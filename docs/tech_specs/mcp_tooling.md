@@ -39,6 +39,9 @@ Tools exposed to agents SHOULD be grouped into categories.
 - External API tools
   - outbound provider calls through API Egress Server
   - git operations through Git Egress MCP
+- Connector tools
+  - manage connector instances and credentials
+  - invoke connector operations (read, send) subject to policy
 - Artifact tools
   - upload, download, and list task artifacts
 - Node and sandbox tools
@@ -75,6 +78,7 @@ Recommended tool access
 - Database read and write tools for tasks, preferences, and routing metadata
 - Model registry and node capability tools
 - Node configuration and sandbox orchestration tools
+- Connector management and invocation tools, subject to policy
 - External API and web tools, subject to policy
 
 ### Project Analyst Agent Tool Access
@@ -136,7 +140,7 @@ Key principles
 - Sandboxes SHOULD not expose inbound network services for control (no SSH requirement).
 - Orchestrator-side agents request sandbox execution through MCP.
 - The orchestrator routes sandbox operations to the target node's worker API.
-- The node uses the container runtime (e.g. Podman) to create containers and execute commands.
+- The node uses a container runtime (Docker or Podman; Podman preferred for rootless) to create containers and execute commands.
 
 Node-hosted sandbox MCP
 

@@ -9,7 +9,7 @@ Coordinates sandboxed workers across local nodes and optional cloud capacity, wi
 
 CyNodeAI coordinates agents on local nodes and, when configured, cloud-based agents.
 A central orchestrator manages tasks, preferences, and vector storage (PostgreSQL + pgvector).
-Local worker nodes register, receive jobs, run inference, and report results in isolated Podman containers; cloud-based agents are managed through the same registration, dispatch, and tool interfaces.
+Local worker nodes register, receive jobs, run inference, and report results in isolated containers (Docker or Podman; Podman preferred for rootless); cloud-based agents are managed through the same registration, dispatch, and tool interfaces.
 CyNodeAI also supports routing inference to external AI providers through controlled API egress.
 Nodes may be inference-capable or sandbox-only, depending on configuration.
 
@@ -44,7 +44,7 @@ CyNodeAI uses a central orchestrator that can manage both node-local workers and
 - Sandbox image registry: manages sandbox container images and allowed images for node execution
 - MCP tool interface: standard tool protocol for agents, with role-based access and support for external MCP servers
 - Orchestrator bootstrap: optional YAML import at startup to seed PostgreSQL configuration and integrations
-- Task queue & scheduler
+- Task scheduler: queues work, selects nodes, dispatches jobs; supports retries, leases, and a cron tool for scheduled jobs, wakeups, and automation
 - Execution sandboxes: requests sandbox container execution on worker nodes
 - Co-location preference: run sandbox containers on the same host that is assigned the AI work to minimize network traffic
 - Orchestrator can also act as a worker by running the same worker services locally
@@ -54,7 +54,7 @@ See [`docs/tech_specs/orchestrator.md`](docs/tech_specs/orchestrator.md) for orc
 
 ### Worker Nodes
 
-- Node Manager (system service): manages Podman and container lifecycle on the worker host
+- Node Manager (system service): manages Docker or Podman (Podman preferred for rootless) and container lifecycle on the worker host
   - Starts/stops the worker API container and the Ollama container (or host Ollama)
   - Spins up and tears down per-job or per-agent sandbox containers
   - Receives node configuration from the orchestrator, including registry endpoints and credentials
@@ -161,12 +161,19 @@ See [`docs/tech_specs/orchestrator_bootstrap.md`](docs/tech_specs/orchestrator_b
 
 See [`docs/tech_specs/orchestrator.md`](docs/tech_specs/orchestrator.md) and [`docs/tech_specs/node.md`](docs/tech_specs/node.md).
 
-### Key Technologies
+## Key Technologies
 
-- Python + FastAPI
-- Ollama
-- PostgreSQL + pgvector
-- Podman (single-container workers)
+- Go (orchestrator and node REST APIs; see [Go REST API standards](docs/tech_specs/go_rest_api_standards.md))
+- Ollama (local inference)
+- PostgreSQL + pgvector (state, embeddings)
+- Docker or Podman (sandbox containers; Podman preferred for rootless)
+- MCP (agent tool interface)
 - JWT auth + HTTPS (self-signed or Let's Encrypt)
 
-See [`docs/tech_specs/_main.md`](docs/tech_specs/_main.md) for the full tech spec index.
+See [Tech Specs Index](docs/tech_specs/_main.md) for the full spec index.
+
+## Future Considerations
+
+- **Kubernetes support**: run orchestrator and/or workers on Kubernetes (scheduling, scaling, CRI-based nodes).
+- **containerd via nerdctl**: support containerd as a sandbox runtime (e.g. via nerdctl) for environments where it is already the standard.
+- **External service for RBAC**: integrate with an IdM/IdP and group directory (e.g. Google Workspace, Microsoft Entra ID) to source groups and memberships via SCIM-style provisioning and/or directory APIs.

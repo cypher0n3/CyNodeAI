@@ -47,10 +47,14 @@ Key principles
 - Admin web console: [`docs/tech_specs/admin_web_console.md`](admin_web_console.md)
 - CLI management app: [`docs/tech_specs/cli_management_app.md`](cli_management_app.md)
 - Data REST API: [`docs/tech_specs/data_rest_api.md`](data_rest_api.md)
+- Runs and sessions API: [`docs/tech_specs/runs_and_sessions_api.md`](runs_and_sessions_api.md)
+- Connector framework: [`docs/tech_specs/connector_framework.md`](connector_framework.md)
+- Local user accounts: [`docs/tech_specs/local_user_accounts.md`](local_user_accounts.md)
 - Go REST API standards: [`docs/tech_specs/go_rest_api_standards.md`](go_rest_api_standards.md)
 - MCP tooling: [`docs/tech_specs/mcp_tooling.md`](mcp_tooling.md)
 - User preferences: [`docs/tech_specs/user_preferences.md`](user_preferences.md)
 - Access control: [`docs/tech_specs/access_control.md`](access_control.md)
+- RBAC and groups: [`docs/tech_specs/rbac_and_groups.md`](rbac_and_groups.md)
 
 ### Execution and Artifacts
 
@@ -85,7 +89,7 @@ Items are grouped by phase and can be implemented incrementally.
 
 ### Phase 0 Foundations
 
-- Define Postgres schema for tasks, jobs, nodes, artifacts, and audit logging.
+- Define Postgres schema for users, local auth sessions, groups and RBAC, tasks, jobs, nodes, artifacts, and audit logging.
 - Define node capability report payload and node configuration payload.
 - Define MCP tool envelope and initial tool allowlists by role.
 
@@ -94,7 +98,7 @@ Items are grouped by phase and can be implemented incrementally.
 - Orchestrator: node registration (PSK to JWT), capability ingest, config delivery, job dispatch, result collection.
 - Node: Node Manager startup sequence that contacts orchestrator before starting the single Ollama container.
 - Node: worker API can receive a job, run a sandbox container, and return a result.
-- User API Gateway: create task and retrieve task result.
+- User API Gateway: local user auth (login and refresh), create task, and retrieve task result.
 
 ### Phase 2 MCP in the Loop
 

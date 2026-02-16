@@ -30,6 +30,20 @@ The gateway SHOULD support:
 - Task submission and management
   - Create tasks, set acceptance criteria, and attach artifacts.
   - List tasks, read status, and retrieve results.
+- Scheduler and cron
+  - Create, list, update, disable, and delete scheduled jobs (cron or one-off).
+  - Cancel a schedule or the next run; view run history per schedule (past execution times and outcomes).
+  - Time-zone aware schedule evaluation (schedules specify or inherit a time zone).
+  - Query queue depth and schedule state for user visibility.
+  - Support wakeups and automation triggers via the same scheduler surface.
+- Runs and sessions
+  - First-class runs and sessions API: create sessions, spawn sub-sessions, create and list runs, attach logs, stream status, store transcripts with retention policies.
+  - See [`docs/tech_specs/runs_and_sessions_api.md`](runs_and_sessions_api.md).
+- Connector framework
+  - Install, enable, disable, and uninstall connector instances.
+  - Manage connector credentials (create, rotate, revoke, disable) and view connector audit and operation history.
+  - Enforce per-operation policy (read, send, admin) for connector invocations and administration.
+  - See [`docs/tech_specs/connector_framework.md`](connector_framework.md).
 - Interactive sessions
   - Chat-like interaction that creates or updates tasks and threads.
 - Capability discovery
@@ -38,6 +52,10 @@ The gateway SHOULD support:
   - Upload files for tasks and download produced artifacts.
 - Admin operations
   - Manage credentials, preferences, and basic node lifecycle controls through a single user-facing surface.
+- Groups and RBAC
+  - Manage groups and membership (create group, add member, remove member), when allowed.
+  - Manage role bindings (assign role to user or group), when allowed.
+  - See [`docs/tech_specs/rbac_and_groups.md`](rbac_and_groups.md).
 
 ## Client Compatibility
 
@@ -138,6 +156,7 @@ Constraints
 - The gateway MUST authorize user actions using policy and preferences.
 - The gateway SHOULD emit audit logs for all user actions, including task submission and artifact access.
 - The gateway SHOULD support per-user rate limiting and request size limits.
+- For the MVP local user account model and secure credential handling requirements, see [`docs/tech_specs/local_user_accounts.md`](local_user_accounts.md).
 
 ## Admin Web Console
 

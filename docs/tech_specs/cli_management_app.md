@@ -138,7 +138,7 @@ Required flags (examples)
 
 - `--provider`
 - `--name`
-- `--owner-type` (user|team)
+- `--owner-type` (user|group)
 - `--owner-id` (uuid, optional when owner-type is user and derived from auth context)
 
 ## Preferences Management

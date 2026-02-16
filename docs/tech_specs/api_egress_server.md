@@ -47,9 +47,9 @@ Proposed tables
 
 - `id` (uuid, pk)
 - `owner_type` (text)
-  - one of: user|team
+  - one of: user|group
 - `owner_id` (uuid)
-  - user id or team id, depending on owner_type
+  - user id or group id, depending on owner_type
 - `provider` (text)
 - `credential_type` (text)
   - examples: api_key, oauth_token, bearer_token
@@ -88,11 +88,11 @@ Recommended checks
 - The chosen credential MUST be authorized for the request context and MUST be active.
 - The service SHOULD apply per-user and per-task constraints, such as rate limits and allowed operations.
 
-Team-scoped credentials
+Group-scoped credentials
 
-- The API Egress Server SHOULD support team-scoped credentials for shared enterprise integrations.
-- A team-scoped credential MUST be selectable only when the task context includes a team identity and policy allows team usage.
-- Access control rules SHOULD distinguish between user-scoped and team-scoped usage when needed.
+- The API Egress Server SHOULD support group-scoped credentials for shared enterprise integrations.
+- A group-scoped credential MUST be selectable only when the task context includes a group identity and policy allows group usage.
+- Access control rules SHOULD distinguish between user-scoped and group-scoped usage when needed.
 
 ## Policy and Auditing
 

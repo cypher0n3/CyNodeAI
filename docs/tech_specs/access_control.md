@@ -10,6 +10,7 @@
 
 This document defines access control policy for services that provide controlled capabilities to agents.
 It is intended to cover both the API Egress Server and the Secure Browser Service.
+For how users, groups, roles, and membership feed into subject resolution for policy evaluation, see [`docs/tech_specs/rbac_and_groups.md`](rbac_and_groups.md).
 
 ## Core Concepts
 
@@ -20,7 +21,7 @@ Access control is evaluated for a request using the following information.
   - Examples: a user, the Project Manager Agent acting for a user, a task-scoped agent.
 - Credential owner
   - Which identity owns the credential used for the action.
-  - Examples: user-scoped credential vs team-scoped credential.
+  - Examples: user-scoped credential vs group-scoped credential.
 - Action
   - What is being attempted.
   - Examples: `api.call`, `web.fetch`, `sandbox_image.publish`, `sandbox_image.use`, `messaging.configure`, `messaging.send`, `mcp.tool.invoke`.
@@ -61,7 +62,7 @@ They are a starting point and can be extended later.
 
 - `id` (uuid, pk)
 - `subject_type` (text)
-  - examples: system, user, project, task, agent
+  - examples: system, user, group, project, task, agent
 - `subject_id` (uuid, nullable)
   - null is allowed only for `system` subject_type
 - `action` (text)

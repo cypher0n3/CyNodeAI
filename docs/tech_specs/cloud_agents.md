@@ -172,7 +172,7 @@ Common patterns
 
 Sandbox considerations
 
-- Local nodes rely on Podman sandboxes for isolation.
+- Local nodes rely on Docker or Podman for sandbox isolation (Podman preferred for rootless).
 - Cloud workers MAY implement an equivalent sandbox model, but this is provider-specific.
 - Jobs MUST remain portable so that tasks can be retried on local or cloud workers when needed.
 

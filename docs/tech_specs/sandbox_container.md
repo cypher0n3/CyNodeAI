@@ -22,7 +22,7 @@ It focuses on what MUST be present inside a sandbox container image so dispatche
 ## Purpose
 
 Sandbox containers provide isolated execution for tools and job steps.
-They are started and stopped by the Node Manager on a worker node.
+They are started and stopped by the Node Manager on a worker node using a container runtime (Docker or Podman; Podman preferred for rootless).
 
 See [`docs/tech_specs/node.md`](node.md) and [`docs/tech_specs/sandbox_image_registry.md`](sandbox_image_registry.md).
 

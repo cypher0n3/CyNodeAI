@@ -77,7 +77,7 @@ Recommended metadata fields shown in the UI
 
 - Provider
 - Credential name
-- Owner scope (user or team)
+- Owner scope (user or group)
 - Active status
 - Created and updated timestamps
 - Last used timestamp, when available
@@ -263,7 +263,7 @@ Minimum viable admin console
 
 Future enhancements
 
-- Team scope management and role assignment.
+- Group scope management and role assignment.
 - Git Egress credential management.
 - ACL rule editor with templates and safety rails.
 - Webhooks and messaging destination management.

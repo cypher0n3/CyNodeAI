@@ -25,7 +25,14 @@ These tables provide preference storage with clear scoping and precedence.
 
 - `id` (uuid, pk)
 - `handle` (text, unique)
+- `external_source` (text, nullable)
+  - examples: entra_id, google_workspace, scim
+- `external_id` (text, nullable)
+  - stable identifier from the external system
 - `created_at` (timestamptz)
+
+The users table is shared by local authentication and RBAC.
+See [`docs/tech_specs/local_user_accounts.md`](local_user_accounts.md) and [`docs/tech_specs/rbac_and_groups.md`](rbac_and_groups.md).
 
 ### Preference Entries Table
 
