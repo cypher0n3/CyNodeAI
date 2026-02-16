@@ -3,7 +3,8 @@
 # shellcheck disable=SC2148,SC1007
 # (justfile: not a shell script; recipe bodies are run by just with set shell)
 
-set shell := ["bash", "-uc"]
+# Source profile so PATH (e.g. Go from install-go) is visible to subsequent recipes
+set shell := ["bash", "-c", "source ~/.bashrc 2>/dev/null || true; source ~/.profile 2>/dev/null || true; exec bash -uc \"$1\""]
 
 # Go version to install when using install-go (match go.mod / toolchain)
 go_version := "1.25.7"
@@ -111,13 +112,14 @@ install-go:
         if ! grep -qF "$go_path" "$profile" 2>/dev/null; then
             echo '' >> "$profile"
             echo '# Go (just install-go)' >> "$profile"
-            echo "export PATH=\"$go_path:\$PATH\"" >> "$profile"
-            echo "Added $go_path to PATH in $profile"
+            echo "export PATH=\"$go_path:\$HOME/go/bin:\$PATH\"" >> "$profile"
+            echo "Added $go_path and \$HOME/go/bin to PATH in $profile"
         fi
     else
-        echo "Add to PATH: export PATH=\"$go_path:\$PATH\" (and ensure it is in your shell profile)"
+        echo "Add to PATH: export PATH=\"$go_path:\$HOME/go/bin:\$PATH\" (and ensure it is in your shell profile)"
     fi
-    /usr/local/go/bin/go version
+    [ -n "$profile" ] && [ -f "$profile" ] && . "$profile"
+    go version 2>/dev/null || /usr/local/go/bin/go version
 
 # Install Go linting and analysis tools (required for .golangci.yml, lint-go, lint-go-ci, vulncheck-go)
 install-go-tools:
