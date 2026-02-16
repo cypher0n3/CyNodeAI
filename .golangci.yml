@@ -1,0 +1,33 @@
+# golangci-lint configuration
+# This configuration enables the contextcheck linter to ensure that functions
+# calling other functions that require context.Context also require context.
+# This enforces proper context propagation through the call chain.
+
+version: "2"
+
+linters:
+  enable:
+    - contextcheck
+    - dupl          # Code duplication detection
+    - gocyclo       # Cyclomatic complexity
+    - gocritic      # Code critique and code smells
+    - goconst       # Constant usage
+    - gocognit      # Cognitive complexity
+  settings:
+    dupl:
+      threshold: 50
+    gocyclo:
+      min-complexity: 15
+    gocritic:
+      enabled-tags:
+        - diagnostic
+        - experimental
+        - opinionated
+        - performance
+        - style
+      disabled-checks:
+        - dupImport
+    goconst:
+      min-len: 3
+    gocognit:
+      min-complexity: 15
