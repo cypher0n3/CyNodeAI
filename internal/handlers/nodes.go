@@ -1,0 +1,265 @@
+package handlers
+
+import (
+        "context"
+        "crypto/sha256"
+        "encoding/hex"
+        "encoding/json"
+        "errors"
+        "log/slog"
+        "net/http"
+        "time"
+
+        "github.com/cypher0n3/cynodeai/internal/auth"
+        "github.com/cypher0n3/cynodeai/internal/database"
+        "github.com/cypher0n3/cynodeai/internal/models"
+        "github.com/google/uuid"
+)
+
+// NodeHandler handles node registration and management endpoints.
+type NodeHandler struct {
+        db              database.Store
+        jwt             *auth.JWTManager
+        registrationPSK string
+        logger          *slog.Logger
+}
+
+// NewNodeHandler creates a new node handler.
+func NewNodeHandler(db database.Store, jwt *auth.JWTManager, registrationPSK string, logger *slog.Logger) *NodeHandler {
+        return &NodeHandler{
+                db:              db,
+                jwt:             jwt,
+                registrationPSK: registrationPSK,
+                logger:          logger,
+        }
+}
+
+func (h *NodeHandler) logError(msg string, args ...any) {
+        if h.logger != nil {
+                h.logger.Error(msg, args...)
+        }
+}
+
+func (h *NodeHandler) logWarn(msg string, args ...any) {
+        if h.logger != nil {
+                h.logger.Warn(msg, args...)
+        }
+}
+
+func (h *NodeHandler) logInfo(msg string, args ...any) {
+        if h.logger != nil {
+                h.logger.Info(msg, args...)
+        }
+}
+
+// NodeCapabilityReport represents the capability report from a node.
+// See docs/tech_specs/node_payloads.md for full schema.
+type NodeCapabilityReport struct {
+        Version    int                    `json:"version"`
+        ReportedAt string                 `json:"reported_at"`
+        Node       NodeCapabilityNode     `json:"node"`
+        Platform   NodeCapabilityPlatform `json:"platform"`
+        Compute    NodeCapabilityCompute  `json:"compute"`
+        Sandbox    *NodeCapabilitySandbox `json:"sandbox,omitempty"`
+}
+
+// NodeCapabilityNode contains node identity info.
+type NodeCapabilityNode struct {
+        NodeSlug string   `json:"node_slug"`
+        Name     string   `json:"name,omitempty"`
+        Labels   []string `json:"labels,omitempty"`
+}
+
+// NodeCapabilityPlatform contains platform info.
+type NodeCapabilityPlatform struct {
+        OS     string `json:"os"`
+        Distro string `json:"distro,omitempty"`
+        Arch   string `json:"arch"`
+}
+
+// NodeCapabilityCompute contains compute resources info.
+type NodeCapabilityCompute struct {
+        CPUCores int `json:"cpu_cores"`
+        RAMMB    int `json:"ram_mb"`
+}
+
+// NodeCapabilitySandbox contains sandbox capability info.
+type NodeCapabilitySandbox struct {
+        Supported      bool     `json:"supported"`
+        Features       []string `json:"features,omitempty"`
+        MaxConcurrency int      `json:"max_concurrency,omitempty"`
+}
+
+// NodeRegistrationRequest represents the registration request with PSK.
+type NodeRegistrationRequest struct {
+        PSK        string               `json:"psk"`
+        Capability NodeCapabilityReport `json:"capability"`
+}
+
+// NodeBootstrapResponse represents the bootstrap payload.
+// See docs/tech_specs/node_payloads.md node_bootstrap_payload_v1.
+type NodeBootstrapResponse struct {
+        Version  int               `json:"version"`
+        IssuedAt string            `json:"issued_at"`
+        Auth     NodeBootstrapAuth `json:"auth"`
+}
+
+// NodeBootstrapAuth contains authentication info.
+type NodeBootstrapAuth struct {
+        NodeJWT   string `json:"node_jwt"`
+        ExpiresAt string `json:"expires_at"`
+}
+
+// Register handles POST /v1/nodes/register.
+func (h *NodeHandler) Register(w http.ResponseWriter, r *http.Request) {
+        ctx := r.Context()
+
+        req, ok := h.validateRegistrationRequest(w, r)
+        if !ok {
+                return
+        }
+
+        existingNode, err := h.db.GetNodeBySlug(ctx, req.Capability.Node.NodeSlug)
+        if err != nil && !errors.Is(err, database.ErrNotFound) {
+                h.logError("get node by slug", "error", err)
+                WriteInternalError(w, "Failed to register node")
+                return
+        }
+
+        if existingNode != nil {
+                h.handleExistingNodeRegistration(ctx, w, existingNode)
+                return
+        }
+
+        h.handleNewNodeRegistration(ctx, w, req)
+}
+
+func (h *NodeHandler) validateRegistrationRequest(w http.ResponseWriter, r *http.Request) (*NodeRegistrationRequest, bool) {
+        var req NodeRegistrationRequest
+        if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+                WriteBadRequest(w, "Invalid request body")
+                return nil, false
+        }
+
+        if req.PSK != h.registrationPSK {
+                h.logWarn("invalid registration PSK", "node_slug", req.Capability.Node.NodeSlug)
+                WriteUnauthorized(w, "Invalid registration PSK")
+                return nil, false
+        }
+
+        if req.Capability.Version != 1 {
+                WriteBadRequest(w, "Unsupported capability version")
+                return nil, false
+        }
+
+        if req.Capability.Node.NodeSlug == "" {
+                WriteBadRequest(w, "Node slug is required")
+                return nil, false
+        }
+
+        return &req, true
+}
+
+func (h *NodeHandler) handleExistingNodeRegistration(ctx context.Context, w http.ResponseWriter, node *models.Node) {
+        if err := h.db.UpdateNodeStatus(ctx, node.ID, "active"); err != nil {
+                h.logError("update node status", "error", err)
+                WriteInternalError(w, "Failed to register node")
+                return
+        }
+
+        nodeJWT, expiresAt, err := h.jwt.GenerateNodeToken(node.ID, node.NodeSlug)
+        if err != nil {
+                h.logError("generate node JWT", "error", err)
+                WriteInternalError(w, "Failed to generate token")
+                return
+        }
+
+        WriteJSON(w, http.StatusOK, h.buildBootstrapResponse(nodeJWT, expiresAt))
+}
+
+func (h *NodeHandler) handleNewNodeRegistration(ctx context.Context, w http.ResponseWriter, req *NodeRegistrationRequest) {
+        newNode, err := h.db.CreateNode(ctx, req.Capability.Node.NodeSlug)
+        if err != nil {
+                h.logError("create node", "error", err)
+                WriteInternalError(w, "Failed to register node")
+                return
+        }
+
+        h.initializeNewNode(ctx, newNode.ID, req.Capability)
+
+        nodeJWT, expiresAt, err := h.jwt.GenerateNodeToken(newNode.ID, newNode.NodeSlug)
+        if err != nil {
+                h.logError("generate node JWT", "error", err)
+                WriteInternalError(w, "Failed to generate token")
+                return
+        }
+
+        h.logInfo("node registered", "node_id", newNode.ID, "node_slug", newNode.NodeSlug)
+        WriteJSON(w, http.StatusCreated, h.buildBootstrapResponse(nodeJWT, expiresAt))
+}
+
+func (h *NodeHandler) initializeNewNode(ctx context.Context, nodeID uuid.UUID, capability NodeCapabilityReport) {
+        if err := h.db.UpdateNodeStatus(ctx, nodeID, "active"); err != nil {
+                h.logError("update node status", "error", err)
+        }
+
+        capJSON, _ := json.Marshal(capability)
+        if err := h.db.SaveNodeCapabilitySnapshot(ctx, nodeID, string(capJSON)); err != nil {
+                h.logError("save capability snapshot", "error", err)
+        }
+
+        hashBytes := sha256.Sum256(capJSON)
+        capHash := "sha256:" + hex.EncodeToString(hashBytes[:])
+        if err := h.db.UpdateNodeCapability(ctx, nodeID, capHash); err != nil {
+                h.logError("update capability hash", "error", err)
+        }
+}
+
+func (h *NodeHandler) buildBootstrapResponse(nodeJWT string, expiresAt time.Time) NodeBootstrapResponse {
+        return NodeBootstrapResponse{
+                Version:  1,
+                IssuedAt: time.Now().UTC().Format(time.RFC3339),
+                Auth: NodeBootstrapAuth{
+                        NodeJWT:   nodeJWT,
+                        ExpiresAt: expiresAt.Format(time.RFC3339),
+                },
+        }
+}
+
+// ReportCapability handles POST /v1/nodes/capability.
+func (h *NodeHandler) ReportCapability(w http.ResponseWriter, r *http.Request) {
+        ctx := r.Context()
+        nodeID := getNodeIDFromContext(ctx)
+
+        if nodeID == nil {
+                WriteUnauthorized(w, "Node authentication required")
+                return
+        }
+
+        var report NodeCapabilityReport
+        if err := json.NewDecoder(r.Body).Decode(&report); err != nil {
+                WriteBadRequest(w, "Invalid request body")
+                return
+        }
+
+        capJSON, _ := json.Marshal(report)
+        if err := h.db.SaveNodeCapabilitySnapshot(ctx, *nodeID, string(capJSON)); err != nil {
+                h.logError("save capability snapshot", "error", err)
+                WriteInternalError(w, "Failed to save capability")
+                return
+        }
+
+        hashBytes := sha256.Sum256(capJSON)
+        capHash := "sha256:" + hex.EncodeToString(hashBytes[:])
+        if err := h.db.UpdateNodeCapability(ctx, *nodeID, capHash); err != nil {
+                h.logError("update capability hash", "error", err)
+                WriteInternalError(w, "Failed to update capability")
+                return
+        }
+
+        if err := h.db.UpdateNodeLastSeen(ctx, *nodeID); err != nil {
+                h.logError("update last seen", "error", err)
+        }
+
+        w.WriteHeader(http.StatusNoContent)
+}
