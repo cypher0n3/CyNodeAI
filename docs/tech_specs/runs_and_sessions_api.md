@@ -14,6 +14,8 @@
 
 This document defines a first-class runs and sessions API exposed by the User API Gateway.
 It provides parity with session-based workflows: execution traces (runs), user-facing sessions, sub-runs, attached logs, streaming status, stored transcripts with retention, and background job process management within sandbox constraints.
+The Postgres schema is defined in [`docs/tech_specs/postgres_schema.md`](postgres_schema.md).
+See [Runs and Sessions](postgres_schema.md#runs-and-sessions).
 
 ## Purpose
 

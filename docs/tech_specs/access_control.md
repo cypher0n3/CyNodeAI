@@ -11,6 +11,8 @@
 This document defines access control policy for services that provide controlled capabilities to agents.
 It is intended to cover both the API Egress Server and the Secure Browser Service.
 For how users, groups, roles, and membership feed into subject resolution for policy evaluation, see [`docs/tech_specs/rbac_and_groups.md`](rbac_and_groups.md).
+The Postgres schema is defined in [`docs/tech_specs/postgres_schema.md`](postgres_schema.md).
+See [Access Control](postgres_schema.md#access-control) and [Audit Logging](postgres_schema.md#audit-logging).
 
 ## Core Concepts
 

@@ -64,6 +64,12 @@ Recommended behavior
 Allowed images and their capabilities MUST be stored in PostgreSQL.
 This enables the Project Manager Agent to choose a sandbox environment appropriate for a task.
 
+Database schema
+
+- The Postgres schema is defined in [`docs/tech_specs/postgres_schema.md`](postgres_schema.md).
+- Sandbox image registry tables are specified in the [Sandbox Image Registry](postgres_schema.md#sandbox-image-registry) section.
+- Canonical table names are `sandbox_images`, `sandbox_image_versions`, and `node_sandbox_image_availability`.
+
 ### Sandbox Images Table
 
 - `id` (uuid, pk)

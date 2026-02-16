@@ -3,7 +3,11 @@
 - [Document Overview](#document-overview)
 - [Architecture Summary](#architecture-summary)
 - [Tech Spec Index](#tech-spec-index)
-  - [Core Documents](#core-documents)
+  - [Orchestrator and Nodes](#orchestrator-and-nodes)
+  - [User Interfaces and APIs](#user-interfaces-and-apis)
+  - [Agents and Connectors](#agents-and-connectors)
+  - [Identity, Policy, and Data](#identity-policy-and-data)
+  - [Protocols and Standards](#protocols-and-standards)
   - [Execution and Artifacts](#execution-and-artifacts)
   - [External Integration and Routing](#external-integration-and-routing)
   - [Model Lifecycle](#model-lifecycle)
@@ -38,23 +42,42 @@ Key principles
 
 <!-- no-empty-heading allow -->
 
-### Core Documents
+### Orchestrator and Nodes
 
 - Orchestrator: [`docs/tech_specs/orchestrator.md`](orchestrator.md)
 - Worker nodes: [`docs/tech_specs/node.md`](node.md)
-- Cloud-based agents: [`docs/tech_specs/cloud_agents.md`](cloud_agents.md)
+- Node payloads: [`docs/tech_specs/node_payloads.md`](node_payloads.md)
+
+### User Interfaces and APIs
+
 - User API Gateway: [`docs/tech_specs/user_api_gateway.md`](user_api_gateway.md)
-- Admin web console: [`docs/tech_specs/admin_web_console.md`](admin_web_console.md)
-- CLI management app: [`docs/tech_specs/cli_management_app.md`](cli_management_app.md)
 - Data REST API: [`docs/tech_specs/data_rest_api.md`](data_rest_api.md)
 - Runs and sessions API: [`docs/tech_specs/runs_and_sessions_api.md`](runs_and_sessions_api.md)
+- CLI management app: [`docs/tech_specs/cli_management_app.md`](cli_management_app.md)
+- Admin web console: [`docs/tech_specs/admin_web_console.md`](admin_web_console.md)
+
+### Agents and Connectors
+
+- Cloud-based agents: [`docs/tech_specs/cloud_agents.md`](cloud_agents.md)
 - Connector framework: [`docs/tech_specs/connector_framework.md`](connector_framework.md)
+
+### Identity, Policy, and Data
+
 - Local user accounts: [`docs/tech_specs/local_user_accounts.md`](local_user_accounts.md)
-- Go REST API standards: [`docs/tech_specs/go_rest_api_standards.md`](go_rest_api_standards.md)
-- MCP tooling: [`docs/tech_specs/mcp_tooling.md`](mcp_tooling.md)
-- User preferences: [`docs/tech_specs/user_preferences.md`](user_preferences.md)
-- Access control: [`docs/tech_specs/access_control.md`](access_control.md)
+- Projects and scopes: [`docs/tech_specs/projects_and_scopes.md`](projects_and_scopes.md)
 - RBAC and groups: [`docs/tech_specs/rbac_and_groups.md`](rbac_and_groups.md)
+- Access control: [`docs/tech_specs/access_control.md`](access_control.md)
+- User preferences: [`docs/tech_specs/user_preferences.md`](user_preferences.md)
+- Postgres schema: [`docs/tech_specs/postgres_schema.md`](postgres_schema.md)
+
+### Protocols and Standards
+
+- MCP tooling: [`docs/tech_specs/mcp_tooling.md`](mcp_tooling.md)
+- MCP gateway enforcement: [`docs/tech_specs/mcp_gateway_enforcement.md`](mcp_gateway_enforcement.md)
+- MCP tool catalog: [`docs/tech_specs/mcp_tool_catalog.md`](mcp_tool_catalog.md)
+- MCP tool call auditing: [`docs/tech_specs/mcp_tool_call_auditing.md`](mcp_tool_call_auditing.md)
+- MCP SDK installation: [`docs/tech_specs/mcp_sdk_installation.md`](mcp_sdk_installation.md)
+- Go REST API standards: [`docs/tech_specs/go_rest_api_standards.md`](go_rest_api_standards.md)
 
 ### Execution and Artifacts
 
@@ -89,9 +112,16 @@ Items are grouped by phase and can be implemented incrementally.
 
 ### Phase 0 Foundations
 
-- Define Postgres schema for users, local auth sessions, groups and RBAC, tasks, jobs, nodes, artifacts, and audit logging.
-- Define node capability report payload and node configuration payload.
-- Define MCP tool envelope and initial tool allowlists by role.
+- Define Postgres schema for users, local auth sessions, groups and RBAC, tasks, jobs, nodes, artifacts, and audit logging (see [`docs/tech_specs/postgres_schema.md`](postgres_schema.md)).
+- Define node capability report payload and node configuration payload (see [`docs/tech_specs/node_payloads.md`](node_payloads.md)).
+  - Specify registration-time bootstrap payload (PSK to JWT) and config versioning.
+  - Specify capability report fields, hashing, and change reporting behavior.
+  - Specify configuration refresh, acknowledgement payload, and rollback reporting.
+- Define MCP gateway enforcement and initial tool allowlists by role (see [`docs/tech_specs/mcp_gateway_enforcement.md`](mcp_gateway_enforcement.md)).
+  - Use standard MCP protocol messages on the wire.
+  - Enforce allowlists, access control, and auditing centrally at the orchestrator gateway.
+  - Require strict tool argument schemas for task-scoped tools (tool args include `task_id`).
+  - Define policy mapping to `access_control_rules` using action `mcp.tool.invoke`.
 
 ### Phase 1 Single Node Happy Path
 
