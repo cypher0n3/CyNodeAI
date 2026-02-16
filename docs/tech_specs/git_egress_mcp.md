@@ -28,7 +28,7 @@ Goals
 
 - Keep Git credentials out of sandboxes and out of agent processes.
 - Provide a policy-controlled and auditable path to push changes to Git remotes.
-- Support user-scoped and team-scoped Git credentials for enterprise workflows.
+- Support user-scoped and group-scoped Git credentials for enterprise workflows.
 - Support patch-based and bundle-based promotion of changes from sandboxes.
 
 Non-goals
@@ -93,7 +93,7 @@ Minimum response fields
 ## Credential Storage
 
 Git credentials MUST be stored in PostgreSQL and MUST be retrievable only by Git egress.
-Credentials SHOULD support both user-scoped and team-scoped ownership.
+Credentials SHOULD support both user-scoped and group-scoped ownership.
 
 Recommended model
 
@@ -113,14 +113,14 @@ Recommended access control dimensions
 - Subject identity (user and agent identity).
 - Action (git operation, such as `git.push` or `git.pr.create`).
 - Resource (repo and branch targets).
-- Credential owner (user-scoped vs team-scoped).
+- Credential owner (user-scoped vs group-scoped).
 - Context (task_id, project_id, environment labels).
 
 Example policies
 
 - Allow PR creation only for repos in an allowlist.
 - Deny pushes to protected branches.
-- Restrict team-scoped credentials to tasks with an explicit team context.
+- Restrict group-scoped credentials to tasks with an explicit group context.
 - Require that sandbox changesets are created by jobs for the same task_id.
 
 See [`docs/tech_specs/access_control.md`](access_control.md).

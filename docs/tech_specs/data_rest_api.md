@@ -37,10 +37,16 @@ The Data REST API SHOULD expose resource-oriented endpoints for:
 - Users
 - Tasks, task state, and task history
 - Jobs and job results
+- Runs and sessions (execution traces, sub-runs, logs, transcripts, and background process attribution)
+  - See [`docs/tech_specs/runs_and_sessions_api.md`](runs_and_sessions_api.md).
+- Connectors (catalog, instances, credential metadata, and audit-visible operation history)
+  - See [`docs/tech_specs/connector_framework.md`](connector_framework.md).
 - Artifacts and artifact metadata
 - Nodes, node status, and capability reports
 - Preferences and effective preferences resolution results
 - Access control rules and audit records, when allowed
+- Groups, group memberships, roles, and role bindings (RBAC), when allowed
+  - See [`docs/tech_specs/rbac_and_groups.md`](rbac_and_groups.md).
 - Model registry and model availability, when allowed
 - Sandbox image registry metadata, when allowed
 

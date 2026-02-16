@@ -27,7 +27,8 @@ Nodes are configured by the orchestrator to access orchestrator-provided service
 The Node Manager is a host-level system service responsible for:
 
 - Starting and stopping worker services (worker API, Ollama, sandbox containers).
-- Managing Podman lifecycle for sandbox execution.
+- Managing container runtime (Docker or Podman) lifecycle for sandbox execution.
+  Podman is preferred for rootless operation.
 - Receiving configuration updates from the orchestrator and applying them locally.
 - Managing local secure storage for pull credentials and certificates.
 
@@ -66,8 +67,9 @@ Normative requirements
 
 Option A (normative for node-local execution)
 
-- For each sandbox job, the Node Manager creates a Podman pod for that job.
-- The pod contains:
+- For each sandbox job, the Node Manager creates a runtime pod (Podman) or equivalent isolated network (Docker) for that job.
+  Podman is preferred for rootless operation.
+- The pod (or network) contains:
   - the sandbox container
   - a lightweight inference proxy sidecar container
 - The inference proxy listens on `localhost:11434` inside the pod network namespace.
@@ -205,9 +207,10 @@ Sandbox keys
 - `sandbox.mode` (string, optional)
   - One of `allow`, `sandbox_only`, or `disabled`.
 - `sandbox.runtime` (string, optional)
-  - Sandbox runtime identifier (e.g. `podman`).
+  - Sandbox runtime identifier: `podman` or `docker`.
+    Podman is preferred for rootless operation.
 - `sandbox.rootless` (boolean, optional)
-  - Whether sandbox containers run rootless when supported.
+  - Whether sandbox containers run rootless when supported (Podman supports rootless; Docker typically requires root or root-equivalent).
 - `sandbox.max_concurrency` (number, optional)
   - Maximum concurrent sandbox jobs accepted by this node.
 - `sandbox.default_image` (string, optional)
@@ -304,7 +307,7 @@ worker_api:
   max_request_bytes: 10485760
 sandbox:
   mode: sandbox_only
-  runtime: podman
+  runtime: podman   # or docker; podman preferred for rootless
   rootless: true
   max_concurrency: 4
   default_network_policy: restricted
@@ -410,7 +413,7 @@ Recommended capability fields
   - OS type and distribution details
   - architecture (e.g. amd64, arm64)
   - kernel version
-  - container runtime details (Podman version, rootless support)
+  - container runtime details (Docker or Podman version, rootless support)
 - Compute resources
   - CPU model and core count
   - total system RAM

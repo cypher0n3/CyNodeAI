@@ -2,6 +2,7 @@
 
 - [Document Overview](#document-overview)
 - [Core Responsibilities](#core-responsibilities)
+- [Task Scheduler](#task-scheduler)
 - [Project Manager Agent](#project-manager-agent)
 - [API Egress Server](#api-egress-server)
 - [Secure Browser Service](#secure-browser-service)
@@ -25,6 +26,29 @@ This document describes the orchestrator responsibilities and its relationship t
 - Dispatches sandboxed execution to worker nodes (via the worker API).
 - Routes model inference to local nodes or to external providers when allowed.
 - Schedules sandbox execution independently of where inference occurs.
+
+## Task Scheduler
+
+The orchestrator MUST include a task scheduler that decides when and where to run work.
+
+Responsibilities
+
+- **Queue**: Maintain a queue of pending work (tasks and jobs) backed by PostgreSQL so state survives restarts.
+- **Dispatch**: Select eligible nodes based on capability, load, data locality, and model availability; dispatch jobs to the worker API; collect results and update task state.
+- **Retries and leases**: Support job leases, retries on failure, and idempotency so work is not lost or duplicated when nodes fail or restart.
+- **Cron tool**: MUST support a cron (or equivalent) facility for scheduled jobs, wakeups, and automation.
+  Users and agents MUST be able to enqueue work at a future time or on a recurrence (cron expression or calendar-like).
+  The scheduler is responsible for firing at the scheduled time and enqueueing the corresponding tasks or jobs.
+  Schedule evaluation MUST be time-zone aware (schedules specify or inherit a time zone; next-run and history use that zone).
+  Schedules MUST support create, update, disable (temporarily stop firing without deleting), and cancellation (cancel the schedule or the next run).
+  The system MUST retain run history per schedule (past execution times and outcomes) for visibility and debugging.
+  The cron facility SHOULD be exposed to agents (e.g. via MCP tools) so they can create and manage scheduled jobs.
+
+The scheduler MAY be implemented as a background process, a worker that consumes the queue, or integrated into the workflow engine; it MUST use the same node selection and job-dispatch contracts as the rest of the orchestrator.
+Agents (e.g. Project Manager) and the cron facility enqueue work; the scheduler is responsible for dequeueing and dispatching to nodes.
+The scheduler MUST be available via the User API Gateway so users can create and manage scheduled jobs, query queue and schedule state, and trigger wakeups or automation.
+
+See job dispatch and node selection in [`docs/tech_specs/node.md`](node.md), Phase 3 in the [MVP Development Plan](_main.md#phase-3-multi-node-robustness), and [`docs/tech_specs/user_api_gateway.md`](user_api_gateway.md).
 
 ## Project Manager Agent
 

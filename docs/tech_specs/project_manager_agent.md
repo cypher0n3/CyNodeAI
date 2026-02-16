@@ -75,7 +75,7 @@ External providers MUST be accessed through API Egress so provider credentials a
 - Add provider credentials
   - Store the provider credential in PostgreSQL for API Egress (user-scoped).
   - See [`docs/tech_specs/api_egress_server.md`](api_egress_server.md).
-  - Teams MAY also use team-scoped credentials for shared integrations, subject to policy.
+- Groups MAY also use group-scoped credentials for shared integrations, subject to policy.
 - Add access control rules
   - Allow the relevant subjects to call `api.call` for the chosen provider and operations.
   - Recommended stance is default-deny with narrow allow rules.
