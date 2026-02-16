@@ -1,0 +1,45 @@
+# Directories
+.vscode/
+.cursor/
+.venv/
+node_modules/
+Abacus.ai*/
+tmp/
+
+# File Patterns
+*.backup*
+*.bak
+*.bmp
+*.doc
+*.docx
+*.eps
+*.gif
+*.ico
+*.jpeg
+*.jpg
+*.log
+*.odp
+*.odt
+*.out
+*.pdf
+*.ppt
+*.pptx
+*.test
+*.tiff
+*.webp
+*.xls
+*.xlsx
+*.zip
+
+# Ignore tar files
+*.tar
+*.tar.gz
+
+# Ignore coverage files
+coverage.*
+
+# Ignore Python cache files
+**/__pycache__/
+
+# Ignore local files
+meta.md
