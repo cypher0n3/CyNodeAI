@@ -1,0 +1,147 @@
+# User API Gateway
+
+- [Document Overview](#document-overview)
+- [Gateway Purpose](#gateway-purpose)
+- [Core Capabilities](#core-capabilities)
+- [Client Compatibility](#client-compatibility)
+- [Data REST API](#data-rest-api)
+- [Live Updates and Messaging](#live-updates-and-messaging)
+  - [Delivery Methods](#delivery-methods)
+  - [Event Types](#event-types)
+  - [Subscriptions and Destinations](#subscriptions-and-destinations)
+- [Authentication and Auditing](#authentication-and-auditing)
+- [Admin Web Console](#admin-web-console)
+
+## Document Overview
+
+This document defines the User API Gateway, a single user-facing endpoint exposed by the orchestrator.
+It provides a stable interface for user clients to submit work, query status, and retrieve artifacts.
+
+## Gateway Purpose
+
+- Expose orchestrator capabilities through one user-facing API surface.
+- Support multiple user clients and integration tools without exposing internal worker endpoints.
+- Provide consistent authentication, authorization, rate limiting, and auditing for user interactions.
+
+## Core Capabilities
+
+The gateway SHOULD support:
+
+- Task submission and management
+  - Create tasks, set acceptance criteria, and attach artifacts.
+  - List tasks, read status, and retrieve results.
+- Interactive sessions
+  - Chat-like interaction that creates or updates tasks and threads.
+- Capability discovery
+  - Report enabled services and features (e.g. external routing, secure browser, API egress).
+- Artifact ingress and egress
+  - Upload files for tasks and download produced artifacts.
+- Admin operations
+  - Manage credentials, preferences, and basic node lifecycle controls through a single user-facing surface.
+
+## Client Compatibility
+
+The gateway SHOULD provide compatibility modes to support common external tools.
+
+- Open WebUI compatibility
+  - The gateway MAY expose an OpenAI-compatible subset for chat and model listing, backed by orchestrator task workflows.
+- Messaging integrations
+  - The gateway SHOULD support inbound messages via webhooks and outbound notifications via integration adapters.
+
+Compatibility layers MUST preserve orchestrator policy constraints and MUST not bypass auditing.
+
+## MCP Tool Interface
+
+The User API Gateway MAY expose MCP-facing capability discovery and tool routing for user clients.
+Agents use MCP tools as the standard tool interface, as defined in [`docs/tech_specs/mcp_tooling.md`](mcp_tooling.md).
+
+## Data REST API
+
+The User API Gateway MUST provide a Data REST API for user clients and integrations.
+This API provides database-backed resources without exposing raw SQL.
+
+See [`docs/tech_specs/data_rest_api.md`](data_rest_api.md).
+
+## Live Updates and Messaging
+
+The User API Gateway is the single user-facing integration surface for live updates.
+Users can connect destinations and subscribe them to task and agent events.
+
+### Delivery Methods
+
+The gateway SHOULD support multiple delivery methods through adapters.
+
+Examples
+
+- Webhooks
+- Chat platform adapters (e.g. Matrix, Slack, Discord, Mattermost)
+
+Secrets required for delivery MUST be stored securely in PostgreSQL and MUST NOT be exposed to agents.
+
+### Event Types
+
+The orchestrator SHOULD emit structured events that can be subscribed to.
+
+Examples
+
+- Task created, updated, completed, failed
+- Job started, progress update, completed, failed
+- Agent started, sub-agent spawned, verification pass, verification fail
+
+Events SHOULD include task context, timestamps, and a stable event name.
+
+### Subscriptions and Destinations
+
+Users connect one or more messaging destinations and subscribe them to event types.
+
+#### Messaging Destinations Table
+
+- `id` (uuid, pk)
+- `user_id` (uuid)
+  - foreign key to [`docs/tech_specs/user_preferences.md`](user_preferences.md) `users.id`
+- `destination_type` (text)
+  - examples: webhook, matrix, slack, discord
+- `destination_config` (jsonb)
+  - non-secret configuration (e.g. webhook URL host allowlist, channel ids)
+- `secret_ciphertext` (bytea, nullable)
+  - encrypted secrets, if required (e.g. tokens)
+- `secret_kid` (text, nullable)
+- `is_active` (boolean)
+- `created_at` (timestamptz)
+- `updated_at` (timestamptz)
+
+Constraints
+
+- Index: (`user_id`)
+- Index: (`destination_type`)
+- Index: (`is_active`)
+
+#### Messaging Subscriptions Table
+
+- `id` (uuid, pk)
+- `destination_id` (uuid)
+  - foreign key to `messaging_destinations.id`
+- `event_pattern` (text)
+  - exact or pattern match for event names
+- `filter` (jsonb, nullable)
+  - optional constraints, such as project_id or task tags
+- `created_at` (timestamptz)
+
+Constraints
+
+- Index: (`destination_id`)
+- Index: (`event_pattern`)
+
+## Authentication and Auditing
+
+- The gateway MUST authenticate user clients.
+- The gateway MUST authorize user actions using policy and preferences.
+- The gateway SHOULD emit audit logs for all user actions, including task submission and artifact access.
+- The gateway SHOULD support per-user rate limiting and request size limits.
+
+## Admin Web Console
+
+The User API Gateway SHOULD support an admin-focused web console for managing credentials and preferences.
+The web console MUST be a client of the gateway and MUST NOT connect directly to PostgreSQL.
+
+See [`docs/tech_specs/admin_web_console.md`](admin_web_console.md).

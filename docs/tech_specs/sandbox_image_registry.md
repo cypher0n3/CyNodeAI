@@ -1,0 +1,143 @@
+# Sandbox Image Registry
+
+- [Document Overview](#document-overview)
+- [Registry Options](#registry-options)
+- [Image Publishing Workflow](#image-publishing-workflow)
+- [Node Pull Workflow](#node-pull-workflow)
+- [Allowed Images and Capabilities](#allowed-images-and-capabilities)
+- [Preferences and Constraints](#preferences-and-constraints)
+- [Access Control and Auditing](#access-control-and-auditing)
+
+## Document Overview
+
+This document defines a sandbox container image registry used for sandbox execution containers.
+Worker nodes pull sandbox images from the configured registry, and the orchestrator controls what images are allowed.
+Image metadata and capabilities are stored in PostgreSQL for planning, routing, and verification.
+
+## Registry Options
+
+The sandbox image registry MUST be configurable.
+
+- User-provided registry
+  - Users provide a registry URL and credentials, if needed.
+  - The orchestrator uses it as the source of truth for sandbox images.
+- Orchestrator-hosted default
+  - Users MAY deploy a registry on the orchestrator host.
+  - The default SHOULD be Project Zot (an open-source OCI-native registry) with a sane configuration:
+    - private by default
+    - TLS enabled
+    - authenticated access for pushes and pulls
+
+In both modes, worker nodes SHOULD be configured to pull sandbox images from the registry and SHOULD not pull arbitrary images from the public internet.
+
+## Image Publishing Workflow
+
+Agents MUST NOT push images directly to the registry.
+Instead, agents submit a publish request to the orchestrator, which performs validation and publishing.
+
+Recommended flow
+
+- Agent submits an image publish request to the orchestrator with task context.
+- The orchestrator validates:
+  - subject identity and permissions
+  - the target repository and tag policy
+  - the image metadata and declared capabilities
+  - optional image scanning policy, if enabled
+- The orchestrator pushes the image to the configured registry.
+- The orchestrator records the published image and updates allowed image state in PostgreSQL.
+
+## Node Pull Workflow
+
+When dispatching a sandbox job, the orchestrator selects an allowed sandbox image with required capabilities.
+The target node pulls the image from the configured registry and starts the sandbox container.
+
+Recommended behavior
+
+- The orchestrator selects an image version based on required capabilities and policy.
+- The orchestrator configures the node with the correct registry endpoint and pull credentials during node registration.
+- The node pulls the referenced image and verifies integrity when possible (digest pinning).
+- The node starts the sandbox container using the approved image reference.
+- The node reports image pull status and sandbox start status back to the orchestrator.
+
+## Allowed Images and Capabilities
+
+Allowed images and their capabilities MUST be stored in PostgreSQL.
+This enables the Project Manager Agent to choose a sandbox environment appropriate for a task.
+
+### Sandbox Images Table
+
+- `id` (uuid, pk)
+- `name` (text)
+  - logical image name (e.g. python-tools, node-build, secops)
+- `description` (text, nullable)
+- `created_at` (timestamptz)
+- `updated_at` (timestamptz)
+- `updated_by` (text)
+
+Constraints
+
+- Unique: (`name`)
+- Index: (`name`)
+
+### Sandbox Image Versions Table
+
+- `id` (uuid, pk)
+- `sandbox_image_id` (uuid)
+  - foreign key to `sandbox_images.id`
+- `version` (text)
+  - tag or semantic version
+- `image_ref` (text)
+  - OCI reference including registry and repository
+- `image_digest` (text, nullable)
+  - digest for pinning (recommended)
+- `capabilities` (jsonb)
+  - examples: runtimes, tools, network_requirements, filesystem_requirements
+- `is_allowed` (boolean)
+- `created_at` (timestamptz)
+- `updated_at` (timestamptz)
+
+Constraints
+
+- Unique: (`sandbox_image_id`, `version`)
+- Index: (`sandbox_image_id`)
+- Index: (`is_allowed`)
+
+### Node Image Availability Table
+
+- `id` (uuid, pk)
+- `node_id` (uuid)
+- `sandbox_image_version_id` (uuid)
+- `status` (text)
+  - examples: available, pulling, failed, evicted
+- `last_checked_at` (timestamptz)
+- `details` (jsonb, nullable)
+
+Constraints
+
+- Unique: (`node_id`, `sandbox_image_version_id`)
+- Index: (`node_id`)
+
+## Preferences and Constraints
+
+Sandbox image registry behavior SHOULD be configurable via PostgreSQL preferences.
+
+Suggested preference keys
+
+- `sandbox_images.registry.mode` (string)
+  - examples: orchestrator_hosted, user_provided
+- `sandbox_images.registry.url` (string)
+- `sandbox_images.nodes.prefer_cached_images` (boolean)
+- `sandbox_images.allow_public_internet` (boolean)
+- `sandbox_images.require_digest_pinning` (boolean)
+
+## Access Control and Auditing
+
+Publishing and use of sandbox images MUST be policy-controlled and audited.
+
+- Access control rules SHOULD be defined via [`docs/tech_specs/access_control.md`](access_control.md).
+- Actions SHOULD include:
+  - image publish requests
+  - image pull and sandbox execution requests
+- The orchestrator SHOULD log:
+  - who published an image, which task it was for, and what was published
+  - which image version was used for each sandbox execution
