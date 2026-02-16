@@ -8,14 +8,17 @@
   - [Project Manager Agent Tool Access](#project-manager-agent-tool-access)
   - [Project Analyst Agent Tool Access](#project-analyst-agent-tool-access)
 - [Database Access Rules](#database-access-rules)
-- [External MCP Servers](#external-mcp-servers)
 - [Access Control and Auditing](#access-control-and-auditing)
 - [Sandbox Connectivity Model](#sandbox-connectivity-model)
 
 ## Document Overview
 
 This document defines how CyNodeAI uses MCP as the standard interface for agent tools.
-It covers tool categories, role-based access, database access restrictions, and external MCP server integration.
+It covers tool categories, role-based access, and database access restrictions.
+Gateway enforcement and role allowlists are defined in [`docs/tech_specs/mcp_gateway_enforcement.md`](mcp_gateway_enforcement.md).
+The tool catalog is defined in [`docs/tech_specs/mcp_tool_catalog.md`](mcp_tool_catalog.md).
+Tool call audit storage is defined in [`docs/tech_specs/mcp_tool_call_auditing.md`](mcp_tool_call_auditing.md).
+Practical SDK installation guidance is in [`docs/tech_specs/mcp_sdk_installation.md`](mcp_sdk_installation.md).
 
 ## MCP Role in CyNodeAI
 
@@ -104,19 +107,6 @@ Normative requirements
 - The orchestrator owns database credentials and exposes only scoped MCP database tools.
 - User-facing access MUST be mediated by the User API Gateway and MUST NOT expose raw SQL execution.
 
-## External MCP Servers
-
-The orchestrator MAY connect to external MCP servers to expose additional tools.
-External MCP servers MUST be subject to policy controls, audit logging, and allowlisting.
-
-Recommended behavior
-
-- External MCP servers SHOULD be registered with:
-  - a logical name
-  - a tool allowlist
-  - per-user and per-project enablement
-- External MCP server tool responses MUST be treated as untrusted data.
-
 ## Access Control and Auditing
 
 All MCP tool calls MUST be audited with task context.
@@ -145,7 +135,7 @@ Key principles
 Node-hosted sandbox MCP
 
 - Nodes SHOULD expose sandbox operations via a node-local MCP server.
-- The orchestrator SHOULD register node MCP servers as external MCP servers and route sandbox tool calls to the correct node.
+- The orchestrator SHOULD register each node MCP server with an allowlist and route sandbox tool calls to the correct node.
 - Agents MUST call sandbox tools through the orchestrator and MUST NOT call node MCP servers directly.
 
 Recommended sandbox tool operations

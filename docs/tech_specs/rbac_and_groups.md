@@ -13,6 +13,8 @@
 
 This document defines CyNodeAI role-based access control (RBAC) and how group membership is tracked for users.
 It complements the policy model in [`docs/tech_specs/access_control.md`](access_control.md) by defining subjects, roles, and membership resolution.
+The Postgres schema is defined in [`docs/tech_specs/postgres_schema.md`](postgres_schema.md).
+See [Groups and RBAC](postgres_schema.md#groups-and-rbac).
 
 ## Goals
 

@@ -34,7 +34,6 @@ Bootstrap YAML SHOULD support seeding:
 
 - System preferences (entries in `preference_entries` with `scope_type` system)
 - Access control rules and default policy
-- External MCP servers to connect to, with allowlists
 - Sandbox image registry configuration (registry URL, mode, policy defaults)
 - Model management defaults (cache limits and download policy)
 - External model routing defaults (allowed providers and fallback order)

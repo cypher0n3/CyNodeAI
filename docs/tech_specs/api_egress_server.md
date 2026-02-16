@@ -4,6 +4,7 @@
 - [Service Purpose](#service-purpose)
 - [Agent Interaction Model](#agent-interaction-model)
 - [Credential Storage](#credential-storage)
+  - [API Credentials Table](#api-credentials-table)
 - [Access Control](#access-control)
 - [Policy and Auditing](#policy-and-auditing)
 
@@ -41,7 +42,10 @@ Minimum response fields
 Credentials are stored in PostgreSQL and are only retrievable by the API Egress Server.
 Agents MUST never receive credentials in responses.
 
-Proposed tables
+Database schema
+
+- The Postgres schema is defined in [`docs/tech_specs/postgres_schema.md`](postgres_schema.md).
+- The API Egress credentials table is specified in the [API Egress Credentials](postgres_schema.md#api-egress-credentials) section.
 
 ### API Credentials Table
 

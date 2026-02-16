@@ -20,6 +20,8 @@ Preferences are stored as key-value entries with scope and precedence.
 ## Tables
 
 These tables provide preference storage with clear scoping and precedence.
+The Postgres schema is defined in [`docs/tech_specs/postgres_schema.md`](postgres_schema.md).
+See [Preferences](postgres_schema.md#preferences).
 
 ### Users Table
 

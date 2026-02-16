@@ -97,7 +97,7 @@ Normative requirements
 
 - Each node SHOULD run a node-local MCP server that exposes sandbox operations for that node.
 - The node MCP server MUST be reachable only by the orchestrator, not by arbitrary clients.
-- The orchestrator SHOULD register each node MCP server as an external MCP server with an allowlist.
+- The orchestrator SHOULD register each node MCP server with an allowlist.
 - Sandbox operations MUST be audited with `task_id` context.
 
 Recommended sandbox MCP tool surface
@@ -391,6 +391,7 @@ Capability reporting guidance
 ## Registration and Bootstrap
 
 During registration, the node establishes trust with the orchestrator and receives a bootstrap configuration payload.
+Canonical payload shapes are defined in [`docs/tech_specs/node_payloads.md`](node_payloads.md).
 
 Recommended flow
 
@@ -406,6 +407,7 @@ Recommended flow
 
 Nodes MUST report host capabilities to the orchestrator so the orchestrator can select compatible configuration and schedule work safely.
 Nodes SHOULD report capabilities during registration and again on every node startup.
+Canonical payload shapes are defined in [`docs/tech_specs/node_payloads.md`](node_payloads.md).
 
 Recommended capability fields
 
@@ -439,6 +441,7 @@ Change reporting
 ## Configuration Delivery
 
 The orchestrator MUST be able to deliver and update configuration for registered nodes.
+Canonical payload shapes are defined in [`docs/tech_specs/node_payloads.md`](node_payloads.md).
 
 Recommended behavior
 

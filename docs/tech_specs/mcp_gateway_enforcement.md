@@ -1,0 +1,150 @@
+# MCP Gateway Enforcement and Tool Allowlists
+
+- [Document Overview](#document-overview)
+- [Goals](#goals)
+- [Standard MCP Usage](#standard-mcp-usage)
+- [Gateway Enforcement Responsibilities](#gateway-enforcement-responsibilities)
+- [Role-Based Tool Allowlists](#role-based-tool-allowlists)
+  - [Worker Agent Allowlist](#worker-agent-allowlist)
+  - [Project Manager Agent Allowlist](#project-manager-agent-allowlist)
+  - [Project Analyst Agent Allowlist](#project-analyst-agent-allowlist)
+- [Tool Argument Schema Requirements](#tool-argument-schema-requirements)
+- [Access Control Mapping](#access-control-mapping)
+- [Auditing Requirements](#auditing-requirements)
+- [Compatibility and Versioning](#compatibility-and-versioning)
+
+## Document Overview
+
+This document defines how CyNodeAI enforces policy and auditing for MCP tool calls.
+CyNodeAI uses the standard MCP protocol on the wire.
+The orchestrator MCP gateway is the enforcement and audit point.
+
+Related documents
+
+- MCP concepts: [`docs/tech_specs/mcp_tooling.md`](mcp_tooling.md)
+- MCP tool catalog: [`docs/tech_specs/mcp_tool_catalog.md`](mcp_tool_catalog.md)
+- Access control and auditing: [`docs/tech_specs/access_control.md`](access_control.md)
+- Tool call audit storage: [`docs/tech_specs/mcp_tool_call_auditing.md`](mcp_tool_call_auditing.md)
+- Git egress tool patterns: [`docs/tech_specs/git_egress_mcp.md`](git_egress_mcp.md)
+
+## Goals
+
+- Maximize compatibility with existing MCP clients and configurations.
+- Enforce allowlists, access control, and auditing centrally at the orchestrator gateway.
+- Make task scoping deterministic using strict tool argument schemas for task-scoped tools.
+
+## Standard MCP Usage
+
+Normative requirements
+
+- CyNodeAI MUST use the standard MCP protocol messages on the wire to MCP servers.
+- The orchestrator MUST NOT require MCP servers to accept CyNodeAI-specific wrapper fields.
+- The orchestrator MAY attach internal metadata to an invocation record, but it MUST NOT depend on non-standard wire fields.
+
+## Gateway Enforcement Responsibilities
+
+The orchestrator MCP gateway MUST perform the following for every tool call it routes.
+
+- Resolve identity and context from orchestrator state.
+  This includes user identity, RBAC context, task context, and run or job context when available.
+- Enforce role-based tool allowlists (coarse gating).
+- Enforce access control policy (`access_control_rules`) using `mcp.tool.invoke`.
+- Enforce request and response limits.
+  This includes size limits, timeouts, and schema validation for tool responses when defined.
+- Emit audit records for the decision and outcome.
+
+The orchestrator MUST fail closed.
+If required context is missing for a tool call, the call MUST be rejected.
+
+## Role-Based Tool Allowlists
+
+Allowlists are a coarse safety control.
+They define which tool namespaces are eligible for routing for a given agent role.
+
+Allowlists are not sufficient for authorization.
+Fine-grained authorization MUST still be enforced by access control policy rules.
+
+### Worker Agent Allowlist
+
+Worker agents run in sandbox containers and SHOULD have the minimal tool surface needed to complete dispatched work.
+
+Recommended allowlist
+
+- `artifact.*` (scoped to current task)
+- `web.fetch` (sanitized, when allowed by policy)
+- `api.call` (through API Egress, when explicitly allowed for the task)
+
+Explicitly disallowed
+
+- `db.*`
+- `node.*`
+- `sandbox.*` (worker is already inside a sandbox)
+
+### Project Manager Agent Allowlist
+
+Recommended allowlist
+
+- `db.*` (tasks, jobs, preferences, routing metadata)
+- `node.*` (capabilities, status, config refresh)
+- `sandbox.*` (create, exec, file transfer, logs, destroy)
+- `artifact.*`
+- `model.*` (registry and availability)
+- `connector.*` (management and invocation, subject to policy)
+- `web.fetch` (sanitized, subject to policy)
+- `api.call` (through API Egress, subject to policy)
+- `git.*` (through Git egress, subject to policy)
+
+### Project Analyst Agent Allowlist
+
+Recommended allowlist
+
+- `db.read` and limited `db.write` (verification findings only)
+- `artifact.*` (read for produced outputs)
+- `web.fetch` (sanitized, when allowed for verification)
+- `api.call` (through API Egress, when allowed for verification)
+
+## Tool Argument Schema Requirements
+
+Because CyNodeAI does not extend MCP wire messages, task scoping MUST be expressed in tool arguments.
+
+Normative requirements
+
+- Any tool that is task-scoped MUST include `task_id` in its arguments schema.
+- Any tool that is run-scoped SHOULD include `run_id` in its arguments schema.
+- Any tool that is job-scoped SHOULD include `job_id` in its arguments schema.
+- Tools MUST reject calls where required scoped ids are missing or do not match orchestrator context.
+
+Recommended guidance
+
+- Prefer stable, explicit ids (`task_id`, `run_id`, `job_id`) over implicit scoping.
+- Prefer allowlisted tool patterns over dynamic tool discovery.
+
+## Access Control Mapping
+
+Access control SHOULD be defined via [`docs/tech_specs/access_control.md`](access_control.md).
+
+Recommended mapping for tool calls
+
+- `action`: `mcp.tool.invoke`
+- `resource_type`: `mcp.tool`
+- `resource_pattern`: tool identity pattern
+  - examples: `sandbox.*`, `git.pr.create`, `api.call`
+
+## Auditing Requirements
+
+All MCP tool calls routed by the orchestrator MUST be audited with task context when applicable.
+
+Minimum audit fields (recommended)
+
+- subject identity (user_id, group_ids, role_names) when applicable
+- tool identity (server and tool name)
+- `task_id` and `project_id` when applicable
+- decision allow or deny
+- status success or error
+- timing and error status
+
+## Compatibility and Versioning
+
+- Changes to allowlists and policy MUST be applied centrally at the gateway.
+- Tool argument schemas MAY evolve by adding optional fields.
+- Required fields MUST NOT change meaning without a versioned tool name or tool schema versioning mechanism.

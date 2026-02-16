@@ -28,6 +28,8 @@ Cache properties
 
 The model registry stores model metadata used for routing and verification.
 It allows the Project Manager Agent to select appropriate models for tasks based on capabilities and availability.
+The Postgres schema is defined in [`docs/tech_specs/postgres_schema.md`](postgres_schema.md).
+See [Model Registry](postgres_schema.md#model-registry).
 
 ### Models Table
 

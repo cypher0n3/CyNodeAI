@@ -9,7 +9,7 @@
 - [User API Gateway Surface](#user-api-gateway-surface)
 - [Initial Connectors](#initial-connectors)
 - [OpenClaw Connector Compatibility](#openclaw-connector-compatibility)
-- [External MCP Server Governance](#external-mcp-server-governance)
+- [Connector MCP Adapters](#connector-mcp-adapters)
 
 ## Document Overview
 
@@ -172,9 +172,9 @@ Normative requirements
 
 Recommended adapter approaches
 
-- External MCP adapter (preferred)
+- MCP adapter (preferred)
   - Wrap OpenClaw connectors behind an MCP server that exposes allowlisted `connector.*` tools only.
-  - Register that MCP server as an external MCP server with per-project enablement and a tool allowlist.
+  - Apply per-project enablement and a tool allowlist for the MCP server.
 - Internal connector service
   - Load OpenClaw connectors as plugins into a dedicated connector service process.
   - Apply the same enforcement boundary: policy checks, auditing, allowlists, rate limits, and strict response normalization.
@@ -190,9 +190,9 @@ Response handling guidance
 - Responses MUST be schema-validated and size-limited.
 - Responses MUST be normalized and redacted to prevent accidental secret leakage.
 
-## External MCP Server Governance
+## Connector MCP Adapters
 
-Connectors MAY be implemented as internal services or as external MCP servers.
-External MCP connector servers MUST follow governance requirements: allowlists, sandbox expectations, response validation, and per-project enablement.
+Connectors MAY be implemented as internal services or as MCP servers.
+Connector MCP servers MUST follow governance requirements: allowlists, sandbox expectations, response validation, and per-project enablement.
 
-See [`docs/tech_specs/mcp_tooling.md`](mcp_tooling.md#external-mcp-servers).
+See [`docs/tech_specs/mcp_tooling.md`](mcp_tooling.md).
