@@ -1,0 +1,7 @@
+# Python lint tools for CyNodeAI
+flake8>=6.0
+pylint>=3.0
+radon>=6.0
+xenon>=0.9
+vulture>=2.0
+bandit>=1.7

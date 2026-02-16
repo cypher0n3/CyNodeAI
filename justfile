@@ -3,7 +3,7 @@
 # shellcheck disable=SC2148,SC1007
 # (justfile: not a shell script; recipe bodies are run by just with set shell)
 
-set shell ["bash", "-uc"]
+set shell := ["bash", "-uc"]
 
 # Go version to install when using install-go (match go.mod / toolchain)
 go_version := "1.25.7"
