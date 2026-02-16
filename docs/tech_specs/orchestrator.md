@@ -101,7 +101,10 @@ See [`docs/tech_specs/mcp_tooling.md`](mcp_tooling.md).
 ## Workflow Engine
 
 The orchestrator uses LangGraph to implement multi-step and multi-agent workflows.
-The MVP workflow topology is defined in [`docs/tech_specs/langgraph_mvp.md`](langgraph_mvp.md).
+The Project Manager Agent's behavior is implemented by the LangGraph MVP workflow.
+
+See [`docs/tech_specs/langgraph_mvp.md`](langgraph_mvp.md) for the graph topology, state model, and node behaviors.
+For how the graph is hosted, invoked, checkpointed, and wired to orchestrator capabilities (MCP, Worker API, model routing), see the "Integration with the Orchestrator" section of that document.
 
 ## Orchestrator Bootstrap Configuration
 

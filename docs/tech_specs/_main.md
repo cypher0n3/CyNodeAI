@@ -3,7 +3,18 @@
 - [Document Overview](#document-overview)
 - [Architecture Summary](#architecture-summary)
 - [Tech Spec Index](#tech-spec-index)
+  - [Core Documents](#core-documents)
+  - [Execution and Artifacts](#execution-and-artifacts)
+  - [External Integration and Routing](#external-integration-and-routing)
+  - [Model Lifecycle](#model-lifecycle)
+  - [Agents Specification](#agents-specification)
+  - [Bootstrap Configurations](#bootstrap-configurations)
 - [MVP Development Plan](#mvp-development-plan)
+  - [Phase 0 Foundations](#phase-0-foundations)
+  - [Phase 1 Single Node Happy Path](#phase-1-single-node-happy-path)
+  - [Phase 2 MCP in the Loop](#phase-2-mcp-in-the-loop)
+  - [Phase 3 Multi Node Robustness](#phase-3-multi-node-robustness)
+  - [Phase 4 Optional Controlled Egress and Integrations](#phase-4-optional-controlled-egress-and-integrations)
 
 ## Document Overview
 
@@ -25,7 +36,9 @@ Key principles
 
 ## Tech Spec Index
 
-Core documents
+<!-- no-empty-heading allow -->
+
+### Core Documents
 
 - Orchestrator: [`docs/tech_specs/orchestrator.md`](orchestrator.md)
 - Worker nodes: [`docs/tech_specs/node.md`](node.md)
@@ -39,29 +52,29 @@ Core documents
 - User preferences: [`docs/tech_specs/user_preferences.md`](user_preferences.md)
 - Access control: [`docs/tech_specs/access_control.md`](access_control.md)
 
-Execution and artifacts
+### Execution and Artifacts
 
 - Sandbox container: [`docs/tech_specs/sandbox_container.md`](sandbox_container.md)
 - Sandbox image registry: [`docs/tech_specs/sandbox_image_registry.md`](sandbox_image_registry.md)
 - Sandbox web browsing: [`docs/tech_specs/secure_browser_service.md`](secure_browser_service.md)
 
-External integration and routing
+### External Integration and Routing
 
 - API egress server: [`docs/tech_specs/api_egress_server.md`](api_egress_server.md)
 - Git egress MCP: [`docs/tech_specs/git_egress_mcp.md`](git_egress_mcp.md)
 - External model routing: [`docs/tech_specs/external_model_routing.md`](external_model_routing.md)
 
-Model lifecycle
+### Model Lifecycle
 
 - Model management: [`docs/tech_specs/model_management.md`](model_management.md)
 
-Agents
+### Agents Specification
 
 - Project Manager Agent: [`docs/tech_specs/project_manager_agent.md`](project_manager_agent.md)
 - Project Analyst Agent: [`docs/tech_specs/project_analyst_agent.md`](project_analyst_agent.md)
 - LangGraph MVP workflow: [`docs/tech_specs/langgraph_mvp.md`](langgraph_mvp.md)
 
-Bootstrap
+### Bootstrap Configurations
 
 - Orchestrator bootstrap: [`docs/tech_specs/orchestrator_bootstrap.md`](orchestrator_bootstrap.md)
 
