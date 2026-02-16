@@ -19,6 +19,26 @@ Nodes may be inference-capable or sandbox-only, depending on configuration.
 
 **Technical specifications:** [Tech Specs Index](docs/tech_specs/_main.md)
 
+**Contributing:** [CONTRIBUTING.md](CONTRIBUTING.md)
+
+**AI-assisted workflows:** [AI coding instructions](ai_files/ai_coding_instructions.md)
+
+## Development Setup
+
+A [justfile](justfile) provides dev environment setup and scripting.
+Install [just](https://github.com/casey/just), then run:
+
+- `just setup` - install Podman (if missing), Go 1.25.x, and Go lint tools (golangci-lint, staticcheck, govulncheck)
+- `just install-podman` / `just install-go` / `just install-go-tools` - individual steps
+- `just ci` - local CI (lint + test + vulncheck-go)
+- `just lint` - run all linting (Go + Python)
+- `just lint-go` / `just lint-go-ci` - Go vet+staticcheck / golangci-lint
+- `just lint-python` - Python (flake8, pylint, radon, xenon, vulture, bandit)
+- `just test` - run all tests
+- `just test-go` / `just test-go-race` - Go tests / with race detector
+- `just vulncheck-go` - Go dependency vuln check
+- `just fmt-go` - format Go code
+
 ## Goals
 
 - Multi-agent system that can run fully local and private or incorporate cloud-based agents
@@ -42,7 +62,7 @@ CyNodeAI uses a central orchestrator that can manage both node-local workers and
 - Model management: caches models locally and tracks model capabilities for consistent node execution
 - User API gateway: single user-facing endpoint that exposes orchestrator capabilities for UIs and integrations
 - Sandbox image registry: manages sandbox container images and allowed images for node execution
-- MCP tool interface: standard tool protocol for agents, with role-based access and support for external MCP servers
+- MCP tool interface: standard tool protocol for agents, with role-based access
 - Orchestrator bootstrap: optional YAML import at startup to seed PostgreSQL configuration and integrations
 - Task scheduler: queues work, selects nodes, dispatches jobs; supports retries, leases, and a cron tool for scheduled jobs, wakeups, and automation
 - Execution sandboxes: requests sandbox container execution on worker nodes
@@ -139,7 +159,7 @@ See [`docs/tech_specs/user_api_gateway.md`](docs/tech_specs/user_api_gateway.md)
 
 - Agents use MCP as the standard interface for tools (web, API egress, artifacts, model and node operations)
 - Tool access is role-based (worker agents vs orchestrator-side agents such as Project Manager and Project Analyst)
-- Orchestrator can expose additional tools by connecting to external MCP servers, subject to policy and auditing
+- Tool calls are policy-controlled and audited
 
 See [`docs/tech_specs/mcp_tooling.md`](docs/tech_specs/mcp_tooling.md).
 
