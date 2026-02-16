@@ -1,0 +1,68 @@
+# Secure Browser Service rules and controls.
+#
+# This file is an optional import and export format.
+# It can be used to seed system defaults into PostgreSQL and to review effective rules.
+# The source of truth for preferences is PostgreSQL, as defined by `docs/tech_specs/user_preferences.md`.
+#
+# Notes
+# - This file contains no secrets.
+# - Access control is handled separately via `docs/tech_specs/access_control.md`.
+
+fetch:
+  respect_robots: true
+  user_agent: "CyNodeAI-SecureBrowser/0.1"
+  timeout_seconds: 20
+  max_bytes: 4000000
+
+redirects:
+  max_redirect_hops: 5
+  allow_cross_domain_redirects: false
+  blocked_redirect_url_patterns:
+    - "(?i)/cdn-cgi/"
+    - "(?i)captcha"
+    - "(?i)bot[-_]?check"
+    - "(?i)consent"
+    - "(?i)cookie"
+
+extraction:
+  mode_defaults:
+    default: "auto"
+  strip_elements:
+    - "script"
+    - "style"
+    - "noscript"
+    - "svg"
+    - "canvas"
+    - "iframe"
+    - "form"
+  strip_selector_hints:
+    class_contains:
+      - "nav"
+      - "footer"
+      - "header"
+      - "sidebar"
+      - "cookie"
+      - "consent"
+      - "ad"
+    id_contains:
+      - "nav"
+      - "footer"
+      - "header"
+      - "sidebar"
+      - "cookie"
+      - "consent"
+
+sanitization:
+  max_output_chars: 20000
+  denylist_line_patterns:
+    - "(?i)ignore\\s+previous\\s+instructions"
+    - "(?i)system\\s+prompt"
+    - "(?i)developer\\s+message"
+    - "(?i)jailbreak"
+    - "(?i)you\\s+are\\s+chatgpt"
+  denylist_section_markers:
+    - "BEGIN PROMPT"
+    - "END PROMPT"
+    - "INSTRUCTIONS:"
+    - "SYSTEM:"
+    - "DEVELOPER:"
