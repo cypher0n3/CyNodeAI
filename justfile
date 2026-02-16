@@ -16,6 +16,7 @@ setup:
     just install-podman
     just install-go
     just install-go-tools
+    just install-markdownlint
 
 # Install Podman if not already installed (Linux: distro package; macOS: Homebrew)
 install-podman:
@@ -138,6 +139,44 @@ lint-go-ci:
 vulncheck-go:
     govulncheck ./...
 
+# Install markdownlint: create .markdownlint-cli2.jsonc if missing; clone/update
+# https://github.com/cypher0n3/docs-as-code-tools markdownlint-rules into .markdownlint-rules/
+# when the config points to that dir.
+install-markdownlint:
+    #!/usr/bin/env bash
+    set -e
+    CONFIG=".markdownlint-cli2.jsonc"
+    RULES_DIR=".markdownlint-rules"
+    REPO_DIR=".markdownlint-repo"
+    REPO_URL="https://github.com/cypher0n3/docs-as-code-tools.git"
+    if [ ! -f "$CONFIG" ]; then
+        echo "Creating $CONFIG with customRules in $RULES_DIR/ ..."
+        printf '%s\n' '{"config":{"default":true,"extends":".markdownlint.yml"},"customRules":[".markdownlint-rules/allow-custom-anchors.js",".markdownlint-rules/ascii-only.js",".markdownlint-rules/document-length.js",".markdownlint-rules/fenced-code-under-heading.js",".markdownlint-rules/heading-min-words.js",".markdownlint-rules/heading-numbering.js",".markdownlint-rules/heading-title-case.js",".markdownlint-rules/no-duplicate-headings-normalized.js",".markdownlint-rules/no-empty-heading.js",".markdownlint-rules/no-h1-content.js",".markdownlint-rules/no-heading-like-lines.js",".markdownlint-rules/one-sentence-per-line.js"],"ignores":[".github/**","**/node_modules/**","tmp/**","**/*.plan.md"]}' > "$CONFIG"
+    fi
+    if ! grep -q '"\.markdownlint-rules/' "$CONFIG" 2>/dev/null && ! grep -q '"./\.markdownlint-rules/' "$CONFIG" 2>/dev/null; then
+        echo "Config does not point to $RULES_DIR; skipping rules download."
+        exit 0
+    fi
+    command -v git >/dev/null 2>&1 || { echo "Error: git required to download markdownlint rules."; exit 1; }
+    if [ ! -d "$REPO_DIR" ]; then
+        echo "Cloning docs-as-code-tools into $REPO_DIR ..."
+        git clone --depth 1 "$REPO_URL" "$REPO_DIR"
+        ln -sfn "$REPO_DIR/markdownlint-rules" "$RULES_DIR"
+        echo "Rules installed at $RULES_DIR (symlink to $REPO_DIR/markdownlint-rules)."
+    else
+        echo "Updating $REPO_DIR ..."
+        git -C "$REPO_DIR" fetch origin main
+        git -C "$REPO_DIR" merge --ff-only origin/main || true
+        if [ ! -e "$RULES_DIR" ]; then
+            ln -sfn "$REPO_DIR/markdownlint-rules" "$RULES_DIR"
+            echo "Linked $RULES_DIR to $REPO_DIR/markdownlint-rules."
+        fi
+    fi
+
+# Lint Markdown (markdownlint-cli2; uses .markdownlint-cli2.jsonc)
+lint-markdown:
+    markdownlint-cli2 '**/*.md'
+
 # Format Go code
 fmt-go:
     gofmt -s -w .
@@ -151,11 +190,12 @@ test-go:
 test-go-race:
     go test -race ./...
 
-# All linting (Go quick + Go full + Python)
+# All linting (Go quick + Go full + Python + Markdown)
 lint:
     just lint-go
     just lint-go-ci
     just lint-python
+    just lint-markdown
 
 # All tests
 test:

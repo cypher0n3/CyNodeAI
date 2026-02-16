@@ -68,6 +68,30 @@ See [`docs/tech_specs/_main.md`](_main.md) for the MVP development plan and foun
 - Use consistent types: `uuid` for primary keys and foreign keys, `timestamptz` for timestamps, `text` for strings unless a more specific type is required.
 - Support auditing: domain-specific audit tables where specs require it; recommended fields for each.
 
+## Storing This Schema in Code
+
+This tech spec is the source of truth for table names, columns, and constraints.
+Implementations MUST store the database schema as versioned migrations in the repository so environments can be created and upgraded deterministically.
+
+Normative requirements
+
+- The schema MUST be represented as **versioned migrations** committed to the repository.
+- Migrations SHOULD be written as **plain SQL** and reviewed like normal code.
+- Migrations MUST be applied in a deterministic order (lexicographic filename order is acceptable).
+- The orchestrator MUST provide a supported way to apply migrations in dev and CI (for example a `migrate` command or a documented startup option).
+
+Recommended repository layout
+
+- `migrations/`
+  - `0001_identity_auth.sql`
+  - `0002_tasks_jobs_nodes.sql`
+  - `0003_audit.sql`
+
+Implementation notes (non-normative)
+
+- A small Go migration runner is sufficient for MVP.
+- A migration tool/library MAY be used, but migration files should remain committed to the repo.
+
 Out of scope for this document
 
 - Node capability report and node configuration payload wire formats (see [`docs/tech_specs/node.md`](node.md)).

@@ -48,7 +48,7 @@ The scheduler MAY be implemented as a background process, a worker that consumes
 Agents (e.g. Project Manager) and the cron facility enqueue work; the scheduler is responsible for dequeueing and dispatching to nodes.
 The scheduler MUST be available via the User API Gateway so users can create and manage scheduled jobs, query queue and schedule state, and trigger wakeups or automation.
 
-See job dispatch and node selection in [`docs/tech_specs/node.md`](node.md), Phase 3 in the [MVP Development Plan](_main.md#phase-3-multi-node-robustness), and [`docs/tech_specs/user_api_gateway.md`](user_api_gateway.md).
+See job dispatch and node selection in [`docs/tech_specs/node.md`](node.md), the roadmap in [`docs/tech_specs/_main.md`](_main.md), and [`docs/tech_specs/user_api_gateway.md`](user_api_gateway.md).
 
 ## Project Manager Agent
 

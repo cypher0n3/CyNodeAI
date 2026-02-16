@@ -45,6 +45,10 @@ Normative requirements
 - The node MUST stream sandbox stdout and stderr back to the orchestrator for logging and debugging.
 - The node MUST associate sandbox containers with `task_id` and `job_id` for auditing and cleanup.
 
+Worker API contract
+
+- The Worker API endpoint surface and payload shapes are defined in [`docs/tech_specs/worker_api.md`](worker_api.md).
+
 Recommended sandbox operations in the worker API
 
 - Create sandbox container for a task job.

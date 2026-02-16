@@ -75,6 +75,10 @@ Minimum endpoints
 - `POST /status`
 - `POST /result`
 
+Authoritative contract
+
+- The Worker API contract for nodes (endpoint surface and payload shapes) is defined in [`docs/tech_specs/worker_api.md`](worker_api.md).
+
 Normative requirements
 
 - A cloud worker MUST NOT access PostgreSQL directly.

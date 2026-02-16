@@ -19,6 +19,8 @@ Authoritative details live in [`docs/tech_specs/`](../docs/tech_specs/).
 
 ## 3. Core Principles
 
+These principles are non-negotiable and apply to all changes.
+
 ### 3.1 Specification Adherence
 
 - **Primary rule:** Follow specifications in [`docs/tech_specs/`](../docs/tech_specs/) exactly as written.
@@ -48,6 +50,8 @@ Authoritative details live in [`docs/tech_specs/`](../docs/tech_specs/).
 - **MCP:** Agents use MCP as the standard tool interface for privileged operations and data access.
 
 ## 5. Development Workflow
+
+Follow this workflow for all implementation work in this repository.
 
 ### 5.1 BDD/TDD (Red -> Green -> Refactor)
 
@@ -92,6 +96,8 @@ Authoritative details live in [`docs/tech_specs/`](../docs/tech_specs/).
 - **Secure browser:** [`secure_browser/`](../secure_browser/) - rules and assets for the secure browser service.
 
 ## 7. Error Handling
+
+Prefer failing fast on spec ambiguity and fixing quality issues before merging.
 
 ### 7.1 Specification Issues
 
