@@ -3,6 +3,7 @@
 - [Document Overview](#document-overview)
 - [Goals](#goals)
 - [Conventions](#conventions)
+- [Security Notes](#security-notes)
 - [Node Capability Report Payload](#node-capability-report-payload)
   - [Capability Report Schema `node_capability_report_v1`](#capability-report-schema-node_capability_report_v1)
 - [Node Bootstrap Payload](#node-bootstrap-payload)
@@ -35,7 +36,7 @@ Behavioral requirements remain defined in [`docs/tech_specs/node.md`](node.md).
 - Timestamps are RFC 3339 strings in UTC.
 - Optional fields may be omitted when unknown.
 
-Security notes
+## Security Notes
 
 - Payloads may include secrets (for example short-lived pull tokens).
 - Secrets MUST be short-lived where possible and MUST NOT be exposed to sandbox containers.
@@ -49,8 +50,6 @@ It may also be sent when capabilities change.
 Source requirements: [`docs/tech_specs/node.md`](node.md#capability-reporting).
 
 ### Capability Report Schema `node_capability_report_v1`
-
-Required fields
 
 - `version` (int)
   - must be 1
@@ -157,8 +156,6 @@ Source requirements: [`docs/tech_specs/node.md`](node.md#registration-and-bootst
 
 ### Bootstrap Payload Schema `node_bootstrap_payload_v1`
 
-Required fields
-
 - `version` (int)
   - must be 1
 - `issued_at` (string)
@@ -174,14 +171,6 @@ Required fields
 - `trust` (object, optional)
   - `ca_bundle_pem` (string, optional)
   - `pinned_spki_sha256` (string, optional)
-
-Credential delivery
-
-- Registry and cache pull credentials SHOULD be issued as short-lived tokens.
-- Tokens SHOULD be rotated by configuration refresh.
-
-Optional fields
-
 - `initial_config_version` (string, optional)
 - `pull_credentials` (object, optional)
   - `sandbox_registry` (object, optional)
@@ -195,6 +184,11 @@ Optional fields
     - `token` (string, optional)
     - `expires_at` (string, optional)
 
+Credential delivery
+
+- Registry and cache pull credentials SHOULD be issued as short-lived tokens.
+- Tokens SHOULD be rotated by configuration refresh.
+
 ## Node Configuration Payload
 
 This payload is delivered by the orchestrator to registered nodes.
@@ -203,8 +197,6 @@ It is versioned so nodes can apply updates safely and atomically.
 Source requirements: [`docs/tech_specs/node.md`](node.md#configuration-delivery) and [`docs/tech_specs/node.md`](node.md#dynamic-configuration-updates).
 
 ### Node Config Schema `node_configuration_payload_v1`
-
-Required fields
 
 - `version` (int)
   - must be 1
@@ -237,9 +229,13 @@ Required fields
     - `enable_dynamic_config` (boolean, optional)
     - `poll_interval_seconds` (int, optional)
     - `allow_service_restart` (boolean, optional)
-
-Optional fields
-
+- `worker_api` (object, optional)
+  - `orchestrator_bearer_token` (string, optional)
+    - Bearer token the orchestrator will use to authenticate when calling the node Worker API.
+    - Must be treated as a secret and must not be exposed to sandbox containers.
+  - `orchestrator_bearer_token_expires_at` (string, optional)
+    - RFC 3339 UTC timestamp.
+    - When present, the node must reject expired tokens and request a configuration refresh.
 - `notes` (string, optional)
 - `constraints` (object, optional)
   - `max_request_bytes` (int, optional)
@@ -252,8 +248,6 @@ This acknowledgement allows safe rollout, retries, and visibility.
 
 ### Config Ack Schema `node_config_ack_v1`
 
-Required fields
-
 - `version` (int)
   - must be 1
 - `node_slug` (string)
@@ -261,9 +255,6 @@ Required fields
 - `ack_at` (string)
 - `status` (string)
   - examples: applied, failed, rolled_back
-
-Optional fields
-
 - `error` (object, optional)
   - `type` (string)
   - `message` (string)

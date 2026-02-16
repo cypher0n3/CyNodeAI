@@ -5,6 +5,10 @@
 node_modules/
 Abacus.ai*/
 tmp/
+# install-markdownlint: cloned repo and rules (dir or symlink)
+.markdownlint-repo/
+.markdownlint-rules
+.markdownlint-rules/
 
 # File Patterns
 *.backup*
@@ -43,3 +47,4 @@ coverage.*
 
 # Ignore local files
 meta.md
+.markdownlint-cli2.jsonc

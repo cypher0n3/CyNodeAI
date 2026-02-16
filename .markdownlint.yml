@@ -14,142 +14,35 @@ MD013:
   strict: false
   stern: false
 
-# MD033/no-inline-html - allow anchor elements for custom anchors
+# MD033/no-inline-html - allow only listed HTML elements (built-in). Required
+# for allow-custom-anchors (<a id=""></a>).
+# Options:
+#   allowed_elements: list of element names (e.g. "a", "br"); only these allowed
+# ---
 MD033:
-  allowed_elements: ["a"]
+  allowed_elements:
+    - "a"
 
 # NOTE: This project uses custom markdownlint rules from https://github.com/cypher0n3/docs-as-code-tools.
 
-# ascii-only: disallow non-ASCII except in configured paths; inline code (backticks) always stripped
-# No built-in path/emoji defaults. Options:
-# - allowedPathPatternsUnicode: glob list; files where any non-ASCII is allowed
-# - allowedPathPatternsEmoji: glob list; files where only allowedEmoji chars are allowed
-# - allowedEmoji: emoji/chars allowed in paths matching allowedPathPatternsEmoji (multi-codepoint OK)
-# - allowedUnicode: chars allowed in all files; extends default set (é, ï, ñ, ç, etc.) unless replace below
-# - allowedUnicodeReplaceDefault: true = use only allowedUnicode list (no default set)
-# - allowUnicodeInCodeBlocks: true (default) = skip fenced blocks; false = check them for unicode
-# - disallowUnicodeInCodeBlockTypes: when allowUnicodeInCodeBlocks false, only these block types checked
-#   (block type = first word after opening fence, e.g. "text" from ```text); empty = check all blocks
-# - unicodeReplacements: object or [char, replacement] array; built-in defaults (arrows, quotes, <=>=*) if omitted
-ascii-only:
-  allowedPathPatternsUnicode:
-    # - "README.md"
-  allowedPathPatternsEmoji:
-    - "dev_docs/**"
-    - "docs/docs_standards/markdown_conventions.md"
-    - "**/DEPENDENCY_LICENSES.md"
-  # allowedUnicode:
-  #   - "ń"   # additions on top of default (fixtures e.g. positive_general.md)
-  # allowedUnicodeReplaceDefault: false  # true = use only allowedUnicode list, no default set
-  allowedEmoji:
-    - "✅"
-    - "❌"
-    - "📊"
-    - "⚠️"
-
-# document-length: disallow documents longer than maximum lines.
+# -----------------------------------------------------------------------------
+# allow-custom-anchors (custom) + MD033 (built-in; allow <a> for anchors)
+# -----------------------------------------------------------------------------
+# To override: Uncomment both allow-custom-anchors and MD033 below. Define
+# allowedIdPatterns (required); optionally set strictPlacement and
+# excludePathPatterns.
+#
+# allow-custom-anchors: allow only configured <a id="..."></a> anchor id
+#   patterns; optional placement per pattern.
 # Options:
-#   maximum: number (default 1500); max allowed line count; must be positive integer
-#   excludePathPatterns: list of globs; skip this rule for matching file paths
-document-length:
-  maximum: 1500
-
-# heading-title-case: AP-style headline capitalization; words in backticks and file names (suggest backticks) handled. Fixable.
-# Options (all optional):
-#   lowercaseWords: list of strings; words that must be lowercase in middle (extends default list)
-#   lowercaseWordsReplaceDefault: bool (default false); true = use only lowercaseWords list, no built-in default
-#   excludePathPatterns: list of globs; skip this rule for matching file paths
-# heading-title-case:
-#   lowercaseWords: ["through"]
-#   lowercaseWordsReplaceDefault: true
-
-# no-heading-like-lines: report lines that look like headings but are not (e.g. **Text:**, 1. **Text**, MD036-style **Intro**). Fixable.
-# Options (all optional):
-#   convertToHeading: bool (default false); when true, fix converts to ATX heading; when false, fix strips emphasis to plain text
-#   defaultHeadingLevel: number 1-6 (default 2); used when converting to heading and there is no preceding heading
-#   fixedHeadingLevel: number 1-6; when set, suggested heading uses this level and ignores context
-#   punctuationMarks: string (default ".,;!?"); for whole-line emphasis, skip when content ends with one of these (no colon = catch colon lines)
-#   excludePathPatterns: list of globs; skip this rule for matching file paths
-# With convertToHeading true, heading-title-case.js and heading-numbering.js in same dir (if present) add AP title case and numbering.
-no-heading-like-lines:
-  convertToHeading: true
-#   defaultHeadingLevel: 2
-#   # fixedHeadingLevel: 3
-#   # excludePathPatterns: ["**/README.md"]
-
-# no-h1-content: under first h1 allow only TOC (blank lines, list-of-links, badges, HTML comments including multi-line).
-# Options:
-#   excludePathPatterns: list of globs; skip this rule for matching file paths
-# no-h1-content:
-#   excludePathPatterns:
-#     - "README.md"
-#     - "CONTRIBUTING.md"
-#     - "**/README.md"
-
-# fenced-code-under-heading: code blocks for given languages must sit under an H2-H6 heading.
-# Options:
-#   languages: list of strings (required); info strings (e.g. go, bash) to check; block type = first word after opening fence
-#   minHeadingLevel / maxHeadingLevel: numbers (default 2 and 6); heading levels that count
-#   maxBlocksPerHeading: number; max blocks matching languages per heading; only configured language(s) count unless exclusive
-#   requireHeading: bool (default true); when true, every applicable block must have a preceding heading
-#   exclusive: bool (default false); when true, at most one fenced block (any language) per heading, and it must be one of languages
-#   excludePaths / includePaths: list of globs; excludePaths skips matching paths; includePaths (when set) = only those files checked
-#   excludePathPatterns: list of globs; skip this rule for matching file paths (alias for excludePaths in this rule)
-fenced-code-under-heading:
-  languages:
-    - "bash"
-    - "go"
-    - "markdown"
-    - "text"
-    - "yaml"
-    - "json"
-  maxBlocksPerHeading: 1
-  requireHeading: true
-  excludePaths:
-    - "docs/docs_standards/markdown_conventions.md"
-    - "**/README.md"
-  # exclusive: true   # uncomment to allow only one block total per heading (and it must be one of the configured languages)
-
-# heading-min-words: headings at or below a level must have at least N words (after optional numbering strip).
-# Options:
-#   minWords: number (required); minimum word count per heading
-#   applyToLevelsAtOrBelow: number (required); apply to headings at this level or deeper (e.g. 4 = H1-H4)
-#   minLevel / maxLevel: numbers (optional); only headings in this level range checked (default 1-6)
-#   excludePaths / includePaths: list of globs; excludePaths skips; includePaths (when set) = only those files
-#   allowList: list of exact heading titles (after strip) allowed even if below minWords (e.g. "Overview", "Summary")
-#   stripNumbering: bool (default true); when true, leading numbering (e.g. 1.2.3) stripped before counting and allowList match
-#   excludePathPatterns: list of globs; skip this rule for matching file paths
-heading-min-words:
-  minWords: 2
-  applyToLevelsAtOrBelow: 3
-  allowList:
-    - "Cross-References"
-    - "Overview"
-  excludePaths:
-    - "docs/docs_standards/requirements_domains.md"
-    - "scripts/README.md"
-
-# no-empty-heading: H2+ must have content before any subheading; single- and multi-line HTML comments supported.
-# Options (all optional):
-#   minimumContentLines: number (default 1); minimum lines that count as content under each H2+
-#   countBlankLinesAsContent: bool (default false); count blank lines toward minimum
-#   countHTMLCommentsAsContent: bool (default false); count HTML-comment-only lines (including multi-line <!-- ... -->)
-#   countHtmlLinesAsContent: bool (default false); count HTML-tag-only lines (e.g. <br>)
-#   countCodeBlockLinesAsContent: bool (default true); count lines inside ```/~~~ blocks
-#   excludePathPatterns: list of globs; skip this rule for matching file paths
-# Suppress per section: "<!-- no-empty-heading allow -->" on its own line allows that section to be empty.
-no-empty-heading:
-  excludePathPatterns:
-    - "**/*_index.md"
-    - "ai_files/ai_coding_instructions.md"
-
-# allow-custom-anchors: allow only configured <a id="..."></a> anchor id patterns; optional placement per pattern.
-# Options:
-#   allowedIdPatterns: array (required); each entry regex string or { pattern: string, placement?: object }
-#     placement: headingMatch (regex), lineMatch (regex), standaloneLine (bool), requireAfter (["blank","fencedBlock","list"]),
+#   allowedIdPatterns: array (required); each entry regex string or
+#     { pattern: string, placement?: object }
+#     placement: headingMatch (regex), lineMatch (regex), standaloneLine (bool),
+#                requireAfter (["blank","fencedBlock","list"]),
 #                anchorImmediatelyAfterHeading (bool), maxPerSection (number)
-#   strictPlacement: bool (default true); when true, enforce placement when the matching pattern has placement set
+#   strictPlacement: bool (default true); enforce placement when pattern has placement set
 #   excludePathPatterns: list of globs; skip this rule for matching file paths
+# ---
 allow-custom-anchors:
   allowedIdPatterns:
     - pattern: "^spec-[a-z0-9-]+$"
@@ -177,32 +70,221 @@ allow-custom-anchors:
         maxPerSection: 1
   strictPlacement: true
 
-# heading-numbering: enforce numeric outline (e.g. 1, 1.1, 1.2). Fixable. Not configured here; options documented for reference.
+# -----------------------------------------------------------------------------
+# ascii-only (custom)
+# -----------------------------------------------------------------------------
+# To override: Uncomment the ascii-only block and set any of the options below.
+# Disallow non-ASCII except in configured paths; inline code (backticks) always
+# stripped. Fixable when replacement in unicodeReplacements.
 # Options (all optional):
-#   maxHeadingLevel: number 1-6 (default 6); headings at or below this level must be numbered
-#   maxSegmentValue: number (default 99); max value for any segment (e.g. 99 => 1.99.3 allowed)
-#   maxSegmentValueMinLevel: number 1-6 (default 2); min heading level for maxSegmentValue cap
-#   maxSegmentValueMaxLevel: number 1-6 (default 6); max heading level for maxSegmentValue cap
+#   allowedEmoji: list of chars/emoji allowed in paths matching allowedPathPatternsEmoji
+#   allowedPathPatternsEmoji: list of globs; files where only allowedEmoji allowed
+#   allowedPathPatternsUnicode: list of globs; files where any non-ASCII allowed
+#   allowedUnicode: list of single-char strings; allowed in all files
+#   allowedUnicodeReplaceDefault: bool (default false); true = use only allowedUnicode, no built-in
+#   allowUnicodeInCodeBlocks: bool (default true); false = check inside fenced blocks
+#   disallowUnicodeInCodeBlockTypes: list of block types; when allowUnicodeInCodeBlocks false, only these checked
 #   excludePathPatterns: list of globs; skip this rule for matching file paths
-# heading-numbering:
-#   maxHeadingLevel: 6
-#   maxSegmentValue: 99
-#   maxSegmentValueMinLevel: 2
-#   maxSegmentValueMaxLevel: 6
-#   # excludePathPatterns: ["**/README.md"]
+#   unicodeReplacements: object or [[char, replacement], ...]; built-in defaults if omitted
+# ---
+ascii-only:
+  allowedPathPatternsUnicode:
+    # - "README.md"
+  allowedPathPatternsEmoji:
+    - "dev_docs/**"
+    - "docs/docs_standards/markdown_conventions.md"
+    - "**/DEPENDENCY_LICENSES.md"
+  # allowedUnicode:
+  #   - "ń"   # additions on top of default (fixtures e.g. positive_general.md)
+  # allowedUnicodeReplaceDefault: false  # true = use only allowedUnicode list, no default set
+  allowedEmoji:
+    - "✅"
+    - "❌"
+    - "📊"
+    - "⚠️"
 
-# no-duplicate-headings-normalized: disallow duplicate heading text after normalizing (whitespace/case). Not configured here.
+# -----------------------------------------------------------------------------
+# document-length (custom)
+# -----------------------------------------------------------------------------
+# To override: Uncomment the document-length block; set maximum and/or excludePathPatterns.
+# Disallow documents longer than maximum lines.
+# Options:
+#   maximum: number (default 1500); max allowed line count; must be positive integer
+#   excludePathPatterns: list of globs; skip this rule for matching file paths
+# ---
+document-length:
+  maximum: 1500
+#   # excludePathPatterns:
+#   #   - "**/long/**"
+
+# -----------------------------------------------------------------------------
+# fenced-code-under-heading (custom)
+# -----------------------------------------------------------------------------
+# To override: Uncomment the block; set languages (required), then any of the other options.
+# Code blocks for given languages must sit under an H2–H6 heading.
+# Options:
+#   languages: list of strings (required); info strings (e.g. go, bash) to check
+#   minHeadingLevel / maxHeadingLevel: numbers (default 2 and 6); heading levels that count
+#   maxBlocksPerHeading: number; max blocks matching languages per heading
+#   requireHeading: bool (default true); every applicable block must have preceding heading
+#   exclusive: bool (default false); when true, at most one fenced block per heading, must be one of languages
+#   excludePaths / includePaths: list of globs; excludePaths skips; includePaths = only those checked
+#   excludePathPatterns: list of globs; skip this rule (alias for excludePaths in this rule)
+# ---
+fenced-code-under-heading:
+  languages:
+    - "bash"
+    - "go"
+    - "markdown"
+    - "text"
+    - "yaml"
+    - "json"
+  maxBlocksPerHeading: 1
+  requireHeading: true
+  excludePaths:
+    - "docs/docs_standards/markdown_conventions.md"
+    - "**/README.md"
+  # exclusive: true   # uncomment to allow only one block total per heading (and it must be one of the configured languages)
+
+# -----------------------------------------------------------------------------
+# heading-min-words (custom)
+# -----------------------------------------------------------------------------
+# To override: Uncomment the block; set minWords and applyToLevelsAtOrBelow (required), then any optional options.
+# Headings at or below a level must have at least N words (after optional numbering strip).
+# Options:
+#   minWords: number (required); minimum word count per heading
+#   applyToLevelsAtOrBelow: number (required); apply to headings at this level or deeper (e.g. 4 = H1–H4)
+#   minLevel / maxLevel: numbers (optional); only headings in this level range checked (default 1–6)
+#   excludePaths / includePaths: list of globs; excludePaths skips; includePaths = only those files
+#   allowList: list of exact heading titles (after strip) allowed even if below minWords
+#   stripNumbering: bool (default true); strip leading numbering (e.g. 1.2.3) before counting and allowList match
+#   excludePathPatterns: list of globs; skip this rule for matching file paths
+# ---
+heading-min-words:
+  minWords: 2
+  applyToLevelsAtOrBelow: 3
+  allowList:
+    - "Cross-References"
+    - "Overview"
+  # excludePaths:
+  #   - "docs/docs_standards/requirements_domains.md"
+  #   - "scripts/README.md"
+
+# -----------------------------------------------------------------------------
+# heading-numbering (custom)
+# -----------------------------------------------------------------------------
+# To override: Uncomment the heading-numbering block and set any options. Enforce numeric outline (e.g. 1, 1.1, 1.2). Fixable.
+# Options (all optional):
+#   maxHeadingLevel: number 1–6 (default 6); headings at or below this level must be numbered
+#   maxSegmentValue: number (default 99); max value for any segment
+#   maxSegmentValueMinLevel: number 1–6 (default 2); min heading level for maxSegmentValue cap
+#   maxSegmentValueMaxLevel: number 1–6 (default 6); max heading level for maxSegmentValue cap
+#   excludePathPatterns: list of globs; skip this rule for matching file paths
+# ---
+# heading-numbering:
+#   # maxHeadingLevel: 6
+#   # maxSegmentValue: 99
+#   # maxSegmentValueMinLevel: 2
+#   # maxSegmentValueMaxLevel: 6
+#   # excludePathPatterns:
+#   #   - "**/*.md"
+
+# -----------------------------------------------------------------------------
+# heading-title-case (custom)
+# -----------------------------------------------------------------------------
+# To override: Uncomment the block and set lowercaseWords and/or excludePathPatterns as needed. AP-style headline capitalization; fixable.
+# Options (all optional):
+#   lowercaseWords: list of strings; words that must be lowercase in middle (extends default list)
+#   lowercaseWordsReplaceDefault: bool (default false); true = use only lowercaseWords list, no built-in default
+#   excludePathPatterns: list of globs; skip this rule for matching file paths
+# ---
+# heading-title-case:
+#   # lowercaseWords:
+#   #   - "a"
+#   #   - "an"
+#   #   - "the"
+#   #   - "vs"
+#   # lowercaseWordsReplaceDefault: false
+#   # excludePathPatterns:
+#   #   - "**/*.md"
+
+# -----------------------------------------------------------------------------
+# no-duplicate-headings-normalized (custom)
+# -----------------------------------------------------------------------------
+# To override: Uncomment the block; add excludePathPatterns if you need to skip paths. Disallow duplicate heading text after normalizing (whitespace/case).
 # Options:
 #   excludePathPatterns: list of globs; skip this rule for matching file paths
+# ---
 # no-duplicate-headings-normalized:
-#   # excludePathPatterns: ["**/README.md"]
+#   # excludePathPatterns:
+#   #   - "**/*.md"
 
-# one-sentence-per-line: enforce one sentence per line in prose and list content. Fixable (repeated Fix all).
+# -----------------------------------------------------------------------------
+# no-empty-heading (custom)
+# -----------------------------------------------------------------------------
+# To override: Uncomment the block and set minimumContentLines, count* options, and/or excludePathPatterns. H2+ must have content before any subheading. Per-section suppress: "<!-- no-empty-heading allow -->".
+# Options (all optional):
+#   minimumContentLines: number (default 1); minimum lines that count as content under each H2+
+#   countBlankLinesAsContent: bool (default false); count blank lines toward minimum
+#   countHTMLCommentsAsContent: bool (default false); count HTML-comment-only lines
+#   countHtmlLinesAsContent: bool (default false); count HTML-tag-only lines (e.g. <br>)
+#   countCodeBlockLinesAsContent: bool (default true); count lines inside ```/~~~ blocks
+#   excludePathPatterns: list of globs; skip this rule for matching file paths
+# ---
+# no-empty-heading:
+#   # minimumContentLines: 1
+#   # countBlankLinesAsContent: false
+#   # countHTMLCommentsAsContent: false
+#   # countHtmlLinesAsContent: false
+#   # countCodeBlockLinesAsContent: true
+#   # excludePathPatterns:
+#   #   - "**/*_index.md"
+
+# -----------------------------------------------------------------------------
+# no-h1-content (custom)
+# -----------------------------------------------------------------------------
+# To override: Uncomment the block; set excludePathPatterns to skip READMEs etc. if desired. Under first h1 allow only TOC (blank lines, list-of-links, badges, HTML comments).
+# Options:
+#   excludePathPatterns: list of globs; skip this rule for matching file paths
+# ---
+# no-h1-content:
+#   # excludePathPatterns:
+#   #   - "**/README.md"
+
+# -----------------------------------------------------------------------------
+# no-heading-like-lines (custom)
+# -----------------------------------------------------------------------------
+# To override: Uncomment the block; set convertToHeading, defaultHeadingLevel, fixedHeadingLevel, punctuationMarks, or excludePathPatterns. Report lines that look like headings but are not (e.g. **Text:**, MD036-style). Fixable.
+# Options (all optional):
+#   convertToHeading: bool (default false); when true, fix converts to ATX heading; when false, fix strips emphasis
+#   defaultHeadingLevel: number 1–6 (default 2); used when converting and there is no preceding heading
+#   fixedHeadingLevel: number 1–6; when set, suggested heading uses this level and ignores context
+#   punctuationMarks: string (default ".,;!?"); for whole-line emphasis, skip when content ends with one of these
+#   excludePathPatterns: list of globs; skip this rule for matching file paths
+# ---
+no-heading-like-lines:
+  convertToHeading: true
+#   # defaultHeadingLevel: 2
+#   # fixedHeadingLevel: 3
+#   # punctuationMarks: ".,;!?"
+#   # excludePathPatterns:
+#   #   - "**/*.md"
+
+# -----------------------------------------------------------------------------
+# one-sentence-per-line (custom)
+# -----------------------------------------------------------------------------
+# To override: Uncomment the block; set continuationIndent, strictAbbreviations, and/or excludePathPatterns. Enforce one sentence per line in prose and list content. Fixable (repeated Fix all).
 # Options (all optional):
 #   continuationIndent: number (default 4); spaces for paragraph continuation lines
 #   strictAbbreviations: list of strings; abbreviations that do not end a sentence (extends/replaces default)
 #   excludePathPatterns: list of globs; skip this rule for matching file paths
+# ---
 # one-sentence-per-line:
-#   continuationIndent: 4
-#   # excludePathPatterns: ["**/README.md"]
+#   # continuationIndent: 4
+#   # strictAbbreviations:
+#   #   - "e.g"
+#   #   - "i.e"
+#   #   - "etc"
+#   # excludePathPatterns:
+#   #   - "**/*.md"
 ...

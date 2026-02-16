@@ -4,7 +4,8 @@
 - [Architecture Summary](#architecture-summary)
 - [Tech Spec Index](#tech-spec-index)
   - [Orchestrator and Nodes](#orchestrator-and-nodes)
-  - [User Interfaces and APIs](#user-interfaces-and-apis)
+  - [User Interfaces](#user-interfaces)
+  - [API Specifications](#api-specifications)
   - [Agents and Connectors](#agents-and-connectors)
   - [Identity, Policy, and Data](#identity-policy-and-data)
   - [Protocols and Standards](#protocols-and-standards)
@@ -48,13 +49,17 @@ Key principles
 - Worker nodes: [`docs/tech_specs/node.md`](node.md)
 - Node payloads: [`docs/tech_specs/node_payloads.md`](node_payloads.md)
 
-### User Interfaces and APIs
+### User Interfaces
+
+- CLI management app: [`docs/tech_specs/cli_management_app.md`](cli_management_app.md)
+- Admin web console: [`docs/tech_specs/admin_web_console.md`](admin_web_console.md)
+
+### API Specifications
 
 - User API Gateway: [`docs/tech_specs/user_api_gateway.md`](user_api_gateway.md)
 - Data REST API: [`docs/tech_specs/data_rest_api.md`](data_rest_api.md)
 - Runs and sessions API: [`docs/tech_specs/runs_and_sessions_api.md`](runs_and_sessions_api.md)
-- CLI management app: [`docs/tech_specs/cli_management_app.md`](cli_management_app.md)
-- Admin web console: [`docs/tech_specs/admin_web_console.md`](admin_web_console.md)
+- Worker API (node contract): [`docs/tech_specs/worker_api.md`](worker_api.md)
 
 ### Agents and Connectors
 
