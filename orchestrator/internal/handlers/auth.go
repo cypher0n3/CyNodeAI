@@ -317,7 +317,7 @@ func (h *AuthHandler) auditLog(ctx context.Context, userID *uuid.UUID, eventType
 		detPtr = &details
 	}
 
-	if err := h.db.CreateAuthAuditLog(ctx, userID, eventType, success, ipPtr, uaPtr, detPtr); err != nil {
+	if err := h.db.CreateAuthAuditLog(ctx, userID, eventType, success, ipPtr, uaPtr, nil, detPtr); err != nil {
 		if h.logger != nil {
 			h.logger.Error("create auth audit log", "error", err)
 		}

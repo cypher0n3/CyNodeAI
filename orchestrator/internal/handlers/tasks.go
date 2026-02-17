@@ -182,7 +182,7 @@ func (h *TaskHandler) GetTaskResult(w http.ResponseWriter, r *http.Request) {
 		jobResponses = append(jobResponses, JobResponse{
 			ID:        job.ID.String(),
 			Status:    job.Status,
-			Result:    job.Result,
+			Result:    job.Result.Ptr(),
 			StartedAt: job.StartedAt,
 			EndedAt:   job.EndedAt,
 		})

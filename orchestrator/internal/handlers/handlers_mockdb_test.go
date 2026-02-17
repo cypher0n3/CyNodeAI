@@ -571,7 +571,7 @@ func TestTaskHandler_GetTaskResultSuccess(t *testing.T) {
 		ID:        uuid.New(),
 		TaskID:    task.ID,
 		Status:    models.JobStatusCompleted,
-		Result:    &result,
+		Result:    models.NewJSONBString(&result),
 		StartedAt: &startedAt,
 		EndedAt:   &endedAt,
 		CreatedAt: time.Now().UTC(),

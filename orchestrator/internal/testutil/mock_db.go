@@ -112,6 +112,24 @@ func runWithWLockErr(m *MockDB, fn func() error) error {
 	return fn()
 }
 
+func (m *MockDB) setStatusAndUpdatedAt(id uuid.UUID, status string, forTask bool) error {
+	return runWithWLockErr(m, func() error {
+		now := time.Now().UTC()
+		if forTask {
+			if t, ok := m.Tasks[id]; ok {
+				t.Status = status
+				t.UpdatedAt = now
+			}
+		} else {
+			if j, ok := m.Jobs[id]; ok {
+				j.Status = status
+				j.UpdatedAt = now
+			}
+		}
+		return nil
+	})
+}
+
 // CreateUser creates a new user.
 func (m *MockDB) CreateUser(_ context.Context, handle string, email *string) (*models.User, error) {
 	return runWithLock(m, true, func() (*models.User, error) {
@@ -218,8 +236,8 @@ func (m *MockDB) InvalidateAllUserSessions(_ context.Context, userID uuid.UUID) 
 	return m.invalidateSessionsWithPred(func(s *models.RefreshSession) bool { return s.UserID == userID })
 }
 
-// CreateAuthAuditLog creates an auth audit log entry.
-func (m *MockDB) CreateAuthAuditLog(_ context.Context, userID *uuid.UUID, eventType string, success bool, ipAddr, userAgent, details *string) error {
+// CreateAuthAuditLog creates an auth audit log entry (subjectHandle, reason per Store).
+func (m *MockDB) CreateAuthAuditLog(_ context.Context, userID *uuid.UUID, eventType string, success bool, ipAddr, userAgent, subjectHandle, reason *string) error {
 	return runWithWLockErr(m, func() error {
 		entry := &AuthAuditLog{
 			ID:        uuid.New(),
@@ -228,11 +246,29 @@ func (m *MockDB) CreateAuthAuditLog(_ context.Context, userID *uuid.UUID, eventT
 			Success:   success,
 			IPAddress: ipAddr,
 			UserAgent: userAgent,
-			Details:   details,
+			Details:   reason,
 			CreatedAt: time.Now().UTC(),
 		}
 		m.AuditLogs = append(m.AuditLogs, entry)
 		return nil
+	})
+}
+
+// GetNodeByID retrieves a node by ID.
+func (m *MockDB) GetNodeByID(_ context.Context, id uuid.UUID) (*models.Node, error) {
+	return getByKeyLocked(m, m.Nodes, id)
+}
+
+// ListActiveNodes lists all active nodes.
+func (m *MockDB) ListActiveNodes(_ context.Context) ([]*models.Node, error) {
+	return runWithLock(m, false, func() ([]*models.Node, error) {
+		var out []*models.Node
+		for _, n := range m.Nodes {
+			if n.Status == models.NodeStatusActive {
+				out = append(out, n)
+			}
+		}
+		return out, nil
 	})
 }
 
@@ -257,6 +293,43 @@ func (m *MockDB) GetTaskByID(_ context.Context, id uuid.UUID) (*models.Task, err
 	return getByKeyLocked(m, m.Tasks, id)
 }
 
+// UpdateTaskStatus updates a task's status.
+func (m *MockDB) UpdateTaskStatus(_ context.Context, taskID uuid.UUID, status string) error {
+	return m.setStatusAndUpdatedAt(taskID, status, true)
+}
+
+// UpdateTaskSummary updates a task's summary.
+func (m *MockDB) UpdateTaskSummary(_ context.Context, taskID uuid.UUID, summary string) error {
+	return runWithWLockErr(m, func() error {
+		if task, ok := m.Tasks[taskID]; ok {
+			task.Summary = &summary
+			task.UpdatedAt = time.Now().UTC()
+		}
+		return nil
+	})
+}
+
+// ListTasksByUser lists tasks created by a user.
+func (m *MockDB) ListTasksByUser(_ context.Context, userID uuid.UUID, limit, offset int) ([]*models.Task, error) {
+	return runWithLock(m, false, func() ([]*models.Task, error) {
+		var out []*models.Task
+		for _, t := range m.Tasks {
+			if t.CreatedBy != nil && *t.CreatedBy == userID {
+				out = append(out, t)
+			}
+		}
+		// simple desc by created_at and limit/offset (no sort for mock)
+		if offset > len(out) {
+			return nil, nil
+		}
+		out = out[offset:]
+		if limit < len(out) {
+			out = out[:limit]
+		}
+		return out, nil
+	})
+}
+
 // GetJobsByTaskID retrieves jobs by task ID.
 func (m *MockDB) GetJobsByTaskID(_ context.Context, taskID uuid.UUID) ([]*models.Job, error) {
 	return runWithLock(m, false, func() ([]*models.Job, error) {
@@ -275,7 +348,7 @@ func (m *MockDB) CreateJob(_ context.Context, taskID uuid.UUID, payload string) 
 			ID:        uuid.New(),
 			TaskID:    taskID,
 			Status:    models.JobStatusQueued,
-			Payload:   &payload,
+			Payload:   models.NewJSONBString(&payload),
 			CreatedAt: time.Now().UTC(),
 			UpdatedAt: time.Now().UTC(),
 		}
@@ -285,13 +358,63 @@ func (m *MockDB) CreateJob(_ context.Context, taskID uuid.UUID, payload string) 
 	})
 }
 
+// GetJobByID retrieves a job by ID.
+func (m *MockDB) GetJobByID(_ context.Context, id uuid.UUID) (*models.Job, error) {
+	return getByKeyLocked(m, m.Jobs, id)
+}
+
+// UpdateJobStatus updates a job's status.
+func (m *MockDB) UpdateJobStatus(_ context.Context, jobID uuid.UUID, status string) error {
+	return m.setStatusAndUpdatedAt(jobID, status, false)
+}
+
+// AssignJobToNode assigns a job to a node.
+func (m *MockDB) AssignJobToNode(_ context.Context, jobID, nodeID uuid.UUID) error {
+	return runWithWLockErr(m, func() error {
+		if job, ok := m.Jobs[jobID]; ok {
+			now := time.Now().UTC()
+			job.NodeID = &nodeID
+			job.Status = models.JobStatusRunning
+			job.StartedAt = &now
+			job.UpdatedAt = now
+		}
+		return nil
+	})
+}
+
+// CompleteJob marks a job as completed with a result.
+func (m *MockDB) CompleteJob(_ context.Context, jobID uuid.UUID, result, status string) error {
+	return runWithWLockErr(m, func() error {
+		if job, ok := m.Jobs[jobID]; ok {
+			now := time.Now().UTC()
+			job.Result = models.NewJSONBString(&result)
+			job.Status = status
+			job.EndedAt = &now
+			job.UpdatedAt = now
+		}
+		return nil
+	})
+}
+
+// GetNextQueuedJob retrieves the next queued job.
+func (m *MockDB) GetNextQueuedJob(_ context.Context) (*models.Job, error) {
+	return runWithLock(m, false, func() (*models.Job, error) {
+		for _, job := range m.Jobs {
+			if job.Status == models.JobStatusQueued {
+				return job, nil
+			}
+		}
+		return nil, database.ErrNotFound
+	})
+}
+
 // CreateNode creates a new node.
 func (m *MockDB) CreateNode(_ context.Context, nodeSlug string) (*models.Node, error) {
 	return runWithLock(m, true, func() (*models.Node, error) {
 		node := &models.Node{
 			ID:        uuid.New(),
 			NodeSlug:  nodeSlug,
-			Status:    "pending",
+			Status:    models.NodeStatusRegistered,
 			CreatedAt: time.Now().UTC(),
 			UpdatedAt: time.Now().UTC(),
 		}

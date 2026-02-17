@@ -2,119 +2,79 @@ package database
 
 import (
 	"context"
+	"embed"
 	"fmt"
-	"io/fs"
 	"log/slog"
 	"sort"
 	"strings"
+
+	"github.com/cypher0n3/cynodeai/orchestrator/internal/models"
 )
 
-// MigrationsFS is set at runtime by the main package with embedded migrations.
-var MigrationsFS fs.FS
+//go:embed ddl/*.sql
+var ddlFS embed.FS
 
-// RunMigrations runs all SQL migrations in order.
-func (db *DB) RunMigrations(ctx context.Context, logger *slog.Logger) error {
-	if MigrationsFS == nil {
-		return fmt.Errorf("migrations filesystem not set")
-	}
-
-	if err := db.createMigrationsTable(ctx); err != nil {
+// RunSchema runs GORM AutoMigrate for all models then the idempotent DDL bootstrap (extensions, etc.).
+// Per postgres_schema.md: schema is represented as GORM models; a separate DDL step manages extensions and non-ORM DDL.
+func (db *DB) RunSchema(ctx context.Context, logger *slog.Logger) error {
+	if err := db.runAutoMigrate(ctx, logger); err != nil {
 		return err
 	}
-
-	applied, err := db.getAppliedMigrations(ctx)
-	if err != nil {
-		return err
-	}
-
-	files, err := db.getMigrationFiles()
-	if err != nil {
-		return err
-	}
-
-	return db.applyPendingMigrations(ctx, logger, files, applied)
+	return db.runDDLBootstrap(ctx, logger)
 }
 
-func (db *DB) createMigrationsTable(ctx context.Context) error {
-	_, err := db.ExecContext(ctx, `
-		CREATE TABLE IF NOT EXISTS schema_migrations (
-			version TEXT PRIMARY KEY,
-			applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-		)
-	`)
+// runAutoMigrate runs GORM AutoMigrate for all tables used by the Store.
+func (db *DB) runAutoMigrate(ctx context.Context, logger *slog.Logger) error {
+	logger.Info("running GORM AutoMigrate")
+	err := db.db.WithContext(ctx).AutoMigrate(
+		&models.User{},
+		&models.PasswordCredential{},
+		&models.RefreshSession{},
+		&models.AuthAuditLog{},
+		&models.Task{},
+		&models.Job{},
+		&models.Node{},
+		&models.NodeCapability{},
+	)
 	if err != nil {
-		return fmt.Errorf("create migrations table: %w", err)
+		return fmt.Errorf("auto migrate: %w", err)
 	}
+	logger.Info("AutoMigrate complete")
 	return nil
 }
 
-func (db *DB) getAppliedMigrations(ctx context.Context) (map[string]bool, error) {
-	applied := make(map[string]bool)
-	rows, err := db.QueryContext(ctx, "SELECT version FROM schema_migrations")
+// runDDLBootstrap runs idempotent DDL from embedded ddl/*.sql (e.g. CREATE EXTENSION).
+func (db *DB) runDDLBootstrap(ctx context.Context, logger *slog.Logger) error {
+	entries, err := ddlFS.ReadDir("ddl")
 	if err != nil {
-		return nil, fmt.Errorf("query migrations: %w", err)
-	}
-	defer func() { _ = rows.Close() }()
-
-	for rows.Next() {
-		var version string
-		if err := rows.Scan(&version); err != nil {
-			return nil, fmt.Errorf("scan migration: %w", err)
-		}
-		applied[version] = true
-	}
-	return applied, nil
-}
-
-func (db *DB) getMigrationFiles() ([]string, error) {
-	entries, err := fs.ReadDir(MigrationsFS, ".")
-	if err != nil {
-		return nil, fmt.Errorf("read migrations dir: %w", err)
+		return fmt.Errorf("read ddl dir: %w", err)
 	}
 
 	var files []string
-	for _, entry := range entries {
-		if !entry.IsDir() && strings.HasSuffix(entry.Name(), ".sql") {
-			files = append(files, entry.Name())
+	for _, e := range entries {
+		if !e.IsDir() && strings.HasSuffix(e.Name(), ".sql") {
+			files = append(files, e.Name())
 		}
 	}
 	sort.Strings(files)
-	return files, nil
-}
 
-func (db *DB) applyPendingMigrations(ctx context.Context, logger *slog.Logger, files []string, applied map[string]bool) error {
+	sqlDB, err := db.db.DB()
+	if err != nil {
+		return fmt.Errorf("get sql.DB: %w", err)
+	}
+
 	for _, file := range files {
-		version := strings.TrimSuffix(file, ".sql")
-		if applied[version] {
-			logger.Debug("migration already applied", "version", version)
-			continue
+		path := "ddl/" + file
+		content, err := ddlFS.ReadFile(path)
+		if err != nil {
+			return fmt.Errorf("read %s: %w", path, err)
 		}
-
-		if err := db.applySingleMigration(ctx, logger, file, version); err != nil {
-			return err
+		logger.Info("applying DDL", "file", file)
+		_, err = sqlDB.ExecContext(ctx, string(content))
+		if err != nil {
+			return fmt.Errorf("execute %s: %w", file, err)
 		}
+		logger.Info("DDL applied", "file", file)
 	}
-	return nil
-}
-
-func (db *DB) applySingleMigration(ctx context.Context, logger *slog.Logger, file, version string) error {
-	content, err := fs.ReadFile(MigrationsFS, file)
-	if err != nil {
-		return fmt.Errorf("read migration %s: %w", file, err)
-	}
-
-	logger.Info("applying migration", "version", version)
-
-	_, err = db.ExecContext(ctx, string(content))
-	if err != nil {
-		return fmt.Errorf("apply migration %s: %w", file, err)
-	}
-
-	_, err = db.ExecContext(ctx, "INSERT INTO schema_migrations (version) VALUES ($1)", version)
-	if err != nil {
-		return fmt.Errorf("record migration %s: %w", file, err)
-	}
-
-	logger.Info("migration applied", "version", version)
 	return nil
 }
