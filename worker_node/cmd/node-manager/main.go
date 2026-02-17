@@ -31,20 +31,20 @@ func main() {
 
 	ctx := context.Background()
 
-	nodeJWT, expiresAt, err := register(ctx, &cfg)
+	bootstrap, err := register(ctx, &cfg)
 	if err != nil {
 		logger.Error("failed to register node", "error", err)
 		os.Exit(1)
 	}
 
-	logger.Info("registered with orchestrator", "node_slug", cfg.NodeSlug, "expires_at", expiresAt)
+	logger.Info("registered with orchestrator", "node_slug", cfg.NodeSlug, "expires_at", bootstrap.ExpiresAt)
 
-	// Report capabilities periodically.
+	// Report capabilities periodically using URLs from bootstrap payload.
 	ticker := time.NewTicker(cfg.CapabilityReportInterval)
 	defer ticker.Stop()
 
 	for {
-		if err := reportCapabilities(ctx, &cfg, nodeJWT); err != nil {
+		if err := reportCapabilities(ctx, &cfg, bootstrap); err != nil {
 			logger.Error("capability report failed", "error", err)
 		}
 		<-ticker.C
@@ -84,7 +84,15 @@ func (c *config) validate() error {
 	return nil
 }
 
-func register(ctx context.Context, cfg *config) (nodeJWT, expiresAt string, err error) {
+// bootstrapData holds parsed bootstrap payload data for follow-on calls.
+type bootstrapData struct {
+	NodeJWT       string
+	ExpiresAt     string
+	NodeReportURL string
+	NodeConfigURL string
+}
+
+func register(ctx context.Context, cfg *config) (*bootstrapData, error) {
 	capability := buildCapability(cfg)
 
 	req := nodepayloads.RegistrationRequest{
@@ -94,51 +102,75 @@ func register(ctx context.Context, cfg *config) (nodeJWT, expiresAt string, err 
 
 	body, err := json.Marshal(req)
 	if err != nil {
-		return "", "", fmt.Errorf("marshal registration request: %w", err)
+		return nil, fmt.Errorf("marshal registration request: %w", err)
 	}
 
 	url := cfg.OrchestratorURL + "/v1/nodes/register"
 	httpReq, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(body))
 	if err != nil {
-		return "", "", fmt.Errorf("create registration request: %w", err)
+		return nil, fmt.Errorf("create registration request: %w", err)
 	}
 	httpReq.Header.Set("Content-Type", "application/json")
 
 	client := &http.Client{Timeout: cfg.HTTPTimeout}
 	resp, err := client.Do(httpReq)
 	if err != nil {
-		return "", "", fmt.Errorf("send registration request: %w", err)
+		return nil, fmt.Errorf("send registration request: %w", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
 
 	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
 		var p problem.Details
 		_ = json.NewDecoder(resp.Body).Decode(&p)
-		return "", "", fmt.Errorf("registration failed: %s (%d) %s", resp.Status, resp.StatusCode, p.Detail)
+		return nil, fmt.Errorf("registration failed: %s (%d) %s", resp.Status, resp.StatusCode, p.Detail)
 	}
 
 	var bootstrap nodepayloads.BootstrapResponse
 	if err := json.NewDecoder(resp.Body).Decode(&bootstrap); err != nil {
-		return "", "", fmt.Errorf("decode bootstrap response: %w", err)
+		return nil, fmt.Errorf("decode bootstrap response: %w", err)
 	}
 
-	return bootstrap.Auth.NodeJWT, bootstrap.Auth.ExpiresAt, nil
+	if err := validateBootstrap(&bootstrap); err != nil {
+		return nil, fmt.Errorf("invalid bootstrap payload: %w", err)
+	}
+
+	return &bootstrapData{
+		NodeJWT:       bootstrap.Auth.NodeJWT,
+		ExpiresAt:     bootstrap.Auth.ExpiresAt,
+		NodeReportURL: bootstrap.Orchestrator.Endpoints.NodeReportURL,
+		NodeConfigURL: bootstrap.Orchestrator.Endpoints.NodeConfigURL,
+	}, nil
 }
 
-func reportCapabilities(ctx context.Context, cfg *config, nodeJWT string) error {
+func validateBootstrap(b *nodepayloads.BootstrapResponse) error {
+	if b.Version != 1 {
+		return fmt.Errorf("unsupported bootstrap version %d", b.Version)
+	}
+	if b.Auth.NodeJWT == "" {
+		return errors.New("missing auth.node_jwt")
+	}
+	if b.Orchestrator.Endpoints.NodeReportURL == "" {
+		return errors.New("missing orchestrator.endpoints.node_report_url")
+	}
+	if b.Orchestrator.Endpoints.NodeConfigURL == "" {
+		return errors.New("missing orchestrator.endpoints.node_config_url")
+	}
+	return nil
+}
+
+func reportCapabilities(ctx context.Context, cfg *config, bootstrap *bootstrapData) error {
 	report := buildCapability(cfg)
 	body, err := json.Marshal(report)
 	if err != nil {
 		return fmt.Errorf("marshal capability report: %w", err)
 	}
 
-	url := cfg.OrchestratorURL + "/v1/nodes/capability"
-	req, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, "POST", bootstrap.NodeReportURL, bytes.NewReader(body))
 	if err != nil {
 		return fmt.Errorf("create capability request: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", "Bearer "+nodeJWT)
+	req.Header.Set("Authorization", "Bearer "+bootstrap.NodeJWT)
 
 	client := &http.Client{Timeout: cfg.HTTPTimeout}
 	resp, err := client.Do(req)

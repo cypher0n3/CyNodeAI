@@ -11,8 +11,10 @@ import (
 	"time"
 )
 
+const testOrchestratorURL = "http://test-orchestrator"
+
 func TestNewNodeHandler(t *testing.T) {
-	handler := NewNodeHandler(nil, nil, "test-psk", nil)
+	handler := NewNodeHandler(nil, nil, "test-psk", testOrchestratorURL, nil)
 	if handler == nil {
 		t.Fatal("NewNodeHandler returned nil")
 	}
@@ -44,11 +46,11 @@ func TestRegisterInvalidBodyOrSlug(t *testing.T) {
 		wantStatus int
 	}{
 		{"invalid capability version", NodeRegistrationRequest{
-			PSK: "test-psk",
+			PSK:        "test-psk",
 			Capability: NodeCapabilityReport{Version: 2, Node: NodeCapabilityNode{NodeSlug: "test-node"}},
 		}, http.StatusBadRequest},
 		{"missing node slug", NodeRegistrationRequest{
-			PSK: "test-psk",
+			PSK:        "test-psk",
 			Capability: NodeCapabilityReport{Version: 1, Node: NodeCapabilityNode{NodeSlug: ""}},
 		}, http.StatusBadRequest},
 	}
@@ -119,21 +121,30 @@ func TestNodeCapabilityReportJSON(t *testing.T) {
 }
 
 func TestNodeBootstrapResponseJSON(t *testing.T) {
-	resp := NodeBootstrapResponse{
-		Version:  1,
-		IssuedAt: time.Now().UTC().Format(time.RFC3339),
-		Auth: NodeBootstrapAuth{
-			NodeJWT:   "test-jwt",
-			ExpiresAt: time.Now().Add(time.Hour).Format(time.RFC3339),
-		},
-	}
+	handler := &NodeHandler{orchestratorPublicURL: testOrchestratorURL}
+	resp := handler.buildBootstrapResponse(testOrchestratorURL, "test-jwt", time.Now().Add(time.Hour))
 
 	jsonData, err := json.Marshal(resp)
 	if err != nil {
 		t.Fatalf("failed to marshal: %v", err)
 	}
 
-	var parsed NodeBootstrapResponse
+	var parsed struct {
+		Version      int    `json:"version"`
+		IssuedAt     string `json:"issued_at"`
+		Orchestrator struct {
+			BaseURL   string `json:"base_url"`
+			Endpoints struct {
+				WorkerRegistrationURL string `json:"worker_registration_url"`
+				NodeReportURL         string `json:"node_report_url"`
+				NodeConfigURL         string `json:"node_config_url"`
+			} `json:"endpoints"`
+		} `json:"orchestrator"`
+		Auth struct {
+			NodeJWT   string `json:"node_jwt"`
+			ExpiresAt string `json:"expires_at"`
+		} `json:"auth"`
+	}
 	if err := json.Unmarshal(jsonData, &parsed); err != nil {
 		t.Fatalf("failed to unmarshal: %v", err)
 	}
@@ -144,19 +155,35 @@ func TestNodeBootstrapResponseJSON(t *testing.T) {
 	if parsed.Auth.NodeJWT != "test-jwt" {
 		t.Errorf("expected JWT 'test-jwt', got %s", parsed.Auth.NodeJWT)
 	}
+	if parsed.Orchestrator.BaseURL != testOrchestratorURL {
+		t.Errorf("expected base_url %q, got %s", testOrchestratorURL, parsed.Orchestrator.BaseURL)
+	}
+	if parsed.Orchestrator.Endpoints.NodeReportURL != testOrchestratorURL+"/v1/nodes/capability" {
+		t.Errorf("expected node_report_url, got %s", parsed.Orchestrator.Endpoints.NodeReportURL)
+	}
 }
 
 func TestBuildBootstrapResponse(t *testing.T) {
 	handler := &NodeHandler{}
+	baseURL := testOrchestratorURL
 	expiresAt := time.Now().Add(time.Hour)
 
-	resp := handler.buildBootstrapResponse("test-jwt", expiresAt)
+	resp := handler.buildBootstrapResponse(baseURL, "test-jwt", expiresAt)
 
 	if resp.Version != 1 {
 		t.Errorf("expected version 1, got %d", resp.Version)
 	}
 	if resp.Auth.NodeJWT != "test-jwt" {
 		t.Errorf("expected JWT 'test-jwt', got %s", resp.Auth.NodeJWT)
+	}
+	if resp.Orchestrator.BaseURL != baseURL {
+		t.Errorf("expected base_url %q, got %q", baseURL, resp.Orchestrator.BaseURL)
+	}
+	if resp.Orchestrator.Endpoints.NodeReportURL != baseURL+"/v1/nodes/capability" {
+		t.Errorf("expected node_report_url, got %s", resp.Orchestrator.Endpoints.NodeReportURL)
+	}
+	if resp.Orchestrator.Endpoints.NodeConfigURL != baseURL+"/v1/nodes/config" {
+		t.Errorf("expected node_config_url, got %s", resp.Orchestrator.Endpoints.NodeConfigURL)
 	}
 }
 
@@ -249,17 +276,6 @@ func TestNodeRegistrationRequestJSON(t *testing.T) {
 
 	if parsed.PSK != "secret-psk" {
 		t.Errorf("expected PSK 'secret-psk', got %s", parsed.PSK)
-	}
-}
-
-func TestNodeBootstrapAuth(t *testing.T) {
-	auth := NodeBootstrapAuth{
-		NodeJWT:   "jwt-token",
-		ExpiresAt: "2024-01-01T12:00:00Z",
-	}
-
-	if auth.NodeJWT != "jwt-token" {
-		t.Errorf("expected NodeJWT 'jwt-token', got %s", auth.NodeJWT)
 	}
 }
 

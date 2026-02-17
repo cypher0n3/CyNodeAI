@@ -33,6 +33,10 @@ func TestLoadOrchestratorConfig_Defaults(t *testing.T) {
 	if cfg.RateLimitPerMinute == 0 {
 		t.Error("RateLimitPerMinute should have a default value")
 	}
+
+	if cfg.OrchestratorPublicURL == "" {
+		t.Error("OrchestratorPublicURL should have a default value")
+	}
 }
 
 func TestLoadOrchestratorConfig_EnvOverrides(t *testing.T) {

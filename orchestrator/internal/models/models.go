@@ -118,15 +118,15 @@ func (RefreshSession) TableName() string { return "refresh_sessions" }
 // AuthAuditLog records authentication events.
 // Schema: subject_handle, reason, ip_address (inet); no details column.
 type AuthAuditLog struct {
-	ID            uuid.UUID `gorm:"type:uuid;primaryKey" json:"id"`
+	ID            uuid.UUID  `gorm:"type:uuid;primaryKey" json:"id"`
 	UserID        *uuid.UUID `gorm:"column:user_id;index" json:"user_id,omitempty"`
-	EventType     string    `gorm:"column:event_type;index" json:"event_type"`
-	Success       bool      `gorm:"column:success" json:"success"`
-	SubjectHandle *string   `gorm:"column:subject_handle" json:"subject_handle,omitempty"`
-	IPAddress     *string   `gorm:"column:ip_address" json:"ip_address,omitempty"`
-	UserAgent     *string   `gorm:"column:user_agent" json:"user_agent,omitempty"`
-	Reason        *string   `gorm:"column:reason" json:"reason,omitempty"`
-	CreatedAt     time.Time `gorm:"column:created_at" json:"created_at"`
+	EventType     string     `gorm:"column:event_type;index" json:"event_type"`
+	Success       bool       `gorm:"column:success" json:"success"`
+	SubjectHandle *string    `gorm:"column:subject_handle" json:"subject_handle,omitempty"`
+	IPAddress     *string    `gorm:"column:ip_address" json:"ip_address,omitempty"`
+	UserAgent     *string    `gorm:"column:user_agent" json:"user_agent,omitempty"`
+	Reason        *string    `gorm:"column:reason" json:"reason,omitempty"`
+	CreatedAt     time.Time  `gorm:"column:created_at" json:"created_at"`
 }
 
 func (AuthAuditLog) TableName() string { return "auth_audit_log" }

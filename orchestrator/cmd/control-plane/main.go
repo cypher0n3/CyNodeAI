@@ -72,7 +72,7 @@ func main() {
 		cfg.JWTNodeDuration,
 	)
 
-	nodeHandler := handlers.NewNodeHandler(store, jwtManager, cfg.NodeRegistrationPSK, logger)
+	nodeHandler := handlers.NewNodeHandler(store, jwtManager, cfg.NodeRegistrationPSK, cfg.OrchestratorPublicURL, logger)
 	authMiddleware := middleware.NewAuthMiddleware(jwtManager, logger)
 
 	mux := http.NewServeMux()

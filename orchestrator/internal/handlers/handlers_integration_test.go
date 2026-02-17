@@ -114,12 +114,12 @@ func TestAuthHandler_CompleteLoginPath(t *testing.T) {
 	}
 }
 
-// TestNodeHandler_BootstrapResponse tests bootstrap response structure
+// TestNodeHandler_BootstrapResponse tests bootstrap response structure (CYNAI.WORKER.Payload.BootstrapV1)
 func TestNodeHandler_BootstrapResponse(t *testing.T) {
-	handler := &NodeHandler{}
+	handler := &NodeHandler{orchestratorPublicURL: testOrchestratorURL}
 	expiresAt := time.Now().Add(24 * time.Hour)
 
-	resp := handler.buildBootstrapResponse("test-node-jwt", expiresAt)
+	resp := handler.buildBootstrapResponse(testOrchestratorURL, "test-node-jwt", expiresAt)
 
 	if resp.Version != 1 {
 		t.Errorf("expected version 1, got %d", resp.Version)
@@ -129,6 +129,15 @@ func TestNodeHandler_BootstrapResponse(t *testing.T) {
 	}
 	if resp.IssuedAt == "" {
 		t.Error("expected IssuedAt to be set")
+	}
+	if resp.Orchestrator.BaseURL != testOrchestratorURL {
+		t.Errorf("expected base_url %q, got %s", testOrchestratorURL, resp.Orchestrator.BaseURL)
+	}
+	if resp.Orchestrator.Endpoints.NodeReportURL == "" {
+		t.Error("expected NodeReportURL to be set")
+	}
+	if resp.Orchestrator.Endpoints.NodeConfigURL == "" {
+		t.Error("expected NodeConfigURL to be set")
 	}
 }
 
@@ -212,10 +221,10 @@ func TestGetTaskResultWithValidUUID(t *testing.T) {
 // TestCreateTaskOrLogoutWithNilDB tests handlers that require user context but hit nil db (panic expected).
 func TestCreateTaskOrLogoutWithNilDB(t *testing.T) {
 	tests := []struct {
-		name    string
-		path    string
-		body    interface{}
-		invoke  func(http.ResponseWriter, *http.Request)
+		name   string
+		path   string
+		body   interface{}
+		invoke func(http.ResponseWriter, *http.Request)
 	}{
 		{"CreateTask", "/v1/tasks", CreateTaskRequest{Prompt: "test prompt"}, (&TaskHandler{}).CreateTask},
 		{"Logout", "/v1/auth/logout", LogoutRequest{RefreshToken: "some-refresh-token"}, (&AuthHandler{}).Logout},
@@ -328,7 +337,6 @@ func TestUserHandler_GetMeWithLoggerNil(t *testing.T) {
 		t.Errorf("expected status 500, got %d", rec.Code)
 	}
 }
-
 
 // TestNodeHandlerLoggerMethods tests logger helper methods with real logger
 func TestNodeHandlerLoggerMethods(t *testing.T) {

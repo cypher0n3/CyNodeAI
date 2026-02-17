@@ -15,7 +15,8 @@ It focuses on Phase 0 and Phase 1 and does not change any specs; it calls out am
 
 Key findings (updated for current completion plan):
 
-- **Resolved by completion plan:** Bootstrap payload shape (Phase 1 minimal subset in Chunk 02), Worker API auth (static token via config, HTTP for internal traffic in Chunk 03), config delivery API (`node_config_url` GET/POST and paths from bootstrap), inference precondition ownership (node enforces: Node Manager must not report ready until Ollama is running; see Section 3.1.0.2), and Phase 1 scope decisions in Section 1.1 (config_version, worker_api_target_url stored per node, network_policy=restricted as deny-all, no resource limits, workspace at /workspace, config ack applied/failed only).
+- **Resolved by completion plan:** Bootstrap payload shape (Phase 1 minimal subset in Chunk 02), Worker API auth (static token via config, HTTP for internal traffic in Chunk 03), config delivery API (`node_config_url` GET/POST and paths from bootstrap),
+  inference precondition ownership (node enforces: Node Manager must not report ready until Ollama is running; see Section 3.1.0.2), and Phase 1 scope decisions in Section 1.1 (config_version, worker_api_target_url stored per node, network_policy=restricted as deny-all, no resource limits, workspace at /workspace, config ack applied/failed only).
 - **Phase 0:** MCP gateway enforcement is fully specified but Phase 1 does not use the MCP gateway; Phase 1 task execution is direct (orchestrator -> Worker API).
   The completion plan does not explicitly state this; stating it would avoid confusion.
 - **Schema:** The completion plan locks that `worker_api_target_url` is "provided by orchestrator bootstrap configuration and stored per node" but `postgres_schema.md` does not define the columns or table for that storage (or for the bearer token).

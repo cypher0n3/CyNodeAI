@@ -42,11 +42,25 @@ type RegistrationRequest struct {
 }
 
 // BootstrapResponse represents the bootstrap payload returned on registration.
-// See docs/tech_specs/node_payloads.md node_bootstrap_payload_v1.
+// Spec CYNAI.WORKER.Payload.BootstrapV1; see docs/tech_specs/node_payloads.md node_bootstrap_payload_v1.
 type BootstrapResponse struct {
-	Version  int           `json:"version"`
-	IssuedAt string        `json:"issued_at"`
-	Auth     BootstrapAuth `json:"auth"`
+	Version      int                   `json:"version"`
+	IssuedAt     string                `json:"issued_at"`
+	Orchestrator BootstrapOrchestrator `json:"orchestrator"`
+	Auth         BootstrapAuth         `json:"auth"`
+}
+
+// BootstrapOrchestrator contains orchestrator base URL and endpoint URLs.
+type BootstrapOrchestrator struct {
+	BaseURL   string             `json:"base_url"`
+	Endpoints BootstrapEndpoints `json:"endpoints"`
+}
+
+// BootstrapEndpoints contains absolute URLs for node-orchestrator communication.
+type BootstrapEndpoints struct {
+	WorkerRegistrationURL string `json:"worker_registration_url"`
+	NodeReportURL         string `json:"node_report_url"`
+	NodeConfigURL         string `json:"node_config_url"`
 }
 
 type BootstrapAuth struct {
