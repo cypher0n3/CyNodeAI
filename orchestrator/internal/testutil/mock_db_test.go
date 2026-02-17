@@ -191,7 +191,7 @@ func TestMockDB_CreateAuthAuditLog(t *testing.T) {
 	ua := "Mozilla/5.0"
 	details := "test details"
 
-	err := db.CreateAuthAuditLog(ctx, &userID, "login", true, &ip, &ua, &details)
+	err := db.CreateAuthAuditLog(ctx, &userID, "login", true, &ip, &ua, nil, &details)
 	if err != nil {
 		t.Fatalf("CreateAuthAuditLog failed: %v", err)
 	}
@@ -438,7 +438,7 @@ func TestMockDB_ForceError_SessionOperations(t *testing.T) {
 		t.Error("InvalidateRefreshSession should return forced error")
 	}
 
-	err = db.CreateAuthAuditLog(ctx, nil, "", false, nil, nil, nil)
+	err = db.CreateAuthAuditLog(ctx, nil, "", false, nil, nil, nil, nil)
 	if err == nil {
 		t.Error("CreateAuthAuditLog should return forced error")
 	}

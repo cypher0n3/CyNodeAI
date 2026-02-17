@@ -34,7 +34,7 @@ func loadDispatcherConfig() dispatcherConfig {
 	}
 }
 
-func startDispatcher(ctx context.Context, db *database.DB, logger *slog.Logger) {
+func startDispatcher(ctx context.Context, db database.Store, logger *slog.Logger) {
 	cfg := loadDispatcherConfig()
 	if !cfg.Enabled {
 		logger.Info("dispatcher disabled")
@@ -67,7 +67,7 @@ func startDispatcher(ctx context.Context, db *database.DB, logger *slog.Logger) 
 	}
 }
 
-func dispatchOnce(ctx context.Context, db *database.DB, client *http.Client, cfg dispatcherConfig, logger *slog.Logger) error {
+func dispatchOnce(ctx context.Context, db database.Store, client *http.Client, cfg dispatcherConfig, logger *slog.Logger) error {
 	job, err := db.GetNextQueuedJob(ctx)
 	if err != nil {
 		return err
@@ -87,7 +87,7 @@ func dispatchOnce(ctx context.Context, db *database.DB, client *http.Client, cfg
 	}
 	_ = db.UpdateTaskStatus(ctx, job.TaskID, models.TaskStatusRunning)
 
-	sandbox, err := parseSandboxSpec(job.Payload)
+	sandbox, err := parseSandboxSpec(job.Payload.Ptr())
 	if err != nil {
 		_ = db.CompleteJob(ctx, job.ID, marshalDispatchError(err), models.JobStatusFailed)
 		_ = db.UpdateTaskStatus(ctx, job.TaskID, models.TaskStatusFailed)

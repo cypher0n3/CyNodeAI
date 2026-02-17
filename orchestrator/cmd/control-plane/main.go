@@ -48,19 +48,18 @@ func main() {
 	defer func() { _ = db.Close() }()
 
 	ctx := context.Background()
-	migrationsDir := getEnv("MIGRATIONS_DIR", "migrations")
-	database.MigrationsFS = os.DirFS(migrationsDir)
-	if err := db.RunMigrations(ctx, logger); err != nil {
-		logger.Error("failed to run migrations", "error", err)
+	if err := db.RunSchema(ctx, logger); err != nil {
+		logger.Error("failed to run schema", "error", err)
 		exitCode = 1
 		return
 	}
 	if migrateOnly {
-		logger.Info("migrations complete (migrate-only)")
+		logger.Info("schema applied (migrate-only)")
 		return
 	}
 
-	if err := bootstrapAdminUser(ctx, db, cfg.BootstrapAdminPassword, logger); err != nil {
+	var store database.Store = db
+	if err := bootstrapAdminUser(ctx, store, cfg.BootstrapAdminPassword, logger); err != nil {
 		logger.Error("failed to bootstrap admin user", "error", err)
 		exitCode = 1
 		return
@@ -73,7 +72,7 @@ func main() {
 		cfg.JWTNodeDuration,
 	)
 
-	nodeHandler := handlers.NewNodeHandler(db, jwtManager, cfg.NodeRegistrationPSK, logger)
+	nodeHandler := handlers.NewNodeHandler(store, jwtManager, cfg.NodeRegistrationPSK, logger)
 	authMiddleware := middleware.NewAuthMiddleware(jwtManager, logger)
 
 	mux := http.NewServeMux()
@@ -98,7 +97,7 @@ func main() {
 		MaxHeaderBytes:    cfg.MaxHeaderBytes,
 	}
 
-	go startDispatcher(ctx, db, logger)
+	go startDispatcher(ctx, store, logger)
 
 	done := make(chan os.Signal, 1)
 	signal.Notify(done, os.Interrupt, syscall.SIGTERM)
@@ -128,7 +127,7 @@ func getEnv(key, def string) string {
 	return def
 }
 
-func bootstrapAdminUser(ctx context.Context, db *database.DB, password string, logger *slog.Logger) error {
+func bootstrapAdminUser(ctx context.Context, db database.Store, password string, logger *slog.Logger) error {
 	_, err := db.GetUserByHandle(ctx, "admin")
 	if err == nil {
 		logger.Info("admin user already exists")

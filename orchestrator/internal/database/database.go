@@ -1,37 +1,32 @@
-// Package database provides PostgreSQL database operations.
+// Package database provides PostgreSQL database operations via GORM.
 // See docs/tech_specs/postgres_schema.md for schema details.
 package database
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"fmt"
 	"time"
 
+	"gorm.io/driver/postgres"
+	"gorm.io/gorm"
+
 	"github.com/google/uuid"
-	_ "github.com/lib/pq"
 
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/models"
 )
 
-// wrapQueryErr maps query/scan errors to ErrNotFound when sql.ErrNoRows, or wraps with context.
-func wrapQueryErr(err error, op string) error {
+// ErrNotFound is returned when a record is not found.
+var ErrNotFound = errors.New("not found")
+
+func wrapErr(err error, op string) error {
 	if err == nil {
 		return nil
 	}
-	if errors.Is(err, sql.ErrNoRows) {
+	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return ErrNotFound
 	}
 	return fmt.Errorf("%s: %w", op, err)
-}
-
-// wrapExecErr wraps an exec error with an operation name.
-func wrapExecErr(err error, op string) error {
-	if err != nil {
-		return fmt.Errorf("%s: %w", op, err)
-	}
-	return nil
 }
 
 // Store defines the interface for database operations.
@@ -52,128 +47,127 @@ type Store interface {
 	InvalidateRefreshSession(ctx context.Context, sessionID uuid.UUID) error
 	InvalidateAllUserSessions(ctx context.Context, userID uuid.UUID) error
 
-	// Auth audit log operations
-	CreateAuthAuditLog(ctx context.Context, userID *uuid.UUID, eventType string, success bool, ipAddress, userAgent, details *string) error
+	// Auth audit log operations (subjectHandle, reason per postgres_schema.md)
+	CreateAuthAuditLog(ctx context.Context, userID *uuid.UUID, eventType string, success bool, ipAddress, userAgent, subjectHandle, reason *string) error
 
 	// Task operations
 	CreateTask(ctx context.Context, createdBy *uuid.UUID, prompt string) (*models.Task, error)
 	GetTaskByID(ctx context.Context, id uuid.UUID) (*models.Task, error)
+	UpdateTaskStatus(ctx context.Context, taskID uuid.UUID, status string) error
+	UpdateTaskSummary(ctx context.Context, taskID uuid.UUID, summary string) error
+	ListTasksByUser(ctx context.Context, userID uuid.UUID, limit, offset int) ([]*models.Task, error)
 	GetJobsByTaskID(ctx context.Context, taskID uuid.UUID) ([]*models.Job, error)
 	CreateJob(ctx context.Context, taskID uuid.UUID, payload string) (*models.Job, error)
+	GetJobByID(ctx context.Context, id uuid.UUID) (*models.Job, error)
+	UpdateJobStatus(ctx context.Context, jobID uuid.UUID, status string) error
+	AssignJobToNode(ctx context.Context, jobID, nodeID uuid.UUID) error
+	CompleteJob(ctx context.Context, jobID uuid.UUID, result, status string) error
+	GetNextQueuedJob(ctx context.Context) (*models.Job, error)
 
 	// Node operations
 	CreateNode(ctx context.Context, nodeSlug string) (*models.Node, error)
 	GetNodeBySlug(ctx context.Context, slug string) (*models.Node, error)
+	GetNodeByID(ctx context.Context, id uuid.UUID) (*models.Node, error)
 	UpdateNodeStatus(ctx context.Context, nodeID uuid.UUID, status string) error
 	UpdateNodeLastSeen(ctx context.Context, nodeID uuid.UUID) error
 	SaveNodeCapabilitySnapshot(ctx context.Context, nodeID uuid.UUID, capJSON string) error
 	UpdateNodeCapability(ctx context.Context, nodeID uuid.UUID, capHash string) error
+	ListActiveNodes(ctx context.Context) ([]*models.Node, error)
 }
 
-// DB wraps database operations.
+// DB wraps GORM database operations.
 type DB struct {
-	*sql.DB
+	db *gorm.DB
 }
 
-// Ensure DB implements Store interface
+// Ensure DB implements Store.
 var _ Store = (*DB)(nil)
 
-// rowScanner is satisfied by *sql.Row and *sql.Rows (both have Scan(dest ...any) error).
-type rowScanner interface {
-	Scan(dest ...any) error
+// firstByID loads a record by primary key into dest (e.g. &models.User{}). Returns wrapErr of the query error.
+func (db *DB) firstByID(ctx context.Context, dest interface{}, id uuid.UUID, op string) error {
+	return wrapErr(db.db.WithContext(ctx).First(dest, "id = ?", id).Error, op)
 }
 
-// scanOne allocates *T, runs s.Scan(ptrs(t)...), and returns t or error. Shared by all single-row and row-set scanners.
-func scanOne[T any](s rowScanner, ptrs func(*T) []any) (*T, error) {
-	t := new(T)
-	if err := s.Scan(ptrs(t)...); err != nil {
+// getByID loads a record by ID and returns it or an error.
+func getByID[T any](db *DB, ctx context.Context, id uuid.UUID, op string) (*T, error) {
+	var dest T
+	if err := db.firstByID(ctx, &dest, id, op); err != nil {
 		return nil, err
 	}
-	return t, nil
+	return &dest, nil
 }
 
-// queryRowInto runs a single-row query, scans into T via scan, and returns (T, error). Use for Get* methods.
-func queryRowInto[T any](db *DB, ctx context.Context, op, query string, args []any, scan func(*sql.Row) (T, error)) (T, error) {
-	var zero T
-	row := db.QueryRowContext(ctx, query, args...)
-	t, err := scan(row)
-	if err != nil {
-		return zero, wrapQueryErr(err, op)
+// firstWhere loads the first record matching column=value into dest.
+func (db *DB) firstWhere(ctx context.Context, dest interface{}, column string, value interface{}, op string) error {
+	return wrapErr(db.db.WithContext(ctx).Where(column+" = ?", value).First(dest).Error, op)
+}
+
+// getWhere loads the first record matching column=value and returns it or an error.
+func getWhere[T any](db *DB, ctx context.Context, column string, value interface{}, op string) (*T, error) {
+	var dest T
+	if err := db.firstWhere(ctx, &dest, column, value, op); err != nil {
+		return nil, err
 	}
-	return t, nil
+	return &dest, nil
 }
 
-// execAndReturn runs exec and returns result on success. Use for Create* methods that return the created entity.
-func execAndReturn[T any](exec func() error, result T) (T, error) {
-	var zero T
-	if err := exec(); err != nil {
-		return zero, err
-	}
-	return result, nil
+// updateWhere updates model by whereCol=whereVal, setting updated_at and the given updates.
+func (db *DB) updateWhere(ctx context.Context, model interface{}, whereCol string, whereVal interface{}, updates map[string]interface{}, op string) error {
+	now := time.Now().UTC()
+	updates["updated_at"] = now
+	return wrapErr(db.db.WithContext(ctx).Model(model).Where(whereCol+" = ?", whereVal).Updates(updates).Error, op)
 }
 
-// queryRows runs a multi-row query and collects results via scanAllRows. Use for List* / Get* slice methods.
-func queryRows[T any](db *DB, ctx context.Context, op, query string, args []any, scanOne func(*sql.Rows) (T, error)) ([]T, error) {
-	rows, err := db.QueryContext(ctx, query, args...)
-	if err != nil {
-		return nil, fmt.Errorf("%s: %w", op, err)
-	}
-	defer func() { _ = rows.Close() }()
-	return scanAllRows(rows, op, scanOne)
+// createRecord creates a single record and returns wrapErr of the result.
+func (db *DB) createRecord(ctx context.Context, record interface{}, op string) error {
+	return wrapErr(db.db.WithContext(ctx).Create(record).Error, op)
 }
 
-// execContext runs an exec statement and wraps errors with op.
-func (db *DB) execContext(ctx context.Context, op, query string, args ...any) error {
-	_, err := db.ExecContext(ctx, query, args...)
-	return wrapExecErr(err, op)
+// createReturning creates record and returns it or an error.
+func createReturning[T any](db *DB, ctx context.Context, record *T, op string) (*T, error) {
+	return record, db.createRecord(ctx, record, op)
 }
 
-// scanAllRows iterates rows and collects results via scanOne; wraps scan errors with op.
-func scanAllRows[T any](rows *sql.Rows, op string, scanOne func(*sql.Rows) (T, error)) ([]T, error) {
-	var out []T
-	for rows.Next() {
-		t, err := scanOne(rows)
-		if err != nil {
-			return nil, fmt.Errorf("%s: %w", op, err)
-		}
-		out = append(out, t)
-	}
-	return out, nil
-}
-
-// Open opens a database connection.
+// Open opens a database connection using GORM with the pgx driver.
 func Open(dataSourceName string) (*DB, error) {
-	db, err := sql.Open("postgres", dataSourceName)
+	gormDB, err := gorm.Open(postgres.Open(dataSourceName), &gorm.Config{})
 	if err != nil {
 		return nil, fmt.Errorf("open database: %w", err)
 	}
 
-	db.SetMaxOpenConns(25)
-	db.SetMaxIdleConns(5)
-	db.SetConnMaxLifetime(5 * time.Minute)
+	sqlDB, err := gormDB.DB()
+	if err != nil {
+		return nil, fmt.Errorf("get underlying sql.DB: %w", err)
+	}
+	sqlDB.SetMaxOpenConns(25)
+	sqlDB.SetMaxIdleConns(5)
+	sqlDB.SetConnMaxLifetime(5 * time.Minute)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	if err := db.PingContext(ctx); err != nil {
+	if err := sqlDB.PingContext(ctx); err != nil {
 		return nil, fmt.Errorf("ping database: %w", err)
 	}
 
-	return &DB{db}, nil
+	return &DB{db: gormDB}, nil
 }
 
-// ErrNotFound is returned when a record is not found.
-var ErrNotFound = errors.New("not found")
-
-// --- User Operations ---
-
-const selectUserCols = `SELECT id, handle, email, is_active, external_source, external_id, created_at, updated_at FROM users`
-
-func scanUserRow(row *sql.Row) (*models.User, error) {
-	u := &models.User{}
-	err := row.Scan(&u.ID, &u.Handle, &u.Email, &u.IsActive, &u.ExternalSource, &u.ExternalID, &u.CreatedAt, &u.UpdatedAt)
-	return u, err
+// Close closes the underlying database connection.
+func (db *DB) Close() error {
+	sqlDB, err := db.db.DB()
+	if err != nil {
+		return err
+	}
+	return sqlDB.Close()
 }
+
+// GORM returns the underlying *gorm.DB for migrations and raw operations.
+func (db *DB) GORM() *gorm.DB {
+	return db.db
+}
+
+// --- User operations ---
 
 // CreateUser creates a new user.
 func (db *DB) CreateUser(ctx context.Context, handle string, email *string) (*models.User, error) {
@@ -185,35 +179,20 @@ func (db *DB) CreateUser(ctx context.Context, handle string, email *string) (*mo
 		CreatedAt: time.Now().UTC(),
 		UpdatedAt: time.Now().UTC(),
 	}
-	if err := db.execContext(ctx, "create user",
-		`INSERT INTO users (id, handle, email, is_active, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6)`,
-		user.ID, user.Handle, user.Email, user.IsActive, user.CreatedAt, user.UpdatedAt); err != nil {
-		return nil, err
-	}
-	return user, nil
+	return createReturning(db, ctx, user, "create user")
 }
 
 // GetUserByHandle retrieves a user by handle.
 func (db *DB) GetUserByHandle(ctx context.Context, handle string) (*models.User, error) {
-	return queryRowInto(db, ctx, "get user by handle", selectUserCols+` WHERE handle = $1`, []any{handle}, scanUserRow)
+	return getWhere[models.User](db, ctx, "handle", handle, "get user by handle")
 }
 
 // GetUserByID retrieves a user by ID.
 func (db *DB) GetUserByID(ctx context.Context, id uuid.UUID) (*models.User, error) {
-	return queryRowInto(db, ctx, "get user by id", selectUserCols+` WHERE id = $1`, []any{id}, scanUserRow)
+	return getByID[models.User](db, ctx, id, "get user by id")
 }
 
-// --- Password Credential Operations ---
-
-const selectCredCols = `SELECT id, user_id, password_hash, hash_alg, created_at, updated_at FROM password_credentials`
-
-func scanPasswordCredentialRow(row *sql.Row) (*models.PasswordCredential, error) {
-	c := &models.PasswordCredential{}
-	if err := row.Scan(&c.ID, &c.UserID, &c.PasswordHash, &c.HashAlg, &c.CreatedAt, &c.UpdatedAt); err != nil {
-		return nil, err
-	}
-	return c, nil
-}
+// --- Password credential operations ---
 
 // CreatePasswordCredential creates a password credential for a user.
 func (db *DB) CreatePasswordCredential(ctx context.Context, userID uuid.UUID, passwordHash []byte, hashAlg string) (*models.PasswordCredential, error) {
@@ -225,29 +204,15 @@ func (db *DB) CreatePasswordCredential(ctx context.Context, userID uuid.UUID, pa
 		CreatedAt:    time.Now().UTC(),
 		UpdatedAt:    time.Now().UTC(),
 	}
-	return execAndReturn(func() error {
-		return db.execContext(ctx, "create password credential",
-			`INSERT INTO password_credentials (id, user_id, password_hash, hash_alg, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6)`,
-			cred.ID, cred.UserID, cred.PasswordHash, cred.HashAlg, cred.CreatedAt, cred.UpdatedAt)
-	}, cred)
+	return createReturning(db, ctx, cred, "create password credential")
 }
 
 // GetPasswordCredentialByUserID retrieves password credential for a user.
 func (db *DB) GetPasswordCredentialByUserID(ctx context.Context, userID uuid.UUID) (*models.PasswordCredential, error) {
-	return queryRowInto(db, ctx, "get password credential", selectCredCols+` WHERE user_id = $1`, []any{userID}, scanPasswordCredentialRow)
+	return getWhere[models.PasswordCredential](db, ctx, "user_id", userID, "get password credential")
 }
 
-// --- Refresh Session Operations ---
-
-const selectSessionCols = `SELECT id, user_id, refresh_token_hash, is_active, expires_at, last_used_at, created_at, updated_at FROM refresh_sessions`
-
-func scanRefreshSessionRow(row *sql.Row) (*models.RefreshSession, error) {
-	s := &models.RefreshSession{}
-	if err := row.Scan(&s.ID, &s.UserID, &s.RefreshTokenHash, &s.IsActive, &s.ExpiresAt, &s.LastUsedAt, &s.CreatedAt, &s.UpdatedAt); err != nil {
-		return nil, err
-	}
-	return s, nil
-}
+// --- Refresh session operations ---
 
 // CreateRefreshSession creates a new refresh session.
 func (db *DB) CreateRefreshSession(ctx context.Context, userID uuid.UUID, tokenHash []byte, expiresAt time.Time) (*models.RefreshSession, error) {
@@ -260,10 +225,7 @@ func (db *DB) CreateRefreshSession(ctx context.Context, userID uuid.UUID, tokenH
 		CreatedAt:        time.Now().UTC(),
 		UpdatedAt:        time.Now().UTC(),
 	}
-	err := db.execContext(ctx, "create refresh session",
-		`INSERT INTO refresh_sessions (id, user_id, refresh_token_hash, is_active, expires_at, created_at, updated_at) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-		session.ID, session.UserID, session.RefreshTokenHash, session.IsActive, session.ExpiresAt, session.CreatedAt, session.UpdatedAt)
-	if err != nil {
+	if err := db.createRecord(ctx, session, "create refresh session"); err != nil {
 		return nil, err
 	}
 	return session, nil
@@ -271,30 +233,42 @@ func (db *DB) CreateRefreshSession(ctx context.Context, userID uuid.UUID, tokenH
 
 // GetActiveRefreshSession retrieves an active refresh session by token hash.
 func (db *DB) GetActiveRefreshSession(ctx context.Context, tokenHash []byte) (*models.RefreshSession, error) {
-	return queryRowInto(db, ctx, "get refresh session",
-		selectSessionCols+` WHERE refresh_token_hash = $1 AND is_active = true AND expires_at > NOW()`, []any{tokenHash}, scanRefreshSessionRow)
+	var session models.RefreshSession
+	err := db.db.WithContext(ctx).
+		Where("refresh_token_hash = ? AND is_active = ? AND expires_at > ?", tokenHash, true, time.Now().UTC()).
+		First(&session).Error
+	if err != nil {
+		return nil, wrapErr(err, "get refresh session")
+	}
+	return &session, nil
 }
 
 // InvalidateRefreshSession invalidates a refresh session.
 func (db *DB) InvalidateRefreshSession(ctx context.Context, sessionID uuid.UUID) error {
-	return db.execContext(ctx, "invalidate refresh session",
-		`UPDATE refresh_sessions SET is_active = false, updated_at = $2 WHERE id = $1`,
-		sessionID, time.Now().UTC())
+	return db.updateWhere(ctx, &models.RefreshSession{}, "id", sessionID,
+		map[string]interface{}{"is_active": false}, "invalidate refresh session")
 }
 
 // InvalidateAllUserSessions invalidates all sessions for a user.
 func (db *DB) InvalidateAllUserSessions(ctx context.Context, userID uuid.UUID) error {
-	return db.execContext(ctx, "invalidate all user sessions",
-		`UPDATE refresh_sessions SET is_active = false, updated_at = $2 WHERE user_id = $1`,
-		userID, time.Now().UTC())
+	return db.updateWhere(ctx, &models.RefreshSession{}, "user_id", userID,
+		map[string]interface{}{"is_active": false}, "invalidate all user sessions")
 }
 
-// --- Auth Audit Log Operations ---
+// --- Auth audit log operations ---
 
-// CreateAuthAuditLog creates an auth audit log entry.
-func (db *DB) CreateAuthAuditLog(ctx context.Context, userID *uuid.UUID, eventType string, success bool, ipAddress, userAgent, details *string) error {
-	return db.execContext(ctx, "create auth audit log",
-		`INSERT INTO auth_audit_log (id, user_id, event_type, success, ip_address, user_agent, details, created_at)
-                 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-		uuid.New(), userID, eventType, success, ipAddress, userAgent, details, time.Now().UTC())
+// CreateAuthAuditLog creates an auth audit log entry (subject_handle, reason per postgres_schema.md).
+func (db *DB) CreateAuthAuditLog(ctx context.Context, userID *uuid.UUID, eventType string, success bool, ipAddress, userAgent, subjectHandle, reason *string) error {
+	entry := &models.AuthAuditLog{
+		ID:            uuid.New(),
+		UserID:        userID,
+		EventType:     eventType,
+		Success:       success,
+		IPAddress:     ipAddress,
+		UserAgent:     userAgent,
+		SubjectHandle: subjectHandle,
+		Reason:        reason,
+		CreatedAt:     time.Now().UTC(),
+	}
+	return db.createRecord(ctx, entry, "create auth audit log")
 }

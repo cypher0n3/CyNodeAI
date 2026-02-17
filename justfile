@@ -221,20 +221,24 @@ go_coverage_min := "90"
 
 # Run Go tests with coverage; fail if any module coverage is below go_coverage_min
 test-go-cover: install-go
-    @fail=0; \
+    @fail=0; failed=""; \
     mkdir -p "{{ root_dir }}/tmp/go/coverage"; \
+    echo ""; echo "--- Go coverage (min {{ go_coverage_min }}%) ---"; echo ""; \
     for m in {{ go_modules }}; do \
-      echo "==> go test -coverprofile ($m)"; \
+      echo "==> $m: go test -coverprofile"; \
       out="{{ root_dir }}/tmp/go/coverage/$m.coverage.out"; \
       (cd "$m" && go test ./... -coverprofile="$out" -covermode=atomic); \
       pct=$(go tool cover -func="$out" | awk '/^total:/ {gsub("%","",$3); print $3}'); \
-      echo "==> coverage ($m): $pct% (min {{ go_coverage_min }}%)"; \
-      awk -v p="$pct" -v m="{{ go_coverage_min }}" 'BEGIN{exit (p+0 < m+0)}' || fail=1; \
+      if awk -v p="$pct" -v min="{{ go_coverage_min }}" 'BEGIN{exit (p+0 >= min+0)}'; then \
+        echo "    coverage: $pct%  [FAIL] (below {{ go_coverage_min }}%)"; fail=1; failed="$failed $m"; \
+      else \
+        echo "    coverage: $pct%  [PASS]"; \
+      fi; echo ""; \
     done; \
     if [ "$fail" -ne 0 ]; then \
-      echo "FAIL: one or more modules below {{ go_coverage_min }}%"; \
-      exit 1; \
-    fi
+      echo "--- Summary ---"; echo "Modules below {{ go_coverage_min }}%:$failed"; echo ""; exit 1; \
+    fi; \
+    echo "--- Summary ---"; echo "All modules meet coverage threshold (≥ {{ go_coverage_min }}%)."; echo ""
 
 # Run Go tests with race detector
 test-go-race: install-go
