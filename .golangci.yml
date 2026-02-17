@@ -1,9 +1,9 @@
-# golangci-lint v1 configuration
-# This configuration enables linters to ensure code quality.
+# golangci-lint configuration
+# This configuration enables the contextcheck linter to ensure that functions
+# calling other functions that require context.Context also require context.
+# This enforces proper context propagation through the call chain.
 
-run:
-  timeout: 5m
-  tests: true
+version: "2"
 
 linters:
   enable:
@@ -13,35 +13,21 @@ linters:
     - gocritic      # Code critique and code smells
     - goconst       # Constant usage
     - gocognit      # Cognitive complexity
-
-linters-settings:
-  dupl:
-    threshold: 150
-  gocyclo:
-    min-complexity: 15
-  gocritic:
-    enabled-tags:
-      - diagnostic
-      - experimental
-      - opinionated
-      - performance
-      - style
-    disabled-checks:
-      - dupImport
-      - hugeParam
-      - rangeValCopy
-      - unnamedResult
-      - httpNoBody
-      - exitAfterDefer
-  goconst:
-    min-len: 3
-  gocognit:
-    min-complexity: 15
-
-issues:
-  exclude-rules:
-    # Exclude test files from some checks
-    - path: _test\.go
-      linters:
-        - dupl
-        - goconst
+  settings:
+    dupl:
+      threshold: 50
+    gocyclo:
+      min-complexity: 15
+    gocritic:
+      enabled-tags:
+        - diagnostic
+        - experimental
+        - opinionated
+        - performance
+        - style
+      disabled-checks:
+        - dupImport
+    goconst:
+      min-len: 3
+    gocognit:
+      min-complexity: 15

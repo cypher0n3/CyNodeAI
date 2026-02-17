@@ -3,21 +3,24 @@
 # shellcheck disable=SC2148,SC1007
 # (justfile: not a shell script; recipe bodies are run by just with set shell)
 
-# Source profile so PATH (e.g. Go from install-go) is visible to subsequent recipes
-set shell := ["bash", "-c", "source ~/.bashrc 2>/dev/null || true; source ~/.profile 2>/dev/null || true; exec bash -uc \"$1\""]
+# Strict bash for all recipes (explicit errors, safe pipelines).
+set shell := ["bash", "-euo", "pipefail", "-c"]
 
 # Go version to install when using install-go (match go.mod / toolchain)
 go_version := "1.25.7"
+
+# Directory containing this justfile (repo root when justfile is at root)
+root_dir := justfile_directory()
+
+# Workspace modules (explicit, stable).
+go_modules := "go_shared_libs orchestrator worker_node"
 
 default:
     @just --list
 
 # Full dev setup: podman, Go, and Go tools (incl. deps for .golangci.yml and lint-go-ci)
-setup:
-    just install-podman
-    just install-go
-    just install-go-tools
-    just install-markdownlint
+setup: install-podman install-go install-go-tools install-markdownlint
+    @:
 
 # Install Podman if not already installed (Linux: distro package; macOS: Homebrew)
 install-podman:
@@ -114,6 +117,7 @@ install-go:
             echo '# Go (just install-go)' >> "$profile"
             echo "export PATH=\"$go_path:\$HOME/go/bin:\$PATH\"" >> "$profile"
             echo "Added $go_path and \$HOME/go/bin to PATH in $profile"
+            export PATH="$go_path:\$HOME/go/bin:\$PATH"
         fi
     else
         echo "Add to PATH: export PATH=\"$go_path:\$HOME/go/bin:\$PATH\" (and ensure it is in your shell profile)"
@@ -122,24 +126,35 @@ install-go:
     go version 2>/dev/null || /usr/local/go/bin/go version
 
 # Install Go linting and analysis tools (required for .golangci.yml, lint-go, lint-go-ci, vulncheck-go)
-install-go-tools:
-    @go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
+install-go-tools: install-go
+    @go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest
     @go install honnef.co/go/tools/cmd/staticcheck@latest
     @go install golang.org/x/vuln/cmd/govulncheck@latest
     @echo "Installed: golangci-lint, staticcheck, govulncheck"
 
 # Run go vet and staticcheck (quick Go lint; use lint-go-ci for full suite)
-lint-go:
-    go vet ./...
-    staticcheck ./...
+# Runs per-module (see go_modules).
+lint-go: install-go-tools
+    @for m in {{ go_modules }}; do \
+      echo "==> go vet ./... ($m)"; \
+      (cd "$m" && go vet ./...); \
+      echo "==> staticcheck ./... ($m)"; \
+      (cd "$m" && staticcheck ./...); \
+    done
 
 # Full Go lint suite via golangci-lint (uses .golangci.yml)
-lint-go-ci:
-    golangci-lint run -c .golangci.yml ./...
+lint-go-ci: install-go-tools
+    @for m in {{ go_modules }}; do \
+      echo "==> golangci-lint run ./... ($m)"; \
+      (cd "$m" && golangci-lint run -c "{{ root_dir }}/.golangci.yml" ./...); \
+    done
 
 # Run vulnerability check on Go dependencies
-vulncheck-go:
-    govulncheck ./...
+vulncheck-go: install-go-tools
+    @for m in {{ go_modules }}; do \
+      echo "==> govulncheck ./... ($m)"; \
+      (cd "$m" && govulncheck ./...); \
+    done
 
 # Install markdownlint: create .markdownlint-cli2.jsonc if missing; clone/update
 # https://github.com/cypher0n3/docs-as-code-tools markdownlint-rules into .markdownlint-rules/
@@ -147,6 +162,8 @@ vulncheck-go:
 install-markdownlint:
     #!/usr/bin/env bash
     set -e
+    pushd "{{ root_dir }}" >/dev/null
+    trap 'popd >/dev/null 2>/dev/null' EXIT
     CONFIG=".markdownlint-cli2.jsonc"
     RULES_DIR=".markdownlint-rules"
     REPO_DIR=".markdownlint-repo"
@@ -176,54 +193,95 @@ install-markdownlint:
     fi
 
 # Lint Markdown (markdownlint-cli2; uses .markdownlint-cli2.jsonc)
-lint-markdown:
-    markdownlint-cli2 '**/*.md'
+lint-md target = '**/*.md':
+    #!/usr/bin/env bash
+    set -e
+    pushd "{{ root_dir }}" >/dev/null
+    trap 'popd >/dev/null 2>/dev/null' EXIT
+    markdownlint-cli2 --fix {{ target }}
 
-# Format Go code
-fmt-go:
-    gofmt -s -w .
-    go mod tidy
+# Format Go code (each module in go_modules)
+fmt-go: install-go
+    @for m in {{ go_modules }}; do \
+      echo "==> gofmt -s -w ($m)"; \
+      (cd "$m" && gofmt -s -w .); \
+      echo "==> go mod tidy ($m)"; \
+      (cd "$m" && go mod tidy); \
+    done
 
 # Run Go tests
-test-go:
-    go test ./...
+test-go: install-go
+    @for m in {{ go_modules }}; do \
+      echo "==> go test ./... ($m)"; \
+      (cd "$m" && go test ./...); \
+    done
+
+# Minimum Go coverage (percent) required when running test-go-cover / ci
+go_coverage_min := "90"
+
+# Run Go tests with coverage; fail if any module coverage is below go_coverage_min
+test-go-cover: install-go
+    @fail=0; \
+    mkdir -p "{{ root_dir }}/tmp/go/coverage"; \
+    for m in {{ go_modules }}; do \
+      echo "==> go test -coverprofile ($m)"; \
+      out="{{ root_dir }}/tmp/go/coverage/$m.coverage.out"; \
+      (cd "$m" && go test ./... -coverprofile="$out" -covermode=atomic); \
+      pct=$(go tool cover -func="$out" | awk '/^total:/ {gsub("%","",$3); print $3}'); \
+      echo "==> coverage ($m): $pct% (min {{ go_coverage_min }}%)"; \
+      awk -v p="$pct" -v m="{{ go_coverage_min }}" 'BEGIN{exit (p+0 < m+0)}' || fail=1; \
+    done; \
+    if [ "$fail" -ne 0 ]; then \
+      echo "FAIL: one or more modules below {{ go_coverage_min }}%"; \
+      exit 1; \
+    fi
 
 # Run Go tests with race detector
-test-go-race:
-    go test -race ./...
+test-go-race: install-go
+    @for m in {{ go_modules }}; do \
+      echo "==> go test -race ./... ($m)"; \
+      (cd "$m" && go test -race ./...); \
+    done
 
 # All linting (Go quick + Go full + Python + Markdown)
-lint:
-    just lint-go
-    just lint-go-ci
-    just lint-python
-    just lint-markdown
+lint: lint-go lint-go-ci lint-python lint-md
+    @:
 
 # All tests
-test:
-    just test-go
+test: test-go
+    @:
 
-# Local CI: all lint, all tests, Go vuln check
-ci:
-    just lint
-    just test
-    just vulncheck-go
+# E2E: start Postgres, orchestrator, one worker node; run happy path (login, create task, get result).
+# Requires: podman or docker, jq. Stops existing services first; leaves services running after.
+e2e:
+    @./scripts/setup-dev.sh full-demo
+
+# Local CI: all lint, all tests (with 90% coverage), Go vuln check
+ci: lint-go lint-go-ci lint-python lint-md test-go-cover vulncheck-go
+    @:
 
 # Create .venv and install Python lint tooling (scripts/requirements-lint.txt). Use with lint-python.
 venv:
-    @command -v python3 >/dev/null 2>&1 || { echo "Error: python3 not found. Install Python 3 to create the venv."; exit 1; }
-    @python3 -m venv .venv
-    @.venv/bin/pip install -q --upgrade pip
-    @.venv/bin/pip install -q -r scripts/requirements-lint.txt
-    @echo "Created .venv with lint tooling. Use 'just lint-python' (it will use .venv when present)."
+    #!/usr/bin/env bash
+    set -e
+    pushd "{{ root_dir }}" >/dev/null
+    trap 'popd >/dev/null 2>/dev/null' EXIT
+    command -v python3 >/dev/null 2>&1 || { echo "Error: python3 not found. Install Python 3 to create the venv."; exit 1; }
+    python3 -m venv .venv
+    .venv/bin/pip install -q --upgrade pip
+    .venv/bin/pip install -q -r scripts/requirements-lint.txt
+    echo "Created .venv with lint tooling. Use 'just lint-python' (it will use .venv when present)."
 
 # Alias for venv (matches install-* naming for setup)
-install-python-venv:
-    just venv
+install-python-venv: venv
+    @:
 
 # Python linting (flake8, pylint, radon, xenon, vulture, bandit). Optional: just lint-python paths="scripts,other"
 lint-python paths="scripts":
     #!/usr/bin/env bash
+    set -e
+    pushd "{{ root_dir }}" >/dev/null
+    trap 'popd >/dev/null 2>/dev/null' EXIT
     LINT_PATHS=$(echo "{{ paths }}" | tr ',' ' ')
     command -v python3 >/dev/null 2>&1 || { echo "Error: python3 not found. Install Python 3 to run Python linting."; exit 1; }
     need() { command -v "$1" >/dev/null 2>&1 || [ -x .venv/bin/"$1" ] || { echo "Error: $1 not found. Install with: pip install $1 or run 'just venv'"; exit 1; }; }

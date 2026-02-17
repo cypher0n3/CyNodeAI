@@ -1,0 +1,30 @@
+services:
+  worker-api:
+    build:
+      context: ..
+      dockerfile: worker_node/cmd/worker-api/Containerfile
+    container_name: cynodeai-worker-api
+    environment:
+      LISTEN_ADDR: ":8081"
+      WORKER_API_BEARER_TOKEN: ${WORKER_API_BEARER_TOKEN:-dev-worker-api-token-change-me}
+      # Run the job command directly inside this container for dev.
+      # Production SHOULD use podman/docker on the host to create per-job sandboxes.
+      CONTAINER_RUNTIME: ${CONTAINER_RUNTIME:-direct}
+      DEFAULT_TIMEOUT_SECONDS: ${DEFAULT_TIMEOUT_SECONDS:-300}
+      MAX_OUTPUT_BYTES: ${MAX_OUTPUT_BYTES:-1048576}
+    ports:
+      - "${WORKER_API_PORT:-8081}:8081"
+
+  node-manager:
+    build:
+      context: ..
+      dockerfile: worker_node/cmd/node-manager/Containerfile
+    container_name: cynodeai-node-manager
+    environment:
+      ORCHESTRATOR_URL: ${ORCHESTRATOR_URL:-http://host.containers.internal:8082}
+      NODE_SLUG: ${NODE_SLUG:-dev-node-01}
+      NODE_NAME: ${NODE_NAME:-Development Node}
+      NODE_REGISTRATION_PSK: ${NODE_REGISTRATION_PSK:-dev-node-psk-secret}
+      CAPABILITY_REPORT_INTERVAL: ${CAPABILITY_REPORT_INTERVAL:-60s}
+    depends_on:
+      - worker-api

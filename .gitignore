@@ -46,5 +46,4 @@ coverage.*
 **/__pycache__/
 
 # Ignore local files
-meta.md
 .markdownlint-cli2.jsonc

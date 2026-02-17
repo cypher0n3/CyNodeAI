@@ -1,0 +1,7 @@
+go 1.25.7
+
+use (
+	./go_shared_libs
+	./orchestrator
+	./worker_node
+)

@@ -1,0 +1,22 @@
+FROM golang:1.25-alpine AS build
+
+WORKDIR /src
+RUN apk add --no-cache ca-certificates git
+
+ENV CGO_ENABLED=0
+
+COPY . .
+
+RUN go build -o /out/control-plane ./orchestrator/cmd/control-plane
+
+FROM alpine:3.20
+RUN apk add --no-cache ca-certificates
+
+WORKDIR /app
+COPY --from=build /out/control-plane /app/control-plane
+COPY orchestrator/migrations /app/migrations
+
+ENV MIGRATIONS_DIR=/app/migrations
+
+EXPOSE 8082
+ENTRYPOINT ["/app/control-plane"]

@@ -23,6 +23,10 @@ MD033:
   allowed_elements:
     - "a"
 
+# Disabled because AI has a hard time with table column alignment and we have easy tools to fix (VSCode Prettier).
+MD060: false
+  # style: any
+
 # NOTE: This project uses custom markdownlint rules from https://github.com/cypher0n3/docs-as-code-tools.
 
 # -----------------------------------------------------------------------------
