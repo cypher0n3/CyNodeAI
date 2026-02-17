@@ -3,16 +3,20 @@
 - [Agent Purpose](#agent-purpose)
 - [Agent Responsibilities](#agent-responsibilities)
 - [External Provider Usage](#external-provider-usage)
+  - [External Provider Usage Applicable Requirements](#external-provider-usage-applicable-requirements)
 - [External Provider Configuration](#external-provider-configuration)
   - [Standalone Orchestrator Scenario](#standalone-orchestrator-scenario)
   - [Required Configuration Steps](#required-configuration-steps)
   - [Bootstrap and Runtime Configuration](#bootstrap-and-runtime-configuration)
 - [Tool Access and Database Access](#tool-access-and-database-access)
+  - [Tool Access and Database Access Applicable Requirements](#tool-access-and-database-access-applicable-requirements)
 - [Inputs and Outputs](#inputs-and-outputs)
   - [Agent Inputs](#agent-inputs)
   - [Agent Outputs](#agent-outputs)
 - [Preference Usage](#preference-usage)
+  - [Preference Usage Applicable Requirements](#preference-usage-applicable-requirements)
 - [Sub-Agent Model](#sub-agent-model)
+  - [Sub-Agent Model Applicable Requirements](#sub-agent-model-applicable-requirements)
   - [Project Analyst Agent](#project-analyst-agent)
 
 ## Agent Purpose
@@ -48,12 +52,16 @@ It coordinates multi-step and multi-agent flows, enforces standards, and verifie
 The Project Manager Agent MAY use external AI providers for planning and verification.
 External provider usage MUST be policy-controlled and audited.
 
-Normative requirements
+### External Provider Usage Applicable Requirements
 
-- The agent MUST NOT store provider API keys.
-- External model calls MUST be routed through the API Egress Server.
-- The agent SHOULD prefer local execution when it satisfies capability and policy constraints.
-- The agent SHOULD be able to pair external inference with sandbox execution on a node when tool runs are required.
+- Spec ID: `CYNAI.AGENTS.PMExternalProvider` <a id="spec-cynai-agents-pmexternalprovider"></a>
+
+Traces To:
+
+- [REQ-AGENTS-0106](../requirements/agents.md#req-agents-0106)
+- [REQ-AGENTS-0107](../requirements/agents.md#req-agents-0107)
+- [REQ-AGENTS-0108](../requirements/agents.md#req-agents-0108)
+- [REQ-AGENTS-0119](../requirements/agents.md#req-agents-0119)
 
 See [`docs/tech_specs/external_model_routing.md`](external_model_routing.md) and [`docs/tech_specs/api_egress_server.md`](api_egress_server.md).
 
@@ -99,10 +107,14 @@ External providers MUST be accessed through API Egress so provider credentials a
 The Project Manager Agent is an orchestrator-side agent.
 It MUST use MCP tools for privileged operations.
 
-Normative requirements
+### Tool Access and Database Access Applicable Requirements
 
-- All PostgreSQL access MUST happen through MCP tools.
-- The agent MUST NOT connect directly to PostgreSQL.
+- Spec ID: `CYNAI.AGENTS.ProjectManagerToolAccess` <a id="spec-cynai-agents-pmtoolaccess"></a>
+
+Traces To:
+
+- [REQ-AGENTS-0109](../requirements/agents.md#req-agents-0109)
+- [REQ-AGENTS-0110](../requirements/agents.md#req-agents-0110)
 
 ## Inputs and Outputs
 
@@ -124,11 +136,17 @@ This section defines the information the agent consumes and produces.
 
 ## Preference Usage
 
-Normative requirements for planning and verification.
+The following requirements apply.
 
-- The agent MUST load applicable preferences before planning and before final verification.
-- Preference precedence SHOULD be: task-specific > project-specific > user-default > system-default.
-- The agent MUST record which preference set was applied for verification.
+### Preference Usage Applicable Requirements
+
+- Spec ID: `CYNAI.AGENTS.ProjectManagerPreferenceUsage` <a id="spec-cynai-agents-pmpreferenceusage"></a>
+
+Traces To:
+
+- [REQ-AGENTS-0111](../requirements/agents.md#req-agents-0111)
+- [REQ-AGENTS-0112](../requirements/agents.md#req-agents-0112)
+- [REQ-AGENTS-0113](../requirements/agents.md#req-agents-0113)
 
 See [`docs/tech_specs/user_preferences.md`](user_preferences.md).
 
@@ -137,11 +155,15 @@ See [`docs/tech_specs/user_preferences.md`](user_preferences.md).
 The Project Manager Agent MAY spin up sub-agents to monitor individual tasks.
 Sub-agents run as long-lived, focused workers that watch task state and validate outputs against requirements.
 
-Normative requirements for sub-agents
+### Sub-Agent Model Applicable Requirements
 
-- Sub-agents MUST operate within the same standards and preference precedence rules as the Project Manager Agent.
-- Sub-agents MUST write their findings and recommended remediation steps back to PostgreSQL.
-- Sub-agents SHOULD be scoped to a single task to avoid cross-task state leakage.
+- Spec ID: `CYNAI.AGENTS.ProjectManagerSubAgent` <a id="spec-cynai-agents-pmsubagent"></a>
+
+Traces To:
+
+- [REQ-AGENTS-0120](../requirements/agents.md#req-agents-0120)
+- [REQ-AGENTS-0121](../requirements/agents.md#req-agents-0121)
+- [REQ-AGENTS-0122](../requirements/agents.md#req-agents-0122)
 
 ### Project Analyst Agent
 

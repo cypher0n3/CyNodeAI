@@ -1,6 +1,7 @@
 # RBAC and Groups
 
 - [Document Overview](#document-overview)
+- [Spec IDs](#spec-ids)
 - [Goals](#goals)
 - [Core Concepts](#core-concepts)
 - [Group Membership Model](#group-membership-model)
@@ -8,6 +9,12 @@
 - [Policy Evaluation Integration](#policy-evaluation-integration)
 - [User API and Data REST Resources](#user-api-and-data-rest-resources)
 - [Future Considerations: External Group Service Integration](#future-considerations-external-group-service-integration)
+
+## Spec IDs
+
+- Spec ID: `CYNAI.ACCESS.Doc.RBACAndGroups` <a id="spec-cynai-access-doc-rbacandgroups"></a>
+
+This section defines stable Spec ID anchors for referencing this document.
 
 ## Document Overview
 
@@ -40,13 +47,19 @@ Scopes
 
 ## Group Membership Model
 
-Normative requirements
+The following requirements apply.
 
-- The orchestrator MUST track groups and group membership in PostgreSQL.
-- A user MAY belong to zero or more groups.
-- Group membership MUST be auditable and support enable, disable, and removal.
-- Group membership changes MUST be recorded with timestamps and an actor identifier.
-- Group and membership records SHOULD support stable external identity mapping for future directory sync.
+### Group Membership Model Applicable Requirements
+
+- Spec ID: `CYNAI.ACCESS.GroupMembership` <a id="spec-cynai-access-groupmembership"></a>
+
+Traces To:
+
+- [REQ-ACCESS-0100](../requirements/access.md#req-access-0100)
+- [REQ-ACCESS-0101](../requirements/access.md#req-access-0101)
+- [REQ-ACCESS-0102](../requirements/access.md#req-access-0102)
+- [REQ-ACCESS-0103](../requirements/access.md#req-access-0103)
+- [REQ-ACCESS-0104](../requirements/access.md#req-access-0104)
 
 Recommended tables
 
@@ -93,12 +106,18 @@ Constraints
 
 ## RBAC Model
 
-Normative requirements
+The following requirements apply.
 
-- The system MUST support role assignments for users and groups.
-- Role assignments MUST be scope-aware.
-- Role evaluation MUST be performed at request time using current memberships and bindings.
-- RBAC decisions MUST be auditable and attributable to the effective subject (user and group context).
+### RBAC Model Applicable Requirements
+
+- Spec ID: `CYNAI.ACCESS.RbacModel` <a id="spec-cynai-access-rbacmodel"></a>
+
+Traces To:
+
+- [REQ-ACCESS-0105](../requirements/access.md#req-access-0105)
+- [REQ-ACCESS-0106](../requirements/access.md#req-access-0106)
+- [REQ-ACCESS-0107](../requirements/access.md#req-access-0107)
+- [REQ-ACCESS-0108](../requirements/access.md#req-access-0108)
 
 Recommended role structure
 
@@ -146,14 +165,17 @@ Permission mapping
 
 ## Policy Evaluation Integration
 
-Normative requirements
+The following requirements apply.
 
-- Policy evaluation MUST consider both direct user bindings and group-derived bindings.
-- The orchestrator MUST resolve effective roles for a request using:
-  - authenticated user identity
-  - active group memberships
-  - active role bindings within the relevant scope
-- The resolved subject context MUST be included in audit logs.
+### Policy Evaluation Integration Applicable Requirements
+
+- Spec ID: `CYNAI.ACCESS.PolicyEvaluation` <a id="spec-cynai-access-policyevaluation"></a>
+
+Traces To:
+
+- [REQ-ACCESS-0109](../requirements/access.md#req-access-0109)
+- [REQ-ACCESS-0110](../requirements/access.md#req-access-0110)
+- [REQ-ACCESS-0111](../requirements/access.md#req-access-0111)
 
 Recommended audit fields
 
@@ -166,14 +188,17 @@ See [`docs/tech_specs/access_control.md`](access_control.md).
 
 ## User API and Data REST Resources
 
-Normative requirements
+The following requirements apply.
 
-- The User API Gateway MUST expose groups and membership resources to authorized users.
-- The Data REST API SHOULD expose:
-  - groups
-  - group memberships
-  - roles and role bindings
-- Admin operations MUST be policy-gated (e.g. create group, add member, bind role).
+### User API and Data REST Resources Applicable Requirements
+
+- Spec ID: `CYNAI.ACCESS.UserApiDataRest` <a id="spec-cynai-access-userapirest"></a>
+
+Traces To:
+
+- [REQ-ACCESS-0112](../requirements/access.md#req-access-0112)
+- [REQ-ACCESS-0120](../requirements/access.md#req-access-0120)
+- [REQ-ACCESS-0113](../requirements/access.md#req-access-0113)
 
 See [`docs/tech_specs/user_api_gateway.md`](user_api_gateway.md) and [`docs/tech_specs/data_rest_api.md`](data_rest_api.md).
 

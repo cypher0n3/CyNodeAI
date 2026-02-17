@@ -10,13 +10,22 @@
 
 ## Document Overview
 
+- Spec ID: `CYNAI.SANDBX.Doc.SandboxImageRegistry` <a id="spec-cynai-sandbx-doc-sandboximageregistry"></a>
+
 This document defines a sandbox container image registry used for sandbox execution containers.
 Worker nodes pull sandbox images from the configured registry, and the orchestrator controls what images are allowed.
 Image metadata and capabilities are stored in PostgreSQL for planning, routing, and verification.
 
 ## Registry Options
 
+- Spec ID: `CYNAI.SANDBX.RegistryOptions` <a id="spec-cynai-sandbx-registryoptions"></a>
+
 The sandbox image registry MUST be configurable.
+
+Traces To:
+
+- [REQ-SANDBX-0115](../requirements/sandbx.md#req-sandbx-0115)
+- [REQ-SANDBX-0116](../requirements/sandbx.md#req-sandbx-0116)
 
 - User-provided registry
   - Users provide a registry URL and credentials, if needed.
@@ -32,8 +41,14 @@ In both modes, worker nodes SHOULD be configured to pull sandbox images from the
 
 ## Image Publishing Workflow
 
+- Spec ID: `CYNAI.SANDBX.ImagePublishing` <a id="spec-cynai-sandbx-imagepublishing"></a>
+
 Agents MUST NOT push images directly to the registry.
 Instead, agents submit a publish request to the orchestrator, which performs validation and publishing.
+
+Traces To:
+
+- [REQ-SANDBX-0117](../requirements/sandbx.md#req-sandbx-0117)
 
 Recommended flow
 
@@ -48,6 +63,8 @@ Recommended flow
 
 ## Node Pull Workflow
 
+- Spec ID: `CYNAI.SANDBX.NodePullWorkflow` <a id="spec-cynai-sandbx-nodepullworkflow"></a>
+
 When dispatching a sandbox job, the orchestrator selects an allowed sandbox image with required capabilities.
 The target node pulls the image from the configured registry and starts the sandbox container.
 
@@ -61,8 +78,14 @@ Recommended behavior
 
 ## Allowed Images and Capabilities
 
+- Spec ID: `CYNAI.SANDBX.AllowedImagesCapabilities` <a id="spec-cynai-sandbx-allowedimagescapabilities"></a>
+
 Allowed images and their capabilities MUST be stored in PostgreSQL.
 This enables the Project Manager Agent to choose a sandbox environment appropriate for a task.
+
+Traces To:
+
+- [REQ-SANDBX-0118](../requirements/sandbx.md#req-sandbx-0118)
 
 Database schema
 
@@ -125,7 +148,13 @@ Constraints
 
 ## Preferences and Constraints
 
+- Spec ID: `CYNAI.SANDBX.PreferencesConstraints` <a id="spec-cynai-sandbx-preferencesconstraints"></a>
+
 Sandbox image registry behavior SHOULD be configurable via PostgreSQL preferences.
+
+Traces To:
+
+- [REQ-SANDBX-0119](../requirements/sandbx.md#req-sandbx-0119)
 
 Suggested preference keys
 
@@ -138,7 +167,13 @@ Suggested preference keys
 
 ## Access Control and Auditing
 
+- Spec ID: `CYNAI.SANDBX.AccessControlAuditing` <a id="spec-cynai-sandbx-accesscontrolauditing"></a>
+
 Publishing and use of sandbox images MUST be policy-controlled and audited.
+
+Traces To:
+
+- [REQ-SANDBX-0120](../requirements/sandbx.md#req-sandbx-0120)
 
 - Access control rules SHOULD be defined via [`docs/tech_specs/access_control.md`](access_control.md).
 - Actions SHOULD include:

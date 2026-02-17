@@ -1,5 +1,6 @@
 # Projects and Scope Model
 
+- [Spec IDs](#spec-ids)
 - [Document Overview](#document-overview)
 - [Goals](#goals)
 - [Core Concepts](#core-concepts)
@@ -9,6 +10,12 @@
   - [Preference Scope](#preference-scope)
   - [Task Scope](#task-scope)
 - [MVP Notes](#mvp-notes)
+
+## Spec IDs
+
+- Spec ID: `CYNAI.ACCESS.Doc.ProjectsAndScopes` <a id="spec-cynai-access-doc-projectsandscopes"></a>
+
+This section defines stable Spec ID anchors for referencing this document.
 
 ## Document Overview
 
@@ -38,11 +45,17 @@ Terminology
 
 ## Database Model
 
-Normative requirements
+This section describes the project database model and how referential integrity is enforced.
 
-- The orchestrator MUST store projects in PostgreSQL with stable identifiers.
-- Projects MUST be able to be disabled without deleting records.
-- Tables that reference `project_id` MUST use a foreign key to `projects.id`.
+### Applicable Requirements
+
+- Spec ID: `CYNAI.ACCESS.ProjectsDatabaseModel` <a id="spec-cynai-access-projectsdb"></a>
+
+Traces To:
+
+- [REQ-ACCESS-0114](../requirements/access.md#req-access-0114)
+- [REQ-ACCESS-0115](../requirements/access.md#req-access-0115)
+- [REQ-ACCESS-0116](../requirements/access.md#req-access-0116)
 
 Canonical tables and foreign keys are defined in [`docs/tech_specs/postgres_schema.md`](postgres_schema.md).
 

@@ -11,13 +11,16 @@ alwaysApply: true
 - Check the actual date using the `date` command before writing the date.
 - See [meta.md](../meta.md) for basic project info.
 - See [ai_files/](../ai_files/) for AI assisted coding instructions.
-- See [docs/tech_specs/](../docs/tech_specs/) for technical specifications.
+- See [docs/requirements/](../docs/requirements/) for canonical requirements ("what").
+- See [docs/tech_specs/](../docs/tech_specs/) for technical specifications and implementation guidance ("how").
 
 ## Tech Specs vs. Implementation
 
-In any case where there are deviations between the technical specifications (docs/tech_specs) and the actual implementation,
-the implementation MUST be brought into compliance with the tech specs.
-In cases where the tech_specs are unclear would cause issues during implementation, STOP and ASK what you should do.
+In any case where there are deviations between the requirements (`docs/requirements/`) and the actual implementation,
+the implementation MUST be brought into compliance with the requirements.
+
+Tech specs (`docs/tech_specs/`) describe implementation guidance and should trace back to requirements.
+If requirements are unclear or would cause issues during implementation, STOP and ASK what you should do.
 
 ## Available Tooling
 

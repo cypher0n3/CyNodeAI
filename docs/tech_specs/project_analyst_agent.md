@@ -4,7 +4,6 @@
 - [Agent Purpose](#agent-purpose)
 - [Agent Responsibilities](#agent-responsibilities)
 - [External Provider Usage](#external-provider-usage)
-  - [Normative Requirements](#normative-requirements)
 - [External Provider Configuration](#external-provider-configuration)
   - [Standalone Orchestrator Scenario](#standalone-orchestrator-scenario)
   - [Required Configuration Steps](#required-configuration-steps)
@@ -43,11 +42,13 @@ It is intended to tighten feedback loops and keep task quality aligned with defi
 The Project Analyst Agent MAY use external AI providers for verification when allowed.
 External provider usage MUST be policy-controlled and audited.
 
-### Normative Requirements
+### Applicable Requirements
 
-- The agent MUST NOT store provider API keys.
-- External model calls MUST be routed through the API Egress Server.
-- The agent SHOULD prefer local execution when it satisfies capability and policy constraints.
+Traces To:
+
+- [REQ-AGENTS-0125](../requirements/agents.md#req-agents-0125)
+- [REQ-AGENTS-0126](../requirements/agents.md#req-agents-0126)
+- [REQ-AGENTS-0127](../requirements/agents.md#req-agents-0127)
 
 See [`docs/tech_specs/external_model_routing.md`](external_model_routing.md) and [`docs/tech_specs/api_egress_server.md`](api_egress_server.md).
 
@@ -90,10 +91,14 @@ Project Analyst agents are spawned by the Project Manager Agent and SHOULD follo
 The Project Analyst Agent is an orchestrator-side agent.
 It MUST use MCP tools for privileged operations.
 
-Normative requirements
+### Tool Access and Database Access Applicable Requirements
 
-- All PostgreSQL access MUST happen through MCP tools.
-- The agent MUST NOT connect directly to PostgreSQL.
+- Spec ID: `CYNAI.AGENTS.ProjectAnalystToolAccess` <a id="spec-cynai-agents-patoolaccess"></a>
+
+Traces To:
+
+- [REQ-AGENTS-0114](../requirements/agents.md#req-agents-0114)
+- [REQ-AGENTS-0115](../requirements/agents.md#req-agents-0115)
 
 ## Verification Outputs
 
@@ -107,9 +112,15 @@ Minimum recommended fields for recorded findings
 
 ## Preference Usage
 
-Normative requirements for verification.
+The following requirements apply.
 
-- The agent MUST compute and use effective preferences for the task using the same precedence rules as the Project Manager Agent.
-- The agent MUST record which preference set was applied for verification.
+### Preference Usage Applicable Requirements
+
+- Spec ID: `CYNAI.AGENTS.ProjectAnalystPreferenceUsage` <a id="spec-cynai-agents-papreferenceusage"></a>
+
+Traces To:
+
+- [REQ-AGENTS-0123](../requirements/agents.md#req-agents-0123)
+- [REQ-AGENTS-0124](../requirements/agents.md#req-agents-0124)
 
 See [`docs/tech_specs/user_preferences.md`](user_preferences.md).

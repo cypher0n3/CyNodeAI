@@ -3,18 +3,24 @@
 - [Document Overview](#document-overview)
 - [Node Manager](#node-manager)
 - [Sandbox Control Plane](#sandbox-control-plane)
+  - [Sandbox Control Plane Applicable Requirements](#sandbox-control-plane-applicable-requirements)
 - [Node-Local Inference and Sandbox Workflow](#node-local-inference-and-sandbox-workflow)
+  - [Node-Local Inference Applicable Requirements](#node-local-inference-applicable-requirements)
 - [Node Sandbox MCP Exposure](#node-sandbox-mcp-exposure)
+  - [Node Sandbox MCP Exposure Applicable Requirements](#node-sandbox-mcp-exposure-applicable-requirements)
 - [Node Startup YAML](#node-startup-yaml)
+  - [Node Startup YAML Applicable Requirements](#node-startup-yaml-applicable-requirements)
   - [User-Configurable Properties](#user-configurable-properties)
 - [Node Startup Procedure](#node-startup-procedure)
 - [Ollama Container Policy](#ollama-container-policy)
 - [Sandbox-Only Nodes](#sandbox-only-nodes)
+  - [Sandbox-Only Nodes Applicable Requirements](#sandbox-only-nodes-applicable-requirements)
 - [Registration and Bootstrap](#registration-and-bootstrap)
 - [Capability Reporting](#capability-reporting)
 - [Configuration Delivery](#configuration-delivery)
 - [Dynamic Configuration Updates](#dynamic-configuration-updates)
 - [Credential Handling](#credential-handling)
+  - [Credential Handling Applicable Requirements](#credential-handling-applicable-requirements)
 - [Required Node Configuration](#required-node-configuration)
 
 ## Document Overview
@@ -37,13 +43,17 @@ The Node Manager is a host-level system service responsible for:
 This section defines how agents and the orchestrator interact with sandbox containers on a node.
 Agents do not connect to sandboxes directly over the network.
 
-Normative requirements
+### Sandbox Control Plane Applicable Requirements
 
-- The node MUST expose a worker API that the orchestrator can call to manage sandbox lifecycle and execution.
-- The node MUST NOT require inbound SSH access to sandboxes for command execution.
-- The node SHOULD use container runtime primitives (create, exec, copy) to implement sandbox operations.
-- The node MUST stream sandbox stdout and stderr back to the orchestrator for logging and debugging.
-- The node MUST associate sandbox containers with `task_id` and `job_id` for auditing and cleanup.
+- Spec ID: `CYNAI.WORKER.NodeSandboxControlPlane` <a id="spec-cynai-worker-nodesandbox"></a>
+
+Traces To:
+
+- [REQ-WORKER-0109](../requirements/worker.md#req-worker-0109)
+- [REQ-WORKER-0110](../requirements/worker.md#req-worker-0110)
+- [REQ-WORKER-0111](../requirements/worker.md#req-worker-0111)
+- [REQ-WORKER-0112](../requirements/worker.md#req-worker-0112)
+- [REQ-WORKER-0113](../requirements/worker.md#req-worker-0113)
 
 Worker API contract
 
@@ -64,12 +74,16 @@ See [`docs/tech_specs/mcp_tooling.md`](mcp_tooling.md) for the MCP tool layer th
 This section defines the preferred node-local workflow when a sandbox and Ollama inference are co-located on the same node.
 Node-local traffic SHOULD remain on the node and SHOULD not traverse external networks.
 
-Normative requirements
+### Node-Local Inference Applicable Requirements
 
-- The node MUST support an execution mode where sandbox jobs can call a node-local inference endpoint without leaving the node.
-- The node MUST keep Ollama access private to the node and MUST NOT require exposing Ollama on a public interface.
+- Spec ID: `CYNAI.WORKER.NodeLocalInference` <a id="spec-cynai-worker-nodelocalinference"></a>
 
-Option A (normative for node-local execution)
+Traces To:
+
+- [REQ-WORKER-0114](../requirements/worker.md#req-worker-0114)
+- [REQ-WORKER-0115](../requirements/worker.md#req-worker-0115)
+
+Option A (recommended for node-local execution)
 
 - For each sandbox job, the Node Manager creates a runtime pod (Podman) or equivalent isolated network (Docker) for that job.
   Podman is preferred for rootless operation.
@@ -97,12 +111,16 @@ Implementation notes
 When the orchestrator needs to manage or interact with a sandbox on a node, sandbox operations should be exposed as MCP tools on that node.
 The orchestrator acts as the routing point and agents do not connect to node MCP servers directly.
 
-Normative requirements
+### Node Sandbox MCP Exposure Applicable Requirements
 
-- Each node SHOULD run a node-local MCP server that exposes sandbox operations for that node.
-- The node MCP server MUST be reachable only by the orchestrator, not by arbitrary clients.
-- The orchestrator SHOULD register each node MCP server with an allowlist.
-- Sandbox operations MUST be audited with `task_id` context.
+- Spec ID: `CYNAI.WORKER.NodeSandboxMcpExposure` <a id="spec-cynai-worker-nodesandboxmcpexposure"></a>
+
+Traces To:
+
+- [REQ-WORKER-0116](../requirements/worker.md#req-worker-0116)
+- [REQ-WORKER-0117](../requirements/worker.md#req-worker-0117)
+- [REQ-WORKER-0118](../requirements/worker.md#req-worker-0118)
+- [REQ-WORKER-0119](../requirements/worker.md#req-worker-0119)
 
 Recommended sandbox MCP tool surface
 
@@ -118,12 +136,19 @@ Recommended sandbox MCP tool surface
 Nodes SHOULD support a local startup YAML file that the Node Manager reads on boot.
 This file provides the minimum information required to contact the orchestrator and allows operators to apply node-local constraints.
 
-Normative requirements
+### Node Startup YAML Applicable Requirements
 
-- Node startup YAML MUST NOT be treated as the source of truth for global policy.
+- Spec ID: `CYNAI.WORKER.NodeStartupYaml` <a id="spec-cynai-worker-nodestartupyaml"></a>
+- Node startup YAML must not be treated as the source of truth for global policy.
 - The orchestrator remains the source of truth for scheduling and allowed capabilities after registration.
-- Node startup YAML MAY impose stricter local constraints than the orchestrator requests.
-- If a local constraint prevents fulfilling an orchestrator request, the node MUST refuse the request and report the reason.
+- Node startup YAML may impose stricter local constraints than the orchestrator requests.
+- If a local constraint prevents fulfilling an orchestrator request, the node must refuse the request and report the reason.
+
+Traces To:
+
+- [REQ-WORKER-0120](../requirements/worker.md#req-worker-0120)
+- [REQ-WORKER-0121](../requirements/worker.md#req-worker-0121)
+- [REQ-WORKER-0122](../requirements/worker.md#req-worker-0122)
 
 Recommended location
 
@@ -353,6 +378,11 @@ updates:
 On startup, the Node Manager MUST contact the orchestrator before starting the Ollama container.
 This ensures the orchestrator can select an Ollama container image compatible with the node and can apply current policy.
 
+The system requires that the overall deployment has at least one inference-capable path.
+Inference may be provided by node-local inference (Ollama) or by external model routing through API Egress when configured.
+In the single-node case, the system MUST refuse to enter a ready state if the node cannot run the inference container and there is no configured external provider key.
+See [`docs/tech_specs/external_model_routing.md`](external_model_routing.md) and [`docs/tech_specs/orchestrator_bootstrap.md`](orchestrator_bootstrap.md).
+
 Recommended startup flow
 
 - Start Node Manager system service.
@@ -379,12 +409,16 @@ Rationale
 CyNodeAI SHOULD support nodes that do not provide AI inference capabilities.
 These nodes exist to run sandbox containers for tool execution, builds, tests, and other compute tasks.
 
-Normative requirements
+### Sandbox-Only Nodes Applicable Requirements
 
-- A node MAY be configured to run no Ollama container.
-- A sandbox-only node MUST still run the worker API and Node Manager.
-- The orchestrator MUST be able to schedule sandbox execution on sandbox-only nodes.
-- Sandbox-only nodes MUST follow the same credential handling and isolation rules as other nodes.
+- Spec ID: `CYNAI.WORKER.SandboxOnlyNodes` <a id="spec-cynai-worker-sandboxonlynodes"></a>
+
+Traces To:
+
+- [REQ-WORKER-0123](../requirements/worker.md#req-worker-0123)
+- [REQ-WORKER-0124](../requirements/worker.md#req-worker-0124)
+- [REQ-WORKER-0125](../requirements/worker.md#req-worker-0125)
+- [REQ-WORKER-0126](../requirements/worker.md#req-worker-0126)
 
 Capability reporting guidance
 
@@ -472,14 +506,16 @@ Recommended behavior
 Nodes require credentials to connect to orchestrator-provided services.
 These credentials MUST be handled securely and with least privilege.
 
-Normative requirements
+### Credential Handling Applicable Requirements
 
-- The node MUST NOT expose service credentials to sandbox containers.
-- The node SHOULD store credentials in a local secure store (root-owned file with strict permissions or OS key store).
-- The orchestrator SHOULD issue least-privilege pull credentials for:
-  - sandbox image registry pulls
-  - model cache downloads
-- Credentials SHOULD be short-lived where possible and SHOULD support rotation.
+- Spec ID: `CYNAI.WORKER.NodeCredentialHandling` <a id="spec-cynai-worker-nodecredentialhandling"></a>
+
+Traces To:
+
+- [REQ-WORKER-0127](../requirements/worker.md#req-worker-0127)
+- [REQ-WORKER-0128](../requirements/worker.md#req-worker-0128)
+- [REQ-WORKER-0129](../requirements/worker.md#req-worker-0129)
+- [REQ-WORKER-0130](../requirements/worker.md#req-worker-0130)
 
 ## Required Node Configuration
 

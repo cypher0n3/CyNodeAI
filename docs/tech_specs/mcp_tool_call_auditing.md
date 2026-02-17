@@ -26,11 +26,17 @@ Related documents
 
 ## Audit Point
 
-Normative requirements
+This section identifies the point in the system where tool call auditing is performed.
 
-- The orchestrator MCP gateway MUST emit an audit record for every tool call it routes.
-- Audit records MUST be written regardless of allow or deny decisions.
-- Audit records MUST be written regardless of tool call success or failure.
+### Applicable Requirements
+
+- Spec ID: `CYNAI.MCPGAT.ToolCallAuditPoint` <a id="spec-cynai-mcpgat-toolaudit"></a>
+
+Traces To:
+
+- [REQ-MCPGAT-0107](../requirements/mcpgat.md#req-mcpgat-0107)
+- [REQ-MCPGAT-0108](../requirements/mcpgat.md#req-mcpgat-0108)
+- [REQ-MCPGAT-0109](../requirements/mcpgat.md#req-mcpgat-0109)
 
 ## Required Audit Fields
 
@@ -53,8 +59,8 @@ Recommended minimum fields
 
 Payload storage
 
-- For MVP, tool argument payloads and tool result payloads MUST NOT be stored in PostgreSQL audit tables.
-- Tool payloads MAY be stored in structured logs when needed for debugging, subject to redaction.
+- For MVP, tool argument payloads and tool result payloads are not stored in PostgreSQL audit tables.
+- Tool payloads can be stored in structured logs when needed for debugging, subject to redaction.
 
 ## Storage in PostgreSQL
 

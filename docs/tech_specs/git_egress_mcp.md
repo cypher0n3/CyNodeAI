@@ -38,12 +38,18 @@ Non-goals
 
 ## Architecture and Trust Boundaries
 
-Normative requirements
+This section describes how Git operations are performed outside sandboxes and within policy-controlled boundaries.
 
-- Sandboxes MUST NOT store Git credentials.
-- Sandboxes MUST NOT make arbitrary outbound network calls to Git hosts.
-- Git operations that require remote access MUST be performed by the Git egress service.
-- The orchestrator SHOULD act as the policy and routing point for Git egress operations.
+### Applicable Requirements
+
+- Spec ID: `CYNAI.APIEGR.GitEgressArchitecture` <a id="spec-cynai-apiegr-gitegressarch"></a>
+
+Traces To:
+
+- [REQ-APIEGR-0100](../requirements/apiegr.md#req-apiegr-0100)
+- [REQ-APIEGR-0101](../requirements/apiegr.md#req-apiegr-0101)
+- [REQ-APIEGR-0102](../requirements/apiegr.md#req-apiegr-0102)
+- [REQ-APIEGR-0103](../requirements/apiegr.md#req-apiegr-0103)
 
 High-level flow
 
@@ -153,10 +159,14 @@ Recommended formats
 - File-set based
   - Explicit list of files and content, stored as artifacts.
 
-Normative requirements
+### Sandbox Output Formats Applicable Requirements
 
-- A changeset artifact MUST be associated with a single `task_id`.
-- A changeset artifact MUST NOT include credentials.
+- Spec ID: `CYNAI.APIEGR.GitEgressSandboxOutput` <a id="spec-cynai-apiegr-gitegressout"></a>
+
+Traces To:
+
+- [REQ-APIEGR-0104](../requirements/apiegr.md#req-apiegr-0104)
+- [REQ-APIEGR-0105](../requirements/apiegr.md#req-apiegr-0105)
 
 ## Recommended Workflows
 

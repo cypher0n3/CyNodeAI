@@ -34,10 +34,14 @@ Assumptions
 - Sandbox containers are network-restricted by default.
 - Sandboxes must not contain long-lived secrets.
 
-Normative requirements
+### Threat Model Applicable Requirements
 
-- Sandbox containers MUST NOT include orchestrator credentials, Git credentials, or external provider API keys.
-- Sandbox containers MUST assume that all outbound network access may be blocked by policy.
+- Spec ID: `CYNAI.SANDBX.SandboxThreatModel` <a id="spec-cynai-sandbx-sandboxthreat"></a>
+
+Traces To:
+
+- [REQ-SANDBX-0100](../requirements/sandbx.md#req-sandbx-0100)
+- [REQ-SANDBX-0101](../requirements/sandbx.md#req-sandbx-0101)
 
 ## Runtime Contract
 
@@ -56,12 +60,16 @@ Baseline contract requirements
 Agents do not connect to a sandbox container over the network.
 Sandbox control is performed by the Node Manager using container runtime operations.
 
-Normative requirements
+### Sandbox Connectivity Applicable Requirements
 
-- Sandbox images MUST NOT assume inbound connectivity for control (no SSH requirement).
-- Sandbox images MUST work without exposing any listening ports.
-- Sandbox execution MUST support command execution via the container runtime exec mechanism.
-- Logs MUST be available via stdout and stderr for streaming back to the orchestrator.
+- Spec ID: `CYNAI.SANDBX.SandboxConnectivity` <a id="spec-cynai-sandbx-sandboxconn"></a>
+
+Traces To:
+
+- [REQ-SANDBX-0102](../requirements/sandbx.md#req-sandbx-0102)
+- [REQ-SANDBX-0103](../requirements/sandbx.md#req-sandbx-0103)
+- [REQ-SANDBX-0104](../requirements/sandbx.md#req-sandbx-0104)
+- [REQ-SANDBX-0105](../requirements/sandbx.md#req-sandbx-0105)
 
 See [`docs/tech_specs/node.md`](node.md) and [`docs/tech_specs/mcp_tooling.md`](mcp_tooling.md).
 
@@ -69,10 +77,14 @@ See [`docs/tech_specs/node.md`](node.md) and [`docs/tech_specs/mcp_tooling.md`](
 
 When a sandbox job is scheduled on a node that also provides Ollama inference, the sandbox SHOULD be able to access inference without leaving the node.
 
-Normative requirements
+### Node-Local Inference Access Applicable Requirements
 
-- The sandbox SHOULD call a node-local inference endpoint.
-- The node MUST NOT require exposing Ollama on a public network interface.
+- Spec ID: `CYNAI.SANDBX.NodeLocalInference` <a id="spec-cynai-sandbx-nodelocalinf"></a>
+
+Traces To:
+
+- [REQ-SANDBX-0106](../requirements/sandbx.md#req-sandbx-0106)
+- [REQ-SANDBX-0107](../requirements/sandbx.md#req-sandbx-0107)
 
 Recommended approach
 
@@ -137,11 +149,17 @@ Recommended profiles
 
 ## Filesystem and Working Directories
 
-Normative requirements
+The following requirements apply.
 
-- A sandbox container MUST have a writable working directory for job execution.
-- The Node Manager SHOULD mount a per-task workspace directory into the sandbox.
-- The sandbox SHOULD treat the working directory as ephemeral unless artifacts are explicitly uploaded.
+### Filesystem and Working Directories Applicable Requirements
+
+- Spec ID: `CYNAI.SANDBX.FilesystemWorkingDirs` <a id="spec-cynai-sandbx-sandboxfs"></a>
+
+Traces To:
+
+- [REQ-SANDBX-0108](../requirements/sandbx.md#req-sandbx-0108)
+- [REQ-SANDBX-0109](../requirements/sandbx.md#req-sandbx-0109)
+- [REQ-SANDBX-0110](../requirements/sandbx.md#req-sandbx-0110)
 
 Recommended paths
 
@@ -165,10 +183,14 @@ Recommended variables
 Sandbox network policy is controlled by the orchestrator and the node.
 Images MUST work under restricted or no-egress configurations.
 
-Normative requirements
+### Network Expectations Applicable Requirements
 
-- Sandbox execution MUST NOT depend on public internet access.
-- Required external calls MUST be routed through orchestrator-mediated services when allowed.
+- Spec ID: `CYNAI.SANDBX.NetworkExpectations` <a id="spec-cynai-sandbx-networkexpect"></a>
+
+Traces To:
+
+- [REQ-SANDBX-0111](../requirements/sandbx.md#req-sandbx-0111)
+- [REQ-SANDBX-0112](../requirements/sandbx.md#req-sandbx-0112)
 
 Relevant controlled services
 
@@ -180,10 +202,14 @@ Relevant controlled services
 
 Sandboxes exchange data with the orchestrator through artifacts and orchestrator-managed endpoints.
 
-Normative requirements
+### Artifacts and Data Exchange Applicable Requirements
 
-- Sandboxes MUST NOT write directly to PostgreSQL.
-- Sandboxes SHOULD use artifact upload and download mechanisms for data exchange.
+- Spec ID: `CYNAI.SANDBX.ArtifactsDataExchange` <a id="spec-cynai-sandbx-artifactsexchange"></a>
+
+Traces To:
+
+- [REQ-SANDBX-0113](../requirements/sandbx.md#req-sandbx-0113)
+- [REQ-SANDBX-0114](../requirements/sandbx.md#req-sandbx-0114)
 
 See [`docs/tech_specs/user_api_gateway.md`](user_api_gateway.md) and [`docs/tech_specs/mcp_tooling.md`](mcp_tooling.md).
 

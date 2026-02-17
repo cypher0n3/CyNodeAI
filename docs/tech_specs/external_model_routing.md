@@ -21,6 +21,10 @@ External calls are intended as an allowed fallback when local workers are overlo
 The orchestrator SHOULD prefer local execution when it can meet required capabilities and latency objectives.
 The orchestrator MUST be able to route to configured external AI APIs when needed and when policy allows it.
 
+The system requires that at least one inference-capable path is available in the deployment.
+If no worker can provide local inference and no external provider is configured (via API Egress), the system MUST fail fast (or refuse to enter a ready state) because inference is unavailable.
+See [`docs/tech_specs/orchestrator_bootstrap.md`](orchestrator_bootstrap.md).
+
 ## Routing Signals
 
 The orchestrator SHOULD consider the following signals when selecting an execution target.

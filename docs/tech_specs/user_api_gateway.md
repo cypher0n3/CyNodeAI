@@ -14,6 +14,8 @@
 
 ## Document Overview
 
+- Spec ID: `CYNAI.USRGWY.Doc.UserApiGateway` <a id="spec-cynai-usrgwy-doc-userapigateway"></a>
+
 This document defines the User API Gateway, a single user-facing endpoint exposed by the orchestrator.
 It provides a stable interface for user clients to submit work, query status, and retrieve artifacts.
 
@@ -59,6 +61,8 @@ The gateway SHOULD support:
 
 ## Client Compatibility
 
+- Spec ID: `CYNAI.USRGWY.ClientCompatibility` <a id="spec-cynai-usrgwy-clientcompatibility"></a>
+
 The gateway SHOULD provide compatibility modes to support common external tools.
 
 - Open WebUI compatibility
@@ -68,6 +72,10 @@ The gateway SHOULD provide compatibility modes to support common external tools.
 
 Compatibility layers MUST preserve orchestrator policy constraints and MUST not bypass auditing.
 
+Traces To:
+
+- [REQ-USRGWY-0121](../requirements/usrgwy.md#req-usrgwy-0121)
+
 ## MCP Tool Interface
 
 The User API Gateway MAY expose MCP-facing capability discovery and tool routing for user clients.
@@ -75,12 +83,20 @@ Agents use MCP tools as the standard tool interface, as defined in [`docs/tech_s
 
 ## Data REST API
 
+- Spec ID: `CYNAI.USRGWY.DataRestApi` <a id="spec-cynai-usrgwy-datarestapi"></a>
+
 The User API Gateway MUST provide a Data REST API for user clients and integrations.
 This API provides database-backed resources without exposing raw SQL.
+
+Traces To:
+
+- [REQ-USRGWY-0122](../requirements/usrgwy.md#req-usrgwy-0122)
 
 See [`docs/tech_specs/data_rest_api.md`](data_rest_api.md).
 
 ## Live Updates and Messaging
+
+- Spec ID: `CYNAI.USRGWY.MessagingAndEvents` <a id="spec-cynai-usrgwy-messagingevents"></a>
 
 The User API Gateway is the single user-facing integration surface for live updates.
 Users can connect destinations and subscribe them to task and agent events.
@@ -95,6 +111,10 @@ Examples
 - Chat platform adapters (e.g. Matrix, Slack, Discord, Mattermost)
 
 Secrets required for delivery MUST be stored securely in PostgreSQL and MUST NOT be exposed to agents.
+
+Traces To:
+
+- [REQ-USRGWY-0123](../requirements/usrgwy.md#req-usrgwy-0123)
 
 ### Event Types
 
@@ -152,15 +172,28 @@ Constraints
 
 ## Authentication and Auditing
 
+- Spec ID: `CYNAI.USRGWY.AuthAuditing` <a id="spec-cynai-usrgwy-authauditing"></a>
+
 - The gateway MUST authenticate user clients.
 - The gateway MUST authorize user actions using policy and preferences.
 - The gateway SHOULD emit audit logs for all user actions, including task submission and artifact access.
 - The gateway SHOULD support per-user rate limiting and request size limits.
 - For the MVP local user account model and secure credential handling requirements, see [`docs/tech_specs/local_user_accounts.md`](local_user_accounts.md).
 
+Traces To:
+
+- [REQ-USRGWY-0124](../requirements/usrgwy.md#req-usrgwy-0124)
+- [REQ-USRGWY-0125](../requirements/usrgwy.md#req-usrgwy-0125)
+
 ## Admin Web Console
+
+- Spec ID: `CYNAI.USRGWY.AdminConsole` <a id="spec-cynai-usrgwy-adminconsole"></a>
 
 The User API Gateway SHOULD support an admin-focused web console for managing credentials and preferences.
 The web console MUST be a client of the gateway and MUST NOT connect directly to PostgreSQL.
+
+Traces To:
+
+- [REQ-USRGWY-0126](../requirements/usrgwy.md#req-usrgwy-0126)
 
 See [`docs/tech_specs/admin_web_console.md`](admin_web_console.md).

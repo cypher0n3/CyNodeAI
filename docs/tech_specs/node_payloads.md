@@ -16,10 +16,12 @@
 
 ## Document Overview
 
+- Spec ID: `CYNAI.WORKER.Doc.NodePayloads` <a id="spec-cynai-worker-doc-nodepayloads"></a>
+
 This document defines the canonical wire payloads exchanged between worker nodes and the orchestrator.
 It covers node capability reporting and orchestrator configuration delivery.
 
-This document is normative for payload shapes, field names, and versioning.
+This document is the canonical specification for payload shapes, field names, and versioning.
 Behavioral requirements remain defined in [`docs/tech_specs/node.md`](node.md).
 
 ## Goals
@@ -38,9 +40,16 @@ Behavioral requirements remain defined in [`docs/tech_specs/node.md`](node.md).
 
 ## Security Notes
 
+- Spec ID: `CYNAI.WORKER.PayloadSecurity` <a id="spec-cynai-worker-payloadsecurity"></a>
+
 - Payloads may include secrets (for example short-lived pull tokens).
 - Secrets MUST be short-lived where possible and MUST NOT be exposed to sandbox containers.
 - Nodes MUST store secrets only in a node-local secure store.
+
+Traces To:
+
+- [REQ-WORKER-0131](../requirements/worker.md#req-worker-0131)
+- [REQ-WORKER-0132](../requirements/worker.md#req-worker-0132)
 
 ## Node Capability Report Payload
 
@@ -50,6 +59,8 @@ It may also be sent when capabilities change.
 Source requirements: [`docs/tech_specs/node.md`](node.md#capability-reporting).
 
 ### Capability Report Schema `node_capability_report_v1`
+
+- Spec ID: `CYNAI.WORKER.Payload.CapabilityReportV1` <a id="spec-cynai-worker-payload-capabilityreport-v1"></a>
 
 - `version` (int)
   - must be 1
@@ -156,6 +167,8 @@ Source requirements: [`docs/tech_specs/node.md`](node.md#registration-and-bootst
 
 ### Bootstrap Payload Schema `node_bootstrap_payload_v1`
 
+- Spec ID: `CYNAI.WORKER.Payload.BootstrapV1` <a id="spec-cynai-worker-payload-bootstrap-v1"></a>
+
 - `version` (int)
   - must be 1
 - `issued_at` (string)
@@ -197,6 +210,8 @@ It is versioned so nodes can apply updates safely and atomically.
 Source requirements: [`docs/tech_specs/node.md`](node.md#configuration-delivery) and [`docs/tech_specs/node.md`](node.md#dynamic-configuration-updates).
 
 ### Node Config Schema `node_configuration_payload_v1`
+
+- Spec ID: `CYNAI.WORKER.Payload.ConfigurationV1` <a id="spec-cynai-worker-payload-configuration-v1"></a>
 
 - `version` (int)
   - must be 1
@@ -246,7 +261,13 @@ Source requirements: [`docs/tech_specs/node.md`](node.md#configuration-delivery)
 Nodes MUST report configuration application status back to the orchestrator.
 This acknowledgement allows safe rollout, retries, and visibility.
 
+Traces To:
+
+- [REQ-WORKER-0137](../requirements/worker.md#req-worker-0137)
+
 ### Config Ack Schema `node_config_ack_v1`
+
+- Spec ID: `CYNAI.WORKER.Payload.ConfigAckV1` <a id="spec-cynai-worker-payload-configack-v1"></a>
 
 - `version` (int)
   - must be 1
@@ -262,6 +283,8 @@ This acknowledgement allows safe rollout, retries, and visibility.
 - `effective_config_hash` (string, optional)
 
 ## Compatibility and Versioning
+
+- Spec ID: `CYNAI.WORKER.Payload.CompatibilityVersioning` <a id="spec-cynai-worker-payload-versioning"></a>
 
 - New fields MAY be added to payloads as optional fields.
 - Fields MUST NOT change meaning within the same `version`.

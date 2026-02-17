@@ -1,10 +1,17 @@
 # Access Control
 
+- [Spec IDs](#spec-ids)
 - [Document Overview](#document-overview)
 - [Core Concepts](#core-concepts)
 - [Policy Evaluation](#policy-evaluation)
 - [Proposed Tables](#proposed-tables)
 - [Service Integration](#service-integration)
+
+## Spec IDs
+
+- Spec ID: `CYNAI.ACCESS.Doc.AccessControl` <a id="spec-cynai-access-doc-accesscontrol"></a>
+
+This section defines stable Spec ID anchors for referencing this document.
 
 ## Document Overview
 

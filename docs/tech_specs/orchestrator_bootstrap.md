@@ -3,6 +3,7 @@
 - [Document Overview](#document-overview)
 - [Bootstrap Goal](#bootstrap-goal)
 - [Bootstrap Source and Precedence](#bootstrap-source-and-precedence)
+  - [Applicable Requirements](#applicable-requirements)
 - [Bootstrap Contents](#bootstrap-contents)
 - [Standalone Operation Mode](#standalone-operation-mode)
 
@@ -22,11 +23,15 @@ Bootstrap configuration is used to seed PostgreSQL and configure external servic
 Bootstrap YAML is an import mechanism, not the source of truth.
 The source of truth for configuration and preferences is PostgreSQL.
 
-Normative requirements
+### Applicable Requirements
 
-- On startup, the orchestrator MAY load a bootstrap YAML file when configured to do so.
-- Bootstrap import MUST be idempotent and SHOULD support updates using versioned keys.
-- After import, agents and systems MUST read configuration and preferences from PostgreSQL via MCP tools or the User API Gateway.
+- Spec ID: `CYNAI.BOOTST.BootstrapSource` <a id="spec-cynai-bootst-bootstrapsource"></a>
+
+Traces To:
+
+- [REQ-BOOTST-0100](../requirements/bootst.md#req-bootst-0100)
+- [REQ-BOOTST-0101](../requirements/bootst.md#req-bootst-0101)
+- [REQ-BOOTST-0102](../requirements/bootst.md#req-bootst-0102)
 
 ## Bootstrap Contents
 
@@ -50,6 +55,8 @@ The orchestrator SHOULD support running as the sole service with zero worker nod
 
 Recommended behavior
 
+- The orchestrator MUST ensure at least one inference-capable path is available before reporting ready.
+  If no local inference is available and no external provider keys are configured, the orchestrator MUST refuse to enter a ready state because inference is unavailable.
 - If there are no registered worker nodes, the orchestrator MAY route model calls to external providers when policy allows it.
 - External model calls MUST use the API Egress Server so API keys are not exposed to agents.
 - Sandbox execution SHOULD be disabled or restricted when no worker nodes are available.

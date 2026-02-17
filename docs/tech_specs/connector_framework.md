@@ -32,12 +32,16 @@ Terminology
 - **Connector instance**: An installed configuration of a connector type for a specific owner and scope.
 - **Operation**: A named action exposed by a connector instance (e.g. read inbox, post message).
 
-Normative requirements
+### Connector Model Applicable Requirements
 
-- The orchestrator MUST maintain a connector catalog of supported connector types and their operations.
-- Users MUST be able to install a connector instance, enable it, disable it, and uninstall it.
-- A connector instance MUST be scoped to an owner identity (user or group) and MAY be scoped to a project.
-- Connector instances MUST have stable identifiers for policy rules and auditing.
+- Spec ID: `CYNAI.CONNEC.ConnectorModel` <a id="spec-cynai-connec-connectormodel"></a>
+
+Traces To:
+
+- [REQ-CONNEC-0100](../requirements/connec.md#req-connec-0100)
+- [REQ-CONNEC-0101](../requirements/connec.md#req-connec-0101)
+- [REQ-CONNEC-0102](../requirements/connec.md#req-connec-0102)
+- [REQ-CONNEC-0103](../requirements/connec.md#req-connec-0103)
 
 Recommended connector instance fields
 
@@ -67,12 +71,16 @@ Runtime boundaries
 Connector secrets MUST be encrypted at rest.
 Credential handling SHOULD follow the API Egress Server model.
 
-Normative requirements
+### Credential Storage and Rotation Applicable Requirements
 
-- Connector credentials MUST be stored in PostgreSQL as ciphertext with a key identifier for envelope encryption.
-- Only the service responsible for executing connector operations MUST be able to decrypt connector credentials.
-- Credential rotation MUST be supported without changing connector instance identifiers.
-- Credential revocation MUST support immediate deactivation.
+- Spec ID: `CYNAI.CONNEC.ConnectorCredentialStorage` <a id="spec-cynai-connec-conncredstorage"></a>
+
+Traces To:
+
+- [REQ-CONNEC-0104](../requirements/connec.md#req-connec-0104)
+- [REQ-CONNEC-0105](../requirements/connec.md#req-connec-0105)
+- [REQ-CONNEC-0106](../requirements/connec.md#req-connec-0106)
+- [REQ-CONNEC-0107](../requirements/connec.md#req-connec-0107)
 
 See [`docs/tech_specs/api_egress_server.md`](api_egress_server.md#credential-storage).
 
@@ -80,11 +88,15 @@ See [`docs/tech_specs/api_egress_server.md`](api_egress_server.md#credential-sto
 
 Connector operations MUST be governed by access control and audited.
 
-Normative requirements
+### Policy and Auditing Applicable Requirements
 
-- The orchestrator MUST enforce a default-deny policy for connector operations.
-- Policy MUST be evaluated per operation with subject, action, resource, and task context.
-- Connector operations MUST emit audit logs including subject identity, connector instance, operation, and decision.
+- Spec ID: `CYNAI.CONNEC.ConnectorPolicyAuditing` <a id="spec-cynai-connec-connpolicy"></a>
+
+Traces To:
+
+- [REQ-CONNEC-0108](../requirements/connec.md#req-connec-0108)
+- [REQ-CONNEC-0109](../requirements/connec.md#req-connec-0109)
+- [REQ-CONNEC-0110](../requirements/connec.md#req-connec-0110)
 
 Recommended policy action taxonomy
 
@@ -104,11 +116,15 @@ See [`docs/tech_specs/access_control.md`](access_control.md) for policy evaluati
 
 Orchestrator-side agents SHOULD use MCP tools to manage and invoke connector operations.
 
-Normative requirements
+### Tool Surface MCP Applicable Requirements
 
-- Connector management tools (install, enable, disable, rotate, revoke) MUST be restricted to authorized subjects.
-- Connector invocation tools (read, send) MUST be policy-gated per operation and per connector instance.
-- Tool calls MUST be audited with task context when invoked during task execution.
+- Spec ID: `CYNAI.CONNEC.ConnectorToolSurfaceMcp` <a id="spec-cynai-connec-conntoolmcp"></a>
+
+Traces To:
+
+- [REQ-CONNEC-0111](../requirements/connec.md#req-connec-0111)
+- [REQ-CONNEC-0112](../requirements/connec.md#req-connec-0112)
+- [REQ-CONNEC-0113](../requirements/connec.md#req-connec-0113)
 
 Recommended MCP tools
 
@@ -128,11 +144,15 @@ See [`docs/tech_specs/mcp_tooling.md`](mcp_tooling.md).
 The scheduler, connectors, and other user-facing capabilities are exposed through the User API Gateway.
 Connector management and connector operation visibility MUST be available to authenticated users.
 
-Normative requirements
+### User API Gateway Surface Applicable Requirements
 
-- The User API Gateway MUST expose endpoints to install, enable, disable, and uninstall connector instances.
-- The User API Gateway MUST expose endpoints to manage connector credentials (create, rotate, revoke, disable).
-- The User API Gateway SHOULD expose connector run history and audit views for visibility and debugging.
+- Spec ID: `CYNAI.CONNEC.ConnectorUserApiGateway` <a id="spec-cynai-connec-connusergwy"></a>
+
+Traces To:
+
+- [REQ-CONNEC-0114](../requirements/connec.md#req-connec-0114)
+- [REQ-CONNEC-0115](../requirements/connec.md#req-connec-0115)
+- [REQ-CONNEC-0116](../requirements/connec.md#req-connec-0116)
 
 See [`docs/tech_specs/user_api_gateway.md`](user_api_gateway.md) and [`docs/tech_specs/data_rest_api.md`](data_rest_api.md).
 
@@ -162,13 +182,17 @@ Key principle
 
 - OpenClaw connector code and responses MUST be treated as untrusted.
 
-Normative requirements
+### OpenClaw Connector Compatibility Applicable Requirements
 
-- OpenClaw connectors MUST run behind an orchestrator-controlled boundary.
-- The boundary MUST enforce policy, auditing, allowlists, and response validation for every connector operation.
-- Connector credentials MUST NOT be returned to agents or worker sandboxes.
-- OpenClaw connectors MUST NOT be executed inside worker sandboxes that run arbitrary agent code.
-- Connector invocation MUST be scoped to a connector instance id and operation name with subject identity and task context.
+- Spec ID: `CYNAI.CONNEC.OpenClawCompatibility` <a id="spec-cynai-connec-openclaw"></a>
+
+Traces To:
+
+- [REQ-CONNEC-0117](../requirements/connec.md#req-connec-0117)
+- [REQ-CONNEC-0118](../requirements/connec.md#req-connec-0118)
+- [REQ-CONNEC-0119](../requirements/connec.md#req-connec-0119)
+- [REQ-CONNEC-0120](../requirements/connec.md#req-connec-0120)
+- [REQ-CONNEC-0121](../requirements/connec.md#req-connec-0121)
 
 Recommended adapter approaches
 

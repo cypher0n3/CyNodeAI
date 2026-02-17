@@ -119,10 +119,14 @@ Constraints
 
 ## Retrieval Rules
 
-Normative requirements for planning and verification.
+This section describes how effective preferences are computed and cached.
 
-When verifying a task, the Project Manager Agent:
+### Applicable Requirements
 
-- MUST compute the effective preferences for the task by merging scopes in precedence order.
-- MUST treat unknown keys as opaque and pass them through to verification/tooling.
-- SHOULD cache effective preferences per task revision, but MUST invalidate on preference update.
+- Spec ID: `CYNAI.STANDS.UserPreferencesRetrieval` <a id="spec-cynai-stands-prefretrieval"></a>
+
+Traces To:
+
+- [REQ-CLIENT-0113](../requirements/client.md#req-client-0113)
+- [REQ-CLIENT-0114](../requirements/client.md#req-client-0114)
+- [REQ-CLIENT-0115](../requirements/client.md#req-client-0115)

@@ -24,6 +24,18 @@ Keep scenarios aligned with the technical specs and with the actual implementati
 
 If a scenario becomes outdated, update the feature file and the corresponding tests together.
 
+### 3.1 Traceability Tags
+
+Each `Scenario` SHOULD include:
+
+- A requirement tag: `@req_<domain>_<nnnn>` derived from `REQ-<DOMAIN>-<NNNN>` (lowercased).
+- A spec tag: `@spec_<spec_id>` derived from a Spec ID (dots replaced with underscores, lowercased).
+
+Example:
+
+- `REQ-IDENTY-0104` => `@req_identy_0104`
+- `CYNAI.IDENTY.AuthenticationModel` => `@spec_cynai_identy_authenticationmodel`
+
 ## 4 Testing and Validation
 
 This repository currently validates behavior primarily through Go tests and end-to-end developer tooling.

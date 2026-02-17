@@ -49,20 +49,24 @@ MD060: false
 # ---
 allow-custom-anchors:
   allowedIdPatterns:
+    # Spec ID definitions pattern
     - pattern: "^spec-[a-z0-9-]+$"
       placement:
-        lineMatch: '^- Spec ID:\s+`NP\.[^`]+`'
+        lineMatch: '^- Spec ID:\s+`CYNAI\.[A-Z]{6}\.[^`]+`'
         anchorImmediatelyAfterHeading: true
+        maxPerSection: 1
+    # Requirement ID definitions pattern
+    - pattern: "^req-[a-z]{6}-[0-9]{4}$"
+      placement:
+        standaloneLine: true
+    # Code block reference anchors pattern
     - pattern: "^ref-[a-z0-9]+-[a-z0-9-]+$"
       placement:
         standaloneLine: true
         requireAfter:
           - blank
           - fencedBlock
-    - pattern: "^algo-[a-z0-9-]+-step-[0-9]+(?:-[0-9]+)*$"
-      placement:
-        headingMatch: '^#{1,6} .*`[^`]+`.*\bAlgorithm\b'
-        lineMatch: '^\s*(?:[-*+]\s+|\d+[.)]\s+)'
+    # Algorithm specification pattern
     - pattern: '^algo-[a-z0-9-]+$'
       placement:
         headingMatch: '^\s*#{1,6}\s+.*`[^`]+`.*\bAlgorithm\b'
@@ -72,6 +76,11 @@ allow-custom-anchors:
           - list
         anchorImmediatelyAfterHeading: true
         maxPerSection: 1
+    # Algorithm step specifications when fine-grained algorithm is used
+    - pattern: "^algo-[a-z0-9-]+-step-[0-9]+(?:-[0-9]+)*$"
+      placement:
+        headingMatch: '^#{1,6} .*`[^`]+`.*\bAlgorithm\b'
+        lineMatch: '^\s*(?:[-*+]\s+|\d+[.)]\s+)'
   strictPlacement: true
 
 # -----------------------------------------------------------------------------

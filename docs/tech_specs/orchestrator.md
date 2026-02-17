@@ -1,5 +1,6 @@
 # Orchestrator Technical Spec
 
+- [Spec IDs](#spec-ids)
 - [Document Overview](#document-overview)
 - [Core Responsibilities](#core-responsibilities)
 - [Task Scheduler](#task-scheduler)
@@ -14,6 +15,10 @@
 - [MCP Tool Interface](#mcp-tool-interface)
 - [Orchestrator Bootstrap Configuration](#orchestrator-bootstrap-configuration)
 - [Workflow Engine](#workflow-engine)
+
+## Spec IDs
+
+- Spec ID: `CYNAI.ORCHES.Doc.Orchestrator` <a id="spec-cynai-orches-doc-orchestrator"></a>
 
 ## Document Overview
 

@@ -8,7 +8,8 @@ It coordinates sandboxed worker execution across local nodes and optional cloud 
 ## Repository Status
 
 - This repository is currently **early prototype / design phase**.
-- Most authoritative details live in `docs/tech_specs/`.
+- The canonical normative "what" lives in `docs/requirements/`.
+- Implementation guidance ("how") lives in `docs/tech_specs/` and should trace back to requirements.
 - The `node/` and `orchestrator/` directories currently exist as placeholders for implementation.
 
 ## Key Documents
@@ -35,7 +36,8 @@ It coordinates sandboxed worker execution across local nodes and optional cloud 
 
 ## Repository Layout
 
-- `docs/tech_specs/`: design and normative requirements (primary source of truth); entrypoint is `_main.md`.
+- `docs/requirements/`: canonical normative requirements ("what"); entrypoint is `README.md`.
+- `docs/tech_specs/`: design and implementation guidance ("how"); entrypoint is `_main.md`.
 - `secure_browser/`: rules and assets for the secure browser service (e.g. `secure_browser_rules.yaml`).
 - `node/`: reserved for worker-node services (implementation to be added).
 - `orchestrator/`: reserved for orchestrator services (implementation to be added).
@@ -43,6 +45,9 @@ It coordinates sandboxed worker execution across local nodes and optional cloud 
 
 ## Style and Tooling Conventions
 
+**CRITICAL:** Do NOT modify linting rules or add linter suppression comments (e.g. `//nolint` in go files)!
+
+- See [`markdown_conventions.md`](./docs/docs_standards/markdown_conventions.md)
 - Use the project **justfile** for setup, checking, and validation.
   All changes must pass **`just ci`** before considering work complete; see the justfile for available recipes.
 - Markdown formatting is governed by `.editorconfig` and `.markdownlint.yml`.
@@ -52,8 +57,10 @@ It coordinates sandboxed worker execution across local nodes and optional cloud 
 
 ## Contribution Expectations
 
-- Specs in `docs/tech_specs/` take precedence over code.
+- Requirements in `docs/requirements/` take precedence over tech specs and code.
+  If requirements, specs, and code differ, treat it as a **gap** and call it out to the user for direction.
+- Tech specs in `docs/tech_specs/` take precedence over code.
   If specs and code differ, treat it as a **code gap** and call it out to the user for direction.
 - AIs must not update the tech specs without explicit user direction.
-- Prefer links to the relevant tech spec section over duplicating large design explanations in code comments.
+- Prefer links to the relevant requirement and tech spec sections over duplicating large design explanations in code comments.
 - Do not commit secrets (API keys, tokens, credentials).
