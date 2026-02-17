@@ -116,9 +116,9 @@ func (db *DB) CompleteJob(ctx context.Context, jobID uuid.UUID, result, status s
 	err := db.db.WithContext(ctx).Model(&models.Job{}).
 		Where("id = ?", jobID).
 		Updates(map[string]interface{}{
-			"result":    models.NewJSONBString(&result),
-			"status":    status,
-			"ended_at":  now,
+			"result":     models.NewJSONBString(&result),
+			"status":     status,
+			"ended_at":   now,
 			"updated_at": now,
 		}).Error
 	return wrapErr(err, "complete job")

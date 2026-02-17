@@ -30,6 +30,9 @@ type OrchestratorConfig struct {
 	// Node Registration
 	NodeRegistrationPSK string
 
+	// Orchestrator public URL for bootstrap payload (emitted to nodes).
+	OrchestratorPublicURL string
+
 	// Bootstrap
 	BootstrapAdminPassword string
 
@@ -77,6 +80,7 @@ func LoadOrchestratorConfig() *OrchestratorConfig {
 		JWTRefreshDuration:     getDurationEnv("JWT_REFRESH_DURATION", 7*24*time.Hour),
 		JWTNodeDuration:        getDurationEnv("JWT_NODE_DURATION", 24*time.Hour),
 		NodeRegistrationPSK:    getEnv("NODE_REGISTRATION_PSK", "default-psk-change-me"),
+		OrchestratorPublicURL:  getEnv("ORCHESTRATOR_PUBLIC_URL", "http://localhost:8082"),
 		BootstrapAdminPassword: getEnv("BOOTSTRAP_ADMIN_PASSWORD", "admin123"),
 		RateLimitPerMinute:     getIntEnv("RATE_LIMIT_PER_MINUTE", 60),
 	}

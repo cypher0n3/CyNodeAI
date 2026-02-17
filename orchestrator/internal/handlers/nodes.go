@@ -8,8 +8,10 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"strings"
 	"time"
 
+	"github.com/cypher0n3/cynodeai/go_shared_libs/contracts/nodepayloads"
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/auth"
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/database"
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/models"
@@ -18,19 +20,21 @@ import (
 
 // NodeHandler handles node registration and management endpoints.
 type NodeHandler struct {
-	db              database.Store
-	jwt             *auth.JWTManager
-	registrationPSK string
-	logger          *slog.Logger
+	db                    database.Store
+	jwt                   *auth.JWTManager
+	registrationPSK       string
+	orchestratorPublicURL string
+	logger                *slog.Logger
 }
 
 // NewNodeHandler creates a new node handler.
-func NewNodeHandler(db database.Store, jwt *auth.JWTManager, registrationPSK string, logger *slog.Logger) *NodeHandler {
+func NewNodeHandler(db database.Store, jwt *auth.JWTManager, registrationPSK, orchestratorPublicURL string, logger *slog.Logger) *NodeHandler {
 	return &NodeHandler{
-		db:              db,
-		jwt:             jwt,
-		registrationPSK: registrationPSK,
-		logger:          logger,
+		db:                    db,
+		jwt:                   jwt,
+		registrationPSK:       registrationPSK,
+		orchestratorPublicURL: orchestratorPublicURL,
+		logger:                logger,
 	}
 }
 
@@ -94,20 +98,6 @@ type NodeCapabilitySandbox struct {
 type NodeRegistrationRequest struct {
 	PSK        string               `json:"psk"`
 	Capability NodeCapabilityReport `json:"capability"`
-}
-
-// NodeBootstrapResponse represents the bootstrap payload.
-// See docs/tech_specs/node_payloads.md node_bootstrap_payload_v1.
-type NodeBootstrapResponse struct {
-	Version  int               `json:"version"`
-	IssuedAt string            `json:"issued_at"`
-	Auth     NodeBootstrapAuth `json:"auth"`
-}
-
-// NodeBootstrapAuth contains authentication info.
-type NodeBootstrapAuth struct {
-	NodeJWT   string `json:"node_jwt"`
-	ExpiresAt string `json:"expires_at"`
 }
 
 // Register handles POST /v1/nodes/register.
@@ -174,7 +164,7 @@ func (h *NodeHandler) handleExistingNodeRegistration(ctx context.Context, w http
 		return
 	}
 
-	WriteJSON(w, http.StatusOK, h.buildBootstrapResponse(nodeJWT, expiresAt))
+	WriteJSON(w, http.StatusOK, h.buildBootstrapResponse(h.orchestratorPublicURL, nodeJWT, expiresAt))
 }
 
 func (h *NodeHandler) handleNewNodeRegistration(ctx context.Context, w http.ResponseWriter, req *NodeRegistrationRequest) {
@@ -195,7 +185,7 @@ func (h *NodeHandler) handleNewNodeRegistration(ctx context.Context, w http.Resp
 	}
 
 	h.logInfo("node registered", "node_id", newNode.ID, "node_slug", newNode.NodeSlug)
-	WriteJSON(w, http.StatusCreated, h.buildBootstrapResponse(nodeJWT, expiresAt))
+	WriteJSON(w, http.StatusCreated, h.buildBootstrapResponse(h.orchestratorPublicURL, nodeJWT, expiresAt))
 }
 
 func (h *NodeHandler) initializeNewNode(ctx context.Context, nodeID uuid.UUID, capability *NodeCapabilityReport) {
@@ -215,11 +205,20 @@ func (h *NodeHandler) initializeNewNode(ctx context.Context, nodeID uuid.UUID, c
 	}
 }
 
-func (h *NodeHandler) buildBootstrapResponse(nodeJWT string, expiresAt time.Time) NodeBootstrapResponse {
-	return NodeBootstrapResponse{
+func (h *NodeHandler) buildBootstrapResponse(baseURL, nodeJWT string, expiresAt time.Time) nodepayloads.BootstrapResponse {
+	baseURL = strings.TrimSuffix(baseURL, "/")
+	return nodepayloads.BootstrapResponse{
 		Version:  1,
 		IssuedAt: time.Now().UTC().Format(time.RFC3339),
-		Auth: NodeBootstrapAuth{
+		Orchestrator: nodepayloads.BootstrapOrchestrator{
+			BaseURL: baseURL,
+			Endpoints: nodepayloads.BootstrapEndpoints{
+				WorkerRegistrationURL: baseURL + "/v1/nodes/register",
+				NodeReportURL:         baseURL + "/v1/nodes/capability",
+				NodeConfigURL:         baseURL + "/v1/nodes/config",
+			},
+		},
+		Auth: nodepayloads.BootstrapAuth{
 			NodeJWT:   nodeJWT,
 			ExpiresAt: expiresAt.Format(time.RFC3339),
 		},
