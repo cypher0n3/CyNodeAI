@@ -19,9 +19,11 @@ POSTGRES_PASSWORD="${POSTGRES_PASSWORD:-postgres}"
 POSTGRES_DB="${POSTGRES_DB:-cynodeai}"
 
 ORCHESTRATOR_PORT="${ORCHESTRATOR_PORT:-8080}"
+CONTROL_PLANE_PORT="${CONTROL_PLANE_PORT:-8082}"
 NODE_PORT="${NODE_PORT:-8081}"
 NODE_SLUG="${NODE_SLUG:-dev-node-01}"
 NODE_REGISTRATION_PSK="${NODE_REGISTRATION_PSK:-dev-psk-secret}"
+WORKER_API_BEARER_TOKEN="${WORKER_API_BEARER_TOKEN:-dev-worker-api-token}"
 BOOTSTRAP_ADMIN_PASSWORD="${BOOTSTRAP_ADMIN_PASSWORD:-admin123}"
 JWT_SECRET="${JWT_SECRET:-dev-jwt-secret-change-in-prod}"
 
@@ -67,7 +69,7 @@ check_postgres() {
 # Start PostgreSQL container
 start_postgres() {
     log_info "Starting PostgreSQL container..."
-    
+
     # Check if container exists but is stopped
     if $RUNTIME ps -a --filter "name=$POSTGRES_CONTAINER_NAME" --format "{{.Names}}" | grep -q "$POSTGRES_CONTAINER_NAME"; then
         if check_postgres; then
@@ -86,7 +88,7 @@ start_postgres() {
             -e "POSTGRES_DB=$POSTGRES_DB" \
             postgres:16
     fi
-    
+
     # Wait for PostgreSQL to be ready
     log_info "Waiting for PostgreSQL to be ready..."
     for i in {1..30}; do
@@ -96,7 +98,7 @@ start_postgres() {
         fi
         sleep 1
     done
-    
+
     log_error "PostgreSQL failed to start within 30 seconds"
     exit 1
 }
@@ -126,166 +128,177 @@ remove_postgres() {
 # Build the Go binaries
 build() {
     log_info "Building Go binaries..."
-    go build -o bin/orchestrator-api ./cmd/orchestrator-api
-    go build -o bin/node ./cmd/node
+    go build -o bin/control-plane ./orchestrator/cmd/control-plane
+    go build -o bin/user-gateway ./orchestrator/cmd/user-gateway
+    go build -o bin/worker-api ./worker_node/cmd/worker-api
+    go build -o bin/node-manager ./worker_node/cmd/node-manager
     log_success "Build complete"
 }
 
-# Start the orchestrator API
-start_orchestrator() {
-    log_info "Starting Orchestrator API on port $ORCHESTRATOR_PORT..."
-    
+# Start control-plane (migrations, node API, dispatcher)
+start_control_plane() {
+    log_info "Starting control-plane on port $CONTROL_PLANE_PORT..."
     export DATABASE_URL="postgres://postgres:$POSTGRES_PASSWORD@localhost:$POSTGRES_PORT/$POSTGRES_DB?sslmode=disable"
-    export LISTEN_ADDR=":$ORCHESTRATOR_PORT"
+    export MIGRATIONS_DIR="${MIGRATIONS_DIR:-./orchestrator/migrations}"
+    export CONTROL_PLANE_LISTEN_ADDR=":$CONTROL_PLANE_PORT"
     export JWT_SECRET="$JWT_SECRET"
     export NODE_REGISTRATION_PSK="$NODE_REGISTRATION_PSK"
     export BOOTSTRAP_ADMIN_PASSWORD="$BOOTSTRAP_ADMIN_PASSWORD"
-    
-    ./bin/orchestrator-api &
-    ORCHESTRATOR_PID=$!
-    echo $ORCHESTRATOR_PID > /tmp/cynodeai-orchestrator.pid
-    
-    # Wait for server to be ready
-    log_info "Waiting for Orchestrator API to be ready..."
+    export WORKER_API_URL="http://localhost:$NODE_PORT"
+    export WORKER_API_BEARER_TOKEN="$WORKER_API_BEARER_TOKEN"
+    ./bin/control-plane &
+    echo $! > /tmp/cynodeai-control-plane.pid
     for i in {1..15}; do
-        if curl -s "http://localhost:$ORCHESTRATOR_PORT/healthz" > /dev/null 2>&1; then
-            log_success "Orchestrator API is ready (PID: $ORCHESTRATOR_PID)"
+        if curl -s "http://localhost:$CONTROL_PLANE_PORT/healthz" > /dev/null 2>&1; then
+            log_success "Control-plane is ready"
             return 0
         fi
         sleep 1
     done
-    
-    log_error "Orchestrator API failed to start"
+    log_error "Control-plane failed to start"
     exit 1
 }
 
-# Start the node
-start_node() {
-    log_info "Starting Node on port $NODE_PORT..."
-    
-    export ORCHESTRATOR_URL="http://localhost:$ORCHESTRATOR_PORT"
-    export NODE_REGISTRATION_PSK="$NODE_REGISTRATION_PSK"
-    export NODE_SLUG="$NODE_SLUG"
-    export NODE_NAME="Development Node"
-    export NODE_LISTEN_ADDR=":$NODE_PORT"
-    export CONTAINER_RUNTIME="$RUNTIME"
-    
-    ./bin/node &
-    NODE_PID=$!
-    echo $NODE_PID > /tmp/cynodeai-node.pid
-    
-    # Wait for server to be ready
-    log_info "Waiting for Node to be ready..."
+# Start the user-facing API gateway
+start_orchestrator() {
+    log_info "Starting user-gateway on port $ORCHESTRATOR_PORT..."
+    export DATABASE_URL="postgres://postgres:$POSTGRES_PASSWORD@localhost:$POSTGRES_PORT/$POSTGRES_DB?sslmode=disable"
+    export USER_GATEWAY_LISTEN_ADDR=":$ORCHESTRATOR_PORT"
+    export JWT_SECRET="$JWT_SECRET"
+    export BOOTSTRAP_ADMIN_PASSWORD="$BOOTSTRAP_ADMIN_PASSWORD"
+    ./bin/user-gateway &
+    ORCHESTRATOR_PID=$!
+    echo $ORCHESTRATOR_PID > /tmp/cynodeai-orchestrator.pid
     for i in {1..15}; do
-        if curl -s "http://localhost:$NODE_PORT/healthz" > /dev/null 2>&1; then
-            log_success "Node is ready (PID: $NODE_PID)"
+        if curl -s "http://localhost:$ORCHESTRATOR_PORT/healthz" > /dev/null 2>&1; then
+            log_success "User-gateway is ready (PID: $ORCHESTRATOR_PID)"
             return 0
         fi
         sleep 1
     done
-    
-    log_error "Node failed to start"
+    log_error "User-gateway failed to start"
+    exit 1
+}
+
+# Start worker-api and node-manager
+start_node() {
+    log_info "Starting worker-api on port $NODE_PORT..."
+    export LISTEN_ADDR=":$NODE_PORT"
+    export WORKER_API_BEARER_TOKEN="$WORKER_API_BEARER_TOKEN"
+    export CONTAINER_RUNTIME="${CONTAINER_RUNTIME:-$RUNTIME}"
+    ./bin/worker-api &
+    echo $! > /tmp/cynodeai-worker-api.pid
+    sleep 1
+    log_info "Starting node-manager..."
+    export ORCHESTRATOR_URL="http://localhost:$CONTROL_PLANE_PORT"
+    export NODE_REGISTRATION_PSK="$NODE_REGISTRATION_PSK"
+    export NODE_SLUG="$NODE_SLUG"
+    export NODE_NAME="Development Node"
+    ./bin/node-manager &
+    echo $! > /tmp/cynodeai-node-manager.pid
+    for i in {1..15}; do
+        if curl -s "http://localhost:$NODE_PORT/healthz" > /dev/null 2>&1; then
+            log_success "Worker-api and node-manager are ready"
+            return 0
+        fi
+        sleep 1
+    done
+    log_error "Worker/node failed to start"
     exit 1
 }
 
 # Stop all services
 stop_services() {
     log_info "Stopping services..."
-    
-    if [ -f /tmp/cynodeai-node.pid ]; then
-        kill $(cat /tmp/cynodeai-node.pid) 2>/dev/null || true
-        rm -f /tmp/cynodeai-node.pid
-        log_info "Node stopped"
-    fi
-    
-    if [ -f /tmp/cynodeai-orchestrator.pid ]; then
-        kill $(cat /tmp/cynodeai-orchestrator.pid) 2>/dev/null || true
-        rm -f /tmp/cynodeai-orchestrator.pid
-        log_info "Orchestrator stopped"
-    fi
-    
+    for pidfile in /tmp/cynodeai-node-manager.pid /tmp/cynodeai-worker-api.pid /tmp/cynodeai-orchestrator.pid /tmp/cynodeai-control-plane.pid; do
+        if [ -f "$pidfile" ]; then
+            kill $(cat "$pidfile") 2>/dev/null || true
+            rm -f "$pidfile"
+        fi
+    done
     log_success "Services stopped"
 }
 
-# Run end-to-end tests
+# Run end-to-end tests (user API :8080, control-plane :8082, worker :8081)
 test_e2e() {
     log_info "Running end-to-end tests..."
-    
-    API_URL="http://localhost:$ORCHESTRATOR_PORT"
-    
-    # Test 1: Health check
+
+    USER_API="http://localhost:$ORCHESTRATOR_PORT"
+    CONTROL_PLANE_API="http://localhost:$CONTROL_PLANE_PORT"
+
+    # Test 1: Health check (user-gateway)
     log_info "Test 1: Health check..."
-    HEALTH=$(curl -s "$API_URL/healthz")
+    HEALTH=$(curl -s "$USER_API/healthz")
     if [ "$HEALTH" = "ok" ]; then
         log_success "Health check passed"
     else
         log_error "Health check failed"
         exit 1
     fi
-    
+
     # Test 2: Login as admin
     log_info "Test 2: Login as admin..."
-    LOGIN_RESP=$(curl -s -X POST "$API_URL/v1/auth/login" \
+    LOGIN_RESP=$(curl -s -X POST "$USER_API/v1/auth/login" \
         -H "Content-Type: application/json" \
         -d "{\"handle\": \"admin\", \"password\": \"$BOOTSTRAP_ADMIN_PASSWORD\"}")
-    
+
     ACCESS_TOKEN=$(echo "$LOGIN_RESP" | grep -o '"access_token":"[^"]*"' | cut -d'"' -f4)
     if [ -z "$ACCESS_TOKEN" ]; then
         log_error "Login failed: $LOGIN_RESP"
         exit 1
     fi
     log_success "Login successful, got access token"
-    
+
     # Test 3: Get current user
     log_info "Test 3: Get current user..."
-    USER_RESP=$(curl -s "$API_URL/v1/users/me" \
+    USER_RESP=$(curl -s "$USER_API/v1/users/me" \
         -H "Authorization: Bearer $ACCESS_TOKEN")
-    
+
     if echo "$USER_RESP" | grep -q '"handle":"admin"'; then
         log_success "Get user passed"
     else
         log_error "Get user failed: $USER_RESP"
         exit 1
     fi
-    
+
     # Test 4: Create a task
     log_info "Test 4: Create a task..."
-    TASK_RESP=$(curl -s -X POST "$API_URL/v1/tasks" \
+    TASK_RESP=$(curl -s -X POST "$USER_API/v1/tasks" \
         -H "Authorization: Bearer $ACCESS_TOKEN" \
         -H "Content-Type: application/json" \
         -d '{"prompt": "Run echo hello world"}')
-    
+
     TASK_ID=$(echo "$TASK_RESP" | grep -o '"id":"[^"]*"' | cut -d'"' -f4)
     if [ -z "$TASK_ID" ]; then
         log_error "Create task failed: $TASK_RESP"
         exit 1
     fi
     log_success "Task created with ID: $TASK_ID"
-    
+
     # Test 5: Get task
     log_info "Test 5: Get task..."
-    GET_TASK_RESP=$(curl -s "$API_URL/v1/tasks/$TASK_ID" \
+    GET_TASK_RESP=$(curl -s "$USER_API/v1/tasks/$TASK_ID" \
         -H "Authorization: Bearer $ACCESS_TOKEN")
-    
+
     if echo "$GET_TASK_RESP" | grep -q '"status":"pending"'; then
         log_success "Get task passed"
     else
         log_error "Get task failed: $GET_TASK_RESP"
         exit 1
     fi
-    
+
     # Test 6: Get task result
     log_info "Test 6: Get task result..."
-    RESULT_RESP=$(curl -s "$API_URL/v1/tasks/$TASK_ID/result" \
+    RESULT_RESP=$(curl -s "$USER_API/v1/tasks/$TASK_ID/result" \
         -H "Authorization: Bearer $ACCESS_TOKEN")
-    
+
     if echo "$RESULT_RESP" | grep -q '"task_id"'; then
         log_success "Get task result passed"
     else
         log_error "Get task result failed: $RESULT_RESP"
         exit 1
     fi
-    
+
     # Test 7: Node health check
     log_info "Test 7: Node health check..."
     NODE_HEALTH=$(curl -s "http://localhost:$NODE_PORT/healthz")
@@ -295,11 +308,12 @@ test_e2e() {
         log_error "Node health check failed"
         exit 1
     fi
-    
-    # Test 8: Execute sandbox job on node
-    log_info "Test 8: Execute sandbox job on node..."
+
+    # Test 8: Execute sandbox job on worker (requires Bearer token)
+    log_info "Test 8: Execute sandbox job on worker..."
     JOB_RESP=$(curl -s -X POST "http://localhost:$NODE_PORT/v1/worker/jobs:run" \
         -H "Content-Type: application/json" \
+        -H "Authorization: Bearer $WORKER_API_BEARER_TOKEN" \
         -d '{
             "version": 1,
             "task_id": "test-task-123",
@@ -310,14 +324,14 @@ test_e2e() {
                 "timeout_seconds": 30
             }
         }')
-    
+
     if echo "$JOB_RESP" | grep -q '"status"'; then
         JOB_STATUS=$(echo "$JOB_RESP" | grep -o '"status":"[^"]*"' | cut -d'"' -f4)
         log_success "Job executed with status: $JOB_STATUS"
     else
         log_warn "Job execution may have failed (container runtime may not be available): $JOB_RESP"
     fi
-    
+
     log_success "All E2E tests completed!"
 }
 
@@ -350,15 +364,18 @@ case "${1:-}" in
     start)
         start_postgres
         build
+        start_control_plane
+        sleep 2
         start_orchestrator
         sleep 2
         start_node
         echo ""
         log_success "All services started!"
         echo ""
-        echo "Orchestrator API: http://localhost:$ORCHESTRATOR_PORT"
-        echo "Node Worker API:  http://localhost:$NODE_PORT"
-        echo "Admin login:      handle=admin password=$BOOTSTRAP_ADMIN_PASSWORD"
+        echo "User API (auth/tasks):  http://localhost:$ORCHESTRATOR_PORT"
+        echo "Control-plane (nodes):  http://localhost:$CONTROL_PLANE_PORT"
+        echo "Worker API:             http://localhost:$NODE_PORT"
+        echo "Admin login:            handle=admin password=$BOOTSTRAP_ADMIN_PASSWORD"
         echo ""
         echo "Run '$0 test' to verify the setup"
         echo "Run '$0 stop' to stop all services"
@@ -371,6 +388,8 @@ case "${1:-}" in
         sleep 1
         start_postgres
         build
+        start_control_plane
+        sleep 2
         start_orchestrator
         sleep 2
         start_node

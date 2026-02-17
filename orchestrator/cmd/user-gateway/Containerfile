@@ -1,0 +1,19 @@
+FROM golang:1.25-alpine AS build
+
+WORKDIR /src
+RUN apk add --no-cache ca-certificates git
+
+ENV CGO_ENABLED=0
+
+COPY . .
+
+RUN go build -o /out/user-gateway ./orchestrator/cmd/user-gateway
+
+FROM alpine:3.20
+RUN apk add --no-cache ca-certificates
+
+WORKDIR /app
+COPY --from=build /out/user-gateway /app/user-gateway
+
+EXPOSE 8080
+ENTRYPOINT ["/app/user-gateway"]

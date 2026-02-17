@@ -1,0 +1,19 @@
+FROM golang:1.25-alpine AS build
+
+WORKDIR /src
+RUN apk add --no-cache ca-certificates git
+
+ENV CGO_ENABLED=0
+
+COPY . .
+
+RUN go build -o /out/mcp-gateway ./orchestrator/cmd/mcp-gateway
+
+FROM alpine:3.20
+RUN apk add --no-cache ca-certificates
+
+WORKDIR /app
+COPY --from=build /out/mcp-gateway /app/mcp-gateway
+
+EXPOSE 8083
+ENTRYPOINT ["/app/mcp-gateway"]

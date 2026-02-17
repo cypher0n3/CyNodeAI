@@ -1,0 +1,18 @@
+FROM golang:1.25-alpine AS build
+
+WORKDIR /src
+RUN apk add --no-cache ca-certificates git
+
+ENV CGO_ENABLED=0
+
+COPY . .
+
+RUN go build -o /out/node-manager ./worker_node/node_manager/cmd/node-manager
+
+FROM alpine:3.20
+RUN apk add --no-cache ca-certificates
+
+WORKDIR /app
+COPY --from=build /out/node-manager /app/node-manager
+
+ENTRYPOINT ["/app/node-manager"]
