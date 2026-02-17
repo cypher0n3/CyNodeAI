@@ -17,7 +17,6 @@ It covers MCP gateway enforcement and auditing for tool invocation.
 - REQ-MCPGAT-0002: Audit record for every tool call (allow/deny and success/failure).
   [CYNAI.MCPGAT.ToolCallAuditPoint](../tech_specs/mcp_tool_call_auditing.md#spec-cynai-mcpgat-toolaudit)
   <a id="req-mcpgat-0002"></a>
-
 - REQ-MCPGAT-0100: The MCP gateway MUST use the standard MCP protocol messages on the wire to MCP servers.
   [CYNAI.MCPGAT.StandardMcpUsage](../tech_specs/mcp_gateway_enforcement.md#spec-cynai-mcpgat-stdmcpusage)
   <a id="req-mcpgat-0100"></a>
@@ -48,7 +47,6 @@ It covers MCP gateway enforcement and auditing for tool invocation.
 - REQ-MCPGAT-0109: Audit records MUST be written regardless of tool call success or failure.
   [CYNAI.MCPGAT.ToolCallAuditPoint](../tech_specs/mcp_tool_call_auditing.md#spec-cynai-mcpgat-toolaudit)
   <a id="req-mcpgat-0109"></a>
-
 - REQ-MCPGAT-0110: For MVP, tool argument payloads and tool result payloads MUST NOT be stored in PostgreSQL audit tables.
   [mcp_tool_call_auditing.md](../tech_specs/mcp_tool_call_auditing.md)
   <a id="req-mcpgat-0110"></a>

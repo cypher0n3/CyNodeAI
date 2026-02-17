@@ -7,6 +7,7 @@
   - [2.3 User API Gateway Requirements](#23-user-api-gateway-requirements)
 - [3 Phase 1 Work Plan (4-6 Hour Chunks)](#3-phase-1-work-plan-4-6-hour-chunks)
   - [3.1 Chunk 01 (4-6 Hours): Lock the Phase 1 Acceptance Criteria](#31-chunk-01-4-6-hours-lock-the-phase-1-acceptance-criteria)
+    - [3.1.0 Phase 1 Acceptance Checklist](#310-phase-1-acceptance-checklist-chunk-01-deliverable)
   - [3.2 Chunk 02 (4-6 Hours): Make Bootstrap Payload Spec-Compliant Enough to Enable Config Delivery](#32-chunk-02-4-6-hours-make-bootstrap-payload-spec-compliant-enough-to-enable-config-delivery)
   - [3.3 Chunk 03 (4-6 Hours): Implement Minimum Node Config Delivery API in the Control Plane](#33-chunk-03-4-6-hours-implement-minimum-node-config-delivery-api-in-the-control-plane)
   - [3.4 Chunk 04 (4-6 Hours): Update Node Manager to Fetch Config and Start Node Services in the Spec Order](#34-chunk-04-4-6-hours-update-node-manager-to-fetch-config-and-start-node-services-in-the-spec-order)
@@ -23,20 +24,35 @@ This plan was generated on 2026-02-17.
 
 The items below are blocking ambiguities or known implementation-versus-spec mismatches that must be resolved to claim Phase 1 compliance.
 
-- The node bootstrap payload implemented today does not match the normative bootstrap payload shape.
-  The spec requires orchestrator endpoints (including a node config URL), and optionally trust and initial config version.
-  We need to confirm whether Phase 1 requires full bootstrap payload compliance, or whether we can defer some fields while still keeping wire compatibility.
-  See [`docs/tech_specs/node_payloads.md`](../docs/tech_specs/node_payloads.md).
-
 - Worker API authentication is specified as a bearer token delivered via the orchestrator node configuration payload.
   The current implementation uses environment variables on both sides.
-  We need to decide the minimum Phase 1 config delivery behavior for this token (static token versus expiring token with refresh).
+  For MVP Phase 1, we will use a static, unchanging bearer token delivered via node config (no refresh).
+  For MVP Phase 1, CyNodeAI component-to-component traffic may use internal HTTP (not HTTPS).
+  These MVP decisions are defined in [Chunk 03](#33-chunk-03-4-6-hours-implement-minimum-node-config-delivery-api-in-the-control-plane).
   See [`docs/tech_specs/worker_api.md`](../docs/tech_specs/worker_api.md) and [`docs/tech_specs/node_payloads.md`](../docs/tech_specs/node_payloads.md).
 
 - "Config delivery" is a Phase 1 requirement, but the control-plane currently has no node configuration endpoints.
-  We need to confirm the minimal Phase 1 API surface for config delivery and acknowledgement.
-  The spec defines a configuration payload and an acknowledgement payload, but it does not mandate the exact REST endpoint paths for config delivery.
+  For MVP Phase 1, implement the minimal, spec-shaped API surface as follows:
+  - `node_config_url` (from `node_bootstrap_payload_v1`):
+    - `GET`: return `node_configuration_payload_v1` for the authenticated node.
+    - `POST`: accept `node_config_ack_v1` for the authenticated node and persist the acknowledgement.
+  Endpoint paths are not mandated by the specs; the bootstrap payload carries the concrete URLs so nodes do not rely on hard-coded paths.
   See [`docs/tech_specs/node_payloads.md`](../docs/tech_specs/node_payloads.md) and [`docs/tech_specs/orchestrator.md`](../docs/tech_specs/orchestrator.md).
+
+### 1.1 Decisions to Lock Before Execution
+
+The work chunks below must not contain design or decisional tasks.
+Before executing the work plan, lock the decisions below and then treat the work chunks as build-only tasks.
+
+- Inference: Node-local inference via a Node Manager-managed Ollama container (MVP Phase 1).
+- Node JWT lifetime: long-lived; node re-registers on expiry.
+- Config refresh: fetch config on startup only (no polling in MVP Phase 1).
+- `config_version`: monotonic integer string per node ("1", "2", "3", ...).
+- `worker_api_target_url`: provided by orchestrator bootstrap configuration and stored per node.
+- Worker API `network_policy=restricted`: treat as deny-all (equivalent to `none`) for MVP Phase 1.
+- Sandbox resource limits: do not apply CPU, memory, or PIDs limits for MVP Phase 1.
+- Workspace: per-job directory mounted read/write at `/workspace`.
+- Config ack status: support `applied` and `failed` only.
 
 ## 2 Current State Versus Phase 1 Requirements
 
@@ -107,19 +123,37 @@ Each chunk is designed to be a focused 4-6 hour block with clear outputs and val
 
 This chunk makes Phase 1 "done" measurable and aligned to the authoritative specs.
 
+#### 3.1.0 Phase 1 Acceptance Checklist (Chunk 01 Deliverable)
+
+Derived from [Phase 1 Single Node Happy Path](../docs/tech_specs/_main.md#phase-1-single-node-happy-path) in [`docs/tech_specs/_main.md`](../docs/tech_specs/_main.md).
+
+- [ ] Orchestrator: node registration (PSK to JWT), capability ingest, config delivery, job dispatch, result collection.
+- [ ] Node: Node Manager startup sequence contacts orchestrator before starting the single Ollama container.
+- [ ] Node: Worker API receives a job, runs a sandbox container, returns a result.
+- [ ] System: at least one inference-capable path available (MVP Phase 1: node-local Ollama only; see inference precondition below).
+- [ ] System: single-node fail-fast when inference is unavailable (see below).
+- [ ] User API Gateway: local user auth (login and refresh), create task, retrieve task result.
+
+##### 3.1.0.1 Phase 1 Inference Precondition (Mvp Phase 1)
+
+The system must have at least one inference-capable execution path.
+For MVP Phase 1, inference is provided solely by a node-local Ollama container started and managed by the Node Manager.
+External model routing is out of scope.
+
+##### 3.1.0.2 Fail-Fast (Single-Node)
+
+If the node cannot run the inference container (e.g. Ollama fails to start), the system must fail fast or refuse to enter a ready state.
+The Node Manager must not report the node as ready for job dispatch until the Ollama container is running; otherwise it must exit with an error or remain in a non-ready state and report the failure.
+
 #### 3.1.1 Chunk 01 Tasks
 
-- Extract the explicit Phase 1 happy path requirements from [`docs/tech_specs/_main.md`](../docs/tech_specs/_main.md) into a short acceptance checklist inside this document.
-- Define the Phase 1 inference precondition.
-  Ensure Phase 1 requires at least one inference-capable execution path in the overall system (node-local inference container such as Ollama, or an external provider API key for inference routing).
-  In the single-node case, define the fail-fast behavior when neither local inference nor external inference credentials are available.
-- Decide and document whether Phase 1 inference requires node-local inference container lifecycle management, or whether Phase 1 can use external inference only (with sandbox execution still node-local).
-- Decide the minimum required node config delivery semantics for Phase 1.
-  At minimum, this should cover the Worker API bearer token delivery requirement in [`docs/tech_specs/worker_api.md`](../docs/tech_specs/worker_api.md).
+- [x] Extract the explicit Phase 1 happy path requirements from [`docs/tech_specs/_main.md`](../docs/tech_specs/_main.md) into a short acceptance checklist inside this document (see [Section 3.1.0](#310-phase-1-acceptance-checklist-chunk-01-deliverable)).
+- [x] Define the Phase 1 inference precondition and single-node fail-fast behavior per [Section 1.1](#11-decisions-to-lock-before-execution) (see [Section 3.1.0](#310-phase-1-acceptance-checklist-chunk-01-deliverable)).
 
 #### 3.1.2 Chunk 01 Deliverables
 
-- Updated `dev_docs/mvp_phase1_completion_plan.md` with an explicit acceptance checklist and resolved scope notes for the items in "Spec Gaps and Clarifications Needed."
+- [x] Updated `dev_docs/mvp_phase1_completion_plan.md` with an explicit acceptance checklist and inference precondition/fail-fast (Section 3.1.0).
+- Spec gaps in Section 1 are resolved via Section 1.1 and the config delivery / Worker API auth decisions recorded earlier in this document.
 
 #### 3.1.3 Chunk 01 Validation
 
@@ -129,20 +163,40 @@ This chunk makes Phase 1 "done" measurable and aligned to the authoritative spec
 
 This chunk aligns node registration bootstrap behavior with [`docs/tech_specs/node_payloads.md`](../docs/tech_specs/node_payloads.md) so a node can discover where to fetch its configuration.
 
-#### 3.2.1 Chunk 02 Tasks
+#### 3.2.1 Phase 1 Minimal Bootstrap Subset (Definition)
 
-- Update the shared contracts in [`go_shared_libs/contracts/nodepayloads/nodepayloads.go`](../go_shared_libs/contracts/nodepayloads/nodepayloads.go) to include the missing bootstrap payload fields required by the spec.
+For Phase 1, we do not need full bootstrap payload completeness.
+We do need a stable, spec-shaped bootstrap that lets the node discover the correct orchestrator URLs and authenticate subsequent requests without hard-coded paths.
+
+The Phase 1 minimal subset is:
+
+- Orchestrator emits, in its bootstrap response (spec-shaped):
+  - `version`, `issued_at`.
+  - `orchestrator.base_url` and `orchestrator.endpoints`:
+    - `worker_registration_url`
+    - `node_report_url`
+    - `node_config_url` (used for config retrieval and config ack; see Chunk 03).
+  - `auth.node_jwt` and `auth.expires_at`.
+- Node consumes the bootstrap response by:
+  - Persisting the node JWT and using it for subsequent orchestrator calls.
+  - Using the returned endpoint URLs (not hard-coded paths) for capability reporting and config retrieval.
+
+Anything beyond this (for example trust bundles and an initial config version hint) is optional for Phase 1 and can be added later without breaking wire compatibility.
+
+#### 3.2.2 Chunk 02 Tasks
+
+- Update the shared contracts in [`go_shared_libs/contracts/nodepayloads/nodepayloads.go`](../go_shared_libs/contracts/nodepayloads/nodepayloads.go) to include the Phase 1 minimal bootstrap subset fields.
 - Update the control-plane node registration handler to emit the normative bootstrap shape, including orchestrator base URL and endpoint URLs for registration, capability reporting, and node config delivery.
   See [`orchestrator/internal/handlers/nodes.go`](../orchestrator/internal/handlers/nodes.go).
 - Update the node manager registration client to parse the updated bootstrap payload.
   See [`worker_node/cmd/node-manager/main.go`](../worker_node/cmd/node-manager/main.go).
 
-#### 3.2.2 Chunk 02 Deliverables
+#### 3.2.3 Chunk 02 Deliverables
 
 - Node registration returns a spec-aligned bootstrap payload shape.
 - Node manager can register and parse the bootstrap payload shape without relying on hard-coded endpoint paths.
 
-#### 3.2.3 Chunk 02 Validation
+#### 3.2.4 Chunk 02 Validation
 
 - Run `just test-go`.
 - Run `just lint-go-ci`.
@@ -151,22 +205,32 @@ This chunk aligns node registration bootstrap behavior with [`docs/tech_specs/no
 
 This chunk implements Phase 1 "config delivery" on the orchestrator side.
 
-#### 3.3.1 Chunk 03 Tasks
+#### 3.3.1 MVP Phase 1 Decisions (Config Delivery and Transport)
 
-- Define and implement a minimal node configuration retrieval endpoint on the control-plane.
+- Worker API auth token semantics:
+  - Use a static, unchanging bearer token for MVP Phase 1.
+  - Defer expiring tokens and refresh until a later phase.
+- Transport:
+  - Use HTTP for component-to-component traffic for MVP Phase 1 (internal network only).
+  - Defer HTTPS, mTLS, and related hardening until a later phase.
+
+#### 3.3.2 Chunk 03 Tasks
+
+- Implement a minimal node configuration retrieval endpoint on the control-plane.
   The endpoint must return the normative payload shape from [`docs/tech_specs/node_payloads.md`](../docs/tech_specs/node_payloads.md) `node_configuration_payload_v1`.
+- Implement the concrete MVP Phase 1 endpoint paths and methods for `node_config_url` and `node_report_url` and ensure they are emitted in `node_bootstrap_payload_v1`.
 - Include at least the Worker API bearer token field in the node configuration payload so the node can authenticate Worker API requests as specified in [`docs/tech_specs/worker_api.md`](../docs/tech_specs/worker_api.md).
 - Persist a per-node config version and emit it in the payload.
   Use a monotonic `config_version` string and store it in PostgreSQL.
-- Add a minimal config acknowledgement endpoint and record node acknowledgements for visibility.
-  Use the acknowledgement shape in [`docs/tech_specs/node_payloads.md`](../docs/tech_specs/node_payloads.md) `node_config_ack_v1`.
+- Implement config acknowledgement using the same `node_config_url` (preferred for MVP Phase 1):
+  - `POST node_config_url`: accept `node_config_ack_v1` and record node acknowledgements for visibility.
 
-#### 3.3.2 Chunk 03 Deliverables
+#### 3.3.3 Chunk 03 Deliverables
 
 - Control-plane supports node configuration delivery and acknowledgement for registered nodes.
 - The node configuration includes `worker_api.orchestrator_bearer_token` in a way that can replace env-based token distribution.
 
-#### 3.3.3 Chunk 03 Validation
+#### 3.3.4 Chunk 03 Validation
 
 - Run `just test-go`.
 - Run `just lint-go-ci`.
@@ -179,16 +243,14 @@ This chunk implements the node startup sequence that fetches orchestrator config
 
 - Extend the node manager to fetch the node configuration payload after registration.
   Use the config endpoint URL provided by the bootstrap payload.
-- Add a config polling loop consistent with the update guidance in [`docs/tech_specs/node.md`](../docs/tech_specs/node.md).
-  For Phase 1, it is acceptable to fetch config on startup only, but the code should be structured to support polling.
+- Fetch node configuration on startup only for MVP Phase 1 (no polling).
 - Start the Worker API service using the delivered bearer token instead of requiring manual env configuration.
   Confirm that the token is treated as a secret and is not logged.
-- If Phase 1 requires Ollama lifecycle management, implement a minimal "start single Ollama container" path that is driven by configuration and runs after config fetch.
-  If Phase 1 is sandbox-only, explicitly enforce inference disabled and do not start Ollama.
+- Implement the Phase 1 inference startup behavior as locked in [Section 1.1](#11-decisions-to-lock-before-execution).
 
 #### 3.4.2 Chunk 04 Deliverables
 
-- Node manager performs: register => fetch config => start worker api => optional start ollama => report config ack.
+- Node manager performs: register => fetch config => start worker api => start ollama => report config ack.
 - Worker API bearer token distribution is end-to-end via orchestrator config delivery.
 
 #### 3.4.3 Chunk 04 Validation
@@ -203,11 +265,11 @@ This chunk ensures sandbox execution behavior matches the Phase 1 expectations i
 #### 3.5.1 Chunk 05 Tasks
 
 - Implement `network_policy` support as defined in [`docs/tech_specs/worker_api.md`](../docs/tech_specs/worker_api.md).
-  Map `none` => `--network=none` and `restricted` => a clearly documented restricted policy for Phase 1.
-- Add basic safety limits when supported by the runtime.
-  Implement reasonable defaults for CPU and memory limits, and PIDs limits where supported.
-  See [`docs/tech_specs/worker_api.md`](../docs/tech_specs/worker_api.md).
+  Map `none` => `--network=none`.
+  Map `restricted` according to the locked decision in [Section 1.1](#11-decisions-to-lock-before-execution).
+- Do not implement CPU, memory, or PIDs limits for MVP Phase 1 (defer to a later phase).
 - Mount a per-task workspace directory into the container and set an explicit working directory (for example `/workspace`).
+  Implement the locked workspace layout from [Section 1.1](#11-decisions-to-lock-before-execution).
   See [`docs/tech_specs/sandbox_container.md`](../docs/tech_specs/sandbox_container.md).
 - Ensure environment variables include non-secret task context variables (task id, job id, workspace dir) and do not include orchestrator secrets.
   See [`docs/tech_specs/sandbox_container.md`](../docs/tech_specs/sandbox_container.md).
@@ -273,8 +335,8 @@ Phase 1 is complete when all of the following are true.
 
 Phase 1 requires at least one inference-capable execution path in the overall system.
 
-- Inference MAY be provided by a node-local inference container such as Ollama.
-- Inference MAY be provided via external model routing when an external AI API key is configured and policy allows it.
+- For MVP Phase 1, inference is provided by node-local inference (a single Ollama container managed by the Node Manager).
+- External model routing is out of scope for MVP Phase 1.
 - In the single-node case, the system must fail fast (or refuse to enter a ready state) if the node cannot run an inference container and there is no external AI API key configured.
 
 - The Phase 1 bullets in [`docs/tech_specs/_main.md`](../docs/tech_specs/_main.md) are met without relying on undocumented manual steps.
