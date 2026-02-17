@@ -25,12 +25,19 @@ Practical SDK installation guidance is in [`docs/tech_specs/mcp_sdk_installation
 MCP provides a consistent protocol for agents to request tool operations.
 The orchestrator is the policy and routing point for tools.
 
-Normative requirements
+### MCP Role Applicable Requirements
 
-- Sandboxed worker agents MUST use MCP tools for controlled capabilities.
-- Orchestrator-side agents (Project Manager and Project Analyst) MUST use MCP tools for privileged operations.
+- Spec ID: `CYNAI.MCPTOO.McpRole` <a id="spec-cynai-mcptoo-mcprole"></a>
+- Sandboxed worker agents must use MCP tools for controlled capabilities.
+- Orchestrator-side agents (Project Manager and Project Analyst) must use MCP tools for privileged operations.
 - The User API Gateway is intended for external user clients and integrations, not for internal agent operations.
-- Direct access to internal services and databases SHOULD be avoided and MUST be restricted by policy.
+- Direct access to internal services and databases should be avoided and restricted by policy.
+
+Traces To:
+
+- [REQ-MCPTOO-0100](../requirements/mcptoo.md#req-mcptoo-0100)
+- [REQ-MCPTOO-0101](../requirements/mcptoo.md#req-mcptoo-0101)
+- [REQ-MCPTOO-0102](../requirements/mcptoo.md#req-mcptoo-0102)
 
 ## Tool Categories
 
@@ -100,12 +107,19 @@ Recommended tool access
 All agent interactions with PostgreSQL MUST happen through MCP database tools.
 User clients MAY access database-backed information through the User API Gateway Data REST API.
 
-Normative requirements
+### Database Access Rules Applicable Requirements
 
-- Sandboxed agents MUST NOT connect directly to PostgreSQL.
-- Orchestrator-side agents SHOULD NOT connect directly to PostgreSQL.
+- Spec ID: `CYNAI.MCPTOO.DatabaseAccessRules` <a id="spec-cynai-mcptoo-dbaccess"></a>
+- Sandboxed agents must not connect directly to PostgreSQL.
+- Orchestrator-side agents should not connect directly to PostgreSQL.
 - The orchestrator owns database credentials and exposes only scoped MCP database tools.
-- User-facing access MUST be mediated by the User API Gateway and MUST NOT expose raw SQL execution.
+- User-facing access must be mediated by the User API Gateway and must not expose raw SQL execution.
+
+Traces To:
+
+- [REQ-MCPTOO-0103](../requirements/mcptoo.md#req-mcptoo-0103)
+- [REQ-MCPTOO-0104](../requirements/mcptoo.md#req-mcptoo-0104)
+- [REQ-MCPTOO-0105](../requirements/mcptoo.md#req-mcptoo-0105)
 
 ## Access Control and Auditing
 

@@ -50,7 +50,7 @@
 
 ## Document Overview
 
-This document is the single normative specification for the CyNodeAI orchestrator PostgreSQL schema.
+This document is the single canonical specification for the CyNodeAI orchestrator PostgreSQL schema.
 It consolidates and extends table definitions referenced across the tech specs so that the MVP (and later milestones) can implement the schema without ambiguity.
 
 Source of truth
@@ -71,26 +71,32 @@ See [`docs/tech_specs/_main.md`](_main.md) for the MVP development plan and foun
 ## Storing This Schema in Code
 
 This tech spec is the source of truth for table names, columns, and constraints.
-Implementations MUST store the database schema as versioned migrations in the repository so environments can be created and upgraded deterministically.
+Implementations MUST keep the Go database models and schema bootstrap logic in sync with this document so environments can be created and upgraded deterministically.
 
-Normative requirements
+### Storing This Schema in Code Applicable Requirements
 
-- The schema MUST be represented as **versioned migrations** committed to the repository.
-- Migrations SHOULD be written as **plain SQL** and reviewed like normal code.
-- Migrations MUST be applied in a deterministic order (lexicographic filename order is acceptable).
-- The orchestrator MUST provide a supported way to apply migrations in dev and CI (for example a `migrate` command or a documented startup option).
+- Spec ID: `CYNAI.SCHEMA.StoringInCode` <a id="spec-cynai-schema-storingcode"></a>
+
+Traces To:
+
+- [REQ-SCHEMA-0100](../requirements/schema.md#req-schema-0100)
+- [REQ-SCHEMA-0101](../requirements/schema.md#req-schema-0101)
+- [REQ-SCHEMA-0102](../requirements/schema.md#req-schema-0102)
+- [REQ-SCHEMA-0103](../requirements/schema.md#req-schema-0103)
+- [REQ-SCHEMA-0104](../requirements/schema.md#req-schema-0104)
+- [REQ-SCHEMA-0105](../requirements/schema.md#req-schema-0105)
 
 Recommended repository layout
 
-- `migrations/`
-  - `0001_identity_auth.sql`
-  - `0002_tasks_jobs_nodes.sql`
-  - `0003_audit.sql`
+- `db/`
+  - `models/` (GORM models)
+  - `ddl/` (idempotent SQL for extensions and advanced indexes/constraints)
 
-Implementation notes (non-normative)
+Implementation notes
 
-- A small Go migration runner is sufficient for MVP.
-- A migration tool/library MAY be used, but migration files should remain committed to the repo.
+- AutoMigrate is convenient for MVP, but it can drift across versions.
+  Prefer explicit version pinning and CI checks that validate the expected schema exists.
+- A migration tool/library MAY be used for the DDL bootstrap step, but SQL files should remain committed to the repo.
 
 Out of scope for this document
 
@@ -650,17 +656,24 @@ Constraints
 CyNodeAI uses PostgreSQL and pgvector for vector storage and similarity search.
 Vector storage is used to support retrieval and semantic search over task-related content.
 
-Normative requirements
+### Vector Storage Applicable Requirements
 
-- The database MUST enable the pgvector extension.
-- Vector rows MUST be scoped so queries can filter by `task_id` and `project_id` when applicable.
-- Vector rows MUST record the embedding model identifier used to produce the embedding.
+- Spec ID: `CYNAI.SCHEMA.VectorStorage` <a id="spec-cynai-schema-vectorstorage"></a>
+
+Traces To:
+
+- [REQ-SCHEMA-0106](../requirements/schema.md#req-schema-0106)
+- [REQ-SCHEMA-0107](../requirements/schema.md#req-schema-0107)
+- [REQ-SCHEMA-0108](../requirements/schema.md#req-schema-0108)
+- [REQ-SCHEMA-0109](../requirements/schema.md#req-schema-0109)
+- [REQ-SCHEMA-0110](../requirements/schema.md#req-schema-0110)
 
 Recommended behavior
 
 - Prefer cosine distance for similarity search.
 - Use an approximate index (HNSW when available; otherwise IVFFLAT) to keep queries fast at scale.
 - Store only sanitized, policy-allowed content in vector storage.
+- Keep similarity search queries isolated in a repository layer so they can be tuned without changing callers.
 
 ### Vector Items Table
 
@@ -682,8 +695,9 @@ It is intentionally generic so multiple sources can be indexed (artifacts, run l
 - `embedding_model` (text)
   - examples: text-embedding-3-small, bge-m3, nomic-embed-text
 - `embedding_dim` (int)
-- `embedding` (vector)
-  - the configured dimension MUST match `embedding_dim`
+- `embedding` (vector(1536))
+  - dimension is an example and MUST be set to the system's configured embedding dimension
+  - the configured embedding dimension MUST match `embedding_dim`
 - `metadata` (jsonb, nullable)
 - `created_at` (timestamptz)
 - `updated_at` (timestamptz)
@@ -699,6 +713,25 @@ Indexing guidance
 
 - Create a pgvector index on `embedding` using cosine operators.
 - The index SHOULD be paired with filters (for example `task_id`) to avoid cross-scope retrieval.
+- Index type and parameters MUST be explicit and versioned in migrations.
+- Use IVFFLAT for approximate search when HNSW is unavailable.
+- Use HNSW when pgvector supports it and it meets performance requirements for the expected dataset size.
+
+Example index definitions
+
+```sql
+-- IVFFLAT (approximate).
+-- Tune lists and probes based on dataset size and recall requirements.
+CREATE INDEX CONCURRENTLY IF NOT EXISTS vector_items_embedding_ivfflat
+ON vector_items USING ivfflat (embedding vector_cosine_ops)
+WITH (lists = 100);
+
+-- HNSW (newer pgvector).
+-- Tune m and ef_construction based on dataset size and recall requirements.
+CREATE INDEX CONCURRENTLY IF NOT EXISTS vector_items_embedding_hnsw
+ON vector_items USING hnsw (embedding vector_cosine_ops)
+WITH (m = 16, ef_construction = 200);
+```
 
 ## Audit Logging
 

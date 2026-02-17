@@ -10,6 +10,8 @@
 
 ## Document Overview
 
+- Spec ID: `CYNAI.APIEGR.Doc.ApiEgressServer` <a id="spec-cynai-apiegr-doc-apiegressserver"></a>
+
 This document defines the API Egress Server, a service that performs outbound API calls on behalf of agents.
 It is designed to keep external API keys out of sandbox containers while providing controlled, auditable network egress.
 
@@ -39,8 +41,17 @@ Minimum response fields
 
 ## Credential Storage
 
+- Spec ID: `CYNAI.APIEGR.CredentialStorage` <a id="spec-cynai-apiegr-credentialstorage"></a>
+
 Credentials are stored in PostgreSQL and are only retrievable by the API Egress Server.
 Agents MUST never receive credentials in responses.
+
+Traces To:
+
+- [REQ-APIEGR-0106](../requirements/apiegr.md#req-apiegr-0106)
+- [REQ-APIEGR-0107](../requirements/apiegr.md#req-apiegr-0107)
+- [REQ-APIEGR-0108](../requirements/apiegr.md#req-apiegr-0108)
+- [REQ-APIEGR-0109](../requirements/apiegr.md#req-apiegr-0109)
 
 Database schema
 
@@ -82,8 +93,22 @@ Security notes
 
 ## Access Control
 
+- Spec ID: `CYNAI.APIEGR.AccessControl` <a id="spec-cynai-apiegr-accesscontrol"></a>
+
 The API Egress Server MUST enforce access control for outbound API calls.
 Access control rules are defined in [`docs/tech_specs/access_control.md`](access_control.md).
+
+Traces To:
+
+- [REQ-APIEGR-0110](../requirements/apiegr.md#req-apiegr-0110)
+- [REQ-APIEGR-0111](../requirements/apiegr.md#req-apiegr-0111)
+- [REQ-APIEGR-0112](../requirements/apiegr.md#req-apiegr-0112)
+- [REQ-APIEGR-0113](../requirements/apiegr.md#req-apiegr-0113)
+- [REQ-APIEGR-0114](../requirements/apiegr.md#req-apiegr-0114)
+- [REQ-APIEGR-0115](../requirements/apiegr.md#req-apiegr-0115)
+- [REQ-APIEGR-0116](../requirements/apiegr.md#req-apiegr-0116)
+- [REQ-APIEGR-0117](../requirements/apiegr.md#req-apiegr-0117)
+- [REQ-APIEGR-0118](../requirements/apiegr.md#req-apiegr-0118)
 
 Recommended checks
 
@@ -100,7 +125,14 @@ Group-scoped credentials
 
 ## Policy and Auditing
 
+- Spec ID: `CYNAI.APIEGR.PolicyAuditing` <a id="spec-cynai-apiegr-policyauditing"></a>
+
 The orchestrator and API Egress Server enforce outbound access policy.
+
+Traces To:
+
+- [REQ-APIEGR-0119](../requirements/apiegr.md#req-apiegr-0119)
+- [REQ-APIEGR-0120](../requirements/apiegr.md#req-apiegr-0120)
 
 - Policy checks SHOULD include provider allowlists, operation allowlists, and per-task constraints.
 - All calls SHOULD be logged with task context, provider, operation, and timing information.

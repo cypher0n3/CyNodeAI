@@ -23,12 +23,45 @@ It provides read and write access to database-backed entities without exposing r
 The Data REST API is a user-facing interface.
 Agents MUST NOT use this API for internal operations and MUST use MCP tools instead.
 
-Normative requirements
+### Scope and Boundaries Applicable Requirements
 
-- The Data REST API MUST be implemented by the User API Gateway.
-- The Data REST API MUST NOT expose raw SQL execution.
-- The Data REST API MUST enforce authentication and authorization for all endpoints.
-- The Data REST API MUST emit audit logs for reads and writes.
+- Spec ID: `CYNAI.DATAPI.ScopeBoundaries` <a id="spec-cynai-datapi-scopebound"></a>
+
+Traces To:
+
+- [REQ-DATAPI-0100](../requirements/datapi.md#req-datapi-0100)
+- [REQ-DATAPI-0101](../requirements/datapi.md#req-datapi-0101)
+- [REQ-DATAPI-0102](../requirements/datapi.md#req-datapi-0102)
+- [REQ-DATAPI-0103](../requirements/datapi.md#req-datapi-0103)
+
+## Database Access and ORM Requirements
+
+The Data REST API is implemented in Go.
+It serves database-backed resources without exposing PostgreSQL connectivity to user clients.
+
+### Database Access and ORM Applicable Requirements
+
+- Spec ID: `CYNAI.DATAPI.DatabaseAccessOrm` <a id="spec-cynai-datapi-dbaccessorm"></a>
+
+Traces To:
+
+- [REQ-DATAPI-0104](../requirements/datapi.md#req-datapi-0104)
+- [REQ-DATAPI-0105](../requirements/datapi.md#req-datapi-0105)
+- [REQ-DATAPI-0106](../requirements/datapi.md#req-datapi-0106)
+- [REQ-DATAPI-0107](../requirements/datapi.md#req-datapi-0107)
+- [REQ-DATAPI-0108](../requirements/datapi.md#req-datapi-0108)
+- [REQ-DATAPI-0109](../requirements/datapi.md#req-datapi-0109)
+- [REQ-DATAPI-0110](../requirements/datapi.md#req-datapi-0110)
+- [REQ-DATAPI-0111](../requirements/datapi.md#req-datapi-0111)
+- [REQ-DATAPI-0112](../requirements/datapi.md#req-datapi-0112)
+
+Recommended behaviors
+
+- Configure database connection pooling (`MaxOpenConns`, `MaxIdleConns`, `ConnMaxLifetime`) based on worker concurrency and expected vector query latency.
+- Avoid returning embeddings unless required.
+  Use `Select()` (or equivalent) to exclude embedding columns for list and read endpoints by default.
+- Enable structured ORM logging.
+  Avoid full SQL logging in production, or sample it.
 
 ## Core Resources
 

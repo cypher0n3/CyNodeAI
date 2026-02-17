@@ -41,11 +41,17 @@ Non-goals
 
 ## Identity and Account Model
 
-Normative requirements
+The following requirements apply.
 
-- The system MUST store users in PostgreSQL with stable identifiers.
-- Users MUST be able to be disabled without deleting records.
-- User records MUST support stable external identity mapping for future sync.
+### Identity and Account Model Applicable Requirements
+
+- Spec ID: `CYNAI.IDENTY.IdentityAccountModel` <a id="spec-cynai-identy-identityaccount"></a>
+
+Traces To:
+
+- [REQ-IDENTY-0100](../requirements/identy.md#req-identy-0100)
+- [REQ-IDENTY-0101](../requirements/identy.md#req-identy-0101)
+- [REQ-IDENTY-0102](../requirements/identy.md#req-identy-0102)
 
 Recommended users table
 
@@ -60,12 +66,18 @@ Recommended users table
 
 ## Authentication Model
 
-Normative requirements
+The following requirements apply.
 
-- The User API Gateway MUST authenticate user clients using local user accounts in MVP deployments.
-- Authentication MUST issue a short-lived access token and a revocable refresh token.
-- Refresh tokens MUST be rotated on use.
-- Tokens MUST be scoped to a user identity and MUST support revocation.
+### Authentication Model Applicable Requirements
+
+- Spec ID: `CYNAI.IDENTY.AuthenticationModel` <a id="spec-cynai-identy-authmodel"></a>
+
+Traces To:
+
+- [REQ-IDENTY-0103](../requirements/identy.md#req-identy-0103)
+- [REQ-IDENTY-0104](../requirements/identy.md#req-identy-0104)
+- [REQ-IDENTY-0105](../requirements/identy.md#req-identy-0105)
+- [REQ-IDENTY-0106](../requirements/identy.md#req-identy-0106)
 
 Recommended token model
 
@@ -84,22 +96,34 @@ Logout and revocation
 
 ## Authorization and RBAC Integration
 
-Normative requirements
+The following requirements apply.
 
+### Authorization and RBAC Integration Applicable Requirements
+
+- Spec ID: `CYNAI.IDENTY.AuthorizationRbac` <a id="spec-cynai-identy-authzrbac"></a>
 - Authentication identifies the user.
-- Authorization MUST be evaluated using policy and RBAC derived from group membership and role bindings.
-- Authorization decisions MUST be auditable and include resolved group and role context.
+
+Traces To:
+
+- [REQ-IDENTY-0107](../requirements/identy.md#req-identy-0107)
+- [REQ-IDENTY-0108](../requirements/identy.md#req-identy-0108)
 
 See [`docs/tech_specs/access_control.md`](access_control.md) and [`docs/tech_specs/rbac_and_groups.md`](rbac_and_groups.md).
 
 ## Credential Storage
 
-Normative requirements
+The following requirements apply.
 
-- Passwords MUST be stored only as strong password hashes.
-- The system MUST NOT store plaintext passwords.
-- Password hashing MUST use an algorithm suitable for password storage.
-- Password hashes and token hashes MUST be stored in PostgreSQL.
+### Credential Storage Applicable Requirements
+
+- Spec ID: `CYNAI.IDENTY.CredentialStorage` <a id="spec-cynai-identy-credstorage"></a>
+
+Traces To:
+
+- [REQ-IDENTY-0109](../requirements/identy.md#req-identy-0109)
+- [REQ-IDENTY-0110](../requirements/identy.md#req-identy-0110)
+- [REQ-IDENTY-0111](../requirements/identy.md#req-identy-0111)
+- [REQ-IDENTY-0112](../requirements/identy.md#req-identy-0112)
 
 Recommended password hashing
 
@@ -140,11 +164,17 @@ Notes
 
 ## Bootstrap and Administration
 
-Normative requirements
+The following requirements apply.
 
-- The orchestrator MUST support bootstrapping an initial admin user for a fresh install.
-- User creation SHOULD be admin-gated by default in MVP deployments.
-- Password reset SHOULD be admin-initiated in MVP deployments.
+### Bootstrap and Administration Applicable Requirements
+
+- Spec ID: `CYNAI.IDENTY.BootstrapAdministration` <a id="spec-cynai-identy-bootstrapadmin"></a>
+
+Traces To:
+
+- [REQ-IDENTY-0113](../requirements/identy.md#req-identy-0113)
+- [REQ-IDENTY-0114](../requirements/identy.md#req-identy-0114)
+- [REQ-IDENTY-0115](../requirements/identy.md#req-identy-0115)
 
 Recommended bootstrap mechanisms
 
@@ -154,11 +184,17 @@ Recommended bootstrap mechanisms
 
 ## Audit and Abuse Controls
 
-Normative requirements
+The following requirements apply.
 
-- Authentication attempts MUST be rate-limited per user identifier and per IP.
-- Repeated failed logins SHOULD trigger temporary lockout or stepped-up delays.
-- All authentication events MUST be audit logged.
+### Audit and Abuse Controls Applicable Requirements
+
+- Spec ID: `CYNAI.IDENTY.AuditAbuseControls` <a id="spec-cynai-identy-auditabuse"></a>
+
+Traces To:
+
+- [REQ-IDENTY-0116](../requirements/identy.md#req-identy-0116)
+- [REQ-IDENTY-0117](../requirements/identy.md#req-identy-0117)
+- [REQ-IDENTY-0118](../requirements/identy.md#req-identy-0118)
 
 Recommended audit events
 
@@ -173,10 +209,16 @@ Recommended audit events
 
 ## User API Gateway Surface
 
-Normative requirements
+The following requirements apply.
 
-- Local user account management MUST be exposed via the User API Gateway.
-- Endpoints MUST enforce authentication, authorization, and auditing.
+### User API Gateway Surface Applicable Requirements
+
+- Spec ID: `CYNAI.IDENTY.UserApiGatewaySurface` <a id="spec-cynai-identy-userapigateway"></a>
+
+Traces To:
+
+- [REQ-IDENTY-0119](../requirements/identy.md#req-identy-0119)
+- [REQ-IDENTY-0120](../requirements/identy.md#req-identy-0120)
 
 Minimum MVP endpoints
 

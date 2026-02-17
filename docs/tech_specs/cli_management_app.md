@@ -33,13 +33,19 @@ Non-goals
 
 ## Security Model
 
-Normative requirements
+The following requirements apply.
 
-- The CLI MUST NOT connect directly to PostgreSQL.
-- The CLI MUST call the User API Gateway for all operations.
-- The CLI MUST avoid printing secrets.
-- The CLI MUST not persist plaintext secrets to disk.
-- The CLI MUST support least privilege and MUST fail closed on authorization errors.
+### Security Model Applicable Requirements
+
+- Spec ID: `CYNAI.CLIENT.CliSecurityModel` <a id="spec-cynai-client-clisecurity"></a>
+
+Traces To:
+
+- [REQ-CLIENT-0100](../requirements/client.md#req-client-0100)
+- [REQ-CLIENT-0101](../requirements/client.md#req-client-0101)
+- [REQ-CLIENT-0102](../requirements/client.md#req-client-0102)
+- [REQ-CLIENT-0103](../requirements/client.md#req-client-0103)
+- [REQ-CLIENT-0104](../requirements/client.md#req-client-0104)
 
 ## Authentication and Configuration
 
@@ -58,11 +64,15 @@ Recommended auth approaches
 - API token issued by the gateway.
 - Interactive login flow that exchanges username and password for a short-lived token, when enabled.
 
-Normative requirements
+### Authentication and Configuration Applicable Requirements
 
-- The CLI MUST support token-based authentication.
-- The CLI SHOULD support reading tokens from env vars for CI usage.
-- The CLI SHOULD support optional mTLS or pinned CA bundles for enterprise deployments.
+- Spec ID: `CYNAI.CLIENT.CliAuthConfig` <a id="spec-cynai-client-cliauth"></a>
+
+Traces To:
+
+- [REQ-CLIENT-0105](../requirements/client.md#req-client-0105)
+- [REQ-CLIENT-0106](../requirements/client.md#req-client-0106)
+- [REQ-CLIENT-0107](../requirements/client.md#req-client-0107)
 
 ## Command Surface
 
@@ -89,23 +99,19 @@ Recommended entrypoint
 
 - `cynork shell`
 
-Normative requirements
+### Interactive Mode Applicable Requirements
 
-- The interactive mode MUST provide access to the same commands and flags as the non-interactive CLI.
-  - Example: `cynork creds list --output json` MUST be usable as `creds list --output json` inside the shell.
-- The interactive mode MUST support tab completion for:
-  - Commands and subcommands.
-  - Flags for the current command.
-  - Enumerated flag values where known (for example `--output (table|json)`).
-- The interactive mode MUST support in-session help (for example `help`, `help <command>`, and/or `<command> --help`).
-- The interactive mode MUST support `exit` and `quit`.
-- The interactive mode MUST NOT store secrets in history.
-  - Secret prompts (for example credential create/rotate) MUST bypass history recording.
-  - The shell SHOULD support disabling history entirely (for example `--no-history`).
-- If a persistent history file is implemented, it MUST be stored under the CLI config directory with permissions `0600`.
-- Tab completion MUST NOT fetch or reveal secret values.
-  - Dynamic completion MAY fetch metadata identifiers (for example credential names, node IDs) from the gateway when
-    authenticated, but MUST treat these as non-secret and MUST fail closed on authorization errors.
+- Spec ID: `CYNAI.CLIENT.CliInteractiveMode` <a id="spec-cynai-client-cliinteractivemode"></a>
+
+Traces To:
+
+- [REQ-CLIENT-0136](../requirements/client.md#req-client-0136)
+- [REQ-CLIENT-0137](../requirements/client.md#req-client-0137)
+- [REQ-CLIENT-0138](../requirements/client.md#req-client-0138)
+- [REQ-CLIENT-0139](../requirements/client.md#req-client-0139)
+- [REQ-CLIENT-0140](../requirements/client.md#req-client-0140)
+- [REQ-CLIENT-0141](../requirements/client.md#req-client-0141)
+- [REQ-CLIENT-0142](../requirements/client.md#req-client-0142)
 
 Recommended behaviors
 
@@ -184,11 +190,15 @@ Recommended commands
 
 The CLI SHOULD be scriptable.
 
-Normative requirements
+### Output and Scripting Applicable Requirements
 
-- The CLI MUST support JSON output mode.
-- The CLI SHOULD support table output mode for humans.
-- The CLI SHOULD return non-zero exit codes on failures and policy denials.
+- Spec ID: `CYNAI.CLIENT.CliOutputScripting` <a id="spec-cynai-client-clioutputscripting"></a>
+
+Traces To:
+
+- [REQ-CLIENT-0143](../requirements/client.md#req-client-0143)
+- [REQ-CLIENT-0144](../requirements/client.md#req-client-0144)
+- [REQ-CLIENT-0145](../requirements/client.md#req-client-0145)
 
 Recommended flags
 

@@ -1,5 +1,6 @@
 # MCP Gateway Enforcement and Tool Allowlists
 
+- [Spec IDs](#spec-ids)
 - [Document Overview](#document-overview)
 - [Goals](#goals)
 - [Standard MCP Usage](#standard-mcp-usage)
@@ -12,6 +13,12 @@
 - [Access Control Mapping](#access-control-mapping)
 - [Auditing Requirements](#auditing-requirements)
 - [Compatibility and Versioning](#compatibility-and-versioning)
+
+## Spec IDs
+
+- Spec ID: `CYNAI.MCPGAT.Doc.GatewayEnforcement` <a id="spec-cynai-mcpgat-doc-gatewayenforcement"></a>
+
+This section defines stable Spec ID anchors for referencing this document.
 
 ## Document Overview
 
@@ -35,11 +42,17 @@ Related documents
 
 ## Standard MCP Usage
 
-Normative requirements
+This section describes how CyNodeAI uses MCP without extending MCP wire messages.
 
-- CyNodeAI MUST use the standard MCP protocol messages on the wire to MCP servers.
-- The orchestrator MUST NOT require MCP servers to accept CyNodeAI-specific wrapper fields.
-- The orchestrator MAY attach internal metadata to an invocation record, but it MUST NOT depend on non-standard wire fields.
+### Applicable Requirements (Standard MCP Usage)
+
+- Spec ID: `CYNAI.MCPGAT.StandardMcpUsage` <a id="spec-cynai-mcpgat-stdmcpusage"></a>
+
+Traces To:
+
+- [REQ-MCPGAT-0100](../requirements/mcpgat.md#req-mcpgat-0100)
+- [REQ-MCPGAT-0101](../requirements/mcpgat.md#req-mcpgat-0101)
+- [REQ-MCPGAT-0102](../requirements/mcpgat.md#req-mcpgat-0102)
 
 ## Gateway Enforcement Responsibilities
 
@@ -107,12 +120,16 @@ Recommended allowlist
 
 Because CyNodeAI does not extend MCP wire messages, task scoping MUST be expressed in tool arguments.
 
-Normative requirements
+### Applicable Requirements (Tool Argument Schemas)
 
-- Any tool that is task-scoped MUST include `task_id` in its arguments schema.
-- Any tool that is run-scoped SHOULD include `run_id` in its arguments schema.
-- Any tool that is job-scoped SHOULD include `job_id` in its arguments schema.
-- Tools MUST reject calls where required scoped ids are missing or do not match orchestrator context.
+- Spec ID: `CYNAI.MCPGAT.ToolArgumentSchema` <a id="spec-cynai-mcpgat-toolargschema"></a>
+
+Traces To:
+
+- [REQ-MCPGAT-0103](../requirements/mcpgat.md#req-mcpgat-0103)
+- [REQ-MCPGAT-0104](../requirements/mcpgat.md#req-mcpgat-0104)
+- [REQ-MCPGAT-0105](../requirements/mcpgat.md#req-mcpgat-0105)
+- [REQ-MCPGAT-0106](../requirements/mcpgat.md#req-mcpgat-0106)
 
 Recommended guidance
 

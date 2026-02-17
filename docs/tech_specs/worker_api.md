@@ -16,7 +16,7 @@
 This document defines the **Worker API** contract exposed by a node (local worker or cloud worker).
 The orchestrator uses this API to dispatch work to a node for sandbox execution and to collect results.
 
-This document is normative for:
+This document is the canonical contract for:
 
 - endpoint paths and methods
 - request and response payload shapes
@@ -55,12 +55,15 @@ Additional endpoints (file transfer, streaming logs, async job polling, backgrou
 
 The Worker API MUST authenticate all requests (except explicit health checks).
 
-Normative requirements
+### Applicable Requirements (Authentication)
 
-- The orchestrator MUST call the Worker API using a bearer token:
-  - `Authorization: Bearer <token>`
-- The node MUST validate the token and reject invalid or expired tokens.
-- Tokens MUST be treated as secrets and MUST NOT be logged.
+- Spec ID: `CYNAI.WORKER.WorkerApiAuth` <a id="spec-cynai-worker-workerauth"></a>
+
+Traces To:
+
+- [REQ-WORKER-0100](../requirements/worker.md#req-worker-0100)
+- [REQ-WORKER-0101](../requirements/worker.md#req-worker-0101)
+- [REQ-WORKER-0102](../requirements/worker.md#req-worker-0102)
 
 Token delivery
 
@@ -89,7 +92,7 @@ Run a sandbox job to completion and return a result in the same response.
 
 - `POST /v1/worker/jobs:run`
 
-#### Normative Behavior
+#### Required Behavior
 
 - The node MUST execute the provided command in a sandbox container.
 - The node MUST associate the execution with `task_id` and `job_id` for auditing and cleanup.
@@ -97,7 +100,7 @@ Run a sandbox job to completion and return a result in the same response.
 - The node MUST capture stdout and stderr and include them in the response (subject to truncation limits).
 - The node MUST return a deterministic result for the same inputs when execution is deterministic.
 
-#### Normative Request Body Example
+#### Request Body Example
 
 ```json
 {
@@ -129,7 +132,7 @@ Run a sandbox job to completion and return a result in the same response.
   - `network_policy` (string, optional)
     - allowed values for initial implementation: `restricted`, `none`
 
-#### Normative Response Body Example
+#### Response Body Example
 
 ```json
 {
@@ -175,19 +178,28 @@ Run a sandbox job to completion and return a result in the same response.
 
 ## Sandbox Execution Requirements (Initial Implementation)
 
-Normative requirements
+This section describes sandbox execution constraints required by the initial Worker API implementation.
 
-- Nodes MUST support sandbox execution using a container runtime (Podman preferred).
-- Nodes MUST NOT expose orchestrator-provided credentials to sandbox containers.
-- Nodes MUST apply basic safety limits:
-  - request size limits
-  - execution timeout
-  - reasonable defaults for CPU/memory/PIDs when the runtime supports it
+### Applicable Requirements (Sandbox Execution)
+
+- Spec ID: `CYNAI.WORKER.SandboxExecution` <a id="spec-cynai-worker-sandboxexec"></a>
+
+Traces To:
+
+- [REQ-WORKER-0103](../requirements/worker.md#req-worker-0103)
+- [REQ-WORKER-0104](../requirements/worker.md#req-worker-0104)
+- [REQ-WORKER-0105](../requirements/worker.md#req-worker-0105)
 
 ## Logging and Output Limits
 
-Normative requirements
+This section describes log capture and truncation limits for Worker API responses.
 
-- Worker API implementations MUST bound stdout/stderr size.
-- When truncation occurs, the response MUST indicate it using `truncated.stdout` and `truncated.stderr`.
-- Secrets MUST NOT be written to logs.
+### Applicable Requirements (Logging and Output Limits)
+
+- Spec ID: `CYNAI.WORKER.LoggingOutputLimits` <a id="spec-cynai-worker-loglimits"></a>
+
+Traces To:
+
+- [REQ-WORKER-0106](../requirements/worker.md#req-worker-0106)
+- [REQ-WORKER-0107](../requirements/worker.md#req-worker-0107)
+- [REQ-WORKER-0108](../requirements/worker.md#req-worker-0108)

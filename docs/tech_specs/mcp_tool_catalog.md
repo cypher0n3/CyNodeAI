@@ -36,11 +36,17 @@ Related documents
 
 ## Naming and Conventions
 
-Normative requirements
+The following requirements apply.
 
-- Tool names MUST use `namespace.operation` format.
-- Tool names MUST be stable identifiers.
-- Namespaces MUST be short and descriptive.
+### Naming and Conventions Applicable Requirements
+
+- Spec ID: `CYNAI.MCPTOO.ToolCatalogNaming` <a id="spec-cynai-mcptoo-toolnaming"></a>
+
+Traces To:
+
+- [REQ-MCPTOO-0106](../requirements/mcptoo.md#req-mcptoo-0106)
+- [REQ-MCPTOO-0107](../requirements/mcptoo.md#req-mcptoo-0107)
+- [REQ-MCPTOO-0108](../requirements/mcptoo.md#req-mcptoo-0108)
 
 ## Common Argument Requirements
 
@@ -136,6 +142,7 @@ This catalog uses the same tool names.
 
 Database tools are typed operations only.
 Raw SQL MUST NOT be exposed via MCP tools.
+Implementations MAY use raw SQL internally (for example pgvector similarity queries), but they MUST NOT accept arbitrary SQL from callers.
 
 Minimum typed tools for MVP:
 
@@ -152,10 +159,16 @@ Minimum typed tools for MVP:
 
 ## Response and Error Model
 
-Normative requirements
+The following requirements apply.
 
-- Tool responses MUST be schema-validated and size-limited.
-- Errors MUST be structured and MUST NOT leak secrets.
+### Response and Error Model Applicable Requirements
+
+- Spec ID: `CYNAI.MCPTOO.ToolCatalogResponseError` <a id="spec-cynai-mcptoo-toolresponse"></a>
+
+Traces To:
+
+- [REQ-MCPTOO-0109](../requirements/mcptoo.md#req-mcptoo-0109)
+- [REQ-MCPTOO-0110](../requirements/mcptoo.md#req-mcptoo-0110)
 
 Recommended fields
 

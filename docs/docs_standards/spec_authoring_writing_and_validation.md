@@ -2,32 +2,28 @@
 
 - [Markdown Conventions](#markdown-conventions)
 - [Tech Spec Conventions](#tech-spec-conventions)
+- [Documentation Layers](#documentation-layers)
+  - [Requirements (`docs/requirements/`)](#requirements-docsrequirements)
+  - [Technical Specifications (`docs/tech_specs/`)](#technical-specifications-docstech_specs)
+  - [Feature Files (`features/`)](#feature-files-features)
 - [Spec Items](#spec-items)
   - [Core Definitions](#core-definitions)
   - [Mandatory Structure for a Spec Item](#mandatory-structure-for-a-spec-item)
-    - [Canonical Heading](#canonical-heading)
-    - [Spec ID Anchor Line](#spec-id-anchor-line)
-    - [Spec ID Line](#spec-id-line)
-    - [Optional Metadata Lines](#optional-metadata-lines)
-    - [Contract Content](#contract-content)
-    - [Contract Section Layout](#contract-section-layout)
   - [Algorithm and Processing](#algorithm-and-processing)
   - [Language Reference Blocks](#language-reference-blocks)
-    - [Reference Heading Format](#reference-heading-format)
-    - [Reference Anchors](#reference-anchors)
   - [Backticked Symbols and Kind Tokens](#backticked-symbols-and-kind-tokens)
   - [Allowed Inline HTML](#allowed-inline-html)
 - [Cross-References and Traceability](#cross-references-and-traceability)
   - [Canonical Link Target](#canonical-link-target)
   - [Requirements to Spec References](#requirements-to-spec-references)
-  - [Spec to Requirement Traceability (Optional)](#spec-to-requirement-traceability-optional)
-  - [Feature to Spec References (Gherkin)](#feature-to-spec-references-gherkin)
+  - [Spec to Requirement Traceability](#spec-to-requirement-traceability)
+  - [Feature to Requirement and Spec References (Gherkin)](#feature-to-requirement-and-spec-references-gherkin)
   - [Requirement IDs](#requirement-ids)
 - [Documentation Validation Pipeline](#documentation-validation-pipeline)
   - [Order of Checks](#order-of-checks)
   - [When PATHS is Set](#when-paths-is-set)
   - [After Creating or Changing Markdown](#after-creating-or-changing-markdown)
-  - [Make Targets Quick Reference](#make-targets-quick-reference)
+  - [Justfile / Doc Check Quick Reference](#justfile--doc-check-quick-reference)
 - [Validator Requirements Summary](#validator-requirements-summary)
 - [Authoring Checklist](#authoring-checklist)
 
@@ -46,8 +42,62 @@ See:
   Prefer function signatures, constants, generic type definitions, and short usage snippets.
 - There must be a single source of truth for each specification.
   Related specs should link to it rather than restate it.
+- Tech specs should avoid introducing new normative RFC-2119 obligations ("MUST", "SHOULD", etc.).
+  Normative obligations belong in `docs/requirements/` and should be referenced from tech specs.
 - Use the latest structured errors approach for error handling.
   Remove references to legacy sentinel errors.
+
+## Documentation Layers
+
+This repository uses three documentation layers that serve different purposes.
+Keeping each layer focused reduces duplication and improves testability and traceability.
+
+### Requirements (`docs/requirements/`)
+
+Requirements docs define **what is required**.
+They are the canonical home for normative RFC-2119 obligations ("MUST", "SHOULD", etc.).
+They are implementation-agnostic and should not describe design choices or internal architecture.
+Requirements exist to state outcomes, constraints, and acceptance criteria at the "what" level.
+
+Rules:
+
+- Requirements should be atomic and testable.
+  Prefer one obligation per `REQ-<DOMAIN>-<NNNN>` entry.
+- Requirements should link to the relevant implementation spec sections via `spec-*` anchors.
+- Requirements must be stable, uniquely identified, and easy to reference from specs and tests.
+
+See:
+
+- [`docs/requirements/`](../requirements/)
+
+### Technical Specifications (`docs/tech_specs/`)
+
+Tech specs define **how we build it**.
+They describe architecture, design, flows, and implementation details for the requirements.
+They should define Spec Items with Spec IDs and stable anchors.
+
+Rules:
+
+- Tech specs should cross-link back to applicable `REQ-*` items.
+  Do not duplicate long blocks of requirement text in specs.
+
+See:
+
+- [`docs/tech_specs/`](../tech_specs/)
+
+### Feature Files (`features/`)
+
+Feature files define **user stories and executable acceptance tests** in Gherkin.
+They exist to make requirements and specs testable end-to-end using Godog (Cucumber) scenarios.
+
+Rules:
+
+- Feature files must live under [`features/`](../../features/).
+- Each Feature must include a user story narrative block directly under the `Feature:` line:
+  `As a ...`, `I want ...`, `So that ...`.
+- Each Feature or Scenario must link to both:
+  - at least one requirement ID (`REQ-<DOMAIN>-<NNNN>`), and
+  - at least one tech spec anchor (`spec-*`) that defines the relevant implementation design.
 
 ## Spec Items
 
@@ -60,6 +110,11 @@ This section defines the required structure for Spec Items in `docs/tech_specs/`
   It is the canonical key for cross-links, requirements, and validation tooling.
   Spec ID domains must be kept in sync with the canonical requirements domains.
   See [`requirements_domains.md`](./requirements_domains.md).
+
+Rules:
+
+- Spec IDs must not include the token `Normative` (or any `.Normative` suffix).
+  Normative obligations belong in `docs/requirements/` as `REQ-*` entries.
 
 ### Mandatory Structure for a Spec Item
 
@@ -264,6 +319,8 @@ Inline HTML is disallowed except for these anchor forms:
 - Reference anchors: `<a id="ref-<lang>-..."></a>`
 - Algorithm anchors: `<a id="algo-..."></a>`
 - Algorithm step anchors: `<a id="algo-...-step-..."></a>`
+- Requirement entry anchors: `<a id="req-..."></a>` (requirements docs only; on a continuation line under the requirement list item, after any spec reference link lines).
+- Normative anchors: `<a id="norm-..."></a>` (deprecated; do not introduce in new tech specs).
 
 Rules:
 
@@ -273,6 +330,7 @@ Rules:
 - Algorithm anchors must be on their own line at the start of the `Algorithm` section (immediately after the Algorithm heading, separated by a blank line).
 - Algorithm step anchors must be appended to the end of the corresponding ordered or unordered list item line within an `Algorithm` section.
 - Reference anchors must be on their own line directly above a fenced code block, separated from the code block by a blank line.
+- Requirement entry anchors must appear on a continuation line under the requirement list item (after the `- REQ-<DOMAIN>-<NNNN>: ...` line and after any spec reference link lines).
 - All other inline HTML must be rejected by tooling.
   This is enforced by markdownlint with a custom rule and may also be enforced by the Python validation scripts.
 
@@ -290,26 +348,29 @@ Example:
 
 ### Requirements to Spec References
 
-In requirements docs, use a "Spec References" section listing Spec IDs with links to Spec ID anchors.
+In requirements docs, use a list-style requirements format.
+Each requirement is a list item with continuation lines for spec references and the requirement anchor.
 
 Example:
 
-- `CYNAI.CORE.Package.ReadFile - ../tech_specs/api_core.md#spec-cynai-core-package-readfile`
+- REQ-MCPGAT-0001: The MCP gateway MUST enforce gateway policy for all MCP tool calls.
+  [CYNAI.MCPGAT.Doc.GatewayEnforcement](../tech_specs/mcp_gateway_enforcement.md#spec-cynai-mcpgat-doc-gatewayenforcement)
+  <a id="req-mcpgat-0001"></a>
 
 Rules:
 
-- Each entry must include the Spec ID text and a link to the Spec ID anchor.
-- Keep the list small and specific.
-- Do not restate spec content in requirements.
-  Link to the spec instead.
+- Each requirement entry is a list item: `- REQ-<DOMAIN>-<NNNN>: <short label>.`
+- Continuation lines: one or more spec reference links (Spec ID as link text, href to `spec-*` anchor), then the `req-*` anchor on its own line.
+- Requirements are the canonical normative "what".
+  Tech specs should link back to requirements rather than re-stating requirements as normative spec content.
 
-### Spec to Requirement Traceability (Optional)
+### Spec to Requirement Traceability
 
-Specs may include traceability back to requirements.
+Tech specs must link to the applicable requirements they implement.
 
-Recommended format:
+Format:
 
-- `Traces To: REQ-CORE-001, REQ-FILEFMT-004`
+- `Traces To: [REQ-MCPGAT-0001](../requirements/mcpgat.md#req-mcpgat-0001), [REQ-MCPGAT-0002](../requirements/mcpgat.md#req-mcpgat-0002)`
 
 Rules:
 
@@ -317,27 +378,39 @@ Rules:
 - Do not embed long requirement text inside specs.
   Link instead.
 
-### Feature to Spec References (Gherkin)
+### Feature to Requirement and Spec References (Gherkin)
 
-Feature files should reference Spec IDs for scenarios that validate spec-defined behavior.
+Feature files should reference both requirement IDs and Spec IDs for scenarios that validate requirement-defined behavior.
+This enables BDD traceability between:
+requirements ("what"), specs ("how"), and tests (Gherkin scenarios executed by Godog).
 
-Option A (preferred): tags derived from Spec IDs.
+Use tags derived from requirement IDs and Spec IDs used in this repository.
 
-- `@spec-CYNAI_CORE_Package_ReadFile`
+- `@spec_cynai_mcpgat_doc_gatewayenforcement`
 
-Option B: a structured comment block above the Feature or Scenario.
+Requirement tag format:
+
+- `@req_worker_0001`
 
 Rules:
 
-- Tags must be derived from Spec ID by replacing `.` with `_`.
-- Tags should retain the project prefix (e.g. `CYNAI` for CyNodeAI) to avoid collisions.
+- Requirement tags must be derived from the requirement ID by removing `REQ-`, replacing `-` with `_`, and lowercasing.
+  Example: `REQ-WORKER-0001` => `@req_worker_0001`.
+- Each Scenario must include both `@req_*` and `@spec_*` tags.
+
+Rules:
+
+- `@spec_*` tags must be derived from Spec ID by replacing `.` with `_` and lowercasing.
+  Example: `CYNAI.MCPGAT.Doc.GatewayEnforcement` => `@spec_cynai_mcpgat_doc_gatewayenforcement`.
 - If a feature declares Spec references, all referenced Spec IDs must exist.
+- If a feature declares requirement references, all referenced requirement IDs must exist.
+- If a Scenario references requirements, it must also reference at least one spec anchor that defines the scenario's behavior.
 
 ### Requirement IDs
 
-Recommended requirement ID format:
+Requirement ID format:
 
-- `REQ-<DOMAIN>-<NNN>`
+- `REQ-<DOMAIN>-<NNNN>` (4 digits, e.g. 0001-9999)
 
 Rules:
 
@@ -348,21 +421,9 @@ Rules:
 
 The documentation pipeline runs via **`just lint-md`** (and in CI via `just ci`, which includes `just lint-md`).
 
-Use the project justfile; do not invoke validation scripts directly unless instructed.
+Use the project `justfile`; do not invoke validation scripts directly unless instructed.
 
 ### Order of Checks
-
-When full doc-validation tooling is present, order is significant.
-The sequence is:
-
-1. `validate-go-code-blocks`
-2. `validate-go-spec-signature-consistency`
-3. `validate-heading-numbering`
-4. `validate-go-defs-index`
-5. `validate-req-references`
-6. `audit-coverage`
-7. `validate-links`
-8. `lint-markdown`
 
 Currently this project uses `just lint-md` for Markdown linting; additional checks may be added.
 
@@ -400,7 +461,7 @@ Tooling should enforce at minimum:
 
 When adding a new Spec Item:
 
-- Add a numbered heading in canonical format.
+- Add a heading in canonical format.
 - Add the Spec ID anchor and the `Spec ID:` bullet (and optional metadata).
 - Write the contract in language-neutral terms.
 - Add reference blocks and examples with per-language headings when needed.

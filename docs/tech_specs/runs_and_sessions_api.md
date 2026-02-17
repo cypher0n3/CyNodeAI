@@ -31,12 +31,16 @@ See [`docs/tech_specs/user_api_gateway.md`](user_api_gateway.md) and [`docs/tech
 A **run** is a single execution trace: one workflow instance, one dispatched job, or one agent turn.
 Runs are first-class resources with stable identifiers.
 
-Normative requirements
+### Runs Applicable Requirements
 
-- The orchestrator MUST assign a unique run identifier to each run and persist it in PostgreSQL.
-- A run MUST be associated with a task (and optionally a job) for auditing and lineage.
-- A run MAY have a parent run identifier to support sub-runs (e.g. a step or sub-agent spawn).
-- The Data REST API MUST expose runs as a core resource: create, read, list, and filter by task, job, session, parent run, and time range.
+- Spec ID: `CYNAI.USRGWY.Runs` <a id="spec-cynai-usrgwy-runs"></a>
+
+Traces To:
+
+- [REQ-USRGWY-0100](../requirements/usrgwy.md#req-usrgwy-0100)
+- [REQ-USRGWY-0101](../requirements/usrgwy.md#req-usrgwy-0101)
+- [REQ-USRGWY-0102](../requirements/usrgwy.md#req-usrgwy-0102)
+- [REQ-USRGWY-0103](../requirements/usrgwy.md#req-usrgwy-0103)
 
 Recommended run fields
 
@@ -53,12 +57,16 @@ Recommended run fields
 
 A **session** is a user-facing container for interactive work (e.g. a chat thread or task thread) that groups runs and holds a transcript.
 
-Normative requirements
+### Sessions Applicable Requirements
 
-- The orchestrator MUST support creating and listing sessions.
-- A session MAY have a parent session (sub-session) for delegation or nested context.
-- Runs MAY be associated with a session via `session_id`.
-- The User API Gateway MUST allow creating a session, spawning sub-sessions, listing runs for a session, and attaching new work to a session.
+- Spec ID: `CYNAI.USRGWY.Sessions` <a id="spec-cynai-usrgwy-sessions"></a>
+
+Traces To:
+
+- [REQ-USRGWY-0104](../requirements/usrgwy.md#req-usrgwy-0104)
+- [REQ-USRGWY-0105](../requirements/usrgwy.md#req-usrgwy-0105)
+- [REQ-USRGWY-0106](../requirements/usrgwy.md#req-usrgwy-0106)
+- [REQ-USRGWY-0107](../requirements/usrgwy.md#req-usrgwy-0107)
 
 Recommended session fields
 
@@ -73,21 +81,29 @@ Recommended session fields
 Logs are append-only streams attached to runs.
 Transcripts are stored conversation or execution summaries associated with a session or run.
 
-Normative requirements
+### Logs and Transcripts Applicable Requirements
 
-- The system MUST support attaching logs to a run (e.g. stdout, stderr, or structured events).
-- Logs MUST be stored in a way that supports retrieval by run and time range and MUST be subject to retention policies.
-- Transcripts (e.g. chat history, agent turn summaries) MUST be storable per session or run with a configurable retention policy.
-- The Data REST API MUST expose endpoints to append and read logs for a run and to read/write transcript segments for a session or run.
+- Spec ID: `CYNAI.USRGWY.LogsTranscripts` <a id="spec-cynai-usrgwy-logstrans"></a>
+
+Traces To:
+
+- [REQ-USRGWY-0108](../requirements/usrgwy.md#req-usrgwy-0108)
+- [REQ-USRGWY-0109](../requirements/usrgwy.md#req-usrgwy-0109)
+- [REQ-USRGWY-0110](../requirements/usrgwy.md#req-usrgwy-0110)
+- [REQ-USRGWY-0111](../requirements/usrgwy.md#req-usrgwy-0111)
 
 ## Streaming Status
 
 Clients MUST be able to observe run and session status in near real time.
 
-Normative requirements
+### Streaming Status Applicable Requirements
 
-- Run status changes (e.g. pending -> running -> completed) MUST be observable via the Data REST API (polling) and SHOULD be emitted as events for the User API Gateway live updates (webhooks, subscriptions).
-- The gateway SHOULD support streaming run status and log tail for a run when the client requests it (e.g. Server-Sent Events or WebSocket).
+- Spec ID: `CYNAI.USRGWY.StreamingStatus` <a id="spec-cynai-usrgwy-streamstatus"></a>
+
+Traces To:
+
+- [REQ-USRGWY-0112](../requirements/usrgwy.md#req-usrgwy-0112)
+- [REQ-USRGWY-0113](../requirements/usrgwy.md#req-usrgwy-0113)
 
 See event types and subscriptions in [`docs/tech_specs/user_api_gateway.md`](user_api_gateway.md#live-updates-and-messaging).
 
@@ -95,12 +111,16 @@ See event types and subscriptions in [`docs/tech_specs/user_api_gateway.md`](use
 
 Long-running work inside a sandbox (e.g. a build or server process) MUST be manageable as background processes tied to a run.
 
-Normative requirements
+### Background Process Management Applicable Requirements
 
-- The orchestrator MUST support starting, listing, and terminating background processes within a sandbox, subject to sandbox constraints (no direct host access).
-- Background process operations MUST be associated with a run and task for auditing.
-- Process lifecycle (start, stdout/stderr capture, exit status) MUST be exposed so clients can attach output to runs and show status in the runs/sessions API.
-- Background process management MAY be exposed via MCP sandbox tools (e.g. `sandbox.start_background`, `sandbox.list_processes`, `sandbox.terminate_process`) and MUST be reflected in the runs API when processes are tied to a run.
+- Spec ID: `CYNAI.USRGWY.BackgroundProcessManagement` <a id="spec-cynai-usrgwy-bgprocess"></a>
+
+Traces To:
+
+- [REQ-USRGWY-0114](../requirements/usrgwy.md#req-usrgwy-0114)
+- [REQ-USRGWY-0115](../requirements/usrgwy.md#req-usrgwy-0115)
+- [REQ-USRGWY-0116](../requirements/usrgwy.md#req-usrgwy-0116)
+- [REQ-USRGWY-0117](../requirements/usrgwy.md#req-usrgwy-0117)
 
 Sandbox constraints
 
@@ -111,11 +131,15 @@ Sandbox constraints
 
 Transcript and log retention MUST be configurable so operators can meet compliance and storage constraints.
 
-Normative requirements
+### Retention Policies Applicable Requirements
 
-- The system MUST support configurable retention policies for run logs and session transcripts (e.g. retain for N days or until storage limit).
-- Retention policy SHOULD be defined at the orchestrator or project level and applied consistently.
-- Expired data MUST be purged or archived in a way that does not break referential integrity for audit records that reference run/session identifiers (e.g. retain id and metadata, drop bulk content).
+- Spec ID: `CYNAI.USRGWY.RetentionPolicies` <a id="spec-cynai-usrgwy-retention"></a>
+
+Traces To:
+
+- [REQ-USRGWY-0118](../requirements/usrgwy.md#req-usrgwy-0118)
+- [REQ-USRGWY-0119](../requirements/usrgwy.md#req-usrgwy-0119)
+- [REQ-USRGWY-0120](../requirements/usrgwy.md#req-usrgwy-0120)
 
 ## API Surface
 

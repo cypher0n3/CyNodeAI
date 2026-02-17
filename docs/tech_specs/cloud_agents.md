@@ -79,11 +79,15 @@ Authoritative contract
 
 - The Worker API contract for nodes (endpoint surface and payload shapes) is defined in [`docs/tech_specs/worker_api.md`](worker_api.md).
 
-Normative requirements
+### Cloud Worker Contract Applicable Requirements
 
-- A cloud worker MUST NOT access PostgreSQL directly.
-- A cloud worker MUST use orchestrator-mediated tool access and MUST NOT embed provider API keys.
-- A cloud worker MUST support job retries and idempotency semantics as defined by the orchestrator.
+- Spec ID: `CYNAI.AGENTS.CloudWorkerContract` <a id="spec-cynai-agents-cwcontract"></a>
+
+Traces To:
+
+- [REQ-AGENTS-0100](../requirements/agents.md#req-agents-0100)
+- [REQ-AGENTS-0101](../requirements/agents.md#req-agents-0101)
+- [REQ-AGENTS-0102](../requirements/agents.md#req-agents-0102)
 
 ## Authentication and Trust
 
@@ -151,11 +155,15 @@ See [`docs/tech_specs/access_control.md`](access_control.md).
 Cloud workers use the same tool model as local workers.
 Tool access is mediated through the orchestrator and MCP.
 
-Normative requirements
+### Tool Access Model Applicable Requirements
 
-- Cloud workers MUST call tools through the orchestrator MCP gateway.
-- Cloud workers MUST NOT call arbitrary outbound network endpoints directly unless explicitly allowed by policy.
-- Cloud workers MUST use API Egress for external API calls.
+- Spec ID: `CYNAI.AGENTS.CloudWorkerToolAccess` <a id="spec-cynai-agents-cwtoolaccess"></a>
+
+Traces To:
+
+- [REQ-AGENTS-0103](../requirements/agents.md#req-agents-0103)
+- [REQ-AGENTS-0104](../requirements/agents.md#req-agents-0104)
+- [REQ-AGENTS-0105](../requirements/agents.md#req-agents-0105)
 
 Relevant specs
 

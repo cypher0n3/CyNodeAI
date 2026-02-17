@@ -32,13 +32,19 @@ The admin web console is intended for credential upload and management and for p
 
 ## Security Model
 
-Normative requirements
+The following requirements apply.
 
-- The web console MUST NOT connect directly to PostgreSQL.
-- The web console MUST call the User API Gateway for all operations.
-- Secrets MUST be write-only in the UI.
-- The UI MUST never display plaintext secret values after creation.
-- The UI MUST support least privilege and MUST not expose admin features to non-admin users.
+### Security Model Applicable Requirements
+
+- Spec ID: `CYNAI.CLIENT.AdminWebConsoleSecurity` <a id="spec-cynai-client-awcsecurity"></a>
+
+Traces To:
+
+- [REQ-CLIENT-0108](../requirements/client.md#req-client-0108)
+- [REQ-CLIENT-0109](../requirements/client.md#req-client-0109)
+- [REQ-CLIENT-0110](../requirements/client.md#req-client-0110)
+- [REQ-CLIENT-0111](../requirements/client.md#req-client-0111)
+- [REQ-CLIENT-0112](../requirements/client.md#req-client-0112)
 
 Threat model notes
 
@@ -65,13 +71,17 @@ Credential types
 - API Egress credentials (external model providers, SaaS APIs).
 - Git Egress credentials (GitHub/GitLab/Gitea tokens or deploy keys).
 
-Normative requirements
+### Credential Management Applicable Requirements
 
-- Credential create MUST accept secrets only on create or rotate operations.
-- Credential read MUST return metadata only.
-- Credential list MUST support filtering by provider and scope.
-- Credential rotate MUST create a new encrypted secret value and invalidate the old one.
-- Credential disable MUST support immediate deactivation.
+- Spec ID: `CYNAI.CLIENT.AdminWebConsoleCredential` <a id="spec-cynai-client-awccredential"></a>
+
+Traces To:
+
+- [REQ-CLIENT-0116](../requirements/client.md#req-client-0116)
+- [REQ-CLIENT-0117](../requirements/client.md#req-client-0117)
+- [REQ-CLIENT-0118](../requirements/client.md#req-client-0118)
+- [REQ-CLIENT-0119](../requirements/client.md#req-client-0119)
+- [REQ-CLIENT-0120](../requirements/client.md#req-client-0120)
 
 Recommended metadata fields shown in the UI
 
@@ -86,12 +96,16 @@ Recommended metadata fields shown in the UI
 
 The web console must support editing preferences stored in PostgreSQL.
 
-Normative requirements
+### Preferences Management Applicable Requirements
 
-- Preference edits MUST be scoped and versioned.
-- The UI MUST support preference scope selection (system, user, project, task).
-- The UI SHOULD provide an "effective preferences" preview for a given task or project.
-- The UI SHOULD provide validation for known keys and types.
+- Spec ID: `CYNAI.CLIENT.AdminWebConsolePreferences` <a id="spec-cynai-client-awcpreferences"></a>
+
+Traces To:
+
+- [REQ-CLIENT-0121](../requirements/client.md#req-client-0121)
+- [REQ-CLIENT-0122](../requirements/client.md#req-client-0122)
+- [REQ-CLIENT-0123](../requirements/client.md#req-client-0123)
+- [REQ-CLIENT-0124](../requirements/client.md#req-client-0124)
 
 Recommended UI behaviors
 
@@ -104,12 +118,16 @@ Recommended UI behaviors
 The admin web console should support basic node management for operators.
 This includes inventory views, health status, and safe administrative controls.
 
-Normative requirements
+### Node Management Applicable Requirements
 
-- Node management MUST be mediated by the User API Gateway.
-- The UI MUST NOT connect directly to node worker APIs.
-- The UI MUST clearly distinguish between node-reported state and orchestrator-derived state.
-- Potentially disruptive actions MUST be gated by admin authorization and SHOULD require confirmation.
+- Spec ID: `CYNAI.CLIENT.AdminWebConsoleNodeManagement` <a id="spec-cynai-client-awcnodemgmt"></a>
+
+Traces To:
+
+- [REQ-CLIENT-0125](../requirements/client.md#req-client-0125)
+- [REQ-CLIENT-0126](../requirements/client.md#req-client-0126)
+- [REQ-CLIENT-0127](../requirements/client.md#req-client-0127)
+- [REQ-CLIENT-0128](../requirements/client.md#req-client-0128)
 
 Recommended node views
 
@@ -133,11 +151,15 @@ See [`docs/tech_specs/node.md`](node.md) for node lifecycle and capability repor
 The admin web console SHOULD be implemented as a Nuxt application (Vue).
 The console is a user-facing client and MUST only interact with CyNodeAI through the User API Gateway.
 
-Normative requirements
+### Implementation Specification Applicable Requirements
 
-- The console MUST not embed privileged service credentials.
-- The console MUST not bypass gateway authorization and auditing.
-- The console MUST treat gateway responses as the source of truth.
+- Spec ID: `CYNAI.CLIENT.AdminWebConsoleImplementation` <a id="spec-cynai-client-awcimpl"></a>
+
+Traces To:
+
+- [REQ-CLIENT-0129](../requirements/client.md#req-client-0129)
+- [REQ-CLIENT-0130](../requirements/client.md#req-client-0130)
+- [REQ-CLIENT-0131](../requirements/client.md#req-client-0131)
 
 ### Technology Choices
 
@@ -173,10 +195,14 @@ Recommended approaches
 - Session cookie issued by the gateway after login.
 - Bearer token stored in an HttpOnly cookie and attached by the gateway proxy.
 
-Normative requirements
+### Authentication Model Applicable Requirements
 
-- The console MUST avoid storing bearer tokens in localStorage.
-- The console MUST support logout and token invalidation.
+- Spec ID: `CYNAI.CLIENT.AdminWebConsoleAuthModel` <a id="spec-cynai-client-awcauth"></a>
+
+Traces To:
+
+- [REQ-CLIENT-0132](../requirements/client.md#req-client-0132)
+- [REQ-CLIENT-0133](../requirements/client.md#req-client-0133)
 
 ### Gateway API Client
 
@@ -217,10 +243,14 @@ Recommended deployments
 - Serve the console from the User API Gateway as static assets behind the same origin.
 - Or deploy the console separately, but always point it at the gateway URL.
 
-Normative requirements
+### Deployment Options Applicable Requirements
 
-- The console MUST enforce HTTPS in production deployments.
-- CORS SHOULD be avoided by preferring same-origin hosting behind the gateway.
+- Spec ID: `CYNAI.CLIENT.AdminWebConsoleDeployment` <a id="spec-cynai-client-awcdeploy"></a>
+
+Traces To:
+
+- [REQ-CLIENT-0134](../requirements/client.md#req-client-0134)
+- [REQ-CLIENT-0135](../requirements/client.md#req-client-0135)
 
 ## API Surface
 

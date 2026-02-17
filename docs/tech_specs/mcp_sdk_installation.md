@@ -8,6 +8,8 @@
 
 ## Document Overview
 
+- Spec ID: `CYNAI.MCPTOO.Doc.McpSdkInstallation` <a id="spec-cynai-mcptoo-doc-mcpsdkinstallation"></a>
+
 This document defines practical conventions for installing and using MCP SDKs in CyNodeAI code.
 It focuses on making MCP integration easy to adopt while keeping versions pinned and reproducible.
 
@@ -30,15 +32,28 @@ SDK
 - Go SDK repository: `github.com/modelcontextprotocol/go-sdk`
 - Primary package: `github.com/modelcontextprotocol/go-sdk/mcp`
 
-Version pinning
+### Go SDK Version Pinning
+
+- Spec ID: `CYNAI.MCPTOO.GoSdkVersionPinning` <a id="spec-cynai-mcptoo-gosdkversionpinning"></a>
 
 - MCP SDK versions MUST be pinned in each service `go.mod`.
 - Avoid unpinned `go get` in documentation and scripts.
 
-Recommended repo layout
+Traces To:
+
+- [REQ-MCPTOO-0111](../requirements/mcptoo.md#req-mcptoo-0111)
+
+### Go Service Module Layout
+
+- Spec ID: `CYNAI.MCPTOO.GoServiceModuleLayout` <a id="spec-cynai-mcptoo-goservicemodlayout"></a>
 
 - Each Go service SHOULD have its own `go.mod` at the service root.
 - If a multi-module layout is used, a `go.work` MAY be used for local development.
+
+Traces To:
+
+- [REQ-MCPTOO-0112](../requirements/mcptoo.md#req-mcptoo-0112)
+- [REQ-MCPTOO-0113](../requirements/mcptoo.md#req-mcptoo-0113)
 
 Install and import (example)
 
@@ -59,11 +74,25 @@ Toolchain
 CyNodeAI MAY implement the workflow engine in a separate process (for example a Python LangGraph runtime).
 If the workflow runtime needs MCP protocol support directly, it SHOULD use the official Python MCP SDK.
 
-Guidance
+### Python SDK Usage
+
+- Spec ID: `CYNAI.MCPTOO.PythonSdkUsage` <a id="spec-cynai-mcptoo-pythonsdkusage"></a>
+
+Traces To:
+
+- [REQ-MCPTOO-0114](../requirements/mcptoo.md#req-mcptoo-0114)
+
+### Workflow Runtime Database Access
+
+- Spec ID: `CYNAI.MCPTOO.WorkflowRuntimeNoDirectDb` <a id="spec-cynai-mcptoo-workflowruntimenodb"></a>
 
 - Pin Python dependencies and keep them isolated to the workflow runtime directory.
 - The workflow runtime MUST NOT connect directly to PostgreSQL.
   It MUST use MCP database tools (or an internal service that enforces the same policy).
+
+Traces To:
+
+- [REQ-MCPTOO-0115](../requirements/mcptoo.md#req-mcptoo-0115)
 
 ## Reference Servers for Local Development
 

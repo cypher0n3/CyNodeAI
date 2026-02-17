@@ -64,13 +64,13 @@ This section defines how the LangGraph workflow is integrated with the orchestra
 - The checkpoint store MUST be backed by PostgreSQL (or an orchestrator-owned store that uses PostgreSQL as the source of truth).
 - The workflow implementation MUST support loading checkpoint state by `task_id` and continuing from the next node when the orchestrator or workflow process restarts.
 - Checkpoint schema and storage format are implementation-defined.
-  The normative requirement is that the workflow engine can save and load by `task_id` and that the state model in [State Model](#state-model) is represented.
+  The key requirement is that the workflow engine can save and load by `task_id` and that the state model in [State Model](#state-model) is represented.
 - The orchestrator MUST NOT run workflow steps without going through the checkpoint layer so that resumability is guaranteed.
 
 ### Graph Nodes to Orchestrator Capabilities
 
 Each graph node performs work by calling orchestrator-owned capabilities.
-The following mapping is normative for the MVP.
+The following mapping is the MVP reference mapping.
 
 - **Load Task Context**: MCP database tools (or equivalent internal API) to read task, acceptance criteria, artifacts; preference resolution.
 - **Plan Steps**: Orchestrator model routing (local or API Egress) for LLM calls; state write for the plan.
@@ -92,7 +92,7 @@ The following mapping is normative for the MVP.
   - by the **Verify Step Result** node invoking the Project Analyst as a separate call (e.g. spawn a sub-agent workflow or call an internal verification API that uses the Project Analyst).
 - If the Project Analyst runs as a separate workflow or process, the orchestrator MUST pass task context and the step result, and MUST record the analyst's findings back into the main workflow state (or checkpoint) so that **Verify Step Result** can decide pass/fail and recommended actions.
 - Sub-agent invocation mechanism (same process vs. separate workflow vs. internal API) is implementation-defined.
-  The normative requirement is that verification findings and recommended actions are available to the graph state and that the Project Analyst does not bypass MCP or direct DB access rules.
+  The key requirement is that verification findings and recommended actions are available to the graph state and that the Project Analyst does not bypass MCP or direct DB access rules.
   See [`project_analyst_agent.md`](project_analyst_agent.md).
 
 ## Graph Topology
@@ -179,11 +179,17 @@ Each node is a bounded step that reads and writes the workflow state.
 
 ## Checkpointing and Resumability
 
-Normative requirements
+This section describes persistence of workflow state so work can resume after restarts.
 
-- The workflow MUST checkpoint progress to PostgreSQL after each node transition.
-- The workflow MUST be resumable after orchestrator restarts.
-- Each step attempt MUST be idempotent or have idempotency keys.
+### Applicable Requirements
+
+- Spec ID: `CYNAI.AGENTS.LanggraphCheckpointing` <a id="spec-cynai-agents-lgcheckpoint"></a>
+
+Traces To:
+
+- [REQ-AGENTS-0116](../requirements/agents.md#req-agents-0116)
+- [REQ-AGENTS-0117](../requirements/agents.md#req-agents-0117)
+- [REQ-AGENTS-0118](../requirements/agents.md#req-agents-0118)
 
 Recommended checkpoint points
 

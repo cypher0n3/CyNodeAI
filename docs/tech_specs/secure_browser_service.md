@@ -10,6 +10,8 @@
 
 ## Document Overview
 
+- Spec ID: `CYNAI.BROWSR.Doc.SecureBrowserService` <a id="spec-cynai-browsr-doc-securebrowserservice"></a>
+
 This document defines the Secure Browser Service, a service that retrieves web content on behalf of agents.
 It returns sanitized plain text and strips common prompt-injection patterns using deterministic rules, not AI.
 
@@ -20,6 +22,8 @@ It returns sanitized plain text and strips common prompt-injection patterns usin
 - Return plain text suitable for downstream use as untrusted reference material.
 
 ## Agent Interaction Model
+
+- Spec ID: `CYNAI.BROWSR.UntrustedContentHandling` <a id="spec-cynai-browsr-untrustedcontent"></a>
 
 Agents do not browse the open web directly.
 Instead, they submit a structured request to the orchestrator, which routes approved requests to the Secure Browser Service.
@@ -41,6 +45,11 @@ Minimum response fields
 Security note
 
 - Returned content MUST be treated as untrusted data and MUST NOT be interpreted as instructions.
+
+Traces To:
+
+- [REQ-BROWSR-0100](../requirements/browsr.md#req-browsr-0100)
+- [REQ-BROWSR-0101](../requirements/browsr.md#req-browsr-0101)
 
 ## Deterministic Sanitization
 
@@ -77,6 +86,8 @@ The goal is to strip non-content and reduce common prompt-injection vectors befo
 
 ## Configuration and Rules
 
+- Spec ID: `CYNAI.BROWSR.PreferencesRules` <a id="spec-cynai-browsr-preferencesrules"></a>
+
 The Secure Browser Service SHOULD be configured by preferences stored in PostgreSQL.
 This enables deterministic behavior changes without modifying code and allows per-user, per-project, and per-task overrides.
 
@@ -84,6 +95,13 @@ Preferences source of truth
 
 - Effective preferences MUST be resolved using the precedence model in [`docs/tech_specs/user_preferences.md`](user_preferences.md).
 - The service SHOULD treat missing preference keys as system defaults.
+
+Traces To:
+
+- [REQ-BROWSR-0102](../requirements/browsr.md#req-browsr-0102)
+- [REQ-BROWSR-0103](../requirements/browsr.md#req-browsr-0103)
+- [REQ-BROWSR-0104](../requirements/browsr.md#req-browsr-0104)
+- [REQ-BROWSR-0105](../requirements/browsr.md#req-browsr-0105)
 
 Optional YAML import and export
 
@@ -112,7 +130,21 @@ Recommended preference controls
 
 ## Robots and Redirect Handling
 
+- Spec ID: `CYNAI.BROWSR.RobotsRedirectHandling` <a id="spec-cynai-browsr-robotsredirects"></a>
+
 The Secure Browser Service MUST implement deterministic handling for `robots.txt` and redirects.
+
+Traces To:
+
+- [REQ-BROWSR-0106](../requirements/browsr.md#req-browsr-0106)
+- [REQ-BROWSR-0107](../requirements/browsr.md#req-browsr-0107)
+- [REQ-BROWSR-0108](../requirements/browsr.md#req-browsr-0108)
+- [REQ-BROWSR-0109](../requirements/browsr.md#req-browsr-0109)
+- [REQ-BROWSR-0110](../requirements/browsr.md#req-browsr-0110)
+- [REQ-BROWSR-0111](../requirements/browsr.md#req-browsr-0111)
+- [REQ-BROWSR-0112](../requirements/browsr.md#req-browsr-0112)
+- [REQ-BROWSR-0113](../requirements/browsr.md#req-browsr-0113)
+- [REQ-BROWSR-0114](../requirements/browsr.md#req-browsr-0114)
 
 ### Robots Policy
 
@@ -131,6 +163,8 @@ The Secure Browser Service MUST implement deterministic handling for `robots.txt
 
 ## Access Control
 
+- Spec ID: `CYNAI.BROWSR.AccessControl` <a id="spec-cynai-browsr-accesscontrol"></a>
+
 The Secure Browser Service MUST enforce access control for outbound fetches.
 Access control rules are defined in [`docs/tech_specs/access_control.md`](access_control.md).
 
@@ -141,7 +175,16 @@ Recommended checks
 - The service SHOULD enforce maximum response size and concurrency limits by subject and by task.
 - The service SHOULD restrict redirect behavior within policy.
 
+Traces To:
+
+- [REQ-BROWSR-0115](../requirements/browsr.md#req-browsr-0115)
+- [REQ-BROWSR-0116](../requirements/browsr.md#req-browsr-0116)
+- [REQ-BROWSR-0117](../requirements/browsr.md#req-browsr-0117)
+- [REQ-BROWSR-0118](../requirements/browsr.md#req-browsr-0118)
+
 ## Policy and Auditing
+
+- Spec ID: `CYNAI.BROWSR.PolicyAuditing` <a id="spec-cynai-browsr-policyauditing"></a>
 
 The orchestrator and Secure Browser Service enforce outbound browsing policy.
 
@@ -149,3 +192,10 @@ The orchestrator and Secure Browser Service enforce outbound browsing policy.
 - Requests SHOULD support rate limiting and concurrency limits.
 - All fetches SHOULD be logged with task context, final URL, and timing information.
 - Responses SHOULD be filtered to avoid leaking secrets or internal network information.
+
+Traces To:
+
+- [REQ-BROWSR-0119](../requirements/browsr.md#req-browsr-0119)
+- [REQ-BROWSR-0120](../requirements/browsr.md#req-browsr-0120)
+- [REQ-BROWSR-0121](../requirements/browsr.md#req-browsr-0121)
+- [REQ-BROWSR-0122](../requirements/browsr.md#req-browsr-0122)
