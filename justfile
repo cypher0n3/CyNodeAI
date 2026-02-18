@@ -216,29 +216,29 @@ test-go: install-go
       (cd "$m" && go test ./...); \
     done
 
-# Minimum Go coverage (percent) required when running test-go-cover / ci
+# Minimum Go coverage (percent) required per package when running test-go-cover / ci
 go_coverage_min := "90"
 
-# Run Go tests with coverage; fail if any module coverage is below go_coverage_min
+# Run Go tests with coverage; fail if any package in any module is below go_coverage_min
 test-go-cover: install-go
-    @fail=0; failed=""; \
+    @fail=0; failed_pkgs=""; \
     mkdir -p "{{ root_dir }}/tmp/go/coverage"; \
-    echo ""; echo "--- Go coverage (min {{ go_coverage_min }}%) ---"; echo ""; \
+    echo ""; echo "--- Go coverage (min {{ go_coverage_min }}% per package) ---"; echo ""; \
     for m in {{ go_modules }}; do \
       echo "==> $m: go test -coverprofile"; \
       out="{{ root_dir }}/tmp/go/coverage/$m.coverage.out"; \
       (cd "$m" && go test ./... -coverprofile="$out" -covermode=atomic); \
-      pct=$(go tool cover -func="$out" | awk '/^total:/ {gsub("%","",$3); print $3}'); \
-      if awk -v p="$pct" -v min="{{ go_coverage_min }}" 'BEGIN{exit (p+0 >= min+0)}'; then \
-        echo "    coverage: $pct%  [FAIL] (below {{ go_coverage_min }}%)"; fail=1; failed="$failed $m"; \
+      r=0; below=$(awk -v min="{{ go_coverage_min }}" '/^mode:/{next}{path=$1;sub(/:.*/,"",path);n=split(path,a,"/");pkg=(n>1)?a[1]:".";for(i=2;i<n;i++)pkg=pkg"/"a[i];t[pkg]+=$2;c[pkg]+=$3}END{for(p in t){pct=100*c[p]/t[p];if(pct<min+0){printf "  %s %.1f%%\n",p,pct;e=1}}exit e+0}' "$out") || r=$?; \
+      if [ "$r" -ne 0 ]; then \
+        echo "    [FAIL] packages below {{ go_coverage_min }}%:"; echo "$below"; fail=1; failed_pkgs="$failed_pkgs${failed_pkgs:+$'\n'}[$m]"$'\n'"$below"; \
       else \
-        echo "    coverage: $pct%  [PASS]"; \
+        echo "    [PASS] all packages ≥ {{ go_coverage_min }}%"; \
       fi; echo ""; \
     done; \
     if [ "$fail" -ne 0 ]; then \
-      echo "--- Summary ---"; echo "Modules below {{ go_coverage_min }}%:$failed"; echo ""; exit 1; \
+      echo "--- Summary ---"; echo "Packages below {{ go_coverage_min }}%:"; echo "$failed_pkgs"; echo ""; exit 1; \
     fi; \
-    echo "--- Summary ---"; echo "All modules meet coverage threshold (≥ {{ go_coverage_min }}%)."; echo ""
+    echo "--- Summary ---"; echo "All packages meet coverage threshold (≥ {{ go_coverage_min }}%)."; echo ""
 
 # Go coverage. For orchestrator: starts a Postgres container with Podman and sets POSTGRES_TEST_DSN
 # so database integration tests run (no testcontainers/socket needed). Other modules: plain go test.
@@ -251,7 +251,7 @@ test-go-cover-podman: install-go
     failed=""
     mkdir -p "$root/tmp/go/coverage"
     echo ""
-    echo "--- Go coverage (min ${min}%) ---"
+    echo "--- Go coverage (min ${min}% per package) ---"
     echo ""
 
     for m in {{ go_modules }}; do
@@ -288,25 +288,43 @@ test-go-cover-podman: install-go
         (cd "$root/$m" && go test ./... -coverprofile="$out" -covermode=atomic)
       fi
 
-      pct=$(go tool cover -func="$out" | awk '/^total:/ {gsub("%","",$3); print $3}')
-      if awk -v p="$pct" -v min="$min" 'BEGIN{exit (p+0 >= min+0)}'; then
-        echo "    coverage: ${pct}%  [FAIL] (below ${min}%)"
+      r=0
+      below=$(awk -v min="$min" '
+        /^mode:/ { next }
+        { path = $1; sub(/:.*/, "", path)
+          n = split(path, a, "/")
+          pkg = (n > 1) ? a[1] : "."
+          for (i = 2; i < n; i++) pkg = pkg "/" a[i]
+          t[pkg] += $2; c[pkg] += $3
+        }
+        END {
+          for (p in t) {
+            pct = 100 * c[p] / t[p]
+            if (pct < min + 0) { printf "  %s %.1f%%\n", p, pct; e = 1 }
+          }
+          exit e + 0
+        }
+      ' "$out") || r=$?
+      if [ "$r" -ne 0 ]; then
+        echo "    [FAIL] packages below ${min}%:"
+        echo "$below"
         fail=1
-        failed="$failed $m"
+        failed="$failed${failed:+$'\n'}[$m]"$'\n'"$below"
       else
-        echo "    coverage: ${pct}%  [PASS]"
+        echo "    [PASS] all packages ≥ ${min}%"
       fi
       echo ""
     done
 
     if [ "$fail" -ne 0 ]; then
       echo "--- Summary ---"
-      echo "Modules below ${min}%:$failed"
+      echo "Packages below ${min}%:"
+      echo "$failed"
       echo ""
       exit 1
     fi
     echo "--- Summary ---"
-    echo "All modules meet coverage threshold (≥ ${min}%)."
+    echo "All packages meet coverage threshold (≥ ${min}%)."
     echo ""
 
 # Run Go tests with race detector
