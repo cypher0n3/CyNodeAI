@@ -12,10 +12,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 
 	"github.com/cypher0n3/cynodeai/go_shared_libs/contracts/nodepayloads"
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/auth"
+	"github.com/cypher0n3/cynodeai/orchestrator/internal/database"
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/models"
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/testutil"
 )
@@ -255,6 +257,34 @@ func TestAuthHandler_RefreshSuccess(t *testing.T) {
 	}
 	if resp.AccessToken == "" {
 		t.Error("expected new access token")
+	}
+}
+
+func TestAuthHandler_RefreshInvalidUserIDInToken(t *testing.T) {
+	secret := "test-secret-key-1234567890123456"
+	jwtMgr := auth.NewJWTManager(secret, 15*time.Minute, 7*24*time.Hour, 24*time.Hour)
+	handler := NewAuthHandler(testutil.NewMockDB(), jwtMgr, auth.NewRateLimiter(100, time.Minute), newTestLogger())
+	now := time.Now()
+	claims := &auth.Claims{
+		RegisteredClaims: jwt.RegisteredClaims{
+			Issuer:    "cynodeai",
+			Subject:   "not-a-valid-uuid",
+			IssuedAt:  jwt.NewNumericDate(now),
+			ExpiresAt: jwt.NewNumericDate(now.Add(time.Hour)),
+			ID:        uuid.New().String(),
+		},
+		TokenType: auth.TokenTypeRefresh,
+		UserID:    "not-a-valid-uuid",
+	}
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
+	tokenStr, err := token.SignedString([]byte(secret))
+	if err != nil {
+		t.Fatalf("sign token: %v", err)
+	}
+	req, rec := recordedRequestJSON("POST", "/v1/auth/refresh", RefreshRequest{RefreshToken: tokenStr})
+	handler.Refresh(rec, req)
+	if rec.Code != http.StatusUnauthorized {
+		t.Errorf("expected 401, got %d", rec.Code)
 	}
 }
 
@@ -1304,4 +1334,203 @@ func (m *capabilityErrorMockDB) SaveNodeCapabilitySnapshot(_ context.Context, _ 
 
 func (m *capabilityErrorMockDB) UpdateNodeLastSeen(_ context.Context, _ uuid.UUID) error {
 	return nil
+}
+
+// updateNodeStatusErrorStore fails only UpdateNodeStatus (e.g. in handleExistingNodeRegistration).
+type updateNodeStatusErrorStore struct {
+	*testutil.MockDB
+}
+
+func (m *updateNodeStatusErrorStore) UpdateNodeStatus(_ context.Context, _ uuid.UUID, _ string) error {
+	return errors.New("update node status error")
+}
+
+func TestNodeHandler_RegisterExistingNode_UpdateNodeStatusFails(t *testing.T) {
+	mockDB := &updateNodeStatusErrorStore{MockDB: testutil.NewMockDB()}
+	node := &models.Node{
+		ID:        uuid.New(),
+		NodeSlug:  "existing-node",
+		Status:    "offline",
+		CreatedAt: time.Now().UTC(),
+		UpdatedAt: time.Now().UTC(),
+	}
+	mockDB.AddNode(node)
+	jwtMgr := auth.NewJWTManager("test-secret-key-1234567890123456", 15*time.Minute, 7*24*time.Hour, 24*time.Hour)
+	handler := NewNodeHandler(mockDB, jwtMgr, "test-psk", testOrchestratorURL, newTestLogger())
+
+	body := NodeRegistrationRequest{
+		PSK: "test-psk",
+		Capability: NodeCapabilityReport{
+			Version: 1,
+			Node:    NodeCapabilityNode{NodeSlug: "existing-node"},
+			Platform: NodeCapabilityPlatform{OS: "linux", Arch: "amd64"},
+			Compute:  NodeCapabilityCompute{CPUCores: 4, RAMMB: 8192},
+		},
+	}
+	req, rec := recordedRequestJSON("POST", "/v1/nodes/register", body)
+	handler.Register(rec, req)
+
+	if rec.Code != http.StatusInternalServerError {
+		t.Errorf("expected status 500, got %d", rec.Code)
+	}
+}
+
+// createNodeErrorStore fails only CreateNode so handleNewNodeRegistration hits CreateNode error path.
+type createNodeErrorStore struct {
+	*testutil.MockDB
+}
+
+func (m *createNodeErrorStore) CreateNode(_ context.Context, _ string) (*models.Node, error) {
+	return nil, errors.New("create node error")
+}
+
+func TestNodeHandler_RegisterNewNode_CreateNodeFails(t *testing.T) {
+	mockDB := &createNodeErrorStore{MockDB: testutil.NewMockDB()}
+	jwtMgr := auth.NewJWTManager("test-secret-key-1234567890123456", 15*time.Minute, 7*24*time.Hour, 24*time.Hour)
+	handler := NewNodeHandler(mockDB, jwtMgr, "test-psk", testOrchestratorURL, newTestLogger())
+
+	body := NodeRegistrationRequest{
+		PSK: "test-psk",
+		Capability: NodeCapabilityReport{
+			Version: 1,
+			Node:    NodeCapabilityNode{NodeSlug: "new-node"},
+			Platform: NodeCapabilityPlatform{OS: "linux", Arch: "amd64"},
+			Compute:  NodeCapabilityCompute{CPUCores: 4, RAMMB: 8192},
+		},
+	}
+	req, rec := recordedRequestJSON("POST", "/v1/nodes/register", body)
+	handler.Register(rec, req)
+
+	if rec.Code != http.StatusInternalServerError {
+		t.Errorf("expected status 500, got %d", rec.Code)
+	}
+}
+
+// invalidateSessionErrorStore fails only InvalidateRefreshSession (Refresh token rotation).
+type invalidateSessionErrorStore struct {
+	*testutil.MockDB
+}
+
+func (m *invalidateSessionErrorStore) InvalidateRefreshSession(_ context.Context, _ uuid.UUID) error {
+	return errors.New("invalidate session error")
+}
+
+// refreshWithStore runs Refresh with a pre-configured user and session on base, using store as the handler's DB. Asserts rec.Code == expectedCode.
+func refreshWithStore(t *testing.T, base *testutil.MockDB, store database.Store, expectedCode int) {
+	t.Helper()
+	jwtMgr := auth.NewJWTManager("test-secret-key-1234567890123456", 15*time.Minute, 7*24*time.Hour, 24*time.Hour)
+	handler := NewAuthHandler(store, jwtMgr, auth.NewRateLimiter(100, time.Minute), newTestLogger())
+	user := &models.User{ID: uuid.New(), Handle: "u", IsActive: true, CreatedAt: time.Now().UTC(), UpdatedAt: time.Now().UTC()}
+	base.AddUser(user)
+	refreshToken, expiresAt, _ := jwtMgr.GenerateRefreshToken(user.ID)
+	tokenHash := auth.HashToken(refreshToken)
+	session := &models.RefreshSession{
+		ID: uuid.New(), UserID: user.ID, RefreshTokenHash: tokenHash, IsActive: true, ExpiresAt: expiresAt,
+		CreatedAt: time.Now().UTC(), UpdatedAt: time.Now().UTC(),
+	}
+	base.AddRefreshSession(session)
+	req, rec := recordedRequestJSON("POST", "/v1/auth/refresh", RefreshRequest{RefreshToken: refreshToken})
+	handler.Refresh(rec, req)
+	if rec.Code != expectedCode {
+		t.Errorf("expected status %d, got %d", expectedCode, rec.Code)
+	}
+}
+
+func TestAuthHandler_Refresh_InvalidateSessionFails(t *testing.T) {
+	base := testutil.NewMockDB()
+	refreshWithStore(t, base, &invalidateSessionErrorStore{MockDB: base}, http.StatusInternalServerError)
+}
+
+// getUserByIDErrorStore fails GetUserByID (Refresh path: user not found).
+type getUserByIDErrorStore struct {
+	*testutil.MockDB
+}
+
+func (m *getUserByIDErrorStore) GetUserByID(_ context.Context, _ uuid.UUID) (*models.User, error) {
+	return nil, errors.New("user not found")
+}
+
+func TestAuthHandler_Refresh_GetUserByIDFails(t *testing.T) {
+	base := testutil.NewMockDB()
+	refreshWithStore(t, base, &getUserByIDErrorStore{MockDB: base}, http.StatusUnauthorized)
+}
+
+func TestAuthHandler_Refresh_SessionNotFound(t *testing.T) {
+	mockDB := testutil.NewMockDB()
+	jwtMgr := auth.NewJWTManager("test-secret-key-1234567890123456", 15*time.Minute, 7*24*time.Hour, 24*time.Hour)
+	handler := NewAuthHandler(mockDB, jwtMgr, auth.NewRateLimiter(100, time.Minute), newTestLogger())
+
+	user := &models.User{ID: uuid.New(), Handle: "u", IsActive: true, CreatedAt: time.Now().UTC(), UpdatedAt: time.Now().UTC()}
+	mockDB.AddUser(user)
+	refreshToken, _, _ := jwtMgr.GenerateRefreshToken(user.ID)
+	// Do not add refresh session - session lookup will return ErrNotFound
+
+	req, rec := recordedRequestJSON("POST", "/v1/auth/refresh", RefreshRequest{RefreshToken: refreshToken})
+	handler.Refresh(rec, req)
+
+	if rec.Code != http.StatusUnauthorized {
+		t.Errorf("expected status 401, got %d", rec.Code)
+	}
+}
+
+func TestAuthHandler_Refresh_GetActiveRefreshSessionError(t *testing.T) {
+	mockDB := testutil.NewMockDB()
+	mockDB.ForceError = errors.New("db error")
+	jwtMgr := auth.NewJWTManager("test-secret-key-1234567890123456", 15*time.Minute, 7*24*time.Hour, 24*time.Hour)
+	handler := NewAuthHandler(mockDB, jwtMgr, auth.NewRateLimiter(100, time.Minute), newTestLogger())
+
+	refreshToken, _, _ := jwtMgr.GenerateRefreshToken(uuid.New())
+
+	req, rec := recordedRequestJSON("POST", "/v1/auth/refresh", RefreshRequest{RefreshToken: refreshToken})
+	handler.Refresh(rec, req)
+
+	if rec.Code != http.StatusInternalServerError {
+		t.Errorf("expected status 500, got %d", rec.Code)
+	}
+}
+
+func TestAuthHandler_Refresh_CreateSessionFails(t *testing.T) {
+	mockDB := &sessionErrorMockDB{MockDB: testutil.NewMockDB(), failOnCreateSession: true}
+	jwtMgr := auth.NewJWTManager("test-secret-key-1234567890123456", 15*time.Minute, 7*24*time.Hour, 24*time.Hour)
+	handler := NewAuthHandler(mockDB, jwtMgr, auth.NewRateLimiter(100, time.Minute), newTestLogger())
+
+	user := &models.User{ID: uuid.New(), Handle: "u", IsActive: true, CreatedAt: time.Now().UTC(), UpdatedAt: time.Now().UTC()}
+	mockDB.AddUser(user)
+	refreshToken, expiresAt, _ := jwtMgr.GenerateRefreshToken(user.ID)
+	tokenHash := auth.HashToken(refreshToken)
+	session := &models.RefreshSession{
+		ID: uuid.New(), UserID: user.ID, RefreshTokenHash: tokenHash, IsActive: true, ExpiresAt: expiresAt,
+		CreatedAt: time.Now().UTC(), UpdatedAt: time.Now().UTC(),
+	}
+	mockDB.AddRefreshSession(session)
+
+	req, rec := recordedRequestJSON("POST", "/v1/auth/refresh", RefreshRequest{RefreshToken: refreshToken})
+	handler.Refresh(rec, req)
+
+	if rec.Code != http.StatusInternalServerError {
+		t.Errorf("expected status 500, got %d", rec.Code)
+	}
+}
+
+// createJobErrorStore fails only CreateJob (CreateTask handler: task created, job creation fails).
+type createJobErrorStore struct {
+	*testutil.MockDB
+}
+
+func (m *createJobErrorStore) CreateJob(_ context.Context, _ uuid.UUID, _ string) (*models.Job, error) {
+	return nil, errors.New("create job error")
+}
+
+func TestTaskHandler_CreateTask_CreateJobFails(t *testing.T) {
+	mockDB := &createJobErrorStore{MockDB: testutil.NewMockDB()}
+	handler := NewTaskHandler(mockDB, newTestLogger())
+	userID := uuid.New()
+	ctx := context.WithValue(context.Background(), contextKeyUserID, userID)
+	req, rec := recordedRequestJSON("POST", "/v1/tasks", CreateTaskRequest{Prompt: "p"})
+	req = req.WithContext(ctx)
+	handler.CreateTask(rec, req)
+
+	if rec.Code != http.StatusInternalServerError {
+		t.Errorf("expected status 500, got %d", rec.Code)
+	}
 }

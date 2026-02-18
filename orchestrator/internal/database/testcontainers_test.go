@@ -20,13 +20,20 @@ func TestMain(m *testing.M) {
 		return
 	}
 	ctx := context.Background()
+	var code int
+	var container *postgres.PostgresContainer
 	defer func() {
 		if r := recover(); r != nil {
 			_, _ = os.Stderr.WriteString("[database/testcontainers] panic: " + fmt.Sprint(r) + "\n")
-			os.Exit(m.Run())
+			code = m.Run()
 		}
+		if container != nil {
+			_ = container.Terminate(ctx)
+		}
+		os.Exit(code)
 	}()
-	container, err := postgres.Run(ctx, "postgres:16-alpine",
+	var err error
+	container, err = postgres.Run(ctx, "postgres:16-alpine",
 		testcontainers.WithProvider(testcontainers.ProviderPodman),
 		postgres.WithDatabase("cynodeai"),
 		postgres.WithUsername("cynodeai"),
@@ -34,37 +41,37 @@ func TestMain(m *testing.M) {
 	)
 	if err != nil {
 		_, _ = os.Stderr.WriteString("[database/testcontainers] postgres.Run failed: " + err.Error() + "\n")
-		os.Exit(m.Run())
+		code = m.Run()
 		return
 	}
 	connStr, err := container.ConnectionString(ctx, "sslmode=disable")
 	if err != nil {
 		_, _ = os.Stderr.WriteString("[database/testcontainers] ConnectionString failed: " + err.Error() + "\n")
-		_ = container.Terminate(ctx)
-		os.Exit(m.Run())
+		code = m.Run()
 		return
 	}
-	os.Setenv(integrationEnv, connStr)
-	code := m.Run()
-	_ = container.Terminate(ctx)
-	os.Exit(code)
+	_ = os.Setenv(integrationEnv, connStr)
+	code = m.Run()
 }
 
-func TestWithTestcontainers_Integration(t *testing.T) {
+func tcOpenDB(t *testing.T, ctx context.Context) Store {
+	t.Helper()
 	if os.Getenv(integrationEnv) == "" {
 		t.Skip("postgres not started by TestMain (testcontainers skipped)")
 	}
-	ctx := context.Background()
-	db, err := Open(os.Getenv(integrationEnv))
+	db, err := Open(ctx, os.Getenv(integrationEnv))
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
 	t.Cleanup(func() { _ = db.Close() })
-
 	if err := db.RunSchema(ctx, slog.Default()); err != nil {
 		t.Fatalf("RunSchema: %v", err)
 	}
+	return db
+}
 
+func tcCreateUserAndVerify(t *testing.T, db Store, ctx context.Context) *models.User {
+	t.Helper()
 	user, err := db.CreateUser(ctx, "tc-user", nil)
 	if err != nil {
 		t.Fatalf("CreateUser: %v", err)
@@ -73,7 +80,11 @@ func TestWithTestcontainers_Integration(t *testing.T) {
 	if err != nil || got.ID != user.ID {
 		t.Fatalf("GetUserByHandle: %v", err)
 	}
+	return user
+}
 
+func tcCreateTaskJobAndVerifyPayload(t *testing.T, db Store, ctx context.Context, user *models.User) (*models.Task, *models.Job) {
+	t.Helper()
 	task, err := db.CreateTask(ctx, &user.ID, "prompt")
 	if err != nil {
 		t.Fatalf("CreateTask: %v", err)
@@ -85,7 +96,11 @@ func TestWithTestcontainers_Integration(t *testing.T) {
 	if job.Payload.Ptr() == nil || *job.Payload.Ptr() != `{"x":1}` {
 		t.Error("CreateJob payload round-trip")
 	}
+	return task, job
+}
 
+func tcCreateNodeAndListActive(t *testing.T, db Store, ctx context.Context) *models.Node {
+	t.Helper()
 	node, err := db.CreateNode(ctx, "tc-node")
 	if err != nil {
 		t.Fatalf("CreateNode: %v", err)
@@ -97,8 +112,11 @@ func TestWithTestcontainers_Integration(t *testing.T) {
 	if err != nil || len(list) < 1 {
 		t.Fatalf("ListActiveNodes: %v", err)
 	}
+	return node
+}
 
-	result := `{"status":"ok"}`
+func tcCompleteJobAndVerifyResult(t *testing.T, db Store, ctx context.Context, job *models.Job, result string) {
+	t.Helper()
 	if err := db.CompleteJob(ctx, job.ID, result, models.JobStatusCompleted); err != nil {
 		t.Fatalf("CompleteJob: %v", err)
 	}
@@ -106,4 +124,13 @@ func TestWithTestcontainers_Integration(t *testing.T) {
 	if err != nil || gotJob.Result.Ptr() == nil || *gotJob.Result.Ptr() != result {
 		t.Fatalf("CompleteJob round-trip: %v", err)
 	}
+}
+
+func TestWithTestcontainers_Integration(t *testing.T) {
+	ctx := context.Background()
+	db := tcOpenDB(t, ctx)
+	user := tcCreateUserAndVerify(t, db, ctx)
+	_, job := tcCreateTaskJobAndVerifyPayload(t, db, ctx, user)
+	_ = tcCreateNodeAndListActive(t, db, ctx)
+	tcCompleteJobAndVerifyResult(t, db, ctx, job, `{"status":"ok"}`)
 }

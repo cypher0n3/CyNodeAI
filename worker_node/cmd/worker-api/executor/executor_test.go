@@ -9,6 +9,8 @@ import (
 	"github.com/cypher0n3/cynodeai/go_shared_libs/contracts/workerapi"
 )
 
+const goOSWindows = "windows"
+
 func TestNew(t *testing.T) {
 	e := New("podman", 30*time.Second, 4096)
 	if e == nil {
@@ -18,7 +20,7 @@ func TestNew(t *testing.T) {
 
 func TestRunJobDirectSuccess(t *testing.T) {
 	var cmd []string
-	if runtime.GOOS == "windows" {
+	if runtime.GOOS == goOSWindows {
 		cmd = []string{"cmd", "/c", "echo", "hello"}
 	} else {
 		cmd = []string{"echo", "hello"}
@@ -47,7 +49,7 @@ func TestRunJobDirectSuccess(t *testing.T) {
 
 func TestRunJobDirectExitError(t *testing.T) {
 	var cmd []string
-	if runtime.GOOS == "windows" {
+	if runtime.GOOS == goOSWindows {
 		cmd = []string{"cmd", "/c", "exit", "3"}
 	} else {
 		cmd = []string{"sh", "-c", "exit 3"}
@@ -72,7 +74,7 @@ func TestRunJobDirectExitError(t *testing.T) {
 
 func TestRunJobDirectTimeout(t *testing.T) {
 	var cmd []string
-	if runtime.GOOS == "windows" {
+	if runtime.GOOS == goOSWindows {
 		cmd = []string{"cmd", "/c", "ping", "-n", "10", "127.0.0.1"}
 	} else {
 		cmd = []string{"sleep", "10"}
@@ -116,7 +118,7 @@ func TestRunJobDirectNonExitError(t *testing.T) {
 
 func TestRunJobDirectEnv(t *testing.T) {
 	var cmd []string
-	if runtime.GOOS == "windows" {
+	if runtime.GOOS == goOSWindows {
 		cmd = []string{"cmd", "/c", "echo", "%FOO%"}
 	} else {
 		cmd = []string{"sh", "-c", "echo $FOO"}
@@ -145,7 +147,7 @@ func TestRunJobDirectEnv(t *testing.T) {
 
 func TestRunJobDirectTruncation(t *testing.T) {
 	var cmd []string
-	if runtime.GOOS == "windows" {
+	if runtime.GOOS == goOSWindows {
 		cmd = []string{"cmd", "/c", "echo", "12345678901234567890"}
 	} else {
 		cmd = []string{"sh", "-c", "echo 12345678901234567890"}
@@ -173,7 +175,7 @@ func TestRunJobDirectTruncation(t *testing.T) {
 
 func TestRunJobDefaultImage(t *testing.T) {
 	var cmd []string
-	if runtime.GOOS == "windows" {
+	if runtime.GOOS == goOSWindows {
 		cmd = []string{"cmd", "/c", "echo", "ok"}
 	} else {
 		cmd = []string{"echo", "ok"}
@@ -199,7 +201,7 @@ func TestRunJobDefaultImage(t *testing.T) {
 
 func TestRunJobDirectStderrTruncation(t *testing.T) {
 	var cmd []string
-	if runtime.GOOS == "windows" {
+	if runtime.GOOS == goOSWindows {
 		cmd = []string{"cmd", "/c", "echo err 12345678901234567890"}
 	} else {
 		cmd = []string{"sh", "-c", "echo err 12345678901234567890 >&2"}
@@ -225,7 +227,7 @@ func TestRunJobDirectStderrTruncation(t *testing.T) {
 
 func TestRunJobSandboxTimeoutSeconds(t *testing.T) {
 	var cmd []string
-	if runtime.GOOS == "windows" {
+	if runtime.GOOS == goOSWindows {
 		cmd = []string{"cmd", "/c", "echo", "ok"}
 	} else {
 		cmd = []string{"echo", "ok"}

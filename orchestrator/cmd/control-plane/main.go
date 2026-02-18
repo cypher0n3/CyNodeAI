@@ -21,13 +21,13 @@ import (
 )
 
 func main() {
-	var exitCode int
-	defer func() {
-		if exitCode != 0 {
-			os.Exit(exitCode)
-		}
-	}()
+	if code := runMain(); code != 0 {
+		os.Exit(code)
+	}
+}
 
+// runMain runs the control-plane and returns an exit code. Used by main and tests.
+func runMain() int {
 	var migrateOnly bool
 	flag.BoolVar(&migrateOnly, "migrate-only", false, "run database migrations and exit")
 	flag.Parse()
@@ -39,30 +39,35 @@ func main() {
 
 	cfg := config.LoadOrchestratorConfig()
 
-	db, err := database.Open(cfg.DatabaseURL)
+	ctx := context.Background()
+	db, err := database.Open(ctx, cfg.DatabaseURL)
 	if err != nil {
 		logger.Error("failed to connect to database", "error", err)
-		exitCode = 1
-		return
+		return 1
 	}
 	defer func() { _ = db.Close() }()
 
-	ctx := context.Background()
 	if err := db.RunSchema(ctx, logger); err != nil {
 		logger.Error("failed to run schema", "error", err)
-		exitCode = 1
-		return
+		return 1
 	}
 	if migrateOnly {
 		logger.Info("schema applied (migrate-only)")
-		return
+		return 0
 	}
 
 	var store database.Store = db
+	if err := run(ctx, store, cfg, logger); err != nil {
+		logger.Error("run failed", "error", err)
+		return 1
+	}
+	return 0
+}
+
+// run bootstraps admin, starts the HTTP server and dispatcher until ctx is cancelled. Used by main and tests.
+func run(ctx context.Context, store database.Store, cfg *config.OrchestratorConfig, logger *slog.Logger) error {
 	if err := bootstrapAdminUser(ctx, store, cfg.BootstrapAdminPassword, logger); err != nil {
-		logger.Error("failed to bootstrap admin user", "error", err)
-		exitCode = 1
-		return
+		return err
 	}
 
 	jwtManager := auth.NewJWTManager(
@@ -102,22 +107,31 @@ func main() {
 	done := make(chan os.Signal, 1)
 	signal.Notify(done, os.Interrupt, syscall.SIGTERM)
 
+	serverErr := make(chan error, 1)
 	go func() {
 		logger.Info("starting control-plane", "addr", server.Addr)
 		if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			logger.Error("server error", "error", err)
-			os.Exit(1)
+			serverErr <- err
 		}
 	}()
 
-	<-done
+	select {
+	case <-ctx.Done():
+	case <-done:
+	case err := <-serverErr:
+		return err
+	}
+
 	logger.Info("shutting down...")
-	shutdownCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	shutdownCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 	if err := server.Shutdown(shutdownCtx); err != nil {
 		logger.Error("shutdown error", "error", err)
+		return err
 	}
 	logger.Info("server stopped")
+	return nil
 }
 
 func getEnv(key, def string) string {

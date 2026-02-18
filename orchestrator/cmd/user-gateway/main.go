@@ -20,6 +20,9 @@ import (
 )
 
 func main() {
+	code := 0
+	defer func() { os.Exit(code) }()
+
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
 		Level: slog.LevelInfo,
 	}))
@@ -27,13 +30,23 @@ func main() {
 
 	cfg := config.LoadOrchestratorConfig()
 
-	db, err := database.Open(cfg.DatabaseURL)
+	db, err := database.Open(context.Background(), cfg.DatabaseURL)
 	if err != nil {
 		logger.Error("failed to connect to database", "error", err)
-		os.Exit(1)
+		code = 1
+		return
 	}
 	defer func() { _ = db.Close() }()
 
+	if err := run(context.Background(), cfg, db, logger); err != nil {
+		logger.Error("run failed", "error", err)
+		code = 1
+		return
+	}
+}
+
+// run sets up handlers and runs the server until ctx is cancelled. Used by main and tests.
+func run(ctx context.Context, cfg *config.OrchestratorConfig, store database.Store, logger *slog.Logger) error {
 	jwtManager := auth.NewJWTManager(
 		cfg.JWTSecret,
 		cfg.JWTAccessDuration,
@@ -42,9 +55,9 @@ func main() {
 	)
 	rateLimiter := auth.NewRateLimiter(cfg.RateLimitPerMinute, time.Minute)
 
-	authHandler := handlers.NewAuthHandler(db, jwtManager, rateLimiter, logger)
-	userHandler := handlers.NewUserHandler(db, logger)
-	taskHandler := handlers.NewTaskHandler(db, logger)
+	authHandler := handlers.NewAuthHandler(store, jwtManager, rateLimiter, logger)
+	userHandler := handlers.NewUserHandler(store, logger)
+	taskHandler := handlers.NewTaskHandler(store, logger)
 
 	authMiddleware := middleware.NewAuthMiddleware(jwtManager, logger)
 
@@ -81,22 +94,31 @@ func main() {
 	done := make(chan os.Signal, 1)
 	signal.Notify(done, os.Interrupt, syscall.SIGTERM)
 
+	serverErr := make(chan error, 1)
 	go func() {
 		logger.Info("starting user-gateway", "addr", server.Addr)
 		if err := server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			logger.Error("server error", "error", err)
-			os.Exit(1)
+			serverErr <- err
 		}
 	}()
 
-	<-done
+	select {
+	case <-ctx.Done():
+	case <-done:
+	case err := <-serverErr:
+		return err
+	}
+
 	logger.Info("shutting down...")
-	shutdownCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	shutdownCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 	if err := server.Shutdown(shutdownCtx); err != nil {
 		logger.Error("shutdown error", "error", err)
+		return err
 	}
 	logger.Info("server stopped")
+	return nil
 }
 
 func getEnv(key, def string) string {
