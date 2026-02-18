@@ -27,10 +27,14 @@ func main() {
 }
 
 // runMain runs the control-plane and returns an exit code. Used by main and tests.
+// Parses flags from os.Args[1:] using a new FlagSet so it can be called multiple times in tests.
 func runMain() int {
+	fs := flag.NewFlagSet("control-plane", flag.ContinueOnError)
 	var migrateOnly bool
-	flag.BoolVar(&migrateOnly, "migrate-only", false, "run database migrations and exit")
-	flag.Parse()
+	fs.BoolVar(&migrateOnly, "migrate-only", false, "run database migrations and exit")
+	if err := fs.Parse(os.Args[1:]); err != nil {
+		return 1
+	}
 
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
 		Level: slog.LevelInfo,

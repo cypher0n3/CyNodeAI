@@ -4,6 +4,7 @@ package database
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"time"
@@ -128,6 +129,9 @@ func createReturning[T any](db *DB, ctx context.Context, record *T, op string) (
 	return record, db.createRecord(ctx, record, op)
 }
 
+// getSQLDB is overridden in tests to inject failures for coverage.
+var getSQLDB = func(gormDB *gorm.DB) (*sql.DB, error) { return gormDB.DB() }
+
 // Open opens a database connection using GORM with the pgx driver.
 func Open(ctx context.Context, dataSourceName string) (*DB, error) {
 	gormDB, err := gorm.Open(postgres.Open(dataSourceName), &gorm.Config{})
@@ -135,7 +139,7 @@ func Open(ctx context.Context, dataSourceName string) (*DB, error) {
 		return nil, fmt.Errorf("open database: %w", err)
 	}
 
-	sqlDB, err := gormDB.DB()
+	sqlDB, err := getSQLDB(gormDB)
 	if err != nil {
 		return nil, fmt.Errorf("get underlying sql.DB: %w", err)
 	}
@@ -153,9 +157,12 @@ func Open(ctx context.Context, dataSourceName string) (*DB, error) {
 	return &DB{db: gormDB}, nil
 }
 
+// getSQLDBFromDB is overridden in tests to inject failures for coverage.
+var getSQLDBFromDB = func(db *DB) (*sql.DB, error) { return db.db.DB() }
+
 // Close closes the underlying database connection.
 func (db *DB) Close() error {
-	sqlDB, err := db.db.DB()
+	sqlDB, err := getSQLDBFromDB(db)
 	if err != nil {
 		return err
 	}

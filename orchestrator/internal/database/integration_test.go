@@ -245,3 +245,106 @@ func TestIntegration_GetUserByID_ErrNotFound(t *testing.T) {
 		t.Errorf("GetUserByID: expected ErrNotFound, got %v", err)
 	}
 }
+
+func TestIntegration_GetUserByHandle_ErrNotFound(t *testing.T) {
+	db, ctx := integrationDB(t)
+	_, err := db.GetUserByHandle(ctx, "nonexistent-handle-"+uuid.New().String())
+	if err != ErrNotFound {
+		t.Errorf("GetUserByHandle: expected ErrNotFound, got %v", err)
+	}
+}
+
+func TestIntegration_GetNodeBySlug_ErrNotFound(t *testing.T) {
+	db, ctx := integrationDB(t)
+	_, err := db.GetNodeBySlug(ctx, "nonexistent-slug-"+uuid.New().String())
+	if err != ErrNotFound {
+		t.Errorf("GetNodeBySlug: expected ErrNotFound, got %v", err)
+	}
+}
+
+func TestIntegration_GetNodeByID_ErrNotFound(t *testing.T) {
+	db, ctx := integrationDB(t)
+	_, err := db.GetNodeByID(ctx, uuid.New())
+	if err != ErrNotFound {
+		t.Errorf("GetNodeByID: expected ErrNotFound, got %v", err)
+	}
+}
+
+func TestIntegration_CreateUser_DuplicateHandle(t *testing.T) {
+	db, ctx := integrationDB(t)
+	handle := "dup-handle-" + uuid.New().String()
+	_, err := db.CreateUser(ctx, handle, nil)
+	if err != nil {
+		t.Fatalf("first CreateUser: %v", err)
+	}
+	_, err = db.CreateUser(ctx, handle, nil)
+	if err == nil {
+		t.Error("second CreateUser with same handle should fail")
+	}
+}
+
+func TestIntegration_GetTaskByID_ErrNotFound(t *testing.T) {
+	db, ctx := integrationDB(t)
+	_, err := db.GetTaskByID(ctx, uuid.New())
+	if err != ErrNotFound {
+		t.Errorf("GetTaskByID: expected ErrNotFound, got %v", err)
+	}
+}
+
+func TestIntegration_GetJobByID_ErrNotFound(t *testing.T) {
+	db, ctx := integrationDB(t)
+	_, err := db.GetJobByID(ctx, uuid.New())
+	if err != ErrNotFound {
+		t.Errorf("GetJobByID: expected ErrNotFound, got %v", err)
+	}
+}
+
+func TestIntegration_GetPasswordCredentialByUserID_ErrNotFound(t *testing.T) {
+	db, ctx := integrationDB(t)
+	user, err := db.CreateUser(ctx, "nocred-"+uuid.New().String(), nil)
+	if err != nil {
+		t.Fatalf("CreateUser: %v", err)
+	}
+	_, err = db.GetPasswordCredentialByUserID(ctx, user.ID)
+	if err != ErrNotFound {
+		t.Errorf("GetPasswordCredentialByUserID: expected ErrNotFound, got %v", err)
+	}
+}
+
+func TestIntegration_GetActiveRefreshSession_ErrNotFound(t *testing.T) {
+	db, ctx := integrationDB(t)
+	_, err := db.GetActiveRefreshSession(ctx, []byte("nonexistent-token-hash"))
+	if err != ErrNotFound {
+		t.Errorf("GetActiveRefreshSession: expected ErrNotFound, got %v", err)
+	}
+}
+
+func TestIntegration_ListTasksByUser_Empty(t *testing.T) {
+	db, ctx := integrationDB(t)
+	user, err := db.CreateUser(ctx, "notasks-"+uuid.New().String(), nil)
+	if err != nil {
+		t.Fatalf("CreateUser: %v", err)
+	}
+	list, err := db.ListTasksByUser(ctx, user.ID, 10, 0)
+	if err != nil {
+		t.Fatalf("ListTasksByUser: %v", err)
+	}
+	if len(list) != 0 {
+		t.Errorf("ListTasksByUser: expected empty, got %d", len(list))
+	}
+}
+
+func TestIntegration_GetJobsByTaskID_Empty(t *testing.T) {
+	db, ctx := integrationDB(t)
+	task, err := db.CreateTask(ctx, nil, "no-jobs-task")
+	if err != nil {
+		t.Fatalf("CreateTask: %v", err)
+	}
+	jobs, err := db.GetJobsByTaskID(ctx, task.ID)
+	if err != nil {
+		t.Fatalf("GetJobsByTaskID: %v", err)
+	}
+	if len(jobs) != 0 {
+		t.Errorf("GetJobsByTaskID: expected empty, got %d", len(jobs))
+	}
+}
