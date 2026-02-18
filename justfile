@@ -18,6 +18,10 @@ go_modules := "go_shared_libs orchestrator worker_node"
 default:
     @just --list
 
+# Local CI: all lint, all tests (with 90% coverage), Go vuln check. Uses test-go-cover-podman so coverage works with rootful Podman.
+ci: lint-go lint-go-ci lint-python lint-md test-go-cover test-go-cover-podman vulncheck-go
+    @:
+
 # Full dev setup: podman, Go, and Go tools (incl. deps for .golangci.yml and lint-go-ci)
 setup: install-podman install-go install-go-tools install-markdownlint
     @:
@@ -228,7 +232,7 @@ test-go-cover: install-go
       echo "==> $m: go test -coverprofile"; \
       out="{{ root_dir }}/tmp/go/coverage/$m.coverage.out"; \
       (cd "$m" && go test ./... -coverprofile="$out" -covermode=atomic); \
-      r=0; below=$(awk -v min="{{ go_coverage_min }}" '/^mode:/{next}{path=$1;sub(/:.*/,"",path);n=split(path,a,"/");pkg=(n>1)?a[1]:".";for(i=2;i<n;i++)pkg=pkg"/"a[i];t[pkg]+=$2;c[pkg]+=$3}END{for(p in t){pct=100*c[p]/t[p];if(pct<min+0){printf "  %s %.1f%%\n",p,pct;e=1}}exit e+0}' "$out") || r=$?; \
+      r=0; below=$(awk -v min="{{ go_coverage_min }}" '/^mode:/{next}{path=$1;sub(/:.*/,"",path);n=split(path,a,"/");pkg=(n>1)?a[1]:".";for(i=2;i<n;i++)pkg=pkg"/"a[i];stmts=$2;cnt=$3;t[pkg]+=stmts;c[pkg]+=(cnt>0)?stmts:0}END{for(p in t){pct=(t[p]>0)?(100*c[p]/t[p]):0;if(pct<min+0){printf "  %s %.1f%%\n",p,pct;e=1}}exit e+0}' "$out") || r=$?; \
       if [ "$r" -ne 0 ]; then \
         echo "    [FAIL] packages below {{ go_coverage_min }}%:"; echo "$below"; fail=1; failed_pkgs="$failed_pkgs${failed_pkgs:+$'\n'}[$m]"$'\n'"$below"; \
       else \
@@ -295,11 +299,13 @@ test-go-cover-podman: install-go
           n = split(path, a, "/")
           pkg = (n > 1) ? a[1] : "."
           for (i = 2; i < n; i++) pkg = pkg "/" a[i]
-          t[pkg] += $2; c[pkg] += $3
+          stmts = $2; count = $3
+          t[pkg] += stmts
+          c[pkg] += (count > 0) ? stmts : 0
         }
         END {
           for (p in t) {
-            pct = 100 * c[p] / t[p]
+            pct = (t[p] > 0) ? (100 * c[p] / t[p]) : 0
             if (pct < min + 0) { printf "  %s %.1f%%\n", p, pct; e = 1 }
           }
           exit e + 0
@@ -346,10 +352,6 @@ test: test-go
 # Requires: podman or docker, jq. Stops existing services first; leaves services running after.
 e2e:
     @./scripts/setup-dev.sh full-demo
-
-# Local CI: all lint, all tests (with 90% coverage), Go vuln check. Uses test-go-cover-podman so coverage works with rootful Podman.
-ci: lint-go lint-go-ci lint-python lint-md test-go-cover-podman vulncheck-go
-    @:
 
 # Create .venv and install Python lint tooling (scripts/requirements-lint.txt). Use with lint-python.
 venv:
