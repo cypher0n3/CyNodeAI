@@ -192,3 +192,4 @@ podman compose -f orchestrator/docker-compose.yml up -d
 - **Migrations**: Control-plane runs them on startup.
   For migrate-only: `./bin/control-plane -migrate-only`
 - **Ports**: User API 8080, control-plane 8082, worker-api 8081
+- **Go coverage**: Run `just test-go-cover-podman` (or `just ci`). For the orchestrator, this starts a Postgres container with Podman (`pgvector/pgvector:pg16` on port 15432), sets `POSTGRES_TEST_DSN`, runs tests, then removes the container. No Docker socket or testcontainers needed.

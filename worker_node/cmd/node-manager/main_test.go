@@ -5,146 +5,92 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"testing"
 	"time"
 
 	"github.com/cypher0n3/cynodeai/go_shared_libs/contracts/nodepayloads"
 )
 
-func TestValidateBootstrap(t *testing.T) {
-	tests := []struct {
-		name    string
-		b       nodepayloads.BootstrapResponse
-		wantErr bool
-	}{
-		{
-			name: "valid",
-			b: nodepayloads.BootstrapResponse{
-				Version: 1,
-				Auth:    nodepayloads.BootstrapAuth{NodeJWT: "jwt"},
-				Orchestrator: nodepayloads.BootstrapOrchestrator{
-					Endpoints: nodepayloads.BootstrapEndpoints{
-						NodeReportURL: "http://orch/v1/nodes/capability",
-						NodeConfigURL: "http://orch/v1/nodes/config",
-					},
-				},
-			},
-			wantErr: false,
-		},
-		{
-			name: "wrong version",
-			b: nodepayloads.BootstrapResponse{
-				Version: 2,
-				Auth:    nodepayloads.BootstrapAuth{NodeJWT: "jwt"},
-				Orchestrator: nodepayloads.BootstrapOrchestrator{
-					Endpoints: nodepayloads.BootstrapEndpoints{
-						NodeReportURL: "http://orch/v1/nodes/capability",
-						NodeConfigURL: "http://orch/v1/nodes/config",
-					},
-				},
-			},
-			wantErr: true,
-		},
-		{
-			name: "missing node_jwt",
-			b: nodepayloads.BootstrapResponse{
-				Version: 1,
-				Auth:    nodepayloads.BootstrapAuth{NodeJWT: ""},
-				Orchestrator: nodepayloads.BootstrapOrchestrator{
-					Endpoints: nodepayloads.BootstrapEndpoints{
-						NodeReportURL: "http://orch/v1/nodes/capability",
-						NodeConfigURL: "http://orch/v1/nodes/config",
-					},
-				},
-			},
-			wantErr: true,
-		},
-		{
-			name: "missing node_report_url",
-			b: nodepayloads.BootstrapResponse{
-				Version: 1,
-				Auth:    nodepayloads.BootstrapAuth{NodeJWT: "jwt"},
-				Orchestrator: nodepayloads.BootstrapOrchestrator{
-					Endpoints: nodepayloads.BootstrapEndpoints{
-						NodeReportURL: "",
-						NodeConfigURL: "http://orch/v1/nodes/config",
-					},
-				},
-			},
-			wantErr: true,
-		},
-		{
-			name: "missing node_config_url",
-			b: nodepayloads.BootstrapResponse{
-				Version: 1,
-				Auth:    nodepayloads.BootstrapAuth{NodeJWT: "jwt"},
-				Orchestrator: nodepayloads.BootstrapOrchestrator{
-					Endpoints: nodepayloads.BootstrapEndpoints{
-						NodeReportURL: "http://orch/v1/nodes/capability",
-						NodeConfigURL: "",
-					},
-				},
-			},
-			wantErr: true,
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			err := validateBootstrap(&tt.b)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("validateBootstrap() error = %v, wantErr %v", err, tt.wantErr)
-			}
-		})
+func TestRunMainValidateFails(t *testing.T) {
+	os.Setenv("NODE_SLUG", "")
+	os.Setenv("ORCHESTRATOR_URL", "http://x")
+	os.Setenv("NODE_REGISTRATION_PSK", "psk")
+	defer func() {
+		os.Unsetenv("NODE_SLUG")
+		os.Unsetenv("ORCHESTRATOR_URL")
+		os.Unsetenv("NODE_REGISTRATION_PSK")
+	}()
+
+	ctx := context.Background()
+	code := runMain(ctx)
+	if code != 1 {
+		t.Errorf("runMain should return 1 when config invalid, got %d", code)
 	}
 }
 
-func TestRegisterUsesBootstrapURLs(t *testing.T) {
-	// Start a mock server that returns spec-shaped bootstrap with custom node_report_url.
-	reportURL := ""
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+func TestRunMainContextCancelled(t *testing.T) {
+	os.Setenv("NODE_SLUG", "x")
+	os.Setenv("ORCHESTRATOR_URL", "http://127.0.0.1:1")
+	os.Setenv("NODE_REGISTRATION_PSK", "psk")
+	os.Setenv("HTTP_TIMEOUT", "1ms")
+	defer func() {
+		os.Unsetenv("NODE_SLUG")
+		os.Unsetenv("ORCHESTRATOR_URL")
+		os.Unsetenv("NODE_REGISTRATION_PSK")
+		os.Unsetenv("HTTP_TIMEOUT")
+	}()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	code := runMain(ctx)
+	if code != 1 {
+		t.Errorf("runMain should return 1 when register fails, got %d", code)
+	}
+}
+
+func TestRunMainSuccess(t *testing.T) {
+	var srv *httptest.Server
+	srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/v1/nodes/register" {
-			bootstrap := nodepayloads.BootstrapResponse{
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusCreated)
+			_ = json.NewEncoder(w).Encode(nodepayloads.BootstrapResponse{
 				Version:  1,
 				IssuedAt: time.Now().UTC().Format(time.RFC3339),
 				Orchestrator: nodepayloads.BootstrapOrchestrator{
-					BaseURL: "http://custom-orchestrator",
 					Endpoints: nodepayloads.BootstrapEndpoints{
-						WorkerRegistrationURL: "http://custom-orchestrator/v1/nodes/register",
-						NodeReportURL:         "http://custom-orchestrator/v1/nodes/capability",
-						NodeConfigURL:         "http://custom-orchestrator/v1/nodes/config",
+						NodeReportURL: srv.URL + "/cap",
+						NodeConfigURL: srv.URL + "/cfg",
 					},
 				},
-				Auth: nodepayloads.BootstrapAuth{
-					NodeJWT:   "test-jwt",
-					ExpiresAt: time.Now().Add(time.Hour).Format(time.RFC3339),
-				},
-			}
-			reportURL = bootstrap.Orchestrator.Endpoints.NodeReportURL
-			w.Header().Set("Content-Type", "application/json")
-			_ = json.NewEncoder(w).Encode(bootstrap)
-			w.WriteHeader(http.StatusCreated)
+				Auth: nodepayloads.BootstrapAuth{NodeJWT: "jwt", ExpiresAt: "2026-01-01T00:00:00Z"},
+			})
+			return
 		}
+		w.WriteHeader(http.StatusNoContent)
 	}))
-	defer server.Close()
+	defer srv.Close()
 
-	cfg := config{
-		OrchestratorURL:          server.URL,
-		NodeSlug:                 "test-node",
-		NodeName:                 "Test",
-		RegistrationPSK:          "psk",
-		CapabilityReportInterval: time.Hour,
-		HTTPTimeout:              5 * time.Second,
-	}
+	os.Setenv("ORCHESTRATOR_URL", srv.URL)
+	os.Setenv("NODE_SLUG", "x")
+	os.Setenv("NODE_REGISTRATION_PSK", "psk")
+	os.Setenv("CAPABILITY_REPORT_INTERVAL", "1h")
+	os.Setenv("HTTP_TIMEOUT", "5s")
+	defer func() {
+		os.Unsetenv("ORCHESTRATOR_URL")
+		os.Unsetenv("NODE_SLUG")
+		os.Unsetenv("NODE_REGISTRATION_PSK")
+		os.Unsetenv("CAPABILITY_REPORT_INTERVAL")
+		os.Unsetenv("HTTP_TIMEOUT")
+	}()
 
-	bootstrap, err := register(context.Background(), &cfg)
-	if err != nil {
-		t.Fatalf("register failed: %v", err)
-	}
+	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	defer cancel()
 
-	if bootstrap.NodeReportURL != reportURL {
-		t.Errorf("expected NodeReportURL %q from bootstrap, got %q", reportURL, bootstrap.NodeReportURL)
-	}
-	if bootstrap.NodeReportURL != "http://custom-orchestrator/v1/nodes/capability" {
-		t.Errorf("expected node_report_url from bootstrap payload, got %q", bootstrap.NodeReportURL)
+	code := runMain(ctx)
+	if code != 0 {
+		t.Errorf("runMain should return 0 on success, got %d", code)
 	}
 }

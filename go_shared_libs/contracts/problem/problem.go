@@ -19,3 +19,23 @@ const (
 	TypeRateLimit      = "urn:cynodeai:error:rate_limit"
 	TypeInternal       = "urn:cynodeai:error:internal"
 )
+
+// Validate returns an error if Details has an invalid status (non-HTTP error range).
+func (d *Details) Validate() error {
+	if d == nil {
+		return nil
+	}
+	if d.Status < 400 || d.Status >= 600 {
+		return &ValidationError{Status: d.Status}
+	}
+	return nil
+}
+
+// ValidationError is returned when Details has an invalid status code.
+type ValidationError struct {
+	Status int
+}
+
+func (e *ValidationError) Error() string {
+	return "problem details status must be 4xx or 5xx"
+}

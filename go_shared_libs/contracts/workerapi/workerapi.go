@@ -48,3 +48,33 @@ type TruncatedInfo struct {
 	Stdout bool `json:"stdout"`
 	Stderr bool `json:"stderr"`
 }
+
+// DefaultSandboxSpec returns a SandboxSpec with DefaultImage and empty command.
+// Callers should set Command before use.
+func DefaultSandboxSpec() SandboxSpec {
+	return SandboxSpec{
+		Image:   DefaultImage,
+		Command: nil,
+		Env:     nil,
+	}
+}
+
+// ValidateRequest returns an error if the request is invalid for execution.
+func ValidateRequest(req *RunJobRequest) error {
+	if req == nil {
+		return &RequestValidationError{Reason: "request is nil"}
+	}
+	if len(req.Sandbox.Command) == 0 {
+		return &RequestValidationError{Reason: "sandbox.command is required"}
+	}
+	return nil
+}
+
+// RequestValidationError is returned when RunJobRequest is invalid.
+type RequestValidationError struct {
+	Reason string
+}
+
+func (e *RequestValidationError) Error() string {
+	return e.Reason
+}

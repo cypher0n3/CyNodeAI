@@ -500,3 +500,106 @@ func TestMockDB_ForceError_NodeOperations(t *testing.T) {
 		t.Error("UpdateNodeCapability should return forced error")
 	}
 }
+
+// TestMockDB_JobLifecycle covers CreateJob, GetJobByID, UpdateJobStatus, AssignJobToNode, CompleteJob, GetNextQueuedJob.
+func TestMockDB_JobLifecycle(t *testing.T) {
+	db := NewMockDB()
+	ctx := context.Background()
+
+	task, _ := db.CreateTask(ctx, nil, "p")
+	job, err := db.CreateJob(ctx, task.ID, `{"x":1}`)
+	if err != nil {
+		t.Fatalf("CreateJob: %v", err)
+	}
+	if job.Status != models.JobStatusQueued {
+		t.Errorf("CreateJob status: %s", job.Status)
+	}
+
+	got, err := db.GetJobByID(ctx, job.ID)
+	if err != nil || got.ID != job.ID {
+		t.Fatalf("GetJobByID: %v", err)
+	}
+
+	err = db.UpdateJobStatus(ctx, job.ID, models.JobStatusRunning)
+	if err != nil {
+		t.Fatalf("UpdateJobStatus: %v", err)
+	}
+
+	node, _ := db.CreateNode(ctx, "n1")
+	err = db.AssignJobToNode(ctx, job.ID, node.ID)
+	if err != nil {
+		t.Fatalf("AssignJobToNode: %v", err)
+	}
+
+	err = db.CompleteJob(ctx, job.ID, `{"ok":true}`, models.JobStatusCompleted)
+	if err != nil {
+		t.Fatalf("CompleteJob: %v", err)
+	}
+
+	// GetNextQueuedJob returns first queued; we completed the only job so should get ErrNotFound
+	_, err = db.GetNextQueuedJob(ctx)
+	if err != database.ErrNotFound {
+		t.Errorf("GetNextQueuedJob: expected ErrNotFound, got %v", err)
+	}
+}
+
+// TestMockDB_GetNodeByID_ListActiveNodes covers GetNodeByID and ListActiveNodes.
+func TestMockDB_GetNodeByID_ListActiveNodes(t *testing.T) {
+	db := NewMockDB()
+	ctx := context.Background()
+
+	node, _ := db.CreateNode(ctx, "n1")
+	_, err := db.GetNodeByID(ctx, node.ID)
+	if err != nil {
+		t.Fatalf("GetNodeByID: %v", err)
+	}
+
+	_ = db.UpdateNodeStatus(ctx, node.ID, models.NodeStatusActive)
+	list, err := db.ListActiveNodes(ctx)
+	if err != nil {
+		t.Fatalf("ListActiveNodes: %v", err)
+	}
+	if len(list) != 1 || list[0].ID != node.ID {
+		t.Errorf("ListActiveNodes: %v", list)
+	}
+}
+
+// TestMockDB_UpdateTaskStatus_UpdateTaskSummary_ListTasksByUser covers task helpers.
+func TestMockDB_UpdateTaskStatus_UpdateTaskSummary_ListTasksByUser(t *testing.T) {
+	db := NewMockDB()
+	ctx := context.Background()
+
+	userID := uuid.New()
+	task, _ := db.CreateTask(ctx, &userID, "prompt")
+
+	err := db.UpdateTaskStatus(ctx, task.ID, models.TaskStatusRunning)
+	if err != nil {
+		t.Fatalf("UpdateTaskStatus: %v", err)
+	}
+
+	err = db.UpdateTaskSummary(ctx, task.ID, "summary")
+	if err != nil {
+		t.Fatalf("UpdateTaskSummary: %v", err)
+	}
+
+	list, err := db.ListTasksByUser(ctx, userID, 10, 0)
+	if err != nil {
+		t.Fatalf("ListTasksByUser: %v", err)
+	}
+	if len(list) != 1 || list[0].ID != task.ID {
+		t.Errorf("ListTasksByUser: %v", list)
+	}
+}
+
+// TestMockDB_InvalidateAllUserSessions covers InvalidateAllUserSessions.
+func TestMockDB_InvalidateAllUserSessions(t *testing.T) {
+	db := NewMockDB()
+	ctx := context.Background()
+
+	user, _ := db.CreateUser(ctx, "u", nil)
+	_, _ = db.CreateRefreshSession(ctx, user.ID, []byte("hash1"), time.Now().Add(time.Hour))
+	err := db.InvalidateAllUserSessions(ctx, user.ID)
+	if err != nil {
+		t.Fatalf("InvalidateAllUserSessions: %v", err)
+	}
+}

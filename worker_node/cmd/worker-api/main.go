@@ -3,8 +3,8 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
-	"errors"
 	"log/slog"
 	"net/http"
 	"os"
@@ -17,13 +17,18 @@ import (
 )
 
 func main() {
+	os.Exit(runMain(context.Background()))
+}
+
+// runMain builds and runs the server until ctx is cancelled.
+// Returns 0 on success, 1 on failure. Extracted for testability.
+func runMain(ctx context.Context) int {
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
 	slog.SetDefault(logger)
-
 	bearerToken := getEnv("WORKER_API_BEARER_TOKEN", "")
 	if bearerToken == "" {
 		logger.Error("WORKER_API_BEARER_TOKEN must be set")
-		os.Exit(1)
+		return 1
 	}
 
 	exec := executor.New(
@@ -34,11 +39,14 @@ func main() {
 	mux := newMux(exec, bearerToken, logger)
 	srv := newServer(mux)
 
-	logger.Info("starting worker-api", "addr", srv.Addr)
-	if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-		logger.Error("server error", "error", err)
-		os.Exit(1)
+	go func() {
+		_ = srv.ListenAndServe()
+	}()
+	<-ctx.Done()
+	if err := srv.Shutdown(context.Background()); err != nil {
+		return 1
 	}
+	return 0
 }
 
 func newMux(exec *executor.Executor, bearerToken string, logger *slog.Logger) *http.ServeMux {

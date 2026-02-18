@@ -8,8 +8,10 @@ import (
 	"log/slog"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/models"
+	"github.com/google/uuid"
 )
 
 const integrationEnv = "POSTGRES_TEST_DSN"
@@ -104,6 +106,17 @@ func integrationDB(t *testing.T) (*DB, context.Context) {
 
 func TestIntegration_GetNextQueuedJob_ErrNotFound(t *testing.T) {
 	db, ctx := integrationDB(t)
+	// Drain queue so we can assert ErrNotFound when empty (tests share one DB).
+	for {
+		job, err := db.GetNextQueuedJob(ctx)
+		if err == ErrNotFound {
+			break
+		}
+		if err != nil {
+			t.Fatalf("GetNextQueuedJob: %v", err)
+		}
+		_ = db.CompleteJob(ctx, job.ID, "", models.JobStatusCancelled)
+	}
 	_, err := db.GetNextQueuedJob(ctx)
 	if err != ErrNotFound {
 		t.Errorf("GetNextQueuedJob: expected ErrNotFound, got %v", err)
@@ -124,5 +137,87 @@ func TestIntegration_CompleteJobRoundTrip(t *testing.T) {
 	}
 	if got.Result.Ptr() == nil || *got.Result.Ptr() != result {
 		t.Errorf("result not round-tripped: got %v", got.Result.Ptr())
+	}
+}
+
+// TestIntegration_StoreRoundTrip exercises more Store methods for coverage.
+func TestIntegration_StoreRoundTrip(t *testing.T) {
+	db, ctx := integrationDB(t)
+	user, err := db.GetUserByHandle(ctx, "inttest-user")
+	if err != nil {
+		t.Skip("create inttest-user first (run TestIntegration_User)")
+	}
+	if _, err := db.GetUserByID(ctx, user.ID); err != nil {
+		t.Fatalf("GetUserByID: %v", err)
+	}
+	_, err = db.CreatePasswordCredential(ctx, user.ID, []byte("hash"), "argon2")
+	if err != nil {
+		t.Fatalf("CreatePasswordCredential: %v", err)
+	}
+	if _, err := db.GetPasswordCredentialByUserID(ctx, user.ID); err != nil {
+		t.Fatalf("GetPasswordCredentialByUserID: %v", err)
+	}
+	expires := time.Now().Add(time.Hour)
+	session, err := db.CreateRefreshSession(ctx, user.ID, []byte("tokenhash"), expires)
+	if err != nil {
+		t.Fatalf("CreateRefreshSession: %v", err)
+	}
+	if _, err := db.GetActiveRefreshSession(ctx, []byte("tokenhash")); err != nil {
+		t.Fatalf("GetActiveRefreshSession: %v", err)
+	}
+	if err := db.InvalidateRefreshSession(ctx, session.ID); err != nil {
+		t.Fatalf("InvalidateRefreshSession: %v", err)
+	}
+	node, err := db.CreateNode(ctx, "inttest-roundtrip-node")
+	if err != nil {
+		t.Fatalf("CreateNode: %v", err)
+	}
+	if _, err := db.GetNodeByID(ctx, node.ID); err != nil {
+		t.Fatalf("GetNodeByID: %v", err)
+	}
+	if _, err := db.GetNodeBySlug(ctx, "inttest-roundtrip-node"); err != nil {
+		t.Fatalf("GetNodeBySlug: %v", err)
+	}
+	task, err := db.CreateTask(ctx, &user.ID, "roundtrip-prompt")
+	if err != nil {
+		t.Fatalf("CreateTask: %v", err)
+	}
+	if err := db.UpdateTaskStatus(ctx, task.ID, models.TaskStatusRunning); err != nil {
+		t.Fatalf("UpdateTaskStatus: %v", err)
+	}
+	if err := db.UpdateTaskSummary(ctx, task.ID, "summary"); err != nil {
+		t.Fatalf("UpdateTaskSummary: %v", err)
+	}
+	list, err := db.ListTasksByUser(ctx, user.ID, 10, 0)
+	if err != nil || len(list) < 1 {
+		t.Fatalf("ListTasksByUser: %v", err)
+	}
+	job, err := db.CreateJob(ctx, task.ID, `{"r":1}`)
+	if err != nil {
+		t.Fatalf("CreateJob: %v", err)
+	}
+	if _, err := db.GetJobsByTaskID(ctx, task.ID); err != nil {
+		t.Fatalf("GetJobsByTaskID: %v", err)
+	}
+	if err := db.UpdateJobStatus(ctx, job.ID, models.JobStatusRunning); err != nil {
+		t.Fatalf("UpdateJobStatus: %v", err)
+	}
+	if err := db.AssignJobToNode(ctx, job.ID, node.ID); err != nil {
+		t.Fatalf("AssignJobToNode: %v", err)
+	}
+	_ = db.CompleteJob(ctx, job.ID, "{}", models.JobStatusCompleted)
+	if err := db.InvalidateAllUserSessions(ctx, user.ID); err != nil {
+		t.Fatalf("InvalidateAllUserSessions: %v", err)
+	}
+	_ = db.UpdateNodeLastSeen(ctx, node.ID)
+	_ = db.UpdateNodeCapability(ctx, node.ID, "hash")
+	_ = db.SaveNodeCapabilitySnapshot(ctx, node.ID, `{}`)
+}
+
+func TestIntegration_GetUserByID_ErrNotFound(t *testing.T) {
+	db, ctx := integrationDB(t)
+	_, err := db.GetUserByID(ctx, uuid.New())
+	if err != ErrNotFound {
+		t.Errorf("GetUserByID: expected ErrNotFound, got %v", err)
 	}
 }
