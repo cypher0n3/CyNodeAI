@@ -7,18 +7,25 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"strconv"
 	"time"
 )
 
 func main() {
+	os.Exit(runMain(context.Background()))
+}
+
+// runMain sets up logger and runs the server. Returns 0 on success, 1 on failure. Used by main and tests.
+func runMain(ctx context.Context) int {
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
 		Level: slog.LevelInfo,
 	}))
 	slog.SetDefault(logger)
-	if err := run(context.Background(), logger); err != nil {
+	if err := run(ctx, logger); err != nil {
 		logger.Error("run failed", "error", err)
-		os.Exit(1)
+		return 1
 	}
+	return 0
 }
 
 // run sets up and runs the server until ctx is cancelled. Used by main and tests.
@@ -53,9 +60,20 @@ func run(ctx context.Context, logger *slog.Logger) error {
 	case err := <-serverErr:
 		return err
 	}
-	shutdownCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	shutdownCtx, cancel := context.WithTimeout(ctx, shutdownTimeout())
 	defer cancel()
 	return srv.Shutdown(shutdownCtx)
+}
+
+// shutdownTimeout returns server shutdown timeout from env or default. Used by run and tests.
+func shutdownTimeout() time.Duration {
+	const defaultSec = 10
+	if s := os.Getenv("MCP_GATEWAY_SHUTDOWN_SEC"); s != "" {
+		if n, err := strconv.Atoi(s); err == nil && n > 0 {
+			return time.Duration(n) * time.Second
+		}
+	}
+	return defaultSec * time.Second
 }
 
 func getEnv(key, def string) string {

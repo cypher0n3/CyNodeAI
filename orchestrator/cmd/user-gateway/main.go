@@ -20,29 +20,27 @@ import (
 )
 
 func main() {
-	code := 0
-	defer func() { os.Exit(code) }()
+	os.Exit(runMain(context.Background()))
+}
 
+// runMain loads config, opens DB, and runs the server. Returns 0 on success, 1 on failure. Used by main and tests.
+func runMain(ctx context.Context) int {
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
 		Level: slog.LevelInfo,
 	}))
 	slog.SetDefault(logger)
-
 	cfg := config.LoadOrchestratorConfig()
-
-	db, err := database.Open(context.Background(), cfg.DatabaseURL)
+	db, err := database.Open(ctx, cfg.DatabaseURL)
 	if err != nil {
 		logger.Error("failed to connect to database", "error", err)
-		code = 1
-		return
+		return 1
 	}
 	defer func() { _ = db.Close() }()
-
-	if err := run(context.Background(), cfg, db, logger); err != nil {
+	if err := run(ctx, cfg, db, logger); err != nil {
 		logger.Error("run failed", "error", err)
-		code = 1
-		return
+		return 1
 	}
+	return 0
 }
 
 // run sets up handlers and runs the server until ctx is cancelled. Used by main and tests.

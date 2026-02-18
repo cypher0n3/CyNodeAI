@@ -90,3 +90,75 @@ func TestRun_ListenAndServeFails(t *testing.T) {
 	}
 }
 
+func TestRunMain_Success(t *testing.T) {
+	pgTest := os.Getenv("POSTGRES_TEST_DSN")
+	if pgTest == "" {
+		t.Skip("POSTGRES_TEST_DSN not set; need DB for runMain success path")
+	}
+	oldDSN := os.Getenv("DATABASE_URL")
+	_ = os.Setenv("DATABASE_URL", pgTest)
+	defer func() {
+		if oldDSN != "" {
+			_ = os.Setenv("DATABASE_URL", oldDSN)
+		} else {
+			_ = os.Unsetenv("DATABASE_URL")
+		}
+	}()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	done := make(chan int, 1)
+	go func() { done <- runMain(ctx) }()
+	time.Sleep(80 * time.Millisecond)
+	cancel()
+	time.Sleep(150 * time.Millisecond)
+	code := <-done
+	if code != 0 {
+		t.Errorf("runMain success path: got %d", code)
+	}
+}
+
+func TestRunMain_DBOpenFails(t *testing.T) {
+	oldDSN := os.Getenv("DATABASE_URL")
+	_ = os.Setenv("DATABASE_URL", "postgres://invalid:invalid@127.0.0.1:1/none?sslmode=disable")
+	defer func() {
+		if oldDSN != "" {
+			_ = os.Setenv("DATABASE_URL", oldDSN)
+		} else {
+			_ = os.Unsetenv("DATABASE_URL")
+		}
+	}()
+	code := runMain(context.Background())
+	if code != 1 {
+		t.Errorf("runMain with bad DB: got %d", code)
+	}
+}
+
+func TestRunMain_RunFails(t *testing.T) {
+	if pg := os.Getenv("POSTGRES_TEST_DSN"); pg != "" {
+		oldDSN := os.Getenv("DATABASE_URL")
+		_ = os.Setenv("DATABASE_URL", pg)
+		defer func() {
+			if oldDSN != "" {
+				_ = os.Setenv("DATABASE_URL", oldDSN)
+			} else {
+				_ = os.Unsetenv("DATABASE_URL")
+			}
+		}()
+	}
+	oldAddr := os.Getenv("LISTEN_ADDR")
+	_ = os.Setenv("LISTEN_ADDR", ":99999")
+	defer func() {
+		if oldAddr != "" {
+			_ = os.Setenv("LISTEN_ADDR", oldAddr)
+		} else {
+			_ = os.Unsetenv("LISTEN_ADDR")
+		}
+	}()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	code := runMain(ctx)
+	if code != 1 {
+		t.Errorf("runMain when run fails: got %d", code)
+	}
+}
+

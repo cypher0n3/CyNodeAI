@@ -24,10 +24,14 @@ Summary of work done to raise coverage:
 
 - **user-gateway**: Extracted `run(ctx, cfg, store, logger)`; added `TestRun_CancelledContext`, `TestRun_StartAndShutdown`, `TestLimitBody`.
   Coverage 6% -> 66.1%.
+    Later: added `runMain(ctx) int`, `TestRunMain_Success`, `TestRunMain_DBOpenFails`, `TestRunMain_RunFails`.
+    Coverage 66.1% -> 91.5%.
 - **api-egress**: Extracted `run(ctx, logger)`; added `TestRun_CancelledContext`.
   Coverage 21.4% -> 70.8%.
-- **mcp-gateway**: Same pattern as api-egress.
-  Coverage 21.4% -> 70.8%.
+    Later: added `runMain(ctx) int`, `shutdownTimeout()`, `TestRunMain_Success`, `TestRunMain_RunFails`, `TestShutdownTimeout`.
+    Coverage 70.8% -> 90.3%.
+- **mcp-gateway**: Same pattern as api-egress (runMain, shutdownTimeout, tests).
+  Coverage 70.8% -> 90.3%.
 - **control-plane**: Extracted `run(ctx, store, cfg, logger)` and `runMain()`; added `TestRun_CancelledContext`, `TestBootstrapAdminUser_GetUserError`, `TestStartDispatcher_EnabledOneTick`, `TestDispatchOnce_WorkerAPIBadVersion`, `TestDispatchOnce_WorkerAPIInvalidJSON`.
   Coverage 48.1% -> 84.6%.
 
@@ -45,10 +49,10 @@ Summary of work done to raise coverage:
 
 | Package            | Coverage |
 |--------------------|----------|
-| cmd/api-egress     | 70.8%    |
+| cmd/api-egress     | 90.3%    |
 | cmd/control-plane  | 84.6%    |
-| cmd/mcp-gateway    | 70.8%    |
-| cmd/user-gateway   | 66.1%    |
+| cmd/mcp-gateway    | 90.3%    |
+| cmd/user-gateway   | 91.5%    |
 | internal/auth      | 94.7%    |
 | internal/config    | 100%     |
 | internal/database  | 87.9%    |
@@ -69,3 +73,8 @@ Summary of work done to raise coverage:
 - All new tests use existing patterns (mock DB, httptest, env vars).
 - No Makefiles or Justfiles were modified (per instructions).
 - Reports and temp files follow project layout (dev_docs, tmp).
+
+### 1. Worker Node Cmd/node/node-Manager (90%+)
+
+- Added `getEnv(key, def string)`, optional `NODE_MANAGER_DEBUG` for log level, `TestGetEnv`, `TestRunMain_DebugLevel`.
+- Coverage 75% -> 92.9%.
