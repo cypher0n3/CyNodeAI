@@ -2,8 +2,8 @@
 
 ## Summary
 
-Orchestrator module coverage was raised from **79.4%** to **90.1%** using `just test-go-cover-podman`.
-The 90% threshold is met; this report summarizes changes made.
+Orchestrator module coverage was raised so that **all packages** meet the 90% threshold when running `just test-go-cover-podman` (Postgres via Podman).
+This report summarizes changes made.
 
 ## Changes Made
 
@@ -34,11 +34,15 @@ Summary of work done to raise coverage:
   Coverage 70.8% -> 90.3%.
 - **control-plane**: Extracted `run(ctx, store, cfg, logger)` and `runMain()`; added `TestRun_CancelledContext`, `TestBootstrapAdminUser_GetUserError`, `TestStartDispatcher_EnabledOneTick`, `TestDispatchOnce_WorkerAPIBadVersion`, `TestDispatchOnce_WorkerAPIInvalidJSON`.
   Coverage 48.1% -> 84.6%.
+  Later: `runMain()` now uses a local `flag.FlagSet` (no global flags) so it can be called multiple times in tests; added `TestRunMain_MigrateOnly`, `TestRunMain_RunFails`, `TestGetDurationEnv_InvalidValue`.
+  Coverage 84.6% -> 90.2%.
 
 ### 4. Orchestrator Internal/database/database
 
 - **GORM()**: Integration test now calls `db.GORM()` in `integrationDB()` to cover the accessor.
   Coverage 86.4% -> 87.9%.
+  Later: added `TestWrapErr_Nil`, `TestWrapErr_ErrRecordNotFound`; integration tests for `GetUserByHandle_ErrNotFound`, `GetNodeBySlug_ErrNotFound`, `GetNodeByID_ErrNotFound`, `GetTaskByID_ErrNotFound`, `GetJobByID_ErrNotFound`, `GetPasswordCredentialByUserID_ErrNotFound`, `GetActiveRefreshSession_ErrNotFound`, `CreateUser_DuplicateHandle`, `ListTasksByUser_Empty`, `GetJobsByTaskID_Empty`. Test hooks `getSQLDB` / `getSQLDBFromDB` in `database.go` for Open/Close error paths; added `TestOpen_GetSQLDBFails`, `TestClose_GetSQLDBFromDBFails`.
+  Coverage 87.9% -> 90.8%.
 
 ### 5. Orchestrator Internal/handlers/handlers
 
@@ -47,21 +51,22 @@ Summary of work done to raise coverage:
 
 ## Current Per-Package Coverage (Orchestrator)
 
+With `just test-go-cover-podman` (Postgres via Podman), all packages meet the 90% threshold:
+
 | Package            | Coverage |
 |--------------------|----------|
 | cmd/api-egress     | 90.3%    |
-| cmd/control-plane  | 84.6%    |
+| cmd/control-plane  | 90.2%    |
 | cmd/mcp-gateway    | 90.3%    |
 | cmd/user-gateway   | 91.5%    |
 | internal/auth      | 94.7%    |
 | internal/config    | 100%     |
-| internal/database  | 87.9%    |
+| internal/database  | 90.8%    |
 | internal/dispatcher| 100%     |
 | internal/handlers  | 91.6%    |
 | internal/middleware| 98.3%    |
 | internal/models    | 97.3%    |
 | internal/testutil  | 97.8%    |
-| **Total**          | **90.1%**|
 
 ## How to Run
 
@@ -70,9 +75,10 @@ Summary of work done to raise coverage:
 
 ## Notes
 
-- All new tests use existing patterns (mock DB, httptest, env vars).
+- All new tests use existing patterns (mock DB, httptest, env vars, integration with Postgres).
 - No Makefiles or Justfiles were modified (per instructions).
 - Reports and temp files follow project layout (dev_docs, tmp).
+- Orchestrator 90% coverage requires Postgres: use `just test-go-cover-podman`. Without Postgres, `just test-go-cover` skips integration tests and some packages report lower coverage.
 
 ### 1. Worker Node Cmd/node/node-Manager (90%+)
 

@@ -71,6 +71,14 @@ func TestGetDurationEnv(t *testing.T) {
 	}
 }
 
+func TestGetDurationEnv_InvalidValue(t *testing.T) {
+	_ = os.Setenv("TEST_DISPATCH_DURATION_BAD", "not-a-duration")
+	defer func() { _ = os.Unsetenv("TEST_DISPATCH_DURATION_BAD") }()
+	if getDurationEnv("TEST_DISPATCH_DURATION_BAD", 7*time.Second) != 7*time.Second {
+		t.Error("invalid duration should return default")
+	}
+}
+
 func TestGetEnv(t *testing.T) {
 	_ = os.Unsetenv("TEST_CP_ENV")
 	if getEnv("TEST_CP_ENV", "default") != "default" {
@@ -406,6 +414,7 @@ func TestRun_CancelledContext(t *testing.T) {
 	}
 }
 
+
 func TestRunMain_OpenFails(t *testing.T) {
 	oldArgs := os.Args
 	oldDB := os.Getenv("DATABASE_URL")
@@ -422,6 +431,61 @@ func TestRunMain_OpenFails(t *testing.T) {
 	code := runMain()
 	if code != 1 {
 		t.Errorf("runMain() = %d, want 1", code)
+	}
+}
+
+// TestRunMain_MigrateOnly runs runMain with -migrate-only and real Postgres; expects exit 0. Skips without POSTGRES_TEST_DSN.
+func TestRunMain_MigrateOnly(t *testing.T) {
+	dsn := os.Getenv("POSTGRES_TEST_DSN")
+	if dsn == "" {
+		t.Skip("set POSTGRES_TEST_DSN to run")
+	}
+	oldArgs := os.Args
+	oldDB := os.Getenv("DATABASE_URL")
+	defer func() {
+		os.Args = oldArgs
+		if oldDB != "" {
+			_ = os.Setenv("DATABASE_URL", oldDB)
+		} else {
+			_ = os.Unsetenv("DATABASE_URL")
+		}
+	}()
+	os.Args = []string{"control-plane", "-migrate-only"}
+	_ = os.Setenv("DATABASE_URL", dsn)
+	code := runMain()
+	if code != 0 {
+		t.Errorf("runMain(-migrate-only) = %d, want 0", code)
+	}
+}
+
+// TestRunMain_RunFails runs runMain with real Postgres but run() fails (invalid port); expects exit 1. Skips without POSTGRES_TEST_DSN.
+func TestRunMain_RunFails(t *testing.T) {
+	dsn := os.Getenv("POSTGRES_TEST_DSN")
+	if dsn == "" {
+		t.Skip("set POSTGRES_TEST_DSN to run")
+	}
+	oldArgs := os.Args
+	oldDB := os.Getenv("DATABASE_URL")
+	oldListen := os.Getenv("LISTEN_ADDR")
+	defer func() {
+		os.Args = oldArgs
+		if oldDB != "" {
+			_ = os.Setenv("DATABASE_URL", oldDB)
+		} else {
+			_ = os.Unsetenv("DATABASE_URL")
+		}
+		if oldListen != "" {
+			_ = os.Setenv("LISTEN_ADDR", oldListen)
+		} else {
+			_ = os.Unsetenv("LISTEN_ADDR")
+		}
+	}()
+	os.Args = []string{"control-plane"}
+	_ = os.Setenv("DATABASE_URL", dsn)
+	_ = os.Setenv("LISTEN_ADDR", ":99999")
+	code := runMain()
+	if code != 1 {
+		t.Errorf("runMain() with invalid port = %d, want 1", code)
 	}
 }
 
