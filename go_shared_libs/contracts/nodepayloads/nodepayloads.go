@@ -67,3 +67,8 @@ type BootstrapAuth struct {
 	NodeJWT   string `json:"node_jwt"`
 	ExpiresAt string `json:"expires_at"`
 }
+
+// SupportedBootstrapVersion returns true if v is a supported bootstrap payload version.
+func SupportedBootstrapVersion(v int) bool {
+	return v == 1
+}

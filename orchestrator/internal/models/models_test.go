@@ -1,6 +1,8 @@
 package models
 
 import (
+	"database/sql/driver"
+	"encoding/json"
 	"testing"
 )
 
@@ -105,5 +107,92 @@ func TestNode_Fields(t *testing.T) {
 
 	if node.Status != NodeStatusRegistered {
 		t.Errorf("Status = %s, want %s", node.Status, NodeStatusRegistered)
+	}
+}
+
+func TestJSONBString_Value(t *testing.T) {
+	var j JSONBString
+	v, err := j.Value()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if v != nil {
+		t.Errorf("nil JSONBString should Value() nil, got %v", v)
+	}
+	s := "hello"
+	j = NewJSONBString(&s)
+	v, err = j.Value()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if v == nil {
+		t.Fatal("expected non-nil")
+	}
+}
+
+func TestJSONBString_Scan(t *testing.T) {
+	var j JSONBString
+	if err := j.Scan(nil); err != nil {
+		t.Fatal(err)
+	}
+	if j.Ptr() != nil {
+		t.Error("Scan(nil) should set nil")
+	}
+	if err := j.Scan([]byte(`"x"`)); err != nil {
+		t.Fatal(err)
+	}
+	if j.Ptr() == nil || *j.Ptr() != "x" {
+		t.Errorf("Scan: %v", j.Ptr())
+	}
+}
+
+func TestJSONBString_MarshalUnmarshalJSON(t *testing.T) {
+	s := "payload"
+	j := NewJSONBString(&s)
+	data, err := json.Marshal(j)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var j2 JSONBString
+	if err := json.Unmarshal(data, &j2); err != nil {
+		t.Fatal(err)
+	}
+	if j2.Ptr() == nil || *j2.Ptr() != "payload" {
+		t.Errorf("round-trip: %v", j2.Ptr())
+	}
+	var j3 JSONBString
+	if err := json.Unmarshal([]byte("null"), &j3); err != nil {
+		t.Fatal(err)
+	}
+	if j3.Ptr() != nil {
+		t.Error("null should unmarshal to nil")
+	}
+}
+
+func TestJSONBString_Value_implementsDriverValuer(t *testing.T) {
+	var _ driver.Valuer = (*JSONBString)(nil)
+}
+
+func TestTableNames(t *testing.T) {
+	tests := []struct {
+		name string
+		got  string
+		want string
+	}{
+		{"User", (User{}).TableName(), "users"},
+		{"PasswordCredential", (PasswordCredential{}).TableName(), "password_credentials"},
+		{"RefreshSession", (RefreshSession{}).TableName(), "refresh_sessions"},
+		{"AuthAuditLog", (AuthAuditLog{}).TableName(), "auth_audit_log"},
+		{"Node", (Node{}).TableName(), "nodes"},
+		{"NodeCapability", (NodeCapability{}).TableName(), "node_capabilities"},
+		{"Task", (Task{}).TableName(), "tasks"},
+		{"Job", (Job{}).TableName(), "jobs"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.got != tt.want {
+				t.Errorf("TableName() = %q, want %q", tt.got, tt.want)
+			}
+		})
 	}
 }

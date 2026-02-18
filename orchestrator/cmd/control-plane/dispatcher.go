@@ -13,6 +13,7 @@ import (
 
 	"github.com/cypher0n3/cynodeai/go_shared_libs/contracts/workerapi"
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/database"
+	"github.com/cypher0n3/cynodeai/orchestrator/internal/dispatcher"
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/models"
 )
 
@@ -87,9 +88,9 @@ func dispatchOnce(ctx context.Context, db database.Store, client *http.Client, c
 	}
 	_ = db.UpdateTaskStatus(ctx, job.TaskID, models.TaskStatusRunning)
 
-	sandbox, err := parseSandboxSpec(job.Payload.Ptr())
+	sandbox, err := dispatcher.ParseSandboxSpec(job.Payload.Ptr())
 	if err != nil {
-		_ = db.CompleteJob(ctx, job.ID, marshalDispatchError(err), models.JobStatusFailed)
+		_ = db.CompleteJob(ctx, job.ID, dispatcher.MarshalDispatchError(err), models.JobStatusFailed)
 		_ = db.UpdateTaskStatus(ctx, job.TaskID, models.TaskStatusFailed)
 		return nil
 	}
@@ -103,7 +104,7 @@ func dispatchOnce(ctx context.Context, db database.Store, client *http.Client, c
 
 	result, err := callWorkerAPI(ctx, client, cfg, &runReq)
 	if err != nil {
-		_ = db.CompleteJob(ctx, job.ID, marshalDispatchError(err), models.JobStatusFailed)
+		_ = db.CompleteJob(ctx, job.ID, dispatcher.MarshalDispatchError(err), models.JobStatusFailed)
 		_ = db.UpdateTaskStatus(ctx, job.TaskID, models.TaskStatusFailed)
 		return nil
 	}
@@ -123,7 +124,7 @@ func dispatchOnce(ctx context.Context, db database.Store, client *http.Client, c
 	_ = db.UpdateTaskStatus(ctx, job.TaskID, taskStatus)
 
 	if taskStatus == models.TaskStatusCompleted {
-		summary := summarizeResult(result)
+		summary := dispatcher.SummarizeResult(result)
 		_ = db.UpdateTaskSummary(ctx, job.TaskID, summary)
 	}
 
@@ -136,34 +137,6 @@ func dispatchOnce(ctx context.Context, db database.Store, client *http.Client, c
 	)
 
 	return nil
-}
-
-func parseSandboxSpec(payload *string) (workerapi.SandboxSpec, error) {
-	if payload == nil || *payload == "" {
-		return workerapi.SandboxSpec{}, errors.New("job payload is empty")
-	}
-
-	var spec struct {
-		Image          string            `json:"image"`
-		Command        []string          `json:"command"`
-		Env            map[string]string `json:"env"`
-		TimeoutSeconds int               `json:"timeout_seconds"`
-		NetworkPolicy  string            `json:"network_policy"`
-	}
-	if err := json.Unmarshal([]byte(*payload), &spec); err != nil {
-		return workerapi.SandboxSpec{}, fmt.Errorf("parse payload json: %w", err)
-	}
-	if len(spec.Command) == 0 {
-		return workerapi.SandboxSpec{}, errors.New("payload.command is required")
-	}
-
-	return workerapi.SandboxSpec{
-		Image:          spec.Image,
-		Command:        spec.Command,
-		Env:            spec.Env,
-		TimeoutSeconds: spec.TimeoutSeconds,
-		NetworkPolicy:  spec.NetworkPolicy,
-	}, nil
 }
 
 func callWorkerAPI(ctx context.Context, client *http.Client, cfg dispatcherConfig, req *workerapi.RunJobRequest) (*workerapi.RunJobResponse, error) {
@@ -200,46 +173,6 @@ func callWorkerAPI(ctx context.Context, client *http.Client, cfg dispatcherConfi
 	}
 
 	return &runResp, nil
-}
-
-func summarizeResult(resp *workerapi.RunJobResponse) string {
-	if resp == nil {
-		return ""
-	}
-	if resp.Status != workerapi.StatusCompleted {
-		return fmt.Sprintf("job %s", resp.Status)
-	}
-	if resp.Stdout != "" {
-		return truncateOneLine(resp.Stdout, 200)
-	}
-	if resp.Stderr != "" {
-		return truncateOneLine(resp.Stderr, 200)
-	}
-	return "completed"
-}
-
-func truncateOneLine(s string, maxLen int) string {
-	line := s
-	for i := 0; i < len(line); i++ {
-		if line[i] == '\n' {
-			line = line[:i]
-			break
-		}
-	}
-	if len(line) > maxLen {
-		return line[:maxLen]
-	}
-	return line
-}
-
-func marshalDispatchError(err error) string {
-	obj := map[string]any{
-		"version": 1,
-		"status":  "failed",
-		"error":   err.Error(),
-	}
-	b, _ := json.Marshal(obj)
-	return string(b)
 }
 
 func getDurationEnv(key string, def time.Duration) time.Duration {

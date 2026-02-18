@@ -50,3 +50,12 @@ func TestBootstrapResponseJSON(t *testing.T) {
 		t.Errorf("expected node_config_url, got %s", parsed.Orchestrator.Endpoints.NodeConfigURL)
 	}
 }
+
+func TestSupportedBootstrapVersion(t *testing.T) {
+	if !SupportedBootstrapVersion(1) {
+		t.Error("SupportedBootstrapVersion(1) should be true")
+	}
+	if SupportedBootstrapVersion(0) || SupportedBootstrapVersion(2) {
+		t.Error("SupportedBootstrapVersion(0 or 2) should be false")
+	}
+}

@@ -240,6 +240,75 @@ test-go-cover: install-go
     fi; \
     echo "--- Summary ---"; echo "All modules meet coverage threshold (≥ {{ go_coverage_min }}%)."; echo ""
 
+# Go coverage. For orchestrator: starts a Postgres container with Podman and sets POSTGRES_TEST_DSN
+# so database integration tests run (no testcontainers/socket needed). Other modules: plain go test.
+test-go-cover-podman: install-go
+    #!/usr/bin/env bash
+    set -euo pipefail
+    root="{{ root_dir }}"
+    min="{{ go_coverage_min }}"
+    fail=0
+    failed=""
+    mkdir -p "$root/tmp/go/coverage"
+    echo ""
+    echo "--- Go coverage (min ${min}%) ---"
+    echo ""
+
+    for m in {{ go_modules }}; do
+      if [ "$m" = "orchestrator" ]; then
+        out="$root/tmp/go/coverage/$m.coverage.out"
+        (cd "$root/$m" && go clean -testcache) || true
+        echo "==> $m: starting Postgres (podman), then go test -coverprofile"
+        pg_port=15432
+        cid=$(podman run -d --name cynodeai-pg-cover \
+          -e POSTGRES_USER=cynodeai \
+          -e POSTGRES_PASSWORD=cynodeai-test \
+          -e POSTGRES_DB=cynodeai \
+          -p 127.0.0.1:${pg_port}:5432 \
+          pgvector/pgvector:pg16 2>/dev/null) || cid=""
+        if [ -z "$cid" ]; then
+          echo "    podman run failed; run orchestrator tests without DB (coverage will be below ${min}%)"
+          (cd "$root/$m" && go test ./... -coverprofile="$out" -covermode=atomic) || true
+        else
+          trap 'podman rm -f cynodeai-pg-cover 2>/dev/null || true' EXIT
+          for i in $(seq 1 25); do
+            podman exec cynodeai-pg-cover pg_isready -U cynodeai -d cynodeai -q 2>/dev/null && break
+            sleep 1
+          done
+          sleep 5
+          export POSTGRES_TEST_DSN="postgres://cynodeai:cynodeai-test@127.0.0.1:${pg_port}/cynodeai?sslmode=disable"
+          r=0; (cd "$root/$m" && go test ./... -coverprofile="$out" -covermode=atomic) || r=1
+          podman rm -f cynodeai-pg-cover 2>/dev/null || true
+          trap - EXIT
+          [ "$r" -ne 0 ] && exit "$r"
+        fi
+      else
+        echo "==> $m: go test -coverprofile"
+        out="$root/tmp/go/coverage/$m.coverage.out"
+        (cd "$root/$m" && go test ./... -coverprofile="$out" -covermode=atomic)
+      fi
+
+      pct=$(go tool cover -func="$out" | awk '/^total:/ {gsub("%","",$3); print $3}')
+      if awk -v p="$pct" -v min="$min" 'BEGIN{exit (p+0 >= min+0)}'; then
+        echo "    coverage: ${pct}%  [FAIL] (below ${min}%)"
+        fail=1
+        failed="$failed $m"
+      else
+        echo "    coverage: ${pct}%  [PASS]"
+      fi
+      echo ""
+    done
+
+    if [ "$fail" -ne 0 ]; then
+      echo "--- Summary ---"
+      echo "Modules below ${min}%:$failed"
+      echo ""
+      exit 1
+    fi
+    echo "--- Summary ---"
+    echo "All modules meet coverage threshold (≥ ${min}%)."
+    echo ""
+
 # Run Go tests with race detector
 test-go-race: install-go
     @for m in {{ go_modules }}; do \
@@ -260,8 +329,8 @@ test: test-go
 e2e:
     @./scripts/setup-dev.sh full-demo
 
-# Local CI: all lint, all tests (with 90% coverage), Go vuln check
-ci: lint-go lint-go-ci lint-python lint-md test-go-cover vulncheck-go
+# Local CI: all lint, all tests (with 90% coverage), Go vuln check. Uses test-go-cover-podman so coverage works with rootful Podman.
+ci: lint-go lint-go-ci lint-python lint-md test-go-cover-podman vulncheck-go
     @:
 
 # Create .venv and install Python lint tooling (scripts/requirements-lint.txt). Use with lint-python.
