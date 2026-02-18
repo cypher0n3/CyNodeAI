@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"os"
 	"testing"
+	"time"
 )
 
 func TestGetEnv(t *testing.T) {
@@ -45,5 +46,48 @@ func TestRun_ListenAndServeFails(t *testing.T) {
 	err := run(ctx, logger)
 	if err == nil {
 		t.Error("expected error when ListenAndServe fails (invalid port)")
+	}
+}
+
+func TestRunMain_Success(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	code := runMain(ctx)
+	if code != 0 {
+		t.Errorf("runMain: got %d", code)
+	}
+}
+
+func TestShutdownTimeout(t *testing.T) {
+	_ = os.Unsetenv("MCP_GATEWAY_SHUTDOWN_SEC")
+	if shutdownTimeout() != 10*time.Second {
+		t.Errorf("default: got %v", shutdownTimeout())
+	}
+	_ = os.Setenv("MCP_GATEWAY_SHUTDOWN_SEC", "5")
+	defer func() { _ = os.Unsetenv("MCP_GATEWAY_SHUTDOWN_SEC") }()
+	if shutdownTimeout() != 5*time.Second {
+		t.Errorf("from env: got %v", shutdownTimeout())
+	}
+	_ = os.Setenv("MCP_GATEWAY_SHUTDOWN_SEC", "x")
+	if shutdownTimeout() != 10*time.Second {
+		t.Errorf("invalid env should use default: got %v", shutdownTimeout())
+	}
+}
+
+func TestRunMain_RunFails(t *testing.T) {
+	oldAddr := os.Getenv("LISTEN_ADDR")
+	_ = os.Setenv("LISTEN_ADDR", ":99999")
+	defer func() {
+		if oldAddr != "" {
+			_ = os.Setenv("LISTEN_ADDR", oldAddr)
+		} else {
+			_ = os.Unsetenv("LISTEN_ADDR")
+		}
+	}()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	code := runMain(ctx)
+	if code != 1 {
+		t.Errorf("runMain when run fails: got %d", code)
 	}
 }

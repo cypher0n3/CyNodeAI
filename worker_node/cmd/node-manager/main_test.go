@@ -12,6 +12,35 @@ import (
 	"github.com/cypher0n3/cynodeai/go_shared_libs/contracts/nodepayloads"
 )
 
+func TestGetEnv(t *testing.T) {
+	_ = os.Unsetenv("TEST_NM_ENV")
+	if getEnv("TEST_NM_ENV", "def") != "def" {
+		t.Error("expected default")
+	}
+	_ = os.Setenv("TEST_NM_ENV", "val")
+	defer func() { _ = os.Unsetenv("TEST_NM_ENV") }()
+	if getEnv("TEST_NM_ENV", "def") != "val" {
+		t.Error("expected from env")
+	}
+}
+
+func TestRunMain_DebugLevel(t *testing.T) {
+	_ = os.Setenv("NODE_MANAGER_DEBUG", "1")
+	_ = os.Setenv("NODE_SLUG", "")
+	_ = os.Setenv("ORCHESTRATOR_URL", "http://x")
+	_ = os.Setenv("NODE_REGISTRATION_PSK", "psk")
+	defer func() {
+		_ = os.Unsetenv("NODE_MANAGER_DEBUG")
+		_ = os.Unsetenv("NODE_SLUG")
+		_ = os.Unsetenv("ORCHESTRATOR_URL")
+		_ = os.Unsetenv("NODE_REGISTRATION_PSK")
+	}()
+	code := runMain(context.Background())
+	if code != 1 {
+		t.Errorf("runMain with invalid config: got %d", code)
+	}
+}
+
 func TestRunMainValidateFails(t *testing.T) {
 	_ = os.Setenv("NODE_SLUG", "")
 	_ = os.Setenv("ORCHESTRATOR_URL", "http://x")
