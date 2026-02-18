@@ -43,7 +43,9 @@ func runMain(ctx context.Context) int {
 		_ = srv.ListenAndServe()
 	}()
 	<-ctx.Done()
-	if err := srv.Shutdown(context.Background()); err != nil {
+	shutdownCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	if err := srv.Shutdown(shutdownCtx); err != nil {
 		return 1
 	}
 	return 0

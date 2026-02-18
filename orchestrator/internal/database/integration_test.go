@@ -92,14 +92,17 @@ func integrationDB(t *testing.T) (*DB, context.Context) {
 	if dsn == "" {
 		t.Skipf("set %s to run integration tests", integrationEnv)
 	}
-	db, err := Open(dsn)
+	ctx := context.Background()
+	db, err := Open(ctx, dsn)
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
 	t.Cleanup(func() { _ = db.Close() })
-	ctx := context.Background()
 	if err := db.RunSchema(ctx, slog.Default()); err != nil {
 		t.Fatalf("RunSchema: %v", err)
+	}
+	if db.GORM() == nil {
+		t.Fatal("GORM() must not be nil")
 	}
 	return db, ctx
 }
@@ -140,25 +143,21 @@ func TestIntegration_CompleteJobRoundTrip(t *testing.T) {
 	}
 }
 
-// TestIntegration_StoreRoundTrip exercises more Store methods for coverage.
-func TestIntegration_StoreRoundTrip(t *testing.T) {
-	db, ctx := integrationDB(t)
-	user, err := db.GetUserByHandle(ctx, "inttest-user")
-	if err != nil {
-		t.Skip("create inttest-user first (run TestIntegration_User)")
-	}
-	if _, err := db.GetUserByID(ctx, user.ID); err != nil {
-		t.Fatalf("GetUserByID: %v", err)
-	}
-	_, err = db.CreatePasswordCredential(ctx, user.ID, []byte("hash"), "argon2")
+func storeRoundTripCredentials(t *testing.T, db Store, ctx context.Context, userID uuid.UUID) {
+	t.Helper()
+	_, err := db.CreatePasswordCredential(ctx, userID, []byte("hash"), "argon2")
 	if err != nil {
 		t.Fatalf("CreatePasswordCredential: %v", err)
 	}
-	if _, err := db.GetPasswordCredentialByUserID(ctx, user.ID); err != nil {
+	if _, err := db.GetPasswordCredentialByUserID(ctx, userID); err != nil {
 		t.Fatalf("GetPasswordCredentialByUserID: %v", err)
 	}
+}
+
+func storeRoundTripSessions(t *testing.T, db Store, ctx context.Context, userID uuid.UUID) {
+	t.Helper()
 	expires := time.Now().Add(time.Hour)
-	session, err := db.CreateRefreshSession(ctx, user.ID, []byte("tokenhash"), expires)
+	session, err := db.CreateRefreshSession(ctx, userID, []byte("tokenhash"), expires)
 	if err != nil {
 		t.Fatalf("CreateRefreshSession: %v", err)
 	}
@@ -168,6 +167,10 @@ func TestIntegration_StoreRoundTrip(t *testing.T) {
 	if err := db.InvalidateRefreshSession(ctx, session.ID); err != nil {
 		t.Fatalf("InvalidateRefreshSession: %v", err)
 	}
+}
+
+func storeRoundTripNode(t *testing.T, db Store, ctx context.Context) *models.Node {
+	t.Helper()
 	node, err := db.CreateNode(ctx, "inttest-roundtrip-node")
 	if err != nil {
 		t.Fatalf("CreateNode: %v", err)
@@ -178,7 +181,12 @@ func TestIntegration_StoreRoundTrip(t *testing.T) {
 	if _, err := db.GetNodeBySlug(ctx, "inttest-roundtrip-node"); err != nil {
 		t.Fatalf("GetNodeBySlug: %v", err)
 	}
-	task, err := db.CreateTask(ctx, &user.ID, "roundtrip-prompt")
+	return node
+}
+
+func storeRoundTripTaskJobNode(t *testing.T, db Store, ctx context.Context, userID uuid.UUID, node *models.Node) {
+	t.Helper()
+	task, err := db.CreateTask(ctx, &userID, "roundtrip-prompt")
 	if err != nil {
 		t.Fatalf("CreateTask: %v", err)
 	}
@@ -188,7 +196,7 @@ func TestIntegration_StoreRoundTrip(t *testing.T) {
 	if err := db.UpdateTaskSummary(ctx, task.ID, "summary"); err != nil {
 		t.Fatalf("UpdateTaskSummary: %v", err)
 	}
-	list, err := db.ListTasksByUser(ctx, user.ID, 10, 0)
+	list, err := db.ListTasksByUser(ctx, userID, 10, 0)
 	if err != nil || len(list) < 1 {
 		t.Fatalf("ListTasksByUser: %v", err)
 	}
@@ -206,6 +214,22 @@ func TestIntegration_StoreRoundTrip(t *testing.T) {
 		t.Fatalf("AssignJobToNode: %v", err)
 	}
 	_ = db.CompleteJob(ctx, job.ID, "{}", models.JobStatusCompleted)
+}
+
+// TestIntegration_StoreRoundTrip exercises more Store methods for coverage.
+func TestIntegration_StoreRoundTrip(t *testing.T) {
+	db, ctx := integrationDB(t)
+	user, err := db.GetUserByHandle(ctx, "inttest-user")
+	if err != nil {
+		t.Skip("create inttest-user first (run TestIntegration_User)")
+	}
+	if _, err := db.GetUserByID(ctx, user.ID); err != nil {
+		t.Fatalf("GetUserByID: %v", err)
+	}
+	storeRoundTripCredentials(t, db, ctx, user.ID)
+	storeRoundTripSessions(t, db, ctx, user.ID)
+	node := storeRoundTripNode(t, db, ctx)
+	storeRoundTripTaskJobNode(t, db, ctx, user.ID, node)
 	if err := db.InvalidateAllUserSessions(ctx, user.ID); err != nil {
 		t.Fatalf("InvalidateAllUserSessions: %v", err)
 	}

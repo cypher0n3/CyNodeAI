@@ -2,6 +2,7 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"log/slog"
 	"net/http"
@@ -14,7 +15,14 @@ func main() {
 		Level: slog.LevelInfo,
 	}))
 	slog.SetDefault(logger)
+	if err := run(context.Background(), logger); err != nil {
+		logger.Error("run failed", "error", err)
+		os.Exit(1)
+	}
+}
 
+// run sets up and runs the server until ctx is cancelled. Used by main and tests.
+func run(ctx context.Context, logger *slog.Logger) error {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
@@ -31,11 +39,23 @@ func main() {
 		MaxHeaderBytes:    1 << 20,
 	}
 
-	logger.Info("starting api-egress", "addr", srv.Addr)
-	if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-		logger.Error("server error", "error", err)
-		os.Exit(1)
+	serverErr := make(chan error, 1)
+	go func() {
+		logger.Info("starting api-egress", "addr", srv.Addr)
+		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			logger.Error("server error", "error", err)
+			serverErr <- err
+		}
+	}()
+
+	select {
+	case <-ctx.Done():
+	case err := <-serverErr:
+		return err
 	}
+	shutdownCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	return srv.Shutdown(shutdownCtx)
 }
 
 func getEnv(key, def string) string {

@@ -12,16 +12,18 @@ import (
 	"github.com/cypher0n3/cynodeai/go_shared_libs/contracts/nodepayloads"
 )
 
+const pathNodesRegister = "/v1/nodes/register"
+
 func TestLoadConfig(t *testing.T) {
-	os.Unsetenv("ORCHESTRATOR_URL")
-	os.Unsetenv("NODE_SLUG")
-	os.Unsetenv("CAPABILITY_REPORT_INTERVAL")
-	os.Unsetenv("HTTP_TIMEOUT")
+	_ = os.Unsetenv("ORCHESTRATOR_URL")
+	_ = os.Unsetenv("NODE_SLUG")
+	_ = os.Unsetenv("CAPABILITY_REPORT_INTERVAL")
+	_ = os.Unsetenv("HTTP_TIMEOUT")
 	defer func() {
-		os.Unsetenv("ORCHESTRATOR_URL")
-		os.Unsetenv("NODE_SLUG")
-		os.Unsetenv("CAPABILITY_REPORT_INTERVAL")
-		os.Unsetenv("HTTP_TIMEOUT")
+		_ = os.Unsetenv("ORCHESTRATOR_URL")
+		_ = os.Unsetenv("NODE_SLUG")
+		_ = os.Unsetenv("CAPABILITY_REPORT_INTERVAL")
+		_ = os.Unsetenv("HTTP_TIMEOUT")
 	}()
 
 	cfg := LoadConfig()
@@ -32,9 +34,9 @@ func TestLoadConfig(t *testing.T) {
 		t.Errorf("default interval: %v", cfg.CapabilityReportInterval)
 	}
 
-	os.Setenv("ORCHESTRATOR_URL", "http://x")
-	os.Setenv("NODE_SLUG", "s")
-	os.Setenv("HTTP_TIMEOUT", "2m")
+	_ = os.Setenv("ORCHESTRATOR_URL", "http://x")
+	_ = os.Setenv("NODE_SLUG", "s")
+	_ = os.Setenv("HTTP_TIMEOUT", "2m")
 	cfg2 := LoadConfig()
 	if cfg2.OrchestratorURL != "http://x" || cfg2.NodeSlug != "s" {
 		t.Errorf("env: %+v", cfg2)
@@ -43,7 +45,7 @@ func TestLoadConfig(t *testing.T) {
 		t.Errorf("HTTP_TIMEOUT: %v", cfg2.HTTPTimeout)
 	}
 
-	os.Setenv("HTTP_TIMEOUT", "invalid")
+	_ = os.Setenv("HTTP_TIMEOUT", "invalid")
 	cfg3 := LoadConfig()
 	if cfg3.HTTPTimeout != 10*time.Second {
 		t.Errorf("invalid HTTP_TIMEOUT should use default: %v", cfg3.HTTPTimeout)
@@ -133,24 +135,31 @@ func TestValidateBootstrap(t *testing.T) {
 	}
 }
 
+// registerOKHandler returns a handler that responds 201 with a BootstrapResponse for the given baseURL.
+func registerOKHandler(baseURL string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+		_ = json.NewEncoder(w).Encode(nodepayloads.BootstrapResponse{
+			Version:  1,
+			IssuedAt: time.Now().UTC().Format(time.RFC3339),
+			Orchestrator: nodepayloads.BootstrapOrchestrator{
+				Endpoints: nodepayloads.BootstrapEndpoints{
+					NodeReportURL: baseURL + "/v1/nodes/capability",
+					NodeConfigURL: baseURL + "/v1/nodes/config",
+				},
+			},
+			Auth: nodepayloads.BootstrapAuth{NodeJWT: "jwt", ExpiresAt: "2026-01-01T00:00:00Z"},
+		})
+	}
+}
+
 func TestRun(t *testing.T) {
 	reportCalled := false
 	var srv *httptest.Server
 	srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/v1/nodes/register" {
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusCreated)
-			_ = json.NewEncoder(w).Encode(nodepayloads.BootstrapResponse{
-				Version:  1,
-				IssuedAt: time.Now().UTC().Format(time.RFC3339),
-				Orchestrator: nodepayloads.BootstrapOrchestrator{
-					Endpoints: nodepayloads.BootstrapEndpoints{
-						NodeReportURL: srv.URL + "/v1/nodes/capability",
-						NodeConfigURL: srv.URL + "/v1/nodes/config",
-					},
-				},
-				Auth: nodepayloads.BootstrapAuth{NodeJWT: "jwt", ExpiresAt: "2026-01-01T00:00:00Z"},
-			})
+		if r.URL.Path == pathNodesRegister {
+			registerOKHandler(srv.URL)(w, r)
 			return
 		}
 		if r.URL.Path == "/v1/nodes/capability" {
@@ -207,14 +216,10 @@ func TestRunRegisterFails(t *testing.T) {
 	}
 }
 
-func TestRunRegisterErrorStatus(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusForbidden)
-		_, _ = w.Write([]byte(`{"detail":"forbidden"}`))
-	}))
+func runWithServerExpectError(t *testing.T, handler http.HandlerFunc, errMsg string) {
+	t.Helper()
+	server := httptest.NewServer(handler)
 	defer server.Close()
-
 	cfg := &Config{
 		OrchestratorURL: server.URL,
 		NodeSlug:        "x",
@@ -222,10 +227,37 @@ func TestRunRegisterErrorStatus(t *testing.T) {
 		RegistrationPSK: "psk",
 		HTTPTimeout:     5 * time.Second,
 	}
-	ctx := context.Background()
-	err := Run(ctx, nil, cfg)
+	err := Run(context.Background(), nil, cfg)
 	if err == nil {
-		t.Error("Run should fail on 403")
+		t.Error(errMsg)
+	}
+}
+
+func TestRunRegisterErrorStatusAndBadJSON(t *testing.T) {
+	for name, tc := range map[string]struct {
+		handler http.HandlerFunc
+		errMsg  string
+	}{
+		"403": {
+			func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusForbidden)
+				_, _ = w.Write([]byte(`{"detail":"forbidden"}`))
+			},
+			"Run should fail on 403",
+		},
+		"bad JSON": {
+			func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusCreated)
+				_, _ = w.Write([]byte("not json"))
+			},
+			"Run should fail on invalid JSON",
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			runWithServerExpectError(t, tc.handler, tc.errMsg)
+		})
 	}
 }
 
@@ -260,46 +292,12 @@ func TestRunRegisterInvalidBootstrap(t *testing.T) {
 	}
 }
 
-func TestRunRegisterBadJSON(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusCreated)
-		_, _ = w.Write([]byte("not json"))
-	}))
-	defer server.Close()
-
-	cfg := &Config{
-		OrchestratorURL: server.URL,
-		NodeSlug:        "x",
-		NodeName:        "x",
-		RegistrationPSK: "psk",
-		HTTPTimeout:     5 * time.Second,
-	}
-	ctx := context.Background()
-	err := Run(ctx, nil, cfg)
-	if err == nil {
-		t.Error("Run should fail on invalid JSON")
-	}
-}
-
 func TestRunReportCapabilitiesErrorBranch(t *testing.T) {
 	reportCount := 0
 	var srv *httptest.Server
 	srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/v1/nodes/register" {
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusCreated)
-			_ = json.NewEncoder(w).Encode(nodepayloads.BootstrapResponse{
-				Version:  1,
-				IssuedAt: time.Now().UTC().Format(time.RFC3339),
-				Orchestrator: nodepayloads.BootstrapOrchestrator{
-					Endpoints: nodepayloads.BootstrapEndpoints{
-						NodeReportURL: srv.URL + "/v1/nodes/capability",
-						NodeConfigURL: srv.URL + "/v1/nodes/config",
-					},
-				},
-				Auth: nodepayloads.BootstrapAuth{NodeJWT: "jwt", ExpiresAt: "2026-01-01T00:00:00Z"},
-			})
+		if r.URL.Path == pathNodesRegister {
+			registerOKHandler(srv.URL)(w, r)
 			return
 		}
 		if r.URL.Path == "/v1/nodes/capability" {
@@ -333,7 +331,7 @@ func TestRunReportCapabilitiesErrorBranch(t *testing.T) {
 func TestRunReportCapabilitiesConnectionFails(t *testing.T) {
 	var srv *httptest.Server
 	srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/v1/nodes/register" {
+		if r.URL.Path == pathNodesRegister {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusCreated)
 			_ = json.NewEncoder(w).Encode(nodepayloads.BootstrapResponse{
@@ -371,7 +369,7 @@ func TestRunReportCapabilitiesConnectionFails(t *testing.T) {
 func TestRunContextCancelledAfterRegister(t *testing.T) {
 	var srv *httptest.Server
 	srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/v1/nodes/register" {
+		if r.URL.Path == pathNodesRegister {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusCreated)
 			_ = json.NewEncoder(w).Encode(nodepayloads.BootstrapResponse{

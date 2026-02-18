@@ -13,13 +13,13 @@ import (
 )
 
 func TestRunMainValidateFails(t *testing.T) {
-	os.Setenv("NODE_SLUG", "")
-	os.Setenv("ORCHESTRATOR_URL", "http://x")
-	os.Setenv("NODE_REGISTRATION_PSK", "psk")
+	_ = os.Setenv("NODE_SLUG", "")
+	_ = os.Setenv("ORCHESTRATOR_URL", "http://x")
+	_ = os.Setenv("NODE_REGISTRATION_PSK", "psk")
 	defer func() {
-		os.Unsetenv("NODE_SLUG")
-		os.Unsetenv("ORCHESTRATOR_URL")
-		os.Unsetenv("NODE_REGISTRATION_PSK")
+		_ = os.Unsetenv("NODE_SLUG")
+		_ = os.Unsetenv("ORCHESTRATOR_URL")
+		_ = os.Unsetenv("NODE_REGISTRATION_PSK")
 	}()
 
 	ctx := context.Background()
@@ -30,15 +30,15 @@ func TestRunMainValidateFails(t *testing.T) {
 }
 
 func TestRunMainContextCancelled(t *testing.T) {
-	os.Setenv("NODE_SLUG", "x")
-	os.Setenv("ORCHESTRATOR_URL", "http://127.0.0.1:1")
-	os.Setenv("NODE_REGISTRATION_PSK", "psk")
-	os.Setenv("HTTP_TIMEOUT", "1ms")
+	_ = os.Setenv("NODE_SLUG", "x")
+	_ = os.Setenv("ORCHESTRATOR_URL", "http://127.0.0.1:1")
+	_ = os.Setenv("NODE_REGISTRATION_PSK", "psk")
+	_ = os.Setenv("HTTP_TIMEOUT", "1ms")
 	defer func() {
-		os.Unsetenv("NODE_SLUG")
-		os.Unsetenv("ORCHESTRATOR_URL")
-		os.Unsetenv("NODE_REGISTRATION_PSK")
-		os.Unsetenv("HTTP_TIMEOUT")
+		_ = os.Unsetenv("NODE_SLUG")
+		_ = os.Unsetenv("ORCHESTRATOR_URL")
+		_ = os.Unsetenv("NODE_REGISTRATION_PSK")
+		_ = os.Unsetenv("HTTP_TIMEOUT")
 	}()
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -73,17 +73,17 @@ func TestRunMainSuccess(t *testing.T) {
 	}))
 	defer srv.Close()
 
-	os.Setenv("ORCHESTRATOR_URL", srv.URL)
-	os.Setenv("NODE_SLUG", "x")
-	os.Setenv("NODE_REGISTRATION_PSK", "psk")
-	os.Setenv("CAPABILITY_REPORT_INTERVAL", "1h")
-	os.Setenv("HTTP_TIMEOUT", "5s")
+	_ = os.Setenv("ORCHESTRATOR_URL", srv.URL)
+	_ = os.Setenv("NODE_SLUG", "x")
+	_ = os.Setenv("NODE_REGISTRATION_PSK", "psk")
+	_ = os.Setenv("CAPABILITY_REPORT_INTERVAL", "1h")
+	_ = os.Setenv("HTTP_TIMEOUT", "5s")
 	defer func() {
-		os.Unsetenv("ORCHESTRATOR_URL")
-		os.Unsetenv("NODE_SLUG")
-		os.Unsetenv("NODE_REGISTRATION_PSK")
-		os.Unsetenv("CAPABILITY_REPORT_INTERVAL")
-		os.Unsetenv("HTTP_TIMEOUT")
+		_ = os.Unsetenv("ORCHESTRATOR_URL")
+		_ = os.Unsetenv("NODE_SLUG")
+		_ = os.Unsetenv("NODE_REGISTRATION_PSK")
+		_ = os.Unsetenv("CAPABILITY_REPORT_INTERVAL")
+		_ = os.Unsetenv("HTTP_TIMEOUT")
 	}()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)

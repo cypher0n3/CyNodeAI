@@ -22,12 +22,13 @@ func TestRunSchemaWithDSN(t *testing.T) {
 	if dsn == "" {
 		t.Skipf("set %s to run", integrationEnv)
 	}
-	db, err := Open(dsn)
+	ctx := context.Background()
+	db, err := Open(ctx, dsn)
 	if err != nil {
 		t.Fatalf("Open: %v", err)
 	}
 	defer func() { _ = db.Close() }()
-	if err := db.RunSchema(context.Background(), slog.Default()); err != nil {
+	if err := db.RunSchema(ctx, slog.Default()); err != nil {
 		t.Fatalf("RunSchema: %v", err)
 	}
 }

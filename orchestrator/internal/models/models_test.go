@@ -144,6 +144,42 @@ func TestJSONBString_Scan(t *testing.T) {
 	if j.Ptr() == nil || *j.Ptr() != "x" {
 		t.Errorf("Scan: %v", j.Ptr())
 	}
+	// Scan with string type (driver may pass string instead of []byte)
+	var j2 JSONBString
+	if err := j2.Scan(`"y"`); err != nil {
+		t.Fatal(err)
+	}
+	if j2.Ptr() == nil || *j2.Ptr() != "y" {
+		t.Errorf("Scan(string): %v", j2.Ptr())
+	}
+}
+
+func TestJSONBString_Scan_UnsupportedType(t *testing.T) {
+	var j JSONBString
+	if err := j.Scan(123); err == nil {
+		t.Error("Scan(123) should return error")
+	}
+}
+
+func TestJSONBString_MarshalJSON_Nil(t *testing.T) {
+	var j JSONBString
+	data, err := json.Marshal(j)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(data) != "null" {
+		t.Errorf("nil JSONBString should marshal to null, got %s", data)
+	}
+}
+
+func TestJSONBString_UnmarshalJSON_Invalid(t *testing.T) {
+	var j JSONBString
+	if err := json.Unmarshal([]byte("123"), &j); err == nil {
+		t.Error("Unmarshal(123) should return error")
+	}
+	if err := json.Unmarshal([]byte("{}"), &j); err == nil {
+		t.Error("Unmarshal({}) should return error")
+	}
 }
 
 func TestJSONBString_MarshalUnmarshalJSON(t *testing.T) {

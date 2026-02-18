@@ -80,3 +80,15 @@ func TestRateLimiter_Reset(t *testing.T) {
 		t.Error("Allow() returned false after Reset(), want true")
 	}
 }
+
+func TestRateLimiter_CleanupRuns(t *testing.T) {
+	// Short window so cleanup ticker (window*2) fires soon
+	rl := NewRateLimiter(2, 2*time.Millisecond)
+	rl.Allow("key1")
+	// Wait for cleanup goroutine to run (cleanup interval is 4ms)
+	time.Sleep(10 * time.Millisecond)
+	// After cleanup, key1 entry should be removed; Allow creates new window
+	if !rl.Allow("key1") {
+		t.Error("Allow() after cleanup should start new window")
+	}
+}

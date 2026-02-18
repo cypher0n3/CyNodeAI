@@ -129,7 +129,7 @@ func createReturning[T any](db *DB, ctx context.Context, record *T, op string) (
 }
 
 // Open opens a database connection using GORM with the pgx driver.
-func Open(dataSourceName string) (*DB, error) {
+func Open(ctx context.Context, dataSourceName string) (*DB, error) {
 	gormDB, err := gorm.Open(postgres.Open(dataSourceName), &gorm.Config{})
 	if err != nil {
 		return nil, fmt.Errorf("open database: %w", err)
@@ -143,10 +143,10 @@ func Open(dataSourceName string) (*DB, error) {
 	sqlDB.SetMaxIdleConns(5)
 	sqlDB.SetConnMaxLifetime(5 * time.Minute)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	pingCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 
-	if err := sqlDB.PingContext(ctx); err != nil {
+	if err := sqlDB.PingContext(pingCtx); err != nil {
 		return nil, fmt.Errorf("ping database: %w", err)
 	}
 

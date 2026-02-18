@@ -149,3 +149,14 @@ func TestJWTManager_DifferentSecret(t *testing.T) {
 		t.Errorf("ValidateAccessToken() with different secret error = %v, want %v", err, ErrInvalidToken)
 	}
 }
+
+func TestJWTManager_ValidateAccessToken_WithRefreshToken(t *testing.T) {
+	mgr := NewJWTManager("test-secret", 15*time.Minute, 7*24*time.Hour, 24*time.Hour)
+	userID := uuid.New()
+	refreshToken, _, _ := mgr.GenerateRefreshToken(userID)
+
+	_, err := mgr.ValidateAccessToken(refreshToken)
+	if err != ErrInvalidToken {
+		t.Errorf("ValidateAccessToken(refresh) error = %v, want %v", err, ErrInvalidToken)
+	}
+}

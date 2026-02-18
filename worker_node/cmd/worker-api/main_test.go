@@ -16,28 +16,28 @@ import (
 )
 
 func TestGetEnv(t *testing.T) {
-	os.Unsetenv("TEST_WORKER_GETENV")
+	_ = os.Unsetenv("TEST_WORKER_GETENV")
 	if getEnv("TEST_WORKER_GETENV", "def") != "def" {
 		t.Error("getEnv default")
 	}
-	os.Setenv("TEST_WORKER_GETENV", "val")
-	defer os.Unsetenv("TEST_WORKER_GETENV")
+	_ = os.Setenv("TEST_WORKER_GETENV", "val")
+	defer func() { _ = os.Unsetenv("TEST_WORKER_GETENV") }()
 	if getEnv("TEST_WORKER_GETENV", "def") != "val" {
 		t.Error("getEnv from env")
 	}
 }
 
 func TestGetEnvInt(t *testing.T) {
-	os.Unsetenv("TEST_WORKER_INT")
+	_ = os.Unsetenv("TEST_WORKER_INT")
 	if getEnvInt("TEST_WORKER_INT", 42) != 42 {
 		t.Error("getEnvInt default")
 	}
-	os.Setenv("TEST_WORKER_INT", "99")
-	defer os.Unsetenv("TEST_WORKER_INT")
+	_ = os.Setenv("TEST_WORKER_INT", "99")
+	defer func() { _ = os.Unsetenv("TEST_WORKER_INT") }()
 	if getEnvInt("TEST_WORKER_INT", 0) != 99 {
 		t.Error("getEnvInt from env")
 	}
-	os.Setenv("TEST_WORKER_INT", "bad")
+	_ = os.Setenv("TEST_WORKER_INT", "bad")
 	if getEnvInt("TEST_WORKER_INT", 7) != 7 {
 		t.Error("getEnvInt invalid should use default")
 	}
@@ -57,7 +57,7 @@ func TestRequireBearerToken(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			r := httptest.NewRequest(http.MethodPost, "/v1/worker/jobs:run", nil)
+			r := httptest.NewRequest(http.MethodPost, "/v1/worker/jobs:run", http.NoBody)
 			if tt.authz != "" {
 				r.Header.Set("Authorization", tt.authz)
 			}
@@ -105,37 +105,33 @@ func TestWriteJSON(t *testing.T) {
 }
 
 func TestNewServer(t *testing.T) {
-	os.Unsetenv("LISTEN_ADDR")
+	_ = os.Unsetenv("LISTEN_ADDR")
 	srv := newServer(http.NewServeMux())
 	if srv.Addr != ":8081" {
 		t.Errorf("default addr: %s", srv.Addr)
 	}
-	os.Setenv("LISTEN_ADDR", ":9999")
-	defer os.Unsetenv("LISTEN_ADDR")
+	_ = os.Setenv("LISTEN_ADDR", ":9999")
+	defer func() { _ = os.Unsetenv("LISTEN_ADDR") }()
 	srv2 := newServer(http.NewServeMux())
 	if srv2.Addr != ":9999" {
 		t.Errorf("env addr: %s", srv2.Addr)
 	}
 }
 
+func runJobCmd() []string {
+	if runtime.GOOS == "windows" {
+		return []string{"cmd", "/c", "echo", "ok"}
+	}
+	return []string{"echo", "ok"}
+}
+
 func TestHandleRunJob(t *testing.T) {
 	exec := executor.New("direct", 5*time.Second, 1024)
-	token := "test-bearer"
-	mux := newMux(exec, token, nil)
-
-	var cmd []string
-	if runtime.GOOS == "windows" {
-		cmd = []string{"cmd", "/c", "echo", "ok"}
-	} else {
-		cmd = []string{"echo", "ok"}
-	}
+	mux := newMux(exec, "test-bearer", nil)
+	cmd := runJobCmd()
 	reqBody := workerapi.RunJobRequest{
-		Version: 1,
-		TaskID:  "task-1",
-		JobID:   "job-1",
-		Sandbox: workerapi.SandboxSpec{
-			Command: cmd,
-		},
+		Version: 1, TaskID: "task-1", JobID: "job-1",
+		Sandbox: workerapi.SandboxSpec{Command: cmd},
 	}
 	body, _ := json.Marshal(reqBody)
 
@@ -147,24 +143,9 @@ func TestHandleRunJob(t *testing.T) {
 			t.Errorf("status %d", w.Code)
 		}
 	})
-
 	t.Run("success", func(t *testing.T) {
-		w := httptest.NewRecorder()
-		r := httptest.NewRequest(http.MethodPost, "/v1/worker/jobs:run", bytes.NewReader(body))
-		r.Header.Set("Authorization", "Bearer test-bearer")
-		mux.ServeHTTP(w, r)
-		if w.Code != http.StatusOK {
-			t.Errorf("status %d body %s", w.Code, w.Body.String())
-		}
-		var resp workerapi.RunJobResponse
-		if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
-			t.Fatalf("decode: %v", err)
-		}
-		if resp.Status != workerapi.StatusCompleted {
-			t.Errorf("resp status %s", resp.Status)
-		}
+		postRunJobSuccess(t, mux, body)
 	})
-
 	t.Run("bad request body", func(t *testing.T) {
 		w := httptest.NewRecorder()
 		r := httptest.NewRequest(http.MethodPost, "/v1/worker/jobs:run", bytes.NewReader([]byte("not json")))
@@ -174,48 +155,46 @@ func TestHandleRunJob(t *testing.T) {
 			t.Errorf("status %d", w.Code)
 		}
 	})
+	postRunJobExpectBadRequest(t, mux, &workerapi.RunJobRequest{Version: 2, TaskID: "t", JobID: "j", Sandbox: workerapi.SandboxSpec{Command: cmd}}, "wrong version")
+	postRunJobExpectBadRequest(t, mux, &workerapi.RunJobRequest{Version: 1, TaskID: "", JobID: "", Sandbox: workerapi.SandboxSpec{Command: cmd}}, "missing task_id job_id")
+	postRunJobExpectBadRequest(t, mux, &workerapi.RunJobRequest{Version: 1, TaskID: "t", JobID: "j", Sandbox: workerapi.SandboxSpec{Command: nil}}, "empty command")
+}
 
-	t.Run("wrong version", func(t *testing.T) {
-		badReq := workerapi.RunJobRequest{Version: 2, TaskID: "t", JobID: "j", Sandbox: workerapi.SandboxSpec{Command: cmd}}
-		body2, _ := json.Marshal(badReq)
-		w := httptest.NewRecorder()
-		r := httptest.NewRequest(http.MethodPost, "/v1/worker/jobs:run", bytes.NewReader(body2))
-		r.Header.Set("Authorization", "Bearer test-bearer")
-		mux.ServeHTTP(w, r)
-		if w.Code != http.StatusBadRequest {
-			t.Errorf("status %d", w.Code)
-		}
-	})
+func postRunJobSuccess(t *testing.T, mux *http.ServeMux, body []byte) {
+	t.Helper()
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodPost, "/v1/worker/jobs:run", bytes.NewReader(body))
+	r.Header.Set("Authorization", "Bearer test-bearer")
+	mux.ServeHTTP(w, r)
+	if w.Code != http.StatusOK {
+		t.Errorf("status %d body %s", w.Code, w.Body.String())
+	}
+	var resp workerapi.RunJobResponse
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if resp.Status != workerapi.StatusCompleted {
+		t.Errorf("resp status %s", resp.Status)
+	}
+}
 
-	t.Run("missing task_id job_id", func(t *testing.T) {
-		badReq := workerapi.RunJobRequest{Version: 1, TaskID: "", JobID: "", Sandbox: workerapi.SandboxSpec{Command: cmd}}
-		body2, _ := json.Marshal(badReq)
-		w := httptest.NewRecorder()
-		r := httptest.NewRequest(http.MethodPost, "/v1/worker/jobs:run", bytes.NewReader(body2))
-		r.Header.Set("Authorization", "Bearer test-bearer")
-		mux.ServeHTTP(w, r)
-		if w.Code != http.StatusBadRequest {
-			t.Errorf("status %d", w.Code)
-		}
-	})
-
-	t.Run("empty command", func(t *testing.T) {
-		badReq := workerapi.RunJobRequest{Version: 1, TaskID: "t", JobID: "j", Sandbox: workerapi.SandboxSpec{Command: nil}}
-		body2, _ := json.Marshal(badReq)
-		w := httptest.NewRecorder()
-		r := httptest.NewRequest(http.MethodPost, "/v1/worker/jobs:run", bytes.NewReader(body2))
-		r.Header.Set("Authorization", "Bearer test-bearer")
-		mux.ServeHTTP(w, r)
-		if w.Code != http.StatusBadRequest {
-			t.Errorf("status %d", w.Code)
-		}
-	})
+// postRunJobExpectBadRequest POSTs the request to mux with Bearer test-bearer and asserts 400.
+func postRunJobExpectBadRequest(t *testing.T, mux *http.ServeMux, badReq *workerapi.RunJobRequest, subName string) {
+	t.Helper()
+	body2, _ := json.Marshal(badReq)
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodPost, "/v1/worker/jobs:run", bytes.NewReader(body2))
+	r.Header.Set("Authorization", "Bearer test-bearer")
+	mux.ServeHTTP(w, r)
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("%s: status %d", subName, w.Code)
+	}
 }
 
 func TestHealthz(t *testing.T) {
 	mux := newMux(executor.New("direct", time.Second, 1024), "token", nil)
 	w := httptest.NewRecorder()
-	r := httptest.NewRequest(http.MethodGet, "/healthz", nil)
+	r := httptest.NewRequest(http.MethodGet, "/healthz", http.NoBody)
 	mux.ServeHTTP(w, r)
 	if w.Code != http.StatusOK || w.Body.String() != "ok" {
 		t.Errorf("healthz: %d %s", w.Code, w.Body.String())
@@ -223,8 +202,8 @@ func TestHealthz(t *testing.T) {
 }
 
 func TestRunMainMissingToken(t *testing.T) {
-	os.Unsetenv("WORKER_API_BEARER_TOKEN")
-	defer os.Unsetenv("WORKER_API_BEARER_TOKEN")
+	_ = os.Unsetenv("WORKER_API_BEARER_TOKEN")
+	defer func() { _ = os.Unsetenv("WORKER_API_BEARER_TOKEN") }()
 	code := runMain(context.Background())
 	if code != 1 {
 		t.Errorf("runMain should return 1 when token unset, got %d", code)
@@ -232,8 +211,8 @@ func TestRunMainMissingToken(t *testing.T) {
 }
 
 func TestRunMainWithContextCancel(t *testing.T) {
-	os.Setenv("WORKER_API_BEARER_TOKEN", "test-token")
-	defer os.Unsetenv("WORKER_API_BEARER_TOKEN")
+	_ = os.Setenv("WORKER_API_BEARER_TOKEN", "test-token")
+	defer func() { _ = os.Unsetenv("WORKER_API_BEARER_TOKEN") }()
 
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan int, 1)
