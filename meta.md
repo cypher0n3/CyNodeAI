@@ -10,7 +10,7 @@ It coordinates sandboxed worker execution across local nodes and optional cloud 
 - This repository is currently **early prototype / design phase**.
 - The canonical normative "what" lives in `docs/requirements/`.
 - Implementation guidance ("how") lives in `docs/tech_specs/` and should trace back to requirements.
-- The `node/` and `orchestrator/` directories currently exist as placeholders for implementation.
+- The `worker_node/` and `orchestrator/` directories contain the Go implementation (see `go.work` and the justfile).
 
 ## Key Documents
 
@@ -39,8 +39,8 @@ It coordinates sandboxed worker execution across local nodes and optional cloud 
 - `docs/requirements/`: canonical normative requirements ("what"); entrypoint is `README.md`.
 - `docs/tech_specs/`: design and implementation guidance ("how"); entrypoint is `_main.md`.
 - `secure_browser/`: rules and assets for the secure browser service (e.g. `secure_browser_rules.yaml`).
-- `node/`: reserved for worker-node services (implementation to be added).
-- `orchestrator/`: reserved for orchestrator services (implementation to be added).
+- `worker_node/`: worker-node Go module (node manager, worker API); see `worker_node/README.md`.
+- `orchestrator/`: orchestrator Go module (control-plane, user-gateway, api-egress, etc.); see `orchestrator/README.md`.
 - `tmp/`: scratch space (ignored by Python lint configs; avoid committing generated artifacts unless intentional).
 
 ## Style and Tooling Conventions
@@ -52,6 +52,8 @@ It coordinates sandboxed worker execution across local nodes and optional cloud 
   All changes must pass **`just ci`** before considering work complete; see the justfile for available recipes.
 - Markdown formatting is governed by `.editorconfig` and `.markdownlint.yml`.
   Keep Markdown ASCII-only (avoid emoji and non-ASCII punctuation) unless explicitly allowed by the linter config.
+  - **NOTE:** Use `just lint-md <path>` to apply automatic markdownlint fixes before fixing other linter issues.
+    This will save a lot of manual work.
 - Python linting configuration exists in `.flake8` and `.pylintrc` (line length 100).
   When adding Python code, follow these configs and keep excluded directories in mind (for example `tmp/`).
 

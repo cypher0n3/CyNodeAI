@@ -137,6 +137,8 @@ Items are grouped by phase and can be implemented incrementally.
 - System: at least one inference-capable path must be available (node-local inference container such as Ollama, or external model routing with a configured provider key).
 - System: in the single-node case, startup must fail fast (or refuse to enter a ready state) if the node cannot run an inference container and no external provider key is configured.
 - User API Gateway: local user auth (login and refresh), create task, and retrieve task result.
+- Phase 1 config refresh: node fetches configuration on startup only (no polling).
+- Phase 1 node JWT: long-lived; node re-registers on expiry.
 
 ### Phase 2 MCP in the Loop
 

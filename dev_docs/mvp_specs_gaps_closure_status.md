@@ -31,7 +31,7 @@ Canonical content lives in permanent locations only (not in dev_docs):
   - [`docs/tech_specs/postgres_schema.md`](../docs/tech_specs/postgres_schema.md) (Nodes: worker_api_target_url, bearer token, config_ack_*)
   - [`docs/tech_specs/_main.md`](../docs/tech_specs/_main.md) (Phase 1 bullets, job dispatch path)
 - **Example configs:** [`docs/examples/orchestrator_bootstrap_example.yaml`](../docs/examples/orchestrator_bootstrap_example.yaml) (orchestrator), [`docs/examples/node_bootstrap_example.yaml`](../docs/examples/node_bootstrap_example.yaml) (worker/node).
-- **Features:** [`features/single_node_happy_path.feature`](../features/single_node_happy_path.feature) (config fetch, config ack, dispatcher per-node, inference precondition).
+- **Features:** suite-scoped feature files under [`features/`](../features/) (config fetch, config ack, dispatcher per-node, inference precondition).
 - Temporary plan in `dev_docs/` (e.g. completion plan) is not the source of truth; use the above for implementation and traceability.
 
 ### 2.2 Schema and Config Storage (Section 4) - **Closed**
@@ -51,7 +51,9 @@ Canonical content lives in permanent locations only (not in dev_docs):
 
 ### 2.5 BDD and Traceability (Section 6) - **Closed**
 
-- `features/single_node_happy_path.feature` includes scenarios for node fetches config, node sends config ack, dispatcher uses per-node worker URL and token, and inference precondition (fail fast when no inference path), with requirement and spec tags.
+- `features/orchestrator/node_registration_and_config.feature` includes scenarios for node fetches config and node sends config ack, with requirement and spec tags.
+- `features/orchestrator/orchestrator_task_lifecycle.feature` includes a dispatcher contract scenario for per-node worker URL and token, with requirement and spec tags.
+- `features/orchestrator/orchestrator_startup.feature` includes the inference precondition (fail fast when no inference path), with requirement and spec tags.
 
 ## 3 Conclusion
 

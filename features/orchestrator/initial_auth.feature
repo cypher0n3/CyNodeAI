@@ -1,3 +1,4 @@
+@suite_orchestrator
 Feature: Initial User Authentication
 
   As a CyNodeAI user

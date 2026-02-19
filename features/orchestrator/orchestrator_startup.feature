@@ -1,3 +1,4 @@
+@suite_orchestrator
 Feature: Orchestrator Startup
 
   As an operator
