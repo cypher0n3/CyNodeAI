@@ -74,6 +74,39 @@ func TestIntegration_Node(t *testing.T) {
 	}
 }
 
+func TestIntegration_NodeConfigVersionAndAck(t *testing.T) {
+	db, ctx := integrationDB(t)
+	node, err := db.CreateNode(ctx, "inttest-config-node-"+uuid.New().String())
+	if err != nil {
+		t.Fatalf("CreateNode: %v", err)
+	}
+	if err := db.UpdateNodeConfigVersion(ctx, node.ID, "1"); err != nil {
+		t.Fatalf("UpdateNodeConfigVersion: %v", err)
+	}
+	ackAt := time.Now().UTC()
+	errMsg := "test error"
+	if err := db.UpdateNodeConfigAck(ctx, node.ID, "1", "applied", ackAt, nil); err != nil {
+		t.Fatalf("UpdateNodeConfigAck applied: %v", err)
+	}
+	got, err := db.GetNodeByID(ctx, node.ID)
+	if err != nil {
+		t.Fatalf("GetNodeByID: %v", err)
+	}
+	if got.ConfigVersion == nil || *got.ConfigVersion != "1" {
+		t.Errorf("ConfigVersion: expected 1, got %v", got.ConfigVersion)
+	}
+	if got.ConfigAckStatus == nil || *got.ConfigAckStatus != "applied" {
+		t.Errorf("ConfigAckStatus: expected applied, got %v", got.ConfigAckStatus)
+	}
+	if err := db.UpdateNodeConfigAck(ctx, node.ID, "1", "failed", ackAt, &errMsg); err != nil {
+		t.Fatalf("UpdateNodeConfigAck failed: %v", err)
+	}
+	got, _ = db.GetNodeByID(ctx, node.ID)
+	if got.ConfigAckError == nil || *got.ConfigAckError != errMsg {
+		t.Errorf("ConfigAckError: expected %q, got %v", errMsg, got.ConfigAckError)
+	}
+}
+
 func TestIntegration_AuthAuditLog(t *testing.T) {
 	db, ctx := integrationDB(t)
 	user, err := db.GetUserByHandle(ctx, "inttest-user")

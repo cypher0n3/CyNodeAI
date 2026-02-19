@@ -466,14 +466,42 @@ func (m *MockDB) SaveNodeCapabilitySnapshot(_ context.Context, nodeID uuid.UUID,
 	})
 }
 
-// UpdateNodeCapability updates node capability hash.
-func (m *MockDB) UpdateNodeCapability(_ context.Context, nodeID uuid.UUID, capHash string) error {
+// updateNodeWith runs fn on the node identified by nodeID and sets UpdatedAt. Caller must use runWithWLockErr.
+func (m *MockDB) updateNodeWith(nodeID uuid.UUID, fn func(*models.Node)) {
+	node, ok := m.Nodes[nodeID]
+	if ok {
+		fn(node)
+		now := time.Now().UTC()
+		node.UpdatedAt = now
+	}
+}
+
+// updateNode runs fn on the node under write lock; used by node update methods.
+func (m *MockDB) updateNode(_ context.Context, nodeID uuid.UUID, fn func(*models.Node)) error {
 	return runWithWLockErr(m, func() error {
-		node, ok := m.Nodes[nodeID]
-		if ok {
-			node.CapabilityHash = &capHash
-			node.UpdatedAt = time.Now().UTC()
-		}
+		m.updateNodeWith(nodeID, fn)
+		return nil
+	})
+}
+
+// UpdateNodeCapability updates node capability hash.
+func (m *MockDB) UpdateNodeCapability(ctx context.Context, nodeID uuid.UUID, capHash string) error {
+	return m.updateNode(ctx, nodeID, func(n *models.Node) { n.CapabilityHash = &capHash })
+}
+
+// UpdateNodeConfigVersion sets the node's config_version.
+func (m *MockDB) UpdateNodeConfigVersion(ctx context.Context, nodeID uuid.UUID, configVersion string) error {
+	return m.updateNode(ctx, nodeID, func(n *models.Node) { n.ConfigVersion = &configVersion })
+}
+
+// UpdateNodeConfigAck records the node's configuration acknowledgement.
+func (m *MockDB) UpdateNodeConfigAck(_ context.Context, nodeID uuid.UUID, configVersion, status string, ackAt time.Time, errMsg *string) error {
+	return runWithWLockErr(m, func() error {
+		m.updateNodeWith(nodeID, func(n *models.Node) {
+			n.ConfigAckAt = &ackAt
+			n.ConfigAckStatus = &status
+			n.ConfigAckError = errMsg
+		})
 		return nil
 	})
 }

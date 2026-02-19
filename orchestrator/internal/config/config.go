@@ -33,6 +33,12 @@ type OrchestratorConfig struct {
 	// Orchestrator public URL for bootstrap payload (emitted to nodes).
 	OrchestratorPublicURL string
 
+	// Worker API: bearer token delivered to nodes for orchestrator-to-node auth (Phase 1: static).
+	WorkerAPIBearerToken string
+
+	// Worker API target URL for single-node Phase 1 (optional; used when node has not yet reported its URL).
+	WorkerAPITargetURL string
+
 	// Bootstrap
 	BootstrapAdminPassword string
 
@@ -81,6 +87,8 @@ func LoadOrchestratorConfig() *OrchestratorConfig {
 		JWTNodeDuration:        getDurationEnv("JWT_NODE_DURATION", 24*time.Hour),
 		NodeRegistrationPSK:    getEnv("NODE_REGISTRATION_PSK", "default-psk-change-me"),
 		OrchestratorPublicURL:  getEnv("ORCHESTRATOR_PUBLIC_URL", "http://localhost:8082"),
+		WorkerAPIBearerToken:  getEnv("WORKER_API_BEARER_TOKEN", "phase1-static-token"),
+		WorkerAPITargetURL:    getEnv("WORKER_API_TARGET_URL", ""),
 		BootstrapAdminPassword: getEnv("BOOTSTRAP_ADMIN_PASSWORD", "admin123"),
 		RateLimitPerMinute:     getIntEnv("RATE_LIMIT_PER_MINUTE", 60),
 	}

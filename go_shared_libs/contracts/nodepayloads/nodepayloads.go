@@ -72,3 +72,82 @@ type BootstrapAuth struct {
 func SupportedBootstrapVersion(v int) bool {
 	return v == 1
 }
+
+// NodeConfigurationPayload is the node configuration payload (node_configuration_payload_v1).
+// Spec CYNAI.WORKER.Payload.ConfigurationV1; see docs/tech_specs/node_payloads.md.
+type NodeConfigurationPayload struct {
+	Version       int                        `json:"version"`
+	ConfigVersion string                     `json:"config_version"`
+	IssuedAt      string                     `json:"issued_at"`
+	NodeSlug      string                     `json:"node_slug"`
+	Orchestrator  ConfigOrchestrator         `json:"orchestrator"`
+	SandboxRegistry ConfigSandboxRegistry    `json:"sandbox_registry"`
+	ModelCache    ConfigModelCache           `json:"model_cache"`
+	Policy        *ConfigPolicy              `json:"policy,omitempty"`
+	WorkerAPI     *ConfigWorkerAPI           `json:"worker_api,omitempty"`
+	Notes         string                     `json:"notes,omitempty"`
+	Constraints   *ConfigConstraints         `json:"constraints,omitempty"`
+}
+
+// ConfigOrchestrator contains orchestrator base URL and endpoints for node config.
+type ConfigOrchestrator struct {
+	BaseURL   string              `json:"base_url"`
+	Endpoints ConfigEndpoints     `json:"endpoints"`
+}
+
+// ConfigEndpoints contains endpoint URLs in the node configuration payload.
+type ConfigEndpoints struct {
+	WorkerAPITargetURL string `json:"worker_api_target_url"`
+	NodeReportURL     string `json:"node_report_url"`
+}
+
+// ConfigSandboxRegistry holds sandbox registry config (minimal for Phase 1).
+type ConfigSandboxRegistry struct {
+	RegistryURL string `json:"registry_url"`
+}
+
+// ConfigModelCache holds model cache config (minimal for Phase 1).
+type ConfigModelCache struct {
+	CacheURL string `json:"cache_url"`
+}
+
+// ConfigPolicy holds policy overrides (optional for Phase 1).
+type ConfigPolicy struct {
+	Sandbox *ConfigSandboxPolicy `json:"sandbox,omitempty"`
+}
+
+// ConfigSandboxPolicy holds sandbox policy fields.
+type ConfigSandboxPolicy struct {
+	DefaultNetworkPolicy string `json:"default_network_policy,omitempty"`
+}
+
+// ConfigWorkerAPI holds Worker API auth token for orchestrator-to-node calls.
+type ConfigWorkerAPI struct {
+	OrchestratorBearerToken        string `json:"orchestrator_bearer_token,omitempty"`
+	OrchestratorBearerTokenExpiresAt string `json:"orchestrator_bearer_token_expires_at,omitempty"`
+}
+
+// ConfigConstraints holds optional request/job limits.
+type ConfigConstraints struct {
+	MaxRequestBytes      int `json:"max_request_bytes,omitempty"`
+	MaxJobTimeoutSeconds int `json:"max_job_timeout_seconds,omitempty"`
+}
+
+// ConfigAck is the node configuration acknowledgement (node_config_ack_v1).
+// Spec CYNAI.WORKER.Payload.ConfigAckV1; see docs/tech_specs/node_payloads.md.
+type ConfigAck struct {
+	Version            int        `json:"version"`
+	NodeSlug           string     `json:"node_slug"`
+	ConfigVersion      string     `json:"config_version"`
+	AckAt              string     `json:"ack_at"`
+	Status             string     `json:"status"`
+	Error              *ConfigAckError `json:"error,omitempty"`
+	EffectiveConfigHash string    `json:"effective_config_hash,omitempty"`
+}
+
+// ConfigAckError holds error details in a config ack.
+type ConfigAckError struct {
+	Type    string `json:"type"`
+	Message string `json:"message"`
+	Details any    `json:"details,omitempty"`
+}

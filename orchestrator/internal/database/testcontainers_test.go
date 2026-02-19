@@ -1,5 +1,9 @@
 // Package database: run integration tests with testcontainers using Podman.
 // Requires Podman (rootful or rootless). Rootless: systemctl --user start podman.socket.
+//
+// Rootless Podman: testcontainers-go discovers the daemon via DOCKER_HOST. It does not
+// check the rootless Podman socket path ($XDG_RUNTIME_DIR/podman/podman.sock) by default.
+// We set DOCKER_HOST here when unset so "go test ./..." works without exporting it in the shell.
 package database
 
 import (
@@ -7,18 +11,38 @@ import (
 	"fmt"
 	"log/slog"
 	"os"
+	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/models"
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/modules/postgres"
 )
 
+// setupRootlessPodmanHost sets DOCKER_HOST to the rootless Podman socket if DOCKER_HOST
+// is unset and the socket exists. Required for testcontainers-go to find rootless Podman.
+func setupRootlessPodmanHost() {
+	if os.Getenv("DOCKER_HOST") != "" {
+		return
+	}
+	runtimeDir := os.Getenv("XDG_RUNTIME_DIR")
+	if runtimeDir == "" {
+		return
+	}
+	sock := filepath.Join(runtimeDir, "podman", "podman.sock")
+	if _, err := os.Stat(sock); err != nil {
+		return
+	}
+	_ = os.Setenv("DOCKER_HOST", "unix://"+sock)
+}
+
 func TestMain(m *testing.M) {
 	if os.Getenv(integrationEnv) != "" {
 		os.Exit(m.Run())
 		return
 	}
+	setupRootlessPodmanHost()
 	ctx := context.Background()
 	var code int
 	var container *postgres.PostgresContainer
@@ -33,7 +57,7 @@ func TestMain(m *testing.M) {
 		os.Exit(code)
 	}()
 	var err error
-	container, err = postgres.Run(ctx, "postgres:16-alpine",
+	container, err = postgres.Run(ctx, "pgvector/pgvector:pg16",
 		testcontainers.WithProvider(testcontainers.ProviderPodman),
 		postgres.WithDatabase("cynodeai"),
 		postgres.WithUsername("cynodeai"),
@@ -51,7 +75,31 @@ func TestMain(m *testing.M) {
 		return
 	}
 	_ = os.Setenv(integrationEnv, connStr)
+	// Wait for Postgres to accept connections (pgvector image can take 20–40s on first start).
+	if err := waitForPostgres(ctx, connStr, 60*time.Second); err != nil {
+		_, _ = os.Stderr.WriteString("[database/testcontainers] postgres not ready: " + err.Error() + "\n")
+		code = m.Run()
+		return
+	}
 	code = m.Run()
+}
+
+// waitForPostgres polls the database until it accepts connections or timeout. Checks once per second.
+func waitForPostgres(ctx context.Context, dsn string, timeout time.Duration) error {
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		db, err := Open(ctx, dsn)
+		if err == nil {
+			_ = db.Close()
+			return nil
+		}
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(time.Second):
+		}
+	}
+	return fmt.Errorf("postgres not ready within %v", timeout)
 }
 
 func tcOpenDB(t *testing.T, ctx context.Context) Store {

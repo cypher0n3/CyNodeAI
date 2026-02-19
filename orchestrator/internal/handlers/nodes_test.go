@@ -14,7 +14,7 @@ import (
 const testOrchestratorURL = "http://test-orchestrator"
 
 func TestNewNodeHandler(t *testing.T) {
-	handler := NewNodeHandler(nil, nil, "test-psk", testOrchestratorURL, nil)
+	handler := NewNodeHandler(nil, nil, "test-psk", testOrchestratorURL, "", "", nil)
 	if handler == nil {
 		t.Fatal("NewNodeHandler returned nil")
 	}
