@@ -17,6 +17,9 @@ It covers worker-node behavior and the worker API contract for job execution and
 - **REQ-WORKER-0002:** Node exposes worker API for sandbox lifecycle; no inbound SSH; container runtime primitives for sandbox ops.
   [CYNAI.WORKER.NodeSandboxControlPlane](../tech_specs/node.md#spec-cynai-worker-nodesandbox)
   <a id="req-worker-0002"></a>
+- **REQ-WORKER-0003:** Worker Telemetry: node MUST persist operational telemetry locally and expose an orchestrator-authenticated API for querying node logs, system info, and container inventory/state with bounded responses and retention.
+  [CYNAI.WORKER.Doc.WorkerTelemetryApi](../tech_specs/worker_telemetry_api.md#spec-cynai-worker-doc-workertelemetryapi)
+  <a id="req-worker-0003"></a>
 - **REQ-WORKER-0100:** The orchestrator MUST call the Worker API using a bearer token.
   [CYNAI.WORKER.WorkerApiAuth](../tech_specs/worker_api.md#spec-cynai-worker-workerauth)
   <a id="req-worker-0100"></a>
@@ -136,3 +139,84 @@ It covers worker-node behavior and the worker API contract for job execution and
 - **REQ-WORKER-0138:** Nodes SHOULD reject payloads with unsupported `version` values and report a structured error.
   [CYNAI.WORKER.Payload.CompatibilityVersioning](../tech_specs/node_payloads.md#spec-cynai-worker-payload-versioning)
   <a id="req-worker-0138"></a>
+
+- **REQ-WORKER-0140:** The node MUST expose unauthenticated health check endpoints `GET /healthz` and `GET /readyz`.
+  [CYNAI.WORKER.WorkerApiHealthChecks](../tech_specs/worker_api.md#spec-cynai-worker-workerapihealthchecks)
+  <a id="req-worker-0140"></a>
+- **REQ-WORKER-0141:** `GET /healthz` MUST return HTTP 200 with plain text body `ok` when the Worker API HTTP server is running.
+  [CYNAI.WORKER.WorkerApiHealthChecks](../tech_specs/worker_api.md#spec-cynai-worker-workerapihealthchecks)
+  <a id="req-worker-0141"></a>
+- **REQ-WORKER-0142:** `GET /readyz` MUST return HTTP 200 with plain text body `ready` when the node is ready to accept job execution requests, and MUST return HTTP 503 otherwise.
+  [CYNAI.WORKER.WorkerApiHealthChecks](../tech_specs/worker_api.md#spec-cynai-worker-workerapihealthchecks)
+  <a id="req-worker-0142"></a>
+
+- **REQ-WORKER-0143:** The node MUST implement `POST /v1/worker/jobs:run` with the request and response payload shapes defined in the Worker API tech spec.
+  [CYNAI.WORKER.WorkerApiRunJobSyncV1](../tech_specs/worker_api.md#spec-cynai-worker-workerapirunjobsync-v1)
+  <a id="req-worker-0143"></a>
+- **REQ-WORKER-0144:** The node MUST enforce job timeouts using the precedence and defaulting rules defined in the Worker API tech spec.
+  [CYNAI.WORKER.WorkerApiRunJobSyncV1](../tech_specs/worker_api.md#spec-cynai-worker-workerapirunjobsync-v1)
+  <a id="req-worker-0144"></a>
+- **REQ-WORKER-0145:** The node MUST enforce the Worker API request body size limit rules defined in the Worker API tech spec and MUST reject oversized requests with HTTP 413.
+  [CYNAI.WORKER.WorkerApiRequestSizeLimits](../tech_specs/worker_api.md#spec-cynai-worker-workerapirequestsizelimits)
+  <a id="req-worker-0145"></a>
+- **REQ-WORKER-0146:** The node MUST enforce stdout and stderr capture limits for `POST /v1/worker/jobs:run` using the defaults and truncation behavior defined in the Worker API tech spec.
+  [CYNAI.WORKER.WorkerApiStdIoCaptureLimits](../tech_specs/worker_api.md#spec-cynai-worker-workerapistdiocapturelimits)
+  <a id="req-worker-0146"></a>
+- **REQ-WORKER-0147:** When truncation occurs, the node MUST truncate by bytes, preserve valid UTF-8, and set `truncated.stdout` and `truncated.stderr` flags as defined in the Worker API tech spec.
+  [CYNAI.WORKER.WorkerApiStdIoCaptureLimits](../tech_specs/worker_api.md#spec-cynai-worker-workerapistdiocapturelimits)
+  <a id="req-worker-0147"></a>
+- **REQ-WORKER-0148:** The node MUST NOT attempt pattern-based secret redaction of sandbox stdout and stderr, and MUST rely on sandbox environment credential handling to prevent secret exposure.
+  [CYNAI.WORKER.WorkerApiSecretHandling](../tech_specs/worker_api.md#spec-cynai-worker-workerapisecrethandling)
+  <a id="req-worker-0148"></a>
+- **REQ-WORKER-0200:** Worker Telemetry API MUST require bearer token authentication for all telemetry endpoints.
+  [CYNAI.WORKER.TelemetryApiAuth](../tech_specs/worker_telemetry_api.md#spec-cynai-worker-telemetryauth)
+  <a id="req-worker-0200"></a>
+- **REQ-WORKER-0201:** Telemetry API bearer tokens MUST be treated as secrets and MUST NOT be logged.
+  [CYNAI.WORKER.TelemetryApiAuth](../tech_specs/worker_telemetry_api.md#spec-cynai-worker-telemetryauth)
+  <a id="req-worker-0201"></a>
+- **REQ-WORKER-0210:** Nodes MUST maintain a node-local SQLite database used to index and query telemetry for the Worker Telemetry API.
+  [CYNAI.WORKER.TelemetryStorageSqlite](../tech_specs/worker_telemetry_api.md#spec-cynai-worker-telemetrystorage-sqlite)
+  <a id="req-worker-0210"></a>
+- **REQ-WORKER-0211:** The telemetry SQLite database MUST be located at `${storage.state_dir}/telemetry/telemetry.db` (or `/var/lib/cynode/state/telemetry/telemetry.db` when `storage.state_dir` is unset).
+  [CYNAI.WORKER.TelemetryStorageSqlite](../tech_specs/worker_telemetry_api.md#spec-cynai-worker-telemetrystorage-sqlite)
+  <a id="req-worker-0211"></a>
+- **REQ-WORKER-0212:** Nodes MUST implement the telemetry SQLite schema defined by the Worker Telemetry API tech spec and MUST apply schema migrations on startup.
+  [CYNAI.WORKER.TelemetryStorageSqlite](../tech_specs/worker_telemetry_api.md#spec-cynai-worker-telemetrystorage-sqlite)
+  <a id="req-worker-0212"></a>
+- **REQ-WORKER-0220:** Nodes MUST enforce bounded retention for telemetry data so disk usage is controlled.
+  [CYNAI.WORKER.TelemetryRetention](../tech_specs/worker_telemetry_api.md#spec-cynai-worker-telemetryretention)
+  <a id="req-worker-0220"></a>
+- **REQ-WORKER-0221:** Nodes MUST enforce retention on startup and at least once per hour while running.
+  [CYNAI.WORKER.TelemetryRetention](../tech_specs/worker_telemetry_api.md#spec-cynai-worker-telemetryretention)
+  <a id="req-worker-0221"></a>
+- **REQ-WORKER-0222:** Nodes MUST perform SQLite vacuuming for the telemetry database at least once per day.
+  [CYNAI.WORKER.TelemetryRetention](../tech_specs/worker_telemetry_api.md#spec-cynai-worker-telemetryretention)
+  <a id="req-worker-0222"></a>
+- **REQ-WORKER-0230:** Nodes MUST implement the Worker Telemetry API endpoints defined by the Worker Telemetry API tech spec.
+  [CYNAI.WORKER.TelemetryApiSurfaceV1](../tech_specs/worker_telemetry_api.md#spec-cynai-worker-telemetrysurface-v1)
+  <a id="req-worker-0230"></a>
+- **REQ-WORKER-0231:** Nodes MUST provide a node info endpoint that returns build and platform information and the last known capability report when available.
+  [CYNAI.WORKER.TelemetryApiSurfaceV1](../tech_specs/worker_telemetry_api.md#spec-cynai-worker-telemetrysurface-v1)
+  <a id="req-worker-0231"></a>
+- **REQ-WORKER-0232:** Nodes MUST provide a node stats endpoint that returns a point-in-time resource snapshot.
+  [CYNAI.WORKER.TelemetryApiSurfaceV1](../tech_specs/worker_telemetry_api.md#spec-cynai-worker-telemetrysurface-v1)
+  <a id="req-worker-0232"></a>
+- **REQ-WORKER-0233:** Nodes MUST provide container inventory endpoints that support filtering by `kind`, `status`, `task_id`, and `job_id`.
+  [CYNAI.WORKER.TelemetryApiSurfaceV1](../tech_specs/worker_telemetry_api.md#spec-cynai-worker-telemetrysurface-v1)
+  <a id="req-worker-0233"></a>
+- **REQ-WORKER-0234:** Nodes MUST provide a log query endpoint that supports time range filtering and pagination, and enforces strict response size limits.
+  [CYNAI.WORKER.TelemetryApiSurfaceV1](../tech_specs/worker_telemetry_api.md#spec-cynai-worker-telemetrysurface-v1)
+  [CYNAI.WORKER.TelemetryLogQueryV1](../tech_specs/worker_telemetry_api.md#spec-cynai-worker-telemetrylogquery-v1)
+  <a id="req-worker-0234"></a>
+- **REQ-WORKER-0240:** The log query endpoint MUST require a source filter (service source or container id) and MUST reject unbounded queries.
+  [CYNAI.WORKER.TelemetryLogQueryV1](../tech_specs/worker_telemetry_api.md#spec-cynai-worker-telemetrylogquery-v1)
+  <a id="req-worker-0240"></a>
+- **REQ-WORKER-0241:** The log query endpoint MUST enforce a maximum response body size of 1 MiB and MUST indicate truncation in the response.
+  [CYNAI.WORKER.TelemetryLogQueryV1](../tech_specs/worker_telemetry_api.md#spec-cynai-worker-telemetrylogquery-v1)
+  <a id="req-worker-0241"></a>
+- **REQ-WORKER-0242:** Telemetry responses MUST NOT include secrets and MUST NOT leak bearer tokens.
+  [CYNAI.WORKER.TelemetryApiAuth](../tech_specs/worker_telemetry_api.md#spec-cynai-worker-telemetryauth)
+  <a id="req-worker-0242"></a>
+- **REQ-WORKER-0243:** Nodes MUST associate telemetry records for sandbox containers with `task_id` and `job_id` when known.
+  [CYNAI.WORKER.TelemetryStorageSqlite](../tech_specs/worker_telemetry_api.md#spec-cynai-worker-telemetrystorage-sqlite)
+  <a id="req-worker-0243"></a>

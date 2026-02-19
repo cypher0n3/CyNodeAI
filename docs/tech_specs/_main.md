@@ -60,6 +60,7 @@ Key principles
 - Data REST API: [`docs/tech_specs/data_rest_api.md`](data_rest_api.md)
 - Runs and sessions API: [`docs/tech_specs/runs_and_sessions_api.md`](runs_and_sessions_api.md)
 - Worker API (node contract): [`docs/tech_specs/worker_api.md`](worker_api.md)
+- Worker Telemetry API (node ops): [`docs/tech_specs/worker_telemetry_api.md`](worker_telemetry_api.md)
 
 ### Agents and Connectors
 

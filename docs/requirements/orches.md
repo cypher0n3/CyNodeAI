@@ -82,3 +82,12 @@ It covers orchestrator control-plane behavior, task lifecycle, dispatch, and sta
   [orchestrator.md](../tech_specs/orchestrator.md)
   [data_rest_api.md](../tech_specs/data_rest_api.md)
   <a id="req-orches-0124"></a>
+- **REQ-ORCHES-0140:** The orchestrator MUST be able to pull node operational telemetry (logs, system info, container inventory/state) from nodes via the Worker Telemetry API.
+  [CYNAI.ORCHES.NodeTelemetryPull](../tech_specs/worker_telemetry_api.md#spec-cynai-orches-nodetelemetrypull)
+  <a id="req-orches-0140"></a>
+- **REQ-ORCHES-0141:** The orchestrator MUST apply per-request timeouts and MUST tolerate node unavailability when pulling telemetry.
+  [CYNAI.ORCHES.NodeTelemetryPull](../tech_specs/worker_telemetry_api.md#spec-cynai-orches-nodetelemetrypull)
+  <a id="req-orches-0141"></a>
+- **REQ-ORCHES-0142:** The orchestrator MUST treat node telemetry as non-authoritative operational data and MUST NOT make correctness-critical scheduling decisions based solely on telemetry responses.
+  [CYNAI.ORCHES.NodeTelemetryPull](../tech_specs/worker_telemetry_api.md#spec-cynai-orches-nodetelemetrypull)
+  <a id="req-orches-0142"></a>

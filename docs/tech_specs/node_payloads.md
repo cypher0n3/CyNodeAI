@@ -37,6 +37,7 @@ Behavioral requirements remain defined in [`docs/tech_specs/node.md`](node.md).
 - Every payload includes a `version` integer.
 - Timestamps are RFC 3339 strings in UTC.
 - Optional fields may be omitted when unknown.
+- UUID values MUST be encoded as lowercase RFC 4122 strings.
 
 ## Security Notes
 
@@ -65,8 +66,10 @@ Source requirements: [`docs/tech_specs/node.md`](node.md#capability-reporting).
 - `version` (int)
   - must be 1
 - `reported_at` (string)
+  - RFC 3339 UTC timestamp
 - `node` (object)
   - `node_slug` (string)
+    - MUST match the node startup YAML `node.id`
   - `name` (string, optional)
   - `labels` (array of strings, optional)
 - `platform` (object)
@@ -104,8 +107,8 @@ Source requirements: [`docs/tech_specs/node.md`](node.md#capability-reporting).
   - `orchestrator_reachable` (boolean, optional)
   - `outbound_policy` (string, optional)
     - examples: unrestricted, restricted, allowlist, none
-- `capability_hash` (string, optional)
-  - stable hash over the normalized report
+- `capability_hash` (string, required)
+  - stable hash over the normalized report (see below)
 - `inference` (object, optional)
   - `supported` (boolean)
   - `mode` (string, optional)
@@ -158,6 +161,24 @@ Example
 }
 ```
 
+#### Capability Hash Algorithm (Required)
+
+The node MUST compute `capability_hash` as:
+
+- `sha256:` + lowercase hex SHA-256 digest of the canonical JSON encoding of the capability report **excluding**
+  the `capability_hash` field itself.
+
+Canonical JSON encoding rules (required)
+
+- Use UTF-8.
+- Use JSON object keys sorted lexicographically.
+- Do not include insignificant whitespace.
+- Omit optional fields that are unknown instead of setting them to `null`.
+- Preserve array element order.
+- Encode numbers using JSON number syntax without trailing `.0` for integers.
+
+The node MUST compute the hash over the byte sequence of the canonical JSON string.
+
 ## Node Bootstrap Payload
 
 This payload is returned by the orchestrator during registration.
@@ -200,6 +221,7 @@ Source requirements: [`docs/tech_specs/node.md`](node.md#registration-and-bootst
 Credential delivery
 
 - Registry and cache pull credentials SHOULD be issued as short-lived tokens.
+- When a token is included, `expires_at` SHOULD be present and SHOULD be an RFC 3339 UTC timestamp.
 - Tokens SHOULD be rotated by configuration refresh.
 
 ## Node Configuration Payload
@@ -217,6 +239,8 @@ Source requirements: [`docs/tech_specs/node.md`](node.md#configuration-delivery)
   - must be 1
 - `config_version` (string)
   - monotonic version identifier for this node
+  - For `version=1`, the orchestrator MUST use a ULID encoded as a 26-character Crockford Base32 string.
+  - Nodes MUST compare `config_version` values lexicographically to determine monotonic order.
 - `issued_at` (string)
 - `node_slug` (string)
 - `orchestrator` (object)
@@ -290,3 +314,8 @@ Traces To:
 - New fields MAY be added to payloads as optional fields.
 - Fields MUST NOT change meaning within the same `version`.
 - Nodes SHOULD reject payloads with unsupported `version` values and report a structured error.
+  - When rejecting a payload, nodes MUST return a Go REST API Problem Details error with:
+    - `type`: `https://cynode.ai/problems/unsupported-payload-version`
+    - `title`: `Unsupported payload version`
+    - `status`: 400
+    - `detail`: includes the received `version` and the supported versions

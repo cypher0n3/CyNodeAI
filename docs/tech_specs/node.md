@@ -34,7 +34,8 @@ The Node Manager is a host-level system service responsible for:
 
 - Starting and stopping worker services (worker API, Ollama, sandbox containers).
 - Managing container runtime (Docker or Podman) lifecycle for sandbox execution.
-  Podman is preferred for rootless operation.
+  Podman MUST be supported and MUST be the default runtime for sandbox execution.
+  Docker MAY be supported as an alternative runtime.
 - Receiving configuration updates from the orchestrator and applying them locally.
 - Managing local secure storage for pull credentials and certificates.
 
@@ -59,20 +60,21 @@ Worker API contract
 
 - The Worker API endpoint surface and payload shapes are defined in [`docs/tech_specs/worker_api.md`](worker_api.md).
 
-Recommended sandbox operations in the worker API
+Worker API operations (MVP Phase 1)
 
-- Create sandbox container for a task job.
-- Execute a command inside a sandbox container.
-- Upload and download workspace files, when needed.
-- Stream logs for a sandbox execution.
-- Stop and remove a sandbox container.
+For MVP Phase 1, the Worker API surface is intentionally minimal and MUST implement only:
+
+- `POST /v1/worker/jobs:run`
+
+Future phases MAY add endpoints for file transfer, async job polling, and log streaming, but those MUST be defined in
+[`docs/tech_specs/worker_api.md`](worker_api.md) before implementation.
 
 See [`docs/tech_specs/mcp_tooling.md`](mcp_tooling.md) for the MCP tool layer that orchestrator-side agents use.
 
 ## Node-Local Inference and Sandbox Workflow
 
 This section defines the preferred node-local workflow when a sandbox and Ollama inference are co-located on the same node.
-Node-local traffic SHOULD remain on the node and SHOULD not traverse external networks.
+Node-local traffic MUST remain on the node and MUST NOT traverse external networks.
 
 ### Node-Local Inference Applicable Requirements
 
@@ -83,7 +85,7 @@ Traces To:
 - [REQ-WORKER-0114](../requirements/worker.md#req-worker-0114)
 - [REQ-WORKER-0115](../requirements/worker.md#req-worker-0115)
 
-Option A (recommended for node-local execution)
+Option A (required for node-local execution when inference is enabled)
 
 - For each sandbox job, the Node Manager creates a runtime pod (Podman) or equivalent isolated network (Docker) for that job.
   Podman is preferred for rootless operation.
@@ -102,13 +104,16 @@ Rationale
 
 Implementation notes
 
-- The Node Manager should inject `OLLAMA_BASE_URL=http://localhost:11434` into the sandbox container environment.
-- The inference proxy sidecar should be minimal and should not expose credentials.
-- The inference proxy sidecar should enforce request size limits and timeouts.
+- The Node Manager MUST inject `OLLAMA_BASE_URL=http://localhost:11434` into the sandbox container environment.
+- The inference proxy sidecar MUST be minimal and MUST NOT expose credentials.
+- The inference proxy sidecar MUST enforce request size limits and timeouts.
+  - Maximum request body size MUST be 10485760 bytes (10 MiB).
+  - Per-request timeout MUST be 120 seconds.
 
 ## Node Sandbox MCP Exposure
 
-When the orchestrator needs to manage or interact with a sandbox on a node, sandbox operations should be exposed as MCP tools on that node.
+For MVP Phase 2 and later, when the orchestrator needs to manage or interact with a sandbox on a node, sandbox
+operations MUST be exposed as MCP tools on that node.
 The orchestrator acts as the routing point and agents do not connect to node MCP servers directly.
 
 ### Node Sandbox MCP Exposure Applicable Requirements
@@ -122,7 +127,7 @@ Traces To:
 - [REQ-WORKER-0118](../requirements/worker.md#req-worker-0118)
 - [REQ-WORKER-0119](../requirements/worker.md#req-worker-0119)
 
-Recommended sandbox MCP tool surface
+Required sandbox MCP tool surface
 
 - `sandbox.create`
 - `sandbox.exec`
@@ -133,7 +138,7 @@ Recommended sandbox MCP tool surface
 
 ## Node Startup YAML
 
-Nodes SHOULD support a local startup YAML file that the Node Manager reads on boot.
+Nodes MUST support a local startup YAML file that the Node Manager reads on boot.
 This file provides the minimum information required to contact the orchestrator and allows operators to apply node-local constraints.
 
 ### Node Startup YAML Applicable Requirements
@@ -194,7 +199,7 @@ These settings are node-local and MAY be stricter than orchestrator policy.
 
 ##### Security Notes
 
-- Secrets SHOULD be supplied via env vars or local files.
+- Secrets MUST be supplied via env vars or local files.
 - Node startup YAML MUST NOT embed external provider API keys.
 
 #### Node Settings
@@ -211,9 +216,11 @@ These settings are node-local and MAY be stricter than orchestrator policy.
 #### Worker API Settings
 
 - `worker_api.listen_host` (string, optional)
-  - Address/interface to bind (default implementation-defined).
+  - Address/interface to bind.
+  - Default MUST be `0.0.0.0`.
 - `worker_api.listen_port` (number, optional)
   - Port to bind.
+  - Default MUST be `8080`.
 - `worker_api.public_base_url` (string, optional)
   - Public URL the orchestrator should use to reach the worker API.
 - `worker_api.max_request_bytes` (number, optional)
@@ -226,10 +233,10 @@ Node startup YAML MUST support a sandbox mode that determines whether the node i
 Recommended values
 
 - `allow`
-  - The node may run sandboxes.
-  - The node may also provide inference if available and enabled.
+  - The node MUST be eligible for sandbox execution.
+  - The node MAY provide inference if available and enabled.
 - `sandbox_only`
-  - The node may run sandboxes.
+  - The node MUST be eligible for sandbox execution.
   - The node MUST NOT run inference services.
 - `disabled`
   - The node MUST NOT run sandboxes.
@@ -277,7 +284,7 @@ Sandbox keys
 
 #### Inference Settings
 
-Node startup YAML SHOULD allow operators to disable inference even if hardware is present.
+Node startup YAML MUST allow operators to disable inference even if hardware is present.
 
 Inference keys
 
@@ -387,7 +394,7 @@ Inference may be provided by node-local inference (Ollama) or by external model 
 In the single-node case, the system MUST refuse to enter a ready state if the node cannot run the inference container and there is no configured external provider key.
 See [`docs/tech_specs/external_model_routing.md`](external_model_routing.md) and [`docs/tech_specs/orchestrator_bootstrap.md`](orchestrator_bootstrap.md).
 
-Recommended startup flow
+Required startup flow
 
 - Start Node Manager system service.
 - Load node startup YAML and apply node-local constraints.
@@ -410,7 +417,7 @@ Rationale
 
 ## Sandbox-Only Nodes
 
-CyNodeAI SHOULD support nodes that do not provide AI inference capabilities.
+CyNodeAI MUST support nodes that do not provide AI inference capabilities.
 These nodes exist to run sandbox containers for tool execution, builds, tests, and other compute tasks.
 
 ### Sandbox-Only Nodes Applicable Requirements
@@ -426,16 +433,16 @@ Traces To:
 
 Capability reporting guidance
 
-- Sandbox-only nodes SHOULD report `gpu` capabilities as absent.
-- Sandbox-only nodes SHOULD include labels that indicate sandbox execution is supported.
-- Sandbox-only nodes SHOULD include labels that indicate inference is not supported.
+- Sandbox-only nodes MUST report `gpu.present=false`.
+- Sandbox-only nodes MUST include labels that indicate sandbox execution is supported.
+- Sandbox-only nodes MUST include labels that indicate inference is not supported.
 
 ## Registration and Bootstrap
 
 During registration, the node establishes trust with the orchestrator and receives a bootstrap configuration payload.
 Canonical payload shapes are defined in [`docs/tech_specs/node_payloads.md`](node_payloads.md).
 
-Recommended flow
+Required flow
 
 - Node registers using a pre-shared key (PSK).
 - Node sends a capability report as part of registration and on startup.
@@ -448,10 +455,10 @@ Recommended flow
 ## Capability Reporting
 
 Nodes MUST report host capabilities to the orchestrator so the orchestrator can select compatible configuration and schedule work safely.
-Nodes SHOULD report capabilities during registration and again on every node startup.
+Nodes MUST report capabilities during registration and again on every node startup.
 Canonical payload shapes are defined in [`docs/tech_specs/node_payloads.md`](node_payloads.md).
 
-Recommended capability fields
+Required capability fields
 
 - Identity and platform
   - OS type and distribution details
@@ -477,7 +484,7 @@ Recommended capability fields
 
 Change reporting
 
-- Nodes SHOULD compute and report a stable capability hash.
+- Nodes MUST compute and report `capability_hash` using the algorithm defined in [`docs/tech_specs/node_payloads.md`](node_payloads.md).
 - If capabilities change (hardware change, driver change, runtime change), the node MUST report an updated capability report.
 
 ## Configuration Delivery
@@ -485,25 +492,26 @@ Change reporting
 The orchestrator MUST be able to deliver and update configuration for registered nodes.
 Canonical payload shapes are defined in [`docs/tech_specs/node_payloads.md`](node_payloads.md).
 
-Recommended behavior
+Required behavior
 
 - The node MUST support receiving configuration at registration time.
-- The node SHOULD support configuration refresh, either by polling or by a push notification.
+- For MVP Phase 1, the node MUST fetch configuration on startup and MAY omit polling.
+- For MVP Phase 3 and later, the node MUST support configuration refresh, either by polling or by a push notification.
 - The node MUST validate configuration authenticity and origin before applying it.
-- The node SHOULD report configuration application status back to the orchestrator.
+- The node MUST report configuration application status back to the orchestrator.
 
 ## Dynamic Configuration Updates
 
 The orchestrator MUST be able to update node configuration after registration.
 This enables rotating credentials, changing registry endpoints, and applying new policy.
 
-Recommended behavior
+Required behavior (when `policy.updates.enable_dynamic_config=true`)
 
-- The orchestrator SHOULD version node configuration payloads.
-- The node SHOULD poll for configuration updates or receive them via a push channel.
+- The orchestrator MUST version node configuration payloads.
+- The node MUST poll for configuration updates or receive them via a push channel.
 - The node MUST apply configuration updates atomically where possible and MUST roll back on failure.
 - The node MUST acknowledge applied configuration version to the orchestrator.
-- The node SHOULD request a configuration refresh on startup and when capability reports change.
+- The node MUST request a configuration refresh on startup and when capability reports change.
 
 ## Credential Handling
 
@@ -523,7 +531,7 @@ Traces To:
 
 ## Required Node Configuration
 
-The orchestrator SHOULD configure nodes with:
+The orchestrator MUST configure nodes with:
 
 - Orchestrator endpoints
   - worker API target URLs and registration endpoints
