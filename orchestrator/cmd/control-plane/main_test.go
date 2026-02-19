@@ -15,6 +15,7 @@ import (
 
 	"github.com/cypher0n3/cynodeai/go_shared_libs/contracts/workerapi"
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/config"
+	"github.com/cypher0n3/cynodeai/orchestrator/internal/database"
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/models"
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/testutil"
 )
@@ -278,6 +279,15 @@ func TestBootstrapAdminUser_GetUserError(t *testing.T) {
 	}
 }
 
+// createUserErrorStore fails CreateUser (bootstrapAdminUser path).
+type createUserErrorStore struct {
+	*testutil.MockDB
+}
+
+func (m *createUserErrorStore) CreateUser(_ context.Context, _ string, _ *string) (*models.User, error) {
+	return nil, errors.New("create user error")
+}
+
 // createPasswordCredErrorStore fails CreatePasswordCredential (bootstrapAdminUser path).
 type createPasswordCredErrorStore struct {
 	*testutil.MockDB
@@ -287,13 +297,21 @@ func (m *createPasswordCredErrorStore) CreatePasswordCredential(_ context.Contex
 	return nil, errors.New("create credential error")
 }
 
+func TestBootstrapAdminUser_CreateUserFails(t *testing.T) {
+	testBootstrapAdminUserFails(t, &createUserErrorStore{MockDB: testutil.NewMockDB()}, "CreateUser")
+}
+
 func TestBootstrapAdminUser_CreatePasswordCredentialFails(t *testing.T) {
-	mock := &createPasswordCredErrorStore{MockDB: testutil.NewMockDB()}
+	testBootstrapAdminUserFails(t, &createPasswordCredErrorStore{MockDB: testutil.NewMockDB()}, "CreatePasswordCredential")
+}
+
+func testBootstrapAdminUserFails(t *testing.T, store database.Store, which string) {
+	t.Helper()
 	ctx := context.Background()
 	logger := slog.Default()
-	err := bootstrapAdminUser(ctx, mock, "adminpass", logger)
+	err := bootstrapAdminUser(ctx, store, "adminpass", logger)
 	if err == nil {
-		t.Fatal("expected error when CreatePasswordCredential fails")
+		t.Fatalf("expected error when %s fails", which)
 	}
 }
 
@@ -414,6 +432,15 @@ func TestRun_CancelledContext(t *testing.T) {
 	}
 }
 
+func TestRunMain_FlagParseError(t *testing.T) {
+	oldArgs := os.Args
+	defer func() { os.Args = oldArgs }()
+	os.Args = []string{"control-plane", "-unknown-flag"}
+	code := runMain()
+	if code != 1 {
+		t.Errorf("runMain() with bad flag = %d, want 1", code)
+	}
+}
 
 func TestRunMain_OpenFails(t *testing.T) {
 	oldArgs := os.Args

@@ -36,7 +36,12 @@ func runMain(ctx context.Context) int {
 		return 1
 	}
 	defer func() { _ = db.Close() }()
-	if err := run(ctx, cfg, db, logger); err != nil {
+	return runMainWithStore(ctx, cfg, db, logger)
+}
+
+// runMainWithStore runs the server with the given store. Returns 0 on success, 1 on failure. Used by tests to hit success path without opening DB.
+func runMainWithStore(ctx context.Context, cfg *config.OrchestratorConfig, store database.Store, logger *slog.Logger) int {
+	if err := run(ctx, cfg, store, logger); err != nil {
 		logger.Error("run failed", "error", err)
 		return 1
 	}

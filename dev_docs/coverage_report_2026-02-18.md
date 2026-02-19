@@ -41,7 +41,8 @@ Summary of work done to raise coverage:
 
 - **GORM()**: Integration test now calls `db.GORM()` in `integrationDB()` to cover the accessor.
   Coverage 86.4% -> 87.9%.
-  Later: added `TestWrapErr_Nil`, `TestWrapErr_ErrRecordNotFound`; integration tests for `GetUserByHandle_ErrNotFound`, `GetNodeBySlug_ErrNotFound`, `GetNodeByID_ErrNotFound`, `GetTaskByID_ErrNotFound`, `GetJobByID_ErrNotFound`, `GetPasswordCredentialByUserID_ErrNotFound`, `GetActiveRefreshSession_ErrNotFound`, `CreateUser_DuplicateHandle`, `ListTasksByUser_Empty`, `GetJobsByTaskID_Empty`. Test hooks `getSQLDB` / `getSQLDBFromDB` in `database.go` for Open/Close error paths; added `TestOpen_GetSQLDBFails`, `TestClose_GetSQLDBFromDBFails`.
+  Later: added `TestWrapErr_Nil`, `TestWrapErr_ErrRecordNotFound`; integration tests for `GetUserByHandle_ErrNotFound`, `GetNodeBySlug_ErrNotFound`, `GetNodeByID_ErrNotFound`, `GetTaskByID_ErrNotFound`, `GetJobByID_ErrNotFound`, `GetPasswordCredentialByUserID_ErrNotFound`, `GetActiveRefreshSession_ErrNotFound`, `CreateUser_DuplicateHandle`, `ListTasksByUser_Empty`, `GetJobsByTaskID_Empty`.
+  Test hooks `getSQLDB` / `getSQLDBFromDB` in `database.go` for Open/Close error paths; added `TestOpen_GetSQLDBFails`, `TestClose_GetSQLDBFromDBFails`.
   Coverage 87.9% -> 90.8%.
 
 ### 5. Orchestrator Internal/handlers/handlers
@@ -78,7 +79,8 @@ With `just test-go-cover-podman` (Postgres via Podman), all packages meet the 90
 - All new tests use existing patterns (mock DB, httptest, env vars, integration with Postgres).
 - No Makefiles or Justfiles were modified (per instructions).
 - Reports and temp files follow project layout (dev_docs, tmp).
-- Orchestrator 90% coverage requires Postgres: use `just test-go-cover-podman`. Without Postgres, `just test-go-cover` skips integration tests and some packages report lower coverage.
+- Orchestrator 90% coverage requires Postgres: use `just test-go-cover-podman`.
+  Without Postgres, `just test-go-cover` skips integration tests and some packages report lower coverage.
 
 ### 1. Worker Node Cmd/node/node-Manager (90%+)
 
