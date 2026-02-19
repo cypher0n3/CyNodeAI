@@ -20,6 +20,15 @@ import (
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/middleware"
 )
 
+// testShutdownTimeout, when set by tests, overrides the server shutdown timeout.
+var testShutdownTimeout *time.Duration
+
+// testShutdownHook, when set by tests, is called instead of server.Shutdown so tests can force a shutdown error.
+var testShutdownHook func(*http.Server, context.Context) error
+
+// testOpenStore, when set by tests, is used instead of database.Open when store is nil so store==nil path can be covered without a real DB.
+var testOpenStore func(context.Context, string) (database.Store, error)
+
 func main() {
 	if code := runMain(); code != 0 {
 		os.Exit(code)
@@ -27,8 +36,48 @@ func main() {
 }
 
 // runMain runs the control-plane and returns an exit code. Used by main and tests.
-// Parses flags from os.Args[1:] using a new FlagSet so it can be called multiple times in tests.
 func runMain() int {
+	return runMainWithContext(context.Background(), nil)
+}
+
+// resolveStore opens the DB when store is nil (using testOpenStore or database.Open). Returns (store, nil), (nil, nil) when migrateOnly after open, or (nil, err).
+func resolveStore(ctx context.Context, store database.Store, cfg *config.OrchestratorConfig, logger *slog.Logger, migrateOnly bool) (database.Store, error) {
+	if store != nil {
+		return store, nil
+	}
+	if testOpenStore != nil {
+		var err error
+		store, err = testOpenStore(ctx, cfg.DatabaseURL)
+		if err != nil {
+			logger.Error("failed to connect to database", "error", err)
+			return nil, err
+		}
+		if store != nil && migrateOnly {
+			logger.Info("schema applied (migrate-only)")
+			return nil, nil
+		}
+		return store, nil
+	}
+	db, err := database.Open(ctx, cfg.DatabaseURL)
+	if err != nil {
+		logger.Error("failed to connect to database", "error", err)
+		return nil, err
+	}
+	defer func() { _ = db.Close() }()
+	if err := db.RunSchema(ctx, logger); err != nil {
+		logger.Error("failed to run schema", "error", err)
+		return nil, err
+	}
+	if migrateOnly {
+		logger.Info("schema applied (migrate-only)")
+		return nil, nil
+	}
+	return db, nil
+}
+
+// runMainWithContext runs the control-plane with an optional store (for tests). When store is nil, opens DB from config.
+// Used by tests to exercise the full success path without a real database.
+func runMainWithContext(ctx context.Context, store database.Store) int {
 	fs := flag.NewFlagSet("control-plane", flag.ContinueOnError)
 	var migrateOnly bool
 	fs.BoolVar(&migrateOnly, "migrate-only", false, "run database migrations and exit")
@@ -43,24 +92,19 @@ func runMain() int {
 
 	cfg := config.LoadOrchestratorConfig()
 
-	ctx := context.Background()
-	db, err := database.Open(ctx, cfg.DatabaseURL)
+	var err error
+	store, err = resolveStore(ctx, store, cfg, logger, migrateOnly)
 	if err != nil {
-		logger.Error("failed to connect to database", "error", err)
 		return 1
 	}
-	defer func() { _ = db.Close() }()
-
-	if err := db.RunSchema(ctx, logger); err != nil {
-		logger.Error("failed to run schema", "error", err)
-		return 1
+	if store == nil {
+		return 0
 	}
 	if migrateOnly {
 		logger.Info("schema applied (migrate-only)")
 		return 0
 	}
 
-	var store database.Store = db
 	if err := run(ctx, store, cfg, logger); err != nil {
 		logger.Error("run failed", "error", err)
 		return 1
@@ -130,11 +174,21 @@ func run(ctx context.Context, store database.Store, cfg *config.OrchestratorConf
 	}
 
 	logger.Info("shutting down...")
-	shutdownCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+	shutdownTimeout := 30 * time.Second
+	if testShutdownTimeout != nil {
+		shutdownTimeout = *testShutdownTimeout
+	}
+	shutdownCtx, cancel := context.WithTimeout(ctx, shutdownTimeout)
 	defer cancel()
-	if err := server.Shutdown(shutdownCtx); err != nil {
-		logger.Error("shutdown error", "error", err)
-		return err
+	var shutdownErr error
+	if testShutdownHook != nil {
+		shutdownErr = testShutdownHook(server, shutdownCtx)
+	} else {
+		shutdownErr = server.Shutdown(shutdownCtx)
+	}
+	if shutdownErr != nil {
+		logger.Error("shutdown error", "error", shutdownErr)
+		return shutdownErr
 	}
 	logger.Info("server stopped")
 	return nil
