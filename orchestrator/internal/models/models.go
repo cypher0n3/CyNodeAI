@@ -133,16 +133,21 @@ func (AuthAuditLog) TableName() string { return "auth_audit_log" }
 
 // Node represents a registered worker node.
 type Node struct {
-	ID               uuid.UUID  `gorm:"type:uuid;primaryKey" json:"id"`
-	NodeSlug         string     `gorm:"column:node_slug;uniqueIndex" json:"node_slug"`
-	Status           string     `gorm:"column:status;index" json:"status"`
-	CapabilityHash   *string    `gorm:"column:capability_hash" json:"capability_hash,omitempty"`
-	ConfigVersion    *string    `gorm:"column:config_version" json:"config_version,omitempty"`
-	LastSeenAt       *time.Time `gorm:"column:last_seen_at" json:"last_seen_at,omitempty"`
-	LastCapabilityAt *time.Time `gorm:"column:last_capability_at" json:"last_capability_at,omitempty"`
-	Metadata         *string    `gorm:"column:metadata;type:jsonb" json:"metadata,omitempty"`
-	CreatedAt        time.Time  `gorm:"column:created_at" json:"created_at"`
-	UpdatedAt        time.Time  `gorm:"column:updated_at" json:"updated_at"`
+	ID                   uuid.UUID  `gorm:"type:uuid;primaryKey" json:"id"`
+	NodeSlug             string     `gorm:"column:node_slug;uniqueIndex" json:"node_slug"`
+	Status               string     `gorm:"column:status;index" json:"status"`
+	CapabilityHash       *string    `gorm:"column:capability_hash" json:"capability_hash,omitempty"`
+	ConfigVersion        *string    `gorm:"column:config_version" json:"config_version,omitempty"`
+	WorkerAPITargetURL   *string    `gorm:"column:worker_api_target_url" json:"worker_api_target_url,omitempty"`
+	WorkerAPIBearerToken *string    `gorm:"column:worker_api_bearer_token" json:"-"`
+	ConfigAckAt          *time.Time `gorm:"column:config_ack_at" json:"config_ack_at,omitempty"`
+	ConfigAckStatus      *string    `gorm:"column:config_ack_status" json:"config_ack_status,omitempty"`
+	ConfigAckError       *string    `gorm:"column:config_ack_error" json:"config_ack_error,omitempty"`
+	LastSeenAt           *time.Time `gorm:"column:last_seen_at" json:"last_seen_at,omitempty"`
+	LastCapabilityAt     *time.Time `gorm:"column:last_capability_at" json:"last_capability_at,omitempty"`
+	Metadata             *string    `gorm:"column:metadata;type:jsonb" json:"metadata,omitempty"`
+	CreatedAt            time.Time  `gorm:"column:created_at" json:"created_at"`
+	UpdatedAt            time.Time  `gorm:"column:updated_at" json:"updated_at"`
 }
 
 func (Node) TableName() string { return "nodes" }

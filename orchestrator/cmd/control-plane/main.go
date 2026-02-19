@@ -81,7 +81,7 @@ func run(ctx context.Context, store database.Store, cfg *config.OrchestratorConf
 		cfg.JWTNodeDuration,
 	)
 
-	nodeHandler := handlers.NewNodeHandler(store, jwtManager, cfg.NodeRegistrationPSK, cfg.OrchestratorPublicURL, logger)
+	nodeHandler := handlers.NewNodeHandler(store, jwtManager, cfg.NodeRegistrationPSK, cfg.OrchestratorPublicURL, cfg.WorkerAPIBearerToken, cfg.WorkerAPITargetURL, logger)
 	authMiddleware := middleware.NewAuthMiddleware(jwtManager, logger)
 
 	mux := http.NewServeMux()
@@ -91,6 +91,8 @@ func run(ctx context.Context, store database.Store, cfg *config.OrchestratorConf
 	})
 
 	mux.HandleFunc("POST /v1/nodes/register", nodeHandler.Register)
+	mux.Handle("GET /v1/nodes/config", authMiddleware.RequireNodeAuth(http.HandlerFunc(nodeHandler.GetConfig)))
+	mux.Handle("POST /v1/nodes/config", authMiddleware.RequireNodeAuth(http.HandlerFunc(nodeHandler.ConfigAck)))
 	mux.Handle("POST /v1/nodes/capability", authMiddleware.RequireNodeAuth(http.HandlerFunc(nodeHandler.ReportCapability)))
 
 	handler := middleware.Recovery(logger)(middleware.Logging(logger)(mux))

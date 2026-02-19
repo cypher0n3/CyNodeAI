@@ -18,9 +18,10 @@ go_modules := "go_shared_libs orchestrator worker_node"
 default:
     @just --list
 
-# Local CI: all lint, all tests (with 90% coverage), Go vuln check.
-# test-go-cover runs coverage for go_modules_cover; test-go-cover-podman runs all modules (orchestrator with Postgres via Podman).
-ci: lint-go lint-go-ci vulncheck-go lint-python lint-md validate-doc-links validate-feature-files test-go-cover test-go-cover-podman
+# Local CI: all lint, all tests (with 90% coverage), Go vuln check, BDD suites.
+# test-go-cover runs coverage for all go_modules (orchestrator uses testcontainers for Postgres when POSTGRES_TEST_DSN unset).
+# test-bdd runs Godog BDD for orchestrator and worker_node (orchestrator scenarios need POSTGRES_TEST_DSN for DB steps).
+ci: lint-go lint-go-ci vulncheck-go lint-python lint-md validate-doc-links validate-feature-files test-go-cover test-bdd
     @:
 
 # Full dev setup: podman, Go, and Go tools (incl. deps for .golangci.yml and lint-go-ci)
@@ -53,6 +54,39 @@ install-podman:
         exit 1
     fi
     echo "Podman installed: $(podman --version)"
+
+# Enable and start Podman so the API/socket is available (for testcontainers-go and orchestrator DB tests).
+# Linux: systemd user socket. macOS: podman machine (VM). Skips if already running.
+podman-setup: install-podman
+    #!/usr/bin/env bash
+    set -e
+    case "$(uname)" in
+      Darwin)
+        # macOS: ensure podman machine (default VM) is running. One-time init: podman machine init
+        if podman machine list --format '{{ "{{" }}.Running}}{{ "}}" }}' 2>/dev/null | grep -q 'true'; then
+            echo "podman machine already running"
+            exit 0
+        fi
+        podman machine start
+        ;;
+      Linux)
+        if ! command -v systemctl >/dev/null 2>&1; then
+            echo "podman-setup: systemctl not found; skipping"
+            exit 0
+        fi
+        active=$(systemctl --user is-active podman.socket 2>/dev/null) || true
+        enabled=$(systemctl --user is-enabled podman.socket 2>/dev/null) || true
+        if [ "$active" = "active" ] && [ "$enabled" = "enabled" ]; then
+            echo "podman.socket already enabled and active"
+            exit 0
+        fi
+        systemctl --user enable --now podman.socket
+        ;;
+      *)
+        echo "podman-setup: unsupported OS ($(uname)); skipping"
+        exit 0
+        ;;
+    esac
 
 # Install Go (prefer distro package; fall back to go.dev tarball for {{ go_version }})
 install-go:
@@ -240,8 +274,15 @@ fmt-go: install-go
       (cd "$m" && go mod tidy); \
     done
 
+# Tidy and update deps in all Go modules (go mod tidy in each)
+go-tidy: install-go
+    @for m in {{ go_modules }}; do \
+      echo "==> go mod tidy ($m)"; \
+      (cd "{{ root_dir }}/$m" && go mod tidy); \
+    done
+
 # Run Go tests
-test-go: test-go-cover test-go-cover-podman test-go-race test-go-e2e
+test-go: test-go-cover test-go-race test-go-e2e
     @:
 
 # E2E tests are opt-in (RUN_E2E=1) so default test-go / ci stay fast.
@@ -257,33 +298,9 @@ test-go-e2e:
 # Minimum Go coverage (percent) required per package when running test-go-cover / ci
 go_coverage_min := "90"
 
-# test-go-cover runs coverage for these only; orchestrator needs Postgres (test-go-cover-podman).
-go_modules_cover := "go_shared_libs worker_node"
-
-# Run Go tests with coverage; fail if any package is below go_coverage_min (awk aggregates coverprofile by pkg).
-test-go-cover: install-go
-    @fail=0; failed_pkgs=""; \
-    mkdir -p "{{ root_dir }}/tmp/go/coverage"; \
-    echo ""; echo "--- Go coverage (min {{ go_coverage_min }}% per package) ---"; echo ""; \
-    for m in {{ go_modules_cover }}; do \
-    echo "==> $m: go test -coverprofile"; \
-    out="{{ root_dir }}/tmp/go/coverage/$m.coverage.out"; \
-    (cd "$m" && go test ./... -coverprofile="$out" -covermode=atomic); \
-    r=0; below=$(awk -v min="{{ go_coverage_min }}" '/^mode:/{next}{path=$1;sub(/:.*/,"",path);n=split(path,a,"/");pkg=(n>1)?a[1]:".";for(i=2;i<n;i++)pkg=pkg"/"a[i];stmts=$2;cnt=$3;t[pkg]+=stmts;c[pkg]+=(cnt>0)?stmts:0}END{for(p in t){pct=(t[p]>0)?(100*c[p]/t[p]):0;if(pct<min+0){printf "  %s %.1f%%\n",p,pct;e=1}}exit e+0}' "$out") || r=$?; \
-    if [ "$r" -ne 0 ]; then \
-    echo "    [FAIL] packages below {{ go_coverage_min }}%:"; echo "$below"; fail=1; failed_pkgs="$failed_pkgs${failed_pkgs:+$'\n'}[$m]"$'\n'"$below"; \
-    else \
-    echo "    [PASS] all packages ≥ {{ go_coverage_min }}%"; \
-    fi; echo ""; \
-    done; \
-    if [ "$fail" -ne 0 ]; then \
-    echo "--- Summary ---"; echo "Packages below {{ go_coverage_min }}%:"; echo "$failed_pkgs"; echo ""; exit 1; \
-    fi; \
-    echo "--- Summary ---"; echo "All packages meet coverage threshold (≥ {{ go_coverage_min }}%)."; echo ""
-
-# Go coverage. For orchestrator: starts a Postgres container with Podman and sets POSTGRES_TEST_DSN
-# so database integration tests run (no testcontainers/socket needed). Other modules: plain go test.
-test-go-cover-podman: install-go
+# Run Go tests with coverage for all go_modules; fail if any package is below go_coverage_min.
+# Orchestrator uses testcontainers for Postgres when POSTGRES_TEST_DSN is unset (run just podman-setup first).
+test-go-cover: install-go podman-setup
     #!/usr/bin/env bash
     set -euo pipefail
     root="{{ root_dir }}"
@@ -296,44 +313,10 @@ test-go-cover-podman: install-go
     echo ""
 
     for m in {{ go_modules }}; do
-      # Orchestrator needs a real Postgres; other modules run tests without DB
-      if [ "$m" = "orchestrator" ]; then
-        out="$root/tmp/go/coverage/$m.coverage.out"
-        (cd "$root/$m" && go clean -testcache) || true
-        echo "==> $m: starting Postgres (podman), then go test -coverprofile"
-        pg_port=15432
-        cid=$(podman run -d --name cynodeai-pg-cover \
-          -e POSTGRES_USER=cynodeai \
-          -e POSTGRES_PASSWORD=cynodeai-test \
-          -e POSTGRES_DB=cynodeai \
-          -p 127.0.0.1:${pg_port}:5432 \
-          pgvector/pgvector:pg16 2>/dev/null) || cid=""
-        if [ -z "$cid" ]; then
-          # Container already exists or podman failed; run tests without DB so CI doesn't hard-fail
-          echo "    podman run failed; run orchestrator tests without DB (coverage will be below ${min}%)"
-          (cd "$root/$m" && go test ./... -coverprofile="$out" -covermode=atomic) || true
-        else
-          trap 'podman rm -f cynodeai-pg-cover 2>/dev/null || true' EXIT
-          # Wait for Postgres to accept connections (up to ~25s)
-          for i in $(seq 1 25); do
-            podman exec cynodeai-pg-cover pg_isready -U cynodeai -d cynodeai -q 2>/dev/null && break
-            sleep 1
-          done
-          sleep 5
-          # Orchestrator tests read this env var for DB connection
-          export POSTGRES_TEST_DSN="postgres://cynodeai:cynodeai-test@127.0.0.1:${pg_port}/cynodeai?sslmode=disable"
-          r=0; (cd "$root/$m" && go test ./... -coverprofile="$out" -covermode=atomic) || r=1
-          podman rm -f cynodeai-pg-cover 2>/dev/null || true
-          trap - EXIT
-          [ "$r" -ne 0 ] && exit "$r"
-        fi
-      else
-        echo "==> $m: go test -coverprofile"
-        out="$root/tmp/go/coverage/$m.coverage.out"
-        (cd "$root/$m" && go test ./... -coverprofile="$out" -covermode=atomic)
-      fi
+      echo "==> $m: go test -coverprofile"
+      out="$root/tmp/go/coverage/$m.coverage.out"
+      (cd "$root/$m" && go test ./... -coverprofile="$out" -covermode=atomic)
 
-      # Aggregate coverprofile by package dir; exit 1 if any package below min %
       r=0
       below=$(awk -v min="$min" '
         /^mode:/ { next }
@@ -354,12 +337,12 @@ test-go-cover-podman: install-go
         }
       ' "$out") || r=$?
       if [ "$r" -ne 0 ]; then
-        echo "    [FAIL] packages below ${min}%:"
+        echo "  [FAIL] packages below ${min}%:"
         echo "$below"
         fail=1
         failed="$failed${failed:+$'\n'}[$m]"$'\n'"$below"
       else
-        echo "    [PASS] all packages ≥ ${min}%"
+        echo "  [PASS] all packages ≥ ${min}%"
       fi
       echo ""
     done
@@ -390,6 +373,12 @@ lint: lint-go lint-go-ci lint-python lint-md validate-doc-links validate-feature
 test: test-go
     @:
 
+# BDD: run Godog suites for orchestrator and worker_node (from repo root).
+# Orchestrator steps that need a DB are skipped unless POSTGRES_TEST_DSN is set.
+# Run with DB: POSTGRES_TEST_DSN="postgres://..." just test-bdd
+test-bdd: install-go
+    @cd "{{ root_dir }}" && go test ./orchestrator/_bdd ./worker_node/_bdd -count=1
+
 # E2E: start Postgres, orchestrator, one worker node; run happy path (login, create task, get result).
 # Requires: podman or docker, jq. Stops existing services first; leaves services running after.
 e2e:
@@ -414,7 +403,7 @@ install-python-venv: venv
 # Python linting (flake8, pylint, radon, xenon, vulture, bandit). Optional: just lint-python paths="scripts,other"
 lint-python paths="scripts,.ci_scripts":
     #!/usr/bin/env bash
-    # No set -e: we capture each linter's exit code and fail at the end if any gating check failed
+    # No set -e: we capture each linter exit code and fail at the end if any gating check failed
     pushd "{{ root_dir }}" >/dev/null
     trap 'popd >/dev/null 2>/dev/null' EXIT
     LINT_PATHS=$(echo "{{ paths }}" | tr ',' ' ')

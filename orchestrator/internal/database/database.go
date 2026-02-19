@@ -74,6 +74,8 @@ type Store interface {
 	SaveNodeCapabilitySnapshot(ctx context.Context, nodeID uuid.UUID, capJSON string) error
 	UpdateNodeCapability(ctx context.Context, nodeID uuid.UUID, capHash string) error
 	ListActiveNodes(ctx context.Context) ([]*models.Node, error)
+	UpdateNodeConfigVersion(ctx context.Context, nodeID uuid.UUID, configVersion string) error
+	UpdateNodeConfigAck(ctx context.Context, nodeID uuid.UUID, configVersion, status string, ackAt time.Time, errMsg *string) error
 }
 
 // DB wraps GORM database operations.

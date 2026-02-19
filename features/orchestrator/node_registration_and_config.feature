@@ -44,3 +44,16 @@ Feature: Node Registration and Configuration
     And the node sends a config acknowledgement with status "applied"
     Then the orchestrator records the config ack for "test-node-01"
     And the node config_version is stored
+
+  @req_worker_0135
+  @spec_cynai_worker_payload_configurationv1
+  Scenario: GET config without node JWT returns 401
+    When an unauthenticated request requests node configuration
+    Then the orchestrator responds with 401 Unauthorized
+
+  @req_worker_0135
+  @spec_cynai_worker_payload_configackv1
+  Scenario: Config ack with wrong node_slug is rejected
+    Given a registered node "test-node-01" that has received configuration
+    When the node sends a config acknowledgement with node_slug "wrong-slug" and status "applied"
+    Then the orchestrator responds with 400 Bad Request

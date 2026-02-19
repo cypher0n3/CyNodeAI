@@ -71,3 +71,21 @@ func (db *DB) SaveNodeCapabilitySnapshot(ctx context.Context, nodeID uuid.UUID, 
 	}
 	return db.createRecord(ctx, nodeCap, "save node capability snapshot")
 }
+
+// UpdateNodeConfigVersion sets the node's config_version.
+func (db *DB) UpdateNodeConfigVersion(ctx context.Context, nodeID uuid.UUID, configVersion string) error {
+	return db.updateWhere(ctx, &models.Node{}, "id", nodeID,
+		map[string]interface{}{"config_version": configVersion}, "update node config version")
+}
+
+// UpdateNodeConfigAck records the node's configuration acknowledgement.
+func (db *DB) UpdateNodeConfigAck(ctx context.Context, nodeID uuid.UUID, configVersion, status string, ackAt time.Time, errMsg *string) error {
+	updates := map[string]interface{}{
+		"config_ack_at":     ackAt,
+		"config_ack_status": status,
+	}
+	if errMsg != nil {
+		updates["config_ack_error"] = *errMsg
+	}
+	return db.updateWhere(ctx, &models.Node{}, "id", nodeID, updates, "update node config ack")
+}

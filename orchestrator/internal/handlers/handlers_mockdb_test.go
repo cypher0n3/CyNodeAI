@@ -654,7 +654,7 @@ func TestNodeHandler_RegisterNewNode(t *testing.T) {
 	jwtMgr := auth.NewJWTManager("test-secret-key-1234567890123456", 15*time.Minute, 7*24*time.Hour, 24*time.Hour)
 	logger := newTestLogger()
 
-	handler := NewNodeHandler(mockDB, jwtMgr, "test-psk-secret", testOrchestratorURL, logger)
+	handler := NewNodeHandler(mockDB, jwtMgr, "test-psk-secret", testOrchestratorURL, "", "", logger)
 
 	body := NodeRegistrationRequest{PSK: "test-psk-secret", Capability: testNodeCapabilityReport("test-node-1", "Test Node 1", 8, 16384)}
 	jsonBody, _ := json.Marshal(body)
@@ -693,7 +693,7 @@ func TestNodeHandler_RegisterExistingNode(t *testing.T) {
 	jwtMgr := auth.NewJWTManager("test-secret-key-1234567890123456", 15*time.Minute, 7*24*time.Hour, 24*time.Hour)
 	logger := newTestLogger()
 
-	handler := NewNodeHandler(mockDB, jwtMgr, "test-psk-secret", testOrchestratorURL, logger)
+	handler := NewNodeHandler(mockDB, jwtMgr, "test-psk-secret", testOrchestratorURL, "", "", logger)
 
 	// Create existing node
 	node := &models.Node{
@@ -723,7 +723,7 @@ func TestNodeHandler_RegisterDBError(t *testing.T) {
 	jwtMgr := auth.NewJWTManager("test-secret-key-1234567890123456", 15*time.Minute, 7*24*time.Hour, 24*time.Hour)
 	logger := newTestLogger()
 
-	handler := NewNodeHandler(mockDB, jwtMgr, "test-psk-secret", testOrchestratorURL, logger)
+	handler := NewNodeHandler(mockDB, jwtMgr, "test-psk-secret", testOrchestratorURL, "", "", logger)
 
 	body := NodeRegistrationRequest{
 		PSK: "test-psk-secret",
@@ -756,7 +756,7 @@ func TestNodeHandler_ReportCapabilitySuccess(t *testing.T) {
 	jwtMgr := auth.NewJWTManager("test-secret-key-1234567890123456", 15*time.Minute, 7*24*time.Hour, 24*time.Hour)
 	logger := newTestLogger()
 
-	handler := NewNodeHandler(mockDB, jwtMgr, "test-psk-secret", testOrchestratorURL, logger)
+	handler := NewNodeHandler(mockDB, jwtMgr, "test-psk-secret", testOrchestratorURL, "", "", logger)
 
 	// Create node
 	node := &models.Node{
@@ -781,13 +781,291 @@ func TestNodeHandler_ReportCapabilitySuccess(t *testing.T) {
 	}
 }
 
+// --- Node Config (GET/POST /v1/nodes/config) Tests ---
+
+func TestNodeHandler_GetConfig_Success(t *testing.T) {
+	mockDB := testutil.NewMockDB()
+	jwtMgr := auth.NewJWTManager("test-secret-key-1234567890123456", 15*time.Minute, 7*24*time.Hour, 24*time.Hour)
+	logger := newTestLogger()
+
+	handler := NewNodeHandler(mockDB, jwtMgr, "test-psk", testOrchestratorURL, "bearer-token-1", "http://node:8081", logger)
+
+	cfgVer := "1"
+	node := &models.Node{
+		ID:            uuid.New(),
+		NodeSlug:      "cfg-node",
+		Status:        models.NodeStatusActive,
+		ConfigVersion: &cfgVer,
+		CreatedAt:     time.Now().UTC(),
+		UpdatedAt:     time.Now().UTC(),
+	}
+	mockDB.AddNode(node)
+
+	ctx := context.WithValue(context.Background(), contextKeyNodeID, node.ID)
+	req := httptest.NewRequest("GET", "/v1/nodes/config", http.NoBody).WithContext(ctx)
+	rec := httptest.NewRecorder()
+
+	handler.GetConfig(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Errorf("expected status 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	var payload nodepayloads.NodeConfigurationPayload
+	if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("unmarshal config: %v", err)
+	}
+	if payload.Version != 1 || payload.ConfigVersion != "1" || payload.NodeSlug != "cfg-node" {
+		t.Errorf("unexpected payload: version=%d config_version=%s node_slug=%s", payload.Version, payload.ConfigVersion, payload.NodeSlug)
+	}
+	if payload.WorkerAPI == nil || payload.WorkerAPI.OrchestratorBearerToken != "bearer-token-1" {
+		t.Errorf("expected worker_api.orchestrator_bearer_token, got %+v", payload.WorkerAPI)
+	}
+	if payload.Orchestrator.Endpoints.WorkerAPITargetURL != "http://node:8081" {
+		t.Errorf("expected worker_api_target_url from handler, got %s", payload.Orchestrator.Endpoints.WorkerAPITargetURL)
+	}
+}
+
+func TestNodeHandler_GetConfig_NoNodeID(t *testing.T) {
+	mockDB := testutil.NewMockDB()
+	handler := NewNodeHandler(mockDB, nil, "test-psk", testOrchestratorURL, "", "", nil)
+
+	req := httptest.NewRequest("GET", "/v1/nodes/config", http.NoBody)
+	rec := httptest.NewRecorder()
+
+	handler.GetConfig(rec, req)
+
+	if rec.Code != http.StatusUnauthorized {
+		t.Errorf("expected status 401, got %d", rec.Code)
+	}
+}
+
+func TestNodeHandler_GetConfig_NodeNotFound(t *testing.T) {
+	mockDB := testutil.NewMockDB()
+	handler := NewNodeHandler(mockDB, nil, "test-psk", testOrchestratorURL, "", "", nil)
+
+	ctx := context.WithValue(context.Background(), contextKeyNodeID, uuid.New())
+	req := httptest.NewRequest("GET", "/v1/nodes/config", http.NoBody).WithContext(ctx)
+	rec := httptest.NewRecorder()
+
+	handler.GetConfig(rec, req)
+
+	if rec.Code != http.StatusNotFound {
+		t.Errorf("expected status 404, got %d", rec.Code)
+	}
+}
+
+func TestNodeHandler_ConfigAck_Success(t *testing.T) {
+	mockDB := testutil.NewMockDB()
+	logger := newTestLogger()
+	handler := NewNodeHandler(mockDB, nil, "test-psk", testOrchestratorURL, "", "", logger)
+
+	node := &models.Node{
+		ID:        uuid.New(),
+		NodeSlug:  "ack-node",
+		Status:    models.NodeStatusActive,
+		CreatedAt: time.Now().UTC(),
+		UpdatedAt: time.Now().UTC(),
+	}
+	mockDB.AddNode(node)
+
+	ack := nodepayloads.ConfigAck{
+		Version:       1,
+		NodeSlug:      "ack-node",
+		ConfigVersion: "1",
+		AckAt:         time.Now().UTC().Format(time.RFC3339),
+		Status:        "applied",
+	}
+	jsonBody, _ := json.Marshal(ack)
+	ctx := context.WithValue(context.Background(), contextKeyNodeID, node.ID)
+	req := httptest.NewRequest("POST", "/v1/nodes/config", bytes.NewBuffer(jsonBody)).WithContext(ctx)
+	rec := httptest.NewRecorder()
+
+	handler.ConfigAck(rec, req)
+
+	if rec.Code != http.StatusNoContent {
+		t.Errorf("expected status 204, got %d: %s", rec.Code, rec.Body.String())
+	}
+	// Node should have config ack fields updated (via mock)
+	updated, _ := mockDB.GetNodeByID(context.Background(), node.ID)
+	if updated.ConfigAckStatus == nil || *updated.ConfigAckStatus != "applied" {
+		t.Errorf("expected config_ack_status applied, got %v", updated.ConfigAckStatus)
+	}
+}
+
+func TestNodeHandler_ConfigAck_NoNodeID(t *testing.T) {
+	handler := NewNodeHandler(nil, nil, "test-psk", testOrchestratorURL, "", "", nil)
+
+	ack := nodepayloads.ConfigAck{Version: 1, NodeSlug: "x", ConfigVersion: "1", AckAt: time.Now().UTC().Format(time.RFC3339), Status: "applied"}
+	jsonBody, _ := json.Marshal(ack)
+	req := httptest.NewRequest("POST", "/v1/nodes/config", bytes.NewBuffer(jsonBody))
+	rec := httptest.NewRecorder()
+
+	handler.ConfigAck(rec, req)
+
+	if rec.Code != http.StatusUnauthorized {
+		t.Errorf("expected status 401, got %d", rec.Code)
+	}
+}
+
+func TestNodeHandler_ConfigAck_BadRequestCases(t *testing.T) {
+	tests := []struct {
+		name      string
+		ack       nodepayloads.ConfigAck
+		nodeSlug  string
+	}{
+		{"bad slug", nodepayloads.ConfigAck{
+			Version: 1, NodeSlug: "wrong-slug", ConfigVersion: "1",
+			AckAt: time.Now().UTC().Format(time.RFC3339), Status: "applied",
+		}, "real-slug"},
+		{"invalid status", nodepayloads.ConfigAck{
+			Version: 1, NodeSlug: "status-node", ConfigVersion: "1",
+			AckAt: time.Now().UTC().Format(time.RFC3339), Status: "rolled_back",
+		}, "status-node"},
+		{"unsupported version", nodepayloads.ConfigAck{
+			Version: 2, NodeSlug: "ver-node", ConfigVersion: "1",
+			AckAt: time.Now().UTC().Format(time.RFC3339), Status: "applied",
+		}, "ver-node"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mockDB := testutil.NewMockDB()
+			handler := NewNodeHandler(mockDB, nil, "test-psk", testOrchestratorURL, "", "", nil)
+			node := &models.Node{
+				ID: uuid.New(), NodeSlug: tt.nodeSlug, Status: models.NodeStatusActive,
+				CreatedAt: time.Now().UTC(), UpdatedAt: time.Now().UTC(),
+			}
+			mockDB.AddNode(node)
+			jsonBody, _ := json.Marshal(tt.ack)
+			ctx := context.WithValue(context.Background(), contextKeyNodeID, node.ID)
+			req := httptest.NewRequest("POST", "/v1/nodes/config", bytes.NewBuffer(jsonBody)).WithContext(ctx)
+			rec := httptest.NewRecorder()
+			handler.ConfigAck(rec, req)
+			if rec.Code != http.StatusBadRequest {
+				t.Errorf("expected status 400, got %d", rec.Code)
+			}
+		})
+	}
+}
+
+func TestNodeHandler_GetConfig_SetsConfigVersionWhenNil(t *testing.T) {
+	mockDB := testutil.NewMockDB()
+	handler := NewNodeHandler(mockDB, nil, "test-psk", testOrchestratorURL, "tok", "", nil)
+
+	node := &models.Node{
+		ID:        uuid.New(),
+		NodeSlug:  "no-ver-node",
+		Status:    models.NodeStatusActive,
+		CreatedAt: time.Now().UTC(),
+		UpdatedAt: time.Now().UTC(),
+		// ConfigVersion nil
+	}
+	mockDB.AddNode(node)
+
+	ctx := context.WithValue(context.Background(), contextKeyNodeID, node.ID)
+	req := httptest.NewRequest("GET", "/v1/nodes/config", http.NoBody).WithContext(ctx)
+	rec := httptest.NewRecorder()
+
+	handler.GetConfig(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Errorf("expected status 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	// Handler should have persisted config_version "1"
+	updated, _ := mockDB.GetNodeByID(context.Background(), node.ID)
+	if updated.ConfigVersion == nil || *updated.ConfigVersion != "1" {
+		t.Errorf("expected config_version 1 to be set, got %v", updated.ConfigVersion)
+	}
+}
+
+func TestNodeHandler_ConfigAck_InvalidBody(t *testing.T) {
+	mockDB := testutil.NewMockDB()
+	handler := NewNodeHandler(mockDB, nil, "test-psk", testOrchestratorURL, "", "", nil)
+
+	node := &models.Node{
+		ID:        uuid.New(),
+		NodeSlug:  "body-node",
+		Status:    models.NodeStatusActive,
+		CreatedAt: time.Now().UTC(),
+		UpdatedAt: time.Now().UTC(),
+	}
+	mockDB.AddNode(node)
+
+	ctx := context.WithValue(context.Background(), contextKeyNodeID, node.ID)
+	req := httptest.NewRequest("POST", "/v1/nodes/config", bytes.NewBufferString("{invalid}")).WithContext(ctx)
+	rec := httptest.NewRecorder()
+
+	handler.ConfigAck(rec, req)
+
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("expected status 400, got %d", rec.Code)
+	}
+}
+
+func TestNodeHandler_GetConfig_DBError(t *testing.T) {
+	mockDB := testutil.NewMockDB()
+	mockDB.ForceError = errors.New("db error")
+	handler := NewNodeHandler(mockDB, nil, "test-psk", testOrchestratorURL, "", "", nil)
+
+	node := &models.Node{
+		ID:        uuid.New(),
+		NodeSlug:  "db-err-node",
+		Status:    models.NodeStatusActive,
+		CreatedAt: time.Now().UTC(),
+		UpdatedAt: time.Now().UTC(),
+	}
+	mockDB.AddNode(node)
+
+	ctx := context.WithValue(context.Background(), contextKeyNodeID, node.ID)
+	req := httptest.NewRequest("GET", "/v1/nodes/config", http.NoBody).WithContext(ctx)
+	rec := httptest.NewRecorder()
+
+	handler.GetConfig(rec, req)
+
+	if rec.Code != http.StatusInternalServerError {
+		t.Errorf("expected status 500, got %d", rec.Code)
+	}
+}
+
+func TestNodeHandler_ConfigAck_DBError(t *testing.T) {
+	mockDB := testutil.NewMockDB()
+	mockDB.ForceError = errors.New("db error")
+	handler := NewNodeHandler(mockDB, nil, "test-psk", testOrchestratorURL, "", "", nil)
+
+	node := &models.Node{
+		ID:        uuid.New(),
+		NodeSlug:  "ack-db-node",
+		Status:    models.NodeStatusActive,
+		CreatedAt: time.Now().UTC(),
+		UpdatedAt: time.Now().UTC(),
+	}
+	mockDB.AddNode(node)
+
+	ack := nodepayloads.ConfigAck{
+		Version:       1,
+		NodeSlug:      "ack-db-node",
+		ConfigVersion: "1",
+		AckAt:         time.Now().UTC().Format(time.RFC3339),
+		Status:        "applied",
+	}
+	jsonBody, _ := json.Marshal(ack)
+	ctx := context.WithValue(context.Background(), contextKeyNodeID, node.ID)
+	req := httptest.NewRequest("POST", "/v1/nodes/config", bytes.NewBuffer(jsonBody)).WithContext(ctx)
+	rec := httptest.NewRecorder()
+
+	handler.ConfigAck(rec, req)
+
+	if rec.Code != http.StatusInternalServerError {
+		t.Errorf("expected status 500, got %d", rec.Code)
+	}
+}
+
 func TestNodeHandler_ReportCapabilityDBError(t *testing.T) {
 	mockDB := testutil.NewMockDB()
 	mockDB.ForceError = errors.New("database error")
 	jwtMgr := auth.NewJWTManager("test-secret-key-1234567890123456", 15*time.Minute, 7*24*time.Hour, 24*time.Hour)
 	logger := newTestLogger()
 
-	handler := NewNodeHandler(mockDB, jwtMgr, "test-psk-secret", testOrchestratorURL, logger)
+	handler := NewNodeHandler(mockDB, jwtMgr, "test-psk-secret", testOrchestratorURL, "", "", logger)
 
 	nodeID := uuid.New()
 	report := NodeCapabilityReport{
@@ -955,7 +1233,7 @@ func TestNodeHandler_handleExistingNodeDBError(t *testing.T) {
 	mockDB.AddNode(node)
 	mockDB.ForceError = errors.New("db error on update")
 
-	handler := NewNodeHandler(mockDB, jwtMgr, "test-psk", testOrchestratorURL, logger)
+	handler := NewNodeHandler(mockDB, jwtMgr, "test-psk", testOrchestratorURL, "", "", logger)
 
 	body := NodeRegistrationRequest{
 		PSK: "test-psk",
@@ -1028,7 +1306,7 @@ func TestNodeHandler_ReportCapabilityWithSandbox(t *testing.T) {
 	jwtMgr := auth.NewJWTManager("test-secret-key-1234567890123456", 15*time.Minute, 7*24*time.Hour, 24*time.Hour)
 	logger := newTestLogger()
 
-	handler := NewNodeHandler(mockDB, jwtMgr, "test-psk-secret", testOrchestratorURL, logger)
+	handler := NewNodeHandler(mockDB, jwtMgr, "test-psk-secret", testOrchestratorURL, "", "", logger)
 
 	node := &models.Node{
 		ID:        uuid.New(),
@@ -1155,7 +1433,7 @@ func TestNodeHandler_NewNodeRegistrationJWTError(t *testing.T) {
 	jwtMgr := auth.NewJWTManager("", 15*time.Minute, 7*24*time.Hour, 24*time.Hour)
 	logger := newTestLogger()
 
-	handler := NewNodeHandler(mockDB, jwtMgr, "test-psk-secret", testOrchestratorURL, logger)
+	handler := NewNodeHandler(mockDB, jwtMgr, "test-psk-secret", testOrchestratorURL, "", "", logger)
 
 	body := NodeRegistrationRequest{
 		PSK: "test-psk-secret",
@@ -1201,7 +1479,7 @@ func TestNodeHandler_ExistingNodeJWTError(t *testing.T) {
 	mockDB := testutil.NewMockDB()
 	mockDB.AddNode(node)
 
-	handler := NewNodeHandler(mockDB, jwtMgr, "test-psk", testOrchestratorURL, logger)
+	handler := NewNodeHandler(mockDB, jwtMgr, "test-psk", testOrchestratorURL, "", "", logger)
 
 	body := NodeRegistrationRequest{
 		PSK: "test-psk",
@@ -1296,7 +1574,7 @@ func TestNodeHandler_ReportCapabilityUpdateErrors(t *testing.T) {
 	}
 	mockDB.AddNode(node)
 
-	handler := NewNodeHandler(mockDB, jwtMgr, "test-psk", testOrchestratorURL, logger)
+	handler := NewNodeHandler(mockDB, jwtMgr, "test-psk", testOrchestratorURL, "", "", logger)
 
 	report := NodeCapabilityReport{
 		Version: 1,
@@ -1356,7 +1634,7 @@ func TestNodeHandler_RegisterExistingNode_UpdateNodeStatusFails(t *testing.T) {
 	}
 	mockDB.AddNode(node)
 	jwtMgr := auth.NewJWTManager("test-secret-key-1234567890123456", 15*time.Minute, 7*24*time.Hour, 24*time.Hour)
-	handler := NewNodeHandler(mockDB, jwtMgr, "test-psk", testOrchestratorURL, newTestLogger())
+	handler := NewNodeHandler(mockDB, jwtMgr, "test-psk", testOrchestratorURL, "", "", newTestLogger())
 
 	body := NodeRegistrationRequest{
 		PSK: "test-psk",
@@ -1387,7 +1665,7 @@ func (m *createNodeErrorStore) CreateNode(_ context.Context, _ string) (*models.
 func TestNodeHandler_RegisterNewNode_CreateNodeFails(t *testing.T) {
 	mockDB := &createNodeErrorStore{MockDB: testutil.NewMockDB()}
 	jwtMgr := auth.NewJWTManager("test-secret-key-1234567890123456", 15*time.Minute, 7*24*time.Hour, 24*time.Hour)
-	handler := NewNodeHandler(mockDB, jwtMgr, "test-psk", testOrchestratorURL, newTestLogger())
+	handler := NewNodeHandler(mockDB, jwtMgr, "test-psk", testOrchestratorURL, "", "", newTestLogger())
 
 	body := NodeRegistrationRequest{
 		PSK: "test-psk",

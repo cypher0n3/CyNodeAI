@@ -24,16 +24,20 @@ type NodeHandler struct {
 	jwt                   *auth.JWTManager
 	registrationPSK       string
 	orchestratorPublicURL string
+	workerAPIBearerToken  string
+	workerAPITargetURL    string
 	logger                *slog.Logger
 }
 
 // NewNodeHandler creates a new node handler.
-func NewNodeHandler(db database.Store, jwt *auth.JWTManager, registrationPSK, orchestratorPublicURL string, logger *slog.Logger) *NodeHandler {
+func NewNodeHandler(db database.Store, jwt *auth.JWTManager, registrationPSK, orchestratorPublicURL, workerAPIBearerToken, workerAPITargetURL string, logger *slog.Logger) *NodeHandler {
 	return &NodeHandler{
 		db:                    db,
 		jwt:                   jwt,
 		registrationPSK:       registrationPSK,
 		orchestratorPublicURL: orchestratorPublicURL,
+		workerAPIBearerToken:  workerAPIBearerToken,
+		workerAPITargetURL:    workerAPITargetURL,
 		logger:                logger,
 	}
 }
@@ -193,6 +197,10 @@ func (h *NodeHandler) initializeNewNode(ctx context.Context, nodeID uuid.UUID, c
 		h.logError("update node status", "error", err)
 	}
 
+	if err := h.db.UpdateNodeConfigVersion(ctx, nodeID, "1"); err != nil {
+		h.logError("set initial config version", "error", err)
+	}
+
 	capJSON, _ := json.Marshal(capability)
 	if err := h.db.SaveNodeCapabilitySnapshot(ctx, nodeID, string(capJSON)); err != nil {
 		h.logError("save capability snapshot", "error", err)
@@ -223,6 +231,126 @@ func (h *NodeHandler) buildBootstrapResponse(baseURL, nodeJWT string, expiresAt 
 			ExpiresAt: expiresAt.Format(time.RFC3339),
 		},
 	}
+}
+
+// GetConfig handles GET /v1/nodes/config. Returns node_configuration_payload_v1.
+func (h *NodeHandler) GetConfig(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	nodeID := getNodeIDFromContext(ctx)
+	if nodeID == nil {
+		WriteUnauthorized(w, "Node authentication required")
+		return
+	}
+
+	node, err := h.db.GetNodeByID(ctx, *nodeID)
+	if err != nil {
+		if errors.Is(err, database.ErrNotFound) {
+			WriteNotFound(w, "Node not found")
+			return
+		}
+		h.logError("get node", "error", err)
+		WriteInternalError(w, "Failed to get node config")
+		return
+	}
+
+	configVersion := "1"
+	if node.ConfigVersion != nil && *node.ConfigVersion != "" {
+		configVersion = *node.ConfigVersion
+	} else {
+		if err := h.db.UpdateNodeConfigVersion(ctx, node.ID, configVersion); err != nil {
+			h.logError("set config version", "error", err)
+		}
+	}
+
+	baseURL := strings.TrimSuffix(h.orchestratorPublicURL, "/")
+	workerAPITargetURL := h.workerAPITargetURL
+	if node.WorkerAPITargetURL != nil && *node.WorkerAPITargetURL != "" {
+		workerAPITargetURL = *node.WorkerAPITargetURL
+	}
+
+	payload := nodepayloads.NodeConfigurationPayload{
+		Version:       1,
+		ConfigVersion: configVersion,
+		IssuedAt:      time.Now().UTC().Format(time.RFC3339),
+		NodeSlug:      node.NodeSlug,
+		Orchestrator: nodepayloads.ConfigOrchestrator{
+			BaseURL: baseURL,
+			Endpoints: nodepayloads.ConfigEndpoints{
+				WorkerAPITargetURL: workerAPITargetURL,
+				NodeReportURL:      baseURL + "/v1/nodes/capability",
+			},
+		},
+		SandboxRegistry: nodepayloads.ConfigSandboxRegistry{RegistryURL: ""},
+		ModelCache:      nodepayloads.ConfigModelCache{CacheURL: ""},
+	}
+	if h.workerAPIBearerToken != "" {
+		payload.WorkerAPI = &nodepayloads.ConfigWorkerAPI{
+			OrchestratorBearerToken: h.workerAPIBearerToken,
+		}
+	}
+
+	WriteJSON(w, http.StatusOK, payload)
+}
+
+// ConfigAck handles POST /v1/nodes/config. Accepts node_config_ack_v1 and records the acknowledgement.
+func (h *NodeHandler) ConfigAck(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	nodeID := getNodeIDFromContext(ctx)
+	if nodeID == nil {
+		WriteUnauthorized(w, "Node authentication required")
+		return
+	}
+
+	node, err := h.db.GetNodeByID(ctx, *nodeID)
+	if err != nil {
+		if errors.Is(err, database.ErrNotFound) {
+			WriteNotFound(w, "Node not found")
+			return
+		}
+		h.logError("get node", "error", err)
+		WriteInternalError(w, "Failed to record config ack")
+		return
+	}
+
+	var ack nodepayloads.ConfigAck
+	if err := json.NewDecoder(r.Body).Decode(&ack); err != nil {
+		WriteBadRequest(w, "Invalid request body")
+		return
+	}
+
+	if ack.Version != 1 {
+		WriteBadRequest(w, "Unsupported config ack version")
+		return
+	}
+	if ack.NodeSlug != node.NodeSlug {
+		WriteBadRequest(w, "node_slug does not match authenticated node")
+		return
+	}
+	if ack.Status != "applied" && ack.Status != "failed" {
+		WriteBadRequest(w, "status must be applied or failed")
+		return
+	}
+
+	ackAt := time.Now().UTC()
+	if ack.AckAt != "" {
+		if t, err := time.Parse(time.RFC3339, ack.AckAt); err == nil {
+			ackAt = t.UTC()
+		}
+	}
+
+	var errMsg *string
+	if ack.Error != nil && ack.Error.Message != "" {
+		errMsg = &ack.Error.Message
+	}
+
+	if err := h.db.UpdateNodeConfigAck(ctx, node.ID, ack.ConfigVersion, ack.Status, ackAt, errMsg); err != nil {
+		h.logError("update config ack", "error", err)
+		WriteInternalError(w, "Failed to record config ack")
+		return
+	}
+
+	h.logInfo("config ack recorded", "node_slug", node.NodeSlug, "config_version", ack.ConfigVersion, "status", ack.Status)
+	w.WriteHeader(http.StatusNoContent)
 }
 
 // ReportCapability handles POST /v1/nodes/capability.
