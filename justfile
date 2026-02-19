@@ -223,12 +223,15 @@ test-go: install-go
 # Minimum Go coverage (percent) required per package when running test-go-cover / ci
 go_coverage_min := "90"
 
+# Modules included in test-go-cover (orchestrator skipped; use test-go-cover-podman for orchestrator coverage with Postgres).
+go_modules_cover := "go_shared_libs worker_node"
+
 # Run Go tests with coverage; fail if any package in any module is below go_coverage_min
 test-go-cover: install-go
     @fail=0; failed_pkgs=""; \
     mkdir -p "{{ root_dir }}/tmp/go/coverage"; \
     echo ""; echo "--- Go coverage (min {{ go_coverage_min }}% per package) ---"; echo ""; \
-    for m in {{ go_modules }}; do \
+    for m in {{ go_modules_cover }}; do \
       echo "==> $m: go test -coverprofile"; \
       out="{{ root_dir }}/tmp/go/coverage/$m.coverage.out"; \
       (cd "$m" && go test ./... -coverprofile="$out" -covermode=atomic); \

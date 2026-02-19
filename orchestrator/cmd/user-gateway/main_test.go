@@ -44,6 +44,25 @@ func TestLimitBody(t *testing.T) {
 	}
 }
 
+func TestGetEnv_USER_GATEWAY_LISTEN_ADDR(t *testing.T) {
+	// run() uses getEnv("USER_GATEWAY_LISTEN_ADDR", getEnv("LISTEN_ADDR", ":8080"))
+	_ = os.Unsetenv("USER_GATEWAY_LISTEN_ADDR")
+	_ = os.Unsetenv("LISTEN_ADDR")
+	if getEnv("LISTEN_ADDR", ":8080") != ":8080" {
+		t.Error("LISTEN_ADDR default")
+	}
+	_ = os.Setenv("LISTEN_ADDR", ":9090")
+	defer func() { _ = os.Unsetenv("LISTEN_ADDR") }()
+	if getEnv("USER_GATEWAY_LISTEN_ADDR", getEnv("LISTEN_ADDR", ":8080")) != ":9090" {
+		t.Error("USER_GATEWAY_LISTEN_ADDR should fall back to LISTEN_ADDR")
+	}
+	_ = os.Setenv("USER_GATEWAY_LISTEN_ADDR", ":7070")
+	defer func() { _ = os.Unsetenv("USER_GATEWAY_LISTEN_ADDR") }()
+	if getEnv("USER_GATEWAY_LISTEN_ADDR", getEnv("LISTEN_ADDR", ":8080")) != ":7070" {
+		t.Error("USER_GATEWAY_LISTEN_ADDR should take precedence")
+	}
+}
+
 func TestRun_CancelledContext(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
@@ -57,16 +76,36 @@ func TestRun_CancelledContext(t *testing.T) {
 }
 
 func TestRun_StartAndShutdown(t *testing.T) {
+	oldAddr := os.Getenv("LISTEN_ADDR")
+	_ = os.Setenv("LISTEN_ADDR", ":18080")
+	defer func() {
+		if oldAddr != "" {
+			_ = os.Setenv("LISTEN_ADDR", oldAddr)
+		} else {
+			_ = os.Unsetenv("LISTEN_ADDR")
+		}
+	}()
 	ctx, cancel := context.WithCancel(context.Background())
 	cfg := config.LoadOrchestratorConfig()
 	mockDB := testutil.NewMockDB()
 	logger := slog.Default()
-	go func() {
-		_ = run(ctx, cfg, mockDB, logger)
-	}()
-	time.Sleep(50 * time.Millisecond)
+	done := make(chan error, 1)
+	go func() { done <- run(ctx, cfg, mockDB, logger) }()
+	time.Sleep(80 * time.Millisecond)
+	resp, err := http.Get("http://127.0.0.1:18080/healthz")
+	if err == nil {
+		_ = resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			t.Errorf("healthz: got %d", resp.StatusCode)
+		}
+	}
 	cancel()
-	time.Sleep(100 * time.Millisecond)
+	time.Sleep(150 * time.Millisecond)
+	select {
+	case <-done:
+	default:
+		t.Log("run may still be shutting down")
+	}
 }
 
 func TestRun_ListenAndServeFails(t *testing.T) {
@@ -91,29 +130,14 @@ func TestRun_ListenAndServeFails(t *testing.T) {
 }
 
 func TestRunMain_Success(t *testing.T) {
-	pgTest := os.Getenv("POSTGRES_TEST_DSN")
-	if pgTest == "" {
-		t.Skip("POSTGRES_TEST_DSN not set; need DB for runMain success path")
-	}
-	oldDSN := os.Getenv("DATABASE_URL")
-	_ = os.Setenv("DATABASE_URL", pgTest)
-	defer func() {
-		if oldDSN != "" {
-			_ = os.Setenv("DATABASE_URL", oldDSN)
-		} else {
-			_ = os.Unsetenv("DATABASE_URL")
-		}
-	}()
 	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	done := make(chan int, 1)
-	go func() { done <- runMain(ctx) }()
-	time.Sleep(80 * time.Millisecond)
 	cancel()
-	time.Sleep(150 * time.Millisecond)
-	code := <-done
+	cfg := config.LoadOrchestratorConfig()
+	mockDB := testutil.NewMockDB()
+	logger := slog.Default()
+	code := runMainWithStore(ctx, cfg, mockDB, logger)
 	if code != 0 {
-		t.Errorf("runMain success path: got %d", code)
+		t.Errorf("runMainWithStore success path: got %d", code)
 	}
 }
 
@@ -159,6 +183,27 @@ func TestRunMain_RunFails(t *testing.T) {
 	code := runMain(ctx)
 	if code != 1 {
 		t.Errorf("runMain when run fails: got %d", code)
+	}
+}
+
+func TestRunMainWithStore_RunFails(t *testing.T) {
+	oldAddr := os.Getenv("LISTEN_ADDR")
+	_ = os.Setenv("LISTEN_ADDR", ":99999")
+	defer func() {
+		if oldAddr != "" {
+			_ = os.Setenv("LISTEN_ADDR", oldAddr)
+		} else {
+			_ = os.Unsetenv("LISTEN_ADDR")
+		}
+	}()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	cfg := config.LoadOrchestratorConfig()
+	mockDB := testutil.NewMockDB()
+	logger := slog.Default()
+	code := runMainWithStore(ctx, cfg, mockDB, logger)
+	if code != 1 {
+		t.Errorf("runMainWithStore when run fails: got %d", code)
 	}
 }
 
