@@ -24,7 +24,15 @@
 
 As of 2026-02-19, gap closure status is documented in [`dev_docs/mvp_specs_gaps_closure_status.md`](./mvp_specs_gaps_closure_status.md).
 The blocking schema gap is closed; Phase 1 dispatch (direct HTTP to Worker API, no MCP gateway) and BDD scenarios are closed in permanent specs and suite-scoped feature files under [`features/`](../features/).
-This document adds an explicit **MVP requirement scope** (Section 6) mapping requirement IDs to Phase 1 in-scope vs deferred, closing the optional gap 2.4.
+
+Implementation progress versus this plan (branch `mvp/phase-1`, checked 2026-02-19):
+
+- Chunk 01: complete (acceptance checklist and Phase 1 inference precondition / fail-fast behavior).
+- Chunk 02: complete (bootstrap payload: `orchestrator.base_url`, `orchestrator.endpoints`, `auth.node_jwt`).
+- Chunk 03: complete (node config delivery API: GET/POST `node_config_url`, config ack storage).
+- Remaining: Chunks 04-07.
+
+This document includes an explicit **MVP requirement scope** (Section 6) mapping requirement IDs to Phase 1 in-scope vs deferred.
 
 ## 2 Phase 1 Scope and Decisions
 
@@ -46,9 +54,12 @@ This section cross-checks the status report in [`dev_docs/PHASE1_STATUS.md`](./P
   The control-plane stores capability snapshots and updates a capability hash.
   See [`orchestrator/internal/handlers/nodes.go`](../orchestrator/internal/handlers/nodes.go) and [`docs/tech_specs/node_payloads.md`](../docs/tech_specs/node_payloads.md).
 
-- Configuration delivery is not implemented.
-  There is no node config endpoint, and the bootstrap response does not include the required orchestrator endpoints or a node config URL.
-  See [`docs/tech_specs/node_payloads.md`](../docs/tech_specs/node_payloads.md) and [`docs/tech_specs/orchestrator.md`](../docs/tech_specs/orchestrator.md).
+- Configuration delivery is implemented (orchestrator side).
+  The control-plane exposes:
+  - `GET /v1/nodes/config`: returns `node_configuration_payload_v1`.
+  - `POST /v1/nodes/config`: accepts `node_config_ack_v1` and records config acknowledgement on the node.
+  The node bootstrap response includes `orchestrator.base_url` and `orchestrator.endpoints` (including `node_config_url`).
+  See [`orchestrator/cmd/control-plane/main.go`](../orchestrator/cmd/control-plane/main.go), [`orchestrator/internal/handlers/nodes.go`](../orchestrator/internal/handlers/nodes.go), and [`docs/tech_specs/node_payloads.md`](../docs/tech_specs/node_payloads.md).
 
 - Job dispatch is implemented, but it is single-node and not node-address-aware.
   The dispatcher runs inside the control-plane process and calls a single Worker API URL from environment configuration.
@@ -141,6 +152,8 @@ The Node Manager must not report the node as ready for job dispatch until the Ol
 
 This chunk aligns node registration bootstrap behavior with [`docs/tech_specs/node_payloads.md`](../docs/tech_specs/node_payloads.md) so a node can discover where to fetch its configuration.
 
+Status: complete (2026-02-19).
+
 #### 4.2.1 Phase 1 Minimal Bootstrap Subset (Definition)
 
 For Phase 1, we do not need full bootstrap payload completeness.
@@ -172,7 +185,7 @@ Anything beyond this (for example trust bundles and an initial config version hi
 #### 4.2.3 Chunk 02 Deliverables
 
 - Node registration returns a spec-aligned bootstrap payload shape.
-- Node manager can register and parse the bootstrap payload shape without relying on hard-coded endpoint paths.
+- Node manager can register and parse the bootstrap payload shape and uses returned endpoint URLs for follow-on calls (capability reporting today; config retrieval in Chunk 04).
 
 #### 4.2.4 Chunk 02 Validation
 
@@ -182,6 +195,8 @@ Anything beyond this (for example trust bundles and an initial config version hi
 ### 4.3 Chunk 03 (4-6 Hours): Implement Minimum Node Config Delivery API in the Control Plane
 
 This chunk implements Phase 1 "config delivery" on the orchestrator side.
+
+Status: complete (2026-02-19).
 
 #### 4.3.1 MVP Phase 1 Decisions (Config Delivery and Transport)
 
@@ -225,15 +240,25 @@ This chunk implements the node startup sequence that fetches orchestrator config
 - Start the Worker API service using the delivered bearer token instead of requiring manual env configuration.
   Confirm that the token is treated as a secret and is not logged.
 - Implement the Phase 1 inference startup behavior as locked in [Section 2](#2-phase-1-scope-and-decisions).
+- Add or update BDD coverage for the node manager config fetch + startup sequence:
+  - Create or update `features/worker_node/` feature coverage to assert:
+    - The node manager fetches config via `node_config_url` (from bootstrap payload, not hard-coded paths).
+    - The node manager uses `worker_api.orchestrator_bearer_token` from config (no manual env token wiring).
+    - The node manager submits config acknowledgement (`node_config_ack_v1`) after applying config (Phase 1: startup-only).
+    - Fail-fast / non-ready behavior is exercised for inference startup failures (per the locked Phase 1 precondition).
+  - Implement step definitions for the above in the worker-node BDD suite.
 
 #### 4.4.2 Chunk 04 Deliverables
 
 - Node manager performs: register => fetch config => start worker api => start ollama => report config ack.
 - Worker API bearer token distribution is end-to-end via orchestrator config delivery.
+- Feature coverage exists/updated under `features/worker_node/` and the worker-node BDD suite executes the config fetch/startup path (including a config ack).
 
 #### 4.4.3 Chunk 04 Validation
 
+- Run `just validate-feature-files`.
 - Run `just test-go`.
+- Run `POSTGRES_TEST_DSN="postgres://..." just test-bdd` (orchestrator config ack steps require a DB).
 - Run `just lint-go-ci`.
 
 ### 4.5 Chunk 05 (4-6 Hours): Make Worker API Sandbox Execution Match Phase 1 Spec Constraints
@@ -251,14 +276,23 @@ This chunk ensures sandbox execution behavior matches the Phase 1 expectations i
   See [`docs/tech_specs/sandbox_container.md`](../docs/tech_specs/sandbox_container.md).
 - Ensure environment variables include non-secret task context variables (task id, job id, workspace dir) and do not include orchestrator secrets.
   See [`docs/tech_specs/sandbox_container.md`](../docs/tech_specs/sandbox_container.md).
+- Add or update worker-node BDD coverage for Phase 1 sandbox constraints:
+  - Update `features/worker_node/worker_node_sandbox_execution.feature` to include scenarios that assert:
+    - `network_policy` behavior matches Phase 1 decisions (`restricted` treated as deny-all; `none` is deny-all).
+    - The container runs with a deterministic working directory (`/workspace`) and a per-task workspace mount.
+    - Sandbox environment contains task/job/workspace context and does not include orchestrator secrets.
+  - Implement/update step definitions to validate the above (including inspecting the returned run result / metadata as needed).
 
 #### 4.5.2 Chunk 05 Deliverables
 
 - Worker API executes sandbox jobs with the expected baseline constraints and predictable working directory behavior.
+- Feature coverage exists/updated under `features/worker_node/` for sandbox constraints, and step definitions are implemented (no `godog.ErrSkip`).
 
 #### 4.5.3 Chunk 05 Validation
 
+- Run `just validate-feature-files`.
 - Run `just test-go`.
+- Run `POSTGRES_TEST_DSN="postgres://..." just test-bdd` (runs the worker-node suite and orchestrator suite; orchestrator scenarios require DB for DB-backed steps).
 - Run `just lint-go-ci`.
 
 ### 4.6 Chunk 06 (4-6 Hours): Make Orchestrator Dispatch Node-Aware (Single Node, Spec-Shaped)
@@ -273,14 +307,22 @@ This chunk keeps the Phase 1 dispatcher simple while aligning it to the node con
 - Stop using a single global Worker API bearer token from env for dispatch.
   Use the per-node bearer token as stored via config delivery.
 - Ensure dispatch only targets nodes that are active and have acknowledged a config version that contains Worker API connectivity details.
+- Add or update orchestrator BDD coverage for node-aware dispatch:
+  - Update `features/orchestrator/orchestrator_task_lifecycle.feature` to assert:
+    - The dispatcher uses per-node worker target URL and bearer token derived from config delivery (not global env wiring).
+    - Dispatch selects only nodes that are active and have acknowledged an applicable config version.
+  - Implement/update step definitions so these scenarios execute end-to-end against the control-plane test server.
 
 #### 4.6.2 Chunk 06 Deliverables
 
 - The dispatcher uses per-node endpoint and per-node bearer token derived from the config delivery flow.
+- Feature coverage exists/updated under `features/orchestrator/` for node-aware dispatch, and step definitions are implemented (no `godog.ErrSkip`).
 
 #### 4.6.3 Chunk 06 Validation
 
+- Run `just validate-feature-files`.
 - Run `just test-go`.
+- Run `POSTGRES_TEST_DSN="postgres://..." just test-bdd`.
 - Run `just lint-go-ci`.
 
 ### 4.7 Chunk 07 (4-6 Hours): End-to-End Phase 1 Demo Hardening
@@ -291,17 +333,21 @@ This chunk ensures the Phase 1 happy path works from scratch, using only `just` 
 
 - Update the existing happy path test flow so it does not rely on manual environment variables for worker api token distribution.
   The Node Manager should be able to boot, fetch config, start worker api, and accept dispatch with no extra manual steps beyond the orchestrator bootstrap variables.
-- Run the Phase 1 BDD feature scenarios and ensure they pass.
-  See [`features/e2e/single_node_happy_path.feature`](../features/e2e/single_node_happy_path.feature) and the suite-specific features under `features/orchestrator/` and `features/worker_node/`.
+- Flesh out and run Phase 1 BDD feature scenarios (no skips) to cover the remaining chunk behaviors:
+  - Ensure suite-scoped features under `features/orchestrator/` and `features/worker_node/` include coverage for Chunks 04-06.
+  - Ensure the end-to-end feature `features/e2e/single_node_happy_path.feature` does not depend on manual Worker API token wiring (token delivered via config).
+  - Implement any missing step definitions so `just test-bdd` is fully meaningful for Phase 1 (no `godog.ErrSkip` in Phase 1 paths).
 - Ensure the documentation in [`dev_docs/PHASE1_STATUS.md`](./PHASE1_STATUS.md) is consistent with the actual Phase 1 wiring.
   Do not update tech specs without explicit direction.
 
 #### 4.7.2 Chunk 07 Deliverables
 
 - A clean local run path that passes the Phase 1 happy path using project tooling.
+- All Phase 1 feature files are present/updated and step definitions implemented for the remaining chunks; Phase 1 BDD suites execute without skips for Phase 1 scenarios.
 
 #### 4.7.3 Chunk 07 Validation
 
+- Run `just validate-feature-files`.
 - Run `just ci`.
 - Run `just e2e`.
 
