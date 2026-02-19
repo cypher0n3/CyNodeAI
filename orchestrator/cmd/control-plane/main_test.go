@@ -20,6 +20,8 @@ import (
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/testutil"
 )
 
+const testJobPayload = `{"command":["echo","hi"]}`
+
 func TestLoadDispatcherConfig(t *testing.T) {
 	_ = os.Unsetenv("DISPATCHER_ENABLED")
 	_ = os.Unsetenv("DISPATCH_POLL_INTERVAL")
@@ -113,7 +115,7 @@ func TestDispatchOnce_Success(t *testing.T) {
 	mock := testutil.NewMockDB()
 	ctx := context.Background()
 	task, _ := mock.CreateTask(ctx, nil, "prompt")
-	payload := `{"command":["echo","hi"]}`
+	payload := testJobPayload
 	job, _ := mock.CreateJob(ctx, task.ID, payload)
 	node, _ := mock.CreateNode(ctx, "node-1")
 	_ = mock.UpdateNodeStatus(ctx, node.ID, models.NodeStatusActive)
@@ -152,7 +154,7 @@ func TestDispatchOnce_ErrNotFound(t *testing.T) {
 }
 
 func TestDispatchOnce_NoNodes(t *testing.T) {
-	payload := `{"command":["echo","hi"]}`
+	payload := testJobPayload
 	mock := testutil.NewMockDB()
 	ctx := context.Background()
 	task, _ := mock.CreateTask(ctx, nil, "p")
@@ -372,7 +374,7 @@ func runDispatchOnceWithWorkerStatus(t *testing.T, statusCode int) {
 	mock := testutil.NewMockDB()
 	ctx := context.Background()
 	task, _ := mock.CreateTask(ctx, nil, "p")
-	_, _ = mock.CreateJob(ctx, task.ID, `{"command":["echo","hi"]}`)
+	_, _ = mock.CreateJob(ctx, task.ID, testJobPayload)
 	node, _ := mock.CreateNode(ctx, "n1")
 	_ = mock.UpdateNodeStatus(ctx, node.ID, models.NodeStatusActive)
 	cfg := dispatcherConfig{
@@ -403,7 +405,7 @@ func TestDispatchOnce_WorkerAPIBadVersion(t *testing.T) {
 	mock := testutil.NewMockDB()
 	ctx := context.Background()
 	task, _ := mock.CreateTask(ctx, nil, "p")
-	_, _ = mock.CreateJob(ctx, task.ID, `{"command":["echo","hi"]}`)
+	_, _ = mock.CreateJob(ctx, task.ID, testJobPayload)
 	node, _ := mock.CreateNode(ctx, "n1")
 	_ = mock.UpdateNodeStatus(ctx, node.ID, models.NodeStatusActive)
 
@@ -427,6 +429,115 @@ func TestRun_CancelledContext(t *testing.T) {
 	mockDB := testutil.NewMockDB()
 	logger := slog.Default()
 	err := run(ctx, mockDB, cfg, logger)
+	if err != nil {
+		t.Errorf("run: %v", err)
+	}
+}
+
+// TestRun_ShutdownSucceeds covers the shutdown success path (server started, then ctx cancelled, shutdown succeeds).
+func TestRun_ShutdownSucceeds(t *testing.T) {
+	oldListen := os.Getenv("LISTEN_ADDR")
+	_ = os.Setenv("LISTEN_ADDR", ":0")
+	defer func() {
+		if oldListen != "" {
+			_ = os.Setenv("LISTEN_ADDR", oldListen)
+		} else {
+			_ = os.Unsetenv("LISTEN_ADDR")
+		}
+	}()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cfg := config.LoadOrchestratorConfig()
+	mockDB := testutil.NewMockDB()
+	logger := slog.Default()
+
+	done := make(chan error, 1)
+	go func() { done <- run(ctx, mockDB, cfg, logger) }()
+
+	// Allow server to start and dispatcher to tick once.
+	time.Sleep(50 * time.Millisecond)
+	cancel()
+
+	err := <-done
+	if err != nil {
+		t.Errorf("run after cancel: %v", err)
+	}
+}
+
+// TestRun_ShutdownFails covers the path where server shutdown returns an error.
+func TestRun_ShutdownFails(t *testing.T) {
+	testShutdownHook = func(s *http.Server, ctx context.Context) error {
+		_ = s.Shutdown(ctx) // stop server so test doesn't leak goroutines
+		return errors.New("shutdown failed")
+	}
+	defer func() { testShutdownHook = nil }()
+
+	oldListen := os.Getenv("LISTEN_ADDR")
+	_ = os.Setenv("LISTEN_ADDR", ":0")
+	defer func() {
+		if oldListen != "" {
+			_ = os.Setenv("LISTEN_ADDR", oldListen)
+		} else {
+			_ = os.Unsetenv("LISTEN_ADDR")
+		}
+	}()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cfg := config.LoadOrchestratorConfig()
+	mockDB := testutil.NewMockDB()
+	logger := slog.Default()
+
+	done := make(chan error, 1)
+	go func() { done <- run(ctx, mockDB, cfg, logger) }()
+
+	time.Sleep(50 * time.Millisecond)
+	cancel()
+
+	err := <-done
+	if err == nil {
+		t.Error("expected shutdown error, got nil")
+	}
+}
+
+// TestRun_DispatcherRunsOneTick runs run() with dispatcher enabled and a mock worker so the dispatcher loop ticks and runs dispatchOnce.
+func TestRun_DispatcherRunsOneTick(t *testing.T) {
+	workerResp := workerapi.RunJobResponse{
+		Version: 1, TaskID: "t1", JobID: "j1",
+		Status: workerapi.StatusCompleted, ExitCode: 0,
+		StartedAt: "2026-01-01T00:00:00Z", EndedAt: "2026-01-01T00:00:01Z",
+	}
+	server := newWorkerServerOK(&workerResp)
+	defer server.Close()
+
+	_ = os.Setenv("LISTEN_ADDR", ":0")
+	_ = os.Setenv("WORKER_API_BEARER_TOKEN", "token")
+	_ = os.Setenv("WORKER_API_URL", server.URL)
+	_ = os.Setenv("DISPATCH_POLL_INTERVAL", "15ms")
+	defer func() {
+		_ = os.Unsetenv("LISTEN_ADDR")
+		_ = os.Unsetenv("WORKER_API_BEARER_TOKEN")
+		_ = os.Unsetenv("WORKER_API_URL")
+		_ = os.Unsetenv("DISPATCH_POLL_INTERVAL")
+	}()
+
+	mock := testutil.NewMockDB()
+	ctx := context.Background()
+	task, _ := mock.CreateTask(ctx, nil, "p")
+	payload := testJobPayload
+	_, _ = mock.CreateJob(ctx, task.ID, payload)
+	node, _ := mock.CreateNode(ctx, "n1")
+	_ = mock.UpdateNodeStatus(ctx, node.ID, models.NodeStatusActive)
+
+	runCtx, cancel := context.WithCancel(context.Background())
+	cfg := config.LoadOrchestratorConfig()
+	logger := slog.Default()
+
+	done := make(chan error, 1)
+	go func() { done <- run(runCtx, mock, cfg, logger) }()
+
+	time.Sleep(60 * time.Millisecond) // allow server start and one dispatcher tick
+	cancel()
+	err := <-done
 	if err != nil {
 		t.Errorf("run: %v", err)
 	}
@@ -485,6 +596,125 @@ func TestRunMain_MigrateOnly(t *testing.T) {
 	}
 }
 
+// TestRunMainWithContext_Success covers the success path (store provided, run returns nil).
+func TestRunMainWithContext_Success(t *testing.T) {
+	oldArgs := os.Args
+	defer func() { os.Args = oldArgs }()
+	os.Args = []string{"control-plane"}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	mockDB := testutil.NewMockDB()
+	code := runMainWithContext(ctx, mockDB)
+	if code != 0 {
+		t.Errorf("runMainWithContext(cancelled ctx, mockDB) = %d, want 0", code)
+	}
+}
+
+// TestRunMainWithContext_StoreFromTestOpener covers the store==nil path when testOpenStore is set (no real DB).
+func TestRunMainWithContext_StoreFromTestOpener(t *testing.T) {
+	oldArgs := os.Args
+	defer func() { os.Args = oldArgs }()
+	os.Args = []string{"control-plane"}
+
+	testOpenStore = func(_ context.Context, _ string) (database.Store, error) {
+		return testutil.NewMockDB(), nil
+	}
+	defer func() { testOpenStore = nil }()
+
+	_ = os.Setenv("LISTEN_ADDR", ":0")
+	defer func() { _ = os.Unsetenv("LISTEN_ADDR") }()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan int, 1)
+	go func() { done <- runMainWithContext(ctx, nil) }()
+	time.Sleep(150 * time.Millisecond)
+	cancel()
+	code := <-done
+	if code != 0 {
+		t.Errorf("runMainWithContext with testOpenStore: exit code %d", code)
+	}
+}
+
+// TestRunMainWithContext_TestOpenerMigrateOnly covers store==nil, testOpenStore set, and migrateOnly true.
+func TestRunMainWithContext_TestOpenerMigrateOnly(t *testing.T) {
+	oldArgs := os.Args
+	defer func() { os.Args = oldArgs }()
+	os.Args = []string{"control-plane", "-migrate-only"}
+
+	testOpenStore = func(_ context.Context, _ string) (database.Store, error) {
+		return testutil.NewMockDB(), nil
+	}
+	defer func() { testOpenStore = nil }()
+
+	code := runMainWithContext(context.Background(), nil)
+	if code != 0 {
+		t.Errorf("expected exit 0 (migrate-only with testOpenStore), got %d", code)
+	}
+}
+
+// TestRunMainWithContext_TestOpenerReturnsError covers testOpenStore returning an error.
+func TestRunMainWithContext_TestOpenerReturnsError(t *testing.T) {
+	oldArgs := os.Args
+	defer func() { os.Args = oldArgs }()
+	os.Args = []string{"control-plane"}
+
+	testOpenStore = func(_ context.Context, _ string) (database.Store, error) {
+		return nil, errors.New("open failed")
+	}
+	defer func() { testOpenStore = nil }()
+
+	code := runMainWithContext(context.Background(), nil)
+	if code != 1 {
+		t.Errorf("expected exit 1 when testOpenStore fails, got %d", code)
+	}
+}
+
+// TestRunMainWithContext_RunReturnsError covers runMainWithContext returning 1 when run() returns an error.
+func TestRunMainWithContext_RunReturnsError(t *testing.T) {
+	oldArgs := os.Args
+	defer func() { os.Args = oldArgs }()
+	os.Args = []string{"control-plane"}
+	_ = os.Setenv("LISTEN_ADDR", ":0")
+	defer func() { _ = os.Unsetenv("LISTEN_ADDR") }()
+
+	testOpenStore = func(_ context.Context, _ string) (database.Store, error) {
+		return testutil.NewMockDB(), nil
+	}
+	testShutdownHook = func(s *http.Server, ctx context.Context) error {
+		_ = s.Shutdown(ctx)
+		return errors.New("shutdown failed")
+	}
+	defer func() {
+		testOpenStore = nil
+		testShutdownHook = nil
+	}()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan int, 1)
+	go func() { done <- runMainWithContext(ctx, nil) }()
+	time.Sleep(80 * time.Millisecond)
+	cancel()
+	code := <-done
+	if code != 1 {
+		t.Errorf("expected exit 1 when run() fails, got %d", code)
+	}
+}
+
+// TestRunMainWithContext_MigrateOnlyWithStore covers migrate-only with injected store (no DB open).
+func TestRunMainWithContext_MigrateOnlyWithStore(t *testing.T) {
+	oldArgs := os.Args
+	defer func() { os.Args = oldArgs }()
+	os.Args = []string{"control-plane", "-migrate-only"}
+
+	ctx := context.Background()
+	mockDB := testutil.NewMockDB()
+	code := runMainWithContext(ctx, mockDB)
+	if code != 0 {
+		t.Errorf("runMainWithContext(ctx, mockDB) with -migrate-only = %d, want 0", code)
+	}
+}
+
 // TestRunMain_RunFails runs runMain with real Postgres but run() fails (invalid port); expects exit 1. Skips without POSTGRES_TEST_DSN.
 func TestRunMain_RunFails(t *testing.T) {
 	dsn := os.Getenv("POSTGRES_TEST_DSN")
@@ -537,7 +767,7 @@ func TestDispatchOnce_CompleteJobFails(t *testing.T) {
 	base := testutil.NewMockDB()
 	ctx := context.Background()
 	task, _ := base.CreateTask(ctx, nil, "p")
-	_, _ = base.CreateJob(ctx, task.ID, `{"command":["echo","hi"]}`)
+	_, _ = base.CreateJob(ctx, task.ID, testJobPayload)
 	node, _ := base.CreateNode(ctx, "n1")
 	_ = base.UpdateNodeStatus(ctx, node.ID, models.NodeStatusActive)
 
@@ -572,7 +802,7 @@ func TestDispatchOnce_AssignJobToNodeFails(t *testing.T) {
 	mock := &assignJobErrorStore{MockDB: testutil.NewMockDB()}
 	ctx := context.Background()
 	task, _ := mock.CreateTask(ctx, nil, "p")
-	_, _ = mock.CreateJob(ctx, task.ID, `{"command":["echo","hi"]}`)
+	_, _ = mock.CreateJob(ctx, task.ID, testJobPayload)
 	node, _ := mock.CreateNode(ctx, "n1")
 	_ = mock.UpdateNodeStatus(ctx, node.ID, models.NodeStatusActive)
 
@@ -589,7 +819,7 @@ func TestDispatchOnce_CallWorkerAPINetworkError(t *testing.T) {
 	mock := testutil.NewMockDB()
 	ctx := context.Background()
 	task, _ := mock.CreateTask(ctx, nil, "p")
-	_, _ = mock.CreateJob(ctx, task.ID, `{"command":["echo","hi"]}`)
+	_, _ = mock.CreateJob(ctx, task.ID, testJobPayload)
 	node, _ := mock.CreateNode(ctx, "n1")
 	_ = mock.UpdateNodeStatus(ctx, node.ID, models.NodeStatusActive)
 
@@ -617,7 +847,7 @@ func TestDispatchOnce_WorkerAPIInvalidJSON(t *testing.T) {
 	mock := testutil.NewMockDB()
 	ctx := context.Background()
 	task, _ := mock.CreateTask(ctx, nil, "p")
-	_, _ = mock.CreateJob(ctx, task.ID, `{"command":["echo","hi"]}`)
+	_, _ = mock.CreateJob(ctx, task.ID, testJobPayload)
 	node, _ := mock.CreateNode(ctx, "n1")
 	_ = mock.UpdateNodeStatus(ctx, node.ID, models.NodeStatusActive)
 
