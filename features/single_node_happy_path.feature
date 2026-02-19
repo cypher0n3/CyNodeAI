@@ -1,14 +1,12 @@
-# Single Node Happy Path
-
 Feature: Single Node Happy Path
 
-# Precondition: At least one inference-capable path must be available.
+  As a CyNodeAI user running orchestrator and worker on the same host (single-node)
+  I want to create tasks that execute on that local worker node
+  So that I can automate sandboxed execution of commands without a separate machine
+
+# Precondition: at least one inference-capable path must be available.
 # Inference may be node-local (Ollama or similar) or external via a configured provider key.
 # In the single-node case, startup should fail fast if neither is available.
-
-  As a CyNodeAI user
-  I want to create tasks that execute on worker nodes
-  So that I can automate sandboxed execution of commands
 
   Background:
     Given a running PostgreSQL database
@@ -96,3 +94,44 @@ Feature: Single Node Happy Path
     And I have a completed task
     When I get the task result
     Then I receive the job output including stdout and exit code
+
+  @req_orches_0113
+  @req_worker_0135
+  @spec_cynai_orches_doc_orchestrator
+  @spec_cynai_worker_payload_configurationv1
+  Scenario: Node fetches config after registration
+    Given a node with slug "test-node-01" and valid PSK
+    When the node registers with the orchestrator
+    And the node requests its configuration
+    Then the orchestrator returns a configuration payload for "test-node-01"
+    And the payload includes config_version and worker_api bearer token
+
+  @req_worker_0135
+  @spec_cynai_worker_payload_configackv1
+  Scenario: Node sends config acknowledgement
+    Given a registered node "test-node-01" that has received configuration
+    When the node applies the configuration
+    And the node sends a config acknowledgement with status "applied"
+    Then the orchestrator records the config ack for "test-node-01"
+    And the node config_version is stored
+
+  @req_worker_0100
+  @req_orches_0122
+  @spec_cynai_worker_workerauth
+  @spec_cynai_orches_doc_orchestrator
+  Scenario: Dispatcher uses per-node worker URL and token
+    Given I am logged in as "admin"
+    And a registered node "test-node-01" has worker_api_target_url and bearer token in config
+    When I create a task with command "echo hello"
+    And the orchestrator selects the node for dispatch
+    Then the orchestrator calls the node Worker API at its configured target URL
+    And the request includes the bearer token from that node's config
+
+  @req_bootst_0002
+  @spec_cynai_bootst_bootstrapsource
+  Scenario: Orchestrator fails fast when no inference path is available
+    Given no local inference (Ollama) is running
+    And no external provider key is configured
+    When the orchestrator starts
+    Then the orchestrator does not enter ready state
+    And the orchestrator reports that no inference path is available

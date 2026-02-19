@@ -70,6 +70,13 @@ Token delivery
 - The orchestrator MUST deliver the Worker API bearer token to the node via the node configuration payload.
   - See [`docs/tech_specs/node_payloads.md`](node_payloads.md) `node_configuration_payload_v1`.
 
+Initial implementation (Phase 1) constraints
+
+- Bearer token is static (delivered via node config; no refresh).
+- Component-to-component traffic may use HTTP (not HTTPS).
+- When `network_policy` is `restricted`, treat as deny-all (equivalent to `none`).
+- CPU, memory, and PIDs limits are not applied; workspace is per-job at `/workspace` per [`docs/tech_specs/sandbox_container.md`](sandbox_container.md).
+
 ## Error Handling
 
 Worker API error responses MUST follow the Go REST API error standards:

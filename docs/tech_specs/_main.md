@@ -131,6 +131,7 @@ Items are grouped by phase and can be implemented incrementally.
 ### Phase 1 Single Node Happy Path
 
 - Orchestrator: node registration (PSK to JWT), capability ingest, config delivery, job dispatch, result collection.
+- Job dispatch: direct HTTP to Worker API using per-node URL and token from config delivery; MCP gateway not in loop.
 - Node: Node Manager startup sequence that contacts orchestrator before starting the single Ollama container.
 - Node: worker API can receive a job, run a sandbox container, and return a result.
 - System: at least one inference-capable path must be available (node-local inference container such as Ollama, or external model routing with a configured provider key).

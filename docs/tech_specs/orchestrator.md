@@ -118,7 +118,20 @@ The orchestrator MUST be able to configure worker nodes at registration time.
 This includes distributing the correct endpoints, certificates, and pull credentials for orchestrator-provided services.
 The orchestrator MUST support dynamic configuration updates after registration and must ingest node capability reports on registration and node startup.
 
-See [`docs/tech_specs/node.md`](node.md).
+Config delivery
+
+- The orchestrator exposes the node config URL in the bootstrap payload (`node_config_url` in `node_bootstrap_payload_v1`).
+- GET on that URL returns `node_configuration_payload_v1` for the authenticated node.
+- POST on that URL accepts `node_config_ack_v1` and persists the acknowledgement; see [`docs/tech_specs/postgres_schema.md`](postgres_schema.md) Nodes table columns `config_ack_at`, `config_ack_status`, `config_ack_error`.
+- Endpoint paths are not mandated here; the bootstrap payload carries the concrete URLs so nodes do not rely on hard-coded paths.
+
+Job dispatch (initial implementation)
+
+- For the initial single-node implementation (Phase 1), the orchestrator dispatches jobs to the Worker API via direct HTTP.
+- The dispatcher uses the per-node `worker_api_target_url` and per-node bearer token stored from config delivery (see [`docs/tech_specs/postgres_schema.md`](postgres_schema.md) Nodes table).
+- The MCP gateway is not in the loop for job dispatch in Phase 1.
+
+See [`docs/tech_specs/node.md`](node.md) and [`docs/tech_specs/node_payloads.md`](node_payloads.md).
 
 ## MCP Tool Interface
 

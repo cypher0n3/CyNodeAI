@@ -276,6 +276,7 @@ Traces To:
 - `ack_at` (string)
 - `status` (string)
   - examples: applied, failed, rolled_back
+  - For MVP Phase 1, only `applied` and `failed` are required; `rolled_back` may be supported in later phases.
 - `error` (object, optional)
   - `type` (string)
   - `message` (string)

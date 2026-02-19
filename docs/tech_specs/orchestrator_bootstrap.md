@@ -33,6 +33,11 @@ Traces To:
 - [REQ-BOOTST-0101](../requirements/bootst.md#req-bootst-0101)
 - [REQ-BOOTST-0102](../requirements/bootst.md#req-bootst-0102)
 
+## Example
+
+See [`docs/examples/orchestrator_bootstrap_example.yaml`](../examples/orchestrator_bootstrap_example.yaml) for a minimal example.
+Secrets MUST be provided via environment variables or a secrets manager.
+
 ## Bootstrap Contents
 
 Bootstrap YAML SHOULD support seeding:
