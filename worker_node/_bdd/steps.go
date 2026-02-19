@@ -11,13 +11,16 @@ import (
 	"net/http/httptest"
 	"os"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/cucumber/godog"
 
+	"github.com/cypher0n3/cynodeai/go_shared_libs/contracts/nodepayloads"
 	"github.com/cypher0n3/cynodeai/go_shared_libs/contracts/problem"
 	"github.com/cypher0n3/cynodeai/go_shared_libs/contracts/workerapi"
 	"github.com/cypher0n3/cynodeai/worker_node/cmd/worker-api/executor"
+	"github.com/cypher0n3/cynodeai/worker_node/internal/nodemanager"
 )
 
 type ctxKey int
@@ -25,10 +28,16 @@ type ctxKey int
 const stateKey ctxKey = 0
 
 type workerTestState struct {
-	server      *httptest.Server
-	bearerToken string
-	lastStatus  int
-	lastBody    []byte
+	server               *httptest.Server
+	bearerToken          string
+	lastStatus           int
+	lastBody             []byte
+	mockOrch             *httptest.Server
+	getConfigCalled      bool
+	postAckCalled        bool
+	nodeManagerErr       error
+	failInferenceStartup bool
+	mu                   sync.Mutex
 }
 
 func getWorkerState(ctx context.Context) *workerTestState {
@@ -99,13 +108,22 @@ func InitializeWorkerNodeSuite(sc *godog.ScenarioContext, state *workerTestState
 		if state.server != nil {
 			state.server.Close()
 		}
+		if state.mockOrch != nil {
+			state.mockOrch.Close()
+		}
 		state.server = nil
+		state.mockOrch = nil
 		state.lastStatus = 0
 		state.lastBody = nil
+		state.getConfigCalled = false
+		state.postAckCalled = false
+		state.nodeManagerErr = nil
+		state.failInferenceStartup = false
 		return ctx, nil
 	})
 
 	RegisterWorkerNodeSteps(sc, state)
+	RegisterNodeManagerConfigSteps(sc, state)
 }
 
 func getEnv(key, def string) string {
@@ -237,6 +255,156 @@ func RegisterWorkerNodeSteps(sc *godog.ScenarioContext, state *workerTestState) 
 		}
 		if dec.ExitCode != code {
 			return fmt.Errorf("exit code %d, want %d", dec.ExitCode, code)
+		}
+		return nil
+	})
+}
+
+// RegisterNodeManagerConfigSteps registers steps for node manager config fetch and startup features.
+func RegisterNodeManagerConfigSteps(sc *godog.ScenarioContext, state *workerTestState) {
+	sc.Step(`^a mock orchestrator that returns bootstrap with node_config_url$`, func(ctx context.Context) error {
+		state.mu.Lock()
+		defer state.mu.Unlock()
+		var srv *httptest.Server
+		srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.URL.Path == "/v1/nodes/register" && r.Method == "POST" {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusCreated)
+				_ = json.NewEncoder(w).Encode(nodepayloads.BootstrapResponse{
+					Version:  1,
+					IssuedAt: time.Now().UTC().Format(time.RFC3339),
+					Orchestrator: nodepayloads.BootstrapOrchestrator{
+						BaseURL: srv.URL,
+						Endpoints: nodepayloads.BootstrapEndpoints{
+							NodeReportURL: srv.URL + "/v1/nodes/capability",
+							NodeConfigURL: srv.URL + "/v1/nodes/config",
+						},
+					},
+					Auth: nodepayloads.BootstrapAuth{NodeJWT: "mock-jwt", ExpiresAt: "2026-12-31T00:00:00Z"},
+				})
+				return
+			}
+			if r.URL.Path == "/v1/nodes/config" {
+				if r.Method == "GET" {
+					state.mu.Lock()
+					state.getConfigCalled = true
+					state.mu.Unlock()
+					w.Header().Set("Content-Type", "application/json")
+					w.WriteHeader(http.StatusOK)
+					_ = json.NewEncoder(w).Encode(nodepayloads.NodeConfigurationPayload{
+						Version:       1,
+						ConfigVersion: "1",
+						IssuedAt:      time.Now().UTC().Format(time.RFC3339),
+						NodeSlug:      "bdd-node",
+						WorkerAPI:     &nodepayloads.ConfigWorkerAPI{OrchestratorBearerToken: "delivered-token"},
+					})
+					return
+				}
+				if r.Method == "POST" {
+					state.mu.Lock()
+					state.postAckCalled = true
+					state.mu.Unlock()
+					w.WriteHeader(http.StatusNoContent)
+				}
+				return
+			}
+			if r.URL.Path == "/v1/nodes/capability" && r.Method == "POST" {
+				w.WriteHeader(http.StatusNoContent)
+			}
+		}))
+		state.mockOrch = srv
+		return nil
+	})
+	sc.Step(`^the mock returns node config with worker_api bearer token$`, func(ctx context.Context) error {
+		return nil
+	})
+	sc.Step(`^the node manager runs the startup sequence against the mock orchestrator$`, func(ctx context.Context) error {
+		st := getWorkerState(ctx)
+		if st == nil || st.mockOrch == nil {
+			return fmt.Errorf("mock orchestrator not started")
+		}
+		cfg := &nodemanager.Config{
+			OrchestratorURL:          st.mockOrch.URL,
+			NodeSlug:                 "bdd-node",
+			NodeName:                 "BDD Node",
+			RegistrationPSK:          "psk",
+			CapabilityReportInterval: 50 * time.Millisecond,
+			HTTPTimeout:              5 * time.Second,
+		}
+		opts := &nodemanager.RunOptions{}
+		if st.failInferenceStartup {
+			opts.StartOllama = func() error { return fmt.Errorf("inference startup failed") }
+		}
+		runCtx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+		defer cancel()
+		st.nodeManagerErr = nodemanager.RunWithOptions(runCtx, nil, cfg, opts)
+		return nil
+	})
+	sc.Step(`^the node manager requested config using the bootstrap node_config_url$`, func(ctx context.Context) error {
+		st := getWorkerState(ctx)
+		if st == nil {
+			return fmt.Errorf("no state")
+		}
+		st.mu.Lock()
+		ok := st.getConfigCalled
+		st.mu.Unlock()
+		if !ok {
+			return fmt.Errorf("node manager did not request config from mock")
+		}
+		return nil
+	})
+	sc.Step(`^the received config contains worker_api orchestrator_bearer_token$`, func(ctx context.Context) error {
+		st := getWorkerState(ctx)
+		if st == nil {
+			return fmt.Errorf("no state")
+		}
+		if st.nodeManagerErr != nil {
+			return fmt.Errorf("node manager failed: %w", st.nodeManagerErr)
+		}
+		return nil
+	})
+	sc.Step(`^the node manager sent a config acknowledgement with status "([^"]*)"$`, func(ctx context.Context, status string) error {
+		st := getWorkerState(ctx)
+		if st == nil {
+			return fmt.Errorf("no state")
+		}
+		st.mu.Lock()
+		ok := st.postAckCalled
+		st.mu.Unlock()
+		if !ok {
+			return fmt.Errorf("node manager did not send config ack")
+		}
+		if st.nodeManagerErr != nil {
+			return fmt.Errorf("node manager failed: %w", st.nodeManagerErr)
+		}
+		return nil
+	})
+	sc.Step(`^the node manager is configured to fail inference startup$`, func(ctx context.Context) error {
+		st := getWorkerState(ctx)
+		if st == nil {
+			return fmt.Errorf("no state")
+		}
+		st.failInferenceStartup = true
+		return nil
+	})
+	sc.Step(`^the node manager exits with an error$`, func(ctx context.Context) error {
+		st := getWorkerState(ctx)
+		if st == nil {
+			return fmt.Errorf("no state")
+		}
+		if st.nodeManagerErr == nil {
+			return fmt.Errorf("expected node manager to fail")
+		}
+		return nil
+	})
+	sc.Step(`^the error indicates inference startup failed$`, func(ctx context.Context) error {
+		st := getWorkerState(ctx)
+		if st == nil || st.nodeManagerErr == nil {
+			return fmt.Errorf("no error to check")
+		}
+		msg := st.nodeManagerErr.Error()
+		if !strings.Contains(msg, "inference") && !strings.Contains(msg, "Ollama") {
+			return fmt.Errorf("error %q does not indicate inference startup failure", msg)
 		}
 		return nil
 	})

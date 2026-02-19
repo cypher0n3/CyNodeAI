@@ -61,8 +61,22 @@ type BootstrapData struct {
 	NodeConfigURL string
 }
 
-// Run performs registration and capability reporting until ctx is cancelled.
+// RunOptions allows optional service starters for production; nil means skip (e.g. in tests).
+// StartWorkerAPI receives the bearer token from config; callers must not log it.
+// StartOllama is Phase 1 inference; if it returns an error, Run fails (fail-fast).
+type RunOptions struct {
+	StartWorkerAPI func(bearerToken string) error
+	StartOllama     func() error
+}
+
+// Run performs registration, config fetch, service startup, config ack, then capability reporting until ctx is cancelled.
+// Order: register => fetch config => start worker API (if token present) => start Ollama (if set) => config ack => capability loop.
 func Run(ctx context.Context, logger *slog.Logger, cfg *Config) error {
+	return RunWithOptions(ctx, logger, cfg, nil)
+}
+
+// RunWithOptions is like Run but accepts optional StartWorkerAPI and StartOllama; nil means skip that step.
+func RunWithOptions(ctx context.Context, logger *slog.Logger, cfg *Config, opts *RunOptions) error {
 	if err := cfg.Validate(); err != nil {
 		return err
 	}
@@ -75,9 +89,48 @@ func Run(ctx context.Context, logger *slog.Logger, cfg *Config) error {
 		logger.Info("registered with orchestrator", "node_slug", cfg.NodeSlug, "expires_at", bootstrap.ExpiresAt)
 	}
 
+	nodeConfig, err := FetchConfig(ctx, cfg, bootstrap)
+	if err != nil {
+		return fmt.Errorf("fetch config: %w", err)
+	}
+
+	if err := applyConfigAndStartServices(ctx, logger, cfg, bootstrap, nodeConfig, opts); err != nil {
+		return err
+	}
+
+	return runCapabilityLoop(ctx, cfg, bootstrap)
+}
+
+// applyConfigAndStartServices starts Worker API and Ollama from opts (if set), then sends config ack.
+func applyConfigAndStartServices(ctx context.Context, logger *slog.Logger, cfg *Config, bootstrap *BootstrapData, nodeConfig *nodepayloads.NodeConfigurationPayload, opts *RunOptions) error {
+	if opts != nil && opts.StartWorkerAPI != nil && nodeConfig != nil && nodeConfig.WorkerAPI != nil && nodeConfig.WorkerAPI.OrchestratorBearerToken != "" {
+		if err := opts.StartWorkerAPI(nodeConfig.WorkerAPI.OrchestratorBearerToken); err != nil {
+			return fmt.Errorf("start worker API: %w", err)
+		}
+		if logger != nil {
+			logger.Info("worker API started")
+		}
+	}
+	if opts != nil && opts.StartOllama != nil {
+		if err := opts.StartOllama(); err != nil {
+			return fmt.Errorf("start inference (Ollama): %w", err)
+		}
+		if logger != nil {
+			logger.Info("inference container started")
+		}
+	}
+	if err := SendConfigAck(ctx, cfg, bootstrap, nodeConfig, "applied"); err != nil {
+		return fmt.Errorf("config ack: %w", err)
+	}
+	if logger != nil {
+		logger.Info("config applied and acknowledged", "config_version", nodeConfig.ConfigVersion)
+	}
+	return nil
+}
+
+func runCapabilityLoop(ctx context.Context, cfg *Config, bootstrap *BootstrapData) error {
 	ticker := time.NewTicker(cfg.CapabilityReportInterval)
 	defer ticker.Stop()
-
 	for {
 		select {
 		case <-ctx.Done():
@@ -88,6 +141,76 @@ func Run(ctx context.Context, logger *slog.Logger, cfg *Config) error {
 			}
 		}
 	}
+}
+
+// FetchConfig fetches the node configuration from the bootstrap node_config_url (GET).
+func FetchConfig(ctx context.Context, cfg *Config, bootstrap *BootstrapData) (*nodepayloads.NodeConfigurationPayload, error) {
+	req, err := http.NewRequestWithContext(ctx, "GET", bootstrap.NodeConfigURL, http.NoBody)
+	if err != nil {
+		return nil, fmt.Errorf("create config request: %w", err)
+	}
+	req.Header.Set("Authorization", "Bearer "+bootstrap.NodeJWT)
+
+	client := &http.Client{Timeout: cfg.HTTPTimeout}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("get config: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusOK {
+		var p problem.Details
+		_ = json.NewDecoder(resp.Body).Decode(&p)
+		return nil, fmt.Errorf("get config: %s (%d) %s", resp.Status, resp.StatusCode, p.Detail)
+	}
+
+	var payload nodepayloads.NodeConfigurationPayload
+	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+		return nil, fmt.Errorf("decode config: %w", err)
+	}
+	if payload.Version != 1 {
+		return nil, fmt.Errorf("unsupported config version %d", payload.Version)
+	}
+	return &payload, nil
+}
+
+// SendConfigAck sends node_config_ack_v1 to the bootstrap node_config_url (POST).
+func SendConfigAck(ctx context.Context, cfg *Config, bootstrap *BootstrapData, nodeConfig *nodepayloads.NodeConfigurationPayload, status string) error {
+	if nodeConfig == nil {
+		return errors.New("node config is nil")
+	}
+	ack := nodepayloads.ConfigAck{
+		Version:       1,
+		NodeSlug:      nodeConfig.NodeSlug,
+		ConfigVersion: nodeConfig.ConfigVersion,
+		AckAt:         time.Now().UTC().Format(time.RFC3339),
+		Status:        status,
+	}
+	body, err := json.Marshal(ack)
+	if err != nil {
+		return fmt.Errorf("marshal config ack: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, "POST", bootstrap.NodeConfigURL, bytes.NewReader(body))
+	if err != nil {
+		return fmt.Errorf("create config ack request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+bootstrap.NodeJWT)
+
+	client := &http.Client{Timeout: cfg.HTTPTimeout}
+	resp, err := client.Do(req)
+	if err != nil {
+		return fmt.Errorf("send config ack: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+
+	if resp.StatusCode != http.StatusNoContent && resp.StatusCode != http.StatusOK {
+		var p problem.Details
+		_ = json.NewDecoder(resp.Body).Decode(&p)
+		return fmt.Errorf("config ack: %s (%d) %s", resp.Status, resp.StatusCode, p.Detail)
+	}
+	return nil
 }
 
 func register(ctx context.Context, cfg *Config) (*BootstrapData, error) {
