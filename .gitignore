@@ -47,3 +47,4 @@ coverage.*
 
 # Ignore local files
 .markdownlint-cli2.jsonc
+.env*

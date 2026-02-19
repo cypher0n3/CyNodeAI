@@ -483,6 +483,16 @@ Constraints
   - stable hash of last reported capability for change detection
 - `config_version` (text, nullable)
   - version of last applied node configuration payload
+- `worker_api_target_url` (text, nullable)
+  - URL of the node Worker API for job dispatch; from node configuration delivery; see [`node_payloads.md`](node_payloads.md) `node_configuration_payload_v1`
+- `worker_api_bearer_token` (text, nullable)
+  - bearer token for orchestrator-to-node Worker API auth; MUST be stored encrypted at rest or in a secrets backend; populated from config delivery
+- `config_ack_at` (timestamptz, nullable)
+  - time of last config acknowledgement from the node
+- `config_ack_status` (text, nullable)
+  - status of last config ack: e.g. applied, failed
+- `config_ack_error` (text, nullable)
+  - error message when config_ack_status is failed
 - `last_seen_at` (timestamptz, nullable)
 - `last_capability_at` (timestamptz, nullable)
 - `metadata` (jsonb, nullable)

@@ -19,7 +19,7 @@ default:
     @just --list
 
 # Local CI: all lint, all tests (with 90% coverage), Go vuln check. Uses test-go-cover-podman so coverage works with rootful Podman.
-ci: lint-go lint-go-ci lint-python lint-md test-go-cover test-go-cover-podman vulncheck-go
+ci: lint-go lint-go-ci vulncheck-go lint-python lint-md validate-doc-links test-go-cover test-go-cover-podman
     @:
 
 # Full dev setup: podman, Go, and Go tools (incl. deps for .golangci.yml and lint-go-ci)
@@ -196,6 +196,14 @@ install-markdownlint:
         fi
     fi
 
+# Validate internal file links in docs/ (markdown links to other files; internal # refs ignored)
+validate-doc-links:
+    #!/usr/bin/env bash
+    set -e
+    pushd "{{ root_dir }}" >/dev/null
+    trap 'popd >/dev/null 2>/dev/null' EXIT
+    python3 .ci_scripts/validate_doc_links.py --report dev_docs/doc_links_validation_report.txt
+
 # Lint Markdown (markdownlint-cli2; uses .markdownlint-cli2.jsonc)
 lint-md target = '**/*.md':
     #!/usr/bin/env bash
@@ -344,7 +352,7 @@ test-go-race: install-go
     done
 
 # All linting (Go quick + Go full + Python + Markdown)
-lint: lint-go lint-go-ci lint-python lint-md
+lint: lint-go lint-go-ci lint-python lint-md validate-doc-links
     @:
 
 # All tests
@@ -373,7 +381,7 @@ install-python-venv: venv
     @:
 
 # Python linting (flake8, pylint, radon, xenon, vulture, bandit). Optional: just lint-python paths="scripts,other"
-lint-python paths="scripts":
+lint-python paths="scripts,.ci_scripts":
     #!/usr/bin/env bash
     set -e
     pushd "{{ root_dir }}" >/dev/null

@@ -1,0 +1,23 @@
+# Orchestrator bootstrap example (minimal for Phase 1).
+# Load at startup via config (e.g. bootstrap.yaml_path).
+# Secrets MUST NOT be stored here; use environment variables or a secrets manager.
+# Example: set CYNODE_NODE_REGISTRATION_PSK for node registration PSK.
+
+version: 1
+
+# System preferences (scope_type=system); optional.
+# Keys and values are written to preference_entries.
+preferences: []
+
+# Access control rules; optional.
+# Used to seed access_control_rules for policy enforcement.
+access_control_rules: []
+
+# Optional: sandbox image registry defaults (registry URL, policy).
+# sandbox_image_registry: {}
+
+# Optional: initial admin user for fresh install (REQ-IDENTY-0113).
+# Password MUST come from env or secrets manager; do not put hashes here.
+# admin_user:
+#   handle: admin
+#   password_env: CYNODE_ADMIN_PASSWORD

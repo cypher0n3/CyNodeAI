@@ -154,6 +154,10 @@ Recommended location
 
 - `/etc/cynode/node.yaml`
 
+Example
+
+- See [`docs/examples/node_bootstrap_example.yaml`](../examples/node_bootstrap_example.yaml) for a minimal node (worker) startup config.
+
 ### User-Configurable Properties
 
 Node startup YAML SHOULD allow operators to set the properties below.

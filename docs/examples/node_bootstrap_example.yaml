@@ -1,0 +1,28 @@
+# Node (worker) bootstrap example.
+# Typical path: /etc/cynode/node.yaml or path given via --config.
+# Secrets: use orchestrator.registration_psk_env or registration_psk_file; do not embed PSK here.
+
+version: 1
+
+orchestrator:
+  url: "http://localhost:8080"
+  registration_psk_env: CYNODE_NODE_REGISTRATION_PSK
+  # registration_psk_file: /run/secrets/node_psk
+  # timeouts:
+  #   connect_seconds: 10
+  #   request_seconds: 30
+
+node:
+  id: "worker-01"
+  name: "Local worker 01"
+  # labels: ["trusted", "region_local"]
+
+worker_api:
+  listen_host: "0.0.0.0"
+  listen_port: 9090
+  public_base_url: "http://localhost:9090"
+
+sandbox:
+  mode: allow
+  runtime: podman
+  # default_network_policy: restricted

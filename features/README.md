@@ -15,7 +15,14 @@ Treat feature files as a high-level contract for system behavior rather than as 
 
 ## 2 What This Directory Contains
 
-Feature files in this directory describe end-to-end flows across the orchestrator and worker node components.
+Feature files in this directory describe end-to-end flows and acceptance behavior across the orchestrator and worker node components.
+
+| File | Focus |
+|------|--------|
+| `single_node_happy_path.feature` | Full E2E: auth, node registration, config delivery, task create/status/result, inference precondition |
+| `initial_auth.feature` | Initial user auth: login, refresh, logout, current user |
+| `node_registration_and_config.feature` | Node registration with PSK, capability reporting, config fetch, config ack |
+| `orchestrator_startup.feature` | Orchestrator startup: fail fast when no inference path |
 
 ## 3 How to Use These Features
 
