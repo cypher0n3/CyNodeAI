@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"os/exec"
 	"testing"
 	"time"
 
@@ -80,8 +81,8 @@ func TestRunMainContextCancelled(t *testing.T) {
 }
 
 func TestRunMainSuccess(t *testing.T) {
-	var srv *httptest.Server
-	srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	var baseURL string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/v1/nodes/register" {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusCreated)
@@ -90,29 +91,50 @@ func TestRunMainSuccess(t *testing.T) {
 				IssuedAt: time.Now().UTC().Format(time.RFC3339),
 				Orchestrator: nodepayloads.BootstrapOrchestrator{
 					Endpoints: nodepayloads.BootstrapEndpoints{
-						NodeReportURL: srv.URL + "/cap",
-						NodeConfigURL: srv.URL + "/cfg",
+						NodeReportURL: baseURL + "/v1/nodes/capability",
+						NodeConfigURL: baseURL + "/v1/nodes/config",
 					},
 				},
 				Auth: nodepayloads.BootstrapAuth{NodeJWT: "jwt", ExpiresAt: "2026-01-01T00:00:00Z"},
 			})
 			return
 		}
-		w.WriteHeader(http.StatusNoContent)
+		if r.URL.Path == "/v1/nodes/config" {
+			if r.Method == "GET" {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusOK)
+				_ = json.NewEncoder(w).Encode(nodepayloads.NodeConfigurationPayload{
+					Version:       1,
+					ConfigVersion: "1",
+					IssuedAt:      time.Now().UTC().Format(time.RFC3339),
+					NodeSlug:      "x",
+					WorkerAPI:     &nodepayloads.ConfigWorkerAPI{OrchestratorBearerToken: "test-token"},
+				})
+				return
+			}
+			w.WriteHeader(http.StatusNoContent)
+			return
+		}
+		if r.URL.Path == "/v1/nodes/capability" {
+			w.WriteHeader(http.StatusNoContent)
+		}
 	}))
 	defer srv.Close()
+	baseURL = srv.URL
 
 	_ = os.Setenv("ORCHESTRATOR_URL", srv.URL)
 	_ = os.Setenv("NODE_SLUG", "x")
 	_ = os.Setenv("NODE_REGISTRATION_PSK", "psk")
 	_ = os.Setenv("CAPABILITY_REPORT_INTERVAL", "1h")
 	_ = os.Setenv("HTTP_TIMEOUT", "5s")
+	_ = os.Setenv("NODE_MANAGER_SKIP_SERVICES", "1")
 	defer func() {
 		_ = os.Unsetenv("ORCHESTRATOR_URL")
 		_ = os.Unsetenv("NODE_SLUG")
 		_ = os.Unsetenv("NODE_REGISTRATION_PSK")
 		_ = os.Unsetenv("CAPABILITY_REPORT_INTERVAL")
 		_ = os.Unsetenv("HTTP_TIMEOUT")
+		_ = os.Unsetenv("NODE_MANAGER_SKIP_SERVICES")
 	}()
 
 	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
@@ -122,4 +144,37 @@ func TestRunMainSuccess(t *testing.T) {
 	if code != 0 {
 		t.Errorf("runMain should return 0 on success, got %d", code)
 	}
+}
+
+func TestStartWorkerAPI_Success(t *testing.T) {
+	_ = os.Setenv("NODE_MANAGER_WORKER_API_BIN", "true")
+	defer func() { _ = os.Unsetenv("NODE_MANAGER_WORKER_API_BIN") }()
+	err := startWorkerAPI("secret-token")
+	if err != nil {
+		t.Errorf("startWorkerAPI with true binary: %v", err)
+	}
+}
+
+func TestStartWorkerAPI_BinaryNotFound(t *testing.T) {
+	_ = os.Setenv("NODE_MANAGER_WORKER_API_BIN", "/nonexistent/binary")
+	defer func() { _ = os.Unsetenv("NODE_MANAGER_WORKER_API_BIN") }()
+	err := startWorkerAPI("token")
+	if err == nil {
+		t.Error("startWorkerAPI should fail when binary not found")
+	}
+}
+
+func TestStartOllama_Success(t *testing.T) {
+	_ = os.Setenv("CONTAINER_RUNTIME", "podman")
+	_ = os.Setenv("OLLAMA_IMAGE", "alpine")
+	defer func() {
+		_ = os.Unsetenv("CONTAINER_RUNTIME")
+		_ = os.Unsetenv("OLLAMA_IMAGE")
+	}()
+	err := startOllama()
+	if err != nil {
+		t.Skipf("startOllama requires podman and alpine image: %v", err)
+	}
+	// Clean up container so we do not leave it behind.
+	_ = exec.Command("podman", "rm", "-f", "cynodeai-ollama").Run()
 }

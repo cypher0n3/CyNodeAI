@@ -3,16 +3,24 @@ package nodemanager
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"io"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/cypher0n3/cynodeai/go_shared_libs/contracts/nodepayloads"
 )
 
-const pathNodesRegister = "/v1/nodes/register"
+const (
+	pathNodesRegister = "/v1/nodes/register"
+	pathNodesConfig   = "/v1/nodes/config"
+	pathNodesCapability = "/v1/nodes/capability"
+)
 
 func TestLoadConfig(t *testing.T) {
 	_ = os.Unsetenv("ORCHESTRATOR_URL")
@@ -145,13 +153,55 @@ func registerOKHandler(baseURL string) http.HandlerFunc {
 			IssuedAt: time.Now().UTC().Format(time.RFC3339),
 			Orchestrator: nodepayloads.BootstrapOrchestrator{
 				Endpoints: nodepayloads.BootstrapEndpoints{
-					NodeReportURL: baseURL + "/v1/nodes/capability",
-					NodeConfigURL: baseURL + "/v1/nodes/config",
+					NodeReportURL: baseURL + pathNodesCapability,
+					NodeConfigURL: baseURL + pathNodesConfig,
 				},
 			},
 			Auth: nodepayloads.BootstrapAuth{NodeJWT: "jwt", ExpiresAt: "2026-01-01T00:00:00Z"},
 		})
 	}
+}
+
+// configHandler returns a handler that responds to GET with a minimal node config and POST with 204.
+func configHandler(nodeSlug string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == "GET" {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			_ = json.NewEncoder(w).Encode(nodepayloads.NodeConfigurationPayload{
+				Version:       1,
+				ConfigVersion: "1",
+				IssuedAt:      time.Now().UTC().Format(time.RFC3339),
+				NodeSlug:      nodeSlug,
+				WorkerAPI:     &nodepayloads.ConfigWorkerAPI{OrchestratorBearerToken: "test-bearer"},
+			})
+			return
+		}
+		if r.Method == "POST" {
+			w.WriteHeader(http.StatusNoContent)
+		}
+	}
+}
+
+// mockOrchWithConfig returns a test server that handles register, config GET/POST, and capability.
+func mockOrchWithConfig(t *testing.T) *httptest.Server {
+	t.Helper()
+	var baseURL string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == pathNodesRegister {
+			registerOKHandler(baseURL)(w, r)
+			return
+		}
+		if r.URL.Path == pathNodesConfig {
+			configHandler("x")(w, r)
+			return
+		}
+		if r.URL.Path == pathNodesCapability {
+			w.WriteHeader(http.StatusNoContent)
+		}
+	}))
+	baseURL = srv.URL
+	return srv
 }
 
 func TestRun(t *testing.T) {
@@ -162,7 +212,11 @@ func TestRun(t *testing.T) {
 			registerOKHandler(srv.URL)(w, r)
 			return
 		}
-		if r.URL.Path == "/v1/nodes/capability" {
+		if r.URL.Path == pathNodesConfig {
+			configHandler("run-test")(w, r)
+			return
+		}
+		if r.URL.Path == pathNodesCapability {
 			reportCalled = true
 			w.WriteHeader(http.StatusNoContent)
 		}
@@ -263,6 +317,14 @@ func TestRunRegisterErrorStatusAndBadJSON(t *testing.T) {
 
 func TestRunRegisterInvalidBootstrap(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != pathNodesRegister {
+			if r.URL.Path == "/v1/nodes/config" {
+				configHandler("x")(w, r)
+				return
+			}
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusCreated)
 		_ = json.NewEncoder(w).Encode(nodepayloads.BootstrapResponse{
@@ -300,7 +362,11 @@ func TestRunReportCapabilitiesErrorBranch(t *testing.T) {
 			registerOKHandler(srv.URL)(w, r)
 			return
 		}
-		if r.URL.Path == "/v1/nodes/capability" {
+		if r.URL.Path == pathNodesConfig {
+			configHandler("x")(w, r)
+			return
+		}
+		if r.URL.Path == pathNodesCapability {
 			reportCount++
 			if reportCount > 1 {
 				w.WriteHeader(http.StatusInternalServerError)
@@ -340,11 +406,15 @@ func TestRunReportCapabilitiesConnectionFails(t *testing.T) {
 				Orchestrator: nodepayloads.BootstrapOrchestrator{
 					Endpoints: nodepayloads.BootstrapEndpoints{
 						NodeReportURL: "http://127.0.0.1:1",
-						NodeConfigURL: srv.URL + "/cfg",
+						NodeConfigURL: srv.URL + pathNodesConfig,
 					},
 				},
 				Auth: nodepayloads.BootstrapAuth{NodeJWT: "jwt", ExpiresAt: "2026-01-01T00:00:00Z"},
 			})
+			return
+		}
+		if r.URL.Path == pathNodesConfig {
+			configHandler("x")(w, r)
 		}
 	}))
 	defer srv.Close()
@@ -378,13 +448,17 @@ func TestRunContextCancelledAfterRegister(t *testing.T) {
 				Orchestrator: nodepayloads.BootstrapOrchestrator{
 					Endpoints: nodepayloads.BootstrapEndpoints{
 						NodeReportURL: srv.URL + "/cap",
-						NodeConfigURL: srv.URL + "/cfg",
-					},
+NodeConfigURL: srv.URL + pathNodesConfig,
 				},
-				Auth: nodepayloads.BootstrapAuth{NodeJWT: "j", ExpiresAt: "2026-01-01T00:00:00Z"},
-			})
-		}
-	}))
+			},
+			Auth: nodepayloads.BootstrapAuth{NodeJWT: "j", ExpiresAt: "2026-01-01T00:00:00Z"},
+		})
+		return
+	}
+	if r.URL.Path == pathNodesConfig {
+		configHandler("x")(w, r)
+	}
+}))
 	defer srv.Close()
 
 	cfg := &Config{
@@ -405,5 +479,181 @@ func TestRunContextCancelledAfterRegister(t *testing.T) {
 	err := <-errCh
 	if err != nil {
 		t.Errorf("Run after cancel should return nil: %v", err)
+	}
+}
+
+func TestFetchConfig(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == pathNodesConfig && r.Method == "GET" {
+			configHandler("fetch-test")(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	bootstrap := &BootstrapData{
+		NodeJWT:       "jwt",
+		NodeConfigURL: srv.URL + pathNodesConfig,
+	}
+	cfg := &Config{HTTPTimeout: 5 * time.Second}
+	ctx := context.Background()
+
+	payload, err := FetchConfig(ctx, cfg, bootstrap)
+	if err != nil {
+		t.Fatalf("FetchConfig: %v", err)
+	}
+	if payload.NodeSlug != "fetch-test" || payload.ConfigVersion != "1" {
+		t.Errorf("payload: %+v", payload)
+	}
+	if payload.WorkerAPI == nil || payload.WorkerAPI.OrchestratorBearerToken != "test-bearer" {
+		t.Errorf("worker_api token missing")
+	}
+}
+
+func TestSendConfigAck(t *testing.T) {
+	ackReceived := false
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == pathNodesConfig && r.Method == "POST" {
+			ackReceived = true
+			w.WriteHeader(http.StatusNoContent)
+		}
+	}))
+	defer srv.Close()
+
+	bootstrap := &BootstrapData{
+		NodeJWT:       "jwt",
+		NodeConfigURL: srv.URL + pathNodesConfig,
+	}
+	cfg := &Config{HTTPTimeout: 5 * time.Second}
+	ctx := context.Background()
+	nodeConfig := &nodepayloads.NodeConfigurationPayload{
+		Version:       1,
+		ConfigVersion: "1",
+		NodeSlug:      "ack-test",
+	}
+
+	err := SendConfigAck(ctx, cfg, bootstrap, nodeConfig, "applied")
+	if err != nil {
+		t.Fatalf("SendConfigAck: %v", err)
+	}
+	if !ackReceived {
+		t.Error("ack was not received")
+	}
+}
+
+func TestRunWithOptions_OllamaFailFast(t *testing.T) {
+	srv := mockOrchWithConfig(t)
+	defer srv.Close()
+
+	cfg := &Config{
+		OrchestratorURL: srv.URL,
+		NodeSlug:        "x",
+		NodeName:        "x",
+		RegistrationPSK: "psk",
+		HTTPTimeout:     5 * time.Second,
+	}
+	opts := &RunOptions{
+		StartOllama: func() error { return errors.New("ollama start failed") },
+	}
+	ctx := context.Background()
+
+	err := RunWithOptions(ctx, nil, cfg, opts)
+	if err == nil {
+		t.Fatal("RunWithOptions should fail when StartOllama returns error")
+	}
+	if !strings.Contains(err.Error(), "start inference") || !strings.Contains(err.Error(), "ollama start failed") {
+		t.Errorf("unexpected error: %v", err)
+	}
+}
+
+func TestRunWithOptions_StartWorkerAPICalled(t *testing.T) {
+	srv := mockOrchWithConfig(t)
+	defer srv.Close()
+
+	var tokenReceived string
+	cfg := &Config{
+		OrchestratorURL:          srv.URL,
+		NodeSlug:                 "x",
+		NodeName:                 "x",
+		RegistrationPSK:          "psk",
+		CapabilityReportInterval: 20 * time.Millisecond,
+		HTTPTimeout:              5 * time.Second,
+	}
+	opts := &RunOptions{
+		StartWorkerAPI: func(tok string) error {
+			tokenReceived = tok
+			return nil
+		},
+		StartOllama: func() error { return nil },
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 80*time.Millisecond)
+	defer cancel()
+	logger := slog.New(slog.NewJSONHandler(io.Discard, nil))
+
+	err := RunWithOptions(ctx, logger, cfg, opts)
+	if err != nil {
+		t.Fatalf("RunWithOptions: %v", err)
+	}
+	if tokenReceived != "test-bearer" {
+		t.Errorf("StartWorkerAPI should receive token from config, got %q", tokenReceived)
+	}
+}
+
+func TestFetchConfig_NonOK(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer srv.Close()
+
+	bootstrap := &BootstrapData{NodeJWT: "jwt", NodeConfigURL: srv.URL + pathNodesConfig}
+	cfg := &Config{HTTPTimeout: 5 * time.Second}
+	ctx := context.Background()
+
+	_, err := FetchConfig(ctx, cfg, bootstrap)
+	if err == nil {
+		t.Fatal("FetchConfig should fail on 204")
+	}
+}
+
+func TestSendConfigAck_NilConfig(t *testing.T) {
+	bootstrap := &BootstrapData{NodeJWT: "jwt", NodeConfigURL: "http://x"}
+	cfg := &Config{HTTPTimeout: 5 * time.Second}
+	ctx := context.Background()
+
+	err := SendConfigAck(ctx, cfg, bootstrap, nil, "applied")
+	if err == nil {
+		t.Fatal("SendConfigAck should fail when node config is nil")
+	}
+}
+
+func TestFetchConfig_BadJSON(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("not json"))
+	}))
+	defer srv.Close()
+	bootstrap := &BootstrapData{NodeJWT: "jwt", NodeConfigURL: srv.URL}
+	cfg := &Config{HTTPTimeout: 5 * time.Second}
+	ctx := context.Background()
+	_, err := FetchConfig(ctx, cfg, bootstrap)
+	if err == nil {
+		t.Fatal("FetchConfig should fail on invalid JSON")
+	}
+}
+
+func TestSendConfigAck_Non204(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusBadRequest)
+	}))
+	defer srv.Close()
+	bootstrap := &BootstrapData{NodeJWT: "jwt", NodeConfigURL: srv.URL}
+	cfg := &Config{HTTPTimeout: 5 * time.Second}
+	ctx := context.Background()
+	nodeConfig := &nodepayloads.NodeConfigurationPayload{
+		Version: 1, ConfigVersion: "1", NodeSlug: "x",
+	}
+	err := SendConfigAck(ctx, cfg, bootstrap, nodeConfig, "applied")
+	if err == nil {
+		t.Fatal("SendConfigAck should fail on 400")
 	}
 }

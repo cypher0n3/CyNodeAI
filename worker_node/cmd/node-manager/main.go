@@ -3,8 +3,11 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"os"
+	"os/exec"
+	"strings"
 
 	"github.com/cypher0n3/cynodeai/worker_node/internal/nodemanager"
 )
@@ -31,9 +34,50 @@ func runMain(ctx context.Context) int {
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: level}))
 	slog.SetDefault(logger)
 	cfg := nodemanager.LoadConfig()
-	if err := nodemanager.Run(ctx, logger, &cfg); err != nil {
+	opts := &nodemanager.RunOptions{
+		StartWorkerAPI: startWorkerAPI,
+		StartOllama:    startOllama,
+	}
+	if getEnv("NODE_MANAGER_SKIP_SERVICES", "") != "" {
+		opts = nil
+	}
+	if err := nodemanager.RunWithOptions(ctx, logger, &cfg, opts); err != nil {
 		logger.Error("node manager failed", "error", err)
 		return 1
 	}
 	return 0
+}
+
+// startWorkerAPI starts the worker-api process with the given bearer token in env.
+// The token must not be logged. Returns when the process has been started (or an error).
+func startWorkerAPI(bearerToken string) error {
+	bin := getEnv("NODE_MANAGER_WORKER_API_BIN", "worker-api")
+	if !strings.Contains(bin, "/") {
+		path, err := exec.LookPath(bin)
+		if err != nil {
+			return err
+		}
+		bin = path
+	}
+	cmd := exec.CommandContext(context.Background(), bin)
+	cmd.Env = append(os.Environ(), "WORKER_API_BEARER_TOKEN="+bearerToken)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if err := cmd.Start(); err != nil {
+		return err
+	}
+	go func() { _ = cmd.Wait() }()
+	return nil
+}
+
+// startOllama starts the Phase 1 inference container (Ollama). Fail-fast on error.
+func startOllama() error {
+	runtime := getEnv("CONTAINER_RUNTIME", "podman")
+	image := getEnv("OLLAMA_IMAGE", "ollama/ollama")
+	name := "cynodeai-ollama"
+	cmd := exec.Command(runtime, "run", "-d", "--name", name, image)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("%w: %s", err, strings.TrimSpace(string(out)))
+	}
+	return nil
 }
