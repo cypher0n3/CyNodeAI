@@ -93,8 +93,14 @@ They exist to make requirements and specs testable end-to-end using Godog (Cucum
 Rules:
 
 - Feature files must live under [`features/`](../../features/).
+- Each feature file MUST be confined to a single major component so BDD can run per component without cross-component dependencies.
+- A feature that intentionally spans multiple major components MUST be tagged and treated as end-to-end only.
+- Each feature file MUST live under the suite directory implied by its suite tag.
+  Example: `@suite_orchestrator` feature files live under `features/orchestrator/`.
 - Each Feature must include a user story narrative block directly under the `Feature:` line:
   `As a ...`, `I want ...`, `So that ...`.
+- Each Feature MUST include exactly one suite tag on a line immediately above the `Feature:` line.
+  Allowed suite tags are defined in [`features/README.md`](../../features/README.md) Section 3.1.
 - Each Feature or Scenario must link to both:
   - at least one requirement ID (`REQ-<DOMAIN>-<NNNN>`), and
   - at least one tech spec anchor (`spec-*`) that defines the relevant implementation design.

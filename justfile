@@ -18,8 +18,9 @@ go_modules := "go_shared_libs orchestrator worker_node"
 default:
     @just --list
 
-# Local CI: all lint, all tests (with 90% coverage), Go vuln check. Uses test-go-cover-podman so coverage works with rootful Podman.
-ci: lint-go lint-go-ci vulncheck-go lint-python lint-md validate-doc-links test-go-cover test-go-cover-podman
+# Local CI: all lint, all tests (with 90% coverage), Go vuln check.
+# test-go-cover runs coverage for go_modules_cover; test-go-cover-podman runs all modules (orchestrator with Postgres via Podman).
+ci: lint-go lint-go-ci vulncheck-go lint-python lint-md validate-doc-links validate-feature-files test-go-cover test-go-cover-podman
     @:
 
 # Full dev setup: podman, Go, and Go tools (incl. deps for .golangci.yml and lint-go-ci)
@@ -30,6 +31,7 @@ setup: install-podman install-go install-go-tools install-markdownlint
 install-podman:
     #!/usr/bin/env bash
     set -e
+    # Detect OS via release files / uname and install via appropriate package manager
     if command -v podman >/dev/null 2>&1; then
         echo "podman already installed: $(podman --version)"
         exit 0
@@ -57,8 +59,10 @@ install-go:
     #!/usr/bin/env bash
     set -e
     go_version="{{ go_version }}"
+    # want_minor = first number after "1." (e.g. 25 from 1.25.7) for version check
     want_minor="${go_version#*.}"
     want_minor="${want_minor%%.*}"
+    # go_ok: true if go is in PATH and its minor version >= want_minor
     go_ok() {
         command -v go >/dev/null 2>&1 && go version | sed -n 's/.*go1\.\([0-9]*\)\.*.*/\1/p' | xargs -I{} test "{}" -ge "$want_minor"
     }
@@ -85,10 +89,12 @@ install-go:
         echo "Go installed via package manager: $(go version)"
         exit 0
     fi
+    # On Debian/Ubuntu, remove distro go so /usr/local/go takes precedence
     if [ "$did_apt_go" = 1 ]; then
         echo "Removing too-old golang-go package before tarball install"
         sudo apt-get remove -y golang-go || true
     fi
+    # go.dev tarballs use three-part version (e.g. 1.25.0)
     tarball_version="$go_version"
     case "$tarball_version" in
         *.*.*) ;;
@@ -96,6 +102,7 @@ install-go:
     esac
     echo "Installing Go $tarball_version from go.dev/dl (distro package missing or too old)"
     os=$(uname -s | tr '[:upper:]' '[:lower:]')
+    # Map kernel arch to Go naming (e.g. x86_64 -> amd64)
     arch=$(uname -m)
     case "$arch" in
         x86_64) arch=amd64 ;;
@@ -109,6 +116,7 @@ install-go:
     sudo rm -rf /usr/local/go
     sudo tar -C /usr/local -xzf "$tmpdir/$tarball"
     go_path="/usr/local/go/bin"
+    # Pick shell profile so we can append PATH for this session and future logins
     profile=""
     case "${SHELL:-}" in
         *zsh) profile="$HOME/.zshrc" ;;
@@ -136,8 +144,8 @@ install-go-tools: install-go
     @go install golang.org/x/vuln/cmd/govulncheck@latest
     @echo "Installed: golangci-lint, staticcheck, govulncheck"
 
-# Run go vet and staticcheck (quick Go lint; use lint-go-ci for full suite)
-# Runs per-module (see go_modules).
+# Run go vet and staticcheck (quick Go lint; use lint-go-ci for full suite).
+# Runs in each workspace module so each go.mod is used correctly.
 lint-go: install-go-tools
     @for m in {{ go_modules }}; do \
       echo "==> go vet ./... ($m)"; \
@@ -146,7 +154,7 @@ lint-go: install-go-tools
       (cd "$m" && staticcheck ./...); \
     done
 
-# Full Go lint suite via golangci-lint (uses .golangci.yml)
+# Full Go lint suite via golangci-lint (uses repo-root .golangci.yml for all modules).
 lint-go-ci: install-go-tools
     @for m in {{ go_modules }}; do \
       echo "==> golangci-lint run ./... ($m)"; \
@@ -172,10 +180,12 @@ install-markdownlint:
     RULES_DIR=".markdownlint-rules"
     REPO_DIR=".markdownlint-repo"
     REPO_URL="https://github.com/cypher0n3/docs-as-code-tools.git"
+    # Bootstrap config with customRules and ignores so lint-md works out of the box
     if [ ! -f "$CONFIG" ]; then
         echo "Creating $CONFIG with customRules in $RULES_DIR/ ..."
         printf '%s\n' '{"config":{"default":true,"extends":".markdownlint.yml"},"customRules":[".markdownlint-rules/allow-custom-anchors.js",".markdownlint-rules/ascii-only.js",".markdownlint-rules/document-length.js",".markdownlint-rules/fenced-code-under-heading.js",".markdownlint-rules/heading-min-words.js",".markdownlint-rules/heading-numbering.js",".markdownlint-rules/heading-title-case.js",".markdownlint-rules/no-duplicate-headings-normalized.js",".markdownlint-rules/no-empty-heading.js",".markdownlint-rules/no-h1-content.js",".markdownlint-rules/no-heading-like-lines.js",".markdownlint-rules/one-sentence-per-line.js"],"ignores":[".github/**","**/node_modules/**","tmp/**","**/*.plan.md"]}' > "$CONFIG"
     fi
+    # Only clone/update rules repo if config references .markdownlint-rules/
     if ! grep -q '"\.markdownlint-rules/' "$CONFIG" 2>/dev/null && ! grep -q '"./\.markdownlint-rules/' "$CONFIG" 2>/dev/null; then
         echo "Config does not point to $RULES_DIR; skipping rules download."
         exit 0
@@ -190,19 +200,28 @@ install-markdownlint:
         echo "Updating $REPO_DIR ..."
         git -C "$REPO_DIR" fetch origin main
         git -C "$REPO_DIR" merge --ff-only origin/main || true
+        # Symlink so config customRules paths resolve without copying files
         if [ ! -e "$RULES_DIR" ]; then
             ln -sfn "$REPO_DIR/markdownlint-rules" "$RULES_DIR"
             echo "Linked $RULES_DIR to $REPO_DIR/markdownlint-rules."
         fi
     fi
 
-# Validate internal file links in docs/ (markdown links to other files; internal # refs ignored)
+# Validate internal file links in docs/ (checks markdown hrefs to other files; in-doc #anchors ignored).
 validate-doc-links:
     #!/usr/bin/env bash
     set -e
     pushd "{{ root_dir }}" >/dev/null
     trap 'popd >/dev/null 2>/dev/null' EXIT
-    python3 .ci_scripts/validate_doc_links.py --report dev_docs/doc_links_validation_report.txt
+    python3 .ci_scripts/validate_doc_links.py
+
+# Validate Gherkin feature file conventions in features/
+validate-feature-files:
+    #!/usr/bin/env bash
+    set -e
+    pushd "{{ root_dir }}" >/dev/null
+    trap 'popd >/dev/null 2>/dev/null' EXIT
+    python3 .ci_scripts/validate_feature_files.py
 
 # Lint Markdown (markdownlint-cli2; uses .markdownlint-cli2.jsonc)
 lint-md target = '**/*.md':
@@ -222,36 +241,43 @@ fmt-go: install-go
     done
 
 # Run Go tests
-test-go: install-go
-    @for m in {{ go_modules }}; do \
-      echo "==> go test ./... ($m)"; \
-      (cd "$m" && go test ./...); \
-    done
+test-go: test-go-cover test-go-cover-podman test-go-race test-go-e2e
+    @:
+
+# E2E tests are opt-in (RUN_E2E=1) so default test-go / ci stay fast.
+test-go-e2e:
+    #!/usr/bin/env bash
+    set -e
+    if [ "${RUN_E2E:-}" != "1" ]; then
+        echo "Skipping e2e (set RUN_E2E=1 to run)"
+        exit 0
+    fi
+    just e2e
 
 # Minimum Go coverage (percent) required per package when running test-go-cover / ci
 go_coverage_min := "90"
 
-# Modules included in test-go-cover (orchestrator skipped; use test-go-cover-podman for orchestrator coverage with Postgres).
+# test-go-cover runs coverage for these only; orchestrator needs Postgres (test-go-cover-podman).
 go_modules_cover := "go_shared_libs worker_node"
 
-# Run Go tests with coverage; fail if any package in any module is below go_coverage_min
+# Run Go tests with coverage; fail if any package is below go_coverage_min (awk aggregates coverprofile by pkg).
 test-go-cover: install-go
     @fail=0; failed_pkgs=""; \
     mkdir -p "{{ root_dir }}/tmp/go/coverage"; \
     echo ""; echo "--- Go coverage (min {{ go_coverage_min }}% per package) ---"; echo ""; \
     for m in {{ go_modules_cover }}; do \
-      echo "==> $m: go test -coverprofile"; \
-      out="{{ root_dir }}/tmp/go/coverage/$m.coverage.out"; \
-      (cd "$m" && go test ./... -coverprofile="$out" -covermode=atomic); \
-      r=0; below=$(awk -v min="{{ go_coverage_min }}" '/^mode:/{next}{path=$1;sub(/:.*/,"",path);n=split(path,a,"/");pkg=(n>1)?a[1]:".";for(i=2;i<n;i++)pkg=pkg"/"a[i];stmts=$2;cnt=$3;t[pkg]+=stmts;c[pkg]+=(cnt>0)?stmts:0}END{for(p in t){pct=(t[p]>0)?(100*c[p]/t[p]):0;if(pct<min+0){printf "  %s %.1f%%\n",p,pct;e=1}}exit e+0}' "$out") || r=$?; \
-      if [ "$r" -ne 0 ]; then \
-        echo "    [FAIL] packages below {{ go_coverage_min }}%:"; echo "$below"; fail=1; failed_pkgs="$failed_pkgs${failed_pkgs:+$'\n'}[$m]"$'\n'"$below"; \
-      else \
-        echo "    [PASS] all packages ≥ {{ go_coverage_min }}%"; \
-      fi; echo ""; \
+    echo "==> $m: go test -coverprofile"; \
+    out="{{ root_dir }}/tmp/go/coverage/$m.coverage.out"; \
+    (cd "$m" && go test ./... -coverprofile="$out" -covermode=atomic); \
+    r=0; below=$(awk -v min="{{ go_coverage_min }}" '/^mode:/{next}{path=$1;sub(/:.*/,"",path);n=split(path,a,"/");pkg=(n>1)?a[1]:".";for(i=2;i<n;i++)pkg=pkg"/"a[i];stmts=$2;cnt=$3;t[pkg]+=stmts;c[pkg]+=(cnt>0)?stmts:0}END{for(p in t){pct=(t[p]>0)?(100*c[p]/t[p]):0;if(pct<min+0){printf "  %s %.1f%%\n",p,pct;e=1}}exit e+0}' "$out") || r=$?; \
+    if [ "$r" -ne 0 ]; then \
+    echo "    [FAIL] packages below {{ go_coverage_min }}%:"; echo "$below"; fail=1; failed_pkgs="$failed_pkgs${failed_pkgs:+$'\n'}[$m]"$'\n'"$below"; \
+    else \
+    echo "    [PASS] all packages ≥ {{ go_coverage_min }}%"; \
+    fi; echo ""; \
     done; \
     if [ "$fail" -ne 0 ]; then \
-      echo "--- Summary ---"; echo "Packages below {{ go_coverage_min }}%:"; echo "$failed_pkgs"; echo ""; exit 1; \
+    echo "--- Summary ---"; echo "Packages below {{ go_coverage_min }}%:"; echo "$failed_pkgs"; echo ""; exit 1; \
     fi; \
     echo "--- Summary ---"; echo "All packages meet coverage threshold (≥ {{ go_coverage_min }}%)."; echo ""
 
@@ -270,6 +296,7 @@ test-go-cover-podman: install-go
     echo ""
 
     for m in {{ go_modules }}; do
+      # Orchestrator needs a real Postgres; other modules run tests without DB
       if [ "$m" = "orchestrator" ]; then
         out="$root/tmp/go/coverage/$m.coverage.out"
         (cd "$root/$m" && go clean -testcache) || true
@@ -282,15 +309,18 @@ test-go-cover-podman: install-go
           -p 127.0.0.1:${pg_port}:5432 \
           pgvector/pgvector:pg16 2>/dev/null) || cid=""
         if [ -z "$cid" ]; then
+          # Container already exists or podman failed; run tests without DB so CI doesn't hard-fail
           echo "    podman run failed; run orchestrator tests without DB (coverage will be below ${min}%)"
           (cd "$root/$m" && go test ./... -coverprofile="$out" -covermode=atomic) || true
         else
           trap 'podman rm -f cynodeai-pg-cover 2>/dev/null || true' EXIT
+          # Wait for Postgres to accept connections (up to ~25s)
           for i in $(seq 1 25); do
             podman exec cynodeai-pg-cover pg_isready -U cynodeai -d cynodeai -q 2>/dev/null && break
             sleep 1
           done
           sleep 5
+          # Orchestrator tests read this env var for DB connection
           export POSTGRES_TEST_DSN="postgres://cynodeai:cynodeai-test@127.0.0.1:${pg_port}/cynodeai?sslmode=disable"
           r=0; (cd "$root/$m" && go test ./... -coverprofile="$out" -covermode=atomic) || r=1
           podman rm -f cynodeai-pg-cover 2>/dev/null || true
@@ -303,6 +333,7 @@ test-go-cover-podman: install-go
         (cd "$root/$m" && go test ./... -coverprofile="$out" -covermode=atomic)
       fi
 
+      # Aggregate coverprofile by package dir; exit 1 if any package below min %
       r=0
       below=$(awk -v min="$min" '
         /^mode:/ { next }
@@ -352,7 +383,7 @@ test-go-race: install-go
     done
 
 # All linting (Go quick + Go full + Python + Markdown)
-lint: lint-go lint-go-ci lint-python lint-md validate-doc-links
+lint: lint-go lint-go-ci lint-python lint-md validate-doc-links validate-feature-files
     @:
 
 # All tests
@@ -383,11 +414,12 @@ install-python-venv: venv
 # Python linting (flake8, pylint, radon, xenon, vulture, bandit). Optional: just lint-python paths="scripts,other"
 lint-python paths="scripts,.ci_scripts":
     #!/usr/bin/env bash
-    set -e
+    # No set -e: we capture each linter's exit code and fail at the end if any gating check failed
     pushd "{{ root_dir }}" >/dev/null
     trap 'popd >/dev/null 2>/dev/null' EXIT
     LINT_PATHS=$(echo "{{ paths }}" | tr ',' ' ')
     command -v python3 >/dev/null 2>&1 || { echo "Error: python3 not found. Install Python 3 to run Python linting."; exit 1; }
+    # need: require tool in PATH or in .venv/bin (so "just venv" is enough)
     need() { command -v "$1" >/dev/null 2>&1 || [ -x .venv/bin/"$1" ] || { echo "Error: $1 not found. Install with: pip install $1 or run 'just venv'"; exit 1; }; }
     need flake8; need pylint; need radon; need xenon; need vulture; need bandit
     if [ -d .venv ]; then export PATH="$PWD/.venv/bin:$PATH"; fi
@@ -403,6 +435,7 @@ lint-python paths="scripts,.ci_scripts":
     echo "Running radon maintainability metrics (non-gating)..."
     radon mi -s $LINT_PATHS || true
     echo "Running radon maintainability check (fail if any module MI rank C)..."
+    # radon mi -j outputs JSON; we parse it and fail if any file has rank C
     TMP_MI=$(mktemp); radon mi -j $LINT_PATHS -O "$TMP_MI"
     python3 -c "import sys, json; d=json.load(open(sys.argv[1])); bad=[k for k,v in d.items() if v.get('rank')=='C']; [print('MI rank C (low maintainability):', f) for f in bad]; sys.exit(1 if bad else 0)" "$TMP_MI"; MI_RESULT=$?
     rm -f "$TMP_MI"
@@ -411,4 +444,5 @@ lint-python paths="scripts,.ci_scripts":
     echo "Running bandit security scan (non-gating)..."
     bandit -r $LINT_PATHS; BANDIT_RESULT=$?
     echo ""; echo "Lint exit codes: flake8=$FLAKE8_RESULT pylint=$PYLINT_RESULT xenon=$XENON_RESULT radon_mi=$MI_RESULT bandit=$BANDIT_RESULT"
+    # Fail if any gating linter reported errors (radon cc/mi -s and vulture are non-gating)
     [ "$FLAKE8_RESULT" -ne 0 ] || [ "$PYLINT_RESULT" -ne 0 ] || [ "$XENON_RESULT" -ne 0 ] || [ "$MI_RESULT" -ne 0 ] || [ "$BANDIT_RESULT" -ne 0 ] && exit 1; exit 0

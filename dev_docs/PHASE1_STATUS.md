@@ -66,7 +66,7 @@ Key artifacts and entry points for Phase 1.
 
 | File                                      | Description                         |
 | ----------------------------------------- | ----------------------------------- |
-| `features/single_node_happy_path.feature` | Single node task execution scenario |
+| `features/e2e/single_node_happy_path.feature` | Single node task execution scenario (E2E) |
 
 ---
 
@@ -190,7 +190,7 @@ Alternatively use `./scripts/setup-dev.sh start` (starts Postgres, control-plane
 build first with `./scripts/setup-dev.sh build`), then start node manually or run `just e2e`
 which runs the full demo including the node.
 
-**BDD:** The scenarios in `features/single_node_happy_path.feature` are exercised by the same
+**BDD:** The scenarios in `features/e2e/single_node_happy_path.feature` are exercised by the same
 E2E flow; run `just e2e` or `./scripts/setup-dev.sh test-e2e` (with services already started).
 
 ### Recent Updates (Phase 1 CI and Refactor)

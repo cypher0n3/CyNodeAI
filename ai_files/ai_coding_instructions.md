@@ -6,7 +6,7 @@
 **Context:** Self-hosted teams and small enterprises; coordinates sandboxed worker execution across local nodes and optional cloud capacity.
 **Status:** Early prototype / design phase.
 Authoritative details live in [`docs/tech_specs/`](../docs/tech_specs/).
-[`node/`](../node/) and [`orchestrator/`](../orchestrator/) are placeholders for implementation.
+[`worker_node/`](../worker_node/) and [`orchestrator/`](../orchestrator/) contain the Go implementation (see `go.work` and the justfile).
 **References:** [`meta.md`](../meta.md), [`docs/tech_specs/_main.md`](../docs/tech_specs/_main.md).
 
 ## 2. Documentation and Style Standards
@@ -91,7 +91,7 @@ Follow this workflow for all implementation work in this repository.
 
 - **Specs:** [`docs/tech_specs/`](../docs/tech_specs/) - design and normative requirements.
 - **BDD:** [`features/`](../features/) - Gherkin `.feature` files containing user stories and scenarios.
-- **Placeholders:** [`node/`](../node/) - worker-node services; [`orchestrator/`](../orchestrator/) - orchestrator services.
+- **Go implementation:** [`worker_node/`](../worker_node/) - worker-node services; [`orchestrator/`](../orchestrator/) - orchestrator services.
 - **Scratch:** [`tmp/`](../tmp/) - scratch space (excluded from Python lint configs where applicable).
 - **Secure browser:** [`secure_browser/`](../secure_browser/) - rules and assets for the secure browser service.
 

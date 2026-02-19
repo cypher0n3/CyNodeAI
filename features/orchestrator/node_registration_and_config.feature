@@ -1,3 +1,4 @@
+@suite_orchestrator
 Feature: Node Registration and Configuration
 
   As an operator

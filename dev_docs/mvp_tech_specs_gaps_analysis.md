@@ -119,7 +119,12 @@ Acceptance tests and traceability for Phase 1.
 
 ### 6.1 Feature Coverage
 
-- `features/single_node_happy_path.feature` covers: login, refresh, logout, user info, node registration, capability reporting, create task, get task status, end-to-end task execution, get task result.
+- Feature coverage is split by suite:
+  - `features/orchestrator/initial_auth.feature` covers: login, refresh, logout, user info.
+  - `features/orchestrator/node_registration_and_config.feature` covers: node registration, capability reporting, config fetch, config ack.
+  - `features/orchestrator/orchestrator_task_lifecycle.feature` covers: create task, get task status, get task result, dispatcher contract.
+  - `features/worker_node/worker_node_sandbox_execution.feature` covers: worker API auth and sandbox job execution contract.
+  - `features/e2e/single_node_happy_path.feature` covers: end-to-end single-node happy path across orchestrator and worker node.
 - **Gaps:**
   - No scenario for "node fetches config after registration" or "node sends config ack."
   - No scenario for "dispatcher uses per-node worker URL and token from config."
