@@ -63,3 +63,10 @@ It covers storage, tracking, and exposure of AI skills files so that inference m
   All operations MUST go through the User API Gateway; the same controls (auth, scope elevation permission, auditing on write) apply.
   [CYNAI.SKILLS.SkillManagementCrud](../tech_specs/skills_storage_and_inference.md#spec-cynai-skills-skillmanagementcrud)
   <a id="req-skills-0115"></a>
+- **REQ-SKILLS-0116:** The system MUST provide a built-in default skill that describes how AIs should interact with CyNodeAI (e.g. MCP tools, gateway usage, conventions).
+  This skill MUST be loaded by default for inference: when the system exposes skills to an inference request that supports skills, this default skill MUST be included in the set offered (e.g. global scope, always included).
+  [CYNAI.SKILLS.DefaultCyNodeAISkill](../tech_specs/skills_storage_and_inference.md#spec-cynai-skills-defaultcynodeaiskill)
+  <a id="req-skills-0116"></a>
+- **REQ-SKILLS-0117:** The content of the default CyNodeAI interaction skill MUST be updated regularly (e.g. with product releases or on a defined schedule) so that it reflects current capabilities, APIs, and conventions.
+  [CYNAI.SKILLS.DefaultCyNodeAISkill](../tech_specs/skills_storage_and_inference.md#spec-cynai-skills-defaultcynodeaiskill)
+  <a id="req-skills-0117"></a>

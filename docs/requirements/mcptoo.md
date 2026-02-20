@@ -70,3 +70,7 @@ It covers MCP tooling conventions, tool catalog expectations, and SDK installati
 - **REQ-MCPTOO-0115:** The workflow runtime MUST NOT connect directly to PostgreSQL and MUST use MCP database tools (or an internal service enforcing the same policy).
   [CYNAI.MCPTOO.WorkflowRuntimeNoDirectDb](../tech_specs/mcp_sdk_installation.md#spec-cynai-mcptoo-workflowruntimenodb)
   <a id="req-mcptoo-0115"></a>
+- **REQ-MCPTOO-0116:** The system SHOULD expose a help MCP server (or help tools) that provide on-demand documentation for how to interact with CyNodeAI (e.g. tool usage, conventions, gateway).
+  Help content SHOULD be aligned with and updated on the same cadence as the default CyNodeAI interaction skill.
+  [CYNAI.MCPTOO.HelpMcpServer](../tech_specs/mcp_tooling.md#spec-cynai-mcptoo-helpmcpserver)
+  <a id="req-mcptoo-0116"></a>

@@ -13,6 +13,7 @@
   - [Node Tools](#node-tools)
   - [Model Registry](#model-registry)
   - [Skills Tools](#skills-tools)
+  - [Help Tools](#help-tools)
   - [Database Tools](#database-tools)
 - [Response and Error Model](#response-and-error-model)
 
@@ -150,6 +151,17 @@ This catalog lists tool names for allowlist and discovery; do not duplicate argu
   - `skills.get`
   - `skills.update`
   - `skills.delete`
+
+### Help Tools
+
+On-demand documentation for how to interact with CyNodeAI.
+See [Help MCP Server](mcp_tooling.md#help-mcp-server).
+
+- `help.get`
+  - required args: `task_id` (for context and auditing)
+  - optional args: `topic` (string; e.g. tool name or doc path) or `path` (string; logical path into help content).
+  - Returns documentation content (e.g. markdown or plain text) for the requested topic or a default/overview when omitted.
+  - Response MUST be size-limited; content MUST NOT include secrets.
 
 ### Database Tools
 

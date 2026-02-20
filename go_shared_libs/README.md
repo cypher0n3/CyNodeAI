@@ -42,6 +42,9 @@ All Go modules in this repository are checked by repo-level `just` targets.
 
 ## 5 Cross-References
 
-- Root project overview at [`README.md`](../README.md).
-- Orchestrator implementation at [`orchestrator/README.md`](../orchestrator/README.md).
-- Worker node implementation at [`worker_node/README.md`](../worker_node/README.md).
+- Root project overview at [README.md](../README.md).
+- Project meta at [meta.md](../meta.md).
+- Orchestrator implementation at [orchestrator/README.md](../orchestrator/README.md).
+- Worker node implementation at [worker_node/README.md](../worker_node/README.md).
+- CLI management client at [cynork/README.md](../cynork/README.md).
+- Technical specifications index at [docs/tech_specs/_main.md](../docs/tech_specs/_main.md).

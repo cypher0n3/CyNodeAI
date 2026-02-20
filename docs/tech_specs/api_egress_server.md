@@ -7,6 +7,7 @@
   - [API Credentials Table](#api-credentials-table)
 - [Access Control](#access-control)
 - [Policy and Auditing](#policy-and-auditing)
+- [Admin API (Gateway Endpoints)](#admin-api-gateway-endpoints)
 
 ## Document Overview
 
@@ -137,3 +138,56 @@ Traces To:
 - Policy checks SHOULD include provider allowlists, operation allowlists, and per-task constraints.
 - All calls SHOULD be logged with task context, provider, operation, and timing information.
 - Responses SHOULD be filtered to avoid accidental secret leakage.
+
+## Admin API (Gateway Endpoints)
+
+- Spec ID: `CYNAI.APIEGR.AdminApiGatewayEndpoints` <a id="spec-cynai-apiegr-adminapigatewayendpoints"></a>
+
+The User API Gateway exposes credential management endpoints so that the Admin Web Console and the CLI management app (cynork) can perform the same operations via the same API.
+Both clients MUST use these gateway endpoints; the endpoint contract is defined here so that capability parity (REQ-CLIENT-0004) is implementable.
+
+Traces To:
+
+- [REQ-CLIENT-0116](../requirements/client.md#req-client-0116)
+- [REQ-CLIENT-0117](../requirements/client.md#req-client-0117)
+- [REQ-CLIENT-0118](../requirements/client.md#req-client-0118)
+- [REQ-CLIENT-0119](../requirements/client.md#req-client-0119)
+- [REQ-CLIENT-0120](../requirements/client.md#req-client-0120)
+
+Endpoint contract
+
+- All endpoints MUST live under the gateway's versioned API prefix (e.g. `/v1/`) and MUST require authentication and authorization.
+- The gateway MUST audit credential create, rotate, and disable; MUST NOT return secret values in any response; and MUST enforce scope (user/group) so that callers only access credentials they are allowed to manage.
+
+List credentials
+
+- `GET /v1/credentials` (or equivalent under the gateway prefix).
+- Query params: optional filter by `provider`, `owner_type`, `owner_id`.
+- Response: array of credential metadata only (id, owner_type, owner_id, provider, credential_name, credential_type, is_active, expires_at, created_at, updated_at; no credential_ciphertext or secret).
+
+Get credential (metadata only)
+
+- `GET /v1/credentials/{id}`.
+- Response: single credential metadata; 404 if not found or not authorized.
+
+Create credential
+
+- `POST /v1/credentials`.
+- Body: provider, credential_name, owner_type, owner_id, credential_type, and secret (write-only; never echoed in response or logs).
+- Response: 201 with metadata of created credential (no secret).
+
+Rotate credential
+
+- `POST /v1/credentials/{id}/rotate` (or equivalent action).
+- Body: new secret only.
+- Response: 200 with updated metadata (no secret); 404 if not found or not authorized.
+
+Disable credential
+
+- `PATCH /v1/credentials/{id}` with body indicating deactivation (e.g. `is_active: false`), or dedicated `POST /v1/credentials/{id}/disable`.
+- Response: 200 with updated metadata; 404 if not found or not authorized.
+
+Clients
+
+- The [Admin Web Console](admin_web_console.md) and the [CLI management app (cynork)](cli_management_app.md) MUST use the above endpoint contract for API Egress credential operations.
+- The gateway SHOULD expose this contract in its OpenAPI/Swagger spec for discovery and for the admin console Swagger UI.
