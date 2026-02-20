@@ -6,6 +6,7 @@
 - [Files Created](#files-created)
 - [Test Coverage Status](#test-coverage-status)
 - [Known Issues and Remaining Work](#known-issues-and-remaining-work)
+- [Code Review (2026-02-20)](#code-review-2026-02-20)
 - [Running the System Locally](#running-the-system-locally)
 - [Architecture Overview](#architecture-overview)
 - [Contact](#contact)
@@ -71,6 +72,21 @@ Key artifacts and entry points for Phase 1.
 | File                                      | Description                         |
 | ----------------------------------------- | ----------------------------------- |
 | `features/e2e/single_node_happy_path.feature` | Single node task execution scenario (E2E) |
+| `features/orchestrator/node_registration_and_config.feature` | Node registration, config fetch, config ack |
+| `features/orchestrator/orchestrator_task_lifecycle.feature` | Task create, status, result; dispatcher per-node |
+| `features/orchestrator/orchestrator_startup.feature` | Orchestrator fail-fast (inference path) |
+| `features/orchestrator/initial_auth.feature` | User login, refresh, logout |
+| `features/worker_node/node_manager_config_startup.feature` | Node manager config fetch and fail-fast |
+| `features/worker_node/worker_node_sandbox_execution.feature` | Worker API auth, sandbox run, workspace/env |
+
+### Dev Docs
+
+| File | Description |
+| ---- | ----------- |
+| `dev_docs/mvp_phase1_completion_plan.md` | Phase 1 chunks, acceptance checklist, requirement scope |
+| `dev_docs/mvp_phase1_code_review_report.md` | In-depth code review vs specs, feature/BDD gaps (2026-02-20) |
+| `dev_docs/PHASE1_STATUS.md` | This status report |
+| `dev_docs/mvp_specs_gaps_closure_status.md` | Spec gaps closure status |
 
 ---
 
@@ -111,6 +127,18 @@ Notes and open items for MVP completion.
 - [ ] Comprehensive error handling and retry logic
 - [ ] API documentation (OpenAPI/Swagger)
 - [ ] Production configuration and deployment guides
+
+### Spec Gaps From Code Review (2026-02-20)
+
+See `dev_docs/mvp_phase1_code_review_report.md` for full detail.
+
+- **config_version:** Spec (`node_payloads.md`) requires ULID (26-char Crockford Base32) for config version; implementation uses literal `"1"`.
+  Should implement ULID generation when serving config.
+- **Ollama image:** Spec says node starts "the single Ollama container specified by the orchestrator"; implementation uses env `OLLAMA_IMAGE`.
+  Either add image to config payload or document as Phase 1 env-only and defer.
+- **Worker API readyz:** Spec requires `GET /readyz`; only `GET /healthz` is implemented.
+- **Orchestrator fail-fast:** Feature `orchestrator_startup.feature` asserts orchestrator fails fast when no inference path; spec places fail-fast on the node.
+  Clarify scope or implement orchestrator readiness check.
 
 ---
 
@@ -196,6 +224,15 @@ which runs the full demo including the node.
 
 **BDD:** The scenarios in `features/e2e/single_node_happy_path.feature` are exercised by the same
 E2E flow; run `just e2e` or `./scripts/setup-dev.sh test-e2e` (with services already started).
+
+### Code Review (2026-02-20)
+
+An in-depth code review of the Phase 1 implementation versus the technical specs and completion plan is in `dev_docs/mvp_phase1_code_review_report.md`.
+Summary:
+
+- **Implemented:** Node-aware dispatch (per-node URL and token from config), config delivery and config ack, node manager startup order (register -> fetch config -> start Worker API -> start Ollama -> config ack), sandbox network policy and workspace/env, user auth and task APIs.
+- **Gaps:** `config_version` not ULID per spec; Ollama image from env rather than orchestrator config; Worker API missing `GET /readyz`; capability report schema in code is minimal vs full spec; orchestrator fail-fast scenario scope unclear (node vs orchestrator).
+- **Feature/BDD:** Feature files for orchestrator and worker_node cover registration, config, dispatcher, sandbox, and node manager; BDD steps skip when `POSTGRES_TEST_DSN` is unset (run with DB for full Phase 1 coverage).
 
 ### Recent Updates (Phase 1 CI and Refactor)
 
