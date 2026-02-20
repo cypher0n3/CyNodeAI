@@ -5,6 +5,10 @@ Feature: Orchestrator Startup
   I want the orchestrator to fail fast when no inference path is available
   So that I know the system is not ready and can fix configuration before accepting work
 
+  # "Inference path" here means at least one dispatchable (registered, config-acked) node.
+  # When no node is available, readyz returns 503 and a message indicating no inference path.
+  # BDD runs this scenario with a mock where no nodes are registered.
+
   @req_bootst_0002
   @spec_cynai_bootst_bootstrapsource
   Scenario: Orchestrator fails fast when no inference path is available

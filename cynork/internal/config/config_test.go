@@ -86,8 +86,9 @@ func TestSave(t *testing.T) {
 
 func TestConfigDir(t *testing.T) {
 	dir := t.TempDir()
+	_ = os.Unsetenv("XDG_CONFIG_HOME")
 	_ = os.Setenv("HOME", dir)
-	defer func() { _ = os.Unsetenv("HOME") }()
+	defer func() { _, _ = os.Unsetenv("HOME"), os.Unsetenv("XDG_CONFIG_HOME") }()
 	got, err := ConfigDir()
 	if err != nil {
 		t.Fatalf("ConfigDir: %v", err)
@@ -98,15 +99,44 @@ func TestConfigDir(t *testing.T) {
 	}
 }
 
+func TestConfigDir_XDGConfigHome(t *testing.T) {
+	xdgDir := t.TempDir()
+	_ = os.Setenv("XDG_CONFIG_HOME", xdgDir)
+	defer func() { _ = os.Unsetenv("XDG_CONFIG_HOME") }()
+	got, err := ConfigDir()
+	if err != nil {
+		t.Fatalf("ConfigDir: %v", err)
+	}
+	want := filepath.Join(xdgDir, "cynork")
+	if got != want {
+		t.Errorf("ConfigDir() = %q, want %q", got, want)
+	}
+}
+
 func TestConfigPath(t *testing.T) {
 	dir := t.TempDir()
+	_ = os.Unsetenv("XDG_CONFIG_HOME")
 	_ = os.Setenv("HOME", dir)
-	defer func() { _ = os.Unsetenv("HOME") }()
+	defer func() { _, _ = os.Unsetenv("HOME"), os.Unsetenv("XDG_CONFIG_HOME") }()
 	got, err := ConfigPath()
 	if err != nil {
 		t.Fatalf("ConfigPath: %v", err)
 	}
 	want := filepath.Join(dir, ".config", "cynork", "config.yaml")
+	if got != want {
+		t.Errorf("ConfigPath() = %q, want %q", got, want)
+	}
+}
+
+func TestConfigPath_XDGConfigHome(t *testing.T) {
+	xdgDir := t.TempDir()
+	_ = os.Setenv("XDG_CONFIG_HOME", xdgDir)
+	defer func() { _ = os.Unsetenv("XDG_CONFIG_HOME") }()
+	got, err := ConfigPath()
+	if err != nil {
+		t.Fatalf("ConfigPath: %v", err)
+	}
+	want := filepath.Join(xdgDir, "cynork", "config.yaml")
 	if got != want {
 		t.Errorf("ConfigPath() = %q, want %q", got, want)
 	}
@@ -150,8 +180,9 @@ func TestLoad_InvalidYAML(t *testing.T) {
 
 func TestSave_EmptyPath(t *testing.T) {
 	dir := t.TempDir()
+	_ = os.Unsetenv("XDG_CONFIG_HOME")
 	_ = os.Setenv("HOME", dir)
-	defer func() { _ = os.Unsetenv("HOME") }()
+	defer func() { _, _ = os.Unsetenv("HOME"), os.Unsetenv("XDG_CONFIG_HOME") }()
 	if err := os.MkdirAll(filepath.Join(dir, ".config", "cynork"), 0o700); err != nil {
 		t.Fatal(err)
 	}
@@ -181,6 +212,25 @@ func TestSave_MkdirFails(t *testing.T) {
 	}
 }
 
+// TestSave_CreateTempFails ensures Save returns an error when the config dir is not writable
+// (e.g. CreateTemp fails), so the caller gets a clear failure instead of a partial write.
+func TestSave_CreateTempFails(t *testing.T) {
+	dir := t.TempDir()
+	sub := filepath.Join(dir, "sub")
+	if err := os.MkdirAll(sub, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(sub, 0o000); err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = os.Chmod(sub, 0o700) }()
+	path := filepath.Join(sub, "config.yaml")
+	err := Save(path, &Config{GatewayURL: "http://localhost", Token: "t"})
+	if err == nil {
+		t.Fatal("expected error when config dir is not writable")
+	}
+}
+
 func TestSave_WriteFails(t *testing.T) {
 	path := t.TempDir()
 	err := Save(path, &Config{GatewayURL: "http://localhost"})
@@ -196,5 +246,19 @@ func TestSave_DefaultPathError(t *testing.T) {
 	err := Save("", &Config{GatewayURL: "http://localhost"})
 	if err == nil {
 		t.Fatal("expected error when defaultConfigPath fails")
+	}
+}
+
+func TestConfigDirAndPath_UserHomeDirFails(t *testing.T) {
+	old := userHomeDir
+	defer func() { userHomeDir = old }()
+	userHomeDir = func() (string, error) { return "", errors.New("injected") }
+	_ = os.Unsetenv("XDG_CONFIG_HOME")
+	defer func() { _ = os.Unsetenv("XDG_CONFIG_HOME") }()
+	if _, err := ConfigDir(); err == nil {
+		t.Fatal("ConfigDir: expected error when UserHomeDir fails")
+	}
+	if _, err := ConfigPath(); err == nil {
+		t.Fatal("ConfigPath: expected error when ConfigDir fails")
 	}
 }

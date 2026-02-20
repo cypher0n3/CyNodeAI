@@ -19,9 +19,17 @@ type Config struct {
 	Token      string `yaml:"token" json:"token"`
 }
 
-// ConfigDir returns the default config directory (~/.config/cynork).
+// userHomeDir is overridable in tests.
+var userHomeDir = os.UserHomeDir
+
+// ConfigDir returns the default config directory.
+// If XDG_CONFIG_HOME is set, uses $XDG_CONFIG_HOME/cynork; otherwise ~/.config/cynork.
+// See docs/tech_specs/cli_management_app.md (CliConfigFileLocation).
 func ConfigDir() (string, error) {
-	home, err := os.UserHomeDir()
+	if xdg := os.Getenv("XDG_CONFIG_HOME"); xdg != "" {
+		return filepath.Join(xdg, "cynork"), nil
+	}
+	home, err := userHomeDir()
 	if err != nil {
 		return "", fmt.Errorf("home dir: %w", err)
 	}
@@ -83,7 +91,9 @@ func applyEnvOverrides(cfg *Config) {
 }
 
 // Save writes the config to the given path (e.g. after login).
-// Creates parent directory if needed.
+// Creates parent directory if needed. Writes atomically (temp file + rename) so
+// a crash or interrupt does not leave a partial file; subsequent CLI runs still
+// see the previous config or a complete new one.
 func Save(savePath string, cfg *Config) error {
 	if savePath == "" {
 		var err error
@@ -100,8 +110,22 @@ func Save(savePath string, cfg *Config) error {
 	if err != nil {
 		return fmt.Errorf("marshal config: %w", err)
 	}
-	if err := os.WriteFile(savePath, data, 0o600); err != nil {
-		return fmt.Errorf("write config: %w", err)
+	tmp, err := os.CreateTemp(dir, ".config.yaml.*.tmp")
+	if err != nil {
+		return fmt.Errorf("create temp config: %w", err)
+	}
+	tmpPath := tmp.Name()
+	defer func() { _ = os.Remove(tmpPath) }()
+	if _, err := tmp.Write(data); err != nil {
+		_ = tmp.Close()
+		return fmt.Errorf("write temp config: %w", err)
+	}
+	// CreateTemp uses 0o600 on Unix; no need to Chmod for spec compliance.
+	if err := tmp.Close(); err != nil {
+		return fmt.Errorf("close temp config: %w", err)
+	}
+	if err := os.Rename(tmpPath, savePath); err != nil {
+		return fmt.Errorf("rename config: %w", err)
 	}
 	return nil
 }

@@ -98,14 +98,15 @@ It authenticates to the User API Gateway and is authorized by the gateway.
 Traces To:
 
 - [REQ-CLIENT-0149](../requirements/client.md#req-client-0149)
+- [REQ-CLIENT-0150](../requirements/client.md#req-client-0150)
 
-Config file path
+#### Config File Path
 
 - Default path MUST be resolved as follows: if `XDG_CONFIG_HOME` is set, use `$XDG_CONFIG_HOME/cynork/config.yaml`; otherwise use `~/.config/cynork/config.yaml`.
 - The `--config` flag MUST override the default path when provided.
 - The CLI MUST create the config directory with mode `0700` when writing (e.g. on `auth login`); it MUST NOT create the file or directory on read if missing.
 
-Config file format (YAML)
+#### Config File Format (YAML)
 
 - The file MUST be valid YAML.
 - Supported top-level keys:
@@ -115,15 +116,22 @@ Config file format (YAML)
 - Unknown keys MAY be ignored; the CLI MUST NOT fail load solely due to unknown keys.
 - When writing the config file (e.g. after login), the CLI MUST use file mode `0600` and MUST NOT log the contents or token value.
 
-Environment overrides
+#### Environment Overrides
 
 - `CYNORK_GATEWAY_URL`: if set, overrides `gateway_url` from the config file after load.
 - `CYNORK_TOKEN`: if set, overrides the resolved token (see [Token Resolution (Precedence)](#token-resolution-precedence)) for the session; use for CI or ephemeral runs.
 - Overrides apply at config load time; the effective gateway URL and token used for requests MUST be the result of applying overrides to the loaded config and resolved token.
 
-Default gateway URL
+#### Default Gateway URL
 
 - When `gateway_url` is empty after load and env override, the CLI MUST use the default `http://localhost:8080` (or a build-time constant matching the orchestrator default).
+
+#### Session Persistence (Reliability)
+
+- Spec ID: `CYNAI.CLIENT.CliSessionPersistence` <a id="spec-cynai-client-clisessionpersistence"></a>
+- Traces To: [REQ-CLIENT-0150](../requirements/client.md#req-client-0150)
+- When writing the config file (e.g. after `auth login` or `auth logout`), the CLI MUST write atomically (e.g. write to a temp file in the same directory then rename to the final path) so that a crash or interrupt does not leave a partial or corrupt file; subsequent invocations MUST see either the previous config or a complete new one.
+- When the default config path cannot be resolved (e.g. home directory unavailable and no `--config` given), `auth login` and `auth logout` MUST fail with a clear error and MUST NOT proceed with an empty path.
 
 ### Token Resolution (Precedence)
 

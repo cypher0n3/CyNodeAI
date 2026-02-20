@@ -73,7 +73,11 @@ func runAuthLogin(_ *cobra.Command, _ []string) error {
 	cfg.Token = resp.AccessToken
 	path := configPath
 	if path == "" {
-		path, _ = config.ConfigPath()
+		var err error
+		path, err = getDefaultConfigPath()
+		if err != nil {
+			return fmt.Errorf("config path: %w", err)
+		}
 	}
 	if err := config.Save(path, cfg); err != nil {
 		return fmt.Errorf("save token: %w", err)
@@ -96,7 +100,11 @@ func runAuthLogout(_ *cobra.Command, _ []string) error {
 	cfg.Token = ""
 	path := configPath
 	if path == "" {
-		path, _ = config.ConfigPath()
+		var err error
+		path, err = getDefaultConfigPath()
+		if err != nil {
+			return fmt.Errorf("config path: %w", err)
+		}
 	}
 	if err := config.Save(path, cfg); err != nil {
 		return fmt.Errorf("save config: %w", err)

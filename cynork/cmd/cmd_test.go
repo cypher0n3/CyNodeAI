@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -105,6 +106,18 @@ func TestRunAuthWhoami_OK(t *testing.T) {
 	}
 }
 
+func TestRunAuthWhoami_GatewayError(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer server.Close()
+	cfg = &config.Config{GatewayURL: server.URL, Token: "tok"}
+	defer func() { cfg = nil }()
+	if err := runAuthWhoami(nil, nil); err == nil {
+		t.Fatal("expected error")
+	}
+}
+
 func TestRunTaskCreate_NoToken(t *testing.T) {
 	cfg = &config.Config{}
 	defer func() { cfg = nil }()
@@ -155,6 +168,22 @@ func TestRunAuthLogout(t *testing.T) {
 		t.Fatal(err)
 	}
 	configPath = path
+	cfg = &config.Config{GatewayURL: "http://localhost", Token: "x"}
+	defer func() { configPath = ""; cfg = nil }()
+	if err := runAuthLogout(nil, nil); err != nil {
+		t.Errorf("runAuthLogout: %v", err)
+	}
+}
+
+func TestRunAuthLogout_DefaultConfigPath(t *testing.T) {
+	dir := t.TempDir()
+	sub := filepath.Join(dir, "cynork")
+	if err := os.MkdirAll(sub, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	_ = os.Setenv("XDG_CONFIG_HOME", dir)
+	defer func() { _ = os.Unsetenv("XDG_CONFIG_HOME") }()
+	configPath = ""
 	cfg = &config.Config{GatewayURL: "http://localhost", Token: "x"}
 	defer func() { configPath = ""; cfg = nil }()
 	if err := runAuthLogout(nil, nil); err != nil {
@@ -213,6 +242,32 @@ func TestRunAuthLogin_SaveFails(t *testing.T) {
 	}
 }
 
+func TestRunAuthLogin_ConfigPathFails(t *testing.T) {
+	server := mockJSONServer(t, http.StatusOK, gateway.LoginResponse{AccessToken: "tok", TokenType: "Bearer"})
+	defer server.Close()
+	configPath = ""
+	cfg = &config.Config{GatewayURL: server.URL}
+	authLoginHandle = "u"
+	authLoginPassword = "p"
+	old := getDefaultConfigPath
+	getDefaultConfigPath = func() (string, error) { return "", errors.New("injected") }
+	defer func() { configPath = ""; cfg = nil; authLoginHandle = ""; authLoginPassword = ""; getDefaultConfigPath = old }()
+	if err := runAuthLogin(nil, nil); err == nil {
+		t.Fatal("expected config path error")
+	}
+}
+
+func TestRunAuthLogout_ConfigPathFails(t *testing.T) {
+	configPath = ""
+	cfg = &config.Config{GatewayURL: "http://localhost", Token: "x"}
+	old := getDefaultConfigPath
+	getDefaultConfigPath = func() (string, error) { return "", errors.New("injected") }
+	defer func() { configPath = ""; cfg = nil; getDefaultConfigPath = old }()
+	if err := runAuthLogout(nil, nil); err == nil {
+		t.Fatal("expected config path error")
+	}
+}
+
 func TestReadPassword(t *testing.T) {
 	oldStdin := os.Stdin
 	r, w, err := os.Pipe()
@@ -229,6 +284,21 @@ func TestReadPassword(t *testing.T) {
 	}
 	if pass != "secret" {
 		t.Errorf("password = %q, want secret", pass)
+	}
+}
+
+func TestReadPassword_ScanFails(t *testing.T) {
+	oldStdin := os.Stdin
+	r, _, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	_ = r.Close()
+	defer func() { os.Stdin = oldStdin }()
+	os.Stdin = r
+	_, err = readPassword("")
+	if err == nil {
+		t.Fatal("expected error when stdin closed")
 	}
 }
 
@@ -287,6 +357,25 @@ func TestRunAuthLogin_HandleFromStdin(t *testing.T) {
 
 func TestRunAuthLogin_PasswordFromStdin(t *testing.T) {
 	if err := runAuthLoginWithStdin(t, "u", "", "stdin_pass\n"); err != nil {
+		t.Errorf("runAuthLogin: %v", err)
+	}
+}
+
+func TestRunAuthLogin_ConfigPathFromDefault(t *testing.T) {
+	server := mockJSONServer(t, http.StatusOK, gateway.LoginResponse{AccessToken: "tok", TokenType: "Bearer"})
+	defer server.Close()
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, "cynork"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	_ = os.Setenv("XDG_CONFIG_HOME", dir)
+	defer func() { _ = os.Unsetenv("XDG_CONFIG_HOME") }()
+	configPath = ""
+	cfg = &config.Config{GatewayURL: server.URL}
+	authLoginHandle = "u"
+	authLoginPassword = "p"
+	defer func() { configPath = ""; cfg = nil; authLoginHandle = ""; authLoginPassword = "" }()
+	if err := runAuthLogin(nil, nil); err != nil {
 		t.Errorf("runAuthLogin: %v", err)
 	}
 }
