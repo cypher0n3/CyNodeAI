@@ -4,4 +4,5 @@ use (
 	./go_shared_libs
 	./orchestrator
 	./worker_node
+	./cynork
 )

@@ -13,7 +13,7 @@ go_version := "1.25.7"
 root_dir := justfile_directory()
 
 # Workspace modules (explicit, stable).
-go_modules := "go_shared_libs orchestrator worker_node"
+go_modules := "go_shared_libs orchestrator worker_node cynork"
 
 default:
     @just --list
@@ -293,6 +293,41 @@ go-tidy: install-go
       echo "==> go mod tidy ($m)"; \
       (cd "{{ root_dir }}/$m" && go mod tidy); \
     done
+
+# Upgrade all Go dependencies to latest in each workspace module (go get -u ./... then tidy).
+go-upgrade-deps: install-go
+    @for m in {{ go_modules }}; do \
+      echo "==> go get -u ./... ($m)"; \
+      (cd "{{ root_dir }}/$m" && go get -u ./... && go mod tidy); \
+    done
+
+# Build cynork CLI for production: stripped, compressed with upx (minimal size).
+# Requires: upx (e.g. pacman -S upx, apt install upx-ucl).
+build-cynork: install-go
+    #!/usr/bin/env bash
+    set -e
+    root="{{ root_dir }}"
+    mkdir -p "$root/tmp"
+    cd "$root"
+    echo "Building cynork (production, minimal size)..."
+    CGO_ENABLED=0 go build -ldflags="-s -w" -o "$root/tmp/cynork" ./cynork
+    if command -v upx >/dev/null 2>&1; then
+      upx --best "$root/tmp/cynork"
+    else
+      echo "upx not found; install for smaller binary (e.g. pacman -S upx, apt install upx-ucl)"
+    fi
+    echo "Built: $root/tmp/cynork"
+
+# Build cynork CLI for development: debug symbols, no optimizations (better stack traces).
+build-cynork-dev: install-go
+    #!/usr/bin/env bash
+    set -e
+    root="{{ root_dir }}"
+    mkdir -p "$root/tmp"
+    cd "$root"
+    echo "Building cynork (dev, debug)..."
+    go build -gcflags="all=-N -l" -o "$root/tmp/cynork-dev" ./cynork
+    echo "Built: $root/tmp/cynork-dev"
 
 # Run Go tests
 test-go: test-go-cover test-go-race test-go-e2e

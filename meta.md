@@ -10,7 +10,7 @@ It coordinates sandboxed worker execution across local nodes and optional cloud 
 - This repository is currently **early prototype / design phase**.
 - The canonical normative "what" lives in `docs/requirements/`.
 - Implementation guidance ("how") lives in `docs/tech_specs/` and should trace back to requirements.
-- The `worker_node/` and `orchestrator/` directories contain the Go implementation (see `go.work` and the justfile).
+- The Go implementation lives in four modules (see root `go.work` and the justfile): `go_shared_libs/`, `orchestrator/`, `worker_node/`, `cynork/`.
 
 ## Key Documents
 
@@ -42,8 +42,10 @@ It coordinates sandboxed worker execution across local nodes and optional cloud 
 - `docs/requirements/`: canonical normative requirements ("what"); entrypoint is `README.md`.
 - `docs/tech_specs/`: design and implementation guidance ("how"); entrypoint is `_main.md`.
 - `secure_browser/`: rules and assets for the secure browser service (e.g. `secure_browser_rules.yaml`).
-- `worker_node/`: worker-node Go module (node manager, worker API); see `worker_node/README.md`.
+- `go_shared_libs/`: shared Go contracts and types used by orchestrator and worker node; see `go_shared_libs/README.md`.
 - `orchestrator/`: orchestrator Go module (control-plane, user-gateway, api-egress, etc.); see `orchestrator/README.md`.
+- `worker_node/`: worker-node Go module (node manager, worker API); see `worker_node/README.md`.
+- `cynork/`: CLI management client (Go, Cobra); see `cynork/README.md` and `docs/tech_specs/cli_management_app.md`.
 - `tmp/`: scratch space (ignored by Python lint configs; avoid committing generated artifacts unless intentional).
 
 ## Style and Tooling Conventions
