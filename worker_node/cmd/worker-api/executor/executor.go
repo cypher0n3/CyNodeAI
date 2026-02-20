@@ -7,9 +7,18 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"strings"
 	"time"
 
 	"github.com/cypher0n3/cynodeai/go_shared_libs/contracts/workerapi"
+)
+
+// Task context env keys (sandbox_container.md). Must not contain orchestrator secrets.
+const (
+	envTaskID       = "CYNODE_TASK_ID"
+	envJobID        = "CYNODE_JOB_ID"
+	envWorkspaceDir = "CYNODE_WORKSPACE_DIR"
+	workspaceMount  = "/workspace"
 )
 
 // Executor executes sandbox jobs.
@@ -29,7 +38,9 @@ func New(runtime string, defaultTimeout time.Duration, maxOutputBytes int) *Exec
 }
 
 // RunJob executes a sandbox job and returns the result.
-func (e *Executor) RunJob(ctx context.Context, req *workerapi.RunJobRequest) (*workerapi.RunJobResponse, error) {
+// workspaceDir is the host path for the per-task workspace; if non-empty it is mounted at /workspace
+// and task context env vars are set. See docs/tech_specs/sandbox_container.md.
+func (e *Executor) RunJob(ctx context.Context, req *workerapi.RunJobRequest, workspaceDir string) (*workerapi.RunJobResponse, error) {
 	startedAt := time.Now().UTC()
 
 	resp := &workerapi.RunJobResponse{
@@ -56,17 +67,26 @@ func (e *Executor) RunJob(ctx context.Context, req *workerapi.RunJobRequest) (*w
 	// This is useful for containerized dev environments where running podman-in-podman
 	// is undesirable. Production deployments SHOULD use a real container runtime.
 	if e.runtime == "direct" {
-		return e.runDirect(ctx, req, resp)
+		return e.runDirect(ctx, req, resp, workspaceDir)
 	}
 
 	// Build container run command.
 	args := []string{"run", "--rm"}
 
-	// Default to no networking in MVP (restricted).
-	args = append(args, "--network=none")
+	// Phase 1: none and restricted both mean deny-all (worker_api.md).
+	switch strings.ToLower(strings.TrimSpace(req.Sandbox.NetworkPolicy)) {
+	case "none", "restricted", "":
+		args = append(args, "--network=none")
+	default:
+		args = append(args, "--network=none")
+	}
 
-	// Add environment variables.
-	for k, v := range req.Sandbox.Env {
+	if workspaceDir != "" {
+		args = append(args, "-v", fmt.Sprintf("%s:%s", workspaceDir, workspaceMount), "-w", workspaceMount)
+	}
+
+	env := e.buildTaskEnv(req, workspaceMount)
+	for k, v := range env {
 		args = append(args, "-e", fmt.Sprintf("%s=%s", k, v))
 	}
 
@@ -120,6 +140,23 @@ func (e *Executor) RunJob(ctx context.Context, req *workerapi.RunJobRequest) (*w
 	return resp, nil
 }
 
+// buildTaskEnv returns env for the sandbox: task context first, then request env.
+// Request env must not override CYNODE_* (no orchestrator secrets in sandbox).
+func (e *Executor) buildTaskEnv(req *workerapi.RunJobRequest, workspaceDirValue string) map[string]string {
+	out := map[string]string{
+		envTaskID:       req.TaskID,
+		envJobID:        req.JobID,
+		envWorkspaceDir: workspaceDirValue,
+	}
+	for k, v := range req.Sandbox.Env {
+		if strings.HasPrefix(k, "CYNODE_") {
+			continue
+		}
+		out[k] = v
+	}
+	return out
+}
+
 // setRunError sets resp status/exit/stderr from an execution error.
 func (e *Executor) setRunError(resp *workerapi.RunJobResponse, err error) {
 	resp.Status = workerapi.StatusFailed
@@ -131,16 +168,20 @@ func (e *Executor) setRunError(resp *workerapi.RunJobResponse, err error) {
 	}
 }
 
-func (e *Executor) runDirect(ctx context.Context, req *workerapi.RunJobRequest, resp *workerapi.RunJobResponse) (*workerapi.RunJobResponse, error) {
+func (e *Executor) runDirect(ctx context.Context, req *workerapi.RunJobRequest, resp *workerapi.RunJobResponse, workspaceDir string) (*workerapi.RunJobResponse, error) {
 	cmd := exec.CommandContext(ctx, req.Sandbox.Command[0], req.Sandbox.Command[1:]...)
 
-	if len(req.Sandbox.Env) > 0 {
-		env := make([]string, 0, len(req.Sandbox.Env))
-		for k, v := range req.Sandbox.Env {
-			env = append(env, fmt.Sprintf("%s=%s", k, v))
-		}
-		cmd.Env = append(os.Environ(), env...)
+	workspaceDirValue := workspaceMount
+	if workspaceDir != "" {
+		workspaceDirValue = workspaceDir
+		cmd.Dir = workspaceDir
 	}
+	env := e.buildTaskEnv(req, workspaceDirValue)
+	envSlice := make([]string, 0, len(env))
+	for k, v := range env {
+		envSlice = append(envSlice, fmt.Sprintf("%s=%s", k, v))
+	}
+	cmd.Env = append(os.Environ(), envSlice...)
 
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout

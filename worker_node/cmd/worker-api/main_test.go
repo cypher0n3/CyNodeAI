@@ -4,9 +4,11 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"runtime"
 	"testing"
 	"time"
@@ -127,7 +129,7 @@ func runJobCmd() []string {
 
 func TestHandleRunJob(t *testing.T) {
 	exec := executor.New("direct", 5*time.Second, 1024)
-	mux := newMux(exec, "test-bearer", nil)
+	mux := newMux(exec, "test-bearer", "", slog.Default())
 	cmd := runJobCmd()
 	reqBody := workerapi.RunJobRequest{
 		Version: 1, TaskID: "task-1", JobID: "job-1",
@@ -145,6 +147,26 @@ func TestHandleRunJob(t *testing.T) {
 	})
 	t.Run("success", func(t *testing.T) {
 		postRunJobSuccess(t, mux, body)
+	})
+	t.Run("success with workspace root", func(t *testing.T) {
+		muxWithWorkspace := newMux(executor.New("direct", 5*time.Second, 1024), "test-bearer", t.TempDir(), slog.Default())
+		postRunJobSuccess(t, muxWithWorkspace, body)
+	})
+	t.Run("workspace creation failure returns 500", func(t *testing.T) {
+		dir := t.TempDir()
+		blocker := filepath.Join(dir, "blocker")
+		if err := os.WriteFile(blocker, []byte("x"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		// workspaceDir will be blocker/job-1; MkdirAll fails because blocker is a file
+		muxBad := newMux(executor.New("direct", 5*time.Second, 1024), "test-bearer", blocker, slog.Default())
+		w := httptest.NewRecorder()
+		r := httptest.NewRequest(http.MethodPost, "/v1/worker/jobs:run", bytes.NewReader(body))
+		r.Header.Set("Authorization", "Bearer test-bearer")
+		muxBad.ServeHTTP(w, r)
+		if w.Code != http.StatusInternalServerError {
+			t.Errorf("status %d want 500", w.Code)
+		}
 	})
 	t.Run("bad request body", func(t *testing.T) {
 		w := httptest.NewRecorder()
@@ -192,7 +214,7 @@ func postRunJobExpectBadRequest(t *testing.T, mux *http.ServeMux, badReq *worker
 }
 
 func TestHealthz(t *testing.T) {
-	mux := newMux(executor.New("direct", time.Second, 1024), "token", nil)
+	mux := newMux(executor.New("direct", time.Second, 1024), "token", "", slog.Default())
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest(http.MethodGet, "/healthz", http.NoBody)
 	mux.ServeHTTP(w, r)

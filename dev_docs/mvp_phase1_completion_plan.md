@@ -8,7 +8,6 @@
   - [3.3 User API Gateway Requirements](#33-user-api-gateway-requirements)
 - [4 Phase 1 Work Plan (4-6 Hour Chunks)](#4-phase-1-work-plan-4-6-hour-chunks)
   - [4.1 Chunk 01 (4-6 Hours): Lock the Phase 1 Acceptance Criteria](#41-chunk-01-4-6-hours-lock-the-phase-1-acceptance-criteria)
-    - [4.1.0 Phase 1 Acceptance Checklist](#410-phase-1-acceptance-checklist-chunk-01-deliverable)
   - [4.2 Chunk 02 (4-6 Hours): Make Bootstrap Payload Spec-Compliant Enough to Enable Config Delivery](#42-chunk-02-4-6-hours-make-bootstrap-payload-spec-compliant-enough-to-enable-config-delivery)
   - [4.3 Chunk 03 (4-6 Hours): Implement Minimum Node Config Delivery API in the Control Plane](#43-chunk-03-4-6-hours-implement-minimum-node-config-delivery-api-in-the-control-plane)
   - [4.4 Chunk 04 (4-6 Hours): Update Node Manager to Fetch Config and Start Node Services in the Spec Order](#44-chunk-04-4-6-hours-update-node-manager-to-fetch-config-and-start-node-services-in-the-spec-order)
@@ -294,6 +293,8 @@ This chunk ensures sandbox execution behavior matches the Phase 1 expectations i
 - Run `just test-go`.
 - Run `POSTGRES_TEST_DSN="postgres://..." just test-bdd` (runs the worker-node suite and orchestrator suite; orchestrator scenarios require DB for DB-backed steps).
 - Run `just lint-go-ci`.
+- Run `just ci`.
+  Fix any issues, re-run, repeat.
 
 ### 4.6 Chunk 06 (4-6 Hours): Make Orchestrator Dispatch Node-Aware (Single Node, Spec-Shaped)
 
