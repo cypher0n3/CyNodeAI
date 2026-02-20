@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/cypher0n3/cynodeai/go_shared_libs/contracts/workerapi"
@@ -20,8 +21,6 @@ import (
 type dispatcherConfig struct {
 	Enabled      bool
 	PollInterval time.Duration
-	WorkerAPIURL string
-	BearerToken  string
 	HTTPTimeout  time.Duration
 }
 
@@ -29,8 +28,6 @@ func loadDispatcherConfig() dispatcherConfig {
 	return dispatcherConfig{
 		Enabled:      getEnv("DISPATCHER_ENABLED", "true") == "true",
 		PollInterval: getDurationEnv("DISPATCH_POLL_INTERVAL", 1*time.Second),
-		WorkerAPIURL: getEnv("WORKER_API_URL", "http://localhost:8081"),
-		BearerToken:  getEnv("WORKER_API_BEARER_TOKEN", ""),
 		HTTPTimeout:  getDurationEnv("DISPATCH_HTTP_TIMEOUT", 5*time.Minute),
 	}
 }
@@ -41,16 +38,12 @@ func startDispatcher(ctx context.Context, db database.Store, logger *slog.Logger
 		logger.Info("dispatcher disabled")
 		return
 	}
-	if cfg.BearerToken == "" {
-		logger.Warn("dispatcher enabled but WORKER_API_BEARER_TOKEN is empty; dispatcher will not run")
-		return
-	}
 
 	client := &http.Client{Timeout: cfg.HTTPTimeout}
 	ticker := time.NewTicker(cfg.PollInterval)
 	defer ticker.Stop()
 
-	logger.Info("dispatcher started", "poll_interval", cfg.PollInterval.String(), "worker_api_url", cfg.WorkerAPIURL)
+	logger.Info("dispatcher started", "poll_interval", cfg.PollInterval.String())
 
 	for {
 		select {
@@ -74,14 +67,26 @@ func dispatchOnce(ctx context.Context, db database.Store, client *http.Client, c
 		return err
 	}
 
-	nodes, err := db.ListActiveNodes(ctx)
+	nodes, err := db.ListDispatchableNodes(ctx)
 	if err != nil {
-		return fmt.Errorf("list active nodes: %w", err)
+		return fmt.Errorf("list dispatchable nodes: %w", err)
 	}
 	if len(nodes) == 0 {
-		return fmt.Errorf("no active nodes available")
+		return fmt.Errorf("no dispatchable nodes (active with config ack and worker API URL/token)")
 	}
 	node := nodes[0]
+
+	workerURL := ""
+	if node.WorkerAPITargetURL != nil {
+		workerURL = *node.WorkerAPITargetURL
+	}
+	workerToken := ""
+	if node.WorkerAPIBearerToken != nil {
+		workerToken = *node.WorkerAPIBearerToken
+	}
+	if workerURL == "" || workerToken == "" {
+		return fmt.Errorf("node %s has no worker API URL or token", node.NodeSlug)
+	}
 
 	if err := db.AssignJobToNode(ctx, job.ID, node.ID); err != nil {
 		return fmt.Errorf("assign job to node: %w", err)
@@ -102,7 +107,7 @@ func dispatchOnce(ctx context.Context, db database.Store, client *http.Client, c
 		Sandbox: sandbox,
 	}
 
-	result, err := callWorkerAPI(ctx, client, cfg, &runReq)
+	result, err := callWorkerAPI(ctx, client, workerURL, workerToken, &runReq)
 	if err != nil {
 		_ = db.CompleteJob(ctx, job.ID, dispatcher.MarshalDispatchError(err), models.JobStatusFailed)
 		_ = db.UpdateTaskStatus(ctx, job.TaskID, models.TaskStatusFailed)
@@ -139,19 +144,20 @@ func dispatchOnce(ctx context.Context, db database.Store, client *http.Client, c
 	return nil
 }
 
-func callWorkerAPI(ctx context.Context, client *http.Client, cfg dispatcherConfig, req *workerapi.RunJobRequest) (*workerapi.RunJobResponse, error) {
+func callWorkerAPI(ctx context.Context, client *http.Client, workerBaseURL, bearerToken string, req *workerapi.RunJobRequest) (*workerapi.RunJobResponse, error) {
 	b, err := json.Marshal(req)
 	if err != nil {
 		return nil, err
 	}
 
-	url := cfg.WorkerAPIURL + "/v1/worker/jobs:run"
+	baseURL := strings.TrimSuffix(workerBaseURL, "/")
+	url := baseURL + "/v1/worker/jobs:run"
 	httpReq, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(b))
 	if err != nil {
 		return nil, err
 	}
 	httpReq.Header.Set("Content-Type", "application/json")
-	httpReq.Header.Set("Authorization", "Bearer "+cfg.BearerToken)
+	httpReq.Header.Set("Authorization", "Bearer "+bearerToken)
 
 	resp, err := client.Do(httpReq)
 	if err != nil {

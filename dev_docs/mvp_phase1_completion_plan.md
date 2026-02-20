@@ -294,7 +294,7 @@ This chunk ensures sandbox execution behavior matches the Phase 1 expectations i
 - Run `POSTGRES_TEST_DSN="postgres://..." just test-bdd` (runs the worker-node suite and orchestrator suite; orchestrator scenarios require DB for DB-backed steps).
 - Run `just lint-go-ci`.
 - Run `just ci`.
-  Fix any issues, re-run, repeat.
+  Fix any issues, re-run, repeat.t.
 
 ### 4.6 Chunk 06 (4-6 Hours): Make Orchestrator Dispatch Node-Aware (Single Node, Spec-Shaped)
 
@@ -325,6 +325,8 @@ This chunk keeps the Phase 1 dispatcher simple while aligning it to the node con
 - Run `just test-go`.
 - Run `POSTGRES_TEST_DSN="postgres://..." just test-bdd`.
 - Run `just lint-go-ci`.
+- Run `just ci`.
+  Fix any issues, re-run, repeat.
 
 ### 4.7 Chunk 07 (4-6 Hours): End-to-End Phase 1 Demo Hardening
 

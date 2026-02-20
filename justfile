@@ -28,6 +28,19 @@ ci: lint-go lint-go-ci vulncheck-go lint-python lint-md validate-doc-links valid
 setup: install-podman install-go install-go-tools install-markdownlint
     @:
 
+# Remove temporary files, .out files, compiled binaries, coverage artifacts, and Go test cache.
+clean:
+    #!/usr/bin/env bash
+    set -e
+    root="{{ root_dir }}"
+    echo "Cleaning $root ..."
+    find "$root" -maxdepth 3 -type f -name '*.out' ! -path '*/.git/*' -delete 2>/dev/null || true
+    find "$root" -maxdepth 4 -type f -name 'coverage.*' ! -path '*/.git/*' -delete 2>/dev/null || true
+    for m in {{ go_modules }}; do
+      (cd "$root/$m" && go clean -testcache 2>/dev/null) || true
+    done
+    echo "Done."
+
 # Install Podman if not already installed (Linux: distro package; macOS: Homebrew)
 install-podman:
     #!/usr/bin/env bash

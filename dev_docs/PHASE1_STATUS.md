@@ -1,6 +1,6 @@
 # CyNodeAI MVP Phase 1 Status Report
 
-<!-- Date: 2026-02-16. Branch: mvp/phase-1. Status: In progress -->
+<!-- Date: 2026-02-20. Branch: mvp/phase-1. Status: In progress -->
 
 - [Summary of Implementation](#summary-of-implementation)
 - [Files Created](#files-created)
@@ -24,6 +24,10 @@ The MVP implements:
 - **User Gateway**: Authentication, task submission, and result retrieval endpoints
 - **Node Worker**: Worker API framework for sandbox job execution
 - **BDD Tests**: Feature file for single-node happy path scenario
+- **Node-aware dispatch**: Dispatcher uses per-node `worker_api_target_url` and bearer token from config delivery (not global env).
+  Only nodes that are active and have acknowledged config with Worker API details are dispatchable.
+- **Config-delivered token**: Worker API bearer token and target URL are delivered via node config payload; persisted per-node when config is served so dispatch can use them.
+  E2E flow: control-plane has `WORKER_API_TARGET_URL` and `WORKER_API_BEARER_TOKEN`; node manager fetches config and starts worker-api with the delivered token (no manual token on the node).
 
 ---
 

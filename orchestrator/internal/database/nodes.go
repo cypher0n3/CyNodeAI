@@ -61,6 +61,21 @@ func (db *DB) ListActiveNodes(ctx context.Context) ([]*models.Node, error) {
 	return nodes, nil
 }
 
+// ListDispatchableNodes lists active nodes that have acknowledged config and have Worker API URL and token set.
+func (db *DB) ListDispatchableNodes(ctx context.Context) ([]*models.Node, error) {
+	var nodes []*models.Node
+	err := db.db.WithContext(ctx).
+		Where("status = ?", models.NodeStatusActive).
+		Where("config_ack_status = ?", "applied").
+		Where("worker_api_target_url IS NOT NULL AND worker_api_target_url != ''").
+		Where("worker_api_bearer_token IS NOT NULL AND worker_api_bearer_token != ''").
+		Find(&nodes).Error
+	if err != nil {
+		return nil, wrapErr(err, "list dispatchable nodes")
+	}
+	return nodes, nil
+}
+
 // SaveNodeCapabilitySnapshot saves a capability snapshot for a node.
 func (db *DB) SaveNodeCapabilitySnapshot(ctx context.Context, nodeID uuid.UUID, snapshot string) error {
 	nodeCap := &models.NodeCapability{
@@ -88,4 +103,13 @@ func (db *DB) UpdateNodeConfigAck(ctx context.Context, nodeID uuid.UUID, configV
 		updates["config_ack_error"] = *errMsg
 	}
 	return db.updateWhere(ctx, &models.Node{}, "id", nodeID, updates, "update node config ack")
+}
+
+// UpdateNodeWorkerAPIConfig stores the Worker API target URL and bearer token delivered to the node (for dispatch).
+func (db *DB) UpdateNodeWorkerAPIConfig(ctx context.Context, nodeID uuid.UUID, targetURL, bearerToken string) error {
+	return db.updateWhere(ctx, &models.Node{}, "id", nodeID,
+		map[string]interface{}{
+			"worker_api_target_url":   targetURL,
+			"worker_api_bearer_token": bearerToken,
+		}, "update node worker api config")
 }

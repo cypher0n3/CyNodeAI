@@ -150,7 +150,7 @@ start_control_plane() {
     export JWT_SECRET=$JWT_SECRET
     export NODE_REGISTRATION_PSK=$NODE_PSK
     export BOOTSTRAP_ADMIN_PASSWORD=$ADMIN_PASSWORD
-    export WORKER_API_URL="http://localhost:$WORKER_PORT"
+    export WORKER_API_TARGET_URL="http://localhost:$WORKER_PORT"
     export WORKER_API_BEARER_TOKEN
 
     ./bin/control-plane &
@@ -187,33 +187,27 @@ start_orchestrator() {
     fi
 }
 
-# Function to start worker-api and node-manager
+# Function to start node-manager (which fetches config and starts worker-api with token from config)
 start_node() {
     cd "$PROJECT_ROOT"
 
-    log_info "Starting worker-api on port $WORKER_PORT..."
-    export LISTEN_ADDR=":$WORKER_PORT"
-    export WORKER_API_BEARER_TOKEN
-    export CONTAINER_RUNTIME="${CONTAINER_RUNTIME:-podman}"
-    ./bin/worker-api &
-    WORKER_PID=$!
-    echo $WORKER_PID > /tmp/cynodeai-worker-api.pid
-    sleep 1
-
-    log_info "Starting node-manager..."
+    log_info "Starting node-manager (will fetch config and start worker-api)..."
     export ORCHESTRATOR_URL="http://localhost:$CONTROL_PLANE_PORT"
     export NODE_REGISTRATION_PSK=$NODE_PSK
     export NODE_SLUG=$NODE_SLUG
     export NODE_NAME="${NODE_NAME:-Development Node}"
+    # Worker-api is started by node-manager with token from config; pass listen port via env for the child process.
+    export LISTEN_ADDR=":$WORKER_PORT"
+    export CONTAINER_RUNTIME="${CONTAINER_RUNTIME:-podman}"
     ./bin/node-manager &
     NODE_PID=$!
     echo $NODE_PID > /tmp/cynodeai-node-manager.pid
 
     sleep 2
-    if kill -0 $WORKER_PID 2>/dev/null && kill -0 $NODE_PID 2>/dev/null; then
-        log_info "Worker-api and node-manager started"
+    if kill -0 $NODE_PID 2>/dev/null; then
+        log_info "Node-manager started (worker-api will be started by node-manager after config fetch)"
     else
-        log_error "Failed to start worker/node"
+        log_error "Failed to start node-manager"
         exit 1
     fi
 }

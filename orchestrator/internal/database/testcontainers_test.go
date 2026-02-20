@@ -37,13 +37,63 @@ func setupRootlessPodmanHost() {
 	_ = os.Setenv("DOCKER_HOST", "unix://"+sock)
 }
 
+// testcontainersSetupTimeout bounds how long TestMain waits for container start.
+// Prevents CI from hanging indefinitely if Podman/testcontainers blocks.
+const testcontainersSetupTimeout = 90 * time.Second
+
+// runTestcontainersSetup starts Postgres via testcontainers and waits for it.
+// On success returns (container, true) with integrationEnv set. On failure logs to stderr and returns (container or nil, false).
+func runTestcontainersSetup(ctx context.Context) (*postgres.PostgresContainer, bool) {
+	setupCtx, cancel := context.WithTimeout(ctx, testcontainersSetupTimeout)
+	defer cancel()
+
+	container, err := postgres.Run(setupCtx, "pgvector/pgvector:pg16",
+		testcontainers.WithProvider(testcontainers.ProviderPodman),
+		postgres.WithDatabase("cynodeai"),
+		postgres.WithUsername("cynodeai"),
+		postgres.WithPassword("cynodeai-test"),
+	)
+	if err != nil {
+		writeTestcontainersErr(setupCtx, "postgres.Run failed: "+err.Error())
+		return nil, false
+	}
+	connStr, err := container.ConnectionString(setupCtx, "sslmode=disable")
+	if err != nil {
+		writeTestcontainersErr(setupCtx, "ConnectionString failed: "+err.Error())
+		return container, false
+	}
+	_ = os.Setenv(integrationEnv, connStr)
+	if err := waitForPostgres(setupCtx, connStr, 60*time.Second); err != nil {
+		writeTestcontainersErr(setupCtx, "postgres not ready: "+err.Error())
+		return container, false
+	}
+	return container, true
+}
+
+func writeTestcontainersErr(ctx context.Context, fallback string) {
+	if ctx.Err() != nil {
+		_, _ = os.Stderr.WriteString("[database/testcontainers] setup timed out after " + testcontainersSetupTimeout.String() + "; running tests without DB\n")
+		return
+	}
+	_, _ = os.Stderr.WriteString("[database/testcontainers] " + fallback + "\n")
+}
+
+// testcontainersResult carries the outcome of runTestcontainersSetup from a goroutine.
+type testcontainersResult struct {
+	container *postgres.PostgresContainer
+	ok        bool
+}
+
 func TestMain(m *testing.M) {
 	if os.Getenv(integrationEnv) != "" {
 		os.Exit(m.Run())
 		return
 	}
+	if os.Getenv("SKIP_TESTCONTAINERS") != "" {
+		os.Exit(m.Run())
+		return
+	}
 	setupRootlessPodmanHost()
-	ctx := context.Background()
 	var code int
 	var container *postgres.PostgresContainer
 	defer func() {
@@ -52,32 +102,32 @@ func TestMain(m *testing.M) {
 			code = m.Run()
 		}
 		if container != nil {
-			_ = container.Terminate(ctx)
+			termCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+			_ = container.Terminate(termCtx)
+			cancel()
 		}
 		os.Exit(code)
 	}()
-	var err error
-	container, err = postgres.Run(ctx, "pgvector/pgvector:pg16",
-		testcontainers.WithProvider(testcontainers.ProviderPodman),
-		postgres.WithDatabase("cynodeai"),
-		postgres.WithUsername("cynodeai"),
-		postgres.WithPassword("cynodeai-test"),
-	)
-	if err != nil {
-		_, _ = os.Stderr.WriteString("[database/testcontainers] postgres.Run failed: " + err.Error() + "\n")
-		code = m.Run()
-		return
+
+	// Run setup in a goroutine so we can enforce a hard timeout; some testcontainers
+	// operations (e.g. image pull) may not respect context and would otherwise hang CI.
+	hardTimeout := testcontainersSetupTimeout + 15*time.Second
+	resultCh := make(chan testcontainersResult, 1)
+	go func() {
+		c, ok := runTestcontainersSetup(context.Background())
+		resultCh <- testcontainersResult{container: c, ok: ok}
+	}()
+	var ok bool
+	select {
+	case res := <-resultCh:
+		container = res.container
+		ok = res.ok
+	case <-time.After(hardTimeout):
+		_, _ = os.Stderr.WriteString("[database/testcontainers] setup did not complete within " + hardTimeout.String() + "; running tests without DB\n")
+		container = nil
+		ok = false
 	}
-	connStr, err := container.ConnectionString(ctx, "sslmode=disable")
-	if err != nil {
-		_, _ = os.Stderr.WriteString("[database/testcontainers] ConnectionString failed: " + err.Error() + "\n")
-		code = m.Run()
-		return
-	}
-	_ = os.Setenv(integrationEnv, connStr)
-	// Wait for Postgres to accept connections (pgvector image can take 20–40s on first start).
-	if err := waitForPostgres(ctx, connStr, 60*time.Second); err != nil {
-		_, _ = os.Stderr.WriteString("[database/testcontainers] postgres not ready: " + err.Error() + "\n")
+	if !ok {
 		code = m.Run()
 		return
 	}
@@ -179,6 +229,23 @@ func TestWithTestcontainers_Integration(t *testing.T) {
 	db := tcOpenDB(t, ctx)
 	user := tcCreateUserAndVerify(t, db, ctx)
 	_, job := tcCreateTaskJobAndVerifyPayload(t, db, ctx, user)
-	_ = tcCreateNodeAndListActive(t, db, ctx)
+	node := tcCreateNodeAndListActive(t, db, ctx)
+	if err := db.UpdateNodeConfigVersion(ctx, node.ID, "1"); err != nil {
+		t.Fatalf("UpdateNodeConfigVersion: %v", err)
+	}
+	if err := db.UpdateNodeWorkerAPIConfig(ctx, node.ID, "http://worker:8081", "token"); err != nil {
+		t.Fatalf("UpdateNodeWorkerAPIConfig: %v", err)
+	}
+	ackAt := time.Now().UTC()
+	if err := db.UpdateNodeConfigAck(ctx, node.ID, "1", "applied", ackAt, nil); err != nil {
+		t.Fatalf("UpdateNodeConfigAck: %v", err)
+	}
+	dispatchable, err := db.ListDispatchableNodes(ctx)
+	if err != nil {
+		t.Fatalf("ListDispatchableNodes: %v", err)
+	}
+	if len(dispatchable) != 1 || dispatchable[0].ID != node.ID {
+		t.Errorf("ListDispatchableNodes: expected one node, got %d", len(dispatchable))
+	}
 	tcCompleteJobAndVerifyResult(t, db, ctx, job, `{"status":"ok"}`)
 }
