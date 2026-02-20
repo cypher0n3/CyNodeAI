@@ -8,6 +8,7 @@ import (
 )
 
 var taskCreatePrompt string
+var taskCreateUseInference bool
 
 // taskCmd represents the task command group.
 var taskCmd = &cobra.Command{
@@ -32,6 +33,7 @@ func init() {
 	rootCmd.AddCommand(taskCmd)
 	taskCmd.AddCommand(taskCreateCmd, taskResultCmd)
 	taskCreateCmd.Flags().StringVarP(&taskCreatePrompt, "prompt", "p", "", "task prompt (command to run)")
+	taskCreateCmd.Flags().BoolVar(&taskCreateUseInference, "use-inference", false, "run job in a pod with inference proxy (OLLAMA_BASE_URL in sandbox)")
 	_ = taskCreateCmd.MarkFlagRequired("prompt")
 }
 
@@ -41,7 +43,7 @@ func runTaskCreate(_ *cobra.Command, _ []string) error {
 	}
 	client := gateway.NewClient(cfg.GatewayURL)
 	client.SetToken(cfg.Token)
-	task, err := client.CreateTask(gateway.CreateTaskRequest{Prompt: taskCreatePrompt})
+	task, err := client.CreateTask(gateway.CreateTaskRequest{Prompt: taskCreatePrompt, UseInference: taskCreateUseInference})
 	if err != nil {
 		return err
 	}

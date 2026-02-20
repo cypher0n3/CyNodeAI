@@ -494,6 +494,50 @@ func TestTaskHandler_CreateTaskWithMockDB(t *testing.T) {
 	}
 }
 
+func TestTaskHandler_CreateTaskWithUseInference_StoresUseInferenceInJobPayload(t *testing.T) {
+	mockDB := testutil.NewMockDB()
+	logger := newTestLogger()
+	handler := NewTaskHandler(mockDB, logger)
+	userID := uuid.New()
+	ctx := context.WithValue(context.Background(), contextKeyUserID, userID)
+	body := CreateTaskRequest{Prompt: "echo hi", UseInference: true}
+	jsonBody, _ := json.Marshal(body)
+	req := httptest.NewRequest("POST", "/v1/tasks", bytes.NewBuffer(jsonBody)).WithContext(ctx)
+	rec := httptest.NewRecorder()
+	handler.CreateTask(rec, req)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("expected status 201, got %d: %s", rec.Code, rec.Body.String())
+	}
+	var resp TaskResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("unmarshal response: %v", err)
+	}
+	taskID, err := uuid.Parse(resp.ID)
+	if err != nil {
+		t.Fatalf("parse task ID: %v", err)
+	}
+	jobs, err := mockDB.GetJobsByTaskID(ctx, taskID)
+	if err != nil {
+		t.Fatalf("GetJobsByTaskID: %v", err)
+	}
+	if len(jobs) != 1 {
+		t.Fatalf("expected 1 job, got %d", len(jobs))
+	}
+	payload := jobs[0].Payload.Ptr()
+	if payload == nil {
+		t.Fatal("job payload is nil")
+	}
+	var pl struct {
+		UseInference bool `json:"use_inference"`
+	}
+	if err := json.Unmarshal([]byte(*payload), &pl); err != nil {
+		t.Fatalf("unmarshal job payload: %v", err)
+	}
+	if !pl.UseInference {
+		t.Error("expected job payload use_inference true")
+	}
+}
+
 func TestTaskHandler_CreateTaskDBError(t *testing.T) {
 	mockDB := testutil.NewMockDB()
 	mockDB.ForceError = errors.New("database error")
