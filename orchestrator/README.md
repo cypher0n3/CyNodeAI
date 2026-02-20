@@ -56,8 +56,10 @@ This module also includes integration-style tests under [`internal/handlers/`](i
 
 ## 5 Cross-References
 
-- Root project overview at [`README.md`](../README.md).
-- Technical specifications index at [`docs/tech_specs/_main.md`](../docs/tech_specs/_main.md).
-- Go REST API standards at [`docs/tech_specs/go_rest_api_standards.md`](../docs/tech_specs/go_rest_api_standards.md).
-- Worker node implementation at [`worker_node/README.md`](../worker_node/README.md).
-- Shared contracts at [`go_shared_libs/README.md`](../go_shared_libs/README.md).
+- Root project overview at [README.md](../README.md).
+- Project meta at [meta.md](../meta.md).
+- Technical specifications index at [docs/tech_specs/_main.md](../docs/tech_specs/_main.md).
+- Go REST API standards at [docs/tech_specs/go_rest_api_standards.md](../docs/tech_specs/go_rest_api_standards.md).
+- Worker node implementation at [worker_node/README.md](../worker_node/README.md).
+- CLI management client at [cynork/README.md](../cynork/README.md).
+- Shared contracts at [go_shared_libs/README.md](../go_shared_libs/README.md).

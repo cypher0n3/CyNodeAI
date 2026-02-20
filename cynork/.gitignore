@@ -1,0 +1,15 @@
+# Binaries
+cynork
+cynork.exe
+
+# Config
+config.yaml
+
+# Logs
+logs/
+
+# Temp
+tmp/
+
+# Env
+.env

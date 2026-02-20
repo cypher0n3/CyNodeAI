@@ -37,15 +37,19 @@ It covers user-facing management surfaces and user preference behavior.
   <a id="req-client-0102"></a>
 - **REQ-CLIENT-0103:** The CLI MUST not persist plaintext secrets to disk.
   [CYNAI.CLIENT.CliSecurityModel](../tech_specs/cli_management_app.md#spec-cynai-client-clisecurity)
+  [CYNAI.CLIENT.CliConfigFileLocation](../tech_specs/cli_management_app.md#spec-cynai-client-cliconfigfilelocation)
+  [CYNAI.CLIENT.CliCredentialHelperProtocol](../tech_specs/cli_management_app.md#spec-cynai-client-clicredentialhelperprotocol)
   <a id="req-client-0103"></a>
 - **REQ-CLIENT-0104:** The CLI MUST support least privilege and MUST fail closed on authorization errors.
   [CYNAI.CLIENT.CliSecurityModel](../tech_specs/cli_management_app.md#spec-cynai-client-clisecurity)
   <a id="req-client-0104"></a>
 - **REQ-CLIENT-0105:** The CLI MUST support token-based authentication.
   [CYNAI.CLIENT.CliAuthConfig](../tech_specs/cli_management_app.md#spec-cynai-client-cliauth)
+  [CYNAI.CLIENT.CliTokenResolution](../tech_specs/cli_management_app.md#spec-cynai-client-clitokenresolution)
   <a id="req-client-0105"></a>
 - **REQ-CLIENT-0106:** The CLI SHOULD support reading tokens from env vars for CI usage.
   [CYNAI.CLIENT.CliAuthConfig](../tech_specs/cli_management_app.md#spec-cynai-client-cliauth)
+  [CYNAI.CLIENT.CliTokenResolution](../tech_specs/cli_management_app.md#spec-cynai-client-clitokenresolution)
   <a id="req-client-0106"></a>
 - **REQ-CLIENT-0107:** The CLI SHOULD support optional mTLS or pinned CA bundles for enterprise deployments.
   [CYNAI.CLIENT.CliAuthConfig](../tech_specs/cli_management_app.md#spec-cynai-client-cliauth)
@@ -187,3 +191,9 @@ It covers user-facing management surfaces and user preference behavior.
 - **REQ-CLIENT-0148:** The admin web console MUST provide Swagger UI (or equivalent API documentation UI) for the User API Gateway so that authenticated admins can discover and try API endpoints.
   [CYNAI.CLIENT.AdminWebConsoleSwaggerUi](../tech_specs/admin_web_console.md#spec-cynai-client-awcswaggerui)
   <a id="req-client-0148"></a>
+- **REQ-CLIENT-0149:** The CLI MUST support a local key (gateway token) stored in the user config dir (e.g. `~/.config/cynork/config.yaml`) and SHOULD support reading the token from a password store or credential helper (kubectl-style) so the token need not be stored in plaintext.
+  [CYNAI.CLIENT.CliAuthConfig](../tech_specs/cli_management_app.md#spec-cynai-client-cliauth)
+  [CYNAI.CLIENT.CliConfigFileLocation](../tech_specs/cli_management_app.md#spec-cynai-client-cliconfigfilelocation)
+  [CYNAI.CLIENT.CliTokenResolution](../tech_specs/cli_management_app.md#spec-cynai-client-clitokenresolution)
+  [CYNAI.CLIENT.CliCredentialHelperProtocol](../tech_specs/cli_management_app.md#spec-cynai-client-clicredentialhelperprotocol)
+  <a id="req-client-0149"></a>

@@ -51,7 +51,9 @@ When developing the worker executor, also verify behavior against orchestrator f
 
 ## 5 Cross-References
 
-- Root project overview at [`README.md`](../README.md).
-- Orchestrator implementation at [`orchestrator/README.md`](../orchestrator/README.md).
-- Shared contracts at [`go_shared_libs/README.md`](../go_shared_libs/README.md).
-- Technical specifications index at [`docs/tech_specs/_main.md`](../docs/tech_specs/_main.md).
+- Root project overview at [README.md](../README.md).
+- Project meta at [meta.md](../meta.md).
+- Orchestrator implementation at [orchestrator/README.md](../orchestrator/README.md).
+- CLI management client at [cynork/README.md](../cynork/README.md).
+- Shared contracts at [go_shared_libs/README.md](../go_shared_libs/README.md).
+- Technical specifications index at [docs/tech_specs/_main.md](../docs/tech_specs/_main.md).

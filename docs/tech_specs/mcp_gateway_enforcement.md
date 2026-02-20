@@ -107,6 +107,7 @@ Recommended allowlist
 - `artifact.*` (scoped to current task)
 - `web.fetch` (sanitized, when allowed by policy)
 - `api.call` (through API Egress, when explicitly allowed for the task)
+- `help.*` (on-demand docs; optional for worker)
 
 Explicitly disallowed
 
@@ -127,6 +128,7 @@ Recommended allowlist
 - `web.fetch` (sanitized, subject to policy)
 - `api.call` (through API Egress, subject to policy)
 - `git.*` (through Git egress, subject to policy)
+- `help.*` (on-demand docs)
 
 ### Project Analyst Agent Allowlist
 
@@ -136,6 +138,7 @@ Recommended allowlist
 - `artifact.*` (read for produced outputs)
 - `web.fetch` (sanitized, when allowed for verification)
 - `api.call` (through API Egress, when allowed for verification)
+- `help.*` (on-demand docs)
 
 ## Tool Argument Schema Requirements
 

@@ -3,6 +3,7 @@
 - [Document Overview](#document-overview)
 - [MCP Role in CyNodeAI](#mcp-role-in-cynodeai)
 - [Tool Categories](#tool-categories)
+- [Help MCP Server](#help-mcp-server)
 - [Role-Based Tool Access](#role-based-tool-access)
   - [Worker Agent Tool Access](#worker-agent-tool-access)
   - [Project Manager Agent Tool Access](#project-manager-agent-tool-access)
@@ -62,9 +63,30 @@ Tools exposed to agents SHOULD be grouped into categories.
   - list available models and capabilities
 - Skills tools
   - See [Skills Storage and Inference Exposure](skills_storage_and_inference.md) for tool contract and controls; catalog lists tool names only.
+- Help tools
+  - on-demand documentation for how to interact with CyNodeAI; see [Help MCP Server](#help-mcp-server).
 - Database query tools
   - read task state, preferences, and audit records
   - write task updates, verification results, and summaries
+
+## Help MCP Server
+
+- Spec ID: `CYNAI.MCPTOO.HelpMcpServer` <a id="spec-cynai-mcptoo-helpmcpserver"></a>
+
+Traces To:
+
+- [REQ-MCPTOO-0116](../requirements/mcptoo.md#req-mcptoo-0116)
+
+The system MAY expose a help MCP server (or a set of help tools) so that agents can request documentation on demand during a run.
+This complements the [default CyNodeAI interaction skill](skills_storage_and_inference.md#default-cynodeai-interaction-skill): the skill is always included in inference context for baseline guidance; the help server provides deeper or targeted documentation when the agent explicitly calls a help tool (e.g. to look up a specific tool schema or convention).
+
+Scope
+
+- **Purpose**: Help tools return documentation content about CyNodeAI: how to use MCP tools, gateway usage, task and project context, conventions, and references to authoritative docs.
+  Content SHOULD be aligned with (and MAY be derived from) the default CyNodeAI interaction skill and updated on the same cadence.
+- **Read-only**: Help tools MUST NOT modify state; they only return documentation or not-found.
+- **Allowlists**: Help tools are allowlisted for orchestrator-side agents (Project Manager, Project Analyst) and MAY be allowlisted for Worker agents so sandboxed agents can look up usage when needed.
+- **Catalog**: Tool names and argument schemas are defined in the [MCP tool catalog](mcp_tool_catalog.md#help-tools).
 
 ## Role-Based Tool Access
 

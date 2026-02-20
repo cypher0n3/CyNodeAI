@@ -77,6 +77,8 @@ The Data REST API SHOULD expose resource-oriented endpoints for:
 - Artifacts and artifact metadata
 - Nodes, node status, and capability reports
 - Preferences and effective preferences resolution results
+- API Egress credentials (metadata list, get, create, rotate, disable; secrets write-only on create and rotate)
+  - See [API Egress Server - Admin API (Gateway Endpoints)](api_egress_server.md#admin-api-gateway-endpoints).
 - Access control rules and audit records, when allowed
 - Groups, group memberships, roles, and role bindings (RBAC), when allowed
   - See [`docs/tech_specs/rbac_and_groups.md`](rbac_and_groups.md).

@@ -1,6 +1,7 @@
 # Skills Storage and Inference Exposure
 
 - [Document Overview](#document-overview)
+- [Default CyNodeAI Interaction Skill](#default-cynodeai-interaction-skill)
 - [Skill Store](#skill-store)
   - [`SkillStore` Scope](#skillstore-scope)
   - [`SkillStore` Preconditions](#skillstore-preconditions)
@@ -55,6 +56,40 @@ Related specs
 
 - Model lifecycle and inference: [`docs/tech_specs/model_management.md`](model_management.md)
 - External model routing: [`docs/tech_specs/external_model_routing.md`](external_model_routing.md)
+
+## Default CyNodeAI Interaction Skill
+
+- Spec ID: `CYNAI.SKILLS.DefaultCyNodeAISkill` <a id="spec-cynai-skills-defaultcynodeaiskill"></a>
+
+Traces To:
+
+- [REQ-SKILLS-0116](../requirements/skills.md#req-skills-0116)
+- [REQ-SKILLS-0117](../requirements/skills.md#req-skills-0117)
+
+The system provides a single built-in default skill whose purpose is to inform inference models (AIs) how to interact with CyNodeAI.
+This skill is part of the MVP and ensures agents have consistent, up-to-date guidance on capabilities and conventions.
+
+### Scope and Purpose
+
+- **Purpose**: The default skill content MUST describe how AIs should interact with CyNodeAI.
+  Topics SHOULD include (as applicable): use of MCP tools and the MCP gateway, User API Gateway usage, task and project context, sandbox and node conventions, and references to authoritative docs (e.g. requirements and tech specs).
+  The actual skill file (e.g. SKILL.md) is maintained separately; this spec does not define or implement that file.
+- **Loaded by default**: When the system exposes skills to an inference request that supports skills, the default CyNodeAI interaction skill MUST be included in the set of skills offered (e.g. resolved and supplied in context or by reference).
+  No user or caller action is required to enable it.
+- **Scope**: The default skill is effectively global in scope: it is visible to all inference requests that receive skills (all users/tenants).
+- **Ownership**: The skill is system-owned.
+  It MUST NOT be user-editable or user-deletable via web, CLI, or MCP skill tools; the system MAY allow read (list/get) for transparency.
+  It MAY be stored in a dedicated system/built-in store or in the same store under a reserved identifier; implementation MUST prevent normal CRUD from modifying or removing it.
+
+### Updated Regularly
+
+- The default skill content MUST be updated regularly so it stays aligned with current behavior.
+  "Regularly" is defined as: at least with each product release that changes relevant behavior, and SHOULD include a defined schedule (e.g. quarterly) or trigger (e.g. when tech spec or requirement docs change) so that non-release updates can be applied.
+  Responsibility for content updates lies with the project/maintainers; the implementation MUST support replacing or refreshing the stored content when a new version is supplied (e.g. at deploy or via an admin/maintenance path).
+
+### Inclusion in Inference
+
+- The default skill is subject to the same inference-exposure mechanism as other skills (see [Inference Exposure](#inference-exposure)); the only difference is that it is always included when skills are offered, and it is not optional for the caller to add.
 
 ## Skill Store
 

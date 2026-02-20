@@ -88,6 +88,7 @@ Recommended approaches
 ## Credential Management
 
 The admin web console must support managing credentials that are consumed by controlled egress services.
+The gateway endpoint contract for credential operations (list, get, create, rotate, disable) is defined in [API Egress Server - Admin API (Gateway Endpoints)](api_egress_server.md#admin-api-gateway-endpoints); the console and cynork both use these same endpoints.
 
 Credential types
 
