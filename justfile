@@ -433,6 +433,10 @@ test-bdd: install-go
 
 # E2E: start Postgres, orchestrator, one worker node; run happy path (login, create task, get result).
 # Requires: podman or docker, jq. Stops existing services first; leaves services running after.
+# Remove PostgreSQL container and volume (so next start uses fresh DB, e.g. with pgvector image).
+clean-db:
+    @./scripts/setup-dev.sh clean-db
+
 e2e:
     @./scripts/setup-dev.sh full-demo
 

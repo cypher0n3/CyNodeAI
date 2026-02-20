@@ -41,23 +41,45 @@ detect_runtime() {
 RUNTIME=$(detect_runtime)
 log_info "Using container runtime: $RUNTIME"
 
+# Host address as seen from containers (for DB, worker-api on host). Docker on Linux needs --add-host.
+if [ "$RUNTIME" = "podman" ]; then
+    CONTAINER_HOST_ALIAS="${CONTAINER_HOST_ALIAS:-host.containers.internal}"
+    DOCKER_EXTRA_HOSTS=""
+else
+    CONTAINER_HOST_ALIAS="${CONTAINER_HOST_ALIAS:-host.docker.internal}"
+    # So that host.docker.internal resolves when running containers (e.g. on Linux)
+    DOCKER_EXTRA_HOSTS="--add-host=host.docker.internal:host-gateway"
+fi
+
 # Configuration
 POSTGRES_CONTAINER_NAME="cynodeai-postgres-dev"
+CONTROL_PLANE_CONTAINER_NAME="${CONTROL_PLANE_CONTAINER_NAME:-cynodeai-control-plane}"
+USER_GATEWAY_CONTAINER_NAME="${USER_GATEWAY_CONTAINER_NAME:-cynodeai-user-gateway}"
 POSTGRES_PORT="${POSTGRES_PORT:-5432}"
 POSTGRES_USER="${POSTGRES_USER:-cynodeai}"
 POSTGRES_PASSWORD="${POSTGRES_PASSWORD:-cynodeai-dev-password}"
 POSTGRES_DB="${POSTGRES_DB:-cynodeai}"
+# Image must include pgvector for 01_extensions.sql (vector extension)
+POSTGRES_IMAGE="${POSTGRES_IMAGE:-pgvector/pgvector:pg16}"
 
 # Orchestrator API config
 ORCHESTRATOR_PORT="${ORCHESTRATOR_PORT:-8080}"
+CONTROL_PLANE_PORT="${CONTROL_PLANE_PORT:-8082}"
 JWT_SECRET="${JWT_SECRET:-dev-jwt-secret-change-in-production}"
 NODE_PSK="${NODE_PSK:-dev-node-psk-secret}"
 ADMIN_PASSWORD="${ADMIN_PASSWORD:-admin123}"
 
 # Node config
 NODE_SLUG="${NODE_SLUG:-dev-node-1}"
+WORKER_PORT="${WORKER_PORT:-8081}"
+WORKER_API_BEARER_TOKEN="${WORKER_API_BEARER_TOKEN:-dev-worker-api-token-change-me}"
+
+# Compose file for orchestrator stack (postgres + control-plane + user-gateway)
+COMPOSE_FILE="$(cd "$PROJECT_ROOT" && pwd)/orchestrator/docker-compose.yml"
 
 export DATABASE_URL="postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@localhost:${POSTGRES_PORT}/${POSTGRES_DB}?sslmode=disable"
+# URL for use inside orchestrator containers (they reach Postgres via host alias)
+DATABASE_URL_FOR_CONTAINERS="postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@${CONTAINER_HOST_ALIAS}:${POSTGRES_PORT}/${POSTGRES_DB}?sslmode=disable"
 
 # Function to start PostgreSQL
 start_postgres() {
@@ -76,7 +98,7 @@ start_postgres() {
         fi
     fi
 
-    # Create and start new container
+    # Create and start new container (pgvector image required for vector extension)
     $RUNTIME run -d \
         --name $POSTGRES_CONTAINER_NAME \
         -e POSTGRES_USER=$POSTGRES_USER \
@@ -84,7 +106,7 @@ start_postgres() {
         -e POSTGRES_DB=$POSTGRES_DB \
         -p $POSTGRES_PORT:5432 \
         -v cynodeai-postgres-data:/var/lib/postgresql/data \
-        postgres:16-alpine
+        $POSTGRES_IMAGE
 
     log_info "Waiting for PostgreSQL to be ready..."
     sleep 3
@@ -134,55 +156,116 @@ build_binaries() {
     log_info "Binaries built: bin/control-plane, bin/user-gateway, bin/worker-api, bin/node-manager"
 }
 
-# Control-plane port (node register, capability); user-gateway on ORCHESTRATOR_PORT (8080)
-CONTROL_PLANE_PORT="${CONTROL_PLANE_PORT:-8082}"
-WORKER_PORT="${WORKER_PORT:-8081}"
-WORKER_API_BEARER_TOKEN="${WORKER_API_BEARER_TOKEN:-dev-worker-api-token-change-me}"
-
-# Function to start control-plane (migrations, node API, dispatcher)
-start_control_plane() {
-    log_info "Starting control-plane on port $CONTROL_PLANE_PORT..."
+# Build orchestrator service container images (control-plane, user-gateway). Context = repo root.
+build_orchestrator_containers() {
+    log_info "Building orchestrator container images..."
     cd "$PROJECT_ROOT"
+    if ! $RUNTIME build -f orchestrator/cmd/control-plane/Containerfile -t cynodeai-control-plane:dev .; then
+        log_error "Failed to build control-plane image"
+        return 1
+    fi
+    if ! $RUNTIME build -f orchestrator/cmd/user-gateway/Containerfile -t cynodeai-user-gateway:dev .; then
+        log_error "Failed to build user-gateway image"
+        return 1
+    fi
+    log_info "Orchestrator images built: cynodeai-control-plane:dev, cynodeai-user-gateway:dev"
+}
 
-    export DATABASE_URL
-    export MIGRATIONS_DIR="${MIGRATIONS_DIR:-./orchestrator/migrations}"
-    export CONTROL_PLANE_LISTEN_ADDR=":$CONTROL_PLANE_PORT"
-    export JWT_SECRET=$JWT_SECRET
-    export NODE_REGISTRATION_PSK=$NODE_PSK
-    export BOOTSTRAP_ADMIN_PASSWORD=$ADMIN_PASSWORD
-    export WORKER_API_TARGET_URL="http://localhost:$WORKER_PORT"
-    export WORKER_API_BEARER_TOKEN
+# Build inference-proxy container image for inference-in-sandbox E2E. Requires repo root context.
+build_inference_proxy_image() {
+    log_info "Building inference-proxy container image..."
+    cd "$PROJECT_ROOT"
+    if ! $RUNTIME build -f worker_node/cmd/inference-proxy/Dockerfile -t cynodeai-inference-proxy:dev .; then
+        log_error "Failed to build inference-proxy image"
+        return 1
+    fi
+    log_info "Inference-proxy image built: cynodeai-inference-proxy:dev"
+}
 
-    ./bin/control-plane &
-    CP_PID=$!
-    echo $CP_PID > /tmp/cynodeai-control-plane.pid
+# Function to start orchestrator stack (postgres, control-plane, user-gateway) via docker-compose
+start_orchestrator_stack_compose() {
+    log_info "Starting orchestrator stack with compose..."
+    cd "$PROJECT_ROOT"
+    if ! $RUNTIME compose version &>/dev/null; then
+        log_error "Compose not available. Install docker compose or podman compose."
+        return 1
+    fi
+    if [ ! -f "$COMPOSE_FILE" ]; then
+        log_error "Compose file not found: $COMPOSE_FILE"
+        return 1
+    fi
+    # Tear down any existing stack and remove standalone containers that might hold ports
+    $RUNTIME compose -f "$COMPOSE_FILE" down 2>/dev/null || true
+    $RUNTIME rm -f "$CONTROL_PLANE_CONTAINER_NAME" "$USER_GATEWAY_CONTAINER_NAME" 2>/dev/null || true
+    export POSTGRES_USER POSTGRES_PASSWORD POSTGRES_DB POSTGRES_PORT
+    export JWT_SECRET NODE_PSK WORKER_API_BEARER_TOKEN CONTROL_PLANE_PORT ORCHESTRATOR_PORT
+    export WORKER_API_TARGET_URL="http://${CONTAINER_HOST_ALIAS}:${WORKER_PORT}"
+    export BOOTSTRAP_ADMIN_PASSWORD="$ADMIN_PASSWORD"
+    if ! $RUNTIME compose -f "$COMPOSE_FILE" up -d --build; then
+        log_error "Compose up failed"
+        return 1
+    fi
+    log_info "Orchestrator stack started (postgres :5432, control-plane :$CONTROL_PLANE_PORT, user-gateway :$ORCHESTRATOR_PORT)"
+}
+
+# Function to stop orchestrator stack (compose down)
+stop_orchestrator_stack_compose() {
+    log_info "Stopping orchestrator stack..."
+    cd "$PROJECT_ROOT"
+    if [ -f "$COMPOSE_FILE" ]; then
+        $RUNTIME compose -f "$COMPOSE_FILE" down 2>/dev/null || true
+    fi
+}
+
+# Function to start control-plane (migrations, node API, dispatcher) in a container (standalone; prefer compose)
+start_control_plane() {
+    log_info "Starting control-plane container on port $CONTROL_PLANE_PORT..."
+    cd "$PROJECT_ROOT"
+    $RUNTIME rm -f "$CONTROL_PLANE_CONTAINER_NAME" 2>/dev/null || true
+    if ! $RUNTIME run -d --name "$CONTROL_PLANE_CONTAINER_NAME" \
+        $DOCKER_EXTRA_HOSTS \
+        -e DATABASE_URL="$DATABASE_URL_FOR_CONTAINERS" \
+        -e CONTROL_PLANE_LISTEN_ADDR=":$CONTROL_PLANE_PORT" \
+        -e JWT_SECRET="$JWT_SECRET" \
+        -e NODE_REGISTRATION_PSK="$NODE_PSK" \
+        -e BOOTSTRAP_ADMIN_PASSWORD="$ADMIN_PASSWORD" \
+        -e WORKER_API_TARGET_URL="http://${CONTAINER_HOST_ALIAS}:$WORKER_PORT" \
+        -e WORKER_API_BEARER_TOKEN="$WORKER_API_BEARER_TOKEN" \
+        -p "$CONTROL_PLANE_PORT:$CONTROL_PLANE_PORT" \
+        cynodeai-control-plane:dev; then
+        log_error "Failed to start control-plane container"
+        exit 1
+    fi
     sleep 2
-    if kill -0 $CP_PID 2>/dev/null; then
-        log_info "Control-plane started (PID: $CP_PID)"
+    if $RUNTIME ps --format '{{.Names}}' 2>/dev/null | grep -q "^${CONTROL_PLANE_CONTAINER_NAME}$"; then
+        log_info "Control-plane container started"
     else
-        log_error "Failed to start control-plane"
+        log_error "Control-plane container exited; check logs: $RUNTIME logs $CONTROL_PLANE_CONTAINER_NAME"
         exit 1
     fi
 }
 
-# Function to start user-gateway (auth, users, tasks)
+# Function to start user-gateway (auth, users, tasks) in a container
 start_orchestrator() {
-    log_info "Starting user-gateway on port $ORCHESTRATOR_PORT..."
+    log_info "Starting user-gateway container on port $ORCHESTRATOR_PORT..."
     cd "$PROJECT_ROOT"
-
-    export DATABASE_URL
-    export USER_GATEWAY_LISTEN_ADDR=":$ORCHESTRATOR_PORT"
-    export JWT_SECRET=$JWT_SECRET
-    export BOOTSTRAP_ADMIN_PASSWORD=$ADMIN_PASSWORD
-
-    ./bin/user-gateway &
-    ORCHESTRATOR_PID=$!
-    echo $ORCHESTRATOR_PID > /tmp/orchestrator-api.pid
+    $RUNTIME rm -f "$USER_GATEWAY_CONTAINER_NAME" 2>/dev/null || true
+    if ! $RUNTIME run -d --name "$USER_GATEWAY_CONTAINER_NAME" \
+        $DOCKER_EXTRA_HOSTS \
+        -e DATABASE_URL="$DATABASE_URL_FOR_CONTAINERS" \
+        -e USER_GATEWAY_LISTEN_ADDR=":$ORCHESTRATOR_PORT" \
+        -e JWT_SECRET="$JWT_SECRET" \
+        -e BOOTSTRAP_ADMIN_PASSWORD="$ADMIN_PASSWORD" \
+        -p "$ORCHESTRATOR_PORT:$ORCHESTRATOR_PORT" \
+        cynodeai-user-gateway:dev; then
+        log_error "Failed to start user-gateway container"
+        exit 1
+    fi
     sleep 2
-    if kill -0 $ORCHESTRATOR_PID 2>/dev/null; then
-        log_info "User-gateway started (PID: $ORCHESTRATOR_PID)"
+    if $RUNTIME ps --format '{{.Names}}' 2>/dev/null | grep -q "^${USER_GATEWAY_CONTAINER_NAME}$"; then
+        log_info "User-gateway container started"
     else
-        log_error "Failed to start user-gateway"
+        log_error "User-gateway container exited; check logs: $RUNTIME logs $USER_GATEWAY_CONTAINER_NAME"
         exit 1
     fi
 }
@@ -196,7 +279,8 @@ start_node() {
     export NODE_REGISTRATION_PSK=$NODE_PSK
     export NODE_SLUG=$NODE_SLUG
     export NODE_NAME="${NODE_NAME:-Development Node}"
-    # Worker-api is started by node-manager with token from config; pass listen port via env for the child process.
+    # Worker-api is started by node-manager; point to bin so exec.LookPath finds it
+    export NODE_MANAGER_WORKER_API_BIN="$PROJECT_ROOT/bin/worker-api"
     export LISTEN_ADDR=":$WORKER_PORT"
     export CONTAINER_RUNTIME="${CONTAINER_RUNTIME:-podman}"
     ./bin/node-manager &
@@ -212,28 +296,21 @@ start_node() {
     fi
 }
 
-# Function to stop all services
+# Function to stop all services (orchestrator stack + node processes)
 stop_all() {
     log_info "Stopping all services..."
 
     if [ -f /tmp/cynodeai-node-manager.pid ]; then
         kill $(cat /tmp/cynodeai-node-manager.pid) 2>/dev/null || true
-        rm /tmp/cynodeai-node-manager.pid
+        rm -f /tmp/cynodeai-node-manager.pid
     fi
     if [ -f /tmp/cynodeai-worker-api.pid ]; then
         kill $(cat /tmp/cynodeai-worker-api.pid) 2>/dev/null || true
-        rm /tmp/cynodeai-worker-api.pid
+        rm -f /tmp/cynodeai-worker-api.pid
     fi
-    if [ -f /tmp/orchestrator-api.pid ]; then
-        kill $(cat /tmp/orchestrator-api.pid) 2>/dev/null || true
-        rm /tmp/orchestrator-api.pid
-    fi
-    if [ -f /tmp/cynodeai-control-plane.pid ]; then
-        kill $(cat /tmp/cynodeai-control-plane.pid) 2>/dev/null || true
-        rm /tmp/cynodeai-control-plane.pid
-    fi
-
-    stop_postgres
+    stop_orchestrator_stack_compose
+    # Ensure compose-managed containers are gone (in case compose down missed them)
+    $RUNTIME rm -f cynodeai-postgres "$CONTROL_PLANE_CONTAINER_NAME" "$USER_GATEWAY_CONTAINER_NAME" 2>/dev/null || true
 }
 
 # Ollama E2E container name (must match worker_node/cmd/node-manager/main.go)
@@ -343,6 +420,44 @@ run_e2e_test() {
         -H "Authorization: Bearer $ACCESS_TOKEN")
 
     log_info "Task result: $RESULT_RESPONSE"
+
+    # Test 5b: Inference-in-sandbox task (only when node is inference-ready)
+    if [ -n "${INFERENCE_PROXY_IMAGE:-}" ]; then
+        log_info "Test 5b: Create task with use_inference and verify sandbox sees OLLAMA_BASE_URL..."
+        INF_TASK_RESPONSE=$(curl -s -X POST "$USER_API/v1/tasks" \
+            -H "Authorization: Bearer $ACCESS_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d '{"prompt": "sh -c '\''echo $OLLAMA_BASE_URL'\''", "use_inference": true}')
+        INF_TASK_ID=$(echo "$INF_TASK_RESPONSE" | jq -r '.id')
+        if [ "$INF_TASK_ID" = "null" ] || [ -z "$INF_TASK_ID" ]; then
+            log_error "Create inference task failed: $INF_TASK_RESPONSE"
+            return 1
+        fi
+        log_info "Inference task created: $INF_TASK_ID; polling for result (up to 90s)..."
+        INF_STATUS=""
+        for _ in $(seq 1 18); do
+            sleep 5
+            INF_RESULT=$(curl -s -X GET "$USER_API/v1/tasks/$INF_TASK_ID/result" \
+                -H "Authorization: Bearer $ACCESS_TOKEN")
+            INF_STATUS=$(echo "$INF_RESULT" | jq -r '.status')
+            if [ "$INF_STATUS" = "completed" ] || [ "$INF_STATUS" = "failed" ]; then
+                break
+            fi
+        done
+        if [ "$INF_STATUS" != "completed" ]; then
+            log_error "Inference task did not complete: status=$INF_STATUS result=$INF_RESULT"
+            return 1
+        fi
+        # job result is stored as full RunJobResponse JSON; extract stdout
+        INF_STDOUT=$(echo "$INF_RESULT" | jq -r '.jobs[0].result // empty' | jq -r '.stdout // empty')
+        if [ -z "$INF_STDOUT" ] || ! echo "$INF_STDOUT" | grep -q "http://localhost:11434"; then
+            log_error "Inference task stdout missing expected OLLAMA_BASE_URL: $INF_STDOUT"
+            return 1
+        fi
+        log_info "Inference-in-sandbox passed: sandbox saw OLLAMA_BASE_URL=$INF_STDOUT"
+    else
+        log_info "Skipping inference-in-sandbox test (INFERENCE_PROXY_IMAGE not set)"
+    fi
 
     # Test 6: Node registration (control-plane)
     log_info "Test 6: Node registration..."
@@ -456,11 +571,8 @@ case "${1:-}" in
         build_binaries
         ;;
     start)
-        start_postgres
         build_binaries
-        start_control_plane
-        sleep 2
-        start_orchestrator
+        start_orchestrator_stack_compose || exit 1
         log_info "Services started. User API: http://localhost:$ORCHESTRATOR_PORT Control-plane: http://localhost:$CONTROL_PLANE_PORT"
         log_info "Use '$0 test-e2e' to run the E2E demo test. Use '$0 stop' to stop all services"
         ;;
@@ -471,15 +583,15 @@ case "${1:-}" in
         run_e2e_test
         ;;
     full-demo)
-        start_postgres
-        build_binaries
-        start_control_plane
+        build_binaries || { stop_all; exit 1; }
+        start_orchestrator_stack_compose || { stop_all; exit 1; }
+        build_inference_proxy_image || { stop_all; exit 1; }
+        export INFERENCE_PROXY_IMAGE="${INFERENCE_PROXY_IMAGE:-cynodeai-inference-proxy:dev}"
+        export OLLAMA_UPSTREAM_URL="${OLLAMA_UPSTREAM_URL:-http://host.containers.internal:11434}"
         sleep 2
-        start_orchestrator
-        sleep 2
-        start_node
+        start_node || { stop_all; exit 1; }
         sleep 3
-        run_e2e_test
+        run_e2e_test || { stop_all; exit 1; }
         log_info ""
         log_info "Demo completed! Services are still running."
         log_info "Use '$0 stop' to stop all services"

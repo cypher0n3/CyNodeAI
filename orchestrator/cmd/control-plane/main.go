@@ -81,13 +81,14 @@ func resolveStore(ctx context.Context, store database.Store, cfg *config.Orchest
 		logger.Error("failed to connect to database", "error", err)
 		return nil, err
 	}
-	defer func() { _ = db.Close() }()
 	if err := db.RunSchema(ctx, logger); err != nil {
 		logger.Error("failed to run schema", "error", err)
+		_ = db.Close()
 		return nil, err
 	}
 	if migrateOnly {
 		logger.Info("schema applied (migrate-only)")
+		_ = db.Close()
 		return nil, nil
 	}
 	return db, nil
