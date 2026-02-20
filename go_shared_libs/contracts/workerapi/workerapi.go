@@ -27,6 +27,9 @@ type SandboxSpec struct {
 	Env            map[string]string `json:"env,omitempty"`
 	TimeoutSeconds int               `json:"timeout_seconds,omitempty"`
 	NetworkPolicy  string            `json:"network_policy,omitempty"`
+	// UseInference when true asks the node to run the job in a pod with an inference proxy
+	// so the sandbox can call http://localhost:11434 for node-local Ollama (node.md Option A).
+	UseInference bool `json:"use_inference,omitempty"`
 }
 
 // RunJobResponse represents a synchronous job execution response.

@@ -39,6 +39,9 @@ func runMain(ctx context.Context) int {
 		getEnv("CONTAINER_RUNTIME", "podman"),
 		time.Duration(getEnvInt("DEFAULT_TIMEOUT_SECONDS", 300))*time.Second,
 		getEnvInt("MAX_OUTPUT_BYTES", 1<<20),
+		getEnv("OLLAMA_UPSTREAM_URL", ""),
+		getEnv("INFERENCE_PROXY_IMAGE", ""),
+		nil,
 	)
 	workspaceRoot := getEnv("WORKSPACE_ROOT", filepath.Join(os.TempDir(), "cynodeai-workspaces"))
 	mux := newMux(exec, bearerToken, workspaceRoot, logger)

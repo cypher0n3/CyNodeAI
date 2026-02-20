@@ -21,6 +21,7 @@ func ParseSandboxSpec(payload *string) (workerapi.SandboxSpec, error) {
 		Env            map[string]string `json:"env"`
 		TimeoutSeconds int               `json:"timeout_seconds"`
 		NetworkPolicy  string            `json:"network_policy"`
+		UseInference   bool              `json:"use_inference"`
 	}
 	if err := json.Unmarshal([]byte(*payload), &spec); err != nil {
 		return workerapi.SandboxSpec{}, fmt.Errorf("parse payload json: %w", err)
@@ -35,6 +36,7 @@ func ParseSandboxSpec(payload *string) (workerapi.SandboxSpec, error) {
 		Env:            spec.Env,
 		TimeoutSeconds: spec.TimeoutSeconds,
 		NetworkPolicy:  spec.NetworkPolicy,
+		UseInference:   spec.UseInference,
 	}, nil
 }
 

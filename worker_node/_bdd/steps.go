@@ -95,6 +95,9 @@ func InitializeWorkerNodeSuite(sc *godog.ScenarioContext, state *workerTestState
 			getEnv("CONTAINER_RUNTIME", "direct"),
 			30*time.Second,
 			1<<20,
+			"",
+			"",
+			nil,
 		)
 		state.bearerToken = "test-bearer-token"
 		if t := os.Getenv("WORKER_API_BEARER_TOKEN"); t != "" {
