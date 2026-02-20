@@ -2,7 +2,7 @@
 
 - [1 Objectives](#1-objectives)
 - [2 Scope Summary](#2-scope-summary)
-  - [2.1 Current Status (2026-02-20 1055)](#21-current-status-2026-02-20-1055)
+  - [2.1 Current Status (2026-02-20 1628)](#21-current-status-2026-02-20-1628)
 - [3 Inference in Sandboxed Containers](#3-inference-in-sandboxed-containers)
   - [3.1 Inference Proxy Sidecar (Per `node.md` Option A)](#31-inference-proxy-sidecar-per-nodemd-option-a)
   - [3.2 Implementation Ownership](#32-implementation-ownership)
@@ -38,7 +38,7 @@ Remaining Phase 1 spec gaps (e.g. config_version ULID, Worker API `GET /readyz`)
 | BDD | Steps and scenarios for inference-ready node and sandbox job using inference; CLI has BDD (see 2.1). |
 | CLI | Separate Go module; `version`, `status`, `auth login` / `logout` / `whoami`; create task and get result against user-gateway; config via env and optional file. |
 
-### 2.1 Current Status (2026-02-20 1055)
+### 2.1 Current Status (2026-02-20 1628)
 
 - **CLI (cynork):** Done.
   Module at `cynork/`, in `go.work` and justfile `go_modules`.
@@ -50,8 +50,12 @@ Remaining Phase 1 spec gaps (e.g. config_version ULID, Worker API `GET /readyz`)
   Worker node can run jobs with `use_inference: true` in a Podman pod containing a sandbox container plus an inference proxy sidecar that listens on `localhost:11434`.
   The sandbox receives `OLLAMA_BASE_URL=http://localhost:11434` when the node is configured with `OLLAMA_UPSTREAM_URL` and `INFERENCE_PROXY_IMAGE`.
   See [post_phase1_inference_proxy_report.md](post_phase1_inference_proxy_report.md).
-  Remaining: add user-facing task creation support for `use_inference`, plus E2E and worker_node feature coverage for inference-in-sandbox.
-- **Phase 1 gaps:** Unchanged: `config_version` ULID, Worker API `GET /readyz`, orchestrator fail-fast scenario scope (see code review).
+  **Remaining:** (1) User-facing task creation for `use_inference`: User API `POST /v1/tasks` and `CreateTaskRequest` are prompt-only; job payload from `marshalJobPayload` does not set `use_inference`.
+  CLI (cynork) has no `--use-inference` (or equivalent) flag.
+  (2) Feature/BDD: `features/e2e/single_node_happy_path.feature` has the inference scenario (`@inference_in_sandbox`); `features/worker_node/worker_node_sandbox_execution.feature` has "Sandbox receives OLLAMA_BASE_URL when use_inference is true" and worker_node `_bdd` implements "I submit a sandbox job with use_inference that runs command".
+  No BDD runner for `features/e2e` (script-driven `just e2e` is primary).
+  Orchestrator has no step "I create a task with use_inference and command" and no API support to pass `use_inference` into the job.
+- **Phase 1 gaps:** Unchanged: `config_version` ULID (orchestrator still uses string; no ULID generation in codebase), Worker API `GET /readyz` (not implemented in worker_node), orchestrator fail-fast scenario scope (see code review).
   Optional 413/truncation worker_node scenarios not added.
 
 ## 3 Inference in Sandboxed Containers
@@ -89,9 +93,10 @@ See [single_node_e2e_testing_plan.md](single_node_e2e_testing_plan.md).
   Covers status, auth login/whoami, whoami without token, create task and get result.
   Suite tag `@suite_cynork`; see [features/README.md](../features/README.md) suite registry.
 
-- **`features/e2e/single_node_happy_path.feature`:** Add a scenario (e.g. "Single-node task execution with inference in sandbox") that assumes an inference-capable node with proxy and model loaded.
-  Steps: login, node registered and config ack, create task that runs inference inside the sandbox, dispatch, job completes with success.
-  Tag so BDD/script can select it when inference path is available.
+- **`features/e2e/single_node_happy_path.feature`:** Done.
+  Scenario "Single-node task execution with inference in sandbox" exists (`@inference_in_sandbox`); steps reference "I create a task with use_inference and command" and "the node executes the sandbox job in a pod with inference proxy".
+  Not run by `just test-bdd` (no separate e2e BDD runner); script-driven `just e2e` is primary.
+  API and BDD step for "create task with use_inference" not yet implemented (see 2.1).
 
 - **`features/worker_node/worker_node_sandbox_execution.feature`:** Optionally add scenarios for request size limit (413) and stdout/stderr truncation (per [mvp_phase1_code_review_report.md](mvp_phase1_code_review_report.md) Section 3).
 
@@ -110,10 +115,12 @@ See [single_node_e2e_testing_plan.md](single_node_e2e_testing_plan.md).
 ## 6 BDD Suite
 
 - **Orchestrator (`orchestrator/_bdd`):** Add step definitions and scenarios that depend on "inference-ready" only when the new E2E/inference scenarios are added; keep existing DB-backed scenarios running with testcontainers when `POSTGRES_TEST_DSN` is unset.
-- **Worker node (`worker_node/_bdd`):** Add steps for "job runs in pod with inference proxy" and "sandbox env contains OLLAMA_BASE_URL"; use mock orchestrator or a real Worker API with a test runtime (e.g. podman) when needed.
+- **Worker node (`worker_node/_bdd`):** Done for inference.
+  Step "I submit a sandbox job with use_inference that runs command" and scenario "Sandbox receives OLLAMA_BASE_URL when use_inference is true" in `worker_node_sandbox_execution.feature` are implemented.
   Keep scenarios that do not require inference runnable without a real Ollama.
 - **E2E:** The script-driven E2E (`just e2e`) remains the primary way to run the full single-node + inference path.
-  BDD can implement the same flow in Godog for traceability (see `features/e2e/` and optional `_bdd` for e2e if added).
+  Feature file `features/e2e/single_node_happy_path.feature` exists with inference scenario.
+  No e2e Godog runner, so e2e scenarios are not executed by `just test-bdd`.
 - **CLI (cynork):** BDD in place.
   `just test-bdd` runs `./orchestrator/_bdd ./worker_node/_bdd ./cynork/_bdd`.
   Feature file: `features/cynork/cynork_cli.feature`; steps use a mock gateway.
@@ -142,8 +149,11 @@ Suggested order (can be parallelized where independent):
 3. ~~**Inference proxy and pod/network**~~ **Done (worker_node).**
    Worker node supports `use_inference: true` jobs via a Podman pod containing sandbox + proxy sidecar and injects `OLLAMA_BASE_URL`.
    See [post_phase1_inference_proxy_report.md](post_phase1_inference_proxy_report.md).
-4. **Feature files and BDD:** Add or update feature files (E2E inference-in-sandbox scenario, optional 413/truncation, orchestrator fail-fast wording); implement BDD steps for inference-in-sandbox; ensure `just test-bdd` passes.
-5. **E2E script:** Extend `scripts/setup-dev.sh` / `just e2e` to run the inference-in-sandbox scenario when the node and model are available (align with `single_node_e2e_testing_plan.md`).
+4. **Feature files and BDD:** Partially done.
+   E2E and worker_node feature files have inference scenarios; worker_node BDD steps for use_inference/OLLAMA_BASE_URL in place.
+   Remaining: user API and CLI support for `use_inference` on task create; orchestrator BDD step "I create a task with use_inference and command"; optional 413/truncation and fail-fast wording; ensure `just test-bdd` passes.
+5. **E2E script:** `scripts/setup-dev.sh` full-demo already runs inference smoke when Ollama container is present (`run_ollama_inference_smoke`).
+   Optional: extend to run the inference-in-sandbox task path when node and model are available (align with `single_node_e2e_testing_plan.md`).
 6. ~~**Coverage and CI**~~ **Done.** cynork is in `go_modules`; `just ci` runs fmt, lint, test-go-cover, vulncheck-go, test-bdd for all modules including cynork.
 
 ## 9 References
@@ -162,4 +172,5 @@ Suggested order (can be parallelized where independent):
 - `features/` - Orchestrator, worker_node, cynork, and e2e feature files.
 
 Report generated 2026-02-20.
+Status reviewed and plan updated 2026-02-20.
 Do not update tech specs without explicit direction.
