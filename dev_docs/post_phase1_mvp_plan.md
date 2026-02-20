@@ -2,7 +2,7 @@
 
 - [1 Objectives](#1-objectives)
 - [2 Scope Summary](#2-scope-summary)
-  - [2.1 Current Status (2026-02-20 0637)](#21-current-status-2026-02-20-0637)
+  - [2.1 Current Status (2026-02-20 1055)](#21-current-status-2026-02-20-1055)
 - [3 Inference in Sandboxed Containers](#3-inference-in-sandboxed-containers)
   - [3.1 Inference Proxy Sidecar (Per `node.md` Option A)](#31-inference-proxy-sidecar-per-nodemd-option-a)
   - [3.2 Implementation Ownership](#32-implementation-ownership)
@@ -38,7 +38,7 @@ Remaining Phase 1 spec gaps (e.g. config_version ULID, Worker API `GET /readyz`)
 | BDD | Steps and scenarios for inference-ready node and sandbox job using inference; CLI has BDD (see 2.1). |
 | CLI | Separate Go module; `version`, `status`, `auth login` / `logout` / `whoami`; create task and get result against user-gateway; config via env and optional file. |
 
-### 2.1 Current Status (2026-02-20 0637)
+### 2.1 Current Status (2026-02-20 1055)
 
 - **CLI (cynork):** Done.
   Module at `cynork/`, in `go.work` and justfile `go_modules`.
@@ -46,9 +46,11 @@ Remaining Phase 1 spec gaps (e.g. config_version ULID, Worker API `GET /readyz`)
   Gateway client, config (env + optional `~/.config/cynork/config.yaml`), unit tests, and BDD suite (`cynork/_bdd`, `features/cynork/cynork_cli.feature`) in place.
   `just test-bdd` runs orchestrator, worker_node, and cynork BDD.
   See [post_phase1_cli_implementation_report.md](post_phase1_cli_implementation_report.md) and [cynork_cli_localhost.md](cynork_cli_localhost.md).
-- **Inference in sandbox:** Not started.
-  No inference proxy sidecar, pod/network, or `OLLAMA_BASE_URL` in sandbox; sandboxes still run with `--network=none`.
-  E2E and worker_node feature files do not yet include inference-in-sandbox scenarios.
+- **Inference in sandbox:** Implemented (worker_node pod path + inference proxy sidecar).
+  Worker node can run jobs with `use_inference: true` in a Podman pod containing a sandbox container plus an inference proxy sidecar that listens on `localhost:11434`.
+  The sandbox receives `OLLAMA_BASE_URL=http://localhost:11434` when the node is configured with `OLLAMA_UPSTREAM_URL` and `INFERENCE_PROXY_IMAGE`.
+  See [post_phase1_inference_proxy_report.md](post_phase1_inference_proxy_report.md).
+  Remaining: add user-facing task creation support for `use_inference`, plus E2E and worker_node feature coverage for inference-in-sandbox.
 - **Phase 1 gaps:** Unchanged: `config_version` ULID, Worker API `GET /readyz`, orchestrator fail-fast scenario scope (see code review).
   Optional 413/truncation worker_node scenarios not added.
 
@@ -56,7 +58,8 @@ Remaining Phase 1 spec gaps (e.g. config_version ULID, Worker API `GET /readyz`)
 
 Phase 1 runs sandboxes with `--network=none`, so jobs cannot reach Ollama.
 
-To leverage full single-node capabilities (orchestrator dispatches work that uses inference inside the sandbox), implement the following.
+To leverage full single-node capabilities (orchestrator dispatches work that uses inference inside the sandbox), the worker node now supports the following path.
+Remaining plan items focus on user-facing wiring and feature/E2E coverage.
 
 ### 3.1 Inference Proxy Sidecar (Per `node.md` Option A)
 
@@ -65,6 +68,7 @@ To leverage full single-node capabilities (orchestrator dispatches work that use
   - A lightweight inference proxy sidecar that listens on `localhost:11434` inside the pod and forwards to the node's Ollama container.
 - Sandbox container receives `OLLAMA_BASE_URL=http://localhost:11434` in its environment.
 - Proxy enforces request size (e.g. 10 MiB) and per-request timeout (e.g. 120s) and MUST NOT expose credentials.
+  See [post_phase1_inference_proxy_report.md](post_phase1_inference_proxy_report.md) for the delivered implementation details and configuration.
 
 ### 3.2 Implementation Ownership
 
@@ -135,7 +139,9 @@ Suggested order (can be parallelized where independent):
 
 1. **Phase 1 gap closure (optional first):** config_version ULID in orchestrator; Worker API `GET /readyz`; clarify orchestrator fail-fast scenario.
 2. ~~**CLI module bootstrap**~~ **Done.** cynork module exists; in go.work and go_modules; version, status, auth, task create/result; unit tests and BDD; documented.
-3. **Inference proxy and pod/network:** Design and implement the inference proxy (minimal HTTP forwarder to Ollama with size/timeout limits); implement Worker API / Node Manager path that runs jobs in a pod with sandbox + proxy and sets `OLLAMA_BASE_URL` in sandbox env; unit tests for proxy and execution path.
+3. ~~**Inference proxy and pod/network**~~ **Done (worker_node).**
+   Worker node supports `use_inference: true` jobs via a Podman pod containing sandbox + proxy sidecar and injects `OLLAMA_BASE_URL`.
+   See [post_phase1_inference_proxy_report.md](post_phase1_inference_proxy_report.md).
 4. **Feature files and BDD:** Add or update feature files (E2E inference-in-sandbox scenario, optional 413/truncation, orchestrator fail-fast wording); implement BDD steps for inference-in-sandbox; ensure `just test-bdd` passes.
 5. **E2E script:** Extend `scripts/setup-dev.sh` / `just e2e` to run the inference-in-sandbox scenario when the node and model are available (align with `single_node_e2e_testing_plan.md`).
 6. ~~**Coverage and CI**~~ **Done.** cynork is in `go_modules`; `just ci` runs fmt, lint, test-go-cover, vulncheck-go, test-bdd for all modules including cynork.
