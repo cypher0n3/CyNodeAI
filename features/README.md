@@ -48,7 +48,7 @@ Suite tag registry:
 
 - `@suite_orchestrator`: Orchestrator suite (control-plane and user-gateway behavior).
 - `@suite_worker_node`: Worker-node suite (node manager and worker API behavior).
-- `@suite_cli_management_app`: CLI management app suite.
+- `@suite_cynork`: cynork admin CLI suite.
 - `@suite_admin_web_console`: Admin web console suite.
 - `@suite_api_egress_server`: API Egress Server suite.
 - `@suite_secure_browser_service`: Secure Browser Service suite.
