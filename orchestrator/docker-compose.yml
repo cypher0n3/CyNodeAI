@@ -1,3 +1,6 @@
+# Full orchestrator stack: Postgres + control-plane + user-gateway.
+# Ports: postgres 5432, control-plane 8082, user-gateway 8080 (override with CONTROL_PLANE_PORT, ORCHESTRATOR_PORT).
+# Run from repo root: docker compose -f orchestrator/docker-compose.yml up -d
 services:
   postgres:
     image: pgvector/pgvector:pg16
@@ -22,14 +25,15 @@ services:
       dockerfile: orchestrator/cmd/control-plane/Containerfile
     container_name: cynodeai-control-plane
     environment:
-      DATABASE_URL: ${DATABASE_URL:-postgres://cynodeai:cynodeai-dev-password@postgres:5432/cynodeai?sslmode=disable}
+      DATABASE_URL: postgres://${POSTGRES_USER:-cynodeai}:${POSTGRES_PASSWORD:-cynodeai-dev-password}@postgres:5432/${POSTGRES_DB:-cynodeai}?sslmode=disable
       CONTROL_PLANE_LISTEN_ADDR: ":8082"
-      JWT_SECRET: ${JWT_SECRET:-dev-jwt-secret-change-me}
+      JWT_SECRET: ${JWT_SECRET:-dev-jwt-secret-change-in-production}
       NODE_REGISTRATION_PSK: ${NODE_REGISTRATION_PSK:-dev-node-psk-secret}
       BOOTSTRAP_ADMIN_PASSWORD: ${BOOTSTRAP_ADMIN_PASSWORD:-admin123}
-      WORKER_API_URL: ${WORKER_API_URL:-http://host.containers.internal:8081}
+      WORKER_API_TARGET_URL: ${WORKER_API_TARGET_URL:-http://host.containers.internal:8081}
       WORKER_API_BEARER_TOKEN: ${WORKER_API_BEARER_TOKEN:-dev-worker-api-token-change-me}
-      DISPATCHER_ENABLED: ${DISPATCHER_ENABLED:-true}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     ports:
       - "${CONTROL_PLANE_PORT:-8082}:8082"
     depends_on:
@@ -42,11 +46,12 @@ services:
       dockerfile: orchestrator/cmd/user-gateway/Containerfile
     container_name: cynodeai-user-gateway
     environment:
-      DATABASE_URL: ${DATABASE_URL:-postgres://cynodeai:cynodeai-dev-password@postgres:5432/cynodeai?sslmode=disable}
+      DATABASE_URL: postgres://${POSTGRES_USER:-cynodeai}:${POSTGRES_PASSWORD:-cynodeai-dev-password}@postgres:5432/${POSTGRES_DB:-cynodeai}?sslmode=disable
       USER_GATEWAY_LISTEN_ADDR: ":8080"
-      JWT_SECRET: ${JWT_SECRET:-dev-jwt-secret-change-me}
+      JWT_SECRET: ${JWT_SECRET:-dev-jwt-secret-change-in-production}
+      BOOTSTRAP_ADMIN_PASSWORD: ${BOOTSTRAP_ADMIN_PASSWORD:-admin123}
     ports:
-      - "${USER_GATEWAY_PORT:-8080}:8080"
+      - "${ORCHESTRATOR_PORT:-8080}:8080"
     depends_on:
       postgres:
         condition: service_healthy

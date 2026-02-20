@@ -71,11 +71,12 @@ func startWorkerAPI(bearerToken string) error {
 }
 
 // startOllama starts the Phase 1 inference container (Ollama). Fail-fast on error.
+// Publishes port 11434 so the inference proxy (in a pod) can reach Ollama via host.containers.internal:11434.
 func startOllama() error {
 	runtime := getEnv("CONTAINER_RUNTIME", "podman")
 	image := getEnv("OLLAMA_IMAGE", "ollama/ollama")
 	name := "cynodeai-ollama"
-	cmd := exec.Command(runtime, "run", "-d", "--name", name, image)
+	cmd := exec.Command(runtime, "run", "-d", "--name", name, "-p", "11434:11434", image)
 	if out, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("%w: %s", err, strings.TrimSpace(string(out)))
 	}
