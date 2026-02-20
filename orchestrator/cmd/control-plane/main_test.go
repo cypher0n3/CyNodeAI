@@ -16,6 +16,7 @@ import (
 	"github.com/cypher0n3/cynodeai/go_shared_libs/contracts/workerapi"
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/config"
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/database"
+	"github.com/cypher0n3/cynodeai/orchestrator/internal/dispatcher"
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/models"
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/testutil"
 )
@@ -126,7 +127,7 @@ func TestDispatchOnce_Success(t *testing.T) {
 	client := &http.Client{Timeout: cfg.HTTPTimeout}
 	logger := slog.Default()
 
-	err := dispatchOnce(ctx, mock, client, cfg, logger)
+	err := dispatcher.RunOnce(ctx, mock, client, cfg.HTTPTimeout, logger)
 	if err != nil {
 		t.Fatalf("dispatchOnce: %v", err)
 	}
@@ -150,7 +151,7 @@ func TestDispatchOnce_NoDispatchableNodes(t *testing.T) {
 	cfg := dispatcherConfig{}
 	client := &http.Client{}
 	logger := slog.Default()
-	err := dispatchOnce(ctx, mock, client, cfg, logger)
+	err := dispatcher.RunOnce(ctx, mock, client, cfg.HTTPTimeout, logger)
 	if err == nil {
 		t.Fatal("expected error when no dispatchable nodes")
 	}
@@ -163,7 +164,7 @@ func TestDispatchOnce_ErrNotFound(t *testing.T) {
 	client := &http.Client{}
 	logger := slog.Default()
 
-	err := dispatchOnce(ctx, mock, client, cfg, logger)
+	err := dispatcher.RunOnce(ctx, mock, client, cfg.HTTPTimeout, logger)
 	if err == nil {
 		t.Fatal("expected ErrNotFound")
 	}
@@ -181,7 +182,7 @@ func TestDispatchOnce_NoNodes(t *testing.T) {
 	client := &http.Client{}
 	logger := slog.Default()
 
-	err := dispatchOnce(ctx, mock, client, cfg, logger)
+	err := dispatcher.RunOnce(ctx, mock, client, cfg.HTTPTimeout, logger)
 	if err == nil {
 		t.Fatal("expected no active nodes error")
 	}
@@ -383,7 +384,7 @@ func TestDispatchOnce_InvalidPayload(t *testing.T) {
 	cfg := dispatcherConfig{}
 	client := &http.Client{}
 	logger := slog.Default()
-	err := dispatchOnce(ctx, mock, client, cfg, logger)
+	err := dispatcher.RunOnce(ctx, mock, client, cfg.HTTPTimeout, logger)
 	if err != nil {
 		t.Fatalf("dispatchOnce with bad payload should complete job as failed: %v", err)
 	}
@@ -404,7 +405,7 @@ func runDispatchOnceWithWorkerStatus(t *testing.T, statusCode int) {
 	cfg := dispatcherConfig{HTTPTimeout: 5 * time.Second}
 	client := &http.Client{Timeout: cfg.HTTPTimeout}
 	logger := slog.Default()
-	err := dispatchOnce(ctx, mock, client, cfg, logger)
+	err := dispatcher.RunOnce(ctx, mock, client, cfg.HTTPTimeout, logger)
 	if err != nil {
 		t.Fatalf("dispatchOnce should complete job as failed: %v", err)
 	}
@@ -432,7 +433,7 @@ func TestDispatchOnce_WorkerAPIBadVersion(t *testing.T) {
 	cfg := dispatcherConfig{HTTPTimeout: 5 * time.Second}
 	client := &http.Client{Timeout: cfg.HTTPTimeout}
 	logger := slog.Default()
-	err := dispatchOnce(ctx, mock, client, cfg, logger)
+	err := dispatcher.RunOnce(ctx, mock, client, cfg.HTTPTimeout, logger)
 	if err != nil {
 		t.Fatalf("dispatchOnce should complete job as failed on bad version: %v", err)
 	}
@@ -649,6 +650,8 @@ func TestRunMainWithContext_StoreFromTestOpener(t *testing.T) {
 }
 
 // TestRunMainWithContext_TestOpenerMigrateOnly covers store==nil, testOpenStore set, and migrateOnly true.
+//
+//nolint:dupl // mirrors DatabaseOpenerMigrateOnly for testOpenStore hook
 func TestRunMainWithContext_TestOpenerMigrateOnly(t *testing.T) {
 	oldArgs := os.Args
 	defer func() { os.Args = oldArgs }()
@@ -666,6 +669,8 @@ func TestRunMainWithContext_TestOpenerMigrateOnly(t *testing.T) {
 }
 
 // TestRunMainWithContext_TestOpenerReturnsError covers testOpenStore returning an error.
+//
+//nolint:dupl // mirrors DatabaseOpenerReturnsError for testOpenStore hook
 func TestRunMainWithContext_TestOpenerReturnsError(t *testing.T) {
 	oldArgs := os.Args
 	defer func() { os.Args = oldArgs }()
@@ -679,6 +684,65 @@ func TestRunMainWithContext_TestOpenerReturnsError(t *testing.T) {
 	code := runMainWithContext(context.Background(), nil)
 	if code != 1 {
 		t.Errorf("expected exit 1 when testOpenStore fails, got %d", code)
+	}
+}
+
+// TestRunMainWithContext_DatabaseOpenerSuccess covers resolveStore using testDatabaseOpen (success, no migrateOnly).
+func TestRunMainWithContext_DatabaseOpenerSuccess(t *testing.T) {
+	oldArgs := os.Args
+	defer func() { os.Args = oldArgs }()
+	os.Args = []string{"control-plane"}
+	_ = os.Setenv("LISTEN_ADDR", ":0")
+	defer func() { _ = os.Unsetenv("LISTEN_ADDR") }()
+
+	testDatabaseOpen = func(_ context.Context, _ string) (database.Store, error) {
+		return testutil.NewMockDB(), nil
+	}
+	defer func() { testDatabaseOpen = nil }()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	code := runMainWithContext(ctx, nil)
+	if code != 0 {
+		t.Errorf("expected exit 0 when testDatabaseOpen succeeds, got %d", code)
+	}
+}
+
+// TestRunMainWithContext_DatabaseOpenerMigrateOnly covers resolveStore using testDatabaseOpen with migrateOnly.
+//
+//nolint:dupl // mirrors TestOpenerMigrateOnly for testDatabaseOpen hook
+func TestRunMainWithContext_DatabaseOpenerMigrateOnly(t *testing.T) {
+	oldArgs := os.Args
+	defer func() { os.Args = oldArgs }()
+	os.Args = []string{"control-plane", "-migrate-only"}
+
+	testDatabaseOpen = func(_ context.Context, _ string) (database.Store, error) {
+		return testutil.NewMockDB(), nil
+	}
+	defer func() { testDatabaseOpen = nil }()
+
+	code := runMainWithContext(context.Background(), nil)
+	if code != 0 {
+		t.Errorf("expected exit 0 (migrate-only with testDatabaseOpen), got %d", code)
+	}
+}
+
+// TestRunMainWithContext_DatabaseOpenerReturnsError covers testDatabaseOpen returning an error.
+//
+//nolint:dupl // mirrors TestOpenerReturnsError for testDatabaseOpen hook
+func TestRunMainWithContext_DatabaseOpenerReturnsError(t *testing.T) {
+	oldArgs := os.Args
+	defer func() { os.Args = oldArgs }()
+	os.Args = []string{"control-plane"}
+
+	testDatabaseOpen = func(_ context.Context, _ string) (database.Store, error) {
+		return nil, errors.New("database open failed")
+	}
+	defer func() { testDatabaseOpen = nil }()
+
+	code := runMainWithContext(context.Background(), nil)
+	if code != 1 {
+		t.Errorf("expected exit 1 when testDatabaseOpen fails, got %d", code)
 	}
 }
 
@@ -787,7 +851,7 @@ func TestDispatchOnce_CompleteJobFails(t *testing.T) {
 	cfg := dispatcherConfig{HTTPTimeout: 5 * time.Second}
 	client := &http.Client{Timeout: cfg.HTTPTimeout}
 	logger := slog.Default()
-	err := dispatchOnce(ctx, mock, client, cfg, logger)
+	err := dispatcher.RunOnce(ctx, mock, client, cfg.HTTPTimeout, logger)
 	if err == nil {
 		t.Fatal("expected error when CompleteJob fails")
 	}
@@ -817,7 +881,7 @@ func TestDispatchOnce_AssignJobToNodeFails(t *testing.T) {
 	cfg := dispatcherConfig{}
 	client := &http.Client{}
 	logger := slog.Default()
-	err := dispatchOnce(ctx, mock, client, cfg, logger)
+	err := dispatcher.RunOnce(ctx, mock, client, cfg.HTTPTimeout, logger)
 	if err == nil {
 		t.Fatal("expected error when AssignJobToNode fails")
 	}
@@ -834,7 +898,7 @@ func TestDispatchOnce_CallWorkerAPINetworkError(t *testing.T) {
 	cfg := dispatcherConfig{HTTPTimeout: 100 * time.Millisecond}
 	client := &http.Client{Timeout: cfg.HTTPTimeout}
 	logger := slog.Default()
-	err := dispatchOnce(ctx, mock, client, cfg, logger)
+	err := dispatcher.RunOnce(ctx, mock, client, cfg.HTTPTimeout, logger)
 	if err != nil {
 		t.Fatalf("dispatchOnce should complete job as failed on network error: %v", err)
 	}
@@ -858,7 +922,7 @@ func TestDispatchOnce_WorkerAPIInvalidJSON(t *testing.T) {
 	cfg := dispatcherConfig{HTTPTimeout: 5 * time.Second}
 	client := &http.Client{Timeout: cfg.HTTPTimeout}
 	logger := slog.Default()
-	err := dispatchOnce(ctx, mock, client, cfg, logger)
+	err := dispatcher.RunOnce(ctx, mock, client, cfg.HTTPTimeout, logger)
 	if err != nil {
 		t.Fatalf("dispatchOnce should complete job as failed on invalid JSON: %v", err)
 	}

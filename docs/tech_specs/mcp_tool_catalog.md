@@ -12,6 +12,7 @@
   - [Git Egress](#git-egress)
   - [Node Tools](#node-tools)
   - [Model Registry](#model-registry)
+  - [Skills Tools](#skills-tools)
   - [Database Tools](#database-tools)
 - [Response and Error Model](#response-and-error-model)
 
@@ -137,6 +138,18 @@ This catalog uses the same tool names.
   - required args: none
 - `model.get`
   - required args: `model_id`
+
+### Skills Tools
+
+Canonical tool names, argument schemas, behavior, and controls for skills tools are defined in the skills spec only.
+This catalog lists tool names for allowlist and discovery; do not duplicate argument or behavior details here.
+
+- **Skills (full CRUD)**: [Skill Tools via MCP (CRUD)](skills_storage_and_inference.md#skill-tools-via-mcp-crud)
+  - `skills.create`
+  - `skills.list`
+  - `skills.get`
+  - `skills.update`
+  - `skills.delete`
 
 ### Database Tools
 

@@ -69,6 +69,27 @@ The orchestrator MCP gateway MUST perform the following for every tool call it r
 The orchestrator MUST fail closed.
 If required context is missing for a tool call, the call MUST be rejected.
 
+## Edge Enforcement Mode (Node-Local Agent Runtimes)
+
+- Spec ID: `CYNAI.MCPGAT.EdgeEnforcementMode` <a id="spec-cynai-mcpgat-edgeenforcement"></a>
+
+Traces To:
+
+- [REQ-MCPGAT-0112](../requirements/mcpgat.md#req-mcpgat-0112)
+
+This section defines an edge enforcement mode for tool calls that are not routed by the orchestrator MCP gateway.
+The primary use case is a node-local agent runtime interacting directly with a node-local MCP server on the same host for low-latency sandbox operations.
+
+Requirements
+
+- Edge enforcement MUST NOT extend MCP wire messages.
+  Task scoping MUST still be expressed in tool arguments, consistent with `Tool Argument Schema Requirements`.
+- Edge enforcement MUST be authorized using orchestrator-issued capability leases.
+  Leases MUST be short-lived, least-privilege, and MUST scope allowed tool identities and required context (for example `task_id`).
+- The node-local MCP server (or an edge enforcement proxy colocated with it) MUST validate leases, enforce tool allowlists, and MUST fail closed.
+- The node-local MCP server MUST emit audit records for edge-routed tool calls with the same minimum audit fields used by the orchestrator gateway.
+  See `docs/tech_specs/mcp_tool_call_auditing.md`.
+
 ## Role-Based Tool Allowlists
 
 Allowlists are a coarse safety control.

@@ -114,7 +114,8 @@ Implementation notes
 
 For MVP Phase 2 and later, when the orchestrator needs to manage or interact with a sandbox on a node, sandbox
 operations MUST be exposed as MCP tools on that node.
-The orchestrator acts as the routing point and agents do not connect to node MCP servers directly.
+The orchestrator acts as the default routing point for sandbox tools for remote agent runtimes.
+When an AI agent runtime is co-located on the same host as the worker node, the system MAY use a low-latency control path that allows direct interaction with node-hosted sandbox tools under orchestrator-issued capability leases.
 
 ### Node Sandbox MCP Exposure Applicable Requirements
 
@@ -135,6 +136,33 @@ Required sandbox MCP tool surface
 - `sandbox.get_file`
 - `sandbox.stream_logs`
 - `sandbox.destroy`
+
+### Node-Local Agent Sandbox Control (Low-Latency Path)
+
+- Spec ID: `CYNAI.WORKER.NodeLocalAgentSandboxControl` <a id="spec-cynai-worker-nodelocalagentsandboxcontrol"></a>
+
+Traces To:
+
+- [REQ-WORKER-0154](../requirements/worker.md#req-worker-0154)
+- [REQ-WORKER-0155](../requirements/worker.md#req-worker-0155)
+- [REQ-WORKER-0156](../requirements/worker.md#req-worker-0156)
+
+This section defines a low-latency control path for sandbox operations when an AI agent runtime and the worker node are co-located on the same host.
+The goal is to avoid routing every sandbox tool call through the orchestrator while still preserving policy enforcement and auditing.
+
+Required properties
+
+- The node MUST restrict direct access to node-hosted sandbox tools.
+  Only node-local agent runtimes with orchestrator-issued capability leases may call this interface.
+- Capability leases MUST be short-lived and least-privilege.
+  They MUST scope calls to a `task_id` and MUST identify the allowed tool namespaces and operations.
+- The node MUST validate capability leases and MUST fail closed when validation fails or when required scoped ids are missing.
+- The node MUST emit audit records for direct tool calls with `task_id` context and MUST make those records available to the orchestrator.
+
+Recommended binding and transport
+
+- The node SHOULD expose the direct control path only on loopback (`127.0.0.1`) and/or a Unix domain socket.
+- The direct control path SHOULD reuse the same MCP tool identities and argument schemas as the node-hosted MCP server so policy remains consistent.
 
 ## Node Startup YAML
 

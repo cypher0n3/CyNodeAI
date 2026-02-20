@@ -26,7 +26,8 @@ It identifies implementation gaps, spec deviations, and missing or incomplete fe
   Request size and stdout/stderr limits exist; default timeout derivation from node config/YAML is only partially applied.
 - **Feature files:** Several Phase 1 scenarios are present; orchestrator fail-fast scenario scope is ambiguous (spec places fail-fast on the node, not the orchestrator).
   E2E and worker_node features are largely aligned; a few scenarios lack explicit tags or could be tightened.
-- **BDD:** Many orchestrator steps return `godog.ErrSkip` when `POSTGRES_TEST_DSN` is unset or state is missing; this is intentional for DB-backed scenarios but means Phase 1 paths are not fully exercised without a DB.
+- **BDD:** The orchestrator BDD suite now uses testcontainers to start Postgres when `POSTGRES_TEST_DSN` is unset (see `orchestrator/_bdd/testmain_test.go`), so Phase 1 scenarios run against a real DB without requiring a pre-started Postgres.
+  Set `SKIP_TESTCONTAINERS=1` to run without a DB (scenarios that need the DB will skip).
   Worker-node BDD uses a mock orchestrator and "direct" executor; sandbox scenarios run but without a real container for some steps.
 
 ## 2 Implementation vs Technical Specs
@@ -92,10 +93,9 @@ The following tables compare implementation to the Phase 1 technical specs.
 
 ## 4 BDD Test Gaps
 
-- **Orchestrator suite:** Many steps return `godog.ErrSkip` when `POSTGRES_TEST_DSN` is unset or when test state (server, db, tokens) is missing.
-  This is by design so that `just test-bdd` runs without a DB, but it means node registration, config fetch/ack, and dispatcher scenarios are skipped unless `POSTGRES_TEST_DSN` is set.
-  Completion plan Chunk 07 asks for "no godog.ErrSkip in Phase 1 paths" when running with DB; with DB, the implemented steps should run.
-  No change required for step logic; ensure CI or local validation runs BDD with DB for Phase 1 coverage.
+- **Orchestrator suite:** TestMain in `orchestrator/_bdd/testmain_test.go` starts Postgres via testcontainers when `POSTGRES_TEST_DSN` is unset, so `just test-bdd` runs the full suite against a real DB (no skips for missing DB).
+  Set `SKIP_TESTCONTAINERS=1` to disable container startup; then scenarios that need the DB will skip.
+    CI can run `just test-bdd` without pre-provisioning Postgres.
 - **Worker node suite:** Node manager scenarios use a mock orchestrator; config fetch and config ack steps are implemented.
   Sandbox scenarios use executor with `runtime: "direct"` by default, so no real container is used; network_policy and workspace behavior are still asserted via the direct runner.
   For full container-based validation, a separate run with a real runtime (e.g. podman) would be needed; not strictly required for Phase 1 BDD.
@@ -112,7 +112,8 @@ The following tables compare implementation to the Phase 1 technical specs.
    If no, mark the scenario as deferred or adjust wording to node-side fail-fast only.
 4. **Worker API readyz:** Add `GET /readyz` that returns 200 when the node is ready to accept jobs (and 503 otherwise) per `worker_api.md`.
 5. **Feature coverage:** Add optional scenarios for request size 413 and stdout/stderr truncation in the worker_node sandbox feature if desired for Phase 1; otherwise leave for a later phase.
-6. **BDD with DB:** Run `POSTGRES_TEST_DSN="..." just test-bdd` in CI or release checklist so that orchestrator node/config/dispatcher scenarios are not skipped and Phase 1 paths are validated.
+6. **BDD with DB:** The orchestrator BDD suite now starts Postgres via testcontainers when `POSTGRES_TEST_DSN` is unset, so `just test-bdd` validates Phase 1 paths without manual DB setup.
+   Use `SKIP_TESTCONTAINERS=1` only when Podman/Docker is unavailable.
 
 ## 6 References
 

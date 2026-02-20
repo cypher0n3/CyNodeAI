@@ -168,6 +168,29 @@ It covers worker-node behavior and the worker API contract for job execution and
 - **REQ-WORKER-0148:** The node MUST NOT attempt pattern-based secret redaction of sandbox stdout and stderr, and MUST rely on sandbox environment credential handling to prevent secret exposure.
   [CYNAI.WORKER.WorkerApiSecretHandling](../tech_specs/worker_api.md#spec-cynai-worker-workerapisecrethandling)
   <a id="req-worker-0148"></a>
+- **REQ-WORKER-0150:** The Worker API MUST support creating a session sandbox (long-running container) associated with a task or session identifier, and executing multiple commands in that same container (send command, get result, repeat) for longer-running work.
+  [CYNAI.WORKER.SessionSandbox](../tech_specs/worker_api.md#spec-cynai-worker-sessionsandbox)
+  <a id="req-worker-0150"></a>
+- **REQ-WORKER-0151:** Session sandboxes MUST have a maximum lifetime or idle timeout; the node MUST terminate and clean up the container when the limit is reached or when the orchestrator explicitly ends the session.
+  [CYNAI.WORKER.SessionSandbox](../tech_specs/worker_api.md#spec-cynai-worker-sessionsandbox)
+  <a id="req-worker-0151"></a>
+- **REQ-WORKER-0152:** The node MUST associate session sandbox containers with `task_id` and a stable session identifier for auditing and cleanup.
+  [CYNAI.WORKER.SessionSandbox](../tech_specs/worker_api.md#spec-cynai-worker-sessionsandbox)
+  <a id="req-worker-0152"></a>
+- **REQ-WORKER-0153:** The Worker API MUST support an interactive PTY mode for session sandboxes so the orchestrator can exchange a bidirectional terminal byte stream and resize events without requiring inbound SSH or network access to the sandbox.
+  [CYNAI.WORKER.SessionSandboxPty](../tech_specs/worker_api.md#spec-cynai-worker-sessionsandboxpty)
+  <a id="req-worker-0153"></a>
+- **REQ-WORKER-0154:** The node MUST support a low-latency control path for sandbox operations when an AI agent runtime is co-located on the same host as the worker node.
+  This control path SHOULD allow the agent runtime to interact directly with node-hosted sandbox tools without requiring the orchestrator to route every call.
+  [CYNAI.WORKER.NodeLocalAgentSandboxControl](../tech_specs/node.md#spec-cynai-worker-nodelocalagentsandboxcontrol)
+  <a id="req-worker-0154"></a>
+- **REQ-WORKER-0155:** Direct sandbox tool calls to a node MUST be authorized using short-lived, least-privilege capability leases issued by the orchestrator.
+  The node MUST validate the lease, enforce tool allowlists and task scoping, and MUST fail closed when required context is missing or invalid.
+  [CYNAI.WORKER.NodeLocalAgentSandboxControl](../tech_specs/node.md#spec-cynai-worker-nodelocalagentsandboxcontrol)
+  <a id="req-worker-0155"></a>
+- **REQ-WORKER-0156:** The node MUST audit direct sandbox tool calls made through the low-latency control path and MUST make audit records available to the orchestrator for centralized retention and inspection.
+  [CYNAI.WORKER.NodeLocalAgentSandboxControl](../tech_specs/node.md#spec-cynai-worker-nodelocalagentsandboxcontrol)
+  <a id="req-worker-0156"></a>
 - **REQ-WORKER-0200:** Worker Telemetry API MUST require bearer token authentication for all telemetry endpoints.
   [CYNAI.WORKER.TelemetryApiAuth](../tech_specs/worker_telemetry_api.md#spec-cynai-worker-telemetryauth)
   <a id="req-worker-0200"></a>

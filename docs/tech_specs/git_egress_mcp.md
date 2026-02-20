@@ -22,6 +22,12 @@ Git egress enables creating commits and pull requests from sandbox-produced chan
 Sandboxes should be treated as untrusted and network-restricted by default.
 Direct Git host access from sandboxes risks credential leakage and data exfiltration.
 
+Clean split model
+
+- Sandboxes MAY run local-only Git commands against the mounted workspace.
+- Sandboxes MUST NOT perform remote-affecting Git operations (for example `git clone`, `git fetch`, `git pull`, `git push`, submodule fetch/update, or Git LFS downloads).
+- All Git operations that require remote access MUST be performed via Git egress using task-scoped changeset artifacts.
+
 ## Goals and Non-Goals
 
 Goals

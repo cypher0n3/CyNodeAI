@@ -10,6 +10,7 @@
 - [Error Handling](#error-handling)
 - [Worker API Surface (Initial Implementation)](#worker-api-surface-initial-implementation)
   - [Run Job (Synchronous)](#run-job-synchronous)
+  - [Session Sandbox (Long-Running)](#session-sandbox-long-running)
 - [Sandbox Execution Requirements (Initial Implementation)](#sandbox-execution-requirements-initial-implementation)
   - [Applicable Requirements (Sandbox Execution)](#applicable-requirements-sandbox-execution)
 - [Logging and Output Limits](#logging-and-output-limits)
@@ -237,6 +238,111 @@ Timeout rules (required)
 - 401/403: auth failure
 - 413: request too large
 - 500: internal node error
+
+### Session Sandbox (Long-Running)
+
+- Spec ID: `CYNAI.WORKER.SessionSandbox` <a id="spec-cynai-worker-sessionsandbox"></a>
+
+Traces To:
+
+- [REQ-WORKER-0150](../requirements/worker.md#req-worker-0150)
+- [REQ-WORKER-0151](../requirements/worker.md#req-worker-0151)
+- [REQ-WORKER-0152](../requirements/worker.md#req-worker-0152)
+
+For longer-running tasks, the Worker API MUST support **session sandboxes**: the orchestrator creates a long-running container, then sends multiple commands (exec rounds) to that same container and receives results, so the AI model can continue working on the same problem in the same environment.
+
+#### `SessionSandbox` Scope
+
+- The node exposes operations to: create a session (start container), execute a command in the session (exec), and end the session (stop and remove container).
+- Each session is identified by a stable session identifier (e.g. UUID) and MUST be associated with `task_id` for auditing.
+- The same container is used for all exec rounds in the session; the workspace persists across rounds.
+
+#### `SessionSandbox` Behavior
+
+- **Create session**: Orchestrator calls an endpoint (e.g. `POST /v1/worker/sessions`) with `task_id`, `session_id`, sandbox image, and optional session lifetime or idle timeout.
+  The node starts the container and returns success; the container stays running.
+- **Exec in session**: Orchestrator calls an endpoint (e.g. `POST /v1/worker/sessions/{session_id}/exec`) with command and optional timeout.
+  The node runs the command via container exec in that session's container and returns stdout, stderr, and exit code.
+  Multiple exec calls may be made for the same session.
+- **End session**: Orchestrator calls an endpoint (e.g. `POST /v1/worker/sessions/{session_id}/end`) or the node automatically ends the session when max lifetime or idle timeout is reached.
+  The node stops and removes the container and reclaims resources.
+
+#### `SessionSandbox` Outcomes
+
+- Session sandboxes MUST have a maximum lifetime or idle timeout; the node MUST terminate the container when the limit is reached or when the orchestrator explicitly ends the session.
+- The node MUST associate the session container with `task_id` and the session identifier in logs and telemetry for auditing and cleanup.
+- Exact endpoint paths, request/response payloads, and timeout semantics for session create, exec, and end are to be defined in a later revision of this spec or in a dedicated session-sandbox subsection; this Spec Item establishes the required capability and behavior.
+
+See [`docs/tech_specs/sandbox_container.md`](sandbox_container.md#long-running-session-sandboxes) for the sandbox contract for long-running sessions.
+
+### Session Sandbox PTY (Interactive Terminal Stream)
+
+- Spec ID: `CYNAI.WORKER.SessionSandboxPty` <a id="spec-cynai-worker-sessionsandboxpty"></a>
+
+Traces To:
+
+- [REQ-WORKER-0153](../requirements/worker.md#req-worker-0153)
+
+This section defines an interactive PTY mode for session sandboxes.
+It enables effectively interactive terminal control for long-running coding tasks without requiring inbound SSH or a network server inside the sandbox container.
+
+#### `SessionSandboxPty` Scope
+
+- PTY mode applies only to session sandboxes (long-running containers).
+- PTY mode MUST NOT require inbound network connectivity to the sandbox.
+  The node implements PTY I/O using container runtime primitives (exec/attach with a TTY), and exposes the PTY stream via the Worker API.
+- PTY mode is intended for workflows that are materially harder with exec-round command calls.
+  Examples include REPL-driven debugging, terminal UIs, and tools that require a TTY.
+
+#### `SessionSandboxPty` Behavior
+
+The Worker API MUST support the following PTY lifecycle operations for a session sandbox:
+
+- **Open PTY**: establish an interactive PTY stream associated with `task_id` and `session_id`.
+- **Send input**: write bytes to PTY stdin.
+- **Receive output**: read bytes from the PTY stream (combined stdout/stderr).
+- **Resize**: send terminal resize events (cols, rows).
+- **Close PTY**: close the interactive stream and release node-side buffers.
+
+Recommended API shape (subject to later endpoint finalization):
+
+- `POST /v1/worker/sessions/{session_id}/pty:open`
+- `POST /v1/worker/sessions/{session_id}/pty:send`
+- `POST /v1/worker/sessions/{session_id}/pty:resize`
+- `POST /v1/worker/sessions/{session_id}/pty:close`
+- `GET /v1/worker/sessions/{session_id}/pty:recv`
+
+Recommended request fields (minimum):
+
+- `version` (int, required): must be 1
+- `task_id` (uuid string, required)
+- `session_id` (uuid string, required)
+- `pty_id` (uuid string, required for send/recv/resize/close; returned by open)
+
+PTY I/O encoding:
+
+- PTY payloads MUST be treated as bytes, not as UTF-8 text.
+- Requests and responses SHOULD encode byte payloads using base64 fields (for example, `data_b64`) so the transport remains JSON-safe.
+- The node MUST enforce strict per-message and per-buffer size limits.
+
+Timeouts and lifecycle:
+
+- PTY streams MUST be bounded by the session lifetime and idle timeout rules.
+- The node MUST terminate PTY streams when the session ends.
+- The node SHOULD enforce a PTY idle timeout that is less than or equal to the session idle timeout.
+
+#### Auditing and Safety (PTY)
+
+- All PTY operations MUST be auditable with `task_id`, `session_id`, and `pty_id`.
+- Audit records SHOULD include byte counts sent and received, resize events, open/close timestamps, and error codes.
+- Secrets MUST NOT be written to logs.
+  The node MUST NOT attempt pattern-based redaction of PTY output.
+  The correct remediation is to prevent secrets from entering the sandbox environment.
+
+#### Compatibility Notes
+
+PTY mode is an additional capability.
+Agents and orchestrator workflows SHOULD default to exec-round session operations for determinism and easier output bounding, and use PTY only when required by the task profile.
 
 ## Sandbox Execution Requirements (Initial Implementation)
 

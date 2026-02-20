@@ -22,9 +22,11 @@ It covers controlled egress services and their policy and auditing constraints.
   [CYNAI.APIEGR.GitEgressArchitecture](../tech_specs/git_egress_mcp.md#spec-cynai-apiegr-gitegressarch)
   <a id="req-apiegr-0100"></a>
 - **REQ-APIEGR-0101:** Sandboxes MUST NOT make arbitrary outbound network calls to Git hosts.
+  This includes remote-affecting Git operations such as `git clone`, `git fetch`, `git pull`, `git push`, submodule fetch/update, and Git LFS downloads.
   [CYNAI.APIEGR.GitEgressArchitecture](../tech_specs/git_egress_mcp.md#spec-cynai-apiegr-gitegressarch)
   <a id="req-apiegr-0101"></a>
 - **REQ-APIEGR-0102:** Git operations that require remote access MUST be performed by the Git egress service.
+  Sandboxes MAY run local-only Git commands (for example `git status`, `git diff`, `git commit`) on the mounted workspace, but they MUST NOT contact Git remotes directly.
   [CYNAI.APIEGR.GitEgressArchitecture](../tech_specs/git_egress_mcp.md#spec-cynai-apiegr-gitegressarch)
   <a id="req-apiegr-0102"></a>
 - **REQ-APIEGR-0103:** The orchestrator SHOULD act as the policy and routing point for Git egress operations.

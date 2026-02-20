@@ -10,7 +10,8 @@
 ## Document Overview
 
 This document defines how MCP tool calls are audited in CyNodeAI.
-Tool call auditing is performed centrally by the orchestrator MCP gateway.
+Tool call auditing is performed centrally by the orchestrator MCP gateway for routed calls.
+When edge enforcement mode is used for node-local agent runtimes, tool call auditing is additionally performed on the node and audit records must be made available to the orchestrator.
 
 Related documents
 
@@ -37,6 +38,22 @@ Traces To:
 - [REQ-MCPGAT-0107](../requirements/mcpgat.md#req-mcpgat-0107)
 - [REQ-MCPGAT-0108](../requirements/mcpgat.md#req-mcpgat-0108)
 - [REQ-MCPGAT-0109](../requirements/mcpgat.md#req-mcpgat-0109)
+
+### Edge Tool Call Auditing
+
+- Spec ID: `CYNAI.MCPGAT.EdgeToolCallAuditing` <a id="spec-cynai-mcpgat-edgetoolaudit"></a>
+
+Traces To:
+
+- [REQ-MCPGAT-0112](../requirements/mcpgat.md#req-mcpgat-0112)
+
+In edge enforcement mode, tool calls may be invoked directly against a node-local MCP server by a node-local agent runtime.
+In that case:
+
+- The node-local MCP server (or an edge enforcement proxy) MUST emit an audit record for every tool call (allow or deny, success or failure).
+- The node MUST persist audit records locally with bounded retention.
+- The node MUST make audit records available to the orchestrator for centralized retention and inspection.
+  The exact ingestion mechanism is implementation-defined and may be pull-based (orchestrator queries node telemetry) or push-based (node submits batches).
 
 ## Required Audit Fields
 
