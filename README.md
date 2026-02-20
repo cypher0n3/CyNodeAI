@@ -39,6 +39,22 @@ Install [just](https://github.com/casey/just), then run:
 - `just vulncheck-go` - Go dependency vuln check
 - `just fmt-go` - format Go code
 
+## Repository Layout and Go Modules
+
+Canonical layout and project meta: [meta.md](meta.md).
+
+Go workspace modules (see root [go.work](go.work) and [justfile](justfile)):
+
+- [go_shared_libs/](go_shared_libs/) - shared contracts and types used by orchestrator and worker node
+- [orchestrator/](orchestrator/) - control plane, user gateway, MCP gateway, API egress (Go)
+- [worker_node/](worker_node/) - node manager and worker API (Go)
+- [cynork/](cynork/) - CLI management client (Go, Cobra); see [CLI management app spec](docs/tech_specs/cli_management_app.md)
+
+Documentation:
+
+- Requirements (canonical "what"): [docs/requirements/](docs/requirements/) ([README](docs/requirements/README.md))
+- Tech specs (implementation "how"): [docs/tech_specs/](docs/tech_specs/) ([index](docs/tech_specs/_main.md))
+
 ## Goals
 
 - Multi-agent system that can run fully local and private or incorporate cloud-based agents
@@ -52,7 +68,7 @@ CyNodeAI uses a central orchestrator that can manage both node-local workers and
 ### Orchestrator Node
 
 - PostgreSQL + pgvector: stores tasks, agent state, user preferences, vector embeddings
-- FastAPI server: REST + WebSocket API for node registration, job dispatch, result collection
+- REST + WebSocket API (Go): node registration, job dispatch, result collection
 - Authentication: pre-shared key (PSK) for node registration -> JWT for ongoing comms
 - Workflow engine: LangGraph for multi-step and multi-agent flows
 - Project Manager Agent: long-lived agent that coordinates tasks, enforces standards, and verifies completion using stored preferences
@@ -79,7 +95,7 @@ See [`docs/tech_specs/orchestrator.md`](docs/tech_specs/orchestrator.md) for orc
   - Spins up and tears down per-job or per-agent sandbox containers
   - Receives node configuration from the orchestrator, including registry endpoints and credentials
   - Contacts the orchestrator before starting Ollama so the orchestrator can select the correct Ollama container for the node
-- Worker API service (FastAPI): exposes /register, /jobs, /status, /result endpoints
+- Worker API service (Go): exposes /register, /jobs, /status, /result endpoints
   - Registers with orchestrator using PSK
   - Polls/pushes via HTTP or WebSocket
 - Optional single Ollama container (models loaded on-demand) with access to all GPUs/NPUs on the host
