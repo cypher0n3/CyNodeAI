@@ -12,11 +12,13 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"sync"
 	"time"
 
 	"github.com/cucumber/godog"
 
 	"github.com/cypher0n3/cynodeai/go_shared_libs/contracts/nodepayloads"
+	"github.com/cypher0n3/cynodeai/go_shared_libs/contracts/workerapi"
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/auth"
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/config"
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/database"
@@ -30,16 +32,21 @@ const stateKey ctxKey = 0
 
 // testState holds shared state for BDD steps.
 type testState struct {
-	server           *httptest.Server
-	db               *database.DB
-	accessToken      string
-	refreshToken     string
-	taskID           string
-	nodeJWT          string
-	nodeSlug         string
-	lastConfigBody   []byte
+	server            *httptest.Server
+	db                *database.DB
+	accessToken       string
+	refreshToken      string
+	taskID            string
+	nodeJWT           string
+	nodeSlug          string
+	lastConfigBody    []byte
 	lastConfigVersion string
-	lastStatusCode   int
+	lastStatusCode    int
+	// Fake worker for node-aware dispatch scenarios
+	workerServer   *httptest.Server
+	workerRequestMu sync.Mutex
+	workerRequest  *http.Request
+	workerToken    string
 }
 
 func getState(ctx context.Context) *testState {
@@ -97,6 +104,14 @@ func InitializeOrchestratorSuite(sc *godog.ScenarioContext, state *testState) {
 	})
 
 	sc.After(func(ctx context.Context, s *godog.Scenario, err error) (context.Context, error) {
+		if state.workerServer != nil {
+			state.workerServer.Close()
+			state.workerServer = nil
+		}
+		state.workerRequestMu.Lock()
+		state.workerRequest = nil
+		state.workerRequestMu.Unlock()
+		state.workerToken = ""
 		if state.server != nil {
 			state.server.Close()
 		}
@@ -675,11 +690,52 @@ func RegisterOrchestratorSteps(sc *godog.ScenarioContext, state *testState) {
 		return err
 	})
 	sc.Step(`^I receive the job output including stdout and exit code$`, func(ctx context.Context) error { return nil })
-	sc.Step(`^the orchestrator selects the node for dispatch$`, func(ctx context.Context) error { return nil })
+	sc.Step(`^the orchestrator selects the node for dispatch$`, func(ctx context.Context) error {
+		st := getState(ctx)
+		if st == nil || st.workerServer == nil {
+			return godog.ErrSkip
+		}
+		deadline := time.Now().Add(5 * time.Second)
+		for time.Now().Before(deadline) {
+			st.workerRequestMu.Lock()
+			got := st.workerRequest != nil
+			st.workerRequestMu.Unlock()
+			if got {
+				return nil
+			}
+			time.Sleep(100 * time.Millisecond)
+		}
+		return fmt.Errorf("dispatcher did not call worker within 5s")
+	})
 	sc.Step(`^the orchestrator calls the node Worker API at its configured target URL$`, func(ctx context.Context) error {
+		st := getState(ctx)
+		if st == nil {
+			return godog.ErrSkip
+		}
+		st.workerRequestMu.Lock()
+		defer st.workerRequestMu.Unlock()
+		if st.workerRequest == nil {
+			return fmt.Errorf("no worker request was received")
+		}
+		if st.workerRequest.URL.Path != "/v1/worker/jobs:run" {
+			return fmt.Errorf("worker request path %q, want /v1/worker/jobs:run", st.workerRequest.URL.Path)
+		}
 		return nil
 	})
 	sc.Step(`^the request includes the bearer token from that node's config$`, func(ctx context.Context) error {
+		st := getState(ctx)
+		if st == nil {
+			return godog.ErrSkip
+		}
+		st.workerRequestMu.Lock()
+		defer st.workerRequestMu.Unlock()
+		if st.workerRequest == nil {
+			return fmt.Errorf("no worker request was received")
+		}
+		want := "Bearer " + st.workerToken
+		if got := st.workerRequest.Header.Get("Authorization"); got != want {
+			return fmt.Errorf("Authorization header %q, want %q", got, want)
+		}
 		return nil
 	})
 
@@ -726,7 +782,42 @@ func RegisterOrchestratorSteps(sc *godog.ScenarioContext, state *testState) {
 		return st.db.UpdateNodeStatus(ctx, node.ID, "active")
 	})
 	sc.Step(`^the node "([^"]*)" has worker_api_target_url and bearer token in config$`, func(ctx context.Context, slug string) error {
-		return nil
+		st := getState(ctx)
+		if st == nil || st.db == nil {
+			return godog.ErrSkip
+		}
+		node, err := st.db.GetNodeBySlug(ctx, slug)
+		if err != nil {
+			return err
+		}
+		token := "phase1-bdd-token"
+		if st.workerServer == nil {
+			st.workerRequestMu.Lock()
+			st.workerRequest = nil
+			st.workerRequestMu.Unlock()
+			st.workerServer = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				st.workerRequestMu.Lock()
+				st.workerRequest = r
+				st.workerRequestMu.Unlock()
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusOK)
+				_ = json.NewEncoder(w).Encode(workerapi.RunJobResponse{
+					Version:  1,
+					TaskID:   "",
+					JobID:   "",
+					Status:  workerapi.StatusCompleted,
+					ExitCode: 0,
+					StartedAt: time.Now().UTC().Format(time.RFC3339),
+					EndedAt:   time.Now().UTC().Format(time.RFC3339),
+				})
+			}))
+			st.workerToken = token
+		}
+		if err := st.db.UpdateNodeWorkerAPIConfig(ctx, node.ID, st.workerServer.URL, token); err != nil {
+			return err
+		}
+		ackAt := time.Now().UTC()
+		return st.db.UpdateNodeConfigAck(ctx, node.ID, "1", "applied", ackAt, nil)
 	})
 }
 

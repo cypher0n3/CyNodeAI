@@ -564,6 +564,44 @@ func TestMockDB_GetNodeByID_ListActiveNodes(t *testing.T) {
 	}
 }
 
+// TestMockDB_ListDispatchableNodes_UpdateNodeWorkerAPIConfig covers ListDispatchableNodes, UpdateNodeConfigVersion, UpdateNodeConfigAck, UpdateNodeWorkerAPIConfig.
+func TestMockDB_ListDispatchableNodes_UpdateNodeWorkerAPIConfig(t *testing.T) {
+	db := NewMockDB()
+	ctx := context.Background()
+
+	node, _ := db.CreateNode(ctx, "dispatchable-node")
+	if err := db.UpdateNodeStatus(ctx, node.ID, models.NodeStatusActive); err != nil {
+		t.Fatalf("UpdateNodeStatus: %v", err)
+	}
+	if err := db.UpdateNodeConfigVersion(ctx, node.ID, "1"); err != nil {
+		t.Fatalf("UpdateNodeConfigVersion: %v", err)
+	}
+	ackAt := time.Now().UTC()
+	if err := db.UpdateNodeConfigAck(ctx, node.ID, "1", "applied", ackAt, nil); err != nil {
+		t.Fatalf("UpdateNodeConfigAck: %v", err)
+	}
+	if err := db.UpdateNodeWorkerAPIConfig(ctx, node.ID, "http://worker:8081", "token"); err != nil {
+		t.Fatalf("UpdateNodeWorkerAPIConfig: %v", err)
+	}
+
+	list, err := db.ListDispatchableNodes(ctx)
+	if err != nil {
+		t.Fatalf("ListDispatchableNodes: %v", err)
+	}
+	if len(list) != 1 || list[0].ID != node.ID {
+		t.Errorf("ListDispatchableNodes: expected one node, got %v", list)
+	}
+
+	// Empty list when node missing config ack or worker API config
+	db2 := NewMockDB()
+	node2, _ := db2.CreateNode(ctx, "inactive-node")
+	_ = db2.UpdateNodeStatus(ctx, node2.ID, models.NodeStatusActive)
+	list2, _ := db2.ListDispatchableNodes(ctx)
+	if len(list2) != 0 {
+		t.Errorf("ListDispatchableNodes: expected none without config ack, got %d", len(list2))
+	}
+}
+
 // TestMockDB_UpdateTaskStatus_UpdateTaskSummary_ListTasksByUser covers task helpers.
 func TestMockDB_UpdateTaskStatus_UpdateTaskSummary_ListTasksByUser(t *testing.T) {
 	db := NewMockDB()

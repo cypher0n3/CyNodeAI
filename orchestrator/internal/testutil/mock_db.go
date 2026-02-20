@@ -272,6 +272,35 @@ func (m *MockDB) ListActiveNodes(_ context.Context) ([]*models.Node, error) {
 	})
 }
 
+func isDispatchableNode(n *models.Node) bool {
+	if n.Status != models.NodeStatusActive {
+		return false
+	}
+	if n.ConfigAckStatus == nil || *n.ConfigAckStatus != "applied" {
+		return false
+	}
+	if n.WorkerAPITargetURL == nil || *n.WorkerAPITargetURL == "" {
+		return false
+	}
+	if n.WorkerAPIBearerToken == nil || *n.WorkerAPIBearerToken == "" {
+		return false
+	}
+	return true
+}
+
+// ListDispatchableNodes lists active nodes with config ack applied and Worker API URL and token set.
+func (m *MockDB) ListDispatchableNodes(_ context.Context) ([]*models.Node, error) {
+	return runWithLock(m, false, func() ([]*models.Node, error) {
+		var out []*models.Node
+		for _, n := range m.Nodes {
+			if isDispatchableNode(n) {
+				out = append(out, n)
+			}
+		}
+		return out, nil
+	})
+}
+
 // CreateTask creates a new task.
 func (m *MockDB) CreateTask(_ context.Context, createdBy *uuid.UUID, prompt string) (*models.Task, error) {
 	return runWithLock(m, true, func() (*models.Task, error) {
@@ -501,6 +530,17 @@ func (m *MockDB) UpdateNodeConfigAck(_ context.Context, nodeID uuid.UUID, config
 			n.ConfigAckAt = &ackAt
 			n.ConfigAckStatus = &status
 			n.ConfigAckError = errMsg
+		})
+		return nil
+	})
+}
+
+// UpdateNodeWorkerAPIConfig stores the Worker API target URL and bearer token for the node.
+func (m *MockDB) UpdateNodeWorkerAPIConfig(_ context.Context, nodeID uuid.UUID, targetURL, bearerToken string) error {
+	return runWithWLockErr(m, func() error {
+		m.updateNodeWith(nodeID, func(n *models.Node) {
+			n.WorkerAPITargetURL = &targetURL
+			n.WorkerAPIBearerToken = &bearerToken
 		})
 		return nil
 	})

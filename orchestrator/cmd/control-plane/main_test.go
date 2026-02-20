@@ -43,22 +43,15 @@ func TestLoadDispatcherConfig(t *testing.T) {
 	if cfg.PollInterval != 1*time.Second {
 		t.Errorf("default PollInterval: %v", cfg.PollInterval)
 	}
-	if cfg.WorkerAPIURL != "http://localhost:8081" {
-		t.Errorf("default WorkerAPIURL: %s", cfg.WorkerAPIURL)
-	}
 
 	_ = os.Setenv("DISPATCHER_ENABLED", "false")
 	_ = os.Setenv("DISPATCH_POLL_INTERVAL", "2s")
-	_ = os.Setenv("WORKER_API_URL", "http://worker:8081")
 	cfg2 := loadDispatcherConfig()
 	if cfg2.Enabled {
 		t.Error("DISPATCHER_ENABLED=false should set Enabled false")
 	}
 	if cfg2.PollInterval != 2*time.Second {
 		t.Errorf("DISPATCH_POLL_INTERVAL: %v", cfg2.PollInterval)
-	}
-	if cfg2.WorkerAPIURL != "http://worker:8081" {
-		t.Errorf("WORKER_API_URL: %s", cfg2.WorkerAPIURL)
 	}
 }
 
@@ -103,6 +96,15 @@ func newWorkerServerOK(workerResp *workerapi.RunJobResponse) *httptest.Server {
 	}))
 }
 
+// makeDispatchableNode sets the node as active with config ack applied and worker API URL/token (for ListDispatchableNodes).
+func makeDispatchableNode(t *testing.T, mock *testutil.MockDB, ctx context.Context, node *models.Node, workerURL, bearerToken string) {
+	t.Helper()
+	_ = mock.UpdateNodeStatus(ctx, node.ID, models.NodeStatusActive)
+	_ = mock.UpdateNodeWorkerAPIConfig(ctx, node.ID, workerURL, bearerToken)
+	ackAt := time.Now().UTC()
+	_ = mock.UpdateNodeConfigAck(ctx, node.ID, "1", "applied", ackAt, nil)
+}
+
 func TestDispatchOnce_Success(t *testing.T) {
 	workerResp := workerapi.RunJobResponse{
 		Version: 1, TaskID: "t1", JobID: "j1",
@@ -118,13 +120,9 @@ func TestDispatchOnce_Success(t *testing.T) {
 	payload := testJobPayload
 	job, _ := mock.CreateJob(ctx, task.ID, payload)
 	node, _ := mock.CreateNode(ctx, "node-1")
-	_ = mock.UpdateNodeStatus(ctx, node.ID, models.NodeStatusActive)
+	makeDispatchableNode(t, mock, ctx, node, server.URL, "token")
 
-	cfg := dispatcherConfig{
-		WorkerAPIURL: server.URL,
-		BearerToken:  "token",
-		HTTPTimeout:  5 * time.Second,
-	}
+	cfg := dispatcherConfig{HTTPTimeout: 5 * time.Second}
 	client := &http.Client{Timeout: cfg.HTTPTimeout}
 	logger := slog.Default()
 
@@ -137,6 +135,24 @@ func TestDispatchOnce_Success(t *testing.T) {
 	j, _ := mock.GetJobByID(ctx, job.ID)
 	if j.Status != models.JobStatusCompleted {
 		t.Errorf("job status %s", j.Status)
+	}
+}
+
+func TestDispatchOnce_NoDispatchableNodes(t *testing.T) {
+	mock := testutil.NewMockDB()
+	ctx := context.Background()
+	task, _ := mock.CreateTask(ctx, nil, "p")
+	_, _ = mock.CreateJob(ctx, task.ID, testJobPayload)
+	node, _ := mock.CreateNode(ctx, "n1")
+	_ = mock.UpdateNodeStatus(ctx, node.ID, models.NodeStatusActive)
+	// No worker API config or config ack -> not dispatchable
+
+	cfg := dispatcherConfig{}
+	client := &http.Client{}
+	logger := slog.Default()
+	err := dispatchOnce(ctx, mock, client, cfg, logger)
+	if err == nil {
+		t.Fatal("expected error when no dispatchable nodes")
 	}
 }
 
@@ -192,7 +208,11 @@ func TestStartDispatcher_NoToken(t *testing.T) {
 	defer cancel()
 	mock := testutil.NewMockDB()
 	logger := slog.Default()
-	startDispatcher(ctx, mock, logger)
+	// Dispatcher no longer exits early when token unset (uses per-node token); run in goroutine and cancel.
+	go startDispatcher(ctx, mock, logger)
+	<-time.After(25 * time.Millisecond)
+	cancel()
+	<-time.After(10 * time.Millisecond)
 }
 
 func TestStartDispatcher_EnabledOneTick(t *testing.T) {
@@ -214,13 +234,17 @@ func TestStartDispatcher_EnabledOneTick(t *testing.T) {
 	<-time.After(10 * time.Millisecond)
 }
 
-// listActiveNodesErrorStore fails ListActiveNodes so dispatchOnce returns non-ErrNotFound error.
-type listActiveNodesErrorStore struct {
+// listDispatchableNodesErrorStore fails ListDispatchableNodes so dispatchOnce returns non-ErrNotFound error.
+type listDispatchableNodesErrorStore struct {
 	*testutil.MockDB
 }
 
-func (m *listActiveNodesErrorStore) ListActiveNodes(_ context.Context) ([]*models.Node, error) {
+func (m *listDispatchableNodesErrorStore) ListDispatchableNodes(_ context.Context) ([]*models.Node, error) {
 	return nil, errors.New("list nodes error")
+}
+
+func (m *listDispatchableNodesErrorStore) ListActiveNodes(ctx context.Context) ([]*models.Node, error) {
+	return m.MockDB.ListActiveNodes(ctx)
 }
 
 func TestStartDispatcher_DispatchOnceReturnsError(t *testing.T) {
@@ -236,7 +260,7 @@ func TestStartDispatcher_DispatchOnceReturnsError(t *testing.T) {
 	ctx := context.Background()
 	task, _ := base.CreateTask(ctx, nil, "p")
 	_, _ = base.CreateJob(ctx, task.ID, `{"command":["x"]}`)
-	mock := &listActiveNodesErrorStore{MockDB: base}
+	mock := &listDispatchableNodesErrorStore{MockDB: base}
 	ctx, cancel := context.WithCancel(context.Background())
 	logger := slog.Default()
 	go startDispatcher(ctx, mock, logger)
@@ -354,7 +378,7 @@ func TestDispatchOnce_InvalidPayload(t *testing.T) {
 	task, _ := mock.CreateTask(ctx, nil, "p")
 	_, _ = mock.CreateJob(ctx, task.ID, "not-valid-json")
 	node, _ := mock.CreateNode(ctx, "n1")
-	_ = mock.UpdateNodeStatus(ctx, node.ID, models.NodeStatusActive)
+	makeDispatchableNode(t, mock, ctx, node, "http://localhost:8081", "token")
 
 	cfg := dispatcherConfig{}
 	client := &http.Client{}
@@ -376,12 +400,8 @@ func runDispatchOnceWithWorkerStatus(t *testing.T, statusCode int) {
 	task, _ := mock.CreateTask(ctx, nil, "p")
 	_, _ = mock.CreateJob(ctx, task.ID, testJobPayload)
 	node, _ := mock.CreateNode(ctx, "n1")
-	_ = mock.UpdateNodeStatus(ctx, node.ID, models.NodeStatusActive)
-	cfg := dispatcherConfig{
-		WorkerAPIURL: server.URL,
-		BearerToken:  "t",
-		HTTPTimeout:  5 * time.Second,
-	}
+	makeDispatchableNode(t, mock, ctx, node, server.URL, "t")
+	cfg := dispatcherConfig{HTTPTimeout: 5 * time.Second}
 	client := &http.Client{Timeout: cfg.HTTPTimeout}
 	logger := slog.Default()
 	err := dispatchOnce(ctx, mock, client, cfg, logger)
@@ -407,13 +427,9 @@ func TestDispatchOnce_WorkerAPIBadVersion(t *testing.T) {
 	task, _ := mock.CreateTask(ctx, nil, "p")
 	_, _ = mock.CreateJob(ctx, task.ID, testJobPayload)
 	node, _ := mock.CreateNode(ctx, "n1")
-	_ = mock.UpdateNodeStatus(ctx, node.ID, models.NodeStatusActive)
+	makeDispatchableNode(t, mock, ctx, node, server.URL, "t")
 
-	cfg := dispatcherConfig{
-		WorkerAPIURL: server.URL,
-		BearerToken:  "t",
-		HTTPTimeout:  5 * time.Second,
-	}
+	cfg := dispatcherConfig{HTTPTimeout: 5 * time.Second}
 	client := &http.Client{Timeout: cfg.HTTPTimeout}
 	logger := slog.Default()
 	err := dispatchOnce(ctx, mock, client, cfg, logger)
@@ -510,13 +526,9 @@ func TestRun_DispatcherRunsOneTick(t *testing.T) {
 	defer server.Close()
 
 	_ = os.Setenv("LISTEN_ADDR", ":0")
-	_ = os.Setenv("WORKER_API_BEARER_TOKEN", "token")
-	_ = os.Setenv("WORKER_API_URL", server.URL)
 	_ = os.Setenv("DISPATCH_POLL_INTERVAL", "15ms")
 	defer func() {
 		_ = os.Unsetenv("LISTEN_ADDR")
-		_ = os.Unsetenv("WORKER_API_BEARER_TOKEN")
-		_ = os.Unsetenv("WORKER_API_URL")
 		_ = os.Unsetenv("DISPATCH_POLL_INTERVAL")
 	}()
 
@@ -526,7 +538,7 @@ func TestRun_DispatcherRunsOneTick(t *testing.T) {
 	payload := testJobPayload
 	_, _ = mock.CreateJob(ctx, task.ID, payload)
 	node, _ := mock.CreateNode(ctx, "n1")
-	_ = mock.UpdateNodeStatus(ctx, node.ID, models.NodeStatusActive)
+	makeDispatchableNode(t, mock, ctx, node, server.URL, "token")
 
 	runCtx, cancel := context.WithCancel(context.Background())
 	cfg := config.LoadOrchestratorConfig()
@@ -565,7 +577,7 @@ func TestRunMain_OpenFails(t *testing.T) {
 		}
 	}()
 	os.Args = []string{"control-plane"}
-	_ = os.Setenv("DATABASE_URL", "postgres://invalid:invalid@127.0.0.1:1/nonexistent?sslmode=disable")
+	_ = os.Setenv("DATABASE_URL", "postgres://invalid:invalid@127.0.0.1:1/nonexistent?sslmode=disable&connect_timeout=2")
 	code := runMain()
 	if code != 1 {
 		t.Errorf("runMain() = %d, want 1", code)
@@ -769,14 +781,10 @@ func TestDispatchOnce_CompleteJobFails(t *testing.T) {
 	task, _ := base.CreateTask(ctx, nil, "p")
 	_, _ = base.CreateJob(ctx, task.ID, testJobPayload)
 	node, _ := base.CreateNode(ctx, "n1")
-	_ = base.UpdateNodeStatus(ctx, node.ID, models.NodeStatusActive)
+	makeDispatchableNode(t, base, ctx, node, server.URL, "t")
 
 	mock := &completeJobErrorStore{MockDB: base}
-	cfg := dispatcherConfig{
-		WorkerAPIURL: server.URL,
-		BearerToken:  "t",
-		HTTPTimeout:  5 * time.Second,
-	}
+	cfg := dispatcherConfig{HTTPTimeout: 5 * time.Second}
 	client := &http.Client{Timeout: cfg.HTTPTimeout}
 	logger := slog.Default()
 	err := dispatchOnce(ctx, mock, client, cfg, logger)
@@ -804,7 +812,7 @@ func TestDispatchOnce_AssignJobToNodeFails(t *testing.T) {
 	task, _ := mock.CreateTask(ctx, nil, "p")
 	_, _ = mock.CreateJob(ctx, task.ID, testJobPayload)
 	node, _ := mock.CreateNode(ctx, "n1")
-	_ = mock.UpdateNodeStatus(ctx, node.ID, models.NodeStatusActive)
+	makeDispatchableNode(t, mock.MockDB, ctx, node, "http://localhost:8081", "t")
 
 	cfg := dispatcherConfig{}
 	client := &http.Client{}
@@ -821,13 +829,9 @@ func TestDispatchOnce_CallWorkerAPINetworkError(t *testing.T) {
 	task, _ := mock.CreateTask(ctx, nil, "p")
 	_, _ = mock.CreateJob(ctx, task.ID, testJobPayload)
 	node, _ := mock.CreateNode(ctx, "n1")
-	_ = mock.UpdateNodeStatus(ctx, node.ID, models.NodeStatusActive)
+	makeDispatchableNode(t, mock, ctx, node, "http://127.0.0.1:19999", "t")
 
-	cfg := dispatcherConfig{
-		WorkerAPIURL: "http://127.0.0.1:19999",
-		BearerToken:  "t",
-		HTTPTimeout:  100 * time.Millisecond,
-	}
+	cfg := dispatcherConfig{HTTPTimeout: 100 * time.Millisecond}
 	client := &http.Client{Timeout: cfg.HTTPTimeout}
 	logger := slog.Default()
 	err := dispatchOnce(ctx, mock, client, cfg, logger)
@@ -849,13 +853,9 @@ func TestDispatchOnce_WorkerAPIInvalidJSON(t *testing.T) {
 	task, _ := mock.CreateTask(ctx, nil, "p")
 	_, _ = mock.CreateJob(ctx, task.ID, testJobPayload)
 	node, _ := mock.CreateNode(ctx, "n1")
-	_ = mock.UpdateNodeStatus(ctx, node.ID, models.NodeStatusActive)
+	makeDispatchableNode(t, mock, ctx, node, server.URL, "t")
 
-	cfg := dispatcherConfig{
-		WorkerAPIURL: server.URL,
-		BearerToken:  "t",
-		HTTPTimeout:  5 * time.Second,
-	}
+	cfg := dispatcherConfig{HTTPTimeout: 5 * time.Second}
 	client := &http.Client{Timeout: cfg.HTTPTimeout}
 	logger := slog.Default()
 	err := dispatchOnce(ctx, mock, client, cfg, logger)

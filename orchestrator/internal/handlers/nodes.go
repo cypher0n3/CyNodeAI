@@ -289,6 +289,13 @@ func (h *NodeHandler) GetConfig(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// Persist delivered Worker API URL and token so the dispatcher can use them per-node.
+	if workerAPITargetURL != "" && h.workerAPIBearerToken != "" {
+		if err := h.db.UpdateNodeWorkerAPIConfig(ctx, node.ID, workerAPITargetURL, h.workerAPIBearerToken); err != nil {
+			h.logError("update node worker api config", "error", err)
+		}
+	}
+
 	WriteJSON(w, http.StatusOK, payload)
 }
 
