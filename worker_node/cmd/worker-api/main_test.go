@@ -128,7 +128,7 @@ func runJobCmd() []string {
 }
 
 func TestHandleRunJob(t *testing.T) {
-	exec := executor.New("direct", 5*time.Second, 1024)
+	exec := executor.New("direct", 5*time.Second, 1024, "", "", nil)
 	mux := newMux(exec, "test-bearer", "", slog.Default())
 	cmd := runJobCmd()
 	reqBody := workerapi.RunJobRequest{
@@ -149,7 +149,7 @@ func TestHandleRunJob(t *testing.T) {
 		postRunJobSuccess(t, mux, body)
 	})
 	t.Run("success with workspace root", func(t *testing.T) {
-		muxWithWorkspace := newMux(executor.New("direct", 5*time.Second, 1024), "test-bearer", t.TempDir(), slog.Default())
+		muxWithWorkspace := newMux(executor.New("direct", 5*time.Second, 1024, "", "", nil), "test-bearer", t.TempDir(), slog.Default())
 		postRunJobSuccess(t, muxWithWorkspace, body)
 	})
 	t.Run("workspace creation failure returns 500", func(t *testing.T) {
@@ -159,7 +159,7 @@ func TestHandleRunJob(t *testing.T) {
 			t.Fatal(err)
 		}
 		// workspaceDir will be blocker/job-1; MkdirAll fails because blocker is a file
-		muxBad := newMux(executor.New("direct", 5*time.Second, 1024), "test-bearer", blocker, slog.Default())
+		muxBad := newMux(executor.New("direct", 5*time.Second, 1024, "", "", nil), "test-bearer", blocker, slog.Default())
 		w := httptest.NewRecorder()
 		r := httptest.NewRequest(http.MethodPost, "/v1/worker/jobs:run", bytes.NewReader(body))
 		r.Header.Set("Authorization", "Bearer test-bearer")
@@ -214,7 +214,7 @@ func postRunJobExpectBadRequest(t *testing.T, mux *http.ServeMux, badReq *worker
 }
 
 func TestHealthz(t *testing.T) {
-	mux := newMux(executor.New("direct", time.Second, 1024), "token", "", slog.Default())
+	mux := newMux(executor.New("direct", time.Second, 1024, "", "", nil), "token", "", slog.Default())
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest(http.MethodGet, "/healthz", http.NoBody)
 	mux.ServeHTTP(w, r)

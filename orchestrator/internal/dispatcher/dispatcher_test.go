@@ -35,6 +35,14 @@ func TestParseSandboxSpec(t *testing.T) {
 	if spec.Image != "img" || spec.TimeoutSeconds != 30 || len(spec.Command) != 2 {
 		t.Errorf("spec: %+v", spec)
 	}
+
+	spec2, err := ParseSandboxSpec(strPtr(`{"command":["x"],"use_inference":true}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !spec2.UseInference {
+		t.Error("use_inference should be true")
+	}
 }
 
 func TestMarshalDispatchError(t *testing.T) {
