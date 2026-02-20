@@ -66,7 +66,7 @@ func workerMux(exec *executor.Executor, bearerToken string) *http.ServeMux {
 			writeProblem(w, http.StatusBadRequest, problem.TypeValidation, "Bad Request", "validation failed")
 			return
 		}
-		resp, err := exec.RunJob(r.Context(), &req)
+		resp, err := exec.RunJob(r.Context(), &req, "")
 		if err != nil {
 			writeProblem(w, http.StatusInternalServerError, problem.TypeInternal, "Internal Server Error", "Job execution failed")
 			return
@@ -255,6 +255,113 @@ func RegisterWorkerNodeSteps(sc *godog.ScenarioContext, state *workerTestState) 
 		}
 		if dec.ExitCode != code {
 			return fmt.Errorf("exit code %d, want %d", dec.ExitCode, code)
+		}
+		return nil
+	})
+	sc.Step(`^I submit a sandbox job with network_policy "([^"]*)" that runs command "([^"]*)"$`, func(ctx context.Context, networkPolicy, cmd string) error {
+		st := getWorkerState(ctx)
+		if st == nil || st.server == nil {
+			return fmt.Errorf("worker API not started")
+		}
+		body, _ := json.Marshal(map[string]interface{}{
+			"version": 1,
+			"task_id": "bdd-task",
+			"job_id":  "bdd-job",
+			"sandbox": map[string]interface{}{
+				"image":          "alpine:latest",
+				"command":       []string{"sh", "-c", cmd},
+				"network_policy": networkPolicy,
+			},
+		})
+		req, _ := http.NewRequest("POST", st.server.URL+"/v1/worker/jobs:run", bytes.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer "+st.bearerToken)
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			return err
+		}
+		defer resp.Body.Close()
+		st.lastStatus = resp.StatusCode
+		st.lastBody = nil
+		if resp.StatusCode == http.StatusOK {
+			var dec workerapi.RunJobResponse
+			if err := json.NewDecoder(resp.Body).Decode(&dec); err == nil {
+				st.lastBody, _ = json.Marshal(dec)
+			}
+		}
+		return nil
+	})
+	sc.Step(`^the sandbox job completes successfully$`, func(ctx context.Context) error {
+		st := getWorkerState(ctx)
+		if st == nil {
+			return fmt.Errorf("no state")
+		}
+		if st.lastStatus != http.StatusOK {
+			return fmt.Errorf("expected 200, got %d", st.lastStatus)
+		}
+		var dec workerapi.RunJobResponse
+		if err := json.Unmarshal(st.lastBody, &dec); err != nil {
+			return err
+		}
+		if dec.Status != workerapi.StatusCompleted {
+			return fmt.Errorf("status %q, want completed", dec.Status)
+		}
+		return nil
+	})
+	sc.Step(`^the sandbox job result stdout contains "([^"]*)"$`, func(ctx context.Context, want string) error {
+		st := getWorkerState(ctx)
+		if st == nil {
+			return fmt.Errorf("no state")
+		}
+		if st.lastStatus != http.StatusOK {
+			return fmt.Errorf("expected 200, got %d", st.lastStatus)
+		}
+		var dec workerapi.RunJobResponse
+		if err := json.Unmarshal(st.lastBody, &dec); err != nil {
+			return err
+		}
+		if !strings.Contains(dec.Stdout, want) {
+			return fmt.Errorf("stdout %q does not contain %q", dec.Stdout, want)
+		}
+		return nil
+	})
+	sc.Step(`^I submit a sandbox job with env "([^"]*)" that runs command "([^"]*)"$`, func(ctx context.Context, envKV, cmd string) error {
+		st := getWorkerState(ctx)
+		if st == nil || st.server == nil {
+			return fmt.Errorf("worker API not started")
+		}
+		env := make(map[string]string)
+		if envKV != "" {
+			parts := strings.SplitN(envKV, "=", 2)
+			if len(parts) == 2 {
+				env[strings.TrimSpace(parts[0])] = strings.TrimSpace(parts[1])
+			}
+		}
+		body, _ := json.Marshal(map[string]interface{}{
+			"version": 1,
+			"task_id": "bdd-task",
+			"job_id":  "bdd-job",
+			"sandbox": map[string]interface{}{
+				"image":   "alpine:latest",
+				"command": []string{"sh", "-c", cmd},
+				"env":     env,
+			},
+		})
+		req, _ := http.NewRequest("POST", st.server.URL+"/v1/worker/jobs:run", bytes.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer "+st.bearerToken)
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			return err
+		}
+		defer resp.Body.Close()
+		st.lastStatus = resp.StatusCode
+		st.lastBody = nil
+		if resp.StatusCode == http.StatusOK {
+			var dec workerapi.RunJobResponse
+			if err := json.NewDecoder(resp.Body).Decode(&dec); err == nil {
+				st.lastBody, _ = json.Marshal(dec)
+			}
 		}
 		return nil
 	})

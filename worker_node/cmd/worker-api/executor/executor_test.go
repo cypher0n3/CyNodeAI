@@ -3,6 +3,7 @@ package executor
 import (
 	"context"
 	"runtime"
+	"strings"
 	"testing"
 	"time"
 
@@ -35,7 +36,7 @@ func TestRunJobDirectSuccess(t *testing.T) {
 			Command: cmd,
 		},
 	}
-	resp, err := e.RunJob(context.Background(), req)
+	resp, err := e.RunJob(context.Background(), req, "")
 	if err != nil {
 		t.Fatalf("RunJob: %v", err)
 	}
@@ -63,7 +64,7 @@ func TestRunJobDirectExitError(t *testing.T) {
 			Command: cmd,
 		},
 	}
-	resp, err := e.RunJob(context.Background(), req)
+	resp, err := e.RunJob(context.Background(), req, "")
 	if err != nil {
 		t.Fatalf("RunJob: %v", err)
 	}
@@ -88,7 +89,7 @@ func TestRunJobDirectTimeout(t *testing.T) {
 			Command: cmd,
 		},
 	}
-	resp, err := e.RunJob(context.Background(), req)
+	resp, err := e.RunJob(context.Background(), req, "")
 	if err != nil {
 		t.Fatalf("RunJob: %v", err)
 	}
@@ -107,7 +108,7 @@ func TestRunJobDirectNonExitError(t *testing.T) {
 			Command: []string{"/nonexistent-binary-xyz", "arg"},
 		},
 	}
-	resp, err := e.RunJob(context.Background(), req)
+	resp, err := e.RunJob(context.Background(), req, "")
 	if err != nil {
 		t.Fatalf("RunJob: %v", err)
 	}
@@ -133,7 +134,7 @@ func TestRunJobDirectEnv(t *testing.T) {
 			Env:     map[string]string{"FOO": "bar"},
 		},
 	}
-	resp, err := e.RunJob(context.Background(), req)
+	resp, err := e.RunJob(context.Background(), req, "")
 	if err != nil {
 		t.Fatalf("RunJob: %v", err)
 	}
@@ -161,7 +162,7 @@ func TestRunJobDirectTruncation(t *testing.T) {
 			Command: cmd,
 		},
 	}
-	resp, err := e.RunJob(context.Background(), req)
+	resp, err := e.RunJob(context.Background(), req, "")
 	if err != nil {
 		t.Fatalf("RunJob: %v", err)
 	}
@@ -190,7 +191,7 @@ func TestRunJobDefaultImage(t *testing.T) {
 			Command: cmd,
 		},
 	}
-	resp, err := e.RunJob(context.Background(), req)
+	resp, err := e.RunJob(context.Background(), req, "")
 	if err != nil {
 		t.Fatalf("RunJob: %v", err)
 	}
@@ -213,7 +214,7 @@ func TestRunJobDirectStderrTruncation(t *testing.T) {
 		JobID:   "j1",
 		Sandbox: workerapi.SandboxSpec{Command: cmd},
 	}
-	resp, err := e.RunJob(context.Background(), req)
+	resp, err := e.RunJob(context.Background(), req, "")
 	if err != nil {
 		t.Fatalf("RunJob: %v", err)
 	}
@@ -242,7 +243,7 @@ func TestRunJobSandboxTimeoutSeconds(t *testing.T) {
 			TimeoutSeconds: 30,
 		},
 	}
-	resp, err := e.RunJob(context.Background(), req)
+	resp, err := e.RunJob(context.Background(), req, "")
 	if err != nil {
 		t.Fatalf("RunJob: %v", err)
 	}
@@ -265,7 +266,7 @@ func TestRunJobContainerPath(t *testing.T) {
 			Env:     map[string]string{"K": "V"},
 		},
 	}
-	resp, err := e.RunJob(context.Background(), req)
+	resp, err := e.RunJob(context.Background(), req, "")
 	if err != nil {
 		t.Fatalf("RunJob: %v", err)
 	}
@@ -287,11 +288,129 @@ func TestRunJobContainerPathWithTimeout(t *testing.T) {
 			TimeoutSeconds: 30,
 		},
 	}
-	resp, err := e.RunJob(context.Background(), req)
+	resp, err := e.RunJob(context.Background(), req, "")
 	if err != nil {
 		t.Fatalf("RunJob: %v", err)
 	}
 	if resp.Status != workerapi.StatusFailed {
 		t.Errorf("status=%s", resp.Status)
+	}
+}
+
+// TestRunJobContainerPathWithWorkspace covers workspace mount and task env in container path.
+func TestRunJobContainerPathWithWorkspace(t *testing.T) {
+	dir := t.TempDir()
+	e := New("nonexistent-runtime-xyz", 5*time.Second, 1024)
+	req := &workerapi.RunJobRequest{
+		Version: 1,
+		TaskID:  "t1",
+		JobID:   "j1",
+		Sandbox: workerapi.SandboxSpec{
+			Image:         "alpine:latest",
+			Command:       []string{"echo", "hi"},
+			NetworkPolicy: "restricted",
+		},
+	}
+	resp, err := e.RunJob(context.Background(), req, dir)
+	if err != nil {
+		t.Fatalf("RunJob: %v", err)
+	}
+	if resp.Status != workerapi.StatusFailed {
+		t.Errorf("status=%s (expected failed when runtime missing)", resp.Status)
+	}
+}
+
+// TestRunJobDirectCynodeEnvNotOverridable asserts request env cannot override CYNODE_* (sandbox_container.md).
+func TestRunJobDirectCynodeEnvNotOverridable(t *testing.T) {
+	var cmd []string
+	if runtime.GOOS == goOSWindows {
+		cmd = []string{"cmd", "/c", "echo", "%CYNODE_TASK_ID%"}
+	} else {
+		cmd = []string{"sh", "-c", "echo $CYNODE_TASK_ID"}
+	}
+	e := New("direct", 10*time.Second, 1024)
+	req := &workerapi.RunJobRequest{
+		Version: 1,
+		TaskID:  "real-task",
+		JobID:   "real-job",
+		Sandbox: workerapi.SandboxSpec{
+			Command: cmd,
+			Env:     map[string]string{"CYNODE_TASK_ID": "forged"},
+		},
+	}
+	resp, err := e.RunJob(context.Background(), req, "")
+	if err != nil {
+		t.Fatalf("RunJob: %v", err)
+	}
+	if resp.Status != workerapi.StatusCompleted {
+		t.Errorf("status=%s", resp.Status)
+	}
+	if strings.TrimSpace(resp.Stdout) != "real-task" {
+		t.Errorf("stdout %q want real-task (CYNODE_* must not be overridable)", resp.Stdout)
+	}
+}
+
+// TestRunJobDirectTaskEnv asserts CYNODE_TASK_ID, CYNODE_JOB_ID, CYNODE_WORKSPACE_DIR are set (sandbox_container.md).
+func TestRunJobDirectTaskEnv(t *testing.T) {
+	var cmd []string
+	if runtime.GOOS == goOSWindows {
+		cmd = []string{"cmd", "/c", "echo", "%CYNODE_TASK_ID%", "%CYNODE_JOB_ID%", "%CYNODE_WORKSPACE_DIR%"}
+	} else {
+		cmd = []string{"sh", "-c", "echo \"$CYNODE_TASK_ID\" \"$CYNODE_JOB_ID\" \"$CYNODE_WORKSPACE_DIR\""}
+	}
+	e := New("direct", 10*time.Second, 1024)
+	req := &workerapi.RunJobRequest{
+		Version: 1,
+		TaskID:  "task-123",
+		JobID:   "job-456",
+		Sandbox: workerapi.SandboxSpec{Command: cmd},
+	}
+	dir := t.TempDir()
+	resp, err := e.RunJob(context.Background(), req, dir)
+	if err != nil {
+		t.Fatalf("RunJob: %v", err)
+	}
+	if resp.Status != workerapi.StatusCompleted {
+		t.Errorf("status=%s", resp.Status)
+	}
+	// Direct mode: CYNODE_WORKSPACE_DIR is the host path (dir)
+	out := strings.TrimSpace(resp.Stdout)
+	if runtime.GOOS == goOSWindows {
+		if !strings.Contains(out, "task-123") || !strings.Contains(out, "job-456") {
+			t.Errorf("stdout %q should contain task and job ids", out)
+		}
+	} else {
+		if out != "task-123 job-456 "+dir {
+			t.Errorf("stdout %q want task-123 job-456 %s", out, dir)
+		}
+	}
+}
+
+// TestRunJobDirectWorkspaceDir asserts working directory is set when workspaceDir is provided.
+func TestRunJobDirectWorkspaceDir(t *testing.T) {
+	var cmd []string
+	if runtime.GOOS == goOSWindows {
+		cmd = []string{"cmd", "/c", "cd"}
+	} else {
+		cmd = []string{"sh", "-c", "pwd"}
+	}
+	e := New("direct", 10*time.Second, 1024)
+	req := &workerapi.RunJobRequest{
+		Version: 1,
+		TaskID:  "t",
+		JobID:   "j",
+		Sandbox: workerapi.SandboxSpec{Command: cmd},
+	}
+	dir := t.TempDir()
+	resp, err := e.RunJob(context.Background(), req, dir)
+	if err != nil {
+		t.Fatalf("RunJob: %v", err)
+	}
+	if resp.Status != workerapi.StatusCompleted {
+		t.Errorf("status=%s", resp.Status)
+	}
+	out := strings.TrimSpace(resp.Stdout)
+	if runtime.GOOS != goOSWindows && !strings.HasSuffix(out, dir) {
+		t.Errorf("pwd %q should end with workspace dir %q", out, dir)
 	}
 }
