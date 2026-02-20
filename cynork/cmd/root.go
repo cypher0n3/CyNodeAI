@@ -12,6 +12,9 @@ import (
 var (
 	configPath string
 	cfg        *config.Config
+	// getDefaultConfigPath resolves the default config file path when --config is not set.
+	// Tests may override to inject failures.
+	getDefaultConfigPath = config.ConfigPath
 )
 
 // rootCmd represents the base command.

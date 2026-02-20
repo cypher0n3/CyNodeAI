@@ -308,6 +308,9 @@ func (e *Executor) runDirect(ctx context.Context, req *workerapi.RunJobRequest, 
 		cmd.Dir = workspaceDir
 	}
 	env := e.buildTaskEnv(req, workspaceDirValue)
+	if req.Sandbox.UseInference && e.ollamaUpstreamURL != "" {
+		env[envOllamaBaseURL] = ollamaBaseURLInPod
+	}
 	envSlice := make([]string, 0, len(env))
 	for k, v := range env {
 		envSlice = append(envSlice, fmt.Sprintf("%s=%s", k, v))

@@ -42,3 +42,12 @@ Feature: cynork CLI
     Then cynork exits with code 0
     And cynork stdout contains "status=completed"
     And cynork stdout contains "hello"
+
+  @req_client_0150
+  @spec_cynai_client_clisessionpersistence
+  Scenario: Consecutive invocations use stored session
+    When I run cynork auth login with username "alice" and password "secret"
+    Then cynork exits with code 0
+    When I run cynork auth whoami using the stored config
+    Then cynork exits with code 0
+    And cynork stdout contains "handle=alice"

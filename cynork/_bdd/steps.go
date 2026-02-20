@@ -25,6 +25,7 @@ const stateKey ctxKey = 0
 type cynorkState struct {
 	mockServer *httptest.Server
 	cynorkBin  string
+	configPath string // path to config file for session persistence (login writes, whoami reads)
 	lastExit   int
 	lastStdout string
 	lastStderr string
@@ -183,6 +184,7 @@ func InitializeCynorkSuite(sc *godog.ScenarioContext, state *cynorkState) {
 		}
 		tmpDir := filepath.Join(root, "tmp")
 		_ = os.MkdirAll(tmpDir, 0o755)
+		state.configPath = filepath.Join(tmpDir, "cynork-bdd-config.yaml")
 		bin := filepath.Join(tmpDir, "cynork-bdd")
 		cynorkDir := filepath.Join(root, "cynork")
 		if _, err := os.Stat(bin); err != nil {
@@ -247,7 +249,8 @@ func InitializeCynorkSuite(sc *godog.ScenarioContext, state *cynorkState) {
 
 	sc.Step(`^I run cynork auth login with username "([^"]*)" and password "([^"]*)"$`, func(ctx context.Context, user, pass string) error {
 		st := getState(ctx)
-		st.lastExit, st.lastStdout, st.lastStderr = st.runCynork([]string{"auth", "login", "-u", user, "-p", pass}, "CYNORK_GATEWAY_URL="+st.mockServer.URL)
+		args := []string{"--config", st.configPath, "auth", "login", "-u", user, "-p", pass}
+		st.lastExit, st.lastStdout, st.lastStderr = st.runCynork(args, "CYNORK_GATEWAY_URL="+st.mockServer.URL)
 		if st.lastExit == 0 {
 			st.token = "tok-" + user
 		}
@@ -260,13 +263,24 @@ func InitializeCynorkSuite(sc *godog.ScenarioContext, state *cynorkState) {
 		if st.token != "" {
 			env = append(env, "CYNORK_TOKEN="+st.token)
 		}
-		st.lastExit, st.lastStdout, st.lastStderr = st.runCynork([]string{"auth", "whoami"}, env...)
+		args := []string{"--config", st.configPath, "auth", "whoami"}
+		st.lastExit, st.lastStdout, st.lastStderr = st.runCynork(args, env...)
+		return nil
+	})
+
+	sc.Step(`^I run cynork auth whoami using the stored config$`, func(ctx context.Context) error {
+		st := getState(ctx)
+		// No CYNORK_TOKEN: whoami must read token from config file (session persistence).
+		env := []string{"CYNORK_GATEWAY_URL=" + st.mockServer.URL}
+		args := []string{"--config", st.configPath, "auth", "whoami"}
+		st.lastExit, st.lastStdout, st.lastStderr = st.runCynork(args, env...)
 		return nil
 	})
 
 	sc.Step(`^I am logged in with username "([^"]*)" and password "([^"]*)"$`, func(ctx context.Context, user, pass string) error {
 		st := getState(ctx)
-		st.lastExit, st.lastStdout, st.lastStderr = st.runCynork([]string{"auth", "login", "-u", user, "-p", pass}, "CYNORK_GATEWAY_URL="+st.mockServer.URL)
+		args := []string{"--config", st.configPath, "auth", "login", "-u", user, "-p", pass}
+		st.lastExit, st.lastStdout, st.lastStderr = st.runCynork(args, "CYNORK_GATEWAY_URL="+st.mockServer.URL)
 		if st.lastExit != 0 {
 			return fmt.Errorf("login failed: %s", st.lastStderr)
 		}
@@ -277,7 +291,8 @@ func InitializeCynorkSuite(sc *godog.ScenarioContext, state *cynorkState) {
 	sc.Step(`^I run cynork task create with prompt "([^"]*)"$`, func(ctx context.Context, prompt string) error {
 		st := getState(ctx)
 		env := []string{"CYNORK_GATEWAY_URL=" + st.mockServer.URL, "CYNORK_TOKEN=" + st.token}
-		st.lastExit, st.lastStdout, st.lastStderr = st.runCynork([]string{"task", "create", "-p", prompt}, env...)
+		args := []string{"--config", st.configPath, "task", "create", "-p", prompt}
+		st.lastExit, st.lastStdout, st.lastStderr = st.runCynork(args, env...)
 		return nil
 	})
 
@@ -296,7 +311,8 @@ func InitializeCynorkSuite(sc *godog.ScenarioContext, state *cynorkState) {
 			return fmt.Errorf("no stored task id")
 		}
 		env := []string{"CYNORK_GATEWAY_URL=" + st.mockServer.URL, "CYNORK_TOKEN=" + st.token}
-		st.lastExit, st.lastStdout, st.lastStderr = st.runCynork([]string{"task", "result", st.taskID}, env...)
+		args := []string{"--config", st.configPath, "task", "result", st.taskID}
+		st.lastExit, st.lastStdout, st.lastStderr = st.runCynork(args, env...)
 		return nil
 	})
 }

@@ -95,7 +95,7 @@ func InitializeWorkerNodeSuite(sc *godog.ScenarioContext, state *workerTestState
 			getEnv("CONTAINER_RUNTIME", "direct"),
 			30*time.Second,
 			1<<20,
-			"",
+			getEnv("OLLAMA_UPSTREAM_URL", "http://localhost:11434"),
 			"",
 			nil,
 		)
@@ -325,6 +325,39 @@ func RegisterWorkerNodeSteps(sc *godog.ScenarioContext, state *workerTestState) 
 		}
 		if !strings.Contains(dec.Stdout, want) {
 			return fmt.Errorf("stdout %q does not contain %q", dec.Stdout, want)
+		}
+		return nil
+	})
+	sc.Step(`^I submit a sandbox job with use_inference that runs command "([^"]*)"$`, func(ctx context.Context, cmd string) error {
+		st := getWorkerState(ctx)
+		if st == nil || st.server == nil {
+			return fmt.Errorf("worker API not started")
+		}
+		body, _ := json.Marshal(map[string]interface{}{
+			"version": 1,
+			"task_id": "bdd-task",
+			"job_id":  "bdd-job",
+			"sandbox": map[string]interface{}{
+				"image":         "alpine:latest",
+				"command":       []string{"sh", "-c", cmd},
+				"use_inference": true,
+			},
+		})
+		req, _ := http.NewRequest("POST", st.server.URL+"/v1/worker/jobs:run", bytes.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer "+st.bearerToken)
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			return err
+		}
+		defer resp.Body.Close()
+		st.lastStatus = resp.StatusCode
+		st.lastBody = nil
+		if resp.StatusCode == http.StatusOK {
+			var dec workerapi.RunJobResponse
+			if err := json.NewDecoder(resp.Body).Decode(&dec); err == nil {
+				st.lastBody, _ = json.Marshal(dec)
+			}
 		}
 		return nil
 	})

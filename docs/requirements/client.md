@@ -197,3 +197,8 @@ It covers user-facing management surfaces and user preference behavior.
   [CYNAI.CLIENT.CliTokenResolution](../tech_specs/cli_management_app.md#spec-cynai-client-clitokenresolution)
   [CYNAI.CLIENT.CliCredentialHelperProtocol](../tech_specs/cli_management_app.md#spec-cynai-client-clicredentialhelperprotocol)
   <a id="req-client-0149"></a>
+- **REQ-CLIENT-0150:** The CLI MUST store session credentials (e.g. token after login) in a reliable way so that multiple consecutive CLI invocations can reuse the token without re-authenticating.
+  The config file path MUST be resolved consistently (e.g. honoring XDG_CONFIG_HOME); writes MUST be atomic (e.g. temp file then rename) so a crash does not leave a partial file; and if the default config path cannot be resolved (e.g. no home dir), login and logout MUST fail with a clear error.
+  [CYNAI.CLIENT.CliConfigFileLocation](../tech_specs/cli_management_app.md#spec-cynai-client-cliconfigfilelocation)
+  [CYNAI.CLIENT.CliSessionPersistence](../tech_specs/cli_management_app.md#spec-cynai-client-clisessionpersistence)
+  <a id="req-client-0150"></a>
