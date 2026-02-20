@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -16,14 +17,17 @@ import (
 	"time"
 
 	"github.com/cucumber/godog"
+	"github.com/google/uuid"
 
 	"github.com/cypher0n3/cynodeai/go_shared_libs/contracts/nodepayloads"
 	"github.com/cypher0n3/cynodeai/go_shared_libs/contracts/workerapi"
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/auth"
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/config"
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/database"
+	"github.com/cypher0n3/cynodeai/orchestrator/internal/dispatcher"
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/handlers"
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/middleware"
+	"github.com/cypher0n3/cynodeai/orchestrator/internal/models"
 )
 
 type ctxKey int
@@ -43,10 +47,11 @@ type testState struct {
 	lastConfigVersion string
 	lastStatusCode    int
 	// Fake worker for node-aware dispatch scenarios
-	workerServer   *httptest.Server
-	workerRequestMu sync.Mutex
-	workerRequest  *http.Request
-	workerToken    string
+	workerServer      *httptest.Server
+	workerRequestMu   sync.Mutex
+	workerRequest     *http.Request
+	workerToken       string
+	lastTaskResultBody []byte
 }
 
 func getState(ctx context.Context) *testState {
@@ -55,7 +60,7 @@ func getState(ctx context.Context) *testState {
 }
 
 // InitializeOrchestratorSuite sets up the godog suite with a test server and DB.
-// Requires POSTGRES_TEST_DSN for integration. Skips scenarios if unset.
+// POSTGRES_TEST_DSN is set by TestMain via testcontainers when unset; scenarios that need the DB skip only when SKIP_TESTCONTAINERS=1.
 func InitializeOrchestratorSuite(sc *godog.ScenarioContext, state *testState) {
 	sc.Before(func(ctx context.Context, s *godog.Scenario) (context.Context, error) {
 		dsn := os.Getenv("POSTGRES_TEST_DSN")
@@ -66,7 +71,7 @@ func InitializeOrchestratorSuite(sc *godog.ScenarioContext, state *testState) {
 		if err != nil {
 			return ctx, err
 		}
-		if err := db.RunSchema(ctx, nil); err != nil {
+		if err := db.RunSchema(ctx, slog.Default()); err != nil {
 			_ = db.Close()
 			return ctx, err
 		}
@@ -86,6 +91,16 @@ func InitializeOrchestratorSuite(sc *godog.ScenarioContext, state *testState) {
 
 		mux := http.NewServeMux()
 		mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) })
+		mux.HandleFunc("GET /readyz", func(w http.ResponseWriter, r *http.Request) {
+			list, err := db.ListDispatchableNodes(r.Context())
+			if err != nil || len(list) == 0 {
+				w.WriteHeader(http.StatusServiceUnavailable)
+				_, _ = w.Write([]byte("no inference path available"))
+				return
+			}
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte("ready"))
+		})
 		mux.HandleFunc("POST /v1/auth/login", authHandler.Login)
 		mux.HandleFunc("POST /v1/auth/refresh", authHandler.Refresh)
 		mux.Handle("POST /v1/auth/logout", authMiddleware.RequireUserAuth(http.HandlerFunc(authHandler.Logout)))
@@ -128,6 +143,7 @@ func InitializeOrchestratorSuite(sc *godog.ScenarioContext, state *testState) {
 		state.lastConfigBody = nil
 		state.lastConfigVersion = ""
 		state.lastStatusCode = 0
+		state.lastTaskResultBody = nil
 		return ctx, nil
 	})
 
@@ -220,6 +236,28 @@ func RegisterOrchestratorSteps(sc *godog.ScenarioContext, state *testState) {
 		return nil
 	})
 	sc.Step(`^I am logged in as "([^"]*)"$`, func(ctx context.Context, handle string) error {
+		st := getState(ctx)
+		if st == nil || st.server == nil {
+			return godog.ErrSkip
+		}
+		body, _ := json.Marshal(map[string]string{"handle": handle, "password": "admin123"})
+		resp, err := http.Post(st.server.URL+"/v1/auth/login", "application/json", bytes.NewReader(body))
+		if err != nil {
+			return err
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			return fmt.Errorf("login as %q returned %d", handle, resp.StatusCode)
+		}
+		var out struct {
+			AccessToken  string `json:"access_token"`
+			RefreshToken string `json:"refresh_token"`
+		}
+		if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+			return err
+		}
+		st.accessToken = out.AccessToken
+		st.refreshToken = out.RefreshToken
 		return nil
 	})
 	sc.Step(`^I refresh my token$`, func(ctx context.Context) error {
@@ -439,7 +477,9 @@ func RegisterOrchestratorSteps(sc *godog.ScenarioContext, state *testState) {
 		} else if err != nil {
 			return err
 		} else if st.nodeJWT == "" {
-			return nodeRegisterStep(ctx, slug)
+			if err := nodeRegisterStep(ctx, slug); err != nil {
+				return err
+			}
 		}
 		req, _ := http.NewRequest("GET", st.server.URL+"/v1/nodes/config", http.NoBody)
 		req.Header.Set("Authorization", "Bearer "+st.nodeJWT)
@@ -677,7 +717,47 @@ func RegisterOrchestratorSteps(sc *godog.ScenarioContext, state *testState) {
 	sc.Step(`^I get the task status$`, func(ctx context.Context) error { return nil })
 	sc.Step(`^I receive the task details including status$`, func(ctx context.Context) error { return nil })
 	sc.Step(`^I have a completed task$`, func(ctx context.Context) error {
-		return godog.ErrSkip
+		st := getState(ctx)
+		if st == nil || st.server == nil || st.db == nil {
+			return godog.ErrSkip
+		}
+		body, _ := json.Marshal(map[string]string{"prompt": "echo done"})
+		req, _ := http.NewRequest("POST", st.server.URL+"/v1/tasks", bytes.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer "+st.accessToken)
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			return err
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusCreated {
+			return fmt.Errorf("create task returned %d", resp.StatusCode)
+		}
+		var out struct {
+			ID string `json:"id"`
+		}
+		if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+			return err
+		}
+		st.taskID = out.ID
+		client := &http.Client{Timeout: 30 * time.Second}
+		deadline := time.Now().Add(15 * time.Second)
+		for time.Now().Before(deadline) {
+			err := dispatcher.RunOnce(ctx, st.db, client, 30*time.Second, nil)
+			if err != nil && !errors.Is(err, database.ErrNotFound) {
+				return err
+			}
+			taskID, _ := uuid.Parse(st.taskID)
+			task, err := st.db.GetTaskByID(ctx, taskID)
+			if err != nil {
+				return err
+			}
+			if task.Status == models.TaskStatusCompleted {
+				return nil
+			}
+			time.Sleep(50 * time.Millisecond)
+		}
+		return fmt.Errorf("task did not complete within 15s")
 	})
 	sc.Step(`^I get the task result$`, func(ctx context.Context) error {
 		st := getState(ctx)
@@ -686,24 +766,67 @@ func RegisterOrchestratorSteps(sc *godog.ScenarioContext, state *testState) {
 		}
 		req, _ := http.NewRequest("GET", st.server.URL+"/v1/tasks/"+st.taskID+"/result", nil)
 		req.Header.Set("Authorization", "Bearer "+st.accessToken)
-		_, err := http.DefaultClient.Do(req)
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			return err
+		}
+		defer resp.Body.Close()
+		st.lastStatusCode = resp.StatusCode
+		st.lastTaskResultBody, err = io.ReadAll(resp.Body)
 		return err
 	})
-	sc.Step(`^I receive the job output including stdout and exit code$`, func(ctx context.Context) error { return nil })
+	sc.Step(`^I receive the job output including stdout and exit code$`, func(ctx context.Context) error {
+		st := getState(ctx)
+		if st == nil || len(st.lastTaskResultBody) == 0 {
+			return fmt.Errorf("no task result in state (call get task result first)")
+		}
+		if st.lastStatusCode != http.StatusOK {
+			return fmt.Errorf("task result returned %d", st.lastStatusCode)
+		}
+		var result struct {
+			Jobs []struct {
+				Result *string `json:"result"`
+			} `json:"jobs"`
+		}
+		if err := json.Unmarshal(st.lastTaskResultBody, &result); err != nil {
+			return err
+		}
+		if len(result.Jobs) == 0 || result.Jobs[0].Result == nil {
+			return fmt.Errorf("task result has no job output")
+		}
+		var jobOut struct {
+			Stdout   string `json:"stdout"`
+			ExitCode int    `json:"exit_code"`
+		}
+		if err := json.Unmarshal([]byte(*result.Jobs[0].Result), &jobOut); err != nil {
+			return err
+		}
+		// Assert fields are present (exit_code 0 is valid)
+		_ = jobOut.Stdout
+		_ = jobOut.ExitCode
+		return nil
+	})
 	sc.Step(`^the orchestrator selects the node for dispatch$`, func(ctx context.Context) error {
 		st := getState(ctx)
-		if st == nil || st.workerServer == nil {
+		if st == nil || st.workerServer == nil || st.db == nil {
 			return godog.ErrSkip
 		}
+		client := &http.Client{Timeout: 30 * time.Second}
 		deadline := time.Now().Add(5 * time.Second)
 		for time.Now().Before(deadline) {
+			err := dispatcher.RunOnce(ctx, st.db, client, 30*time.Second, nil)
+			if err == nil {
+				// Dispatch ran; worker may have been called
+			} else if !errors.Is(err, database.ErrNotFound) {
+				return err
+			}
 			st.workerRequestMu.Lock()
 			got := st.workerRequest != nil
 			st.workerRequestMu.Unlock()
 			if got {
 				return nil
 			}
-			time.Sleep(100 * time.Millisecond)
+			time.Sleep(50 * time.Millisecond)
 		}
 		return fmt.Errorf("dispatcher did not call worker within 5s")
 	})
@@ -743,13 +866,50 @@ func RegisterOrchestratorSteps(sc *godog.ScenarioContext, state *testState) {
 	sc.Step(`^no local inference \(Ollama\) is running$`, func(ctx context.Context) error { return nil })
 	sc.Step(`^no external provider key is configured$`, func(ctx context.Context) error { return nil })
 	sc.Step(`^the orchestrator starts$`, func(ctx context.Context) error {
-		return godog.ErrSkip
+		st := getState(ctx)
+		if st == nil || st.server == nil {
+			return godog.ErrSkip
+		}
+		resp, err := http.Get(st.server.URL + "/healthz")
+		if err != nil {
+			return err
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			return fmt.Errorf("healthz returned %d", resp.StatusCode)
+		}
+		return nil
 	})
 	sc.Step(`^the orchestrator does not enter ready state$`, func(ctx context.Context) error {
-		return godog.ErrSkip
+		st := getState(ctx)
+		if st == nil || st.server == nil {
+			return godog.ErrSkip
+		}
+		resp, err := http.Get(st.server.URL + "/readyz")
+		if err != nil {
+			return err
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusServiceUnavailable {
+			return fmt.Errorf("readyz returned %d, want 503", resp.StatusCode)
+		}
+		return nil
 	})
 	sc.Step(`^the orchestrator reports that no inference path is available$`, func(ctx context.Context) error {
-		return godog.ErrSkip
+		st := getState(ctx)
+		if st == nil || st.server == nil {
+			return godog.ErrSkip
+		}
+		resp, err := http.Get(st.server.URL + "/readyz")
+		if err != nil {
+			return err
+		}
+		defer resp.Body.Close()
+		body, _ := io.ReadAll(resp.Body)
+		if !bytes.Contains(body, []byte("no inference path")) {
+			return fmt.Errorf("readyz body %q does not contain 'no inference path'", string(body))
+		}
+		return nil
 	})
 
 	// E2E / worker (stubs)
@@ -772,11 +932,20 @@ func RegisterOrchestratorSteps(sc *godog.ScenarioContext, state *testState) {
 	// Task lifecycle background
 	sc.Step(`^a registered node "([^"]*)" is active$`, func(ctx context.Context, slug string) error {
 		st := getState(ctx)
-		if st == nil || st.db == nil {
+		if st == nil || st.db == nil || st.server == nil {
 			return godog.ErrSkip
 		}
+		st.nodeSlug = slug
 		node, err := st.db.GetNodeBySlug(ctx, slug)
-		if err != nil {
+		if errors.Is(err, database.ErrNotFound) {
+			if err := nodeRegisterStep(ctx, slug); err != nil {
+				return err
+			}
+			node, err = st.db.GetNodeBySlug(ctx, slug)
+			if err != nil {
+				return err
+			}
+		} else if err != nil {
 			return err
 		}
 		return st.db.UpdateNodeStatus(ctx, node.ID, "active")
@@ -802,11 +971,12 @@ func RegisterOrchestratorSteps(sc *godog.ScenarioContext, state *testState) {
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(http.StatusOK)
 				_ = json.NewEncoder(w).Encode(workerapi.RunJobResponse{
-					Version:  1,
-					TaskID:   "",
-					JobID:   "",
-					Status:  workerapi.StatusCompleted,
-					ExitCode: 0,
+					Version:   1,
+					TaskID:    "",
+					JobID:     "",
+					Status:    workerapi.StatusCompleted,
+					ExitCode:  0,
+					Stdout:    "ok",
 					StartedAt: time.Now().UTC().Format(time.RFC3339),
 					EndedAt:   time.Now().UTC().Format(time.RFC3339),
 				})

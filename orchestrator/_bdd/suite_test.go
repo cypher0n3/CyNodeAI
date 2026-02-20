@@ -1,5 +1,6 @@
 // Package bdd runs the orchestrator Godog BDD suite.
-// Run with POSTGRES_TEST_DSN set for integration; scenarios are skipped otherwise.
+// TestMain starts Postgres via testcontainers when POSTGRES_TEST_DSN is unset (see testmain_test.go).
+// Set SKIP_TESTCONTAINERS=1 to run without a DB; scenarios that need the DB will skip.
 package bdd
 
 import (

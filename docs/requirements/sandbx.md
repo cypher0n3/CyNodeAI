@@ -62,7 +62,6 @@ It covers sandbox execution, container constraints, and isolation requirements.
 - **REQ-SANDBX-0114:** Sandboxes SHOULD use artifact upload and download mechanisms for data exchange.
   [CYNAI.SANDBX.ArtifactsDataExchange](../tech_specs/sandbox_container.md#spec-cynai-sandbx-artifactsexchange)
   <a id="req-sandbx-0114"></a>
-
 - **REQ-SANDBX-0115:** The sandbox image registry MUST be configurable.
   [CYNAI.SANDBX.RegistryOptions](../tech_specs/sandbox_image_registry.md#spec-cynai-sandbx-registryoptions)
   <a id="req-sandbx-0115"></a>
@@ -81,3 +80,13 @@ It covers sandbox execution, container constraints, and isolation requirements.
 - **REQ-SANDBX-0120:** Publishing and use of sandbox images MUST be policy-controlled and audited.
   [CYNAI.SANDBX.AccessControlAuditing](../tech_specs/sandbox_image_registry.md#spec-cynai-sandbx-accesscontrolauditing)
   <a id="req-sandbx-0120"></a>
+- **REQ-SANDBX-0121:** The system MUST support long-running sandbox sessions where the same container remains alive across multiple command executions so that an AI model can send commands, receive results, and continue working on the same problem in the same environment.
+  [CYNAI.SANDBX.LongRunningSession](../tech_specs/sandbox_container.md#spec-cynai-sandbx-longrunningsession)
+  <a id="req-sandbx-0121"></a>
+- **REQ-SANDBX-0122:** Within a session sandbox, the workspace MUST persist across command rounds so that state and artifacts from one command are available to the next.
+  [CYNAI.SANDBX.LongRunningSession](../tech_specs/sandbox_container.md#spec-cynai-sandbx-longrunningsession)
+  <a id="req-sandbx-0122"></a>
+- **REQ-SANDBX-0123:** If Git is present in a sandbox image, sandboxes MAY run local-only Git commands against the mounted workspace, but sandboxes MUST NOT perform any Git operation that contacts a remote or requires Git host network access.
+  Remote Git operations MUST be performed via Git egress.
+  [CYNAI.SANDBX.GitLocalOnly](../tech_specs/sandbox_container.md#spec-cynai-sandbx-gitlocalonly)
+  <a id="req-sandbx-0123"></a>

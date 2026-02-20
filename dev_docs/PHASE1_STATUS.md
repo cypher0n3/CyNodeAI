@@ -222,8 +222,9 @@ Alternatively use `./scripts/setup-dev.sh start` (starts Postgres, control-plane
 build first with `./scripts/setup-dev.sh build`), then start node manually or run `just e2e`
 which runs the full demo including the node.
 
-**BDD:** The scenarios in `features/e2e/single_node_happy_path.feature` are exercised by the same
-E2E flow; run `just e2e` or `./scripts/setup-dev.sh test-e2e` (with services already started).
+**BDD:** Run `just test-bdd` to run the orchestrator and worker_node Godog suites.
+The orchestrator suite starts Postgres via testcontainers when `POSTGRES_TEST_DSN` is unset; set `SKIP_TESTCONTAINERS=1` to run without a DB (scenarios that need the DB will skip).
+The scenarios in `features/e2e/single_node_happy_path.feature` are exercised by the same E2E flow; run `just e2e` or `./scripts/setup-dev.sh test-e2e` (with services already started).
 
 ### Code Review (2026-02-20)
 
@@ -232,7 +233,7 @@ Summary:
 
 - **Implemented:** Node-aware dispatch (per-node URL and token from config), config delivery and config ack, node manager startup order (register -> fetch config -> start Worker API -> start Ollama -> config ack), sandbox network policy and workspace/env, user auth and task APIs.
 - **Gaps:** `config_version` not ULID per spec; Ollama image from env rather than orchestrator config; Worker API missing `GET /readyz`; capability report schema in code is minimal vs full spec; orchestrator fail-fast scenario scope unclear (node vs orchestrator).
-- **Feature/BDD:** Feature files for orchestrator and worker_node cover registration, config, dispatcher, sandbox, and node manager; BDD steps skip when `POSTGRES_TEST_DSN` is unset (run with DB for full Phase 1 coverage).
+- **Feature/BDD:** Feature files for orchestrator and worker_node cover registration, config, dispatcher, sandbox, and node manager; orchestrator BDD starts Postgres via testcontainers when DSN is unset for full Phase 1 coverage.
 
 ### Recent Updates (Phase 1 CI and Refactor)
 

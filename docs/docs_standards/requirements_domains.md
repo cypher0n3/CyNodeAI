@@ -51,3 +51,5 @@ The filename is the domain tag lowercased.
   - Requirements file: [`docs/requirements/bootst.md`](../requirements/bootst.md)
 - `STANDS`: Cross-cutting standards and conventions (for example REST API standards) that apply across components.
   - Requirements file: [`docs/requirements/stands.md`](../requirements/stands.md)
+- `SKILLS`: AI skills file storage, tracking, and exposure to inference models that support skills.
+  - Requirements file: [`docs/requirements/skills.md`](../requirements/skills.md)

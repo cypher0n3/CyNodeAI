@@ -37,6 +37,8 @@ See:
 
 ## Tech Spec Conventions
 
+- Tech specs must be **highly prescriptive** and **leave no room for interpretation**.
+  Implementation choices, behavior, contracts, and algorithms must be stated unambiguously so that implementers and reviewers can verify compliance without inferring intent.
 - Use prose to describe technical implementation and behavior.
 - Keep code in tech specs minimal.
   Prefer function signatures, constants, generic type definitions, and short usage snippets.
@@ -73,8 +75,9 @@ See:
 ### Technical Specifications (`docs/tech_specs/`)
 
 Tech specs define **how we build it**.
-They describe architecture, design, flows, and implementation details for the requirements.
-They should define Spec Items with Spec IDs and stable anchors.
+They are **highly prescriptive**: they must describe architecture, design, flows, and implementation details in unambiguous terms so that there is no room for interpretation.
+Implementations must be verifiable against the spec without inferring author intent.
+Tech specs should define Spec Items with Spec IDs and stable anchors.
 
 Rules:
 

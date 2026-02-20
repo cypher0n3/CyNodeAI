@@ -12,6 +12,7 @@
 - [Environment Variables](#environment-variables)
 - [Network Expectations](#network-expectations)
 - [Artifacts and Data Exchange](#artifacts-and-data-exchange)
+- [Long-Running Session Sandboxes](#long-running-session-sandboxes)
 - [Non-Requirements](#non-requirements)
 
 ## Document Overview
@@ -123,7 +124,30 @@ Compression and archive handling
 Notes
 
 - Network clients such as `curl` or `wget` are optional because sandboxes may have no outbound access.
-- Git is optional because Git operations requiring credentials SHOULD be performed via Git Egress.
+- Git is optional because Git operations requiring remote access MUST be performed via Git Egress.
+  If Git is present, local-only Git commands are allowed, but remote-affecting operations (for example `git clone`, `git fetch`, `git pull`, `git push`, submodule fetch/update, and Git LFS downloads) MUST NOT be performed from inside a sandbox.
+
+## Git Behavior (Local-Only)
+
+- Spec ID: `CYNAI.SANDBX.GitLocalOnly` <a id="spec-cynai-sandbx-gitlocalonly"></a>
+
+Traces To:
+
+- [REQ-SANDBX-0123](../requirements/sandbx.md#req-sandbx-0123)
+
+This section removes ambiguity about Git usage inside sandboxes.
+
+Allowed (local-only)
+
+- Sandboxes MAY run local-only Git commands against the mounted workspace.
+  Examples include `git status`, `git diff`, `git log`, `git add`, and local `git commit`.
+
+Disallowed (remote-affecting)
+
+- Sandboxes MUST NOT contact Git remotes directly.
+  This includes `git clone`, `git fetch`, `git pull`, `git push`, submodule fetch/update, Git LFS operations, and any Git remote helper that performs network access.
+- Remote Git operations MUST be performed by Git egress, using task-scoped changeset artifacts.
+  See `docs/tech_specs/git_egress_mcp.md`.
 
 ## Recommended Optional Tooling Profiles
 
@@ -212,6 +236,37 @@ Traces To:
 - [REQ-SANDBX-0114](../requirements/sandbx.md#req-sandbx-0114)
 
 See [`docs/tech_specs/user_api_gateway.md`](user_api_gateway.md) and [`docs/tech_specs/mcp_tooling.md`](mcp_tooling.md).
+
+## Long-Running Session Sandboxes
+
+- Spec ID: `CYNAI.SANDBX.LongRunningSession` <a id="spec-cynai-sandbx-longrunningsession"></a>
+
+Traces To:
+
+- [REQ-SANDBX-0121](../requirements/sandbx.md#req-sandbx-0121)
+- [REQ-SANDBX-0122](../requirements/sandbx.md#req-sandbx-0122)
+
+For longer-running tasks, the system supports **session sandboxes**: a single container that stays alive across multiple command executions.
+The AI model (via the orchestrator) can send a command, receive the result, then send another command in the same container, so that work continues in the same environment with persistent workspace state.
+
+### `LongRunningSession` Scope
+
+- The same container is reused for multiple exec rounds; the container is not torn down after each command.
+- Control is still via the container runtime (exec); no inbound SSH or long-lived network server inside the sandbox is required.
+- The same threat model, connectivity rules, and artifact exchange apply as for single-shot sandboxes.
+
+### `LongRunningSession` Outcomes
+
+- The workspace directory (e.g. `/workspace`) persists across command rounds; files and state written by one command are visible to the next.
+- The orchestrator identifies the session with a stable session identifier and optionally `task_id`; the node uses this for auditing and cleanup.
+- Session lifetime and idle timeout are enforced by the node or orchestrator so that long-running sandboxes do not run indefinitely without bounds.
+
+Optional interactive terminal support:
+
+- Session sandboxes MAY be controlled using an interactive PTY stream exposed by the node via the Worker API.
+  PTY mode MUST NOT require inbound network connectivity to the sandbox and MUST rely on container runtime primitives.
+
+See [`docs/tech_specs/worker_api.md`](worker_api.md) for the Worker API contract for creating a session, executing commands in the session, ending the session, and PTY support.
 
 ## Non-Requirements
 

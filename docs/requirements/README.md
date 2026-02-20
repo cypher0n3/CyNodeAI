@@ -55,3 +55,4 @@ The filename is the domain tag lowercased.
 - `BROWSR`: [browsr.md](./browsr.md)
 - `BOOTST`: [bootst.md](./bootst.md)
 - `STANDS`: [stands.md](./stands.md)
+- `SKILLS`: [skills.md](./skills.md)

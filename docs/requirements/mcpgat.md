@@ -53,3 +53,8 @@ It covers MCP gateway enforcement and auditing for tool invocation.
 - **REQ-MCPGAT-0111:** Tool payloads MAY be stored in structured logs when needed for debugging, subject to redaction.
   [mcp_tool_call_auditing.md](../tech_specs/mcp_tool_call_auditing.md)
   <a id="req-mcpgat-0111"></a>
+- **REQ-MCPGAT-0112:** CyNodeAI MUST support an edge enforcement mode where node-local MCP servers can enforce allowlists, task scoping, and auditing for direct tool calls made by node-local agent runtimes using orchestrator-issued capability leases.
+  Audit records produced by edge enforcement MUST be ingestible by the orchestrator for centralized retention and inspection.
+  [CYNAI.MCPGAT.EdgeEnforcementMode](../tech_specs/mcp_gateway_enforcement.md#spec-cynai-mcpgat-edgeenforcement)
+  [CYNAI.MCPGAT.EdgeToolCallAuditing](../tech_specs/mcp_tool_call_auditing.md#spec-cynai-mcpgat-edgetoolaudit)
+  <a id="req-mcpgat-0112"></a>

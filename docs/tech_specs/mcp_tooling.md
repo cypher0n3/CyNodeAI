@@ -60,6 +60,8 @@ Tools exposed to agents SHOULD be grouped into categories.
 - Model tools
   - request model load on a node
   - list available models and capabilities
+- Skills tools
+  - See [Skills Storage and Inference Exposure](skills_storage_and_inference.md) for tool contract and controls; catalog lists tool names only.
 - Database query tools
   - read task state, preferences, and audit records
   - write task updates, verification results, and summaries
@@ -150,7 +152,9 @@ Node-hosted sandbox MCP
 
 - Nodes SHOULD expose sandbox operations via a node-local MCP server.
 - The orchestrator SHOULD register each node MCP server with an allowlist and route sandbox tool calls to the correct node.
-- Agents MUST call sandbox tools through the orchestrator and MUST NOT call node MCP servers directly.
+- Remote agents MUST call sandbox tools through the orchestrator and MUST NOT call node MCP servers directly.
+  Node-local agent runtimes MAY call node-hosted sandbox tools directly only when the node enforces orchestrator-issued capability leases and produces auditable tool call records.
+  See `docs/tech_specs/node.md#node-local-agent-sandbox-control-low-latency-path`.
 
 Recommended sandbox tool operations
 

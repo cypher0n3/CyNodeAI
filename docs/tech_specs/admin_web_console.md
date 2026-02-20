@@ -1,20 +1,30 @@
 # Admin Web Console
 
 - [Document Overview](#document-overview)
+- [Capability Parity with CLI](#capability-parity-with-cli)
 - [Primary Use Cases](#primary-use-cases)
 - [Security Model](#security-model)
+  - [Security Model Applicable Requirements](#security-model-applicable-requirements)
 - [Authentication and Authorization](#authentication-and-authorization)
 - [Credential Management](#credential-management)
+  - [Credential Management Applicable Requirements](#credential-management-applicable-requirements)
 - [Preferences Management](#preferences-management)
+  - [Preferences Management Applicable Requirements](#preferences-management-applicable-requirements)
+- [Skills Management](#skills-management)
 - [Node Management](#node-management)
+  - [Node Management Applicable Requirements](#node-management-applicable-requirements)
 - [Implementation Specification (Nuxt)](#implementation-specification-nuxt)
+  - [Implementation Specification Applicable Requirements](#implementation-specification-applicable-requirements)
   - [Technology Choices](#technology-choices)
   - [Application Structure](#application-structure)
   - [Authentication Model](#authentication-model)
+  - [Authentication Model Applicable Requirements](#authentication-model-applicable-requirements)
   - [Gateway API Client](#gateway-api-client)
   - [UI Requirements by Domain](#ui-requirements-by-domain)
   - [Deployment Options](#deployment-options)
+  - [Deployment Options Applicable Requirements](#deployment-options-applicable-requirements)
 - [API Surface](#api-surface)
+- [API Documentation (Swagger UI)](#api-documentation-swagger-ui)
 - [Audit and Change History](#audit-and-change-history)
 - [MVP Scope](#mvp-scope)
 
@@ -23,11 +33,24 @@
 This document defines an admin-focused web interface for CyNodeAI.
 The admin web console is intended for credential upload and management and for preferences management.
 
+## Capability Parity With CLI
+
+- Spec ID: `CYNAI.CLIENT.AdminWebConsoleCapabilityParity` <a id="spec-cynai-client-awccapabilityparity"></a>
+
+Traces To:
+
+- [REQ-CLIENT-0004](../requirements/client.md#req-client-0004)
+
+The Admin Web Console and the CLI management app MUST offer the same administrative capabilities.
+When adding or changing a capability in this spec (for example a new credential workflow, preference scope, node action, or skill operation), the [CLI management app](cli_management_app.md) spec and implementation MUST be updated to match, and vice versa.
+Use the same gateway APIs and the same authorization and auditing rules for both clients.
+
 ## Primary Use Cases
 
 - Upload and manage external provider credentials for API Egress and Git Egress.
 - View, edit, and audit preferences across scopes (system, user, project, task).
 - View node inventory and manage basic node lifecycle controls.
+- Full CRUD for AI skills: create (upload), list, view (content and metadata), edit (update content and/or metadata including scope, with same auditing and scope permissions), and delete; see [Skill Management CRUD](skills_storage_and_inference.md#skill-management-crud-web-and-cli).
 - Inspect access control rules and audit decisions.
 
 ## Security Model
@@ -112,6 +135,25 @@ Recommended UI behaviors
 - Show the precedence model and where a value is coming from.
 - Provide a diff view when editing complex JSON values.
 - Require a reason field for preference changes when auditing is enabled.
+
+## Skills Management
+
+- Spec ID: `CYNAI.CLIENT.AdminWebConsoleSkillsManagement` <a id="spec-cynai-client-awcskillsmanagement"></a>
+
+Traces To:
+
+- [REQ-CLIENT-0147](../requirements/client.md#req-client-0147)
+
+The web console MUST support full CRUD for AI skills (create, list, view, update, delete) via the User API Gateway.
+All operations use the same controls as defined in [Skill Management CRUD](skills_storage_and_inference.md#skill-management-crud-web-and-cli): authentication, scope visibility, scope elevation permission on write, and auditing on write with rejection feedback (match category and triggering text) when content fails the security scan.
+
+Recommended UI
+
+- **List**: Table or list of skills visible to the user (metadata: name, scope, owner, updated_at); optional filters by scope or owner.
+- **View**: Single skill detail with full content and metadata; read-only unless the user has edit permission.
+- **Create**: Upload form (paste or file) for markdown content; optional name and scope (scope elevation subject to permission).
+- **Edit**: Update content and/or metadata (name, scope); updated content is re-audited; on failure show rejection reason and exact triggering text.
+- **Delete**: Confirm and remove skill from store and registry (restricted to owner or admin).
 
 ## Node Management
 
@@ -268,6 +310,18 @@ Minimum required API capabilities
 - Audit log query endpoints for admins.
 
 See [`docs/tech_specs/user_api_gateway.md`](user_api_gateway.md) and [`docs/tech_specs/data_rest_api.md`](data_rest_api.md).
+
+## API Documentation (Swagger UI)
+
+- Spec ID: `CYNAI.CLIENT.AdminWebConsoleSwaggerUi` <a id="spec-cynai-client-awcswaggerui"></a>
+
+Traces To:
+
+- [REQ-CLIENT-0148](../requirements/client.md#req-client-0148)
+
+The admin web console MUST provide Swagger UI (or an equivalent API documentation UI) for the User API Gateway.
+Authenticated admins MUST be able to discover and try API endpoints (e.g. OpenAPI/Swagger spec served by the gateway, rendered in the console).
+Access to Swagger UI MUST be subject to the same authentication and authorization as the rest of the console; the UI MUST NOT expose the ability to call endpoints the admin is not authorized to use.
 
 ## Audit and Change History
 

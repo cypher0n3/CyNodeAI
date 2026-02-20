@@ -1,22 +1,58 @@
 # CLI Management App
 
 - [Document Overview](#document-overview)
+- [Capability Parity with Admin Web Console](#capability-parity-with-admin-web-console)
 - [Goals and Non-Goals](#goals-and-non-goals)
 - [Security Model](#security-model)
+  - [Security Model Applicable Requirements](#security-model-applicable-requirements)
 - [Authentication and Configuration](#authentication-and-configuration)
+  - [Authentication and Configuration Applicable Requirements](#authentication-and-configuration-applicable-requirements)
 - [Command Surface](#command-surface)
 - [Interactive Mode (REPL)](#interactive-mode-repl)
+  - [Interactive Mode Applicable Requirements](#interactive-mode-applicable-requirements)
 - [Credential Management](#credential-management)
 - [Preferences Management](#preferences-management)
 - [Node Management](#node-management)
+- [Skills Management](#skills-management)
 - [Output and Scripting](#output-and-scripting)
+  - [Output and Scripting Applicable Requirements](#output-and-scripting-applicable-requirements)
 - [Implementation Specification (Go + Cobra)](#implementation-specification-go--cobra)
 - [MVP Scope](#mvp-scope)
 
 ## Document Overview
 
+- Spec ID: `CYNAI.CLIENT.Doc.CliManagementApp` <a id="spec-cynai-client-doc-climanagementapp"></a>
+
 This document defines a CLI management application for CyNodeAI.
 The CLI is intended to support the same administrative capabilities as the Admin Web Console.
+
+Traces To:
+
+- [REQ-CLIENT-0001](../requirements/client.md#req-client-0001)
+- [REQ-CLIENT-0004](../requirements/client.md#req-client-0004)
+
+Related documents
+
+- Client requirements: [`docs/requirements/client.md`](../requirements/client.md)
+- User API Gateway: [`docs/tech_specs/user_api_gateway.md`](user_api_gateway.md)
+- Admin Web Console: [`docs/tech_specs/admin_web_console.md`](admin_web_console.md)
+- User preferences: [`docs/tech_specs/user_preferences.md`](user_preferences.md)
+- Skills storage and CRUD: [`docs/tech_specs/skills_storage_and_inference.md`](skills_storage_and_inference.md)
+- Data REST API: [`docs/tech_specs/data_rest_api.md`](data_rest_api.md)
+- API Egress (credentials): [`docs/tech_specs/api_egress_server.md`](api_egress_server.md)
+- Git Egress (credentials): [`docs/tech_specs/git_egress_mcp.md`](git_egress_mcp.md)
+
+## Capability Parity With Admin Web Console
+
+- Spec ID: `CYNAI.CLIENT.CliCapabilityParity` <a id="spec-cynai-client-clicapabilityparity"></a>
+
+Traces To:
+
+- [REQ-CLIENT-0004](../requirements/client.md#req-client-0004)
+
+The CLI and the [Admin Web Console](admin_web_console.md) MUST offer the same administrative capabilities.
+When adding or changing a capability in this spec (for example a new command, credential workflow, preference scope, node action, or skill operation), the Admin Web Console spec and implementation MUST be updated to match, and vice versa.
+Use the same gateway APIs and the same authorization and auditing rules for both clients.
 
 ## Goals and Non-Goals
 
@@ -76,6 +112,12 @@ Traces To:
 
 ## Command Surface
 
+- Spec ID: `CYNAI.CLIENT.CliCommandSurface` <a id="spec-cynai-client-clicommandsurface"></a>
+
+Traces To:
+
+- [REQ-CLIENT-0101](../requirements/client.md#req-client-0101)
+
 The CLI SHOULD be implemented as `cynork` with subcommands.
 
 Recommended top-level commands
@@ -88,6 +130,13 @@ Recommended top-level commands
 - `cynork creds ...`
 - `cynork prefs ...`
 - `cynork nodes ...`
+- `cynork skills ...`
+  - Full CRUD via gateway; see [Skill Management CRUD (Web and CLI)](skills_storage_and_inference.md#spec-cynai-skills-skillmanagementcrud) and [Skills Management](#skills-management) below.
+  - Create: `cynork skills load <file.md>` (upload markdown skill file; optional `--name`, `--scope`).
+  - List: `cynork skills list` (optional `--scope`, `--owner` filters).
+  - Get: `cynork skills get <skill_id>` (output content and metadata).
+  - Update: `cynork skills update <skill_id> <file.md>` (optional `--name`, `--scope`; content re-audited on update).
+  - Delete: `cynork skills delete <skill_id>`.
 - `cynork audit ...`
 
 ## Interactive Mode (REPL)
@@ -123,6 +172,16 @@ Recommended behaviors
 
 ## Credential Management
 
+- Spec ID: `CYNAI.CLIENT.CliCredentialManagement` <a id="spec-cynai-client-clicredential"></a>
+
+Traces To:
+
+- [REQ-CLIENT-0116](../requirements/client.md#req-client-0116)
+- [REQ-CLIENT-0117](../requirements/client.md#req-client-0117)
+- [REQ-CLIENT-0118](../requirements/client.md#req-client-0118)
+- [REQ-CLIENT-0119](../requirements/client.md#req-client-0119)
+- [REQ-CLIENT-0120](../requirements/client.md#req-client-0120)
+
 The CLI MUST support credential workflows for API Egress and Git Egress.
 Secrets are write-only.
 
@@ -149,6 +208,15 @@ Required flags (examples)
 
 ## Preferences Management
 
+- Spec ID: `CYNAI.CLIENT.CliPreferencesManagement` <a id="spec-cynai-client-clipreferences"></a>
+
+Traces To:
+
+- [REQ-CLIENT-0121](../requirements/client.md#req-client-0121)
+- [REQ-CLIENT-0122](../requirements/client.md#req-client-0122)
+- [REQ-CLIENT-0123](../requirements/client.md#req-client-0123)
+- [REQ-CLIENT-0124](../requirements/client.md#req-client-0124)
+
 The CLI MUST support reading and writing preferences across scopes.
 
 Required commands
@@ -171,6 +239,14 @@ Required flags (examples)
 
 ## Node Management
 
+- Spec ID: `CYNAI.CLIENT.CliNodeManagement` <a id="spec-cynai-client-clinodemgmt"></a>
+
+Traces To:
+
+- [REQ-CLIENT-0125](../requirements/client.md#req-client-0125)
+- [REQ-CLIENT-0126](../requirements/client.md#req-client-0126)
+- [REQ-CLIENT-0128](../requirements/client.md#req-client-0128)
+
 The CLI MUST support basic node management actions matching the web console.
 
 Required commands
@@ -185,6 +261,16 @@ Required commands
 Recommended commands
 
 - `cynork nodes prefetch-image`
+
+## Skills Management
+
+- Spec ID: `CYNAI.CLIENT.CliSkillsManagement` <a id="spec-cynai-client-cliskillsmanagement"></a>
+
+Traces To:
+
+- [REQ-CLIENT-0146](../requirements/client.md#req-client-0146)
+
+The CLI MUST support full CRUD for skills (create/load, list, get, update, delete) via the User API Gateway, with the same controls as defined in [Skill Management CRUD (Web and CLI)](skills_storage_and_inference.md#spec-cynai-skills-skillmanagementcrud).
 
 ## Output and Scripting
 
@@ -207,6 +293,14 @@ Recommended flags
 - `--no-color`
 
 ## Implementation Specification (Go + Cobra)
+
+- Spec ID: `CYNAI.CLIENT.CliImplementation` <a id="spec-cynai-client-cliimpl"></a>
+
+Traces To:
+
+- [REQ-CLIENT-0101](../requirements/client.md#req-client-0101)
+- [REQ-CLIENT-0102](../requirements/client.md#req-client-0102)
+- [REQ-CLIENT-0103](../requirements/client.md#req-client-0103)
 
 The CLI SHOULD be written in Go using Cobra for command structure.
 
@@ -240,4 +334,9 @@ Minimum viable CLI
 - Effective preferences for a task.
 - Node list, get, enable, disable, drain.
 
-See [`docs/tech_specs/user_api_gateway.md`](user_api_gateway.md), [`docs/tech_specs/data_rest_api.md`](data_rest_api.md), and [`docs/tech_specs/admin_web_console.md`](admin_web_console.md).
+Related specifications
+
+- [User API Gateway](user_api_gateway.md)
+- [Data REST API](data_rest_api.md)
+- [Admin Web Console](admin_web_console.md)
+- [Client requirements](../requirements/client.md)

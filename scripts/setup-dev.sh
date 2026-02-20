@@ -236,12 +236,59 @@ stop_all() {
     stop_postgres
 }
 
+# Ollama E2E container name (must match worker_node/cmd/node-manager/main.go)
+OLLAMA_CONTAINER_NAME="${OLLAMA_CONTAINER_NAME:-cynodeai-ollama}"
+OLLAMA_E2E_MODEL="${OLLAMA_E2E_MODEL:-tinyllama}"
+
+# Wait for Ollama container to be running (up to 30s). No-op if container not present.
+wait_for_ollama() {
+    local _
+    for _ in {1..30}; do
+        if "$RUNTIME" ps --format '{{.Names}}' 2>/dev/null | grep -q "^${OLLAMA_CONTAINER_NAME}$"; then
+            return 0
+        fi
+        sleep 1
+    done
+    return 1
+}
+
+# Load inference model and run a basic inference (host-side smoke). Skips if Ollama container not found.
+run_ollama_inference_smoke() {
+    if ! "$RUNTIME" ps -a --format '{{.Names}}' 2>/dev/null | grep -q "^${OLLAMA_CONTAINER_NAME}$"; then
+        log_warn "Ollama container ${OLLAMA_CONTAINER_NAME} not found; skipping inference smoke (run full-demo to start node)"
+        return 0
+    fi
+    if ! wait_for_ollama; then
+        log_error "Ollama container did not become ready in time"
+        return 1
+    fi
+    log_info "Pulling inference model: ${OLLAMA_E2E_MODEL}..."
+    if ! "$RUNTIME" exec "$OLLAMA_CONTAINER_NAME" ollama pull "$OLLAMA_E2E_MODEL"; then
+        log_error "Failed to pull model ${OLLAMA_E2E_MODEL}"
+        return 1
+    fi
+    log_info "Running basic inference..."
+    local out
+    out=$("$RUNTIME" exec "$OLLAMA_CONTAINER_NAME" ollama run "$OLLAMA_E2E_MODEL" "Say one word: hello" 2>&1) || true
+    if [ -z "$(echo "$out" | tr -d '\n\r\t ')" ]; then
+        log_error "Inference smoke failed: no output from model"
+        return 1
+    fi
+    log_info "Inference smoke passed"
+    return 0
+}
+
 # Function to run E2E demo test (user APIs on :8080, node APIs on :8082)
 run_e2e_test() {
     log_info "Running E2E demo test..."
 
     USER_API="http://localhost:$ORCHESTRATOR_PORT"
     CONTROL_PLANE_API="http://localhost:$CONTROL_PLANE_PORT"
+
+    # Inference readiness: load model and run basic inference when Ollama container is present
+    if ! run_ollama_inference_smoke; then
+        return 1
+    fi
 
     # Test 1: Login as admin (user-gateway)
     log_info "Test 1: Login as admin..."

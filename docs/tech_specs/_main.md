@@ -12,6 +12,7 @@
   - [Execution and Artifacts](#execution-and-artifacts)
   - [External Integration and Routing](#external-integration-and-routing)
   - [Model Lifecycle](#model-lifecycle)
+  - [AI Skills](#ai-skills)
   - [Agents Specification](#agents-specification)
   - [Bootstrap Configurations](#bootstrap-configurations)
 - [MVP Development Plan](#mvp-development-plan)
@@ -101,6 +102,10 @@ Key principles
 
 - Model management: [`docs/tech_specs/model_management.md`](model_management.md)
 
+### AI Skills
+
+- Skills storage and inference exposure: [`docs/tech_specs/skills_storage_and_inference.md`](skills_storage_and_inference.md)
+
 ### Agents Specification
 
 - Project Manager Agent: [`docs/tech_specs/project_manager_agent.md`](project_manager_agent.md)
@@ -128,6 +133,7 @@ Items are grouped by phase and can be implemented incrementally.
   - Enforce allowlists, access control, and auditing centrally at the orchestrator gateway.
   - Require strict tool argument schemas for task-scoped tools (tool args include `task_id`).
   - Define policy mapping to `access_control_rules` using action `mcp.tool.invoke`.
+- Define the LangGraph MVP workflow contract and checkpointing requirements (see [`docs/tech_specs/langgraph_mvp.md`](langgraph_mvp.md)).
 
 ### Phase 1 Single Node Happy Path
 
@@ -140,23 +146,41 @@ Items are grouped by phase and can be implemented incrementally.
 - User API Gateway: local user auth (login and refresh), create task, and retrieve task result.
 - Phase 1 config refresh: node fetches configuration on startup only (no polling).
 - Phase 1 node JWT: long-lived; node re-registers on expiry.
+- Phase 1 workflow engine: tasks are executed as a single dispatched sandbox job.
+  LangGraph is not integrated in the Phase 1 runtime loop.
+
+### Phase 1.5 Single Node Full Capability (Post-Phase 1)
+
+- Enable node-local inference access from inside the sandbox (see [`docs/tech_specs/node.md`](node.md) and [`docs/tech_specs/sandbox_container.md`](sandbox_container.md)).
+  Implement the inference proxy sidecar approach so sandboxes can call `http://localhost:11434` without leaving the node.
+- Extend E2E to exercise inference inside the sandbox for the single-node deployment.
+- Add the minimum viable CLI slice as a separate Go module (see [`docs/tech_specs/cli_management_app.md`](cli_management_app.md)).
+  Focus on localhost user-gateway auth and basic task operations.
 
 ### Phase 2 MCP in the Loop
 
 - Implement orchestrator MCP tool gateway with role-based access.
 - Add MCP database tools for orchestrator-side agents and MCP artifact tools for worker agents.
 - Ensure orchestrator-side agents use MCP database tools and do not connect to Postgres directly.
+- Integrate the LangGraph MVP workflow as the orchestrator workflow engine for the Project Manager Agent (see [`docs/tech_specs/langgraph_mvp.md`](langgraph_mvp.md)).
+  - Start one workflow instance per `task_id` when a task is ready to be driven.
+  - Persist checkpoints after each node transition to a Postgres-backed store.
+  - Resume workflows by `task_id` after orchestrator or workflow process restarts.
+  - Enforce single-active-workflow-per-task (lease, idempotency key, or coalescing).
+  - Map workflow nodes to orchestrator capabilities (MCP DB, model routing, Worker API dispatch, result collection).
 
 ### Phase 3 Multi Node Robustness
 
 - Add node selection based on capability, load, data locality, and model availability.
 - Add job leases, retries, idempotency, and heartbeats.
 - Add dynamic node configuration updates and startup capability change reporting.
+- Add Worker Telemetry API integration for node health and operational signals (see [`docs/tech_specs/worker_telemetry_api.md`](worker_telemetry_api.md)).
 
 ### Phase 4 Optional Controlled Egress and Integrations
 
 - Add API Egress Server with ACL enforcement and auditing.
 - Add Secure Browser Service with deterministic sanitization and DB-backed rules.
 - Add external model routing fallback for standalone orchestrator operation, subject to policy.
-- Add CLI management app for credentials, preferences, and basic node management.
+- Expand the CLI management app surface for credentials, preferences, skills, and node management.
+  See [`docs/tech_specs/cli_management_app.md`](cli_management_app.md) and [`docs/tech_specs/skills_storage_and_inference.md`](skills_storage_and_inference.md).
 - Defer the admin web console until after the CLI exists.

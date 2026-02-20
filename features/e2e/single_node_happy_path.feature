@@ -8,6 +8,10 @@ Feature: Single Node Happy Path
 # Precondition: at least one inference-capable path must be available.
 # Inference may be node-local (Ollama or similar) or external via a configured provider key.
 # In the single-node case, startup should fail fast if neither is available.
+#
+# Script-driven E2E (just e2e / setup-dev.sh full-demo): after the node starts, the script
+# loads a small model into Ollama and runs a basic inference smoke to verify inference works.
+# See dev_docs/single_node_e2e_testing_plan.md.
 
   Background:
     Given a running PostgreSQL database

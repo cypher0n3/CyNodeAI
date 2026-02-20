@@ -11,6 +11,7 @@ It covers user-facing management surfaces and user preference behavior.
 ## 2 Requirements
 
 - **REQ-CLIENT-0001:** CLI: no direct DB; gateway for all ops; no secrets in output or on disk; token auth; least privilege.
+  [CYNAI.CLIENT.Doc.CliManagementApp](../tech_specs/cli_management_app.md#spec-cynai-client-doc-climanagementapp)
   [CYNAI.CLIENT.CliSecurityModel](../tech_specs/cli_management_app.md#spec-cynai-client-clisecurity)
   [CYNAI.CLIENT.CliAuthConfig](../tech_specs/cli_management_app.md#spec-cynai-client-cliauth)
   <a id="req-client-0001"></a>
@@ -20,6 +21,11 @@ It covers user-facing management surfaces and user preference behavior.
 - **REQ-CLIENT-0003:** Effective preferences by scope precedence; unknown keys passed through; cache per task revision with invalidation on update.
   [CYNAI.STANDS.UserPreferencesRetrieval](../tech_specs/user_preferences.md#spec-cynai-stands-prefretrieval)
   <a id="req-client-0003"></a>
+- **REQ-CLIENT-0004:** The Admin Web Console and the CLI management app MUST provide capability parity for administrative operations.
+  When adding or changing a capability in one client (for example a new credential type, preference scope, node action, or skill operation), the other client MUST be updated to match.
+  [CYNAI.CLIENT.AdminWebConsoleCapabilityParity](../tech_specs/admin_web_console.md#spec-cynai-client-awccapabilityparity)
+  [CYNAI.CLIENT.CliCapabilityParity](../tech_specs/cli_management_app.md#spec-cynai-client-clicapabilityparity)
+  <a id="req-client-0004"></a>
 - **REQ-CLIENT-0100:** The CLI MUST NOT connect directly to PostgreSQL.
   [CYNAI.CLIENT.CliSecurityModel](../tech_specs/cli_management_app.md#spec-cynai-client-clisecurity)
   <a id="req-client-0100"></a>
@@ -68,45 +74,56 @@ It covers user-facing management surfaces and user preference behavior.
 - **REQ-CLIENT-0115:** SHOULD cache effective preferences per task revision, but MUST invalidate on preference update.
   [CYNAI.STANDS.UserPreferencesRetrieval](../tech_specs/user_preferences.md#spec-cynai-stands-prefretrieval)
   <a id="req-client-0115"></a>
-
 - **REQ-CLIENT-0116:** Credential create MUST accept secrets only on create or rotate operations.
   [CYNAI.CLIENT.AdminWebConsoleCredential](../tech_specs/admin_web_console.md#spec-cynai-client-awccredential)
+  [CYNAI.CLIENT.CliCredentialManagement](../tech_specs/cli_management_app.md#spec-cynai-client-clicredential)
   <a id="req-client-0116"></a>
 - **REQ-CLIENT-0117:** Credential read MUST return metadata only.
   [CYNAI.CLIENT.AdminWebConsoleCredential](../tech_specs/admin_web_console.md#spec-cynai-client-awccredential)
+  [CYNAI.CLIENT.CliCredentialManagement](../tech_specs/cli_management_app.md#spec-cynai-client-clicredential)
   <a id="req-client-0117"></a>
 - **REQ-CLIENT-0118:** Credential list MUST support filtering by provider and scope.
   [CYNAI.CLIENT.AdminWebConsoleCredential](../tech_specs/admin_web_console.md#spec-cynai-client-awccredential)
+  [CYNAI.CLIENT.CliCredentialManagement](../tech_specs/cli_management_app.md#spec-cynai-client-clicredential)
   <a id="req-client-0118"></a>
 - **REQ-CLIENT-0119:** Credential rotate MUST create a new encrypted secret value and invalidate the old one.
   [CYNAI.CLIENT.AdminWebConsoleCredential](../tech_specs/admin_web_console.md#spec-cynai-client-awccredential)
+  [CYNAI.CLIENT.CliCredentialManagement](../tech_specs/cli_management_app.md#spec-cynai-client-clicredential)
   <a id="req-client-0119"></a>
 - **REQ-CLIENT-0120:** Credential disable MUST support immediate deactivation.
   [CYNAI.CLIENT.AdminWebConsoleCredential](../tech_specs/admin_web_console.md#spec-cynai-client-awccredential)
+  [CYNAI.CLIENT.CliCredentialManagement](../tech_specs/cli_management_app.md#spec-cynai-client-clicredential)
   <a id="req-client-0120"></a>
 - **REQ-CLIENT-0121:** Preference edits MUST be scoped and versioned.
   [CYNAI.CLIENT.AdminWebConsolePreferences](../tech_specs/admin_web_console.md#spec-cynai-client-awcpreferences)
+  [CYNAI.CLIENT.CliPreferencesManagement](../tech_specs/cli_management_app.md#spec-cynai-client-clipreferences)
   <a id="req-client-0121"></a>
 - **REQ-CLIENT-0122:** The UI MUST support preference scope selection (system, user, project, task).
   [CYNAI.CLIENT.AdminWebConsolePreferences](../tech_specs/admin_web_console.md#spec-cynai-client-awcpreferences)
+  [CYNAI.CLIENT.CliPreferencesManagement](../tech_specs/cli_management_app.md#spec-cynai-client-clipreferences)
   <a id="req-client-0122"></a>
 - **REQ-CLIENT-0123:** The UI SHOULD provide an \"effective preferences\" preview for a given task or project.
   [CYNAI.CLIENT.AdminWebConsolePreferences](../tech_specs/admin_web_console.md#spec-cynai-client-awcpreferences)
+  [CYNAI.CLIENT.CliPreferencesManagement](../tech_specs/cli_management_app.md#spec-cynai-client-clipreferences)
   <a id="req-client-0123"></a>
 - **REQ-CLIENT-0124:** The UI SHOULD provide validation for known keys and types.
   [CYNAI.CLIENT.AdminWebConsolePreferences](../tech_specs/admin_web_console.md#spec-cynai-client-awcpreferences)
+  [CYNAI.CLIENT.CliPreferencesManagement](../tech_specs/cli_management_app.md#spec-cynai-client-clipreferences)
   <a id="req-client-0124"></a>
 - **REQ-CLIENT-0125:** Node management MUST be mediated by the User API Gateway.
   [CYNAI.CLIENT.AdminWebConsoleNodeManagement](../tech_specs/admin_web_console.md#spec-cynai-client-awcnodemgmt)
+  [CYNAI.CLIENT.CliNodeManagement](../tech_specs/cli_management_app.md#spec-cynai-client-clinodemgmt)
   <a id="req-client-0125"></a>
 - **REQ-CLIENT-0126:** The UI MUST NOT connect directly to node worker APIs.
   [CYNAI.CLIENT.AdminWebConsoleNodeManagement](../tech_specs/admin_web_console.md#spec-cynai-client-awcnodemgmt)
+  [CYNAI.CLIENT.CliNodeManagement](../tech_specs/cli_management_app.md#spec-cynai-client-clinodemgmt)
   <a id="req-client-0126"></a>
 - **REQ-CLIENT-0127:** The UI MUST clearly distinguish between node-reported state and orchestrator-derived state.
   [CYNAI.CLIENT.AdminWebConsoleNodeManagement](../tech_specs/admin_web_console.md#spec-cynai-client-awcnodemgmt)
   <a id="req-client-0127"></a>
 - **REQ-CLIENT-0128:** Potentially disruptive actions MUST be gated by admin authorization and SHOULD require confirmation.
   [CYNAI.CLIENT.AdminWebConsoleNodeManagement](../tech_specs/admin_web_console.md#spec-cynai-client-awcnodemgmt)
+  [CYNAI.CLIENT.CliNodeManagement](../tech_specs/cli_management_app.md#spec-cynai-client-clinodemgmt)
   <a id="req-client-0128"></a>
 - **REQ-CLIENT-0129:** The console MUST not embed privileged service credentials.
   [CYNAI.CLIENT.AdminWebConsoleImplementation](../tech_specs/admin_web_console.md#spec-cynai-client-awcimpl)
@@ -129,7 +146,6 @@ It covers user-facing management surfaces and user preference behavior.
 - **REQ-CLIENT-0135:** CORS SHOULD be avoided by preferring same-origin hosting behind the gateway.
   [CYNAI.CLIENT.AdminWebConsoleDeployment](../tech_specs/admin_web_console.md#spec-cynai-client-awcdeploy)
   <a id="req-client-0135"></a>
-
 - **REQ-CLIENT-0136:** The interactive CLI mode MUST provide access to the same commands and flags as the non-interactive CLI.
   [CYNAI.CLIENT.CliInteractiveMode](../tech_specs/cli_management_app.md#spec-cynai-client-cliinteractivemode)
   <a id="req-client-0136"></a>
@@ -160,3 +176,14 @@ It covers user-facing management surfaces and user preference behavior.
 - **REQ-CLIENT-0145:** The CLI SHOULD return non-zero exit codes on failures and policy denials.
   [CYNAI.CLIENT.CliOutputScripting](../tech_specs/cli_management_app.md#spec-cynai-client-clioutputscripting)
   <a id="req-client-0145"></a>
+- **REQ-CLIENT-0146:** The CLI MUST support full CRUD for skills (create/load, list, get, update, delete) via the User API Gateway, with the same controls as defined in the skills spec (scope visibility, scope elevation permission, auditing on write).
+  [CYNAI.CLIENT.CliSkillsManagement](../tech_specs/cli_management_app.md#spec-cynai-client-cliskillsmanagement)
+  [CYNAI.SKILLS.SkillManagementCrud](../tech_specs/skills_storage_and_inference.md#spec-cynai-skills-skillmanagementcrud)
+  <a id="req-client-0146"></a>
+- **REQ-CLIENT-0147:** The admin web console MUST support full CRUD for skills (create, list, view, update, delete) via the User API Gateway, with the same controls as defined in the skills spec (scope visibility, scope elevation permission, auditing on write).
+  [CYNAI.CLIENT.AdminWebConsoleSkillsManagement](../tech_specs/admin_web_console.md#spec-cynai-client-awcskillsmanagement)
+  [CYNAI.SKILLS.SkillManagementCrud](../tech_specs/skills_storage_and_inference.md#spec-cynai-skills-skillmanagementcrud)
+  <a id="req-client-0147"></a>
+- **REQ-CLIENT-0148:** The admin web console MUST provide Swagger UI (or equivalent API documentation UI) for the User API Gateway so that authenticated admins can discover and try API endpoints.
+  [CYNAI.CLIENT.AdminWebConsoleSwaggerUi](../tech_specs/admin_web_console.md#spec-cynai-client-awcswaggerui)
+  <a id="req-client-0148"></a>

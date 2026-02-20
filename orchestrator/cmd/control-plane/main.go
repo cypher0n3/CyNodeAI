@@ -29,6 +29,9 @@ var testShutdownHook func(*http.Server, context.Context) error
 // testOpenStore, when set by tests, is used instead of database.Open when store is nil so store==nil path can be covered without a real DB.
 var testOpenStore func(context.Context, string) (database.Store, error)
 
+// testDatabaseOpen, when set by tests, is used instead of database.Open when both store and testOpenStore are nil (allows covering open-success path without a real DB).
+var testDatabaseOpen func(context.Context, string) (database.Store, error)
+
 func main() {
 	if code := runMain(); code != 0 {
 		os.Exit(code)
@@ -41,6 +44,8 @@ func runMain() int {
 }
 
 // resolveStore opens the DB when store is nil (using testOpenStore or database.Open). Returns (store, nil), (nil, nil) when migrateOnly after open, or (nil, err).
+//
+//nolint:gocognit,dupl // test hooks and real open share the same migrateOnly handling by design
 func resolveStore(ctx context.Context, store database.Store, cfg *config.OrchestratorConfig, logger *slog.Logger, migrateOnly bool) (database.Store, error) {
 	if store != nil {
 		return store, nil
@@ -48,6 +53,19 @@ func resolveStore(ctx context.Context, store database.Store, cfg *config.Orchest
 	if testOpenStore != nil {
 		var err error
 		store, err = testOpenStore(ctx, cfg.DatabaseURL)
+		if err != nil {
+			logger.Error("failed to connect to database", "error", err)
+			return nil, err
+		}
+		if store != nil && migrateOnly {
+			logger.Info("schema applied (migrate-only)")
+			return nil, nil
+		}
+		return store, nil
+	}
+	if testDatabaseOpen != nil {
+		var err error
+		store, err = testDatabaseOpen(ctx, cfg.DatabaseURL)
 		if err != nil {
 			logger.Error("failed to connect to database", "error", err)
 			return nil, err
