@@ -425,11 +425,11 @@ lint: lint-go lint-go-ci lint-python lint-md validate-doc-links validate-feature
 test: test-go
     @:
 
-# BDD: run Godog suites for orchestrator and worker_node (from repo root).
+# BDD: run Godog suites for orchestrator, worker_node, and cynork (from repo root).
 # Orchestrator steps that need a DB are skipped unless POSTGRES_TEST_DSN is set.
 # Run with DB: POSTGRES_TEST_DSN="postgres://..." just test-bdd
 test-bdd: install-go
-    @cd "{{ root_dir }}" && go test ./orchestrator/_bdd ./worker_node/_bdd -count=1
+    @cd "{{ root_dir }}" && go test ./orchestrator/_bdd ./worker_node/_bdd ./cynork/_bdd -count=1
 
 # E2E: start Postgres, orchestrator, one worker node; run happy path (login, create task, get result).
 # Requires: podman or docker, jq. Stops existing services first; leaves services running after.
