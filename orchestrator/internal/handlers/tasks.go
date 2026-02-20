@@ -28,7 +28,8 @@ func NewTaskHandler(db database.Store, logger *slog.Logger) *TaskHandler {
 
 // CreateTaskRequest represents task creation request.
 type CreateTaskRequest struct {
-	Prompt string `json:"prompt"`
+	Prompt       string `json:"prompt"`
+	UseInference bool   `json:"use_inference,omitempty"`
 }
 
 // TaskResponse represents task data in responses.
@@ -65,7 +66,7 @@ func (h *TaskHandler) CreateTask(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// MVP Phase 1: create a single queued job for the task.
-	payload, err := marshalJobPayload(req.Prompt)
+	payload, err := marshalJobPayload(req.Prompt, req.UseInference)
 	if err != nil {
 		h.logger.Error("marshal job payload", "error", err)
 		WriteInternalError(w, "Failed to create task job")
@@ -86,12 +87,15 @@ func (h *TaskHandler) CreateTask(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func marshalJobPayload(prompt string) (string, error) {
+func marshalJobPayload(prompt string, useInference bool) (string, error) {
 	// This payload is interpreted by the control-plane dispatcher.
 	// It is intentionally simple for Phase 1: one sandbox command from the task prompt.
 	obj := map[string]any{
 		"image":   "alpine:latest",
 		"command": []string{"sh", "-c", prompt},
+	}
+	if useInference {
+		obj["use_inference"] = true
 	}
 	b, err := json.Marshal(obj)
 	if err != nil {

@@ -76,4 +76,8 @@ func TestCreateTaskRequestJSON(t *testing.T) {
 	if parsed.Prompt != "test prompt" {
 		t.Errorf("expected prompt 'test prompt', got %s", parsed.Prompt)
 	}
+	roundTripJSON(t, CreateTaskRequest{Prompt: "x", UseInference: true}, &parsed)
+	if parsed.Prompt != "x" || !parsed.UseInference {
+		t.Errorf("expected prompt 'x' UseInference true, got %q %v", parsed.Prompt, parsed.UseInference)
+	}
 }

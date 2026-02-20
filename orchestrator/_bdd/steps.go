@@ -650,6 +650,33 @@ func RegisterOrchestratorSteps(sc *godog.ScenarioContext, state *testState) {
 		st.taskID = out.ID
 		return nil
 	})
+	sc.Step(`^I create a task with use_inference and command "([^"]*)"$`, func(ctx context.Context, cmd string) error {
+		st := getState(ctx)
+		if st == nil || st.server == nil {
+			return godog.ErrSkip
+		}
+		body, _ := json.Marshal(map[string]any{"prompt": cmd, "use_inference": true})
+		req, _ := http.NewRequest("POST", st.server.URL+"/v1/tasks", bytes.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer "+st.accessToken)
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			return err
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusCreated {
+			return fmt.Errorf("create task returned %d", resp.StatusCode)
+		}
+		var out struct {
+			ID     string `json:"id"`
+			Status string `json:"status"`
+		}
+		if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+			return err
+		}
+		st.taskID = out.ID
+		return nil
+	})
 	sc.Step(`^I create a task with command "([^"]*)"$`, func(ctx context.Context, cmd string) error {
 		st := getState(ctx)
 		if st == nil || st.server == nil {

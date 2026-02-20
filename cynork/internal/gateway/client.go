@@ -97,7 +97,8 @@ func (c *Client) Health() error {
 
 // CreateTaskRequest is the body for POST /v1/tasks.
 type CreateTaskRequest struct {
-	Prompt string `json:"prompt"`
+	Prompt       string `json:"prompt"`
+	UseInference bool   `json:"use_inference,omitempty"`
 }
 
 // TaskResponse is the task in create/get responses.
