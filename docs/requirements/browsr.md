@@ -19,16 +19,16 @@ It covers secure browser service behavior, rules, and deterministic sanitization
 - **REQ-BROWSR-0101:** The agent and orchestrator SHOULD treat all fetched content as untrusted reference material.
   [CYNAI.BROWSR.UntrustedContentHandling](../tech_specs/secure_browser_service.md#spec-cynai-browsr-untrustedcontent)
   <a id="req-browsr-0101"></a>
-- **REQ-BROWSR-0102:** The Secure Browser Service SHOULD be configured by preferences stored in PostgreSQL.
+- **REQ-BROWSR-0102:** The Secure Browser Service SHOULD be configured by user task-execution preferences and constraints stored in PostgreSQL.
   [CYNAI.BROWSR.PreferencesRules](../tech_specs/secure_browser_service.md#spec-cynai-browsr-preferencesrules)
   <a id="req-browsr-0102"></a>
 - **REQ-BROWSR-0103:** Effective preferences MUST be resolved using the scope precedence model.
   [CYNAI.BROWSR.PreferencesRules](../tech_specs/secure_browser_service.md#spec-cynai-browsr-preferencesrules)
   <a id="req-browsr-0103"></a>
-- **REQ-BROWSR-0104:** The service SHOULD treat missing preference keys as system defaults.
+- **REQ-BROWSR-0104:** The service SHOULD treat missing preference keys as system-scoped defaults.
   [CYNAI.BROWSR.PreferencesRules](../tech_specs/secure_browser_service.md#spec-cynai-browsr-preferencesrules)
   <a id="req-browsr-0104"></a>
-- **REQ-BROWSR-0105:** A YAML file MAY be used to seed system defaults into PostgreSQL or to export the effective rules for review.
+- **REQ-BROWSR-0105:** A YAML file MAY be used to seed system-scoped defaults into PostgreSQL or to export the effective rules for review.
   [CYNAI.BROWSR.PreferencesRules](../tech_specs/secure_browser_service.md#spec-cynai-browsr-preferencesrules)
   <a id="req-browsr-0105"></a>
 - **REQ-BROWSR-0106:** The Secure Browser Service MUST implement deterministic handling for `robots.txt` and redirects.

@@ -1,7 +1,7 @@
 # Secure Browser Service rules and controls.
 #
 # This file is an optional import and export format.
-# It can be used to seed system defaults into PostgreSQL and to review effective rules.
+# It can be used to seed system-scoped defaults into PostgreSQL and to review effective rules.
 # The source of truth for preferences is PostgreSQL, as defined by `docs/tech_specs/user_preferences.md`.
 #
 # Notes

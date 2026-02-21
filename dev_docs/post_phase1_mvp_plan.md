@@ -3,6 +3,8 @@
 - [1 Objectives](#1-objectives)
 - [2 Scope Summary](#2-scope-summary)
   - [2.1 Current Status (2026-02-20 1628)](#21-current-status-2026-02-20-1628)
+  - [2.2 Intended Task Semantics (Prompt Interpretation)](#22-intended-task-semantics-prompt-interpretation)
+  - [2.3 Prompt Interpretation: Actionable Steps](#23-prompt-interpretation-actionable-steps)
 - [3 Inference in Sandboxed Containers](#3-inference-in-sandboxed-containers)
   - [3.1 Inference Proxy Sidecar (Per `node.md` Option A)](#31-inference-proxy-sidecar-per-nodemd-option-a)
   - [3.2 Implementation Ownership](#32-implementation-ownership)
@@ -23,6 +25,7 @@ This plan extends the MVP past Phase 1 so that:
 3. **Unit tests** maintain or achieve at least 90% code coverage for all touched packages (existing justfile rule).
 4. **BDD suite** (orchestrator and worker_node) covers the new inference-in-sandbox path and remains runnable via `just test-bdd`.
 5. **CLI app** exists as a separate Go module, runnable against the orchestrator (user-gateway) on localhost, with basic auth and task operations.
+6. **Prompt interpretation:** Natural-language task prompts are interpreted by the system (model and/or sandbox), not executed as literal shell commands; see Section 2.2 and Section 2.3.
 
 Assumptions: Phase 1 is substantially complete (node registration, config delivery, per-node dispatch, sandbox run with `--network=none`, user-gateway auth and task APIs).
 
@@ -33,10 +36,11 @@ Remaining Phase 1 spec gaps (e.g. config_version ULID, Worker API `GET /readyz`)
 | Area | Post-Phase 1 MVP scope |
 |------|------------------------|
 | Inference in sandbox | Inference proxy sidecar; pod/network so sandbox can call `http://localhost:11434`; `OLLAMA_BASE_URL` in sandbox env; optional E2E scenario that runs a task invoking inference from inside the sandbox. |
-| Feature files | E2E inference-in-sandbox scenario; optional worker_node scenarios (413, truncation); orchestrator fail-fast scenario clarified or scoped to node. |
+| Prompt interpretation | Natural-language prompt is default; inference by default; prompt not executed as shell command; minimal path: prompt as model input (sandbox-based or orchestrator-side), result = model output; optional raw/script/commands mode for explicit shell; see Section 2.3. |
+| Feature files | E2E inference-in-sandbox scenario; prompt-interpretation scenario (natural-language prompt yields model result); optional worker_node (413, truncation), orchestrator fail-fast clarified. |
 | Unit tests | 90%+ coverage for orchestrator, worker_node, and new CLI module; no new exceptions in justfile. |
-| BDD | Steps and scenarios for inference-ready node and sandbox job using inference; CLI has BDD (see 2.1). |
-| CLI | Separate Go module; `version`, `status`, `auth login` / `logout` / `whoami`; create task and get result against user-gateway; config via env and optional file. |
+| BDD | Steps and scenarios for inference-ready node and sandbox job; steps for "create task with natural-language prompt (default), result contains model output"; CLI has BDD (see 2.1). |
+| CLI | Separate Go module; `version`, `status`, `auth login` / `logout` / `whoami`; create task and get result (natural-language default, inference by default; optional raw/script/commands mode); config via env and optional file. |
 
 ### 2.1 Current Status (2026-02-20 1628)
 
@@ -50,13 +54,61 @@ Remaining Phase 1 spec gaps (e.g. config_version ULID, Worker API `GET /readyz`)
   Worker node can run jobs with `use_inference: true` in a Podman pod containing a sandbox container plus an inference proxy sidecar that listens on `localhost:11434`.
   The sandbox receives `OLLAMA_BASE_URL=http://localhost:11434` when the node is configured with `OLLAMA_UPSTREAM_URL` and `INFERENCE_PROXY_IMAGE`.
   See [post_phase1_inference_proxy_report.md](post_phase1_inference_proxy_report.md).
-  **Remaining:** (1) User-facing task creation for `use_inference`: User API `POST /v1/tasks` and `CreateTaskRequest` are prompt-only; job payload from `marshalJobPayload` does not set `use_inference`.
-  CLI (cynork) has no `--use-inference` (or equivalent) flag.
+  **Remaining:** (1) User-facing task creation: User API `POST /v1/tasks` and `CreateTaskRequest` are prompt-only; job payload from `marshalJobPayload` does not set inference-by-default (node runs job in pod with proxy when inference is used).
+  Default behavior should be interpretation/inference, not pass-through as command.
   (2) Feature/BDD: `features/e2e/single_node_happy_path.feature` has the inference scenario (`@inference_in_sandbox`); `features/worker_node/worker_node_sandbox_execution.feature` has "Sandbox receives OLLAMA_BASE_URL when use_inference is true" and worker_node `_bdd` implements "I submit a sandbox job with use_inference that runs command".
   No BDD runner for `features/e2e` (script-driven `just e2e` is primary).
-  Orchestrator has no step "I create a task with use_inference and command" and no API support to pass `use_inference` into the job.
+  Orchestrator has no step for "create task with natural-language prompt (default)" and no API/orchestrator behavior to default jobs to inference path.
 - **Phase 1 gaps:** Unchanged: `config_version` ULID (orchestrator still uses string; no ULID generation in codebase), Worker API `GET /readyz` (not implemented in worker_node), orchestrator fail-fast scenario scope (see code review).
   Optional 413/truncation worker_node scenarios not added.
+
+### 2.2 Intended Task Semantics (Prompt Interpretation)
+
+**Intended behavior:** Task creation accepts a **natural-language prompt** (e.g. "Tell me what model you are").
+The **system** interprets the prompt and decides whether to call the AI model and/or run sandbox job(s).
+The prompt is **not** the literal shell command executed in the sandbox.
+
+**Current implementation gap:** The CLI and backend treat the prompt as the exact command string run in the sandbox (e.g. `sh -c "<prompt>"`).
+There is no "ask the model" or interpretation layer yet; natural-language prompts therefore fail when executed as shell (e.g. `Tell: not found`).
+
+**Implementation direction:** Add a prompt-interpretation layer (orchestrator/workflow) that turns the user prompt into model calls and/or sandbox commands.
+Until that exists, the MVP may continue to pass the prompt through as the sandbox command for backward compatibility when the user supplies an explicit shell command (e.g. `echo hello`).
+See `dev_docs/task_prompt_semantics_update.md` and REQ-ORCHES-0125.
+
+### 2.3 Prompt Interpretation: Actionable Steps
+
+Steps to get from current state (prompt = sandbox command) to intended behavior (natural-language prompt interpreted; model and/or sandbox):
+
+#### 2.3.1 Inference by Default for Task Jobs
+
+- Orchestrator: when creating the job payload (e.g. `marshalJobPayload`), default to using the inference path (e.g. set job so the node runs it in a pod with the inference proxy when the task is natural-language / interpreted).
+- User API and CLI: no user-facing "use inference" flag; interpretation (and thus inference when needed) is the default.
+- Raw/script/commands modes are the explicit opt-in for literal shell execution.
+- Delivers: new tasks get inference path by default; unblocks step 2.
+
+#### 2.3.2 Implement Minimal "Prompt as Model Input" Path in the Orchestrator
+
+- When a task is created with a natural-language prompt and inference requested (e.g. `use_inference=true`), the orchestrator MUST NOT pass the prompt as the sandbox command.
+- Option A (sandbox-based): orchestrator builds a job whose **command** is a fixed script that calls the model (e.g. script that uses `OLLAMA_BASE_URL` to send the user prompt to the model and prints the response); task result = job stdout/stderr.
+- Option B (orchestrator-side): orchestrator calls node-local or external inference with the prompt, writes the model response into the task result, and marks the task complete without dispatching a sandbox job (or dispatches only for side effects).
+- Choose one option for MVP; document in orchestrator and update task lifecycle so "completed" task with inference has result body from the model.
+
+#### 2.3.3 Keep Backward Compatibility for Explicit Shell Commands
+
+- Add an explicit "raw command" mode: CLI flag (e.g. `--raw` or `--command`) or request field that means "treat prompt as the exact sandbox command."
+- When raw mode is set, orchestrator continues current behavior: prompt is passed through as the sandbox command (e.g. `sh -c "<prompt>"`).
+- BDD and E2E can keep using literal commands (e.g. `echo hello`) with raw mode, or retain current behavior when no interpretation path is configured.
+
+#### 2.3.4 Feature and Bdd Coverage for Prompt Interpretation
+
+- Add scenario: create task with natural-language prompt (default), get result containing model output (no "Tell: not found").
+- Orchestrator BDD: step "I create a task with prompt X" (default interpretation) and "the task result contains the model response."
+- Optional: scenario for raw command mode (prompt = "echo hello", result = "hello").
+
+#### 2.3.5 Later (Phase 2): Full Interpretation via Workflow
+
+- Replace or extend the minimal path with LangGraph (or equivalent) so the system can decide: call model only, run sandbox only, or both (e.g. model plans, then sandbox runs commands).
+- Per `docs/tech_specs/langgraph_mvp.md` and Phase 2 in `_main.md`.
 
 ## 3 Inference in Sandboxed Containers
 
@@ -91,17 +143,22 @@ See [single_node_e2e_testing_plan.md](single_node_e2e_testing_plan.md).
 
 - **`features/cynork/cynork_cli.feature`:** Exists.
   Covers status, auth login/whoami, whoami without token, create task and get result.
+  Add scenario for natural-language prompt (default; result contains model output) and optionally for raw/script/commands mode (see Section 2.3 step 4).
   Suite tag `@suite_cynork`; see [features/README.md](../features/README.md) suite registry.
 
 - **`features/e2e/single_node_happy_path.feature`:** Done.
   Scenario "Single-node task execution with inference in sandbox" exists (`@inference_in_sandbox`); steps reference "I create a task with use_inference and command" and "the node executes the sandbox job in a pod with inference proxy".
+  Add or extend scenario for prompt interpretation: natural-language prompt (e.g. "Tell me what model you are", default), task result contains model response (see Section 2.3 step 4).
   Not run by `just test-bdd` (no separate e2e BDD runner); script-driven `just e2e` is primary.
-  API and BDD step for "create task with use_inference" not yet implemented (see 2.1).
+  API and orchestrator default (interpretation/inference) and BDD step for "create task with natural-language prompt" not yet implemented (see 2.1).
 
 - **`features/worker_node/worker_node_sandbox_execution.feature`:** Optionally add scenarios for request size limit (413) and stdout/stderr truncation (per [mvp_phase1_code_review_report.md](mvp_phase1_code_review_report.md) Section 3).
 
 - **`features/orchestrator/orchestrator_startup.feature`:** Clarify or rescope "Orchestrator fails fast when no inference path is available" per code review.
   Either document as node-side only and mark scenario as such, or implement an orchestrator readiness check and keep the scenario.
+
+- **Orchestrator feature (new or existing):** Scenario(s) for prompt interpretation: create task with natural-language prompt (default); task completes; result contains model output (not shell error).
+  See Section 2.3 step 4.
 
 - **New (optional):** `features/e2e/single_node_inference_in_sandbox.feature` if the team prefers a dedicated feature file for inference-in-sandbox rather than extending `single_node_happy_path.feature`.
 
@@ -115,15 +172,17 @@ See [single_node_e2e_testing_plan.md](single_node_e2e_testing_plan.md).
 ## 6 BDD Suite
 
 - **Orchestrator (`orchestrator/_bdd`):** Add step definitions and scenarios that depend on "inference-ready" only when the new E2E/inference scenarios are added; keep existing DB-backed scenarios running with testcontainers when `POSTGRES_TEST_DSN` is unset.
+  Add steps for prompt interpretation: e.g. "I create a task with prompt X" (default) and "the task result contains the model response" (see Section 2.3 step 4).
 - **Worker node (`worker_node/_bdd`):** Done for inference.
   Step "I submit a sandbox job with use_inference that runs command" and scenario "Sandbox receives OLLAMA_BASE_URL when use_inference is true" in `worker_node_sandbox_execution.feature` are implemented.
   Keep scenarios that do not require inference runnable without a real Ollama.
 - **E2E:** The script-driven E2E (`just e2e`) remains the primary way to run the full single-node + inference path.
-  Feature file `features/e2e/single_node_happy_path.feature` exists with inference scenario.
+  Feature file `features/e2e/single_node_happy_path.feature` exists with inference scenario; extend for prompt-interpretation (natural-language in, model result out).
   No e2e Godog runner, so e2e scenarios are not executed by `just test-bdd`.
 - **CLI (cynork):** BDD in place.
   `just test-bdd` runs `./orchestrator/_bdd ./worker_node/_bdd ./cynork/_bdd`.
   Feature file: `features/cynork/cynork_cli.feature`; steps use a mock gateway.
+  Add scenario for natural-language prompt (default) and optional raw/script/commands mode (see Section 2.3 step 4).
   Unit tests and manual runs against localhost user-gateway documented in [cynork_cli_localhost.md](cynork_cli_localhost.md).
 
 ## 7 CLI App (Separate Go Module)
@@ -135,7 +194,7 @@ See [single_node_e2e_testing_plan.md](single_node_e2e_testing_plan.md).
   Structure: `cmd/` (root, version, status, auth, task), `internal/gateway/`, `internal/config/`.
 - **Base URL and auth:** Gateway URL from env `CYNORK_GATEWAY_URL` (default `http://localhost:8080`); token from env `CYNORK_TOKEN` or from `auth login` (stored in optional `~/.config/cynork/config.yaml`).
   No direct DB access; all operations via User API Gateway.
-- **Commands:** `cynork version`, `cynork status`, `cynork auth login` / `logout` / `whoami`, `cynork task create --prompt "..."`, `cynork task result <task-id>`.
+- **Commands:** `cynork version`, `cynork status`, `cynork auth login` / `logout` / `whoami`, `cynork task create --prompt "..."` (natural-language default, inference by default; optional raw/script/commands mode per Section 2.3), `cynork task result <task-id>`.
 - **Testing:** Unit tests for gateway client (mocked HTTP), config, and commands; BDD suite in `cynork/_bdd` with `features/cynork/cynork_cli.feature`.
   Target 90%+ coverage per justfile rule.
 - **Docs:** `dev_docs/post_phase1_cli_implementation_report.md`, `dev_docs/cynork_cli_localhost.md`.
@@ -149,12 +208,17 @@ Suggested order (can be parallelized where independent):
 3. ~~**Inference proxy and pod/network**~~ **Done (worker_node).**
    Worker node supports `use_inference: true` jobs via a Podman pod containing sandbox + proxy sidecar and injects `OLLAMA_BASE_URL`.
    See [post_phase1_inference_proxy_report.md](post_phase1_inference_proxy_report.md).
-4. **Feature files and BDD:** Partially done.
-   E2E and worker_node feature files have inference scenarios; worker_node BDD steps for use_inference/OLLAMA_BASE_URL in place.
-   Remaining: user API and CLI support for `use_inference` on task create; orchestrator BDD step "I create a task with use_inference and command"; optional 413/truncation and fail-fast wording; ensure `just test-bdd` passes.
-5. **E2E script:** `scripts/setup-dev.sh` full-demo already runs inference smoke when Ollama container is present (`run_ollama_inference_smoke`).
-   Optional: extend to run the inference-in-sandbox task path when node and model are available (align with `single_node_e2e_testing_plan.md`).
-6. ~~**Coverage and CI**~~ **Done.** cynork is in `go_modules`; `just ci` runs fmt, lint, test-go-cover, vulncheck-go, test-bdd for all modules including cynork.
+4. **Prompt interpretation - step 1 (inference by default):** Orchestrator defaults job payload to inference path (node runs job in pod with proxy when applicable); no user-facing "use inference" flag.
+   Raw/script/commands modes are the opt-in for literal execution (see Section 2.3 step 1).
+5. **Prompt interpretation - step 2 (minimal interpretation path):** Orchestrator implements minimal "prompt as model input" (sandbox-based script or orchestrator-side call); for natural-language prompt (default), do not pass prompt as sandbox command; result = model output (see Section 2.3 step 2).
+6. **Prompt interpretation - step 3 (raw/script/commands mode):** Explicit raw-command, script, or commands mode (CLI flags or request fields) so literal shell execution remains supported; BDD/E2E can use for "echo hello" style tests (see Section 2.3 step 3).
+7. **Feature files and BDD:** Partially done.
+   E2E and worker_node feature files have inference scenarios; worker_node BDD steps for inference/OLLAMA_BASE_URL in place.
+   Remaining: orchestrator default to inference path on task create (step 4); orchestrator BDD step "I create a task with natural-language prompt"; prompt-interpretation scenarios (default prompt, result contains model output; optional raw/commands scenario); optional 413/truncation and fail-fast wording; ensure `just test-bdd` passes (see Section 2.3 step 4).
+8. **E2E script:** `scripts/setup-dev.sh` full-demo already runs inference smoke when Ollama container is present (`run_ollama_inference_smoke`).
+   Optional: extend to run the inference-in-sandbox task path and prompt-interpretation path (natural-language prompt yields model result) when node and model are available (align with `single_node_e2e_testing_plan.md`).
+9. ~~**Coverage and CI**~~ **Done.** cynork is in `go_modules`; `just ci` runs fmt, lint, test-go-cover, vulncheck-go, test-bdd for all modules including cynork.
+10. **Later (Phase 2):** Full prompt interpretation via LangGraph/workflow (model + sandbox orchestration); see Section 2.3 step 5 and `docs/tech_specs/langgraph_mvp.md`.
 
 ## 9 References
 
@@ -170,6 +234,7 @@ Suggested order (can be parallelized where independent):
 - `docs/tech_specs/user_api_gateway.md` - Auth and task endpoints for CLI.
 - `justfile` - `ci`, `test-go-cover`, `test-bdd`, `e2e`, `go_modules` (includes cynork).
 - `features/` - Orchestrator, worker_node, cynork, and e2e feature files.
+- `dev_docs/task_prompt_semantics_update.md` - Intended task prompt semantics and doc change log.
 
 Report generated 2026-02-20.
 Status reviewed and plan updated 2026-02-20.

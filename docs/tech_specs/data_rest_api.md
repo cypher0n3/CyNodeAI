@@ -95,7 +95,8 @@ Endpoints SHOULD support:
 ## Authentication and Authorization
 
 - Clients MUST authenticate to the User API Gateway.
-- Authorization MUST be evaluated using policy and preferences.
+- Authorization MUST be evaluated using policy and (when applicable) system settings.
+  User preferences are a separate resource and do not govern API authorization; for the distinction between preferences and system settings, see [User preferences (Terminology)](user_preferences.md#2-terminology).
 - Responses MUST be scoped to the authenticated subject.
 
 ## Future GraphQL Option

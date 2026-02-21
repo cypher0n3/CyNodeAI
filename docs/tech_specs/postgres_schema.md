@@ -372,7 +372,10 @@ Constraints
 
 ## Preferences
 
-Preference entries are scoped (system, user, project, task) with precedence.
+Preference entries store user task-execution preferences and constraints.
+Preference entries are scoped (system, user, group, project, task) with precedence.
+Deployment and service configuration (ports, hostnames, database DSNs, and secrets) MUST NOT be stored as preferences.
+The distinction between preferences and system settings is defined in [User preferences (Terminology)](user_preferences.md#2-terminology).
 The `users` table is shared with identity and RBAC.
 
 Source: [`docs/tech_specs/user_preferences.md`](user_preferences.md).
@@ -381,7 +384,7 @@ Source: [`docs/tech_specs/user_preferences.md`](user_preferences.md).
 
 - `id` (uuid, pk)
 - `scope_type` (text)
-  - one of: system, user, project, task
+  - one of: system, user, group, project, task
 - `scope_id` (uuid, nullable)
   - null allowed only for system scope
 - `key` (text)
@@ -410,6 +413,46 @@ Constraints
 Constraints
 
 - Index: (`entry_id`)
+- Index: (`changed_at`)
+
+## System Settings
+
+System settings store operator-managed operational configuration and policy parameters.
+System settings are not user task-execution preferences; for the distinction, see [User preferences (Terminology)](user_preferences.md#2-terminology).
+System settings MUST NOT store secrets in plaintext.
+
+### System Settings Table
+
+Table name: `system_settings`.
+
+- `key` (text, pk)
+- `value` (jsonb)
+- `value_type` (text)
+  - examples: string|number|boolean|object|array
+- `version` (int)
+- `updated_at` (timestamptz)
+- `updated_by` (text)
+
+Constraints
+
+- Unique: (`key`)
+- Index: (`updated_at`)
+
+### System Settings Audit Log Table
+
+Table name: `system_settings_audit_log`.
+
+- `id` (uuid, pk)
+- `key` (text)
+- `old_value` (jsonb)
+- `new_value` (jsonb)
+- `changed_at` (timestamptz)
+- `changed_by` (text)
+- `reason` (text, nullable)
+
+Constraints
+
+- Index: (`key`)
 - Index: (`changed_at`)
 
 ## Tasks, Jobs, and Nodes

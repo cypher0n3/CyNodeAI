@@ -72,10 +72,19 @@ func startWorkerAPI(bearerToken string) error {
 
 // startOllama starts the Phase 1 inference container (Ollama). Fail-fast on error.
 // Publishes port 11434 so the inference proxy (in a pod) can reach Ollama via host.containers.internal:11434.
+// If a container named cynodeai-ollama already exists (e.g. from orchestrator compose), skip creating it.
 func startOllama() error {
 	runtime := getEnv("CONTAINER_RUNTIME", "podman")
 	image := getEnv("OLLAMA_IMAGE", "ollama/ollama")
 	name := "cynodeai-ollama"
+	// Skip if already present (e.g. started by orchestrator docker-compose with ollama on 11434)
+	check := exec.Command(runtime, "ps", "-a", "--format", "{{.Names}}")
+	out, err := check.Output()
+	if err == nil && strings.Contains(string(out), name) {
+		// Container exists; start it if stopped
+		_ = exec.Command(runtime, "start", name).Run()
+		return nil
+	}
 	cmd := exec.Command(runtime, "run", "-d", "--name", name, "-p", "11434:11434", image)
 	if out, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("%w: %s", err, strings.TrimSpace(string(out)))

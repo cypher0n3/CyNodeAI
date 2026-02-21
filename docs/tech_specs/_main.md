@@ -95,6 +95,7 @@ Key principles
 ### External Integration and Routing
 
 - API egress server: [`docs/tech_specs/api_egress_server.md`](api_egress_server.md)
+- Web egress proxy: [`docs/tech_specs/web_egress_proxy.md`](web_egress_proxy.md)
 - Git egress MCP: [`docs/tech_specs/git_egress_mcp.md`](git_egress_mcp.md)
 - External model routing: [`docs/tech_specs/external_model_routing.md`](external_model_routing.md)
 
@@ -143,11 +144,16 @@ Items are grouped by phase and can be implemented incrementally.
 - Node: worker API can receive a job, run a sandbox container, and return a result.
 - System: at least one inference-capable path must be available (node-local inference container such as Ollama, or external model routing with a configured provider key).
 - System: in the single-node case, startup must fail fast (or refuse to enter a ready state) if the node cannot run an inference container and no external provider key is configured.
+- Orchestrator: on startup, select and warm up the effective Project Manager model per [Project Manager Model (Startup Selection and Warmup)](orchestrator.md#project-manager-model-startup-selection-and-warmup).
 - User API Gateway: local user auth (login and refresh), create task, and retrieve task result.
 - Phase 1 config refresh: node fetches configuration on startup only (no polling).
 - Phase 1 node JWT: long-lived; node re-registers on expiry.
 - Phase 1 workflow engine: tasks are executed as a single dispatched sandbox job.
   LangGraph is not integrated in the Phase 1 runtime loop.
+- Task creation (User API, CLI, web console): user-facing input is **plain text or Markdown** (inline or from file), **attachments** (CLI: path strings; web: file upload), **script** (e.g. `--script <path>` / script file), or **short series of commands** (e.g. `--commands` / multi-line).
+  For script or commands, the system runs them in the sandbox; otherwise it interprets the task and may call the AI model and/or run sandbox jobs.
+  Interpretation and inference are the default for task text (no user-facing "use inference" flag).
+  The Phase 1 implementation may pass the task through as the sandbox command until a prompt-interpretation layer exists (see REQ-ORCHES-0125, REQ-ORCHES-0126, REQ-ORCHES-0127).
 
 ### Phase 1.5 Single Node Full Capability (Post-Phase 1)
 
@@ -181,6 +187,6 @@ Items are grouped by phase and can be implemented incrementally.
 - Add API Egress Server with ACL enforcement and auditing.
 - Add Secure Browser Service with deterministic sanitization and DB-backed rules.
 - Add external model routing fallback for standalone orchestrator operation, subject to policy.
-- Expand the CLI management app surface for credentials, preferences, skills, and node management.
+- Expand the CLI management app surface for credentials, user preferences, skills, and node management.
   See [`docs/tech_specs/cli_management_app.md`](cli_management_app.md) and [`docs/tech_specs/skills_storage_and_inference.md`](skills_storage_and_inference.md).
 - Defer the admin web console until after the CLI exists.

@@ -22,6 +22,22 @@ It covers model lifecycle requirements, routing, and model management behavior.
   [orchestrator_bootstrap.md](../tech_specs/orchestrator_bootstrap.md)
   [node.md](../tech_specs/node.md)
   <a id="req-models-0003"></a>
+- **REQ-MODELS-0004:** When local inference is available (Ollama or similar), the orchestrator MUST be able to request that a node loads a specific model to satisfy the Project Manager model startup requirement.
+  The orchestrator MUST support at least one local Project Manager model for limited systems, and that smallest supported local model MUST be `tinyllama`.
+  [model_management.md](../tech_specs/model_management.md)
+  [project_manager_agent.md](../tech_specs/project_manager_agent.md)
+  [CYNAI.ORCHES.Operation.SelectProjectManagerModel](../tech_specs/orchestrator.md#spec-cynai-orches-operation-selectprojectmanagermodel)
+  <a id="req-models-0004"></a>
+- **REQ-MODELS-0005:** The orchestrator MUST support an automatic Project Manager model selection policy that chooses an effective local Project Manager model based on the available resources of the node that will run the model.
+  The effective model selection MUST be deterministic and MUST be specified by the `Orchestrator.SelectProjectManagerModel` algorithm.
+  [CYNAI.ORCHES.Operation.SelectProjectManagerModel](../tech_specs/orchestrator.md#spec-cynai-orches-operation-selectprojectmanagermodel)
+  <a id="req-models-0005"></a>
+- **REQ-MODELS-0006:** The automatic Project Manager model selection policy SHOULD standardize on the Qwen2.5 Instruct model line, with the Llama 3.3 Instruct model line as a secondary fallback when Qwen2.5 is unavailable or incompatible with the serving stack.
+  [CYNAI.ORCHES.Operation.SelectProjectManagerModel](../tech_specs/orchestrator.md#spec-cynai-orches-operation-selectprojectmanagermodel)
+  <a id="req-models-0006"></a>
+- **REQ-MODELS-0007:** Operators MUST be able to override the effective local Project Manager model selection via system settings when needed (for example to pin a specific local model name).
+  [orchestrator_bootstrap.md](../tech_specs/orchestrator_bootstrap.md)
+  <a id="req-models-0007"></a>
 - **REQ-MODELS-0100:** Worker nodes SHOULD load models from the orchestrator cache instead of downloading from external sources.
   [CYNAI.MODELS.ModelCache](../tech_specs/model_management.md#spec-cynai-models-modelcache)
   <a id="req-models-0100"></a>
@@ -46,8 +62,8 @@ It covers model lifecycle requirements, routing, and model management behavior.
 - **REQ-MODELS-0107:** Model management actions MUST be policy-controlled and audited.
   [CYNAI.MODELS.UserDirectedDownloads](../tech_specs/model_management.md#spec-cynai-models-userdirecteddownloads)
   <a id="req-models-0107"></a>
-- **REQ-MODELS-0108:** Model management SHOULD be configurable via PostgreSQL preferences.
-  [CYNAI.MODELS.PreferencesConstraints](../tech_specs/model_management.md#spec-cynai-models-preferencesconstraints)
+- **REQ-MODELS-0108:** Model management SHOULD be configurable via PostgreSQL system settings.
+  [CYNAI.MODELS.SystemSettingsConstraints](../tech_specs/model_management.md#spec-cynai-models-systemsettingsconstraints)
   <a id="req-models-0108"></a>
 - **REQ-MODELS-0109:** The orchestrator SHOULD record all model downloads, imports, and evictions.
   [CYNAI.MODELS.AuditingSafety](../tech_specs/model_management.md#spec-cynai-models-auditingsafety)

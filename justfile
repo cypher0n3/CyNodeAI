@@ -270,6 +270,15 @@ validate-feature-files:
     trap 'popd >/dev/null 2>/dev/null' EXIT
     python3 .ci_scripts/validate_feature_files.py
 
+# Check docs/tech_specs for duplicated spec text (CPD-style); output to stdout only.
+# Pass script args as recipe args, e.g. just check-tech-spec-duplication --report dev_docs/tech_spec_duplication_report.txt
+check-tech-spec-duplication *ARGS:
+    #!/usr/bin/env bash
+    set -e
+    pushd "{{ root_dir }}" >/dev/null
+    trap 'popd >/dev/null 2>/dev/null' EXIT
+    python3 .ci_scripts/check_tech_spec_duplication.py --no-fail {{ ARGS }}
+
 # Lint Markdown (markdownlint-cli2; uses .markdownlint-cli2.jsonc)
 lint-md target = '**/*.md':
     #!/usr/bin/env bash
@@ -439,6 +448,9 @@ clean-db:
 
 e2e:
     @./scripts/setup-dev.sh full-demo
+
+e2e-stop:
+    @./scripts/setup-dev.sh stop
 
 # Create .venv and install Python lint tooling (scripts/requirements-lint.txt). Use with lint-python.
 venv:

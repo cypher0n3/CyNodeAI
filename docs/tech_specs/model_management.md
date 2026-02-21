@@ -3,9 +3,13 @@
 - [Document Overview](#document-overview)
 - [Model Cache](#model-cache)
 - [Model Registry](#model-registry)
+  - [Models Table](#models-table)
+  - [Model Versions Table](#model-versions-table)
+  - [Model Artifacts Table](#model-artifacts-table)
+  - [Node Model Availability Table](#node-model-availability-table)
 - [Node Load Workflow](#node-load-workflow)
 - [User Directed Downloads](#user-directed-downloads)
-- [Preferences and Constraints](#preferences-and-constraints)
+- [System Settings and Constraints](#system-settings-and-constraints)
 - [Auditing and Safety](#auditing-and-safety)
 
 ## Document Overview
@@ -129,6 +133,8 @@ Recommended behavior
 - The orchestrator selects a model version that satisfies task capability requirements.
 - The orchestrator checks `node_model_availability` to find a suitable node with the model already available.
 - When selecting a node for a task, the Project Manager Agent SHOULD prefer nodes where the required model is already loaded.
+- On orchestrator startup (or when the first local inference worker becomes dispatchable), the orchestrator SHOULD request that at least one eligible node loads the effective Project Manager model so the Project Manager Agent can run.
+  Selection and warmup behavior (including system setting keys, sliding-scale policy, and orchestrator-host preference) are defined in [Project Manager Model (Startup Selection and Warmup)](orchestrator.md#project-manager-model-startup-selection-and-warmup); do not restate them here.
 - The orchestrator configures nodes with the model cache endpoint and any required pull credentials during node registration.
 - If no node has the model, the orchestrator requests the target node to load the model.
 - The node retrieves the artifact from the orchestrator cache and installs it into Ollama or a compatible runtime.
@@ -153,17 +159,18 @@ Examples
 
 These actions MUST be policy-controlled and audited.
 
-## Preferences and Constraints
+## System Settings and Constraints
 
-- Spec ID: `CYNAI.MODELS.PreferencesConstraints` <a id="spec-cynai-models-preferencesconstraints"></a>
+- Spec ID: `CYNAI.MODELS.SystemSettingsConstraints` <a id="spec-cynai-models-systemsettingsconstraints"></a>
 
-Model management SHOULD be configurable via PostgreSQL preferences.
+Model management SHOULD be configurable via PostgreSQL system settings.
+These settings are operational configuration and policy parameters.
 
 Traces To:
 
 - [REQ-MODELS-0108](../requirements/models.md#req-models-0108)
 
-Suggested preference keys
+Suggested system setting keys
 
 - `models.cache.max_bytes` (number)
 - `models.cache.evict_policy` (string)

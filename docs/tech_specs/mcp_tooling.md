@@ -68,6 +68,7 @@ Tools exposed to agents SHOULD be grouped into categories.
 - Database query tools
   - read task state, preferences, and audit records
   - write task updates, verification results, and summaries
+  - preference retrieval is performed via `db.preference.get`, `db.preference.list`, and `db.preference.effective` as defined in [`docs/tech_specs/mcp_tool_catalog.md`](mcp_tool_catalog.md)
 
 ## Help MCP Server
 

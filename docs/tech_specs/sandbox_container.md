@@ -219,6 +219,7 @@ Traces To:
 Relevant controlled services
 
 - API Egress Server: [`docs/tech_specs/api_egress_server.md`](api_egress_server.md)
+- Web Egress Proxy: [`docs/tech_specs/web_egress_proxy.md`](web_egress_proxy.md)
 - Secure Browser Service: [`docs/tech_specs/secure_browser_service.md`](secure_browser_service.md)
 - Git Egress MCP: [`docs/tech_specs/git_egress_mcp.md`](git_egress_mcp.md)
 

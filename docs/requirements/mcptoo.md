@@ -74,3 +74,12 @@ It covers MCP tooling conventions, tool catalog expectations, and SDK installati
   Help content SHOULD be aligned with and updated on the same cadence as the default CyNodeAI interaction skill.
   [CYNAI.MCPTOO.HelpMcpServer](../tech_specs/mcp_tooling.md#spec-cynai-mcptoo-helpmcpserver)
   <a id="req-mcptoo-0116"></a>
+- **REQ-MCPTOO-0117:** The MCP tool catalog MUST include typed preference read tools that allow agents to get, list, and resolve effective preferences.
+  At minimum, the catalog MUST include `db.preference.get`, `db.preference.list`, and `db.preference.effective`.
+  [mcp_tool_catalog.md](../tech_specs/mcp_tool_catalog.md)
+  [user_preferences.md](../tech_specs/user_preferences.md)
+  <a id="req-mcptoo-0117"></a>
+- **REQ-MCPTOO-0118:** MCP tool families SHOULD support full CRUD by default.
+  If full CRUD is not appropriate, the tool catalog MUST document an intentional exception and the allowed operations.
+  [mcp_tool_catalog.md](../tech_specs/mcp_tool_catalog.md)
+  <a id="req-mcptoo-0118"></a>

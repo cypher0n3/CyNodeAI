@@ -289,6 +289,8 @@ Sandbox keys
   - Node-local default network policy (e.g. `restricted`, `none`, `allowlist`).
 - `sandbox.allowed_egress_domains` (array of strings, optional)
   - Domain allowlist for sandbox egress when policy is allowlist-based.
+  - This allowlist is enforced by the controlled egress path (for example the Web Egress Proxy).
+    See [`docs/tech_specs/web_egress_proxy.md`](web_egress_proxy.md).
 - `sandbox.resources.max_cpu_cores` (number, optional)
   - Maximum CPU cores allowed for a sandbox job.
 - `sandbox.resources.max_memory_mb` (number, optional)

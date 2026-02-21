@@ -8,7 +8,7 @@ Local-first multi-agent orchestrator for self-hosted teams and small enterprises
 Coordinates sandboxed workers across local nodes and optional cloud capacity, with centralized task management.
 
 CyNodeAI coordinates agents on local nodes and, when configured, cloud-based agents.
-A central orchestrator manages tasks, preferences, and vector storage (PostgreSQL + pgvector).
+A central orchestrator manages tasks, user task-execution preferences, and vector storage (PostgreSQL + pgvector).
 Local worker nodes register, receive jobs, run inference, and report results in isolated containers (Docker or Podman; Podman preferred for rootless); cloud-based agents are managed through the same registration, dispatch, and tool interfaces.
 CyNodeAI also supports routing inference to external AI providers through controlled API egress.
 Nodes may be inference-capable or sandbox-only, depending on configuration.
@@ -67,11 +67,11 @@ CyNodeAI uses a central orchestrator that can manage both node-local workers and
 
 ### Orchestrator Node
 
-- PostgreSQL + pgvector: stores tasks, agent state, user preferences, vector embeddings
+- PostgreSQL + pgvector: stores tasks, agent state, user task-execution preferences, vector embeddings
 - REST + WebSocket API (Go): node registration, job dispatch, result collection
 - Authentication: pre-shared key (PSK) for node registration -> JWT for ongoing comms
 - Workflow engine: LangGraph for multi-step and multi-agent flows
-- Project Manager Agent: long-lived agent that coordinates tasks, enforces standards, and verifies completion using stored preferences
+- Project Manager Agent: long-lived agent that coordinates tasks, enforces standards, and verifies completion using stored user task-execution preferences
 - API Egress Server: controlled external API access that keeps API keys out of sandbox containers
 - Secure Browser Service: fetches and sanitizes web content for agents without exposing the open web to sandboxes
 - External model routing: uses configured external AI APIs when local workers are overloaded or lack required capabilities
@@ -82,7 +82,7 @@ CyNodeAI uses a central orchestrator that can manage both node-local workers and
 - Orchestrator bootstrap: optional YAML import at startup to seed PostgreSQL configuration and integrations
 - Task scheduler: queues work, selects nodes, dispatches jobs; supports retries, leases, and a cron tool for scheduled jobs, wakeups, and automation
 - Execution sandboxes: requests sandbox container execution on worker nodes
-- Co-location preference: run sandbox containers on the same host that is assigned the AI work to minimize network traffic
+- Co-location default: run sandbox containers on the same host that is assigned the AI work to minimize network traffic
 - Orchestrator can also act as a worker by running the same worker services locally
 - Can manage cloud-based agents via the same registration, capability reporting, and job dispatch model
 
@@ -139,7 +139,7 @@ See [`docs/tech_specs/secure_browser_service.md`](docs/tech_specs/secure_browser
 ### External Model Routing
 
 - Orchestrator can route LLM calls to external AI APIs when configured and allowed
-- Default preference is local execution, with external fallback for overload or missing capabilities
+- Default policy is local execution, with external fallback for overload or missing capabilities
 - External calls use the API Egress Server so credentials are never exposed to agents or sandbox containers
 
 See [`docs/tech_specs/external_model_routing.md`](docs/tech_specs/external_model_routing.md).
@@ -181,7 +181,7 @@ See [`docs/tech_specs/mcp_tooling.md`](docs/tech_specs/mcp_tooling.md).
 
 ### Orchestrator Bootstrap
 
-- Orchestrator can import a bootstrap YAML at startup to seed PostgreSQL with system defaults and integration configuration
+- Orchestrator can import a bootstrap YAML at startup to seed PostgreSQL with system-scoped defaults and integration configuration
 - YAML is not the source of truth; PostgreSQL remains the source of truth after import
 - Orchestrator can run as the sole service with zero worker nodes by routing to external AI providers when allowed
 

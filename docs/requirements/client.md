@@ -19,6 +19,7 @@ It covers user-facing management surfaces and user preference behavior.
   [CYNAI.CLIENT.AdminWebConsoleSecurity](../tech_specs/admin_web_console.md#spec-cynai-client-awcsecurity)
   <a id="req-client-0002"></a>
 - **REQ-CLIENT-0003:** Effective preferences by scope precedence; unknown keys passed through; cache per task revision with invalidation on update.
+  Effective preference computation MUST be deterministic and MUST skip invalid preference entries (for example mismatched `value_type`) rather than letting invalid entries override lower-precedence valid entries.
   [CYNAI.STANDS.UserPreferencesRetrieval](../tech_specs/user_preferences.md#spec-cynai-stands-prefretrieval)
   <a id="req-client-0003"></a>
 - **REQ-CLIENT-0004:** The Admin Web Console and the CLI management app MUST provide capability parity for administrative operations.
@@ -70,12 +71,16 @@ It covers user-facing management surfaces and user preference behavior.
   [CYNAI.CLIENT.AdminWebConsoleSecurity](../tech_specs/admin_web_console.md#spec-cynai-client-awcsecurity)
   <a id="req-client-0112"></a>
 - **REQ-CLIENT-0113:** MUST compute effective preferences for the task by merging scopes in precedence order.
+  The precedence order MUST be task => project => user => group => system.
+  If multiple entries exist for the same key at the same scope, clients MUST apply deterministic tie-breakers (for example by timestamp and stable identifier).
   [CYNAI.STANDS.UserPreferencesRetrieval](../tech_specs/user_preferences.md#spec-cynai-stands-prefretrieval)
   <a id="req-client-0113"></a>
 - **REQ-CLIENT-0114:** MUST treat unknown keys as opaque and pass them through to verification/tooling.
+  Unknown keys include user-defined keys not documented by CyNodeAI specs.
   [CYNAI.STANDS.UserPreferencesRetrieval](../tech_specs/user_preferences.md#spec-cynai-stands-prefretrieval)
   <a id="req-client-0114"></a>
 - **REQ-CLIENT-0115:** SHOULD cache effective preferences per task revision, but MUST invalidate on preference update.
+  Cache invalidation MUST occur when any relevant preference entry changes for the task context (system, user, group, project, or task scope).
   [CYNAI.STANDS.UserPreferencesRetrieval](../tech_specs/user_preferences.md#spec-cynai-stands-prefretrieval)
   <a id="req-client-0115"></a>
 - **REQ-CLIENT-0116:** Credential create MUST accept secrets only on create or rotate operations.
@@ -99,10 +104,12 @@ It covers user-facing management surfaces and user preference behavior.
   [CYNAI.CLIENT.CliCredentialManagement](../tech_specs/cli_management_app.md#spec-cynai-client-clicredential)
   <a id="req-client-0120"></a>
 - **REQ-CLIENT-0121:** Preference edits MUST be scoped and versioned.
+  Updates SHOULD use optimistic concurrency via expected-version checks to prevent lost updates.
+  When an expected version is provided and does not match the current stored version, the update MUST fail with a conflict error.
   [CYNAI.CLIENT.AdminWebConsolePreferences](../tech_specs/admin_web_console.md#spec-cynai-client-awcpreferences)
   [CYNAI.CLIENT.CliPreferencesManagement](../tech_specs/cli_management_app.md#spec-cynai-client-clipreferences)
   <a id="req-client-0121"></a>
-- **REQ-CLIENT-0122:** The UI MUST support preference scope selection (system, user, project, task).
+- **REQ-CLIENT-0122:** The UI MUST support preference scope selection (system, user, group, project, task).
   [CYNAI.CLIENT.AdminWebConsolePreferences](../tech_specs/admin_web_console.md#spec-cynai-client-awcpreferences)
   [CYNAI.CLIENT.CliPreferencesManagement](../tech_specs/cli_management_app.md#spec-cynai-client-clipreferences)
   <a id="req-client-0122"></a>
@@ -111,9 +118,22 @@ It covers user-facing management surfaces and user preference behavior.
   [CYNAI.CLIENT.CliPreferencesManagement](../tech_specs/cli_management_app.md#spec-cynai-client-clipreferences)
   <a id="req-client-0123"></a>
 - **REQ-CLIENT-0124:** The UI SHOULD provide validation for known keys and types.
+  The UI MUST allow user-defined keys to be stored even when it cannot validate their semantics, as long as the key and JSON value are valid.
   [CYNAI.CLIENT.AdminWebConsolePreferences](../tech_specs/admin_web_console.md#spec-cynai-client-awcpreferences)
   [CYNAI.CLIENT.CliPreferencesManagement](../tech_specs/cli_management_app.md#spec-cynai-client-clipreferences)
   <a id="req-client-0124"></a>
+- **REQ-CLIENT-0160:** The Admin Web Console and the CLI MUST allow configuring Project Manager model selection for local inference via system settings.
+  At minimum, clients MUST allow editing `agents.project_manager.model.local_default_ollama_model` through the standard system settings management surface (no bespoke API required).
+  Clients SHOULD also surface the automatic selection policy keys for discoverability (for example `agents.project_manager.model.selection.execution_mode`, `agents.project_manager.model.selection.mode`, and `agents.project_manager.model.selection.prefer_orchestrator_host`).
+  System settings are distinct from user preferences; see [User preferences (Terminology)](../tech_specs/user_preferences.md#2-terminology).
+  [CYNAI.CLIENT.AdminWebConsoleSystemSettings](../tech_specs/admin_web_console.md#spec-cynai-client-awcsystemsettings)
+  [CYNAI.CLIENT.CliSystemSettingsManagement](../tech_specs/cli_management_app.md#spec-cynai-client-clisystemsettings)
+  <a id="req-client-0160"></a>
+- **REQ-CLIENT-0161:** The CLI MUST provide a chat command that starts an interactive chat session with the Project Manager (PM) model.
+  The user MUST be able to send messages and receive responses in turn until they exit the session.
+  The chat session MUST use the same gateway and authentication as other CLI commands and MUST NOT expose secrets in history or output.
+  [CYNAI.CLIENT.CliChat](../tech_specs/cli_management_app.md#spec-cynai-client-clichat)
+  <a id="req-client-0161"></a>
 - **REQ-CLIENT-0125:** Node management MUST be mediated by the User API Gateway.
   [CYNAI.CLIENT.AdminWebConsoleNodeManagement](../tech_specs/admin_web_console.md#spec-cynai-client-awcnodemgmt)
   [CYNAI.CLIENT.CliNodeManagement](../tech_specs/cli_management_app.md#spec-cynai-client-clinodemgmt)
@@ -202,3 +222,38 @@ It covers user-facing management surfaces and user preference behavior.
   [CYNAI.CLIENT.CliConfigFileLocation](../tech_specs/cli_management_app.md#spec-cynai-client-cliconfigfilelocation)
   [CYNAI.CLIENT.CliSessionPersistence](../tech_specs/cli_management_app.md#spec-cynai-client-clisessionpersistence)
   <a id="req-client-0150"></a>
+- **REQ-CLIENT-0151:** The CLI MUST allow passing a task as inline text (e.g. `--prompt` or `--task`) or from a file (e.g. `--task-file <path>`) containing plain text or Markdown.
+  The default is interpretation; the system interprets the task and uses inference when needed (no user-facing "use inference" flag).
+  Attachments are specified in REQ-CLIENT-0157.
+  [CYNAI.CLIENT.CliTaskCreatePrompt](../tech_specs/cli_management_app.md#spec-cynai-client-clitaskcreateprompt)
+  <a id="req-client-0151"></a>
+- **REQ-CLIENT-0152:** The admin web console MUST allow submitting a task as plain text or Markdown (inline or from paste) and MUST support attaching files or other artifacts (e.g. file upload) with the same semantics as the CLI and gateway.
+  [CYNAI.CLIENT.AdminWebConsoleCapabilityParity](../tech_specs/admin_web_console.md#spec-cynai-client-awccapabilityparity)
+  <a id="req-client-0152"></a>
+- **REQ-CLIENT-0153:** The CLI MUST support running a script via a flag (e.g. `--script <path>`) and a short series of commands (e.g. `--commands` with one or more commands or repeatable `--command`).
+  These are explicit "run script" / "run commands" modes; the system runs the script or commands in the sandbox rather than interpreting as natural language.
+  [CYNAI.CLIENT.CliTaskCreatePrompt](../tech_specs/cli_management_app.md#spec-cynai-client-clitaskcreateprompt)
+  <a id="req-client-0153"></a>
+- **REQ-CLIENT-0154:** The admin web console MUST support running a script (e.g. script file upload or path) and a short series of commands (e.g. multi-line or list input) with the same semantics as the CLI and gateway.
+  [CYNAI.CLIENT.AdminWebConsoleCapabilityParity](../tech_specs/admin_web_console.md#spec-cynai-client-awccapabilityparity)
+  <a id="req-client-0154"></a>
+- **REQ-CLIENT-0155:** The CLI command surface for tasks MUST be fully specified and MUST be treated as a stable user-facing contract.
+  The CLI MUST implement the task subcommand set, flag names, argument ordering, mutual exclusions, default values, confirmation behavior, output schemas, and exit codes exactly as defined in the CLI management app spec.
+  [CYNAI.CLIENT.CliCommandSurface](../tech_specs/cli_management_app.md#spec-cynai-client-clicommandsurface)
+  <a id="req-client-0155"></a>
+- **REQ-CLIENT-0156:** The CLI MUST return deterministic exit codes for common failure categories (usage error, auth error, gateway error, not found, conflict, validation error).
+  The CLI MUST write machine-parseable output only to stdout when `--output json` is selected, and MUST write all human messages and errors to stderr in JSON mode.
+  [CYNAI.CLIENT.CliCommandSurface](../tech_specs/cli_management_app.md#spec-cynai-client-clicommandsurface)
+  [CYNAI.CLIENT.CliOutputScripting](../tech_specs/cli_management_app.md#spec-cynai-client-clioutputscripting)
+  <a id="req-client-0156"></a>
+- **REQ-CLIENT-0157:** The CLI MUST support other attachment types by accepting one or more path strings (e.g. repeatable `--attach <path>`).
+  For each provided path, the CLI MUST validate the path and MUST send the attachment payload to the gateway according to the task-create API contract.
+  [CYNAI.CLIENT.CliTaskCreatePrompt](../tech_specs/cli_management_app.md#spec-cynai-client-clitaskcreateprompt)
+  <a id="req-client-0157"></a>
+- **REQ-CLIENT-0158:** The CLI MUST support shorthand aliases (`-<x>`) for the most commonly used flags.
+  The required shorthand aliases and their long forms MUST be defined in the CLI management app spec and MUST be treated as a stable user-facing contract.
+  [CYNAI.CLIENT.CliCommandSurface](../tech_specs/cli_management_app.md#spec-cynai-client-clicommandsurface)
+  <a id="req-client-0158"></a>
+- **REQ-CLIENT-0159:** The CLI interactive mode MUST support tab-completion of task names when a task identifier is expected (e.g. for `task get`, `task result`, `task cancel`, `task logs`, `task artifacts list`, `task artifacts get`).
+  [CYNAI.CLIENT.CliInteractiveMode](../tech_specs/cli_management_app.md#spec-cynai-client-cliinteractivemode)
+  <a id="req-client-0159"></a>

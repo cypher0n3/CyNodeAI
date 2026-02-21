@@ -93,7 +93,7 @@ It covers user-facing REST API gateway behavior and related API contracts.
 - **REQ-USRGWY-0124:** The gateway MUST authenticate user clients.
   [CYNAI.USRGWY.AuthAuditing](../tech_specs/user_api_gateway.md#spec-cynai-usrgwy-authauditing)
   <a id="req-usrgwy-0124"></a>
-- **REQ-USRGWY-0125:** The gateway MUST authorize user actions using policy and preferences.
+- **REQ-USRGWY-0125:** The gateway MUST authorize user actions using policy and (when applicable) user task-execution preferences and constraints.
   [CYNAI.USRGWY.AuthAuditing](../tech_specs/user_api_gateway.md#spec-cynai-usrgwy-authauditing)
   <a id="req-usrgwy-0125"></a>
 - **REQ-USRGWY-0126:** The web console MUST be a client of the gateway and MUST NOT connect directly to PostgreSQL.

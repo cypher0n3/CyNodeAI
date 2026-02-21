@@ -19,7 +19,7 @@ It coordinates sandboxed worker execution across local nodes and optional cloud 
 
 ## Architecture Summary
 
-- **Central orchestrator**: owns task state, preferences, audit logs, and vector storage (PostgreSQL + pgvector).
+- **Central orchestrator**: owns task state, user task-execution preferences, audit logs, and vector storage (PostgreSQL + pgvector).
 - **Worker nodes**: register with the orchestrator, receive jobs, run inference and tools in sandboxed containers, and report results.
 - **Sandboxed execution**: per-job or per-agent containers with restricted network access and orchestrator-controlled ingress/egress.
 - **MCP-first tools**: agents use MCP as the standard tool interface for privileged operations and data access.

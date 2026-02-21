@@ -11,7 +11,7 @@
 - [Routing inputs and signals](#routing-inputs-and-signals)
 - [Routing decision output](#routing-decision-output)
 - [How this plugs into OpenAI-compatible clients](#how-this-plugs-into-openai-compatible-clients)
-- [Preferences and configuration model](#preferences-and-configuration-model)
+- [Preferences model (task-execution)](#preferences-model-task-execution)
 - [Auditing, safety, and policy](#auditing-safety-and-policy)
 - [Observability and operator UX](#observability-and-operator-ux)
 - [Rollout plan (incremental)](#rollout-plan-incremental)
@@ -41,7 +41,7 @@ Key references:
 - Support OpenAI-compatible clients by exposing stable "model IDs" that map to routing policies.
 - Prefer local inference when it satisfies capability and latency needs, and fall back to external providers only when policy allows it.
 - Produce auditable, explainable routing decisions with clear reasons and thresholds.
-- Make routing behavior configurable via PostgreSQL preferences (consistent with existing specs).
+- Make routing behavior configurable via PostgreSQL preferences (task-execution preferences and constraints, consistent with existing specs).
 
 ## Non-Goals (For Initial Implementation)
 
@@ -215,9 +215,10 @@ Cline tends to rely on:
 The router should treat "tool support required" as a hard capability constraint.
 If local models do not support a required tool protocol, the router must select an external provider only if policy allows it, otherwise it must fail with an actionable error.
 
-## Preferences and Configuration Model
+## Preferences Model (Task-Execution)
 
 This proposal assumes the preference-based approach in `external_model_routing.md` and extends it with virtual-model policy definitions.
+These preferences are intended to be read by agents and the router during task execution, not to represent deployment or service configuration.
 
 ### Suggested Preference Keys (Additive)
 
