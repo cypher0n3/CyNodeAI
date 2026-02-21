@@ -96,9 +96,11 @@ func (c *Client) Health() error {
 }
 
 // CreateTaskRequest is the body for POST /v1/tasks.
+// InputMode: "prompt" (default) = natural language, inference; "script" or "commands" = literal shell.
 type CreateTaskRequest struct {
 	Prompt       string `json:"prompt"`
 	UseInference bool   `json:"use_inference,omitempty"`
+	InputMode    string `json:"input_mode,omitempty"`
 }
 
 // TaskResponse is the task in create/get responses.

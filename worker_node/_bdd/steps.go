@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -49,6 +50,18 @@ func getWorkerState(ctx context.Context) *workerTestState {
 func workerMux(exec *executor.Executor, bearerToken string) *http.ServeMux {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) })
+	mux.HandleFunc("GET /readyz", func(w http.ResponseWriter, r *http.Request) {
+		ready, reason := exec.Ready(r.Context())
+		if ready {
+			w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte("ready"))
+			return
+		}
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		w.WriteHeader(http.StatusServiceUnavailable)
+		_, _ = w.Write([]byte(reason))
+	})
 	mux.HandleFunc("POST /v1/worker/jobs:run", func(w http.ResponseWriter, r *http.Request) {
 		const prefix = "Bearer "
 		authz := r.Header.Get("Authorization")
@@ -56,9 +69,14 @@ func workerMux(exec *executor.Executor, bearerToken string) *http.ServeMux {
 			writeProblem(w, http.StatusUnauthorized, problem.TypeAuthentication, "Unauthorized", "Invalid or missing bearer token")
 			return
 		}
-		r.Body = http.MaxBytesReader(w, r.Body, 10*1024*1024)
+		maxRequestBytes := int64(10 * 1024 * 1024)
+		r.Body = http.MaxBytesReader(w, r.Body, maxRequestBytes)
 		var req workerapi.RunJobRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			if err != nil && strings.Contains(err.Error(), "request body too large") {
+				writeProblem(w, http.StatusRequestEntityTooLarge, problem.TypeValidation, "Request Entity Too Large", "Request body exceeds maximum size")
+				return
+			}
 			writeProblem(w, http.StatusBadRequest, problem.TypeValidation, "Bad Request", "Invalid request body")
 			return
 		}
@@ -189,6 +207,77 @@ func RegisterWorkerNodeSteps(sc *godog.ScenarioContext, state *workerTestState) 
 		}
 		defer resp.Body.Close()
 		st.lastStatus = resp.StatusCode
+		return nil
+	})
+	sc.Step(`^I call GET /readyz on the worker API$`, func(ctx context.Context) error {
+		st := getWorkerState(ctx)
+		if st == nil || st.server == nil {
+			return fmt.Errorf("worker API not started")
+		}
+		resp, err := http.Get(st.server.URL + "/readyz")
+		if err != nil {
+			return err
+		}
+		defer resp.Body.Close()
+		st.lastStatus = resp.StatusCode
+		body, _ := io.ReadAll(resp.Body)
+		st.lastBody, _ = json.Marshal(map[string]string{"body": string(body)})
+		return nil
+	})
+	sc.Step(`^the worker API returns status 200$`, func(ctx context.Context) error {
+		st := getWorkerState(ctx)
+		if st == nil {
+			return fmt.Errorf("no state")
+		}
+		if st.lastStatus != http.StatusOK {
+			return fmt.Errorf("expected 200, got %d", st.lastStatus)
+		}
+		return nil
+	})
+	sc.Step(`^the response body is "([^"]*)"$`, func(ctx context.Context, want string) error {
+		st := getWorkerState(ctx)
+		if st == nil || st.lastBody == nil {
+			return fmt.Errorf("no response body")
+		}
+		var m map[string]string
+		if err := json.Unmarshal(st.lastBody, &m); err != nil {
+			return err
+		}
+		got := m["body"]
+		if got != want {
+			return fmt.Errorf("response body %q, want %q", got, want)
+		}
+		return nil
+	})
+	sc.Step(`^I submit a sandbox job request with body size exceeding the limit$`, func(ctx context.Context) error {
+		st := getWorkerState(ctx)
+		if st == nil || st.server == nil {
+			return fmt.Errorf("worker API not started")
+		}
+		// Body > 10 MiB so server returns 413; use valid JSON shape so error is "request body too large"
+		big := bytes.Repeat([]byte("x"), 11*1024*1024)
+		body := []byte(`{"version":1,"task_id":"t","job_id":"j","sandbox":{"image":"a","command":["`)
+		body = append(body, big...)
+		body = append(body, []byte(`"]}}`)...)
+		req, _ := http.NewRequest("POST", st.server.URL+"/v1/worker/jobs:run", bytes.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer "+st.bearerToken)
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			return err
+		}
+		defer resp.Body.Close()
+		st.lastStatus = resp.StatusCode
+		return nil
+	})
+	sc.Step(`^the worker API returns status 413$`, func(ctx context.Context) error {
+		st := getWorkerState(ctx)
+		if st == nil {
+			return fmt.Errorf("no state")
+		}
+		if st.lastStatus != http.StatusRequestEntityTooLarge {
+			return fmt.Errorf("expected 413, got %d", st.lastStatus)
+		}
 		return nil
 	})
 	sc.Step(`^I submit a sandbox job that runs command "([^"]*)"$`, func(ctx context.Context, cmd string) error {

@@ -22,20 +22,20 @@ It covers the intended architecture, prerequisites, and setup steps once the Use
 ## Scope and Current State
 
 - CyNodeAI exposes a single user-facing surface via the **User API Gateway** (orchestrator).
-- The gateway is designed to integrate with external tools such as Open WebUI; see [User API Gateway](docs/tech_specs/user_api_gateway.md).
-- The gateway **MAY** expose an OpenAI-compatible subset for chat and model listing, backed by orchestrator task workflows (Client Compatibility in [user_api_gateway.md](docs/tech_specs/user_api_gateway.md)).
+- The gateway is designed to integrate with external tools such as Open WebUI; see [User API Gateway](tech_specs/user_api_gateway.md).
+- The gateway **MAY** expose an OpenAI-compatible subset for chat and model listing, backed by orchestrator task workflows (Client Compatibility in [user_api_gateway.md](tech_specs/user_api_gateway.md)).
 - That OpenAI-compatible layer is optional in the spec and may not be implemented yet.
 - This doc assumes the gateway will (or does) offer at least:
   - `GET /v1/models` (or equivalent) for model listing
   - `POST /v1/chat/completions` (or equivalent) for chat, backed by orchestrator task/session workflows
-- All compatibility layers MUST preserve orchestrator policy and auditing; see [REQ-USRGWY-0121](docs/requirements/usrgwy.md#req-usrgwy-0121).
+- All compatibility layers MUST preserve orchestrator policy and auditing; see [REQ-USRGWY-0121](requirements/usrgwy.md#req-usrgwy-0121).
 
 ## Chat Agent Backing (Implementation Requirement)
 
 The implementation MUST allow users to interact via OpenWebUI with one of the following backings:
 
 - **Project Manager Agent**: The default or primary option so users can create and manage tasks, get task and project info, and drive work through the orchestrator.
-  See [Project Manager Agent](docs/tech_specs/project_manager_agent.md).
+  See [Project Manager Agent](tech_specs/project_manager_agent.md).
 - **Separate configurable chat agent**: An alternative chat agent (or multiple agents) that can be selected and configured via the **Admin Web Console** (e.g. model, system prompt, capabilities), so admins can offer different chat experiences (e.g. general assistant vs. task-focused Project Manager).
 
 The gateway MUST support at least interaction with the Project Manager Agent for tasking and info; it MAY also expose additional chat agents configurable in the admin console.
@@ -57,7 +57,7 @@ References: [Open WebUI - Starting with OpenAI-Compatible](https://docs.openwebu
 - User API Gateway configured with an **OpenAI-compatibility** mode that exposes:
   - A base path for the OpenAI API (e.g. `/v1` or `/openai/v1`).
   - Chat completions and (optionally) models endpoints that route to the Project Manager Agent (for tasking and info) and/or to additional chat agents configurable in the admin console.
-- A local user account and credentials (or API token) for gateway authentication; see [Local User Accounts](docs/tech_specs/local_user_accounts.md).
+- A local user account and credentials (or API token) for gateway authentication; see [Local User Accounts](tech_specs/local_user_accounts.md).
 - OpenWebUI installed (Docker, Docker Compose, or native).
 
 ## Architecture Overview
@@ -69,7 +69,7 @@ References: [Open WebUI - Starting with OpenAI-Compatible](https://docs.openwebu
 5. **Gateway** returns an OpenAI-format response to OpenWebUI so it can display the reply in the chat UI.
 
 All requests remain within CyNodeAI policy and auditing; the compatibility layer does not bypass them.
-Interaction with the Project Manager Agent MUST be supported for task creation, task status, and project info; additional chat agents MAY be configurable via the [Admin Web Console](docs/tech_specs/admin_web_console.md).
+Interaction with the Project Manager Agent MUST be supported for task creation, task status, and project info; additional chat agents MAY be configurable via the [Admin Web Console](tech_specs/admin_web_console.md).
 
 ## Setup Steps
 
@@ -78,7 +78,7 @@ Follow these steps to connect OpenWebUI to the CyNodeAI User API Gateway once th
 ### 1. Start CyNodeAI User Gateway
 
 Ensure the orchestrator and user-gateway are running.
-See [orchestrator/README.md](orchestrator/README.md) and, if using containers, [orchestrator/docker-compose.yml](orchestrator/docker-compose.yml) or [orchestrator/systemd/README.md](orchestrator/systemd/README.md).
+See [../orchestrator/README.md](../orchestrator/README.md) and, if using containers, [../orchestrator/docker-compose.yml](../orchestrator/docker-compose.yml) or [../orchestrator/systemd/README.md](../orchestrator/systemd/README.md).
 
 - Note the gateway base URL (e.g. `http://localhost:8080` or `https://cynodeai.example.com`).
 - If an OpenAI-compat path is implemented under a subpath (e.g. `/openai/v1`), the full base URL for OpenWebUI will be `{gateway_base}/openai/v1`; otherwise `{gateway_base}/v1`.
@@ -89,7 +89,7 @@ See [orchestrator/README.md](orchestrator/README.md) and, if using containers, [
   Example with cynork: `cynork auth login -u <handle> -p <password>`; the stored token can be used as the OpenWebUI API key if the gateway accepts Bearer tokens for the OpenAI-compat endpoint.
 - **Option B (API key)**: If the gateway supports long-lived API keys for integrations, create one in the admin console or via API and use it as the OpenWebUI API key.
 
-The gateway MUST authenticate user clients; see [user_api_gateway.md - Authentication and Auditing](docs/tech_specs/user_api_gateway.md#authentication-and-auditing).
+The gateway MUST authenticate user clients; see [user_api_gateway.md - Authentication and Auditing](tech_specs/user_api_gateway.md#authentication-and-auditing).
 
 ### 3. Deploy and Configure OpenWebUI
 
@@ -126,10 +126,10 @@ These are implementation details for the gateway; the exact URL layout and respo
 
 ## References
 
-- CyNodeAI: [README.md](README.md), [meta.md](meta.md)
-- User API Gateway: [docs/tech_specs/user_api_gateway.md](docs/tech_specs/user_api_gateway.md)
-- Project Manager Agent: [docs/tech_specs/project_manager_agent.md](docs/tech_specs/project_manager_agent.md)
-- Admin Web Console: [docs/tech_specs/admin_web_console.md](docs/tech_specs/admin_web_console.md)
-- Data REST API: [docs/tech_specs/data_rest_api.md](docs/tech_specs/data_rest_api.md)
-- Local user accounts and auth: [docs/tech_specs/local_user_accounts.md](docs/tech_specs/local_user_accounts.md)
+- CyNodeAI: [README.md](README.md), [meta.md](../meta.md)
+- User API Gateway: [tech_specs/user_api_gateway.md](tech_specs/user_api_gateway.md)
+- Project Manager Agent: [tech_specs/project_manager_agent.md](tech_specs/project_manager_agent.md)
+- Admin Web Console: [tech_specs/admin_web_console.md](tech_specs/admin_web_console.md)
+- Data REST API: [tech_specs/data_rest_api.md](tech_specs/data_rest_api.md)
+- Local user accounts and auth: [tech_specs/local_user_accounts.md](tech_specs/local_user_accounts.md)
 - Open WebUI: [OpenAI-Compatible setup](https://docs.openwebui.com/getting-started/quick-start/starting-with-openai-compatible)

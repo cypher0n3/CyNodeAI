@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -538,6 +539,75 @@ func TestTaskHandler_CreateTaskWithUseInference_StoresUseInferenceInJobPayload(t
 	}
 }
 
+func TestTaskHandler_CreateTask_InputModePrompt_StoresPromptJobPayload(t *testing.T) {
+	mockDB := testutil.NewMockDB()
+	handler := NewTaskHandler(mockDB, newTestLogger())
+	userID := uuid.New()
+	ctx := context.WithValue(context.Background(), contextKeyUserID, userID)
+	body := CreateTaskRequest{Prompt: "What is 2+2?", InputMode: "prompt"}
+	jsonBody, _ := json.Marshal(body)
+	req := httptest.NewRequest("POST", "/v1/tasks", bytes.NewBuffer(jsonBody)).WithContext(ctx)
+	rec := httptest.NewRecorder()
+	handler.CreateTask(rec, req)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d: %s", rec.Code, rec.Body.String())
+	}
+	var resp TaskResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	taskID, _ := uuid.Parse(resp.ID)
+	jobs, _ := mockDB.GetJobsByTaskID(ctx, taskID)
+	if len(jobs) != 1 {
+		t.Fatalf("expected 1 job, got %d", len(jobs))
+	}
+	var pl struct {
+		Image string            `json:"image"`
+		Env   map[string]string `json:"env"`
+	}
+	if err := json.Unmarshal([]byte(*jobs[0].Payload.Ptr()), &pl); err != nil {
+		t.Fatalf("unmarshal payload: %v", err)
+	}
+	if pl.Image != "python:alpine" {
+		t.Errorf("expected image python:alpine, got %s", pl.Image)
+	}
+	if pl.Env["CYNODE_PROMPT"] != "What is 2+2?" {
+		t.Errorf("expected CYNODE_PROMPT in env, got %v", pl.Env)
+	}
+}
+
+func TestTaskHandler_CreateTask_InputModeCommands_StoresShellJobPayload(t *testing.T) {
+	mockDB := testutil.NewMockDB()
+	handler := NewTaskHandler(mockDB, newTestLogger())
+	userID := uuid.New()
+	ctx := context.WithValue(context.Background(), contextKeyUserID, userID)
+	body := CreateTaskRequest{Prompt: "echo hello", InputMode: "commands"}
+	jsonBody, _ := json.Marshal(body)
+	req := httptest.NewRequest("POST", "/v1/tasks", bytes.NewBuffer(jsonBody)).WithContext(ctx)
+	rec := httptest.NewRecorder()
+	handler.CreateTask(rec, req)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d", rec.Code)
+	}
+	var resp TaskResponse
+	_ = json.Unmarshal(rec.Body.Bytes(), &resp)
+	taskID, _ := uuid.Parse(resp.ID)
+	jobs, _ := mockDB.GetJobsByTaskID(ctx, taskID)
+	if len(jobs) != 1 {
+		t.Fatalf("expected 1 job, got %d", len(jobs))
+	}
+	var pl struct {
+		Command []string `json:"command"`
+	}
+	if err := json.Unmarshal([]byte(*jobs[0].Payload.Ptr()), &pl); err != nil {
+		t.Fatalf("unmarshal payload: %v", err)
+	}
+	cmdStr := strings.Join(pl.Command, " ")
+	if !strings.Contains(cmdStr, "echo hello") {
+		t.Errorf("expected command to contain 'echo hello', got %s", cmdStr)
+	}
+}
+
 func TestTaskHandler_CreateTaskDBError(t *testing.T) {
 	mockDB := testutil.NewMockDB()
 	mockDB.ForceError = errors.New("database error")
@@ -1014,10 +1084,10 @@ func TestNodeHandler_GetConfig_SetsConfigVersionWhenNil(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Errorf("expected status 200, got %d: %s", rec.Code, rec.Body.String())
 	}
-	// Handler should have persisted config_version "1"
+	// Handler should have persisted a ULID config_version (26-char Crockford Base32)
 	updated, _ := mockDB.GetNodeByID(context.Background(), node.ID)
-	if updated.ConfigVersion == nil || *updated.ConfigVersion != "1" {
-		t.Errorf("expected config_version 1 to be set, got %v", updated.ConfigVersion)
+	if updated.ConfigVersion == nil || len(*updated.ConfigVersion) != 26 {
+		t.Errorf("expected config_version ULID (26 chars) to be set, got %v", updated.ConfigVersion)
 	}
 }
 

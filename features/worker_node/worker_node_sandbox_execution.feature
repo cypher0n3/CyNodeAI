@@ -76,3 +76,18 @@ Feature: Worker Node Sandbox Execution
     When I submit a sandbox job with use_inference that runs command "echo $OLLAMA_BASE_URL"
     Then the sandbox job completes successfully
     And the sandbox job result stdout contains "http://localhost:11434"
+
+  @req_worker_0140
+  @req_worker_0142
+  @spec_cynai_worker_workerapihealthchecks
+  Scenario: Worker API GET readyz returns ready when runtime is available
+    When I call GET /readyz on the worker API
+    Then the worker API returns status 200
+    And the response body is "ready"
+
+  @req_worker_0145
+  @spec_cynai_worker_workerapirequestsizelimits
+  Scenario: Worker API returns 413 when request body is too large
+    Given the worker API is configured with a valid bearer token
+    When I submit a sandbox job request with body size exceeding the limit
+    Then the worker API returns status 413

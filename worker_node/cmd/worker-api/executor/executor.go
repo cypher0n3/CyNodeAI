@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/cypher0n3/cynodeai/go_shared_libs/contracts/workerapi"
 )
@@ -45,6 +46,21 @@ func New(runtime string, defaultTimeout time.Duration, maxOutputBytes int, ollam
 		inferenceProxyImage:   inferenceProxyImage,
 		inferenceProxyCommand: inferenceProxyCommand,
 	}
+}
+
+// Ready reports whether the executor can accept job requests (container runtime available).
+// Used for GET /readyz. For "direct" runtime always returns true.
+func (e *Executor) Ready(ctx context.Context) (ready bool, reason string) {
+	if e.runtime == "direct" {
+		return true, ""
+	}
+	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, e.runtime, "info")
+	if _, err := cmd.CombinedOutput(); err != nil {
+		return false, fmt.Sprintf("%s not available: %v", e.runtime, err)
+	}
+	return true, ""
 }
 
 // RunJob executes a sandbox job and returns the result.
@@ -128,13 +144,8 @@ func (e *Executor) RunJob(ctx context.Context, req *workerapi.RunJobRequest, wor
 
 	resp.Truncated.Stdout = len(stdoutStr) > e.maxOutputBytes
 	resp.Truncated.Stderr = len(stderrStr) > e.maxOutputBytes
-
-	if resp.Truncated.Stdout {
-		stdoutStr = stdoutStr[:e.maxOutputBytes]
-	}
-	if resp.Truncated.Stderr {
-		stderrStr = stderrStr[:e.maxOutputBytes]
-	}
+	stdoutStr = truncateUTF8(stdoutStr, e.maxOutputBytes)
+	stderrStr = truncateUTF8(stderrStr, e.maxOutputBytes)
 
 	resp.Stdout = stdoutStr
 	resp.Stderr = stderrStr
@@ -196,12 +207,8 @@ func (e *Executor) runJobWithPodInference(ctx context.Context, req *workerapi.Ru
 	stderrStr := stderr.String()
 	resp.Truncated.Stdout = len(stdoutStr) > e.maxOutputBytes
 	resp.Truncated.Stderr = len(stderrStr) > e.maxOutputBytes
-	if resp.Truncated.Stdout {
-		stdoutStr = stdoutStr[:e.maxOutputBytes]
-	}
-	if resp.Truncated.Stderr {
-		stderrStr = stderrStr[:e.maxOutputBytes]
-	}
+	stdoutStr = truncateUTF8(stdoutStr, e.maxOutputBytes)
+	stderrStr = truncateUTF8(stderrStr, e.maxOutputBytes)
 	resp.Stdout = stdoutStr
 	resp.Stderr = stderrStr
 
@@ -330,13 +337,8 @@ func (e *Executor) runDirect(ctx context.Context, req *workerapi.RunJobRequest, 
 
 	resp.Truncated.Stdout = len(stdoutStr) > e.maxOutputBytes
 	resp.Truncated.Stderr = len(stderrStr) > e.maxOutputBytes
-
-	if resp.Truncated.Stdout {
-		stdoutStr = stdoutStr[:e.maxOutputBytes]
-	}
-	if resp.Truncated.Stderr {
-		stderrStr = stderrStr[:e.maxOutputBytes]
-	}
+	stdoutStr = truncateUTF8(stdoutStr, e.maxOutputBytes)
+	stderrStr = truncateUTF8(stderrStr, e.maxOutputBytes)
 
 	resp.Stdout = stdoutStr
 	resp.Stderr = stderrStr
@@ -355,4 +357,23 @@ func (e *Executor) runDirect(ctx context.Context, req *workerapi.RunJobRequest, 
 	resp.Status = workerapi.StatusCompleted
 	resp.ExitCode = 0
 	return resp, nil
+}
+
+// truncateUTF8 truncates s to at most maxBytes bytes while preserving valid UTF-8
+// (no rune is cut in the middle). Per worker_api.md stdout/stderr capture limits.
+func truncateUTF8(s string, maxBytes int) string {
+	if len(s) <= maxBytes {
+		return s
+	}
+	b := []byte(s[:maxBytes])
+	for i := len(b) - 1; i >= 0; i-- {
+		if utf8.RuneStart(b[i]) {
+			_, n := utf8.DecodeRune(b[i:])
+			if n > 0 && i+n <= len(b) {
+				return string(b[:i+n])
+			}
+			b = b[:i]
+		}
+	}
+	return string(b)
 }

@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"context"
+	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
@@ -16,6 +17,7 @@ import (
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/database"
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/models"
 	"github.com/google/uuid"
+	"github.com/oklog/ulid/v2"
 )
 
 // NodeHandler handles node registration and management endpoints.
@@ -233,6 +235,18 @@ func (h *NodeHandler) buildBootstrapResponse(baseURL, nodeJWT string, expiresAt 
 	}
 }
 
+// resolveConfigVersion returns the node's config version or a new ULID, persisting when new.
+func (h *NodeHandler) resolveConfigVersion(ctx context.Context, node *models.Node) string {
+	if node.ConfigVersion != nil && *node.ConfigVersion != "" {
+		return *node.ConfigVersion
+	}
+	configVersion := ulid.MustNew(ulid.Timestamp(time.Now()), rand.Reader).String()
+	if err := h.db.UpdateNodeConfigVersion(ctx, node.ID, configVersion); err != nil {
+		h.logError("set config version", "error", err)
+	}
+	return configVersion
+}
+
 // GetConfig handles GET /v1/nodes/config. Returns node_configuration_payload_v1.
 func (h *NodeHandler) GetConfig(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
@@ -253,21 +267,25 @@ func (h *NodeHandler) GetConfig(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	configVersion := "1"
-	if node.ConfigVersion != nil && *node.ConfigVersion != "" {
-		configVersion = *node.ConfigVersion
-	} else {
-		if err := h.db.UpdateNodeConfigVersion(ctx, node.ID, configVersion); err != nil {
-			h.logError("set config version", "error", err)
-		}
-	}
-
-	baseURL := strings.TrimSuffix(h.orchestratorPublicURL, "/")
+	configVersion := h.resolveConfigVersion(ctx, node)
 	workerAPITargetURL := h.workerAPITargetURL
 	if node.WorkerAPITargetURL != nil && *node.WorkerAPITargetURL != "" {
 		workerAPITargetURL = *node.WorkerAPITargetURL
 	}
 
+	payload := h.buildNodeConfigPayload(node, configVersion, workerAPITargetURL)
+
+	if workerAPITargetURL != "" && h.workerAPIBearerToken != "" {
+		if err := h.db.UpdateNodeWorkerAPIConfig(ctx, node.ID, workerAPITargetURL, h.workerAPIBearerToken); err != nil {
+			h.logError("update node worker api config", "error", err)
+		}
+	}
+
+	WriteJSON(w, http.StatusOK, payload)
+}
+
+func (h *NodeHandler) buildNodeConfigPayload(node *models.Node, configVersion, workerAPITargetURL string) nodepayloads.NodeConfigurationPayload {
+	baseURL := strings.TrimSuffix(h.orchestratorPublicURL, "/")
 	payload := nodepayloads.NodeConfigurationPayload{
 		Version:       1,
 		ConfigVersion: configVersion,
@@ -288,15 +306,7 @@ func (h *NodeHandler) GetConfig(w http.ResponseWriter, r *http.Request) {
 			OrchestratorBearerToken: h.workerAPIBearerToken,
 		}
 	}
-
-	// Persist delivered Worker API URL and token so the dispatcher can use them per-node.
-	if workerAPITargetURL != "" && h.workerAPIBearerToken != "" {
-		if err := h.db.UpdateNodeWorkerAPIConfig(ctx, node.ID, workerAPITargetURL, h.workerAPIBearerToken); err != nil {
-			h.logError("update node worker api config", "error", err)
-		}
-	}
-
-	WriteJSON(w, http.StatusOK, payload)
+	return payload
 }
 
 // ConfigAck handles POST /v1/nodes/config. Accepts node_config_ack_v1 and records the acknowledgement.

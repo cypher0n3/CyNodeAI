@@ -66,9 +66,9 @@ These behaviors are reflected in Phase 1 (inference path requirement), Phase 2 (
 
 | Phase | Focus                                                                                      | Status                                                                                        |
 | ----- | ------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------- |
-| 0     | Foundations (schema, node payloads, MCP gateway spec, LangGraph contract)                  | Spec complete; implementation in progress / done for Phase 1 scope                            |
-| 1     | Single node happy path (registration, dispatch, sandbox, auth, task APIs)                  | Substantially complete; minor spec gaps (see Current Status)                                  |
-| 1.5   | Inference in sandbox (proxy sidecar), E2E inference, CLI module                            | CLI and inference proxy implemented; prompt interpretation and default inference path pending |
+| 0     | Foundations (schema, node payloads, MCP gateway spec, LangGraph contract)                  | Spec complete; implementation in progress / done for Phase 1 scope                           |
+| 1     | Single node happy path (registration, dispatch, sandbox, auth, task APIs)                  | Complete (readyz, ULID config_version, Worker readyz, 413/truncation; see Current Status)     |
+| 1.5   | Inference in sandbox (proxy sidecar), E2E inference, CLI, prompt interpretation           | Complete (input_mode, prompt-as-model path, BDD; `just ci` passes)                             |
 | 2     | MCP in the loop, LangGraph workflow, MCP DB/artifact tools                                 | Not started                                                                                   |
 | 3     | Multi-node selection, leases, retries, telemetry                                           | Not started                                                                                   |
 | 4     | API Egress, Secure Browser, external model routing, CLI expansion, admin console after CLI | Not started                                                                                   |
@@ -86,10 +86,12 @@ These behaviors are reflected in Phase 1 (inference path requirement), Phase 2 (
 
 ## Current Status
 
-- **Phase 1:** Node registration, config delivery, per-node dispatch, sandbox run with `--network=none`, user-gateway auth and task APIs are in place.
-  Open gaps: `config_version` ULID, Worker API `GET /readyz`, and ready-state gating for inference availability (the system MUST refuse to enter a ready state when no local inference is available and no external provider keys are configured); see [mvp_phase1_code_review_report.md](../dev_docs/mvp_phase1_code_review_report.md) and [mvp_specs_gaps_closure_status.md](../dev_docs/mvp_specs_gaps_closure_status.md).
-- **Phase 1.5:** CLI (cynork) and inference proxy sidecar are implemented.
-  Remaining: default task creation to interpretation/inference path (orchestrator and User API); minimal "prompt as model input" path; raw/script/commands mode for explicit shell; BDD/feature coverage for prompt interpretation.
+- **Phase 1:** Complete.
+  Node registration, config delivery (with ULID `config_version`), per-node dispatch, sandbox run, user-gateway auth and task APIs in place.
+  Orchestrator `GET /readyz` returns 503 when no dispatchable nodes (inference path unavailable); Worker API `GET /readyz` and 413 for oversized body; stdout/stderr truncation (UTF-8-safe, 256 KiB).
+- **Phase 1.5:** Complete.
+  CLI (cynork), inference proxy sidecar, and prompt interpretation: `input_mode` (prompt/script/commands), default prompt-as-model path (sandbox job with fixed model-call script), BDD/feature coverage.
+  `just ci` passes (lint, coverage >=90%, BDD orchestrator/worker_node/cynork).
   See [PHASE1_STATUS.md](../dev_docs/PHASE1_STATUS.md).
 
 ## Prompt Interpretation: Intended Semantics
@@ -98,11 +100,8 @@ These behaviors are reflected in Phase 1 (inference path requirement), Phase 2 (
 The **system** interprets the prompt and decides whether to call the AI model and/or run sandbox job(s).
 The prompt is **not** the literal shell command executed in the sandbox.
 
-**Current gap:** The CLI and backend treat the prompt as the exact command string run in the sandbox (e.g. `sh -c "<prompt>"`).
-There is no "ask the model" or interpretation layer yet; natural-language prompts therefore fail when executed as shell (e.g. `Tell: not found`).
-
-**Direction:** Add a prompt-interpretation layer (orchestrator/workflow) that turns the user prompt into model calls and/or sandbox commands.
-Until that exists, the MVP may pass the prompt through as the sandbox command for backward compatibility when the user supplies an explicit shell command (e.g. `echo hello`).
+**Current state (Phase 1.5 done):** Default `input_mode` is `"prompt"`; the orchestrator sends a sandbox job that runs a fixed model-call script with the user prompt as `CYNODE_PROMPT`, so natural-language prompts yield model output.
+Explicit `input_mode` `"script"` or `"commands"` runs the prompt as literal shell for backward compatibility.
 See [REQ-ORCHES-0125](../docs/requirements/orches.md#req-orches-0125) and task-prompt semantics in `docs/requirements/` and `docs/tech_specs/`.
 
 ### Actionable Sequence
@@ -366,8 +365,9 @@ Reference: [docs/tech_specs/\_main.md](../docs/tech_specs/_main.md) Phase 1; [ex
   Gateway URL default `http://localhost:8080`; no direct DB access; all operations via User API Gateway.
   See [cli_management_app.md](../docs/tech_specs/cli_management_app.md) and [ports_and_endpoints.md](../docs/tech_specs/ports_and_endpoints.md).
 
-**Done:** CLI module, inference proxy and pod path, worker_node BDD for inference (step "I submit a sandbox job with use_inference that runs command", scenario "Sandbox receives OLLAMA_BASE_URL when job requests inference").
-**Next:** Orchestrator/User API default to inference path for task jobs; minimal prompt-as-model-input path; raw/script/commands mode; BDD for natural-language prompt (default) and result containing model output.
+**Done:** CLI module, inference proxy and pod path, worker_node BDD for inference; orchestrator/User API default to inference path; minimal prompt-as-model-input path (Option A); raw/script/commands mode; BDD for natural-language prompt (default) and result containing model output, and for commands mode (literal shell).
+Worker BDD: GET /readyz, 413 on oversized body. `just ci` passes.
+**Next:** Phase 2 (MCP in the loop, LangGraph workflow).
 
 Reference: [docs/tech_specs/node.md](../docs/tech_specs/node.md), [docs/tech_specs/sandbox_container.md](../docs/tech_specs/sandbox_container.md).
 
@@ -402,22 +402,14 @@ Reference: [docs/tech_specs/\_main.md](../docs/tech_specs/_main.md) Phase 4.
 
 ## Feature Files and BDD
 
-- **`features/cynork/cynork_cli.feature`:** Exists.
-  Covers status, auth login/whoami, create task and get result.
-  Add scenario for natural-language prompt (default; result contains model output) and optionally raw/script/commands mode.
+- **`features/cynork/cynork_cli.feature`:** Exists; covers status, auth, create task and get result.
   Suite tag `@suite_cynork`; see [features/README.md](../features/README.md).
 - **`features/e2e/single_node_happy_path.feature`:** Inference scenario exists (`@inference_in_sandbox`).
-  Steps for "I create a task with use_inference and command" and "the node executes the sandbox job in a pod with inference proxy".
-  Add or extend scenario for prompt interpretation (natural-language prompt, task result contains model response).
   Not run by `just test-bdd` (no e2e Godog runner); script-driven `just e2e` is primary.
-- **`features/worker_node/worker_node_sandbox_execution.feature`.** Inference scenario and worker_node BDD step for use_inference implemented.
-  Optionally add 413 and truncation scenarios; see [mvp_phase1_code_review_report.md](../dev_docs/mvp_phase1_code_review_report.md).
-- **`features/orchestrator/orchestrator_startup.feature`:** Clarify or rescope "Orchestrator fails fast when no inference path is available" (document as node-side only or implement orchestrator readiness check).
-- **Orchestrator feature (new or existing):** Scenario(s) for prompt interpretation: create task with natural-language prompt (default); task completes; result contains model output (not shell error).
-- **BDD suites:** `just test-bdd` runs `./orchestrator/_bdd ./worker_node/_bdd ./cynork/_bdd`.
-  Orchestrator: add steps "I create a task with prompt X" (default) and "the task result contains the model response."
-  Worker node: inference steps done; keep scenarios that do not require inference runnable without a real Ollama.
-  E2E: extend single_node_happy_path for prompt-interpretation when API/orchestrator default exists.
+- **`features/worker_node/worker_node_sandbox_execution.feature`:** Inference scenario, use_inference step, GET /readyz (200 "ready"), and 413 on oversized body scenarios in place.
+- **`features/orchestrator/orchestrator_task_lifecycle.feature`:** Scenarios for task with natural-language prompt (default) completing with model output, and for input_mode commands running literal shell; step "the job sent to the worker has command containing ...".
+- **`features/orchestrator/orchestrator_startup.feature`:** Orchestrator readyz returns 503 when no inference path (no dispatchable nodes).
+- **BDD suites:** `just test-bdd` runs `./orchestrator/_bdd ./worker_node/_bdd ./cynork/_bdd`; orchestrator and worker_node steps for prompt interpretation, readyz, and 413 implemented; all pass under `just ci`.
 
 ## Unit Tests and Coverage
 
@@ -433,20 +425,18 @@ Summary of what is done and what remains; task IDs refer to the Task Breakdown a
 
 Items below are implemented.
 
-- Phase 1 gap closure: optional first (P1-01-P1-05 not yet done).
-- CLI module bootstrap: cynork at `cynork/`, in go.work and go_modules; version, status, auth, task create/result; unit tests and BDD; documented.
+- Phase 1 gap closure: P1-01-P1-05 (orchestrator health/readyz with 503 reason and inference-path gating; config_version ULID; Worker API GET /readyz; 413 and UTF-8-safe truncation).
+- CLI module bootstrap: cynork at `cynork/`, in go.work and go_modules; version, status, auth, task create/result; unit tests and BDD; documented; `--input-mode` (prompt/script/commands).
 - Inference proxy and pod/network: worker node supports `use_inference: true` jobs via Podman pod (sandbox + proxy sidecar, `OLLAMA_BASE_URL` in sandbox env).
-- Coverage and CI: cynork in go_modules; `just ci` runs fmt, lint, test-go-cover, vulncheck-go, test-bdd for all modules.
+- P1.5-01-P1.5-03: input_mode and interpretation-by-default; minimal prompt-as-model-input path (Option A); BDD for natural-language prompt (default) and commands mode; feature files and orchestrator/worker_node BDD steps (readyz, 413).
+- Coverage and CI: `just ci` runs fmt, lint, test-go-cover (>=90%), vulncheck-go, test-bdd for orchestrator, worker_node, cynork; all pass.
 
 ### Remaining (Order)
 
-1. Phase 1 gap closure: P1-01-P1-05 (health/readyz, ready-state gating, config_version ULID, Worker API GET /readyz, request size and truncation).
-2. P1.5-01: Task create encodes input mode; interpretation by default.
-3. P1.5-02: Minimal "prompt as model input" path (Option A or B).
-4. P1.5-03: Raw/script/commands mode; BDD for prompt interpretation and raw mode.
-5. Feature files and BDD: orchestrator BDD step for natural-language prompt; prompt-interpretation scenarios; optional 413/truncation and fail-fast wording.
-6. E2E script: optional extend setup-dev.sh to run inference-in-sandbox task path and prompt-interpretation path when node and model are available.
-7. Phase 2+: MCP in the loop, LangGraph workflow; Phase 3 multi-node; Phase 4 API Egress and external routing.
+1. E2E script: optional extend setup-dev.sh to run inference-in-sandbox and prompt-interpretation path when node and model are available.
+2. Phase 2: MCP in the loop, LangGraph workflow, MCP DB/artifact tools.
+3. Phase 3: Multi-node selection, leases, retries, telemetry.
+4. Phase 4: API Egress and external routing.
 
 ## References
 

@@ -27,9 +27,11 @@ func NewTaskHandler(db database.Store, logger *slog.Logger) *TaskHandler {
 }
 
 // CreateTaskRequest represents task creation request.
+// InputMode: "prompt" (default) = interpret as natural language, use inference; "script" or "commands" = run as literal shell.
 type CreateTaskRequest struct {
 	Prompt       string `json:"prompt"`
 	UseInference bool   `json:"use_inference,omitempty"`
+	InputMode    string `json:"input_mode,omitempty"`
 }
 
 // TaskResponse represents task data in responses.
@@ -66,7 +68,11 @@ func (h *TaskHandler) CreateTask(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// MVP Phase 1: create a single queued job for the task.
-	payload, err := marshalJobPayload(req.Prompt, req.UseInference)
+	inputMode := req.InputMode
+	if inputMode == "" {
+		inputMode = "prompt"
+	}
+	payload, err := marshalJobPayload(req.Prompt, req.UseInference, inputMode)
 	if err != nil {
 		h.logger.Error("marshal job payload", "error", err)
 		WriteInternalError(w, "Failed to create task job")
@@ -87,9 +93,35 @@ func (h *TaskHandler) CreateTask(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func marshalJobPayload(prompt string, useInference bool) (string, error) {
-	// This payload is interpreted by the control-plane dispatcher.
-	// It is intentionally simple for Phase 1: one sandbox command from the task prompt.
+// promptModeModelCommand is the fixed command for "prompt" input_mode: calls Ollama with CYNODE_PROMPT env, prints response or error.
+const promptModeModelCommand = `import os,sys,json,urllib.request
+u=os.environ.get('OLLAMA_BASE_URL','http://localhost:11434')+'/api/generate'
+p=os.environ.get('CYNODE_PROMPT','')
+try:
+  r=urllib.request.urlopen(urllib.request.Request(u,data=json.dumps({'model':'tinyllama','prompt':p,'stream':False}).encode(),headers={'Content-Type':'application/json'}),timeout=120)
+  d=json.loads(r.read().decode())
+  out=d.get('response','')
+  if d.get('error'): out='[Ollama error] '+d.get('error','')
+  print(out or '(no response)')
+except Exception as e: print('[Ollama request failed]', str(e), file=sys.stderr); sys.exit(1)
+`
+
+func marshalJobPayload(prompt string, useInference bool, inputMode string) (string, error) {
+	// prompt = natural language, use inference by default; script/commands = literal shell (backward compat).
+	if inputMode == "prompt" {
+		obj := map[string]any{
+			"image":          "python:alpine",
+			"command":        []string{"python3", "-c", promptModeModelCommand},
+			"env":            map[string]string{"CYNODE_PROMPT": prompt},
+			"use_inference":  true,
+		}
+		b, err := json.Marshal(obj)
+		if err != nil {
+			return "", err
+		}
+		return string(b), nil
+	}
+	// script / commands: run prompt as literal shell command (backward compat).
 	obj := map[string]any{
 		"image":   "alpine:latest",
 		"command": []string{"sh", "-c", prompt},
