@@ -189,6 +189,11 @@ Task name format
 - Trailing numbers MAY be used for uniqueness when the same logical name would otherwise repeat (e.g. `deploy-docs-2`, `run-tests-3`).
 - Task names MUST be unique within the scope where they are resolved (e.g. per user or per project as defined by the gateway).
 
+User-supplied name on create
+
+- The task create request (e.g. POST from the User API Gateway or CLI) MAY include a suggested name (e.g. `name` or `task_name`).
+- The orchestrator MUST accept the suggested name when present, MUST normalize it to the task name format above (lowercase, single dashes), and MUST ensure uniqueness within scope (e.g. by appending `-2`, `-3`, etc.) when the normalized name already exists.
+
 APIs and the CLI MUST accept either the task UUID or the task name as the task identifier when a task is referenced.
 
 ### Task Naming Applicable Requirements

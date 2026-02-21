@@ -107,8 +107,6 @@ Source requirements: [`docs/tech_specs/node.md`](node.md#capability-reporting).
   - `orchestrator_reachable` (boolean, optional)
   - `outbound_policy` (string, optional)
     - examples: unrestricted, restricted, allowlist, none
-- `capability_hash` (string, required)
-  - stable hash over the normalized report (see below)
 - `inference` (object, optional)
   - `supported` (boolean)
   - `mode` (string, optional)
@@ -156,28 +154,11 @@ Example
   "network": {
     "orchestrator_reachable": true,
     "outbound_policy": "restricted"
-  },
-  "capability_hash": "sha256:...redacted..."
+  }
 }
 ```
 
-#### Capability Hash Algorithm (Required)
-
-The node MUST compute `capability_hash` as:
-
-- `sha256:` + lowercase hex SHA-256 digest of the canonical JSON encoding of the capability report **excluding**
-  the `capability_hash` field itself.
-
-Canonical JSON encoding rules (required)
-
-- Use UTF-8.
-- Use JSON object keys sorted lexicographically.
-- Do not include insignificant whitespace.
-- Omit optional fields that are unknown instead of setting them to `null`.
-- Preserve array element order.
-- Encode numbers using JSON number syntax without trailing `.0` for integers.
-
-The node MUST compute the hash over the byte sequence of the canonical JSON string.
+The payload is the canonical representation of the node's capabilities; the orchestrator MUST ingest and store the full JSON (or a normalized snapshot) for scheduling and display.
 
 ## Node Bootstrap Payload
 

@@ -329,7 +329,7 @@ All subcommands that call the gateway MUST use the resolved gateway URL and reso
 - `cynork auth login`: interactive or flag-based login; POST to gateway login endpoint; MUST support writing token to config and/or credential helper; MUST NOT echo password.
 - `cynork auth logout`: clear token from config file and optionally from credential helper; MUST NOT require gateway call.
 - `cynork auth whoami`: call gateway with current token; MUST require auth.
-- `cynork task ...`: create tasks, list tasks, get task status, cancel tasks, and retrieve task results and artifacts.
+- `cynork task ...`: create tasks, list tasks, get task status, watch task status, cancel tasks, and retrieve task results and artifacts.
 - `cynork chat`: start an interactive chat session with the Project Manager (PM) model; see [Chat Command](#chat-command).
 - `cynork creds ...`: see [Credential Management](#credential-management); MUST use gateway credential endpoints.
 - `cynork prefs ...`: see [Preferences Management](#preferences-management).
@@ -455,6 +455,7 @@ Task identifier
 
 - Where a task is referenced (e.g. `task get`, `task result`, `task cancel`, `task logs`, `task artifacts list`, `task artifacts get`), the CLI MUST accept either the task UUID or the human-readable task name (see [Project Manager Agent - Task Naming](project_manager_agent.md#task-naming)).
 - Task list and task get output MUST include the task name when the system provides one (e.g. in table mode as `task_name=<name>` and in JSON as `task_name`).
+  For task name format and semantics, see [Project Manager Agent - Task Naming](project_manager_agent.md#task-naming).
 
 Task status enum
 
@@ -481,6 +482,17 @@ Task input modes (exactly one MUST be provided)
 Attachment flags (optional)
 
 - `-a, --attach <path>` repeated zero or more times.
+
+Optional flags
+
+- `--name <string>`.
+  Suggested human-readable name for the task.
+  When provided, the CLI MUST include it in the task create request.
+  The orchestrator accepts the value, normalizes it per [Task Naming](project_manager_agent.md#task-naming), and ensures uniqueness (e.g. appends a number) when the normalized name already exists in scope.
+- `--result`.
+  Default is false.
+  When set, after creating the task the CLI MUST poll the gateway for the task result until the task reaches a terminal status (`completed`, `failed`, or `canceled`), then MUST print the result in the same format as `cynork task result`.
+  If the user interrupts (e.g. Ctrl+C) before the task reaches a terminal status, the CLI MUST exit without printing the result.
 
 Behavior
 
@@ -516,8 +528,8 @@ Size limits
 
 Output
 
-- Table mode MUST print a single line containing `task_id=<id>`.
-- JSON mode MUST print `{"task_id":"<id>"}`.
+- When `--result` is not set: table mode MUST print a single line containing `task_id=<id>` and when the system provides a task name, `task_name=<name>`; JSON mode MUST print at least `task_id`, and when provided, `task_name`.
+- When `--result` is set: after the task reaches a terminal status, the CLI MUST print the result in the same format as `cynork task result` (task_id, task_name when provided, status, jobs and their results).
 
 #### `cynork task list`
 
@@ -569,8 +581,8 @@ Behavior
 - If `--yes` is not provided, the CLI MUST prompt for confirmation.
 - The confirmation prompt MUST be `Cancel task <task_id>? [y/N]`.
 - If the user does not enter `y` or `Y`, the CLI MUST exit with code 0 and MUST NOT make a gateway request.
-- On success, the CLI MUST print exactly one line `task_id=<id> canceled=true` in table mode.
-- On success, the CLI MUST print `{"task_id":"<id>","canceled":true}` in JSON mode.
+- On success, table mode MUST print exactly one line including `task_id=<id>`, `canceled=true`, and when the system provides a task name, `task_name=<name>`.
+- On success, JSON mode MUST print at least `task_id`, `canceled`, and when provided, `task_name`.
 
 #### `cynork task result <task_id>`
 
@@ -587,9 +599,32 @@ Output
 
 - If `--wait` is set, the CLI MUST poll the gateway until the task reaches a terminal status.
   Terminal statuses are `completed`, `failed`, and `canceled`.
-- Table mode MUST print exactly one line and MUST include at least `task_id=<id>` and `status=<status>`.
+- Table mode MUST print exactly one line and MUST include at least `task_id=<id>`, `status=<status>`, and when the system provides a task name, `task_name=<name>`.
 - If the task is in a terminal status, table mode MUST also include `stdout=<...>` and `stderr=<...>`.
-- JSON mode MUST print a single JSON object with at least `task_id`, `status`, `stdout`, and `stderr` fields.
+- JSON mode MUST print a single JSON object with at least `task_id`, `status`, and when provided, `task_name`; and when terminal, `stdout` and `stderr`.
+
+#### `cynork task watch <task_id>`
+
+Invocation
+
+- `cynork task watch <task_id>`.
+
+Behavior
+
+- The CLI MUST poll the gateway for the task result at a fixed interval and redraw the output, similar to the Linux `watch(1)` command.
+- The CLI MUST use the same output format as `cynork task result` (task_id, task_name when provided, status, jobs and results).
+- When stdout is a terminal and `--no-clear` is not set, the CLI MUST clear the screen before each redraw so the display updates in place.
+- The CLI MUST exit with code 0 when the task reaches a terminal status (`completed`, `failed`, or `canceled`), or when the user interrupts (e.g. Ctrl+C).
+
+Optional flags
+
+- `-n, --interval <duration>`.
+  Poll interval (e.g. `2s`, `500ms`).
+  Default is `2s`.
+  Minimum is `1s`.
+- `--no-clear`.
+  Do not clear the screen between polls; output scrolls instead.
+  Useful when stdout is not a terminal or when capturing output.
 
 #### `cynork task logs <task_id>`
 
@@ -608,7 +643,7 @@ Optional flags
 Output
 
 - Table mode MUST print raw log lines to stdout.
-- JSON mode MUST print `{"task_id":"<id>","stream":"<stream>","lines":[... ]}`.
+- JSON mode MUST print an object with at least `task_id`, `stream`, `lines`; and when the system provides a task name, `task_name`.
 
 #### `cynork task artifacts list <task_id>`
 
@@ -621,7 +656,7 @@ Output
 - Table mode MUST print a header line with these tab-separated columns in this exact order.
   `artifact_id`, `name`, `content_type`, `size_bytes`.
 - Table mode MUST then print one row per artifact.
-- JSON mode MUST print `{"task_id":"<id>","artifacts":[... ]}`.
+- JSON mode MUST print an object with at least `task_id`, `artifacts`; and when the system provides a task name, `task_name`.
   Each artifact object MUST include at least `artifact_id`, `name`, and `size_bytes`.
 
 #### `cynork task artifacts get <task_id> <artifact_id> --out <path>`
@@ -737,7 +772,7 @@ Required behaviors
 - The prompt MUST show the active gateway URL (or a short label) and SHOULD show auth identity when available (e.g. handle from whoami).
 - Commands entered in the shell MUST behave identically to non-interactive invocation: same flags, same `--output table|json`, same exit codes.
 - Tab completion MUST be provided for commands, subcommands, and known flag values; MUST NOT suggest or expose secret values (REQ-CLIENT-0142).
-- Tab completion MUST be provided for task names when a task identifier is expected (e.g. after `task get`, `task result`, `task cancel`, `task logs`, `task artifacts list`, `task artifacts get`); completion MAY be driven by gateway-backed list of task names available to the user (REQ-CLIENT-0159).
+- Tab completion MUST be provided for task names when a task identifier is expected (e.g. after `task get`, `task result`, `task watch`, `task cancel`, `task logs`, `task artifacts list`, `task artifacts get`); completion MAY be driven by gateway-backed list of task names available to the user (REQ-CLIENT-0159).
 - History (if implemented) MUST NOT record lines that contain secrets or that were entered during secret prompts; secret prompts MUST bypass history.
 - When invoked as `cynork shell -c "..."`, the CLI MUST run the given command once and exit with that command's exit code (zero or non-zero).
 

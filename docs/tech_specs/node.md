@@ -516,7 +516,7 @@ Required capability fields
 
 Change reporting
 
-- Nodes MUST compute and report `capability_hash` using the algorithm defined in [`docs/tech_specs/node_payloads.md`](node_payloads.md).
+- Nodes MUST report the full capability report as JSON (actual capabilities: node identity, platform, compute, gpu, sandbox, network, inference, tls, etc.) using the schema in [`docs/tech_specs/node_payloads.md`](node_payloads.md).
 - If capabilities change (hardware change, driver change, runtime change), the node MUST report an updated capability report.
 
 ## Configuration Delivery

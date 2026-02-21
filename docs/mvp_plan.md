@@ -100,7 +100,12 @@ These behaviors are reflected in Phase 1 (inference path requirement), Phase 2 (
 The **system** interprets the prompt and decides whether to call the AI model and/or run sandbox job(s).
 The prompt is **not** the literal shell command executed in the sandbox.
 
-**Current state (Phase 1.5 done):** Default `input_mode` is `"prompt"`; the orchestrator sends a sandbox job that runs a fixed model-call script with the user prompt as `CYNODE_PROMPT`, so natural-language prompts yield model output.
+**Intended flow:** For `input_mode` `"prompt"`, the user prompt goes **directly to the Project Manager (PM) model**; the PM model then decides what to do (e.g. create and run a command in the sandbox, return an answer).
+Inference is always used for prompt mode (`use_inference` true).
+
+**Current state (MVP Phase 1):** Prompt->model MUST work.
+When the user-gateway has `OLLAMA_BASE_URL` or `INFERENCE_URL` set, the orchestrator calls the model directly and stores the response as a completed job.
+If that call fails, it falls back to the sandbox job path.
 Explicit `input_mode` `"script"` or `"commands"` runs the prompt as literal shell for backward compatibility.
 See [REQ-ORCHES-0125](../docs/requirements/orches.md#req-orches-0125) and task-prompt semantics in `docs/requirements/` and `docs/tech_specs/`.
 

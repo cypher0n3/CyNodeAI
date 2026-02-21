@@ -522,8 +522,6 @@ Constraints
   - stable identifier used in registration and scheduling (e.g. from node startup YAML)
 - `status` (text)
   - examples: registered, active, inactive, drained
-- `capability_hash` (text, nullable)
-  - stable hash of last reported capability for change detection
 - `config_version` (text, nullable)
   - version of last applied node configuration payload
 - `worker_api_target_url` (text, nullable)
@@ -550,16 +548,14 @@ Constraints
 
 ### Node Capabilities Table
 
-Optional snapshot of last reported capability payload for scheduling and display.
-Full payload may be large; this table stores a normalized or summary form, or the orchestrator may store only `capability_hash` on `nodes` and keep full payload in object storage or in-memory cache.
+Stores the last reported capability payload (full JSON of actual capabilities) for scheduling and display.
+The orchestrator MUST store the capability report JSON here (or a normalized snapshot that preserves the actual capabilities per node.md).
 
 - `id` (uuid, pk)
 - `node_id` (uuid, fk to `nodes.id`)
 - `reported_at` (timestamptz)
 - `capability_snapshot` (jsonb)
-  - normalized capability report (identity, compute, gpu, labels, etc. per node.md)
-- `hash` (text)
-  - matches `nodes.capability_hash` for this report
+  - full capability report JSON (identity, platform, compute, gpu, sandbox, network, inference, tls, etc. per node_payloads.md)
 
 Constraints
 
