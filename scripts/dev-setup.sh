@@ -12,7 +12,7 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
-# Configuration
+# Configuration (default ports match docs/tech_specs/ports_and_endpoints.md)
 POSTGRES_CONTAINER_NAME="cynodeai-postgres-dev"
 POSTGRES_PORT="${POSTGRES_PORT:-5432}"
 POSTGRES_PASSWORD="${POSTGRES_PASSWORD:-postgres}"

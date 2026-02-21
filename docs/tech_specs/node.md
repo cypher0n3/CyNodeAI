@@ -96,6 +96,8 @@ Option A (required for node-local execution when inference is enabled)
 - The inference proxy forwards requests to the node's single Ollama container over a node-internal container network.
 - The sandbox container calls the model via `http://localhost:11434`.
 
+See [`docs/tech_specs/ports_and_endpoints.md`](ports_and_endpoints.md#spec-cynai-stands-portsandendpoints) for consolidated default ports and conflict avoidance.
+
 Rationale
 
 - The sandbox can use a stable localhost endpoint.

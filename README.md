@@ -39,6 +39,8 @@ Install [just](https://github.com/casey/just), then run:
 - `just vulncheck-go` - Go dependency vuln check
 - `just fmt-go` - format Go code
 
+For running services locally (Postgres, control-plane, user-gateway, worker node, E2E): [Development setup](docs/development_setup.md).
+
 ## Repository Layout and Go Modules
 
 Canonical layout and project meta: [meta.md](meta.md).
@@ -52,6 +54,7 @@ Go workspace modules (see root [go.work](go.work) and [justfile](justfile)):
 
 Documentation:
 
+- **Documentation index**: [docs/README.md](docs/README.md) - entry point for all project docs.
 - Requirements (canonical "what"): [docs/requirements/](docs/requirements/) ([README](docs/requirements/README.md))
 - Tech specs (implementation "how"): [docs/tech_specs/](docs/tech_specs/) ([index](docs/tech_specs/_main.md))
 

@@ -1,5 +1,19 @@
 # OpenWebUI and CyNodeAI Integration
 
+- [Purpose](#purpose)
+- [Scope and Current State](#scope-and-current-state)
+- [Chat Agent Backing (Implementation Requirement)](#chat-agent-backing-implementation-requirement)
+- [How OpenWebUI Connects to Backends](#how-openwebui-connects-to-backends)
+- [Prerequisites](#prerequisites)
+- [Architecture Overview](#architecture-overview)
+- [Setup Steps](#setup-steps)
+  - [1. Start CyNodeAI User Gateway](#1-start-cynodeai-user-gateway)
+  - [2. Obtain Gateway Credentials](#2-obtain-gateway-credentials)
+  - [3. Deploy and Configure OpenWebUI](#3-deploy-and-configure-openwebui)
+  - [4. Network and Deployment Notes](#4-network-and-deployment-notes)
+- [What CyNodeAI Must Provide (Implementation Notes)](#what-cynodeai-must-provide-implementation-notes)
+- [References](#references)
+
 ## Purpose
 
 This document describes how to integrate [Open WebUI](https://github.com/open-webui/open-webui) with CyNodeAI so that OpenWebUI can use the CyNodeAI orchestrator as an OpenAI-compatible chat backend.

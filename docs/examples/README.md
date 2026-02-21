@@ -12,4 +12,5 @@ These are for reference and local development; do not commit secrets.
 - **Node (worker) bootstrap:** [`node_bootstrap_example.yaml`](node_bootstrap_example.yaml)
   - Node startup config: orchestrator URL, registration PSK reference, node identity, Worker API and sandbox settings.
 
-Specs: [`docs/tech_specs/orchestrator_bootstrap.md`](../tech_specs/orchestrator_bootstrap.md), [`docs/tech_specs/node.md`](../tech_specs/node.md).
+Specs: [orchestrator_bootstrap.md](../tech_specs/orchestrator_bootstrap.md), [node.md](../tech_specs/node.md).
+Documentation index: [docs/README.md](../README.md).

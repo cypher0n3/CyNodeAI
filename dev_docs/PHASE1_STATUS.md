@@ -86,7 +86,6 @@ Key artifacts and entry points for Phase 1.
 | `dev_docs/mvp_phase1_completion_plan.md` | Phase 1 chunks, acceptance checklist, requirement scope |
 | `dev_docs/mvp_phase1_code_review_report.md` | In-depth code review vs specs, feature/BDD gaps (2026-02-20) |
 | `dev_docs/PHASE1_STATUS.md` | This status report |
-| `dev_docs/mvp_specs_gaps_closure_status.md` | Spec gaps closure status |
 
 ---
 
@@ -239,7 +238,6 @@ Summary:
 
 - **Database:** Shared helpers in `orchestrator/internal/database` (queryRow, execContext, scanAllRows); table-driven getter/exec/list tests.
 - **Testutil:** Unified `runWithLock`, `getByKey`, and invalidate helpers in `orchestrator/internal/testutil/mock_db.go`; table-driven GetNotFound tests.
-- **tmp/old review:** `dev_docs/tmp_old_review.md` compares `tmp/old/` with current orchestrator and `go_shared_libs`; no gaps.
 - **E2E:** `just e2e` runs full demo (Postgres, control-plane, user-gateway, node, happy path); `scripts/setup-dev.sh full-demo` includes node.
 - **Worker node:** Lint fixes in `worker_node/cmd/node-manager` (hugeParam, errcheck, paramTypeCombine) and `worker_node/cmd/worker-api` (gocognit via extracted handlers).
 

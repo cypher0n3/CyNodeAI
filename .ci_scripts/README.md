@@ -12,6 +12,8 @@ This directory holds Python scripts used for continuous integration and document
 Scripts are run from the repository root (e.g. via the [justfile](../justfile)).
 Reports are written to [dev_docs/](../dev_docs/); temporary files, if any, go in [tmp/](../tmp/).
 
+**See also:** [docs/README.md](../docs/README.md) (documentation index), [README.md](../README.md) (project overview).
+
 ## Scripts
 
 The following scripts are available.
@@ -48,13 +50,13 @@ Any block that appears in more than one file (or in multiple places in the same 
 - Uses a sliding window of contiguous lines (default 4 lines per block).
 - Normalizes lines (collapse whitespace, strip) and skips boilerplate (TOC links, `---`, empty lines, short lines).
 - Hashes each block; blocks with the same fingerprint in two or more locations are reported as duplicates.
-- Writes a report to [dev_docs/](../dev_docs/) (default: `dev_docs/tech_spec_duplication_report.txt`).
+- Writes a report to the given path when `--report` is used (e.g. `tmp/tech_spec_duplication_report.txt` to avoid committing).
 - Exit 0 if no duplicates, 1 if duplicates found (unless `--no-fail` is used).
 
 #### Running the Checker
 
 From repo root: `just check-tech-spec-duplication` (output to stdout only; exits 0).
-To write a report file, pass script args: `just check-tech-spec-duplication --report dev_docs/tech_spec_duplication_report.txt`.
+To write a report file, pass script args: `just check-tech-spec-duplication --report tmp/tech_spec_duplication_report.txt`.
 
 Or run the script directly:
 
@@ -65,7 +67,7 @@ python3 .ci_scripts/check_tech_spec_duplication.py
 Optional report path:
 
 ```bash
-python3 .ci_scripts/check_tech_spec_duplication.py --report dev_docs/tech_spec_duplication_report.txt
+python3 .ci_scripts/check_tech_spec_duplication.py --report tmp/tech_spec_duplication_report.txt
 ```
 
 #### Checker Options

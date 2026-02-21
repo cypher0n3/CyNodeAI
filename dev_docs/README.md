@@ -19,12 +19,14 @@ Before merging any branch to main, complete these steps:
 
 1. Review all files in `dev_docs/`
 2. Decide the fate of each document:
-    - Move valuable content to appropriate permanent location in `docs/` or otherwise
-    - Delete temporary working documents
-    - Extract and preserve important decisions or rationale
+   - Move valuable content to appropriate permanent location in `docs/` or otherwise
+   - Delete temporary working documents
+   - Extract and preserve important decisions or rationale
 3. Ensure only `README.md` remains in this directory
 
 Branches with unreviewed files in `dev_docs/` will be rejected during merge review.
+
+**See also:** Permanent documentation lives in [docs/](../docs/README.md); root project overview at [README.md](../README.md).
 
 ## File Naming Convention
 

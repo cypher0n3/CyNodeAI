@@ -79,7 +79,9 @@ Feature scenarios may also be reflected in orchestrator integration tests under 
 
 ## 5 Cross-References
 
-- Root project overview at [`README.md`](../README.md).
-- Technical specifications index at [`docs/tech_specs/_main.md`](../docs/tech_specs/_main.md).
+- Root project overview at [README.md](../README.md).
+- Documentation index at [docs/README.md](../docs/README.md).
+- Technical specifications index at [docs/tech_specs/_main.md](../docs/tech_specs/_main.md).
+- Default ports and E2E/BDD port usage at [`docs/tech_specs/ports_and_endpoints.md`](../docs/tech_specs/ports_and_endpoints.md#e2e-and-bdd).
 - Orchestrator implementation at [`orchestrator/README.md`](../orchestrator/README.md).
 - Worker node implementation at [`worker_node/README.md`](../worker_node/README.md).
