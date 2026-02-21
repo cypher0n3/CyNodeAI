@@ -20,6 +20,7 @@ const (
 var (
 	configPath string
 	outputFmt  string
+	noColor    bool
 	cfg        *config.Config
 	// getDefaultConfigPath resolves the default config file path when --config is not set.
 	// Tests may override to inject failures.
@@ -79,4 +80,5 @@ func exitFromGatewayErr(err error) error {
 func init() {
 	rootCmd.PersistentFlags().StringVar(&configPath, "config", "", "config file (default ~/.config/cynork/config.yaml)")
 	rootCmd.PersistentFlags().StringVarP(&outputFmt, "output", "o", outputFormatTable, "output format: table | json")
+	rootCmd.PersistentFlags().BoolVar(&noColor, "no-color", false, "disable colored output")
 }
