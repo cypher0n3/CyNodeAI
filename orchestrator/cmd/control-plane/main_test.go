@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -8,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -85,6 +87,52 @@ func TestGetEnv(t *testing.T) {
 	defer func() { _ = os.Unsetenv("TEST_CP_ENV") }()
 	if getEnv("TEST_CP_ENV", "default") != "value" {
 		t.Error("from env")
+	}
+}
+
+func TestReadyzHandler_NoNodes(t *testing.T) {
+	mock := testutil.NewMockDB()
+	handler := readyzHandler(mock, slog.Default())
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodGet, "/readyz", http.NoBody)
+	handler(w, r)
+	if w.Code != http.StatusServiceUnavailable {
+		t.Errorf("readyz (no nodes): got %d", w.Code)
+	}
+	if !bytes.Contains(w.Body.Bytes(), []byte("no inference path")) {
+		t.Errorf("readyz body should contain 'no inference path', got %s", w.Body.String())
+	}
+}
+
+func TestReadyzHandler_WithNode(t *testing.T) {
+	mock := testutil.NewMockDB()
+	ctx := context.Background()
+	node, _ := mock.CreateNode(ctx, "n1")
+	url, token := "http://localhost:8081", "tok"
+	_ = mock.UpdateNodeWorkerAPIConfig(ctx, node.ID, url, token)
+	_ = mock.UpdateNodeConfigAck(ctx, node.ID, "01HXYZ", "applied", time.Now().UTC(), nil)
+	_ = mock.UpdateNodeStatus(ctx, node.ID, "active")
+	handler := readyzHandler(mock, slog.Default())
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodGet, "/readyz", http.NoBody)
+	handler(w, r)
+	if w.Code != http.StatusOK {
+		t.Errorf("readyz (with node): got %d", w.Code)
+	}
+	if strings.TrimSpace(w.Body.String()) != "ready" {
+		t.Errorf("readyz body want 'ready', got %s", w.Body.String())
+	}
+}
+
+func TestReadyzHandler_DBError(t *testing.T) {
+	mock := testutil.NewMockDB()
+	mock.ForceError = errors.New("db error")
+	handler := readyzHandler(mock, slog.Default())
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodGet, "/readyz", http.NoBody)
+	handler(w, r)
+	if w.Code != http.StatusServiceUnavailable {
+		t.Errorf("readyz (db error): got %d", w.Code)
 	}
 }
 

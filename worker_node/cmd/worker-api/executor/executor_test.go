@@ -604,3 +604,42 @@ func TestRunJobDirectWorkspaceDir(t *testing.T) {
 		t.Errorf("pwd %q should end with workspace dir %q", out, dir)
 	}
 }
+
+func TestReady_Direct(t *testing.T) {
+	e := New("direct", time.Second, 1024, "", "", nil)
+	ready, reason := e.Ready(context.Background())
+	if !ready || reason != "" {
+		t.Errorf("direct runtime: ready=%v reason=%q", ready, reason)
+	}
+}
+
+func TestReady_UnavailableRuntime(t *testing.T) {
+	e := New("nonexistent-runtime-xyz", time.Second, 1024, "", "", nil)
+	ready, reason := e.Ready(context.Background())
+	if ready || reason == "" {
+		t.Errorf("unavailable runtime: ready=%v reason=%q", ready, reason)
+	}
+}
+
+func TestTruncateUTF8(t *testing.T) {
+	tests := []struct {
+		name     string
+		s        string
+		maxBytes int
+		want     string
+	}{
+		{"empty", "", 10, ""},
+		{"under limit", "hello", 10, "hello"},
+		{"exact", "1234567890", 10, "1234567890"},
+		{"over ascii", "123456789012345", 10, "1234567890"},
+		{"rune boundary", "a\u00e9b", 3, "a\u00e9"}, // U+00E9 is 2 bytes in UTF-8
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := truncateUTF8(tt.s, tt.maxBytes)
+			if got != tt.want {
+				t.Errorf("truncateUTF8(%q, %d) = %q, want %q", tt.s, tt.maxBytes, got, tt.want)
+			}
+		})
+	}
+}

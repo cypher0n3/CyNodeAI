@@ -152,6 +152,7 @@ func run(ctx context.Context, store database.Store, cfg *config.OrchestratorConf
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte("ok"))
 	})
+	mux.HandleFunc("GET /readyz", readyzHandler(store, logger))
 
 	mux.HandleFunc("POST /v1/nodes/register", nodeHandler.Register)
 	mux.Handle("GET /v1/nodes/config", authMiddleware.RequireNodeAuth(http.HandlerFunc(nodeHandler.GetConfig)))
@@ -211,6 +212,34 @@ func run(ctx context.Context, store database.Store, cfg *config.OrchestratorConf
 	}
 	logger.Info("server stopped")
 	return nil
+}
+
+// readyzHandler returns a handler for GET /readyz. Returns 200 with body "ready" when at least one
+// inference-capable path exists (dispatchable node); otherwise 503 with an actionable reason.
+// See REQ-ORCHES-0119 and CYNAI.ORCHES.Rule.HealthEndpoints.
+func readyzHandler(store database.Store, logger *slog.Logger) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		ctx := r.Context()
+		nodes, err := store.ListDispatchableNodes(ctx)
+		if err != nil {
+			if logger != nil {
+				logger.Error("readyz check failed", "error", err)
+			}
+			w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+			w.WriteHeader(http.StatusServiceUnavailable)
+			_, _ = w.Write([]byte("readiness check failed (database error)"))
+			return
+		}
+		if len(nodes) == 0 {
+			w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+			w.WriteHeader(http.StatusServiceUnavailable)
+			_, _ = w.Write([]byte("no inference path available (no dispatchable nodes; register and configure a worker node or configure external provider keys)"))
+			return
+		}
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("ready"))
+	}
 }
 
 func getEnv(key, def string) string {

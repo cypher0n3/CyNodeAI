@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -47,10 +48,11 @@ type testState struct {
 	lastConfigVersion string
 	lastStatusCode    int
 	// Fake worker for node-aware dispatch scenarios
-	workerServer      *httptest.Server
-	workerRequestMu   sync.Mutex
-	workerRequest     *http.Request
-	workerToken       string
+	workerServer       *httptest.Server
+	workerRequestMu    sync.Mutex
+	workerRequest      *http.Request
+	workerRequestBody  []byte // captured so we can inspect after handler returns (Body may be closed)
+	workerToken        string
 	lastTaskResultBody []byte
 }
 
@@ -125,6 +127,7 @@ func InitializeOrchestratorSuite(sc *godog.ScenarioContext, state *testState) {
 		}
 		state.workerRequestMu.Lock()
 		state.workerRequest = nil
+		state.workerRequestBody = nil
 		state.workerRequestMu.Unlock()
 		state.workerToken = ""
 		if state.server != nil {
@@ -771,6 +774,105 @@ func RegisterOrchestratorSteps(sc *godog.ScenarioContext, state *testState) {
 	sc.Step(`^I have created a task$`, func(ctx context.Context) error { return nil })
 	sc.Step(`^I get the task status$`, func(ctx context.Context) error { return nil })
 	sc.Step(`^I receive the task details including status$`, func(ctx context.Context) error { return nil })
+	sc.Step(`^the task completes$`, func(ctx context.Context) error {
+		st := getState(ctx)
+		if st == nil || st.db == nil || st.taskID == "" {
+			return godog.ErrSkip
+		}
+		client := &http.Client{Timeout: 30 * time.Second}
+		deadline := time.Now().Add(15 * time.Second)
+		for time.Now().Before(deadline) {
+			err := dispatcher.RunOnce(ctx, st.db, client, 30*time.Second, nil)
+			if err != nil && !errors.Is(err, database.ErrNotFound) {
+				return err
+			}
+			taskID, err := uuid.Parse(st.taskID)
+			if err != nil {
+				return err
+			}
+			task, err := st.db.GetTaskByID(ctx, taskID)
+			if err != nil {
+				return err
+			}
+			if task.Status == models.TaskStatusCompleted || task.Status == models.TaskStatusFailed {
+				return nil
+			}
+			time.Sleep(50 * time.Millisecond)
+		}
+		return fmt.Errorf("task did not complete within 15s")
+	})
+	sc.Step(`^the task result contains model output$`, func(ctx context.Context) error {
+		st := getState(ctx)
+		if st == nil || len(st.lastTaskResultBody) == 0 {
+			return fmt.Errorf("no task result in state (call get task result first)")
+		}
+		var result struct {
+			Jobs []struct {
+				Result *string `json:"result"`
+			} `json:"jobs"`
+		}
+		if err := json.Unmarshal(st.lastTaskResultBody, &result); err != nil {
+			return err
+		}
+		if len(result.Jobs) == 0 || result.Jobs[0].Result == nil {
+			return fmt.Errorf("task result has no job output")
+		}
+		var jobOut struct {
+			Stdout string `json:"stdout"`
+		}
+		if err := json.Unmarshal([]byte(*result.Jobs[0].Result), &jobOut); err != nil {
+			return err
+		}
+		if jobOut.Stdout == "" {
+			return fmt.Errorf("task result stdout is empty (expected model output)")
+		}
+		return nil
+	})
+	sc.Step(`^I create a task with input_mode "([^"]*)" and prompt "([^"]*)"$`, func(ctx context.Context, inputMode, prompt string) error {
+		st := getState(ctx)
+		if st == nil || st.server == nil {
+			return godog.ErrSkip
+		}
+		body, _ := json.Marshal(map[string]any{"prompt": prompt, "input_mode": inputMode})
+		req, _ := http.NewRequest("POST", st.server.URL+"/v1/tasks", bytes.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer "+st.accessToken)
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			return err
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusCreated {
+			return fmt.Errorf("create task returned %d", resp.StatusCode)
+		}
+		var out struct {
+			ID string `json:"id"`
+		}
+		if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+			return err
+		}
+		st.taskID = out.ID
+		return nil
+	})
+	sc.Step(`^the job sent to the worker has command containing "([^"]*)"$`, func(ctx context.Context, sub string) error {
+		st := getState(ctx)
+		if st == nil || len(st.workerRequestBody) == 0 {
+			return fmt.Errorf("no worker request body captured")
+		}
+		var reqBody struct {
+			Sandbox struct {
+				Command []string `json:"command"`
+			} `json:"sandbox"`
+		}
+		if err := json.Unmarshal(st.workerRequestBody, &reqBody); err != nil {
+			return fmt.Errorf("decode worker request: %w", err)
+		}
+		cmdStr := strings.Join(reqBody.Sandbox.Command, " ")
+		if !strings.Contains(cmdStr, sub) {
+			return fmt.Errorf("worker command %q does not contain %q", cmdStr, sub)
+		}
+		return nil
+	})
 	sc.Step(`^I have a completed task$`, func(ctx context.Context) error {
 		st := getState(ctx)
 		if st == nil || st.server == nil || st.db == nil {
@@ -1020,8 +1122,10 @@ func RegisterOrchestratorSteps(sc *godog.ScenarioContext, state *testState) {
 			st.workerRequest = nil
 			st.workerRequestMu.Unlock()
 			st.workerServer = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				body, _ := io.ReadAll(r.Body)
 				st.workerRequestMu.Lock()
 				st.workerRequest = r
+				st.workerRequestBody = body
 				st.workerRequestMu.Unlock()
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(http.StatusOK)

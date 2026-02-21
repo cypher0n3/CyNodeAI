@@ -43,3 +43,20 @@ Feature: Orchestrator Task Lifecycle
     And the orchestrator selects the node for dispatch
     Then the orchestrator calls the node Worker API at its configured target URL
     And the request includes the bearer token from that node's config
+
+  @req_orches_0125
+  @req_orches_0127
+  @spec_cynai_client_clitaskcreateprompt
+  Scenario: Task with natural-language prompt (default) completes with model output
+    When I create a task with prompt "What is 2+2?"
+    And the task completes
+    And I get the task result
+    Then the task result contains model output
+
+  @req_orches_0125
+  @req_orches_0127
+  @spec_cynai_client_clitaskcreateprompt
+  Scenario: Task with input_mode commands runs literal shell
+    When I create a task with input_mode "commands" and prompt "echo hello"
+    And the orchestrator selects the node for dispatch
+    Then the job sent to the worker has command containing "echo hello"

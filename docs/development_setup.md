@@ -265,7 +265,7 @@ Compose uses `POSTGRES_*`, `ORCHESTRATOR_PORT`, `CONTROL_PLANE_PORT`, `OLLAMA_IM
 - **Tests**: `just test-go` or `just test-go-cover` for coverage
 - **Lint**: `just lint-go` or `just lint-go-ci`
 - **Full CI**: `just ci` (run before every commit)
-- **CLI (cynork)**: `just build-cynork`; see [dev_docs/cynork_cli_localhost.md](../dev_docs/cynork_cli_localhost.md) for running against localhost
+- **CLI (cynork)**: `just build-cynork`; run against localhost with default gateway URL `http://localhost:8080` (see [cynork/README.md](../cynork/README.md))
 
 ## Systemd (Podman)
 

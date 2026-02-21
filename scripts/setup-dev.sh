@@ -427,7 +427,7 @@ run_e2e_test() {
         INF_TASK_RESPONSE=$(curl -s -X POST "$USER_API/v1/tasks" \
             -H "Authorization: Bearer $ACCESS_TOKEN" \
             -H "Content-Type: application/json" \
-            -d '{"prompt": "sh -c '\''echo $OLLAMA_BASE_URL'\''", "use_inference": true}')
+            -d '{"prompt": "sh -c '\''echo $OLLAMA_BASE_URL'\''", "use_inference": true, "input_mode": "commands"}')
         INF_TASK_ID=$(echo "$INF_TASK_RESPONSE" | jq -r '.id')
         if [ "$INF_TASK_ID" = "null" ] || [ -z "$INF_TASK_ID" ]; then
             log_error "Create inference task failed: $INF_TASK_RESPONSE"

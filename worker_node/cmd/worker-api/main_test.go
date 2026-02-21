@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"testing"
 	"time"
 
@@ -220,6 +221,33 @@ func TestHealthz(t *testing.T) {
 	mux.ServeHTTP(w, r)
 	if w.Code != http.StatusOK || w.Body.String() != "ok" {
 		t.Errorf("healthz: %d %s", w.Code, w.Body.String())
+	}
+}
+
+func TestReadyz(t *testing.T) {
+	mux := newMux(executor.New("direct", time.Second, 1024, "", "", nil), "token", "", slog.Default())
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodGet, "/readyz", http.NoBody)
+	mux.ServeHTTP(w, r)
+	if w.Code != http.StatusOK || strings.TrimSpace(w.Body.String()) != "ready" {
+		t.Errorf("readyz: %d %s", w.Code, w.Body.String())
+	}
+}
+
+func TestRunJob_RequestTooLarge(t *testing.T) {
+	mux := newMux(executor.New("direct", time.Second, 1024, "", "", nil), "token", "", slog.Default())
+	// Body > 10 MiB so MaxBytesReader triggers; use valid JSON shape so the error is "request body too large" not "invalid JSON"
+	big := bytes.Repeat([]byte("x"), 11*1024*1024)
+	body := []byte(`{"version":1,"task_id":"t","job_id":"j","sandbox":{"image":"a","command":["`)
+	body = append(body, big...)
+	body = append(body, []byte(`"]}}`)...)
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodPost, "/v1/worker/jobs:run", bytes.NewReader(body))
+	r.Header.Set("Content-Type", "application/json")
+	r.Header.Set("Authorization", "Bearer token")
+	mux.ServeHTTP(w, r)
+	if w.Code != http.StatusRequestEntityTooLarge {
+		t.Errorf("expected 413, got %d", w.Code)
 	}
 }
 

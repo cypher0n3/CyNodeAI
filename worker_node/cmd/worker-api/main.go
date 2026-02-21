@@ -38,7 +38,7 @@ func runMain(ctx context.Context) int {
 	exec := executor.New(
 		getEnv("CONTAINER_RUNTIME", "podman"),
 		time.Duration(getEnvInt("DEFAULT_TIMEOUT_SECONDS", 300))*time.Second,
-		getEnvInt("MAX_OUTPUT_BYTES", 1<<20),
+		getEnvInt("MAX_OUTPUT_BYTES", 262144), // 256 KiB default per worker_api.md
 		getEnv("OLLAMA_UPSTREAM_URL", ""),
 		getEnv("INFERENCE_PROXY_IMAGE", ""),
 		nil,
@@ -65,8 +65,38 @@ func newMux(exec *executor.Executor, bearerToken, workspaceRoot string, logger *
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte("ok"))
 	})
+	mux.HandleFunc("GET /readyz", readyzHandler(exec))
 	mux.HandleFunc("POST /v1/worker/jobs:run", handleRunJob(exec, bearerToken, workspaceRoot, logger))
 	return mux
+}
+
+func readyzHandler(exec *executor.Executor) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		ready, reason := exec.Ready(r.Context())
+		if ready {
+			w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte("ready"))
+			return
+		}
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		w.WriteHeader(http.StatusServiceUnavailable)
+		_, _ = w.Write([]byte(reason))
+	}
+}
+
+func decodeRunJobRequest(w http.ResponseWriter, r *http.Request, maxBytes int64) (*workerapi.RunJobRequest, bool) {
+	r.Body = http.MaxBytesReader(w, r.Body, maxBytes)
+	var req workerapi.RunJobRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		if err != nil && strings.Contains(err.Error(), "request body too large") {
+			writeProblem(w, http.StatusRequestEntityTooLarge, problem.TypeValidation, "Request Entity Too Large", "Request body exceeds maximum size")
+			return nil, false
+		}
+		writeProblem(w, http.StatusBadRequest, problem.TypeValidation, "Bad Request", "Invalid request body")
+		return nil, false
+	}
+	return &req, true
 }
 
 func handleRunJob(exec *executor.Executor, bearerToken, workspaceRoot string, logger *slog.Logger) http.HandlerFunc {
@@ -75,13 +105,11 @@ func handleRunJob(exec *executor.Executor, bearerToken, workspaceRoot string, lo
 			writeProblem(w, http.StatusUnauthorized, problem.TypeAuthentication, "Unauthorized", "Invalid or missing bearer token")
 			return
 		}
-		r.Body = http.MaxBytesReader(w, r.Body, 10*1024*1024)
-		var req workerapi.RunJobRequest
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			writeProblem(w, http.StatusBadRequest, problem.TypeValidation, "Bad Request", "Invalid request body")
+		req, ok := decodeRunJobRequest(w, r, 10*1024*1024) // 10 MiB per worker_api.md
+		if !ok {
 			return
 		}
-		if err := validateRunJobRequest(&req); err != nil {
+		if err := validateRunJobRequest(req); err != nil {
 			writeProblem(w, http.StatusBadRequest, problem.TypeValidation, "Bad Request", err.Error())
 			return
 		}
@@ -94,7 +122,7 @@ func handleRunJob(exec *executor.Executor, bearerToken, workspaceRoot string, lo
 		if cleanup != nil {
 			defer cleanup()
 		}
-		resp, err := exec.RunJob(r.Context(), &req, workspaceDir)
+		resp, err := exec.RunJob(r.Context(), req, workspaceDir)
 		if err != nil {
 			logger.Error("job execution error", "error", err)
 			writeProblem(w, http.StatusInternalServerError, problem.TypeInternal, "Internal Server Error", "Job execution failed")
