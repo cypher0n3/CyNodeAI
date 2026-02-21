@@ -134,6 +134,11 @@ It covers user-facing management surfaces and user preference behavior.
   The chat session MUST use the same gateway and authentication as other CLI commands and MUST NOT expose secrets in history or output.
   [CYNAI.CLIENT.CliChat](../tech_specs/cli_management_app.md#spec-cynai-client-clichat)
   <a id="req-client-0161"></a>
+- **REQ-CLIENT-0162:** The CLI chat command MUST render model responses with pretty-formatted output when the response contains Markdown.
+  The CLI MUST interpret common Markdown (headings, lists, code blocks, emphasis, links) and display them in a human-readable way in the terminal (e.g. indentation, styling, or syntax highlighting for code blocks).
+  The CLI MUST honor `--no-color` for chat output and SHOULD support a plain-text mode (e.g. `--plain`) that prints the raw response without Markdown rendering for scripting or piping.
+  [CYNAI.CLIENT.CliChat](../tech_specs/cli_management_app.md#spec-cynai-client-clichat)
+  <a id="req-client-0162"></a>
 - **REQ-CLIENT-0125:** Node management MUST be mediated by the User API Gateway.
   [CYNAI.CLIENT.AdminWebConsoleNodeManagement](../tech_specs/admin_web_console.md#spec-cynai-client-awcnodemgmt)
   [CYNAI.CLIENT.CliNodeManagement](../tech_specs/cli_management_app.md#spec-cynai-client-clinodemgmt)

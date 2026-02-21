@@ -712,6 +712,7 @@ The user task text MUST NOT be executed as a literal shell command unless the us
 Traces To:
 
 - [REQ-CLIENT-0161](../requirements/client.md#req-client-0161)
+- [REQ-CLIENT-0162](../requirements/client.md#req-client-0162)
 
 The CLI MUST provide a top-level `chat` command that starts an interactive chat session with the Project Manager (PM) model.
 The session MUST use the same User API Gateway and token resolution as other commands and MUST require auth.
@@ -724,6 +725,7 @@ Optional flags
 
 - `-c, --config` (string): path to config file (global).
 - `--no-color` (bool): disable colored output (global).
+- `--plain` (bool, optional): print model responses as raw text without Markdown formatting; for scripting or piping.
 
 #### `cynork chat` Behavior
 
@@ -735,6 +737,14 @@ Optional flags
   The exact exit control MUST be defined in this spec or in a linked spec; implementations MUST support at least one of `/exit`, `/quit`, or EOF.
 - Chat input and model output MUST NOT be recorded in shell history or in any persistent history that could expose secrets; the same rules as interactive mode (REQ-CLIENT-0140) apply.
 - All communication with the PM model MUST go through the User API Gateway; the CLI MUST NOT connect directly to inference or to the database.
+
+#### `cynork chat` Response Output (Pretty Formatting)
+
+- When `--plain` is not set, the CLI MUST render model responses with pretty-formatted output: interpret Markdown in the response and display it in a human-readable way in the terminal.
+- The CLI MUST support at least: headings, lists (ordered and unordered), code blocks (with optional syntax highlighting), inline code, emphasis (bold/italic), and links.
+  Display MAY use terminal styling (e.g. indentation, colors, or borders) so that structure is clear without raw Markdown syntax.
+- The CLI MUST honor `--no-color` for chat output (no colors or minimal styling when set).
+- When `--plain` is set, the CLI MUST print the raw response text with no Markdown parsing or styling, so that output is suitable for piping or scripting.
 
 #### `cynork chat` Error Conditions
 

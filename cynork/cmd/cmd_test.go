@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -518,6 +519,29 @@ func TestParseArgs(t *testing.T) {
 				t.Errorf("parseArgs(%q)[%d] = %q, want %q", tt.line, i, got[i], tt.want[i])
 			}
 		}
+	}
+}
+
+func TestFormatChatResponse_Plain(t *testing.T) {
+	got, err := formatChatResponse("hello", true, false)
+	if err != nil {
+		t.Fatalf("formatChatResponse(plain): %v", err)
+	}
+	if got != "hello\n" {
+		t.Errorf("plain: got %q", got)
+	}
+}
+
+func TestFormatChatResponse_Formatted(t *testing.T) {
+	got, err := formatChatResponse("**bold**", false, true)
+	if err != nil {
+		t.Fatalf("formatChatResponse(formatted): %v", err)
+	}
+	if got == "" {
+		t.Error("formatted: got empty")
+	}
+	if !strings.Contains(got, "bold") {
+		t.Errorf("formatted output should contain 'bold', got %q", got)
 	}
 }
 
