@@ -1,0 +1,6 @@
+# hadolint config (lint-containerfiles). See https://github.com/hadolint/hadolint
+# DL3018: apk add version pinning (base image tag provides reproducibility).
+# DL3059: consolidate RUN (optional; we keep separate RUN for clarity).
+ignored:
+  - DL3018
+  - DL3059
