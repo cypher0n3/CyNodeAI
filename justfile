@@ -284,15 +284,11 @@ lint-containerfiles:
     #!/usr/bin/env bash
     set -e
     root="{{ root_dir }}"
-    files=(
-        orchestrator/cmd/control-plane/Containerfile
-        orchestrator/cmd/user-gateway/Containerfile
-        orchestrator/cmd/api-egress/Containerfile
-        orchestrator/cmd/mcp-gateway/Containerfile
-        worker_node/cmd/worker-api/Containerfile
-        worker_node/cmd/node-manager/Containerfile
-        worker_node/cmd/inference-proxy/Dockerfile
-    )
+    pushd "$root" >/dev/null
+    trap 'popd >/dev/null 2>/dev/null' EXIT
+    files=()
+    while IFS= read -r -d '' p; do files+=("$p"); done < <(find . -type f \( -name 'Containerfile' -o -name 'Dockerfile' \) ! -path '*/.git/*' -print0 | sort -z)
+    if [ ${#files[@]} -eq 0 ]; then echo "No Containerfile/Dockerfile found."; exit 0; fi
     run_hadolint() {
         local f="$1"
         if command -v hadolint >/dev/null 2>&1; then
@@ -528,11 +524,21 @@ lint: lint-go lint-go-ci lint-python lint-md validate-doc-links validate-feature
 test: test-go
     @:
 
-# BDD: run Godog suites for orchestrator, worker_node, and cynork (from repo root).
+# BDD: run Godog suites for each go_modules module that has _bdd (from repo root).
 # Orchestrator steps that need a DB are skipped unless POSTGRES_TEST_DSN is set.
+# Optional timeout cancels tests if they exceed the duration (e.g. timeout="5m").
 # Run with DB: POSTGRES_TEST_DSN="postgres://..." just test-bdd
-test-bdd: install-go
-    @cd "{{ root_dir }}" && go test -v ./orchestrator/_bdd ./worker_node/_bdd ./cynork/_bdd -count=1
+# Run with timeout: just test-bdd timeout="10m"
+test-bdd timeout="": install-go
+    #!/usr/bin/env bash
+    set -e
+    cd "{{ root_dir }}"
+    extra=()
+    [ -n "{{ timeout }}" ] && extra=(-timeout "{{ timeout }}")
+    for m in {{ go_modules }}; do
+      [ -d "./$m/_bdd" ] || continue
+      go test -v "${extra[@]}" "./$m/_bdd" -count=1
+    done
 
 # E2E: start Postgres, orchestrator, one worker node; run happy path (login, create task, get result).
 # Requires: podman or docker, jq. Stops existing services first; leaves services running after.

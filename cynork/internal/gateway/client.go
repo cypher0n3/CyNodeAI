@@ -258,6 +258,25 @@ func (c *Client) GetTaskLogs(taskID, stream string) (*TaskLogsResponse, error) {
 	return &out, nil
 }
 
+// ChatRequest is the request body for POST /v1/chat (orchestrator).
+type ChatRequest struct {
+	Message string `json:"message"`
+}
+
+// ChatResponse is the response body for POST /v1/chat.
+type ChatResponse struct {
+	Response string `json:"response"`
+}
+
+// Chat calls POST /v1/chat (requires auth). Uses the real orchestrator chat endpoint; server creates task and returns response when terminal.
+func (c *Client) Chat(message string) (*ChatResponse, error) {
+	var out ChatResponse
+	if err := c.doPostJSON("/v1/chat", ChatRequest{Message: message}, http.StatusOK, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
 // CreateTask calls POST /v1/tasks (requires auth).
 func (c *Client) CreateTask(req CreateTaskRequest) (*TaskResponse, error) {
 	var out TaskResponse

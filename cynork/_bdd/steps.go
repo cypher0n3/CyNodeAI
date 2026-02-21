@@ -214,6 +214,26 @@ func (s *cynorkState) mockGatewayMux() *http.ServeMux {
 		w.WriteHeader(http.StatusOK)
 		_ = json.NewEncoder(w).Encode(map[string]any{"task_id": id, "stdout": result, "stderr": ""})
 	})
+	mux.HandleFunc("POST /v1/chat", func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") == "" {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		var req struct {
+			Message string `json:"message"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		resp := req.Message
+		if strings.HasPrefix(req.Message, "echo ") {
+			resp = strings.TrimSpace(strings.TrimPrefix(req.Message, "echo "))
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode(map[string]any{"response": resp})
+	})
 	// Stub endpoints for creds, prefs, settings, nodes, skills, audit
 	mux.HandleFunc("GET /v1/creds", func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("Authorization") == "" {

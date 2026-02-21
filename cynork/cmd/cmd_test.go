@@ -961,64 +961,16 @@ func TestRunSettingsGet(t *testing.T) {
 	}
 }
 
-func TestPrintJobResults(t *testing.T) {
-	result := &gateway.TaskResultResponse{
-		Jobs: []gateway.JobResponse{
-			{Result: strPtr("line1")},
-			{Result: nil},
-			{Result: strPtr("line2")},
-		},
-	}
-	printJobResults(result)
-}
-
-func TestSendMessageAndPoll_OK(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		if r.URL.Path == "/v1/tasks" && r.Method == http.MethodPost {
-			w.WriteHeader(http.StatusCreated)
-			_ = json.NewEncoder(w).Encode(gateway.TaskResponse{ID: "task-1", TaskID: "task-1", Status: "queued"})
-			return
-		}
-		if r.URL.Path == "/v1/tasks/task-1/result" {
-			w.WriteHeader(http.StatusOK)
-			_ = json.NewEncoder(w).Encode(gateway.TaskResultResponse{
-				TaskID: "task-1", Status: "completed",
-				Jobs: []gateway.JobResponse{{ID: "j1", Result: strPtr("hello")}},
-			})
-			return
-		}
-		w.WriteHeader(http.StatusNotFound)
-	}))
-	defer server.Close()
-	client := gateway.NewClient(server.URL)
-	client.SetToken("tok")
-	result, err := sendMessageAndPoll(client, "hi")
-	if err != nil {
-		t.Fatalf("sendMessageAndPoll: %v", err)
-	}
-	if result.Status != "completed" || len(result.Jobs) != 1 || result.Jobs[0].Result == nil || *result.Jobs[0].Result != "hello" {
-		t.Errorf("result = %+v", result)
-	}
-}
-
 func TestRunChat_OneMessage(t *testing.T) {
-	callCount := 0
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		if r.URL.Path == "/v1/tasks" && r.Method == http.MethodPost {
-			w.WriteHeader(http.StatusCreated)
-			_ = json.NewEncoder(w).Encode(gateway.TaskResponse{ID: "t1", TaskID: "t1", Status: "queued"})
-			return
-		}
-		if r.URL.Path == "/v1/tasks/t1/result" {
-			callCount++
-			w.WriteHeader(http.StatusOK)
-			_ = json.NewEncoder(w).Encode(gateway.TaskResultResponse{
-				TaskID: "t1", Status: "completed",
-				Jobs: []gateway.JobResponse{{Result: strPtr("reply")}},
-			})
-			return
+		if r.URL.Path == "/v1/chat" && r.Method == http.MethodPost {
+			var req gateway.ChatRequest
+			if _ = json.NewDecoder(r.Body).Decode(&req); req.Message == "hello" {
+				w.WriteHeader(http.StatusOK)
+				_ = json.NewEncoder(w).Encode(gateway.ChatResponse{Response: "reply"})
+				return
+			}
 		}
 		w.WriteHeader(http.StatusNotFound)
 	}))
@@ -1032,26 +984,32 @@ func TestRunChat_OneMessage(t *testing.T) {
 	}
 	defer func() { os.Stdin = oldStdin }()
 	os.Stdin = r
-	_, _ = w.WriteString("hello\n")
+	_, _ = w.WriteString("hello\n/exit\n")
 	_ = w.Close()
 	if err := runChat(nil, nil); err != nil {
 		t.Errorf("runChat: %v", err)
 	}
-	if callCount < 1 {
-		t.Error("expected at least one GetTaskResult call")
-	}
 }
 
-func TestSendMessageAndPoll_CreateFails(t *testing.T) {
+func TestRunChat_ChatFails(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusUnauthorized)
 	}))
 	defer server.Close()
-	client := gateway.NewClient(server.URL)
-	client.SetToken("tok")
-	_, err := sendMessageAndPoll(client, "hi")
+	cfg = &config.Config{GatewayURL: server.URL, Token: "tok"}
+	defer func() { cfg = nil }()
+	oldStdin := os.Stdin
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { os.Stdin = oldStdin }()
+	os.Stdin = r
+	_, _ = w.WriteString("hi\n/exit\n")
+	_ = w.Close()
+	err = runChat(nil, nil)
 	if err == nil {
-		t.Fatal("expected error")
+		t.Fatal("expected error from chat")
 	}
 }
 
