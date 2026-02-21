@@ -41,6 +41,7 @@ All Go modules in this repository are checked by repo-level `just` targets.
 ## 5 Cross-References
 
 - Root project overview at [README.md](../README.md).
+- Documentation index at [docs/README.md](../docs/README.md).
 - Project meta and repository layout at [meta.md](../meta.md).
 - CLI specification at [docs/tech_specs/cli_management_app.md](../docs/tech_specs/cli_management_app.md).
 - Technical specifications index at [docs/tech_specs/_main.md](../docs/tech_specs/_main.md).

@@ -39,8 +39,9 @@ It coordinates sandboxed worker execution across local nodes and optional cloud 
 
 ## Repository Layout
 
+- `docs/`: project documentation; entrypoint is [docs/README.md](docs/README.md).
 - `docs/requirements/`: canonical normative requirements ("what"); entrypoint is `README.md`.
-- `docs/tech_specs/`: design and implementation guidance ("how"); entrypoint is `_main.md`.
+- `docs/tech_specs/`: design and implementation guidance ("how"); entrypoint is `_main.md` (see also [docs/tech_specs/README.md](docs/tech_specs/README.md)).
 - `secure_browser/`: rules and assets for the secure browser service (e.g. `secure_browser_rules.yaml`).
 - `go_shared_libs/`: shared Go contracts and types used by orchestrator and worker node; see `go_shared_libs/README.md`.
 - `orchestrator/`: orchestrator Go module (control-plane, user-gateway, api-egress, etc.); see `orchestrator/README.md`.

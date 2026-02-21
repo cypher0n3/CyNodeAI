@@ -41,6 +41,7 @@ Feature: Single Node Happy Path
   @inference_in_sandbox
   @req_orches_0112
   @spec_cynai_worker_sandboxexec
+  @spec_cynai_stands_portsandendpoints
   Scenario: Single-node task execution with inference in sandbox
     When I login as "admin" with password "admin123"
     And a node with slug "test-node-01" registers with the orchestrator using a valid PSK

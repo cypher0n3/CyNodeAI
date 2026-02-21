@@ -4,6 +4,7 @@
 - [Architecture Summary](#architecture-summary)
 - [Tech Spec Index](#tech-spec-index)
   - [Orchestrator and Nodes](#orchestrator-and-nodes)
+  - [Ports and Endpoints](#ports-and-endpoints)
   - [User Interfaces](#user-interfaces)
   - [API Specifications](#api-specifications)
   - [Agents and Connectors](#agents-and-connectors)
@@ -15,17 +16,13 @@
   - [AI Skills](#ai-skills)
   - [Agents Specification](#agents-specification)
   - [Bootstrap Configurations](#bootstrap-configurations)
-- [MVP Development Plan](#mvp-development-plan)
-  - [Phase 0 Foundations](#phase-0-foundations)
-  - [Phase 1 Single Node Happy Path](#phase-1-single-node-happy-path)
-  - [Phase 2 MCP in the Loop](#phase-2-mcp-in-the-loop)
-  - [Phase 3 Multi Node Robustness](#phase-3-multi-node-robustness)
-  - [Phase 4 Optional Controlled Egress and Integrations](#phase-4-optional-controlled-egress-and-integrations)
 
 ## Document Overview
 
 This document is the entrypoint for CyNodeAI technical specifications.
 It provides a summary of the system and links to detailed specs.
+
+For MVP scope and the phased MVP plan, see [`docs/mvp.md`](../mvp.md).
 
 ## Architecture Summary
 
@@ -49,6 +46,10 @@ Key principles
 - Orchestrator: [`docs/tech_specs/orchestrator.md`](orchestrator.md)
 - Worker nodes: [`docs/tech_specs/node.md`](node.md)
 - Node payloads: [`docs/tech_specs/node_payloads.md`](node_payloads.md)
+
+### Ports and Endpoints
+
+- Ports and endpoints: [`docs/tech_specs/ports_and_endpoints.md`](ports_and_endpoints.md)
 
 ### User Interfaces
 
@@ -116,77 +117,3 @@ Key principles
 ### Bootstrap Configurations
 
 - Orchestrator bootstrap: [`docs/tech_specs/orchestrator_bootstrap.md`](orchestrator_bootstrap.md)
-
-## MVP Development Plan
-
-This plan targets the minimum components needed for end-to-end task execution.
-Items are grouped by phase and can be implemented incrementally.
-
-### Phase 0 Foundations
-
-- Define Postgres schema for users, local auth sessions, groups and RBAC, tasks, jobs, nodes, artifacts, and audit logging (see [`docs/tech_specs/postgres_schema.md`](postgres_schema.md)).
-- Define node capability report payload and node configuration payload (see [`docs/tech_specs/node_payloads.md`](node_payloads.md)).
-  - Specify registration-time bootstrap payload (PSK to JWT) and config versioning.
-  - Specify capability report fields, hashing, and change reporting behavior.
-  - Specify configuration refresh, acknowledgement payload, and rollback reporting.
-- Define MCP gateway enforcement and initial tool allowlists by role (see [`docs/tech_specs/mcp_gateway_enforcement.md`](mcp_gateway_enforcement.md)).
-  - Use standard MCP protocol messages on the wire.
-  - Enforce allowlists, access control, and auditing centrally at the orchestrator gateway.
-  - Require strict tool argument schemas for task-scoped tools (tool args include `task_id`).
-  - Define policy mapping to `access_control_rules` using action `mcp.tool.invoke`.
-- Define the LangGraph MVP workflow contract and checkpointing requirements (see [`docs/tech_specs/langgraph_mvp.md`](langgraph_mvp.md)).
-
-### Phase 1 Single Node Happy Path
-
-- Orchestrator: node registration (PSK to JWT), capability ingest, config delivery, job dispatch, result collection.
-- Job dispatch: direct HTTP to Worker API using per-node URL and token from config delivery; MCP gateway not in loop.
-- Node: Node Manager startup sequence that contacts orchestrator before starting the single Ollama container.
-- Node: worker API can receive a job, run a sandbox container, and return a result.
-- System: at least one inference-capable path must be available (node-local inference container such as Ollama, or external model routing with a configured provider key).
-- System: in the single-node case, startup must fail fast (or refuse to enter a ready state) if the node cannot run an inference container and no external provider key is configured.
-- Orchestrator: on startup, select and warm up the effective Project Manager model per [Project Manager Model (Startup Selection and Warmup)](orchestrator.md#project-manager-model-startup-selection-and-warmup).
-- User API Gateway: local user auth (login and refresh), create task, and retrieve task result.
-- Phase 1 config refresh: node fetches configuration on startup only (no polling).
-- Phase 1 node JWT: long-lived; node re-registers on expiry.
-- Phase 1 workflow engine: tasks are executed as a single dispatched sandbox job.
-  LangGraph is not integrated in the Phase 1 runtime loop.
-- Task creation (User API, CLI, web console): user-facing input is **plain text or Markdown** (inline or from file), **attachments** (CLI: path strings; web: file upload), **script** (e.g. `--script <path>` / script file), or **short series of commands** (e.g. `--commands` / multi-line).
-  For script or commands, the system runs them in the sandbox; otherwise it interprets the task and may call the AI model and/or run sandbox jobs.
-  Interpretation and inference are the default for task text (no user-facing "use inference" flag).
-  The Phase 1 implementation may pass the task through as the sandbox command until a prompt-interpretation layer exists (see REQ-ORCHES-0125, REQ-ORCHES-0126, REQ-ORCHES-0127).
-
-### Phase 1.5 Single Node Full Capability (Post-Phase 1)
-
-- Enable node-local inference access from inside the sandbox (see [`docs/tech_specs/node.md`](node.md) and [`docs/tech_specs/sandbox_container.md`](sandbox_container.md)).
-  Implement the inference proxy sidecar approach so sandboxes can call `http://localhost:11434` without leaving the node.
-- Extend E2E to exercise inference inside the sandbox for the single-node deployment.
-- Add the minimum viable CLI slice as a separate Go module (see [`docs/tech_specs/cli_management_app.md`](cli_management_app.md)).
-  Focus on localhost user-gateway auth and basic task operations.
-
-### Phase 2 MCP in the Loop
-
-- Implement orchestrator MCP tool gateway with role-based access.
-- Add MCP database tools for orchestrator-side agents and MCP artifact tools for worker agents.
-- Ensure orchestrator-side agents use MCP database tools and do not connect to Postgres directly.
-- Integrate the LangGraph MVP workflow as the orchestrator workflow engine for the Project Manager Agent (see [`docs/tech_specs/langgraph_mvp.md`](langgraph_mvp.md)).
-  - Start one workflow instance per `task_id` when a task is ready to be driven.
-  - Persist checkpoints after each node transition to a Postgres-backed store.
-  - Resume workflows by `task_id` after orchestrator or workflow process restarts.
-  - Enforce single-active-workflow-per-task (lease, idempotency key, or coalescing).
-  - Map workflow nodes to orchestrator capabilities (MCP DB, model routing, Worker API dispatch, result collection).
-
-### Phase 3 Multi Node Robustness
-
-- Add node selection based on capability, load, data locality, and model availability.
-- Add job leases, retries, idempotency, and heartbeats.
-- Add dynamic node configuration updates and startup capability change reporting.
-- Add Worker Telemetry API integration for node health and operational signals (see [`docs/tech_specs/worker_telemetry_api.md`](worker_telemetry_api.md)).
-
-### Phase 4 Optional Controlled Egress and Integrations
-
-- Add API Egress Server with ACL enforcement and auditing.
-- Add Secure Browser Service with deterministic sanitization and DB-backed rules.
-- Add external model routing fallback for standalone orchestrator operation, subject to policy.
-- Expand the CLI management app surface for credentials, user preferences, skills, and node management.
-  See [`docs/tech_specs/cli_management_app.md`](cli_management_app.md) and [`docs/tech_specs/skills_storage_and_inference.md`](skills_storage_and_inference.md).
-- Defer the admin web console until after the CLI exists.

@@ -37,6 +37,7 @@ It covers sandbox execution, container constraints, and isolation requirements.
   <a id="req-sandbx-0105"></a>
 - **REQ-SANDBX-0106:** The sandbox SHOULD call a node-local inference endpoint.
   [CYNAI.SANDBX.NodeLocalInference](../tech_specs/sandbox_container.md#spec-cynai-sandbx-nodelocalinf)
+  [CYNAI.STANDS.PortsAndEndpoints](../tech_specs/ports_and_endpoints.md#spec-cynai-stands-portsandendpoints)
   <a id="req-sandbx-0106"></a>
 - **REQ-SANDBX-0107:** The node MUST NOT require exposing Ollama on a public network interface.
   [CYNAI.SANDBX.NodeLocalInference](../tech_specs/sandbox_container.md#spec-cynai-sandbx-nodelocalinf)

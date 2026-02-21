@@ -163,6 +163,7 @@ Traces To:
 #### Default Gateway URL
 
 - When `gateway_url` is empty after load and env override, the CLI MUST use the default `http://localhost:8080` (or a build-time constant matching the orchestrator default).
+- See [Ports and endpoints](ports_and_endpoints.md#cli-cynork) for the consolidated default and overrides.
 
 #### Session Persistence (Reliability)
 

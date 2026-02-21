@@ -51,7 +51,7 @@ else
     DOCKER_EXTRA_HOSTS="--add-host=host.docker.internal:host-gateway"
 fi
 
-# Configuration
+# Configuration (default ports: docs/tech_specs/ports_and_endpoints.md)
 POSTGRES_CONTAINER_NAME="cynodeai-postgres-dev"
 CONTROL_PLANE_CONTAINER_NAME="${CONTROL_PLANE_CONTAINER_NAME:-cynodeai-control-plane}"
 USER_GATEWAY_CONTAINER_NAME="${USER_GATEWAY_CONTAINER_NAME:-cynodeai-user-gateway}"

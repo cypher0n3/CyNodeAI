@@ -65,9 +65,11 @@ It covers worker-node behavior and the worker API contract for job execution and
   <a id="req-worker-0113"></a>
 - **REQ-WORKER-0114:** The node MUST support an execution mode where sandbox jobs can call a node-local inference endpoint without leaving the node.
   [CYNAI.WORKER.NodeLocalInference](../tech_specs/node.md#spec-cynai-worker-nodelocalinference)
+  [CYNAI.STANDS.PortsAndEndpoints](../tech_specs/ports_and_endpoints.md#spec-cynai-stands-portsandendpoints)
   <a id="req-worker-0114"></a>
 - **REQ-WORKER-0115:** The node MUST keep Ollama access private to the node and MUST NOT require exposing Ollama on a public interface.
   [CYNAI.WORKER.NodeLocalInference](../tech_specs/node.md#spec-cynai-worker-nodelocalinference)
+  [CYNAI.STANDS.PortsAndEndpoints](../tech_specs/ports_and_endpoints.md#spec-cynai-stands-portsandendpoints)
   <a id="req-worker-0115"></a>
 - **REQ-WORKER-0116:** Each node SHOULD run a node-local MCP server that exposes sandbox operations for that node.
   [CYNAI.WORKER.NodeSandboxMcpExposure](../tech_specs/node.md#spec-cynai-worker-nodesandboxmcpexposure)

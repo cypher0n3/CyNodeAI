@@ -69,6 +69,7 @@ Feature: Worker Node Sandbox Execution
   @req_worker_0103
   @req_worker_0104
   @spec_cynai_worker_sandboxexec
+  @spec_cynai_stands_portsandendpoints
   @inference_in_sandbox
   Scenario: Sandbox receives OLLAMA_BASE_URL when job requests inference
     Given the worker API is configured with a valid bearer token

@@ -6,9 +6,9 @@
 - [Routing Policy](#routing-policy)
 - [External Provider Integration](#external-provider-integration)
 - [External Inference With Node Sandboxes](#external-inference-with-node-sandboxes)
-- [Preferences and Constraints](#preferences-and-constraints)
-  - [Suggested Preference Keys](#suggested-preference-keys)
-  - [Suggested Orchestrator-Side Agent Preference Keys](#suggested-orchestrator-side-agent-preference-keys)
+- [Settings and Constraints](#settings-and-constraints)
+  - [Suggested Setting Keys](#suggested-setting-keys)
+  - [Suggested Orchestrator-Side Agent Setting Keys](#suggested-orchestrator-side-agent-setting-keys)
 - [Auditing and Safety](#auditing-and-safety)
 
 ## Document Overview

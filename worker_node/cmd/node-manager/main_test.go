@@ -164,6 +164,19 @@ func TestStartWorkerAPI_BinaryNotFound(t *testing.T) {
 	}
 }
 
+func TestStartWorkerAPI_AbsolutePath(t *testing.T) {
+	path, err := exec.LookPath("true")
+	if err != nil {
+		t.Skip("true binary not in PATH")
+	}
+	_ = os.Setenv("NODE_MANAGER_WORKER_API_BIN", path)
+	defer func() { _ = os.Unsetenv("NODE_MANAGER_WORKER_API_BIN") }()
+	err = startWorkerAPI("token")
+	if err != nil {
+		t.Errorf("startWorkerAPI with absolute path: %v", err)
+	}
+}
+
 func TestStartOllama_Success(t *testing.T) {
 	_ = os.Setenv("CONTAINER_RUNTIME", "podman")
 	_ = os.Setenv("OLLAMA_IMAGE", "alpine")
@@ -177,4 +190,19 @@ func TestStartOllama_Success(t *testing.T) {
 	}
 	// Clean up container so we do not leave it behind.
 	_ = exec.Command("podman", "rm", "-f", "cynodeai-ollama").Run()
+}
+
+func TestStartOllama_ContainerExists(t *testing.T) {
+	_ = os.Setenv("CONTAINER_RUNTIME", "podman")
+	defer func() { _ = os.Unsetenv("CONTAINER_RUNTIME") }()
+	_ = exec.Command("podman", "rm", "-f", "cynodeai-ollama").Run()
+	create := exec.Command("podman", "run", "-d", "--name", "cynodeai-ollama", "alpine", "sleep", "300")
+	if out, err := create.CombinedOutput(); err != nil {
+		t.Skipf("podman or alpine not available: %v %s", err, out)
+	}
+	defer func() { _ = exec.Command("podman", "rm", "-f", "cynodeai-ollama").Run() }()
+	err := startOllama()
+	if err != nil {
+		t.Errorf("startOllama when container exists: %v", err)
+	}
 }

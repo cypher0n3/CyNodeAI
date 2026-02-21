@@ -92,7 +92,7 @@ Recommended approach
 - The Node Manager provides a pod-local `localhost` endpoint for inference.
 - The sandbox uses `http://localhost:11434` for inference calls inside the pod.
 
-See [`docs/tech_specs/node.md`](node.md).
+See [`docs/tech_specs/node.md`](node.md) and [`docs/tech_specs/ports_and_endpoints.md`](ports_and_endpoints.md#inference-ollama-and-proxy).
 
 ## Minimum Required Software
 

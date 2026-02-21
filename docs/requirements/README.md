@@ -8,7 +8,8 @@
 
 This directory contains the consolidated CyNodeAI requirements set.
 Requirements documents are the canonical normative "what" for CyNodeAI.
-Technical specifications under [`docs/tech_specs/`](../tech_specs/) describe the "how" (design and implementation guidance) and trace back to requirements.
+Technical specifications under [tech_specs/](../tech_specs/) describe the "how" (design and implementation guidance) and trace back to requirements.
+Documentation index: [docs/README.md](../README.md).
 
 ## 2 Conventions
 
