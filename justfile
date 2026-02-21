@@ -21,7 +21,7 @@ default:
 # Local CI: all lint, all tests (with 90% coverage), Go vuln check, BDD suites.
 # test-go-cover runs coverage for all go_modules (orchestrator uses testcontainers for Postgres when POSTGRES_TEST_DSN unset).
 # test-bdd runs Godog BDD for orchestrator and worker_node (orchestrator scenarios need POSTGRES_TEST_DSN for DB steps).
-ci: lint-go lint-go-ci vulncheck-go lint-python lint-md validate-doc-links validate-feature-files test-go-cover test-bdd
+ci: lint-go lint-go-ci vulncheck-go lint-python lint-md validate-doc-links validate-feature-files test-go-cover test-bdd lint-containerfiles
     @:
 
 # Full dev setup: podman, Go, and Go tools (incl. deps for .golangci.yml and lint-go-ci)
@@ -278,6 +278,40 @@ check-tech-spec-duplication *ARGS:
     pushd "{{ root_dir }}" >/dev/null
     trap 'popd >/dev/null 2>/dev/null' EXIT
     python3 .ci_scripts/check_tech_spec_duplication.py --no-fail {{ ARGS }}
+
+# Lint Containerfiles and Dockerfile (hadolint). Uses hadolint from PATH, or podman run hadolint/hadolint.
+lint-containerfiles:
+    #!/usr/bin/env bash
+    set -e
+    root="{{ root_dir }}"
+    files=(
+        orchestrator/cmd/control-plane/Containerfile
+        orchestrator/cmd/user-gateway/Containerfile
+        orchestrator/cmd/api-egress/Containerfile
+        orchestrator/cmd/mcp-gateway/Containerfile
+        worker_node/cmd/worker-api/Containerfile
+        worker_node/cmd/node-manager/Containerfile
+        worker_node/cmd/inference-proxy/Dockerfile
+    )
+    run_hadolint() {
+        local f="$1"
+        if command -v hadolint >/dev/null 2>&1; then
+            hadolint "$root/$f"
+        elif command -v podman >/dev/null 2>&1; then
+            podman run --rm -v "$root:/lint:ro" -w /lint hadolint/hadolint hadolint "/lint/$f"
+        elif command -v docker >/dev/null 2>&1; then
+            docker run --rm -v "$root:/lint:ro" -w /lint hadolint/hadolint hadolint "/lint/$f"
+        else
+            echo "lint-containerfiles: install hadolint (e.g. pacman -S hadolint) or run with podman/docker"
+            exit 1
+        fi
+    }
+    for f in "${files[@]}"; do
+        [ -f "$root/$f" ] || { echo "Missing $f"; exit 1; }
+        echo "==> hadolint $f"
+        run_hadolint "$f"
+    done
+    echo "Containerfile lint: OK"
 
 # Lint Markdown (markdownlint-cli2; uses .markdownlint-cli2.jsonc)
 lint-md target = '**/*.md':
