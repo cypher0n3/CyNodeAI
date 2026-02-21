@@ -22,7 +22,7 @@ func TestTaskHandler_CreateTaskSuccess(t *testing.T) {
 	// Test the JSON response structure
 	resp := TaskResponse{
 		TaskID:    uuid.New().String(),
-		Status:    "queued",
+		Status:    SpecStatusQueued,
 		Prompt:    ptr("test prompt"),
 		CreatedAt: time.Now().UTC(),
 		UpdatedAt: time.Now().UTC(),
@@ -38,7 +38,7 @@ func TestTaskHandler_CreateTaskSuccess(t *testing.T) {
 		t.Fatalf("failed to unmarshal TaskResponse: %v", err)
 	}
 
-	if parsed.Status != "queued" {
+	if parsed.Status != SpecStatusQueued {
 		t.Errorf("expected status queued, got %s", parsed.Status)
 	}
 }
@@ -375,7 +375,7 @@ func TestTaskResponseWithSummary(t *testing.T) {
 	summary := "Task completed successfully"
 	resp := TaskResponse{
 		TaskID:    uuid.New().String(),
-		Status:    "completed",
+		Status:    SpecStatusCompleted,
 		Prompt:    ptr("test prompt"),
 		Summary:   &summary,
 		CreatedAt: time.Now(),

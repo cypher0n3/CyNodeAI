@@ -35,7 +35,7 @@ Feature: cynork CLI
   @spec_cynai_client_cliauth
   Scenario: Whoami without token fails
     When I run cynork auth whoami
-    Then cynork exits with code 1
+    Then cynork exits with code 3
 
   # Intended semantics: task is text or markdown; system interprets and may call model and/or run sandbox.
   # This scenario uses a literal shell command for MVP testing until prompt interpretation is implemented.

@@ -61,13 +61,21 @@ type TaskResponse struct {
 	UpdatedAt time.Time `json:"updated_at"`
 }
 
+// CLI spec status constants (used in responses and tests).
+const (
+	SpecStatusQueued    = "queued"
+	SpecStatusCanceled  = "canceled"
+	SpecStatusCompleted = "completed"
+	streamParamAll      = "all"
+)
+
 // taskStatusToSpec maps internal task status to CLI spec enum (queued, running, completed, failed, canceled).
 func taskStatusToSpec(status string) string {
 	switch status {
 	case models.TaskStatusPending:
-		return "queued"
+		return SpecStatusQueued
 	case models.TaskStatusCancelled:
-		return "canceled"
+		return SpecStatusCanceled
 	default:
 		return status
 	}
@@ -361,6 +369,26 @@ type ListTasksResponse struct {
 	NextOffset *int           `json:"next_offset,omitempty"`
 }
 
+func parseListTasksParams(r *http.Request) (limit, offset int, statusFilter string, errCode int) {
+	limit = 50
+	if l := r.URL.Query().Get("limit"); l != "" {
+		n, err := parseInt(l, 1, 200)
+		if err != nil {
+			return 0, 0, "", http.StatusBadRequest
+		}
+		limit = n
+	}
+	offset = 0
+	if o := r.URL.Query().Get("offset"); o != "" {
+		n, err := parseInt(o, 0, 1<<31-1)
+		if err != nil {
+			return 0, 0, "", http.StatusBadRequest
+		}
+		offset = n
+	}
+	return limit, offset, r.URL.Query().Get("status"), 0
+}
+
 // ListTasks handles GET /v1/tasks.
 func (h *TaskHandler) ListTasks(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
@@ -369,26 +397,11 @@ func (h *TaskHandler) ListTasks(w http.ResponseWriter, r *http.Request) {
 		WriteUnauthorized(w, "Authentication required")
 		return
 	}
-	limit := 50
-	if l := r.URL.Query().Get("limit"); l != "" {
-		if n, err := parseInt(l, 1, 200); err != nil {
-			WriteBadRequest(w, "Invalid limit")
-			return
-		} else {
-			limit = n
-		}
+	limit, offset, statusFilter, errCode := parseListTasksParams(r)
+	if errCode != 0 {
+		WriteBadRequest(w, "Invalid limit or offset")
+		return
 	}
-	offset := 0
-	if o := r.URL.Query().Get("offset"); o != "" {
-		if n, err := parseInt(o, 0, 1<<31-1); err != nil {
-			WriteBadRequest(w, "Invalid offset")
-			return
-		} else {
-			offset = n
-		}
-	}
-	statusFilter := r.URL.Query().Get("status")
-
 	tasks, err := h.db.ListTasksByUser(ctx, *userID, limit+1, offset)
 	if err != nil {
 		h.logger.Error("list tasks", "error", err)
@@ -422,12 +435,12 @@ func (h *TaskHandler) ListTasks(w http.ResponseWriter, r *http.Request) {
 	WriteJSON(w, http.StatusOK, resp)
 }
 
-func parseInt(s string, min, max int) (int, error) {
+func parseInt(s string, minVal, maxVal int) (int, error) {
 	var n int
 	if _, err := fmt.Sscanf(s, "%d", &n); err != nil {
 		return 0, err
 	}
-	if n < min || n > max {
+	if n < minVal || n > maxVal {
 		return 0, errors.New("out of range")
 	}
 	return n, nil
@@ -489,6 +502,26 @@ type GetTaskLogsResponse struct {
 	Stderr string `json:"stderr"`
 }
 
+func aggregateLogsFromJobs(jobs []*models.Job, stream string) (stdout, stderr string) {
+	var outStd, outErr strings.Builder
+	for _, job := range jobs {
+		if job.Result.Ptr() == nil {
+			continue
+		}
+		var res workerapi.RunJobResponse
+		if json.Unmarshal([]byte(*job.Result.Ptr()), &res) != nil {
+			continue
+		}
+		if stream == "stdout" || stream == streamParamAll {
+			outStd.WriteString(res.Stdout)
+		}
+		if stream == "stderr" || stream == streamParamAll {
+			outErr.WriteString(res.Stderr)
+		}
+	}
+	return outStd.String(), outErr.String()
+}
+
 // GetTaskLogs handles GET /v1/tasks/{id}/logs.
 func (h *TaskHandler) GetTaskLogs(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
@@ -515,7 +548,7 @@ func (h *TaskHandler) GetTaskLogs(w http.ResponseWriter, r *http.Request) {
 	}
 	stream := r.URL.Query().Get("stream")
 	if stream == "" {
-		stream = "all"
+		stream = streamParamAll
 	}
 	jobs, err := h.db.GetJobsByTaskID(ctx, taskID)
 	if err != nil {
@@ -523,26 +556,11 @@ func (h *TaskHandler) GetTaskLogs(w http.ResponseWriter, r *http.Request) {
 		WriteInternalError(w, "Failed to get task logs")
 		return
 	}
-	var stdout, stderr strings.Builder
-	for _, job := range jobs {
-		if job.Result.Ptr() == nil {
-			continue
-		}
-		var res workerapi.RunJobResponse
-		if err := json.Unmarshal([]byte(*job.Result.Ptr()), &res); err != nil {
-			continue
-		}
-		if stream == "stdout" || stream == "all" {
-			stdout.WriteString(res.Stdout)
-		}
-		if stream == "stderr" || stream == "all" {
-			stderr.WriteString(res.Stderr)
-		}
-	}
+	stdout, stderr := aggregateLogsFromJobs(jobs, stream)
 	WriteJSON(w, http.StatusOK, GetTaskLogsResponse{
 		TaskID: taskID.String(),
-		Stdout: stdout.String(),
-		Stderr: stderr.String(),
+		Stdout: stdout,
+		Stderr: stderr,
 	})
 }
 
@@ -554,6 +572,43 @@ type ChatRequest struct {
 // ChatResponse is the response for POST /v1/chat.
 type ChatResponse struct {
 	Response string `json:"response"`
+}
+
+func (h *TaskHandler) chatResponseFromJob(job *models.Job) string {
+	if job.Result.Ptr() == nil {
+		return ""
+	}
+	var res workerapi.RunJobResponse
+	if json.Unmarshal([]byte(*job.Result.Ptr()), &res) != nil {
+		return ""
+	}
+	return res.Stdout
+}
+
+func (h *TaskHandler) chatPollUntilTerminal(ctx context.Context, taskID uuid.UUID) (response string, errCode int) {
+	for {
+		t, err := h.db.GetTaskByID(ctx, taskID)
+		if err != nil {
+			h.logger.Error("chat get task", "error", err)
+			return "", http.StatusInternalServerError
+		}
+		if t.Status == models.TaskStatusCompleted || t.Status == models.TaskStatusFailed || t.Status == models.TaskStatusCancelled {
+			jobs, err := h.db.GetJobsByTaskID(ctx, taskID)
+			if err != nil {
+				return "", http.StatusInternalServerError
+			}
+			var out strings.Builder
+			for _, j := range jobs {
+				out.WriteString(h.chatResponseFromJob(j))
+			}
+			return out.String(), 0
+		}
+		select {
+		case <-ctx.Done():
+			return "", http.StatusInternalServerError
+		case <-time.After(500 * time.Millisecond):
+		}
+	}
 }
 
 // Chat handles POST /v1/chat. Creates a task with message as prompt, waits for terminal status, returns response from job result.
@@ -582,14 +637,7 @@ func (h *TaskHandler) Chat(w http.ResponseWriter, r *http.Request) {
 	if h.inferenceURL != "" {
 		job, err := h.createTaskWithOrchestratorInference(ctx, task.ID, req.Message)
 		if err == nil {
-			out := ""
-			if job.Result.Ptr() != nil {
-				var res workerapi.RunJobResponse
-				if json.Unmarshal([]byte(*job.Result.Ptr()), &res) == nil {
-					out = res.Stdout
-				}
-			}
-			WriteJSON(w, http.StatusOK, ChatResponse{Response: out})
+			WriteJSON(w, http.StatusOK, ChatResponse{Response: h.chatResponseFromJob(job)})
 			return
 		}
 		h.logger.Warn("chat orchestrator inference failed, falling back to job", "error", err)
@@ -605,37 +653,10 @@ func (h *TaskHandler) Chat(w http.ResponseWriter, r *http.Request) {
 		WriteInternalError(w, "Failed to process message")
 		return
 	}
-	for {
-		t, err := h.db.GetTaskByID(ctx, task.ID)
-		if err != nil {
-			h.logger.Error("chat get task", "error", err)
-			WriteInternalError(w, "Failed to process message")
-			return
-		}
-		switch t.Status {
-		case models.TaskStatusCompleted, models.TaskStatusFailed, models.TaskStatusCancelled:
-			jobs, err := h.db.GetJobsByTaskID(ctx, task.ID)
-			if err != nil {
-				WriteInternalError(w, "Failed to get result")
-				return
-			}
-			out := ""
-			for _, j := range jobs {
-				if j.Result.Ptr() != nil {
-					var res workerapi.RunJobResponse
-					if json.Unmarshal([]byte(*j.Result.Ptr()), &res) == nil {
-						out += res.Stdout
-					}
-				}
-			}
-			WriteJSON(w, http.StatusOK, ChatResponse{Response: out})
-			return
-		}
-		select {
-		case <-ctx.Done():
-			WriteInternalError(w, "Request cancelled")
-			return
-		case <-time.After(500 * time.Millisecond):
-		}
+	out, errCode := h.chatPollUntilTerminal(ctx, task.ID)
+	if errCode != 0 {
+		WriteInternalError(w, "Request cancelled")
+		return
 	}
+	WriteJSON(w, http.StatusOK, ChatResponse{Response: out})
 }

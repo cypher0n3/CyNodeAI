@@ -2,15 +2,24 @@
 package cmd
 
 import (
+	"errors"
 	"fmt"
 	"os"
 
 	"github.com/cypher0n3/cynodeai/cynork/internal/config"
+	"github.com/cypher0n3/cynodeai/cynork/internal/exit"
+	"github.com/cypher0n3/cynodeai/cynork/internal/gateway"
 	"github.com/spf13/cobra"
+)
+
+const (
+	outputFormatJSON  = "json"
+	outputFormatTable = "table"
 )
 
 var (
 	configPath string
+	outputFmt  string
 	cfg        *config.Config
 	// getDefaultConfigPath resolves the default config file path when --config is not set.
 	// Tests may override to inject failures.
@@ -26,7 +35,10 @@ var rootCmd = &cobra.Command{
 		var err error
 		cfg, err = config.Load(configPath)
 		if err != nil {
-			return fmt.Errorf("load config: %w", err)
+			return exit.Usage(fmt.Errorf("load config: %w", err))
+		}
+		if outputFmt != "" && outputFmt != outputFormatTable && outputFmt != outputFormatJSON {
+			return exit.Usage(fmt.Errorf("output must be table or json"))
 		}
 		return nil
 	},
@@ -36,11 +48,35 @@ var rootCmd = &cobra.Command{
 func Execute() int {
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Fprintln(os.Stderr, err)
-		return 1
+		return exit.CodeOf(err)
 	}
 	return 0
 }
 
+// exitFromGatewayErr maps gateway HTTP errors to spec exit codes (3 auth, 4 not found, etc.).
+func exitFromGatewayErr(err error) error {
+	if err == nil {
+		return nil
+	}
+	var he *gateway.HTTPError
+	if !errors.As(err, &he) {
+		return exit.Gateway(err)
+	}
+	switch he.Status {
+	case 401, 403:
+		return exit.Auth(he.Err)
+	case 404:
+		return exit.NotFound(he.Err)
+	case 409:
+		return exit.Conflict(he.Err)
+	case 400, 422:
+		return exit.Validation(he.Err)
+	default:
+		return exit.Gateway(he.Err)
+	}
+}
+
 func init() {
 	rootCmd.PersistentFlags().StringVar(&configPath, "config", "", "config file (default ~/.config/cynork/config.yaml)")
+	rootCmd.PersistentFlags().StringVarP(&outputFmt, "output", "o", outputFormatTable, "output format: table | json")
 }
