@@ -72,6 +72,27 @@ func (db *DB) CreateJob(ctx context.Context, taskID uuid.UUID, payload string) (
 	return job, nil
 }
 
+// CreateJobCompleted creates a job that is already completed (orchestrator-side inference).
+// The job is never queued so the dispatcher does not pick it up.
+func (db *DB) CreateJobCompleted(ctx context.Context, taskID, jobID uuid.UUID, result string) (*models.Job, error) {
+	now := time.Now().UTC()
+	emptyPayload := "{}"
+	job := &models.Job{
+		ID:        jobID,
+		TaskID:    taskID,
+		Status:    models.JobStatusCompleted,
+		Payload:   models.NewJSONBString(&emptyPayload),
+		Result:    models.NewJSONBString(&result),
+		EndedAt:   &now,
+		CreatedAt: now,
+		UpdatedAt: now,
+	}
+	if err := db.createRecord(ctx, job, "create job completed"); err != nil {
+		return nil, err
+	}
+	return job, nil
+}
+
 // GetJobByID retrieves a job by ID.
 func (db *DB) GetJobByID(ctx context.Context, id uuid.UUID) (*models.Job, error) {
 	return getByID[models.Job](db, ctx, id, "get job by id")

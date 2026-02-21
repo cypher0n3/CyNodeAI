@@ -87,7 +87,7 @@ func InitializeOrchestratorSuite(sc *godog.ScenarioContext, state *testState) {
 		rateLimiter := auth.NewRateLimiter(cfg.RateLimitPerMinute, time.Minute)
 		authHandler := handlers.NewAuthHandler(db, jwtManager, rateLimiter, nil)
 		userHandler := handlers.NewUserHandler(db, nil)
-		taskHandler := handlers.NewTaskHandler(db, nil)
+		taskHandler := handlers.NewTaskHandler(db, nil, "", "")
 		nodeHandler := handlers.NewNodeHandler(db, jwtManager, cfg.NodeRegistrationPSK, cfg.OrchestratorPublicURL, cfg.WorkerAPIBearerToken, cfg.WorkerAPITargetURL, nil)
 		authMiddleware := middleware.NewAuthMiddleware(jwtManager, nil)
 

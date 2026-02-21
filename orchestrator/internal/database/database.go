@@ -59,6 +59,7 @@ type Store interface {
 	ListTasksByUser(ctx context.Context, userID uuid.UUID, limit, offset int) ([]*models.Task, error)
 	GetJobsByTaskID(ctx context.Context, taskID uuid.UUID) ([]*models.Job, error)
 	CreateJob(ctx context.Context, taskID uuid.UUID, payload string) (*models.Job, error)
+	CreateJobCompleted(ctx context.Context, taskID, jobID uuid.UUID, result string) (*models.Job, error)
 	GetJobByID(ctx context.Context, id uuid.UUID) (*models.Job, error)
 	UpdateJobStatus(ctx context.Context, jobID uuid.UUID, status string) error
 	AssignJobToNode(ctx context.Context, jobID, nodeID uuid.UUID) error

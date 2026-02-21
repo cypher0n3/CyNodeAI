@@ -50,11 +50,16 @@ services:
       USER_GATEWAY_LISTEN_ADDR: ":8080"
       JWT_SECRET: ${JWT_SECRET:-dev-jwt-secret-change-in-production}
       BOOTSTRAP_ADMIN_PASSWORD: ${BOOTSTRAP_ADMIN_PASSWORD:-admin123}
+      # Prompt-mode tasks: orchestrator calls PM model so prompt→model MUST work (MVP Phase 1).
+      OLLAMA_BASE_URL: http://ollama:11434
+      INFERENCE_MODEL: ${INFERENCE_MODEL:-tinyllama}
     ports:
       - "${ORCHESTRATOR_PORT:-8080}:8080"
     depends_on:
       postgres:
         condition: service_healthy
+      ollama:
+        condition: service_started
 
   ollama:
     image: ${OLLAMA_IMAGE:-ollama/ollama}

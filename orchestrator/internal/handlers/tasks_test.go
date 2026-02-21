@@ -6,7 +6,7 @@ import (
 )
 
 func TestNewTaskHandler(t *testing.T) {
-	handler := NewTaskHandler(nil, nil)
+	handler := NewTaskHandler(nil, nil, "", "")
 	if handler == nil {
 		t.Fatal("NewTaskHandler returned nil")
 	}
