@@ -2,14 +2,14 @@
 
 - [1 Overview](#1-overview)
 - [2 What This Directory Contains](#2-what-this-directory-contains)
-- [3 How To Run For Development](#3-how-to-run-for-development)
-- [4 Testing And Linting](#4-testing-and-linting)
+- [3 How to Run for Development](#3-how-to-run-for-development)
+- [4 Testing and Linting](#4-testing-and-linting)
 - [5 Cross-References](#5-cross-references)
 
 ## 1 Overview
 
 This directory contains the CyNodeAI CLI management client (**cynork**), implemented in Go with Cobra.
-Cynork operates against the User API Gateway for authentication, task operations, and admin capabilities (credentials, preferences, nodes, skills).
+`cynork` operates against the User API Gateway for authentication, task operations, and admin capabilities (credentials, user preferences, nodes, skills).
 It MUST offer the same administrative capabilities as the Admin Web Console; see [CLI management app spec](../docs/tech_specs/cli_management_app.md).
 
 ## 2 What This Directory Contains

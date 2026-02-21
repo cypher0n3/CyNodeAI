@@ -30,7 +30,9 @@ It provides a stable interface for user clients to submit work, query status, an
 The gateway SHOULD support:
 
 - Task submission and management
-  - Create tasks, set acceptance criteria, and attach artifacts.
+  - Create tasks with task input as **plain text or Markdown** (inline or from file), optional **attachments**, **script** (path/file), or **short series of commands**; for script/commands the system runs them in the sandbox; otherwise it interprets the task and may call an AI model and/or dispatch sandbox work.
+  Interpretation and inference are the **default** for task text; there is no user-facing "use inference" flag (see REQ-ORCHES-0125, REQ-ORCHES-0126, REQ-ORCHES-0127).
+  - Set acceptance criteria and attach artifacts.
   - List tasks, read status, and retrieve results.
 - Scheduler and cron
   - Create, list, update, disable, and delete scheduled jobs (cron or one-off).
@@ -53,7 +55,7 @@ The gateway SHOULD support:
 - Artifact ingress and egress
   - Upload files for tasks and download produced artifacts.
 - Admin operations
-  - Manage credentials, preferences, and basic node lifecycle controls through a single user-facing surface.
+  - Manage credentials, user preferences, and basic node lifecycle controls through a single user-facing surface.
 - Groups and RBAC
   - Manage groups and membership (create group, add member, remove member), when allowed.
   - Manage role bindings (assign role to user or group), when allowed.
@@ -175,7 +177,7 @@ Constraints
 - Spec ID: `CYNAI.USRGWY.AuthAuditing` <a id="spec-cynai-usrgwy-authauditing"></a>
 
 - The gateway MUST authenticate user clients.
-- The gateway MUST authorize user actions using policy and preferences.
+- The gateway MUST authorize user actions using policy and (when applicable) user task-execution preferences and constraints.
 - The gateway SHOULD emit audit logs for all user actions, including task submission and artifact access.
 - The gateway SHOULD support per-user rate limiting and request size limits.
 - For the MVP local user account model and secure credential handling requirements, see [`docs/tech_specs/local_user_accounts.md`](local_user_accounts.md).
@@ -189,7 +191,7 @@ Traces To:
 
 - Spec ID: `CYNAI.USRGWY.AdminConsole` <a id="spec-cynai-usrgwy-adminconsole"></a>
 
-The User API Gateway SHOULD support an admin-focused web console for managing credentials and preferences.
+The User API Gateway SHOULD support an admin-focused web console for managing credentials and user preferences.
 The web console MUST be a client of the gateway and MUST NOT connect directly to PostgreSQL.
 
 Traces To:

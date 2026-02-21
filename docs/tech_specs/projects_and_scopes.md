@@ -20,7 +20,7 @@ This section defines stable Spec ID anchors for referencing this document.
 ## Document Overview
 
 This document defines the project and scoping model for CyNodeAI.
-It makes `project_id` a first-class database entity and clarifies how project scope is applied across RBAC, preferences, and tasks.
+It makes `project_id` a first-class database entity and clarifies how project scope is applied across RBAC, user task-execution preferences, and tasks.
 
 Related documents
 
@@ -40,6 +40,7 @@ Related documents
 Terminology
 
 - **Project**: A named workspace boundary used for preferences and authorization scoping.
+- **Project**: A named workspace boundary used for user task-execution preference scoping and authorization scoping.
 - **Scope**: A tuple of `scope_type` and optional `scope_id`.
   System scope uses `scope_type=system` with `scope_id` null.
 
@@ -74,10 +75,11 @@ See [`docs/tech_specs/rbac_and_groups.md`](rbac_and_groups.md).
 
 ### Preference Scope
 
-Preferences support:
+User task-execution preferences support:
 
 - System scope: `scope_type=system`, `scope_id` null.
 - User scope: `scope_type=user`, `scope_id` is a `users.id`.
+- Group scope: `scope_type=group`, `scope_id` is a `groups.id`.
 - Project scope: `scope_type=project`, `scope_id` is a `projects.id`.
 - Task scope: `scope_type=task`, `scope_id` is a `tasks.id`.
 

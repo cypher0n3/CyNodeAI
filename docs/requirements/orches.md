@@ -62,6 +62,36 @@ It covers orchestrator control-plane behavior, task lifecycle, dispatch, and sta
 - **REQ-ORCHES-0115:** The orchestrator SHOULD support running as the sole service with zero worker nodes and using external AI providers when allowed.
   [orchestrator.md](../tech_specs/orchestrator.md)
   <a id="req-orches-0115"></a>
+- **REQ-ORCHES-0116:** On startup, the orchestrator MUST select an effective "Project Manager model" to run the Project Manager Agent.
+  If a dispatchable local inference worker is available (Ollama or similar), the orchestrator MUST prefer a local Project Manager model.
+  If no dispatchable local inference worker is available, the orchestrator MUST use an external model routing path when configured and allowed.
+  The orchestrator MUST honor a system setting override that forces Project Manager inference to use an external model routing path when configured and allowed, even when local inference is available (`agents.project_manager.model.selection.execution_mode=force_external`).
+  The orchestrator MUST select the node that will run the local Project Manager model using the automatic Project Manager model selection policy.
+  By default, the orchestrator MUST prefer running the Project Manager model on a worker node that is on the same host as the orchestrator, unless there is no dispatchable worker on the orchestrator host.
+  For this requirement, "on the same host as the orchestrator" MUST be determined by the node capability report label `orchestrator_host`.
+  [CYNAI.ORCHES.Operation.SelectProjectManagerModel](../tech_specs/orchestrator.md#spec-cynai-orches-operation-selectprojectmanagermodel)
+  [project_manager_agent.md](../tech_specs/project_manager_agent.md)
+  [external_model_routing.md](../tech_specs/external_model_routing.md)
+  <a id="req-orches-0116"></a>
+- **REQ-ORCHES-0117:** When a dispatchable local inference worker is available, the orchestrator MUST ensure the effective Project Manager model is loaded and ready before entering ready state.
+  The effective Project Manager model MUST be derived from the automatic Project Manager model selection policy unless overridden by system settings.
+  Overrides and policy parameters MUST be configurable via orchestrator bootstrap and via client system settings management surfaces.
+  [CYNAI.ORCHES.Rule.WarmupProjectManagerModel](../tech_specs/orchestrator.md#spec-cynai-orches-rule-warmupprojectmanagermodel)
+  [model_management.md](../tech_specs/model_management.md)
+  <a id="req-orches-0117"></a>
+- **REQ-ORCHES-0118:** For the MVP, the Project Manager model MUST handle all inference task assignments.
+  This includes selecting the inference execution target (local worker vs external API via API Egress), selecting the model (and version), and requesting model loads when needed.
+  [project_manager_agent.md](../tech_specs/project_manager_agent.md)
+  [model_management.md](../tech_specs/model_management.md)
+  [external_model_routing.md](../tech_specs/external_model_routing.md)
+  <a id="req-orches-0118"></a>
+
+- **REQ-ORCHES-0119:** The orchestrator MUST remain running while it is not ready due to missing Project Manager inference prerequisites, and MUST expose health endpoints that distinguish "process alive" from "ready to accept work".
+  `GET /healthz` MUST return 200 when the orchestrator process is alive.
+  `GET /readyz` MUST return 200 only when the orchestrator is in a ready state; otherwise it MUST return 503 with a reason indicating what prerequisites are missing.
+  While not ready, the orchestrator MUST allow users to configure system settings and credentials required to become ready.
+  [CYNAI.ORCHES.Rule.HealthEndpoints](../tech_specs/orchestrator.md#spec-cynai-orches-rule-healthendpoints)
+  <a id="req-orches-0119"></a>
 
 - **REQ-ORCHES-0120:** The orchestrator MUST persist tasks and their lifecycle state in PostgreSQL with stable identifiers.
   [orchestrator.md](../tech_specs/orchestrator.md)
@@ -82,6 +112,28 @@ It covers orchestrator control-plane behavior, task lifecycle, dispatch, and sta
   [orchestrator.md](../tech_specs/orchestrator.md)
   [data_rest_api.md](../tech_specs/data_rest_api.md)
   <a id="req-orches-0124"></a>
+- **REQ-ORCHES-0125:** Task creation MUST accept a natural-language user prompt and MUST accept task input as plain text or Markdown.
+  The system MUST interpret the prompt or task text to decide whether to call an AI model and/or execute sandbox jobs.
+  The system SHALL use inference by default when interpreting (no user opt-in required).
+  The user prompt or task text MUST NOT be executed as a literal shell command unless the user explicitly requests raw command execution (e.g. script, commands, or a dedicated raw-command flag).
+  [user_api_gateway.md](../tech_specs/user_api_gateway.md)
+  [cli_management_app.md](../tech_specs/cli_management_app.md#spec-cynai-client-clitaskcreateprompt)
+  <a id="req-orches-0125"></a>
+- **REQ-ORCHES-0126:** Task creation MUST support attachments (e.g. files or other artifacts).
+  Clients MAY supply attachments as path strings (CLI) or via file upload (web console); the gateway and orchestrator define how attachment payloads are ingested and made available to the task.
+  [user_api_gateway.md](../tech_specs/user_api_gateway.md)
+  [cli_management_app.md](../tech_specs/cli_management_app.md#spec-cynai-client-clitaskcreateprompt)
+  [admin_web_console.md](../tech_specs/admin_web_console.md#api-surface)
+  <a id="req-orches-0126"></a>
+- **REQ-ORCHES-0127:** Task creation MUST support running a **script** (e.g. path to a script file) and a **short series of commands** as explicit task input types.
+  When the client supplies a script or commands, the system MUST run them in the sandbox (or equivalent) rather than interpreting the input as natural language.
+  [user_api_gateway.md](../tech_specs/user_api_gateway.md)
+  [cli_management_app.md](../tech_specs/cli_management_app.md#spec-cynai-client-clitaskcreateprompt)
+  <a id="req-orches-0127"></a>
+- **REQ-ORCHES-0128:** The orchestrator MUST continuously validate that the selected Project Manager model remains online after startup.
+  If the selected Project Manager model becomes unavailable due to node loss, eviction, failure, or relevant system setting changes, the orchestrator MUST transition out of ready state and MUST re-run Project Manager model selection and warmup until a Project Manager model is online again.
+  [CYNAI.ORCHES.Rule.MonitorProjectManagerModel](../tech_specs/orchestrator.md#spec-cynai-orches-rule-monitorprojectmanagermodel)
+  <a id="req-orches-0128"></a>
 - **REQ-ORCHES-0140:** The orchestrator MUST be able to pull node operational telemetry (logs, system info, container inventory/state) from nodes via the Worker Telemetry API.
   [CYNAI.ORCHES.NodeTelemetryPull](../tech_specs/worker_telemetry_api.md#spec-cynai-orches-nodetelemetrypull)
   <a id="req-orches-0140"></a>

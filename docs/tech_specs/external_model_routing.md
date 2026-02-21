@@ -94,11 +94,11 @@ Example flow
 - The orchestrator dispatches a sandbox job to run tests or apply changes.
 - The sandbox job uses MCP tools for artifacts and controlled services.
 
-## Preferences and Constraints
+## Settings and Constraints
 
-Routing behavior SHOULD be configurable via PostgreSQL preferences.
+Routing behavior SHOULD be configurable via PostgreSQL settings.
 
-### Suggested Preference Keys
+### Suggested Setting Keys
 
 - `model_routing.prefer_local` (boolean)
 - `model_routing.allowed_external_providers` (array)
@@ -108,9 +108,9 @@ Routing behavior SHOULD be configurable via PostgreSQL preferences.
 - `model_routing.max_external_tokens` (number)
 - `model_routing.max_external_cost_usd` (number)
 
-### Suggested Orchestrator-Side Agent Preference Keys
+### Suggested Orchestrator-Side Agent Setting Keys
 
-Orchestrator-side agents MAY use separate preferences for external provider routing.
+Orchestrator-side agents MAY use separate settings for external provider routing.
 This allows enabling external providers for the Project Manager and Project Analyst agents without changing task routing defaults.
 
 - `agents.project_manager.model_routing.prefer_local` (boolean)

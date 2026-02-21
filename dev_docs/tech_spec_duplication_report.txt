@@ -1,0 +1,749 @@
+Tech spec duplication report
+===========================
+Specs dir: /home/cypher/GoogleDrive/github/cynodeai/docs/tech_specs
+Duplicate blocks: 81
+
+Block fingerprint: cc43587bb963dff1...
+  access_control.md:95-98
+  postgres_schema.md:312-315
+  Preview:
+    - Index: (`subject_type`, `subject_id`)
+    - Index: (`action`)
+    - Index: (`resource_type`)
+    - Index: (`priority`)
+
+Block fingerprint: 96b2cac1b9824f96...
+  access_control.md:102-105
+  postgres_schema.md:319-322
+  Preview:
+    - `id` (uuid, pk)
+    - `subject_type` (text)
+    - `subject_id` (uuid, nullable)
+    - `action` (text)
+
+Block fingerprint: af6134164101e801...
+  access_control.md:103-106
+  postgres_schema.md:320-323
+  Preview:
+    - `subject_type` (text)
+    - `subject_id` (uuid, nullable)
+    - `action` (text)
+    - `resource_type` (text)
+
+Block fingerprint: cf70f8d2dc74a943...
+  access_control.md:104-107
+  postgres_schema.md:321-324
+  Preview:
+    - `subject_id` (uuid, nullable)
+    - `action` (text)
+    - `resource_type` (text)
+    - `resource` (text)
+
+Block fingerprint: 43c82cdb1375ea01...
+  admin_web_console.md:144-147
+  cli_management_app.md:815-818
+  Preview:
+    - `output.summary_style` (string)
+      - examples: concise, detailed
+    - `definition_of_done.required_checks` (array)
+      - examples: lint, unit_tests, docs_updated
+
+Block fingerprint: 526434f79625ce38...
+  admin_web_console.md:145-148
+  cli_management_app.md:816-819
+  Preview:
+      - examples: concise, detailed
+    - `definition_of_done.required_checks` (array)
+      - examples: lint, unit_tests, docs_updated
+    - `language.preferred` (string)
+
+Block fingerprint: f83defdc25c2a4a1...
+  admin_web_console.md:146-149
+  cli_management_app.md:817-820
+  Preview:
+    - `definition_of_done.required_checks` (array)
+      - examples: lint, unit_tests, docs_updated
+    - `language.preferred` (string)
+      - examples: en, en-US
+
+Block fingerprint: d8c13950e807ff33...
+  admin_web_console.md:147-150
+  cli_management_app.md:818-821
+  Preview:
+      - examples: lint, unit_tests, docs_updated
+    - `language.preferred` (string)
+      - examples: en, en-US
+    - `code.language.rank_ordered` (array)
+
+Block fingerprint: 498b593111cccdd1...
+  admin_web_console.md:148-151
+  cli_management_app.md:819-822
+  Preview:
+    - `language.preferred` (string)
+      - examples: en, en-US
+    - `code.language.rank_ordered` (array)
+      - Rank-ordered code language choices with optional context (project kind, task kind).
+
+Block fingerprint: 993dcf6824eb5967...
+  admin_web_console.md:149-152
+  cli_management_app.md:820-823
+  Preview:
+      - examples: en, en-US
+    - `code.language.rank_ordered` (array)
+      - Rank-ordered code language choices with optional context (project kind, task kind).
+    - `code.language.disallowed` (array)
+
+Block fingerprint: 4cf6db308cc66d04...
+  admin_web_console.md:150-153
+  cli_management_app.md:821-824
+  Preview:
+    - `code.language.rank_ordered` (array)
+      - Rank-ordered code language choices with optional context (project kind, task kind).
+    - `code.language.disallowed` (array)
+      - Globally disallowed languages.
+
+Block fingerprint: 9cfe6660154be424...
+  admin_web_console.md:151-154
+  cli_management_app.md:822-825
+  Preview:
+      - Rank-ordered code language choices with optional context (project kind, task kind).
+    - `code.language.disallowed` (array)
+      - Globally disallowed languages.
+    - `code.language.disallowed_by_project_kind` (object)
+
+Block fingerprint: e5828d432410bad4...
+  admin_web_console.md:152-155
+  cli_management_app.md:823-826
+  Preview:
+    - `code.language.disallowed` (array)
+      - Globally disallowed languages.
+    - `code.language.disallowed_by_project_kind` (object)
+      - Per-project-kind disallowed languages.
+
+Block fingerprint: 68546a6aa4d4ff5a...
+  admin_web_console.md:153-156
+  cli_management_app.md:824-827
+  Preview:
+      - Globally disallowed languages.
+    - `code.language.disallowed_by_project_kind` (object)
+      - Per-project-kind disallowed languages.
+    - `code.language.disallowed_by_task_kind` (object)
+
+Block fingerprint: 7108af03cb03e189...
+  admin_web_console.md:154-157
+  cli_management_app.md:825-828
+  Preview:
+    - `code.language.disallowed_by_project_kind` (object)
+      - Per-project-kind disallowed languages.
+    - `code.language.disallowed_by_task_kind` (object)
+      - Per-task-kind disallowed languages.
+
+Block fingerprint: 8f170ccdcc791adc...
+  admin_web_console.md:155-158
+  cli_management_app.md:826-829
+  Preview:
+      - Per-project-kind disallowed languages.
+    - `code.language.disallowed_by_task_kind` (object)
+      - Per-task-kind disallowed languages.
+    - `standards.markdown.line_length` (number)
+
+Block fingerprint: b8ed2897cf9c8ca6...
+  api_egress_server.md:64-67
+  connector_framework.md:48-51
+  Preview:
+    - `id` (uuid, pk)
+    - `owner_type` (text)
+      - one of: user|group
+    - `owner_id` (uuid)
+
+Block fingerprint: c0ced11f733a56e8...
+  api_egress_server.md:67-70
+  postgres_schema.md:350-353
+  Preview:
+    - `owner_id` (uuid)
+      - user id or group id, depending on owner_type
+    - `provider` (text)
+    - `credential_type` (text)
+
+Block fingerprint: 9829367f85b5028e...
+  api_egress_server.md:68-71
+  postgres_schema.md:351-354
+  Preview:
+      - user id or group id, depending on owner_type
+    - `provider` (text)
+    - `credential_type` (text)
+      - examples: api_key, oauth_token, bearer_token
+
+Block fingerprint: 6547da4a9e65041a...
+  api_egress_server.md:69-72
+  postgres_schema.md:352-355
+  Preview:
+    - `provider` (text)
+    - `credential_type` (text)
+      - examples: api_key, oauth_token, bearer_token
+    - `credential_name` (text)
+
+Block fingerprint: 0c922f57bc99aa50...
+  api_egress_server.md:70-73
+  postgres_schema.md:353-356
+  Preview:
+    - `credential_type` (text)
+      - examples: api_key, oauth_token, bearer_token
+    - `credential_name` (text)
+      - human-friendly label to support multiple keys per user and provider
+
+Block fingerprint: 0285da691ddf412b...
+  api_egress_server.md:71-74
+  postgres_schema.md:354-357
+  Preview:
+      - examples: api_key, oauth_token, bearer_token
+    - `credential_name` (text)
+      - human-friendly label to support multiple keys per user and provider
+    - `credential_ciphertext` (bytea)
+
+Block fingerprint: 1dc93e44c7f7a3bb...
+  api_egress_server.md:72-75
+  postgres_schema.md:355-358
+  Preview:
+    - `credential_name` (text)
+      - human-friendly label to support multiple keys per user and provider
+    - `credential_ciphertext` (bytea)
+    - `credential_kid` (text)
+
+Block fingerprint: 8f9854d76f89e3fc...
+  api_egress_server.md:73-76
+  postgres_schema.md:356-359
+  Preview:
+      - human-friendly label to support multiple keys per user and provider
+    - `credential_ciphertext` (bytea)
+    - `credential_kid` (text)
+      - key identifier for envelope encryption rotation
+
+Block fingerprint: dffae7ba2298cae6...
+  api_egress_server.md:74-77
+  postgres_schema.md:357-360
+  Preview:
+    - `credential_ciphertext` (bytea)
+    - `credential_kid` (text)
+      - key identifier for envelope encryption rotation
+    - `is_active` (boolean)
+
+Block fingerprint: 09d331a25c2d1fde...
+  api_egress_server.md:75-78
+  postgres_schema.md:358-361
+  Preview:
+    - `credential_kid` (text)
+      - key identifier for envelope encryption rotation
+    - `is_active` (boolean)
+    - `expires_at` (timestamptz, nullable)
+
+Block fingerprint: 1b1eba9b2972cac4...
+  api_egress_server.md:76-79
+  postgres_schema.md:359-362
+  Preview:
+      - key identifier for envelope encryption rotation
+    - `is_active` (boolean)
+    - `expires_at` (timestamptz, nullable)
+    - `created_at` (timestamptz)
+
+Block fingerprint: 4d4e87c93bf95f31...
+  api_egress_server.md:77-80
+  postgres_schema.md:360-363
+  Preview:
+    - `is_active` (boolean)
+    - `expires_at` (timestamptz, nullable)
+    - `created_at` (timestamptz)
+    - `updated_at` (timestamptz)
+
+Block fingerprint: 2c82bbccaf59cc9b...
+  api_egress_server.md:78-81
+  postgres_schema.md:361-364
+  Preview:
+    - `expires_at` (timestamptz, nullable)
+    - `created_at` (timestamptz)
+    - `updated_at` (timestamptz)
+    - `updated_by` (text)
+
+Block fingerprint: 2bcfd358ad47a9f3...
+  cli_management_app.md:492-495
+  cli_management_app.md:696-699
+  cli_management_app.md:1002-1005
+  Preview:
+    - `-l, --limit <n>`.
+      Default is `50`.
+      Allowed range is `1` to `200`.
+    - `--cursor <opaque>`.
+
+Block fingerprint: 6ababbeeff0e1332...
+  cli_management_app.md:493-496
+  cli_management_app.md:697-700
+  cli_management_app.md:1003-1006
+  cli_management_app.md:1166-1169
+  cli_management_app.md:1255-1258
+  Preview:
+      Default is `50`.
+      Allowed range is `1` to `200`.
+    - `--cursor <opaque>`.
+      Default is empty.
+
+Block fingerprint: 12289e3a5e256271...
+  cli_management_app.md:1165-1168
+  cli_management_app.md:1254-1257
+  Preview:
+    - `--limit <n>`.
+      Default is `50`.
+      Allowed range is `1` to `200`.
+    - `--cursor <opaque>`.
+
+Block fingerprint: 38ff471f05160453...
+  local_user_accounts.md:58-61
+  postgres_schema.md:133-136
+  Preview:
+    - `id` (uuid, pk)
+    - `handle` (text, unique)
+    - `email` (text, unique, nullable)
+    - `is_active` (boolean)
+
+Block fingerprint: 1b610e4563606003...
+  local_user_accounts.md:59-62
+  postgres_schema.md:134-137
+  Preview:
+    - `handle` (text, unique)
+    - `email` (text, unique, nullable)
+    - `is_active` (boolean)
+    - `external_source` (text, nullable)
+
+Block fingerprint: d8bb64e8c9ee8c8d...
+  local_user_accounts.md:60-63
+  postgres_schema.md:135-138
+  Preview:
+    - `email` (text, unique, nullable)
+    - `is_active` (boolean)
+    - `external_source` (text, nullable)
+    - `external_id` (text, nullable)
+
+Block fingerprint: 2f471041689f85d4...
+  local_user_accounts.md:61-64
+  postgres_schema.md:136-139
+  Preview:
+    - `is_active` (boolean)
+    - `external_source` (text, nullable)
+    - `external_id` (text, nullable)
+    - `created_at` (timestamptz)
+
+Block fingerprint: 5335e267cd0d121e...
+  local_user_accounts.md:62-65
+  postgres_schema.md:137-140
+  Preview:
+    - `external_source` (text, nullable)
+    - `external_id` (text, nullable)
+    - `created_at` (timestamptz)
+    - `updated_at` (timestamptz)
+
+Block fingerprint: 09ad22b57d462321...
+  local_user_accounts.md:140-143
+  postgres_schema.md:152-155
+  Preview:
+    - `password_hash` (bytea)
+    - `hash_alg` (text)
+      - examples: argon2id, bcrypt
+    - `created_at` (timestamptz)
+
+Block fingerprint: 460a02368687d804...
+  local_user_accounts.md:141-144
+  postgres_schema.md:153-156
+  Preview:
+    - `hash_alg` (text)
+      - examples: argon2id, bcrypt
+    - `created_at` (timestamptz)
+    - `updated_at` (timestamptz)
+
+Block fingerprint: 1f47a5f9424df5fb...
+  local_user_accounts.md:154-157
+  postgres_schema.md:169-172
+  Preview:
+    - `is_active` (boolean)
+    - `expires_at` (timestamptz)
+    - `last_used_at` (timestamptz, nullable)
+    - `created_at` (timestamptz)
+
+Block fingerprint: 40639cf09f736926...
+  local_user_accounts.md:155-158
+  postgres_schema.md:170-173
+  Preview:
+    - `expires_at` (timestamptz)
+    - `last_used_at` (timestamptz, nullable)
+    - `created_at` (timestamptz)
+    - `updated_at` (timestamptz)
+
+Block fingerprint: 83b8b57c4a97d464...
+  model_management.md:54-57
+  postgres_schema.md:871-874
+  Preview:
+    - `vendor` (text, nullable)
+    - `description` (text, nullable)
+    - `created_at` (timestamptz)
+    - `updated_at` (timestamptz)
+
+Block fingerprint: a35fea3fc506fd23...
+  model_management.md:55-58
+  postgres_schema.md:584-587
+  postgres_schema.md:872-875
+  sandbox_image_registry.md:101-104
+  Preview:
+    - `description` (text, nullable)
+    - `created_at` (timestamptz)
+    - `updated_at` (timestamptz)
+    - `updated_by` (text)
+
+Block fingerprint: a021ac4888dc1568...
+  model_management.md:109-112
+  postgres_schema.md:918-921
+  Preview:
+    - `status` (text)
+      - examples: available, loading, failed, evicted
+    - `last_checked_at` (timestamptz)
+    - `details` (jsonb, nullable)
+
+Block fingerprint: a300606a2fcf2824...
+  postgres_schema.md:188-191
+  postgres_schema.md:210-213
+  rbac_and_groups.md:68-71
+  Preview:
+    - `id` (uuid, pk)
+    - `slug` (text, unique)
+    - `display_name` (text)
+    - `is_active` (boolean)
+
+Block fingerprint: 0a975498be8e569b...
+  postgres_schema.md:211-214
+  rbac_and_groups.md:69-72
+  Preview:
+    - `slug` (text, unique)
+    - `display_name` (text)
+    - `is_active` (boolean)
+    - `external_source` (text, nullable)
+
+Block fingerprint: 8127dbf2bfefb3ef...
+  postgres_schema.md:213-216
+  postgres_schema.md:232-235
+  Preview:
+    - `is_active` (boolean)
+    - `external_source` (text, nullable)
+    - `external_id` (text, nullable)
+    - `managed_by` (text, nullable)
+
+Block fingerprint: cba9140d89874922...
+  postgres_schema.md:214-217
+  postgres_schema.md:233-236
+  Preview:
+    - `external_source` (text, nullable)
+    - `external_id` (text, nullable)
+    - `managed_by` (text, nullable)
+    - `last_synced_at` (timestamptz, nullable)
+
+Block fingerprint: cb507853120fa91e...
+  postgres_schema.md:215-218
+  postgres_schema.md:234-237
+  Preview:
+    - `external_id` (text, nullable)
+    - `managed_by` (text, nullable)
+    - `last_synced_at` (timestamptz, nullable)
+    - `created_at` (timestamptz)
+
+Block fingerprint: cea0585a813ecbd8...
+  postgres_schema.md:216-219
+  postgres_schema.md:235-238
+  postgres_schema.md:273-276
+  Preview:
+    - `managed_by` (text, nullable)
+    - `last_synced_at` (timestamptz, nullable)
+    - `created_at` (timestamptz)
+    - `updated_at` (timestamptz)
+
+Block fingerprint: 34136c4d657cb7c2...
+  postgres_schema.md:217-220
+  postgres_schema.md:236-239
+  postgres_schema.md:274-277
+  rbac_and_groups.md:78-81
+  rbac_and_groups.md:95-98
+  rbac_and_groups.md:148-151
+  Preview:
+    - `last_synced_at` (timestamptz, nullable)
+    - `created_at` (timestamptz)
+    - `updated_at` (timestamptz)
+    - `updated_by` (text)
+
+Block fingerprint: 3b7f77aa13644c45...
+  postgres_schema.md:243-246
+  rbac_and_groups.md:102-105
+  Preview:
+    - Unique: (`group_id`, `user_id`)
+    - Index: (`group_id`)
+    - Index: (`user_id`)
+    - Index: (`is_active`)
+
+Block fingerprint: 13a5f6eda702a822...
+  postgres_schema.md:250-253
+  rbac_and_groups.md:126-129
+  Preview:
+    - `id` (uuid, pk)
+    - `name` (text, unique)
+      - examples: owner, admin, operator, member, viewer
+    - `description` (text, nullable)
+
+Block fingerprint: 5847ca4266a57233...
+  postgres_schema.md:251-254
+  rbac_and_groups.md:127-130
+  Preview:
+    - `name` (text, unique)
+      - examples: owner, admin, operator, member, viewer
+    - `description` (text, nullable)
+    - `created_at` (timestamptz)
+
+Block fingerprint: 4d587030a947d489...
+  postgres_schema.md:252-255
+  rbac_and_groups.md:128-131
+  Preview:
+      - examples: owner, admin, operator, member, viewer
+    - `description` (text, nullable)
+    - `created_at` (timestamptz)
+    - `updated_at` (timestamptz)
+
+Block fingerprint: 6c743291a43c3690...
+  postgres_schema.md:281-284
+  rbac_and_groups.md:155-158
+  Preview:
+    - Index: (`subject_type`, `subject_id`)
+    - Index: (`role_id`)
+    - Index: (`scope_type`, `scope_id`)
+    - Index: (`is_active`)
+
+Block fingerprint: 5204b380e6eeb0ec...
+  postgres_schema.md:404-407
+  user_preferences.md:81-84
+  Preview:
+    - `id` (uuid, pk)
+    - `entry_id` (uuid, fk to `preference_entries.id`)
+    - `old_value` (jsonb)
+    - `new_value` (jsonb)
+
+Block fingerprint: 9dbbe65e45cc7374...
+  postgres_schema.md:405-408
+  user_preferences.md:82-85
+  Preview:
+    - `entry_id` (uuid, fk to `preference_entries.id`)
+    - `old_value` (jsonb)
+    - `new_value` (jsonb)
+    - `changed_at` (timestamptz)
+
+Block fingerprint: 103c0fdb47315400...
+  postgres_schema.md:406-409
+  postgres_schema.md:446-449
+  user_preferences.md:83-86
+  Preview:
+    - `old_value` (jsonb)
+    - `new_value` (jsonb)
+    - `changed_at` (timestamptz)
+    - `changed_by` (text)
+
+Block fingerprint: ba4e0e0b6ea0d2f4...
+  postgres_schema.md:407-410
+  postgres_schema.md:447-450
+  Preview:
+    - `new_value` (jsonb)
+    - `changed_at` (timestamptz)
+    - `changed_by` (text)
+    - `reason` (text, nullable)
+
+Block fingerprint: de703e0f49f2d3a4...
+  postgres_schema.md:428-431
+  user_preferences.md:66-69
+  Preview:
+    - `value` (jsonb)
+    - `value_type` (text)
+      - examples: string|number|boolean|object|array
+    - `version` (int)
+
+Block fingerprint: 1d514b224473c2b4...
+  postgres_schema.md:429-432
+  user_preferences.md:67-70
+  Preview:
+    - `value_type` (text)
+      - examples: string|number|boolean|object|array
+    - `version` (int)
+    - `updated_at` (timestamptz)
+
+Block fingerprint: 791bae70a2ffa4bd...
+  postgres_schema.md:430-433
+  user_preferences.md:68-71
+  Preview:
+      - examples: string|number|boolean|object|array
+    - `version` (int)
+    - `updated_at` (timestamptz)
+    - `updated_by` (text)
+
+Block fingerprint: 66da39fa6d97ecce...
+  postgres_schema.md:581-584
+  sandbox_image_registry.md:98-101
+  Preview:
+    - `id` (uuid, pk)
+    - `name` (text)
+      - logical image name (e.g. python-tools, node-build, secops)
+    - `description` (text, nullable)
+
+Block fingerprint: 13ce18c08df58ca7...
+  postgres_schema.md:582-585
+  sandbox_image_registry.md:99-102
+  Preview:
+    - `name` (text)
+      - logical image name (e.g. python-tools, node-build, secops)
+    - `description` (text, nullable)
+    - `created_at` (timestamptz)
+
+Block fingerprint: 1a48499051b823af...
+  postgres_schema.md:583-586
+  sandbox_image_registry.md:100-103
+  Preview:
+      - logical image name (e.g. python-tools, node-build, secops)
+    - `description` (text, nullable)
+    - `created_at` (timestamptz)
+    - `updated_at` (timestamptz)
+
+Block fingerprint: a139e9f0a0f0cbf4...
+  postgres_schema.md:600-603
+  sandbox_image_registry.md:116-119
+  Preview:
+    - `version` (text)
+      - tag or semantic version
+    - `image_ref` (text)
+      - OCI reference including registry and repository
+
+Block fingerprint: d838adb3e0a778f2...
+  postgres_schema.md:601-604
+  sandbox_image_registry.md:117-120
+  Preview:
+      - tag or semantic version
+    - `image_ref` (text)
+      - OCI reference including registry and repository
+    - `image_digest` (text, nullable)
+
+Block fingerprint: 019b9b9bd2618be6...
+  postgres_schema.md:602-605
+  sandbox_image_registry.md:118-121
+  Preview:
+    - `image_ref` (text)
+      - OCI reference including registry and repository
+    - `image_digest` (text, nullable)
+      - digest for pinning (recommended)
+
+Block fingerprint: 6c40506a28385b75...
+  postgres_schema.md:603-606
+  sandbox_image_registry.md:119-122
+  Preview:
+      - OCI reference including registry and repository
+    - `image_digest` (text, nullable)
+      - digest for pinning (recommended)
+    - `capabilities` (jsonb)
+
+Block fingerprint: f30fbcca1c1095dc...
+  postgres_schema.md:604-607
+  sandbox_image_registry.md:120-123
+  Preview:
+    - `image_digest` (text, nullable)
+      - digest for pinning (recommended)
+    - `capabilities` (jsonb)
+      - examples: runtimes, tools, network_requirements, filesystem_requirements
+
+Block fingerprint: 9f156180a83fb731...
+  postgres_schema.md:605-608
+  sandbox_image_registry.md:121-124
+  Preview:
+      - digest for pinning (recommended)
+    - `capabilities` (jsonb)
+      - examples: runtimes, tools, network_requirements, filesystem_requirements
+    - `is_allowed` (boolean)
+
+Block fingerprint: 380a4485767bdb88...
+  postgres_schema.md:606-609
+  sandbox_image_registry.md:122-125
+  Preview:
+    - `capabilities` (jsonb)
+      - examples: runtimes, tools, network_requirements, filesystem_requirements
+    - `is_allowed` (boolean)
+    - `created_at` (timestamptz)
+
+Block fingerprint: e4d21138bc5cf321...
+  postgres_schema.md:607-610
+  sandbox_image_registry.md:123-126
+  Preview:
+      - examples: runtimes, tools, network_requirements, filesystem_requirements
+    - `is_allowed` (boolean)
+    - `created_at` (timestamptz)
+    - `updated_at` (timestamptz)
+
+Block fingerprint: 0cd3d2639a2efec9...
+  postgres_schema.md:625-628
+  sandbox_image_registry.md:139-142
+  Preview:
+    - `status` (text)
+      - examples: available, pulling, failed, evicted
+    - `last_checked_at` (timestamptz)
+    - `details` (jsonb, nullable)
+
+Block fingerprint: 36e1c728d4b7f131...
+  project_analyst_agent.md:71-74
+  project_manager_agent.md:111-114
+  Preview:
+    - Add access control rules
+      - Allow the relevant subjects to call `api.call` for the chosen provider and operations.
+      - Recommended stance is default-deny with narrow allow rules.
+      - See [`docs/tech_specs/access_control.md`](access_control.md).
+
+Block fingerprint: c392b783f143319b...
+  project_analyst_agent.md:72-75
+  project_manager_agent.md:112-115
+  Preview:
+      - Allow the relevant subjects to call `api.call` for the chosen provider and operations.
+      - Recommended stance is default-deny with narrow allow rules.
+      - See [`docs/tech_specs/access_control.md`](access_control.md).
+    - Set preferences for agent routing
+
+Block fingerprint: 92aa5b24ad701de6...
+  project_analyst_agent.md:73-76
+  project_manager_agent.md:113-116
+  Preview:
+      - Recommended stance is default-deny with narrow allow rules.
+      - See [`docs/tech_specs/access_control.md`](access_control.md).
+    - Set preferences for agent routing
+      - Configure which providers are allowed for this agent and the preferred order.
+
+Block fingerprint: 7640712ab4d74818...
+  project_analyst_agent.md:74-77
+  project_manager_agent.md:114-117
+  Preview:
+      - See [`docs/tech_specs/access_control.md`](access_control.md).
+    - Set preferences for agent routing
+      - Configure which providers are allowed for this agent and the preferred order.
+      - Suggested keys are:
+
+Block fingerprint: a1d475e6b5e01e90...
+  rbac_and_groups.md:76-79
+  rbac_and_groups.md:93-96
+  rbac_and_groups.md:146-149
+  Preview:
+    - `managed_by` (text, optional)
+      - examples: local, external_sync
+    - `last_synced_at` (timestamptz, nullable)
+    - `created_at` (timestamptz)
+
+Block fingerprint: af122ac682e68e74...
+  rbac_and_groups.md:77-80
+  rbac_and_groups.md:94-97
+  rbac_and_groups.md:147-150
+  Preview:
+      - examples: local, external_sync
+    - `last_synced_at` (timestamptz, nullable)
+    - `created_at` (timestamptz)
+    - `updated_at` (timestamptz)
+

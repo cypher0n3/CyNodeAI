@@ -10,7 +10,8 @@ Feature: Single Node Happy Path
 # In the single-node case, startup should fail fast if neither is available.
 #
 # Script-driven E2E (just e2e / setup-dev.sh full-demo): after the node starts, the script
-# loads a small model into Ollama and runs a basic inference smoke to verify inference works.
+# pulls the effective Project Manager model into Ollama and runs a basic inference smoke to verify inference works (`tinyllama` is the
+# smallest supported fallback model for limited systems).
 # See dev_docs/single_node_e2e_testing_plan.md.
 
   Background:
@@ -45,7 +46,7 @@ Feature: Single Node Happy Path
     And a node with slug "test-node-01" registers with the orchestrator using a valid PSK
     And the node requests its configuration
     And the node applies the configuration and sends a config acknowledgement with status "applied"
-    And I create a task with use_inference and command "sh -c 'echo $OLLAMA_BASE_URL'"
+    And I create a task with command "sh -c 'echo $OLLAMA_BASE_URL'"
     And the orchestrator dispatches a job to the node
     And the node executes the sandbox job in a pod with inference proxy
     Then the job result contains stdout "http://localhost:11434"

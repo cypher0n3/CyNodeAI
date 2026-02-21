@@ -1,7 +1,7 @@
 # Admin Web Console
 
 - [Document Overview](#document-overview)
-- [Capability Parity with CLI](#capability-parity-with-cli)
+- [Capability Parity With CLI](#capability-parity-with-cli)
 - [Primary Use Cases](#primary-use-cases)
 - [Security Model](#security-model)
   - [Security Model Applicable Requirements](#security-model-applicable-requirements)
@@ -10,6 +10,7 @@
   - [Credential Management Applicable Requirements](#credential-management-applicable-requirements)
 - [Preferences Management](#preferences-management)
   - [Preferences Management Applicable Requirements](#preferences-management-applicable-requirements)
+- [System Settings Management](#system-settings-management)
 - [Skills Management](#skills-management)
 - [Node Management](#node-management)
   - [Node Management Applicable Requirements](#node-management-applicable-requirements)
@@ -31,7 +32,7 @@
 ## Document Overview
 
 This document defines an admin-focused web interface for CyNodeAI.
-The admin web console is intended for credential upload and management and for preferences management.
+The admin web console is intended for credential upload and management, for user preferences management, systems settings management, log review, and a variety of other admin tasks.
 
 ## Capability Parity With CLI
 
@@ -48,9 +49,10 @@ Use the same gateway APIs and the same authorization and auditing rules for both
 ## Primary Use Cases
 
 - Upload and manage external provider credentials for API Egress and Git Egress.
-- View, edit, and audit preferences across scopes (system, user, project, task).
+- View, edit, and audit user preferences across scopes (system, user, group, project, task).
 - View node inventory and manage basic node lifecycle controls.
 - Full CRUD for AI skills: create (upload), list, view (content and metadata), edit (update content and/or metadata including scope, with same auditing and scope permissions), and delete; see [Skill Management CRUD](skills_storage_and_inference.md#skill-management-crud-web-and-cli).
+- Create tasks: submit a task as plain text or Markdown (inline or paste), attach files or other artifacts (file upload), run a script (e.g. script file upload), or run a short series of commands; same semantics as the CLI and User API Gateway (see [REQ-ORCHES-0125](../requirements/orches.md#req-orches-0125), [REQ-ORCHES-0126](../requirements/orches.md#req-orches-0126), [REQ-ORCHES-0127](../requirements/orches.md#req-orches-0127), [REQ-CLIENT-0152](../requirements/client.md#req-client-0152), [REQ-CLIENT-0154](../requirements/client.md#req-client-0154)).
 - Inspect access control rules and audit decisions.
 
 ## Security Model
@@ -136,6 +138,45 @@ Recommended UI behaviors
 - Show the precedence model and where a value is coming from.
 - Provide a diff view when editing complex JSON values.
 - Require a reason field for preference changes when auditing is enabled.
+
+Recommended keys to surface (MVP)
+
+- `output.summary_style` (string)
+  - examples: concise, detailed
+- `definition_of_done.required_checks` (array)
+  - examples: lint, unit_tests, docs_updated
+- `language.preferred` (string)
+  - examples: en, en-US
+- `code.language.rank_ordered` (array)
+  - Rank-ordered code language choices with optional context (project kind, task kind).
+- `code.language.disallowed` (array)
+  - Globally disallowed languages.
+- `code.language.disallowed_by_project_kind` (object)
+  - Per-project-kind disallowed languages.
+- `code.language.disallowed_by_task_kind` (object)
+  - Per-task-kind disallowed languages.
+- `standards.markdown.line_length` (number)
+
+## System Settings Management
+
+- Spec ID: `CYNAI.CLIENT.AdminWebConsoleSystemSettings` <a id="spec-cynai-client-awcsystemsettings"></a>
+
+Traces To:
+
+- [REQ-CLIENT-0160](../requirements/client.md#req-client-0160)
+
+The web console MUST support editing system settings that control orchestrator operational behavior.
+System settings are not user preferences; they are operator-controlled orchestrator operational configuration.
+For the full distinction, see [User preferences (Terminology)](user_preferences.md#2-terminology).
+
+Recommended keys to surface (MVP)
+
+Key semantics and the PM model selection/warmup algorithm are defined in [Project Manager Model (Startup Selection and Warmup)](orchestrator.md#project-manager-model-startup-selection-and-warmup).
+
+- `agents.project_manager.model.local_default_ollama_model` (string)
+- `agents.project_manager.model.selection.execution_mode` (string): `auto` | `force_local` | `force_external`
+- `agents.project_manager.model.selection.mode` (string): `auto_sliding_scale` | `fixed_model`
+- `agents.project_manager.model.selection.prefer_orchestrator_host` (boolean)
 
 ## Skills Management
 
@@ -274,6 +315,12 @@ Preferences UI requirements
 - Show precedence and effective preferences preview.
 - Validate known key types when possible.
 
+Task creation UI requirements
+
+- Allow submitting the task as plain text or Markdown (inline input or paste).
+- Support attaching one or more files or other artifacts (file upload); same semantics as CLI attachment paths and gateway task-create API.
+- Support running a script (e.g. script file upload or path input) and a short series of commands (e.g. multi-line or list input); same semantics as CLI `--script` and `--commands` and gateway.
+
 Node UI requirements
 
 - List nodes and show health, last heartbeat, labels, and capability summary.
@@ -302,6 +349,7 @@ It uses the Data REST API for resource-oriented access and may use dedicated adm
 
 Minimum required API capabilities
 
+- Task create with task body (text or Markdown), optional attachments (file upload or path semantics per gateway), script run (script file/path), or short series of commands.
 - Preferences CRUD for allowed scopes.
 - Effective preferences resolution for a given task or project.
 - Credential metadata CRUD and secret rotation endpoints.

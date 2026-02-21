@@ -31,6 +31,8 @@ The filename is the domain tag lowercased.
   - Requirements file: [`docs/requirements/sandbx.md`](../requirements/sandbx.md)
 - `APIEGR`: Controlled egress services, including API egress and git egress behavior.
   - Requirements file: [`docs/requirements/apiegr.md`](../requirements/apiegr.md)
+- `WEBPRX`: Web Egress Proxy: allowlist-based HTTP(S) forward proxy for sandbox dependency downloads.
+  - Requirements file: [`docs/requirements/webprx.md`](../requirements/webprx.md)
 - `MCPGAT`: MCP gateway enforcement, auditing, and policy controls for tool invocation.
   - Requirements file: [`docs/requirements/mcpgat.md`](../requirements/mcpgat.md)
 - `MCPTOO`: MCP tooling, tool catalog conventions, and SDK installation and integration.

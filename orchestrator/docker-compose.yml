@@ -1,5 +1,5 @@
-# Full orchestrator stack: Postgres + control-plane + user-gateway.
-# Ports: postgres 5432, control-plane 8082, user-gateway 8080 (override with CONTROL_PLANE_PORT, ORCHESTRATOR_PORT).
+# Full orchestrator stack: Postgres + control-plane + user-gateway + Ollama (inference on 11434).
+# Ports: postgres 5432, control-plane 8082, user-gateway 8080, ollama 11434.
 # Run from repo root: docker compose -f orchestrator/docker-compose.yml up -d
 services:
   postgres:
@@ -56,6 +56,14 @@ services:
       postgres:
         condition: service_healthy
 
+  ollama:
+    image: ${OLLAMA_IMAGE:-ollama/ollama}
+    container_name: cynodeai-ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama-data:/root/.ollama
+
   mcp-gateway:
     profiles: ["optional"]
     build:
@@ -80,3 +88,4 @@ services:
 
 volumes:
   cynodeai-postgres-data: {}
+  ollama-data: {}

@@ -45,6 +45,7 @@ The filename is the domain tag lowercased.
 - `WORKER`: [worker.md](./worker.md)
 - `SANDBX`: [sandbx.md](./sandbx.md)
 - `APIEGR`: [apiegr.md](./apiegr.md)
+- `WEBPRX`: [webprx.md](./webprx.md)
 - `MCPGAT`: [mcpgat.md](./mcpgat.md)
 - `MCPTOO`: [mcptoo.md](./mcptoo.md)
 - `SCHEMA`: [schema.md](./schema.md)

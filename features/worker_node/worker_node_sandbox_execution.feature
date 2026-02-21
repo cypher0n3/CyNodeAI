@@ -70,7 +70,7 @@ Feature: Worker Node Sandbox Execution
   @req_worker_0104
   @spec_cynai_worker_sandboxexec
   @inference_in_sandbox
-  Scenario: Sandbox receives OLLAMA_BASE_URL when use_inference is true
+  Scenario: Sandbox receives OLLAMA_BASE_URL when job requests inference
     Given the worker API is configured with a valid bearer token
     When I submit a sandbox job with use_inference that runs command "echo $OLLAMA_BASE_URL"
     Then the sandbox job completes successfully

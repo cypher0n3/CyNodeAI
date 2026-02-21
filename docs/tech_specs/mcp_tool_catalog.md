@@ -3,6 +3,7 @@
 - [Document Overview](#document-overview)
 - [Goals](#goals)
 - [Naming and Conventions](#naming-and-conventions)
+  - [Naming and Conventions Applicable Requirements](#naming-and-conventions-applicable-requirements)
 - [Common Argument Requirements](#common-argument-requirements)
 - [Tool Catalog](#tool-catalog)
   - [Artifact Tools](#artifact-tools)
@@ -16,6 +17,7 @@
   - [Help Tools](#help-tools)
   - [Database Tools](#database-tools)
 - [Response and Error Model](#response-and-error-model)
+  - [Response and Error Model Applicable Requirements](#response-and-error-model-applicable-requirements)
 
 ## Document Overview
 
@@ -169,6 +171,18 @@ Database tools are typed operations only.
 Raw SQL MUST NOT be exposed via MCP tools.
 Implementations MAY use raw SQL internally (for example pgvector similarity queries), but they MUST NOT accept arbitrary SQL from callers.
 
+CRUD expectations
+
+For each database-backed resource exposed via MCP tools, the default expectation is full CRUD support:
+
+- create
+- list
+- get
+- update
+- delete
+
+If full CRUD is not appropriate for a resource or for MVP scope, the tool catalog MUST document an intentional exception and the allowed operations.
+
 Minimum typed tools for MVP:
 
 - `db.task.get`
@@ -179,8 +193,50 @@ Minimum typed tools for MVP:
   - required args: `job_id`
 - `db.job.update_status`
   - required args: `job_id`, `status`
+
+Intentional exceptions (MVP)
+
+- Tasks and jobs are not full-CRUD via MCP tools in MVP.
+  The minimum MCP surface is read plus narrowly-scoped updates required by orchestrator-side agents.
+  Full task CRUD is exposed to user clients via the User API Gateway.
+- `db.system_setting.get`
+  - required args: `key`
+- `db.system_setting.list`
+  - optional args: `key_prefix`, `limit`, `cursor`
+  - notes: list responses MUST be size-limited and support pagination
+- `db.system_setting.create`
+  - required args: `key`, `value`, `value_type`
+  - optional args: `reason`
+  - notes: create MUST fail if the key already exists
+- `db.system_setting.update`
+  - required args: `key`, `value`, `value_type`
+  - optional args: `expected_version`, `reason`
+  - notes: when `expected_version` is provided and does not match, update MUST fail with a conflict error
+- `db.system_setting.delete`
+  - required args: `key`
+  - optional args: `expected_version`, `reason`
+- `db.preference.get`
+  - required args: `scope_type`, `key`
+  - optional args: `scope_id`
+  - notes: `scope_id` is required when `scope_type` is not `system`
+- `db.preference.list`
+  - required args: `scope_type`
+  - optional args: `scope_id`, `key_prefix`, `limit`, `cursor`
+  - notes: list responses MUST be size-limited and support pagination
+- `db.preference.create`
+  - required args: `scope_type`, `key`, `value`, `value_type`
+  - optional args: `scope_id`, `reason`
+  - notes: create MUST fail if the scoped key already exists
+- `db.preference.update`
+  - required args: `scope_type`, `key`, `value`, `value_type`
+  - optional args: `scope_id`, `expected_version`, `reason`
+  - notes: when `expected_version` is provided and does not match, update MUST fail with a conflict error
+- `db.preference.delete`
+  - required args: `scope_type`, `key`
+  - optional args: `scope_id`, `expected_version`, `reason`
 - `db.preference.effective`
   - required args: `task_id`
+  - optional args: `include_sources` (boolean)
 
 ## Response and Error Model
 

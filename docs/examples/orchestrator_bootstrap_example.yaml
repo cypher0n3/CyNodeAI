@@ -5,9 +5,75 @@
 
 version: 1
 
-# System preferences (scope_type=system); optional.
-# Keys and values are written to preference_entries.
-preferences: []
+# Preference defaults (scope_type=system); optional.
+# These are user-facing task-execution preferences and constraints written to preference_entries.
+# This is not deployment or service configuration.
+preferences:
+  - key: output.summary_style
+    value: concise
+    value_type: string
+  - key: language.preferred
+    value: en
+    value_type: string
+  - key: code.language.rank_ordered
+    value:
+      - language: go
+        preferred_for:
+          project_kinds:
+            - backend
+            - cli
+            - infra
+      - language: python
+        preferred_for:
+          project_kinds:
+            - data
+            - tooling
+            - scripts
+    value_type: array
+  - key: code.language.disallowed
+    value:
+      - php
+      - perl
+    value_type: array
+  - key: standards.markdown.line_length
+    value: 100
+    value_type: number
+  - key: definition_of_done.required_checks
+    value:
+      - lint
+      - unit_tests
+      - docs_updated
+    value_type: array
+
+# System settings (operational configuration and policy parameters); optional.
+# System settings are not user task-execution preferences.
+system_settings:
+  - key: agents.project_manager.model.selection.execution_mode
+    value: auto
+    value_type: string
+  - key: agents.project_manager.model.selection.mode
+    value: auto_sliding_scale
+    value_type: string
+  - key: agents.project_manager.model.selection.prefer_orchestrator_host
+    value: true
+    value_type: boolean
+
+  # Optional override:
+  # - When set, pins the effective local Project Manager model name.
+  # - When unset, the effective local Project Manager model is selected automatically.
+  # - `tinyllama` is the smallest supported fallback model for limited systems.
+  #
+  # - key: agents.project_manager.model.local_default_ollama_model
+  #   value: tinyllama
+  #   value_type: string
+
+  # Model management defaults (operational settings).
+  - key: models.cache.max_bytes
+    value: 107374182400
+    value_type: number
+  - key: models.download.require_user_approval
+    value: true
+    value_type: boolean
 
 # Access control rules; optional.
 # Used to seed access_control_rules for policy enforcement.

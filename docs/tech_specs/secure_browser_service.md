@@ -88,13 +88,14 @@ The goal is to strip non-content and reduce common prompt-injection vectors befo
 
 - Spec ID: `CYNAI.BROWSR.PreferencesRules` <a id="spec-cynai-browsr-preferencesrules"></a>
 
-The Secure Browser Service SHOULD be configured by preferences stored in PostgreSQL.
+The Secure Browser Service SHOULD be configured by user task-execution preferences and constraints stored in PostgreSQL.
 This enables deterministic behavior changes without modifying code and allows per-user, per-project, and per-task overrides.
+These preferences are not deployment or service configuration.
 
-Preferences source of truth
+Preference source of truth
 
 - Effective preferences MUST be resolved using the precedence model in [`docs/tech_specs/user_preferences.md`](user_preferences.md).
-- The service SHOULD treat missing preference keys as system defaults.
+- The service SHOULD treat missing preference keys as system-scoped defaults.
 
 Traces To:
 
@@ -105,7 +106,7 @@ Traces To:
 
 Optional YAML import and export
 
-- A YAML file MAY be used to seed system defaults into PostgreSQL or to export the effective rules for review.
+- A YAML file MAY be used to seed system-scoped defaults into PostgreSQL or to export the effective rules for review.
 - The prototype YAML format is defined by `docs/tech_specs/secure_browser_rules.yaml`.
 
 Recommended preference controls

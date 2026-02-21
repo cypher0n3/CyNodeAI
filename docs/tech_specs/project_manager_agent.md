@@ -13,6 +13,8 @@
 - [Inputs and Outputs](#inputs-and-outputs)
   - [Agent Inputs](#agent-inputs)
   - [Agent Outputs](#agent-outputs)
+- [Task Naming](#task-naming)
+  - [Task Naming Applicable Requirements](#task-naming-applicable-requirements)
 - [Preference Usage](#preference-usage)
   - [Preference Usage Applicable Requirements](#preference-usage-applicable-requirements)
 - [Sub-Agent Model](#sub-agent-model)
@@ -22,7 +24,9 @@
 ## Agent Purpose
 
 The Project Manager Agent is a long-lived orchestrator-side agent responsible for driving tasks to completion.
-It coordinates multi-step and multi-agent flows, enforces standards, and verifies outcomes against stored preferences.
+It coordinates multi-step and multi-agent flows, enforces standards, and verifies outcomes against stored user task-execution preferences.
+It is the control-plane agent responsible for setting up task execution, handing out work to task-scoped sub-agents, and orchestrating sandbox jobs on worker nodes.
+It is also responsible for storing and retrieving task execution state and evidence in PostgreSQL through MCP database tools.
 
 ## Agent Responsibilities
 
@@ -32,6 +36,7 @@ It coordinates multi-step and multi-agent flows, enforces standards, and verifie
 - Sub-agent management
   - Spin up sub-agents to monitor specific tasks and provide focused verification and feedback loops.
   - Ensure sub-agent findings are recorded in PostgreSQL and applied to task remediation.
+  - Eagerly delegate tasks to Project Analyst sub-agents whenever possible.
 - Planning and dispatch
   - Select worker nodes based on capabilities, health, data locality, and model availability.
   - Prefer nodes that already have the required model version loaded to reduce startup latency and network traffic.
@@ -40,12 +45,30 @@ It coordinates multi-step and multi-agent flows, enforces standards, and verifie
   - Verify outputs against acceptance criteria and user preferences (style, security, completeness).
   - Request fixes or reruns when checks fail, and record rationale.
 - Model selection
-  - Select models based on required capabilities and preferences using the orchestrator model registry.
+  - Select models based on required capabilities and user task-execution preferences and constraints using the orchestrator model registry.
   - Request nodes to load required model versions when not already available.
   - Use external model routing when policy allows and local execution cannot satisfy requirements.
+  - When selecting the Project Manager model itself (startup selection), prefer models with reliable structured tool calling and stable long-horizon planning over coder-only checkpoints.
+  - The selection and warmup algorithm is defined in [Project Manager Model (Startup Selection and Warmup)](orchestrator.md#project-manager-model-startup-selection-and-warmup).
+
+MVP inference assignment responsibility
+
+- For the MVP, the Project Manager model is the single decision-maker for inference task assignments.
+  It selects local vs external inference targets, selects the model/version, and requests model loads when required.
 - Continuous state maintenance
   - Keep task/job status, artifacts, logs, and summaries up to date in PostgreSQL.
   - Ensure workflows are resumable after restarts (checkpointed state).
+
+Project Manager model capability requirements (MVP)
+
+- Consistent tool/function calling and structured JSON output.
+- Stable multi-step planning, task decomposition, and state tracking.
+- Strong performance on common operator tooling prompts (git workflows, patch planning, CI, container operations).
+- The Project Manager model SHOULD prioritize tool-use reliability and predictable latency over maximum coding intelligence.
+
+Recommended default model line (MVP)
+
+- See [Project Manager Model (Startup Selection and Warmup)](orchestrator.md#project-manager-model-startup-selection-and-warmup) for tier order and model baselines (Qwen2.5/Llama 3.3/`tinyllama`).
 
 ## External Provider Usage
 
@@ -77,6 +100,10 @@ External providers MUST be accessed through API Egress so provider credentials a
 - In this mode, the Project Manager Agent can plan, coordinate, and verify using external inference.
 - Sandbox execution depends on whether any nodes exist that can run sandboxes.
 - If there are no sandbox-capable nodes, the orchestrator SHOULD restrict or defer sandbox-required steps.
+
+For tasks that require dependency downloads inside sandboxes, outbound HTTP(S) is mediated by the Web Egress Proxy.
+If policy allows it, the Project Manager Agent may request task-scoped, temporary allowlist entries for the Web Egress Proxy.
+See [`docs/tech_specs/web_egress_proxy.md`](web_egress_proxy.md) and [REQ-WEBPRX-0104](../requirements/webprx.md#req-webprx-0104).
 
 ### Required Configuration Steps
 
@@ -125,7 +152,24 @@ This section defines the information the agent consumes and produces.
 - Inputs
   - Tasks, task metadata, and acceptance criteria.
   - User preferences (standards, policies, communication defaults).
+  - System settings (operational configuration and policy parameters).
   - Worker inventory (capabilities, current load, health).
+
+Startup context
+
+On orchestrator startup, the Project Manager Agent MUST be provided sufficient context to begin dispatching work without relying on implicit defaults.
+At minimum, the startup context MUST include:
+
+- The Project Manager agent identity and role (for tool allowlists and policy evaluation).
+- Access to MCP tools required for task execution:
+  - task and job read/write tools
+  - preference resolution tools
+  - system settings get/list tools
+  - artifact tools
+  - node and sandbox tools (when dispatching work)
+- The current set of pending and runnable tasks (or the ability to query them deterministically).
+- The effective preference resolution model for each task context.
+- The current system settings required for safe dispatch and routing (for example model selection settings and cache/download policy).
 
 ### Agent Outputs
 
@@ -133,6 +177,27 @@ This section defines the information the agent consumes and produces.
   - Job dispatch requests to worker APIs.
   - Task state transitions and verification records in PostgreSQL.
   - Final task summaries and artifacts (including links to uploaded files).
+
+## Task Naming
+
+The Project Manager MUST assign each task a human-readable name in addition to its UUID so users can refer to tasks by name in the CLI and API (e.g. for `task get`, `task result`, `task cancel`).
+
+Task name format
+
+- All lowercase.
+- Words separated by single dashes (e.g. `deploy-docs`, `run-tests`).
+- Trailing numbers MAY be used for uniqueness when the same logical name would otherwise repeat (e.g. `deploy-docs-2`, `run-tests-3`).
+- Task names MUST be unique within the scope where they are resolved (e.g. per user or per project as defined by the gateway).
+
+APIs and the CLI MUST accept either the task UUID or the task name as the task identifier when a task is referenced.
+
+### Task Naming Applicable Requirements
+
+- Spec ID: `CYNAI.AGENTS.ProjectManagerTaskNaming` <a id="spec-cynai-agents-pmtasknaming"></a>
+
+Traces To:
+
+- [REQ-AGENTS-0129](../requirements/agents.md#req-agents-0129)
 
 ## Preference Usage
 

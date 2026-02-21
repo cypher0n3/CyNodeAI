@@ -11,12 +11,50 @@
   - [Credential Helper Protocol](#credential-helper-protocol)
   - [Authentication and Configuration Applicable Requirements](#authentication-and-configuration-applicable-requirements)
 - [Command Surface](#command-surface)
+  - [Global Flags](#global-flags)
+  - [Shorthand Flag Aliases (Stable Contract)](#shorthand-flag-aliases-stable-contract)
+  - [Output Rules](#output-rules)
+  - [Exit Codes](#exit-codes)
+  - [Required Top-Level Commands](#required-top-level-commands)
+  - [Standard Error Behavior](#standard-error-behavior)
+  - [`cynork version`](#cynork-version)
+  - [`cynork status`](#cynork-status)
+  - [`cynork auth` Commands](#cynork-auth-commands)
+  - [Task Commands](#task-commands)
+  - [Task Creation (Task Input and Attachments)](#task-creation-task-input-and-attachments)
+  - [Chat Command](#chat-command)
 - [Interactive Mode (REPL)](#interactive-mode-repl)
   - [Interactive Mode Applicable Requirements](#interactive-mode-applicable-requirements)
 - [Credential Management](#credential-management)
+  - [`cynork creds list`](#cynork-creds-list)
+  - [`cynork creds get <credential_id>`](#cynork-creds-get-credential_id)
+  - [`cynork creds create`](#cynork-creds-create)
+  - [`cynork creds rotate <credential_id>`](#cynork-creds-rotate-credential_id)
+  - [`cynork creds disable <credential_id>`](#cynork-creds-disable-credential_id)
 - [Preferences Management](#preferences-management)
+- [System Settings Management](#system-settings-management)
+  - [`cynork prefs list`](#cynork-prefs-list)
+  - [`cynork prefs get`](#cynork-prefs-get)
+  - [`cynork prefs set`](#cynork-prefs-set)
+  - [`cynork prefs delete`](#cynork-prefs-delete)
+  - [`cynork prefs effective`](#cynork-prefs-effective)
 - [Node Management](#node-management)
+  - [`cynork nodes list`](#cynork-nodes-list)
+  - [`cynork nodes get <node_id>`](#cynork-nodes-get-node_id)
+  - [`cynork nodes enable <node_id>`](#cynork-nodes-enable-node_id)
+  - [`cynork nodes disable <node_id>`](#cynork-nodes-disable-node_id)
+  - [`cynork nodes drain <node_id>`](#cynork-nodes-drain-node_id)
+  - [`cynork nodes refresh-config <node_id>`](#cynork-nodes-refresh-config-node_id)
+  - [`cynork nodes prefetch-image <node_id> <image_ref>`](#cynork-nodes-prefetch-image-node_id-image_ref)
 - [Skills Management](#skills-management)
+  - [`cynork skills load <file.md>`](#cynork-skills-load-filemd)
+  - [`cynork skills list`](#cynork-skills-list)
+  - [`cynork skills get <skill_id>`](#cynork-skills-get-skill_id)
+  - [`cynork skills update <skill_id> <file.md>`](#cynork-skills-update-skill_id-filemd)
+  - [`cynork skills delete <skill_id>`](#cynork-skills-delete-skill_id)
+- [Audit Commands](#audit-commands)
+  - [`cynork audit list`](#cynork-audit-list)
+  - [`cynork audit get <event_id>`](#cynork-audit-get-event_id)
 - [Output and Scripting](#output-and-scripting)
   - [Output and Scripting Applicable Requirements](#output-and-scripting-applicable-requirements)
 - [Implementation Specification (Go + Cobra)](#implementation-specification-go--cobra)
@@ -61,7 +99,7 @@ Use the same gateway APIs and the same authorization and auditing rules for both
 
 Goals
 
-- Provide a fast, scriptable admin interface for credentials, preferences, and node management.
+- Provide a fast, scriptable admin interface for credentials, user task-execution preferences, and node management.
 - Operate against the User API Gateway so the CLI does not require direct database access.
 - Support secure secret input and rotation without echoing secrets to terminal logs.
 
@@ -204,22 +242,94 @@ Traces To:
 Traces To:
 
 - [REQ-CLIENT-0101](../requirements/client.md#req-client-0101)
+- [REQ-CLIENT-0155](../requirements/client.md#req-client-0155)
+- [REQ-CLIENT-0156](../requirements/client.md#req-client-0156)
+- [REQ-CLIENT-0158](../requirements/client.md#req-client-0158)
 
 The CLI MUST be implemented as a single binary named `cynork` with subcommands.
 All commands that require gateway auth MUST fail immediately with a non-zero exit code and a clear message if the resolved token is empty (see [Token Resolution (Precedence)](#token-resolution-precedence)).
 
-Required global flag
+### Global Flags
 
-- `--config` (string): path to config file; overrides default config path.
+The following flags MUST be supported on the root command and MUST apply to all subcommands.
+
+- `-c, --config` (string): path to config file; overrides default config path.
   Optional to specify; when omitted, default path is used.
+- `-o, --output` (string): output format.
+  Allowed values are `table` and `json`.
+  Default is `table`.
+- `-q, --quiet` (bool): suppress non-essential output.
+  Errors MUST still be printed to stderr.
+- `--no-color` (bool): disable colored output.
 
-Required top-level commands
+### Shorthand Flag Aliases (Stable Contract)
+
+The CLI MUST support the following short flags as exact aliases of the corresponding long flags.
+These shorthands MUST be supported anywhere the corresponding long flag is supported.
+
+- `-c` => `--config`
+- `-o` => `--output`
+- `-q` => `--quiet`
+- `-y` => `--yes`
+- `-l` => `--limit`
+- `-p` => `--prompt`
+- `-t` => `--task`
+- `-f` => `--task-file`
+- `-s` => `--script`
+- `-a` => `--attach`
+- `-w` => `--wait`
+- `-F` => `--follow`
+
+### Output Rules
+
+When `--output json` is selected, the CLI MUST emit exactly one JSON value to stdout.
+The CLI MUST NOT write any other bytes to stdout in JSON mode.
+All warnings, hints, progress messages, and errors MUST be written to stderr in JSON mode.
+
+When `--output table` is selected, the CLI SHOULD write human-readable output to stdout.
+The CLI MAY write errors to stderr in table mode.
+
+### Exit Codes
+
+The CLI MUST return deterministic exit codes.
+If multiple failure categories apply, the CLI MUST return the exit code for the earliest failing check in this order: usage validation, auth validation, gateway request, response handling.
+
+- Exit code 0.
+  The command succeeded.
+- Exit code 2.
+  Usage error.
+  This includes unknown flags, missing required flags, invalid flag values, missing required positional arguments, and mutually exclusive flags used together.
+- Exit code 3.
+  Authentication or authorization error.
+  This includes missing token, gateway 401, and gateway 403.
+- Exit code 4.
+  Not found.
+  This includes gateway 404 for a requested resource.
+- Exit code 5.
+  Conflict.
+  This includes gateway 409 or an idempotency conflict where the server rejects the request.
+- Exit code 6.
+  Validation error.
+  This includes gateway 400 and 422 responses where the request payload is invalid.
+- Exit code 7.
+  Gateway or network error.
+  This includes network failures, timeouts, and gateway 5xx responses.
+- Exit code 8.
+  Internal CLI error.
+  This includes unexpected failures before a gateway request can be made that are not usage or auth errors.
+
+### Required Top-Level Commands
+
+The CLI MUST implement the following top-level commands and subcommands.
+All subcommands that call the gateway MUST use the resolved gateway URL and resolved token from config load.
 
 - `cynork version`: print version string (e.g. from build); MUST NOT require auth.
 - `cynork status`: report gateway reachability and optionally auth status; MAY require auth for full status.
 - `cynork auth login`: interactive or flag-based login; POST to gateway login endpoint; MUST support writing token to config and/or credential helper; MUST NOT echo password.
 - `cynork auth logout`: clear token from config file and optionally from credential helper; MUST NOT require gateway call.
-- `cynork auth whoami`: call gateway with current token; MUST require auth; output MUST be machine-parseable (e.g. `id=... handle=...`).
+- `cynork auth whoami`: call gateway with current token; MUST require auth.
+- `cynork task ...`: create tasks, list tasks, get task status, cancel tasks, and retrieve task results and artifacts.
+- `cynork chat`: start an interactive chat session with the Project Manager (PM) model; see [Chat Command](#chat-command).
 - `cynork creds ...`: see [Credential Management](#credential-management); MUST use gateway credential endpoints.
 - `cynork prefs ...`: see [Preferences Management](#preferences-management).
 - `cynork nodes ...`: see [Node Management](#node-management).
@@ -231,11 +341,370 @@ Required top-level commands
   - Delete: `cynork skills delete <skill_id>`.
 - `cynork audit ...`: query audit logs; MUST require auth.
 
-Error behavior
+### Standard Error Behavior
 
-- On gateway 401/403: print a clear error and exit non-zero; MUST NOT retry with the same token.
-- On gateway 5xx or network failure: implementers MAY retry with backoff; if giving up, exit non-zero with a clear message.
-- On invalid config file (syntax error): fail load and exit non-zero before running any command.
+On gateway 401 or 403, the CLI MUST print a clear error to stderr and exit with code 3.
+On gateway 404, the CLI MUST print a clear error to stderr and exit with code 4.
+On gateway 409, the CLI MUST print a clear error to stderr and exit with code 5.
+On gateway 400 or 422, the CLI MUST print a clear error to stderr and exit with code 6.
+On gateway 5xx and on network failure, the CLI MUST exit with code 7.
+On invalid config file (syntax error), the CLI MUST exit with code 2 before running any command.
+
+### `cynork version`
+
+Invocation
+
+- `cynork version`.
+
+Behavior
+
+- The CLI MUST print build and version metadata.
+- The CLI MUST NOT require auth.
+
+Output
+
+- Table mode MUST print exactly one line containing `version=<string>`.
+- JSON mode MUST print `{"version":"<string>"}`.
+
+### `cynork status`
+
+Invocation
+
+- `cynork status`.
+
+Behavior
+
+- The CLI MUST call the gateway health endpoint.
+- The CLI MUST treat an HTTP 200 response body containing `ok` as healthy.
+
+Output
+
+- Table mode MUST print exactly one line containing `ok`.
+- JSON mode MUST print `{"gateway":"ok"}`.
+
+Exit behavior
+
+- If the gateway health check fails, the CLI MUST exit with code 7.
+
+### `cynork auth` Commands
+
+All `auth` subcommands MUST use the gateway auth endpoints.
+
+#### `cynork auth login`
+
+Invocation
+
+- `cynork auth login`.
+
+Optional flags
+
+- `--handle <handle>`.
+- `--password-stdin`.
+
+Behavior
+
+- If `--handle` is not provided, the CLI MUST prompt `Handle:` on stderr and read one line from stdin.
+- If `--password-stdin` is set, the CLI MUST require `--handle` to be provided.
+  This is a usage error and MUST return exit code 2.
+- If `--password-stdin` is set, the CLI MUST read the password from stdin as UTF-8 text.
+  The CLI MUST trim exactly one trailing newline if present.
+- If `--password-stdin` is not set, the CLI MUST prompt `Password:` on stderr and read the password without echo.
+- The CLI MUST NOT accept a `--password <value>` flag.
+- The CLI MUST NOT print the password or token.
+- On success, the CLI MUST persist the token according to the config and credential helper rules in this spec.
+
+Output
+
+- Table mode MUST print exactly one line containing `logged_in=true` and `handle=<handle>`.
+- JSON mode MUST print `{"logged_in":true,"handle":"<handle>"}`.
+
+#### `cynork auth logout`
+
+Invocation
+
+- `cynork auth logout`.
+
+Behavior
+
+- The CLI MUST remove the token from the config file and MUST clear it from the credential helper if configured.
+- The CLI MUST NOT require a gateway call.
+
+Output
+
+- Table mode MUST print exactly one line containing `logged_out=true`.
+- JSON mode MUST print `{"logged_out":true}`.
+
+#### `cynork auth whoami`
+
+Invocation
+
+- `cynork auth whoami`.
+
+Output
+
+- Table mode MUST print exactly one line containing `id=<id>` and `handle=<handle>`.
+- JSON mode MUST print `{"id":"<id>","handle":"<handle>"}`.
+
+### Task Commands
+
+The CLI MUST implement the following `task` subcommands.
+All `task` subcommands MUST require auth.
+
+Task identifier
+
+- Where a task is referenced (e.g. `task get`, `task result`, `task cancel`, `task logs`, `task artifacts list`, `task artifacts get`), the CLI MUST accept either the task UUID or the human-readable task name (see [Project Manager Agent - Task Naming](project_manager_agent.md#task-naming)).
+- Task list and task get output MUST include the task name when the system provides one (e.g. in table mode as `task_name=<name>` and in JSON as `task_name`).
+
+Task status enum
+
+- `queued`
+- `running`
+- `completed`
+- `failed`
+- `canceled`
+
+#### `cynork task create`
+
+Invocation
+
+- `cynork task create` followed by exactly one task input mode.
+
+Task input modes (exactly one MUST be provided)
+
+- `-t, --task <string>` or `-p, --prompt <string>`.
+- `-f, --task-file <path>`.
+- `-s, --script <path>`.
+- `--command <string>` repeated one or more times.
+- `--commands-file <path>`.
+
+Attachment flags (optional)
+
+- `-a, --attach <path>` repeated zero or more times.
+
+Behavior
+
+- The CLI MUST reject invocations that provide zero or more than one task input mode.
+  This is a usage error and MUST return exit code 2.
+- If `--task` or `--prompt` is provided, the system MUST interpret the task input as plain text or Markdown.
+- If `--task-file` is provided, the CLI MUST read the file contents and send it as task input.
+  The file contents MUST be treated as plain text or Markdown.
+- If `--script` is provided, the CLI MUST read the script file contents and request script execution mode.
+  The system MUST run the script in the sandbox.
+- If `--command` is provided, the CLI MUST preserve the order of occurrences and MUST send the ordered list of commands.
+  The system MUST run the commands in the sandbox in that order.
+- If `--commands-file` is provided, the CLI MUST read the file and split it by `\n`.
+  Empty lines and lines that are only whitespace MUST be ignored.
+  Remaining lines are commands and MUST be run in file order.
+- If any `--attach` paths are provided, the CLI MUST include them as attachments in the task create request.
+
+Path and file validation
+
+- For `--task-file`, `--script`, `--commands-file`, and each `--attach`, the CLI MUST validate that the path exists, is a regular file, and is readable by the current user.
+  If any path fails validation, the CLI MUST exit with code 2 before making a gateway request.
+- The CLI MUST reject directories and symlinks for these file inputs.
+  This is a usage error and MUST return exit code 2.
+
+Size limits
+
+- `--task-file` contents MUST be <= 1 MiB.
+- `--script` contents MUST be <= 256 KiB.
+- `--commands-file` contents MUST be <= 64 KiB.
+- Each `--attach` file MUST be <= 10 MiB.
+- The number of `--attach` occurrences MUST be <= 16.
+- If a limit is exceeded, the CLI MUST exit with code 2 before making a gateway request.
+
+Output
+
+- Table mode MUST print a single line containing `task_id=<id>`.
+- JSON mode MUST print `{"task_id":"<id>"}`.
+
+#### `cynork task list`
+
+Invocation
+
+- `cynork task list`.
+
+Optional flags
+
+- `--status <status>`.
+  Allowed values are `queued`, `running`, `completed`, `failed`, and `canceled`.
+- `-l, --limit <n>`.
+  Default is `50`.
+  Allowed range is `1` to `200`.
+- `--cursor <opaque>`.
+  Default is empty.
+
+Output
+
+- Table mode MUST print one task per line.
+  Table mode MUST include at least `task_id=<id>`, `status=<status>`, and when the system provides a task name, `task_name=<name>`.
+- JSON mode MUST print `{"tasks":[...],"next_cursor":"<opaque>"}`.
+  Each task object MUST include at least `task_id`, `status`, and when provided, `task_name`.
+
+#### `cynork task get <task_id>`
+
+Invocation
+
+- `cynork task get <task_id>`, where `<task_id>` is the task UUID or the human-readable task name.
+
+Output
+
+- Table mode MUST print exactly one line and MUST include at least `task_id=<id>`, `status=<status>`, and when provided, `task_name=<name>`.
+- JSON mode MUST print a single JSON object representing the task.
+  The JSON object MUST include at least `task_id`, `status`, and when provided, `task_name`.
+
+#### `cynork task cancel <task_id>`
+
+Invocation
+
+- `cynork task cancel <task_id>`.
+
+Optional flags
+
+- `-y, --yes`.
+
+Behavior
+
+- If `--yes` is not provided, the CLI MUST prompt for confirmation.
+- The confirmation prompt MUST be `Cancel task <task_id>? [y/N]`.
+- If the user does not enter `y` or `Y`, the CLI MUST exit with code 0 and MUST NOT make a gateway request.
+- On success, the CLI MUST print exactly one line `task_id=<id> canceled=true` in table mode.
+- On success, the CLI MUST print `{"task_id":"<id>","canceled":true}` in JSON mode.
+
+#### `cynork task result <task_id>`
+
+Invocation
+
+- `cynork task result <task_id>`.
+
+Optional flags
+
+- `-w, --wait`.
+  Default is false.
+
+Output
+
+- If `--wait` is set, the CLI MUST poll the gateway until the task reaches a terminal status.
+  Terminal statuses are `completed`, `failed`, and `canceled`.
+- Table mode MUST print exactly one line and MUST include at least `task_id=<id>` and `status=<status>`.
+- If the task is in a terminal status, table mode MUST also include `stdout=<...>` and `stderr=<...>`.
+- JSON mode MUST print a single JSON object with at least `task_id`, `status`, `stdout`, and `stderr` fields.
+
+#### `cynork task logs <task_id>`
+
+Invocation
+
+- `cynork task logs <task_id>`.
+
+Optional flags
+
+- `--stream <stream>`.
+  Allowed values are `stdout`, `stderr`, and `all`.
+  Default is `all`.
+- `-F, --follow`.
+  Default is false.
+
+Output
+
+- Table mode MUST print raw log lines to stdout.
+- JSON mode MUST print `{"task_id":"<id>","stream":"<stream>","lines":[... ]}`.
+
+#### `cynork task artifacts list <task_id>`
+
+Invocation
+
+- `cynork task artifacts list <task_id>`.
+
+Output
+
+- Table mode MUST print a header line with these tab-separated columns in this exact order.
+  `artifact_id`, `name`, `content_type`, `size_bytes`.
+- Table mode MUST then print one row per artifact.
+- JSON mode MUST print `{"task_id":"<id>","artifacts":[... ]}`.
+  Each artifact object MUST include at least `artifact_id`, `name`, and `size_bytes`.
+
+#### `cynork task artifacts get <task_id> <artifact_id> --out <path>`
+
+Invocation
+
+- `cynork task artifacts get <task_id> <artifact_id> --out <path>`.
+
+Required flags
+
+- `--out <path>`.
+
+Behavior
+
+- The CLI MUST write the artifact bytes to the `--out` path.
+- The CLI MUST create parent directories if needed.
+- If the output file already exists, the CLI MUST refuse to overwrite it unless `--force` is provided.
+
+Optional flags
+
+- `--force`.
+
+Output
+
+- Table mode MUST print exactly one line containing `saved=true` and `path=<path>`.
+- JSON mode MUST print `{"saved":true,"path":"<path>"}`.
+
+### Task Creation (Task Input and Attachments)
+
+- Spec ID: `CYNAI.CLIENT.CliTaskCreatePrompt` <a id="spec-cynai-client-clitaskcreateprompt"></a>
+
+Traces To:
+
+- [REQ-ORCHES-0121](../requirements/orches.md#req-orches-0121)
+- [REQ-ORCHES-0125](../requirements/orches.md#req-orches-0125)
+- [REQ-ORCHES-0126](../requirements/orches.md#req-orches-0126)
+- [REQ-ORCHES-0127](../requirements/orches.md#req-orches-0127)
+- [REQ-CLIENT-0151](../requirements/client.md#req-client-0151)
+- [REQ-CLIENT-0153](../requirements/client.md#req-client-0153)
+- [REQ-CLIENT-0157](../requirements/client.md#req-client-0157)
+
+Task create MUST accept the task as **inline text** (e.g. `--prompt "..."` or `--task "..."`) or from a **file** (e.g. `--task-file <path>`) containing plain text or Markdown.
+Exactly one task input mode MUST be supplied per `cynork task create` invocation.
+The CLI MUST support attachments via repeatable `--attach <path>`.
+The CLI MUST support running a script via `--script <path>`.
+The CLI MUST support running a short series of commands via repeatable `--command <string>` or via `--commands-file <path>`.
+The user task text MUST NOT be executed as a literal shell command unless the user explicitly selects `--script`, `--command`, or `--commands-file`.
+
+### Chat Command
+
+- Spec ID: `CYNAI.CLIENT.CliChat` <a id="spec-cynai-client-clichat"></a>
+
+Traces To:
+
+- [REQ-CLIENT-0161](../requirements/client.md#req-client-0161)
+
+The CLI MUST provide a top-level `chat` command that starts an interactive chat session with the Project Manager (PM) model.
+The session MUST use the same User API Gateway and token resolution as other commands and MUST require auth.
+
+#### `cynork chat` Invocation
+
+- `cynork chat`.
+
+Optional flags
+
+- `-c, --config` (string): path to config file (global).
+- `--no-color` (bool): disable colored output (global).
+
+#### `cynork chat` Behavior
+
+- The CLI MUST resolve the gateway URL and token using the same config load and token resolution as other commands.
+  If the resolved token is empty, the CLI MUST exit with code 3 and MUST NOT start a chat session.
+- The CLI MUST open an interactive loop: read a line of user input, send it to the gateway as a chat message to the PM model, receive the model response, and print the response to the user.
+  This loop MUST continue until the user exits (see below).
+- The CLI MUST support a session-exit control (e.g. `/exit`, `/quit`, or EOF) so the user can leave the chat without sending a message.
+  The exact exit control MUST be defined in this spec or in a linked spec; implementations MUST support at least one of `/exit`, `/quit`, or EOF.
+- Chat input and model output MUST NOT be recorded in shell history or in any persistent history that could expose secrets; the same rules as interactive mode (REQ-CLIENT-0140) apply.
+- All communication with the PM model MUST go through the User API Gateway; the CLI MUST NOT connect directly to inference or to the database.
+
+#### `cynork chat` Error Conditions
+
+- Missing or invalid token: exit code 3.
+- Gateway unreachable or 5xx: exit code 7.
+- Gateway 4xx (e.g. 429, 403): exit code per [Exit Codes](#exit-codes) (e.g. 3 for 403, 6 for 422).
 
 ## Interactive Mode (REPL)
 
@@ -260,12 +729,14 @@ Traces To:
 - [REQ-CLIENT-0140](../requirements/client.md#req-client-0140)
 - [REQ-CLIENT-0141](../requirements/client.md#req-client-0141)
 - [REQ-CLIENT-0142](../requirements/client.md#req-client-0142)
+- [REQ-CLIENT-0159](../requirements/client.md#req-client-0159)
 
 Required behaviors
 
 - The prompt MUST show the active gateway URL (or a short label) and SHOULD show auth identity when available (e.g. handle from whoami).
 - Commands entered in the shell MUST behave identically to non-interactive invocation: same flags, same `--output table|json`, same exit codes.
 - Tab completion MUST be provided for commands, subcommands, and known flag values; MUST NOT suggest or expose secret values (REQ-CLIENT-0142).
+- Tab completion MUST be provided for task names when a task identifier is expected (e.g. after `task get`, `task result`, `task cancel`, `task logs`, `task artifacts list`, `task artifacts get`); completion MAY be driven by gateway-backed list of task names available to the user (REQ-CLIENT-0159).
 - History (if implemented) MUST NOT record lines that contain secrets or that were entered during secret prompts; secret prompts MUST bypass history.
 - When invoked as `cynork shell -c "..."`, the CLI MUST run the given command once and exit with that command's exit code (zero or non-zero).
 
@@ -284,24 +755,121 @@ Traces To:
 The CLI MUST support credential workflows for API Egress and Git Egress using the gateway endpoints defined in [API Egress Server - Admin API (Gateway Endpoints)](api_egress_server.md#admin-api-gateway-endpoints).
 Responses MUST return metadata only; the CLI MUST NOT print or log secret values.
 
-Required commands and behavior
+### `cynork creds list`
 
-- `cynork creds list`: GET list endpoint; optional query filters.
-  Output: table or JSON of credential metadata (id, provider, credential_name, owner_type, owner_id, is_active, created_at, updated_at).
-- `cynork creds get <id>`: GET by id; response MUST be metadata only; 404 if not found or not authorized.
-- `cynork creds create`: POST to create endpoint.
-  MUST require `--provider` and `--name`; MUST support `--owner-type` (user|group) and `--owner-id` (default to current user when owner-type is user).
-  Secret input: exactly one of `--secret-from-stdin`, prompt (no echo), or `--secret-file <path>`; MUST NOT echo secret to terminal or logs.
-- `cynork creds rotate <id>`: POST to rotate endpoint.
-  Secret input: same as create; MUST NOT echo secret.
-- `cynork creds disable <id>`: PATCH to set inactive (or equivalent); MUST require confirmation or `--yes` for non-interactive use.
+Invocation
 
-Required flags (credential scope)
+- `cynork creds list`.
 
-- `--provider` (string, required for create): provider identifier (e.g. openai, github).
-- `--name` (string, required for create): credential name (human-readable).
-- `--owner-type` (string, optional): `user` or `group`; default `user`.
-- `--owner-id` (string, optional): UUID; when owner-type is user and omitted, derive from current auth context.
+Optional flags
+
+- `--provider <provider>`.
+- `--owner-type <owner_type>`.
+  Allowed values are `user` and `group`.
+- `--owner-id <uuid>`.
+- `--active <bool>`.
+  Allowed values are `true` and `false`.
+- `-l, --limit <n>`.
+  Default is `50`.
+  Allowed range is `1` to `200`.
+- `--cursor <opaque>`.
+  Default is empty.
+
+Output
+
+- Table mode MUST print a header line with these tab-separated columns in this exact order.
+  `credential_id`, `provider`, `name`, `owner_type`, `owner_id`, `active`, `created_at`, `updated_at`.
+- Table mode MUST then print one row per credential with the same tab-separated column order.
+- JSON mode MUST print `{"credentials":[...],"next_cursor":"<opaque>"}`.
+  Each credential object MUST include `credential_id`, `provider`, `name`, `owner_type`, `owner_id`, `active`, `created_at`, and `updated_at`.
+
+### `cynork creds get <credential_id>`
+
+Invocation
+
+- `cynork creds get <credential_id>`.
+
+Output
+
+- Table mode MUST print exactly one line containing at least `credential_id=<id>` and `provider=<provider>` and `name=<name>` and `active=<bool>`.
+- JSON mode MUST print a single JSON object containing at least `credential_id`, `provider`, `name`, and `active`.
+
+### `cynork creds create`
+
+Invocation
+
+- `cynork creds create` with required flags and exactly one secret input method.
+
+Required flags
+
+- `--provider <provider>`.
+- `--name <name>`.
+
+Optional flags
+
+- `--owner-type <owner_type>`.
+  Allowed values are `user` and `group`.
+  Default is `user`.
+- `--owner-id <uuid>`.
+  If `--owner-type user` and `--owner-id` is omitted, the CLI MUST default the owner to the authenticated user.
+
+Secret input methods (exactly one MUST be used)
+
+- `--secret-from-stdin`.
+- `--secret-file <path>`.
+- Interactive secret prompt.
+
+Secret handling
+
+- If `--secret-from-stdin` is set, the CLI MUST read the secret from stdin as UTF-8 text.
+  The CLI MUST trim exactly one trailing newline if present.
+- If `--secret-file` is set, the CLI MUST read the secret from the specified file.
+  The CLI MUST trim exactly one trailing newline if present.
+- If neither `--secret-from-stdin` nor `--secret-file` is set, the CLI MUST prompt `Secret:` on stderr and read the secret without echo.
+- The CLI MUST reject invocations that specify more than one secret input method.
+  This is a usage error and MUST return exit code 2.
+- The CLI MUST NOT print or log the secret.
+
+Output
+
+- Table mode MUST print exactly one line containing `credential_id=<id>`.
+- JSON mode MUST print `{"credential_id":"<id>"}`.
+
+### `cynork creds rotate <credential_id>`
+
+Invocation
+
+- `cynork creds rotate <credential_id>` with exactly one secret input method.
+
+Secret input methods and secret handling
+
+- Secret input methods and secret handling MUST match `cynork creds create`.
+
+Output
+
+- Table mode MUST print exactly one line containing `credential_id=<id> rotated=true`.
+- JSON mode MUST print `{"credential_id":"<id>","rotated":true}`.
+
+### `cynork creds disable <credential_id>`
+
+Invocation
+
+- `cynork creds disable <credential_id>`.
+
+Optional flags
+
+- `-y, --yes`.
+
+Behavior
+
+- If `--yes` is not provided, the CLI MUST prompt for confirmation.
+- The confirmation prompt MUST be `Disable credential <credential_id>? [y/N]`.
+- If the user does not enter `y` or `Y`, the CLI MUST exit with code 0 and MUST NOT make a gateway request.
+
+Output
+
+- Table mode MUST print exactly one line containing `credential_id=<id> disabled=true`.
+- JSON mode MUST print `{"credential_id":"<id>","disabled":true}`.
 
 ## Preferences Management
 
@@ -316,15 +884,175 @@ Traces To:
 
 The CLI MUST support reading and writing preferences via the Data REST API; scope and key semantics are defined in [User preferences](user_preferences.md).
 
-Required commands and behavior
+All preference commands MUST require auth.
 
-- `cynork prefs list`: list preferences for a scope; MUST require `--scope-type` (system|user|project|task); when scope-type is user, scope-id MAY default to current user.
-- `cynork prefs get`: get one preference; MUST require `--scope-type` and `--key`; `--scope-id` required for project/task.
-- `cynork prefs set`: set a preference; MUST require `--scope-type`, `--key`, and either `--value` (JSON string) or `--value-file` (path to JSON file); SHOULD support `--reason` for audit.
-- `cynork prefs delete`: delete a preference; MUST require `--scope-type` and `--key`.
-- `cynork prefs effective`: resolve effective preferences for a task or project; MUST require task id or project id (e.g. `--task-id` or `--project-id`); output MUST show merged result and MAY show precedence.
+Recommended keys to support (MVP)
 
-All preference commands MUST require auth except where the gateway allows unauthenticated read for system scope.
+- `output.summary_style` (string)
+  - examples: concise, detailed
+- `definition_of_done.required_checks` (array)
+  - examples: lint, unit_tests, docs_updated
+- `language.preferred` (string)
+  - examples: en, en-US
+- `code.language.rank_ordered` (array)
+  - Rank-ordered code language choices with optional context (project kind, task kind).
+- `code.language.disallowed` (array)
+  - Globally disallowed languages.
+- `code.language.disallowed_by_project_kind` (object)
+  - Per-project-kind disallowed languages.
+- `code.language.disallowed_by_task_kind` (object)
+  - Per-task-kind disallowed languages.
+- `standards.markdown.line_length` (number)
+
+Scope type enum
+
+- `system`
+- `user`
+- `project`
+- `task`
+
+## System Settings Management
+
+- Spec ID: `CYNAI.CLIENT.CliSystemSettingsManagement` <a id="spec-cynai-client-clisystemsettings"></a>
+
+Traces To:
+
+- [REQ-CLIENT-0160](../requirements/client.md#req-client-0160)
+
+The CLI MUST support reading and writing system settings via the User API Gateway.
+System settings are not user preferences and are not managed via `cynork prefs`.
+User preferences are managed via `cynork prefs`; see [User preferences](user_preferences.md).
+
+Recommended keys to support (MVP)
+
+Semantics: [Project Manager Model (Startup Selection and Warmup)](orchestrator.md#project-manager-model-startup-selection-and-warmup).
+
+- `agents.project_manager.model.local_default_ollama_model` (string)
+- `agents.project_manager.model.selection.execution_mode` (string)
+- `agents.project_manager.model.selection.mode` (string)
+- `agents.project_manager.model.selection.prefer_orchestrator_host` (boolean)
+
+Command group
+
+- `cynork settings ...`
+
+### `cynork prefs list`
+
+Invocation
+
+- `cynork prefs list --scope-type <scope_type> [--scope-id <id>]`.
+
+Required flags
+
+- `--scope-type <scope_type>`.
+  Allowed values are `system`, `user`, `project`, and `task`.
+
+Optional flags
+
+- `--scope-id <id>`.
+  If `--scope-type user` and `--scope-id` is omitted, the CLI MUST default the scope id to the authenticated user id.
+  If `--scope-type project` or `--scope-type task`, `--scope-id` is required.
+
+Output
+
+- Table mode MUST print a header line with these tab-separated columns in this exact order.
+  `key`, `value_json`, `updated_at`.
+- Table mode MUST then print one row per preference.
+- JSON mode MUST print `{"preferences":[... ]}`.
+  Each preference object MUST include `key` and `value`.
+
+### `cynork prefs get`
+
+Invocation
+
+- `cynork prefs get --scope-type <scope_type> [--scope-id <id>] --key <key>`.
+
+Required flags
+
+- `--scope-type <scope_type>`.
+- `--key <key>`.
+
+Optional flags
+
+- `--scope-id <id>`.
+  Scope id rules MUST match `cynork prefs list`.
+
+Output
+
+- Table mode MUST print exactly one line containing `key=<key>` and `value=<json>`.
+- JSON mode MUST print `{"key":"<key>","value":<json>}`.
+
+### `cynork prefs set`
+
+Invocation
+
+- `cynork prefs set --scope-type <scope_type> [--scope-id <id>] --key <key>` with exactly one value input method.
+
+Required flags
+
+- `--scope-type <scope_type>`.
+- `--key <key>`.
+
+Value input methods (exactly one MUST be used)
+
+- `--value <json>`.
+- `--value-file <path>`.
+
+Optional flags
+
+- `--scope-id <id>`.
+  Scope id rules MUST match `cynork prefs list`.
+- `--reason <string>`.
+
+Behavior
+
+- If `--value` is used, the CLI MUST parse the argument as JSON.
+- If `--value-file` is used, the CLI MUST read the file as UTF-8 text and parse it as JSON.
+- If JSON parsing fails, the CLI MUST exit with code 2 before making a gateway request.
+
+Output
+
+- Table mode MUST print exactly one line containing `ok=true`.
+- JSON mode MUST print `{"ok":true}`.
+
+### `cynork prefs delete`
+
+Invocation
+
+- `cynork prefs delete --scope-type <scope_type> [--scope-id <id>] --key <key>`.
+
+Required flags
+
+- `--scope-type <scope_type>`.
+- `--key <key>`.
+
+Optional flags
+
+- `--scope-id <id>`.
+  Scope id rules MUST match `cynork prefs list`.
+
+Output
+
+- Table mode MUST print exactly one line containing `deleted=true`.
+- JSON mode MUST print `{"deleted":true}`.
+
+### `cynork prefs effective`
+
+Invocation
+
+- `cynork prefs effective` with exactly one selector.
+
+Selectors (exactly one MUST be provided)
+
+- `--task-id <task_id>`.
+- `--project-id <project_id>`.
+
+Output
+
+- Table mode MUST print the merged JSON object on stdout.
+- JSON mode MUST print `{"effective":<json>,"sources":[... ]}`.
+  The `sources` array MUST contain one object per resolved key.
+  Each source object MUST include `key`, `scope_type`, and `scope_id`.
 
 ## Node Management
 
@@ -338,18 +1066,123 @@ Traces To:
 
 The CLI MUST support node inventory and admin actions via the User API Gateway (no direct worker API calls); semantics align with [Node](node.md) and the Admin Web Console.
 
-Required commands and behavior
+All node commands MUST require auth.
 
-- `cynork nodes list`: GET node list from gateway; output MUST include at least node id, status, last heartbeat, and capability summary; MUST require auth.
-- `cynork nodes get <node_id>`: GET node detail; 404 if not found; MUST require auth.
-- `cynork nodes enable <node_id>`: set node enabled for scheduling; MUST require auth; SHOULD require confirmation or `--yes` for non-interactive.
-- `cynork nodes disable <node_id>`: set node disabled; MUST require auth; SHOULD require confirmation or `--yes`.
-- `cynork nodes drain <node_id>`: stop assigning new jobs, allow in-flight to complete; MUST require auth; SHOULD require confirmation or `--yes`.
-- `cynork nodes refresh-config <node_id>`: request node to refresh config from orchestrator; MUST require auth.
+### `cynork nodes list`
 
-Optional commands
+Invocation
 
-- `cynork nodes prefetch-image <node_id> [image_ref]`: request pre-pull of a sandbox image when allowed by policy.
+- `cynork nodes list`.
+
+Optional flags
+
+- `-l, --limit <n>`.
+  Default is `50`.
+  Allowed range is `1` to `200`.
+- `--cursor <opaque>`.
+  Default is empty.
+
+Output
+
+- Table mode MUST print a header line with these tab-separated columns in this exact order.
+  `node_id`, `status`, `enabled`, `last_heartbeat`, `capability_summary`.
+- Table mode MUST then print one row per node.
+- JSON mode MUST print `{"nodes":[...],"next_cursor":"<opaque>"}`.
+  Each node object MUST include at least `node_id`, `status`, and `enabled`.
+
+### `cynork nodes get <node_id>`
+
+Invocation
+
+- `cynork nodes get <node_id>`.
+
+Output
+
+- Table mode MUST print exactly one line containing at least `node_id=<id>` and `status=<status>` and `enabled=<bool>`.
+- JSON mode MUST print a single JSON object containing at least `node_id`, `status`, and `enabled`.
+
+### `cynork nodes enable <node_id>`
+
+Invocation
+
+- `cynork nodes enable <node_id>`.
+
+Optional flags
+
+- `-y, --yes`.
+
+Behavior
+
+- If `--yes` is not provided, the CLI MUST prompt for confirmation.
+- The confirmation prompt MUST be `Enable node <node_id>? [y/N]`.
+- If the user does not enter `y` or `Y`, the CLI MUST exit with code 0 and MUST NOT make a gateway request.
+
+Output
+
+- Table mode MUST print exactly one line containing `node_id=<id> enabled=true`.
+- JSON mode MUST print `{"node_id":"<id>","enabled":true}`.
+
+### `cynork nodes disable <node_id>`
+
+Invocation
+
+- `cynork nodes disable <node_id>`.
+
+Optional flags
+
+- `-y, --yes`.
+
+Behavior
+
+- Confirmation behavior MUST match `cynork nodes enable`.
+  The confirmation prompt MUST be `Disable node <node_id>? [y/N]`.
+
+Output
+
+- Table mode MUST print exactly one line containing `node_id=<id> enabled=false`.
+- JSON mode MUST print `{"node_id":"<id>","enabled":false}`.
+
+### `cynork nodes drain <node_id>`
+
+Invocation
+
+- `cynork nodes drain <node_id>`.
+
+Optional flags
+
+- `-y, --yes`.
+
+Behavior
+
+- Confirmation behavior MUST match `cynork nodes enable`.
+  The confirmation prompt MUST be `Drain node <node_id>? [y/N]`.
+
+Output
+
+- Table mode MUST print exactly one line containing `node_id=<id> drained=true`.
+- JSON mode MUST print `{"node_id":"<id>","drained":true}`.
+
+### `cynork nodes refresh-config <node_id>`
+
+Invocation
+
+- `cynork nodes refresh-config <node_id>`.
+
+Output
+
+- Table mode MUST print exactly one line containing `node_id=<id> refresh_config_requested=true`.
+- JSON mode MUST print `{"node_id":"<id>","refresh_config_requested":true}`.
+
+### `cynork nodes prefetch-image <node_id> <image_ref>`
+
+Invocation
+
+- `cynork nodes prefetch-image <node_id> <image_ref>`.
+
+Output
+
+- Table mode MUST print exactly one line containing `node_id=<id> prefetch_requested=true`.
+- JSON mode MUST print `{"node_id":"<id>","prefetch_requested":true}`.
 
 ## Skills Management
 
@@ -360,6 +1193,165 @@ Traces To:
 - [REQ-CLIENT-0146](../requirements/client.md#req-client-0146)
 
 The CLI MUST support full CRUD for skills (create/load, list, get, update, delete) via the User API Gateway, with the same controls as defined in [Skill Management CRUD (Web and CLI)](skills_storage_and_inference.md#spec-cynai-skills-skillmanagementcrud).
+
+All skills commands MUST require auth.
+
+Scope enum
+
+- `user`
+- `group`
+- `project`
+- `global`
+
+### `cynork skills load <file.md>`
+
+Invocation
+
+- `cynork skills load <file.md>`.
+
+Optional flags
+
+- `--name <name>`.
+- `--scope <scope>`.
+  Allowed values are `user`, `group`, `project`, and `global`.
+  Default is `user`.
+- `--scope-id <id>`.
+  Required when `--scope` is `group` or `project`.
+  Forbidden when `--scope` is `global`.
+
+Behavior
+
+- The CLI MUST read `<file.md>` as UTF-8 text.
+- The CLI MUST reject unreadable files and MUST exit with code 2 before making a gateway request.
+
+Output
+
+- Table mode MUST print exactly one line containing `skill_id=<id>`.
+- JSON mode MUST print `{"skill_id":"<id>"}`.
+
+### `cynork skills list`
+
+Invocation
+
+- `cynork skills list`.
+
+Optional flags
+
+- `--scope <scope>`.
+- `--owner <owner_id>`.
+- `--limit <n>`.
+  Default is `50`.
+  Allowed range is `1` to `200`.
+- `--cursor <opaque>`.
+  Default is empty.
+
+Output
+
+- Table mode MUST print a header line with these tab-separated columns in this exact order.
+  `skill_id`, `name`, `scope`, `scope_id`, `owner_id`, `updated_at`.
+- Table mode MUST then print one row per skill.
+- JSON mode MUST print `{"skills":[...],"next_cursor":"<opaque>"}`.
+  Each skill object MUST include at least `skill_id`, `name`, and `scope`.
+
+### `cynork skills get <skill_id>`
+
+Invocation
+
+- `cynork skills get <skill_id>`.
+
+Output
+
+- Table mode MUST print the skill metadata followed by the skill content.
+- Table mode MUST include a metadata line containing at least `skill_id=<id>` and `scope=<scope>`.
+- JSON mode MUST print `{"skill_id":"<id>","name":"<name>","scope":"<scope>","scope_id":"<id_or_empty>","content_md":"<markdown>"}`.
+
+### `cynork skills update <skill_id> <file.md>`
+
+Invocation
+
+- `cynork skills update <skill_id> <file.md>`.
+
+Optional flags
+
+- `--name <name>`.
+- `--scope <scope>`.
+- `--scope-id <id>`.
+  Scope and scope-id rules MUST match `cynork skills load`.
+
+Behavior
+
+- The CLI MUST read `<file.md>` as UTF-8 text.
+
+Output
+
+- Table mode MUST print exactly one line containing `skill_id=<id> updated=true`.
+- JSON mode MUST print `{"skill_id":"<id>","updated":true}`.
+
+### `cynork skills delete <skill_id>`
+
+Invocation
+
+- `cynork skills delete <skill_id>`.
+
+Optional flags
+
+- `-y, --yes`.
+
+Behavior
+
+- If `--yes` is not provided, the CLI MUST prompt for confirmation.
+- The confirmation prompt MUST be `Delete skill <skill_id>? [y/N]`.
+- If the user does not enter `y` or `Y`, the CLI MUST exit with code 0 and MUST NOT make a gateway request.
+
+Output
+
+- Table mode MUST print exactly one line containing `skill_id=<id> deleted=true`.
+- JSON mode MUST print `{"skill_id":"<id>","deleted":true}`.
+
+## Audit Commands
+
+- Spec ID: `CYNAI.CLIENT.CliAuditCommands` <a id="spec-cynai-client-cliauditcommands"></a>
+
+The CLI MUST support querying audit events via the User API Gateway.
+
+All audit commands MUST require auth.
+
+### `cynork audit list`
+
+Invocation
+
+- `cynork audit list`.
+
+Optional flags
+
+- `--resource-type <type>`.
+- `--actor-id <id>`.
+- `--since <rfc3339>`.
+- `--until <rfc3339>`.
+- `--limit <n>`.
+  Default is `50`.
+  Allowed range is `1` to `200`.
+- `--cursor <opaque>`.
+  Default is empty.
+
+Output
+
+- Table mode MUST print a header line with these tab-separated columns in this exact order.
+  `event_id`, `ts`, `actor_id`, `action`, `resource_type`, `resource_id`, `decision`.
+- Table mode MUST then print one row per event.
+- JSON mode MUST print `{"events":[...],"next_cursor":"<opaque>"}`.
+  Each event object MUST include at least `event_id`, `ts`, `actor_id`, `action`, `resource_type`, and `resource_id`.
+
+### `cynork audit get <event_id>`
+
+Invocation
+
+- `cynork audit get <event_id>`.
+
+Output
+
+- Table mode MUST print the event as key-value pairs.
+- JSON mode MUST print a single JSON object representing the event.
 
 ## Output and Scripting
 

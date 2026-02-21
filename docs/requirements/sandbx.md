@@ -90,3 +90,7 @@ It covers sandbox execution, container constraints, and isolation requirements.
   Remote Git operations MUST be performed via Git egress.
   [CYNAI.SANDBX.GitLocalOnly](../tech_specs/sandbox_container.md#spec-cynai-sandbx-gitlocalonly)
   <a id="req-sandbx-0123"></a>
+
+- **REQ-SANDBX-0130:** When sandbox web egress is permitted by policy for dependency downloads, sandboxes MUST be configured to use the Web Egress Proxy and MUST NOT have direct outbound internet access that bypasses it.
+  [CYNAI.SANDBX.Integration.WebEgressProxy](../tech_specs/web_egress_proxy.md#spec-cynai-sandbx-integration-webegressproxy)
+  <a id="req-sandbx-0130"></a>

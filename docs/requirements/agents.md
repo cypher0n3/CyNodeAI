@@ -59,12 +59,15 @@ It covers agent behaviors, responsibilities, and workflow integration.
   [CYNAI.AGENTS.ProjectManagerToolAccess](../tech_specs/project_manager_agent.md#spec-cynai-agents-pmtoolaccess)
   <a id="req-agents-0110"></a>
 - **REQ-AGENTS-0111:** The Project Manager Agent MUST load applicable preferences before planning and before final verification.
+  Applicable preferences MUST be resolved deterministically using the scope precedence rules defined in [`docs/tech_specs/user_preferences.md`](../tech_specs/user_preferences.md).
+  Invalid preference entries (for example mismatched `value_type`) MUST be skipped and MUST NOT override lower-precedence valid entries.
   [CYNAI.AGENTS.ProjectManagerPreferenceUsage](../tech_specs/project_manager_agent.md#spec-cynai-agents-pmpreferenceusage)
   <a id="req-agents-0111"></a>
-- **REQ-AGENTS-0112:** Preference precedence SHOULD be: task-specific > project-specific > user-default > system-default.
+- **REQ-AGENTS-0112:** Preference precedence SHOULD be: task-specific > project-specific > user-default > group-default > system-default.
   [CYNAI.AGENTS.ProjectManagerPreferenceUsage](../tech_specs/project_manager_agent.md#spec-cynai-agents-pmpreferenceusage)
   <a id="req-agents-0112"></a>
 - **REQ-AGENTS-0113:** The Project Manager Agent MUST record which preference set was applied for verification.
+  The recorded applied preference set MUST be sufficient to reproduce the effective preference result, including the source scope and entry versions (or equivalent stable identifiers) for keys that were applied.
   [CYNAI.AGENTS.ProjectManagerPreferenceUsage](../tech_specs/project_manager_agent.md#spec-cynai-agents-pmpreferenceusage)
   <a id="req-agents-0113"></a>
 - **REQ-AGENTS-0114:** All PostgreSQL access MUST happen through MCP tools (Project Analyst).
@@ -95,13 +98,19 @@ It covers agent behaviors, responsibilities, and workflow integration.
 - **REQ-AGENTS-0122:** Sub-agents SHOULD be scoped to a single task to avoid cross-task state leakage.
   [CYNAI.AGENTS.ProjectManagerSubAgent](../tech_specs/project_manager_agent.md#spec-cynai-agents-pmsubagent)
   <a id="req-agents-0122"></a>
+- **REQ-AGENTS-0130:** The Project Manager Agent SHOULD eagerly delegate eligible tasks to Project Analyst agents for task-scoped monitoring and verification.
+  Delegation SHOULD occur as soon as a task is runnable and the system has capacity, subject to policy constraints and configured concurrency limits.
+  [CYNAI.AGENTS.ProjectManagerSubAgent](../tech_specs/project_manager_agent.md#spec-cynai-agents-pmsubagent)
+  [project_analyst_agent.md](../tech_specs/project_analyst_agent.md)
+  <a id="req-agents-0130"></a>
 - **REQ-AGENTS-0123:** The Project Analyst Agent MUST compute and use effective preferences for the task using the same precedence rules as the Project Manager Agent.
+  The Project Analyst Agent MUST treat unknown keys as opaque and MUST pass them through to verification and reporting without interpretation.
   [CYNAI.AGENTS.ProjectAnalystPreferenceUsage](../tech_specs/project_analyst_agent.md#spec-cynai-agents-papreferenceusage)
   <a id="req-agents-0123"></a>
 - **REQ-AGENTS-0124:** The Project Analyst Agent MUST record which preference set was applied for verification.
+  The recorded applied preference set MUST be sufficient to reproduce the effective preference result, including the source scope and entry versions (or equivalent stable identifiers) for keys that were applied.
   [CYNAI.AGENTS.ProjectAnalystPreferenceUsage](../tech_specs/project_analyst_agent.md#spec-cynai-agents-papreferenceusage)
   <a id="req-agents-0124"></a>
-
 - **REQ-AGENTS-0125:** The Project Analyst Agent MUST NOT store provider API keys.
   [project_analyst_agent.md](../tech_specs/project_analyst_agent.md)
   <a id="req-agents-0125"></a>
@@ -111,3 +120,13 @@ It covers agent behaviors, responsibilities, and workflow integration.
 - **REQ-AGENTS-0127:** The Project Analyst Agent SHOULD prefer local execution when it satisfies capability and policy constraints.
   [project_analyst_agent.md](../tech_specs/project_analyst_agent.md)
   <a id="req-agents-0127"></a>
+- **REQ-AGENTS-0128:** For the MVP, the Project Manager model MUST be the single decision-maker for all inference task assignments.
+  This includes selecting local vs external inference targets, selecting the model/version, and requesting local model loads when required.
+  [project_manager_agent.md](../tech_specs/project_manager_agent.md)
+  [model_management.md](../tech_specs/model_management.md)
+  [external_model_routing.md](../tech_specs/external_model_routing.md)
+  <a id="req-agents-0128"></a>
+- **REQ-AGENTS-0129:** The Project Manager model MUST assign each task a human-readable task name in addition to its UUID, so users can call or refer to the task by name or by UUID.
+  Task names MUST be all lowercase with dashes for word separation and MAY use trailing numbers for uniqueness (e.g. `deploy-docs`, `deploy-docs-2`).
+  [CYNAI.AGENTS.ProjectManagerTaskNaming](../tech_specs/project_manager_agent.md#spec-cynai-agents-pmtasknaming)
+  <a id="req-agents-0129"></a>

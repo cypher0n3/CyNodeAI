@@ -151,6 +151,7 @@ Constraints
 - Spec ID: `CYNAI.SANDBX.PreferencesConstraints` <a id="spec-cynai-sandbx-preferencesconstraints"></a>
 
 Sandbox image registry behavior SHOULD be configurable via PostgreSQL preferences.
+These preferences are user-facing task-execution preferences and constraints, not deployment or service configuration.
 
 Traces To:
 

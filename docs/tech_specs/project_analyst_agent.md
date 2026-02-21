@@ -21,6 +21,8 @@ It provides focused verification that task outputs satisfy acceptance criteria a
 
 The Project Analyst Agent monitors a specific task and produces verification findings.
 It is intended to tighten feedback loops and keep task quality aligned with defined requirements.
+The Project Analyst Agent is task-scoped.
+It is responsible for managing and tracking a single task that has been handed off by the Project Manager Agent.
 
 ## Agent Responsibilities
 
@@ -36,6 +38,26 @@ It is intended to tighten feedback loops and keep task quality aligned with defi
   - Request re-runs or additional evidence when verification is inconclusive.
 - Record findings
   - Write structured verification notes to PostgreSQL with timestamps and applied preference context.
+
+## Handoff Model
+
+Project Analyst agents are spawned and managed by the Project Manager Agent.
+The Project Manager Agent SHOULD eagerly hand off tasks to Project Analyst agents whenever possible.
+
+Handoff payload
+
+When the Project Manager Agent spawns a Project Analyst agent for a task, it SHOULD provide a task-scoped handoff payload that includes:
+
+- `task_id`
+- the current acceptance criteria and task metadata
+- a pointer to the effective preference computation for the task (or an effective preference snapshot with sources)
+- relevant artifacts and evidence pointers for verification (for example artifact paths and run or job identifiers)
+- any policy constraints relevant to verification (for example external provider allowance)
+
+Task scope constraint
+
+- A Project Analyst agent MUST treat its assigned `task_id` as its only authority scope for state, evidence, and outputs.
+- A Project Analyst agent MUST NOT read or write data for unrelated tasks except through explicitly allowlisted, non-task-specific tools.
 
 ## External Provider Usage
 
