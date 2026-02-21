@@ -8,6 +8,23 @@ import (
 	"testing"
 )
 
+func TestClient_ListTasks_WithLimitOffset(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/tasks" {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		jsonHandler(http.StatusOK, ListTasksResponse{Tasks: []TaskResponse{}})(w, r)
+	}))
+	defer server.Close()
+	client := NewClient(server.URL)
+	client.SetToken("tok")
+	_, err := client.ListTasks(ListTasksRequest{Limit: 5, Offset: 10})
+	if err != nil {
+		t.Fatalf("ListTasks: %v", err)
+	}
+}
+
 func jsonHandler(status int, v any) http.HandlerFunc {
 	return func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -307,5 +324,270 @@ func TestClient_GetTaskResult_DoFails(t *testing.T) {
 	_, err := client.GetTaskResult("tid")
 	if err == nil {
 		t.Fatal("expected error")
+	}
+}
+
+func TestClient_ListTasks_Success(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/tasks" || r.Method != http.MethodGet {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		jsonHandler(http.StatusOK, ListTasksResponse{
+			Tasks: []TaskResponse{{ID: "t1", Status: "completed"}, {TaskID: "t2", ID: "t2", Status: "queued"}},
+		})(w, r)
+	}))
+	defer server.Close()
+	client := NewClient(server.URL)
+	client.SetToken("tok")
+	resp, err := client.ListTasks(ListTasksRequest{Limit: 10})
+	if err != nil {
+		t.Fatalf("ListTasks: %v", err)
+	}
+	if len(resp.Tasks) != 2 {
+		t.Fatalf("len(Tasks)=%d", len(resp.Tasks))
+	}
+	if resp.Tasks[0].ResolveTaskID() != "t1" || resp.Tasks[1].ResolveTaskID() != "t2" {
+		t.Errorf("Tasks[0].ResolveTaskID()=%q Tasks[1].ResolveTaskID()=%q", resp.Tasks[0].ResolveTaskID(), resp.Tasks[1].ResolveTaskID())
+	}
+}
+
+func TestClient_ListTasks_Unauthorized(t *testing.T) {
+	server := httptest.NewServer(jsonHandler(http.StatusUnauthorized, ProblemDetails{Detail: "expired", Status: 401}))
+	defer server.Close()
+	client := NewClient(server.URL)
+	_, err := client.ListTasks(ListTasksRequest{})
+	if err == nil {
+		t.Fatal("expected error")
+	}
+}
+
+func TestClient_GetTask_Success(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/tasks/tid-1" {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		jsonHandler(http.StatusOK, TaskResponse{ID: "tid-1", Status: "running"})(w, r)
+	}))
+	defer server.Close()
+	client := NewClient(server.URL)
+	client.SetToken("tok")
+	task, err := client.GetTask("tid-1")
+	if err != nil {
+		t.Fatalf("GetTask: %v", err)
+	}
+	if task.ResolveTaskID() != "tid-1" || task.Status != "running" {
+		t.Errorf("task = %+v", task)
+	}
+}
+
+func TestClient_ExpectError(t *testing.T) {
+	tests := []struct {
+		name   string
+		status int
+		body   interface{}
+		call   func(*Client) error
+	}{
+		{"GetTask_NotFound", http.StatusNotFound, ProblemDetails{Detail: "not found", Status: 404}, func(c *Client) error { _, err := c.GetTask("tid-missing"); return err }},
+		{"CancelTask_Forbidden", http.StatusForbidden, ProblemDetails{Detail: "not owner", Status: 403}, func(c *Client) error { _, err := c.CancelTask("tid-1"); return err }},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			server := httptest.NewServer(jsonHandler(tt.status, tt.body))
+			defer server.Close()
+			client := NewClient(server.URL)
+			client.SetToken("tok")
+			if err := tt.call(client); err == nil {
+				t.Fatal("expected error")
+			}
+		})
+	}
+}
+
+func TestClient_CancelTask_Success(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/tasks/tid-1/cancel" || r.Method != http.MethodPost {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		jsonHandler(http.StatusOK, CancelTaskResponse{TaskID: "tid-1", Canceled: true})(w, r)
+	}))
+	defer server.Close()
+	client := NewClient(server.URL)
+	client.SetToken("tok")
+	resp, err := client.CancelTask("tid-1")
+	if err != nil {
+		t.Fatalf("CancelTask: %v", err)
+	}
+	if !resp.Canceled || resp.TaskID != "tid-1" {
+		t.Errorf("resp = %+v", resp)
+	}
+}
+
+func TestClient_GetTaskLogs_Success(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/tasks/tid-1/logs" {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		jsonHandler(http.StatusOK, TaskLogsResponse{TaskID: "tid-1", Stdout: "out", Stderr: "err"})(w, r)
+	}))
+	defer server.Close()
+	client := NewClient(server.URL)
+	client.SetToken("tok")
+	logs, err := client.GetTaskLogs("tid-1", "")
+	if err != nil {
+		t.Fatalf("GetTaskLogs: %v", err)
+	}
+	if logs.Stdout != "out" || logs.Stderr != "err" {
+		t.Errorf("logs = %+v", logs)
+	}
+}
+
+func TestClient_GetTaskLogs_NotFound(t *testing.T) {
+	server := httptest.NewServer(jsonHandler(http.StatusNotFound, ProblemDetails{Detail: "not found", Status: 404}))
+	defer server.Close()
+	client := NewClient(server.URL)
+	client.SetToken("tok")
+	_, err := client.GetTaskLogs("tid-missing", "stdout")
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	var he *HTTPError
+	if !errors.As(err, &he) || he.Status != 404 {
+		t.Errorf("want HTTPError 404, got %T %v", err, err)
+	}
+}
+
+func TestClient_GetBytes_Success(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`["a","b"]`))
+	}))
+	defer server.Close()
+	client := NewClient(server.URL)
+	client.SetToken("tok")
+	body, err := client.GetBytes("/v1/creds")
+	if err != nil {
+		t.Fatalf("GetBytes: %v", err)
+	}
+	if string(body) != `["a","b"]` {
+		t.Errorf("body = %q", body)
+	}
+}
+
+func TestClient_GetBytes_Unauthorized(t *testing.T) {
+	server := httptest.NewServer(jsonHandler(http.StatusUnauthorized, ProblemDetails{Status: 401}))
+	defer server.Close()
+	client := NewClient(server.URL)
+	_, err := client.GetBytes("/v1/creds")
+	if err == nil {
+		t.Fatal("expected error")
+	}
+}
+
+func TestClient_PostBytes_Success(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+	client := NewClient(server.URL)
+	client.SetToken("tok")
+	_, err := client.PostBytes("/v1/prefs", []byte("{}"))
+	if err != nil {
+		t.Fatalf("PostBytes: %v", err)
+	}
+}
+
+func TestClient_PostBytes_NoContent(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer server.Close()
+	client := NewClient(server.URL)
+	client.SetToken("tok")
+	body, err := client.PostBytes("/v1/prefs", nil)
+	if err != nil {
+		t.Fatalf("PostBytes: %v", err)
+	}
+	if body != nil {
+		t.Errorf("want nil body for 204, got %q", body)
+	}
+}
+
+func TestClient_GetBytes(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/creds" {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		_, _ = w.Write([]byte(`[{"id":"c1"}]`))
+	}))
+	defer server.Close()
+	client := NewClient(server.URL)
+	client.SetToken("tok")
+	body, err := client.GetBytes("/v1/creds")
+	if err != nil {
+		t.Fatalf("GetBytes: %v", err)
+	}
+	if string(body) != `[{"id":"c1"}]` {
+		t.Errorf("body = %q", body)
+	}
+}
+
+func TestClient_GetBytes_Error(t *testing.T) {
+	server := httptest.NewServer(jsonHandler(http.StatusUnauthorized, ProblemDetails{Detail: "unauthorized", Status: 401}))
+	defer server.Close()
+	client := NewClient(server.URL)
+	client.SetToken("tok")
+	_, err := client.GetBytes("/v1/creds")
+	if err == nil {
+		t.Fatal("expected error")
+	}
+}
+
+func TestClient_PostBytes(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/prefs" || r.Method != http.MethodPost {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{}`))
+	}))
+	defer server.Close()
+	client := NewClient(server.URL)
+	client.SetToken("tok")
+	body, err := client.PostBytes("/v1/prefs", []byte("{}"))
+	if err != nil {
+		t.Fatalf("PostBytes: %v", err)
+	}
+	if string(body) != `{}` {
+		t.Errorf("body = %q", body)
+	}
+}
+
+func TestClient_PostBytes_Error(t *testing.T) {
+	server := httptest.NewServer(jsonHandler(http.StatusForbidden, ProblemDetails{Detail: "forbidden", Status: 403}))
+	defer server.Close()
+	client := NewClient(server.URL)
+	client.SetToken("tok")
+	_, err := client.PostBytes("/v1/prefs", []byte("{}"))
+	if err == nil {
+		t.Fatal("expected error")
+	}
+}
+
+func TestHTTPError_Unwrap(t *testing.T) {
+	inner := errors.New("inner")
+	e := &HTTPError{Status: 404, Err: inner}
+	if e.Unwrap() != inner {
+		t.Error("Unwrap should return inner")
 	}
 }

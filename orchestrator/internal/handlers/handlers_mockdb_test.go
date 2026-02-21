@@ -490,7 +490,7 @@ func TestTaskHandler_CreateTaskWithMockDB(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("failed to unmarshal response: %v", err)
 	}
-	if resp.Status != "queued" {
+	if resp.Status != SpecStatusQueued {
 		t.Errorf("expected status queued, got %s", resp.Status)
 	}
 }
@@ -599,7 +599,7 @@ func TestTaskHandler_CreateTask_PromptMode_OrchestratorInference(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
-	if resp.Status != "completed" {
+	if resp.Status != SpecStatusCompleted {
 		t.Errorf("expected status completed (orchestrator inference), got %s", resp.Status)
 	}
 	taskID, _ := uuid.Parse(resp.TaskID)
@@ -1569,7 +1569,7 @@ func TestTaskHandler_ListTasksSuccess(t *testing.T) {
 	if len(resp.Tasks) != 1 {
 		t.Errorf("expected 1 task, got %d", len(resp.Tasks))
 	}
-	if resp.Tasks[0].TaskID != task.ID.String() || resp.Tasks[0].Status != "queued" {
+	if resp.Tasks[0].TaskID != task.ID.String() || resp.Tasks[0].Status != SpecStatusQueued {
 		t.Errorf("task_id or status wrong: %+v", resp.Tasks[0])
 	}
 }
@@ -1584,36 +1584,28 @@ func TestTaskHandler_ListTasksNoUser(t *testing.T) {
 	}
 }
 
-func TestTaskHandler_ListTasksInvalidLimit(t *testing.T) {
+func TestTaskHandler_ListTasksInvalidParams(t *testing.T) {
 	handler := NewTaskHandler(testutil.NewMockDB(), newTestLogger(), "", "")
 	userID := uuid.New()
-	req := httptest.NewRequest("GET", "/v1/tasks?limit=invalid", http.NoBody).WithContext(context.WithValue(context.Background(), contextKeyUserID, userID))
-	rec := httptest.NewRecorder()
-	handler.ListTasks(rec, req)
-	if rec.Code != http.StatusBadRequest {
-		t.Errorf("expected 400, got %d", rec.Code)
+	ctx := context.WithValue(context.Background(), contextKeyUserID, userID)
+	tests := []struct {
+		name   string
+		query  string
+		expect int
+	}{
+		{"invalid limit", "limit=invalid", http.StatusBadRequest},
+		{"limit out of range", "limit=0", http.StatusBadRequest},
+		{"invalid offset", "offset=-1", http.StatusBadRequest},
 	}
-}
-
-func TestTaskHandler_ListTasksLimitOutOfRange(t *testing.T) {
-	handler := NewTaskHandler(testutil.NewMockDB(), newTestLogger(), "", "")
-	userID := uuid.New()
-	req := httptest.NewRequest("GET", "/v1/tasks?limit=0", http.NoBody).WithContext(context.WithValue(context.Background(), contextKeyUserID, userID))
-	rec := httptest.NewRecorder()
-	handler.ListTasks(rec, req)
-	if rec.Code != http.StatusBadRequest {
-		t.Errorf("expected 400, got %d", rec.Code)
-	}
-}
-
-func TestTaskHandler_ListTasksInvalidOffset(t *testing.T) {
-	handler := NewTaskHandler(testutil.NewMockDB(), newTestLogger(), "", "")
-	userID := uuid.New()
-	req := httptest.NewRequest("GET", "/v1/tasks?offset=-1", http.NoBody).WithContext(context.WithValue(context.Background(), contextKeyUserID, userID))
-	rec := httptest.NewRecorder()
-	handler.ListTasks(rec, req)
-	if rec.Code != http.StatusBadRequest {
-		t.Errorf("expected 400, got %d", rec.Code)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			req := httptest.NewRequest("GET", "/v1/tasks?"+tt.query, http.NoBody).WithContext(ctx)
+			rec := httptest.NewRecorder()
+			handler.ListTasks(rec, req)
+			if rec.Code != tt.expect {
+				t.Errorf("expected %d, got %d", tt.expect, rec.Code)
+			}
+		})
 	}
 }
 
@@ -1707,7 +1699,7 @@ func TestTaskHandler_ListTasksStatusFilterAndOffset(t *testing.T) {
 	if len(resp.Tasks) != 1 {
 		t.Errorf("expected 1 task (filtered), got %d", len(resp.Tasks))
 	}
-	if len(resp.Tasks) > 0 && resp.Tasks[0].Status != "completed" {
+	if len(resp.Tasks) > 0 && resp.Tasks[0].Status != SpecStatusCompleted {
 		t.Errorf("expected status completed, got %s", resp.Tasks[0].Status)
 	}
 }
@@ -1769,7 +1761,8 @@ func TestTaskHandler_CancelTaskNotFound(t *testing.T) {
 	}
 }
 
-func TestTaskHandler_CancelTaskForbidden(t *testing.T) {
+func testTaskForbidden(t *testing.T, runHandler func(*TaskHandler, *http.Request, *httptest.ResponseRecorder), method, pathSuffix string) {
+	t.Helper()
 	mockDB := testutil.NewMockDB()
 	handler := NewTaskHandler(mockDB, newTestLogger(), "", "")
 	ownerID := uuid.New()
@@ -1784,13 +1777,17 @@ func TestTaskHandler_CancelTaskForbidden(t *testing.T) {
 		UpdatedAt: time.Now().UTC(),
 	}
 	mockDB.AddTask(task)
-	req := httptest.NewRequest("POST", "/v1/tasks/"+task.ID.String()+"/cancel", http.NoBody).WithContext(context.WithValue(context.Background(), contextKeyUserID, otherID))
+	req := httptest.NewRequest(method, "/v1/tasks/"+task.ID.String()+pathSuffix, http.NoBody).WithContext(context.WithValue(context.Background(), contextKeyUserID, otherID))
 	req.SetPathValue("id", task.ID.String())
 	rec := httptest.NewRecorder()
-	handler.CancelTask(rec, req)
+	runHandler(handler, req, rec)
 	if rec.Code != http.StatusForbidden {
 		t.Errorf("expected 403, got %d", rec.Code)
 	}
+}
+
+func TestTaskHandler_CancelTaskForbidden(t *testing.T) {
+	testTaskForbidden(t, func(h *TaskHandler, r *http.Request, w *httptest.ResponseRecorder) { h.CancelTask(w, r) }, "POST", "/cancel")
 }
 
 func TestTaskHandler_CancelTaskWithJobs(t *testing.T) {
@@ -1850,7 +1847,8 @@ func TestTaskHandler_CancelTaskUpdateStatusError(t *testing.T) {
 	}
 }
 
-func TestTaskHandler_CancelTaskGetJobsError(t *testing.T) {
+func testTaskWithErrorOnJobsMock(t *testing.T, runHandler func(*TaskHandler, *http.Request, *httptest.ResponseRecorder), method, pathSuffix, taskStatus string) {
+	t.Helper()
 	mockDB := &errorOnJobsMockDB{MockDB: testutil.NewMockDB()}
 	handler := NewTaskHandler(mockDB, newTestLogger(), "", "")
 	userID := uuid.New()
@@ -1858,19 +1856,23 @@ func TestTaskHandler_CancelTaskGetJobsError(t *testing.T) {
 	task := &models.Task{
 		ID:        uuid.New(),
 		CreatedBy: &userID,
-		Status:    models.TaskStatusPending,
+		Status:    taskStatus,
 		Prompt:    &prompt,
 		CreatedAt: time.Now().UTC(),
 		UpdatedAt: time.Now().UTC(),
 	}
 	mockDB.AddTask(task)
-	req := httptest.NewRequest("POST", "/v1/tasks/"+task.ID.String()+"/cancel", http.NoBody).WithContext(context.WithValue(context.Background(), contextKeyUserID, userID))
+	req := httptest.NewRequest(method, "/v1/tasks/"+task.ID.String()+pathSuffix, http.NoBody).WithContext(context.WithValue(context.Background(), contextKeyUserID, userID))
 	req.SetPathValue("id", task.ID.String())
 	rec := httptest.NewRecorder()
-	handler.CancelTask(rec, req)
+	runHandler(handler, req, rec)
 	if rec.Code != http.StatusInternalServerError {
 		t.Errorf("expected 500, got %d", rec.Code)
 	}
+}
+
+func TestTaskHandler_CancelTaskGetJobsError(t *testing.T) {
+	testTaskWithErrorOnJobsMock(t, func(h *TaskHandler, r *http.Request, w *httptest.ResponseRecorder) { h.CancelTask(w, r) }, "POST", "/cancel", models.TaskStatusPending)
 }
 
 func TestTaskHandler_GetTaskLogsSuccess(t *testing.T) {
@@ -1915,105 +1917,58 @@ func TestTaskHandler_GetTaskLogsSuccess(t *testing.T) {
 }
 
 func TestTaskHandler_GetTaskLogsDBError(t *testing.T) {
-	mockDB := &errorOnJobsMockDB{MockDB: testutil.NewMockDB()}
-	handler := NewTaskHandler(mockDB, newTestLogger(), "", "")
-	userID := uuid.New()
-	prompt := testPrompt
-	task := &models.Task{
-		ID:        uuid.New(),
-		CreatedBy: &userID,
-		Status:    models.TaskStatusCompleted,
-		Prompt:    &prompt,
-		CreatedAt: time.Now().UTC(),
-		UpdatedAt: time.Now().UTC(),
-	}
-	mockDB.AddTask(task)
-	req := httptest.NewRequest("GET", "/v1/tasks/"+task.ID.String()+"/logs", http.NoBody).WithContext(context.WithValue(context.Background(), contextKeyUserID, userID))
-	req.SetPathValue("id", task.ID.String())
-	rec := httptest.NewRecorder()
-	handler.GetTaskLogs(rec, req)
-	if rec.Code != http.StatusInternalServerError {
-		t.Errorf("expected 500, got %d", rec.Code)
-	}
+	testTaskWithErrorOnJobsMock(t, func(h *TaskHandler, r *http.Request, w *httptest.ResponseRecorder) { h.GetTaskLogs(w, r) }, "GET", "/logs", models.TaskStatusCompleted)
 }
 
-func TestTaskHandler_GetTaskLogsStreamStdout(t *testing.T) {
-	mockDB := testutil.NewMockDB()
-	handler := NewTaskHandler(mockDB, newTestLogger(), "", "")
-	userID := uuid.New()
-	prompt := testPrompt
-	task := &models.Task{
-		ID:        uuid.New(),
-		CreatedBy: &userID,
-		Status:    models.TaskStatusCompleted,
-		Prompt:    &prompt,
-		CreatedAt: time.Now().UTC(),
-		UpdatedAt: time.Now().UTC(),
+func TestTaskHandler_GetTaskLogsStreamParam(t *testing.T) {
+	resultJSON := `{"version":1,"stdout":"out","stderr":"err","started_at":"","ended_at":"","truncated":{"stdout":false,"stderr":false}}`
+	tests := []struct {
+		stream     string
+		wantStdout string
+		wantStderr string
+	}{
+		{"stdout", "out", ""},
+		{"stderr", "", "err"},
 	}
-	mockDB.AddTask(task)
-	result := `{"version":1,"stdout":"out","stderr":"err","started_at":"","ended_at":"","truncated":{"stdout":false,"stderr":false}}`
-	job := &models.Job{
-		ID:        uuid.New(),
-		TaskID:    task.ID,
-		Status:    models.JobStatusCompleted,
-		Result:    models.NewJSONBString(&result),
-		CreatedAt: time.Now().UTC(),
-		UpdatedAt: time.Now().UTC(),
-	}
-	mockDB.AddJob(job)
-	req := httptest.NewRequest("GET", "/v1/tasks/"+task.ID.String()+"/logs?stream=stdout", http.NoBody).WithContext(context.WithValue(context.Background(), contextKeyUserID, userID))
-	req.SetPathValue("id", task.ID.String())
-	rec := httptest.NewRecorder()
-	handler.GetTaskLogs(rec, req)
-	if rec.Code != http.StatusOK {
-		t.Errorf("expected 200, got %d", rec.Code)
-	}
-	var resp GetTaskLogsResponse
-	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
-		t.Fatalf("unmarshal: %v", err)
-	}
-	if resp.Stdout != "out" || resp.Stderr != "" {
-		t.Errorf("stream=stdout: got stdout=%q stderr=%q", resp.Stdout, resp.Stderr)
-	}
-}
-
-func TestTaskHandler_GetTaskLogsStreamStderr(t *testing.T) {
-	mockDB := testutil.NewMockDB()
-	handler := NewTaskHandler(mockDB, newTestLogger(), "", "")
-	userID := uuid.New()
-	prompt := testPrompt
-	task := &models.Task{
-		ID:        uuid.New(),
-		CreatedBy: &userID,
-		Status:    models.TaskStatusCompleted,
-		Prompt:    &prompt,
-		CreatedAt: time.Now().UTC(),
-		UpdatedAt: time.Now().UTC(),
-	}
-	mockDB.AddTask(task)
-	result := `{"version":1,"stdout":"out","stderr":"err","started_at":"","ended_at":"","truncated":{"stdout":false,"stderr":false}}`
-	job := &models.Job{
-		ID:        uuid.New(),
-		TaskID:    task.ID,
-		Status:    models.JobStatusCompleted,
-		Result:    models.NewJSONBString(&result),
-		CreatedAt: time.Now().UTC(),
-		UpdatedAt: time.Now().UTC(),
-	}
-	mockDB.AddJob(job)
-	req := httptest.NewRequest("GET", "/v1/tasks/"+task.ID.String()+"/logs?stream=stderr", http.NoBody).WithContext(context.WithValue(context.Background(), contextKeyUserID, userID))
-	req.SetPathValue("id", task.ID.String())
-	rec := httptest.NewRecorder()
-	handler.GetTaskLogs(rec, req)
-	if rec.Code != http.StatusOK {
-		t.Errorf("expected 200, got %d", rec.Code)
-	}
-	var resp GetTaskLogsResponse
-	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
-		t.Fatalf("unmarshal: %v", err)
-	}
-	if resp.Stderr != "err" || resp.Stdout != "" {
-		t.Errorf("stream=stderr: got stdout=%q stderr=%q", resp.Stdout, resp.Stderr)
+	for _, tt := range tests {
+		t.Run("stream="+tt.stream, func(t *testing.T) {
+			mockDB := testutil.NewMockDB()
+			handler := NewTaskHandler(mockDB, newTestLogger(), "", "")
+			userID := uuid.New()
+			prompt := testPrompt
+			task := &models.Task{
+				ID:        uuid.New(),
+				CreatedBy: &userID,
+				Status:    models.TaskStatusCompleted,
+				Prompt:    &prompt,
+				CreatedAt: time.Now().UTC(),
+				UpdatedAt: time.Now().UTC(),
+			}
+			mockDB.AddTask(task)
+			job := &models.Job{
+				ID:        uuid.New(),
+				TaskID:    task.ID,
+				Status:    models.JobStatusCompleted,
+				Result:    models.NewJSONBString(&resultJSON),
+				CreatedAt: time.Now().UTC(),
+				UpdatedAt: time.Now().UTC(),
+			}
+			mockDB.AddJob(job)
+			req := httptest.NewRequest("GET", "/v1/tasks/"+task.ID.String()+"/logs?stream="+tt.stream, http.NoBody).WithContext(context.WithValue(context.Background(), contextKeyUserID, userID))
+			req.SetPathValue("id", task.ID.String())
+			rec := httptest.NewRecorder()
+			handler.GetTaskLogs(rec, req)
+			if rec.Code != http.StatusOK {
+				t.Errorf("expected 200, got %d", rec.Code)
+			}
+			var resp GetTaskLogsResponse
+			if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+				t.Fatalf("unmarshal: %v", err)
+			}
+			if resp.Stdout != tt.wantStdout || resp.Stderr != tt.wantStderr {
+				t.Errorf("got stdout=%q stderr=%q", resp.Stdout, resp.Stderr)
+			}
+		})
 	}
 }
 
@@ -2051,27 +2006,7 @@ func TestTaskHandler_GetTaskLogsMalformedResult(t *testing.T) {
 }
 
 func TestTaskHandler_GetTaskLogsForbidden(t *testing.T) {
-	mockDB := testutil.NewMockDB()
-	handler := NewTaskHandler(mockDB, newTestLogger(), "", "")
-	ownerID := uuid.New()
-	otherID := uuid.New()
-	prompt := testPrompt
-	task := &models.Task{
-		ID:        uuid.New(),
-		CreatedBy: &ownerID,
-		Status:    models.TaskStatusCompleted,
-		Prompt:    &prompt,
-		CreatedAt: time.Now().UTC(),
-		UpdatedAt: time.Now().UTC(),
-	}
-	mockDB.AddTask(task)
-	req := httptest.NewRequest("GET", "/v1/tasks/"+task.ID.String()+"/logs", http.NoBody).WithContext(context.WithValue(context.Background(), contextKeyUserID, otherID))
-	req.SetPathValue("id", task.ID.String())
-	rec := httptest.NewRecorder()
-	handler.GetTaskLogs(rec, req)
-	if rec.Code != http.StatusForbidden {
-		t.Errorf("expected 403, got %d", rec.Code)
-	}
+	testTaskForbidden(t, func(h *TaskHandler, r *http.Request, w *httptest.ResponseRecorder) { h.GetTaskLogs(w, r) }, "GET", "/logs")
 }
 
 func TestTaskHandler_ChatEmptyMessage(t *testing.T) {
@@ -2152,6 +2087,21 @@ func TestTaskHandler_ChatCreateTaskError(t *testing.T) {
 	}
 }
 
+// chatGetTaskCompletedAfterFirstCall is shared by mocks that return completed task after first GetTaskByID call.
+func chatGetTaskCompletedAfterFirstCall(ctx context.Context, m *testutil.MockDB, calls *int, id uuid.UUID) (*models.Task, error) {
+	*calls++
+	task, err := m.GetTaskByID(ctx, id)
+	if err != nil || task == nil {
+		return task, err
+	}
+	if *calls > 1 {
+		t := *task
+		t.Status = models.TaskStatusCompleted
+		return &t, nil
+	}
+	return task, nil
+}
+
 // chatPollMock returns a completed task on GetTaskByID after the first call (so Chat poll loop exits).
 type chatPollMock struct {
 	*testutil.MockDB
@@ -2159,17 +2109,7 @@ type chatPollMock struct {
 }
 
 func (m *chatPollMock) GetTaskByID(ctx context.Context, id uuid.UUID) (*models.Task, error) {
-	m.getTaskCalls++
-	task, err := m.MockDB.GetTaskByID(ctx, id)
-	if err != nil || task == nil {
-		return task, err
-	}
-	if m.getTaskCalls > 1 {
-		t := *task
-		t.Status = models.TaskStatusCompleted
-		return &t, nil
-	}
-	return task, nil
+	return chatGetTaskCompletedAfterFirstCall(ctx, m.MockDB, &m.getTaskCalls, id)
 }
 
 // chatPollErrorMock returns error on GetTaskByID after the first call (covers Chat poll GetTask error path).
@@ -2193,17 +2133,7 @@ type chatTerminalJobsErrorMock struct {
 }
 
 func (m *chatTerminalJobsErrorMock) GetTaskByID(ctx context.Context, id uuid.UUID) (*models.Task, error) {
-	m.getTaskCalls++
-	task, err := m.MockDB.GetTaskByID(ctx, id)
-	if err != nil || task == nil {
-		return task, err
-	}
-	if m.getTaskCalls > 1 {
-		t := *task
-		t.Status = models.TaskStatusCompleted
-		return &t, nil
-	}
-	return task, nil
+	return chatGetTaskCompletedAfterFirstCall(ctx, m.MockDB, &m.getTaskCalls, id)
 }
 
 func (m *chatTerminalJobsErrorMock) GetJobsByTaskID(ctx context.Context, taskID uuid.UUID) ([]*models.Job, error) {
@@ -2267,33 +2197,29 @@ func TestTaskHandler_ChatContextCanceled(t *testing.T) {
 	}
 }
 
-func TestTaskHandler_ChatGetTaskErrorInPoll(t *testing.T) {
-	mockDB := testutil.NewMockDB()
-	errorMock := &chatPollErrorMock{MockDB: mockDB}
-	handler := NewTaskHandler(errorMock, newTestLogger(), "", "")
+func TestTaskHandler_ChatErrorPaths(t *testing.T) {
 	userID := uuid.New()
+	ctx := context.WithValue(context.Background(), contextKeyUserID, userID)
 	body := []byte(`{"message":"hello"}`)
-	req := httptest.NewRequest("POST", "/v1/chat", bytes.NewReader(body)).WithContext(context.WithValue(context.Background(), contextKeyUserID, userID))
-	req.Header.Set("Content-Type", "application/json")
-	rec := httptest.NewRecorder()
-	handler.Chat(rec, req)
-	if rec.Code != http.StatusInternalServerError {
-		t.Errorf("expected 500 when GetTaskByID fails in poll, got %d", rec.Code)
+	tests := []struct {
+		name   string
+		store  database.Store
+		expect int
+	}{
+		{"GetTaskByID fails in poll", &chatPollErrorMock{MockDB: testutil.NewMockDB()}, http.StatusInternalServerError},
+		{"GetJobsByTaskID fails in terminal", &chatTerminalJobsErrorMock{MockDB: testutil.NewMockDB()}, http.StatusInternalServerError},
 	}
-}
-
-func TestTaskHandler_ChatTerminalGetJobsError(t *testing.T) {
-	mockDB := testutil.NewMockDB()
-	jobsErrorMock := &chatTerminalJobsErrorMock{MockDB: mockDB}
-	handler := NewTaskHandler(jobsErrorMock, newTestLogger(), "", "")
-	userID := uuid.New()
-	body := []byte(`{"message":"hello"}`)
-	req := httptest.NewRequest("POST", "/v1/chat", bytes.NewReader(body)).WithContext(context.WithValue(context.Background(), contextKeyUserID, userID))
-	req.Header.Set("Content-Type", "application/json")
-	rec := httptest.NewRecorder()
-	handler.Chat(rec, req)
-	if rec.Code != http.StatusInternalServerError {
-		t.Errorf("expected 500 when GetJobsByTaskID fails in terminal branch, got %d", rec.Code)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			handler := NewTaskHandler(tt.store, newTestLogger(), "", "")
+			req := httptest.NewRequest("POST", "/v1/chat", bytes.NewReader(body)).WithContext(ctx)
+			req.Header.Set("Content-Type", "application/json")
+			rec := httptest.NewRecorder()
+			handler.Chat(rec, req)
+			if rec.Code != tt.expect {
+				t.Errorf("expected %d, got %d", tt.expect, rec.Code)
+			}
+		})
 	}
 }
 

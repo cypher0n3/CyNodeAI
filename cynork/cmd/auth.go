@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/cypher0n3/cynodeai/cynork/internal/config"
+	"github.com/cypher0n3/cynodeai/cynork/internal/exit"
 	"github.com/cypher0n3/cynodeai/cynork/internal/gateway"
 	"github.com/spf13/cobra"
 )
@@ -68,7 +69,7 @@ func runAuthLogin(_ *cobra.Command, _ []string) error {
 	client := gateway.NewClient(cfg.GatewayURL)
 	resp, err := client.Login(gateway.LoginRequest{Handle: handle, Password: password})
 	if err != nil {
-		return err
+		return exitFromGatewayErr(err)
 	}
 	cfg.Token = resp.AccessToken
 	path := configPath
@@ -115,13 +116,13 @@ func runAuthLogout(_ *cobra.Command, _ []string) error {
 
 func runAuthWhoami(_ *cobra.Command, _ []string) error {
 	if cfg.Token == "" {
-		return fmt.Errorf("not logged in: run 'cynork auth login'")
+		return exit.Auth(fmt.Errorf("not logged in: run 'cynork auth login'"))
 	}
 	client := gateway.NewClient(cfg.GatewayURL)
 	client.SetToken(cfg.Token)
 	user, err := client.GetMe()
 	if err != nil {
-		return err
+		return exitFromGatewayErr(err)
 	}
 	fmt.Printf("id=%s handle=%s\n", user.ID, user.Handle)
 	return nil
