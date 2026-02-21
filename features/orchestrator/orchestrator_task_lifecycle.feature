@@ -18,7 +18,7 @@ Feature: Orchestrator Task Lifecycle
   Scenario: Create task as authenticated user
     When I create a task with prompt "echo hello world"
     Then I receive a task ID
-    And the task status is "pending"
+    And the task status is "queued"
 
   @req_orches_0124
   @spec_cynai_orches_doc_orchestrator
@@ -60,3 +60,30 @@ Feature: Orchestrator Task Lifecycle
     When I create a task with input_mode "commands" and prompt "echo hello"
     And the orchestrator selects the node for dispatch
     Then the job sent to the worker has command containing "echo hello"
+
+  @req_orches_0121
+  @spec_cynai_orches_doc_orchestrator
+  Scenario: List tasks as authenticated user
+    When I create a task with prompt "list me"
+    And I list tasks with limit 10
+    Then I receive a list of tasks
+
+  @req_orches_0121
+  @spec_cynai_orches_doc_orchestrator
+  Scenario: Cancel task as owner
+    When I create a task with prompt "cancel me"
+    And I cancel the task
+    Then the task status is cancelled
+
+  @req_orches_0123
+  @spec_cynai_orches_doc_orchestrator
+  Scenario: Get task logs
+    Given I have a completed task
+    When I get the task logs
+    Then the response contains stdout and stderr
+
+  @req_orches_0125
+  @spec_cynai_client_clitaskcreateprompt
+  Scenario: Chat returns model response
+    When I send a chat message "Hello"
+    Then I receive a 200 response with non-empty response field

@@ -66,7 +66,7 @@ type BootstrapData struct {
 // StartOllama is Phase 1 inference; if it returns an error, Run fails (fail-fast).
 type RunOptions struct {
 	StartWorkerAPI func(bearerToken string) error
-	StartOllama     func() error
+	StartOllama    func() error
 }
 
 // Run performs registration, config fetch, service startup, config ack, then capability reporting until ctx is cancelled.

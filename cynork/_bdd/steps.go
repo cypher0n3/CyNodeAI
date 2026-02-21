@@ -68,8 +68,8 @@ func (s *cynorkState) mockGatewayMux() *http.ServeMux {
 		w.WriteHeader(http.StatusOK)
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"access_token": tok,
-			"token_type":  "Bearer",
-			"expires_in":  900,
+			"token_type":   "Bearer",
+			"expires_in":   900,
 		})
 	})
 	mux.HandleFunc("GET /v1/users/me", func(w http.ResponseWriter, r *http.Request) {

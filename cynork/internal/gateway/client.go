@@ -133,9 +133,9 @@ type JobResponse struct {
 
 // TaskResultResponse is the body returned by GET /v1/tasks/{id}/result.
 type TaskResultResponse struct {
-	TaskID string         `json:"task_id"`
-	Status string         `json:"status"`
-	Jobs   []JobResponse  `json:"jobs"`
+	TaskID string        `json:"task_id"`
+	Status string        `json:"status"`
+	Jobs   []JobResponse `json:"jobs"`
 }
 
 // GetTaskResult calls GET /v1/tasks/{id}/result (requires auth).

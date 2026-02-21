@@ -273,7 +273,13 @@ func TestRunAuthLogin_ConfigPathFails(t *testing.T) {
 	authLoginPassword = "p"
 	old := getDefaultConfigPath
 	getDefaultConfigPath = func() (string, error) { return "", errors.New("injected") }
-	defer func() { configPath = ""; cfg = nil; authLoginHandle = ""; authLoginPassword = ""; getDefaultConfigPath = old }()
+	defer func() {
+		configPath = ""
+		cfg = nil
+		authLoginHandle = ""
+		authLoginPassword = ""
+		getDefaultConfigPath = old
+	}()
 	if err := runAuthLogin(nil, nil); err == nil {
 		t.Fatal("expected config path error")
 	}

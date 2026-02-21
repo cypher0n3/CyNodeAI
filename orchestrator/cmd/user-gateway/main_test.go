@@ -206,4 +206,3 @@ func TestRunMainWithStore_RunFails(t *testing.T) {
 		t.Errorf("runMainWithStore when run fails: got %d", code)
 	}
 }
-

@@ -17,12 +17,12 @@ import (
 )
 
 const (
-	postgresTestDSNEnv     = "POSTGRES_TEST_DSN"
-	skipTestcontainersEnv  = "SKIP_TESTCONTAINERS"
-	bddTCSetupTimeout      = 90 * time.Second
-	bddTCWaitTimeout       = 60 * time.Second
-	bddTCHardTimeout       = bddTCSetupTimeout + 15*time.Second
-	bddTCTerminateTimeout  = 15 * time.Second
+	postgresTestDSNEnv    = "POSTGRES_TEST_DSN"
+	skipTestcontainersEnv = "SKIP_TESTCONTAINERS"
+	bddTCSetupTimeout     = 90 * time.Second
+	bddTCWaitTimeout      = 60 * time.Second
+	bddTCHardTimeout      = bddTCSetupTimeout + 15*time.Second
+	bddTCTerminateTimeout = 15 * time.Second
 )
 
 func setupRootlessPodmanHost() {
