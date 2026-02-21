@@ -460,6 +460,41 @@ func TestClient_GetTaskLogs_NotFound(t *testing.T) {
 	}
 }
 
+func TestClient_Chat_Success(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/chat" || r.Method != http.MethodPost {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		var req ChatRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		jsonHandler(http.StatusOK, ChatResponse{Response: "echo: " + req.Message})(w, r)
+	}))
+	defer server.Close()
+	client := NewClient(server.URL)
+	client.SetToken("tok")
+	resp, err := client.Chat("hello")
+	if err != nil {
+		t.Fatalf("Chat: %v", err)
+	}
+	if resp.Response != "echo: hello" {
+		t.Errorf("response = %q", resp.Response)
+	}
+}
+
+func TestClient_Chat_Unauthorized(t *testing.T) {
+	server := httptest.NewServer(jsonHandler(http.StatusUnauthorized, ProblemDetails{Detail: "expired", Status: 401}))
+	defer server.Close()
+	client := NewClient(server.URL)
+	_, err := client.Chat("hi")
+	if err == nil {
+		t.Fatal("expected error")
+	}
+}
+
 func TestClient_GetBytes_Success(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")

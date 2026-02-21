@@ -10,6 +10,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net/url"
 	"os"
 	"path/filepath"
 	"testing"
@@ -41,6 +42,25 @@ func setupRootlessPodmanHost() {
 // Prevents CI from hanging indefinitely if Podman/testcontainers blocks.
 const testcontainersSetupTimeout = 90 * time.Second
 
+// dsnForceIPv4 rewrites a postgres DSN so the host is 127.0.0.1 instead of localhost,
+// avoiding "connection reset by peer" when Podman only forwards IPv4.
+func dsnForceIPv4(dsn string) string {
+	u, err := url.Parse(dsn)
+	if err != nil {
+		return dsn
+	}
+	host := u.Hostname()
+	if host == "localhost" || host == "::1" {
+		port := u.Port()
+		if port == "" {
+			port = "5432"
+		}
+		u.Host = "127.0.0.1:" + port
+		return u.String()
+	}
+	return dsn
+}
+
 // runTestcontainersSetup starts Postgres via testcontainers and waits for it.
 // On success returns (container, true) with integrationEnv set. On failure logs to stderr and returns (container or nil, false).
 func runTestcontainersSetup(ctx context.Context) (*postgres.PostgresContainer, bool) {
@@ -52,6 +72,7 @@ func runTestcontainersSetup(ctx context.Context) (*postgres.PostgresContainer, b
 		postgres.WithDatabase("cynodeai"),
 		postgres.WithUsername("cynodeai"),
 		postgres.WithPassword("cynodeai-test"),
+		postgres.BasicWaitStrategies(), // wait for "ready to accept connections" (2x) and port before considering ready
 	)
 	if err != nil {
 		writeTestcontainersErr(setupCtx, "postgres.Run failed: "+err.Error())
@@ -61,6 +82,12 @@ func runTestcontainersSetup(ctx context.Context) (*postgres.PostgresContainer, b
 	if err != nil {
 		writeTestcontainersErr(setupCtx, "ConnectionString failed: "+err.Error())
 		return container, false
+	}
+	connStr = dsnForceIPv4(connStr)
+	select {
+	case <-setupCtx.Done():
+		return container, false
+	case <-time.After(3 * time.Second):
 	}
 	_ = os.Setenv(integrationEnv, connStr)
 	if err := waitForPostgres(setupCtx, connStr, 60*time.Second); err != nil {

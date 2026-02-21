@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"os"
 	"strings"
-	"time"
 
 	"github.com/cypher0n3/cynodeai/cynork/internal/exit"
 	"github.com/cypher0n3/cynodeai/cynork/internal/gateway"
@@ -14,8 +13,8 @@ import (
 
 var chatCmd = &cobra.Command{
 	Use:   "chat",
-	Short: "Interactive chat with the Project Manager (create task + poll result per message)",
-	Long:  "Reads lines from stdin; /exit or /quit or EOF exits. Each message is sent as a task and the result is printed when terminal. No token yields exit 3.",
+	Short: "Interactive chat with the Project Manager (POST /v1/chat)",
+	Long:  "Reads lines from stdin; /exit or /quit or EOF exits. Each message is sent via POST /v1/chat. No token yields exit 3.",
 	RunE:  runChat,
 }
 
@@ -42,35 +41,12 @@ func runChat(_ *cobra.Command, _ []string) error {
 		if line == "/exit" || line == "/quit" {
 			return nil
 		}
-		result, err := sendMessageAndPoll(client, line)
+		resp, err := client.Chat(line)
 		if err != nil {
-			return err
+			return exitFromGatewayErr(err)
 		}
-		printJobResults(result)
-	}
-}
-
-func sendMessageAndPoll(client *gateway.Client, message string) (*gateway.TaskResultResponse, error) {
-	task, err := client.CreateTask(gateway.CreateTaskRequest{Prompt: message})
-	if err != nil {
-		return nil, exitFromGatewayErr(err)
-	}
-	for {
-		result, err := client.GetTaskResult(task.ResolveTaskID())
-		if err != nil {
-			return nil, exitFromGatewayErr(err)
-		}
-		if terminalTaskStatuses[result.Status] {
-			return result, nil
-		}
-		time.Sleep(2 * time.Second)
-	}
-}
-
-func printJobResults(result *gateway.TaskResultResponse) {
-	for _, j := range result.Jobs {
-		if j.Result != nil {
-			fmt.Println(*j.Result)
+		if resp.Response != "" {
+			fmt.Println(resp.Response)
 		}
 	}
 }

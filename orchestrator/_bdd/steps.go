@@ -54,6 +54,8 @@ type testState struct {
 	workerRequestBody  []byte // captured so we can inspect after handler returns (Body may be closed)
 	workerToken        string
 	lastTaskResultBody []byte
+	// Mock inference server for Chat scenario (POST /api/generate); closed in After
+	inferenceServer *httptest.Server
 }
 
 func getState(ctx context.Context) *testState {
@@ -87,7 +89,22 @@ func InitializeOrchestratorSuite(sc *godog.ScenarioContext, state *testState) {
 		rateLimiter := auth.NewRateLimiter(cfg.RateLimitPerMinute, time.Minute)
 		authHandler := handlers.NewAuthHandler(db, jwtManager, rateLimiter, nil)
 		userHandler := handlers.NewUserHandler(db, nil)
-		taskHandler := handlers.NewTaskHandler(db, nil, "", "")
+		// Enable mock inference only for Chat scenario so Chat returns immediately; other scenarios get queued tasks.
+		var inferenceURL, inferenceModel string
+		if s.Name == "Chat returns model response" {
+			inferenceServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.URL.Path != "/api/generate" || r.Method != http.MethodPost {
+					w.WriteHeader(http.StatusNotFound)
+					return
+				}
+				w.Header().Set("Content-Type", "application/json")
+				_ = json.NewEncoder(w).Encode(map[string]interface{}{"response": "Hello from model", "done": true})
+			}))
+			state.inferenceServer = inferenceServer
+			inferenceURL = inferenceServer.URL
+			inferenceModel = "tinyllama"
+		}
+		taskHandler := handlers.NewTaskHandler(db, nil, inferenceURL, inferenceModel)
 		nodeHandler := handlers.NewNodeHandler(db, jwtManager, cfg.NodeRegistrationPSK, cfg.OrchestratorPublicURL, cfg.WorkerAPIBearerToken, cfg.WorkerAPITargetURL, nil)
 		authMiddleware := middleware.NewAuthMiddleware(jwtManager, nil)
 
@@ -125,6 +142,10 @@ func InitializeOrchestratorSuite(sc *godog.ScenarioContext, state *testState) {
 	})
 
 	sc.After(func(ctx context.Context, s *godog.Scenario, err error) (context.Context, error) {
+		if state.inferenceServer != nil {
+			state.inferenceServer.Close()
+			state.inferenceServer = nil
+		}
 		if state.workerServer != nil {
 			state.workerServer.Close()
 			state.workerServer = nil
@@ -657,34 +678,6 @@ func RegisterOrchestratorSteps(sc *godog.ScenarioContext, state *testState) {
 		st.taskID = out.TaskID
 		return nil
 	})
-	sc.Step(`^I create a task with command "([^"]*)"$`, func(ctx context.Context, cmd string) error {
-		st := getState(ctx)
-		if st == nil || st.server == nil {
-			return godog.ErrSkip
-		}
-		// Inference is the default for interpreted tasks; no user flag.
-		body, _ := json.Marshal(map[string]any{"prompt": cmd, "use_inference": true})
-		req, _ := http.NewRequest("POST", st.server.URL+"/v1/tasks", bytes.NewReader(body))
-		req.Header.Set("Content-Type", "application/json")
-		req.Header.Set("Authorization", "Bearer "+st.accessToken)
-		resp, err := http.DefaultClient.Do(req)
-		if err != nil {
-			return err
-		}
-		defer resp.Body.Close()
-		if resp.StatusCode != http.StatusCreated {
-			return fmt.Errorf("create task returned %d", resp.StatusCode)
-		}
-		var out struct {
-			TaskID string `json:"task_id"`
-			Status string `json:"status"`
-		}
-		if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
-			return err
-		}
-		st.taskID = out.TaskID
-		return nil
-	})
 	sc.Step(`^I create a task with use_inference and command "([^"]*)"$`, func(ctx context.Context, cmd string) error {
 		st := getState(ctx)
 		if st == nil || st.server == nil {
@@ -717,7 +710,8 @@ func RegisterOrchestratorSteps(sc *godog.ScenarioContext, state *testState) {
 		if st == nil || st.server == nil {
 			return godog.ErrSkip
 		}
-		body, _ := json.Marshal(map[string]string{"prompt": cmd})
+		// input_mode commands so task is queued for dispatcher (no orchestrator inference).
+		body, _ := json.Marshal(map[string]string{"prompt": cmd, "input_mode": "commands"})
 		req, _ := http.NewRequest("POST", st.server.URL+"/v1/tasks", bytes.NewReader(body))
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("Authorization", "Bearer "+st.accessToken)
