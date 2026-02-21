@@ -67,8 +67,8 @@ func TestBuildProxyRunArgs(t *testing.T) {
 
 func TestBuildSandboxRunArgsForPod(t *testing.T) {
 	req := &workerapi.RunJobRequest{
-		TaskID: "t1",
-		JobID:  "j1",
+		TaskID:  "t1",
+		JobID:   "j1",
 		Sandbox: workerapi.SandboxSpec{Command: []string{"echo", "hi"}, Image: "alpine"},
 	}
 	env := map[string]string{"CYNODE_TASK_ID": "t1", "CYNODE_JOB_ID": "j1", "CYNODE_WORKSPACE_DIR": "/workspace", envOllamaBaseURL: ollamaBaseURLInPod}

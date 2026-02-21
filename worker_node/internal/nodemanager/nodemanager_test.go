@@ -17,8 +17,8 @@ import (
 )
 
 const (
-	pathNodesRegister = "/v1/nodes/register"
-	pathNodesConfig   = "/v1/nodes/config"
+	pathNodesRegister   = "/v1/nodes/register"
+	pathNodesConfig     = "/v1/nodes/config"
 	pathNodesCapability = "/v1/nodes/capability"
 )
 
@@ -448,17 +448,17 @@ func TestRunContextCancelledAfterRegister(t *testing.T) {
 				Orchestrator: nodepayloads.BootstrapOrchestrator{
 					Endpoints: nodepayloads.BootstrapEndpoints{
 						NodeReportURL: srv.URL + "/cap",
-NodeConfigURL: srv.URL + pathNodesConfig,
+						NodeConfigURL: srv.URL + pathNodesConfig,
+					},
 				},
-			},
-			Auth: nodepayloads.BootstrapAuth{NodeJWT: "j", ExpiresAt: "2026-01-01T00:00:00Z"},
-		})
-		return
-	}
-	if r.URL.Path == pathNodesConfig {
-		configHandler("x")(w, r)
-	}
-}))
+				Auth: nodepayloads.BootstrapAuth{NodeJWT: "j", ExpiresAt: "2026-01-01T00:00:00Z"},
+			})
+			return
+		}
+		if r.URL.Path == pathNodesConfig {
+			configHandler("x")(w, r)
+		}
+	}))
 	defer srv.Close()
 
 	cfg := &Config{

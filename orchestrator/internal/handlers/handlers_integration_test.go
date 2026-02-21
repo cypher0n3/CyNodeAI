@@ -21,8 +21,8 @@ import (
 func TestTaskHandler_CreateTaskSuccess(t *testing.T) {
 	// Test the JSON response structure
 	resp := TaskResponse{
-		ID:        uuid.New().String(),
-		Status:    models.TaskStatusPending,
+		TaskID:    uuid.New().String(),
+		Status:    "queued",
 		Prompt:    ptr("test prompt"),
 		CreatedAt: time.Now().UTC(),
 		UpdatedAt: time.Now().UTC(),
@@ -38,8 +38,8 @@ func TestTaskHandler_CreateTaskSuccess(t *testing.T) {
 		t.Fatalf("failed to unmarshal TaskResponse: %v", err)
 	}
 
-	if parsed.Status != models.TaskStatusPending {
-		t.Errorf("expected status %s, got %s", models.TaskStatusPending, parsed.Status)
+	if parsed.Status != "queued" {
+		t.Errorf("expected status queued, got %s", parsed.Status)
 	}
 }
 
@@ -374,8 +374,8 @@ func TestValidateLoginCredentialsStructure(t *testing.T) {
 func TestTaskResponseWithSummary(t *testing.T) {
 	summary := "Task completed successfully"
 	resp := TaskResponse{
-		ID:        uuid.New().String(),
-		Status:    models.TaskStatusCompleted,
+		TaskID:    uuid.New().String(),
+		Status:    "completed",
 		Prompt:    ptr("test prompt"),
 		Summary:   &summary,
 		CreatedAt: time.Now(),

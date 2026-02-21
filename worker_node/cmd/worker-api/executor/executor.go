@@ -26,12 +26,12 @@ const (
 
 // Executor executes sandbox jobs.
 type Executor struct {
-	runtime                 string   // docker or podman
-	defaultTimeout          time.Duration
-	maxOutputBytes          int
-	ollamaUpstreamURL       string   // when set with inferenceProxyImage, jobs with UseInference run in pod with proxy
-	inferenceProxyImage     string
-	inferenceProxyCommand   []string // optional; when set, appended to proxy container run (e.g. ["sleep","60"] for tests)
+	runtime               string // docker or podman
+	defaultTimeout        time.Duration
+	maxOutputBytes        int
+	ollamaUpstreamURL     string // when set with inferenceProxyImage, jobs with UseInference run in pod with proxy
+	inferenceProxyImage   string
+	inferenceProxyCommand []string // optional; when set, appended to proxy container run (e.g. ["sleep","60"] for tests)
 }
 
 // New creates a new job executor. ollamaUpstreamURL and inferenceProxyImage are optional;

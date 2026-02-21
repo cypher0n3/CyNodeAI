@@ -4,8 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -18,10 +20,10 @@ import (
 
 // TaskHandler handles task endpoints.
 type TaskHandler struct {
-	db              database.Store
-	logger          *slog.Logger
-	inferenceURL    string
-	inferenceModel  string
+	db             database.Store
+	logger         *slog.Logger
+	inferenceURL   string
+	inferenceModel string
 }
 
 // NewTaskHandler creates a new task handler. inferenceURL and inferenceModel are optional; when set, prompt-mode tasks call the model directly so prompt→model MUST work.
@@ -48,14 +50,27 @@ type CreateTaskRequest struct {
 	InputMode    string `json:"input_mode,omitempty"`
 }
 
-// TaskResponse represents task data in responses.
+// TaskResponse represents task data in responses (CLI spec: task_id, status, optional task_name).
 type TaskResponse struct {
-	ID        string    `json:"id"`
+	TaskID    string    `json:"task_id"`
 	Status    string    `json:"status"`
+	TaskName  *string   `json:"task_name,omitempty"`
 	Prompt    *string   `json:"prompt,omitempty"`
 	Summary   *string   `json:"summary,omitempty"`
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
+}
+
+// taskStatusToSpec maps internal task status to CLI spec enum (queued, running, completed, failed, canceled).
+func taskStatusToSpec(status string) string {
+	switch status {
+	case models.TaskStatusPending:
+		return "queued"
+	case models.TaskStatusCancelled:
+		return "canceled"
+	default:
+		return status
+	}
 }
 
 // CreateTask handles POST /v1/tasks.
@@ -92,8 +107,8 @@ func (h *TaskHandler) CreateTask(w http.ResponseWriter, r *http.Request) {
 		if inferErr == nil {
 			_ = job // job already completed
 			WriteJSON(w, http.StatusCreated, TaskResponse{
-				ID:        task.ID.String(),
-				Status:    models.TaskStatusCompleted,
+				TaskID:    task.ID.String(),
+				Status:    taskStatusToSpec(models.TaskStatusCompleted),
 				Prompt:    task.Prompt,
 				CreatedAt: task.CreatedAt,
 				UpdatedAt: task.UpdatedAt,
@@ -122,8 +137,8 @@ func (h *TaskHandler) CreateTask(w http.ResponseWriter, r *http.Request) {
 	}
 
 	WriteJSON(w, http.StatusCreated, TaskResponse{
-		ID:        task.ID.String(),
-		Status:    task.Status,
+		TaskID:    task.ID.String(),
+		Status:    taskStatusToSpec(task.Status),
 		Prompt:    task.Prompt,
 		CreatedAt: task.CreatedAt,
 		UpdatedAt: task.UpdatedAt,
@@ -201,10 +216,10 @@ func marshalJobPayload(prompt string, useInference bool, inputMode string) (stri
 	// Stand-in: we dispatch a sandbox job that calls the model with CYNODE_PROMPT; use_inference always true.
 	if inputMode == InputModePrompt {
 		obj := map[string]any{
-			"image":          "python:alpine",
-			"command":        []string{"python3", "-c", promptModeModelCommand},
-			"env":            map[string]string{"CYNODE_PROMPT": prompt},
-			"use_inference":  true, // always true for prompt mode
+			"image":         "python:alpine",
+			"command":       []string{"python3", "-c", promptModeModelCommand},
+			"env":           map[string]string{"CYNODE_PROMPT": prompt},
+			"use_inference": true, // always true for prompt mode
 		}
 		b, err := json.Marshal(obj)
 		if err != nil {
@@ -230,6 +245,7 @@ func marshalJobPayload(prompt string, useInference bool, inputMode string) (stri
 // GetTask handles GET /v1/tasks/{id}.
 func (h *TaskHandler) GetTask(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
+	userID := getUserIDFromContext(ctx)
 	taskIDStr := r.PathValue("id")
 
 	taskID, err := uuid.Parse(taskIDStr)
@@ -248,10 +264,15 @@ func (h *TaskHandler) GetTask(w http.ResponseWriter, r *http.Request) {
 		WriteInternalError(w, "Failed to get task")
 		return
 	}
+	if task.CreatedBy == nil || userID == nil || *task.CreatedBy != *userID {
+		WriteForbidden(w, "Not task owner")
+		return
+	}
 
 	WriteJSON(w, http.StatusOK, TaskResponse{
-		ID:        task.ID.String(),
-		Status:    task.Status,
+		TaskID:    task.ID.String(),
+		Status:    taskStatusToSpec(task.Status),
+		TaskName:  task.Summary,
 		Prompt:    task.Prompt,
 		Summary:   task.Summary,
 		CreatedAt: task.CreatedAt,
@@ -278,6 +299,7 @@ type JobResponse struct {
 // GetTaskResult handles GET /v1/tasks/{id}/result.
 func (h *TaskHandler) GetTaskResult(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
+	userID := getUserIDFromContext(ctx)
 	taskIDStr := r.PathValue("id")
 
 	taskID, err := uuid.Parse(taskIDStr)
@@ -294,6 +316,10 @@ func (h *TaskHandler) GetTaskResult(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		h.logger.Error("get task", "error", err)
 		WriteInternalError(w, "Failed to get task")
+		return
+	}
+	if task.CreatedBy == nil || userID == nil || *task.CreatedBy != *userID {
+		WriteForbidden(w, "Not task owner")
 		return
 	}
 
@@ -317,7 +343,299 @@ func (h *TaskHandler) GetTaskResult(w http.ResponseWriter, r *http.Request) {
 
 	WriteJSON(w, http.StatusOK, TaskResultResponse{
 		TaskID: task.ID.String(),
-		Status: task.Status,
+		Status: taskStatusToSpec(task.Status),
 		Jobs:   jobResponses,
 	})
+}
+
+// ListTasksRequest holds query params for GET /v1/tasks.
+type ListTasksRequest struct {
+	Limit  int    // default 50, min 1, max 200
+	Offset int    // for pagination
+	Status string // optional filter: queued|running|completed|failed|canceled
+}
+
+// ListTasksResponse is the response for GET /v1/tasks.
+type ListTasksResponse struct {
+	Tasks      []TaskResponse `json:"tasks"`
+	NextOffset *int           `json:"next_offset,omitempty"`
+}
+
+// ListTasks handles GET /v1/tasks.
+func (h *TaskHandler) ListTasks(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	userID := getUserIDFromContext(ctx)
+	if userID == nil {
+		WriteUnauthorized(w, "Authentication required")
+		return
+	}
+	limit := 50
+	if l := r.URL.Query().Get("limit"); l != "" {
+		if n, err := parseInt(l, 1, 200); err != nil {
+			WriteBadRequest(w, "Invalid limit")
+			return
+		} else {
+			limit = n
+		}
+	}
+	offset := 0
+	if o := r.URL.Query().Get("offset"); o != "" {
+		if n, err := parseInt(o, 0, 1<<31-1); err != nil {
+			WriteBadRequest(w, "Invalid offset")
+			return
+		} else {
+			offset = n
+		}
+	}
+	statusFilter := r.URL.Query().Get("status")
+
+	tasks, err := h.db.ListTasksByUser(ctx, *userID, limit+1, offset)
+	if err != nil {
+		h.logger.Error("list tasks", "error", err)
+		WriteInternalError(w, "Failed to list tasks")
+		return
+	}
+	hasMore := len(tasks) > limit
+	if hasMore {
+		tasks = tasks[:limit]
+	}
+	out := make([]TaskResponse, 0, len(tasks))
+	for _, t := range tasks {
+		if statusFilter != "" && taskStatusToSpec(t.Status) != statusFilter {
+			continue
+		}
+		out = append(out, TaskResponse{
+			TaskID:    t.ID.String(),
+			Status:    taskStatusToSpec(t.Status),
+			TaskName:  t.Summary,
+			Prompt:    t.Prompt,
+			Summary:   t.Summary,
+			CreatedAt: t.CreatedAt,
+			UpdatedAt: t.UpdatedAt,
+		})
+	}
+	resp := ListTasksResponse{Tasks: out}
+	if hasMore {
+		next := offset + limit
+		resp.NextOffset = &next
+	}
+	WriteJSON(w, http.StatusOK, resp)
+}
+
+func parseInt(s string, min, max int) (int, error) {
+	var n int
+	if _, err := fmt.Sscanf(s, "%d", &n); err != nil {
+		return 0, err
+	}
+	if n < min || n > max {
+		return 0, errors.New("out of range")
+	}
+	return n, nil
+}
+
+// CancelTaskResponse is the response for POST /v1/tasks/{id}/cancel.
+type CancelTaskResponse struct {
+	TaskID   string `json:"task_id"`
+	Canceled bool   `json:"canceled"`
+}
+
+// CancelTask handles POST /v1/tasks/{id}/cancel.
+func (h *TaskHandler) CancelTask(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	userID := getUserIDFromContext(ctx)
+	taskIDStr := r.PathValue("id")
+	taskID, err := uuid.Parse(taskIDStr)
+	if err != nil {
+		WriteBadRequest(w, "Invalid task ID")
+		return
+	}
+	task, err := h.db.GetTaskByID(ctx, taskID)
+	if errors.Is(err, database.ErrNotFound) {
+		WriteNotFound(w, "Task not found")
+		return
+	}
+	if err != nil {
+		h.logger.Error("get task", "error", err)
+		WriteInternalError(w, "Failed to get task")
+		return
+	}
+	if task.CreatedBy == nil || userID == nil || *task.CreatedBy != *userID {
+		WriteForbidden(w, "Not task owner")
+		return
+	}
+	if err := h.db.UpdateTaskStatus(ctx, taskID, models.TaskStatusCancelled); err != nil {
+		h.logger.Error("update task status", "error", err)
+		WriteInternalError(w, "Failed to cancel task")
+		return
+	}
+	jobs, err := h.db.GetJobsByTaskID(ctx, taskID)
+	if err != nil {
+		h.logger.Error("get jobs", "error", err)
+		WriteInternalError(w, "Failed to cancel task")
+		return
+	}
+	for _, j := range jobs {
+		if j.Status != models.JobStatusCompleted && j.Status != models.JobStatusFailed && j.Status != models.JobStatusCancelled {
+			_ = h.db.UpdateJobStatus(ctx, j.ID, models.JobStatusCancelled)
+		}
+	}
+	WriteJSON(w, http.StatusOK, CancelTaskResponse{TaskID: taskID.String(), Canceled: true})
+}
+
+// GetTaskLogsResponse is the response for GET /v1/tasks/{id}/logs.
+type GetTaskLogsResponse struct {
+	TaskID string `json:"task_id"`
+	Stdout string `json:"stdout"`
+	Stderr string `json:"stderr"`
+}
+
+// GetTaskLogs handles GET /v1/tasks/{id}/logs.
+func (h *TaskHandler) GetTaskLogs(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	userID := getUserIDFromContext(ctx)
+	taskIDStr := r.PathValue("id")
+	taskID, err := uuid.Parse(taskIDStr)
+	if err != nil {
+		WriteBadRequest(w, "Invalid task ID")
+		return
+	}
+	task, err := h.db.GetTaskByID(ctx, taskID)
+	if errors.Is(err, database.ErrNotFound) {
+		WriteNotFound(w, "Task not found")
+		return
+	}
+	if err != nil {
+		h.logger.Error("get task", "error", err)
+		WriteInternalError(w, "Failed to get task")
+		return
+	}
+	if task.CreatedBy == nil || userID == nil || *task.CreatedBy != *userID {
+		WriteForbidden(w, "Not task owner")
+		return
+	}
+	stream := r.URL.Query().Get("stream")
+	if stream == "" {
+		stream = "all"
+	}
+	jobs, err := h.db.GetJobsByTaskID(ctx, taskID)
+	if err != nil {
+		h.logger.Error("get jobs", "error", err)
+		WriteInternalError(w, "Failed to get task logs")
+		return
+	}
+	var stdout, stderr strings.Builder
+	for _, job := range jobs {
+		if job.Result.Ptr() == nil {
+			continue
+		}
+		var res workerapi.RunJobResponse
+		if err := json.Unmarshal([]byte(*job.Result.Ptr()), &res); err != nil {
+			continue
+		}
+		if stream == "stdout" || stream == "all" {
+			stdout.WriteString(res.Stdout)
+		}
+		if stream == "stderr" || stream == "all" {
+			stderr.WriteString(res.Stderr)
+		}
+	}
+	WriteJSON(w, http.StatusOK, GetTaskLogsResponse{
+		TaskID: taskID.String(),
+		Stdout: stdout.String(),
+		Stderr: stderr.String(),
+	})
+}
+
+// ChatRequest is the request body for POST /v1/chat.
+type ChatRequest struct {
+	Message string `json:"message"`
+}
+
+// ChatResponse is the response for POST /v1/chat.
+type ChatResponse struct {
+	Response string `json:"response"`
+}
+
+// Chat handles POST /v1/chat. Creates a task with message as prompt, waits for terminal status, returns response from job result.
+func (h *TaskHandler) Chat(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	userID := getUserIDFromContext(ctx)
+	if userID == nil {
+		WriteUnauthorized(w, "Authentication required")
+		return
+	}
+	var req ChatRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		WriteBadRequest(w, "Invalid request body")
+		return
+	}
+	if strings.TrimSpace(req.Message) == "" {
+		WriteBadRequest(w, "Message is required")
+		return
+	}
+	task, err := h.db.CreateTask(ctx, userID, req.Message)
+	if err != nil {
+		h.logger.Error("chat create task", "error", err)
+		WriteInternalError(w, "Failed to process message")
+		return
+	}
+	if h.inferenceURL != "" {
+		job, err := h.createTaskWithOrchestratorInference(ctx, task.ID, req.Message)
+		if err == nil {
+			out := ""
+			if job.Result.Ptr() != nil {
+				var res workerapi.RunJobResponse
+				if json.Unmarshal([]byte(*job.Result.Ptr()), &res) == nil {
+					out = res.Stdout
+				}
+			}
+			WriteJSON(w, http.StatusOK, ChatResponse{Response: out})
+			return
+		}
+		h.logger.Warn("chat orchestrator inference failed, falling back to job", "error", err)
+	}
+	payload, err := marshalJobPayload(req.Message, true, InputModePrompt)
+	if err != nil {
+		h.logger.Error("chat marshal payload", "error", err)
+		WriteInternalError(w, "Failed to process message")
+		return
+	}
+	if _, err := h.db.CreateJob(ctx, task.ID, payload); err != nil {
+		h.logger.Error("chat create job", "error", err)
+		WriteInternalError(w, "Failed to process message")
+		return
+	}
+	for {
+		t, err := h.db.GetTaskByID(ctx, task.ID)
+		if err != nil {
+			h.logger.Error("chat get task", "error", err)
+			WriteInternalError(w, "Failed to process message")
+			return
+		}
+		switch t.Status {
+		case models.TaskStatusCompleted, models.TaskStatusFailed, models.TaskStatusCancelled:
+			jobs, err := h.db.GetJobsByTaskID(ctx, task.ID)
+			if err != nil {
+				WriteInternalError(w, "Failed to get result")
+				return
+			}
+			out := ""
+			for _, j := range jobs {
+				if j.Result.Ptr() != nil {
+					var res workerapi.RunJobResponse
+					if json.Unmarshal([]byte(*j.Result.Ptr()), &res) == nil {
+						out += res.Stdout
+					}
+				}
+			}
+			WriteJSON(w, http.StatusOK, ChatResponse{Response: out})
+			return
+		}
+		select {
+		case <-ctx.Done():
+			WriteInternalError(w, "Request cancelled")
+			return
+		case <-time.After(500 * time.Millisecond):
+		}
+	}
 }

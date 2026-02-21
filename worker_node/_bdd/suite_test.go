@@ -25,9 +25,9 @@ func TestWorkerNodeBDD(t *testing.T) {
 		},
 		Options: &godog.Options{
 			Format:   "pretty",
-			Paths:   []string{featurePath()},
+			Paths:    []string{featurePath()},
 			TestingT: t,
-			Tags:    "~@wip",
+			Tags:     "~@wip",
 		},
 	}
 	if suite.Run() != 0 {

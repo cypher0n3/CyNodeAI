@@ -47,9 +47,9 @@ func TestGetTaskOrResultInvalidID(t *testing.T) {
 func TestTaskResponseJSON(t *testing.T) {
 	prompt := "test prompt"
 	var parsed TaskResponse
-	roundTripJSON(t, TaskResponse{ID: "test-id", Status: "pending", Prompt: &prompt}, &parsed)
-	if parsed.ID != "test-id" || parsed.Status != "pending" {
-		t.Errorf("got ID %q status %q", parsed.ID, parsed.Status)
+	roundTripJSON(t, TaskResponse{TaskID: "test-id", Status: "queued", Prompt: &prompt}, &parsed)
+	if parsed.TaskID != "test-id" || parsed.Status != "queued" {
+		t.Errorf("got TaskID %q status %q", parsed.TaskID, parsed.Status)
 	}
 }
 

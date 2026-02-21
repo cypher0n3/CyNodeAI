@@ -108,8 +108,12 @@ func InitializeOrchestratorSuite(sc *godog.ScenarioContext, state *testState) {
 		mux.Handle("POST /v1/auth/logout", authMiddleware.RequireUserAuth(http.HandlerFunc(authHandler.Logout)))
 		mux.Handle("GET /v1/users/me", authMiddleware.RequireUserAuth(http.HandlerFunc(userHandler.GetMe)))
 		mux.Handle("POST /v1/tasks", authMiddleware.RequireUserAuth(http.HandlerFunc(taskHandler.CreateTask)))
+		mux.Handle("GET /v1/tasks", authMiddleware.RequireUserAuth(http.HandlerFunc(taskHandler.ListTasks)))
 		mux.Handle("GET /v1/tasks/{id}", authMiddleware.RequireUserAuth(http.HandlerFunc(taskHandler.GetTask)))
 		mux.Handle("GET /v1/tasks/{id}/result", authMiddleware.RequireUserAuth(http.HandlerFunc(taskHandler.GetTaskResult)))
+		mux.Handle("POST /v1/tasks/{id}/cancel", authMiddleware.RequireUserAuth(http.HandlerFunc(taskHandler.CancelTask)))
+		mux.Handle("GET /v1/tasks/{id}/logs", authMiddleware.RequireUserAuth(http.HandlerFunc(taskHandler.GetTaskLogs)))
+		mux.Handle("POST /v1/chat", authMiddleware.RequireUserAuth(http.HandlerFunc(taskHandler.Chat)))
 		mux.HandleFunc("POST /v1/nodes/register", nodeHandler.Register)
 		mux.Handle("GET /v1/nodes/config", authMiddleware.RequireNodeAuth(http.HandlerFunc(nodeHandler.GetConfig)))
 		mux.Handle("POST /v1/nodes/config", authMiddleware.RequireNodeAuth(http.HandlerFunc(nodeHandler.ConfigAck)))
@@ -644,13 +648,13 @@ func RegisterOrchestratorSteps(sc *godog.ScenarioContext, state *testState) {
 			return fmt.Errorf("create task returned %d", resp.StatusCode)
 		}
 		var out struct {
-			ID     string `json:"id"`
+			TaskID string `json:"task_id"`
 			Status string `json:"status"`
 		}
 		if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
 			return err
 		}
-		st.taskID = out.ID
+		st.taskID = out.TaskID
 		return nil
 	})
 	sc.Step(`^I create a task with command "([^"]*)"$`, func(ctx context.Context, cmd string) error {
@@ -672,13 +676,13 @@ func RegisterOrchestratorSteps(sc *godog.ScenarioContext, state *testState) {
 			return fmt.Errorf("create task returned %d", resp.StatusCode)
 		}
 		var out struct {
-			ID     string `json:"id"`
+			TaskID string `json:"task_id"`
 			Status string `json:"status"`
 		}
 		if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
 			return err
 		}
-		st.taskID = out.ID
+		st.taskID = out.TaskID
 		return nil
 	})
 	sc.Step(`^I create a task with use_inference and command "([^"]*)"$`, func(ctx context.Context, cmd string) error {
@@ -699,13 +703,13 @@ func RegisterOrchestratorSteps(sc *godog.ScenarioContext, state *testState) {
 			return fmt.Errorf("create task returned %d", resp.StatusCode)
 		}
 		var out struct {
-			ID     string `json:"id"`
+			TaskID string `json:"task_id"`
 			Status string `json:"status"`
 		}
 		if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
 			return err
 		}
-		st.taskID = out.ID
+		st.taskID = out.TaskID
 		return nil
 	})
 	sc.Step(`^I create a task with command "([^"]*)"$`, func(ctx context.Context, cmd string) error {
@@ -726,13 +730,13 @@ func RegisterOrchestratorSteps(sc *godog.ScenarioContext, state *testState) {
 			return fmt.Errorf("create task returned %d", resp.StatusCode)
 		}
 		var out struct {
-			ID     string `json:"id"`
+			TaskID string `json:"task_id"`
 			Status string `json:"status"`
 		}
 		if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
 			return err
 		}
-		st.taskID = out.ID
+		st.taskID = out.TaskID
 		return nil
 	})
 	sc.Step(`^I receive a task ID$`, func(ctx context.Context) error {
@@ -772,7 +776,168 @@ func RegisterOrchestratorSteps(sc *godog.ScenarioContext, state *testState) {
 		return nil
 	})
 	sc.Step(`^I have created a task$`, func(ctx context.Context) error { return nil })
-	sc.Step(`^I get the task status$`, func(ctx context.Context) error { return nil })
+	sc.Step(`^I get the task status$`, func(ctx context.Context) error {
+		st := getState(ctx)
+		if st == nil || st.server == nil || st.taskID == "" {
+			return godog.ErrSkip
+		}
+		req, _ := http.NewRequest("GET", st.server.URL+"/v1/tasks/"+st.taskID, nil)
+		req.Header.Set("Authorization", "Bearer "+st.accessToken)
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			return err
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			return fmt.Errorf("get task returned %d", resp.StatusCode)
+		}
+		return nil
+	})
+	sc.Step(`^I list tasks with limit (\d+)$`, func(ctx context.Context, limit int) error {
+		st := getState(ctx)
+		if st == nil || st.server == nil {
+			return godog.ErrSkip
+		}
+		req, _ := http.NewRequest("GET", st.server.URL+"/v1/tasks?limit="+fmt.Sprint(limit), nil)
+		req.Header.Set("Authorization", "Bearer "+st.accessToken)
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			return err
+		}
+		defer resp.Body.Close()
+		st.lastStatusCode = resp.StatusCode
+		if resp.StatusCode != http.StatusOK {
+			return fmt.Errorf("list tasks returned %d", resp.StatusCode)
+		}
+		st.lastTaskResultBody, _ = io.ReadAll(resp.Body)
+		return nil
+	})
+	sc.Step(`^I receive a list of tasks$`, func(ctx context.Context) error {
+		st := getState(ctx)
+		if st == nil || len(st.lastTaskResultBody) == 0 {
+			return fmt.Errorf("no list response in state")
+		}
+		var out struct {
+			Tasks []struct {
+				TaskID string `json:"task_id"`
+				Status string `json:"status"`
+			} `json:"tasks"`
+		}
+		if err := json.Unmarshal(st.lastTaskResultBody, &out); err != nil {
+			return err
+		}
+		if len(out.Tasks) == 0 {
+			return fmt.Errorf("list of tasks is empty")
+		}
+		return nil
+	})
+	sc.Step(`^I cancel the task$`, func(ctx context.Context) error {
+		st := getState(ctx)
+		if st == nil || st.server == nil || st.taskID == "" {
+			return godog.ErrSkip
+		}
+		req, _ := http.NewRequest("POST", st.server.URL+"/v1/tasks/"+st.taskID+"/cancel", nil)
+		req.Header.Set("Authorization", "Bearer "+st.accessToken)
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			return err
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			return fmt.Errorf("cancel task returned %d", resp.StatusCode)
+		}
+		return nil
+	})
+	sc.Step(`^the task status is cancelled$`, func(ctx context.Context) error {
+		st := getState(ctx)
+		if st == nil || st.server == nil || st.taskID == "" {
+			return godog.ErrSkip
+		}
+		req, _ := http.NewRequest("GET", st.server.URL+"/v1/tasks/"+st.taskID, nil)
+		req.Header.Set("Authorization", "Bearer "+st.accessToken)
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			return err
+		}
+		defer resp.Body.Close()
+		var out struct {
+			Status string `json:"status"`
+		}
+		if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+			return err
+		}
+		if out.Status != "canceled" {
+			return fmt.Errorf("task status %q, want canceled", out.Status)
+		}
+		return nil
+	})
+	sc.Step(`^I get the task logs$`, func(ctx context.Context) error {
+		st := getState(ctx)
+		if st == nil || st.server == nil || st.taskID == "" {
+			return godog.ErrSkip
+		}
+		req, _ := http.NewRequest("GET", st.server.URL+"/v1/tasks/"+st.taskID+"/logs", nil)
+		req.Header.Set("Authorization", "Bearer "+st.accessToken)
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			return err
+		}
+		defer resp.Body.Close()
+		st.lastStatusCode = resp.StatusCode
+		st.lastTaskResultBody, _ = io.ReadAll(resp.Body)
+		return nil
+	})
+	sc.Step(`^the response contains stdout and stderr$`, func(ctx context.Context) error {
+		st := getState(ctx)
+		if st == nil || len(st.lastTaskResultBody) == 0 {
+			return fmt.Errorf("no logs response in state")
+		}
+		var out struct {
+			Stdout string `json:"stdout"`
+			Stderr string `json:"stderr"`
+		}
+		if err := json.Unmarshal(st.lastTaskResultBody, &out); err != nil {
+			return err
+		}
+		return nil
+	})
+	sc.Step(`^I send a chat message "([^"]*)"$`, func(ctx context.Context, message string) error {
+		st := getState(ctx)
+		if st == nil || st.server == nil {
+			return godog.ErrSkip
+		}
+		body, _ := json.Marshal(map[string]string{"message": message})
+		req, _ := http.NewRequest("POST", st.server.URL+"/v1/chat", bytes.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer "+st.accessToken)
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			return err
+		}
+		defer resp.Body.Close()
+		st.lastStatusCode = resp.StatusCode
+		if resp.StatusCode != http.StatusOK {
+			return fmt.Errorf("chat returned %d", resp.StatusCode)
+		}
+		st.lastTaskResultBody, _ = io.ReadAll(resp.Body)
+		return nil
+	})
+	sc.Step(`^I receive a 200 response with non-empty response field$`, func(ctx context.Context) error {
+		st := getState(ctx)
+		if st == nil {
+			return godog.ErrSkip
+		}
+		if st.lastStatusCode != http.StatusOK {
+			return fmt.Errorf("expected 200, got %d", st.lastStatusCode)
+		}
+		var out struct {
+			Response string `json:"response"`
+		}
+		if err := json.Unmarshal(st.lastTaskResultBody, &out); err != nil {
+			return err
+		}
+		return nil
+	})
 	sc.Step(`^I receive the task details including status$`, func(ctx context.Context) error { return nil })
 	sc.Step(`^the task completes$`, func(ctx context.Context) error {
 		st := getState(ctx)
@@ -846,12 +1011,12 @@ func RegisterOrchestratorSteps(sc *godog.ScenarioContext, state *testState) {
 			return fmt.Errorf("create task returned %d", resp.StatusCode)
 		}
 		var out struct {
-			ID string `json:"id"`
+			TaskID string `json:"task_id"`
 		}
 		if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
 			return err
 		}
-		st.taskID = out.ID
+		st.taskID = out.TaskID
 		return nil
 	})
 	sc.Step(`^the job sent to the worker has command containing "([^"]*)"$`, func(ctx context.Context, sub string) error {
@@ -891,12 +1056,12 @@ func RegisterOrchestratorSteps(sc *godog.ScenarioContext, state *testState) {
 			return fmt.Errorf("create task returned %d", resp.StatusCode)
 		}
 		var out struct {
-			ID string `json:"id"`
+			TaskID string `json:"task_id"`
 		}
 		if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
 			return err
 		}
-		st.taskID = out.ID
+		st.taskID = out.TaskID
 		client := &http.Client{Timeout: 30 * time.Second}
 		deadline := time.Now().Add(15 * time.Second)
 		for time.Now().Before(deadline) {

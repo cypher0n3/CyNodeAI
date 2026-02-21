@@ -25,11 +25,11 @@ func TestCynorkBDD(t *testing.T) {
 			InitializeCynorkSuite(sc, state)
 		},
 		Options: &godog.Options{
-			Format:    "pretty",
+			Format:   "pretty",
 			Paths:    []string{featurePath()},
-			TestingT:  t,
-			Tags:      "~@wip",
-			NoColors:  true,
+			TestingT: t,
+			Tags:     "~@wip",
+			NoColors: true,
 		},
 	}
 	if suite.Run() != 0 {

@@ -361,7 +361,7 @@ func RegisterWorkerNodeSteps(sc *godog.ScenarioContext, state *workerTestState) 
 			"job_id":  "bdd-job",
 			"sandbox": map[string]interface{}{
 				"image":          "alpine:latest",
-				"command":       []string{"sh", "-c", cmd},
+				"command":        []string{"sh", "-c", cmd},
 				"network_policy": networkPolicy,
 			},
 		})
