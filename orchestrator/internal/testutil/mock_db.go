@@ -387,6 +387,27 @@ func (m *MockDB) CreateJob(_ context.Context, taskID uuid.UUID, payload string) 
 	})
 }
 
+// CreateJobCompleted creates a job that is already completed (orchestrator-side inference).
+func (m *MockDB) CreateJobCompleted(_ context.Context, taskID, jobID uuid.UUID, result string) (*models.Job, error) {
+	return runWithLock(m, true, func() (*models.Job, error) {
+		now := time.Now().UTC()
+		emptyPayload := "{}"
+		job := &models.Job{
+			ID:        jobID,
+			TaskID:    taskID,
+			Status:    models.JobStatusCompleted,
+			Payload:   models.NewJSONBString(&emptyPayload),
+			Result:    models.NewJSONBString(&result),
+			EndedAt:   &now,
+			CreatedAt: now,
+			UpdatedAt: now,
+		}
+		m.Jobs[job.ID] = job
+		m.JobsByTask[taskID] = append(m.JobsByTask[taskID], job)
+		return job, nil
+	})
+}
+
 // GetJobByID retrieves a job by ID.
 func (m *MockDB) GetJobByID(_ context.Context, id uuid.UUID) (*models.Job, error) {
 	return getByKeyLocked(m, m.Jobs, id)

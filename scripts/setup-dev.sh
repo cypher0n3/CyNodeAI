@@ -459,6 +459,45 @@ run_e2e_test() {
         log_info "Skipping inference-in-sandbox test (INFERENCE_PROXY_IMAGE not set)"
     fi
 
+    # Test 5c: Prompt-mode task (natural-language prompt -> model output; orchestrator or sandbox path)
+    log_info "Test 5c: Create task with natural-language prompt and verify model output..."
+    PROMPT_TASK_RESPONSE=$(curl -s -X POST "$USER_API/v1/tasks" \
+        -H "Authorization: Bearer $ACCESS_TOKEN" \
+        -H "Content-Type: application/json" \
+        -d '{"prompt": "What model are you? Reply in one short sentence."}')
+    PROMPT_TASK_ID=$(echo "$PROMPT_TASK_RESPONSE" | jq -r '.id')
+    if [ "$PROMPT_TASK_ID" = "null" ] || [ -z "$PROMPT_TASK_ID" ]; then
+        log_error "Create prompt task failed: $PROMPT_TASK_RESPONSE"
+        return 1
+    fi
+    log_info "Prompt task created: $PROMPT_TASK_ID; polling for result (up to 90s)..."
+    PROMPT_STATUS=""
+    for _ in $(seq 1 18); do
+        sleep 5
+        PROMPT_RESULT=$(curl -s -X GET "$USER_API/v1/tasks/$PROMPT_TASK_ID/result" \
+            -H "Authorization: Bearer $ACCESS_TOKEN")
+        PROMPT_STATUS=$(echo "$PROMPT_RESULT" | jq -r '.status')
+        if [ "$PROMPT_STATUS" = "completed" ] || [ "$PROMPT_STATUS" = "failed" ]; then
+            break
+        fi
+    done
+    if [ "$PROMPT_STATUS" != "completed" ]; then
+        log_error "Prompt task did not complete: status=$PROMPT_STATUS result=$PROMPT_RESULT"
+        return 1
+    fi
+    # .jobs[0].result is the RunJobResponse JSON string; extract .stdout
+    PROMPT_STDOUT=$(echo "$PROMPT_RESULT" | jq -r '.jobs[0].result // empty' | jq -r '.stdout // empty')
+    if [ -z "$PROMPT_STDOUT" ] || [ "$PROMPT_STDOUT" = "(no response)" ]; then
+        log_error "Prompt task stdout missing or empty: got '$PROMPT_STDOUT'"
+        return 1
+    fi
+    # Reject pure whitespace
+    if [ "$(echo "$PROMPT_STDOUT" | tr -d '\n\r\t ')" = "" ]; then
+        log_error "Prompt task stdout is whitespace only: '$PROMPT_STDOUT'"
+        return 1
+    fi
+    log_info "Prompt test passed: model output (first 120 chars)= ${PROMPT_STDOUT:0:120}"
+
     # Test 6: Node registration (control-plane)
     log_info "Test 6: Node registration..."
     NODE_RESPONSE=$(curl -s -X POST "$CONTROL_PLANE_API/v1/nodes/register" \

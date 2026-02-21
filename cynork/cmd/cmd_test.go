@@ -158,6 +158,28 @@ func TestRunTaskResult_OK(t *testing.T) {
 	}
 }
 
+func TestRunTaskWatch_NoToken(t *testing.T) {
+	cfg = &config.Config{}
+	defer func() { cfg = nil }()
+	if err := runTaskWatch(nil, []string{"tid"}); err == nil {
+		t.Fatal("expected error")
+	}
+}
+
+func TestRunTaskWatch_ExitsOnTerminalStatus(t *testing.T) {
+	server := mockJSONServer(t, http.StatusOK, gateway.TaskResultResponse{
+		TaskID: "tid", Status: "completed",
+		Jobs: []gateway.JobResponse{{ID: "j1", Status: "completed", Result: strPtr("done")}},
+	})
+	defer server.Close()
+	cfg = &config.Config{GatewayURL: server.URL, Token: "tok"}
+	taskWatchNoClear = true
+	defer func() { cfg = nil; taskWatchNoClear = false }()
+	if err := runTaskWatch(nil, []string{"tid"}); err != nil {
+		t.Errorf("runTaskWatch: %v", err)
+	}
+}
+
 func TestRunAuthLogout(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.yaml")

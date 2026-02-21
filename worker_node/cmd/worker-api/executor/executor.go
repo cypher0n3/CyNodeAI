@@ -279,15 +279,16 @@ func sanitizePodName(jobID string) string {
 }
 
 // buildTaskEnv returns env for the sandbox: task context first, then request env.
-// Request env must not override CYNODE_* (no orchestrator secrets in sandbox).
+// Request env must not override worker-reserved CYNODE_* (task id, job id, workspace); other CYNODE_* from the request (e.g. CYNODE_PROMPT) are allowed.
 func (e *Executor) buildTaskEnv(req *workerapi.RunJobRequest, workspaceDirValue string) map[string]string {
 	out := map[string]string{
 		envTaskID:       req.TaskID,
 		envJobID:        req.JobID,
 		envWorkspaceDir: workspaceDirValue,
 	}
+	reserved := map[string]bool{envTaskID: true, envJobID: true, envWorkspaceDir: true}
 	for k, v := range req.Sandbox.Env {
-		if strings.HasPrefix(k, "CYNODE_") {
+		if reserved[k] {
 			continue
 		}
 		out[k] = v

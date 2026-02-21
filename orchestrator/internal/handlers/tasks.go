@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"log/slog"
@@ -9,22 +10,35 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/cypher0n3/cynodeai/go_shared_libs/contracts/workerapi"
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/database"
+	"github.com/cypher0n3/cynodeai/orchestrator/internal/inference"
+	"github.com/cypher0n3/cynodeai/orchestrator/internal/models"
 )
 
 // TaskHandler handles task endpoints.
 type TaskHandler struct {
-	db     database.Store
-	logger *slog.Logger
+	db              database.Store
+	logger          *slog.Logger
+	inferenceURL    string
+	inferenceModel  string
 }
 
-// NewTaskHandler creates a new task handler.
-func NewTaskHandler(db database.Store, logger *slog.Logger) *TaskHandler {
+// NewTaskHandler creates a new task handler. inferenceURL and inferenceModel are optional; when set, prompt-mode tasks call the model directly so prompt→model MUST work.
+func NewTaskHandler(db database.Store, logger *slog.Logger, inferenceURL, inferenceModel string) *TaskHandler {
+	if inferenceModel == "" {
+		inferenceModel = "tinyllama"
+	}
 	return &TaskHandler{
-		db:     db,
-		logger: logger,
+		db:             db,
+		logger:         logger,
+		inferenceURL:   inferenceURL,
+		inferenceModel: inferenceModel,
 	}
 }
+
+// InputModePrompt is the default: natural-language prompt goes to the PM model.
+const InputModePrompt = "prompt"
 
 // CreateTaskRequest represents task creation request.
 // InputMode: "prompt" (default) = interpret as natural language, use inference; "script" or "commands" = run as literal shell.
@@ -67,12 +81,35 @@ func (h *TaskHandler) CreateTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// MVP Phase 1: create a single queued job for the task.
 	inputMode := req.InputMode
 	if inputMode == "" {
-		inputMode = "prompt"
+		inputMode = InputModePrompt
 	}
-	payload, err := marshalJobPayload(req.Prompt, req.UseInference, inputMode)
+
+	// Prompt mode: send prompt to the model so it MUST work (MVP Phase 1). Prefer orchestrator-side inference when configured.
+	if inputMode == InputModePrompt && h.inferenceURL != "" {
+		job, inferErr := h.createTaskWithOrchestratorInference(ctx, task.ID, req.Prompt)
+		if inferErr == nil {
+			_ = job // job already completed
+			WriteJSON(w, http.StatusCreated, TaskResponse{
+				ID:        task.ID.String(),
+				Status:    models.TaskStatusCompleted,
+				Prompt:    task.Prompt,
+				CreatedAt: task.CreatedAt,
+				UpdatedAt: task.UpdatedAt,
+			})
+			return
+		}
+		// Fall back to sandbox job path on inference failure
+		h.logger.Warn("orchestrator inference failed, falling back to sandbox job", "error", inferErr)
+	}
+
+	// Create a single queued job (sandbox path).
+	useInference := req.UseInference
+	if inputMode == InputModePrompt {
+		useInference = true
+	}
+	payload, err := marshalJobPayload(req.Prompt, useInference, inputMode)
 	if err != nil {
 		h.logger.Error("marshal job payload", "error", err)
 		WriteInternalError(w, "Failed to create task job")
@@ -93,27 +130,81 @@ func (h *TaskHandler) CreateTask(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// createTaskWithOrchestratorInference calls the PM model with the prompt and stores the result as a completed job.
+// Returns the job and nil on success; on failure returns nil, error (caller may fall back to sandbox path).
+func (h *TaskHandler) createTaskWithOrchestratorInference(ctx context.Context, taskID uuid.UUID, prompt string) (*models.Job, error) {
+	response, err := inference.CallGenerate(ctx, nil, h.inferenceURL, h.inferenceModel, prompt)
+	if err != nil {
+		return nil, err
+	}
+	jobID := uuid.New()
+	now := time.Now().UTC()
+	nowStr := now.Format(time.RFC3339)
+	result := workerapi.RunJobResponse{
+		Version:   1,
+		TaskID:    taskID.String(),
+		JobID:     jobID.String(),
+		Status:    workerapi.StatusCompleted,
+		ExitCode:  0,
+		Stdout:    response,
+		Stderr:    "",
+		StartedAt: nowStr,
+		EndedAt:   nowStr,
+		Truncated: workerapi.TruncatedInfo{Stdout: false, Stderr: false},
+	}
+	resultJSON, err := json.Marshal(result)
+	if err != nil {
+		return nil, err
+	}
+	job, err := h.db.CreateJobCompleted(ctx, taskID, jobID, string(resultJSON))
+	if err != nil {
+		return nil, err
+	}
+	_ = h.db.UpdateTaskStatus(ctx, taskID, models.TaskStatusCompleted)
+	summary := response
+	if len(summary) > 200 {
+		summary = summary[:200]
+	}
+	_ = h.db.UpdateTaskSummary(ctx, taskID, summary)
+	return job, nil
+}
+
 // promptModeModelCommand is the fixed command for "prompt" input_mode: calls Ollama with CYNODE_PROMPT env, prints response or error.
+// Handles both single-JSON and NDJSON (streamed) responses from /api/generate.
 const promptModeModelCommand = `import os,sys,json,urllib.request
 u=os.environ.get('OLLAMA_BASE_URL','http://localhost:11434')+'/api/generate'
 p=os.environ.get('CYNODE_PROMPT','')
 try:
   r=urllib.request.urlopen(urllib.request.Request(u,data=json.dumps({'model':'tinyllama','prompt':p,'stream':False}).encode(),headers={'Content-Type':'application/json'}),timeout=120)
-  d=json.loads(r.read().decode())
-  out=d.get('response','')
-  if d.get('error'): out='[Ollama error] '+d.get('error','')
+  raw=r.read().decode()
+  out=''
+  err_msg=''
+  try:
+    d=json.loads(raw)
+    out=d.get('response','')
+    if d.get('error'): err_msg=d.get('error','')
+  except json.JSONDecodeError:
+    for line in raw.split('\n'):
+      line=line.strip()
+      if not line: continue
+      try: d=json.loads(line)
+      except json.JSONDecodeError: continue
+      if d.get('error'): err_msg=d.get('error','')
+      out+=d.get('response','')
+  if err_msg: out='[Ollama error] '+err_msg
   print(out or '(no response)')
 except Exception as e: print('[Ollama request failed]', str(e), file=sys.stderr); sys.exit(1)
 `
 
 func marshalJobPayload(prompt string, useInference bool, inputMode string) (string, error) {
-	// prompt = natural language, use inference by default; script/commands = literal shell (backward compat).
-	if inputMode == "prompt" {
+	// input_mode "prompt": prompt is intended for the PM model; PM decides (e.g. run in sandbox).
+	// Stand-in: we dispatch a sandbox job that calls the model with CYNODE_PROMPT; use_inference always true.
+	if inputMode == InputModePrompt {
 		obj := map[string]any{
 			"image":          "python:alpine",
 			"command":        []string{"python3", "-c", promptModeModelCommand},
 			"env":            map[string]string{"CYNODE_PROMPT": prompt},
-			"use_inference":  true,
+			"use_inference":  true, // always true for prompt mode
 		}
 		b, err := json.Marshal(obj)
 		if err != nil {

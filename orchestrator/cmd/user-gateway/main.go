@@ -60,7 +60,7 @@ func run(ctx context.Context, cfg *config.OrchestratorConfig, store database.Sto
 
 	authHandler := handlers.NewAuthHandler(store, jwtManager, rateLimiter, logger)
 	userHandler := handlers.NewUserHandler(store, logger)
-	taskHandler := handlers.NewTaskHandler(store, logger)
+	taskHandler := handlers.NewTaskHandler(store, logger, cfg.InferenceURL, cfg.InferenceModel)
 
 	authMiddleware := middleware.NewAuthMiddleware(jwtManager, logger)
 

@@ -176,6 +176,27 @@ func TestIntegration_CompleteJobRoundTrip(t *testing.T) {
 	}
 }
 
+func TestIntegration_CreateJobCompleted(t *testing.T) {
+	db, ctx := integrationDB(t)
+	task, _ := db.CreateTask(ctx, nil, "prompt-task")
+	jobID := uuid.New()
+	result := `{"version":1,"task_id":"` + task.ID.String() + `","job_id":"` + jobID.String() + `","status":"completed","stdout":"hi"}`
+	job, err := db.CreateJobCompleted(ctx, task.ID, jobID, result)
+	if err != nil {
+		t.Fatalf("CreateJobCompleted: %v", err)
+	}
+	if job.Status != models.JobStatusCompleted {
+		t.Errorf("status want completed got %s", job.Status)
+	}
+	if job.Result.Ptr() == nil || *job.Result.Ptr() != result {
+		t.Errorf("result not stored: got %v", job.Result.Ptr())
+	}
+	jobs, _ := db.GetJobsByTaskID(ctx, task.ID)
+	if len(jobs) != 1 || jobs[0].ID != jobID {
+		t.Errorf("GetJobsByTaskID: got %v", jobs)
+	}
+}
+
 func storeRoundTripCredentials(t *testing.T, db Store, ctx context.Context, userID uuid.UUID) {
 	t.Helper()
 	_, err := db.CreatePasswordCredential(ctx, userID, []byte("hash"), "argon2")

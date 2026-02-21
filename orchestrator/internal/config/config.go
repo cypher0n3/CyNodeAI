@@ -44,6 +44,10 @@ type OrchestratorConfig struct {
 
 	// Rate Limiting
 	RateLimitPerMinute int
+
+	// Inference (PM model): when set, prompt-mode tasks call this URL directly so prompt→model MUST work (MVP Phase 1).
+	InferenceURL   string // e.g. http://localhost:11434 or http://ollama:11434
+	InferenceModel string // e.g. tinyllama; default tinyllama
 }
 
 // NodeConfig holds node manager configuration.
@@ -91,6 +95,8 @@ func LoadOrchestratorConfig() *OrchestratorConfig {
 		WorkerAPITargetURL:    getEnv("WORKER_API_TARGET_URL", ""),
 		BootstrapAdminPassword: getEnv("BOOTSTRAP_ADMIN_PASSWORD", "admin123"),
 		RateLimitPerMinute:     getIntEnv("RATE_LIMIT_PER_MINUTE", 60),
+		InferenceURL:           getEnv("OLLAMA_BASE_URL", getEnv("INFERENCE_URL", "")),
+		InferenceModel:         getEnv("INFERENCE_MODEL", "tinyllama"),
 	}
 }
 

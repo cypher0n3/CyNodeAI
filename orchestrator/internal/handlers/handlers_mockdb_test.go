@@ -471,7 +471,7 @@ func TestTaskHandler_CreateTaskWithMockDB(t *testing.T) {
 	mockDB := testutil.NewMockDB()
 	logger := newTestLogger()
 
-	handler := NewTaskHandler(mockDB, logger)
+	handler := NewTaskHandler(mockDB, logger, "", "")
 
 	userID := uuid.New()
 	ctx := context.WithValue(context.Background(), contextKeyUserID, userID)
@@ -498,7 +498,7 @@ func TestTaskHandler_CreateTaskWithMockDB(t *testing.T) {
 func TestTaskHandler_CreateTaskWithUseInference_StoresUseInferenceInJobPayload(t *testing.T) {
 	mockDB := testutil.NewMockDB()
 	logger := newTestLogger()
-	handler := NewTaskHandler(mockDB, logger)
+	handler := NewTaskHandler(mockDB, logger, "", "")
 	userID := uuid.New()
 	ctx := context.WithValue(context.Background(), contextKeyUserID, userID)
 	body := CreateTaskRequest{Prompt: "echo hi", UseInference: true}
@@ -541,7 +541,7 @@ func TestTaskHandler_CreateTaskWithUseInference_StoresUseInferenceInJobPayload(t
 
 func TestTaskHandler_CreateTask_InputModePrompt_StoresPromptJobPayload(t *testing.T) {
 	mockDB := testutil.NewMockDB()
-	handler := NewTaskHandler(mockDB, newTestLogger())
+	handler := NewTaskHandler(mockDB, newTestLogger(), "", "")
 	userID := uuid.New()
 	ctx := context.WithValue(context.Background(), contextKeyUserID, userID)
 	body := CreateTaskRequest{Prompt: "What is 2+2?", InputMode: "prompt"}
@@ -576,9 +576,57 @@ func TestTaskHandler_CreateTask_InputModePrompt_StoresPromptJobPayload(t *testin
 	}
 }
 
+func TestTaskHandler_CreateTask_PromptMode_OrchestratorInference(t *testing.T) {
+	// Mock Ollama: return a valid generate response so prompt→model path completes.
+	mockOllama := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{"response": "I am tinyllama.", "done": true})
+	}))
+	defer mockOllama.Close()
+
+	mockDB := testutil.NewMockDB()
+	handler := NewTaskHandler(mockDB, newTestLogger(), mockOllama.URL, "tinyllama")
+	userID := uuid.New()
+	ctx := context.WithValue(context.Background(), contextKeyUserID, userID)
+	body := CreateTaskRequest{Prompt: "What model are you?", InputMode: InputModePrompt}
+	jsonBody, _ := json.Marshal(body)
+	req := httptest.NewRequest("POST", "/v1/tasks", bytes.NewBuffer(jsonBody)).WithContext(ctx)
+	rec := httptest.NewRecorder()
+	handler.CreateTask(rec, req)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d: %s", rec.Code, rec.Body.String())
+	}
+	var resp TaskResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if resp.Status != models.TaskStatusCompleted {
+		t.Errorf("expected status completed (orchestrator inference), got %s", resp.Status)
+	}
+	taskID, _ := uuid.Parse(resp.ID)
+	jobs, _ := mockDB.GetJobsByTaskID(ctx, taskID)
+	if len(jobs) != 1 {
+		t.Fatalf("expected 1 job, got %d", len(jobs))
+	}
+	if jobs[0].Status != models.JobStatusCompleted {
+		t.Errorf("job status want completed got %s", jobs[0].Status)
+	}
+	if jobs[0].Result.Ptr() == nil {
+		t.Fatal("job result empty")
+	}
+	var jobResult struct {
+		Stdout string `json:"stdout"`
+	}
+	if err := json.Unmarshal([]byte(*jobs[0].Result.Ptr()), &jobResult); err != nil {
+		t.Fatalf("unmarshal result: %v", err)
+	}
+	if jobResult.Stdout != "I am tinyllama." {
+		t.Errorf("stdout want 'I am tinyllama.' got %q", jobResult.Stdout)
+	}
+}
+
 func TestTaskHandler_CreateTask_InputModeCommands_StoresShellJobPayload(t *testing.T) {
 	mockDB := testutil.NewMockDB()
-	handler := NewTaskHandler(mockDB, newTestLogger())
+	handler := NewTaskHandler(mockDB, newTestLogger(), "", "")
 	userID := uuid.New()
 	ctx := context.WithValue(context.Background(), contextKeyUserID, userID)
 	body := CreateTaskRequest{Prompt: "echo hello", InputMode: "commands"}
@@ -613,7 +661,7 @@ func TestTaskHandler_CreateTaskDBError(t *testing.T) {
 	mockDB.ForceError = errors.New("database error")
 	logger := newTestLogger()
 
-	handler := NewTaskHandler(mockDB, logger)
+	handler := NewTaskHandler(mockDB, logger, "", "")
 
 	userID := uuid.New()
 	ctx := context.WithValue(context.Background(), contextKeyUserID, userID)
@@ -633,7 +681,7 @@ func TestTaskHandler_GetTaskSuccess(t *testing.T) {
 	mockDB := testutil.NewMockDB()
 	logger := newTestLogger()
 
-	handler := NewTaskHandler(mockDB, logger)
+	handler := NewTaskHandler(mockDB, logger, "", "")
 
 	prompt := testPrompt
 	task := &models.Task{
@@ -660,7 +708,7 @@ func TestTaskHandler_GetTaskNotFound(t *testing.T) {
 	mockDB := testutil.NewMockDB()
 	logger := newTestLogger()
 
-	handler := NewTaskHandler(mockDB, logger)
+	handler := NewTaskHandler(mockDB, logger, "", "")
 
 	taskID := uuid.New()
 	req := httptest.NewRequest("GET", "/v1/tasks/"+taskID.String(), http.NoBody)
@@ -679,7 +727,7 @@ func TestTaskHandler_GetTaskDBError(t *testing.T) {
 	mockDB.ForceError = errors.New("database error")
 	logger := newTestLogger()
 
-	handler := NewTaskHandler(mockDB, logger)
+	handler := NewTaskHandler(mockDB, logger, "", "")
 
 	taskID := uuid.New()
 	req := httptest.NewRequest("GET", "/v1/tasks/"+taskID.String(), http.NoBody)
@@ -697,7 +745,7 @@ func TestTaskHandler_GetTaskResultSuccess(t *testing.T) {
 	mockDB := testutil.NewMockDB()
 	logger := newTestLogger()
 
-	handler := NewTaskHandler(mockDB, logger)
+	handler := NewTaskHandler(mockDB, logger, "", "")
 
 	prompt := testPrompt
 	task := &models.Task{
@@ -747,7 +795,7 @@ func TestTaskHandler_GetTaskResultNotFound(t *testing.T) {
 	mockDB := testutil.NewMockDB()
 	logger := newTestLogger()
 
-	handler := NewTaskHandler(mockDB, logger)
+	handler := NewTaskHandler(mockDB, logger, "", "")
 
 	taskID := uuid.New()
 	req := httptest.NewRequest("GET", "/v1/tasks/"+taskID.String()+"/result", http.NoBody)
@@ -1393,7 +1441,7 @@ func TestTaskHandler_GetTaskResultJobsDBError(t *testing.T) {
 	}
 	mockDB.AddTask(task)
 
-	handler := NewTaskHandler(mockDB, logger)
+	handler := NewTaskHandler(mockDB, logger, "", "")
 
 	req := httptest.NewRequest("GET", "/v1/tasks/"+task.ID.String()+"/result", http.NoBody)
 	req.SetPathValue("id", task.ID.String())
@@ -1471,7 +1519,7 @@ func TestTaskHandler_GetTaskResultDBError(t *testing.T) {
 	mockDB.ForceError = errors.New("database error")
 	logger := newTestLogger()
 
-	handler := NewTaskHandler(mockDB, logger)
+	handler := NewTaskHandler(mockDB, logger, "", "")
 
 	taskID := uuid.New()
 	req := httptest.NewRequest("GET", "/v1/tasks/"+taskID.String()+"/result", http.NoBody)
@@ -1915,7 +1963,7 @@ func (m *createJobErrorStore) CreateJob(_ context.Context, _ uuid.UUID, _ string
 
 func TestTaskHandler_CreateTask_CreateJobFails(t *testing.T) {
 	mockDB := &createJobErrorStore{MockDB: testutil.NewMockDB()}
-	handler := NewTaskHandler(mockDB, newTestLogger())
+	handler := NewTaskHandler(mockDB, newTestLogger(), "", "")
 	userID := uuid.New()
 	ctx := context.WithValue(context.Background(), contextKeyUserID, userID)
 	req, rec := recordedRequestJSON("POST", "/v1/tasks", CreateTaskRequest{Prompt: "p"})
