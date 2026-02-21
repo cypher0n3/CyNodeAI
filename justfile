@@ -310,33 +310,93 @@ go-upgrade-deps: install-go
       (cd "{{ root_dir }}/$m" && go get -u ./... && go mod tidy); \
     done
 
-# Build cynork CLI for production: stripped, compressed with upx (minimal size).
-# Requires: upx (e.g. pacman -S upx, apt install upx-ucl).
-build-cynork: install-go
+# All built binaries go here (production and dev). Production = stripped + upx; dev = debug symbols.
+bin_dir := root_dir + "/bin"
+
+# Build one binary: production (stripped, upx'd) or dev (debug). Usage: _build_prod <name> <pkg_path>; _build_dev <name> <pkg_path>.
+_build_prod name pkg_path:
     #!/usr/bin/env bash
     set -e
     root="{{ root_dir }}"
-    mkdir -p "$root/tmp"
+    mkdir -p "$root/bin"
     cd "$root"
-    echo "Building cynork (production, minimal size)..."
-    CGO_ENABLED=0 go build -ldflags="-s -w" -o "$root/tmp/cynork" ./cynork
+    echo "Building {{ name }} (production)..."
+    CGO_ENABLED=0 go build -ldflags="-s -w" -o "$root/bin/{{ name }}" {{ pkg_path }}
     if command -v upx >/dev/null 2>&1; then
-      upx --best "$root/tmp/cynork"
+      upx --best "$root/bin/{{ name }}"
     else
       echo "upx not found; install for smaller binary (e.g. pacman -S upx, apt install upx-ucl)"
     fi
-    echo "Built: $root/tmp/cynork"
+    echo "Built: $root/bin/{{ name }}"
 
-# Build cynork CLI for development: debug symbols, no optimizations (better stack traces).
-build-cynork-dev: install-go
+_build_dev name pkg_path:
     #!/usr/bin/env bash
     set -e
     root="{{ root_dir }}"
-    mkdir -p "$root/tmp"
+    mkdir -p "$root/bin"
     cd "$root"
-    echo "Building cynork (dev, debug)..."
-    go build -gcflags="all=-N -l" -o "$root/tmp/cynork-dev" ./cynork
-    echo "Built: $root/tmp/cynork-dev"
+    echo "Building {{ name }} (dev, debug)..."
+    go build -gcflags="all=-N -l" -o "$root/bin/{{ name }}-dev" {{ pkg_path }}
+    echo "Built: $root/bin/{{ name }}-dev"
+
+# --- Cynork ---
+build-cynork: install-go
+    @just _build_prod cynork ./cynork
+
+build-cynork-dev: install-go
+    @just _build_dev cynork ./cynork
+
+# --- Orchestrator ---
+build-control-plane: install-go
+    @just _build_prod control-plane ./orchestrator/cmd/control-plane
+
+build-control-plane-dev: install-go
+    @just _build_dev control-plane ./orchestrator/cmd/control-plane
+
+build-user-gateway: install-go
+    @just _build_prod user-gateway ./orchestrator/cmd/user-gateway
+
+build-user-gateway-dev: install-go
+    @just _build_dev user-gateway ./orchestrator/cmd/user-gateway
+
+build-api-egress: install-go
+    @just _build_prod api-egress ./orchestrator/cmd/api-egress
+
+build-api-egress-dev: install-go
+    @just _build_dev api-egress ./orchestrator/cmd/api-egress
+
+build-mcp-gateway: install-go
+    @just _build_prod mcp-gateway ./orchestrator/cmd/mcp-gateway
+
+build-mcp-gateway-dev: install-go
+    @just _build_dev mcp-gateway ./orchestrator/cmd/mcp-gateway
+
+# --- Worker node ---
+build-worker-api: install-go
+    @just _build_prod worker-api ./worker_node/cmd/worker-api
+
+build-worker-api-dev: install-go
+    @just _build_dev worker-api ./worker_node/cmd/worker-api
+
+build-node-manager: install-go
+    @just _build_prod node-manager ./worker_node/cmd/node-manager
+
+build-node-manager-dev: install-go
+    @just _build_dev node-manager ./worker_node/cmd/node-manager
+
+build-inference-proxy: install-go
+    @just _build_prod inference-proxy ./worker_node/cmd/inference-proxy
+
+build-inference-proxy-dev: install-go
+    @just _build_dev inference-proxy ./worker_node/cmd/inference-proxy
+
+# Build all production binaries (stripped + upx) into bin/.
+build: install-go
+    @just build-cynork build-control-plane build-user-gateway build-api-egress build-mcp-gateway build-worker-api build-node-manager build-inference-proxy
+
+# Build all dev binaries (debug symbols) into bin/.
+build-dev: install-go
+    @just build-cynork-dev build-control-plane-dev build-user-gateway-dev build-api-egress-dev build-mcp-gateway-dev build-worker-api-dev build-node-manager-dev build-inference-proxy-dev
 
 # Run Go tests
 test-go: test-go-cover test-go-race test-go-e2e

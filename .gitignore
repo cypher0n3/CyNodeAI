@@ -10,6 +10,7 @@ tmp/
 .markdownlint-rules
 .markdownlint-rules/
 bin/
+bin-dev/
 
 # File Patterns
 *.backup*

@@ -3,10 +3,12 @@
 # Use a minimal go.work so we do not need to copy orchestrator or cynork.
 FROM golang:1.25-alpine AS builder
 WORKDIR /build
+RUN apk add --no-cache upx
 RUN printf '%s\n' 'go 1.25.7' 'use (' './go_shared_libs' './worker_node' ')' > go.work
 COPY go_shared_libs ./go_shared_libs
 COPY worker_node ./worker_node
-RUN go build -o /inference-proxy ./worker_node/cmd/inference-proxy
+RUN go build -ldflags="-s -w" -o /inference-proxy ./worker_node/cmd/inference-proxy \
+    && upx --best /inference-proxy
 
 # Minimal runtime image.
 FROM alpine:3.20
