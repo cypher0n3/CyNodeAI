@@ -1,13 +1,14 @@
 FROM golang:1.25-alpine AS build
 
 WORKDIR /src
-RUN apk add --no-cache ca-certificates git
+RUN apk add --no-cache ca-certificates git upx
 
 ENV CGO_ENABLED=0
 
 COPY . .
 
-RUN go build -o /out/node-manager ./worker_node/cmd/node-manager
+RUN go build -ldflags="-s -w" -o /out/node-manager ./worker_node/cmd/node-manager \
+    && upx --best /out/node-manager
 
 FROM alpine:3.20
 RUN apk add --no-cache ca-certificates
