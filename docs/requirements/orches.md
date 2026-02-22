@@ -138,7 +138,7 @@ It covers orchestrator control-plane behavior, task lifecycle, dispatch, and sta
   Operations include: task (list, get, create, cancel, result, logs, artifacts list, artifacts get), status, whoami, nodes (list, get), preferences (list, get, set, delete, effective), and skills (list, get).
   Chat slash commands MUST use the same gateway API surface as the non-interactive CLI; no separate chat-only API is required.
   [CYNAI.USRGWY.ChatSlashCommandSupport](../tech_specs/user_api_gateway.md#spec-cynai-usrgwy-chatslashcommandsupport)
-  [cli_management_app.md](../tech_specs/cli_management_app.md#slash-command-reference)
+  [cli_management_app_commands_chat.md](../tech_specs/cli_management_app_commands_chat.md#slash-command-reference)
   <a id="req-orches-0129"></a>
 - **REQ-ORCHES-0140:** The orchestrator MUST be able to pull node operational telemetry (logs, system info, container inventory/state) from nodes via the Worker Telemetry API.
   [CYNAI.ORCHES.NodeTelemetryPull](../tech_specs/worker_telemetry_api.md#spec-cynai-orches-nodetelemetrypull)

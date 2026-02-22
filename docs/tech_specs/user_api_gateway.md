@@ -181,7 +181,7 @@ Traces To:
 
 - [REQ-ORCHES-0129](../requirements/orches.md#req-orches-0129)
 
-The User API Gateway MUST expose endpoints and operations that support every cynork chat slash command defined in the [CLI management app spec - Slash Command Reference](cli_management_app.md#slash-command-reference).
+The User API Gateway MUST expose endpoints and operations that support every cynork chat slash command defined in the [CLI management app spec - Slash Command Reference](cli_management_app_commands_chat.md#slash-command-reference).
 The CLI executes slash commands by calling the same gateway APIs as the non-interactive CLI; the gateway and orchestrator MUST support that full surface.
 
 Required operation coverage:
