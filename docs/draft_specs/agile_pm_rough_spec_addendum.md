@@ -45,6 +45,8 @@ Key distinction:
 
 ## 4. Requirement Types
 
+Four requirement types are defined below.
+
 ### 4.1 Functional Requirement (FR)
 
 Defines observable behavior.
@@ -78,6 +80,8 @@ Example:
 - "Embeddings must be rebuildable after model upgrade."
 
 ## 5. Data Model Additions
+
+New tables and fields are described below.
 
 ### 5.1 Requirements Table
 
@@ -124,11 +128,13 @@ Examples:
 
 Identifier format:
 
-REQ-<DOMAIN>-<NUMBER>
+`REQ-<DOMAIN>-<NUMBER>`
 
 Identifiers are immutable once approved.
 
 ## 7. Relationship to Work Items
+
+Requirements and acceptance criteria link to work items as follows.
 
 ### 7.1 Story-Level Association
 
@@ -181,6 +187,8 @@ Use:
 
 ## 9. Validation Mechanisms
 
+Validation may be automated or manual.
+
 ### 9.1 Automated Validation
 
 - Sandbox job executes test suite
@@ -203,6 +211,8 @@ Allowed only if:
 - Audit event recorded
 
 ## 10. Integration With Cynode-Pm
+
+cynode-pm integrates with requirements and acceptance criteria as follows.
 
 ### 10.1 Planning Rules
 
@@ -242,6 +252,8 @@ Objective
 This chain must be queryable.
 
 ## 12. RBAC Integration
+
+Requirements and criteria are subject to RBAC as follows.
 
 ### 12.1 Requirement Visibility
 

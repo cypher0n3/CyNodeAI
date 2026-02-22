@@ -97,7 +97,7 @@ It covers user-facing REST API gateway behavior and related API contracts.
   [CYNAI.USRGWY.AuthAuditing](../tech_specs/user_api_gateway.md#spec-cynai-usrgwy-authauditing)
   <a id="req-usrgwy-0125"></a>
 - **REQ-USRGWY-0126:** The web console MUST be a client of the gateway and MUST NOT connect directly to PostgreSQL.
-  [CYNAI.USRGWY.AdminConsole](../tech_specs/user_api_gateway.md#spec-cynai-usrgwy-adminconsole)
+  [CYNAI.USRGWY.WebConsole](../tech_specs/user_api_gateway.md#spec-cynai-usrgwy-webconsole)
   <a id="req-usrgwy-0126"></a>
 - **REQ-USRGWY-0127:** The User API Gateway MUST expose the OpenAI-compatible chat API as the only interactive chat interface.
   This includes `GET /v1/models` and `POST /v1/chat/completions`.

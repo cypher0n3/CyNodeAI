@@ -54,6 +54,7 @@ The filename is the domain tag lowercased.
 - `MODELS`: [models.md](./models.md)
 - `AGENTS`: [agents.md](./agents.md)
 - `CLIENT`: [client.md](./client.md)
+- `WEBCON`: [webcon.md](./webcon.md)
 - `CONNEC`: [connec.md](./connec.md)
 - `BROWSR`: [browsr.md](./browsr.md)
 - `BOOTST`: [bootst.md](./bootst.md)

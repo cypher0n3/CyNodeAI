@@ -54,7 +54,7 @@ Key principles
 ### User Interfaces
 
 - CLI management app: [`docs/tech_specs/cli_management_app.md`](cli_management_app.md)
-- Admin web console: [`docs/tech_specs/admin_web_console.md`](admin_web_console.md)
+- Web Console: [`docs/tech_specs/web_console.md`](web_console.md)
 
 ### API Specifications
 

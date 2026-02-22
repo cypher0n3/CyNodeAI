@@ -29,6 +29,8 @@ The goal is to:
 
 ## 3. Work Item Hierarchy
 
+The following hierarchy and definitions apply.
+
 ### 3.1 Hierarchy Overview
 
 Epic
@@ -40,9 +42,11 @@ Epic
 Not all levels are mandatory.
 Small projects may start at Story level.
 
-### 3.2 Definitions
+### 3.2 Term Definitions
 
-#### 3.2.1 Epic
+Each level in the hierarchy is defined below.
+
+#### 3.2.1 Epic Level
 
 - Large initiative aligned to strategic objective
 - Spans multiple features
@@ -53,7 +57,7 @@ Example:
 
 - "Implement secure multi-node execution framework"
 
-#### 3.2.1 Feature
+#### 3.2.2 Feature Level
 
 - Deliverable capability within an Epic
 - Produces measurable outcome
@@ -63,7 +67,7 @@ Example:
 
 - "Sandbox runner with deterministic execution contract"
 
-#### 3.2.1 Story
+#### 3.2.3 Story Level
 
 - User- or system-focused unit of value
 - Sized for sprint-level execution
@@ -73,7 +77,7 @@ Example:
 
 - "As a PM agent, I can generate job specs validated against schema"
 
-#### 3.2.1 Task
+#### 3.2.4 Task Level
 
 - Technical implementation unit
 - Directly executable by sandbox or engineer
@@ -83,13 +87,15 @@ Example:
 
 - "Implement JSON schema validation in cynode-agent"
 
-#### 3.2.1 Sub-Task
+#### 3.2.5 Sub-Task Level
 
 - Atomic step within task
 - Typically deterministic
 - Suitable for single sandbox job
 
 ## 4. Data Model Proposal
+
+Core tables and shared fields are described below.
 
 ### 4.1 Core Tables
 
@@ -136,6 +142,8 @@ Backlog
 Status transitions must be logged as events.
 
 ## 5. Relationship to Agents
+
+Agents integrate with work items as follows.
 
 ### 5.1 Cynode-Pm Integration
 
@@ -198,6 +206,8 @@ Full lineage is preserved.
 
 ## 7. RBAC Integration
 
+Work items are subject to RBAC as follows.
+
 ### 7.1 Access Control Rules
 
 Work items are scoped by:
@@ -235,6 +245,8 @@ All access enforced server-side.
 
 ## 8. Agile Best Practices Alignment
 
+Sprint support, estimation, and definition of done are described below.
+
 ### 8.1 Sprint Support
 
 Optional sprint table:
@@ -248,7 +260,7 @@ Optional sprint table:
 
 Stories and tasks may be assigned to sprints.
 
-### 8.2 Estimation
+### 8.2 Estimation Practices
 
 - Story points at Story level
 - Hour estimates at Task level
@@ -277,6 +289,8 @@ To align with modern PM best practices:
 - Stories must produce verifiable outcomes
 
 ## 10. Automation Hooks
+
+Automation may update status and create events.
 
 ### 10.1 Auto-Status Updates
 

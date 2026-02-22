@@ -36,7 +36,7 @@ The implementation MUST allow users to interact via OpenWebUI with one of the fo
 
 - **Project Manager Agent**: The default or primary option so users can create and manage tasks, get task and project info, and drive work through the orchestrator.
   See [Project Manager Agent](tech_specs/project_manager_agent.md).
-- **Separate configurable chat agent**: An alternative chat agent (or multiple agents) that can be selected and configured via the **Admin Web Console** (e.g. model, system prompt, capabilities), so admins can offer different chat experiences (e.g. general assistant vs. task-focused Project Manager).
+- **Separate configurable chat agent**: An alternative chat agent (or multiple agents) that can be selected and configured via the **Web Console** (e.g. model, system prompt, capabilities), so admins can offer different chat experiences (e.g. general assistant vs. task-focused Project Manager).
 
 The gateway MUST support at least interaction with the Project Manager Agent for tasking and info; it MAY also expose additional chat agents configurable in the admin console.
 
@@ -69,7 +69,7 @@ References: [Open WebUI - Starting with OpenAI-Compatible](https://docs.openwebu
 5. **Gateway** returns an OpenAI-format response to OpenWebUI so it can display the reply in the chat UI.
 
 All requests remain within CyNodeAI policy and auditing; the compatibility layer does not bypass them.
-Interaction with the Project Manager Agent MUST be supported for task creation, task status, and project info; additional chat agents MAY be configurable via the [Admin Web Console](tech_specs/admin_web_console.md).
+Interaction with the Project Manager Agent MUST be supported for task creation, task status, and project info; additional chat agents MAY be configurable via the [Web Console](tech_specs/web_console.md).
 
 ## Setup Steps
 
@@ -114,7 +114,7 @@ For a complete integration, the User API Gateway implementation should provide:
 
 - **OpenAI-compat base path**: A stable path (e.g. `/v1`) under which the following are served.
 - **Authentication**: Accept Bearer tokens (JWT or API key) and map them to a user identity; enforce the same auth as the rest of the gateway.
-- **GET /v1/models**: Return a list of "models" that include at least one entry corresponding to the **Project Manager Agent** (for tasking, task status, project info); optionally additional entries for other chat agents configurable via the admin web console, in OpenAI list-models format.
+- **GET /v1/models**: Return a list of "models" that include at least one entry corresponding to the **Project Manager Agent** (for tasking, task status, project info); optionally additional entries for other chat agents configurable via the web console, in OpenAI list-models format.
 - **POST /v1/chat/completions**: Accept OpenAI-format messages and route them to the selected agent.
   When the selected "model" is the Project Manager Agent, the gateway MUST drive the request through the Project Manager Agent for tasking and info.
   The PM and PA create and manage tasks via MCP during the conversation.
@@ -122,7 +122,7 @@ For a complete integration, the User API Gateway implementation should provide:
   When the selected "model" is a separate configurable chat agent, the gateway MUST use the agent configuration defined in the admin console (e.g. model, system prompt) and return the response in OpenAI chat-completion format.
 - **Streaming (optional)**: If OpenWebUI is used with streaming, the gateway should support streaming responses in the same format as the OpenAI API.
 - **Policy and auditing**: All requests through this compatibility layer MUST be subject to existing gateway policy and audit logging (REQ-USRGWY-0121).
-- **Admin Web Console**: If additional chat agents are supported, their configuration (which model, system prompt, capabilities) MUST be manageable via the Admin Web Console so admins can define and expose multiple chat experiences.
+- **Web Console**: If additional chat agents are supported, their configuration (which model, system prompt, capabilities) MUST be manageable via the Web Console so admins can define and expose multiple chat experiences.
 
 These are implementation details for the gateway; the exact URL layout and response shapes should follow the tech spec once the OpenAI-compat mode is fully specified.
 
@@ -131,7 +131,7 @@ These are implementation details for the gateway; the exact URL layout and respo
 - CyNodeAI: [README.md](README.md), [meta.md](../meta.md)
 - User API Gateway: [tech_specs/user_api_gateway.md](tech_specs/user_api_gateway.md)
 - Project Manager Agent: [tech_specs/project_manager_agent.md](tech_specs/project_manager_agent.md)
-- Admin Web Console: [tech_specs/admin_web_console.md](tech_specs/admin_web_console.md)
+- Web Console: [tech_specs/web_console.md](tech_specs/web_console.md)
 - Data REST API: [tech_specs/data_rest_api.md](tech_specs/data_rest_api.md)
 - Local user accounts and auth: [tech_specs/local_user_accounts.md](tech_specs/local_user_accounts.md)
 - Open WebUI: [OpenAI-Compatible setup](https://docs.openwebui.com/getting-started/quick-start/starting-with-openai-compatible)

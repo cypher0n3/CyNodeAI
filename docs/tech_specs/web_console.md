@@ -1,4 +1,4 @@
-# Admin Web Console
+# Web Console
 
 - [Document Overview](#document-overview)
 - [Capability Parity With CLI](#capability-parity-with-cli)
@@ -33,17 +33,17 @@
 ## Document Overview
 
 This document defines an admin-focused web interface for CyNodeAI.
-The admin web console is intended for credential upload and management, for user preferences management, systems settings management, log review, and a variety of other admin tasks.
+The web console is intended for credential upload and management, for user preferences management, systems settings management, log review, and a variety of other admin tasks.
 
 ## Capability Parity With CLI
 
-- Spec ID: `CYNAI.CLIENT.AdminWebConsoleCapabilityParity` <a id="spec-cynai-client-awccapabilityparity"></a>
+- Spec ID: `CYNAI.CLIENT.WebConsoleCapabilityParity` <a id="spec-cynai-client-webconcapabilityparity"></a>
 
 Traces To:
 
 - [REQ-CLIENT-0004](../requirements/client.md#req-client-0004)
 
-The Admin Web Console and the CLI management app MUST offer the same administrative capabilities.
+The Web Console and the CLI management app MUST offer the same administrative capabilities.
 When adding or changing a capability in this spec (for example a new credential workflow, preference scope, node action, or skill operation), the [CLI management app](cli_management_app.md) spec and implementation MUST be updated to match, and vice versa.
 Use the same gateway APIs and the same authorization and auditing rules for both clients.
 
@@ -63,15 +63,16 @@ The following requirements apply.
 
 ### Security Model Applicable Requirements
 
-- Spec ID: `CYNAI.CLIENT.AdminWebConsoleSecurity` <a id="spec-cynai-client-awcsecurity"></a>
+- Spec ID: `CYNAI.WEBCON.Security` <a id="spec-cynai-webcon-security"></a>
 
 Traces To:
 
-- [REQ-CLIENT-0108](../requirements/client.md#req-client-0108)
-- [REQ-CLIENT-0109](../requirements/client.md#req-client-0109)
-- [REQ-CLIENT-0110](../requirements/client.md#req-client-0110)
-- [REQ-CLIENT-0111](../requirements/client.md#req-client-0111)
-- [REQ-CLIENT-0112](../requirements/client.md#req-client-0112)
+- [REQ-WEBCON-0001](../requirements/webcon.md#req-webcon-0001)
+- [REQ-WEBCON-0100](../requirements/webcon.md#req-webcon-0100)
+- [REQ-WEBCON-0101](../requirements/webcon.md#req-webcon-0101)
+- [REQ-WEBCON-0102](../requirements/webcon.md#req-webcon-0102)
+- [REQ-WEBCON-0103](../requirements/webcon.md#req-webcon-0103)
+- [REQ-WEBCON-0104](../requirements/webcon.md#req-webcon-0104)
 
 Threat model notes
 
@@ -91,7 +92,7 @@ Recommended approaches
 
 ## Credential Management
 
-The admin web console must support managing credentials that are consumed by controlled egress services.
+The web console must support managing credentials that are consumed by controlled egress services.
 The gateway endpoint contract for credential operations (list, get, create, rotate, disable) is defined in [API Egress Server - Admin API (Gateway Endpoints)](api_egress_server.md#admin-api-gateway-endpoints); the console and cynork both use these same endpoints.
 
 Credential types
@@ -101,7 +102,7 @@ Credential types
 
 ### Credential Management Applicable Requirements
 
-- Spec ID: `CYNAI.CLIENT.AdminWebConsoleCredential` <a id="spec-cynai-client-awccredential"></a>
+- Spec ID: `CYNAI.WEBCON.Credential` <a id="spec-cynai-webcon-credential"></a>
 
 Traces To:
 
@@ -127,7 +128,7 @@ It MUST provide an easy method for users to create, read, update, and delete the
 
 ### Preferences Management Applicable Requirements
 
-- Spec ID: `CYNAI.CLIENT.AdminWebConsolePreferences` <a id="spec-cynai-client-awcpreferences"></a>
+- Spec ID: `CYNAI.WEBCON.Preferences` <a id="spec-cynai-webcon-preferences"></a>
 
 Traces To:
 
@@ -162,7 +163,7 @@ Recommended keys to surface (MVP)
 
 ## System Settings Management
 
-- Spec ID: `CYNAI.CLIENT.AdminWebConsoleSystemSettings` <a id="spec-cynai-client-awcsystemsettings"></a>
+- Spec ID: `CYNAI.WEBCON.SystemSettings` <a id="spec-cynai-webcon-systemsettings"></a>
 
 Traces To:
 
@@ -183,11 +184,11 @@ Key semantics and the PM model selection/warmup algorithm are defined in [Projec
 
 ## Skills Management
 
-- Spec ID: `CYNAI.CLIENT.AdminWebConsoleSkillsManagement` <a id="spec-cynai-client-awcskillsmanagement"></a>
+- Spec ID: `CYNAI.WEBCON.SkillsManagement` <a id="spec-cynai-webcon-skillsmanagement"></a>
 
 Traces To:
 
-- [REQ-CLIENT-0147](../requirements/client.md#req-client-0147)
+- [REQ-WEBCON-0112](../requirements/webcon.md#req-webcon-0112)
 
 The web console MUST support full CRUD for AI skills (create, list, view, update, delete) via the User API Gateway.
 All operations use the same controls as defined in [Skill Management CRUD](skills_storage_and_inference.md#skill-management-crud-web-and-cli): authentication, scope visibility, scope elevation permission on write, and auditing on write with rejection feedback (match category and triggering text) when content fails the security scan.
@@ -202,7 +203,7 @@ Recommended UI
 
 ## Project Management
 
-- Spec ID: `CYNAI.CLIENT.AdminWebConsoleProjectManagement` <a id="spec-cynai-client-awcprojectmanagement"></a>
+- Spec ID: `CYNAI.WEBCON.ProjectManagement` <a id="spec-cynai-webcon-projectmanagement"></a>
 
 Traces To:
 
@@ -221,12 +222,12 @@ Recommended UI
 
 ## Node Management
 
-The admin web console should support basic node management for operators.
+The web console should support basic node management for operators.
 This includes inventory views, health status, and safe administrative controls.
 
 ### Node Management Applicable Requirements
 
-- Spec ID: `CYNAI.CLIENT.AdminWebConsoleNodeManagement` <a id="spec-cynai-client-awcnodemgmt"></a>
+- Spec ID: `CYNAI.WEBCON.NodeManagement` <a id="spec-cynai-webcon-nodemanagement"></a>
 
 Traces To:
 
@@ -254,18 +255,18 @@ See [`docs/tech_specs/node.md`](node.md) for node lifecycle and capability repor
 
 ## Implementation Specification (Nuxt)
 
-The admin web console SHOULD be implemented as a Nuxt application (Vue).
+The web console SHOULD be implemented as a Nuxt application (Vue).
 The console is a user-facing client and MUST only interact with CyNodeAI through the User API Gateway.
 
 ### Implementation Specification Applicable Requirements
 
-- Spec ID: `CYNAI.CLIENT.AdminWebConsoleImplementation` <a id="spec-cynai-client-awcimpl"></a>
+- Spec ID: `CYNAI.WEBCON.Implementation` <a id="spec-cynai-webcon-implementation"></a>
 
 Traces To:
 
-- [REQ-CLIENT-0129](../requirements/client.md#req-client-0129)
-- [REQ-CLIENT-0130](../requirements/client.md#req-client-0130)
-- [REQ-CLIENT-0131](../requirements/client.md#req-client-0131)
+- [REQ-WEBCON-0105](../requirements/webcon.md#req-webcon-0105)
+- [REQ-WEBCON-0106](../requirements/webcon.md#req-webcon-0106)
+- [REQ-WEBCON-0107](../requirements/webcon.md#req-webcon-0107)
 
 ### Technology Choices
 
@@ -303,12 +304,12 @@ Recommended approaches
 
 ### Authentication Model Applicable Requirements
 
-- Spec ID: `CYNAI.CLIENT.AdminWebConsoleAuthModel` <a id="spec-cynai-client-awcauth"></a>
+- Spec ID: `CYNAI.WEBCON.AuthModel` <a id="spec-cynai-webcon-authmodel"></a>
 
 Traces To:
 
-- [REQ-CLIENT-0132](../requirements/client.md#req-client-0132)
-- [REQ-CLIENT-0133](../requirements/client.md#req-client-0133)
+- [REQ-WEBCON-0108](../requirements/webcon.md#req-webcon-0108)
+- [REQ-WEBCON-0109](../requirements/webcon.md#req-webcon-0109)
 
 ### Gateway API Client
 
@@ -358,12 +359,12 @@ Recommended deployments
 
 ### Deployment Options Applicable Requirements
 
-- Spec ID: `CYNAI.CLIENT.AdminWebConsoleDeployment` <a id="spec-cynai-client-awcdeploy"></a>
+- Spec ID: `CYNAI.WEBCON.Deployment` <a id="spec-cynai-webcon-deployment"></a>
 
 Traces To:
 
-- [REQ-CLIENT-0134](../requirements/client.md#req-client-0134)
-- [REQ-CLIENT-0135](../requirements/client.md#req-client-0135)
+- [REQ-WEBCON-0110](../requirements/webcon.md#req-webcon-0110)
+- [REQ-WEBCON-0111](../requirements/webcon.md#req-webcon-0111)
 
 ## API Surface
 
@@ -385,13 +386,13 @@ See [`docs/tech_specs/user_api_gateway.md`](user_api_gateway.md) and [`docs/tech
 
 ## API Documentation (Swagger UI)
 
-- Spec ID: `CYNAI.CLIENT.AdminWebConsoleSwaggerUi` <a id="spec-cynai-client-awcswaggerui"></a>
+- Spec ID: `CYNAI.WEBCON.SwaggerUi` <a id="spec-cynai-webcon-swaggerui"></a>
 
 Traces To:
 
-- [REQ-CLIENT-0148](../requirements/client.md#req-client-0148)
+- [REQ-WEBCON-0113](../requirements/webcon.md#req-webcon-0113)
 
-The admin web console MUST provide Swagger UI (or an equivalent API documentation UI) for the User API Gateway.
+The web console MUST provide Swagger UI (or an equivalent API documentation UI) for the User API Gateway.
 Authenticated admins MUST be able to discover and try API endpoints (e.g. OpenAPI/Swagger spec served by the gateway, rendered in the console).
 Access to Swagger UI MUST be subject to the same authentication and authorization as the rest of the console; the UI MUST NOT expose the ability to call endpoints the admin is not authorized to use.
 
@@ -408,7 +409,7 @@ Recommended audit views
 
 ## MVP Scope
 
-Minimum viable admin console
+Minimum viable web console
 
 - Login and session management.
 - Credential create, list, rotate, and disable for API Egress.

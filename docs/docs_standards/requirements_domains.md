@@ -45,8 +45,10 @@ The filename is the domain tag lowercased.
   - Requirements file: [`docs/requirements/models.md`](../requirements/models.md)
 - `AGENTS`: Agent behaviors, responsibilities, and workflow integration.
   - Requirements file: [`docs/requirements/agents.md`](../requirements/agents.md)
-- `CLIENT`: User-facing management surfaces, including CLI and admin web console behavior.
+- `CLIENT`: User-facing management surfaces, including CLI and Web Console behavior (shared capabilities and parity).
   - Requirements file: [`docs/requirements/client.md`](../requirements/client.md)
+- `WEBCON`: Web Console-specific behavior (specs and requirements that apply only to the Web Console).
+  - Requirements file: [`docs/requirements/webcon.md`](../requirements/webcon.md)
 - `CONNEC`: Connector framework requirements and external connector integration patterns.
   - Requirements file: [`docs/requirements/connec.md`](../requirements/connec.md)
 - `BROWSR`: Secure browser service requirements, rules, and deterministic sanitization.

@@ -37,7 +37,7 @@ It covers storage, tracking, and exposure of AI skills files so that inference m
   <a id="req-skills-0108"></a>
 - **REQ-SKILLS-0105:** Users MUST be able to load (upload) skills through the web interface; the system MUST store the skill and register it for discovery.
   [CYNAI.SKILLS.SkillLoading](../tech_specs/skills_storage_and_inference.md#spec-cynai-skills-skillloading)
-  [CYNAI.CLIENT.AdminWebConsoleSecurity](../tech_specs/admin_web_console.md#spec-cynai-client-awcsecurity)
+  [CYNAI.WEBCON.Security](../tech_specs/web_console.md#spec-cynai-webcon-security)
   <a id="req-skills-0105"></a>
 - **REQ-SKILLS-0106:** Users MUST be able to load skills via the CLI by uploading a markdown file (e.g. SKILL.md); the CLI MUST call the gateway and the system MUST store the skill and register it.
   [CYNAI.SKILLS.SkillLoading](../tech_specs/skills_storage_and_inference.md#spec-cynai-skills-skillloading)

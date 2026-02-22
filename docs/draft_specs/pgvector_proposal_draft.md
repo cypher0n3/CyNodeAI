@@ -37,6 +37,8 @@ Authorization must be applied before similarity ranking.
 
 ## 4. Data Model Adjustments for RBAC
 
+Tables and fields are extended for RBAC as follows.
+
 ### 4.1 Authoritative Metadata Tables
 
 Add explicit access metadata:
@@ -74,6 +76,8 @@ Add explicit access metadata:
 Important: tenant_id and project_id must be indexed and enforced.
 
 ## 5. Retrieval Flow With RBAC Enforcement
+
+Queries must apply RBAC before similarity ranking.
 
 ### 5.1 Query Flow
 
@@ -146,6 +150,8 @@ This prevents high-privilege documents from being retrieved by lower roles even 
 
 ## 8. Cross-Project and Global Content
 
+Global and cross-project retrieval are restricted as follows.
+
 ### 8.1 Global Content
 
 Certain namespaces (e.g., core skills, global docs) may be marked:
@@ -169,6 +175,8 @@ By default:
 If a role allows multi-project visibility, project_id filter must still be explicit.
 
 ## 9. Write Path Controls
+
+Ingestion and agent writes are controlled as follows.
 
 ### 9.1 Ingestion Authorization
 
@@ -199,6 +207,8 @@ Instead:
 - Only then is content embedded
 
 ## 10. Memory Segmentation Strategy
+
+Memory is segmented by project, user, and global scope.
 
 ### 10.1 Project Memory
 
@@ -273,6 +283,8 @@ Because filtering reduces candidate set size:
 Similarity search should run only against already filtered rows.
 
 ## 15. Threat Model Considerations
+
+Key risks and mitigations are summarized below.
 
 ### 15.1 Embedding Leakage Risk
 

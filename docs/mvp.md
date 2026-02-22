@@ -78,8 +78,8 @@ They remain part of the overall roadmap and are covered by later work beyond Pha
 
 Deferred capabilities (explicit)
 
-- **Admin web console**.
-  See [`docs/tech_specs/admin_web_console.md`](tech_specs/admin_web_console.md).
+- **Web Console**.
+  See [`docs/tech_specs/web_console.md`](tech_specs/web_console.md).
 - **Web egress proxy**.
   See [`docs/tech_specs/web_egress_proxy.md`](tech_specs/web_egress_proxy.md).
 - **Git egress MCP**.
@@ -173,4 +173,4 @@ For the full task breakdown with requirement and spec references, see [`docs/mvp
   This includes routing policy and signals, external inference with node sandboxes, configurable settings, and per-agent overrides for Project Manager and Project Analyst.
 - Expand the CLI management app surface for credentials, user preferences, skills, and node management.
   See [`docs/tech_specs/cli_management_app.md`](tech_specs/cli_management_app.md) and [`docs/tech_specs/skills_storage_and_inference.md`](tech_specs/skills_storage_and_inference.md).
-- Defer the admin web console until after the CLI exists.
+- Defer the web console until after the CLI exists.

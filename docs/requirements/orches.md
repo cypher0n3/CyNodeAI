@@ -123,7 +123,7 @@ It covers orchestrator control-plane behavior, task lifecycle, dispatch, and sta
   Clients MAY supply attachments as path strings (CLI) or via file upload (web console); the gateway and orchestrator define how attachment payloads are ingested and made available to the task.
   [user_api_gateway.md](../tech_specs/user_api_gateway.md)
   [cli_management_app.md](../tech_specs/cli_management_app.md#spec-cynai-client-clitaskcreateprompt)
-  [admin_web_console.md](../tech_specs/admin_web_console.md#api-surface)
+  [web_console.md](../tech_specs/web_console.md#api-surface)
   <a id="req-orches-0126"></a>
 - **REQ-ORCHES-0127:** Task creation MUST support running a **script** (e.g. path to a script file) and a **short series of commands** as explicit task input types.
   When the client supplies a script or commands, the system MUST run them in the sandbox (or equivalent) rather than interpreting the input as natural language.
