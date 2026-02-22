@@ -143,7 +143,7 @@ Traces To:
 
 - Spec ID: `CYNAI.APIEGR.AdminApiGatewayEndpoints` <a id="spec-cynai-apiegr-adminapigatewayendpoints"></a>
 
-The User API Gateway exposes credential management endpoints so that the Admin Web Console and the CLI management app (cynork) can perform the same operations via the same API.
+The User API Gateway exposes credential management endpoints so that the Web Console and the CLI management app (cynork) can perform the same operations via the same API.
 Both clients MUST use these gateway endpoints; the endpoint contract is defined here so that capability parity (REQ-CLIENT-0004) is implementable.
 
 Traces To:
@@ -189,5 +189,5 @@ Disable credential
 
 Clients
 
-- The [Admin Web Console](admin_web_console.md) and the [CLI management app (cynork)](cli_management_app.md) MUST use the above endpoint contract for API Egress credential operations.
+- The [Web Console](web_console.md) and the [CLI management app (cynork)](cli_management_app.md) MUST use the above endpoint contract for API Egress credential operations.
 - The gateway SHOULD expose this contract in its OpenAPI/Swagger spec for discovery and for the admin console Swagger UI.

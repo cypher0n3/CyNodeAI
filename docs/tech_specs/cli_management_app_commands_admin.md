@@ -338,7 +338,7 @@ Traces To:
 - [REQ-CLIENT-0126](../requirements/client.md#req-client-0126)
 - [REQ-CLIENT-0128](../requirements/client.md#req-client-0128)
 
-The CLI MUST support node inventory and admin actions via the User API Gateway (no direct worker API calls); semantics align with [Node](node.md) and the Admin Web Console.
+The CLI MUST support node inventory and admin actions via the User API Gateway (no direct worker API calls); semantics align with [Node](node.md) and the [Web Console](web_console.md).
 
 All node commands MUST require auth.
 

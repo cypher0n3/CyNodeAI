@@ -25,9 +25,9 @@ It coordinates sandboxed worker execution across local nodes and optional cloud 
 - **MCP-first tools**: agents use MCP as the standard tool interface for privileged operations and data access.
 - **Controlled egress**: outbound web and API access are mediated by dedicated services and policy, not direct sandbox access.
 - **REST APIs**: all REST APIs in this system MUST be implemented in Go (see `docs/tech_specs/go_rest_api_standards.md`).
-- **Admin clients parity**: the Admin Web Console and the CLI management app (`cynork`) MUST offer the same administrative capabilities.
+- **Admin clients parity**: the Web Console and the CLI management app (`cynork`) MUST offer the same administrative capabilities.
   When adding or changing a capability in one client, the other MUST be updated to match.
-  See `docs/requirements/client.md` (REQ-CLIENT-0004) and the capability-parity sections in `docs/tech_specs/admin_web_console.md` and `docs/tech_specs/cli_management_app.md`.
+  See `docs/requirements/client.md` (REQ-CLIENT-0004) and the capability-parity sections in `docs/tech_specs/web_console.md` and `docs/tech_specs/cli_management_app.md`.
 
 ## Security and Access Notes
 

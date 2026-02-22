@@ -30,12 +30,12 @@ Preferences cover standards and constraints such as acceptance criteria, writing
 
 In this repository, the term "preferences" refers only to user-facing task-execution preferences and constraints.
 Preferences are intended to be retrieved by agents and, when appropriate, passed to AI models or queried during task execution.
-They are stored in `preference_entries`, scoped (system, user, group, project, task), and managed via preference surfaces (e.g. Admin Web Console preferences UI, `cynork prefs`).
+They are stored in `preference_entries`, scoped (system, user, group, project, task), and managed via preference surfaces (e.g. Web Console preferences UI, `cynork prefs`).
 
 ### 2.1 Settings vs Preferences
 
 - **System settings** are operator- and deployment-level configuration (e.g. orchestrator operational knobs, model selection keys, cache limits, deployment config such as ports, hostnames, database DSNs, service endpoints).
-  They are stored in `system_settings`, managed via system settings surfaces (e.g. Admin Web Console system settings UI, `cynork settings`), and MUST NOT be described as preferences.
+  They are stored in `system_settings`, managed via system settings surfaces (e.g. Web Console system settings UI, `cynork settings`), and MUST NOT be described as preferences.
 - Preferences and system settings are distinct; do not conflate them in specs or UI.
 
 See [`docs/tech_specs/orchestrator_bootstrap.md`](orchestrator_bootstrap.md) for bootstrap-time seeding of preferences versus system settings.

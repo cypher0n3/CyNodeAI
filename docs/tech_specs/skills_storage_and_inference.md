@@ -186,7 +186,7 @@ Both paths MUST result in the skill being stored in the skill store and register
 
 ### `SkillLoading` Scope
 
-- **Web interface**: The admin web console MUST provide a way to upload a skill file (e.g. markdown).
+- **Web interface**: The web console MUST provide a way to upload a skill file (e.g. markdown).
   The UI sends the content to the User API Gateway; the gateway (or backend) writes to the skill store and updates the registry.
   The web console MUST NOT connect directly to the store; it MUST use the gateway.
 - **CLI**: The CLI MUST provide a command (e.g. `cynork skills load <file.md>`) that reads a local markdown file and submits it to the gateway.
@@ -206,7 +206,7 @@ Both paths MUST result in the skill being stored in the skill store and register
 
 Related specs
 
-- Admin web console: [`docs/tech_specs/admin_web_console.md`](admin_web_console.md)
+- Web Console: [`docs/tech_specs/web_console.md`](web_console.md)
 - CLI management app: [`docs/tech_specs/cli_management_app.md`](cli_management_app.md)
 - Skill auditing: [Skill Auditing (Malicious Pattern Scanning)](#skill-auditing-malicious-pattern-scanning)
 - Full CRUD: [Skill Management CRUD (Web and CLI)](#skill-management-crud-web-and-cli)
@@ -252,7 +252,7 @@ All operations MUST go through the User API Gateway; the same controls (authenti
 
 Related specs
 
-- Admin web console: [`docs/tech_specs/admin_web_console.md`](admin_web_console.md)
+- Web Console: [`docs/tech_specs/web_console.md`](web_console.md)
 - CLI management app: [`docs/tech_specs/cli_management_app.md`](cli_management_app.md)
 
 ## Skill Tools via MCP (CRUD)

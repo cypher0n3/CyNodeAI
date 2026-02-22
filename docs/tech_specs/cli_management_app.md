@@ -1,7 +1,7 @@
 # CLI Management App
 
 - [Document Overview](#document-overview)
-- [Capability Parity With Admin Web Console](#capability-parity-with-admin-web-console)
+- [Capability Parity With Web Console](#capability-parity-with-web-console)
 - [Goals and Non-Goals](#goals-and-non-goals)
 - [Security Model](#security-model)
   - [Security Model Applicable Requirements](#security-model-applicable-requirements)
@@ -39,7 +39,7 @@ This spec is split into multiple documents.
 Command and feature details live in: [Core commands (version, status, auth)](cli_management_app_commands_core.md), [Task commands](cli_management_app_commands_tasks.md), [Chat command](cli_management_app_commands_chat.md), [Admin and resource commands](cli_management_app_commands_admin.md), [Interactive mode and output](cli_management_app_shell_output.md).
 
 This document defines a CLI management application for CyNodeAI.
-The CLI is intended to support the same administrative capabilities as the Admin Web Console.
+The CLI is intended to support the same administrative capabilities as the Web Console.
 
 Traces To:
 
@@ -50,14 +50,14 @@ Related documents
 
 - Client requirements: [`docs/requirements/client.md`](../requirements/client.md)
 - User API Gateway: [`docs/tech_specs/user_api_gateway.md`](user_api_gateway.md)
-- Admin Web Console: [`docs/tech_specs/admin_web_console.md`](admin_web_console.md)
+- Web Console: [`docs/tech_specs/web_console.md`](web_console.md)
 - User preferences: [`docs/tech_specs/user_preferences.md`](user_preferences.md)
 - Skills storage and CRUD: [`docs/tech_specs/skills_storage_and_inference.md`](skills_storage_and_inference.md)
 - Data REST API: [`docs/tech_specs/data_rest_api.md`](data_rest_api.md)
 - API Egress (credentials): [`docs/tech_specs/api_egress_server.md`](api_egress_server.md)
 - Git Egress (credentials): [`docs/tech_specs/git_egress_mcp.md`](git_egress_mcp.md)
 
-## Capability Parity With Admin Web Console
+## Capability Parity With Web Console
 
 - Spec ID: `CYNAI.CLIENT.CliCapabilityParity` <a id="spec-cynai-client-clicapabilityparity"></a>
 
@@ -65,8 +65,8 @@ Traces To:
 
 - [REQ-CLIENT-0004](../requirements/client.md#req-client-0004)
 
-The CLI and the [Admin Web Console](admin_web_console.md) MUST offer the same administrative capabilities.
-When adding or changing a capability in this spec (for example a new command, credential workflow, preference scope, node action, or skill operation), the Admin Web Console spec and implementation MUST be updated to match, and vice versa.
+The CLI and the [Web Console](web_console.md) MUST offer the same administrative capabilities.
+When adding or changing a capability in this spec (for example a new command, credential workflow, preference scope, node action, or skill operation), the Web Console spec and implementation MUST be updated to match, and vice versa.
 Use the same gateway APIs and the same authorization and auditing rules for both clients.
 
 ## Goals and Non-Goals
@@ -459,5 +459,5 @@ Related specifications
 
 - [User API Gateway](user_api_gateway.md)
 - [Data REST API](data_rest_api.md)
-- [Admin Web Console](admin_web_console.md)
+- [Web Console](web_console.md)
 - [Client requirements](../requirements/client.md)

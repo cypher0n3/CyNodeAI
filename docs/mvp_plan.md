@@ -401,7 +401,7 @@ Reference: [docs/tech_specs/\_main.md](../docs/tech_specs/_main.md) Phase 3, [wo
 - External model routing: fallback for standalone orchestrator (no workers) and when local capacity cannot satisfy requirements; routing policy, signals, and settings per [external_model_routing.md](../docs/tech_specs/external_model_routing.md); external inference with node sandboxes (model via API Egress, sandbox for tools); per-agent routing settings for Project Manager and Project Analyst.
 - Secure Browser Service: deterministic sanitization, DB-backed rules.
 - CLI expansion: credentials (API Egress, Git Egress), user preferences, skills, node management (see [cli_management_app.md](../docs/tech_specs/cli_management_app.md), [skills_storage_and_inference.md](../docs/tech_specs/skills_storage_and_inference.md)).
-- Admin web console after CLI; parity with CLI for admin capabilities.
+- Web Console after CLI; parity with CLI for admin capabilities.
 
 Reference: [docs/tech_specs/\_main.md](../docs/tech_specs/_main.md) Phase 4.
 

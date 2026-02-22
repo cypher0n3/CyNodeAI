@@ -10,7 +10,7 @@
   - [Event Types](#event-types)
   - [Subscriptions and Destinations](#subscriptions-and-destinations)
 - [Authentication and Auditing](#authentication-and-auditing)
-- [Admin Web Console](#admin-web-console)
+- [Web Console](#web-console)
 
 ## Document Overview
 
@@ -217,15 +217,15 @@ Traces To:
 - [REQ-USRGWY-0124](../requirements/usrgwy.md#req-usrgwy-0124)
 - [REQ-USRGWY-0125](../requirements/usrgwy.md#req-usrgwy-0125)
 
-## Admin Web Console
+## Web Console
 
-- Spec ID: `CYNAI.USRGWY.AdminConsole` <a id="spec-cynai-usrgwy-adminconsole"></a>
+- Spec ID: `CYNAI.USRGWY.WebConsole` <a id="spec-cynai-usrgwy-webconsole"></a>
 
-The User API Gateway SHOULD support an admin-focused web console for managing credentials and user preferences.
-The web console MUST be a client of the gateway and MUST NOT connect directly to PostgreSQL.
+The User API Gateway SHOULD support the Web Console for managing credentials and user preferences.
+The Web Console MUST be a client of the gateway and MUST NOT connect directly to PostgreSQL.
 
 Traces To:
 
 - [REQ-USRGWY-0126](../requirements/usrgwy.md#req-usrgwy-0126)
 
-See [`docs/tech_specs/admin_web_console.md`](admin_web_console.md).
+See [`docs/tech_specs/web_console.md`](web_console.md).

@@ -20,6 +20,8 @@ It operates within the trusted host/control-plane environment.
 
 ## 2. Responsibilities
 
+Core functions and non-responsibilities are listed below.
+
 ### 2.1 Core Functions
 
 - Maintain project-level agent state
@@ -32,7 +34,7 @@ It operates within the trusted host/control-plane environment.
 - Update plan and state
 - Produce final artifacts
 
-### 2.2 Non-Responsibilities
+### 2.2 Explicit Non-Responsibilities
 
 - Direct file system manipulation
 - Running shell commands
@@ -44,9 +46,11 @@ It operates within the trusted host/control-plane environment.
 
 ## 3. Architecture
 
+High-level position and components are described below.
+
 ### 3.1 High-Level Position
 
-```
+```text
 User
   ↓
 cynode-pm
@@ -56,7 +60,7 @@ Worker API
 Sandbox (cynode-agent)
 ```
 
-### 3.2 Components
+### 3.2 Component Overview
 
 - LLM Interface Layer
 - State Manager
@@ -70,6 +74,8 @@ Sandbox (cynode-agent)
 ---
 
 ## 4. Execution Model
+
+The agent follows a loop that loads state, plans, and dispatches jobs.
 
 ### 4.1 Agent Loop
 
@@ -103,6 +109,8 @@ The platform validates this before execution.
 
 ## 5. State Model
 
+State is persisted and updated according to the following rules.
+
 ### 5.1 Persisted State
 
 ```json
@@ -135,6 +143,8 @@ The platform validates this before execution.
 
 ## 6. Skill Integration
 
+Skills are registered and selected as follows.
+
 ### 6.1 Skill Registry
 
 Skills are versioned packages containing:
@@ -161,7 +171,9 @@ Skill selection must be explicit in job_request payload.
 
 ## 7. Job Specification Generation
 
-### 7.1 Responsibilities
+The PM agent generates job specs and validates them before dispatch.
+
+### 7.1 Job Builder Responsibilities
 
 - Generate deterministic `job.json`
 - Populate constraints
@@ -169,7 +181,7 @@ Skill selection must be explicit in job_request payload.
 - Ensure command allowlists are respected
 - Embed resource limits
 
-### 7.2 Validation
+### 7.2 Validation Rules
 
 Before dispatch:
 
@@ -190,7 +202,9 @@ Failure results in:
 
 ## 8. LLM Interface
 
-### 8.1 Requirements
+The LLM must satisfy the following requirements and prompt structure.
+
+### 8.1 LLM Requirements
 
 - Structured JSON output only
 - Schema-constrained responses
@@ -225,6 +239,8 @@ Policy violations must be surfaced before job dispatch.
 
 ## 10. Result Processing
 
+Results from the sandbox are processed as follows.
+
 ### 10.1 Expected Input
 
 `result.json` from sandbox agent:
@@ -234,7 +250,7 @@ Policy violations must be surfaced before job dispatch.
 - Artifacts
 - Resource metrics
 
-### 10.2 Responsibilities
+### 10.2 Result Handler Responsibilities
 
 - Verify integrity (hashes)
 - Attach artifacts to session state
@@ -246,11 +262,13 @@ Policy violations must be surfaced before job dispatch.
 
 ## 11. Concurrency Model
 
-### 11.1 Single-Session
+Single-session and multi-session behavior are described below.
+
+### 11.1 Single-Session Behavior
 
 - One active job per session (MVP)
 
-### 11.2 Multi-Session
+### 11.2 Multi-Session Behavior
 
 - Stateless workers
 - State stored in central datastore
@@ -260,13 +278,15 @@ Policy violations must be surfaced before job dispatch.
 
 ## 12. Security Model
 
-### 12.1 Secrets
+Secrets and isolation are handled as follows.
+
+### 12.1 Secrets Handling
 
 - No secret storage in memory beyond request scope
 - Secrets accessed only through brokered APIs
 - Never embedded in job.json
 
-### 12.2 Isolation
+### 12.2 Process Isolation
 
 - Runs outside sandbox
 - Uses least-privilege service account
@@ -275,6 +295,8 @@ Policy violations must be surfaced before job dispatch.
 ---
 
 ## 13. Observability
+
+Logging and trace correlation are required as follows.
 
 ### 13.1 Required Logging
 
@@ -297,6 +319,8 @@ All logs must include:
 
 ## 14. Failure Handling
 
+Failure types and recovery are described below.
+
 ### 14.1 Failure Types
 
 - schema_error
@@ -315,6 +339,8 @@ All logs must include:
 ---
 
 ## 15. Configuration
+
+Runtime flags and environment variables are described below.
 
 ### 15.1 Runtime Flags
 

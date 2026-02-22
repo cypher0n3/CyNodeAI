@@ -1,3 +1,5 @@
+# Agent Building
+
 ## Mental Model: What an "Agent" Is
 
 An agent is a control loop around an LLM that:
@@ -12,6 +14,8 @@ The LLM is the "policy," not the system.
 Your platform (CyNodeAI) is the "actuator" that makes tool calls safe, observable, auditable, and reproducible.
 
 ## Agent Architecture That Fits CyNodeAI
+
+This section describes the core loop, state model, tool interface, and skills.
 
 ### 1) Core Loop (Sense - Think - Act)
 
@@ -72,6 +76,8 @@ Skills should be executable without the LLM in the loop for validation (schema, 
 
 ## Designing Agents for Your Platform
 
+Three patterns are described below.
+
 ### Pattern a - "PM Agent" (Planner and Dispatcher)
 
 Responsibilities:
@@ -109,6 +115,8 @@ If you want an LLM to assist with policy decisions, keep it advisory:
 - The platform enforces policy deterministically
 
 ## Guardrails That Matter in Practice
+
+Key guardrails are schema-first tool calling, policy metadata, and deterministic enforcement.
 
 ### 1) Schema-First Tool Calling
 
@@ -149,6 +157,8 @@ Log every tool call with:
 This is how you debug agent behavior and regressions.
 
 ## How to Build Your First CyNodeAI-Compatible Agent
+
+Follow these steps to build a CyNodeAI-compatible agent.
 
 ### Step 1 - Define One Skill With a Tight Scope
 

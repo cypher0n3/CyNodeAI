@@ -34,6 +34,8 @@ Primary goals:
 
 ## 3. Execution Model
 
+The agent runs in a container and supports file-based or stdin invocation.
+
 ### 3.1 Process Model
 
 The agent runs as PID 1 (or main process) inside the sandbox container.
@@ -56,6 +58,8 @@ File-based mode simplifies artifact collection and debugging.
 ---
 
 ## 4. Job Specification (`job.json`)
+
+The job is specified as JSON with the following structure.
 
 ### 4.1 Top-Level Schema
 
@@ -88,7 +92,7 @@ File-based mode simplifies artifact collection and debugging.
 
 The agent must implement only deterministic primitives.
 
-### 5.1 Run_command_command
+### 5.1 Run Command Step
 
 Executes a command.
 
@@ -111,7 +115,7 @@ Constraints:
 - Hard timeout enforced
 - Output truncated at max_output_bytes
 
-Result:
+#### 5.1.1 Result Shape
 
 ```json
 {
@@ -124,7 +128,7 @@ Result:
 
 ---
 
-### 5.2 Write_file_file
+### 5.2 Write File Step
 
 Arguments:
 
@@ -144,7 +148,7 @@ Constraints:
 
 ---
 
-### 5.3 Read_file_file
+### 5.3 Read File Step
 
 Arguments:
 
@@ -162,7 +166,7 @@ Constraints:
 
 ---
 
-### 5.4 Apply_unified_diff_unified_diff
+### 5.4 Apply Unified Diff Step
 
 Arguments:
 
@@ -181,7 +185,7 @@ Behavior:
 
 ---
 
-### 5.5 List_tree_tree
+### 5.5 List Tree Step
 
 Arguments:
 
@@ -200,7 +204,9 @@ Returns:
 
 ## 6. Result Specification (`result.json`)
 
-### 6.1 Top-Level Schema
+The agent produces a result JSON with the following structure.
+
+### 6.1 Result Top-Level Schema
 
 ```json
 {
@@ -234,6 +240,8 @@ Returns:
 
 ## 7. Security Constraints
 
+The agent and container runtime enforce the following.
+
 The agent must enforce:
 
 - Path canonicalization
@@ -256,6 +264,8 @@ The container runtime enforces:
 ---
 
 ## 8. Policy Boundary
+
+Policy is decided and enforced outside the agent.
 
 The agent does not decide policy.
 
@@ -281,6 +291,8 @@ If a step violates constraints, the agent returns:
 
 ## 9. Observability
 
+Structured logging is required.
+
 The agent must emit:
 
 - Structured logs to stdout (JSON lines)
@@ -295,6 +307,8 @@ No free-form log text.
 
 ## 10. Versioning
 
+Protocol and agent versioning rules:
+
 - `protocol_version` must be checked at startup
 - Agent must refuse unknown major versions
 - Minor versions may allow backward-compatible fields
@@ -302,6 +316,8 @@ No free-form log text.
 ---
 
 ## 11. Failure Modes
+
+The agent must report structured failure types.
 
 The agent must distinguish:
 
@@ -318,6 +334,8 @@ Failures must never leave partial JSON.
 
 ## 12. Non-Goals
 
+Out of scope for the agent:
+
 The agent will not:
 
 - Host an LLM
@@ -331,6 +349,8 @@ The agent will not:
 ---
 
 ## 13. Implementation Notes
+
+The following implementation choices are recommended.
 
 Recommended implementation language: Go.
 
@@ -351,6 +371,8 @@ Binary should be:
 ---
 
 ## 14. MVP Scope
+
+The MVP includes the following.
 
 Minimum viable feature set:
 

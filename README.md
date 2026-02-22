@@ -65,8 +65,8 @@ Documentation:
 ## Goals
 
 - **Local-first and private:** Run fully on your infrastructure; optionally incorporate cloud-based agents and external AI providers via controlled egress.
-- **Single user-facing API:** One User API Gateway for all clients (Open WebUI, cynork CLI, future Admin Web Console, integrations).
-- **Admin client parity:** The CLI (cynork) and the Admin Web Console MUST offer the same administrative capabilities; both talk to the gateway only.
+- **Single user-facing API:** One User API Gateway for all clients (Open WebUI, cynork CLI, future Web Console, integrations).
+- **Admin client parity:** The CLI (cynork) and the Web Console MUST offer the same administrative capabilities; both talk to the gateway only.
 - **Prompt-as-intent:** Natural-language task prompts are interpreted by the system (inference and/or sandbox), not executed as literal shell commands; script/commands modes are explicit opt-in.
 - **Multi-agent orchestration:** Centralized task and state management with distributed execution across local worker nodes and optional cloud agents.
 - **Scaling:** Add local nodes (containers) or register cloud-based agents; orchestrator selects nodes by capability, load, and policy.
@@ -81,7 +81,7 @@ The User API Gateway exposes a single surface for humans and integrations.
 - **OpenAI-compatible chat:** The gateway exposes an OpenAI-style chat API (`/v1/models`, `/v1/chat/completions`) for Open WebUI, cynork chat, and E2E.
   This is the only interactive chat interface; conversation state is tracked as chat threads and messages.
 - **CLI (cynork):** Auth, task operations, interactive chat and shell, status, settings, preferences, nodes, credentials, audit, and skills.
-  Cynork uses the same gateway APIs as the future Admin Web Console (capability parity).
+  Cynork uses the same gateway APIs as the future Web Console (capability parity).
 - **Planned (gateway spec):** Scheduler and cron, runs and sessions API, connector framework, live updates and messaging, groups and RBAC.
   See [User API Gateway](docs/tech_specs/user_api_gateway.md), [OpenAI-compatible chat API](docs/tech_specs/openai_compatible_chat_api.md), [Runs and sessions API](docs/tech_specs/runs_and_sessions_api.md).
 

@@ -1,5 +1,12 @@
 # Orchestrator Systemd Units (Podman)
 
+- [Overview](#overview)
+- [Generate Units](#generate-units)
+- [Install](#install)
+- [Order](#order)
+
+## Overview
+
 Generated unit files allow running the orchestrator stack under systemd (e.g. rootless user services).
 
 ## Generate Units
@@ -19,7 +26,9 @@ podman compose -f orchestrator/docker-compose.yml down
 
 ## Install
 
-### Rootless (Recommended):
+Use rootless (user) or rootful (system) install as below.
+
+### Rootless (Recommended)
 
 ```bash
 mkdir -p ~/.config/systemd/user
@@ -31,7 +40,7 @@ systemctl --user enable --now container-cynodeai-control-plane.service
 systemctl --user enable --now container-cynodeai-user-gateway.service
 ```
 
-### Rootful:
+### Rootful Install
 
 ```bash
 sudo cp orchestrator/systemd/container-*.service /etc/systemd/system/
