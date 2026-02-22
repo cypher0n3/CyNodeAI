@@ -98,9 +98,6 @@ func applyJobResult(ctx context.Context, db database.Store, job *models.Job, res
 		return fmt.Errorf("complete job: %w", err)
 	}
 	_ = db.UpdateTaskStatus(ctx, job.TaskID, taskStatus)
-	if taskStatus == models.TaskStatusCompleted {
-		_ = db.UpdateTaskSummary(ctx, job.TaskID, SummarizeResult(result))
-	}
 	return nil
 }
 

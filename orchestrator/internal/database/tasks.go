@@ -2,6 +2,7 @@ package database
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/google/uuid"
@@ -9,13 +10,19 @@ import (
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/models"
 )
 
-// CreateTask creates a new task.
+// CreateTask creates a new task with a task name in the format task_name_### (e.g. task_name_001).
 func (db *DB) CreateTask(ctx context.Context, createdBy *uuid.UUID, prompt string) (*models.Task, error) {
+	var count int64
+	if createdBy != nil {
+		_ = db.db.WithContext(ctx).Model(&models.Task{}).Where("created_by = ?", createdBy).Count(&count).Error
+	}
+	taskName := fmt.Sprintf("task_name_%03d", count+1)
 	task := &models.Task{
 		ID:        uuid.New(),
 		CreatedBy: createdBy,
 		Status:    models.TaskStatusPending,
 		Prompt:    &prompt,
+		Summary:   &taskName,
 		CreatedAt: time.Now().UTC(),
 		UpdatedAt: time.Now().UTC(),
 	}

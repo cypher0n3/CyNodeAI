@@ -268,7 +268,7 @@ test_e2e() {
         -H "Content-Type: application/json" \
         -d '{"prompt": "Run echo hello world"}')
 
-    TASK_ID=$(echo "$TASK_RESP" | grep -o '"id":"[^"]*"' | cut -d'"' -f4)
+    TASK_ID=$(echo "$TASK_RESP" | jq -r '.task_id')
     if [ -z "$TASK_ID" ]; then
         log_error "Create task failed: $TASK_RESP"
         exit 1
