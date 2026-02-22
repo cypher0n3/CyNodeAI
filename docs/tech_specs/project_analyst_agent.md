@@ -3,6 +3,7 @@
 - [Document Overview](#document-overview)
 - [Agent Purpose](#agent-purpose)
 - [Agent Responsibilities](#agent-responsibilities)
+- [Handoff Model](#handoff-model)
 - [External Provider Usage](#external-provider-usage)
 - [External Provider Configuration](#external-provider-configuration)
   - [Standalone Orchestrator Scenario](#standalone-orchestrator-scenario)
@@ -65,6 +66,12 @@ Task scope constraint
 
 - A Project Analyst agent MUST treat its assigned `task_id` as its only authority scope for state, evidence, and outputs.
 - A Project Analyst agent MUST NOT read or write data for unrelated tasks except through explicitly allowlisted, non-task-specific tools.
+
+LangGraph MVP
+
+- **Orchestrator kicks off to PMA.**
+  In the **Verify Step Result** node of the LangGraph workflow, **PMA tasks the Project Analyst (or another sandbox agent)** to perform verification; findings are written back into the workflow state.
+  See [langgraph_mvp.md](langgraph_mvp.md) Sub-Agent Invocation section.
 
 ## External Provider Usage
 

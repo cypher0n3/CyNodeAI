@@ -19,6 +19,8 @@
   - [Finalize Summary](#finalize-summary)
   - [Mark Failed](#mark-failed)
 - [Checkpointing and Resumability](#checkpointing-and-resumability)
+  - [Checkpoint schema (prescriptive)](#checkpoint-schema-prescriptive)
+- [Phase 2 flow summary](#phase-2-flow-summary)
 - [Tooling and Security Notes](#tooling-and-security-notes)
 
 ## Document Overview
@@ -44,8 +46,9 @@ This section defines how the LangGraph workflow is integrated with the orchestra
 ### Runtime and Hosting
 
 - The LangGraph workflow runs as part of the orchestrator's workflow engine.
-- The workflow engine MAY be implemented in a different language or process than the orchestrator's REST APIs (e.g. a Python LangGraph runtime invoked by the Go orchestrator).
-- If the workflow runs in a separate process, the orchestrator MUST provide a stable contract for starting workflows, passing `task_id`, and reading/writing checkpoints so that the graph can be resumed after any restart (orchestrator or workflow process).
+- **Phase 2 implementation:** The workflow engine MUST be a **separate Python LangGraph process** invoked by the Go orchestrator (e.g. HTTP or RPC).
+  The workflow process does not serve the orchestrator's REST APIs.
+- The orchestrator MUST provide a stable contract for starting workflows, passing `task_id`, and reading/writing checkpoints so that the graph can be resumed after any restart (orchestrator or workflow process).
 - The Project Manager Agent's behavior is implemented by this graph: the graph is the execution model for the agent.
   Planning, dispatch, verification, and finalization are graph nodes, not separate services.
 
@@ -53,9 +56,11 @@ This section defines how the LangGraph workflow is integrated with the orchestra
 
 - One workflow instance is scoped to one task (one `task_id`).
 - The orchestrator starts a workflow when a task is ready to be driven (e.g. after task creation via User API or when a task is unblocked).
-- How the orchestrator starts the workflow is implementation-defined (in-process call, out-of-process job, or queue consumer), but the following MUST hold:
+- The following MUST hold:
   - The workflow receives the task identifier and MUST load task context in the first node (Load Task Context).
-  - Only one active workflow instance per task at a time; duplicate starts for the same task MUST be prevented or coalesced (e.g. by lease or idempotency key).
+  - Only one active workflow instance per task at a time.
+  - The **single-active-workflow-per-task** guarantee is enforced by a **lease held in the orchestrator DB** (see [orchestrator.md](orchestrator.md) and [postgres_schema.md](postgres_schema.md)).
+  - The workflow runner MUST acquire or check the lease via the orchestrator before running; the orchestrator is the source of truth.
 - The orchestrator MAY run multiple workflow instances concurrently for different tasks.
 
 ### Checkpoint Persistence Contract
@@ -63,8 +68,7 @@ This section defines how the LangGraph workflow is integrated with the orchestra
 - The workflow MUST persist checkpoint data after each node transition so that state is durable and the graph can resume from the last checkpoint.
 - The checkpoint store MUST be backed by PostgreSQL (or an orchestrator-owned store that uses PostgreSQL as the source of truth).
 - The workflow implementation MUST support loading checkpoint state by `task_id` and continuing from the next node when the orchestrator or workflow process restarts.
-- Checkpoint schema and storage format are implementation-defined.
-  The key requirement is that the workflow engine can save and load by `task_id` and that the state model in [State Model](#state-model) is represented.
+- The checkpoint schema and storage are prescriptive; see [Checkpoint schema (prescriptive)](#checkpoint-schema-prescriptive) under Checkpointing and Resumability.
 - The orchestrator MUST NOT run workflow steps without going through the checkpoint layer so that resumability is guaranteed.
 
 ### Graph Nodes to Orchestrator Capabilities
@@ -87,13 +91,11 @@ The following mapping is the MVP reference mapping.
 ### Sub-Agent Invocation
 
 - The Project Analyst Agent is a sub-agent used for focused verification.
-  For the MVP, verification MAY be implemented either:
-  - entirely inside the **Verify Step Result** node (single process / same graph), or
-  - by the **Verify Step Result** node invoking the Project Analyst as a separate call (e.g. spawn a sub-agent workflow or call an internal verification API that uses the Project Analyst).
-- If the Project Analyst runs as a separate workflow or process, the orchestrator MUST pass task context and the step result, and MUST record the analyst's findings back into the main workflow state (or checkpoint) so that **Verify Step Result** can decide pass/fail and recommended actions.
-- Sub-agent invocation mechanism (same process vs. separate workflow vs. internal API) is implementation-defined.
-  The key requirement is that verification findings and recommended actions are available to the graph state and that the Project Analyst does not bypass MCP or direct DB access rules.
-  See [`project_analyst_agent.md`](project_analyst_agent.md).
+- **MVP rule:** The **Orchestrator** kicks off work to **PMA** (e.g. when a task is ready to be driven, or when a scheduled run requires interpretation).
+  In the **Verify Step Result** node, **PMA tasks the Project Analyst (or another sandbox agent)** to perform verification; the orchestrator does not call an internal verification API directly.
+  Findings are written back into the main workflow state (or checkpoint) so that **Verify Step Result** can decide pass/fail and recommended actions.
+- The Project Analyst MUST NOT bypass MCP or direct DB access rules.
+  See [project_analyst_agent.md](project_analyst_agent.md) Handoff Model.
 
 ## Graph Topology
 
@@ -198,6 +200,45 @@ Recommended checkpoint points
 - After each result collection.
 - After each verification.
 - On finalization or failure.
+
+### Checkpoint Schema (Prescriptive)
+
+The checkpoint store uses a single PostgreSQL table so that implementations are unambiguous.
+
+- **Table name:** `workflow_checkpoints`.
+- **Columns (minimum):**
+  - `id` (uuid, primary key)
+  - `task_id` (uuid, foreign key to `tasks.id`; one row per task for the "current" checkpoint; see constraints below)
+  - `state` (jsonb) holding the full [State Model](#state-model) (task_id, acceptance_criteria, preferences_effective, plan, current_step_index, attempts_by_step, last_result, verification)
+  - `last_node_id` (text) identity of the last completed graph node
+  - `updated_at` (timestamptz)
+- **Constraints:** Unique on `task_id` so that the latest checkpoint for a task is the single row for that task (upsert by task_id on each persist).
+- The workflow engine MUST save and load by `task_id`; the orchestrator MUST NOT run workflow steps without going through this checkpoint layer.
+
+See [postgres_schema.md](postgres_schema.md) for the full table definition and creation order.
+
+## Phase 2 Flow Summary
+
+End-to-end flow for task-driven execution and scheduled runs:
+
+```mermaid
+flowchart LR
+  subgraph task_driven [Task-driven]
+    T1[Task created/updated] --> O1[Orchestrator starts workflow]
+    O1 --> L[Lease in DB]
+    L --> W[Workflow runner runs graph]
+    W --> D[Dispatch Step]
+    D --> J[Job dispatch]
+    J --> C[Collect Result]
+    C --> V[Verify Step: PMA tasks PA]
+    V --> F[Finalize or Mark Failed]
+  end
+  subgraph scheduled [Scheduled run]
+    S[Scheduler fires] --> H[Scheduler hands payload to PMA]
+    H --> P[PMA creates task and starts workflow]
+    P --> O1
+  end
+```
 
 ## Tooling and Security Notes
 

@@ -27,9 +27,26 @@ The goal is to:
 - Agent-compatible (LLM planning must map to work items deterministically)
 - Immutable history with append-only state transitions
 
+### 2.1 Terminology: Agile Work Items vs CyNodeAI Execution
+
+To avoid ambiguity in specs and implementation:
+
+- **Agile work items (planning/PM layer):** Epic, Feature, Story, Task, Sub-task.
+  These are units of planning, tracking, and value delivery.
+  They live in the work-management hierarchy and are used by cynode-pm for decomposition and status.
+- **CyNodeAI execution (orchestrator/worker layer):**
+  - **Orchestrator task:** A row in the orchestrator `tasks` table; represents one execution run (workflow, request, or batch) and owns state such as status and acceptance_criteria.
+  - **Job:** A row in the `jobs` table; the unit of work dispatched to a worker node (sandbox execution, e.g. one `job.json` or skill invocation).
+  One orchestrator task may have many jobs.
+- **Mapping:** An agile **Sub-task** (work item) typically corresponds to one CyNodeAI **Job** (sandbox execution); jobs reference the agile work item (e.g. `subtask_id`, `story_id`) for traceability.
+  Agile **Task** and **Story** are parent work items and do not denote orchestrator tasks or jobs.
+
+Where context could be unclear, use "agile task" or "work-item task" vs "orchestrator task", and "agile Sub-task" vs "Job".
+Canonical definitions for the `tasks` and `jobs` tables: [postgres_schema.md](../tech_specs/postgres_schema.md) (Tasks, Jobs, and Nodes).
+
 ## 3. Work Item Hierarchy
 
-The following hierarchy and definitions apply.
+The following hierarchy and definitions apply to **agile work items** only.
 
 ### 3.1 Hierarchy Overview
 
@@ -77,21 +94,22 @@ Example:
 
 - "As a PM agent, I can generate job specs validated against schema"
 
-#### 3.2.4 Task Level
+#### 3.2.4 Task Level (Agile Work Item)
 
-- Technical implementation unit
+- Technical implementation unit within a Story
 - Directly executable by sandbox or engineer
 - Often mapped to a skill
+- Not to be confused with the orchestrator `tasks` table (execution run)
 
 Example:
 
 - "Implement JSON schema validation in cynode-agent"
 
-#### 3.2.5 Sub-Task Level
+#### 3.2.5 Sub-Task Level (Agile Work Item)
 
-- Atomic step within task
+- Atomic step within an agile Task
 - Typically deterministic
-- Suitable for single sandbox job
+- Suitable for single sandbox execution; typically maps 1:1 to one CyNodeAI Job
 
 ## 4. Data Model Proposal
 
@@ -145,7 +163,7 @@ Status transitions must be logged as events.
 
 Agents integrate with work items as follows.
 
-### 5.1 Cynode-Pm Integration
+### 5.1 CyNode-Pm Integration
 
 cynode-pm becomes work-item aware.
 
@@ -172,37 +190,30 @@ The PM agent must output:
 
 ### 5.2 Sandbox Integration
 
-Sub-tasks correspond directly to:
+Agile Sub-tasks (work items) correspond directly to CyNodeAI Jobs:
 
-- job.json specs
-- skill invocations
-
-Each sandbox job must reference:
-
-- subtask_id
-- task_id
-- story_id
-
-Results update the subtask status automatically.
+- One agile Sub-task typically drives one Job (job.json, skill invocation).
+- Each Job must reference the originating agile work item: subtask_id, task_id, story_id.
+- Job completion updates the linked agile Sub-task status automatically.
 
 ## 6. Traceability Model
 
-Every artifact must reference:
+Every artifact must reference the agile work item:
 
 - subtask_id
 - task_id
 - story_id
 
-Every job must reference:
+Every CyNodeAI Job must reference:
 
-- work_item_id
-- skill_id
+- the agile work item (subtask_id and parent ids)
+- skill_id where applicable
 
 This ensures:
 
-Objective -> Epic -> Feature -> Story -> Task -> Sub-task -> Job -> Artifact
+Objective -> Epic -> Feature -> Story -> (agile) Task -> (agile) Sub-task -> Job -> Artifact
 
-Full lineage is preserved.
+Full lineage is preserved (agile work items to execution Jobs to artifacts).
 
 ## 7. RBAC Integration
 

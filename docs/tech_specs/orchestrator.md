@@ -89,8 +89,10 @@ The scheduler MUST be available via the User API Gateway so users can create and
 When a schedule **fires**, the orchestrator has a run payload (created at schedule-creation time: e.g. task description, prompt, or concrete job spec).
 Routing of that run MUST be determined by whether the payload requires agent reasoning, task interpretation, or planning:
 
-- When a scheduled run's payload **requires agent reasoning, task interpretation, or planning** (e.g. natural-language task, "daily standup reminder", "triage backlog"), the orchestrator MUST **hand that work off to the Project Manager Agent** per the same handoff rules and context as in [cynode_pma.md](cynode_pma.md) (user, project, thread, schedule id, run id).
-  PMA then plans, creates or updates tasks, and may use MCP (e.g. sandbox tools, scheduler MCP tools) to carry out work; when PMA or the workflow engine enqueues **concrete** jobs, the scheduler still uses the same node selection and job-dispatch contracts to dispatch them.
+- When a scheduled run's payload **requires agent reasoning, task interpretation, or planning** (e.g. natural-language task, "daily standup reminder", "triage backlog"), the orchestrator MUST **hand the run payload directly to PMA** per the same handoff rules and context as in [cynode_pma.md](cynode_pma.md) (user, project, thread, schedule id, run id).
+  **PMA creates the task and starts the workflow internally**; there is no separate "enqueue workflow start" step.
+  The scheduler does not create the task or enqueue a workflow start; PMA owns task creation and workflow start for those runs.
+  PMA may use MCP (e.g. sandbox tools, scheduler MCP tools) to carry out work; when PMA or the workflow engine enqueues **concrete** jobs, the scheduler still uses the same node selection and job-dispatch contracts to dispatch them.
 - When the payload is a **pre-specified job** (e.g. concrete script/command/sandbox spec with no interpretation needed), the scheduler MAY enqueue it for **direct dispatch** using the same node selection and job-dispatch contracts, without handing off to PMA.
 
 Schedule payload types (e.g. `task` / `prompt` vs `job_spec`) that determine "requires interpretation" are defined in the User API Gateway or a dedicated scheduler API spec so that routing is deterministic and implementable.
@@ -378,8 +380,17 @@ See [`docs/tech_specs/mcp_tooling.md`](mcp_tooling.md).
 The orchestrator uses LangGraph to implement multi-step and multi-agent workflows.
 The Project Manager Agent's behavior is implemented by the LangGraph MVP workflow.
 
-See [`docs/tech_specs/langgraph_mvp.md`](langgraph_mvp.md) for the graph topology, state model, and node behaviors.
-For how the graph is hosted, invoked, checkpointed, and wired to orchestrator capabilities (MCP, Worker API, model routing), see the "Integration with the Orchestrator" section of that document.
+**Phase 2 implementation:** The workflow engine is a **separate Python LangGraph process** (separate from the Go orchestrator process).
+The orchestrator invokes it via a stable start/resume and checkpoint contract; see [langgraph_mvp.md](langgraph_mvp.md) Integration with the Orchestrator.
+
+**Process boundaries (Phase 2):** **cynode-pma** (chat, MCP tools) and the **workflow runner** (LangGraph graph execution) are **separate processes**.
+They share the MCP gateway and DB.
+The orchestrator starts the workflow runner for a given task; chat and planning requests go to PMA; the workflow runner executes the graph and does not serve chat.
+
+**Single-active-workflow-per-task:** The lease that enforces only one active workflow per task is **held in the orchestrator DB** (table or row semantics defined in [postgres_schema.md](postgres_schema.md)).
+The workflow runner acquires or checks the lease via the orchestrator before running.
+
+See [langgraph_mvp.md](langgraph_mvp.md) for the graph topology, state model, node behaviors, checkpoint schema, and wiring to orchestrator capabilities (MCP, Worker API, model routing).
 
 ## Orchestrator Bootstrap Configuration
 

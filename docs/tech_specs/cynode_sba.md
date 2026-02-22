@@ -1,4 +1,4 @@
-# Cynode SandBox Agent (`cynode-sba`)
+# CyNode SandBox Agent (`cynode-sba`)
 
 - [Document Overview](#document-overview)
 - [Purpose](#purpose)
@@ -23,7 +23,7 @@
 
 ## Document Overview
 
-- Spec ID: `CYNAI.SBAGNT.Doc.CynodeSba` <a id="spec-cynai-sbagnt-doc-cynodesba"></a>
+- Spec ID: `CYNAI.SBAGNT.Doc.CyNodeSba` <a id="spec-cynai-sbagnt-doc-cynodesba"></a>
 
 This document defines `cynode-sba`, the sandbox agent runner binary.
 It is a deterministic executor that runs inside a sandbox container; see [Sandbox Boundary and Security](#sandbox-boundary-and-security) for container shape and the network model (egress only via worker proxies, not airgapped).
@@ -56,6 +56,7 @@ Within the job, the SBA MUST be able to build and manage its own todo list (deri
   The process MUST NOT run as root.
 - Fail-closed on **schema validation** only (invalid job spec is rejected; no step execution).
   Runtime enforcement is bounded by the container and non-root execution, not by per-command or per-path allowlists.
+  The orchestrator or worker MAY use command or path allowlists when constructing or validating job requests; the SBA does not enforce them inside the container.
 - Structured, machine-parseable results.
 
 ## Execution Model

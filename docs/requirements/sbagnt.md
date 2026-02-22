@@ -19,7 +19,7 @@ Sandbox image and isolation requirements remain in the `SANDBX` domain.
 ## 2 Requirements
 
 - **REQ-SBAGNT-0001:** The system MUST provide a sandbox runner binary named `cynode-sba` that executes validated job specifications deterministically inside a sandbox container.
-  [CYNAI.SBAGNT.Doc.CynodeSba](../tech_specs/cynode_sba.md#spec-cynai-sbagnt-doc-cynodesba)
+  [CYNAI.SBAGNT.Doc.CyNodeSba](../tech_specs/cynode_sba.md#spec-cynai-sbagnt-doc-cynodesba)
   <a id="req-sbagnt-0001"></a>
 
 - **REQ-SBAGNT-0100:** `cynode-sba` MUST accept a versioned job specification and MUST refuse unknown major protocol versions.

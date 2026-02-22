@@ -14,6 +14,14 @@ This amendment extends the CyNodeAI project management architecture to fully ali
 This amendment does not replace the structured work model.
 It strengthens it with operational Lean controls.
 
+### 1.1 Terminology: Agile Work Items vs CyNodeAI Execution
+
+- **Agile work items:** Epic, Feature, Story, Task, Sub-task (planning/PM layer).
+- **CyNodeAI execution:** **Orchestrator task** = one run in the `tasks` table; **Job** = one sandbox dispatch in the `jobs` table.
+  An agile **Sub-task** typically maps to one **Job**.
+Where the doc says "task" or "sub-task" in a WIP or flow context, it means the agile work item unless stated otherwise.
+Canonical table definitions: [postgres_schema.md](../tech_specs/postgres_schema.md) (Tasks, Jobs, and Nodes).
+
 ## 2. Guiding Lean Principles
 
 This amendment operationalizes the following Lean principles:
@@ -60,10 +68,10 @@ WIP limits cap concurrent work at multiple levels to preserve flow.
 
 WIP limits must be enforced at:
 
-- Story level per project
-- Task level per story
-- Sub-task/job level per agent session
-- Sandbox execution concurrency per tenant
+- Story level per project (agile work items)
+- Task level per story (agile work items)
+- Sub-task / Job level per agent session (agile Sub-tasks and the CyNodeAI Jobs they spawn)
+- Sandbox execution concurrency per tenant (Jobs)
 
 ### 4.2 Configuration Fields
 
@@ -116,8 +124,8 @@ Work must move to In Progress only when:
 
 cynode-pm must:
 
-- Check capacity before generating new sub-tasks
-- Prefer completing existing tasks over spawning new work
+- Check capacity before generating new agile Sub-tasks (and thus Jobs)
+- Prefer completing existing agile tasks over spawning new work
 - Avoid speculative parallelization
 
 ### 5.3 Sandbox Pull Integration
@@ -314,7 +322,7 @@ All systemic failures must:
 - **Lean Principle:** Optimize flow
   - amendment coverage: Flow states + metrics
 - **Lean Principle:** Deliver small batches
-  - amendment coverage: Sub-task/job mapping
+  - amendment coverage: Agile Sub-task to Job mapping
 - **Lean Principle:** Build quality in
   - amendment coverage: Requirement validation gating
 - **Lean Principle:** Pull system

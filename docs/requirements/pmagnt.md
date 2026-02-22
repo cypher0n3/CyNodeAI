@@ -19,7 +19,7 @@ Behavioral and workflow requirements still live in `AGENTS` and `ORCHES`.
 ## 2 Requirements
 
 - **REQ-PMAGNT-0001:** The system MUST provide an orchestrator-side agent binary named `cynode-pma` that can operate in at least two role modes: `project_manager` and `project_analyst`.
-  [CYNAI.PMAGNT.Doc.CynodePma](../tech_specs/cynode_pma.md#spec-cynai-pmagnt-doc-cynodepma)
+  [CYNAI.PMAGNT.Doc.CyNodePma](../tech_specs/cynode_pma.md#spec-cynai-pmagnt-doc-cynodepma)
   <a id="req-pmagnt-0001"></a>
 
 - **REQ-PMAGNT-0100:** `cynode-pma` MUST support explicit role selection via configuration (flag or equivalent) and MUST enforce role separation by loading a distinct instructions bundle per role.
@@ -42,7 +42,7 @@ Behavioral and workflow requirements still live in `AGENTS` and `ORCHES`.
   <a id="req-pmagnt-0103"></a>
 
 - **REQ-PMAGNT-0104:** `cynode-pma` MUST emit audit or observability records for decisions that affect dispatch, model routing, or task state (e.g. role selection, instructions path chosen, tool allowlist scope).
-  [CYNAI.PMAGNT.Doc.CynodePma](../tech_specs/cynode_pma.md#spec-cynai-pmagnt-doc-cynodepma)
+  [CYNAI.PMAGNT.Doc.CyNodePma](../tech_specs/cynode_pma.md#spec-cynai-pmagnt-doc-cynodepma)
   <a id="req-pmagnt-0104"></a>
 
 - **REQ-PMAGNT-0105:** `cynode-pma` MUST expose a configurable surface (e.g. flags or environment variables) for role mode and instructions bundle paths, with safe defaults that prevent accidental reuse of the wrong role bundle.

@@ -26,22 +26,34 @@ Requirements must be:
 - Linked to work items
 - Linked to validation artifacts
 
+### 2.1 Terminology: Agile Work Items vs CyNodeAI Execution
+
+- **Agile work items (planning/PM layer):** Epic, Feature, Story, Task, Sub-task.
+  Used for planning, decomposition, and status; see the base [structured work model](agile_pm_rough_spec.md).
+- **CyNodeAI execution:** **Orchestrator task** = one execution run in the `tasks` table; **Job** = one sandbox dispatch in the `jobs` table.
+  An agile **Sub-task** typically maps to one **Job**; agile **Task** is the work-item parent of Sub-tasks, not an orchestrator task.
+
+Where ambiguous, use "agile task" / "work-item task" vs "orchestrator task", and "agile Sub-task" vs "Job".
+Canonical table definitions: [postgres_schema.md](../tech_specs/postgres_schema.md) (Tasks, Jobs, and Nodes).
+
 ## 3. Hierarchical Model With Requirements
 
-Updated hierarchy:
+Updated hierarchy (agile work items plus requirements):
 
 Epic
 -> Feature
 -> Story
 -> Requirement
 -> Acceptance Criteria
--> Task
--> Sub-task
+-> (agile) Task
+-> (agile) Sub-task
+
+Agile Sub-tasks map to CyNodeAI Jobs for execution.
 
 Key distinction:
 
 - **Requirements define what must be true**
-- **Tasks define how we make it true**
+- **Agile Tasks and Sub-tasks define how we make it true**
 
 ## 4. Requirement Types
 
@@ -144,21 +156,21 @@ Stories are considered complete only when:
 
 - All linked requirements are verified.
 
-### 7.2 Task Mapping
+### 7.2 Task Mapping (Agile Work Items)
 
-Tasks must reference:
+Agile Tasks must reference:
 
 - requirement_id
 
 This ensures traceability from execution to requirement.
 
-### 7.3 Sub-Task Mapping
+### 7.3 Sub-Task Mapping (Agile Work Items to Jobs)
 
-Sub-tasks optionally reference:
+Agile Sub-tasks optionally reference:
 
 - specific acceptance_criteria_id
 
-Particularly when they correspond to:
+Particularly when the corresponding CyNodeAI Job is for:
 
 - test implementation
 - validation run
@@ -191,9 +203,8 @@ Validation may be automated or manual.
 
 ### 9.1 Automated Validation
 
-- Sandbox job executes test suite
-- Metric job measures performance
-- Schema validation job checks contract
+- A CyNodeAI Job (sandbox execution) runs the test suite, metric check, or schema validation.
+- Each such Job is typically linked to one agile Sub-task.
 
 Results must produce:
 
@@ -210,7 +221,7 @@ Allowed only if:
 - Requires approval role
 - Audit event recorded
 
-## 10. Integration With Cynode-Pm
+## 10. Integration With CyNode-Pm
 
 cynode-pm integrates with requirements and acceptance criteria as follows.
 
@@ -235,7 +246,7 @@ If any fail:
 
 ## 11. Traceability Chain
 
-Full traceability must support:
+Full traceability must support (agile work items then CyNodeAI execution):
 
 Objective
 -> Epic
@@ -243,12 +254,13 @@ Objective
 -> Story
 -> Requirement
 -> Acceptance Criteria
--> Task
--> Sub-task
+-> (agile) Task
+-> (agile) Sub-task
 -> Job
 -> Artifact
 -> Verification Event
 
+Agile Sub-task to Job is the link between work items and execution.
 This chain must be queryable.
 
 ## 12. RBAC Integration
@@ -340,7 +352,7 @@ Defer:
 The requirements system is considered implemented when:
 
 - Stories cannot be marked Done without verified requirements
-- Every sandbox job can reference a requirement
+- Every CyNodeAI Job (sandbox execution) can reference a requirement via its agile Sub-task
 - Audit trail reconstructs requirement lifecycle
 - RBAC prevents unauthorized modification
 - Requirement versions are immutable once approved

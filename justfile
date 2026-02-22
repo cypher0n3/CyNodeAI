@@ -25,8 +25,18 @@ ci: lint-go lint-go-ci vulncheck-go lint-python lint-md validate-doc-links valid
     @:
 
 # Local docs check: lint Markdown, validate doc links, validate feature files.
-docs-check: lint-md validate-doc-links validate-feature-files
+docs-check: fix-cynode lint-md validate-doc-links validate-feature-files
     @:
+
+# Fix all instances of "Cynode" to "CyNode" in all Markdown files.
+fix-cynode:
+    #!/usr/bin/env bash
+    set -e
+    if [ "$(uname)" = "Darwin" ]; then
+        find "{{ root_dir }}" -type f -iname '*.md' -exec sed -i '' 's/Cynode/CyNode/g' {} \;
+    else
+        find "{{ root_dir }}" -type f -iname '*.md' -exec sed -i "s/Cynode/CyNode/g" {} \;
+    fi
 
 # Full dev setup: podman, Go, and Go tools (incl. deps for .golangci.yml and lint-go-ci)
 setup: install-podman install-go install-go-tools install-markdownlint
