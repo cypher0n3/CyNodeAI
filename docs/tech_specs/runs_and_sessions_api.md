@@ -55,7 +55,9 @@ Recommended run fields
 
 ## Sessions
 
-A **session** is a user-facing container for interactive work (e.g. a chat thread or task thread) that groups runs and holds a transcript.
+A **session** is a user-facing container for interactive work that groups runs and holds transcript segments.
+Raw chat history is stored separately as chat threads and chat messages.
+See [`docs/tech_specs/chat_threads_and_messages.md`](chat_threads_and_messages.md).
 
 ### Sessions Applicable Requirements
 
@@ -80,6 +82,9 @@ Recommended session fields
 
 Logs are append-only streams attached to runs.
 Transcripts are stored conversation or execution summaries associated with a session or run.
+Transcripts are derived artifacts and are not the canonical raw chat-message store.
+Raw chat messages are stored as chat-thread messages.
+See [`docs/tech_specs/chat_threads_and_messages.md`](chat_threads_and_messages.md).
 
 ### Logs and Transcripts Applicable Requirements
 

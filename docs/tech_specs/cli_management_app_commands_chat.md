@@ -24,9 +24,14 @@ Traces To:
 - [REQ-CLIENT-0168](../requirements/client.md#req-client-0168)
 - [REQ-CLIENT-0169](../requirements/client.md#req-client-0169)
 - [REQ-CLIENT-0170](../requirements/client.md#req-client-0170)
+- [REQ-CLIENT-0171](../requirements/client.md#req-client-0171)
+- [REQ-CLIENT-0172](../requirements/client.md#req-client-0172)
+- [REQ-CLIENT-0173](../requirements/client.md#req-client-0173)
 
 The CLI MUST provide a top-level `chat` command that starts an interactive chat session with the Project Manager (PM) model.
 The session MUST use the same User API Gateway and token resolution as other commands and MUST require auth.
+The chat interface MUST use the OpenAI-compatible chat API (`POST /v1/chat/completions`).
+See [`docs/tech_specs/openai_compatible_chat_api.md`](openai_compatible_chat_api.md).
 
 ### `cynork chat` Invocation
 
@@ -37,12 +42,17 @@ Optional flags
 - `-c, --config` (string): path to config file (global).
 - `--no-color` (bool): disable colored output (global).
 - `--plain` (bool, optional): print model responses as raw text without Markdown formatting; for scripting or piping.
+- `--model` (string, optional): OpenAI model identifier to use for chat completions.
+  This is sent as the OpenAI `model` field in requests to `POST /v1/chat/completions`.
+  If omitted, the CLI uses the gateway default.
+- `--project-id` (string, optional): Project identifier to associate with the chat thread and to use as project context for the session.
+  If omitted, no project is associated by default.
 
 ### `cynork chat` Behavior
 
 - The CLI MUST resolve the gateway URL and token using the same config load and token resolution as other commands.
   If the resolved token is empty, the CLI MUST exit with code 3 and MUST NOT start a chat session.
-- The CLI MUST open an interactive loop: read a line of user input, send it to the gateway as a chat message to the PM model, receive the model response, and print the response to the user.
+- The CLI MUST open an interactive loop: read a line of user input, send it to the gateway via `POST /v1/chat/completions` using an OpenAI-format request body, receive the completion response, and print the response to the user.
   This loop MUST continue until the user exits (see below).
 - The CLI MUST support session-exit via the slash commands `/exit` and `/quit` (see [Slash command reference](#slash-command-reference)), or EOF (e.g. Ctrl+D).
   Implementations MUST support at least `/exit`, `/quit`, or EOF; supporting all three is recommended.
@@ -114,6 +124,47 @@ Required slash commands:
   - Print the cynork version string (same as `cynork version`).
   - No arguments.
   - Useful inside a long chat session without leaving the session.
+
+#### Model Selection Slash Commands
+
+- Spec ID: `CYNAI.CLIENT.CliChatModelSelection` <a id="spec-cynai-client-clichatmodelselection"></a>
+
+Traces To:
+
+- [REQ-CLIENT-0171](../requirements/client.md#req-client-0171)
+- [REQ-CLIENT-0172](../requirements/client.md#req-client-0172)
+
+The CLI SHOULD support model selection and discovery within a chat session.
+Model selection affects only chat completion requests.
+Model selection MUST NOT change any user preference or system setting.
+
+- **`/models`**
+  - List available OpenAI model identifiers for the gateway.
+  - The CLI MUST call `GET /v1/models` and display the returned model ids.
+  - No arguments.
+
+- **`/model`** [`<model_id>`]
+  - Show or set the model used for subsequent `POST /v1/chat/completions` calls in the current session.
+  - With no argument, the CLI MUST print the current selected model id.
+  - With `<model_id>`, the CLI MUST set the current selected model id.
+  - The CLI SHOULD validate the id against `/models` when available.
+
+#### Project Context Slash Commands
+
+- Spec ID: `CYNAI.CLIENT.CliChatProjectContext` <a id="spec-cynai-client-clichatprojectcontext"></a>
+
+Traces To:
+
+- [REQ-CLIENT-0173](../requirements/client.md#req-client-0173)
+
+Project context affects only chat session association and any user-initiated task operations that accept a project context.
+Project context MUST NOT be implicitly assigned.
+
+- **`/project`** [`<project_id>`]
+  - Show or set the project context for the current chat session.
+  - With no argument, the CLI MUST print the current selected project id (or indicate none).
+  - With `<project_id>`, the CLI MUST set the current selected project id for the session.
+  - The CLI MUST treat an empty project selection as \"no project\".
 
 #### Task Slash Commands
 

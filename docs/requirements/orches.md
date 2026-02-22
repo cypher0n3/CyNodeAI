@@ -130,6 +130,11 @@ It covers orchestrator control-plane behavior, task lifecycle, dispatch, and sta
   [user_api_gateway.md](../tech_specs/user_api_gateway.md)
   [cli_management_app.md](../tech_specs/cli_management_app.md#spec-cynai-client-clitaskcreateprompt)
   <a id="req-orches-0127"></a>
+- **REQ-ORCHES-0132:** Task creation MUST accept an optional `project_id` association.
+  When `project_id` is omitted, the task MUST have no project association.
+  The system MUST NOT implicitly assign a default project.
+  [projects_and_scopes.md](../tech_specs/projects_and_scopes.md)
+  <a id="req-orches-0132"></a>
 - **REQ-ORCHES-0128:** The orchestrator MUST continuously validate that the selected Project Manager model remains online after startup.
   If the selected Project Manager model becomes unavailable due to node loss, eviction, failure, or relevant system setting changes, the orchestrator MUST transition out of ready state and MUST re-run Project Manager model selection and warmup until a Project Manager model is online again.
   [CYNAI.ORCHES.Rule.MonitorProjectManagerModel](../tech_specs/orchestrator.md#spec-cynai-orches-rule-monitorprojectmanagermodel)
@@ -140,6 +145,13 @@ It covers orchestrator control-plane behavior, task lifecycle, dispatch, and sta
   [CYNAI.USRGWY.ChatSlashCommandSupport](../tech_specs/user_api_gateway.md#spec-cynai-usrgwy-chatslashcommandsupport)
   [cli_management_app_commands_chat.md](../tech_specs/cli_management_app_commands_chat.md#slash-command-reference)
   <a id="req-orches-0129"></a>
+- **REQ-ORCHES-0130:** The orchestrator MUST enforce a maximum total wait duration when producing an OpenAI-compatible chat completion response.
+  If the completion does not finish before the cap, the gateway MUST return a clear timeout error.
+  [CYNAI.USRGWY.OpenAIChatApi.Reliability](../tech_specs/openai_compatible_chat_api.md#spec-cynai-usrgwy-openaichatapi-reliability)
+  <a id="req-orches-0130"></a>
+- **REQ-ORCHES-0131:** The orchestrator MUST retry transient inference failures with bounded backoff before using a fallback path for OpenAI-compatible chat completions.
+  [CYNAI.USRGWY.OpenAIChatApi.Reliability](../tech_specs/openai_compatible_chat_api.md#spec-cynai-usrgwy-openaichatapi-reliability)
+  <a id="req-orches-0131"></a>
 - **REQ-ORCHES-0140:** The orchestrator MUST be able to pull node operational telemetry (logs, system info, container inventory/state) from nodes via the Worker Telemetry API.
   [CYNAI.ORCHES.NodeTelemetryPull](../tech_specs/worker_telemetry_api.md#spec-cynai-orches-nodetelemetrypull)
   <a id="req-orches-0140"></a>

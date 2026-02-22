@@ -93,6 +93,14 @@ When set, the project scope SHOULD be used for:
 - preference resolution (project-level overrides)
 - access control policy evaluation when `project_id` is part of the request context
 
+### Chat Scope
+
+Chat threads MAY be associated with a project via `chat_threads.project_id`.
+When set, the project scope SHOULD be used for:
+
+- access control policy evaluation when `project_id` is part of the request context
+- grouping and filtering chat history for user clients
+
 ## MVP Notes
 
 - Project membership is derived from user identity plus RBAC bindings.

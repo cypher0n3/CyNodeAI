@@ -28,6 +28,11 @@ It coordinates multi-step and multi-agent flows, enforces standards, and verifie
 It is the control-plane agent responsible for setting up task execution, handing out work to task-scoped sub-agents, and orchestrating sandbox jobs on worker nodes.
 It is also responsible for storing and retrieving task execution state and evidence in PostgreSQL through MCP database tools.
 
+User-facing chat is a conversation surface.
+The PM and PA create and manage tasks via MCP tools during that conversation.
+Chat messages are tracked separately from tasks.
+See [`docs/tech_specs/openai_compatible_chat_api.md`](openai_compatible_chat_api.md) and [`docs/tech_specs/chat_threads_and_messages.md`](chat_threads_and_messages.md).
+
 ## Agent Responsibilities
 
 - Task intake and triage

@@ -69,7 +69,8 @@ The gateway SHOULD support:
 The gateway SHOULD provide compatibility modes to support common external tools.
 
 - Open WebUI compatibility
-  - The gateway MAY expose an OpenAI-compatible subset for chat and model listing, backed by orchestrator task workflows.
+  - The gateway MUST expose the OpenAI-compatible chat surface defined in [`docs/tech_specs/openai_compatible_chat_api.md`](openai_compatible_chat_api.md).
+  - This is the only interactive chat interface for Open WebUI, cynork, and E2E.
 - Messaging integrations
   - The gateway SHOULD support inbound messages via webhooks and outbound notifications via integration adapters.
 
@@ -78,6 +79,7 @@ Compatibility layers MUST preserve orchestrator policy constraints and MUST not 
 Traces To:
 
 - [REQ-USRGWY-0121](../requirements/usrgwy.md#req-usrgwy-0121)
+- [REQ-USRGWY-0127](../requirements/usrgwy.md#req-usrgwy-0127)
 
 ## MCP Tool Interface
 

@@ -24,6 +24,10 @@ default:
 ci: lint-go lint-go-ci vulncheck-go lint-python lint-md validate-doc-links validate-feature-files test-go-cover test-bdd lint-containerfiles
     @:
 
+# Local docs check: lint Markdown, validate doc links, validate feature files.
+docs-check: lint-md validate-doc-links validate-feature-files
+    @:
+
 # Full dev setup: podman, Go, and Go tools (incl. deps for .golangci.yml and lint-go-ci)
 setup: install-podman install-go install-go-tools install-markdownlint
     @:

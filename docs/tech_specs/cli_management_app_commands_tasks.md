@@ -53,6 +53,12 @@ Optional flags
   Suggested human-readable name for the task.
   When provided, the CLI MUST include it in the task create request.
   The orchestrator accepts the value, normalizes it per [Task Naming](project_manager_agent.md#task-naming), and ensures uniqueness (e.g. appends a number) when the normalized name already exists in scope.
+- `--project-id <project_id>`.
+  Optional project association for the task.
+  When provided, the CLI MUST include it in the task create request.
+  When omitted, the task MUST have no project association (i.e. `project_id` is null).
+  The system MUST NOT implicitly assign a default project.
+  See [Projects and Scope Model](projects_and_scopes.md).
 - `--result`.
   Default is false.
   When set, after creating the task the CLI MUST poll the gateway for the task result until the task reaches a terminal status (`completed`, `failed`, or `canceled`), then MUST print the result in the same format as `cynork task result`.
