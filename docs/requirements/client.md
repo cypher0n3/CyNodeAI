@@ -139,6 +139,34 @@ It covers user-facing management surfaces and user preference behavior.
   The CLI MUST honor `--no-color` for chat output and SHOULD support a plain-text mode (e.g. `--plain`) that prints the raw response without Markdown rendering for scripting or piping.
   [CYNAI.CLIENT.CliChat](../tech_specs/cli_management_app.md#spec-cynai-client-clichat)
   <a id="req-client-0162"></a>
+- **REQ-CLIENT-0163:** The CLI MUST display all JSON as pretty-printed (indented, with newlines) whenever JSON is part of the output.
+  This applies to `--output json`, JSON embedded in chat or other responses, and any other CLI output that contains JSON.
+  [CYNAI.CLIENT.CliPrettyPrintJson](../tech_specs/cli_management_app.md#spec-cynai-client-cliprettyprintjson)
+  <a id="req-client-0163"></a>
+- **REQ-CLIENT-0164:** The CLI chat command MUST display the available slash commands (e.g. `/exit`, `/quit`, `/help`) to the user.
+  Display MUST occur at session start or in response to a dedicated help command (e.g. `/help`) so users can discover slash commands.
+  [CYNAI.CLIENT.CliChatSlashCommands](../tech_specs/cli_management_app.md#spec-cynai-client-clichatslashcommands)
+  <a id="req-client-0164"></a>
+- **REQ-CLIENT-0165:** The CLI chat command MUST support slash-command autocomplete and inline suggestions when the user types `/`.
+  When the input line starts with `/`, the CLI MUST show the list of available slash commands with short descriptions (e.g. command on the left, description on the right) and MUST support Tab to complete or cycle and arrow-up/arrow-down to move through suggestions, with the current selection visually indicated.
+  [CYNAI.CLIENT.CliChatSlashAutocomplete](../tech_specs/cli_management_app.md#spec-cynai-client-clichatslashautocomplete)
+  <a id="req-client-0165"></a>
+- **REQ-CLIENT-0166:** The CLI chat command MUST support task operations via slash commands: list, get, create (with inline prompt), cancel, result, logs, and artifacts list.
+  These MUST use the same User API Gateway endpoints as `cynork task`; output MUST be shown inline in chat (pretty-printed when JSON).
+  [CYNAI.CLIENT.CliChatSlashTask](../tech_specs/cli_management_app.md#spec-cynai-client-clichatslashtask)
+  <a id="req-client-0166"></a>
+- **REQ-CLIENT-0167:** The CLI chat command MUST support `/status` and `/whoami` slash commands to show gateway reachability and current identity without leaving chat.
+  [CYNAI.CLIENT.CliChatSlashStatus](../tech_specs/cli_management_app.md#spec-cynai-client-clichatslashstatus)
+  <a id="req-client-0167"></a>
+- **REQ-CLIENT-0168:** The CLI chat command MUST support node listing and get via slash commands: `/nodes list`, `/nodes get <node_id>`.
+  [CYNAI.CLIENT.CliChatSlashNodes](../tech_specs/cli_management_app.md#spec-cynai-client-clichatslashnodes)
+  <a id="req-client-0168"></a>
+- **REQ-CLIENT-0169:** The CLI chat command MUST support preferences via slash commands: list, get, set, delete, and effective (e.g. `/prefs list`, `/prefs get [key]`, `/prefs set ...`, `/prefs delete ...`, `/prefs effective [--task-id <id>]`).
+  [CYNAI.CLIENT.CliChatSlashPrefs](../tech_specs/cli_management_app.md#spec-cynai-client-clichatslashprefs)
+  <a id="req-client-0169"></a>
+- **REQ-CLIENT-0170:** The CLI chat command MUST support skills list and get via slash commands: `/skills list`, `/skills get <skill_id>`.
+  [CYNAI.CLIENT.CliChatSlashSkills](../tech_specs/cli_management_app.md#spec-cynai-client-clichatslashskills)
+  <a id="req-client-0170"></a>
 - **REQ-CLIENT-0125:** Node management MUST be mediated by the User API Gateway.
   [CYNAI.CLIENT.AdminWebConsoleNodeManagement](../tech_specs/admin_web_console.md#spec-cynai-client-awcnodemgmt)
   [CYNAI.CLIENT.CliNodeManagement](../tech_specs/cli_management_app.md#spec-cynai-client-clinodemgmt)

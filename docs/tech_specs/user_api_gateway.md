@@ -173,6 +173,30 @@ Constraints
 - Index: (`destination_id`)
 - Index: (`event_pattern`)
 
+## Support for Cynork Chat Slash Commands
+
+- Spec ID: `CYNAI.USRGWY.ChatSlashCommandSupport` <a id="spec-cynai-usrgwy-chatslashcommandsupport"></a>
+
+Traces To:
+
+- [REQ-ORCHES-0129](../requirements/orches.md#req-orches-0129)
+
+The User API Gateway MUST expose endpoints and operations that support every cynork chat slash command defined in the [CLI management app spec - Slash Command Reference](cli_management_app.md#slash-command-reference).
+The CLI executes slash commands by calling the same gateway APIs as the non-interactive CLI; the gateway and orchestrator MUST support that full surface.
+
+Required operation coverage:
+
+- **Status and identity:** Gateway reachability (status) and current identity (whoami) endpoints used by `/status` and `/whoami`.
+- **Tasks:** Task list, get, create, cancel, result, logs, artifacts list, and artifacts get (as used by `/task list`, `/task get`, `/task create`, `/task cancel`, `/task result`, `/task logs`, `/task artifacts list`, `/task artifacts get`).
+  Task create MUST accept prompt/task text, optional name, and optional attachments per the task-create API.
+- **Nodes:** Node list and node get (as used by `/nodes list`, `/nodes get <node_id>`).
+- **Preferences:** List, get, set, delete, and effective-preferences (as used by `/prefs list`, `/prefs get`, `/prefs set`, `/prefs delete`, `/prefs effective`).
+  Scope-type, scope-id, and key semantics MUST match the preferences API.
+- **Skills:** Skill list and skill get (as used by `/skills list`, `/skills get <skill_id>`).
+
+Implementation MUST use the existing Data REST API and gateway auth endpoints; no separate "chat API" is required.
+New gateway endpoints or resources added for other clients (e.g. admin console) MUST be taken into account so that slash commands can call the same operations where applicable.
+
 ## Authentication and Auditing
 
 - Spec ID: `CYNAI.USRGWY.AuthAuditing` <a id="spec-cynai-usrgwy-authauditing"></a>
