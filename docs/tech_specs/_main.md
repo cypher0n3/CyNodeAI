@@ -59,8 +59,10 @@ Key principles
 ### API Specifications
 
 - User API Gateway: [`docs/tech_specs/user_api_gateway.md`](user_api_gateway.md)
+- OpenAI-compatible chat API: [`docs/tech_specs/openai_compatible_chat_api.md`](openai_compatible_chat_api.md)
 - Data REST API: [`docs/tech_specs/data_rest_api.md`](data_rest_api.md)
 - Runs and sessions API: [`docs/tech_specs/runs_and_sessions_api.md`](runs_and_sessions_api.md)
+- Chat threads and messages: [`docs/tech_specs/chat_threads_and_messages.md`](chat_threads_and_messages.md)
 - Worker API (node contract): [`docs/tech_specs/worker_api.md`](worker_api.md)
 - Worker Telemetry API (node ops): [`docs/tech_specs/worker_telemetry_api.md`](worker_telemetry_api.md)
 

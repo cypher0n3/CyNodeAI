@@ -133,6 +133,7 @@ It covers user-facing management surfaces and user preference behavior.
   The user MUST be able to send messages and receive responses in turn until they exit the session.
   The chat session MUST use the same gateway and authentication as other CLI commands and MUST NOT expose secrets in history or output.
   [CYNAI.CLIENT.CliChat](../tech_specs/cli_management_app.md#spec-cynai-client-clichat)
+  [CYNAI.USRGWY.OpenAIChatApi](../tech_specs/openai_compatible_chat_api.md#spec-cynai-usrgwy-openaichatapi)
   <a id="req-client-0161"></a>
 - **REQ-CLIENT-0162:** The CLI chat command MUST render model responses with pretty-formatted output when the response contains Markdown.
   The CLI MUST interpret common Markdown (headings, lists, code blocks, emphasis, links) and display them in a human-readable way in the terminal (e.g. indentation, styling, or syntax highlighting for code blocks).
@@ -167,6 +168,23 @@ It covers user-facing management surfaces and user preference behavior.
 - **REQ-CLIENT-0170:** The CLI chat command MUST support skills list and get via slash commands: `/skills list`, `/skills get <skill_id>`.
   [CYNAI.CLIENT.CliChatSlashSkills](../tech_specs/cli_management_app_commands_chat.md#spec-cynai-client-clichatslashskills)
   <a id="req-client-0170"></a>
+- **REQ-CLIENT-0171:** The CLI chat command MUST support selecting an OpenAI model identifier for chat completions.
+  The CLI MUST support selecting the model at session start (e.g. `cynork chat --model <id>`) and within the session (e.g. `/model <id>`).
+  Model selection MUST only affect `POST /v1/chat/completions` requests and MUST NOT change system settings or user preferences.
+  [CYNAI.CLIENT.CliChatModelSelection](../tech_specs/cli_management_app_commands_chat.md#spec-cynai-client-clichatmodelselection)
+  [CYNAI.USRGWY.OpenAIChatApi.Endpoints](../tech_specs/openai_compatible_chat_api.md#spec-cynai-usrgwy-openaichatapi-endpoints)
+  <a id="req-client-0171"></a>
+- **REQ-CLIENT-0172:** The CLI chat command SHOULD support listing available OpenAI model identifiers from the gateway (e.g. `/models`).
+  This MUST call `GET /v1/models` and display model ids.
+  [CYNAI.CLIENT.CliChatModelSelection](../tech_specs/cli_management_app_commands_chat.md#spec-cynai-client-clichatmodelselection)
+  [CYNAI.USRGWY.OpenAIChatApi.Endpoints](../tech_specs/openai_compatible_chat_api.md#spec-cynai-usrgwy-openaichatapi-endpoints)
+  <a id="req-client-0172"></a>
+- **REQ-CLIENT-0173:** The CLI chat command MUST support setting an optional project context for the chat session.
+  When set, the project context MAY be used to associate a chat thread to a project and to scope user-initiated task operations.
+  When omitted, there is no project by default.
+  [CYNAI.CLIENT.CliChatProjectContext](../tech_specs/cli_management_app_commands_chat.md#spec-cynai-client-clichatprojectcontext)
+  [CYNAI.ACCESS.Doc.ProjectsAndScopes](../tech_specs/projects_and_scopes.md#spec-cynai-access-doc-projectsandscopes)
+  <a id="req-client-0173"></a>
 - **REQ-CLIENT-0125:** Node management MUST be mediated by the User API Gateway.
   [CYNAI.CLIENT.AdminWebConsoleNodeManagement](../tech_specs/admin_web_console.md#spec-cynai-client-awcnodemgmt)
   [CYNAI.CLIENT.CliNodeManagement](../tech_specs/cli_management_app.md#spec-cynai-client-clinodemgmt)
@@ -257,11 +275,18 @@ It covers user-facing management surfaces and user preference behavior.
   <a id="req-client-0150"></a>
 - **REQ-CLIENT-0151:** The CLI MUST allow passing a task as inline text (e.g. `--prompt` or `--task`) or from a file (e.g. `--task-file <path>`) containing plain text or Markdown.
   The default is interpretation; the system interprets the task and uses inference when needed (no user-facing "use inference" flag).
+  The CLI MUST support optionally associating a created task with a `project_id` (for example `cynork task create --project-id <id>`).
+  When `project_id` is omitted, there is no project association by default.
+  The system MUST NOT implicitly assign a default project.
   Attachments are specified in REQ-CLIENT-0157.
   [CYNAI.CLIENT.CliTaskCreatePrompt](../tech_specs/cli_management_app.md#spec-cynai-client-clitaskcreateprompt)
+  [CYNAI.ACCESS.Doc.ProjectsAndScopes](../tech_specs/projects_and_scopes.md#spec-cynai-access-doc-projectsandscopes)
   <a id="req-client-0151"></a>
 - **REQ-CLIENT-0152:** The admin web console MUST allow submitting a task as plain text or Markdown (inline or from paste) and MUST support attaching files or other artifacts (e.g. file upload) with the same semantics as the CLI and gateway.
+  The console MUST support optionally associating the submitted task with a `project_id`.
+  When `project_id` is omitted, there is no project association by default.
   [CYNAI.CLIENT.AdminWebConsoleCapabilityParity](../tech_specs/admin_web_console.md#spec-cynai-client-awccapabilityparity)
+  [CYNAI.ACCESS.Doc.ProjectsAndScopes](../tech_specs/projects_and_scopes.md#spec-cynai-access-doc-projectsandscopes)
   <a id="req-client-0152"></a>
 - **REQ-CLIENT-0153:** The CLI MUST support running a script via a flag (e.g. `--script <path>`) and a short series of commands (e.g. `--commands` with one or more commands or repeatable `--command`).
   These are explicit "run script" / "run commands" modes; the system runs the script or commands in the sandbox rather than interpreting as natural language.

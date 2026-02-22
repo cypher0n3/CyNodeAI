@@ -23,11 +23,11 @@ It covers the intended architecture, prerequisites, and setup steps once the Use
 
 - CyNodeAI exposes a single user-facing surface via the **User API Gateway** (orchestrator).
 - The gateway is designed to integrate with external tools such as Open WebUI; see [User API Gateway](tech_specs/user_api_gateway.md).
-- The gateway **MAY** expose an OpenAI-compatible subset for chat and model listing, backed by orchestrator task workflows (Client Compatibility in [user_api_gateway.md](tech_specs/user_api_gateway.md)).
-- That OpenAI-compatible layer is optional in the spec and may not be implemented yet.
-- This doc assumes the gateway will (or does) offer at least:
+- The gateway MUST expose an OpenAI-compatible chat surface for chat and model listing.
+  See [OpenAI-Compatible Chat API](tech_specs/openai_compatible_chat_api.md).
+- This doc assumes the gateway offers at least:
   - `GET /v1/models` (or equivalent) for model listing
-  - `POST /v1/chat/completions` (or equivalent) for chat, backed by orchestrator task/session workflows
+  - `POST /v1/chat/completions` (or equivalent) for chat completions
 - All compatibility layers MUST preserve orchestrator policy and auditing; see [REQ-USRGWY-0121](requirements/usrgwy.md#req-usrgwy-0121).
 
 ## Chat Agent Backing (Implementation Requirement)
@@ -116,7 +116,9 @@ For a complete integration, the User API Gateway implementation should provide:
 - **Authentication**: Accept Bearer tokens (JWT or API key) and map them to a user identity; enforce the same auth as the rest of the gateway.
 - **GET /v1/models**: Return a list of "models" that include at least one entry corresponding to the **Project Manager Agent** (for tasking, task status, project info); optionally additional entries for other chat agents configurable via the admin web console, in OpenAI list-models format.
 - **POST /v1/chat/completions**: Accept OpenAI-format messages and route them to the selected agent.
-  When the selected "model" is the Project Manager Agent, the gateway MUST create or use a session/task and drive the request through the Project Manager Agent (task intake, dispatch, verification, info retrieval).
+  When the selected "model" is the Project Manager Agent, the gateway MUST drive the request through the Project Manager Agent for tasking and info.
+  The PM and PA create and manage tasks via MCP during the conversation.
+  The gateway MUST NOT model chat as one task per message.
   When the selected "model" is a separate configurable chat agent, the gateway MUST use the agent configuration defined in the admin console (e.g. model, system prompt) and return the response in OpenAI chat-completion format.
 - **Streaming (optional)**: If OpenWebUI is used with streaming, the gateway should support streaming responses in the same format as the OpenAI API.
 - **Policy and auditing**: All requests through this compatibility layer MUST be subject to existing gateway policy and audit logging (REQ-USRGWY-0121).

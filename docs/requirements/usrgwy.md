@@ -99,3 +99,28 @@ It covers user-facing REST API gateway behavior and related API contracts.
 - **REQ-USRGWY-0126:** The web console MUST be a client of the gateway and MUST NOT connect directly to PostgreSQL.
   [CYNAI.USRGWY.AdminConsole](../tech_specs/user_api_gateway.md#spec-cynai-usrgwy-adminconsole)
   <a id="req-usrgwy-0126"></a>
+- **REQ-USRGWY-0127:** The User API Gateway MUST expose the OpenAI-compatible chat API as the only interactive chat interface.
+  This includes `GET /v1/models` and `POST /v1/chat/completions`.
+  [CYNAI.USRGWY.OpenAIChatApi](../tech_specs/openai_compatible_chat_api.md#spec-cynai-usrgwy-openaichatapi)
+  [CYNAI.USRGWY.ClientCompatibility](../tech_specs/user_api_gateway.md#spec-cynai-usrgwy-clientcompatibility)
+  <a id="req-usrgwy-0127"></a>
+- **REQ-USRGWY-0128:** The gateway MUST support configurable timeouts suitable for OpenAI-compatible chat completions.
+  Deployments that use chat MUST be able to configure timeouts so chat can complete when models are cold or under load.
+  [CYNAI.USRGWY.OpenAIChatApi.Timeouts](../tech_specs/openai_compatible_chat_api.md#spec-cynai-usrgwy-openaichatapi-timeouts)
+  <a id="req-usrgwy-0128"></a>
+- **REQ-USRGWY-0129:** The gateway MUST provide distinct chat-completion error semantics and MUST log completion path selection for diagnostics.
+  Errors MUST distinguish cancellation, inference failure, and completion timeout.
+  [CYNAI.USRGWY.OpenAIChatApi.Errors](../tech_specs/openai_compatible_chat_api.md#spec-cynai-usrgwy-openaichatapi-errors)
+  [CYNAI.USRGWY.OpenAIChatApi.Observability](../tech_specs/openai_compatible_chat_api.md#spec-cynai-usrgwy-openaichatapi-observability)
+  <a id="req-usrgwy-0129"></a>
+- **REQ-USRGWY-0130:** The system MUST store chat history as chat threads and chat messages that are tracked separately from task lifecycle state.
+  Chat threads and messages MUST be retrievable to authorized clients.
+  Transcript segments remain a separate derived artifact associated with a session or run.
+  [CYNAI.USRGWY.ChatThreadsMessages](../tech_specs/chat_threads_and_messages.md#spec-cynai-usrgwy-chatthreadsmessages)
+  [CYNAI.USRGWY.OpenAIChatApi.ConversationModel](../tech_specs/openai_compatible_chat_api.md#spec-cynai-usrgwy-openaichatapi-conversationmodel)
+  <a id="req-usrgwy-0130"></a>
+- **REQ-USRGWY-0131:** Tasks and chat threads MUST support optional association to a project via `project_id`.
+  There is no default project association; `project_id` is null unless explicitly set by the user client or by the PM/PA via MCP.
+  [CYNAI.ACCESS.Doc.ProjectsAndScopes](../tech_specs/projects_and_scopes.md#spec-cynai-access-doc-projectsandscopes)
+  [CYNAI.USRGWY.ChatThreadsMessages.Threads](../tech_specs/chat_threads_and_messages.md#spec-cynai-usrgwy-chatthreadsmessages-threads)
+  <a id="req-usrgwy-0131"></a>
