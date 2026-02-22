@@ -175,7 +175,7 @@ build_orchestrator_containers() {
 build_inference_proxy_image() {
     log_info "Building inference-proxy container image..."
     cd "$PROJECT_ROOT"
-    if ! $RUNTIME build -f worker_node/cmd/inference-proxy/Dockerfile -t cynodeai-inference-proxy:dev .; then
+    if ! $RUNTIME build -f worker_node/cmd/inference-proxy/Containerfile -t cynodeai-inference-proxy:dev .; then
         log_error "Failed to build inference-proxy image"
         return 1
     fi
@@ -362,6 +362,15 @@ run_e2e_test() {
     USER_API="http://localhost:$ORCHESTRATOR_PORT"
     CONTROL_PLANE_API="http://localhost:$CONTROL_PLANE_PORT"
 
+    # Wait for user-gateway to be reachable
+    for i in {1..30}; do
+        if curl -s -o /dev/null -w "%{http_code}" "$USER_API/healthz" | grep -q 200; then
+            break
+        fi
+        [ "$i" -eq 30 ] && { log_error "User API not ready after 30s"; return 1; }
+        sleep 1
+    done
+
     # Inference readiness: load model and run basic inference when Ollama container is present
     if ! run_ollama_inference_smoke; then
         return 1
@@ -394,14 +403,15 @@ run_e2e_test() {
 
     # Test 3: Create a task
     log_info "Test 3: Create a task..."
-    TASK_RESPONSE=$(curl -s -X POST "$USER_API/v1/tasks" \
+    TASK_RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "$USER_API/v1/tasks" \
         -H "Authorization: Bearer $ACCESS_TOKEN" \
         -H "Content-Type: application/json" \
         -d '{"prompt": "echo Hello from sandbox"}')
-
-    TASK_ID=$(echo "$TASK_RESPONSE" | jq -r '.id')
-    if [ "$TASK_ID" == "null" ] || [ -z "$TASK_ID" ]; then
-        log_error "Create task failed: $TASK_RESPONSE"
+    TASK_HTTP_CODE=$(echo "$TASK_RESPONSE" | tail -n 1)
+    TASK_BODY=$(echo "$TASK_RESPONSE" | sed '$d')
+    TASK_ID=$(echo "$TASK_BODY" | jq -r '.task_id // .id // empty')
+    if [ -z "$TASK_ID" ]; then
+        log_error "Create task failed (HTTP $TASK_HTTP_CODE): $TASK_BODY"
         return 1
     fi
     log_info "Task created with ID: $TASK_ID"
@@ -428,8 +438,8 @@ run_e2e_test() {
             -H "Authorization: Bearer $ACCESS_TOKEN" \
             -H "Content-Type: application/json" \
             -d '{"prompt": "sh -c '\''echo $OLLAMA_BASE_URL'\''", "use_inference": true, "input_mode": "commands"}')
-        INF_TASK_ID=$(echo "$INF_TASK_RESPONSE" | jq -r '.id')
-        if [ "$INF_TASK_ID" = "null" ] || [ -z "$INF_TASK_ID" ]; then
+        INF_TASK_ID=$(echo "$INF_TASK_RESPONSE" | jq -r '.task_id // .id // empty')
+        if [ -z "$INF_TASK_ID" ]; then
             log_error "Create inference task failed: $INF_TASK_RESPONSE"
             return 1
         fi
@@ -465,8 +475,8 @@ run_e2e_test() {
         -H "Authorization: Bearer $ACCESS_TOKEN" \
         -H "Content-Type: application/json" \
         -d '{"prompt": "What model are you? Reply in one short sentence."}')
-    PROMPT_TASK_ID=$(echo "$PROMPT_TASK_RESPONSE" | jq -r '.id')
-    if [ "$PROMPT_TASK_ID" = "null" ] || [ -z "$PROMPT_TASK_ID" ]; then
+    PROMPT_TASK_ID=$(echo "$PROMPT_TASK_RESPONSE" | jq -r '.task_id // .id // empty')
+    if [ -z "$PROMPT_TASK_ID" ]; then
         log_error "Create prompt task failed: $PROMPT_TASK_RESPONSE"
         return 1
     fi

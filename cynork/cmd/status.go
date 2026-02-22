@@ -1,9 +1,7 @@
 package cmd
 
 import (
-	"encoding/json"
 	"fmt"
-	"os"
 
 	"github.com/cypher0n3/cynodeai/cynork/internal/exit"
 	"github.com/cypher0n3/cynodeai/cynork/internal/gateway"
@@ -27,7 +25,7 @@ func runStatus(_ *cobra.Command, _ []string) error {
 		return exit.Gateway(fmt.Errorf("gateway unreachable: %w", err))
 	}
 	if outputFmt == outputFormatJSON {
-		_ = json.NewEncoder(os.Stdout).Encode(map[string]string{"gateway": "ok"})
+		_ = jsonOutputEncoder().Encode(map[string]string{"gateway": "ok"})
 		return nil
 	}
 	fmt.Println("ok")

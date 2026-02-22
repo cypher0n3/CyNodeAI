@@ -2,7 +2,6 @@ package cmd
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"os"
 	"os/signal"
@@ -115,9 +114,7 @@ func runTaskCreate(_ *cobra.Command, _ []string) error {
 	}
 	taskID := task.ResolveTaskID()
 	if outputFmt == outputFormatJSON {
-		enc := json.NewEncoder(os.Stdout)
-		enc.SetEscapeHTML(false)
-		_ = enc.Encode(map[string]string{"task_id": taskID})
+		_ = jsonOutputEncoder().Encode(map[string]string{"task_id": taskID})
 		return nil
 	}
 	fmt.Println("task_id=" + taskID)
@@ -142,9 +139,7 @@ func runTaskList(_ *cobra.Command, _ []string) error {
 		return exitFromGatewayErr(err)
 	}
 	if outputFmt == outputFormatJSON {
-		enc := json.NewEncoder(os.Stdout)
-		enc.SetEscapeHTML(false)
-		_ = enc.Encode(resp)
+		_ = jsonOutputEncoder().Encode(resp)
 		return nil
 	}
 	for _, t := range resp.Tasks {
@@ -172,9 +167,7 @@ func runTaskGet(_ *cobra.Command, args []string) error {
 		if task.TaskName != nil {
 			out["task_name"] = *task.TaskName
 		}
-		enc := json.NewEncoder(os.Stdout)
-		enc.SetEscapeHTML(false)
-		_ = enc.Encode(out)
+		_ = jsonOutputEncoder().Encode(out)
 		return nil
 	}
 	line := fmt.Sprintf("task_id=%s status=%s", task.ResolveTaskID(), task.Status)
@@ -236,9 +229,7 @@ func runTaskCancel(_ *cobra.Command, args []string) error {
 		return exitFromGatewayErr(err)
 	}
 	if outputFmt == outputFormatJSON {
-		enc := json.NewEncoder(os.Stdout)
-		enc.SetEscapeHTML(false)
-		_ = enc.Encode(map[string]any{"task_id": resp.TaskID, "canceled": resp.Canceled})
+		_ = jsonOutputEncoder().Encode(map[string]any{"task_id": resp.TaskID, "canceled": resp.Canceled})
 		return nil
 	}
 	fmt.Printf("task_id=%s canceled=%t\n", resp.TaskID, resp.Canceled)
@@ -256,9 +247,7 @@ func runTaskLogs(_ *cobra.Command, args []string) error {
 		return exitFromGatewayErr(err)
 	}
 	if outputFmt == outputFormatJSON {
-		enc := json.NewEncoder(os.Stdout)
-		enc.SetEscapeHTML(false)
-		_ = enc.Encode(logs)
+		_ = jsonOutputEncoder().Encode(logs)
 		return nil
 	}
 	if logs.Stdout != "" {
@@ -285,9 +274,7 @@ func printTaskResult(result *gateway.TaskResultResponse) {
 		if stderr != "" {
 			out["stderr"] = stderr
 		}
-		enc := json.NewEncoder(os.Stdout)
-		enc.SetEscapeHTML(false)
-		_ = enc.Encode(out)
+		_ = jsonOutputEncoder().Encode(out)
 		return
 	}
 	fmt.Printf("task_id=%s status=%s\n", result.TaskID, result.Status)

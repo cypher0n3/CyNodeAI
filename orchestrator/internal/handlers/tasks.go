@@ -184,11 +184,6 @@ func (h *TaskHandler) createTaskWithOrchestratorInference(ctx context.Context, t
 		return nil, err
 	}
 	_ = h.db.UpdateTaskStatus(ctx, taskID, models.TaskStatusCompleted)
-	summary := response
-	if len(summary) > 200 {
-		summary = summary[:200]
-	}
-	_ = h.db.UpdateTaskSummary(ctx, taskID, summary)
 	return job, nil
 }
 

@@ -2,6 +2,7 @@
 package cmd
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -43,6 +44,14 @@ var rootCmd = &cobra.Command{
 		}
 		return nil
 	},
+}
+
+// jsonOutputEncoder returns an encoder for stdout with indentation and no HTML escaping.
+func jsonOutputEncoder() *json.Encoder {
+	enc := json.NewEncoder(os.Stdout)
+	enc.SetEscapeHTML(false)
+	enc.SetIndent("", "  ")
+	return enc
 }
 
 // Execute runs the root command.
