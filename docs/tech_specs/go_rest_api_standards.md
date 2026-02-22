@@ -130,6 +130,16 @@ Recommended error fields
 - `detail`: safe detail for operators and users
 - `instance`: request identifier for correlating logs and traces
 
+Protocol compatibility exceptions
+
+Some gateway endpoints exist specifically to emulate an external protocol (for example OpenAI-compatible endpoints).
+In those cases, the endpoint MAY return the external protocol's error shape instead of the standard CyNodeAI error envelope.
+When an exception is used:
+
+- The endpoint's tech spec MUST define the exact error payload shape.
+- Implementations MUST not mix multiple error formats for the same endpoint.
+- Error payloads MUST remain safe (no secrets) and observable (include request identifiers in logs).
+
 ## Authentication, Authorization, and Security
 
 The following requirements apply.

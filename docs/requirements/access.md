@@ -18,10 +18,6 @@ It covers authorization, policy evaluation, RBAC, groups, and scope enforcement.
   [CYNAI.ACCESS.Doc.RBACAndGroups](../tech_specs/rbac_and_groups.md#spec-cynai-access-doc-rbacandgroups)
   [CYNAI.ACCESS.GroupMembership](../tech_specs/rbac_and_groups.md#spec-cynai-access-groupmembership)
   <a id="req-access-0002"></a>
-- **REQ-ACCESS-0003:** Projects in PostgreSQL with stable ids; disable without delete; FKs to projects.id.
-  [CYNAI.ACCESS.Doc.ProjectsAndScopes](../tech_specs/projects_and_scopes.md#spec-cynai-access-doc-projectsandscopes)
-  [CYNAI.ACCESS.ProjectsDatabaseModel](../tech_specs/projects_and_scopes.md#spec-cynai-access-projectsdb)
-  <a id="req-access-0003"></a>
 
 - **REQ-ACCESS-0100:** The orchestrator MUST track groups and group membership in PostgreSQL.
   [CYNAI.ACCESS.GroupMembership](../tech_specs/rbac_and_groups.md#spec-cynai-access-groupmembership)
@@ -68,15 +64,6 @@ It covers authorization, policy evaluation, RBAC, groups, and scope enforcement.
 - **REQ-ACCESS-0120:** The Data REST API SHOULD expose groups, group memberships, roles, and role bindings to authorized users.
   [CYNAI.ACCESS.UserApiDataRest](../tech_specs/rbac_and_groups.md#spec-cynai-access-userapirest)
   <a id="req-access-0120"></a>
-- **REQ-ACCESS-0114:** The orchestrator MUST store projects in PostgreSQL with stable identifiers.
-  [CYNAI.ACCESS.ProjectsDatabaseModel](../tech_specs/projects_and_scopes.md#spec-cynai-access-projectsdb)
-  <a id="req-access-0114"></a>
-- **REQ-ACCESS-0115:** Projects MUST be able to be disabled without deleting records.
-  [CYNAI.ACCESS.ProjectsDatabaseModel](../tech_specs/projects_and_scopes.md#spec-cynai-access-projectsdb)
-  <a id="req-access-0115"></a>
-- **REQ-ACCESS-0116:** Tables that reference `project_id` MUST use a foreign key to `projects.id`.
-  [CYNAI.ACCESS.ProjectsDatabaseModel](../tech_specs/projects_and_scopes.md#spec-cynai-access-projectsdb)
-  <a id="req-access-0116"></a>
 
 - **REQ-ACCESS-0117:** The system SHOULD be default deny.
   [access_control.md](../tech_specs/access_control.md)

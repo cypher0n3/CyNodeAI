@@ -309,6 +309,14 @@ All subcommands that call the gateway MUST use the resolved gateway URL and reso
 - `cynork creds ...`: see [Credential Management](cli_management_app_commands_admin.md#credential-management); MUST use gateway credential endpoints.
 - `cynork prefs ...`: see [Preferences Management](cli_management_app_commands_admin.md#preferences-management).
 - `cynork nodes ...`: see [Node Management](cli_management_app_commands_admin.md#node-management).
+- `cynork project ...`: basic CRUD, active project, and project-scoped RBAC via gateway; see [Project Management](cli_management_app_commands_admin.md#project-management).
+  - Set active: `cynork project set <project_id>` (clearing when supported).
+  - Create: `cynork project create --slug <slug> --title <title>` (optional `--description`).
+  - List: `cynork project list` (optional `--limit`, `--cursor`, `--active-only`).
+  - Get: `cynork project get <project_id>`.
+  - Update: `cynork project update <project_id>` (optional `--title`, `--description`, `--active`).
+  - Delete: `cynork project delete <project_id>`.
+  - RBAC: `cynork project rbac list <project_id>`, `cynork project rbac grant <project_id> --role <name> --user <id>|--group <id>`, `cynork project rbac revoke <project_id> --role <name> --user <id>|--group <id>`.
 - `cynork skills ...`: full CRUD via gateway; see [Skill Management CRUD (Web and CLI)](skills_storage_and_inference.md#spec-cynai-skills-skillmanagementcrud) and [Skills Management](cli_management_app_commands_admin.md#skills-management).
   - Create: `cynork skills load <file.md>` (required file path; optional `--name`, `--scope`).
   - List: `cynork skills list` (optional `--scope`, `--owner`).
@@ -369,6 +377,11 @@ Full specification: [CLI management app - Core commands](cli_management_app_comm
 
 - Spec ID: `CYNAI.CLIENT.CliNodeManagement` <a id="spec-cynai-client-clinodemgmt"></a>
 - Full specification: [CLI management app - Admin and resource commands](cli_management_app_commands_admin.md#node-management).
+
+## Project Management
+
+- Spec ID: `CYNAI.CLIENT.CliProjectManagement` <a id="spec-cynai-client-cliprojectmanagement"></a>
+- Full specification: [CLI management app - Admin and resource commands](cli_management_app_commands_admin.md#project-management).
 
 ## Skills Management
 

@@ -101,6 +101,10 @@ It covers user-facing REST API gateway behavior and related API contracts.
   <a id="req-usrgwy-0126"></a>
 - **REQ-USRGWY-0127:** The User API Gateway MUST expose the OpenAI-compatible chat API as the only interactive chat interface.
   This includes `GET /v1/models` and `POST /v1/chat/completions`.
+  The OpenAI-compatible contract MUST be pinned to the latest OpenAI Chat Completions API reference as of 2026-02-22.
+  The implementation MUST follow the OpenAI REST API version indicated by `openai-version: 2020-10-01` (as of 2026-02-22).
+  The gateway MUST ignore unknown request fields for forward compatibility.
+  `GET /v1/models` MUST return only model identifiers that the authenticated user is authorized to use (RBAC/policy).
   [CYNAI.USRGWY.OpenAIChatApi](../tech_specs/openai_compatible_chat_api.md#spec-cynai-usrgwy-openaichatapi)
   [CYNAI.USRGWY.ClientCompatibility](../tech_specs/user_api_gateway.md#spec-cynai-usrgwy-clientcompatibility)
   <a id="req-usrgwy-0127"></a>
@@ -110,6 +114,7 @@ It covers user-facing REST API gateway behavior and related API contracts.
   <a id="req-usrgwy-0128"></a>
 - **REQ-USRGWY-0129:** The gateway MUST provide distinct chat-completion error semantics and MUST log completion path selection for diagnostics.
   Errors MUST distinguish cancellation, inference failure, and completion timeout.
+  For the OpenAI-compatible endpoints (`GET /v1/models`, `POST /v1/chat/completions`), the gateway MUST return an OpenAI-style JSON error payload with a top-level `error` object.
   [CYNAI.USRGWY.OpenAIChatApi.Errors](../tech_specs/openai_compatible_chat_api.md#spec-cynai-usrgwy-openaichatapi-errors)
   [CYNAI.USRGWY.OpenAIChatApi.Observability](../tech_specs/openai_compatible_chat_api.md#spec-cynai-usrgwy-openaichatapi-observability)
   <a id="req-usrgwy-0129"></a>
@@ -119,8 +124,19 @@ It covers user-facing REST API gateway behavior and related API contracts.
   [CYNAI.USRGWY.ChatThreadsMessages](../tech_specs/chat_threads_and_messages.md#spec-cynai-usrgwy-chatthreadsmessages)
   [CYNAI.USRGWY.OpenAIChatApi.ConversationModel](../tech_specs/openai_compatible_chat_api.md#spec-cynai-usrgwy-openaichatapi-conversationmodel)
   <a id="req-usrgwy-0130"></a>
-- **REQ-USRGWY-0131:** Tasks and chat threads MUST support optional association to a project via `project_id`.
-  There is no default project association; `project_id` is null unless explicitly set by the user client or by the PM/PA via MCP.
+- **REQ-USRGWY-0131:** Tasks MUST support association to the creating user (e.g. `created_by` from the authenticated request context) and to a project via `project_id`.
+  When a task is created via the gateway by an authenticated user, the gateway MUST set the task creator from the request context.
+  When created by the system (including PM/PA via MCP and bootstrap flows), the system MUST set creator per policy but MUST NOT write a null `created_by` (use the reserved system user identity when no human creator applies; see [REQ-IDENTY-0121](../requirements/identy.md#req-identy-0121)).
+  When no project is explicitly set (by the user client or by the PM/PA), the gateway MUST associate the task or chat thread with the creating user's default project (authenticated user when present, otherwise system user) (see [REQ-PROJCT-0104](../requirements/projct.md#req-projct-0104)).
+  User clients MAY supply an explicit project via the OpenAI-standard `OpenAI-Project` request header for chat; when absent, the thread and any tasks created in that context use the creating user's default project.
+  [REQ-PROJCT-0001](../requirements/projct.md#req-projct-0001)
+  [REQ-PROJCT-0104](../requirements/projct.md#req-projct-0104)
   [CYNAI.ACCESS.Doc.ProjectsAndScopes](../tech_specs/projects_and_scopes.md#spec-cynai-access-doc-projectsandscopes)
   [CYNAI.USRGWY.ChatThreadsMessages.Threads](../tech_specs/chat_threads_and_messages.md#spec-cynai-usrgwy-chatthreadsmessages-threads)
   <a id="req-usrgwy-0131"></a>
+
+- **REQ-USRGWY-0132:** The User API Gateway MUST redact detected secrets from OpenAI-compatible chat messages before persisting or using them for inference.
+  The gateway MUST persist only the amended (redacted) content in chat threads and chat messages.
+  [CYNAI.USRGWY.OpenAIChatApi.Pipeline](../tech_specs/openai_compatible_chat_api.md#spec-cynai-usrgwy-openaichatapi-pipeline)
+  [CYNAI.USRGWY.ChatThreadsMessages.Messages](../tech_specs/chat_threads_and_messages.md#spec-cynai-usrgwy-chatthreadsmessages-messages)
+  <a id="req-usrgwy-0132"></a>

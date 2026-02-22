@@ -12,6 +12,7 @@
   - [Preferences Management Applicable Requirements](#preferences-management-applicable-requirements)
 - [System Settings Management](#system-settings-management)
 - [Skills Management](#skills-management)
+- [Project Management](#project-management)
 - [Node Management](#node-management)
   - [Node Management Applicable Requirements](#node-management-applicable-requirements)
 - [Implementation Specification (Nuxt)](#implementation-specification-nuxt)
@@ -49,9 +50,10 @@ Use the same gateway APIs and the same authorization and auditing rules for both
 ## Primary Use Cases
 
 - Upload and manage external provider credentials for API Egress and Git Egress.
-- View, edit, and audit user preferences across scopes (system, user, group, project, task).
+- View, edit, and audit user preferences across scopes (system, user, group, project, task), with an easy method to CRUD personal, group, and project preferences.
 - View node inventory and manage basic node lifecycle controls.
 - Full CRUD for AI skills: create (upload), list, view (content and metadata), edit (update content and/or metadata including scope, with same auditing and scope permissions), and delete; see [Skill Management CRUD](skills_storage_and_inference.md#skill-management-crud-web-and-cli).
+- Basic project management (CRUD): create, list, view, edit, and delete or disable projects; each project has a user-friendly title and optional text description (see [Projects and Scope Model](projects_and_scopes.md), [REQ-PROJCT-0103](../requirements/projct.md#req-projct-0103)).
 - Create tasks: submit a task as plain text or Markdown (inline or paste), attach files or other artifacts (file upload), run a script (e.g. script file upload), or run a short series of commands; same semantics as the CLI and User API Gateway (see [REQ-ORCHES-0125](../requirements/orches.md#req-orches-0125), [REQ-ORCHES-0126](../requirements/orches.md#req-orches-0126), [REQ-ORCHES-0127](../requirements/orches.md#req-orches-0127), [REQ-CLIENT-0152](../requirements/client.md#req-client-0152), [REQ-CLIENT-0154](../requirements/client.md#req-client-0154)).
 - Inspect access control rules and audit decisions.
 
@@ -121,6 +123,7 @@ Recommended metadata fields shown in the UI
 ## Preferences Management
 
 The web console must support editing preferences stored in PostgreSQL.
+It MUST provide an easy method for users to create, read, update, and delete their personal (user), group, and project preferences (full CRUD for those scopes).
 
 ### Preferences Management Applicable Requirements
 
@@ -196,6 +199,25 @@ Recommended UI
 - **Create**: Upload form (paste or file) for markdown content; optional name and scope (scope elevation subject to permission).
 - **Edit**: Update content and/or metadata (name, scope); updated content is re-audited; on failure show rejection reason and exact triggering text.
 - **Delete**: Confirm and remove skill from store and registry (restricted to owner or admin).
+
+## Project Management
+
+- Spec ID: `CYNAI.CLIENT.AdminWebConsoleProjectManagement` <a id="spec-cynai-client-awcprojectmanagement"></a>
+
+Traces To:
+
+- [REQ-CLIENT-0174](../requirements/client.md#req-client-0174)
+
+The web console MUST support basic project CRUD (create, list, view, update, delete or disable) via the User API Gateway, with the same capabilities as the CLI (see [Project Management](cli_management_app_commands_admin.md#project-management)).
+Projects have a user-friendly title (display name) and an optional text description for lists and detail views.
+
+Recommended UI
+
+- **List**: Table or list of projects (columns: title, slug, description excerpt, active, updated_at); optional filter by active status.
+- **View**: Single project detail (title, slug, description, is_active, created_at, updated_at, updated_by).
+- **Create**: Form with required slug and title; optional description.
+- **Edit**: Update title, description, and active status.
+- **Delete**: Confirm and delete (or disable) project; show warning when project is referenced by tasks or chat threads.
 
 ## Node Management
 
@@ -311,6 +333,7 @@ Credentials UI requirements
 
 Preferences UI requirements
 
+- Provide an easy method for users to create, read, update, and delete personal (user), group, and project preferences (full CRUD).
 - View and edit preferences by scope.
 - Show precedence and effective preferences preview.
 - Validate known key types when possible.
@@ -389,7 +412,7 @@ Minimum viable admin console
 
 - Login and session management.
 - Credential create, list, rotate, and disable for API Egress.
-- Preference list and edit for system and user scopes.
+- Preference list and edit for system, user, group, and project scopes, with easy CRUD for personal, group, and project preferences.
 - Effective preferences preview for a task.
 - Node inventory list and detail views.
 - Node enable, disable, and drain actions.

@@ -56,8 +56,7 @@ Optional flags
 - `--project-id <project_id>`.
   Optional project association for the task.
   When provided, the CLI MUST include it in the task create request.
-  When omitted, the task MUST have no project association (i.e. `project_id` is null).
-  The system MUST NOT implicitly assign a default project.
+  When omitted, the gateway MUST associate the task with the authenticated user's default project (see [Default project](projects_and_scopes.md#default-project)).
   See [Projects and Scope Model](projects_and_scopes.md).
 - `--result`.
   Default is false.

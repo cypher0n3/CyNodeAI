@@ -34,6 +34,9 @@
 - [Runs and Sessions](#runs-and-sessions)
   - [Runs Table](#runs-table)
   - [Sessions Table](#sessions-table)
+- [Chat Threads and Messages](#chat-threads-and-messages)
+  - [Chat Threads Table](#chat-threads-table)
+  - [Chat Messages Table](#chat-messages-table)
 - [Task Artifacts](#task-artifacts)
 - [Vector Storage (`pgvector`)](#vector-storage-pgvector)
   - [Vector Items Table](#vector-items-table)
@@ -116,10 +119,11 @@ Logical groups
 7. **Tasks, jobs, nodes:** `tasks`, `jobs`, `nodes`, `node_capabilities`
 8. **Sandbox image registry:** `sandbox_images`, `sandbox_image_versions`, `node_sandbox_image_availability`
 9. **Runs and sessions:** `runs`, `sessions`
-10. **Task artifacts:** `task_artifacts`
-11. **Vector storage (`pgvector`):** `vector_items`
-12. **Audit:** `auth_audit_log`, `mcp_tool_call_audit_log` (and domain-specific audit tables above)
-13. **Model registry (optional for MVP):** `models`, `model_versions`, `model_artifacts`, `node_model_availability`
+10. **Chat:** `chat_threads`, `chat_messages`
+11. **Task artifacts:** `task_artifacts`
+12. **Vector storage (`pgvector`):** `vector_items`
+13. **Audit:** `auth_audit_log`, `mcp_tool_call_audit_log` (and domain-specific audit tables above)
+14. **Model registry (optional for MVP):** `models`, `model_versions`, `model_artifacts`, `node_model_availability`
 
 ## Identity and Authentication
 
@@ -144,6 +148,12 @@ Constraints
 - Index: (`handle`)
 - Index: (`email`) where not null
 - Index: (`is_active`)
+
+Reserved identities
+
+- The handle `system` is reserved.
+  The orchestrator MUST ensure a corresponding `users` row exists (the "system user") and MUST use that user id for attribution when an action is performed by the system and no human actor applies (for example `tasks.created_by` for system-created tasks).
+  User creation MUST reject attempts to create or rename a user to `handle=system`.
 
 ### Password Credentials Table
 
@@ -188,6 +198,9 @@ Source: [`docs/tech_specs/projects_and_scopes.md`](projects_and_scopes.md).
 - `id` (uuid, pk)
 - `slug` (text, unique)
 - `display_name` (text)
+  - user-friendly title for lists and detail views
+- `description` (text, nullable)
+  - optional text description for the project
 - `is_active` (boolean)
 - `created_at` (timestamptz)
 - `updated_at` (timestamptz)
@@ -465,10 +478,10 @@ Sources: [`docs/tech_specs/orchestrator.md`](orchestrator.md), [`docs/tech_specs
 ### Tasks Table
 
 - `id` (uuid, pk)
-- `created_by` (uuid, fk to `users.id`, nullable)
-  - null if created by system or unauthenticated bootstrap
+- `created_by` (uuid, fk to `users.id`)
+  - creating user; set from authenticated request context when created via the gateway; for system-created and bootstrap tasks, use the reserved system user
 - `project_id` (uuid, fk to `projects.id`, nullable)
-  - optional project scope for RBAC and preferences
+  - optional project association for RBAC, preferences, and grouping; null unless explicitly set by client or PM/PA
 - `status` (text)
   - examples: pending, running, completed, failed, cancelled
 - `acceptance_criteria` (jsonb, nullable)
@@ -675,6 +688,46 @@ Constraints
 - Index: (`parent_session_id`)
 - Index: (`created_at`)
 
+## Chat Threads and Messages
+
+Chat threads and chat messages store chat history separately from task lifecycle state.
+Chat message content MUST be the amended (redacted) content.
+Plaintext secrets MUST NOT be persisted in chat message content.
+
+Source:
+
+- [`docs/tech_specs/chat_threads_and_messages.md`](chat_threads_and_messages.md)
+- [`docs/tech_specs/openai_compatible_chat_api.md`](openai_compatible_chat_api.md)
+
+### Chat Threads Table
+
+- `id` (uuid, pk)
+- `user_id` (uuid, fk to `users.id`)
+- `project_id` (uuid, fk to `projects.id`, nullable)
+- `session_id` (uuid, fk to `sessions.id`, nullable)
+- `title` (text, nullable)
+- `created_at` (timestamptz)
+- `updated_at` (timestamptz)
+
+Constraints
+
+- Index: (`user_id`, `updated_at`)
+- Index: (`project_id`, `updated_at`)
+
+### Chat Messages Table
+
+- `id` (uuid, pk)
+- `thread_id` (uuid, fk to `chat_threads.id`)
+- `role` (text)
+  - examples: user, assistant, system
+- `content` (text)
+- `metadata` (jsonb, nullable)
+- `created_at` (timestamptz)
+
+Constraints
+
+- Index: (`thread_id`, `created_at`)
+
 ## Task Artifacts
 
 Artifacts are files or blobs produced or attached to a task (e.g. uploads, job outputs).
@@ -851,8 +904,34 @@ Constraints
 
 - **Access control:** `access_control_audit_log` (see Access Control).
 - **Preferences:** `preference_audit_log` (see Preferences).
+- **Chat completions:** `chat_audit_log` (see OpenAI-compatible chat API and chat threads/messages).
 
 Additional domain-specific audit tables (e.g. MCP tool calls, connector operations, Git egress) MAY be added later; they SHOULD include at least `task_id` (nullable), subject identity, action, decision or outcome, and `created_at`.
+
+### Chat Audit Log Table
+
+This table stores audit records for OpenAI-compatible chat completion requests.
+It MUST NOT store full message content.
+
+- `id` (uuid, pk)
+- `created_at` (timestamptz)
+- `user_id` (uuid, fk to `users.id`, nullable)
+- `project_id` (uuid, fk to `projects.id`, nullable)
+- `outcome` (text)
+  - examples: success, error, cancelled, timeout
+- `error_code` (text, nullable)
+- `redaction_applied` (boolean)
+- `redaction_kinds` (jsonb, nullable)
+  - array of string
+  - examples: api_key, token, password
+- `duration_ms` (int, nullable)
+- `request_id` (text, nullable)
+
+Constraints
+
+- Index: (`created_at`)
+- Index: (`user_id`)
+- Index: (`project_id`)
 
 ## Model Registry
 

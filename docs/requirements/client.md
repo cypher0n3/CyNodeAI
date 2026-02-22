@@ -110,6 +110,7 @@ It covers user-facing management surfaces and user preference behavior.
   [CYNAI.CLIENT.CliPreferencesManagement](../tech_specs/cli_management_app.md#spec-cynai-client-clipreferences)
   <a id="req-client-0121"></a>
 - **REQ-CLIENT-0122:** The UI MUST support preference scope selection (system, user, group, project, task).
+  For the admin web console, this MUST include an easy method for users to create, read, update, and delete their personal (user), group, and project preferences.
   [CYNAI.CLIENT.AdminWebConsolePreferences](../tech_specs/admin_web_console.md#spec-cynai-client-awcpreferences)
   [CYNAI.CLIENT.CliPreferencesManagement](../tech_specs/cli_management_app.md#spec-cynai-client-clipreferences)
   <a id="req-client-0122"></a>
@@ -180,11 +181,18 @@ It covers user-facing management surfaces and user preference behavior.
   [CYNAI.USRGWY.OpenAIChatApi.Endpoints](../tech_specs/openai_compatible_chat_api.md#spec-cynai-usrgwy-openaichatapi-endpoints)
   <a id="req-client-0172"></a>
 - **REQ-CLIENT-0173:** The CLI chat command MUST support setting an optional project context for the chat session.
-  When set, the project context MAY be used to associate a chat thread to a project and to scope user-initiated task operations.
-  When omitted, there is no project by default.
+  When set, the CLI MUST send the project context using the OpenAI-standard `OpenAI-Project` request header on `POST /v1/chat/completions`.
+  When omitted, the CLI does not send the header and the gateway associates the thread with the user's default project (see [REQ-PROJCT-0104](../requirements/projct.md#req-projct-0104)).
   [CYNAI.CLIENT.CliChatProjectContext](../tech_specs/cli_management_app_commands_chat.md#spec-cynai-client-clichatprojectcontext)
   [CYNAI.ACCESS.Doc.ProjectsAndScopes](../tech_specs/projects_and_scopes.md#spec-cynai-access-doc-projectsandscopes)
   <a id="req-client-0173"></a>
+- **REQ-CLIENT-0174:** The CLI and the Admin Web Console MUST support basic project management (CRUD: create, list, get, update, delete or disable) via the User API Gateway.
+  Projects have a user-friendly title and optional text description (see [REQ-PROJCT-0103](../requirements/projct.md#req-projct-0103)); clients MUST allow setting and editing these in create and update flows.
+  Both clients MUST offer the same project CRUD capabilities (capability parity).
+  [CYNAI.CLIENT.CliProjectManagement](../tech_specs/cli_management_app_commands_admin.md#project-management)
+  [CYNAI.CLIENT.AdminWebConsoleProjectManagement](../tech_specs/admin_web_console.md#project-management)
+  [CYNAI.ACCESS.Doc.ProjectsAndScopes](../tech_specs/projects_and_scopes.md#spec-cynai-access-doc-projectsandscopes)
+  <a id="req-client-0174"></a>
 - **REQ-CLIENT-0125:** Node management MUST be mediated by the User API Gateway.
   [CYNAI.CLIENT.AdminWebConsoleNodeManagement](../tech_specs/admin_web_console.md#spec-cynai-client-awcnodemgmt)
   [CYNAI.CLIENT.CliNodeManagement](../tech_specs/cli_management_app.md#spec-cynai-client-clinodemgmt)
@@ -276,15 +284,14 @@ It covers user-facing management surfaces and user preference behavior.
 - **REQ-CLIENT-0151:** The CLI MUST allow passing a task as inline text (e.g. `--prompt` or `--task`) or from a file (e.g. `--task-file <path>`) containing plain text or Markdown.
   The default is interpretation; the system interprets the task and uses inference when needed (no user-facing "use inference" flag).
   The CLI MUST support optionally associating a created task with a `project_id` (for example `cynork task create --project-id <id>`).
-  When `project_id` is omitted, there is no project association by default.
-  The system MUST NOT implicitly assign a default project.
+  When `project_id` is omitted, the task MUST be associated with the authenticated user's default project (see [REQ-PROJCT-0104](../requirements/projct.md#req-projct-0104)).
   Attachments are specified in REQ-CLIENT-0157.
   [CYNAI.CLIENT.CliTaskCreatePrompt](../tech_specs/cli_management_app.md#spec-cynai-client-clitaskcreateprompt)
   [CYNAI.ACCESS.Doc.ProjectsAndScopes](../tech_specs/projects_and_scopes.md#spec-cynai-access-doc-projectsandscopes)
   <a id="req-client-0151"></a>
 - **REQ-CLIENT-0152:** The admin web console MUST allow submitting a task as plain text or Markdown (inline or from paste) and MUST support attaching files or other artifacts (e.g. file upload) with the same semantics as the CLI and gateway.
   The console MUST support optionally associating the submitted task with a `project_id`.
-  When `project_id` is omitted, there is no project association by default.
+  When `project_id` is omitted, the task MUST be associated with the authenticated user's default project (see [REQ-PROJCT-0104](../requirements/projct.md#req-projct-0104)).
   [CYNAI.CLIENT.AdminWebConsoleCapabilityParity](../tech_specs/admin_web_console.md#spec-cynai-client-awccapabilityparity)
   [CYNAI.ACCESS.Doc.ProjectsAndScopes](../tech_specs/projects_and_scopes.md#spec-cynai-access-doc-projectsandscopes)
   <a id="req-client-0152"></a>

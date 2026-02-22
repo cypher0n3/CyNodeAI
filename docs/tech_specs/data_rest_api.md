@@ -82,6 +82,8 @@ The Data REST API SHOULD expose resource-oriented endpoints for:
 - Access control rules and audit records, when allowed
 - Groups, group memberships, roles, and role bindings (RBAC), when allowed
   - See [`docs/tech_specs/rbac_and_groups.md`](rbac_and_groups.md).
+- Projects (create, list, get, update, delete/disable), when allowed
+  - User-friendly title (`display_name`) and optional text description; see [`docs/tech_specs/projects_and_scopes.md`](projects_and_scopes.md).
 - Model registry and model availability, when allowed
 - Sandbox image registry metadata, when allowed
 

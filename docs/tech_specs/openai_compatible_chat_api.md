@@ -11,6 +11,8 @@
 - [Reliability Requirements](#reliability-requirements)
 - [Error Semantics](#error-semantics)
 - [Observability](#observability)
+- [Request Processing Pipeline](#request-processing-pipeline)
+  - [Pipeline Steps (Order is Mandatory)](#pipeline-steps-order-is-mandatory)
 - [Optional: Async Chat (Deferred)](#optional-async-chat-deferred)
 - [Related Documents](#related-documents)
 
@@ -20,6 +22,12 @@
 
 This spec defines the OpenAI-compatible chat interface exposed by the User API Gateway.
 It is the **only** interactive chat surface for Open WebUI, cynork, and E2E.
+
+Compatibility contract (pinned as of 2026-02-22):
+
+- The OpenAI-compatible surface in this spec is pinned to the OpenAI Chat Completions API as documented in the OpenAI API Reference.
+- The OpenAI REST API version header reported by the OpenAI API Overview is `openai-version: 2020-10-01` as of 2026-02-22.
+- Reference: [OpenAI API Overview](https://platform.openai.com/docs/api-reference) and [Chat Completions API Reference](https://platform.openai.com/docs/api-reference/chat).
 
 Traces To:
 
@@ -67,6 +75,24 @@ The gateway MUST accept the OpenAI `model` field when provided.
 If `model` is omitted or empty, the gateway MUST use a default model identifier.
 The default MUST correspond to the PM/PA chat surface for typical user chat.
 
+Forward compatibility:
+
+- The gateway MUST ignore unknown request fields in the OpenAI chat-completions request body.
+- The gateway MUST ignore unknown fields inside message objects.
+
+Project scoping:
+
+- If an OpenAI-standard `OpenAI-Project` request header is present, the gateway MUST treat its value as the project context for persistence.
+- If the header is absent, the gateway MUST associate the thread (and any tasks created in that context) with the creating user's default project (see [REQ-PROJCT-0104](../requirements/projct.md#req-projct-0104) and [Default project](../tech_specs/projects_and_scopes.md#default-project)).
+
+Model identifiers:
+
+- The gateway MUST expose a stable PM/PA chat surface model id `cynodeai.pm`.
+- When the client omits `model` or provides an empty `model`, the gateway MUST behave as if `model` was `cynodeai.pm`.
+- The gateway MUST also expose underlying inference model identifiers in `GET /v1/models`.
+  These identifiers MUST be limited to the currently configured inference model(s) that the authenticated user is authorized to use.
+  The gateway MUST NOT disclose model identifiers the user is not authorized to use.
+
 ## Conversation Model
 
 - Spec ID: `CYNAI.USRGWY.OpenAIChatApi.ConversationModel` <a id="spec-cynai-usrgwy-openaichatapi-conversationmodel"></a>
@@ -76,6 +102,13 @@ A chat completion is message-in and completion-out.
 
 Conversation state and history are tracked separately from tasks.
 Chat messages are stored as chat-thread messages (see [Chat Threads and Messages](chat_threads_and_messages.md)).
+
+Thread identifiers and association:
+
+- The OpenAI-compatible surface MUST NOT require any CyNodeAI-specific thread or session identifiers in request bodies or headers.
+- The orchestrator MUST manage chat thread association server-side.
+- The orchestrator MUST maintain a single active thread per `(user_id, project_id)` scope.
+  The orchestrator MUST rotate to a new active thread after 2 hours of inactivity.
 
 Traces To:
 
@@ -152,6 +185,29 @@ The gateway MUST return errors that allow clients and operators to distinguish a
 
 Errors MUST NOT leak secrets.
 
+Error format for OpenAI-compatible endpoints:
+
+- For `GET /v1/models` and `POST /v1/chat/completions`, error responses MUST use an OpenAI-style JSON payload with a top-level `error` object.
+- The gateway MUST NOT return RFC 9457 Problem Details for these OpenAI-compatible endpoints.
+- The payload MUST follow this shape:
+
+```json
+{
+  "error": {
+    "message": "Safe, user-displayable error message.",
+    "type": "cynodeai_error",
+    "param": null,
+    "code": "cynodeai_completion_timeout"
+  }
+}
+```
+
+HTTP status mapping:
+
+- Request cancelled: `408`.
+- Orchestrator inference failed: `502` or `503` depending on whether the failure is upstream or overload.
+- Completion timeout (poll cap reached): `504`.
+
 Traces To:
 
 - [REQ-USRGWY-0129](../requirements/usrgwy.md#req-usrgwy-0129)
@@ -166,6 +222,33 @@ The gateway MUST log timeouts and request cancellations.
 Traces To:
 
 - [REQ-USRGWY-0129](../requirements/usrgwy.md#req-usrgwy-0129)
+
+## Request Processing Pipeline
+
+- Spec ID: `CYNAI.USRGWY.OpenAIChatApi.Pipeline` <a id="spec-cynai-usrgwy-openaichatapi-pipeline"></a>
+
+This section defines the required request-processing steps for `POST /v1/chat/completions`.
+
+### Pipeline Steps (Order is Mandatory)
+
+1. Authenticate the caller using the standard gateway Bearer token mechanism.
+2. Decode the OpenAI chat-completions request body and validate that `messages` is present and non-empty.
+3. Determine `project_id`: from the OpenAI-standard `OpenAI-Project` header when present; when absent, use the creating user's default project.
+4. Detect and redact secrets in the message content.
+   - API keys are the priority.
+   - The gateway MUST redact secrets before any persistence or inference.
+   - Detected secrets MUST be replaced with the literal string `SECRET_REDACTED` in the amended message content.
+   - The gateway MUST record whether redaction was applied and the kind(s) of secrets detected in `chat_audit_log`.
+5. Persist the amended (redacted) user message content to the database as a chat-thread message scoped to `(user_id, project_id)`.
+6. Invoke the LLM or agent surface using only the amended (redacted) messages.
+7. Persist the assistant output as a chat-thread message scoped to the same `(user_id, project_id)`.
+8. Return an OpenAI-format chat-completions response where the content is present at `choices[0].message.content`.
+
+Traces To:
+
+- [REQ-USRGWY-0121](../requirements/usrgwy.md#req-usrgwy-0121)
+- [REQ-USRGWY-0127](../requirements/usrgwy.md#req-usrgwy-0127)
+- [REQ-USRGWY-0130](../requirements/usrgwy.md#req-usrgwy-0130)
 
 ## Optional: Async Chat (Deferred)
 

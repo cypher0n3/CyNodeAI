@@ -13,7 +13,9 @@ Local worker nodes register, receive jobs, run inference, and report results in 
 CyNodeAI also supports routing inference to external AI providers through controlled API egress.
 Nodes may be inference-capable or sandbox-only, depending on configuration.
 
-**Status:** Early prototype / design phase
+**Status:** MVP Phase 1 and 1.5 complete (single-node execution, inference in sandbox, cynork CLI).
+Phases 2-4 (MCP in the loop, multi-node robustness, controlled egress) are in scope.
+See [MVP and phased plan](docs/mvp.md) and [mvp_plan.md](docs/mvp_plan.md) for current status and roadmap.
 
 **License:** [Apache 2.0](LICENSE)
 
@@ -30,7 +32,7 @@ Install [just](https://github.com/casey/just), then run:
 
 - `just setup` - install Podman (if missing), Go 1.25.x, and Go lint tools (golangci-lint, staticcheck, govulncheck)
 - `just install-podman` / `just install-go` / `just install-go-tools` - individual steps
-- `just ci` - local CI (lint + test + vulncheck-go)
+- `just ci` - full local CI (lint, doc validation, tests with coverage, test-bdd, vulncheck-go, lint-containerfiles)
 - `just lint` - run all linting (Go + Python)
 - `just lint-go` / `just lint-go-ci` - Go vet+staticcheck / golangci-lint
 - `just lint-python` - Python (flake8, pylint, radon, xenon, vulture, bandit)
@@ -49,20 +51,39 @@ Go workspace modules (see root [go.work](go.work) and [justfile](justfile)):
 
 - [go_shared_libs/](go_shared_libs/) - shared contracts and types used by orchestrator and worker node
 - [orchestrator/](orchestrator/) - control plane, user gateway, MCP gateway, API egress (Go)
-- [worker_node/](worker_node/) - node manager and worker API (Go)
+- [worker_node/](worker_node/) - node manager, worker API, and inference proxy (Go)
 - [cynork/](cynork/) - CLI management client (Go, Cobra); see [CLI management app spec](docs/tech_specs/cli_management_app.md)
 
 Documentation:
 
 - **Documentation index**: [docs/README.md](docs/README.md) - entry point for all project docs.
+- **MVP and roadmap**: [docs/mvp.md](docs/mvp.md), [docs/mvp_plan.md](docs/mvp_plan.md) - phased scope and current status.
 - Requirements (canonical "what"): [docs/requirements/](docs/requirements/) ([README](docs/requirements/README.md))
 - Tech specs (implementation "how"): [docs/tech_specs/](docs/tech_specs/) ([index](docs/tech_specs/_main.md))
+- **Open WebUI**: [Connect Open WebUI to the gateway](docs/openwebui_cynodeai_integration.md)
 
 ## Goals
 
-- Multi-agent system that can run fully local and private or incorporate cloud-based agents
-- Easy scaling by adding local nodes (containers) or registering cloud-based agents
-- Centralized intelligence with distributed compute across local and cloud workers
+- **Local-first and private:** Run fully on your infrastructure; optionally incorporate cloud-based agents and external AI providers via controlled egress.
+- **Single user-facing API:** One User API Gateway for all clients (Open WebUI, cynork CLI, future Admin Web Console, integrations).
+- **Admin client parity:** The CLI (cynork) and the Admin Web Console MUST offer the same administrative capabilities; both talk to the gateway only.
+- **Prompt-as-intent:** Natural-language task prompts are interpreted by the system (inference and/or sandbox), not executed as literal shell commands; script/commands modes are explicit opt-in.
+- **Multi-agent orchestration:** Centralized task and state management with distributed execution across local worker nodes and optional cloud agents.
+- **Scaling:** Add local nodes (containers) or register cloud-based agents; orchestrator selects nodes by capability, load, and policy.
+
+## User-Facing Capabilities
+
+The User API Gateway exposes a single surface for humans and integrations.
+
+- **Authentication:** Local user accounts; login, refresh, and session handling.
+- **Tasks:** Create tasks (plain text or Markdown, optional attachments, script, or commands), list, get, result, cancel, logs, and artifacts.
+  Plain-text prompts use inference by default; script/commands run explicitly in the sandbox.
+- **OpenAI-compatible chat:** The gateway exposes an OpenAI-style chat API (`/v1/models`, `/v1/chat/completions`) for Open WebUI, cynork chat, and E2E.
+  This is the only interactive chat interface; conversation state is tracked as chat threads and messages.
+- **CLI (cynork):** Auth, task operations, interactive chat and shell, status, settings, preferences, nodes, credentials, audit, and skills.
+  Cynork uses the same gateway APIs as the future Admin Web Console (capability parity).
+- **Planned (gateway spec):** Scheduler and cron, runs and sessions API, connector framework, live updates and messaging, groups and RBAC.
+  See [User API Gateway](docs/tech_specs/user_api_gateway.md), [OpenAI-compatible chat API](docs/tech_specs/openai_compatible_chat_api.md), [Runs and sessions API](docs/tech_specs/runs_and_sessions_api.md).
 
 ## High-Level Architecture
 
@@ -167,12 +188,13 @@ See [`docs/tech_specs/sandbox_image_registry.md`](docs/tech_specs/sandbox_image_
 
 ### User API Gateway
 
-- Orchestrator exposes a single user-facing API endpoint for submitting work and retrieving results
-- Designed to integrate with external tools such as Open WebUI and messaging services
-- Provides stable auth, auditing, and capability discovery for user clients
-- Provides live updates through user-connected messaging destinations and webhook subscriptions
+- Single user-facing API for all clients: task submission, chat, admin operations, and (planned) scheduler, runs/sessions, connectors, live updates.
+- **Tasks:** Create, list, get, result, cancel, logs, artifacts; plain-text or Markdown prompts use inference by default; script/commands run in the sandbox.
+- **OpenAI-compatible chat:** `/v1/models` and `/v1/chat/completions` for Open WebUI and cynork; conversation state as chat threads and messages.
+- **Data REST API:** Database-backed resources for user clients and integrations (no raw SQL).
+- Stable auth, auditing, and capability discovery; (planned) live updates via messaging destinations and webhook subscriptions.
 
-See [`docs/tech_specs/user_api_gateway.md`](docs/tech_specs/user_api_gateway.md) and [`docs/tech_specs/data_rest_api.md`](docs/tech_specs/data_rest_api.md).
+See [`docs/tech_specs/user_api_gateway.md`](docs/tech_specs/user_api_gateway.md), [`docs/tech_specs/openai_compatible_chat_api.md`](docs/tech_specs/openai_compatible_chat_api.md), [`docs/tech_specs/data_rest_api.md`](docs/tech_specs/data_rest_api.md), and [`docs/tech_specs/runs_and_sessions_api.md`](docs/tech_specs/runs_and_sessions_api.md).
 
 ### MCP Tool Interface
 

@@ -46,7 +46,8 @@ Optional flags
   This is sent as the OpenAI `model` field in requests to `POST /v1/chat/completions`.
   If omitted, the CLI uses the gateway default.
 - `--project-id` (string, optional): Project identifier to associate with the chat thread and to use as project context for the session.
-  If omitted, no project is associated by default.
+  If omitted, the CLI MUST use the **active project** from `cynork project set` when one is set; otherwise the CLI does not send `OpenAI-Project`, and the gateway associates the thread with the user's default project.
+  When set (explicitly or from active project), the CLI MUST send this value using the OpenAI-standard `OpenAI-Project` request header on `POST /v1/chat/completions`.
 
 ### `cynork chat` Behavior
 
@@ -159,12 +160,26 @@ Traces To:
 
 Project context affects only chat session association and any user-initiated task operations that accept a project context.
 Project context MUST NOT be implicitly assigned.
+When project context is set, the CLI MUST send it using the OpenAI-standard `OpenAI-Project` request header on subsequent `POST /v1/chat/completions` calls.
 
-- **`/project`** [`<project_id>`]
-  - Show or set the project context for the current chat session.
-  - With no argument, the CLI MUST print the current selected project id (or indicate none).
-  - With `<project_id>`, the CLI MUST set the current selected project id for the session.
-  - The CLI MUST treat an empty project selection as \"no project\".
+The chat `/project` slash commands MUST leverage the same logic and (where applicable) the same gateway calls as the `cynork project` subcommands.
+Implementations SHOULD reuse the same request-building and output code paths as `cynork project list`, `cynork project get`, and `cynork project set` so that behavior stays consistent and slash commands remain a thin adapter.
+
+- **`/project`** [no args]
+  - Show the current project context for the chat session.
+  - Equivalent to showing the result of the active project (same semantics as after `cynork project set`); if none is set, indicate the user's default project is used by the gateway.
+
+- **`/project list`** [optional flags]
+  - List projects; same semantics as `cynork project list`.
+  - Optional: `--limit`, `--active-only`, cursor-style pagination when supported in the chat parser.
+
+- **`/project get <project_id>`**
+  - Show project details; same as `cynork project get <project_id>`.
+
+- **`/project set <project_id>`** or **`/project <project_id>`**
+  - Set the project context for the current chat session.
+  - Equivalent to `cynork project set <project_id>` for the duration of the chat session; the CLI MUST set the session project context and send it on subsequent `POST /v1/chat/completions` via the `OpenAI-Project` header.
+  - The CLI MUST treat an empty or \"none\" project selection as default project (no header sent; gateway uses user's default project).
 
 #### Task Slash Commands
 
@@ -178,6 +193,11 @@ The CLI MUST support the following task slash commands in chat.
 Each MUST call the same User API Gateway endpoints as the corresponding `cynork task` subcommand.
 Output MUST be shown inline in the chat (pretty-printed per [Pretty-Printed JSON Output](cli_management_app_shell_output.md#pretty-printed-json-output) when the output is JSON).
 Arguments are parsed from the remainder of the line after the slash command; the CLI MAY support a subset of flags (e.g. `--limit`, `--status`) where the chat input allows.
+
+Implementation guidance:
+
+- To prevent behavioral drift, implementations SHOULD reuse the existing cynork subcommand request-building and output code paths for the corresponding operations (task, prefs, nodes, skills, status, auth).
+  Slash commands should be a thin adapter that selects a subcommand and passes the parsed arguments through.
 
 - **`/task list`** [optional flags]
   - List tasks; same semantics as `cynork task list`.

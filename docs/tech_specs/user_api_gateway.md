@@ -61,6 +61,9 @@ The gateway SHOULD support:
   - Manage groups and membership (create group, add member, remove member), when allowed.
   - Manage role bindings (assign role to user or group), when allowed.
   - See [`docs/tech_specs/rbac_and_groups.md`](rbac_and_groups.md).
+- Projects
+  - Basic project CRUD (create, list, get, update, delete or disable) via the Data REST API; projects have a user-friendly title and optional text description.
+  - See [`docs/tech_specs/projects_and_scopes.md`](projects_and_scopes.md) and [Data REST API - Core Resources](data_rest_api.md#core-resources).
 
 ## Client Compatibility
 

@@ -1,8 +1,8 @@
-# Orchestrator systemd units (Podman)
+# Orchestrator Systemd Units (Podman)
 
 Generated unit files allow running the orchestrator stack under systemd (e.g. rootless user services).
 
-## Generate units
+## Generate Units
 
 From repo root, after containers exist (e.g. started once with compose):
 
@@ -19,7 +19,7 @@ podman compose -f orchestrator/docker-compose.yml down
 
 ## Install
 
-**Rootless (recommended):**
+### Rootless (Recommended):
 
 ```bash
 mkdir -p ~/.config/systemd/user
@@ -31,7 +31,7 @@ systemctl --user enable --now container-cynodeai-control-plane.service
 systemctl --user enable --now container-cynodeai-user-gateway.service
 ```
 
-**Rootful:**
+### Rootful:
 
 ```bash
 sudo cp orchestrator/systemd/container-*.service /etc/systemd/system/
@@ -42,4 +42,5 @@ sudo systemctl enable --now container-cynodeai-postgres.service
 
 ## Order
 
-Start postgres first, then control-plane (runs migrations), then user-gateway. Optional: mcp-gateway, api-egress.
+Start postgres first, then control-plane (runs migrations), then user-gateway.
+Optional: mcp-gateway, api-egress.
