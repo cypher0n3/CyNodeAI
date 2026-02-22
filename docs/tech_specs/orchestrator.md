@@ -18,6 +18,7 @@
 - [Node Bootstrap and Configuration](#node-bootstrap-and-configuration)
 - [MCP Tool Interface](#mcp-tool-interface)
 - [Workflow Engine](#workflow-engine)
+  - [Task Workflow Lease Lifecycle](#task-workflow-lease-lifecycle)
 - [Orchestrator Bootstrap Configuration](#orchestrator-bootstrap-configuration)
 
 ## Spec IDs
@@ -381,7 +382,9 @@ The orchestrator uses LangGraph to implement multi-step and multi-agent workflow
 The Project Manager Agent's behavior is implemented by the LangGraph MVP workflow.
 
 **Phase 2 implementation:** The workflow engine is a **separate Python LangGraph process** (separate from the Go orchestrator process).
-The orchestrator invokes it via a stable start/resume and checkpoint contract; see [langgraph_mvp.md](langgraph_mvp.md) Integration with the Orchestrator.
+The orchestrator invokes it via a stable start/resume and checkpoint contract.
+The workflow start/resume API contract and workflow start triggers are defined in [langgraph_mvp.md](langgraph_mvp.md): [Workflow Start/Resume API Contract](langgraph_mvp.md#spec-cynai-orches-workflowstartresumeapi) and [Workflow Start Triggers](langgraph_mvp.md#spec-cynai-orches-workflowstarttriggers).
+Lease lifecycle is defined in [Task Workflow Lease Lifecycle](#task-workflow-lease-lifecycle) below.
 
 **Process boundaries (Phase 2):** **cynode-pma** (chat, MCP tools) and the **workflow runner** (LangGraph graph execution) are **separate processes**.
 They share the MCP gateway and DB.
@@ -391,6 +394,33 @@ The orchestrator starts the workflow runner for a given task; chat and planning 
 The workflow runner acquires or checks the lease via the orchestrator before running.
 
 See [langgraph_mvp.md](langgraph_mvp.md) for the graph topology, state model, node behaviors, checkpoint schema, and wiring to orchestrator capabilities (MCP, Worker API, model routing).
+
+### Task Workflow Lease Lifecycle
+
+- Spec ID: `CYNAI.ORCHES.TaskWorkflowLeaseLifecycle` <a id="spec-cynai-orches-taskworkflowleaselifecycle"></a>
+
+Traces To:
+
+- [REQ-ORCHES-0146](../requirements/orches.md#req-orches-0146)
+
+The orchestrator grants and releases the task workflow lease; the workflow runner acquires or checks it via the orchestrator API (see [langgraph_mvp.md](langgraph_mvp.md#spec-cynai-orches-workflowstartresumeapi)).
+The lease table and columns are defined in [postgres_schema.md](postgres_schema.md) Task Workflow Leases Table.
+
+**Acquire.**
+The workflow runner calls the orchestrator (as part of the workflow start API or a dedicated lease endpoint) to acquire the lease for a `task_id`.
+The request includes the workflow runner identity (`holder_id`).
+The orchestrator grants the lease only if no other holder has it; otherwise it returns a defined error (e.g. 409 Conflict).
+Idempotent acquire: if the same holder re-requests for the same `task_id` with the same `lease_id` (or equivalent), the orchestrator returns success without changing state.
+
+**Release.**
+On normal workflow completion or failure, the workflow runner calls the orchestrator to release the lease (e.g. as part of a completion/failure report or a dedicated release operation).
+The orchestrator updates the lease row so the task is no longer held.
+If the workflow runner does not release (e.g. crash), the orchestrator may release on expiry (see Expiry).
+
+**Expiry.**
+Each lease row has an `expires_at` (timestamptz).
+The workflow runner may renew the lease before expiry (e.g. by sending a heartbeat or an explicit renew request that the orchestrator uses to extend `expires_at`).
+If the workflow runner does not renew before `expires_at`, the orchestrator treats the lease as released and may allow another start for that task.
 
 ## Orchestrator Bootstrap Configuration
 

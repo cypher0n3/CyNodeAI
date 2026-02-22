@@ -482,6 +482,16 @@ Use repository-provided targets.
 - **Full local CI**
   - `just ci`
 
+## Execution Status (2026-02-22)
+
+**Not executed.**
+Codebase still uses the legacy chat path; none of the checklist items below are implemented.
+
+- **Orchestrator:** Only `POST /v1/chat` is registered; no `GET /v1/models` or `POST /v1/chat/completions`.
+  No chat_threads/chat_messages migrations or store; no thread/message REST endpoints.
+- **Cynork:** Still calls `Client.Chat()` (POST /v1/chat); no `ListModels`/`ChatCompletions`, no slash commands or autocomplete.
+- **BDD:** `features/e2e/chat_openai_compatible.feature` exists but its scenarios target endpoints that are not implemented; orchestrator BDD still uses legacy `POST /v1/chat`.
+
 ## Implementation Checklist (Ordered)
 
 - [ ] Implement `GET /v1/models` in user-gateway and add BDD coverage.

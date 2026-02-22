@@ -168,3 +168,19 @@ It covers orchestrator control-plane behavior, task lifecycle, dispatch, and sta
 - **REQ-ORCHES-0143:** The orchestrator MUST treat node telemetry as non-authoritative operational data and MUST NOT make correctness-critical scheduling decisions based solely on telemetry responses.
   [CYNAI.ORCHES.NodeTelemetryPull](../tech_specs/worker_telemetry_api.md#spec-cynai-orches-nodetelemetrypull)
   <a id="req-orches-0143"></a>
+- **REQ-ORCHES-0144:** The orchestrator MUST provide a stable workflow start/resume API to the workflow runner (transport, operations, and idempotency semantics prescribed in tech specs).
+  The workflow runner MUST acquire or validate the task workflow lease via the orchestrator before running.
+  [CYNAI.ORCHES.WorkflowStartResumeAPI](../tech_specs/langgraph_mvp.md#spec-cynai-orches-workflowstartresumeapi)
+  <a id="req-orches-0144"></a>
+- **REQ-ORCHES-0145:** At most one active workflow per task.
+  A duplicate start request for a task that already has an active workflow (lease held) MUST return a defined response (e.g. 409 Conflict or 200 with status indicating already running) and MUST NOT start a second instance.
+  [CYNAI.ORCHES.WorkflowStartResumeAPI](../tech_specs/langgraph_mvp.md#spec-cynai-orches-workflowstartresumeapi)
+  <a id="req-orches-0145"></a>
+- **REQ-ORCHES-0146:** Task workflow lease acquire, release (on completion or failure), and expiry (and optional renewal) semantics MUST be defined and enforced by the orchestrator.
+  The workflow runner MUST use the orchestrator as the sole source of truth for the lease.
+  [CYNAI.ORCHES.TaskWorkflowLeaseLifecycle](../tech_specs/orchestrator.md#spec-cynai-orches-taskworkflowleaselifecycle)
+  <a id="req-orches-0146"></a>
+- **REQ-ORCHES-0147:** The conditions under which the orchestrator starts a workflow for a task (triggers) MUST be defined in one place: task created via User API, task created via chat/PMA, and scheduled run handed to PMA.
+  The orchestrator MUST follow these triggers when starting the workflow runner.
+  [CYNAI.ORCHES.WorkflowStartTriggers](../tech_specs/langgraph_mvp.md#spec-cynai-orches-workflowstarttriggers)
+  <a id="req-orches-0147"></a>
