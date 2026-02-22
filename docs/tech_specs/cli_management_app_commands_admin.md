@@ -12,7 +12,7 @@
 ## Document Overview
 
 This document specifies credential management, preferences, system settings, node management, skills management, and audit commands.
-It is part of the [CLI management app](cli_management_app.md) specification.
+It is part of the [cynork CLI](cynork_cli.md) specification.
 
 ## Credential Management
 
@@ -26,7 +26,7 @@ Traces To:
 - [REQ-CLIENT-0119](../requirements/client.md#req-client-0119)
 - [REQ-CLIENT-0120](../requirements/client.md#req-client-0120)
 
-The CLI MUST support credential workflows for API Egress and Git Egress using the gateway endpoints defined in [API Egress Server - Admin API (Gateway Endpoints)](api_egress_server.md#admin-api-gateway-endpoints).
+The CLI MUST support credential workflows for API Egress and Git Egress using the gateway endpoints defined in [API Egress Server - Admin API (Gateway Endpoints)](api_egress_server.md#spec-cynai-apiegr-adminapigatewayendpoints).
 Responses MUST return metadata only; the CLI MUST NOT print or log secret values.
 
 ### `cynork creds list`
@@ -199,7 +199,7 @@ User preferences are managed via `cynork prefs`; see [User preferences](user_pre
 
 Recommended keys to support (MVP)
 
-Semantics: [Project Manager Model (Startup Selection and Warmup)](orchestrator.md#project-manager-model-startup-selection-and-warmup).
+Semantics: [Project Manager Model (Startup Selection and Warmup)](orchestrator.md#spec-cynai-orches-projectmanagermodelstartup).
 
 - `agents.project_manager.model.local_default_ollama_model` (string)
 - `agents.project_manager.model.selection.execution_mode` (string)
@@ -338,7 +338,7 @@ Traces To:
 - [REQ-CLIENT-0126](../requirements/client.md#req-client-0126)
 - [REQ-CLIENT-0128](../requirements/client.md#req-client-0128)
 
-The CLI MUST support node inventory and admin actions via the User API Gateway (no direct worker API calls); semantics align with [Node](node.md) and the [Web Console](web_console.md).
+The CLI MUST support node inventory and admin actions via the User API Gateway (no direct worker API calls); semantics align with [Node](worker_node.md) and the [Web Console](web_console.md).
 
 All node commands MUST require auth.
 
@@ -594,7 +594,7 @@ Output
 ### Project RBAC (Role Bindings)
 
 The CLI MUST allow setting and listing RBAC role bindings scoped to a project.
-Role bindings assign a role to a user or group within project scope; see [RBAC Model](rbac_and_groups.md#rbac-model) and [Projects and Scope Model](projects_and_scopes.md#rbac-scope).
+Role bindings assign a role to a user or group within project scope; see [RBAC Model](rbac_and_groups.md#spec-cynai-access-rbacmodel) and [Projects and Scope Model](projects_and_scopes.md#spec-cynai-access-rbacscope).
 
 #### `cynork project rbac list <project_id>`
 

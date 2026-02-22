@@ -26,7 +26,7 @@
 ## Document Overview
 
 This document defines worker node responsibilities, including node registration, configuration bootstrap, and secure credential handling.
-Nodes are configured by the orchestrator to access orchestrator-provided services such as the sandbox image registry and model cache.
+Nodes are configured by the orchestrator to access orchestrator-provided services such as the rank-ordered sandbox image registry list and model cache.
 
 ## Node Manager
 
@@ -43,6 +43,8 @@ The Node Manager is a host-level system service responsible for:
 
 This section defines how agents and the orchestrator interact with sandbox containers on a node.
 Agents do not connect to sandboxes directly over the network.
+Outbound traffic from sandboxes is permitted only through worker proxies (inference proxy, node-local web egress proxy, and orchestrator API Egress); sandboxes do not have direct internet access.
+See [Sandbox Boundary and Security](cynode_sba.md#spec-cynai-sbagnt-sandboxboundary) and [Network Expectations](sandbox_container.md#spec-cynai-sandbx-networkexpect).
 
 ### Sandbox Control Plane Applicable Requirements
 
@@ -384,8 +386,9 @@ sandbox:
   max_concurrency: 4
   default_network_policy: restricted
   allowed_images:
-    - registry.example.com/cynode/sandboxes/python:3.12
-    - registry.example.com/cynode/sandboxes/node:22
+    # When no registry list is configured, images are pulled from Docker Hub (docker.io)
+    - python:3.12
+    - node:22
   mounts:
     allowed_host_paths:
       - /var/lib/cynode/shared
@@ -471,8 +474,10 @@ Capability reporting guidance
 
 ## Registration and Bootstrap
 
+- Spec ID: `CYNAI.WORKER.RegistrationAndBootstrap` <a id="spec-cynai-worker-registrationandbootstrap"></a>
+
 During registration, the node establishes trust with the orchestrator and receives a bootstrap configuration payload.
-Canonical payload shapes are defined in [`docs/tech_specs/node_payloads.md`](node_payloads.md).
+Canonical payload shapes are defined in [`docs/tech_specs/worker_node_payloads.md`](worker_node_payloads.md).
 
 Required flow
 
@@ -486,9 +491,11 @@ Required flow
 
 ## Capability Reporting
 
+- Spec ID: `CYNAI.WORKER.CapabilityReporting` <a id="spec-cynai-worker-capabilityreporting"></a>
+
 Nodes MUST report host capabilities to the orchestrator so the orchestrator can select compatible configuration and schedule work safely.
 Nodes MUST report capabilities during registration and again on every node startup.
-Canonical payload shapes are defined in [`docs/tech_specs/node_payloads.md`](node_payloads.md).
+Canonical payload shapes are defined in [`docs/tech_specs/worker_node_payloads.md`](worker_node_payloads.md).
 
 Required capability fields
 
@@ -516,13 +523,15 @@ Required capability fields
 
 Change reporting
 
-- Nodes MUST report the full capability report as JSON (actual capabilities: node identity, platform, compute, gpu, sandbox, network, inference, tls, etc.) using the schema in [`docs/tech_specs/node_payloads.md`](node_payloads.md).
+- Nodes MUST report the full capability report as JSON (actual capabilities: node identity, platform, compute, gpu, sandbox, network, inference, tls, etc.) using the schema in [`docs/tech_specs/worker_node_payloads.md`](worker_node_payloads.md).
 - If capabilities change (hardware change, driver change, runtime change), the node MUST report an updated capability report.
 
 ## Configuration Delivery
 
+- Spec ID: `CYNAI.WORKER.ConfigurationDelivery` <a id="spec-cynai-worker-configurationdelivery"></a>
+
 The orchestrator MUST be able to deliver and update configuration for registered nodes.
-Canonical payload shapes are defined in [`docs/tech_specs/node_payloads.md`](node_payloads.md).
+Canonical payload shapes are defined in [`docs/tech_specs/worker_node_payloads.md`](worker_node_payloads.md).
 
 Required behavior
 
@@ -534,8 +543,10 @@ Required behavior
 
 ## Dynamic Configuration Updates
 
+- Spec ID: `CYNAI.WORKER.DynamicConfigurationUpdates` <a id="spec-cynai-worker-dynamicconfigurationupdates"></a>
+
 The orchestrator MUST be able to update node configuration after registration.
-This enables rotating credentials, changing registry endpoints, and applying new policy.
+This enables rotating credentials, changing the rank-ordered registry list or per-registry endpoints, and applying new policy.
 
 Required behavior (when `policy.updates.enable_dynamic_config=true`)
 
@@ -568,8 +579,8 @@ The orchestrator MUST configure nodes with:
 - Orchestrator endpoints
   - worker API target URLs and registration endpoints
   - service discovery endpoints, if available
-- Sandbox image registry
-  - registry URL and pull credentials
+- Sandbox image registries (rank-ordered list)
+  - per-registry URL and pull credentials
   - policies such as digest pinning requirements
 - Model cache
   - cache endpoint URL and pull credentials

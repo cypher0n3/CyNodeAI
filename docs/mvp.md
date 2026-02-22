@@ -19,7 +19,7 @@ The current implementation-oriented breakdown (4-8 hour chunks) is maintained in
   - PostgreSQL schema for identity/auth, tasks/jobs, nodes, artifacts, and auditing.
     See [`docs/tech_specs/postgres_schema.md`](tech_specs/postgres_schema.md).
   - Canonical node payloads (capability report, bootstrap, config delivery, config ack).
-    See [`docs/tech_specs/node_payloads.md`](tech_specs/node_payloads.md).
+    See [`docs/tech_specs/worker_node_payloads.md`](tech_specs/worker_node_payloads.md).
   - MCP gateway enforcement rules and initial allowlists (spec definition, with runtime integration in Phase 2).
     See [`docs/tech_specs/mcp_gateway_enforcement.md`](tech_specs/mcp_gateway_enforcement.md).
   - LangGraph MVP workflow contract (spec definition, with runtime integration in Phase 2).
@@ -27,9 +27,9 @@ The current implementation-oriented breakdown (4-8 hour chunks) is maintained in
 
 - **Single-node end-to-end execution (Phase 1)**.
   - Orchestrator control-plane supports node registration (PSK => JWT), capability ingest, config delivery, job dispatch, and result collection.
-    See [`docs/tech_specs/orchestrator.md`](tech_specs/orchestrator.md) and [`docs/tech_specs/node_payloads.md`](tech_specs/node_payloads.md).
+    See [`docs/tech_specs/orchestrator.md`](tech_specs/orchestrator.md) and [`docs/tech_specs/worker_node_payloads.md`](tech_specs/worker_node_payloads.md).
   - Worker node runs Node Manager and Worker API, executes sandbox jobs in containers, and returns bounded results.
-    See [`docs/tech_specs/node.md`](tech_specs/node.md), [`docs/tech_specs/worker_api.md`](tech_specs/worker_api.md), and [`docs/tech_specs/sandbox_container.md`](tech_specs/sandbox_container.md).
+    See [`docs/tech_specs/worker_node.md`](tech_specs/worker_node.md), [`docs/tech_specs/worker_api.md`](tech_specs/worker_api.md), and [`docs/tech_specs/sandbox_container.md`](tech_specs/sandbox_container.md).
   - User API Gateway supports local auth and task create/get/result.
     See [`docs/tech_specs/user_api_gateway.md`](tech_specs/user_api_gateway.md).
   - Readiness gating for inference availability and Project Manager model selection and warmup.
@@ -37,13 +37,18 @@ The current implementation-oriented breakdown (4-8 hour chunks) is maintained in
   - Task input semantics:
     - Prompt text (plain text or Markdown) is interpreted by default and uses inference by default.
     - Script and commands modes are explicit raw execution modes and MUST run in the sandbox.
-    See [`docs/requirements/orches.md`](requirements/orches.md) (REQ-ORCHES-0125, REQ-ORCHES-0126, REQ-ORCHES-0127) and [`docs/tech_specs/user_api_gateway.md`](tech_specs/user_api_gateway.md).
+    See [`docs/requirements/orches.md`](requirements/orches.md) (REQ-ORCHES-0126, REQ-ORCHES-0127, REQ-ORCHES-0128) and [`docs/tech_specs/user_api_gateway.md`](tech_specs/user_api_gateway.md).
 
 - **Single-node full capability slice (Phase 1.5)**.
   - Inference from inside the sandbox via node-local proxy sidecar and `OLLAMA_BASE_URL`.
-    See [`docs/tech_specs/node.md`](tech_specs/node.md) and [`docs/tech_specs/sandbox_container.md`](tech_specs/sandbox_container.md).
+    See [`docs/tech_specs/worker_node.md`](tech_specs/worker_node.md) and [`docs/tech_specs/sandbox_container.md`](tech_specs/sandbox_container.md).
   - CLI management app (cynork) exists as a separate Go module and can perform basic auth and task operations against the User API Gateway.
-    See [`docs/tech_specs/cli_management_app.md`](tech_specs/cli_management_app.md).
+    See [`docs/tech_specs/cynork_cli.md`](tech_specs/cynork_cli.md).
+
+- **Agent implementation and orchestrator integration (Phase 1.7)**.
+  - Implement `cynode-pma` binary (role flag, instructions paths) and start it as part of orchestrator startup so the PM chat surface is backed by the real agent.
+  - Specs and requirements: Project Manager Agent (`cynode-pma`) including Project Analyst role mode and instructions routing; Sandbox Agent runner spec (`cynode-sba`) and its deterministic job/result contract.
+  - See [`docs/mvp_plan.md`](mvp_plan.md), [`docs/tech_specs/cynode_pma.md`](tech_specs/cynode_pma.md), and [`docs/tech_specs/cynode_sba.md`](tech_specs/cynode_sba.md).
 
 - **MCP in the loop (Phase 2)**.
   - Orchestrator MCP tool gateway enforces allowlists, scoping, and auditing for tool calls in the runtime loop.
@@ -57,7 +62,7 @@ The current implementation-oriented breakdown (4-8 hour chunks) is maintained in
   - Node selection (capability, load, data locality, model availability).
   - Job leases, retries, idempotency, and heartbeats.
   - Dynamic node configuration updates and capability change reporting.
-    See [`docs/tech_specs/orchestrator.md`](tech_specs/orchestrator.md), [`docs/tech_specs/node.md`](tech_specs/node.md), and [`docs/tech_specs/node_payloads.md`](tech_specs/node_payloads.md).
+    See [`docs/tech_specs/orchestrator.md`](tech_specs/orchestrator.md), [`docs/tech_specs/worker_node.md`](tech_specs/worker_node.md), and [`docs/tech_specs/worker_node_payloads.md`](tech_specs/worker_node_payloads.md).
   - Worker Telemetry API integration for node operational signals.
     See [`docs/tech_specs/worker_telemetry_api.md`](tech_specs/worker_telemetry_api.md).
 
@@ -69,7 +74,7 @@ The current implementation-oriented breakdown (4-8 hour chunks) is maintained in
   - Secure Browser Service (optional) for controlled web access and deterministic sanitization.
     See [`docs/tech_specs/secure_browser_service.md`](tech_specs/secure_browser_service.md).
   - CLI expansion for credentials, preferences, skills, and node management.
-    See [`docs/tech_specs/cli_management_app.md`](tech_specs/cli_management_app.md) and [`docs/tech_specs/skills_storage_and_inference.md`](tech_specs/skills_storage_and_inference.md).
+    See [`docs/tech_specs/cynork_cli.md`](tech_specs/cynork_cli.md) and [`docs/tech_specs/skills_storage_and_inference.md`](tech_specs/skills_storage_and_inference.md).
 
 ### Deferred Until After MVP
 
@@ -101,7 +106,7 @@ For the full task breakdown with requirement and spec references, see [`docs/mvp
 - Define Postgres schema for users, local auth sessions, groups and RBAC, tasks, jobs, nodes, artifacts, and audit logging.
   See [`docs/tech_specs/postgres_schema.md`](tech_specs/postgres_schema.md).
 - Define node capability report payload and node configuration payload.
-  See [`docs/tech_specs/node_payloads.md`](tech_specs/node_payloads.md).
+  See [`docs/tech_specs/worker_node_payloads.md`](tech_specs/worker_node_payloads.md).
   - Specify registration-time bootstrap payload (PSK to JWT) and config versioning.
   - Specify capability report fields, hashing, and change reporting behavior.
   - Specify configuration refresh, acknowledgement payload, and rollback reporting.
@@ -116,9 +121,9 @@ For the full task breakdown with requirement and spec references, see [`docs/mvp
   See [`docs/tech_specs/orchestrator.md`](tech_specs/orchestrator.md).
 - Job dispatch: direct HTTP to Worker API using per-node URL and token from config delivery.
   MCP gateway is not in the loop for Phase 1.
-  See [`docs/tech_specs/worker_api.md`](tech_specs/worker_api.md) and [`docs/tech_specs/node_payloads.md`](tech_specs/node_payloads.md).
+  See [`docs/tech_specs/worker_api.md`](tech_specs/worker_api.md) and [`docs/tech_specs/worker_node_payloads.md`](tech_specs/worker_node_payloads.md).
 - Node: Node Manager startup sequence that contacts orchestrator before starting the single Ollama container.
-  See [`docs/tech_specs/node.md`](tech_specs/node.md).
+  See [`docs/tech_specs/worker_node.md`](tech_specs/worker_node.md).
 - Node: Worker API can receive a job, run a sandbox container, and return a result.
   See [`docs/tech_specs/worker_api.md`](tech_specs/worker_api.md) and [`docs/tech_specs/sandbox_container.md`](tech_specs/sandbox_container.md).
 - System: at least one inference-capable path must be available (node-local inference or external model routing with a configured provider key).
@@ -136,16 +141,16 @@ For the full task breakdown with requirement and spec references, see [`docs/mvp
   For script or commands, the system runs them in the sandbox.
   For plain text or Markdown, the system interprets the input and uses inference by default.
   The user task text MUST NOT be executed as a literal shell command unless the user explicitly selects a raw execution mode (script or commands).
-  See [`docs/requirements/orches.md`](requirements/orches.md) (REQ-ORCHES-0125, REQ-ORCHES-0126, REQ-ORCHES-0127) and [`docs/tech_specs/user_api_gateway.md`](tech_specs/user_api_gateway.md).
+  See [`docs/requirements/orches.md`](requirements/orches.md) (REQ-ORCHES-0126, REQ-ORCHES-0127, REQ-ORCHES-0128) and [`docs/tech_specs/user_api_gateway.md`](tech_specs/user_api_gateway.md).
 
 #### Phase 1.5 Single Node Full Capability
 
 - Enable node-local inference access from inside the sandbox.
   Implement the inference proxy sidecar approach so sandboxes can call `http://localhost:11434` without leaving the node.
-  See [`docs/tech_specs/node.md`](tech_specs/node.md) and [`docs/tech_specs/sandbox_container.md`](tech_specs/sandbox_container.md).
+  See [`docs/tech_specs/worker_node.md`](tech_specs/worker_node.md) and [`docs/tech_specs/sandbox_container.md`](tech_specs/sandbox_container.md).
 - Extend E2E to exercise inference inside the sandbox for the single-node deployment.
 - Add the minimum viable CLI slice as a separate Go module.
-  See [`docs/tech_specs/cli_management_app.md`](tech_specs/cli_management_app.md).
+  See [`docs/tech_specs/cynork_cli.md`](tech_specs/cynork_cli.md).
 
 #### Phase 2 MCP in the Loop
 
@@ -172,5 +177,5 @@ For the full task breakdown with requirement and spec references, see [`docs/mvp
 - Add external model routing per [`docs/tech_specs/external_model_routing.md`](tech_specs/external_model_routing.md).
   This includes routing policy and signals, external inference with node sandboxes, configurable settings, and per-agent overrides for Project Manager and Project Analyst.
 - Expand the CLI management app surface for credentials, user preferences, skills, and node management.
-  See [`docs/tech_specs/cli_management_app.md`](tech_specs/cli_management_app.md) and [`docs/tech_specs/skills_storage_and_inference.md`](tech_specs/skills_storage_and_inference.md).
+  See [`docs/tech_specs/cynork_cli.md`](tech_specs/cynork_cli.md) and [`docs/tech_specs/skills_storage_and_inference.md`](tech_specs/skills_storage_and_inference.md).
 - Defer the web console until after the CLI exists.

@@ -8,7 +8,9 @@
 - [Tool Catalog](#tool-catalog)
   - [Artifact Tools](#artifact-tools)
   - [Sandbox Tools](#sandbox-tools)
+  - [Sandbox Allowed Images (PM Agent)](#sandbox-allowed-images-pm-agent)
   - [Web Fetch](#web-fetch)
+  - [Secure Web Search](#secure-web-search)
   - [API Egress](#api-egress)
   - [Git Egress](#git-egress)
   - [Node Tools](#node-tools)
@@ -30,7 +32,7 @@ Related documents
 - MCP gateway enforcement: [`docs/tech_specs/mcp_gateway_enforcement.md`](mcp_gateway_enforcement.md)
 - MCP concepts: [`docs/tech_specs/mcp_tooling.md`](mcp_tooling.md)
 - Git egress tool patterns: [`docs/tech_specs/git_egress_mcp.md`](git_egress_mcp.md)
-- Node and sandbox behaviors: [`docs/tech_specs/node.md`](node.md)
+- Node and sandbox behaviors: [`docs/tech_specs/worker_node.md`](worker_node.md)
 
 ## Goals
 
@@ -81,6 +83,8 @@ Optional arguments MAY be added later as optional fields.
 
 ### Sandbox Tools
 
+- Spec ID: `CYNAI.MCPTOO.SandboxTools` <a id="spec-cynai-mcptoo-sandboxtools"></a>
+
 - `sandbox.create`
   - required args: `task_id`, `job_id`, `image_ref`
 - `sandbox.exec`
@@ -94,12 +98,51 @@ Optional arguments MAY be added later as optional fields.
 - `sandbox.destroy`
   - required args: `task_id`, `job_id`
 
+### Sandbox Allowed Images (PM Agent)
+
+- Spec ID: `CYNAI.MCPTOO.SandboxAllowedImagesPmAgent` <a id="spec-cynai-mcptoo-sandboxallowedimagespmagent"></a>
+
+These tools are available only to the Project Manager agent.
+Adding an image to the allowed list is gated by the orchestrator system setting `agents.project_manager.sandbox.allow_add_to_allowed_images` (default `false`).
+See [`docs/tech_specs/sandbox_image_registry.md`](sandbox_image_registry.md#spec-cynai-sandbx-pmagentaddtoallowedimages).
+
+- `sandbox.allowed_images.list`
+  - required args: none
+  - optional args: `limit`, `cursor` (for pagination)
+  - Returns the current allowed sandbox image references (or a paginated subset).
+  - Gateway: allow for PM agent only.
+- `sandbox.allowed_images.add`
+  - required args: `image_ref` (string; OCI image reference, e.g. `docker.io/library/python:3.12` or `quay.io/org/image:tag`)
+  - optional args: `name` (string; logical name for the image), `task_id` (uuid; for audit context)
+  - Adds the image to the allowed list and records it in the sandbox image registry so it may be used for sandbox jobs.
+  - Gateway: allow for PM agent only when `agents.project_manager.sandbox.allow_add_to_allowed_images` is `true`; otherwise MUST reject.
+
 ### Web Fetch
 
 `web.fetch` is a policy-controlled, sanitized fetch implemented by the Secure Browser Service.
 
 - `web.fetch`
   - required args: `task_id`, `url`
+
+### Secure Web Search
+
+- Spec ID: `CYNAI.MCPTOO.SecureWebSearch` <a id="spec-cynai-mcptoo-securewebsearch"></a>
+
+Secure web search is a policy-controlled MCP tool that allows agents to run search queries without direct, unfiltered access to the open internet.
+Results are returned through a secure path (e.g. Secure Browser Service or a dedicated search proxy) so that only sanitized or allowlisted search provider responses are exposed to the agent.
+
+- `web.search`
+  - required args: `task_id`, `query` (string; search query text)
+  - optional args: `limit` (int; max number of results to return), `safe_filter` (boolean; when supported, request safe-search filtering)
+  - Returns search results (titles, snippets, URLs) in a size-limited, policy-compliant format.
+  - Implementation MUST NOT expose raw internet access; search MUST be routed through the same secure, policy-controlled mechanism as `web.fetch` (e.g. Secure Browser Service with search-specific rules) or a dedicated secure search endpoint.
+  - Subject to the same access control and audit as `web.fetch`; action MAY be `web.search` in access control rules.
+
+Traces To:
+
+- [REQ-MCPTOO-0119](../requirements/mcptoo.md#req-mcptoo-0119)
+
+See [`docs/tech_specs/secure_browser_service.md`](secure_browser_service.md) (or equivalent secure fetch/search integration).
 
 ### API Egress
 
@@ -144,10 +187,12 @@ This catalog uses the same tool names.
 
 ### Skills Tools
 
+- Spec ID: `CYNAI.MCPTOO.SkillsTools` <a id="spec-cynai-mcptoo-skillstools"></a>
+
 Canonical tool names, argument schemas, behavior, and controls for skills tools are defined in the skills spec only.
 This catalog lists tool names for allowlist and discovery; do not duplicate argument or behavior details here.
 
-- **Skills (full CRUD)**: [Skill Tools via MCP (CRUD)](skills_storage_and_inference.md#skill-tools-via-mcp-crud)
+- **Skills (full CRUD)**: [Skill Tools via MCP (CRUD)](skills_storage_and_inference.md#spec-cynai-skills-skilltoolsmcp)
   - `skills.create`
   - `skills.list`
   - `skills.get`
@@ -156,8 +201,10 @@ This catalog lists tool names for allowlist and discovery; do not duplicate argu
 
 ### Help Tools
 
+- Spec ID: `CYNAI.MCPTOO.HelpTools` <a id="spec-cynai-mcptoo-helptools"></a>
+
 On-demand documentation for how to interact with CyNodeAI.
-See [Help MCP Server](mcp_tooling.md#help-mcp-server).
+See [Help MCP Server](mcp_tooling.md#spec-cynai-mcptoo-helpmcpserver).
 
 - `help.get`
   - required args: `task_id` (for context and auditing)
@@ -166,6 +213,8 @@ See [Help MCP Server](mcp_tooling.md#help-mcp-server).
   - Response MUST be size-limited; content MUST NOT include secrets.
 
 ### Database Tools
+
+- Spec ID: `CYNAI.MCPTOO.DatabaseTools` <a id="spec-cynai-mcptoo-databasetools"></a>
 
 Database tools are typed operations only.
 Raw SQL MUST NOT be exposed via MCP tools.
@@ -237,6 +286,15 @@ Intentional exceptions (MVP)
 - `db.preference.effective`
   - required args: `task_id`
   - optional args: `include_sources` (boolean)
+- **Project tools (user-scoped)**  
+  All project tools MUST return only projects the authenticated user is authorized to access (default project plus RBAC-scoped projects).
+  See [Project Search via MCP](projects_and_scopes.md#spec-cynai-access-projectsmcpsearch).
+- `db.project.get`
+  - required args: `project_id` (uuid) or `slug` (text); exactly one MUST be provided
+  - notes: returns the project if it is in the user's authorized set; otherwise not-found or access-denied
+- `db.project.list`
+  - optional args: `q` (text; filter on slug, display_name, or description), `limit`, `cursor`
+  - notes: list responses MUST be size-limited and support pagination; only authorized projects are returned
 
 ## Response and Error Model
 

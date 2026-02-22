@@ -10,12 +10,19 @@
   - [Bootstrap and Runtime Configuration](#bootstrap-and-runtime-configuration)
 - [Tool Access and Database Access](#tool-access-and-database-access)
 - [Verification Outputs](#verification-outputs)
+- [LLM Context (Baseline and User-Configurable)](#llm-context-baseline-and-user-configurable)
 - [Preference Usage](#preference-usage)
 
 ## Document Overview
 
 This document defines the Project Analyst Agent, a sub-agent spawned by the Project Manager Agent to monitor a single task.
 It provides focused verification that task outputs satisfy acceptance criteria and user preferences.
+
+Implementation artifact
+
+- The concrete analyst runtime is `cynode-pma` running in `project_analyst` mode.
+- It MUST use a separate instructions bundle from the Project Manager role.
+- See [`docs/tech_specs/cynode_pma.md`](cynode_pma.md).
 
 ## Agent Purpose
 
@@ -131,6 +138,12 @@ Minimum recommended fields for recorded findings
 - `findings`: array of structured issues and evidence
 - `recommended_actions`: array of remediation steps
 - `preferences_applied`: preference scope identifiers and versions used for verification
+
+## LLM Context (Baseline and User-Configurable)
+
+The Project Analyst Agent MUST pass baseline context (identity, role, responsibilities, non-goals) to every LLM it uses and MUST include project-level and task-level context when in scope, and user-configurable additional context resolved from preferences.
+See [REQ-AGENTS-0132](../requirements/agents.md#req-agents-0132), [REQ-AGENTS-0133](../requirements/agents.md#req-agents-0133), [REQ-AGENTS-0134](../requirements/agents.md#req-agents-0134), and [LLM Context (Baseline and User-Configurable)](project_manager_agent.md#spec-cynai-agents-llmcontext).
+The preference key `agents.project_analyst.additional_context` supplies the user-configurable additional context for this agent.
 
 ## Preference Usage
 

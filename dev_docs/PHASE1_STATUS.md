@@ -38,68 +38,56 @@ Key artifacts and entry points for Phase 1.
 
 ### Command Entry Points
 
-| File                                     | Description                             |
-| ---------------------------------------- | --------------------------------------- |
-| `orchestrator/cmd/control-plane/main.go` | Control-plane API, migrations, dispatch |
-| `orchestrator/cmd/user-gateway/main.go`  | User-facing API (auth, tasks)           |
-| `orchestrator/cmd/mcp-gateway/main.go`   | MCP gateway (scaffold)                  |
-| `orchestrator/cmd/api-egress/main.go`    | API egress (scaffold)                   |
-| `worker_node/cmd/worker-api/`            | Worker API (jobs:run)                   |
-| `worker_node/cmd/node-manager/main.go`   | Node registration and capability        |
+- `orchestrator/cmd/control-plane/main.go` - Control-plane API, migrations, dispatch
+- `orchestrator/cmd/user-gateway/main.go` - User-facing API (auth, tasks)
+- `orchestrator/cmd/mcp-gateway/main.go` - MCP gateway (scaffold)
+- `orchestrator/cmd/api-egress/main.go` - API egress (scaffold)
+- `worker_node/cmd/worker-api/` - Worker API (jobs:run)
+- `worker_node/cmd/node-manager/main.go` - Node registration and capability
 
 ### Database Migrations
 
-| File                                                | Description                              |
-| --------------------------------------------------- | ---------------------------------------- |
-| `orchestrator/migrations/0001_identity_auth.sql`    | Users, credentials, sessions, audit logs |
-| `orchestrator/migrations/0002_tasks_jobs_nodes.sql` | Tasks, jobs, nodes, capabilities         |
+- `orchestrator/migrations/0001_identity_auth.sql` - Users, credentials, sessions, audit logs
+- `orchestrator/migrations/0002_tasks_jobs_nodes.sql` - Tasks, jobs, nodes, capabilities
 
 ### Shared and Internal Packages
 
-| Location                           | Description                                                               |
-| ---------------------------------- | ------------------------------------------------------------------------- |
-| `go_shared_libs/contracts/`        | workerapi, nodepayloads, problem (shared by orchestrator and worker_node) |
-| `orchestrator/internal/auth`       | JWT, Argon2id, rate limiting                                              |
-| `orchestrator/internal/config`     | Environment-based configuration                                           |
-| `orchestrator/internal/database`   | DB operations, migrations                                                 |
-| `orchestrator/internal/handlers`   | HTTP handlers                                                             |
-| `orchestrator/internal/middleware` | HTTP middleware                                                           |
-| `orchestrator/internal/models`     | Data models                                                               |
-| `orchestrator/internal/testutil`   | Test utilities                                                            |
+- `go_shared_libs/contracts/` - workerapi, nodepayloads, problem (shared by orchestrator and worker_node)
+- `orchestrator/internal/auth` - JWT, Argon2id, rate limiting
+- `orchestrator/internal/config` - Environment-based configuration
+- `orchestrator/internal/database` - DB operations, migrations
+- `orchestrator/internal/handlers` - HTTP handlers
+- `orchestrator/internal/middleware` - HTTP middleware
+- `orchestrator/internal/models` - Data models
+- `orchestrator/internal/testutil` - Test utilities
 
 ### BDD Features
 
-| File                                      | Description                         |
-| ----------------------------------------- | ----------------------------------- |
-| `features/e2e/single_node_happy_path.feature` | Single node task execution scenario (E2E) |
-| `features/orchestrator/node_registration_and_config.feature` | Node registration, config fetch, config ack |
-| `features/orchestrator/orchestrator_task_lifecycle.feature` | Task create, status, result; dispatcher per-node |
-| `features/orchestrator/orchestrator_startup.feature` | Orchestrator fail-fast (inference path) |
-| `features/orchestrator/initial_auth.feature` | User login, refresh, logout |
-| `features/worker_node/node_manager_config_startup.feature` | Node manager config fetch and fail-fast |
-| `features/worker_node/worker_node_sandbox_execution.feature` | Worker API auth, sandbox run, workspace/env |
+- `features/e2e/single_node_happy_path.feature` - Single node task execution scenario (E2E)
+- `features/orchestrator/node_registration_and_config.feature` - Node registration, config fetch, config ack
+- `features/orchestrator/orchestrator_task_lifecycle.feature` - Task create, status, result; dispatcher per-node
+- `features/orchestrator/orchestrator_startup.feature` - Orchestrator fail-fast (inference path)
+- `features/orchestrator/initial_auth.feature` - User login, refresh, logout
+- `features/worker_node/node_manager_config_startup.feature` - Node manager config fetch and fail-fast
+- `features/worker_node/worker_node_sandbox_execution.feature` - Worker API auth, sandbox run, workspace/env
 
 ### Dev Docs
 
-| File | Description |
-| ---- | ----------- |
-| `dev_docs/mvp_phase1_completion_plan.md` | Phase 1 chunks, acceptance checklist, requirement scope |
-| `dev_docs/mvp_phase1_code_review_report.md` | In-depth code review vs specs, feature/BDD gaps (2026-02-20) |
-| `dev_docs/PHASE1_STATUS.md` | This status report |
+- `dev_docs/mvp_phase1_completion_plan.md` - Phase 1 chunks, acceptance checklist, requirement scope
+- `dev_docs/mvp_phase1_code_review_report.md` - In-depth code review vs specs, feature/BDD gaps (2026-02-20)
+- `dev_docs/PHASE1_STATUS.md` - This status report
 
 ---
 
 ## Test Coverage Status
 
-| Package                            | Coverage | Status            |
-| ---------------------------------- | -------- | ----------------- |
-| `orchestrator/internal/config`     | 100.0%   | Excellent         |
-| `orchestrator/internal/testutil`   | 90%+     | Good              |
-| `orchestrator/internal/database`   | 92.7%    | Good              |
-| `orchestrator/internal/auth`       | 88.5%    | Good              |
-| `orchestrator/internal/middleware` | 88.7%    | Good              |
-| `orchestrator/internal/handlers`   | 86.8%    | Good              |
-| `orchestrator/cmd/*`               | 0.0%     | Main entry points |
+- `orchestrator/internal/config` - 100.0% - Excellent
+- `orchestrator/internal/testutil` - 90%+ - Good
+- `orchestrator/internal/database` - 92.7% - Good
+- `orchestrator/internal/auth` - 88.5% - Good
+- `orchestrator/internal/middleware` - 88.7% - Good
+- `orchestrator/internal/handlers` - 86.8% - Good
+- `orchestrator/cmd/*` - 0.0% - Main entry points
 
 **Overall:** Core packages have good test coverage (82-100%).
 Main entry points are excluded as they primarily wire dependencies.
@@ -131,7 +119,7 @@ Notes and open items for MVP completion.
 
 See `dev_docs/mvp_phase1_code_review_report.md` for full detail.
 
-- **config_version:** Spec (`node_payloads.md`) requires ULID (26-char Crockford Base32) for config version; implementation uses literal `"1"`.
+- **config_version:** Spec (`worker_node_payloads.md`) requires ULID (26-char Crockford Base32) for config version; implementation uses literal `"1"`.
   Should implement ULID generation when serving config.
 - **Ollama image:** Spec says node starts "the single Ollama container specified by the orchestrator"; implementation uses env `OLLAMA_IMAGE`.
   Either add image to config payload or document as Phase 1 env-only and defer.

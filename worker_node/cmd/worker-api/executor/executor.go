@@ -96,7 +96,7 @@ func (e *Executor) RunJob(ctx context.Context, req *workerapi.RunJobRequest, wor
 		return e.runDirect(ctx, req, resp, workspaceDir)
 	}
 
-	// When UseInference is set and node has proxy image + Ollama URL, run in pod with inference proxy (node.md Option A).
+	// When UseInference is set and node has proxy image + Ollama URL, run in pod with inference proxy (worker_node.md Option A).
 	if req.Sandbox.UseInference && e.ollamaUpstreamURL != "" && e.inferenceProxyImage != "" && e.runtime == "podman" {
 		return e.runJobWithPodInference(ctx, req, resp, workspaceDir)
 	}
@@ -167,7 +167,7 @@ func (e *Executor) RunJob(ctx context.Context, req *workerapi.RunJobRequest, wor
 }
 
 // runJobWithPodInference runs the job in a Podman pod with an inference proxy sidecar;
-// sandbox gets OLLAMA_BASE_URL=http://localhost:11434. Per node.md Option A.
+// sandbox gets OLLAMA_BASE_URL=http://localhost:11434. Per worker_node.md Option A.
 func (e *Executor) runJobWithPodInference(ctx context.Context, req *workerapi.RunJobRequest, resp *workerapi.RunJobResponse, workspaceDir string) (*workerapi.RunJobResponse, error) {
 	podName := "cynodeai-job-" + sanitizePodName(req.JobID)
 	createPod := exec.CommandContext(ctx, e.runtime, "pod", "create", "--name", podName)

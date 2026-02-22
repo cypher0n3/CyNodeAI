@@ -65,6 +65,8 @@ Recommended behaviors
 
 ## Core Resources
 
+- Spec ID: `CYNAI.DATAPI.CoreResources` <a id="spec-cynai-datapi-coreresources"></a>
+
 The Data REST API SHOULD expose resource-oriented endpoints for:
 
 - Users
@@ -78,7 +80,7 @@ The Data REST API SHOULD expose resource-oriented endpoints for:
 - Nodes, node status, and capability reports
 - Preferences and effective preferences resolution results
 - API Egress credentials (metadata list, get, create, rotate, disable; secrets write-only on create and rotate)
-  - See [API Egress Server - Admin API (Gateway Endpoints)](api_egress_server.md#admin-api-gateway-endpoints).
+  - See [API Egress Server - Admin API (Gateway Endpoints)](api_egress_server.md#spec-cynai-apiegr-adminapigatewayendpoints).
 - Access control rules and audit records, when allowed
 - Groups, group memberships, roles, and role bindings (RBAC), when allowed
   - See [`docs/tech_specs/rbac_and_groups.md`](rbac_and_groups.md).
@@ -98,7 +100,7 @@ Endpoints SHOULD support:
 
 - Clients MUST authenticate to the User API Gateway.
 - Authorization MUST be evaluated using policy and (when applicable) system settings.
-  User preferences are a separate resource and do not govern API authorization; for the distinction between preferences and system settings, see [User preferences (Terminology)](user_preferences.md#2-terminology).
+  User preferences are a separate resource and do not govern API authorization; for the distinction between preferences and system settings, see [User preferences (Terminology)](user_preferences.md#spec-cynai-stands-preferenceterminology).
 - Responses MUST be scoped to the authenticated subject.
 
 ## Future GraphQL Option

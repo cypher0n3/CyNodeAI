@@ -5,6 +5,7 @@
 - [Compatibility Goals](#compatibility-goals)
 - [Endpoints](#endpoints)
 - [Conversation Model](#conversation-model)
+- [Chat Completion Routing Path](#chat-completion-routing-path)
 - [Tasks Versus Chat (Non-Goals)](#tasks-versus-chat-non-goals)
 - [Authentication, Policy, and Auditing](#authentication-policy-and-auditing)
 - [Gateway Timeouts and Long-Running Behavior](#gateway-timeouts-and-long-running-behavior)
@@ -83,12 +84,13 @@ Forward compatibility:
 Project scoping:
 
 - If an OpenAI-standard `OpenAI-Project` request header is present, the gateway MUST treat its value as the project context for persistence.
-- If the header is absent, the gateway MUST associate the thread (and any tasks created in that context) with the creating user's default project (see [REQ-PROJCT-0104](../requirements/projct.md#req-projct-0104) and [Default project](../tech_specs/projects_and_scopes.md#default-project)).
+- If the header is absent, the gateway MUST associate the thread (and any tasks created in that context) with the creating user's default project (see [REQ-PROJCT-0104](../requirements/projct.md#req-projct-0104) and [Default project](../tech_specs/projects_and_scopes.md#spec-cynai-access-defaultproject)).
 
 Model identifiers:
 
 - The gateway MUST expose a stable PM/PA chat surface model id `cynodeai.pm`.
 - When the client omits `model` or provides an empty `model`, the gateway MUST behave as if `model` was `cynodeai.pm`.
+- The internal implementation of the PM/PA chat surface is the `cynode-pma` binary (see [cynode_pma.md](cynode_pma.md)); the external id `cynodeai.pm` is stable and MUST NOT change for client compatibility.
 - The gateway MUST also expose underlying inference model identifiers in `GET /v1/models`.
   These identifiers MUST be limited to the currently configured inference model(s) that the authenticated user is authorized to use.
   The gateway MUST NOT disclose model identifiers the user is not authorized to use.
@@ -113,6 +115,48 @@ Thread identifiers and association:
 Traces To:
 
 - [REQ-USRGWY-0130](../requirements/usrgwy.md#req-usrgwy-0130)
+
+## Chat Completion Routing Path
+
+- Spec ID: `CYNAI.USRGWY.OpenAIChatApi.RoutingPath` <a id="spec-cynai-usrgwy-openaichatapi-routingpath"></a>
+
+All OpenAI-compliant chat/completion requests are processed by the **orchestrator** first.
+The orchestrator is the single point of entry for request handling, policy, and routing.
+The gateway MUST NOT send chat completion requests directly to an agent or inference endpoint; every request MUST flow through the orchestrator.
+
+Effective model identifier
+
+- The **effective model identifier** for routing is the request body `model` field if present and non-empty; otherwise it is `cynodeai.pm`.
+
+Orchestrator responsibilities before routing
+
+- Perform automatic **sanitization**: detect and redact secrets in message content (at least API keys), replace detected secrets with the literal `SECRET_REDACTED`, and record redaction in audit log.
+- Perform **logging** and audit recording for the request.
+- Persist the amended user message to the chat thread.
+- Then route to the backend that generates the completion using the effective model identifier.
+
+What is routed to the PM agent
+
+- The orchestrator MUST hand off the request to the **PM agent** (`cynode-pma` in `project_manager` mode) if and only if the effective model identifier is exactly `cynodeai.pm`.
+- In that case the orchestrator sends the sanitized messages to `cynode-pma`; the PM agent performs further processing (including tool use and inference) and returns the completion.
+  The orchestrator does not call an inference API directly for that request.
+
+What is not routed to the PM agent
+
+- The orchestrator MUST route the request to **direct inference** (no PM agent) if and only if the effective model identifier is not `cynodeai.pm`.
+- In that case the effective model identifier MUST be one of the inference model ids returned by `GET /v1/models` for the authenticated user.
+  The orchestrator MUST call the corresponding inference backend: node-local inference (e.g. Ollama on the selected worker or sidecar) or an external API via API Egress, per [External Model Routing](external_model_routing.md).
+  The orchestrator MUST NOT invoke `cynode-pma` for that request.
+
+Summary
+
+- **Effective model `cynodeai.pm`:** Routed to PM agent (`cynode-pma`).
+  Orchestrator hands off sanitized messages to the PM agent; the agent returns the completion.
+  Orchestrator does not call an inference API directly.
+- **Effective model any other value:** Routed to direct inference.
+  Orchestrator calls the inference backend (node-local or API Egress); the orchestrator does not invoke the PM agent.
+
+See [Request Processing Pipeline](#request-processing-pipeline) for the ordered steps and [External Model Routing](external_model_routing.md) for inference routing policy.
 
 ## Tasks Versus Chat (Non-Goals)
 
@@ -170,8 +214,8 @@ The gateway handler backing `POST /v1/chat/completions` MUST implement the follo
 
 Traces To:
 
-- [REQ-ORCHES-0130](../requirements/orches.md#req-orches-0130)
 - [REQ-ORCHES-0131](../requirements/orches.md#req-orches-0131)
+- [REQ-ORCHES-0132](../requirements/orches.md#req-orches-0132)
 
 ## Error Semantics
 
@@ -240,7 +284,12 @@ This section defines the required request-processing steps for `POST /v1/chat/co
    - Detected secrets MUST be replaced with the literal string `SECRET_REDACTED` in the amended message content.
    - The gateway MUST record whether redaction was applied and the kind(s) of secrets detected in `chat_audit_log`.
 5. Persist the amended (redacted) user message content to the database as a chat-thread message scoped to `(user_id, project_id)`.
-6. Invoke the LLM or agent surface using only the amended (redacted) messages.
+6. **Orchestrator routing:** Compute the effective model identifier (request `model` if present and non-empty, else `cynodeai.pm`).
+   Using only the amended (redacted) messages and that identifier:
+   - If the effective model identifier is exactly `cynodeai.pm`: hand off the request to the PM agent (`cynode-pma`) for processing and response generation.
+     Do not call an inference API directly.
+   - If the effective model identifier is not `cynodeai.pm`: route to direct inference (node-local or external API via API Egress per [External Model Routing](external_model_routing.md)).
+     Do not invoke the PM agent.
 7. Persist the assistant output as a chat-thread message scoped to the same `(user_id, project_id)`.
 8. Return an OpenAI-format chat-completions response where the content is present at `choices[0].message.content`.
 

@@ -17,7 +17,7 @@
 This document defines secure handling of local user accounts for CyNodeAI.
 Local user accounts are the MVP default authentication mechanism for self-hosted deployments.
 The Postgres schema is defined in [`docs/tech_specs/postgres_schema.md`](postgres_schema.md).
-See [Identity and Authentication](postgres_schema.md#identity-and-authentication) and [Audit Logging](postgres_schema.md#audit-logging).
+See [Identity and Authentication](postgres_schema.md#spec-cynai-schema-identityauth) and [Audit Logging](postgres_schema.md#spec-cynai-schema-auditlogging).
 
 ## Goals
 

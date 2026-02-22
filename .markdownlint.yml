@@ -288,6 +288,19 @@ no-heading-like-lines:
 #   #   - "**/*.md"
 
 # -----------------------------------------------------------------------------
+# no-tables (custom)
+# -----------------------------------------------------------------------------
+# To override: Uncomment the block; set convert-to and/or excludePathPatterns. Disallow GFM tables; when convert-to is "list", suggest converting each table to a list.
+# Options (all optional):
+#   convert-to: string (default "none"); "none" = short message only, "list" = show suggested list format in detail
+#   excludePathPatterns: list of globs; skip this rule for matching file paths
+# ---
+no-tables:
+  convert-to: list
+#   # excludePathPatterns:
+#   #   - "**/*.md"
+
+# -----------------------------------------------------------------------------
 # one-sentence-per-line (custom)
 # -----------------------------------------------------------------------------
 # To override: Uncomment the block; set continuationIndent, strictAbbreviations, and/or excludePathPatterns. Enforce one sentence per line in prose and list content. Fixable (repeated Fix all).

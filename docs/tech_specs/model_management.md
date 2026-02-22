@@ -44,7 +44,7 @@ Cache properties
 The model registry stores model metadata used for routing and verification.
 It allows the Project Manager Agent to select appropriate models for tasks based on capabilities and availability.
 The Postgres schema is defined in [`docs/tech_specs/postgres_schema.md`](postgres_schema.md).
-See [Model Registry](postgres_schema.md#model-registry).
+See [Model Registry](postgres_schema.md#spec-cynai-schema-modelregistry).
 
 ### Models Table
 
@@ -134,7 +134,7 @@ Recommended behavior
 - The orchestrator checks `node_model_availability` to find a suitable node with the model already available.
 - When selecting a node for a task, the Project Manager Agent SHOULD prefer nodes where the required model is already loaded.
 - On orchestrator startup (or when the first local inference worker becomes dispatchable), the orchestrator SHOULD request that at least one eligible node loads the effective Project Manager model so the Project Manager Agent can run.
-  Selection and warmup behavior (including system setting keys, sliding-scale policy, and orchestrator-host preference) are defined in [Project Manager Model (Startup Selection and Warmup)](orchestrator.md#project-manager-model-startup-selection-and-warmup); do not restate them here.
+  Selection and warmup behavior (including system setting keys, sliding-scale policy, and orchestrator-host preference) are defined in [Project Manager Model (Startup Selection and Warmup)](orchestrator.md#spec-cynai-orches-projectmanagermodelstartup); do not restate them here.
 - The orchestrator configures nodes with the model cache endpoint and any required pull credentials during node registration.
 - If no node has the model, the orchestrator requests the target node to load the model.
 - The node retrieves the artifact from the orchestrator cache and installs it into Ollama or a compatible runtime.

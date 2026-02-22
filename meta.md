@@ -27,7 +27,7 @@ It coordinates sandboxed worker execution across local nodes and optional cloud 
 - **REST APIs**: all REST APIs in this system MUST be implemented in Go (see `docs/tech_specs/go_rest_api_standards.md`).
 - **Admin clients parity**: the Web Console and the CLI management app (`cynork`) MUST offer the same administrative capabilities.
   When adding or changing a capability in one client, the other MUST be updated to match.
-  See `docs/requirements/client.md` (REQ-CLIENT-0004) and the capability-parity sections in `docs/tech_specs/web_console.md` and `docs/tech_specs/cli_management_app.md`.
+  See `docs/requirements/client.md` (REQ-CLIENT-0004) and the capability-parity sections in `docs/tech_specs/web_console.md` and `docs/tech_specs/cynork_cli.md`.
 
 ## Security and Access Notes
 
@@ -46,7 +46,7 @@ It coordinates sandboxed worker execution across local nodes and optional cloud 
 - `go_shared_libs/`: shared Go contracts and types used by orchestrator and worker node; see `go_shared_libs/README.md`.
 - `orchestrator/`: orchestrator Go module (control-plane, user-gateway, api-egress, etc.); see `orchestrator/README.md`.
 - `worker_node/`: worker-node Go module (node manager, worker API); see `worker_node/README.md`.
-- `cynork/`: CLI management client (Go, Cobra); see `cynork/README.md` and `docs/tech_specs/cli_management_app.md`.
+- `cynork/`: CLI management client (Go, Cobra); see `cynork/README.md` and `docs/tech_specs/cynork_cli.md`.
 - `tmp/`: scratch space (ignored by Python lint configs; avoid committing generated artifacts unless intentional).
 
 ## Style and Tooling Conventions
@@ -56,6 +56,7 @@ It coordinates sandboxed worker execution across local nodes and optional cloud 
 - See [`markdown_conventions.md`](./docs/docs_standards/markdown_conventions.md)
 - Use the project **justfile** for setup, checking, and validation.
   All changes must pass **`just ci`** before considering work complete; see the justfile for available recipes.
+  - Note: If only docs were updated, **`just docs-check`** is sufficient instead of `just ci`.
 - Markdown formatting is governed by `.editorconfig` and `.markdownlint.yml`.
   Keep Markdown ASCII-only (avoid emoji and non-ASCII punctuation) unless explicitly allowed by the linter config.
   - **NOTE:** Use `just lint-md <path>` to apply automatic markdownlint fixes before fixing other linter issues.
@@ -65,6 +66,7 @@ It coordinates sandboxed worker execution across local nodes and optional cloud 
 
 ## Contribution Expectations
 
+- When authoring or editing **tech specs**, **requirements**, **features**, or related design docs, you MUST follow the project's spec standards: [docs/docs_standards/spec_authoring_writing_and_validation.md](docs/docs_standards/spec_authoring_writing_and_validation.md).
 - Requirements in `docs/requirements/` take precedence over tech specs and code.
   If requirements, specs, and code differ, treat it as a **gap** and call it out to the user for direction.
 - Tech specs in `docs/tech_specs/` take precedence over code.

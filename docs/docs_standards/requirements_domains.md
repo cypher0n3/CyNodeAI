@@ -45,6 +45,10 @@ The filename is the domain tag lowercased.
   - Requirements file: [`docs/requirements/models.md`](../requirements/models.md)
 - `AGENTS`: Agent behaviors, responsibilities, and workflow integration.
   - Requirements file: [`docs/requirements/agents.md`](../requirements/agents.md)
+- `PMAGNT`: Project Manager Agent binary requirements (implementation artifact, including Project Analyst role mode).
+  - Requirements file: [`docs/requirements/pmagnt.md`](../requirements/pmagnt.md)
+- `SBAGNT`: Sandbox Agent runner binary requirements (deterministic runner inside sandbox containers).
+  - Requirements file: [`docs/requirements/sbagnt.md`](../requirements/sbagnt.md)
 - `CLIENT`: User-facing management surfaces, including CLI and Web Console behavior (shared capabilities and parity).
   - Requirements file: [`docs/requirements/client.md`](../requirements/client.md)
 - `WEBCON`: Web Console-specific behavior (specs and requirements that apply only to the Web Console).

@@ -8,6 +8,7 @@
 - [4 Key Semantics](#4-key-semantics)
 - [5 Value Semantics](#5-value-semantics)
 - [6 Known Keys and User-Defined Keys](#6-known-keys-and-user-defined-keys)
+  - [6.1 Agent additional context](#61-agent-additional-context)
 - [7 Code Language Preferences](#7-code-language-preferences)
 - [8 Effective Preference Resolution](#8-effective-preference-resolution)
   - [8.1 Applicable Requirements](#81-applicable-requirements)
@@ -27,6 +28,8 @@ Store user task-execution preferences and constraints in PostgreSQL so orchestra
 Preferences cover standards and constraints such as acceptance criteria, writing style, language preferences, code language preferences, security constraints, definition-of-done, and reporting style.
 
 ## 2 Terminology
+
+- Spec ID: `CYNAI.STANDS.PreferencesTerminology` <a id="spec-cynai-stands-preferenceterminology"></a>
 
 In this repository, the term "preferences" refers only to user-facing task-execution preferences and constraints.
 Preferences are intended to be retrieved by agents and, when appropriate, passed to AI models or queried during task execution.
@@ -57,7 +60,7 @@ Precedence order (highest wins):
 - task => project => user => group => system
 
 The Postgres schema is defined in [`docs/tech_specs/postgres_schema.md`](postgres_schema.md).
-See [Preferences](postgres_schema.md#preferences).
+See [Preferences](postgres_schema.md#spec-cynai-schema-preferences).
 
 ### 3.1 Preferences Tables
 
@@ -164,6 +167,28 @@ User-defined key examples:
 - `custom.acme.writing.tone`
 - `user.alice.acceptance.extra_checks`
 - `project.docs.custom.release_notes_template`
+
+### 6.1 Agent Additional Context
+
+- Spec ID: `CYNAI.STANDS.AgentAdditionalContext` <a id="spec-cynai-stands-agentadditionalcontext"></a>
+
+Agents that leverage LLMs MUST support user-configurable additional context included with LLM prompts.
+See [REQ-AGENTS-0133](../requirements/agents.md#req-agents-0133) and [LLM Context (Baseline and User-Configurable)](project_manager_agent.md#spec-cynai-agents-llmcontext).
+
+Recommended known keys (reserved namespace `agents.<agent_id>.additional_context` or role-based):
+
+- `agents.project_manager.additional_context` (string or array of strings)
+  - User-supplied text merged into the context passed to the Project Manager Agent's LLM (after baseline context and role instructions).
+- `agents.project_analyst.additional_context` (string or array of strings)
+  - User-supplied text merged into the context passed to the Project Analyst Agent's LLM.
+- `agents.sandbox_agent.additional_context` (string or array of strings)
+  - User-supplied text merged into the context passed to the Sandbox Agent's LLM when it performs inference (resolved at job-creation time and supplied in job context).
+
+Semantics:
+
+- Value MAY be a string (single block of text) or an array of strings (concatenated in order).
+- Resolution uses the same scope precedence as other preferences (task > project > user > group > system).
+- Invalid or unknown keys MUST be skipped during resolution; valid entries MUST be included in the effective context supplied to the agent runtime.
 
 ## 7 Code Language Preferences
 

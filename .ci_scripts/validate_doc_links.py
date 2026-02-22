@@ -6,6 +6,11 @@ Finds all markdown links that point to other files (not same-document # anchors
 or external URLs) and checks that target files exist and, when present, that
 fragment identifiers exist in the target file.
 
+Same-document (internal) links may use regular heading refs. For cross-doc
+links from docs/tech_specs, docs/requirements, and docs/draft_specs, fragment
+identifiers must use stable anchor patterns from .markdownlint.yml
+allow-custom-anchors. Other docs may use non-anchor links.
+
 Exit code: 0 if all links valid, 1 if any broken. Outputs to stdout; report
 can be written to dev_docs when run via justfile.
 """
@@ -36,6 +41,39 @@ def _collect_md_files(docs_root: Path) -> list[Path]:
 # Match markdown link: [text](url). Captures url (may include fragment).
 _LINK_RE = re.compile(r"\[([^\]]*)\]\(([^)\s]+)(?:\s+[^)]*)?\)")
 
+# Subpaths under docs/ where cross-doc links must use stable anchors only.
+_STABLE_ANCHOR_SCOPE = ("tech_specs", "requirements", "draft_specs")
+
+
+def _load_stable_anchor_patterns(repo_root: Path) -> tuple[re.Pattern[str], ...]:
+    """Read allow-custom-anchors.allowedIdPatterns from .markdownlint.yml."""
+    yaml_path = repo_root / ".markdownlint.yml"
+    if not yaml_path.is_file():
+        return ()
+    text = yaml_path.read_text(encoding="utf-8", errors="replace")
+    patterns: list[re.Pattern[str]] = []
+    in_allowed = False
+    for line in text.splitlines():
+        stripped = line.strip()
+        if stripped.startswith("allowedIdPatterns:"):
+            in_allowed = True
+            continue
+        if in_allowed:
+            # End of list: sibling key at 2-space indent (e.g. strictPlacement:)
+            if re.match(r"^  [a-zA-Z]", line):
+                in_allowed = False
+                continue
+            # List item: "    - pattern: '...'" or "    - pattern: \"...\""
+            m = re.match(r"^\s*-\s*pattern:\s*(?:(['\"])(.+)\1|(.+?))\s*$", stripped)
+            if m:
+                raw = m.group(2) if m.group(2) is not None else (m.group(3) or "").strip()
+                if raw:
+                    try:
+                        patterns.append(re.compile(raw))
+                    except re.error:
+                        continue
+    return tuple(patterns)
+
 
 def _extract_links(content: str) -> list[tuple[str, int]]:
     """Return list of (href, 1-based line number) for each link in content."""
@@ -62,6 +100,23 @@ def _resolve_path(from_file: Path, href: str) -> Path:
     path_part = href.split("#", 1)[0].strip()
     from_dir = from_file.parent
     return (from_dir / path_part).resolve()
+
+
+def _under_stable_anchor_scope(docs_root: Path, source: Path) -> bool:
+    """True if source is under tech_specs, requirements, or draft_specs."""
+    try:
+        rel = source.resolve().relative_to(docs_root.resolve())
+    except ValueError:
+        return False
+    parts = rel.parts
+    return len(parts) >= 1 and parts[0] in _STABLE_ANCHOR_SCOPE
+
+
+def _fragment_matches_stable_pattern(
+    fragment: str, patterns: tuple[re.Pattern[str], ...]
+) -> bool:
+    """True if fragment matches one of the allow-custom-anchors id patterns."""
+    return any(p.fullmatch(fragment) for p in patterns)
 
 
 def _slug_from_heading(line: str) -> str:
@@ -107,6 +162,8 @@ def validate_links(
     against explicit <a id="..."> anchors and heading-derived slugs in the target file.
     """
     errors: list[tuple[Path, int, str, str]] = []
+    repo_root = docs_root.parent
+    stable_patterns = _load_stable_anchor_patterns(repo_root)
     md_files = _collect_md_files(docs_root)
     anchor_cache: dict[Path, set[str]] = {}
 
@@ -153,6 +210,26 @@ def validate_links(
                 ))
                 continue
 
+            # Cross-doc links from tech_specs/requirements/draft_specs must use stable anchors.
+            # Same-document links may use regular heading refs.
+            if "#" in href:
+                fragment = href.split("#", 1)[1].strip()
+                if fragment:
+                    is_cross_doc = target_path.resolve() != md_path.resolve()
+                    if (
+                        is_cross_doc
+                        and _under_stable_anchor_scope(docs_root, md_path)
+                        and stable_patterns
+                        and not _fragment_matches_stable_pattern(fragment, stable_patterns)
+                    ):
+                        errors.append((
+                            md_path,
+                            line_no,
+                            href,
+                            "cross-doc links in tech_specs/requirements/draft_specs must use "
+                            "stable anchor ids from .markdownlint.yml allow-custom-anchors",
+                        ))
+                        continue
             # Always validate fragment when href contains # (file links only).
             if check_fragments and "#" in href:
                 fragment = href.split("#", 1)[1].strip()

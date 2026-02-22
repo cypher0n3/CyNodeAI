@@ -9,20 +9,18 @@
 
 From `orchestrator/cmd/user-gateway/main.go` and `orchestrator/internal/handlers/tasks.go`:
 
-| Route | Method | Cynork usage |
-|-------|--------|--------------|
-| `GET /healthz` | GET | `status` (real) |
-| `POST /v1/auth/login` | POST | auth (real) |
-| `POST /v1/auth/refresh` | POST | (real) |
-| `POST /v1/auth/logout` | POST | auth (real) |
-| `GET /v1/users/me` | GET | whoami (real) |
-| `POST /v1/tasks` | POST | task create (real) |
-| `GET /v1/tasks` | GET | task list (real) |
-| `GET /v1/tasks/{id}` | GET | task get (real) |
-| `GET /v1/tasks/{id}/result` | GET | task result (real) |
-| `POST /v1/tasks/{id}/cancel` | POST | task cancel (real) |
-| `GET /v1/tasks/{id}/logs` | GET | task logs (real) |
-| `POST /v1/chat` | POST | chat (real, after un-stub) |
+- `GET /healthz` - GET - Cynork: `status` (real)
+- `POST /v1/auth/login` - POST - Cynork: auth (real)
+- `POST /v1/auth/refresh` - POST - Cynork: (real)
+- `POST /v1/auth/logout` - POST - Cynork: auth (real)
+- `GET /v1/users/me` - GET - Cynork: whoami (real)
+- `POST /v1/tasks` - POST - Cynork: task create (real)
+- `GET /v1/tasks` - GET - Cynork: task list (real)
+- `GET /v1/tasks/{id}` - GET - Cynork: task get (real)
+- `GET /v1/tasks/{id}/result` - GET - Cynork: task result (real)
+- `POST /v1/tasks/{id}/cancel` - POST - Cynork: task cancel (real)
+- `GET /v1/tasks/{id}/logs` - GET - Cynork: task logs (real)
+- `POST /v1/chat` - POST - Cynork: chat (real, after un-stub)
 
 ## What Was Un-Stubbed
 

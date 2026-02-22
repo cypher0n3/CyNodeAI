@@ -17,6 +17,7 @@
 
 This document defines a generic, allowlist-based HTTP(S) forward proxy for sandboxed execution.
 It exists to support safe dependency downloads (for example Go modules and Python packages) without granting sandboxes direct internet egress.
+Sandboxes are not airgapped; when web egress is permitted, it is only through this proxy (and the node-local proxy that forwards to it).
 
 The Web Egress Proxy is distinct from:
 
@@ -59,6 +60,7 @@ Assumptions:
 
 - Sandbox code is untrusted.
 - Sandboxes are egress-restricted by default.
+  When egress is permitted, it is only via the Web Egress Proxy (and node-local proxy); sandboxes are not airgapped but have strict egress controls.
 - Sandboxes must not hold long-lived secrets.
 - Sandboxes can generate arbitrary HTTP requests when a proxy is available.
 
@@ -273,7 +275,7 @@ Recommended node behavior:
 Node configuration integration:
 
 - The node startup configuration includes `sandbox.allowed_egress_domains` for allowlist-based policy.
-  See [`docs/tech_specs/node.md`](node.md).
+  See [`docs/tech_specs/worker_node.md`](worker_node.md).
 
 Traces To:
 

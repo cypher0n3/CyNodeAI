@@ -10,6 +10,7 @@
 - [Error Handling](#error-handling)
 - [Worker API Surface (Initial Implementation)](#worker-api-surface-initial-implementation)
   - [Run Job (Synchronous)](#run-job-synchronous)
+  - [Job Lifecycle and Result Persistence](#job-lifecycle-and-result-persistence)
   - [Session Sandbox (Long-Running)](#session-sandbox-long-running)
 - [Sandbox Execution Requirements (Initial Implementation)](#sandbox-execution-requirements-initial-implementation)
   - [Applicable Requirements (Sandbox Execution)](#applicable-requirements-sandbox-execution)
@@ -32,9 +33,9 @@ This document is the canonical contract for:
 
 Related specs
 
-- Node responsibilities: [`docs/tech_specs/node.md`](node.md)
+- Node responsibilities: [`docs/tech_specs/worker_node.md`](worker_node.md)
 - Go API implementation standards: [`docs/tech_specs/go_rest_api_standards.md`](go_rest_api_standards.md)
-- Node payloads (bootstrap/config): [`docs/tech_specs/node_payloads.md`](node_payloads.md)
+- Node payloads (bootstrap/config): [`docs/tech_specs/worker_node_payloads.md`](worker_node_payloads.md)
 
 ## Scope
 
@@ -76,7 +77,7 @@ Traces To:
 Token delivery
 
 - The orchestrator MUST deliver the Worker API bearer token to the node via the node configuration payload.
-  - See [`docs/tech_specs/node_payloads.md`](node_payloads.md) `node_configuration_payload_v1`.
+  - See [`docs/tech_specs/worker_node_payloads.md`](worker_node_payloads.md) `node_configuration_payload_v1`.
 
 Initial implementation (Phase 1) constraints
 
@@ -117,7 +118,7 @@ Worker API error responses MUST follow the Go REST API error standards:
 - Do not leak secrets in errors.
 - Use stable error `type` values where practical.
 
-See [`docs/tech_specs/go_rest_api_standards.md`](go_rest_api_standards.md#error-format-and-status-codes).
+See [`docs/tech_specs/go_rest_api_standards.md`](go_rest_api_standards.md#spec-cynai-stands-errorfmt).
 
 ## Worker API Surface (Initial Implementation)
 
@@ -171,7 +172,7 @@ Timeout rules (required)
   "task_id": "00000000-0000-0000-0000-000000000000",
   "job_id": "00000000-0000-0000-0000-000000000000",
   "sandbox": {
-    "image": "registry.example.com/cynode/sandboxes/base:1",
+    "image": "docker.io/library/bash:latest",
     "command": ["bash", "-lc", "echo hello"],
     "env": {
       "KEY": "VALUE"
@@ -188,7 +189,7 @@ Timeout rules (required)
 - `task_id` (uuid string, required)
 - `job_id` (uuid string, required)
 - `sandbox` (object, required)
-  - `image` (string, required): OCI image reference
+  - `image` (string, required): OCI image reference (when no custom registry is configured, images are from Docker Hub, e.g. `docker.io/library/bash:latest` or `bash:latest`)
   - `command` (array of string, required): argv form; must not be empty
   - `env` (object string->string, optional)
   - `timeout_seconds` (int, optional)
@@ -239,6 +240,45 @@ Timeout rules (required)
 - 413: request too large
 - 500: internal node error
 
+### Job Lifecycle and Result Persistence
+
+- Spec ID: `CYNAI.WORKER.JobLifecycleResultPersistence` <a id="spec-cynai-worker-joblifecycleresultpersistence"></a>
+
+Traces To:
+
+- [REQ-WORKER-0149](../requirements/worker.md#req-worker-0149)
+
+Jobs follow a defined lifecycle so the orchestrator can record in-progress state and persist results without relying on a single long-lived connection.
+The implementation MAY keep the orchestrator's request open for the full job (e.g. chunked or streaming response with an early in-progress event and a final result), or MAY use an async pattern (e.g. 202 Accepted and node reports status and result via callback or orchestrator polling).
+
+Job states
+
+- **accepted**: orchestrator has dispatched the job to the node; node has received it.
+- **in_progress**: the sandbox process (e.g. SBA) has accepted the job (read and validated the job spec) and is executing.
+- **completed**, **failed**, **timeout**: terminal states; the node has the final result (and, for SBA, the result contract).
+
+In-progress reporting (required)
+
+- The node MUST report to the orchestrator that the job is **in progress** once the sandbox process has accepted the job (e.g. SBA has read and validated the job spec and signalled in-progress per [cynode_sba.md](cynode_sba.md#spec-cynai-sbagnt-joblifecycle)).
+  The exact mechanism is implementation-defined: e.g. the node sends an early chunk or event on the same HTTP response, or the node calls an orchestrator endpoint to update job status, or the orchestrator polls the node for status.
+  The orchestrator MUST be able to mark the job as in progress without holding the request open for the full job duration unless the implementation uses a single streaming response.
+
+Completion and result reporting
+
+- When the job reaches a terminal state, the node MUST report completion (and the result payload) to the orchestrator.
+  The result MUST be suitable for storing in the orchestrator database (e.g. `jobs.result`).
+
+Result retention (required)
+
+- The node MUST retain the job result (e.g. in node-local SQLite or equivalent) until the result has been **successfully persisted** by the orchestrator (e.g. uploaded to the orchestrator and written to the database, or accepted by an orchestrator endpoint that performs persistence).
+  The node MUST NOT clear or delete the job result until persistence is confirmed.
+  This ensures no result loss if the connection drops after the job completes but before the orchestrator has stored the result.
+  Retained results SHOULD be subject to node-local retention and disk limits; the implementation SHOULD define cleanup for results that could not be delivered after a timeout or retry limit.
+
+See:
+
+- [cynode_sba.md - Job lifecycle and status reporting](cynode_sba.md#spec-cynai-sbagnt-joblifecycle) (SBA in-progress and completion contract)
+
 ### Session Sandbox (Long-Running)
 
 - Spec ID: `CYNAI.WORKER.SessionSandbox` <a id="spec-cynai-worker-sessionsandbox"></a>
@@ -273,7 +313,7 @@ For longer-running tasks, the Worker API MUST support **session sandboxes**: the
 - The node MUST associate the session container with `task_id` and the session identifier in logs and telemetry for auditing and cleanup.
 - Exact endpoint paths, request/response payloads, and timeout semantics for session create, exec, and end are to be defined in a later revision of this spec or in a dedicated session-sandbox subsection; this Spec Item establishes the required capability and behavior.
 
-See [`docs/tech_specs/sandbox_container.md`](sandbox_container.md#long-running-session-sandboxes) for the sandbox contract for long-running sessions.
+See [`docs/tech_specs/sandbox_container.md`](sandbox_container.md#spec-cynai-sandbx-longrunningsession) for the sandbox contract for long-running sessions.
 
 ### Session Sandbox PTY (Interactive Terminal Stream)
 

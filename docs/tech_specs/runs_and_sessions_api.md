@@ -15,7 +15,7 @@
 This document defines a first-class runs and sessions API exposed by the User API Gateway.
 It provides parity with session-based workflows: execution traces (runs), user-facing sessions, sub-runs, attached logs, streaming status, stored transcripts with retention, and background job process management within sandbox constraints.
 The Postgres schema is defined in [`docs/tech_specs/postgres_schema.md`](postgres_schema.md).
-See [Runs and Sessions](postgres_schema.md#runs-and-sessions).
+See [Runs and Sessions](postgres_schema.md#spec-cynai-schema-runssessions).
 
 ## Purpose
 
@@ -110,7 +110,7 @@ Traces To:
 - [REQ-USRGWY-0112](../requirements/usrgwy.md#req-usrgwy-0112)
 - [REQ-USRGWY-0113](../requirements/usrgwy.md#req-usrgwy-0113)
 
-See event types and subscriptions in [`docs/tech_specs/user_api_gateway.md`](user_api_gateway.md#live-updates-and-messaging).
+See event types and subscriptions in [`docs/tech_specs/user_api_gateway.md`](user_api_gateway.md#spec-cynai-usrgwy-messagingevents).
 
 ## Background Process Management
 
@@ -130,7 +130,7 @@ Traces To:
 Sandbox constraints
 
 - Processes run inside the same sandbox container as the current job; they MUST NOT outlive the sandbox unless the spec explicitly allows detached execution.
-- Resource limits (CPU, memory, PIDs) apply as defined in [`docs/tech_specs/node.md`](node.md).
+- Resource limits (CPU, memory, PIDs) apply as defined in [`docs/tech_specs/worker_node.md`](worker_node.md).
 
 ## Retention Policies
 

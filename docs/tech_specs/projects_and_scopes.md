@@ -10,6 +10,8 @@
   - [RBAC Scope](#rbac-scope)
   - [Preference Scope](#preference-scope)
   - [Task Scope](#task-scope)
+  - [Chat Scope](#chat-scope)
+- [Project Search via MCP](#project-search-via-mcp)
 - [MVP Notes](#mvp-notes)
 
 ## Spec IDs
@@ -83,6 +85,8 @@ This section describes how `project` scope applies across core subsystems.
 
 ### RBAC Scope
 
+- Spec ID: `CYNAI.ACCESS.RbacScope` <a id="spec-cynai-access-rbacscope"></a>
+
 Role bindings support:
 
 - System scope: `scope_type=system`, `scope_id` null.
@@ -118,6 +122,28 @@ When set, the project scope SHOULD be used for:
 
 - access control policy evaluation when `project_id` is part of the request context
 - grouping and filtering chat history for user clients
+
+## Project Search via MCP
+
+- Spec ID: `CYNAI.ACCESS.ProjectsMcpSearch` <a id="spec-cynai-access-projectsmcpsearch"></a>
+
+Traces To:
+
+- [REQ-PROJCT-0105](../requirements/projct.md#req-projct-0105)
+
+Orchestrator-side agents (e.g. Project Manager) MUST be able to search and resolve projects via MCP tools so they can associate tasks and chat with the correct project when the user names a project (by slug or id).
+All project list and search operations MUST be scoped to the authenticated user: only projects the user is authorized to access (default project plus projects for which the user or their groups have a role binding) MAY be returned.
+The MCP gateway MUST enforce this scope; tool implementations MUST filter by the request subject's authorized project set before returning results.
+Tool names and argument schemas are defined in the [MCP tool catalog](mcp_tool_catalog.md#spec-cynai-mcptoo-databasetools) (e.g. `db.project.get`, `db.project.list`).
+Auditing MUST follow [MCP tool call auditing](mcp_tool_call_auditing.md).
+
+Search semantics (MVP)
+
+- **List**: Return projects the user can access, with optional pagination and optional text filter on slug/display_name/description.
+- **Get by id or slug**: Return a single project if it is in the user's authorized set; otherwise not-found or access-denied.
+- **Vector search**: Not required for MVP.
+  Project metadata (slug, title, description) is small and keyword/list + get-by-id-or-slug is sufficient for "resolve by name or id" and "list my projects."
+  Vector similarity search MAY be considered later if rich project descriptions and natural-language search ("projects about X") become a requirement; see `dev_docs/projects_mcp_search_and_vector.md`.
 
 ## MVP Notes
 

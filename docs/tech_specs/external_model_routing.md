@@ -71,6 +71,8 @@ Integration expectations
 
 ## External Inference With Node Sandboxes
 
+- Spec ID: `CYNAI.ORCHES.ExternalInferenceNodeSandboxes` <a id="spec-cynai-orches-externalinferencenodesandboxes"></a>
+
 External inference and sandbox execution are separate concerns.
 The orchestrator SHOULD support workflows where a task uses an external provider for model inference while still running tools inside a sandbox container on a node.
 

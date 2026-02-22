@@ -57,7 +57,7 @@ Traces To:
 Database schema
 
 - The Postgres schema is defined in [`docs/tech_specs/postgres_schema.md`](postgres_schema.md).
-- The API Egress credentials table is specified in the [API Egress Credentials](postgres_schema.md#api-egress-credentials) section.
+- The API Egress credentials table is specified in the [API Egress Credentials](postgres_schema.md#spec-cynai-schema-apiegresscredentials) section.
 
 ### API Credentials Table
 
@@ -189,5 +189,5 @@ Disable credential
 
 Clients
 
-- The [Web Console](web_console.md) and the [CLI management app (cynork)](cli_management_app.md) MUST use the above endpoint contract for API Egress credential operations.
+- The [Web Console](web_console.md) and the [cynork CLI](cynork_cli.md) MUST use the above endpoint contract for API Egress credential operations.
 - The gateway SHOULD expose this contract in its OpenAPI/Swagger spec for discovery and for the admin console Swagger UI.

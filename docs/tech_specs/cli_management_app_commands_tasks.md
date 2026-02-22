@@ -6,7 +6,7 @@
 ## Document Overview
 
 This document specifies the `cynork task` subcommands and task creation (task input and attachments).
-It is part of the [CLI management app](cli_management_app.md) specification.
+It is part of the [cynork CLI](cynork_cli.md) specification.
 
 ## Task Commands
 
@@ -17,9 +17,9 @@ All `task` subcommands MUST require auth.
 
 Task identifier
 
-- Where a task is referenced (e.g. `task get`, `task result`, `task cancel`, `task logs`, `task artifacts list`, `task artifacts get`), the CLI MUST accept either the task UUID or the human-readable task name (see [Project Manager Agent - Task Naming](project_manager_agent.md#task-naming)).
+- Where a task is referenced (e.g. `task get`, `task result`, `task cancel`, `task logs`, `task artifacts list`, `task artifacts get`), the CLI MUST accept either the task UUID or the human-readable task name (see [Project Manager Agent - Task Naming](project_manager_agent.md#spec-cynai-agents-pmtasknaming)).
 - Task list and task get output MUST include the task name when the system provides one (e.g. in table mode as `task_name=<name>` and in JSON as `task_name`).
-  For task name format and semantics, see [Project Manager Agent - Task Naming](project_manager_agent.md#task-naming).
+  For task name format and semantics, see [Project Manager Agent - Task Naming](project_manager_agent.md#spec-cynai-agents-pmtasknaming).
 
 Task status enum
 
@@ -52,11 +52,11 @@ Optional flags
 - `--name <string>`.
   Suggested human-readable name for the task.
   When provided, the CLI MUST include it in the task create request.
-  The orchestrator accepts the value, normalizes it per [Task Naming](project_manager_agent.md#task-naming), and ensures uniqueness (e.g. appends a number) when the normalized name already exists in scope.
+  The orchestrator accepts the value, normalizes it per [Task Naming](project_manager_agent.md#spec-cynai-agents-pmtasknaming), and ensures uniqueness (e.g. appends a number) when the normalized name already exists in scope.
 - `--project-id <project_id>`.
   Optional project association for the task.
   When provided, the CLI MUST include it in the task create request.
-  When omitted, the gateway MUST associate the task with the authenticated user's default project (see [Default project](projects_and_scopes.md#default-project)).
+  When omitted, the gateway MUST associate the task with the authenticated user's default project (see [Default project](projects_and_scopes.md#spec-cynai-access-defaultproject)).
   See [Projects and Scope Model](projects_and_scopes.md).
 - `--result`.
   Default is false.
@@ -259,10 +259,10 @@ Output
 
 Traces To:
 
-- [REQ-ORCHES-0121](../requirements/orches.md#req-orches-0121)
-- [REQ-ORCHES-0125](../requirements/orches.md#req-orches-0125)
+- [REQ-ORCHES-0122](../requirements/orches.md#req-orches-0122)
 - [REQ-ORCHES-0126](../requirements/orches.md#req-orches-0126)
 - [REQ-ORCHES-0127](../requirements/orches.md#req-orches-0127)
+- [REQ-ORCHES-0128](../requirements/orches.md#req-orches-0128)
 - [REQ-CLIENT-0151](../requirements/client.md#req-client-0151)
 - [REQ-CLIENT-0153](../requirements/client.md#req-client-0153)
 - [REQ-CLIENT-0157](../requirements/client.md#req-client-0157)

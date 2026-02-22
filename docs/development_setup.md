@@ -55,13 +55,11 @@ The default path uses Docker Compose for the orchestrator stack (Postgres, contr
 
 ## Service Layout
 
-| Service       | Port  | Role                                             |
-| ------------- | ----- | ------------------------------------------------ |
-| user-gateway  | 8080  | Auth, users, tasks, results                      |
-| control-plane | 8082  | Migrations, node register/capability, dispatcher |
-| worker-api    | 8081  | Run jobs (Worker API)                            |
-| ollama        | 11434 | Inference (Ollama API; used by inference proxy)  |
-| node-manager  | -     | Registers node, reports capabilities             |
+- **user-gateway** - 8080 - Auth, users, tasks, results
+- **control-plane** - 8082 - Migrations, node register/capability, dispatcher
+- **worker-api** - 8081 - Run jobs (Worker API)
+- **ollama** - 11434 - Inference (Ollama API; used by inference proxy)
+- **node-manager** - (dynamic) - Registers node, reports capabilities
 
 When using `./scripts/setup-dev.sh start` or `just e2e`, the orchestrator stack (postgres, control-plane, user-gateway, ollama) runs in containers via Compose.
 For a single source of truth on default ports and overrides, see [Ports and endpoints](tech_specs/ports_and_endpoints.md).
@@ -186,32 +184,24 @@ Reference for the main REST endpoints.
 
 ### Authentication Endpoints
 
-| Method | Endpoint           | Description                 |
-| ------ | ------------------ | --------------------------- |
-| POST   | `/v1/auth/login`   | Login with handle/password  |
-| POST   | `/v1/auth/refresh` | Refresh access token        |
-| POST   | `/v1/auth/logout`  | Logout (invalidate session) |
+- POST `/v1/auth/login` - Login with handle/password
+- POST `/v1/auth/refresh` - Refresh access token
+- POST `/v1/auth/logout` - Logout (invalidate session)
 
 ### User Endpoints
 
-| Method | Endpoint       | Description           |
-| ------ | -------------- | --------------------- |
-| GET    | `/v1/users/me` | Get current user info |
+- GET `/v1/users/me` - Get current user info
 
 ### Tasks Endpoints
 
-| Method | Endpoint                | Description               |
-| ------ | ----------------------- | ------------------------- |
-| POST   | `/v1/tasks`             | Create a new task         |
-| GET    | `/v1/tasks/{id}`        | Get task details          |
-| GET    | `/v1/tasks/{id}/result` | Get task result with jobs |
+- POST `/v1/tasks` - Create a new task
+- GET `/v1/tasks/{id}` - Get task details
+- GET `/v1/tasks/{id}/result` - Get task result with jobs
 
 ### Node (Control-Plane)
 
-| Method | Endpoint               | Description              |
-| ------ | ---------------------- | ------------------------- |
-| POST   | `/v1/nodes/register`   | Register a node with PSK  |
-| POST   | `/v1/nodes/capability` | Report node capabilities |
+- POST `/v1/nodes/register` - Register a node with PSK
+- POST `/v1/nodes/capability` - Report node capabilities
 
 ## E2E Demo and Tests
 
@@ -236,29 +226,25 @@ Key variables by component.
 
 ### Orchestrator (Control-Plane, User-Gateway)
 
-| Variable                    | Description                        | Default    |
-| --------------------------- | ---------------------------------- | ---------- |
-| `DATABASE_URL`              | PostgreSQL connection string       | -          |
-| `JWT_SECRET`                | JWT signing secret                 | -          |
-| `NODE_REGISTRATION_PSK`     | Node registration PSK              | -          |
-| `BOOTSTRAP_ADMIN_PASSWORD`  | Admin user password                | -          |
-| `USER_GATEWAY_LISTEN_ADDR`  | User gateway listen address        | :8080      |
-| `CONTROL_PLANE_LISTEN_ADDR` | Control-plane listen address       | :8082      |
-| `WORKER_API_TARGET_URL`     | Worker API URL (control-plane)     | -          |
-| `MIGRATIONS_DIR`            | Path to migrations (control-plane) | migrations |
+- `DATABASE_URL` - PostgreSQL connection string - (required)
+- `JWT_SECRET` - JWT signing secret - (required)
+- `NODE_REGISTRATION_PSK` - Node registration PSK - (required)
+- `BOOTSTRAP_ADMIN_PASSWORD` - Admin user password - (required)
+- `USER_GATEWAY_LISTEN_ADDR` - User gateway listen address - :8080
+- `CONTROL_PLANE_LISTEN_ADDR` - Control-plane listen address - :8082
+- `WORKER_API_TARGET_URL` - Worker API URL (control-plane) - (required)
+- `MIGRATIONS_DIR` - Path to migrations (control-plane) - migrations
 
 Compose uses `POSTGRES_*`, `ORCHESTRATOR_PORT`, `CONTROL_PLANE_PORT`, `OLLAMA_IMAGE`; see [orchestrator/docker-compose.yml](../orchestrator/docker-compose.yml).
 
 ### Worker Node
 
-| Variable                     | Description                                      |
-| ---------------------------- | ------------------------------------------------ |
-| `ORCHESTRATOR_URL`           | Control-plane URL (node-manager)                 |
-| `NODE_REGISTRATION_PSK`      | Must match control-plane                         |
-| `WORKER_API_BEARER_TOKEN`    | Must match control-plane                         |
-| `NODE_MANAGER_WORKER_API_BIN`| Path to worker-api binary (e.g. when using script)|
-| `OLLAMA_UPSTREAM_URL`        | For inference proxy (e.g. <http://host.containers.internal:11434>) |
-| `INFERENCE_PROXY_IMAGE`      | Image for inference proxy (inference-in-sandbox)  |
+- `ORCHESTRATOR_URL` - Control-plane URL (node-manager)
+- `NODE_REGISTRATION_PSK` - Must match control-plane
+- `WORKER_API_BEARER_TOKEN` - Must match control-plane
+- `NODE_MANAGER_WORKER_API_BIN` - Path to worker-api binary (e.g. when using script)
+- `OLLAMA_UPSTREAM_URL` - For inference proxy (e.g. <http://host.containers.internal:11434>)
+- `INFERENCE_PROXY_IMAGE` - Image for inference proxy (inference-in-sandbox)
 
 ## Development Workflow
 

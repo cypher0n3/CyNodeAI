@@ -13,6 +13,7 @@
 - [Inputs and Outputs](#inputs-and-outputs)
   - [Agent Inputs](#agent-inputs)
   - [Agent Outputs](#agent-outputs)
+- [LLM Context (Baseline and User-Configurable)](#llm-context-baseline-and-user-configurable)
 - [Task Naming](#task-naming)
   - [Project Context From Chat Prompt](#project-context-from-chat-prompt)
   - [Task Naming Applicable Requirements](#task-naming-applicable-requirements)
@@ -28,6 +29,11 @@ The Project Manager Agent is a long-lived orchestrator-side agent responsible fo
 It coordinates multi-step and multi-agent flows, enforces standards, and verifies outcomes against stored user task-execution preferences.
 It is the control-plane agent responsible for setting up task execution, handing out work to task-scoped sub-agents, and orchestrating sandbox jobs on worker nodes.
 It is also responsible for storing and retrieving task execution state and evidence in PostgreSQL through MCP database tools.
+
+Implementation artifact
+
+- The concrete agent runtime is `cynode-pma` running in `project_manager` mode.
+- See [`docs/tech_specs/cynode_pma.md`](cynode_pma.md).
 
 User-facing chat is a conversation surface.
 The PM and PA create and manage tasks via MCP tools during that conversation.
@@ -60,7 +66,7 @@ See [`docs/tech_specs/openai_compatible_chat_api.md`](openai_compatible_chat_api
   - Request nodes to load required model versions when not already available.
   - Use external model routing when policy allows and local execution cannot satisfy requirements.
   - When selecting the Project Manager model itself (startup selection), prefer models with reliable structured tool calling and stable long-horizon planning over coder-only checkpoints.
-  - The selection and warmup algorithm is defined in [Project Manager Model (Startup Selection and Warmup)](orchestrator.md#project-manager-model-startup-selection-and-warmup).
+  - The selection and warmup algorithm is defined in [Project Manager Model (Startup Selection and Warmup)](orchestrator.md#spec-cynai-orches-projectmanagermodelstartup).
 
 MVP inference assignment responsibility
 
@@ -79,7 +85,7 @@ Project Manager model capability requirements (MVP)
 
 Recommended default model line (MVP)
 
-- See [Project Manager Model (Startup Selection and Warmup)](orchestrator.md#project-manager-model-startup-selection-and-warmup) for tier order and model baselines (Qwen2.5/Llama 3.3/`tinyllama`).
+- See [Project Manager Model (Startup Selection and Warmup)](orchestrator.md#spec-cynai-orches-projectmanagermodelstartup) for tier order and model baselines (Qwen2.5/Llama 3.3/`tinyllama`).
 
 ## External Provider Usage
 
@@ -113,8 +119,9 @@ External providers MUST be accessed through API Egress so provider credentials a
 - If there are no sandbox-capable nodes, the orchestrator SHOULD restrict or defer sandbox-required steps.
 
 For tasks that require dependency downloads inside sandboxes, outbound HTTP(S) is mediated by the Web Egress Proxy.
+Sandbox egress is only via worker proxies (inference, web egress, API Egress); sandboxes are not airgapped but have strict egress controls.
+See [`docs/tech_specs/cynode_sba.md`](cynode_sba.md#spec-cynai-sbagnt-sandboxboundary), [`docs/tech_specs/sandbox_container.md`](sandbox_container.md#spec-cynai-sandbx-networkexpect), [`docs/tech_specs/web_egress_proxy.md`](web_egress_proxy.md), and [REQ-WEBPRX-0104](../requirements/webprx.md#req-webprx-0104).
 If policy allows it, the Project Manager Agent may request task-scoped, temporary allowlist entries for the Web Egress Proxy.
-See [`docs/tech_specs/web_egress_proxy.md`](web_egress_proxy.md) and [REQ-WEBPRX-0104](../requirements/webprx.md#req-webprx-0104).
 
 ### Required Configuration Steps
 
@@ -178,6 +185,7 @@ At minimum, the startup context MUST include:
   - system settings get/list tools
   - artifact tools
   - node and sandbox tools (when dispatching work)
+  - sandbox allowed-images tools: `sandbox.allowed_images.list` (always); `sandbox.allowed_images.add` only when the orchestrator system setting `agents.project_manager.sandbox.allow_add_to_allowed_images` is enabled (default disabled)
 - The current set of pending and runnable tasks (or the ability to query them deterministically).
 - The effective preference resolution model for each task context.
 - The current system settings required for safe dispatch and routing (for example model selection settings and cache/download policy).
@@ -188,6 +196,52 @@ At minimum, the startup context MUST include:
   - Job dispatch requests to worker APIs.
   - Task state transitions and verification records in PostgreSQL.
   - Final task summaries and artifacts (including links to uploaded files).
+
+## LLM Context (Baseline and User-Configurable)
+
+- Spec ID: `CYNAI.AGENTS.LLMContext` <a id="spec-cynai-agents-llmcontext"></a>
+
+Traces To:
+
+- [REQ-AGENTS-0132](../requirements/agents.md#req-agents-0132)
+- [REQ-AGENTS-0133](../requirements/agents.md#req-agents-0133)
+- [REQ-AGENTS-0134](../requirements/agents.md#req-agents-0134)
+
+This section applies to all agents that leverage LLMs (Project Manager, Project Analyst, Sandbox Agent, and any cloud-run agents).
+Each such agent MUST supply baseline context and user-configurable additional context to every LLM prompt or system message it uses.
+When a project or task is in scope, the agent MUST also include project-level and task-level context respectively.
+
+### Baseline Context
+
+- Baseline context is fixed per agent (or per role when one binary has multiple roles).
+- It MUST describe: agent identity, role, responsibilities, and non-goals.
+- It MUST be included in every LLM prompt or system message used by that agent.
+- It is typically sourced from the agent's instructions bundle or a dedicated baseline document and MUST NOT be overridden by user preferences.
+
+### Project-Level Context
+
+- When the request or job has an associated `project_id` (and the agent has access to that project), the agent MUST include project-level context in the LLM prompt.
+- Project-level context describes the current project: identity (id, name, slug), scope, and any project metadata relevant to the LLM (e.g. project kind, description).
+- It is sourced from the orchestrator (e.g. via MCP project tools or handoff) and MUST be included after role instructions and before task-level context in the composition order.
+
+### Task-Level Context
+
+- When the request or job has an associated `task_id`, the agent MUST include task-level context in the LLM prompt.
+- Task-level context describes the current task: identity (id, name), acceptance criteria summary, status, and any task metadata relevant to the LLM.
+- It is sourced from the orchestrator (e.g. via MCP task tools or job payload) and MUST be included after project-level context (if present) and before user-configurable additional context in the composition order.
+
+### User-Configurable Additional Context
+
+- Additional context is resolved from user preferences using the same scope precedence as other preferences (task > project > user > group > system).
+- Preference keys for agent additional context use the reserved namespace `agents.<agent_id>.additional_context` or role-based keys (e.g. `agents.project_manager.additional_context`, `agents.project_analyst.additional_context`, `agents.sandbox_agent.additional_context`).
+- See [User preferences - Agent additional context](user_preferences.md#spec-cynai-stands-agentadditionalcontext).
+- The effective additional context (after resolution) MUST be merged into the context supplied to the LLM in a defined order: baseline context, then role instructions (instructions bundle), then project-level context (when applicable), then task-level context (when applicable), then user-configurable additional context, then request-specific messages.
+
+Implementation notes
+
+- For `cynode-pma`, baseline context is part of the role-specific instructions bundle; the runtime MUST also resolve and append project-level context (when `project_id` in scope), task-level context (when `task_id` in scope), and preferences-based additional context when building system or prompt content.
+- For `cynode-sba`, baseline context describes the sandbox agent identity and role and is supplied in the job; job context MUST include project-level context and task-level context (when the job is scoped to a project and task); preferences-based additional context for the SBA uses the same keys and is included in the job context or a dedicated slot.
+- Cloud workers that run agent code and call LLMs MUST receive baseline context, project-level and task-level context (when applicable), and preferences-based additional context from the orchestrator (e.g. in the job payload or handoff) and MUST include all of them in LLM prompts.
 
 ## Task Naming
 
@@ -264,4 +318,7 @@ Traces To:
 The Project Analyst Agent is a monitoring sub-agent that focuses on a specific task.
 It validates that task outputs satisfy acceptance criteria and user preferences.
 
-See [`docs/tech_specs/project_analyst_agent.md`](project_analyst_agent.md).
+Implementation artifact
+
+- The concrete analyst runtime is `cynode-pma` running in `project_analyst` mode with a separate instructions bundle.
+- See [`docs/tech_specs/project_analyst_agent.md`](project_analyst_agent.md) and [`docs/tech_specs/cynode_pma.md`](cynode_pma.md).

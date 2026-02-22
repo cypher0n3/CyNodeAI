@@ -41,7 +41,7 @@ It covers storage, tracking, and exposure of AI skills files so that inference m
   <a id="req-skills-0105"></a>
 - **REQ-SKILLS-0106:** Users MUST be able to load skills via the CLI by uploading a markdown file (e.g. SKILL.md); the CLI MUST call the gateway and the system MUST store the skill and register it.
   [CYNAI.SKILLS.SkillLoading](../tech_specs/skills_storage_and_inference.md#spec-cynai-skills-skillloading)
-  [CYNAI.CLIENT.CliSecurityModel](../tech_specs/cli_management_app.md#spec-cynai-client-clisecurity)
+  [CYNAI.CLIENT.CliSecurityModel](../tech_specs/cynork_cli.md#spec-cynai-client-clisecurity)
   <a id="req-skills-0106"></a>
 - **REQ-SKILLS-0110:** The system MUST scan skill content for malicious or policy-violating patterns before accepting a load (or update) and MUST reject the load when a match is found.
   [CYNAI.SKILLS.SkillAuditing](../tech_specs/skills_storage_and_inference.md#spec-cynai-skills-skillauditing)
@@ -56,7 +56,7 @@ It covers storage, tracking, and exposure of AI skills files so that inference m
   [CYNAI.SKILLS.SkillAuditing](../tech_specs/skills_storage_and_inference.md#spec-cynai-skills-skillauditing)
   <a id="req-skills-0113"></a>
 - **REQ-SKILLS-0114:** The system MUST expose MCP tools so that models (agents) can perform full CRUD on skills for the user when directed (create, list, get, update, delete); all operations MUST follow the same controls as web and CLI (auditing on write, default user scope, scope elevation only with permission, gateway enforcement and auditing).
-  [CYNAI.SKILLS.SkillToolsMcp](../tech_specs/skills_storage_and_inference.md#skill-tools-via-mcp-crud)
+  [CYNAI.SKILLS.SkillToolsMcp](../tech_specs/skills_storage_and_inference.md#spec-cynai-skills-skilltoolsmcp)
   [CYNAI.MCPGAT.Doc.GatewayEnforcement](../tech_specs/mcp_gateway_enforcement.md#spec-cynai-mcpgat-doc-gatewayenforcement)
   <a id="req-skills-0114"></a>
 - **REQ-SKILLS-0115:** The web interface and CLI MUST support full CRUD for skills: create (load), list (with optional scope/owner filter), get (content and metadata by identifier), update (content and/or metadata including scope, subject to same auditing and scope permissions as load), and delete (remove from store and registry).

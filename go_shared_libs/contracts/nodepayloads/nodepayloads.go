@@ -2,7 +2,7 @@
 package nodepayloads
 
 // CapabilityReport represents the capability report from a node.
-// See docs/tech_specs/node_payloads.md for the normative schema.
+// See docs/tech_specs/worker_node_payloads.md for the normative schema.
 type CapabilityReport struct {
 	Version    int             `json:"version"`
 	ReportedAt string          `json:"reported_at"`
@@ -42,7 +42,7 @@ type RegistrationRequest struct {
 }
 
 // BootstrapResponse represents the bootstrap payload returned on registration.
-// Spec CYNAI.WORKER.Payload.BootstrapV1; see docs/tech_specs/node_payloads.md node_bootstrap_payload_v1.
+// Spec CYNAI.WORKER.Payload.BootstrapV1; see docs/tech_specs/worker_node_payloads.md node_bootstrap_payload_v1.
 type BootstrapResponse struct {
 	Version      int                   `json:"version"`
 	IssuedAt     string                `json:"issued_at"`
@@ -74,7 +74,7 @@ func SupportedBootstrapVersion(v int) bool {
 }
 
 // NodeConfigurationPayload is the node configuration payload (node_configuration_payload_v1).
-// Spec CYNAI.WORKER.Payload.ConfigurationV1; see docs/tech_specs/node_payloads.md.
+// Spec CYNAI.WORKER.Payload.ConfigurationV1; see docs/tech_specs/worker_node_payloads.md.
 type NodeConfigurationPayload struct {
 	Version         int                   `json:"version"`
 	ConfigVersion   string                `json:"config_version"`
@@ -134,7 +134,7 @@ type ConfigConstraints struct {
 }
 
 // ConfigAck is the node configuration acknowledgement (node_config_ack_v1).
-// Spec CYNAI.WORKER.Payload.ConfigAckV1; see docs/tech_specs/node_payloads.md.
+// Spec CYNAI.WORKER.Payload.ConfigAckV1; see docs/tech_specs/worker_node_payloads.md.
 type ConfigAck struct {
 	Version             int             `json:"version"`
 	NodeSlug            string          `json:"node_slug"`

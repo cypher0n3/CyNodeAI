@@ -7,6 +7,7 @@
 
 This document consolidates requirements for the `SANDBX` domain.
 It covers sandbox execution, container constraints, and isolation requirements.
+When outbound egress is permitted by policy, it is only via worker proxies (inference, Web Egress Proxy, API Egress); sandboxes are not airgapped but have strict controls on inbound and outbound traffic.
 
 ## 2 Requirements
 
@@ -63,10 +64,10 @@ It covers sandbox execution, container constraints, and isolation requirements.
 - **REQ-SANDBX-0114:** Sandboxes SHOULD use artifact upload and download mechanisms for data exchange.
   [CYNAI.SANDBX.ArtifactsDataExchange](../tech_specs/sandbox_container.md#spec-cynai-sandbx-artifactsexchange)
   <a id="req-sandbx-0114"></a>
-- **REQ-SANDBX-0115:** The sandbox image registry MUST be configurable.
+- **REQ-SANDBX-0115:** The sandbox image registries MAY be configurable as a rank-ordered list; when not configured, the system MUST use the default Docker Hub registry (`docker.io`) only.
   [CYNAI.SANDBX.RegistryOptions](../tech_specs/sandbox_image_registry.md#spec-cynai-sandbx-registryoptions)
   <a id="req-sandbx-0115"></a>
-- **REQ-SANDBX-0116:** Worker nodes SHOULD be configured to pull sandbox images from the registry and SHOULD not pull arbitrary images from the public internet.
+- **REQ-SANDBX-0116:** Worker nodes SHOULD be configured to pull sandbox images only from the configured rank-ordered registry list (or Docker Hub when none configured) and SHOULD NOT pull arbitrary images from the public internet.
   [CYNAI.SANDBX.RegistryOptions](../tech_specs/sandbox_image_registry.md#spec-cynai-sandbx-registryoptions)
   <a id="req-sandbx-0116"></a>
 - **REQ-SANDBX-0117:** Agents MUST NOT push images directly to the registry.
@@ -92,6 +93,21 @@ It covers sandbox execution, container constraints, and isolation requirements.
   [CYNAI.SANDBX.GitLocalOnly](../tech_specs/sandbox_container.md#spec-cynai-sandbx-gitlocalonly)
   <a id="req-sandbx-0123"></a>
 
+- **REQ-SANDBX-0124:** For sandbox jobs that require full agent capabilities (session sandbox, MCP tools, multi-round agent workflow), the system MUST use only images marked as CyNodeAI agent-compatible (e.g. OCI image label `io.cynodeai.sandbox.agent-compatible="true"` or equivalent in the registry).
+  For basic command tasks (single command, no MCP or session), the system MAY use any allowed image that meets the runtime contract, unless policy restricts to agent-compatible images only.
+  [CYNAI.SANDBX.ImageCompatibilityTaskType](../tech_specs/sandbox_image_registry.md#spec-cynai-sandbx-imagecompatibilitytasktype)
+  <a id="req-sandbx-0124"></a>
+- **REQ-SANDBX-0125:** An orchestrator-level system setting MUST control whether the Project Manager agent may add container images to the allowed-images list; the default MUST be disabled.
+  When enabled, the PM agent MAY use the MCP tool `sandbox.allowed_images.add` to add images; when disabled, the MCP gateway MUST reject that tool when invoked by the PM agent.
+  The PM agent MUST have MCP capability to list allowed images (`sandbox.allowed_images.list`) regardless of this setting.
+  [CYNAI.SANDBX.PMAgentAddToAllowedImages](../tech_specs/sandbox_image_registry.md#spec-cynai-sandbx-pmagentaddtoallowedimages)
+  <a id="req-sandbx-0125"></a>
+- **REQ-SANDBX-0126:** Sandbox images MUST include a POSIX shell (`/bin/sh`), core utilities sufficient for typical build and inspection tasks, a TLS trust store (e.g. ca-certificates), at least one process-status tool (e.g. ps), at least one tool to inspect environment variables (e.g. env or printenv), and archive handling (tar, gzip, unzip).
+  [CYNAI.SANDBX.MinimumRequiredSoftware](../tech_specs/sandbox_container.md#spec-cynai-sandbx-minimumrequiredsoftware)
+  <a id="req-sandbx-0126"></a>
+- **REQ-SANDBX-0127:** Sandbox images SHOULD declare purpose or usage (e.g. Go builds, Python testing) via an OCI image config label so the orchestrator and operators can select images by purpose without inspecting image contents.
+  [CYNAI.SANDBX.ContainerPurposeUsageLabeling](../tech_specs/sandbox_container.md#spec-cynai-sandbx-containerpurposeusage)
+  <a id="req-sandbx-0127"></a>
 - **REQ-SANDBX-0130:** When sandbox web egress is permitted by policy for dependency downloads, sandboxes MUST be configured to use the Web Egress Proxy and MUST NOT have direct outbound internet access that bypasses it.
   [CYNAI.SANDBX.Integration.WebEgressProxy](../tech_specs/web_egress_proxy.md#spec-cynai-sandbx-integration-webegressproxy)
   <a id="req-sandbx-0130"></a>

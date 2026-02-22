@@ -27,12 +27,14 @@ It provides a stable interface for user clients to submit work, query status, an
 
 ## Core Capabilities
 
+- Spec ID: `CYNAI.USRGWY.CoreCapabilities` <a id="spec-cynai-usrgwy-corecapabilities"></a>
+
 The gateway SHOULD support:
 
 - Task submission and management
   - Create tasks with task input as **plain text or Markdown** (inline or from file), optional **attachments**, **script** (path/file), or **short series of commands**; for script/commands the system runs them in the sandbox; otherwise it interprets the task and may call an AI model and/or dispatch sandbox work.
-  Interpretation and inference are the **default** for task text; there is no user-facing "use inference" flag (see REQ-ORCHES-0125, REQ-ORCHES-0126, REQ-ORCHES-0127).
-  The create request MAY include an optional **task name**; the orchestrator MUST accept it, normalize it per [Task Naming](project_manager_agent.md#task-naming), and ensure uniqueness (e.g. append numbers) when needed.
+  Interpretation and inference are the **default** for task text; there is no user-facing "use inference" flag (see REQ-ORCHES-0126, REQ-ORCHES-0127, REQ-ORCHES-0128).
+  The create request MAY include an optional **task name**; the orchestrator MUST accept it, normalize it per [Task Naming](project_manager_agent.md#spec-cynai-agents-pmtasknaming), and ensure uniqueness (e.g. append numbers) when needed.
   - Set acceptance criteria and attach artifacts.
   - List tasks, read status, and retrieve results.
 - Scheduler and cron
@@ -41,6 +43,7 @@ The gateway SHOULD support:
   - Time-zone aware schedule evaluation (schedules specify or inherit a time zone).
   - Query queue depth and schedule state for user visibility.
   - Support wakeups and automation triggers via the same scheduler surface.
+  - When the API for creating scheduled jobs is specified, the schedule payload type (e.g. `task` / `prompt` vs `job_spec`) MUST be defined so that "requires interpretation" is deterministic and the orchestrator can route runs to the Project Manager Agent or to direct dispatch per [orchestrator.md - Scheduled run routing](orchestrator.md#spec-cynai-orches-scheduledrunrouting).
 - Runs and sessions
   - First-class runs and sessions API: create sessions, spawn sub-sessions, create and list runs, attach logs, stream status, store transcripts with retention policies.
   - See [`docs/tech_specs/runs_and_sessions_api.md`](runs_and_sessions_api.md).
@@ -63,7 +66,7 @@ The gateway SHOULD support:
   - See [`docs/tech_specs/rbac_and_groups.md`](rbac_and_groups.md).
 - Projects
   - Basic project CRUD (create, list, get, update, delete or disable) via the Data REST API; projects have a user-friendly title and optional text description.
-  - See [`docs/tech_specs/projects_and_scopes.md`](projects_and_scopes.md) and [Data REST API - Core Resources](data_rest_api.md#core-resources).
+  - See [`docs/tech_specs/projects_and_scopes.md`](projects_and_scopes.md) and [Data REST API - Core Resources](data_rest_api.md#spec-cynai-datapi-coreresources).
 
 ## Client Compatibility
 
@@ -184,9 +187,9 @@ Constraints
 
 Traces To:
 
-- [REQ-ORCHES-0129](../requirements/orches.md#req-orches-0129)
+- [REQ-ORCHES-0130](../requirements/orches.md#req-orches-0130)
 
-The User API Gateway MUST expose endpoints and operations that support every cynork chat slash command defined in the [CLI management app spec - Slash Command Reference](cli_management_app_commands_chat.md#slash-command-reference).
+The User API Gateway MUST expose endpoints and operations that support every cynork chat slash command defined in the [CLI management app spec - Slash Command Reference](cli_management_app_commands_chat.md#spec-cynai-client-clichatslashcommandreference).
 The CLI executes slash commands by calling the same gateway APIs as the non-interactive CLI; the gateway and orchestrator MUST support that full surface.
 
 Required operation coverage:

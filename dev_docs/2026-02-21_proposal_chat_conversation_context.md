@@ -37,7 +37,7 @@ References: `orchestrator/internal/handlers/tasks.go` (Chat, ChatRequest), `orch
 ## Existing Context
 
 - **Sessions and transcripts:** [runs_and_sessions_api.md](../docs/tech_specs/runs_and_sessions_api.md) defines sessions as containers for interactive work (e.g. chat thread) with transcripts; [REQ-USRGWY-0110](../docs/requirements/usrgwy.md) requires storable transcripts with configurable retention.
-- **CLI chat:** [cli_management_app.md](../docs/tech_specs/cli_management_app.md) specifies `cynork chat` as an interactive loop sending one message at a time to the gateway; adding context would allow the gateway to maintain the thread for that client.
+- **CLI chat:** [cynork_cli.md](../docs/tech_specs/cynork_cli.md) specifies `cynork chat` as an interactive loop sending one message at a time to the gateway; adding context would allow the gateway to maintain the thread for that client.
 - **Open WebUI:** [openwebui_cynodeai_integration.md](../docs/openwebui_cynodeai_integration.md) describes OpenAI-compatible chat; OpenAI format is message-list based and expects conversation context.
 
 ## Proposed Direction
@@ -123,6 +123,6 @@ Clients stay simple (one message per request); server owns loading and persistin
 - [runs_and_sessions_api.md](../docs/tech_specs/runs_and_sessions_api.md) - Sessions, transcripts
 - [REQ-USRGWY-0110](../docs/requirements/usrgwy.md) - Transcripts storable with retention
 - [user_api_gateway.md](../docs/tech_specs/user_api_gateway.md) - Core capabilities, interactive sessions
-- [cli_management_app.md](../docs/tech_specs/cli_management_app.md) - Chat command
+- [cynork_cli.md](../docs/tech_specs/cynork_cli.md) - Chat command
 - [openwebui_cynodeai_integration.md](../docs/openwebui_cynodeai_integration.md) - OpenAI-style chat backing
 - Current implementation: `orchestrator/internal/handlers/tasks.go` (Chat), `orchestrator/internal/inference/client.go` (CallGenerate)

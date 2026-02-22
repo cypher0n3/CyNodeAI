@@ -53,6 +53,8 @@ Traces To:
 
 ## Deterministic Sanitization
 
+- Spec ID: `CYNAI.BROWSR.DeterministicSanitization` <a id="spec-cynai-browsr-deterministicsanitization"></a>
+
 The Secure Browser Service performs a deterministic sanitization pipeline that does not use AI.
 The goal is to strip non-content and reduce common prompt-injection vectors before returning text.
 

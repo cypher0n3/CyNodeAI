@@ -1,6 +1,6 @@
 // inference-proxy is a minimal HTTP reverse proxy that forwards requests to Ollama.
 // It listens on localhost:11434 inside a pod and forwards to the node's Ollama container.
-// Per docs/tech_specs/node.md: enforces request size (10 MiB) and per-request timeout (120s);
+// Per docs/tech_specs/worker_node.md: enforces request size (10 MiB) and per-request timeout (120s);
 // MUST NOT expose credentials.
 package main
 

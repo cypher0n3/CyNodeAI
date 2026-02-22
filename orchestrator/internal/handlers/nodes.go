@@ -63,7 +63,7 @@ func (h *NodeHandler) logInfo(msg string, args ...any) {
 }
 
 // NodeCapabilityReport represents the capability report from a node.
-// See docs/tech_specs/node_payloads.md for full schema.
+// See docs/tech_specs/worker_node_payloads.md for full schema.
 type NodeCapabilityReport struct {
 	Version    int                    `json:"version"`
 	ReportedAt string                 `json:"reported_at"`

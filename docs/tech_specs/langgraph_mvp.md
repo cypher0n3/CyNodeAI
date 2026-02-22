@@ -82,7 +82,7 @@ The following mapping is the MVP reference mapping.
 
 - All database reads and writes from the workflow MUST go through MCP database tools (or an internal service that enforces the same policy).
   The workflow MUST NOT connect directly to PostgreSQL.
-- Node selection and job dispatch MUST use the orchestrator's node registry, capability data, and worker API as defined in [`node.md`](node.md) and [`orchestrator.md`](orchestrator.md).
+- Node selection and job dispatch MUST use the orchestrator's node registry, capability data, and worker API as defined in [`worker_node.md`](worker_node.md) and [`orchestrator.md`](orchestrator.md).
 
 ### Sub-Agent Invocation
 

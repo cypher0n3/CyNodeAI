@@ -32,9 +32,9 @@ This spec is intentionally prescriptive:
 Related specs
 
 - Worker job execution API: [`docs/tech_specs/worker_api.md`](worker_api.md)
-- Node responsibilities: [`docs/tech_specs/node.md`](node.md)
+- Node responsibilities: [`docs/tech_specs/worker_node.md`](worker_node.md)
 - Go API implementation standards: [`docs/tech_specs/go_rest_api_standards.md`](go_rest_api_standards.md)
-- Node startup YAML keys (including `storage.state_dir`): [`docs/tech_specs/node.md`](node.md#node-startup-yaml)
+- Node startup YAML keys (including `storage.state_dir`): [`docs/tech_specs/worker_node.md`](worker_node.md#spec-cynai-worker-nodestartupyaml)
 
 ## Scope
 
@@ -83,7 +83,7 @@ Requirements
 - The Worker Telemetry API MUST authenticate all requests.
 - Authentication MUST use the same orchestrator-to-node bearer token mechanism as the Worker API.
   - The orchestrator bearer token is delivered via the node configuration payload.
-  - See [`docs/tech_specs/node_payloads.md`](node_payloads.md) `node_configuration_payload_v1.worker_api.orchestrator_bearer_token`.
+  - See [`docs/tech_specs/worker_node_payloads.md`](worker_node_payloads.md) `node_configuration_payload_v1.worker_api.orchestrator_bearer_token`.
 - The node MUST treat bearer tokens as secrets and MUST NOT log them.
 
 ## Telemetry Storage (SQLite)
@@ -247,7 +247,7 @@ Worker Telemetry API error responses MUST follow the Go REST API error standards
 - Do not leak secrets in errors.
 - Use stable error `type` values.
 
-See [`docs/tech_specs/go_rest_api_standards.md`](go_rest_api_standards.md#error-format-and-status-codes).
+See [`docs/tech_specs/go_rest_api_standards.md`](go_rest_api_standards.md#spec-cynai-stands-errorfmt).
 
 ## Worker Telemetry API Surface (V1)
 
@@ -287,7 +287,7 @@ Response fields
   - `arch` (string, required)
   - `kernel_version` (string, required)
 - `last_capability_report` (object, optional)
-  - MUST match the `node_capability_report_v1` schema from [`docs/tech_specs/node_payloads.md`](node_payloads.md).
+  - MUST match the `node_capability_report_v1` schema from [`docs/tech_specs/worker_node_payloads.md`](worker_node_payloads.md).
 
 ### Get Node Stats (Snapshot)
 
@@ -427,9 +427,9 @@ Response size limits (required)
 
 Traces To:
 
-- [REQ-ORCHES-0140](../requirements/orches.md#req-orches-0140)
 - [REQ-ORCHES-0141](../requirements/orches.md#req-orches-0141)
 - [REQ-ORCHES-0142](../requirements/orches.md#req-orches-0142)
+- [REQ-ORCHES-0143](../requirements/orches.md#req-orches-0143)
 
 The orchestrator MUST consume the Worker Telemetry API using a best-effort policy:
 
