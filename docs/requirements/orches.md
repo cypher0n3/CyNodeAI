@@ -134,6 +134,12 @@ It covers orchestrator control-plane behavior, task lifecycle, dispatch, and sta
   If the selected Project Manager model becomes unavailable due to node loss, eviction, failure, or relevant system setting changes, the orchestrator MUST transition out of ready state and MUST re-run Project Manager model selection and warmup until a Project Manager model is online again.
   [CYNAI.ORCHES.Rule.MonitorProjectManagerModel](../tech_specs/orchestrator.md#spec-cynai-orches-rule-monitorprojectmanagermodel)
   <a id="req-orches-0128"></a>
+- **REQ-ORCHES-0129:** The User API Gateway MUST expose all operations required to support the cynork chat slash commands defined in the CLI management app spec.
+  Operations include: task (list, get, create, cancel, result, logs, artifacts list, artifacts get), status, whoami, nodes (list, get), preferences (list, get, set, delete, effective), and skills (list, get).
+  Chat slash commands MUST use the same gateway API surface as the non-interactive CLI; no separate chat-only API is required.
+  [CYNAI.USRGWY.ChatSlashCommandSupport](../tech_specs/user_api_gateway.md#spec-cynai-usrgwy-chatslashcommandsupport)
+  [cli_management_app.md](../tech_specs/cli_management_app.md#slash-command-reference)
+  <a id="req-orches-0129"></a>
 - **REQ-ORCHES-0140:** The orchestrator MUST be able to pull node operational telemetry (logs, system info, container inventory/state) from nodes via the Worker Telemetry API.
   [CYNAI.ORCHES.NodeTelemetryPull](../tech_specs/worker_telemetry_api.md#spec-cynai-orches-nodetelemetrypull)
   <a id="req-orches-0140"></a>
