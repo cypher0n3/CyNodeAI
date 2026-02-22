@@ -58,3 +58,23 @@ It covers MCP gateway enforcement and auditing for tool invocation.
   [CYNAI.MCPGAT.EdgeEnforcementMode](../tech_specs/mcp_gateway_enforcement.md#spec-cynai-mcpgat-edgeenforcement)
   [CYNAI.MCPGAT.EdgeToolCallAuditing](../tech_specs/mcp_tool_call_auditing.md#spec-cynai-mcpgat-edgetoolaudit)
   <a id="req-mcpgat-0112"></a>
+- **REQ-MCPGAT-0113:** Admins MUST be able to turn individual MCP tools on or off.
+  When a tool is disabled, the MCP gateway MUST reject invocations of that tool.
+  The Web Console and CLI management app MUST expose this configuration for admins (view and change per-tool enable/disable).
+  [CYNAI.MCPGAT.AdminPerToolEnableDisable](../tech_specs/mcp_gateway_enforcement.md#spec-cynai-mcpgat-adminpertoolenabledisable)
+  <a id="req-mcpgat-0113"></a>
+- **REQ-MCPGAT-0114:** The orchestrator MUST track per MCP tool whether the tool is available to sandbox agents, PM (orchestrator-side) agents, or both.
+  The gateway MUST use this scope when enforcing allowlists: sandbox agents MAY invoke only tools with sandbox (or both) scope; PM/PA agents MAY invoke only tools with PM (or both) scope.
+  [CYNAI.MCPGAT.PerToolScope](../tech_specs/mcp_gateway_enforcement.md#spec-cynai-mcpgat-pertoolscope)
+  <a id="req-mcpgat-0114"></a>
+- **REQ-MCPGAT-0115:** Users MUST be able to install their own (custom) MCP tools and MUST be able to configure per tool whether the tool is available to sandbox agents, PM agents, or both.
+  The Web Console and CLI MUST expose the ability to view and change this sandbox vs PM setting per tool.
+  [CYNAI.MCPTOO.UserInstallableTools](../tech_specs/user_installable_mcp_tools.md#spec-cynai-mcptoo-userinstallabletools)
+  [CYNAI.MCPGAT.PerToolScope](../tech_specs/mcp_gateway_enforcement.md#spec-cynai-mcpgat-pertoolscope)
+  <a id="req-mcpgat-0115"></a>
+- **REQ-MCPGAT-0116:** The system MUST support controlling MCP tool access via agent-scoped tokens or API keys.
+  The orchestrator MUST be able to issue tokens (or API keys) for PM/PA agents and for sandbox agents; agents present the token when making MCP requests; the gateway MUST authenticate using the token and restrict tool access to the allowlist and per-tool scope for the resolved agent type (PM, PA, or sandbox).
+  This MAY be used instead of or in addition to resolving identity from orchestrator state.
+  Audit records MUST include the resolved agent type and user/task context from the token.
+  [CYNAI.MCPGAT.AgentScopedTokens](../tech_specs/mcp_gateway_enforcement.md#spec-cynai-mcpgat-agentscopedtokens)
+  <a id="req-mcpgat-0116"></a>

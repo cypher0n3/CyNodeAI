@@ -51,7 +51,7 @@ This section lists the requirements and tech specs this plan traces to.
     - `REQ-USRGWY-0121`, `REQ-USRGWY-0124`, `REQ-USRGWY-0125`, `REQ-USRGWY-0127`, `REQ-USRGWY-0128`, `REQ-USRGWY-0129`, `REQ-USRGWY-0130`
 - **Orchestrator reliability for chat completions**
   - `docs/requirements/orches.md`
-    - `REQ-ORCHES-0130`, `REQ-ORCHES-0131`
+    - `REQ-ORCHES-0131`, `REQ-ORCHES-0132`
 - **Cynork chat UX requirements**
   - `docs/requirements/client.md`
     - `REQ-CLIENT-0161` through `REQ-CLIENT-0173`
@@ -107,7 +107,7 @@ This section describes what "done" means for Phase 1, and what is explicitly out
   - Traces to `REQ-USRGWY-0121`, `REQ-USRGWY-0124`, `REQ-USRGWY-0125`.
 - Implement reliability behavior for the chat-completions handler.
   - Poll cap and bounded retries with backoff.
-  - Traces to `REQ-ORCHES-0130`, `REQ-ORCHES-0131`.
+  - Traces to `REQ-ORCHES-0131`, `REQ-ORCHES-0132`.
 - Track and store chat history as chat threads and messages, independently of task lifecycle.
   - Traces to `REQ-USRGWY-0130`.
 - Update `cynork` to use the OpenAI-compatible gateway endpoints and meet the CLI chat contract.
@@ -216,8 +216,8 @@ Traces to:
 
 Traces to:
 
-- `REQ-ORCHES-0130`
 - `REQ-ORCHES-0131`
+- `REQ-ORCHES-0132`
 - `CYNAI.USRGWY.OpenAIChatApi.Reliability`
 
 - **A5 Timeouts: Server Configuration and Documentation**

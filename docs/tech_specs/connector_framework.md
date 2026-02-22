@@ -82,7 +82,7 @@ Traces To:
 - [REQ-CONNEC-0106](../requirements/connec.md#req-connec-0106)
 - [REQ-CONNEC-0107](../requirements/connec.md#req-connec-0107)
 
-See [`docs/tech_specs/api_egress_server.md`](api_egress_server.md#credential-storage).
+See [`docs/tech_specs/api_egress_server.md`](api_egress_server.md#spec-cynai-apiegr-credentialstorage).
 
 ## Policy and Auditing
 

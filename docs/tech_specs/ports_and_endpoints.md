@@ -30,15 +30,13 @@ Traces To:
 - [REQ-WORKER-0115](../requirements/worker.md#req-worker-0115)
 - [REQ-SANDBX-0106](../requirements/sandbx.md#req-sandbx-0106)
 
-| Port  | Component        | Role |
-|-------|------------------|------|
-| 5432  | PostgreSQL       | Database (orchestrator) |
-| 8080  | User API Gateway | Auth, users, tasks, results (orchestrator) |
-| 8081  | Worker API       | Run jobs on the node (worker node) |
-| 8082  | Control-plane    | Node registration, dispatch, migrations (orchestrator) |
-| 8083  | MCP Gateway      | MCP tool routing (orchestrator; optional profile) |
-| 8084  | API Egress       | External API calls with credentials (orchestrator; optional profile) |
-| 11434 | Ollama           | Inference API (orchestrator or node); also inference proxy listen port inside sandbox pods |
+- **5432** - PostgreSQL - Database (orchestrator)
+- **8080** - User API Gateway - Auth, users, tasks, results (orchestrator)
+- **8081** - Worker API - Run jobs on the node (worker node)
+- **8082** - Control-plane - Node registration, dispatch, migrations (orchestrator)
+- **8083** - MCP Gateway - MCP tool routing (orchestrator; optional profile)
+- **8084** - API Egress - External API calls with credentials (orchestrator; optional profile)
+- **11434** - Ollama - Inference API (orchestrator or node); also inference proxy listen port inside sandbox pods
 
 No other CyNodeAI service defaults use these ports.
 The CLI (Cynork) does not listen on any port.
@@ -74,9 +72,11 @@ When nodes run on the host, that is typically <http://host.containers.internal:8
   The inference proxy in pods can reach it at `host.containers.internal:11434`.
 
 Recommended: use Worker API default `8081` to avoid conflict with User API Gateway (`8080`).
-If `worker_api.listen_port` is set in node startup YAML, it should match the Worker API process listen port (implementation default is 8081; node.md example uses 9090 for illustration).
+If `worker_api.listen_port` is set in node startup YAML, it should match the Worker API process listen port (implementation default is 8081; worker_node.md example uses 9090 for illustration).
 
 ## Inference (Ollama and Proxy)
+
+- Spec ID: `CYNAI.STANDS.InferenceOllamaAndProxy` <a id="spec-cynai-stands-inferenceollamaandproxy"></a>
 
 - **Ollama:** standard port `11434` (both orchestrator stack and node-local).
   Containers publish `11434:11434`.
@@ -84,9 +84,11 @@ If `worker_api.listen_port` is set in node startup YAML, it should match the Wor
   The proxy forwards to the node's Ollama (e.g. <http://host.containers.internal:11434>).
   There is no port conflict because the proxy's 11434 is inside the pod; the host's 11434 is used only by Ollama.
 
-See [`docs/tech_specs/node.md`](node.md#node-local-inference-and-sandbox-workflow) and [`docs/tech_specs/sandbox_container.md`](sandbox_container.md#node-local-inference-access).
+See [`docs/tech_specs/worker_node.md`](worker_node.md#spec-cynai-worker-nodelocalinference) and [`docs/tech_specs/sandbox_container.md`](sandbox_container.md#spec-cynai-sandbx-nodelocalinf).
 
 ## CLI (Cynork)
+
+- Spec ID: `CYNAI.STANDS.CliCynork` <a id="spec-cynai-stands-clicynork"></a>
 
 The CLI does not bind any port.
 It connects to the User API Gateway:
@@ -97,7 +99,7 @@ It connects to the User API Gateway:
 Cynork expects the orchestrator's user-gateway to be reachable at the configured URL (default 8080).
 It does not use 11434 or any other port.
 
-See [`docs/tech_specs/cli_management_app.md`](cli_management_app.md).
+See [`docs/tech_specs/cynork_cli.md`](cynork_cli.md).
 
 ## Conflict Avoidance
 
@@ -118,13 +120,11 @@ E2E and BDD tests use the same default ports as production and dev.
 
 ## Environment and Config Overrides
 
-| Component        | Default | Override (env or config) |
-|------------------|---------|---------------------------|
-| PostgreSQL       | 5432    | `POSTGRES_PORT` (host mapping) |
-| User API Gateway | :8080   | `USER_GATEWAY_LISTEN_ADDR`, `LISTEN_ADDR`; `ORCHESTRATOR_PORT` (host mapping) |
-| Control-plane    | :8082   | `CONTROL_PLANE_LISTEN_ADDR`, `LISTEN_ADDR`; `CONTROL_PLANE_PORT` (host mapping) |
-| Worker API       | :8081   | `LISTEN_ADDR`; node YAML `worker_api.listen_port` |
-| MCP Gateway      | :8083   | `LISTEN_ADDR`; `MCP_GATEWAY_PORT` (host mapping) |
-| API Egress       | :8084   | `LISTEN_ADDR`; `API_EGRESS_PORT` (host mapping) |
-| Ollama           | 11434   | Change port mapping in compose or node-manager; inference proxy upstream via `OLLAMA_UPSTREAM_URL` (e.g. <http://host.containers.internal:11434>) |
-| Cynork gateway   | <http://localhost:8080> | `CYNORK_GATEWAY_URL` or config `gateway_url` |
+- **PostgreSQL** - Default: 5432 - Override: `POSTGRES_PORT` (host mapping)
+- **User API Gateway** - Default: :8080 - Override: `USER_GATEWAY_LISTEN_ADDR`, `LISTEN_ADDR`; `ORCHESTRATOR_PORT` (host mapping)
+- **Control-plane** - Default: :8082 - Override: `CONTROL_PLANE_LISTEN_ADDR`, `LISTEN_ADDR`; `CONTROL_PLANE_PORT` (host mapping)
+- **Worker API** - Default: :8081 - Override: `LISTEN_ADDR`; node YAML `worker_api.listen_port`
+- **MCP Gateway** - Default: :8083 - Override: `LISTEN_ADDR`; `MCP_GATEWAY_PORT` (host mapping)
+- **API Egress** - Default: :8084 - Override: `LISTEN_ADDR`; `API_EGRESS_PORT` (host mapping)
+- **Ollama** - Default: 11434 - Override: Change port mapping in compose or node-manager; inference proxy upstream via `OLLAMA_UPSTREAM_URL` (e.g. <http://host.containers.internal:11434>)
+- **Cynork gateway** - Default: <http://localhost:8080> - Override: `CYNORK_GATEWAY_URL` or config `gateway_url`

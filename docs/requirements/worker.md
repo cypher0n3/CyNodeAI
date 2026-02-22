@@ -15,7 +15,7 @@ It covers worker-node behavior and the worker API contract for job execution and
   [CYNAI.WORKER.SandboxExecution](../tech_specs/worker_api.md#spec-cynai-worker-sandboxexec)
   <a id="req-worker-0001"></a>
 - **REQ-WORKER-0002:** Node exposes worker API for sandbox lifecycle; no inbound SSH; container runtime primitives for sandbox ops.
-  [CYNAI.WORKER.NodeSandboxControlPlane](../tech_specs/node.md#spec-cynai-worker-nodesandbox)
+  [CYNAI.WORKER.NodeSandboxControlPlane](../tech_specs/worker_node.md#spec-cynai-worker-nodesandbox)
   <a id="req-worker-0002"></a>
 - **REQ-WORKER-0003:** Worker Telemetry: node MUST persist operational telemetry locally and expose an orchestrator-authenticated API for querying node logs, system info, and container inventory/state with bounded responses and retention.
   [CYNAI.WORKER.Doc.WorkerTelemetryApi](../tech_specs/worker_telemetry_api.md#spec-cynai-worker-doc-workertelemetryapi)
@@ -49,97 +49,97 @@ It covers worker-node behavior and the worker API contract for job execution and
   <a id="req-worker-0108"></a>
 
 - **REQ-WORKER-0109:** The node MUST expose a worker API that the orchestrator can call to manage sandbox lifecycle and execution.
-  [CYNAI.WORKER.NodeSandboxControlPlane](../tech_specs/node.md#spec-cynai-worker-nodesandbox)
+  [CYNAI.WORKER.NodeSandboxControlPlane](../tech_specs/worker_node.md#spec-cynai-worker-nodesandbox)
   <a id="req-worker-0109"></a>
 - **REQ-WORKER-0110:** The node MUST NOT require inbound SSH access to sandboxes for command execution.
-  [CYNAI.WORKER.NodeSandboxControlPlane](../tech_specs/node.md#spec-cynai-worker-nodesandbox)
+  [CYNAI.WORKER.NodeSandboxControlPlane](../tech_specs/worker_node.md#spec-cynai-worker-nodesandbox)
   <a id="req-worker-0110"></a>
 - **REQ-WORKER-0111:** The node SHOULD use container runtime primitives (create, exec, copy) to implement sandbox operations.
-  [CYNAI.WORKER.NodeSandboxControlPlane](../tech_specs/node.md#spec-cynai-worker-nodesandbox)
+  [CYNAI.WORKER.NodeSandboxControlPlane](../tech_specs/worker_node.md#spec-cynai-worker-nodesandbox)
   <a id="req-worker-0111"></a>
 - **REQ-WORKER-0112:** The node MUST stream sandbox stdout and stderr back to the orchestrator for logging and debugging.
-  [CYNAI.WORKER.NodeSandboxControlPlane](../tech_specs/node.md#spec-cynai-worker-nodesandbox)
+  [CYNAI.WORKER.NodeSandboxControlPlane](../tech_specs/worker_node.md#spec-cynai-worker-nodesandbox)
   <a id="req-worker-0112"></a>
 - **REQ-WORKER-0113:** The node MUST associate sandbox containers with `task_id` and `job_id` for auditing and cleanup.
-  [CYNAI.WORKER.NodeSandboxControlPlane](../tech_specs/node.md#spec-cynai-worker-nodesandbox)
+  [CYNAI.WORKER.NodeSandboxControlPlane](../tech_specs/worker_node.md#spec-cynai-worker-nodesandbox)
   <a id="req-worker-0113"></a>
 - **REQ-WORKER-0114:** The node MUST support an execution mode where sandbox jobs can call a node-local inference endpoint without leaving the node.
-  [CYNAI.WORKER.NodeLocalInference](../tech_specs/node.md#spec-cynai-worker-nodelocalinference)
+  [CYNAI.WORKER.NodeLocalInference](../tech_specs/worker_node.md#spec-cynai-worker-nodelocalinference)
   [CYNAI.STANDS.PortsAndEndpoints](../tech_specs/ports_and_endpoints.md#spec-cynai-stands-portsandendpoints)
   <a id="req-worker-0114"></a>
 - **REQ-WORKER-0115:** The node MUST keep Ollama access private to the node and MUST NOT require exposing Ollama on a public interface.
-  [CYNAI.WORKER.NodeLocalInference](../tech_specs/node.md#spec-cynai-worker-nodelocalinference)
+  [CYNAI.WORKER.NodeLocalInference](../tech_specs/worker_node.md#spec-cynai-worker-nodelocalinference)
   [CYNAI.STANDS.PortsAndEndpoints](../tech_specs/ports_and_endpoints.md#spec-cynai-stands-portsandendpoints)
   <a id="req-worker-0115"></a>
 - **REQ-WORKER-0116:** Each node SHOULD run a node-local MCP server that exposes sandbox operations for that node.
-  [CYNAI.WORKER.NodeSandboxMcpExposure](../tech_specs/node.md#spec-cynai-worker-nodesandboxmcpexposure)
+  [CYNAI.WORKER.NodeSandboxMcpExposure](../tech_specs/worker_node.md#spec-cynai-worker-nodesandboxmcpexposure)
   <a id="req-worker-0116"></a>
 - **REQ-WORKER-0117:** The node MCP server MUST be reachable only by the orchestrator, not by arbitrary clients.
-  [CYNAI.WORKER.NodeSandboxMcpExposure](../tech_specs/node.md#spec-cynai-worker-nodesandboxmcpexposure)
+  [CYNAI.WORKER.NodeSandboxMcpExposure](../tech_specs/worker_node.md#spec-cynai-worker-nodesandboxmcpexposure)
   <a id="req-worker-0117"></a>
 - **REQ-WORKER-0118:** The orchestrator SHOULD register each node MCP server with an allowlist.
-  [CYNAI.WORKER.NodeSandboxMcpExposure](../tech_specs/node.md#spec-cynai-worker-nodesandboxmcpexposure)
+  [CYNAI.WORKER.NodeSandboxMcpExposure](../tech_specs/worker_node.md#spec-cynai-worker-nodesandboxmcpexposure)
   <a id="req-worker-0118"></a>
 - **REQ-WORKER-0119:** Sandbox operations MUST be audited with `task_id` context.
-  [CYNAI.WORKER.NodeSandboxMcpExposure](../tech_specs/node.md#spec-cynai-worker-nodesandboxmcpexposure)
+  [CYNAI.WORKER.NodeSandboxMcpExposure](../tech_specs/worker_node.md#spec-cynai-worker-nodesandboxmcpexposure)
   <a id="req-worker-0119"></a>
 - **REQ-WORKER-0120:** Node startup YAML MUST NOT be treated as the source of truth for global policy.
-  [CYNAI.WORKER.NodeStartupYaml](../tech_specs/node.md#spec-cynai-worker-nodestartupyaml)
+  [CYNAI.WORKER.NodeStartupYaml](../tech_specs/worker_node.md#spec-cynai-worker-nodestartupyaml)
   <a id="req-worker-0120"></a>
 - **REQ-WORKER-0121:** Node startup YAML MAY impose stricter local constraints than the orchestrator requests.
-  [CYNAI.WORKER.NodeStartupYaml](../tech_specs/node.md#spec-cynai-worker-nodestartupyaml)
+  [CYNAI.WORKER.NodeStartupYaml](../tech_specs/worker_node.md#spec-cynai-worker-nodestartupyaml)
   <a id="req-worker-0121"></a>
 - **REQ-WORKER-0122:** If a local constraint prevents fulfilling an orchestrator request, the node MUST refuse the request and report the reason.
-  [CYNAI.WORKER.NodeStartupYaml](../tech_specs/node.md#spec-cynai-worker-nodestartupyaml)
+  [CYNAI.WORKER.NodeStartupYaml](../tech_specs/worker_node.md#spec-cynai-worker-nodestartupyaml)
   <a id="req-worker-0122"></a>
 - **REQ-WORKER-0123:** A node MAY be configured to run no Ollama container.
-  [CYNAI.WORKER.SandboxOnlyNodes](../tech_specs/node.md#spec-cynai-worker-sandboxonlynodes)
+  [CYNAI.WORKER.SandboxOnlyNodes](../tech_specs/worker_node.md#spec-cynai-worker-sandboxonlynodes)
   <a id="req-worker-0123"></a>
 - **REQ-WORKER-0124:** A sandbox-only node MUST still run the worker API and Node Manager.
-  [CYNAI.WORKER.SandboxOnlyNodes](../tech_specs/node.md#spec-cynai-worker-sandboxonlynodes)
+  [CYNAI.WORKER.SandboxOnlyNodes](../tech_specs/worker_node.md#spec-cynai-worker-sandboxonlynodes)
   <a id="req-worker-0124"></a>
 - **REQ-WORKER-0125:** The orchestrator MUST be able to schedule sandbox execution on sandbox-only nodes.
-  [CYNAI.WORKER.SandboxOnlyNodes](../tech_specs/node.md#spec-cynai-worker-sandboxonlynodes)
+  [CYNAI.WORKER.SandboxOnlyNodes](../tech_specs/worker_node.md#spec-cynai-worker-sandboxonlynodes)
   <a id="req-worker-0125"></a>
 - **REQ-WORKER-0126:** Sandbox-only nodes MUST follow the same credential handling and isolation rules as other nodes.
-  [CYNAI.WORKER.SandboxOnlyNodes](../tech_specs/node.md#spec-cynai-worker-sandboxonlynodes)
+  [CYNAI.WORKER.SandboxOnlyNodes](../tech_specs/worker_node.md#spec-cynai-worker-sandboxonlynodes)
   <a id="req-worker-0126"></a>
 - **REQ-WORKER-0127:** The node MUST NOT expose service credentials to sandbox containers.
-  [CYNAI.WORKER.NodeCredentialHandling](../tech_specs/node.md#spec-cynai-worker-nodecredentialhandling)
+  [CYNAI.WORKER.NodeCredentialHandling](../tech_specs/worker_node.md#spec-cynai-worker-nodecredentialhandling)
   <a id="req-worker-0127"></a>
 - **REQ-WORKER-0128:** The node SHOULD store credentials in a local secure store (root-owned file with strict permissions or OS key store).
-  [CYNAI.WORKER.NodeCredentialHandling](../tech_specs/node.md#spec-cynai-worker-nodecredentialhandling)
+  [CYNAI.WORKER.NodeCredentialHandling](../tech_specs/worker_node.md#spec-cynai-worker-nodecredentialhandling)
   <a id="req-worker-0128"></a>
 - **REQ-WORKER-0129:** The orchestrator SHOULD issue least-privilege pull credentials for node operations that require pulls.
-  [CYNAI.WORKER.NodeCredentialHandling](../tech_specs/node.md#spec-cynai-worker-nodecredentialhandling)
+  [CYNAI.WORKER.NodeCredentialHandling](../tech_specs/worker_node.md#spec-cynai-worker-nodecredentialhandling)
   <a id="req-worker-0129"></a>
 - **REQ-WORKER-0130:** Credentials SHOULD be short-lived where possible and SHOULD support rotation.
-  [CYNAI.WORKER.NodeCredentialHandling](../tech_specs/node.md#spec-cynai-worker-nodecredentialhandling)
+  [CYNAI.WORKER.NodeCredentialHandling](../tech_specs/worker_node.md#spec-cynai-worker-nodecredentialhandling)
   <a id="req-worker-0130"></a>
 
 - **REQ-WORKER-0131:** Secrets MUST be short-lived where possible and MUST NOT be exposed to sandbox containers.
-  [CYNAI.WORKER.PayloadSecurity](../tech_specs/node_payloads.md#spec-cynai-worker-payloadsecurity)
+  [CYNAI.WORKER.PayloadSecurity](../tech_specs/worker_node_payloads.md#spec-cynai-worker-payloadsecurity)
   <a id="req-worker-0131"></a>
 - **REQ-WORKER-0132:** Nodes MUST store secrets only in a node-local secure store.
-  [CYNAI.WORKER.PayloadSecurity](../tech_specs/node_payloads.md#spec-cynai-worker-payloadsecurity)
+  [CYNAI.WORKER.PayloadSecurity](../tech_specs/worker_node_payloads.md#spec-cynai-worker-payloadsecurity)
   <a id="req-worker-0132"></a>
 - **REQ-WORKER-0133:** Registry and cache pull credentials SHOULD be issued as short-lived tokens.
-  [CYNAI.WORKER.Payload.BootstrapV1](../tech_specs/node_payloads.md#spec-cynai-worker-payload-bootstrap-v1)
+  [CYNAI.WORKER.Payload.BootstrapV1](../tech_specs/worker_node_payloads.md#spec-cynai-worker-payload-bootstrap-v1)
   <a id="req-worker-0133"></a>
 - **REQ-WORKER-0134:** Tokens SHOULD be rotated by configuration refresh.
-  [CYNAI.WORKER.Payload.BootstrapV1](../tech_specs/node_payloads.md#spec-cynai-worker-payload-bootstrap-v1)
+  [CYNAI.WORKER.Payload.BootstrapV1](../tech_specs/worker_node_payloads.md#spec-cynai-worker-payload-bootstrap-v1)
   <a id="req-worker-0134"></a>
 - **REQ-WORKER-0135:** Nodes MUST report configuration application status back to the orchestrator.
-  [CYNAI.WORKER.Payload.ConfigAckV1](../tech_specs/node_payloads.md#spec-cynai-worker-payload-configack-v1)
+  [CYNAI.WORKER.Payload.ConfigAckV1](../tech_specs/worker_node_payloads.md#spec-cynai-worker-payload-configack-v1)
   <a id="req-worker-0135"></a>
 - **REQ-WORKER-0136:** New fields MAY be added to payloads as optional fields.
-  [CYNAI.WORKER.Payload.CompatibilityVersioning](../tech_specs/node_payloads.md#spec-cynai-worker-payload-versioning)
+  [CYNAI.WORKER.Payload.CompatibilityVersioning](../tech_specs/worker_node_payloads.md#spec-cynai-worker-payload-versioning)
   <a id="req-worker-0136"></a>
 - **REQ-WORKER-0137:** Fields MUST NOT change meaning within the same `version`.
-  [CYNAI.WORKER.Payload.CompatibilityVersioning](../tech_specs/node_payloads.md#spec-cynai-worker-payload-versioning)
+  [CYNAI.WORKER.Payload.CompatibilityVersioning](../tech_specs/worker_node_payloads.md#spec-cynai-worker-payload-versioning)
   <a id="req-worker-0137"></a>
 - **REQ-WORKER-0138:** Nodes SHOULD reject payloads with unsupported `version` values and report a structured error.
-  [CYNAI.WORKER.Payload.CompatibilityVersioning](../tech_specs/node_payloads.md#spec-cynai-worker-payload-versioning)
+  [CYNAI.WORKER.Payload.CompatibilityVersioning](../tech_specs/worker_node_payloads.md#spec-cynai-worker-payload-versioning)
   <a id="req-worker-0138"></a>
 
 - **REQ-WORKER-0140:** The node MUST expose unauthenticated health check endpoints `GET /healthz` and `GET /readyz`.
@@ -170,6 +170,10 @@ It covers worker-node behavior and the worker API contract for job execution and
 - **REQ-WORKER-0148:** The node MUST NOT attempt pattern-based secret redaction of sandbox stdout and stderr, and MUST rely on sandbox environment credential handling to prevent secret exposure.
   [CYNAI.WORKER.WorkerApiSecretHandling](../tech_specs/worker_api.md#spec-cynai-worker-workerapisecrethandling)
   <a id="req-worker-0148"></a>
+- **REQ-WORKER-0149:** The node MUST report to the orchestrator that a job is in progress once the sandbox process (e.g. SBA) has accepted the job, and MUST report completion and result when the job ends.
+  The node MUST retain the job result (e.g. in node-local SQLite) until the result has been successfully persisted to the orchestrator database, and MUST NOT clear or delete the result until persistence is confirmed.
+  [CYNAI.WORKER.JobLifecycleResultPersistence](../tech_specs/worker_api.md#spec-cynai-worker-joblifecycleresultpersistence)
+  <a id="req-worker-0149"></a>
 - **REQ-WORKER-0150:** The Worker API MUST support creating a session sandbox (long-running container) associated with a task or session identifier, and executing multiple commands in that same container (send command, get result, repeat) for longer-running work.
   [CYNAI.WORKER.SessionSandbox](../tech_specs/worker_api.md#spec-cynai-worker-sessionsandbox)
   <a id="req-worker-0150"></a>
@@ -184,14 +188,14 @@ It covers worker-node behavior and the worker API contract for job execution and
   <a id="req-worker-0153"></a>
 - **REQ-WORKER-0154:** The node MUST support a low-latency control path for sandbox operations when an AI agent runtime is co-located on the same host as the worker node.
   This control path SHOULD allow the agent runtime to interact directly with node-hosted sandbox tools without requiring the orchestrator to route every call.
-  [CYNAI.WORKER.NodeLocalAgentSandboxControl](../tech_specs/node.md#spec-cynai-worker-nodelocalagentsandboxcontrol)
+  [CYNAI.WORKER.NodeLocalAgentSandboxControl](../tech_specs/worker_node.md#spec-cynai-worker-nodelocalagentsandboxcontrol)
   <a id="req-worker-0154"></a>
 - **REQ-WORKER-0155:** Direct sandbox tool calls to a node MUST be authorized using short-lived, least-privilege capability leases issued by the orchestrator.
   The node MUST validate the lease, enforce tool allowlists and task scoping, and MUST fail closed when required context is missing or invalid.
-  [CYNAI.WORKER.NodeLocalAgentSandboxControl](../tech_specs/node.md#spec-cynai-worker-nodelocalagentsandboxcontrol)
+  [CYNAI.WORKER.NodeLocalAgentSandboxControl](../tech_specs/worker_node.md#spec-cynai-worker-nodelocalagentsandboxcontrol)
   <a id="req-worker-0155"></a>
 - **REQ-WORKER-0156:** The node MUST audit direct sandbox tool calls made through the low-latency control path and MUST make audit records available to the orchestrator for centralized retention and inspection.
-  [CYNAI.WORKER.NodeLocalAgentSandboxControl](../tech_specs/node.md#spec-cynai-worker-nodelocalagentsandboxcontrol)
+  [CYNAI.WORKER.NodeLocalAgentSandboxControl](../tech_specs/worker_node.md#spec-cynai-worker-nodelocalagentsandboxcontrol)
   <a id="req-worker-0156"></a>
 - **REQ-WORKER-0200:** Worker Telemetry API MUST require bearer token authentication for all telemetry endpoints.
   [CYNAI.WORKER.TelemetryApiAuth](../tech_specs/worker_telemetry_api.md#spec-cynai-worker-telemetryauth)

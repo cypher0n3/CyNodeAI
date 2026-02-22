@@ -53,6 +53,8 @@ The filename is the domain tag lowercased.
 - `SCHEMA`: [schema.md](./schema.md)
 - `MODELS`: [models.md](./models.md)
 - `AGENTS`: [agents.md](./agents.md)
+- `PMAGNT`: [pmagnt.md](./pmagnt.md)
+- `SBAGNT`: [sbagnt.md](./sbagnt.md)
 - `CLIENT`: [client.md](./client.md)
 - `WEBCON`: [webcon.md](./webcon.md)
 - `CONNEC`: [connec.md](./connec.md)

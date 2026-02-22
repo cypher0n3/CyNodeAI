@@ -81,7 +81,7 @@ Payload storage
 
 ## Storage in PostgreSQL
 
-The canonical table definition is in [`docs/tech_specs/postgres_schema.md`](postgres_schema.md#mcp-tool-call-audit-log-table).
+The canonical table definition is in [`docs/tech_specs/postgres_schema.md`](postgres_schema.md#spec-cynai-schema-mcptoolcallauditlog).
 
 ## Retention
 

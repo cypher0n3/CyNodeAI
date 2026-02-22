@@ -37,8 +37,10 @@ See:
 
 ## Tech Spec Conventions
 
-- Tech specs must be **highly prescriptive** and **leave no room for interpretation**.
+- Tech specs must be **prescriptive**, **specific**, and **explicit**.
+  They must be highly prescriptive and leave no room for interpretation.
   Implementation choices, behavior, contracts, and algorithms must be stated unambiguously so that implementers and reviewers can verify compliance without inferring intent.
+  Specs must explicitly define: **contracts** (interfaces, types, operations); **algorithm logic** (required steps and ordering); **return values and outputs**; **status and error codes** (HTTP, gRPC, or domain-specific); and any other behavior that implementations must match.
 - Use prose to describe technical implementation and behavior.
 - Keep code in tech specs minimal.
   Prefer function signatures, constants, generic type definitions, and short usage snippets.
@@ -75,7 +77,7 @@ See:
 ### Technical Specifications (`docs/tech_specs/`)
 
 Tech specs define **how we build it**.
-They are **highly prescriptive**: they must describe architecture, design, flows, and implementation details in unambiguous terms so that there is no room for interpretation.
+They are **prescriptive**, **specific**, and **explicit**: they must describe architecture, design, flows, contracts, algorithm logic, return values, status/error codes, and implementation details in unambiguous terms so that there is no room for interpretation.
 Implementations must be verifiable against the spec without inferring author intent.
 Tech specs should define Spec Items with Spec IDs and stable anchors.
 

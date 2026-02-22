@@ -8,7 +8,7 @@
 ## Document Overview
 
 This document specifies the core CLI commands: `cynork version`, `cynork status`, and `cynork auth` (login, logout, whoami).
-It is part of the [CLI management app](cli_management_app.md) specification.
+It is part of the [cynork CLI](cynork_cli.md) specification.
 
 Traces To:
 

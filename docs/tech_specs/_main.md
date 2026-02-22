@@ -44,8 +44,8 @@ Key principles
 ### Orchestrator and Nodes
 
 - Orchestrator: [`docs/tech_specs/orchestrator.md`](orchestrator.md)
-- Worker nodes: [`docs/tech_specs/node.md`](node.md)
-- Node payloads: [`docs/tech_specs/node_payloads.md`](node_payloads.md)
+- Worker nodes: [`docs/tech_specs/worker_node.md`](worker_node.md)
+- Node payloads: [`docs/tech_specs/worker_node_payloads.md`](worker_node_payloads.md)
 
 ### Ports and Endpoints
 
@@ -53,7 +53,7 @@ Key principles
 
 ### User Interfaces
 
-- CLI management app: [`docs/tech_specs/cli_management_app.md`](cli_management_app.md)
+- cynork CLI (management app): [`docs/tech_specs/cynork_cli.md`](cynork_cli.md)
 - Web Console: [`docs/tech_specs/web_console.md`](web_console.md)
 
 ### API Specifications
@@ -84,6 +84,7 @@ Key principles
 
 - MCP tooling: [`docs/tech_specs/mcp_tooling.md`](mcp_tooling.md)
 - MCP gateway enforcement: [`docs/tech_specs/mcp_gateway_enforcement.md`](mcp_gateway_enforcement.md)
+- User-installable MCP tools: [`docs/tech_specs/user_installable_mcp_tools.md`](user_installable_mcp_tools.md)
 - MCP tool catalog: [`docs/tech_specs/mcp_tool_catalog.md`](mcp_tool_catalog.md)
 - MCP tool call auditing: [`docs/tech_specs/mcp_tool_call_auditing.md`](mcp_tool_call_auditing.md)
 - MCP SDK installation: [`docs/tech_specs/mcp_sdk_installation.md`](mcp_sdk_installation.md)
@@ -114,6 +115,8 @@ Key principles
 
 - Project Manager Agent: [`docs/tech_specs/project_manager_agent.md`](project_manager_agent.md)
 - Project Analyst Agent: [`docs/tech_specs/project_analyst_agent.md`](project_analyst_agent.md)
+- Cynode PMA (`cynode-pma`): [`docs/tech_specs/cynode_pma.md`](cynode_pma.md)
+- Cynode SBA (`cynode-sba`): [`docs/tech_specs/cynode_sba.md`](cynode_sba.md)
 - LangGraph MVP workflow: [`docs/tech_specs/langgraph_mvp.md`](langgraph_mvp.md)
 
 ### Bootstrap Configurations

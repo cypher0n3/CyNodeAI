@@ -1,4 +1,4 @@
-# CLI Management App
+# `cynork` CLI (Management App)
 
 - [Document Overview](#document-overview)
 - [Capability Parity With Web Console](#capability-parity-with-web-console)
@@ -17,17 +17,7 @@
   - [Exit Codes](#exit-codes)
   - [Required Top-Level Commands](#required-top-level-commands)
   - [Standard Error Behavior](#standard-error-behavior)
-  - [Task Commands](#task-commands)
-  - [Task Creation (Task Input and Attachments)](#task-creation-task-input-and-attachments)
-  - [Chat Command](#chat-command)
-  - [Interactive Mode (REPL)](#interactive-mode-repl)
-  - [Credential Management](#credential-management)
-  - [Preferences Management](#preferences-management)
-  - [System Settings Management](#system-settings-management)
-  - [Node Management](#node-management)
-  - [Skills Management](#skills-management)
-  - [Audit Commands](#audit-commands)
-  - [Output and Scripting](#output-and-scripting)
+- [Command Details (Sub-Docs)](#command-details-sub-docs)
 - [Implementation Specification (Go + Cobra)](#implementation-specification-go--cobra)
 - [MVP Scope](#mvp-scope)
 
@@ -38,7 +28,7 @@
 This spec is split into multiple documents.
 Command and feature details live in: [Core commands (version, status, auth)](cli_management_app_commands_core.md), [Task commands](cli_management_app_commands_tasks.md), [Chat command](cli_management_app_commands_chat.md), [Admin and resource commands](cli_management_app_commands_admin.md), [Interactive mode and output](cli_management_app_shell_output.md).
 
-This document defines a CLI management application for CyNodeAI.
+This document defines the cynork CLI management application for CyNodeAI.
 The CLI is intended to support the same administrative capabilities as the Web Console.
 
 Traces To:
@@ -137,7 +127,7 @@ Traces To:
 #### Default Gateway URL
 
 - When `gateway_url` is empty after load and env override, the CLI MUST use the default `http://localhost:8080` (or a build-time constant matching the orchestrator default).
-- See [Ports and endpoints](ports_and_endpoints.md#cli-cynork) for the consolidated default and overrides.
+- See [Ports and endpoints](ports_and_endpoints.md#spec-cynai-stands-clicynork) for the consolidated default and overrides.
 
 #### Session Persistence (Reliability)
 
@@ -158,10 +148,21 @@ Traces To:
 
 The CLI MUST resolve the bearer token used for gateway requests by following this order; the first non-empty value wins.
 
-1. **Environment.** If `CYNORK_TOKEN` is set and non-empty, use it and do not read config file `token` or credential helper.
-2. **Config file.** If the config file was loaded and contains a non-empty `token` field, use it; skip step 3.
-3. **Credential helper.** If `credential_helper` is set in the loaded config, invoke the helper (see [Credential Helper Protocol](#credential-helper-protocol)) with action `get`; if the helper returns a non-empty secret, use it.
-4. **None.** If no token was obtained, the effective token is empty; commands that require auth MUST fail with a clear error (e.g. "not logged in: run 'cynork auth login' or set CYNORK_TOKEN") and MUST NOT send a request with an empty or missing Authorization header.
+#### Environment Variable
+
+If `CYNORK_TOKEN` is set and non-empty, use it and do not read config file `token` or credential helper.
+
+#### Config File
+
+If the config file was loaded and contains a non-empty `token` field, use it; skip step 3.
+
+#### Credential Helper
+
+If `credential_helper` is set in the loaded config, invoke the helper (see [Credential Helper Protocol](#credential-helper-protocol)) with action `get`; if the helper returns a non-empty secret, use it.
+
+#### No Token
+
+If no token was obtained, the effective token is empty; commands that require auth MUST fail with a clear error (e.g. "not logged in: run 'cynork auth login' or set CYNORK_TOKEN") and MUST NOT send a request with an empty or missing Authorization header.
 
 Implementers MUST perform token resolution once per process after config load (or when config is reloaded) and reuse the resolved value for all gateway calls in that run.
 The CLI MUST NOT log or print the resolved token.
@@ -260,12 +261,14 @@ These shorthands MUST be supported anywhere the corresponding long flag is suppo
 When `--output json` is selected, the CLI MUST emit exactly one JSON value to stdout.
 The CLI MUST NOT write any other bytes to stdout in JSON mode.
 All warnings, hints, progress messages, and errors MUST be written to stderr in JSON mode.
-Whenever the CLI outputs JSON (including `--output json`, JSON embedded in chat or table output, or other responses), the JSON MUST be pretty-printed (indented, with newlines) for human readability; see [Pretty-Printed JSON](cli_management_app_shell_output.md#pretty-printed-json-output).
+Whenever the CLI outputs JSON (including `--output json`, JSON embedded in chat or table output, or other responses), the JSON MUST be pretty-printed (indented, with newlines) for human readability; see [Pretty-Printed JSON](cli_management_app_shell_output.md#spec-cynai-client-cliprettyprintjson).
 
 When `--output table` is selected, the CLI SHOULD write human-readable output to stdout.
 The CLI MAY write errors to stderr in table mode.
 
 ### Exit Codes
+
+- Spec ID: `CYNAI.CLIENT.CliExitCodes` <a id="spec-cynai-client-cliexitcodes"></a>
 
 The CLI MUST return deterministic exit codes.
 If multiple failure categories apply, the CLI MUST return the exit code for the earliest failing check in this order: usage validation, auth validation, gateway request, response handling.
@@ -306,10 +309,10 @@ All subcommands that call the gateway MUST use the resolved gateway URL and reso
 - `cynork auth whoami`: call gateway with current token; MUST require auth.
 - `cynork task ...`: create tasks, list tasks, get task status, watch task status, cancel tasks, and retrieve task results and artifacts; see [Task commands](cli_management_app_commands_tasks.md).
 - `cynork chat`: start an interactive chat session with the Project Manager (PM) model; see [Chat command](cli_management_app_commands_chat.md).
-- `cynork creds ...`: see [Credential Management](cli_management_app_commands_admin.md#credential-management); MUST use gateway credential endpoints.
-- `cynork prefs ...`: see [Preferences Management](cli_management_app_commands_admin.md#preferences-management).
-- `cynork nodes ...`: see [Node Management](cli_management_app_commands_admin.md#node-management).
-- `cynork project ...`: basic CRUD, active project, and project-scoped RBAC via gateway; see [Project Management](cli_management_app_commands_admin.md#project-management).
+- `cynork creds ...`: see [Credential Management](cli_management_app_commands_admin.md#spec-cynai-client-clicredential); MUST use gateway credential endpoints.
+- `cynork prefs ...`: see [Preferences Management](cli_management_app_commands_admin.md#spec-cynai-client-clipreferences).
+- `cynork nodes ...`: see [Node Management](cli_management_app_commands_admin.md#spec-cynai-client-clinodemgmt).
+- `cynork project ...`: basic CRUD, active project, and project-scoped RBAC via gateway; see [Project Management](cli_management_app_commands_admin.md#spec-cynai-client-cliprojectmanagement).
   - Set active: `cynork project set <project_id>` (clearing when supported).
   - Create: `cynork project create --slug <slug> --title <title>` (optional `--description`).
   - List: `cynork project list` (optional `--limit`, `--cursor`, `--active-only`).
@@ -317,7 +320,7 @@ All subcommands that call the gateway MUST use the resolved gateway URL and reso
   - Update: `cynork project update <project_id>` (optional `--title`, `--description`, `--active`).
   - Delete: `cynork project delete <project_id>`.
   - RBAC: `cynork project rbac list <project_id>`, `cynork project rbac grant <project_id> --role <name> --user <id>|--group <id>`, `cynork project rbac revoke <project_id> --role <name> --user <id>|--group <id>`.
-- `cynork skills ...`: full CRUD via gateway; see [Skill Management CRUD (Web and CLI)](skills_storage_and_inference.md#spec-cynai-skills-skillmanagementcrud) and [Skills Management](cli_management_app_commands_admin.md#skills-management).
+- `cynork skills ...`: full CRUD via gateway; see [Skill Management CRUD (Web and CLI)](skills_storage_and_inference.md#spec-cynai-skills-skillmanagementcrud) and [Skills Management](cli_management_app_commands_admin.md#spec-cynai-client-cliskillsmanagement).
   - Create: `cynork skills load <file.md>` (required file path; optional `--name`, `--scope`).
   - List: `cynork skills list` (optional `--scope`, `--owner`).
   - Get: `cynork skills get <skill_id>`.
@@ -334,76 +337,13 @@ On gateway 400 or 422, the CLI MUST print a clear error to stderr and exit with 
 On gateway 5xx and on network failure, the CLI MUST exit with code 7.
 On invalid config file (syntax error), the CLI MUST exit with code 2 before running any command.
 
-### Core Commands (Version, Status, Auth)
+## Command Details (Sub-Docs)
 
-Full specification: [CLI management app - Core commands](cli_management_app_commands_core.md).
-
-### Task Commands
-
-- Spec ID: `CYNAI.CLIENT.CliCommandSurface` (task subset) <a id="spec-cynai-client-clicommandsurface"></a>
-- Full specification: [CLI management app - Task commands](cli_management_app_commands_tasks.md#task-commands).
-
-### Task Creation (Task Input and Attachments)
-
-- Spec ID: `CYNAI.CLIENT.CliTaskCreatePrompt` <a id="spec-cynai-client-clitaskcreateprompt"></a>
-- Full specification: [CLI management app - Task commands](cli_management_app_commands_tasks.md#task-creation-task-input-and-attachments).
-
-### Chat Command
-
-- Spec ID: `CYNAI.CLIENT.CliChat` <a id="spec-cynai-client-clichat"></a>
-- Full specification: [CLI management app - Chat command](cli_management_app_commands_chat.md#chat-command).
-
-## Interactive Mode (REPL)
-
-- Spec ID: `CYNAI.CLIENT.CliInteractiveMode` <a id="spec-cynai-client-cliinteractivemode"></a>
-- Full specification: [CLI management app - Interactive mode and output](cli_management_app_shell_output.md#interactive-mode-repl).
-
-## Credential Management
-
-- Spec ID: `CYNAI.CLIENT.CliCredentialManagement` <a id="spec-cynai-client-clicredential"></a>
-- Full specification: [CLI management app - Admin and resource commands](cli_management_app_commands_admin.md#credential-management).
-
-## Preferences Management
-
-- Spec ID: `CYNAI.CLIENT.CliPreferencesManagement` <a id="spec-cynai-client-clipreferences"></a>
-- Full specification: [CLI management app - Admin and resource commands](cli_management_app_commands_admin.md#preferences-management).
-
-## System Settings Management
-
-- Spec ID: `CYNAI.CLIENT.CliSystemSettingsManagement` <a id="spec-cynai-client-clisystemsettings"></a>
-- Full specification: [CLI management app - Admin and resource commands](cli_management_app_commands_admin.md#system-settings-management).
-
-## Node Management
-
-- Spec ID: `CYNAI.CLIENT.CliNodeManagement` <a id="spec-cynai-client-clinodemgmt"></a>
-- Full specification: [CLI management app - Admin and resource commands](cli_management_app_commands_admin.md#node-management).
-
-## Project Management
-
-- Spec ID: `CYNAI.CLIENT.CliProjectManagement` <a id="spec-cynai-client-cliprojectmanagement"></a>
-- Full specification: [CLI management app - Admin and resource commands](cli_management_app_commands_admin.md#project-management).
-
-## Skills Management
-
-- Spec ID: `CYNAI.CLIENT.CliSkillsManagement` <a id="spec-cynai-client-cliskillsmanagement"></a>
-- Full specification: [CLI management app - Admin and resource commands](cli_management_app_commands_admin.md#skills-management).
-
-## Audit Commands
-
-- Spec ID: `CYNAI.CLIENT.CliAuditCommands` <a id="spec-cynai-client-cliauditcommands"></a>
-- Full specification: [CLI management app - Admin and resource commands](cli_management_app_commands_admin.md#audit-commands).
-
-## Output and Scripting
-
-- Full specification: [CLI management app - Interactive mode and output](cli_management_app_shell_output.md#output-and-scripting).
-
-### Pretty-Printed JSON Output (Stub)
-
-- Spec ID: `CYNAI.CLIENT.CliPrettyPrintJson` <a id="spec-cynai-client-cliprettyprintjson"></a>
-
-### Output and Scripting Applicable Requirements (Stub)
-
-- Spec ID: `CYNAI.CLIENT.CliOutputScripting` <a id="spec-cynai-client-clioutputscripting"></a>
+- Core commands (version, status, auth): [cli_management_app_commands_core.md](cli_management_app_commands_core.md)
+- Task commands: [cli_management_app_commands_tasks.md](cli_management_app_commands_tasks.md)
+- Chat command: [cli_management_app_commands_chat.md](cli_management_app_commands_chat.md)
+- Admin and resource commands (creds, prefs, system settings, nodes, project, skills, audit): [cli_management_app_commands_admin.md](cli_management_app_commands_admin.md)
+- Interactive mode and output: [cli_management_app_shell_output.md](cli_management_app_shell_output.md)
 
 ## Implementation Specification (Go + Cobra)
 

@@ -52,7 +52,7 @@ Go workspace modules (see root [go.work](go.work) and [justfile](justfile)):
 - [go_shared_libs/](go_shared_libs/) - shared contracts and types used by orchestrator and worker node
 - [orchestrator/](orchestrator/) - control plane, user gateway, MCP gateway, API egress (Go)
 - [worker_node/](worker_node/) - node manager, worker API, and inference proxy (Go)
-- [cynork/](cynork/) - CLI management client (Go, Cobra); see [CLI management app spec](docs/tech_specs/cli_management_app.md)
+- [cynork/](cynork/) - CLI management client (Go, Cobra); see [cynork CLI spec](docs/tech_specs/cynork_cli.md)
 
 Documentation:
 
@@ -125,7 +125,7 @@ See [`docs/tech_specs/orchestrator.md`](docs/tech_specs/orchestrator.md) for orc
 - Optional single Ollama container (models loaded on-demand) with access to all GPUs/NPUs on the host
 - Sandbox-only nodes can run sandboxes without running inference services
 
-See [`docs/tech_specs/node.md`](docs/tech_specs/node.md) for node manager, registration, capability reporting, and configuration delivery.
+See [`docs/tech_specs/worker_node.md`](docs/tech_specs/worker_node.md) for node manager, registration, capability reporting, and configuration delivery.
 
 ### Cloud-Based Agents
 
@@ -141,7 +141,7 @@ See [`docs/tech_specs/cloud_agents.md`](docs/tech_specs/cloud_agents.md) for con
 - Data ingress/egress via orchestrator-managed REST endpoints and file upload/download handling
 - Sandbox containers are started and stopped by the worker node's Node Manager on the target host
 
-See [`docs/tech_specs/node.md`](docs/tech_specs/node.md) for sandbox lifecycle and host execution responsibilities.
+See [`docs/tech_specs/worker_node.md`](docs/tech_specs/worker_node.md) for sandbox lifecycle and host execution responsibilities.
 
 ### API Egress Server
 
@@ -179,8 +179,9 @@ See [`docs/tech_specs/model_management.md`](docs/tech_specs/model_management.md)
 
 ### Sandbox Image Registry
 
-- Orchestrator provides or integrates with a container image registry for sandbox images
-- Nodes pull sandbox container images from the configured registry
+- Users can specify a rank-ordered list of container registries for sandbox images (e.g. private registry, Quay, Docker Hub); image resolution and pull follow this order
+- When no list is configured, the default is Docker Hub (`docker.io`) only
+- Nodes pull sandbox images from the configured list in order; allowed images and policy are enforced regardless of registry
 - Agents can submit images for publishing via orchestrator-controlled workflows
 - Database tracks allowed images and image capabilities so tasks can request appropriate sandbox environments
 
@@ -220,7 +221,7 @@ See [`docs/tech_specs/orchestrator_bootstrap.md`](docs/tech_specs/orchestrator_b
 4. Node runs sandboxed tools and optional local inference -> pushes result/status back
 5. Central DB tracks everything (tasks, vectors, logs)
 
-See [`docs/tech_specs/orchestrator.md`](docs/tech_specs/orchestrator.md) and [`docs/tech_specs/node.md`](docs/tech_specs/node.md).
+See [`docs/tech_specs/orchestrator.md`](docs/tech_specs/orchestrator.md) and [`docs/tech_specs/worker_node.md`](docs/tech_specs/worker_node.md).
 
 ## Key Technologies
 

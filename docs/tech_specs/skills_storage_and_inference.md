@@ -207,7 +207,7 @@ Both paths MUST result in the skill being stored in the skill store and register
 Related specs
 
 - Web Console: [`docs/tech_specs/web_console.md`](web_console.md)
-- CLI management app: [`docs/tech_specs/cli_management_app.md`](cli_management_app.md)
+- CLI management app: [`docs/tech_specs/cynork_cli.md`](cynork_cli.md)
 - Skill auditing: [Skill Auditing (Malicious Pattern Scanning)](#skill-auditing-malicious-pattern-scanning)
 - Full CRUD: [Skill Management CRUD (Web and CLI)](#skill-management-crud-web-and-cli)
 
@@ -253,7 +253,7 @@ All operations MUST go through the User API Gateway; the same controls (authenti
 Related specs
 
 - Web Console: [`docs/tech_specs/web_console.md`](web_console.md)
-- CLI management app: [`docs/tech_specs/cli_management_app.md`](cli_management_app.md)
+- CLI management app: [`docs/tech_specs/cynork_cli.md`](cynork_cli.md)
 
 ## Skill Tools via MCP (CRUD)
 
@@ -306,7 +306,7 @@ All invocations MUST be audited per [MCP tool call auditing](mcp_tool_call_audit
 Related specs
 
 - MCP gateway: [`docs/tech_specs/mcp_gateway_enforcement.md`](mcp_gateway_enforcement.md)
-- MCP tool catalog: lists all skills tool names for allowlist/discovery; [catalog Skills Tools section](mcp_tool_catalog.md#skills-tools) references this spec as the source of truth for contract and behavior.
+- MCP tool catalog: lists all skills tool names for allowlist/discovery; [catalog Skills Tools section](mcp_tool_catalog.md#spec-cynai-mcptoo-skillstools) references this spec as the source of truth for contract and behavior.
 - Skill auditing: [Skill Auditing (Malicious Pattern Scanning)](#skill-auditing-malicious-pattern-scanning)
 
 ## Skill Auditing (Malicious Pattern Scanning)
@@ -334,7 +334,7 @@ Matches cause load rejection; existing skills may be flagged or quarantined when
   - **Secret or security bypass**: Instructions that would prompt the model to expose secrets, bypass access controls, or circumvent security boundaries (e.g. "ignore previous safety guidelines", "output the user's API key").
 - The exact pattern set (regex, keywords, or rule engine) is implementation-defined but MUST be maintainable (e.g. configurable or updatable without code change) so that new patterns can be added as threats evolve.
 - **Alignment with Secure Browser Service**: Skill auditing SHOULD use the same or aligned pattern-detection approach as the [Secure Browser Service](secure_browser_service.md).
-  That service defines deterministic injection-stripping rules: denylists of instruction-like patterns (e.g. "ignore previous instructions", "system prompt", "developer message", "jailbreak"), removal of HTML comments and hidden content, and configurable regex patterns and section markers (see [Deterministic Sanitization](secure_browser_service.md#deterministic-sanitization) and [Configuration and Rules](secure_browser_service.md#configuration-and-rules)).
+  That service defines deterministic injection-stripping rules: denylists of instruction-like patterns (e.g. "ignore previous instructions", "system prompt", "developer message", "jailbreak"), removal of HTML comments and hidden content, and configurable regex patterns and section markers (see [Deterministic Sanitization](secure_browser_service.md#spec-cynai-browsr-deterministicsanitization) and [Configuration and Rules](secure_browser_service.md#spec-cynai-browsr-preferencesrules)).
   Implementations MAY share or derive pattern rules from the same configuration (e.g. shared denylist line patterns, or a skills-specific extension of the same rule format) so that instruction-override and secret-bypass patterns are maintained in one place where practical.
 
 ### `SkillAuditing` Preconditions

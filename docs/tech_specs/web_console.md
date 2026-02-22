@@ -44,7 +44,7 @@ Traces To:
 - [REQ-CLIENT-0004](../requirements/client.md#req-client-0004)
 
 The Web Console and the CLI management app MUST offer the same administrative capabilities.
-When adding or changing a capability in this spec (for example a new credential workflow, preference scope, node action, or skill operation), the [CLI management app](cli_management_app.md) spec and implementation MUST be updated to match, and vice versa.
+When adding or changing a capability in this spec (for example a new credential workflow, preference scope, node action, or skill operation), the [cynork CLI](cynork_cli.md) spec and implementation MUST be updated to match, and vice versa.
 Use the same gateway APIs and the same authorization and auditing rules for both clients.
 
 ## Primary Use Cases
@@ -52,9 +52,9 @@ Use the same gateway APIs and the same authorization and auditing rules for both
 - Upload and manage external provider credentials for API Egress and Git Egress.
 - View, edit, and audit user preferences across scopes (system, user, group, project, task), with an easy method to CRUD personal, group, and project preferences.
 - View node inventory and manage basic node lifecycle controls.
-- Full CRUD for AI skills: create (upload), list, view (content and metadata), edit (update content and/or metadata including scope, with same auditing and scope permissions), and delete; see [Skill Management CRUD](skills_storage_and_inference.md#skill-management-crud-web-and-cli).
+- Full CRUD for AI skills: create (upload), list, view (content and metadata), edit (update content and/or metadata including scope, with same auditing and scope permissions), and delete; see [Skill Management CRUD](skills_storage_and_inference.md#spec-cynai-skills-skillmanagementcrud).
 - Basic project management (CRUD): create, list, view, edit, and delete or disable projects; each project has a user-friendly title and optional text description (see [Projects and Scope Model](projects_and_scopes.md), [REQ-PROJCT-0103](../requirements/projct.md#req-projct-0103)).
-- Create tasks: submit a task as plain text or Markdown (inline or paste), attach files or other artifacts (file upload), run a script (e.g. script file upload), or run a short series of commands; same semantics as the CLI and User API Gateway (see [REQ-ORCHES-0125](../requirements/orches.md#req-orches-0125), [REQ-ORCHES-0126](../requirements/orches.md#req-orches-0126), [REQ-ORCHES-0127](../requirements/orches.md#req-orches-0127), [REQ-CLIENT-0152](../requirements/client.md#req-client-0152), [REQ-CLIENT-0154](../requirements/client.md#req-client-0154)).
+- Create tasks: submit a task as plain text or Markdown (inline or paste), attach files or other artifacts (file upload), run a script (e.g. script file upload), or run a short series of commands; same semantics as the CLI and User API Gateway (see [REQ-ORCHES-0126](../requirements/orches.md#req-orches-0126), [REQ-ORCHES-0127](../requirements/orches.md#req-orches-0127), [REQ-ORCHES-0128](../requirements/orches.md#req-orches-0128), [REQ-CLIENT-0152](../requirements/client.md#req-client-0152), [REQ-CLIENT-0154](../requirements/client.md#req-client-0154)).
 - Inspect access control rules and audit decisions.
 
 ## Security Model
@@ -93,7 +93,7 @@ Recommended approaches
 ## Credential Management
 
 The web console must support managing credentials that are consumed by controlled egress services.
-The gateway endpoint contract for credential operations (list, get, create, rotate, disable) is defined in [API Egress Server - Admin API (Gateway Endpoints)](api_egress_server.md#admin-api-gateway-endpoints); the console and cynork both use these same endpoints.
+The gateway endpoint contract for credential operations (list, get, create, rotate, disable) is defined in [API Egress Server - Admin API (Gateway Endpoints)](api_egress_server.md#spec-cynai-apiegr-adminapigatewayendpoints); the console and cynork both use these same endpoints.
 
 Credential types
 
@@ -171,11 +171,11 @@ Traces To:
 
 The web console MUST support editing system settings that control orchestrator operational behavior.
 System settings are not user preferences; they are operator-controlled orchestrator operational configuration.
-For the full distinction, see [User preferences (Terminology)](user_preferences.md#2-terminology).
+For the full distinction, see [User preferences (Terminology)](user_preferences.md#spec-cynai-stands-preferenceterminology).
 
 Recommended keys to surface (MVP)
 
-Key semantics and the PM model selection/warmup algorithm are defined in [Project Manager Model (Startup Selection and Warmup)](orchestrator.md#project-manager-model-startup-selection-and-warmup).
+Key semantics and the PM model selection/warmup algorithm are defined in [Project Manager Model (Startup Selection and Warmup)](orchestrator.md#spec-cynai-orches-projectmanagermodelstartup).
 
 - `agents.project_manager.model.local_default_ollama_model` (string)
 - `agents.project_manager.model.selection.execution_mode` (string): `auto` | `force_local` | `force_external`
@@ -191,7 +191,7 @@ Traces To:
 - [REQ-WEBCON-0112](../requirements/webcon.md#req-webcon-0112)
 
 The web console MUST support full CRUD for AI skills (create, list, view, update, delete) via the User API Gateway.
-All operations use the same controls as defined in [Skill Management CRUD](skills_storage_and_inference.md#skill-management-crud-web-and-cli): authentication, scope visibility, scope elevation permission on write, and auditing on write with rejection feedback (match category and triggering text) when content fails the security scan.
+All operations use the same controls as defined in [Skill Management CRUD](skills_storage_and_inference.md#spec-cynai-skills-skillmanagementcrud): authentication, scope visibility, scope elevation permission on write, and auditing on write with rejection feedback (match category and triggering text) when content fails the security scan.
 
 Recommended UI
 
@@ -209,7 +209,7 @@ Traces To:
 
 - [REQ-CLIENT-0174](../requirements/client.md#req-client-0174)
 
-The web console MUST support basic project CRUD (create, list, view, update, delete or disable) via the User API Gateway, with the same capabilities as the CLI (see [Project Management](cli_management_app_commands_admin.md#project-management)).
+The web console MUST support basic project CRUD (create, list, view, update, delete or disable) via the User API Gateway, with the same capabilities as the CLI (see [Project Management](cli_management_app_commands_admin.md#spec-cynai-client-cliprojectmanagement)).
 Projects have a user-friendly title (display name) and an optional text description for lists and detail views.
 
 Recommended UI
@@ -251,7 +251,7 @@ Recommended admin actions
 - Request a node configuration refresh.
 - Request a node to pre-pull a sandbox image, when allowed.
 
-See [`docs/tech_specs/node.md`](node.md) for node lifecycle and capability reporting.
+See [`docs/tech_specs/worker_node.md`](worker_node.md) for node lifecycle and capability reporting.
 
 ## Implementation Specification (Nuxt)
 
@@ -367,6 +367,8 @@ Traces To:
 - [REQ-WEBCON-0111](../requirements/webcon.md#req-webcon-0111)
 
 ## API Surface
+
+- Spec ID: `CYNAI.WEBCON.ApiSurface` <a id="spec-cynai-webcon-apisurface"></a>
 
 The web console is a client of the User API Gateway.
 It uses the Data REST API for resource-oriented access and may use dedicated admin endpoints when needed.

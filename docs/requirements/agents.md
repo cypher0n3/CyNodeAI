@@ -134,3 +134,16 @@ It covers agent behaviors, responsibilities, and workflow integration.
   Resolution and access MUST be performed via MCP or gateway; the PM MUST NOT assume access without verification.
   [CYNAI.AGENTS.PMProjectFromPrompt](../tech_specs/project_manager_agent.md#spec-cynai-agents-pmprojectfromprompt)
   <a id="req-agents-0131"></a>
+- **REQ-AGENTS-0132:** Every agent that leverages LLMs MUST pass a baseline context to those LLMs that describes what the agent is: identity, role, responsibilities, and non-goals.
+  Baseline context MUST be defined per agent (or per role when one binary supports multiple roles) and MUST be included in every LLM prompt or system message used by that agent.
+  [CYNAI.AGENTS.LLMContext](../tech_specs/project_manager_agent.md#spec-cynai-agents-llmcontext)
+  <a id="req-agents-0132"></a>
+- **REQ-AGENTS-0133:** Every agent that leverages LLMs MUST support user-configurable additional context that is included with LLM prompts.
+  Additional context MUST be resolved from user preferences using the same scope precedence as other preferences (task > project > user > group > system) and MUST be merged into the context supplied to the LLM (e.g. system or user message) in a defined order relative to baseline context and role instructions.
+  [CYNAI.AGENTS.LLMContext](../tech_specs/project_manager_agent.md#spec-cynai-agents-llmcontext)
+  [CYNAI.STANDS.UserPreferencesRetrieval](../tech_specs/user_preferences.md#spec-cynai-stands-prefretrieval)
+  <a id="req-agents-0133"></a>
+- **REQ-AGENTS-0134:** When a project is in scope for an agent request or job (e.g. `project_id` is set and the agent has access), the agent MUST include project-level context in every LLM prompt (project identity, scope, relevant metadata).
+  When a task is in scope (e.g. `task_id` is set), the agent MUST include task-level context in every LLM prompt (task identity, acceptance criteria summary, status, relevant metadata).
+  [CYNAI.AGENTS.LLMContext](../tech_specs/project_manager_agent.md#spec-cynai-agents-llmcontext)
+  <a id="req-agents-0134"></a>

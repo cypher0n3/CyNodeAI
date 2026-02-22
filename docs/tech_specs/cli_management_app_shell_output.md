@@ -7,7 +7,7 @@
 ## Document Overview
 
 This document specifies the interactive shell (REPL) and output/scripting rules for the CLI.
-It is part of the [CLI management app](cli_management_app.md) specification.
+It is part of the [cynork CLI](cynork_cli.md) specification.
 
 ## Interactive Mode (REPL)
 

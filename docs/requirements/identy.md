@@ -79,5 +79,5 @@ It covers identity, authentication, and session lifecycle requirements.
   <a id="req-identy-0120"></a>
 - **REQ-IDENTY-0121:** The orchestrator MUST provision a reserved system user identity for attribution (for example `handle=system`).
   System-created records (for example tasks created by bootstrap or by orchestrator-side agents) MUST use this identity for `created_by` (and similar) fields rather than writing null.
-  [postgres_schema.md](../tech_specs/postgres_schema.md#users-table)
+  [postgres_schema.md](../tech_specs/postgres_schema.md#spec-cynai-schema-userstable)
   <a id="req-identy-0121"></a>

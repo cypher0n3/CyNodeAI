@@ -103,7 +103,7 @@ Implementation notes
 
 Out of scope for this document
 
-- Node capability report and node configuration payload wire formats (see [`docs/tech_specs/node.md`](node.md)).
+- Node capability report and node configuration payload wire formats (see [`docs/tech_specs/worker_node.md`](worker_node.md)).
 - MCP gateway enforcement and tool allowlists (see [`docs/tech_specs/mcp_gateway_enforcement.md`](mcp_gateway_enforcement.md)).
 
 ## Schema Overview
@@ -127,12 +127,16 @@ Logical groups
 
 ## Identity and Authentication
 
+- Spec ID: `CYNAI.SCHEMA.IdentityAuth` <a id="spec-cynai-schema-identityauth"></a>
+
 The orchestrator MUST store users and local auth state in PostgreSQL.
 Credentials and refresh tokens MUST be stored as hashes.
 
 Source: [`docs/tech_specs/local_user_accounts.md`](local_user_accounts.md).
 
 ### Users Table
+
+- Spec ID: `CYNAI.SCHEMA.UsersTable` <a id="spec-cynai-schema-userstable"></a>
 
 - `id` (uuid, pk)
 - `handle` (text, unique)
@@ -212,6 +216,8 @@ Constraints
 - Index: (`is_active`)
 
 ## Groups and RBAC
+
+- Spec ID: `CYNAI.SCHEMA.GroupsRbac` <a id="spec-cynai-schema-groupsrbac"></a>
 
 The orchestrator MUST track groups, group membership, roles, and role bindings in PostgreSQL.
 Policy evaluation and auditing depend on these tables.
@@ -298,6 +304,8 @@ Constraints
 
 ## Access Control
 
+- Spec ID: `CYNAI.SCHEMA.AccessControl` <a id="spec-cynai-schema-accesscontrol"></a>
+
 Policy rules and access control audit log.
 Used by API Egress, Secure Browser, and other policy-enforcing services.
 
@@ -348,6 +356,8 @@ Constraints
 
 ## API Egress Credentials
 
+- Spec ID: `CYNAI.SCHEMA.ApiEgressCredentials` <a id="spec-cynai-schema-apiegresscredentials"></a>
+
 Credentials for outbound API calls are stored in PostgreSQL and are only retrievable by the API Egress Server.
 Agents MUST never receive credentials in responses.
 
@@ -385,10 +395,12 @@ Constraints
 
 ## Preferences
 
+- Spec ID: `CYNAI.SCHEMA.Preferences` <a id="spec-cynai-schema-preferences"></a>
+
 Preference entries store user task-execution preferences and constraints.
 Preference entries are scoped (system, user, group, project, task) with precedence.
 Deployment and service configuration (ports, hostnames, database DSNs, and secrets) MUST NOT be stored as preferences.
-The distinction between preferences and system settings is defined in [User preferences (Terminology)](user_preferences.md#2-terminology).
+The distinction between preferences and system settings is defined in [User preferences (Terminology)](user_preferences.md#spec-cynai-stands-preferenceterminology).
 The `users` table is shared with identity and RBAC.
 
 Source: [`docs/tech_specs/user_preferences.md`](user_preferences.md).
@@ -431,7 +443,7 @@ Constraints
 ## System Settings
 
 System settings store operator-managed operational configuration and policy parameters.
-System settings are not user task-execution preferences; for the distinction, see [User preferences (Terminology)](user_preferences.md#2-terminology).
+System settings are not user task-execution preferences; for the distinction, see [User preferences (Terminology)](user_preferences.md#spec-cynai-stands-preferenceterminology).
 System settings MUST NOT store secrets in plaintext.
 
 ### System Settings Table
@@ -473,7 +485,7 @@ Constraints
 The orchestrator owns task state and a queue of jobs backed by PostgreSQL.
 Nodes register with the orchestrator and report capabilities; the orchestrator stores node registry and optional capability snapshot.
 
-Sources: [`docs/tech_specs/orchestrator.md`](orchestrator.md), [`docs/tech_specs/node.md`](node.md), [`docs/tech_specs/langgraph_mvp.md`](langgraph_mvp.md).
+Sources: [`docs/tech_specs/orchestrator.md`](orchestrator.md), [`docs/tech_specs/worker_node.md`](worker_node.md), [`docs/tech_specs/langgraph_mvp.md`](langgraph_mvp.md).
 
 ### Tasks Table
 
@@ -538,7 +550,7 @@ Constraints
 - `config_version` (text, nullable)
   - version of last applied node configuration payload
 - `worker_api_target_url` (text, nullable)
-  - URL of the node Worker API for job dispatch; from node configuration delivery; see [`node_payloads.md`](node_payloads.md) `node_configuration_payload_v1`
+  - URL of the node Worker API for job dispatch; from node configuration delivery; see [`worker_node_payloads.md`](worker_node_payloads.md) `node_configuration_payload_v1`
 - `worker_api_bearer_token` (text, nullable)
   - bearer token for orchestrator-to-node Worker API auth; MUST be stored encrypted at rest or in a secrets backend; populated from config delivery
 - `config_ack_at` (timestamptz, nullable)
@@ -562,13 +574,13 @@ Constraints
 ### Node Capabilities Table
 
 Stores the last reported capability payload (full JSON of actual capabilities) for scheduling and display.
-The orchestrator MUST store the capability report JSON here (or a normalized snapshot that preserves the actual capabilities per node.md).
+The orchestrator MUST store the capability report JSON here (or a normalized snapshot that preserves the actual capabilities per worker_node.md).
 
 - `id` (uuid, pk)
 - `node_id` (uuid, fk to `nodes.id`)
 - `reported_at` (timestamptz)
 - `capability_snapshot` (jsonb)
-  - full capability report JSON (identity, platform, compute, gpu, sandbox, network, inference, tls, etc. per node_payloads.md)
+  - full capability report JSON (identity, platform, compute, gpu, sandbox, network, inference, tls, etc. per worker_node_payloads.md)
 
 Constraints
 
@@ -578,6 +590,8 @@ Constraints
 Recommendation: one row per node, updated in place when capability report is received; alternatively, append-only with retention policy.
 
 ## Sandbox Image Registry
+
+- Spec ID: `CYNAI.SCHEMA.SandboxImageRegistry` <a id="spec-cynai-schema-sandboximageregistry"></a>
 
 Allowed sandbox images and their capabilities MUST be stored in PostgreSQL.
 This enables agents and schedulers to pick safe, policy-approved execution environments.
@@ -614,7 +628,7 @@ Table name: `sandbox_image_versions`.
 - `image_digest` (text, nullable)
   - digest for pinning (recommended)
 - `capabilities` (jsonb)
-  - examples: runtimes, tools, network_requirements, filesystem_requirements
+  - examples: runtimes, tools, network_requirements, filesystem_requirements; SHOULD include `agent_compatible` (boolean) when known, from OCI label `io.cynodeai.sandbox.agent-compatible` at ingest
 - `is_allowed` (boolean)
 - `created_at` (timestamptz)
 - `updated_at` (timestamptz)
@@ -643,6 +657,8 @@ Constraints
 - Index: (`node_id`)
 
 ## Runs and Sessions
+
+- Spec ID: `CYNAI.SCHEMA.RunsSessions` <a id="spec-cynai-schema-runssessions"></a>
 
 Runs are execution traces (workflow instance, dispatched job, or agent turn).
 Sessions are user-facing containers that group runs and hold transcripts.
@@ -837,6 +853,8 @@ WITH (m = 16, ef_construction = 200);
 
 ## Audit Logging
 
+- Spec ID: `CYNAI.SCHEMA.AuditLogging` <a id="spec-cynai-schema-auditlogging"></a>
+
 Audit logging is implemented via domain-specific tables so that retention and query patterns can be tuned per domain.
 All audit tables MUST use `timestamptz` for event time and SHOULD include subject and decision/outcome where applicable.
 
@@ -866,6 +884,8 @@ Constraints
 - Index: (`event_type`)
 
 ### MCP Tool Call Audit Log Table
+
+- Spec ID: `CYNAI.SCHEMA.McpToolCallAuditLog` <a id="spec-cynai-schema-mcptoolcallauditlog"></a>
 
 This table stores append-only metadata for MCP tool calls routed by the orchestrator gateway.
 Tool arguments and tool results are not stored in this table for MVP.
@@ -934,6 +954,8 @@ Constraints
 - Index: (`project_id`)
 
 ## Model Registry
+
+- Spec ID: `CYNAI.SCHEMA.ModelRegistry` <a id="spec-cynai-schema-modelregistry"></a>
 
 Model metadata and node-model availability.
 Optional for MVP; required when model management and node load workflow are implemented.

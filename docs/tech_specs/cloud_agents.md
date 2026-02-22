@@ -8,6 +8,7 @@
 - [Authentication and Trust](#authentication-and-trust)
 - [Capability Reporting](#capability-reporting)
 - [Dispatch, Routing, and Policy](#dispatch-routing-and-policy)
+- [LLM Context (Baseline and User-Configurable)](#llm-context-baseline-and-user-configurable)
 - [Tool Access Model](#tool-access-model)
 - [Execution Environments](#execution-environments)
 - [Security and Auditing](#security-and-auditing)
@@ -34,7 +35,7 @@ Non-goals
 - This document does not define the full Worker API schema.
 - This document does not define the full sandbox security model for local execution.
 
-See [`docs/tech_specs/node.md`](node.md) for local node details.
+See [`docs/tech_specs/worker_node.md`](worker_node.md) for local node details.
 
 ## Definitions
 
@@ -149,6 +150,13 @@ Policy integration
 - The orchestrator SHOULD be the first gate and the target service SHOULD be the final gate.
 
 See [`docs/tech_specs/access_control.md`](access_control.md).
+
+## LLM Context (Baseline and User-Configurable)
+
+Cloud workers that run agent code and call LLMs MUST receive baseline context (agent identity, role, responsibilities, non-goals), project-level and task-level context when applicable, and user-configurable additional context (resolved from preferences with the same scope precedence as other agents).
+All supplied context MUST be included in every LLM prompt or system message in the defined composition order.
+The orchestrator MUST supply this context in the job payload or handoff (e.g. in the same shape as for the Sandbox Agent, including `project_context` and `task_context` when in scope).
+See [REQ-AGENTS-0132](../requirements/agents.md#req-agents-0132), [REQ-AGENTS-0133](../requirements/agents.md#req-agents-0133), [REQ-AGENTS-0134](../requirements/agents.md#req-agents-0134), and [LLM Context (Baseline and User-Configurable)](project_manager_agent.md#spec-cynai-agents-llmcontext).
 
 ## Tool Access Model
 

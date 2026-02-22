@@ -1,5 +1,5 @@
 // Package inferenceproxy provides a minimal HTTP reverse proxy to Ollama.
-// Per docs/tech_specs/node.md: enforces request size (10 MiB) and per-request timeout (120s);
+// Per docs/tech_specs/worker_node.md: enforces request size (10 MiB) and per-request timeout (120s);
 // MUST NOT expose credentials.
 package inferenceproxy
 
@@ -13,10 +13,10 @@ import (
 	"time"
 )
 
-// MaxRequestBodyBytes is the maximum request body size (10 MiB per node.md).
+// MaxRequestBodyBytes is the maximum request body size (10 MiB per worker_node.md).
 const MaxRequestBodyBytes = 10 * 1024 * 1024
 
-// PerRequestTimeout is the per-request timeout (120s per node.md).
+// PerRequestTimeout is the per-request timeout (120s per worker_node.md).
 const PerRequestTimeout = 120 * time.Second
 
 // NewProxy returns an http.Handler that forwards requests to upstream with size and timeout limits.

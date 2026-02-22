@@ -33,5 +33,10 @@ Technical specification: [`docs/tech_specs/projects_and_scopes.md`](../tech_spec
   When a task, chat thread, or other project-scoped entity is created without an explicit `project_id`, the system MUST associate it with the creating user's default project (authenticated user when present, otherwise system user).
   The default project MAY be created on first use or at user creation; its identity MUST be deterministic per user (e.g. slug derived from user id or handle).
   [CYNAI.ACCESS.Doc.ProjectsAndScopes](../tech_specs/projects_and_scopes.md#spec-cynai-access-doc-projectsandscopes)
-  [Default project](projects_and_scopes.md#default-project)
+  [Default project](../tech_specs/projects_and_scopes.md#spec-cynai-access-defaultproject)
   <a id="req-projct-0104"></a>
+- **REQ-PROJCT-0105:** The system MUST expose MCP tools so that orchestrator-side agents (e.g. Project Manager) can search and resolve projects for the authenticated user.
+  All project list and search operations MUST be scoped to projects the authenticated user is authorized to access (e.g. via RBAC and default project); the gateway MUST enforce this scope and MUST NOT return projects the user cannot access.
+  [CYNAI.ACCESS.ProjectsMcpSearch](../tech_specs/projects_and_scopes.md#spec-cynai-access-projectsmcpsearch)
+  [CYNAI.MCPGAT.Doc.GatewayEnforcement](../tech_specs/mcp_gateway_enforcement.md#spec-cynai-mcpgat-doc-gatewayenforcement)
+  <a id="req-projct-0105"></a>

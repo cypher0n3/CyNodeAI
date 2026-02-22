@@ -10,7 +10,7 @@
 
 This directory contains the CyNodeAI CLI management client (**cynork**), implemented in Go with Cobra.
 `cynork` operates against the User API Gateway for authentication, task operations, and admin capabilities (credentials, user preferences, nodes, skills).
-It MUST offer the same administrative capabilities as the Web Console; see [CLI management app spec](../docs/tech_specs/cli_management_app.md).
+It MUST offer the same administrative capabilities as the Web Console; see [cynork CLI spec](../docs/tech_specs/cynork_cli.md).
 
 ## 2 What This Directory Contains
 
@@ -28,7 +28,7 @@ Prefer repo-level tooling in the root [`justfile`](../justfile).
 
 - Build from repo root: `cd cynork && go build -o cynork .` (or build from root with appropriate module path).
 - Run against a local User API Gateway (e.g. after `just e2e` or running the orchestrator compose stack).
-- Configuration: config file (default `~/.config/cynork/config.yaml`) and environment overrides; see [CLI management app spec - Authentication and Configuration](../docs/tech_specs/cli_management_app.md#authentication-and-configuration).
+- Configuration: config file (default `~/.config/cynork/config.yaml`) and environment overrides; see [cynork CLI spec - Authentication and Configuration](../docs/tech_specs/cynork_cli.md#authentication-and-configuration).
 
 ## 4 Testing and Linting
 
@@ -43,7 +43,7 @@ All Go modules in this repository are checked by repo-level `just` targets.
 - Root project overview at [README.md](../README.md).
 - Documentation index at [docs/README.md](../docs/README.md).
 - Project meta and repository layout at [meta.md](../meta.md).
-- CLI specification at [docs/tech_specs/cli_management_app.md](../docs/tech_specs/cli_management_app.md).
+- CLI specification at [docs/tech_specs/cynork_cli.md](../docs/tech_specs/cynork_cli.md).
 - Technical specifications index at [docs/tech_specs/_main.md](../docs/tech_specs/_main.md).
 - Orchestrator (User API Gateway) at [orchestrator/README.md](../orchestrator/README.md).
 - Worker node at [worker_node/README.md](../worker_node/README.md).

@@ -5,10 +5,6 @@
 node_modules/
 Abacus.ai*/
 tmp/
-# install-markdownlint: cloned repo and rules (dir or symlink)
-.markdownlint-repo/
-.markdownlint-rules
-.markdownlint-rules/
 bin/
 bin-dev/
 

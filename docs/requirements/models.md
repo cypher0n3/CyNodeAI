@@ -20,7 +20,7 @@ It covers model lifecycle requirements, routing, and model management behavior.
   In the single-node case, startup must fail fast (or refuse to enter a ready state) if no local inference is available and no external provider key is configured.
   [external_model_routing.md](../tech_specs/external_model_routing.md)
   [orchestrator_bootstrap.md](../tech_specs/orchestrator_bootstrap.md)
-  [node.md](../tech_specs/node.md)
+  [worker_node.md](../tech_specs/worker_node.md)
   <a id="req-models-0003"></a>
 - **REQ-MODELS-0004:** When local inference is available (Ollama or similar), the orchestrator MUST be able to request that a node loads a specific model to satisfy the Project Manager model startup requirement.
   The orchestrator MUST support at least one local Project Manager model for limited systems, and that smallest supported local model MUST be `tinyllama`.

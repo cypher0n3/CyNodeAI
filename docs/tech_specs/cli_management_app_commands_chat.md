@@ -7,7 +7,7 @@
 ## Document Overview
 
 This document specifies the `cynork chat` command and all chat slash commands.
-It is part of the [CLI management app](cli_management_app.md) specification.
+It is part of the [cynork CLI](cynork_cli.md) specification.
 
 ## Chat Command
 
@@ -92,6 +92,8 @@ When the user commits the line (e.g. Enter), the CLI MUST execute the selected o
 Implementations MUST honor `--no-color` for the suggestion list (e.g. no colors or minimal styling when set).
 
 #### Slash Command Reference
+
+- Spec ID: `CYNAI.CLIENT.CliChatSlashCommandReference` <a id="spec-cynai-client-clichatslashcommandreference"></a>
 
 All slash commands start with `/` and are case-insensitive for the command name (e.g. `/help`, `/Help`, and `/HELP` are equivalent).
 Input that does not start with `/` is sent to the PM model as a chat message.
@@ -191,7 +193,7 @@ Traces To:
 
 The CLI MUST support the following task slash commands in chat.
 Each MUST call the same User API Gateway endpoints as the corresponding `cynork task` subcommand.
-Output MUST be shown inline in the chat (pretty-printed per [Pretty-Printed JSON Output](cli_management_app_shell_output.md#pretty-printed-json-output) when the output is JSON).
+Output MUST be shown inline in the chat (pretty-printed per [Pretty-Printed JSON Output](cli_management_app_shell_output.md#spec-cynai-client-cliprettyprintjson) when the output is JSON).
 Arguments are parsed from the remainder of the line after the slash command; the CLI MAY support a subset of flags (e.g. `--limit`, `--status`) where the chat input allows.
 
 Implementation guidance:
@@ -312,4 +314,4 @@ Traces To:
 
 - Missing or invalid token: exit code 3.
 - Gateway unreachable or 5xx: exit code 7.
-- Gateway 4xx (e.g. 429, 403): exit code per [Exit Codes](cli_management_app.md#exit-codes) (e.g. 3 for 403, 6 for 422).
+- Gateway 4xx (e.g. 429, 403): exit code per [Exit Codes](cynork_cli.md#spec-cynai-client-cliexitcodes) (e.g. 3 for 403, 6 for 422).

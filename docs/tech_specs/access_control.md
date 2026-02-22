@@ -19,7 +19,7 @@ This document defines access control policy for services that provide controlled
 It is intended to cover both the API Egress Server and the Secure Browser Service.
 For how users, groups, roles, and membership feed into subject resolution for policy evaluation, see [`docs/tech_specs/rbac_and_groups.md`](rbac_and_groups.md).
 The Postgres schema is defined in [`docs/tech_specs/postgres_schema.md`](postgres_schema.md).
-See [Access Control](postgres_schema.md#access-control) and [Audit Logging](postgres_schema.md#audit-logging).
+See [Access Control](postgres_schema.md#spec-cynai-schema-accesscontrol) and [Audit Logging](postgres_schema.md#spec-cynai-schema-auditlogging).
 
 ## Core Concepts
 
@@ -33,7 +33,7 @@ Access control is evaluated for a request using the following information.
   - Examples: user-scoped credential vs group-scoped credential.
 - Action
   - What is being attempted.
-  - Examples: `api.call`, `web.fetch`, `sandbox_image.publish`, `sandbox_image.use`, `messaging.configure`, `messaging.send`, `mcp.tool.invoke`.
+  - Examples: `api.call`, `web.fetch`, `web.search`, `sandbox_image.publish`, `sandbox_image.use`, `messaging.configure`, `messaging.send`, `mcp.tool.invoke`.
   - Git egress examples: `git.push`, `git.pr.create`.
 - Resource
   - What is being accessed.
@@ -75,7 +75,7 @@ They are a starting point and can be extended later.
 - `subject_id` (uuid, nullable)
   - null is allowed only for `system` subject_type
 - `action` (text)
-  - examples: api.call, web.fetch
+  - examples: api.call, web.fetch, web.search
 - `resource_type` (text)
   - examples: api.provider_operation, web.domain, web.url_pattern
 - `resource_pattern` (text)

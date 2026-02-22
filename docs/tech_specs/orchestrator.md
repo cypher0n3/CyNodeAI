@@ -5,6 +5,7 @@
 - [Core Responsibilities](#core-responsibilities)
 - [Health Checks](#health-checks)
 - [Task Scheduler](#task-scheduler)
+  - [Scheduled Run Routing to Project Manager Agent](#scheduled-run-routing-to-project-manager-agent)
 - [Project Manager Agent](#project-manager-agent)
   - [Project Manager Model (Startup Selection and Warmup)](#project-manager-model-startup-selection-and-warmup)
 - [API Egress Server](#api-egress-server)
@@ -43,7 +44,7 @@ This section defines the orchestrator health and readiness endpoints.
 
 - Spec ID: `CYNAI.ORCHES.Rule.HealthEndpoints` <a id="spec-cynai-orches-rule-healthendpoints"></a>
 
-Traces To: [REQ-ORCHES-0119](../requirements/orches.md#req-orches-0119), [REQ-BOOTST-0002](../requirements/bootst.md#req-bootst-0002)
+Traces To: [REQ-ORCHES-0120](../requirements/orches.md#req-orches-0120), [REQ-BOOTST-0002](../requirements/bootst.md#req-bootst-0002)
 
 The orchestrator exposes health endpoints that distinguish "process alive" from "ready to accept work".
 
@@ -66,6 +67,7 @@ Responsibilities
 
 - **Queue**: Maintain a queue of pending work (tasks and jobs) backed by PostgreSQL so state survives restarts.
 - **Dispatch**: Select eligible nodes based on capability, load, data locality, and model availability; dispatch jobs to the worker API; collect results and update task state.
+  When the orchestrator receives job completion (success, failure, or timeout), it MUST pass that reporting to the Project Manager Agent and/or Project Analyst Agent for additional work (e.g. verification, remediation, follow-up tasks).
 - **Retries and leases**: Support job leases, retries on failure, and idempotency so work is not lost or duplicated when nodes fail or restart.
 - **Cron tool**: MUST support a cron (or equivalent) facility for scheduled jobs, wakeups, and automation.
   Users and agents MUST be able to enqueue work at a future time or on a recurrence (cron expression or calendar-like).
@@ -79,7 +81,22 @@ The scheduler MAY be implemented as a background process, a worker that consumes
 Agents (e.g. Project Manager) and the cron facility enqueue work; the scheduler is responsible for dequeueing and dispatching to nodes.
 The scheduler MUST be available via the User API Gateway so users can create and manage scheduled jobs, query queue and schedule state, and trigger wakeups or automation.
 
-See job dispatch and node selection in [`docs/tech_specs/node.md`](node.md), the roadmap in [`docs/tech_specs/_main.md`](_main.md), and [`docs/tech_specs/user_api_gateway.md`](user_api_gateway.md).
+### Scheduled Run Routing to Project Manager Agent
+
+- Spec ID: `CYNAI.ORCHES.ScheduledRunRouting` <a id="spec-cynai-orches-scheduledrunrouting"></a>
+- Traces to: [REQ-ORCHES-0109](../requirements/orches.md#req-orches-0109), [Request Source and Orchestrator Handoff](cynode_pma.md#spec-cynai-pmagnt-requestsource)
+
+When a schedule **fires**, the orchestrator has a run payload (created at schedule-creation time: e.g. task description, prompt, or concrete job spec).
+Routing of that run MUST be determined by whether the payload requires agent reasoning, task interpretation, or planning:
+
+- When a scheduled run's payload **requires agent reasoning, task interpretation, or planning** (e.g. natural-language task, "daily standup reminder", "triage backlog"), the orchestrator MUST **hand that work off to the Project Manager Agent** per the same handoff rules and context as in [cynode_pma.md](cynode_pma.md) (user, project, thread, schedule id, run id).
+  PMA then plans, creates or updates tasks, and may use MCP (e.g. sandbox tools, scheduler MCP tools) to carry out work; when PMA or the workflow engine enqueues **concrete** jobs, the scheduler still uses the same node selection and job-dispatch contracts to dispatch them.
+- When the payload is a **pre-specified job** (e.g. concrete script/command/sandbox spec with no interpretation needed), the scheduler MAY enqueue it for **direct dispatch** using the same node selection and job-dispatch contracts, without handing off to PMA.
+
+Schedule payload types (e.g. `task` / `prompt` vs `job_spec`) that determine "requires interpretation" are defined in the User API Gateway or a dedicated scheduler API spec so that routing is deterministic and implementable.
+See [User API Gateway - Scheduler and cron](user_api_gateway.md#spec-cynai-usrgwy-corecapabilities).
+
+See job dispatch and node selection in [`docs/tech_specs/worker_node.md`](worker_node.md), the roadmap in [`docs/tech_specs/_main.md`](_main.md), and [`docs/tech_specs/user_api_gateway.md`](user_api_gateway.md).
 
 ## Project Manager Agent
 
@@ -99,6 +116,8 @@ See [`docs/tech_specs/external_model_routing.md`](external_model_routing.md) and
 
 ### Project Manager Model (Startup Selection and Warmup)
 
+- Spec ID: `CYNAI.ORCHES.ProjectManagerModelStartup` <a id="spec-cynai-orches-projectmanagermodelstartup"></a>
+
 The orchestrator MUST select an effective "Project Manager model" on startup to run the Project Manager Agent.
 This selection is distinct from where sandbox jobs run.
 
@@ -106,7 +125,7 @@ This selection is distinct from where sandbox jobs run.
 
 - Spec ID: `CYNAI.ORCHES.Operation.SelectProjectManagerModel` <a id="spec-cynai-orches-operation-selectprojectmanagermodel"></a>
 
-Traces To: [REQ-ORCHES-0116](../requirements/orches.md#req-orches-0116), [REQ-MODELS-0004](../requirements/models.md#req-models-0004), [REQ-MODELS-0005](../requirements/models.md#req-models-0005)
+Traces To: [REQ-ORCHES-0117](../requirements/orches.md#req-orches-0117), [REQ-MODELS-0004](../requirements/models.md#req-models-0004), [REQ-MODELS-0005](../requirements/models.md#req-models-0005)
 
 This Spec Item defines the deterministic selection of:
 
@@ -243,7 +262,7 @@ This Spec Item defines the required startup warmup behavior after a local Projec
 
 - Spec ID: `CYNAI.ORCHES.Rule.MonitorProjectManagerModel` <a id="spec-cynai-orches-rule-monitorprojectmanagermodel"></a>
 
-Traces To: [REQ-ORCHES-0128](../requirements/orches.md#req-orches-0128)
+Traces To: [REQ-ORCHES-0129](../requirements/orches.md#req-orches-0129)
 
 This Spec Item defines continuous monitoring of the selected Project Manager model after startup.
 The goal is to ensure that readiness reflects the current availability of the Project Manager model and that the orchestrator reacts deterministically to node loss and relevant system setting changes.
@@ -272,7 +291,7 @@ Required behavior
 Note:
 
 - For the MVP, the Project Manager model is responsible for all inference task assignment decisions.
-  See [REQ-ORCHES-0118](../requirements/orches.md#req-orches-0118) and [`docs/tech_specs/project_manager_agent.md`](project_manager_agent.md).
+  See [REQ-ORCHES-0119](../requirements/orches.md#req-orches-0119) and [`docs/tech_specs/project_manager_agent.md`](project_manager_agent.md).
 
 ## API Egress Server
 
@@ -314,11 +333,14 @@ See [`docs/tech_specs/model_management.md`](model_management.md).
 The orchestrator exposes a single user-facing API endpoint that surfaces its capabilities to external clients.
 This is intended for UIs and integrations such as Open WebUI and messaging services.
 
+OpenAI-compliant chat completions are processed by the orchestrator first: the orchestrator performs automatic sanitization, logging, and persistence, then either hands off to the PM agent (`cynode-pma`) when the model is `cynodeai.pm`, or routes to the selected inference model (node-local or external API via API Egress) when another model is selected.
+See [`docs/tech_specs/openai_compatible_chat_api.md`](openai_compatible_chat_api.md#spec-cynai-usrgwy-openaichatapi-routingpath).
+
 See [`docs/tech_specs/user_api_gateway.md`](user_api_gateway.md) and [`docs/tech_specs/data_rest_api.md`](data_rest_api.md).
 
 ## Sandbox Image Registry
 
-The orchestrator integrates with a sandbox container image registry for worker nodes to pull sandbox images from.
+The orchestrator uses a configurable rank-ordered list of sandbox container image registries; when none is configured, worker nodes pull sandbox images from Docker Hub (`docker.io`) only.
 Allowed sandbox images and their capabilities are tracked in PostgreSQL so tasks can request safe, appropriate execution environments.
 
 See [`docs/tech_specs/sandbox_image_registry.md`](sandbox_image_registry.md).
@@ -342,7 +364,7 @@ Job dispatch (initial implementation)
 - The dispatcher uses the per-node `worker_api_target_url` and per-node bearer token stored from config delivery (see [`docs/tech_specs/postgres_schema.md`](postgres_schema.md) Nodes table).
 - The MCP gateway is not in the loop for job dispatch in Phase 1.
 
-See [`docs/tech_specs/node.md`](node.md) and [`docs/tech_specs/node_payloads.md`](node_payloads.md).
+See [`docs/tech_specs/worker_node.md`](worker_node.md) and [`docs/tech_specs/worker_node_payloads.md`](worker_node_payloads.md).
 
 ## MCP Tool Interface
 

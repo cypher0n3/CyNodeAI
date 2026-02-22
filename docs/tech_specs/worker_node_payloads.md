@@ -22,7 +22,7 @@ This document defines the canonical wire payloads exchanged between worker nodes
 It covers node capability reporting and orchestrator configuration delivery.
 
 This document is the canonical specification for payload shapes, field names, and versioning.
-Behavioral requirements remain defined in [`docs/tech_specs/node.md`](node.md).
+Behavioral requirements remain defined in [`docs/tech_specs/worker_node.md`](worker_node.md).
 
 ## Goals
 
@@ -57,7 +57,7 @@ Traces To:
 This payload is sent from a node to the orchestrator during registration and on every startup.
 It may also be sent when capabilities change.
 
-Source requirements: [`docs/tech_specs/node.md`](node.md#capability-reporting).
+Source requirements: [`docs/tech_specs/worker_node.md`](worker_node.md#spec-cynai-worker-capabilityreporting).
 
 ### Capability Report Schema `node_capability_report_v1`
 
@@ -165,7 +165,7 @@ The payload is the canonical representation of the node's capabilities; the orch
 This payload is returned by the orchestrator during registration.
 It establishes the ongoing communication contract and provides initial configuration hints.
 
-Source requirements: [`docs/tech_specs/node.md`](node.md#registration-and-bootstrap).
+Source requirements: [`docs/tech_specs/worker_node.md`](worker_node.md#spec-cynai-worker-registrationandbootstrap).
 
 ### Bootstrap Payload Schema `node_bootstrap_payload_v1`
 
@@ -188,12 +188,7 @@ Source requirements: [`docs/tech_specs/node.md`](node.md#registration-and-bootst
   - `pinned_spki_sha256` (string, optional)
 - `initial_config_version` (string, optional)
 - `pull_credentials` (object, optional)
-  - `sandbox_registry` (object, optional)
-    - `registry_url` (string)
-    - `username` (string, optional)
-    - `password` (string, optional)
-    - `token` (string, optional)
-    - `expires_at` (string, optional)
+  - `sandbox_registries` (array of objects, optional): rank-ordered; each has `registry_url` (string), optional `username`, `password`, `token`, `expires_at`
   - `model_cache` (object, optional)
     - `cache_url` (string)
     - `token` (string, optional)
@@ -210,7 +205,7 @@ Credential delivery
 This payload is delivered by the orchestrator to registered nodes.
 It is versioned so nodes can apply updates safely and atomically.
 
-Source requirements: [`docs/tech_specs/node.md`](node.md#configuration-delivery) and [`docs/tech_specs/node.md`](node.md#dynamic-configuration-updates).
+Source requirements: [`docs/tech_specs/worker_node.md`](worker_node.md#spec-cynai-worker-configurationdelivery) and [`docs/tech_specs/worker_node.md`](worker_node.md#spec-cynai-worker-dynamicconfigurationupdates).
 
 ### Node Config Schema `node_configuration_payload_v1`
 
@@ -229,11 +224,16 @@ Source requirements: [`docs/tech_specs/node.md`](node.md#configuration-delivery)
   - `endpoints` (object)
     - `worker_api_target_url` (string)
     - `node_report_url` (string)
-- `sandbox_registry` (object)
-  - `registry_url` (string)
-  - `require_digest_pinning` (boolean, optional)
-  - `pull_token` (string, optional)
-  - `pull_token_expires_at` (string, optional)
+- `sandbox_registries` (array of objects, optional)
+  - Rank-ordered list of registries for sandbox image pulls.
+  - When absent or empty, the node MUST use a single default: Docker Hub (`docker.io`).
+  - Each element:
+    - `registry_url` (string): registry host (e.g. `docker.io`, `quay.io`, private host)
+    - `pull_token` (string, optional)
+    - `pull_token_expires_at` (string, optional)
+  - Image resolution and pull follow this order (try first, then next, etc.).
+- `require_digest_pinning` (boolean, optional)
+  - Applies to sandbox image pulls when present at this level.
 - `model_cache` (object)
   - `cache_url` (string)
   - `pull_token` (string, optional)
