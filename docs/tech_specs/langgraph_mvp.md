@@ -5,6 +5,8 @@
 - [Integration With the Orchestrator](#integration-with-the-orchestrator)
   - [Runtime and Hosting](#runtime-and-hosting)
   - [Invocation Model](#invocation-model)
+  - [Workflow Start/Resume API Contract](#workflow-startresume-api-contract)
+  - [Workflow Start Triggers](#workflow-start-triggers)
   - [Checkpoint Persistence Contract](#checkpoint-persistence-contract)
   - [Graph Nodes to Orchestrator Capabilities](#graph-nodes-to-orchestrator-capabilities)
   - [Sub-Agent Invocation](#sub-agent-invocation)
@@ -62,6 +64,58 @@ This section defines how the LangGraph workflow is integrated with the orchestra
   - The **single-active-workflow-per-task** guarantee is enforced by a **lease held in the orchestrator DB** (see [orchestrator.md](orchestrator.md) and [postgres_schema.md](postgres_schema.md)).
   - The workflow runner MUST acquire or check the lease via the orchestrator before running; the orchestrator is the source of truth.
 - The orchestrator MAY run multiple workflow instances concurrently for different tasks.
+- When and how the orchestrator starts a workflow for a task is defined in [Workflow Start Triggers](#workflow-start-triggers) below.
+
+### Workflow Start/Resume API Contract
+
+- Spec ID: `CYNAI.ORCHES.WorkflowStartResumeAPI` <a id="spec-cynai-orches-workflowstartresumeapi"></a>
+
+Traces To:
+
+- [REQ-ORCHES-0144](../requirements/orches.md#req-orches-0144)
+- [REQ-ORCHES-0145](../requirements/orches.md#req-orches-0145)
+
+The orchestrator exposes a stable API to the workflow runner for starting and resuming workflows.
+The implementation uses HTTP; the contract is defined below.
+
+#### Workflow Start/Resume API Operations
+
+- **StartWorkflow:** Request includes `task_id` (uuid) and optional `idempotency_key` (string).
+  Response: 200 with run identifier or status; or 409 Conflict when the lease for the task is already held by another holder; or 200 with body indicating "already running" when the same holder re-requests (idempotent).
+  The start operation must not start a second workflow instance when the lease is already held.
+- **ResumeWorkflow:** Request includes `task_id`.
+  Response: 200 with current checkpoint pointer or status so the workflow runner can continue from the last node.
+
+The workflow runner acquires or validates the task workflow lease via this API (or a dedicated lease step that is part of start) before running graph steps.
+If the lease is already held for the task, the start call returns the defined response (409 or 200 already-running) and does not start a second instance.
+
+**Transport:** The API is exposed over HTTP by the orchestrator; the workflow runner is the client.
+
+### Workflow Start Triggers
+
+- Spec ID: `CYNAI.ORCHES.WorkflowStartTriggers` <a id="spec-cynai-orches-workflowstarttriggers"></a>
+
+Traces To:
+
+- [REQ-ORCHES-0147](../requirements/orches.md#req-orches-0147)
+
+The conditions under which the orchestrator starts a workflow for a task are:
+
+#### Task Created via User API
+
+When a task is created via the User API Gateway (e.g. POST that creates a task), the orchestrator treats the task as ready to be driven once creation succeeds (and any optional eligibility checks pass).
+The orchestrator invokes the workflow start contract (start workflow for that `task_id`) as defined in [Workflow Start/Resume API Contract](#workflow-startresume-api-contract).
+No separate "run task" step is required unless the API design explicitly separates create and run.
+
+#### Task Created via Chat (PMA/MCP)
+
+When PMA creates a task via MCP during a chat turn, PMA invokes an MCP tool or internal request to "start workflow for task_id" (or equivalent); the orchestrator performs the start for that `task_id` in response.
+The orchestrator does not infer workflow start from task-state subscription; the trigger is the explicit request from PMA.
+
+#### Scheduled Run
+
+When a scheduled run requires interpretation, the scheduler hands the run payload to PMA; PMA creates the task and starts the workflow internally.
+See [orchestrator.md](orchestrator.md) Scheduled Run Routing to Project Manager Agent.
 
 ### Checkpoint Persistence Contract
 
