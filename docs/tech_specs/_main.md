@@ -115,8 +115,8 @@ Key principles
 
 - Project Manager Agent: [`docs/tech_specs/project_manager_agent.md`](project_manager_agent.md)
 - Project Analyst Agent: [`docs/tech_specs/project_analyst_agent.md`](project_analyst_agent.md)
-- Cynode PMA (`cynode-pma`): [`docs/tech_specs/cynode_pma.md`](cynode_pma.md)
-- Cynode SBA (`cynode-sba`): [`docs/tech_specs/cynode_sba.md`](cynode_sba.md)
+- CyNode PMA (`cynode-pma`): [`docs/tech_specs/cynode_pma.md`](cynode_pma.md)
+- CyNode SBA (`cynode-sba`): [`docs/tech_specs/cynode_sba.md`](cynode_sba.md)
 - LangGraph MVP workflow: [`docs/tech_specs/langgraph_mvp.md`](langgraph_mvp.md)
 
 ### Bootstrap Configurations

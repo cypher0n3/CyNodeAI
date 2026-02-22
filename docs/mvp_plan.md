@@ -34,7 +34,7 @@
 This document is the **canonical full MVP development plan** for CyNodeAI.
 All task breakdowns, requirement and spec references, and implementation order are maintained here.
 
-This document is the single comprehensive MVP development plan as of 2026-02-20.
+This document is the single comprehensive MVP development plan as of 2026-02-22.
 It reflects the latest tech specs (including [external_model_routing.md](../docs/tech_specs/external_model_routing.md)) and post-Phase 1 implementation status.
 
 The canonical phase list and high-level scope remain in [docs/tech_specs/\_main.md](../docs/tech_specs/_main.md); this plan adds objectives, current status, spec alignment, task breakdown with req/spec refs, and quality/BDD expectations.
@@ -60,6 +60,14 @@ Recent tech spec updates incorporated into this plan:
   - External inference with node sandboxes: orchestrator MAY use external model for inference while dispatching sandbox jobs to nodes for tools; sandboxes MUST NOT receive provider keys; sandbox-only nodes allowed for tool execution.
   - Settings: suggested keys for global routing (e.g. `model_routing.prefer_local`, `model_routing.allowed_external_providers`, overload thresholds, max tokens/cost) and per-agent keys for Project Manager and Project Analyst.
   - Auditing: log routing decisions and API Egress outbound calls with task context and identity.
+
+- **Sandbox image registry** ([sandbox_image_registry.md](../docs/tech_specs/sandbox_image_registry.md), [postgres_schema.md](../docs/tech_specs/postgres_schema.md)):
+  - Schema tables (`sandbox_images`, `sandbox_image_versions`, `node_sandbox_image_availability`) are in scope for MVP so the schema can be created and upgraded.
+  - Full registry behavior (rank-ordered registries, allowed images, node pull workflow, publish workflow) is **deferred until after MVP**; implementation of registry flows is out of scope for Phase 0 through Phase 4.
+
+- **User-installable MCP tools** ([user_installable_mcp_tools.md](../docs/tech_specs/user_installable_mcp_tools.md)):
+  - Not in current MVP scope per [mvp.md](mvp.md).
+  - Deferred; if product adds them later, this plan can be updated.
 
 These behaviors are reflected in Phase 1 (inference path requirement), Phase 2 (workflow model routing), and Phase 4 (API Egress, external model routing fallback, and policy).
 
@@ -336,13 +344,27 @@ There is no Phase 5 in [`docs/tech_specs/_main.md`](../docs/tech_specs/_main.md)
   - **Deliverable**: Pulls use per-request timeouts and tolerate node unavailability.
   - **Deliverable**: Telemetry is treated as non-authoritative and does not drive correctness-critical scheduling decisions by itself.
   - **Reqs**:
-- [`REQ-ORCHES-0141`](../docs/requirements/orches.md#req-orches-0141)
-- [`REQ-ORCHES-0142`](../docs/requirements/orches.md#req-orches-0142)
-- [`REQ-ORCHES-0143`](../docs/requirements/orches.md#req-orches-0143)
-  - [`REQ-WORKER-0003`](../docs/requirements/worker.md#req-worker-0003)
-  - [`REQ-WORKER-0200`](../docs/requirements/worker.md#req-worker-0200)
-  - [`REQ-WORKER-0230`](../docs/requirements/worker.md#req-worker-0230)
-  - [`REQ-WORKER-0231`](../docs/requirements/worker.md#req-worker-0231)
+    - [`REQ-ORCHES-0141`](../docs/requirements/orches.md#req-orches-0141)
+    - [`REQ-ORCHES-0142`](../docs/requirements/orches.md#req-orches-0142)
+    - [`REQ-ORCHES-0143`](../docs/requirements/orches.md#req-orches-0143)
+    - [`REQ-WORKER-0003`](../docs/requirements/worker.md#req-worker-0003)
+    - [`REQ-WORKER-0200`](../docs/requirements/worker.md#req-worker-0200)
+    - [`REQ-WORKER-0201`](../docs/requirements/worker.md#req-worker-0201)
+    - [`REQ-WORKER-0210`](../docs/requirements/worker.md#req-worker-0210)
+    - [`REQ-WORKER-0211`](../docs/requirements/worker.md#req-worker-0211)
+    - [`REQ-WORKER-0212`](../docs/requirements/worker.md#req-worker-0212)
+    - [`REQ-WORKER-0220`](../docs/requirements/worker.md#req-worker-0220)
+    - [`REQ-WORKER-0221`](../docs/requirements/worker.md#req-worker-0221)
+    - [`REQ-WORKER-0222`](../docs/requirements/worker.md#req-worker-0222)
+    - [`REQ-WORKER-0230`](../docs/requirements/worker.md#req-worker-0230)
+    - [`REQ-WORKER-0231`](../docs/requirements/worker.md#req-worker-0231)
+    - [`REQ-WORKER-0232`](../docs/requirements/worker.md#req-worker-0232)
+    - [`REQ-WORKER-0233`](../docs/requirements/worker.md#req-worker-0233)
+    - [`REQ-WORKER-0234`](../docs/requirements/worker.md#req-worker-0234)
+    - [`REQ-WORKER-0240`](../docs/requirements/worker.md#req-worker-0240)
+    - [`REQ-WORKER-0241`](../docs/requirements/worker.md#req-worker-0241)
+    - [`REQ-WORKER-0242`](../docs/requirements/worker.md#req-worker-0242)
+    - [`REQ-WORKER-0243`](../docs/requirements/worker.md#req-worker-0243)
   - **Specs**:
     - [`CYNAI.ORCHES.NodeTelemetryPull`](../docs/tech_specs/worker_telemetry_api.md#spec-cynai-orches-nodetelemetrypull)
     - [`CYNAI.WORKER.Doc.WorkerTelemetryApi`](../docs/tech_specs/worker_telemetry_api.md#spec-cynai-worker-doc-workertelemetryapi)
@@ -429,11 +451,33 @@ Reference: [docs/tech_specs/worker_node.md](../docs/tech_specs/worker_node.md), 
 
 - Orchestrator MCP tool gateway with role-based access.
 - MCP database tools (orchestrator-side agents); MCP artifact tools (worker agents); no direct Postgres from agents.
-- LangGraph MVP as workflow engine: one instance per task_id, Postgres checkpoints, resume by task_id, single-active-workflow-per-task, map workflow nodes to MCP DB, model routing (local or API Egress), Worker API dispatch, result collection.
+- **Workflow engine:** **Separate Python LangGraph process** invoked by the Go orchestrator; one instance per `task_id`; **lease in orchestrator DB** (single-active-workflow-per-task); **prescriptive checkpoint schema** in PostgreSQL ([workflow_checkpoints](../docs/tech_specs/postgres_schema.md#workflow-checkpoints-table), [task_workflow_leases](../docs/tech_specs/postgres_schema.md#task-workflow-leases-table)).
+  Workflow nodes map to MCP DB, model routing (local or API Egress), Worker API dispatch, result collection.
+- **Scheduler:** When a run requires interpretation, **scheduler hands payload directly to PMA**; **PMA creates the task and starts the workflow internally** (no separate enqueue-workflow-start step).
+- **Verify Step Result:** **PMA tasks the Project Analyst (or other sandbox agent)** to verify; findings back to workflow state.
+- **Process boundaries:** **cynode-pma** (chat, MCP) and **workflow runner** (LangGraph) are **separate processes** sharing MCP gateway and DB; orchestrator starts workflow runner for a task; chat and planning go to PMA.
 
 Model routing in Phase 2 follows [external_model_routing.md](../docs/tech_specs/external_model_routing.md): local preferred; external via API Egress when policy allows; orchestrator-side agent settings (e.g. Project Manager / Project Analyst) may override defaults.
 
-Reference: [docs/tech_specs/\_main.md](../docs/tech_specs/_main.md) Phase 2, [langgraph_mvp.md](../docs/tech_specs/langgraph_mvp.md).
+### Phase 2 LangGraph Integration Checklist
+
+Concrete steps for Phase 2 LangGraph integration:
+
+- (a) Checkpoint table/schema implemented per [langgraph_mvp.md](../docs/tech_specs/langgraph_mvp.md) and [postgres_schema.md](../docs/tech_specs/postgres_schema.md).
+- (b) Workflow start/resume API (Go orchestrator to Python LangGraph process).
+- (c) Graph nodes wired to MCP DB tools and Worker API.
+- (d) Lease acquisition in orchestrator DB (workflow runner acquires/checks lease via orchestrator).
+- (e) Verify Step Result implemented as PMA tasking Project Analyst or other sandbox agent.
+
+### Phase 2 LangGraph Tasks (Optional 4-8 Hour Chunks)
+
+- **P2-04 (4-8h):** Checkpoint table and schema per spec; workflow runner can persist and load by task_id.
+- **P2-05 (4-8h):** Workflow start/resume API from Go orchestrator to Python LangGraph process.
+- **P2-06 (4-8h):** Graph nodes wired to MCP DB tools and Worker API (Load Task Context, Plan Steps, Dispatch Step, Collect Result, Finalize Summary, Mark Failed).
+- **P2-07 (4-8h):** Lease acquisition in orchestrator DB; workflow runner acquires/checks lease via orchestrator before running.
+- **P2-08 (4-8h):** Verify Step Result implemented as PMA tasking Project Analyst or other sandbox agent; findings written back to workflow state.
+
+Reference: [docs/tech_specs/\_main.md](../docs/tech_specs/_main.md) Phase 2, [langgraph_mvp.md](../docs/tech_specs/langgraph_mvp.md), [orchestrator.md](../docs/tech_specs/orchestrator.md#workflow-engine).
 
 ## Phase 3 Multi Node Robustness
 
@@ -447,9 +491,12 @@ Reference: [docs/tech_specs/\_main.md](../docs/tech_specs/_main.md) Phase 3, [wo
 ## Phase 4 Optional Controlled Egress and Integrations
 
 - API Egress Server: ACL enforcement, auditing; credentials in PostgreSQL; outbound calls only via API Egress (see [api_egress_server.md](../docs/tech_specs/api_egress_server.md)).
-- External model routing: fallback for standalone orchestrator (no workers) and when local capacity cannot satisfy requirements; routing policy, signals, and settings per [external_model_routing.md](../docs/tech_specs/external_model_routing.md); external inference with node sandboxes (model via API Egress, sandbox for tools); per-agent routing settings for Project Manager and Project Analyst.
+- External model routing: fallback for standalone orchestrator (no workers) and when local capacity cannot satisfy requirements.
+  Routing policy, signals, and settings per [external_model_routing.md](../docs/tech_specs/external_model_routing.md).
+  External inference with node sandboxes (model via API Egress, sandbox for tools); per-agent routing settings for Project Manager and Project Analyst.
 - Secure Browser Service: deterministic sanitization, DB-backed rules.
-- CLI expansion: credentials (API Egress, Git Egress), user preferences, skills, node management (see [cynork_cli.md](../docs/tech_specs/cynork_cli.md), [skills_storage_and_inference.md](../docs/tech_specs/skills_storage_and_inference.md)).
+- CLI expansion per [cynork_cli.md](../docs/tech_specs/cynork_cli.md) MVP Scope: auth token support and `whoami`; interactive shell mode with tab completion for all MVP commands; credential list, create, rotate, disable for API Egress; preference list, get, set for system and user scopes; effective preferences for a task; node list, get, enable, disable, drain; skills (see [skills_storage_and_inference.md](../docs/tech_specs/skills_storage_and_inference.md)).
+  Recommended admin keys: [cli_management_app_commands_admin.md](../docs/tech_specs/cli_management_app_commands_admin.md).
 - Web Console after CLI; parity with CLI for admin capabilities.
 
 Reference: [docs/tech_specs/\_main.md](../docs/tech_specs/_main.md) Phase 4.
@@ -503,5 +550,7 @@ Items below are implemented.
 - [docs/tech_specs/sandbox_container.md](../docs/tech_specs/sandbox_container.md) - Node-local inference access.
 - [docs/tech_specs/cynork_cli.md](../docs/tech_specs/cynork_cli.md) - CLI goals, commands, MVP scope.
 - [docs/tech_specs/ports_and_endpoints.md](../docs/tech_specs/ports_and_endpoints.md) - Default ports and E2E/BDD port usage.
+- [docs/tech_specs/sandbox_image_registry.md](../docs/tech_specs/sandbox_image_registry.md) - Registry behavior deferred; schema tables in scope for MVP (see Tech Spec Alignment).
+- [docs/tech_specs/user_installable_mcp_tools.md](../docs/tech_specs/user_installable_mcp_tools.md) - Out of MVP scope; deferred.
 - [docs/development_setup.md](../docs/development_setup.md) - Local setup, scripts, E2E, troubleshooting.
 - [PHASE1_STATUS.md](../dev_docs/PHASE1_STATUS.md) - Phase 1 implementation summary and running locally.

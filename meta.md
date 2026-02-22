@@ -53,6 +53,9 @@ It coordinates sandboxed worker execution across local nodes and optional cloud 
 
 **CRITICAL:** Do NOT modify linting rules or add linter suppression comments (e.g. `//nolint` in go files)!
 
+- Correct capitalizations:
+  - CyNodeAI
+  - CyNode
 - See [`markdown_conventions.md`](./docs/docs_standards/markdown_conventions.md)
 - Use the project **justfile** for setup, checking, and validation.
   All changes must pass **`just ci`** before considering work complete; see the justfile for available recipes.

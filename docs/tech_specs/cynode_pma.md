@@ -1,10 +1,11 @@
-# Cynode PMA (`cynode-pma`)
+# CyNode PMA (`cynode-pma`)
 
 - [Document Overview](#document-overview)
 - [Purpose and Trust Boundary](#purpose-and-trust-boundary)
 - [Request Source and Orchestrator Handoff](#request-source-and-orchestrator-handoff)
   - [What is Handed off to `cynode-pma`](#what-is-handed-off-to-cynode-pma)
   - [What is Not Handed off to `cynode-pma`](#what-is-not-handed-off-to-cynode-pma)
+  - [Process Boundaries and Workflow Runner](#process-boundaries-and-workflow-runner)
 - [Role Modes](#role-modes)
 - [Instructions Loading and Routing](#instructions-loading-and-routing)
 - [LLM Context Composition](#llm-context-composition)
@@ -16,7 +17,7 @@
 
 ## Document Overview
 
-- Spec ID: `CYNAI.PMAGNT.Doc.CynodePma` <a id="spec-cynai-pmagnt-doc-cynodepma"></a>
+- Spec ID: `CYNAI.PMAGNT.Doc.CyNodePma` <a id="spec-cynai-pmagnt-doc-cynodepma"></a>
 
 This document defines the `cynode-pma` agent binary.
 It is the concrete implementation artifact for:
@@ -74,6 +75,13 @@ In each case the orchestrator provides the necessary context (user, task, projec
   All other handoff categories above still apply for other work.
 
 See [`docs/tech_specs/openai_compatible_chat_api.md`](openai_compatible_chat_api.md) and [`docs/tech_specs/project_manager_agent.md`](project_manager_agent.md).
+
+### Process Boundaries and Workflow Runner
+
+**cynode-pma** (chat, MCP) and the **workflow runner** (LangGraph) are **separate processes**.
+They share the MCP gateway and DB.
+The orchestrator starts the workflow runner for a given task; chat and planning go to PMA; the workflow runner executes the graph and does not serve chat.
+See [orchestrator.md](orchestrator.md) Workflow Engine section.
 
 ## Role Modes
 

@@ -8,7 +8,7 @@
 - [Gap: Explicit Routing Path for Scheduled Runs](#gap-explicit-routing-path-for-scheduled-runs)
 - [Recommendations](#recommendations)
   - [Orchestrator Spec (`orchestrator.md`, Task Scheduler)](#orchestrator-spec-orchestratormd-task-scheduler)
-  - [Cynode PMA Spec (`cynode_pma.md`)](#cynode-pma-spec-cynode_pmamd)
+  - [CyNode PMA Spec (`cynode_pma.md`)](#cynode-pma-spec-cynode_pmamd)
   - [Requirements (`orches.md`)](#requirements-orchesmd)
   - [User API Gateway / Scheduler Surface (Future)](#user-api-gateway--scheduler-surface-future)
 - [Applied (2026-02-22)](#applied-2026-02-22)
@@ -88,7 +88,7 @@ Add a short subsection that states:
 - When the payload is a **pre-specified job** (e.g. concrete script/command/sandbox spec with no interpretation needed), the scheduler MAY enqueue it for direct dispatch using the same node selection and job-dispatch contracts.
 - Optionally: reference that schedule payload types (e.g. "task/prompt" vs "job spec") may be defined in the User API Gateway or a dedicated scheduler spec.
 
-### Cynode PMA Spec (`cynode_pma.md`)
+### CyNode PMA Spec (`cynode_pma.md`)
 
 Under "What is Handed off to cynode-pma", keep "scheduled job interpretation" but add a cross-reference to the Task Scheduler subsection in `orchestrator.md` that defines when a fired schedule is handed to PMA (so the routing rule lives in one place and is referenced from both sides).
 

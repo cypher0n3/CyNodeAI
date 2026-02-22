@@ -116,7 +116,7 @@ Logical groups
 4. **Access control:** `access_control_rules`, `access_control_audit_log`
 5. **API egress credentials:** `api_credentials`
 6. **Preferences:** `preference_entries`, `preference_audit_log`
-7. **Tasks, jobs, nodes:** `tasks`, `jobs`, `nodes`, `node_capabilities`
+7. **Tasks, jobs, nodes, workflow:** `tasks`, `jobs`, `nodes`, `node_capabilities`, `workflow_checkpoints`, `task_workflow_leases`
 8. **Sandbox image registry:** `sandbox_images`, `sandbox_image_versions`, `node_sandbox_image_availability`
 9. **Runs and sessions:** `runs`, `sessions`
 10. **Chat:** `chat_threads`, `chat_messages`
@@ -589,6 +589,56 @@ Constraints
 
 Recommendation: one row per node, updated in place when capability report is received; alternatively, append-only with retention policy.
 
+## Workflow Checkpoints
+
+The LangGraph workflow engine persists checkpoint state to PostgreSQL so that workflows can resume after restarts.
+The orchestrator MUST NOT run workflow steps without going through this checkpoint layer.
+
+Source: [langgraph_mvp.md](langgraph_mvp.md) Checkpoint schema (prescriptive).
+
+### Workflow Checkpoints Table
+
+Table name: `workflow_checkpoints`.
+
+- `id` (uuid, pk)
+- `task_id` (uuid, fk to `tasks.id`, unique)
+  - one row per task for the current checkpoint; upsert by task_id on each persist
+- `state` (jsonb)
+  - full state model: task_id, acceptance_criteria, preferences_effective, plan, current_step_index, attempts_by_step, last_result, verification (see [langgraph_mvp.md](langgraph_mvp.md) State Model)
+- `last_node_id` (text)
+  - identity of the last completed graph node
+- `updated_at` (timestamptz)
+
+Constraints
+
+- Unique: (`task_id`)
+- Index: (`task_id`)
+- Index: (`updated_at`)
+
+### Task Workflow Leases Table
+
+Table name: `task_workflow_leases`.
+
+The orchestrator grants and releases this lease; the workflow runner acquires or checks it via the orchestrator API.
+Only one active workflow per task is allowed; the lease enforces that.
+
+- `id` (uuid, pk)
+- `task_id` (uuid, fk to `tasks.id`, unique)
+  - one lease row per task
+- `lease_id` (uuid)
+  - idempotency/identity for the lease
+- `holder_id` (text, nullable)
+  - workflow runner instance identifier holding the lease
+- `expires_at` (timestamptz, nullable)
+- `created_at` (timestamptz)
+- `updated_at` (timestamptz)
+
+Constraints
+
+- Unique: (`task_id`)
+- Index: (`task_id`)
+- Index: (`expires_at`) where not null
+
 ## Sandbox Image Registry
 
 - Spec ID: `CYNAI.SCHEMA.SandboxImageRegistry` <a id="spec-cynai-schema-sandboximageregistry"></a>
@@ -1035,7 +1085,7 @@ Creation order (respecting foreign keys)
 6. `preference_entries`
 7. `nodes`, `sandbox_images`
 8. `tasks`, `sessions`
-9. `sandbox_image_versions`, `jobs`, `node_capabilities`
+9. `sandbox_image_versions`, `jobs`, `node_capabilities`, `workflow_checkpoints`, `task_workflow_leases`
 10. `runs`, `task_artifacts`, `node_sandbox_image_availability`, `vector_items`
 11. `auth_audit_log`, `mcp_tool_call_audit_log`, `access_control_audit_log`, `preference_audit_log`
 12. Model registry (if used): `models`, `model_versions`, `model_artifacts`, `node_model_availability`
