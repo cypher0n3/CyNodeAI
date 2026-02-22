@@ -14,6 +14,7 @@
   - [Agent Inputs](#agent-inputs)
   - [Agent Outputs](#agent-outputs)
 - [Task Naming](#task-naming)
+  - [Project Context From Chat Prompt](#project-context-from-chat-prompt)
   - [Task Naming Applicable Requirements](#task-naming-applicable-requirements)
 - [Preference Usage](#preference-usage)
   - [Preference Usage Applicable Requirements](#preference-usage-applicable-requirements)
@@ -38,6 +39,11 @@ See [`docs/tech_specs/openai_compatible_chat_api.md`](openai_compatible_chat_api
 - Task intake and triage
   - Create and update tasks, subtasks, and acceptance criteria in PostgreSQL.
   - Break work into executable steps suitable for worker nodes and sandbox containers.
+- Project context from chat
+  - When the user includes a project name or project id in a chat message, the PM agent SHOULD attempt to resolve it (e.g. by slug or id via MCP or gateway) and associate any tasks or related work created from that turn with that project, provided the user has access to the project.
+  - Resolution and access MUST be performed via MCP/gateway; the PM MUST NOT assume access without verification.
+  - If the user does not mention a project, the request context (e.g. thread project or default project) applies.
+    See [Project context from chat prompt](#project-context-from-chat-prompt).
 - Sub-agent management
   - Spin up sub-agents to monitor specific tasks and provide focused verification and feedback loops.
   - Ensure sub-agent findings are recorded in PostgreSQL and applied to task remediation.
@@ -200,6 +206,19 @@ User-supplied name on create
 - The orchestrator MUST accept the suggested name when present, MUST normalize it to the task name format above (lowercase, single dashes), and MUST ensure uniqueness within scope (e.g. by appending `-2`, `-3`, etc.) when the normalized name already exists.
 
 APIs and the CLI MUST accept either the task UUID or the task name as the task identifier when a task is referenced.
+
+### Project Context From Chat Prompt
+
+- Spec ID: `CYNAI.AGENTS.PMProjectFromPrompt` <a id="spec-cynai-agents-pmprojectfromprompt"></a>
+
+Traces To:
+
+- [REQ-AGENTS-0131](../requirements/agents.md#req-agents-0131)
+
+When the user provides a project name or project id in a chat message (e.g. "create a task for project X" or "add this to the backend project"), the Project Manager Agent SHOULD attempt to resolve the project (by slug or id) and associate any tasks or related work created from that conversation turn with that project.
+The PM MUST verify that the user has access to the project (e.g. via MCP or gateway-provided context) before associating work with it; if the user does not have access, the PM MUST NOT associate with that project and SHOULD use the thread project or the user's default project instead.
+Resolution and access checks MUST be performed through MCP tools or gateway contracts; the PM MUST NOT assume access without verification.
+If the user does not mention a project in the prompt, the existing request context (thread `project_id` or default project) applies.
 
 ### Task Naming Applicable Requirements
 

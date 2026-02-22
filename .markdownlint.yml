@@ -23,6 +23,10 @@ MD033:
   allowed_elements:
     - "a"
 
+# No asterisks lists
+MD004:
+  style: dash
+
 # Disabled because AI has a hard time with table column alignment and we have easy tools to fix (VSCode Prettier).
 MD060: false
   # style: any
@@ -127,8 +131,8 @@ ascii-only:
 # ---
 document-length:
   maximum: 1500
-#   # excludePathPatterns:
-#   #   - "**/long/**"
+  excludePathPatterns:
+    - "docs/requirements/**"
 
 # -----------------------------------------------------------------------------
 # fenced-code-under-heading (custom)

@@ -130,3 +130,7 @@ It covers agent behaviors, responsibilities, and workflow integration.
   Task names MUST be all lowercase with dashes for word separation and MAY use trailing numbers for uniqueness (e.g. `deploy-docs`, `deploy-docs-2`).
   [CYNAI.AGENTS.ProjectManagerTaskNaming](../tech_specs/project_manager_agent.md#spec-cynai-agents-pmtasknaming)
   <a id="req-agents-0129"></a>
+- **REQ-AGENTS-0131:** When the user provides a project name or project id in a chat prompt, the Project Manager Agent SHOULD attempt to resolve the project and associate any tasks (or related work) created from that turn with that project if the user has access to it.
+  Resolution and access MUST be performed via MCP or gateway; the PM MUST NOT assume access without verification.
+  [CYNAI.AGENTS.PMProjectFromPrompt](../tech_specs/project_manager_agent.md#spec-cynai-agents-pmprojectfromprompt)
+  <a id="req-agents-0131"></a>

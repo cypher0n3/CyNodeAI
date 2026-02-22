@@ -32,6 +32,8 @@ Goals:
 - Persist chat history for UX and audit.
 - Allow clients to retrieve a conversation thread and its messages.
 - Separate chat message storage from task lifecycle storage.
+- Ensure persisted chat content does not store plaintext secrets.
+- Raw user input MUST be amended by secret redaction before storage.
 
 Non-goals:
 
@@ -43,6 +45,12 @@ Non-goals:
 - Spec ID: `CYNAI.USRGWY.ChatThreadsMessages.Threads` <a id="spec-cynai-usrgwy-chatthreadsmessages-threads"></a>
 
 A chat thread is a stable container for a conversation.
+
+Thread association rules:
+
+- For OpenAI-compatible chat completions, the orchestrator manages thread association server-side.
+- When no explicit thread identifier is provided by the client, the system SHOULD use a single active thread per `(user_id, project_id)` scope and rotate to a new thread after inactivity.
+- Inactivity threshold: 2 hours.
 
 Recommended fields:
 
@@ -67,6 +75,12 @@ Constraints:
 A chat message is one turn item in a thread.
 Messages are append-only.
 
+Secret handling:
+
+- Message `content` MUST be the amended (redacted) content.
+- The system MUST NOT persist plaintext secrets in chat message content.
+- If redaction occurs, it MUST be indicated directly in `content` by replacing detected secrets with the literal string `SECRET_REDACTED`.
+
 Recommended fields:
 
 - `id` (uuid, pk)
@@ -77,6 +91,10 @@ Recommended fields:
 - `created_at` (timestamptz)
 - `metadata` (jsonb, optional)
   For example model identifier, tool-call summary, or client identifiers.
+
+Recommended metadata keys:
+
+- `model_id` (string, optional)
 
 Constraints:
 
@@ -128,6 +146,30 @@ Required operations:
 - Get chat thread.
 - Append message to thread.
 - List messages for thread.
+
+Standardized endpoints (Phase 1):
+
+- `POST /v1/chat/threads`
+  - Create a chat thread.
+  - Request body MUST allow:
+    - `project_id` (uuid, optional)
+    - `title` (string, optional)
+  - The server MUST derive `user_id` from authentication.
+  - The server MUST NOT allow the client to set `session_id`.
+- `GET /v1/chat/threads`
+  - List chat threads for the authenticated user.
+  - SHOULD support filtering by `project_id`.
+  - Pagination MUST use `limit` and `offset` query parameters.
+- `GET /v1/chat/threads/{thread_id}`
+  - Get one chat thread owned by the authenticated user.
+- `POST /v1/chat/threads/{thread_id}/messages`
+  - Append one message to a thread.
+  - The gateway MUST reject attempts to append plaintext secrets (redaction must occur before persistence).
+  - Clients MUST only append messages with `role: user`.
+  - The gateway writes assistant messages as part of `POST /v1/chat/completions`.
+- `GET /v1/chat/threads/{thread_id}/messages`
+  - List messages for a thread in ascending `created_at` order.
+  - Pagination MUST use `limit` and `offset` query parameters.
 
 Clients that do not need this (for example Open WebUI) MAY use only the OpenAI-compatible endpoints and ignore thread management.
 

@@ -43,6 +43,7 @@ The filename is the domain tag lowercased.
 - `USRGWY`: [usrgwy.md](./usrgwy.md)
 - `DATAPI`: [datapi.md](./datapi.md)
 - `ORCHES`: [orches.md](./orches.md)
+- `PROJCT`: [projct.md](./projct.md)
 - `WORKER`: [worker.md](./worker.md)
 - `SANDBX`: [sandbx.md](./sandbx.md)
 - `APIEGR`: [apiegr.md](./apiegr.md)

@@ -5,6 +5,7 @@
 - [Preferences Management](#preferences-management)
 - [System Settings Management](#system-settings-management)
 - [Node Management](#node-management)
+- [Project Management](#project-management)
 - [Skills Management](#skills-management)
 - [Audit Commands](#audit-commands)
 
@@ -456,6 +457,204 @@ Output
 
 - Table mode MUST print exactly one line containing `node_id=<id> prefetch_requested=true`.
 - JSON mode MUST print `{"node_id":"<id>","prefetch_requested":true}`.
+
+## Project Management
+
+- Spec ID: `CYNAI.CLIENT.CliProjectManagement` <a id="spec-cynai-client-cliprojectmanagement"></a>
+
+Traces To:
+
+- [REQ-CLIENT-0174](../requirements/client.md#req-client-0174)
+
+The CLI MUST support basic project CRUD (create, list, get, update, delete or disable) via the User API Gateway.
+Projects have a user-friendly title (`display_name`) and an optional text description; see [Projects and Scope Model](projects_and_scopes.md) and [REQ-PROJCT-0103](../requirements/projct.md#req-projct-0103).
+All project commands MUST require auth.
+
+### `cynork project create`
+
+Invocation
+
+- `cynork project create`.
+
+Required flags
+
+- `--slug <slug>`.
+  Unique URL-safe identifier; must match schema constraints.
+- `--title <title>`.
+  User-friendly display name (stored as `display_name`).
+
+Optional flags
+
+- `--description <text>`.
+  Optional text description for the project.
+
+Output
+
+- Table mode MUST print exactly one line containing `project_id=<id>`.
+- JSON mode MUST print `{"project_id":"<id>"}`.
+
+### `cynork project set <project_id>`
+
+Invocation
+
+- `cynork project set <project_id>`.
+  `<project_id>` MAY be the project UUID or the project slug.
+  The CLI MUST support clearing the active project (e.g. `cynork project set --none`, or `cynork project unset`, or passing a reserved value per implementation).
+
+Behavior
+
+- Sets the **active project** for the CLI.
+  The active project is the default project context for the current process and for child sessions (e.g. when starting `cynork chat`, the chat session inherits this as its initial project context).
+  When running outside chat, the CLI SHOULD persist the active project (e.g. in config or session state) so that subsequent invocations use it as the default for commands that accept an optional `--project-id` (e.g. `cynork task create`).
+  When the user clears the active project, subsequent commands use the user's default project (no explicit project id; gateway resolves default project when needed).
+
+Output
+
+- Table mode MUST print exactly one line containing `active_project=<id>` or `active_project=none` when cleared.
+- JSON mode MUST print `{"active_project":"<id>"}` or `{"active_project":null}`.
+
+### `cynork project list`
+
+Invocation
+
+- `cynork project list`.
+
+Optional flags
+
+- `-l, --limit <n>`.
+  Default is `50`.
+  Allowed range is `1` to `200`.
+- `--cursor <opaque>`.
+  Default is empty.
+- `--active-only`.
+  When set, list only projects with `is_active` true.
+
+Output
+
+- Table mode MUST print a header line with these tab-separated columns in this exact order.
+  `project_id`, `slug`, `title`, `is_active`, `updated_at`.
+  `title` is the display name.
+- Table mode MUST then print one row per project.
+- JSON mode MUST print `{"projects":[...],"next_cursor":"<opaque>"}`.
+  Each project object MUST include at least `project_id`, `slug`, `display_name` (title), `description`, and `is_active`.
+
+### `cynork project get <project_id>`
+
+Invocation
+
+- `cynork project get <project_id>`.
+  `<project_id>` MAY be the project UUID or the project slug.
+
+Output
+
+- Table mode MUST print one line per field (e.g. `project_id=`, `slug=`, `title=`, `description=`, `is_active=`, `created_at=`, `updated_at=`).
+- JSON mode MUST print a single JSON object with at least `project_id`, `slug`, `display_name`, `description`, `is_active`, `created_at`, `updated_at`.
+
+### `cynork project update <project_id>`
+
+Invocation
+
+- `cynork project update <project_id>`.
+
+Optional flags (at least one MUST be provided for a meaningful update)
+
+- `--title <title>`.
+  User-friendly display name.
+- `--description <text>`.
+  Optional text description; pass empty string to clear.
+- `--active <bool>`.
+  Set `is_active` (true/false).
+
+Output
+
+- Table mode MUST print exactly one line containing `project_id=<id> updated=true`.
+- JSON mode MUST print `{"project_id":"<id>","updated":true}`.
+
+### `cynork project delete <project_id>`
+
+Invocation
+
+- `cynork project delete <project_id>`.
+
+Optional flags
+
+- `-y, --yes`.
+
+Behavior
+
+- If `--yes` is not provided, the CLI MUST prompt for confirmation.
+- The confirmation prompt MUST be `Delete project <project_id>? This may break references. [y/N]`.
+- Delete MUST be policy-gated; the gateway MAY implement soft delete (set `is_active` false) or hard delete per policy.
+
+Output
+
+- Table mode MUST print exactly one line containing `project_id=<id> deleted=true`.
+- JSON mode MUST print `{"project_id":"<id>","deleted":true}`.
+
+### Project RBAC (Role Bindings)
+
+The CLI MUST allow setting and listing RBAC role bindings scoped to a project.
+Role bindings assign a role to a user or group within project scope; see [RBAC Model](rbac_and_groups.md#rbac-model) and [Projects and Scope Model](projects_and_scopes.md#rbac-scope).
+
+#### `cynork project rbac list <project_id>`
+
+Invocation
+
+- `cynork project rbac list <project_id>`.
+
+Output
+
+- Table mode MUST print a header line with columns such as `binding_id`, `subject_type`, `subject_id`, `role`, `is_active`, `updated_at`, then one row per binding.
+- JSON mode MUST print `{"bindings":[...]}`.
+  Each binding MUST include at least `subject_type`, `subject_id`, `role` (name or id), and `is_active`.
+
+#### `cynork project rbac grant <project_id>`
+
+Invocation
+
+- `cynork project rbac grant <project_id>`.
+
+Required flags (subject: exactly one)
+
+- `--user <user_id>`.
+  Grant the role to this user.
+- `--group <group_id>`.
+  Grant the role to this group.
+
+Required flags
+
+- `--role <role_name>`.
+  Role name (e.g. `admin`, `member`, `viewer`).
+
+Output
+
+- Table mode MUST print exactly one line containing `binding_id=<id> scope=project scope_id=<project_id>`.
+- JSON mode MUST print `{"binding_id":"<id>","scope_type":"project","scope_id":"<project_id>"}`.
+
+#### `cynork project rbac revoke <project_id>`
+
+Invocation
+
+- `cynork project rbac revoke <project_id>`.
+
+Required flags (subject: exactly one)
+
+- `--user <user_id>`.
+- `--group <group_id>`.
+
+Required flags
+
+- `--role <role_name>`.
+
+Behavior
+
+- Revokes (deactivates or removes) the role binding for the given subject and role in project scope.
+  Confirmation MAY be required when not passing `--yes`.
+
+Output
+
+- Table mode MUST print exactly one line containing `revoked=true`.
+- JSON mode MUST print `{"revoked":true}`.
 
 ## Skills Management
 

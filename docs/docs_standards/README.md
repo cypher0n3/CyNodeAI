@@ -20,6 +20,7 @@ When a standard is added, it will be listed below with a short description and l
 
 - [Markdown conventions](markdown_conventions.md) - Repository-wide Markdown formatting rules (including heading numbering and uniqueness).
 - [Requirements domains](requirements_domains.md) - Canonical list of requirement/spec domains (e.g. for Spec IDs and REQ IDs); single source of truth for domain tags and requirements file mapping.
+- [Spec authoring, writing and validation](spec_authoring_writing_and_validation.md) - How to write and validate specs and feature files (traceability, BDD, conventions).
 
 ## Relation to Other Docs
 

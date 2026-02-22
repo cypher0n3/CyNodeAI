@@ -314,7 +314,7 @@ lint-containerfiles:
     echo "Containerfile lint: OK"
 
 # Lint Markdown (markdownlint-cli2; uses .markdownlint-cli2.jsonc)
-lint-md target = '**/*.md':
+lint-md target = "'**/*.md'":
     #!/usr/bin/env bash
     set -e
     pushd "{{ root_dir }}" >/dev/null

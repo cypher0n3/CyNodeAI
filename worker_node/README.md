@@ -20,6 +20,7 @@ This directory is a standalone Go module defined by [`go.mod`](go.mod).
 - [`cmd/`](cmd/): Entrypoints for worker node services.
   - [`cmd/node-manager/`](cmd/node-manager/): The node manager service entrypoint and container definition.
   - [`cmd/worker-api/`](cmd/worker-api/): The worker API service entrypoint, container definition, and executor package.
+  - [`cmd/inference-proxy/`](cmd/inference-proxy/): The inference proxy service for sandbox-side inference routing.
 - [`docker-compose.yml`](docker-compose.yml): Development compose stack for local worker services.
 - [`systemd/`](systemd/): Service definitions and notes for running on a host.
 

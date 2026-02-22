@@ -130,10 +130,14 @@ It covers orchestrator control-plane behavior, task lifecycle, dispatch, and sta
   [user_api_gateway.md](../tech_specs/user_api_gateway.md)
   [cli_management_app.md](../tech_specs/cli_management_app.md#spec-cynai-client-clitaskcreateprompt)
   <a id="req-orches-0127"></a>
-- **REQ-ORCHES-0132:** Task creation MUST accept an optional `project_id` association.
-  When `project_id` is omitted, the task MUST have no project association.
-  The system MUST NOT implicitly assign a default project.
+- **REQ-ORCHES-0132:** Task creation MUST associate the task with the authenticated user (set `created_by` to that user) when the request is authenticated.
+  When created by the system (including unauthenticated bootstrap), `created_by` MUST be set to the reserved system user identity (see [REQ-IDENTY-0121](../requirements/identy.md#req-identy-0121)), and the task MUST be associated with the **system user's default project** (the system user has a default project in the same way as any user; when there is no authenticated user, that default project is used).
+  Task creation MUST accept an optional `project_id`; when `project_id` is omitted, the task MUST be associated with the creating user's default project (authenticated user's default project, or system user's default project when created by the system) (see [REQ-PROJCT-0104](../requirements/projct.md#req-projct-0104)).
+  Tasks MUST be associable with both a user (creator) and a project (default or explicitly set) per schema.
+  [REQ-PROJCT-0001](../requirements/projct.md#req-projct-0001)
+  [REQ-PROJCT-0104](../requirements/projct.md#req-projct-0104)
   [projects_and_scopes.md](../tech_specs/projects_and_scopes.md)
+  [postgres_schema.md](../tech_specs/postgres_schema.md)
   <a id="req-orches-0132"></a>
 - **REQ-ORCHES-0128:** The orchestrator MUST continuously validate that the selected Project Manager model remains online after startup.
   If the selected Project Manager model becomes unavailable due to node loss, eviction, failure, or relevant system setting changes, the orchestrator MUST transition out of ready state and MUST re-run Project Manager model selection and warmup until a Project Manager model is online again.

@@ -25,6 +25,8 @@ The filename is the domain tag lowercased.
   - Requirements file: [`docs/requirements/datapi.md`](../requirements/datapi.md)
 - `ORCHES`: Orchestrator control-plane behavior, task lifecycle, dispatch, and state management.
   - Requirements file: [`docs/requirements/orches.md`](../requirements/orches.md)
+- `PROJCT`: Project entity, storage, schema, user-facing title and description, and project-scoped scope model.
+  - Requirements file: [`docs/requirements/projct.md`](../requirements/projct.md)
 - `WORKER`: Worker-node behavior and the worker API contract for job execution and reporting.
   - Requirements file: [`docs/requirements/worker.md`](../requirements/worker.md)
 - `SANDBX`: Sandbox execution model, container constraints, and isolation.

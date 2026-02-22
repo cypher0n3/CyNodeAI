@@ -16,7 +16,7 @@ It MUST offer the same administrative capabilities as the Admin Web Console; see
 
 This directory is a standalone Go module defined by [`go.mod`](go.mod).
 
-- [`cmd/`](cmd/): Cobra command definitions (root, auth, task, status, version).
+- [`cmd/`](cmd/): Cobra command definitions (root, auth, task, status, chat, shell, version, settings, prefs, nodes, creds, audit, skills).
 - [`internal/config/`](internal/config/): Config loading, env overrides, validation.
 - [`internal/gateway/`](internal/gateway/): Typed gateway client and auth for the User API Gateway.
 

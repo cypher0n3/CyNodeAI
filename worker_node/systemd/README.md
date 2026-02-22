@@ -1,8 +1,8 @@
-# Worker node systemd units (Podman)
+# Worker Node Systemd Units (Podman)
 
 Generated unit files for running worker-api and node-manager under systemd.
 
-## Generate units
+## Generate Units
 
 From repo root:
 
@@ -14,7 +14,7 @@ podman compose -f worker_node/docker-compose.yml down  # optional
 
 ## Install
 
-**Rootless:**
+### Rootless:
 
 ```bash
 mkdir -p ~/.config/systemd/user

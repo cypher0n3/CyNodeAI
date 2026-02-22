@@ -73,6 +73,7 @@ Example:
 This repository currently validates behavior primarily through Go tests and end-to-end developer tooling.
 
 - Run `just test-go` to run Go tests across all modules.
+- Run `just test-bdd` to run BDD/Godog scenarios for orchestrator, worker node, and cynork.
 - Run `just e2e` to run the repository happy path that exercises orchestrator and worker node behavior.
 
 Feature scenarios may also be reflected in orchestrator integration tests under [`orchestrator/internal/handlers/`](../orchestrator/internal/handlers/).
