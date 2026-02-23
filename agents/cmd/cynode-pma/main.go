@@ -16,18 +16,26 @@ import (
 )
 
 func main() {
-	if code := run(); code != 0 {
-		os.Exit(code)
-	}
+	os.Exit(runWithSignal(os.Args[1:]))
 }
 
-func run() int {
-	role := flag.String("role", "", "Agent role: project_manager or project_analyst (or set PMA_ROLE)")
-	instructionsRoot := flag.String("instructions-root", pma.DefaultInstructionsRoot, "Root directory for role instruction bundles (or PMA_INSTRUCTIONS_ROOT)")
-	instructionsPM := flag.String("instructions-project-manager", "", "Override path for project_manager bundle (or PMA_INSTRUCTIONS_PROJECT_MANAGER)")
-	instructionsPA := flag.String("instructions-project-analyst", "", "Override path for project_analyst bundle (or PMA_INSTRUCTIONS_PROJECT_ANALYST)")
-	listenAddr := flag.String("listen", ":8090", "HTTP listen address (or PMA_LISTEN_ADDR)")
-	flag.Parse()
+// runWithSignal sets up signal handling and runs the server. Used by main and tests for coverage.
+func runWithSignal(args []string) int {
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+	return run(ctx, args)
+}
+
+func run(ctx context.Context, args []string) int {
+	fs := flag.NewFlagSet("cynode-pma", flag.ContinueOnError)
+	role := fs.String("role", "", "Agent role: project_manager or project_analyst (or set PMA_ROLE)")
+	instructionsRoot := fs.String("instructions-root", pma.DefaultInstructionsRoot, "Root directory for role instruction bundles (or PMA_INSTRUCTIONS_ROOT)")
+	instructionsPM := fs.String("instructions-project-manager", "", "Override path for project_manager bundle (or PMA_INSTRUCTIONS_PROJECT_MANAGER)")
+	instructionsPA := fs.String("instructions-project-analyst", "", "Override path for project_analyst bundle (or PMA_INSTRUCTIONS_PROJECT_ANALYST)")
+	listenAddr := fs.String("listen", ":8090", "HTTP listen address (or PMA_LISTEN_ADDR)")
+	if err := fs.Parse(args); err != nil {
+		return 1
+	}
 
 	cfg := &pma.Config{
 		Role:                      pma.Role(resolveRole(*role)),
@@ -69,9 +77,6 @@ func run() int {
 		IdleTimeout:       120 * time.Second,
 	}
 
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	defer stop()
-
 	go func() {
 		logger.Info("cynode-pma listening", "role", cfg.Role, "addr", server.Addr)
 		if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
@@ -81,15 +86,17 @@ func run() int {
 
 	<-ctx.Done()
 	logger.Info("shutting down...")
-	shutdownCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	shutdownCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 15*time.Second)
 	defer cancel()
-	if err := server.Shutdown(shutdownCtx); err != nil {
+	if err := shutdownServer(shutdownCtx, server); err != nil {
 		logger.Error("shutdown error", "error", err)
 		return 1
 	}
 	logger.Info("stopped")
 	return 0
 }
+
+var shutdownServer = func(ctx context.Context, srv *http.Server) error { return srv.Shutdown(ctx) }
 
 func resolveRole(flagRole string) string {
 	if flagRole != "" {

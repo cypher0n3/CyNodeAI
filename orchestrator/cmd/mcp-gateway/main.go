@@ -129,7 +129,7 @@ type toolCallRequest struct {
 	ToolName string `json:"tool_name"`
 }
 
-// toolCallHandler writes an audit record for every tool call (P2-02) and returns 501 until tool routing is implemented.
+// toolCallHandler writes an audit record for every tool call (P2-02; mcp_tool_call_auditing) and returns 501 until tool routing is implemented.
 func toolCallHandler(store database.Store, logger *slog.Logger) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {

@@ -90,6 +90,7 @@ func runTestcontainersSetup(ctx context.Context) (*postgres.PostgresContainer, b
 	case <-time.After(3 * time.Second):
 	}
 	_ = os.Setenv(integrationEnv, connStr)
+	_ = os.Setenv("DATABASE_URL", connStr) // so mcp-gateway can use same container when it runs after database
 	if err := waitForPostgres(setupCtx, connStr, 60*time.Second); err != nil {
 		writeTestcontainersErr(setupCtx, "postgres not ready: "+err.Error())
 		return container, false
@@ -271,8 +272,19 @@ func TestWithTestcontainers_Integration(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListDispatchableNodes: %v", err)
 	}
-	if len(dispatchable) != 1 || dispatchable[0].ID != node.ID {
-		t.Errorf("ListDispatchableNodes: expected one node, got %d", len(dispatchable))
+	if len(dispatchable) < 1 {
+		t.Errorf("ListDispatchableNodes: expected at least one node, got %d", len(dispatchable))
+	} else {
+		found := false
+		for _, n := range dispatchable {
+			if n.ID == node.ID {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Error("ListDispatchableNodes: expected our node in the list")
+		}
 	}
 	tcCompleteJobAndVerifyResult(t, db, ctx, job, `{"status":"ok"}`)
 }

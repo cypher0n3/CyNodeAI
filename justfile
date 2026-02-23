@@ -13,7 +13,7 @@ go_version := "1.25.7"
 root_dir := justfile_directory()
 
 # Workspace modules (explicit, stable).
-go_modules := "go_shared_libs orchestrator worker_node cynork"
+go_modules := "go_shared_libs orchestrator worker_node cynork agents"
 
 default:
     @just --list
@@ -56,7 +56,6 @@ clean:
     for m in {{ go_modules }}; do
       (cd "$root/$m" && go clean -testcache 2>/dev/null) || true
     done
-    (cd "$root/agents" && go clean -testcache 2>/dev/null) || true
     echo "Done."
 
 # Install Podman if not already installed (Linux: distro package; macOS: Homebrew)
@@ -486,9 +485,10 @@ test-go-e2e:
 
 # Minimum Go coverage (percent) required per package when running test-go-cover / ci
 go_coverage_min := "90"
-# Exceptions: control-plane and database allow ≥89%; testutil (test helpers) has no minimum; mcp-gateway (testcontainers) allows ≥85%.
-go_coverage_min_control_plane := "89"
-go_coverage_min_mcp_gateway := "85"
+# Exceptions: control-plane and database allow ≥89%; testutil (test helpers) has no minimum; mcp-gateway (testcontainers) allows ≥85%
+go_coverage_min_control_plane := "90"
+go_coverage_min_mcp_gateway := "90"
+go_coverage_min_agents := "90"
 
 # Run Go tests with coverage for all go_modules; fail if any package is below go_coverage_min.
 # Orchestrator uses testcontainers for Postgres when POSTGRES_TEST_DSN is unset (run just podman-setup first).
@@ -512,7 +512,8 @@ test-go-cover: install-go podman-setup
       r=0
       min_cp="{{ go_coverage_min_control_plane }}"
       min_mcp="{{ go_coverage_min_mcp_gateway }}"
-      below=$(awk -v min="$min" -v min_cp="$min_cp" -v min_mcp="$min_mcp" '
+      min_agents="{{ go_coverage_min_agents }}"
+      below=$(awk -v min="$min" -v min_cp="$min_cp" -v min_mcp="$min_mcp" -v min_agents="$min_agents" -v module="$m" '
         /^mode:/ { next }
         { path = $1; sub(/:.*/, "", path)
           n = split(path, a, "/")
@@ -525,7 +526,8 @@ test-go-cover: install-go podman-setup
         END {
           for (p in t) {
             pct = (t[p] > 0) ? (100 * c[p] / t[p]) : 0
-            if (p ~ /\/cmd\/control-plane$/) req = min_cp + 0
+            if (module == "agents") req = min_agents + 0
+            else if (p ~ /\/cmd\/control-plane$/) req = min_cp + 0
             else if (p ~ /\/internal\/database$/) req = min_cp + 0
             else if (p ~ /\/internal\/testutil$/) req = 0
             else if (p ~ /\/cmd\/mcp-gateway$/) req = min_mcp + 0

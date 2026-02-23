@@ -73,15 +73,18 @@ func runMain(ctx context.Context) int {
 
 func newMux(exec *executor.Executor, bearerToken, workspaceRoot string, logger *slog.Logger) *http.ServeMux {
 	mux := http.NewServeMux()
+	// REQ-WORKER-0140, REQ-WORKER-0141: unauthenticated GET /healthz
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte("ok"))
 	})
+	// REQ-WORKER-0140, REQ-WORKER-0142: unauthenticated GET /readyz
 	mux.HandleFunc("GET /readyz", readyzHandler(exec))
 	mux.HandleFunc("POST /v1/worker/jobs:run", handleRunJob(exec, bearerToken, workspaceRoot, logger))
 	return mux
 }
 
+// readyzHandler implements REQ-WORKER-0142: 200 "ready" when ready to accept jobs, 503 otherwise.
 func readyzHandler(exec *executor.Executor) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ready, reason := exec.Ready(r.Context())
@@ -97,6 +100,7 @@ func readyzHandler(exec *executor.Executor) http.HandlerFunc {
 	}
 }
 
+// decodeRunJobRequest decodes POST body; enforces maxBytes and returns 413 on overflow (REQ-WORKER-0145).
 func decodeRunJobRequest(w http.ResponseWriter, r *http.Request, maxBytes int64) (*workerapi.RunJobRequest, bool) {
 	r.Body = http.MaxBytesReader(w, r.Body, maxBytes)
 	var req workerapi.RunJobRequest
@@ -117,7 +121,7 @@ func handleRunJob(exec *executor.Executor, bearerToken, workspaceRoot string, lo
 			writeProblem(w, http.StatusUnauthorized, problem.TypeAuthentication, "Unauthorized", "Invalid or missing bearer token")
 			return
 		}
-		req, ok := decodeRunJobRequest(w, r, 10*1024*1024) // 10 MiB per worker_api.md
+		req, ok := decodeRunJobRequest(w, r, 10*1024*1024) // 10 MiB per worker_api.md (REQ-WORKER-0145)
 		if !ok {
 			return
 		}

@@ -31,6 +31,17 @@ func TestIntegration_User(t *testing.T) {
 	}
 }
 
+func TestIntegration_CreateTaskWithNilCreatedBy(t *testing.T) {
+	db, ctx := integrationDB(t)
+	task, err := db.CreateTask(ctx, nil, "prompt-nil-createdby")
+	if err != nil {
+		t.Fatalf("CreateTask(nil createdBy): %v", err)
+	}
+	if task.Summary == nil || *task.Summary == "" {
+		t.Error("CreateTask with nil createdBy should set task_name_001 style summary")
+	}
+}
+
 func TestIntegration_TaskAndJob(t *testing.T) {
 	db, ctx := integrationDB(t)
 	user, err := db.GetUserByHandle(ctx, "inttest-user")
@@ -72,6 +83,40 @@ func TestIntegration_Node(t *testing.T) {
 	if len(list) < 1 {
 		t.Error("ListActiveNodes: expected at least one")
 	}
+}
+
+func TestIntegration_ListDispatchableNodesAndListTasksByUser(t *testing.T) {
+	db, ctx := integrationDB(t)
+	user, err := db.GetUserByHandle(ctx, "inttest-user")
+	if err != nil {
+		t.Skip("create inttest-user first (run TestIntegration_User)")
+	}
+	node, err := db.CreateNode(ctx, "inttest-dispatchable-"+uuid.New().String())
+	if err != nil {
+		t.Fatalf("CreateNode: %v", err)
+	}
+	if err := db.UpdateNodeStatus(ctx, node.ID, models.NodeStatusActive); err != nil {
+		t.Fatalf("UpdateNodeStatus: %v", err)
+	}
+	if err := db.UpdateNodeWorkerAPIConfig(ctx, node.ID, "http://localhost:8081", "token"); err != nil {
+		t.Fatalf("UpdateNodeWorkerAPIConfig: %v", err)
+	}
+	ackAt := time.Now().UTC()
+	if err := db.UpdateNodeConfigAck(ctx, node.ID, "1", "applied", ackAt, nil); err != nil {
+		t.Fatalf("UpdateNodeConfigAck: %v", err)
+	}
+	list, err := db.ListDispatchableNodes(ctx)
+	if err != nil {
+		t.Fatalf("ListDispatchableNodes: %v", err)
+	}
+	if len(list) < 1 {
+		t.Error("ListDispatchableNodes: expected at least one after setup")
+	}
+	tasks, err := db.ListTasksByUser(ctx, user.ID, 10, 0)
+	if err != nil {
+		t.Fatalf("ListTasksByUser: %v", err)
+	}
+	_ = tasks
 }
 
 func TestIntegration_NodeConfigVersionAndAck(t *testing.T) {

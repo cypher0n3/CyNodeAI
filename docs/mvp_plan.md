@@ -101,12 +101,16 @@ These behaviors are reflected in Phase 1 (inference path requirement), Phase 2 (
   `just ci` passes (lint, coverage >=90%, BDD orchestrator/worker_node/cynork).
   See [PHASE1_STATUS.md](../dev_docs/PHASE1_STATUS.md).
 - **Phase 1.7:** Complete.
-  `agents/` Go module with `cynode-pma` binary (role flag, instructions paths, Containerfile); control-plane starts cynode-pma when `PMA_ENABLED=true` and stops it on shutdown; cynode-pma runs as a container in the orchestrator stack (compose + e2e).
+  `agents/` Go module with `cynode-pma` binary (role flag, instructions paths, Containerfile); control-plane starts cynode-pma by default (`PMA_ENABLED=true`) and stops it on shutdown; `GET /readyz` returns 503 until PMA is reachable when enabled; cynode-pma runs as a container in the orchestrator stack (compose + e2e).
   **Chat routing (OpenAI-compatible):** Implemented and verified per spec.
   User-gateway exposes `GET /v1/models` and `POST /v1/chat/completions`; effective model `cynodeai.pm` routes to PM agent (cynode-pma), any other to direct inference; legacy `POST /v1/chat` removed.
-  Compose: user-gateway has `PMA_BASE_URL`; cynode-pma has `OLLAMA_BASE_URL` so PMA can call Ollama for completions. E2E script includes Test 5d (list-models + chat completions); `just e2e` / full-demo passes.
+  Compose: user-gateway has `PMA_BASE_URL`; cynode-pma has `OLLAMA_BASE_URL` so PMA can call Ollama for completions.
+    E2E script includes Test 5d (list-models + chat completions); `just e2e` / full-demo passes.
   See [2026-02-22_phase_1_7_execution_report.md](../dev_docs/2026-02-22_phase_1_7_execution_report.md).
-- **E2E script and image cache:** Script-driven E2E (`just e2e` / `./scripts/setup-dev.sh full-demo`) uses conditional container image rebuild: build-context hash cached under `tmp/e2e-image-cache`; images rebuild only on delta. Create-task step retries on 000/5xx. Env: `E2E_FORCE_REBUILD`, `E2E_IMAGE_CACHE_DIR`. See [development_setup.md](development_setup.md).
+- **E2E script and image cache:** Script-driven E2E (`just e2e` / `./scripts/setup-dev.sh full-demo`) uses conditional container image rebuild: build-context hash cached under `tmp/e2e-image-cache`; images rebuild only on delta.
+  Create-task step retries on 000/5xx.
+  Env: `E2E_FORCE_REBUILD`, `E2E_IMAGE_CACHE_DIR`.
+  See [development_setup.md](development_setup.md).
 - **Phase 2:** Foundation in progress.
   P2-02: MCP tool call audit table (`mcp_tool_call_audit_log`), store method, mcp-gateway `POST /v1/mcp/tools/call` writes audit and returns 501; gateway uses testcontainers for real-DB coverage (>=90%).
     P2-01 (scoping/schema), P2-03 (preference tools), and full allow path not started.
@@ -515,7 +519,8 @@ Reference: [docs/tech_specs/\_main.md](../docs/tech_specs/_main.md) Phase 4.
   Suite tag `@suite_cynork`; see [features/README.md](../features/README.md).
 - **`features/e2e/single_node_happy_path.feature`:** Inference scenario exists (`@inference_in_sandbox`).
   Not run by `just test-bdd` (no e2e Godog runner); script-driven `just e2e` is primary.
-- **`features/e2e/chat_openai_compatible.feature`:** Describes GET /v1/models and POST /v1/chat/completions (list-models, completion at `choices[0].message.content`). Same endpoints are exercised by the E2E script (Test 5d); no separate Godog runner for e2e features.
+- **`features/e2e/chat_openai_compatible.feature`:** Describes GET /v1/models and POST /v1/chat/completions (list-models, completion at `choices[0].message.content`).
+  Same endpoints are exercised by the E2E script (Test 5d); no separate Godog runner for e2e features.
 - **`features/worker_node/worker_node_sandbox_execution.feature`:** Inference scenario, use_inference step, GET /readyz (200 "ready"), and 413 on oversized body scenarios in place.
 - **`features/orchestrator/orchestrator_task_lifecycle.feature`:** Scenarios for task with natural-language prompt (default) completing with model output, and for input_mode commands running literal shell; step "the job sent to the worker has command containing ...".
 - **`features/orchestrator/orchestrator_startup.feature`:** Orchestrator readyz returns 503 when no inference path (no dispatchable nodes).

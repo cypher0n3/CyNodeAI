@@ -155,6 +155,9 @@ func ensureAuditIDAndTime(id *uuid.UUID, createdAt *time.Time) {
 // getSQLDB is overridden in tests to inject failures for coverage.
 var getSQLDB = func(gormDB *gorm.DB) (*sql.DB, error) { return gormDB.DB() }
 
+// pingDB is overridden in tests to inject ping failures for coverage.
+var pingDB = func(ctx context.Context, sqlDB *sql.DB) error { return sqlDB.PingContext(ctx) }
+
 // Open opens a database connection using GORM with the pgx driver.
 func Open(ctx context.Context, dataSourceName string) (*DB, error) {
 	gormDB, err := gorm.Open(postgres.Open(dataSourceName), &gorm.Config{})
@@ -173,7 +176,7 @@ func Open(ctx context.Context, dataSourceName string) (*DB, error) {
 	pingCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 
-	if err := sqlDB.PingContext(pingCtx); err != nil {
+	if err := pingDB(pingCtx, sqlDB); err != nil {
 		return nil, fmt.Errorf("ping database: %w", err)
 	}
 

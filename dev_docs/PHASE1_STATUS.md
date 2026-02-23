@@ -231,10 +231,15 @@ Summary:
 
 ### E2E and OpenAI Chat (2026-02-22)
 
-- **Full-demo passes:** `just e2e` / `./scripts/setup-dev.sh full-demo` runs all E2E steps including Test 5d (GET /v1/models, POST /v1/chat/completions with model `cynodeai.pm`). List-models and chat completion succeed against the live stack.
-- **Compose:** user-gateway has `PMA_BASE_URL: http://cynode-pma:8090`; cynode-pma has `OLLAMA_BASE_URL: http://ollama:11434` and `INFERENCE_MODEL` so the PMA can call Ollama. user-gateway depends on cynode-pma (healthy); cynode-pma depends on ollama (started).
-- **E2E script:** Conditional container image rebuild (build-context hash in `tmp/e2e-image-cache`); images rebuild only when context changes. Create-task step retries up to 3 times on HTTP 000/5xx. Env: `E2E_FORCE_REBUILD`, `E2E_IMAGE_CACHE_DIR` (see script `show_usage`).
-- **Chat routing:** Effective model `cynodeai.pm` (or omitted) routes to PM agent; other models route to direct inference. Implementation and spec alignment documented in `orchestrator/internal/handlers/openai_chat.go` and verified per `docs/tech_specs/openai_compatible_chat_api.md`.
+- **Full-demo passes:** `just e2e` / `./scripts/setup-dev.sh full-demo` runs all E2E steps including Test 5d (GET /v1/models, POST /v1/chat/completions with model `cynodeai.pm`).
+  List-models and chat completion succeed against the live stack.
+- **Compose:** user-gateway has `PMA_BASE_URL: http://cynode-pma:8090`; cynode-pma has `OLLAMA_BASE_URL: http://ollama:11434` and `INFERENCE_MODEL` so the PMA can call Ollama.
+  user-gateway depends on cynode-pma (healthy); cynode-pma depends on ollama (started).
+- **E2E script:** Conditional container image rebuild (build-context hash in `tmp/e2e-image-cache`); images rebuild only when context changes.
+  Create-task step retries up to 3 times on HTTP 000/5xx.
+  Env: `E2E_FORCE_REBUILD`, `E2E_IMAGE_CACHE_DIR` (see script `show_usage`).
+- **Chat routing:** Effective model `cynodeai.pm` (or omitted) routes to PM agent; other models route to direct inference.
+  Implementation and spec alignment documented in `orchestrator/internal/handlers/openai_chat.go` and verified per `docs/tech_specs/openai_compatible_chat_api.md`.
 
 ---
 

@@ -72,9 +72,12 @@ Completed items for P1.7-03 and P1.7-04 follow.
 - `just lint-md` and `just validate-doc-links` pass.
 - `just ci` and `just docs-check` pass.
 
-## Post–Phase 1.7 / Current State
+## Post-Phase 1.7 / Current State
 
-- **E2E full-demo:** `just e2e` / `./scripts/setup-dev.sh full-demo` passes end-to-end, including Test 5d (GET /v1/models, POST /v1/chat/completions with model `cynodeai.pm`). List-models and chat completion are exercised against the live stack.
-- **Compose routing:** user-gateway is configured with `PMA_BASE_URL: http://cynode-pma:8090`; cynode-pma is configured with `OLLAMA_BASE_URL: http://ollama:11434` and `INFERENCE_MODEL` so the PMA can reach Ollama for chat completions. user-gateway depends on cynode-pma (service_healthy); cynode-pma depends on ollama (service_started).
+- **E2E full-demo:** `just e2e` / `./scripts/setup-dev.sh full-demo` passes end-to-end, including Test 5d (GET /v1/models, POST /v1/chat/completions with model `cynodeai.pm`).
+  List-models and chat completion are exercised against the live stack.
+- **Compose routing:** user-gateway is configured with `PMA_BASE_URL: http://cynode-pma:8090`; cynode-pma is configured with `OLLAMA_BASE_URL: http://ollama:11434` and `INFERENCE_MODEL` so the PMA can reach Ollama for chat completions.
+  user-gateway depends on cynode-pma (service_healthy); cynode-pma depends on ollama (service_started).
 - **Orchestrator BDD:** Chat scenario uses OpenAI-compatible endpoints (GET /v1/models, POST /v1/chat/completions); step "I send a chat message" calls `/v1/chat/completions` with OpenAI-format body; assertion checks `choices[0].message.content`.
-- **Chat routing:** Implementation in `orchestrator/internal/handlers/openai_chat.go` is aligned with `docs/tech_specs/openai_compatible_chat_api.md` (effective model default `cynodeai.pm`; exactly `cynodeai.pm` → PM agent; other → direct inference). Comments in code reference the spec section.
+- **Chat routing:** Implementation in `orchestrator/internal/handlers/openai_chat.go` is aligned with `docs/tech_specs/openai_compatible_chat_api.md` (effective model default `cynodeai.pm`; exactly `cynodeai.pm` -> PM agent; other -> direct inference).
+  Comments in code reference the spec section.

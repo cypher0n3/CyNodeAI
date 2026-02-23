@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"log/slog"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -25,6 +26,10 @@ import (
 )
 
 const testJobPayload = `{"command":["echo","hi"]}`
+
+const testWorkerAPIURL = "http://localhost:8081"
+const testWorkerAPIToken = "tok"
+const expectedReadyBody = "ready"
 
 func TestLoadDispatcherConfig(t *testing.T) {
 	_ = os.Unsetenv("DISPATCHER_ENABLED")
@@ -93,7 +98,8 @@ func TestGetEnv(t *testing.T) {
 
 func TestReadyzHandler_NoNodes(t *testing.T) {
 	mock := testutil.NewMockDB()
-	handler := readyzHandler(mock, slog.Default())
+	cfg := &config.OrchestratorConfig{PMAEnabled: false}
+	handler := readyzHandler(mock, cfg, slog.Default())
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest(http.MethodGet, "/readyz", http.NoBody)
 	handler(w, r)
@@ -109,18 +115,19 @@ func TestReadyzHandler_WithNode(t *testing.T) {
 	mock := testutil.NewMockDB()
 	ctx := context.Background()
 	node, _ := mock.CreateNode(ctx, "n1")
-	url, token := "http://localhost:8081", "tok"
+	url, token := testWorkerAPIURL, testWorkerAPIToken
 	_ = mock.UpdateNodeWorkerAPIConfig(ctx, node.ID, url, token)
 	_ = mock.UpdateNodeConfigAck(ctx, node.ID, "01HXYZ", "applied", time.Now().UTC(), nil)
 	_ = mock.UpdateNodeStatus(ctx, node.ID, "active")
-	handler := readyzHandler(mock, slog.Default())
+	cfg := &config.OrchestratorConfig{PMAEnabled: false}
+	handler := readyzHandler(mock, cfg, slog.Default())
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest(http.MethodGet, "/readyz", http.NoBody)
 	handler(w, r)
 	if w.Code != http.StatusOK {
 		t.Errorf("readyz (with node): got %d", w.Code)
 	}
-	if strings.TrimSpace(w.Body.String()) != "ready" {
+	if strings.TrimSpace(w.Body.String()) != expectedReadyBody {
 		t.Errorf("readyz body want 'ready', got %s", w.Body.String())
 	}
 }
@@ -128,12 +135,97 @@ func TestReadyzHandler_WithNode(t *testing.T) {
 func TestReadyzHandler_DBError(t *testing.T) {
 	mock := testutil.NewMockDB()
 	mock.ForceError = errors.New("db error")
-	handler := readyzHandler(mock, slog.Default())
+	cfg := &config.OrchestratorConfig{PMAEnabled: false}
+	handler := readyzHandler(mock, cfg, slog.Default())
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest(http.MethodGet, "/readyz", http.NoBody)
 	handler(w, r)
 	if w.Code != http.StatusServiceUnavailable {
 		t.Errorf("readyz (db error): got %d", w.Code)
+	}
+}
+
+func TestReadyzHandler_PMANotReady(t *testing.T) {
+	mock := testutil.NewMockDB()
+	ctx := context.Background()
+	node, _ := mock.CreateNode(ctx, "n1")
+	url, token := testWorkerAPIURL, testWorkerAPIToken
+	_ = mock.UpdateNodeWorkerAPIConfig(ctx, node.ID, url, token)
+	_ = mock.UpdateNodeConfigAck(ctx, node.ID, "01HXYZ", "applied", time.Now().UTC(), nil)
+	_ = mock.UpdateNodeStatus(ctx, node.ID, "active")
+	cfg := &config.OrchestratorConfig{PMAEnabled: true, PMAListenAddr: ":19999"}
+	handler := readyzHandler(mock, cfg, slog.Default())
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodGet, "/readyz", http.NoBody)
+	handler(w, r)
+	if w.Code != http.StatusServiceUnavailable {
+		t.Errorf("readyz (PMA not ready): got %d", w.Code)
+	}
+	if !bytes.Contains(w.Body.Bytes(), []byte("PMA not ready")) {
+		t.Errorf("readyz body should contain 'PMA not ready', got %s", w.Body.String())
+	}
+}
+
+func TestPmaReady_InvalidListenAddr(t *testing.T) {
+	ctx := context.Background()
+	if pmaReady(ctx, "") {
+		t.Error("pmaReady with empty addr should return false")
+	}
+	if pmaReady(ctx, "no-port") {
+		t.Error("pmaReady with invalid addr should return false")
+	}
+}
+
+func TestReadyzHandler_WithNode_NilConfig(t *testing.T) {
+	mock := testutil.NewMockDB()
+	ctx := context.Background()
+	node, _ := mock.CreateNode(ctx, "n1")
+	_ = mock.UpdateNodeWorkerAPIConfig(ctx, node.ID, testWorkerAPIURL, testWorkerAPIToken)
+	_ = mock.UpdateNodeConfigAck(ctx, node.ID, "01HXYZ", "applied", time.Now().UTC(), nil)
+	_ = mock.UpdateNodeStatus(ctx, node.ID, "active")
+	handler := readyzHandler(mock, nil, slog.Default())
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodGet, "/readyz", http.NoBody)
+	handler(w, r)
+	if w.Code != http.StatusOK {
+		t.Errorf("readyz (nil cfg, with node): got %d", w.Code)
+	}
+	if strings.TrimSpace(w.Body.String()) != expectedReadyBody {
+		t.Errorf("readyz body want 'ready', got %s", w.Body.String())
+	}
+}
+
+func TestReadyzHandler_PMAReady(t *testing.T) {
+	pmaServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/healthz" {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("ok"))
+	}))
+	defer pmaServer.Close()
+	_, port, err := net.SplitHostPort(strings.TrimPrefix(pmaServer.URL, "http://"))
+	if err != nil {
+		t.Fatalf("parse PMA server URL: %v", err)
+	}
+	mock := testutil.NewMockDB()
+	ctx := context.Background()
+	node, _ := mock.CreateNode(ctx, "n1")
+	workerURL, token := testWorkerAPIURL, testWorkerAPIToken
+	_ = mock.UpdateNodeWorkerAPIConfig(ctx, node.ID, workerURL, token)
+	_ = mock.UpdateNodeConfigAck(ctx, node.ID, "01HXYZ", "applied", time.Now().UTC(), nil)
+	_ = mock.UpdateNodeStatus(ctx, node.ID, "active")
+	cfg := &config.OrchestratorConfig{PMAEnabled: true, PMAListenAddr: ":" + port}
+	handler := readyzHandler(mock, cfg, slog.Default())
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodGet, "/readyz", http.NoBody)
+	handler(w, r)
+	if w.Code != http.StatusOK {
+		t.Errorf("readyz (PMA ready): got %d %s", w.Code, w.Body.String())
+	}
+	if strings.TrimSpace(w.Body.String()) != expectedReadyBody {
+		t.Errorf("readyz body want 'ready', got %s", w.Body.String())
 	}
 }
 
@@ -428,7 +520,7 @@ func TestDispatchOnce_InvalidPayload(t *testing.T) {
 	task, _ := mock.CreateTask(ctx, nil, "p")
 	_, _ = mock.CreateJob(ctx, task.ID, "not-valid-json")
 	node, _ := mock.CreateNode(ctx, "n1")
-	makeDispatchableNode(t, mock, ctx, node, "http://localhost:8081", "token")
+	makeDispatchableNode(t, mock, ctx, node, testWorkerAPIURL, "token")
 
 	cfg := dispatcherConfig{}
 	client := &http.Client{}
@@ -492,6 +584,7 @@ func TestRun_CancelledContext(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	cfg := config.LoadOrchestratorConfig()
+	cfg.PMAEnabled = false
 	mockDB := testutil.NewMockDB()
 	logger := slog.Default()
 	err := run(ctx, mockDB, cfg, logger)
@@ -514,6 +607,7 @@ func TestRun_ShutdownSucceeds(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cfg := config.LoadOrchestratorConfig()
+	cfg.PMAEnabled = false
 	mockDB := testutil.NewMockDB()
 	logger := slog.Default()
 
@@ -627,6 +721,7 @@ func TestRun_DispatcherRunsOneTick(t *testing.T) {
 
 	runCtx, cancel := context.WithCancel(context.Background())
 	cfg := config.LoadOrchestratorConfig()
+	cfg.PMAEnabled = false
 	logger := slog.Default()
 
 	done := make(chan error, 1)
@@ -696,8 +791,17 @@ func TestRunMain_MigrateOnly(t *testing.T) {
 // TestRunMainWithContext_Success covers the success path (store provided, run returns nil).
 func TestRunMainWithContext_Success(t *testing.T) {
 	oldArgs := os.Args
-	defer func() { os.Args = oldArgs }()
+	oldPMA := os.Getenv("PMA_ENABLED")
+	defer func() {
+		os.Args = oldArgs
+		if oldPMA != "" {
+			_ = os.Setenv("PMA_ENABLED", oldPMA)
+		} else {
+			_ = os.Unsetenv("PMA_ENABLED")
+		}
+	}()
 	os.Args = []string{"control-plane"}
+	_ = os.Setenv("PMA_ENABLED", "false")
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
@@ -711,8 +815,17 @@ func TestRunMainWithContext_Success(t *testing.T) {
 // TestRunMainWithContext_StoreFromTestOpener covers the store==nil path when testOpenStore is set (no real DB).
 func TestRunMainWithContext_StoreFromTestOpener(t *testing.T) {
 	oldArgs := os.Args
-	defer func() { os.Args = oldArgs }()
+	oldPMA := os.Getenv("PMA_ENABLED")
+	defer func() {
+		os.Args = oldArgs
+		if oldPMA != "" {
+			_ = os.Setenv("PMA_ENABLED", oldPMA)
+		} else {
+			_ = os.Unsetenv("PMA_ENABLED")
+		}
+	}()
 	os.Args = []string{"control-plane"}
+	_ = os.Setenv("PMA_ENABLED", "false")
 
 	testOpenStore = func(_ context.Context, _ string) (database.Store, error) {
 		return testutil.NewMockDB(), nil
@@ -774,9 +887,18 @@ func TestRunMainWithContext_TestOpenerReturnsError(t *testing.T) {
 // TestRunMainWithContext_DatabaseOpenerSuccess covers resolveStore using testDatabaseOpen (success, no migrateOnly).
 func TestRunMainWithContext_DatabaseOpenerSuccess(t *testing.T) {
 	oldArgs := os.Args
-	defer func() { os.Args = oldArgs }()
+	oldPMA := os.Getenv("PMA_ENABLED")
+	defer func() {
+		os.Args = oldArgs
+		if oldPMA != "" {
+			_ = os.Setenv("PMA_ENABLED", oldPMA)
+		} else {
+			_ = os.Unsetenv("PMA_ENABLED")
+		}
+	}()
 	os.Args = []string{"control-plane"}
 	_ = os.Setenv("LISTEN_ADDR", ":0")
+	_ = os.Setenv("PMA_ENABLED", "false")
 	defer func() { _ = os.Unsetenv("LISTEN_ADDR") }()
 
 	testDatabaseOpen = func(_ context.Context, _ string) (database.Store, error) {
@@ -833,9 +955,18 @@ func TestRunMainWithContext_DatabaseOpenerReturnsError(t *testing.T) {
 // TestRunMainWithContext_RunReturnsError covers runMainWithContext returning 1 when run() returns an error.
 func TestRunMainWithContext_RunReturnsError(t *testing.T) {
 	oldArgs := os.Args
-	defer func() { os.Args = oldArgs }()
+	oldPMA := os.Getenv("PMA_ENABLED")
+	defer func() {
+		os.Args = oldArgs
+		if oldPMA != "" {
+			_ = os.Setenv("PMA_ENABLED", oldPMA)
+		} else {
+			_ = os.Unsetenv("PMA_ENABLED")
+		}
+	}()
 	os.Args = []string{"control-plane"}
 	_ = os.Setenv("LISTEN_ADDR", ":0")
+	_ = os.Setenv("PMA_ENABLED", "false")
 	defer func() { _ = os.Unsetenv("LISTEN_ADDR") }()
 
 	testOpenStore = func(_ context.Context, _ string) (database.Store, error) {
@@ -960,7 +1091,7 @@ func TestDispatchOnce_AssignJobToNodeFails(t *testing.T) {
 	task, _ := mock.CreateTask(ctx, nil, "p")
 	_, _ = mock.CreateJob(ctx, task.ID, testJobPayload)
 	node, _ := mock.CreateNode(ctx, "n1")
-	makeDispatchableNode(t, mock.MockDB, ctx, node, "http://localhost:8081", "t")
+	makeDispatchableNode(t, mock.MockDB, ctx, node, testWorkerAPIURL, "t")
 
 	cfg := dispatcherConfig{}
 	client := &http.Client{}

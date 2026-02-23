@@ -104,6 +104,8 @@ Recommended behavior
   If no local inference is available and no external provider keys are configured, the orchestrator MUST refuse to enter a ready state because inference is unavailable.
 - The orchestrator MUST select an effective Project Manager model on startup.
   If a local inference worker is available, it MUST ensure the default Project Manager model is loaded and ready before entering ready state.
+- When the Project Manager Agent (cynode-pma) is enabled, the orchestrator MUST NOT report ready until the PMA is reachable (e.g. responds to `GET /healthz` on its listen address).
+  PMA is enabled by default (control-plane env `PMA_ENABLED=true`); set `PMA_ENABLED=false` to run without starting cynode-pma.
 - If there are no registered worker nodes, the orchestrator MAY route model calls to external providers when policy allows it.
 - External model calls MUST use the API Egress Server so API keys are not exposed to agents.
 - Sandbox execution SHOULD be disabled or restricted when no worker nodes are available.

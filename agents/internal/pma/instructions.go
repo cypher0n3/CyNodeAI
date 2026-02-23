@@ -27,27 +27,30 @@ func LoadInstructions(dir string) (string, error) {
 	}
 	var parts []string
 	for _, e := range entries {
-		name := e.Name()
-		ext := strings.ToLower(filepath.Ext(name))
-		if ext != ".md" && ext != ".txt" {
-			continue
-		}
-		fpath := filepath.Join(dir, name)
-		if e.IsDir() {
-			sub, err := LoadInstructions(fpath)
-			if err != nil {
-				return "", err
-			}
-			if sub != "" {
-				parts = append(parts, sub)
-			}
-			continue
-		}
-		b, err := os.ReadFile(fpath)
+		s, err := loadEntry(dir, e)
 		if err != nil {
 			return "", err
 		}
-		parts = append(parts, string(b))
+		if s != "" {
+			parts = append(parts, s)
+		}
 	}
 	return strings.TrimSpace(strings.Join(parts, "\n\n")), nil
+}
+
+func loadEntry(dir string, e os.DirEntry) (string, error) {
+	name := e.Name()
+	ext := strings.ToLower(filepath.Ext(name))
+	if ext != ".md" && ext != ".txt" {
+		return "", nil
+	}
+	fpath := filepath.Join(dir, name)
+	if e.IsDir() {
+		return LoadInstructions(fpath)
+	}
+	b, err := os.ReadFile(fpath)
+	if err != nil {
+		return "", err
+	}
+	return string(b), nil
 }

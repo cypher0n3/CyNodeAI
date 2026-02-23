@@ -57,6 +57,8 @@ Endpoints
 - `GET /readyz`
   - Returns 200 only when the orchestrator is in a ready state.
   - Returns 503 when prerequisites for readiness are not yet satisfied (for example no eligible inference path, Project Manager model not online, or required credentials/policy not present).
+  - When the Project Manager Agent (cynode-pma) is enabled, the orchestrator MUST NOT return 200 until the PMA process is reachable (e.g. responds to its health check).
+  - PMA is enabled by default (control-plane config `PMA_ENABLED`, default true); set to false to run without cynode-pma.
   - The response MUST include a reason that is actionable for an operator.
   - While `GET /readyz` returns 503, the orchestrator continues to serve the management surfaces required to become ready (for example system settings and credential configuration).
 

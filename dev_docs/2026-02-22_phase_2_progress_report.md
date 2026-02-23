@@ -15,7 +15,10 @@ Continued from Phase 1.7 and started Phase 2 (MCP in the loop) per `docs/mvp_pla
 Implemented the foundation for P2-02 (audit record for every routed MCP tool call): schema, store method, and mcp-gateway wiring so the gateway writes an audit record for each tool-call request.
 P2-01 (scoping/schema enforcement) and P2-03 (db.preference tools) are not started.
 
-**E2E and chat (unchanged for Phase 2):** Full-demo E2E passes, including OpenAI-compatible chat (Test 5d). Compose stack has user-gateway `PMA_BASE_URL` and cynode-pma `OLLAMA_BASE_URL`. Chat routing to PMA is verified per `openai_compatible_chat_api.md`. No Phase 2 changes to the chat path.
+**E2E and chat (unchanged for Phase 2):** Full-demo E2E passes, including OpenAI-compatible chat (Test 5d).
+Compose stack has user-gateway `PMA_BASE_URL` and cynode-pma `OLLAMA_BASE_URL`.
+Chat routing to PMA is verified per `openai_compatible_chat_api.md`.
+No Phase 2 changes to the chat path.
 
 ## Completed
 

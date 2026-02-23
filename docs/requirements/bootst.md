@@ -15,6 +15,7 @@ It covers bootstrap configuration requirements for orchestrator and node startup
   <a id="req-bootst-0001"></a>
 - **REQ-BOOTST-0002:** MVP Phase 1 startup must ensure at least one inference-capable path is available before reporting ready.
   If no local inference is available and no external provider key is configured, the system MUST refuse to enter a ready state until an inference-capable path becomes available.
+  When the Project Manager Agent (cynode-pma) is enabled (default), the system MUST also refuse to enter a ready state until the PMA is reachable.
   [orchestrator_bootstrap.md](../tech_specs/orchestrator_bootstrap.md)
   [external_model_routing.md](../tech_specs/external_model_routing.md)
   <a id="req-bootst-0002"></a>

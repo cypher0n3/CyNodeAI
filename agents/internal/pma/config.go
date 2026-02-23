@@ -53,9 +53,8 @@ func (c *Config) InstructionsPath() string {
 			return absPath(c.InstructionsProjectAnalyst)
 		}
 		return absPath(filepath.Join(root, "project_analyst"))
-	case RoleProjectManager:
-		fallthrough
 	default:
+		// RoleProjectManager or any other value
 		if c.InstructionsProjectManager != "" {
 			return absPath(c.InstructionsProjectManager)
 		}

@@ -159,6 +159,10 @@ func TestToolCallHandler_InvalidJSON(t *testing.T) {
 	callToolHandlerPOST(t, `{`, http.StatusBadRequest)
 }
 
+func TestToolCallHandler_EmptyToolName(t *testing.T) {
+	callToolHandlerPOST(t, `{"tool_name":""}`, http.StatusNotImplemented)
+}
+
 func TestToolCallHandler_MethodNotPost(t *testing.T) {
 	handler := toolCallHandler(testutil.NewMockDB(), slog.Default())
 	req := httptest.NewRequest(http.MethodGet, "/v1/mcp/tools/call", http.NoBody)

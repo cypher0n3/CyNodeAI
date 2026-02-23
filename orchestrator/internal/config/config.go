@@ -49,8 +49,8 @@ type OrchestratorConfig struct {
 	InferenceURL   string // e.g. http://localhost:11434 or http://ollama:11434
 	InferenceModel string // e.g. tinyllama; default tinyllama
 
-	// PMA (cynode-pma): when enabled, control-plane starts cynode-pma as subprocess so PM chat surface is backed by the agent. See docs/tech_specs/cynode_pma.md.
-	PMAEnabled          bool   // PMA_ENABLED; default false
+	// PMA (cynode-pma): when enabled, control-plane starts cynode-pma as subprocess so PM chat surface is backed by the agent; GET /readyz returns 503 until PMA is reachable. Default true per REQ-ORCHES-0120 and orchestrator.md HealthEndpoints.
+	PMAEnabled          bool   // PMA_ENABLED; default true
 	PMABinaryPath       string // PMA_BINARY; path to cynode-pma binary
 	PMAListenAddr       string // PMA_LISTEN_ADDR; default :8090
 	PMAInstructionsRoot string // PMA_INSTRUCTIONS_ROOT; optional
@@ -105,7 +105,7 @@ func LoadOrchestratorConfig() *OrchestratorConfig {
 		RateLimitPerMinute:     getIntEnv("RATE_LIMIT_PER_MINUTE", 60),
 		InferenceURL:           getEnv("OLLAMA_BASE_URL", getEnv("INFERENCE_URL", "")),
 		InferenceModel:         getEnv("INFERENCE_MODEL", "tinyllama"),
-		PMAEnabled:             getBoolEnv("PMA_ENABLED", false),
+		PMAEnabled:             getBoolEnv("PMA_ENABLED", true),
 		PMABinaryPath:          getEnv("PMA_BINARY", "cynode-pma"),
 		PMAListenAddr:          getEnv("PMA_LISTEN_ADDR", ":8090"),
 		PMAInstructionsRoot:    getEnv("PMA_INSTRUCTIONS_ROOT", ""),

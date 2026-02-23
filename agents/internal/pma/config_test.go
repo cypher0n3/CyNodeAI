@@ -55,6 +55,14 @@ func TestConfig_InstructionsPath(t *testing.T) {
 			},
 			want: filepath.Join(wd, DefaultInstructionsRoot, "project_manager"),
 		},
+		{
+			name: "unknown role defaults to project_manager",
+			config: Config{
+				Role:             Role("other"),
+				InstructionsRoot: "inst",
+			},
+			want: filepath.Join(wd, "inst", "project_manager"),
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

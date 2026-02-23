@@ -236,6 +236,7 @@ func (h *NodeHandler) buildBootstrapResponse(baseURL, nodeJWT string, expiresAt 
 }
 
 // resolveConfigVersion returns the node's config version or a new ULID, persisting when new.
+// config_version in node_configuration_payload_v1 per worker_node_payloads.md (CYNAI.WORKER.Payload.ConfigurationV1).
 func (h *NodeHandler) resolveConfigVersion(ctx context.Context, node *models.Node) string {
 	if node.ConfigVersion != nil && *node.ConfigVersion != "" {
 		return *node.ConfigVersion

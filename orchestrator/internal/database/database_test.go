@@ -86,3 +86,22 @@ func TestClose_GetSQLDBFromDBFails(t *testing.T) {
 		t.Fatal("Close should fail when getSQLDBFromDB fails")
 	}
 }
+
+func TestOpen_PingFails(t *testing.T) {
+	dsn := os.Getenv(integrationEnv)
+	if dsn == "" {
+		t.Skipf("set %s to run", integrationEnv)
+	}
+	old := pingDB
+	defer func() { pingDB = old }()
+	pingDB = func(context.Context, *sql.DB) error {
+		return errors.New("injected ping error")
+	}
+	_, err := Open(context.Background(), dsn)
+	if err == nil {
+		t.Fatal("Open should fail when ping fails")
+	}
+	if !strings.Contains(err.Error(), "ping database") {
+		t.Errorf("Open error should mention ping database: %v", err)
+	}
+}
