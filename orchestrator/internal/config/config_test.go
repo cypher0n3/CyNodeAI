@@ -137,3 +137,27 @@ func TestGetDurationEnv(t *testing.T) {
 		t.Errorf("getDurationEnv() with nonexistent var = %v, want 1h", val)
 	}
 }
+
+func TestGetBoolEnv(t *testing.T) {
+	for _, v := range []string{"1", "true", "yes", "on"} {
+		_ = os.Setenv("TEST_BOOL", v)
+		if !getBoolEnv("TEST_BOOL", false) {
+			t.Errorf("getBoolEnv(%q) = false, want true", v)
+		}
+		_ = os.Unsetenv("TEST_BOOL")
+	}
+	for _, v := range []string{"0", "false", "no", "off"} {
+		_ = os.Setenv("TEST_BOOL", v)
+		if getBoolEnv("TEST_BOOL", true) {
+			t.Errorf("getBoolEnv(%q) = true, want false", v)
+		}
+		_ = os.Unsetenv("TEST_BOOL")
+	}
+	_ = os.Unsetenv("TEST_BOOL")
+	if getBoolEnv("TEST_BOOL", true) != true {
+		t.Error("getBoolEnv() with unset var = false, want default true")
+	}
+	if getBoolEnv("TEST_BOOL", false) != false {
+		t.Error("getBoolEnv() with unset var = true, want default false")
+	}
+}

@@ -1,5 +1,5 @@
-# Full orchestrator stack: Postgres + control-plane + user-gateway + Ollama (inference on 11434).
-# Ports: postgres 5432, control-plane 8082, user-gateway 8080, ollama 11434.
+# Full orchestrator stack: Postgres + control-plane + user-gateway + cynode-pma + Ollama (inference on 11434).
+# Ports: postgres 5432, control-plane 8082, user-gateway 8080, cynode-pma 8090, ollama 11434.
 # Run from repo root: docker compose -f orchestrator/docker-compose.yml up -d
 services:
   postgres:
@@ -20,6 +20,7 @@ services:
       retries: 30
 
   control-plane:
+    image: cynodeai-control-plane:dev
     build:
       context: ..
       dockerfile: orchestrator/cmd/control-plane/Containerfile
@@ -41,6 +42,7 @@ services:
         condition: service_healthy
 
   user-gateway:
+    image: cynodeai-user-gateway:dev
     build:
       context: ..
       dockerfile: orchestrator/cmd/user-gateway/Containerfile
@@ -50,6 +52,8 @@ services:
       USER_GATEWAY_LISTEN_ADDR: ":8080"
       JWT_SECRET: ${JWT_SECRET:-dev-jwt-secret-change-in-production}
       BOOTSTRAP_ADMIN_PASSWORD: ${BOOTSTRAP_ADMIN_PASSWORD:-admin123}
+      # OpenAI chat model=cynodeai.pm routes to PMA.
+      PMA_BASE_URL: http://cynode-pma:8090
       # Prompt-mode tasks: orchestrator calls PM model so prompt→model MUST work (MVP Phase 1).
       OLLAMA_BASE_URL: http://ollama:11434
       INFERENCE_MODEL: ${INFERENCE_MODEL:-tinyllama}
@@ -60,6 +64,32 @@ services:
         condition: service_healthy
       ollama:
         condition: service_started
+      cynode-pma:
+        condition: service_healthy
+
+  cynode-pma:
+    image: cynodeai-cynode-pma:dev
+    build:
+      context: ..
+      dockerfile: agents/cmd/cynode-pma/Containerfile
+    container_name: cynodeai-cynode-pma
+    environment:
+      PMA_ROLE: project_manager
+      PMA_LISTEN_ADDR: ":8090"
+      # PMA calls Ollama for chat completion; use compose service name.
+      OLLAMA_BASE_URL: http://ollama:11434
+      INFERENCE_MODEL: ${INFERENCE_MODEL:-tinyllama}
+    ports:
+      - "${PMA_PORT:-8090}:8090"
+    depends_on:
+      ollama:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "-", "http://localhost:8090/healthz"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
 
   ollama:
     image: ${OLLAMA_IMAGE:-ollama/ollama}

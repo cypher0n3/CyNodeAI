@@ -2223,6 +2223,276 @@ func TestTaskHandler_ChatErrorPaths(t *testing.T) {
 	}
 }
 
+// --- OpenAIChatHandler tests (GET /v1/models, POST /v1/chat/completions) ---
+
+func TestOpenAIChatHandler_ListModels(t *testing.T) {
+	h := NewOpenAIChatHandler(testutil.NewMockDB(), newTestLogger(), "http://localhost:11434", "tinyllama", "")
+	req := httptest.NewRequest("GET", "/v1/models", http.NoBody).WithContext(context.WithValue(context.Background(), contextKeyUserID, uuid.New()))
+	rec := httptest.NewRecorder()
+	h.ListModels(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Errorf("expected 200, got %d", rec.Code)
+	}
+	var out struct {
+		Object string `json:"object"`
+		Data   []struct {
+			ID string `json:"id"`
+		} `json:"data"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &out); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if out.Object != "list" || len(out.Data) < 1 {
+		t.Errorf("expected object list and at least one model, got %+v", out)
+	}
+	if out.Data[0].ID != EffectiveModelPM {
+		t.Errorf("first model want %q, got %q", EffectiveModelPM, out.Data[0].ID)
+	}
+}
+
+func TestOpenAIChatHandler_ChatCompletions_NoUser(t *testing.T) {
+	h := NewOpenAIChatHandler(testutil.NewMockDB(), newTestLogger(), "", "", "")
+	body := []byte(`{"messages":[{"role":"user","content":"hi"}]}`)
+	req := httptest.NewRequest("POST", "/v1/chat/completions", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	h.ChatCompletions(rec, req)
+	if rec.Code != http.StatusUnauthorized {
+		t.Errorf("expected 401, got %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestOpenAIChatHandler_ChatCompletions_BadRequestCases(t *testing.T) {
+	userID := uuid.New()
+	ctx := context.WithValue(context.Background(), contextKeyUserID, userID)
+	tests := []struct {
+		name   string
+		body   []byte
+		expect int
+	}{
+		{"empty messages", []byte(`{"messages":[]}`), http.StatusBadRequest},
+		{"no user message", []byte(`{"messages":[{"role":"system","content":"you are helpful"}]}`), http.StatusBadRequest},
+		{"direct inference not configured", []byte(`{"model":"tinyllama","messages":[{"role":"user","content":"hi"}]}`), http.StatusBadRequest},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			h := NewOpenAIChatHandler(testutil.NewMockDB(), newTestLogger(), "", "tinyllama", "")
+			req := httptest.NewRequest("POST", "/v1/chat/completions", bytes.NewReader(tt.body)).WithContext(ctx)
+			req.Header.Set("Content-Type", "application/json")
+			rec := httptest.NewRecorder()
+			h.ChatCompletions(rec, req)
+			if rec.Code != tt.expect {
+				t.Errorf("expected %d, got %d", tt.expect, rec.Code)
+			}
+		})
+	}
+}
+
+func TestOpenAIChatHandler_ChatCompletions_DirectInference(t *testing.T) {
+	mockOllama := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{"response": "Hello from model.", "done": true})
+	}))
+	defer mockOllama.Close()
+	h := NewOpenAIChatHandler(testutil.NewMockDB(), newTestLogger(), mockOllama.URL, "tinyllama", "")
+	body := []byte(`{"model":"tinyllama","messages":[{"role":"user","content":"hi"}]}`)
+	req := httptest.NewRequest("POST", "/v1/chat/completions", bytes.NewReader(body)).WithContext(context.WithValue(context.Background(), contextKeyUserID, uuid.New()))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	h.ChatCompletions(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Errorf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	var out ChatCompletionsResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &out); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if len(out.Choices) != 1 || out.Choices[0].Message.Content != "Hello from model." {
+		t.Errorf("expected one choice with content, got %+v", out.Choices)
+	}
+}
+
+func TestOpenAIChatHandler_ChatCompletions_PMA(t *testing.T) {
+	mockPMA := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/internal/chat/completion" || r.Method != http.MethodPost {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]string{"content": "PMA reply."})
+	}))
+	defer mockPMA.Close()
+	h := NewOpenAIChatHandler(testutil.NewMockDB(), newTestLogger(), "", "", mockPMA.URL)
+	body := []byte(`{"model":"cynodeai.pm","messages":[{"role":"user","content":"hi"}]}`)
+	req := httptest.NewRequest("POST", "/v1/chat/completions", bytes.NewReader(body)).WithContext(context.WithValue(context.Background(), contextKeyUserID, uuid.New()))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	h.ChatCompletions(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Errorf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	var out ChatCompletionsResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &out); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if len(out.Choices) != 1 || out.Choices[0].Message.Content != "PMA reply." {
+		t.Errorf("expected one choice with PMA content, got %+v", out.Choices)
+	}
+}
+
+func TestOpenAIChatHandler_ChatCompletions_DefaultModelIsPM(t *testing.T) {
+	mockPMA := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]string{"content": "Default PM."})
+	}))
+	defer mockPMA.Close()
+	h := NewOpenAIChatHandler(testutil.NewMockDB(), newTestLogger(), "", "", mockPMA.URL)
+	body := []byte(`{"messages":[{"role":"user","content":"hi"}]}`)
+	req := httptest.NewRequest("POST", "/v1/chat/completions", bytes.NewReader(body)).WithContext(context.WithValue(context.Background(), contextKeyUserID, uuid.New()))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	h.ChatCompletions(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Errorf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	var out ChatCompletionsResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &out); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if out.Model != EffectiveModelPM {
+		t.Errorf("default model want %q, got %q", EffectiveModelPM, out.Model)
+	}
+}
+
+func TestOpenAIChatHandler_ChatCompletions_PMAUnavailable(t *testing.T) {
+	h := NewOpenAIChatHandler(testutil.NewMockDB(), newTestLogger(), "", "", "")
+	body := []byte(`{"model":"cynodeai.pm","messages":[{"role":"user","content":"hi"}]}`)
+	req := httptest.NewRequest("POST", "/v1/chat/completions", bytes.NewReader(body)).WithContext(context.WithValue(context.Background(), contextKeyUserID, uuid.New()))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	h.ChatCompletions(rec, req)
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Errorf("expected 503 when PMA URL empty, got %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestOpenAIChatHandler_ChatCompletions_InvalidBody(t *testing.T) {
+	h := NewOpenAIChatHandler(testutil.NewMockDB(), newTestLogger(), "", "", "")
+	req := httptest.NewRequest("POST", "/v1/chat/completions", strings.NewReader("not json")).WithContext(context.WithValue(context.Background(), contextKeyUserID, uuid.New()))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	h.ChatCompletions(rec, req)
+	if rec.Code != http.StatusBadRequest {
+		t.Errorf("expected 400, got %d", rec.Code)
+	}
+}
+
+func TestOpenAIChatHandler_ChatCompletions_DirectInferenceFails(t *testing.T) {
+	mockOllama := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer mockOllama.Close()
+	h := NewOpenAIChatHandler(testutil.NewMockDB(), newTestLogger(), mockOllama.URL, "tinyllama", "")
+	body := []byte(`{"model":"tinyllama","messages":[{"role":"user","content":"hi"}]}`)
+	req := httptest.NewRequest("POST", "/v1/chat/completions", bytes.NewReader(body)).WithContext(context.WithValue(context.Background(), contextKeyUserID, uuid.New()))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	h.ChatCompletions(rec, req)
+	if rec.Code != http.StatusBadGateway {
+		t.Errorf("expected 502 on inference failure, got %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestOpenAIChatHandler_ChatCompletions_RedactsSecrets(t *testing.T) {
+	mockOllama := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{"response": "ok", "done": true})
+	}))
+	defer mockOllama.Close()
+	h := NewOpenAIChatHandler(testutil.NewMockDB(), newTestLogger(), mockOllama.URL, "tinyllama", "")
+	body := []byte(`{"model":"tinyllama","messages":[{"role":"user","content":"my key is sk-abcdefghij1234567890abcdefghij"}]}`)
+	req := httptest.NewRequest("POST", "/v1/chat/completions", bytes.NewReader(body)).WithContext(context.WithValue(context.Background(), contextKeyUserID, uuid.New()))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	h.ChatCompletions(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Errorf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestOpenAIChatHandler_ChatCompletions_ProjectHeaderAndApiKeyRedaction(t *testing.T) {
+	mockOllama := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{"response": "ok", "done": true})
+	}))
+	defer mockOllama.Close()
+	projID := uuid.New()
+	h := NewOpenAIChatHandler(testutil.NewMockDB(), newTestLogger(), mockOllama.URL, "tinyllama", "")
+	body := []byte(`{"model":"tinyllama","messages":[{"role":"user","content":"apikey: secret123"}]}`)
+	req := httptest.NewRequest("POST", "/v1/chat/completions", bytes.NewReader(body)).WithContext(context.WithValue(context.Background(), contextKeyUserID, uuid.New()))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("OpenAI-Project", projID.String())
+	rec := httptest.NewRecorder()
+	h.ChatCompletions(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Errorf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	// Invalid OpenAI-Project header is ignored (projectIDFromHeader returns nil).
+	req2 := httptest.NewRequest("POST", "/v1/chat/completions", bytes.NewReader(body)).WithContext(context.WithValue(context.Background(), contextKeyUserID, uuid.New()))
+	req2.Header.Set("Content-Type", "application/json")
+	req2.Header.Set("OpenAI-Project", "not-a-uuid")
+	rec2 := httptest.NewRecorder()
+	h.ChatCompletions(rec2, req2)
+	if rec2.Code != http.StatusOK {
+		t.Errorf("expected 200 with invalid project header (ignored), got %d", rec2.Code)
+	}
+}
+
+func TestOpenAIChatHandler_ChatCompletions_PMAFails(t *testing.T) {
+	mockPMA := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer mockPMA.Close()
+	h := NewOpenAIChatHandler(testutil.NewMockDB(), newTestLogger(), "", "", mockPMA.URL)
+	body := []byte(`{"model":"cynodeai.pm","messages":[{"role":"user","content":"hi"}]}`)
+	req := httptest.NewRequest("POST", "/v1/chat/completions", bytes.NewReader(body)).WithContext(context.WithValue(context.Background(), contextKeyUserID, uuid.New()))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	h.ChatCompletions(rec, req)
+	if rec.Code != http.StatusBadGateway {
+		t.Errorf("expected 502 when PMA returns 500, got %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestOpenAIChatHandler_ChatCompletions_GetThreadError(t *testing.T) {
+	mockDB := testutil.NewMockDB()
+	mockDB.ForceError = errors.New("db error")
+	h := NewOpenAIChatHandler(mockDB, newTestLogger(), "http://localhost:11434", "tinyllama", "")
+	body := []byte(`{"model":"tinyllama","messages":[{"role":"user","content":"hi"}]}`)
+	req := httptest.NewRequest("POST", "/v1/chat/completions", bytes.NewReader(body)).WithContext(context.WithValue(context.Background(), contextKeyUserID, uuid.New()))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	h.ChatCompletions(rec, req)
+	if rec.Code != http.StatusInternalServerError {
+		t.Errorf("expected 500 on GetOrCreateActiveChatThread error, got %d", rec.Code)
+	}
+}
+
+func TestOpenAIChatHandler_ChatCompletions_NonDefaultModelUsesInferenceModel(t *testing.T) {
+	mockOllama := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var body struct {
+			Model string `json:"model"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		_ = json.NewEncoder(w).Encode(map[string]any{"response": "from-" + body.Model, "done": true})
+	}))
+	defer mockOllama.Close()
+	h := NewOpenAIChatHandler(testutil.NewMockDB(), newTestLogger(), mockOllama.URL, "tinyllama", "")
+	body := []byte(`{"model":"llama2","messages":[{"role":"user","content":"hi"}]}`)
+	req := httptest.NewRequest("POST", "/v1/chat/completions", bytes.NewReader(body)).WithContext(context.WithValue(context.Background(), contextKeyUserID, uuid.New()))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	h.ChatCompletions(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Errorf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
 func TestNodeHandler_ReportCapabilityWithSandbox(t *testing.T) {
 	mockDB := testutil.NewMockDB()
 	jwtMgr := auth.NewJWTManager("test-secret-key-1234567890123456", 15*time.Minute, 7*24*time.Hour, 24*time.Hour)

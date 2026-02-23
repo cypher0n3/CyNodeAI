@@ -79,6 +79,14 @@ type Store interface {
 	UpdateNodeConfigVersion(ctx context.Context, nodeID uuid.UUID, configVersion string) error
 	UpdateNodeConfigAck(ctx context.Context, nodeID uuid.UUID, configVersion, status string, ackAt time.Time, errMsg *string) error
 	UpdateNodeWorkerAPIConfig(ctx context.Context, nodeID uuid.UUID, targetURL, bearerToken string) error
+
+	// MCP tool call audit (P2-02): write one record per routed tool call (allow/deny, success/error).
+	CreateMcpToolCallAuditLog(ctx context.Context, rec *models.McpToolCallAuditLog) error
+
+	// Chat threads and messages (OpenAI-compatible chat API).
+	GetOrCreateActiveChatThread(ctx context.Context, userID uuid.UUID, projectID *uuid.UUID) (*models.ChatThread, error)
+	AppendChatMessage(ctx context.Context, threadID uuid.UUID, role, content string, metadata *string) (*models.ChatMessage, error)
+	CreateChatAuditLog(ctx context.Context, rec *models.ChatAuditLog) error
 }
 
 // DB wraps GORM database operations.
@@ -132,6 +140,16 @@ func (db *DB) createRecord(ctx context.Context, record interface{}, op string) e
 // createReturning creates record and returns it or an error.
 func createReturning[T any](db *DB, ctx context.Context, record *T, op string) (*T, error) {
 	return record, db.createRecord(ctx, record, op)
+}
+
+// ensureAuditIDAndTime sets id and createdAt to new values if they are zero. Used by audit log creators.
+func ensureAuditIDAndTime(id *uuid.UUID, createdAt *time.Time) {
+	if *id == uuid.Nil {
+		*id = uuid.New()
+	}
+	if createdAt.IsZero() {
+		*createdAt = time.Now().UTC()
+	}
 }
 
 // getSQLDB is overridden in tests to inject failures for coverage.

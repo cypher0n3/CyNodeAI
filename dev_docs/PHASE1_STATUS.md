@@ -1,6 +1,6 @@
 # CyNodeAI MVP Phase 1 Status Report
 
-<!-- Date: 2026-02-20. Branch: mvp/phase-1. Status: In progress -->
+<!-- Date: 2026-02-22. Branch: mvp/phase-1. Status: Phase 1/1.5/1.7 complete; Phase 2 foundation in progress -->
 
 - [Summary of Implementation](#summary-of-implementation)
 - [Files Created](#files-created)
@@ -90,7 +90,7 @@ Key artifacts and entry points for Phase 1.
 - `orchestrator/cmd/*` - 0.0% - Main entry points
 
 **Overall:** Core packages have good test coverage (82-100%).
-Main entry points are excluded as they primarily wire dependencies.
+Main entry points (cmd/*) are tested where practical; mcp-gateway uses testcontainers for real-DB path (>=90%).
 
 ---
 
@@ -228,6 +228,13 @@ Summary:
 - **Testutil:** Unified `runWithLock`, `getByKey`, and invalidate helpers in `orchestrator/internal/testutil/mock_db.go`; table-driven GetNotFound tests.
 - **E2E:** `just e2e` runs full demo (Postgres, control-plane, user-gateway, node, happy path); `scripts/setup-dev.sh full-demo` includes node.
 - **Worker node:** Lint fixes in `worker_node/cmd/node-manager` (hugeParam, errcheck, paramTypeCombine) and `worker_node/cmd/worker-api` (gocognit via extracted handlers).
+
+### E2E and OpenAI Chat (2026-02-22)
+
+- **Full-demo passes:** `just e2e` / `./scripts/setup-dev.sh full-demo` runs all E2E steps including Test 5d (GET /v1/models, POST /v1/chat/completions with model `cynodeai.pm`). List-models and chat completion succeed against the live stack.
+- **Compose:** user-gateway has `PMA_BASE_URL: http://cynode-pma:8090`; cynode-pma has `OLLAMA_BASE_URL: http://ollama:11434` and `INFERENCE_MODEL` so the PMA can call Ollama. user-gateway depends on cynode-pma (healthy); cynode-pma depends on ollama (started).
+- **E2E script:** Conditional container image rebuild (build-context hash in `tmp/e2e-image-cache`); images rebuild only when context changes. Create-task step retries up to 3 times on HTTP 000/5xx. Env: `E2E_FORCE_REBUILD`, `E2E_IMAGE_CACHE_DIR` (see script `show_usage`).
+- **Chat routing:** Effective model `cynodeai.pm` (or omitted) routes to PM agent; other models route to direct inference. Implementation and spec alignment documented in `orchestrator/internal/handlers/openai_chat.go` and verified per `docs/tech_specs/openai_compatible_chat_api.md`.
 
 ---
 

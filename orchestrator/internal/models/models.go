@@ -223,3 +223,93 @@ const (
 	NodeStatusInactive   = "inactive"
 	NodeStatusDrained    = "drained"
 )
+
+// McpToolCallAuditLog stores metadata for each MCP tool call routed by the gateway.
+// Per docs/tech_specs/mcp_tool_call_auditing.md and postgres_schema.md; tool args/results not stored for MVP.
+type McpToolCallAuditLog struct {
+	ID         uuid.UUID  `gorm:"type:uuid;primaryKey" json:"id"`
+	CreatedAt  time.Time  `gorm:"column:created_at;index" json:"created_at"`
+	TaskID     *uuid.UUID `gorm:"column:task_id;index" json:"task_id,omitempty"`
+	ProjectID  *uuid.UUID `gorm:"column:project_id;index" json:"project_id,omitempty"`
+	RunID      *uuid.UUID `gorm:"column:run_id" json:"run_id,omitempty"`
+	JobID      *uuid.UUID `gorm:"column:job_id" json:"job_id,omitempty"`
+	SubjectType *string   `gorm:"column:subject_type" json:"subject_type,omitempty"`
+	SubjectID  *uuid.UUID `gorm:"column:subject_id" json:"subject_id,omitempty"`
+	UserID     *uuid.UUID `gorm:"column:user_id;index" json:"user_id,omitempty"`
+	GroupIDs   *string    `gorm:"column:group_ids;type:jsonb" json:"group_ids,omitempty"`
+	RoleNames  *string    `gorm:"column:role_names;type:jsonb" json:"role_names,omitempty"`
+	ToolName   string     `gorm:"column:tool_name;index" json:"tool_name"`
+	Decision   string     `gorm:"column:decision" json:"decision"`   // allow or deny
+	Status     string     `gorm:"column:status" json:"status"`       // success or error
+	DurationMs *int       `gorm:"column:duration_ms" json:"duration_ms,omitempty"`
+	ErrorType  *string    `gorm:"column:error_type" json:"error_type,omitempty"`
+}
+
+func (McpToolCallAuditLog) TableName() string { return "mcp_tool_call_audit_log" }
+
+// Project represents a workspace boundary (see postgres_schema.md Projects).
+type Project struct {
+	ID          uuid.UUID  `gorm:"type:uuid;primaryKey" json:"id"`
+	Slug        string     `gorm:"column:slug;uniqueIndex" json:"slug"`
+	DisplayName string     `gorm:"column:display_name" json:"display_name"`
+	Description *string    `gorm:"column:description" json:"description,omitempty"`
+	IsActive    bool       `gorm:"column:is_active;index" json:"is_active"`
+	CreatedAt   time.Time  `gorm:"column:created_at" json:"created_at"`
+	UpdatedAt   time.Time  `gorm:"column:updated_at" json:"updated_at"`
+	UpdatedBy   *string    `gorm:"column:updated_by" json:"updated_by,omitempty"`
+}
+
+func (Project) TableName() string { return "projects" }
+
+// Session represents a user session (see postgres_schema.md Sessions).
+type Session struct {
+	ID               uuid.UUID  `gorm:"type:uuid;primaryKey" json:"id"`
+	ParentSessionID  *uuid.UUID `gorm:"column:parent_session_id;index" json:"parent_session_id,omitempty"`
+	UserID           uuid.UUID  `gorm:"column:user_id;index" json:"user_id"`
+	Title            *string    `gorm:"column:title" json:"title,omitempty"`
+	CreatedAt        time.Time  `gorm:"column:created_at" json:"created_at"`
+	UpdatedAt        time.Time  `gorm:"column:updated_at" json:"updated_at"`
+}
+
+func (Session) TableName() string { return "sessions" }
+
+// ChatThread represents a chat conversation container (see postgres_schema.md Chat Threads).
+type ChatThread struct {
+	ID        uuid.UUID  `gorm:"type:uuid;primaryKey" json:"id"`
+	UserID    uuid.UUID  `gorm:"column:user_id;index" json:"user_id"`
+	ProjectID *uuid.UUID `gorm:"column:project_id;index" json:"project_id,omitempty"`
+	SessionID *uuid.UUID `gorm:"column:session_id;index" json:"session_id,omitempty"`
+	Title     *string    `gorm:"column:title" json:"title,omitempty"`
+	CreatedAt time.Time  `gorm:"column:created_at" json:"created_at"`
+	UpdatedAt time.Time  `gorm:"column:updated_at" json:"updated_at"`
+}
+
+func (ChatThread) TableName() string { return "chat_threads" }
+
+// ChatMessage represents one message in a thread (see postgres_schema.md Chat Messages).
+type ChatMessage struct {
+	ID        uuid.UUID  `gorm:"type:uuid;primaryKey" json:"id"`
+	ThreadID  uuid.UUID  `gorm:"column:thread_id;index" json:"thread_id"`
+	Role      string     `gorm:"column:role" json:"role"`
+	Content   string     `gorm:"column:content" json:"content"`
+	Metadata  *string    `gorm:"column:metadata;type:jsonb" json:"metadata,omitempty"`
+	CreatedAt time.Time  `gorm:"column:created_at" json:"created_at"`
+}
+
+func (ChatMessage) TableName() string { return "chat_messages" }
+
+// ChatAuditLog records chat completion request audit (redaction, outcome) per openai_compatible_chat_api.md.
+type ChatAuditLog struct {
+	ID               uuid.UUID  `gorm:"type:uuid;primaryKey" json:"id"`
+	CreatedAt        time.Time  `gorm:"column:created_at;index" json:"created_at"`
+	UserID           *uuid.UUID `gorm:"column:user_id;index" json:"user_id,omitempty"`
+	ProjectID        *uuid.UUID `gorm:"column:project_id;index" json:"project_id,omitempty"`
+	Outcome          string     `gorm:"column:outcome" json:"outcome"`
+	ErrorCode        *string    `gorm:"column:error_code" json:"error_code,omitempty"`
+	RedactionApplied bool       `gorm:"column:redaction_applied" json:"redaction_applied"`
+	RedactionKinds   *string    `gorm:"column:redaction_kinds;type:jsonb" json:"redaction_kinds,omitempty"`
+	DurationMs       *int       `gorm:"column:duration_ms" json:"duration_ms,omitempty"`
+	RequestID        *string    `gorm:"column:request_id" json:"request_id,omitempty"`
+}
+
+func (ChatAuditLog) TableName() string { return "chat_audit_log" }

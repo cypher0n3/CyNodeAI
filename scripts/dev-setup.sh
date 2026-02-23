@@ -91,7 +91,7 @@ start_postgres() {
 
     # Wait for PostgreSQL to be ready
     log_info "Waiting for PostgreSQL to be ready..."
-    for i in {1..30}; do
+    for _ in {1..30}; do
         if $RUNTIME exec "$POSTGRES_CONTAINER_NAME" pg_isready -U postgres &> /dev/null; then
             log_success "PostgreSQL is ready"
             return 0
@@ -148,7 +148,7 @@ start_control_plane() {
     export WORKER_API_BEARER_TOKEN="$WORKER_API_BEARER_TOKEN"
     ./bin/control-plane &
     echo $! > /tmp/cynodeai-control-plane.pid
-    for i in {1..15}; do
+    for _ in {1..15}; do
         if curl -s "http://localhost:$CONTROL_PLANE_PORT/healthz" > /dev/null 2>&1; then
             log_success "Control-plane is ready"
             return 0
@@ -169,7 +169,7 @@ start_orchestrator() {
     ./bin/user-gateway &
     ORCHESTRATOR_PID=$!
     echo $ORCHESTRATOR_PID > /tmp/cynodeai-orchestrator.pid
-    for i in {1..15}; do
+    for _ in {1..15}; do
         if curl -s "http://localhost:$ORCHESTRATOR_PORT/healthz" > /dev/null 2>&1; then
             log_success "User-gateway is ready (PID: $ORCHESTRATOR_PID)"
             return 0
@@ -196,7 +196,7 @@ start_node() {
     export NODE_NAME="Development Node"
     ./bin/node-manager &
     echo $! > /tmp/cynodeai-node-manager.pid
-    for i in {1..15}; do
+    for _ in {1..15}; do
         if curl -s "http://localhost:$NODE_PORT/healthz" > /dev/null 2>&1; then
             log_success "Worker-api and node-manager are ready"
             return 0
@@ -212,7 +212,7 @@ stop_services() {
     log_info "Stopping services..."
     for pidfile in /tmp/cynodeai-node-manager.pid /tmp/cynodeai-worker-api.pid /tmp/cynodeai-orchestrator.pid /tmp/cynodeai-control-plane.pid; do
         if [ -f "$pidfile" ]; then
-            kill $(cat "$pidfile") 2>/dev/null || true
+            kill "$(cat "$pidfile")" 2>/dev/null || true
             rm -f "$pidfile"
         fi
     done
@@ -224,7 +224,6 @@ test_e2e() {
     log_info "Running end-to-end tests..."
 
     USER_API="http://localhost:$ORCHESTRATOR_PORT"
-    CONTROL_PLANE_API="http://localhost:$CONTROL_PLANE_PORT"
 
     # Test 1: Health check (user-gateway)
     log_info "Test 1: Health check..."

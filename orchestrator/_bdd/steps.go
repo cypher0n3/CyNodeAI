@@ -130,7 +130,9 @@ func InitializeOrchestratorSuite(sc *godog.ScenarioContext, state *testState) {
 		mux.Handle("GET /v1/tasks/{id}/result", authMiddleware.RequireUserAuth(http.HandlerFunc(taskHandler.GetTaskResult)))
 		mux.Handle("POST /v1/tasks/{id}/cancel", authMiddleware.RequireUserAuth(http.HandlerFunc(taskHandler.CancelTask)))
 		mux.Handle("GET /v1/tasks/{id}/logs", authMiddleware.RequireUserAuth(http.HandlerFunc(taskHandler.GetTaskLogs)))
-		mux.Handle("POST /v1/chat", authMiddleware.RequireUserAuth(http.HandlerFunc(taskHandler.Chat)))
+		openAIChatHandler := handlers.NewOpenAIChatHandler(db, slog.Default(), inferenceURL, inferenceModel, "")
+		mux.Handle("GET /v1/models", authMiddleware.RequireUserAuth(http.HandlerFunc(openAIChatHandler.ListModels)))
+		mux.Handle("POST /v1/chat/completions", authMiddleware.RequireUserAuth(http.HandlerFunc(openAIChatHandler.ChatCompletions)))
 		mux.HandleFunc("POST /v1/nodes/register", nodeHandler.Register)
 		mux.Handle("GET /v1/nodes/config", authMiddleware.RequireNodeAuth(http.HandlerFunc(nodeHandler.GetConfig)))
 		mux.Handle("POST /v1/nodes/config", authMiddleware.RequireNodeAuth(http.HandlerFunc(nodeHandler.ConfigAck)))
@@ -900,8 +902,12 @@ func RegisterOrchestratorSteps(sc *godog.ScenarioContext, state *testState) {
 		if st == nil || st.server == nil {
 			return godog.ErrSkip
 		}
-		body, _ := json.Marshal(map[string]string{"message": message})
-		req, _ := http.NewRequest("POST", st.server.URL+"/v1/chat", bytes.NewReader(body))
+		// Use inference model so mock inference server is used (pmaBaseURL not set in BDD)
+		body, _ := json.Marshal(map[string]interface{}{
+			"model": "tinyllama",
+			"messages": []map[string]string{{"role": "user", "content": message}},
+		})
+		req, _ := http.NewRequest("POST", st.server.URL+"/v1/chat/completions", bytes.NewReader(body))
 		req.Header.Set("Content-Type", "application/json")
 		req.Header.Set("Authorization", "Bearer "+st.accessToken)
 		resp, err := http.DefaultClient.Do(req)
@@ -911,7 +917,7 @@ func RegisterOrchestratorSteps(sc *godog.ScenarioContext, state *testState) {
 		defer resp.Body.Close()
 		st.lastStatusCode = resp.StatusCode
 		if resp.StatusCode != http.StatusOK {
-			return fmt.Errorf("chat returned %d", resp.StatusCode)
+			return fmt.Errorf("chat/completions returned %d", resp.StatusCode)
 		}
 		st.lastTaskResultBody, _ = io.ReadAll(resp.Body)
 		return nil
@@ -925,10 +931,17 @@ func RegisterOrchestratorSteps(sc *godog.ScenarioContext, state *testState) {
 			return fmt.Errorf("expected 200, got %d", st.lastStatusCode)
 		}
 		var out struct {
-			Response string `json:"response"`
+			Choices []struct {
+				Message struct {
+					Content string `json:"content"`
+				} `json:"message"`
+			} `json:"choices"`
 		}
 		if err := json.Unmarshal(st.lastTaskResultBody, &out); err != nil {
 			return err
+		}
+		if len(out.Choices) == 0 || strings.TrimSpace(out.Choices[0].Message.Content) == "" {
+			return fmt.Errorf("choices[0].message.content empty")
 		}
 		return nil
 	})

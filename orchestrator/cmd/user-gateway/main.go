@@ -61,6 +61,7 @@ func run(ctx context.Context, cfg *config.OrchestratorConfig, store database.Sto
 	authHandler := handlers.NewAuthHandler(store, jwtManager, rateLimiter, logger)
 	userHandler := handlers.NewUserHandler(store, logger)
 	taskHandler := handlers.NewTaskHandler(store, logger, cfg.InferenceURL, cfg.InferenceModel)
+	openAIChatHandler := handlers.NewOpenAIChatHandler(store, logger, cfg.InferenceURL, cfg.InferenceModel, cfg.PMABaseURL)
 
 	authMiddleware := middleware.NewAuthMiddleware(jwtManager, logger)
 
@@ -83,7 +84,8 @@ func run(ctx context.Context, cfg *config.OrchestratorConfig, store database.Sto
 	mux.Handle("GET /v1/tasks/{id}/result", authMiddleware.RequireUserAuth(http.HandlerFunc(taskHandler.GetTaskResult)))
 	mux.Handle("POST /v1/tasks/{id}/cancel", authMiddleware.RequireUserAuth(http.HandlerFunc(taskHandler.CancelTask)))
 	mux.Handle("GET /v1/tasks/{id}/logs", authMiddleware.RequireUserAuth(http.HandlerFunc(taskHandler.GetTaskLogs)))
-	mux.Handle("POST /v1/chat", authMiddleware.RequireUserAuth(http.HandlerFunc(limitBody(maxBodyBytes, taskHandler.Chat))))
+	mux.Handle("GET /v1/models", authMiddleware.RequireUserAuth(http.HandlerFunc(openAIChatHandler.ListModels)))
+	mux.Handle("POST /v1/chat/completions", authMiddleware.RequireUserAuth(http.HandlerFunc(limitBody(maxBodyBytes, openAIChatHandler.ChatCompletions))))
 
 	handler := middleware.Recovery(logger)(middleware.Logging(logger)(mux))
 

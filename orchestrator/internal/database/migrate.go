@@ -35,6 +35,12 @@ func (db *DB) runAutoMigrate(ctx context.Context, logger *slog.Logger) error {
 		&models.Job{},
 		&models.Node{},
 		&models.NodeCapability{},
+		&models.McpToolCallAuditLog{},
+		&models.Project{},
+		&models.Session{},
+		&models.ChatThread{},
+		&models.ChatMessage{},
+		&models.ChatAuditLog{},
 	)
 	if err != nil {
 		return fmt.Errorf("auto migrate: %w", err)

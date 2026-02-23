@@ -76,8 +76,8 @@ These behaviors are reflected in Phase 1 (inference path requirement), Phase 2 (
 - **Phase 0** - Foundations (schema, node payloads, MCP gateway spec, LangGraph contract) - Spec complete; implementation in progress / done for Phase 1 scope
 - **Phase 1** - Single node happy path (registration, dispatch, sandbox, auth, task APIs) - Complete (readyz, ULID config_version, Worker readyz, 413/truncation; see Current Status)
 - **Phase 1.5** - Inference in sandbox (proxy sidecar), E2E inference, CLI, prompt interpretation - Complete (input_mode, prompt-as-model path, BDD; `just ci` passes)
-- **Phase 1.7** - Implement cynode-pma; PMA startup as part of orchestrator start - Not started
-- **Phase 2** - MCP in the loop, LangGraph workflow, MCP DB/artifact tools - Not started
+- **Phase 1.7** - Implement cynode-pma; PMA startup as part of orchestrator start - Complete (agents module, cynode-pma binary, orchestrator integration)
+- **Phase 2** - MCP in the loop, LangGraph workflow, MCP DB/artifact tools - In progress (P2-02 foundation: audit table, gateway write path; mcp-gateway testcontainers for 90%+ coverage)
 - **Phase 3** - Multi-node selection, leases, retries, telemetry - Not started
 - **Phase 4** - API Egress, Secure Browser, external model routing, CLI expansion, admin console after CLI - Not started
 
@@ -100,9 +100,17 @@ These behaviors are reflected in Phase 1 (inference path requirement), Phase 2 (
   CLI (cynork), inference proxy sidecar, and prompt interpretation: `input_mode` (prompt/script/commands), default prompt-as-model path (sandbox job with fixed model-call script), BDD/feature coverage.
   `just ci` passes (lint, coverage >=90%, BDD orchestrator/worker_node/cynork).
   See [PHASE1_STATUS.md](../dev_docs/PHASE1_STATUS.md).
-- **Phase 1.7:** Docs complete; implementation remaining.
-  Requirements and tech specs for `cynode-pma` and `cynode-sba` are in place (PMAGNT, SBAGNT, `cynode_pma.md`, `cynode_sba.md`, PM/PA integration, OpenAI chat mapping).
-  Phase 1.7 implementation: build the `cynode-pma` binary (e.g. in an `agents/` Go module), support role flag and instructions paths per spec, and start `cynode-pma` as part of orchestrator startup so the PM chat surface is backed by the real agent.
+- **Phase 1.7:** Complete.
+  `agents/` Go module with `cynode-pma` binary (role flag, instructions paths, Containerfile); control-plane starts cynode-pma when `PMA_ENABLED=true` and stops it on shutdown; cynode-pma runs as a container in the orchestrator stack (compose + e2e).
+  **Chat routing (OpenAI-compatible):** Implemented and verified per spec.
+  User-gateway exposes `GET /v1/models` and `POST /v1/chat/completions`; effective model `cynodeai.pm` routes to PM agent (cynode-pma), any other to direct inference; legacy `POST /v1/chat` removed.
+  Compose: user-gateway has `PMA_BASE_URL`; cynode-pma has `OLLAMA_BASE_URL` so PMA can call Ollama for completions. E2E script includes Test 5d (list-models + chat completions); `just e2e` / full-demo passes.
+  See [2026-02-22_phase_1_7_execution_report.md](../dev_docs/2026-02-22_phase_1_7_execution_report.md).
+- **E2E script and image cache:** Script-driven E2E (`just e2e` / `./scripts/setup-dev.sh full-demo`) uses conditional container image rebuild: build-context hash cached under `tmp/e2e-image-cache`; images rebuild only on delta. Create-task step retries on 000/5xx. Env: `E2E_FORCE_REBUILD`, `E2E_IMAGE_CACHE_DIR`. See [development_setup.md](development_setup.md).
+- **Phase 2:** Foundation in progress.
+  P2-02: MCP tool call audit table (`mcp_tool_call_audit_log`), store method, mcp-gateway `POST /v1/mcp/tools/call` writes audit and returns 501; gateway uses testcontainers for real-DB coverage (>=90%).
+    P2-01 (scoping/schema), P2-03 (preference tools), and full allow path not started.
+  See [2026-02-22_phase_2_progress_report.md](../dev_docs/2026-02-22_phase_2_progress_report.md).
 
 ## Prompt Interpretation: Intended Semantics
 
@@ -507,6 +515,7 @@ Reference: [docs/tech_specs/\_main.md](../docs/tech_specs/_main.md) Phase 4.
   Suite tag `@suite_cynork`; see [features/README.md](../features/README.md).
 - **`features/e2e/single_node_happy_path.feature`:** Inference scenario exists (`@inference_in_sandbox`).
   Not run by `just test-bdd` (no e2e Godog runner); script-driven `just e2e` is primary.
+- **`features/e2e/chat_openai_compatible.feature`:** Describes GET /v1/models and POST /v1/chat/completions (list-models, completion at `choices[0].message.content`). Same endpoints are exercised by the E2E script (Test 5d); no separate Godog runner for e2e features.
 - **`features/worker_node/worker_node_sandbox_execution.feature`:** Inference scenario, use_inference step, GET /readyz (200 "ready"), and 413 on oversized body scenarios in place.
 - **`features/orchestrator/orchestrator_task_lifecycle.feature`:** Scenarios for task with natural-language prompt (default) completing with model output, and for input_mode commands running literal shell; step "the job sent to the worker has command containing ...".
 - **`features/orchestrator/orchestrator_startup.feature`:** Orchestrator readyz returns 503 when no inference path (no dispatchable nodes).
@@ -531,15 +540,17 @@ Items below are implemented.
 - Inference proxy and pod/network: worker node supports `use_inference: true` jobs via Podman pod (sandbox + proxy sidecar, `OLLAMA_BASE_URL` in sandbox env).
 - P1.5-01-P1.5-03: input_mode and interpretation-by-default; minimal prompt-as-model-input path (Option A); BDD for natural-language prompt (default) and commands mode; feature files and orchestrator/worker_node BDD steps (readyz, 413).
 - P1.7-01, P1.7-02: PMAGNT/SBAGNT requirements and cynode_pma/cynode_sba tech specs; PM/PA integration and OpenAI chat mapping (docs complete).
-- Coverage and CI: `just ci` runs fmt, lint, test-go-cover (>=90%), vulncheck-go, test-bdd for orchestrator, worker_node, cynork; all pass.
+- P1.7-03, P1.7-04: `cynode-pma` binary in `agents/` module; PMA startup integrated into orchestrator (control-plane starts/stops subprocess when enabled).
+- P2-02 foundation: MCP tool call audit table and store; mcp-gateway optional DB, `POST /v1/mcp/tools/call` writes audit (deny/501); mcp-gateway tests use testcontainers for real-DB path (>=90% coverage).
+- E2E and OpenAI chat: Test 5d in `run_e2e_test` (GET /v1/models, POST /v1/chat/completions with `cynodeai.pm`); compose stack has user-gateway `PMA_BASE_URL` and cynode-pma `OLLAMA_BASE_URL`; orchestrator BDD uses OpenAI endpoints; chat routing in `openai_chat.go` aligned with openai_compatible_chat_api.md (effective model, PMA vs direct inference). `just e2e` passes.
+- E2E script: conditional image rebuild (hash cache in `tmp/e2e-image-cache`), create-task retries, post-healthz delay; `E2E_FORCE_REBUILD` and `E2E_IMAGE_CACHE_DIR` documented in script usage.
+- Coverage and CI: `just ci` runs fmt, lint, test-go-cover (>=90%), vulncheck-go, test-bdd for orchestrator, worker_node, cynork; `just docs-check` (fix-cynode, lint-md, validate-doc-links, validate-feature-files) passes.
 
 ### Remaining (Order)
 
-1. Phase 1.7 implementation: implement `cynode-pma` binary (P1.7-03) and integrate PMA startup into orchestrator (P1.7-04).
-2. E2E script: optional extend setup-dev.sh to run inference-in-sandbox and prompt-interpretation path when node and model are available.
-3. Phase 2: MCP in the loop, LangGraph workflow, MCP DB/artifact tools.
-4. Phase 3: Multi-node selection, leases, retries, telemetry.
-5. Phase 4: API Egress and external routing.
+1. Phase 2: P2-01 (MCP scoping/schema), P2-03 (preference tools), full P2-02 allow path; LangGraph workflow, MCP DB/artifact tools.
+2. Phase 3: Multi-node selection, leases, retries, telemetry.
+3. Phase 4: API Egress and external routing.
 
 ## References
 

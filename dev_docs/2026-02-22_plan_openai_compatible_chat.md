@@ -35,7 +35,7 @@
 
 **Date:** 2026-02-22
 **Type:** Implementation plan
-**Status:** Draft
+**Status:** Draft (validation complete: chat routing does not yet match spec; see [Chat routing validation](#chat-routing-validation-spec-vs-current))
 
 This plan describes the work needed to implement the OpenAI-compatible chat surface in the orchestrator User API Gateway and update `cynork` to use it.
 It also covers the related persistence and BDD feature coverage required by the referenced requirements and tech specs.
@@ -505,3 +505,28 @@ Codebase still uses the legacy chat path; none of the checklist items below are 
 - [ ] Implement slash autocomplete and inline suggestions for `/` input.
 - [ ] Remove or disable legacy `POST /v1/chat` (after internal clients and tests are migrated).
 - [ ] Run `just test-bdd`, `just docs-check`, and `just ci` to confirm everything is green.
+
+## Chat Routing Validation (Spec vs Current)
+
+Validation against `openai_compatible_chat_api.md` and `cynode_pma.md` (2026-02-22).
+
+### Spec (`openai_compatible_chat_api.md`, `cynode_pma.md`)
+
+- **Endpoints:** Gateway MUST expose only `GET /v1/models` and `POST /v1/chat/completions` (no legacy chat).
+- **Effective model:** Request body `model` if present and non-empty; otherwise `cynodeai.pm`.
+- **Routing path (CYNAI.USRGWY.OpenAIChatApi.RoutingPath):**
+  - Effective model **exactly `cynodeai.pm`** -> orchestrator hands off sanitized messages to **PM agent** (`cynode-pma`); orchestrator does not call inference directly.
+  - Effective model **any other value** -> orchestrator routes to **direct inference** (node-local or API Egress); orchestrator does not invoke cynode-pma.
+- **Default:** Omitted or empty `model` MUST behave as `cynodeai.pm`.
+
+### Current Implementation
+
+- User-gateway exposes **legacy `POST /v1/chat`** only (`{ "message": "..." }`).
+  No `GET /v1/models`, no `POST /v1/chat/completions`.
+- No `model` field; no effective-model logic; no routing by model id.
+- Chat handler creates a task and uses `OLLAMA_BASE_URL`/`INFERENCE_URL` for direct inference or sandbox job polling. **No request is ever sent to cynode-pma for chat.**
+- cynode-pma runs as a container in the orchestrator stack (e2e) but is not wired into the user-gateway chat path.
+
+**Conclusion (2026-02-22 update):** Chat routing now matches spec.
+Implemented: `GET /v1/models`, `POST /v1/chat/completions`, effective model default `cynodeai.pm`, routing to PMA when model is `cynodeai.pm` and to direct inference otherwise; secret redaction; chat thread and message persistence; OpenAI-style errors for these endpoints; legacy `POST /v1/chat` removed.
+Remaining from checklist: cynork chat flags/behavior, slash commands, BDD updates, optional removal of legacy references in tests.

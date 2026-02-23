@@ -119,6 +119,24 @@ func TestIntegration_AuthAuditLog(t *testing.T) {
 	}
 }
 
+func TestIntegration_McpToolCallAuditLog(t *testing.T) {
+	db, ctx := integrationDB(t)
+	rec := &models.McpToolCallAuditLog{
+		ToolName: "db.preference.get",
+		Decision: "allow",
+		Status:   "success",
+	}
+	if err := db.CreateMcpToolCallAuditLog(ctx, rec); err != nil {
+		t.Fatalf("CreateMcpToolCallAuditLog: %v", err)
+	}
+	if rec.ID == uuid.Nil {
+		t.Error("expected ID to be set")
+	}
+	if rec.CreatedAt.IsZero() {
+		t.Error("expected CreatedAt to be set")
+	}
+}
+
 func integrationDB(t *testing.T) (*DB, context.Context) {
 	t.Helper()
 	dsn := os.Getenv(integrationEnv)
@@ -400,5 +418,45 @@ func TestIntegration_GetJobsByTaskID_Empty(t *testing.T) {
 	}
 	if len(jobs) != 0 {
 		t.Errorf("GetJobsByTaskID: expected empty, got %d", len(jobs))
+	}
+}
+
+func TestIntegration_ChatThreadsAndMessages(t *testing.T) {
+	db, ctx := integrationDB(t)
+	user, err := db.CreateUser(ctx, "chat-user-"+uuid.New().String(), nil)
+	if err != nil {
+		t.Fatalf("CreateUser: %v", err)
+	}
+	thread, err := db.GetOrCreateActiveChatThread(ctx, user.ID, nil)
+	if err != nil {
+		t.Fatalf("GetOrCreateActiveChatThread: %v", err)
+	}
+	if thread.ID == uuid.Nil || thread.UserID != user.ID {
+		t.Errorf("thread: id or user_id mismatch")
+	}
+	msg, err := db.AppendChatMessage(ctx, thread.ID, "user", "hello", nil)
+	if err != nil {
+		t.Fatalf("AppendChatMessage: %v", err)
+	}
+	if msg.Role != "user" || msg.Content != "hello" {
+		t.Errorf("message: role or content mismatch")
+	}
+	msg2, err := db.AppendChatMessage(ctx, thread.ID, "assistant", "hi back", nil)
+	if err != nil {
+		t.Fatalf("AppendChatMessage assistant: %v", err)
+	}
+	if msg2.Content != "hi back" {
+		t.Errorf("assistant message content: got %q", msg2.Content)
+	}
+	rec := &models.ChatAuditLog{
+		UserID:           &user.ID,
+		Outcome:          "success",
+		RedactionApplied: false,
+	}
+	if err := db.CreateChatAuditLog(ctx, rec); err != nil {
+		t.Fatalf("CreateChatAuditLog: %v", err)
+	}
+	if rec.ID == uuid.Nil || rec.CreatedAt.IsZero() {
+		t.Error("CreateChatAuditLog: expected ID and CreatedAt set")
 	}
 }

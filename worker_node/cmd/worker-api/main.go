@@ -10,9 +10,11 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/cypher0n3/cynodeai/go_shared_libs/contracts/problem"
@@ -47,11 +49,21 @@ func runMain(ctx context.Context) int {
 	mux := newMux(exec, bearerToken, workspaceRoot, logger)
 	srv := newServer(mux)
 
+	serverErr := make(chan error, 1)
 	go func() {
-		_ = srv.ListenAndServe()
+		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			serverErr <- err
+		}
 	}()
-	<-ctx.Done()
-	shutdownCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	done := make(chan os.Signal, 1)
+	signal.Notify(done, os.Interrupt, syscall.SIGTERM)
+	select {
+	case <-ctx.Done():
+	case <-done:
+	case <-serverErr:
+	}
+	// Shutdown with a timeout; derive from ctx so contextcheck passes, but use WithoutCancel so we get a grace period even when ctx is already cancelled.
+	shutdownCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
 	defer cancel()
 	if err := srv.Shutdown(shutdownCtx); err != nil {
 		return 1

@@ -100,20 +100,20 @@ start_postgres() {
 
     # Create and start new container (pgvector image required for vector extension)
     $RUNTIME run -d \
-        --name $POSTGRES_CONTAINER_NAME \
-        -e POSTGRES_USER=$POSTGRES_USER \
-        -e POSTGRES_PASSWORD=$POSTGRES_PASSWORD \
-        -e POSTGRES_DB=$POSTGRES_DB \
-        -p $POSTGRES_PORT:5432 \
+        --name "$POSTGRES_CONTAINER_NAME" \
+        -e POSTGRES_USER="$POSTGRES_USER" \
+        -e POSTGRES_PASSWORD="$POSTGRES_PASSWORD" \
+        -e POSTGRES_DB="$POSTGRES_DB" \
+        -p "$POSTGRES_PORT:5432" \
         -v cynodeai-postgres-data:/var/lib/postgresql/data \
-        $POSTGRES_IMAGE
+        "$POSTGRES_IMAGE"
 
     log_info "Waiting for PostgreSQL to be ready..."
     sleep 3
 
     # Wait for PostgreSQL to be ready
     for i in {1..30}; do
-        if $RUNTIME exec $POSTGRES_CONTAINER_NAME pg_isready -U $POSTGRES_USER -d $POSTGRES_DB > /dev/null 2>&1; then
+        if $RUNTIME exec "$POSTGRES_CONTAINER_NAME" pg_isready -U "$POSTGRES_USER" -d "$POSTGRES_DB" > /dev/null 2>&1; then
             log_info "PostgreSQL is ready"
             return 0
         fi
@@ -143,46 +143,119 @@ run_migrations() {
     log_info "Migrations run when control-plane starts..."
 }
 
-# Function to build binaries
+# Function to build all binaries via justfile (outputs to module bin/ dirs: orchestrator/bin, worker_node/bin, etc.)
 build_binaries() {
-    log_info "Building binaries..."
+    log_info "Building all binaries (just build)..."
     cd "$PROJECT_ROOT"
-
-    go build -o bin/control-plane ./orchestrator/cmd/control-plane
-    go build -o bin/user-gateway ./orchestrator/cmd/user-gateway
-    go build -o bin/worker-api ./worker_node/cmd/worker-api
-    go build -o bin/node-manager ./worker_node/cmd/node-manager
-
-    log_info "Binaries built: bin/control-plane, bin/user-gateway, bin/worker-api, bin/node-manager"
-}
-
-# Build orchestrator service container images (control-plane, user-gateway). Context = repo root.
-build_orchestrator_containers() {
-    log_info "Building orchestrator container images..."
-    cd "$PROJECT_ROOT"
-    if ! $RUNTIME build -f orchestrator/cmd/control-plane/Containerfile -t cynodeai-control-plane:dev .; then
-        log_error "Failed to build control-plane image"
+    if ! command -v just &>/dev/null; then
+        log_error "just not found. Install just (https://github.com/casey/just) or run: just build"
         return 1
     fi
-    if ! $RUNTIME build -f orchestrator/cmd/user-gateway/Containerfile -t cynodeai-user-gateway:dev .; then
-        log_error "Failed to build user-gateway image"
+    if ! just build; then
+        log_error "just build failed"
         return 1
     fi
-    log_info "Orchestrator images built: cynodeai-control-plane:dev, cynodeai-user-gateway:dev"
+    log_info "Binaries built: orchestrator/bin, worker_node/bin, cynork/bin, agents/bin"
 }
 
-# Build inference-proxy container image for inference-in-sandbox E2E. Requires repo root context.
-build_inference_proxy_image() {
-    log_info "Building inference-proxy container image..."
+# E2E image cache: only rebuild when build-context hash changes. Cache dir stores one file per image (name.hash).
+# Set E2E_FORCE_REBUILD=1 to ignore cache and rebuild all images.
+E2E_IMAGE_CACHE_DIR="${E2E_IMAGE_CACHE_DIR:-$PROJECT_ROOT/tmp/e2e-image-cache}"
+
+# Compute a content hash of the build context (dockerfile + paths). Paths are relative to PROJECT_ROOT; use git when available.
+compute_build_context_hash() {
+    local dockerfile="$1"
+    shift
+    local paths=("$@")
     cd "$PROJECT_ROOT"
-    if ! $RUNTIME build -f worker_node/cmd/inference-proxy/Containerfile -t cynodeai-inference-proxy:dev .; then
-        log_error "Failed to build inference-proxy image"
+    local input=""
+    if [ ! -f "$dockerfile" ]; then
+        echo "invalid"
         return 1
     fi
-    log_info "Inference-proxy image built: cynodeai-inference-proxy:dev"
+    input=$(cat "$dockerfile" | tr -d '\0' 2>/dev/null || true)
+    if git rev-parse --is-inside-work-tree &>/dev/null; then
+        local list
+        list=$(git ls-files -- "${paths[@]}" 2>/dev/null | sort -u)
+        if [ -n "$list" ]; then
+            while IFS= read -r f; do
+                if [ -f "$f" ]; then
+                    # Strip NULs so hashing is consistent (avoids "ignored null byte" in command substitution)
+                    input="$input$(cat "$f" | tr -d '\0' 2>/dev/null || true)"
+                fi
+            done <<< "$list"
+        fi
+    else
+        local f
+        for f in "${paths[@]}"; do
+            if [ -d "$f" ]; then
+                while IFS= read -r ff; do
+                    input="$input$(cat "$ff" | tr -d '\0' 2>/dev/null || true)"
+                done < <(find "$f" -type f 2>/dev/null)
+            elif [ -f "$f" ]; then
+                input="$input$(cat "$f" | tr -d '\0' 2>/dev/null || true)"
+            fi
+        done
+    fi
+    echo -n "$input" | sha256sum | awk '{print $1}'
 }
 
-# Function to start orchestrator stack (postgres, control-plane, user-gateway) via docker-compose
+# Ensure image is built only when build context hash changed. Uses E2E_IMAGE_CACHE_DIR for tracking.
+# Usage: ensure_image_build_if_delta <image_key> <tag> <dockerfile_rel> <path1> [path2 ...]
+ensure_image_build_if_delta() {
+    local key="$1"
+    local tag="$2"
+    local dockerfile="$3"
+    shift 3
+    local paths=("$@")
+    local cache_file="$E2E_IMAGE_CACHE_DIR/$key.hash"
+    mkdir -p "$E2E_IMAGE_CACHE_DIR"
+    local current_hash
+    current_hash=$(compute_build_context_hash "$PROJECT_ROOT/$dockerfile" "${paths[@]}")
+    local cached_hash=""
+    if [ "${E2E_FORCE_REBUILD:-0}" = "1" ]; then
+        cached_hash=""
+    else
+        [ -f "$cache_file" ] && cached_hash=$(cat "$cache_file")
+    fi
+    if [ "$cached_hash" = "$current_hash" ]; then
+        if $RUNTIME image inspect "$tag" &>/dev/null; then
+            log_info "Image $tag up to date (cache hit)"
+            return 0
+        fi
+    fi
+    log_info "Building image $tag (cache miss or image missing)..."
+    cd "$PROJECT_ROOT"
+    if ! $RUNTIME build -f "$dockerfile" -t "$tag" .; then
+        log_error "Failed to build $tag"
+        return 1
+    fi
+    echo -n "$current_hash" > "$cache_file"
+    log_info "Built and cached $tag"
+    return 0
+}
+
+# Ensure orchestrator stack images (control-plane, user-gateway, cynode-pma) are built only when context changed.
+ensure_stack_images_build_if_delta() {
+    log_info "Ensuring stack images are up to date (rebuild only on delta)..."
+    cd "$PROJECT_ROOT"
+    ensure_image_build_if_delta "control-plane" "cynodeai-control-plane:dev" \
+        "orchestrator/cmd/control-plane/Containerfile" "orchestrator" "go.work" || return 1
+    ensure_image_build_if_delta "user-gateway" "cynodeai-user-gateway:dev" \
+        "orchestrator/cmd/user-gateway/Containerfile" "orchestrator" "go.work" || return 1
+    ensure_image_build_if_delta "cynode-pma" "cynodeai-cynode-pma:dev" \
+        "agents/cmd/cynode-pma/Containerfile" "agents" "go.work" || return 1
+    log_info "Stack images up to date"
+}
+
+# Ensure inference-proxy image is built only when context changed (used by full-demo / node with inference).
+ensure_inference_proxy_build_if_delta() {
+    ensure_image_build_if_delta "inference-proxy" "cynodeai-inference-proxy:dev" \
+        "worker_node/cmd/inference-proxy/Containerfile" "worker_node" "go_shared_libs" "go.work" || return 1
+}
+
+# Function to start orchestrator stack (postgres, control-plane, user-gateway) via docker-compose.
+# Images are built only when build-context hash changes (see ensure_stack_images_build_if_delta).
 start_orchestrator_stack_compose() {
     log_info "Starting orchestrator stack with compose..."
     cd "$PROJECT_ROOT"
@@ -194,6 +267,7 @@ start_orchestrator_stack_compose() {
         log_error "Compose file not found: $COMPOSE_FILE"
         return 1
     fi
+    ensure_stack_images_build_if_delta || return 1
     # Tear down any existing stack and remove standalone containers that might hold ports
     $RUNTIME compose -f "$COMPOSE_FILE" down 2>/dev/null || true
     $RUNTIME rm -f "$CONTROL_PLANE_CONTAINER_NAME" "$USER_GATEWAY_CONTAINER_NAME" 2>/dev/null || true
@@ -201,7 +275,7 @@ start_orchestrator_stack_compose() {
     export JWT_SECRET NODE_PSK WORKER_API_BEARER_TOKEN CONTROL_PLANE_PORT ORCHESTRATOR_PORT
     export WORKER_API_TARGET_URL="http://${CONTAINER_HOST_ALIAS}:${WORKER_PORT}"
     export BOOTSTRAP_ADMIN_PASSWORD="$ADMIN_PASSWORD"
-    if ! $RUNTIME compose -f "$COMPOSE_FILE" up -d --build; then
+    if ! $RUNTIME compose -f "$COMPOSE_FILE" up -d; then
         log_error "Compose up failed"
         return 1
     fi
@@ -279,11 +353,11 @@ start_node() {
     export NODE_REGISTRATION_PSK=$NODE_PSK
     export NODE_SLUG=$NODE_SLUG
     export NODE_NAME="${NODE_NAME:-Development Node}"
-    # Worker-api is started by node-manager; point to bin so exec.LookPath finds it
-    export NODE_MANAGER_WORKER_API_BIN="$PROJECT_ROOT/bin/worker-api"
+    # Worker-api is started by node-manager; point to worker_node/bin so exec.LookPath finds it
+    export NODE_MANAGER_WORKER_API_BIN="$PROJECT_ROOT/worker_node/bin/worker-api"
     export LISTEN_ADDR=":$WORKER_PORT"
     export CONTAINER_RUNTIME="${CONTAINER_RUNTIME:-podman}"
-    ./bin/node-manager &
+    "$PROJECT_ROOT/worker_node/bin/node-manager" &
     NODE_PID=$!
     echo $NODE_PID > /tmp/cynodeai-node-manager.pid
 
@@ -301,11 +375,11 @@ stop_all() {
     log_info "Stopping all services..."
 
     if [ -f /tmp/cynodeai-node-manager.pid ]; then
-        kill $(cat /tmp/cynodeai-node-manager.pid) 2>/dev/null || true
+        kill "$(cat /tmp/cynodeai-node-manager.pid)" 2>/dev/null || true
         rm -f /tmp/cynodeai-node-manager.pid
     fi
     if [ -f /tmp/cynodeai-worker-api.pid ]; then
-        kill $(cat /tmp/cynodeai-worker-api.pid) 2>/dev/null || true
+        kill "$(cat /tmp/cynodeai-worker-api.pid)" 2>/dev/null || true
         rm -f /tmp/cynodeai-worker-api.pid
     fi
     stop_orchestrator_stack_compose
@@ -370,6 +444,7 @@ run_e2e_test() {
         [ "$i" -eq 30 ] && { log_error "User API not ready after 30s"; return 1; }
         sleep 1
     done
+    sleep 3
 
     # Inference readiness: load model and run basic inference when Ollama container is present
     if ! run_ollama_inference_smoke; then
@@ -401,17 +476,29 @@ run_e2e_test() {
     fi
     log_info "User info retrieved: $USER_HANDLE"
 
-    # Test 3: Create a task
+    # Test 3: Create a task (retry on 000/5xx - gateway may still be warming or busy)
     log_info "Test 3: Create a task..."
-    TASK_RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "$USER_API/v1/tasks" \
-        -H "Authorization: Bearer $ACCESS_TOKEN" \
-        -H "Content-Type: application/json" \
-        -d '{"prompt": "echo Hello from sandbox"}')
-    TASK_HTTP_CODE=$(echo "$TASK_RESPONSE" | tail -n 1)
-    TASK_BODY=$(echo "$TASK_RESPONSE" | sed '$d')
-    TASK_ID=$(echo "$TASK_BODY" | jq -r '.task_id // .id // empty')
+    TASK_ID=""
+    for attempt in 1 2 3; do
+        [ "$attempt" -gt 1 ] && { log_info "Retry $attempt/3..."; sleep 5; }
+        TASK_RESPONSE=$(curl -s -w "\n%{http_code}" --max-time 60 -X POST "$USER_API/v1/tasks" \
+            -H "Authorization: Bearer $ACCESS_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d '{"prompt": "echo Hello from sandbox"}')
+        TASK_HTTP_CODE=$(echo "$TASK_RESPONSE" | tail -n 1)
+        TASK_BODY=$(echo "$TASK_RESPONSE" | sed '$d')
+        TASK_ID=$(echo "$TASK_BODY" | jq -r '.task_id // .id // empty')
+        if [ -n "$TASK_ID" ]; then
+            break
+        fi
+        if [ "$TASK_HTTP_CODE" = "000" ]; then
+            log_warn "Create task attempt $attempt: connection failed or timeout (HTTP 000)"
+        else
+            log_warn "Create task attempt $attempt failed (HTTP $TASK_HTTP_CODE): $TASK_BODY"
+        fi
+    done
     if [ -z "$TASK_ID" ]; then
-        log_error "Create task failed (HTTP $TASK_HTTP_CODE): $TASK_BODY"
+        log_error "Create task failed after 3 attempts (last HTTP $TASK_HTTP_CODE): $TASK_BODY"
         return 1
     fi
     log_info "Task created with ID: $TASK_ID"
@@ -434,10 +521,11 @@ run_e2e_test() {
     # Test 5b: Inference-in-sandbox task (only when node is inference-ready)
     if [ -n "${INFERENCE_PROXY_IMAGE:-}" ]; then
         log_info "Test 5b: Create task with use_inference and verify sandbox sees OLLAMA_BASE_URL..."
+        # Shell: pass literal $OLLAMA_BASE_URL in prompt so sandbox expands it
         INF_TASK_RESPONSE=$(curl -s -X POST "$USER_API/v1/tasks" \
             -H "Authorization: Bearer $ACCESS_TOKEN" \
             -H "Content-Type: application/json" \
-            -d '{"prompt": "sh -c '\''echo $OLLAMA_BASE_URL'\''", "use_inference": true, "input_mode": "commands"}')
+            -d "{\"prompt\": \"sh -c 'echo \$OLLAMA_BASE_URL'\", \"use_inference\": true, \"input_mode\": \"commands\"}")
         INF_TASK_ID=$(echo "$INF_TASK_RESPONSE" | jq -r '.task_id // .id // empty')
         if [ -z "$INF_TASK_ID" ]; then
             log_error "Create inference task failed: $INF_TASK_RESPONSE"
@@ -508,6 +596,40 @@ run_e2e_test() {
     fi
     log_info "Prompt test passed: model output (first 120 chars)= ${PROMPT_STDOUT:0:120}"
 
+    # Test 5d: OpenAI-compatible chat (GET /v1/models, POST /v1/chat/completions)
+    log_info "Test 5d: GET /v1/models..."
+    MODELS_RESPONSE=$(curl -s -w "\n%{http_code}" -X GET "$USER_API/v1/models" \
+        -H "Authorization: Bearer $ACCESS_TOKEN")
+    MODELS_HTTP=$(echo "$MODELS_RESPONSE" | tail -n 1)
+    MODELS_BODY=$(echo "$MODELS_RESPONSE" | sed '$d')
+    if [ "$MODELS_HTTP" != "200" ]; then
+        log_error "GET /v1/models failed (HTTP $MODELS_HTTP): $MODELS_BODY"
+        return 1
+    fi
+    if ! echo "$MODELS_BODY" | jq -e '.object == "list" and (.data | length) >= 1' >/dev/null 2>&1; then
+        log_error "GET /v1/models invalid list-models payload: $MODELS_BODY"
+        return 1
+    fi
+    log_info "List-models OK"
+
+    log_info "Test 5d: POST /v1/chat/completions..."
+    CHAT_RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "$USER_API/v1/chat/completions" \
+        -H "Authorization: Bearer $ACCESS_TOKEN" \
+        -H "Content-Type: application/json" \
+        -d '{"model":"cynodeai.pm","messages":[{"role":"user","content":"Reply with exactly: OK"}]}')
+    CHAT_HTTP=$(echo "$CHAT_RESPONSE" | tail -n 1)
+    CHAT_BODY=$(echo "$CHAT_RESPONSE" | sed '$d')
+    if [ "$CHAT_HTTP" != "200" ]; then
+        log_error "POST /v1/chat/completions failed (HTTP $CHAT_HTTP): $CHAT_BODY"
+        return 1
+    fi
+    CHAT_CONTENT=$(echo "$CHAT_BODY" | jq -r '.choices[0].message.content // empty')
+    if [ -z "$CHAT_CONTENT" ] || [ "$(echo "$CHAT_CONTENT" | tr -d '\n\r\t ')" = "" ]; then
+        log_error "POST /v1/chat/completions missing choices[0].message.content: $CHAT_BODY"
+        return 1
+    fi
+    log_info "OpenAI chat OK: completion (first 80 chars)= ${CHAT_CONTENT:0:80}"
+
     # Test 6: Node registration (control-plane)
     log_info "Test 6: Node registration..."
     NODE_RESPONSE=$(curl -s -X POST "$CONTROL_PLANE_API/v1/nodes/register" \
@@ -532,6 +654,7 @@ run_e2e_test() {
 
     # Test 7: Report capability with node JWT (control-plane)
     log_info "Test 7: Report capability..."
+    # shellcheck disable=SC2034
     CAP_RESPONSE=$(curl -s -X POST "$CONTROL_PLANE_API/v1/nodes/capability" \
         -H "Authorization: Bearer $NODE_JWT" \
         -H "Content-Type: application/json" \
@@ -600,6 +723,8 @@ show_usage() {
     echo "  ORCHESTRATOR_PORT Orchestrator API port (default: 8080)"
     echo "  ADMIN_PASSWORD    Admin user password (default: admin123)"
     echo "  NODE_PSK          Node registration PSK (default: dev-node-psk-secret)"
+    echo "  E2E_FORCE_REBUILD Set to 1 to rebuild container images even when cache matches (default: 0)"
+    echo "  E2E_IMAGE_CACHE_DIR Dir for build-context hashes (default: tmp/e2e-image-cache)"
 }
 
 # Main script
@@ -634,7 +759,7 @@ case "${1:-}" in
     full-demo)
         build_binaries || { stop_all; exit 1; }
         start_orchestrator_stack_compose || { stop_all; exit 1; }
-        build_inference_proxy_image || { stop_all; exit 1; }
+        ensure_inference_proxy_build_if_delta || { stop_all; exit 1; }
         export INFERENCE_PROXY_IMAGE="${INFERENCE_PROXY_IMAGE:-cynodeai-inference-proxy:dev}"
         export OLLAMA_UPSTREAM_URL="${OLLAMA_UPSTREAM_URL:-http://host.containers.internal:11434}"
         sleep 2

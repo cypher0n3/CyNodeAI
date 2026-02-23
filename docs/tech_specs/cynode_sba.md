@@ -30,7 +30,7 @@ It is a deterministic executor that runs inside a sandbox container; see [Sandbo
 
 This spec is derived from the draft runner design in:
 
-- [`docs/draft_specs/cynode-agent_rough_spec.md`](../draft_specs/cynode-agent_rough_spec.md)
+- Draft runner design: `docs/draft_specs/cynode-agent_rough_spec.md` (not in repo)
 
 This spec aligns with:
 

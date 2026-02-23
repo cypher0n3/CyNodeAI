@@ -48,6 +48,14 @@ type OrchestratorConfig struct {
 	// Inference (PM model): when set, prompt-mode tasks call this URL directly so prompt→model MUST work (MVP Phase 1).
 	InferenceURL   string // e.g. http://localhost:11434 or http://ollama:11434
 	InferenceModel string // e.g. tinyllama; default tinyllama
+
+	// PMA (cynode-pma): when enabled, control-plane starts cynode-pma as subprocess so PM chat surface is backed by the agent. See docs/tech_specs/cynode_pma.md.
+	PMAEnabled          bool   // PMA_ENABLED; default false
+	PMABinaryPath       string // PMA_BINARY; path to cynode-pma binary
+	PMAListenAddr       string // PMA_LISTEN_ADDR; default :8090
+	PMAInstructionsRoot string // PMA_INSTRUCTIONS_ROOT; optional
+	// PMABaseURL is the base URL for the user-gateway to call cynode-pma (e.g. http://localhost:8090 or http://cynode-pma:8090). Used for model=cynodeai.pm routing.
+	PMABaseURL string // PMA_BASE_URL; empty means PM chat path is unavailable
 }
 
 // NodeConfig holds node manager configuration.
@@ -97,6 +105,11 @@ func LoadOrchestratorConfig() *OrchestratorConfig {
 		RateLimitPerMinute:     getIntEnv("RATE_LIMIT_PER_MINUTE", 60),
 		InferenceURL:           getEnv("OLLAMA_BASE_URL", getEnv("INFERENCE_URL", "")),
 		InferenceModel:         getEnv("INFERENCE_MODEL", "tinyllama"),
+		PMAEnabled:             getBoolEnv("PMA_ENABLED", false),
+		PMABinaryPath:          getEnv("PMA_BINARY", "cynode-pma"),
+		PMAListenAddr:          getEnv("PMA_LISTEN_ADDR", ":8090"),
+		PMAInstructionsRoot:    getEnv("PMA_INSTRUCTIONS_ROOT", ""),
+		PMABaseURL:             getEnv("PMA_BASE_URL", ""),
 	}
 }
 
@@ -138,6 +151,18 @@ func getDurationEnv(key string, defaultVal time.Duration) time.Duration {
 	if val := os.Getenv(key); val != "" {
 		if d, err := time.ParseDuration(val); err == nil {
 			return d
+		}
+	}
+	return defaultVal
+}
+
+func getBoolEnv(key string, defaultVal bool) bool {
+	if val := os.Getenv(key); val != "" {
+		switch val {
+		case "1", "true", "yes", "on":
+			return true
+		case "0", "false", "no", "off":
+			return false
 		}
 	}
 	return defaultVal

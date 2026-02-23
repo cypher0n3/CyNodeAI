@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"os/exec"
 	"os/signal"
 	"syscall"
 	"time"
@@ -18,6 +19,7 @@ import (
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/database"
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/handlers"
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/middleware"
+	"github.com/cypher0n3/cynodeai/orchestrator/internal/pmasubprocess"
 )
 
 // testShutdownTimeout, when set by tests, overrides the server shutdown timeout.
@@ -173,6 +175,21 @@ func run(ctx context.Context, store database.Store, cfg *config.OrchestratorConf
 	}
 
 	go startDispatcher(ctx, store, logger)
+
+	var pmaCmd *exec.Cmd
+	if cmd, err := pmasubprocess.Start(cfg, logger); err != nil {
+		logger.Error("failed to start cynode-pma", "error", err)
+		return err
+	} else if cmd != nil {
+		pmaCmd = cmd
+		defer func() {
+			if pmaCmd != nil && pmaCmd.Process != nil {
+				_ = pmaCmd.Process.Signal(syscall.SIGTERM)
+				_ = pmaCmd.Wait()
+				logger.Info("cynode-pma stopped")
+			}
+		}()
+	}
 
 	done := make(chan os.Signal, 1)
 	signal.Notify(done, os.Interrupt, syscall.SIGTERM)

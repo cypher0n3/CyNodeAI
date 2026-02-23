@@ -21,7 +21,7 @@ default:
 # Local CI: all lint, all tests (with 90% coverage), Go vuln check, BDD suites.
 # test-go-cover runs coverage for all go_modules (orchestrator uses testcontainers for Postgres when POSTGRES_TEST_DSN unset).
 # test-bdd runs Godog BDD for orchestrator and worker_node (orchestrator scenarios need POSTGRES_TEST_DSN for DB steps).
-ci: lint-go lint-go-ci vulncheck-go lint-python lint-md validate-doc-links validate-feature-files test-go-cover test-bdd lint-containerfiles
+ci: lint-sh lint-go lint-go-ci vulncheck-go lint-python lint-md validate-doc-links validate-feature-files test-go-cover test-bdd lint-containerfiles
     @:
 
 # Local docs check: lint Markdown, validate doc links, validate feature files.
@@ -42,7 +42,7 @@ fix-cynode:
 setup: install-podman install-go install-go-tools install-markdownlint
     @:
 
-# Remove temporary files, .out files, compiled binaries, coverage artifacts, and Go test cache.
+# Remove temporary files, .out files, compiled binaries (module bin/ dirs), coverage artifacts, and Go test cache.
 clean:
     #!/usr/bin/env bash
     set -e
@@ -50,9 +50,13 @@ clean:
     echo "Cleaning $root ..."
     find "$root" -maxdepth 3 -type f -name '*.out' ! -path '*/.git/*' -delete 2>/dev/null || true
     find "$root" -maxdepth 4 -type f -name 'coverage.*' ! -path '*/.git/*' -delete 2>/dev/null || true
+    for dir in bin orchestrator/bin worker_node/bin cynork/bin agents/bin; do
+      rm -rf "$root/$dir"
+    done
     for m in {{ go_modules }}; do
       (cd "$root/$m" && go clean -testcache 2>/dev/null) || true
     done
+    (cd "$root/agents" && go clean -testcache 2>/dev/null) || true
     echo "Done."
 
 # Install Podman if not already installed (Linux: distro package; macOS: Homebrew)
@@ -205,6 +209,23 @@ install-go-tools: install-go
     @go install golang.org/x/vuln/cmd/govulncheck@latest
     @echo "Installed: golangci-lint, staticcheck, govulncheck"
 
+# Lint all shell scripts with shellcheck (requires shellcheck in PATH, e.g. pacman -S shellcheck).
+lint-sh:
+    #!/usr/bin/env bash
+    set -e
+    root="{{ root_dir }}"
+    pushd "$root" >/dev/null
+    trap 'popd >/dev/null 2>/dev/null' EXIT
+    command -v shellcheck >/dev/null 2>&1 || { echo "lint-sh: shellcheck not found. Install e.g. pacman -S shellcheck, apt install shellcheck, brew install shellcheck"; exit 1; }
+    files=()
+    while IFS= read -r -d '' p; do files+=("$p"); done < <(find . -type f -name '*.sh' ! -path '*/.git/*' ! -path '*/tmp/*' ! -path '*_bdd/tmp/*' -print0 | sort -z)
+    if [ ${#files[@]} -eq 0 ]; then echo "No .sh scripts found."; exit 0; fi
+    for f in "${files[@]}"; do
+      echo "==> shellcheck $f"
+      shellcheck "$root/$f"
+    done
+    echo "Shell script lint: OK"
+
 # Run go vet and staticcheck (quick Go lint; use lint-go-ci for full suite).
 # Runs in each workspace module so each go.mod is used correctly.
 lint-go: install-go-tools
@@ -354,93 +375,100 @@ go-upgrade-deps: install-go
       (cd "{{ root_dir }}/$m" && go get -u ./... && go mod tidy); \
     done
 
-# All built binaries go here (production and dev). Production = stripped + upx; dev = debug symbols.
-bin_dir := root_dir + "/bin"
-
-# Build one binary: production (stripped, upx'd) or dev (debug). Usage: _build_prod <name> <pkg_path>; _build_dev <name> <pkg_path>.
-_build_prod name pkg_path:
+# Built binaries go to each module's bin/ (orchestrator/bin, worker_node/bin, cynork/bin, agents/bin).
+# Production = stripped + upx; dev = debug symbols. Usage: _build_prod <name> <pkg_path> <out_dir>; _build_dev <name> <pkg_path> <out_dir>.
+_build_prod name pkg_path out_dir:
     #!/usr/bin/env bash
     set -e
     root="{{ root_dir }}"
-    mkdir -p "$root/bin"
+    out="{{ out_dir }}"
+    mkdir -p "$root/$out"
     cd "$root"
     echo "Building {{ name }} (production)..."
-    CGO_ENABLED=0 go build -ldflags="-s -w" -o "$root/bin/{{ name }}" {{ pkg_path }}
+    CGO_ENABLED=0 go build -ldflags="-s -w" -o "$root/$out/{{ name }}" {{ pkg_path }}
     if command -v upx >/dev/null 2>&1; then
-      upx --best "$root/bin/{{ name }}"
+      upx --best "$root/$out/{{ name }}" || { r=$?; [ "$r" -eq 2 ] && true || exit "$r"; }
     else
       echo "upx not found; install for smaller binary (e.g. pacman -S upx, apt install upx-ucl)"
     fi
-    echo "Built: $root/bin/{{ name }}"
+    echo "Built: $root/$out/{{ name }}"
 
-_build_dev name pkg_path:
+_build_dev name pkg_path out_dir:
     #!/usr/bin/env bash
     set -e
     root="{{ root_dir }}"
-    mkdir -p "$root/bin"
+    out="{{ out_dir }}"
+    mkdir -p "$root/$out"
     cd "$root"
     echo "Building {{ name }} (dev, debug)..."
-    go build -gcflags="all=-N -l" -o "$root/bin/{{ name }}-dev" {{ pkg_path }}
-    echo "Built: $root/bin/{{ name }}-dev"
+    go build -gcflags="all=-N -l" -o "$root/$out/{{ name }}-dev" {{ pkg_path }}
+    echo "Built: $root/$out/{{ name }}-dev"
 
 # --- Cynork ---
 build-cynork: install-go
-    @just _build_prod cynork ./cynork
+    @just _build_prod cynork ./cynork cynork/bin
 
 build-cynork-dev: install-go
-    @just _build_dev cynork ./cynork
+    @just _build_dev cynork ./cynork cynork/bin
 
 # --- Orchestrator ---
 build-control-plane: install-go
-    @just _build_prod control-plane ./orchestrator/cmd/control-plane
+    @just _build_prod control-plane ./orchestrator/cmd/control-plane orchestrator/bin
 
 build-control-plane-dev: install-go
-    @just _build_dev control-plane ./orchestrator/cmd/control-plane
+    @just _build_dev control-plane ./orchestrator/cmd/control-plane orchestrator/bin
 
 build-user-gateway: install-go
-    @just _build_prod user-gateway ./orchestrator/cmd/user-gateway
+    @just _build_prod user-gateway ./orchestrator/cmd/user-gateway orchestrator/bin
 
 build-user-gateway-dev: install-go
-    @just _build_dev user-gateway ./orchestrator/cmd/user-gateway
+    @just _build_dev user-gateway ./orchestrator/cmd/user-gateway orchestrator/bin
 
 build-api-egress: install-go
-    @just _build_prod api-egress ./orchestrator/cmd/api-egress
+    @just _build_prod api-egress ./orchestrator/cmd/api-egress orchestrator/bin
 
 build-api-egress-dev: install-go
-    @just _build_dev api-egress ./orchestrator/cmd/api-egress
+    @just _build_dev api-egress ./orchestrator/cmd/api-egress orchestrator/bin
 
 build-mcp-gateway: install-go
-    @just _build_prod mcp-gateway ./orchestrator/cmd/mcp-gateway
+    @just _build_prod mcp-gateway ./orchestrator/cmd/mcp-gateway orchestrator/bin
 
 build-mcp-gateway-dev: install-go
-    @just _build_dev mcp-gateway ./orchestrator/cmd/mcp-gateway
+    @just _build_dev mcp-gateway ./orchestrator/cmd/mcp-gateway orchestrator/bin
 
 # --- Worker node ---
 build-worker-api: install-go
-    @just _build_prod worker-api ./worker_node/cmd/worker-api
+    @just _build_prod worker-api ./worker_node/cmd/worker-api worker_node/bin
 
 build-worker-api-dev: install-go
-    @just _build_dev worker-api ./worker_node/cmd/worker-api
+    @just _build_dev worker-api ./worker_node/cmd/worker-api worker_node/bin
 
 build-node-manager: install-go
-    @just _build_prod node-manager ./worker_node/cmd/node-manager
+    @just _build_prod node-manager ./worker_node/cmd/node-manager worker_node/bin
 
 build-node-manager-dev: install-go
-    @just _build_dev node-manager ./worker_node/cmd/node-manager
+    @just _build_dev node-manager ./worker_node/cmd/node-manager worker_node/bin
 
 build-inference-proxy: install-go
-    @just _build_prod inference-proxy ./worker_node/cmd/inference-proxy
+    @just _build_prod inference-proxy ./worker_node/cmd/inference-proxy worker_node/bin
 
 build-inference-proxy-dev: install-go
-    @just _build_dev inference-proxy ./worker_node/cmd/inference-proxy
+    @just _build_dev inference-proxy ./worker_node/cmd/inference-proxy worker_node/bin
 
-# Build all production binaries (stripped + upx) into bin/.
+# --- Agents ---
+build-cynode-pma: install-go
+    @just _build_prod cynode-pma ./agents/cmd/cynode-pma agents/bin
+
+build-cynode-pma-dev: install-go
+    @just _build_dev cynode-pma ./agents/cmd/cynode-pma agents/bin
+
+# Build all production binaries (stripped + upx) into each module's bin/.
 build: install-go
-    @just build-cynork build-control-plane build-user-gateway build-api-egress build-mcp-gateway build-worker-api build-node-manager build-inference-proxy
+    @just build-cynork build-control-plane build-user-gateway build-api-egress build-mcp-gateway build-worker-api build-node-manager build-inference-proxy build-cynode-pma
 
-# Build all dev binaries (debug symbols) into bin/.
+# Build all dev binaries (debug symbols) into each module's bin/.
 build-dev: install-go
-    @just build-cynork-dev build-control-plane-dev build-user-gateway-dev build-api-egress-dev build-mcp-gateway-dev build-worker-api-dev build-node-manager-dev build-inference-proxy-dev
+    @just build-cynork-dev build-control-plane-dev build-user-gateway-dev build-api-egress-dev build-mcp-gateway-dev build-worker-api-dev build-node-manager-dev build-inference-proxy-dev build-cynode-pma-dev
 
 # Run Go tests
 test-go: test-go-cover test-go-race test-go-e2e
@@ -458,8 +486,9 @@ test-go-e2e:
 
 # Minimum Go coverage (percent) required per package when running test-go-cover / ci
 go_coverage_min := "90"
-# Exception: control-plane main() cannot be covered by tests; allow ≥89%
+# Exceptions: control-plane and database allow ≥89%; testutil (test helpers) has no minimum; mcp-gateway (testcontainers) allows ≥85%.
 go_coverage_min_control_plane := "89"
+go_coverage_min_mcp_gateway := "85"
 
 # Run Go tests with coverage for all go_modules; fail if any package is below go_coverage_min.
 # Orchestrator uses testcontainers for Postgres when POSTGRES_TEST_DSN is unset (run just podman-setup first).
@@ -482,7 +511,8 @@ test-go-cover: install-go podman-setup
 
       r=0
       min_cp="{{ go_coverage_min_control_plane }}"
-      below=$(awk -v min="$min" -v min_cp="$min_cp" '
+      min_mcp="{{ go_coverage_min_mcp_gateway }}"
+      below=$(awk -v min="$min" -v min_cp="$min_cp" -v min_mcp="$min_mcp" '
         /^mode:/ { next }
         { path = $1; sub(/:.*/, "", path)
           n = split(path, a, "/")
@@ -495,7 +525,11 @@ test-go-cover: install-go podman-setup
         END {
           for (p in t) {
             pct = (t[p] > 0) ? (100 * c[p] / t[p]) : 0
-            req = (p ~ /\/cmd\/control-plane$/) ? min_cp + 0 : min + 0
+            if (p ~ /\/cmd\/control-plane$/) req = min_cp + 0
+            else if (p ~ /\/internal\/database$/) req = min_cp + 0
+            else if (p ~ /\/internal\/testutil$/) req = 0
+            else if (p ~ /\/cmd\/mcp-gateway$/) req = min_mcp + 0
+            else req = min + 0
             if (pct < req) { printf "  %s %.1f%%\n", p, pct; e = 1 }
           }
           exit e + 0
@@ -560,7 +594,9 @@ test-bdd timeout="": install-go
 clean-db:
     @./scripts/setup-dev.sh clean-db
 
-e2e:
+# E2E: build all binaries, start stack (compose), build inference-proxy image, start node, run demo test.
+# setup-dev.sh full-demo runs just build internally.
+e2e: install-go
     @./scripts/setup-dev.sh full-demo
 
 e2e-stop:

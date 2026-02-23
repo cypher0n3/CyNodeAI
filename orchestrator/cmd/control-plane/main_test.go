@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"os/exec"
 	"strings"
 	"testing"
 	"time"
@@ -526,6 +527,41 @@ func TestRun_ShutdownSucceeds(t *testing.T) {
 	err := <-done
 	if err != nil {
 		t.Errorf("run after cancel: %v", err)
+	}
+}
+
+// TestRun_PMAStartedAndStopped runs with PMA enabled and a quick-exit binary so the start and defer stop path is covered.
+func TestRun_PMAStartedAndStopped(t *testing.T) {
+	path, err := exec.LookPath("true")
+	if err != nil {
+		t.Skip("true not in PATH, skipping PMA test")
+	}
+	oldListen := os.Getenv("LISTEN_ADDR")
+	_ = os.Setenv("LISTEN_ADDR", ":0")
+	defer func() {
+		if oldListen != "" {
+			_ = os.Setenv("LISTEN_ADDR", oldListen)
+		} else {
+			_ = os.Unsetenv("LISTEN_ADDR")
+		}
+	}()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cfg := config.LoadOrchestratorConfig()
+	cfg.PMAEnabled = true
+	cfg.PMABinaryPath = path
+	mockDB := testutil.NewMockDB()
+	logger := slog.Default()
+
+	done := make(chan error, 1)
+	go func() { done <- run(ctx, mockDB, cfg, logger) }()
+
+	time.Sleep(50 * time.Millisecond)
+	cancel()
+
+	err = <-done
+	if err != nil {
+		t.Errorf("run with PMA after cancel: %v", err)
 	}
 }
 

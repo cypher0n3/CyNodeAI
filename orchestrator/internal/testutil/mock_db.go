@@ -31,6 +31,8 @@ type MockDB struct {
 	JobsByTask        map[uuid.UUID][]*models.Job
 	CapabilityHistory []*NodeCapabilitySnapshot
 	AuditLogs         []*AuthAuditLog
+	ChatThreads       map[uuid.UUID]*models.ChatThread
+	ChatMessages     map[uuid.UUID][]*models.ChatMessage
 
 	// Error injection
 	ForceError error
@@ -68,6 +70,8 @@ func NewMockDB() *MockDB {
 		Tasks:           make(map[uuid.UUID]*models.Task),
 		Jobs:            make(map[uuid.UUID]*models.Job),
 		JobsByTask:      make(map[uuid.UUID][]*models.Job),
+		ChatThreads:     make(map[uuid.UUID]*models.ChatThread),
+		ChatMessages:    make(map[uuid.UUID][]*models.ChatMessage),
 	}
 }
 
@@ -565,6 +569,52 @@ func (m *MockDB) UpdateNodeWorkerAPIConfig(_ context.Context, nodeID uuid.UUID, 
 		})
 		return nil
 	})
+}
+
+// CreateMcpToolCallAuditLog is a no-op for the mock unless ForceError is set; satisfies database.Store.
+func (m *MockDB) CreateMcpToolCallAuditLog(_ context.Context, _ *models.McpToolCallAuditLog) error {
+	return runWithWLockErr(m, func() error { return m.ForceError })
+}
+
+// GetOrCreateActiveChatThread returns or creates a chat thread for (userID, projectID).
+func (m *MockDB) GetOrCreateActiveChatThread(_ context.Context, userID uuid.UUID, projectID *uuid.UUID) (*models.ChatThread, error) {
+	return runWithLock(m, true, func() (*models.ChatThread, error) {
+		now := time.Now().UTC()
+		thread := &models.ChatThread{
+			ID:        uuid.New(),
+			UserID:    userID,
+			ProjectID: projectID,
+			CreatedAt: now,
+			UpdatedAt: now,
+		}
+		m.ChatThreads[thread.ID] = thread
+		m.ChatMessages[thread.ID] = nil
+		return thread, nil
+	})
+}
+
+// AppendChatMessage appends a message to the thread.
+func (m *MockDB) AppendChatMessage(_ context.Context, threadID uuid.UUID, role, content string, metadata *string) (*models.ChatMessage, error) {
+	return runWithLock(m, true, func() (*models.ChatMessage, error) {
+		msg := &models.ChatMessage{
+			ID:        uuid.New(),
+			ThreadID:  threadID,
+			Role:      role,
+			Content:   content,
+			Metadata:  metadata,
+			CreatedAt: time.Now().UTC(),
+		}
+		m.ChatMessages[threadID] = append(m.ChatMessages[threadID], msg)
+		if t, ok := m.ChatThreads[threadID]; ok {
+			t.UpdatedAt = time.Now().UTC()
+		}
+		return msg, nil
+	})
+}
+
+// CreateChatAuditLog writes a chat audit log entry (no-op storage for mock).
+func (m *MockDB) CreateChatAuditLog(_ context.Context, _ *models.ChatAuditLog) error {
+	return runWithWLockErr(m, func() error { return nil })
 }
 
 // AddUser adds a pre-created user to the mock database.
