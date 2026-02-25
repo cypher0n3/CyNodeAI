@@ -3,6 +3,7 @@
 - [Document Overview](#document-overview)
 - [Purpose](#purpose)
 - [Design Principles](#design-principles)
+- [SBA Capabilities (What the Agent Can Call and How)](#sba-capabilities-what-the-agent-can-call-and-how)
 - [Execution Model](#execution-model)
   - [Todo List](#todo-list)
 - [Integration With Worker API](#integration-with-worker-api)
@@ -19,11 +20,13 @@
   - [Security Constraints](#security-constraints)
 - [MCP Tool Access (Sandbox Allowlist)](#mcp-tool-access-sandbox-allowlist)
 - [SBA Container Image (Containerfile)](#sba-container-image-containerfile)
+- [Go Implementation](#go-implementation)
 - [Protocol Versioning](#protocol-versioning)
 
 ## Document Overview
 
 - Spec ID: `CYNAI.SBAGNT.Doc.CyNodeSba` <a id="spec-cynai-sbagnt-doc-cynodesba"></a>
+- Traces To: [REQ-SBAGNT-0001](../requirements/sbagnt.md#req-sbagnt-0001)
 
 This document defines `cynode-sba`, the sandbox agent runner binary.
 It is a deterministic executor that runs inside a sandbox container; see [Sandbox Boundary and Security](#sandbox-boundary-and-security) for container shape and the network model (egress only via worker proxies, not airgapped).
@@ -58,6 +61,73 @@ Within the job, the SBA MUST be able to build and manage its own todo list (deri
   Runtime enforcement is bounded by the container and non-root execution, not by per-command or per-path allowlists.
   The orchestrator or worker MAY use command or path allowlists when constructing or validating job requests; the SBA does not enforce them inside the container.
 - Structured, machine-parseable results.
+
+## SBA Capabilities (What the Agent Can Call and How)
+
+- Spec ID: `CYNAI.SBAGNT.Capabilities` <a id="spec-cynai-sbagnt-capabilities"></a>
+
+Traces To:
+
+- [REQ-SBAGNT-0001](../requirements/sbagnt.md#req-sbagnt-0001)
+- [REQ-SBAGNT-0112](../requirements/sbagnt.md#req-sbagnt-0112)
+
+This section summarizes what the SBA can invoke and the mechanisms used.
+All outbound traffic from the sandbox goes through worker proxies or orchestrator-mediated endpoints.
+See [Worker Proxies (Inference and Web Egress)](#worker-proxies-inference-and-web-egress) and [Sandbox Boundary and Security](#sandbox-boundary-and-security).
+
+### Local Execution (Inside the Container)
+
+- **Arbitrary command execution:** The SBA MAY run any **user-level** command (no root).
+  There are **no command or path allowlists** inside the container; enforcement is the container boundary and non-root process.
+  See [Design Principles](#design-principles) and [Step Types (MVP)](#step-types-mvp).
+- **Step types:** The SBA executes validated steps: `run_command`, `write_file`, `read_file`, `apply_unified_diff`, `list_tree`.
+  Working directory and file access are under `/workspace` (full access) or as specified per step; symlink escape outside `/workspace` is rejected.
+- **Filesystem:** Full read/write under `/workspace`; `/job/` for job input, result staging, and artifacts; `/tmp` for temporary files.
+
+### Outbound Channels (Worker Proxies Only)
+
+The SBA has **no direct internet or host access**.
+All outbound use is via:
+
+- **Lifecycle / status** - Report job in-progress, completion, result, timeout extension.
+  Outbound HTTP to orchestrator job callback URL or job-status endpoint; URLs injected by node (e.g. env or job payload).
+  See [Job Lifecycle and Status Reporting](#job-lifecycle-and-status-reporting).
+- **Inference** - LLM calls for planning, tool use, refinement.
+  Node-local inference proxy (`OLLAMA_BASE_URL`) or orchestrator-mediated API Egress endpoint; only models in job `inference.allowed_models`.
+- **MCP gateway** - Tools: artifacts, memory, skills, web, API egress.
+  SBA calls orchestrator MCP gateway with agent-scoped token; only [sandbox allowlist](#mcp-tool-access-sandbox-allowlist) tools.
+  Traffic goes through worker proxy.
+- **Web egress** - Outbound HTTP/HTTPS (e.g. package installs, fetches).
+  When `constraints.ext_net_allowed` is true, node sets `HTTP_PROXY`/`HTTPS_PROXY` to node-local web egress proxy; proxy forwards to orchestrator Web Egress Proxy (allowlisted destinations only).
+- **API Egress** - External APIs (e.g. GitHub, Slack) without credentials in sandbox.
+  SBA invokes MCP tool `api.call`; gateway routes to API Egress Server; credentials stay in orchestrator.
+  Allowed only when task/job policy and (for external destination) `ext_net_allowed` permit.
+  See [API Egress Server](api_egress_server.md).
+
+### Job Lifecycle Reporting (What the SBA Must Call)
+
+- **In progress:** After validating the job spec, the SBA MUST signal in progress via outbound call through the worker proxy (e.g. to orchestrator job-status endpoint or callback URL).
+- **Completion:** On success, failure, or timeout, the SBA MUST report completion via outbound call to deliver the [Result contract](#result-contract) (and optionally artifact references or inline data).
+- **Artifacts:** The SBA MAY upload attachments via MCP `artifact.put` (task-scoped) or stage files under `/job/artifacts/` for node-mediated delivery.
+- **Timeout extension:** The SBA MUST be able to request a time extension (e.g. via job-status callback or dedicated endpoint) up to the node maximum; remaining time or deadline MUST be available to the SBA for LLM context.
+  The exact mechanism (callback payload, MCP tool, or status API) is defined in the [Worker API](worker_api.md) and/or MCP tool catalog.
+
+### MCP Tools Available to the SBA
+
+The SBA MAY invoke only tools on the [Worker Agent allowlist](mcp_gateway_enforcement.md#spec-cynai-mcpgat-workeragentallowlist) with sandbox (or both) scope:
+
+- **artifact.*** - `artifact.put`, `artifact.get`, `artifact.list` (task-scoped).
+- **memory.*** - `memory.add`, `memory.list`, `memory.retrieve`, `memory.delete` (job-scoped; see [Temporary Memory](#spec-cynai-sbagnt-temporarymemory)).
+- **skills.list**, **skills.get** - Read-only skill fetch when allowed by policy.
+- **web.fetch** - Sanitized fetch when allowed by policy (e.g. Secure Browser Service).
+- **web.search** - Secure web search when allowed by policy.
+- **api.call** - Via API Egress when explicitly allowed for the task; credentials never in sandbox.
+- **help.*** - On-demand docs (optional for worker).
+
+Explicitly disallowed: `db.*`, `node.*`, `sandbox.*`.
+User-installed tools with sandbox scope MAY be added per [MCP Tool Access](#mcp-tool-access-sandbox-allowlist).
+
+See [mcp_tool_catalog.md](mcp_tool_catalog.md) and [mcp_gateway_enforcement.md](mcp_gateway_enforcement.md).
 
 ## Execution Model
 
@@ -125,6 +195,8 @@ Result, status, and artifacts move from the SBA to the orchestrator by the SBA m
 The SBA reports job status (in-progress, completion) and uploads artifacts by calling orchestrator-mediated endpoints (e.g. job callback URL, status API) or MCP tools (e.g. `artifact.put`) over the network; all traffic goes through the worker proxies so the sandbox never has direct internet access.
 The runtime (node and/or orchestrator) MUST provide the SBA with the means to reach these endpoints (e.g. job callback URL, MCP gateway URL) via the proxy path; the node injects the necessary URLs or configuration (e.g. env vars, job payload) so the SBA can report and upload without handling credentials.
 The SBA MAY also write the [Result contract](#result-contract) and artifact files under `/job/` for staging or for node-mediated delivery (the node then reads and forwards after the container exits); the implementation MAY use that path as a fallback or in addition to outbound reporting.
+For synchronous Worker API implementations, node-mediated delivery typically means the node reads `/job/result.json` and `/job/artifacts/` after the container exits and returns their contents in the same HTTP response to the orchestrator; the orchestrator then persists the result and artifacts (see [Worker API - Node-Mediated SBA Result (Sync)](worker_api.md#spec-cynai-worker-nodemediatedsbaresult-sync)).
+A container-internal proxy (e.g. a sidecar that SBA POSTs to, which then forwards to the node or orchestrator) is not currently specified and is not required for MVP.
 
 #### In-Progress State
 
@@ -139,6 +211,32 @@ The SBA MAY also write the result to the agreed location (e.g. `/job/result.json
 The orchestrator MUST pass job completion (status and result) to the Project Manager Agent and/or Project Analyst Agent for additional work (e.g. verification, remediation); see [Orchestrator - Task Scheduler](orchestrator.md#spec-cynai-orches-scheduledrunrouting).
 
 See [Worker API - Job lifecycle and result persistence](worker_api.md#spec-cynai-worker-joblifecycleresultpersistence).
+
+#### Timeout Extension
+
+- Spec ID: `CYNAI.SBAGNT.TimeoutExtension` <a id="spec-cynai-sbagnt-timeoutextension"></a>
+
+The SBA MUST be able to **request a time extension** for the current job (e.g. via job-status callback or a dedicated extension endpoint), up to the **node maximum** job timeout.
+The orchestrator or node MAY grant or deny the request.
+When granted, the job's effective deadline is extended; the node (or orchestrator) MUST enforce the new deadline.
+The mechanism (e.g. MCP tool or field on the job-status callback) is defined in the Worker API and/or MCP tool catalog.
+
+#### Time Remaining and LLM Context
+
+- Spec ID: `CYNAI.SBAGNT.TimeRemaining` <a id="spec-cynai-sbagnt-timeremaining"></a>
+
+The job context supplied to the SBA (or an endpoint/tool the SBA can call) MUST provide **remaining time** or an absolute **deadline** so the SBA can track it internally.
+The SBA MUST be able to inject "you have X time left to complete this task" (or equivalent) into LLM prompts or step context so the agent can pace work and avoid running out of time without warning.
+The job spec or runtime-injected context SHOULD include `deadline` or `remaining_seconds` (or both), updated when an extension is granted.
+
+#### Temporary Memory (Job-Scoped)
+
+- Spec ID: `CYNAI.SBAGNT.TemporaryMemory` <a id="spec-cynai-sbagnt-temporarymemory"></a>
+
+The SBA MUST have a method to **store and retrieve temporary memories** during job processing, scoped to the task/job (e.g. MCP tools `memory.add`, `memory.list`, `memory.retrieve`, and `memory.delete` per [MCP tool catalog - Memory tools](mcp_tool_catalog.md#spec-cynai-mcptoo-memorytoolsjobscoped)), so it can persist working state across steps and LLM calls.
+These memories are **job-scoped** (or task-scoped) and MUST NOT persist beyond the job (or task) unless explicitly promoted to artifacts or long-term storage.
+Size limits and retention (e.g. max entries, max size per entry, TTL = job lifetime) are defined in the MCP tool catalog and enforced by the gateway.
+The [Worker Agent allowlist](mcp_gateway_enforcement.md#spec-cynai-mcpgat-workeragentallowlist) MUST include these memory tools for sandbox-scoped use.
 
 ### Worker Proxies (Inference and Web Egress)
 
@@ -411,6 +509,21 @@ See:
 
 The definitive spec for the SBA runner container image (minimum requirements, recommendations, and Containerfile guidance) is in [sandbox_container.md - SBA Runner Image (Containerfile)](sandbox_container.md#spec-cynai-sbagnt-sbacontainerimage).
 Implementations and third-party SBA-compatible images MUST satisfy that spec.
+
+## Go Implementation
+
+- Spec ID: `CYNAI.SBAGNT.Implementation` <a id="spec-cynai-sbagnt-implementation"></a>
+
+The **canonical implementation** of `cynode-sba` is in **Go** using the [langchaingo](https://github.com/tmc/langchaingo) library.
+
+Langchaingo usage:
+
+- **LLM calls:** Via the `llms` package with provider and endpoint set from job/runtime (e.g. Ollama base URL for worker proxy, or OpenAI-compatible endpoint for API Egress).
+- **Agent loop:** Via the `agents` package (e.g. ReAct/MRKL-style or tool-calling executor) for the decide-next-step / call-tool / interpret-result loop.
+- **Tools:** MCP tools on the sandbox allowlist are invoked through the orchestrator MCP gateway.
+  The implementation wraps MCP calls as langchaingo tools so the agent uses the existing gateway contract.
+
+All contract requirements in this document (job spec, result contract, Worker API integration, MCP tool access, security constraints) are unchanged; only the implementation stack is specified above.
 
 ## Protocol Versioning
 

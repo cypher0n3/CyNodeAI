@@ -31,7 +31,7 @@ services:
       JWT_SECRET: ${JWT_SECRET:-dev-jwt-secret-change-in-production}
       NODE_REGISTRATION_PSK: ${NODE_REGISTRATION_PSK:-dev-node-psk-secret}
       BOOTSTRAP_ADMIN_PASSWORD: ${BOOTSTRAP_ADMIN_PASSWORD:-admin123}
-      WORKER_API_TARGET_URL: ${WORKER_API_TARGET_URL:-http://host.containers.internal:8081}
+      WORKER_API_TARGET_URL: ${WORKER_API_TARGET_URL:-http://host.containers.internal:9190}
       WORKER_API_BEARER_TOKEN: ${WORKER_API_BEARER_TOKEN:-dev-worker-api-token-change-me}
     extra_hosts:
       - "host.docker.internal:host-gateway"

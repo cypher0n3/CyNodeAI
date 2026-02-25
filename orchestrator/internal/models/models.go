@@ -247,6 +247,36 @@ type McpToolCallAuditLog struct {
 
 func (McpToolCallAuditLog) TableName() string { return "mcp_tool_call_audit_log" }
 
+// PreferenceEntry stores a single preference in a scope (system, user, group, project, task).
+// Per docs/tech_specs/postgres_schema.md and user_preferences.md.
+// Unique on (scope_type, scope_id, key).
+type PreferenceEntry struct {
+	ID        uuid.UUID  `gorm:"type:uuid;primaryKey" json:"id"`
+	ScopeType string     `gorm:"column:scope_type;uniqueIndex:uix_pref_scope_key,priority:1" json:"scope_type"`
+	ScopeID   *uuid.UUID `gorm:"column:scope_id;uniqueIndex:uix_pref_scope_key,priority:2" json:"scope_id,omitempty"`
+	Key       string     `gorm:"column:key;uniqueIndex:uix_pref_scope_key,priority:3;index" json:"key"`
+	Value     *string   `gorm:"column:value;type:jsonb" json:"value,omitempty"`
+	ValueType string    `gorm:"column:value_type" json:"value_type"`
+	Version   int       `gorm:"column:version" json:"version"`
+	UpdatedAt time.Time `gorm:"column:updated_at;index" json:"updated_at"`
+	UpdatedBy *string   `gorm:"column:updated_by" json:"updated_by,omitempty"`
+}
+
+func (PreferenceEntry) TableName() string { return "preference_entries" }
+
+// PreferenceAuditLog records preference entry change history per postgres_schema.md.
+type PreferenceAuditLog struct {
+	ID        uuid.UUID  `gorm:"type:uuid;primaryKey" json:"id"`
+	EntryID   uuid.UUID  `gorm:"column:entry_id;index" json:"entry_id"`
+	OldValue  *string    `gorm:"column:old_value;type:jsonb" json:"old_value,omitempty"`
+	NewValue  *string    `gorm:"column:new_value;type:jsonb" json:"new_value,omitempty"`
+	ChangedAt time.Time  `gorm:"column:changed_at;index" json:"changed_at"`
+	ChangedBy *string    `gorm:"column:changed_by" json:"changed_by,omitempty"`
+	Reason    *string    `gorm:"column:reason" json:"reason,omitempty"`
+}
+
+func (PreferenceAuditLog) TableName() string { return "preference_audit_log" }
+
 // Project represents a workspace boundary (see postgres_schema.md Projects).
 type Project struct {
 	ID          uuid.UUID  `gorm:"type:uuid;primaryKey" json:"id"`

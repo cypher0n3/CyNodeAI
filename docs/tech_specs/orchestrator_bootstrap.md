@@ -6,6 +6,7 @@
   - [Applicable Requirements](#applicable-requirements)
 - [Bootstrap Contents](#bootstrap-contents)
 - [Standalone Operation Mode](#standalone-operation-mode)
+- [Deployment and auto-start](#deployment-and-auto-start)
 
 ## Document Overview
 
@@ -97,6 +98,20 @@ Secrets
 ## Standalone Operation Mode
 
 The orchestrator SHOULD support running as the sole service with zero worker nodes.
+
+## Deployment and Auto-Start
+
+- Spec ID: `CYNAI.BOOTST.DeploymentAutoStart` <a id="spec-cynai-bootst-deploymentautostart"></a>
+
+Traces To:
+
+- [REQ-BOOTST-0104](../requirements/bootst.md#req-bootst-0104)
+
+Orchestrator deployments MUST support auto-start on the host so that the orchestrator stack (e.g. PostgreSQL, control-plane, user-gateway) starts on boot or on demand without manual invocation.
+
+- **Linux:** The implementation MUST provide or document systemd unit files for the orchestrator (e.g. container or process units for postgres, control-plane, user-gateway).
+  Both user (rootless) and system (root) installs MUST be supported; see [`orchestrator/systemd/README.md`](../../orchestrator/systemd/README.md) for the reference layout and generation steps.
+- **macOS:** The implementation MUST provide or document equivalent auto-start (e.g. launchd plist files) so that the orchestrator services can start on boot or on user login, with equivalent capability to the Linux systemd approach.
 
 Recommended behavior
 

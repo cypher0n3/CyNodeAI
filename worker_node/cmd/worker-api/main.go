@@ -177,7 +177,7 @@ func prepareWorkspace(workspaceRoot, jobID string) (dir string, cleanup func(), 
 
 func newServer(handler http.Handler) *http.Server {
 	return &http.Server{
-		Addr:              getEnv("LISTEN_ADDR", ":8081"),
+		Addr:              getEnv("LISTEN_ADDR", ":9190"),
 		Handler:           handler,
 		ReadHeaderTimeout: 30 * time.Second,
 		ReadTimeout:       30 * time.Second,

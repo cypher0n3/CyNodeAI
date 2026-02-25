@@ -85,3 +85,8 @@ Sandbox image and isolation requirements remain in the `SANDBX` domain.
   [CYNAI.SBAGNT.JobLifecycle](../tech_specs/cynode_sba.md#spec-cynai-sbagnt-joblifecycle)
   [CYNAI.WORKER.JobLifecycleResultPersistence](../tech_specs/worker_api.md#spec-cynai-worker-joblifecycleresultpersistence)
   <a id="req-sbagnt-0110"></a>
+
+- **REQ-SBAGNT-0112:** The SBA MUST have the capabilities (local execution, outbound channels, job lifecycle reporting, MCP tools) specified in CYNAI.SBAGNT.Capabilities.
+  Local execution includes arbitrary user-level commands and step types with full `/workspace` access; outbound use is only via worker proxies (lifecycle/status, inference, MCP gateway, web egress when allowed, API Egress when allowed).
+  [CYNAI.SBAGNT.Capabilities](../tech_specs/cynode_sba.md#spec-cynai-sbagnt-capabilities)
+  <a id="req-sbagnt-0112"></a>

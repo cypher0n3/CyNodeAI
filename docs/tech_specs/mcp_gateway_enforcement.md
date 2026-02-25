@@ -146,6 +146,7 @@ Worker agents run in sandbox containers and SHOULD have the minimal tool surface
 Recommended allowlist
 
 - `artifact.*` (scoped to current task)
+- `memory.*` (job-scoped temporary memory: `memory.add`, `memory.list`, `memory.retrieve`, `memory.delete`; see [MCP tool catalog - Memory tools](mcp_tool_catalog.md#spec-cynai-mcptoo-memorytoolsjobscoped))
 - `skills.list`, `skills.get` (read-only; when allowed by policy, so the SBA can fetch relevant skills via the gateway)
 - `web.fetch` (sanitized, when allowed by policy)
 - `web.search` (secure web search, when allowed by policy)

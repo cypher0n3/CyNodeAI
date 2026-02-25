@@ -27,7 +27,7 @@ import (
 
 const testJobPayload = `{"command":["echo","hi"]}`
 
-const testWorkerAPIURL = "http://localhost:8081"
+const testWorkerAPIURL = "http://localhost:9190"
 const testWorkerAPIToken = "tok"
 const expectedReadyBody = "ready"
 

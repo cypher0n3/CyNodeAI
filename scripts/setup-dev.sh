@@ -71,7 +71,7 @@ ADMIN_PASSWORD="${ADMIN_PASSWORD:-admin123}"
 
 # Node config
 NODE_SLUG="${NODE_SLUG:-dev-node-1}"
-WORKER_PORT="${WORKER_PORT:-8081}"
+WORKER_PORT="${WORKER_PORT:-9190}"
 WORKER_API_BEARER_TOKEN="${WORKER_API_BEARER_TOKEN:-dev-worker-api-token-change-me}"
 
 # Compose file for orchestrator stack (postgres + control-plane + user-gateway)

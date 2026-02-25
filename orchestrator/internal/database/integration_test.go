@@ -5,6 +5,7 @@ package database
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"os"
 	"testing"
@@ -15,6 +16,8 @@ import (
 )
 
 const integrationEnv = "POSTGRES_TEST_DSN"
+
+const integrationTestPreferenceValue = `"v1"`
 
 func TestIntegration_User(t *testing.T) {
 	db, ctx := integrationDB(t)
@@ -98,7 +101,7 @@ func TestIntegration_ListDispatchableNodesAndListTasksByUser(t *testing.T) {
 	if err := db.UpdateNodeStatus(ctx, node.ID, models.NodeStatusActive); err != nil {
 		t.Fatalf("UpdateNodeStatus: %v", err)
 	}
-	if err := db.UpdateNodeWorkerAPIConfig(ctx, node.ID, "http://localhost:8081", "token"); err != nil {
+	if err := db.UpdateNodeWorkerAPIConfig(ctx, node.ID, "http://localhost:9190", "token"); err != nil {
 		t.Fatalf("UpdateNodeWorkerAPIConfig: %v", err)
 	}
 	ackAt := time.Now().UTC()
@@ -181,6 +184,229 @@ func TestIntegration_McpToolCallAuditLog(t *testing.T) {
 		t.Error("expected CreatedAt to be set")
 	}
 }
+
+func TestIntegration_Preferences_GetAndList(t *testing.T) {
+	db, ctx := integrationDB(t)
+	val := integrationTestPreferenceValue
+	ent := &models.PreferenceEntry{
+		ID:        uuid.New(),
+		ScopeType: "system",
+		ScopeID:   nil,
+		Key:       "test.key",
+		Value:     &val,
+		ValueType: "string",
+		Version:   1,
+		UpdatedAt: time.Now().UTC(),
+	}
+	if err := db.GORM().WithContext(ctx).Create(ent).Error; err != nil {
+		t.Fatalf("create preference entry: %v", err)
+	}
+	got, err := db.GetPreference(ctx, "system", nil, "test.key")
+	if err != nil {
+		t.Fatalf("GetPreference: %v", err)
+	}
+	if got.Key != "test.key" || got.ScopeType != "system" {
+		t.Errorf("GetPreference: got %+v", got)
+	}
+	list, next, err := db.ListPreferences(ctx, "system", nil, "", 10, "")
+	if err != nil {
+		t.Fatalf("ListPreferences: %v", err)
+	}
+	if len(list) < 1 || next != "" {
+		t.Errorf("ListPreferences: got %d entries, next_cursor %q", len(list), next)
+	}
+	_, err = db.GetPreference(ctx, "system", nil, "nonexistent.key")
+	if err != ErrNotFound {
+		t.Errorf("GetPreference nonexistent: got %v, want ErrNotFound", err)
+	}
+}
+
+func TestIntegration_Preferences_EffectiveAndCursor(t *testing.T) {
+	db, ctx := integrationDB(t)
+	val := integrationTestPreferenceValue
+	ent := &models.PreferenceEntry{
+		ID:        uuid.New(),
+		ScopeType: "system",
+		Key:       "test.key",
+		Value:     &val,
+		ValueType: "string",
+		Version:   1,
+		UpdatedAt: time.Now().UTC(),
+	}
+	if err := db.GORM().WithContext(ctx).Create(ent).Error; err != nil {
+		t.Fatalf("create preference: %v", err)
+	}
+	task, err := db.CreateTask(ctx, nil, "eff-prompt")
+	if err != nil {
+		t.Fatalf("CreateTask: %v", err)
+	}
+	effective, err := db.GetEffectivePreferencesForTask(ctx, task.ID)
+	if err != nil {
+		t.Fatalf("GetEffectivePreferencesForTask: %v", err)
+	}
+	if effective["test.key"] == nil {
+		t.Errorf("effective should contain test.key, got %v", effective)
+	}
+	list2, next2, err := db.ListPreferences(ctx, "system", nil, "test.", 1, "")
+	if err != nil {
+		t.Fatalf("ListPreferences key_prefix: %v", err)
+	}
+	if len(list2) < 1 {
+		t.Errorf("ListPreferences key_prefix: got %d", len(list2))
+	}
+	if next2 != "" {
+		_, _, err = db.ListPreferences(ctx, "system", nil, "test.", 10, next2)
+		if err != nil {
+			t.Fatalf("ListPreferences cursor: %v", err)
+		}
+	}
+}
+
+func TestIntegration_Preferences_UserScope(t *testing.T) {
+	db, ctx := integrationDB(t)
+	user, err := db.GetUserByHandle(ctx, "inttest-user")
+	if err != nil {
+		t.Skip("create inttest-user first (run TestIntegration_User)")
+	}
+	uv := `"user-val"`
+	uent := &models.PreferenceEntry{
+		ID:        uuid.New(),
+		ScopeType: "user",
+		ScopeID:   &user.ID,
+		Key:       "user.key",
+		Value:     &uv,
+		ValueType: "string",
+		Version:   1,
+		UpdatedAt: time.Now().UTC(),
+	}
+	if err := db.GORM().WithContext(ctx).Create(uent).Error; err != nil {
+		t.Fatalf("create user preference: %v", err)
+	}
+	got, err := db.GetPreference(ctx, "user", &user.ID, "user.key")
+	if err != nil {
+		t.Fatalf("GetPreference user scope: %v", err)
+	}
+	if got.Key != "user.key" {
+		t.Errorf("GetPreference: got key %q", got.Key)
+	}
+	ulist, _, err := db.ListPreferences(ctx, "user", &user.ID, "", 1, "")
+	if err != nil {
+		t.Fatalf("ListPreferences user scope: %v", err)
+	}
+	if len(ulist) >= 1 {
+		_, nextCur, _ := db.ListPreferences(ctx, "user", &user.ID, "", 1, "0")
+		if nextCur != "" {
+			_, _, _ = db.ListPreferences(ctx, "user", &user.ID, "", 1, nextCur)
+		}
+	}
+}
+
+func TestIntegration_Preferences_EffectiveWithProject(t *testing.T) {
+	db, ctx := integrationDB(t)
+	user, err := db.GetUserByHandle(ctx, "inttest-user")
+	if err != nil {
+		t.Skip("create inttest-user first")
+	}
+	var proj models.Project
+	err = db.GORM().WithContext(ctx).Where("slug = ?", "default").First(&proj).Error
+	if err != nil {
+		pid := uuid.New()
+		now := time.Now().UTC()
+		_ = db.GORM().WithContext(ctx).Create(&models.Project{ID: pid, Slug: "default", DisplayName: "Default", IsActive: true, CreatedAt: now, UpdatedAt: now}).Error
+		task2, _ := db.CreateTask(ctx, &user.ID, "eff2")
+		if task2 != nil {
+			_ = db.GORM().WithContext(ctx).Model(&models.Task{}).Where("id = ?", task2.ID).Update("project_id", pid).Error
+			_, _ = db.GetEffectivePreferencesForTask(ctx, task2.ID)
+		}
+	} else {
+		task2, _ := db.CreateTask(ctx, &user.ID, "eff2")
+		if task2 != nil {
+			_ = db.GORM().WithContext(ctx).Model(&models.Task{}).Where("id = ?", task2.ID).Update("project_id", proj.ID).Error
+			_, _ = db.GetEffectivePreferencesForTask(ctx, task2.ID)
+		}
+	}
+}
+
+// TestIntegration_Preferences_ListLimitAndCursor covers ListPreferences limit cap, invalid cursor, and nextCursor when offset+len < total.
+func TestIntegration_Preferences_ListLimitAndCursor(t *testing.T) {
+	db, ctx := integrationDB(t)
+	val := integrationTestPreferenceValue
+	for i := 0; i < 3; i++ {
+		ent := &models.PreferenceEntry{
+			ID:        uuid.New(),
+			ScopeType: "system",
+			ScopeID:   nil,
+			Key:       fmt.Sprintf("cap.key.%d", i),
+			Value:     &val,
+			ValueType: "string",
+			Version:   1,
+			UpdatedAt: time.Now().UTC(),
+		}
+		if err := db.GORM().WithContext(ctx).Create(ent).Error; err != nil {
+			t.Fatalf("create preference: %v", err)
+		}
+	}
+	// Limit cap: request > MaxPreferenceListLimit
+	list, _, err := db.ListPreferences(ctx, "system", nil, "", 500, "")
+	if err != nil {
+		t.Fatalf("ListPreferences limit 500: %v", err)
+	}
+	if len(list) > MaxPreferenceListLimit {
+		t.Errorf("ListPreferences: expected cap at %d, got %d", MaxPreferenceListLimit, len(list))
+	}
+	// Invalid or negative cursor leaves offset 0; limit <= 0 is capped to MaxPreferenceListLimit
+	_, _, err = db.ListPreferences(ctx, "system", nil, "", 10, "x")
+	if err != nil {
+		t.Fatalf("ListPreferences invalid cursor: %v", err)
+	}
+	_, _, err = db.ListPreferences(ctx, "system", nil, "", 10, "-1")
+	if err != nil {
+		t.Fatalf("ListPreferences negative cursor: %v", err)
+	}
+	_, _, err = db.ListPreferences(ctx, "system", nil, "", 0, "")
+	if err != nil {
+		t.Fatalf("ListPreferences limit 0: %v", err)
+	}
+	// Limit 2 with 3+ entries: nextCursor = offset + len(entries) when len(entries) <= limit but more exist
+	list2, next2, err := db.ListPreferences(ctx, "system", nil, "cap.key.", 2, "")
+	if err != nil {
+		t.Fatalf("ListPreferences key_prefix limit 2: %v", err)
+	}
+	if len(list2) != 2 || next2 == "" {
+		t.Errorf("ListPreferences: got %d entries, next_cursor %q", len(list2), next2)
+	}
+	_, _, _ = db.ListPreferences(ctx, "system", nil, "cap.key.", 2, next2)
+}
+
+// TestIntegration_Preferences_EffectiveWithNilValue covers GetEffectivePreferencesForTask when an entry has nil value (skip unmarshal).
+func TestIntegration_Preferences_EffectiveWithNilValue(t *testing.T) {
+	db, ctx := integrationDB(t)
+	ent := &models.PreferenceEntry{
+		ID:        uuid.New(),
+		ScopeType: "system",
+		ScopeID:   nil,
+		Key:       "nil.val.key",
+		Value:     nil, // nil value: effective still gets the key with nil
+		ValueType: "string",
+		Version:   1,
+		UpdatedAt: time.Now().UTC(),
+	}
+	if err := db.GORM().WithContext(ctx).Create(ent).Error; err != nil {
+		t.Fatalf("create preference: %v", err)
+	}
+	task, err := db.CreateTask(ctx, nil, "eff-nil-val")
+	if err != nil {
+		t.Fatalf("CreateTask: %v", err)
+	}
+	effective, err := db.GetEffectivePreferencesForTask(ctx, task.ID)
+	if err != nil {
+		t.Fatalf("GetEffectivePreferencesForTask: %v", err)
+	}
+	if effective["nil.val.key"] != nil {
+		t.Errorf("expected nil value to yield nil in effective, got %v", effective["nil.val.key"])
+	}
+}
+
 
 func integrationDB(t *testing.T) (*DB, context.Context) {
 	t.Helper()

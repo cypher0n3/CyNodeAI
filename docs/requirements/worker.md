@@ -249,3 +249,15 @@ It covers worker-node behavior and the worker API contract for job execution and
 - **REQ-WORKER-0243:** Nodes MUST associate telemetry records for sandbox containers with `task_id` and `job_id` when known.
   [CYNAI.WORKER.TelemetryStorageSqlite](../tech_specs/worker_telemetry_api.md#spec-cynai-worker-telemetrystorage-sqlite)
   <a id="req-worker-0243"></a>
+- **REQ-WORKER-0250:** The worker node MUST map container paths `/workspace` and `/job` to real, persistent filesystem paths on the host (bind mounts).
+  The host parent directory under which the node creates these paths MUST be configurable by the user via the node startup configuration.
+  [CYNAI.WORKER.SandboxWorkspaceJobMounts](../tech_specs/worker_node.md#spec-cynai-worker-sandboxworkspacejobmounts)
+  <a id="req-worker-0250"></a>
+- **REQ-WORKER-0251:** When the container runtime supports rootless execution (e.g. Podman), the worker node MUST use rootless operations for sandbox containers (MUST NOT run sandbox containers as root).
+  The operator MAY override via node startup config (e.g. `sandbox.rootless: false`) only as a documented exception path when the runtime allows.
+  [CYNAI.WORKER.SandboxRootless](../tech_specs/worker_node.md#spec-cynai-worker-sandboxrootless)
+  <a id="req-worker-0251"></a>
+- **REQ-WORKER-0252:** The worker node MUST perform startup checks to verify it can deploy containers and meet readiness prerequisites before reporting ready (e.g. before `GET /readyz` returns 200).
+  [CYNAI.WORKER.NodeStartupChecks](../tech_specs/worker_node.md#spec-cynai-worker-nodestartupchecks)
+  [CYNAI.WORKER.WorkerApiHealthChecks](../tech_specs/worker_api.md#spec-cynai-worker-workerapihealthchecks)
+  <a id="req-worker-0252"></a>

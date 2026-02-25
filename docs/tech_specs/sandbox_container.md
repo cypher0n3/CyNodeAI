@@ -311,7 +311,8 @@ Python
 User and paths
 
 - The container MUST be run as a **non-root** user; the image MUST support running the entrypoint as that user.
-- The node mounts or provides **`/workspace`** and **`/job`** at runtime; the image MUST NOT assume host paths and MUST use these agreed paths for job I/O.
+- The node bind-mounts **`/workspace`** and **`/job`** at runtime from real, persistent host paths; the image MUST NOT assume host paths and MUST use these agreed paths for job I/O.
+  See [Filesystem and Working Directories](sandbox_container.md#filesystem-and-working-directories) and [Sandbox workspace and job mounts](worker_node.md#spec-cynai-worker-sandboxworkspacejobmounts).
 
 ### SBA Runner Image Recommendations
 
@@ -333,6 +334,8 @@ Image compatibility marking
 ## Filesystem and Working Directories
 
 The following requirements apply.
+The worker node maps `/workspace` and `/job` inside the sandbox to real, persistent filesystem paths on the host (bind mounts); the host parent directory is configurable per node.
+See [Sandbox workspace and job mounts](worker_node.md#spec-cynai-worker-sandboxworkspacejobmounts) in [`worker_node.md`](worker_node.md).
 
 ### Filesystem and Working Directories Applicable Requirements
 
@@ -346,7 +349,8 @@ Traces To:
 
 Recommended paths
 
-- Working directory: `/workspace`
+- Working directory: `/workspace` (bind mount to a persistent host path per worker node config)
+- Job directory: `/job` (bind mount to a persistent host path per worker node config)
 - Temporary directory: `/tmp`
 
 ## Environment Variables

@@ -7,6 +7,7 @@
 - [Common Argument Requirements](#common-argument-requirements)
 - [Tool Catalog](#tool-catalog)
   - [Artifact Tools](#artifact-tools)
+  - [Memory Tools (Job-Scoped)](#memory-tools-job-scoped)
   - [Sandbox Tools](#sandbox-tools)
   - [Sandbox Allowed Images (PM Agent)](#sandbox-allowed-images-pm-agent)
   - [Web Fetch](#web-fetch)
@@ -80,6 +81,32 @@ Optional arguments MAY be added later as optional fields.
   - required args: `task_id`, `path`
 - `artifact.list`
   - required args: `task_id`
+
+### Memory Tools (Job-Scoped)
+
+- Spec ID: `CYNAI.MCPTOO.MemoryToolsJobScoped` <a id="spec-cynai-mcptoo-memorytoolsjobscoped"></a>
+
+Job-scoped temporary memory for sandbox agents (e.g. SBA) to persist working state across steps and LLM calls during a job.
+Memories are scoped to `task_id` and `job_id` and MUST NOT persist beyond the job (or task) unless explicitly promoted.
+Size limits and TTL (e.g. job lifetime) are enforced by the gateway.
+See [cynode_sba.md - Temporary memory](cynode_sba.md#spec-cynai-sbagnt-temporarymemory).
+
+- `memory.add`
+  - required args: `task_id`, `job_id`, `key` (string), `content` (string; size-limited)
+  - optional args: `summary` (string; short label for listing)
+- `memory.list`
+  - required args: `task_id`, `job_id`
+  - optional args: `limit`, `cursor`
+  - Returns keys (and optional summaries) of memories for the job; paginated if needed.
+- `memory.retrieve`
+  - required args: `task_id`, `job_id`, `key`
+  - Returns the stored content for the given key.
+- `memory.delete`
+  - required args: `task_id`, `job_id`, `key`
+  - Removes the memory entry for the key.
+
+Gateway: these tools MUST be on the [Worker Agent allowlist](mcp_gateway_enforcement.md#spec-cynai-mcpgat-workeragentallowlist) for sandbox-scoped use; scope is sandbox (or both).
+Enforce max entries and max size per entry per job.
 
 ### Sandbox Tools
 
@@ -286,7 +313,7 @@ Intentional exceptions (MVP)
 - `db.preference.effective`
   - required args: `task_id`
   - optional args: `include_sources` (boolean)
-- **Project tools (user-scoped)**  
+- **Project tools (user-scoped)**
   All project tools MUST return only projects the authenticated user is authorized to access (default project plus RBAC-scoped projects).
   See [Project Search via MCP](projects_and_scopes.md#spec-cynai-access-projectsmcpsearch).
 - `db.project.get`

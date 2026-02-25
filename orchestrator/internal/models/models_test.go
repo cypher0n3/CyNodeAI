@@ -229,6 +229,8 @@ func TestTableNames(t *testing.T) {
 		{"ChatMessage", (ChatMessage{}).TableName(), "chat_messages"},
 		{"ChatAuditLog", (ChatAuditLog{}).TableName(), "chat_audit_log"},
 		{"McpToolCallAuditLog", (McpToolCallAuditLog{}).TableName(), "mcp_tool_call_audit_log"},
+		{"PreferenceEntry", (PreferenceEntry{}).TableName(), "preference_entries"},
+		{"PreferenceAuditLog", (PreferenceAuditLog{}).TableName(), "preference_audit_log"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

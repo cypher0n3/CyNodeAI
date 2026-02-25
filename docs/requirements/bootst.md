@@ -32,3 +32,9 @@ It covers bootstrap configuration requirements for orchestrator and node startup
   The system setting key MUST be `agents.project_manager.model.local_default_ollama_model`.
   [orchestrator_bootstrap.md](../tech_specs/orchestrator_bootstrap.md)
   <a id="req-bootst-0103"></a>
+- **REQ-BOOTST-0104:** Deployments MUST support auto-start of the orchestrator on its host and of worker node services on worker hosts.
+  On Linux, implementations MUST provide or document systemd unit files (user or system) for orchestrator and worker node services.
+  On macOS, implementations MUST provide or document equivalent auto-start (e.g. launchd plist files) so that orchestrator and worker nodes can start on boot or on demand.
+  [CYNAI.BOOTST.DeploymentAutoStart](../tech_specs/orchestrator_bootstrap.md#spec-cynai-bootst-deploymentautostart)
+  [CYNAI.WORKER.DeploymentAutoStart](../tech_specs/worker_node.md#spec-cynai-worker-deploymentautostart)
+  <a id="req-bootst-0104"></a>

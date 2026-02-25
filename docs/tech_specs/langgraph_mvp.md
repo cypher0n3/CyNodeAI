@@ -142,6 +142,12 @@ The following mapping is the MVP reference mapping.
   The workflow MUST NOT connect directly to PostgreSQL.
 - Node selection and job dispatch MUST use the orchestrator's node registry, capability data, and worker API as defined in [`worker_node.md`](worker_node.md) and [`orchestrator.md`](orchestrator.md).
 
+#### LLM and Tool Execution (Implementation)
+
+- The LLM and tool execution performed within graph nodes (e.g. Plan Steps, Verify Step Result) are implemented using **langchaingo** (Go), including **multiple simultaneous tool calls** where supported by the model and MCP gateway.
+- LangGraph remains the graph runner and checkpoint owner; see [Runtime and Hosting](#runtime-and-hosting) and [Checkpoint Persistence Contract](#checkpoint-persistence-contract).
+- See [Project Manager Agent - LLM and Tool Execution (Implementation)](project_manager_agent.md#spec-cynai-agents-pmllmtoolimplementation).
+
 ### Sub-Agent Invocation
 
 - The Project Analyst Agent is a sub-agent used for focused verification.

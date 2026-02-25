@@ -20,6 +20,8 @@
 - [Phase 1 Single Node Happy Path](#phase-1-single-node-happy-path)
 - [Phase 1.5 Single Node Full Capability](#phase-15-single-node-full-capability)
 - [Phase 2 MCP in the Loop](#phase-2-mcp-in-the-loop)
+  - [Phase 2 LangGraph Integration Checklist](#phase-2-langgraph-integration-checklist)
+  - [Phase 2 LangGraph Tasks (Optional 4-8 Hour Chunks)](#phase-2-langgraph-tasks-optional-4-8-hour-chunks)
 - [Phase 3 Multi Node Robustness](#phase-3-multi-node-robustness)
 - [Phase 4 Optional Controlled Egress and Integrations](#phase-4-optional-controlled-egress-and-integrations)
 - [Feature Files and BDD](#feature-files-and-bdd)
@@ -68,6 +70,12 @@ Recent tech spec updates incorporated into this plan:
 - **User-installable MCP tools** ([user_installable_mcp_tools.md](../docs/tech_specs/user_installable_mcp_tools.md)):
   - Not in current MVP scope per [mvp.md](mvp.md).
   - Deferred; if product adds them later, this plan can be updated.
+
+- **SBA and PMA implementation (langchaingo)** ([cynode_sba.md](../docs/tech_specs/cynode_sba.md), [project_manager_agent.md](../docs/tech_specs/project_manager_agent.md), [langgraph_mvp.md](../docs/tech_specs/langgraph_mvp.md)):
+  - **SBA:** The canonical implementation of `cynode-sba` is in Go using [langchaingo](https://github.com/tmc/langchaingo) for LLM calls, agent loop, and MCP tools (wrapped as langchaingo tools).
+  - **PMA:** PMA uses langchaingo (Go) for LLM and tool execution, including multiple simultaneous tool calls where supported.
+  - LangGraph remains the orchestrator workflow engine (graph, checkpointing to PostgreSQL, lease); langchaingo implements the agentic steps within workflow nodes.
+  - See [dev_docs/2026-02-24_langchaingo_agents_sba_spec_reqs_proposal.md](../dev_docs/2026-02-24_langchaingo_agents_sba_spec_reqs_proposal.md).
 
 These behaviors are reflected in Phase 1 (inference path requirement), Phase 2 (workflow model routing), and Phase 4 (API Egress, external model routing fallback, and policy).
 
@@ -316,6 +324,34 @@ There is no Phase 5 in [`docs/tech_specs/_main.md`](../docs/tech_specs/_main.md)
     - [`mcp_tool_catalog.md`](../docs/tech_specs/mcp_tool_catalog.md)
     - [`user_preferences.md`](../docs/tech_specs/user_preferences.md)
 
+- **P2-09 (8-16h): Implement cynode-sba binary and SBA runner image.**
+  - **Deliverable**: `cynode-sba` binary (`agents/`) that reads job spec from `/job/job.json` (or stdin), validates schema (protocol_version, job_id, task_id, constraints with max_runtime_seconds and max_output_bytes, steps), refuses unknown major protocol versions.
+  - **Deliverable**: Executes MVP step types (run_command, write_file, read_file, apply_unified_diff, list_tree); enforces constraints (timeout, output caps); runs as non-root with full `/workspace` access and no command/path allowlists.
+  - **Deliverable**: Writes the [result contract](../docs/tech_specs/cynode_sba.md#result-contract) to `/job/result.json` with status, steps, artifacts, failure_code, failure_message.
+  - **Deliverable**: Containerfile for SBA runner image per [sandbox_container.md - SBA Runner Image](../docs/tech_specs/sandbox_container.md#sandbox-agent-sba-runner-image-containerfile).
+  - **Reqs**:
+    - [`REQ-SBAGNT-0001`](../docs/requirements/sbagnt.md#req-sbagnt-0001)
+    - [`REQ-SBAGNT-0100`](../docs/requirements/sbagnt.md#req-sbagnt-0100)
+    - [`REQ-SBAGNT-0101`](../docs/requirements/sbagnt.md#req-sbagnt-0101)
+    - [`REQ-SBAGNT-0102`](../docs/requirements/sbagnt.md#req-sbagnt-0102)
+    - [`REQ-SBAGNT-0103`](../docs/requirements/sbagnt.md#req-sbagnt-0103)
+    - [`REQ-SBAGNT-0104`](../docs/requirements/sbagnt.md#req-sbagnt-0104)
+  - **Specs**:
+    - [`cynode_sba.md`](../docs/tech_specs/cynode_sba.md)
+    - [`sandbox_container.md`](../docs/tech_specs/sandbox_container.md)
+
+- **P2-10 (4-8h): Worker API and orchestrator integration for SBA runner jobs.**
+  - **Deliverable**: When a job uses the SBA runner image, the worker node runs the container with entrypoint/command that invokes `cynode-sba`; job payload (job spec) is written to the agreed location (e.g. `/job/job.json`); node derives Worker API response from SBA result (e.g. reads `/job/result.json` on container exit) and returns to orchestrator.
+  - **Deliverable**: Result transmission (sync): after SBA container exit, the node reads `/job/result.json` and includes the SBA result contract in the Worker API response body (e.g. `sba_result` per worker_api.md); the orchestrator persists it to the database (e.g. `jobs.result`).
+  - **Deliverable**: Artifact handling: the node reads `/job/artifacts/` (if present) and includes artifact refs or content in the response (e.g. `artifacts` array per worker_api.md); the orchestrator persists artifact blobs and stores refs so they are retrievable by clients.
+  - **Deliverable**: Orchestrator (or job builder) can produce job specs with job_id, task_id, constraints, steps, and optional context/inference allowlist; SBA in-progress and completion are observable (result.json); node does not clear job result until persisted to orchestrator.
+  - **Reqs**:
+    - [`REQ-SBAGNT-0106`](../docs/requirements/sbagnt.md#req-sbagnt-0106)
+    - [`REQ-SBAGNT-0110`](../docs/requirements/sbagnt.md#req-sbagnt-0110)
+  - **Specs**:
+    - [`cynode_sba.md`](../docs/tech_specs/cynode_sba.md) (Integration With Worker API, Job Lifecycle)
+    - [`worker_api.md`](../docs/tech_specs/worker_api.md)
+
 ### Phase 3 Multi Node Robustness (Scheduling, Reliability, Telemetry)
 
 - **P3-01 (4-8h): Node selection v1 (capability, load, data locality, model availability).**
@@ -463,6 +499,9 @@ Reference: [docs/tech_specs/worker_node.md](../docs/tech_specs/worker_node.md), 
 
 - Orchestrator MCP tool gateway with role-based access.
 - MCP database tools (orchestrator-side agents); MCP artifact tools (worker agents); no direct Postgres from agents.
+- **SBA (cynode-sba):** Phase 2 includes implementation of the sandbox agent runner per [cynode_sba.md](../docs/tech_specs/cynode_sba.md): P2-09 (cynode-sba binary and SBA runner image), P2-10 (Worker API and orchestrator integration for SBA runner jobs).
+  When the worker runs a job with the SBA runner image, the container invokes `cynode-sba`; the node derives the Worker API response from the SBA result contract.
+  P2-08 (Verify Step Result) then uses this runner when PMA tasks the Project Analyst or sandbox agent.
 - **Workflow engine:** **Separate Python LangGraph process** invoked by the Go orchestrator; one instance per `task_id`; **lease in orchestrator DB** (single-active-workflow-per-task); **prescriptive checkpoint schema** in PostgreSQL ([workflow_checkpoints](../docs/tech_specs/postgres_schema.md#workflow-checkpoints-table), [task_workflow_leases](../docs/tech_specs/postgres_schema.md#task-workflow-leases-table)).
   Workflow nodes map to MCP DB, model routing (local or API Egress), Worker API dispatch, result collection.
 - **Scheduler:** When a run requires interpretation, **scheduler hands payload directly to PMA**; **PMA creates the task and starts the workflow internally** (no separate enqueue-workflow-start step).
@@ -553,7 +592,7 @@ Items below are implemented.
 
 ### Remaining (Order)
 
-1. Phase 2: P2-01 (MCP scoping/schema), P2-03 (preference tools), full P2-02 allow path; LangGraph workflow, MCP DB/artifact tools.
+1. Phase 2: P2-01 (MCP scoping/schema), P2-03 (preference tools) done; full P2-02 allow path; **P2-09 (cynode-sba binary and SBA runner image), P2-10 (Worker API and orchestrator integration for SBA jobs)**; LangGraph workflow (P2-04--P2-08), MCP DB/artifact tools.
 2. Phase 3: Multi-node selection, leases, retries, telemetry.
 3. Phase 4: API Egress and external routing.
 
@@ -563,7 +602,8 @@ Items below are implemented.
 - [docs/tech_specs/external_model_routing.md](../docs/tech_specs/external_model_routing.md) - Routing goal, policy, API Egress integration, external inference with sandboxes, settings, auditing.
 - [docs/tech_specs/orchestrator_bootstrap.md](../docs/tech_specs/orchestrator_bootstrap.md) - Standalone mode and ready-state requirements for inference availability and Project Manager warmup.
 - [docs/tech_specs/worker_node.md](../docs/tech_specs/worker_node.md) - Node-local inference, Option A (proxy sidecar).
-- [docs/tech_specs/sandbox_container.md](../docs/tech_specs/sandbox_container.md) - Node-local inference access.
+- [docs/tech_specs/sandbox_container.md](../docs/tech_specs/sandbox_container.md) - Node-local inference access; SBA runner image.
+- [docs/tech_specs/cynode_sba.md](../docs/tech_specs/cynode_sba.md) - Sandbox agent runner (cynode-sba) spec; Phase 2 P2-09, P2-10.
 - [docs/tech_specs/cynork_cli.md](../docs/tech_specs/cynork_cli.md) - CLI goals, commands, MVP scope.
 - [docs/tech_specs/ports_and_endpoints.md](../docs/tech_specs/ports_and_endpoints.md) - Default ports and E2E/BDD port usage.
 - [docs/tech_specs/sandbox_image_registry.md](../docs/tech_specs/sandbox_image_registry.md) - Registry behavior deferred; schema tables in scope for MVP (see Tech Spec Alignment).

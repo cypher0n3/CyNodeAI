@@ -3,15 +3,20 @@
 - [Document Overview](#document-overview)
 - [Node Manager](#node-manager)
 - [Sandbox Control Plane](#sandbox-control-plane)
+  - [Sandbox Workspace and Job Mounts](#sandbox-workspace-and-job-mounts)
+  - [Sandbox Rootless Execution](#sandbox-rootless-execution)
   - [Sandbox Control Plane Applicable Requirements](#sandbox-control-plane-applicable-requirements)
 - [Node-Local Inference and Sandbox Workflow](#node-local-inference-and-sandbox-workflow)
   - [Node-Local Inference Applicable Requirements](#node-local-inference-applicable-requirements)
 - [Node Sandbox MCP Exposure](#node-sandbox-mcp-exposure)
   - [Node Sandbox MCP Exposure Applicable Requirements](#node-sandbox-mcp-exposure-applicable-requirements)
+  - [Node-Local Agent Sandbox Control (Low-Latency Path)](#node-local-agent-sandbox-control-low-latency-path)
 - [Node Startup YAML](#node-startup-yaml)
   - [Node Startup YAML Applicable Requirements](#node-startup-yaml-applicable-requirements)
   - [User-Configurable Properties](#user-configurable-properties)
 - [Node Startup Procedure](#node-startup-procedure)
+- [Node Startup Checks and Readiness](#node-startup-checks-and-readiness)
+- [Deployment and Auto-Start](#deployment-and-auto-start)
 - [Ollama Container Policy](#ollama-container-policy)
 - [Sandbox-Only Nodes](#sandbox-only-nodes)
   - [Sandbox-Only Nodes Applicable Requirements](#sandbox-only-nodes-applicable-requirements)
@@ -36,6 +41,7 @@ The Node Manager is a host-level system service responsible for:
 - Managing container runtime (Docker or Podman) lifecycle for sandbox execution.
   Podman MUST be supported and MUST be the default runtime for sandbox execution.
   Docker MAY be supported as an alternative runtime.
+- When the runtime supports rootless execution (e.g. Podman), the node MUST use rootless operations for sandbox containers unless overridden by the operator; see [Sandbox rootless execution](#sandbox-rootless-execution).
 - Receiving configuration updates from the orchestrator and applying them locally.
 - Managing local secure storage for pull credentials and certificates.
 
@@ -45,6 +51,55 @@ This section defines how agents and the orchestrator interact with sandbox conta
 Agents do not connect to sandboxes directly over the network.
 Outbound traffic from sandboxes is permitted only through worker proxies (inference proxy, node-local web egress proxy, and orchestrator API Egress); sandboxes do not have direct internet access.
 See [Sandbox Boundary and Security](cynode_sba.md#spec-cynai-sbagnt-sandboxboundary) and [Network Expectations](sandbox_container.md#spec-cynai-sandbx-networkexpect).
+
+### Sandbox Workspace and Job Mounts
+
+- Spec ID: `CYNAI.WORKER.SandboxWorkspaceJobMounts` <a id="spec-cynai-worker-sandboxworkspacejobmounts"></a>
+
+Traces To:
+
+- [REQ-WORKER-0250](../requirements/worker.md#req-worker-0250)
+
+The worker node MUST provide container paths `/workspace` and `/job` by bind-mounting real, persistent directories from the host filesystem.
+The node MUST create per-job directories on the host under a single configurable parent directory and MUST bind-mount them into the sandbox so that:
+
+- `/workspace` in the container corresponds to a host path used as the job workspace (writable working directory).
+- `/job` in the container corresponds to a host path used for job payload and result files (e.g. `job.json`, `result.json`).
+
+The host parent directory MUST be configurable by the user as follows:
+
+- **Primary mechanism:** Node startup YAML, key `sandbox.mount_root` (string, optional).
+  - Value: absolute path on the host under which the node creates per-job subdirectories.
+    The node MUST use the layout `<mount_root>/<job_id>/workspace` (bind-mounted as `/workspace`) and `<mount_root>/<job_id>/job` (bind-mounted as `/job`), where `<job_id>` is the job identifier and `<mount_root>` is the configured or default parent path.
+  - When `sandbox.mount_root` is set, the node MUST use this path as the parent for all sandbox workspace and job bind mounts.
+  - When `sandbox.mount_root` is unset, the node MUST use the path formed by appending `/sandbox_mounts` to the effective node state directory.
+    The effective node state directory is the value of `storage.state_dir` when set, otherwise `/var/lib/cynode/state`.
+    The full default path is `/var/lib/cynode/state/sandbox_mounts`.
+- **Override via environment:** The node MUST support the environment variable `CYNODE_SANDBOX_MOUNT_ROOT` (absolute path) read by the Node Manager at startup.
+  When set, it overrides `sandbox.mount_root` (environment takes precedence over YAML).
+  When unset, the node uses `sandbox.mount_root` or the default above.
+
+The node MUST create the host directories before starting the container and MUST ensure they persist for the duration of the job and until the node has finished processing the result (e.g. after result upload to the orchestrator), so that data is not lost on container exit.
+
+### Sandbox Rootless Execution
+
+- Spec ID: `CYNAI.WORKER.SandboxRootless` <a id="spec-cynai-worker-sandboxrootless"></a>
+
+Traces To:
+
+- [REQ-WORKER-0251](../requirements/worker.md#req-worker-0251)
+
+When the container runtime supports rootless execution (e.g. Podman), the worker node MUST run sandbox containers in rootless mode (MUST NOT run sandbox containers as root).
+When the runtime does not support rootless (e.g. typical Docker setups), the node runs containers as root or root-equivalent because the runtime provides no alternative.
+
+Configuration
+
+- Node startup YAML key `sandbox.rootless` (boolean, optional):
+  - When the runtime supports rootless and `sandbox.rootless` is `true` or unset, the node MUST use rootless execution for sandbox containers.
+  - When the operator sets `sandbox.rootless` to `false` and the runtime supports rootless, the node MUST run sandbox containers in non-rootless (root) mode.
+  - When the runtime does not support rootless, `sandbox.rootless` has no effect and the node runs containers as the runtime requires.
+
+The node MUST report rootless capability and effective state in the capability report (e.g. `rootless_supported`, `rootless_enabled` per [`worker_node_payloads.md`](worker_node_payloads.md)).
 
 ### Sandbox Control Plane Applicable Requirements
 
@@ -89,7 +144,7 @@ Traces To:
 
 Option A (required for node-local execution when inference is enabled)
 
-- For each sandbox job, the Node Manager creates a runtime pod (Podman) or equivalent isolated network (Docker) for that job.
+- For each sandbox job, the Node Manager creates an isolated network for that job: when the runtime is Podman, a pod; when the runtime is Docker, a user-defined bridge network for that job with the sandbox and inference proxy containers attached.
   Podman is preferred for rootless operation.
 - The pod (or network) contains:
   - the sandbox container
@@ -119,7 +174,7 @@ Implementation notes
 For MVP Phase 2 and later, when the orchestrator needs to manage or interact with a sandbox on a node, sandbox
 operations MUST be exposed as MCP tools on that node.
 The orchestrator acts as the default routing point for sandbox tools for remote agent runtimes.
-When an AI agent runtime is co-located on the same host as the worker node, the system MAY use a low-latency control path that allows direct interaction with node-hosted sandbox tools under orchestrator-issued capability leases.
+When an AI agent runtime is co-located on the same host as the worker node, the node MUST support a low-latency control path that allows direct interaction with node-hosted sandbox tools under orchestrator-issued capability leases.
 
 ### Node Sandbox MCP Exposure Applicable Requirements
 
@@ -163,10 +218,11 @@ Required properties
 - The node MUST validate capability leases and MUST fail closed when validation fails or when required scoped ids are missing.
 - The node MUST emit audit records for direct tool calls with `task_id` context and MUST make those records available to the orchestrator.
 
-Recommended binding and transport
+Binding and transport
 
-- The node SHOULD expose the direct control path only on loopback (`127.0.0.1`) and/or a Unix domain socket.
-- The direct control path SHOULD reuse the same MCP tool identities and argument schemas as the node-hosted MCP server so policy remains consistent.
+- The node MUST expose the direct control path only on loopback (`127.0.0.1`), a Unix domain socket, or both.
+  The node MUST NOT expose it on a non-loopback network interface.
+- The direct control path MUST use the same MCP tool identities and argument schemas as the node-hosted MCP server so policy remains consistent.
 
 ## Node Startup YAML
 
@@ -197,8 +253,8 @@ Example
 
 ### User-Configurable Properties
 
-Node startup YAML SHOULD allow operators to set the properties below.
-These settings are node-local and MAY be stricter than orchestrator policy.
+Node startup YAML MUST allow operators to set the properties below.
+These settings are node-local and MAY impose stricter constraints than orchestrator policy (see REQ-WORKER-0121).
 
 #### Top-Level Keys
 
@@ -252,7 +308,7 @@ These settings are node-local and MAY be stricter than orchestrator policy.
   - Default MUST be `0.0.0.0`.
 - `worker_api.listen_port` (number, optional)
   - Port to bind.
-  - Default MUST be `8080`.
+    Default MUST be `9190` (CyNodeAI Worker API default; see [`ports_and_endpoints.md`](ports_and_endpoints.md#spec-cynai-stands-portsandendpoints)).
 - `worker_api.public_base_url` (string, optional)
   - Public URL the orchestrator should use to reach the worker API.
 - `worker_api.max_request_bytes` (number, optional)
@@ -280,9 +336,11 @@ Sandbox keys
   - One of `allow`, `sandbox_only`, or `disabled`.
 - `sandbox.runtime` (string, optional)
   - Sandbox runtime identifier: `podman` or `docker`.
-    Podman is preferred for rootless operation.
+    Podman is preferred and supports rootless; when runtime is Podman, the node MUST use rootless for sandboxes unless overridden.
 - `sandbox.rootless` (boolean, optional)
-  - Whether sandbox containers run rootless when supported (Podman supports rootless; Docker typically requires root or root-equivalent).
+  - When the runtime supports rootless (e.g. Podman), the node MUST use rootless execution when this is `true` or unset; when `false`, the node MUST run sandbox containers in non-rootless (root) mode.
+    When the runtime does not support rootless, this key has no effect.
+    See [Sandbox rootless execution](#sandbox-rootless-execution).
 - `sandbox.max_concurrency` (number, optional)
   - Maximum concurrent sandbox jobs accepted by this node.
 - `sandbox.default_image` (string, optional)
@@ -302,9 +360,15 @@ Sandbox keys
 - `sandbox.resources.max_pids` (number, optional)
   - Maximum process count allowed for a sandbox job.
 - `sandbox.timeouts.default_seconds` (number, optional)
-  - Default sandbox timeout when not specified by the orchestrator.
+  - Default sandbox job timeout (seconds) when the orchestrator does not set `sandbox.timeout_seconds` on the request.
+  When unset, the node MUST use 3600 (1 hour).
 - `sandbox.timeouts.max_seconds` (number, optional)
-  - Maximum sandbox timeout allowed on this node.
+  - Maximum sandbox job timeout (seconds) allowed on this node; the orchestrator (e.g. PMA/PAA) sets per-job timeout in the request, and the node caps it at this max.
+  When unset, the node MUST use 10800 (3 hours).
+- `sandbox.mount_root` (string, optional)
+  - Absolute path on the host under which the node creates per-job directories that are bind-mounted into sandboxes as `/workspace` and `/job`.
+    When unset, the node MUST use `<effective state_dir>/sandbox_mounts`, where the effective state directory is `storage.state_dir` if set, otherwise `/var/lib/cynode/state`.
+    See [Sandbox workspace and job mounts](#sandbox-workspace-and-job-mounts).
 - `sandbox.mounts.allowed_host_paths` (array of strings, optional)
   - Allowlist of host paths that may be mounted into sandboxes.
 - `sandbox.mounts.read_only_by_default` (boolean, optional)
@@ -333,6 +397,7 @@ Inference keys
 
 - `storage.state_dir` (string, optional)
   - Node state directory (registration cache and applied config state).
+    When unset, the node MUST use `/var/lib/cynode/state`.
 - `storage.cache_dir` (string, optional)
   - Cache directory (image pulls and temporary files).
 - `storage.artifacts_dir` (string, optional)
@@ -376,7 +441,7 @@ node:
     - region_us_east_1
 worker_api:
   listen_host: 0.0.0.0
-  listen_port: 8080
+  listen_port: 9190
   public_base_url: https://worker-01.example.com
   max_request_bytes: 10485760
 sandbox:
@@ -384,6 +449,7 @@ sandbox:
   runtime: podman   # or docker; podman preferred for rootless
   rootless: true
   max_concurrency: 4
+  # mount_root: /var/lib/cynode/sandbox_mounts   # parent for /workspace and /job bind mounts
   default_network_policy: restricted
   allowed_images:
     # When no registry list is configured, images are pulled from Docker Hub (docker.io)
@@ -398,8 +464,8 @@ sandbox:
     max_memory_mb: 16384
     max_pids: 2048
   timeouts:
-    default_seconds: 900
-    max_seconds: 3600
+    default_seconds: 3600   # 1 hour when orchestrator does not set per-job timeout
+    max_seconds: 10800     # 3 hours node cap
   security:
     allow_privileged: false
     allow_host_network: false
@@ -433,12 +499,50 @@ Required startup flow
 
 - Start Node Manager system service.
 - Load node startup YAML and apply node-local constraints.
+- Perform [node startup checks](#node-startup-checks-and-readiness); the node MUST NOT report ready until these pass.
 - Collect host capabilities.
 - Register with orchestrator and send capability report.
 - Fetch the latest node configuration from orchestrator.
 - Start the worker API service.
 - Start the single Ollama container specified by the orchestrator, when configured for inference.
 - Report startup status and effective configuration version to the orchestrator.
+
+## Node Startup Checks and Readiness
+
+- Spec ID: `CYNAI.WORKER.NodeStartupChecks` <a id="spec-cynai-worker-nodestartupchecks"></a>
+
+Traces To:
+
+- [REQ-WORKER-0252](../requirements/worker.md#req-worker-0252)
+
+The worker node MUST perform startup checks before reporting ready (i.e. before `GET /readyz` returns 200).
+The node MUST NOT report ready until the following prerequisites are verified (as applicable to the node configuration):
+
+- **Container runtime:** The node MUST verify it can create and run a container (e.g. run a minimal image or a no-op container create/start/stop) using the configured runtime (Podman or Docker).
+  If the runtime is unavailable or fails the check, the node MUST NOT report ready.
+- **Sandbox mount root:** When sandbox execution is enabled (`sandbox.mode` is `allow` or `sandbox_only`), the node MUST verify that the effective sandbox mount root directory (from `sandbox.mount_root` or default) exists or can be created and is writable by the node process.
+  If the mount root is not usable, the node MUST NOT report ready.
+- **Worker API:** The Worker API HTTP server MUST be listening and responding to `GET /healthz` before the node reports ready.
+- **Orchestrator connectivity (when required):** When the node must register or fetch config before accepting jobs, the node MUST complete registration and config fetch before reporting ready so that the orchestrator can schedule work to the node.
+
+No other checks may block readiness.
+When any of the above checks fails, `GET /readyz` MUST return 503.
+When all applicable checks pass, `GET /readyz` MUST return 200 with body `ready`.
+
+## Deployment and Auto-Start
+
+- Spec ID: `CYNAI.WORKER.DeploymentAutoStart` <a id="spec-cynai-worker-deploymentautostart"></a>
+
+Traces To:
+
+- [REQ-BOOTST-0104](../requirements/bootst.md#req-bootst-0104)
+
+Worker node deployments MUST support auto-start on the host so that Node Manager and Worker API (and related services) start on boot or on demand without manual invocation.
+
+- **Linux:** The implementation MUST provide systemd unit files for worker node services (Node Manager, Worker API).
+  Both user (rootless) and system (root) installs MUST be supported.
+  See [`worker_node/systemd/README.md`](../../worker_node/systemd/README.md) for the reference layout and generation steps.
+- **macOS:** The implementation MUST provide launchd plist files for worker node services so that they can start on boot or on user login, with the same capability as the Linux systemd approach (start on boot, start on demand, enable/disable).
 
 ## Ollama Container Policy
 
@@ -536,8 +640,10 @@ Canonical payload shapes are defined in [`docs/tech_specs/worker_node_payloads.m
 Required behavior
 
 - The node MUST support receiving configuration at registration time.
-- For MVP Phase 1, the node MUST fetch configuration on startup and MAY omit polling.
-- For MVP Phase 3 and later, the node MUST support configuration refresh, either by polling or by a push notification.
+- For MVP Phase 1, the node MUST fetch configuration on startup and MUST NOT poll for configuration updates (no polling in Phase 1).
+- For MVP Phase 3 and later, the node MUST support configuration refresh by polling.
+  The node MAY additionally support push notification.
+  When an update is delivered via any supported channel (polling or push), the node MUST apply it.
 - The node MUST validate configuration authenticity and origin before applying it.
 - The node MUST report configuration application status back to the orchestrator.
 

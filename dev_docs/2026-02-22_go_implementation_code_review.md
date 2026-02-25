@@ -194,7 +194,7 @@ When implementing allow path, add task_id/run_id/job_id validation per `mcp_gate
 2. **CI parity for agents:** Include `agents` in `go_modules` (or add a dedicated ci step for agents) so lint, vulncheck, and test-go-cover run for agents.
    Add any justified coverage/lint exceptions in the justfile.
 3. **Traceability:** Add requirement IDs in comments for health endpoints, config_version, Worker API limits, and MCP audit.
-4. **Phase 2:** Proceed with P2-01 (MCP scoping/schema), P2-03 (preference tools), and then the allow path for tool routing while keeping audit-on-allow and schema compliance.
+4. **Phase 2:** Proceed with P2-01 (MCP scoping/schema), P2-03 (preference tools) done, then the allow path for tool routing while keeping audit-on-allow and schema compliance; implement SBA per MVP plan (P2-09 cynode-sba binary and runner image, P2-10 Worker API and orchestrator integration for SBA jobs).
 
 ---
 
@@ -211,4 +211,3 @@ When implementing allow path, add task_id/run_id/job_id validation per `mcp_gate
 - `docs/tech_specs/cynode_pma.md` - PMA binary and integration
 - `docs/tech_specs/mcp_tool_call_auditing.md` - Audit fields and storage
 - `meta.md` - Repo layout, Go modules
-- `.github/copilot-instructions.md` - Tech specs vs implementation, justfile usage

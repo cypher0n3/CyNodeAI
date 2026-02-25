@@ -1,6 +1,7 @@
 # Project Manager Agent
 
 - [Agent Purpose](#agent-purpose)
+- [LLM and Tool Execution (Implementation)](#llm-and-tool-execution-implementation)
 - [Agent Responsibilities](#agent-responsibilities)
 - [External Provider Usage](#external-provider-usage)
   - [External Provider Usage Applicable Requirements](#external-provider-usage-applicable-requirements)
@@ -39,6 +40,16 @@ User-facing chat is a conversation surface.
 The PM and PA create and manage tasks via MCP tools during that conversation.
 Chat messages are tracked separately from tasks.
 See [`docs/tech_specs/openai_compatible_chat_api.md`](openai_compatible_chat_api.md) and [`docs/tech_specs/chat_threads_and_messages.md`](chat_threads_and_messages.md).
+
+## LLM and Tool Execution (Implementation)
+
+- Spec ID: `CYNAI.AGENTS.PMLlmToolImplementation` <a id="spec-cynai-agents-pmllmtoolimplementation"></a>
+
+PMA uses **langchaingo** (Go) for LLM calls and tool execution, including **multiple simultaneous tool calls** where supported by the model and MCP gateway.
+The [LangGraph MVP workflow](langgraph_mvp.md) remains the graph runner and checkpoint owner.
+Langchaingo implements the agentic steps within nodes (e.g. Plan Steps, Verify Step Result).
+MCP tool calls from PMA still go through the orchestrator MCP gateway.
+Langchaingo tools wrap those MCP calls.
 
 ## Agent Responsibilities
 

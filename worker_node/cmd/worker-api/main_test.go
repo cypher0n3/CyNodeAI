@@ -110,7 +110,7 @@ func TestWriteJSON(t *testing.T) {
 func TestNewServer(t *testing.T) {
 	_ = os.Unsetenv("LISTEN_ADDR")
 	srv := newServer(http.NewServeMux())
-	if srv.Addr != ":8081" {
+	if srv.Addr != ":9190" {
 		t.Errorf("default addr: %s", srv.Addr)
 	}
 	_ = os.Setenv("LISTEN_ADDR", ":9999")

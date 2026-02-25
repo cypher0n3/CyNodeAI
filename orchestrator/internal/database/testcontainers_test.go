@@ -16,9 +16,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cypher0n3/cynodeai/orchestrator/internal/models"
+	"github.com/google/uuid"
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/modules/postgres"
+
+	"github.com/cypher0n3/cynodeai/orchestrator/internal/models"
 )
 
 // setupRootlessPodmanHost sets DOCKER_HOST to the rootless Podman socket if DOCKER_HOST
@@ -41,6 +43,27 @@ func setupRootlessPodmanHost() {
 // testcontainersSetupTimeout bounds how long TestMain waits for container start.
 // Prevents CI from hanging indefinitely if Podman/testcontainers blocks.
 const testcontainersSetupTimeout = 90 * time.Second
+
+const wantDSNIPv4 = "postgres://127.0.0.1:5432/db"
+
+// TestDsnForceIPv4 covers the DSN rewrite helper (localhost -> 127.0.0.1; parse error returns as-is).
+func TestDsnForceIPv4(t *testing.T) {
+	if got := dsnForceIPv4("://bad"); got != "://bad" {
+		t.Errorf("parse error: got %q", got)
+	}
+	if got := dsnForceIPv4("postgres://localhost:5432/db"); got != wantDSNIPv4 {
+		t.Errorf("localhost: got %q", got)
+	}
+	if got := dsnForceIPv4("postgres://localhost/db"); got != wantDSNIPv4 {
+		t.Errorf("localhost no port: got %q", got)
+	}
+	if got := dsnForceIPv4("postgres://example.com:5432/db"); got != "postgres://example.com:5432/db" {
+		t.Errorf("other host: got %q", got)
+	}
+	if got := dsnForceIPv4("postgres://[::1]:5432/db"); got != wantDSNIPv4 {
+		t.Errorf("::1: got %q", got)
+	}
+}
 
 // dsnForceIPv4 rewrites a postgres DSN so the host is 127.0.0.1 instead of localhost,
 // avoiding "connection reset by peer" when Podman only forwards IPv4.
@@ -113,9 +136,18 @@ type testcontainersResult struct {
 }
 
 func TestMain(m *testing.M) {
-	if os.Getenv(integrationEnv) != "" {
-		os.Exit(m.Run())
-		return
+	if dsn := os.Getenv(integrationEnv); dsn != "" {
+		// Use existing DSN only if it actually connects (avoids stale/bad env and forces testcontainers when needed).
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		db, err := Open(ctx, dsn)
+		cancel()
+		if err == nil {
+			_ = db.Close()
+			os.Exit(m.Run())
+			return
+		}
+		_ = os.Unsetenv(integrationEnv)
+		_ = os.Unsetenv("DATABASE_URL")
 	}
 	if os.Getenv("SKIP_TESTCONTAINERS") != "" {
 		os.Exit(m.Run())
@@ -261,7 +293,7 @@ func TestWithTestcontainers_Integration(t *testing.T) {
 	if err := db.UpdateNodeConfigVersion(ctx, node.ID, "1"); err != nil {
 		t.Fatalf("UpdateNodeConfigVersion: %v", err)
 	}
-	if err := db.UpdateNodeWorkerAPIConfig(ctx, node.ID, "http://worker:8081", "token"); err != nil {
+	if err := db.UpdateNodeWorkerAPIConfig(ctx, node.ID, "http://worker:9190", "token"); err != nil {
 		t.Fatalf("UpdateNodeWorkerAPIConfig: %v", err)
 	}
 	ackAt := time.Now().UTC()
@@ -287,4 +319,54 @@ func TestWithTestcontainers_Integration(t *testing.T) {
 		}
 	}
 	tcCompleteJobAndVerifyResult(t, db, ctx, job, `{"status":"ok"}`)
+}
+
+// TestWithTestcontainers_Preferences exercises preference store with the testcontainers DB.
+func TestWithTestcontainers_Preferences(t *testing.T) {
+	ctx := context.Background()
+	store := tcOpenDB(t, ctx)
+	db, ok := store.(*DB)
+	if !ok {
+		t.Fatal("tcOpenDB did not return *DB")
+	}
+	val := integrationTestPreferenceValue
+	ent := &models.PreferenceEntry{
+		ID:        uuid.New(),
+		ScopeType: "system",
+		ScopeID:   nil,
+		Key:       "tc.pref.key",
+		Value:     &val,
+		ValueType: "string",
+		Version:   1,
+		UpdatedAt: time.Now().UTC(),
+	}
+	if err := db.GORM().WithContext(ctx).Create(ent).Error; err != nil {
+		t.Fatalf("create preference: %v", err)
+	}
+	got, err := store.GetPreference(ctx, "system", nil, "tc.pref.key")
+	if err != nil {
+		t.Fatalf("GetPreference: %v", err)
+	}
+	if got.Key != "tc.pref.key" {
+		t.Errorf("GetPreference: got key %q", got.Key)
+	}
+	list, next, err := store.ListPreferences(ctx, "system", nil, "", 10, "")
+	if err != nil {
+		t.Fatalf("ListPreferences: %v", err)
+	}
+	if len(list) < 1 {
+		t.Errorf("ListPreferences: got %d entries", len(list))
+	}
+	_ = next
+	task, err := store.CreateTask(ctx, nil, "tc-pref-task")
+	if err != nil {
+		t.Fatalf("CreateTask: %v", err)
+	}
+	effective, err := store.GetEffectivePreferencesForTask(ctx, task.ID)
+	if err != nil {
+		t.Fatalf("GetEffectivePreferencesForTask: %v", err)
+	}
+	if effective["tc.pref.key"] == nil {
+		t.Errorf("effective missing tc.pref.key: %v", effective)
+	}
 }

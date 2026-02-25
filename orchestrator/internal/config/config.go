@@ -120,7 +120,7 @@ func LoadNodeConfig() *NodeConfig {
 		RegistrationPSK:       getEnv("NODE_REGISTRATION_PSK", "default-psk-change-me"),
 		NodeSlug:              getEnv("NODE_SLUG", "node-01"),
 		NodeName:              getEnv("NODE_NAME", "Default Node"),
-		ListenAddr:            getEnv("NODE_LISTEN_ADDR", ":8081"),
+		ListenAddr:            getEnv("NODE_LISTEN_ADDR", ":9190"),
 		ReadTimeout:           getDurationEnv("NODE_READ_TIMEOUT", 30*time.Second),
 		WriteTimeout:          getDurationEnv("NODE_WRITE_TIMEOUT", 300*time.Second),
 		IdleTimeout:           getDurationEnv("NODE_IDLE_TIMEOUT", 120*time.Second),

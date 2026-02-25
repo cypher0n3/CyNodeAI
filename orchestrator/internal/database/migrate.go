@@ -36,6 +36,8 @@ func (db *DB) runAutoMigrate(ctx context.Context, logger *slog.Logger) error {
 		&models.Node{},
 		&models.NodeCapability{},
 		&models.McpToolCallAuditLog{},
+		&models.PreferenceEntry{},
+		&models.PreferenceAuditLog{},
 		&models.Project{},
 		&models.Session{},
 		&models.ChatThread{},

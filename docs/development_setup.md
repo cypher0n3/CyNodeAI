@@ -57,7 +57,7 @@ The default path uses Docker Compose for the orchestrator stack (Postgres, contr
 
 - **user-gateway** - 8080 - Auth, users, tasks, results
 - **control-plane** - 8082 - Migrations, node register/capability, dispatcher
-- **worker-api** - 8081 - Run jobs (Worker API)
+- **worker-api** - 9190 - Run jobs (Worker API)
 - **ollama** - 11434 - Inference (Ollama API; used by inference proxy)
 - **node-manager** - (dynamic) - Registers node, reports capabilities
 
@@ -262,7 +262,7 @@ See [orchestrator/systemd/README.md](../orchestrator/systemd/README.md) and [wor
 - **Containers**: `podman ps` or `docker ps`; orchestrator stack uses `cynodeai-postgres`, `cynodeai-control-plane`, `cynodeai-user-gateway`, `cynodeai-ollama`.
 - **Migrations**: Control-plane runs them on startup.
   Migrate-only (when running binary directly): `./bin/control-plane -migrate-only`.
-- **Ports**: User API 8080, control-plane 8082, worker-api 8081, Ollama 11434.
+- **Ports**: User API 8080, control-plane 8082, worker-api 9190, Ollama 11434.
   See [Ports and endpoints](tech_specs/ports_and_endpoints.md) for the full table and overrides.
 - **CI/coverage**: Run `just test-go-cover` or `just ci`.
   For orchestrator DB tests, set `POSTGRES_TEST_DSN` if not using testcontainers.
@@ -277,5 +277,5 @@ See [orchestrator/systemd/README.md](../orchestrator/systemd/README.md) and [wor
 
 See [tech_specs/_main.md](tech_specs/_main.md) and the specs under [tech_specs/](tech_specs/) for detailed architecture.
 
-High-level: user-gateway (:8080) and control-plane (:8082) talk to PostgreSQL; nodes register with the control-plane; the dispatcher sends jobs to worker-api (:8081) on registered nodes.
+High-level: user-gateway (:8080) and control-plane (:8082) talk to PostgreSQL; nodes register with the control-plane; the dispatcher sends jobs to worker-api (:9190) on registered nodes.
 Ollama (:11434) provides inference; jobs with `use_inference` run in a pod with an inference proxy so the sandbox can call the model.

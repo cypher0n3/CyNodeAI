@@ -209,8 +209,8 @@ func TestRun_WithRealDatabase(t *testing.T) {
 		}
 	}
 
-	// Hit tool-call endpoint to exercise audit path with real DB
-	resp, err := http.Post(baseURL+"/v1/mcp/tools/call", "application/json", bytes.NewReader([]byte(`{"tool_name":"db.preference.get"}`)))
+	// Hit tool-call endpoint with non-routed tool to exercise audit path with real DB
+	resp, err := http.Post(baseURL+"/v1/mcp/tools/call", "application/json", bytes.NewReader([]byte(`{"tool_name":"other.tool"}`)))
 	if err != nil {
 		cancel()
 		<-done

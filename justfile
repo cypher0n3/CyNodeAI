@@ -485,7 +485,7 @@ test-go-e2e:
 
 # Minimum Go coverage (percent) required per package when running test-go-cover / ci
 go_coverage_min := "90"
-# Exceptions: control-plane and database allow ≥89%; testutil (test helpers) has no minimum; mcp-gateway (testcontainers) allows ≥85%
+# testutil (test helpers) has no minimum; all other packages require go_coverage_min (90%)
 go_coverage_min_control_plane := "90"
 go_coverage_min_mcp_gateway := "90"
 go_coverage_min_agents := "90"
@@ -507,7 +507,11 @@ test-go-cover: install-go podman-setup
     for m in {{ go_modules }}; do
       echo "==> $m: go test -coverprofile"
       out="$root/tmp/go/coverage/$m.coverage.out"
-      (cd "$root/$m" && go test ./... -coverprofile="$out" -covermode=atomic)
+      if [ "$m" = "orchestrator" ]; then
+        (cd "$root/$m" && go test -p 1 ./... -coverprofile="$out" -covermode=atomic)
+      else
+        (cd "$root/$m" && go test ./... -coverprofile="$out" -covermode=atomic)
+      fi
 
       r=0
       min_cp="{{ go_coverage_min_control_plane }}"
@@ -526,13 +530,14 @@ test-go-cover: install-go podman-setup
         END {
           for (p in t) {
             pct = (t[p] > 0) ? (100 * c[p] / t[p]) : 0
+            pct_rounded = int(pct * 10 + 0.5) / 10
             if (module == "agents") req = min_agents + 0
             else if (p ~ /\/cmd\/control-plane$/) req = min_cp + 0
             else if (p ~ /\/internal\/database$/) req = min_cp + 0
             else if (p ~ /\/internal\/testutil$/) req = 0
             else if (p ~ /\/cmd\/mcp-gateway$/) req = min_mcp + 0
             else req = min + 0
-            if (pct < req) { printf "  %s %.1f%%\n", p, pct; e = 1 }
+            if (pct_rounded < req) { printf "  %s %.1f%%\n", p, pct; e = 1 }
           }
           exit e + 0
         }

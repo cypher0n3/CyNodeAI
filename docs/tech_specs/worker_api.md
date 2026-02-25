@@ -101,14 +101,15 @@ Traces To:
 - [REQ-WORKER-0140](../requirements/worker.md#req-worker-0140)
 - [REQ-WORKER-0141](../requirements/worker.md#req-worker-0141)
 - [REQ-WORKER-0142](../requirements/worker.md#req-worker-0142)
+- [REQ-WORKER-0252](../requirements/worker.md#req-worker-0252)
 
 Endpoints
 
 - `GET /healthz`
   - returns 200 with plain text body `ok` when the HTTP server is running
 - `GET /readyz`
-  - returns 200 with plain text body `ready` when the node is ready to accept job execution requests
-  - returns 503 when the node is not ready
+  - returns 200 with plain text body `ready` only when the node has passed [node startup checks](worker_node.md#spec-cynai-worker-nodestartupchecks) and is ready to accept job execution requests
+  - returns 503 when the node is not ready (e.g. startup checks not yet passed or failed)
 
 ## Error Handling
 
@@ -146,6 +147,7 @@ Traces To:
 - The node MUST execute the provided command in a sandbox container.
 - The node MUST associate the execution with `task_id` and `job_id` for auditing and cleanup.
 - The node MUST enforce a timeout (job-provided or node default) using the rules below.
+  The **orchestrator** (e.g. PMA or Project Analyst Agent when dispatching jobs) sets the per-job timeout via `sandbox.timeout_seconds` in the request when it wants to allow long-running work; the node provides a default when not set and enforces a node-specific max.
 - The node MUST capture stdout and stderr and include them in the response (subject to truncation limits).
 - The node MUST return a deterministic result for the same inputs when execution is deterministic.
 
@@ -157,10 +159,10 @@ Timeout rules (required)
   - `min(node_default_job_timeout_seconds, node_max_job_timeout_seconds)`
 - `node_default_job_timeout_seconds` MUST be derived in this order:
   - node startup YAML `sandbox.timeouts.default_seconds`
-  - otherwise 900 seconds
+  - otherwise 3600 seconds (1 hour)
 - `node_max_job_timeout_seconds` MUST be derived in this order:
   - node startup YAML `sandbox.timeouts.max_seconds`
-  - otherwise 3600 seconds
+  - otherwise 10800 seconds (3 hours)
 - If the node configuration payload includes `constraints.max_job_timeout_seconds`, the node MUST further cap the timeout
   by taking the minimum of the values above and `constraints.max_job_timeout_seconds`.
 
@@ -231,6 +233,10 @@ Timeout rules (required)
 - `truncated` (object, required)
   - `stdout` (boolean)
   - `stderr` (boolean)
+- `sba_result` (object, optional): When the job used an SBA runner image, the node MAY include the SBA result contract (e.g. from `/job/result.json`) so the orchestrator can persist it to `jobs.result`.
+  Shape: protocol_version, job_id, status, steps, artifacts, failure_code, failure_message per [cynode_sba.md - Result contract](cynode_sba.md#spec-cynai-sbagnt-resultcontract).
+- `artifacts` (array, optional): When the job used an SBA runner image and the node read `/job/artifacts/`, the node MAY include artifact descriptors or content (e.g. name, content_type, size_bytes, content_base64 or ref) so the orchestrator can persist artifact blobs and refs.
+  Shape is implementation-defined but MUST be suitable for orchestrator storage and client retrieval.
 
 #### Status Codes
 
@@ -274,6 +280,25 @@ Result retention (required)
   The node MUST NOT clear or delete the job result until persistence is confirmed.
   This ensures no result loss if the connection drops after the job completes but before the orchestrator has stored the result.
   Retained results SHOULD be subject to node-local retention and disk limits; the implementation SHOULD define cleanup for results that could not be delivered after a timeout or retry limit.
+
+### Node-Mediated SBA Result (Sync)
+
+- Spec ID: `CYNAI.WORKER.NodeMediatedSbaResultSync` <a id="spec-cynai-worker-nodemediatedsbaresult-sync"></a>
+
+- When the job uses an SBA runner image and the implementation uses the synchronous Run Job response, the node MUST do the following.
+  - **Blocking wait for container exit:** The node MUST start the container (with `/job/` and `/workspace` bind-mounted) and MUST **block** until the container process exits or the job timeout is reached (whichever comes first).
+    E.g. a single goroutine or thread waiting on the container runtime's wait primitive; no periodic polling is required.
+    The Run Job HTTP request remains open for the full job duration.
+    On timeout, the node MUST stop the container and treat the job as timed out.
+  - **Long-running jobs:** Holding the connection open for long-running jobs (e.g. 1-3 hours) is not recommended.
+    For long-running work, implementations SHOULD use an **async** pattern where the SBA reports status and completion via outbound call (e.g. job callback or status API) so the node does not block the Run Job request for the full duration.
+    The node may respond with 202 Accepted and deliver the result when the SBA reports completion.
+    See [cynode_sba.md - Job lifecycle and status reporting](cynode_sba.md#spec-cynai-sbagnt-joblifecycle).
+  - **Read job results after exit:** After the container has exited (or been stopped), the node MUST read `/job/result.json` from the host bind-mount (and optionally `/job/artifacts/`) and MUST derive job status from the container exit code and/or from the SBA result contract when present.
+  - **Build and return response:** The node MUST build the response body including `sba_result` and `artifacts` as defined in the Run Job response fields and return them in the same HTTP response to the orchestrator.
+  - **Retention:** The node MUST NOT clear or delete the job directory until the response has been sent.
+  The node SHOULD retain the job directory until orchestrator persistence is confirmed when the protocol supports it.
+  This aligns with [cynode_sba.md - Result and Artifact Delivery](cynode_sba.md#spec-cynai-sbagnt-resultandartifactdelivery) (node-mediated delivery path).
 
 See:
 
