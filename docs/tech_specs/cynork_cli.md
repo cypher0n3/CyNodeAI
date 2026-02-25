@@ -59,6 +59,16 @@ The CLI and the [Web Console](web_console.md) MUST offer the same administrative
 When adding or changing a capability in this spec (for example a new command, credential workflow, preference scope, node action, or skill operation), the Web Console spec and implementation MUST be updated to match, and vice versa.
 Use the same gateway APIs and the same authorization and auditing rules for both clients.
 
+### User-Gateway Alignment (Implementation Status)
+
+Cynork calls the User API Gateway ([user_api_gateway.md](user_api_gateway.md)).
+The following alignment is for implementers:
+
+- **Implemented on gateway and used by cynork:** `GET /healthz`, `POST /v1/auth/login`, `POST /v1/auth/refresh`, `POST /v1/auth/logout`, `GET /v1/users/me`, `POST /v1/tasks`, `GET /v1/tasks`, `GET /v1/tasks/{id}`, `GET /v1/tasks/{id}/result`, `POST /v1/tasks/{id}/cancel`, `GET /v1/tasks/{id}/logs`, `POST /v1/chat`.
+- **Not yet implemented on gateway:** `/v1/creds`, `/v1/prefs`, `/v1/prefs/effective`, `/v1/settings`, `/v1/nodes`, `/v1/skills/load`, `/v1/audit`.
+  Cynork commands for creds, prefs, settings, nodes, skills, and audit call these paths; against a real orchestrator they return 404 until the gateway adds the APIs.
+  BDD uses a mock that stubs these endpoints so scenarios pass.
+
 ## Goals and Non-Goals
 
 Goals
@@ -112,7 +122,7 @@ Traces To:
 
 - The file MUST be valid YAML.
 - Supported top-level keys:
-  - `gateway_url` (string, optional): base URL of the User API Gateway (e.g. `http://localhost:8080`).
+  - `gateway_url` (string, optional): base URL of the User API Gateway (e.g. `http://localhost:12080`).
   - `token` (string, optional): bearer token for gateway auth; MAY be omitted when using a credential helper.
   - `credential_helper` (string, optional): command or helper name to obtain the token (see [Credential Helper Protocol](#credential-helper-protocol)).
 - Unknown keys MAY be ignored; the CLI MUST NOT fail load solely due to unknown keys.
@@ -126,7 +136,7 @@ Traces To:
 
 #### Default Gateway URL
 
-- When `gateway_url` is empty after load and env override, the CLI MUST use the default `http://localhost:8080` (or a build-time constant matching the orchestrator default).
+- When `gateway_url` is empty after load and env override, the CLI MUST use the default `http://localhost:12080` (or a build-time constant matching the orchestrator default).
 - See [Ports and endpoints](ports_and_endpoints.md#spec-cynai-stands-clicynork) for the consolidated default and overrides.
 
 #### Session Persistence (Reliability)

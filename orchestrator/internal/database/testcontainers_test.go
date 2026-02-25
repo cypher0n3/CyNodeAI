@@ -293,7 +293,7 @@ func TestWithTestcontainers_Integration(t *testing.T) {
 	if err := db.UpdateNodeConfigVersion(ctx, node.ID, "1"); err != nil {
 		t.Fatalf("UpdateNodeConfigVersion: %v", err)
 	}
-	if err := db.UpdateNodeWorkerAPIConfig(ctx, node.ID, "http://worker:9190", "token"); err != nil {
+	if err := db.UpdateNodeWorkerAPIConfig(ctx, node.ID, "http://worker:12090", "token"); err != nil {
 		t.Fatalf("UpdateNodeWorkerAPIConfig: %v", err)
 	}
 	ackAt := time.Now().UTC()

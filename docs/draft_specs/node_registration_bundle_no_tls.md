@@ -143,7 +143,7 @@ The node MUST report the following in the registration request (e.g. in the capa
   Used for inventory and display.
 - **Primary IP:** The IP address the orchestrator should use to reach the node (e.g. the node's primary interface address, or the address used for the current connection).
   A single primary IP is sufficient for dispatch; additional addresses may be optional for diagnostics.
-- **Worker API port:** The port on which the Worker API is listening (e.g. default 9190 or the value from node startup YAML).
+- **Worker API port:** The port on which the Worker API is listening (e.g. default 12090 or the value from node startup YAML).
 - **Worker API listen host (optional):** If useful for display or validation (e.g. 0.0.0.0 vs a specific interface).
 - **Public base URL (optional):** If the node or admin has configured a public URL for the Worker API (e.g. for NAT or load balancers), it may be reported so the orchestrator can store it for dispatch.
 - **Node id (node_slug):** A stable identifier for the node (e.g. from node startup YAML `node.id`, or a default such as hostname).

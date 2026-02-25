@@ -186,7 +186,7 @@ Worker node code is in `worker_node/`; Node Manager and Worker API surface are i
 
 Agents live in `agents/` (cynode-pma, SBA runner); Phase 1.7 and P2-09/P2-10 are in scope.
 
-### 5.1 PMA (Cynode-Pma)
+### 5.1 PMA (CyNode-Pma)
 
 - **Issue:** PMA does not use langchaingo for LLM or tool execution
   - spec / requirement: mvp_plan.md Tech Spec Alignment: "PMA uses langchaingo (Go) for LLM and tool execution, including multiple simultaneous tool calls where supported"; cynode_pma.md; project_manager_agent.md
@@ -196,7 +196,7 @@ Agents live in `agents/` (cynode-pma, SBA runner); Phase 1.7 and P2-09/P2-10 are
   - spec / requirement: cynode_pma.md; pmagnt requirements
   - remediation: No change; note langchaingo gap above for Phase 2 MCP-in-the-loop.
 
-### 5.2 SBA (Cynode-Sba)
+### 5.2 SBA (CyNode-Sba)
 
 - **Issue:** Result and artifact delivery: SBA writes `/job/result.json`; node-mediated sync path not fully wired in Worker API response
   - spec / requirement: cynode_sba.md Result contract; worker_api.md Node-Mediated SBA Result (Sync)
@@ -214,7 +214,7 @@ Agents live in `agents/` (cynode-pma, SBA runner); Phase 1.7 and P2-09/P2-10 are
   - remediation: Implemented in agents/sba (todo state).
     No gap.
 
-### 5.3 Step Executor (Cynode-Sse)
+### 5.3 Step Executor (CyNode-Sse)
 
 - **Issue:** No `cynode-sse` binary or step-executor runner
   - spec / requirement: cynode_step_executor.md; worker_api.md step_executor_result
@@ -317,7 +317,7 @@ Payload and gateway completeness for full spec alignment.
 
 Phase 2 and follow-on work; not required for initial P2-10 closure.
 
-#### 7.3.1 Cynode-Sse (Step Executor)
+#### 7.3.1 CyNode-Sse (Step Executor)
 
 - Implement binary and runner image per cynode_step_executor.md; wire Worker API and orchestrator to `step_executor_result`.
 

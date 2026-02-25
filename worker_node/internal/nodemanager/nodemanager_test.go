@@ -35,7 +35,7 @@ func TestLoadConfig(t *testing.T) {
 	}()
 
 	cfg := LoadConfig()
-	if cfg.OrchestratorURL != "http://localhost:8082" || cfg.NodeSlug != "node-01" {
+	if cfg.OrchestratorURL != "http://localhost:12082" || cfg.NodeSlug != "node-01" {
 		t.Errorf("defaults: %+v", cfg)
 	}
 	if cfg.CapabilityReportInterval != 60*time.Second {

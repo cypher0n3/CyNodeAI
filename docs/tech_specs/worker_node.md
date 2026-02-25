@@ -308,7 +308,7 @@ These settings are node-local and MAY impose stricter constraints than orchestra
   - Default MUST be `0.0.0.0`.
 - `worker_api.listen_port` (number, optional)
   - Port to bind.
-    Default MUST be `9190` (CyNodeAI Worker API default; see [`ports_and_endpoints.md`](ports_and_endpoints.md#spec-cynai-stands-portsandendpoints)).
+    Default MUST be `12090` (CyNodeAI Worker API default; see [`ports_and_endpoints.md`](ports_and_endpoints.md#spec-cynai-stands-portsandendpoints)).
 - `worker_api.public_base_url` (string, optional)
   - Public URL the orchestrator should use to reach the worker API.
 - `worker_api.max_request_bytes` (number, optional)
@@ -441,7 +441,7 @@ node:
     - region_us_east_1
 worker_api:
   listen_host: 0.0.0.0
-  listen_port: 9190
+  listen_port: 12090
   public_base_url: https://worker-01.example.com
   max_request_bytes: 10485760
 sandbox:

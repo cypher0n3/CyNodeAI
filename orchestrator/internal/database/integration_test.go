@@ -101,7 +101,7 @@ func TestIntegration_ListDispatchableNodesAndListTasksByUser(t *testing.T) {
 	if err := db.UpdateNodeStatus(ctx, node.ID, models.NodeStatusActive); err != nil {
 		t.Fatalf("UpdateNodeStatus: %v", err)
 	}
-	if err := db.UpdateNodeWorkerAPIConfig(ctx, node.ID, "http://localhost:9190", "token"); err != nil {
+	if err := db.UpdateNodeWorkerAPIConfig(ctx, node.ID, "http://localhost:12090", "token"); err != nil {
 		t.Fatalf("UpdateNodeWorkerAPIConfig: %v", err)
 	}
 	ackAt := time.Now().UTC()

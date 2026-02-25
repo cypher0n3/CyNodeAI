@@ -75,7 +75,6 @@ Recent tech spec updates incorporated into this plan:
   - **SBA:** The canonical implementation of `cynode-sba` is in Go using [langchaingo](https://github.com/tmc/langchaingo) for LLM calls, agent loop, and MCP tools (wrapped as langchaingo tools).
   - **PMA:** PMA uses langchaingo (Go) for LLM and tool execution, including multiple simultaneous tool calls where supported.
   - LangGraph remains the orchestrator workflow engine (graph, checkpointing to PostgreSQL, lease); langchaingo implements the agentic steps within workflow nodes.
-  - See [dev_docs/2026-02-24_langchaingo_agents_sba_spec_reqs_proposal.md](../dev_docs/2026-02-24_langchaingo_agents_sba_spec_reqs_proposal.md).
 
 These behaviors are reflected in Phase 1 (inference path requirement), Phase 2 (workflow model routing), and Phase 4 (API Egress, external model routing fallback, and policy).
 
@@ -114,7 +113,7 @@ These behaviors are reflected in Phase 1 (inference path requirement), Phase 2 (
   User-gateway exposes `GET /v1/models` and `POST /v1/chat/completions`; effective model `cynodeai.pm` routes to PM agent (cynode-pma), any other to direct inference; legacy `POST /v1/chat` removed.
   Compose: user-gateway has `PMA_BASE_URL`; cynode-pma has `OLLAMA_BASE_URL` so PMA can call Ollama for completions.
     E2E script includes Test 5d (list-models + chat completions); `just e2e` / full-demo passes.
-  See [2026-02-22_phase_1_7_execution_report.md](../dev_docs/2026-02-22_phase_1_7_execution_report.md).
+  See [PHASE1_STATUS.md](../dev_docs/PHASE1_STATUS.md) for runbook and phase summary.
 - **E2E script and image cache:** Script-driven E2E (`just e2e` / `./scripts/setup-dev.sh full-demo`) uses conditional container image rebuild: build-context hash cached under `tmp/e2e-image-cache`; images rebuild only on delta.
   Create-task step retries on 000/5xx.
   Env: `E2E_FORCE_REBUILD`, `E2E_IMAGE_CACHE_DIR`.
@@ -122,7 +121,7 @@ These behaviors are reflected in Phase 1 (inference path requirement), Phase 2 (
 - **Phase 2:** Foundation in progress.
   P2-02: MCP tool call audit table (`mcp_tool_call_audit_log`), store method, mcp-gateway `POST /v1/mcp/tools/call` writes audit and returns 501; gateway uses testcontainers for real-DB coverage (>=90%).
     P2-01 (scoping/schema), P2-03 (preference tools), and full allow path not started.
-  See [2026-02-22_phase_2_progress_report.md](../dev_docs/2026-02-22_phase_2_progress_report.md).
+  See [PHASE1_STATUS.md](../dev_docs/PHASE1_STATUS.md) for Phase 2 detail.
 
 ## Prompt Interpretation: Intended Semantics
 
@@ -486,7 +485,7 @@ Reference: [docs/tech_specs/\_main.md](../docs/tech_specs/_main.md) Phase 1; [ex
 - **E2E:** Scenario that runs task with inference inside the sandbox (e.g. command that calls `http://localhost:11434` or echoes `OLLAMA_BASE_URL`).
   Script-driven E2E (`just e2e` / `scripts/setup-dev.sh` full-demo) runs this when the node is started with inference and a model is loaded.
 - **CLI (cynork):** Separate Go module at `cynork/`; in `go.work` and justfile `go_modules`; version, status, auth (login/logout/whoami), task create/result; config via env and optional `~/.config/cynork/config.yaml`.
-  Gateway URL default `http://localhost:8080`; no direct DB access; all operations via User API Gateway.
+  Gateway URL default `http://localhost:12080`; no direct DB access; all operations via User API Gateway.
   See [cynork_cli.md](../docs/tech_specs/cynork_cli.md) and [ports_and_endpoints.md](../docs/tech_specs/ports_and_endpoints.md).
 
 **Done:** CLI module, inference proxy and pod path, worker_node BDD for inference; orchestrator/User API default to inference path; minimal prompt-as-model-input path (Option A); raw/script/commands mode; BDD for natural-language prompt (default) and result containing model output, and for commands mode (literal shell).

@@ -18,6 +18,7 @@ This directory holds the main project documentation for CyNodeAI.
 ## Other Directories
 
 - [docs_standards/](docs_standards/README.md) - Markdown and spec authoring conventions.
+- [draft_specs/](draft_specs/README.md) - draft and proposal specs not yet in requirements or tech_specs; use for designs under consideration (e.g. NATS messaging) before promotion to canonical docs.
 - [examples/](examples/README.md) - example configuration files (e.g. bootstrap YAML).
 
 ## Relation to Repo

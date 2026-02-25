@@ -30,7 +30,7 @@ type Config struct {
 // LoadConfig reads configuration from the environment.
 func LoadConfig() Config {
 	return Config{
-		OrchestratorURL:          getEnv("ORCHESTRATOR_URL", "http://localhost:8082"),
+		OrchestratorURL:          getEnv("ORCHESTRATOR_URL", "http://localhost:12082"),
 		NodeSlug:                 getEnv("NODE_SLUG", "node-01"),
 		NodeName:                 getEnv("NODE_NAME", "Default Node"),
 		RegistrationPSK:          getEnv("NODE_REGISTRATION_PSK", ""),

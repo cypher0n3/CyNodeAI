@@ -87,7 +87,7 @@ type NodeConfig struct {
 func LoadOrchestratorConfig() *OrchestratorConfig {
 	return &OrchestratorConfig{
 		DatabaseURL:            getEnv("DATABASE_URL", "postgres://postgres:postgres@localhost:5432/cynodeai?sslmode=disable"),
-		ListenAddr:             getEnv("LISTEN_ADDR", ":8080"),
+		ListenAddr:             getEnv("LISTEN_ADDR", ":12080"),
 		ReadTimeout:            getDurationEnv("READ_TIMEOUT", 30*time.Second),
 		WriteTimeout:           getDurationEnv("WRITE_TIMEOUT", 30*time.Second),
 		IdleTimeout:            getDurationEnv("IDLE_TIMEOUT", 120*time.Second),
@@ -98,7 +98,7 @@ func LoadOrchestratorConfig() *OrchestratorConfig {
 		JWTRefreshDuration:     getDurationEnv("JWT_REFRESH_DURATION", 7*24*time.Hour),
 		JWTNodeDuration:        getDurationEnv("JWT_NODE_DURATION", 24*time.Hour),
 		NodeRegistrationPSK:    getEnv("NODE_REGISTRATION_PSK", "default-psk-change-me"),
-		OrchestratorPublicURL:  getEnv("ORCHESTRATOR_PUBLIC_URL", "http://localhost:8082"),
+		OrchestratorPublicURL:  getEnv("ORCHESTRATOR_PUBLIC_URL", "http://localhost:12082"),
 		WorkerAPIBearerToken:   getEnv("WORKER_API_BEARER_TOKEN", "phase1-static-token"),
 		WorkerAPITargetURL:     getEnv("WORKER_API_TARGET_URL", ""),
 		BootstrapAdminPassword: getEnv("BOOTSTRAP_ADMIN_PASSWORD", "admin123"),
@@ -116,11 +116,11 @@ func LoadOrchestratorConfig() *OrchestratorConfig {
 // LoadNodeConfig loads node configuration from environment.
 func LoadNodeConfig() *NodeConfig {
 	return &NodeConfig{
-		OrchestratorURL:       getEnv("ORCHESTRATOR_URL", "http://localhost:8080"),
+		OrchestratorURL:       getEnv("ORCHESTRATOR_URL", "http://localhost:12082"),
 		RegistrationPSK:       getEnv("NODE_REGISTRATION_PSK", "default-psk-change-me"),
 		NodeSlug:              getEnv("NODE_SLUG", "node-01"),
 		NodeName:              getEnv("NODE_NAME", "Default Node"),
-		ListenAddr:            getEnv("NODE_LISTEN_ADDR", ":9190"),
+		ListenAddr:            getEnv("NODE_LISTEN_ADDR", ":12090"),
 		ReadTimeout:           getDurationEnv("NODE_READ_TIMEOUT", 30*time.Second),
 		WriteTimeout:          getDurationEnv("NODE_WRITE_TIMEOUT", 300*time.Second),
 		IdleTimeout:           getDurationEnv("NODE_IDLE_TIMEOUT", 120*time.Second),

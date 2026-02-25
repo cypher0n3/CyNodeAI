@@ -45,7 +45,7 @@ The gateway MUST support at least interaction with the Project Manager Agent for
 OpenWebUI uses the **OpenAI Chat Completions** protocol.
 It connects to any backend that implements an OpenAI-compatible API.
 
-- **API URL**: Base URL of the backend, e.g. `http://localhost:8080/v1` (trailing path is typically `/v1`).
+- **API URL**: Base URL of the backend, e.g. `http://localhost:12080/v1` (trailing path is typically `/v1`).
 - **API Key**: Optional; when required, OpenWebUI sends it as the `Authorization: Bearer <key>` header.
 - **Model listing**: OpenWebUI can call `GET .../v1/models` to discover models; if the backend does not support it, models can be added manually in OpenWebUI connection settings.
 
@@ -80,7 +80,7 @@ Follow these steps to connect OpenWebUI to the CyNodeAI User API Gateway once th
 Ensure the orchestrator and user-gateway are running.
 See [../orchestrator/README.md](../orchestrator/README.md) and, if using containers, [../orchestrator/docker-compose.yml](../orchestrator/docker-compose.yml) or [../orchestrator/systemd/README.md](../orchestrator/systemd/README.md).
 
-- Note the gateway base URL (e.g. `http://localhost:8080` or `https://cynodeai.example.com`).
+- Note the gateway base URL (e.g. `http://localhost:12080` or `https://cynodeai.example.com`).
 - If an OpenAI-compat path is implemented under a subpath (e.g. `/openai/v1`), the full base URL for OpenWebUI will be `{gateway_base}/openai/v1`; otherwise `{gateway_base}/v1`.
 
 ### 2. Obtain Gateway Credentials
@@ -95,7 +95,7 @@ The gateway MUST authenticate user clients; see [user_api_gateway.md - Authentic
 
 - Install OpenWebUI (see [Open WebUI docs](https://docs.openwebui.com/)).
 - In OpenWebUI: **Admin Settings** => **Connections** => **OpenAI** (or equivalent "Connect a provider" flow).
-- **API URL**: Set to the CyNodeAI gateway OpenAI-compat base, e.g. `http://localhost:8080/v1` or `http://host.docker.internal:8080/v1` if OpenWebUI runs in Docker and the gateway is on the host.
+- **API URL**: Set to the CyNodeAI gateway OpenAI-compat base, e.g. `http://localhost:12080/v1` or `http://host.docker.internal:12080/v1` if OpenWebUI runs in Docker and the gateway is on the host.
 - **API Key**: Set to the gateway token or API key from step 2.
 - Save the connection.
 

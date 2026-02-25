@@ -5,7 +5,7 @@
 version: 1
 
 orchestrator:
-  url: "http://localhost:8080"
+  url: "http://localhost:12080"
   registration_psk_env: CYNODE_NODE_REGISTRATION_PSK
   # registration_psk_file: /run/secrets/node_psk
   # timeouts:
@@ -19,7 +19,7 @@ node:
 
 worker_api:
   listen_host: "0.0.0.0"
-  listen_port: 9190
+  listen_port: 12090
   public_base_url: "http://localhost:9090"
 
 sandbox:

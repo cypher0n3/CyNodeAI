@@ -954,7 +954,7 @@ func TestNodeHandler_GetConfig_Success(t *testing.T) {
 	jwtMgr := auth.NewJWTManager("test-secret-key-1234567890123456", 15*time.Minute, 7*24*time.Hour, 24*time.Hour)
 	logger := newTestLogger()
 
-	handler := NewNodeHandler(mockDB, jwtMgr, "test-psk", testOrchestratorURL, "bearer-token-1", "http://node:9190", logger)
+	handler := NewNodeHandler(mockDB, jwtMgr, "test-psk", testOrchestratorURL, "bearer-token-1", "http://node:12090", logger)
 
 	cfgVer := "1"
 	node := &models.Node{
@@ -986,7 +986,7 @@ func TestNodeHandler_GetConfig_Success(t *testing.T) {
 	if payload.WorkerAPI == nil || payload.WorkerAPI.OrchestratorBearerToken != "bearer-token-1" {
 		t.Errorf("expected worker_api.orchestrator_bearer_token, got %+v", payload.WorkerAPI)
 	}
-	if payload.Orchestrator.Endpoints.WorkerAPITargetURL != "http://node:9190" {
+	if payload.Orchestrator.Endpoints.WorkerAPITargetURL != "http://node:12090" {
 		t.Errorf("expected worker_api_target_url from handler, got %s", payload.Orchestrator.Endpoints.WorkerAPITargetURL)
 	}
 }

@@ -63,15 +63,15 @@ POSTGRES_DB="${POSTGRES_DB:-cynodeai}"
 POSTGRES_IMAGE="${POSTGRES_IMAGE:-pgvector/pgvector:pg16}"
 
 # Orchestrator API config
-ORCHESTRATOR_PORT="${ORCHESTRATOR_PORT:-8080}"
-CONTROL_PLANE_PORT="${CONTROL_PLANE_PORT:-8082}"
+ORCHESTRATOR_PORT="${ORCHESTRATOR_PORT:-12080}"
+CONTROL_PLANE_PORT="${CONTROL_PLANE_PORT:-12082}"
 JWT_SECRET="${JWT_SECRET:-dev-jwt-secret-change-in-production}"
 NODE_PSK="${NODE_PSK:-dev-node-psk-secret}"
 ADMIN_PASSWORD="${ADMIN_PASSWORD:-admin123}"
 
 # Node config
 NODE_SLUG="${NODE_SLUG:-dev-node-1}"
-WORKER_PORT="${WORKER_PORT:-9190}"
+WORKER_PORT="${WORKER_PORT:-12090}"
 WORKER_API_BEARER_TOKEN="${WORKER_API_BEARER_TOKEN:-dev-worker-api-token-change-me}"
 
 # Compose file for orchestrator stack (postgres + control-plane + user-gateway)
@@ -429,7 +429,7 @@ run_ollama_inference_smoke() {
     return 0
 }
 
-# Function to run E2E demo test (user APIs on :8080, node APIs on :8082)
+# Function to run E2E demo test (user API :12080, control-plane :12082, worker :12090)
 run_e2e_test() {
     log_info "Running E2E demo test..."
 
@@ -720,7 +720,7 @@ show_usage() {
     echo ""
     echo "Environment Variables:"
     echo "  POSTGRES_PORT     PostgreSQL port (default: 5432)"
-    echo "  ORCHESTRATOR_PORT Orchestrator API port (default: 8080)"
+    echo "  ORCHESTRATOR_PORT Orchestrator API port (default: 12080)"
     echo "  ADMIN_PASSWORD    Admin user password (default: admin123)"
     echo "  NODE_PSK          Node registration PSK (default: dev-node-psk-secret)"
     echo "  E2E_FORCE_REBUILD Set to 1 to rebuild container images even when cache matches (default: 0)"

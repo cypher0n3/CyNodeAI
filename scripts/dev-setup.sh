@@ -18,9 +18,9 @@ POSTGRES_PORT="${POSTGRES_PORT:-5432}"
 POSTGRES_PASSWORD="${POSTGRES_PASSWORD:-postgres}"
 POSTGRES_DB="${POSTGRES_DB:-cynodeai}"
 
-ORCHESTRATOR_PORT="${ORCHESTRATOR_PORT:-8080}"
-CONTROL_PLANE_PORT="${CONTROL_PLANE_PORT:-8082}"
-NODE_PORT="${NODE_PORT:-9190}"
+ORCHESTRATOR_PORT="${ORCHESTRATOR_PORT:-12080}"
+CONTROL_PLANE_PORT="${CONTROL_PLANE_PORT:-12082}"
+NODE_PORT="${NODE_PORT:-12090}"
 NODE_SLUG="${NODE_SLUG:-dev-node-01}"
 NODE_REGISTRATION_PSK="${NODE_REGISTRATION_PSK:-dev-psk-secret}"
 WORKER_API_BEARER_TOKEN="${WORKER_API_BEARER_TOKEN:-dev-worker-api-token}"
@@ -219,7 +219,7 @@ stop_services() {
     log_success "Services stopped"
 }
 
-# Run end-to-end tests (user API :8080, control-plane :8082, worker :9190)
+# Run end-to-end tests (user API :12080, control-plane :12082, worker :12090)
 test_e2e() {
     log_info "Running end-to-end tests..."
 
@@ -351,8 +351,8 @@ usage() {
     echo ""
     echo "Environment Variables:"
     echo "  POSTGRES_PORT               PostgreSQL port (default: 5432)"
-    echo "  ORCHESTRATOR_PORT           Orchestrator API port (default: 8080)"
-    echo "  NODE_PORT                   Node Worker API port (default: 9190)"
+    echo "  ORCHESTRATOR_PORT           Orchestrator API port (default: 12080)"
+    echo "  NODE_PORT                   Node Worker API port (default: 12090)"
     echo "  NODE_SLUG                   Node identifier (default: dev-node-01)"
     echo "  NODE_REGISTRATION_PSK       PSK for node registration"
     echo "  BOOTSTRAP_ADMIN_PASSWORD    Admin user password (default: admin123)"

@@ -10,8 +10,8 @@
   - [4. Docker Compose (Orchestrator Stack)](#4-docker-compose-orchestrator-stack)
   - [5. Docker Compose (Worker Node)](#5-docker-compose-worker-node)
 - [Testing the API](#testing-the-api)
-  - [User API (Port 8080)](#user-api-port-8080)
-  - [Node Registration (Port 8082)](#node-registration-port-8082)
+  - [User API (Port 12080)](#user-api-port-12080)
+  - [Node Registration (Port 12082)](#node-registration-port-12082)
 - [API Endpoints](#api-endpoints)
   - [Authentication endpoints](#authentication-endpoints)
   - [User endpoints](#user-endpoints)
@@ -45,7 +45,7 @@ The default path uses Docker Compose for the orchestrator stack (Postgres, contr
 ```bash
 # From repo root: build binaries and start orchestrator stack (compose)
 ./scripts/setup-dev.sh start
-# User API: http://localhost:8080  Control-plane: http://localhost:8082  Ollama: http://localhost:11434
+# User API: http://localhost:12080  Control-plane: http://localhost:12082  Ollama: http://localhost:11434
 # Default admin: admin / admin123
 ```
 
@@ -55,9 +55,9 @@ The default path uses Docker Compose for the orchestrator stack (Postgres, contr
 
 ## Service Layout
 
-- **user-gateway** - 8080 - Auth, users, tasks, results
-- **control-plane** - 8082 - Migrations, node register/capability, dispatcher
-- **worker-api** - 9190 - Run jobs (Worker API)
+- **user-gateway** - 12080 - Auth, users, tasks, results
+- **control-plane** - 12082 - Migrations, node register/capability, dispatcher
+- **worker-api** - 12090 - Run jobs (Worker API)
 - **ollama** - 11434 - Inference (Ollama API; used by inference proxy)
 - **node-manager** - (dynamic) - Registers node, reports capabilities
 
@@ -111,7 +111,7 @@ export BOOTSTRAP_ADMIN_PASSWORD=admin123
 ./bin/control-plane
 
 # Terminal 2: user-gateway
-export USER_GATEWAY_LISTEN_ADDR=:8080
+export USER_GATEWAY_LISTEN_ADDR=:12080
 ./bin/user-gateway
 ```
 
@@ -120,7 +120,7 @@ Optional (for job execution): start worker-api and node-manager with the same `W
 ### 4. Docker Compose (Orchestrator Stack)
 
 The orchestrator stack runs Postgres, control-plane, user-gateway, and Ollama in containers.
-Ports: 5432, 8082, 8080, 11434.
+Ports: 5432, 12082, 12080, 11434.
 
 ```bash
 # From repo root (required for build context)
@@ -136,7 +136,7 @@ To stop: `just e2e-stop` or `./scripts/setup-dev.sh stop`.
 ```bash
 cd worker_node
 WORKER_API_BEARER_TOKEN=dev-worker-api-token NODE_REGISTRATION_PSK=dev-node-psk \
-  ORCHESTRATOR_URL=http://host.containers.internal:8082 \
+  ORCHESTRATOR_URL=http://host.containers.internal:12082 \
   docker compose up -d   # or podman compose up -d
 ```
 
@@ -144,28 +144,28 @@ WORKER_API_BEARER_TOKEN=dev-worker-api-token NODE_REGISTRATION_PSK=dev-node-psk 
 
 Use the following examples to verify the API (services must be running).
 
-### User API (Port 8080)
+### User API (Port 12080)
 
 ```bash
 # Login
-curl -X POST http://localhost:8080/v1/auth/login \
+curl -X POST http://localhost:12080/v1/auth/login \
   -H "Content-Type: application/json" \
   -d '{"handle": "admin", "password": "admin123"}'
 
 # Create task (use access_token from login). Optional: "use_inference": true for inference-in-sandbox jobs.
-curl -X POST http://localhost:8080/v1/tasks \
+curl -X POST http://localhost:12080/v1/tasks \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"prompt": "echo hello world"}'
 
 # Get result
-curl http://localhost:8080/v1/tasks/<task_id>/result -H "Authorization: Bearer $TOKEN"
+curl http://localhost:12080/v1/tasks/<task_id>/result -H "Authorization: Bearer $TOKEN"
 ```
 
-### Node Registration (Port 8082)
+### Node Registration (Port 12082)
 
 ```bash
-curl -X POST http://localhost:8082/v1/nodes/register \
+curl -X POST http://localhost:12082/v1/nodes/register \
   -H "Content-Type: application/json" \
   -d '{
     "psk": "dev-node-psk",
@@ -230,8 +230,8 @@ Key variables by component.
 - `JWT_SECRET` - JWT signing secret - (required)
 - `NODE_REGISTRATION_PSK` - Node registration PSK - (required)
 - `BOOTSTRAP_ADMIN_PASSWORD` - Admin user password - (required)
-- `USER_GATEWAY_LISTEN_ADDR` - User gateway listen address - :8080
-- `CONTROL_PLANE_LISTEN_ADDR` - Control-plane listen address - :8082
+- `USER_GATEWAY_LISTEN_ADDR` - User gateway listen address - :12080
+- `CONTROL_PLANE_LISTEN_ADDR` - Control-plane listen address - :12082
 - `WORKER_API_TARGET_URL` - Worker API URL (control-plane) - (required)
 - `MIGRATIONS_DIR` - Path to migrations (control-plane) - migrations
 
@@ -251,7 +251,7 @@ Compose uses `POSTGRES_*`, `ORCHESTRATOR_PORT`, `CONTROL_PLANE_PORT`, `OLLAMA_IM
 - **Tests**: `just test-go` or `just test-go-cover` for coverage
 - **Lint**: `just lint-go` or `just lint-go-ci`
 - **Full CI**: `just ci` (run before every commit)
-- **CLI (cynork)**: `just build-cynork`; run against localhost with default gateway URL `http://localhost:8080` (see [cynork/README.md](../cynork/README.md))
+- **CLI (cynork)**: `just build-cynork`; run against localhost with default gateway URL `http://localhost:12080` (see [cynork/README.md](../cynork/README.md))
 
 ## Systemd (Podman)
 
@@ -262,13 +262,13 @@ See [orchestrator/systemd/README.md](../orchestrator/systemd/README.md) and [wor
 - **Containers**: `podman ps` or `docker ps`; orchestrator stack uses `cynodeai-postgres`, `cynodeai-control-plane`, `cynodeai-user-gateway`, `cynodeai-ollama`.
 - **Migrations**: Control-plane runs them on startup.
   Migrate-only (when running binary directly): `./bin/control-plane -migrate-only`.
-- **Ports**: User API 8080, control-plane 8082, worker-api 9190, Ollama 11434.
+- **Ports**: User API 12080, control-plane 12082, worker-api 12090, Ollama 11434.
   See [Ports and endpoints](tech_specs/ports_and_endpoints.md) for the full table and overrides.
 - **CI/coverage**: Run `just test-go-cover` or `just ci`.
   For orchestrator DB tests, set `POSTGRES_TEST_DSN` if not using testcontainers.
 - **Connection issues**: Set `POSTGRES_TEST_DSN` to use a real DB; use `SKIP_TESTCONTAINERS=1` if needed.
 - **Port conflicts**: The script runs `compose down` and removes existing orchestrator containers before `compose up`.
-  To use different ports: `ORCHESTRATOR_PORT=9080 CONTROL_PLANE_PORT=9082 ./scripts/setup-dev.sh start`.
+  To use different ports: `ORCHESTRATOR_PORT=12080 CONTROL_PLANE_PORT=12082 ./scripts/setup-dev.sh start`.
 - **Reset DB**: `just clean-db` or `./scripts/setup-dev.sh clean-db`.
   Then start again with `./scripts/setup-dev.sh start`.
 - **Stop everything**: `just e2e-stop` or `./scripts/setup-dev.sh stop`.
@@ -277,5 +277,5 @@ See [orchestrator/systemd/README.md](../orchestrator/systemd/README.md) and [wor
 
 See [tech_specs/_main.md](tech_specs/_main.md) and the specs under [tech_specs/](tech_specs/) for detailed architecture.
 
-High-level: user-gateway (:8080) and control-plane (:8082) talk to PostgreSQL; nodes register with the control-plane; the dispatcher sends jobs to worker-api (:9190) on registered nodes.
+High-level: user-gateway (:12080) and control-plane (:12082) talk to PostgreSQL; nodes register with the control-plane; the dispatcher sends jobs to worker-api (:12090) on registered nodes.
 Ollama (:11434) provides inference; jobs with `use_inference` run in a pod with an inference proxy so the sandbox can call the model.

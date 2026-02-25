@@ -6,7 +6,7 @@
 - [Files Created](#files-created)
 - [Test Coverage Status](#test-coverage-status)
 - [Known Issues and Remaining Work](#known-issues-and-remaining-work)
-- [Code Review (2026-02-20)](#code-review-2026-02-20)
+- [Code Review](#code-review)
 - [Running the System Locally](#running-the-system-locally)
 - [Architecture Overview](#architecture-overview)
 - [Contact](#contact)
@@ -29,6 +29,23 @@ The MVP implements:
   Only nodes that are active and have acknowledged config with Worker API details are dispatchable.
 - **Config-delivered token**: Worker API bearer token and target URL are delivered via node config payload; persisted per-node when config is served so dispatch can use them.
   E2E flow: control-plane has `WORKER_API_TARGET_URL` and `WORKER_API_BEARER_TOKEN`; node manager fetches config and starts worker-api with the delivered token (no manual token on the node).
+
+### Phase Status (MVP-Wide)
+
+Per `docs/mvp_plan.md`:
+
+- **Phase 0:** Foundations (schema, payloads, MCP gateway spec) - Complete.
+- **Phase 1:** Single-node happy path (registration, dispatch, sandbox, auth, task APIs) - Complete.
+- **Phase 1.5:** Inference in sandbox, E2E inference, CLI, prompt interpretation - Complete.
+- **Phase 1.7:** cynode-pma, PMA in orchestrator stack, OpenAI-compatible chat routing - Complete.
+- **Phase 2:** MCP in the loop (tool enforcement, auditing, preference tools, SBA implementation) - In progress.
+- **Phase 3:** Multi-node robustness - Not started.
+- **Phase 4:** API Egress, external routing, admin console - Not started.
+
+**Phase 2 detail:** P2-02 (MCP tool call audit) and P2-03 (preference tools) complete.
+P2-01 (MCP scoping/schema), P2-09 (cynode-sba binary and image), P2-10 (SBA integration), and LangGraph workflow (P2-04--P2-08) not started or in progress.
+
+**Test coverage and CI:** All packages at or above 90%; `just ci` passes (lint, vulncheck, test-go-cover, test-bdd, doc validation).
 
 ---
 
@@ -73,9 +90,8 @@ Key artifacts and entry points for Phase 1.
 
 ### Dev Docs
 
-- `dev_docs/mvp_phase1_completion_plan.md` - Phase 1 chunks, acceptance checklist, requirement scope
-- `dev_docs/mvp_phase1_code_review_report.md` - In-depth code review vs specs, feature/BDD gaps (2026-02-20)
 - `dev_docs/PHASE1_STATUS.md` - This status report
+- `dev_docs/2026-02-25_go_code_review_tech_specs_mvp.md` - Current code review vs specs/requirements/MVP
 
 ---
 
@@ -115,9 +131,9 @@ Notes and open items for MVP completion.
 - [ ] API documentation (OpenAPI/Swagger)
 - [ ] Production configuration and deployment guides
 
-### Spec Gaps From Code Review (2026-02-20)
+### Spec Gaps From Code Review
 
-See `dev_docs/mvp_phase1_code_review_report.md` for full detail.
+See `dev_docs/2026-02-25_go_code_review_tech_specs_mvp.md` for current findings and remediation.
 
 - **config_version:** Spec (`worker_node_payloads.md`) requires ULID (26-char Crockford Base32) for config version; implementation uses literal `"1"`.
   Should implement ULID generation when serving config.
@@ -156,8 +172,8 @@ export NODE_REGISTRATION_PSK="node-registration-psk"
 # 4. Start the orchestrator API
 go run ./orchestrator/cmd/control-plane
 
-# 5. In another terminal, start a node (control-plane is on 8082)
-export ORCHESTRATOR_URL="http://localhost:8082"
+# 5. In another terminal, start a node (control-plane is on 12082)
+export ORCHESTRATOR_URL="http://localhost:12082"
 export NODE_SLUG="node-001"
 go run ./worker_node/cmd/node-manager
 # Worker API (optional, for job execution): go run ./worker_node/cmd/worker-api
@@ -200,7 +216,7 @@ Requires `jq` and podman or docker.
 1. **Orchestrator stack** (Postgres + control-plane + user-gateway):
    `cd orchestrator && podman compose up -d`
 2. **Worker node** (worker-api + node-manager): from repo root,
-   `cd worker_node && ORCHESTRATOR_URL=http://host.containers.internal:8082 \
+   `cd worker_node && ORCHESTRATOR_URL=http://host.containers.internal:12082 \
     WORKER_API_BEARER_TOKEN=dev-worker-api-token-change-me \
     NODE_REGISTRATION_PSK=dev-node-psk-secret \
     podman compose up -d`
@@ -213,10 +229,10 @@ which runs the full demo including the node.
 The orchestrator suite starts Postgres via testcontainers when `POSTGRES_TEST_DSN` is unset; set `SKIP_TESTCONTAINERS=1` to run without a DB (scenarios that need the DB will skip).
 The scenarios in `features/e2e/single_node_happy_path.feature` are exercised by the same E2E flow; run `just e2e` or `./scripts/setup-dev.sh test-e2e` (with services already started).
 
-### Code Review (2026-02-20)
+### Code Review
 
-An in-depth code review of the Phase 1 implementation versus the technical specs and completion plan is in `dev_docs/mvp_phase1_code_review_report.md`.
-Summary:
+The current code review of implementation versus tech specs, requirements, and MVP plan is in `dev_docs/2026-02-25_go_code_review_tech_specs_mvp.md`.
+Phase 1 summary:
 
 - **Implemented:** Node-aware dispatch (per-node URL and token from config), config delivery and config ack, node manager startup order (register -> fetch config -> start Worker API -> start Ollama -> config ack), sandbox network policy and workspace/env, user auth and task APIs.
 - **Gaps:** `config_version` not ULID per spec; Ollama image from env rather than orchestrator config; Worker API missing `GET /readyz`; capability report schema in code is minimal vs full spec; orchestrator fail-fast scenario scope unclear (node vs orchestrator).
