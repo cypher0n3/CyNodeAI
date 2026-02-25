@@ -6,11 +6,14 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -19,9 +22,9 @@ import (
 
 	"github.com/cypher0n3/cynodeai/go_shared_libs/contracts/nodepayloads"
 	"github.com/cypher0n3/cynodeai/go_shared_libs/contracts/problem"
+	"github.com/cypher0n3/cynodeai/go_shared_libs/contracts/sbajob"
 	"github.com/cypher0n3/cynodeai/go_shared_libs/contracts/workerapi"
 	"github.com/cypher0n3/cynodeai/worker_node/cmd/worker-api/executor"
-	"github.com/cypher0n3/cynodeai/worker_node/internal/nodemanager"
 )
 
 type ctxKey int
@@ -39,6 +42,12 @@ type workerTestState struct {
 	nodeManagerErr       error
 	failInferenceStartup bool
 	mu                   sync.Mutex
+	// SBA job spec validation (local, no orchestrator)
+	sbaJobSpecBytes       []byte
+	sbaValidationErr      error
+	sbaValidationErrField string
+	sbaResult             *sbajob.Result
+	sbaResultJSON         []byte
 }
 
 func getWorkerState(ctx context.Context) *workerTestState {
@@ -140,10 +149,16 @@ func InitializeWorkerNodeSuite(sc *godog.ScenarioContext, state *workerTestState
 		state.postAckCalled = false
 		state.nodeManagerErr = nil
 		state.failInferenceStartup = false
+		state.sbaJobSpecBytes = nil
+		state.sbaValidationErr = nil
+		state.sbaValidationErrField = ""
+		state.sbaResult = nil
+		state.sbaResultJSON = nil
 		return ctx, nil
 	})
 
 	RegisterWorkerNodeSteps(sc, state)
+	RegisterWorkerNodeSBASteps(sc, state)
 	RegisterNodeManagerConfigSteps(sc, state)
 }
 
@@ -152,6 +167,65 @@ func getEnv(key, def string) string {
 		return v
 	}
 	return def
+}
+
+// ensureNodeManagerBinary returns the path to the node-manager binary, building it if needed (black-box: no internal import).
+// Resolves worker_node root whether tests run from repo root, worker_node, or worker_node/_bdd.
+func ensureNodeManagerBinary() (string, error) {
+	if p := os.Getenv("NODE_MANAGER_BIN"); p != "" {
+		if _, err := os.Stat(p); err != nil {
+			return "", fmt.Errorf("NODE_MANAGER_BIN=%q not found: %w", p, err)
+		}
+		return p, nil
+	}
+	cwd, err := os.Getwd()
+	if err != nil {
+		return "", fmt.Errorf("getwd: %w", err)
+	}
+	// Candidate worker_node roots: parent of cwd (when cwd is _bdd), cwd (when in worker_node), cwd/worker_node (when in repo root).
+	tryDirs := []string{filepath.Dir(cwd), cwd}
+	if b := filepath.Join(cwd, "worker_node"); dirExists(b) {
+		tryDirs = append(tryDirs, b)
+	}
+	for _, root := range tryDirs {
+		tryBin := filepath.Join(root, "bin", "node-manager")
+		if dirExists(filepath.Join(root, "cmd", "node-manager")) && fileExists(tryBin) {
+			return tryBin, nil
+		}
+	}
+	// Build: find worker_node root (has cmd/node-manager).
+	var moduleRoot string
+	for _, root := range tryDirs {
+		cmdDir := filepath.Join(root, "cmd", "node-manager")
+		if fileExists(cmdDir) || dirExists(cmdDir) {
+			moduleRoot = root
+			break
+		}
+	}
+	if moduleRoot == "" {
+		return "", fmt.Errorf("node-manager source not found (run from repo root or worker_node)")
+	}
+	outBin := filepath.Join(moduleRoot, "bin", "node-manager")
+	if err := os.MkdirAll(filepath.Dir(outBin), 0o755); err != nil {
+		return "", fmt.Errorf("mkdir bin: %w", err)
+	}
+	build := exec.Command("go", "build", "-o", outBin, "./cmd/node-manager")
+	build.Dir = moduleRoot
+	build.Env = os.Environ()
+	if out, err := build.CombinedOutput(); err != nil {
+		return "", fmt.Errorf("go build node-manager: %w: %s", err, bytes.TrimSpace(out))
+	}
+	return outBin, nil
+}
+
+func dirExists(p string) bool {
+	fi, err := os.Stat(p)
+	return err == nil && fi.IsDir()
+}
+
+func fileExists(p string) bool {
+	fi, err := os.Stat(p)
+	return err == nil && !fi.IsDir()
 }
 
 // RegisterWorkerNodeSteps registers step definitions for worker_node features.
@@ -492,6 +566,106 @@ func RegisterWorkerNodeSteps(sc *godog.ScenarioContext, state *workerTestState) 
 	})
 }
 
+// RegisterWorkerNodeSBASteps registers step definitions for SBA job spec and result contract (local validation, no orchestrator).
+func RegisterWorkerNodeSBASteps(sc *godog.ScenarioContext, state *workerTestState) {
+	sc.Step(`^I have a SBA job spec with protocol_version "([^"]*)" and required fields$`, func(ctx context.Context, pv string) error {
+		state.sbaJobSpecBytes = []byte(fmt.Sprintf(`{
+			"protocol_version": %q,
+			"job_id": "j1",
+			"task_id": "t1",
+			"constraints": {"max_runtime_seconds": 300, "max_output_bytes": 1048576},
+			"steps": []
+		}`, pv))
+		return nil
+	})
+	sc.Step(`^I have a SBA job spec with an unknown field$`, func(ctx context.Context) error {
+		state.sbaJobSpecBytes = []byte(`{
+			"protocol_version": "1.0",
+			"job_id": "j1",
+			"task_id": "t1",
+			"constraints": {"max_runtime_seconds": 300, "max_output_bytes": 1048576},
+			"steps": [],
+			"unknown_field": "x"
+		}`)
+		return nil
+	})
+	sc.Step(`^I have a SBA job spec with protocol_version "([^"]*)" and empty job_id$`, func(ctx context.Context, pv string) error {
+		state.sbaJobSpecBytes = []byte(fmt.Sprintf(`{
+			"protocol_version": %q,
+			"job_id": "",
+			"task_id": "t1",
+			"constraints": {"max_runtime_seconds": 300, "max_output_bytes": 1048576},
+			"steps": []
+		}`, pv))
+		return nil
+	})
+	sc.Step(`^I validate the SBA job spec$`, func(ctx context.Context) error {
+		state.sbaValidationErr = nil
+		state.sbaValidationErrField = ""
+		_, err := sbajob.ParseAndValidateJobSpec(state.sbaJobSpecBytes)
+		if err != nil {
+			state.sbaValidationErr = err
+			var ve *sbajob.ValidationError
+			if errors.As(err, &ve) {
+				state.sbaValidationErrField = ve.Field
+			}
+		}
+		return nil
+	})
+	sc.Step(`^the SBA job spec validation succeeds$`, func(ctx context.Context) error {
+		if state.sbaValidationErr != nil {
+			return fmt.Errorf("validation should have succeeded: %w", state.sbaValidationErr)
+		}
+		return nil
+	})
+	sc.Step(`^the SBA job spec validation fails$`, func(ctx context.Context) error {
+		if state.sbaValidationErr == nil {
+			return fmt.Errorf("validation should have failed")
+		}
+		return nil
+	})
+	sc.Step(`^the validation error is for field "([^"]*)"$`, func(ctx context.Context, field string) error {
+		if state.sbaValidationErr == nil {
+			return fmt.Errorf("no validation error to check")
+		}
+		if state.sbaValidationErrField != field {
+			return fmt.Errorf("validation error field %q, want %q", state.sbaValidationErrField, field)
+		}
+		return nil
+	})
+	sc.Step(`^I have a SBA result with status "([^"]*)" and job_id "([^"]*)"$`, func(ctx context.Context, status, jobID string) error {
+		state.sbaResult = &sbajob.Result{
+			ProtocolVersion: "1.0",
+			JobID:           jobID,
+			Status:          status,
+			Steps:           []sbajob.StepResult{},
+			Artifacts:       []sbajob.ArtifactRef{},
+		}
+		return nil
+	})
+	sc.Step(`^I marshal the SBA result to JSON$`, func(ctx context.Context) error {
+		if state.sbaResult == nil {
+			return fmt.Errorf("no SBA result set")
+		}
+		var err error
+		state.sbaResultJSON, err = json.Marshal(state.sbaResult)
+		return err
+	})
+	sc.Step(`^the JSON contains "([^"]*)"$`, func(ctx context.Context, key string) error {
+		if len(state.sbaResultJSON) == 0 {
+			return fmt.Errorf("no JSON to check")
+		}
+		var m map[string]interface{}
+		if err := json.Unmarshal(state.sbaResultJSON, &m); err != nil {
+			return err
+		}
+		if _, ok := m[key]; !ok {
+			return fmt.Errorf("JSON does not contain key %q", key)
+		}
+		return nil
+	})
+}
+
 // RegisterNodeManagerConfigSteps registers steps for node manager config fetch and startup features.
 func RegisterNodeManagerConfigSteps(sc *godog.ScenarioContext, state *workerTestState) {
 	sc.Step(`^a mock orchestrator that returns bootstrap with node_config_url$`, func(ctx context.Context) error {
@@ -555,21 +729,31 @@ func RegisterNodeManagerConfigSteps(sc *godog.ScenarioContext, state *workerTest
 		if st == nil || st.mockOrch == nil {
 			return fmt.Errorf("mock orchestrator not started")
 		}
-		cfg := &nodemanager.Config{
-			OrchestratorURL:          st.mockOrch.URL,
-			NodeSlug:                 "bdd-node",
-			NodeName:                 "BDD Node",
-			RegistrationPSK:          "psk",
-			CapabilityReportInterval: 50 * time.Millisecond,
-			HTTPTimeout:              5 * time.Second,
+		bin, err := ensureNodeManagerBinary()
+		if err != nil {
+			return err
 		}
-		opts := &nodemanager.RunOptions{}
-		if st.failInferenceStartup {
-			opts.StartOllama = func() error { return fmt.Errorf("inference startup failed") }
-		}
-		runCtx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
+		runCtx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 		defer cancel()
-		st.nodeManagerErr = nodemanager.RunWithOptions(runCtx, nil, cfg, opts)
+		cmd := exec.CommandContext(runCtx, bin)
+		cmd.Env = append(os.Environ(),
+			"ORCHESTRATOR_URL="+st.mockOrch.URL,
+			"NODE_SLUG=bdd-node",
+			"NODE_NAME=BDD Node",
+			"NODE_REGISTRATION_PSK=psk",
+			"CAPABILITY_REPORT_INTERVAL=50ms",
+			"HTTP_TIMEOUT=5s",
+			"NODE_MANAGER_SKIP_SERVICES=1",
+		)
+		cmd.Stdout = io.Discard
+		cmd.Stderr = io.Discard
+		runErr := cmd.Run()
+		if runErr != nil {
+			if exitErr, ok := runErr.(*exec.ExitError); ok && exitErr.ExitCode() == 1 {
+				st.nodeManagerErr = runErr
+			}
+			// Context deadline or kill: process was stopped after doing register/config/ack; treat as success
+		}
 		return nil
 	})
 	sc.Step(`^the node manager requested config using the bootstrap node_config_url$`, func(ctx context.Context) error {

@@ -49,6 +49,8 @@ The filename is the domain tag lowercased.
   - Requirements file: [`docs/requirements/pmagnt.md`](../requirements/pmagnt.md)
 - `SBAGNT`: Sandbox Agent runner binary requirements (deterministic runner inside sandbox containers).
   - Requirements file: [`docs/requirements/sbagnt.md`](../requirements/sbagnt.md)
+- `STEPEX`: Simple Step Executor runner binary requirements (ordered step list execution, no inference).
+  - Requirements file: [`docs/requirements/stepex.md`](../requirements/stepex.md)
 - `CLIENT`: User-facing management surfaces, including CLI and Web Console behavior (shared capabilities and parity).
   - Requirements file: [`docs/requirements/client.md`](../requirements/client.md)
 - `WEBCON`: Web Console-specific behavior (specs and requirements that apply only to the Web Console).

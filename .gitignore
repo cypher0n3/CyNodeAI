@@ -7,6 +7,30 @@ Abacus.ai*/
 tmp/
 bin/
 bin-dev/
+**/bin/
+**/bin-dev/
+
+# Go build binary names (justfile build-* outputs; ignore anywhere in tree)
+**/cynode-pma
+**/cynode-pma-dev
+**/cynode-sba
+**/cynode-sba-dev
+**/cynork
+**/cynork.exe
+**/control-plane
+**/control-plane-dev
+**/user-gateway
+**/user-gateway-dev
+**/api-egress
+**/api-egress-dev
+**/mcp-gateway
+**/mcp-gateway-dev
+**/worker-api
+**/worker-api-dev
+**/node-manager
+**/node-manager-dev
+**/inference-proxy
+**/inference-proxy-dev
 
 # File Patterns
 *.backup*

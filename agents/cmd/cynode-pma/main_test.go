@@ -72,7 +72,9 @@ func TestRun_ShutdownErrorExitsOne(t *testing.T) {
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan int, 1)
-	go func() { done <- run(ctx, []string{"--role=project_manager", "--listen=127.0.0.1:0", "--instructions-root=" + dir}) }()
+	go func() {
+		done <- run(ctx, []string{"--role=project_manager", "--listen=127.0.0.1:0", "--instructions-root=" + dir})
+	}()
 	time.Sleep(80 * time.Millisecond)
 	cancel()
 	code := <-done

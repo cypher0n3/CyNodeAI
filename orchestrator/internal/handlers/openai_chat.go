@@ -13,8 +13,8 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/database"
-	"github.com/cypher0n3/cynodeai/orchestrator/internal/models"
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/inference"
+	"github.com/cypher0n3/cynodeai/orchestrator/internal/models"
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/pmaclient"
 )
 
@@ -222,8 +222,8 @@ func buildChatCompletionsResponse(model, content string) ChatCompletionsResponse
 		Created: time.Now().Unix(),
 		Model:   model,
 		Choices: []struct {
-			Index        int    `json:"index"`
-			Message      struct {
+			Index   int `json:"index"`
+			Message struct {
 				Role    string `json:"role"`
 				Content string `json:"content"`
 			} `json:"message"`
@@ -306,7 +306,7 @@ func writeOpenAIError(w http.ResponseWriter, status int, code, message string) {
 			"message": message,
 			"type":    "cynodeai_error",
 			"param":   nil,
-			"code":   code,
+			"code":    code,
 		},
 	})
 }

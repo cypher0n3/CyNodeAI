@@ -682,16 +682,25 @@ func (m *MockDB) GetEffectivePreferencesForTask(ctx context.Context, taskID uuid
 		return nil, err
 	}
 	scopes := []struct {
-		t string
+		t  string
 		id *uuid.UUID
 	}{{"system", nil}}
 	if task.CreatedBy != nil {
-		scopes = append(scopes, struct{ t string; id *uuid.UUID }{"user", task.CreatedBy})
+		scopes = append(scopes, struct {
+			t  string
+			id *uuid.UUID
+		}{"user", task.CreatedBy})
 	}
 	if task.ProjectID != nil {
-		scopes = append(scopes, struct{ t string; id *uuid.UUID }{"project", task.ProjectID})
+		scopes = append(scopes, struct {
+			t  string
+			id *uuid.UUID
+		}{"project", task.ProjectID})
 	}
-	scopes = append(scopes, struct{ t string; id *uuid.UUID }{"task", &taskID})
+	scopes = append(scopes, struct {
+		t  string
+		id *uuid.UUID
+	}{"task", &taskID})
 	effective := make(map[string]interface{})
 	for _, s := range scopes {
 		entries, _, err := m.ListPreferences(ctx, s.t, s.id, "", database.MaxPreferenceListLimit, "")

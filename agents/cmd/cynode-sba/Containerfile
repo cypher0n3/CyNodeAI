@@ -1,0 +1,43 @@
+# SBA runner image (cynode-sba). Build context: repo root.
+# Spec: docs/tech_specs/sandbox_container.md (SBA Runner Image), docs/tech_specs/cynode_sba.md.
+# Example: podman build -f agents/cmd/cynode-sba/Containerfile -t cynodeai-cynode-sba:dev .
+FROM golang:1.25-alpine AS build
+WORKDIR /build
+RUN apk add --no-cache ca-certificates upx
+ENV CGO_ENABLED=0
+RUN printf '%s\n' 'go 1.25.7' 'use (' './agents' './go_shared_libs' ')' > go.work
+COPY agents ./agents
+COPY go_shared_libs ./go_shared_libs
+RUN go build -ldflags="-s -w" -o /cynode-sba ./agents/cmd/cynode-sba \
+    && upx --best /cynode-sba
+
+FROM alpine:3
+# SBA Runner Image minimum requirements: bash, coreutils, findutils, diffutils, procps, tar, gzip, unzip, jq, ca-certificates, git, python3; sandbox baseline also requires zip.
+RUN apk add --no-cache \
+    bash \
+    ca-certificates \
+    coreutils \
+    diffutils \
+    findutils \
+    git \
+    gzip \
+    jq \
+    patch \
+    procps \
+    python3 \
+    tar \
+    unzip \
+    wget \
+    zip
+# Non-root user per REQ-SBAGNT-0102 and sandbox_container.md
+RUN adduser -D -u 1000 -h /home/sba sba
+# /workspace and /job are bind-mounted by the node at runtime; image only provides placeholders
+RUN mkdir -p /workspace /job/artifacts && chown -R sba:sba /workspace /job
+WORKDIR /workspace
+COPY --from=build /cynode-sba /usr/local/bin/cynode-sba
+RUN chown sba:sba /usr/local/bin/cynode-sba
+# Image compatibility marking per sandbox_container.md (REQ-SANDBX-0124)
+LABEL io.cynodeai.sandbox.agent-compatible="true"
+LABEL io.cynodeai.sandbox.purpose="base-tools,build,test"
+USER sba
+ENTRYPOINT ["/usr/local/bin/cynode-sba"]

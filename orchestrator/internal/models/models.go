@@ -227,22 +227,22 @@ const (
 // McpToolCallAuditLog stores metadata for each MCP tool call routed by the gateway.
 // Per docs/tech_specs/mcp_tool_call_auditing.md and postgres_schema.md; tool args/results not stored for MVP.
 type McpToolCallAuditLog struct {
-	ID         uuid.UUID  `gorm:"type:uuid;primaryKey" json:"id"`
-	CreatedAt  time.Time  `gorm:"column:created_at;index" json:"created_at"`
-	TaskID     *uuid.UUID `gorm:"column:task_id;index" json:"task_id,omitempty"`
-	ProjectID  *uuid.UUID `gorm:"column:project_id;index" json:"project_id,omitempty"`
-	RunID      *uuid.UUID `gorm:"column:run_id" json:"run_id,omitempty"`
-	JobID      *uuid.UUID `gorm:"column:job_id" json:"job_id,omitempty"`
-	SubjectType *string   `gorm:"column:subject_type" json:"subject_type,omitempty"`
-	SubjectID  *uuid.UUID `gorm:"column:subject_id" json:"subject_id,omitempty"`
-	UserID     *uuid.UUID `gorm:"column:user_id;index" json:"user_id,omitempty"`
-	GroupIDs   *string    `gorm:"column:group_ids;type:jsonb" json:"group_ids,omitempty"`
-	RoleNames  *string    `gorm:"column:role_names;type:jsonb" json:"role_names,omitempty"`
-	ToolName   string     `gorm:"column:tool_name;index" json:"tool_name"`
-	Decision   string     `gorm:"column:decision" json:"decision"`   // allow or deny
-	Status     string     `gorm:"column:status" json:"status"`       // success or error
-	DurationMs *int       `gorm:"column:duration_ms" json:"duration_ms,omitempty"`
-	ErrorType  *string    `gorm:"column:error_type" json:"error_type,omitempty"`
+	ID          uuid.UUID  `gorm:"type:uuid;primaryKey" json:"id"`
+	CreatedAt   time.Time  `gorm:"column:created_at;index" json:"created_at"`
+	TaskID      *uuid.UUID `gorm:"column:task_id;index" json:"task_id,omitempty"`
+	ProjectID   *uuid.UUID `gorm:"column:project_id;index" json:"project_id,omitempty"`
+	RunID       *uuid.UUID `gorm:"column:run_id" json:"run_id,omitempty"`
+	JobID       *uuid.UUID `gorm:"column:job_id" json:"job_id,omitempty"`
+	SubjectType *string    `gorm:"column:subject_type" json:"subject_type,omitempty"`
+	SubjectID   *uuid.UUID `gorm:"column:subject_id" json:"subject_id,omitempty"`
+	UserID      *uuid.UUID `gorm:"column:user_id;index" json:"user_id,omitempty"`
+	GroupIDs    *string    `gorm:"column:group_ids;type:jsonb" json:"group_ids,omitempty"`
+	RoleNames   *string    `gorm:"column:role_names;type:jsonb" json:"role_names,omitempty"`
+	ToolName    string     `gorm:"column:tool_name;index" json:"tool_name"`
+	Decision    string     `gorm:"column:decision" json:"decision"` // allow or deny
+	Status      string     `gorm:"column:status" json:"status"`     // success or error
+	DurationMs  *int       `gorm:"column:duration_ms" json:"duration_ms,omitempty"`
+	ErrorType   *string    `gorm:"column:error_type" json:"error_type,omitempty"`
 }
 
 func (McpToolCallAuditLog) TableName() string { return "mcp_tool_call_audit_log" }
@@ -255,50 +255,50 @@ type PreferenceEntry struct {
 	ScopeType string     `gorm:"column:scope_type;uniqueIndex:uix_pref_scope_key,priority:1" json:"scope_type"`
 	ScopeID   *uuid.UUID `gorm:"column:scope_id;uniqueIndex:uix_pref_scope_key,priority:2" json:"scope_id,omitempty"`
 	Key       string     `gorm:"column:key;uniqueIndex:uix_pref_scope_key,priority:3;index" json:"key"`
-	Value     *string   `gorm:"column:value;type:jsonb" json:"value,omitempty"`
-	ValueType string    `gorm:"column:value_type" json:"value_type"`
-	Version   int       `gorm:"column:version" json:"version"`
-	UpdatedAt time.Time `gorm:"column:updated_at;index" json:"updated_at"`
-	UpdatedBy *string   `gorm:"column:updated_by" json:"updated_by,omitempty"`
+	Value     *string    `gorm:"column:value;type:jsonb" json:"value,omitempty"`
+	ValueType string     `gorm:"column:value_type" json:"value_type"`
+	Version   int        `gorm:"column:version" json:"version"`
+	UpdatedAt time.Time  `gorm:"column:updated_at;index" json:"updated_at"`
+	UpdatedBy *string    `gorm:"column:updated_by" json:"updated_by,omitempty"`
 }
 
 func (PreferenceEntry) TableName() string { return "preference_entries" }
 
 // PreferenceAuditLog records preference entry change history per postgres_schema.md.
 type PreferenceAuditLog struct {
-	ID        uuid.UUID  `gorm:"type:uuid;primaryKey" json:"id"`
-	EntryID   uuid.UUID  `gorm:"column:entry_id;index" json:"entry_id"`
-	OldValue  *string    `gorm:"column:old_value;type:jsonb" json:"old_value,omitempty"`
-	NewValue  *string    `gorm:"column:new_value;type:jsonb" json:"new_value,omitempty"`
-	ChangedAt time.Time  `gorm:"column:changed_at;index" json:"changed_at"`
-	ChangedBy *string    `gorm:"column:changed_by" json:"changed_by,omitempty"`
-	Reason    *string    `gorm:"column:reason" json:"reason,omitempty"`
+	ID        uuid.UUID `gorm:"type:uuid;primaryKey" json:"id"`
+	EntryID   uuid.UUID `gorm:"column:entry_id;index" json:"entry_id"`
+	OldValue  *string   `gorm:"column:old_value;type:jsonb" json:"old_value,omitempty"`
+	NewValue  *string   `gorm:"column:new_value;type:jsonb" json:"new_value,omitempty"`
+	ChangedAt time.Time `gorm:"column:changed_at;index" json:"changed_at"`
+	ChangedBy *string   `gorm:"column:changed_by" json:"changed_by,omitempty"`
+	Reason    *string   `gorm:"column:reason" json:"reason,omitempty"`
 }
 
 func (PreferenceAuditLog) TableName() string { return "preference_audit_log" }
 
 // Project represents a workspace boundary (see postgres_schema.md Projects).
 type Project struct {
-	ID          uuid.UUID  `gorm:"type:uuid;primaryKey" json:"id"`
-	Slug        string     `gorm:"column:slug;uniqueIndex" json:"slug"`
-	DisplayName string     `gorm:"column:display_name" json:"display_name"`
-	Description *string    `gorm:"column:description" json:"description,omitempty"`
-	IsActive    bool       `gorm:"column:is_active;index" json:"is_active"`
-	CreatedAt   time.Time  `gorm:"column:created_at" json:"created_at"`
-	UpdatedAt   time.Time  `gorm:"column:updated_at" json:"updated_at"`
-	UpdatedBy   *string    `gorm:"column:updated_by" json:"updated_by,omitempty"`
+	ID          uuid.UUID `gorm:"type:uuid;primaryKey" json:"id"`
+	Slug        string    `gorm:"column:slug;uniqueIndex" json:"slug"`
+	DisplayName string    `gorm:"column:display_name" json:"display_name"`
+	Description *string   `gorm:"column:description" json:"description,omitempty"`
+	IsActive    bool      `gorm:"column:is_active;index" json:"is_active"`
+	CreatedAt   time.Time `gorm:"column:created_at" json:"created_at"`
+	UpdatedAt   time.Time `gorm:"column:updated_at" json:"updated_at"`
+	UpdatedBy   *string   `gorm:"column:updated_by" json:"updated_by,omitempty"`
 }
 
 func (Project) TableName() string { return "projects" }
 
 // Session represents a user session (see postgres_schema.md Sessions).
 type Session struct {
-	ID               uuid.UUID  `gorm:"type:uuid;primaryKey" json:"id"`
-	ParentSessionID  *uuid.UUID `gorm:"column:parent_session_id;index" json:"parent_session_id,omitempty"`
-	UserID           uuid.UUID  `gorm:"column:user_id;index" json:"user_id"`
-	Title            *string    `gorm:"column:title" json:"title,omitempty"`
-	CreatedAt        time.Time  `gorm:"column:created_at" json:"created_at"`
-	UpdatedAt        time.Time  `gorm:"column:updated_at" json:"updated_at"`
+	ID              uuid.UUID  `gorm:"type:uuid;primaryKey" json:"id"`
+	ParentSessionID *uuid.UUID `gorm:"column:parent_session_id;index" json:"parent_session_id,omitempty"`
+	UserID          uuid.UUID  `gorm:"column:user_id;index" json:"user_id"`
+	Title           *string    `gorm:"column:title" json:"title,omitempty"`
+	CreatedAt       time.Time  `gorm:"column:created_at" json:"created_at"`
+	UpdatedAt       time.Time  `gorm:"column:updated_at" json:"updated_at"`
 }
 
 func (Session) TableName() string { return "sessions" }
@@ -318,12 +318,12 @@ func (ChatThread) TableName() string { return "chat_threads" }
 
 // ChatMessage represents one message in a thread (see postgres_schema.md Chat Messages).
 type ChatMessage struct {
-	ID        uuid.UUID  `gorm:"type:uuid;primaryKey" json:"id"`
-	ThreadID  uuid.UUID  `gorm:"column:thread_id;index" json:"thread_id"`
-	Role      string     `gorm:"column:role" json:"role"`
-	Content   string     `gorm:"column:content" json:"content"`
-	Metadata  *string    `gorm:"column:metadata;type:jsonb" json:"metadata,omitempty"`
-	CreatedAt time.Time  `gorm:"column:created_at" json:"created_at"`
+	ID        uuid.UUID `gorm:"type:uuid;primaryKey" json:"id"`
+	ThreadID  uuid.UUID `gorm:"column:thread_id;index" json:"thread_id"`
+	Role      string    `gorm:"column:role" json:"role"`
+	Content   string    `gorm:"column:content" json:"content"`
+	Metadata  *string   `gorm:"column:metadata;type:jsonb" json:"metadata,omitempty"`
+	CreatedAt time.Time `gorm:"column:created_at" json:"created_at"`
 }
 
 func (ChatMessage) TableName() string { return "chat_messages" }

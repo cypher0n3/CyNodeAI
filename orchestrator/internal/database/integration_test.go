@@ -407,7 +407,6 @@ func TestIntegration_Preferences_EffectiveWithNilValue(t *testing.T) {
 	}
 }
 
-
 func integrationDB(t *testing.T) (*DB, context.Context) {
 	t.Helper()
 	dsn := os.Getenv(integrationEnv)

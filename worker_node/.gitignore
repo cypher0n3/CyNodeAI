@@ -1,2 +1,8 @@
-# Binaries (just build outputs)
+# Binaries (just build outputs and local go build)
 bin/
+worker-api
+worker-api-dev
+node-manager
+node-manager-dev
+inference-proxy
+inference-proxy-dev

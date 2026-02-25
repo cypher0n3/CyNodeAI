@@ -38,11 +38,11 @@ func run(ctx context.Context, args []string) int {
 	}
 
 	cfg := &pma.Config{
-		Role:                      pma.Role(resolveRole(*role)),
-		InstructionsRoot:          resolveEnv("PMA_INSTRUCTIONS_ROOT", *instructionsRoot),
+		Role:                       pma.Role(resolveRole(*role)),
+		InstructionsRoot:           resolveEnv("PMA_INSTRUCTIONS_ROOT", *instructionsRoot),
 		InstructionsProjectManager: resolveEnv("PMA_INSTRUCTIONS_PROJECT_MANAGER", *instructionsPM),
-		InstructionsProjectAnalyst:  resolveEnv("PMA_INSTRUCTIONS_PROJECT_ANALYST", *instructionsPA),
-		ListenAddr:                resolveEnv("PMA_LISTEN_ADDR", *listenAddr),
+		InstructionsProjectAnalyst: resolveEnv("PMA_INSTRUCTIONS_PROJECT_ANALYST", *instructionsPA),
+		ListenAddr:                 resolveEnv("PMA_LISTEN_ADDR", *listenAddr),
 	}
 
 	if cfg.Role != pma.RoleProjectManager && cfg.Role != pma.RoleProjectAnalyst {

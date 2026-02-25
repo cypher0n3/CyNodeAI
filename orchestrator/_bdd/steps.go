@@ -904,7 +904,7 @@ func RegisterOrchestratorSteps(sc *godog.ScenarioContext, state *testState) {
 		}
 		// Use inference model so mock inference server is used (pmaBaseURL not set in BDD)
 		body, _ := json.Marshal(map[string]interface{}{
-			"model": "tinyllama",
+			"model":    "tinyllama",
 			"messages": []map[string]string{{"role": "user", "content": message}},
 		})
 		req, _ := http.NewRequest("POST", st.server.URL+"/v1/chat/completions", bytes.NewReader(body))

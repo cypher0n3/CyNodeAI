@@ -20,10 +20,10 @@ import (
 )
 
 const (
-	mcpGatewayDBEnv             = "DATABASE_URL"
-	testcontainersSetupTimeout  = 90 * time.Second
-	testcontainersWaitForDB     = 60 * time.Second
-	testcontainersRealDBListen  = "127.0.0.1:19084"
+	mcpGatewayDBEnv            = "DATABASE_URL"
+	testcontainersSetupTimeout = 90 * time.Second
+	testcontainersWaitForDB    = 60 * time.Second
+	testcontainersRealDBListen = "127.0.0.1:19084"
 )
 
 func setupRootlessPodmanHost() {

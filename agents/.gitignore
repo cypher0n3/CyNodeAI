@@ -1,2 +1,6 @@
-# Binaries (just build outputs)
+# Binaries (just build outputs and local go build)
 bin/
+cynode-pma
+cynode-pma-dev
+cynode-sba
+cynode-sba-dev

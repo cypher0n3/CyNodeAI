@@ -11,6 +11,8 @@
 - [Worker API Surface (Initial Implementation)](#worker-api-surface-initial-implementation)
   - [Run Job (Synchronous)](#run-job-synchronous)
   - [Job Lifecycle and Result Persistence](#job-lifecycle-and-result-persistence)
+  - [Node-Mediated SBA Result (Sync)](#node-mediated-sba-result-sync)
+  - [Node-Mediated Step-Executor Result (Sync)](#node-mediated-step-executor-result-sync)
   - [Session Sandbox (Long-Running)](#session-sandbox-long-running)
 - [Sandbox Execution Requirements (Initial Implementation)](#sandbox-execution-requirements-initial-implementation)
   - [Applicable Requirements (Sandbox Execution)](#applicable-requirements-sandbox-execution)
@@ -235,7 +237,10 @@ Timeout rules (required)
   - `stderr` (boolean)
 - `sba_result` (object, optional): When the job used an SBA runner image, the node MAY include the SBA result contract (e.g. from `/job/result.json`) so the orchestrator can persist it to `jobs.result`.
   Shape: protocol_version, job_id, status, steps, artifacts, failure_code, failure_message per [cynode_sba.md - Result contract](cynode_sba.md#spec-cynai-sbagnt-resultcontract).
+- `step_executor_result` (object, optional): When the job used a step-executor runner image (e.g. `cynode-sse`), the node MAY include the step-executor result contract (e.g. from `/job/result.json`) so the orchestrator can persist it to `jobs.result`.
+  Shape: protocol_version, job_id, status, steps, failure_code, failure_message per [cynode_step_executor.md - Result contract](cynode_step_executor.md#spec-cynai-stepex-resultcontract).
 - `artifacts` (array, optional): When the job used an SBA runner image and the node read `/job/artifacts/`, the node MAY include artifact descriptors or content (e.g. name, content_type, size_bytes, content_base64 or ref) so the orchestrator can persist artifact blobs and refs.
+  When the job used a step-executor runner image, the node MAY similarly include artifacts from `/job/artifacts/` if the step executor staged any.
   Shape is implementation-defined but MUST be suitable for orchestrator storage and client retrieval.
 
 #### Status Codes
@@ -303,6 +308,14 @@ Result retention (required)
 See:
 
 - [cynode_sba.md - Job lifecycle and status reporting](cynode_sba.md#spec-cynai-sbagnt-joblifecycle) (SBA in-progress and completion contract)
+
+### Node-Mediated Step-Executor Result (Sync)
+
+- Spec ID: `CYNAI.WORKER.NodeMediatedStepExecutorResultSync` <a id="spec-cynai-worker-nodemediatedstepexecutorresult-sync"></a>
+
+When the job uses a **step-executor runner image** (e.g. image that runs `cynode-sse` as the main process) and the implementation uses the synchronous Run Job response, the node MAY do the following: block until the container exits (or timeout), read `/job/result.json` from the host bind-mount (and optionally `/job/artifacts/`), and include the step-executor result in the response body as `step_executor_result` (and optionally `artifacts`) so the orchestrator can persist it to `jobs.result`.
+This mirrors the pattern for [Node-Mediated SBA Result (Sync)](#node-mediated-sba-result-sync); the step executor does not require outbound callbacks for MVP.
+See [cynode_step_executor.md - Worker API Integration](cynode_step_executor.md#spec-cynai-stepex-workerapiintegration).
 
 ### Session Sandbox (Long-Running)
 

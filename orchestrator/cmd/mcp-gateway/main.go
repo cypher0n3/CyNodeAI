@@ -128,8 +128,8 @@ func getEnv(key, def string) string {
 
 // toolCallRequest is a minimal body for POST /v1/mcp/tools/call (MCP tool call). Arguments per mcp_tool_catalog.md.
 type toolCallRequest struct {
-	ToolName   string                 `json:"tool_name"`
-	Arguments  map[string]interface{}  `json:"arguments,omitempty"`
+	ToolName  string                 `json:"tool_name"`
+	Arguments map[string]interface{} `json:"arguments,omitempty"`
 }
 
 // toolCallHandler writes an audit record for every tool call (P2-02) and routes db.preference.* tools (P2-03).

@@ -12,7 +12,7 @@ type Role string
 
 const (
 	RoleProjectManager Role = "project_manager"
-	RoleProjectAnalyst  Role = "project_analyst"
+	RoleProjectAnalyst Role = "project_analyst"
 )
 
 // Config holds cynode-pma configuration.

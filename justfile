@@ -12,8 +12,9 @@ go_version := "1.25.7"
 # Directory containing this justfile (repo root when justfile is at root)
 root_dir := justfile_directory()
 
-# Workspace modules (explicit, stable).
-go_modules := "go_shared_libs orchestrator worker_node cynork agents"
+# Workspace modules (from go.work).
+go_work_path := root_dir / "go.work"
+go_modules := shell("grep -E '^[[:space:]]*\\./' \"$1\" | sed 's|^[[:space:]]*\\./||;s/[[:space:]].*//' | tr '\\n' ' ' | sed 's/ $//'", go_work_path)
 
 default:
     @just --list
@@ -461,13 +462,19 @@ build-cynode-pma: install-go
 build-cynode-pma-dev: install-go
     @just _build_dev cynode-pma ./agents/cmd/cynode-pma agents/bin
 
+build-cynode-sba: install-go
+    @just _build_prod cynode-sba ./agents/cmd/cynode-sba agents/bin
+
+build-cynode-sba-dev: install-go
+    @just _build_dev cynode-sba ./agents/cmd/cynode-sba agents/bin
+
 # Build all production binaries (stripped + upx) into each module's bin/.
 build: install-go
-    @just build-cynork build-control-plane build-user-gateway build-api-egress build-mcp-gateway build-worker-api build-node-manager build-inference-proxy build-cynode-pma
+    @just build-cynork build-control-plane build-user-gateway build-api-egress build-mcp-gateway build-worker-api build-node-manager build-inference-proxy build-cynode-pma build-cynode-sba
 
 # Build all dev binaries (debug symbols) into each module's bin/.
 build-dev: install-go
-    @just build-cynork-dev build-control-plane-dev build-user-gateway-dev build-api-egress-dev build-mcp-gateway-dev build-worker-api-dev build-node-manager-dev build-inference-proxy-dev build-cynode-pma-dev
+    @just build-cynork-dev build-control-plane-dev build-user-gateway-dev build-api-egress-dev build-mcp-gateway-dev build-worker-api-dev build-node-manager-dev build-inference-proxy-dev build-cynode-pma-dev build-cynode-sba-dev
 
 # Run Go tests
 test-go: test-go-cover test-go-race test-go-e2e
@@ -489,6 +496,8 @@ go_coverage_min := "90"
 go_coverage_min_control_plane := "90"
 go_coverage_min_mcp_gateway := "90"
 go_coverage_min_agents := "90"
+go_coverage_min_sba := "90"  # internal/sba: agent/LLM paths need live Ollama or more mocks to reach 90%
+go_coverage_min_sba_cmd := "90"  # cmd/cynode-sba: stdin path exercised via subprocess (not instrumented)
 
 # Run Go tests with coverage for all go_modules; fail if any package is below go_coverage_min.
 # Orchestrator uses testcontainers for Postgres when POSTGRES_TEST_DSN is unset (run just podman-setup first).
@@ -517,7 +526,9 @@ test-go-cover: install-go podman-setup
       min_cp="{{ go_coverage_min_control_plane }}"
       min_mcp="{{ go_coverage_min_mcp_gateway }}"
       min_agents="{{ go_coverage_min_agents }}"
-      below=$(awk -v min="$min" -v min_cp="$min_cp" -v min_mcp="$min_mcp" -v min_agents="$min_agents" -v module="$m" '
+      min_sba="{{ go_coverage_min_sba }}"
+      min_sba_cmd="{{ go_coverage_min_sba_cmd }}"
+      below=$(awk -v min="$min" -v min_cp="$min_cp" -v min_mcp="$min_mcp" -v min_agents="$min_agents" -v min_sba="$min_sba" -v min_sba_cmd="$min_sba_cmd" -v module="$m" '
         /^mode:/ { next }
         { path = $1; sub(/:.*/, "", path)
           n = split(path, a, "/")
@@ -531,7 +542,9 @@ test-go-cover: install-go podman-setup
           for (p in t) {
             pct = (t[p] > 0) ? (100 * c[p] / t[p]) : 0
             pct_rounded = int(pct * 10 + 0.5) / 10
-            if (module == "agents") req = min_agents + 0
+            if (module == "agents" && p ~ /\/cmd\/cynode-sba$/) req = min_sba_cmd + 0
+            else if (module == "agents" && p ~ /\/internal\/sba$/) req = min_sba + 0
+            else if (module == "agents") req = min_agents + 0
             else if (p ~ /\/cmd\/control-plane$/) req = min_cp + 0
             else if (p ~ /\/internal\/database$/) req = min_cp + 0
             else if (p ~ /\/internal\/testutil$/) req = 0

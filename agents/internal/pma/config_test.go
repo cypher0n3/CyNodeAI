@@ -32,8 +32,8 @@ func TestConfig_InstructionsPath(t *testing.T) {
 		{
 			name: "project_manager override",
 			config: Config{
-				Role:                      RoleProjectManager,
-				InstructionsRoot:          "instructions",
+				Role:                       RoleProjectManager,
+				InstructionsRoot:           "instructions",
 				InstructionsProjectManager: "/opt/pma/pm",
 			},
 			want: "/opt/pma/pm",
@@ -41,8 +41,8 @@ func TestConfig_InstructionsPath(t *testing.T) {
 		{
 			name: "project_analyst override",
 			config: Config{
-				Role:                     RoleProjectAnalyst,
-				InstructionsRoot:         "instructions",
+				Role:                       RoleProjectAnalyst,
+				InstructionsRoot:           "instructions",
 				InstructionsProjectAnalyst: "/opt/pma/pa",
 			},
 			want: "/opt/pma/pa",

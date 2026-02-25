@@ -1,2 +1,10 @@
-# Binaries (just build outputs)
+# Binaries (just build outputs and local go build)
 bin/
+control-plane
+control-plane-dev
+user-gateway
+user-gateway-dev
+api-egress
+api-egress-dev
+mcp-gateway
+mcp-gateway-dev
