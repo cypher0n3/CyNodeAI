@@ -81,3 +81,7 @@ It covers identity, authentication, and session lifecycle requirements.
   System-created records (for example tasks created by bootstrap or by orchestrator-side agents) MUST use this identity for `created_by` (and similar) fields rather than writing null.
   [postgres_schema.md](../tech_specs/postgres_schema.md#spec-cynai-schema-userstable)
   <a id="req-identy-0121"></a>
+- **REQ-IDENTY-0122:** The gateway MUST validate the access token on every request.
+  Revoked or expired tokens MUST be rejected; the gateway MUST NOT honor identity from an invalid or expired token.
+  [CYNAI.IDENTY.PerRequestTokenValidation](../tech_specs/local_user_accounts.md#spec-cynai-identy-perrequesttokenvalidation)
+  <a id="req-identy-0122"></a>

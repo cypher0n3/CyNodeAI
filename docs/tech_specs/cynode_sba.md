@@ -388,6 +388,7 @@ Example shape (with optional context)
 
 The MVP step types are deterministic primitives.
 The runner executes as a **non-root** user and has **full access to `/workspace`**; there are no command allowlists or path allowlists inside the container.
+Step flexibility: the order and presence of steps MAY be implementation-defined (e.g. optional steps, reordering for efficiency); the SBA MUST still satisfy the job context and acceptance criteria.
 
 - `run_command`
   - Runs a command (argv form; no shell interpretation unless the step type explicitly requests it).

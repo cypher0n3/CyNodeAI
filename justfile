@@ -340,7 +340,7 @@ lint-containerfiles:
     pushd "$root" >/dev/null
     trap 'popd >/dev/null 2>/dev/null' EXIT
     files=()
-    while IFS= read -r -d '' p; do files+=("$p"); done < <(find . -type f \( -name 'Containerfile' -o -name 'Dockerfile' \) ! -path '*/.git/*' -print0 | sort -z)
+    while IFS= read -r -d '' p; do files+=("$p"); done < <(find . -type f \( -name 'Containerfile*' -o -name 'Dockerfile*' \) ! -path '*/.git/*' -print0 | sort -z)
     if [ ${#files[@]} -eq 0 ]; then echo "No Containerfile/Dockerfile found."; exit 0; fi
     run_hadolint() {
         local f="$1"

@@ -209,6 +209,8 @@ New gateway endpoints or resources added for other clients (e.g. admin console) 
 
 - Spec ID: `CYNAI.USRGWY.AuthAuditing` <a id="spec-cynai-usrgwy-authauditing"></a>
 
+- **Every user-facing request MUST be authenticated and authorized.**
+  No endpoint may rely on network location or a previous request for identity; each request is verified independently.
 - The gateway MUST authenticate user clients.
 - The gateway MUST authorize user actions using policy and (when applicable) user task-execution preferences and constraints.
 - The gateway SHOULD emit audit logs for all user actions, including task submission and artifact access.
@@ -219,6 +221,7 @@ Traces To:
 
 - [REQ-USRGWY-0124](../requirements/usrgwy.md#req-usrgwy-0124)
 - [REQ-USRGWY-0125](../requirements/usrgwy.md#req-usrgwy-0125)
+- [REQ-USRGWY-0133](../requirements/usrgwy.md#req-usrgwy-0133)
 
 ## Web Console
 

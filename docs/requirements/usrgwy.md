@@ -140,3 +140,7 @@ It covers user-facing REST API gateway behavior and related API contracts.
   [CYNAI.USRGWY.OpenAIChatApi.Pipeline](../tech_specs/openai_compatible_chat_api.md#spec-cynai-usrgwy-openaichatapi-pipeline)
   [CYNAI.USRGWY.ChatThreadsMessages.Messages](../tech_specs/chat_threads_and_messages.md#spec-cynai-usrgwy-chatthreadsmessages-messages)
   <a id="req-usrgwy-0132"></a>
+- **REQ-USRGWY-0133:** Every user-facing request MUST be authenticated and authorized.
+  No endpoint may rely on network location or a previous request for identity; each request MUST be verified independently.
+  [CYNAI.USRGWY.AuthAuditing](../tech_specs/user_api_gateway.md#spec-cynai-usrgwy-authauditing)
+  <a id="req-usrgwy-0133"></a>

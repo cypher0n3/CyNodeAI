@@ -36,7 +36,7 @@
 This document is the **canonical full MVP development plan** for CyNodeAI.
 All task breakdowns, requirement and spec references, and implementation order are maintained here.
 
-This document is the single comprehensive MVP development plan as of 2026-02-22.
+This document is the single comprehensive MVP development plan as of 2026-02-26.
 It reflects the latest tech specs (including [external_model_routing.md](../docs/tech_specs/external_model_routing.md)) and post-Phase 1 implementation status.
 
 The canonical phase list and high-level scope remain in [docs/tech_specs/\_main.md](../docs/tech_specs/_main.md); this plan adds objectives, current status, spec alignment, task breakdown with req/spec refs, and quality/BDD expectations.
@@ -106,22 +106,21 @@ These behaviors are reflected in Phase 1 (inference path requirement), Phase 2 (
 - **Phase 1.5:** Complete.
   CLI (cynork), inference proxy sidecar, and prompt interpretation: `input_mode` (prompt/script/commands), default prompt-as-model path (sandbox job with fixed model-call script), BDD/feature coverage.
   `just ci` passes (lint, coverage >=90%, BDD orchestrator/worker_node/cynork).
-  See [PHASE1_STATUS.md](../dev_docs/PHASE1_STATUS.md).
 - **Phase 1.7:** Complete.
   `agents/` Go module with `cynode-pma` binary (role flag, instructions paths, Containerfile); control-plane starts cynode-pma by default (`PMA_ENABLED=true`) and stops it on shutdown; `GET /readyz` returns 503 until PMA is reachable when enabled; cynode-pma runs as a container in the orchestrator stack (compose + e2e).
   **Chat routing (OpenAI-compatible):** Implemented and verified per spec.
   User-gateway exposes `GET /v1/models` and `POST /v1/chat/completions`; effective model `cynodeai.pm` routes to PM agent (cynode-pma), any other to direct inference; legacy `POST /v1/chat` removed.
   Compose: user-gateway has `PMA_BASE_URL`; cynode-pma has `OLLAMA_BASE_URL` so PMA can call Ollama for completions.
     E2E script includes Test 5d (list-models + chat completions); `just e2e` / full-demo passes.
-  See [PHASE1_STATUS.md](../dev_docs/PHASE1_STATUS.md) for runbook and phase summary.
 - **E2E script and image cache:** Script-driven E2E (`just e2e` / `./scripts/setup-dev.sh full-demo`) uses conditional container image rebuild: build-context hash cached under `tmp/e2e-image-cache`; images rebuild only on delta.
   Create-task step retries on 000/5xx.
   Env: `E2E_FORCE_REBUILD`, `E2E_IMAGE_CACHE_DIR`.
   See [development_setup.md](development_setup.md).
+- **Shared Go contracts:** User API Gateway contract lives in `go_shared_libs/contracts/userapi`; orchestrator handlers and cynork gateway client use it (single source of truth for gateway API, supports [REQ-CLIENT-0004](../docs/requirements/client.md)).
+  Orchestrator uses `problem.Details` from `go_shared_libs/contracts/problem` for error responses.
 - **Phase 2:** Foundation in progress.
   P2-02: MCP tool call audit table (`mcp_tool_call_audit_log`), store method, mcp-gateway `POST /v1/mcp/tools/call` writes audit and returns 501; gateway uses testcontainers for real-DB coverage (>=90%).
     P2-01 (scoping/schema), P2-03 (preference tools), and full allow path not started.
-  See [PHASE1_STATUS.md](../dev_docs/PHASE1_STATUS.md) for Phase 2 detail.
 
 ## Prompt Interpretation: Intended Semantics
 
@@ -587,6 +586,7 @@ Items below are implemented.
 - P2-02 foundation: MCP tool call audit table and store; mcp-gateway optional DB, `POST /v1/mcp/tools/call` writes audit (deny/501); mcp-gateway tests use testcontainers for real-DB path (>=90% coverage).
 - E2E and OpenAI chat: Test 5d in `run_e2e_test` (GET /v1/models, POST /v1/chat/completions with `cynodeai.pm`); compose stack has user-gateway `PMA_BASE_URL` and cynode-pma `OLLAMA_BASE_URL`; orchestrator BDD uses OpenAI endpoints; chat routing in `openai_chat.go` aligned with openai_compatible_chat_api.md (effective model, PMA vs direct inference). `just e2e` passes.
 - E2E script: conditional image rebuild (hash cache in `tmp/e2e-image-cache`), create-task retries, post-healthz delay; `E2E_FORCE_REBUILD` and `E2E_IMAGE_CACHE_DIR` documented in script usage.
+- Shared Go libs: `go_shared_libs/contracts/userapi` added; orchestrator handlers and cynork use shared User API Gateway types; orchestrator uses `problem.Details` from go_shared_libs for error responses.
 - Coverage and CI: `just ci` runs fmt, lint, test-go-cover (>=90%), vulncheck-go, test-bdd for orchestrator, worker_node, cynork; `just docs-check` (fix-cynode, lint-md, validate-doc-links, validate-feature-files) passes.
 
 ### Remaining (Order)
@@ -608,4 +608,3 @@ Items below are implemented.
 - [docs/tech_specs/sandbox_image_registry.md](../docs/tech_specs/sandbox_image_registry.md) - Registry behavior deferred; schema tables in scope for MVP (see Tech Spec Alignment).
 - [docs/tech_specs/user_installable_mcp_tools.md](../docs/tech_specs/user_installable_mcp_tools.md) - Out of MVP scope; deferred.
 - [docs/development_setup.md](../docs/development_setup.md) - Local setup, scripts, E2E, troubleshooting.
-- [PHASE1_STATUS.md](../dev_docs/PHASE1_STATUS.md) - Phase 1 implementation summary and running locally.

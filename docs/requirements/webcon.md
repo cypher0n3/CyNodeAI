@@ -57,3 +57,9 @@ Requirements that apply to both the Web Console and the CLI (capability parity, 
 - **REQ-WEBCON-0113:** The web console MUST provide Swagger UI (or equivalent API documentation UI) for the User API Gateway so that authenticated admins can discover and try API endpoints.
   [CYNAI.WEBCON.SwaggerUi](../tech_specs/web_console.md#spec-cynai-webcon-swaggerui)
   <a id="req-webcon-0113"></a>
+- **REQ-WEBCON-0114:** The web console MUST listen on port 8080 by default when run as its own process or container.
+  [CYNAI.WEBCON.RuntimeAndDeployment](../tech_specs/web_console.md#spec-cynai-webcon-runtimeanddeployment)
+  <a id="req-webcon-0114"></a>
+- **REQ-WEBCON-0115:** The web console MUST be runnable in its own container as part of the orchestrator stack (e.g. docker compose with other orchestrator services).
+  [CYNAI.WEBCON.RuntimeAndDeployment](../tech_specs/web_console.md#spec-cynai-webcon-runtimeanddeployment)
+  <a id="req-webcon-0115"></a>

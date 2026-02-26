@@ -31,6 +31,7 @@ Traces To:
 - [REQ-SANDBX-0106](../requirements/sandbx.md#req-sandbx-0106)
 
 - **5432** - PostgreSQL - Database (orchestrator)
+- **8080** - Web Console - Nuxt/Vue web UI (orchestrator; own container)
 - **12080** - User API Gateway - Auth, users, tasks, results (orchestrator)
 - **12082** - Control-plane - Node registration, dispatch, migrations (orchestrator)
 - **12083** - MCP Gateway - MCP tool routing (orchestrator; optional profile)
@@ -38,8 +39,9 @@ Traces To:
 - **12090** - Worker API - Run jobs on the node (worker node)
 - **11434** - Ollama - Inference API (orchestrator or node); also inference proxy listen port inside sandbox pods
 
-All CyNodeAI HTTP service defaults use the **12080-12090** block to avoid conflict with common 8xxx ports and other applications.
-No other CyNodeAI service defaults use these ports.
+The Web Console uses port **8080** by default so it is easy to remember and does not conflict with the 12080-12090 orchestrator API block.
+All other CyNodeAI HTTP service defaults use the **12080-12090** block.
+No other CyNodeAI service defaults use port 8080.
 The CLI (Cynork) does not listen on any port.
 It connects to the User API Gateway (default `http://localhost:12080`).
 
@@ -47,6 +49,10 @@ It connects to the User API Gateway (default `http://localhost:12080`).
 
 - **PostgreSQL:** `5432` (container internal and host mapping).
   Override: `POSTGRES_PORT`.
+- **Web Console:** listens `:8080` in its own container.
+  Override: `WEBCON_PORT` or `NITRO_PORT` (Nuxt); host mapping `WEBCON_PORT`.
+  The console is a separate service in the orchestrator stack; it calls the User API Gateway (e.g. `http://user-gateway:12080`) for all operations.
+  See [Web Console](web_console.md#spec-cynai-webcon-runtimeanddeployment).
 - **Control-plane:** listens `:12082`.
   Override: `CONTROL_PLANE_LISTEN_ADDR` or `LISTEN_ADDR`; host mapping `CONTROL_PLANE_PORT`.
 - **User API Gateway:** listens `:12080`.
@@ -102,9 +108,9 @@ See [`docs/tech_specs/cynork_cli.md`](cynork_cli.md).
 
 ## Conflict Avoidance
 
-- **Single-host dev:** Ports 5432, 12080, 12082, 12090, 11434 must be free for a full stack (orchestrator + one node + Ollama).
+- **Single-host dev:** Ports 5432, 8080, 12080, 12082, 12090, 11434 must be free for a full stack (orchestrator + Web Console + one node + Ollama).
   Optional: 12083, 12084.
-- **Orchestrator-only (docker compose):** 5432, 12080, 12082, 11434.
+- **Orchestrator-only (docker compose):** 5432, 8080, 12080, 12082, 11434.
   Node runs elsewhere and uses 12090 (and optionally 11434 for node-local Ollama).
 - **Multiple nodes on one host:** Each node's Worker API needs a distinct port (e.g. 12090, 12091, 12092).
   Configure `worker_api.listen_port` and `worker_api.public_base_url` per node.
@@ -120,6 +126,7 @@ E2E and BDD tests use the same default ports as production and dev.
 ## Environment and Config Overrides
 
 - **PostgreSQL** - Default: 5432 - Override: `POSTGRES_PORT` (host mapping)
+- **Web Console** - Default: :8080 - Override: `WEBCON_PORT` or `NITRO_PORT` (Nuxt); host mapping `WEBCON_PORT`
 - **User API Gateway** - Default: :12080 - Override: `USER_GATEWAY_LISTEN_ADDR`, `LISTEN_ADDR`; `ORCHESTRATOR_PORT` (host mapping)
 - **Control-plane** - Default: :12082 - Override: `CONTROL_PLANE_LISTEN_ADDR`, `LISTEN_ADDR`; `CONTROL_PLANE_PORT` (host mapping)
 - **Worker API** - Default: :12090 - Override: `LISTEN_ADDR`; node YAML `worker_api.listen_port`
@@ -127,3 +134,4 @@ E2E and BDD tests use the same default ports as production and dev.
 - **API Egress** - Default: :12084 - Override: `LISTEN_ADDR`; `API_EGRESS_PORT` (host mapping)
 - **Ollama** - Default: 11434 - Override: Change port mapping in compose or node-manager; inference proxy upstream via `OLLAMA_UPSTREAM_URL` (e.g. <http://host.containers.internal:11434>)
 - **Cynork gateway** - Default: <http://localhost:12080> - Override: `CYNORK_GATEWAY_URL` or config `gateway_url`
+- **Web Console gateway URL** - Default (in container): <http://user-gateway:12080> - Override: `NUXT_PUBLIC_GATEWAY_URL` or equivalent runtime config

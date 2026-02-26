@@ -40,6 +40,8 @@ It coordinates sandboxed worker execution across local nodes and optional cloud 
 ## Repository Layout
 
 - `docs/`: project documentation; entrypoint is [docs/README.md](docs/README.md).
+- `docs/dev_docs/`: temporary files that must be cleaned up/deleted/moved before merging to default branch.
+  Do not create links to these files.
 - `docs/requirements/`: canonical normative requirements ("what"); entrypoint is `README.md`.
 - `docs/tech_specs/`: design and implementation guidance ("how"); entrypoint is `_main.md` (see also [docs/tech_specs/README.md](docs/tech_specs/README.md)).
 - `secure_browser/`: rules and assets for the secure browser service (e.g. `secure_browser_rules.yaml`).

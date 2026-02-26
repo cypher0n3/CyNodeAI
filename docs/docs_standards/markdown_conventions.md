@@ -12,7 +12,7 @@ It applies to all Markdown files unless a document explicitly states an exceptio
   Do not use pseudo-headings (for example `**Label:**`).
 - Use "=>" instead of arrows.
 - Avoid non-ASCII characters except:
-  - work-tracking docs under [`dev_docs/`](../../dev_docs/) where ✅, ❌, 📊, ⚠️ are allowed.
+  - work-tracking docs under [`dev_docs/`](../dev_docs/) where ✅, ❌, 📊, ⚠️ are allowed.
   - `README.md` files, which may use emoji, badges, and other visual elements.
 - Include a blank line after every heading.
 - Include a blank line before and after every list.

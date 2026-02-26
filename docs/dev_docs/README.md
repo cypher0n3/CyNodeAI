@@ -26,7 +26,7 @@ Before merging any branch to main, complete these steps:
 
 Branches with unreviewed files in `dev_docs/` will be rejected during merge review.
 
-**See also:** Permanent documentation lives in [docs/](../docs/README.md); root project overview at [README.md](../README.md).
+**See also:** Permanent documentation lives in [docs/](../README.md); root project overview at [README.md](../../README.md).
 
 ## File Naming Convention
 
@@ -92,4 +92,4 @@ When making commits, document your work in this directory:
 - Note any tradeoffs or alternatives considered
 - Reference relevant specifications from `docs/tech_specs/`, requirements from `docs/requirements`, and/or feature files from `features`
 
-See [`ai_files/ai_coding_instructions.md`](../ai_files/ai_coding_instructions.md) for detailed guidelines.
+See [`ai_files/ai_coding_instructions.md`](../../ai_files/ai_coding_instructions.md) for detailed guidelines.

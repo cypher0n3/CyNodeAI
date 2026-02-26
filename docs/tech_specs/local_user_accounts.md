@@ -5,6 +5,7 @@
 - [Threat Model](#threat-model)
 - [Identity and Account Model](#identity-and-account-model)
 - [Authentication Model](#authentication-model)
+  - [Per-Request Token Validation](#per-request-token-validation)
 - [Authorization and RBAC Integration](#authorization-and-rbac-integration)
 - [Credential Storage](#credential-storage)
 - [Bootstrap and Administration](#bootstrap-and-administration)
@@ -93,6 +94,18 @@ Logout and revocation
 
 - Users MUST be able to revoke refresh tokens.
 - Admins MUST be able to revoke all active sessions for a user.
+
+### Per-Request Token Validation
+
+- Spec ID: `CYNAI.IDENTY.PerRequestTokenValidation` <a id="spec-cynai-identy-perrequesttokenvalidation"></a>
+
+Traces To:
+
+- [REQ-IDENTY-0122](../requirements/identy.md#req-identy-0122)
+
+Access tokens are validated on every request.
+Revoked or expired tokens MUST be rejected; the gateway MUST NOT honor identity from an invalid or expired token.
+This aligns with session and refresh-token revocation: once a session or token is revoked, subsequent requests using that token MUST receive an unauthorized response.
 
 ## Authorization and RBAC Integration
 

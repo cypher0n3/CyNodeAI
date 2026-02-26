@@ -29,7 +29,7 @@ Requirements take precedence over tech specs and code; tech specs take precedenc
 ## See Also
 
 - Root [README.md](../README.md) - project overview, development setup, architecture.
-- [dev_docs/](../dev_docs/README.md) - temporary development notes (clean up before merge).
+- [dev_docs/](dev_docs/README.md) - temporary development notes (clean up before merge).
 - [features/](../features/README.md) - Gherkin feature files and BDD specs.
 - [scripts/](../scripts/README.md) - helper scripts for setup and systemd unit generation.
 - [.ci_scripts/](../.ci_scripts/README.md) - CI and doc-validation scripts.

@@ -33,7 +33,7 @@ When a draft is **accepted**, its content should be:
 ## What Does Not Belong Here
 
 - Accepted design that is already (or should be) in `docs/requirements/` or `docs/tech_specs/`.
-- Implementation notes or ad-hoc design decisions; use [dev_docs/](../../dev_docs/) for temporary development notes.
+- Implementation notes or ad-hoc design decisions; use [dev_docs/](../dev_docs/) for temporary development notes.
 - Gherkin/BDD feature files; those live under [features/](../../features/).
 
 ## Conventions for Drafts

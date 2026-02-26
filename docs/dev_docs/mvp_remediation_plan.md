@@ -324,8 +324,8 @@ Then: (4)-(10) admin endpoints, payload, gateway, cynork (+ doc), SBA in-progres
    - status: **Done**
    - notes: Health() body check; chat uses POST /v1/chat/completions; cynork_cli.md updated.
 8. SBA in-progress and lifecycle
-   - status: Pending
-   - notes: Signalling; orchestrator job in_progress.
+   - status: **Done**
+   - notes: Dispatcher sets job to running (UpdateJobStatus) when dispatching so orchestrator marks job in-progress; sync Worker API path does not require a separate callback.
 9. PMA langchaingo
    - status: Pending
    - notes: Refactor from direct Ollama HTTP.
@@ -353,6 +353,8 @@ Then: (4)-(10) admin endpoints, payload, gateway, cynork (+ doc), SBA in-progres
 16. Worker API cmd (production)
     - status: Pending
     - notes: Dedicated binary if needed.
+
+Remaining Pending (9, 14, 15, 16) are Phase 2 refactors, step-executor binary, timeout extension when long-running SBA is in scope, and production Worker API cmd per E2E needs; no further MVP code changes in this pass.
 
 ---
 

@@ -64,10 +64,21 @@ Use the same gateway APIs and the same authorization and auditing rules for both
 Cynork calls the User API Gateway ([user_api_gateway.md](user_api_gateway.md)).
 The following alignment is for implementers:
 
-- **Implemented on gateway and used by cynork:** `GET /healthz`, `POST /v1/auth/login`, `POST /v1/auth/refresh`, `POST /v1/auth/logout`, `GET /v1/users/me`, `POST /v1/tasks`, `GET /v1/tasks`, `GET /v1/tasks/{id}`, `GET /v1/tasks/{id}/result`, `POST /v1/tasks/{id}/cancel`, `GET /v1/tasks/{id}/logs`, `POST /v1/chat`.
+- **Implemented on gateway and used by cynork:** `GET /healthz`, `POST /v1/auth/login`, `POST /v1/auth/refresh`, `POST /v1/auth/logout`, `GET /v1/users/me`, `POST /v1/users/{id}/revoke_sessions` (admin), `POST /v1/tasks`, `GET /v1/tasks`, `GET /v1/tasks/{id}`, `GET /v1/tasks/{id}/result`, `POST /v1/tasks/{id}/cancel`, `GET /v1/tasks/{id}/logs`, `POST /v1/chat/completions`.
 - **Not yet implemented on gateway:** `/v1/creds`, `/v1/prefs`, `/v1/prefs/effective`, `/v1/settings`, `/v1/nodes`, `/v1/skills/load`, `/v1/audit`.
   Cynork commands for creds, prefs, settings, nodes, skills, and audit call these paths; against a real orchestrator they return 404 until the gateway adds the APIs.
   BDD uses a mock that stubs these endpoints so scenarios pass.
+
+### Parity Baseline (REQ-CLIENT-0004)
+
+Current CLI capability set as of MVP Phase 1 (parity baseline for Web Console):
+
+- **Auth:** login, refresh, logout, status (healthz + body "ok").
+- **User:** me, admin revoke_sessions.
+- **Tasks:** create, list, get, result, cancel, logs.
+- **Chat:** POST /v1/chat/completions (OpenAI format).
+
+When the Web Console is implemented, it MUST offer the same capabilities and use the same gateway APIs and authorization rules.
 
 ## Goals and Non-Goals
 
