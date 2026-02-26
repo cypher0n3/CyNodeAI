@@ -1391,6 +1391,103 @@ func TestProcessChatLine(t *testing.T) {
 	}
 }
 
+func TestProcessChatLine_ShellEscape(t *testing.T) {
+	cfg = &config.Config{GatewayURL: "http://localhost", Token: "tok"}
+	defer func() { cfg = nil }()
+	client := gateway.NewClient("http://localhost")
+	client.SetToken("tok")
+	// ! echo hi -> output to stdout
+	r, w, _ := os.Pipe()
+	oldStdout := os.Stdout
+	os.Stdout = w
+	defer func() { os.Stdout = oldStdout }()
+	done := make(chan struct{})
+	var out bytes.Buffer
+	go func() {
+		_, _ = io.Copy(&out, r)
+		close(done)
+	}()
+	exitSession, err := processChatLine(client, "! echo hi")
+	_ = w.Close()
+	<-done
+	if err != nil || exitSession {
+		t.Errorf("processChatLine ! echo hi: exit=%v err=%v", exitSession, err)
+	}
+	if !strings.Contains(out.String(), "hi") {
+		t.Errorf("expected stdout to contain hi, got %q", out.String())
+	}
+	// ! with empty command -> usage to stderr
+	r2, w2, _ := os.Pipe()
+	oldStderr := os.Stderr
+	os.Stderr = w2
+	var errOut bytes.Buffer
+	done2 := make(chan struct{})
+	go func() {
+		_, _ = io.Copy(&errOut, r2)
+		close(done2)
+	}()
+	_, _ = processChatLine(client, "!")
+	_ = w2.Close()
+	<-done2
+	os.Stderr = oldStderr
+	if !strings.Contains(errOut.String(), "usage") {
+		t.Errorf("expected stderr to contain usage for empty !, got %q", errOut.String())
+	}
+	// ! false -> exit status 1 to stderr, session continues
+	r3, w3, _ := os.Pipe()
+	os.Stderr = w3
+	var errOut2 bytes.Buffer
+	done3 := make(chan struct{})
+	go func() {
+		_, _ = io.Copy(&errOut2, r3)
+		close(done3)
+	}()
+	exitSession, err = processChatLine(client, "! false")
+	_ = w3.Close()
+	<-done3
+	os.Stderr = oldStderr
+	if err != nil || exitSession {
+		t.Errorf("! false must not exit session: exit=%v err=%v", exitSession, err)
+	}
+	if !strings.Contains(errOut2.String(), "exit status 1") {
+		t.Errorf("expected stderr to contain exit status 1, got %q", errOut2.String())
+	}
+}
+
+func TestProcessChatLine_SlashErrorDoesNotExit(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+		_, _ = w.Write([]byte("Not Found"))
+	}))
+	defer server.Close()
+	cfg = &config.Config{GatewayURL: server.URL, Token: "tok"}
+	defer func() { cfg = nil }()
+	client := gateway.NewClient(server.URL)
+	client.SetToken("tok")
+	oldStderr := os.Stderr
+	r, w, _ := os.Pipe()
+	os.Stderr = w
+	var errOut bytes.Buffer
+	done := make(chan struct{})
+	go func() {
+		_, _ = io.Copy(&errOut, r)
+		close(done)
+	}()
+	exitSession, err := processChatLine(client, "/skills list")
+	_ = w.Close()
+	<-done
+	os.Stderr = oldStderr
+	if err != nil {
+		t.Errorf("slash error must not return err (spec: session continues): %v", err)
+	}
+	if exitSession {
+		t.Error("slash error must not set exitSession true")
+	}
+	if !strings.Contains(errOut.String(), "404") && !strings.Contains(errOut.String(), "Not Found") {
+		t.Errorf("error should be printed to stderr, got %q", errOut.String())
+	}
+}
+
 func TestAllSlashCommands(t *testing.T) {
 	cmds := AllSlashCommands()
 	if len(cmds) == 0 {
@@ -1494,9 +1591,18 @@ func TestRunSlashCommand_Models(t *testing.T) {
 	}
 }
 
+func stubSlashServeAuth(w http.ResponseWriter, r *http.Request) bool {
+	if r.URL.Path == "/v1/users/me" && r.Method == http.MethodGet {
+		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode(map[string]string{"id": "u1", "handle": "alice"})
+		return true
+	}
+	return false
+}
+
 func stubSlashServerHandler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
-	if stubSlashServeNodes(w, r) || stubSlashServePrefs(w, r) || stubSlashServeProjects(w, r) || stubSlashServeTasks(w, r) || stubSlashServeSkills(w, r) {
+	if stubSlashServeAuth(w, r) || stubSlashServeNodes(w, r) || stubSlashServePrefs(w, r) || stubSlashServeProjects(w, r) || stubSlashServeTasks(w, r) || stubSlashServeSkills(w, r) {
 		return
 	}
 	w.WriteHeader(http.StatusNotFound)
@@ -1615,7 +1721,7 @@ func TestRunSlashCommand_StubEndpoints(t *testing.T) {
 	client := gateway.NewClient(server.URL)
 	client.SetToken("tok")
 	cmds := []string{
-		"/nodes list", "/nodes get n1", "/skills list", "/skills get s1",
+		"/auth whoami", "/nodes list", "/nodes get n1", "/skills list", "/skills get s1",
 		"/prefs list", "/prefs get", "/prefs effective", "/prefs delete",
 		"/project list", "/project get p1", "/project", "/project set p2",
 		"/model", "/model m1", "/task list", "/task get t1",
@@ -1639,7 +1745,9 @@ func TestRunSlashCommand_UsagePaths(t *testing.T) {
 	for _, cmd := range []string{
 		"/task", "/task foo", "/task create", "/task cancel", "/task result", "/task logs",
 		"/task artifacts", "/task artifacts list", "/task result --wait",
+		"/auth", "/auth foo",
 		"/nodes", "/nodes foo x", "/skills", "/skills get", "/prefs", "/project get",
+		"/project help", "/project --help",
 	} {
 		_, err := runSlashCommand(client, cmd)
 		if err != nil {

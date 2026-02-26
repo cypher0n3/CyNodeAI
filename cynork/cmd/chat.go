@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"strings"
 
 	"github.com/charmbracelet/glamour"
@@ -75,8 +76,8 @@ func runChat(_ *cobra.Command, _ []string) error {
 	if chatMessage != "" {
 		return sendAndPrintChat(client, chatMessage)
 	}
-	// Discoverability: show slash commands at session start (spec CliChatSlashCommands).
-	fmt.Fprintln(os.Stderr, "Slash commands: /help for list.")
+	// Discoverability: show slash commands and shell escape at session start (spec CliChatSlashCommands, CliChatShellEscape).
+	fmt.Fprintln(os.Stderr, "Slash commands: /help for list. ! <cmd> run in shell.")
 	printSlashHelp()
 	if term.IsTerminal(int(os.Stdin.Fd())) && term.IsTerminal(int(os.Stdout.Fd())) {
 		return runChatLoopLiner(client)
@@ -131,14 +132,45 @@ func runChatLoopWithReader(client *gateway.Client, prompt string, getLine func(s
 }
 
 // processChatLine handles one line of input; returns (exitSession, err). Empty line is no-op and returns (false, nil).
+// Slash and shell-escape errors are printed and do not exit the session (spec CliChatSubcommandErrors).
 func processChatLine(client *gateway.Client, line string) (bool, error) {
 	if line == "" {
 		return false, nil
 	}
+	if strings.HasPrefix(line, "!") {
+		runChatShellCommand(strings.TrimSpace(line[1:]))
+		return false, nil
+	}
 	if strings.HasPrefix(line, "/") {
-		return runSlashCommand(client, line)
+		exitSession, err := runSlashCommand(client, line)
+		if err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			return false, nil
+		}
+		return exitSession, nil
 	}
 	return false, sendAndPrintChat(client, line)
+}
+
+// runChatShellCommand runs cmd in the shell and prints stdout/stderr inline. Never returns an error (spec CliChatShellEscape).
+func runChatShellCommand(cmd string) {
+	cmd = strings.TrimSpace(cmd)
+	if cmd == "" {
+		fmt.Fprintln(os.Stderr, "usage: ! <shell command>")
+		return
+	}
+	c := exec.Command("sh", "-c", cmd)
+	out, err := c.CombinedOutput()
+	if len(out) > 0 {
+		fmt.Print(string(out))
+	}
+	if err != nil {
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			fmt.Fprintf(os.Stderr, "exit status %d\n", exitErr.ExitCode())
+		} else {
+			fmt.Fprintln(os.Stderr, err)
+		}
+	}
 }
 
 func slashCompleter(line string) []string {

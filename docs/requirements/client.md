@@ -176,6 +176,12 @@ Web Console-specific requirements live in [webcon.md](webcon.md) (REQ-WEBCON-*).
   [CYNAI.WEBCON.ProjectManagement](../tech_specs/web_console.md#spec-cynai-webcon-projectmanagement)
   [CYNAI.ACCESS.Doc.ProjectsAndScopes](../tech_specs/projects_and_scopes.md#spec-cynai-access-doc-projectsandscopes)
   <a id="req-client-0174"></a>
+- **REQ-CLIENT-0175:** The CLI chat command MUST support a shell-escape syntax: input starting with `!` runs the remainder of the line as a shell command; the command's output is displayed inline and the chat session continues.
+  [CYNAI.CLIENT.CliChatShellEscape](../tech_specs/cli_management_app_commands_chat.md#spec-cynai-client-clichatshellescape)
+  <a id="req-client-0175"></a>
+- **REQ-CLIENT-0176:** When a slash command or shell-escape command fails in chat (e.g. gateway 404, command not found), the CLI MUST display the error and MUST NOT exit the chat session or show the top-level command Usage.
+  [CYNAI.CLIENT.CliChatSubcommandErrors](../tech_specs/cli_management_app_commands_chat.md#spec-cynai-client-clichatsubcommanderrors)
+  <a id="req-client-0176"></a>
 - **REQ-CLIENT-0125:** Node management MUST be mediated by the User API Gateway.
   [CYNAI.WEBCON.NodeManagement](../tech_specs/web_console.md#spec-cynai-webcon-nodemanagement)
   [CYNAI.CLIENT.CliNodeManagement](../tech_specs/cli_management_app_commands_admin.md#spec-cynai-client-clinodemgmt)

@@ -18,23 +18,24 @@ type SlashCommand struct {
 	Description string
 }
 
-// AllSlashCommands returns every slash command with short description (spec: discoverability).
+// AllSlashCommands returns every slash command with short description (spec: discoverability), in alphabetical order.
 func AllSlashCommands() []SlashCommand {
 	return []SlashCommand{
-		{"/exit", "end chat session"},
-		{"/quit", "end chat session"},
-		{"/help", "list slash commands"},
+		{"/auth", "auth login, logout, whoami, refresh"},
 		{"/clear", "clear terminal display"},
-		{"/version", "print cynork version"},
-		{"/models", "list available models"},
+		{"/exit", "end chat session"},
+		{"/help", "list slash commands"},
 		{"/model", "show or set session model"},
-		{"/project", "show or set project context"},
-		{"/task", "task list, get, create, cancel, result, logs, artifacts"},
-		{"/status", "gateway reachability"},
-		{"/whoami", "current identity"},
+		{"/models", "list available models"},
 		{"/nodes", "nodes list, get"},
 		{"/prefs", "preferences list, get, set, delete, effective"},
+		{"/project", "show or set project context"},
+		{"/quit", "end chat session"},
 		{"/skills", "skills list, get"},
+		{"/status", "gateway reachability"},
+		{"/task", "task list, get, create, cancel, result, logs, artifacts"},
+		{"/version", "print cynork version"},
+		{"/whoami", "current identity"},
 	}
 }
 
@@ -55,46 +56,37 @@ func parseSlash(line string) (cmd, rest string, ok bool) {
 	return strings.ToLower(line[:idx]), strings.TrimSpace(line[idx+1:]), true
 }
 
+type slashHandler func(*gateway.Client, string) (bool, error)
+
+var slashHandlers = map[string]slashHandler{
+	"exit":   func(*gateway.Client, string) (bool, error) { return true, nil },
+	"quit":   func(*gateway.Client, string) (bool, error) { return true, nil },
+	"help":   func(*gateway.Client, string) (bool, error) { printSlashHelp(); return false, nil },
+	"clear":  func(*gateway.Client, string) (bool, error) { clearTerminal(); return false, nil },
+	"version": func(*gateway.Client, string) (bool, error) { fmt.Println("cynork", version); return false, nil },
+	"models": func(*gateway.Client, string) (bool, error) { return false, runModelsList(nil, nil) },
+	"model":  func(c *gateway.Client, rest string) (bool, error) { return false, runSlashModel(c, rest) },
+	"project": func(c *gateway.Client, rest string) (bool, error) { return false, runSlashProject(c, rest) },
+	"task":   func(c *gateway.Client, rest string) (bool, error) { return false, runSlashTask(c, rest) },
+	"status": func(*gateway.Client, string) (bool, error) { return false, runStatus(nil, nil) },
+	"whoami": func(*gateway.Client, string) (bool, error) { return false, runAuthWhoami(nil, nil) },
+	"auth":   func(_ *gateway.Client, rest string) (bool, error) { return false, runSlashAuth(rest) },
+	"nodes":  func(_ *gateway.Client, rest string) (bool, error) { return false, runSlashNodes(rest) },
+	"prefs":  func(_ *gateway.Client, rest string) (bool, error) { return false, runSlashPrefs(rest) },
+	"skills": func(_ *gateway.Client, rest string) (bool, error) { return false, runSlashSkills(rest) },
+}
+
 // runSlashCommand executes a slash command. Returns (exitSession, err). exitSession true means chat should exit.
 func runSlashCommand(client *gateway.Client, line string) (exitSession bool, err error) {
 	cmd, rest, ok := parseSlash(line)
 	if !ok {
 		return false, nil
 	}
-	switch cmd {
-	case "exit", "quit":
-		return true, nil
-	case "help":
-		printSlashHelp()
-		return false, nil
-	case "clear":
-		clearTerminal()
-		return false, nil
-	case "version":
-		fmt.Println("cynork", version)
-		return false, nil
-	case "models":
-		return false, runModelsList(nil, nil)
-	case "model":
-		return false, runSlashModel(client, rest)
-	case "project":
-		return false, runSlashProject(client, rest)
-	case "task":
-		return false, runSlashTask(client, rest)
-	case "status":
-		return false, runStatus(nil, nil)
-	case "whoami":
-		return false, runAuthWhoami(nil, nil)
-	case "nodes":
-		return false, runSlashNodes(rest)
-	case "prefs":
-		return false, runSlashPrefs(rest)
-	case "skills":
-		return false, runSlashSkills(rest)
-	default:
-		fmt.Fprintln(os.Stderr, "Unknown command. Type /help for available commands.")
-		return false, nil
+	if h, ok := slashHandlers[cmd]; ok {
+		return h(client, rest)
 	}
+	fmt.Fprintln(os.Stderr, "Unknown command. Type /help for available commands.")
+	return false, nil
 }
 
 func printSlashHelp() {
@@ -109,6 +101,39 @@ func clearTerminal() {
 		return
 	}
 	_, _ = fmt.Fprint(os.Stdout, "\033[H\033[2J")
+}
+
+func runSlashAuth(rest string) error {
+	rest = strings.TrimSpace(rest)
+	parts := strings.Fields(rest)
+	if len(parts) == 0 {
+		fmt.Fprintln(os.Stderr, "usage: /auth login|logout|whoami|refresh [login flags: -u username -p password]")
+		return nil
+	}
+	sub := strings.ToLower(parts[0])
+	args := parts[1:]
+	switch sub {
+	case "whoami":
+		return runAuthWhoami(nil, nil)
+	case "logout":
+		return runAuthLogout(nil, nil)
+	case "refresh":
+		return runAuthRefresh(nil, nil)
+	case "login":
+		fs := flag.NewFlagSet("auth login", flag.ContinueOnError)
+		u := fs.String("u", "", "username")
+		p := fs.String("p", "", "password")
+		if err := fs.Parse(args); err != nil {
+			return nil
+		}
+		authLoginHandle = *u
+		authLoginPassword = *p
+		defer func() { authLoginHandle = ""; authLoginPassword = "" }()
+		return runAuthLogin(nil, nil)
+	default:
+		fmt.Fprintln(os.Stderr, "usage: /auth login|logout|whoami|refresh [login flags: -u username -p password]")
+		return nil
+	}
 }
 
 func runSlashModel(_ *gateway.Client, rest string) error {
@@ -136,13 +161,17 @@ func runSlashProject(_ *gateway.Client, rest string) error {
 	if len(parts) == 0 {
 		return nil
 	}
-	switch strings.ToLower(parts[0]) {
+	first := strings.ToLower(parts[0])
+	switch first {
 	case subList:
 		return runProjectList(nil, nil)
 	case subGet:
 		return runSlashProjectGet(parts)
 	case "set":
 		return runSlashProjectSet(parts)
+	case "help", "--help", "-h":
+		fmt.Fprintln(os.Stderr, "usage: /project [list|get <project_id>|set <project_id>] or /project <project_id> to set")
+		return nil
 	}
 	setChatSessionProject(parts[0])
 	return nil

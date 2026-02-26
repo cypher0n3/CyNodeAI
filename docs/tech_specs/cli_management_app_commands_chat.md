@@ -27,6 +27,8 @@ Traces To:
 - [REQ-CLIENT-0171](../requirements/client.md#req-client-0171)
 - [REQ-CLIENT-0172](../requirements/client.md#req-client-0172)
 - [REQ-CLIENT-0173](../requirements/client.md#req-client-0173)
+- [REQ-CLIENT-0175](../requirements/client.md#req-client-0175)
+- [REQ-CLIENT-0176](../requirements/client.md#req-client-0176)
 
 The CLI MUST provide a top-level `chat` command that starts an interactive chat session with the Project Manager (PM) model.
 The session MUST use the same User API Gateway and token resolution as other commands and MUST require auth.
@@ -96,9 +98,23 @@ Implementations MUST honor `--no-color` for the suggestion list (e.g. no colors 
 - Spec ID: `CYNAI.CLIENT.CliChatSlashCommandReference` <a id="spec-cynai-client-clichatslashcommandreference"></a>
 
 All slash commands start with `/` and are case-insensitive for the command name (e.g. `/help`, `/Help`, and `/HELP` are equivalent).
-Input that does not start with `/` is sent to the PM model as a chat message.
+Input that does not start with `/` or `!` is sent to the PM model as a chat message.
 Input that starts with `/` but does not match a known command SHOULD be treated as an unknown command.
 The CLI MUST print a brief error or hint (e.g. "Unknown command. Type /help for available commands.") and MUST NOT send the line to the PM model.
+
+#### Shell Escape (`!` Command)
+
+- Spec ID: `CYNAI.CLIENT.CliChatShellEscape` <a id="spec-cynai-client-clichatshellescape"></a>
+
+Traces To:
+
+- [REQ-CLIENT-0175](../requirements/client.md#req-client-0175)
+
+When the user types a line that starts with `!`, the CLI MUST treat the remainder of the line as a shell command.
+The CLI MUST run the command in the user's underlying shell (e.g. `sh -c "<rest>"`) and MUST display the command's combined stdout and stderr inline in the chat.
+The chat session MUST continue after the command completes; the command's exit code MAY be shown (e.g. on non-zero exit).
+If the command cannot be run (e.g. executable not found), the CLI MUST print an error to stderr and MUST NOT exit the chat session.
+Empty `!` (no command after the space) SHOULD print a brief usage hint (e.g. "usage: ! followed by a shell command") and continue the session.
 
 Required slash commands:
 
@@ -249,6 +265,10 @@ Traces To:
   - Show current identity (id, handle); same as `cynork auth whoami`.
   - No arguments.
 
+- **`/auth`** [login | logout | whoami | refresh]
+  - Same subcommands as `cynork auth`: `/auth whoami` (identity), `/auth logout`, `/auth refresh`, `/auth login` (optionally `-u username -p password`).
+  - With no arguments, print usage.
+
 #### Node Slash Commands
 
 - Spec ID: `CYNAI.CLIENT.CliChatSlashNodes` <a id="spec-cynai-client-clichatslashnodes"></a>
@@ -315,3 +335,15 @@ Traces To:
 - Missing or invalid token: exit code 3.
 - Gateway unreachable or 5xx: exit code 7.
 - Gateway 4xx (e.g. 429, 403): exit code per [Exit Codes](cynork_cli.md#spec-cynai-client-cliexitcodes) (e.g. 3 for 403, 6 for 422).
+
+#### Slash and Shell Command Errors Must Not Exit the Session
+
+- Spec ID: `CYNAI.CLIENT.CliChatSubcommandErrors` <a id="spec-cynai-client-clichatsubcommanderrors"></a>
+
+Traces To:
+
+- [REQ-CLIENT-0176](../requirements/client.md#req-client-0176)
+
+When a slash command (e.g. `/skills list`, `/prefs list`) or a shell-escape command (`! ...`) fails (e.g. gateway returns 404, or the shell command exits non-zero), the CLI MUST display the error to the user (e.g. on stderr) and MUST continue the chat session.
+The CLI MUST NOT exit with a non-zero code or show the top-level command Usage in response to such a failure.
+Only session-exit actions (`/exit`, `/quit`, EOF) or fatal startup failures (e.g. missing token) MUST cause the chat process to exit.
