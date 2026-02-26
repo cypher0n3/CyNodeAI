@@ -6,6 +6,7 @@
 - [Versioning](#versioning)
 - [Authentication](#authentication)
   - [Applicable Requirements (Authentication)](#applicable-requirements-authentication)
+- [HTTPS Transport and Reverse Proxy](#https-transport-and-reverse-proxy)
 - [Health Checks](#health-checks)
 - [Error Handling](#error-handling)
 - [Worker API Surface (Initial Implementation)](#worker-api-surface-initial-implementation)
@@ -88,6 +89,20 @@ Initial implementation (Phase 1) constraints
   HTTPS MAY be added later without changing endpoint paths or payload shapes.
 - When `network_policy` is `restricted`, treat as deny-all (equivalent to `none`).
 - CPU, memory, and PIDs limits are not applied; workspace is per-job at `/workspace` per [`docs/tech_specs/sandbox_container.md`](sandbox_container.md).
+
+## HTTPS Transport and Reverse Proxy
+
+- Spec ID: `CYNAI.WORKER.HttpsTransportReverseProxy` <a id="spec-cynai-worker-httpstransportreverseproxy"></a>
+
+The Worker API MAY be deployed behind a containerized nginx reverse proxy for HTTPS transport.
+When the Worker API is reached over HTTPS, the orchestrator MUST validate the server certificate when connecting to the node, unless explicitly configured for development (e.g. insecure skip).
+
+Self-signed certificate handling
+
+- When the Worker API is served over HTTPS using a self-signed certificate, the orchestrator has no public CA to validate the server.
+- The initial registration data sent from the node to the orchestrator (the capability report or equivalent bundle exchanged at registration) MUST include the worker node's TLS server certificate or public key so that the orchestrator can trust the worker for subsequent HTTPS connections.
+- The orchestrator MUST use this trust material (e.g. pin the certificate or add it to the TLS client trust store) when making HTTPS requests to that node's Worker API.
+- The canonical place for this trust material is the node capability report; see [`docs/tech_specs/worker_node_payloads.md`](worker_node_payloads.md) capability report schema `tls.worker_api_server_cert_pem`.
 
 ## Health Checks
 

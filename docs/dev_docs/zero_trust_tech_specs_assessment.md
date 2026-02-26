@@ -8,7 +8,8 @@
 - [6. Data Protection Gaps](#6-data-protection-gaps)
 - [7. Monitoring, Audit, and Assume-Breach Gaps](#7-monitoring-audit-and-assume-breach-gaps)
 - [8. Summary of Recommended Spec Changes](#8-summary-of-recommended-spec-changes)
-- [9. References](#9-references)
+- [9. Alignment with Worker API HTTPS Spec Updates](#9-alignment-with-worker-api-https-spec-updates)
+- [10. References](#10-references)
 
 ## 1. Executive Summary
 
@@ -276,7 +277,33 @@ Sandboxes are correctly treated as untrusted and network-restricted.
 
 ---
 
-## 9. References
+## 9. Alignment With Worker API HTTPS Spec Updates
+
+The following spec changes were made after this assessment and align with Section 4 (Transport and Network Security):
+
+- **worker_api.md** - New section [HTTPS Transport and Reverse Proxy](../tech_specs/worker_api.md#spec-cynai-worker-httpstransportreverseproxy): Worker API MAY be deployed behind a containerized nginx reverse proxy for HTTPS; when using HTTPS the orchestrator MUST validate the server certificate (except dev insecure skip).
+  When using a self-signed cert, the initial registration data (capability report) MUST include the worker's TLS server certificate or public key so the orchestrator can trust the worker for subsequent connections.
+- **worker_node_payloads.md** - Capability report `tls` object now includes optional `worker_api_server_cert_pem`: the node sends the Worker API server cert PEM at registration when serving over HTTPS with a self-signed certificate, so the orchestrator can pin/trust it.
+
+Alignment with assessment recommendations:
+
+- **4.1.1 (In-Transit Encryption):** Partially addressed.
+  The spec now defines HTTPS deployment and mandatory server certificate validation when HTTPS is used.
+  The existing MVP constraint ("MUST support HTTP for MVP") is unchanged; the assessment recommended qualifying it so production MUST use TLS and HTTP is dev/local only.
+  That qualification is not yet in the spec.
+- **4.2.1 (Mutual TLS and Server Identity):** Partially addressed.
+  Server certificate validation by the orchestrator is specified; the capability report carries Worker API trust material (`worker_api_server_cert_pem`) for self-signed deployments.
+  Not yet added: an explicit "production Worker API MUST be served over TLS" sentence, or the optional mTLS (client cert) subsection.
+
+Remaining gaps from Section 4 for worker/orchestrator transport:
+
+- Explicit production TLS requirement and MVP HTTP qualified as dev-only (4.1.1).
+- Optional mTLS subsection and node identity from client cert (4.2.1).
+- ports_and_endpoints note that production MUST use TLS for Worker API (4.1.1).
+
+---
+
+## 10. References
 
 - Tech specs index: [`docs/tech_specs/_main.md`](../tech_specs/_main.md).
 - Access control: [`docs/tech_specs/access_control.md`](../tech_specs/access_control.md).

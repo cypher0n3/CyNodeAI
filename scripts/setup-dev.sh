@@ -344,6 +344,23 @@ start_orchestrator() {
     fi
 }
 
+# Wait for control-plane to be listening (GET /readyz returns 200 or 503). Node-manager must not start until control-plane accepts TCP/HTTP.
+# readyz returns 200 only after a node is registered and PMA is ready, so we accept 503 (server up, not ready) and then start the node.
+wait_for_control_plane_listening() {
+    local url="http://127.0.0.1:${CONTROL_PLANE_PORT}/readyz"
+    log_info "Waiting for control-plane at $url (up to 90s)..."
+    for i in $(seq 1 90); do
+        code=$(curl -s -o /dev/null -w "%{http_code}" --connect-timeout 2 "$url" 2>/dev/null || echo "000")
+        if [ "$code" = "200" ] || [ "$code" = "503" ]; then
+            log_info "Control-plane is listening (readyz $code)"
+            return 0
+        fi
+        [ "$i" -eq 90 ] && { log_error "Control-plane not listening after 90s (last code='$code')"; return 1; }
+        sleep 1
+    done
+    return 1
+}
+
 # Function to start node-manager (which fetches config and starts worker-api with token from config)
 start_node() {
     cd "$PROJECT_ROOT"
@@ -756,7 +773,7 @@ case "${1:-}" in
         ensure_inference_proxy_build_if_delta || { stop_all; exit 1; }
         export INFERENCE_PROXY_IMAGE="${INFERENCE_PROXY_IMAGE:-cynodeai-inference-proxy:dev}"
         export OLLAMA_UPSTREAM_URL="${OLLAMA_UPSTREAM_URL:-http://host.containers.internal:11434}"
-        sleep 2
+        wait_for_control_plane_listening || { stop_all; exit 1; }
         start_node || { stop_all; exit 1; }
         sleep 3
         run_e2e_test || { stop_all; exit 1; }

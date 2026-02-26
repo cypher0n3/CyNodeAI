@@ -28,6 +28,8 @@ services:
     environment:
       DATABASE_URL: postgres://${POSTGRES_USER:-cynodeai}:${POSTGRES_PASSWORD:-cynodeai-dev-password}@postgres:5432/${POSTGRES_DB:-cynodeai}?sslmode=disable
       CONTROL_PLANE_LISTEN_ADDR: ":12082"
+      # PMA runs as separate container; do not start cynode-pma subprocess inside this container.
+      PMA_ENABLED: "false"
       JWT_SECRET: ${JWT_SECRET:-dev-jwt-secret-change-in-production}
       NODE_REGISTRATION_PSK: ${NODE_REGISTRATION_PSK:-dev-node-psk-secret}
       BOOTSTRAP_ADMIN_PASSWORD: ${BOOTSTRAP_ADMIN_PASSWORD:-admin123}

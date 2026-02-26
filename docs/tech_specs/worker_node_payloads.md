@@ -114,6 +114,10 @@ Source requirements: [`docs/tech_specs/worker_node.md`](worker_node.md#spec-cyna
 - `tls` (object, optional)
   - `trust_material_status` (string, optional)
     - examples: ok, missing, invalid
+  - `worker_api_server_cert_pem` (string, optional)
+    - When the Worker API is served over HTTPS (e.g. behind a containerized nginx reverse proxy) with a self-signed certificate, the node MUST include the server certificate PEM in the capability report so the orchestrator can trust the worker for subsequent HTTPS connections.
+    - Omit when the Worker API is not served over HTTPS or when the certificate is issued by a CA already trusted by the orchestrator.
+    - See [`docs/tech_specs/worker_api.md`](worker_api.md#spec-cynai-worker-httpstransportreverseproxy).
 
 Example
 
