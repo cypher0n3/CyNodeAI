@@ -17,7 +17,7 @@ import (
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/models"
 )
 
-// RunOnce performs one dispatch iteration: get next queued job, pick a dispatchable node, call Worker API, complete job.
+// RunOnce performs one dispatch iteration: get next queued job, pick a dispatchable node, set job to running, call Worker API, complete job.
 // Returns nil on success, database.ErrNotFound when no queued job, or another error.
 func RunOnce(ctx context.Context, db database.Store, client *http.Client, httpTimeout time.Duration, logger *slog.Logger) error {
 	if client == nil {
@@ -34,6 +34,7 @@ func RunOnce(ctx context.Context, db database.Store, client *http.Client, httpTi
 	if err := db.AssignJobToNode(ctx, job.ID, node.ID); err != nil {
 		return fmt.Errorf("assign job to node: %w", err)
 	}
+	_ = db.UpdateJobStatus(ctx, job.ID, models.JobStatusRunning)
 	_ = db.UpdateTaskStatus(ctx, job.TaskID, models.TaskStatusRunning)
 	sandbox, err := ParseSandboxSpec(job.Payload.Ptr())
 	if err != nil {

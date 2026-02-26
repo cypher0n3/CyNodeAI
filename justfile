@@ -375,6 +375,13 @@ go-upgrade-deps: install-go
       (cd "{{ root_dir }}/$m" && go get -u ./... && go mod tidy); \
     done
 
+# Stage all Go module directories (from go.work) with git add.
+git-add-go-modules:
+    @for m in {{ go_modules }}; do \
+      echo "git add $m"; \
+      git add "$m"; \
+    done
+
 # Built binaries go to each module's bin/ (orchestrator/bin, worker_node/bin, cynork/bin, agents/bin).
 # Production = stripped + upx; dev = debug symbols. Usage: _build_prod <name> <pkg_path> <out_dir>; _build_dev <name> <pkg_path> <out_dir>.
 _build_prod name pkg_path out_dir:
