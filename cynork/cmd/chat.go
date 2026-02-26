@@ -17,8 +17,8 @@ var chatPlain bool
 
 var chatCmd = &cobra.Command{
 	Use:   "chat",
-	Short: "Interactive chat with the Project Manager (POST /v1/chat)",
-	Long:  "Reads lines from stdin; /exit or /quit or EOF exits. Each message is sent via POST /v1/chat. No token yields exit 3. Use --plain for raw output (no Markdown rendering).",
+	Short: "Interactive chat with the Project Manager (POST /v1/chat/completions)",
+	Long:  "Reads lines from stdin; /exit or /quit or EOF exits. Each message is sent via POST /v1/chat/completions (OpenAI format). No token yields exit 3. Use --plain for raw output (no Markdown rendering).",
 	RunE:  runChat,
 }
 

@@ -231,6 +231,11 @@ func TestTableNames(t *testing.T) {
 		{"McpToolCallAuditLog", (McpToolCallAuditLog{}).TableName(), "mcp_tool_call_audit_log"},
 		{"PreferenceEntry", (PreferenceEntry{}).TableName(), "preference_entries"},
 		{"PreferenceAuditLog", (PreferenceAuditLog{}).TableName(), "preference_audit_log"},
+		{"WorkflowCheckpoint", (WorkflowCheckpoint{}).TableName(), "workflow_checkpoints"},
+		{"TaskWorkflowLease", (TaskWorkflowLease{}).TableName(), "task_workflow_leases"},
+		{"SandboxImage", (SandboxImage{}).TableName(), "sandbox_images"},
+		{"SandboxImageVersion", (SandboxImageVersion{}).TableName(), "sandbox_image_versions"},
+		{"NodeSandboxImageAvailability", (NodeSandboxImageAvailability{}).TableName(), "node_sandbox_image_availability"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

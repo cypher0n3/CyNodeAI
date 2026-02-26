@@ -267,23 +267,47 @@ func (c *Client) GetTaskLogs(taskID, stream string) (*TaskLogsResponse, error) {
 	return &out, nil
 }
 
-// ChatRequest is the request body for POST /v1/chat (orchestrator).
-type ChatRequest struct {
-	Message string `json:"message"`
+// ChatCompletionsRequest is the OpenAI-format request for POST /v1/chat/completions.
+type ChatCompletionsRequest struct {
+	Model    string          `json:"model,omitempty"`
+	Messages []ChatMessage   `json:"messages"`
 }
 
-// ChatResponse is the response body for POST /v1/chat.
+// ChatMessage is one message in the OpenAI messages array.
+type ChatMessage struct {
+	Role    string `json:"role"`
+	Content string `json:"content"`
+}
+
+// ChatCompletionsResponse is the OpenAI-format response from POST /v1/chat/completions (subset we use).
+type ChatCompletionsResponse struct {
+	Choices []struct {
+		Message struct {
+			Role    string `json:"role"`
+			Content string `json:"content"`
+		} `json:"message"`
+	} `json:"choices"`
+}
+
+// ChatResponse is the parsed chat result for callers (content from choices[0].message.content).
 type ChatResponse struct {
-	Response string `json:"response"`
+	Response string
 }
 
-// Chat calls POST /v1/chat (requires auth). Uses the real orchestrator chat endpoint; server creates task and returns response when terminal.
+// Chat calls POST /v1/chat/completions (requires auth). Sends one user message; returns assistant content per openai_compatible_chat_api.md.
 func (c *Client) Chat(message string) (*ChatResponse, error) {
-	var out ChatResponse
-	if err := c.doPostJSON("/v1/chat", ChatRequest{Message: message}, http.StatusOK, &out); err != nil {
+	req := ChatCompletionsRequest{
+		Messages: []ChatMessage{{Role: "user", Content: message}},
+	}
+	var out ChatCompletionsResponse
+	if err := c.doPostJSON("/v1/chat/completions", req, http.StatusOK, &out); err != nil {
 		return nil, err
 	}
-	return &out, nil
+	content := ""
+	if len(out.Choices) > 0 {
+		content = out.Choices[0].Message.Content
+	}
+	return &ChatResponse{Response: content}, nil
 }
 
 // CreateTask calls POST /v1/tasks (requires auth).

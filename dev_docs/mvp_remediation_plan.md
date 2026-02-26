@@ -18,6 +18,7 @@
   - [4.2 Medium Priority (Payload, API, SBA Spec)](#42-medium-priority-payload-api-sba-spec)
   - [4.3 Lower Priority (Phase 2 and Beyond)](#43-lower-priority-phase-2-and-beyond)
   - [4.4 Ordering Suggestion](#44-ordering-suggestion)
+  - [4.5 Remediation Status (As of 2026-02-26)](#45-remediation-status-as-of-2026-02-26)
 - [5. References](#5-references)
 
 ## 1. Summary
@@ -250,7 +251,8 @@ Each item appears in one of the priority tiers below with full detail.
 7. **cynork** - Health() verify body contains "ok"; chat use POST /v1/chat/completions; update `cynork_cli.md` implemented list.
 8. **SBA in-progress and lifecycle** - Signalling; orchestrator can set job in_progress.
 9. **PMA langchaingo** - Refactor from direct Ollama HTTP to langchaingo; MCP tools; multiple tool calls.
-10. **SBA spec and BDD refactor** - Spec updates (inference, preferences, skills, steps); node manager BDD step use nodemanager.RunWithOptions.
+10. **SBA spec and BDD refactor** - Spec updates (inference, preferences, skills, steps); node manager BDD step use nodemanager.
+    RunWithOptions.
 11. **Schema: Sandbox image registry tables** - Confirm GORM/DDL for sandbox_images, sandbox_image_versions, node_sandbox_image_availability; add if missing.
 12. **Worker stdout/stderr 256 KiB** - Verification only: executor default and tests match spec.
 13. **REQ-CLIENT-0004 parity baseline** - Document current CLI capability set for future Web Console parity.
@@ -295,6 +297,62 @@ First: (1) response contract and (2) healthz so Worker API is spec-compliant and
 Then: (3) schema for LangGraph.
 Then: (4)-(10) admin endpoints, payload, gateway, cynork (+ doc), SBA in-progress, PMA langchaingo, SBA spec/BDD refactor.
 (11)-(16) schema sandbox registry verification, stdout/stderr verification, parity baseline doc, step executor, SBA timeout, Worker API cmd.
+
+### 4.5 Remediation Status (As of 2026-02-26)
+
+1. Worker API response contract
+   - status: **Done**
+   - notes: RunJobResponse has SbaResult, StepExecutorResult, Artifacts; orchestrator persists full JSON.
+    Node populates when SBA/step-executor runner used (contract ready).
+2. Healthz body `ok`
+   - status: **Done**
+   - notes: Worker API, User API Gateway, control-plane return 200 with body `ok`; cynork Health() verifies body contains "ok".
+3. Schema: LangGraph tables
+   - status: **Done**
+   - notes: WorkflowCheckpoint and TaskWorkflowLease GORM models added; included in RunSchema AutoMigrate.
+4. Local user accounts: Admin MVP
+   - status: **Done**
+   - notes: POST /users/{id}/revoke_sessions implemented (RequireAdminAuth, UserHandler.RevokeSessions).
+    Other admin endpoints deferred.
+5. Node payloads
+   - status: **Done**
+   - notes: sandbox_registries array (ConfigSandboxRegistryEntry); capability optional fields (container_runtime, gpu, network, inference, tls, platform.kernel_version, compute extensions).
+6. User API Gateway: Task create
+   - status: Deferred
+   - notes: Attachments and task name normalization/uniqueness documented as deferred; implement when gateway/PM require.
+7. cynork
+   - status: **Done**
+   - notes: Health() body check; chat uses POST /v1/chat/completions; cynork_cli.md updated.
+8. SBA in-progress and lifecycle
+   - status: Pending
+   - notes: Signalling; orchestrator job in_progress.
+9. PMA langchaingo
+   - status: Pending
+   - notes: Refactor from direct Ollama HTTP.
+10. SBA spec and BDD refactor
+    - status: **Done**
+    - notes: cynode_sba.md step flexibility paragraph added; sbajob ContextSpec.
+      Skills and Result.
+      Status doc comments; node manager BDD step refactored to nodemanager.
+      RunWithOptions (context.WithTimeout, StartOllama injectable for fail-fast scenario).
+11. Schema: Sandbox image registry
+    - status: **Done**
+    - notes: SandboxImage, SandboxImageVersion, NodeSandboxImageAvailability GORM models added; included in migrate AutoMigrate; models_test TableNames extended.
+12. Worker stdout/stderr 256 KiB
+    - status: **Done**
+    - notes: Verified: worker-api main uses getEnvInt("MAX_OUTPUT_BYTES", 262144) (256 KiB); executor and BDD align.
+13. REQ-CLIENT-0004 parity baseline
+    - status: **Done**
+    - notes: Parity baseline subsection added to cynork_cli.md; current CLI capability set documented for Web Console parity.
+14. CyNode-Sse (step executor)
+    - status: Pending
+    - notes: Phase 2.
+15. SBA timeout extension
+    - status: Pending
+    - notes: When long-running SBA in scope.
+16. Worker API cmd (production)
+    - status: Pending
+    - notes: Dedicated binary if needed.
 
 ---
 

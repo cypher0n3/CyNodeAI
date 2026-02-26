@@ -55,6 +55,7 @@ type ContextSpec struct {
 	Preferences        map[string]string `json:"preferences,omitempty"`
 	AdditionalContext  string            `json:"additional_context,omitempty"`
 	SkillIDs           []string          `json:"skill_ids,omitempty"`
+	// Skills holds inline skill content or references for the SBA; see CYNAI.SBAGNT.JobContext.
 	Skills             interface{}       `json:"skills,omitempty"`
 }
 
@@ -63,7 +64,8 @@ type ContextSpec struct {
 type Result struct {
 	ProtocolVersion string        `json:"protocol_version"`
 	JobID           string        `json:"job_id"`
-	Status          string        `json:"status"` // success, failure, timeout
+	// Status is one of: success, failure, timeout (see CYNAI.SBAGNT.ResultContract).
+	Status          string        `json:"status"`
 	Steps           []StepResult  `json:"steps"`
 	Artifacts       []ArtifactRef `json:"artifacts"`
 	FailureCode     *string       `json:"failure_code,omitempty"`

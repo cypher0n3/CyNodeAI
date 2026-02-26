@@ -214,25 +214,35 @@ func (s *cynorkState) mockGatewayMux() *http.ServeMux {
 		w.WriteHeader(http.StatusOK)
 		_ = json.NewEncoder(w).Encode(map[string]any{"task_id": id, "stdout": result, "stderr": ""})
 	})
-	mux.HandleFunc("POST /v1/chat", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("POST /v1/chat/completions", func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("Authorization") == "" {
 			w.WriteHeader(http.StatusUnauthorized)
 			return
 		}
 		var req struct {
-			Message string `json:"message"`
+			Messages []struct {
+				Role    string `json:"role"`
+				Content string `json:"content"`
+			} `json:"messages"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
-		resp := req.Message
-		if strings.HasPrefix(req.Message, "echo ") {
-			resp = strings.TrimSpace(strings.TrimPrefix(req.Message, "echo "))
+		resp := ""
+		if len(req.Messages) > 0 {
+			resp = req.Messages[len(req.Messages)-1].Content
+			if strings.HasPrefix(resp, "echo ") {
+				resp = strings.TrimSpace(strings.TrimPrefix(resp, "echo "))
+			}
 		}
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		_ = json.NewEncoder(w).Encode(map[string]any{"response": resp})
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"choices": []map[string]any{
+				{"message": map[string]any{"role": "assistant", "content": resp}, "finish_reason": "stop"},
+			},
+		})
 	})
 	// Stub endpoints for creds, prefs, settings, nodes, skills, audit
 	mux.HandleFunc("GET /v1/creds", func(w http.ResponseWriter, r *http.Request) {

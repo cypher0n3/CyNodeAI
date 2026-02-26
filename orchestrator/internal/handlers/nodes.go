@@ -299,8 +299,8 @@ func (h *NodeHandler) buildNodeConfigPayload(node *models.Node, configVersion, w
 				NodeReportURL:      baseURL + "/v1/nodes/capability",
 			},
 		},
-		SandboxRegistry: nodepayloads.ConfigSandboxRegistry{RegistryURL: ""},
-		ModelCache:      nodepayloads.ConfigModelCache{CacheURL: ""},
+		SandboxRegistries: nil, // empty: node uses default Docker Hub per worker_node_payloads.md
+		ModelCache:        nodepayloads.ConfigModelCache{CacheURL: ""},
 	}
 	if h.workerAPIBearerToken != "" {
 		payload.WorkerAPI = &nodepayloads.ConfigWorkerAPI{

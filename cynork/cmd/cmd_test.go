@@ -989,11 +989,15 @@ func TestRunSettingsGet(t *testing.T) {
 func TestRunChat_OneMessage(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		if r.URL.Path == "/v1/chat" && r.Method == http.MethodPost {
-			var req gateway.ChatRequest
-			if _ = json.NewDecoder(r.Body).Decode(&req); req.Message == "hello" {
+		if r.URL.Path == "/v1/chat/completions" && r.Method == http.MethodPost {
+			var req gateway.ChatCompletionsRequest
+			if _ = json.NewDecoder(r.Body).Decode(&req); len(req.Messages) > 0 && req.Messages[0].Content == "hello" {
 				w.WriteHeader(http.StatusOK)
-				_ = json.NewEncoder(w).Encode(gateway.ChatResponse{Response: "reply"})
+				_ = json.NewEncoder(w).Encode(map[string]any{
+					"choices": []map[string]any{
+						{"message": map[string]any{"role": "assistant", "content": "reply"}},
+					},
+				})
 				return
 			}
 		}

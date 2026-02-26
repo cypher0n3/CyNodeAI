@@ -369,3 +369,42 @@ type TaskWorkflowLease struct {
 }
 
 func (TaskWorkflowLease) TableName() string { return "task_workflow_leases" }
+
+// SandboxImage is a logical sandbox image (e.g. python-tools, node-build). Per postgres_schema.md Sandbox Image Registry.
+type SandboxImage struct {
+	ID          uuid.UUID `gorm:"type:uuid;primaryKey" json:"id"`
+	Name        string    `gorm:"column:name;uniqueIndex" json:"name"`
+	Description *string   `gorm:"column:description" json:"description,omitempty"`
+	CreatedAt   time.Time `gorm:"column:created_at" json:"created_at"`
+	UpdatedAt   time.Time `gorm:"column:updated_at" json:"updated_at"`
+	UpdatedBy   *string   `gorm:"column:updated_by" json:"updated_by,omitempty"`
+}
+
+func (SandboxImage) TableName() string { return "sandbox_images" }
+
+// SandboxImageVersion is a version/tag of a sandbox image with OCI reference. Per postgres_schema.md.
+type SandboxImageVersion struct {
+	ID             uuid.UUID `gorm:"type:uuid;primaryKey" json:"id"`
+	SandboxImageID uuid.UUID `gorm:"column:sandbox_image_id;uniqueIndex:uix_sandbox_image_version,priority:1;not null" json:"sandbox_image_id"`
+	Version        string    `gorm:"column:version;uniqueIndex:uix_sandbox_image_version,priority:2" json:"version"`
+	ImageRef       string    `gorm:"column:image_ref" json:"image_ref"`
+	ImageDigest    *string   `gorm:"column:image_digest" json:"image_digest,omitempty"`
+	Capabilities   *string   `gorm:"column:capabilities;type:jsonb" json:"capabilities,omitempty"`
+	IsAllowed      bool      `gorm:"column:is_allowed;index" json:"is_allowed"`
+	CreatedAt      time.Time `gorm:"column:created_at" json:"created_at"`
+	UpdatedAt      time.Time `gorm:"column:updated_at" json:"updated_at"`
+}
+
+func (SandboxImageVersion) TableName() string { return "sandbox_image_versions" }
+
+// NodeSandboxImageAvailability records whether a node has a sandbox image version available. Per postgres_schema.md.
+type NodeSandboxImageAvailability struct {
+	ID                   uuid.UUID  `gorm:"type:uuid;primaryKey" json:"id"`
+	NodeID               uuid.UUID  `gorm:"column:node_id;uniqueIndex:uix_node_sandbox_avail,priority:1;not null" json:"node_id"`
+	SandboxImageVersionID uuid.UUID  `gorm:"column:sandbox_image_version_id;uniqueIndex:uix_node_sandbox_avail,priority:2;not null" json:"sandbox_image_version_id"`
+	Status               string     `gorm:"column:status" json:"status"`
+	LastCheckedAt        time.Time  `gorm:"column:last_checked_at" json:"last_checked_at"`
+	Details              *string    `gorm:"column:details;type:jsonb" json:"details,omitempty"`
+}
+
+func (NodeSandboxImageAvailability) TableName() string { return "node_sandbox_image_availability" }

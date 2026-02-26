@@ -11,6 +11,7 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"log/slog"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -25,6 +26,7 @@ import (
 	"github.com/cypher0n3/cynodeai/go_shared_libs/contracts/sbajob"
 	"github.com/cypher0n3/cynodeai/go_shared_libs/contracts/workerapi"
 	"github.com/cypher0n3/cynodeai/worker_node/cmd/worker-api/executor"
+	"github.com/cypher0n3/cynodeai/worker_node/internal/nodemanager"
 )
 
 type ctxKey int
@@ -733,30 +735,27 @@ func RegisterNodeManagerConfigSteps(sc *godog.ScenarioContext, state *workerTest
 		if st == nil || st.mockOrch == nil {
 			return fmt.Errorf("mock orchestrator not started")
 		}
-		bin, err := ensureNodeManagerBinary()
-		if err != nil {
-			return err
+		cfg := &nodemanager.Config{
+			OrchestratorURL:          st.mockOrch.URL,
+			NodeSlug:                 "bdd-node",
+			NodeName:                 "BDD Node",
+			RegistrationPSK:          "psk",
+			CapabilityReportInterval: 50 * time.Millisecond,
+			HTTPTimeout:              5 * time.Second,
+		}
+		opts := &nodemanager.RunOptions{
+			StartOllama: func() error {
+				if st != nil && st.failInferenceStartup {
+					return errors.New("inference startup failed")
+				}
+				return nil
+			},
 		}
 		runCtx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 		defer cancel()
-		cmd := exec.CommandContext(runCtx, bin)
-		cmd.Env = append(os.Environ(),
-			"ORCHESTRATOR_URL="+st.mockOrch.URL,
-			"NODE_SLUG=bdd-node",
-			"NODE_NAME=BDD Node",
-			"NODE_REGISTRATION_PSK=psk",
-			"CAPABILITY_REPORT_INTERVAL=50ms",
-			"HTTP_TIMEOUT=5s",
-			"NODE_MANAGER_SKIP_SERVICES=1",
-		)
-		cmd.Stdout = io.Discard
-		cmd.Stderr = io.Discard
-		runErr := cmd.Run()
+		runErr := nodemanager.RunWithOptions(runCtx, slog.Default(), cfg, opts)
 		if runErr != nil {
-			if exitErr, ok := runErr.(*exec.ExitError); ok && exitErr.ExitCode() == 1 {
-				st.nodeManagerErr = runErr
-			}
-			// Context deadline or kill: process was stopped after doing register/config/ack; treat as success
+			st.nodeManagerErr = runErr
 		}
 		return nil
 	})

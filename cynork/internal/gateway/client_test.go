@@ -479,16 +479,26 @@ func TestClient_GetTaskLogs_NotFound(t *testing.T) {
 
 func TestClient_Chat_Success(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/v1/chat" || r.Method != http.MethodPost {
+		if r.URL.Path != "/v1/chat/completions" || r.Method != http.MethodPost {
 			w.WriteHeader(http.StatusNotFound)
 			return
 		}
-		var req ChatRequest
+		var req ChatCompletionsRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
-		jsonHandler(http.StatusOK, ChatResponse{Response: "echo: " + req.Message})(w, r)
+		content := ""
+		if len(req.Messages) > 0 {
+			content = "echo: " + req.Messages[0].Content
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"choices": []map[string]any{
+				{"message": map[string]any{"role": "assistant", "content": content}},
+			},
+		})
 	}))
 	defer server.Close()
 	client := NewClient(server.URL)

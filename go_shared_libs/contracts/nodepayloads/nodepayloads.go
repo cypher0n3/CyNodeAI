@@ -2,14 +2,19 @@
 package nodepayloads
 
 // CapabilityReport represents the capability report from a node.
-// See docs/tech_specs/worker_node_payloads.md for the normative schema.
+// See docs/tech_specs/worker_node_payloads.md node_capability_report_v1.
 type CapabilityReport struct {
-	Version    int             `json:"version"`
-	ReportedAt string          `json:"reported_at"`
-	Node       CapabilityNode  `json:"node"`
-	Platform   Platform        `json:"platform"`
-	Compute    Compute         `json:"compute"`
-	Sandbox    *SandboxSupport `json:"sandbox,omitempty"`
+	Version          int                  `json:"version"`
+	ReportedAt       string               `json:"reported_at"`
+	Node             CapabilityNode       `json:"node"`
+	Platform         Platform             `json:"platform"`
+	ContainerRuntime *ContainerRuntime    `json:"container_runtime,omitempty"`
+	Compute          Compute              `json:"compute"`
+	GPU              *GPUInfo             `json:"gpu,omitempty"`
+	Sandbox          *SandboxSupport      `json:"sandbox,omitempty"`
+	Network          *NetworkInfo         `json:"network,omitempty"`
+	Inference        *InferenceInfo       `json:"inference,omitempty"`
+	TLS              *TLSInfo             `json:"tls,omitempty"`
 }
 
 type CapabilityNode struct {
@@ -19,20 +24,57 @@ type CapabilityNode struct {
 }
 
 type Platform struct {
-	OS     string `json:"os"`
-	Distro string `json:"distro,omitempty"`
-	Arch   string `json:"arch"`
+	OS            string `json:"os"`
+	Distro        string `json:"distro,omitempty"`
+	Arch          string `json:"arch"`
+	KernelVersion string `json:"kernel_version,omitempty"`
+}
+
+type ContainerRuntime struct {
+	Runtime           string `json:"runtime"`
+	Version           string `json:"version,omitempty"`
+	RootlessSupported bool   `json:"rootless_supported,omitempty"`
+	RootlessEnabled   bool   `json:"rootless_enabled,omitempty"`
 }
 
 type Compute struct {
-	CPUCores int `json:"cpu_cores"`
-	RAMMB    int `json:"ram_mb"`
+	CPUModel      string `json:"cpu_model,omitempty"`
+	CPUCores      int    `json:"cpu_cores"`
+	RAMMB         int    `json:"ram_mb"`
+	StorageFreeMB int    `json:"storage_free_mb,omitempty"`
+}
+
+type GPUDevice struct {
+	Vendor   string                 `json:"vendor,omitempty"`
+	Model    string                 `json:"model,omitempty"`
+	DeviceID string                 `json:"device_id,omitempty"`
+	VRAMMB   int                    `json:"vram_mb,omitempty"`
+	Features map[string]interface{} `json:"features,omitempty"`
+}
+
+type GPUInfo struct {
+	Present bool         `json:"present"`
+	Devices []GPUDevice  `json:"devices,omitempty"`
 }
 
 type SandboxSupport struct {
 	Supported      bool     `json:"supported"`
 	Features       []string `json:"features,omitempty"`
 	MaxConcurrency int      `json:"max_concurrency,omitempty"`
+}
+
+type NetworkInfo struct {
+	OrchestratorReachable bool   `json:"orchestrator_reachable,omitempty"`
+	OutboundPolicy       string `json:"outbound_policy,omitempty"`
+}
+
+type InferenceInfo struct {
+	Supported bool   `json:"supported"`
+	Mode      string `json:"mode,omitempty"`
+}
+
+type TLSInfo struct {
+	TrustMaterialStatus string `json:"trust_material_status,omitempty"`
 }
 
 // RegistrationRequest represents the node registration request with PSK.
@@ -76,17 +118,17 @@ func SupportedBootstrapVersion(v int) bool {
 // NodeConfigurationPayload is the node configuration payload (node_configuration_payload_v1).
 // Spec CYNAI.WORKER.Payload.ConfigurationV1; see docs/tech_specs/worker_node_payloads.md.
 type NodeConfigurationPayload struct {
-	Version         int                   `json:"version"`
-	ConfigVersion   string                `json:"config_version"`
-	IssuedAt        string                `json:"issued_at"`
-	NodeSlug        string                `json:"node_slug"`
-	Orchestrator    ConfigOrchestrator    `json:"orchestrator"`
-	SandboxRegistry ConfigSandboxRegistry `json:"sandbox_registry"`
-	ModelCache      ConfigModelCache      `json:"model_cache"`
-	Policy          *ConfigPolicy         `json:"policy,omitempty"`
-	WorkerAPI       *ConfigWorkerAPI      `json:"worker_api,omitempty"`
-	Notes           string                `json:"notes,omitempty"`
-	Constraints     *ConfigConstraints    `json:"constraints,omitempty"`
+	Version          int                        `json:"version"`
+	ConfigVersion    string                     `json:"config_version"`
+	IssuedAt         string                     `json:"issued_at"`
+	NodeSlug         string                     `json:"node_slug"`
+	Orchestrator     ConfigOrchestrator         `json:"orchestrator"`
+	SandboxRegistries []ConfigSandboxRegistryEntry `json:"sandbox_registries,omitempty"`
+	ModelCache       ConfigModelCache           `json:"model_cache"`
+	Policy           *ConfigPolicy              `json:"policy,omitempty"`
+	WorkerAPI        *ConfigWorkerAPI           `json:"worker_api,omitempty"`
+	Notes            string                     `json:"notes,omitempty"`
+	Constraints      *ConfigConstraints         `json:"constraints,omitempty"`
 }
 
 // ConfigOrchestrator contains orchestrator base URL and endpoints for node config.
@@ -101,9 +143,11 @@ type ConfigEndpoints struct {
 	NodeReportURL      string `json:"node_report_url"`
 }
 
-// ConfigSandboxRegistry holds sandbox registry config (minimal for Phase 1).
-type ConfigSandboxRegistry struct {
-	RegistryURL string `json:"registry_url"`
+// ConfigSandboxRegistryEntry is one entry in the sandbox_registries array (rank-ordered).
+type ConfigSandboxRegistryEntry struct {
+	RegistryURL        string `json:"registry_url"`
+	PullToken          string `json:"pull_token,omitempty"`
+	PullTokenExpiresAt string `json:"pull_token_expires_at,omitempty"`
 }
 
 // ConfigModelCache holds model cache config (minimal for Phase 1).
