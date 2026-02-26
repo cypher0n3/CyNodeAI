@@ -429,12 +429,43 @@ run_ollama_inference_smoke() {
     return 0
 }
 
-# Function to run E2E demo test (user API :12080, control-plane :12082, worker :12090)
+# Build cynork-dev for E2E (uses just; binary at cynork/bin/cynork-dev).
+ensure_cynork_dev() {
+    log_info "Building cynork-dev for E2E..."
+    cd "$PROJECT_ROOT"
+    if ! command -v just &>/dev/null; then
+        log_error "just not found. Install just (https://github.com/casey/just) to build cynork-dev"
+        return 1
+    fi
+    if ! just build-cynork-dev; then
+        log_error "just build-cynork-dev failed"
+        return 1
+    fi
+    CYNORK_BIN="$PROJECT_ROOT/cynork/bin/cynork-dev"
+    if [ ! -x "$CYNORK_BIN" ]; then
+        log_error "cynork-dev binary not found at $CYNORK_BIN"
+        return 1
+    fi
+    log_info "cynork-dev ready: $CYNORK_BIN"
+    return 0
+}
+
+# Function to run E2E demo test (user API :12080, control-plane :12082, worker :12090).
+# Uses cynork-dev for auth, tasks, models list, one-shot chat, refresh, and logout; curl only for control-plane (node registration/capability).
 run_e2e_test() {
     log_info "Running E2E demo test..."
 
+    if ! ensure_cynork_dev; then
+        return 1
+    fi
+
     USER_API="http://localhost:$ORCHESTRATOR_PORT"
     CONTROL_PLANE_API="http://localhost:$CONTROL_PLANE_PORT"
+
+    E2E_CONFIG_DIR=$(mktemp -d)
+    E2E_CONFIG="$E2E_CONFIG_DIR/config.yaml"
+    trap 'rm -rf "$E2E_CONFIG_DIR"' RETURN
+    export CYNORK_GATEWAY_URL="$USER_API"
 
     # Wait for user-gateway to be reachable
     for i in {1..30}; do
@@ -451,93 +482,83 @@ run_e2e_test() {
         return 1
     fi
 
-    # Test 1: Login as admin (user-gateway)
-    log_info "Test 1: Login as admin..."
-    LOGIN_RESPONSE=$(curl -s -X POST "$USER_API/v1/auth/login" \
-        -H "Content-Type: application/json" \
-        -d "{\"handle\": \"admin\", \"password\": \"$ADMIN_PASSWORD\"}")
-
-    ACCESS_TOKEN=$(echo "$LOGIN_RESPONSE" | jq -r '.access_token')
-    if [ "$ACCESS_TOKEN" == "null" ] || [ -z "$ACCESS_TOKEN" ]; then
-        log_error "Login failed: $LOGIN_RESPONSE"
+    # Test 1: Login as admin (cynork-dev)
+    log_info "Test 1: Login as admin (cynork-dev)..."
+    if ! "$CYNORK_BIN" --config "$E2E_CONFIG" auth login -u admin -p "$ADMIN_PASSWORD"; then
+        log_error "cynork auth login failed"
         return 1
     fi
-    log_info "Login successful, got access token"
-
-    # Test 2: Get current user info
-    log_info "Test 2: Get current user info..."
-    USER_RESPONSE=$(curl -s -X GET "$USER_API/v1/users/me" \
-        -H "Authorization: Bearer $ACCESS_TOKEN")
-
-    USER_HANDLE=$(echo "$USER_RESPONSE" | jq -r '.handle')
-    if [ "$USER_HANDLE" != "admin" ]; then
-        log_error "Get user failed: $USER_RESPONSE"
+    ACCESS_TOKEN=$(sed -n 's/^token:[[:space:]]*\(.*\)$/\1/p' "$E2E_CONFIG" | tr -d '"')
+    if [ -z "$ACCESS_TOKEN" ]; then
+        log_error "Could not read token from E2E config"
         return 1
     fi
-    log_info "User info retrieved: $USER_HANDLE"
+    log_info "Login successful (token in config)"
 
-    # Test 3: Create a task (retry on 000/5xx - gateway may still be warming or busy)
-    log_info "Test 3: Create a task..."
+    # Test 2: Get current user info (cynork-dev)
+    log_info "Test 2: Get current user info (cynork-dev)..."
+    if ! USER_OUT=$("$CYNORK_BIN" --config "$E2E_CONFIG" auth whoami 2>&1); then
+        log_error "cynork auth whoami failed: $USER_OUT"
+        return 1
+    fi
+    if ! echo "$USER_OUT" | grep -q 'handle=admin'; then
+        log_error "Expected handle=admin, got: $USER_OUT"
+        return 1
+    fi
+    log_info "User info retrieved: admin"
+
+    # Test 3: Create a task (cynork-dev; retry on failure)
+    log_info "Test 3: Create a task (cynork-dev)..."
     TASK_ID=""
     for attempt in 1 2 3; do
         [ "$attempt" -gt 1 ] && { log_info "Retry $attempt/3..."; sleep 5; }
-        TASK_RESPONSE=$(curl -s -w "\n%{http_code}" --max-time 60 -X POST "$USER_API/v1/tasks" \
-            -H "Authorization: Bearer $ACCESS_TOKEN" \
-            -H "Content-Type: application/json" \
-            -d '{"prompt": "echo Hello from sandbox"}')
-        TASK_HTTP_CODE=$(echo "$TASK_RESPONSE" | tail -n 1)
-        TASK_BODY=$(echo "$TASK_RESPONSE" | sed '$d')
-        TASK_ID=$(echo "$TASK_BODY" | jq -r '.task_id // .id // empty')
+        TASK_OUT=$("$CYNORK_BIN" --config "$E2E_CONFIG" tasks create -p "echo Hello from sandbox" -o json 2>&1) || true
+        TASK_ID=$(echo "$TASK_OUT" | jq -r '.task_id // empty')
         if [ -n "$TASK_ID" ]; then
             break
         fi
-        if [ "$TASK_HTTP_CODE" = "000" ]; then
-            log_warn "Create task attempt $attempt: connection failed or timeout (HTTP 000)"
-        else
-            log_warn "Create task attempt $attempt failed (HTTP $TASK_HTTP_CODE): $TASK_BODY"
-        fi
+        log_warn "Create task attempt $attempt failed: $TASK_OUT"
     done
     if [ -z "$TASK_ID" ]; then
-        log_error "Create task failed after 3 attempts (last HTTP $TASK_HTTP_CODE): $TASK_BODY"
+        log_error "Create task failed after 3 attempts"
         return 1
     fi
     log_info "Task created with ID: $TASK_ID"
 
-    # Test 4: Get task details
-    log_info "Test 4: Get task details..."
-    TASK_DETAILS=$(curl -s -X GET "$USER_API/v1/tasks/$TASK_ID" \
-        -H "Authorization: Bearer $ACCESS_TOKEN")
-
-    TASK_STATUS=$(echo "$TASK_DETAILS" | jq -r '.status')
+    # Test 4: Get task details (cynork-dev)
+    log_info "Test 4: Get task details (cynork-dev)..."
+    TASK_DETAILS=$("$CYNORK_BIN" --config "$E2E_CONFIG" tasks get "$TASK_ID" -o json 2>&1) || true
+    TASK_STATUS=$(echo "$TASK_DETAILS" | jq -r '.status // empty')
+    if [ -z "$TASK_STATUS" ]; then
+        log_error "Get task failed: $TASK_DETAILS"
+        return 1
+    fi
     log_info "Task status: $TASK_STATUS"
 
-    # Test 5: Get task result
-    log_info "Test 5: Get task result..."
-    RESULT_RESPONSE=$(curl -s -X GET "$USER_API/v1/tasks/$TASK_ID/result" \
-        -H "Authorization: Bearer $ACCESS_TOKEN")
-
+    # Test 5: Get task result (cynork-dev)
+    log_info "Test 5: Get task result (cynork-dev)..."
+    RESULT_RESPONSE=$("$CYNORK_BIN" --config "$E2E_CONFIG" tasks result "$TASK_ID" -o json 2>&1) || true
+    if ! echo "$RESULT_RESPONSE" | jq -e '.status' &>/dev/null; then
+        log_error "Get task result failed: $RESULT_RESPONSE"
+        return 1
+    fi
     log_info "Task result: $RESULT_RESPONSE"
 
-    # Test 5b: Inference-in-sandbox task (only when node is inference-ready)
+    # Test 5b: Inference-in-sandbox task (cynork-dev; only when node is inference-ready)
     if [ -n "${INFERENCE_PROXY_IMAGE:-}" ]; then
-        log_info "Test 5b: Create task with use_inference and verify sandbox sees OLLAMA_BASE_URL..."
-        # Shell: pass literal $OLLAMA_BASE_URL in prompt so sandbox expands it
-        INF_TASK_RESPONSE=$(curl -s -X POST "$USER_API/v1/tasks" \
-            -H "Authorization: Bearer $ACCESS_TOKEN" \
-            -H "Content-Type: application/json" \
-            -d "{\"prompt\": \"sh -c 'echo \$OLLAMA_BASE_URL'\", \"use_inference\": true, \"input_mode\": \"commands\"}")
-        INF_TASK_ID=$(echo "$INF_TASK_RESPONSE" | jq -r '.task_id // .id // empty')
+        log_info "Test 5b: Create task with use_inference (cynork-dev) and verify sandbox sees OLLAMA_BASE_URL..."
+        INF_TASK_OUT=$("$CYNORK_BIN" --config "$E2E_CONFIG" tasks create -p "sh -c 'echo \$OLLAMA_BASE_URL'" --use-inference --input-mode commands -o json 2>&1) || true
+        INF_TASK_ID=$(echo "$INF_TASK_OUT" | jq -r '.task_id // empty')
         if [ -z "$INF_TASK_ID" ]; then
-            log_error "Create inference task failed: $INF_TASK_RESPONSE"
+            log_error "Create inference task failed: $INF_TASK_OUT"
             return 1
         fi
         log_info "Inference task created: $INF_TASK_ID; polling for result (up to 90s)..."
         INF_STATUS=""
         for _ in $(seq 1 18); do
             sleep 5
-            INF_RESULT=$(curl -s -X GET "$USER_API/v1/tasks/$INF_TASK_ID/result" \
-                -H "Authorization: Bearer $ACCESS_TOKEN")
-            INF_STATUS=$(echo "$INF_RESULT" | jq -r '.status')
+            INF_RESULT=$("$CYNORK_BIN" --config "$E2E_CONFIG" tasks result "$INF_TASK_ID" -o json 2>&1) || true
+            INF_STATUS=$(echo "$INF_RESULT" | jq -r '.status // empty')
             if [ "$INF_STATUS" = "completed" ] || [ "$INF_STATUS" = "failed" ]; then
                 break
             fi
@@ -546,8 +567,8 @@ run_e2e_test() {
             log_error "Inference task did not complete: status=$INF_STATUS result=$INF_RESULT"
             return 1
         fi
-        # job result is stored as full RunJobResponse JSON; extract stdout
-        INF_STDOUT=$(echo "$INF_RESULT" | jq -r '.jobs[0].result // empty' | jq -r '.stdout // empty')
+        # cynork result -o json has .stdout = RunJobResponse JSON string; extract inner .stdout
+        INF_STDOUT=$(echo "$INF_RESULT" | jq -r '.stdout // empty' | jq -r '.stdout // empty')
         if [ -z "$INF_STDOUT" ] || ! echo "$INF_STDOUT" | grep -q "http://localhost:11434"; then
             log_error "Inference task stdout missing expected OLLAMA_BASE_URL: $INF_STDOUT"
             return 1
@@ -557,24 +578,20 @@ run_e2e_test() {
         log_info "Skipping inference-in-sandbox test (INFERENCE_PROXY_IMAGE not set)"
     fi
 
-    # Test 5c: Prompt-mode task (natural-language prompt -> model output; orchestrator or sandbox path)
-    log_info "Test 5c: Create task with natural-language prompt and verify model output..."
-    PROMPT_TASK_RESPONSE=$(curl -s -X POST "$USER_API/v1/tasks" \
-        -H "Authorization: Bearer $ACCESS_TOKEN" \
-        -H "Content-Type: application/json" \
-        -d '{"prompt": "What model are you? Reply in one short sentence."}')
-    PROMPT_TASK_ID=$(echo "$PROMPT_TASK_RESPONSE" | jq -r '.task_id // .id // empty')
+    # Test 5c: Prompt-mode task (cynork-dev; natural-language prompt -> model output)
+    log_info "Test 5c: Create task with natural-language prompt (cynork-dev) and verify model output..."
+    PROMPT_TASK_OUT=$("$CYNORK_BIN" --config "$E2E_CONFIG" tasks create -p "What model are you? Reply in one short sentence." -o json 2>&1) || true
+    PROMPT_TASK_ID=$(echo "$PROMPT_TASK_OUT" | jq -r '.task_id // empty')
     if [ -z "$PROMPT_TASK_ID" ]; then
-        log_error "Create prompt task failed: $PROMPT_TASK_RESPONSE"
+        log_error "Create prompt task failed: $PROMPT_TASK_OUT"
         return 1
     fi
     log_info "Prompt task created: $PROMPT_TASK_ID; polling for result (up to 90s)..."
     PROMPT_STATUS=""
     for _ in $(seq 1 18); do
         sleep 5
-        PROMPT_RESULT=$(curl -s -X GET "$USER_API/v1/tasks/$PROMPT_TASK_ID/result" \
-            -H "Authorization: Bearer $ACCESS_TOKEN")
-        PROMPT_STATUS=$(echo "$PROMPT_RESULT" | jq -r '.status')
+        PROMPT_RESULT=$("$CYNORK_BIN" --config "$E2E_CONFIG" tasks result "$PROMPT_TASK_ID" -o json 2>&1) || true
+        PROMPT_STATUS=$(echo "$PROMPT_RESULT" | jq -r '.status // empty')
         if [ "$PROMPT_STATUS" = "completed" ] || [ "$PROMPT_STATUS" = "failed" ]; then
             break
         fi
@@ -583,52 +600,37 @@ run_e2e_test() {
         log_error "Prompt task did not complete: status=$PROMPT_STATUS result=$PROMPT_RESULT"
         return 1
     fi
-    # .jobs[0].result is the RunJobResponse JSON string; extract .stdout
-    PROMPT_STDOUT=$(echo "$PROMPT_RESULT" | jq -r '.jobs[0].result // empty' | jq -r '.stdout // empty')
+    PROMPT_STDOUT=$(echo "$PROMPT_RESULT" | jq -r '.stdout // empty' | jq -r '.stdout // empty')
     if [ -z "$PROMPT_STDOUT" ] || [ "$PROMPT_STDOUT" = "(no response)" ]; then
         log_error "Prompt task stdout missing or empty: got '$PROMPT_STDOUT'"
         return 1
     fi
-    # Reject pure whitespace
     if [ "$(echo "$PROMPT_STDOUT" | tr -d '\n\r\t ')" = "" ]; then
         log_error "Prompt task stdout is whitespace only: '$PROMPT_STDOUT'"
         return 1
     fi
     log_info "Prompt test passed: model output (first 120 chars)= ${PROMPT_STDOUT:0:120}"
 
-    # Test 5d: OpenAI-compatible chat (GET /v1/models, POST /v1/chat/completions)
-    log_info "Test 5d: GET /v1/models..."
-    MODELS_RESPONSE=$(curl -s -w "\n%{http_code}" -X GET "$USER_API/v1/models" \
-        -H "Authorization: Bearer $ACCESS_TOKEN")
-    MODELS_HTTP=$(echo "$MODELS_RESPONSE" | tail -n 1)
-    MODELS_BODY=$(echo "$MODELS_RESPONSE" | sed '$d')
-    if [ "$MODELS_HTTP" != "200" ]; then
-        log_error "GET /v1/models failed (HTTP $MODELS_HTTP): $MODELS_BODY"
-        return 1
-    fi
-    if ! echo "$MODELS_BODY" | jq -e '.object == "list" and (.data | length) >= 1' >/dev/null 2>&1; then
-        log_error "GET /v1/models invalid list-models payload: $MODELS_BODY"
+    # Test 5d: Models list and one-shot chat (cynork-dev)
+    log_info "Test 5d: Models list (cynork-dev)..."
+    MODELS_OUT=$("$CYNORK_BIN" --config "$E2E_CONFIG" models list -o json 2>&1) || true
+    if ! echo "$MODELS_OUT" | jq -e '.object == "list" and (.data | length) >= 1' >/dev/null 2>&1; then
+        log_error "cynork models list failed or invalid payload: $MODELS_OUT"
         return 1
     fi
     log_info "List-models OK"
 
-    log_info "Test 5d: POST /v1/chat/completions..."
-    CHAT_RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "$USER_API/v1/chat/completions" \
-        -H "Authorization: Bearer $ACCESS_TOKEN" \
-        -H "Content-Type: application/json" \
-        -d '{"model":"cynodeai.pm","messages":[{"role":"user","content":"Reply with exactly: OK"}]}')
-    CHAT_HTTP=$(echo "$CHAT_RESPONSE" | tail -n 1)
-    CHAT_BODY=$(echo "$CHAT_RESPONSE" | sed '$d')
-    if [ "$CHAT_HTTP" != "200" ]; then
-        log_error "POST /v1/chat/completions failed (HTTP $CHAT_HTTP): $CHAT_BODY"
+    log_info "Test 5d: One-shot chat (cynork-dev)..."
+    CHAT_OUT=$("$CYNORK_BIN" --config "$E2E_CONFIG" chat --message "Reply with exactly: OK" --plain 2>&1) || true
+    if [ -z "$CHAT_OUT" ] || [ "$(echo "$CHAT_OUT" | tr -d '\n\r\t ')" = "" ]; then
+        log_error "cynork chat --message produced empty output: $CHAT_OUT"
         return 1
     fi
-    CHAT_CONTENT=$(echo "$CHAT_BODY" | jq -r '.choices[0].message.content // empty')
-    if [ -z "$CHAT_CONTENT" ] || [ "$(echo "$CHAT_CONTENT" | tr -d '\n\r\t ')" = "" ]; then
-        log_error "POST /v1/chat/completions missing choices[0].message.content: $CHAT_BODY"
+    if ! echo "$CHAT_OUT" | grep -q "OK"; then
+        log_error "cynork chat response missing expected OK: $CHAT_OUT"
         return 1
     fi
-    log_info "OpenAI chat OK: completion (first 80 chars)= ${CHAT_CONTENT:0:80}"
+    log_info "OpenAI chat OK: completion (first 80 chars)= ${CHAT_OUT:0:80}"
 
     # Test 6: Node registration (control-plane)
     log_info "Test 6: Node registration..."
@@ -669,32 +671,24 @@ run_e2e_test() {
     # Capability report returns 204 No Content on success
     log_info "Capability report submitted"
 
-    # Test 8: Refresh token
-    log_info "Test 8: Token refresh..."
-    REFRESH_TOKEN=$(echo "$LOGIN_RESPONSE" | jq -r '.refresh_token')
-    REFRESH_RESPONSE=$(curl -s -X POST "$USER_API/v1/auth/refresh" \
-        -H "Content-Type: application/json" \
-        -d "{\"refresh_token\": \"$REFRESH_TOKEN\"}")
-
-    NEW_ACCESS_TOKEN=$(echo "$REFRESH_RESPONSE" | jq -r '.access_token')
-    if [ "$NEW_ACCESS_TOKEN" == "null" ] || [ -z "$NEW_ACCESS_TOKEN" ]; then
-        log_error "Token refresh failed: $REFRESH_RESPONSE"
+    # Test 8: Token refresh (cynork-dev)
+    log_info "Test 8: Token refresh (cynork-dev)..."
+    if ! "$CYNORK_BIN" --config "$E2E_CONFIG" auth refresh 2>&1; then
+        log_error "cynork auth refresh failed"
+        return 1
+    fi
+    if ! "$CYNORK_BIN" --config "$E2E_CONFIG" auth whoami 2>&1 | grep -q 'handle=admin'; then
+        log_error "After refresh, whoami did not return handle=admin"
         return 1
     fi
     log_info "Token refreshed successfully"
 
-    # Test 9: Logout
-    log_info "Test 9: Logout..."
-    LOGOUT_RESPONSE=$(curl -s -w "\n%{http_code}" -X POST "$USER_API/v1/auth/logout" \
-        -H "Authorization: Bearer $NEW_ACCESS_TOKEN" \
-        -H "Content-Type: application/json" \
-        -d "{\"refresh_token\": \"$(echo "$REFRESH_RESPONSE" | jq -r '.refresh_token')\"}")
-
-    HTTP_CODE=$(echo "$LOGOUT_RESPONSE" | tail -n 1)
-    if [ "$HTTP_CODE" == "204" ]; then
-        log_info "Logout successful"
+    # Test 9: Logout (cynork-dev)
+    log_info "Test 9: Logout (cynork-dev)..."
+    if ! "$CYNORK_BIN" --config "$E2E_CONFIG" auth logout 2>&1; then
+        log_warn "cynork auth logout returned non-zero"
     else
-        log_warn "Logout returned unexpected code: $HTTP_CODE"
+        log_info "Logout successful"
     fi
 
     log_info "All E2E tests passed!"
@@ -715,7 +709,7 @@ show_usage() {
     echo "  build           Build orchestrator-api and node binaries"
     echo "  start           Start all services (db, orchestrator-api)"
     echo "  stop            Stop all services"
-    echo "  test-e2e        Run E2E demo test"
+    echo "  test-e2e        Run E2E demo test (builds cynork-dev at start, uses it for auth/tasks/logout)"
     echo "  full-demo       Full demo: start all services and run E2E test"
     echo ""
     echo "Environment Variables:"

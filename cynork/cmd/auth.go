@@ -41,9 +41,16 @@ var authWhoamiCmd = &cobra.Command{
 	RunE:  runAuthWhoami,
 }
 
+var authRefreshCmd = &cobra.Command{
+	Use:   "refresh",
+	Short: "Refresh access token using stored refresh token",
+	Long:  "Calls POST /v1/auth/refresh with the refresh token saved at login and updates the stored access token.",
+	RunE:  runAuthRefresh,
+}
+
 func init() {
 	rootCmd.AddCommand(authCmd)
-	authCmd.AddCommand(authLoginCmd, authLogoutCmd, authWhoamiCmd)
+	authCmd.AddCommand(authLoginCmd, authLogoutCmd, authWhoamiCmd, authRefreshCmd)
 	authLoginCmd.Flags().StringVarP(&authLoginHandle, "username", "u", "", "username (handle)")
 	authLoginCmd.Flags().StringVarP(&authLoginPassword, "password", "p", "", "password")
 }
@@ -72,6 +79,7 @@ func runAuthLogin(_ *cobra.Command, _ []string) error {
 		return exitFromGatewayErr(err)
 	}
 	cfg.Token = resp.AccessToken
+	cfg.RefreshToken = resp.RefreshToken
 	path := configPath
 	if path == "" {
 		var err error
@@ -99,6 +107,7 @@ func readPassword(prompt string) (string, error) {
 
 func runAuthLogout(_ *cobra.Command, _ []string) error {
 	cfg.Token = ""
+	cfg.RefreshToken = ""
 	path := configPath
 	if path == "" {
 		var err error
@@ -125,5 +134,31 @@ func runAuthWhoami(_ *cobra.Command, _ []string) error {
 		return exitFromGatewayErr(err)
 	}
 	fmt.Printf("id=%s handle=%s\n", user.ID, user.Handle)
+	return nil
+}
+
+func runAuthRefresh(_ *cobra.Command, _ []string) error {
+	if cfg.RefreshToken == "" {
+		return exit.Auth(fmt.Errorf("no refresh token: run 'cynork auth login' first"))
+	}
+	client := gateway.NewClient(cfg.GatewayURL)
+	resp, err := client.Refresh(cfg.RefreshToken)
+	if err != nil {
+		return exitFromGatewayErr(err)
+	}
+	cfg.Token = resp.AccessToken
+	cfg.RefreshToken = resp.RefreshToken
+	path := configPath
+	if path == "" {
+		var err error
+		path, err = getDefaultConfigPath()
+		if err != nil {
+			return fmt.Errorf("config path: %w", err)
+		}
+	}
+	if err := config.Save(path, cfg); err != nil {
+		return fmt.Errorf("save token: %w", err)
+	}
+	fmt.Println("Token refreshed successfully.")
 	return nil
 }

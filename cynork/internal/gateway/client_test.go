@@ -512,13 +512,142 @@ func TestClient_Chat_Success(t *testing.T) {
 	}
 }
 
-func TestClient_Chat_Unauthorized(t *testing.T) {
-	server := httptest.NewServer(jsonHandler(http.StatusUnauthorized, ProblemDetails{Detail: "expired", Status: 401}))
+func TestClient_Refresh_Success(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/auth/refresh" || r.Method != http.MethodPost {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		var req RefreshRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.RefreshToken == "" {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode(LoginResponse{
+			AccessToken:  "new-access",
+			RefreshToken: "new-refresh",
+			TokenType:    "Bearer",
+			ExpiresIn:    900,
+		})
+	}))
 	defer server.Close()
 	client := NewClient(server.URL)
-	_, err := client.Chat("hi")
+	resp, err := client.Refresh("old-refresh-token")
+	if err != nil {
+		t.Fatalf("Refresh: %v", err)
+	}
+	if resp.AccessToken != "new-access" || resp.RefreshToken != "new-refresh" {
+		t.Errorf("resp = %+v", resp)
+	}
+}
+
+func TestClient_ListModels_Success(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/models" || r.Method != http.MethodGet {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode(ListModelsResponse{
+			Object: "list",
+			Data:   []ListModelEntry{{ID: "cynodeai.pm", Object: "model", Created: 0}},
+		})
+	}))
+	defer server.Close()
+	client := NewClient(server.URL)
+	client.SetToken("tok")
+	resp, err := client.ListModels()
+	if err != nil {
+		t.Fatalf("ListModels: %v", err)
+	}
+	if resp.Object != "list" || len(resp.Data) != 1 || resp.Data[0].ID != "cynodeai.pm" {
+		t.Errorf("resp = %+v", resp)
+	}
+}
+
+func TestClient_UnauthorizedOrBadStatus(t *testing.T) {
+	unauth := jsonHandler(http.StatusUnauthorized, ProblemDetails{Detail: "expired", Status: 401})
+	tests := []struct {
+		name string
+		run  func(*Client) error
+	}{
+		{"Chat", func(c *Client) error { _, err := c.Chat("hi"); return err }},
+		{"Refresh", func(c *Client) error { _, err := c.Refresh("refresh-tok"); return err }},
+		{"ListModels", func(c *Client) error {
+			c.SetToken("tok")
+			_, err := c.ListModels()
+			return err
+		}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			server := httptest.NewServer(unauth)
+			defer server.Close()
+			client := NewClient(server.URL)
+			if err := tt.run(client); err == nil {
+				t.Fatal("expected error")
+			}
+		})
+	}
+}
+
+func TestClient_InvalidJSONResponse(t *testing.T) {
+	tests := []struct {
+		name string
+		body []byte
+		run  func(*Client) error
+	}{
+		{"Refresh", []byte("not json"), func(c *Client) error { _, err := c.Refresh("tok"); return err }},
+		{"ListModels", []byte("[]"), func(c *Client) error {
+			c.SetToken("tok")
+			_, err := c.ListModels()
+			return err
+		}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusOK)
+				_, _ = w.Write(tt.body)
+			}))
+			defer server.Close()
+			client := NewClient(server.URL)
+			if err := tt.run(client); err == nil {
+				t.Fatal("expected decode error")
+			}
+		})
+	}
+}
+
+func TestClient_Refresh_ReturnsCreated(t *testing.T) {
+	// Refresh expects 200; server returns 201 so doPostJSONNoAuth returns parseError
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+		_ = json.NewEncoder(w).Encode(LoginResponse{AccessToken: "a", RefreshToken: "r"})
+	}))
+	defer server.Close()
+	client := NewClient(server.URL)
+	_, err := client.Refresh("tok")
 	if err == nil {
-		t.Fatal("expected error")
+		t.Fatal("expected error when status is 201")
+	}
+}
+
+func TestHTTPError_Error(t *testing.T) {
+	// Err nil branch
+	e := &HTTPError{Status: 503}
+	if got := e.Error(); got != "HTTP 503" {
+		t.Errorf("Error() = %q, want HTTP 503", got)
+	}
+	// Err non-nil branch (from parseError)
+	e.Err = errors.New("detail")
+	if got := e.Error(); got != "detail" {
+		t.Errorf("Error() = %q, want detail", got)
 	}
 }
 

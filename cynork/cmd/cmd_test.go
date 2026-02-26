@@ -113,6 +113,114 @@ func TestRunAuthWhoami_OK(t *testing.T) {
 	}
 }
 
+func TestRunAuthRefresh_NoRefreshToken(t *testing.T) {
+	cfg = &config.Config{GatewayURL: "http://localhost"}
+	defer func() { cfg = nil }()
+	if err := runAuthRefresh(nil, nil); err == nil {
+		t.Fatal("expected error when no refresh token")
+	}
+}
+
+func TestRunAuthRefresh_OK(t *testing.T) {
+	server := mockJSONServer(t, http.StatusOK, gateway.LoginResponse{
+		AccessToken:  "new-access",
+		RefreshToken: "new-refresh",
+		TokenType:    "Bearer",
+		ExpiresIn:    900,
+	})
+	defer server.Close()
+	path := writeTempConfig(t, "gateway_url: "+server.URL+"\ntoken: old\nrefresh_token: old-refresh\n")
+	configPath = path
+	cfg = &config.Config{GatewayURL: server.URL, Token: "old", RefreshToken: "old-refresh"}
+	defer func() { configPath = ""; cfg = nil }()
+	if err := runAuthRefresh(nil, nil); err != nil {
+		t.Errorf("runAuthRefresh: %v", err)
+	}
+	if cfg.Token != "new-access" || cfg.RefreshToken != "new-refresh" {
+		t.Errorf("cfg not updated: token=%q refresh_token=%q", cfg.Token, cfg.RefreshToken)
+	}
+}
+
+func TestRunAuthRefresh_DefaultConfigPath(t *testing.T) {
+	server := mockJSONServer(t, http.StatusOK, gateway.LoginResponse{
+		AccessToken:  "new-a",
+		RefreshToken: "new-r",
+		TokenType:    "Bearer",
+		ExpiresIn:    900,
+	})
+	defer server.Close()
+	configPath = ""
+	cfg = &config.Config{GatewayURL: server.URL, Token: "old", RefreshToken: "old-r"}
+	oldGetDefault := getDefaultConfigPath
+	getDefaultConfigPath = func() (string, error) { return writeTempConfig(t, "gateway_url: http://x\n"), nil }
+	defer func() { configPath = ""; cfg = nil; getDefaultConfigPath = oldGetDefault }()
+	if err := runAuthRefresh(nil, nil); err != nil {
+		t.Errorf("runAuthRefresh: %v", err)
+	}
+}
+
+func TestRunModelsList_NoToken(t *testing.T) {
+	cfg = &config.Config{}
+	defer func() { cfg = nil }()
+	if err := runModelsList(nil, nil); err == nil {
+		t.Fatal("expected error when no token")
+	}
+}
+
+func TestRunModelsList_OK(t *testing.T) {
+	server := mockJSONServer(t, http.StatusOK, gateway.ListModelsResponse{
+		Object: "list",
+		Data:   []gateway.ListModelEntry{{ID: "cynodeai.pm", Object: "model", Created: 0}},
+	})
+	defer server.Close()
+	cfg = &config.Config{GatewayURL: server.URL, Token: "tok"}
+	defer func() { cfg = nil }()
+	if err := runModelsList(nil, nil); err != nil {
+		t.Errorf("runModelsList: %v", err)
+	}
+}
+
+func TestRunModelsList_JSONOutput(t *testing.T) {
+	server := mockJSONServer(t, http.StatusOK, gateway.ListModelsResponse{
+		Object: "list",
+		Data:   []gateway.ListModelEntry{{ID: "m1", Object: "model", Created: 0}},
+	})
+	defer server.Close()
+	cfg = &config.Config{GatewayURL: server.URL, Token: "tok"}
+	outputFmt = outputFormatJSON
+	defer func() { cfg = nil; outputFmt = "" }()
+	if err := runModelsList(nil, nil); err != nil {
+		t.Errorf("runModelsList: %v", err)
+	}
+}
+
+func TestRunChat_WithMessageFlag(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.URL.Path == "/v1/chat/completions" && r.Method == http.MethodPost {
+			var req gateway.ChatCompletionsRequest
+			if _ = json.NewDecoder(r.Body).Decode(&req); len(req.Messages) > 0 {
+				w.WriteHeader(http.StatusOK)
+				_ = json.NewEncoder(w).Encode(map[string]any{
+					"choices": []map[string]any{
+						{"message": map[string]any{"role": "assistant", "content": "one-shot reply"}},
+					},
+				})
+				return
+			}
+		}
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+	cfg = &config.Config{GatewayURL: server.URL, Token: "tok"}
+	chatMessage = "hello"
+	chatPlain = true
+	defer func() { cfg = nil; chatMessage = ""; chatPlain = false }()
+	if err := runChat(nil, nil); err != nil {
+		t.Errorf("runChat(--message): %v", err)
+	}
+}
+
 func TestRunAuthWhoami_GatewayError(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)

@@ -55,6 +55,21 @@ func (c *Client) Login(req LoginRequest) (*LoginResponse, error) {
 	return &out, nil
 }
 
+// RefreshRequest is the body for POST /v1/auth/refresh.
+type RefreshRequest struct {
+	RefreshToken string `json:"refresh_token"`
+}
+
+// Refresh calls POST /v1/auth/refresh and returns new tokens (no auth header required).
+func (c *Client) Refresh(refreshToken string) (*LoginResponse, error) {
+	req := RefreshRequest{RefreshToken: refreshToken}
+	var out LoginResponse
+	if err := c.doPostJSONNoAuth("/v1/auth/refresh", req, http.StatusOK, &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
 // UserResponse is the body returned by GET /v1/users/me.
 type UserResponse struct {
 	ID       string  `json:"id"`
@@ -294,6 +309,28 @@ type ChatResponse struct {
 	Response string
 }
 
+// ListModelsResponse is the OpenAI-format response from GET /v1/models.
+type ListModelsResponse struct {
+	Object string          `json:"object"`
+	Data   []ListModelEntry `json:"data"`
+}
+
+// ListModelEntry is one model in the list.
+type ListModelEntry struct {
+	ID      string `json:"id"`
+	Object  string `json:"object"`
+	Created int64  `json:"created"`
+}
+
+// ListModels calls GET /v1/models (requires auth).
+func (c *Client) ListModels() (*ListModelsResponse, error) {
+	var out ListModelsResponse
+	if err := c.doGetJSON("/v1/models", &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
 // Chat calls POST /v1/chat/completions (requires auth). Sends one user message; returns assistant content per openai_compatible_chat_api.md.
 func (c *Client) Chat(message string) (*ChatResponse, error) {
 	req := ChatCompletionsRequest{
@@ -422,6 +459,55 @@ func (c *Client) doPostJSON(path string, reqBody any, wantStatus int, out any) e
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != wantStatus {
+		return c.parseError(resp)
+	}
+	if err := json.NewDecoder(resp.Body).Decode(out); err != nil {
+		return fmt.Errorf("decode response: %w", err)
+	}
+	return nil
+}
+
+// doPostJSONNoAuth posts JSON without Authorization header (e.g. refresh).
+func (c *Client) doPostJSONNoAuth(path string, reqBody any, wantStatus int, out any) error {
+	body, err := json.Marshal(reqBody)
+	if err != nil {
+		return fmt.Errorf("marshal request: %w", err)
+	}
+	base, err := url.Parse(c.BaseURL)
+	if err != nil {
+		return fmt.Errorf("invalid base URL: %w", err)
+	}
+	u, err := base.Parse(path)
+	if err != nil {
+		return fmt.Errorf("invalid path: %w", err)
+	}
+	req, err := http.NewRequest(http.MethodPost, u.String(), bytes.NewReader(body))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := c.HTTPClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != wantStatus {
+		return c.parseError(resp)
+	}
+	if err := json.NewDecoder(resp.Body).Decode(out); err != nil {
+		return fmt.Errorf("decode response: %w", err)
+	}
+	return nil
+}
+
+// doGetJSON performs authenticated GET and decodes JSON into out.
+func (c *Client) doGetJSON(path string, out any) error {
+	resp, err := c.doRequest(http.MethodGet, path, nil, nil)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
 		return c.parseError(resp)
 	}
 	if err := json.NewDecoder(resp.Body).Decode(out); err != nil {

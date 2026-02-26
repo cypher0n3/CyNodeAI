@@ -26,17 +26,35 @@ ci: lint-sh lint-go lint-go-ci vulncheck-go lint-python lint-md validate-doc-lin
     @:
 
 # Local docs check: lint Markdown, validate doc links, validate feature files.
-docs-check: fix-cynode lint-md validate-doc-links validate-feature-files
-    @:
+# With no arguments runs all checks on the repo. Pass paths to run checks only on those files (e.g. just docs-check docs/foo.md).
+docs-check *PATHS:
+    @just fix-cynode {{ PATHS }}
+    @just lint-md {{ PATHS }}
+    @just validate-doc-links
+    @just validate-feature-files
 
-# Fix all instances of "Cynode" to "CyNode" in all Markdown files.
-fix-cynode:
+# Fix all instances of "Cynode" to "CyNode" in Markdown files. With no arguments fixes all .md; pass paths to fix only those.
+fix-cynode *PATHS:
     #!/usr/bin/env bash
     set -e
+    root="{{ root_dir }}"
+    if [ -z "{{ PATHS }}" ]; then
     if [ "$(uname)" = "Darwin" ]; then
-        find "{{ root_dir }}" -type f -iname '*.md' -exec sed -i '' 's/Cynode/CyNode/g' {} \;
+    find "$root" -type f -iname '*.md' -exec sed -i '' 's/Cynode/CyNode/g' {} \;
     else
-        find "{{ root_dir }}" -type f -iname '*.md' -exec sed -i "s/Cynode/CyNode/g" {} \;
+    find "$root" -type f -iname '*.md' -exec sed -i "s/Cynode/CyNode/g" {} \;
+    fi
+    else
+    for f in {{ PATHS }}; do
+    [ -z "$f" ] && continue
+    case "$f" in *.[Mm][Dd]) ;; *) continue ;; esac
+    [ -f "$root/$f" ] || [ -f "$f" ] || continue
+    if [ "$(uname)" = "Darwin" ]; then
+    sed -i '' 's/Cynode/CyNode/g' "$f" 2>/dev/null || sed -i '' 's/Cynode/CyNode/g' "$root/$f"
+    else
+    sed -i "s/Cynode/CyNode/g" "$f" 2>/dev/null || sed -i "s/Cynode/CyNode/g" "$root/$f"
+    fi
+    done
     fi
 
 # Full dev setup: podman, Go, and Go tools (incl. deps for .golangci.yml and lint-go-ci)
@@ -344,13 +362,17 @@ lint-containerfiles:
     done
     echo "Containerfile lint: OK"
 
-# Lint Markdown (markdownlint-cli2; uses .markdownlint-cli2.jsonc)
-lint-md target = "'**/*.md'":
+# Lint Markdown (markdownlint-cli2; uses .markdownlint-cli2.jsonc). With no arguments lints all .md; pass paths to lint only those.
+lint-md *PATHS:
     #!/usr/bin/env bash
     set -e
     pushd "{{ root_dir }}" >/dev/null
     trap 'popd >/dev/null 2>/dev/null' EXIT
-    markdownlint-cli2 --fix {{ target }}
+    if [ -z "{{ PATHS }}" ]; then
+    markdownlint-cli2 --fix '**/*.md'
+    else
+    markdownlint-cli2 --fix {{ PATHS }}
+    fi
 
 # Format Go code (each module in go_modules)
 fmt-go: install-go

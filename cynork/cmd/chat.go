@@ -14,17 +14,19 @@ import (
 )
 
 var chatPlain bool
+var chatMessage string
 
 var chatCmd = &cobra.Command{
 	Use:   "chat",
 	Short: "Interactive chat with the Project Manager (POST /v1/chat/completions)",
-	Long:  "Reads lines from stdin; /exit or /quit or EOF exits. Each message is sent via POST /v1/chat/completions (OpenAI format). No token yields exit 3. Use --plain for raw output (no Markdown rendering).",
+	Long:  "Reads lines from stdin; /exit or /quit or EOF exits. Each message is sent via POST /v1/chat/completions (OpenAI format). Use --message for one-shot (send one message and print response). No token yields exit 3. Use --plain for raw output (no Markdown rendering).",
 	RunE:  runChat,
 }
 
 func init() {
 	rootCmd.AddCommand(chatCmd)
 	chatCmd.Flags().BoolVar(&chatPlain, "plain", false, "print model responses as raw text without Markdown formatting (for scripting or piping)")
+	chatCmd.Flags().StringVarP(&chatMessage, "message", "m", "", "send one message and print response (non-interactive)")
 }
 
 // formatChatResponse returns the response ready to print: raw if plain, else Markdown-rendered for terminal.
@@ -56,6 +58,9 @@ func runChat(_ *cobra.Command, _ []string) error {
 	}
 	client := gateway.NewClient(cfg.GatewayURL)
 	client.SetToken(cfg.Token)
+	if chatMessage != "" {
+		return sendAndPrintChat(client, chatMessage)
+	}
 	scanner := bufio.NewScanner(os.Stdin)
 	for {
 		fmt.Fprint(os.Stderr, "> ")

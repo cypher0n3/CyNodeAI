@@ -15,8 +15,9 @@ const DefaultGatewayURL = "http://localhost:8080"
 
 // Config holds CLI configuration (file + env overrides).
 type Config struct {
-	GatewayURL string `yaml:"gateway_url" json:"gateway_url"`
-	Token      string `yaml:"token" json:"token"`
+	GatewayURL   string `yaml:"gateway_url" json:"gateway_url"`
+	Token        string `yaml:"token" json:"token"`
+	RefreshToken string `yaml:"refresh_token" json:"refresh_token"`
 }
 
 // userHomeDir is overridable in tests.

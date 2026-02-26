@@ -15,7 +15,7 @@ Nodes may be inference-capable or sandbox-only, depending on configuration.
 
 **Status:** MVP Phase 1 and 1.5 complete (single-node execution, inference in sandbox, cynork CLI).
 Phases 2-4 (MCP in the loop, multi-node robustness, controlled egress) are in scope.
-See [MVP and phased plan](docs/mvp.md) and [mvp_plan.md](docs/mvp_plan.md) for current status and roadmap.
+See [MVP and phased plan](docs/mvp.md) and [mvp_plan.md](docs/mvp_plan.md) for roadmap.
 
 **License:** [Apache 2.0](LICENSE)
 
@@ -25,6 +25,19 @@ See [MVP and phased plan](docs/mvp.md) and [mvp_plan.md](docs/mvp_plan.md) for c
 
 **AI-assisted workflows:** [AI coding instructions](ai_files/ai_coding_instructions.md)
 
+## Safe AI Usage and Security Model
+
+CyNodeAI is designed for **safe use of AI systems** and a **strict security model**.
+
+- **Safe AI usage:** Prompts are interpreted as intent; plain-text and Markdown use inference by default.
+  - Script and shell execution are explicit opt-in and run only inside isolated sandbox containers.
+  - External API and web access are mediated by dedicated services (API Egress Server, Secure Browser Service); agents never see API keys or raw web content.
+- **Strict security:** Default-deny access control; allow rules must be explicit.
+  - Worker sandboxes are untrusted and network-restricted; credentials stay in the orchestrator and are never exposed to sandboxes.
+  - Policy evaluation and tool use are auditable; RBAC and scope-aware role bindings apply at request time.
+
+See [Access control](docs/tech_specs/access_control.md), [API Egress Server](docs/tech_specs/api_egress_server.md), and [Secure Browser Service](docs/tech_specs/secure_browser_service.md) for details.
+
 ## Development Setup
 
 A [justfile](justfile) provides dev environment setup and scripting.
@@ -33,6 +46,7 @@ Install [just](https://github.com/casey/just), then run:
 - `just setup` - install Podman (if missing), Go 1.25.x, and Go lint tools (golangci-lint, staticcheck, govulncheck)
 - `just install-podman` / `just install-go` / `just install-go-tools` - individual steps
 - `just ci` - full local CI (lint, doc validation, tests with coverage, test-bdd, vulncheck-go, lint-containerfiles)
+- `just docs-check` - docs-only checks (fix-cynode, lint-md, validate-doc-links, validate-feature-files); use when only documentation changed
 - `just lint` - run all linting (Go + Python)
 - `just lint-go` / `just lint-go-ci` - Go vet+staticcheck / golangci-lint
 - `just lint-python` - Python (flake8, pylint, radon, xenon, vulture, bandit)
@@ -45,9 +59,7 @@ For running services locally (Postgres, control-plane, user-gateway, worker node
 
 ## Repository Layout and Go Modules
 
-Canonical layout and project meta: [meta.md](meta.md).
-
-Go workspace modules (see root [go.work](go.work) and [justfile](justfile)):
+Go workspace modules (see root [go.work](go.work)):
 
 - [go_shared_libs/](go_shared_libs/) - shared contracts and types used by orchestrator and worker node
 - [orchestrator/](orchestrator/) - control plane, user gateway, MCP gateway, API egress (Go)
@@ -57,7 +69,7 @@ Go workspace modules (see root [go.work](go.work) and [justfile](justfile)):
 Documentation:
 
 - **Documentation index**: [docs/README.md](docs/README.md) - entry point for all project docs.
-- **MVP and roadmap**: [docs/mvp.md](docs/mvp.md), [docs/mvp_plan.md](docs/mvp_plan.md) - phased scope and current status.
+- **MVP and roadmap**: [docs/mvp.md](docs/mvp.md), [docs/mvp_plan.md](docs/mvp_plan.md) - phased scope and status.
 - Requirements (canonical "what"): [docs/requirements/](docs/requirements/) ([README](docs/requirements/README.md))
 - Tech specs (implementation "how"): [docs/tech_specs/](docs/tech_specs/) ([index](docs/tech_specs/_main.md))
 - **Open WebUI**: [Connect Open WebUI to the gateway](docs/openwebui_cynodeai_integration.md)
@@ -65,9 +77,9 @@ Documentation:
 ## Goals
 
 - **Local-first and private:** Run fully on your infrastructure; optionally incorporate cloud-based agents and external AI providers via controlled egress.
-- **Single user-facing API:** One User API Gateway for all clients (Open WebUI, cynork CLI, future Web Console, integrations).
-- **Admin client parity:** The CLI (cynork) and the Web Console MUST offer the same administrative capabilities; both talk to the gateway only.
-- **Prompt-as-intent:** Natural-language task prompts are interpreted by the system (inference and/or sandbox), not executed as literal shell commands; script/commands modes are explicit opt-in.
+- **Safe AI usage and strict security:** Sandboxed execution, default-deny policy, credential isolation, and auditable tool and API access; see [Safe AI Usage and Security Model](#safe-ai-usage-and-security-model).
+- **Single user-facing API:** One User API Gateway for all clients (Open WebUI, `cynork` CLI, Web Console, integrations).
+- **Prompt-as-intent:** Natural-language task prompts are interpreted by the system (inference and/or sandbox).
 - **Multi-agent orchestration:** Centralized task and state management with distributed execution across local worker nodes and optional cloud agents.
 - **Scaling:** Add local nodes (containers) or register cloud-based agents; orchestrator selects nodes by capability, load, and policy.
 
