@@ -79,7 +79,7 @@ func (h *NodeHandler) Register(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if existingNode != nil {
-		h.handleExistingNodeRegistration(ctx, w, existingNode)
+		h.handleExistingNodeRegistration(ctx, w, existingNode, req)
 		return
 	}
 	h.handleNewNodeRegistration(ctx, w, req)
@@ -111,12 +111,14 @@ func (h *NodeHandler) validateRegistrationRequest(w http.ResponseWriter, r *http
 	return &req, true
 }
 
-func (h *NodeHandler) handleExistingNodeRegistration(ctx context.Context, w http.ResponseWriter, node *models.Node) {
+func (h *NodeHandler) handleExistingNodeRegistration(ctx context.Context, w http.ResponseWriter, node *models.Node, req *nodepayloads.RegistrationRequest) {
 	if err := h.db.UpdateNodeStatus(ctx, node.ID, "active"); err != nil {
 		h.logError("update node status", "error", err)
 		WriteInternalError(w, "Failed to register node")
 		return
 	}
+
+	h.applyWorkerAPIURLFromCapability(ctx, node.ID, &req.Capability)
 
 	nodeJWT, expiresAt, err := h.jwt.GenerateNodeToken(node.ID, node.NodeSlug)
 	if err != nil {
@@ -167,6 +169,24 @@ func (h *NodeHandler) initializeNewNode(ctx context.Context, nodeID uuid.UUID, c
 	capHash := "sha256:" + hex.EncodeToString(hashBytes[:])
 	if err := h.db.UpdateNodeCapability(ctx, nodeID, capHash); err != nil {
 		h.logError("update capability hash", "error", err)
+	}
+
+	h.applyWorkerAPIURLFromCapability(ctx, nodeID, capability)
+}
+
+// applyWorkerAPIURLFromCapability sets the node's worker_api_target_url from capability.worker_api.base_url
+// unless an explicit override (h.workerAPITargetURL) is configured.
+func (h *NodeHandler) applyWorkerAPIURLFromCapability(ctx context.Context, nodeID uuid.UUID, capability *nodepayloads.CapabilityReport) {
+	workerURL := ""
+	if h.workerAPITargetURL != "" {
+		workerURL = h.workerAPITargetURL
+	} else if capability != nil && capability.WorkerAPI != nil && capability.WorkerAPI.BaseURL != "" {
+		workerURL = strings.TrimSpace(capability.WorkerAPI.BaseURL)
+	}
+	if workerURL != "" && h.workerAPIBearerToken != "" {
+		if err := h.db.UpdateNodeWorkerAPIConfig(ctx, nodeID, workerURL, h.workerAPIBearerToken); err != nil {
+			h.logError("update node worker api config", "error", err)
+		}
 	}
 }
 
@@ -224,8 +244,9 @@ func (h *NodeHandler) GetConfig(w http.ResponseWriter, r *http.Request) {
 	}
 
 	configVersion := h.resolveConfigVersion(ctx, node)
+	// Explicit override (e.g. WORKER_API_TARGET_URL for same-host) wins; otherwise use node's stored URL (from registration/capability).
 	workerAPITargetURL := h.workerAPITargetURL
-	if node.WorkerAPITargetURL != nil && *node.WorkerAPITargetURL != "" {
+	if workerAPITargetURL == "" && node.WorkerAPITargetURL != nil && *node.WorkerAPITargetURL != "" {
 		workerAPITargetURL = *node.WorkerAPITargetURL
 	}
 
@@ -356,6 +377,8 @@ func (h *NodeHandler) ReportCapability(w http.ResponseWriter, r *http.Request) {
 		WriteInternalError(w, "Failed to update capability")
 		return
 	}
+
+	h.applyWorkerAPIURLFromCapability(ctx, *nodeID, &report)
 
 	if err := h.db.UpdateNodeLastSeen(ctx, *nodeID); err != nil {
 		h.logError("update last seen", "error", err)

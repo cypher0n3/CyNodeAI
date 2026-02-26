@@ -275,7 +275,7 @@ def main() -> int:
         "--report",
         type=Path,
         metavar="PATH",
-        help="Write report to this path (e.g. dev_docs/feature_files_validation_report.txt)",
+        help="Write report to this path (e.g. docs/dev_docs/feature_files_validation_report.txt)",
     )
     parser.add_argument(
         "paths",

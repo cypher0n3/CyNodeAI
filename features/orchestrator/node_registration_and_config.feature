@@ -10,12 +10,23 @@ Feature: Node Registration and Configuration
     And the orchestrator API is running
 
   @req_orches_0112
+  @req_worker_0139
+  @req_orches_0148
   @spec_cynai_orches_doc_orchestrator
   Scenario: Node registration with PSK
     Given a node with slug "test-node-01" and valid PSK
     When the node registers with the orchestrator
     Then the node receives a JWT token
     And the node is recorded in the database
+
+  @req_worker_0139
+  @req_orches_0148
+  @spec_cynai_worker_payload_capabilityreport_v1
+  Scenario: Node registration includes worker API base_url
+    Given a node with slug "test-node-02" and valid PSK and worker API URL "http://worker-02.example.com:12090"
+    When the node registers with the orchestrator
+    Then the node is recorded in the database
+    And the orchestrator stored worker_api_target_url from the node-reported base_url for "test-node-02"
 
   @req_orches_0113
   @spec_cynai_orches_doc_orchestrator

@@ -111,6 +111,12 @@ Source requirements: [`docs/tech_specs/worker_node.md`](worker_node.md#spec-cyna
   - `supported` (boolean)
   - `mode` (string, optional)
     - examples: allow, disabled
+- `worker_api` (object, optional but recommended at registration)
+  - Node-reported Worker API address so the orchestrator can dispatch jobs to this node.
+  - The orchestrator MUST use this address to set or update the node's `worker_api_target_url` unless an explicit operator override is configured.
+  - `base_url` (string, required when `worker_api` is present)
+    - Full URL the orchestrator MUST use to call the Worker API (e.g. `http://hostname:12090`, `https://worker-01.example.com:12090`).
+    - MUST include scheme and authority (host and port).
 - `tls` (object, optional)
   - `trust_material_status` (string, optional)
     - examples: ok, missing, invalid
@@ -158,6 +164,9 @@ Example
   "network": {
     "orchestrator_reachable": true,
     "outbound_policy": "restricted"
+  },
+  "worker_api": {
+    "base_url": "http://worker-01.example.com:12090"
   }
 }
 ```

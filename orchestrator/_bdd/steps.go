@@ -42,9 +42,10 @@ type testState struct {
 	accessToken       string
 	refreshToken      string
 	taskID            string
-	nodeJWT           string
-	nodeSlug          string
-	lastConfigBody    []byte
+	nodeJWT                 string
+	nodeSlug                string
+	advertisedWorkerAPIURL  string // optional; when set, registration/capability include worker_api.base_url
+	lastConfigBody          []byte
 	lastConfigVersion string
 	lastStatusCode    int
 	// Fake worker for node-aware dispatch scenarios
@@ -372,21 +373,30 @@ func RegisterOrchestratorSteps(sc *godog.ScenarioContext, state *testState) {
 		st := getState(ctx)
 		if st != nil {
 			st.nodeSlug = slug
+			st.advertisedWorkerAPIURL = ""
+		}
+		return nil
+	})
+	sc.Step(`^a node with slug "([^"]*)" and valid PSK and worker API URL "([^"]*)"$`, func(ctx context.Context, slug, workerAPIURL string) error {
+		st := getState(ctx)
+		if st != nil {
+			st.nodeSlug = slug
+			st.advertisedWorkerAPIURL = workerAPIURL
 		}
 		return nil
 	})
 	sc.Step(`^a node with slug "([^"]*)" registers with the orchestrator$`, func(ctx context.Context, slug string) error {
-		return nodeRegisterStep(ctx, slug)
+		return nodeRegisterStep(ctx, slug, "")
 	})
 	sc.Step(`^a node with slug "([^"]*)" registers with the orchestrator using a valid PSK$`, func(ctx context.Context, slug string) error {
-		return nodeRegisterStep(ctx, slug)
+		return nodeRegisterStep(ctx, slug, "")
 	})
 	sc.Step(`^the node registers with the orchestrator$`, func(ctx context.Context) error {
 		st := getState(ctx)
 		if st == nil || st.nodeSlug == "" {
 			return godog.ErrSkip
 		}
-		return nodeRegisterStep(ctx, st.nodeSlug)
+		return nodeRegisterStep(ctx, st.nodeSlug, st.advertisedWorkerAPIURL)
 	})
 	sc.Step(`^the node receives a JWT token$`, func(ctx context.Context) error {
 		st := getState(ctx)
@@ -405,6 +415,20 @@ func RegisterOrchestratorSteps(sc *godog.ScenarioContext, state *testState) {
 		}
 		_, err := st.db.GetNodeBySlug(ctx, st.nodeSlug)
 		return err
+	})
+	sc.Step(`^the orchestrator stored worker_api_target_url from the node-reported base_url for "([^"]*)"$`, func(ctx context.Context, slug string) error {
+		st := getState(ctx)
+		if st == nil || st.db == nil || st.advertisedWorkerAPIURL == "" {
+			return godog.ErrSkip
+		}
+		node, err := st.db.GetNodeBySlug(ctx, slug)
+		if err != nil {
+			return err
+		}
+		if node.WorkerAPITargetURL == nil || *node.WorkerAPITargetURL != st.advertisedWorkerAPIURL {
+			return fmt.Errorf("node %q worker_api_target_url %v, want %q", slug, node.WorkerAPITargetURL, st.advertisedWorkerAPIURL)
+		}
+		return nil
 	})
 	sc.Step(`^a registered node "([^"]*)"$`, func(ctx context.Context, slug string) error {
 		st := getState(ctx)
@@ -506,13 +530,13 @@ func RegisterOrchestratorSteps(sc *godog.ScenarioContext, state *testState) {
 		}
 		st.nodeSlug = slug
 		if _, err := st.db.GetNodeBySlug(ctx, slug); errors.Is(err, database.ErrNotFound) {
-			if err := nodeRegisterStep(ctx, slug); err != nil {
+			if err := nodeRegisterStep(ctx, slug, st.advertisedWorkerAPIURL); err != nil {
 				return err
 			}
 		} else if err != nil {
 			return err
 		} else if st.nodeJWT == "" {
-			if err := nodeRegisterStep(ctx, slug); err != nil {
+			if err := nodeRegisterStep(ctx, slug, st.advertisedWorkerAPIURL); err != nil {
 				return err
 			}
 		}
@@ -1272,7 +1296,7 @@ func RegisterOrchestratorSteps(sc *godog.ScenarioContext, state *testState) {
 		st.nodeSlug = slug
 		node, err := st.db.GetNodeBySlug(ctx, slug)
 		if errors.Is(err, database.ErrNotFound) {
-			if err := nodeRegisterStep(ctx, slug); err != nil {
+			if err := nodeRegisterStep(ctx, slug, st.advertisedWorkerAPIURL); err != nil {
 				return err
 			}
 			node, err = st.db.GetNodeBySlug(ctx, slug)
@@ -1327,21 +1351,25 @@ func RegisterOrchestratorSteps(sc *godog.ScenarioContext, state *testState) {
 	})
 }
 
-func nodeRegisterStep(ctx context.Context, slug string) error {
+func nodeRegisterStep(ctx context.Context, slug, advertisedWorkerAPIURL string) error {
 	st := getState(ctx)
 	if st == nil || st.server == nil {
 		return godog.ErrSkip
 	}
 	cfg := config.LoadOrchestratorConfig()
+	capability := map[string]interface{}{
+		"version":     1,
+		"reported_at": time.Now().UTC().Format(time.RFC3339),
+		"node":        map[string]interface{}{"node_slug": slug},
+		"platform":    map[string]interface{}{"os": "linux", "arch": "amd64"},
+		"compute":     map[string]interface{}{"cpu_cores": 2, "ram_mb": 4096},
+	}
+	if strings.TrimSpace(advertisedWorkerAPIURL) != "" {
+		capability["worker_api"] = map[string]interface{}{"base_url": strings.TrimSpace(advertisedWorkerAPIURL)}
+	}
 	body, _ := json.Marshal(map[string]interface{}{
-		"psk": cfg.NodeRegistrationPSK,
-		"capability": map[string]interface{}{
-			"version":     1,
-			"reported_at": time.Now().UTC().Format(time.RFC3339),
-			"node":        map[string]interface{}{"node_slug": slug},
-			"platform":    map[string]interface{}{"os": "linux", "arch": "amd64"},
-			"compute":     map[string]interface{}{"cpu_cores": 2, "ram_mb": 4096},
-		},
+		"psk":        cfg.NodeRegistrationPSK,
+		"capability": capability,
 	})
 	resp, err := http.Post(st.server.URL+"/v1/nodes/register", "application/json", bytes.NewReader(body))
 	if err != nil {

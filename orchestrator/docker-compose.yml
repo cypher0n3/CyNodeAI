@@ -52,6 +52,7 @@ services:
     environment:
       DATABASE_URL: postgres://${POSTGRES_USER:-cynodeai}:${POSTGRES_PASSWORD:-cynodeai-dev-password}@postgres:5432/${POSTGRES_DB:-cynodeai}?sslmode=disable
       USER_GATEWAY_LISTEN_ADDR: ":12080"
+      WRITE_TIMEOUT: 120s
       JWT_SECRET: ${JWT_SECRET:-dev-jwt-secret-change-in-production}
       BOOTSTRAP_ADMIN_PASSWORD: ${BOOTSTRAP_ADMIN_PASSWORD:-admin123}
       # OpenAI chat model=cynodeai.pm routes to PMA.

@@ -89,7 +89,7 @@ func LoadOrchestratorConfig() *OrchestratorConfig {
 		DatabaseURL:            getEnv("DATABASE_URL", "postgres://postgres:postgres@localhost:5432/cynodeai?sslmode=disable"),
 		ListenAddr:             getEnv("LISTEN_ADDR", ":12080"),
 		ReadTimeout:            getDurationEnv("READ_TIMEOUT", 30*time.Second),
-		WriteTimeout:           getDurationEnv("WRITE_TIMEOUT", 30*time.Second),
+		WriteTimeout:           getDurationEnv("WRITE_TIMEOUT", 120*time.Second), // chat path (PMA + inference) can exceed 30s
 		IdleTimeout:            getDurationEnv("IDLE_TIMEOUT", 120*time.Second),
 		MaxHeaderBytes:         getIntEnv("MAX_HEADER_BYTES", 1<<20),
 		MaxRequestBodyMB:       getIntEnv("MAX_REQUEST_BODY_MB", 10),

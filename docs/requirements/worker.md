@@ -141,6 +141,10 @@ It covers worker-node behavior and the worker API contract for job execution and
 - **REQ-WORKER-0138:** Nodes SHOULD reject payloads with unsupported `version` values and report a structured error.
   [CYNAI.WORKER.Payload.CompatibilityVersioning](../tech_specs/worker_node_payloads.md#spec-cynai-worker-payload-versioning)
   <a id="req-worker-0138"></a>
+- **REQ-WORKER-0139:** The node MUST report its Worker API address (`worker_api.base_url`) at registration and in capability reports so the orchestrator can dispatch jobs to the node.
+  [CYNAI.WORKER.Payload.CapabilityReportV1](../tech_specs/worker_node_payloads.md#spec-cynai-worker-payload-capabilityreport-v1)
+  [CYNAI.WORKER.RegistrationAndBootstrap](../tech_specs/worker_node.md#spec-cynai-worker-registrationandbootstrap)
+  <a id="req-worker-0139"></a>
 
 - **REQ-WORKER-0140:** The node MUST expose unauthenticated health check endpoints `GET /healthz` and `GET /readyz`.
   [CYNAI.WORKER.WorkerApiHealthChecks](../tech_specs/worker_api.md#spec-cynai-worker-workerapihealthchecks)

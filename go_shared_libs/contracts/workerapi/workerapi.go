@@ -36,6 +36,9 @@ type SandboxSpec struct {
 	// UseInference when true asks the node to run the job in a pod with an inference proxy
 	// so the sandbox can call http://localhost:11434 for node-local Ollama (worker_node.md Option A).
 	UseInference bool `json:"use_inference,omitempty"`
+	// JobSpecJSON is the SBA job specification JSON when the job uses an SBA runner image (P2-10).
+	// The node writes this to /job/job.json and runs the container with /job bind-mounted; on exit reads /job/result.json into response sba_result.
+	JobSpecJSON string `json:"job_spec_json,omitempty"`
 }
 
 // RunJobResponse represents a synchronous job execution response.
@@ -73,12 +76,13 @@ func DefaultSandboxSpec() SandboxSpec {
 }
 
 // ValidateRequest returns an error if the request is invalid for execution.
+// When job_spec_json is set (SBA runner job), command may be empty (node uses image entrypoint).
 func ValidateRequest(req *RunJobRequest) error {
 	if req == nil {
 		return &RequestValidationError{Reason: "request is nil"}
 	}
-	if len(req.Sandbox.Command) == 0 {
-		return &RequestValidationError{Reason: "sandbox.command is required"}
+	if req.Sandbox.JobSpecJSON == "" && len(req.Sandbox.Command) == 0 {
+		return &RequestValidationError{Reason: "sandbox.command is required when job_spec_json is not set"}
 	}
 	return nil
 }

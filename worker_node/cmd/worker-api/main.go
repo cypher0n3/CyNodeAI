@@ -150,14 +150,14 @@ func handleRunJob(exec *executor.Executor, bearerToken, workspaceRoot string, lo
 }
 
 func validateRunJobRequest(req *workerapi.RunJobRequest) error {
+	if err := workerapi.ValidateRequest(req); err != nil {
+		return err
+	}
 	if req.Version != 1 {
 		return fmt.Errorf("unsupported version")
 	}
 	if req.TaskID == "" || req.JobID == "" {
 		return fmt.Errorf("task_id and job_id are required")
-	}
-	if len(req.Sandbox.Command) == 0 {
-		return fmt.Errorf("sandbox.command is required")
 	}
 	return nil
 }

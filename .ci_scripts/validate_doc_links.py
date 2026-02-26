@@ -12,7 +12,7 @@ identifiers must use stable anchor patterns from .markdownlint.yml
 allow-custom-anchors. Other docs may use non-anchor links.
 
 Exit code: 0 if all links valid, 1 if any broken. Outputs to stdout; report
-can be written to dev_docs when run via justfile.
+can be written to docs/dev_docs when run via justfile.
 """
 
 from __future__ import annotations
@@ -259,7 +259,7 @@ def main() -> int:
         "--report",
         type=Path,
         metavar="PATH",
-        help="Write report to this path (e.g. dev_docs/doc_links_validation_report.txt)",
+        help="Write report to this path (e.g. docs/dev_docs/doc_links_validation_report.txt)",
     )
     args = parser.parse_args()
 

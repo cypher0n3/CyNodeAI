@@ -587,7 +587,9 @@ Required flow
 
 - Node registers using a pre-shared key (PSK).
 - Node sends a capability report as part of registration and on startup.
+  The capability report MUST include `worker_api.base_url` (the full URL the orchestrator MUST use to call the Worker API on this node), so the orchestrator can add or update the node record and dispatch jobs.
 - Orchestrator validates the node and issues a JWT for ongoing communication.
+- Orchestrator adds or updates the node in the database; the node's Worker API dispatch URL is set from the node-reported `worker_api.base_url` unless an explicit operator override is configured (e.g. `WORKER_API_TARGET_URL` when the worker runs on the same host as the orchestrator); any override MUST be clearly documented as an override.
 - Orchestrator returns a bootstrap payload that includes:
   - orchestrator base URL and required service endpoints
   - trust material (e.g. CA bundle or pinned certificate), when applicable
@@ -603,6 +605,8 @@ Canonical payload shapes are defined in [`docs/tech_specs/worker_node_payloads.m
 
 Required capability fields
 
+- Worker API address (required for dispatch)
+  - `worker_api.base_url`: full URL the orchestrator MUST use to call the Worker API (scheme, host, port); the node MUST send this at registration and in capability reports so the orchestrator can add or update the node's dispatch URL; see [`worker_node_payloads.md`](worker_node_payloads.md) capability report `worker_api`.
 - Identity and platform
   - OS type and distribution details
   - architecture (e.g. amd64, arm64)
@@ -636,6 +640,12 @@ Change reporting
 
 The orchestrator MUST be able to deliver and update configuration for registered nodes.
 Canonical payload shapes are defined in [`docs/tech_specs/worker_node_payloads.md`](worker_node_payloads.md).
+
+Worker API target URL in config
+
+- The node configuration payload includes `orchestrator.endpoints.worker_api_target_url`, which is the URL the orchestrator will use to call this node's Worker API.
+- That URL is normally the node-reported `worker_api.base_url` from registration or the latest capability report; the orchestrator stores it and echoes it in config.
+- An operator MAY configure an explicit override (e.g. when the worker runs on the same host as the orchestrator); when set, the override is used and MUST be documented as an override (e.g. in deployment docs or env var name such as `WORKER_API_TARGET_URL` for same-host override).
 
 Required behavior
 

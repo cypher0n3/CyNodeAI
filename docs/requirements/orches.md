@@ -59,6 +59,10 @@ It covers orchestrator control-plane behavior, task lifecycle, dispatch, and sta
 - **REQ-ORCHES-0114:** The orchestrator MUST support dynamic configuration updates after registration and must ingest node capability reports on registration and node startup.
   [orchestrator.md](../tech_specs/orchestrator.md)
   <a id="req-orches-0114"></a>
+- **REQ-ORCHES-0148:** The orchestrator MUST set each node's Worker API dispatch URL from the node-reported `worker_api.base_url` (in registration and capability reports) and MUST update it when the node reports a new value; an operator MAY configure an explicit override (e.g. same-host or dev), and when an override is used it MUST be clearly documented as an override.
+  [worker_node_payloads.md](../tech_specs/worker_node_payloads.md#spec-cynai-worker-payload-capabilityreport-v1)
+  [worker_node.md](../tech_specs/worker_node.md#spec-cynai-worker-registrationandbootstrap)
+  <a id="req-orches-0148"></a>
 - **REQ-ORCHES-0115:** The orchestrator MAY import bootstrap configuration from a YAML file at startup to seed PostgreSQL and external integrations.
   [orchestrator.md](../tech_specs/orchestrator.md)
   <a id="req-orches-0115"></a>

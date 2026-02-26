@@ -550,7 +550,7 @@ Constraints
 - `config_version` (text, nullable)
   - version of last applied node configuration payload
 - `worker_api_target_url` (text, nullable)
-  - URL of the node Worker API for job dispatch; from node configuration delivery; see [`worker_node_payloads.md`](worker_node_payloads.md) `node_configuration_payload_v1`
+  - URL of the node Worker API for job dispatch; normally set from the node-reported `worker_api.base_url` at registration and when processing capability reports; may be overridden by operator config (e.g. same-host override); see [`worker_node_payloads.md`](worker_node_payloads.md) and [`worker_node.md`](worker_node.md)
 - `worker_api_bearer_token` (text, nullable)
   - bearer token for orchestrator-to-node Worker API auth; MUST be stored encrypted at rest or in a secrets backend; populated from config delivery
 - `config_ack_at` (timestamptz, nullable)

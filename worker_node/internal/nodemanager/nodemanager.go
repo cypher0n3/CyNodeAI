@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"runtime"
+	"strings"
 	"time"
 
 	"github.com/cypher0n3/cynodeai/go_shared_libs/contracts/nodepayloads"
@@ -23,6 +24,7 @@ type Config struct {
 	NodeSlug                 string
 	NodeName                 string
 	RegistrationPSK          string
+	AdvertisedWorkerAPIURL   string // base_url sent at registration and in capability reports (required for dispatch)
 	CapabilityReportInterval time.Duration
 	HTTPTimeout              time.Duration
 }
@@ -34,6 +36,7 @@ func LoadConfig() Config {
 		NodeSlug:                 getEnv("NODE_SLUG", "node-01"),
 		NodeName:                 getEnv("NODE_NAME", "Default Node"),
 		RegistrationPSK:          getEnv("NODE_REGISTRATION_PSK", ""),
+		AdvertisedWorkerAPIURL:   getEnv("NODE_ADVERTISED_WORKER_API_URL", ""),
 		CapabilityReportInterval: getDurationEnv("CAPABILITY_REPORT_INTERVAL", 60*time.Second),
 		HTTPTimeout:              getDurationEnv("HTTP_TIMEOUT", 10*time.Second),
 	}
@@ -311,7 +314,16 @@ func reportCapabilities(ctx context.Context, cfg *Config, bootstrap *BootstrapDa
 }
 
 func buildCapability(cfg *Config) nodepayloads.CapabilityReport {
-	return nodepayloads.CapabilityReport{
+	if cfg == nil {
+		return nodepayloads.CapabilityReport{
+			Version:    1,
+			ReportedAt: time.Now().UTC().Format(time.RFC3339),
+			Platform:   nodepayloads.Platform{OS: runtime.GOOS, Arch: runtime.GOARCH},
+			Compute:    nodepayloads.Compute{CPUCores: runtime.NumCPU(), RAMMB: 4096},
+			Sandbox:    &nodepayloads.SandboxSupport{Supported: true, Features: []string{"netns"}, MaxConcurrency: 4},
+		}
+	}
+	report := nodepayloads.CapabilityReport{
 		Version:    1,
 		ReportedAt: time.Now().UTC().Format(time.RFC3339),
 		Node: nodepayloads.CapabilityNode{
@@ -332,6 +344,10 @@ func buildCapability(cfg *Config) nodepayloads.CapabilityReport {
 			MaxConcurrency: 4,
 		},
 	}
+	if strings.TrimSpace(cfg.AdvertisedWorkerAPIURL) != "" {
+		report.WorkerAPI = &nodepayloads.WorkerAPIReport{BaseURL: strings.TrimSpace(cfg.AdvertisedWorkerAPIURL)}
+	}
+	return report
 }
 
 func getEnv(key, def string) string {

@@ -71,8 +71,9 @@ When nodes run on the host, that is typically <http://host.containers.internal:1
 
 - **Worker API:** listens `:12090` by default.
   All CyNodeAI HTTP defaults use the 12080-12090 block.
+  The node reports its Worker API address (`worker_api.base_url`) at registration and in capability reports; the orchestrator uses that URL for dispatch unless an explicit operator override is set (e.g. same-host dev: `WORKER_API_TARGET_URL`); see [`worker_node.md`](worker_node.md) and [`worker_node_payloads.md`](worker_node_payloads.md).
   Override: `LISTEN_ADDR` (worker-api process).
-  Node startup YAML `worker_api.listen_port` (and `worker_api.public_base_url`) override the port the node advertises to the orchestrator.
+  Node startup YAML `worker_api.listen_port` (and `worker_api.public_base_url`) define what the node advertises; any orchestrator-side override for the dispatch URL is explicit and documented as an override.
   If the process listens on a different port, config must match.
 - **Node Manager:** does not expose a separate HTTP port.
   It starts Worker API, Ollama (if inference enabled), and pod workloads.

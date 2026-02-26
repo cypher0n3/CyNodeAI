@@ -856,6 +856,34 @@ func TestNodeHandler_RegisterNewNode(t *testing.T) {
 	}
 }
 
+func TestNodeHandler_RegisterNewNode_StoresWorkerAPIURLFromCapability(t *testing.T) {
+	mockDB := testutil.NewMockDB()
+	jwtMgr := auth.NewJWTManager("test-secret-key-1234567890123456", 15*time.Minute, 7*24*time.Hour, 24*time.Hour)
+	logger := newTestLogger()
+	workerURL := "http://worker-01.example.com:12090"
+	handler := NewNodeHandler(mockDB, jwtMgr, "test-psk-secret", testOrchestratorURL, "bearer-token", "", logger)
+
+	capReport := testNodeCapabilityReport("node-with-url", "Node With URL", 4, 8192)
+	capReport.WorkerAPI = &nodepayloads.WorkerAPIReport{BaseURL: workerURL}
+	body := nodepayloads.RegistrationRequest{PSK: "test-psk-secret", Capability: capReport}
+	jsonBody, _ := json.Marshal(body)
+	req := httptest.NewRequest("POST", "/v1/nodes/register", bytes.NewBuffer(jsonBody))
+	rec := httptest.NewRecorder()
+
+	handler.Register(rec, req)
+
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("expected status 201, got %d: %s", rec.Code, rec.Body.String())
+	}
+	node, err := mockDB.GetNodeBySlug(context.Background(), "node-with-url")
+	if err != nil {
+		t.Fatalf("get node: %v", err)
+	}
+	if node.WorkerAPITargetURL == nil || *node.WorkerAPITargetURL != workerURL {
+		t.Errorf("expected worker_api_target_url %q, got %v", workerURL, node.WorkerAPITargetURL)
+	}
+}
+
 //nolint:dupl // node registration body struct repeated across tests
 func TestNodeHandler_RegisterExistingNode(t *testing.T) {
 	mockDB := testutil.NewMockDB()

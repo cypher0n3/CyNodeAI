@@ -7,13 +7,15 @@
 
 ## Changes Made
 
-### `scripts/setup-dev.sh`
+The following updates were made so E2E stack startup and node registration succeed.
+
+### Setup Script (`scripts/setup-dev.sh`)
 
 - Added `wait_for_control_plane_listening()`: polls `http://127.0.0.1:12082/readyz` until response is 200 or 503 (server listening).
   Accepting 503 avoids chicken-and-egg (readyz 200 requires a registered node).
 - In `full-demo`, replaced fixed `sleep 2` before `start_node` with `wait_for_control_plane_listening` so the node is not started until the control-plane accepts connections.
 
-### `orchestrator/docker-compose.yml`
+### Compose File (`orchestrator/docker-compose.yml`)
 
 - Set `PMA_ENABLED: "false"` for the control-plane service.
   In compose, cynode-pma runs as a separate container; the control-plane was exiting with "exec: cynode-pma: executable file not found in $PATH" when it tried to start PMA as a subprocess.

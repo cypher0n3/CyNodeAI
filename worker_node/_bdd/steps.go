@@ -95,7 +95,11 @@ func workerMux(exec *executor.Executor, bearerToken string) *http.ServeMux {
 			writeProblem(w, http.StatusBadRequest, problem.TypeValidation, "Bad Request", "Invalid request body")
 			return
 		}
-		if req.Version != 1 || req.TaskID == "" || req.JobID == "" || len(req.Sandbox.Command) == 0 {
+		if req.Version != 1 || req.TaskID == "" || req.JobID == "" {
+			writeProblem(w, http.StatusBadRequest, problem.TypeValidation, "Bad Request", "validation failed")
+			return
+		}
+		if req.Sandbox.JobSpecJSON == "" && len(req.Sandbox.Command) == 0 {
 			writeProblem(w, http.StatusBadRequest, problem.TypeValidation, "Bad Request", "validation failed")
 			return
 		}

@@ -15,6 +15,14 @@ type CapabilityReport struct {
 	Network          *NetworkInfo         `json:"network,omitempty"`
 	Inference        *InferenceInfo       `json:"inference,omitempty"`
 	TLS              *TLSInfo             `json:"tls,omitempty"`
+	// WorkerAPI is the node-reported Worker API address; orchestrator uses it for dispatch unless an explicit override is set.
+	WorkerAPI *WorkerAPIReport `json:"worker_api,omitempty"`
+}
+
+// WorkerAPIReport is the node-reported Worker API address in capability and registration payloads.
+// See docs/tech_specs/worker_node_payloads.md capability report worker_api.
+type WorkerAPIReport struct {
+	BaseURL string `json:"base_url"`
 }
 
 type CapabilityNode struct {

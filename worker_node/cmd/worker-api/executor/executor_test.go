@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
@@ -618,6 +619,163 @@ func TestReady_UnavailableRuntime(t *testing.T) {
 	ready, reason := e.Ready(context.Background())
 	if ready || reason == "" {
 		t.Errorf("unavailable runtime: ready=%v reason=%q", ready, reason)
+	}
+}
+
+func TestIsSBARunnerImage(t *testing.T) {
+	tests := []struct {
+		image string
+		want  bool
+	}{
+		{"cynodeai-cynode-sba:dev", true},
+		{"localhost/cynodeai-cynode-sba:dev", true},
+		{"docker.io/org/cynode-sba:latest", true},
+		{"alpine:latest", false},
+		{"cynodeai-control-plane:dev", false},
+	}
+	for _, tt := range tests {
+		got := isSBARunnerImage(tt.image)
+		if got != tt.want {
+			t.Errorf("isSBARunnerImage(%q) = %v, want %v", tt.image, got, tt.want)
+		}
+	}
+}
+
+// TestRunJobDirectEmptyCommand asserts that direct runtime returns error when command is empty (e.g. SBA job without container).
+func TestRunJobDirectEmptyCommand(t *testing.T) {
+	e := New("direct", 10*time.Second, 1024, "", "", nil)
+	req := &workerapi.RunJobRequest{
+		Version: 1,
+		TaskID:  "t1",
+		JobID:   "j1",
+		Sandbox: workerapi.SandboxSpec{
+			Image:         "cynodeai-cynode-sba:dev",
+			Command:       nil,
+			JobSpecJSON:   `{"protocol_version":"1.0","job_id":"j1","task_id":"t1","constraints":{"max_runtime_seconds":60,"max_output_bytes":1024},"steps":[]}`,
+		},
+	}
+	resp, err := e.RunJob(context.Background(), req, "")
+	if err != nil {
+		t.Fatalf("RunJob: %v", err)
+	}
+	if resp.Status != workerapi.StatusFailed || resp.ExitCode != -1 {
+		t.Errorf("status=%s exitCode=%d (expected failed when direct + empty command)", resp.Status, resp.ExitCode)
+	}
+	if resp.Stderr == "" || !strings.Contains(resp.Stderr, "direct runtime") {
+		t.Errorf("stderr %q should mention direct runtime", resp.Stderr)
+	}
+}
+
+// TestRunJobSBAPathNoRuntime exercises the SBA branch when container runtime is missing (job dir created, container fails, no result.json).
+func TestRunJobSBAPathNoRuntime(t *testing.T) {
+	e := New("nonexistent-runtime-xyz", 10*time.Second, 1024, "", "", nil)
+	req := &workerapi.RunJobRequest{
+		Version: 1,
+		TaskID:  "t1",
+		JobID:   "j1",
+		Sandbox: workerapi.SandboxSpec{
+			Image:       "cynodeai-cynode-sba:dev",
+			Command:     nil,
+			JobSpecJSON: `{"protocol_version":"1.0","job_id":"j1","task_id":"t1","constraints":{"max_runtime_seconds":60,"max_output_bytes":1024},"steps":[]}`,
+		},
+	}
+	resp, err := e.RunJob(context.Background(), req, "")
+	if err != nil {
+		t.Fatalf("RunJob: %v", err)
+	}
+	if resp.Status != workerapi.StatusFailed {
+		t.Errorf("status=%s (expected failed when runtime missing)", resp.Status)
+	}
+	if resp.SbaResult != nil {
+		t.Errorf("expected no SbaResult when container did not run")
+	}
+}
+
+func TestSetSBAError(t *testing.T) {
+	resp := &workerapi.RunJobResponse{}
+	setSBAError(resp, "test error")
+	if resp.Status != workerapi.StatusFailed || resp.ExitCode != -1 || resp.Stderr != "test error" {
+		t.Errorf("setSBAError: status=%s exitCode=%d stderr=%q", resp.Status, resp.ExitCode, resp.Stderr)
+	}
+	if resp.EndedAt == "" {
+		t.Error("setSBAError: EndedAt should be set")
+	}
+}
+
+func TestBuildSBARunArgs(t *testing.T) {
+	e := New("podman", 30*time.Second, 4096, "", "", nil)
+	req := &workerapi.RunJobRequest{
+		TaskID: "t1",
+		JobID:  "j1",
+		Sandbox: workerapi.SandboxSpec{
+			Image:       "cynodeai-cynode-sba:dev",
+			JobSpecJSON: `{}`,
+		},
+	}
+	args := buildSBARunArgs(req, "/tmp/job", "/tmp/ws", e)
+	argStr := strings.Join(args, " ")
+	if !strings.Contains(argStr, "/tmp/job") || !strings.Contains(argStr, "/job") {
+		t.Errorf("buildSBARunArgs should mount job dir: %s", argStr)
+	}
+	if !strings.Contains(argStr, "/tmp/ws") || !strings.Contains(argStr, workspaceMount) {
+		t.Errorf("buildSBARunArgs should mount workspace: %s", argStr)
+	}
+	if !strings.Contains(argStr, "cynodeai-cynode-sba:dev") {
+		t.Errorf("buildSBARunArgs should include image: %s", argStr)
+	}
+}
+
+func TestApplySbaResultFromDir_MissingFile(t *testing.T) {
+	dir := t.TempDir()
+	resp := &workerapi.RunJobResponse{}
+	applySbaResultFromDir(dir, resp)
+	if resp.Status != workerapi.StatusFailed || resp.ExitCode != -1 {
+		t.Errorf("missing result: status=%s exitCode=%d", resp.Status, resp.ExitCode)
+	}
+}
+
+func TestApplySbaResultFromDir_ValidResult(t *testing.T) {
+	for _, tc := range []struct {
+		name       string
+		json       string
+		wantStatus string
+		wantExit   int
+	}{
+		{"success", `{"protocol_version":"1.0","job_id":"j1","status":"success","steps":[]}`, workerapi.StatusCompleted, 0},
+		{"failure", `{"protocol_version":"1.0","job_id":"j1","status":"failure","failure_code":"timeout","steps":[]}`, workerapi.StatusFailed, 1},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			dir := t.TempDir()
+			_ = os.WriteFile(filepath.Join(dir, resultFilename), []byte(tc.json), 0o644)
+			resp := &workerapi.RunJobResponse{}
+			applySbaResultFromDir(dir, resp)
+			if resp.SbaResult == nil {
+				t.Fatal("expected SbaResult set")
+			}
+			if resp.Status != tc.wantStatus || resp.ExitCode != tc.wantExit {
+				t.Errorf("status=%s exitCode=%d want %s %d", resp.Status, resp.ExitCode, tc.wantStatus, tc.wantExit)
+			}
+		})
+	}
+}
+
+func TestApplySbaResultFromDir_TimeoutPreserved(t *testing.T) {
+	dir := t.TempDir()
+	_ = os.WriteFile(filepath.Join(dir, resultFilename), []byte(`{"protocol_version":"1.0","job_id":"j1","status":"success","steps":[]}`), 0o644)
+	resp := &workerapi.RunJobResponse{Status: workerapi.StatusTimeout}
+	applySbaResultFromDir(dir, resp)
+	if resp.Status != workerapi.StatusTimeout {
+		t.Errorf("timeout should be preserved: status=%s", resp.Status)
+	}
+}
+
+func TestApplySbaResultFromDir_InvalidJSON(t *testing.T) {
+	dir := t.TempDir()
+	_ = os.WriteFile(filepath.Join(dir, resultFilename), []byte(`not json`), 0o644)
+	resp := &workerapi.RunJobResponse{}
+	applySbaResultFromDir(dir, resp)
+	if resp.Status != workerapi.StatusFailed || resp.ExitCode != -1 {
+		t.Errorf("invalid JSON: status=%s exitCode=%d", resp.Status, resp.ExitCode)
 	}
 }
 

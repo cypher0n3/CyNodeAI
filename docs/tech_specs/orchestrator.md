@@ -366,7 +366,7 @@ Config delivery
 Job dispatch (initial implementation)
 
 - For the initial single-node implementation (Phase 1), the orchestrator dispatches jobs to the Worker API via direct HTTP.
-- The dispatcher uses the per-node `worker_api_target_url` and per-node bearer token stored from config delivery (see [`docs/tech_specs/postgres_schema.md`](postgres_schema.md) Nodes table).
+- The dispatcher uses the per-node `worker_api_target_url` and per-node bearer token; the URL is normally set from the node-reported `worker_api.base_url` at registration and when processing capability reports, and may be overridden by operator config (e.g. same-host: `WORKER_API_TARGET_URL`); see [`docs/tech_specs/postgres_schema.md`](postgres_schema.md) Nodes table and [`worker_node_payloads.md`](worker_node_payloads.md).
 - The MCP gateway is not in the loop for job dispatch in Phase 1.
 
 See [`docs/tech_specs/worker_node.md`](worker_node.md) and [`docs/tech_specs/worker_node_payloads.md`](worker_node_payloads.md).

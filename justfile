@@ -324,7 +324,7 @@ validate-feature-files:
     python3 .ci_scripts/validate_feature_files.py
 
 # Check docs/tech_specs for duplicated spec text (CPD-style); output to stdout only.
-# Pass script args as recipe args, e.g. just check-tech-spec-duplication --report dev_docs/tech_spec_duplication_report.txt
+# Pass script args as recipe args, e.g. just check-tech-spec-duplication --report docs/dev_docs/tech_spec_duplication_report.txt
 check-tech-spec-duplication *ARGS:
     #!/usr/bin/env bash
     set -e

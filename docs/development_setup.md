@@ -232,7 +232,8 @@ Key variables by component.
 - `BOOTSTRAP_ADMIN_PASSWORD` - Admin user password - (required)
 - `USER_GATEWAY_LISTEN_ADDR` - User gateway listen address - :12080
 - `CONTROL_PLANE_LISTEN_ADDR` - Control-plane listen address - :12082
-- `WORKER_API_TARGET_URL` - Worker API URL (control-plane) - (required)
+- `WORKER_API_TARGET_URL` - (Control-plane) Optional explicit override for the Worker API dispatch URL (e.g. same-host dev).
+  When unset, the orchestrator uses the node-reported `worker_api.base_url` from registration and capability reports.
 - `MIGRATIONS_DIR` - Path to migrations (control-plane) - migrations
 
 Compose uses `POSTGRES_*`, `ORCHESTRATOR_PORT`, `CONTROL_PLANE_PORT`, `OLLAMA_IMAGE`; see [orchestrator/docker-compose.yml](../orchestrator/docker-compose.yml).
@@ -243,6 +244,7 @@ Compose uses `POSTGRES_*`, `ORCHESTRATOR_PORT`, `CONTROL_PLANE_PORT`, `OLLAMA_IM
 - `NODE_REGISTRATION_PSK` - Must match control-plane
 - `WORKER_API_BEARER_TOKEN` - Must match control-plane
 - `NODE_MANAGER_WORKER_API_BIN` - Path to worker-api binary (e.g. when using script)
+- `NODE_ADVERTISED_WORKER_API_URL` - Full URL the node reports at registration and in capability reports so the orchestrator can dispatch jobs (e.g. `http://host.containers.internal:12090` when orchestrator is in a container).
 - `OLLAMA_UPSTREAM_URL` - For inference proxy (e.g. <http://host.containers.internal:11434>)
 - `INFERENCE_PROXY_IMAGE` - Image for inference proxy (inference-in-sandbox)
 

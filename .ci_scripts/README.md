@@ -10,7 +10,7 @@
 
 This directory holds Python scripts used for continuous integration and documentation validation.
 Scripts are run from the repository root (e.g. via the [justfile](../justfile)).
-Reports are written to [dev_docs/](../dev_docs/); temporary files, if any, go in [tmp/](../tmp/).
+Reports are written to [docs/dev_docs/](../docs/dev_docs/); temporary files, if any, go in [tmp/](../tmp/).
 
 **See also:** [docs/README.md](../docs/README.md) (documentation index), [README.md](../README.md) (project overview).
 

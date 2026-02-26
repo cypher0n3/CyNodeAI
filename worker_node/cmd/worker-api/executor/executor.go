@@ -4,13 +4,16 @@ package executor
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"time"
 	"unicode/utf8"
 
+	"github.com/cypher0n3/cynodeai/go_shared_libs/contracts/sbajob"
 	"github.com/cypher0n3/cynodeai/go_shared_libs/contracts/workerapi"
 )
 
@@ -21,6 +24,9 @@ const (
 	envWorkspaceDir    = "CYNODE_WORKSPACE_DIR"
 	envOllamaBaseURL   = "OLLAMA_BASE_URL"
 	workspaceMount     = "/workspace"
+	jobMount           = "/job"
+	jobSpecFilename    = "job.json"
+	resultFilename     = "result.json"
 	ollamaBaseURLInPod = "http://localhost:11434"
 )
 
@@ -99,6 +105,11 @@ func (e *Executor) RunJob(ctx context.Context, req *workerapi.RunJobRequest, wor
 	// When UseInference is set and node has proxy image + Ollama URL, run in pod with inference proxy (worker_node.md Option A).
 	if req.Sandbox.UseInference && e.ollamaUpstreamURL != "" && e.inferenceProxyImage != "" && e.runtime == "podman" {
 		return e.runJobWithPodInference(ctx, req, resp, workspaceDir)
+	}
+
+	// When job_spec_json is set and image is an SBA runner, run SBA path: write job.json, mount /job, run image entrypoint, read result.json (P2-10).
+	if req.Sandbox.JobSpecJSON != "" && isSBARunnerImage(image) {
+		return e.runJobSBA(ctx, req, resp, workspaceDir)
 	}
 
 	// Build container run command.
@@ -233,6 +244,112 @@ func setPodInferenceError(resp *workerapi.RunJobResponse, prefix string, out []b
 	resp.Stderr = prefix + ": " + strings.TrimSpace(string(out))
 }
 
+// isSBARunnerImage returns true when the image is an SBA runner (cynode-sba). Per worker_api.md Node-Mediated SBA Result.
+func isSBARunnerImage(image string) bool {
+	return strings.Contains(image, "cynode-sba") || strings.Contains(image, "cynodeai-cynode-sba")
+}
+
+// runJobSBA runs a job with an SBA runner image: write job_spec_json to /job/job.json, mount /job and /workspace, run container (entrypoint cynode-sba), read /job/result.json into resp.SbaResult.
+func (e *Executor) runJobSBA(ctx context.Context, req *workerapi.RunJobRequest, resp *workerapi.RunJobResponse, workspaceDir string) (*workerapi.RunJobResponse, error) {
+	jobDir, err := os.MkdirTemp("", "cynodeai-job-")
+	if err != nil {
+		setSBAError(resp, "failed to create job dir: "+err.Error())
+		return resp, nil
+	}
+	defer func() { _ = os.RemoveAll(jobDir) }()
+
+	jobPath := filepath.Join(jobDir, jobSpecFilename)
+	if err := os.WriteFile(jobPath, []byte(req.Sandbox.JobSpecJSON), 0o644); err != nil {
+		setSBAError(resp, "failed to write job.json: "+err.Error())
+		return resp, nil
+	}
+
+	args := buildSBARunArgs(req, jobDir, workspaceDir, e)
+	cmd := exec.CommandContext(ctx, e.runtime, args...)
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	runErr := cmd.Run()
+	endedAt := time.Now().UTC()
+	resp.EndedAt = endedAt.Format(time.RFC3339)
+
+	resp.Truncated.Stdout = len(stdout.String()) > e.maxOutputBytes
+	resp.Truncated.Stderr = len(stderr.String()) > e.maxOutputBytes
+	resp.Stdout = truncateUTF8(stdout.String(), e.maxOutputBytes)
+	resp.Stderr = truncateUTF8(stderr.String(), e.maxOutputBytes)
+
+	if ctx.Err() == context.DeadlineExceeded {
+		resp.Status = workerapi.StatusTimeout
+		resp.ExitCode = -1
+		return resp, nil
+	}
+	if runErr != nil {
+		e.setRunError(resp, runErr)
+	}
+	applySbaResultFromDir(jobDir, resp)
+	return resp, nil
+}
+
+func setSBAError(resp *workerapi.RunJobResponse, msg string) {
+	resp.EndedAt = time.Now().UTC().Format(time.RFC3339)
+	resp.Status = workerapi.StatusFailed
+	resp.ExitCode = -1
+	resp.Stderr = msg
+}
+
+func buildSBARunArgs(req *workerapi.RunJobRequest, jobDir, workspaceDir string, e *Executor) []string {
+	args := []string{"run", "--rm", "--network=none",
+		"-v", fmt.Sprintf("%s:%s", jobDir, jobMount),
+		"--label", fmt.Sprintf("cynodeai.task_id=%s", req.TaskID),
+		"--label", fmt.Sprintf("cynodeai.job_id=%s", req.JobID),
+	}
+	if workspaceDir != "" {
+		args = append(args, "-v", fmt.Sprintf("%s:%s", workspaceDir, workspaceMount), "-w", workspaceMount)
+	}
+	env := e.buildTaskEnv(req, workspaceMount)
+	for k, v := range env {
+		args = append(args, "-e", fmt.Sprintf("%s=%s", k, v))
+	}
+	args = append(args, req.Sandbox.Image)
+	if len(req.Sandbox.Command) > 0 {
+		args = append(args, req.Sandbox.Command...)
+	}
+	return args
+}
+
+func applySbaResultFromDir(jobDir string, resp *workerapi.RunJobResponse) {
+	data, err := os.ReadFile(filepath.Join(jobDir, resultFilename))
+	if err != nil {
+		if resp.Status != workerapi.StatusTimeout && resp.Status == "" {
+			resp.Status = workerapi.StatusFailed
+			resp.ExitCode = -1
+		}
+		return
+	}
+	var sbaResult sbajob.Result
+	if json.Unmarshal(data, &sbaResult) != nil {
+		if resp.Status != workerapi.StatusTimeout && resp.Status == "" {
+			resp.Status = workerapi.StatusFailed
+			resp.ExitCode = -1
+		}
+		return
+	}
+	resp.SbaResult = &sbaResult
+	if resp.Status == workerapi.StatusTimeout {
+		return
+	}
+	switch sbaResult.Status {
+	case "success":
+		resp.Status = workerapi.StatusCompleted
+		resp.ExitCode = 0
+	case "failure":
+		resp.Status = workerapi.StatusFailed
+		if resp.ExitCode == 0 {
+			resp.ExitCode = 1
+		}
+	}
+}
+
 // buildProxyRunArgs returns the argv for running the inference proxy container in the pod.
 func buildProxyRunArgs(podName, ollamaUpstreamURL, image string, command []string) []string {
 	args := []string{"run", "-d", "--rm", "--pod", podName,
@@ -308,6 +425,13 @@ func (e *Executor) setRunError(resp *workerapi.RunJobResponse, err error) {
 }
 
 func (e *Executor) runDirect(ctx context.Context, req *workerapi.RunJobRequest, resp *workerapi.RunJobResponse, workspaceDir string) (*workerapi.RunJobResponse, error) {
+	if len(req.Sandbox.Command) == 0 {
+		resp.EndedAt = time.Now().UTC().Format(time.RFC3339)
+		resp.Status = workerapi.StatusFailed
+		resp.ExitCode = -1
+		resp.Stderr = "direct runtime requires sandbox.command (SBA jobs need a container runtime)"
+		return resp, nil
+	}
 	cmd := exec.CommandContext(ctx, req.Sandbox.Command[0], req.Sandbox.Command[1:]...)
 
 	workspaceDirValue := workspaceMount
