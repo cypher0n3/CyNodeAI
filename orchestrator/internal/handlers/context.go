@@ -36,6 +36,15 @@ func getUserIDFromContext(ctx context.Context) *uuid.UUID {
 	return nil
 }
 
+// GetHandleFromContext returns the authenticated user's handle from context, or empty string.
+// Used by admin middleware to enforce admin-gated endpoints.
+func GetHandleFromContext(ctx context.Context) string {
+	if h, ok := ctx.Value(contextKeyHandle).(string); ok {
+		return h
+	}
+	return ""
+}
+
 func getNodeIDFromContext(ctx context.Context) *uuid.UUID {
 	if id, ok := ctx.Value(contextKeyNodeID).(uuid.UUID); ok {
 		return &id

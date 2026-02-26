@@ -343,3 +343,29 @@ type ChatAuditLog struct {
 }
 
 func (ChatAuditLog) TableName() string { return "chat_audit_log" }
+
+// WorkflowCheckpoint stores the current LangGraph checkpoint state per task.
+// Per docs/tech_specs/postgres_schema.md and langgraph_mvp.md; one row per task (upsert by task_id).
+type WorkflowCheckpoint struct {
+	ID         uuid.UUID  `gorm:"type:uuid;primaryKey" json:"id"`
+	TaskID     uuid.UUID  `gorm:"column:task_id;uniqueIndex;not null" json:"task_id"`
+	State      *string    `gorm:"column:state;type:jsonb" json:"state,omitempty"`
+	LastNodeID string     `gorm:"column:last_node_id" json:"last_node_id,omitempty"`
+	UpdatedAt  time.Time  `gorm:"column:updated_at;index" json:"updated_at"`
+}
+
+func (WorkflowCheckpoint) TableName() string { return "workflow_checkpoints" }
+
+// TaskWorkflowLease enforces one active workflow per task; held by workflow runner.
+// Per docs/tech_specs/postgres_schema.md and langgraph_mvp.md.
+type TaskWorkflowLease struct {
+	ID        uuid.UUID  `gorm:"type:uuid;primaryKey" json:"id"`
+	TaskID    uuid.UUID  `gorm:"column:task_id;uniqueIndex;not null" json:"task_id"`
+	LeaseID   uuid.UUID  `gorm:"column:lease_id;not null" json:"lease_id"`
+	HolderID  *string    `gorm:"column:holder_id" json:"holder_id,omitempty"`
+	ExpiresAt *time.Time `gorm:"column:expires_at;index" json:"expires_at,omitempty"`
+	CreatedAt time.Time  `gorm:"column:created_at" json:"created_at"`
+	UpdatedAt time.Time  `gorm:"column:updated_at" json:"updated_at"`
+}
+
+func (TaskWorkflowLease) TableName() string { return "task_workflow_leases" }

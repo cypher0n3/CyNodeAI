@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strings"
 )
 
 // Client calls the User API Gateway (auth, tasks, health).
@@ -80,9 +81,10 @@ func (c *Client) GetMe() (*UserResponse, error) {
 }
 
 // HealthResponse is the body returned by GET /healthz (plain "ok").
+// Per cli_management_app_commands_core.md the CLI MUST treat HTTP 200 with body containing "ok" as healthy.
 type HealthResponse struct{}
 
-// Health calls GET /healthz and returns nil if status 200.
+// Health calls GET /healthz and returns nil if status 200 and body contains "ok".
 func (c *Client) Health() error {
 	resp, err := c.doRequest(http.MethodGet, "/healthz", nil, nil)
 	if err != nil {
@@ -91,6 +93,13 @@ func (c *Client) Health() error {
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("healthz: %s", resp.Status)
+	}
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return fmt.Errorf("healthz: read body: %w", err)
+	}
+	if !strings.Contains(string(body), "ok") {
+		return fmt.Errorf("healthz: body must contain %q, got %q", "ok", string(body))
 	}
 	return nil
 }

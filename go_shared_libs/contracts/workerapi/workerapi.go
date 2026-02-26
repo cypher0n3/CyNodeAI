@@ -1,6 +1,12 @@
 // Package workerapi defines the Worker API contract payloads.
 package workerapi
 
+import (
+	"encoding/json"
+
+	"github.com/cypher0n3/cynodeai/go_shared_libs/contracts/sbajob"
+)
+
 // Job status constants.
 const (
 	StatusCompleted = "completed"
@@ -33,17 +39,21 @@ type SandboxSpec struct {
 }
 
 // RunJobResponse represents a synchronous job execution response.
+// See docs/tech_specs/worker_api.md#run-job-synchronous.
 type RunJobResponse struct {
-	Version   int           `json:"version"`
-	TaskID    string        `json:"task_id"`
-	JobID     string        `json:"job_id"`
-	Status    string        `json:"status"`
-	ExitCode  int           `json:"exit_code,omitempty"`
-	Stdout    string        `json:"stdout"`
-	Stderr    string        `json:"stderr"`
-	StartedAt string        `json:"started_at"`
-	EndedAt   string        `json:"ended_at"`
-	Truncated TruncatedInfo `json:"truncated"`
+	Version            int               `json:"version"`
+	TaskID             string            `json:"task_id"`
+	JobID              string            `json:"job_id"`
+	Status             string            `json:"status"`
+	ExitCode           int               `json:"exit_code,omitempty"`
+	Stdout             string            `json:"stdout"`
+	Stderr             string            `json:"stderr"`
+	StartedAt          string            `json:"started_at"`
+	EndedAt            string            `json:"ended_at"`
+	Truncated          TruncatedInfo     `json:"truncated"`
+	SbaResult          *sbajob.Result    `json:"sba_result,omitempty"`
+	StepExecutorResult json.RawMessage   `json:"step_executor_result,omitempty"`
+	Artifacts          []json.RawMessage `json:"artifacts,omitempty"`
 }
 
 // TruncatedInfo indicates if output was truncated.

@@ -109,7 +109,11 @@ func InitializeOrchestratorSuite(sc *godog.ScenarioContext, state *testState) {
 		authMiddleware := middleware.NewAuthMiddleware(jwtManager, nil)
 
 		mux := http.NewServeMux()
-		mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) })
+		mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
+			w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte("ok"))
+		})
 		mux.HandleFunc("GET /readyz", func(w http.ResponseWriter, r *http.Request) {
 			list, err := db.ListDispatchableNodes(r.Context())
 			if err != nil || len(list) == 0 {
@@ -124,6 +128,7 @@ func InitializeOrchestratorSuite(sc *godog.ScenarioContext, state *testState) {
 		mux.HandleFunc("POST /v1/auth/refresh", authHandler.Refresh)
 		mux.Handle("POST /v1/auth/logout", authMiddleware.RequireUserAuth(http.HandlerFunc(authHandler.Logout)))
 		mux.Handle("GET /v1/users/me", authMiddleware.RequireUserAuth(http.HandlerFunc(userHandler.GetMe)))
+		mux.Handle("POST /v1/users/{id}/revoke_sessions", authMiddleware.RequireAdminAuth(http.HandlerFunc(userHandler.RevokeSessions)))
 		mux.Handle("POST /v1/tasks", authMiddleware.RequireUserAuth(http.HandlerFunc(taskHandler.CreateTask)))
 		mux.Handle("GET /v1/tasks", authMiddleware.RequireUserAuth(http.HandlerFunc(taskHandler.ListTasks)))
 		mux.Handle("GET /v1/tasks/{id}", authMiddleware.RequireUserAuth(http.HandlerFunc(taskHandler.GetTask)))

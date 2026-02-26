@@ -1,7 +1,7 @@
 # Binaries (just build outputs and local go build)
 bin/
-cynork
-cynork.exe
+**/cynork
+**/cynork.exe
 
 # Config
 config.yaml

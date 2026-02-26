@@ -134,6 +134,37 @@ func TestAuthMiddleware_RequireNodeAuth_WrongTokenType(t *testing.T) {
 	}
 }
 
+func TestAuthMiddleware_RequireAdminAuth(t *testing.T) {
+	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
+	jwt := auth.NewJWTManager("test-secret", 15*time.Minute, 7*24*time.Hour, 24*time.Hour)
+	mw := NewAuthMiddleware(jwt, logger)
+
+	t.Run("admin_passes", func(t *testing.T) {
+		tok, _ := jwt.GenerateAccessToken(uuid.New(), "admin")
+		called := false
+		h := mw.RequireAdminAuth(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { called = true; w.WriteHeader(http.StatusOK) }))
+		req := httptest.NewRequest("GET", "/test", http.NoBody)
+		req.Header.Set("Authorization", "Bearer "+tok)
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, req)
+		if w.Code != http.StatusOK || !called {
+			t.Errorf("code=%d called=%v", w.Code, called)
+		}
+	})
+
+	t.Run("non_admin_forbidden", func(t *testing.T) {
+		tok, _ := jwt.GenerateAccessToken(uuid.New(), "otheruser")
+		h := mw.RequireAdminAuth(http.HandlerFunc(func(http.ResponseWriter, *http.Request) { t.Error("should not run") }))
+		req := httptest.NewRequest("GET", "/test", http.NoBody)
+		req.Header.Set("Authorization", "Bearer "+tok)
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, req)
+		if w.Code != http.StatusForbidden {
+			t.Errorf("code=%d", w.Code)
+		}
+	})
+}
+
 func TestExtractBearerToken(t *testing.T) {
 	tests := []struct {
 		name   string

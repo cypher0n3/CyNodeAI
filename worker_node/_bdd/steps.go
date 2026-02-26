@@ -58,7 +58,11 @@ func getWorkerState(ctx context.Context) *workerTestState {
 // workerMux builds the same routes as worker-api main for testing.
 func workerMux(exec *executor.Executor, bearerToken string) *http.ServeMux {
 	mux := http.NewServeMux()
-	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) })
+	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("ok"))
+	})
 	mux.HandleFunc("GET /readyz", func(w http.ResponseWriter, r *http.Request) {
 		ready, reason := exec.Ready(r.Context())
 		if ready {

@@ -73,8 +73,9 @@ func runMain(ctx context.Context) int {
 
 func newMux(exec *executor.Executor, bearerToken, workspaceRoot string, logger *slog.Logger) *http.ServeMux {
 	mux := http.NewServeMux()
-	// REQ-WORKER-0140, REQ-WORKER-0141: unauthenticated GET /healthz
+	// REQ-WORKER-0140, REQ-WORKER-0141: unauthenticated GET /healthz; body plain text "ok" per worker_api.md
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte("ok"))
 	})

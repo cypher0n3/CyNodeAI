@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -172,6 +173,22 @@ func TestClient_Health_Non200(t *testing.T) {
 	err := client.Health()
 	if err == nil {
 		t.Fatal("expected error for 503")
+	}
+}
+
+func TestClient_Health_BodyMustContainOk(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("unhealthy"))
+	}))
+	defer server.Close()
+	client := NewClient(server.URL)
+	err := client.Health()
+	if err == nil {
+		t.Fatal("expected error when body does not contain ok")
+	}
+	if !strings.Contains(err.Error(), "ok") {
+		t.Errorf("error should mention body/ok: %v", err)
 	}
 }
 

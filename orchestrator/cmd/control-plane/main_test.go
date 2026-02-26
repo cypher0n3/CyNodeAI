@@ -96,6 +96,21 @@ func TestGetEnv(t *testing.T) {
 	}
 }
 
+func TestHealthzHandler(t *testing.T) {
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodGet, "/healthz", http.NoBody)
+	healthzHandler(w, r)
+	if w.Code != http.StatusOK {
+		t.Errorf("healthz: got %d", w.Code)
+	}
+	if ct := w.Header().Get("Content-Type"); ct != "text/plain; charset=utf-8" {
+		t.Errorf("healthz Content-Type: got %q", ct)
+	}
+	if strings.TrimSpace(w.Body.String()) != "ok" {
+		t.Errorf("healthz body: got %q", w.Body.String())
+	}
+}
+
 func TestReadyzHandler_NoNodes(t *testing.T) {
 	mock := testutil.NewMockDB()
 	cfg := &config.OrchestratorConfig{PMAEnabled: false}

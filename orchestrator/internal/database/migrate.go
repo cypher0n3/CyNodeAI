@@ -43,6 +43,8 @@ func (db *DB) runAutoMigrate(ctx context.Context, logger *slog.Logger) error {
 		&models.ChatThread{},
 		&models.ChatMessage{},
 		&models.ChatAuditLog{},
+		&models.WorkflowCheckpoint{},
+		&models.TaskWorkflowLease{},
 	)
 	if err != nil {
 		return fmt.Errorf("auto migrate: %w", err)

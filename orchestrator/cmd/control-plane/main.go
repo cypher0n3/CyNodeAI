@@ -151,10 +151,7 @@ func run(ctx context.Context, store database.Store, cfg *config.OrchestratorConf
 	authMiddleware := middleware.NewAuthMiddleware(jwtManager, logger)
 
 	mux := http.NewServeMux()
-	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte("ok"))
-	})
+	mux.HandleFunc("GET /healthz", healthzHandler)
 	mux.HandleFunc("GET /readyz", readyzHandler(store, cfg, logger))
 
 	mux.HandleFunc("POST /v1/nodes/register", nodeHandler.Register)
@@ -230,6 +227,13 @@ func run(ctx context.Context, store database.Store, cfg *config.OrchestratorConf
 	}
 	logger.Info("server stopped")
 	return nil
+}
+
+// healthzHandler responds to GET /healthz with 200 and plain text body "ok" per spec.
+func healthzHandler(w http.ResponseWriter, _ *http.Request) {
+	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write([]byte("ok"))
 }
 
 // pmaReady checks whether the PMA (cynode-pma) is reachable at the configured listen address.

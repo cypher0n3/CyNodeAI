@@ -104,6 +104,18 @@ func (m *AuthMiddleware) RequireNodeAuth(next http.Handler) http.Handler {
 		handlers.SetNodeContext))
 }
 
+// RequireAdminAuth middleware requires a valid user access token and the user to have handle "admin".
+// Used for admin-gated endpoints per local_user_accounts.md (e.g. POST /users/{id}/revoke_sessions).
+func (m *AuthMiddleware) RequireAdminAuth(next http.Handler) http.Handler {
+	return m.RequireUserAuth(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if handlers.GetHandleFromContext(r.Context()) != "admin" {
+			handlers.WriteForbidden(w, "Admin required")
+			return
+		}
+		next.ServeHTTP(w, r)
+	}))
+}
+
 func extractBearerToken(r *http.Request) string {
 	authHeader := r.Header.Get("Authorization")
 	if authHeader == "" {
