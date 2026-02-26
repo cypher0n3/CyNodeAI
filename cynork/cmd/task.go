@@ -9,6 +9,7 @@ import (
 
 	"github.com/cypher0n3/cynodeai/cynork/internal/exit"
 	"github.com/cypher0n3/cynodeai/cynork/internal/gateway"
+	"github.com/cypher0n3/cynodeai/go_shared_libs/contracts/userapi"
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
 )
@@ -108,7 +109,7 @@ func runTaskCreate(_ *cobra.Command, _ []string) error {
 	if inputMode == "" {
 		inputMode = "prompt"
 	}
-	task, err := client.CreateTask(gateway.CreateTaskRequest{Prompt: taskCreatePrompt, UseInference: taskCreateUseInference, InputMode: inputMode})
+	task, err := client.CreateTask(userapi.CreateTaskRequest{Prompt: taskCreatePrompt, UseInference: taskCreateUseInference, InputMode: inputMode})
 	if err != nil {
 		return exitFromGatewayErr(err)
 	}
@@ -259,7 +260,7 @@ func runTaskLogs(_ *cobra.Command, args []string) error {
 	return nil
 }
 
-func printTaskResult(result *gateway.TaskResultResponse) {
+func printTaskResult(result *userapi.TaskResultResponse) {
 	if outputFmt == outputFormatJSON {
 		out := map[string]any{"task_id": result.TaskID, "status": result.Status}
 		var stdout, stderr string

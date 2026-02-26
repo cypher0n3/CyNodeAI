@@ -13,6 +13,8 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/cypher0n3/cynodeai/go_shared_libs/contracts/nodepayloads"
+	"github.com/cypher0n3/cynodeai/go_shared_libs/contracts/userapi"
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/auth"
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/models"
 )
@@ -20,12 +22,13 @@ import (
 // TestTaskHandler_CreateTaskSuccess tests successful task creation path
 func TestTaskHandler_CreateTaskSuccess(t *testing.T) {
 	// Test the JSON response structure
-	resp := TaskResponse{
+	now := time.Now().UTC().Format(time.RFC3339)
+	resp := userapi.TaskResponse{
 		TaskID:    uuid.New().String(),
-		Status:    SpecStatusQueued,
+		Status:    userapi.StatusQueued,
 		Prompt:    ptr("test prompt"),
-		CreatedAt: time.Now().UTC(),
-		UpdatedAt: time.Now().UTC(),
+		CreatedAt: now,
+		UpdatedAt: now,
 	}
 
 	data, err := json.Marshal(resp)
@@ -33,12 +36,12 @@ func TestTaskHandler_CreateTaskSuccess(t *testing.T) {
 		t.Fatalf("failed to marshal TaskResponse: %v", err)
 	}
 
-	var parsed TaskResponse
+	var parsed userapi.TaskResponse
 	if err := json.Unmarshal(data, &parsed); err != nil {
 		t.Fatalf("failed to unmarshal TaskResponse: %v", err)
 	}
 
-	if parsed.Status != SpecStatusQueued {
+	if parsed.Status != userapi.StatusQueued {
 		t.Errorf("expected status queued, got %s", parsed.Status)
 	}
 }
@@ -46,10 +49,10 @@ func TestTaskHandler_CreateTaskSuccess(t *testing.T) {
 // TestTaskHandler_GetTaskResultWithJobs tests task result response with jobs
 func TestTaskHandler_GetTaskResultWithJobs(t *testing.T) {
 	result := "test result output"
-	startedAt := time.Now().UTC()
-	endedAt := startedAt.Add(5 * time.Second)
+	startedAt := time.Now().UTC().Format(time.RFC3339)
+	endedAt := time.Now().UTC().Add(5 * time.Second).Format(time.RFC3339)
 
-	jobs := []JobResponse{
+	jobs := []userapi.JobResponse{
 		{
 			ID:        uuid.New().String(),
 			Status:    models.JobStatusCompleted,
@@ -66,7 +69,7 @@ func TestTaskHandler_GetTaskResultWithJobs(t *testing.T) {
 		},
 	}
 
-	resp := TaskResultResponse{
+	resp := userapi.TaskResultResponse{
 		TaskID: uuid.New().String(),
 		Status: models.TaskStatusRunning,
 		Jobs:   jobs,
@@ -77,7 +80,7 @@ func TestTaskHandler_GetTaskResultWithJobs(t *testing.T) {
 		t.Fatalf("failed to marshal: %v", err)
 	}
 
-	var parsed TaskResultResponse
+	var parsed userapi.TaskResultResponse
 	if err := json.Unmarshal(data, &parsed); err != nil {
 		t.Fatalf("failed to unmarshal: %v", err)
 	}
@@ -89,7 +92,7 @@ func TestTaskHandler_GetTaskResultWithJobs(t *testing.T) {
 
 // TestAuthHandler_CompleteLoginPath tests the login completion structure
 func TestAuthHandler_CompleteLoginPath(t *testing.T) {
-	resp := LoginResponse{
+	resp := userapi.LoginResponse{
 		AccessToken:  "test-access-token",
 		RefreshToken: "test-refresh-token",
 		TokenType:    "Bearer",
@@ -101,7 +104,7 @@ func TestAuthHandler_CompleteLoginPath(t *testing.T) {
 		t.Fatalf("failed to marshal: %v", err)
 	}
 
-	var parsed LoginResponse
+	var parsed userapi.LoginResponse
 	if err := json.Unmarshal(data, &parsed); err != nil {
 		t.Fatalf("failed to unmarshal: %v", err)
 	}
@@ -171,7 +174,7 @@ func TestAuthHandler_RefreshWithValidJWT(t *testing.T) {
 	userID := uuid.New()
 	refreshToken, _, _ := jwtMgr.GenerateRefreshToken(userID)
 
-	body := RefreshRequest{RefreshToken: refreshToken}
+	body := userapi.RefreshRequest{RefreshToken: refreshToken}
 	jsonBody, _ := json.Marshal(body)
 	req := httptest.NewRequest("POST", "/v1/auth/refresh", bytes.NewBuffer(jsonBody))
 	rec := httptest.NewRecorder()
@@ -226,8 +229,8 @@ func TestCreateTaskOrLogoutWithNilDB(t *testing.T) {
 		body   interface{}
 		invoke func(http.ResponseWriter, *http.Request)
 	}{
-		{"CreateTask", "/v1/tasks", CreateTaskRequest{Prompt: "test prompt"}, (&TaskHandler{}).CreateTask},
-		{"Logout", "/v1/auth/logout", LogoutRequest{RefreshToken: "some-refresh-token"}, (&AuthHandler{}).Logout},
+		{"CreateTask", "/v1/tasks", userapi.CreateTaskRequest{Prompt: "test prompt"}, (&TaskHandler{}).CreateTask},
+		{"Logout", "/v1/auth/logout", userapi.LogoutRequest{RefreshToken: "some-refresh-token"}, (&AuthHandler{}).Logout},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -239,7 +242,9 @@ func TestCreateTaskOrLogoutWithNilDB(t *testing.T) {
 	}
 }
 
-// TestNodeHandler_RegisterWithValidRequest tests registration validation success path
+// TestNodeHandler_RegisterWithValidRequest tests registration validation success path.
+//
+//nolint:dupl // test body struct similar to other node registration tests
 func TestNodeHandler_RegisterWithValidRequest(t *testing.T) {
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelError}))
 	handler := &NodeHandler{
@@ -247,16 +252,16 @@ func TestNodeHandler_RegisterWithValidRequest(t *testing.T) {
 		logger:          logger,
 	}
 
-	body := NodeRegistrationRequest{
+	body := nodepayloads.RegistrationRequest{
 		PSK: "test-psk-secret",
-		Capability: NodeCapabilityReport{
+		Capability: nodepayloads.CapabilityReport{
 			Version: 1,
-			Node:    NodeCapabilityNode{NodeSlug: "test-node-1"},
-			Platform: NodeCapabilityPlatform{
+			Node:    nodepayloads.CapabilityNode{NodeSlug: "test-node-1"},
+			Platform: nodepayloads.Platform{
 				OS:   "linux",
 				Arch: "amd64",
 			},
-			Compute: NodeCapabilityCompute{
+			Compute: nodepayloads.Compute{
 				CPUCores: 8,
 				RAMMB:    16384,
 			},
@@ -298,7 +303,7 @@ func ptr(s string) *string {
 
 // TestJobResponseWithNilFields tests JobResponse with nil optional fields
 func TestJobResponseWithNilFields(t *testing.T) {
-	resp := JobResponse{
+	resp := userapi.JobResponse{
 		ID:        uuid.New().String(),
 		Status:    "pending",
 		Result:    nil,
@@ -311,7 +316,7 @@ func TestJobResponseWithNilFields(t *testing.T) {
 		t.Fatalf("failed to marshal: %v", err)
 	}
 
-	var parsed JobResponse
+	var parsed userapi.JobResponse
 	if err := json.Unmarshal(data, &parsed); err != nil {
 		t.Fatalf("failed to unmarshal: %v", err)
 	}
@@ -373,13 +378,13 @@ func TestValidateLoginCredentialsStructure(t *testing.T) {
 // TestTaskResponseWithSummary tests TaskResponse with summary field
 func TestTaskResponseWithSummary(t *testing.T) {
 	summary := "Task completed successfully"
-	resp := TaskResponse{
+	resp := userapi.TaskResponse{
 		TaskID:    uuid.New().String(),
-		Status:    SpecStatusCompleted,
+		Status:    userapi.StatusCompleted,
 		Prompt:    ptr("test prompt"),
 		Summary:   &summary,
-		CreatedAt: time.Now(),
-		UpdatedAt: time.Now(),
+		CreatedAt: time.Now().Format(time.RFC3339),
+		UpdatedAt: time.Now().Format(time.RFC3339),
 	}
 
 	data, err := json.Marshal(resp)
@@ -387,7 +392,7 @@ func TestTaskResponseWithSummary(t *testing.T) {
 		t.Fatalf("failed to marshal: %v", err)
 	}
 
-	var parsed TaskResponse
+	var parsed userapi.TaskResponse
 	if err := json.Unmarshal(data, &parsed); err != nil {
 		t.Fatalf("failed to unmarshal: %v", err)
 	}

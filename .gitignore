@@ -11,24 +11,14 @@ bin-dev/
 **/bin-dev/
 
 # Go build binary names (justfile build-* outputs; ignore anywhere in tree)
-**/cynode-pma
 **/cynode-pma-dev
-**/cynode-sba
 **/cynode-sba-dev
-**/cynork.exe
-**/control-plane
 **/control-plane-dev
-**/user-gateway
 **/user-gateway-dev
-**/api-egress
 **/api-egress-dev
-**/mcp-gateway
 **/mcp-gateway-dev
-**/worker-api
 **/worker-api-dev
-**/node-manager
 **/node-manager-dev
-**/inference-proxy
 **/inference-proxy-dev
 
 # File Patterns
@@ -38,6 +28,7 @@ bin-dev/
 *.doc
 *.docx
 *.eps
+*.exe
 *.gif
 *.ico
 *.jpeg
@@ -69,3 +60,4 @@ coverage.*
 # Ignore local files
 .markdownlint-cli2.jsonc
 .env*
+!.env.example

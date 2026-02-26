@@ -9,6 +9,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/cypher0n3/cynodeai/go_shared_libs/contracts/userapi"
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/testutil"
 )
 
@@ -40,7 +41,7 @@ func TestGetMeWithUserID(t *testing.T) {
 
 func TestUserResponseJSON(t *testing.T) {
 	email := "test@example.com"
-	resp := UserResponse{
+	resp := userapi.UserResponse{
 		ID:       "user-id",
 		Handle:   testUserHandle,
 		Email:    &email,
@@ -56,7 +57,7 @@ func TestUserResponseJSON(t *testing.T) {
 }
 
 func TestUserResponseNilEmail(t *testing.T) {
-	resp := UserResponse{
+	resp := userapi.UserResponse{
 		ID:       "user-id",
 		Handle:   testUserHandle,
 		Email:    nil,
@@ -149,7 +150,7 @@ func TestRevokeSessions_DBErrorOnInvalidate(t *testing.T) {
 }
 
 func TestUserResponseIsInactive(t *testing.T) {
-	resp := UserResponse{
+	resp := userapi.UserResponse{
 		ID:       "user-id",
 		Handle:   "inactive-user",
 		Email:    nil,

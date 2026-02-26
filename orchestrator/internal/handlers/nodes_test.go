@@ -9,6 +9,8 @@ import (
 	"os"
 	"testing"
 	"time"
+
+	"github.com/cypher0n3/cynodeai/go_shared_libs/contracts/nodepayloads"
 )
 
 const testOrchestratorURL = "http://test-orchestrator"
@@ -27,11 +29,11 @@ func TestRegisterBadRequest(t *testing.T) {
 
 func TestRegisterInvalidPSK(t *testing.T) {
 	handler := &NodeHandler{registrationPSK: "correct-psk"}
-	req, rec := recordedRequestJSON("POST", "/v1/nodes/register", NodeRegistrationRequest{
+	req, rec := recordedRequestJSON("POST", "/v1/nodes/register", nodepayloads.RegistrationRequest{
 		PSK: "wrong-psk",
-		Capability: NodeCapabilityReport{
+		Capability: nodepayloads.CapabilityReport{
 			Version: 1,
-			Node:    NodeCapabilityNode{NodeSlug: "test-node"},
+			Node:    nodepayloads.CapabilityNode{NodeSlug: "test-node"},
 		},
 	})
 	handler.Register(rec, req)
@@ -42,16 +44,16 @@ func TestRegisterInvalidBodyOrSlug(t *testing.T) {
 	handler := &NodeHandler{registrationPSK: "test-psk"}
 	tests := []struct {
 		name       string
-		body       NodeRegistrationRequest
+		body       nodepayloads.RegistrationRequest
 		wantStatus int
 	}{
-		{"invalid capability version", NodeRegistrationRequest{
+		{"invalid capability version", nodepayloads.RegistrationRequest{
 			PSK:        "test-psk",
-			Capability: NodeCapabilityReport{Version: 2, Node: NodeCapabilityNode{NodeSlug: "test-node"}},
+			Capability: nodepayloads.CapabilityReport{Version: 2, Node: nodepayloads.CapabilityNode{NodeSlug: "test-node"}},
 		}, http.StatusBadRequest},
-		{"missing node slug", NodeRegistrationRequest{
+		{"missing node slug", nodepayloads.RegistrationRequest{
 			PSK:        "test-psk",
-			Capability: NodeCapabilityReport{Version: 1, Node: NodeCapabilityNode{NodeSlug: ""}},
+			Capability: nodepayloads.CapabilityReport{Version: 1, Node: nodepayloads.CapabilityNode{NodeSlug: ""}},
 		}, http.StatusBadRequest},
 	}
 	for _, tt := range tests {
@@ -78,24 +80,24 @@ func TestReportCapabilityBadRequest(t *testing.T) {
 }
 
 func TestNodeCapabilityReportJSON(t *testing.T) {
-	report := NodeCapabilityReport{
+	report := nodepayloads.CapabilityReport{
 		Version:    1,
 		ReportedAt: time.Now().UTC().Format(time.RFC3339),
-		Node: NodeCapabilityNode{
+		Node: nodepayloads.CapabilityNode{
 			NodeSlug: "test-node",
 			Name:     "Test Node",
 			Labels:   []string{"gpu", "high-memory"},
 		},
-		Platform: NodeCapabilityPlatform{
+		Platform: nodepayloads.Platform{
 			OS:     "linux",
 			Distro: "ubuntu",
 			Arch:   "amd64",
 		},
-		Compute: NodeCapabilityCompute{
+		Compute: nodepayloads.Compute{
 			CPUCores: 8,
 			RAMMB:    16384,
 		},
-		Sandbox: &NodeCapabilitySandbox{
+		Sandbox: &nodepayloads.SandboxSupport{
 			Supported:      true,
 			Features:       []string{"podman"},
 			MaxConcurrency: 4,
@@ -107,7 +109,7 @@ func TestNodeCapabilityReportJSON(t *testing.T) {
 		t.Fatalf("failed to marshal: %v", err)
 	}
 
-	var parsed NodeCapabilityReport
+	var parsed nodepayloads.CapabilityReport
 	if err := json.Unmarshal(jsonData, &parsed); err != nil {
 		t.Fatalf("failed to unmarshal: %v", err)
 	}
@@ -197,7 +199,7 @@ func TestLogHelpers(t *testing.T) {
 }
 
 func TestNodeCapabilityNode(t *testing.T) {
-	node := NodeCapabilityNode{
+	node := nodepayloads.CapabilityNode{
 		NodeSlug: "test-slug",
 		Name:     "Test Name",
 		Labels:   []string{"label1", "label2"},
@@ -212,7 +214,7 @@ func TestNodeCapabilityNode(t *testing.T) {
 }
 
 func TestNodeCapabilityPlatform(t *testing.T) {
-	platform := NodeCapabilityPlatform{
+	platform := nodepayloads.Platform{
 		OS:     "linux",
 		Distro: "ubuntu",
 		Arch:   "amd64",
@@ -227,7 +229,7 @@ func TestNodeCapabilityPlatform(t *testing.T) {
 }
 
 func TestNodeCapabilityCompute(t *testing.T) {
-	compute := NodeCapabilityCompute{
+	compute := nodepayloads.Compute{
 		CPUCores: 16,
 		RAMMB:    32768,
 	}
@@ -241,7 +243,7 @@ func TestNodeCapabilityCompute(t *testing.T) {
 }
 
 func TestNodeCapabilitySandbox(t *testing.T) {
-	sandbox := NodeCapabilitySandbox{
+	sandbox := nodepayloads.SandboxSupport{
 		Supported:      true,
 		Features:       []string{"podman", "docker"},
 		MaxConcurrency: 8,
@@ -256,11 +258,11 @@ func TestNodeCapabilitySandbox(t *testing.T) {
 }
 
 func TestNodeRegistrationRequestJSON(t *testing.T) {
-	req := NodeRegistrationRequest{
+	req := nodepayloads.RegistrationRequest{
 		PSK: "secret-psk",
-		Capability: NodeCapabilityReport{
+		Capability: nodepayloads.CapabilityReport{
 			Version: 1,
-			Node:    NodeCapabilityNode{NodeSlug: "my-node"},
+			Node:    nodepayloads.CapabilityNode{NodeSlug: "my-node"},
 		},
 	}
 
@@ -269,7 +271,7 @@ func TestNodeRegistrationRequestJSON(t *testing.T) {
 		t.Fatalf("failed to marshal: %v", err)
 	}
 
-	var parsed NodeRegistrationRequest
+	var parsed nodepayloads.RegistrationRequest
 	if err := json.Unmarshal(data, &parsed); err != nil {
 		t.Fatalf("failed to unmarshal: %v", err)
 	}
@@ -322,9 +324,9 @@ func TestValidateRegistrationRequestIntegration(t *testing.T) {
 }
 
 func TestNodeCapabilitySandboxNil(t *testing.T) {
-	report := NodeCapabilityReport{
+	report := nodepayloads.CapabilityReport{
 		Version: 1,
-		Node:    NodeCapabilityNode{NodeSlug: "test"},
+		Node:    nodepayloads.CapabilityNode{NodeSlug: "test"},
 		Sandbox: nil,
 	}
 
@@ -334,9 +336,9 @@ func TestNodeCapabilitySandboxNil(t *testing.T) {
 }
 
 func TestCapabilityHash(t *testing.T) {
-	report := NodeCapabilityReport{
+	report := nodepayloads.CapabilityReport{
 		Version: 1,
-		Node:    NodeCapabilityNode{NodeSlug: "test-node"},
+		Node:    nodepayloads.CapabilityNode{NodeSlug: "test-node"},
 	}
 
 	jsonBytes, _ := json.Marshal(report)
@@ -358,9 +360,9 @@ func TestLogHelpersWithLogger(t *testing.T) {
 func TestReportCapabilityNoNodeID(t *testing.T) {
 	handler := &NodeHandler{}
 
-	body := NodeCapabilityReport{
+	body := nodepayloads.CapabilityReport{
 		Version: 1,
-		Node:    NodeCapabilityNode{NodeSlug: "test"},
+		Node:    nodepayloads.CapabilityNode{NodeSlug: "test"},
 	}
 	jsonBody, _ := json.Marshal(body)
 	req := httptest.NewRequest("POST", "/v1/nodes/capability", bytes.NewBuffer(jsonBody))
@@ -377,11 +379,11 @@ func TestReportCapabilityNoNodeID(t *testing.T) {
 func TestRegisterWithNilDB(t *testing.T) {
 	handler := &NodeHandler{registrationPSK: "test-psk", db: nil}
 
-	body := NodeRegistrationRequest{
+	body := nodepayloads.RegistrationRequest{
 		PSK: "test-psk",
-		Capability: NodeCapabilityReport{
+		Capability: nodepayloads.CapabilityReport{
 			Version: 1,
-			Node:    NodeCapabilityNode{NodeSlug: "test-node"},
+			Node:    nodepayloads.CapabilityNode{NodeSlug: "test-node"},
 		},
 	}
 	jsonBody, _ := json.Marshal(body)
@@ -398,26 +400,26 @@ func TestRegisterWithNilDB(t *testing.T) {
 }
 
 func TestNodeRegistrationRequestAllFields(t *testing.T) {
-	req := NodeRegistrationRequest{
+	req := nodepayloads.RegistrationRequest{
 		PSK: "my-psk",
-		Capability: NodeCapabilityReport{
+		Capability: nodepayloads.CapabilityReport{
 			Version:    1,
 			ReportedAt: time.Now().UTC().Format(time.RFC3339),
-			Node: NodeCapabilityNode{
+			Node: nodepayloads.CapabilityNode{
 				NodeSlug: "node-1",
 				Name:     "Node 1",
 				Labels:   []string{"gpu", "high-mem"},
 			},
-			Platform: NodeCapabilityPlatform{
+			Platform: nodepayloads.Platform{
 				OS:     "linux",
 				Distro: "ubuntu",
 				Arch:   "amd64",
 			},
-			Compute: NodeCapabilityCompute{
+			Compute: nodepayloads.Compute{
 				CPUCores: 16,
 				RAMMB:    65536,
 			},
-			Sandbox: &NodeCapabilitySandbox{
+			Sandbox: &nodepayloads.SandboxSupport{
 				Supported:      true,
 				Features:       []string{"docker", "podman"},
 				MaxConcurrency: 8,
@@ -430,7 +432,7 @@ func TestNodeRegistrationRequestAllFields(t *testing.T) {
 		t.Fatalf("failed to marshal: %v", err)
 	}
 
-	var parsed NodeRegistrationRequest
+	var parsed nodepayloads.RegistrationRequest
 	if err := json.Unmarshal(data, &parsed); err != nil {
 		t.Fatalf("failed to unmarshal: %v", err)
 	}
@@ -447,12 +449,12 @@ func TestNodeRegistrationRequestAllFields(t *testing.T) {
 }
 
 func TestNodeCapabilityReportNoSandbox(t *testing.T) {
-	report := NodeCapabilityReport{
+	report := nodepayloads.CapabilityReport{
 		Version:    1,
 		ReportedAt: time.Now().UTC().Format(time.RFC3339),
-		Node:       NodeCapabilityNode{NodeSlug: "minimal-node"},
-		Platform:   NodeCapabilityPlatform{OS: "linux", Arch: "arm64"},
-		Compute:    NodeCapabilityCompute{CPUCores: 4, RAMMB: 8192},
+		Node:       nodepayloads.CapabilityNode{NodeSlug: "minimal-node"},
+		Platform:   nodepayloads.Platform{OS: "linux", Arch: "arm64"},
+		Compute:    nodepayloads.Compute{CPUCores: 4, RAMMB: 8192},
 		// Sandbox is nil
 	}
 
@@ -461,7 +463,7 @@ func TestNodeCapabilityReportNoSandbox(t *testing.T) {
 		t.Fatalf("failed to marshal: %v", err)
 	}
 
-	var parsed NodeCapabilityReport
+	var parsed nodepayloads.CapabilityReport
 	if err := json.Unmarshal(data, &parsed); err != nil {
 		t.Fatalf("failed to unmarshal: %v", err)
 	}
@@ -477,11 +479,11 @@ func TestNodeCapabilityReportNoSandbox(t *testing.T) {
 func TestValidateRegistrationRequestValid(t *testing.T) {
 	handler := &NodeHandler{registrationPSK: "test-psk"}
 
-	body := NodeRegistrationRequest{
+	body := nodepayloads.RegistrationRequest{
 		PSK: "test-psk",
-		Capability: NodeCapabilityReport{
+		Capability: nodepayloads.CapabilityReport{
 			Version: 1,
-			Node:    NodeCapabilityNode{NodeSlug: "valid-node"},
+			Node:    nodepayloads.CapabilityNode{NodeSlug: "valid-node"},
 		},
 	}
 	jsonBody, _ := json.Marshal(body)

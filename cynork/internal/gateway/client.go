@@ -10,6 +10,9 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
+
+	"github.com/cypher0n3/cynodeai/go_shared_libs/contracts/problem"
+	"github.com/cypher0n3/cynodeai/go_shared_libs/contracts/userapi"
 )
 
 // Client calls the User API Gateway (auth, tasks, health).
@@ -32,54 +35,27 @@ func (c *Client) SetToken(token string) {
 	c.Token = token
 }
 
-// LoginRequest is the body for POST /v1/auth/login.
-type LoginRequest struct {
-	Handle   string `json:"handle"`
-	Password string `json:"password"`
-}
-
-// LoginResponse is the body returned by POST /v1/auth/login.
-type LoginResponse struct {
-	AccessToken  string `json:"access_token"`
-	RefreshToken string `json:"refresh_token"`
-	TokenType    string `json:"token_type"`
-	ExpiresIn    int    `json:"expires_in"`
-}
-
 // Login calls POST /v1/auth/login and returns the token response.
-func (c *Client) Login(req LoginRequest) (*LoginResponse, error) {
-	var out LoginResponse
+func (c *Client) Login(req userapi.LoginRequest) (*userapi.LoginResponse, error) {
+	var out userapi.LoginResponse
 	if err := c.doPostJSON("/v1/auth/login", req, http.StatusOK, &out); err != nil {
 		return nil, err
 	}
 	return &out, nil
 }
 
-// RefreshRequest is the body for POST /v1/auth/refresh.
-type RefreshRequest struct {
-	RefreshToken string `json:"refresh_token"`
-}
-
 // Refresh calls POST /v1/auth/refresh and returns new tokens (no auth header required).
-func (c *Client) Refresh(refreshToken string) (*LoginResponse, error) {
-	req := RefreshRequest{RefreshToken: refreshToken}
-	var out LoginResponse
+func (c *Client) Refresh(refreshToken string) (*userapi.LoginResponse, error) {
+	req := userapi.RefreshRequest{RefreshToken: refreshToken}
+	var out userapi.LoginResponse
 	if err := c.doPostJSONNoAuth("/v1/auth/refresh", req, http.StatusOK, &out); err != nil {
 		return nil, err
 	}
 	return &out, nil
 }
 
-// UserResponse is the body returned by GET /v1/users/me.
-type UserResponse struct {
-	ID       string  `json:"id"`
-	Handle   string  `json:"handle"`
-	Email    *string `json:"email,omitempty"`
-	IsActive bool    `json:"is_active"`
-}
-
 // GetMe calls GET /v1/users/me (requires auth).
-func (c *Client) GetMe() (*UserResponse, error) {
+func (c *Client) GetMe() (*userapi.UserResponse, error) {
 	resp, err := c.doRequest(http.MethodGet, "/v1/users/me", nil, nil)
 	if err != nil {
 		return nil, err
@@ -88,7 +64,7 @@ func (c *Client) GetMe() (*UserResponse, error) {
 	if resp.StatusCode != http.StatusOK {
 		return nil, c.parseError(resp)
 	}
-	var out UserResponse
+	var out userapi.UserResponse
 	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
 		return nil, fmt.Errorf("decode user response: %w", err)
 	}
@@ -119,35 +95,6 @@ func (c *Client) Health() error {
 	return nil
 }
 
-// CreateTaskRequest is the body for POST /v1/tasks.
-// InputMode: "prompt" (default) = natural language, inference; "script" or "commands" = literal shell.
-type CreateTaskRequest struct {
-	Prompt       string `json:"prompt"`
-	UseInference bool   `json:"use_inference,omitempty"`
-	InputMode    string `json:"input_mode,omitempty"`
-}
-
-// TaskResponse is the task in create/get responses.
-// Gateway may return "id" or "task_id"; CLI spec uses task_id.
-type TaskResponse struct {
-	ID        string  `json:"id"`
-	TaskID    string  `json:"task_id"` // alias for list/get responses
-	Status    string  `json:"status"`
-	TaskName  *string `json:"task_name,omitempty"`
-	Prompt    *string `json:"prompt,omitempty"`
-	Summary   *string `json:"summary,omitempty"`
-	CreatedAt string  `json:"created_at"`
-	UpdatedAt string  `json:"updated_at"`
-}
-
-// ResolveTaskID returns the task identifier (task_id if set, else id).
-func (t *TaskResponse) ResolveTaskID() string {
-	if t.TaskID != "" {
-		return t.TaskID
-	}
-	return t.ID
-}
-
 // ListTasksRequest holds query params for GET /v1/tasks.
 type ListTasksRequest struct {
 	Limit  int    // default 50, max 200
@@ -155,15 +102,8 @@ type ListTasksRequest struct {
 	Status string // optional filter: queued, running, completed, failed, cancelled/canceled
 }
 
-// ListTasksResponse is the body of GET /v1/tasks.
-type ListTasksResponse struct {
-	Tasks      []TaskResponse `json:"tasks"`
-	NextOffset *int           `json:"next_offset,omitempty"`
-	NextCursor string         `json:"next_cursor,omitempty"`
-}
-
 // ListTasks calls GET /v1/tasks (requires auth).
-func (c *Client) ListTasks(req ListTasksRequest) (*ListTasksResponse, error) {
+func (c *Client) ListTasks(req ListTasksRequest) (*userapi.ListTasksResponse, error) {
 	q := url.Values{}
 	if req.Limit > 0 {
 		q.Set("limit", fmt.Sprint(req.Limit))
@@ -182,7 +122,7 @@ func (c *Client) ListTasks(req ListTasksRequest) (*ListTasksResponse, error) {
 	if resp.StatusCode != http.StatusOK {
 		return nil, c.parseError(resp)
 	}
-	var out ListTasksResponse
+	var out userapi.ListTasksResponse
 	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
 		return nil, fmt.Errorf("decode list tasks response: %w", err)
 	}
@@ -192,7 +132,7 @@ func (c *Client) ListTasks(req ListTasksRequest) (*ListTasksResponse, error) {
 	return &out, nil
 }
 
-func normalizeTaskResponse(t *TaskResponse) {
+func normalizeTaskResponse(t *userapi.TaskResponse) {
 	if t.TaskID == "" && t.ID != "" {
 		t.TaskID = t.ID
 	}
@@ -202,7 +142,7 @@ func normalizeTaskResponse(t *TaskResponse) {
 }
 
 // GetTask calls GET /v1/tasks/{id} (requires auth).
-func (c *Client) GetTask(taskID string) (*TaskResponse, error) {
+func (c *Client) GetTask(taskID string) (*userapi.TaskResponse, error) {
 	path := "/v1/tasks/" + url.PathEscape(taskID)
 	resp, err := c.doRequest(http.MethodGet, path, nil, nil)
 	if err != nil {
@@ -212,18 +152,12 @@ func (c *Client) GetTask(taskID string) (*TaskResponse, error) {
 	if resp.StatusCode != http.StatusOK {
 		return nil, c.parseError(resp)
 	}
-	var out TaskResponse
+	var out userapi.TaskResponse
 	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
 		return nil, fmt.Errorf("decode task response: %w", err)
 	}
 	normalizeTaskResponse(&out)
 	return &out, nil
-}
-
-// CancelTaskResponse is the body of POST /v1/tasks/{id}/cancel.
-type CancelTaskResponse struct {
-	TaskID   string `json:"task_id"`
-	Canceled bool   `json:"canceled"`
 }
 
 // doTaskPath performs a request to a task subpath and decodes the JSON response into out.
@@ -245,24 +179,17 @@ func (c *Client) doTaskPath(method, path string, out interface{}, decodeErrPrefi
 // CancelTask calls POST /v1/tasks/{id}/cancel (requires auth).
 //
 //nolint:dupl // same pattern as GetTaskResult by design
-func (c *Client) CancelTask(taskID string) (*CancelTaskResponse, error) {
-	var out CancelTaskResponse
+func (c *Client) CancelTask(taskID string) (*userapi.CancelTaskResponse, error) {
+	var out userapi.CancelTaskResponse
 	if err := c.doTaskPath(http.MethodPost, "/v1/tasks/"+url.PathEscape(taskID)+"/cancel", &out, "decode cancel task response"); err != nil {
 		return nil, err
 	}
 	return &out, nil
 }
 
-// TaskLogsResponse is the body of GET /v1/tasks/{id}/logs.
-type TaskLogsResponse struct {
-	TaskID string `json:"task_id"`
-	Stdout string `json:"stdout"`
-	Stderr string `json:"stderr"`
-}
-
 // GetTaskLogs calls GET /v1/tasks/{id}/logs (requires auth).
 // Stream query param: stdout | stderr | all (default).
-func (c *Client) GetTaskLogs(taskID, stream string) (*TaskLogsResponse, error) {
+func (c *Client) GetTaskLogs(taskID, stream string) (*userapi.TaskLogsResponse, error) {
 	path := "/v1/tasks/" + url.PathEscape(taskID) + "/logs"
 	if stream != "" {
 		path += "?stream=" + url.QueryEscape(stream)
@@ -275,33 +202,11 @@ func (c *Client) GetTaskLogs(taskID, stream string) (*TaskLogsResponse, error) {
 	if resp.StatusCode != http.StatusOK {
 		return nil, c.parseError(resp)
 	}
-	var out TaskLogsResponse
+	var out userapi.TaskLogsResponse
 	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
 		return nil, fmt.Errorf("decode task logs response: %w", err)
 	}
 	return &out, nil
-}
-
-// ChatCompletionsRequest is the OpenAI-format request for POST /v1/chat/completions.
-type ChatCompletionsRequest struct {
-	Model    string          `json:"model,omitempty"`
-	Messages []ChatMessage   `json:"messages"`
-}
-
-// ChatMessage is one message in the OpenAI messages array.
-type ChatMessage struct {
-	Role    string `json:"role"`
-	Content string `json:"content"`
-}
-
-// ChatCompletionsResponse is the OpenAI-format response from POST /v1/chat/completions (subset we use).
-type ChatCompletionsResponse struct {
-	Choices []struct {
-		Message struct {
-			Role    string `json:"role"`
-			Content string `json:"content"`
-		} `json:"message"`
-	} `json:"choices"`
 }
 
 // ChatResponse is the parsed chat result for callers (content from choices[0].message.content).
@@ -333,10 +238,10 @@ func (c *Client) ListModels() (*ListModelsResponse, error) {
 
 // Chat calls POST /v1/chat/completions (requires auth). Sends one user message; returns assistant content per openai_compatible_chat_api.md.
 func (c *Client) Chat(message string) (*ChatResponse, error) {
-	req := ChatCompletionsRequest{
-		Messages: []ChatMessage{{Role: "user", Content: message}},
+	req := userapi.ChatCompletionsRequest{
+		Messages: []userapi.ChatMessage{{Role: "user", Content: message}},
 	}
-	var out ChatCompletionsResponse
+	var out userapi.ChatCompletionsResponse
 	if err := c.doPostJSON("/v1/chat/completions", req, http.StatusOK, &out); err != nil {
 		return nil, err
 	}
@@ -348,48 +253,24 @@ func (c *Client) Chat(message string) (*ChatResponse, error) {
 }
 
 // CreateTask calls POST /v1/tasks (requires auth).
-func (c *Client) CreateTask(req CreateTaskRequest) (*TaskResponse, error) {
-	var out TaskResponse
+func (c *Client) CreateTask(req userapi.CreateTaskRequest) (*userapi.TaskResponse, error) {
+	var out userapi.TaskResponse
 	if err := c.doPostJSON("/v1/tasks", req, http.StatusCreated, &out); err != nil {
 		return nil, err
 	}
+	normalizeTaskResponse(&out)
 	return &out, nil
-}
-
-// JobResponse is a single job in a task result.
-type JobResponse struct {
-	ID        string  `json:"id"`
-	Status    string  `json:"status"`
-	Result    *string `json:"result,omitempty"`
-	StartedAt *string `json:"started_at,omitempty"`
-	EndedAt   *string `json:"ended_at,omitempty"`
-}
-
-// TaskResultResponse is the body returned by GET /v1/tasks/{id}/result.
-type TaskResultResponse struct {
-	TaskID string        `json:"task_id"`
-	Status string        `json:"status"`
-	Jobs   []JobResponse `json:"jobs"`
 }
 
 // GetTaskResult calls GET /v1/tasks/{id}/result (requires auth).
 //
 //nolint:dupl // same pattern as CancelTask by design
-func (c *Client) GetTaskResult(taskID string) (*TaskResultResponse, error) {
-	var out TaskResultResponse
+func (c *Client) GetTaskResult(taskID string) (*userapi.TaskResultResponse, error) {
+	var out userapi.TaskResultResponse
 	if err := c.doTaskPath(http.MethodGet, "/v1/tasks/"+url.PathEscape(taskID)+"/result", &out, "decode task result response"); err != nil {
 		return nil, err
 	}
 	return &out, nil
-}
-
-// ProblemDetails is RFC 9457 problem details from the API.
-type ProblemDetails struct {
-	Type     string `json:"type"`
-	Title    string `json:"title"`
-	Status   int    `json:"status"`
-	Detail   string `json:"detail,omitempty"`
-	Instance string `json:"instance,omitempty"`
 }
 
 // GetBytes performs an authenticated GET and returns the body (for stub endpoints like /v1/creds).
@@ -533,13 +414,13 @@ func (e *HTTPError) Unwrap() error { return e.Err }
 
 func (c *Client) parseError(resp *http.Response) error {
 	body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))
-	var problem ProblemDetails
+	var p problem.Details
 	if len(body) > 0 {
-		_ = json.Unmarshal(body, &problem)
+		_ = json.Unmarshal(body, &p)
 	}
 	var msg string
-	if problem.Detail != "" {
-		msg = fmt.Sprintf("%s: %s", resp.Status, problem.Detail)
+	if p.Detail != "" {
+		msg = fmt.Sprintf("%s: %s", resp.Status, p.Detail)
 	} else {
 		msg = resp.Status
 	}

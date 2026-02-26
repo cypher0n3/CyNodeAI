@@ -10,6 +10,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/cypher0n3/cynodeai/go_shared_libs/contracts/userapi"
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/auth"
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/database"
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/models"
@@ -33,20 +34,6 @@ func NewAuthHandler(db database.Store, jwt *auth.JWTManager, rateLimiter *auth.R
 	}
 }
 
-// LoginRequest represents login request body.
-type LoginRequest struct {
-	Handle   string `json:"handle"`
-	Password string `json:"password"`
-}
-
-// LoginResponse represents login response body.
-type LoginResponse struct {
-	AccessToken  string `json:"access_token"`
-	RefreshToken string `json:"refresh_token"`
-	TokenType    string `json:"token_type"`
-	ExpiresIn    int    `json:"expires_in"`
-}
-
 // loginResult contains the result of login validation.
 type loginResult struct {
 	user        *models.User
@@ -54,7 +41,7 @@ type loginResult struct {
 }
 
 // validateLoginCredentials validates user credentials and returns user or error response.
-func (h *AuthHandler) validateLoginCredentials(ctx context.Context, req LoginRequest, ipAddr, userAgent string) *loginResult {
+func (h *AuthHandler) validateLoginCredentials(ctx context.Context, req userapi.LoginRequest, ipAddr, userAgent string) *loginResult {
 	// Get user by handle
 	user, err := h.db.GetUserByHandle(ctx, req.Handle)
 	if errors.Is(err, database.ErrNotFound) {
@@ -104,7 +91,7 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var req LoginRequest
+	var req userapi.LoginRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		WriteBadRequest(w, "Invalid request body")
 		return
@@ -159,7 +146,7 @@ func (h *AuthHandler) completeLogin(w http.ResponseWriter, ctx context.Context, 
 
 	h.auditLog(ctx, &user.ID, "login_success", true, ipAddr, userAgent, "")
 
-	WriteJSON(w, http.StatusOK, LoginResponse{
+	WriteJSON(w, http.StatusOK, userapi.LoginResponse{
 		AccessToken:  accessToken,
 		RefreshToken: refreshToken,
 		TokenType:    "Bearer",
@@ -167,17 +154,12 @@ func (h *AuthHandler) completeLogin(w http.ResponseWriter, ctx context.Context, 
 	})
 }
 
-// RefreshRequest represents refresh token request body.
-type RefreshRequest struct {
-	RefreshToken string `json:"refresh_token"`
-}
-
 // Refresh handles POST /v1/auth/refresh.
 func (h *AuthHandler) Refresh(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	ipAddr := getClientIP(r)
 
-	var req RefreshRequest
+	var req userapi.RefreshRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		WriteBadRequest(w, "Invalid request body")
 		return
@@ -262,17 +244,12 @@ func (h *AuthHandler) Refresh(w http.ResponseWriter, r *http.Request) {
 
 	h.auditLog(ctx, &userID, "refresh_success", true, ipAddr, r.UserAgent(), "")
 
-	WriteJSON(w, http.StatusOK, LoginResponse{
+	WriteJSON(w, http.StatusOK, userapi.LoginResponse{
 		AccessToken:  accessToken,
 		RefreshToken: newRefreshToken,
 		TokenType:    "Bearer",
 		ExpiresIn:    900,
 	})
-}
-
-// LogoutRequest represents logout request body.
-type LogoutRequest struct {
-	RefreshToken string `json:"refresh_token"`
 }
 
 // Logout handles POST /v1/auth/logout.
@@ -281,7 +258,7 @@ func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
 	ipAddr := getClientIP(r)
 	userID := getUserIDFromContext(ctx)
 
-	var req LogoutRequest
+	var req userapi.LogoutRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		WriteBadRequest(w, "Invalid request body")
 		return

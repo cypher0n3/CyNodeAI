@@ -9,6 +9,7 @@ import (
 	"github.com/cypher0n3/cynodeai/cynork/internal/config"
 	"github.com/cypher0n3/cynodeai/cynork/internal/exit"
 	"github.com/cypher0n3/cynodeai/cynork/internal/gateway"
+	"github.com/cypher0n3/cynodeai/go_shared_libs/contracts/userapi"
 	"github.com/spf13/cobra"
 )
 
@@ -74,7 +75,7 @@ func runAuthLogin(_ *cobra.Command, _ []string) error {
 		}
 	}
 	client := gateway.NewClient(cfg.GatewayURL)
-	resp, err := client.Login(gateway.LoginRequest{Handle: handle, Password: password})
+	resp, err := client.Login(userapi.LoginRequest{Handle: handle, Password: password})
 	if err != nil {
 		return exitFromGatewayErr(err)
 	}

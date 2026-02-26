@@ -13,6 +13,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/cypher0n3/cynodeai/go_shared_libs/contracts/userapi"
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/auth"
 )
 
@@ -30,7 +31,7 @@ func TestLoginBadRequest(t *testing.T) {
 
 func TestLoginEmptyCredentials(t *testing.T) {
 	handler := &AuthHandler{rateLimiter: auth.NewRateLimiter(10, time.Minute)}
-	req, rec := recordedRequestJSON("POST", "/v1/auth/login", LoginRequest{Handle: "", Password: ""})
+	req, rec := recordedRequestJSON("POST", "/v1/auth/login", userapi.LoginRequest{Handle: "", Password: ""})
 	handler.Login(rec, req)
 	assertStatusCode(t, rec, http.StatusBadRequest)
 }
@@ -42,7 +43,7 @@ func TestRefreshBadRequest(t *testing.T) {
 
 func TestRefreshEmptyToken(t *testing.T) {
 	handler := &AuthHandler{}
-	req, rec := recordedRequestJSON("POST", "/v1/auth/refresh", RefreshRequest{RefreshToken: ""})
+	req, rec := recordedRequestJSON("POST", "/v1/auth/refresh", userapi.RefreshRequest{RefreshToken: ""})
 	handler.Refresh(rec, req)
 	assertStatusCode(t, rec, http.StatusBadRequest)
 }
@@ -54,7 +55,7 @@ func TestLogoutBadRequest(t *testing.T) {
 
 func TestLogoutSuccess(t *testing.T) {
 	handler := &AuthHandler{}
-	req, rec := recordedRequestJSON("POST", "/v1/auth/logout", LogoutRequest{RefreshToken: ""})
+	req, rec := recordedRequestJSON("POST", "/v1/auth/logout", userapi.LogoutRequest{RefreshToken: ""})
 	handler.Logout(rec, req)
 	assertStatusCode(t, rec, http.StatusNoContent)
 }
@@ -109,7 +110,7 @@ func TestGetClientIP(t *testing.T) {
 }
 
 func TestLoginResponseJSON(t *testing.T) {
-	resp := LoginResponse{
+	resp := userapi.LoginResponse{
 		AccessToken:  "access",
 		RefreshToken: "refresh",
 		TokenType:    "Bearer",
@@ -121,7 +122,7 @@ func TestLoginResponseJSON(t *testing.T) {
 		t.Fatalf("failed to marshal: %v", err)
 	}
 
-	var parsed LoginResponse
+	var parsed userapi.LoginResponse
 	if err := json.Unmarshal(jsonData, &parsed); err != nil {
 		t.Fatalf("failed to unmarshal: %v", err)
 	}
@@ -136,7 +137,7 @@ func TestLoginRateLimited(t *testing.T) {
 	handler := &AuthHandler{rateLimiter: rateLimiter}
 
 	// First request should be allowed but fail due to nil db
-	body := LoginRequest{Handle: "test", Password: "test"}
+	body := userapi.LoginRequest{Handle: "test", Password: "test"}
 	jsonBody, _ := json.Marshal(body)
 	req := httptest.NewRequest("POST", "/v1/auth/login", bytes.NewBuffer(jsonBody))
 	req.RemoteAddr = "192.168.1.1:1234"
@@ -169,7 +170,7 @@ func TestAuditLogWithLogger(t *testing.T) {
 }
 
 func TestLoginRequestJSON(t *testing.T) {
-	req := LoginRequest{
+	req := userapi.LoginRequest{
 		Handle:   testUserHandle,
 		Password: "testpass",
 	}
@@ -179,7 +180,7 @@ func TestLoginRequestJSON(t *testing.T) {
 		t.Fatalf("failed to marshal: %v", err)
 	}
 
-	var parsed LoginRequest
+	var parsed userapi.LoginRequest
 	if err := json.Unmarshal(data, &parsed); err != nil {
 		t.Fatalf("failed to unmarshal: %v", err)
 	}
@@ -190,16 +191,16 @@ func TestLoginRequestJSON(t *testing.T) {
 }
 
 func TestRefreshRequestJSON(t *testing.T) {
-	var parsed RefreshRequest
-	roundTripJSON(t, RefreshRequest{RefreshToken: "refresh-token-123"}, &parsed)
+	var parsed userapi.RefreshRequest
+	roundTripJSON(t, userapi.RefreshRequest{RefreshToken: "refresh-token-123"}, &parsed)
 	if parsed.RefreshToken != "refresh-token-123" {
 		t.Errorf("expected refresh token 'refresh-token-123', got %s", parsed.RefreshToken)
 	}
 }
 
 func TestLogoutRequestJSON(t *testing.T) {
-	var parsed LogoutRequest
-	roundTripJSON(t, LogoutRequest{RefreshToken: "logout-token"}, &parsed)
+	var parsed userapi.LogoutRequest
+	roundTripJSON(t, userapi.LogoutRequest{RefreshToken: "logout-token"}, &parsed)
 	if parsed.RefreshToken != "logout-token" {
 		t.Errorf("expected refresh token 'logout-token', got %s", parsed.RefreshToken)
 	}
@@ -209,7 +210,7 @@ func TestRefreshInvalidJWT(t *testing.T) {
 	jwtMgr := auth.NewJWTManager("secret", 15*time.Minute, 7*24*time.Hour, 24*time.Hour)
 	handler := &AuthHandler{jwt: jwtMgr}
 
-	body := RefreshRequest{RefreshToken: "invalid-token"}
+	body := userapi.RefreshRequest{RefreshToken: "invalid-token"}
 	jsonBody, _ := json.Marshal(body)
 	req := httptest.NewRequest("POST", "/v1/auth/refresh", bytes.NewBuffer(jsonBody))
 	rec := httptest.NewRecorder()
@@ -245,7 +246,7 @@ func TestLoginNilDB(t *testing.T) {
 	rateLimiter := auth.NewRateLimiter(10, time.Minute)
 	handler := &AuthHandler{rateLimiter: rateLimiter, db: nil}
 
-	body := LoginRequest{Handle: "test", Password: "test"}
+	body := userapi.LoginRequest{Handle: "test", Password: "test"}
 	jsonBody, _ := json.Marshal(body)
 	req := httptest.NewRequest("POST", "/v1/auth/login", bytes.NewBuffer(jsonBody))
 	rec := httptest.NewRecorder()
@@ -266,7 +267,7 @@ func TestRefreshValidTokenButMissingDB(t *testing.T) {
 	userID := uuid.New()
 	token, _, _ := jwtMgr.GenerateRefreshToken(userID)
 
-	body := RefreshRequest{RefreshToken: token}
+	body := userapi.RefreshRequest{RefreshToken: token}
 	jsonBody, _ := json.Marshal(body)
 	req := httptest.NewRequest("POST", "/v1/auth/refresh", bytes.NewBuffer(jsonBody))
 	rec := httptest.NewRecorder()
@@ -283,7 +284,7 @@ func TestRefreshValidTokenButMissingDB(t *testing.T) {
 func TestLogoutWithRefreshTokenNilDB(t *testing.T) {
 	handler := &AuthHandler{db: nil}
 
-	body := LogoutRequest{RefreshToken: "some-token"}
+	body := userapi.LogoutRequest{RefreshToken: "some-token"}
 	jsonBody, _ := json.Marshal(body)
 	req := httptest.NewRequest("POST", "/v1/auth/logout", bytes.NewBuffer(jsonBody))
 	rec := httptest.NewRecorder()

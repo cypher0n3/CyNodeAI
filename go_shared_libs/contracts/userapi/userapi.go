@@ -1,0 +1,145 @@
+// Package userapi defines request and response types for the User API Gateway.
+// Single source of truth for auth, users, tasks, and chat used by orchestrator handlers and cynork (and future Web Console).
+// See docs/tech_specs/user_api_gateway.md and REQ-CLIENT-0004 (CLI/Web Console parity).
+package userapi
+
+// API-facing task/job status constants (returned in REST responses; used by CLI/Web Console).
+const (
+	StatusQueued    = "queued"
+	StatusRunning   = "running"
+	StatusCompleted = "completed"
+	StatusFailed    = "failed"
+	StatusCanceled  = "canceled"
+)
+
+// --- Auth ---
+
+// LoginRequest is the body for POST /v1/auth/login.
+type LoginRequest struct {
+	Handle   string `json:"handle"`
+	Password string `json:"password"`
+}
+
+// LoginResponse is the body returned by POST /v1/auth/login and POST /v1/auth/refresh.
+type LoginResponse struct {
+	AccessToken  string `json:"access_token"`
+	RefreshToken string `json:"refresh_token"`
+	TokenType    string `json:"token_type"`
+	ExpiresIn    int    `json:"expires_in"`
+}
+
+// RefreshRequest is the body for POST /v1/auth/refresh.
+type RefreshRequest struct {
+	RefreshToken string `json:"refresh_token"`
+}
+
+// LogoutRequest is the body for POST /v1/auth/logout.
+type LogoutRequest struct {
+	RefreshToken string `json:"refresh_token"`
+}
+
+// UserResponse is the body returned by GET /v1/users/me.
+type UserResponse struct {
+	ID       string  `json:"id"`
+	Handle   string  `json:"handle"`
+	Email    *string `json:"email,omitempty"`
+	IsActive bool    `json:"is_active"`
+}
+
+// --- Tasks ---
+
+// CreateTaskRequest is the body for POST /v1/tasks.
+type CreateTaskRequest struct {
+	Prompt       string `json:"prompt"`
+	UseInference bool   `json:"use_inference,omitempty"`
+	InputMode    string `json:"input_mode,omitempty"`
+}
+
+// TaskResponse is the task in create/get/list responses (CLI spec: task_id, status, optional task_name).
+type TaskResponse struct {
+	ID        string  `json:"id"`
+	TaskID    string  `json:"task_id"`
+	Status    string  `json:"status"`
+	TaskName  *string `json:"task_name,omitempty"`
+	Prompt    *string `json:"prompt,omitempty"`
+	Summary   *string `json:"summary,omitempty"`
+	CreatedAt string  `json:"created_at"`
+	UpdatedAt string  `json:"updated_at"`
+}
+
+// ResolveTaskID returns the task identifier (task_id if set, else id).
+func (t *TaskResponse) ResolveTaskID() string {
+	if t.TaskID != "" {
+		return t.TaskID
+	}
+	return t.ID
+}
+
+// ListTasksResponse is the body of GET /v1/tasks.
+type ListTasksResponse struct {
+	Tasks      []TaskResponse `json:"tasks"`
+	NextOffset *int           `json:"next_offset,omitempty"`
+	NextCursor string         `json:"next_cursor,omitempty"`
+}
+
+// CancelTaskResponse is the body of POST /v1/tasks/{id}/cancel.
+type CancelTaskResponse struct {
+	TaskID   string `json:"task_id"`
+	Canceled bool   `json:"canceled"`
+}
+
+// TaskResultResponse is the body of GET /v1/tasks/{id}/result.
+type TaskResultResponse struct {
+	TaskID string        `json:"task_id"`
+	Status string        `json:"status"`
+	Jobs   []JobResponse `json:"jobs"`
+}
+
+// JobResponse is one job in a task result.
+type JobResponse struct {
+	ID        string  `json:"id"`
+	Status    string  `json:"status"`
+	Result    *string `json:"result,omitempty"`
+	StartedAt *string `json:"started_at,omitempty"`
+	EndedAt   *string `json:"ended_at,omitempty"`
+}
+
+// TaskLogsResponse is the body of GET /v1/tasks/{id}/logs.
+type TaskLogsResponse struct {
+	TaskID string `json:"task_id"`
+	Stdout string `json:"stdout"`
+	Stderr string `json:"stderr"`
+}
+
+// --- Chat (OpenAI-compatible) ---
+
+// ChatMessage is one message in the OpenAI messages array.
+type ChatMessage struct {
+	Role    string `json:"role"`
+	Content string `json:"content"`
+}
+
+// ChatCompletionsRequest is the request body for POST /v1/chat/completions (subset we use).
+type ChatCompletionsRequest struct {
+	Model    string        `json:"model,omitempty"`
+	Messages []ChatMessage `json:"messages"`
+}
+
+// ChatCompletionsChoice is one choice in the chat completions response.
+type ChatCompletionsChoice struct {
+	Index   int    `json:"index"`
+	Message struct {
+		Role    string `json:"role"`
+		Content string `json:"content"`
+	} `json:"message"`
+	FinishReason string `json:"finish_reason"`
+}
+
+// ChatCompletionsResponse is the response from POST /v1/chat/completions (subset we use).
+type ChatCompletionsResponse struct {
+	ID      string                 `json:"id"`
+	Object  string                 `json:"object"`
+	Created int64                  `json:"created"`
+	Model   string                 `json:"model"`
+	Choices []ChatCompletionsChoice `json:"choices"`
+}

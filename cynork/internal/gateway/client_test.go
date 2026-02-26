@@ -7,6 +7,9 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+
+	"github.com/cypher0n3/cynodeai/go_shared_libs/contracts/problem"
+	"github.com/cypher0n3/cynodeai/go_shared_libs/contracts/userapi"
 )
 
 func TestClient_ListTasks_WithLimitOffset(t *testing.T) {
@@ -15,7 +18,7 @@ func TestClient_ListTasks_WithLimitOffset(t *testing.T) {
 			w.WriteHeader(http.StatusNotFound)
 			return
 		}
-		jsonHandler(http.StatusOK, ListTasksResponse{Tasks: []TaskResponse{}})(w, r)
+		jsonHandler(http.StatusOK, userapi.ListTasksResponse{Tasks: []userapi.TaskResponse{}})(w, r)
 	}))
 	defer server.Close()
 	client := NewClient(server.URL)
@@ -49,7 +52,7 @@ func TestClient_Login(t *testing.T) {
 			http.Error(w, "not found", http.StatusNotFound)
 			return
 		}
-		var req LoginRequest
+		var req userapi.LoginRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			http.Error(w, "bad body", http.StatusBadRequest)
 			return
@@ -58,12 +61,12 @@ func TestClient_Login(t *testing.T) {
 			http.Error(w, "bad creds", http.StatusUnauthorized)
 			return
 		}
-		jsonHandler(http.StatusOK, LoginResponse{AccessToken: "tok", TokenType: "Bearer", ExpiresIn: 900})(w, r)
+		jsonHandler(http.StatusOK, userapi.LoginResponse{AccessToken: "tok", TokenType: "Bearer", ExpiresIn: 900})(w, r)
 	}))
 	defer server.Close()
 
 	client := NewClient(server.URL)
-	resp, err := client.Login(LoginRequest{Handle: "u", Password: "p"})
+	resp, err := client.Login(userapi.LoginRequest{Handle: "u", Password: "p"})
 	if err != nil {
 		t.Fatalf("Login: %v", err)
 	}
@@ -73,13 +76,13 @@ func TestClient_Login(t *testing.T) {
 }
 
 func TestClient_Login_Unauthorized(t *testing.T) {
-	server := httptest.NewServer(jsonHandler(http.StatusUnauthorized, ProblemDetails{
+	server := httptest.NewServer(jsonHandler(http.StatusUnauthorized, problem.Details{
 		Detail: "Invalid credentials", Status: 401,
 	}))
 	defer server.Close()
 
 	client := NewClient(server.URL)
-	_, err := client.Login(LoginRequest{Handle: "u", Password: "wrong"})
+	_, err := client.Login(userapi.LoginRequest{Handle: "u", Password: "wrong"})
 	if err == nil {
 		t.Fatal("expected error")
 	}
@@ -104,21 +107,21 @@ func TestClient_Health(t *testing.T) {
 func TestClient_CreateTask_RequiresAuth(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("Authorization") == "" {
-			jsonHandler(http.StatusUnauthorized, ProblemDetails{Detail: "Not authenticated", Status: 401})(w, r)
+			jsonHandler(http.StatusUnauthorized, problem.Details{Detail: "Not authenticated", Status: 401})(w, r)
 			return
 		}
-		jsonHandler(http.StatusCreated, TaskResponse{ID: "tid", Status: "queued"})(w, r)
+		jsonHandler(http.StatusCreated, userapi.TaskResponse{ID: "tid", Status: "queued"})(w, r)
 	}))
 	defer server.Close()
 
 	client := NewClient(server.URL)
-	_, err := client.CreateTask(CreateTaskRequest{Prompt: "echo hi"})
+	_, err := client.CreateTask(userapi.CreateTaskRequest{Prompt: "echo hi"})
 	if err == nil {
 		t.Fatal("expected error when no token")
 	}
 
 	client.SetToken("tok")
-	resp, err := client.CreateTask(CreateTaskRequest{Prompt: "echo hi"})
+	resp, err := client.CreateTask(userapi.CreateTaskRequest{Prompt: "echo hi"})
 	if err != nil {
 		t.Fatalf("CreateTask with token: %v", err)
 	}
@@ -133,9 +136,9 @@ func TestClient_GetTaskResult(t *testing.T) {
 			w.WriteHeader(http.StatusNotFound)
 			return
 		}
-		jsonHandler(http.StatusOK, TaskResultResponse{
+		jsonHandler(http.StatusOK, userapi.TaskResultResponse{
 			TaskID: "tid-123", Status: "completed",
-			Jobs: []JobResponse{{ID: "j1", Status: "completed", Result: strPtr("hello\n")}},
+			Jobs: []userapi.JobResponse{{ID: "j1", Status: "completed", Result: strPtr("hello\n")}},
 		})(w, r)
 	}))
 	defer server.Close()
@@ -204,7 +207,7 @@ func TestClient_GetMe_DecodeError(t *testing.T) {
 }
 
 func TestClient_GetMe_Unauthorized(t *testing.T) {
-	server := httptest.NewServer(jsonHandler(http.StatusUnauthorized, ProblemDetails{Detail: "expired", Status: 401}))
+	server := httptest.NewServer(jsonHandler(http.StatusUnauthorized, problem.Details{Detail: "expired", Status: 401}))
 	defer server.Close()
 	client := NewClient(server.URL)
 	client.SetToken("tok")
@@ -220,7 +223,7 @@ func TestClient_GetMe_Success(t *testing.T) {
 			w.WriteHeader(http.StatusUnauthorized)
 			return
 		}
-		jsonHandler(http.StatusOK, UserResponse{ID: "u1", Handle: "alice", IsActive: true})(w, r)
+		jsonHandler(http.StatusOK, userapi.UserResponse{ID: "u1", Handle: "alice", IsActive: true})(w, r)
 	}))
 	defer server.Close()
 	client := NewClient(server.URL)
@@ -241,7 +244,7 @@ func TestClient_parseError_NonJSONBody(t *testing.T) {
 	}))
 	defer server.Close()
 	client := NewClient(server.URL)
-	_, err := client.Login(LoginRequest{Handle: "u", Password: "p"})
+	_, err := client.Login(userapi.LoginRequest{Handle: "u", Password: "p"})
 	if err == nil {
 		t.Fatal("expected error")
 	}
@@ -251,7 +254,7 @@ func TestClient_Login_DecodeError(t *testing.T) {
 	server := httptest.NewServer(rawHandler(http.StatusOK, "not json"))
 	defer server.Close()
 	client := NewClient(server.URL)
-	_, err := client.Login(LoginRequest{Handle: "u", Password: "p"})
+	_, err := client.Login(userapi.LoginRequest{Handle: "u", Password: "p"})
 	if err == nil {
 		t.Fatal("expected decode error")
 	}
@@ -262,7 +265,7 @@ func TestClient_CreateTask_DecodeError(t *testing.T) {
 	defer server.Close()
 	client := NewClient(server.URL)
 	client.SetToken("tok")
-	_, err := client.CreateTask(CreateTaskRequest{Prompt: "x"})
+	_, err := client.CreateTask(userapi.CreateTaskRequest{Prompt: "x"})
 	if err == nil {
 		t.Fatal("expected decode error")
 	}
@@ -308,7 +311,7 @@ func TestClient_Health_DoFails(t *testing.T) {
 func TestClient_Login_DoFails(t *testing.T) {
 	client := NewClient("http://localhost")
 	client.HTTPClient = &http.Client{Transport: errTransport{}}
-	_, err := client.Login(LoginRequest{Handle: "u", Password: "p"})
+	_, err := client.Login(userapi.LoginRequest{Handle: "u", Password: "p"})
 	if err == nil {
 		t.Fatal("expected error")
 	}
@@ -328,7 +331,7 @@ func TestClient_CreateTask_DoFails(t *testing.T) {
 	client := NewClient("http://localhost")
 	client.HTTPClient = &http.Client{Transport: errTransport{}}
 	client.SetToken("tok")
-	_, err := client.CreateTask(CreateTaskRequest{Prompt: "x"})
+	_, err := client.CreateTask(userapi.CreateTaskRequest{Prompt: "x"})
 	if err == nil {
 		t.Fatal("expected error")
 	}
@@ -350,8 +353,8 @@ func TestClient_ListTasks_Success(t *testing.T) {
 			w.WriteHeader(http.StatusNotFound)
 			return
 		}
-		jsonHandler(http.StatusOK, ListTasksResponse{
-			Tasks: []TaskResponse{{ID: "t1", Status: "completed"}, {TaskID: "t2", ID: "t2", Status: "queued"}},
+		jsonHandler(http.StatusOK, userapi.ListTasksResponse{
+			Tasks: []userapi.TaskResponse{{ID: "t1", Status: "completed"}, {TaskID: "t2", ID: "t2", Status: "queued"}},
 		})(w, r)
 	}))
 	defer server.Close()
@@ -370,7 +373,7 @@ func TestClient_ListTasks_Success(t *testing.T) {
 }
 
 func TestClient_ListTasks_Unauthorized(t *testing.T) {
-	server := httptest.NewServer(jsonHandler(http.StatusUnauthorized, ProblemDetails{Detail: "expired", Status: 401}))
+	server := httptest.NewServer(jsonHandler(http.StatusUnauthorized, problem.Details{Detail: "expired", Status: 401}))
 	defer server.Close()
 	client := NewClient(server.URL)
 	_, err := client.ListTasks(ListTasksRequest{})
@@ -385,7 +388,7 @@ func TestClient_GetTask_Success(t *testing.T) {
 			w.WriteHeader(http.StatusNotFound)
 			return
 		}
-		jsonHandler(http.StatusOK, TaskResponse{ID: "tid-1", Status: "running"})(w, r)
+		jsonHandler(http.StatusOK, userapi.TaskResponse{ID: "tid-1", Status: "running"})(w, r)
 	}))
 	defer server.Close()
 	client := NewClient(server.URL)
@@ -406,8 +409,8 @@ func TestClient_ExpectError(t *testing.T) {
 		body   interface{}
 		call   func(*Client) error
 	}{
-		{"GetTask_NotFound", http.StatusNotFound, ProblemDetails{Detail: "not found", Status: 404}, func(c *Client) error { _, err := c.GetTask("tid-missing"); return err }},
-		{"CancelTask_Forbidden", http.StatusForbidden, ProblemDetails{Detail: "not owner", Status: 403}, func(c *Client) error { _, err := c.CancelTask("tid-1"); return err }},
+		{"GetTask_NotFound", http.StatusNotFound, problem.Details{Detail: "not found", Status: 404}, func(c *Client) error { _, err := c.GetTask("tid-missing"); return err }},
+		{"CancelTask_Forbidden", http.StatusForbidden, problem.Details{Detail: "not owner", Status: 403}, func(c *Client) error { _, err := c.CancelTask("tid-1"); return err }},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -428,7 +431,7 @@ func TestClient_CancelTask_Success(t *testing.T) {
 			w.WriteHeader(http.StatusNotFound)
 			return
 		}
-		jsonHandler(http.StatusOK, CancelTaskResponse{TaskID: "tid-1", Canceled: true})(w, r)
+		jsonHandler(http.StatusOK, userapi.CancelTaskResponse{TaskID: "tid-1", Canceled: true})(w, r)
 	}))
 	defer server.Close()
 	client := NewClient(server.URL)
@@ -448,7 +451,7 @@ func TestClient_GetTaskLogs_Success(t *testing.T) {
 			w.WriteHeader(http.StatusNotFound)
 			return
 		}
-		jsonHandler(http.StatusOK, TaskLogsResponse{TaskID: "tid-1", Stdout: "out", Stderr: "err"})(w, r)
+		jsonHandler(http.StatusOK, userapi.TaskLogsResponse{TaskID: "tid-1", Stdout: "out", Stderr: "err"})(w, r)
 	}))
 	defer server.Close()
 	client := NewClient(server.URL)
@@ -463,7 +466,7 @@ func TestClient_GetTaskLogs_Success(t *testing.T) {
 }
 
 func TestClient_GetTaskLogs_NotFound(t *testing.T) {
-	server := httptest.NewServer(jsonHandler(http.StatusNotFound, ProblemDetails{Detail: "not found", Status: 404}))
+	server := httptest.NewServer(jsonHandler(http.StatusNotFound, problem.Details{Detail: "not found", Status: 404}))
 	defer server.Close()
 	client := NewClient(server.URL)
 	client.SetToken("tok")
@@ -483,7 +486,7 @@ func TestClient_Chat_Success(t *testing.T) {
 			w.WriteHeader(http.StatusNotFound)
 			return
 		}
-		var req ChatCompletionsRequest
+		var req userapi.ChatCompletionsRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			w.WriteHeader(http.StatusBadRequest)
 			return
@@ -518,14 +521,14 @@ func TestClient_Refresh_Success(t *testing.T) {
 			w.WriteHeader(http.StatusNotFound)
 			return
 		}
-		var req RefreshRequest
+		var req userapi.RefreshRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.RefreshToken == "" {
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		_ = json.NewEncoder(w).Encode(LoginResponse{
+		_ = json.NewEncoder(w).Encode(userapi.LoginResponse{
 			AccessToken:  "new-access",
 			RefreshToken: "new-refresh",
 			TokenType:    "Bearer",
@@ -569,7 +572,7 @@ func TestClient_ListModels_Success(t *testing.T) {
 }
 
 func TestClient_UnauthorizedOrBadStatus(t *testing.T) {
-	unauth := jsonHandler(http.StatusUnauthorized, ProblemDetails{Detail: "expired", Status: 401})
+	unauth := jsonHandler(http.StatusUnauthorized, problem.Details{Detail: "expired", Status: 401})
 	tests := []struct {
 		name string
 		run  func(*Client) error
@@ -628,7 +631,7 @@ func TestClient_Refresh_ReturnsCreated(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusCreated)
-		_ = json.NewEncoder(w).Encode(LoginResponse{AccessToken: "a", RefreshToken: "r"})
+		_ = json.NewEncoder(w).Encode(userapi.LoginResponse{AccessToken: "a", RefreshToken: "r"})
 	}))
 	defer server.Close()
 	client := NewClient(server.URL)
@@ -670,7 +673,7 @@ func TestClient_GetBytes_Success(t *testing.T) {
 }
 
 func TestClient_GetBytes_Unauthorized(t *testing.T) {
-	server := httptest.NewServer(jsonHandler(http.StatusUnauthorized, ProblemDetails{Status: 401}))
+	server := httptest.NewServer(jsonHandler(http.StatusUnauthorized, problem.Details{Status: 401}))
 	defer server.Close()
 	client := NewClient(server.URL)
 	_, err := client.GetBytes("/v1/creds")
@@ -733,7 +736,7 @@ func TestClient_GetBytes(t *testing.T) {
 }
 
 func TestClient_GetBytes_Error(t *testing.T) {
-	server := httptest.NewServer(jsonHandler(http.StatusUnauthorized, ProblemDetails{Detail: "unauthorized", Status: 401}))
+	server := httptest.NewServer(jsonHandler(http.StatusUnauthorized, problem.Details{Detail: "unauthorized", Status: 401}))
 	defer server.Close()
 	client := NewClient(server.URL)
 	client.SetToken("tok")
@@ -765,7 +768,7 @@ func TestClient_PostBytes(t *testing.T) {
 }
 
 func TestClient_PostBytes_Error(t *testing.T) {
-	server := httptest.NewServer(jsonHandler(http.StatusForbidden, ProblemDetails{Detail: "forbidden", Status: 403}))
+	server := httptest.NewServer(jsonHandler(http.StatusForbidden, problem.Details{Detail: "forbidden", Status: 403}))
 	defer server.Close()
 	client := NewClient(server.URL)
 	client.SetToken("tok")

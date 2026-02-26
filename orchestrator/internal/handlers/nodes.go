@@ -62,50 +62,6 @@ func (h *NodeHandler) logInfo(msg string, args ...any) {
 	}
 }
 
-// NodeCapabilityReport represents the capability report from a node.
-// See docs/tech_specs/worker_node_payloads.md for full schema.
-type NodeCapabilityReport struct {
-	Version    int                    `json:"version"`
-	ReportedAt string                 `json:"reported_at"`
-	Node       NodeCapabilityNode     `json:"node"`
-	Platform   NodeCapabilityPlatform `json:"platform"`
-	Compute    NodeCapabilityCompute  `json:"compute"`
-	Sandbox    *NodeCapabilitySandbox `json:"sandbox,omitempty"`
-}
-
-// NodeCapabilityNode contains node identity info.
-type NodeCapabilityNode struct {
-	NodeSlug string   `json:"node_slug"`
-	Name     string   `json:"name,omitempty"`
-	Labels   []string `json:"labels,omitempty"`
-}
-
-// NodeCapabilityPlatform contains platform info.
-type NodeCapabilityPlatform struct {
-	OS     string `json:"os"`
-	Distro string `json:"distro,omitempty"`
-	Arch   string `json:"arch"`
-}
-
-// NodeCapabilityCompute contains compute resources info.
-type NodeCapabilityCompute struct {
-	CPUCores int `json:"cpu_cores"`
-	RAMMB    int `json:"ram_mb"`
-}
-
-// NodeCapabilitySandbox contains sandbox capability info.
-type NodeCapabilitySandbox struct {
-	Supported      bool     `json:"supported"`
-	Features       []string `json:"features,omitempty"`
-	MaxConcurrency int      `json:"max_concurrency,omitempty"`
-}
-
-// NodeRegistrationRequest represents the registration request with PSK.
-type NodeRegistrationRequest struct {
-	PSK        string               `json:"psk"`
-	Capability NodeCapabilityReport `json:"capability"`
-}
-
 // Register handles POST /v1/nodes/register.
 func (h *NodeHandler) Register(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
@@ -126,12 +82,11 @@ func (h *NodeHandler) Register(w http.ResponseWriter, r *http.Request) {
 		h.handleExistingNodeRegistration(ctx, w, existingNode)
 		return
 	}
-
 	h.handleNewNodeRegistration(ctx, w, req)
 }
 
-func (h *NodeHandler) validateRegistrationRequest(w http.ResponseWriter, r *http.Request) (*NodeRegistrationRequest, bool) {
-	var req NodeRegistrationRequest
+func (h *NodeHandler) validateRegistrationRequest(w http.ResponseWriter, r *http.Request) (*nodepayloads.RegistrationRequest, bool) {
+	var req nodepayloads.RegistrationRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		WriteBadRequest(w, "Invalid request body")
 		return nil, false
@@ -173,7 +128,7 @@ func (h *NodeHandler) handleExistingNodeRegistration(ctx context.Context, w http
 	WriteJSON(w, http.StatusOK, h.buildBootstrapResponse(h.orchestratorPublicURL, nodeJWT, expiresAt))
 }
 
-func (h *NodeHandler) handleNewNodeRegistration(ctx context.Context, w http.ResponseWriter, req *NodeRegistrationRequest) {
+func (h *NodeHandler) handleNewNodeRegistration(ctx context.Context, w http.ResponseWriter, req *nodepayloads.RegistrationRequest) {
 	newNode, err := h.db.CreateNode(ctx, req.Capability.Node.NodeSlug)
 	if err != nil {
 		h.logError("create node", "error", err)
@@ -194,7 +149,7 @@ func (h *NodeHandler) handleNewNodeRegistration(ctx context.Context, w http.Resp
 	WriteJSON(w, http.StatusCreated, h.buildBootstrapResponse(h.orchestratorPublicURL, nodeJWT, expiresAt))
 }
 
-func (h *NodeHandler) initializeNewNode(ctx context.Context, nodeID uuid.UUID, capability *NodeCapabilityReport) {
+func (h *NodeHandler) initializeNewNode(ctx context.Context, nodeID uuid.UUID, capability *nodepayloads.CapabilityReport) {
 	if err := h.db.UpdateNodeStatus(ctx, nodeID, "active"); err != nil {
 		h.logError("update node status", "error", err)
 	}
@@ -381,7 +336,7 @@ func (h *NodeHandler) ReportCapability(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var report NodeCapabilityReport
+	var report nodepayloads.CapabilityReport
 	if err := json.NewDecoder(r.Body).Decode(&report); err != nil {
 		WriteBadRequest(w, "Invalid request body")
 		return

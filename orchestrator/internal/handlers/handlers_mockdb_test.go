@@ -17,6 +17,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/cypher0n3/cynodeai/go_shared_libs/contracts/nodepayloads"
+	"github.com/cypher0n3/cynodeai/go_shared_libs/contracts/userapi"
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/auth"
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/database"
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/models"
@@ -60,7 +61,7 @@ func TestAuthHandler_LoginSuccess(t *testing.T) {
 	}
 	mockDB.AddPasswordCredential(cred)
 
-	body := LoginRequest{Handle: "testuser", Password: "testpassword123"}
+	body := userapi.LoginRequest{Handle: "testuser", Password: "testpassword123"}
 	jsonBody, _ := json.Marshal(body)
 	req := httptest.NewRequest("POST", "/v1/auth/login", bytes.NewBuffer(jsonBody))
 	rec := httptest.NewRecorder()
@@ -71,7 +72,7 @@ func TestAuthHandler_LoginSuccess(t *testing.T) {
 		t.Errorf("expected status 200, got %d: %s", rec.Code, rec.Body.String())
 	}
 
-	var resp LoginResponse
+	var resp userapi.LoginResponse
 	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("failed to unmarshal response: %v", err)
 	}
@@ -94,7 +95,7 @@ func TestAuthHandler_LoginUserNotFound(t *testing.T) {
 
 	handler := NewAuthHandler(mockDB, jwtMgr, rateLimiter, logger)
 
-	body := LoginRequest{Handle: "nonexistent", Password: "anypassword"}
+	body := userapi.LoginRequest{Handle: "nonexistent", Password: "anypassword"}
 	jsonBody, _ := json.Marshal(body)
 	req := httptest.NewRequest("POST", "/v1/auth/login", bytes.NewBuffer(jsonBody))
 	rec := httptest.NewRecorder()
@@ -134,7 +135,7 @@ func TestAuthHandler_LoginInvalidPassword(t *testing.T) {
 	}
 	mockDB.AddPasswordCredential(cred)
 
-	body := LoginRequest{Handle: "testuser", Password: "wrongpassword"}
+	body := userapi.LoginRequest{Handle: "testuser", Password: "wrongpassword"}
 	jsonBody, _ := json.Marshal(body)
 	req := httptest.NewRequest("POST", "/v1/auth/login", bytes.NewBuffer(jsonBody))
 	rec := httptest.NewRecorder()
@@ -181,7 +182,7 @@ func TestAuthHandler_LoginUnauthorizedCases(t *testing.T) {
 				mockDB.AddPasswordCredential(&models.PasswordCredential{ID: uuid.New(), UserID: u.ID, PasswordHash: hash, HashAlg: "bcrypt", CreatedAt: now, UpdatedAt: now})
 			}
 			handler := NewAuthHandler(mockDB, auth.NewJWTManager("test-secret-key-1234567890123456", 15*time.Minute, 7*24*time.Hour, 24*time.Hour), auth.NewRateLimiter(100, time.Minute), newTestLogger())
-			req, rec := recordedRequestJSON("POST", "/v1/auth/login", LoginRequest{Handle: tt.loginHandle, Password: tt.loginPassword})
+			req, rec := recordedRequestJSON("POST", "/v1/auth/login", userapi.LoginRequest{Handle: tt.loginHandle, Password: tt.loginPassword})
 			handler.Login(rec, req)
 			assertStatusCode(t, rec, tt.wantStatus)
 		})
@@ -197,7 +198,7 @@ func TestAuthHandler_LoginDBError(t *testing.T) {
 
 	handler := NewAuthHandler(mockDB, jwtMgr, rateLimiter, logger)
 
-	body := LoginRequest{Handle: "testuser", Password: "testpassword"}
+	body := userapi.LoginRequest{Handle: "testuser", Password: "testpassword"}
 	jsonBody, _ := json.Marshal(body)
 	req := httptest.NewRequest("POST", "/v1/auth/login", bytes.NewBuffer(jsonBody))
 	rec := httptest.NewRecorder()
@@ -241,7 +242,7 @@ func TestAuthHandler_RefreshSuccess(t *testing.T) {
 	}
 	mockDB.AddRefreshSession(session)
 
-	body := RefreshRequest{RefreshToken: refreshToken}
+	body := userapi.RefreshRequest{RefreshToken: refreshToken}
 	jsonBody, _ := json.Marshal(body)
 	req := httptest.NewRequest("POST", "/v1/auth/refresh", bytes.NewBuffer(jsonBody))
 	rec := httptest.NewRecorder()
@@ -252,7 +253,7 @@ func TestAuthHandler_RefreshSuccess(t *testing.T) {
 		t.Errorf("expected status 200, got %d: %s", rec.Code, rec.Body.String())
 	}
 
-	var resp LoginResponse
+	var resp userapi.LoginResponse
 	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("failed to unmarshal response: %v", err)
 	}
@@ -282,7 +283,7 @@ func TestAuthHandler_RefreshInvalidUserIDInToken(t *testing.T) {
 	if err != nil {
 		t.Fatalf("sign token: %v", err)
 	}
-	req, rec := recordedRequestJSON("POST", "/v1/auth/refresh", RefreshRequest{RefreshToken: tokenStr})
+	req, rec := recordedRequestJSON("POST", "/v1/auth/refresh", userapi.RefreshRequest{RefreshToken: tokenStr})
 	handler.Refresh(rec, req)
 	if rec.Code != http.StatusUnauthorized {
 		t.Errorf("expected 401, got %d", rec.Code)
@@ -320,7 +321,7 @@ func TestAuthHandler_RefreshInactiveUser(t *testing.T) {
 	}
 	mockDB.AddRefreshSession(session)
 
-	body := RefreshRequest{RefreshToken: refreshToken}
+	body := userapi.RefreshRequest{RefreshToken: refreshToken}
 	jsonBody, _ := json.Marshal(body)
 	req := httptest.NewRequest("POST", "/v1/auth/refresh", bytes.NewBuffer(jsonBody))
 	rec := httptest.NewRecorder()
@@ -352,7 +353,7 @@ func TestAuthHandler_RefreshSessionNotFound(t *testing.T) {
 	refreshToken, _, _ := jwtMgr.GenerateRefreshToken(user.ID)
 	// No session added
 
-	body := RefreshRequest{RefreshToken: refreshToken}
+	body := userapi.RefreshRequest{RefreshToken: refreshToken}
 	jsonBody, _ := json.Marshal(body)
 	req := httptest.NewRequest("POST", "/v1/auth/refresh", bytes.NewBuffer(jsonBody))
 	rec := httptest.NewRecorder()
@@ -396,7 +397,7 @@ func TestAuthHandler_LogoutWithRefreshToken(t *testing.T) {
 	mockDB.AddRefreshSession(session)
 
 	ctx := context.WithValue(context.Background(), contextKeyUserID, user.ID)
-	body := LogoutRequest{RefreshToken: refreshToken}
+	body := userapi.LogoutRequest{RefreshToken: refreshToken}
 	jsonBody, _ := json.Marshal(body)
 	req := httptest.NewRequest("POST", "/v1/auth/logout", bytes.NewBuffer(jsonBody)).WithContext(ctx)
 	rec := httptest.NewRecorder()
@@ -437,7 +438,7 @@ func TestUserHandler_GetMeSuccess(t *testing.T) {
 		t.Errorf("expected status 200, got %d: %s", rec.Code, rec.Body.String())
 	}
 
-	var resp UserResponse
+	var resp userapi.UserResponse
 	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("failed to unmarshal response: %v", err)
 	}
@@ -475,7 +476,7 @@ func TestTaskHandler_CreateTaskWithMockDB(t *testing.T) {
 
 	userID := uuid.New()
 	ctx := context.WithValue(context.Background(), contextKeyUserID, userID)
-	body := CreateTaskRequest{Prompt: "test prompt for task"}
+	body := userapi.CreateTaskRequest{Prompt: "test prompt for task"}
 	jsonBody, _ := json.Marshal(body)
 	req := httptest.NewRequest("POST", "/v1/tasks", bytes.NewBuffer(jsonBody)).WithContext(ctx)
 	rec := httptest.NewRecorder()
@@ -486,11 +487,11 @@ func TestTaskHandler_CreateTaskWithMockDB(t *testing.T) {
 		t.Errorf("expected status 201, got %d: %s", rec.Code, rec.Body.String())
 	}
 
-	var resp TaskResponse
+	var resp userapi.TaskResponse
 	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("failed to unmarshal response: %v", err)
 	}
-	if resp.Status != SpecStatusQueued {
+	if resp.Status != userapi.StatusQueued {
 		t.Errorf("expected status queued, got %s", resp.Status)
 	}
 }
@@ -501,7 +502,7 @@ func TestTaskHandler_CreateTaskWithUseInference_StoresUseInferenceInJobPayload(t
 	handler := NewTaskHandler(mockDB, logger, "", "")
 	userID := uuid.New()
 	ctx := context.WithValue(context.Background(), contextKeyUserID, userID)
-	body := CreateTaskRequest{Prompt: "echo hi", UseInference: true}
+	body := userapi.CreateTaskRequest{Prompt: "echo hi", UseInference: true}
 	jsonBody, _ := json.Marshal(body)
 	req := httptest.NewRequest("POST", "/v1/tasks", bytes.NewBuffer(jsonBody)).WithContext(ctx)
 	rec := httptest.NewRecorder()
@@ -509,11 +510,11 @@ func TestTaskHandler_CreateTaskWithUseInference_StoresUseInferenceInJobPayload(t
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("expected status 201, got %d: %s", rec.Code, rec.Body.String())
 	}
-	var resp TaskResponse
+	var resp userapi.TaskResponse
 	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("unmarshal response: %v", err)
 	}
-	taskID, err := uuid.Parse(resp.TaskID)
+	taskID, err := uuid.Parse(resp.ResolveTaskID())
 	if err != nil {
 		t.Fatalf("parse task ID: %v", err)
 	}
@@ -544,7 +545,7 @@ func TestTaskHandler_CreateTask_InputModePrompt_StoresPromptJobPayload(t *testin
 	handler := NewTaskHandler(mockDB, newTestLogger(), "", "")
 	userID := uuid.New()
 	ctx := context.WithValue(context.Background(), contextKeyUserID, userID)
-	body := CreateTaskRequest{Prompt: "What is 2+2?", InputMode: "prompt"}
+	body := userapi.CreateTaskRequest{Prompt: "What is 2+2?", InputMode: "prompt"}
 	jsonBody, _ := json.Marshal(body)
 	req := httptest.NewRequest("POST", "/v1/tasks", bytes.NewBuffer(jsonBody)).WithContext(ctx)
 	rec := httptest.NewRecorder()
@@ -552,11 +553,11 @@ func TestTaskHandler_CreateTask_InputModePrompt_StoresPromptJobPayload(t *testin
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("expected 201, got %d: %s", rec.Code, rec.Body.String())
 	}
-	var resp TaskResponse
+	var resp userapi.TaskResponse
 	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
-	taskID, _ := uuid.Parse(resp.TaskID)
+	taskID, _ := uuid.Parse(resp.ResolveTaskID())
 	jobs, _ := mockDB.GetJobsByTaskID(ctx, taskID)
 	if len(jobs) != 1 {
 		t.Fatalf("expected 1 job, got %d", len(jobs))
@@ -587,7 +588,7 @@ func TestTaskHandler_CreateTask_PromptMode_OrchestratorInference(t *testing.T) {
 	handler := NewTaskHandler(mockDB, newTestLogger(), mockOllama.URL, "tinyllama")
 	userID := uuid.New()
 	ctx := context.WithValue(context.Background(), contextKeyUserID, userID)
-	body := CreateTaskRequest{Prompt: "What model are you?", InputMode: InputModePrompt}
+	body := userapi.CreateTaskRequest{Prompt: "What model are you?", InputMode: InputModePrompt}
 	jsonBody, _ := json.Marshal(body)
 	req := httptest.NewRequest("POST", "/v1/tasks", bytes.NewBuffer(jsonBody)).WithContext(ctx)
 	rec := httptest.NewRecorder()
@@ -595,14 +596,14 @@ func TestTaskHandler_CreateTask_PromptMode_OrchestratorInference(t *testing.T) {
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("expected 201, got %d: %s", rec.Code, rec.Body.String())
 	}
-	var resp TaskResponse
+	var resp userapi.TaskResponse
 	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
-	if resp.Status != SpecStatusCompleted {
+	if resp.Status != userapi.StatusCompleted {
 		t.Errorf("expected status completed (orchestrator inference), got %s", resp.Status)
 	}
-	taskID, _ := uuid.Parse(resp.TaskID)
+	taskID, _ := uuid.Parse(resp.ResolveTaskID())
 	jobs, _ := mockDB.GetJobsByTaskID(ctx, taskID)
 	if len(jobs) != 1 {
 		t.Fatalf("expected 1 job, got %d", len(jobs))
@@ -629,7 +630,7 @@ func TestTaskHandler_CreateTask_InputModeCommands_StoresShellJobPayload(t *testi
 	handler := NewTaskHandler(mockDB, newTestLogger(), "", "")
 	userID := uuid.New()
 	ctx := context.WithValue(context.Background(), contextKeyUserID, userID)
-	body := CreateTaskRequest{Prompt: "echo hello", InputMode: "commands"}
+	body := userapi.CreateTaskRequest{Prompt: "echo hello", InputMode: "commands"}
 	jsonBody, _ := json.Marshal(body)
 	req := httptest.NewRequest("POST", "/v1/tasks", bytes.NewBuffer(jsonBody)).WithContext(ctx)
 	rec := httptest.NewRecorder()
@@ -637,9 +638,9 @@ func TestTaskHandler_CreateTask_InputModeCommands_StoresShellJobPayload(t *testi
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("expected 201, got %d", rec.Code)
 	}
-	var resp TaskResponse
+	var resp userapi.TaskResponse
 	_ = json.Unmarshal(rec.Body.Bytes(), &resp)
-	taskID, _ := uuid.Parse(resp.TaskID)
+	taskID, _ := uuid.Parse(resp.ResolveTaskID())
 	jobs, _ := mockDB.GetJobsByTaskID(ctx, taskID)
 	if len(jobs) != 1 {
 		t.Fatalf("expected 1 job, got %d", len(jobs))
@@ -665,7 +666,7 @@ func TestTaskHandler_CreateTaskDBError(t *testing.T) {
 
 	userID := uuid.New()
 	ctx := context.WithValue(context.Background(), contextKeyUserID, userID)
-	body := CreateTaskRequest{Prompt: testPrompt}
+	body := userapi.CreateTaskRequest{Prompt: testPrompt}
 	jsonBody, _ := json.Marshal(body)
 	req := httptest.NewRequest("POST", "/v1/tasks", bytes.NewBuffer(jsonBody)).WithContext(ctx)
 	rec := httptest.NewRecorder()
@@ -786,7 +787,7 @@ func TestTaskHandler_GetTaskResultSuccess(t *testing.T) {
 		t.Errorf("expected status 200, got %d: %s", rec.Code, rec.Body.String())
 	}
 
-	var resp TaskResultResponse
+	var resp userapi.TaskResultResponse
 	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("failed to unmarshal response: %v", err)
 	}
@@ -815,6 +816,7 @@ func TestTaskHandler_GetTaskResultNotFound(t *testing.T) {
 
 // --- Node Handler Tests ---
 
+//nolint:dupl // node registration body struct repeated across tests
 func TestNodeHandler_RegisterNewNode(t *testing.T) {
 	mockDB := testutil.NewMockDB()
 	jwtMgr := auth.NewJWTManager("test-secret-key-1234567890123456", 15*time.Minute, 7*24*time.Hour, 24*time.Hour)
@@ -822,7 +824,7 @@ func TestNodeHandler_RegisterNewNode(t *testing.T) {
 
 	handler := NewNodeHandler(mockDB, jwtMgr, "test-psk-secret", testOrchestratorURL, "", "", logger)
 
-	body := NodeRegistrationRequest{PSK: "test-psk-secret", Capability: testNodeCapabilityReport("test-node-1", "Test Node 1", 8, 16384)}
+	body := nodepayloads.RegistrationRequest{PSK: "test-psk-secret", Capability: testNodeCapabilityReport("test-node-1", "Test Node 1", 8, 16384)}
 	jsonBody, _ := json.Marshal(body)
 	req := httptest.NewRequest("POST", "/v1/nodes/register", bytes.NewBuffer(jsonBody))
 	rec := httptest.NewRecorder()
@@ -854,6 +856,7 @@ func TestNodeHandler_RegisterNewNode(t *testing.T) {
 	}
 }
 
+//nolint:dupl // node registration body struct repeated across tests
 func TestNodeHandler_RegisterExistingNode(t *testing.T) {
 	mockDB := testutil.NewMockDB()
 	jwtMgr := auth.NewJWTManager("test-secret-key-1234567890123456", 15*time.Minute, 7*24*time.Hour, 24*time.Hour)
@@ -871,7 +874,7 @@ func TestNodeHandler_RegisterExistingNode(t *testing.T) {
 	}
 	mockDB.AddNode(node)
 
-	body := NodeRegistrationRequest{PSK: "test-psk-secret", Capability: testNodeCapabilityReport("existing-node", "", 4, 8192)}
+	body := nodepayloads.RegistrationRequest{PSK: "test-psk-secret", Capability: testNodeCapabilityReport("existing-node", "", 4, 8192)}
 	jsonBody, _ := json.Marshal(body)
 	req := httptest.NewRequest("POST", "/v1/nodes/register", bytes.NewBuffer(jsonBody))
 	rec := httptest.NewRecorder()
@@ -883,6 +886,7 @@ func TestNodeHandler_RegisterExistingNode(t *testing.T) {
 	}
 }
 
+//nolint:dupl // node registration body struct repeated across tests
 func TestNodeHandler_RegisterDBError(t *testing.T) {
 	mockDB := testutil.NewMockDB()
 	mockDB.ForceError = errors.New("database error")
@@ -891,16 +895,16 @@ func TestNodeHandler_RegisterDBError(t *testing.T) {
 
 	handler := NewNodeHandler(mockDB, jwtMgr, "test-psk-secret", testOrchestratorURL, "", "", logger)
 
-	body := NodeRegistrationRequest{
+	body := nodepayloads.RegistrationRequest{
 		PSK: "test-psk-secret",
-		Capability: NodeCapabilityReport{
+		Capability: nodepayloads.CapabilityReport{
 			Version: 1,
-			Node:    NodeCapabilityNode{NodeSlug: "test-node"},
-			Platform: NodeCapabilityPlatform{
+			Node:    nodepayloads.CapabilityNode{NodeSlug: "test-node"},
+			Platform: nodepayloads.Platform{
 				OS:   "linux",
 				Arch: "amd64",
 			},
-			Compute: NodeCapabilityCompute{
+			Compute: nodepayloads.Compute{
 				CPUCores: 4,
 				RAMMB:    8192,
 			},
@@ -1234,14 +1238,14 @@ func TestNodeHandler_ReportCapabilityDBError(t *testing.T) {
 	handler := NewNodeHandler(mockDB, jwtMgr, "test-psk-secret", testOrchestratorURL, "", "", logger)
 
 	nodeID := uuid.New()
-	report := NodeCapabilityReport{
+	report := nodepayloads.CapabilityReport{
 		Version: 1,
-		Node:    NodeCapabilityNode{NodeSlug: "test-node"},
-		Platform: NodeCapabilityPlatform{
+		Node:    nodepayloads.CapabilityNode{NodeSlug: "test-node"},
+		Platform: nodepayloads.Platform{
 			OS:   "linux",
 			Arch: "amd64",
 		},
-		Compute: NodeCapabilityCompute{
+		Compute: nodepayloads.Compute{
 			CPUCores: 4,
 			RAMMB:    8192,
 		},
@@ -1327,7 +1331,7 @@ func TestAuthHandler_RefreshDBErrorOnInvalidate(t *testing.T) {
 	// Set error after getting session
 	mockDB.ForceError = errors.New("database error")
 
-	body := RefreshRequest{RefreshToken: refreshToken}
+	body := userapi.RefreshRequest{RefreshToken: refreshToken}
 	jsonBody, _ := json.Marshal(body)
 	req := httptest.NewRequest("POST", "/v1/auth/refresh", bytes.NewBuffer(jsonBody))
 	rec := httptest.NewRecorder()
@@ -1371,7 +1375,7 @@ func TestAuthHandler_RefreshUserNotFound(t *testing.T) {
 
 	handler := NewAuthHandler(mockDB, jwtMgr, rateLimiter, logger)
 
-	body := RefreshRequest{RefreshToken: refreshToken}
+	body := userapi.RefreshRequest{RefreshToken: refreshToken}
 	jsonBody, _ := json.Marshal(body)
 	req := httptest.NewRequest("POST", "/v1/auth/refresh", bytes.NewBuffer(jsonBody))
 	rec := httptest.NewRecorder()
@@ -1383,6 +1387,7 @@ func TestAuthHandler_RefreshUserNotFound(t *testing.T) {
 	}
 }
 
+//nolint:dupl // node registration body struct repeated across tests
 func TestNodeHandler_handleExistingNodeDBError(t *testing.T) {
 	jwtMgr := auth.NewJWTManager("test-secret-key-1234567890123456", 15*time.Minute, 7*24*time.Hour, 24*time.Hour)
 	logger := newTestLogger()
@@ -1401,16 +1406,16 @@ func TestNodeHandler_handleExistingNodeDBError(t *testing.T) {
 
 	handler := NewNodeHandler(mockDB, jwtMgr, "test-psk", testOrchestratorURL, "", "", logger)
 
-	body := NodeRegistrationRequest{
+	body := nodepayloads.RegistrationRequest{
 		PSK: "test-psk",
-		Capability: NodeCapabilityReport{
+		Capability: nodepayloads.CapabilityReport{
 			Version: 1,
-			Node:    NodeCapabilityNode{NodeSlug: "test-node"},
-			Platform: NodeCapabilityPlatform{
+			Node:    nodepayloads.CapabilityNode{NodeSlug: "test-node"},
+			Platform: nodepayloads.Platform{
 				OS:   "linux",
 				Arch: "amd64",
 			},
-			Compute: NodeCapabilityCompute{
+			Compute: nodepayloads.Compute{
 				CPUCores: 4,
 				RAMMB:    8192,
 			},
@@ -1562,14 +1567,14 @@ func TestTaskHandler_ListTasksSuccess(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Errorf("expected 200, got %d: %s", rec.Code, rec.Body.String())
 	}
-	var resp ListTasksResponse
+	var resp userapi.ListTasksResponse
 	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
 	if len(resp.Tasks) != 1 {
 		t.Errorf("expected 1 task, got %d", len(resp.Tasks))
 	}
-	if resp.Tasks[0].TaskID != task.ID.String() || resp.Tasks[0].Status != SpecStatusQueued {
+	if resp.Tasks[0].ResolveTaskID() != task.ID.String() || resp.Tasks[0].Status != userapi.StatusQueued {
 		t.Errorf("task_id or status wrong: %+v", resp.Tasks[0])
 	}
 }
@@ -1631,7 +1636,7 @@ func TestTaskHandler_ListTasksWithNextOffset(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Errorf("expected 200, got %d: %s", rec.Code, rec.Body.String())
 	}
-	var resp ListTasksResponse
+	var resp userapi.ListTasksResponse
 	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
@@ -1663,7 +1668,7 @@ func TestTaskHandler_ListTasksWithCancelledTask(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Errorf("expected 200, got %d", rec.Code)
 	}
-	var resp ListTasksResponse
+	var resp userapi.ListTasksResponse
 	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
@@ -1692,14 +1697,14 @@ func TestTaskHandler_ListTasksStatusFilterAndOffset(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Errorf("expected 200, got %d: %s", rec.Code, rec.Body.String())
 	}
-	var resp ListTasksResponse
+	var resp userapi.ListTasksResponse
 	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
 	if len(resp.Tasks) != 1 {
 		t.Errorf("expected 1 task (filtered), got %d", len(resp.Tasks))
 	}
-	if len(resp.Tasks) > 0 && resp.Tasks[0].Status != SpecStatusCompleted {
+	if len(resp.Tasks) > 0 && resp.Tasks[0].Status != userapi.StatusCompleted {
 		t.Errorf("expected status completed, got %s", resp.Tasks[0].Status)
 	}
 }
@@ -1739,7 +1744,7 @@ func TestTaskHandler_CancelTaskSuccess(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Errorf("expected 200, got %d: %s", rec.Code, rec.Body.String())
 	}
-	var resp CancelTaskResponse
+	var resp userapi.CancelTaskResponse
 	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
@@ -1907,7 +1912,7 @@ func TestTaskHandler_GetTaskLogsSuccess(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Errorf("expected 200, got %d: %s", rec.Code, rec.Body.String())
 	}
-	var resp GetTaskLogsResponse
+	var resp userapi.TaskLogsResponse
 	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
@@ -1961,7 +1966,7 @@ func TestTaskHandler_GetTaskLogsStreamParam(t *testing.T) {
 			if rec.Code != http.StatusOK {
 				t.Errorf("expected 200, got %d", rec.Code)
 			}
-			var resp GetTaskLogsResponse
+			var resp userapi.TaskLogsResponse
 			if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
 				t.Fatalf("unmarshal: %v", err)
 			}
@@ -2302,7 +2307,7 @@ func TestOpenAIChatHandler_ChatCompletions_DirectInference(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Errorf("expected 200, got %d: %s", rec.Code, rec.Body.String())
 	}
-	var out ChatCompletionsResponse
+	var out userapi.ChatCompletionsResponse
 	if err := json.Unmarshal(rec.Body.Bytes(), &out); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
@@ -2329,7 +2334,7 @@ func TestOpenAIChatHandler_ChatCompletions_PMA(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Errorf("expected 200, got %d: %s", rec.Code, rec.Body.String())
 	}
-	var out ChatCompletionsResponse
+	var out userapi.ChatCompletionsResponse
 	if err := json.Unmarshal(rec.Body.Bytes(), &out); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
@@ -2352,7 +2357,7 @@ func TestOpenAIChatHandler_ChatCompletions_DefaultModelIsPM(t *testing.T) {
 	if rec.Code != http.StatusOK {
 		t.Errorf("expected 200, got %d: %s", rec.Code, rec.Body.String())
 	}
-	var out ChatCompletionsResponse
+	var out userapi.ChatCompletionsResponse
 	if err := json.Unmarshal(rec.Body.Bytes(), &out); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
@@ -2509,23 +2514,23 @@ func TestNodeHandler_ReportCapabilityWithSandbox(t *testing.T) {
 	}
 	mockDB.AddNode(node)
 
-	report := NodeCapabilityReport{
+	report := nodepayloads.CapabilityReport{
 		Version:    1,
 		ReportedAt: time.Now().UTC().Format(time.RFC3339),
-		Node: NodeCapabilityNode{
+		Node: nodepayloads.CapabilityNode{
 			NodeSlug: "test-node",
 			Name:     "Test Node",
 			Labels:   []string{"test"},
 		},
-		Platform: NodeCapabilityPlatform{
+		Platform: nodepayloads.Platform{
 			OS:   "linux",
 			Arch: "amd64",
 		},
-		Compute: NodeCapabilityCompute{
+		Compute: nodepayloads.Compute{
 			CPUCores: 8,
 			RAMMB:    16384,
 		},
-		Sandbox: &NodeCapabilitySandbox{
+		Sandbox: &nodepayloads.SandboxSupport{
 			Supported:      true,
 			Features:       []string{"python", "bash"},
 			MaxConcurrency: 4,
@@ -2607,7 +2612,7 @@ func TestAuthHandler_LoginSessionCreationError(t *testing.T) {
 	}
 	mockDB.AddPasswordCredential(cred)
 
-	body := LoginRequest{Handle: "testuser", Password: "testpassword123"}
+	body := userapi.LoginRequest{Handle: "testuser", Password: "testpassword123"}
 	jsonBody, _ := json.Marshal(body)
 	req := httptest.NewRequest("POST", "/v1/auth/login", bytes.NewBuffer(jsonBody))
 	rec := httptest.NewRecorder()
@@ -2619,6 +2624,7 @@ func TestAuthHandler_LoginSessionCreationError(t *testing.T) {
 	}
 }
 
+//nolint:dupl // node registration body struct repeated across tests
 func TestNodeHandler_NewNodeRegistrationJWTError(t *testing.T) {
 	mockDB := testutil.NewMockDB()
 	// Use invalid JWT manager (empty secret key causes issues)
@@ -2627,16 +2633,16 @@ func TestNodeHandler_NewNodeRegistrationJWTError(t *testing.T) {
 
 	handler := NewNodeHandler(mockDB, jwtMgr, "test-psk-secret", testOrchestratorURL, "", "", logger)
 
-	body := NodeRegistrationRequest{
+	body := nodepayloads.RegistrationRequest{
 		PSK: "test-psk-secret",
-		Capability: NodeCapabilityReport{
+		Capability: nodepayloads.CapabilityReport{
 			Version: 1,
-			Node:    NodeCapabilityNode{NodeSlug: "new-test-node"},
-			Platform: NodeCapabilityPlatform{
+			Node:    nodepayloads.CapabilityNode{NodeSlug: "new-test-node"},
+			Platform: nodepayloads.Platform{
 				OS:   "linux",
 				Arch: "amd64",
 			},
-			Compute: NodeCapabilityCompute{
+			Compute: nodepayloads.Compute{
 				CPUCores: 4,
 				RAMMB:    8192,
 			},
@@ -2656,6 +2662,7 @@ func TestNodeHandler_NewNodeRegistrationJWTError(t *testing.T) {
 }
 
 // Test for handleExistingNodeRegistration JWT error
+//nolint:dupl // node registration body struct repeated across tests
 func TestNodeHandler_ExistingNodeJWTError(t *testing.T) {
 	jwtMgr := auth.NewJWTManager("", 15*time.Minute, 7*24*time.Hour, 24*time.Hour)
 	logger := newTestLogger()
@@ -2673,16 +2680,16 @@ func TestNodeHandler_ExistingNodeJWTError(t *testing.T) {
 
 	handler := NewNodeHandler(mockDB, jwtMgr, "test-psk", testOrchestratorURL, "", "", logger)
 
-	body := NodeRegistrationRequest{
+	body := nodepayloads.RegistrationRequest{
 		PSK: "test-psk",
-		Capability: NodeCapabilityReport{
+		Capability: nodepayloads.CapabilityReport{
 			Version: 1,
-			Node:    NodeCapabilityNode{NodeSlug: "existing-node-jwt-test"},
-			Platform: NodeCapabilityPlatform{
+			Node:    nodepayloads.CapabilityNode{NodeSlug: "existing-node-jwt-test"},
+			Platform: nodepayloads.Platform{
 				OS:   "linux",
 				Arch: "amd64",
 			},
-			Compute: NodeCapabilityCompute{
+			Compute: nodepayloads.Compute{
 				CPUCores: 4,
 				RAMMB:    8192,
 			},
@@ -2714,9 +2721,9 @@ func TestNodeHandler_initializeNewNodeErrors(t *testing.T) {
 	}
 
 	nodeID := uuid.New()
-	capability := NodeCapabilityReport{
+	capability := nodepayloads.CapabilityReport{
 		Version: 1,
-		Node:    NodeCapabilityNode{NodeSlug: "test-node"},
+		Node:    nodepayloads.CapabilityNode{NodeSlug: "test-node"},
 	}
 
 	// Should not panic - just log errors
@@ -2735,7 +2742,7 @@ func TestAuthHandler_RefreshInvalidUserID(t *testing.T) {
 	// Generate a token with invalid user ID format - create a custom JWT
 	// This is hard to test without modifying JWT generation, so test other paths
 
-	body := RefreshRequest{RefreshToken: "invalid.token.format"}
+	body := userapi.RefreshRequest{RefreshToken: "invalid.token.format"}
 	jsonBody, _ := json.Marshal(body)
 	req := httptest.NewRequest("POST", "/v1/auth/refresh", bytes.NewBuffer(jsonBody))
 	rec := httptest.NewRecorder()
@@ -2768,14 +2775,14 @@ func TestNodeHandler_ReportCapabilityUpdateErrors(t *testing.T) {
 
 	handler := NewNodeHandler(mockDB, jwtMgr, "test-psk", testOrchestratorURL, "", "", logger)
 
-	report := NodeCapabilityReport{
+	report := nodepayloads.CapabilityReport{
 		Version: 1,
-		Node:    NodeCapabilityNode{NodeSlug: "test-node-errors"},
-		Platform: NodeCapabilityPlatform{
+		Node:    nodepayloads.CapabilityNode{NodeSlug: "test-node-errors"},
+		Platform: nodepayloads.Platform{
 			OS:   "linux",
 			Arch: "amd64",
 		},
-		Compute: NodeCapabilityCompute{
+		Compute: nodepayloads.Compute{
 			CPUCores: 4,
 			RAMMB:    8192,
 		},
@@ -2815,6 +2822,7 @@ func (m *updateNodeStatusErrorStore) UpdateNodeStatus(_ context.Context, _ uuid.
 	return errors.New("update node status error")
 }
 
+//nolint:dupl // node registration body struct repeated across tests
 func TestNodeHandler_RegisterExistingNode_UpdateNodeStatusFails(t *testing.T) {
 	mockDB := &updateNodeStatusErrorStore{MockDB: testutil.NewMockDB()}
 	node := &models.Node{
@@ -2828,13 +2836,13 @@ func TestNodeHandler_RegisterExistingNode_UpdateNodeStatusFails(t *testing.T) {
 	jwtMgr := auth.NewJWTManager("test-secret-key-1234567890123456", 15*time.Minute, 7*24*time.Hour, 24*time.Hour)
 	handler := NewNodeHandler(mockDB, jwtMgr, "test-psk", testOrchestratorURL, "", "", newTestLogger())
 
-	body := NodeRegistrationRequest{
+	body := nodepayloads.RegistrationRequest{
 		PSK: "test-psk",
-		Capability: NodeCapabilityReport{
+		Capability: nodepayloads.CapabilityReport{
 			Version:  1,
-			Node:     NodeCapabilityNode{NodeSlug: "existing-node"},
-			Platform: NodeCapabilityPlatform{OS: "linux", Arch: "amd64"},
-			Compute:  NodeCapabilityCompute{CPUCores: 4, RAMMB: 8192},
+			Node:     nodepayloads.CapabilityNode{NodeSlug: "existing-node"},
+			Platform: nodepayloads.Platform{OS: "linux", Arch: "amd64"},
+			Compute:  nodepayloads.Compute{CPUCores: 4, RAMMB: 8192},
 		},
 	}
 	req, rec := recordedRequestJSON("POST", "/v1/nodes/register", body)
@@ -2854,18 +2862,19 @@ func (m *createNodeErrorStore) CreateNode(_ context.Context, _ string) (*models.
 	return nil, errors.New("create node error")
 }
 
+//nolint:dupl // node registration body struct repeated across tests
 func TestNodeHandler_RegisterNewNode_CreateNodeFails(t *testing.T) {
 	mockDB := &createNodeErrorStore{MockDB: testutil.NewMockDB()}
 	jwtMgr := auth.NewJWTManager("test-secret-key-1234567890123456", 15*time.Minute, 7*24*time.Hour, 24*time.Hour)
 	handler := NewNodeHandler(mockDB, jwtMgr, "test-psk", testOrchestratorURL, "", "", newTestLogger())
 
-	body := NodeRegistrationRequest{
+	body := nodepayloads.RegistrationRequest{
 		PSK: "test-psk",
-		Capability: NodeCapabilityReport{
+		Capability: nodepayloads.CapabilityReport{
 			Version:  1,
-			Node:     NodeCapabilityNode{NodeSlug: "new-node"},
-			Platform: NodeCapabilityPlatform{OS: "linux", Arch: "amd64"},
-			Compute:  NodeCapabilityCompute{CPUCores: 4, RAMMB: 8192},
+			Node:     nodepayloads.CapabilityNode{NodeSlug: "new-node"},
+			Platform: nodepayloads.Platform{OS: "linux", Arch: "amd64"},
+			Compute:  nodepayloads.Compute{CPUCores: 4, RAMMB: 8192},
 		},
 	}
 	req, rec := recordedRequestJSON("POST", "/v1/nodes/register", body)
@@ -2899,7 +2908,7 @@ func refreshWithStore(t *testing.T, base *testutil.MockDB, store database.Store,
 		CreatedAt: time.Now().UTC(), UpdatedAt: time.Now().UTC(),
 	}
 	base.AddRefreshSession(session)
-	req, rec := recordedRequestJSON("POST", "/v1/auth/refresh", RefreshRequest{RefreshToken: refreshToken})
+	req, rec := recordedRequestJSON("POST", "/v1/auth/refresh", userapi.RefreshRequest{RefreshToken: refreshToken})
 	handler.Refresh(rec, req)
 	if rec.Code != expectedCode {
 		t.Errorf("expected status %d, got %d", expectedCode, rec.Code)
@@ -2935,7 +2944,7 @@ func TestAuthHandler_Refresh_SessionNotFound(t *testing.T) {
 	refreshToken, _, _ := jwtMgr.GenerateRefreshToken(user.ID)
 	// Do not add refresh session - session lookup will return ErrNotFound
 
-	req, rec := recordedRequestJSON("POST", "/v1/auth/refresh", RefreshRequest{RefreshToken: refreshToken})
+	req, rec := recordedRequestJSON("POST", "/v1/auth/refresh", userapi.RefreshRequest{RefreshToken: refreshToken})
 	handler.Refresh(rec, req)
 
 	if rec.Code != http.StatusUnauthorized {
@@ -2951,7 +2960,7 @@ func TestAuthHandler_Refresh_GetActiveRefreshSessionError(t *testing.T) {
 
 	refreshToken, _, _ := jwtMgr.GenerateRefreshToken(uuid.New())
 
-	req, rec := recordedRequestJSON("POST", "/v1/auth/refresh", RefreshRequest{RefreshToken: refreshToken})
+	req, rec := recordedRequestJSON("POST", "/v1/auth/refresh", userapi.RefreshRequest{RefreshToken: refreshToken})
 	handler.Refresh(rec, req)
 
 	if rec.Code != http.StatusInternalServerError {
@@ -2974,7 +2983,7 @@ func TestAuthHandler_Refresh_CreateSessionFails(t *testing.T) {
 	}
 	mockDB.AddRefreshSession(session)
 
-	req, rec := recordedRequestJSON("POST", "/v1/auth/refresh", RefreshRequest{RefreshToken: refreshToken})
+	req, rec := recordedRequestJSON("POST", "/v1/auth/refresh", userapi.RefreshRequest{RefreshToken: refreshToken})
 	handler.Refresh(rec, req)
 
 	if rec.Code != http.StatusInternalServerError {
@@ -2996,7 +3005,7 @@ func TestTaskHandler_CreateTask_CreateJobFails(t *testing.T) {
 	handler := NewTaskHandler(mockDB, newTestLogger(), "", "")
 	userID := uuid.New()
 	ctx := context.WithValue(context.Background(), contextKeyUserID, userID)
-	req, rec := recordedRequestJSON("POST", "/v1/tasks", CreateTaskRequest{Prompt: "p"})
+	req, rec := recordedRequestJSON("POST", "/v1/tasks", userapi.CreateTaskRequest{Prompt: "p"})
 	req = req.WithContext(ctx)
 	handler.CreateTask(rec, req)
 

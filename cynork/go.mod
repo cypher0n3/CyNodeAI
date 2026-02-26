@@ -7,6 +7,7 @@ toolchain go1.25.7
 require (
 	github.com/charmbracelet/glamour v0.10.0
 	github.com/cucumber/godog v0.15.1
+	github.com/cypher0n3/cynodeai/go_shared_libs v0.0.0
 	github.com/spf13/cobra v1.10.2
 	golang.org/x/term v0.40.0
 	gopkg.in/yaml.v3 v3.0.1
@@ -46,3 +47,5 @@ require (
 	golang.org/x/sys v0.41.0 // indirect
 	golang.org/x/text v0.24.0 // indirect
 )
+
+replace github.com/cypher0n3/cynodeai/go_shared_libs => ../go_shared_libs

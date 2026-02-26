@@ -12,6 +12,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/cypher0n3/cynodeai/go_shared_libs/contracts/userapi"
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/database"
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/inference"
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/models"
@@ -74,31 +75,6 @@ func (h *OpenAIChatHandler) ListModels(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// ChatCompletionsRequest is the OpenAI chat-completions request body (subset we use).
-type ChatCompletionsRequest struct {
-	Model    string `json:"model"`
-	Messages []struct {
-		Role    string `json:"role"`
-		Content string `json:"content"`
-	} `json:"messages"`
-}
-
-// ChatCompletionsResponse is the OpenAI chat-completions response (subset we use).
-type ChatCompletionsResponse struct {
-	ID      string `json:"id"`
-	Object  string `json:"object"`
-	Created int64  `json:"created"`
-	Model   string `json:"model"`
-	Choices []struct {
-		Index   int `json:"index"`
-		Message struct {
-			Role    string `json:"role"`
-			Content string `json:"content"`
-		} `json:"message"`
-		FinishReason string `json:"finish_reason"`
-	} `json:"choices"`
-}
-
 // ChatCompletions handles POST /v1/chat/completions with pipeline: auth (already done), decode, project_id, redact, persist user message, route, persist assistant, return.
 func (h *OpenAIChatHandler) ChatCompletions(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
@@ -153,10 +129,10 @@ func (h *OpenAIChatHandler) ChatCompletions(w http.ResponseWriter, r *http.Reque
 		RedactionKinds:   kindsJSON(kinds),
 		DurationMs:       &durationMs,
 	})
-	writeOpenAIJSON(w, http.StatusOK, buildChatCompletionsResponse(effectiveModel, content))
+	writeOpenAIJSON(w, http.StatusOK, buildChatCompletionsResponse(effectiveModel, content)) //nolint:exhaustruct // response struct built inline; exhaustruct wants all fields set
 }
 
-func (h *OpenAIChatHandler) decodeAndValidateChatRequest(r *http.Request) (req ChatCompletionsRequest, status int, errMsg string) {
+func (h *OpenAIChatHandler) decodeAndValidateChatRequest(r *http.Request) (req userapi.ChatCompletionsRequest, status int, errMsg string) {
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		return req, http.StatusBadRequest, "Invalid request body"
 	}
@@ -166,7 +142,7 @@ func (h *OpenAIChatHandler) decodeAndValidateChatRequest(r *http.Request) (req C
 	return req, 0, ""
 }
 
-func lastUserMessageContent(redacted []struct{ Role, Content string }) string {
+func lastUserMessageContent(redacted []userapi.ChatMessage) string {
 	for i := len(redacted) - 1; i >= 0; i-- {
 		if redacted[i].Role == "user" {
 			return redacted[i].Content
@@ -179,7 +155,7 @@ func lastUserMessageContent(redacted []struct{ Role, Content string }) string {
 // Effective model: request body "model" if present and non-empty (after trim), else cynodeai.pm.
 // - effectiveModel == cynodeai.pm → hand off to PM agent (cynode-pma); do not call inference directly.
 // - effectiveModel != cynodeai.pm → route to direct inference (Ollama/API Egress); do not invoke PM agent.
-func (h *OpenAIChatHandler) routeAndComplete(ctx context.Context, effectiveModel string, redacted []struct{ Role, Content string }, lastUserContent string) (content string, status int, code, msg string) {
+func (h *OpenAIChatHandler) routeAndComplete(ctx context.Context, effectiveModel string, redacted []userapi.ChatMessage, lastUserContent string) (content string, status int, code, msg string) {
 	if effectiveModel == EffectiveModelPM {
 		if h.pmaBaseURL == "" {
 			h.logger.Warn("PMA base URL not configured; cannot route to cynodeai.pm")
@@ -215,24 +191,21 @@ func (h *OpenAIChatHandler) routeAndComplete(ctx context.Context, effectiveModel
 	return content, 0, "", ""
 }
 
-func buildChatCompletionsResponse(model, content string) ChatCompletionsResponse {
-	return ChatCompletionsResponse{
+func buildChatCompletionsResponse(model, content string) userapi.ChatCompletionsResponse {
+	return userapi.ChatCompletionsResponse{
 		ID:      uuid.New().String(),
 		Object:  "chat.completion",
 		Created: time.Now().Unix(),
 		Model:   model,
-		Choices: []struct {
-			Index   int `json:"index"`
-			Message struct {
-				Role    string `json:"role"`
-				Content string `json:"content"`
-			} `json:"message"`
-			FinishReason string `json:"finish_reason"`
-		}{
-			{Index: 0, Message: struct {
-				Role    string `json:"role"`
-				Content string `json:"content"`
-			}{Role: "assistant", Content: content}, FinishReason: "stop"},
+		Choices: []userapi.ChatCompletionsChoice{
+			{
+				Index: 0,
+				Message: struct {
+					Role    string `json:"role"`
+					Content string `json:"content"`
+				}{Role: "assistant", Content: content},
+				FinishReason: "stop",
+			},
 		},
 	}
 }
@@ -249,17 +222,8 @@ func projectIDFromHeader(r *http.Request) *uuid.UUID {
 	return &id
 }
 
-func redactSecrets(messages []struct {
-	Role    string `json:"role"`
-	Content string `json:"content"`
-}) (amended []struct {
-	Role    string
-	Content string
-}, kinds []string) {
-	amended = make([]struct {
-		Role    string
-		Content string
-	}, 0, len(messages))
+func redactSecrets(messages []userapi.ChatMessage) (amended []userapi.ChatMessage, kinds []string) {
+	amended = make([]userapi.ChatMessage, 0, len(messages))
 	seen := make(map[string]bool)
 	for _, m := range messages {
 		content := m.Content
@@ -277,10 +241,7 @@ func redactSecrets(messages []struct {
 				seen["api_key"] = true
 			}
 		}
-		amended = append(amended, struct {
-			Role    string
-			Content string
-		}{Role: m.Role, Content: content})
+		amended = append(amended, userapi.ChatMessage{Role: m.Role, Content: content})
 	}
 	return amended, kinds
 }

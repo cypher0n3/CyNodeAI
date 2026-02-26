@@ -7,6 +7,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/cypher0n3/cynodeai/go_shared_libs/contracts/userapi"
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/database"
 )
 
@@ -22,14 +23,6 @@ func NewUserHandler(db database.Store, logger *slog.Logger) *UserHandler {
 		db:     db,
 		logger: logger,
 	}
-}
-
-// UserResponse represents user data in responses.
-type UserResponse struct {
-	ID       string  `json:"id"`
-	Handle   string  `json:"handle"`
-	Email    *string `json:"email,omitempty"`
-	IsActive bool    `json:"is_active"`
 }
 
 // GetMe handles GET /v1/users/me.
@@ -56,7 +49,7 @@ func (h *UserHandler) GetMe(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	WriteJSON(w, http.StatusOK, UserResponse{
+	WriteJSON(w, http.StatusOK, userapi.UserResponse{
 		ID:       user.ID.String(),
 		Handle:   user.Handle,
 		Email:    user.Email,

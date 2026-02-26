@@ -5,12 +5,14 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"github.com/cypher0n3/cynodeai/go_shared_libs/contracts/problem"
 )
 
 func TestWriteError(t *testing.T) {
 	w := httptest.NewRecorder()
 
-	WriteError(w, http.StatusBadRequest, ErrTypeValidation, "Bad Request", "test detail")
+	WriteError(w, http.StatusBadRequest, problem.TypeValidation, "Bad Request", "test detail")
 
 	if w.Code != http.StatusBadRequest {
 		t.Errorf("status code = %d, want %d", w.Code, http.StatusBadRequest)
@@ -20,21 +22,21 @@ func TestWriteError(t *testing.T) {
 		t.Errorf("Content-Type = %s, want application/problem+json", ct)
 	}
 
-	var problem ProblemDetails
-	if err := json.NewDecoder(w.Body).Decode(&problem); err != nil {
+	var p problem.Details
+	if err := json.NewDecoder(w.Body).Decode(&p); err != nil {
 		t.Fatalf("decode problem: %v", err)
 	}
 
-	if problem.Type != ErrTypeValidation {
-		t.Errorf("problem.Type = %s, want %s", problem.Type, ErrTypeValidation)
+	if p.Type != problem.TypeValidation {
+		t.Errorf("problem.Type = %s, want %s", p.Type, problem.TypeValidation)
 	}
 
-	if problem.Status != http.StatusBadRequest {
-		t.Errorf("problem.Status = %d, want %d", problem.Status, http.StatusBadRequest)
+	if p.Status != http.StatusBadRequest {
+		t.Errorf("problem.Status = %d, want %d", p.Status, http.StatusBadRequest)
 	}
 
-	if problem.Detail != "test detail" {
-		t.Errorf("problem.Detail = %s, want test detail", problem.Detail)
+	if p.Detail != "test detail" {
+		t.Errorf("problem.Detail = %s, want test detail", p.Detail)
 	}
 }
 

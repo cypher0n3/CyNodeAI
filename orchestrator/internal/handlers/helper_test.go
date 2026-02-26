@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cypher0n3/cynodeai/go_shared_libs/contracts/nodepayloads"
 	"github.com/google/uuid"
 )
 
@@ -67,13 +68,13 @@ func requestWithUserContext(method, path string, body []byte, userID uuid.UUID) 
 	return req.WithContext(ctx), rec
 }
 
-// testNodeCapabilityReport builds a NodeCapabilityReport for tests; avoids duplicating the struct literal.
-func testNodeCapabilityReport(nodeSlug, name string, cpuCores, ramMB int) NodeCapabilityReport {
-	return NodeCapabilityReport{
+// testNodeCapabilityReport builds a nodepayloads.CapabilityReport for tests; avoids duplicating the struct literal.
+func testNodeCapabilityReport(nodeSlug, name string, cpuCores, ramMB int) nodepayloads.CapabilityReport {
+	return nodepayloads.CapabilityReport{
 		Version:    1,
 		ReportedAt: time.Now().UTC().Format(time.RFC3339),
-		Node:       NodeCapabilityNode{NodeSlug: nodeSlug, Name: name, Labels: []string{"test"}},
-		Platform:   NodeCapabilityPlatform{OS: "linux", Arch: "amd64"},
-		Compute:    NodeCapabilityCompute{CPUCores: cpuCores, RAMMB: ramMB},
+		Node:       nodepayloads.CapabilityNode{NodeSlug: nodeSlug, Name: name, Labels: []string{"test"}},
+		Platform:   nodepayloads.Platform{OS: "linux", Arch: "amd64"},
+		Compute:    nodepayloads.Compute{CPUCores: cpuCores, RAMMB: ramMB},
 	}
 }

@@ -15,6 +15,7 @@ import (
 	"github.com/cypher0n3/cynodeai/cynork/internal/config"
 	"github.com/cypher0n3/cynodeai/cynork/internal/exit"
 	"github.com/cypher0n3/cynodeai/cynork/internal/gateway"
+	"github.com/cypher0n3/cynodeai/go_shared_libs/contracts/userapi"
 )
 
 const testStatusCompleted = "completed"
@@ -104,7 +105,7 @@ func TestRunAuthWhoami_NoToken(t *testing.T) {
 }
 
 func TestRunAuthWhoami_OK(t *testing.T) {
-	server := mockJSONServer(t, http.StatusOK, gateway.UserResponse{ID: "u1", Handle: "alice"})
+	server := mockJSONServer(t, http.StatusOK, userapi.UserResponse{ID: "u1", Handle: "alice"})
 	defer server.Close()
 	cfg = &config.Config{GatewayURL: server.URL, Token: "tok"}
 	defer func() { cfg = nil }()
@@ -122,7 +123,7 @@ func TestRunAuthRefresh_NoRefreshToken(t *testing.T) {
 }
 
 func TestRunAuthRefresh_OK(t *testing.T) {
-	server := mockJSONServer(t, http.StatusOK, gateway.LoginResponse{
+	server := mockJSONServer(t, http.StatusOK, userapi.LoginResponse{
 		AccessToken:  "new-access",
 		RefreshToken: "new-refresh",
 		TokenType:    "Bearer",
@@ -142,7 +143,7 @@ func TestRunAuthRefresh_OK(t *testing.T) {
 }
 
 func TestRunAuthRefresh_DefaultConfigPath(t *testing.T) {
-	server := mockJSONServer(t, http.StatusOK, gateway.LoginResponse{
+	server := mockJSONServer(t, http.StatusOK, userapi.LoginResponse{
 		AccessToken:  "new-a",
 		RefreshToken: "new-r",
 		TokenType:    "Bearer",
@@ -198,7 +199,7 @@ func TestRunChat_WithMessageFlag(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		if r.URL.Path == "/v1/chat/completions" && r.Method == http.MethodPost {
-			var req gateway.ChatCompletionsRequest
+			var req userapi.ChatCompletionsRequest
 			if _ = json.NewDecoder(r.Body).Decode(&req); len(req.Messages) > 0 {
 				w.WriteHeader(http.StatusOK)
 				_ = json.NewEncoder(w).Encode(map[string]any{
@@ -242,7 +243,7 @@ func TestRunTaskCreate_NoToken(t *testing.T) {
 }
 
 func TestRunTaskCreate_OK(t *testing.T) {
-	server := mockJSONServer(t, http.StatusCreated, gateway.TaskResponse{ID: "task-1", Status: "queued"})
+	server := mockJSONServer(t, http.StatusCreated, userapi.TaskResponse{ID: "task-1", Status: "queued"})
 	defer server.Close()
 	cfg = &config.Config{GatewayURL: server.URL, Token: "tok"}
 	taskCreatePrompt = "echo hi"
@@ -261,9 +262,9 @@ func TestRunTaskResult_NoToken(t *testing.T) {
 }
 
 func TestRunTaskResult_OK(t *testing.T) {
-	server := mockJSONServer(t, http.StatusOK, gateway.TaskResultResponse{
+	server := mockJSONServer(t, http.StatusOK, userapi.TaskResultResponse{
 		TaskID: "tid", Status: "completed",
-		Jobs: []gateway.JobResponse{{ID: "j1", Status: "completed", Result: strPtr("out")}},
+		Jobs: []userapi.JobResponse{{ID: "j1", Status: "completed", Result: strPtr("out")}},
 	})
 	defer server.Close()
 	cfg = &config.Config{GatewayURL: server.URL, Token: "tok"}
@@ -282,9 +283,9 @@ func TestRunTaskWatch_NoToken(t *testing.T) {
 }
 
 func TestRunTaskWatch_ExitsOnTerminalStatus(t *testing.T) {
-	server := mockJSONServer(t, http.StatusOK, gateway.TaskResultResponse{
+	server := mockJSONServer(t, http.StatusOK, userapi.TaskResultResponse{
 		TaskID: "tid", Status: "completed",
-		Jobs: []gateway.JobResponse{{ID: "j1", Status: "completed", Result: strPtr("done")}},
+		Jobs: []userapi.JobResponse{{ID: "j1", Status: "completed", Result: strPtr("done")}},
 	})
 	defer server.Close()
 	cfg = &config.Config{GatewayURL: server.URL, Token: "tok"}
@@ -329,7 +330,7 @@ func TestRunAuthLogout_DefaultConfigPath(t *testing.T) {
 }
 
 func TestRunAuthLogin_OK(t *testing.T) {
-	server := mockJSONServer(t, http.StatusOK, gateway.LoginResponse{AccessToken: "new-tok", TokenType: "Bearer"})
+	server := mockJSONServer(t, http.StatusOK, userapi.LoginResponse{AccessToken: "new-tok", TokenType: "Bearer"})
 	defer server.Close()
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.yaml")
@@ -362,7 +363,7 @@ func TestRunAuthLogin_LoginFails(t *testing.T) {
 }
 
 func TestRunAuthLogin_SaveFails(t *testing.T) {
-	server := mockJSONServer(t, http.StatusOK, gateway.LoginResponse{AccessToken: "tok", TokenType: "Bearer"})
+	server := mockJSONServer(t, http.StatusOK, userapi.LoginResponse{AccessToken: "tok", TokenType: "Bearer"})
 	defer server.Close()
 	dir := t.TempDir()
 	blocker := filepath.Join(dir, "blocker")
@@ -380,7 +381,7 @@ func TestRunAuthLogin_SaveFails(t *testing.T) {
 }
 
 func TestRunAuthLogin_ConfigPathFails(t *testing.T) {
-	server := mockJSONServer(t, http.StatusOK, gateway.LoginResponse{AccessToken: "tok", TokenType: "Bearer"})
+	server := mockJSONServer(t, http.StatusOK, userapi.LoginResponse{AccessToken: "tok", TokenType: "Bearer"})
 	defer server.Close()
 	configPath = ""
 	cfg = &config.Config{GatewayURL: server.URL}
@@ -472,7 +473,7 @@ func TestRunTaskResult_GatewayError(t *testing.T) {
 
 func runAuthLoginWithStdin(t *testing.T, handle, password, stdinInput string) error {
 	t.Helper()
-	server := mockJSONServer(t, http.StatusOK, gateway.LoginResponse{AccessToken: "tok", TokenType: "Bearer"})
+	server := mockJSONServer(t, http.StatusOK, userapi.LoginResponse{AccessToken: "tok", TokenType: "Bearer"})
 	defer server.Close()
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.yaml")
@@ -505,7 +506,7 @@ func TestRunAuthLogin_PasswordFromStdin(t *testing.T) {
 }
 
 func TestRunAuthLogin_ConfigPathFromDefault(t *testing.T) {
-	server := mockJSONServer(t, http.StatusOK, gateway.LoginResponse{AccessToken: "tok", TokenType: "Bearer"})
+	server := mockJSONServer(t, http.StatusOK, userapi.LoginResponse{AccessToken: "tok", TokenType: "Bearer"})
 	defer server.Close()
 	dir := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(dir, "cynork"), 0o700); err != nil {
@@ -540,8 +541,8 @@ func TestRunTaskList_NoToken(t *testing.T) {
 }
 
 func TestRunTaskList_OK(t *testing.T) {
-	server := mockJSONServer(t, http.StatusOK, gateway.ListTasksResponse{
-		Tasks: []gateway.TaskResponse{{ID: "t1", Status: "completed"}},
+	server := mockJSONServer(t, http.StatusOK, userapi.ListTasksResponse{
+		Tasks: []userapi.TaskResponse{{ID: "t1", Status: "completed"}},
 	})
 	defer server.Close()
 	cfg = &config.Config{GatewayURL: server.URL, Token: "tok"}
@@ -561,7 +562,7 @@ func TestRunTaskGet_NoToken(t *testing.T) {
 }
 
 func TestRunTaskGet_OK(t *testing.T) {
-	server := mockJSONServer(t, http.StatusOK, gateway.TaskResponse{ID: "tid", Status: "running"})
+	server := mockJSONServer(t, http.StatusOK, userapi.TaskResponse{ID: "tid", Status: "running"})
 	defer server.Close()
 	cfg = &config.Config{GatewayURL: server.URL, Token: "tok"}
 	outputFmt = outputFormatTable
@@ -580,7 +581,7 @@ func TestRunTaskCancel_NoToken(t *testing.T) {
 }
 
 func TestRunTaskCancel_OK(t *testing.T) {
-	server := mockJSONServer(t, http.StatusOK, gateway.CancelTaskResponse{TaskID: "tid", Canceled: true})
+	server := mockJSONServer(t, http.StatusOK, userapi.CancelTaskResponse{TaskID: "tid", Canceled: true})
 	defer server.Close()
 	cfg = &config.Config{GatewayURL: server.URL, Token: "tok"}
 	taskCancelYes = true
@@ -599,7 +600,7 @@ func TestRunTaskLogs_NoToken(t *testing.T) {
 }
 
 func TestRunTaskLogs_OK(t *testing.T) {
-	server := mockJSONServer(t, http.StatusOK, gateway.TaskLogsResponse{TaskID: "tid", Stdout: "out", Stderr: "err"})
+	server := mockJSONServer(t, http.StatusOK, userapi.TaskLogsResponse{TaskID: "tid", Stdout: "out", Stderr: "err"})
 	defer server.Close()
 	cfg = &config.Config{GatewayURL: server.URL, Token: "tok"}
 	defer func() { cfg = nil }()
@@ -777,7 +778,7 @@ func TestRunSkillsLoad_OK(t *testing.T) {
 }
 
 func TestRunTaskCreate_JSONOutput(t *testing.T) {
-	server := mockJSONServer(t, http.StatusCreated, gateway.TaskResponse{ID: "tid", Status: "queued"})
+	server := mockJSONServer(t, http.StatusCreated, userapi.TaskResponse{ID: "tid", Status: "queued"})
 	defer server.Close()
 	cfg = &config.Config{GatewayURL: server.URL, Token: "tok"}
 	taskCreatePrompt = "hi"
@@ -789,9 +790,9 @@ func TestRunTaskCreate_JSONOutput(t *testing.T) {
 }
 
 func TestRunTaskResult_JSONOutput(t *testing.T) {
-	server := mockJSONServer(t, http.StatusOK, gateway.TaskResultResponse{
+	server := mockJSONServer(t, http.StatusOK, userapi.TaskResultResponse{
 		TaskID: "tid", Status: "completed",
-		Jobs: []gateway.JobResponse{{ID: "j1", Status: "completed", Result: strPtr("out")}},
+		Jobs: []userapi.JobResponse{{ID: "j1", Status: "completed", Result: strPtr("out")}},
 	})
 	defer server.Close()
 	cfg = &config.Config{GatewayURL: server.URL, Token: "tok"}
@@ -803,7 +804,7 @@ func TestRunTaskResult_JSONOutput(t *testing.T) {
 }
 
 func TestRunTaskGet_JSONOutput(t *testing.T) {
-	server := mockJSONServer(t, http.StatusOK, gateway.TaskResponse{ID: "tid", Status: "running"})
+	server := mockJSONServer(t, http.StatusOK, userapi.TaskResponse{ID: "tid", Status: "running"})
 	defer server.Close()
 	cfg = &config.Config{GatewayURL: server.URL, Token: "tok"}
 	outputFmt = outputFormatJSON
@@ -814,7 +815,7 @@ func TestRunTaskGet_JSONOutput(t *testing.T) {
 }
 
 func TestRunTaskList_JSONOutput(t *testing.T) {
-	server := mockJSONServer(t, http.StatusOK, gateway.ListTasksResponse{Tasks: []gateway.TaskResponse{}})
+	server := mockJSONServer(t, http.StatusOK, userapi.ListTasksResponse{Tasks: []userapi.TaskResponse{}})
 	defer server.Close()
 	cfg = &config.Config{GatewayURL: server.URL, Token: "tok"}
 	outputFmt = outputFormatJSON
@@ -825,7 +826,7 @@ func TestRunTaskList_JSONOutput(t *testing.T) {
 }
 
 func TestRunTaskCancel_JSONOutput(t *testing.T) {
-	server := mockJSONServer(t, http.StatusOK, gateway.CancelTaskResponse{TaskID: "tid", Canceled: true})
+	server := mockJSONServer(t, http.StatusOK, userapi.CancelTaskResponse{TaskID: "tid", Canceled: true})
 	defer server.Close()
 	cfg = &config.Config{GatewayURL: server.URL, Token: "tok"}
 	taskCancelYes = true
@@ -869,9 +870,9 @@ func TestRunTaskGet_Forbidden(t *testing.T) {
 }
 
 func TestRunTaskResult_WaitTerminal(t *testing.T) {
-	server := mockJSONServer(t, http.StatusOK, gateway.TaskResultResponse{
+	server := mockJSONServer(t, http.StatusOK, userapi.TaskResultResponse{
 		TaskID: "tid", Status: "completed",
-		Jobs: []gateway.JobResponse{{ID: "j1", Status: "completed", Result: strPtr("done")}},
+		Jobs: []userapi.JobResponse{{ID: "j1", Status: "completed", Result: strPtr("done")}},
 	})
 	defer server.Close()
 	cfg = &config.Config{GatewayURL: server.URL, Token: "tok"}
@@ -891,7 +892,7 @@ func TestExecute_ShellC(t *testing.T) {
 }
 
 func TestRunTaskList_WithStatus(t *testing.T) {
-	server := mockJSONServer(t, http.StatusOK, gateway.ListTasksResponse{Tasks: []gateway.TaskResponse{}})
+	server := mockJSONServer(t, http.StatusOK, userapi.ListTasksResponse{Tasks: []userapi.TaskResponse{}})
 	defer server.Close()
 	cfg = &config.Config{GatewayURL: server.URL, Token: "tok"}
 	taskListStatus = testStatusCompleted
@@ -1098,7 +1099,7 @@ func TestRunChat_OneMessage(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		if r.URL.Path == "/v1/chat/completions" && r.Method == http.MethodPost {
-			var req gateway.ChatCompletionsRequest
+			var req userapi.ChatCompletionsRequest
 			if _ = json.NewDecoder(r.Body).Decode(&req); len(req.Messages) > 0 && req.Messages[0].Content == "hello" {
 				w.WriteHeader(http.StatusOK)
 				_ = json.NewEncoder(w).Encode(map[string]any{
@@ -1256,12 +1257,12 @@ func TestRunTaskResult_Wait(t *testing.T) {
 		if r.URL.Path == "/v1/tasks/tid/result" {
 			if first {
 				first = false
-				_ = json.NewEncoder(w).Encode(gateway.TaskResultResponse{TaskID: "tid", Status: "running", Jobs: []gateway.JobResponse{}})
+				_ = json.NewEncoder(w).Encode(userapi.TaskResultResponse{TaskID: "tid", Status: "running", Jobs: []userapi.JobResponse{}})
 				return
 			}
-			_ = json.NewEncoder(w).Encode(gateway.TaskResultResponse{
+			_ = json.NewEncoder(w).Encode(userapi.TaskResultResponse{
 				TaskID: "tid", Status: "completed",
-				Jobs: []gateway.JobResponse{{Result: strPtr("done")}},
+				Jobs: []userapi.JobResponse{{Result: strPtr("done")}},
 			})
 			return
 		}

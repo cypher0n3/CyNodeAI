@@ -12,6 +12,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/cypher0n3/cynodeai/go_shared_libs/contracts/userapi"
 	"github.com/cypher0n3/cynodeai/go_shared_libs/contracts/workerapi"
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/database"
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/inference"
@@ -42,42 +43,30 @@ func NewTaskHandler(db database.Store, logger *slog.Logger, inferenceURL, infere
 // InputModePrompt is the default: natural-language prompt goes to the PM model.
 const InputModePrompt = "prompt"
 
-// CreateTaskRequest represents task creation request.
-// InputMode: "prompt" (default) = interpret as natural language, use inference; "script" or "commands" = run as literal shell.
-type CreateTaskRequest struct {
-	Prompt       string `json:"prompt"`
-	UseInference bool   `json:"use_inference,omitempty"`
-	InputMode    string `json:"input_mode,omitempty"`
-}
+const streamParamAll = "all"
 
-// TaskResponse represents task data in responses (CLI spec: task_id, status, optional task_name).
-type TaskResponse struct {
-	TaskID    string    `json:"task_id"`
-	Status    string    `json:"status"`
-	TaskName  *string   `json:"task_name,omitempty"`
-	Prompt    *string   `json:"prompt,omitempty"`
-	Summary   *string   `json:"summary,omitempty"`
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
-}
-
-// CLI spec status constants (used in responses and tests).
-const (
-	SpecStatusQueued    = "queued"
-	SpecStatusCanceled  = "canceled"
-	SpecStatusCompleted = "completed"
-	streamParamAll      = "all"
-)
-
-// taskStatusToSpec maps internal task status to CLI spec enum (queued, running, completed, failed, canceled).
+// taskStatusToSpec maps internal task status to userapi status enum (queued, running, completed, failed, canceled).
 func taskStatusToSpec(status string) string {
 	switch status {
 	case models.TaskStatusPending:
-		return SpecStatusQueued
+		return userapi.StatusQueued
 	case models.TaskStatusCancelled:
-		return SpecStatusCanceled
+		return userapi.StatusCanceled
 	default:
 		return status
+	}
+}
+
+func taskToResponse(t *models.Task, status string) userapi.TaskResponse {
+	return userapi.TaskResponse{
+		ID:        t.ID.String(),
+		TaskID:    t.ID.String(),
+		Status:    status,
+		TaskName:  t.Summary,
+		Prompt:    t.Prompt,
+		Summary:   t.Summary,
+		CreatedAt: t.CreatedAt.Format(time.RFC3339),
+		UpdatedAt: t.UpdatedAt.Format(time.RFC3339),
 	}
 }
 
@@ -86,7 +75,7 @@ func (h *TaskHandler) CreateTask(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	userID := getUserIDFromContext(ctx)
 
-	var req CreateTaskRequest
+	var req userapi.CreateTaskRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		WriteBadRequest(w, "Invalid request body")
 		return
@@ -114,13 +103,7 @@ func (h *TaskHandler) CreateTask(w http.ResponseWriter, r *http.Request) {
 		job, inferErr := h.createTaskWithOrchestratorInference(ctx, task.ID, req.Prompt)
 		if inferErr == nil {
 			_ = job // job already completed
-			WriteJSON(w, http.StatusCreated, TaskResponse{
-				TaskID:    task.ID.String(),
-				Status:    taskStatusToSpec(models.TaskStatusCompleted),
-				Prompt:    task.Prompt,
-				CreatedAt: task.CreatedAt,
-				UpdatedAt: task.UpdatedAt,
-			})
+			WriteJSON(w, http.StatusCreated, taskToResponse(task, taskStatusToSpec(models.TaskStatusCompleted)))
 			return
 		}
 		// Fall back to sandbox job path on inference failure
@@ -144,13 +127,7 @@ func (h *TaskHandler) CreateTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	WriteJSON(w, http.StatusCreated, TaskResponse{
-		TaskID:    task.ID.String(),
-		Status:    taskStatusToSpec(task.Status),
-		Prompt:    task.Prompt,
-		CreatedAt: task.CreatedAt,
-		UpdatedAt: task.UpdatedAt,
-	})
+	WriteJSON(w, http.StatusCreated, taskToResponse(task, taskStatusToSpec(task.Status)))
 }
 
 // createTaskWithOrchestratorInference calls the PM model with the prompt and stores the result as a completed job.
@@ -272,31 +249,20 @@ func (h *TaskHandler) GetTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	WriteJSON(w, http.StatusOK, TaskResponse{
-		TaskID:    task.ID.String(),
-		Status:    taskStatusToSpec(task.Status),
-		TaskName:  task.Summary,
-		Prompt:    task.Prompt,
-		Summary:   task.Summary,
-		CreatedAt: task.CreatedAt,
-		UpdatedAt: task.UpdatedAt,
-	})
+	WriteJSON(w, http.StatusOK, taskToResponse(task, taskStatusToSpec(task.Status)))
 }
 
-// TaskResultResponse represents task result data.
-type TaskResultResponse struct {
-	TaskID string        `json:"task_id"`
-	Status string        `json:"status"`
-	Jobs   []JobResponse `json:"jobs"`
-}
-
-// JobResponse represents job data in responses.
-type JobResponse struct {
-	ID        string     `json:"id"`
-	Status    string     `json:"status"`
-	Result    *string    `json:"result,omitempty"`
-	StartedAt *time.Time `json:"started_at,omitempty"`
-	EndedAt   *time.Time `json:"ended_at,omitempty"`
+func jobToResponse(job *models.Job) userapi.JobResponse {
+	resp := userapi.JobResponse{ID: job.ID.String(), Status: job.Status, Result: job.Result.Ptr()}
+	if job.StartedAt != nil {
+		s := job.StartedAt.Format(time.RFC3339)
+		resp.StartedAt = &s
+	}
+	if job.EndedAt != nil {
+		s := job.EndedAt.Format(time.RFC3339)
+		resp.EndedAt = &s
+	}
+	return resp
 }
 
 // GetTaskResult handles GET /v1/tasks/{id}/result.
@@ -333,35 +299,16 @@ func (h *TaskHandler) GetTaskResult(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	jobResponses := make([]JobResponse, 0, len(jobs))
+	jobResponses := make([]userapi.JobResponse, 0, len(jobs))
 	for _, job := range jobs {
-		jobResponses = append(jobResponses, JobResponse{
-			ID:        job.ID.String(),
-			Status:    job.Status,
-			Result:    job.Result.Ptr(),
-			StartedAt: job.StartedAt,
-			EndedAt:   job.EndedAt,
-		})
+		jobResponses = append(jobResponses, jobToResponse(job))
 	}
 
-	WriteJSON(w, http.StatusOK, TaskResultResponse{
+	WriteJSON(w, http.StatusOK, userapi.TaskResultResponse{
 		TaskID: task.ID.String(),
 		Status: taskStatusToSpec(task.Status),
 		Jobs:   jobResponses,
 	})
-}
-
-// ListTasksRequest holds query params for GET /v1/tasks.
-type ListTasksRequest struct {
-	Limit  int    // default 50, min 1, max 200
-	Offset int    // for pagination
-	Status string // optional filter: queued|running|completed|failed|canceled
-}
-
-// ListTasksResponse is the response for GET /v1/tasks.
-type ListTasksResponse struct {
-	Tasks      []TaskResponse `json:"tasks"`
-	NextOffset *int           `json:"next_offset,omitempty"`
 }
 
 func parseListTasksParams(r *http.Request) (limit, offset int, statusFilter string, errCode int) {
@@ -407,22 +354,14 @@ func (h *TaskHandler) ListTasks(w http.ResponseWriter, r *http.Request) {
 	if hasMore {
 		tasks = tasks[:limit]
 	}
-	out := make([]TaskResponse, 0, len(tasks))
+	out := make([]userapi.TaskResponse, 0, len(tasks))
 	for _, t := range tasks {
 		if statusFilter != "" && taskStatusToSpec(t.Status) != statusFilter {
 			continue
 		}
-		out = append(out, TaskResponse{
-			TaskID:    t.ID.String(),
-			Status:    taskStatusToSpec(t.Status),
-			TaskName:  t.Summary,
-			Prompt:    t.Prompt,
-			Summary:   t.Summary,
-			CreatedAt: t.CreatedAt,
-			UpdatedAt: t.UpdatedAt,
-		})
+		out = append(out, taskToResponse(t, taskStatusToSpec(t.Status)))
 	}
-	resp := ListTasksResponse{Tasks: out}
+	resp := userapi.ListTasksResponse{Tasks: out}
 	if hasMore {
 		next := offset + limit
 		resp.NextOffset = &next
@@ -439,12 +378,6 @@ func parseInt(s string, minVal, maxVal int) (int, error) {
 		return 0, errors.New("out of range")
 	}
 	return n, nil
-}
-
-// CancelTaskResponse is the response for POST /v1/tasks/{id}/cancel.
-type CancelTaskResponse struct {
-	TaskID   string `json:"task_id"`
-	Canceled bool   `json:"canceled"`
 }
 
 // CancelTask handles POST /v1/tasks/{id}/cancel.
@@ -487,14 +420,7 @@ func (h *TaskHandler) CancelTask(w http.ResponseWriter, r *http.Request) {
 			_ = h.db.UpdateJobStatus(ctx, j.ID, models.JobStatusCancelled)
 		}
 	}
-	WriteJSON(w, http.StatusOK, CancelTaskResponse{TaskID: taskID.String(), Canceled: true})
-}
-
-// GetTaskLogsResponse is the response for GET /v1/tasks/{id}/logs.
-type GetTaskLogsResponse struct {
-	TaskID string `json:"task_id"`
-	Stdout string `json:"stdout"`
-	Stderr string `json:"stderr"`
+	WriteJSON(w, http.StatusOK, userapi.CancelTaskResponse{TaskID: taskID.String(), Canceled: true})
 }
 
 func aggregateLogsFromJobs(jobs []*models.Job, stream string) (stdout, stderr string) {
@@ -552,19 +478,19 @@ func (h *TaskHandler) GetTaskLogs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	stdout, stderr := aggregateLogsFromJobs(jobs, stream)
-	WriteJSON(w, http.StatusOK, GetTaskLogsResponse{
+	WriteJSON(w, http.StatusOK, userapi.TaskLogsResponse{
 		TaskID: taskID.String(),
 		Stdout: stdout,
 		Stderr: stderr,
 	})
 }
 
-// ChatRequest is the request body for POST /v1/chat.
+// ChatRequest is the request body for POST /v1/chat (orchestrator-specific; not in userapi).
 type ChatRequest struct {
 	Message string `json:"message"`
 }
 
-// ChatResponse is the response for POST /v1/chat.
+// ChatResponse is the response for POST /v1/chat (orchestrator-specific).
 type ChatResponse struct {
 	Response string `json:"response"`
 }

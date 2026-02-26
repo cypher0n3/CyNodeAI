@@ -1,5 +1,6 @@
 # Binaries (just build outputs and local go build)
 bin/
+!**/cynork/
 **/cynork
 **/cynork.exe
 
