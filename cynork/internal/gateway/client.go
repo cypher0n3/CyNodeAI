@@ -238,12 +238,50 @@ func (c *Client) ListModels() (*ListModelsResponse, error) {
 
 // Chat calls POST /v1/chat/completions (requires auth). Sends one user message; returns assistant content per openai_compatible_chat_api.md.
 func (c *Client) Chat(message string) (*ChatResponse, error) {
+	return c.ChatWithOptions(message, "", "")
+}
+
+// ChatWithOptions is like Chat but allows session model and OpenAI-Project header.
+// If model is non-empty it is sent in the request body; if projectID is non-empty it is sent as OpenAI-Project header.
+func (c *Client) ChatWithOptions(message, model, projectID string) (*ChatResponse, error) {
 	req := userapi.ChatCompletionsRequest{
+		Model:    model,
 		Messages: []userapi.ChatMessage{{Role: "user", Content: message}},
 	}
-	var out userapi.ChatCompletionsResponse
-	if err := c.doPostJSON("/v1/chat/completions", req, http.StatusOK, &out); err != nil {
+	body, err := json.Marshal(req)
+	if err != nil {
+		return nil, fmt.Errorf("marshal chat request: %w", err)
+	}
+	base, err := url.Parse(c.BaseURL)
+	if err != nil {
+		return nil, fmt.Errorf("invalid base URL: %w", err)
+	}
+	u, err := base.Parse("/v1/chat/completions")
+	if err != nil {
+		return nil, fmt.Errorf("invalid path: %w", err)
+	}
+	httpReq, err := http.NewRequest(http.MethodPost, u.String(), bytes.NewReader(body))
+	if err != nil {
 		return nil, err
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+	if c.Token != "" {
+		httpReq.Header.Set("Authorization", "Bearer "+c.Token)
+	}
+	if projectID != "" {
+		httpReq.Header.Set("OpenAI-Project", projectID)
+	}
+	resp, err := c.HTTPClient.Do(httpReq)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		return nil, c.parseError(resp)
+	}
+	var out userapi.ChatCompletionsResponse
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		return nil, fmt.Errorf("decode chat response: %w", err)
 	}
 	content := ""
 	if len(out.Choices) > 0 {
@@ -298,6 +336,22 @@ func (c *Client) PostBytes(path string, body []byte) ([]byte, error) {
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated && resp.StatusCode != http.StatusNoContent {
+		return nil, c.parseError(resp)
+	}
+	if resp.StatusCode == http.StatusNoContent {
+		return nil, nil
+	}
+	return io.ReadAll(resp.Body)
+}
+
+// DeleteBytes performs an authenticated DELETE and returns the response body.
+func (c *Client) DeleteBytes(path string) ([]byte, error) {
+	resp, err := c.doRequest(http.MethodDelete, path, nil, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNoContent {
 		return nil, c.parseError(resp)
 	}
 	if resp.StatusCode == http.StatusNoContent {

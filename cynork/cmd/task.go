@@ -3,6 +3,7 @@ package cmd
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"os"
 	"os/signal"
 	"time"
@@ -80,11 +81,24 @@ var taskWatchCmd = &cobra.Command{
 	RunE:  runTaskWatch,
 }
 
+var taskArtifactsCmd = &cobra.Command{
+	Use:   "artifacts",
+	Short: "Task artifacts (list, get)",
+}
+
+var taskArtifactsListCmd = &cobra.Command{
+	Use:   "list [task-id]",
+	Short: "List artifacts for a task",
+	Args:  cobra.ExactArgs(1),
+	RunE:  runTaskArtifactsList,
+}
+
 var terminalTaskStatuses = map[string]bool{"completed": true, "failed": true, "canceled": true, "cancelled": true}
 
 func init() {
 	rootCmd.AddCommand(taskCmd)
-	taskCmd.AddCommand(taskCreateCmd, taskListCmd, taskGetCmd, taskResultCmd, taskCancelCmd, taskLogsCmd, taskWatchCmd)
+	taskCmd.AddCommand(taskCreateCmd, taskListCmd, taskGetCmd, taskResultCmd, taskCancelCmd, taskLogsCmd, taskWatchCmd, taskArtifactsCmd)
+	taskArtifactsCmd.AddCommand(taskArtifactsListCmd)
 	taskWatchCmd.Flags().DurationVarP(&taskWatchInterval, "interval", "n", 2*time.Second, "poll interval")
 	taskWatchCmd.Flags().BoolVar(&taskWatchNoClear, "no-clear", false, "do not clear screen between polls")
 	taskCreateCmd.Flags().StringVarP(&taskCreatePrompt, "prompt", "p", "", "task prompt (natural language or command)")
@@ -285,6 +299,24 @@ func printTaskResult(result *userapi.TaskResultResponse) {
 			fmt.Println(*j.Result)
 		}
 	}
+}
+
+func runTaskArtifactsList(_ *cobra.Command, args []string) error {
+	if cfg.Token == "" {
+		return exit.Auth(fmt.Errorf("not logged in: run 'cynork auth login'"))
+	}
+	client := gateway.NewClient(cfg.GatewayURL)
+	client.SetToken(cfg.Token)
+	path := "/v1/tasks/" + url.PathEscape(args[0]) + "/artifacts"
+	body, err := client.GetBytes(path)
+	if err != nil {
+		return exitFromGatewayErr(err)
+	}
+	if len(body) == 0 {
+		body = []byte("[]")
+	}
+	printJSONOrRaw(body)
+	return nil
 }
 
 func runTaskWatch(_ *cobra.Command, args []string) error {

@@ -13,6 +13,19 @@ var skillsCmd = &cobra.Command{
 	Short: "Skills management (stub until orchestrator supports)",
 }
 
+var skillsListCmd = &cobra.Command{
+	Use:   "list",
+	Short: "List skills",
+	RunE:  runSkillsList,
+}
+
+var skillsGetCmd = &cobra.Command{
+	Use:   "get [skill-id]",
+	Short: "Get skill content and metadata",
+	Args:  cobra.ExactArgs(1),
+	RunE:  runSkillsGet,
+}
+
 var skillsLoadCmd = &cobra.Command{
 	Use:   "load [file]",
 	Short: "Load a skill from a markdown file",
@@ -22,7 +35,15 @@ var skillsLoadCmd = &cobra.Command{
 
 func init() {
 	rootCmd.AddCommand(skillsCmd)
-	skillsCmd.AddCommand(skillsLoadCmd)
+	skillsCmd.AddCommand(skillsListCmd, skillsGetCmd, skillsLoadCmd)
+}
+
+func runSkillsList(_ *cobra.Command, _ []string) error {
+	return runStubList("/v1/skills")
+}
+
+func runSkillsGet(_ *cobra.Command, args []string) error {
+	return runStubFetch("/v1/skills/"+args[0], "{}")
 }
 
 func runSkillsLoad(_ *cobra.Command, args []string) error {

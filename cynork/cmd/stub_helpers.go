@@ -57,3 +57,20 @@ func runStubSet(path string) error {
 	}
 	return nil
 }
+
+// runStubDelete runs a stub "delete" command: auth check, DELETE path; prints body if any.
+func runStubDelete(path string) error {
+	if cfg.Token == "" {
+		return exit.Auth(fmt.Errorf("not logged in: run 'cynork auth login'"))
+	}
+	client := gateway.NewClient(cfg.GatewayURL)
+	client.SetToken(cfg.Token)
+	body, err := client.DeleteBytes(path)
+	if err != nil {
+		return exitFromGatewayErr(err)
+	}
+	if len(body) > 0 {
+		printJSONOrRaw(body)
+	}
+	return nil
+}

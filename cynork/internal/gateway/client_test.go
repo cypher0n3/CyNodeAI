@@ -515,6 +515,148 @@ func TestClient_Chat_Success(t *testing.T) {
 	}
 }
 
+func TestClient_ChatWithOptions_ModelAndProject(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/chat/completions" || r.Method != http.MethodPost {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		if r.Header.Get("OpenAI-Project") != "proj-1" {
+			t.Errorf("OpenAI-Project = %q, want proj-1", r.Header.Get("OpenAI-Project"))
+		}
+		var req userapi.ChatCompletionsRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		if req.Model != "gpt-4" {
+			t.Errorf("Model = %q, want gpt-4", req.Model)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"choices": []map[string]any{
+				{"message": map[string]any{"role": "assistant", "content": "ok"}},
+			},
+		})
+	}))
+	defer server.Close()
+	client := NewClient(server.URL)
+	client.SetToken("tok")
+	resp, err := client.ChatWithOptions("hi", "gpt-4", "proj-1")
+	if err != nil {
+		t.Fatalf("ChatWithOptions: %v", err)
+	}
+	if resp.Response != "ok" {
+		t.Errorf("response = %q", resp.Response)
+	}
+}
+
+const pathV1Prefs = "/v1/prefs"
+
+func TestClient_DeleteBytes_Success(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != pathV1Prefs || r.Method != http.MethodDelete {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("{}"))
+	}))
+	defer server.Close()
+	client := NewClient(server.URL)
+	client.SetToken("tok")
+	body, err := client.DeleteBytes(pathV1Prefs)
+	if err != nil {
+		t.Fatalf("DeleteBytes: %v", err)
+	}
+	if string(body) != "{}" {
+		t.Errorf("body = %q", body)
+	}
+}
+
+func TestClient_DeleteBytes_NoContent(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != pathV1Prefs || r.Method != http.MethodDelete {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer server.Close()
+	client := NewClient(server.URL)
+	client.SetToken("tok")
+	body, err := client.DeleteBytes(pathV1Prefs)
+	if err != nil {
+		t.Fatalf("DeleteBytes: %v", err)
+	}
+	if body != nil {
+		t.Errorf("body = %v, want nil", body)
+	}
+}
+
+func TestClient_DeleteBytes_Error(t *testing.T) {
+	expectHTTPError(t, jsonHandler(http.StatusForbidden, problem.Details{Detail: "forbidden", Status: 403}),
+		func(c *Client) error { _, err := c.DeleteBytes(pathV1Prefs); return err })
+}
+
+func TestClient_ChatWithOptions_EmptyOptionalParams(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("OpenAI-Project") != "" {
+			t.Errorf("OpenAI-Project should be empty, got %q", r.Header.Get("OpenAI-Project"))
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"choices": []map[string]any{
+				{"message": map[string]any{"role": "assistant", "content": "ok"}},
+			},
+		})
+	}))
+	defer server.Close()
+	client := NewClient(server.URL)
+	client.SetToken("tok")
+	resp, err := client.ChatWithOptions("hi", "", "")
+	if err != nil {
+		t.Fatalf("ChatWithOptions: %v", err)
+	}
+	if resp.Response != "ok" {
+		t.Errorf("response = %q", resp.Response)
+	}
+}
+
+func TestClient_ChatWithOptions_ServerError(t *testing.T) {
+	server := httptest.NewServer(jsonHandler(http.StatusInternalServerError, problem.Details{Detail: "server error", Status: 500}))
+	defer server.Close()
+	client := NewClient(server.URL)
+	client.SetToken("tok")
+	_, err := client.ChatWithOptions("hi", "m", "p")
+	if err == nil {
+		t.Fatal("expected error")
+	}
+}
+
+func TestClient_ChatWithOptions_InvalidJSON(t *testing.T) {
+	server := httptest.NewServer(rawHandler(http.StatusOK, "not json"))
+	defer server.Close()
+	client := NewClient(server.URL)
+	client.SetToken("tok")
+	_, err := client.ChatWithOptions("hi", "", "")
+	if err == nil {
+		t.Fatal("expected decode error")
+	}
+}
+
+func TestClient_ChatWithOptions_RequestFails(t *testing.T) {
+	client := NewClient("http://127.0.0.1:0")
+	client.SetToken("tok")
+	_, err := client.ChatWithOptions("hi", "", "")
+	if err == nil {
+		t.Fatal("expected request error")
+	}
+}
+
 func TestClient_Refresh_Success(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/v1/auth/refresh" || r.Method != http.MethodPost {
@@ -735,15 +877,20 @@ func TestClient_GetBytes(t *testing.T) {
 	}
 }
 
-func TestClient_GetBytes_Error(t *testing.T) {
-	server := httptest.NewServer(jsonHandler(http.StatusUnauthorized, problem.Details{Detail: "unauthorized", Status: 401}))
+func expectHTTPError(t *testing.T, handler http.Handler, fn func(*Client) error) {
+	t.Helper()
+	server := httptest.NewServer(handler)
 	defer server.Close()
 	client := NewClient(server.URL)
 	client.SetToken("tok")
-	_, err := client.GetBytes("/v1/creds")
-	if err == nil {
+	if err := fn(client); err == nil {
 		t.Fatal("expected error")
 	}
+}
+
+func TestClient_GetBytes_Error(t *testing.T) {
+	expectHTTPError(t, jsonHandler(http.StatusUnauthorized, problem.Details{Detail: "unauthorized", Status: 401}),
+		func(c *Client) error { _, err := c.GetBytes("/v1/creds"); return err })
 }
 
 func TestClient_PostBytes(t *testing.T) {
