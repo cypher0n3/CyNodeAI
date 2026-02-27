@@ -1,6 +1,3 @@
 # Project Manager instruction bundle
 
-Placeholder for Project Manager role instructions.
-See docs/tech_specs/project_manager_agent.md and docs/tech_specs/cynode_pma.md.
-
-Replace this file and add role-specific .md/.txt files for baseline context and tool-use contracts.
+This directory is the role instructions bundle for `cynode-pma` in `project_manager` mode. Loaded in order: 01_baseline.md, 02_tools.md. See docs/tech_specs/cynode_pma.md and project_manager_agent.md.

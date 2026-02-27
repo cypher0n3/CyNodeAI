@@ -9,6 +9,8 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
+	"strings"
 	"syscall"
 	"time"
 
@@ -54,10 +56,20 @@ func run(ctx context.Context, args []string) int {
 	slog.SetDefault(logger)
 
 	instructionsPath := cfg.InstructionsPath()
-	content, err := pma.LoadInstructions(instructionsPath)
+	roleContent, err := pma.LoadInstructions(instructionsPath)
 	if err != nil {
 		slog.Error("failed to load instructions", "path", instructionsPath, "error", err)
 		return 1
+	}
+	rootDir := filepath.Dir(instructionsPath)
+	defaultSkill, err := pma.LoadDefaultSkill(rootDir)
+	if err != nil {
+		slog.Error("failed to load default skill", "root", rootDir, "error", err)
+		return 1
+	}
+	content := roleContent
+	if defaultSkill != "" {
+		content = strings.TrimSpace(content + "\n\n" + defaultSkill)
 	}
 	slog.Info("instructions loaded", "role", cfg.Role, "path", instructionsPath, "bytes", len(content))
 

@@ -4,6 +4,7 @@ package pma
 import (
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 )
 
@@ -25,6 +26,7 @@ func LoadInstructions(dir string) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	sort.Slice(entries, func(i, j int) bool { return entries[i].Name() < entries[j].Name() })
 	var parts []string
 	for _, e := range entries {
 		s, err := loadEntry(dir, e)
@@ -53,4 +55,25 @@ func loadEntry(dir string, e os.DirEntry) (string, error) {
 		return "", err
 	}
 	return string(b), nil
+}
+
+// DefaultSkillFilename is the filename for the default CyNodeAI interaction skill (system-owned).
+const DefaultSkillFilename = "default_cynodeai_skill.md"
+
+// LoadDefaultSkill reads the default CyNodeAI interaction skill from the instructions root directory.
+// Returns empty string if the file does not exist or root is not a directory (no error).
+// See docs/tech_specs/skills_storage_and_inference.md (Default CyNodeAI Interaction Skill).
+func LoadDefaultSkill(instructionsRoot string) (string, error) {
+	if instructionsRoot == "" {
+		return "", nil
+	}
+	fpath := filepath.Join(instructionsRoot, DefaultSkillFilename)
+	b, err := os.ReadFile(fpath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return "", nil
+		}
+		return "", err
+	}
+	return strings.TrimSpace(string(b)), nil
 }

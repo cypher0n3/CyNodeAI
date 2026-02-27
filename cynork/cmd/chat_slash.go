@@ -70,7 +70,7 @@ var slashHandlers = map[string]slashHandler{
 	"task":   func(c *gateway.Client, rest string) (bool, error) { return false, runSlashTask(c, rest) },
 	"status": func(*gateway.Client, string) (bool, error) { return false, runStatus(nil, nil) },
 	"whoami": func(*gateway.Client, string) (bool, error) { return false, runAuthWhoami(nil, nil) },
-	"auth":   func(_ *gateway.Client, rest string) (bool, error) { return false, runSlashAuth(rest) },
+	"auth":   func(c *gateway.Client, rest string) (bool, error) { return false, runSlashAuth(c, rest) },
 	"nodes":  func(_ *gateway.Client, rest string) (bool, error) { return false, runSlashNodes(rest) },
 	"prefs":  func(_ *gateway.Client, rest string) (bool, error) { return false, runSlashPrefs(rest) },
 	"skills": func(_ *gateway.Client, rest string) (bool, error) { return false, runSlashSkills(rest) },
@@ -103,7 +103,7 @@ func clearTerminal() {
 	_, _ = fmt.Fprint(os.Stdout, "\033[H\033[2J")
 }
 
-func runSlashAuth(rest string) error {
+func runSlashAuth(chatClient *gateway.Client, rest string) error {
 	rest = strings.TrimSpace(rest)
 	parts := strings.Fields(rest)
 	if len(parts) == 0 {
@@ -116,9 +116,17 @@ func runSlashAuth(rest string) error {
 	case "whoami":
 		return runAuthWhoami(nil, nil)
 	case "logout":
-		return runAuthLogout(nil, nil)
+		err := runAuthLogout(nil, nil)
+		if err == nil && chatClient != nil {
+			chatClient.SetToken("")
+		}
+		return err
 	case "refresh":
-		return runAuthRefresh(nil, nil)
+		err := runAuthRefresh(nil, nil)
+		if err == nil && chatClient != nil {
+			chatClient.SetToken(cfg.Token)
+		}
+		return err
 	case "login":
 		fs := flag.NewFlagSet("auth login", flag.ContinueOnError)
 		u := fs.String("u", "", "username")
@@ -129,7 +137,11 @@ func runSlashAuth(rest string) error {
 		authLoginHandle = *u
 		authLoginPassword = *p
 		defer func() { authLoginHandle = ""; authLoginPassword = "" }()
-		return runAuthLogin(nil, nil)
+		err := runAuthLogin(nil, nil)
+		if err == nil && chatClient != nil {
+			chatClient.SetToken(cfg.Token)
+		}
+		return err
 	default:
 		fmt.Fprintln(os.Stderr, "usage: /auth login|logout|whoami|refresh [login flags: -u username -p password]")
 		return nil

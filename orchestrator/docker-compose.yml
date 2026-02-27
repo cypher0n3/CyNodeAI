@@ -101,6 +101,11 @@ services:
       - "11434:11434"
     volumes:
       - ollama-data:/root/.ollama
+    # Use explicit DNS to avoid runtime DNS degradation after repeated stack restarts
+    # (Podman/Docker default resolver can fail with "i/o timeout" after many down/up cycles).
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4
 
   mcp-gateway:
     profiles: ["optional"]

@@ -1756,6 +1756,53 @@ func TestRunSlashCommand_UsagePaths(t *testing.T) {
 	}
 }
 
+func TestRunSlashAuth_LoginRefreshLogoutUpdateClient(t *testing.T) {
+	// Login: mock server returns tokens; runSlashAuth with client should call client.SetToken(cfg.Token).
+	server := mockJSONServer(t, http.StatusOK, userapi.LoginResponse{
+		AccessToken: "new-tok", TokenType: "Bearer", ExpiresIn: 900,
+	})
+	defer server.Close()
+	path := writeTempConfig(t, "gateway_url: "+server.URL+"\n")
+	configPath = path
+	cfg = &config.Config{GatewayURL: server.URL}
+	defer func() { configPath = ""; cfg = nil }()
+	client := gateway.NewClient(server.URL)
+	client.SetToken("old-tok")
+	if err := runSlashAuth(client, "login -u u -p p"); err != nil {
+		t.Errorf("runSlashAuth login: %v", err)
+	}
+	if cfg.Token != "new-tok" {
+		t.Errorf("cfg.Token = %q", cfg.Token)
+	}
+	// Client token is updated in-session; next request would use new-tok. We can't read it back, so just coverage.
+
+	// Logout: runSlashAuth with client should call client.SetToken("").
+	cfg.Token = "x"
+	cfg.RefreshToken = ""
+	if err := runSlashAuth(client, "logout"); err != nil {
+		t.Errorf("runSlashAuth logout: %v", err)
+	}
+
+	// Refresh: mock server returns new tokens; runSlashAuth with client should call client.SetToken(cfg.Token).
+	refreshServer := mockJSONServer(t, http.StatusOK, userapi.LoginResponse{
+		AccessToken: "refreshed-tok", RefreshToken: "new-refresh", TokenType: "Bearer", ExpiresIn: 900,
+	})
+	defer refreshServer.Close()
+	cfg.GatewayURL = refreshServer.URL
+	cfg.Token = "old"
+	cfg.RefreshToken = "old-refresh"
+	path2 := writeTempConfig(t, "gateway_url: "+refreshServer.URL+"\nrefresh_token: old-refresh\n")
+	configPath = path2
+	client2 := gateway.NewClient(refreshServer.URL)
+	client2.SetToken("old")
+	if err := runSlashAuth(client2, "refresh"); err != nil {
+		t.Errorf("runSlashAuth refresh: %v", err)
+	}
+	if cfg.Token != "refreshed-tok" {
+		t.Errorf("cfg.Token after refresh = %q", cfg.Token)
+	}
+}
+
 func TestPrintJSONOrRaw(t *testing.T) {
 	r, w, err := os.Pipe()
 	if err != nil {

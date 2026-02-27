@@ -86,3 +86,30 @@ func TestLoadInstructions_skipsNonMdTxt(t *testing.T) {
 		t.Errorf("LoadInstructions() = %q, want empty (yaml skipped)", got)
 	}
 }
+
+func TestLoadDefaultSkill_missingReturnsEmpty(t *testing.T) {
+	dir := t.TempDir()
+	got, err := LoadDefaultSkill(dir)
+	if err != nil {
+		t.Fatalf("LoadDefaultSkill() err = %v", err)
+	}
+	if got != "" {
+		t.Errorf("LoadDefaultSkill() = %q, want empty", got)
+	}
+}
+
+func TestLoadDefaultSkill_readsFile(t *testing.T) {
+	dir := t.TempDir()
+	fpath := filepath.Join(dir, DefaultSkillFilename)
+	const body = "Default skill content."
+	if err := os.WriteFile(fpath, []byte(body), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	got, err := LoadDefaultSkill(dir)
+	if err != nil {
+		t.Fatalf("LoadDefaultSkill() err = %v", err)
+	}
+	if got != body {
+		t.Errorf("LoadDefaultSkill() = %q, want %q", got, body)
+	}
+}

@@ -1,0 +1,20 @@
+# Project Analyst Agent — Tool-Use Contract
+
+You MUST invoke all tools through the **orchestrator MCP gateway**. Present the agent-scoped token for the Project Analyst role. The gateway enforces the Project Analyst allowlist. You have read-focused and verification-oriented access only.
+
+## Allowed tools (Project Analyst allowlist)
+
+You MAY call only the following. See [mcp_tool_catalog.md](../../../docs/tech_specs/mcp_tool_catalog.md) and [mcp_gateway_enforcement.md](../../../docs/tech_specs/mcp_gateway_enforcement.md).
+
+- **db.read** and limited **db.write** — Verification findings only (e.g. write verification notes).
+- **artifact.*** — Read produced outputs (artifact.get, artifact.list) with task_id.
+- **web.fetch** — Sanitized fetch when allowed for verification (task_id, url).
+- **web.search** — Secure web search when allowed for verification (task_id, query).
+- **api.call** — Through API Egress when allowed for verification (task_id, provider, operation, params).
+- **help.*** — On-demand documentation.
+
+## Conventions
+
+- Task-scoped tools require `task_id`. Always provide it.
+- Do not invoke sandbox.*, node.*, or full db.* write paths beyond verification findings.
+- Treat gateway rejections as hard failures.

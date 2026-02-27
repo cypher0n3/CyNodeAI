@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"strings"
 
+	"github.com/cypher0n3/cynodeai/go_shared_libs/contracts/sbajob"
 	"github.com/tmc/langchaingo/tools"
 )
 
@@ -69,7 +70,7 @@ func toolEnvFromContext(ctx context.Context) *ToolEnv {
 	return nil
 }
 
-// NewLocalTools returns langchaingo tools for run_command, write_file, read_file, apply_unified_diff, list_tree.
+// NewLocalTools returns langchaingo tools for run_command, write_file, read_file, apply_unified_diff, list_tree, search_files.
 // Workspace and MaxOutputBytes are taken from context (ContextWithToolEnv) at call time.
 func NewLocalTools() []tools.Tool {
 	return []tools.Tool{
@@ -78,6 +79,7 @@ func NewLocalTools() []tools.Tool {
 		readFileTool(),
 		applyUnifiedDiffTool(),
 		listTreeTool(),
+		searchFilesTool(),
 	}
 }
 
@@ -125,24 +127,30 @@ func writeFileTool() *SBATool {
 	}
 }
 
+// runCappedStepTool runs a step that may truncate output and returns constraint violation on truncation.
+func runCappedStepTool(raw string, te *ToolEnv, step func(int, json.RawMessage, int, string) sbajob.StepResult) (out, errMsg string, constraintViolation bool) {
+	var m map[string]interface{}
+	if err := json.Unmarshal([]byte(raw), &m); err != nil {
+		return "", "invalid JSON: " + err.Error(), false
+	}
+	b, _ := json.Marshal(m)
+	sr := step(0, b, te.MaxOutputBytes, te.Workspace)
+	if sr.Status != statusSuccess {
+		return "", sr.Error, false
+	}
+	if strings.HasSuffix(sr.Output, "\n...[truncated]") {
+		return "", errMsgMaxOutputBytes, true
+	}
+	return sr.Output, "", false
+}
+
+//nolint:dupl // same pattern as searchFilesTool, different step
 func readFileTool() *SBATool {
 	return &SBATool{
 		name: "read_file",
 		desc: "Read a file under workspace. Input JSON: {\"path\": \"rel/path.txt\"}.",
 		call: func(ctx context.Context, raw string, te *ToolEnv) (out string, errMsg string, constraintViolation bool) {
-			var args readFileArgs
-			if err := json.Unmarshal([]byte(raw), &args); err != nil {
-				return "", "invalid JSON: " + err.Error(), false
-			}
-			b, _ := json.Marshal(args)
-			sr := readFileStep(0, b, te.MaxOutputBytes, te.Workspace)
-			if sr.Status != statusSuccess {
-				return "", sr.Error, false
-			}
-			if strings.HasSuffix(sr.Output, "\n...[truncated]") {
-				return "", errMsgMaxOutputBytes, true
-			}
-			return sr.Output, "", false
+			return runCappedStepTool(raw, te, readFileStep)
 		},
 	}
 }
@@ -182,6 +190,17 @@ func listTreeTool() *SBATool {
 				return "", errMsgMaxOutputBytes, true
 			}
 			return sr.Output, "", false
+		},
+	}
+}
+
+//nolint:dupl // same pattern as readFileTool, different step
+func searchFilesTool() *SBATool {
+	return &SBATool{
+		name: "search_files",
+		desc: "Search for a regex pattern in files under workspace. Input JSON: {\"pattern\": \"regex\", \"path\": \"optional/subdir\", \"include\": \"*.go\"}. Returns path:line_num:content per match; output capped.",
+		call: func(ctx context.Context, raw string, te *ToolEnv) (out string, errMsg string, constraintViolation bool) {
+			return runCappedStepTool(raw, te, searchFilesStep)
 		},
 	}
 }

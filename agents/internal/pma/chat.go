@@ -15,11 +15,16 @@ import (
 )
 
 // InternalChatCompletionRequest is the body for POST /internal/chat/completion (orchestrator handoff).
+// Optional fields support full context order per CYNAI.PMAGNT.LLMContextComposition: project, task, additional context.
 type InternalChatCompletionRequest struct {
 	Messages []struct {
 		Role    string `json:"role"`
 		Content string `json:"content"`
 	} `json:"messages"`
+	ProjectID         string `json:"project_id,omitempty"`
+	TaskID            string `json:"task_id,omitempty"`
+	UserID            string `json:"user_id,omitempty"`
+	AdditionalContext string `json:"additional_context,omitempty"`
 }
 
 // InternalChatCompletionResponse is the response body.
@@ -45,7 +50,8 @@ func ChatCompletionHandler(instructionsContent string, logger *slog.Logger) http
 			writeJSON(w, http.StatusBadRequest, InternalChatCompletionResponse{})
 			return
 		}
-		content, err := callInference(r.Context(), instructionsContent, req.Messages, logger)
+		systemContext := buildSystemContext(instructionsContent, &req)
+		content, err := callInference(r.Context(), systemContext, req.Messages, logger)
 		if err != nil {
 			logger.Error("chat completion inference error", "error", err)
 			writeJSON(w, http.StatusInternalServerError, InternalChatCompletionResponse{Content: ""})
@@ -53,6 +59,26 @@ func ChatCompletionHandler(instructionsContent string, logger *slog.Logger) http
 		}
 		writeJSON(w, http.StatusOK, InternalChatCompletionResponse{Content: content})
 	}
+}
+
+// buildSystemContext composes system context per CYNAI.PMAGNT.LLMContextComposition order:
+// baseline+role (instructionsContent) -> project -> task -> user additional context.
+func buildSystemContext(instructionsContent string, req *InternalChatCompletionRequest) string {
+	var b strings.Builder
+	b.WriteString(strings.TrimSpace(instructionsContent))
+	if req.ProjectID != "" {
+		b.WriteString("\n\n## Project context\nproject_id: ")
+		b.WriteString(req.ProjectID)
+	}
+	if req.TaskID != "" {
+		b.WriteString("\n\n## Task context\ntask_id: ")
+		b.WriteString(req.TaskID)
+	}
+	if req.AdditionalContext != "" {
+		b.WriteString("\n\n## User additional context\n")
+		b.WriteString(strings.TrimSpace(req.AdditionalContext))
+	}
+	return b.String()
 }
 
 func writeJSON(w http.ResponseWriter, status int, v interface{}) {

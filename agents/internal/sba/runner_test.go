@@ -118,6 +118,7 @@ func TestEvalLocalTool_ApplyUnifiedDiff(t *testing.T) {
 	}
 }
 
+//nolint:dupl // same structure as TestEvalLocalTool_SearchFiles_InvalidRegex_ReturnsError
 func TestEvalLocalTool_ApplyUnifiedDiff_InvalidJSON_ReturnsError(t *testing.T) {
 	dir := t.TempDir()
 	ctx := context.Background()
@@ -167,6 +168,36 @@ func TestEvalLocalTool_ReadFile_Truncated_ConstraintViolation(t *testing.T) {
 	}
 	if !IsConstraintViolation(err) {
 		t.Errorf("err = %v", err)
+	}
+}
+
+func TestEvalLocalTool_SearchFiles(t *testing.T) {
+	dir := t.TempDir()
+	_ = os.WriteFile(filepath.Join(dir, "a.txt"), []byte("hello\nworld\nhello again\n"), 0o644)
+	_ = os.WriteFile(filepath.Join(dir, "b.txt"), []byte("nope\n"), 0o644)
+	ctx := context.Background()
+	out, err := EvalLocalTool(ctx, "search_files", `{"pattern": "hello"}`, dir, 1024)
+	if err != nil {
+		t.Fatalf("search_files: %v", err)
+	}
+	if !strings.Contains(out, "a.txt:1:hello") || !strings.Contains(out, "a.txt:3:hello again") {
+		t.Errorf("search_files output = %q", out)
+	}
+	if strings.Contains(out, "b.txt") {
+		t.Errorf("search_files should not match b.txt: %q", out)
+	}
+}
+
+//nolint:dupl // same structure as TestEvalLocalTool_ApplyUnifiedDiff_InvalidJSON_ReturnsError
+func TestEvalLocalTool_SearchFiles_InvalidRegex_ReturnsError(t *testing.T) {
+	dir := t.TempDir()
+	ctx := context.Background()
+	out, err := EvalLocalTool(ctx, "search_files", `{"pattern": "["}`, dir, 1024)
+	if err != nil {
+		t.Fatalf("unexpected err: %v", err)
+	}
+	if !strings.HasPrefix(out, "error: ") {
+		t.Errorf("out = %q", out)
 	}
 }
 
@@ -374,6 +405,104 @@ func TestListTreeStep_WithPath(t *testing.T) {
 	}
 }
 
+func TestSearchFilesStep_Basic(t *testing.T) {
+	dir := t.TempDir()
+	_ = os.WriteFile(filepath.Join(dir, "f1.txt"), []byte("foo\nbar\nfoo\n"), 0o644)
+	_ = os.WriteFile(filepath.Join(dir, "f2.txt"), []byte("bar only\n"), 0o644)
+	args, _ := json.Marshal(map[string]string{"pattern": "foo"})
+	sr := searchFilesStep(0, args, 1024, dir)
+	if sr.Status != wantStatusSuccess {
+		t.Fatalf("status = %q, err = %s", sr.Status, sr.Error)
+	}
+	if !strings.Contains(sr.Output, "f1.txt:1:foo") || !strings.Contains(sr.Output, "f1.txt:3:foo") {
+		t.Errorf("output = %q", sr.Output)
+	}
+	if strings.Contains(sr.Output, "f2.txt") {
+		t.Errorf("f2.txt should not match: %q", sr.Output)
+	}
+}
+
+func TestSearchFilesStep_InvalidJSON_Fails(t *testing.T) {
+	dir := t.TempDir()
+	args := []byte(`{"pattern": invalid}`)
+	sr := searchFilesStep(0, args, 1024, dir)
+	if sr.Status != statusFailed {
+		t.Errorf("Status = %q", sr.Status)
+	}
+	if !strings.Contains(sr.Error, "invalid") {
+		t.Errorf("Error = %q", sr.Error)
+	}
+}
+
+func TestSearchFilesStep_EmptyPattern_Fails(t *testing.T) {
+	dir := t.TempDir()
+	args, _ := json.Marshal(map[string]string{"pattern": ""})
+	sr := searchFilesStep(0, args, 1024, dir)
+	if sr.Status != statusFailed {
+		t.Errorf("Status = %q", sr.Status)
+	}
+	if !strings.Contains(sr.Error, "pattern") {
+		t.Errorf("Error = %q", sr.Error)
+	}
+}
+
+//nolint:dupl // same structure as TestReadFileStep_FileNotFound_Fails
+func TestSearchFilesStep_InvalidRegex_Fails(t *testing.T) {
+	dir := t.TempDir()
+	args, _ := json.Marshal(map[string]string{"pattern": "["})
+	sr := searchFilesStep(0, args, 1024, dir)
+	if sr.Status != statusFailed {
+		t.Errorf("Status = %q", sr.Status)
+	}
+}
+
+func TestSearchFilesStep_PathEscape_Fails(t *testing.T) {
+	dir := t.TempDir()
+	args, _ := json.Marshal(map[string]interface{}{"pattern": "x", "path": "../../etc"})
+	sr := searchFilesStep(0, args, 1024, dir)
+	if sr.Status != statusFailed {
+		t.Errorf("Status = %q", sr.Status)
+	}
+	if sr.Error != errPathEscapesWorkspace {
+		t.Errorf("Error = %q", sr.Error)
+	}
+}
+
+func TestSearchFilesStep_TruncatedOutput(t *testing.T) {
+	dir := t.TempDir()
+	// Many matching lines so output exceeds maxOutputBytes and triggers ...[truncated]
+	var b strings.Builder
+	for i := 0; i < 200; i++ {
+		b.WriteString("match\n")
+	}
+	_ = os.WriteFile(filepath.Join(dir, "big.txt"), []byte(b.String()), 0o644)
+	args, _ := json.Marshal(map[string]string{"pattern": "match"})
+	sr := searchFilesStep(0, args, 50, dir)
+	if sr.Status != wantStatusSuccess {
+		t.Fatalf("status = %q err = %q", sr.Status, sr.Error)
+	}
+	if !strings.HasSuffix(sr.Output, "...[truncated]") {
+		t.Errorf("output should end with ...[truncated]: %q", sr.Output)
+	}
+}
+
+func TestSearchFilesStep_IncludeGlob(t *testing.T) {
+	dir := t.TempDir()
+	_ = os.WriteFile(filepath.Join(dir, "a.go"), []byte("package main\n"), 0o644)
+	_ = os.WriteFile(filepath.Join(dir, "a.txt"), []byte("package main\n"), 0o644)
+	args, _ := json.Marshal(map[string]string{"pattern": "package", "include": "*.go"})
+	sr := searchFilesStep(0, args, 1024, dir)
+	if sr.Status != wantStatusSuccess {
+		t.Fatalf("status = %q", sr.Status)
+	}
+	if !strings.Contains(sr.Output, "a.go") {
+		t.Errorf("output should contain a.go: %q", sr.Output)
+	}
+	if strings.Contains(sr.Output, "a.txt") {
+		t.Errorf("output should not contain a.txt (include *.go): %q", sr.Output)
+	}
+}
+
 func TestRunJob_Timeout_ReturnsTimeoutResult(t *testing.T) {
 	dir := t.TempDir()
 	spec := &sbajob.JobSpec{
@@ -471,6 +600,7 @@ func TestReadFileStep_PathEscape_Fails(t *testing.T) {
 	}, "../../etc/passwd")
 }
 
+//nolint:dupl // same structure as TestSearchFilesStep_InvalidRegex_Fails
 func TestReadFileStep_FileNotFound_Fails(t *testing.T) {
 	dir := t.TempDir()
 	args, _ := json.Marshal(map[string]string{"path": "nonexistent.txt"})

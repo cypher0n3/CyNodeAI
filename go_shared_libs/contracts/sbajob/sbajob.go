@@ -33,7 +33,7 @@ type JobConstraints struct {
 	ExtNetAllowed     bool `json:"ext_net_allowed,omitempty"`
 }
 
-// StepSpec describes a single step (MVP: run_command, write_file, read_file, apply_unified_diff, list_tree).
+// StepSpec describes a single step (MVP: run_command, write_file, read_file, apply_unified_diff, list_tree, search_files).
 type StepSpec struct {
 	Type string          `json:"type"`
 	Args json.RawMessage `json:"args,omitempty"`

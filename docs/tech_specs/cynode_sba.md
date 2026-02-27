@@ -13,6 +13,7 @@
   - [Inference Models (Job-Defined Allowlist)](#inference-models-job-defined-allowlist)
   - [Context Supplied to SBA (Requirements, Acceptance Criteria, Preferences, Skills)](#context-supplied-to-sba-requirements-acceptance-criteria-preferences-skills)
 - [Step Types (MVP)](#step-types-mvp)
+  - [Step type argument schemas and common use cases](#step-type-argument-schemas-and-common-use-cases)
 - [Result Contract](#result-contract)
   - [Canonical Failure Codes](#canonical-failure-codes)
 - [Sandbox Boundary and Security](#sandbox-boundary-and-security)
@@ -80,7 +81,7 @@ See [Worker Proxies (Inference and Web Egress)](#worker-proxies-inference-and-we
 - **Arbitrary command execution:** The SBA MAY run any **user-level** command (no root).
   There are **no command or path allowlists** inside the container; enforcement is the container boundary and non-root process.
   See [Design Principles](#design-principles) and [Step Types (MVP)](#step-types-mvp).
-- **Step types:** The SBA executes validated steps: `run_command`, `write_file`, `read_file`, `apply_unified_diff`, `list_tree`.
+- **Step types:** The SBA executes validated steps: `run_command`, `write_file`, `read_file`, `apply_unified_diff`, `list_tree`, `search_files`.
   Working directory and file access are under `/workspace` (full access) or as specified per step; symlink escape outside `/workspace` is rejected.
 - **Filesystem:** Full read/write under `/workspace`; `/job/` for job input, result staging, and artifacts; `/tmp` for temporary files.
 
@@ -404,6 +405,60 @@ Step flexibility: the order and presence of steps MAY be implementation-defined 
     Rejects patches that would write outside `/workspace`.
 - `list_tree`
   - Returns a structured tree representation (not raw shell output) for paths under `/workspace`.
+- `search_files`
+  - Search for a pattern in files under `/workspace`; returns matching lines (path:line:content) with output capped by `max_output_bytes`.
+    Does not depend on grep/rg in the image.
+
+### Step Type Argument Schemas and Common Use Cases
+
+- Spec ID: `CYNAI.SBAGNT.StepTypeSchemas` <a id="spec-cynai-sbagnt-steptypeschemas"></a>
+
+All step paths MUST be under `/workspace` (or the step-specified root); resolution MUST reject symlink escape outside workspace.
+Output from steps that return content (e.g. `run_command`, `read_file`, `list_tree`) MUST be capped by `constraints.max_output_bytes` or a step-level cap; truncation MUST be indicated in the step result (e.g. suffix or status).
+
+#### Run_command_command Step
+
+- Required args: `argv` (array of strings; non-empty).
+  Optional args: `cwd` (string; path relative to workspace; default workspace root).
+- Use for arbitrary user-level commands, including: **grep/search in files** (e.g. `grep`, `rg` when present in the image), **find/glob** (e.g. `find`, shell globs), **head/sed** for line-oriented edits, and builds/tests.
+  Command stdout+stderr are combined and capped; exit code is reflected in the step result.
+
+#### Read_file_file Step
+
+- Required args: `path` (string; file path relative to workspace).
+  Optional args: `start_line`, `end_line` (integers, 1-based inclusive; when both present, only that line range is read; implementations MAY support this to avoid reading large files).
+- When line range is not supported or not provided, the full file is read.
+  Output MUST be capped; out-of-range or missing file MUST produce a deterministic error in the step result.
+
+#### Write_file_file Step
+
+- Required args: `path` (string), `content` (string).
+  Parent directories MUST be created as needed.
+  Rejects path that escapes workspace (symlink or traversal).
+
+#### Apply_unified_diff_unified_diff Step
+
+- Required args: `diff` (string; unified diff body).
+  Paths in the diff (e.g. from `---`/`+++` lines) MUST resolve under workspace; any path that would write outside workspace MUST be rejected before applying.
+  Patch is applied relative to workspace root (e.g. `patch -p1 -d workspace --forward`).
+  Optional arg `dry_run` (boolean) is reserved for future use (validate only, do not apply).
+- Use for **patching files**: generate a unified diff (e.g. from a model or tool) and apply it with this step.
+
+#### List_tree_tree Step
+
+- Optional args: `path` (string; directory under workspace; default workspace root).
+  Returns a structured tree (e.g. one path per line) for that directory.
+  Optional arg `pattern` or `glob` is reserved for future use (filter entries by pattern).
+- For **glob/find by pattern**, use `run_command` with `find` or shell glob until `list_tree` supports a pattern.
+
+#### Search_files_files Step
+
+- Required args: `pattern` (string; regular expression to search for; RE2 syntax).
+  Optional args: `path` (string; directory under workspace; default workspace root), `include` (string; glob to restrict files, e.g. `*.go`; when empty, all readable files are considered).
+- Walks the directory tree under `path`, considers only files matching `include` (if set), and reports each line that matches `pattern` as `relpath:line_num:line_content`.
+  Output MUST be capped by `constraints.max_output_bytes`; truncation MUST be indicated (e.g. suffix).
+  Paths MUST remain under workspace; symlink escape is rejected.
+  Implementation MUST NOT depend on external grep/ripgrep binaries.
 
 ## Result Contract
 

@@ -3,12 +3,14 @@
 package sba
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
 	"strings"
 
 	"github.com/cypher0n3/cynodeai/go_shared_libs/contracts/sbajob"
@@ -249,6 +251,118 @@ func listTreeStep(index int, raw json.RawMessage, maxOutputBytes int, workspace 
 	}
 	sr.Output = capString(out.String(), maxOutputBytes)
 	return sr
+}
+
+type searchFilesArgs struct {
+	Pattern string `json:"pattern"`
+	Path    string `json:"path,omitempty"`
+	Include string `json:"include,omitempty"`
+}
+
+// searchFilesParseArgs validates args and returns (args, re, root). On failure returns non-nil failSr.
+func searchFilesParseArgs(index int, raw json.RawMessage, workspace string) (args searchFilesArgs, re *regexp.Regexp, root string, failSr *sbajob.StepResult) {
+	sr := sbajob.StepResult{Index: index, Type: "search_files", Status: statusSuccess}
+	if err := json.Unmarshal(raw, &args); err != nil {
+		sr.Status = statusFailed
+		sr.Error = "invalid search_files args: " + err.Error()
+		return args, nil, "", &sr
+	}
+	if args.Pattern == "" {
+		sr.Status = statusFailed
+		sr.Error = "search_files requires args.pattern"
+		return args, nil, "", &sr
+	}
+	compiled, err := regexp.Compile(args.Pattern)
+	if err != nil {
+		sr.Status = statusFailed
+		sr.Error = "search_files invalid regex: " + err.Error()
+		return args, nil, "", &sr
+	}
+	root = workspace
+	if args.Path != "" {
+		root = resolveWorkspacePath(workspace, args.Path)
+		if root == "" {
+			sr.Status = statusFailed
+			sr.Error = errPathEscapesWorkspace
+			return args, nil, "", &sr
+		}
+	}
+	return args, compiled, root, nil
+}
+
+func searchFilesStep(index int, raw json.RawMessage, maxOutputBytes int, workspace string) sbajob.StepResult {
+	args, re, root, failSr := searchFilesParseArgs(index, raw, workspace)
+	if failSr != nil {
+		return *failSr
+	}
+	sr := sbajob.StepResult{Index: index, Type: "search_files", Status: statusSuccess}
+	var out strings.Builder
+	err := filepath.Walk(root, searchFilesWalkFn(workspace, &args, re, maxOutputBytes, &out))
+	if err != nil {
+		sr.Status = statusFailed
+		sr.Error = err.Error()
+		return sr
+	}
+	sr.Output = capString(out.String(), maxOutputBytes)
+	return sr
+}
+
+// searchFilesWalkFn returns a filepath.WalkFunc for searchFilesStep.
+//
+//nolint:gocognit // walk callback has necessary branches for dir skip and include filter
+func searchFilesWalkFn(workspace string, args *searchFilesArgs, re *regexp.Regexp, maxOutputBytes int, out *strings.Builder) filepath.WalkFunc {
+	return func(full string, info os.FileInfo, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if info.IsDir() {
+			if info.Name() == ".git" || info.Name() == "node_modules" {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		rel, relErr := filepath.Rel(workspace, full)
+		if relErr != nil {
+			return nil
+		}
+		if args.Include != "" {
+			matched, _ := filepath.Match(args.Include, filepath.Base(full))
+			if !matched {
+				return nil
+			}
+		}
+		truncated, scanErr := searchFilesScanFile(full, rel, re, maxOutputBytes, out)
+		if truncated {
+			return filepath.SkipAll
+		}
+		return scanErr
+	}
+}
+
+// searchFilesScanFile reads one file and appends matching lines to out in "path:line:content" form.
+// Returns (true, nil) when output is truncated, (false, nil) otherwise.
+func searchFilesScanFile(full, rel string, re *regexp.Regexp, maxOutputBytes int, out *strings.Builder) (truncated bool, err error) {
+	f, err := os.Open(full)
+	if err != nil {
+		return false, nil
+	}
+	defer func() { _ = f.Close() }()
+	sc := bufio.NewScanner(f)
+	const maxLineBytes = 64 * 1024
+	sc.Buffer(nil, maxLineBytes)
+	lineNum := 0
+	for sc.Scan() {
+		lineNum++
+		if re.Match(sc.Bytes()) {
+			line := sc.Text()
+			fmt.Fprintf(out, "%s:%d:%s\n", rel, lineNum, line)
+			if out.Len() >= maxOutputBytes {
+				out.WriteString("...[truncated]")
+				return true, nil
+			}
+		}
+	}
+	return false, sc.Err()
 }
 
 // resolveWorkspacePath joins workspace with path and ensures result is under workspace (no symlink escape).

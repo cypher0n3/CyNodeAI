@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strings"
 	"testing"
 )
 
@@ -120,5 +121,24 @@ func TestChatCompletionHandler_InferenceError(t *testing.T) {
 	handler(rec, req)
 	if rec.Code != http.StatusInternalServerError {
 		t.Errorf("got status %d, want 500", rec.Code)
+	}
+}
+
+func TestBuildSystemContext(t *testing.T) {
+	base := "base"
+	if got := buildSystemContext(base, &InternalChatCompletionRequest{}); got != base {
+		t.Errorf("buildSystemContext(instructions only) = %q, want base", got)
+	}
+	req := &InternalChatCompletionRequest{ProjectID: "p1"}
+	if got := buildSystemContext(base, req); !strings.Contains(got, "Project context") || !strings.Contains(got, "p1") {
+		t.Errorf("buildSystemContext(with project) = %q", got)
+	}
+	req = &InternalChatCompletionRequest{TaskID: "t1"}
+	if got := buildSystemContext(base, req); !strings.Contains(got, "Task context") || !strings.Contains(got, "t1") {
+		t.Errorf("buildSystemContext(with task) = %q", got)
+	}
+	req = &InternalChatCompletionRequest{AdditionalContext: "extra"}
+	if got := buildSystemContext(base, req); !strings.Contains(got, "User additional context") || !strings.Contains(got, "extra") {
+		t.Errorf("buildSystemContext(with additional) = %q", got)
 	}
 }
