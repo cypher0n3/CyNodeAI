@@ -29,6 +29,10 @@
 - [Implementation Order (Done vs Remaining)](#implementation-order-done-vs-remaining)
   - [Done (Completed Items)](#done-completed-items)
   - [Remaining (Order)](#remaining-order)
+- [Remediation Status and Next Work](#remediation-status-and-next-work)
+  - [Remediation Status (Done / Deferred / Pending)](#remediation-status-done--deferred--pending)
+  - [P2-10 Orchestrator Gap](#p2-10-orchestrator-gap)
+  - [Suggested Next Work](#suggested-next-work)
 - [References](#references)
 
 ## Overview
@@ -36,7 +40,7 @@
 This document is the **canonical full MVP development plan** for CyNodeAI.
 All task breakdowns, requirement and spec references, and implementation order are maintained here.
 
-This document is the single comprehensive MVP development plan as of 2026-02-26.
+This document is the single comprehensive MVP development plan as of 2026-02-27.
 It reflects the latest tech specs (including [external_model_routing.md](../docs/tech_specs/external_model_routing.md)) and post-Phase 1 implementation status.
 
 The canonical phase list and high-level scope remain in [docs/tech_specs/\_main.md](../docs/tech_specs/_main.md); this plan adds objectives, current status, spec alignment, task breakdown with req/spec refs, and quality/BDD expectations.
@@ -84,7 +88,7 @@ These behaviors are reflected in Phase 1 (inference path requirement), Phase 2 (
 - **Phase 1** - Single node happy path (registration, dispatch, sandbox, auth, task APIs) - Complete (readyz, ULID config_version, Worker readyz, 413/truncation; see Current Status)
 - **Phase 1.5** - Inference in sandbox (proxy sidecar), E2E inference, CLI, prompt interpretation - Complete (input_mode, prompt-as-model path, BDD; `just ci` passes)
 - **Phase 1.7** - Implement cynode-pma; PMA startup as part of orchestrator start - Complete (agents module, cynode-pma binary, orchestrator integration)
-- **Phase 2** - MCP in the loop, LangGraph workflow, MCP DB/artifact tools - In progress (P2-02 foundation: audit table, gateway write path; mcp-gateway testcontainers for 90%+ coverage)
+- **Phase 2** - MCP in the loop, LangGraph workflow, MCP DB/artifact tools - In progress (P2-01 scoping, P2-02 audit + allow for `db.preference.*`, P2-03 preference tools; mcp-gateway testcontainers 90%+; P2-10 orchestrator side not done)
 - **Phase 3** - Multi-node selection, leases, retries, telemetry - Not started
 - **Phase 4** - API Egress, Secure Browser, external model routing, CLI expansion, admin console after CLI - Not started
 
@@ -119,8 +123,11 @@ These behaviors are reflected in Phase 1 (inference path requirement), Phase 2 (
 - **Shared Go contracts:** User API Gateway contract lives in `go_shared_libs/contracts/userapi`; orchestrator handlers and cynork gateway client use it (single source of truth for gateway API, supports [REQ-CLIENT-0004](../docs/requirements/client.md)).
   Orchestrator uses `problem.Details` from `go_shared_libs/contracts/problem` for error responses.
 - **Phase 2:** Foundation in progress.
-  P2-02: MCP tool call audit table (`mcp_tool_call_audit_log`), store method, mcp-gateway `POST /v1/mcp/tools/call` writes audit and returns 501; gateway uses testcontainers for real-DB coverage (>=90%).
-    P2-01 (scoping/schema), P2-03 (preference tools), and full allow path not started.
+  P2-01: Minimal scoping in place (required task_id/run_id/job_id per tool; db.preference.effective requires task_id; get/list use scope_id); gateway rejects with 400 when missing.
+  P2-02: MCP tool call audit table (`mcp_tool_call_audit_log`), store method; mcp-gateway `POST /v1/mcp/tools/call` writes audit for every call; allow path for `db.preference.*` (200); other tools return 501; testcontainers for real-DB coverage (>=90%).
+  P2-03: Preference tools `db.preference.get`, `db.preference.list`, `db.preference.effective` implemented with typed schemas and size-limited responses.
+  Allow path for non-preference MCP tools (sandbox/artifact) not started.
+  P2-10 orchestrator side (job builder producing JobSpecJSON and SBA runner image) not implemented.
 
 ## Prompt Interpretation: Intended Semantics
 
@@ -583,7 +590,9 @@ Items below are implemented.
 - P1.5-01-P1.5-03: input_mode and interpretation-by-default; minimal prompt-as-model-input path (Option A); BDD for natural-language prompt (default) and commands mode; feature files and orchestrator/worker_node BDD steps (readyz, 413).
 - P1.7-01, P1.7-02: PMAGNT/SBAGNT requirements and cynode_pma/cynode_sba tech specs; PM/PA integration and OpenAI chat mapping (docs complete).
 - P1.7-03, P1.7-04: `cynode-pma` binary in `agents/` module; PMA startup integrated into orchestrator (control-plane starts/stops subprocess when enabled).
-- P2-02 foundation: MCP tool call audit table and store; mcp-gateway optional DB, `POST /v1/mcp/tools/call` writes audit (deny/501); mcp-gateway tests use testcontainers for real-DB path (>=90% coverage).
+- P2-01: MCP gateway enforces required scoped ids (task_id for db.preference.effective; scope_id for get/list) per tool; rejects with 400 when missing.
+- P2-02: MCP tool call audit table and store; mcp-gateway `POST /v1/mcp/tools/call` writes audit for every call; allow path for `db.preference.*` (200); other tools return 501; testcontainers for real-DB path (>=90% coverage).
+- P2-03: Preference tools db.preference.get, db.preference.list, db.preference.effective implemented in mcp-gateway with store integration.
 - E2E and OpenAI chat: Test 5d in `run_e2e_test` (GET /v1/models, POST /v1/chat/completions with `cynodeai.pm`); compose stack has user-gateway `PMA_BASE_URL` and cynode-pma `OLLAMA_BASE_URL`; orchestrator BDD uses OpenAI endpoints; chat routing in `openai_chat.go` aligned with openai_compatible_chat_api.md (effective model, PMA vs direct inference). `just e2e` passes.
 - E2E script: conditional image rebuild (hash cache in `tmp/e2e-image-cache`), create-task retries, post-healthz delay; `E2E_FORCE_REBUILD` and `E2E_IMAGE_CACHE_DIR` documented in script usage.
 - Shared Go libs: `go_shared_libs/contracts/userapi` added; orchestrator handlers and cynork use shared User API Gateway types; orchestrator uses `problem.Details` from go_shared_libs for error responses.
@@ -591,9 +600,43 @@ Items below are implemented.
 
 ### Remaining (Order)
 
-1. Phase 2: P2-01 (MCP scoping/schema), P2-03 (preference tools) done; full P2-02 allow path; **P2-09 (cynode-sba binary and SBA runner image), P2-10 (Worker API and orchestrator integration for SBA jobs)**; LangGraph workflow (P2-04--P2-08), MCP DB/artifact tools.
+1. Phase 2: P2-01 (scoping), P2-02 (audit + allow for `db.preference.*`), P2-03 (preference tools) done; **P2-09 (cynode-sba binary and SBA runner image)** and **worker-side P2-10** (node returns `sba_result`/artifacts) done; **P2-10 orchestrator side** (job builder and dispatch path for SBA jobs: `job_spec_json` and SBA runner image) not yet implemented; allow path for other MCP tools (sandbox/artifact); LangGraph workflow (P2-04--P2-08).
 2. Phase 3: Multi-node selection, leases, retries, telemetry.
 3. Phase 4: API Egress and external routing.
+
+## Remediation Status and Next Work
+
+This section summarizes MVP remediation status (as of 2026-02-27) and suggested next work.
+Content was consolidated from dev_docs that have been deleted.
+
+### Remediation Status (Done / Deferred / Pending)
+
+- **Done:** Worker API response contract (SbaResult, StepExecutorResult, Artifacts); healthz body `ok` (Worker API, User API Gateway, control-plane, cynork); LangGraph schema (workflow_checkpoints, task_workflow_leases); admin revoke_sessions;
+  node payloads (sandbox_registries array, capability optional fields); cynork Health() and POST /v1/chat/completions; SBA in-progress (dispatcher sets job running); SBA spec and BDD refactor (nodemanager.RunWithOptions); sandbox image registry schema; worker stdout/stderr 256 KiB verified; REQ-CLIENT-0004 parity baseline in cynork_cli.md (former remediation plan 4.5).
+- **Deferred:** User API Gateway task create attachments and task name normalization.
+  Implement when gateway/PM require.
+- **Pending (Phase 2 or later):** PMA langchaingo refactor (from direct Ollama HTTP); CyNode-Sse step executor binary and runner; SBA timeout extension when long-running SBA in scope; Worker API dedicated cmd if E2E/compose does not provide one.
+
+### P2-10 Orchestrator Gap
+
+P2-09 (cynode-sba binary and SBA runner image) and worker-side P2-10 (node builds RunJobResponse with `sba_result`/artifacts from `/job/result.json`) are implemented.
+The **orchestrator does not yet build or send SBA job specs:** no code sets `Sandbox.JobSpecJSON` or selects an SBA runner image; job builder and task-to-SBA flow are missing.
+
+`applyJobResult` already persists full RunJobResponse (including SbaResult) when present.
+
+### Suggested Next Work
+
+1. **Complete P2-10 orchestrator side (high):** Define when a task/job uses SBA; add job builder producing RunJobRequest with Sandbox.
+   JobSpecJSON and SBA runner image; ensure dispatcher passes JobSpecJSON and uses SBA runner from config or node capability; optional E2E/BDD scenario for SBA job and `job.result` containing `sba_result`.
+2. **MCP gateway allow path or scope (medium):** Document MVP scope (only db.preference.* implemented; others 501) or implement allow path for one sandbox/orchestrator tool.
+3. **PMA langchaingo refactor (medium):** Refactor PMA from direct Ollama HTTP to langchaingo; MCP tools as langchaingo tools; multiple tool calls where supported.
+4. **LangGraph workflow (P2-04--P2-08):** Workflow start/resume API (Go to Python LangGraph); graph nodes to MCP DB and Worker API; lease acquisition; Verify Step Result (PMA tasking Project Analyst / SBA).
+5. **Lower priority when needed:** Task create attachments and task name normalization; model warm-up; step executor, SBA timeout extension, Worker API cmd.
+
+6. **PMA/SBA instructions buildout (remaining):** From dev_docs pma_llm_tool_instructions_plan and buildout report (validated still outstanding).
+   - (a) **Shared Go package for tool descriptions:** Single source for MCP tool names/descriptions (e.g. `agents/internal/tools` or generated from mcp_tool_catalog) so PMA instructions and SBA baseline stay in sync.
+   - (b) **SBA wiring to load baseline:** Wire SBA to load baseline from path (e.g. `agents/instructions/sandbox_agent/`) via shared LoadInstructions when job supplies a path or for image-baked baseline.
+   - (c) **Orchestrator sending project_id/task_id to PMA:** Extend orchestrator chat call sites to pass project_id, task_id (and user_id, additional_context as needed) in InternalChatCompletionRequest so PMA context composition can include project/task blocks.
 
 ## References
 

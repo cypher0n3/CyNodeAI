@@ -244,6 +244,31 @@ func TestToolCallHandler_PreferenceEffective_BadArgs(t *testing.T) {
 	callToolHandlerPOST(t, `{"tool_name":"db.preference.effective"}`, http.StatusBadRequest)
 }
 
+func TestValidateRequiredScopedIds(t *testing.T) {
+	tests := []struct {
+		name     string
+		toolName string
+		args     map[string]interface{}
+		want     string
+	}{
+		{"effective missing task_id", "db.preference.effective", nil, "task_id required"},
+		{"effective empty args", "db.preference.effective", map[string]interface{}{}, "task_id required"},
+		{"effective invalid task_id", "db.preference.effective", map[string]interface{}{"task_id": "not-a-uuid"}, "task_id required"},
+		{"effective has task_id", "db.preference.effective", map[string]interface{}{"task_id": uuid.New().String()}, ""},
+		{"get no scoped ids required", "db.preference.get", map[string]interface{}{"scope_type": "system", "key": "k"}, ""},
+		{"list no scoped ids required", "db.preference.list", map[string]interface{}{"scope_type": "system"}, ""},
+		{"unknown tool", "other.tool", nil, ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := validateRequiredScopedIds(tt.toolName, tt.args)
+			if got != tt.want {
+				t.Errorf("validateRequiredScopedIds() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
 func TestToolCallHandler_PreferenceList_UserScope(t *testing.T) {
 	mock := testutil.NewMockDB()
 	uid := uuid.New()

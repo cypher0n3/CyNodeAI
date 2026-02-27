@@ -132,7 +132,82 @@ type toolCallRequest struct {
 	Arguments map[string]interface{} `json:"arguments,omitempty"`
 }
 
+// requiredScopedIds defines which of task_id, run_id, job_id are required for a tool (REQ-MCPGAT-0103--0106, mcp_gateway_enforcement.md).
+var requiredScopedIds = map[string]struct{ TaskID, RunID, JobID bool }{
+	"db.preference.get":      {},
+	"db.preference.list":     {},
+	"db.preference.effective": {TaskID: true},
+}
+
+// validateRequiredScopedIds returns an error message if required scoped ids are missing or invalid for the tool.
+func validateRequiredScopedIds(toolName string, args map[string]interface{}) string {
+	req, ok := requiredScopedIds[toolName]
+	if !ok {
+		return "" // unknown tool; routing layer will reject with 501
+	}
+	if req.TaskID && uuidArg(args, "task_id") == nil {
+		return "task_id required"
+	}
+	if req.RunID && uuidArg(args, "run_id") == nil {
+		return "run_id required"
+	}
+	if req.JobID && uuidArg(args, "job_id") == nil {
+		return "job_id required"
+	}
+	return ""
+}
+
+// writeDenyAuditAndRespond writes a deny audit record and sends a 400 response. Returns true if caller should return.
+func writeDenyAuditAndRespond(ctx context.Context, w http.ResponseWriter, store database.Store, logger *slog.Logger, toolName string, args map[string]interface{}, errMsg string) bool {
+	rec := &models.McpToolCallAuditLog{
+		ToolName:  toolName,
+		Decision:  auditDecisionDeny,
+		Status:    auditStatusError,
+		ErrorType: strPtr("invalid_arguments"),
+		TaskID:    uuidArg(args, "task_id"),
+		RunID:     uuidArg(args, "run_id"),
+		JobID:     uuidArg(args, "job_id"),
+	}
+	if err := store.CreateMcpToolCallAuditLog(ctx, rec); err != nil {
+		logger.Error("create mcp tool call audit log", "error", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		return true
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusBadRequest)
+	_, _ = w.Write([]byte(`{"error":"` + errMsg + `"}`))
+	return true
+}
+
+// routeAndWriteAudit runs the tool, fills audit scoped ids and duration, writes audit, and sends the response.
+func routeAndWriteAudit(ctx context.Context, w http.ResponseWriter, store database.Store, logger *slog.Logger, toolName string, args map[string]interface{}, start time.Time) {
+	code, body, rec := routeToolCall(ctx, store, toolName, args)
+	rec.ToolName = toolName
+	if rec.TaskID == nil {
+		rec.TaskID = uuidArg(args, "task_id")
+	}
+	if rec.RunID == nil {
+		rec.RunID = uuidArg(args, "run_id")
+	}
+	if rec.JobID == nil {
+		rec.JobID = uuidArg(args, "job_id")
+	}
+	if rec.DurationMs == nil {
+		ms := int(time.Since(start).Milliseconds())
+		rec.DurationMs = &ms
+	}
+	if err := store.CreateMcpToolCallAuditLog(ctx, rec); err != nil {
+		logger.Error("create mcp tool call audit log", "error", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(code)
+	_, _ = w.Write(body)
+}
+
 // toolCallHandler writes an audit record for every tool call (P2-02) and routes db.preference.* tools (P2-03).
+// P2-01: enforces required scoped ids (task_id/run_id/job_id) per tool before routing; rejects with 400 when missing.
 func toolCallHandler(store database.Store, logger *slog.Logger) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
@@ -153,21 +228,15 @@ func toolCallHandler(store database.Store, logger *slog.Logger) http.HandlerFunc
 		if toolName == "" {
 			toolName = "unknown"
 		}
-		start := time.Now()
-		code, body, rec := routeToolCall(r.Context(), store, toolName, req.Arguments)
-		rec.ToolName = toolName
-		if rec.DurationMs == nil {
-			ms := int(time.Since(start).Milliseconds())
-			rec.DurationMs = &ms
+		args := req.Arguments
+		if args == nil {
+			args = make(map[string]interface{})
 		}
-		if err := store.CreateMcpToolCallAuditLog(r.Context(), rec); err != nil {
-			logger.Error("create mcp tool call audit log", "error", err)
-			w.WriteHeader(http.StatusInternalServerError)
+		if errMsg := validateRequiredScopedIds(toolName, args); errMsg != "" {
+			writeDenyAuditAndRespond(r.Context(), w, store, logger, toolName, args, errMsg)
 			return
 		}
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(code)
-		_, _ = w.Write(body)
+		routeAndWriteAudit(r.Context(), w, store, logger, toolName, args, time.Now())
 	}
 }
 
