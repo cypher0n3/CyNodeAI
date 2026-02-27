@@ -1,16 +1,14 @@
 package cmd
 
 import (
-	"flag"
 	"fmt"
 	"os"
+	"os/exec"
 	"strings"
 
+	"github.com/cypher0n3/cynodeai/cynork/internal/config"
 	"github.com/cypher0n3/cynodeai/cynork/internal/gateway"
 )
-
-const subList = "list"
-const subGet = "get"
 
 // SlashCommand describes one slash command for help and autocomplete.
 type SlashCommand struct {
@@ -59,21 +57,21 @@ func parseSlash(line string) (cmd, rest string, ok bool) {
 type slashHandler func(*gateway.Client, string) (bool, error)
 
 var slashHandlers = map[string]slashHandler{
-	"exit":   func(*gateway.Client, string) (bool, error) { return true, nil },
-	"quit":   func(*gateway.Client, string) (bool, error) { return true, nil },
-	"help":   func(*gateway.Client, string) (bool, error) { printSlashHelp(); return false, nil },
-	"clear":  func(*gateway.Client, string) (bool, error) { clearTerminal(); return false, nil },
+	"exit":    func(*gateway.Client, string) (bool, error) { return true, nil },
+	"quit":    func(*gateway.Client, string) (bool, error) { return true, nil },
+	"help":    func(*gateway.Client, string) (bool, error) { printSlashHelp(); return false, nil },
+	"clear":   func(*gateway.Client, string) (bool, error) { clearTerminal(); return false, nil },
 	"version": func(*gateway.Client, string) (bool, error) { fmt.Println("cynork", version); return false, nil },
-	"models": func(*gateway.Client, string) (bool, error) { return false, runModelsList(nil, nil) },
-	"model":  func(c *gateway.Client, rest string) (bool, error) { return false, runSlashModel(c, rest) },
-	"project": func(c *gateway.Client, rest string) (bool, error) { return false, runSlashProject(c, rest) },
-	"task":   func(c *gateway.Client, rest string) (bool, error) { return false, runSlashTask(c, rest) },
-	"status": func(*gateway.Client, string) (bool, error) { return false, runStatus(nil, nil) },
-	"whoami": func(*gateway.Client, string) (bool, error) { return false, runAuthWhoami(nil, nil) },
-	"auth":   func(c *gateway.Client, rest string) (bool, error) { return false, runSlashAuth(c, rest) },
-	"nodes":  func(_ *gateway.Client, rest string) (bool, error) { return false, runSlashNodes(rest) },
-	"prefs":  func(_ *gateway.Client, rest string) (bool, error) { return false, runSlashPrefs(rest) },
-	"skills": func(_ *gateway.Client, rest string) (bool, error) { return false, runSlashSkills(rest) },
+	"models":  func(_ *gateway.Client, rest string) (bool, error) { r := strings.TrimSpace(rest); if r == "" { r = "list" }; return false, runCynorkSubcommandForSlash("models", r) },
+	"model":   func(c *gateway.Client, rest string) (bool, error) { return false, runSlashModel(c, rest) },
+	"project": func(c *gateway.Client, rest string) (bool, error) { return false, runSlashProjectDelegated(c, rest) },
+	"task":    func(_ *gateway.Client, rest string) (bool, error) { return false, runCynorkSubcommandForSlash("task", rest) },
+	"status":  func(_ *gateway.Client, rest string) (bool, error) { return false, runCynorkSubcommandForSlash("status", rest) },
+	"whoami":  func(_ *gateway.Client, rest string) (bool, error) { return false, runCynorkSubcommandForSlash("auth", "whoami") },
+	"auth":    func(c *gateway.Client, rest string) (bool, error) { return false, runSlashAuthDelegated(c, rest) },
+	"nodes":   func(_ *gateway.Client, rest string) (bool, error) { return false, runCynorkSubcommandForSlash("nodes", rest) },
+	"prefs":   func(_ *gateway.Client, rest string) (bool, error) { return false, runCynorkSubcommandForSlash("prefs", rest) },
+	"skills":  func(_ *gateway.Client, rest string) (bool, error) { return false, runCynorkSubcommandForSlash("skills", rest) },
 }
 
 // runSlashCommand executes a slash command. Returns (exitSession, err). exitSession true means chat should exit.
@@ -95,6 +93,57 @@ func printSlashHelp() {
 	}
 }
 
+// runCynorkSubcommandForSlash is the function used to run a subcommand from a slash command.
+// Tests may set this to runCynorkSubcommandInProcess so the test binary doesn't exec itself.
+var runCynorkSubcommandForSlash = runCynorkSubcommand
+
+// runCynorkSubcommandInProcess runs the subcommand in-process via cobra (for tests; avoids exec).
+// On error it prints to stderr and returns nil so behavior matches runCynorkSubcommand (child prints and exits).
+func runCynorkSubcommandInProcess(subcommand, rest string) error {
+	args := parseArgs(rest)
+	rootCmd.SetArgs(append([]string{subcommand}, args...))
+	if err := rootCmd.Execute(); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		return nil
+	}
+	return nil
+}
+
+// getCynorkExeForSubcommand returns the executable to run for delegated slash commands. Tests may override.
+var getCynorkExeForSubcommand = os.Executable
+
+// runCynorkSubcommand runs the cynork binary with the given subcommand and rest as args (e.g. "task", "create --help").
+// This ensures slash commands use the same code paths and flags as the CLI (e.g. /task create --help shows help).
+func runCynorkSubcommand(subcommand, rest string) error {
+	exe, err := getCynorkExeForSubcommand()
+	if err != nil {
+		return fmt.Errorf("cynork subcommand: %w", err)
+	}
+	effectiveConfig := configPath
+	if effectiveConfig == "" {
+		effectiveConfig, _ = getDefaultConfigPath()
+	}
+	args := make([]string, 0, 4+8)
+	if effectiveConfig != "" {
+		args = append(args, "--config", effectiveConfig)
+	}
+	args = append(args, subcommand)
+	args = append(args, parseArgs(rest)...)
+	cmd := exec.Command(exe, args...)
+	cmd.Stdin = os.Stdin
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if err := cmd.Run(); err != nil {
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			// ExitError already printed by child; return nil so chat doesn't print "exit status 1" again.
+			_ = exitErr
+			return nil
+		}
+		return err
+	}
+	return nil
+}
+
 func clearTerminal() {
 	// ANSI clear screen; if not a TTY, do nothing (spec: MAY print message that clearing is not available)
 	if os.Stdout == nil {
@@ -103,49 +152,36 @@ func clearTerminal() {
 	_, _ = fmt.Fprint(os.Stdout, "\033[H\033[2J")
 }
 
-func runSlashAuth(chatClient *gateway.Client, rest string) error {
+// runSlashAuthDelegated runs "cynork auth <rest>" then syncs chat client token on login/refresh/logout.
+func runSlashAuthDelegated(chatClient *gateway.Client, rest string) error {
+	if err := runCynorkSubcommandForSlash("auth", rest); err != nil {
+		return err
+	}
 	rest = strings.TrimSpace(rest)
-	parts := strings.Fields(rest)
+	parts := parseArgs(rest)
 	if len(parts) == 0 {
-		fmt.Fprintln(os.Stderr, "usage: /auth login|logout|whoami|refresh [login flags: -u username -p password]")
 		return nil
 	}
 	sub := strings.ToLower(parts[0])
-	args := parts[1:]
-	switch sub {
-	case "whoami":
-		return runAuthWhoami(nil, nil)
-	case "logout":
-		err := runAuthLogout(nil, nil)
-		if err == nil && chatClient != nil {
-			chatClient.SetToken("")
-		}
-		return err
-	case "refresh":
-		err := runAuthRefresh(nil, nil)
-		if err == nil && chatClient != nil {
-			chatClient.SetToken(cfg.Token)
-		}
-		return err
-	case "login":
-		fs := flag.NewFlagSet("auth login", flag.ContinueOnError)
-		u := fs.String("u", "", "username")
-		p := fs.String("p", "", "password")
-		if err := fs.Parse(args); err != nil {
-			return nil
-		}
-		authLoginHandle = *u
-		authLoginPassword = *p
-		defer func() { authLoginHandle = ""; authLoginPassword = "" }()
-		err := runAuthLogin(nil, nil)
-		if err == nil && chatClient != nil {
-			chatClient.SetToken(cfg.Token)
-		}
-		return err
-	default:
-		fmt.Fprintln(os.Stderr, "usage: /auth login|logout|whoami|refresh [login flags: -u username -p password]")
+	if chatClient == nil {
 		return nil
 	}
+	switch sub {
+	case "login", "refresh":
+		effectivePath := configPath
+		if effectivePath == "" {
+			effectivePath, _ = getDefaultConfigPath()
+		}
+		if effectivePath != "" {
+			if c, err := config.Load(effectivePath); err == nil {
+				cfg = c
+				chatClient.SetToken(cfg.Token)
+			}
+		}
+	case "logout":
+		chatClient.SetToken("")
+	}
+	return nil
 }
 
 func runSlashModel(_ *gateway.Client, rest string) error {
@@ -163,38 +199,16 @@ func runSlashModel(_ *gateway.Client, rest string) error {
 	return nil
 }
 
-func runSlashProject(_ *gateway.Client, rest string) error {
-	rest = strings.TrimSpace(rest)
-	if rest == "" {
-		printChatSessionProject()
-		return nil
+// runSlashProjectDelegated runs "cynork project <rest>" then syncs chat session project when "set" was used.
+func runSlashProjectDelegated(_ *gateway.Client, rest string) error {
+	if err := runCynorkSubcommandForSlash("project", rest); err != nil {
+		return err
 	}
-	parts := strings.Fields(rest)
-	if len(parts) == 0 {
-		return nil
+	parts := parseArgs(strings.TrimSpace(rest))
+	if len(parts) >= 2 && strings.EqualFold(parts[0], "set") {
+		setChatSessionProject(parts[1])
 	}
-	first := strings.ToLower(parts[0])
-	switch first {
-	case subList:
-		return runProjectList(nil, nil)
-	case subGet:
-		return runSlashProjectGet(parts)
-	case "set":
-		return runSlashProjectSet(parts)
-	case "help", "--help", "-h":
-		fmt.Fprintln(os.Stderr, "usage: /project [list|get <project_id>|set <project_id>] or /project <project_id> to set")
-		return nil
-	}
-	setChatSessionProject(parts[0])
 	return nil
-}
-
-func printChatSessionProject() {
-	if chatSessionProjectID == "" {
-		fmt.Fprintln(os.Stderr, "project: (default)")
-	} else {
-		fmt.Fprintln(os.Stderr, "project:", chatSessionProjectID)
-	}
 }
 
 func setChatSessionProject(id string) {
@@ -205,186 +219,3 @@ func setChatSessionProject(id string) {
 	fmt.Fprintln(os.Stderr, "project set to:", chatSessionProjectID)
 }
 
-func runSlashProjectGet(parts []string) error {
-	if len(parts) < 2 {
-		fmt.Fprintln(os.Stderr, "usage: /project get <project_id>")
-		return nil
-	}
-	return runProjectGet(nil, parts[1:])
-}
-
-func runSlashProjectSet(parts []string) error {
-	if len(parts) < 2 {
-		fmt.Fprintln(os.Stderr, "usage: /project set <project_id>")
-		return nil
-	}
-	setChatSessionProject(parts[1])
-	return nil
-}
-
-func runSlashTask(client *gateway.Client, rest string) error {
-	rest = strings.TrimSpace(rest)
-	parts := strings.Fields(rest)
-	if len(parts) == 0 {
-		fmt.Fprintln(os.Stderr, "usage: /task list|get|create|cancel|result|logs|artifacts list ...")
-		return nil
-	}
-	sub := strings.ToLower(parts[0])
-	args := parts[1:]
-	switch sub {
-	case subList:
-		return runSlashTaskList(args)
-	case subGet:
-		return runSlashTaskGet(args)
-	case "create":
-		return runSlashTaskCreate(rest)
-	case "cancel":
-		return runSlashTaskCancel(args)
-	case "result":
-		return runSlashTaskResult(args)
-	case "logs":
-		return runSlashTaskLogs(args)
-	case "artifacts":
-		return runSlashTaskArtifacts(args)
-	default:
-		fmt.Fprintln(os.Stderr, "usage: /task list|get|create|cancel|result|logs|artifacts list ...")
-		return nil
-	}
-}
-
-func runSlashTaskList(args []string) error {
-	fs := flag.NewFlagSet("task list", flag.ContinueOnError)
-	limit := fs.Int("limit", 50, "")
-	status := fs.String("status", "", "")
-	_ = fs.Parse(args)
-	taskListLimit = *limit
-	taskListStatus = *status
-	return runTaskList(nil, nil)
-}
-
-func runSlashTaskGet(args []string) error {
-	if len(args) < 1 {
-		fmt.Fprintln(os.Stderr, "usage: /task get <task_id>")
-		return nil
-	}
-	return runTaskGet(nil, args)
-}
-
-func runSlashTaskCreate(rest string) error {
-	prompt := strings.TrimSpace(strings.TrimPrefix(rest, "create"))
-	if prompt == "" {
-		fmt.Fprintln(os.Stderr, "usage: /task create [prompt text or --prompt \"...\"]")
-		return nil
-	}
-	taskCreatePrompt = prompt
-	taskCreateInputMode = "prompt"
-	return runTaskCreate(nil, nil)
-}
-
-func runSlashTaskCancel(args []string) error {
-	if len(args) < 1 {
-		fmt.Fprintln(os.Stderr, "usage: /task cancel <task_id>")
-		return nil
-	}
-	taskCancelYes = true
-	return runTaskCancel(nil, args)
-}
-
-func runSlashTaskResult(args []string) error {
-	if len(args) < 1 {
-		fmt.Fprintln(os.Stderr, "usage: /task result <task_id> [--wait]")
-		return nil
-	}
-	taskResultWait = false
-	taskArgs := make([]string, 0, len(args))
-	for _, a := range args {
-		if a == "--wait" || a == "-w" {
-			taskResultWait = true
-			continue
-		}
-		taskArgs = append(taskArgs, a)
-	}
-	if len(taskArgs) < 1 {
-		fmt.Fprintln(os.Stderr, "usage: /task result <task_id> [--wait]")
-		return nil
-	}
-	return runTaskResult(nil, taskArgs)
-}
-
-func runSlashTaskLogs(args []string) error {
-	if len(args) < 1 {
-		fmt.Fprintln(os.Stderr, "usage: /task logs <task_id>")
-		return nil
-	}
-	return runTaskLogs(nil, args)
-}
-
-func runSlashTaskArtifacts(args []string) error {
-	if len(args) >= 1 && strings.EqualFold(args[0], subList) {
-		if len(args) < 2 {
-			fmt.Fprintln(os.Stderr, "usage: /task artifacts list <task_id>")
-			return nil
-		}
-		return runTaskArtifactsList(nil, args[1:])
-	}
-	fmt.Fprintln(os.Stderr, "usage: /task artifacts list <task_id>")
-	return nil
-}
-
-func runSlashNodes(rest string) error {
-	return runSlashListGet(rest, "/nodes list|get <node_id>", "usage: /nodes get <node_id>",
-		func() error { return runNodesList(nil, nil) },
-		func(args []string) error { return runNodesGet(nil, args) })
-}
-
-func runSlashListGet(rest, usageAll, usageGet string, runList func() error, runGet func([]string) error) error {
-	rest = strings.TrimSpace(rest)
-	parts := strings.Fields(rest)
-	if len(parts) == 0 {
-		fmt.Fprintln(os.Stderr, "usage:", usageAll)
-		return nil
-	}
-	switch strings.ToLower(parts[0]) {
-	case subList:
-		return runList()
-	case subGet:
-		if len(parts) < 2 {
-			fmt.Fprintln(os.Stderr, usageGet)
-			return nil
-		}
-		return runGet(parts[1:])
-	default:
-		fmt.Fprintln(os.Stderr, "usage:", usageAll)
-		return nil
-	}
-}
-
-func runSlashPrefs(rest string) error {
-	rest = strings.TrimSpace(rest)
-	parts := strings.Fields(rest)
-	if len(parts) == 0 {
-		fmt.Fprintln(os.Stderr, "usage: /prefs list|get|set|delete|effective ...")
-		return nil
-	}
-	switch strings.ToLower(parts[0]) {
-	case subList:
-		return runPrefsList(nil, nil)
-	case subGet:
-		return runPrefsGet(nil, parts[1:])
-	case "set":
-		return runPrefsSet(nil, parts[1:])
-	case "delete":
-		return runPrefsDelete(nil, parts[1:])
-	case "effective":
-		return runPrefsEffective(nil, parts[1:])
-	default:
-		fmt.Fprintln(os.Stderr, "usage: /prefs list|get|set|delete|effective ...")
-		return nil
-	}
-}
-
-func runSlashSkills(rest string) error {
-	return runSlashListGet(rest, "/skills list|get <skill_id>", "usage: /skills get <skill_id>",
-		func() error { return runSkillsList(nil, nil) },
-		func(args []string) error { return runSkillsGet(nil, args) })
-}

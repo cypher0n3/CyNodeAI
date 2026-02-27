@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -622,6 +623,9 @@ func TestParseArgs(t *testing.T) {
 		{"a b", []string{"a", "b"}},
 		{`a "b c" d`, []string{"a", "b c", "d"}},
 		{"task list", []string{"task", "list"}},
+		{"create --help", []string{"create", "--help"}},
+		{"create -p say hello", []string{"create", "-p", "say", "hello"}},
+		{`create "hello world"`, []string{"create", "hello world"}},
 	}
 	for _, tt := range tests {
 		got := parseArgs(tt.line)
@@ -1460,8 +1464,12 @@ func TestProcessChatLine_SlashErrorDoesNotExit(t *testing.T) {
 		_, _ = w.Write([]byte("Not Found"))
 	}))
 	defer server.Close()
+	path := writeTempConfig(t, "gateway_url: "+server.URL+"\ntoken: tok\n")
+	configPath = path
 	cfg = &config.Config{GatewayURL: server.URL, Token: "tok"}
-	defer func() { cfg = nil }()
+	oldRunner := runCynorkSubcommandForSlash
+	runCynorkSubcommandForSlash = runCynorkSubcommandInProcess
+	defer func() { runCynorkSubcommandForSlash = oldRunner; configPath = ""; cfg = nil }()
 	client := gateway.NewClient(server.URL)
 	client.SetToken("tok")
 	oldStderr := os.Stderr
@@ -1554,8 +1562,12 @@ func TestRunSlashCommand_StatusWhoami(t *testing.T) {
 		w.WriteHeader(http.StatusNotFound)
 	}))
 	defer server.Close()
+	path := writeTempConfig(t, "gateway_url: "+server.URL+"\ntoken: tok\n")
+	configPath = path
 	cfg = &config.Config{GatewayURL: server.URL, Token: "tok"}
-	defer func() { cfg = nil }()
+	oldRunner := runCynorkSubcommandForSlash
+	runCynorkSubcommandForSlash = runCynorkSubcommandInProcess
+	defer func() { runCynorkSubcommandForSlash = oldRunner; configPath = ""; cfg = nil }()
 	client := gateway.NewClient(server.URL)
 	client.SetToken("tok")
 	_, err := runSlashCommand(client, "/status")
@@ -1581,8 +1593,12 @@ func TestRunSlashCommand_Models(t *testing.T) {
 		w.WriteHeader(http.StatusNotFound)
 	}))
 	defer server.Close()
+	path := writeTempConfig(t, "gateway_url: "+server.URL+"\ntoken: tok\n")
+	configPath = path
 	cfg = &config.Config{GatewayURL: server.URL, Token: "tok"}
-	defer func() { cfg = nil }()
+	oldRunner := runCynorkSubcommandForSlash
+	runCynorkSubcommandForSlash = runCynorkSubcommandInProcess
+	defer func() { runCynorkSubcommandForSlash = oldRunner; configPath = ""; cfg = nil }()
 	client := gateway.NewClient(server.URL)
 	client.SetToken("tok")
 	_, err := runSlashCommand(client, "/models")
@@ -1716,8 +1732,12 @@ func stubSlashServeTasks(w http.ResponseWriter, r *http.Request) bool {
 func TestRunSlashCommand_StubEndpoints(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(stubSlashServerHandler))
 	defer server.Close()
+	path := writeTempConfig(t, "gateway_url: "+server.URL+"\ntoken: tok\n")
+	configPath = path
 	cfg = &config.Config{GatewayURL: server.URL, Token: "tok"}
-	defer func() { cfg = nil }()
+	oldRunner := runCynorkSubcommandForSlash
+	runCynorkSubcommandForSlash = runCynorkSubcommandInProcess
+	defer func() { runCynorkSubcommandForSlash = oldRunner; configPath = ""; cfg = nil }()
 	client := gateway.NewClient(server.URL)
 	client.SetToken("tok")
 	cmds := []string{
@@ -1725,7 +1745,7 @@ func TestRunSlashCommand_StubEndpoints(t *testing.T) {
 		"/prefs list", "/prefs get", "/prefs effective", "/prefs delete",
 		"/project list", "/project get p1", "/project", "/project set p2",
 		"/model", "/model m1", "/task list", "/task get t1",
-		"/task create say hello", "/task cancel t1", "/task result t1", "/task logs t1", "/task artifacts list t1",
+		"/task create -p say hello", "/task cancel -y t1", "/task result t1", "/task logs t1", "/task artifacts list t1",
 		"/clear",
 	}
 	for _, cmd := range cmds {
@@ -1737,8 +1757,12 @@ func TestRunSlashCommand_StubEndpoints(t *testing.T) {
 }
 
 func TestRunSlashCommand_UsagePaths(t *testing.T) {
+	path := writeTempConfig(t, "gateway_url: http://localhost\ntoken: tok\n")
+	configPath = path
 	cfg = &config.Config{GatewayURL: "http://localhost", Token: "tok"}
-	defer func() { cfg = nil }()
+	oldRunner := runCynorkSubcommandForSlash
+	runCynorkSubcommandForSlash = runCynorkSubcommandInProcess
+	defer func() { runCynorkSubcommandForSlash = oldRunner; configPath = ""; cfg = nil }()
 	client := gateway.NewClient("http://localhost")
 	client.SetToken("tok")
 	// Exercise usage/error paths that don't call gateway.
@@ -1756,8 +1780,30 @@ func TestRunSlashCommand_UsagePaths(t *testing.T) {
 	}
 }
 
+func TestRunCynorkSubcommand_ExecPath(t *testing.T) {
+	// Cover runCynorkSubcommand (exec path) by using "true" as the executable so the child exits 0.
+	path := writeTempConfig(t, "gateway_url: http://localhost\ntoken: tok\n")
+	configPath = path
+	defer func() { configPath = "" }()
+	oldExe := getCynorkExeForSubcommand
+	oldRunner := runCynorkSubcommandForSlash
+	getCynorkExeForSubcommand = func() (string, error) {
+		p, err := exec.LookPath("true")
+		if err != nil {
+			t.Skip("true not in PATH:", err)
+		}
+		return p, nil
+	}
+	runCynorkSubcommandForSlash = runCynorkSubcommand
+	defer func() { getCynorkExeForSubcommand = oldExe; runCynorkSubcommandForSlash = oldRunner }()
+	_, err := runSlashCommand(nil, "/task create --help")
+	if err != nil {
+		t.Errorf("runSlashCommand /task create --help (exec path): %v", err)
+	}
+}
+
 func TestRunSlashAuth_LoginRefreshLogoutUpdateClient(t *testing.T) {
-	// Login: mock server returns tokens; runSlashAuth with client should call client.SetToken(cfg.Token).
+	// Delegated auth: run subcommand in process then sync client token.
 	server := mockJSONServer(t, http.StatusOK, userapi.LoginResponse{
 		AccessToken: "new-tok", TokenType: "Bearer", ExpiresIn: 900,
 	})
@@ -1765,25 +1811,24 @@ func TestRunSlashAuth_LoginRefreshLogoutUpdateClient(t *testing.T) {
 	path := writeTempConfig(t, "gateway_url: "+server.URL+"\n")
 	configPath = path
 	cfg = &config.Config{GatewayURL: server.URL}
-	defer func() { configPath = ""; cfg = nil }()
+	oldRunner := runCynorkSubcommandForSlash
+	runCynorkSubcommandForSlash = runCynorkSubcommandInProcess
+	defer func() { runCynorkSubcommandForSlash = oldRunner; configPath = ""; cfg = nil }()
 	client := gateway.NewClient(server.URL)
 	client.SetToken("old-tok")
-	if err := runSlashAuth(client, "login -u u -p p"); err != nil {
-		t.Errorf("runSlashAuth login: %v", err)
+	if err := runSlashAuthDelegated(client, "login -u u -p p"); err != nil {
+		t.Errorf("runSlashAuthDelegated login: %v", err)
 	}
 	if cfg.Token != "new-tok" {
 		t.Errorf("cfg.Token = %q", cfg.Token)
 	}
-	// Client token is updated in-session; next request would use new-tok. We can't read it back, so just coverage.
 
-	// Logout: runSlashAuth with client should call client.SetToken("").
 	cfg.Token = "x"
 	cfg.RefreshToken = ""
-	if err := runSlashAuth(client, "logout"); err != nil {
-		t.Errorf("runSlashAuth logout: %v", err)
+	if err := runSlashAuthDelegated(client, "logout"); err != nil {
+		t.Errorf("runSlashAuthDelegated logout: %v", err)
 	}
 
-	// Refresh: mock server returns new tokens; runSlashAuth with client should call client.SetToken(cfg.Token).
 	refreshServer := mockJSONServer(t, http.StatusOK, userapi.LoginResponse{
 		AccessToken: "refreshed-tok", RefreshToken: "new-refresh", TokenType: "Bearer", ExpiresIn: 900,
 	})
@@ -1795,8 +1840,8 @@ func TestRunSlashAuth_LoginRefreshLogoutUpdateClient(t *testing.T) {
 	configPath = path2
 	client2 := gateway.NewClient(refreshServer.URL)
 	client2.SetToken("old")
-	if err := runSlashAuth(client2, "refresh"); err != nil {
-		t.Errorf("runSlashAuth refresh: %v", err)
+	if err := runSlashAuthDelegated(client2, "refresh"); err != nil {
+		t.Errorf("runSlashAuthDelegated refresh: %v", err)
 	}
 	if cfg.Token != "refreshed-tok" {
 		t.Errorf("cfg.Token after refresh = %q", cfg.Token)
