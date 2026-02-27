@@ -21,7 +21,7 @@ SBA capabilities split into two layers:
 1. **MCP tools** (orchestrator gateway, sandbox allowlist): `artifact.*`, `memory.*`, `skills.list`/`skills.get`, `web.fetch`, `web.search`, `api.call`, `help.*`.
    Defined in [mcp_tool_catalog.md](../tech_specs/mcp_tool_catalog.md) and [cynode_sba.md - MCP Tool Access](../tech_specs/cynode_sba.md#mcp-tool-access-sandbox-allowlist).
 2. **Local step types** (in-container, under `/workspace`): `run_command`, `write_file`, `read_file`, `apply_unified_diff`, `list_tree`.
-   Defined in [cynode_sba.md - Step Types (MVP)](../tech_specs/cynode_sba.md#step-types-mvp); implementation in `agents/internal/sba/runner.go` and `agent_tools.go`.
+   Defined in [cynode_sba.md - Local Tools (MVP)](../tech_specs/cynode_sba.md#local-tools-mvp); implementation in `agents/internal/sba/runner.go` and `agent_tools.go`.
 
 Step types are the primitives the agent uses for filesystem and shell work; they do not go through MCP.
 
@@ -49,7 +49,7 @@ Step types are the primitives the agent uses for filesystem and shell work; they
 
 ## Spec Additions Applied
 
-The following additions were made to [cynode_sba.md](../tech_specs/cynode_sba.md) (see [cynode_sba.md](../tech_specs/cynode_sba.md#step-type-argument-schemas-and-common-use-cases) for exact wording):
+The following additions were made to [cynode_sba.md](../tech_specs/cynode_sba.md) (see [cynode_sba.md - Tool Argument Schemas](../tech_specs/cynode_sba.md#tool-argument-schemas-and-common-use-cases) for exact wording):
 
 ### Step Types (MVP)
 

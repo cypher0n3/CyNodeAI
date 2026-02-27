@@ -645,9 +645,15 @@ clean-db:
 
 # E2E: build all binaries, start stack (compose), build inference-proxy image, start node, run demo test.
 # setup-dev.sh full-demo runs just build internally.
-e2e: install-go
-    @./scripts/setup-dev.sh full-demo
+# Pass --stop-on-success to stop containers after all tests pass: just e2e --stop-on-success
+e2e *ARGS: install-go
+    @./scripts/setup-dev.sh full-demo {{ ARGS }}
 
+# Run E2E and stop containers on success (convenience alias for just e2e --stop-on-success).
+e2e-stop-on-success: install-go
+    @./scripts/setup-dev.sh full-demo --stop-on-success
+
+# Stop E2E services (orchestrator stack and node processes).
 e2e-stop:
     @./scripts/setup-dev.sh stop
 

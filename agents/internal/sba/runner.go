@@ -1,4 +1,4 @@
-// Package sba provides the SBA job runner: parse job spec, execute steps, produce result contract.
+// Package sba provides the SBA job runner: parse job spec, run agent (inference and tools), produce result contract.
 // See docs/tech_specs/cynode_sba.md and docs/requirements/sbagnt.md.
 package sba
 

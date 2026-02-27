@@ -60,7 +60,7 @@ It covers cross-cutting standards and conventions that apply across components.
 - **REQ-STANDS-0114:** Services MUST emit structured logs.
   [CYNAI.STANDS.Observability](../tech_specs/go_rest_api_standards.md#spec-cynai-stands-observ)
   <a id="req-stands-0114"></a>
-- **REQ-STANDS-0115:** Services SHOULD expose health endpoints (for example `/healthz` and `/readyz`).
+- **REQ-STANDS-0115:** All APIs that we build MUST expose unauthenticated endpoints `GET /healthz` (liveness) and `GET /readyz` (readiness).
   [CYNAI.STANDS.Observability](../tech_specs/go_rest_api_standards.md#spec-cynai-stands-observ)
   <a id="req-stands-0115"></a>
 - **REQ-STANDS-0116:** Services SHOULD support distributed tracing and metrics collection.

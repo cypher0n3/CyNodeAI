@@ -764,6 +764,7 @@ show_usage() {
     echo "  stop            Stop all services"
     echo "  test-e2e        Run E2E demo test (builds cynork-dev at start, uses it for auth/tasks/logout)"
     echo "  full-demo       Full demo: start all services and run E2E test"
+    echo "                  Optional: full-demo --stop-on-success  stop containers after all tests pass"
     echo ""
     echo "Environment Variables:"
     echo "  POSTGRES_PORT     PostgreSQL port (default: 5432)"
@@ -772,6 +773,7 @@ show_usage() {
     echo "  NODE_PSK          Node registration PSK (default: dev-node-psk-secret)"
     echo "  E2E_FORCE_REBUILD Set to 1 to rebuild container images even when cache matches (default: 0)"
     echo "  E2E_IMAGE_CACHE_DIR Dir for build-context hashes (default: tmp/e2e-image-cache)"
+    echo "  STOP_ON_SUCCESS_ENV Set to 1 to stop containers after full-demo succeeds (same as --stop-on-success)"
 }
 
 # Main script
@@ -804,6 +806,13 @@ case "${1:-}" in
         run_e2e_test
         ;;
     full-demo)
+        STOP_ON_SUCCESS=""
+        if [ "${2:-}" = "--stop-on-success" ]; then
+            STOP_ON_SUCCESS=1
+        fi
+        if [ -n "${STOP_ON_SUCCESS_ENV:-}" ]; then
+            STOP_ON_SUCCESS=1
+        fi
         build_binaries || { stop_all; exit 1; }
         start_orchestrator_stack_compose || { stop_all; exit 1; }
         ensure_inference_proxy_build_if_delta || { stop_all; exit 1; }
@@ -814,8 +823,13 @@ case "${1:-}" in
         sleep 3
         run_e2e_test || { stop_all; exit 1; }
         log_info ""
-        log_info "Demo completed! Services are still running."
-        log_info "Use '$0 stop' to stop all services"
+        if [ -n "$STOP_ON_SUCCESS" ]; then
+            log_info "Demo completed! Stopping services (--stop-on-success)."
+            stop_all
+        else
+            log_info "Demo completed! Services are still running."
+            log_info "Use '$0 stop' to stop all services"
+        fi
         ;;
     help|--help|-h)
         show_usage

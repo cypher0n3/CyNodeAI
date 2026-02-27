@@ -8,17 +8,17 @@
 This document consolidates requirements for the `SBAGNT` domain.
 It defines the normative requirements for the `cynode-sba` sandbox agent runner binary.
 
-`cynode-sba` is a deterministic runner that executes job specifications.
-It is not an LLM; it MUST have access to at least one model (via worker proxy or API Egress) and may call inference only using models the job allows.
+`cynode-sba` is a full AI agent that runs inside a sandbox container and uses inference (LLM) and tools to perform work according to the job specification.
+It is not an LLM itself; it MUST have access to at least one model (via worker proxy or API Egress) and uses inference (only with models the job allows) to decide what to do.
 It builds and manages its own todo list from the job; it does not decide policy or scheduling (orchestrator and worker node do that).
 Sandbox network egress, when permitted by policy, is only via worker proxies (inference, web egress, API Egress); see `SANDBX` and [cynode_sba](../tech_specs/cynode_sba.md).
 
-This domain focuses on the runner protocol, inference allowlist, todo list, and enforcement behavior.
+This domain focuses on the agent protocol, inference allowlist, todo list, and tool/local execution behavior.
 Sandbox image and isolation requirements remain in the `SANDBX` domain.
 
 ## 2 Requirements
 
-- **REQ-SBAGNT-0001:** The system MUST provide a sandbox runner binary named `cynode-sba` that executes validated job specifications deterministically inside a sandbox container.
+- **REQ-SBAGNT-0001:** The system MUST provide a sandbox runner binary named `cynode-sba` that operates as a full AI agent (uses inference and tools) to perform work according to the job specification inside a sandbox container.
   [CYNAI.SBAGNT.Doc.CyNodeSba](../tech_specs/cynode_sba.md#spec-cynai-sbagnt-doc-cynodesba)
   <a id="req-sbagnt-0001"></a>
 
@@ -26,7 +26,7 @@ Sandbox image and isolation requirements remain in the `SANDBX` domain.
   [CYNAI.SBAGNT.ProtocolVersioning](../tech_specs/cynode_sba.md#spec-cynai-sbagnt-protocolversioning)
   <a id="req-sbagnt-0100"></a>
 
-- **REQ-SBAGNT-0101:** `cynode-sba` MUST validate the job specification schema before executing any step and MUST fail closed on validation errors.
+- **REQ-SBAGNT-0101:** `cynode-sba` MUST validate the job specification schema before starting the agent and MUST fail closed on validation errors.
   [CYNAI.SBAGNT.SchemaValidation](../tech_specs/cynode_sba.md#spec-cynai-sbagnt-schemavalidation)
   <a id="req-sbagnt-0101"></a>
 
@@ -68,7 +68,7 @@ Sandbox image and isolation requirements remain in the `SANDBX` domain.
   [CYNAI.SBAGNT.JobContext](../tech_specs/cynode_sba.md#spec-cynai-sbagnt-jobcontext)
   <a id="req-sbagnt-0111"></a>
 
-- **REQ-SBAGNT-0108:** `cynode-sba` MUST be able to build and manage its own todo list based on the job (requirements, acceptance criteria, steps).
+- **REQ-SBAGNT-0108:** `cynode-sba` MUST be able to build and manage its own todo list based on the job (requirements, acceptance criteria, and any optional suggested steps in the job).
   The todo list MUST be derived from job context and updated as the SBA executes; the implementation MUST persist todo state as needed and MAY include a summary in the result contract.
   [CYNAI.SBAGNT.TodoList](../tech_specs/cynode_sba.md#spec-cynai-sbagnt-todolist)
   <a id="req-sbagnt-0108"></a>
@@ -89,6 +89,6 @@ Sandbox image and isolation requirements remain in the `SANDBX` domain.
 - **REQ-SBAGNT-0112:** The SBA MUST have the capabilities (local execution, outbound channels, job lifecycle reporting, MCP tools) specified in CYNAI.
   SBAGNT.
   Capabilities.
-  Local execution includes arbitrary user-level commands and step types with full `/workspace` access; outbound use is only via worker proxies (lifecycle/status, inference, MCP gateway, web egress when allowed, API Egress when allowed).
+  Local execution includes arbitrary user-level commands and local tools (run_command, write_file, read_file, apply_unified_diff, list_tree, search_files) with full `/workspace` access; outbound use is only via worker proxies (lifecycle/status, inference, MCP gateway, web egress when allowed, API Egress when allowed).
   [CYNAI.SBAGNT.Capabilities](../tech_specs/cynode_sba.md#spec-cynai-sbagnt-capabilities)
   <a id="req-sbagnt-0112"></a>

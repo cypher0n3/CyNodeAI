@@ -12,8 +12,8 @@
 - [Job Specification](#job-specification)
   - [Inference Models (Job-Defined Allowlist)](#inference-models-job-defined-allowlist)
   - [Context Supplied to SBA (Requirements, Acceptance Criteria, Preferences, Skills)](#context-supplied-to-sba-requirements-acceptance-criteria-preferences-skills)
-- [Step Types (MVP)](#step-types-mvp)
-  - [Step type argument schemas and common use cases](#step-type-argument-schemas-and-common-use-cases)
+- [Local Tools (MVP)](#local-tools-mvp)
+  - [Tool argument schemas and common use cases](#tool-argument-schemas-and-common-use-cases)
 - [Result Contract](#result-contract)
   - [Canonical Failure Codes](#canonical-failure-codes)
 - [Sandbox Boundary and Security](#sandbox-boundary-and-security)
@@ -30,7 +30,7 @@
 - Traces To: [REQ-SBAGNT-0001](../requirements/sbagnt.md#req-sbagnt-0001)
 
 This document defines `cynode-sba`, the sandbox agent runner binary.
-It is a deterministic executor that runs inside a sandbox container; see [Sandbox Boundary and Security](#sandbox-boundary-and-security) for container shape and the network model (egress only via worker proxies, not airgapped).
+It is a full AI agent that runs inside a sandbox container, uses inference (LLM) to decide what to do, and invokes local and MCP tools; see [Sandbox Boundary and Security](#sandbox-boundary-and-security) for container shape and the network model (egress only via worker proxies, not airgapped).
 
 This spec is derived from the draft runner design in:
 
@@ -45,20 +45,20 @@ Abbreviation note: This doc may abbreviate "SandBox Agent" to "SBA" throughout.
 
 ## Purpose
 
-`cynode-sba` executes validated job specifications.
-It is not an LLM; it MUST have access to at least one model (via worker proxy or API Egress) and calls inference using only models the job allows.
+`cynode-sba` is a full AI agent that performs work according to a job specification.
+It is not an LLM itself; it MUST have access to at least one model (via worker proxy or API Egress) and uses inference (using only models the job allows) to plan and decide which tools to call.
 It does not decide policy or scheduling; the orchestrator and worker-node components are responsible for policy and sandbox lifecycle.
-Within the job, the SBA MUST be able to build and manage its own todo list (derived from requirements, acceptance criteria, and steps) to track and drive progress.
+Within the job, the SBA MUST be able to build and manage its own todo list (derived from requirements, acceptance criteria, and any suggested steps in the job) to track and drive progress.
 
 ## Design Principles
 
 - Small attack surface.
-- Strict schema adherence (unknown job fields rejected; validation before any step runs).
+- Strict schema adherence (unknown job fields rejected; validation before the agent is started).
 - **No command or path allowlists inside the container.**
   The sandbox agent runs in an already-sandboxed environment (the container).
   It does not need strict allowlists for commands or paths; it MAY run any **user-level** command on the system and MUST have full access to the **`/workspace`** directory.
   The process MUST NOT run as root.
-- Fail-closed on **schema validation** only (invalid job spec is rejected; no step execution).
+- Fail-closed on **schema validation** only (invalid job spec is rejected; the agent does not start).
   Runtime enforcement is bounded by the container and non-root execution, not by per-command or per-path allowlists.
   The orchestrator or worker MAY use command or path allowlists when constructing or validating job requests; the SBA does not enforce them inside the container.
 - Structured, machine-parseable results.
@@ -80,9 +80,9 @@ See [Worker Proxies (Inference and Web Egress)](#worker-proxies-inference-and-we
 
 - **Arbitrary command execution:** The SBA MAY run any **user-level** command (no root).
   There are **no command or path allowlists** inside the container; enforcement is the container boundary and non-root process.
-  See [Design Principles](#design-principles) and [Step Types (MVP)](#step-types-mvp).
-- **Step types:** The SBA executes validated steps: `run_command`, `write_file`, `read_file`, `apply_unified_diff`, `list_tree`, `search_files`.
-  Working directory and file access are under `/workspace` (full access) or as specified per step; symlink escape outside `/workspace` is rejected.
+  See [Design Principles](#design-principles) and [Local Tools (MVP)](#local-tools-mvp).
+- **Local tools:** The SBA may invoke the following local tools (via inference-driven tool calls): `run_command`, `write_file`, `read_file`, `apply_unified_diff`, `list_tree`, `search_files`.
+  Working directory and file access are under `/workspace` (full access) or as specified per tool call; symlink escape outside `/workspace` is rejected.
 - **Filesystem:** Full read/write under `/workspace`; `/job/` for job input, result staging, and artifacts; `/tmp` for temporary files.
 
 ### Outbound Channels (Worker Proxies Only)
@@ -166,7 +166,7 @@ The implementation MUST persist todo state as needed (e.g. under `/job/` or in m
 - Spec ID: `CYNAI.SBAGNT.WorkerApiIntegration` <a id="spec-cynai-sbagnt-workerapiintegration"></a>
 
 The orchestrator dispatches sandbox jobs to nodes via the [Worker API](worker_api.md) (e.g. `POST /v1/worker/jobs:run`).
-When the job uses an image that runs `cynode-sba` as the main process (the SBA runner image), the node starts the container; `cynode-sba` reads the job spec from the agreed location (e.g. `/job/job.json`), executes the steps, and writes the [Result contract](#result-contract) (e.g. `/job/result.json`).
+When the job uses an image that runs `cynode-sba` as the main process (the SBA runner image), the node starts the container; `cynode-sba` reads the job spec from the agreed location (e.g. `/job/job.json`), runs as an AI agent (using inference and tools), and writes the [Result contract](#result-contract) (e.g. `/job/result.json`).
 
 Contract alignment
 
@@ -201,7 +201,7 @@ A container-internal proxy (e.g. a sidecar that SBA POSTs to, which then forward
 
 #### In-Progress State
 
-After the SBA has read and validated the job spec (and before or as it begins executing steps), the SBA MUST confirm acceptance and signal that the job is **in progress**.
+After the SBA has read and validated the job spec (and before or as it begins work), the SBA MUST confirm acceptance and signal that the job is **in progress**.
 The SBA MUST do so via outbound call through the worker proxy (e.g. to an orchestrator job-status endpoint) and MAY additionally write a status file under `/job/` or use another implementation-defined signal.
 The node MAY also infer in-progress when the SBA has read the job and not yet exited; the orchestrator MUST be able to update job state to in-progress.
 
@@ -250,13 +250,13 @@ Inference proxy
 
 - When the node provides Ollama inference, the Node Manager runs the sandbox in a pod that includes an **inference proxy sidecar**.
   The proxy listens on `localhost:11434` inside the pod; the node injects `OLLAMA_BASE_URL=http://localhost:11434` into the sandbox container environment.
-  Any step or tool that needs inference (e.g. an LLM call from within the sandbox) MUST use this endpoint; the proxy forwards to the node's Ollama container and keeps traffic node-local.
+  Any agent use of inference (e.g. LLM calls from within the sandbox) MUST use this endpoint; the proxy forwards to the node's Ollama container and keeps traffic node-local.
 
 Web egress proxy
 
 - When the sandbox network policy allows allowlisted egress, the node configures the sandbox to use the **node-local web egress proxy** via standard proxy environment variables (`HTTP_PROXY`, `HTTPS_PROXY`, and optionally `NO_PROXY`).
   The node-local proxy forwards requests to the orchestrator's Web Egress Proxy; only allowlisted destinations are permitted.
-  Steps that perform outbound HTTP (e.g. `pip install`, `curl`, package fetches) use these env vars; the SBA and its steps do not set or override proxy URLs.
+  Tool calls that perform outbound HTTP (e.g. `run_command` with `pip install`, `curl`, package fetches) use these env vars; the SBA does not set or override proxy URLs.
 
 Inference access and allowed models
 
@@ -287,11 +287,14 @@ See:
 
 The job is a JSON object.
 Unknown fields MUST be rejected.
-Validation MUST occur before any step execution.
+Validation MUST occur before the agent is started.
 
 Minimum required fields
 
-- `protocol_version`, `job_id`, `task_id`, `constraints`, `steps`.
+- `protocol_version`, `job_id`, `task_id`, `constraints`.
+- `steps` is **optional**.
+  When present, it is used as **recommended to-dos** for the agent (e.g. merged into the todo list or shown as suggested steps); the SBA uses inference to decide what to do and is not required to execute these steps in order or at all.
+  When absent or empty, the SBA has no suggested steps and plans entirely from context (requirements, acceptance criteria, etc.).
 - Within `constraints`: `max_runtime_seconds` and `max_output_bytes` are required for timeout and output caps.
   Path and command allowlists are **not** required; the runner has full access to `/workspace` and may run any user-level command (non-root).
 - Optional in `constraints`: `ext_net_allowed` (default false) documents whether the job is permitted to use **external** network access (outside worker/orchestrator) via worker proxies (e.g. web egress for dependency downloads or API Egress for external APIs).
@@ -383,23 +386,23 @@ Example shape (with optional context)
 - `constraints.ext_net_allowed`: when `true`, the job is permitted to use external network access (e.g. web egress, API Egress) via worker proxies; when `false`, only worker/orchestrator-mediated paths (inference, MCP, status) apply.
   The SBA always has proxy outbound for lifecycle and MCP.
 
-## Step Types (MVP)
+## Local Tools (MVP)
 
 - Spec ID: `CYNAI.SBAGNT.Enforcement` <a id="spec-cynai-sbagnt-enforcement"></a>
 
-The MVP step types are deterministic primitives.
-The runner executes as a **non-root** user and has **full access to `/workspace`**; there are no command allowlists or path allowlists inside the container.
-Step flexibility: the order and presence of steps MAY be implementation-defined (e.g. optional steps, reordering for efficiency); the SBA MUST still satisfy the job context and acceptance criteria.
+The SBA is an AI agent that uses inference to decide what to do; it may invoke the following local tools.
+When the agent calls a tool, the runner executes that tool as a **non-root** user with **full access to `/workspace`**; there are no command allowlists or path allowlists inside the container.
+Tool results are capped and reported in the result contract; the agent continues until it concludes or hits constraints.
 
 - `run_command`
-  - Runs a command (argv form; no shell interpretation unless the step type explicitly requests it).
+  - Runs a command (argv form; no shell interpretation unless the tool explicitly requests it).
     Executed as the same non-root user; may run any user-level command with full access to `/workspace`.
-    Working directory for the step is under `/workspace` or as specified in the step.
+    Working directory is under `/workspace` or as specified in the tool args.
 - `write_file`
   - Writes a file under `/workspace` (or a path relative to workspace).
     Rejects symlink escape outside workspace.
 - `read_file`
-  - Reads a file under `/workspace` (or a path relative to workspace) with a hard size cap from `constraints.max_output_bytes` or step-level cap.
+  - Reads a file under `/workspace` (or a path relative to workspace) with a hard size cap from `constraints.max_output_bytes` or tool-level cap.
 - `apply_unified_diff`
   - Applies a unified diff relative to the workspace root.
     Rejects patches that would write outside `/workspace`.
@@ -409,12 +412,12 @@ Step flexibility: the order and presence of steps MAY be implementation-defined 
   - Search for a pattern in files under `/workspace`; returns matching lines (path:line:content) with output capped by `max_output_bytes`.
     Does not depend on grep/rg in the image.
 
-### Step Type Argument Schemas and Common Use Cases
+### Tool Argument Schemas and Common Use Cases
 
 - Spec ID: `CYNAI.SBAGNT.StepTypeSchemas` <a id="spec-cynai-sbagnt-steptypeschemas"></a>
 
-All step paths MUST be under `/workspace` (or the step-specified root); resolution MUST reject symlink escape outside workspace.
-Output from steps that return content (e.g. `run_command`, `read_file`, `list_tree`) MUST be capped by `constraints.max_output_bytes` or a step-level cap; truncation MUST be indicated in the step result (e.g. suffix or status).
+All tool paths MUST be under `/workspace` (or the tool-specified root); resolution MUST reject symlink escape outside workspace.
+Output from tools that return content (e.g. `run_command`, `read_file`, `list_tree`, `search_files`) MUST be capped by `constraints.max_output_bytes` or a tool-level cap; truncation MUST be indicated in the tool result (e.g. suffix or status).
 
 #### Run_command_command Step
 
@@ -428,7 +431,7 @@ Output from steps that return content (e.g. `run_command`, `read_file`, `list_tr
 - Required args: `path` (string; file path relative to workspace).
   Optional args: `start_line`, `end_line` (integers, 1-based inclusive; when both present, only that line range is read; implementations MAY support this to avoid reading large files).
 - When line range is not supported or not provided, the full file is read.
-  Output MUST be capped; out-of-range or missing file MUST produce a deterministic error in the step result.
+  Output MUST be capped; out-of-range or missing file MUST produce a deterministic error in the tool result.
 
 #### Write_file_file Step
 

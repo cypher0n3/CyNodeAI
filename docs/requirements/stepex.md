@@ -16,6 +16,7 @@ Sandbox boundary and isolation follow the `SANDBX` domain; dispatch uses the sam
 ## 2 Requirements
 
 - **REQ-STEPEX-0001:** The system MUST provide a sandbox runner binary that executes a validated **ordered list of steps** without using inference (no LLM calls).
+  The job MUST include a non-empty `steps` array; the step executor MUST validate this and MUST execute steps exactly in array order.
   [CYNAI.STEPEX.Doc.CyNodeStepExecutor](../tech_specs/cynode_step_executor.md#spec-cynai-stepex-doc-cynodestepexecutor)
   <a id="req-stepex-0001"></a>
 

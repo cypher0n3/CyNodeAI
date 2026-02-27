@@ -55,8 +55,8 @@ It is intended for simple, deterministic jobs (e.g. run these commands, write th
   - sba (`cynode-sba`): Built and updated from job context
   - step executor (`cynode-sse`): Not applicable
 - **Aspect:** Step source
-  - sba (`cynode-sba`): Job may suggest steps; agent can add/reorder
-  - step executor (`cynode-sse`): Job defines fixed ordered `steps` array
+  - sba (`cynode-sba`): Job may include optional `steps` as recommended to-dos; agent decides what to do
+  - step executor (`cynode-sse`): Job MUST include non-empty `steps` array; executor runs them exactly in order
 - **Aspect:** MCP in loop
   - sba (`cynode-sba`): Yes (sandbox allowlist tools)
   - step executor (`cynode-sse`): No (optional artifact staging only)
@@ -82,9 +82,10 @@ Validation MUST occur before any step execution.
 Minimum required fields
 
 - `protocol_version`, `job_id`, `task_id`, `constraints`, `steps`.
+- `steps` is **required** and MUST be non-empty for step-executor jobs.
+  The step executor MUST validate this (e.g. using `ValidateStepExecutorJobSpec` in the shared sbajob contract) and MUST fail closed if `steps` is missing or empty.
+  The `steps` array defines the **exact ordered sequence** of operations to perform; the step executor executes them strictly in array index order, with no inference or agent loop.
 - Within `constraints`: `max_runtime_seconds` and `max_output_bytes` are required for timeout and output caps.
-- `steps`: array of step objects in **execution order**.
-  The executor runs steps in array index order.
 - No `inference` or `context` object is required; the step executor does not use them.
   The job MUST NOT require inference or MCP tool calls for execution.
 
@@ -117,7 +118,7 @@ Example minimal job shape
 - Spec ID: `CYNAI.STEPEX.StepTypes` <a id="spec-cynai-stepex-steptypes"></a>
 
 The step executor reuses the same **primitive step types** as the SBA for consistency.
-Semantics (working directory, path rules, non-root, full `/workspace` access) are as defined in [cynode_sba.md - Step Types (MVP)](cynode_sba.md#spec-cynai-sbagnt-enforcement).
+Semantics (working directory, path rules, non-root, full `/workspace` access) are as defined in [cynode_sba.md - Local Tools (MVP)](cynode_sba.md#spec-cynai-sbagnt-enforcement).
 
 - `run_command` - Runs a command (argv form).
   Working directory under `/workspace` or as specified in the step.

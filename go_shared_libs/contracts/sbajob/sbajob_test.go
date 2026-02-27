@@ -69,6 +69,58 @@ func TestParseAndValidateJobSpec_Valid(t *testing.T) {
 	}
 }
 
+func TestParseAndValidateJobSpec_StepsOptional(t *testing.T) {
+	data := []byte(`{
+		"protocol_version": "1.0",
+		"job_id": "j1",
+		"task_id": "t1",
+		"constraints": {"max_runtime_seconds": 300, "max_output_bytes": 1048576}
+	}`)
+	spec, err := ParseAndValidateJobSpec(data)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if spec.Steps != nil {
+		t.Errorf("Steps should be nil when omitted, got len=%d", len(spec.Steps))
+	}
+}
+
+func TestValidateStepExecutorJobSpec_EmptyStepsFails(t *testing.T) {
+	spec := &JobSpec{
+		ProtocolVersion: "1.0",
+		JobID:           "j1",
+		TaskID:          "t1",
+		Constraints:     JobConstraints{MaxRuntimeSeconds: 300, MaxOutputBytes: 1048576},
+		Steps:           nil,
+	}
+	err := ValidateStepExecutorJobSpec(spec)
+	if err == nil {
+		t.Fatal("expected error for nil steps")
+	}
+	var ve *ValidationError
+	if !errors.As(err, &ve) || ve.Field != "steps" {
+		t.Errorf("expected steps ValidationError, got %v", err)
+	}
+	spec.Steps = []StepSpec{}
+	err = ValidateStepExecutorJobSpec(spec)
+	if err == nil {
+		t.Fatal("expected error for empty steps")
+	}
+}
+
+func TestValidateStepExecutorJobSpec_Valid(t *testing.T) {
+	spec := &JobSpec{
+		ProtocolVersion: "1.0",
+		JobID:           "j1",
+		TaskID:          "t1",
+		Constraints:     JobConstraints{MaxRuntimeSeconds: 300, MaxOutputBytes: 1048576},
+		Steps:           []StepSpec{{Type: "run_command", Args: json.RawMessage(`{"argv":["echo","hi"]}`)}},
+	}
+	if err := ValidateStepExecutorJobSpec(spec); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
 func TestParseAndValidateJobSpec_UnknownMajorVersion(t *testing.T) {
 	data := []byte(`{
 		"protocol_version": "99.0",

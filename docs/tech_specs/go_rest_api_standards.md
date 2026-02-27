@@ -175,6 +175,16 @@ Traces To:
 - [REQ-STANDS-0116](../requirements/stands.md#req-stands-0116)
   - Prefer wrapping `net/http` handlers and clients with official instrumentation (for example `otelhttp`).
 
+Health and readiness endpoints
+
+All APIs MUST offer:
+
+- `GET /healthz`: liveness probe; MUST return 200 when the process is running (e.g. HTTP server is up).
+- `GET /readyz`: readiness probe; MUST return 200 only when the service is ready to accept traffic (e.g. dependencies connected); otherwise MUST return 503 with an actionable reason.
+
+Both endpoints MUST be unauthenticated so load balancers and orchestrators can probe them.
+Service-specific specs (e.g. orchestrator, Worker API) define exact response bodies and 503 semantics.
+
 Recommended log fields
 
 - `request_id`

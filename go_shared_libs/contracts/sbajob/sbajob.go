@@ -14,14 +14,16 @@ import (
 // Unknown major versions must be refused per CYNAI.SBAGNT.ProtocolVersioning.
 const SupportedProtocolMajor = 1
 
-// JobSpec is the SBA job specification (job.json).
-// Validation MUST occur before any step runs; unknown fields are rejected.
+// JobSpec is the shared job specification (job.json) used by both the SBA and the step executor.
+// Validation MUST occur before the runner starts; unknown fields are rejected.
+// Steps is optional in the schema: when absent or empty, the SBA treats it as no suggested to-dos;
+// the step executor requires steps to be present and non-empty (use ValidateStepExecutorJobSpec).
 type JobSpec struct {
 	ProtocolVersion string         `json:"protocol_version"`
 	JobID           string         `json:"job_id"`
 	TaskID          string         `json:"task_id"`
 	Constraints     JobConstraints `json:"constraints"`
-	Steps           []StepSpec     `json:"steps"`
+	Steps           []StepSpec     `json:"steps,omitempty"`
 	Inference       *InferenceSpec `json:"inference,omitempty"`
 	Context         *ContextSpec   `json:"context,omitempty"`
 }
@@ -148,7 +150,20 @@ func ValidateJobSpec(spec *JobSpec) error {
 	if spec.Constraints.MaxOutputBytes <= 0 {
 		return &ValidationError{Field: "constraints.max_output_bytes", Message: "must be positive"}
 	}
-	// steps may be empty but must be present (decoded as nil or [])
+	// steps is optional: nil or empty is valid for SBA; step executor must call ValidateStepExecutorJobSpec
+	return nil
+}
+
+// ValidateStepExecutorJobSpec validates the job spec for the step executor: it MUST pass ValidateJobSpec
+// and MUST have at least one step. The step executor executes steps exactly in order; use this when the
+// job is intended for cynode-sse (or any step-executor runner).
+func ValidateStepExecutorJobSpec(spec *JobSpec) error {
+	if err := ValidateJobSpec(spec); err != nil {
+		return err
+	}
+	if len(spec.Steps) == 0 {
+		return &ValidationError{Field: "steps", Message: "required and must be non-empty for step executor"}
+	}
 	return nil
 }
 
