@@ -73,7 +73,7 @@ clean:
       rm -rf "$root/$dir"
     done
     for m in {{ go_modules }}; do
-      (cd "$root/$m" && go clean -testcache 2>/dev/null) || true
+      (pushd "$root/$m" >/dev/null && go clean -testcache 2>/dev/null && popd >/dev/null 2>/dev/null) || true
     done
     echo "Done."
 
@@ -629,13 +629,15 @@ test: test-go
 test-bdd timeout="": install-go
     #!/usr/bin/env bash
     set -e
-    cd "{{ root_dir }}"
+    pushd "{{ root_dir }}" >/dev/null
+    trap 'popd >/dev/null 2>/dev/null' EXIT
     extra=()
     [ -n "{{ timeout }}" ] && extra=(-timeout "{{ timeout }}")
     for m in {{ go_modules }}; do
       [ -d "./$m/_bdd" ] || continue
       go test -v "${extra[@]}" "./$m/_bdd" -count=1
     done
+    popd >/dev/null 2>/dev/null
 
 # E2E: start Postgres, orchestrator, one worker node; run happy path (login, create task, get result).
 # Requires: podman or docker, jq. Stops existing services first; leaves services running after.
@@ -657,6 +659,30 @@ e2e-stop-on-success: install-go
 e2e-stop:
     @./scripts/setup-dev.sh stop
 
+# Python dev setup (scripts/setup_dev.py). Usage: just setup-dev-py <command> [OPTIONS]
+# Commands: start-db, stop-db, clean-db, migrate, build, build-e2e-images, start, stop, test-e2e, full-demo, help.
+# Example: just setup-dev full-demo --stop-on-success
+setup-dev CMD *ARGS:
+    #!/usr/bin/env bash
+    set -e
+    pushd "{{ root_dir }}" >/dev/null
+    trap 'popd >/dev/null 2>/dev/null' EXIT
+    export PYTHONPATH="$PWD"
+    python3 scripts/setup_dev.py {{ CMD }} {{ ARGS }}
+    popd >/dev/null 2>/dev/null
+
+# Python E2E test suite (scripts/test_scripts/run_e2e.py). Pass options through.
+# Options: --parity-only, --no-build, --skip-ollama, --list; unittest: -v, -k PATTERN, -f.
+# Example: just e2e-py --parity-only --no-build -v
+e2e-py *ARGS:
+    #!/usr/bin/env bash
+    set -e
+    pushd "{{ root_dir }}" >/dev/null
+    trap 'popd >/dev/null 2>/dev/null' EXIT
+    export PYTHONPATH="$PWD"
+    python3 scripts/test_scripts/run_e2e.py {{ ARGS }}
+    popd >/dev/null 2>/dev/null
+
 # Create .venv and install Python lint tooling (scripts/requirements-lint.txt). Use with lint-python.
 venv:
     #!/usr/bin/env bash
@@ -668,6 +694,7 @@ venv:
     .venv/bin/pip install -q --upgrade pip
     .venv/bin/pip install -q -r scripts/requirements-lint.txt
     echo "Created .venv with lint tooling. Use 'just lint-python' (it will use .venv when present)."
+    popd >/dev/null 2>/dev/null
 
 # Alias for venv (matches install-* naming for setup)
 install-python-venv: venv
@@ -704,7 +731,7 @@ lint-python paths="scripts,.ci_scripts":
     echo "Running vulture unused code detection (non-gating)..."
     vulture $LINT_PATHS --min-confidence 80 || true
     echo "Running bandit security scan (non-gating)..."
-    bandit -r $LINT_PATHS; BANDIT_RESULT=$?
+    bandit -r $LINT_PATHS -c bandit.yaml; BANDIT_RESULT=$?
     echo ""; echo "Lint exit codes: flake8=$FLAKE8_RESULT pylint=$PYLINT_RESULT xenon=$XENON_RESULT radon_mi=$MI_RESULT bandit=$BANDIT_RESULT"
     # Fail if any gating linter reported errors (radon cc/mi -s and vulture are non-gating)
     [ "$FLAKE8_RESULT" -ne 0 ] || [ "$PYLINT_RESULT" -ne 0 ] || [ "$XENON_RESULT" -ne 0 ] || [ "$MI_RESULT" -ne 0 ] || [ "$BANDIT_RESULT" -ne 0 ] && exit 1; exit 0

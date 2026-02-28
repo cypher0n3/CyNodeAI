@@ -1,0 +1,106 @@
+# Config for setup_dev (parity with scripts/setup-dev.sh). From os.environ with defaults.
+
+import os
+import subprocess
+import tempfile
+
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+PROJECT_ROOT = os.path.dirname(SCRIPT_DIR)
+
+
+class _RuntimeState:
+    """Container for runtime-detected values (avoids global statement)."""
+    RUNTIME = None
+    CONTAINER_HOST_ALIAS = None
+
+
+# Postgres (standalone container for start-db)
+POSTGRES_CONTAINER_NAME = "cynodeai-postgres-dev"
+POSTGRES_PORT = os.environ.get("POSTGRES_PORT", "5432")
+POSTGRES_USER = os.environ.get("POSTGRES_USER", "cynodeai")
+POSTGRES_PASSWORD = os.environ.get("POSTGRES_PASSWORD", "cynodeai-dev-password")
+POSTGRES_DB = os.environ.get("POSTGRES_DB", "cynodeai")
+POSTGRES_IMAGE = os.environ.get("POSTGRES_IMAGE", "pgvector/pgvector:pg16")
+
+# Orchestrator
+CONTROL_PLANE_CONTAINER_NAME = os.environ.get(
+    "CONTROL_PLANE_CONTAINER_NAME", "cynodeai-control-plane"
+)
+USER_GATEWAY_CONTAINER_NAME = os.environ.get(
+    "USER_GATEWAY_CONTAINER_NAME", "cynodeai-user-gateway"
+)
+ORCHESTRATOR_PORT = os.environ.get("ORCHESTRATOR_PORT", "12080")
+CONTROL_PLANE_PORT = os.environ.get("CONTROL_PLANE_PORT", "12082")
+JWT_SECRET = os.environ.get("JWT_SECRET", "dev-jwt-secret-change-in-production")
+NODE_PSK = os.environ.get("NODE_PSK", "dev-node-psk-secret")
+ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "admin123")
+WORKER_PORT = os.environ.get("WORKER_PORT", "12090")
+WORKER_API_BEARER_TOKEN = os.environ.get(
+    "WORKER_API_BEARER_TOKEN", "dev-worker-api-token-change-me"
+)
+NODE_SLUG = os.environ.get("NODE_SLUG", "dev-node-1")
+NODE_NAME = os.environ.get("NODE_NAME", "Development Node")
+
+COMPOSE_FILE = os.path.join(PROJECT_ROOT, "orchestrator", "docker-compose.yml")
+NODE_MANAGER_PID_FILE = os.path.join(
+    tempfile.gettempdir(), "cynodeai-node-manager.pid"
+)
+NODE_MANAGER_BIN = os.path.join(PROJECT_ROOT, "worker_node", "bin", "node-manager")
+NODE_MANAGER_WORKER_API_BIN = os.path.join(PROJECT_ROOT, "worker_node", "bin", "worker-api")
+
+
+def ensure_runtime():
+    """Set RUNTIME and CONTAINER_HOST_ALIAS. Return True if ok."""
+    if _RuntimeState.RUNTIME:
+        return True
+    for r in ("podman", "docker"):
+        try:
+            subprocess.run(  # nosec B603 - dev script, runtime detection
+                [r, "ps"],
+                capture_output=True,
+                timeout=5,
+                check=False,
+                shell=False,
+            )
+            _RuntimeState.RUNTIME = r
+            _RuntimeState.CONTAINER_HOST_ALIAS = (
+                os.environ.get("CONTAINER_HOST_ALIAS", "host.containers.internal")
+                if r == "podman"
+                else os.environ.get("CONTAINER_HOST_ALIAS", "host.docker.internal")
+            )
+            _sync_runtime_aliases()
+            return True
+        except (subprocess.TimeoutExpired, FileNotFoundError):
+            continue
+    return False
+
+
+# Public aliases for impl (call ensure_runtime() before using)
+RUNTIME = None
+CONTAINER_HOST_ALIAS = None
+
+
+def _sync_runtime_aliases():
+    """Update RUNTIME and CONTAINER_HOST_ALIAS from _RuntimeState (for impl)."""
+    global RUNTIME, CONTAINER_HOST_ALIAS  # noqa: PLW0603 - intentional module state
+    RUNTIME = _RuntimeState.RUNTIME
+    CONTAINER_HOST_ALIAS = _RuntimeState.CONTAINER_HOST_ALIAS
+
+
+def compose_env():
+    """Env dict for compose up (exported to subprocess)."""
+    ensure_runtime()
+    _sync_runtime_aliases()
+    return {
+        "POSTGRES_USER": POSTGRES_USER,
+        "POSTGRES_PASSWORD": POSTGRES_PASSWORD,
+        "POSTGRES_DB": POSTGRES_DB,
+        "POSTGRES_PORT": POSTGRES_PORT,
+        "JWT_SECRET": JWT_SECRET,
+        "NODE_REGISTRATION_PSK": NODE_PSK,
+        "WORKER_API_BEARER_TOKEN": WORKER_API_BEARER_TOKEN,
+        "CONTROL_PLANE_PORT": CONTROL_PLANE_PORT,
+        "ORCHESTRATOR_PORT": ORCHESTRATOR_PORT,
+        "WORKER_API_TARGET_URL": f"http://{CONTAINER_HOST_ALIAS}:{WORKER_PORT}",
+        "BOOTSTRAP_ADMIN_PASSWORD": ADMIN_PASSWORD,
+    }
