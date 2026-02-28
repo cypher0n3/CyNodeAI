@@ -626,12 +626,18 @@ run_e2e_test() {
         log_info "Skipping inference-in-sandbox test (INFERENCE_PROXY_IMAGE not set)"
     fi
 
-    # Test 5c: Prompt-mode task (cynork-dev; natural-language prompt -> model output)
+    # Test 5c: Prompt-mode task (cynork-dev; natural-language prompt -> model output; retry on transient EOF)
     log_info "Test 5c: Create task with natural-language prompt (cynork-dev) and verify model output..."
-    PROMPT_TASK_OUT=$("$CYNORK_BIN" --config "$E2E_CONFIG" task create -p "What model are you? Reply in one short sentence." -o json 2>&1) || true
-    PROMPT_TASK_ID=$(echo "$PROMPT_TASK_OUT" | jq -r '.task_id // empty')
+    PROMPT_TASK_ID=""
+    for attempt in 1 2 3; do
+        [ "$attempt" -gt 1 ] && { log_info "Retry $attempt/3 (prompt task create)..."; sleep 5; }
+        PROMPT_TASK_OUT=$("$CYNORK_BIN" --config "$E2E_CONFIG" task create -p "What model are you? Reply in one short sentence." -o json 2>&1) || true
+        PROMPT_TASK_ID=$(echo "$PROMPT_TASK_OUT" | jq -r '.task_id // empty' 2>/dev/null || true)
+        [ -n "$PROMPT_TASK_ID" ] && break
+        log_warn "Create prompt task attempt $attempt failed: $PROMPT_TASK_OUT"
+    done
     if [ -z "$PROMPT_TASK_ID" ]; then
-        log_error "Create prompt task failed: $PROMPT_TASK_OUT"
+        log_error "Create prompt task failed after 3 attempts: $PROMPT_TASK_OUT"
         return 1
     fi
     log_info "Prompt task created: $PROMPT_TASK_ID; polling for result (up to 90s)..."
