@@ -5,13 +5,15 @@ import (
 	"testing"
 )
 
+const mockLLMWantHello = "hello"
+
 func TestMockLLM_Call(t *testing.T) {
-	m := &MockLLM{Responses: []string{"hello"}}
+	m := &MockLLM{Responses: []string{mockLLMWantHello}}
 	out, err := m.Call(context.Background(), "prompt")
 	if err != nil {
 		t.Fatalf("Call: %v", err)
 	}
-	if out != "hello" {
+	if out != mockLLMWantHello {
 		t.Errorf("out = %q", out)
 	}
 	out2, _ := m.Call(context.Background(), "second")

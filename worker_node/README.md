@@ -30,7 +30,7 @@ This module depends on shared contracts in [`go_shared_libs/`](../go_shared_libs
 
 Prefer repo-level tooling in the root [`justfile`](../justfile) so your workflow stays consistent across modules.
 
-### 3.1 Run With the Orchestrator End-to-End Flow
+### 3.1 Run With the Orchestrator End-To-End Flow
 
 Use the repo-level end-to-end recipe to start Postgres, the orchestrator, and a worker node, then run a basic happy path.
 Run `just e2e` from the repository root.

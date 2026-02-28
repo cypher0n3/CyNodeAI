@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -28,6 +29,7 @@ const (
 	jobSpecFilename    = "job.json"
 	resultFilename     = "result.json"
 	ollamaBaseURLInPod = "http://localhost:11434"
+	runtimePodman      = "podman"
 )
 
 // Executor executes sandbox jobs.
@@ -103,7 +105,7 @@ func (e *Executor) RunJob(ctx context.Context, req *workerapi.RunJobRequest, wor
 	}
 
 	// When UseInference is set and node has proxy image + Ollama URL, run in pod with inference proxy (worker_node.md Option A).
-	if req.Sandbox.UseInference && e.ollamaUpstreamURL != "" && e.inferenceProxyImage != "" && e.runtime == "podman" {
+	if req.Sandbox.UseInference && e.ollamaUpstreamURL != "" && e.inferenceProxyImage != "" && e.runtime == runtimePodman {
 		return e.runJobWithPodInference(ctx, req, resp, workspaceDir)
 	}
 
@@ -263,8 +265,41 @@ func (e *Executor) runJobSBA(ctx context.Context, req *workerapi.RunJobRequest, 
 		setSBAError(resp, "failed to write job.json: "+err.Error())
 		return resp, nil
 	}
+	resultPath := filepath.Join(jobDir, resultFilename)
+	// Pre-create result.json so the container can overwrite it; avoid EACCES when container UID != host (rootless).
+	// Use invalid JSON so applySbaResultFromDir won't set SbaResult if the container never runs.
+	if err := os.WriteFile(resultPath, []byte("\n"), 0o666); err != nil {
+		setSBAError(resp, "failed to pre-create result.json: "+err.Error())
+		return resp, nil
+	}
+	if err := os.Chmod(jobDir, 0o777); err != nil {
+		setSBAError(resp, "failed to chmod job dir: "+err.Error())
+		return resp, nil
+	}
 
-	args := buildSBARunArgs(req, jobDir, workspaceDir, e)
+	// When no workspace is provided, mount a host-owned temp dir at /workspace so the container can chdir
+	// (image /workspace is owned by sba:1000, which may not match host UID with --userns=keep-id).
+	workspaceDirToUse := workspaceDir
+	if workspaceDirToUse == "" {
+		tmpWorkspace, err := os.MkdirTemp("", "cynodeai-ws-")
+		if err != nil {
+			setSBAError(resp, "failed to create temp workspace: "+err.Error())
+			return resp, nil
+		}
+		defer func() { _ = os.RemoveAll(tmpWorkspace) }()
+		workspaceDirToUse = tmpWorkspace
+	}
+
+	args := buildSBARunArgs(req, jobDir, workspaceDirToUse, e)
+	fullArgv := append([]string{e.runtime}, args...)
+	diag := &workerapi.RunDiagnostics{
+		Runtime:      e.runtime,
+		RuntimeArgv:  fullArgv,
+		JobDir:       jobDir,
+		WorkspaceDir: workspaceDirToUse,
+		Image:        req.Sandbox.Image,
+		ContainerStarted: false,
+	}
 	cmd := exec.CommandContext(ctx, e.runtime, args...)
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
@@ -272,6 +307,9 @@ func (e *Executor) runJobSBA(ctx context.Context, req *workerapi.RunJobRequest, 
 	runErr := cmd.Run()
 	endedAt := time.Now().UTC()
 	resp.EndedAt = endedAt.Format(time.RFC3339)
+	// Container started if the runtime process ran (success or exit code); false if e.g. executable not found.
+	diag.ContainerStarted = runErr == nil || isExitError(runErr)
+	resp.RunDiagnostics = diag
 
 	resp.Truncated.Stdout = len(stdout.String()) > e.maxOutputBytes
 	resp.Truncated.Stderr = len(stderr.String()) > e.maxOutputBytes
@@ -290,6 +328,11 @@ func (e *Executor) runJobSBA(ctx context.Context, req *workerapi.RunJobRequest, 
 	return resp, nil
 }
 
+func isExitError(err error) bool {
+	_, ok := err.(*exec.ExitError)
+	return ok
+}
+
 func setSBAError(resp *workerapi.RunJobResponse, msg string) {
 	resp.EndedAt = time.Now().UTC().Format(time.RFC3339)
 	resp.Status = workerapi.StatusFailed
@@ -298,40 +341,60 @@ func setSBAError(resp *workerapi.RunJobResponse, msg string) {
 }
 
 func buildSBARunArgs(req *workerapi.RunJobRequest, jobDir, workspaceDir string, e *Executor) []string {
-	args := []string{"run", "--rm", "--network=none",
-		"-v", fmt.Sprintf("%s:%s", jobDir, jobMount),
+	args := []string{"run", "--rm", "--network=none"}
+	// Rootless podman: keep host UID so the container can write to the bind-mounted jobDir (result.json).
+	if e.runtime == runtimePodman {
+		args = append(args, "--userns=keep-id")
+	}
+	// :z (SELinux shared) so the container can read/write the mount when SELinux is enabled.
+	jobMountOpt := fmt.Sprintf("%s:%s", jobDir, jobMount)
+	if e.runtime == runtimePodman {
+		jobMountOpt += ":z"
+	}
+	args = append(args,
+		"-v", jobMountOpt,
 		"--label", fmt.Sprintf("cynodeai.task_id=%s", req.TaskID),
 		"--label", fmt.Sprintf("cynodeai.job_id=%s", req.JobID),
-	}
+	)
 	if workspaceDir != "" {
-		args = append(args, "-v", fmt.Sprintf("%s:%s", workspaceDir, workspaceMount), "-w", workspaceMount)
+		wsMountOpt := fmt.Sprintf("%s:%s", workspaceDir, workspaceMount)
+		if e.runtime == runtimePodman {
+			wsMountOpt += ":z"
+		}
+		args = append(args, "-v", wsMountOpt, "-w", workspaceMount)
 	}
 	env := e.buildTaskEnv(req, workspaceMount)
 	for k, v := range env {
 		args = append(args, "-e", fmt.Sprintf("%s=%s", k, v))
 	}
-	args = append(args, req.Sandbox.Image)
+	// Direct step execution (no LLM) so jobs with only run_command/write_file/etc. succeed without Ollama in container.
+	args = append(args, "-e", "SBA_DIRECT_STEPS=1", req.Sandbox.Image)
 	if len(req.Sandbox.Command) > 0 {
 		args = append(args, req.Sandbox.Command...)
 	}
 	return args
 }
 
-func applySbaResultFromDir(jobDir string, resp *workerapi.RunJobResponse) {
-	data, err := os.ReadFile(filepath.Join(jobDir, resultFilename))
-	if err != nil {
-		if resp.Status != workerapi.StatusTimeout && resp.Status == "" {
-			resp.Status = workerapi.StatusFailed
-			resp.ExitCode = -1
+func setSbaFailedIfUnset(resp *workerapi.RunJobResponse, stderrMsg string) {
+	if resp.Status != workerapi.StatusTimeout && resp.Status == "" {
+		resp.Status = workerapi.StatusFailed
+		resp.ExitCode = -1
+		if resp.Stderr == "" {
+			resp.Stderr = stderrMsg
 		}
+	}
+}
+
+func applySbaResultFromDir(jobDir string, resp *workerapi.RunJobResponse) {
+	resultPath := filepath.Join(jobDir, resultFilename)
+	data, err := os.ReadFile(resultPath)
+	if err != nil {
+		setSbaFailedIfUnset(resp, "result.json missing or unreadable: "+err.Error())
 		return
 	}
 	var sbaResult sbajob.Result
 	if json.Unmarshal(data, &sbaResult) != nil {
-		if resp.Status != workerapi.StatusTimeout && resp.Status == "" {
-			resp.Status = workerapi.StatusFailed
-			resp.ExitCode = -1
-		}
+		setSbaFailedIfUnset(resp, "result.json invalid or empty (container may have exited before writing result)")
 		return
 	}
 	resp.SbaResult = &sbaResult
@@ -414,13 +477,24 @@ func (e *Executor) buildTaskEnv(req *workerapi.RunJobRequest, workspaceDirValue 
 }
 
 // setRunError sets resp status/exit/stderr from an execution error.
+// Preserves existing resp.Stderr (container/runtime output) when appending the error.
 func (e *Executor) setRunError(resp *workerapi.RunJobResponse, err error) {
 	resp.Status = workerapi.StatusFailed
+	errMsg := err.Error()
 	if exitErr, ok := err.(*exec.ExitError); ok {
 		resp.ExitCode = exitErr.ExitCode()
+		if resp.Stderr != "" {
+			resp.Stderr = "runtime exit " + strconv.Itoa(exitErr.ExitCode()) + ": " + errMsg + "\n--- runtime stderr ---\n" + resp.Stderr
+		} else {
+			resp.Stderr = "runtime exit " + strconv.Itoa(exitErr.ExitCode()) + ": " + errMsg
+		}
 	} else {
 		resp.ExitCode = -1
-		resp.Stderr = err.Error()
+		if resp.Stderr != "" {
+			resp.Stderr = errMsg + "\n--- runtime stderr ---\n" + resp.Stderr
+		} else {
+			resp.Stderr = errMsg
+		}
 	}
 }
 

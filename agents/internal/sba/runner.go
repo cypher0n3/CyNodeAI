@@ -383,6 +383,77 @@ func resolveWorkspacePath(workspace, path string) string {
 	return full
 }
 
+// runOneStepDirect runs a single step and returns its result (for RunStepsDirect).
+func runOneStepDirect(ctx context.Context, i int, step sbajob.StepSpec, maxOut int, workspace string) sbajob.StepResult {
+	switch step.Type {
+	case stepTypeRunCommand:
+		return runCommandStep(ctx, i, step.Args, maxOut, workspace)
+	case "write_file":
+		return writeFileStep(i, step.Args, workspace)
+	case "read_file":
+		return readFileStep(i, step.Args, maxOut, workspace)
+	case "apply_unified_diff":
+		return applyUnifiedDiffStep(i, step.Args, workspace)
+	case "list_tree":
+		return listTreeStep(i, step.Args, maxOut, workspace)
+	case "search_files":
+		return searchFilesStep(i, step.Args, maxOut, workspace)
+	default:
+		sr := sbajob.StepResult{Index: i, Type: step.Type, Status: statusFailed}
+		sr.Error = "unsupported step type for direct execution: " + step.Type
+		return sr
+	}
+}
+
+func setDirectResultFailure(result *sbajob.Result, status, code, msg, jobDir string) {
+	result.Status = status
+	result.FailureCode = &code
+	result.FailureMessage = &msg
+	if jobDir != "" {
+		collectArtifactsToResult(jobDir, result)
+	}
+}
+
+// RunStepsDirect runs the job's steps in order without the LLM agent.
+// Use when SBA_DIRECT_STEPS=1 or when the job has only direct-executable steps and no inference.
+// Returns the result contract; call collectArtifactsToResult if jobDir is set.
+func RunStepsDirect(ctx context.Context, spec *sbajob.JobSpec, workspace, jobDir string) *sbajob.Result {
+	if workspace == "" {
+		workspace = "/workspace"
+	}
+	result := &sbajob.Result{
+		ProtocolVersion: spec.ProtocolVersion,
+		JobID:           spec.JobID,
+		Status:          statusSuccess,
+		Steps:           nil,
+		Artifacts:       nil,
+	}
+	maxOut := spec.Constraints.MaxOutputBytes
+	if maxOut <= 0 {
+		maxOut = 1024
+	}
+	for i, step := range spec.Steps {
+		sr := runOneStepDirect(ctx, i, step, maxOut, workspace)
+		result.Steps = append(result.Steps, sr)
+		if sr.Status != statusSuccess && sr.Status != "" {
+			msg := sr.Error
+			if msg == "" {
+				msg = "step " + step.Type + " failed"
+			}
+			setDirectResultFailure(result, statusFailed, "step_failed", msg, jobDir)
+			return result
+		}
+		if ctx.Err() != nil {
+			setDirectResultFailure(result, statusTimeout, statusTimeout, "job exceeded max_runtime_seconds", jobDir)
+			return result
+		}
+	}
+	if jobDir != "" {
+		collectArtifactsToResult(jobDir, result)
+	}
+	return result
+}
+
 func capString(s string, maxBytes int) string {
 	if maxBytes <= 0 {
 		return s

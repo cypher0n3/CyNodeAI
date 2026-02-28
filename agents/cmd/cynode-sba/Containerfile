@@ -43,8 +43,9 @@ RUN dnf install -y --setopt=install_weak_deps=False \
 RUN npm install -g markdownlint-cli2
 # Non-root user per REQ-SBAGNT-0102 and sandbox_container.md
 RUN useradd -m -u 1000 -d /home/sba sba
-# /workspace and /job are bind-mounted by the node at runtime; image only provides placeholders
-RUN mkdir -p /workspace /job/artifacts && chown -R sba:sba /workspace /job
+# /workspace and /job are bind-mounted by the node at runtime; image only provides placeholders.
+# 755 so any container user (e.g. with --userns=keep-id) can chdir when node does not mount a workspace.
+RUN mkdir -p /workspace /job/artifacts && chown -R sba:sba /workspace /job && chmod 755 /workspace
 WORKDIR /workspace
 COPY --from=build /cynode-sba /usr/local/bin/cynode-sba
 RUN chown sba:sba /usr/local/bin/cynode-sba

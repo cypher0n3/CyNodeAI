@@ -41,6 +41,24 @@ type SandboxSpec struct {
 	JobSpecJSON string `json:"job_spec_json,omitempty"`
 }
 
+// RunDiagnostics holds troubleshooting data for container runs (e.g. SBA).
+// Populated by the worker so failed jobs can be debugged (exact runtime command, mount paths, etc.).
+type RunDiagnostics struct {
+	// Runtime is the container runtime binary used (e.g. "podman", "docker").
+	Runtime string `json:"runtime"`
+	// RuntimeArgv is the full command line: runtime + all arguments (so the exact podman/docker invocation).
+	RuntimeArgv []string `json:"runtime_argv"`
+	// JobDir is the host path mounted at /job (SBA: job.json and result.json).
+	JobDir string `json:"job_dir,omitempty"`
+	// WorkspaceDir is the host path mounted at /workspace (empty if not used).
+	WorkspaceDir string `json:"workspace_dir,omitempty"`
+	// Image is the image name used (e.g. "cynodeai-cynode-sba:dev").
+	Image string `json:"image,omitempty"`
+	// ContainerStarted is true if the runtime process was started and ran to completion (exit 0 or non-zero).
+	// False if the run failed before starting (e.g. image not found, executable not found).
+	ContainerStarted bool `json:"container_started"`
+}
+
 // RunJobResponse represents a synchronous job execution response.
 // See docs/tech_specs/worker_api.md#run-job-synchronous.
 type RunJobResponse struct {
@@ -57,6 +75,8 @@ type RunJobResponse struct {
 	SbaResult          *sbajob.Result    `json:"sba_result,omitempty"`
 	StepExecutorResult json.RawMessage   `json:"step_executor_result,omitempty"`
 	Artifacts          []json.RawMessage `json:"artifacts,omitempty"`
+	// RunDiagnostics is set for container runs (e.g. SBA) to aid troubleshooting when a job fails.
+	RunDiagnostics *RunDiagnostics `json:"run_diagnostics,omitempty"`
 }
 
 // TruncatedInfo indicates if output was truncated.

@@ -523,6 +523,158 @@ func TestRunJob_Timeout_ReturnsTimeoutResult(t *testing.T) {
 	}
 }
 
+func TestRunStepsDirect_Success(t *testing.T) {
+	dir := t.TempDir()
+	spec := &sbajob.JobSpec{
+		ProtocolVersion: "1.0",
+		JobID:           "j1",
+		TaskID:          "t1",
+		Constraints:     sbajob.JobConstraints{MaxRuntimeSeconds: 60, MaxOutputBytes: 1024},
+		Steps: []sbajob.StepSpec{
+			{Type: "run_command", Args: json.RawMessage(`{"argv":["echo","sba-run"]}`)},
+		},
+	}
+	result := RunStepsDirect(context.Background(), spec, dir, "")
+	if result.Status != statusSuccess {
+		t.Errorf("Status = %q", result.Status)
+	}
+	if len(result.Steps) != 1 || result.Steps[0].Type != "run_command" || result.Steps[0].Output != "sba-run\n" {
+		t.Errorf("Steps = %+v", result.Steps)
+	}
+}
+
+func TestRunStepsDirect_UnsupportedStepType_Fails(t *testing.T) {
+	dir := t.TempDir()
+	spec := &sbajob.JobSpec{
+		ProtocolVersion: "1.0",
+		JobID:           "j1",
+		TaskID:          "t1",
+		Constraints:     sbajob.JobConstraints{MaxRuntimeSeconds: 60, MaxOutputBytes: 1024},
+		Steps:           []sbajob.StepSpec{{Type: "unknown_type", Args: json.RawMessage(`{}`)}},
+	}
+	result := RunStepsDirect(context.Background(), spec, dir, "")
+	if result.Status != statusFailed {
+		t.Errorf("Status = %q", result.Status)
+	}
+	if result.FailureMessage == nil || *result.FailureMessage != "unsupported step type for direct execution: unknown_type" {
+		t.Errorf("FailureMessage = %v", result.FailureMessage)
+	}
+}
+
+func TestRunStepsDirect_WithJobDir_CollectsArtifacts(t *testing.T) {
+	dir := t.TempDir()
+	artifactsDir := filepath.Join(dir, "artifacts")
+	if err := os.MkdirAll(artifactsDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(artifactsDir, "out.txt"), []byte("artifact"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	spec := &sbajob.JobSpec{
+		ProtocolVersion: "1.0",
+		JobID:           "j1",
+		TaskID:          "t1",
+		Constraints:     sbajob.JobConstraints{MaxRuntimeSeconds: 60, MaxOutputBytes: 1024},
+		Steps:           []sbajob.StepSpec{{Type: "run_command", Args: json.RawMessage(`{"argv":["echo","ok"]}`)}},
+	}
+	result := RunStepsDirect(context.Background(), spec, dir, dir)
+	if result.Status != statusSuccess {
+		t.Errorf("Status = %q", result.Status)
+	}
+	if len(result.Artifacts) != 1 || result.Artifacts[0].Path != "artifacts/out.txt" {
+		t.Errorf("Artifacts = %+v", result.Artifacts)
+	}
+}
+
+func TestRunStepsDirect_StepFailsWithJobDir_CollectsArtifacts(t *testing.T) {
+	dir := t.TempDir()
+	artifactsDir := filepath.Join(dir, "artifacts")
+	if err := os.MkdirAll(artifactsDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(artifactsDir, "x.txt"), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	spec := &sbajob.JobSpec{
+		ProtocolVersion: "1.0",
+		JobID:           "j1",
+		TaskID:          "t1",
+		Constraints:     sbajob.JobConstraints{MaxRuntimeSeconds: 60, MaxOutputBytes: 1024},
+		Steps:           []sbajob.StepSpec{{Type: "run_command", Args: json.RawMessage(`{"argv":["/nonexistent"]}`)}},
+	}
+	result := RunStepsDirect(context.Background(), spec, dir, dir)
+	if result.Status != statusFailed {
+		t.Errorf("Status = %q", result.Status)
+	}
+	if result.FailureCode == nil || *result.FailureCode != "step_failed" {
+		t.Errorf("FailureCode = %v", result.FailureCode)
+	}
+	if len(result.Artifacts) != 1 {
+		t.Errorf("Artifacts = %+v", result.Artifacts)
+	}
+}
+
+func TestRunStepsDirect_WriteFileStep(t *testing.T) {
+	dir := t.TempDir()
+	spec := &sbajob.JobSpec{
+		ProtocolVersion: "1.0",
+		JobID:           "j1",
+		TaskID:          "t1",
+		Constraints:     sbajob.JobConstraints{MaxRuntimeSeconds: 60, MaxOutputBytes: 1024},
+		Steps: []sbajob.StepSpec{
+			{Type: "write_file", Args: json.RawMessage(`{"path":"f.txt","content":"hello"}`)},
+			{Type: "read_file", Args: json.RawMessage(`{"path":"f.txt"}`)},
+		},
+	}
+	result := RunStepsDirect(context.Background(), spec, dir, "")
+	if result.Status != statusSuccess {
+		t.Errorf("Status = %q", result.Status)
+	}
+	if len(result.Steps) != 2 || result.Steps[0].Type != "write_file" || result.Steps[1].Output != "hello" {
+		t.Errorf("Steps = %+v", result.Steps)
+	}
+}
+
+func TestRunStepsDirect_ListTreeStep(t *testing.T) {
+	dir := t.TempDir()
+	_ = os.MkdirAll(filepath.Join(dir, "a"), 0o755)
+	spec := &sbajob.JobSpec{
+		ProtocolVersion: "1.0",
+		JobID:           "j1",
+		TaskID:          "t1",
+		Constraints:     sbajob.JobConstraints{MaxRuntimeSeconds: 60, MaxOutputBytes: 1024},
+		Steps:           []sbajob.StepSpec{{Type: "list_tree", Args: json.RawMessage(`{}`)}},
+	}
+	result := RunStepsDirect(context.Background(), spec, dir, "")
+	if result.Status != statusSuccess {
+		t.Errorf("Status = %q", result.Status)
+	}
+	if len(result.Steps) != 1 || result.Steps[0].Type != "list_tree" {
+		t.Errorf("Steps = %+v", result.Steps)
+	}
+}
+
+func TestRunStepsDirect_ApplyUnifiedDiffStep(t *testing.T) {
+	dir := t.TempDir()
+	_ = os.WriteFile(filepath.Join(dir, "f.txt"), []byte("a\n"), 0o644)
+	diff := "--- a/f.txt\n+++ b/f.txt\n@@ -1 +1 @@\n-a\n+b\n"
+	argsBytes, _ := json.Marshal(map[string]string{"diff": diff})
+	spec := &sbajob.JobSpec{
+		ProtocolVersion: "1.0",
+		JobID:           "j1",
+		TaskID:          "t1",
+		Constraints:     sbajob.JobConstraints{MaxRuntimeSeconds: 60, MaxOutputBytes: 1024},
+		Steps:           []sbajob.StepSpec{{Type: "apply_unified_diff", Args: argsBytes}},
+	}
+	result := RunStepsDirect(context.Background(), spec, dir, "")
+	if result.Status != statusSuccess {
+		t.Errorf("Status = %q; steps %+v", result.Status, result.Steps)
+	}
+	if len(result.Steps) != 1 || result.Steps[0].Type != "apply_unified_diff" {
+		t.Errorf("Steps = %+v", result.Steps)
+	}
+}
+
 func TestRunCommandStep_EmptyArgv_Fails(t *testing.T) {
 	dir := t.TempDir()
 	args, _ := json.Marshal(map[string]interface{}{"argv": []string{}})

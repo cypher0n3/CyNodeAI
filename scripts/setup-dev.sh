@@ -254,9 +254,17 @@ ensure_inference_proxy_build_if_delta() {
         "worker_node/cmd/inference-proxy/Containerfile" "worker_node" "go_shared_libs" "go.work" || return 1
 }
 
+# Ensure SBA runner image is built only when context changed (used by full-demo for use_sba E2E test).
+ensure_sba_runner_build_if_delta() {
+    ensure_image_build_if_delta "cynode-sba" "cynodeai-cynode-sba:dev" \
+        "agents/cmd/cynode-sba/Containerfile" "agents" "go_shared_libs" "go.work" || return 1
+}
+
 # Function to start orchestrator stack (postgres, control-plane, user-gateway) via docker-compose.
 # Images are built only when build-context hash changes (see ensure_stack_images_build_if_delta).
 start_orchestrator_stack_compose() {
+    log_info "=== Orchestrator stack startup ==="
+    log_info "  postgres :5432, control-plane :$CONTROL_PLANE_PORT (node registration, dispatch), user-gateway :$ORCHESTRATOR_PORT (auth, tasks)"
     log_info "Starting orchestrator stack with compose..."
     cd "$PROJECT_ROOT"
     if ! $RUNTIME compose version &>/dev/null; then
@@ -279,7 +287,9 @@ start_orchestrator_stack_compose() {
         log_error "Compose up failed"
         return 1
     fi
-    log_info "Orchestrator stack started (postgres :5432, control-plane :$CONTROL_PLANE_PORT, user-gateway :$ORCHESTRATOR_PORT)"
+    log_info "Orchestrator stack started."
+    log_info "  User API: http://localhost:$ORCHESTRATOR_PORT  Control-plane: http://localhost:$CONTROL_PLANE_PORT"
+    log_info "=== Orchestrator stack startup done ==="
 }
 
 # Function to stop orchestrator stack (compose down)
@@ -365,7 +375,9 @@ wait_for_control_plane_listening() {
 start_node() {
     cd "$PROJECT_ROOT"
 
-    log_info "Starting node-manager (will fetch config and start worker-api)..."
+    log_info "=== Node startup (node-manager -> worker-api) ==="
+    log_info "  node-manager: registers with control-plane, fetches config, then starts worker-api with bearer token"
+    log_info "  worker-api: listens on :$WORKER_PORT, runs sandbox/SBA jobs via $CONTAINER_RUNTIME"
     export ORCHESTRATOR_URL="http://localhost:$CONTROL_PLANE_PORT"
     export NODE_REGISTRATION_PSK=$NODE_PSK
     export NODE_SLUG=$NODE_SLUG
@@ -376,20 +388,34 @@ start_node() {
     # Node reports this URL at registration so orchestrator can dispatch; when orchestrator is in container, use host alias
     export NODE_ADVERTISED_WORKER_API_URL="${NODE_ADVERTISED_WORKER_API_URL:-http://${CONTAINER_HOST_ALIAS}:${WORKER_PORT}}"
     export CONTAINER_RUNTIME="${CONTAINER_RUNTIME:-podman}"
+    log_info "  binary: $PROJECT_ROOT/worker_node/bin/node-manager -> worker-api: $NODE_MANAGER_WORKER_API_BIN"
+    log_info "  Worker API will listen on http://localhost:$WORKER_PORT (advertised as $NODE_ADVERTISED_WORKER_API_URL)"
+    log_info "Starting node-manager..."
     "$PROJECT_ROOT/worker_node/bin/node-manager" &
     NODE_PID=$!
     echo $NODE_PID > /tmp/cynodeai-node-manager.pid
 
     sleep 2
-    if kill -0 $NODE_PID 2>/dev/null; then
-        log_info "Node-manager started (worker-api will be started by node-manager after config fetch)"
-    else
+    if ! kill -0 $NODE_PID 2>/dev/null; then
         log_error "Failed to start node-manager"
         exit 1
     fi
+    log_info "Node-manager started (PID $NODE_PID); waiting for config fetch and worker-api to bind..."
+    # Give node-manager time to register, fetch config, and start worker-api (typically 2-5s)
+    for i in $(seq 1 15); do
+        sleep 1
+        if curl -s -o /dev/null -w "%{http_code}" --connect-timeout 1 "http://localhost:${WORKER_PORT}/healthz" 2>/dev/null | grep -q 200; then
+            log_info "Worker API is listening on http://localhost:$WORKER_PORT (healthz OK)"
+            log_info "=== Node startup done ==="
+            return 0
+        fi
+    done
+    log_warn "Worker API did not respond on :$WORKER_PORT within 15s (node-manager may still be fetching config; check node-manager logs)"
+    log_info "=== Node startup done ==="
 }
 
 # Function to stop all services (orchestrator stack + node processes)
+# Note: worker-api is started by node-manager and does not write a pid file; kill by port so restarts get a fresh binary.
 stop_all() {
     log_info "Stopping all services..."
 
@@ -400,6 +426,13 @@ stop_all() {
     if [ -f /tmp/cynodeai-worker-api.pid ]; then
         kill "$(cat /tmp/cynodeai-worker-api.pid)" 2>/dev/null || true
         rm -f /tmp/cynodeai-worker-api.pid
+    fi
+    # Worker-api is a child of node-manager and keeps running after parent is killed; free the port so restart binds.
+    WORKER_PORT="${WORKER_PORT:-12090}"
+    if command -v fuser &>/dev/null; then
+        fuser -k "${WORKER_PORT}/tcp" 2>/dev/null || true
+    elif command -v lsof &>/dev/null; then
+        for p in $(lsof -t -i ":${WORKER_PORT}" 2>/dev/null); do kill "$p" 2>/dev/null || true; done
     fi
     stop_orchestrator_stack_compose
     # Ensure compose-managed containers are gone (in case compose down missed them)
@@ -675,21 +708,64 @@ run_e2e_test() {
     log_info "List-models OK"
 
     # Run one-shot chat whenever we ran the inference smoke. Skip only when the whole smoke was skipped (E2E_SKIP_INFERENCE_SMOKE).
+    # Retry on 502/EOF (PMA or gateway may be briefly unavailable or slow on first request).
     if [ -n "${E2E_SKIP_INFERENCE_SMOKE:-}" ]; then
         log_info "Skipping one-shot chat (inference smoke was skipped; model may be unloaded)"
     else
         log_info "Test 5d: One-shot chat (cynork-dev)..."
-        CHAT_OUT=$("$CYNORK_BIN" --config "$E2E_CONFIG" chat --message "Reply with exactly: OK" --plain 2>&1) || true
+        CHAT_OUT=""
+        for attempt in 1 2 3; do
+            [ "$attempt" -gt 1 ] && { log_info "Retry $attempt/3 (chat 502/EOF)..."; sleep 5; }
+            CHAT_OUT=$("$CYNORK_BIN" --config "$E2E_CONFIG" chat --message "Reply with exactly: OK" --plain 2>&1) || true
+            if [ -n "$CHAT_OUT" ] && [ "$(echo "$CHAT_OUT" | tr -d '\n\r\t ')" != "" ] && ! echo "$CHAT_OUT" | grep -qi "error:\|EOF\|502"; then
+                break
+            fi
+            log_warn "Chat attempt $attempt failed or 502/EOF: $CHAT_OUT"
+        done
         if [ -z "$CHAT_OUT" ] || [ "$(echo "$CHAT_OUT" | tr -d '\n\r\t ')" = "" ]; then
-            log_error "cynork chat --message produced empty output: $CHAT_OUT"
+            log_error "cynork chat --message produced empty output after retries: $CHAT_OUT"
             return 1
         fi
-        if echo "$CHAT_OUT" | grep -qi "error:\|EOF"; then
-            log_error "cynork chat failed or got EOF: $CHAT_OUT"
+        if echo "$CHAT_OUT" | grep -qi "error:\|EOF\|502"; then
+            log_error "cynork chat failed or got EOF/502 after retries: $CHAT_OUT"
             return 1
         fi
         log_info "OpenAI chat OK: completion (first 80 chars)= ${CHAT_OUT:0:80}"
     fi
+
+    # Test 5e: SBA job (cynork-dev; create task with --use-sba, assert job result contains sba_result)
+    log_info "Test 5e: Create task with --use-sba (cynork-dev) and verify job result contains sba_result..."
+    SBA_TASK_OUT=$("$CYNORK_BIN" --config "$E2E_CONFIG" task create -p "echo from SBA" --use-sba -o json 2>&1) || true
+    SBA_TASK_ID=$(echo "$SBA_TASK_OUT" | jq -r '.task_id // empty')
+    if [ -z "$SBA_TASK_ID" ]; then
+        log_error "Create SBA task failed: $SBA_TASK_OUT"
+        return 1
+    fi
+    log_info "SBA task created: $SBA_TASK_ID; polling for result (up to 90s)..."
+    SBA_STATUS=""
+    for _ in $(seq 1 18); do
+        sleep 5
+        SBA_RESULT=$("$CYNORK_BIN" --config "$E2E_CONFIG" task result "$SBA_TASK_ID" -o json 2>&1) || true
+        SBA_STATUS=$(echo "$SBA_RESULT" | jq -r '.status // empty')
+        if [ "$SBA_STATUS" = "completed" ] || [ "$SBA_STATUS" = "failed" ]; then
+            break
+        fi
+    done
+    if [ "$SBA_STATUS" != "completed" ]; then
+        log_error "SBA task did not complete: status=$SBA_STATUS result=$SBA_RESULT"
+        return 1
+    fi
+    # Cynork task result -o json returns { task_id, status, stdout }; worker response is in .stdout when .jobs is absent
+    SBA_JOB_RESULT=$(echo "$SBA_RESULT" | jq -r 'if .jobs != null and (.jobs | length) > 0 then (.jobs[0].result // empty) else (.stdout // empty) end')
+    if [ -z "$SBA_JOB_RESULT" ] || [ "$SBA_JOB_RESULT" = "null" ]; then
+        log_error "SBA task has no job result: $SBA_RESULT"
+        return 1
+    fi
+    if ! echo "$SBA_JOB_RESULT" | jq -e '.sba_result != null' >/dev/null 2>&1; then
+        log_error "SBA task job result missing sba_result: $SBA_JOB_RESULT"
+        return 1
+    fi
+    log_info "SBA job test passed: job result contains sba_result"
 
     # Test 6: Node registration (control-plane)
     log_info "Test 6: Node registration..."
@@ -766,7 +842,7 @@ show_usage() {
     echo "  clean-db        Stop and remove PostgreSQL container and volume"
     echo "  migrate         Run database migrations"
     echo "  build           Build orchestrator-api and node binaries"
-    echo "  start           Start all services (db, orchestrator-api)"
+    echo "  start           Start all services (orchestrator stack + node with worker-api on host)"
     echo "  stop            Stop all services"
     echo "  test-e2e        Run E2E demo test (builds cynork-dev at start, uses it for auth/tasks/logout)"
     echo "  full-demo       Full demo: start all services and run E2E test"
@@ -802,8 +878,13 @@ case "${1:-}" in
     start)
         build_binaries
         start_orchestrator_stack_compose || exit 1
-        log_info "Services started. User API: http://localhost:$ORCHESTRATOR_PORT Control-plane: http://localhost:$CONTROL_PLANE_PORT"
-        log_info "Use '$0 test-e2e' to run the E2E demo test. Use '$0 stop' to stop all services"
+        wait_for_control_plane_listening || { stop_all; exit 1; }
+        log_info "Starting node (node-manager then worker-api on :$WORKER_PORT)..."
+        start_node || { stop_all; exit 1; }
+        sleep 2
+        log_info "Services started: orchestrator stack + node (worker-api on http://localhost:$WORKER_PORT)."
+        log_info "  User API: http://localhost:$ORCHESTRATOR_PORT  Control-plane: http://localhost:$CONTROL_PLANE_PORT  Worker API: http://localhost:$WORKER_PORT"
+        log_info "  Commands: '$0 test-e2e' to run E2E test, '$0 stop' to stop all services"
         ;;
     stop)
         stop_all
@@ -822,9 +903,11 @@ case "${1:-}" in
         build_binaries || { stop_all; exit 1; }
         start_orchestrator_stack_compose || { stop_all; exit 1; }
         ensure_inference_proxy_build_if_delta || { stop_all; exit 1; }
+        ensure_sba_runner_build_if_delta || { stop_all; exit 1; }
         export INFERENCE_PROXY_IMAGE="${INFERENCE_PROXY_IMAGE:-cynodeai-inference-proxy:dev}"
         export OLLAMA_UPSTREAM_URL="${OLLAMA_UPSTREAM_URL:-http://host.containers.internal:11434}"
         wait_for_control_plane_listening || { stop_all; exit 1; }
+        log_info "Starting node (node-manager then worker-api on :$WORKER_PORT)..."
         start_node || { stop_all; exit 1; }
         sleep 3
         run_e2e_test || { stop_all; exit 1; }

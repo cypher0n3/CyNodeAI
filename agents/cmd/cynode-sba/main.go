@@ -70,15 +70,20 @@ func run(args []string) int {
 	defer cancel()
 
 	jobDir := filepath.Dir(*resultPath)
-	opts := &sba.RunAgentOptions{JobDir: jobDir}
-	if os.Getenv("SBA_USE_MOCK_LLM") == "1" {
-		mock := &sba.MockLLM{}
-		if resp := os.Getenv("SBA_MOCK_RESPONSES"); resp != "" {
-			_ = json.Unmarshal([]byte(resp), &mock.Responses)
+	var result *sbajob.Result
+	if os.Getenv("SBA_DIRECT_STEPS") == "1" {
+		result = sba.RunStepsDirect(ctx, spec, *workspace, jobDir)
+	} else {
+		opts := &sba.RunAgentOptions{JobDir: jobDir}
+		if os.Getenv("SBA_USE_MOCK_LLM") == "1" {
+			mock := &sba.MockLLM{}
+			if resp := os.Getenv("SBA_MOCK_RESPONSES"); resp != "" {
+				_ = json.Unmarshal([]byte(resp), &mock.Responses)
+			}
+			opts.LLM = mock
 		}
-		opts.LLM = mock
+		result = sba.RunAgent(ctx, spec, *workspace, opts)
 	}
-	result := sba.RunAgent(ctx, spec, *workspace, opts)
 
 	lifecycle.NotifyCompletion(context.Background(), result)
 
