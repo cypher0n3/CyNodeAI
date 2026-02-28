@@ -2,7 +2,10 @@ package handlers
 
 import (
 	"net/http"
+	"strings"
 	"testing"
+
+	"github.com/google/uuid"
 
 	"github.com/cypher0n3/cynodeai/go_shared_libs/contracts/userapi"
 )
@@ -81,5 +84,24 @@ func TestCreateTaskRequestJSON(t *testing.T) {
 	roundTripJSON(t, userapi.CreateTaskRequest{Prompt: "x", UseInference: true}, &parsed)
 	if parsed.Prompt != "x" || !parsed.UseInference {
 		t.Errorf("expected prompt 'x' UseInference true, got %q %v", parsed.Prompt, parsed.UseInference)
+	}
+	roundTripJSON(t, userapi.CreateTaskRequest{Prompt: "p", UseSBA: true}, &parsed)
+	if parsed.Prompt != "p" || !parsed.UseSBA {
+		t.Errorf("expected prompt 'p' UseSBA true, got %q %v", parsed.Prompt, parsed.UseSBA)
+	}
+}
+
+func TestBuildSBAJobPayload(t *testing.T) {
+	taskID := uuid.MustParse("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee")
+	jobID := uuid.MustParse("11111111-2222-3333-4444-555555555555")
+	payload, err := buildSBAJobPayload(taskID, jobID, "test prompt")
+	if err != nil {
+		t.Fatalf("buildSBAJobPayload: %v", err)
+	}
+	if payload == "" {
+		t.Fatal("expected non-empty payload")
+	}
+	if !strings.Contains(payload, "job_spec_json") || !strings.Contains(payload, "1.0") || !strings.Contains(payload, "run_command") {
+		t.Errorf("payload missing expected SBA fields: %s", payload)
 	}
 }

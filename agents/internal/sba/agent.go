@@ -131,7 +131,7 @@ func processStepsToResult(outputs map[string]any, result *sbajob.Result) {
 	for i, s := range steps {
 		sr := sbajob.StepResult{
 			Index:  i,
-			Type:  s.Action.Tool,
+			Type:   s.Action.Tool,
 			Status: statusSuccess,
 			Output: s.Observation,
 		}

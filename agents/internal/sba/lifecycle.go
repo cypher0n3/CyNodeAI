@@ -13,8 +13,8 @@ import (
 )
 
 const (
-	envStatusURL   = "SBA_JOB_STATUS_URL"
-	envCallbackURL = "SBA_CALLBACK_URL"
+	envStatusURL     = "SBA_JOB_STATUS_URL"
+	envCallbackURL   = "SBA_CALLBACK_URL"
 	lifecycleTimeout = 10 * time.Second
 )
 

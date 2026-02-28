@@ -37,17 +37,17 @@ const stateKey ctxKey = 0
 
 // testState holds shared state for BDD steps.
 type testState struct {
-	server            *httptest.Server
-	db                *database.DB
-	accessToken       string
-	refreshToken      string
-	taskID            string
-	nodeJWT                 string
-	nodeSlug                string
-	advertisedWorkerAPIURL  string // optional; when set, registration/capability include worker_api.base_url
-	lastConfigBody          []byte
-	lastConfigVersion string
-	lastStatusCode    int
+	server                 *httptest.Server
+	db                     *database.DB
+	accessToken            string
+	refreshToken           string
+	taskID                 string
+	nodeJWT                string
+	nodeSlug               string
+	advertisedWorkerAPIURL string // optional; when set, registration/capability include worker_api.base_url
+	lastConfigBody         []byte
+	lastConfigVersion      string
+	lastStatusCode         int
 	// Fake worker for node-aware dispatch scenarios
 	workerServer       *httptest.Server
 	workerRequestMu    sync.Mutex

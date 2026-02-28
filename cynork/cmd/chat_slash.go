@@ -62,16 +62,34 @@ var slashHandlers = map[string]slashHandler{
 	"help":    func(*gateway.Client, string) (bool, error) { printSlashHelp(); return false, nil },
 	"clear":   func(*gateway.Client, string) (bool, error) { clearTerminal(); return false, nil },
 	"version": func(*gateway.Client, string) (bool, error) { fmt.Println("cynork", version); return false, nil },
-	"models":  func(_ *gateway.Client, rest string) (bool, error) { r := strings.TrimSpace(rest); if r == "" { r = "list" }; return false, runCynorkSubcommandForSlash("models", r) },
+	"models": func(_ *gateway.Client, rest string) (bool, error) {
+		r := strings.TrimSpace(rest)
+		if r == "" {
+			r = "list"
+		}
+		return false, runCynorkSubcommandForSlash("models", r)
+	},
 	"model":   func(c *gateway.Client, rest string) (bool, error) { return false, runSlashModel(c, rest) },
 	"project": func(c *gateway.Client, rest string) (bool, error) { return false, runSlashProjectDelegated(c, rest) },
-	"task":    func(_ *gateway.Client, rest string) (bool, error) { return false, runCynorkSubcommandForSlash("task", rest) },
-	"status":  func(_ *gateway.Client, rest string) (bool, error) { return false, runCynorkSubcommandForSlash("status", rest) },
-	"whoami":  func(_ *gateway.Client, rest string) (bool, error) { return false, runCynorkSubcommandForSlash("auth", "whoami") },
-	"auth":    func(c *gateway.Client, rest string) (bool, error) { return false, runSlashAuthDelegated(c, rest) },
-	"nodes":   func(_ *gateway.Client, rest string) (bool, error) { return false, runCynorkSubcommandForSlash("nodes", rest) },
-	"prefs":   func(_ *gateway.Client, rest string) (bool, error) { return false, runCynorkSubcommandForSlash("prefs", rest) },
-	"skills":  func(_ *gateway.Client, rest string) (bool, error) { return false, runCynorkSubcommandForSlash("skills", rest) },
+	"task": func(_ *gateway.Client, rest string) (bool, error) {
+		return false, runCynorkSubcommandForSlash("task", rest)
+	},
+	"status": func(_ *gateway.Client, rest string) (bool, error) {
+		return false, runCynorkSubcommandForSlash("status", rest)
+	},
+	"whoami": func(_ *gateway.Client, rest string) (bool, error) {
+		return false, runCynorkSubcommandForSlash("auth", "whoami")
+	},
+	"auth": func(c *gateway.Client, rest string) (bool, error) { return false, runSlashAuthDelegated(c, rest) },
+	"nodes": func(_ *gateway.Client, rest string) (bool, error) {
+		return false, runCynorkSubcommandForSlash("nodes", rest)
+	},
+	"prefs": func(_ *gateway.Client, rest string) (bool, error) {
+		return false, runCynorkSubcommandForSlash("prefs", rest)
+	},
+	"skills": func(_ *gateway.Client, rest string) (bool, error) {
+		return false, runCynorkSubcommandForSlash("skills", rest)
+	},
 }
 
 // runSlashCommand executes a slash command. Returns (exitSession, err). exitSession true means chat should exit.
@@ -218,4 +236,3 @@ func setChatSessionProject(id string) {
 	}
 	fmt.Fprintln(os.Stderr, "project set to:", chatSessionProjectID)
 }
-

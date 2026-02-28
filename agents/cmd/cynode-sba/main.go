@@ -19,7 +19,7 @@ import (
 )
 
 const (
-	defaultJobPath   = "/job/job.json"
+	defaultJobPath    = "/job/job.json"
 	defaultResultPath = "/job/result.json"
 )
 

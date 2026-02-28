@@ -12,7 +12,7 @@ import (
 )
 
 const (
-	envMCPGatewayURL = "SBA_MCP_GATEWAY_URL"
+	envMCPGatewayURL  = "SBA_MCP_GATEWAY_URL"
 	envMCPGatewayURL2 = "MCP_GATEWAY_URL"
 	defaultMCPTimeout = 30 * time.Second
 )

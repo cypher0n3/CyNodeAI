@@ -540,6 +540,53 @@ func TestTaskHandler_CreateTaskWithUseInference_StoresUseInferenceInJobPayload(t
 	}
 }
 
+func TestTaskHandler_CreateTask_UseSBA_StoresSBAJobPayload(t *testing.T) {
+	mockDB := testutil.NewMockDB()
+	handler := NewTaskHandler(mockDB, newTestLogger(), "", "")
+	userID := uuid.New()
+	ctx := context.WithValue(context.Background(), contextKeyUserID, userID)
+	body := userapi.CreateTaskRequest{Prompt: "sba prompt", UseSBA: true}
+	jsonBody, _ := json.Marshal(body)
+	req := httptest.NewRequest("POST", "/v1/tasks", bytes.NewBuffer(jsonBody)).WithContext(ctx)
+	rec := httptest.NewRecorder()
+	handler.CreateTask(rec, req)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("expected status 201, got %d: %s", rec.Code, rec.Body.String())
+	}
+	var resp userapi.TaskResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("unmarshal response: %v", err)
+	}
+	taskID, err := uuid.Parse(resp.ResolveTaskID())
+	if err != nil {
+		t.Fatalf("parse task ID: %v", err)
+	}
+	jobs, err := mockDB.GetJobsByTaskID(ctx, taskID)
+	if err != nil {
+		t.Fatalf("GetJobsByTaskID: %v", err)
+	}
+	if len(jobs) != 1 {
+		t.Fatalf("expected 1 job, got %d", len(jobs))
+	}
+	payload := jobs[0].Payload.Ptr()
+	if payload == nil {
+		t.Fatal("job payload is nil")
+	}
+	var pl struct {
+		JobSpecJSON string `json:"job_spec_json"`
+		Image       string `json:"image"`
+	}
+	if err := json.Unmarshal([]byte(*payload), &pl); err != nil {
+		t.Fatalf("unmarshal job payload: %v", err)
+	}
+	if pl.JobSpecJSON == "" {
+		t.Error("expected job_spec_json in payload")
+	}
+	if pl.Image == "" {
+		t.Error("expected image in payload")
+	}
+}
+
 func TestTaskHandler_CreateTask_InputModePrompt_StoresPromptJobPayload(t *testing.T) {
 	mockDB := testutil.NewMockDB()
 	handler := NewTaskHandler(mockDB, newTestLogger(), "", "")
@@ -574,6 +621,36 @@ func TestTaskHandler_CreateTask_InputModePrompt_StoresPromptJobPayload(t *testin
 	}
 	if pl.Env["CYNODE_PROMPT"] != "What is 2+2?" {
 		t.Errorf("expected CYNODE_PROMPT in env, got %v", pl.Env)
+	}
+}
+
+func TestTaskHandler_CreateTask_PromptMode_OrchestratorInference_CreateJobCompletedFails_FallsBackToSandbox(t *testing.T) {
+	mockOllama := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_ = json.NewEncoder(w).Encode(map[string]any{"response": "ok", "done": true})
+	}))
+	defer mockOllama.Close()
+
+	mockDB := &createJobCompletedErrorStore{MockDB: testutil.NewMockDB()}
+	handler := NewTaskHandler(mockDB, newTestLogger(), mockOllama.URL, "tinyllama")
+	userID := uuid.New()
+	ctx := context.WithValue(context.Background(), contextKeyUserID, userID)
+	body := userapi.CreateTaskRequest{Prompt: "hi", InputMode: InputModePrompt}
+	jsonBody, _ := json.Marshal(body)
+	req := httptest.NewRequest("POST", "/v1/tasks", bytes.NewBuffer(jsonBody)).WithContext(ctx)
+	rec := httptest.NewRecorder()
+	handler.CreateTask(rec, req)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d: %s", rec.Code, rec.Body.String())
+	}
+	var resp userapi.TaskResponse
+	_ = json.Unmarshal(rec.Body.Bytes(), &resp)
+	taskID, _ := uuid.Parse(resp.ResolveTaskID())
+	jobs, _ := mockDB.GetJobsByTaskID(ctx, taskID)
+	if len(jobs) != 1 {
+		t.Fatalf("expected 1 job (sandbox fallback), got %d", len(jobs))
+	}
+	if jobs[0].Status != models.JobStatusQueued {
+		t.Errorf("expected job queued (sandbox), got %s", jobs[0].Status)
 	}
 }
 
@@ -622,6 +699,37 @@ func TestTaskHandler_CreateTask_PromptMode_OrchestratorInference(t *testing.T) {
 	}
 	if jobResult.Stdout != "I am tinyllama." {
 		t.Errorf("stdout want 'I am tinyllama.' got %q", jobResult.Stdout)
+	}
+}
+
+func TestTaskHandler_CreateTask_InputModeCommands_WithUseInference_StoresUseInferenceInPayload(t *testing.T) {
+	mockDB := testutil.NewMockDB()
+	handler := NewTaskHandler(mockDB, newTestLogger(), "", "")
+	userID := uuid.New()
+	ctx := context.WithValue(context.Background(), contextKeyUserID, userID)
+	body := userapi.CreateTaskRequest{Prompt: "echo hi", InputMode: "commands", UseInference: true}
+	jsonBody, _ := json.Marshal(body)
+	req := httptest.NewRequest("POST", "/v1/tasks", bytes.NewBuffer(jsonBody)).WithContext(ctx)
+	rec := httptest.NewRecorder()
+	handler.CreateTask(rec, req)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d: %s", rec.Code, rec.Body.String())
+	}
+	var resp userapi.TaskResponse
+	_ = json.Unmarshal(rec.Body.Bytes(), &resp)
+	taskID, _ := uuid.Parse(resp.ResolveTaskID())
+	jobs, _ := mockDB.GetJobsByTaskID(ctx, taskID)
+	if len(jobs) != 1 {
+		t.Fatalf("expected 1 job, got %d", len(jobs))
+	}
+	var pl struct {
+		UseInference bool `json:"use_inference"`
+	}
+	if err := json.Unmarshal([]byte(*jobs[0].Payload.Ptr()), &pl); err != nil {
+		t.Fatalf("unmarshal payload: %v", err)
+	}
+	if !pl.UseInference {
+		t.Error("expected use_inference true in payload for commands+use_inference")
 	}
 }
 
@@ -2690,6 +2798,7 @@ func TestNodeHandler_NewNodeRegistrationJWTError(t *testing.T) {
 }
 
 // Test for handleExistingNodeRegistration JWT error
+//
 //nolint:dupl // node registration body struct repeated across tests
 func TestNodeHandler_ExistingNodeJWTError(t *testing.T) {
 	jwtMgr := auth.NewJWTManager("", 15*time.Minute, 7*24*time.Hour, 24*time.Hour)
@@ -3026,6 +3135,37 @@ type createJobErrorStore struct {
 
 func (m *createJobErrorStore) CreateJob(_ context.Context, _ uuid.UUID, _ string) (*models.Job, error) {
 	return nil, errors.New("create job error")
+}
+
+// createJobWithIDErrorStore fails only CreateJobWithID (UseSBA path).
+type createJobWithIDErrorStore struct {
+	*testutil.MockDB
+}
+
+func (m *createJobWithIDErrorStore) CreateJobWithID(_ context.Context, _, _ uuid.UUID, _ string) (*models.Job, error) {
+	return nil, errors.New("create job with id error")
+}
+
+// createJobCompletedErrorStore fails only CreateJobCompleted (orchestrator inference path).
+type createJobCompletedErrorStore struct {
+	*testutil.MockDB
+}
+
+func (m *createJobCompletedErrorStore) CreateJobCompleted(_ context.Context, _, _ uuid.UUID, _ string) (*models.Job, error) {
+	return nil, errors.New("create job completed error")
+}
+
+func TestTaskHandler_CreateTask_UseSBA_CreateJobWithIDFails(t *testing.T) {
+	mockDB := &createJobWithIDErrorStore{MockDB: testutil.NewMockDB()}
+	handler := NewTaskHandler(mockDB, newTestLogger(), "", "")
+	userID := uuid.New()
+	ctx := context.WithValue(context.Background(), contextKeyUserID, userID)
+	req, rec := recordedRequestJSON("POST", "/v1/tasks", userapi.CreateTaskRequest{Prompt: "p", UseSBA: true})
+	req = req.WithContext(ctx)
+	handler.CreateTask(rec, req)
+	if rec.Code != http.StatusInternalServerError {
+		t.Errorf("expected status 500, got %d", rec.Code)
+	}
 }
 
 func TestTaskHandler_CreateTask_CreateJobFails(t *testing.T) {

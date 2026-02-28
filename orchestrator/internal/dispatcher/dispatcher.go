@@ -9,7 +9,12 @@ import (
 	"github.com/cypher0n3/cynodeai/go_shared_libs/contracts/workerapi"
 )
 
+// DefaultSBARunnerImage is the image used for SBA jobs when the payload does not set image (P2-10).
+// Must match worker executor isSBARunnerImage (e.g. cynodeai-cynode-sba:dev).
+const DefaultSBARunnerImage = "cynodeai-cynode-sba:dev"
+
 // ParseSandboxSpec parses a JSON job payload into a SandboxSpec.
+// When job_spec_json is set (SBA job), command may be empty; image may be omitted (default SBA runner).
 func ParseSandboxSpec(payload *string) (workerapi.SandboxSpec, error) {
 	if payload == nil || *payload == "" {
 		return workerapi.SandboxSpec{}, errors.New("job payload is empty")
@@ -22,21 +27,27 @@ func ParseSandboxSpec(payload *string) (workerapi.SandboxSpec, error) {
 		TimeoutSeconds int               `json:"timeout_seconds"`
 		NetworkPolicy  string            `json:"network_policy"`
 		UseInference   bool              `json:"use_inference"`
+		JobSpecJSON    string            `json:"job_spec_json"`
 	}
 	if err := json.Unmarshal([]byte(*payload), &spec); err != nil {
 		return workerapi.SandboxSpec{}, fmt.Errorf("parse payload json: %w", err)
 	}
-	if len(spec.Command) == 0 {
-		return workerapi.SandboxSpec{}, errors.New("payload.command is required")
+	if spec.JobSpecJSON == "" && len(spec.Command) == 0 {
+		return workerapi.SandboxSpec{}, errors.New("payload.command is required when job_spec_json is not set")
+	}
+	image := spec.Image
+	if spec.JobSpecJSON != "" && image == "" {
+		image = DefaultSBARunnerImage
 	}
 
 	return workerapi.SandboxSpec{
-		Image:          spec.Image,
+		Image:          image,
 		Command:        spec.Command,
 		Env:            spec.Env,
 		TimeoutSeconds: spec.TimeoutSeconds,
 		NetworkPolicy:  spec.NetworkPolicy,
 		UseInference:   spec.UseInference,
+		JobSpecJSON:    spec.JobSpecJSON,
 	}, nil
 }
 

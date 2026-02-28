@@ -10,8 +10,8 @@ import (
 
 // MockLLM implements llms.Model for tests. It returns fixed responses per call index.
 type MockLLM struct {
-	mu       sync.Mutex
-	CallNum  int
+	mu        sync.Mutex
+	CallNum   int
 	Responses []string
 }
 

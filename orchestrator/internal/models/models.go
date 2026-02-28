@@ -347,11 +347,11 @@ func (ChatAuditLog) TableName() string { return "chat_audit_log" }
 // WorkflowCheckpoint stores the current LangGraph checkpoint state per task.
 // Per docs/tech_specs/postgres_schema.md and langgraph_mvp.md; one row per task (upsert by task_id).
 type WorkflowCheckpoint struct {
-	ID         uuid.UUID  `gorm:"type:uuid;primaryKey" json:"id"`
-	TaskID     uuid.UUID  `gorm:"column:task_id;uniqueIndex;not null" json:"task_id"`
-	State      *string    `gorm:"column:state;type:jsonb" json:"state,omitempty"`
-	LastNodeID string     `gorm:"column:last_node_id" json:"last_node_id,omitempty"`
-	UpdatedAt  time.Time  `gorm:"column:updated_at;index" json:"updated_at"`
+	ID         uuid.UUID `gorm:"type:uuid;primaryKey" json:"id"`
+	TaskID     uuid.UUID `gorm:"column:task_id;uniqueIndex;not null" json:"task_id"`
+	State      *string   `gorm:"column:state;type:jsonb" json:"state,omitempty"`
+	LastNodeID string    `gorm:"column:last_node_id" json:"last_node_id,omitempty"`
+	UpdatedAt  time.Time `gorm:"column:updated_at;index" json:"updated_at"`
 }
 
 func (WorkflowCheckpoint) TableName() string { return "workflow_checkpoints" }
@@ -399,12 +399,12 @@ func (SandboxImageVersion) TableName() string { return "sandbox_image_versions" 
 
 // NodeSandboxImageAvailability records whether a node has a sandbox image version available. Per postgres_schema.md.
 type NodeSandboxImageAvailability struct {
-	ID                   uuid.UUID  `gorm:"type:uuid;primaryKey" json:"id"`
-	NodeID               uuid.UUID  `gorm:"column:node_id;uniqueIndex:uix_node_sandbox_avail,priority:1;not null" json:"node_id"`
-	SandboxImageVersionID uuid.UUID  `gorm:"column:sandbox_image_version_id;uniqueIndex:uix_node_sandbox_avail,priority:2;not null" json:"sandbox_image_version_id"`
-	Status               string     `gorm:"column:status" json:"status"`
-	LastCheckedAt        time.Time  `gorm:"column:last_checked_at" json:"last_checked_at"`
-	Details              *string    `gorm:"column:details;type:jsonb" json:"details,omitempty"`
+	ID                    uuid.UUID `gorm:"type:uuid;primaryKey" json:"id"`
+	NodeID                uuid.UUID `gorm:"column:node_id;uniqueIndex:uix_node_sandbox_avail,priority:1;not null" json:"node_id"`
+	SandboxImageVersionID uuid.UUID `gorm:"column:sandbox_image_version_id;uniqueIndex:uix_node_sandbox_avail,priority:2;not null" json:"sandbox_image_version_id"`
+	Status                string    `gorm:"column:status" json:"status"`
+	LastCheckedAt         time.Time `gorm:"column:last_checked_at" json:"last_checked_at"`
+	Details               *string   `gorm:"column:details;type:jsonb" json:"details,omitempty"`
 }
 
 func (NodeSandboxImageAvailability) TableName() string { return "node_sandbox_image_availability" }

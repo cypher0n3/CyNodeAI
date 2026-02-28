@@ -18,6 +18,7 @@ func TestParseSandboxSpec(t *testing.T) {
 		{"invalid json", strPtr("{"), true},
 		{"missing command", strPtr(`{"image":"alpine"}`), true},
 		{"valid", strPtr(`{"command":["echo","hi"],"image":"alpine"}`), false},
+		{"sba job_spec_json no command", strPtr(`{"job_spec_json":"{\"protocol_version\":\"1.0\",\"job_id\":\"j1\",\"task_id\":\"t1\",\"constraints\":{\"max_runtime_seconds\":60,\"max_output_bytes\":1024},\"steps\":[]}"}`), false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -42,6 +43,14 @@ func TestParseSandboxSpec(t *testing.T) {
 	}
 	if !spec2.UseInference {
 		t.Error("use_inference should be true")
+	}
+
+	spec3, err := ParseSandboxSpec(strPtr(`{"job_spec_json":"{\"protocol_version\":\"1.0\",\"job_id\":\"j1\",\"task_id\":\"t1\",\"constraints\":{\"max_runtime_seconds\":60,\"max_output_bytes\":1024},\"steps\":[]}"}`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if spec3.JobSpecJSON == "" || spec3.Image != DefaultSBARunnerImage {
+		t.Errorf("SBA spec: JobSpecJSON=%q Image=%q", spec3.JobSpecJSON, spec3.Image)
 	}
 }
 

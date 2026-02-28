@@ -12,9 +12,11 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/cypher0n3/cynodeai/go_shared_libs/contracts/sbajob"
 	"github.com/cypher0n3/cynodeai/go_shared_libs/contracts/userapi"
 	"github.com/cypher0n3/cynodeai/go_shared_libs/contracts/workerapi"
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/database"
+	"github.com/cypher0n3/cynodeai/orchestrator/internal/dispatcher"
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/inference"
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/models"
 )
@@ -96,6 +98,12 @@ func (h *TaskHandler) CreateTask(w http.ResponseWriter, r *http.Request) {
 	inputMode := req.InputMode
 	if inputMode == "" {
 		inputMode = InputModePrompt
+	}
+
+	if req.UseSBA {
+		if h.createTaskSBA(ctx, w, task, req.Prompt) {
+			return
+		}
 	}
 
 	// Prompt mode: send prompt to the model so it MUST work (MVP Phase 1). Prefer orchestrator-side inference when configured.
@@ -190,6 +198,51 @@ try:
   print(out or '(no response)')
 except Exception as e: print('[Ollama request failed]', str(e), file=sys.stderr); sys.exit(1)
 `
+
+// createTaskSBA creates a single job with SBA runner (job_spec_json) and writes 201 or 5xx (P2-10).
+func (h *TaskHandler) createTaskSBA(ctx context.Context, w http.ResponseWriter, task *models.Task, prompt string) bool {
+	jobID := uuid.New()
+	payload, err := buildSBAJobPayload(task.ID, jobID, prompt)
+	if err != nil {
+		h.logger.Error("build SBA job payload", "error", err)
+		WriteInternalError(w, "Failed to create SBA job")
+		return true
+	}
+	if _, err := h.db.CreateJobWithID(ctx, task.ID, jobID, payload); err != nil {
+		h.logger.Error("create SBA job", "error", err)
+		WriteInternalError(w, "Failed to create task job")
+		return true
+	}
+	WriteJSON(w, http.StatusCreated, taskToResponse(task, taskStatusToSpec(task.Status)))
+	return true
+}
+
+// buildSBAJobPayload returns a job payload with job_spec_json and SBA runner image (P2-10).
+func buildSBAJobPayload(taskID, jobID uuid.UUID, prompt string) (string, error) {
+	spec := &sbajob.JobSpec{
+		ProtocolVersion: "1.0",
+		JobID:           jobID.String(),
+		TaskID:          taskID.String(),
+		Constraints:     sbajob.JobConstraints{MaxRuntimeSeconds: 60, MaxOutputBytes: 1024},
+		Context:         &sbajob.ContextSpec{TaskContext: prompt},
+		Steps: []sbajob.StepSpec{
+			{Type: "run_command", Args: json.RawMessage(`{"argv":["echo","sba-run"]}`)},
+		},
+	}
+	specJSON, err := json.Marshal(spec)
+	if err != nil {
+		return "", err
+	}
+	payload := map[string]any{
+		"job_spec_json": string(specJSON),
+		"image":         dispatcher.DefaultSBARunnerImage,
+	}
+	b, err := json.Marshal(payload)
+	if err != nil {
+		return "", err
+	}
+	return string(b), nil
+}
 
 func marshalJobPayload(prompt string, useInference bool, inputMode string) (string, error) {
 	// input_mode "prompt": prompt is intended for the PM model; PM decides (e.g. run in sandbox).

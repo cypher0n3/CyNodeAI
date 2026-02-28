@@ -26,7 +26,7 @@ type SBATool struct {
 	call func(ctx context.Context, raw string, env *ToolEnv) (out string, errMsg string, constraintViolation bool)
 }
 
-func (t *SBATool) Name() string { return t.name }
+func (t *SBATool) Name() string        { return t.name }
 func (t *SBATool) Description() string { return t.desc }
 func (t *SBATool) Call(ctx context.Context, input string) (string, error) {
 	env := toolEnvFromContext(ctx)

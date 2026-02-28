@@ -53,6 +53,8 @@ type CreateTaskRequest struct {
 	Prompt       string `json:"prompt"`
 	UseInference bool   `json:"use_inference,omitempty"`
 	InputMode    string `json:"input_mode,omitempty"`
+	// UseSBA when true creates a single job with SBA runner (job_spec_json); prompt is passed as task context (P2-10).
+	UseSBA bool `json:"use_sba,omitempty"`
 }
 
 // TaskResponse is the task in create/get/list responses (CLI spec: task_id, status, optional task_name).
@@ -127,7 +129,7 @@ type ChatCompletionsRequest struct {
 
 // ChatCompletionsChoice is one choice in the chat completions response.
 type ChatCompletionsChoice struct {
-	Index   int    `json:"index"`
+	Index   int `json:"index"`
 	Message struct {
 		Role    string `json:"role"`
 		Content string `json:"content"`
@@ -137,9 +139,9 @@ type ChatCompletionsChoice struct {
 
 // ChatCompletionsResponse is the response from POST /v1/chat/completions (subset we use).
 type ChatCompletionsResponse struct {
-	ID      string                 `json:"id"`
-	Object  string                 `json:"object"`
-	Created int64                  `json:"created"`
-	Model   string                 `json:"model"`
+	ID      string                  `json:"id"`
+	Object  string                  `json:"object"`
+	Created int64                   `json:"created"`
+	Model   string                  `json:"model"`
 	Choices []ChatCompletionsChoice `json:"choices"`
 }

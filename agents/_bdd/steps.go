@@ -32,10 +32,10 @@ type agentsTestState struct {
 	resultPath    string
 	runnerErr     error
 	result        *sbajob.Result
-	lastRunCmd    string   // for mock: one run_command step argv
-	lastApplyDiff string   // for mock: apply_unified_diff diff body (escaping)
-	stdinJobJSON  string   // for stdin mode: raw job JSON
-	resultOutput  string   // for stdin mode: result JSON written to stdout
+	lastRunCmd    string // for mock: one run_command step argv
+	lastApplyDiff string // for mock: apply_unified_diff diff body (escaping)
+	stdinJobJSON  string // for stdin mode: raw job JSON
+	resultOutput  string // for stdin mode: result JSON written to stdout
 	// Lifecycle (callback server)
 	lifecycleServer   *httptest.Server
 	lifecycleStatuses []string

@@ -134,8 +134,8 @@ type toolCallRequest struct {
 
 // requiredScopedIds defines which of task_id, run_id, job_id are required for a tool (REQ-MCPGAT-0103--0106, mcp_gateway_enforcement.md).
 var requiredScopedIds = map[string]struct{ TaskID, RunID, JobID bool }{
-	"db.preference.get":      {},
-	"db.preference.list":     {},
+	"db.preference.get":       {},
+	"db.preference.list":      {},
 	"db.preference.effective": {TaskID: true},
 }
 

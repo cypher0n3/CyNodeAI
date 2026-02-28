@@ -79,6 +79,22 @@ func (db *DB) CreateJob(ctx context.Context, taskID uuid.UUID, payload string) (
 	return job, nil
 }
 
+// CreateJobWithID creates a new job with the given ID (used when payload must reference job_id, e.g. SBA job spec).
+func (db *DB) CreateJobWithID(ctx context.Context, taskID, jobID uuid.UUID, payload string) (*models.Job, error) {
+	job := &models.Job{
+		ID:        jobID,
+		TaskID:    taskID,
+		Status:    models.JobStatusQueued,
+		Payload:   models.NewJSONBString(&payload),
+		CreatedAt: time.Now().UTC(),
+		UpdatedAt: time.Now().UTC(),
+	}
+	if err := db.createRecord(ctx, job, "create job with id"); err != nil {
+		return nil, err
+	}
+	return job, nil
+}
+
 // CreateJobCompleted creates a job that is already completed (orchestrator-side inference).
 // The job is never queued so the dispatcher does not pick it up.
 func (db *DB) CreateJobCompleted(ctx context.Context, taskID, jobID uuid.UUID, result string) (*models.Job, error) {

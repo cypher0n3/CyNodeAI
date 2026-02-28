@@ -109,7 +109,7 @@ func TestRun_StepFailure_ExitsOneAndWritesResult(t *testing.T) {
 		t.Fatalf("result file not written: %v", err)
 	}
 	var r struct {
-		Status      string `json:"status"`
+		Status      string  `json:"status"`
 		FailureCode *string `json:"failure_code"`
 	}
 	if err := json.Unmarshal(data, &r); err != nil {

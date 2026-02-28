@@ -649,9 +649,9 @@ func TestRunJobDirectEmptyCommand(t *testing.T) {
 		TaskID:  "t1",
 		JobID:   "j1",
 		Sandbox: workerapi.SandboxSpec{
-			Image:         "cynodeai-cynode-sba:dev",
-			Command:       nil,
-			JobSpecJSON:   `{"protocol_version":"1.0","job_id":"j1","task_id":"t1","constraints":{"max_runtime_seconds":60,"max_output_bytes":1024},"steps":[]}`,
+			Image:       "cynodeai-cynode-sba:dev",
+			Command:     nil,
+			JobSpecJSON: `{"protocol_version":"1.0","job_id":"j1","task_id":"t1","constraints":{"max_runtime_seconds":60,"max_output_bytes":1024},"steps":[]}`,
 		},
 	}
 	resp, err := e.RunJob(context.Background(), req, "")

@@ -18,6 +18,7 @@ import (
 var taskCreatePrompt string
 var taskCreateUseInference bool
 var taskCreateInputMode string
+var taskCreateUseSBA bool
 var taskWatchInterval time.Duration
 var taskWatchNoClear bool
 var taskListLimit int
@@ -104,6 +105,7 @@ func init() {
 	taskCreateCmd.Flags().StringVarP(&taskCreatePrompt, "prompt", "p", "", "task prompt (natural language or command)")
 	taskCreateCmd.Flags().BoolVar(&taskCreateUseInference, "use-inference", false, "run job in a pod with inference proxy (OLLAMA_BASE_URL in sandbox)")
 	taskCreateCmd.Flags().StringVar(&taskCreateInputMode, "input-mode", "prompt", "input mode: prompt (default, use inference), script, or commands (literal shell)")
+	taskCreateCmd.Flags().BoolVar(&taskCreateUseSBA, "use-sba", false, "create task with SBA runner job (job_spec_json); prompt as task context (P2-10)")
 	_ = taskCreateCmd.MarkFlagRequired("prompt")
 	taskListCmd.Flags().IntVarP(&taskListLimit, "limit", "l", 50, "max tasks to return")
 	taskListCmd.Flags().IntVar(&taskListOffset, "offset", 0, "pagination offset")
@@ -123,7 +125,7 @@ func runTaskCreate(_ *cobra.Command, _ []string) error {
 	if inputMode == "" {
 		inputMode = "prompt"
 	}
-	task, err := client.CreateTask(userapi.CreateTaskRequest{Prompt: taskCreatePrompt, UseInference: taskCreateUseInference, InputMode: inputMode})
+	task, err := client.CreateTask(userapi.CreateTaskRequest{Prompt: taskCreatePrompt, UseInference: taskCreateUseInference, InputMode: inputMode, UseSBA: taskCreateUseSBA})
 	if err != nil {
 		return exitFromGatewayErr(err)
 	}

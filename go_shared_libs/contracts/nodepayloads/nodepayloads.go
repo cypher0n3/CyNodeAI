@@ -4,17 +4,17 @@ package nodepayloads
 // CapabilityReport represents the capability report from a node.
 // See docs/tech_specs/worker_node_payloads.md node_capability_report_v1.
 type CapabilityReport struct {
-	Version          int                  `json:"version"`
-	ReportedAt       string               `json:"reported_at"`
-	Node             CapabilityNode       `json:"node"`
-	Platform         Platform             `json:"platform"`
-	ContainerRuntime *ContainerRuntime    `json:"container_runtime,omitempty"`
-	Compute          Compute              `json:"compute"`
-	GPU              *GPUInfo             `json:"gpu,omitempty"`
-	Sandbox          *SandboxSupport      `json:"sandbox,omitempty"`
-	Network          *NetworkInfo         `json:"network,omitempty"`
-	Inference        *InferenceInfo       `json:"inference,omitempty"`
-	TLS              *TLSInfo             `json:"tls,omitempty"`
+	Version          int               `json:"version"`
+	ReportedAt       string            `json:"reported_at"`
+	Node             CapabilityNode    `json:"node"`
+	Platform         Platform          `json:"platform"`
+	ContainerRuntime *ContainerRuntime `json:"container_runtime,omitempty"`
+	Compute          Compute           `json:"compute"`
+	GPU              *GPUInfo          `json:"gpu,omitempty"`
+	Sandbox          *SandboxSupport   `json:"sandbox,omitempty"`
+	Network          *NetworkInfo      `json:"network,omitempty"`
+	Inference        *InferenceInfo    `json:"inference,omitempty"`
+	TLS              *TLSInfo          `json:"tls,omitempty"`
 	// WorkerAPI is the node-reported Worker API address; orchestrator uses it for dispatch unless an explicit override is set.
 	WorkerAPI *WorkerAPIReport `json:"worker_api,omitempty"`
 }
@@ -61,8 +61,8 @@ type GPUDevice struct {
 }
 
 type GPUInfo struct {
-	Present bool         `json:"present"`
-	Devices []GPUDevice  `json:"devices,omitempty"`
+	Present bool        `json:"present"`
+	Devices []GPUDevice `json:"devices,omitempty"`
 }
 
 type SandboxSupport struct {
@@ -73,7 +73,7 @@ type SandboxSupport struct {
 
 type NetworkInfo struct {
 	OrchestratorReachable bool   `json:"orchestrator_reachable,omitempty"`
-	OutboundPolicy       string `json:"outbound_policy,omitempty"`
+	OutboundPolicy        string `json:"outbound_policy,omitempty"`
 }
 
 type InferenceInfo struct {
@@ -126,17 +126,17 @@ func SupportedBootstrapVersion(v int) bool {
 // NodeConfigurationPayload is the node configuration payload (node_configuration_payload_v1).
 // Spec CYNAI.WORKER.Payload.ConfigurationV1; see docs/tech_specs/worker_node_payloads.md.
 type NodeConfigurationPayload struct {
-	Version          int                        `json:"version"`
-	ConfigVersion    string                     `json:"config_version"`
-	IssuedAt         string                     `json:"issued_at"`
-	NodeSlug         string                     `json:"node_slug"`
-	Orchestrator     ConfigOrchestrator         `json:"orchestrator"`
+	Version           int                          `json:"version"`
+	ConfigVersion     string                       `json:"config_version"`
+	IssuedAt          string                       `json:"issued_at"`
+	NodeSlug          string                       `json:"node_slug"`
+	Orchestrator      ConfigOrchestrator           `json:"orchestrator"`
 	SandboxRegistries []ConfigSandboxRegistryEntry `json:"sandbox_registries,omitempty"`
-	ModelCache       ConfigModelCache           `json:"model_cache"`
-	Policy           *ConfigPolicy              `json:"policy,omitempty"`
-	WorkerAPI        *ConfigWorkerAPI           `json:"worker_api,omitempty"`
-	Notes            string                     `json:"notes,omitempty"`
-	Constraints      *ConfigConstraints         `json:"constraints,omitempty"`
+	ModelCache        ConfigModelCache             `json:"model_cache"`
+	Policy            *ConfigPolicy                `json:"policy,omitempty"`
+	WorkerAPI         *ConfigWorkerAPI             `json:"worker_api,omitempty"`
+	Notes             string                       `json:"notes,omitempty"`
+	Constraints       *ConfigConstraints           `json:"constraints,omitempty"`
 }
 
 // ConfigOrchestrator contains orchestrator base URL and endpoints for node config.

@@ -216,7 +216,7 @@ type ChatResponse struct {
 
 // ListModelsResponse is the OpenAI-format response from GET /v1/models.
 type ListModelsResponse struct {
-	Object string          `json:"object"`
+	Object string           `json:"object"`
 	Data   []ListModelEntry `json:"data"`
 }
 

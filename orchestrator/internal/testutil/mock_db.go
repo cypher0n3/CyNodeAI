@@ -401,6 +401,23 @@ func (m *MockDB) CreateJob(_ context.Context, taskID uuid.UUID, payload string) 
 	})
 }
 
+// CreateJobWithID creates a new job with the given ID (e.g. for SBA job spec).
+func (m *MockDB) CreateJobWithID(_ context.Context, taskID, jobID uuid.UUID, payload string) (*models.Job, error) {
+	return runWithLock(m, true, func() (*models.Job, error) {
+		job := &models.Job{
+			ID:        jobID,
+			TaskID:    taskID,
+			Status:    models.JobStatusQueued,
+			Payload:   models.NewJSONBString(&payload),
+			CreatedAt: time.Now().UTC(),
+			UpdatedAt: time.Now().UTC(),
+		}
+		m.Jobs[job.ID] = job
+		m.JobsByTask[taskID] = append(m.JobsByTask[taskID], job)
+		return job, nil
+	})
+}
+
 // CreateJobCompleted creates a job that is already completed (orchestrator-side inference).
 func (m *MockDB) CreateJobCompleted(_ context.Context, taskID, jobID uuid.UUID, result string) (*models.Job, error) {
 	return runWithLock(m, true, func() (*models.Job, error) {

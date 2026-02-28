@@ -86,7 +86,7 @@ func runCommandStep(ctx context.Context, index int, raw json.RawMessage, maxOutp
 }
 
 type writeFileArgs struct {
-	Path  string `json:"path"`
+	Path    string `json:"path"`
 	Content string `json:"content"`
 }
 

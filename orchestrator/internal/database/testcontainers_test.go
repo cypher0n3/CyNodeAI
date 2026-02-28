@@ -257,6 +257,49 @@ func tcCreateTaskJobAndVerifyPayload(t *testing.T, db Store, ctx context.Context
 	return task, job
 }
 
+func tcCreateTaskAndJobWithID(t *testing.T, db Store, ctx context.Context, user *models.User, jobID uuid.UUID, payload string) (*models.Task, *models.Job) {
+	t.Helper()
+	task, err := db.CreateTask(ctx, &user.ID, "sba-prompt")
+	if err != nil {
+		t.Fatalf("CreateTask: %v", err)
+	}
+	job, err := db.CreateJobWithID(ctx, task.ID, jobID, payload)
+	if err != nil {
+		t.Fatalf("CreateJobWithID: %v", err)
+	}
+	if job.ID != jobID {
+		t.Errorf("CreateJobWithID: job.ID = %v, want %v", job.ID, jobID)
+	}
+	got, err := db.GetJobByID(ctx, jobID)
+	if err != nil || got.Payload.Ptr() == nil || *got.Payload.Ptr() != payload {
+		t.Fatalf("CreateJobWithID round-trip: %v", err)
+	}
+	return task, job
+}
+
+func TestWithTestcontainers_CreateJobWithID_DuplicateIDReturnsError(t *testing.T) {
+	ctx := context.Background()
+	db := tcOpenDB(t, ctx)
+	// Use unique handle so we do not conflict with tcCreateUserAndVerify("tc-user") in other tests.
+	user, err := db.CreateUser(ctx, "tc-user-dup-"+uuid.New().String()[:8], nil)
+	if err != nil {
+		t.Fatalf("CreateUser: %v", err)
+	}
+	task, err := db.CreateTask(ctx, &user.ID, "prompt")
+	if err != nil {
+		t.Fatalf("CreateTask: %v", err)
+	}
+	jobID := uuid.New()
+	_, err = db.CreateJobWithID(ctx, task.ID, jobID, `{"job_spec_json":"{}"}`)
+	if err != nil {
+		t.Fatalf("first CreateJobWithID: %v", err)
+	}
+	_, err = db.CreateJobWithID(ctx, task.ID, jobID, `{"x":2}`)
+	if err == nil {
+		t.Error("second CreateJobWithID with same jobID should return error")
+	}
+}
+
 func tcCreateNodeAndListActive(t *testing.T, db Store, ctx context.Context) *models.Node {
 	t.Helper()
 	node, err := db.CreateNode(ctx, "tc-node")
@@ -289,6 +332,9 @@ func TestWithTestcontainers_Integration(t *testing.T) {
 	db := tcOpenDB(t, ctx)
 	user := tcCreateUserAndVerify(t, db, ctx)
 	_, job := tcCreateTaskJobAndVerifyPayload(t, db, ctx, user)
+	// Exercise CreateJobWithID (SBA job path).
+	sbaJobID := uuid.New()
+	tcCreateTaskAndJobWithID(t, db, ctx, user, sbaJobID, `{"job_spec_json":"{}","image":"cynodeai-cynode-sba:dev"}`)
 	node := tcCreateNodeAndListActive(t, db, ctx)
 	if err := db.UpdateNodeConfigVersion(ctx, node.ID, "1"); err != nil {
 		t.Fatalf("UpdateNodeConfigVersion: %v", err)
