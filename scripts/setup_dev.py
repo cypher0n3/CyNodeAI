@@ -66,10 +66,12 @@ def cmd_start(opts):
 
 
 def cmd_full_demo(opts):
-    """Build, build E2E images, start, run Python E2E, optionally stop."""
+    """Build binaries, E2E images, orchestrator images; start stack; run E2E; optionally stop."""
     if not setup_dev_impl.build_binaries():
         return False
     if not setup_dev_impl.build_e2e_images():
+        return False
+    if not setup_dev_impl.build_orchestrator_compose_images():
         return False
     setup_dev_config.ensure_runtime()
     host = setup_dev_config.CONTAINER_HOST_ALIAS or "host.containers.internal"
@@ -89,7 +91,8 @@ def cmd_full_demo(opts):
     ok = setup_dev_impl.run_python_e2e(extra_env=e2e_env)
     if opts.stop_on_success and ok:
         setup_dev_impl.log_info("Demo completed! Stopping services (--stop-on-success).")
-        setup_dev_impl.stop_all()
+        leave_ollama = setup_dev_impl.get_ollama_was_running_before()
+        setup_dev_impl.stop_all(leave_ollama_running=leave_ollama)
     elif ok:
         setup_dev_impl.log_info("Demo completed! Services still running. Use 'stop' to stop.")
     else:

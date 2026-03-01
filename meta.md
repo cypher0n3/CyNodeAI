@@ -18,6 +18,7 @@ It coordinates sandboxed worker execution across local nodes and optional cloud 
 - Technical specifications index: `docs/tech_specs/_main.md` (grouped by Core, Execution, External, Model, Agents, Bootstrap).
 - **AI coding agents:** All AI-assisted coding MUST follow the BDD/TDD process and workflow in [ai_files/ai_coding_instructions.md](ai_files/ai_coding_instructions.md).
   That document is required reading for any agent making code or test changes; it defines Red/Green/Refactor, including adding Python E2E tests in the Red phase for user- or API-facing behavior.
+- `justfile` contains useful tools for setup and checks.
 
 ## Architecture Summary
 
@@ -67,7 +68,8 @@ It coordinates sandboxed worker execution across local nodes and optional cloud 
 - See [`markdown_conventions.md`](./docs/docs_standards/markdown_conventions.md)
 - Use the project **justfile** for setup, checking, and validation.
   All changes must pass **`just ci`** before considering work complete; see the justfile for available recipes.
-  - Note: If only docs were updated, **`just docs-check`** is sufficient instead of `just ci`.
+  - **ALWAYS** lint all changed files with appropriate `just lint-*` command, or lint all with `just lint`.
+  - If only docs were updated, **`just docs-check`** is sufficient instead of `just ci`.
 - Markdown formatting is governed by `.editorconfig` and `.markdownlint.yml`.
   Keep Markdown ASCII-only (avoid emoji and non-ASCII punctuation) unless explicitly allowed by the linter config.
   - **NOTE:** Use `just lint-md <path>` to apply automatic markdownlint fixes before fixing other linter issues.

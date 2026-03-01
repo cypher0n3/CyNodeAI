@@ -32,6 +32,7 @@ USER_GATEWAY_CONTAINER_NAME = os.environ.get(
 )
 ORCHESTRATOR_PORT = os.environ.get("ORCHESTRATOR_PORT", "12080")
 CONTROL_PLANE_PORT = os.environ.get("CONTROL_PLANE_PORT", "12082")
+OLLAMA_CONTAINER_NAME = os.environ.get("OLLAMA_CONTAINER_NAME", "cynodeai-ollama")
 JWT_SECRET = os.environ.get("JWT_SECRET", "dev-jwt-secret-change-in-production")
 NODE_PSK = os.environ.get("NODE_PSK", "dev-node-psk-secret")
 ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "admin123")
@@ -56,7 +57,7 @@ def ensure_runtime():
         return True
     for r in ("podman", "docker"):
         try:
-            subprocess.run(  # nosec B603 - dev script, runtime detection
+            subprocess.run(
                 [r, "ps"],
                 capture_output=True,
                 timeout=5,

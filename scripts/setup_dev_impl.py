@@ -13,6 +13,9 @@ import urllib.request
 # Import after repo root is on path
 import scripts.setup_dev_config as _cfg
 
+# Mutable state set at start of start_orchestrator_stack_compose; used by stop_all.
+OLLAMA_TEARDOWN_STATE = {"was_running_before": False}
+
 
 @contextlib.contextmanager
 def _popen_no_wait(*args, **kwargs):
@@ -167,11 +170,35 @@ def clean_postgres():
 def build_binaries():
     """Run just build."""
     log_info("Building all binaries (just build)...")
-    if not run(["just", "build"], timeout=300):
+    if not run(["just", "build"], timeout=600):
         log_error("just build failed")
         return False
     log_info("Binaries built: orchestrator/bin, worker_node/bin, cynork/bin, agents/bin")
     return True
+
+
+def build_orchestrator_compose_images():
+    """Build control-plane, user-gateway, cynode-pma images so compose up uses latest code."""
+    if not _cfg.ensure_runtime():
+        return False
+    if not os.path.isfile(_cfg.COMPOSE_FILE):
+        log_error(f"Compose file not found: {_cfg.COMPOSE_FILE}")
+        return False
+    log_info("Building orchestrator compose images (control-plane, user-gateway, cynode-pma)...")
+    if not run(
+        [_cfg.RUNTIME, "compose", "-f", _cfg.COMPOSE_FILE, "build",
+         "control-plane", "user-gateway", "cynode-pma"],
+        cwd=_cfg.PROJECT_ROOT,
+        timeout=600,
+    ):
+        log_error("Orchestrator compose build failed")
+        return False
+    return True
+
+
+def get_ollama_was_running_before():
+    """Return whether the ollama container was running before we started the stack."""
+    return OLLAMA_TEARDOWN_STATE["was_running_before"]
 
 
 def start_orchestrator_stack_compose(extra_env=None):
@@ -181,6 +208,9 @@ def start_orchestrator_stack_compose(extra_env=None):
     if not os.path.isfile(_cfg.COMPOSE_FILE):
         log_error(f"Compose file not found: {_cfg.COMPOSE_FILE}")
         return False
+    OLLAMA_TEARDOWN_STATE["was_running_before"] = container_exists(
+        _cfg.OLLAMA_CONTAINER_NAME, running=True
+    )
     log_info("=== Orchestrator stack startup ===")
     log_info(
         f"  postgres :5432, control-plane :{_cfg.CONTROL_PLANE_PORT}, "
@@ -204,16 +234,19 @@ def start_orchestrator_stack_compose(extra_env=None):
         check=False,
         shell=False,
     )
-    if not run([_cfg.RUNTIME, "compose", "-f", _cfg.COMPOSE_FILE, "up", "-d"],
-               env=env, timeout=600):
+    # Default: include ollama profile so inference is available.
+    if not run(
+        [_cfg.RUNTIME, "compose", "-f", _cfg.COMPOSE_FILE, "--profile", "ollama", "up", "-d"],
+        env=env, timeout=600,
+    ):
         log_error("Compose up failed")
         return False
     log_info("Orchestrator stack started.")
     return True
 
 
-def stop_orchestrator_stack_compose():
-    """Compose down."""
+def stop_orchestrator_stack_compose(leave_ollama_running=False):
+    """Compose down. If leave_ollama_running, bring ollama back up after down."""
     if not _cfg.ensure_runtime():
         return False
     log_info("Stopping orchestrator stack...")
@@ -226,6 +259,15 @@ def stop_orchestrator_stack_compose():
             check=False,
             shell=False,
         )
+        if leave_ollama_running:
+            log_info("Restarting ollama (was running before tests).")
+            run(
+                [_cfg.RUNTIME, "compose", "-f", _cfg.COMPOSE_FILE, "--profile", "ollama",
+                 "up", "-d", "ollama"],
+                env=_cfg.compose_env(),
+                cwd=_cfg.PROJECT_ROOT,
+                timeout=60,
+            )
     return True
 
 
@@ -318,8 +360,9 @@ def _stop_all_step(step_name, func):
         sys.stderr.flush()
 
 
-def stop_all():
+def stop_all(leave_ollama_running=False):
     """Kill node-manager, free worker port, compose down, rm containers.
+    If leave_ollama_running, do not leave ollama stopped (restart it after down).
     Best-effort: never raises so caller can still report success (e.g. after E2E pass).
     """
 
@@ -356,7 +399,11 @@ def stop_all():
         except (FileNotFoundError, subprocess.TimeoutExpired) as e:
             log_warn(f"stop_all: free worker port (fuser) failed: {type(e).__name__}: {e}")
             _stop_all_step("free worker port (lsof)", free_worker_port_fallback)
-        _stop_all_step("compose down", stop_orchestrator_stack_compose)
+
+        def compose_down():
+            stop_orchestrator_stack_compose(leave_ollama_running=leave_ollama_running)
+
+        _stop_all_step("compose down", compose_down)
 
         def rm_containers():
             if _cfg.ensure_runtime():

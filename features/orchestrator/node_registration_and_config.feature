@@ -66,3 +66,12 @@ Scenario: Config ack with wrong node_slug is rejected
   Given a registered node "test-node-01" that has received configuration
   When the node sends a config acknowledgement with node_slug "wrong-slug" and status "applied"
   Then the orchestrator responds with 400 Bad Request
+
+@req_orches_0149
+@spec_cynai_worker_payload_configurationv1
+Scenario: GET config returns inference_backend when node is inference-capable and not existing_service
+  Given a node with slug "inference-node-01" and valid PSK
+  And the node registers with capability inference supported and not existing_service
+  When the node requests its configuration
+  Then the orchestrator returns a configuration payload for "inference-node-01"
+  And the payload includes inference_backend with enabled true
