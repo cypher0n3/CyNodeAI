@@ -71,7 +71,9 @@ It coordinates sandboxed worker execution across local nodes and optional cloud 
   - **ALWAYS** lint all changed files with appropriate `just lint-*` command, or lint all with `just lint`.
   - If only docs were updated, **`just docs-check`** is sufficient instead of `just ci`.
 - Markdown formatting is governed by `.editorconfig` and `.markdownlint.yml`.
-  Keep Markdown ASCII-only (avoid emoji and non-ASCII punctuation) unless explicitly allowed by the linter config.
+  - Comply with standards outlined in `docs/docs_standards/markdown_conventions.md`.
+  - Keep Markdown ASCII-only (avoid emoji and non-ASCII punctuation) unless explicitly allowed by the linter config.
+  - Do NOT use markdown tables unless explicitly directed.
   - **NOTE:** Use `just lint-md <path>` to apply automatic markdownlint fixes before fixing other linter issues.
     This will save a lot of manual work.
 - Python linting configuration exists in `.flake8` and `.pylintrc` (line length 100).

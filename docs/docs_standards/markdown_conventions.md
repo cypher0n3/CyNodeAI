@@ -16,7 +16,7 @@ It applies to all Markdown files unless a document explicitly states an exceptio
   - `README.md` files, which may use emoji, badges, and other visual elements.
 - Include a blank line after every heading.
 - Include a blank line before and after every list.
-- Avoid using Markdown tables; prefer lists or separate sections instead.
+- **Avoid using Markdown tables:** prefer lists or separate sections instead.
 - Put one sentence per line.
   Tables may contain multiple sentences in a single cell.
 - Indent list-item code blocks by four spaces.
