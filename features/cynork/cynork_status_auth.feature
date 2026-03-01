@@ -49,3 +49,17 @@ Scenario: Consecutive invocations use stored session
   When I run cynork auth whoami using the stored config
   Then cynork exits with code 0
   And cynork stdout contains "handle=alice"
+
+@req_identy_0105
+@spec_cynai_client_cliauth
+Scenario: Auth refresh renews session
+  Given I am logged in with username "alice" and password "secret"
+  When I run cynork auth refresh
+  Then cynork exits with code 0
+
+@req_identy_0106
+@spec_cynai_client_cliauth
+Scenario: Logout clears stored session
+  Given I am logged in with username "alice" and password "secret"
+  When I run cynork auth logout
+  Then cynork exits with code 0

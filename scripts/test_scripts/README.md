@@ -6,6 +6,8 @@
   - [Run Options](#run-options)
   - [Via Just](#via-just)
 - [Test Layout](#test-layout)
+  - [Numbering Convention](#numbering-convention)
+  - [Test Modules (Run Order)](#test-modules-run-order)
 - [Execution Order and State](#execution-order-and-state)
 - [Environment](#environment)
 - [Adding Tests](#adding-tests)
@@ -65,27 +67,40 @@ PYTHONPATH=. python scripts/test_scripts/run_e2e.py -k test_05 -v
 - **helpers.py** - `run_cynork()`, `run_curl()`, `wait_for_gateway()`, `run_ollama_inference_smoke()`, JSON/state helpers.
 - **e2e_state.py** - Shared state: `CONFIG_DIR`, `CONFIG_PATH`, `TASK_ID`, `NODE_JWT`, etc.; set by tests, cleaned by logout.
 
-Test modules (one main test per file; order depends on discovery):
+### Numbering Convention
 
-- **e2e_01_login** - Auth login (admin); creates temp config dir and writes token to `state.CONFIG_PATH`.
-- **e2e_02_whoami** - Auth whoami; asserts handle=admin.
-- **e2e_03_task_create** - Create task (echo); sets `state.TASK_ID`.
-- **e2e_04_task_get** - Get task by ID.
-- **e2e_05_task_result** - Get task result; asserts status present.
-- **e2e_05b_inference_task** - Create task with `--use-inference`; asserts `OLLAMA_BASE_URL` in stdout (skipped if `INFERENCE_PROXY_IMAGE` unset).
-- **e2e_05c_prompt_task** - Prompt (LLM) task; asserts non-empty stdout.
-- **e2e_05d_models_and_chat** - Models list; one-shot chat (skipped if `E2E_SKIP_INFERENCE_SMOKE`).
-- **e2e_05e_sba_task** - SBA task; asserts job result contains `sba_result`.
-- **e2e_06_node_register** - POST control-plane `/v1/nodes/register`; sets `state.NODE_JWT`.
-- **e2e_07_capability** - POST control-plane `/v1/nodes/capability` with node JWT.
-- **e2e_08_refresh** - Auth refresh and whoami.
-- **e2e_09_logout** - Auth logout; cleans `state.CONFIG_DIR`.
+Modules are named `e2e_NNN_descriptive_name.py` with **zero-padded NNN in steps of 10** (010, 020, 030, ...).
+Alphabetical order of module names is the run order.
+Gaps (e.g. 011-019 between 010 and 020) allow inserting new tests without renumbering.
+
+### Test Modules (Run Order)
+
+- **e2e_010_cli_version_and_status** - Cynork version and status (gateway health); no auth.
+- **e2e_020_auth_login** - Auth login (admin); creates temp config dir and writes token to `state.CONFIG_PATH`.
+- **e2e_030_auth_negative_whoami** - Whoami without login fails (negative test).
+- **e2e_040_auth_whoami** - Auth whoami; asserts handle=admin.
+- **e2e_050_task_create** - Create task (echo); sets `state.TASK_ID`.
+- **e2e_060_task_list** - Task list JSON; asserts tasks array and created task present.
+- **e2e_070_task_get** - Get task by ID.
+- **e2e_080_task_result** - Get task result; asserts status present.
+- **e2e_090_task_inference** - Create task with `--use-inference` (skipped if `INFERENCE_PROXY_IMAGE` unset).
+- **e2e_100_task_prompt** - Prompt (LLM) task; asserts non-empty stdout.
+- **e2e_110_task_models_and_chat** - Models list; one-shot chat (skipped if `E2E_SKIP_INFERENCE_SMOKE`).
+- **e2e_120_sba_task** - SBA task; asserts job result contains `sba_result`; sets `state.SBA_TASK_ID`.
+- **e2e_130_sba_task_result_contract** - SBA result shape (protocol_version, job_id, status, steps, artifacts).
+- **e2e_140_sba_task_inference** - SBA task with inference prompt (skipped if `E2E_SKIP_INFERENCE_SMOKE`).
+- **e2e_150_task_logs** - Task logs for `state.TASK_ID`.
+- **e2e_160_task_cancel** - Create task, cancel with `-y`, assert terminal status canceled.
+- **e2e_170_control_plane_node_register** - POST `/v1/nodes/register`; sets `state.NODE_JWT`.
+- **e2e_180_control_plane_capability** - POST `/v1/nodes/capability` with node JWT.
+- **e2e_190_auth_refresh** - Auth refresh and whoami.
+- **e2e_200_auth_logout** - Auth logout; cleans `state.CONFIG_DIR`.
 
 ## Execution Order and State
 
-Discovery order is determined by unittest (typically alphabetical by module name).
-Several tests depend on shared state: login (01) creates the config and token; later tests use `state.CONFIG_PATH` and task/JWT IDs set by earlier tests; logout (09) removes the config dir.
-Running a single test in isolation (e.g. `-k test_task_create`) will fail if it expects `state.TASK_ID` or `state.CONFIG_PATH` from a prior test; run the full suite or a contiguous subset (e.g. login through the test you care about).
+Discovery order is alphabetical by module name (010, 020, ... 200).
+Several tests depend on shared state: login (020) creates the config and token; later tests use `state.CONFIG_PATH` and task/JWT IDs set by earlier tests; logout (200) removes the config dir.
+Running a single test in isolation (e.g. `-k test_task_create`) will fail if it expects `state.TASK_ID` or `state.CONFIG_PATH` from a prior test; run the full suite or a contiguous subset.
 
 ## Environment
 
@@ -98,10 +113,13 @@ Same as `scripts/setup-dev.sh`; see also `docs/tech_specs/ports_and_endpoints.md
 
 ## Adding Tests
 
-1. Add a new module `e2e_<name>.py` in `scripts/test_scripts/` with unittest `TestCase` classes.
+1. Add a new module `e2e_NNN_descriptive_name.py` in `scripts/test_scripts/` with unittest `TestCase` classes.
+   Use a number between two existing tests for the desired run position (e.g. 015 between 010 and 020).
+   If adding at the end, use at least 10 above the current last test (e.g. 210 when the last is 200).
+   No need to renumber existing files.
 2. The runner discovers all `e2e_*.py`; no registration needed.
 3. Use `from scripts.test_scripts import config, helpers` and `import scripts.test_scripts.e2e_state as state`.
-4. If the test needs auth or task state, run after login/task-create in the same run (or document the required order).
+4. If the test needs auth or task state, run after the test that sets that state (or document the required order).
 5. Use `helpers.run_cynork(...)` for cynork CLI and `helpers.run_curl(...)` for control-plane HTTP; use `state.CONFIG_PATH` for cynork config when auth is required.
 
 ## Troubleshooting
@@ -109,7 +127,7 @@ Same as `scripts/setup-dev.sh`; see also `docs/tech_specs/ports_and_endpoints.md
 - **"user-gateway not ready (healthz) after 30s"** - Start the stack first (`just setup-dev start` or `just setup-dev full-demo`); ensure nothing else is bound to `ORCHESTRATOR_PORT`.
 - **"cynork-dev not found"** - Run `just build-cynork-dev` or omit `--no-build` so the runner builds it.
 - **"Ollama inference smoke failed"** - Ollama container must be running (e.g. from compose); or set `E2E_SKIP_INFERENCE_SMOKE=1` or pass `--skip-ollama`.
-- **Test 05b skipped** - Set `INFERENCE_PROXY_IMAGE` (e.g. `cynodeai-inference-proxy:dev`) when starting the node so inference-in-sandbox is available.
+- **Test 090 (task_inference) skipped** - Set `INFERENCE_PROXY_IMAGE` (e.g. `cynodeai-inference-proxy:dev`) when starting the node so inference-in-sandbox is available.
 - **Single test fails with missing state** - Run the full suite or include earlier tests (e.g. login, task-create) so shared state is set.
 
 ## Lint

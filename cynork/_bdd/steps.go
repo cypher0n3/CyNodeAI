@@ -67,10 +67,53 @@ func (s *cynorkState) mockGatewayMux() *http.ServeMux {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		_ = json.NewEncoder(w).Encode(map[string]any{
-			"access_token": tok,
-			"token_type":   "Bearer",
-			"expires_in":   900,
+			"access_token":  tok,
+			"refresh_token": "refresh-" + req.Handle,
+			"token_type":    "Bearer",
+			"expires_in":    900,
 		})
+	})
+	mux.HandleFunc("POST /v1/auth/refresh", func(w http.ResponseWriter, r *http.Request) {
+		var req struct {
+			RefreshToken string `json:"refresh_token"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.RefreshToken == "" {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		// Accept any refresh-<handle> and return new tokens (rotation).
+		handle := strings.TrimPrefix(req.RefreshToken, "refresh-")
+		if handle == req.RefreshToken {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		s.mu.Lock()
+		if s.userByToken == nil {
+			s.userByToken = make(map[string]string)
+		}
+		newTok := "tok-" + handle + "-refreshed"
+		s.userByToken[newTok] = handle
+		s.mu.Unlock()
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"access_token":  newTok,
+			"refresh_token": "refresh-" + handle + "-v2",
+			"token_type":    "Bearer",
+			"expires_in":    900,
+		})
+	})
+	mux.HandleFunc("POST /v1/auth/logout", func(w http.ResponseWriter, r *http.Request) {
+		var req struct {
+			RefreshToken string `json:"refresh_token"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("{}"))
 	})
 	mux.HandleFunc("GET /v1/users/me", func(w http.ResponseWriter, r *http.Request) {
 		auth := r.Header.Get("Authorization")
@@ -439,6 +482,22 @@ func InitializeCynorkSuite(sc *godog.ScenarioContext, state *cynorkState) {
 		// No CYNORK_TOKEN: whoami must read token from config file (session persistence).
 		env := []string{"CYNORK_GATEWAY_URL=" + st.mockServer.URL}
 		args := []string{"--config", st.configPath, "auth", "whoami"}
+		st.lastExit, st.lastStdout, st.lastStderr = st.runCynork(args, env...)
+		return nil
+	})
+
+	sc.Step(`^I run cynork auth refresh$`, func(ctx context.Context) error {
+		st := getState(ctx)
+		env := []string{"CYNORK_GATEWAY_URL=" + st.mockServer.URL}
+		args := []string{"--config", st.configPath, "auth", "refresh"}
+		st.lastExit, st.lastStdout, st.lastStderr = st.runCynork(args, env...)
+		return nil
+	})
+
+	sc.Step(`^I run cynork auth logout$`, func(ctx context.Context) error {
+		st := getState(ctx)
+		env := []string{"CYNORK_GATEWAY_URL=" + st.mockServer.URL}
+		args := []string{"--config", st.configPath, "auth", "logout"}
 		st.lastExit, st.lastStdout, st.lastStderr = st.runCynork(args, env...)
 		return nil
 	})

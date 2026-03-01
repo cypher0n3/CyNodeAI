@@ -42,6 +42,18 @@ func TestSanitizePodName(t *testing.T) {
 	}
 }
 
+func TestSanitizePodName_Truncate(t *testing.T) {
+	// JobID longer than 40 chars is truncated (executor.go sanitizePodName).
+	longID := "00000000-0000-0000-0000-000000000000-extra"
+	got := sanitizePodName(longID)
+	if len(got) != 40 {
+		t.Errorf("sanitizePodName(long) length = %d, want 40", len(got))
+	}
+	if got != longID[:40] {
+		t.Errorf("sanitizePodName(long) = %q, want prefix of 40 chars", got)
+	}
+}
+
 func TestBuildProxyRunArgs(t *testing.T) {
 	args := buildProxyRunArgs("pod-1", "http://host:11434", "proxyimg", nil)
 	if len(args) < 6 {
@@ -86,6 +98,20 @@ func TestBuildSandboxRunArgsForPod(t *testing.T) {
 	}
 	if args[len(args)-2] != "echo" || args[len(args)-1] != "hi" {
 		t.Errorf("command should be at end, got %v", args)
+	}
+}
+
+func TestBuildSandboxRunArgsForPod_NoWorkspace(t *testing.T) {
+	req := &workerapi.RunJobRequest{
+		TaskID:  "t1",
+		JobID:   "j1",
+		Sandbox: workerapi.SandboxSpec{Command: []string{"echo", "x"}, Image: "alpine"},
+	}
+	env := map[string]string{"CYNODE_TASK_ID": "t1", "CYNODE_JOB_ID": "j1", "CYNODE_WORKSPACE_DIR": ""}
+	args := buildSandboxRunArgsForPod(req, "mypod", "", env, "alpine")
+	argStr := strings.Join(args, " ")
+	if strings.Contains(argStr, workspaceMount) || strings.Contains(argStr, "-w") {
+		t.Errorf("empty workspaceDir should not add workspace mount or -w: %s", argStr)
 	}
 }
 
@@ -261,6 +287,36 @@ func TestRunJobDirectExitError(t *testing.T) {
 	}
 	if resp.Status != workerapi.StatusFailed || resp.ExitCode != 3 {
 		t.Errorf("status=%s exitCode=%d", resp.Status, resp.ExitCode)
+	}
+}
+
+// TestRunJobDirectExitErrorWithStderr covers setRunError when ExitError and resp.Stderr already set.
+func TestRunJobDirectExitErrorWithStderr(t *testing.T) {
+	var cmd []string
+	if runtime.GOOS == goOSWindows {
+		cmd = []string{"cmd", "/c", "echo err >&2 & exit 3"}
+	} else {
+		cmd = []string{"sh", "-c", "echo err >&2; exit 3"}
+	}
+	e := New("direct", 10*time.Second, 1024, "", "", nil)
+	req := &workerapi.RunJobRequest{
+		Version: 1,
+		TaskID:  "t1",
+		JobID:   "j1",
+		Sandbox: workerapi.SandboxSpec{Command: cmd},
+	}
+	resp, err := e.RunJob(context.Background(), req, "")
+	if err != nil {
+		t.Fatalf("RunJob: %v", err)
+	}
+	if resp.Status != workerapi.StatusFailed || resp.ExitCode != 3 {
+		t.Errorf("status=%s exitCode=%d", resp.Status, resp.ExitCode)
+	}
+	if resp.Stderr == "" {
+		t.Error("expected stderr from failed command")
+	}
+	if !strings.Contains(resp.Stderr, "runtime exit 3") {
+		t.Errorf("stderr should mention exit code: %q", resp.Stderr)
 	}
 }
 
@@ -466,25 +522,38 @@ func TestRunJobContainerPath(t *testing.T) {
 	}
 }
 
-// TestRunJobContainerPathWithTimeout covers TimeoutSeconds in the container path.
-func TestRunJobContainerPathWithTimeout(t *testing.T) {
-	e := New("nonexistent-runtime-xyz", 1*time.Hour, 1024, "", "", nil)
-	req := &workerapi.RunJobRequest{
-		Version: 1,
-		TaskID:  "t1",
-		JobID:   "j1",
-		Sandbox: workerapi.SandboxSpec{
-			Image:          "alpine:latest",
-			Command:        []string{"echo", "hi"},
-			TimeoutSeconds: 30,
+// TestRunJobContainerPath_Variants covers container path with NetworkPolicy default and TimeoutSeconds (runtime missing => failed).
+func TestRunJobContainerPath_Variants(t *testing.T) {
+	for name, req := range map[string]*workerapi.RunJobRequest{
+		"network_policy_default": {
+			Version: 1, TaskID: "t1", JobID: "j1",
+			Sandbox: workerapi.SandboxSpec{
+				Image: "alpine:latest", Command: []string{"echo", "hi"},
+				NetworkPolicy: "allow",
+			},
 		},
-	}
-	resp, err := e.RunJob(context.Background(), req, "")
-	if err != nil {
-		t.Fatalf("RunJob: %v", err)
-	}
-	if resp.Status != workerapi.StatusFailed {
-		t.Errorf("status=%s", resp.Status)
+		"timeout_seconds": {
+			Version: 1, TaskID: "t1", JobID: "j1",
+			Sandbox: workerapi.SandboxSpec{
+				Image: "alpine:latest", Command: []string{"echo", "hi"},
+				TimeoutSeconds: 30,
+			},
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			timeout := 5 * time.Second
+			if name == "timeout_seconds" {
+				timeout = 1 * time.Hour
+			}
+			e := New("nonexistent-runtime-xyz", timeout, 1024, "", "", nil)
+			resp, err := e.RunJob(context.Background(), req, "")
+			if err != nil {
+				t.Fatalf("RunJob: %v", err)
+			}
+			if resp.Status != workerapi.StatusFailed {
+				t.Errorf("status=%s", resp.Status)
+			}
+		})
 	}
 }
 
@@ -577,6 +646,33 @@ func TestRunJobDirectTaskEnv(t *testing.T) {
 	}
 }
 
+// TestRunJobDirectUseInferenceEnv covers runDirect when UseInference and ollamaUpstreamURL are set (env OLLAMA_BASE_URL).
+func TestRunJobDirectUseInferenceEnv(t *testing.T) {
+	var cmd []string
+	if runtime.GOOS == goOSWindows {
+		cmd = []string{"cmd", "/c", "echo", "%OLLAMA_BASE_URL%"}
+	} else {
+		cmd = []string{"sh", "-c", "echo $OLLAMA_BASE_URL"}
+	}
+	e := New("direct", 10*time.Second, 1024, "http://host:11434", "", nil)
+	req := &workerapi.RunJobRequest{
+		Version: 1,
+		TaskID:  "t1",
+		JobID:   "j1",
+		Sandbox: workerapi.SandboxSpec{Command: cmd, UseInference: true},
+	}
+	resp, err := e.RunJob(context.Background(), req, "")
+	if err != nil {
+		t.Fatalf("RunJob: %v", err)
+	}
+	if resp.Status != workerapi.StatusCompleted {
+		t.Errorf("status=%s", resp.Status)
+	}
+	if strings.TrimSpace(resp.Stdout) != "http://localhost:11434" {
+		t.Errorf("direct+UseInference should set OLLAMA_BASE_URL to localhost proxy: %q", resp.Stdout)
+	}
+}
+
 // TestRunJobDirectWorkspaceDir asserts working directory is set when workspaceDir is provided.
 func TestRunJobDirectWorkspaceDir(t *testing.T) {
 	var cmd []string
@@ -619,6 +715,17 @@ func TestReady_UnavailableRuntime(t *testing.T) {
 	ready, reason := e.Ready(context.Background())
 	if ready || reason == "" {
 		t.Errorf("unavailable runtime: ready=%v reason=%q", ready, reason)
+	}
+}
+
+func TestReady_PodmanAvailable(t *testing.T) {
+	if _, err := exec.LookPath("podman"); err != nil {
+		t.Skip("podman not in path")
+	}
+	e := New("podman", 5*time.Second, 1024, "", "", nil)
+	ready, reason := e.Ready(context.Background())
+	if !ready || reason != "" {
+		t.Errorf("podman available: ready=%v reason=%q", ready, reason)
 	}
 }
 
@@ -725,6 +832,47 @@ func TestBuildSBARunArgs(t *testing.T) {
 	}
 }
 
+func TestBuildSBARunArgs_Docker(t *testing.T) {
+	e := New("docker", 30*time.Second, 4096, "", "", nil)
+	req := &workerapi.RunJobRequest{
+		TaskID: "t1",
+		JobID:  "j1",
+		Sandbox: workerapi.SandboxSpec{
+			Image:       "cynode-sba:latest",
+			JobSpecJSON: `{}`,
+		},
+	}
+	args := buildSBARunArgs(req, "/tmp/job", "", e)
+	argStr := strings.Join(args, " ")
+	if strings.Contains(argStr, ":z") {
+		t.Errorf("docker runtime should not add :z (SELinux), got %s", argStr)
+	}
+	if strings.Contains(argStr, "--userns=keep-id") {
+		t.Errorf("docker runtime should not add --userns=keep-id, got %s", argStr)
+	}
+	// Empty workspaceDir: no -v dir:/workspace and no -w (env CYNODE_WORKSPACE_DIR=/workspace is still set).
+	if strings.Contains(argStr, " -w ") {
+		t.Errorf("empty workspaceDir should not add -w, got %s", argStr)
+	}
+}
+
+func TestBuildSBARunArgs_WithCommand(t *testing.T) {
+	e := New("podman", 30*time.Second, 4096, "", "", nil)
+	req := &workerapi.RunJobRequest{
+		TaskID: "t1",
+		JobID:  "j1",
+		Sandbox: workerapi.SandboxSpec{
+			Image:       "cynode-sba:dev",
+			JobSpecJSON: `{}`,
+			Command:     []string{"--custom", "arg"},
+		},
+	}
+	args := buildSBARunArgs(req, "/tmp/job", "/tmp/ws", e)
+	if len(args) < 3 || args[len(args)-2] != "--custom" || args[len(args)-1] != "arg" {
+		t.Errorf("buildSBARunArgs with Command should append command, got %v", args)
+	}
+}
+
 func TestApplySbaResultFromDir_MissingFile(t *testing.T) {
 	dir := t.TempDir()
 	resp := &workerapi.RunJobResponse{}
@@ -791,6 +939,7 @@ func TestTruncateUTF8(t *testing.T) {
 		{"exact", "1234567890", 10, "1234567890"},
 		{"over ascii", "123456789012345", 10, "1234567890"},
 		{"rune boundary", "a\u00e9b", 3, "a\u00e9"}, // U+00E9 is 2 bytes in UTF-8
+		{"mid multi-byte", "1234\u00e9xyz", 6, "1234\u00e9"}, // truncate at 6 bytes, ends at rune boundary
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
