@@ -60,7 +60,7 @@ State transitions must:
 
 ---
 
-## 4. Work-in-Progress (WIP) Limits
+## 4. Work-In-Progress (WIP) Limits
 
 WIP limits cap concurrent work at multiple levels to preserve flow.
 
@@ -292,7 +292,7 @@ This aligns with Lean's flow-over-utilization philosophy.
 
 Stop-the-line and root-cause logging protect quality and reproducibility.
 
-### 11.1 Stop-the-Line Principle
+### 11.1 Stop-The-Line Principle
 
 If:
 

@@ -66,3 +66,9 @@ Behavioral and workflow requirements still live in `AGENTS` and `ORCHES`.
   [CYNAI.AGENTS.LLMContext](../tech_specs/project_manager_agent.md#spec-cynai-agents-llmcontext)
   [CYNAI.PMAGNT.LLMContextComposition](../tech_specs/cynode_pma.md#spec-cynai-pmagnt-llmcontextcomposition)
   <a id="req-pmagnt-0108"></a>
+- **REQ-PMAGNT-0109:** `cynode-pma` MUST be able to use an LLM via the API Egress Server when an LLM API key (or equivalent credential) is provided for PMA through the orchestrator (e.g. configured provider and key for PMA inference).
+  [CYNAI.PMAGNT.LLMViaApiEgress](../tech_specs/cynode_pma.md#spec-cynai-pmagnt-llmviaapiegress)
+  <a id="req-pmagnt-0109"></a>
+- **REQ-PMAGNT-0110:** `cynode-pma` MUST inform the orchestrator when it has come online (e.g. by responding to a health check or by a registration/ready callback) so that the orchestrator can use it and update its own readiness state.
+  [CYNAI.PMAGNT.PmaInformsOrchestratorOnline](../tech_specs/cynode_pma.md#spec-cynai-pmagnt-pmainformsorchestratoronline)
+  <a id="req-pmagnt-0110"></a>

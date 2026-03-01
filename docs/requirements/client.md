@@ -182,6 +182,11 @@ Web Console-specific requirements live in [webcon.md](webcon.md) (REQ-WEBCON-*).
 - **REQ-CLIENT-0176:** When a slash command or shell-escape command fails in chat (e.g. gateway 404, command not found), the CLI MUST display the error and MUST NOT exit the chat session or show the top-level command Usage.
   [CYNAI.CLIENT.CliChatSubcommandErrors](../tech_specs/cli_management_app_commands_chat.md#spec-cynai-client-clichatsubcommanderrors)
   <a id="req-client-0176"></a>
+- **REQ-CLIENT-0177:** Clients that provide an interactive chat session (e.g. CLI chat command, Web Console chat UI) SHOULD call the gateway chat warm-up endpoint after auth and before the first user prompt when the gateway exposes it.
+  Warm-up MUST be non-blocking (e.g. fire-and-forget or short timeout) so the user can type immediately.
+  [CYNAI.USRGWY.OpenAIChatApi.WarmUp](../tech_specs/openai_compatible_chat_api.md#spec-cynai-usrgwy-openaichatapi-warmup)
+  [CYNAI.CLIENT.CliChatWarmUp](../tech_specs/cli_management_app_commands_chat.md#spec-cynai-client-clichatwarmup)
+  <a id="req-client-0177"></a>
 - **REQ-CLIENT-0125:** Node management MUST be mediated by the User API Gateway.
   [CYNAI.WEBCON.NodeManagement](../tech_specs/web_console.md#spec-cynai-webcon-nodemanagement)
   [CYNAI.CLIENT.CliNodeManagement](../tech_specs/cli_management_app_commands_admin.md#spec-cynai-client-clinodemgmt)

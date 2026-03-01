@@ -4,9 +4,17 @@
 - [Bootstrap Goal](#bootstrap-goal)
 - [Bootstrap Source and Precedence](#bootstrap-source-and-precedence)
   - [Applicable Requirements](#applicable-requirements)
+- [Example](#example)
 - [Bootstrap Contents](#bootstrap-contents)
-- [Standalone Operation Mode](#standalone-operation-mode)
-- [Deployment and auto-start](#deployment-and-auto-start)
+- [Orchestrator Independent Startup](#orchestrator-independent-startup)
+- [Worker Node Requirement](#worker-node-requirement)
+- [Deployment and Auto-Start](#deployment-and-auto-start)
+- [Orchestrator Readiness and PMA Startup](#orchestrator-readiness-and-pma-startup)
+  - [Inference Path](#inference-path)
+  - [Worker Reports Ready](#worker-reports-ready)
+  - [PMA Startup](#pma-startup)
+  - [PMA Informs Orchestrator](#pma-informs-orchestrator)
+- [Recommended Behavior (Summary)](#recommended-behavior-summary)
 
 ## Document Overview
 
@@ -17,7 +25,7 @@ Bootstrap configuration is used to seed PostgreSQL and configure external servic
 
 - Provide a repeatable way to initialize an orchestrator deployment.
 - Seed required user preferences, access control rules, and external service configuration into PostgreSQL.
-- Support running the orchestrator as the sole service with no worker nodes.
+- Support deployments that always include at least one worker node (which may be on the same host as the orchestrator for single-system setups).
 
 ## Bootstrap Source and Precedence
 
@@ -95,9 +103,32 @@ Secrets
 - Secrets SHOULD NOT be stored directly in YAML.
 - If secrets must be provisioned at bootstrap time, they SHOULD be provided via environment variables or an external secrets manager and written to PostgreSQL encrypted.
 
-## Standalone Operation Mode
+## Orchestrator Independent Startup
 
-The orchestrator SHOULD support running as the sole service with zero worker nodes.
+- Spec ID: `CYNAI.BOOTST.OrchestratorIndependentStartup` <a id="spec-cynai-bootst-orchestratorindependentstartup"></a>
+
+Traces To:
+
+- [REQ-BOOTST-0105](../requirements/bootst.md#req-bootst-0105)
+
+The orchestrator control-plane and core services (user-gateway, api-egress, cynode-pma when enabled) MUST start and run independently of any OLLAMA or node-local inference container.
+OLLAMA (or equivalent local inference backend) is a **node-side** concern: worker nodes start and manage the inference container after registering with the orchestrator and receiving configuration that instructs them to do so (including backend variant, e.g. ROCm or CUDA).
+
+- The orchestrator MUST NOT require an OLLAMA container as part of its own process or compose stack for correct operation.
+- Dev or single-host convenience setups MAY include OLLAMA in the same compose as the orchestrator for local testing; such setups are optional and MUST NOT be the only supported deployment pattern.
+- Production and multi-node deployments MUST use the prescribed startup sequence: orchestrator services start first (without OLLAMA); nodes start Worker API, register with capabilities, receive config; then nodes start OLLAMA when the orchestrator instructs them to (via node configuration payload).
+
+## Worker Node Requirement
+
+- Spec ID: `CYNAI.BOOTST.WorkerNodeRequirement` <a id="spec-cynai-bootst-workernoderequirement"></a>
+
+Traces To:
+
+- [REQ-ORCHES-0116](../requirements/orches.md#req-orches-0116)
+
+The system always requires at least one worker node for normal operation.
+For single-system setups, that node MAY be on the same host as the orchestrator (e.g. Node Manager and Worker API run on the same machine as control-plane and user-gateway).
+The orchestrator MUST NOT assume it can run as the sole service with zero worker nodes.
 
 ## Deployment and Auto-Start
 
@@ -113,14 +144,49 @@ Orchestrator deployments MUST support auto-start on the host so that the orchest
   Both user (rootless) and system (root) installs MUST be supported; see [`orchestrator/systemd/README.md`](../../orchestrator/systemd/README.md) for the reference layout and generation steps.
 - **macOS:** The implementation MUST provide or document equivalent auto-start (e.g. launchd plist files) so that the orchestrator services can start on boot or on user login, with equivalent capability to the Linux systemd approach.
 
-Recommended behavior
+## Orchestrator Readiness and PMA Startup
 
-- The orchestrator MUST ensure at least one inference-capable path is available before reporting ready.
-  If no local inference is available and no external provider keys are configured, the orchestrator MUST refuse to enter a ready state because inference is unavailable.
-- The orchestrator MUST select an effective Project Manager model on startup.
-  If a local inference worker is available, it MUST ensure the default Project Manager model is loaded and ready before entering ready state.
-- When the Project Manager Agent (cynode-pma) is enabled, the orchestrator MUST NOT report ready until the PMA is reachable (e.g. responds to `GET /healthz` on its listen address).
-  PMA is enabled by default (control-plane env `PMA_ENABLED=true`); set `PMA_ENABLED=false` to run without starting cynode-pma.
-- If there are no registered worker nodes, the orchestrator MAY route model calls to external providers when policy allows it.
+- Spec ID: `CYNAI.BOOTST.OrchestratorReadinessAndPmaStartup` <a id="spec-cynai-bootst-orchestratorreadinessandpmastartup"></a>
+
+Traces To:
+
+- [REQ-BOOTST-0002](../requirements/bootst.md#req-bootst-0002)
+- [REQ-ORCHES-0117](../requirements/orches.md#req-orches-0117)
+- [REQ-ORCHES-0150](../requirements/orches.md#req-orches-0150)
+- [REQ-ORCHES-0151](../requirements/orches.md#req-orches-0151)
+
+The orchestrator cannot report fully ready until at least one inference path exists and, when PMA is enabled, until the PMA has informed the orchestrator that it is online.
+
+### Inference Path
+
+- An **inference path** is either:
+  - A worker node that has registered, been instructed to start inference (via node config `inference_backend`), has started its inference container, and has **reported ready** to the orchestrator (e.g. via config ack with status applied after services are up), or
+  - An LLM API key (or equivalent) configured for the Project Manager Agent via the API Egress Server so PMA can use an external provider for inference.
+- The orchestrator MUST NOT report ready until at least one inference path exists.
+
+### Worker Reports Ready
+
+- The worker MUST report to the orchestrator when it has become ready (e.g. after applying config and starting Worker API and, when instructed, the local inference container) so the orchestrator can treat the node as an inference path.
+  This report MAY be the config ack with status applied, or a dedicated readiness notification as defined in the worker node spec.
+
+### PMA Startup
+
+- The orchestrator MUST start the Project Manager Agent (cynode-pma) when the **first** inference path becomes available: either the first worker node has reported ready and is inference-capable, or the orchestrator has an LLM API key configured for PMA via API Egress.
+- The orchestrator MUST NOT start PMA before at least one of these conditions is satisfied.
+
+### PMA Informs Orchestrator
+
+- The PMA MUST inform the orchestrator when it has come online (e.g. by responding to a health check or via a registration/ready callback) so the orchestrator can use it and set its own readiness to ready when all other prerequisites are met.
+
+## Recommended Behavior (Summary)
+
+- The orchestrator MUST ensure at least one inference path is available before reporting ready.
+  If no worker has reported ready with inference and no PMA-facing LLM API key is configured, the orchestrator MUST refuse to enter a ready state.
+- The orchestrator MUST start PMA when the first inference path exists (worker ready and inference-capable, or API Egress key for PMA).
+- When PMA is enabled, the orchestrator MUST NOT report ready until the PMA is online and reachable (PMA has informed the orchestrator and responds to e.g. `GET /healthz`).
+  PMA is enabled by default (control-plane env `PMA_ENABLED=true`); set `PMA_ENABLED=false` to run without cynode-pma.
+- **PMA inference preference:** PMA configuration MUST prefer local inference via worker nodes unless overridden by user-specified config (e.g. `agents.project_manager.model.selection.execution_mode=force_external`).
+  When a dispatchable local inference worker is available, the orchestrator MUST prefer a local Project Manager model; external inference via API Egress is used only when no local worker is available or when the user has explicitly overridden to force external.
+- The orchestrator MUST select an effective Project Manager model once a local inference worker is available and ensure the model is loaded and ready before entering ready state when using local inference.
 - External model calls MUST use the API Egress Server so API keys are not exposed to agents.
 - Sandbox execution SHOULD be disabled or restricted when no worker nodes are available.

@@ -90,7 +90,7 @@ That is: every API request should be authenticated and session/token validated o
 
 This section lists gaps in transport encryption and network segmentation.
 
-### 4.1 In-Transit Encryption (Component-to-Component)
+### 4.1 In-Transit Encryption (Component-To-Component)
 
 Worker API spec explicitly allows **HTTP (no HTTPS) for MVP** for orchestrator-to-node traffic.
 
@@ -167,14 +167,14 @@ The **principle of least privilege** is not explicitly stated in the access cont
   - Add: **Access MUST be granted with minimum necessary scope** (subject, action, resource, and time); default-deny is the baseline; allow rules SHOULD be as specific as possible (e.g. by resource pattern, task, or time window).
 - In [`mcp_gateway_enforcement.md`](../tech_specs/mcp_gateway_enforcement.md): retain and emphasize that capability leases MUST be short-lived and least-privilege; add that tool allowlists SHOULD expose only the minimal set of tools required for the agent role.
 
-### 5.3 Service-to-Service Authorization
+### 5.3 Service-To-Service Authorization
 
 Control-plane to Worker API uses a bearer token.
 There is **no spec for authorization of other internal calls** (e.g. user-gateway to control-plane, MCP gateway to API Egress, or workflow runner to orchestrator) beyond "authenticated."
 
 - [`docs/tech_specs/orchestrator.md`](../tech_specs/orchestrator.md) and related specs describe who calls whom but not how each service proves identity and what authorization (if any) is applied (e.g. only control-plane may call job dispatch).
 
-#### 5.3.1 Remediation - Service-to-Service Authorization
+#### 5.3.1 Remediation - Service-To-Service Authorization
 
 - In [`orchestrator.md`](../tech_specs/orchestrator.md) or a new "Internal service authentication" subsection (or in [`ports_and_endpoints.md`](../tech_specs/ports_and_endpoints.md)):
   - List **internal call paths** (e.g. user-gateway -> control-plane, control-plane -> Worker API, MCP gateway -> API Egress).

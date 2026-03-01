@@ -2,6 +2,8 @@
 
 - [Document Overview](#document-overview)
 - [Goals and Scope](#goals-and-scope)
+- [Storing This Schema in Code](#storing-this-schema-in-code)
+  - [Storing This Schema in Code Applicable Requirements](#storing-this-schema-in-code-applicable-requirements)
 - [Schema Overview](#schema-overview)
 - [Identity and Authentication](#identity-and-authentication)
   - [Users Table](#users-table)
@@ -9,6 +11,7 @@
   - [Refresh Sessions Table](#refresh-sessions-table)
 - [Projects](#projects)
   - [Projects Table](#projects-table)
+  - [Project Git Repositories Table](#project-git-repositories-table)
 - [Groups and RBAC](#groups-and-rbac)
   - [Groups Table](#groups-table)
   - [Group Memberships Table](#group-memberships-table)
@@ -22,11 +25,17 @@
 - [Preferences](#preferences)
   - [Preference Entries Table](#preference-entries-table)
   - [Preference Audit Log Table](#preference-audit-log-table)
+- [System Settings](#system-settings)
+  - [System Settings Table](#system-settings-table)
+  - [System Settings Audit Log Table](#system-settings-audit-log-table)
 - [Tasks, Jobs, and Nodes](#tasks-jobs-and-nodes)
   - [Tasks Table](#tasks-table)
   - [Jobs Table](#jobs-table)
   - [Nodes Table](#nodes-table)
   - [Node Capabilities Table](#node-capabilities-table)
+- [Workflow Checkpoints](#workflow-checkpoints)
+  - [Workflow Checkpoints Table](#workflow-checkpoints-table)
+  - [Task Workflow Leases Table](#task-workflow-leases-table)
 - [Sandbox Image Registry](#sandbox-image-registry)
   - [Sandbox Images Table](#sandbox-images-table)
   - [Sandbox Image Versions Table](#sandbox-image-versions-table)
@@ -39,11 +48,14 @@
   - [Chat Messages Table](#chat-messages-table)
 - [Task Artifacts](#task-artifacts)
 - [Vector Storage (`pgvector`)](#vector-storage-pgvector)
+  - [Vector Storage Applicable Requirements](#vector-storage-applicable-requirements)
   - [Vector Items Table](#vector-items-table)
+  - [Vector Retrieval and RBAC](#vector-retrieval-and-rbac)
 - [Audit Logging](#audit-logging)
   - [Auth Audit Log Table](#auth-audit-log-table)
   - [MCP Tool Call Audit Log Table](#mcp-tool-call-audit-log-table)
   - [Other Audit Tables](#other-audit-tables)
+  - [Chat Audit Log Table](#chat-audit-log-table)
 - [Model Registry](#model-registry)
   - [Models Table](#models-table)
   - [Model Versions Table](#model-versions-table)
@@ -111,7 +123,7 @@ Out of scope for this document
 Logical groups
 
 1. **Identity and authentication:** `users`, `password_credentials`, `refresh_sessions`
-2. **Projects:** `projects`
+2. **Projects:** `projects`, `project_git_repos`
 3. **Groups and RBAC:** `groups`, `group_memberships`, `roles`, `role_bindings`
 4. **Access control:** `access_control_rules`, `access_control_audit_log`
 5. **API egress credentials:** `api_credentials`
@@ -214,6 +226,47 @@ Constraints
 
 - Index: (`slug`)
 - Index: (`is_active`)
+
+### Project Git Repositories Table
+
+- Spec ID: `CYNAI.SCHEMA.ProjectGitReposTable` <a id="spec-cynai-schema-projectgitrepostable"></a>
+
+Stores Git repository associations for projects so that tasks and Git egress can use project-scoped allowlists.
+
+Source: [`docs/tech_specs/project_git_repos.md`](project_git_repos.md).
+
+#### Git Repos Table Columns (Identity and Provider)
+
+- `id` (uuid, pk)
+- `project_id` (uuid, fk to `projects.id`, NOT NULL)
+- `provider` (text, NOT NULL)
+  - identifier for the Git host or service; any provider for which the system has support (e.g. github, gitlab, gitea); additional providers MAY be added without schema change
+- `repo_identifier` (text, NOT NULL)
+  - provider-specific identifier: for GitHub and Gitea use owner/repo; for GitLab use namespace/project (may include subgroups); semantics defined per provider in the project git repos spec
+- `base_url` (text, nullable)
+  - optional override for self-hosted instances (e.g. <https://gitea.example.com>, <https://gitlab.company.com>)
+
+#### Git Repos Table Columns (Additional Information)
+
+- `display_name` (text, nullable)
+  - optional user-facing label for the repo in this project
+- `description` (text, nullable)
+  - optional longer description of the repo's role or purpose in this project
+- `tags` (jsonb, nullable)
+  - optional array of string tags for filtering or grouping (e.g. `["backend", "main"]`); structure is application-defined
+- `metadata` (jsonb, nullable)
+  - optional key-value data for future extension; no canonical keys required for MVP
+
+#### Git Repos Table Columns (Timestamps)
+
+- `created_at` (timestamptz)
+- `updated_at` (timestamptz)
+
+Constraints
+
+- Unique: (`project_id`, `provider`, `repo_identifier`)
+- Index: (`project_id`)
+- Index: (`provider`, `repo_identifier`) for egress lookups
 
 ## Groups and RBAC
 
@@ -835,6 +888,8 @@ Traces To:
 - [REQ-SCHEMA-0108](../requirements/schema.md#req-schema-0108)
 - [REQ-SCHEMA-0109](../requirements/schema.md#req-schema-0109)
 - [REQ-SCHEMA-0110](../requirements/schema.md#req-schema-0110)
+- [REQ-SCHEMA-0111](../requirements/schema.md#req-schema-0111)
+- [REQ-ACCESS-0125](../requirements/access.md#req-access-0125)
 
 Recommended behavior
 
@@ -853,6 +908,10 @@ It is intentionally generic so multiple sources can be indexed (artifacts, run l
 - `id` (uuid, pk)
 - `project_id` (uuid, fk to `projects.id`, nullable)
 - `task_id` (uuid, fk to `tasks.id`, nullable)
+- `namespace` (text, nullable)
+  - coarse-grained policy boundary (e.g. docs, skills, project_memory, code_index); used for RBAC filtering
+- `sensitivity_level` (text, nullable)
+  - ordered level for role-based filtering (e.g. public, internal, confidential, restricted); query MUST enforce chunk.sensitivity_level <= role.max_sensitivity_level
 - `source_type` (text)
   - examples: task_artifact, run_log, connector_doc, web_page, note
 - `source_ref` (text, nullable)
@@ -873,6 +932,7 @@ It is intentionally generic so multiple sources can be indexed (artifacts, run l
 Constraints
 
 - Index: (`project_id`)
+- Index: (`project_id`, `namespace`) for RBAC-filtered similarity queries
 - Index: (`task_id`)
 - Index: (`source_type`)
 - Index: (`content_sha256`)
@@ -900,6 +960,44 @@ CREATE INDEX CONCURRENTLY IF NOT EXISTS vector_items_embedding_hnsw
 ON vector_items USING hnsw (embedding vector_cosine_ops)
 WITH (m = 16, ef_construction = 200);
 ```
+
+### Vector Retrieval and RBAC
+
+- Spec ID: `CYNAI.SCHEMA.VectorRetrievalRbac` <a id="spec-cynai-schema-vectorretrievalrbac"></a>
+
+Vector retrieval MUST NOT bypass RBAC.
+Similarity search is only allowed within an already-authorized document set; authorization MUST be applied in SQL before similarity ranking.
+
+Traces To:
+
+- [REQ-ACCESS-0121](../requirements/access.md#req-access-0121)
+- [REQ-ACCESS-0122](../requirements/access.md#req-access-0122)
+- [REQ-ACCESS-0123](../requirements/access.md#req-access-0123)
+- [REQ-ACCESS-0124](../requirements/access.md#req-access-0124)
+- [REQ-SCHEMA-0111](../requirements/schema.md#req-schema-0111)
+- [REQ-SCHEMA-0112](../requirements/schema.md#req-schema-0112)
+
+#### Vector Query Flow
+
+1. Authenticate the caller and resolve effective permissions (allowed project_ids, allowed namespaces, max_sensitivity_level for the role).
+2. Build the candidate set with explicit filters: WHERE project_id IN (authorized_projects), AND namespace IN (authorized_namespaces), AND (sensitivity_level IS NULL OR sensitivity_level <= allowed_max).
+3. Run similarity ranking only against the filtered candidate set (e.g. ORDER BY embedding <=> query_embedding LIMIT top_k).
+4. Return results with provenance metadata; do not return full document bodies or hidden metadata beyond chunk text and allowed provenance.
+
+RBAC filtering MUST occur in SQL before similarity scoring.
+No "open" vector queries are allowed; every query MUST include explicit project/namespace/sensitivity constraints derived from the authenticated subject.
+
+#### Vector Ingestion
+
+- Only controlled services may insert into vector storage; ingestion MUST require write permission on the target scope (project, namespace) and correct project association per [REQ-ACCESS-0125](../requirements/access.md#req-access-0125).
+
+#### Vector Audit
+
+- Every retrieval MUST be logged (e.g. user_id, role, project_id, namespaces queried, chunk count returned, timestamp) per [REQ-ACCESS-0124](../requirements/access.md#req-access-0124).
+
+#### Vector Performance
+
+- Use composite indexes on (project_id, namespace) so that filtering reduces the candidate set before similarity search; similarity search SHOULD run only against already filtered rows.
 
 ## Audit Logging
 
@@ -1078,7 +1176,7 @@ Constraints
 Creation order (respecting foreign keys)
 
 1. `users`
-2. `projects`, `groups`, `roles`
+2. `projects`, `project_git_repos`, `groups`, `roles`
 3. `password_credentials`, `refresh_sessions`, `group_memberships`, `role_bindings`
 4. `access_control_rules`
 5. `api_credentials`

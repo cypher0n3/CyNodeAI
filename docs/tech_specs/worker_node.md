@@ -17,6 +17,7 @@
 - [Node Startup Procedure](#node-startup-procedure)
 - [Node Startup Checks and Readiness](#node-startup-checks-and-readiness)
 - [Deployment and Auto-Start](#deployment-and-auto-start)
+- [Existing Inference Service on Host](#existing-inference-service-on-host)
 - [Ollama Container Policy](#ollama-container-policy)
 - [Sandbox-Only Nodes](#sandbox-only-nodes)
   - [Sandbox-Only Nodes Applicable Requirements](#sandbox-only-nodes-applicable-requirements)
@@ -487,25 +488,38 @@ updates:
 
 ## Node Startup Procedure
 
-On startup, the Node Manager MUST contact the orchestrator before starting the Ollama container.
-This ensures the orchestrator can select an Ollama container image compatible with the node and can apply current policy.
+- Spec ID: `CYNAI.WORKER.NodeStartupProcedure` <a id="spec-cynai-worker-nodestartupprocedure"></a>
+
+Traces To:
+
+- [REQ-WORKER-0253](../requirements/worker.md#req-worker-0253)
+- [REQ-WORKER-0254](../requirements/worker.md#req-worker-0254)
+
+This procedure is constrained by [Existing Inference Service on Host](#existing-inference-service-on-host) (use existing host inference when present; do not start a duplicate) and [Ollama Container Policy](#ollama-container-policy) (at most one inference service in use; when the node starts the container, it grants that container access to all GPUs and NPUs).
+
+On startup, the Node Manager MUST contact the orchestrator and receive configuration **before** starting the Ollama (or equivalent) container.
+The Worker API MUST be started and the node MUST register with the orchestrator (sending its capabilities bundle) before the node starts any local inference container.
+The orchestrator acknowledges registration and returns a node configuration payload that **instructs** the node whether and how to start the local inference backend (e.g. container image and backend variant such as ROCm for AMD or CUDA for Nvidia).
+The node MUST NOT start the Ollama container until it has received this instruction in the node configuration payload (see [`worker_node_payloads.md`](worker_node_payloads.md) `node_configuration_payload_v1` `inference_backend`).
 
 The system requires that the overall deployment has at least one inference-capable path.
 Inference may be provided by node-local inference (Ollama) or by external model routing through API Egress when configured.
 In the single-node case, the system MUST refuse to enter a ready state if the node cannot run the inference container and there is no configured external provider key.
 See [`docs/tech_specs/external_model_routing.md`](external_model_routing.md) and [`docs/tech_specs/orchestrator_bootstrap.md`](orchestrator_bootstrap.md).
 
-Required startup flow
+Required startup flow (order is mandatory)
 
-- Start Node Manager system service.
-- Load node startup YAML and apply node-local constraints.
-- Perform [node startup checks](#node-startup-checks-and-readiness); the node MUST NOT report ready until these pass.
-- Collect host capabilities.
-- Register with orchestrator and send capability report.
-- Fetch the latest node configuration from orchestrator.
-- Start the worker API service.
-- Start the single Ollama container specified by the orchestrator, when configured for inference.
-- Report startup status and effective configuration version to the orchestrator.
+1. Start Node Manager system service.
+2. Load node startup YAML and apply node-local constraints.
+3. Perform [node startup checks](#node-startup-checks-and-readiness); the node MUST NOT report ready until these pass.
+4. Collect host capabilities (platform, GPU, container runtime, etc.).
+5. Register with orchestrator and send capability report (capabilities bundle).
+6. Fetch the latest node configuration from orchestrator (orchestrator acks and returns config).
+7. Start the Worker API service (so the node is reachable for job dispatch).
+8. **Local inference:** Apply [Existing Inference Service on Host](#existing-inference-service-on-host): if an inference service (OLLAMA or equivalent) is already running on the host and reachable, the node MUST use it and MUST NOT start another.
+   Only when no existing service is detected and the node configuration instructs the node to start local inference (see `inference_backend` in [`worker_node_payloads.md`](worker_node_payloads.md)), the node starts the single Ollama (or equivalent) container per [Ollama Container Policy](#ollama-container-policy) (image and variant specified by the orchestrator, e.g. ROCm for AMD or CUDA for Nvidia; container granted access to all GPUs and NPUs).
+9. Report startup status and effective configuration version to the orchestrator (config ack and ongoing capability reporting).
+    The node MUST report to the orchestrator when it has become ready (e.g. via config ack with status applied after services are started) so the orchestrator can consider the node as an inference path and start the Project Manager Agent when appropriate; see [REQ-WORKER-0254](../requirements/worker.md#req-worker-0254).
 
 ## Node Startup Checks and Readiness
 
@@ -544,15 +558,28 @@ Worker node deployments MUST support auto-start on the host so that Node Manager
   See [`worker_node/systemd/README.md`](../../worker_node/systemd/README.md) for the reference layout and generation steps.
 - **macOS:** The implementation MUST provide launchd plist files for worker node services so that they can start on boot or on user login, with the same capability as the Linux systemd approach (start on boot, start on demand, enable/disable).
 
+## Existing Inference Service on Host
+
+- Spec ID: `CYNAI.WORKER.ExistingInferenceService` <a id="spec-cynai-worker-existinginferenceservice"></a>
+
+Traces To:
+
+- [REQ-WORKER-0255](../requirements/worker.md#req-worker-0255)
+
+When an OLLAMA (or equivalent) inference service is already running on the host and is reachable (e.g. on the default port or a configured address), the node MUST use that existing service and MUST NOT start its own inference container.
+The node MUST detect an existing service (e.g. by probing the inference API or checking for a known container/process) before deciding to start a container per orchestrator instruction.
+When the node is using an existing inference service, it MUST report this in the capability report (see [Capability Reporting](#capability-reporting) and `inference.existing_service` in [`worker_node_payloads.md`](worker_node_payloads.md)) so the orchestrator does not instruct the node to start a duplicate container.
+
 ## Ollama Container Policy
 
-The node MUST run at most one Ollama container at a time.
-That container MUST be granted access to all GPUs and NPUs on the system.
+The node MUST run at most one Ollama (or equivalent) inference service in use at a time: either one the node started or an existing service on the host.
+When the node starts the container itself, that container MUST be granted access to all GPUs and NPUs on the system.
 
 Rationale
 
 - Centralizes accelerator scheduling for model inference.
 - Avoids conflicting GPU allocation and reduces operational complexity.
+- When the host already runs OLLAMA, the node uses it instead of starting another (see [Existing Inference Service on Host](#existing-inference-service-on-host)).
 
 ## Sandbox-Only Nodes
 
@@ -599,14 +626,22 @@ Required flow
 
 - Spec ID: `CYNAI.WORKER.CapabilityReporting` <a id="spec-cynai-worker-capabilityreporting"></a>
 
+Traces To:
+
+- [REQ-WORKER-0139](../requirements/worker.md#req-worker-0139)
+- [REQ-WORKER-0256](../requirements/worker.md#req-worker-0256)
+
 Nodes MUST report host capabilities to the orchestrator so the orchestrator can select compatible configuration and schedule work safely.
-Nodes MUST report capabilities during registration and again on every node startup.
+Nodes MUST report capabilities during registration and again on every node startup (check-in).
 Canonical payload shapes are defined in [`docs/tech_specs/worker_node_payloads.md`](worker_node_payloads.md).
 
 Required capability fields
 
 - Worker API address (required for dispatch)
   - `worker_api.base_url`: full URL the orchestrator MUST use to call the Worker API (scheme, host, port); the node MUST send this at registration and in capability reports so the orchestrator can add or update the node's dispatch URL; see [`worker_node_payloads.md`](worker_node_payloads.md) capability report `worker_api`.
+- Inference service status (when inference is supported)
+  - The node MUST include in the capability report whether it already has a running inference service on the host (e.g. `inference.existing_service` and `inference.running` per [`worker_node_payloads.md`](worker_node_payloads.md)).
+  - This is required at registration and on every check-in so the orchestrator can treat the node as inference-capable and avoid instructing the node to start an inference container when one is already present.
 - Identity and platform
   - OS type and distribution details
   - architecture (e.g. amd64, arm64)
@@ -638,6 +673,11 @@ Change reporting
 
 - Spec ID: `CYNAI.WORKER.ConfigurationDelivery` <a id="spec-cynai-worker-configurationdelivery"></a>
 
+Traces To:
+
+- [REQ-ORCHES-0149](../requirements/orches.md#req-orches-0149)
+- [REQ-WORKER-0135](../requirements/worker.md#req-worker-0135)
+
 The orchestrator MUST be able to deliver and update configuration for registered nodes.
 Canonical payload shapes are defined in [`docs/tech_specs/worker_node_payloads.md`](worker_node_payloads.md).
 
@@ -646,6 +686,12 @@ Worker API target URL in config
 - The node configuration payload includes `orchestrator.endpoints.worker_api_target_url`, which is the URL the orchestrator will use to call this node's Worker API.
 - That URL is normally the node-reported `worker_api.base_url` from registration or the latest capability report; the orchestrator stores it and echoes it in config.
 - An operator MAY configure an explicit override (e.g. when the worker runs on the same host as the orchestrator); when set, the override is used and MUST be documented as an override (e.g. in deployment docs or env var name such as `WORKER_API_TARGET_URL` for same-host override).
+
+Inference backend instruction in config
+
+- The node configuration payload MAY include `inference_backend` (see [`worker_node_payloads.md`](worker_node_payloads.md) `node_configuration_payload_v1`).
+- The orchestrator MUST derive the inference backend instruction (whether to start, which image, and variant such as ROCm or CUDA) from the node capability report (e.g. `gpu.present`, `gpu.devices[].features`, platform) and policy, and MUST include it in the config when the node is inference-capable and inference is enabled.
+- The node MUST NOT start the OLLAMA (or equivalent) container until it has received this instruction; see [Node Startup Procedure](#node-startup-procedure).
 
 Required behavior
 

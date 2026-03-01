@@ -45,9 +45,11 @@ This section defines the orchestrator health and readiness endpoints.
 
 - Spec ID: `CYNAI.ORCHES.Rule.HealthEndpoints` <a id="spec-cynai-orches-rule-healthendpoints"></a>
 
-Traces To: [REQ-ORCHES-0120](../requirements/orches.md#req-orches-0120), [REQ-BOOTST-0002](../requirements/bootst.md#req-bootst-0002)
+Traces To: [REQ-ORCHES-0120](../requirements/orches.md#req-orches-0120), [REQ-ORCHES-0150](../requirements/orches.md#req-orches-0150), [REQ-ORCHES-0151](../requirements/orches.md#req-orches-0151), [REQ-BOOTST-0002](../requirements/bootst.md#req-bootst-0002)
 
 The orchestrator exposes health endpoints that distinguish "process alive" from "ready to accept work".
+The orchestrator cannot report fully ready until at least one inference path exists (a worker that has reported ready and is inference-capable, or an LLM API key for PMA via API Egress) and, when PMA is enabled, until the PMA has informed the orchestrator that it is online.
+See [Orchestrator Readiness and PMA Startup](orchestrator_bootstrap.md#spec-cynai-bootst-orchestratorreadinessandpmastartup).
 
 Endpoints
 
@@ -56,8 +58,8 @@ Endpoints
   - This endpoint MUST NOT require that the Project Manager model is online.
 - `GET /readyz`
   - Returns 200 only when the orchestrator is in a ready state.
-  - Returns 503 when prerequisites for readiness are not yet satisfied (for example no eligible inference path, Project Manager model not online, or required credentials/policy not present).
-  - When the Project Manager Agent (cynode-pma) is enabled, the orchestrator MUST NOT return 200 until the PMA process is reachable (e.g. responds to its health check).
+  - Returns 503 when prerequisites for readiness are not yet satisfied (no eligible inference path, PMA not started or not yet online, Project Manager model not loaded when using local inference, or required credentials/policy not present).
+  - The orchestrator MUST NOT return 200 until at least one inference path exists and, when PMA is enabled, until the PMA has informed the orchestrator that it is online and is reachable (e.g. responds to its health check).
   - PMA is enabled by default (control-plane config `PMA_ENABLED`, default true); set to false to run without cynode-pma.
   - The response MUST include a reason that is actionable for an operator.
   - While `GET /readyz` returns 503, the orchestrator continues to serve the management surfaces required to become ready (for example system settings and credential configuration).
@@ -427,6 +429,5 @@ If the workflow runner does not renew before `expires_at`, the orchestrator trea
 ## Orchestrator Bootstrap Configuration
 
 The orchestrator MAY import bootstrap configuration from a YAML file at startup to seed PostgreSQL and external integrations.
-The orchestrator SHOULD support running as the sole service with zero worker nodes and using external AI providers when allowed.
-
-See [`docs/tech_specs/orchestrator_bootstrap.md`](orchestrator_bootstrap.md).
+The system always requires at least one worker node for normal operation; for single-system setups that node MAY be on the same host as the orchestrator.
+See [Worker Node Requirement](orchestrator_bootstrap.md#spec-cynai-bootst-workernoderequirement) and [`docs/tech_specs/orchestrator_bootstrap.md`](orchestrator_bootstrap.md).

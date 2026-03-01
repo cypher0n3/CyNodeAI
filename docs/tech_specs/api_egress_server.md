@@ -7,6 +7,16 @@
   - [API Credentials Table](#api-credentials-table)
 - [Access Control](#access-control)
 - [Policy and Auditing](#policy-and-auditing)
+- [Sanity Check (Semantic Safety)](#sanity-check-semantic-safety)
+  - [Sanity Checker Placement in Request Flow](#sanity-checker-placement-in-request-flow)
+  - [Sanity Checker Inputs](#sanity-checker-inputs)
+  - [Sanity Checker Outputs](#sanity-checker-outputs)
+  - [Sanity Checker Detection Categories](#sanity-checker-detection-categories)
+  - [Sanity Checker Security](#sanity-checker-security)
+  - [Sanity Checker Audit](#sanity-checker-audit)
+  - [Sanity Checker Configuration](#sanity-checker-configuration)
+  - [Sanity Checker Model Configuration](#sanity-checker-model-configuration)
+  - [Sanity Checker Req Traces](#sanity-checker-req-traces)
 - [Admin API (Gateway Endpoints)](#admin-api-gateway-endpoints)
 
 ## Document Overview
@@ -138,6 +148,79 @@ Traces To:
 - Policy checks SHOULD include provider allowlists, operation allowlists, and per-task constraints.
 - All calls SHOULD be logged with task context, provider, operation, and timing information.
 - Responses SHOULD be filtered to avoid accidental secret leakage.
+
+## Sanity Check (Semantic Safety)
+
+- Spec ID: `CYNAI.APIEGR.SanityCheck` <a id="spec-cynai-apiegr-sanitycheck"></a>
+
+The API Egress Server MAY perform an optional semantic sanity check on the requested call before credential resolution and outbound execution.
+The sanity checker evaluates whether the call appears safe to execute from a semantic standpoint, complementing access control (identity, provider/operation allowlists, credentials).
+It aims to catch dangerous intents that policy alone cannot express.
+
+### Sanity Checker Placement in Request Flow
+
+1. Request received (provider, operation, params, task_id, subject context).
+2. Access control evaluation (existing: identity, allow policy, credential selection).
+3. **Sanity check (optional):** LLM-based or equivalent semantic evaluation of the intended effect of the call.
+4. If sanity check passes or is disabled: resolve credential, perform outbound call, audit, return result.
+5. If sanity check denies: deny with structured error, audit the denial.
+
+### Sanity Checker Inputs
+
+- provider, operation, params, task_id; any non-secret context needed for explanation.
+- The sanity check MUST NOT receive credentials or decrypted secrets ([REQ-APIEGR-0122](../requirements/apiegr.md#req-apiegr-0122)).
+
+### Sanity Checker Outputs
+
+- One of: allow, deny, or escalate (for human review).
+- Optional short reason or category for deny/escalate (for audit and user feedback).
+
+### Escalate to Human Review
+
+When the sanity checker returns **escalate**, the requested outbound call is not executed; the request is held and a human-review event is recorded (task_id, provider, operation, reason/category, timestamp).
+The agent receives a structured error indicating that the call was escalated for human review.
+
+Delivery of escalation (and other system-to-user updates) to the user is not yet fully specified.
+A draft proposal for default notification connectors (Signal, Discord) that can be enabled and configured to deliver such updates is in [Default notification connectors (draft)](../draft_specs/default_messaging_connectors_proposal.md).
+Until that or an equivalent mechanism is adopted, escalation is visible only via audit logs and any review UI the deployment provides; the system does not push notifications to messaging apps or other channels by default.
+
+### Sanity Checker Detection Categories
+
+The implementation SHOULD use an LLM or equivalent semantic evaluation to classify the request against at least: (1) bulk or irreversible deletion without backup/safety, (2) secret or credential exposure (request-side intent), (3) other dangerous or high-impact actions (billing changes, security/access changes at scale, irreversible data loss).
+Allowlist-based or rule-based shortcuts for known-safe operations are permitted ([REQ-APIEGR-0121](../requirements/apiegr.md#req-apiegr-0121)).
+
+### Sanity Checker Security
+
+- The system MUST treat the LLM as untrusted and non-authoritative for security; it is an additional signal.
+- Access control remains the mandatory gate; the sanity checker is a second layer.
+
+### Sanity Checker Audit
+
+- Log sanity-check result (allow/deny/escalate) and, on deny/escalate, reason/category and task context ([REQ-APIEGR-0123](../requirements/apiegr.md#req-apiegr-0123)).
+
+### Sanity Checker Configuration
+
+- Sanity check SHOULD be configurable per deployment (enable/disable, or per provider/operation) ([REQ-APIEGR-0124](../requirements/apiegr.md#req-apiegr-0124)).
+- When disabled, behavior MUST match the flow without a sanity check step.
+- Optional allowlist of (provider, operation) pairs that skip the check (e.g. read-only or pre-approved safe operations) to reduce latency and cost.
+
+### Sanity Checker Model Configuration
+
+- The sanity check SHALL use local (worker-hosted) inference by default ([REQ-APIEGR-0125](../requirements/apiegr.md#req-apiegr-0125)).
+  It MAY use a configurable external model via API only when the user explicitly configures an external LLM API (OpenAI-compatible or provider-specific endpoint).
+- When local inference is not available and no external LLM API is explicitly configured, the sanity checker SHALL be disabled by default ([REQ-APIEGR-0126](../requirements/apiegr.md#req-apiegr-0126)); the sanity check step SHALL NOT be performed.
+- Recommended local models for safety classification: Llama Guard 3 (e.g. `llama-guard3:8b`, `llama-guard3:1b`); alternatives for custom prompts: SmolLM2, Llama 3.2.
+- When external API is configured: endpoint URL, model identifier, and authentication MUST be configurable; credentials for the external model MUST NOT be exposed to sandboxes.
+- The implementation SHOULD define timeout and behavior when the sanity-check call fails or times out (e.g. fail open vs fail closed by policy).
+
+### Sanity Checker Req Traces
+
+- [REQ-APIEGR-0121](../requirements/apiegr.md#req-apiegr-0121)
+- [REQ-APIEGR-0122](../requirements/apiegr.md#req-apiegr-0122)
+- [REQ-APIEGR-0123](../requirements/apiegr.md#req-apiegr-0123)
+- [REQ-APIEGR-0124](../requirements/apiegr.md#req-apiegr-0124)
+- [REQ-APIEGR-0125](../requirements/apiegr.md#req-apiegr-0125)
+- [REQ-APIEGR-0126](../requirements/apiegr.md#req-apiegr-0126)
 
 ## Admin API (Gateway Endpoints)
 

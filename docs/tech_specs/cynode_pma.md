@@ -212,6 +212,31 @@ See:
 - [`docs/tech_specs/mcp_gateway_enforcement.md`](mcp_gateway_enforcement.md)
 - [`docs/tech_specs/mcp_tool_catalog.md`](mcp_tool_catalog.md)
 
+## LLM via API Egress
+
+- Spec ID: `CYNAI.PMAGNT.LLMViaApiEgress` <a id="spec-cynai-pmagnt-llmviaapiegress"></a>
+
+Traces To:
+
+- [REQ-PMAGNT-0109](../requirements/pmagnt.md#req-pmagnt-0109)
+
+When the orchestrator provides an LLM API key (or equivalent credential) for the Project Manager Agent via the API Egress Server (e.g. configured external provider and key for PMA inference), `cynode-pma` MUST be able to use that provider for inference.
+PMA MUST route such inference requests through the API Egress Server so credentials are not exposed to the agent process.
+See [`docs/tech_specs/api_egress_server.md`](api_egress_server.md) and [`docs/tech_specs/external_model_routing.md`](external_model_routing.md).
+
+## PMA Informs Orchestrator When Online
+
+- Spec ID: `CYNAI.PMAGNT.PmaInformsOrchestratorOnline` <a id="spec-cynai-pmagnt-pmainformsorchestratoronline"></a>
+
+Traces To:
+
+- [REQ-PMAGNT-0110](../requirements/pmagnt.md#req-pmagnt-0110)
+- [REQ-ORCHES-0151](../requirements/orches.md#req-orches-0151)
+
+`cynode-pma` MUST inform the orchestrator when it has come online so that the orchestrator can use it and update its own readiness state (e.g. set `GET /readyz` to 200 when all other prerequisites are met).
+The mechanism MAY be: the orchestrator probes PMA's health endpoint (e.g. `GET /healthz` on the PMA listen address) and treats a successful response as "PMA is online", or PMA sends a registration/ready callback to the orchestrator after startup.
+The implementation MUST ensure the orchestrator learns that PMA is reachable before the orchestrator reports ready.
+
 ## Skills and Default Skill
 
 - Spec ID: `CYNAI.PMAGNT.SkillsAndDefaultSkill` <a id="spec-cynai-pmagnt-skillsanddefaultskill"></a>

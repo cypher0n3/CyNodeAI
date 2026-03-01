@@ -121,6 +121,7 @@ Constraints
 
 The following documents define service-specific policy checks.
 
-- API Egress Server: [`docs/tech_specs/api_egress_server.md`](api_egress_server.md)
+- API Egress Server: [`docs/tech_specs/api_egress_server.md`](api_egress_server.md).
+  The API Egress Server may apply an additional semantic sanity check after policy evaluation (see [Sanity Check (Semantic Safety)](api_egress_server.md#spec-cynai-apiegr-sanitycheck)); policy remains the authoritative allow/deny for identity and resource, and the sanity check is a separate safety layer.
 - Secure Browser Service: [`docs/tech_specs/secure_browser_service.md`](secure_browser_service.md)
 - User API Gateway: [`docs/tech_specs/user_api_gateway.md`](user_api_gateway.md)

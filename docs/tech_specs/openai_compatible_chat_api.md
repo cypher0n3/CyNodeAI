@@ -4,6 +4,7 @@
 - [Single Chat Surface](#single-chat-surface)
 - [Compatibility Goals](#compatibility-goals)
 - [Endpoints](#endpoints)
+- [Chat Model Warm-Up](#chat-model-warm-up)
 - [Conversation Model](#conversation-model)
 - [Chat Completion Routing Path](#chat-completion-routing-path)
 - [Tasks Versus Chat (Non-Goals)](#tasks-versus-chat-non-goals)
@@ -94,6 +95,28 @@ Model identifiers:
 - The gateway MUST also expose underlying inference model identifiers in `GET /v1/models`.
   These identifiers MUST be limited to the currently configured inference model(s) that the authenticated user is authorized to use.
   The gateway MUST NOT disclose model identifiers the user is not authorized to use.
+
+## Chat Model Warm-Up
+
+- Spec ID: `CYNAI.USRGWY.OpenAIChatApi.WarmUp` <a id="spec-cynai-usrgwy-openaichatapi-warmup"></a>
+
+The gateway MAY expose an optional endpoint to warm the default (or a specified) chat model before the first user message, to reduce time-to-first-meaningful-response.
+
+When the endpoint is implemented:
+
+- **Endpoint:** `POST /v1/chat/warm`.
+  Same authentication as `POST /v1/chat/completions` (Bearer token).
+- **Request:** Optional `model` in the request body or query; when omitted, the gateway uses the default chat model (e.g. `cynodeai.pm`).
+- **Behavior:** Gateway triggers backend warm-up (e.g. calls the inference backend or PMA path with a no-op or minimal prompt and discards the response).
+  Warm-up is best-effort: the gateway SHOULD return 200 or 202 quickly (e.g. "warm-up started" or "already warm") and MAY perform loading asynchronously or with a short timeout.
+  Failure or timeout MUST NOT affect the chat session; clients MUST NOT block the first prompt on warm-up completion.
+- **Idempotency:** Multiple rapid warm-up calls for the same model (e.g. several tabs or restarts) MUST be safe; the implementation MAY debounce or ignore duplicate in-flight warm-up.
+- **Observability:** The implementation SHOULD log or emit a metric when warm-up is requested and when it succeeds or fails.
+
+Traces To:
+
+- [REQ-USRGWY-0134](../requirements/usrgwy.md#req-usrgwy-0134)
+- [REQ-CLIENT-0177](../requirements/client.md#req-client-0177)
 
 ## Conversation Model
 

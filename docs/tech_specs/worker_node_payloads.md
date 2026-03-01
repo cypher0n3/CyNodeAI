@@ -111,6 +111,11 @@ Source requirements: [`docs/tech_specs/worker_node.md`](worker_node.md#spec-cyna
   - `supported` (boolean)
   - `mode` (string, optional)
     - examples: allow, disabled
+  - `existing_service` (boolean, optional)
+    - When true, the node has detected and is using an inference service (e.g. OLLAMA) already running on the host; the node did not start it.
+    - The node MUST set this when it is using a host-existing inference service so the orchestrator can treat the node as inference-capable without instructing it to start a container.
+  - `running` (boolean, optional)
+    - When true, inference is currently available on this node (either node-managed or existing on host).
 - `worker_api` (object, optional but recommended at registration)
   - Node-reported Worker API address so the orchestrator can dispatch jobs to this node.
   - The orchestrator MUST use this address to set or update the node's `worker_api_target_url` unless an explicit operator override is configured.
@@ -220,6 +225,10 @@ It is versioned so nodes can apply updates safely and atomically.
 
 Source requirements: [`docs/tech_specs/worker_node.md`](worker_node.md#spec-cynai-worker-configurationdelivery) and [`docs/tech_specs/worker_node.md`](worker_node.md#spec-cynai-worker-dynamicconfigurationupdates).
 
+Traces To:
+
+- [REQ-ORCHES-0149](../requirements/orches.md#req-orches-0149)
+
 ### Node Config Schema `node_configuration_payload_v1`
 
 - Spec ID: `CYNAI.WORKER.Payload.ConfigurationV1` <a id="spec-cynai-worker-payload-configuration-v1"></a>
@@ -269,6 +278,16 @@ Source requirements: [`docs/tech_specs/worker_node.md`](worker_node.md#spec-cyna
   - `orchestrator_bearer_token_expires_at` (string, optional)
     - RFC 3339 UTC timestamp.
     - When present, the node must reject expired tokens and request a configuration refresh.
+- `inference_backend` (object, optional)
+  - When present, the orchestrator instructs the node to start the local inference backend (e.g. OLLAMA) with the given parameters.
+  - When absent or when `inference_backend.enabled` is false, the node MUST NOT start an inference container (sandbox-only or inference-disabled node).
+  - `enabled` (boolean, optional): When true or when the object is present and the node is inference-capable per capability report, the node MUST start the backend container.
+    When false, the node MUST NOT start it.
+  - `image` (string, optional): OCI image reference for the inference backend container (e.g. `ollama/ollama`, or a ROCm/CUDA variant image).
+    When absent, the node MAY use a node-local default (e.g. from node startup YAML or env).
+  - `variant` (string, optional): Backend variant derived by the orchestrator from the node capability report (e.g. `cuda`, `rocm`, `cpu`).
+    The node MUST use this to select or configure the correct image or runtime (ROCM for AMD GPUs, CUDA for Nvidia GPUs when reported in capabilities).
+  - `port` (int, optional): listen port for the inference API (default 11434 for Ollama).
 - `notes` (string, optional)
 - `constraints` (object, optional)
   - `max_request_bytes` (int, optional)
@@ -281,7 +300,9 @@ This acknowledgement allows safe rollout, retries, and visibility.
 
 Traces To:
 
+- [REQ-WORKER-0135](../requirements/worker.md#req-worker-0135)
 - [REQ-WORKER-0137](../requirements/worker.md#req-worker-0137)
+- [REQ-WORKER-0254](../requirements/worker.md#req-worker-0254)
 
 ### Config Ack Schema `node_config_ack_v1`
 

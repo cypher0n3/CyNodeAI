@@ -198,7 +198,11 @@ Traces To:
 The web console MUST support basic project CRUD (create, list, view, update, delete or disable) via the User API Gateway, with the same capabilities as the CLI (see [Project Management](cli_management_app_commands_admin.md#spec-cynai-client-cliprojectmanagement)).
 Projects have a user-friendly title (display name) and an optional text description for lists and detail views.
 
-UI MUST provide: **List** - table or list of projects (columns: title, slug, description excerpt, active, updated_at); optional filter by active status. **View** - single project detail (title, slug, description, is_active, created_at, updated_at, updated_by). **Create** - form with required slug and title; optional description. **Edit** - update title, description, and active status. **Delete** - confirm and delete (or disable) project; show warning when project is referenced by tasks or chat threads.
+UI MUST provide: **List** - table or list of projects (columns: title, slug, description excerpt, active, updated_at); optional filter by active status.
+**View** - single project detail (title, slug, description, is_active, created_at, updated_at, updated_by).
+**Create** - form with required slug and title; optional description.
+**Edit** - update title, description, and active status.
+**Delete** - confirm and delete (or disable) project; show warning when project is referenced by tasks or chat threads.
 
 ## Node Management
 
@@ -337,6 +341,7 @@ Implementation MUST satisfy the following per-domain UI contracts.
   Support running a script (e.g. script file upload or path input) and a short series of commands (e.g. multi-line or list input) with the same semantics as CLI `--script` and `--commands` and the gateway.
 - **Nodes:** List nodes and show health, last heartbeat, labels, and capability summary.
   Provide actions with confirmation: enable, disable, drain, refresh config.
+- **Chat:** When the Web Console provides a chat UI, it SHOULD call the gateway chat warm-up endpoint (e.g. `POST /v1/chat/warm`) on chat view or route load, non-blocking, per [REQ-CLIENT-0177](../requirements/client.md#req-client-0177) and [Chat Model Warm-up](openai_compatible_chat_api.md#spec-cynai-usrgwy-openaichatapi-warmup).
 
 ### Deployment Options
 

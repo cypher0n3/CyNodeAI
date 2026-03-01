@@ -44,14 +44,15 @@ The default path uses Docker Compose for the orchestrator stack (Postgres, contr
 
 ```bash
 # From repo root: build binaries and start orchestrator stack (compose)
-./scripts/setup-dev.sh start
+just setup-dev start
 # User API: http://localhost:12080  Control-plane: http://localhost:12082  Ollama: http://localhost:11434
 # Default admin: admin / admin123
 ```
 
-**Full E2E** (orchestrator stack, inference-proxy image, node-manager, and tests): run `just e2e`.
+**Full E2E** (orchestrator stack, inference-proxy image, node-manager, and tests): run `just setup-dev full-demo` (or `just setup-dev full-demo --stop-on-success` to tear down on pass).
+To run only the E2E test suite with the stack already up: `just e2e`.
 
-**Stop all services** (orchestrator stack and node processes): run `just e2e-stop`.
+**Stop all services** (orchestrator stack and node processes): run `just setup-dev stop`.
 
 ## Service Layout
 
@@ -61,7 +62,7 @@ The default path uses Docker Compose for the orchestrator stack (Postgres, contr
 - **ollama** - 11434 - Inference (Ollama API; used by inference proxy)
 - **node-manager** - (dynamic) - Registers node, reports capabilities
 
-When using `./scripts/setup-dev.sh start` or `just e2e`, the orchestrator stack (postgres, control-plane, user-gateway, ollama) runs in containers via Compose.
+When using `just setup-dev start` or `just setup-dev full-demo`, the orchestrator stack (postgres, control-plane, user-gateway, ollama) runs in containers via Compose.
 For a single source of truth on default ports and overrides, see [Ports and endpoints](tech_specs/ports_and_endpoints.md).
 
 ## Manual Setup
@@ -74,16 +75,16 @@ The orchestrator stack (see [Docker Compose](#4-docker-compose-orchestrator-stac
 For a standalone Postgres container (e.g. for manual runs):
 
 ```bash
-./scripts/setup-dev.sh start-db
+just setup-dev start-db
 ```
 
 The script uses the `pgvector/pgvector:pg16` image so the vector extension is available for schema migrations.
-To reset the DB: `just clean-db` or `./scripts/setup-dev.sh clean-db`.
+To reset the DB: `just setup-dev clean-db`.
 
 ### 2. Build Binaries
 
 ```bash
-./scripts/setup-dev.sh build
+just setup-dev build
 
 # Or manually
 go build -o bin/control-plane ./orchestrator/cmd/control-plane
@@ -128,8 +129,8 @@ docker compose -f orchestrator/docker-compose.yml up -d
 # or: podman compose -f orchestrator/docker-compose.yml up -d
 ```
 
-The setup script uses this for `./scripts/setup-dev.sh start` and `just e2e`.
-To stop: `just e2e-stop` or `./scripts/setup-dev.sh stop`.
+The setup script uses this for `just setup-dev start` and `just setup-dev full-demo`.
+To stop: `just setup-dev stop`.
 
 ### 5. Docker Compose (Worker Node)
 
@@ -209,13 +210,14 @@ The end-to-end demo tests: admin auto-creation, login, create task, task status,
 
 ```bash
 # Full demo: build, start orchestrator stack (compose), build inference-proxy image, start node, run tests
-just e2e
+just setup-dev full-demo
 
-# With orchestrator stack and node already running
-./scripts/setup-dev.sh test-e2e
+# With orchestrator stack and node already running (run E2E suite only)
+just e2e
+# Or: just setup-dev test-e2e
 
 # Stop all services (orchestrator stack and node processes)
-just e2e-stop
+just setup-dev stop
 ```
 
 BDD: run `just test-bdd` for the orchestrator, worker_node, and cynork Godog suites.
@@ -270,10 +272,10 @@ See [orchestrator/systemd/README.md](../orchestrator/systemd/README.md) and [wor
   For orchestrator DB tests, set `POSTGRES_TEST_DSN` if not using testcontainers.
 - **Connection issues**: Set `POSTGRES_TEST_DSN` to use a real DB; use `SKIP_TESTCONTAINERS=1` if needed.
 - **Port conflicts**: The script runs `compose down` and removes existing orchestrator containers before `compose up`.
-  To use different ports: `ORCHESTRATOR_PORT=12080 CONTROL_PLANE_PORT=12082 ./scripts/setup-dev.sh start`.
-- **Reset DB**: `just clean-db` or `./scripts/setup-dev.sh clean-db`.
-  Then start again with `./scripts/setup-dev.sh start`.
-- **Stop everything**: `just e2e-stop` or `./scripts/setup-dev.sh stop`.
+  To use different ports: `ORCHESTRATOR_PORT=12080 CONTROL_PLANE_PORT=12082 just setup-dev start`.
+- **Reset DB**: `just setup-dev clean-db`.
+  Then start again with `just setup-dev start`.
+- **Stop everything**: `just setup-dev stop`.
 
 ## Architecture Overview
 

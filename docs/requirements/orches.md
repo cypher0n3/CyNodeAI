@@ -59,6 +59,11 @@ It covers orchestrator control-plane behavior, task lifecycle, dispatch, and sta
 - **REQ-ORCHES-0114:** The orchestrator MUST support dynamic configuration updates after registration and must ingest node capability reports on registration and node startup.
   [orchestrator.md](../tech_specs/orchestrator.md)
   <a id="req-orches-0114"></a>
+- **REQ-ORCHES-0149:** The orchestrator MUST acknowledge node registration and return a node configuration payload that instructs the node whether and how to start the local inference backend (e.g. OLLAMA).
+  When the node has reported GPU or inference capabilities, the configuration MUST include inference backend instructions (e.g. container image and backend variant such as ROCm for AMD or CUDA for Nvidia) derived from the node capability report, so the node starts the correct OLLAMA (or equivalent) container.
+  [CYNAI.WORKER.ConfigurationDelivery](../tech_specs/worker_node.md#spec-cynai-worker-configurationdelivery)
+  [CYNAI.WORKER.Payload.ConfigurationV1](../tech_specs/worker_node_payloads.md#spec-cynai-worker-payload-configuration-v1)
+  <a id="req-orches-0149"></a>
 - **REQ-ORCHES-0148:** The orchestrator MUST set each node's Worker API dispatch URL from the node-reported `worker_api.base_url` (in registration and capability reports) and MUST update it when the node reports a new value; an operator MAY configure an explicit override (e.g. same-host or dev), and when an override is used it MUST be clearly documented as an override.
   [worker_node_payloads.md](../tech_specs/worker_node_payloads.md#spec-cynai-worker-payload-capabilityreport-v1)
   [worker_node.md](../tech_specs/worker_node.md#spec-cynai-worker-registrationandbootstrap)
@@ -66,8 +71,10 @@ It covers orchestrator control-plane behavior, task lifecycle, dispatch, and sta
 - **REQ-ORCHES-0115:** The orchestrator MAY import bootstrap configuration from a YAML file at startup to seed PostgreSQL and external integrations.
   [orchestrator.md](../tech_specs/orchestrator.md)
   <a id="req-orches-0115"></a>
-- **REQ-ORCHES-0116:** The orchestrator SHOULD support running as the sole service with zero worker nodes and using external AI providers when allowed.
-  [orchestrator.md](../tech_specs/orchestrator.md)
+- **REQ-ORCHES-0116:** The system MUST have at least one worker node for normal operation.
+  For single-system setups, that node MAY be on the same host as the orchestrator.
+  The orchestrator MUST NOT assume it can run as the sole service with zero worker nodes.
+  [CYNAI.BOOTST.WorkerNodeRequirement](../tech_specs/orchestrator_bootstrap.md#spec-cynai-bootst-workernoderequirement)
   <a id="req-orches-0116"></a>
 - **REQ-ORCHES-0117:** On startup, the orchestrator MUST select an effective "Project Manager model" to run the Project Manager Agent.
   If a dispatchable local inference worker is available (Ollama or similar), the orchestrator MUST prefer a local Project Manager model.
@@ -96,11 +103,18 @@ It covers orchestrator control-plane behavior, task lifecycle, dispatch, and sta
 - **REQ-ORCHES-0120:** The orchestrator MUST remain running while it is not ready due to missing Project Manager inference prerequisites, and MUST expose health endpoints that distinguish "process alive" from "ready to accept work".
   `GET /healthz` MUST return 200 when the orchestrator process is alive.
   `GET /readyz` MUST return 200 only when the orchestrator is in a ready state; otherwise it MUST return 503 with a reason indicating what prerequisites are missing.
-  When the Project Manager Agent (cynode-pma) is enabled, `GET /readyz` MUST return 503 until the PMA is reachable (e.g. responds to its health check).
+  The orchestrator MUST NOT report ready until at least one inference path exists (a worker node that has reported ready to the orchestrator and is inference-capable, or an LLM API key for PMA via API Egress) and, when PMA is enabled, until the PMA has informed the orchestrator that it is online and is reachable.
   PMA is enabled by default (config `PMA_ENABLED=true`).
   While not ready, the orchestrator MUST allow users to configure system settings and credentials required to become ready.
   [CYNAI.ORCHES.Rule.HealthEndpoints](../tech_specs/orchestrator.md#spec-cynai-orches-rule-healthendpoints)
   <a id="req-orches-0120"></a>
+- **REQ-ORCHES-0150:** The orchestrator MUST start the Project Manager Agent (cynode-pma) when the first inference path becomes available: either the first worker node has reported ready to the orchestrator and is inference-capable, or the orchestrator has an LLM API key configured for PMA via the API Egress Server.
+  The orchestrator MUST NOT start PMA before at least one of these conditions is satisfied.
+  [CYNAI.BOOTST.OrchestratorReadinessAndPmaStartup](../tech_specs/orchestrator_bootstrap.md#spec-cynai-bootst-orchestratorreadinessandpmastartup)
+  <a id="req-orches-0150"></a>
+- **REQ-ORCHES-0151:** The Project Manager Agent MUST inform the orchestrator when it has come online (e.g. via health check or registration callback) so that the orchestrator can use it and update readiness accordingly.
+  [CYNAI.PMAGNT.PmaInformsOrchestratorOnline](../tech_specs/cynode_pma.md#spec-cynai-pmagnt-pmainformsorchestratoronline)
+  <a id="req-orches-0151"></a>
 
 - **REQ-ORCHES-0121:** The orchestrator MUST persist tasks and their lifecycle state in PostgreSQL with stable identifiers.
   [orchestrator.md](../tech_specs/orchestrator.md)

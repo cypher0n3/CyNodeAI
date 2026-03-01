@@ -50,7 +50,7 @@ Recommended default routing behavior.
 - The orchestrator SHOULD route to an external provider when:
   - no available worker can satisfy capability requirements, or
   - workers are overloaded beyond configured thresholds, or
-  - there are no registered worker nodes and the orchestrator is operating in standalone mode, or
+  - no registered worker node is inference-capable or has reported ready with inference (so external provider is the only inference path), or
   - the task is marked as external-allowed and requires low latency that local capacity cannot meet.
 - The orchestrator SHOULD honor a user override selecting a specific external provider when policy allows it.
 - The orchestrator MUST deny external routing when policy does not allow it.

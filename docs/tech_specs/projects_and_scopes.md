@@ -28,6 +28,7 @@ It makes `project_id` a first-class database entity and clarifies how project sc
 Related documents
 
 - Postgres schema: [`docs/tech_specs/postgres_schema.md`](postgres_schema.md)
+- Project Git repos: [`docs/tech_specs/project_git_repos.md`](project_git_repos.md)
 - RBAC and scopes: [`docs/tech_specs/rbac_and_groups.md`](rbac_and_groups.md)
 - Preferences scoping: [`docs/tech_specs/user_preferences.md`](user_preferences.md)
 - Access control: [`docs/tech_specs/access_control.md`](access_control.md)
@@ -114,6 +115,7 @@ When `project_id` is set (explicit or personal), the project scope SHOULD be use
 
 - preference resolution (project-level overrides)
 - access control policy evaluation when `project_id` is part of the request context
+- Git egress repo allowlist: only repos associated with the project may be used for that task (see [`project_git_repos.md`](project_git_repos.md)).
 
 ### Chat Scope
 

@@ -129,7 +129,8 @@ The node uses the decrypted bundle credential once to register; the orchestrator
 
 ### 5.2 No TLS Required
 
-- The registration request and response may be sent over plain TCP (e.g. HTTP on an internal network) or over TLS. **TLS is not required** for the registration or for subsequent node-orchestrator traffic.
+- The registration request and response may be sent over plain TCP (e.g. HTTP on an internal network) or over TLS.
+  **TLS is not required** for the registration or for subsequent node-orchestrator traffic.
   Confidentiality and integrity are provided by (1) the encrypted registration payload and (2) the rotating-key encryption for ongoing traffic.
   If TLS is used, it is an additional layer only; the system must not depend on it for authentication or confidentiality of the registration or bootstrap payloads.
 

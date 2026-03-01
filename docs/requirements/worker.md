@@ -265,3 +265,22 @@ It covers worker-node behavior and the worker API contract for job execution and
   [CYNAI.WORKER.NodeStartupChecks](../tech_specs/worker_node.md#spec-cynai-worker-nodestartupchecks)
   [CYNAI.WORKER.WorkerApiHealthChecks](../tech_specs/worker_api.md#spec-cynai-worker-workerapihealthchecks)
   <a id="req-worker-0252"></a>
+- **REQ-WORKER-0253:** The node MUST start the Worker API and contact the orchestrator with its capabilities bundle (registration and capability report) before starting any local inference (OLLAMA) container.
+  The node MUST NOT start the OLLAMA (or equivalent) container until the orchestrator has acknowledged registration and returned node configuration that instructs the node to start the local inference backend (including backend variant, e.g. ROCm for AMD or CUDA for Nvidia, when applicable).
+  [CYNAI.WORKER.NodeStartupProcedure](../tech_specs/worker_node.md#spec-cynai-worker-nodestartupprocedure)
+  [CYNAI.WORKER.RegistrationAndBootstrap](../tech_specs/worker_node.md#spec-cynai-worker-registrationandbootstrap)
+  <a id="req-worker-0253"></a>
+- **REQ-WORKER-0254:** The node MUST report to the orchestrator when it has become ready (e.g. after applying config and starting Worker API and, when instructed, the local inference container) so that the orchestrator can consider the node as an inference path and start the Project Manager Agent when appropriate.
+  This report MAY be the config ack with status applied or a dedicated readiness notification as defined in the tech specs.
+  [CYNAI.WORKER.NodeStartupProcedure](../tech_specs/worker_node.md#spec-cynai-worker-nodestartupprocedure)
+  [CYNAI.WORKER.Payload.ConfigAckV1](../tech_specs/worker_node_payloads.md#spec-cynai-worker-payload-configack-v1)
+  <a id="req-worker-0254"></a>
+- **REQ-WORKER-0255:** The node MUST support using an existing OLLAMA (or equivalent) inference service already running on the host when one is present and reachable.
+  The node MUST NOT start its own inference container when such an existing service is detected and usable; the node MUST use the existing service instead.
+  [CYNAI.WORKER.ExistingInferenceService](../tech_specs/worker_node.md#spec-cynai-worker-existinginferenceservice)
+  <a id="req-worker-0255"></a>
+- **REQ-WORKER-0256:** The node MUST include in its capability report (at registration and on every check-in) whether it already has a running inference service on the host (e.g. existing OLLAMA or equivalent that the node is using rather than having started).
+  This allows the orchestrator to treat the node as inference-capable and to avoid instructing the node to start an inference container when one is already present.
+  [CYNAI.WORKER.CapabilityReporting](../tech_specs/worker_node.md#spec-cynai-worker-capabilityreporting)
+  [CYNAI.WORKER.Payload.CapabilityReportV1](../tech_specs/worker_node_payloads.md#spec-cynai-worker-payload-capabilityreport-v1)
+  <a id="req-worker-0256"></a>

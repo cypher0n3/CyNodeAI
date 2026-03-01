@@ -120,6 +120,12 @@ See [`docs/tech_specs/api_egress_server.md`](api_egress_server.md) for credentia
 Git egress MUST be default-deny.
 Access control SHOULD be enforced by the orchestrator and by the Git egress service.
 
+Project-scoped repo allowlist
+
+- When a task has a non-null `project_id`, Git egress MUST validate that the requested provider and repo are associated with that project.
+  See [CYNAI.APIEGR.GitEgressProjectScope](project_git_repos.md#spec-cynai-apiegr-gitegressprojectscope) and [REQ-APIEGR-0127](../requirements/apiegr.md#req-apiegr-0127).
+  The project-repo association model is defined in [`docs/tech_specs/project_git_repos.md`](project_git_repos.md).
+
 Recommended access control dimensions
 
 - Subject identity (user and agent identity).

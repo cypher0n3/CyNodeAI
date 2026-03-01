@@ -2,6 +2,7 @@
 
 - [Document overview](#document-overview)
 - [Chat Command](#chat-command)
+  - [Chat Session Warm-Up](#chat-session-warm-up)
 - [Slash Command Reference](#slash-command-reference)
 
 ## Document Overview
@@ -29,6 +30,7 @@ Traces To:
 - [REQ-CLIENT-0173](../requirements/client.md#req-client-0173)
 - [REQ-CLIENT-0175](../requirements/client.md#req-client-0175)
 - [REQ-CLIENT-0176](../requirements/client.md#req-client-0176)
+- [REQ-CLIENT-0177](../requirements/client.md#req-client-0177)
 
 The CLI MUST provide a top-level `chat` command that starts an interactive chat session with the Project Manager (PM) model.
 The session MUST use the same User API Gateway and token resolution as other commands and MUST require auth.
@@ -61,6 +63,18 @@ Optional flags
   Implementations MUST support at least `/exit`, `/quit`, or EOF; supporting all three is recommended.
 - Chat input and model output MUST NOT be recorded in shell history or in any persistent history that could expose secrets; the same rules as interactive mode (REQ-CLIENT-0140) apply.
 - All communication with the PM model MUST go through the User API Gateway; the CLI MUST NOT connect directly to inference or to the database.
+
+### Chat Session Warm-Up
+
+- Spec ID: `CYNAI.CLIENT.CliChatWarmUp` <a id="spec-cynai-client-clichatwarmup"></a>
+
+Traces To:
+
+- [REQ-CLIENT-0177](../requirements/client.md#req-client-0177)
+
+When the gateway exposes a chat warm-up endpoint (e.g. `POST /v1/chat/warm`), the CLI SHOULD call it once after auth and before entering the interactive chat loop (before showing the first prompt).
+The CLI MUST NOT block the prompt on warm-up completion: use fire-and-forget or a short timeout so the user can type immediately.
+The model parameter MAY be omitted (gateway default) or set from the session default (e.g. `--model` if present).
 
 ### `cynork chat` Slash Commands and Discoverability
 

@@ -144,3 +144,8 @@ It covers user-facing REST API gateway behavior and related API contracts.
   No endpoint may rely on network location or a previous request for identity; each request MUST be verified independently.
   [CYNAI.USRGWY.AuthAuditing](../tech_specs/user_api_gateway.md#spec-cynai-usrgwy-authauditing)
   <a id="req-usrgwy-0133"></a>
+- **REQ-USRGWY-0134:** The User API Gateway MAY expose an optional chat model warm-up endpoint (e.g. `POST /v1/chat/warm`).
+  When exposed, warm-up MUST be best-effort: failure or timeout MUST NOT block or break chat sessions.
+  The endpoint MUST require the same authentication as the chat API.
+  [CYNAI.USRGWY.OpenAIChatApi.WarmUp](../tech_specs/openai_compatible_chat_api.md#spec-cynai-usrgwy-openaichatapi-warmup)
+  <a id="req-usrgwy-0134"></a>

@@ -47,3 +47,13 @@ It covers data persistence requirements, schema-level invariants, and database c
 - **REQ-SCHEMA-0110:** Vector rows MUST record the embedding model identifier used to produce the embedding.
   [CYNAI.SCHEMA.VectorStorage](../tech_specs/postgres_schema.md#spec-cynai-schema-vectorstorage)
   <a id="req-schema-0110"></a>
+- **REQ-SCHEMA-0111:** Vector rows MUST include columns that support RBAC filtering: at least project_id; and MUST include namespace and sensitivity_level (or equivalent) when vector retrieval RBAC is enforced.
+  [CYNAI.SCHEMA.VectorStorage](../tech_specs/postgres_schema.md#spec-cynai-schema-vectorstorage)
+  [CYNAI.SCHEMA.VectorRetrievalRbac](../tech_specs/postgres_schema.md#spec-cynai-schema-vectorretrievalrbac)
+  <a id="req-schema-0111"></a>
+- **REQ-SCHEMA-0112:** Similarity search MUST run only against rows that have been filtered by the authorized scope (project_id, namespace, sensitivity_level); composite indexes on (project_id, namespace) SHOULD be used for performance.
+  [CYNAI.SCHEMA.VectorRetrievalRbac](../tech_specs/postgres_schema.md#spec-cynai-schema-vectorretrievalrbac)
+  <a id="req-schema-0112"></a>
+- **REQ-SCHEMA-0113:** The schema MUST include a project git repositories table that stores per-project Git repo associations (project_id, provider, repo_identifier, optional base_url override) with a foreign key to projects.id.
+  [CYNAI.SCHEMA.ProjectGitReposTable](../tech_specs/postgres_schema.md#spec-cynai-schema-projectgitrepostable)
+  <a id="req-schema-0113"></a>

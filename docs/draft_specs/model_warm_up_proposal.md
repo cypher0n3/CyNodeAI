@@ -1,4 +1,4 @@
-# Model Warm-up Proposal
+# Model Warm-Up Proposal
 
 - [Document Status](#document-status)
 - [Problem](#problem)
@@ -49,12 +49,13 @@ In both cases we want the **default chat model** (typically `cynodeai.pm` and it
 
 The following approaches are possible; each has different trade-offs for client, gateway, and backend.
 
-### Option A: Client-Triggered Warm-up (Explicit)
+### Option A: Client-Triggered Warm-Up (Explicit)
 
 - **CLI:** After starting the chat loop and before showing the first prompt, `cynork` calls a dedicated gateway endpoint (e.g. `POST /v1/chat/warm` or `GET /v1/models` with a warm-up hint) or a minimal `POST /v1/chat/completions` with a no-op/empty message that the gateway treats as warm-only.
 - **Web:** Same: when the chat view loads, the front end calls the warm-up endpoint once.
 - **Gateway:** New optional endpoint (e.g. `POST /v1/chat/warm`) that triggers backend warm-up for the default (or requested) model and returns immediately; or gateway interprets a special request and triggers warm-up in the background without running a full completion.
-- **Pros:** Clear trigger; client controls when to warm. **Cons:** New endpoint or request shape; clients must be updated.
+- **Pros:** Clear trigger; client controls when to warm.
+  **Cons:** New endpoint or request shape; clients must be updated.
 
 ### Option B: Gateway-Triggered on First Chat Request
 
@@ -62,9 +63,10 @@ The following approaches are possible; each has different trade-offs for client,
   When the gateway receives the first `POST /v1/chat/completions` for a given model (or default), it could:
   - Option B1: Perform warm-up synchronously before processing the real request (adds latency to that first request).
   - Option B2: Start warm-up asynchronously and process the request as today (first request still cold; subsequent sessions benefit if warm-up is reused).
-- **Pros:** No client changes. **Cons:** B1 worsens first-request latency; B2 does not help the first request.
+- **Pros:** No client changes.
+  **Cons:** B1 worsens first-request latency; B2 does not help the first request.
 
-### Option C: Gateway Warm-up Endpoint; CLI/Web Call It on Session Start
+### Option C: Gateway Warm-Up Endpoint; CLI/Web Call It on Session Start
 
 - Gateway exposes a best-effort **warm-up** endpoint (e.g. `POST /v1/chat/warm`), optionally with `model` (default: `cynodeai.pm`).
   Requires auth like chat.
@@ -73,13 +75,15 @@ The following approaches are possible; each has different trade-offs for client,
 - **CLI:** In `runChat` (or equivalent), after auth and before entering the chat loop, fire a single warm-up request (same token, optional model from session/default).
   Do not block the prompt on completion; run warm-up in background or with short timeout so the user can type immediately.
 - **Web:** On chat route/view load, call the warm-up endpoint once (e.g. fire-and-forget or short timeout).
-- **Pros:** Explicit, predictable; first user message often hits a warm model. **Cons:** One extra endpoint and client call per session.
+- **Pros:** Explicit, predictable; first user message often hits a warm model.
+  **Cons:** One extra endpoint and client call per session.
 
 ### Option D: Backend (Orchestrator/pma/PMA) Periodic or On-Demand Keep-Warm
 
 - Orchestrator or PMA periodically (or on a health check) calls Ollama to load the configured model so it stays in memory.
   No client or gateway API change.
-- **Pros:** No client changes; model can stay warm. **Cons:** Resource usage when idle; may not match the exact model the user selects; less predictable for "first request after session start."
+- **Pros:** No client changes; model can stay warm.
+  **Cons:** Resource usage when idle; may not match the exact model the user selects; less predictable for "first request after session start."
 
 ## Recommended Direction
 

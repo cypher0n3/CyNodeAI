@@ -84,3 +84,27 @@ It covers controlled egress services and their policy and auditing constraints.
 - **REQ-APIEGR-0120:** Responses SHOULD be filtered to avoid accidental secret leakage.
   [CYNAI.APIEGR.PolicyAuditing](../tech_specs/api_egress_server.md#spec-cynai-apiegr-policyauditing)
   <a id="req-apiegr-0120"></a>
+- **REQ-APIEGR-0121:** The API Egress Server MAY perform a semantic sanity check on the requested call (provider, operation, params) before execution.
+  When enabled, the sanity check MUST evaluate whether the call appears to involve bulk/irreversible deletion without backup, secret exposure, or other dangerous or high-impact actions.
+  [CYNAI.APIEGR.SanityCheck](../tech_specs/api_egress_server.md#spec-cynai-apiegr-sanitycheck)
+  <a id="req-apiegr-0121"></a>
+- **REQ-APIEGR-0122:** The sanity check MUST NOT receive or use decrypted credentials; it SHALL use only the request payload and non-secret context.
+  [CYNAI.APIEGR.SanityCheck](../tech_specs/api_egress_server.md#spec-cynai-apiegr-sanitycheck)
+  <a id="req-apiegr-0122"></a>
+- **REQ-APIEGR-0123:** When the sanity check denies a call, the server MUST deny the request with a structured error and MUST log the denial with task context and reason/category.
+  [CYNAI.APIEGR.SanityCheck](../tech_specs/api_egress_server.md#spec-cynai-apiegr-sanitycheck)
+  <a id="req-apiegr-0123"></a>
+- **REQ-APIEGR-0124:** Sanity check behavior SHOULD be configurable (e.g. enable/disable, or allowlist of operations that skip the check).
+  [CYNAI.APIEGR.SanityCheck](../tech_specs/api_egress_server.md#spec-cynai-apiegr-sanitycheck)
+  <a id="req-apiegr-0124"></a>
+- **REQ-APIEGR-0125:** The sanity check SHALL use local (worker-hosted) inference by default.
+  It MAY use a configurable external model via API only when explicitly configured by the user (e.g. OpenAI-compatible or provider-specific endpoint).
+  When external API is configured, endpoint URL, model identifier, and authentication MUST be configurable; credentials for the external model MUST NOT be exposed to sandboxes.
+  [CYNAI.APIEGR.SanityCheck](../tech_specs/api_egress_server.md#spec-cynai-apiegr-sanitycheck)
+  <a id="req-apiegr-0125"></a>
+- **REQ-APIEGR-0126:** When local (worker-hosted) inference is not available and the user has not explicitly configured an external LLM API for the sanity check, the sanity checker SHALL be disabled by default (the sanity check step SHALL NOT be performed).
+  [CYNAI.APIEGR.SanityCheck](../tech_specs/api_egress_server.md#spec-cynai-apiegr-sanitycheck)
+  <a id="req-apiegr-0126"></a>
+- **REQ-APIEGR-0127:** When a Git egress request includes a task that has a non-null project_id, the Git egress service MUST validate that the requested provider and repo are associated with that project (project-scoped repo allowlist); if not associated, the request MUST be denied.
+  [CYNAI.APIEGR.GitEgressProjectScope](../tech_specs/project_git_repos.md#spec-cynai-apiegr-gitegressprojectscope)
+  <a id="req-apiegr-0127"></a>

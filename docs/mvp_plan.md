@@ -40,7 +40,7 @@
 This document is the **canonical full MVP development plan** for CyNodeAI.
 All task breakdowns, requirement and spec references, and implementation order are maintained here.
 
-This document is the single comprehensive MVP development plan as of 2026-02-27.
+This document is the single comprehensive MVP development plan as of 2026-02-28.
 It reflects the latest tech specs (including [external_model_routing.md](../docs/tech_specs/external_model_routing.md)) and post-Phase 1 implementation status.
 
 The canonical phase list and high-level scope remain in [docs/tech_specs/\_main.md](../docs/tech_specs/_main.md); this plan adds objectives, current status, spec alignment, task breakdown with req/spec refs, and quality/BDD expectations.
@@ -122,6 +122,7 @@ These behaviors are reflected in Phase 1 (inference path requirement), Phase 2 (
   See [development_setup.md](development_setup.md).
 - **Shared Go contracts:** User API Gateway contract lives in `go_shared_libs/contracts/userapi`; orchestrator handlers and cynork gateway client use it (single source of truth for gateway API, supports [REQ-CLIENT-0004](../docs/requirements/client.md)).
   Orchestrator uses `problem.Details` from `go_shared_libs/contracts/problem` for error responses.
+- **CI/E2E:** `just ci` and `just e2e --stop-on-success` verified passing as of 2026-02-28.
 - **Phase 2:** Foundation in progress.
   P2-01: Minimal scoping in place (required task_id/run_id/job_id per tool; db.preference.effective requires task_id; get/list use scope_id); gateway rejects with 400 when missing.
   P2-02: MCP tool call audit table (`mcp_tool_call_audit_log`), store method; mcp-gateway `POST /v1/mcp/tools/call` writes audit for every call; allow path for `db.preference.*` (200); other tools return 501; testcontainers for real-DB coverage (>=90%).
@@ -183,7 +184,7 @@ There is no Phase 5 in [`docs/tech_specs/_main.md`](../docs/tech_specs/_main.md)
     - [`REQ-ORCHES-0120`](../docs/requirements/orches.md#req-orches-0120)
     - [`REQ-ORCHES-0129`](../docs/requirements/orches.md#req-orches-0129)
   - **Specs**:
-    - [`orchestrator_bootstrap.md`](../docs/tech_specs/orchestrator_bootstrap.md#standalone-operation-mode)
+    - [`orchestrator_bootstrap.md`](../docs/tech_specs/orchestrator_bootstrap.md#worker-node-requirement)
     - [`orchestrator.md`](../docs/tech_specs/orchestrator.md#project-manager-model-startup-selection-and-warmup)
     - [`external_model_routing.md`](../docs/tech_specs/external_model_routing.md#routing-goal)
 
@@ -372,7 +373,7 @@ There is no Phase 5 in [`docs/tech_specs/_main.md`](../docs/tech_specs/_main.md)
   - **Deliverable**: When a task/job uses SBA, the orchestrator (or job builder) produces `RunJobRequest` with `Sandbox.JobSpecJSON` and SBA runner image; dispatcher passes `JobSpecJSON` and uses SBA runner from config or node capability.
   - **Deliverable**: Definition of when a task/job uses SBA: task create with `use_sba: true` (API) or `--use-sba` (cynork); job payload may contain `job_spec_json`; dispatcher `ParseSandboxSpec` accepts `job_spec_json`, default image `cynodeai-cynode-sba:dev`.
   - **Deliverable**: Orchestrator persists full `RunJobResponse` including `sba_result` when present (already in place).
-  - **Deliverable**: Optional E2E/BDD scenario for SBA job and `job.result` containing `sba_result` (deferred; CLI and API path in place).
+  - **Deliverable**: Optional E2E scenario for SBA job implemented: Test 5e in `run_e2e_test` creates task with `--use-sba`, polls for completion, asserts `job.result` contains `sba_result`; full-demo builds SBA runner image via `ensure_sba_runner_build_if_delta`.
   - **Reqs**:
     - [`REQ-SBAGNT-0106`](../docs/requirements/sbagnt.md#req-sbagnt-0106)
     - [`REQ-SBAGNT-0110`](../docs/requirements/sbagnt.md#req-sbagnt-0110)
@@ -626,13 +627,13 @@ Items below are implemented.
 
 ### Remaining (Order)
 
-1. Phase 2: P2-01--P2-03, P2-09, P2-10 worker side, **P2-10-orchestrator** done; allow path for other MCP tools (sandbox/artifact); optional E2E/BDD for SBA job result; LangGraph workflow (P2-04--P2-08).
+1. Phase 2: P2-01--P2-03, P2-09, P2-10 (worker + orchestrator) done; allow path for other MCP tools (sandbox/artifact); optional E2E/BDD for SBA job result; LangGraph workflow (P2-04--P2-08).
 2. Phase 3: Multi-node selection, leases, retries, telemetry.
 3. Phase 4: API Egress and external routing.
 
 ## Remediation Status and Next Work
 
-This section summarizes MVP remediation status (as of 2026-02-27) and suggested next work.
+This section summarizes MVP remediation status (as of 2026-02-28) and suggested next work.
 Content was consolidated from dev_docs that have been deleted.
 
 ### Remediation Status (Done / Deferred / Pending)
@@ -653,7 +654,8 @@ Optional E2E/BDD scenario for SBA job and `job.result` containing `sba_result` r
 
 ### Suggested Next Work
 
-1. **Optional E2E/BDD for SBA job (low):** Add E2E or BDD scenario: create task with `--use-sba`, dispatch to node with SBA runner, assert `job.result` contains `sba_result`.
+1. **Optional E2E/BDD for SBA job (low):** Done.
+   E2E Test 5e in `scripts/setup-dev.sh` creates task with `--use-sba`, polls until completed, asserts job result contains `sba_result`; full-demo builds SBA runner image.
 2. **MCP gateway allow path or scope (medium):** Document MVP scope (only db.preference.* implemented; others 501) or implement allow path for one sandbox/orchestrator tool.
 3. **PMA langchaingo refactor (medium):** Refactor PMA from direct Ollama HTTP to langchaingo; MCP tools as langchaingo tools; multiple tool calls where supported.
 4. **LangGraph workflow (P2-04--P2-08):** Workflow start/resume API (Go to Python LangGraph); graph nodes to MCP DB and Worker API; lease acquisition; Verify Step Result (PMA tasking Project Analyst / SBA).

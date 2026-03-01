@@ -74,3 +74,23 @@ It covers authorization, policy evaluation, RBAC, groups, and scope enforcement.
 - **REQ-ACCESS-0119:** The orchestrator and the target service SHOULD both enforce policy.
   [access_control.md](../tech_specs/access_control.md)
   <a id="req-access-0119"></a>
+
+- **REQ-ACCESS-0121:** Vector (similarity) retrieval MUST NOT bypass RBAC.
+  Similarity search is only allowed within an already-authorized document set; authorization MUST be applied before similarity ranking.
+  [CYNAI.SCHEMA.VectorRetrievalRbac](../tech_specs/postgres_schema.md#spec-cynai-schema-vectorretrievalrbac)
+  <a id="req-access-0121"></a>
+- **REQ-ACCESS-0122:** A user MUST NOT retrieve vector-backed content from a project they are not authorized to access.
+  The system MUST filter by authorized project (and namespace when applicable) in SQL before applying similarity scoring.
+  [CYNAI.SCHEMA.VectorRetrievalRbac](../tech_specs/postgres_schema.md#spec-cynai-schema-vectorretrievalrbac)
+  <a id="req-access-0122"></a>
+- **REQ-ACCESS-0123:** When vector rows have a sensitivity level, a lower-privilege role MUST NOT retrieve rows with a higher sensitivity level than the role allows.
+  The query MUST enforce sensitivity_level <= role.max_sensitivity_level within the authorized scope.
+  [CYNAI.SCHEMA.VectorRetrievalRbac](../tech_specs/postgres_schema.md#spec-cynai-schema-vectorretrievalrbac)
+  <a id="req-access-0123"></a>
+- **REQ-ACCESS-0124:** Every vector retrieval MUST be auditable (e.g. user_id, scope, namespaces queried, chunk count returned, timestamp).
+  [CYNAI.SCHEMA.VectorRetrievalRbac](../tech_specs/postgres_schema.md#spec-cynai-schema-vectorretrievalrbac)
+  <a id="req-access-0124"></a>
+- **REQ-ACCESS-0125:** Embedding ingestion MUST require write permission on the target scope (project and namespace) and correct project association; only controlled services MAY insert embeddings.
+  [CYNAI.SCHEMA.VectorStorage](../tech_specs/postgres_schema.md#spec-cynai-schema-vectorstorage)
+  [CYNAI.SCHEMA.VectorRetrievalRbac](../tech_specs/postgres_schema.md#spec-cynai-schema-vectorretrievalrbac)
+  <a id="req-access-0125"></a>
