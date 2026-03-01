@@ -23,7 +23,7 @@ Python dev setup replaces bash for all commands; the bash script remains for ref
 - **setup-dev.sh** - Legacy bash dev setup (start-db, build, start, stop, test-e2e, full-demo).
   Kept for reference; use `just setup-dev` with Python instead.
 - **requirements-lint.txt** - Python lint tooling for `just venv` and `just lint-python`.
-- **dev-setup.sh**, **podman-generate-units.sh** - Optional/auxiliary scripts; see justfile for primary workflows.
+- **podman-generate-units.sh** - Optional/auxiliary; see justfile for primary workflows.
 
 ## Python Dev Setup
 
@@ -40,6 +40,8 @@ Commands (same as `setup-dev.sh`):
 - **build-e2e-images** - Build inference-proxy and cynode-sba images for E2E.
 - **start** - Build, compose up (orchestrator stack), wait for control-plane, start node-manager.
 - **stop** - Kill node-manager, free worker port, compose down, remove containers.
+- **restart** - Stop all then start (same as stop + start).
+- **clean** - Stop all services and remove postgres container/volume.
 - **test-e2e** - Run the Python E2E suite ([test_scripts/run_e2e.py](test_scripts/run_e2e.py)); stack must be up.
 - **full-demo** - Build, build E2E images, start stack and node, run E2E suite; optionally stop on success.
   Use `--stop-on-success` or `STOP_ON_SUCCESS_ENV=1` to tear down after tests pass.

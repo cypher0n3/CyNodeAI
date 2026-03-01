@@ -120,8 +120,8 @@ See [`docs/tech_specs/cynork_cli.md`](cynork_cli.md).
 
 E2E and BDD tests use the same default ports as production and dev.
 
-- **Orchestrator stack:** User API 12080, control-plane 12082, PostgreSQL 5432, Ollama 11434 (e.g. `just e2e`, `./scripts/setup-dev.sh start`, `./scripts/dev-setup.sh`).
-- **Worker node:** Worker API 12090 (or `NODE_PORT` in dev-setup); inference proxy in sandbox pods exposes `http://localhost:11434` to the sandbox per [Inference (Ollama and Proxy)](#inference-ollama-and-proxy).
+- **Orchestrator stack:** User API 12080, control-plane 12082, PostgreSQL 5432, Ollama 11434 (e.g. `just e2e`, `just setup-dev start`).
+- **Worker node:** Worker API 12090 (or `WORKER_PORT`); inference proxy in sandbox pods exposes `http://localhost:11434` to the sandbox per [Inference (Ollama and Proxy)](#inference-ollama-and-proxy).
 - **Feature assertions:** Scenarios that verify inference-in-sandbox assert sandbox stdout contains `http://localhost:11434` (e.g. `features/e2e/single_node_happy_path.feature`, `features/worker_node/worker_node_sandbox_execution.feature`).
 
 ## Environment and Config Overrides

@@ -28,6 +28,8 @@ def show_help():
     print("  build-e2e-images Build inference-proxy and cynode-sba images")
     print("  start           Start all services (compose stack + node)")
     print("  stop            Stop all services")
+    print("  restart         Stop then start all services")
+    print("  clean           Stop all services and remove postgres container/volume")
     print("  test-e2e        Run E2E via scripts/test_scripts/run_e2e.py")
     print("  full-demo       Full demo: build, E2E images, start, E2E, optionally stop")
     print("                  Use --stop-on-success to stop after E2E passes")
@@ -128,6 +130,21 @@ def _run_test_e2e():
     return setup_dev_impl.run_python_e2e()
 
 
+def _run_restart():
+    """Stop all then start (parity with dev-setup.sh restart)."""
+    setup_dev_impl.stop_all()
+    time.sleep(2)
+    class Opts:
+        extra_env = None
+    return cmd_start(Opts())
+
+
+def _run_clean():
+    """Stop all services and remove postgres container/volume (parity with dev-setup.sh clean)."""
+    setup_dev_impl.stop_all()
+    return setup_dev_impl.clean_postgres()
+
+
 def run_command(args):
     """Dispatch parsed args to the right handler. Returns exit code 0 or 1."""
     handlers = {
@@ -137,6 +154,8 @@ def run_command(args):
         "build": _run_build,
         "build-e2e-images": _run_build_e2e_images,
         "stop": _run_stop,
+        "restart": _run_restart,
+        "clean": _run_clean,
         "test-e2e": _run_test_e2e,
     }
     if args.command == "migrate":
@@ -167,7 +186,7 @@ def main():
         "command",
         choices=[
             "start-db", "stop-db", "clean-db", "migrate", "build", "build-e2e-images",
-            "start", "stop", "test-e2e", "full-demo", "help",
+            "start", "stop", "restart", "clean", "test-e2e", "full-demo", "help",
         ],
         help="Command to run",
     )
