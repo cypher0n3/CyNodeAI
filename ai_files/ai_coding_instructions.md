@@ -55,11 +55,19 @@ Follow this workflow for all implementation work in this repository.
 
 ### 5.1 BDD/TDD (Red -> Green -> Refactor)
 
+All feature and implementation work MUST follow this cycle.
+Use it for both Go (unit/BDD) and Python E2E coverage.
+
 - **Write the user story first (BDD):** Create or update a Gherkin `.feature` file under `features/` that describes the behavior from a user's perspective.
   - **Directory rule:** Feature files live in `features/` (create the directory if it does not exist).
-- **Red:** Add/adjust tests so the new scenario(s) fail for the right reason.
-- **Green:** Implement the smallest change that makes tests pass.
-- **Refactor:** Improve structure/readability while keeping tests green.
+- **Red phase:** Add or adjust tests so the new scenario(s) fail for the right reason.
+  - **Go:** Add or update unit tests and/or Godog BDD step definitions so the new behavior is missing and tests fail.
+  - **Python E2E:** When the behavior is user- or API-facing (gateway, control-plane, cynork), add or update tests in `scripts/test_scripts/` as part of Red.
+    Add a new `e2e_<name>.py` module or extend an existing one so the new scenario is exercised and fails before implementation.
+    See [scripts/test_scripts/README.md](../scripts/test_scripts/README.md) for layout, state, and how to add tests.
+  - Do not implement the feature until the Red phase is in place and tests fail as expected.
+- **Green phase:** Implement the smallest change that makes tests pass.
+- **Refactor phase:** Improve structure/readability while keeping tests green.
 - **Keep specs authoritative:** If the feature implies behavior that contradicts `docs/tech_specs/`, treat it as a spec issue and halt for user direction.
 
 ### 5.2 Analysis and Planning

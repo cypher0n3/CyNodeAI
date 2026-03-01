@@ -23,7 +23,8 @@ See [MVP and phased plan](docs/mvp.md) and [mvp_plan.md](docs/mvp_plan.md) for r
 
 **Contributing:** [CONTRIBUTING.md](CONTRIBUTING.md)
 
-**AI-assisted workflows:** [AI coding instructions](ai_files/ai_coding_instructions.md)
+**AI-assisted workflows:** All AI coding agents MUST follow the BDD/TDD process in [ai_files/ai_coding_instructions.md](ai_files/ai_coding_instructions.md).
+See also [meta.md](meta.md).
 
 ## Safe AI Usage and Security Model
 
@@ -54,6 +55,9 @@ Install [just](https://github.com/casey/just), then run:
 - `just test-go` / `just test-go-race` - Go tests / with race detector
 - `just vulncheck-go` - Go dependency vuln check
 - `just fmt-go` - format Go code
+- `just e2e` / `just e2e --stop-on-success` - E2E suite only (stack must be up); or use `just setup-dev full-demo --stop-on-success` to start stack and run E2E
+- `just e2e` - Python E2E suite only (requires stack already running; use `--no-build`, etc.)
+- `just setup-dev` - Python dev setup (same commands as setup-dev.sh, no bash dependency): start-db, stop-db, build, start, stop, test-e2e, full-demo, help
 
 For running services locally (Postgres, control-plane, user-gateway, worker node, E2E): [Development setup](docs/development_setup.md).
 
@@ -65,6 +69,12 @@ Go workspace modules (see root [go.work](go.work)):
 - [orchestrator/](orchestrator/) - control plane, user gateway, MCP gateway, API egress (Go)
 - [worker_node/](worker_node/) - node manager, worker API, and inference proxy (Go)
 - [cynork/](cynork/) - CLI management client (Go, Cobra); see [cynork CLI spec](docs/tech_specs/cynork_cli.md)
+
+Scripts:
+
+- [scripts/](scripts/) - dev setup and E2E tests; see [scripts/README.md](scripts/README.md) for layout and usage.
+  Python dev setup: `setup_dev.py` (same commands as legacy bash; no bash dependency), [test_scripts/](scripts/test_scripts/) (Python E2E suite).
+  Prefer justfile: `just setup-dev`, `just e2e`.
 
 Documentation:
 

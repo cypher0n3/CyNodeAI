@@ -2,6 +2,7 @@
 
 import os
 import subprocess
+import sys
 import tempfile
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -82,9 +83,9 @@ CONTAINER_HOST_ALIAS = None
 
 def _sync_runtime_aliases():
     """Update RUNTIME and CONTAINER_HOST_ALIAS from _RuntimeState (for impl)."""
-    global RUNTIME, CONTAINER_HOST_ALIAS  # noqa: PLW0603 - intentional module state
-    RUNTIME = _RuntimeState.RUNTIME
-    CONTAINER_HOST_ALIAS = _RuntimeState.CONTAINER_HOST_ALIAS
+    mod = sys.modules[__name__]
+    mod.RUNTIME = _RuntimeState.RUNTIME
+    mod.CONTAINER_HOST_ALIAS = _RuntimeState.CONTAINER_HOST_ALIAS
 
 
 def compose_env():

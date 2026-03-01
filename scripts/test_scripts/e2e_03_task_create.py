@@ -14,12 +14,12 @@ class TestTaskCreate(unittest.TestCase):
                 time.sleep(5)
             _, out, err = helpers.run_cynork(
                 ["task", "create", "-p", "echo Hello from sandbox", "-o", "json"],
-                state.config_path,
+                state.CONFIG_PATH,
             )
             data = helpers.parse_json_safe(out)
             task_id = (data or {}).get("task_id") or ""
             if task_id:
-                state.task_id = task_id
+                state.TASK_ID = task_id
                 return
             if attempt == 3:
                 self.fail(f"task create failed after 3 attempts: {out} {err}")

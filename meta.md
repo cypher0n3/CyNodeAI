@@ -16,6 +16,8 @@ It coordinates sandboxed worker execution across local nodes and optional cloud 
 
 - Primary overview: `README.md`
 - Technical specifications index: `docs/tech_specs/_main.md` (grouped by Core, Execution, External, Model, Agents, Bootstrap).
+- **AI coding agents:** All AI-assisted coding MUST follow the BDD/TDD process and workflow in [ai_files/ai_coding_instructions.md](ai_files/ai_coding_instructions.md).
+  That document is required reading for any agent making code or test changes; it defines Red/Green/Refactor, including adding Python E2E tests in the Red phase for user- or API-facing behavior.
 
 ## Architecture Summary
 
@@ -49,6 +51,10 @@ It coordinates sandboxed worker execution across local nodes and optional cloud 
 - `orchestrator/`: orchestrator Go module (control-plane, user-gateway, api-egress, etc.); see `orchestrator/README.md`.
 - `worker_node/`: worker-node Go module (node manager, worker API); see `worker_node/README.md`.
 - `cynork/`: CLI management client (Go, Cobra); see `cynork/README.md` and `docs/tech_specs/cynork_cli.md`.
+- `scripts/`: dev setup and E2E tests; see `scripts/README.md`.
+  Bash: `setup-dev.sh`.
+  Python: `setup_dev.py` (same commands), `test_scripts/` (Python E2E suite).
+  Use `just e2e` or `just setup-dev` from the justfile.
 - `tmp/`: scratch space (ignored by Python lint configs; avoid committing generated artifacts unless intentional).
 
 ## Style and Tooling Conventions

@@ -28,4 +28,4 @@ class TestNodeRegister(unittest.TestCase):
         data = helpers.parse_json_safe(body)
         jwt = (data or {}).get("auth", {}).get("node_jwt")
         self.assertTrue(jwt, "no node_jwt in response")
-        state.node_jwt = jwt
+        state.NODE_JWT = jwt

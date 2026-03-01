@@ -1,9 +1,11 @@
 # Implementation of setup_dev commands (no bash). Parity with setup-dev.sh.
 
+import contextlib
 import os
 import signal
 import subprocess
 import sys
+import traceback
 import time
 import urllib.error
 import urllib.request
@@ -12,12 +14,23 @@ import urllib.request
 import scripts.setup_dev_config as _cfg
 
 
+@contextlib.contextmanager
+def _popen_no_wait(*args, **kwargs):
+    """Context manager for Popen; on exit we do not wait (daemon, cleaned by stop_all)."""
+    proc = subprocess.Popen(*args, **kwargs)
+    try:
+        yield proc
+    finally:
+        pass  # Do not wait; process is long-lived, stop_all kills by pid
+
+
 def log_info(msg):
     print(f"[INFO] {msg}", file=sys.stderr)
 
 
 def log_warn(msg):
     print(f"[WARN] {msg}", file=sys.stderr)
+    sys.stderr.flush()
 
 
 def log_error(msg):
@@ -235,9 +248,15 @@ def wait_for_control_plane_listening():
     return False
 
 
-def start_node():
-    """Start node-manager in background; wait for worker-api healthz."""
+def start_node(extra_env=None):
+    """Start node-manager in background; wait for worker-api healthz.
+
+    extra_env: optional dict merged into node process env (e.g.
+    INFERENCE_PROXY_IMAGE, OLLAMA_UPSTREAM_URL for full-demo).
+    """
     env = os.environ.copy()
+    if extra_env:
+        env.update(extra_env)
     env["ORCHESTRATOR_URL"] = f"http://localhost:{_cfg.CONTROL_PLANE_PORT}"
     env["NODE_REGISTRATION_PSK"] = _cfg.NODE_PSK
     env["NODE_SLUG"] = _cfg.NODE_SLUG
@@ -253,90 +272,107 @@ def start_node():
         log_error(f"node-manager not found: {_cfg.NODE_MANAGER_BIN}")
         return False
     log_info("=== Node startup (node-manager -> worker-api) ===")
-    proc = subprocess.Popen(
+    with _popen_no_wait(
         [_cfg.NODE_MANAGER_BIN],
         cwd=_cfg.PROJECT_ROOT,
         env=env,
         stdout=subprocess.DEVNULL,
         stderr=subprocess.PIPE,
         shell=False,
-    )
-    try:
-        with open(_cfg.NODE_MANAGER_PID_FILE, "w", encoding="utf-8") as f:
-            f.write(str(proc.pid))
-    except OSError:
-        pass
-    time.sleep(2)
-    if proc.poll() is not None:
-        log_error("Failed to start node-manager")
-        return False
-    log_info(f"Node-manager started (PID {proc.pid}); waiting for worker-api...")
-    for _ in range(15):
-        time.sleep(1)
+    ) as proc:
         try:
-            req = urllib.request.Request(
-                f"http://localhost:{_cfg.WORKER_PORT}/healthz"
-            )
-            with urllib.request.urlopen(req, timeout=1) as resp:
-                if resp.getcode() == 200:
-                    log_info(
-                        f"Worker API listening on http://localhost:{_cfg.WORKER_PORT}"
-                    )
-                    return True
-        except (OSError, urllib.error.URLError):
+            with open(_cfg.NODE_MANAGER_PID_FILE, "w", encoding="utf-8") as f:
+                f.write(str(proc.pid))
+        except OSError:
             pass
-    log_warn(f"Worker API did not respond on :{_cfg.WORKER_PORT} within 15s")
+        time.sleep(2)
+        if proc.poll() is not None:
+            log_error("Failed to start node-manager")
+            return False
+        log_info(f"Node-manager started (PID {proc.pid}); waiting for worker-api...")
+        for _ in range(15):
+            time.sleep(1)
+            try:
+                req = urllib.request.Request(
+                    f"http://localhost:{_cfg.WORKER_PORT}/healthz"
+                )
+                with urllib.request.urlopen(req, timeout=1) as resp:
+                    if resp.getcode() == 200:
+                        log_info(
+                            f"Worker API listening on http://localhost:{_cfg.WORKER_PORT}"
+                        )
+                        return True
+            except (OSError, urllib.error.URLError):
+                pass
+        log_warn(f"Worker API did not respond on :{_cfg.WORKER_PORT} within 15s")
     return True
 
 
+def _stop_all_step(step_name, func):
+    """Run one teardown step; on exception log step, error, and traceback; do not raise."""
+    try:
+        func()
+    except Exception as e:  # pylint: disable=broad-except
+        log_warn(f"stop_all: {step_name} failed: {type(e).__name__}: {e}")
+        traceback.print_exc(file=sys.stderr)
+        sys.stderr.flush()
+
+
 def stop_all():
-    """Kill node-manager, free worker port, compose down, rm containers."""
-    log_info("Stopping all services...")
-    if os.path.isfile(_cfg.NODE_MANAGER_PID_FILE):
-        try:
-            with open(_cfg.NODE_MANAGER_PID_FILE, encoding="utf-8") as f:
-                pid = int(f.read().strip())
-            os.kill(pid, signal.SIGTERM)
-        except (OSError, ValueError):
-            pass
+    """Kill node-manager, free worker port, compose down, rm containers.
+    Best-effort: never raises so caller can still report success (e.g. after E2E pass).
+    """
+
+    def kill_node_manager():
+        if not os.path.isfile(_cfg.NODE_MANAGER_PID_FILE):
+            return
+        with open(_cfg.NODE_MANAGER_PID_FILE, encoding="utf-8") as f:
+            pid = int(f.read().strip())
+        os.kill(pid, signal.SIGTERM)
         try:
             os.remove(_cfg.NODE_MANAGER_PID_FILE)
         except OSError:
             pass
-    # Free worker port (worker-api may still be bound)
-    try:
+
+    def free_worker_port():
         subprocess.run(
             ["fuser", "-k", f"{_cfg.WORKER_PORT}/tcp"],
             capture_output=True, timeout=5, check=False, shell=False,
         )
-    except FileNotFoundError:
-        try:
-            r = subprocess.run(
-                ["lsof", "-t", "-i", f":{_cfg.WORKER_PORT}"],
-                capture_output=True,
-                text=True,
-                timeout=5,
-                check=False,
-                shell=False,
-            )
-            for pid in (r.stdout or "").strip().split():
-                try:
-                    os.kill(int(pid), signal.SIGTERM)
-                except (OSError, ValueError):
-                    pass
-        except FileNotFoundError:
-            pass
-    stop_orchestrator_stack_compose()
-    if _cfg.ensure_runtime():
-        subprocess.run(
-            [
-                _cfg.RUNTIME, "rm", "-f", "cynodeai-postgres",
-                _cfg.CONTROL_PLANE_CONTAINER_NAME, _cfg.USER_GATEWAY_CONTAINER_NAME,
-            ],
-            capture_output=True,
-            check=False,
-            shell=False,
+
+    def free_worker_port_fallback():
+        r = subprocess.run(
+            ["lsof", "-t", "-i", f":{_cfg.WORKER_PORT}"],
+            capture_output=True, text=True, timeout=5, check=False, shell=False,
         )
+        for pid in (r.stdout or "").strip().split():
+            os.kill(int(pid), signal.SIGTERM)
+
+    log_info("Stopping all services...")
+    try:
+        _stop_all_step("kill node-manager", kill_node_manager)
+        try:
+            free_worker_port()
+        except (FileNotFoundError, subprocess.TimeoutExpired) as e:
+            log_warn(f"stop_all: free worker port (fuser) failed: {type(e).__name__}: {e}")
+            _stop_all_step("free worker port (lsof)", free_worker_port_fallback)
+        _stop_all_step("compose down", stop_orchestrator_stack_compose)
+
+        def rm_containers():
+            if _cfg.ensure_runtime():
+                subprocess.run(
+                    [
+                        _cfg.RUNTIME, "rm", "-f", "cynodeai-postgres",
+                        _cfg.CONTROL_PLANE_CONTAINER_NAME, _cfg.USER_GATEWAY_CONTAINER_NAME,
+                    ],
+                    capture_output=True, check=False, shell=False, timeout=30,
+                )
+
+        _stop_all_step("rm containers", rm_containers)
+    except Exception as e:  # pylint: disable=broad-except
+        log_warn(f"stop_all: teardown failed: {type(e).__name__}: {e}")
+        traceback.print_exc(file=sys.stderr)
+        sys.stderr.flush()
     return True
 
 
@@ -360,7 +396,7 @@ def build_e2e_images():
 
 
 def run_python_e2e(extra_env=None):
-    """Run scripts/test_scripts/run_e2e.py --parity-only."""
+    """Run scripts/test_scripts/run_e2e.py (discovers e2e_*.py)."""
     env = os.environ.copy()
     env["PYTHONPATH"] = _cfg.PROJECT_ROOT
     if extra_env:
@@ -372,7 +408,7 @@ def run_python_e2e(extra_env=None):
         log_error("scripts/test_scripts/run_e2e.py not found")
         return False
     r = subprocess.run(
-        [sys.executable, run_e2e, "--parity-only"],
+        [sys.executable, run_e2e],
         cwd=_cfg.PROJECT_ROOT,
         env=env,
         check=False,

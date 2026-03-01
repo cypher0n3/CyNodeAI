@@ -52,7 +52,8 @@ def cmd_start(opts):
     setup_dev_impl.log_info(
         f"Starting node (node-manager then worker-api on :{setup_dev_config.WORKER_PORT})..."
     )
-    if not setup_dev_impl.start_node():
+    extra = getattr(opts, "extra_env", None)
+    if not setup_dev_impl.start_node(extra_env=extra):
         setup_dev_impl.stop_all()
         return False
     setup_dev_impl.log_info(

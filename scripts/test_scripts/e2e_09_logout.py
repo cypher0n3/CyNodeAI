@@ -8,7 +8,7 @@ import scripts.test_scripts.e2e_state as state
 
 class TestLogout(unittest.TestCase):
     def test_logout(self):
-        helpers.run_cynork(["auth", "logout"], state.config_path)
+        helpers.run_cynork(["auth", "logout"], state.CONFIG_PATH)
         # Logout can return non-zero; we only warn in bash
 
     def tearDown(self):

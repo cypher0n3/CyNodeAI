@@ -10,7 +10,7 @@ import scripts.test_scripts.e2e_state as state
 
 class TestCapability(unittest.TestCase):
     def test_capability(self):
-        self.assertIsNotNone(state.node_jwt)
+        self.assertIsNotNone(state.NODE_JWT)
         payload = {
             "version": 1,
             "reported_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
@@ -19,8 +19,8 @@ class TestCapability(unittest.TestCase):
             "compute": {"cpu_cores": 4, "ram_mb": 8192},
         }
         ok, body = helpers.run_curl(
-            "POST", "%s/v1/nodes/capability" % config.CONTROL_PLANE_API,
+            "POST", f"{config.CONTROL_PLANE_API}/v1/nodes/capability",
             data=json.dumps(payload),
-            headers={"Authorization": "Bearer %s" % state.node_jwt},
+            headers={"Authorization": f"Bearer {state.NODE_JWT}"},
         )
-        self.assertTrue(ok, "capability report failed: %s" % body)
+        self.assertTrue(ok, f"capability report failed: {body}")

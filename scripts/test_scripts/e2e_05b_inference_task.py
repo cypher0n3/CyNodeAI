@@ -11,21 +11,21 @@ class TestInferenceTask(unittest.TestCase):
     def test_inference_task(self):
         if not config.INFERENCE_PROXY_IMAGE:
             self.skipTest("INFERENCE_PROXY_IMAGE not set")
-        _, out, err = helpers.run_cynork(
+        _, out, _ = helpers.run_cynork(
             ["task", "create", "-p", "sh -c 'echo $OLLAMA_BASE_URL'",
              "--use-inference", "--input-mode", "commands", "-o", "json"],
-            state.config_path,
+            state.CONFIG_PATH,
         )
         data = helpers.parse_json_safe(out)
         task_id = (data or {}).get("task_id")
         self.assertIsNotNone(task_id, "inference task create failed")
-        state.inf_task_id = task_id
+        state.INF_TASK_ID = task_id
         status = None
         data = None
         for _ in range(18):
             time.sleep(5)
             _, out, _ = helpers.run_cynork(
-                ["task", "result", task_id, "-o", "json"], state.config_path
+                ["task", "result", task_id, "-o", "json"], state.CONFIG_PATH
             )
             data = helpers.parse_json_safe(out)
             status = (data or {}).get("status")

@@ -2,33 +2,34 @@
 
 import os
 import shutil
+import sys
 import tempfile
 
 # Set by e2e_01_login; cleaned by e2e_09_logout
-config_dir = None
-config_path = None
+CONFIG_DIR = None
+CONFIG_PATH = None
 
 # Set by respective tests
-task_id = None
-inf_task_id = None
-prompt_task_id = None
-sba_task_id = None
-node_jwt = None
+TASK_ID = None
+INF_TASK_ID = None
+PROMPT_TASK_ID = None
+SBA_TASK_ID = None
+NODE_JWT = None
 
 
 def init_config():
     """Create temp config dir and path. Idempotent."""
-    global config_dir, config_path
-    if config_dir is not None:
+    mod = sys.modules[__name__]
+    if mod.CONFIG_DIR is not None:
         return
-    config_dir = tempfile.mkdtemp(prefix="cynodeai_e2e_")
-    config_path = os.path.join(config_dir, "config.yaml")
+    mod.CONFIG_DIR = tempfile.mkdtemp(prefix="cynodeai_e2e_")
+    mod.CONFIG_PATH = os.path.join(mod.CONFIG_DIR, "config.yaml")
 
 
 def cleanup_config():
     """Remove temp config dir."""
-    global config_dir, config_path
-    if config_dir and os.path.isdir(config_dir):
-        shutil.rmtree(config_dir, ignore_errors=True)
-    config_dir = None
-    config_path = None
+    mod = sys.modules[__name__]
+    if mod.CONFIG_DIR and os.path.isdir(mod.CONFIG_DIR):
+        shutil.rmtree(mod.CONFIG_DIR, ignore_errors=True)
+    mod.CONFIG_DIR = None
+    mod.CONFIG_PATH = None

@@ -13,9 +13,9 @@ class TestLogin(unittest.TestCase):
     def test_login(self):
         ok, out, err = helpers.run_cynork(
             ["auth", "login", "-u", "admin", "-p", config.ADMIN_PASSWORD],
-            state.config_path,
+            state.CONFIG_PATH,
         )
-        self.assertTrue(ok, "auth login failed: %s %s" % (out, err))
-        with open(state.config_path, encoding="utf-8") as f:
+        self.assertTrue(ok, f"auth login failed: {out} {err}")
+        with open(state.CONFIG_PATH, encoding="utf-8") as f:
             content = f.read()
         self.assertIn("token:", content, "token not in config after login")
