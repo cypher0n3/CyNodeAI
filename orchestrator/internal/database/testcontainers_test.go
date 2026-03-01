@@ -13,6 +13,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -365,6 +366,32 @@ func TestWithTestcontainers_Integration(t *testing.T) {
 		}
 	}
 	tcCompleteJobAndVerifyResult(t, db, ctx, job, `{"status":"ok"}`)
+}
+
+// TestWithTestcontainers_GetLatestNodeCapabilitySnapshot exercises Save and GetLatest of capability snapshot.
+func TestWithTestcontainers_GetLatestNodeCapabilitySnapshot(t *testing.T) {
+	ctx := context.Background()
+	db := tcOpenDB(t, ctx)
+	node, err := db.CreateNode(ctx, "tc-cap-node-"+uuid.New().String()[:8])
+	if err != nil {
+		t.Fatalf("CreateNode: %v", err)
+	}
+	capJSON := `{"version":1,"reported_at":"2026-02-28T12:00:00Z","node":{"node_slug":"tc-cap-node"},"inference":{"supported":true,"existing_service":false}}`
+	if err := db.SaveNodeCapabilitySnapshot(ctx, node.ID, capJSON); err != nil {
+		t.Fatalf("SaveNodeCapabilitySnapshot: %v", err)
+	}
+	got, err := db.GetLatestNodeCapabilitySnapshot(ctx, node.ID)
+	if err != nil {
+		t.Fatalf("GetLatestNodeCapabilitySnapshot: %v", err)
+	}
+	// Postgres JSONB may reorder keys and spacing; check equivalent content.
+	if got == "" || !strings.Contains(got, "tc-cap-node") || !strings.Contains(got, "supported") {
+		t.Errorf("GetLatestNodeCapabilitySnapshot: got %q", got)
+	}
+	_, err = db.GetLatestNodeCapabilitySnapshot(ctx, uuid.New())
+	if err != ErrNotFound {
+		t.Errorf("GetLatestNodeCapabilitySnapshot on unknown node: want ErrNotFound, got %v", err)
+	}
 }
 
 // TestWithTestcontainers_Preferences exercises preference store with the testcontainers DB.

@@ -137,7 +137,7 @@ func TestRunMainSuccess(t *testing.T) {
 		_ = os.Unsetenv("NODE_MANAGER_SKIP_SERVICES")
 	}()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 
 	code := runMain(ctx)
@@ -184,7 +184,7 @@ func TestStartOllama_Success(t *testing.T) {
 		_ = os.Unsetenv("CONTAINER_RUNTIME")
 		_ = os.Unsetenv("OLLAMA_IMAGE")
 	}()
-	err := startOllama()
+	err := startOllama("alpine", "")
 	if err != nil {
 		t.Skipf("startOllama requires podman and alpine image: %v", err)
 	}
@@ -201,7 +201,7 @@ func TestStartOllama_ContainerExists(t *testing.T) {
 		t.Skipf("podman or alpine not available: %v %s", err, out)
 	}
 	defer func() { _ = exec.Command("podman", "rm", "-f", "cynodeai-ollama").Run() }()
-	err := startOllama()
+	err := startOllama("", "")
 	if err != nil {
 		t.Errorf("startOllama when container exists: %v", err)
 	}

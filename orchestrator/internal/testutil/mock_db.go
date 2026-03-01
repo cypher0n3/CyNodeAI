@@ -547,6 +547,25 @@ func (m *MockDB) SaveNodeCapabilitySnapshot(_ context.Context, nodeID uuid.UUID,
 	})
 }
 
+// GetLatestNodeCapabilitySnapshot returns the most recent capability snapshot for the node.
+func (m *MockDB) GetLatestNodeCapabilitySnapshot(_ context.Context, nodeID uuid.UUID) (string, error) {
+	return runWithLock(m, false, func() (string, error) {
+		var latest *NodeCapabilitySnapshot
+		for _, cap := range m.CapabilityHistory {
+			if cap.NodeID != nodeID {
+				continue
+			}
+			if latest == nil || cap.CreatedAt.After(latest.CreatedAt) {
+				latest = cap
+			}
+		}
+		if latest == nil {
+			return "", database.ErrNotFound
+		}
+		return latest.CapabilityJSON, nil
+	})
+}
+
 // updateNodeWith runs fn on the node identified by nodeID and sets UpdatedAt. Caller must use runWithWLockErr.
 func (m *MockDB) updateNodeWith(nodeID uuid.UUID, fn func(*models.Node)) {
 	node, ok := m.Nodes[nodeID]

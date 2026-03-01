@@ -1131,6 +1131,114 @@ func TestNodeHandler_GetConfig_Success(t *testing.T) {
 	}
 }
 
+func TestNodeHandler_GetConfig_ReturnsInferenceBackendWhenCapabilityInferenceSupported(t *testing.T) {
+	mockDB := testutil.NewMockDB()
+	jwtMgr := auth.NewJWTManager("test-secret-key-1234567890123456", 15*time.Minute, 7*24*time.Hour, 24*time.Hour)
+	handler := NewNodeHandler(mockDB, jwtMgr, "test-psk", testOrchestratorURL, "bearer-token", "http://node:12090", nil)
+
+	node := &models.Node{
+		ID:        uuid.New(),
+		NodeSlug:  "inference-node",
+		Status:    models.NodeStatusActive,
+		CreatedAt: time.Now().UTC(),
+		UpdatedAt: time.Now().UTC(),
+	}
+	mockDB.AddNode(node)
+	capJSON := `{"version":1,"reported_at":"2026-02-28T12:00:00Z","node":{"node_slug":"inference-node"},"platform":{"os":"linux","arch":"amd64"},"compute":{"cpu_cores":4,"ram_mb":8192},"inference":{"supported":true,"existing_service":false,"running":false}}`
+	if err := mockDB.SaveNodeCapabilitySnapshot(context.Background(), node.ID, capJSON); err != nil {
+		t.Fatalf("save capability: %v", err)
+	}
+
+	ctx := context.WithValue(context.Background(), contextKeyNodeID, node.ID)
+	req := httptest.NewRequest("GET", "/v1/nodes/config", http.NoBody).WithContext(ctx)
+	rec := httptest.NewRecorder()
+	handler.GetConfig(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Errorf("expected status 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	var payload nodepayloads.NodeConfigurationPayload
+	if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("unmarshal config: %v", err)
+	}
+	if payload.InferenceBackend == nil {
+		t.Error("expected inference_backend in payload when node is inference-capable and not existing_service")
+	}
+	if payload.InferenceBackend != nil && !payload.InferenceBackend.Enabled {
+		t.Error("expected inference_backend.enabled true")
+	}
+}
+
+func TestNodeHandler_GetConfig_OmitsInferenceBackendWhenCapabilityExistingService(t *testing.T) {
+	mockDB := testutil.NewMockDB()
+	jwtMgr := auth.NewJWTManager("test-secret-key-1234567890123456", 15*time.Minute, 7*24*time.Hour, 24*time.Hour)
+	handler := NewNodeHandler(mockDB, jwtMgr, "test-psk", testOrchestratorURL, "bearer-token", "http://node:12090", nil)
+
+	node := &models.Node{
+		ID:        uuid.New(),
+		NodeSlug:  "existing-inference-node",
+		Status:    models.NodeStatusActive,
+		CreatedAt: time.Now().UTC(),
+		UpdatedAt: time.Now().UTC(),
+	}
+	mockDB.AddNode(node)
+	capJSON := `{"version":1,"reported_at":"2026-02-28T12:00:00Z","node":{"node_slug":"existing-inference-node"},"inference":{"supported":true,"existing_service":true,"running":true}}`
+	if err := mockDB.SaveNodeCapabilitySnapshot(context.Background(), node.ID, capJSON); err != nil {
+		t.Fatalf("save capability: %v", err)
+	}
+
+	ctx := context.WithValue(context.Background(), contextKeyNodeID, node.ID)
+	req := httptest.NewRequest("GET", "/v1/nodes/config", http.NoBody).WithContext(ctx)
+	rec := httptest.NewRecorder()
+	handler.GetConfig(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Errorf("expected status 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	var payload nodepayloads.NodeConfigurationPayload
+	if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("unmarshal config: %v", err)
+	}
+	if payload.InferenceBackend != nil {
+		t.Error("expected no inference_backend when node reports existing_service true")
+	}
+}
+
+func TestNodeHandler_GetConfig_ReturnsInferenceBackendWithVariantFromGPU(t *testing.T) {
+	mockDB := testutil.NewMockDB()
+	jwtMgr := auth.NewJWTManager("test-secret-key-1234567890123456", 15*time.Minute, 7*24*time.Hour, 24*time.Hour)
+	handler := NewNodeHandler(mockDB, jwtMgr, "test-psk", testOrchestratorURL, "bearer-token", "http://node:12090", nil)
+
+	node := &models.Node{
+		ID:        uuid.New(),
+		NodeSlug:  "gpu-node",
+		Status:    models.NodeStatusActive,
+		CreatedAt: time.Now().UTC(),
+		UpdatedAt: time.Now().UTC(),
+	}
+	mockDB.AddNode(node)
+	capJSON := `{"version":1,"reported_at":"2026-02-28T12:00:00Z","node":{"node_slug":"gpu-node"},"platform":{"os":"linux","arch":"amd64"},"compute":{"cpu_cores":8,"ram_mb":16384},"gpu":{"present":true,"devices":[{"vendor":"AMD","features":{"rocm_version":"5.0"}}]},"inference":{"supported":true,"existing_service":false}}`
+	if err := mockDB.SaveNodeCapabilitySnapshot(context.Background(), node.ID, capJSON); err != nil {
+		t.Fatalf("save capability: %v", err)
+	}
+
+	ctx := context.WithValue(context.Background(), contextKeyNodeID, node.ID)
+	req := httptest.NewRequest("GET", "/v1/nodes/config", http.NoBody).WithContext(ctx)
+	rec := httptest.NewRecorder()
+	handler.GetConfig(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Errorf("expected status 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	var payload nodepayloads.NodeConfigurationPayload
+	if err := json.Unmarshal(rec.Body.Bytes(), &payload); err != nil {
+		t.Fatalf("unmarshal config: %v", err)
+	}
+	if payload.InferenceBackend == nil || payload.InferenceBackend.Variant != "rocm" {
+		t.Errorf("expected inference_backend with variant=rocm from GPU capability, got %+v", payload.InferenceBackend)
+	}
+}
+
 func TestNodeHandler_GetConfig_NoNodeID(t *testing.T) {
 	mockDB := testutil.NewMockDB()
 	handler := NewNodeHandler(mockDB, nil, "test-psk", testOrchestratorURL, "", "", nil)
@@ -2944,6 +3052,10 @@ type capabilityErrorMockDB struct {
 
 func (m *capabilityErrorMockDB) SaveNodeCapabilitySnapshot(_ context.Context, _ uuid.UUID, _ string) error {
 	return errors.New("capability snapshot error")
+}
+
+func (m *capabilityErrorMockDB) GetLatestNodeCapabilitySnapshot(ctx context.Context, nodeID uuid.UUID) (string, error) {
+	return m.MockDB.GetLatestNodeCapabilitySnapshot(ctx, nodeID)
 }
 
 func (m *capabilityErrorMockDB) UpdateNodeLastSeen(_ context.Context, _ uuid.UUID) error {

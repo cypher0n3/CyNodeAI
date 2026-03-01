@@ -10,6 +10,7 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"os/exec"
 	"runtime"
 	"strings"
 	"time"
@@ -66,10 +67,10 @@ type BootstrapData struct {
 
 // RunOptions allows optional service starters for production; nil means skip (e.g. in tests).
 // StartWorkerAPI receives the bearer token from config; callers must not log it.
-// StartOllama is Phase 1 inference; if it returns an error, Run fails (fail-fast).
+// StartOllama is Phase 1 inference; image/variant come from config or env; if it returns an error, Run fails (fail-fast).
 type RunOptions struct {
 	StartWorkerAPI func(bearerToken string) error
-	StartOllama    func() error
+	StartOllama    func(image, variant string) error
 }
 
 // Run performs registration, config fetch, service startup, config ack, then capability reporting until ctx is cancelled.
@@ -105,6 +106,7 @@ func RunWithOptions(ctx context.Context, logger *slog.Logger, cfg *Config, opts 
 }
 
 // applyConfigAndStartServices starts Worker API and Ollama from opts (if set), then sends config ack.
+// OLLAMA is started only when no existing host inference is detected and config instructs (inference_backend.enabled).
 func applyConfigAndStartServices(ctx context.Context, logger *slog.Logger, cfg *Config, bootstrap *BootstrapData, nodeConfig *nodepayloads.NodeConfigurationPayload, opts *RunOptions) error {
 	if opts != nil && opts.StartWorkerAPI != nil && nodeConfig != nil && nodeConfig.WorkerAPI != nil && nodeConfig.WorkerAPI.OrchestratorBearerToken != "" {
 		if err := opts.StartWorkerAPI(nodeConfig.WorkerAPI.OrchestratorBearerToken); err != nil {
@@ -114,19 +116,34 @@ func applyConfigAndStartServices(ctx context.Context, logger *slog.Logger, cfg *
 			logger.Info("worker API started")
 		}
 	}
-	if opts != nil && opts.StartOllama != nil {
-		if err := opts.StartOllama(); err != nil {
-			return fmt.Errorf("start inference (Ollama): %w", err)
-		}
-		if logger != nil {
-			logger.Info("inference container started")
-		}
+	existingService, _ := detectExistingInference(ctx)
+	if err := maybeStartOllama(ctx, logger, nodeConfig, opts, existingService); err != nil {
+		return err
 	}
 	if err := SendConfigAck(ctx, cfg, bootstrap, nodeConfig, "applied"); err != nil {
 		return fmt.Errorf("config ack: %w", err)
 	}
 	if logger != nil {
 		logger.Info("config applied and acknowledged", "config_version", nodeConfig.ConfigVersion)
+	}
+	return nil
+}
+
+func maybeStartOllama(ctx context.Context, logger *slog.Logger, nodeConfig *nodepayloads.NodeConfigurationPayload, opts *RunOptions, existingService bool) error {
+	if opts == nil || opts.StartOllama == nil || existingService ||
+		nodeConfig == nil || nodeConfig.InferenceBackend == nil || !nodeConfig.InferenceBackend.Enabled {
+		return nil
+	}
+	image := nodeConfig.InferenceBackend.Image
+	variant := nodeConfig.InferenceBackend.Variant
+	if image == "" {
+		image = getEnv("OLLAMA_IMAGE", "ollama/ollama")
+	}
+	if err := opts.StartOllama(image, variant); err != nil {
+		return fmt.Errorf("start inference (Ollama): %w", err)
+	}
+	if logger != nil {
+		logger.Info("inference container started")
 	}
 	return nil
 }
@@ -217,7 +234,7 @@ func SendConfigAck(ctx context.Context, cfg *Config, bootstrap *BootstrapData, n
 }
 
 func register(ctx context.Context, cfg *Config) (*BootstrapData, error) {
-	capability := buildCapability(cfg)
+	capability := buildCapability(ctx, cfg)
 
 	req := nodepayloads.RegistrationRequest{
 		PSK:        cfg.RegistrationPSK,
@@ -284,7 +301,7 @@ func ValidateBootstrap(b *nodepayloads.BootstrapResponse) error {
 }
 
 func reportCapabilities(ctx context.Context, cfg *Config, bootstrap *BootstrapData) error {
-	report := buildCapability(cfg)
+	report := buildCapability(ctx, cfg)
 	body, err := json.Marshal(report)
 	if err != nil {
 		return fmt.Errorf("marshal capability report: %w", err)
@@ -313,7 +330,49 @@ func reportCapabilities(ctx context.Context, cfg *Config, bootstrap *BootstrapDa
 	return nil
 }
 
-func buildCapability(cfg *Config) nodepayloads.CapabilityReport {
+// detectExistingInference returns whether an inference container/service already exists and is running.
+// Used to set inference.existing_service and inference.running in capability reports.
+// When NODE_MANAGER_TEST_NO_EXISTING_INFERENCE is set (e.g. unit tests), returns false, false.
+func detectExistingInference(ctx context.Context) (existingService, running bool) {
+	if getEnv("NODE_MANAGER_TEST_NO_EXISTING_INFERENCE", "") != "" {
+		return false, false
+	}
+	rt := getEnv("CONTAINER_RUNTIME", "podman")
+	name := getEnv("OLLAMA_CONTAINER_NAME", "cynodeai-ollama")
+	cmd := exec.Command(rt, "ps", "-a", "--format", "{{.Names}}")
+	out, err := cmd.Output()
+	if err != nil {
+		return false, false
+	}
+	existingService = strings.Contains(string(out), name)
+	if !existingService {
+		return false, false
+	}
+	cmd2 := exec.Command(rt, "ps", "--format", "{{.Names}}")
+	out2, err2 := cmd2.Output()
+	if err2 != nil {
+		return true, false
+	}
+	if !strings.Contains(string(out2), name) {
+		return true, false
+	}
+	// Container is running; optionally verify reachability (e.g. HTTP to 11434).
+	port := getEnv("OLLAMA_PORT", "11434")
+	req, err := http.NewRequestWithContext(ctx, "GET", "http://127.0.0.1:"+port+"/api/tags", http.NoBody)
+	if err != nil {
+		return true, true
+	}
+	client := &http.Client{Timeout: 2 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return true, true
+	}
+	_ = resp.Body.Close()
+	running = resp.StatusCode == http.StatusOK
+	return true, running
+}
+
+func buildCapability(ctx context.Context, cfg *Config) nodepayloads.CapabilityReport {
 	if cfg == nil {
 		return nodepayloads.CapabilityReport{
 			Version:    1,
@@ -346,6 +405,12 @@ func buildCapability(cfg *Config) nodepayloads.CapabilityReport {
 	}
 	if strings.TrimSpace(cfg.AdvertisedWorkerAPIURL) != "" {
 		report.WorkerAPI = &nodepayloads.WorkerAPIReport{BaseURL: strings.TrimSpace(cfg.AdvertisedWorkerAPIURL)}
+	}
+	existing, running := detectExistingInference(ctx)
+	report.Inference = &nodepayloads.InferenceInfo{
+		Supported:       true,
+		ExistingService: existing,
+		Running:         running,
 	}
 	return report
 }

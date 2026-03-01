@@ -2,7 +2,10 @@ package database
 
 import (
 	"context"
+	"errors"
 	"time"
+
+	"gorm.io/gorm"
 
 	"github.com/google/uuid"
 
@@ -85,6 +88,19 @@ func (db *DB) SaveNodeCapabilitySnapshot(ctx context.Context, nodeID uuid.UUID, 
 		CapabilitySnapshot: snapshot,
 	}
 	return db.createRecord(ctx, nodeCap, "save node capability snapshot")
+}
+
+// GetLatestNodeCapabilitySnapshot returns the most recent capability snapshot JSON for the node, or ErrNotFound.
+func (db *DB) GetLatestNodeCapabilitySnapshot(ctx context.Context, nodeID uuid.UUID) (string, error) {
+	var rec models.NodeCapability
+	err := db.db.WithContext(ctx).Where("node_id = ?", nodeID).Order("reported_at DESC").First(&rec).Error
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return "", ErrNotFound
+		}
+		return "", wrapErr(err, "get latest node capability snapshot")
+	}
+	return rec.CapabilitySnapshot, nil
 }
 
 // UpdateNodeConfigVersion sets the node's config_version.

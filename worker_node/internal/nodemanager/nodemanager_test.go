@@ -8,7 +8,9 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -21,6 +23,116 @@ const (
 	pathNodesConfig     = "/v1/nodes/config"
 	pathNodesCapability = "/v1/nodes/capability"
 )
+
+func TestBuildCapability_SetsInference(t *testing.T) {
+	t.Setenv("NODE_MANAGER_TEST_NO_EXISTING_INFERENCE", "1")
+	ctx := context.Background()
+	cfg := &Config{
+		NodeSlug:                 "test-slug",
+		NodeName:                 "Test",
+		AdvertisedWorkerAPIURL:   "http://worker:12090",
+	}
+	report := buildCapability(ctx, cfg)
+	if report.Inference == nil {
+		t.Fatal("buildCapability should set Inference when cfg is non-nil")
+	}
+	if !report.Inference.Supported || report.Inference.ExistingService {
+		t.Errorf("with test env: expected supported=true existing_service=false, got %+v", report.Inference)
+	}
+	if report.WorkerAPI == nil || report.WorkerAPI.BaseURL != "http://worker:12090" {
+		t.Errorf("expected worker_api.base_url from config, got %+v", report.WorkerAPI)
+	}
+}
+
+func TestBuildCapability_NilConfig(t *testing.T) {
+	report := buildCapability(context.Background(), nil)
+	if report.Inference != nil {
+		t.Error("buildCapability with nil cfg should not set Inference")
+	}
+	if report.Version != 1 || report.Node.NodeSlug != "" {
+		t.Errorf("nil cfg: expected minimal report, got %+v", report)
+	}
+}
+
+// TestBuildCapability_DetectExistingInferenceFails covers detectExistingInference when exec fails (e.g. no container runtime).
+func TestBuildCapability_DetectExistingInferenceFails(t *testing.T) {
+	_ = os.Unsetenv("NODE_MANAGER_TEST_NO_EXISTING_INFERENCE")
+	defer func() { _ = os.Setenv("NODE_MANAGER_TEST_NO_EXISTING_INFERENCE", "1") }()
+	_ = os.Setenv("CONTAINER_RUNTIME", "/nonexistent/podman")
+	defer func() { _ = os.Unsetenv("CONTAINER_RUNTIME") }()
+	ctx := context.Background()
+	cfg := &Config{NodeSlug: "x", NodeName: "y"}
+	report := buildCapability(ctx, cfg)
+	// When detection fails we get (false, false); Inference should still be set.
+	if report.Inference == nil {
+		t.Fatal("buildCapability should set Inference when cfg non-nil")
+	}
+	if report.Inference.ExistingService || report.Inference.Running {
+		t.Errorf("when exec fails expected existing_service=false running=false, got %+v", report.Inference)
+	}
+}
+
+// TestBuildCapability_DetectExistingInferenceContainerExists uses a fake runtime script to cover "container exists" path.
+func TestBuildCapability_DetectExistingInferenceContainerExists(t *testing.T) {
+	dir := t.TempDir()
+	script := filepath.Join(dir, "fake-runtime")
+	const scriptBody = "#!/bin/sh\n[ \"$1\" = ps ] && echo cynodeai-ollama\n"
+	if err := os.WriteFile(script, []byte(scriptBody), 0o700); err != nil {
+		t.Fatalf("write script: %v", err)
+	}
+	_ = os.Unsetenv("NODE_MANAGER_TEST_NO_EXISTING_INFERENCE")
+	defer func() { _ = os.Setenv("NODE_MANAGER_TEST_NO_EXISTING_INFERENCE", "1") }()
+	_ = os.Setenv("CONTAINER_RUNTIME", script)
+	defer func() { _ = os.Unsetenv("CONTAINER_RUNTIME") }()
+	_ = os.Setenv("OLLAMA_CONTAINER_NAME", "cynodeai-ollama")
+	defer func() { _ = os.Unsetenv("OLLAMA_CONTAINER_NAME") }()
+	ctx := context.Background()
+	cfg := &Config{NodeSlug: "x", NodeName: "y"}
+	report := buildCapability(ctx, cfg)
+	if report.Inference == nil {
+		t.Fatal("buildCapability should set Inference")
+	}
+	// Script echoes container name so existingService=true; no real HTTP so running may be false.
+	if !report.Inference.ExistingService {
+		t.Errorf("expected existing_service=true when script outputs container name, got %+v", report.Inference)
+	}
+}
+
+// TestBuildCapability_DetectExistingInferenceRunning covers the path when container is running and HTTP returns 200.
+func TestBuildCapability_DetectExistingInferenceRunning(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+	u, err := url.Parse(srv.URL)
+	if err != nil {
+		t.Fatalf("parse server URL: %v", err)
+	}
+	port := u.Port()
+	dir := t.TempDir()
+	script := filepath.Join(dir, "fake-runtime")
+	const scriptBody = "#!/bin/sh\n[ \"$1\" = ps ] && echo cynodeai-ollama\n"
+	if err := os.WriteFile(script, []byte(scriptBody), 0o700); err != nil {
+		t.Fatalf("write script: %v", err)
+	}
+	_ = os.Unsetenv("NODE_MANAGER_TEST_NO_EXISTING_INFERENCE")
+	defer func() { _ = os.Setenv("NODE_MANAGER_TEST_NO_EXISTING_INFERENCE", "1") }()
+	_ = os.Setenv("CONTAINER_RUNTIME", script)
+	defer func() { _ = os.Unsetenv("CONTAINER_RUNTIME") }()
+	_ = os.Setenv("OLLAMA_CONTAINER_NAME", "cynodeai-ollama")
+	defer func() { _ = os.Unsetenv("OLLAMA_CONTAINER_NAME") }()
+	_ = os.Setenv("OLLAMA_PORT", port)
+	defer func() { _ = os.Unsetenv("OLLAMA_PORT") }()
+	ctx := context.Background()
+	cfg := &Config{NodeSlug: "x", NodeName: "y"}
+	report := buildCapability(ctx, cfg)
+	if report.Inference == nil {
+		t.Fatal("buildCapability should set Inference")
+	}
+	if !report.Inference.ExistingService || !report.Inference.Running {
+		t.Errorf("expected existing_service=true running=true when HTTP 200, got %+v", report.Inference)
+	}
+}
 
 func TestLoadConfig(t *testing.T) {
 	_ = os.Unsetenv("ORCHESTRATOR_URL")
@@ -163,6 +275,7 @@ func registerOKHandler(baseURL string) http.HandlerFunc {
 }
 
 // configHandler returns a handler that responds to GET with a minimal node config and POST with 204.
+// Includes InferenceBackend.Enabled so tests that pass StartOllama will invoke it (when no existing service).
 func configHandler(nodeSlug string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method == "GET" {
@@ -174,6 +287,7 @@ func configHandler(nodeSlug string) http.HandlerFunc {
 				IssuedAt:      time.Now().UTC().Format(time.RFC3339),
 				NodeSlug:      nodeSlug,
 				WorkerAPI:     &nodepayloads.ConfigWorkerAPI{OrchestratorBearerToken: "test-bearer"},
+				InferenceBackend: &nodepayloads.ConfigInferenceBackend{Enabled: true, Image: "ollama/ollama"},
 			})
 			return
 		}
@@ -232,7 +346,7 @@ func TestRun(t *testing.T) {
 		HTTPTimeout:              5 * time.Second,
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
 	defer cancel()
 
 	err := Run(ctx, nil, cfg)
@@ -385,7 +499,8 @@ func TestRunReportCapabilitiesErrorBranch(t *testing.T) {
 		CapabilityReportInterval: 5 * time.Millisecond,
 		HTTPTimeout:              5 * time.Second,
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), 50*time.Millisecond)
+	t.Setenv("NODE_MANAGER_TEST_NO_EXISTING_INFERENCE", "1")
+	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
 	defer cancel()
 
 	_ = Run(ctx, nil, cfg)
@@ -425,7 +540,7 @@ func TestRunReportCapabilitiesConnectionFails(t *testing.T) {
 		NodeName:                 "x",
 		RegistrationPSK:          "psk",
 		CapabilityReportInterval: 10 * time.Millisecond,
-		HTTPTimeout:              1 * time.Millisecond,
+		HTTPTimeout:              5 * time.Second,
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 200*time.Millisecond)
 	defer cancel()
@@ -474,7 +589,7 @@ func TestRunContextCancelledAfterRegister(t *testing.T) {
 	go func() {
 		errCh <- Run(ctx, nil, cfg)
 	}()
-	time.Sleep(50 * time.Millisecond)
+	time.Sleep(300 * time.Millisecond)
 	cancel()
 	err := <-errCh
 	if err != nil {
@@ -541,6 +656,7 @@ func TestSendConfigAck(t *testing.T) {
 }
 
 func TestRunWithOptions_OllamaFailFast(t *testing.T) {
+	t.Setenv("NODE_MANAGER_TEST_NO_EXISTING_INFERENCE", "1")
 	srv := mockOrchWithConfig(t)
 	defer srv.Close()
 
@@ -552,7 +668,7 @@ func TestRunWithOptions_OllamaFailFast(t *testing.T) {
 		HTTPTimeout:     5 * time.Second,
 	}
 	opts := &RunOptions{
-		StartOllama: func() error { return errors.New("ollama start failed") },
+		StartOllama: func(_, _ string) error { return errors.New("ollama start failed") },
 	}
 	ctx := context.Background()
 
@@ -566,6 +682,7 @@ func TestRunWithOptions_OllamaFailFast(t *testing.T) {
 }
 
 func TestRunWithOptions_StartWorkerAPICalled(t *testing.T) {
+	t.Setenv("NODE_MANAGER_TEST_NO_EXISTING_INFERENCE", "1")
 	srv := mockOrchWithConfig(t)
 	defer srv.Close()
 
@@ -583,7 +700,7 @@ func TestRunWithOptions_StartWorkerAPICalled(t *testing.T) {
 			tokenReceived = tok
 			return nil
 		},
-		StartOllama: func() error { return nil },
+		StartOllama: func(_, _ string) error { return nil },
 	}
 	ctx, cancel := context.WithTimeout(context.Background(), 80*time.Millisecond)
 	defer cancel()

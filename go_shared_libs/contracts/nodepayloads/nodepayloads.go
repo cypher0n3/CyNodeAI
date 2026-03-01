@@ -76,9 +76,14 @@ type NetworkInfo struct {
 	OutboundPolicy        string `json:"outbound_policy,omitempty"`
 }
 
+// InferenceInfo describes node inference capability per worker_node_payloads.md.
+// ExistingService: true when node uses a host-existing inference service (node did not start it).
+// Running: true when inference is currently available (node-managed or existing on host).
 type InferenceInfo struct {
-	Supported bool   `json:"supported"`
-	Mode      string `json:"mode,omitempty"`
+	Supported       bool   `json:"supported"`
+	Mode            string `json:"mode,omitempty"`
+	ExistingService bool   `json:"existing_service,omitempty"`
+	Running         bool   `json:"running,omitempty"`
 }
 
 type TLSInfo struct {
@@ -135,8 +140,19 @@ type NodeConfigurationPayload struct {
 	ModelCache        ConfigModelCache             `json:"model_cache"`
 	Policy            *ConfigPolicy                `json:"policy,omitempty"`
 	WorkerAPI         *ConfigWorkerAPI             `json:"worker_api,omitempty"`
+	InferenceBackend  *ConfigInferenceBackend      `json:"inference_backend,omitempty"`
 	Notes             string                       `json:"notes,omitempty"`
 	Constraints       *ConfigConstraints           `json:"constraints,omitempty"`
+}
+
+// ConfigInferenceBackend instructs the node to start the inference backend (e.g. OLLAMA).
+// When absent or Enabled=false the node MUST NOT start an inference container.
+// Spec worker_node_payloads.md inference_backend.
+type ConfigInferenceBackend struct {
+	Enabled bool   `json:"enabled,omitempty"`
+	Image   string `json:"image,omitempty"`
+	Variant string `json:"variant,omitempty"`
+	Port    int    `json:"port,omitempty"`
 }
 
 // ConfigOrchestrator contains orchestrator base URL and endpoints for node config.

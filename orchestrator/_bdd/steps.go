@@ -555,6 +555,26 @@ func RegisterOrchestratorSteps(sc *godog.ScenarioContext, state *testState) {
 		}
 		return nil
 	})
+	sc.Step(`^the node registers with capability inference supported and not existing_service$`, func(ctx context.Context) error {
+		return nodeRegisterStepWithInference(ctx, false)
+	})
+	sc.Step(`^the payload includes inference_backend with enabled true$`, func(ctx context.Context) error {
+		st := getState(ctx)
+		if st == nil || len(st.lastConfigBody) == 0 {
+			return fmt.Errorf("no config payload in state")
+		}
+		var payload nodepayloads.NodeConfigurationPayload
+		if err := json.Unmarshal(st.lastConfigBody, &payload); err != nil {
+			return err
+		}
+		if payload.InferenceBackend == nil {
+			return fmt.Errorf("config payload missing inference_backend")
+		}
+		if !payload.InferenceBackend.Enabled {
+			return fmt.Errorf("inference_backend.enabled should be true")
+		}
+		return nil
+	})
 	sc.Step(`^a registered node "([^"]*)" that has received configuration$`, func(ctx context.Context, slug string) error {
 		st := getState(ctx)
 		if st == nil || st.server == nil || st.db == nil {
@@ -1674,5 +1694,51 @@ func nodeRegisterStep(ctx context.Context, slug, advertisedWorkerAPIURL string) 
 	}
 	st.nodeJWT = out.Auth.NodeJWT
 	st.nodeSlug = slug
+	return nil
+}
+
+// nodeRegisterStepWithInference registers the node with capability that includes inference (supported, existing_service).
+func nodeRegisterStepWithInference(ctx context.Context, existingService bool) error {
+	st := getState(ctx)
+	if st == nil || st.server == nil || st.nodeSlug == "" {
+		return godog.ErrSkip
+	}
+	cfg := config.LoadOrchestratorConfig()
+	capability := map[string]interface{}{
+		"version":     1,
+		"reported_at": time.Now().UTC().Format(time.RFC3339),
+		"node":        map[string]interface{}{"node_slug": st.nodeSlug},
+		"platform":    map[string]interface{}{"os": "linux", "arch": "amd64"},
+		"compute":     map[string]interface{}{"cpu_cores": 2, "ram_mb": 4096},
+		"inference": map[string]interface{}{
+			"supported":        true,
+			"existing_service": existingService,
+			"running":          false,
+		},
+	}
+	if strings.TrimSpace(st.advertisedWorkerAPIURL) != "" {
+		capability["worker_api"] = map[string]interface{}{"base_url": strings.TrimSpace(st.advertisedWorkerAPIURL)}
+	}
+	body, _ := json.Marshal(map[string]interface{}{
+		"psk":        cfg.NodeRegistrationPSK,
+		"capability": capability,
+	})
+	resp, err := http.Post(st.server.URL+"/v1/nodes/register", "application/json", bytes.NewReader(body))
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusCreated && resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("register returned %d", resp.StatusCode)
+	}
+	var out struct {
+		Auth struct {
+			NodeJWT string `json:"node_jwt"`
+		} `json:"auth"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		return err
+	}
+	st.nodeJWT = out.Auth.NodeJWT
 	return nil
 }

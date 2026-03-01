@@ -70,22 +70,26 @@ func startWorkerAPI(bearerToken string) error {
 	return nil
 }
 
-// startOllama starts the Phase 1 inference container (Ollama). Fail-fast on error.
-// Publishes port 11434 so the inference proxy (in a pod) can reach Ollama via host.containers.internal:11434.
-// If a container named cynodeai-ollama already exists (e.g. from orchestrator compose), skip creating it.
-func startOllama() error {
-	runtime := getEnv("CONTAINER_RUNTIME", "podman")
-	image := getEnv("OLLAMA_IMAGE", "ollama/ollama")
-	name := "cynodeai-ollama"
-	// Skip if already present (e.g. started by orchestrator docker-compose with ollama on 11434)
-	check := exec.Command(runtime, "ps", "-a", "--format", "{{.Names}}")
+// startOllama starts the Phase 1 inference container (Ollama). image/variant from config or env. Fail-fast on error.
+// If a container named cynodeai-ollama already exists (e.g. from orchestrator compose), start it if stopped and return.
+func startOllama(image, variant string) error {
+	rt := getEnv("CONTAINER_RUNTIME", "podman")
+	if image == "" {
+		image = getEnv("OLLAMA_IMAGE", "ollama/ollama")
+	}
+	name := getEnv("OLLAMA_CONTAINER_NAME", "cynodeai-ollama")
+	// Skip if already present (e.g. started by orchestrator compose with ollama profile)
+	check := exec.Command(rt, "ps", "-a", "--format", "{{.Names}}")
 	out, err := check.Output()
 	if err == nil && strings.Contains(string(out), name) {
-		// Container exists; start it if stopped
-		_ = exec.Command(runtime, "start", name).Run()
+		_ = exec.Command(rt, "start", name).Run()
 		return nil
 	}
-	cmd := exec.Command(runtime, "run", "-d", "--name", name, "-p", "11434:11434", image)
+	// variant (rocm, cuda, cpu) can be used for image selection or env; Phase 1 we use image as-is.
+	cmd := exec.Command(rt, "run", "-d", "--name", name, "-p", "11434:11434", image)
+	if variant != "" {
+		cmd.Env = append(os.Environ(), "OLLAMA_GPU_DRIVER="+variant)
+	}
 	if out, err := cmd.CombinedOutput(); err != nil {
 		return fmt.Errorf("%w: %s", err, strings.TrimSpace(string(out)))
 	}

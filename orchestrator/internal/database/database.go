@@ -74,6 +74,7 @@ type Store interface {
 	UpdateNodeStatus(ctx context.Context, nodeID uuid.UUID, status string) error
 	UpdateNodeLastSeen(ctx context.Context, nodeID uuid.UUID) error
 	SaveNodeCapabilitySnapshot(ctx context.Context, nodeID uuid.UUID, capJSON string) error
+	GetLatestNodeCapabilitySnapshot(ctx context.Context, nodeID uuid.UUID) (string, error)
 	UpdateNodeCapability(ctx context.Context, nodeID uuid.UUID, capHash string) error
 	ListActiveNodes(ctx context.Context) ([]*models.Node, error)
 	ListDispatchableNodes(ctx context.Context) ([]*models.Node, error)

@@ -118,6 +118,7 @@ func (h *NodeHandler) handleExistingNodeRegistration(ctx context.Context, w http
 		return
 	}
 
+	h.saveCapabilitySnapshotAndHash(ctx, node.ID, &req.Capability)
 	h.applyWorkerAPIURLFromCapability(ctx, node.ID, &req.Capability)
 
 	nodeJWT, expiresAt, err := h.jwt.GenerateNodeToken(node.ID, node.NodeSlug)
@@ -160,18 +161,21 @@ func (h *NodeHandler) initializeNewNode(ctx context.Context, nodeID uuid.UUID, c
 		h.logError("set initial config version", "error", err)
 	}
 
+	h.saveCapabilitySnapshotAndHash(ctx, nodeID, capability)
+	h.applyWorkerAPIURLFromCapability(ctx, nodeID, capability)
+}
+
+// saveCapabilitySnapshotAndHash persists the capability snapshot and updates the node's capability hash.
+func (h *NodeHandler) saveCapabilitySnapshotAndHash(ctx context.Context, nodeID uuid.UUID, capability *nodepayloads.CapabilityReport) {
 	capJSON, _ := json.Marshal(capability)
 	if err := h.db.SaveNodeCapabilitySnapshot(ctx, nodeID, string(capJSON)); err != nil {
 		h.logError("save capability snapshot", "error", err)
 	}
-
 	hashBytes := sha256.Sum256(capJSON)
 	capHash := "sha256:" + hex.EncodeToString(hashBytes[:])
 	if err := h.db.UpdateNodeCapability(ctx, nodeID, capHash); err != nil {
 		h.logError("update capability hash", "error", err)
 	}
-
-	h.applyWorkerAPIURLFromCapability(ctx, nodeID, capability)
 }
 
 // applyWorkerAPIURLFromCapability sets the node's worker_api_target_url from capability.worker_api.base_url
@@ -250,7 +254,7 @@ func (h *NodeHandler) GetConfig(w http.ResponseWriter, r *http.Request) {
 		workerAPITargetURL = *node.WorkerAPITargetURL
 	}
 
-	payload := h.buildNodeConfigPayload(node, configVersion, workerAPITargetURL)
+	payload := h.buildNodeConfigPayload(ctx, node, configVersion, workerAPITargetURL)
 
 	if workerAPITargetURL != "" && h.workerAPIBearerToken != "" {
 		if err := h.db.UpdateNodeWorkerAPIConfig(ctx, node.ID, workerAPITargetURL, h.workerAPIBearerToken); err != nil {
@@ -261,7 +265,7 @@ func (h *NodeHandler) GetConfig(w http.ResponseWriter, r *http.Request) {
 	WriteJSON(w, http.StatusOK, payload)
 }
 
-func (h *NodeHandler) buildNodeConfigPayload(node *models.Node, configVersion, workerAPITargetURL string) nodepayloads.NodeConfigurationPayload {
+func (h *NodeHandler) buildNodeConfigPayload(ctx context.Context, node *models.Node, configVersion, workerAPITargetURL string) nodepayloads.NodeConfigurationPayload {
 	baseURL := strings.TrimSuffix(h.orchestratorPublicURL, "/")
 	payload := nodepayloads.NodeConfigurationPayload{
 		Version:       1,
@@ -283,7 +287,38 @@ func (h *NodeHandler) buildNodeConfigPayload(node *models.Node, configVersion, w
 			OrchestratorBearerToken: h.workerAPIBearerToken,
 		}
 	}
+	// When node is inference-capable and does not report existing_service, instruct it to start the backend.
+	if backend := h.deriveInferenceBackend(ctx, node.ID); backend != nil {
+		payload.InferenceBackend = backend
+	}
 	return payload
+}
+
+func (h *NodeHandler) deriveInferenceBackend(ctx context.Context, nodeID uuid.UUID) *nodepayloads.ConfigInferenceBackend {
+	snapJSON, err := h.db.GetLatestNodeCapabilitySnapshot(ctx, nodeID)
+	if err != nil {
+		return nil
+	}
+	var report nodepayloads.CapabilityReport
+	if json.Unmarshal([]byte(snapJSON), &report) != nil || report.Inference == nil || !report.Inference.Supported || report.Inference.ExistingService {
+		return nil
+	}
+	variant := "cpu"
+	if report.GPU != nil && report.GPU.Present && len(report.GPU.Devices) > 0 {
+		if d := report.GPU.Devices[0]; d.Features != nil {
+			if _, hasROCm := d.Features["rocm_version"]; hasROCm {
+				variant = "rocm"
+			} else if _, hasCUDA := d.Features["cuda_capability"]; hasCUDA {
+				variant = "cuda"
+			}
+		}
+	}
+	return &nodepayloads.ConfigInferenceBackend{
+		Enabled: true,
+		Image:   "",
+		Variant: variant,
+		Port:    11434,
+	}
 }
 
 // ConfigAck handles POST /v1/nodes/config. Accepts node_config_ack_v1 and records the acknowledgement.

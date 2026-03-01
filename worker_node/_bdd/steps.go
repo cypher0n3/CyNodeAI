@@ -708,11 +708,12 @@ func RegisterNodeManagerConfigSteps(sc *godog.ScenarioContext, state *workerTest
 					w.Header().Set("Content-Type", "application/json")
 					w.WriteHeader(http.StatusOK)
 					_ = json.NewEncoder(w).Encode(nodepayloads.NodeConfigurationPayload{
-						Version:       1,
-						ConfigVersion: "1",
-						IssuedAt:      time.Now().UTC().Format(time.RFC3339),
-						NodeSlug:      "bdd-node",
-						WorkerAPI:     &nodepayloads.ConfigWorkerAPI{OrchestratorBearerToken: "delivered-token"},
+						Version:          1,
+						ConfigVersion:    "1",
+						IssuedAt:         time.Now().UTC().Format(time.RFC3339),
+						NodeSlug:         "bdd-node",
+						WorkerAPI:        &nodepayloads.ConfigWorkerAPI{OrchestratorBearerToken: "delivered-token"},
+						InferenceBackend: &nodepayloads.ConfigInferenceBackend{Enabled: true},
 					})
 					return
 				}
@@ -739,6 +740,16 @@ func RegisterNodeManagerConfigSteps(sc *godog.ScenarioContext, state *workerTest
 		if st == nil || st.mockOrch == nil {
 			return fmt.Errorf("mock orchestrator not started")
 		}
+		// Force no existing inference so StartOllama is invoked when config has inference_backend (BDD determinism).
+		prev := os.Getenv("NODE_MANAGER_TEST_NO_EXISTING_INFERENCE")
+		_ = os.Setenv("NODE_MANAGER_TEST_NO_EXISTING_INFERENCE", "1")
+		defer func() {
+			if prev == "" {
+				_ = os.Unsetenv("NODE_MANAGER_TEST_NO_EXISTING_INFERENCE")
+			} else {
+				_ = os.Setenv("NODE_MANAGER_TEST_NO_EXISTING_INFERENCE", prev)
+			}
+		}()
 		cfg := &nodemanager.Config{
 			OrchestratorURL:          st.mockOrch.URL,
 			NodeSlug:                 "bdd-node",
@@ -748,7 +759,7 @@ func RegisterNodeManagerConfigSteps(sc *godog.ScenarioContext, state *workerTest
 			HTTPTimeout:              5 * time.Second,
 		}
 		opts := &nodemanager.RunOptions{
-			StartOllama: func() error {
+			StartOllama: func(_, _ string) error {
 				if st != nil && st.failInferenceStartup {
 					return errors.New("inference startup failed")
 				}
