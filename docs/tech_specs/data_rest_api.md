@@ -86,6 +86,10 @@ The Data REST API SHOULD expose resource-oriented endpoints for:
   - See [`docs/tech_specs/rbac_and_groups.md`](rbac_and_groups.md).
 - Projects (create, list, get, update, delete/disable), when allowed
   - User-friendly title (`display_name`) and optional text description; see [`docs/tech_specs/projects_and_scopes.md`](projects_and_scopes.md).
+- Agent personas (create, list, get, update, delete), when allowed
+  - Reusable SBA role/identity descriptions (Agent personas, not customer or end-user personas); scope_type and scope_id for visibility; see [cynode_sba.md - Persona on the Job](cynode_sba.md#spec-cynai-sbagnt-jobpersona) and [postgres_schema.md - Personas Table](postgres_schema.md#spec-cynai-schema-personastable).
+  - **RBAC:** Create, update, and delete MUST be restricted by scope and role: only users with admin (or equivalent system) role MAY create, update, or delete system-scoped (global) Agent personas; users MAY manage user-scoped Agent personas for their own scope_id; project- or group-scoped Agent personas require appropriate role for that scope (e.g. project member or group admin).
+    List and get return only Agent personas the caller is entitled to see per scope visibility.
 - Model registry and model availability, when allowed
 - Sandbox image registry metadata, when allowed
 

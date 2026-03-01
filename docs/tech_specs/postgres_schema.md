@@ -28,6 +28,8 @@
 - [System Settings](#system-settings)
   - [System Settings Table](#system-settings-table)
   - [System Settings Audit Log Table](#system-settings-audit-log-table)
+- [Personas](#personas)
+  - [Personas Table](#personas-table)
 - [Tasks, Jobs, and Nodes](#tasks-jobs-and-nodes)
   - [Tasks Table](#tasks-table)
   - [Jobs Table](#jobs-table)
@@ -128,14 +130,15 @@ Logical groups
 4. **Access control:** `access_control_rules`, `access_control_audit_log`
 5. **API egress credentials:** `api_credentials`
 6. **Preferences:** `preference_entries`, `preference_audit_log`
-7. **Tasks, jobs, nodes, workflow:** `tasks`, `jobs`, `nodes`, `node_capabilities`, `workflow_checkpoints`, `task_workflow_leases`
-8. **Sandbox image registry:** `sandbox_images`, `sandbox_image_versions`, `node_sandbox_image_availability`
-9. **Runs and sessions:** `runs`, `sessions`
-10. **Chat:** `chat_threads`, `chat_messages`
-11. **Task artifacts:** `task_artifacts`
-12. **Vector storage (`pgvector`):** `vector_items`
-13. **Audit:** `auth_audit_log`, `mcp_tool_call_audit_log` (and domain-specific audit tables above)
-14. **Model registry (optional for MVP):** `models`, `model_versions`, `model_artifacts`, `node_model_availability`
+7. **Personas:** `personas` (reusable SBA role/identity descriptions; embedded inline in job spec at job-build time)
+8. **Tasks, jobs, nodes, workflow:** `tasks`, `jobs`, `nodes`, `node_capabilities`, `workflow_checkpoints`, `task_workflow_leases`
+9. **Sandbox image registry:** `sandbox_images`, `sandbox_image_versions`, `node_sandbox_image_availability`
+10. **Runs and sessions:** `runs`, `sessions`
+11. **Chat:** `chat_threads`, `chat_messages`
+12. **Task artifacts:** `task_artifacts`
+13. **Vector storage (`pgvector`):** `vector_items`
+14. **Audit:** `auth_audit_log`, `mcp_tool_call_audit_log` (and domain-specific audit tables above)
+15. **Model registry (optional for MVP):** `models`, `model_versions`, `model_artifacts`, `node_model_availability`
 
 ## Identity and Authentication
 
@@ -533,6 +536,37 @@ Constraints
 - Index: (`key`)
 - Index: (`changed_at`)
 
+## Personas
+
+Agent personas are named, reusable descriptions of how the sandbox agent should behave (role, identity, tone); they are not customer or end-user personas.
+They are stored in the deployment and are queriable by agents (PMA, PAA, orchestrator job builder) via the User API Gateway or MCP.
+When building a job, the builder resolves the chosen Agent persona by id (or by title with scope precedence) and embeds `title` and `description` inline into the job spec; the SBA receives only the inline object.
+Editing (create, update, delete) is subject to RBAC: system-scoped personas require admin (or equivalent) role; user-/project-/group-scoped require appropriate role for that scope; see [data_rest_api.md - Core Resources](data_rest_api.md#spec-cynai-datapi-coreresources).
+
+Source: [cynode_sba.md - Persona on the Job](cynode_sba.md#spec-cynai-sbagnt-jobpersona).
+
+### Personas Table
+
+- Spec ID: `CYNAI.SCHEMA.PersonasTable` <a id="spec-cynai-schema-personastable"></a>
+
+- `id` (uuid, pk)
+- `title` (text, required)
+  - short human-readable label (e.g. "Backend Developer", "Security Reviewer")
+- `description` (text, required)
+  - short prose in the form "You are a &lt;role&gt; with &lt;background&gt; and &lt;supporting details&gt;."
+- `scope_type` (text, optional)
+  - e.g. `system`, `project`, `user`; determines visibility and which scope_id applies
+- `scope_id` (uuid, nullable)
+  - e.g. project_id or user_id when scope_type is project or user
+- `created_at` (timestamptz)
+- `updated_at` (timestamptz)
+- `created_by` (uuid, fk to `users.id`, nullable)
+
+Constraints
+
+- Index: (`scope_type`, `scope_id`)
+- Index: (`created_at`)
+
 ## Tasks, Jobs, and Nodes
 
 The orchestrator owns task state and a queue of jobs backed by PostgreSQL.
@@ -568,6 +602,8 @@ Constraints
 
 - `id` (uuid, pk)
 - `task_id` (uuid, fk to `tasks.id`)
+- `persona_id` (uuid, fk to `personas.id`, nullable)
+  - optional; for indexing, reporting, and provenance; job payload carries inline `persona: { title, description }` for SBA consumption
 - `node_id` (uuid, fk to `nodes.id`, nullable)
   - set when job is dispatched to a node
 - `status` (text)
@@ -587,6 +623,7 @@ Constraints
 Constraints
 
 - Index: (`task_id`)
+- Index: (`persona_id`) where not null
 - Index: (`node_id`)
 - Index: (`status`)
 - Index: (`lease_id`) where not null

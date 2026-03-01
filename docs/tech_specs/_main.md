@@ -2,6 +2,7 @@
 
 - [Document Overview](#document-overview)
 - [Architecture Summary](#architecture-summary)
+  - [Key Principles](#key-principles)
 - [Tech Spec Index](#tech-spec-index)
   - [Orchestrator and Nodes](#orchestrator-and-nodes)
   - [Ports and Endpoints](#ports-and-endpoints)
@@ -29,7 +30,7 @@ For MVP scope and the phased MVP plan, see [`docs/mvp.md`](../mvp.md).
 CyNodeAI is a local-first multi-agent orchestrator for self-hosted teams and small enterprises.
 It uses a central orchestrator to coordinate node-local workers, sandboxed execution, and tool access.
 
-Key principles
+### Key Principles
 
 - Agents use MCP as the standard tool interface.
 - Worker agents run in sandbox containers with restricted network access.
@@ -44,6 +45,7 @@ Key principles
 ### Orchestrator and Nodes
 
 - Orchestrator: [`docs/tech_specs/orchestrator.md`](orchestrator.md)
+- Orchestrator inference container decision: [`docs/tech_specs/orchestrator_inference_container_decision.md`](orchestrator_inference_container_decision.md)
 - Worker nodes: [`docs/tech_specs/worker_node.md`](worker_node.md)
 - Node payloads: [`docs/tech_specs/worker_node_payloads.md`](worker_node_payloads.md)
 
@@ -54,6 +56,11 @@ Key principles
 ### User Interfaces
 
 - cynork CLI (management app): [`docs/tech_specs/cynork_cli.md`](cynork_cli.md)
+  - CLI core commands: [`docs/tech_specs/cli_management_app_commands_core.md`](cli_management_app_commands_core.md)
+  - CLI task commands: [`docs/tech_specs/cli_management_app_commands_tasks.md`](cli_management_app_commands_tasks.md)
+  - CLI chat command: [`docs/tech_specs/cli_management_app_commands_chat.md`](cli_management_app_commands_chat.md)
+  - CLI admin and resource commands: [`docs/tech_specs/cli_management_app_commands_admin.md`](cli_management_app_commands_admin.md)
+  - CLI interactive mode and output: [`docs/tech_specs/cli_management_app_shell_output.md`](cli_management_app_shell_output.md)
 - Web Console: [`docs/tech_specs/web_console.md`](web_console.md)
 
 ### API Specifications
@@ -75,6 +82,7 @@ Key principles
 
 - Local user accounts: [`docs/tech_specs/local_user_accounts.md`](local_user_accounts.md)
 - Projects and scopes: [`docs/tech_specs/projects_and_scopes.md`](projects_and_scopes.md)
+- Project git repos: [`docs/tech_specs/project_git_repos.md`](project_git_repos.md)
 - RBAC and groups: [`docs/tech_specs/rbac_and_groups.md`](rbac_and_groups.md)
 - Access control: [`docs/tech_specs/access_control.md`](access_control.md)
 - User preferences: [`docs/tech_specs/user_preferences.md`](user_preferences.md)

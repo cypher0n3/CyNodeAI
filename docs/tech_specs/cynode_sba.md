@@ -4,6 +4,10 @@
 - [Purpose](#purpose)
 - [Design Principles](#design-principles)
 - [SBA Capabilities (What the Agent Can Call and How)](#sba-capabilities-what-the-agent-can-call-and-how)
+  - [Local Execution (Inside the Container)](#local-execution-inside-the-container)
+  - [Outbound Channels (Worker Proxies Only)](#outbound-channels-worker-proxies-only)
+  - [Job Lifecycle Reporting (What the SBA Must Call)](#job-lifecycle-reporting-what-the-sba-must-call)
+  - [MCP Tools Available to the SBA](#mcp-tools-available-to-the-sba)
 - [Execution Model](#execution-model)
   - [Todo List](#todo-list)
 - [Integration With Worker API](#integration-with-worker-api)
@@ -11,9 +15,11 @@
   - [Worker Proxies (Inference and Web Egress)](#worker-proxies-inference-and-web-egress)
 - [Job Specification](#job-specification)
   - [Inference Models (Job-Defined Allowlist)](#inference-models-job-defined-allowlist)
+  - [Persona on the Job](#persona-on-the-job)
   - [Context Supplied to SBA (Requirements, Acceptance Criteria, Preferences, Skills)](#context-supplied-to-sba-requirements-acceptance-criteria-preferences-skills)
+  - [SBA LLM Prompt Construction](#sba-llm-prompt-construction)
 - [Local Tools (MVP)](#local-tools-mvp)
-  - [Tool argument schemas and common use cases](#tool-argument-schemas-and-common-use-cases)
+  - [Tool Argument Schemas and Common Use Cases](#tool-argument-schemas-and-common-use-cases)
 - [Result Contract](#result-contract)
   - [Canonical Failure Codes](#canonical-failure-codes)
 - [Sandbox Boundary and Security](#sandbox-boundary-and-security)
@@ -314,6 +320,36 @@ The job MAY include an `inference` object with:
 - `source` (string, optional): `worker`, `api_egress`, or unset; when unset, the runtime MAY infer which path(s) to enable per model id or policy.
 The SBA MUST use only models listed in `allowed_models`; the runtime makes at least one of them reachable.
 
+### Persona on the Job
+
+- Spec ID: `CYNAI.SBAGNT.JobPersona` <a id="spec-cynai-sbagnt-jobpersona"></a>
+
+**Terminology:** The personas in this spec are **Agent personas**: named, reusable descriptions of how an agent (here, the SBA) should behave (role, identity, tone).
+They are not to be confused with customer personas, end-user personas, or product UX personas.
+
+The job spec carries the Agent persona **inline only**.
+The SBA never receives a persona reference; it always receives the full persona object in the JSON.
+
+- **Inline in JSON:** Top-level optional object `persona` with `title` (string) and `description` (string).
+  The description MUST be short prose in the form "You are a [role] with [background] and [supporting details]." (or equivalent).
+  Agent personas are stored in the database and are queriable by all agents (PMA, PAA, orchestrator job builder) via the User API Gateway or MCP; when building a job, the builder looks up the chosen Agent persona by id (or by title with scope precedence) and **embeds** `title` and `description` inline into the job spec.
+  When multiple Agent personas match (e.g. same title in different scopes), the builder MUST apply the **most specific** that matches: user scope over project over group over system (global); see [project_manager_agent.md - Persona assignment and resolution](project_manager_agent.md#spec-cynai-agents-personaassignment).
+- **Optional provenance:** `persona_id` (uuid) MAY be present in the job JSON for auditing; the SBA ignores it and uses only `persona.title` and `persona.description`.
+- When **persona is present**, the SBA MUST use it as the first context block in every LLM prompt per [SBA LLM Prompt Construction](#spec-cynai-sbagnt-llmpromptconstruction).
+  When **persona is absent**, the SBA uses only baseline context and other job context without a persona block.
+
+Agent persona model (stored in DB, embedded at job-build time):
+
+- **Agent persona:** A named, reusable description of how the sandbox agent should behave (role, identity, tone).
+  - **Persona title** (required): Short human-readable label (e.g. "Backend Developer", "Security Reviewer").
+  - **Persona description** (required): **Short** prose in the form "You are a [role] with [background] and [supporting details]."
+  Agent personas MUST be kept concise.
+- **Global default Agent personas:** The system MUST provide a small set of system-scoped (global) default Agent personas, seeded at bootstrap.
+  This set MUST include dedicated Agent personas for the Project Manager Agent (PMA) and the Project Analyst Agent (PAA), which PMA and PAA MUST always use for their own identity/role when running; see [project_manager_agent.md](project_manager_agent.md).
+  Other global defaults (e.g. "Backend Developer", "Security Reviewer", "Code Reviewer") MAY be included so SBAs can be assigned common roles without per-user configuration.
+- **Agent personas vs skills:** Persona defines *who* the agent is and is the first context block; skill is procedural guidance supplied separately (e.g. `context.skills` or MCP) and appears later in the prompt.
+  An Agent persona MAY hint at or recommend which skills to use; the actual skill content is supplied via job context or MCP, not embedded in the persona.
+
 ### Context Supplied to SBA (Requirements, Acceptance Criteria, Preferences, Skills)
 
 - Spec ID: `CYNAI.SBAGNT.JobContext` <a id="spec-cynai-sbagnt-jobcontext"></a>
@@ -322,6 +358,7 @@ Traces To:
 
 - [REQ-SBAGNT-0107](../requirements/sbagnt.md#req-sbagnt-0107)
 - [REQ-SBAGNT-0111](../requirements/sbagnt.md#req-sbagnt-0111)
+- [REQ-SBAGNT-0113](../requirements/sbagnt.md#req-sbagnt-0113)
 - [REQ-AGENTS-0132](../requirements/agents.md#req-agents-0132)
 - [REQ-AGENTS-0133](../requirements/agents.md#req-agents-0133)
 - [REQ-AGENTS-0134](../requirements/agents.md#req-agents-0134)
@@ -367,6 +404,10 @@ Example shape (with optional context)
     "allowed_models": ["llama3.2"],
     "source": "worker"
   },
+  "persona": {
+    "title": "Backend Developer",
+    "description": "You are a backend developer with experience in Go and APIs and a focus on clarity and testability. You prefer small, reviewable changes and explicit error handling."
+  },
   "context": {
     "baseline_context": "Sandbox agent identity, role, responsibilities, non-goals (or path to same).",
     "project_context": "Project identity (id, name, slug), scope, relevant metadata (when job is project-scoped).",
@@ -385,6 +426,43 @@ Example shape (with optional context)
 - `context`: **orchestrator MUST supply** requirements, acceptance criteria, relevant preferences, and skills (or references) to the SBA by job payload; the SBA MUST use this context when performing and verifying work.
 - `constraints.ext_net_allowed`: when `true`, the job is permitted to use external network access (e.g. web egress, API Egress) via worker proxies; when `false`, only worker/orchestrator-mediated paths (inference, MCP, status) apply.
   The SBA always has proxy outbound for lifecycle and MCP.
+
+### SBA LLM Prompt Construction
+
+- Spec ID: `CYNAI.SBAGNT.LlmPromptConstruction` <a id="spec-cynai-sbagnt-llmpromptconstruction"></a>
+
+Traces To:
+
+- [REQ-SBAGNT-0113](../requirements/sbagnt.md#req-sbagnt-0113)
+
+**Purpose:** Define the content and order of context sent to the LLM on each request (system message and/or user message), and how tools are presented.
+
+The SBA MUST build each LLM prompt by including the following **in this order**:
+
+1. **Agent persona (if present in job)** - The short persona description from the job's inline `persona.description` (see [Persona on the Job](#spec-cynai-sbagnt-jobpersona)).
+   MUST be the first context block so the model adopts the role before other instructions.
+   Agent personas may hint at or recommend skills; the actual skill content is supplied in step 8.
+2. **Baseline context** - Identity, role, responsibilities, and non-goals (from `context.baseline_context` or image-baked baseline).
+   MUST be included in every LLM prompt.
+3. **Project-level context** - When the job is project-scoped: project identity (id, name, slug), scope, relevant metadata.
+   MUST be included when present in the job.
+4. **Task-level context** - Task identity (id, name), acceptance criteria summary, status, relevant task metadata.
+   MUST be included.
+5. **Requirements and acceptance criteria** - From the job context.
+6. **Relevant preferences** - Resolved user/task preferences that affect how work is done.
+7. **User-configurable additional context** - From `agents.sandbox_agent.additional_context` (resolved at job creation).
+8. **Skills (if supplied or fetched)** - Inline skill content or references; the SBA MAY fetch skills via MCP and append here.
+   Skills are distinct from Agent personas; the persona may recommend which skills to use, but skill content is supplied here.
+9. **Runtime context for this turn** - Remaining time or deadline; current todo list or step progress; and the current user/tool turn.
+
+The implementation MUST concatenate or structure these blocks in a deterministic way (e.g. clear section headers or role/system vs user message split) so that the model receives a consistent, ordered context.
+
+#### Tools Presented to the LLM
+
+- **Local tools** (`run_command`, `write_file`, `read_file`, `apply_unified_diff`, `list_tree`, `search_files`): The SBA MUST present each tool with name, a short non-ambiguous description, and a structured arguments schema (e.g. JSON Schema) including types and constraints.
+- **MCP tools** (sandbox allowlist): When the SBA wraps MCP tools as langchaingo (or equivalent) tools, each tool MUST be presented with name, description from the MCP catalog, and arguments schema; the SBA MUST inject `task_id` and `job_id` from the job spec so the LLM is not required to supply them, or the schema MUST document them as required.
+- **Order and grouping:** Order MUST be deterministic for a given job (e.g. local tools first, then MCP tools).
+- **No credentials or internal URLs:** Tool descriptions and schemas MUST NOT include secrets, bearer tokens, or internal callback URLs; those are injected by the runtime, not into the tool schema visible to the LLM.
 
 ## Local Tools (MVP)
 

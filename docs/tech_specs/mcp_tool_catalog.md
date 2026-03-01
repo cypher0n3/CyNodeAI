@@ -16,6 +16,7 @@
   - [Git Egress](#git-egress)
   - [Node Tools](#node-tools)
   - [Model Registry](#model-registry)
+  - [Persona Tools](#persona-tools)
   - [Skills Tools](#skills-tools)
   - [Help Tools](#help-tools)
   - [Database Tools](#database-tools)
@@ -114,6 +115,8 @@ Enforce max entries and max size per entry per job.
 
 - `sandbox.create`
   - required args: `task_id`, `job_id`, `image_ref`
+  - optional args: `persona_id` (uuid; resolved via gateway/MCP persona get; builder embeds full Agent persona inline in job spec, applying most-specific scope when resolving), or `persona` (object with `title`, `description`; inline Agent persona for the SBA).
+  - The final job spec delivered to the SBA MUST contain the Agent persona **inline only** (`persona: { title, description }`); when `persona_id` is supplied, the orchestrator or PM resolves it and embeds the persona inline.
 - `sandbox.exec`
   - required args: `task_id`, `job_id`, `command`, `argv`
 - `sandbox.put_file`
@@ -211,6 +214,24 @@ This catalog uses the same tool names.
   - required args: none
 - `model.get`
   - required args: `model_id`
+
+### Persona Tools
+
+- Spec ID: `CYNAI.MCPTOO.PersonaTools` <a id="spec-cynai-mcptoo-personatools"></a>
+
+These tools operate on **Agent personas** (SBA role/identity descriptions), not customer or end-user personas.
+PMA, PAA, and any service that builds SBA jobs MUST be able to query Agent personas (list, get) via MCP so they can resolve a chosen persona by id and embed it inline in the job spec.
+When resolving by title or when multiple personas match, the builder MUST apply the most specific scope that matches (user over project over group over system); see [project_manager_agent.md - Persona assignment and resolution](project_manager_agent.md#spec-cynai-agents-personaassignment).
+CRUD for Agent personas is exposed to user clients via the User API Gateway (Data REST API), with RBAC restricting who may create/update/delete per scope; agents use these read tools for job building only.
+
+- `persona.list`
+  - optional args: `scope_type`, `scope_id`, `limit`, `cursor`
+  - Returns Agent personas visible to the caller (per scope); paginated.
+- `persona.get`
+  - required args: `persona_id` (uuid)
+  - Returns the full Agent persona (id, title, description, scope_type, scope_id, created_at, updated_at) for embedding into the job spec.
+
+Gateway: allow for PM agent (and PAA, orchestrator job builder) so they can resolve persona_id when invoking `sandbox.create` or building job spec JSON.
 
 ### Skills Tools
 

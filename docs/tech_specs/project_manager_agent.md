@@ -15,6 +15,11 @@
   - [Agent Inputs](#agent-inputs)
   - [Agent Outputs](#agent-outputs)
 - [LLM Context (Baseline and User-Configurable)](#llm-context-baseline-and-user-configurable)
+  - [Baseline Context](#baseline-context)
+  - [Project-Level Context](#project-level-context)
+  - [Task-Level Context](#task-level-context)
+  - [User-Configurable Additional Context](#user-configurable-additional-context)
+  - [Persona Assignment for SBA Jobs](#persona-assignment-for-sba-jobs)
 - [Task Naming](#task-naming)
   - [Project Context From Chat Prompt](#project-context-from-chat-prompt)
   - [Task Naming Applicable Requirements](#task-naming-applicable-requirements)
@@ -253,6 +258,21 @@ Implementation notes
 - For `cynode-pma`, baseline context is part of the role-specific instructions bundle; the runtime MUST also resolve and append project-level context (when `project_id` in scope), task-level context (when `task_id` in scope), and preferences-based additional context when building system or prompt content.
 - For `cynode-sba`, baseline context describes the sandbox agent identity and role and is supplied in the job; job context MUST include project-level context and task-level context (when the job is scoped to a project and task); preferences-based additional context for the SBA uses the same keys and is included in the job context or a dedicated slot.
 - Cloud workers that run agent code and call LLMs MUST receive baseline context, project-level and task-level context (when applicable), and preferences-based additional context from the orchestrator (e.g. in the job payload or handoff) and MUST include all of them in LLM prompts.
+
+### Persona Assignment for SBA Jobs
+
+- Spec ID: `CYNAI.AGENTS.PersonaAssignment` <a id="spec-cynai-agents-personaassignment"></a>
+
+When the PMA or PAA (or orchestrator job builder) creates or assigns a job that runs the SBA, it MUST be able to set the job's Agent persona.
+The builder queries Agent personas via the User API Gateway or MCP (persona list, persona get by id), fetches the full persona (title, description), and **embeds it inline** in the job spec JSON.
+The job payload delivered to the node contains only the inline `persona` object; the SBA never resolves a persona_id.
+
+**Resolution precedence:** When multiple Agent personas match (e.g. same title in different scopes), the builder MUST apply the **most specific** that matches: user scope over project over group over system (global).
+Example: if both a global Agent persona and a user-scoped Agent persona exist with the same title, the user-scoped one MUST be used.
+The MCP contract for sandbox job creation (e.g. `sandbox.create`) MUST allow passing a persona by id or inline so the final job spec contains the inline persona.
+
+**PMA and PAA built-in Agent personas:** PMA and PAA MUST always use their own dedicated system-scoped (global) Agent personas for their identity/role when running; these are part of the global default Agent personas (see [cynode_sba.md - Persona on the Job](cynode_sba.md#spec-cynai-sbagnt-jobpersona)).
+See [cynode_sba.md - Persona on the Job](cynode_sba.md#spec-cynai-sbagnt-jobpersona) and [mcp_tool_catalog.md - Sandbox Tools](mcp_tool_catalog.md#spec-cynai-mcptoo-sandboxtools).
 
 ## Task Naming
 

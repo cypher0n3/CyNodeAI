@@ -187,6 +187,11 @@ Web Console-specific requirements live in [webcon.md](webcon.md) (REQ-WEBCON-*).
   [CYNAI.USRGWY.OpenAIChatApi.WarmUp](../tech_specs/openai_compatible_chat_api.md#spec-cynai-usrgwy-openaichatapi-warmup)
   [CYNAI.CLIENT.CliChatWarmUp](../tech_specs/cli_management_app_commands_chat.md#spec-cynai-client-clichatwarmup)
   <a id="req-client-0177"></a>
+- **REQ-CLIENT-0178:** The Web Console and the CLI MUST support full CRUD for Agent personas (create, list, get, update, delete) via the User API Gateway, with capability parity between both clients.
+  Agent personas are reusable SBA role/identity descriptions (not customer or end-user personas); title, description, scope; create/update/delete subject to RBAC per scope; see [cynode_sba.md - Persona on the Job](../tech_specs/cynode_sba.md#spec-cynai-sbagnt-jobpersona).
+  [CYNAI.CLIENT.CliPersonasManagement](../tech_specs/cli_management_app_commands_admin.md#spec-cynai-client-clipersonasmanagement)
+  [CYNAI.WEBCON.PersonasManagement](../tech_specs/web_console.md#spec-cynai-webcon-personasmanagement)
+  <a id="req-client-0178"></a>
 - **REQ-CLIENT-0125:** Node management MUST be mediated by the User API Gateway.
   [CYNAI.WEBCON.NodeManagement](../tech_specs/web_console.md#spec-cynai-webcon-nodemanagement)
   [CYNAI.CLIENT.CliNodeManagement](../tech_specs/cli_management_app_commands_admin.md#spec-cynai-client-clinodemgmt)

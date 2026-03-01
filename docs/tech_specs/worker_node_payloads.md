@@ -108,9 +108,12 @@ Source requirements: [`docs/tech_specs/worker_node.md`](worker_node.md#spec-cyna
   - `outbound_policy` (string, optional)
     - examples: unrestricted, restricted, allowlist, none
 - `inference` (object, optional)
-  - `supported` (boolean)
-  - `mode` (string, optional)
-    - examples: allow, disabled
+  - The capability report MUST be factual so the orchestrator can make the inference decision; it MAY include a user-defined override (see `mode`) read from local config/env at node startup.
+  - `supported` (boolean, optional): Factual: the node has the hardware and runtime capability to run inference (e.g. GPU or CPU, container runtime).
+    Derived by the node from local detection, not from user preference.
+  - `mode` (string, optional): User-defined override read by the node from local config (node startup YAML, environment variables, etc.) at startup.
+    Values: `allow` (no override), `disabled` (operator requires no inference on this node), `require` (operator requires inference when capabilities and policy allow).
+    When absent, the orchestrator treats as `allow`.
   - `existing_service` (boolean, optional)
     - When true, the node has detected and is using an inference service (e.g. OLLAMA) already running on the host; the node did not start it.
     - The node MUST set this when it is using a host-existing inference service so the orchestrator can treat the node as inference-capable without instructing it to start a container.
@@ -280,6 +283,7 @@ Traces To:
     - When present, the node must reject expired tokens and request a configuration refresh.
 - `inference_backend` (object, optional)
   - When present, the orchestrator instructs the node to start the local inference backend (e.g. OLLAMA) with the given parameters.
+  - The orchestrator computes this field per [orchestrator_inference_container_decision.md](orchestrator_inference_container_decision.md#spec-cynai-orches-inferencecontainerdecision).
   - When absent or when `inference_backend.enabled` is false, the node MUST NOT start an inference container (sandbox-only or inference-disabled node).
   - `enabled` (boolean, optional): When true or when the object is present and the node is inference-capable per capability report, the node MUST start the backend container.
     When false, the node MUST NOT start it.

@@ -341,6 +341,12 @@ All subcommands that call the gateway MUST use the resolved gateway URL and reso
   - Update: `cynork project update <project_id>` (optional `--title`, `--description`, `--active`).
   - Delete: `cynork project delete <project_id>`.
   - RBAC: `cynork project rbac list <project_id>`, `cynork project rbac grant <project_id> --role <name> --user <id>|--group <id>`, `cynork project rbac revoke <project_id> --role <name> --user <id>|--group <id>`.
+- `cynork persona ...`: full CRUD for Agent personas via gateway (RBAC applies per scope); see [Personas Management](cli_management_app_commands_admin.md#spec-cynai-client-clipersonasmanagement).
+  - List: `cynork persona list` (optional `--scope-type`, `--scope-id`, `--limit`, `--cursor`).
+  - Get: `cynork persona get <persona_id>`.
+  - Create: `cynork persona create --title "..." --description "..."` (optional `--scope-type`, `--scope-id`).
+  - Update: `cynork persona update <persona_id>` (optional `--title`, `--description`, `--scope-type`, `--scope-id`).
+  - Delete: `cynork persona delete <persona_id>`.
 - `cynork skills ...`: full CRUD via gateway; see [Skill Management CRUD (Web and CLI)](skills_storage_and_inference.md#spec-cynai-skills-skillmanagementcrud) and [Skills Management](cli_management_app_commands_admin.md#spec-cynai-client-cliskillsmanagement).
   - Create: `cynork skills load <file.md>` (required file path; optional `--name`, `--scope`).
   - List: `cynork skills list` (optional `--scope`, `--owner`).
@@ -363,7 +369,7 @@ On invalid config file (syntax error), the CLI MUST exit with code 2 before runn
 - Core commands (version, status, auth): [cli_management_app_commands_core.md](cli_management_app_commands_core.md)
 - Task commands: [cli_management_app_commands_tasks.md](cli_management_app_commands_tasks.md)
 - Chat command: [cli_management_app_commands_chat.md](cli_management_app_commands_chat.md)
-- Admin and resource commands (creds, prefs, system settings, nodes, project, skills, audit): [cli_management_app_commands_admin.md](cli_management_app_commands_admin.md)
+- Admin and resource commands (creds, prefs, system settings, nodes, project, persona, skills, audit): [cli_management_app_commands_admin.md](cli_management_app_commands_admin.md)
 - Interactive mode and output: [cli_management_app_shell_output.md](cli_management_app_shell_output.md)
 
 ## Implementation Specification (Go + Cobra)

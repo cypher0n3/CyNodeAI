@@ -59,7 +59,7 @@ The gateway SHOULD support:
 - Artifact ingress and egress
   - Upload files for tasks and download produced artifacts.
 - Admin operations
-  - Manage credentials, user preferences, and basic node lifecycle controls through a single user-facing surface.
+  - Manage credentials, user preferences, Agent personas (CRUD, RBAC per scope), and basic node lifecycle controls through a single user-facing surface.
 - Groups and RBAC
   - Manage groups and membership (create group, add member, remove member), when allowed.
   - Manage role bindings (assign role to user or group), when allowed.

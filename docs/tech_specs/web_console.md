@@ -12,6 +12,7 @@
   - [Preferences Management Applicable Requirements](#preferences-management-applicable-requirements)
 - [System Settings Management](#system-settings-management)
 - [Skills Management](#skills-management)
+- [Personas Management](#personas-management)
 - [Project Management](#project-management)
 - [Node Management](#node-management)
   - [Node Management Applicable Requirements](#node-management-applicable-requirements)
@@ -58,6 +59,7 @@ Use the same gateway APIs and the same authorization and auditing rules for both
 - View, edit, and audit user preferences across scopes (system, user, group, project, task), with an easy method to CRUD personal, group, and project preferences.
 - View node inventory and manage basic node lifecycle controls.
 - Full CRUD for AI skills: create (upload), list, view (content and metadata), edit (update content and/or metadata including scope, with same auditing and scope permissions), and delete; see [Skill Management CRUD](skills_storage_and_inference.md#spec-cynai-skills-skillmanagementcrud).
+- Full CRUD for Agent personas: create, list, view, edit, delete (RBAC per scope); same capability set as cynork per [REQ-CLIENT-0004](../requirements/client.md#req-client-0004) and [REQ-CLIENT-0178](../requirements/client.md#req-client-0178); see [cynode_sba.md - Persona on the Job](cynode_sba.md#spec-cynai-sbagnt-jobpersona).
 - Basic project management (CRUD): create, list, view, edit, and delete or disable projects; each project has a user-friendly title and optional text description (see [Projects and Scope Model](projects_and_scopes.md), [REQ-PROJCT-0103](../requirements/projct.md#req-projct-0103)).
 - Create tasks: submit a task as plain text or Markdown (inline or paste), attach files or other artifacts (file upload), run a script (e.g. script file upload), or run a short series of commands; same semantics as the CLI and User API Gateway (see [REQ-ORCHES-0126](../requirements/orches.md#req-orches-0126), [REQ-ORCHES-0127](../requirements/orches.md#req-orches-0127), [REQ-ORCHES-0128](../requirements/orches.md#req-orches-0128), [REQ-CLIENT-0152](../requirements/client.md#req-client-0152), [REQ-CLIENT-0154](../requirements/client.md#req-client-0154)).
 - Inspect access control rules and audit decisions.
@@ -186,6 +188,25 @@ UI MUST provide the following.
 - **Create:** upload form (paste or file) for markdown content; optional name and scope (scope elevation subject to permission).
 - **Edit:** update content and/or metadata (name, scope); updated content is re-audited; on failure the UI MUST show rejection reason and exact triggering text.
 - **Delete:** confirm and remove skill from store and registry (restricted to owner or admin).
+
+## Personas Management
+
+- Spec ID: `CYNAI.WEBCON.PersonasManagement` <a id="spec-cynai-webcon-personasmanagement"></a>
+
+Traces To:
+
+- [REQ-CLIENT-0178](../requirements/client.md#req-client-0178)
+
+The web console MUST support full CRUD for **Agent personas** (create, list, view, update, delete) via the User API Gateway, with the same capabilities as cynork (see [Personas Management](cli_management_app_commands_admin.md#spec-cynai-client-clipersonasmanagement)).
+Agent personas are reusable SBA role/identity descriptions (not customer or end-user personas); scope_type and scope_id determine visibility; create/update/delete are subject to RBAC per scope (e.g. admin for system-scoped); see [data_rest_api.md - Core Resources](data_rest_api.md#spec-cynai-datapi-coreresources).
+
+UI MUST provide:
+
+- **List** - table or list of Agent personas (metadata: title, scope_type, scope_id, updated_at); optional filters by scope.
+- **View** - single Agent persona detail (title, description, scope_type, scope_id, created_at, updated_at).
+- **Create** - form with required title and description; optional scope_type and scope_id (scope subject to caller role).
+- **Edit** - update title, description, scope_type, scope_id (only when caller has permission for that scope).
+- **Delete** - confirm and remove; show warning when persona is referenced by jobs (if jobs.persona_id is present).
 
 ## Project Management
 

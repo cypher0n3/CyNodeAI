@@ -6,6 +6,7 @@
 - [System Settings Management](#system-settings-management)
 - [Node Management](#node-management)
 - [Project Management](#project-management)
+- [Personas Management](#personas-management)
 - [Skills Management](#skills-management)
 - [Audit Commands](#audit-commands)
 
@@ -655,6 +656,109 @@ Output
 
 - Table mode MUST print exactly one line containing `revoked=true`.
 - JSON mode MUST print `{"revoked":true}`.
+
+## Personas Management
+
+- Spec ID: `CYNAI.CLIENT.CliPersonasManagement` <a id="spec-cynai-client-clipersonasmanagement"></a>
+
+Traces To:
+
+- [REQ-CLIENT-0178](../requirements/client.md#req-client-0178)
+
+The CLI MUST support full CRUD for **Agent personas** (list, get, create, update, delete) via the User API Gateway, with the same capability set as the Web Console per [REQ-CLIENT-0004](../requirements/client.md#req-client-0004).
+Agent personas are reusable SBA role/identity descriptions (not customer or end-user personas); see [cynode_sba.md - Persona on the Job](cynode_sba.md#spec-cynai-sbagnt-jobpersona) and [postgres_schema.md - Personas Table](postgres_schema.md#spec-cynai-schema-personastable).
+Create, update, and delete are subject to RBAC: only users with appropriate roles may edit Agent personas in a given scope (e.g. admin for system-scoped; user for own user-scoped); see [data_rest_api.md - Core Resources](data_rest_api.md#spec-cynai-datapi-coreresources).
+All persona commands MUST require auth.
+
+### `cynork persona list`
+
+Invocation
+
+- `cynork persona list`.
+
+Optional flags
+
+- `--scope-type <scope_type>` (e.g. `system`, `project`, `user`).
+- `--scope-id <uuid>`.
+- `-l, --limit <n>`.
+  Default is `50`.
+  Allowed range is `1` to `200`.
+- `--cursor <opaque>`.
+
+Output
+
+- Table mode MUST print a header line with columns: `persona_id`, `title`, `scope_type`, `scope_id`, `updated_at`, then one row per persona.
+- JSON mode MUST print `{"personas":[...],"next_cursor":"<opaque>"}`.
+
+### `cynork persona get <persona_id>`
+
+Invocation
+
+- `cynork persona get <persona_id>`.
+
+Output
+
+- Table mode MUST print at least `persona_id`, `title`, `description`, `scope_type`, `scope_id`, `created_at`, `updated_at`.
+- JSON mode MUST print a single JSON object with the same fields.
+
+### `cynork persona create`
+
+Invocation
+
+- `cynork persona create`.
+
+Required flags
+
+- `--title <title>`.
+- `--description <description>` (short prose: "You are a ...").
+
+Optional flags
+
+- `--scope-type <scope_type>` (e.g. `system`, `project`, `user`).
+- `--scope-id <uuid>`.
+
+Output
+
+- Table mode MUST print exactly one line containing `persona_id=<id>`.
+- JSON mode MUST print `{"persona_id":"<id>"}`.
+
+### `cynork persona update <persona_id>`
+
+Invocation
+
+- `cynork persona update <persona_id>`.
+
+Optional flags (at least one for a meaningful update)
+
+- `--title <title>`.
+- `--description <description>`.
+- `--scope-type <scope_type>`.
+- `--scope-id <uuid>`.
+
+Output
+
+- Table mode MUST print exactly one line containing `persona_id=<id> updated=true`.
+- JSON mode MUST print `{"persona_id":"<id>","updated":true}`.
+
+### `cynork persona delete <persona_id>`
+
+Invocation
+
+- `cynork persona delete <persona_id>`.
+
+Optional flags
+
+- `-y, --yes`.
+
+Behavior
+
+- If `--yes` is not provided, the CLI MUST prompt for confirmation when the persona is referenced by jobs (if the gateway reports references).
+- The confirmation prompt MUST warn that deleting may affect job provenance.
+
+Output
+
+- Table mode MUST print exactly one line containing `persona_id=<id> deleted=true`.
+- JSON mode MUST print `{"persona_id":"<id>","deleted":true}`.
 
 ## Skills Management
 

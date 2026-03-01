@@ -92,3 +92,9 @@ Sandbox image and isolation requirements remain in the `SANDBX` domain.
   Local execution includes arbitrary user-level commands and local tools (run_command, write_file, read_file, apply_unified_diff, list_tree, search_files) with full `/workspace` access; outbound use is only via worker proxies (lifecycle/status, inference, MCP gateway, web egress when allowed, API Egress when allowed).
   [CYNAI.SBAGNT.Capabilities](../tech_specs/cynode_sba.md#spec-cynai-sbagnt-capabilities)
   <a id="req-sbagnt-0112"></a>
+
+- **REQ-SBAGNT-0113:** When the job includes an Agent persona (inline `persona.title` and `persona.description`), the SBA MUST use it as the first context block in every LLM prompt.
+  The SBA MUST construct LLM prompts according to the defined context order and tool presentation (Agent persona, baseline, project, task, requirements, preferences, additional context, skills, runtime).
+  [CYNAI.SBAGNT.LlmPromptConstruction](../tech_specs/cynode_sba.md#spec-cynai-sbagnt-llmpromptconstruction)
+  [CYNAI.SBAGNT.JobPersona](../tech_specs/cynode_sba.md#spec-cynai-sbagnt-jobpersona)
+  <a id="req-sbagnt-0113"></a>

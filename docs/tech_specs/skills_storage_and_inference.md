@@ -76,7 +76,7 @@ This skill is part of the MVP and ensures agents have consistent, up-to-date gui
   The actual skill file (e.g. SKILL.md) is maintained separately; this spec does not define or implement that file.
 - **Loaded by default**: When the system exposes skills to an inference request that supports skills, the default CyNodeAI interaction skill MUST be included in the set of skills offered (e.g. resolved and supplied in context or by reference).
   No user or caller action is required to enable it.
-- **Scope**: The default skill is effectively global in scope: it is visible to all inference requests that receive skills (all users/tenants).
+- **Scope**: The default skill is effectively global in scope: it is visible to all inference requests that receive skills (all users).
 - **Ownership**: The skill is system-owned.
   It MUST NOT be user-editable or user-deletable via web, CLI, or MCP skill tools; the system MAY allow read (list/get) for transparency.
   It MAY be stored in a dedicated system/built-in store or in the same store under a reserved identifier; implementation MUST prevent normal CRUD from modifying or removing it.
@@ -170,7 +170,7 @@ By default a skill is user-scoped; the user may open up exposure to group, proje
 - User-scoped skills: only the owning user's requests see the skill.
 - Group-scoped: members of the specified group see the skill.
 - Project-scoped: users with access to the specified project see the skill.
-- Global-scoped: all users (or all within a tenant) see the skill; only users with global/admin permission MAY set global scope.
+- Global-scoped: all users in the deployment see the skill; only users with global/admin permission MAY set global scope.
 
 ## Skill Loading (Web and CLI)
 

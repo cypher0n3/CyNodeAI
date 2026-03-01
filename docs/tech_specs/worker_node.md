@@ -383,12 +383,14 @@ Sandbox keys
 
 #### Inference Settings
 
-Node startup YAML MUST allow operators to disable inference even if hardware is present.
+Node startup YAML MUST allow operators to set a user-defined override for inference on this node (reported in the capability report so the orchestrator can make the decision).
+The node MUST read this from local config (YAML, environment variables, etc.) at startup and include it in the capability report as `inference.mode`.
 
 Inference keys
 
 - `inference.mode` (string, optional)
-  - One of `allow` or `disabled`.
+  - User-defined override: one of `allow` (no override), `disabled` (operator requires no inference on this node), or `require` (operator requires inference when policy allows).
+    When unset, the node reports `allow` or omits the field.
 - `inference.max_concurrency` (number, optional)
   - Maximum concurrent inference requests accepted by local inference services.
 - `inference.allow_gpu` (boolean, optional)
@@ -690,7 +692,7 @@ Worker API target URL in config
 Inference backend instruction in config
 
 - The node configuration payload MAY include `inference_backend` (see [`worker_node_payloads.md`](worker_node_payloads.md) `node_configuration_payload_v1`).
-- The orchestrator MUST derive the inference backend instruction (whether to start, which image, and variant such as ROCm or CUDA) from the node capability report (e.g. `gpu.present`, `gpu.devices[].features`, platform) and policy, and MUST include it in the config when the node is inference-capable and inference is enabled.
+- The orchestrator MUST derive the inference backend instruction (whether to start, which image, and variant such as ROCm or CUDA) using the deterministic algorithm in [orchestrator_inference_container_decision.md](orchestrator_inference_container_decision.md#spec-cynai-orches-inferencecontainerdecision), and MUST include it in the config when the node is inference-capable and inference is enabled.
 - The node MUST NOT start the OLLAMA (or equivalent) container until it has received this instruction; see [Node Startup Procedure](#node-startup-procedure).
 
 Required behavior
