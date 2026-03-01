@@ -14,41 +14,29 @@ Feature: Single Node Happy Path
 # smallest supported fallback model for limited systems).
 # See dev_docs/single_node_e2e_testing_plan.md.
 
-  Background:
-    Given a running PostgreSQL database
-    And the orchestrator API is running
-    And an admin user exists with handle "admin"
-    And a worker node is running and reachable by the orchestrator
+Background:
+  Given a running PostgreSQL database
+  And the orchestrator API is running
+  And an admin user exists with handle "admin"
+  And a worker node is running and reachable by the orchestrator
 
-  @req_identy_0104
-  @req_orches_0112
-  @req_orches_0122
-  @spec_cynai_identy_authenticationmodel
-  @spec_cynai_orches_doc_orchestrator
-  @spec_cynai_worker_workerauth
-  Scenario: End-to-end single-node task execution (happy path)
-    When I login as "admin" with password "admin123"
-    And a node with slug "test-node-01" registers with the orchestrator using a valid PSK
-    And the node requests its configuration
-    And the node applies the configuration and sends a config acknowledgement with status "applied"
-    And I create a task with command "echo hello"
-    And the orchestrator dispatches a job to the node
-    And the node executes the sandbox job
-    Then the job result contains stdout "hello"
-    And the task status becomes "completed"
+@req_identy_0104
+@req_orches_0112
+@req_orches_0122
+@spec_cynai_identy_authenticationmodel
+@spec_cynai_orches_doc_orchestrator
+@spec_cynai_worker_workerauth
+Scenario: End-to-end single-node task execution (happy path)
+  When I login as "admin" with password "admin123" and a node with slug "test-node-01" registers with the orchestrator using a valid PSK and the node requests its configuration and the node applies the configuration and sends a config acknowledgement with status "applied" and I create a task with command "echo hello" and the orchestrator dispatches a job to the node and the node executes the sandbox job
+  Then the job result contains stdout "hello"
+  And the task status becomes "completed"
 
   # Requires inference-capable node (proxy sidecar + model loaded). Select with: --tags=@inference_in_sandbox
-  @inference_in_sandbox
-  @req_orches_0112
-  @spec_cynai_worker_sandboxexec
-  @spec_cynai_stands_portsandendpoints
-  Scenario: Single-node task execution with inference in sandbox
-    When I login as "admin" with password "admin123"
-    And a node with slug "test-node-01" registers with the orchestrator using a valid PSK
-    And the node requests its configuration
-    And the node applies the configuration and sends a config acknowledgement with status "applied"
-    And I create a task with command "sh -c 'echo $OLLAMA_BASE_URL'"
-    And the orchestrator dispatches a job to the node
-    And the node executes the sandbox job in a pod with inference proxy
-    Then the job result contains stdout "http://localhost:11434"
-    And the task status becomes "completed"
+@inference_in_sandbox
+@req_orches_0112
+@spec_cynai_worker_sandboxexec
+@spec_cynai_stands_portsandendpoints
+Scenario: Single-node task execution with inference in sandbox
+  When I login as "admin" with password "admin123" and a node with slug "test-node-01" registers with the orchestrator using a valid PSK and the node requests its configuration and the node applies the configuration and sends a config acknowledgement with status "applied" and I create a task with command "sh -c 'echo $OLLAMA_BASE_URL'" and the orchestrator dispatches a job to the node and the node executes the sandbox job in a pod with inference proxy
+  Then the job result contains stdout "http://localhost:11434"
+  And the task status becomes "completed"

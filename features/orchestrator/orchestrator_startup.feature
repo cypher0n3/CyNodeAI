@@ -17,11 +17,11 @@ Feature: Orchestrator Startup
 # When No Inference Target is Available, Readyz Returns 503 and a Message Indicating No Inference path
 # BDD Runs This Scenario With a Mock Where No Nodes Are registered
 
-  @req_bootst_0002
-  @spec_cynai_bootst_bootstrapsource
-  Scenario: Orchestrator remains not ready when no inference path is available
-    Given no local inference (Ollama) is running
-    And no external provider key is configured
-    When the orchestrator starts
-    Then the orchestrator does not enter ready state
-    And the orchestrator reports that no inference path is available
+@req_bootst_0002
+@spec_cynai_bootst_bootstrapsource
+Scenario: Orchestrator remains not ready when no inference path is available
+  Given no local inference (Ollama) is running
+  And no external provider key is configured
+  When the orchestrator starts
+  Then the orchestrator does not enter ready state
+  And the orchestrator reports that no inference path is available
