@@ -31,6 +31,12 @@ MD004:
 MD060: false
   # style: any
 
+# MD046/code-block-style - enforce fenced code block style (``` or ~~~).
+# Options:
+#   style: string (default "fenced"); "fenced" = fenced code block, "indented" = indented code block
+MD046:
+  style: fenced
+
 # NOTE: This project uses custom markdownlint rules from https://github.com/cypher0n3/docs-as-code-tools.
 
 # -----------------------------------------------------------------------------

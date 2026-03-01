@@ -462,6 +462,34 @@ func InitializeCynorkSuite(sc *godog.ScenarioContext, state *cynorkState) {
 		return nil
 	})
 
+	sc.Step(`^I have created a task with prompt "([^"]*)" and stored the task id$`, func(ctx context.Context, prompt string) error {
+		st := getState(ctx)
+		env := []string{"CYNORK_GATEWAY_URL=" + st.mockServer.URL, "CYNORK_TOKEN=" + st.token}
+		args := []string{"--config", st.configPath, "task", "create", "-p", prompt}
+		st.lastExit, st.lastStdout, st.lastStderr = st.runCynork(args, env...)
+		if st.lastExit != 0 {
+			return fmt.Errorf("task create failed with exit %d: %s", st.lastExit, st.lastStderr)
+		}
+		// Parse and store task_id from stdout
+		out := strings.TrimSpace(st.lastStdout)
+		if prefix := "task_id="; strings.HasPrefix(out, prefix) {
+			st.taskID = strings.TrimSpace(strings.SplitN(out[len(prefix):], " ", 2)[0])
+		} else if out != "" && !strings.HasPrefix(out, "{") {
+			st.taskID = strings.SplitN(out, "\n", 2)[0]
+		} else {
+			var m map[string]string
+			if err := json.Unmarshal([]byte(out), &m); err == nil && m["task_id"] != "" {
+				st.taskID = m["task_id"]
+			} else {
+				st.taskID = out
+			}
+		}
+		if st.taskID == "" {
+			return fmt.Errorf("stdout empty or no task_id: %q", st.lastStdout)
+		}
+		return nil
+	})
+
 	sc.Step(`^I store the task id from cynork stdout$`, func(ctx context.Context) error {
 		st := getState(ctx)
 		// Parse task_id=<id> from table mode or first line
@@ -553,6 +581,18 @@ func InitializeCynorkSuite(sc *godog.ScenarioContext, state *cynorkState) {
 		return nil
 	})
 
+	sc.Step(`^I run cynork chat and send "([^"]*)" to cynork stdin$`, func(ctx context.Context, text string) error {
+		st := getState(ctx)
+		env := []string{"CYNORK_GATEWAY_URL=" + st.mockServer.URL, "CYNORK_TOKEN=" + st.token}
+		args := []string{"--config", st.configPath, "chat"}
+		stdin := text
+		if !strings.HasSuffix(stdin, "\n") {
+			stdin += "\n"
+		}
+		st.lastExit, st.lastStdout, st.lastStderr = st.runCynorkWithStdin(args, env, stdin)
+		return nil
+	})
+
 	sc.Step(`^I send "([^"]*)" to cynork stdin$`, func(ctx context.Context, text string) error {
 		// Used with "I run cynork chat" - the step above runs chat with stdin "/exit\n"
 		// This step is for documentation; actual send is in runCynorkWithStdin
@@ -633,7 +673,8 @@ func InitializeCynorkSuite(sc *godog.ScenarioContext, state *cynorkState) {
 		st.lastExit, st.lastStdout, st.lastStderr = st.runCynork(args, env...)
 		return nil
 	})
-	sc.Step(`^I run cynork prefs set scope type "([^"]*)" key "([^"]*)" value "\"([^\"]*)\"\"$`, func(ctx context.Context, scopeType, key, value string) error {
+	// Match value "\"concise\"" (escaped quotes in Gherkin)
+	sc.Step(`^I run cynork prefs set scope type "([^"]*)" key "([^"]*)" value "\\"([^"]*)\\"\"$`, func(ctx context.Context, scopeType, key, value string) error {
 		st := getState(ctx)
 		env := []string{"CYNORK_GATEWAY_URL=" + st.mockServer.URL, "CYNORK_TOKEN=" + st.token}
 		args := []string{"--config", st.configPath, "prefs", "set", "scope", "type", scopeType, "key", key, "value", value}
@@ -656,7 +697,8 @@ func InitializeCynorkSuite(sc *godog.ScenarioContext, state *cynorkState) {
 		st.lastExit, st.lastStdout, st.lastStderr = st.runCynork(args, env...)
 		return nil
 	})
-	sc.Step(`^I run cynork settings set key "([^"]*)" value "\"([^\"]*)\"\"$`, func(ctx context.Context, key, value string) error {
+	// Match value "\"tinyllama\"" (escaped quotes in Gherkin)
+	sc.Step(`^I run cynork settings set key "([^"]*)" value "\\"([^"]*)\\"\"$`, func(ctx context.Context, key, value string) error {
 		st := getState(ctx)
 		env := []string{"CYNORK_GATEWAY_URL=" + st.mockServer.URL, "CYNORK_TOKEN=" + st.token}
 		args := []string{"--config", st.configPath, "settings", "set", "key", key, "value", value}
@@ -709,6 +751,15 @@ func InitializeCynorkSuite(sc *godog.ScenarioContext, state *cynorkState) {
 		env := []string{"CYNORK_GATEWAY_URL=" + st.mockServer.URL, "CYNORK_TOKEN=" + st.token}
 		args := []string{"--config", st.configPath, "shell"}
 		st.lastExit, st.lastStdout, st.lastStderr = st.runCynorkWithStdin(args, env, "exit\n")
+		return nil
+	})
+
+	sc.Step(`^I run cynork shell in interactive mode and request tab-completion for a task identifier position$`, func(ctx context.Context) error {
+		st := getState(ctx)
+		env := []string{"CYNORK_GATEWAY_URL=" + st.mockServer.URL, "CYNORK_TOKEN=" + st.token}
+		args := []string{"--config", st.configPath, "shell"}
+		// Send tab then exit to simulate requesting completion then leaving
+		st.lastExit, st.lastStdout, st.lastStderr = st.runCynorkWithStdin(args, env, "\t\nexit\n")
 		return nil
 	})
 

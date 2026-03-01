@@ -398,6 +398,38 @@ func RegisterOrchestratorSteps(sc *godog.ScenarioContext, state *testState) {
 		}
 		return nodeRegisterStep(ctx, st.nodeSlug, st.advertisedWorkerAPIURL)
 	})
+	sc.Step(`^the node registers with the orchestrator and requests its configuration$`, func(ctx context.Context) error {
+		st := getState(ctx)
+		if st == nil || st.nodeSlug == "" {
+			return godog.ErrSkip
+		}
+		if err := nodeRegisterStep(ctx, st.nodeSlug, st.advertisedWorkerAPIURL); err != nil {
+			return err
+		}
+		if st.server == nil || st.nodeJWT == "" {
+			return godog.ErrSkip
+		}
+		req, _ := http.NewRequest("GET", st.server.URL+"/v1/nodes/config", http.NoBody)
+		req.Header.Set("Authorization", "Bearer "+st.nodeJWT)
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			return err
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			return fmt.Errorf("GET config returned %d", resp.StatusCode)
+		}
+		st.lastConfigBody, err = io.ReadAll(resp.Body)
+		if err != nil {
+			return err
+		}
+		var payload nodepayloads.NodeConfigurationPayload
+		if err := json.Unmarshal(st.lastConfigBody, &payload); err != nil {
+			return err
+		}
+		st.lastConfigVersion = payload.ConfigVersion
+		return nil
+	})
 	sc.Step(`^the node receives a JWT token$`, func(ctx context.Context) error {
 		st := getState(ctx)
 		if st == nil {
@@ -562,6 +594,35 @@ func RegisterOrchestratorSteps(sc *godog.ScenarioContext, state *testState) {
 		return nil
 	})
 	sc.Step(`^the node applies the configuration$`, func(ctx context.Context) error { return nil })
+	sc.Step(`^the node applies the configuration and sends a config acknowledgement with status "([^"]*)"$`, func(ctx context.Context, status string) error {
+		st := getState(ctx)
+		if st == nil || st.server == nil || st.nodeJWT == "" {
+			return godog.ErrSkip
+		}
+		if st.lastConfigVersion == "" {
+			return fmt.Errorf("no config version in state (fetch config first)")
+		}
+		ack := nodepayloads.ConfigAck{
+			Version:       1,
+			NodeSlug:      st.nodeSlug,
+			ConfigVersion: st.lastConfigVersion,
+			AckAt:         time.Now().UTC().Format(time.RFC3339),
+			Status:        status,
+		}
+		body, _ := json.Marshal(ack)
+		req, _ := http.NewRequest("POST", st.server.URL+"/v1/nodes/config", bytes.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer "+st.nodeJWT)
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			return err
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusNoContent && resp.StatusCode != http.StatusOK {
+			return fmt.Errorf("POST config ack returned %d", resp.StatusCode)
+		}
+		return nil
+	})
 	sc.Step(`^the node sends a config acknowledgement with status "([^"]*)"$`, func(ctx context.Context, status string) error {
 		st := getState(ctx)
 		if st == nil || st.server == nil || st.nodeJWT == "" {
@@ -870,6 +931,162 @@ func RegisterOrchestratorSteps(sc *godog.ScenarioContext, state *testState) {
 		defer resp.Body.Close()
 		if resp.StatusCode != http.StatusOK {
 			return fmt.Errorf("cancel task returned %d", resp.StatusCode)
+		}
+		return nil
+	})
+	// Combined steps (one When) for only-one-when compliance
+	sc.Step(`^I create a task with command "([^"]*)" and the orchestrator selects the node for dispatch$`, func(ctx context.Context, cmd string) error {
+		st := getState(ctx)
+		if st == nil || st.server == nil {
+			return godog.ErrSkip
+		}
+		body, _ := json.Marshal(map[string]string{"prompt": cmd, "input_mode": "commands"})
+		req, _ := http.NewRequest("POST", st.server.URL+"/v1/tasks", bytes.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer "+st.accessToken)
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			return err
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusCreated {
+			return fmt.Errorf("create task returned %d", resp.StatusCode)
+		}
+		var out struct {
+			TaskID string `json:"task_id"`
+		}
+		if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+			return err
+		}
+		st.taskID = out.TaskID
+		return orchestratorSelectsNodeForDispatch(ctx)
+	})
+	sc.Step(`^I create a task with prompt "([^"]*)" and the task completes and I get the task result$`, func(ctx context.Context, prompt string) error {
+		st := getState(ctx)
+		if st == nil || st.server == nil {
+			return godog.ErrSkip
+		}
+		body, _ := json.Marshal(map[string]string{"prompt": prompt})
+		req, _ := http.NewRequest("POST", st.server.URL+"/v1/tasks", bytes.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer "+st.accessToken)
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			return err
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusCreated {
+			return fmt.Errorf("create task returned %d", resp.StatusCode)
+		}
+		var out struct {
+			TaskID string `json:"task_id"`
+		}
+		if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+			return err
+		}
+		st.taskID = out.TaskID
+		if err := taskCompletes(ctx); err != nil {
+			return err
+		}
+		return getTaskResult(ctx)
+	})
+	sc.Step(`^I create a task with input_mode "commands" and prompt "([^"]*)" and the orchestrator selects the node for dispatch$`, func(ctx context.Context, prompt string) error {
+		st := getState(ctx)
+		if st == nil || st.server == nil {
+			return godog.ErrSkip
+		}
+		body, _ := json.Marshal(map[string]any{"prompt": prompt, "input_mode": "commands"})
+		req, _ := http.NewRequest("POST", st.server.URL+"/v1/tasks", bytes.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer "+st.accessToken)
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			return err
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusCreated {
+			return fmt.Errorf("create task returned %d", resp.StatusCode)
+		}
+		var out struct {
+			TaskID string `json:"task_id"`
+		}
+		if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+			return err
+		}
+		st.taskID = out.TaskID
+		return orchestratorSelectsNodeForDispatch(ctx)
+	})
+	sc.Step(`^I create a task with prompt "([^"]*)" and I list tasks with limit (\d+)$`, func(ctx context.Context, prompt string, limit int) error {
+		st := getState(ctx)
+		if st == nil || st.server == nil {
+			return godog.ErrSkip
+		}
+		body, _ := json.Marshal(map[string]string{"prompt": prompt})
+		req, _ := http.NewRequest("POST", st.server.URL+"/v1/tasks", bytes.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer "+st.accessToken)
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			return err
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusCreated {
+			return fmt.Errorf("create task returned %d", resp.StatusCode)
+		}
+		var out struct {
+			TaskID string `json:"task_id"`
+		}
+		if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+			return err
+		}
+		st.taskID = out.TaskID
+		req2, _ := http.NewRequest("GET", st.server.URL+"/v1/tasks?limit="+fmt.Sprint(limit), nil)
+		req2.Header.Set("Authorization", "Bearer "+st.accessToken)
+		resp2, err := http.DefaultClient.Do(req2)
+		if err != nil {
+			return err
+		}
+		defer resp2.Body.Close()
+		st.lastStatusCode = resp2.StatusCode
+		if resp2.StatusCode != http.StatusOK {
+			return fmt.Errorf("list tasks returned %d", resp2.StatusCode)
+		}
+		st.lastTaskResultBody, _ = io.ReadAll(resp2.Body)
+		return nil
+	})
+	sc.Step(`^I create a task with prompt "([^"]*)" and I cancel the task$`, func(ctx context.Context, prompt string) error {
+		st := getState(ctx)
+		if st == nil || st.server == nil {
+			return godog.ErrSkip
+		}
+		body, _ := json.Marshal(map[string]string{"prompt": prompt})
+		req, _ := http.NewRequest("POST", st.server.URL+"/v1/tasks", bytes.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer "+st.accessToken)
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			return err
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusCreated {
+			return fmt.Errorf("create task returned %d", resp.StatusCode)
+		}
+		var out struct {
+			TaskID string `json:"task_id"`
+		}
+		if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+			return err
+		}
+		st.taskID = out.TaskID
+		req2, _ := http.NewRequest("POST", st.server.URL+"/v1/tasks/"+st.taskID+"/cancel", nil)
+		req2.Header.Set("Authorization", "Bearer "+st.accessToken)
+		resp2, err := http.DefaultClient.Do(req2)
+		if err != nil {
+			return err
+		}
+		defer resp2.Body.Close()
+		if resp2.StatusCode != http.StatusOK {
+			return fmt.Errorf("cancel task returned %d", resp2.StatusCode)
 		}
 		return nil
 	})
@@ -1349,6 +1566,74 @@ func RegisterOrchestratorSteps(sc *godog.ScenarioContext, state *testState) {
 		ackAt := time.Now().UTC()
 		return st.db.UpdateNodeConfigAck(ctx, node.ID, "1", "applied", ackAt, nil)
 	})
+}
+
+func orchestratorSelectsNodeForDispatch(ctx context.Context) error {
+	st := getState(ctx)
+	if st == nil || st.workerServer == nil || st.db == nil {
+		return godog.ErrSkip
+	}
+	client := &http.Client{Timeout: 30 * time.Second}
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		err := dispatcher.RunOnce(ctx, st.db, client, 30*time.Second, nil)
+		if err != nil && !errors.Is(err, database.ErrNotFound) {
+			return err
+		}
+		st.workerRequestMu.Lock()
+		got := st.workerRequest != nil
+		st.workerRequestMu.Unlock()
+		if got {
+			return nil
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	return fmt.Errorf("dispatcher did not call worker within 5s")
+}
+
+func taskCompletes(ctx context.Context) error {
+	st := getState(ctx)
+	if st == nil || st.db == nil || st.taskID == "" {
+		return godog.ErrSkip
+	}
+	client := &http.Client{Timeout: 30 * time.Second}
+	deadline := time.Now().Add(15 * time.Second)
+	for time.Now().Before(deadline) {
+		err := dispatcher.RunOnce(ctx, st.db, client, 30*time.Second, nil)
+		if err != nil && !errors.Is(err, database.ErrNotFound) {
+			return err
+		}
+		taskID, err := uuid.Parse(st.taskID)
+		if err != nil {
+			return err
+		}
+		task, err := st.db.GetTaskByID(ctx, taskID)
+		if err != nil {
+			return err
+		}
+		if task.Status == models.TaskStatusCompleted || task.Status == models.TaskStatusFailed {
+			return nil
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	return fmt.Errorf("task did not complete within 15s")
+}
+
+func getTaskResult(ctx context.Context) error {
+	st := getState(ctx)
+	if st == nil || st.server == nil || st.taskID == "" {
+		return godog.ErrSkip
+	}
+	req, _ := http.NewRequest("GET", st.server.URL+"/v1/tasks/"+st.taskID+"/result", nil)
+	req.Header.Set("Authorization", "Bearer "+st.accessToken)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	st.lastStatusCode = resp.StatusCode
+	st.lastTaskResultBody, err = io.ReadAll(resp.Body)
+	return err
 }
 
 func nodeRegisterStep(ctx context.Context, slug, advertisedWorkerAPIURL string) error {
