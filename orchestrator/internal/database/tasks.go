@@ -3,6 +3,8 @@ package database
 import (
 	"context"
 	"fmt"
+	"regexp"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -10,19 +12,53 @@ import (
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/models"
 )
 
-// CreateTask creates a new task with a task name in the format task_name_### (e.g. task_name_001).
-func (db *DB) CreateTask(ctx context.Context, createdBy *uuid.UUID, prompt string) (*models.Task, error) {
-	var count int64
-	if createdBy != nil {
-		_ = db.db.WithContext(ctx).Model(&models.Task{}).Where("created_by = ?", createdBy).Count(&count).Error
+var taskNameNormalizeRe = regexp.MustCompile(`[^a-z0-9]+`)
+
+// normalizeTaskName normalizes a user-supplied task name per project_manager_agent.md Task Naming: lowercase, single dashes.
+func normalizeTaskName(s string) string {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return ""
 	}
-	taskName := fmt.Sprintf("task_name_%03d", count+1)
+	s = strings.ToLower(s)
+	s = taskNameNormalizeRe.ReplaceAllString(s, "-")
+	s = strings.Trim(s, "-")
+	for strings.Contains(s, "--") {
+		s = strings.ReplaceAll(s, "--", "-")
+	}
+	return s
+}
+
+// CreateTask creates a new task. If taskName is non-nil and non-empty after normalize, it is used as summary and made unique per user; otherwise task_name_###.
+func (db *DB) CreateTask(ctx context.Context, createdBy *uuid.UUID, prompt string, taskName *string) (*models.Task, error) {
+	summary := ""
+	if taskName != nil {
+		summary = normalizeTaskName(*taskName)
+	}
+	if summary == "" {
+		var count int64
+		if createdBy != nil {
+			_ = db.db.WithContext(ctx).Model(&models.Task{}).Where("created_by = ?", createdBy).Count(&count).Error
+		}
+		summary = fmt.Sprintf("task_name_%03d", count+1)
+	} else if createdBy != nil {
+		// Ensure uniqueness: if same user has a task with this summary, append -2, -3, ...
+		base := summary
+		for n := 2; ; n++ {
+			var exists int64
+			_ = db.db.WithContext(ctx).Model(&models.Task{}).Where("created_by = ? AND summary = ?", createdBy, summary).Limit(1).Count(&exists).Error
+			if exists == 0 {
+				break
+			}
+			summary = fmt.Sprintf("%s-%d", base, n)
+		}
+	}
 	task := &models.Task{
 		ID:        uuid.New(),
 		CreatedBy: createdBy,
 		Status:    models.TaskStatusPending,
 		Prompt:    &prompt,
-		Summary:   &taskName,
+		Summary:   &summary,
 		CreatedAt: time.Now().UTC(),
 		UpdatedAt: time.Now().UTC(),
 	}

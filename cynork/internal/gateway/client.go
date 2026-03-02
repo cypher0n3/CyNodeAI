@@ -291,7 +291,7 @@ func (c *Client) ChatWithOptions(message, model, projectID string) (*ChatRespons
 }
 
 // CreateTask calls POST /v1/tasks (requires auth).
-func (c *Client) CreateTask(req userapi.CreateTaskRequest) (*userapi.TaskResponse, error) {
+func (c *Client) CreateTask(req *userapi.CreateTaskRequest) (*userapi.TaskResponse, error) {
 	var out userapi.TaskResponse
 	if err := c.doPostJSON("/v1/tasks", req, http.StatusCreated, &out); err != nil {
 		return nil, err

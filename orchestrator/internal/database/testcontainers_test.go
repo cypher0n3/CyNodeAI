@@ -244,7 +244,7 @@ func tcCreateUserAndVerify(t *testing.T, db Store, ctx context.Context) *models.
 
 func tcCreateTaskJobAndVerifyPayload(t *testing.T, db Store, ctx context.Context, user *models.User) (*models.Task, *models.Job) {
 	t.Helper()
-	task, err := db.CreateTask(ctx, &user.ID, "prompt")
+	task, err := db.CreateTask(ctx, &user.ID, "prompt", nil)
 	if err != nil {
 		t.Fatalf("CreateTask: %v", err)
 	}
@@ -260,7 +260,7 @@ func tcCreateTaskJobAndVerifyPayload(t *testing.T, db Store, ctx context.Context
 
 func tcCreateTaskAndJobWithID(t *testing.T, db Store, ctx context.Context, user *models.User, jobID uuid.UUID, payload string) (*models.Task, *models.Job) {
 	t.Helper()
-	task, err := db.CreateTask(ctx, &user.ID, "sba-prompt")
+	task, err := db.CreateTask(ctx, &user.ID, "sba-prompt", nil)
 	if err != nil {
 		t.Fatalf("CreateTask: %v", err)
 	}
@@ -278,6 +278,38 @@ func tcCreateTaskAndJobWithID(t *testing.T, db Store, ctx context.Context, user 
 	return task, job
 }
 
+func TestWithTestcontainers_CreateTask_WithTaskName(t *testing.T) {
+	ctx := context.Background()
+	db := tcOpenDB(t, ctx)
+	user, err := db.CreateUser(ctx, "tc-user-taskname-"+uuid.New().String()[:8], nil)
+	if err != nil {
+		t.Fatalf("CreateUser: %v", err)
+	}
+	name1 := "My Task  Name"
+	task1, err := db.CreateTask(ctx, &user.ID, "prompt1", &name1)
+	if err != nil {
+		t.Fatalf("CreateTask with task name: %v", err)
+	}
+	if task1.Summary == nil || *task1.Summary != "my-task-name" {
+		t.Errorf("CreateTask task name normalized: got %q, want my-task-name", ptrVal(task1.Summary))
+	}
+	name2 := "My Task  Name"
+	task2, err := db.CreateTask(ctx, &user.ID, "prompt2", &name2)
+	if err != nil {
+		t.Fatalf("second CreateTask same name: %v", err)
+	}
+	if task2.Summary == nil || *task2.Summary != "my-task-name-2" {
+		t.Errorf("CreateTask uniqueness: got %q, want my-task-name-2", ptrVal(task2.Summary))
+	}
+}
+
+func ptrVal(s *string) string {
+	if s == nil {
+		return ""
+	}
+	return *s
+}
+
 func TestWithTestcontainers_CreateJobWithID_DuplicateIDReturnsError(t *testing.T) {
 	ctx := context.Background()
 	db := tcOpenDB(t, ctx)
@@ -286,7 +318,7 @@ func TestWithTestcontainers_CreateJobWithID_DuplicateIDReturnsError(t *testing.T
 	if err != nil {
 		t.Fatalf("CreateUser: %v", err)
 	}
-	task, err := db.CreateTask(ctx, &user.ID, "prompt")
+	task, err := db.CreateTask(ctx, &user.ID, "prompt", nil)
 	if err != nil {
 		t.Fatalf("CreateTask: %v", err)
 	}
@@ -431,7 +463,7 @@ func TestWithTestcontainers_Preferences(t *testing.T) {
 		t.Errorf("ListPreferences: got %d entries", len(list))
 	}
 	_ = next
-	task, err := store.CreateTask(ctx, nil, "tc-pref-task")
+	task, err := store.CreateTask(ctx, nil, "tc-pref-task", nil)
 	if err != nil {
 		t.Fatalf("CreateTask: %v", err)
 	}

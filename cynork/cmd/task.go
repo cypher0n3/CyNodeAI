@@ -125,7 +125,8 @@ func runTaskCreate(_ *cobra.Command, _ []string) error {
 	if inputMode == "" {
 		inputMode = "prompt"
 	}
-	task, err := client.CreateTask(userapi.CreateTaskRequest{Prompt: taskCreatePrompt, UseInference: taskCreateUseInference, InputMode: inputMode, UseSBA: taskCreateUseSBA})
+	req := userapi.CreateTaskRequest{Prompt: taskCreatePrompt, UseInference: taskCreateUseInference, InputMode: inputMode, UseSBA: taskCreateUseSBA}
+	task, err := client.CreateTask(&req)
 	if err != nil {
 		return exitFromGatewayErr(err)
 	}

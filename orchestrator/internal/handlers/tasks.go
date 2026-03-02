@@ -88,7 +88,7 @@ func (h *TaskHandler) CreateTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	task, err := h.db.CreateTask(ctx, userID, req.Prompt)
+	task, err := h.db.CreateTask(ctx, userID, req.Prompt, req.TaskName)
 	if err != nil {
 		h.logger.Error("create task", "error", err)
 		WriteInternalError(w, "Failed to create task")
@@ -602,7 +602,7 @@ func (h *TaskHandler) Chat(w http.ResponseWriter, r *http.Request) {
 		WriteBadRequest(w, "Message is required")
 		return
 	}
-	task, err := h.db.CreateTask(ctx, userID, req.Message)
+	task, err := h.db.CreateTask(ctx, userID, req.Message, nil)
 	if err != nil {
 		h.logger.Error("chat create task", "error", err)
 		WriteInternalError(w, "Failed to process message")

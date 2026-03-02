@@ -134,6 +134,7 @@ def _run_restart():
     """Stop all then start (parity with dev-setup.sh restart)."""
     setup_dev_impl.stop_all()
     time.sleep(2)
+
     class Opts:
         extra_env = None
     return cmd_start(Opts())

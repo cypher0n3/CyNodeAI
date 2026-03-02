@@ -312,7 +312,7 @@ func TestToolCallHandler_PreferenceGet_Found(t *testing.T) {
 
 func TestToolCallHandler_PreferenceEffective_Success(t *testing.T) {
 	mock := testutil.NewMockDB()
-	task, _ := mock.CreateTask(context.Background(), nil, "p")
+	task, _ := mock.CreateTask(context.Background(), nil, "p", nil)
 	val := `"v"`
 	mock.PreferenceEntries = append(mock.PreferenceEntries, &models.PreferenceEntry{
 		ID:        uuid.New(),
@@ -348,7 +348,7 @@ func TestToolCallHandler_PreferenceList_InternalError(t *testing.T) {
 
 func TestToolCallHandler_PreferenceEffective_InternalError(t *testing.T) {
 	mock := testutil.NewMockDB()
-	task, _ := mock.CreateTask(context.Background(), nil, "p")
+	task, _ := mock.CreateTask(context.Background(), nil, "p", nil)
 	mock.GetEffectivePreferencesForTaskErr = errors.New("db error")
 	body := `{"tool_name":"db.preference.effective","arguments":{"task_id":"` + task.ID.String() + `"}}`
 	callToolHandlerWithStore(t, mock, body, http.StatusInternalServerError)

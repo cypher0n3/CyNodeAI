@@ -12,6 +12,7 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
+	"sync"
 	"syscall"
 	"time"
 
@@ -34,6 +35,9 @@ var testOpenStore func(context.Context, string) (database.Store, error)
 
 // testDatabaseOpen, when set by tests, is used instead of database.Open when both store and testOpenStore are nil (allows covering open-success path without a real DB).
 var testDatabaseOpen func(context.Context, string) (database.Store, error)
+
+// testPMAStart, when set by tests, is used instead of pmasubprocess.Start so tests can cover the "inference path available" branch without running the real binary.
+var testPMAStart func(*config.OrchestratorConfig, *slog.Logger) (*exec.Cmd, error)
 
 func main() {
 	if code := runMain(); code != 0 {
@@ -174,19 +178,21 @@ func run(ctx context.Context, store database.Store, cfg *config.OrchestratorConf
 
 	go startDispatcher(ctx, store, logger)
 
+	// REQ-ORCHES-0150: start PMA only when first inference path is available (worker ready and inference-capable, or API Egress key for PMA).
+	var pmaCmdMu sync.Mutex
 	var pmaCmd *exec.Cmd
-	if cmd, err := pmasubprocess.Start(cfg, logger); err != nil {
-		logger.Error("failed to start cynode-pma", "error", err)
-		return err
-	} else if cmd != nil {
-		pmaCmd = cmd
-		defer func() {
-			if pmaCmd != nil && pmaCmd.Process != nil {
-				_ = pmaCmd.Process.Signal(syscall.SIGTERM)
-				_ = pmaCmd.Wait()
-				logger.Info("cynode-pma stopped")
-			}
-		}()
+	defer func() {
+		pmaCmdMu.Lock()
+		c := pmaCmd
+		pmaCmdMu.Unlock()
+		if c != nil && c.Process != nil {
+			_ = c.Process.Signal(syscall.SIGTERM)
+			_ = c.Wait()
+			logger.Info("cynode-pma stopped")
+		}
+	}()
+	if cfg.PMAEnabled {
+		go startPMAWhenInferencePathReady(ctx, store, cfg, logger, &pmaCmdMu, &pmaCmd)
 	}
 
 	done := make(chan os.Signal, 1)
@@ -227,6 +233,58 @@ func run(ctx context.Context, store database.Store, cfg *config.OrchestratorConf
 	}
 	logger.Info("server stopped")
 	return nil
+}
+
+// testPMAPollInterval, when set by tests, shortens the poll interval in startPMAWhenInferencePathReady.
+var testPMAPollInterval time.Duration
+
+// waitForInferencePath polls ListDispatchableNodes until at least one node is available or ctx is done.
+// Returns true when inference path is available, false when ctx cancelled. Used by startPMAWhenInferencePathReady and tests.
+func waitForInferencePath(ctx context.Context, store database.Store, logger *slog.Logger) bool {
+	pollInterval := 2 * time.Second
+	if testPMAPollInterval > 0 {
+		pollInterval = testPMAPollInterval
+	}
+	for {
+		select {
+		case <-ctx.Done():
+			return false
+		default:
+		}
+		nodes, err := store.ListDispatchableNodes(ctx)
+		if err != nil {
+			if logger != nil {
+				logger.Warn("PMA startup check: list nodes failed", "error", err)
+			}
+			time.Sleep(pollInterval)
+			continue
+		}
+		if len(nodes) > 0 {
+			return true
+		}
+		time.Sleep(pollInterval)
+	}
+}
+
+// startPMAWhenInferencePathReady starts cynode-pma when the first inference path is available (REQ-ORCHES-0150).
+func startPMAWhenInferencePathReady(ctx context.Context, store database.Store, cfg *config.OrchestratorConfig, logger *slog.Logger, pmaCmdMu *sync.Mutex, pmaCmdPtr **exec.Cmd) {
+	if !waitForInferencePath(ctx, store, logger) {
+		return
+	}
+	startFn := pmasubprocess.Start
+	if testPMAStart != nil {
+		startFn = testPMAStart
+	}
+	cmd, err := startFn(cfg, logger)
+	if err != nil {
+		logger.Error("failed to start cynode-pma", "error", err)
+		return
+	}
+	if cmd != nil {
+		pmaCmdMu.Lock()
+		*pmaCmdPtr = cmd
+		pmaCmdMu.Unlock()
+	}
 }
 
 // healthzHandler responds to GET /healthz with 200 and plain text body "ok" per spec.
@@ -273,6 +331,13 @@ func readyzHandler(store database.Store, cfg *config.OrchestratorConfig, logger 
 			_, _ = w.Write([]byte("readiness check failed (database error)"))
 			return
 		}
+		// REQ-ORCHES-0120: require at least one inference path before reporting ready.
+		if len(nodes) == 0 {
+			w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+			w.WriteHeader(http.StatusServiceUnavailable)
+			_, _ = w.Write([]byte("no inference path available (no dispatchable nodes; register and configure a worker node or configure external provider keys)"))
+			return
+		}
 		if cfg != nil && cfg.PMAEnabled {
 			if !pmaReady(ctx, cfg.PMAListenAddr) {
 				w.Header().Set("Content-Type", "text/plain; charset=utf-8")
@@ -280,12 +345,6 @@ func readyzHandler(store database.Store, cfg *config.OrchestratorConfig, logger 
 				_, _ = w.Write([]byte("PMA not ready (cynode-pma not reachable or not yet started)"))
 				return
 			}
-		}
-		if len(nodes) == 0 {
-			w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-			w.WriteHeader(http.StatusServiceUnavailable)
-			_, _ = w.Write([]byte("no inference path available (no dispatchable nodes; register and configure a worker node or configure external provider keys)"))
-			return
 		}
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 		w.WriteHeader(http.StatusOK)

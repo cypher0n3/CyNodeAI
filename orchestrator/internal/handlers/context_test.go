@@ -45,3 +45,13 @@ func TestGetUserIDFromContext_Empty(t *testing.T) {
 func TestGetNodeIDFromContext_Empty(t *testing.T) {
 	assertContextEmpty(t, getNodeIDFromContext)
 }
+
+func TestGetHandleFromContext(t *testing.T) {
+	ctx := SetUserContext(context.Background(), uuid.New(), "admin")
+	if got := GetHandleFromContext(ctx); got != "admin" {
+		t.Errorf("GetHandleFromContext = %q, want admin", got)
+	}
+	if got := GetHandleFromContext(context.Background()); got != "" {
+		t.Errorf("GetHandleFromContext(empty) = %q, want empty", got)
+	}
+}

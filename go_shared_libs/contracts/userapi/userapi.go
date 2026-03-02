@@ -50,11 +50,15 @@ type UserResponse struct {
 
 // CreateTaskRequest is the body for POST /v1/tasks.
 type CreateTaskRequest struct {
-	Prompt       string `json:"prompt"`
-	UseInference bool   `json:"use_inference,omitempty"`
-	InputMode    string `json:"input_mode,omitempty"`
+	Prompt       string   `json:"prompt"`
+	UseInference bool     `json:"use_inference,omitempty"`
+	InputMode    string   `json:"input_mode,omitempty"`
 	// UseSBA when true creates a single job with SBA runner (job_spec_json); prompt is passed as task context (P2-10).
 	UseSBA bool `json:"use_sba,omitempty"`
+	// TaskName is optional; orchestrator normalizes and ensures uniqueness per user_api_gateway.md Task Naming.
+	TaskName *string `json:"task_name,omitempty"`
+	// Attachments are optional path strings (CLI) or identifiers for file uploads; acceptance path per REQ-ORCHES-0127.
+	Attachments []string `json:"attachments,omitempty"`
 }
 
 // TaskResponse is the task in create/get/list responses (CLI spec: task_id, status, optional task_name).

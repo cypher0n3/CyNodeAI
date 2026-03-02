@@ -3,6 +3,7 @@ package testutil
 
 import (
 	"context"
+	"fmt"
 	"strconv"
 	"strings"
 	"sync"
@@ -315,14 +316,21 @@ func (m *MockDB) ListDispatchableNodes(_ context.Context) ([]*models.Node, error
 	})
 }
 
-// CreateTask creates a new task.
-func (m *MockDB) CreateTask(_ context.Context, createdBy *uuid.UUID, prompt string) (*models.Task, error) {
+// CreateTask creates a new task. When taskName is set, mock sets Summary to it for response tests.
+func (m *MockDB) CreateTask(_ context.Context, createdBy *uuid.UUID, prompt string, taskName *string) (*models.Task, error) {
 	return runWithLock(m, true, func() (*models.Task, error) {
+		var summary string
+		if taskName != nil {
+			summary = *taskName
+		} else {
+			summary = fmt.Sprintf("task_name_%03d", len(m.Tasks)+1)
+		}
 		task := &models.Task{
 			ID:        uuid.New(),
 			CreatedBy: createdBy,
 			Status:    models.TaskStatusPending,
 			Prompt:    &prompt,
+			Summary:   &summary,
 			CreatedAt: time.Now().UTC(),
 			UpdatedAt: time.Now().UTC(),
 		}

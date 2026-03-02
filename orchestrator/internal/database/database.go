@@ -51,8 +51,8 @@ type Store interface {
 	// Auth audit log operations (subjectHandle, reason per postgres_schema.md)
 	CreateAuthAuditLog(ctx context.Context, userID *uuid.UUID, eventType string, success bool, ipAddress, userAgent, subjectHandle, reason *string) error
 
-	// Task operations
-	CreateTask(ctx context.Context, createdBy *uuid.UUID, prompt string) (*models.Task, error)
+	// Task operations (taskName optional; when set, normalized and made unique per user).
+	CreateTask(ctx context.Context, createdBy *uuid.UUID, prompt string, taskName *string) (*models.Task, error)
 	GetTaskByID(ctx context.Context, id uuid.UUID) (*models.Task, error)
 	UpdateTaskStatus(ctx context.Context, taskID uuid.UUID, status string) error
 	UpdateTaskSummary(ctx context.Context, taskID uuid.UUID, summary string) error

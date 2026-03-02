@@ -36,7 +36,7 @@ func TestIntegration_User(t *testing.T) {
 
 func TestIntegration_CreateTaskWithNilCreatedBy(t *testing.T) {
 	db, ctx := integrationDB(t)
-	task, err := db.CreateTask(ctx, nil, "prompt-nil-createdby")
+	task, err := db.CreateTask(ctx, nil, "prompt-nil-createdby", nil)
 	if err != nil {
 		t.Fatalf("CreateTask(nil createdBy): %v", err)
 	}
@@ -51,7 +51,7 @@ func TestIntegration_TaskAndJob(t *testing.T) {
 	if err != nil {
 		t.Skip("create inttest-user first (run TestIntegration_User)")
 	}
-	task, err := db.CreateTask(ctx, &user.ID, "prompt")
+	task, err := db.CreateTask(ctx, &user.ID, "prompt", nil)
 	if err != nil {
 		t.Fatalf("CreateTask: %v", err)
 	}
@@ -236,7 +236,7 @@ func TestIntegration_Preferences_EffectiveAndCursor(t *testing.T) {
 	if err := db.GORM().WithContext(ctx).Create(ent).Error; err != nil {
 		t.Fatalf("create preference: %v", err)
 	}
-	task, err := db.CreateTask(ctx, nil, "eff-prompt")
+	task, err := db.CreateTask(ctx, nil, "eff-prompt", nil)
 	if err != nil {
 		t.Fatalf("CreateTask: %v", err)
 	}
@@ -313,13 +313,13 @@ func TestIntegration_Preferences_EffectiveWithProject(t *testing.T) {
 		pid := uuid.New()
 		now := time.Now().UTC()
 		_ = db.GORM().WithContext(ctx).Create(&models.Project{ID: pid, Slug: "default", DisplayName: "Default", IsActive: true, CreatedAt: now, UpdatedAt: now}).Error
-		task2, _ := db.CreateTask(ctx, &user.ID, "eff2")
+		task2, _ := db.CreateTask(ctx, &user.ID, "eff2", nil)
 		if task2 != nil {
 			_ = db.GORM().WithContext(ctx).Model(&models.Task{}).Where("id = ?", task2.ID).Update("project_id", pid).Error
 			_, _ = db.GetEffectivePreferencesForTask(ctx, task2.ID)
 		}
 	} else {
-		task2, _ := db.CreateTask(ctx, &user.ID, "eff2")
+		task2, _ := db.CreateTask(ctx, &user.ID, "eff2", nil)
 		if task2 != nil {
 			_ = db.GORM().WithContext(ctx).Model(&models.Task{}).Where("id = ?", task2.ID).Update("project_id", proj.ID).Error
 			_, _ = db.GetEffectivePreferencesForTask(ctx, task2.ID)
@@ -394,7 +394,7 @@ func TestIntegration_Preferences_EffectiveWithNilValue(t *testing.T) {
 	if err := db.GORM().WithContext(ctx).Create(ent).Error; err != nil {
 		t.Fatalf("create preference: %v", err)
 	}
-	task, err := db.CreateTask(ctx, nil, "eff-nil-val")
+	task, err := db.CreateTask(ctx, nil, "eff-nil-val", nil)
 	if err != nil {
 		t.Fatalf("CreateTask: %v", err)
 	}
@@ -449,7 +449,7 @@ func TestIntegration_GetNextQueuedJob_ErrNotFound(t *testing.T) {
 
 func TestIntegration_CompleteJobRoundTrip(t *testing.T) {
 	db, ctx := integrationDB(t)
-	task, _ := db.CreateTask(ctx, nil, "p")
+	task, _ := db.CreateTask(ctx, nil, "p", nil)
 	job, _ := db.CreateJob(ctx, task.ID, "payload")
 	result := `{"status":"ok"}`
 	if err := db.CompleteJob(ctx, job.ID, result, models.JobStatusCompleted); err != nil {
@@ -466,7 +466,7 @@ func TestIntegration_CompleteJobRoundTrip(t *testing.T) {
 
 func TestIntegration_CreateJobCompleted(t *testing.T) {
 	db, ctx := integrationDB(t)
-	task, _ := db.CreateTask(ctx, nil, "prompt-task")
+	task, _ := db.CreateTask(ctx, nil, "prompt-task", nil)
 	jobID := uuid.New()
 	result := `{"version":1,"task_id":"` + task.ID.String() + `","job_id":"` + jobID.String() + `","status":"completed","stdout":"hi"}`
 	job, err := db.CreateJobCompleted(ctx, task.ID, jobID, result)
@@ -528,7 +528,7 @@ func storeRoundTripNode(t *testing.T, db Store, ctx context.Context) *models.Nod
 
 func storeRoundTripTaskJobNode(t *testing.T, db Store, ctx context.Context, userID uuid.UUID, node *models.Node) {
 	t.Helper()
-	task, err := db.CreateTask(ctx, &userID, "roundtrip-prompt")
+	task, err := db.CreateTask(ctx, &userID, "roundtrip-prompt", nil)
 	if err != nil {
 		t.Fatalf("CreateTask: %v", err)
 	}
@@ -678,7 +678,7 @@ func TestIntegration_ListTasksByUser_Empty(t *testing.T) {
 
 func TestIntegration_GetJobsByTaskID_Empty(t *testing.T) {
 	db, ctx := integrationDB(t)
-	task, err := db.CreateTask(ctx, nil, "no-jobs-task")
+	task, err := db.CreateTask(ctx, nil, "no-jobs-task", nil)
 	if err != nil {
 		t.Fatalf("CreateTask: %v", err)
 	}

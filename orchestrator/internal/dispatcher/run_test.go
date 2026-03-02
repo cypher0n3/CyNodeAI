@@ -38,7 +38,7 @@ func TestRunOnce_Success(t *testing.T) {
 
 	mock := testutil.NewMockDB()
 	ctx := context.Background()
-	task, _ := mock.CreateTask(ctx, nil, "prompt")
+	task, _ := mock.CreateTask(ctx, nil, "prompt", nil)
 	job, _ := mock.CreateJob(ctx, task.ID, testPayload)
 	node, _ := mock.CreateNode(ctx, "node-1")
 	makeDispatchable(t, mock, ctx, node, server.URL, "token")
@@ -70,7 +70,7 @@ func TestRunOnce_ErrNotFound(t *testing.T) {
 func TestRunOnce_NoDispatchableNodes(t *testing.T) {
 	mock := testutil.NewMockDB()
 	ctx := context.Background()
-	task, _ := mock.CreateTask(ctx, nil, "p")
+	task, _ := mock.CreateTask(ctx, nil, "p", nil)
 	_, _ = mock.CreateJob(ctx, task.ID, testPayload)
 	node, _ := mock.CreateNode(ctx, "n1")
 	_ = mock.UpdateNodeStatus(ctx, node.ID, models.NodeStatusActive)
@@ -96,7 +96,7 @@ func TestRunOnce_WorkerReturnsFailed(t *testing.T) {
 
 	mock := testutil.NewMockDB()
 	ctx := context.Background()
-	task, _ := mock.CreateTask(ctx, nil, "p")
+	task, _ := mock.CreateTask(ctx, nil, "p", nil)
 	job, _ := mock.CreateJob(ctx, task.ID, testPayload)
 	node, _ := mock.CreateNode(ctx, "n1")
 	makeDispatchable(t, mock, ctx, node, server.URL, "token")
@@ -115,7 +115,7 @@ func TestRunOnce_WorkerReturnsFailed(t *testing.T) {
 func TestRunOnce_BadPayload(t *testing.T) {
 	mock := testutil.NewMockDB()
 	ctx := context.Background()
-	task, _ := mock.CreateTask(ctx, nil, "p")
+	task, _ := mock.CreateTask(ctx, nil, "p", nil)
 	job, _ := mock.CreateJob(ctx, task.ID, `{"image":"x"}`) // no command
 	node, _ := mock.CreateNode(ctx, "n1")
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) }))
@@ -141,7 +141,7 @@ func TestRunOnce_WorkerHTTPError(t *testing.T) {
 
 	mock := testutil.NewMockDB()
 	ctx := context.Background()
-	task, _ := mock.CreateTask(ctx, nil, "p")
+	task, _ := mock.CreateTask(ctx, nil, "p", nil)
 	job, _ := mock.CreateJob(ctx, task.ID, testPayload)
 	node, _ := mock.CreateNode(ctx, "n1")
 	makeDispatchable(t, mock, ctx, node, server.URL, "token")
@@ -167,7 +167,7 @@ func TestRunOnce_WorkerReturnsWrongVersion(t *testing.T) {
 
 	mock := testutil.NewMockDB()
 	ctx := context.Background()
-	task, _ := mock.CreateTask(ctx, nil, "p")
+	task, _ := mock.CreateTask(ctx, nil, "p", nil)
 	job, _ := mock.CreateJob(ctx, task.ID, testPayload)
 	node, _ := mock.CreateNode(ctx, "n1")
 	makeDispatchable(t, mock, ctx, node, server.URL, "token")

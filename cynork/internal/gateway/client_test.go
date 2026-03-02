@@ -115,13 +115,13 @@ func TestClient_CreateTask_RequiresAuth(t *testing.T) {
 	defer server.Close()
 
 	client := NewClient(server.URL)
-	_, err := client.CreateTask(userapi.CreateTaskRequest{Prompt: "echo hi"})
+	_, err := client.CreateTask(&userapi.CreateTaskRequest{Prompt: "echo hi"})
 	if err == nil {
 		t.Fatal("expected error when no token")
 	}
 
 	client.SetToken("tok")
-	resp, err := client.CreateTask(userapi.CreateTaskRequest{Prompt: "echo hi"})
+	resp, err := client.CreateTask(&userapi.CreateTaskRequest{Prompt: "echo hi"})
 	if err != nil {
 		t.Fatalf("CreateTask with token: %v", err)
 	}
@@ -265,7 +265,7 @@ func TestClient_CreateTask_DecodeError(t *testing.T) {
 	defer server.Close()
 	client := NewClient(server.URL)
 	client.SetToken("tok")
-	_, err := client.CreateTask(userapi.CreateTaskRequest{Prompt: "x"})
+	_, err := client.CreateTask(&userapi.CreateTaskRequest{Prompt: "x"})
 	if err == nil {
 		t.Fatal("expected decode error")
 	}
@@ -331,7 +331,7 @@ func TestClient_CreateTask_DoFails(t *testing.T) {
 	client := NewClient("http://localhost")
 	client.HTTPClient = &http.Client{Transport: errTransport{}}
 	client.SetToken("tok")
-	_, err := client.CreateTask(userapi.CreateTaskRequest{Prompt: "x"})
+	_, err := client.CreateTask(&userapi.CreateTaskRequest{Prompt: "x"})
 	if err == nil {
 		t.Fatal("expected error")
 	}

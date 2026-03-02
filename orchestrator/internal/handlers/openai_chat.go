@@ -4,7 +4,9 @@ package handlers
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"log/slog"
+	"net"
 	"net/http"
 	"regexp"
 	"strings"
@@ -19,10 +21,20 @@ import (
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/pmaclient"
 )
 
+// Max total wait for chat completion (REQ-ORCHES-0131).
+const chatCompletionTimeout = 90 * time.Second
+
+// Retries for transient inference failures (REQ-ORCHES-0132).
+const chatCompletionMaxRetries = 3
+const chatCompletionBackoffBase = 500 * time.Millisecond
+
 // Effective model default per spec: omitted or empty model MUST behave as cynodeai.pm.
 const EffectiveModelPM = "cynodeai.pm"
 
 const secretRedacted = "SECRET_REDACTED"
+
+const completionFailedMsg = "Completion failed"
+const inferenceFailedCode = "orchestrator_inference_failed"
 
 var (
 	apiKeyLikePattern = regexp.MustCompile(`(?i)(api[_-]?key|secret|password|token|bearer)\s*[:=]\s*[a-zA-Z0-9\-._~:/?#\[\]@!$&'()*+,;=%]+`)
@@ -111,8 +123,11 @@ func (h *OpenAIChatHandler) ChatCompletions(w http.ResponseWriter, r *http.Reque
 		writeOpenAIError(w, http.StatusInternalServerError, "internal_error", "Failed to persist message")
 		return
 	}
+	// REQ-ORCHES-0131: enforce maximum total wait duration.
+	timeoutCtx, cancel := context.WithTimeout(ctx, chatCompletionTimeout)
+	defer cancel()
 	start := time.Now()
-	content, status, code, msg := h.routeAndComplete(ctx, effectiveModel, redacted, lastUserContent)
+	content, status, code, msg := h.routeAndComplete(timeoutCtx, effectiveModel, redacted, lastUserContent)
 	if status != 0 {
 		writeOpenAIError(w, status, code, msg)
 		return
@@ -151,29 +166,62 @@ func lastUserMessageContent(redacted []userapi.ChatMessage) string {
 	return ""
 }
 
+// isTransientInferenceError returns true for errors that warrant retry (REQ-ORCHES-0132).
+func isTransientInferenceError(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, context.DeadlineExceeded) || errors.Is(err, context.Canceled) {
+		return false
+	}
+	var netErr net.Error
+	if errors.As(err, &netErr) && netErr.Timeout() {
+		return true
+	}
+	s := err.Error()
+	return strings.Contains(s, "connection refused") || strings.Contains(s, "returned 5")
+}
+
 // routeAndComplete implements Chat Completion Routing Path per openai_compatible_chat_api.md § Chat Completion Routing Path.
-// Effective model: request body "model" if present and non-empty (after trim), else cynodeai.pm.
-// - effectiveModel == cynodeai.pm → hand off to PM agent (cynode-pma); do not call inference directly.
-// - effectiveModel != cynodeai.pm → route to direct inference (Ollama/API Egress); do not invoke PM agent.
+// Enforces max wait via ctx timeout (REQ-ORCHES-0131) and retries transient failures (REQ-ORCHES-0132).
 func (h *OpenAIChatHandler) routeAndComplete(ctx context.Context, effectiveModel string, redacted []userapi.ChatMessage, lastUserContent string) (content string, status int, code, msg string) {
 	if effectiveModel == EffectiveModelPM {
-		if h.pmaBaseURL == "" {
-			h.logger.Warn("PMA base URL not configured; cannot route to cynodeai.pm")
-			return "", http.StatusServiceUnavailable, "model_unavailable", "PM agent is not available"
-		}
-		msgs := make([]pmaclient.ChatMessage, 0, len(redacted))
-		for _, m := range redacted {
-			msgs = append(msgs, pmaclient.ChatMessage{Role: m.Role, Content: m.Content})
-		}
-		var err error
-		content, err = pmaclient.CallChatCompletion(ctx, nil, h.pmaBaseURL, msgs)
-		if err != nil {
-			h.logger.Error("PMA chat completion failed", "error", err)
-			return "", http.StatusBadGateway, "orchestrator_inference_failed", "Completion failed"
-		}
-		h.logger.Info("chat completion path", "path", "pma", "model", effectiveModel)
-		return content, 0, "", ""
+		return h.completeViaPMA(ctx, effectiveModel, redacted)
 	}
+	return h.completeViaDirectInference(ctx, effectiveModel, lastUserContent)
+}
+
+func (h *OpenAIChatHandler) completeViaPMA(ctx context.Context, effectiveModel string, redacted []userapi.ChatMessage) (content string, status int, code, msg string) {
+	if h.pmaBaseURL == "" {
+		h.logger.Warn("PMA base URL not configured; cannot route to cynodeai.pm")
+		return "", http.StatusServiceUnavailable, "model_unavailable", "PM agent is not available"
+	}
+	msgs := make([]pmaclient.ChatMessage, 0, len(redacted))
+	for _, m := range redacted {
+		msgs = append(msgs, pmaclient.ChatMessage{Role: m.Role, Content: m.Content})
+	}
+	var err error
+	for attempt := 0; attempt < chatCompletionMaxRetries; attempt++ {
+		content, err = pmaclient.CallChatCompletion(ctx, nil, h.pmaBaseURL, msgs)
+		if err == nil {
+			h.logger.Info("chat completion path", "path", "pma", "model", effectiveModel)
+			return content, 0, "", ""
+		}
+		if errors.Is(err, context.DeadlineExceeded) {
+			return "", http.StatusGatewayTimeout, "cynodeai_completion_timeout", "Completion did not finish before the maximum wait duration"
+		}
+		if !isTransientInferenceError(err) || attempt == chatCompletionMaxRetries-1 {
+			h.logger.Error("PMA chat completion failed", "error", err)
+			return "", http.StatusBadGateway, inferenceFailedCode, completionFailedMsg
+		}
+		backoff := chatCompletionBackoffBase * time.Duration(1<<uint(attempt))
+		time.Sleep(backoff)
+	}
+	h.logger.Error("PMA chat completion failed after retries", "error", err)
+	return "", http.StatusBadGateway, inferenceFailedCode, completionFailedMsg
+}
+
+func (h *OpenAIChatHandler) completeViaDirectInference(ctx context.Context, effectiveModel, lastUserContent string) (content string, status int, code, msg string) {
 	if h.inferenceURL == "" {
 		return "", http.StatusBadRequest, "invalid_request", "Direct inference not configured for this model"
 	}
@@ -182,13 +230,24 @@ func (h *OpenAIChatHandler) routeAndComplete(ctx context.Context, effectiveModel
 		modelID = h.inferenceModel
 	}
 	var err error
-	content, err = inference.CallGenerate(ctx, nil, h.inferenceURL, modelID, lastUserContent)
-	if err != nil {
-		h.logger.Error("direct inference failed", "error", err)
-		return "", http.StatusBadGateway, "orchestrator_inference_failed", "Completion failed"
+	for attempt := 0; attempt < chatCompletionMaxRetries; attempt++ {
+		content, err = inference.CallGenerate(ctx, nil, h.inferenceURL, modelID, lastUserContent)
+		if err == nil {
+			h.logger.Info("chat completion path", "path", "direct_inference", "model", effectiveModel)
+			return content, 0, "", ""
+		}
+		if errors.Is(err, context.DeadlineExceeded) {
+			return "", http.StatusGatewayTimeout, "cynodeai_completion_timeout", "Completion did not finish before the maximum wait duration"
+		}
+		if !isTransientInferenceError(err) || attempt == chatCompletionMaxRetries-1 {
+			h.logger.Error("direct inference failed", "error", err)
+			return "", http.StatusBadGateway, inferenceFailedCode, completionFailedMsg
+		}
+		backoff := chatCompletionBackoffBase * time.Duration(1<<uint(attempt))
+		time.Sleep(backoff)
 	}
-	h.logger.Info("chat completion path", "path", "direct_inference", "model", effectiveModel)
-	return content, 0, "", ""
+	h.logger.Error("direct inference failed after retries", "error", err)
+	return "", http.StatusBadGateway, inferenceFailedCode, completionFailedMsg
 }
 
 func buildChatCompletionsResponse(model, content string) userapi.ChatCompletionsResponse {

@@ -496,6 +496,30 @@ func TestTaskHandler_CreateTaskWithMockDB(t *testing.T) {
 	}
 }
 
+func TestTaskHandler_CreateTask_WithTaskName(t *testing.T) {
+	mockDB := testutil.NewMockDB()
+	logger := newTestLogger()
+	handler := NewTaskHandler(mockDB, logger, "", "")
+	userID := uuid.New()
+	ctx := context.WithValue(context.Background(), contextKeyUserID, userID)
+	taskName := "my-custom-task"
+	body := userapi.CreateTaskRequest{Prompt: "prompt", TaskName: &taskName}
+	jsonBody, _ := json.Marshal(body)
+	req := httptest.NewRequest("POST", "/v1/tasks", bytes.NewBuffer(jsonBody)).WithContext(ctx)
+	rec := httptest.NewRecorder()
+	handler.CreateTask(rec, req)
+	if rec.Code != http.StatusCreated {
+		t.Errorf("expected status 201, got %d: %s", rec.Code, rec.Body.String())
+	}
+	var resp userapi.TaskResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("unmarshal response: %v", err)
+	}
+	if resp.TaskName == nil || *resp.TaskName != "my-custom-task" {
+		t.Errorf("expected task_name my-custom-task in response, got %v", resp.TaskName)
+	}
+}
+
 func TestTaskHandler_CreateTaskWithUseInference_StoresUseInferenceInJobPayload(t *testing.T) {
 	mockDB := testutil.NewMockDB()
 	logger := newTestLogger()
@@ -2705,6 +2729,71 @@ func TestOpenAIChatHandler_ChatCompletions_PMAFails(t *testing.T) {
 	h.ChatCompletions(rec, req)
 	if rec.Code != http.StatusBadGateway {
 		t.Errorf("expected 502 when PMA returns 500, got %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
+// TestOpenAIChatHandler_ChatCompletions_Timeout verifies REQ-ORCHES-0131: max wait returns 504.
+func TestOpenAIChatHandler_ChatCompletions_Timeout(t *testing.T) {
+	mockPMA := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		time.Sleep(2 * time.Second)
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"content":"ok"}`))
+	}))
+	defer mockPMA.Close()
+	ctx, cancel := context.WithDeadline(context.WithValue(context.Background(), contextKeyUserID, uuid.New()), time.Now().Add(-time.Second))
+	defer cancel()
+	h := NewOpenAIChatHandler(testutil.NewMockDB(), newTestLogger(), "", "", mockPMA.URL)
+	body := []byte(`{"model":"cynodeai.pm","messages":[{"role":"user","content":"hi"}]}`)
+	req := httptest.NewRequest("POST", "/v1/chat/completions", bytes.NewReader(body)).WithContext(ctx)
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	h.ChatCompletions(rec, req)
+	if rec.Code != http.StatusGatewayTimeout {
+		t.Errorf("expected 504 on deadline exceeded, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if !bytes.Contains(rec.Body.Bytes(), []byte("cynodeai_completion_timeout")) {
+		t.Errorf("response should contain cynodeai_completion_timeout, got %s", rec.Body.String())
+	}
+}
+
+// TestOpenAIChatHandler_ChatCompletions_DirectInferenceTimeout verifies 504 on deadline exceeded for direct inference path.
+func TestOpenAIChatHandler_ChatCompletions_DirectInferenceTimeout(t *testing.T) {
+	ctx, cancel := context.WithDeadline(context.WithValue(context.Background(), contextKeyUserID, uuid.New()), time.Now().Add(-time.Second))
+	defer cancel()
+	h := NewOpenAIChatHandler(testutil.NewMockDB(), newTestLogger(), "http://localhost:11434", "tinyllama", "")
+	body := []byte(`{"model":"tinyllama","messages":[{"role":"user","content":"hi"}]}`)
+	req := httptest.NewRequest("POST", "/v1/chat/completions", bytes.NewReader(body)).WithContext(ctx)
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	h.ChatCompletions(rec, req)
+	if rec.Code != http.StatusGatewayTimeout {
+		t.Errorf("expected 504 on direct inference deadline exceeded, got %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
+// TestOpenAIChatHandler_ChatCompletions_DirectInference_RetryThenSuccess verifies REQ-ORCHES-0132: retry on 502 then succeed.
+func TestOpenAIChatHandler_ChatCompletions_DirectInference_RetryThenSuccess(t *testing.T) {
+	var callCount int
+	mockOllama := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		callCount++
+		if callCount == 1 {
+			w.WriteHeader(http.StatusBadGateway)
+			return
+		}
+		_ = json.NewEncoder(w).Encode(map[string]any{"response": "retry-ok", "done": true})
+	}))
+	defer mockOllama.Close()
+	h := NewOpenAIChatHandler(testutil.NewMockDB(), newTestLogger(), mockOllama.URL, "tinyllama", "")
+	body := []byte(`{"model":"tinyllama","messages":[{"role":"user","content":"hi"}]}`)
+	req := httptest.NewRequest("POST", "/v1/chat/completions", bytes.NewReader(body)).WithContext(context.WithValue(context.Background(), contextKeyUserID, uuid.New()))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	h.ChatCompletions(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Errorf("expected 200 after retry, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if callCount != 2 {
+		t.Errorf("expected 2 calls (first 502, second success), got %d", callCount)
 	}
 }
 

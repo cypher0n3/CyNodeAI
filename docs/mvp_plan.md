@@ -110,8 +110,10 @@ These behaviors are reflected in Phase 1 (inference path requirement), Phase 2 (
 - **Phase 1.5:** Complete.
   CLI (cynork), inference proxy sidecar, and prompt interpretation: `input_mode` (prompt/script/commands), default prompt-as-model path (sandbox job with fixed model-call script), BDD/feature coverage.
   `just ci` passes (lint, coverage >=90%, BDD orchestrator/worker_node/cynork).
-- **Phase 1.7:** Complete.
+- **Phase 1.7:** Complete (with known drifts).
   `agents/` Go module with `cynode-pma` binary (role flag, instructions paths, Containerfile); control-plane starts cynode-pma by default (`PMA_ENABLED=true`) and stops it on shutdown; `GET /readyz` returns 503 until PMA is reachable when enabled; cynode-pma runs as a container in the orchestrator stack (compose + e2e).
+  **Partial:** PMA startup is eager (not gated on first inference path per REQ-ORCHES-0150); chat completions do not yet enforce max wait or retry (REQ-ORCHES-0131, REQ-ORCHES-0132).
+  See [Known Drifts](#known-drifts-evidence-based).
   **Chat routing (OpenAI-compatible):** Implemented and verified per spec.
   User-gateway exposes `GET /v1/models` and `POST /v1/chat/completions`; effective model `cynodeai.pm` routes to PM agent (cynode-pma), any other to direct inference; legacy `POST /v1/chat` removed.
   Compose: user-gateway has `PMA_BASE_URL`; cynode-pma has `OLLAMA_BASE_URL` so PMA can call Ollama for completions.
@@ -643,6 +645,19 @@ Content was consolidated from dev_docs that have been deleted.
 - **Deferred:** User API Gateway task create attachments and task name normalization.
   Implement when gateway/PM require.
 - **Pending (Phase 2 or later):** PMA langchaingo refactor (from direct Ollama HTTP); CyNode-Sse step executor binary and runner; SBA timeout extension when long-running SBA in scope; Worker API dedicated cmd if E2E/compose does not provide one.
+
+### Known Drifts (Evidence-Based)
+
+The following gaps between current implementation and requirements/specs are tracked for remediation.
+See [docs/dev_docs/2026-03-01_repo_state_and_execution_plan.md](dev_docs/2026-03-01_repo_state_and_execution_plan.md) and execution tracker for status.
+
+- **PMA startup (REQ-ORCHES-0150):** Implemented behavior starts PMA eagerly when `PMA_ENABLED=true`.
+  Requirement: start PMA only when the first inference path is available (worker ready and inference-capable, or API Egress key for PMA).
+  Remediation: Step 3 of 2026-03-01 execution plan.
+- **Chat completion reliability (REQ-ORCHES-0131, REQ-ORCHES-0132):** Bounded wait duration and transient retry with backoff are not yet implemented in the chat completions handler.
+  Remediation: Step 3 of 2026-03-01 execution plan.
+- **Task create contract (user_api_gateway.md):** Optional task name and attachment ingestion are not yet accepted in the request model or passed through to storage.
+  Remediation: Step 3 of 2026-03-01 execution plan.
 
 ### P2-10 Orchestrator (Completed)
 

@@ -12,6 +12,7 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -273,7 +274,7 @@ func TestDispatchOnce_Success(t *testing.T) {
 
 	mock := testutil.NewMockDB()
 	ctx := context.Background()
-	task, _ := mock.CreateTask(ctx, nil, "prompt")
+	task, _ := mock.CreateTask(ctx, nil, "prompt", nil)
 	payload := testJobPayload
 	job, _ := mock.CreateJob(ctx, task.ID, payload)
 	node, _ := mock.CreateNode(ctx, "node-1")
@@ -298,7 +299,7 @@ func TestDispatchOnce_Success(t *testing.T) {
 func TestDispatchOnce_NoDispatchableNodes(t *testing.T) {
 	mock := testutil.NewMockDB()
 	ctx := context.Background()
-	task, _ := mock.CreateTask(ctx, nil, "p")
+	task, _ := mock.CreateTask(ctx, nil, "p", nil)
 	_, _ = mock.CreateJob(ctx, task.ID, testJobPayload)
 	node, _ := mock.CreateNode(ctx, "n1")
 	_ = mock.UpdateNodeStatus(ctx, node.ID, models.NodeStatusActive)
@@ -330,7 +331,7 @@ func TestDispatchOnce_NoNodes(t *testing.T) {
 	payload := testJobPayload
 	mock := testutil.NewMockDB()
 	ctx := context.Background()
-	task, _ := mock.CreateTask(ctx, nil, "p")
+	task, _ := mock.CreateTask(ctx, nil, "p", nil)
 	_, _ = mock.CreateJob(ctx, task.ID, payload)
 	// No active node
 
@@ -415,7 +416,7 @@ func TestStartDispatcher_DispatchOnceReturnsError(t *testing.T) {
 	}()
 	base := testutil.NewMockDB()
 	ctx := context.Background()
-	task, _ := base.CreateTask(ctx, nil, "p")
+	task, _ := base.CreateTask(ctx, nil, "p", nil)
 	_, _ = base.CreateJob(ctx, task.ID, `{"command":["x"]}`)
 	mock := &listDispatchableNodesErrorStore{MockDB: base}
 	ctx, cancel := context.WithCancel(context.Background())
@@ -532,7 +533,7 @@ func TestRun_ListenAndServeFails(t *testing.T) {
 func TestDispatchOnce_InvalidPayload(t *testing.T) {
 	mock := testutil.NewMockDB()
 	ctx := context.Background()
-	task, _ := mock.CreateTask(ctx, nil, "p")
+	task, _ := mock.CreateTask(ctx, nil, "p", nil)
 	_, _ = mock.CreateJob(ctx, task.ID, "not-valid-json")
 	node, _ := mock.CreateNode(ctx, "n1")
 	makeDispatchableNode(t, mock, ctx, node, testWorkerAPIURL, "token")
@@ -554,7 +555,7 @@ func runDispatchOnceWithWorkerStatus(t *testing.T, statusCode int) {
 	defer server.Close()
 	mock := testutil.NewMockDB()
 	ctx := context.Background()
-	task, _ := mock.CreateTask(ctx, nil, "p")
+	task, _ := mock.CreateTask(ctx, nil, "p", nil)
 	_, _ = mock.CreateJob(ctx, task.ID, testJobPayload)
 	node, _ := mock.CreateNode(ctx, "n1")
 	makeDispatchableNode(t, mock, ctx, node, server.URL, "t")
@@ -581,7 +582,7 @@ func TestDispatchOnce_WorkerAPIBadVersion(t *testing.T) {
 
 	mock := testutil.NewMockDB()
 	ctx := context.Background()
-	task, _ := mock.CreateTask(ctx, nil, "p")
+	task, _ := mock.CreateTask(ctx, nil, "p", nil)
 	_, _ = mock.CreateJob(ctx, task.ID, testJobPayload)
 	node, _ := mock.CreateNode(ctx, "n1")
 	makeDispatchableNode(t, mock, ctx, node, server.URL, "t")
@@ -640,6 +641,7 @@ func TestRun_ShutdownSucceeds(t *testing.T) {
 }
 
 // TestRun_PMAStartedAndStopped runs with PMA enabled and a quick-exit binary so the start and defer stop path is covered.
+// Adds a dispatchable node so startPMAWhenInferencePathReady (REQ-ORCHES-0150) sees an inference path and starts PMA.
 func TestRun_PMAStartedAndStopped(t *testing.T) {
 	path, err := exec.LookPath("true")
 	if err != nil {
@@ -660,18 +662,258 @@ func TestRun_PMAStartedAndStopped(t *testing.T) {
 	cfg.PMAEnabled = true
 	cfg.PMABinaryPath = path
 	mockDB := testutil.NewMockDB()
+	node, err := mockDB.CreateNode(ctx, "pma-test-node")
+	if err != nil {
+		t.Fatalf("CreateNode: %v", err)
+	}
+	_ = mockDB.UpdateNodeStatus(ctx, node.ID, models.NodeStatusActive)
+	_ = mockDB.UpdateNodeConfigVersion(ctx, node.ID, "1")
+	_ = mockDB.UpdateNodeWorkerAPIConfig(ctx, node.ID, "http://localhost:1", "tok")
+	ackAt := time.Now().UTC()
+	_ = mockDB.UpdateNodeConfigAck(ctx, node.ID, "1", "applied", ackAt, nil)
 	logger := slog.Default()
 
 	done := make(chan error, 1)
 	go func() { done <- run(ctx, mockDB, cfg, logger) }()
 
-	time.Sleep(50 * time.Millisecond)
+	time.Sleep(150 * time.Millisecond)
 	cancel()
 
 	err = <-done
 	if err != nil {
 		t.Errorf("run with PMA after cancel: %v", err)
 	}
+}
+
+// TestRun_PMAStartWhenInferencePathReady_StartFails covers startPMAWhenInferencePathReady when Start returns an error.
+func TestRun_PMAStartWhenInferencePathReady_StartFails(t *testing.T) {
+	_ = os.Setenv("LISTEN_ADDR", ":0")
+	defer func() { _ = os.Unsetenv("LISTEN_ADDR") }()
+	testPMAStart = func(*config.OrchestratorConfig, *slog.Logger) (*exec.Cmd, error) {
+		return nil, errors.New("start failed")
+	}
+	defer func() { testPMAStart = nil }()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	cfg := config.LoadOrchestratorConfig()
+	cfg.PMAEnabled = true
+	mockDB := testutil.NewMockDB()
+	node, _ := mockDB.CreateNode(ctx, "n1")
+	_ = mockDB.UpdateNodeStatus(ctx, node.ID, models.NodeStatusActive)
+	_ = mockDB.UpdateNodeConfigVersion(ctx, node.ID, "1")
+	_ = mockDB.UpdateNodeWorkerAPIConfig(ctx, node.ID, "http://localhost:1", "tok")
+	ackAt := time.Now().UTC()
+	_ = mockDB.UpdateNodeConfigAck(ctx, node.ID, "1", "applied", ackAt, nil)
+	logger := slog.Default()
+	done := make(chan error, 1)
+	go func() { done <- run(ctx, mockDB, cfg, logger) }()
+	time.Sleep(100 * time.Millisecond)
+	cancel()
+	<-done
+}
+
+// TestRun_PMAStartWhenInferencePathReady_WithRealCmd covers the cmd != nil path by returning a started process from testPMAStart.
+func TestRun_PMAStartWhenInferencePathReady_WithRealCmd(t *testing.T) {
+	path, err := exec.LookPath("true")
+	if err != nil {
+		t.Skip("true not in PATH")
+	}
+	_ = os.Setenv("LISTEN_ADDR", ":0")
+	defer func() { _ = os.Unsetenv("LISTEN_ADDR") }()
+	testPMAStart = func(*config.OrchestratorConfig, *slog.Logger) (*exec.Cmd, error) {
+		c := exec.Command(path)
+		if err := c.Start(); err != nil {
+			return nil, err
+		}
+		return c, nil
+	}
+	defer func() { testPMAStart = nil }()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	cfg := config.LoadOrchestratorConfig()
+	cfg.PMAEnabled = true
+	mockDB := testutil.NewMockDB()
+	node, _ := mockDB.CreateNode(ctx, "n1")
+	_ = mockDB.UpdateNodeStatus(ctx, node.ID, models.NodeStatusActive)
+	_ = mockDB.UpdateNodeConfigVersion(ctx, node.ID, "1")
+	_ = mockDB.UpdateNodeWorkerAPIConfig(ctx, node.ID, "http://localhost:1", "tok")
+	ackAt := time.Now().UTC()
+	_ = mockDB.UpdateNodeConfigAck(ctx, node.ID, "1", "applied", ackAt, nil)
+	logger := slog.Default()
+	done := make(chan error, 1)
+	go func() { done <- run(ctx, mockDB, cfg, logger) }()
+	time.Sleep(500 * time.Millisecond)
+	cancel()
+	err = <-done
+	if err != nil {
+		t.Errorf("run: %v", err)
+	}
+}
+
+// TestRun_PMAStartWhenInferencePathReady covers startPMAWhenInferencePathReady when store returns dispatchable nodes (REQ-ORCHES-0150).
+func TestRun_PMAStartWhenInferencePathReady(t *testing.T) {
+	oldListen := os.Getenv("LISTEN_ADDR")
+	_ = os.Setenv("LISTEN_ADDR", ":0")
+	defer func() {
+		if oldListen != "" {
+			_ = os.Setenv("LISTEN_ADDR", oldListen)
+		} else {
+			_ = os.Unsetenv("LISTEN_ADDR")
+		}
+	}()
+
+	testPMAStart = func(*config.OrchestratorConfig, *slog.Logger) (*exec.Cmd, error) {
+		return nil, nil
+	}
+	defer func() { testPMAStart = nil }()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cfg := config.LoadOrchestratorConfig()
+	cfg.PMAEnabled = true
+	mockDB := testutil.NewMockDB()
+	logger := slog.Default()
+	node, err := mockDB.CreateNode(ctx, "dispatchable-node")
+	if err != nil {
+		t.Fatalf("CreateNode: %v", err)
+	}
+	if err := mockDB.UpdateNodeStatus(ctx, node.ID, models.NodeStatusActive); err != nil {
+		t.Fatalf("UpdateNodeStatus: %v", err)
+	}
+	if err := mockDB.UpdateNodeConfigVersion(ctx, node.ID, "1"); err != nil {
+		t.Fatalf("UpdateNodeConfigVersion: %v", err)
+	}
+	if err := mockDB.UpdateNodeWorkerAPIConfig(ctx, node.ID, "http://localhost:1", "tok"); err != nil {
+		t.Fatalf("UpdateNodeWorkerAPIConfig: %v", err)
+	}
+	ackAt := time.Now().UTC()
+	if err := mockDB.UpdateNodeConfigAck(ctx, node.ID, "1", "applied", ackAt, nil); err != nil {
+		t.Fatalf("UpdateNodeConfigAck: %v", err)
+	}
+
+	done := make(chan error, 1)
+	go func() { done <- run(ctx, mockDB, cfg, logger) }()
+	time.Sleep(100 * time.Millisecond)
+	cancel()
+	err = <-done
+	if err != nil {
+		t.Errorf("run with PMA when inference path ready: %v", err)
+	}
+}
+
+// TestStartPMAWhenInferencePathReady_Direct covers startPMAWhenInferencePathReady synchronously so the cmd != nil path is hit.
+func TestStartPMAWhenInferencePathReady_Direct(t *testing.T) {
+	path, err := exec.LookPath("true")
+	if err != nil {
+		t.Skip("true not in PATH")
+	}
+	testPMAStart = func(*config.OrchestratorConfig, *slog.Logger) (*exec.Cmd, error) {
+		c := exec.Command(path)
+		if err := c.Start(); err != nil {
+			return nil, err
+		}
+		return c, nil
+	}
+	defer func() { testPMAStart = nil }()
+	ctx := context.Background()
+	cfg := config.LoadOrchestratorConfig()
+	cfg.PMAEnabled = true
+	mockDB := testutil.NewMockDB()
+	node, _ := mockDB.CreateNode(ctx, "n1")
+	_ = mockDB.UpdateNodeStatus(ctx, node.ID, models.NodeStatusActive)
+	_ = mockDB.UpdateNodeConfigVersion(ctx, node.ID, "1")
+	_ = mockDB.UpdateNodeWorkerAPIConfig(ctx, node.ID, "http://localhost:1", "tok")
+	ackAt := time.Now().UTC()
+	_ = mockDB.UpdateNodeConfigAck(ctx, node.ID, "1", "applied", ackAt, nil)
+	logger := slog.Default()
+	var mu sync.Mutex
+	var pmaCmd *exec.Cmd
+	startPMAWhenInferencePathReady(ctx, mockDB, cfg, logger, &mu, &pmaCmd)
+	mu.Lock()
+	c := pmaCmd
+	mu.Unlock()
+	if c == nil || c.Process == nil {
+		t.Error("expected pmaCmd to be set with a started process")
+	}
+	if c != nil && c.Process != nil {
+		_ = c.Process.Kill()
+		_ = c.Wait()
+	}
+}
+
+// TestWaitForInferencePath_ContextCancelled covers waitForInferencePath returning false when ctx is cancelled.
+func TestWaitForInferencePath_ContextCancelled(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	mockDB := testutil.NewMockDB()
+	got := waitForInferencePath(ctx, mockDB, slog.Default())
+	if got {
+		t.Error("waitForInferencePath with cancelled ctx should return false")
+	}
+}
+
+// TestWaitForInferencePath_NodeAvailable covers waitForInferencePath returning true when store returns a node.
+func TestWaitForInferencePath_NodeAvailable(t *testing.T) {
+	testPMAPollInterval = 1 * time.Millisecond
+	defer func() { testPMAPollInterval = 0 }()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	mockDB := testutil.NewMockDB()
+	node, _ := mockDB.CreateNode(ctx, "n1")
+	_ = mockDB.UpdateNodeStatus(ctx, node.ID, models.NodeStatusActive)
+	_ = mockDB.UpdateNodeConfigVersion(ctx, node.ID, "1")
+	_ = mockDB.UpdateNodeWorkerAPIConfig(ctx, node.ID, "http://localhost:1", "tok")
+	ackAt := time.Now().UTC()
+	_ = mockDB.UpdateNodeConfigAck(ctx, node.ID, "1", "applied", ackAt, nil)
+	got := waitForInferencePath(ctx, mockDB, slog.Default())
+	if !got {
+		t.Error("waitForInferencePath with dispatchable node should return true")
+	}
+}
+
+// TestWaitForInferencePath_ListFailsThenNode covers the error path and then success.
+func TestWaitForInferencePath_ListFailsThenNode(t *testing.T) {
+	testPMAPollInterval = 1 * time.Millisecond
+	defer func() { testPMAPollInterval = 0 }()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	mockDB := testutil.NewMockDB()
+	mockDB.ForceError = errors.New("list failed")
+	go func() {
+		time.Sleep(5 * time.Millisecond)
+		mockDB.ForceError = nil
+		node, _ := mockDB.CreateNode(ctx, "n1")
+		_ = mockDB.UpdateNodeStatus(ctx, node.ID, models.NodeStatusActive)
+		_ = mockDB.UpdateNodeConfigVersion(ctx, node.ID, "1")
+		_ = mockDB.UpdateNodeWorkerAPIConfig(ctx, node.ID, "http://localhost:1", "tok")
+		ackAt := time.Now().UTC()
+		_ = mockDB.UpdateNodeConfigAck(ctx, node.ID, "1", "applied", ackAt, nil)
+	}()
+	got := waitForInferencePath(ctx, mockDB, slog.Default())
+	if !got {
+		t.Error("waitForInferencePath should eventually return true after node added")
+	}
+}
+
+// TestRun_PMAStartWhenInferencePathReady_ListNodesFails covers the branch where ListDispatchableNodes returns an error.
+func TestRun_PMAStartWhenInferencePathReady_ListNodesFails(t *testing.T) {
+	_ = os.Setenv("LISTEN_ADDR", ":0")
+	defer func() { _ = os.Unsetenv("LISTEN_ADDR") }()
+	testPMAStart = func(*config.OrchestratorConfig, *slog.Logger) (*exec.Cmd, error) { return nil, nil }
+	testPMAPollInterval = 5 * time.Millisecond
+	defer func() { testPMAStart = nil; testPMAPollInterval = 0 }()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	cfg := config.LoadOrchestratorConfig()
+	cfg.PMAEnabled = true
+	mockDB := testutil.NewMockDB()
+	mockDB.ForceError = errors.New("list nodes failed")
+	defer func() { mockDB.ForceError = nil }()
+	logger := slog.Default()
+	done := make(chan error, 1)
+	go func() { done <- run(ctx, mockDB, cfg, logger) }()
+	time.Sleep(30 * time.Millisecond)
+	cancel()
+	<-done
 }
 
 // TestRun_ShutdownFails covers the path where server shutdown returns an error.
@@ -728,7 +970,7 @@ func TestRun_DispatcherRunsOneTick(t *testing.T) {
 
 	mock := testutil.NewMockDB()
 	ctx := context.Background()
-	task, _ := mock.CreateTask(ctx, nil, "p")
+	task, _ := mock.CreateTask(ctx, nil, "p", nil)
 	payload := testJobPayload
 	_, _ = mock.CreateJob(ctx, task.ID, payload)
 	node, _ := mock.CreateNode(ctx, "n1")
@@ -1072,7 +1314,7 @@ func TestDispatchOnce_CompleteJobFails(t *testing.T) {
 
 	base := testutil.NewMockDB()
 	ctx := context.Background()
-	task, _ := base.CreateTask(ctx, nil, "p")
+	task, _ := base.CreateTask(ctx, nil, "p", nil)
 	_, _ = base.CreateJob(ctx, task.ID, testJobPayload)
 	node, _ := base.CreateNode(ctx, "n1")
 	makeDispatchableNode(t, base, ctx, node, server.URL, "t")
@@ -1103,7 +1345,7 @@ func (m *assignJobErrorStore) AssignJobToNode(_ context.Context, _, _ uuid.UUID)
 func TestDispatchOnce_AssignJobToNodeFails(t *testing.T) {
 	mock := &assignJobErrorStore{MockDB: testutil.NewMockDB()}
 	ctx := context.Background()
-	task, _ := mock.CreateTask(ctx, nil, "p")
+	task, _ := mock.CreateTask(ctx, nil, "p", nil)
 	_, _ = mock.CreateJob(ctx, task.ID, testJobPayload)
 	node, _ := mock.CreateNode(ctx, "n1")
 	makeDispatchableNode(t, mock.MockDB, ctx, node, testWorkerAPIURL, "t")
@@ -1120,7 +1362,7 @@ func TestDispatchOnce_AssignJobToNodeFails(t *testing.T) {
 func TestDispatchOnce_CallWorkerAPINetworkError(t *testing.T) {
 	mock := testutil.NewMockDB()
 	ctx := context.Background()
-	task, _ := mock.CreateTask(ctx, nil, "p")
+	task, _ := mock.CreateTask(ctx, nil, "p", nil)
 	_, _ = mock.CreateJob(ctx, task.ID, testJobPayload)
 	node, _ := mock.CreateNode(ctx, "n1")
 	makeDispatchableNode(t, mock, ctx, node, "http://127.0.0.1:19999", "t")
@@ -1144,7 +1386,7 @@ func TestDispatchOnce_WorkerAPIInvalidJSON(t *testing.T) {
 
 	mock := testutil.NewMockDB()
 	ctx := context.Background()
-	task, _ := mock.CreateTask(ctx, nil, "p")
+	task, _ := mock.CreateTask(ctx, nil, "p", nil)
 	_, _ = mock.CreateJob(ctx, task.ID, testJobPayload)
 	node, _ := mock.CreateNode(ctx, "n1")
 	makeDispatchableNode(t, mock, ctx, node, server.URL, "t")
