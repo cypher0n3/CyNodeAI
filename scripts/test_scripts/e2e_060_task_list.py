@@ -7,7 +7,10 @@ import scripts.test_scripts.e2e_state as state
 
 
 class TestTaskList(unittest.TestCase):
+    """E2E: task list -o json; assert created task appears in list."""
+
     def test_task_list(self):
+        """Assert task list returns JSON with tasks list containing state.TASK_ID."""
         ok, out, err = helpers.run_cynork(
             ["task", "list", "-o", "json", "-l", "10"],
             state.CONFIG_PATH,

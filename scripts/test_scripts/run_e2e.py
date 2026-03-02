@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
-# Run E2E suite (discovers e2e_*.py in scripts/test_scripts). Use from repo root:
-#   PYTHONPATH=. python scripts/test_scripts/run_e2e.py [OPTIONS]
-# Services must be up (e.g. just setup-dev start then run this, or full-demo).
+"""Run E2E suite (discovers e2e_*.py in scripts/test_scripts).
+
+Use from repo root: PYTHONPATH=. python scripts/test_scripts/run_e2e.py [OPTIONS]
+Services must be up (e.g. just setup-dev start, or full-demo).
+"""
 
 import argparse
 import os
@@ -70,6 +72,7 @@ def ensure_cynork_dev():
 
 
 def main():
+    """Discover and run E2E tests; exit 0 on success, 1 on failure or setup error."""
     opts, unknown = parse_args()
     # Leave only script name + unittest args (-k, -v, -f) for unittest
     sys.argv = [sys.argv[0]] + unknown
@@ -80,6 +83,7 @@ def main():
 
     if opts.list:
         def iter_tests(suite_or_case):
+            """Recursively yield individual test cases from a suite."""
             try:
                 for t in suite_or_case:
                     yield from iter_tests(t)

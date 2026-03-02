@@ -8,7 +8,10 @@ import scripts.test_scripts.e2e_state as state
 
 
 class TestSbaTask(unittest.TestCase):
+    """E2E: task create --use-sba; poll result; assert job result has sba_result."""
+
     def test_sba_task(self):
+        """Create SBA task, poll until completed; set state.SBA_TASK_ID; assert sba_result."""
         _, out, _ = helpers.run_cynork(
             ["task", "create", "-p", "echo from SBA", "--use-sba", "-o", "json"],
             state.CONFIG_PATH,

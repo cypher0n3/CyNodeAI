@@ -25,3 +25,11 @@ Scenario: Orchestrator remains not ready when no inference path is available
   When the orchestrator starts
   Then the orchestrator does not enter ready state
   And the orchestrator reports that no inference path is available
+
+@req_orches_0150
+@spec_cynai_bootst_bootstrapsource
+Scenario: Orchestrator becomes ready when inference path is available
+  Given a running PostgreSQL database
+  And the orchestrator API is running
+  When a registered node "ready-node-01" is active with worker_api config and I request the readyz endpoint
+  Then the orchestrator enters ready state

@@ -16,6 +16,7 @@ import (
 )
 
 var taskCreatePrompt string
+var taskCreateTaskName string
 var taskCreateUseInference bool
 var taskCreateInputMode string
 var taskCreateUseSBA bool
@@ -103,6 +104,7 @@ func init() {
 	taskWatchCmd.Flags().DurationVarP(&taskWatchInterval, "interval", "n", 2*time.Second, "poll interval")
 	taskWatchCmd.Flags().BoolVar(&taskWatchNoClear, "no-clear", false, "do not clear screen between polls")
 	taskCreateCmd.Flags().StringVarP(&taskCreatePrompt, "prompt", "p", "", "task prompt (natural language or command)")
+	taskCreateCmd.Flags().StringVar(&taskCreateTaskName, "task-name", "", "optional task name (normalized per Task Naming)")
 	taskCreateCmd.Flags().BoolVar(&taskCreateUseInference, "use-inference", false, "run job in a pod with inference proxy (OLLAMA_BASE_URL in sandbox)")
 	taskCreateCmd.Flags().StringVar(&taskCreateInputMode, "input-mode", "prompt", "input mode: prompt (default, use inference), script, or commands (literal shell)")
 	taskCreateCmd.Flags().BoolVar(&taskCreateUseSBA, "use-sba", false, "create task with SBA runner job (job_spec_json); prompt as task context (P2-10)")
@@ -126,6 +128,9 @@ func runTaskCreate(_ *cobra.Command, _ []string) error {
 		inputMode = "prompt"
 	}
 	req := userapi.CreateTaskRequest{Prompt: taskCreatePrompt, UseInference: taskCreateUseInference, InputMode: inputMode, UseSBA: taskCreateUseSBA}
+	if taskCreateTaskName != "" {
+		req.TaskName = &taskCreateTaskName
+	}
 	task, err := client.CreateTask(&req)
 	if err != nil {
 		return exitFromGatewayErr(err)

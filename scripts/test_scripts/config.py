@@ -1,5 +1,7 @@
-# E2E test configuration from environment (parity with scripts/setup-dev.sh).
-# Do not add runtime dependencies beyond stdlib.
+"""E2E test configuration from environment (parity with scripts/setup-dev.sh).
+
+Reads ports, URLs, credentials, and paths from env; no runtime deps beyond stdlib.
+"""
 
 import os
 

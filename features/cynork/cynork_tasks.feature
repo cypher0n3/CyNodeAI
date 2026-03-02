@@ -21,6 +21,16 @@ Scenario: Create task with inline prompt
   Then cynork exits with code 0
   And I store the task id from cynork stdout
 
+@req_client_0151
+@spec_cynai_client_clitaskcreateprompt
+@spec_cynai_usrgwy_userapigateway
+Scenario: Create task with optional task name
+  Given I am logged in with username "alice" and password "secret"
+  When I run cynork task create with prompt "echo hello" and task name "my-task"
+  Then cynork exits with code 0
+  And I store the task id from cynork stdout
+  And cynork task get shows task name "my-task"
+
 @req_client_0101
 @req_client_0151
 @spec_cynai_client_clicommandsurface

@@ -81,3 +81,10 @@ Scenario: Get task logs
 Scenario: Chat returns model response
   When I send a chat message "Hello"
   Then I receive a 200 response with non-empty response field
+
+@req_orches_0121
+@spec_cynai_usrgwy_userapigateway
+Scenario: Create task with optional task name
+  When I create a task with prompt "echo named" and task name "my-task"
+  Then I receive a task ID
+  And the task name is "my-task"

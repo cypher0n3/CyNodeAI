@@ -7,10 +7,14 @@ import scripts.test_scripts.e2e_state as state
 
 
 class TestLogin(unittest.TestCase):
+    """E2E: auth login; persists token into shared config for later tests."""
+
     def setUp(self):
+        """Create shared config dir for login output."""
         state.init_config()
 
     def test_login(self):
+        """Assert auth login succeeds and config file contains token."""
         ok, out, err = helpers.run_cynork(
             ["auth", "login", "-u", "admin", "-p", config.ADMIN_PASSWORD],
             state.CONFIG_PATH,

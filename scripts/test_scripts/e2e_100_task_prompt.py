@@ -8,7 +8,10 @@ import scripts.test_scripts.e2e_state as state
 
 
 class TestPromptTask(unittest.TestCase):
+    """E2E: LLM prompt task create; poll result; assert completed with non-empty stdout."""
+
     def test_prompt_task(self):
+        """Create prompt task, poll until completed; set state.PROMPT_TASK_ID; assert stdout."""
         task_id = None
         for attempt in range(1, 4):
             if attempt > 1:

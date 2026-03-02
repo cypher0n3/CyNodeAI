@@ -33,7 +33,8 @@ type cynorkState struct {
 	taskID     string
 	// mock state: token -> handle for GetMe
 	userByToken map[string]string
-	tasks       map[string]string // taskID -> result stdout
+	tasks       map[string]string    // taskID -> prompt (for result echo)
+	taskNames   map[string]string   // taskID -> optional task name
 	mu          sync.Mutex
 }
 
@@ -141,7 +142,8 @@ func (s *cynorkState) mockGatewayMux() *http.ServeMux {
 			return
 		}
 		var req struct {
-			Prompt string `json:"prompt"`
+			Prompt   string  `json:"prompt"`
+			TaskName *string `json:"task_name"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			w.WriteHeader(http.StatusBadRequest)
@@ -151,8 +153,14 @@ func (s *cynorkState) mockGatewayMux() *http.ServeMux {
 		if s.tasks == nil {
 			s.tasks = make(map[string]string)
 		}
+		if s.taskNames == nil {
+			s.taskNames = make(map[string]string)
+		}
 		id := fmt.Sprintf("task-%d", len(s.tasks)+1)
 		s.tasks[id] = req.Prompt
+		if req.TaskName != nil && *req.TaskName != "" {
+			s.taskNames[id] = *req.TaskName
+		}
 		s.mu.Unlock()
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusCreated)
@@ -195,7 +203,11 @@ func (s *cynorkState) mockGatewayMux() *http.ServeMux {
 		s.mu.Lock()
 		var tasks []map[string]any
 		for id, prompt := range s.tasks {
-			tasks = append(tasks, map[string]any{"id": id, "task_id": id, "status": "completed", "prompt": prompt})
+			item := map[string]any{"id": id, "task_id": id, "status": "completed", "prompt": prompt}
+			if name := s.taskNames[id]; name != "" {
+				item["task_name"] = name
+			}
+			tasks = append(tasks, item)
 		}
 		s.mu.Unlock()
 		w.Header().Set("Content-Type", "application/json")
@@ -210,14 +222,19 @@ func (s *cynorkState) mockGatewayMux() *http.ServeMux {
 		id := r.PathValue("id")
 		s.mu.Lock()
 		prompt, ok := s.tasks[id]
+		taskName := s.taskNames[id]
 		s.mu.Unlock()
 		if !ok {
 			w.WriteHeader(http.StatusNotFound)
 			return
 		}
+		payload := map[string]any{"id": id, "task_id": id, "status": "completed", "prompt": prompt}
+		if taskName != "" {
+			payload["task_name"] = taskName
+		}
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		_ = json.NewEncoder(w).Encode(map[string]any{"id": id, "task_id": id, "status": "completed", "prompt": prompt})
+		_ = json.NewEncoder(w).Encode(payload)
 	})
 	mux.HandleFunc("POST /v1/tasks/{id}/cancel", func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("Authorization") == "" {
@@ -518,6 +535,27 @@ func InitializeCynorkSuite(sc *godog.ScenarioContext, state *cynorkState) {
 		env := []string{"CYNORK_GATEWAY_URL=" + st.mockServer.URL, "CYNORK_TOKEN=" + st.token}
 		args := []string{"--config", st.configPath, "task", "create", "-p", prompt}
 		st.lastExit, st.lastStdout, st.lastStderr = st.runCynork(args, env...)
+		return nil
+	})
+	sc.Step(`^I run cynork task create with prompt "([^"]*)" and task name "([^"]*)"$`, func(ctx context.Context, prompt, taskName string) error {
+		st := getState(ctx)
+		env := []string{"CYNORK_GATEWAY_URL=" + st.mockServer.URL, "CYNORK_TOKEN=" + st.token}
+		args := []string{"--config", st.configPath, "task", "create", "-p", prompt, "--task-name", taskName}
+		st.lastExit, st.lastStdout, st.lastStderr = st.runCynork(args, env...)
+		return nil
+	})
+	sc.Step(`^cynork task get shows task name "([^"]*)"$`, func(ctx context.Context, wantName string) error {
+		st := getState(ctx)
+		if st.taskID == "" {
+			return fmt.Errorf("no stored task id")
+		}
+		env := []string{"CYNORK_GATEWAY_URL=" + st.mockServer.URL, "CYNORK_TOKEN=" + st.token}
+		args := []string{"--config", st.configPath, "task", "get", st.taskID}
+		_, stdout, _ := st.runCynork(args, env...)
+		expect := "task_name=" + wantName
+		if !strings.Contains(stdout, expect) {
+			return fmt.Errorf("cynork task get output %q does not contain %q", stdout, expect)
+		}
 		return nil
 	})
 

@@ -11,7 +11,10 @@ import scripts.test_scripts.e2e_state as state
 
 
 class TestSbaInference(unittest.TestCase):
+    """E2E: SBA task with inference prompt; skip if E2E_SKIP_INFERENCE_SMOKE; assert sba_result."""
+
     def test_sba_task_with_inference_prompt(self):
+        """Create SBA task with LLM prompt, poll until completed/failed; assert sba_result."""
         if os.environ.get("E2E_SKIP_INFERENCE_SMOKE", "") or config.E2E_SKIP_INFERENCE_SMOKE:
             self.skipTest("E2E_SKIP_INFERENCE_SMOKE set")
         _, out, _ = helpers.run_cynork(

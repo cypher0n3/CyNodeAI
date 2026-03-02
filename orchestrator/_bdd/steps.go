@@ -90,9 +90,9 @@ func InitializeOrchestratorSuite(sc *godog.ScenarioContext, state *testState) {
 		rateLimiter := auth.NewRateLimiter(cfg.RateLimitPerMinute, time.Minute)
 		authHandler := handlers.NewAuthHandler(db, jwtManager, rateLimiter, nil)
 		userHandler := handlers.NewUserHandler(db, nil)
-		// Enable mock inference only for Chat scenario so Chat returns immediately; other scenarios get queued tasks.
+		// Enable mock inference for Chat scenarios so Chat returns immediately; other scenarios get queued tasks.
 		var inferenceURL, inferenceModel string
-		if s.Name == "Chat returns model response" {
+		if s.Name == "Chat returns model response" || s.Name == "Chat completion returns 200 or acceptable error status" {
 			inferenceServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				if r.URL.Path != "/api/generate" || r.Method != http.MethodPost {
 					w.WriteHeader(http.StatusNotFound)
@@ -763,6 +763,59 @@ func RegisterOrchestratorSteps(sc *godog.ScenarioContext, state *testState) {
 	})
 
 	// Tasks
+	sc.Step(`^I create a task with prompt "([^"]*)" and task name "([^"]*)"$`, func(ctx context.Context, prompt, taskName string) error {
+		st := getState(ctx)
+		if st == nil || st.server == nil {
+			return godog.ErrSkip
+		}
+		body, _ := json.Marshal(map[string]interface{}{"prompt": prompt, "task_name": taskName})
+		req, _ := http.NewRequest("POST", st.server.URL+"/v1/tasks", bytes.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer "+st.accessToken)
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			return err
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusCreated {
+			return fmt.Errorf("create task returned %d", resp.StatusCode)
+		}
+		var out struct {
+			TaskID string `json:"task_id"`
+			Status string `json:"status"`
+		}
+		if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+			return err
+		}
+		st.taskID = out.TaskID
+		return nil
+	})
+	sc.Step(`^the task name is "([^"]*)"$`, func(ctx context.Context, wantName string) error {
+		st := getState(ctx)
+		if st == nil || st.server == nil || st.taskID == "" {
+			return godog.ErrSkip
+		}
+		req, _ := http.NewRequest("GET", st.server.URL+"/v1/tasks/"+st.taskID, http.NoBody)
+		req.Header.Set("Authorization", "Bearer "+st.accessToken)
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			return err
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			return fmt.Errorf("get task returned %d", resp.StatusCode)
+		}
+		var out struct {
+			TaskName *string `json:"task_name"`
+		}
+		if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+			return err
+		}
+		if out.TaskName == nil || *out.TaskName != wantName {
+			return fmt.Errorf("task name got %v, want %q", out.TaskName, wantName)
+		}
+		return nil
+	})
 	sc.Step(`^I create a task with prompt "([^"]*)"$`, func(ctx context.Context, prompt string) error {
 		st := getState(ctx)
 		if st == nil || st.server == nil {
@@ -1211,6 +1264,17 @@ func RegisterOrchestratorSteps(sc *godog.ScenarioContext, state *testState) {
 		}
 		return nil
 	})
+	sc.Step(`^the response status is one of 200, 502, 504$`, func(ctx context.Context) error {
+		st := getState(ctx)
+		if st == nil {
+			return godog.ErrSkip
+		}
+		allowed := map[int]bool{http.StatusOK: true, 502: true, 504: true}
+		if !allowed[st.lastStatusCode] {
+			return fmt.Errorf("response status %d is not one of 200, 502, 504", st.lastStatusCode)
+		}
+		return nil
+	})
 	sc.Step(`^I receive the task details including status$`, func(ctx context.Context) error { return nil })
 	sc.Step(`^the task completes$`, func(ctx context.Context) error {
 		st := getState(ctx)
@@ -1503,6 +1567,91 @@ func RegisterOrchestratorSteps(sc *godog.ScenarioContext, state *testState) {
 		body, _ := io.ReadAll(resp.Body)
 		if !bytes.Contains(body, []byte("no inference path")) {
 			return fmt.Errorf("readyz body %q does not contain 'no inference path'", string(body))
+		}
+		return nil
+	})
+	sc.Step(`^I request the readyz endpoint$`, func(ctx context.Context) error {
+		st := getState(ctx)
+		if st == nil || st.server == nil {
+			return godog.ErrSkip
+		}
+		resp, err := http.Get(st.server.URL + "/readyz")
+		if err != nil {
+			return err
+		}
+		defer resp.Body.Close()
+		st.lastStatusCode = resp.StatusCode
+		return nil
+	})
+	sc.Step(`^a registered node "([^"]*)" is active with worker_api config and I request the readyz endpoint$`, func(ctx context.Context, slug string) error {
+		st := getState(ctx)
+		if st == nil || st.db == nil || st.server == nil {
+			return godog.ErrSkip
+		}
+		st.nodeSlug = slug
+		node, err := st.db.GetNodeBySlug(ctx, slug)
+		if errors.Is(err, database.ErrNotFound) {
+			if err := nodeRegisterStep(ctx, slug, st.advertisedWorkerAPIURL); err != nil {
+				return err
+			}
+			node, err = st.db.GetNodeBySlug(ctx, slug)
+			if err != nil {
+				return err
+			}
+		} else if err != nil {
+			return err
+		}
+		if err := st.db.UpdateNodeStatus(ctx, node.ID, "active"); err != nil {
+			return err
+		}
+		if st.workerServer == nil {
+			st.workerRequestMu.Lock()
+			st.workerRequest = nil
+			st.workerRequestMu.Unlock()
+			st.workerServer = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				body, _ := io.ReadAll(r.Body)
+				st.workerRequestMu.Lock()
+				st.workerRequest = r
+				st.workerRequestBody = body
+				st.workerRequestMu.Unlock()
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusOK)
+				_ = json.NewEncoder(w).Encode(workerapi.RunJobResponse{
+					Version: 1, TaskID: "", JobID: "", Status: workerapi.StatusCompleted,
+					ExitCode: 0, Stdout: "ok",
+					StartedAt: time.Now().UTC().Format(time.RFC3339),
+					EndedAt:   time.Now().UTC().Format(time.RFC3339),
+				})
+			}))
+			st.workerToken = "phase1-bdd-token"
+		}
+		if err := st.db.UpdateNodeWorkerAPIConfig(ctx, node.ID, st.workerServer.URL, st.workerToken); err != nil {
+			return err
+		}
+		ackAt := time.Now().UTC()
+		if err := st.db.UpdateNodeConfigAck(ctx, node.ID, "1", "applied", ackAt, nil); err != nil {
+			return err
+		}
+		resp, err := http.Get(st.server.URL + "/readyz")
+		if err != nil {
+			return err
+		}
+		defer resp.Body.Close()
+		st.lastStatusCode = resp.StatusCode
+		return nil
+	})
+	sc.Step(`^the orchestrator enters ready state$`, func(ctx context.Context) error {
+		st := getState(ctx)
+		if st == nil || st.server == nil {
+			return godog.ErrSkip
+		}
+		resp, err := http.Get(st.server.URL + "/readyz")
+		if err != nil {
+			return err
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			return fmt.Errorf("readyz returned %d, want 200", resp.StatusCode)
 		}
 		return nil
 	})

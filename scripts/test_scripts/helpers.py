@@ -1,5 +1,7 @@
-# Helpers for E2E: run cynork, curl, wait for gateway. No extra deps (stdlib + subprocess).
-# Run from repo root with PYTHONPATH=. so "from scripts.test_scripts import config" resolves.
+"""Helpers for E2E: run cynork, curl, wait for gateway.
+
+No extra deps (stdlib + subprocess). Run from repo root with PYTHONPATH=.
+"""
 
 import json
 import os

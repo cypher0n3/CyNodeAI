@@ -7,7 +7,10 @@ import scripts.test_scripts.e2e_state as state
 
 
 class TestTaskGet(unittest.TestCase):
+    """E2E: task get by ID; assert JSON response includes status."""
+
     def test_task_get(self):
+        """Assert task get state.TASK_ID returns JSON with status field."""
         self.assertIsNotNone(state.TASK_ID)
         _, out, err = helpers.run_cynork(
             ["task", "get", state.TASK_ID, "-o", "json"],

@@ -1,4 +1,7 @@
-# Shared state for E2E parity tests (one test per script). Config dir and task/jwt IDs.
+"""Shared state for E2E parity tests (one test per script).
+
+Holds config dir/path and task/jwt IDs set by earlier tests and consumed by later ones.
+"""
 
 import os
 import shutil

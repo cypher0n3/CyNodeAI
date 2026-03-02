@@ -8,7 +8,10 @@ import scripts.test_scripts.e2e_state as state
 
 
 class TestSbaResultContract(unittest.TestCase):
+    """E2E: SBA task result must include protocol_version, job_id, status, steps, artifacts."""
+
     def test_sba_result_contract_shape(self):
+        """Assert sba_result in job result contains all required contract keys."""
         if not state.SBA_TASK_ID:
             self.skipTest("SBA_TASK_ID not set (run e2e_120_sba_task first)")
         _, out, _ = helpers.run_cynork(

@@ -177,6 +177,15 @@ func TestStartWorkerAPI_AbsolutePath(t *testing.T) {
 	}
 }
 
+func TestStartWorkerAPI_LookPathFails(t *testing.T) {
+	_ = os.Setenv("NODE_MANAGER_WORKER_API_BIN", "nonexistent-binary-xyz-no-slash")
+	defer func() { _ = os.Unsetenv("NODE_MANAGER_WORKER_API_BIN") }()
+	err := startWorkerAPI("token")
+	if err == nil {
+		t.Error("startWorkerAPI should fail when LookPath fails for non-absolute binary")
+	}
+}
+
 func TestStartOllama_Success(t *testing.T) {
 	_ = os.Setenv("CONTAINER_RUNTIME", "podman")
 	_ = os.Setenv("OLLAMA_IMAGE", "alpine")
@@ -204,5 +213,31 @@ func TestStartOllama_ContainerExists(t *testing.T) {
 	err := startOllama("", "")
 	if err != nil {
 		t.Errorf("startOllama when container exists: %v", err)
+	}
+}
+
+func TestStartOllama_RunFails(t *testing.T) {
+	_ = os.Setenv("CONTAINER_RUNTIME", "false")
+	_ = os.Setenv("OLLAMA_IMAGE", "ollama/ollama")
+	defer func() {
+		_ = os.Unsetenv("CONTAINER_RUNTIME")
+		_ = os.Unsetenv("OLLAMA_IMAGE")
+	}()
+	err := startOllama("", "")
+	if err == nil {
+		t.Error("startOllama should fail when container run fails")
+	}
+}
+
+func TestStartOllama_ImageFromEnvAndVariant(t *testing.T) {
+	_ = os.Setenv("CONTAINER_RUNTIME", "false")
+	_ = os.Setenv("OLLAMA_IMAGE", "custom-ollama")
+	defer func() {
+		_ = os.Unsetenv("CONTAINER_RUNTIME")
+		_ = os.Unsetenv("OLLAMA_IMAGE")
+	}()
+	err := startOllama("", "rocm")
+	if err == nil {
+		t.Error("startOllama should fail when runtime fails")
 	}
 }
