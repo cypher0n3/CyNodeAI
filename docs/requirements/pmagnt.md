@@ -72,3 +72,16 @@ Behavioral and workflow requirements still live in `AGENTS` and `ORCHES`.
 - **REQ-PMAGNT-0110:** `cynode-pma` MUST inform the orchestrator when it has come online (e.g. by responding to a health check or by a registration/ready callback) so that the orchestrator can use it and update its own readiness state.
   [CYNAI.PMAGNT.PmaInformsOrchestratorOnline](../tech_specs/cynode_pma.md#spec-cynai-pmagnt-pmainformsorchestratoronline)
   <a id="req-pmagnt-0110"></a>
+
+- **REQ-PMAGNT-0111:** When the user's request implies multi-step or project-scoped effort, the Project Manager Agent (cynode-pma in project_manager mode) SHOULD build a project plan (tasks and execution order) from user input before creating orchestrator tasks and handing work off for execution.
+  [CYNAI.AGENTS.ProjectPlanBuilding](../tech_specs/project_manager_agent.md#spec-cynai-agents-projectplanbuilding)
+  <a id="req-pmagnt-0111"></a>
+- **REQ-PMAGNT-0112:** The Project Manager Agent SHOULD ask the user clarifying questions when scope, acceptance criteria, or execution order are ambiguous, and SHOULD prefer clarification over inferring and creating tasks immediately.
+  [CYNAI.AGENTS.ClarificationBeforeExecution](../tech_specs/project_manager_agent.md#spec-cynai-agents-clarificationbeforeexecution)
+  <a id="req-pmagnt-0112"></a>
+- **REQ-PMAGNT-0113:** The Project Manager Agent SHOULD refine project plans as needed based on updated information from the user (e.g. after clarification or change requests).
+  [CYNAI.AGENTS.ProjectPlanBuilding](../tech_specs/project_manager_agent.md#spec-cynai-agents-projectplanbuilding)
+  <a id="req-pmagnt-0113"></a>
+- **REQ-PMAGNT-0114:** When a project plan is locked, the Project Manager Agent MUST NOT change the plan or its tasks; it MAY update completion status and comments on plans and tasks only.
+  [CYNAI.AGENTS.WhenPlanLocked](../tech_specs/project_manager_agent.md#spec-cynai-agents-whenplanlocked)
+  <a id="req-pmagnt-0114"></a>

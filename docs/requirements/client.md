@@ -192,6 +192,10 @@ Web Console-specific requirements live in [webcon.md](webcon.md) (REQ-WEBCON-*).
   [CYNAI.CLIENT.CliPersonasManagement](../tech_specs/cli_management_app_commands_admin.md#spec-cynai-client-clipersonasmanagement)
   [CYNAI.WEBCON.PersonasManagement](../tech_specs/web_console.md#spec-cynai-webcon-personasmanagement)
   <a id="req-client-0178"></a>
+- **REQ-CLIENT-0179:** The Web Console and the CLI MUST support project plan review (view plan, view revision history) and plan approve (and re-approve) via the User API Gateway, with capability parity between both clients.
+  [CYNAI.ACCESS.ProjectPlanReviewApprove](../tech_specs/projects_and_scopes.md#spec-cynai-access-projectplanreviewapprove)
+  [CYNAI.USRGWY.ProjectPlanApi](../tech_specs/user_api_gateway.md#spec-cynai-usrgwy-projectplanapi)
+  <a id="req-client-0179"></a>
 - **REQ-CLIENT-0125:** Node management MUST be mediated by the User API Gateway.
   [CYNAI.WEBCON.NodeManagement](../tech_specs/web_console.md#spec-cynai-webcon-nodemanagement)
   [CYNAI.CLIENT.CliNodeManagement](../tech_specs/cli_management_app_commands_admin.md#spec-cynai-client-clinodemgmt)

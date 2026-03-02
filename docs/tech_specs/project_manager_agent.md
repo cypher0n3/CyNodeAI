@@ -20,6 +20,11 @@
   - [Task-Level Context](#task-level-context)
   - [User-Configurable Additional Context](#user-configurable-additional-context)
   - [Persona Assignment for SBA Jobs](#persona-assignment-for-sba-jobs)
+- [Project plan building](#project-plan-building)
+- [Clarification before execution](#clarification-before-execution)
+- [When plan is locked](#when-plan-is-locked)
+- [Plan Approval: Seek Explicit User Approval](#plan-approval-seek-explicit-user-approval)
+- [Plan approved: PMA tasked to add or update tasks](#plan-approved-pma-tasked-to-add-or-update-tasks)
 - [Task Naming](#task-naming)
   - [Project Context From Chat Prompt](#project-context-from-chat-prompt)
   - [Task Naming Applicable Requirements](#task-naming-applicable-requirements)
@@ -58,6 +63,9 @@ Langchaingo tools wrap those MCP calls.
 
 ## Agent Responsibilities
 
+- Build project plans from user input; refine project plans as needed based on updated info from the user.
+- Prefer to associate tasks to a non-default project when the user or context implies a named project or existing non-default project (default project is catch-all for unrelated work).
+- Clarify with the user before doling out tasks when scope, acceptance criteria, or execution order are unclear.
 - Task intake and triage
   - Create and update tasks, subtasks, and acceptance criteria in PostgreSQL.
   - Break work into executable steps suitable for worker nodes and sandbox containers.
@@ -312,6 +320,70 @@ If the user does not mention a project in the prompt, the existing request conte
 Traces To:
 
 - [REQ-AGENTS-0129](../requirements/agents.md#req-agents-0129)
+
+## Project Plan Building
+
+- Spec ID: `CYNAI.AGENTS.ProjectPlanBuilding` <a id="spec-cynai-agents-projectplanbuilding"></a>
+
+Traces To:
+
+- [REQ-PMAGNT-0111](../requirements/pmagnt.md#req-pmagnt-0111)
+- [REQ-PMAGNT-0113](../requirements/pmagnt.md#req-pmagnt-0113)
+
+The PMA is responsible for **building** the project plan (tasks and execution order) from user input before creating orchestrator tasks and dispatching jobs.
+When the user describes a goal that implies multiple steps or a project, the PMA SHOULD first produce a plan (e.g. list of tasks with order and acceptance criteria), persist it or associate tasks with the plan, and only then create tasks and hand off for execution.
+The PMA SHOULD refine project plans as needed based on updated information from the user (e.g. after clarification or change requests).
+
+## Clarification Before Execution
+
+- Spec ID: `CYNAI.AGENTS.ClarificationBeforeExecution` <a id="spec-cynai-agents-clarificationbeforeexecution"></a>
+
+Traces To:
+
+- [REQ-PMAGNT-0112](../requirements/pmagnt.md#req-pmagnt-0112)
+- [REQ-AGENTS-0135](../requirements/agents.md#req-agents-0135)
+
+The PMA SHOULD ask clarifying questions when scope, acceptance criteria, priorities, or execution order are ambiguous.
+The PMA SHOULD prefer multi-turn clarification over inferring and creating tasks immediately.
+Multi-message conversation is the intended way to clarify and lay out the task before or as it is executed; building up a task properly may take multiple messages.
+See [`chat_threads_and_messages.md`](chat_threads_and_messages.md) and [`openai_compatible_chat_api.md`](openai_compatible_chat_api.md).
+
+## When Plan is Locked
+
+- Spec ID: `CYNAI.AGENTS.WhenPlanLocked` <a id="spec-cynai-agents-whenplanlocked"></a>
+
+Traces To:
+
+- [REQ-PMAGNT-0114](../requirements/pmagnt.md#req-pmagnt-0114)
+
+When a project plan is locked, the PMA MUST NOT change the plan or its tasks; the PMA MAY update completion status and comments on plans and tasks only.
+The API or gateway enforces the lock so that PMA tool calls that would edit the plan document or tasks are rejected when the plan is locked.
+
+## Plan Approval: Seek Explicit User Approval
+
+- Spec ID: `CYNAI.AGENTS.PlanApprovalSeekExplicitApproval` <a id="spec-cynai-agents-planapprovalseekexplicitapproval"></a>
+
+Traces To:
+
+- [REQ-AGENTS-0136](../requirements/agents.md#req-agents-0136)
+
+The PMA MAY mark a plan as approved (set `plan_approved_at`, `plan_approved_by`) only after **seeking and obtaining explicit approval from the user**.
+The MCP tool that performs plan approve MUST be described (in the tool catalog or tool description) so that the LLM understands it must seek explicit user approval before calling it; for example, the tool description MUST state that the agent must obtain explicit user approval before marking the plan as approved for execution.
+Agent instructions (e.g. PMA instructions bundle) MUST state that the agent must not mark a plan as approved until the user has explicitly approved it (e.g. in chat or via explicit confirmation).
+The PMA may build and refine plans and may request workflow start for a task (subject to the workflow start gate); when the PMA invokes plan approve, it must have obtained explicit user approval first.
+
+## Plan Approved: PMA Tasked to Add or Update Tasks
+
+- Spec ID: `CYNAI.AGENTS.PlanApprovedPmaTasked` <a id="spec-cynai-agents-planapprovedpmatasked"></a>
+
+Traces To:
+
+- [REQ-PROJCT-0122](../requirements/projct.md#req-projct-0122)
+
+When a plan is approved (set to **ready**) by the user, the **first action** the system MUST take is to task the PMA to add or update tasks on that plan so that it is ready for execution.
+The orchestrator (or component that processes plan approval) MUST enqueue or invoke a PMA job for the approved plan with the objective of ensuring the plan has at least one task and that the task list is suitable for execution (add or update tasks as needed).
+The plan remains in state **ready** until it is activated (ready -> active); workflow for tasks in the plan MAY run only when the plan is **active**.
+The PMA is responsible for populating or refining the task list as the first step after approval.
 
 ## Preference Usage
 

@@ -333,13 +333,14 @@ All subcommands that call the gateway MUST use the resolved gateway URL and reso
 - `cynork creds ...`: see [Credential Management](cli_management_app_commands_admin.md#spec-cynai-client-clicredential); MUST use gateway credential endpoints.
 - `cynork prefs ...`: see [Preferences Management](cli_management_app_commands_admin.md#spec-cynai-client-clipreferences).
 - `cynork nodes ...`: see [Node Management](cli_management_app_commands_admin.md#spec-cynai-client-clinodemgmt).
-- `cynork project ...`: basic CRUD, active project, and project-scoped RBAC via gateway; see [Project Management](cli_management_app_commands_admin.md#spec-cynai-client-cliprojectmanagement).
+- `cynork project ...`: basic CRUD, active project, project plans, and project-scoped RBAC via gateway; see [Project Management](cli_management_app_commands_admin.md#spec-cynai-client-cliprojectmanagement).
   - Set active: `cynork project set <project_id>` (clearing when supported).
   - Create: `cynork project create --slug <slug> --title <title>` (optional `--description`).
   - List: `cynork project list` (optional `--limit`, `--cursor`, `--active-only`).
   - Get: `cynork project get <project_id>`.
   - Update: `cynork project update <project_id>` (optional `--title`, `--description`, `--active`).
   - Delete: `cynork project delete <project_id>`.
+  - Plans: `cynork project plans list <project_id>`, `cynork project plan get <plan_id>`, `cynork project plan revisions list <plan_id>`, `cynork project plan approve <plan_id>` (multiple plans per project; only one active at a time).
   - RBAC: `cynork project rbac list <project_id>`, `cynork project rbac grant <project_id> --role <name> --user <id>|--group <id>`, `cynork project rbac revoke <project_id> --role <name> --user <id>|--group <id>`.
 - `cynork persona ...`: full CRUD for Agent personas via gateway (RBAC applies per scope); see [Personas Management](cli_management_app_commands_admin.md#spec-cynai-client-clipersonasmanagement).
   - List: `cynork persona list` (optional `--scope-type`, `--scope-id`, `--limit`, `--cursor`).

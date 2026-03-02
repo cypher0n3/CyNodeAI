@@ -163,6 +163,22 @@ Permission mapping
 - The mapping MAY be implemented as derived policy rules in `access_control_rules`.
 - The system SHOULD support an operator-managed default role map.
 
+### Project Plan Lock RBAC
+
+- Spec ID: `CYNAI.ACCESS.ProjectPlanLockRbac` <a id="spec-cynai-access-projectplanlockrbac"></a>
+
+Traces To:
+
+- [REQ-PROJCT-0116](../requirements/projct.md#req-projct-0116)
+
+RBAC MUST allow assigning **lock** and **unlock** permissions for project plans.
+For shared (group) project plans, group members MAY be granted lock or unlock permission so that a principal with the appropriate role can lock or unlock the plan document.
+Enforcement is via API checks when updating the plan document (name, body); see [Project plan lock](projects_and_scopes.md#spec-cynai-access-projectplanlock) and [Project plan actions](access_control.md#spec-cynai-access-projectplanactions).
+
+RBAC MUST allow assigning **approve** permission for project plans (`project_plan.approve` per [Project plan actions](access_control.md#spec-cynai-access-projectplanactions)).
+Principals with approve permission MAY set or clear the plan approved state (approve or re-approve) for projects they are authorized to access.
+For shared (group) project plans, group members MAY be granted approve permission so that a principal with the appropriate role can approve the plan for workflow start.
+
 ## Policy Evaluation Integration
 
 The following requirements apply.

@@ -57,7 +57,7 @@ Brief summary of how projects, tasks, jobs, and PMA are specified today.
 
 - **project_manager_agent.md**: PMA does "task intake and triage," "create and update tasks, subtasks, and acceptance criteria," "break work into executable steps," "planning and dispatch."
   There is no explicit responsibility to "build a project plan" or to "ask clarifying questions before creating/doling out tasks."
-- **E2E gap analysis** ([2026-02-27_analysis_e2e_tests_gap_and_remediation.md](2026-02-27_analysis_e2e_tests_gap_and_remediation.md) section 4.3): REQ-USRGWY-0130 requires **chat threads and chat messages tracked separately from task lifecycle state**; it does not require or forbid "one task per message."
+- **E2E gap analysis** (see dev_docs 2026-02-27 E2E gap analysis, section 4.3): REQ-USRGWY-0130 requires **chat threads and chat messages tracked separately from task lifecycle state**; it does not require or forbid "one task per message."
   **Positioning (for spec updates):** Building up a task properly may take **multiple messages** for clarification and to properly lay out the task.
   Specs (e.g. `chat_threads_and_messages`, `openai_compatible_chat_api`, or related orchestration/PM docs) should be updated to state this explicitly: **multi-message conversation is the intended way to clarify and lay out the task before or as it is executed.**
   This clarification belongs in the normative docs; for now it is recorded in dev_docs.
@@ -160,7 +160,7 @@ Recommendations for tech spec documents.
   PMA SHOULD refine project plans as needed based on updated information from the user (e.g. after clarification or change requests).
 - Add a subsection **Clarification before execution**: PMA SHOULD ask clarifying questions when scope, acceptance criteria, priorities, or execution order are ambiguous.
   PMA SHOULD prefer multi-turn clarification over inferring and creating tasks immediately.
-  Reference the E2E gap doc positioning: multi-message conversation is the intended way to clarify and lay out the task before or as it is executed; specs such as `chat_threads_and_messages`, `openai_compatible_chat_api`, or related orchestration/PM docs should state this explicitly (see [2026-02-27_analysis_e2e_tests_gap_and_remediation.md](2026-02-27_analysis_e2e_tests_gap_and_remediation.md) section 4.3).
+  Reference the E2E gap doc positioning: multi-message conversation is the intended way to clarify and lay out the task before or as it is executed; specs such as `chat_threads_and_messages`, `openai_compatible_chat_api`, or related orchestration/PM docs should state this explicitly (see dev_docs 2026-02-27 E2E gap analysis, section 4.3).
 - In **Agent Responsibilities**, explicitly list "Build project plans from user input," "Refine project plans as needed based on updated info from the user," "Clarify with user before doling out tasks when unclear," and "Prefer to associate tasks to a non-default project when the user or context implies a named project or existing non-default project (default project is catch-all for unrelated work)."
 - Add **When plan is locked**: PMA MUST NOT change the plan or its tasks; PMA MAY update completion status and comments on plans and tasks.
   API/gateway enforces lock so PMA tool calls that would edit plan document or tasks are rejected when plan is locked.
@@ -185,7 +185,7 @@ Recommendations for tech spec documents.
 
 ### 4.3 Chat and Multi-Message Clarification
 
-Per the E2E gap doc ([2026-02-27_analysis_e2e_tests_gap_and_remediation.md](2026-02-27_analysis_e2e_tests_gap_and_remediation.md) section 4.3): REQ-USRGWY-0130 requires that the system store chat history as **chat threads and chat messages tracked separately from task lifecycle state**; it does not require or forbid "one task per message."
+Per the E2E gap doc (dev_docs 2026-02-27 E2E gap analysis, section 4.3): REQ-USRGWY-0130 requires that the system store chat history as **chat threads and chat messages tracked separately from task lifecycle state**; it does not require or forbid "one task per message."
 
 **Positioning (for spec updates):** Building up a task properly may take **multiple messages** for clarification and to properly lay out the task.
 Specs (e.g. `chat_threads_and_messages`, `openai_compatible_chat_api`, or related orchestration/PM docs) should be updated to state this explicitly: **multi-message conversation is the intended way to clarify and lay out the task before or as it is executed.**

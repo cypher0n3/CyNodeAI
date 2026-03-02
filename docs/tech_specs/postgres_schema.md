@@ -11,6 +11,8 @@
   - [Refresh Sessions Table](#refresh-sessions-table)
 - [Projects](#projects)
   - [Projects Table](#projects-table)
+  - [Project Plans Table](#project-plans-table)
+  - [Project Plan Revisions Table](#project-plan-revisions-table)
   - [Project Git Repositories Table](#project-git-repositories-table)
 - [Groups and RBAC](#groups-and-rbac)
   - [Groups Table](#groups-table)
@@ -32,6 +34,7 @@
   - [Personas Table](#personas-table)
 - [Tasks, Jobs, and Nodes](#tasks-jobs-and-nodes)
   - [Tasks Table](#tasks-table)
+  - [Task Dependencies Table](#task-dependencies-table)
   - [Jobs Table](#jobs-table)
   - [Nodes Table](#nodes-table)
   - [Node Capabilities Table](#node-capabilities-table)
@@ -125,13 +128,13 @@ Out of scope for this document
 Logical groups
 
 1. **Identity and authentication:** `users`, `password_credentials`, `refresh_sessions`
-2. **Projects:** `projects`, `project_git_repos`
+2. **Projects:** `projects`, `project_plans`, `project_plan_revisions`, `project_git_repos`
 3. **Groups and RBAC:** `groups`, `group_memberships`, `roles`, `role_bindings`
 4. **Access control:** `access_control_rules`, `access_control_audit_log`
 5. **API egress credentials:** `api_credentials`
 6. **Preferences:** `preference_entries`, `preference_audit_log`
 7. **Personas:** `personas` (reusable SBA role/identity descriptions; embedded inline in job spec at job-build time)
-8. **Tasks, jobs, nodes, workflow:** `tasks`, `jobs`, `nodes`, `node_capabilities`, `workflow_checkpoints`, `task_workflow_leases`
+8. **Tasks, jobs, nodes, workflow:** `tasks`, `task_dependencies`, `jobs`, `nodes`, `node_capabilities`, `workflow_checkpoints`, `task_workflow_leases`
 9. **Sandbox image registry:** `sandbox_images`, `sandbox_image_versions`, `node_sandbox_image_availability`
 10. **Runs and sessions:** `runs`, `sessions`
 11. **Chat:** `chat_threads`, `chat_messages`
@@ -229,6 +232,82 @@ Constraints
 
 - Index: (`slug`)
 - Index: (`is_active`)
+
+### Project Plans Table
+
+- Spec ID: `CYNAI.SCHEMA.ProjectPlansTable` <a id="spec-cynai-schema-projectplanstable"></a>
+
+A project MAY have multiple plans; at most one plan per project may be active at a time.
+Plan state values: `draft`, `ready`, `active`, `suspended`, `completed`, `cancelled` (see [Project plan state](projects_and_scopes.md#spec-cynai-access-projectplanstate)).
+**Archived** is a separate boolean flag for UI/API views; archived plans MUST NOT run workflow and MUST NOT be the active plan (enforced by API).
+
+Source: [REQ-PROJCT-0110](../requirements/projct.md#req-projct-0110), [Project plan state](projects_and_scopes.md#spec-cynai-access-projectplanstate), [REQ-PROJCT-0124](../requirements/projct.md#req-projct-0124).
+
+- `id` (uuid, pk)
+- `project_id` (uuid, fk to `projects.id`, NOT NULL)
+- `plan_name` (text, nullable)
+  - optional name for this plan
+- `plan_body` (text, nullable)
+  - plan document body; MUST be stored as Markdown (see [REQ-PROJCT-0114](../requirements/projct.md#req-projct-0114))
+- `state` (text, NOT NULL)
+  - one of: `draft`, `ready`, `active`, `suspended`, `completed`, `cancelled`
+  - only one row per project may have `state = 'active'` (enforced by partial unique index); archived plans MUST NOT have state `active` (API enforces)
+- `archived` (boolean, NOT NULL, default false)
+  - when true, plan is archived for history/views; workflow MUST NOT run for this plan and this plan MUST NOT be set to active; used by UIs/APIs for filtering and display
+- `is_plan_locked` (boolean, default false)
+  - when true, plan document (plan_name, plan_body) is read-only until unlocked; API enforces
+- `plan_locked_at` (timestamptz, nullable)
+- `plan_locked_by` (uuid, fk to `users.id`, nullable)
+- `plan_approved_at` (timestamptz, nullable)
+  - set when plan is approved (transition to ready or active); who approved and when
+- `plan_approved_by` (uuid, fk to `users.id`, nullable)
+- `created_at` (timestamptz)
+- `updated_at` (timestamptz)
+- `created_by` (uuid, fk to `users.id`, nullable)
+
+Constraints
+
+- Unique partial: (`project_id`) WHERE `state` = 'active' (at most one active plan per project)
+- Index: (`project_id`)
+- Index: (`project_id`, `state`)
+- Index: (`state`)
+- Index: (`archived`) for list/filter by archived
+
+### Project Plan Revisions Table
+
+- Spec ID: `CYNAI.SCHEMA.ProjectPlanRevisionsTable` <a id="spec-cynai-schema-projectplanrevisionstable"></a>
+
+Stores a snapshot of a project plan (document, task list, and task dependencies) each time the plan or its task list or dependencies change so users can view revision history.
+One row per revision; version increments per plan.
+
+Source: [REQ-PROJCT-0119](../requirements/projct.md#req-projct-0119), [Plan revisions](projects_and_scopes.md#spec-cynai-access-projectplanrevisions).
+
+- `id` (uuid, pk)
+- `plan_id` (uuid, fk to `project_plans.id`, NOT NULL)
+- `version` (integer, NOT NULL)
+  - monotonically increasing per plan (1, 2, 3, ...)
+- `plan_name` (text, nullable)
+  - snapshot of project_plans.plan_name at revision time
+- `plan_body` (text, nullable)
+  - snapshot of project_plans.plan_body at revision time (Markdown)
+- `task_ids` (jsonb, nullable)
+  - array of task UUIDs in this plan at revision time
+- `task_dependencies` (jsonb, nullable)
+  - array of objects: `{ "task_id": "<uuid>", "depends_on_task_id": "<uuid>" }` capturing the dependency graph at revision time
+- `created_at` (timestamptz)
+- `created_by` (uuid, fk to `users.id`, nullable)
+
+Constraints
+
+- Unique: (`plan_id`, `version`)
+- Index: (`plan_id`, `created_at`)
+- Index: (`plan_id`)
+
+Behavior
+
+- The orchestrator or gateway MUST insert a new row into `project_plan_revisions` whenever that plan's `plan_name`, `plan_body`, the set of tasks with that `plan_id`, or the set of task_dependencies for tasks in that plan changes.
+- Version MUST be computed as the next integer per plan (e.g. MAX(version)+1 for that plan_id).
+- Retention: implementation MAY support configurable retention (e.g. keep last N revisions per plan); minimum is to retain all revisions unless explicitly purged.
 
 ### Project Git Repositories Table
 
@@ -581,10 +660,18 @@ Sources: [`docs/tech_specs/orchestrator.md`](orchestrator.md), [`docs/tech_specs
   - creating user; set from authenticated request context when created via the gateway; for system-created and bootstrap tasks, use the reserved system user
 - `project_id` (uuid, fk to `projects.id`, nullable)
   - optional project association for RBAC, preferences, and grouping; null unless explicitly set by client or PM/PA
+- `plan_id` (uuid, fk to `project_plans.id`, nullable)
+  - when set, task belongs to this plan; workflow for this task is gated on plan state active and on task dependencies (see [Task dependencies](#task-dependencies-table)).
 - `status` (text)
-  - examples: pending, running, completed, failed, cancelled
+  - Task lifecycle status; stored separately from open/closed.
+  - Values include: pending, running, completed, failed, cancelled, superseded (see [Task status and closed state](#task-status-and-closed-state)).
+- `closed` (boolean, not null)
+  - Binary open/closed state; when true, the task is closed (no further work).
+    MUST be set consistently when status changes (e.g. true when status is completed, failed, cancelled, superseded).
+- `description` (text, nullable)
+  - task description for user-facing display and editing; MUST be stored as Markdown (see [REQ-PROJCT-0114](../requirements/projct.md#req-projct-0114))
 - `acceptance_criteria` (jsonb, nullable)
-  - structured criteria used by Project Manager for verification
+  - structured criteria used by Project Manager for verification; any text fields used for editable criteria MUST be stored as Markdown
 - `summary` (text, nullable)
   - final summary written by workflow
 - `metadata` (jsonb, nullable)
@@ -595,8 +682,45 @@ Constraints
 
 - Index: (`created_by`)
 - Index: (`project_id`)
+- Index: (`plan_id`)
+- Index: (`plan_id`)
 - Index: (`status`)
+- Index: (`closed`)
 - Index: (`created_at`)
+
+#### Task Dependencies Table
+
+- Spec ID: `CYNAI.SCHEMA.TaskDependenciesTable` <a id="spec-cynai-schema-taskdependenciestable"></a>
+
+Stores explicit task-within-plan dependencies; execution order and runnability are determined solely by the dependency graph (prerequisite and dependent tasks).
+When a task is set to `cancelled`, all tasks that depend on it (directly or transitively) MUST be set to `cancelled` automatically; see [REQ-ORCHES-0154](../requirements/orches.md#req-orches-0154) and [Cancel cascades to dependents](langgraph_mvp.md#spec-cynai-orches-cancelcascadestodependents).
+A task is **runnable** when all tasks it depends on have `status = 'completed'`; see [Project plan and task dependencies](langgraph_mvp.md#spec-cynai-orches-workflowplanorder) and [REQ-ORCHES-0153](../requirements/orches.md#req-orches-0153).
+
+- `id` (uuid, pk)
+- `task_id` (uuid, fk to `tasks.id`, NOT NULL)
+  - the dependent task (this task runs after its dependencies)
+- `depends_on_task_id` (uuid, fk to `tasks.id`, NOT NULL)
+  - the task that must reach status `completed` before `task_id` may run
+
+Constraints
+
+- Unique: (`task_id`, `depends_on_task_id`)
+- Check: `task_id != depends_on_task_id` (no self-deps)
+- Application MUST ensure both tasks belong to the same plan (`tasks.plan_id` equal for both) when plan_id is set; optionally enforce via trigger or constraint.
+
+Indexes
+
+- Index: (`task_id`) for "what does this task depend on"
+- Index: (`depends_on_task_id`) for "what tasks depend on this one"
+
+#### Task Status and Closed State
+
+- Spec ID: `CYNAI.SCHEMA.TaskStatusAndClosed` <a id="spec-cynai-schema-taskstatusandclosed"></a>
+
+Task **status** is stored in `tasks.status` and represents the lifecycle state (e.g. pending, running, completed, failed, cancelled, superseded).
+Task **closed** is stored in `tasks.closed` (boolean): when true, the task is closed (no further work); when false, the task is open.
+The system MUST keep `closed` consistent with `status` (e.g. set `closed = true` when status becomes completed, failed, cancelled, or superseded).
+Plan completion (set plan to completed) requires the plan to have at least one task and **all such tasks to have `closed = true`**; see [REQ-PROJCT-0121](../requirements/projct.md#req-projct-0121) and [Project plan state](projects_and_scopes.md#spec-cynai-access-projectplanstate).
 
 ### Jobs Table
 
@@ -1213,13 +1337,13 @@ Constraints
 Creation order (respecting foreign keys)
 
 1. `users`
-2. `projects`, `project_git_repos`, `groups`, `roles`
+2. `projects`, `project_plans`, `project_plan_revisions`, `project_git_repos`, `groups`, `roles`
 3. `password_credentials`, `refresh_sessions`, `group_memberships`, `role_bindings`
 4. `access_control_rules`
 5. `api_credentials`
 6. `preference_entries`
 7. `nodes`, `sandbox_images`
-8. `tasks`, `sessions`
+8. `tasks`, `task_dependencies`, `sessions`
 9. `sandbox_image_versions`, `jobs`, `node_capabilities`, `workflow_checkpoints`, `task_workflow_leases`
 10. `runs`, `task_artifacts`, `node_sandbox_image_availability`, `vector_items`
 11. `auth_audit_log`, `mcp_tool_call_audit_log`, `access_control_audit_log`, `preference_audit_log`

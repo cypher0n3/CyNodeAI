@@ -7,6 +7,8 @@
   - [Invocation Model](#invocation-model)
   - [Workflow Start/Resume API Contract](#workflow-startresume-api-contract)
   - [Workflow Start Triggers](#workflow-start-triggers)
+  - [Project Plan and Task Order](#project-plan-and-task-order)
+  - [Workflow Start Gate (Plan Approved)](#workflow-start-gate-plan-approved)
   - [Checkpoint Persistence Contract](#checkpoint-persistence-contract)
   - [Graph Nodes to Orchestrator Capabilities](#graph-nodes-to-orchestrator-capabilities)
   - [Sub-Agent Invocation](#sub-agent-invocation)
@@ -116,6 +118,74 @@ The orchestrator does not infer workflow start from task-state subscription; the
 
 When a scheduled run requires interpretation, the scheduler hands the run payload to PMA; PMA creates the task and starts the workflow internally.
 See [orchestrator.md](orchestrator.md) Scheduled Run Routing to Project Manager Agent.
+
+### Project Plan and Task Order
+
+- Spec ID: `CYNAI.ORCHES.WorkflowPlanOrder` <a id="spec-cynai-orches-workflowplanorder"></a>
+
+Traces To:
+
+- [REQ-ORCHES-0153](../requirements/orches.md#req-orches-0153)
+
+When a task is associated with a plan (`task.plan_id` set; see [Project plan](projects_and_scopes.md#spec-cynai-access-projectplan)), execution order and runnability are determined solely by **task dependencies** ([`task_dependencies`](postgres_schema.md#spec-cynai-schema-taskdependenciestable) table).
+
+**Runnable:** A task in a plan is **runnable** when: (1) the plan's state is `active`, (2) the task is not closed, and (3) every task it depends on (each `depends_on_task_id` in `task_dependencies` for this `task_id`) has `status = 'completed'`.
+A task with no dependencies in `task_dependencies` is runnable once the plan is active and the task is not closed (subject to the workflow start gate).
+
+**Blocking on failed dependencies:** Tasks that depend on a task with status `failed`, `cancelled`, or `superseded` MUST NOT have their workflow started until that dependency is retried and reaches `status = 'completed'`.
+The orchestrator MUST enforce this in the workflow start gate (see [Workflow start gate: dependency check](#workflow-start-gate-plan-approved)).
+
+**Parallel execution:** Multiple tasks MAY be started in parallel when each is runnable (no unsatisfied dependencies).
+The orchestrator or PMA when selecting which task(s) to run next MUST consider all runnable tasks in the plan and MAY start any subset of them subject to resource and policy constraints.
+
+Tasks with no rows in `task_dependencies` for that plan are runnable once the plan is active and the task is not closed (no prerequisites).
+
+#### Cancel Cascades to Dependents
+
+- Spec ID: `CYNAI.ORCHES.CancelCascadesToDependents` <a id="spec-cynai-orches-cancelcascadestodependents"></a>
+
+Traces To:
+
+- [REQ-ORCHES-0154](../requirements/orches.md#req-orches-0154)
+
+When a task is set to status `cancelled`, the system MUST automatically set to `cancelled` every task that depends on it (each `task_id` that has this task as `depends_on_task_id` in `task_dependencies`).
+This MUST be applied **transitively**: any task that depends on a task that was just cancelled is also cancelled, and so on, so that the entire downstream dependency graph from the cancelled task is cancelled.
+Each cascaded task MUST have its `status` set to `cancelled` and `closed` set to `true`.
+The gateway and orchestrator MUST enforce this when processing a cancel request or when any component sets a task's status to `cancelled`.
+
+### Workflow Start Gate (Plan Approved)
+
+- Spec ID: `CYNAI.ORCHES.WorkflowStartGatePlanApproved` <a id="spec-cynai-orches-workflowstartgateplanapproved"></a>
+
+Traces To:
+
+- [REQ-ORCHES-0152](../requirements/orches.md#req-orches-0152)
+- [REQ-ORCHES-0153](../requirements/orches.md#req-orches-0153)
+- [REQ-PROJCT-0124](../requirements/projct.md#req-projct-0124)
+
+Before the orchestrator starts a workflow for a task, it MUST apply the following gate.
+
+#### `WorkflowStartGatePlanApproved` Scope
+
+- Applies to every workflow start request (whether triggered by User API task create, PMA/MCP "start workflow for task_id", or scheduled run handed to PMA).
+- The gate is evaluated after the trigger is recognized and before the workflow start API is invoked (or before the lease is acquired).
+
+#### `WorkflowStartGatePlanApproved` Algorithm
+
+<a id="algo-cynai-orches-workflowstartgateplanapproved"></a>
+
+1. Resolve the task's plan: `plan_id` from the task row. <a id="algo-cynai-orches-workflowstartgateplanapproved-step-1"></a>
+2. If `plan_id` is null, allow workflow start (no plan gate). <a id="algo-cynai-orches-workflowstartgateplanapproved-step-2"></a>
+3. Load the plan row (`project_plans`).
+   If the plan's `archived` flag is true, deny workflow start and return a defined error (e.g. 409 or 403 with reason "plan is archived").
+   If the plan's `state` is not `active` (e.g. `draft`, `ready`, `suspended`, `completed`, `cancelled`): if the workflow start was requested explicitly by the PMA (e.g. MCP tool or internal "start workflow for task_id" from PMA), continue to step 5 (PMA handoff); otherwise deny workflow start and return a defined error (e.g. 409 or 403 with reason "plan not active"). <a id="algo-cynai-orches-workflowstartgateplanapproved-step-3"></a>
+4. If the plan's `state` is `active`, continue to step 5. <a id="algo-cynai-orches-workflowstartgateplanapproved-step-4"></a>
+5. **Dependency check** (whenever `plan_id` is set): Load all rows from `task_dependencies` where `task_id` = this task.
+   For each such row, load the dependency task (`depends_on_task_id`).
+   If any dependency task has `status != 'completed'`, deny workflow start and return a defined error (e.g. 409 with reason "dependencies not satisfied" or "dependency not completed").
+   If there are no dependency rows, or every dependency has `status = 'completed'`, allow workflow start. <a id="algo-cynai-orches-workflowstartgateplanapproved-step-5"></a>
+
+Implementations MUST set the plan's state to `draft` whenever that plan's document, task list, or task dependencies are updated while the plan is active (see [Project plan auto un-approve on edit](projects_and_scopes.md#spec-cynai-access-projectplanautounapprove)).
 
 ### Checkpoint Persistence Contract
 

@@ -51,13 +51,14 @@ Validation commands run:
 
 ## Current State Summary
 
-High-confidence status:
+High-confidence status (updated after Steps 0--3 execution):
 
 - BDD suites are passing (`agents`, `orchestrator`, `worker_node`, `cynork`).
-- The repository is not currently green on local quality gates.
-- `just test-go` fails coverage due to `worker_node/cmd/node-manager` at 83.0% (below 90% target).
+- Baseline was restored: `just lint-go`, `just test-go`, and `just test-bdd` pass; coverage gates at >=90% for targeted packages.
+- `just ci` is green (Go lint/test/coverage/vulncheck, Python lint, markdownlint, doc-link validation, BDD).
 
-This means the immediate baseline is unstable even before adding new scope.
+Original snapshot (for context): the repository was not green on local quality gates; `just test-go` had failed coverage (e.g. `worker_node/cmd/node-manager` at 83.0%).
+Steps 1--3 addressed baseline and requirement drift; CI is now green.
 
 ## Go/spec Alignment Snapshot
 
@@ -256,25 +257,25 @@ This keeps scope focused on baseline stability and high-impact drift fixes befor
   - requirement ids: (process)
   - spec ids: this doc
   - validation: N/A
-  - status: Not started
+  - status: Done
 - **Step:** 1
   - description: Fix baseline quality gates
   - requirement ids: (repo tooling)
   - spec ids: justfile
   - validation: `just lint-go`, `just test-go`, `just test-bdd`
-  - status: Not started
+  - status: Done
 - **Step:** 2
   - description: Reconcile completed-phase claims
   - requirement ids: (doc accuracy)
   - spec ids: `docs/mvp_plan.md`
   - validation: `just docs-check`
-  - status: Not started
+  - status: Done
 - **Step:** 3
   - description: Close P1/P1.7 requirement drift
   - requirement ids: REQ-ORCHES-0150, REQ-ORCHES-0131, REQ-ORCHES-0132
   - spec ids: `orchestrator_bootstrap.md`, `openai_compatible_chat_api.md`, `user_api_gateway.md`
   - validation: unit + BDD for gating, chat, task-create
-  - status: Not started
+  - status: Done (coverage >=90%; `just ci` green)
 - **Step:** 4
   - description: Complete Phase 2 MCP core slice
   - requirement ids: REQ-MCPGAT-0001, REQ-MCPGAT-0002, REQ-MCPTOO-0109, REQ-MCPTOO-0110

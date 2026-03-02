@@ -4,11 +4,14 @@
 - [Gateway Purpose](#gateway-purpose)
 - [Core Capabilities](#core-capabilities)
 - [Client Compatibility](#client-compatibility)
+- [MCP Tool Interface](#mcp-tool-interface)
 - [Data REST API](#data-rest-api)
+  - [Project Plan API](#project-plan-api)
 - [Live Updates and Messaging](#live-updates-and-messaging)
   - [Delivery Methods](#delivery-methods)
   - [Event Types](#event-types)
   - [Subscriptions and Destinations](#subscriptions-and-destinations)
+- [Support for Cynork Chat Slash Commands](#support-for-cynork-chat-slash-commands)
 - [Authentication and Auditing](#authentication-and-auditing)
 - [Web Console](#web-console)
 
@@ -104,6 +107,104 @@ Traces To:
 - [REQ-USRGWY-0122](../requirements/usrgwy.md#req-usrgwy-0122)
 
 See [`docs/tech_specs/data_rest_api.md`](data_rest_api.md).
+
+### Project Plan API
+
+- Spec ID: `CYNAI.USRGWY.ProjectPlanApi` <a id="spec-cynai-usrgwy-projectplanapi"></a>
+
+Traces To:
+
+- [REQ-PROJCT-0120](../requirements/projct.md#req-projct-0120)
+- [REQ-CLIENT-0179](../requirements/client.md#req-client-0179)
+
+The gateway MUST expose the following operations for project plan review and approve.
+Plans are first-class entities per project; a project may have multiple plans; at most one plan per project may be active at a time (see [Project plan state](projects_and_scopes.md#spec-cynai-access-projectplanstate)).
+Authorization MUST use the actions defined in [Project plan actions](access_control.md#spec-cynai-access-projectplanactions): `project_plan.read` for list plans, get plan, list revisions, get revision; `project_plan.approve` for approve; `project_plan.activate` for activate; `project_plan.update` for create/update plan and state transitions (suspend, resume, cancel); `project_plan.archive` for archive.
+
+#### `ProjectPlanApi` Operations
+
+- **List plans for project**
+  - Inputs: `project_id` (path or query), optional filter by state (draft, ready, active, suspended, completed, cancelled), optional filter by `archived` (true/false; default view MAY exclude archived), optional pagination.
+  - Outputs: List of plans (plan_id, plan_name, state, archived, plan_approved_at, plan_approved_by, is_plan_locked, created_at, updated_at); ordered by updated_at descending or by state (e.g. active first).
+  - Method: GET (e.g. `GET /v1/projects/{project_id}/plans`).
+  - Error conditions: 404 if project missing; 403 if subject lacks `project_plan.read`.
+- **Create plan**
+  - Inputs: `project_id`, optional plan_name, optional plan_body (initial state is `draft`).
+  - Outputs: plan_id, state (`draft`).
+  - Method: POST (e.g. `POST /v1/projects/{project_id}/plans`).
+  - Error conditions: 404 if project missing; 403 if subject lacks `project_plan.update`.
+- **Get plan**
+  - Inputs: `plan_id` (path or query).
+  - Outputs: Plan document (plan_name, plan_body), state, archived, task list with task dependencies (prerequisite/dependent), plan_approved_at, plan_approved_by, is_plan_locked, project_id.
+  - Method: GET (e.g. `GET /v1/plans/{plan_id}` or `GET /v1/projects/{project_id}/plans/{plan_id}`).
+  - Error conditions: 404 if plan missing; 403 if subject lacks `project_plan.read`.
+- **List plan revisions**
+  - Inputs: `plan_id`, optional pagination (limit, cursor or offset).
+  - Outputs: List of revisions (version, created_at, created_by, optional summary); ordered by version descending (newest first).
+  - Method: GET (e.g. `GET /v1/plans/{plan_id}/revisions`).
+  - Error conditions: 404 if plan missing; 403 if subject lacks `project_plan.read`.
+- **Get plan revision**
+  - Inputs: `plan_id`, `version` (integer).
+  - Outputs: Single revision snapshot (plan_name, plan_body, task_ids, task_dependencies, created_at, created_by).
+  - Method: GET (e.g. `GET /v1/plans/{plan_id}/revisions/{version}`).
+  - Error conditions: 404 if plan or version missing; 403 if subject lacks `project_plan.read`.
+- **Approve plan**
+  - Inputs: `plan_id` (path).
+  - Outputs: Updated plan state (`ready`), plan_approved_at, plan_approved_by.
+  - Method: POST (e.g. `POST /v1/plans/{plan_id}/approve`).
+  - Behavior: Set this plan's state to `ready` (not active); set `plan_approved_at` to current time and `plan_approved_by` to authenticated user (or the user on whose behalf the agent acts).
+    The gateway MUST reject if the plan is archived (per [REQ-PROJCT-0124](../requirements/projct.md#req-projct-0124)).
+    Per [REQ-PROJCT-0122](../requirements/projct.md#req-projct-0122), the backend MUST task the PMA to add or update tasks on the plan as the first action after the plan is set to ready.
+    When the request is from an agent, the agent is expected to have obtained explicit user approval before calling approve per [REQ-AGENTS-0136](../requirements/agents.md#req-agents-0136).
+  - Error conditions: 404 if plan missing; 403 if subject lacks `project_plan.approve`; 409 if plan is archived; 400 if plan has no content (optional validation).
+
+- **Activate plan** (ready -> active)
+  - Inputs: `plan_id` (path).
+  - Outputs: Updated plan state (`active`).
+  - Method: POST (e.g. `POST /v1/plans/{plan_id}/activate`).
+  - Behavior: Set this plan's state to `active` so workflow may run.
+    The gateway MUST reject with 409 if the plan is archived (archived plans must never be active; [REQ-PROJCT-0124](../requirements/projct.md#req-projct-0124)).
+    Any other plan in the same project that is currently `active` MUST be set to `draft`, `suspended`, or (if all its tasks are closed) `completed`.
+  - Error conditions: 404 if plan missing; 403 if subject lacks `project_plan.activate`; 409 if plan is archived or plan is not in state `ready`.
+
+- **Suspend plan** (active -> suspended)
+  - Inputs: `plan_id` (path).
+  - Outputs: Updated plan state (`suspended`).
+  - Method: POST or PATCH (e.g. `POST /v1/plans/{plan_id}/suspend`).
+    Workflow for tasks in this plan MUST NOT run while suspended.
+  - Error conditions: 404 if plan missing; 403 if subject lacks `project_plan.update` or equivalent; 409 if plan is not active.
+
+- **Resume plan** (suspended -> active)
+  - Inputs: `plan_id` (path).
+  - Outputs: Updated plan state (`active`).
+  - Method: POST or PATCH (e.g. `POST /v1/plans/{plan_id}/resume`).
+    The gateway MUST reject if plan is archived.
+    Any other plan in the same project that is currently active MUST be set to draft/suspended/completed so only one is active.
+  - Error conditions: 404 if plan missing; 403 if subject lacks `project_plan.update` or equivalent; 409 if plan is not suspended or if archived.
+
+- **Cancel plan**
+  - Inputs: `plan_id` (path).
+  - Outputs: Updated plan state (`cancelled`).
+  - Method: POST or PATCH (e.g. `POST /v1/plans/{plan_id}/cancel`).
+    Workflow MUST NOT run for cancelled plans.
+  - Error conditions: 404 if plan missing; 403 if subject lacks `project_plan.update` or equivalent.
+
+- **Archive plan**
+  - Inputs: `plan_id` (path).
+  - Outputs: Updated plan (`archived` = true).
+  - Method: POST or PATCH (e.g. `POST /v1/plans/{plan_id}/archive`).
+    The gateway MUST reject with 409 if the plan is active (must suspend or cancel first); see [REQ-PROJCT-0124](../requirements/projct.md#req-projct-0124).
+  - Error conditions: 404 if plan missing; 403 if subject lacks `project_plan.archive`; 409 if plan is active.
+
+- **Set plan to completed** (optional explicit operation, or result of approve when previous active plan has all tasks closed)
+  - Inputs: `plan_id` (path).
+  - Outputs: Updated plan state (`completed`).
+  - Method: POST or PATCH (e.g. `POST /v1/plans/{plan_id}/complete` or `PATCH /v1/plans/{plan_id}` with state=completed).
+  - **Precondition:** The gateway MUST reject the request with 409 (or 400) unless the plan has at least one task and all such tasks are closed (per [REQ-PROJCT-0121](../requirements/projct.md#req-projct-0121)).
+    A plan with no tasks is incomplete and MUST NOT be set to completed.
+  - Error conditions: 404 if plan missing; 403 if subject lacks `project_plan.update` or equivalent; 409 if plan has no tasks or not all tasks are closed.
+
+The Web Console and the CLI MUST provide capability parity for these operations per [REQ-CLIENT-0179](../requirements/client.md#req-client-0179).
 
 ## Live Updates and Messaging
 

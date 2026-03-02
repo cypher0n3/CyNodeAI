@@ -127,6 +127,7 @@ A chat completion is message-in and completion-out.
 
 Conversation state and history are tracked separately from tasks.
 Chat messages are stored as chat-thread messages (see [Chat Threads and Messages](chat_threads_and_messages.md)).
+Multi-message conversation is the intended way to clarify and lay out a task (or project plan) before or as it is executed; see [REQ-AGENTS-0135](../requirements/agents.md#req-agents-0135).
 
 Thread identifiers and association:
 

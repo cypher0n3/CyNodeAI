@@ -34,6 +34,8 @@ Goals:
 - Separate chat message storage from task lifecycle storage.
 - Ensure persisted chat content does not store plaintext secrets.
 - Raw user input MUST be amended by secret redaction before storage.
+- Multi-message conversation is the intended way to clarify and lay out a task (or project plan) before or as it is executed; building up a task properly may take multiple messages.
+  See [REQ-AGENTS-0135](../requirements/agents.md#req-agents-0135) and [CYNAI.AGENTS.ClarificationBeforeExecution](../tech_specs/project_manager_agent.md#spec-cynai-agents-clarificationbeforeexecution).
 
 Non-goals:
 

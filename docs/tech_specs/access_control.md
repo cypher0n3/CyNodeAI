@@ -10,6 +10,7 @@
 ## Spec IDs
 
 - Spec ID: `CYNAI.ACCESS.Doc.AccessControl` <a id="spec-cynai-access-doc-accesscontrol"></a>
+- [CYNAI.ACCESS.ProjectPlanActions](#spec-cynai-access-projectplanactions)
 
 This section defines stable Spec ID anchors for referencing this document.
 
@@ -35,6 +36,7 @@ Access control is evaluated for a request using the following information.
   - What is being attempted.
   - Examples: `api.call`, `web.fetch`, `web.search`, `sandbox_image.publish`, `sandbox_image.use`, `messaging.configure`, `messaging.send`, `mcp.tool.invoke`.
   - Git egress examples: `git.push`, `git.pr.create`.
+  - Project plan actions are defined in [Project plan actions](#spec-cynai-access-projectplanactions).
 - Resource
   - What is being accessed.
   - Examples: provider and operation pairs, URL domains, URL patterns, image references and tags, destination ids and destination types.
@@ -46,6 +48,49 @@ Default stance
 
 - The system SHOULD be default deny.
 - Allow MUST be explicitly granted via policy.
+
+## Project Plan Actions
+
+- Spec ID: `CYNAI.ACCESS.ProjectPlanActions` <a id="spec-cynai-access-projectplanactions"></a>
+
+The following action strings are the canonical names for project-plan operations in access control rules and audit logs.
+Implementations MUST use these exact strings when evaluating or recording policy for project plan resources.
+
+### `ProjectPlanActions` Scope
+
+- Applies to the User API Gateway and any service that enforces project plan operations.
+- Resource type for project plan operations: `project_plan`.
+- Resource pattern: project identifier (e.g. `projects/<uuid>` or project slug) so that rules can scope allow/deny per project.
+
+### `ProjectPlanActions` Contract
+
+- **`project_plan.read`**
+  - Meaning: Read plan document (name, body) and task list; list plan revisions.
+  - When evaluated: GET project plan, GET plan revisions.
+- **`project_plan.update`**
+  - Meaning: Update plan document (name, body), task list, or task dependencies (when plan not locked).
+  - When evaluated: PUT/PATCH plan, task list updates, or task dependency updates.
+- **`project_plan.lock`**
+  - Meaning: Lock the plan document so it is not editable until unlocked.
+  - When evaluated: Lock operation.
+- **`project_plan.unlock`**
+  - Meaning: Unlock the plan document.
+  - When evaluated: Unlock operation.
+- **`project_plan.approve`**
+  - Meaning: Approve plan (set state to ready).
+  - When evaluated: Approve operation.
+- **`project_plan.activate`**
+  - Meaning: Activate plan (set state from ready to active so workflow may run).
+  - When evaluated: Activate operation.
+- **`project_plan.archive`**
+  - Meaning: Set or clear the archived flag on a plan (for UI/API views); archived plans must not run and must not be active.
+  - When evaluated: Archive / unarchive operation.
+
+Rules:
+
+- The orchestrator (or gateway) MUST evaluate the above action for the authenticated subject and resource (project) before permitting the operation.
+- Deny takes precedence when both allow and deny rules match.
+- Default deny: if no rule matches, the operation MUST be denied.
 
 ## Policy Evaluation
 

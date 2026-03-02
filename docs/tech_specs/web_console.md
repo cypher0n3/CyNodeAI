@@ -217,6 +217,7 @@ Traces To:
 - [REQ-CLIENT-0174](../requirements/client.md#req-client-0174)
 
 The web console MUST support basic project CRUD (create, list, view, update, delete or disable) via the User API Gateway, with the same capabilities as the CLI (see [Project Management](cli_management_app_commands_admin.md#spec-cynai-client-cliprojectmanagement)).
+The web console MUST support project plan review (list plans per project, view plan by plan_id, view revision history) and plan approve (re-approve) with parity to the CLI; a project may have multiple plans, with only one active at a time; see [Project Plan API](user_api_gateway.md#spec-cynai-usrgwy-projectplanapi) and [REQ-CLIENT-0179](../requirements/client.md#req-client-0179).
 Projects have a user-friendly title (display name) and an optional text description for lists and detail views.
 
 UI MUST provide: **List** - table or list of projects (columns: title, slug, description excerpt, active, updated_at); optional filter by active status.

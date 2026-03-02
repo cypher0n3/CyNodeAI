@@ -466,8 +466,10 @@ Output
 Traces To:
 
 - [REQ-CLIENT-0174](../requirements/client.md#req-client-0174)
+- [REQ-CLIENT-0179](../requirements/client.md#req-client-0179)
 
 The CLI MUST support basic project CRUD (create, list, get, update, delete or disable) via the User API Gateway.
+The CLI MUST support project plan review (view plan, view revision history) and plan approve (re-approve) per [Project Plan API](user_api_gateway.md#spec-cynai-usrgwy-projectplanapi).
 Projects have a user-friendly title (`display_name`) and an optional text description; see [Projects and Scope Model](projects_and_scopes.md) and [REQ-PROJCT-0103](../requirements/projct.md#req-projct-0103).
 All project commands MUST require auth.
 
@@ -591,6 +593,44 @@ Output
 
 - Table mode MUST print exactly one line containing `project_id=<id> deleted=true`.
 - JSON mode MUST print `{"project_id":"<id>","deleted":true}`.
+
+### Project Plan Review and Approve
+
+The CLI MUST support listing a project's plans, viewing a plan, listing plan revisions, and approving a plan via the User API Gateway; see [Project Plan API](user_api_gateway.md#spec-cynai-usrgwy-projectplanapi).
+A project may have multiple plans; only one plan per project may be active at a time.
+
+#### `cynork project plans list <project_id>`
+
+- Invocation: `cynork project plans list <project_id>`.
+- Optional flags: `--state draft|active|completed`, `--limit`, `--cursor`.
+- Output: List of plans (plan_id, plan_name, state, plan_approved_at, plan_approved_by, is_plan_locked, updated_at).
+
+#### `cynork project plan get <plan_id>`
+
+- Invocation: `cynork project plan get <plan_id>`.
+- Output: Plan document (plan_name, plan_body), state, task list with task dependencies, plan_approved_at, plan_approved_by, is_plan_locked, project_id.
+- Table mode: one line per field or a formatted block for plan_body; JSON mode: single object with plan fields.
+
+#### `cynork project plan revisions list <plan_id>`
+
+- Invocation: `cynork project plan revisions list <plan_id>`.
+- Optional flags: `--limit`, `--cursor` (pagination).
+- Output: List of revisions (version, created_at, created_by); newest first.
+
+#### `cynork project plan approve <plan_id>`
+
+- Invocation: `cynork project plan approve <plan_id>`.
+- Behavior: Calls gateway approve endpoint; sets this plan's state to **ready** (not active); backend tasks the PMA to add or update tasks.
+  Plan must be activated separately to run workflow.
+- Output: Table mode: `plan_id=<id> approved=true state=ready`; JSON mode: `{"plan_id":"<id>","approved":true,"state":"ready"}`.
+
+#### `cynork project plan activate <plan_id>`
+
+- Invocation: `cynork project plan activate <plan_id>`.
+- Behavior: Calls gateway activate endpoint; sets this plan's state from ready to **active** so workflow may run.
+  Rejected if plan is archived or not in state ready.
+  Any other active plan in the same project is set to draft, suspended, or completed.
+- Output: Table mode: `plan_id=<id> state=active`; JSON mode: `{"plan_id":"<id>","state":"active"}`.
 
 ### Project RBAC (Role Bindings)
 

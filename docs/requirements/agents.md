@@ -147,3 +147,14 @@ It covers agent behaviors, responsibilities, and workflow integration.
   When a task is in scope (e.g. `task_id` is set), the agent MUST include task-level context in every LLM prompt (task identity, acceptance criteria summary, status, relevant metadata).
   [CYNAI.AGENTS.LLMContext](../tech_specs/project_manager_agent.md#spec-cynai-agents-llmcontext)
   <a id="req-agents-0134"></a>
+- **REQ-AGENTS-0135:** The Project Manager Agent SHOULD use multi-turn conversation to clarify and lay out a task or project plan when user intent is unclear; multi-message conversation is the intended way to clarify and lay out the task before or as it is executed.
+  [REQ-USRGWY-0130](./usrgwy.md#req-usrgwy-0130)
+  [CYNAI.USRGWY.ChatThreadsMessages](../tech_specs/chat_threads_and_messages.md#spec-cynai-usrgwy-chatthreadsmessages)
+  [CYNAI.USRGWY.OpenAIChatApi](../tech_specs/openai_compatible_chat_api.md#spec-cynai-usrgwy-openaichatapi)
+  <a id="req-agents-0135"></a>
+- **REQ-AGENTS-0136:** Agents MAY set plan approved state only after seeking and obtaining explicit approval from the user.
+  The agent (LLM) MUST seek explicit user approval before marking a plan as approved for execution; the MCP tool and agent instructions MUST state that the agent must obtain explicit user approval before invoking plan approve.
+  Users may also approve plans directly via Web Console, CLI, or API without agent involvement.
+  [CYNAI.ACCESS.ProjectPlanApprovedState](../tech_specs/projects_and_scopes.md#spec-cynai-access-projectplanapprovedstate)
+  [CYNAI.AGENTS.PlanApprovalSeekExplicitApproval](../tech_specs/project_manager_agent.md#spec-cynai-agents-planapprovalseekexplicitapproval)
+  <a id="req-agents-0136"></a>
