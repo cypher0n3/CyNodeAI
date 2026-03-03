@@ -408,3 +408,20 @@ type NodeSandboxImageAvailability struct {
 }
 
 func (NodeSandboxImageAvailability) TableName() string { return "node_sandbox_image_availability" }
+
+// TaskArtifact stores artifact metadata for a task (path, storage ref, size). Per postgres_schema.md Task Artifacts.
+// Unique on (task_id, path). Content may be inline in storage_ref or in object storage.
+type TaskArtifact struct {
+	ID           uuid.UUID  `gorm:"type:uuid;primaryKey" json:"id"`
+	TaskID       uuid.UUID  `gorm:"column:task_id;uniqueIndex:uix_task_artifact_path,priority:1;not null" json:"task_id"`
+	RunID        *uuid.UUID `gorm:"column:run_id;index" json:"run_id,omitempty"`
+	Path         string     `gorm:"column:path;uniqueIndex:uix_task_artifact_path,priority:2" json:"path"`
+	StorageRef   string     `gorm:"column:storage_ref" json:"storage_ref"`
+	SizeBytes    *int64     `gorm:"column:size_bytes" json:"size_bytes,omitempty"`
+	ContentType  *string    `gorm:"column:content_type" json:"content_type,omitempty"`
+	ChecksumSHA256 *string  `gorm:"column:checksum_sha256" json:"checksum_sha256,omitempty"`
+	CreatedAt    time.Time  `gorm:"column:created_at" json:"created_at"`
+	UpdatedAt    time.Time  `gorm:"column:updated_at" json:"updated_at"`
+}
+
+func (TaskArtifact) TableName() string { return "task_artifacts" }

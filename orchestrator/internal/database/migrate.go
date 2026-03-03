@@ -48,6 +48,7 @@ func (db *DB) runAutoMigrate(ctx context.Context, logger *slog.Logger) error {
 		&models.SandboxImage{},
 		&models.SandboxImageVersion{},
 		&models.NodeSandboxImageAvailability{},
+		&models.TaskArtifact{},
 	)
 	if err != nil {
 		return fmt.Errorf("auto migrate: %w", err)

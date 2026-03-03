@@ -4,9 +4,11 @@ package database
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -117,6 +119,89 @@ func (db *DB) GetEffectivePreferencesForTask(ctx context.Context, taskID uuid.UU
 		}
 	}
 	return effective, nil
+}
+
+// CreatePreference creates a preference entry. Returns ErrExists if (scope_type, scope_id, key) already exists.
+// value should be JSON-encoded; valueType is e.g. string, number, boolean, object, array. Per mcp_tool_catalog.md.
+func (db *DB) CreatePreference(ctx context.Context, scopeType string, scopeID *uuid.UUID, key, value, valueType string, reason, updatedBy *string) (*models.PreferenceEntry, error) {
+	existing, err := db.GetPreference(ctx, scopeType, scopeID, key)
+	if err != nil && !errors.Is(err, ErrNotFound) {
+		return nil, err
+	}
+	if existing != nil {
+		return nil, ErrExists
+	}
+	now := time.Now().UTC()
+	var valPtr *string
+	if value != "" {
+		valPtr = &value
+	}
+	ent := &models.PreferenceEntry{
+		ID:        uuid.New(),
+		ScopeType: scopeType,
+		ScopeID:   scopeID,
+		Key:       key,
+		Value:     valPtr,
+		ValueType: valueType,
+		Version:   1,
+		UpdatedAt: now,
+		UpdatedBy: updatedBy,
+	}
+	if err := db.db.WithContext(ctx).Create(ent).Error; err != nil {
+		return nil, wrapErr(err, "create preference")
+	}
+	// Optionally write to preference_audit_log (reason/updatedBy); schema supports it; minimal MVP we skip for now.
+	_ = reason
+	return ent, nil
+}
+
+// UpdatePreference updates a preference entry. Returns ErrNotFound if not found, ErrConflict if expected_version is set and does not match.
+func (db *DB) UpdatePreference(ctx context.Context, scopeType string, scopeID *uuid.UUID, key, value, valueType string, expectedVersion *int, reason, updatedBy *string) (*models.PreferenceEntry, error) {
+	ent, err := db.GetPreference(ctx, scopeType, scopeID, key)
+	if err != nil {
+		return nil, err
+	}
+	if expectedVersion != nil && ent.Version != *expectedVersion {
+		return nil, ErrConflict
+	}
+	now := time.Now().UTC()
+	var valPtr *string
+	if value != "" {
+		valPtr = &value
+	}
+	updates := map[string]interface{}{
+		"value":      valPtr,
+		"value_type": valueType,
+		"version":    ent.Version + 1,
+		"updated_at": now,
+		"updated_by": updatedBy,
+	}
+	if err := db.db.WithContext(ctx).Model(ent).Updates(updates).Error; err != nil {
+		return nil, wrapErr(err, "update preference")
+	}
+	_ = reason
+	ent.Value = valPtr
+	ent.ValueType = valueType
+	ent.Version++
+	ent.UpdatedAt = now
+	ent.UpdatedBy = updatedBy
+	return ent, nil
+}
+
+// DeletePreference deletes a preference entry. Returns ErrNotFound if not found, ErrConflict if expected_version is set and does not match.
+func (db *DB) DeletePreference(ctx context.Context, scopeType string, scopeID *uuid.UUID, key string, expectedVersion *int, reason *string) error {
+	ent, err := db.GetPreference(ctx, scopeType, scopeID, key)
+	if err != nil {
+		return err
+	}
+	if expectedVersion != nil && ent.Version != *expectedVersion {
+		return ErrConflict
+	}
+	if err := db.db.WithContext(ctx).Delete(ent).Error; err != nil {
+		return wrapErr(err, "delete preference")
+	}
+	_ = reason
+	return nil
 }
 
 // ParsePreferenceValue parses the stored JSON value into a generic value. Returns nil for nil or empty value.

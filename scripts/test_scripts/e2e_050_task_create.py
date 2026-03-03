@@ -1,5 +1,6 @@
 # E2E parity: task create (echo). Requires login; sets state.task_id.
 
+import re
 import time
 import unittest
 
@@ -62,16 +63,16 @@ class TestTaskCreate(unittest.TestCase):
             self.assertTrue(ok2, f"task get failed: {out2}")
             get_data = helpers.parse_json_safe(out2)
             self.assertIsNotNone(get_data, f"task get response not JSON: {out2}")
-            # Task name is normalized (lowercase, single dashes)
-            self.assertIn(
-                "task_name",
-                get_data,
-                f"task_name missing in get response: {get_data}",
+            # API may return task_name and/or summary (both from normalized name).
+            # Backend ensures uniqueness per user by appending -2, -3, ... when needed.
+            name = get_data.get("task_name") or get_data.get("summary")
+            self.assertIsNotNone(
+                name,
+                f"task_name or summary missing in get response: {get_data}",
             )
-            self.assertEqual(
-                get_data.get("task_name"),
-                "e2e-task-name",
-                f"task_name mismatch: {get_data}",
+            self.assertTrue(
+                re.match(r"^e2e-task-name(-\d+)?$", name),
+                f"task name should be e2e-task-name or e2e-task-name-N: got {name!r}; full response: {get_data}",
             )
             return
         self.fail("unreachable")

@@ -18,6 +18,8 @@ import (
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/models"
 )
 
+const scopeTypeSystem = "system"
+
 func main() {
 	os.Exit(runMain(context.Background()))
 }
@@ -137,6 +139,12 @@ var requiredScopedIds = map[string]struct{ TaskID, RunID, JobID bool }{
 	"db.preference.get":       {},
 	"db.preference.list":      {},
 	"db.preference.effective": {TaskID: true},
+	"db.preference.create":    {},
+	"db.preference.update":   {},
+	"db.preference.delete":   {},
+	"db.task.get":            {TaskID: true},
+	"db.job.get":              {JobID: true},
+	"artifact.get":           {TaskID: true},
 }
 
 // validateRequiredScopedIds returns an error message if required scoped ids are missing or invalid for the tool.
@@ -247,7 +255,7 @@ const (
 	auditStatusSuccess = "success"
 )
 
-// routeToolCall dispatches to preference tools when applicable; returns status code, response body, and audit record.
+// routeToolCall dispatches to preference and db tools when applicable; returns status code, response body, and audit record.
 func routeToolCall(ctx context.Context, store database.Store, toolName string, args map[string]interface{}) (code int, body []byte, rec *models.McpToolCallAuditLog) {
 	rec = &models.McpToolCallAuditLog{Decision: auditDecisionDeny, Status: auditStatusError, ErrorType: strPtr("not_implemented")}
 	switch toolName {
@@ -257,6 +265,18 @@ func routeToolCall(ctx context.Context, store database.Store, toolName string, a
 		code, body, rec = handlePreferenceList(ctx, store, args, rec)
 	case "db.preference.effective":
 		code, body, rec = handlePreferenceEffective(ctx, store, args, rec)
+	case "db.preference.create":
+		code, body, rec = handlePreferenceCreate(ctx, store, args, rec)
+	case "db.preference.update":
+		code, body, rec = handlePreferenceUpdate(ctx, store, args, rec)
+	case "db.preference.delete":
+		code, body, rec = handlePreferenceDelete(ctx, store, args, rec)
+	case "db.task.get":
+		code, body, rec = handleTaskGet(ctx, store, args, rec)
+	case "db.job.get":
+		code, body, rec = handleJobGet(ctx, store, args, rec)
+	case "artifact.get":
+		code, body, rec = handleArtifactGet(ctx, store, args, rec)
 	default:
 		code = http.StatusNotImplemented
 		body = []byte(`{"error":"tool routing not implemented"}`)
@@ -300,6 +320,22 @@ func uuidArg(args map[string]interface{}, key string) *uuid.UUID {
 	return &id
 }
 
+// writePreferenceErrToAudit sets rec for preference errors and returns HTTP code and body.
+func writePreferenceErrToAudit(err error, rec *models.McpToolCallAuditLog) (code int, body []byte) {
+	rec.Decision = auditDecisionAllow
+	rec.Status = auditStatusError
+	if errors.Is(err, database.ErrNotFound) {
+		rec.ErrorType = strPtr("not_found")
+		return http.StatusNotFound, []byte(`{"error":"not found"}`)
+	}
+	if errors.Is(err, database.ErrConflict) {
+		rec.ErrorType = strPtr("conflict")
+		return http.StatusConflict, []byte(`{"error":"version conflict"}`)
+	}
+	rec.ErrorType = strPtr("internal_error")
+	return http.StatusInternalServerError, []byte(`{"error":"internal error"}`)
+}
+
 func handlePreferenceGet(ctx context.Context, store database.Store, args map[string]interface{}, rec *models.McpToolCallAuditLog) (code int, body []byte, auditRec *models.McpToolCallAuditLog) {
 	auditRec = rec
 	scopeType := strArg(args, "scope_type")
@@ -311,7 +347,7 @@ func handlePreferenceGet(ctx context.Context, store database.Store, args map[str
 		return http.StatusBadRequest, []byte(`{"error":"scope_type and key required"}`), auditRec
 	}
 	scopeID := uuidArg(args, "scope_id")
-	if scopeType != "system" && scopeID == nil {
+	if scopeType != scopeTypeSystem && scopeID == nil {
 		rec.Decision = auditDecisionDeny
 		rec.Status = auditStatusError
 		rec.ErrorType = strPtr("invalid_arguments")
@@ -319,16 +355,8 @@ func handlePreferenceGet(ctx context.Context, store database.Store, args map[str
 	}
 	ent, err := store.GetPreference(ctx, scopeType, scopeID, key)
 	if err != nil {
-		if errors.Is(err, database.ErrNotFound) {
-			rec.Decision = auditDecisionAllow
-			rec.Status = auditStatusError
-			rec.ErrorType = strPtr("not_found")
-			return http.StatusNotFound, []byte(`{"error":"not found"}`), auditRec
-		}
-		rec.Decision = auditDecisionAllow
-		rec.Status = auditStatusError
-		rec.ErrorType = strPtr("internal_error")
-		return http.StatusInternalServerError, []byte(`{"error":"internal error"}`), auditRec
+		code, body := writePreferenceErrToAudit(err, rec)
+		return code, body, auditRec
 	}
 	rec.Decision = auditDecisionAllow
 	rec.Status = auditStatusSuccess
@@ -355,7 +383,7 @@ func handlePreferenceList(ctx context.Context, store database.Store, args map[st
 		return http.StatusBadRequest, []byte(`{"error":"scope_type required"}`), auditRec
 	}
 	scopeID := uuidArg(args, "scope_id")
-	if scopeType != "system" && scopeID == nil {
+	if scopeType != scopeTypeSystem && scopeID == nil {
 		rec.Decision = auditDecisionDeny
 		rec.Status = auditStatusError
 		rec.ErrorType = strPtr("invalid_arguments")
@@ -414,6 +442,252 @@ func handlePreferenceEffective(ctx context.Context, store database.Store, args m
 	rec.Status = auditStatusSuccess
 	rec.ErrorType = nil
 	body, _ = json.Marshal(map[string]interface{}{"effective": effective})
+	return http.StatusOK, body, auditRec
+}
+
+func handlePreferenceCreate(ctx context.Context, store database.Store, args map[string]interface{}, rec *models.McpToolCallAuditLog) (code int, body []byte, auditRec *models.McpToolCallAuditLog) {
+	auditRec = rec
+	scopeType := strArg(args, "scope_type")
+	key := strArg(args, "key")
+	value := strArg(args, "value")
+	valueType := strArg(args, "value_type")
+	if scopeType == "" || key == "" || valueType == "" {
+		rec.Decision = auditDecisionDeny
+		rec.Status = auditStatusError
+		rec.ErrorType = strPtr("invalid_arguments")
+		return http.StatusBadRequest, []byte(`{"error":"scope_type, key, and value_type required"}`), auditRec
+	}
+	scopeID := uuidArg(args, "scope_id")
+	if scopeType != scopeTypeSystem && scopeID == nil {
+		rec.Decision = auditDecisionDeny
+		rec.Status = auditStatusError
+		rec.ErrorType = strPtr("invalid_arguments")
+		return http.StatusBadRequest, []byte(`{"error":"scope_id required when scope_type is not system"}`), auditRec
+	}
+	var reason, updatedBy *string
+	if r := strArg(args, "reason"); r != "" {
+		reason = &r
+	}
+	ent, err := store.CreatePreference(ctx, scopeType, scopeID, key, value, valueType, reason, updatedBy)
+	if err != nil {
+		if errors.Is(err, database.ErrExists) {
+			rec.Decision = auditDecisionAllow
+			rec.Status = auditStatusError
+			rec.ErrorType = strPtr("conflict")
+			return http.StatusConflict, []byte(`{"error":"preference already exists for scope and key"}`), auditRec
+		}
+		rec.Decision = auditDecisionAllow
+		rec.Status = auditStatusError
+		rec.ErrorType = strPtr("internal_error")
+		return http.StatusInternalServerError, []byte(`{"error":"internal error"}`), auditRec
+	}
+	rec.Decision = auditDecisionAllow
+	rec.Status = auditStatusSuccess
+	rec.ErrorType = nil
+	out := map[string]interface{}{
+		"scope_type": ent.ScopeType,
+		"scope_id":   ent.ScopeID,
+		"key":        ent.Key,
+		"value":      ent.Value,
+		"value_type": ent.ValueType,
+		"version":    ent.Version,
+	}
+	body, _ = json.Marshal(out)
+	return http.StatusOK, body, auditRec
+}
+
+func handlePreferenceUpdate(ctx context.Context, store database.Store, args map[string]interface{}, rec *models.McpToolCallAuditLog) (code int, body []byte, auditRec *models.McpToolCallAuditLog) {
+	auditRec = rec
+	scopeType := strArg(args, "scope_type")
+	key := strArg(args, "key")
+	value := strArg(args, "value")
+	valueType := strArg(args, "value_type")
+	if scopeType == "" || key == "" || valueType == "" {
+		rec.Decision = auditDecisionDeny
+		rec.Status = auditStatusError
+		rec.ErrorType = strPtr("invalid_arguments")
+		return http.StatusBadRequest, []byte(`{"error":"scope_type, key, and value_type required"}`), auditRec
+	}
+	scopeID := uuidArg(args, "scope_id")
+	if scopeType != scopeTypeSystem && scopeID == nil {
+		rec.Decision = auditDecisionDeny
+		rec.Status = auditStatusError
+		rec.ErrorType = strPtr("invalid_arguments")
+		return http.StatusBadRequest, []byte(`{"error":"scope_id required when scope_type is not system"}`), auditRec
+	}
+	var expectedVersion *int
+	if v, ok := args["expected_version"]; ok {
+		switch n := v.(type) {
+		case float64:
+			ev := int(n)
+			expectedVersion = &ev
+		case int:
+			expectedVersion = &n
+		}
+	}
+	var reason, updatedBy *string
+	if r := strArg(args, "reason"); r != "" {
+		reason = &r
+	}
+	ent, err := store.UpdatePreference(ctx, scopeType, scopeID, key, value, valueType, expectedVersion, reason, updatedBy)
+	if err != nil {
+		code, body := writePreferenceErrToAudit(err, rec)
+		return code, body, auditRec
+	}
+	rec.Decision = auditDecisionAllow
+	rec.Status = auditStatusSuccess
+	rec.ErrorType = nil
+	out := map[string]interface{}{
+		"scope_type": ent.ScopeType,
+		"scope_id":   ent.ScopeID,
+		"key":        ent.Key,
+		"value":      ent.Value,
+		"value_type": ent.ValueType,
+		"version":    ent.Version,
+	}
+	body, _ = json.Marshal(out)
+	return http.StatusOK, body, auditRec
+}
+
+func handlePreferenceDelete(ctx context.Context, store database.Store, args map[string]interface{}, rec *models.McpToolCallAuditLog) (code int, body []byte, auditRec *models.McpToolCallAuditLog) {
+	auditRec = rec
+	scopeType := strArg(args, "scope_type")
+	key := strArg(args, "key")
+	if scopeType == "" || key == "" {
+		rec.Decision = auditDecisionDeny
+		rec.Status = auditStatusError
+		rec.ErrorType = strPtr("invalid_arguments")
+		return http.StatusBadRequest, []byte(`{"error":"scope_type and key required"}`), auditRec
+	}
+	scopeID := uuidArg(args, "scope_id")
+	if scopeType != scopeTypeSystem && scopeID == nil {
+		rec.Decision = auditDecisionDeny
+		rec.Status = auditStatusError
+		rec.ErrorType = strPtr("invalid_arguments")
+		return http.StatusBadRequest, []byte(`{"error":"scope_id required when scope_type is not system"}`), auditRec
+	}
+	var expectedVersion *int
+	if v, ok := args["expected_version"]; ok {
+		switch n := v.(type) {
+		case float64:
+			ev := int(n)
+			expectedVersion = &ev
+		case int:
+			expectedVersion = &n
+		}
+	}
+	var reason *string
+	if r := strArg(args, "reason"); r != "" {
+		reason = &r
+	}
+	err := store.DeletePreference(ctx, scopeType, scopeID, key, expectedVersion, reason)
+	if err != nil {
+		code, body := writePreferenceErrToAudit(err, rec)
+		return code, body, auditRec
+	}
+	rec.Decision = auditDecisionAllow
+	rec.Status = auditStatusSuccess
+	rec.ErrorType = nil
+	return http.StatusOK, []byte(`{}`), auditRec
+}
+
+func handleTaskGet(ctx context.Context, store database.Store, args map[string]interface{}, rec *models.McpToolCallAuditLog) (code int, body []byte, auditRec *models.McpToolCallAuditLog) {
+	auditRec = rec
+	taskID := uuidArg(args, "task_id")
+	if taskID == nil {
+		rec.Decision = auditDecisionDeny
+		rec.Status = auditStatusError
+		rec.ErrorType = strPtr("invalid_arguments")
+		return http.StatusBadRequest, []byte(`{"error":"task_id required"}`), auditRec
+	}
+	rec.TaskID = taskID
+	task, err := store.GetTaskByID(ctx, *taskID)
+	if err != nil {
+		code, body := writePreferenceErrToAudit(err, rec)
+		return code, body, auditRec
+	}
+	rec.Decision = auditDecisionAllow
+	rec.Status = auditStatusSuccess
+	rec.ErrorType = nil
+	out := map[string]interface{}{
+		"id":         task.ID,
+		"status":     task.Status,
+		"prompt":     task.Prompt,
+		"summary":    task.Summary,
+		"created_by": task.CreatedBy,
+		"project_id": task.ProjectID,
+		"created_at": task.CreatedAt,
+		"updated_at": task.UpdatedAt,
+	}
+	body, _ = json.Marshal(out)
+	return http.StatusOK, body, auditRec
+}
+
+func handleJobGet(ctx context.Context, store database.Store, args map[string]interface{}, rec *models.McpToolCallAuditLog) (code int, body []byte, auditRec *models.McpToolCallAuditLog) {
+	auditRec = rec
+	jobID := uuidArg(args, "job_id")
+	if jobID == nil {
+		rec.Decision = auditDecisionDeny
+		rec.Status = auditStatusError
+		rec.ErrorType = strPtr("invalid_arguments")
+		return http.StatusBadRequest, []byte(`{"error":"job_id required"}`), auditRec
+	}
+	rec.JobID = jobID
+	job, err := store.GetJobByID(ctx, *jobID)
+	if err != nil {
+		code, body := writePreferenceErrToAudit(err, rec)
+		return code, body, auditRec
+	}
+	rec.Decision = auditDecisionAllow
+	rec.Status = auditStatusSuccess
+	rec.ErrorType = nil
+	out := map[string]interface{}{
+		"id":       job.ID,
+		"task_id":  job.TaskID,
+		"status":   job.Status,
+		"node_id":  job.NodeID,
+		"payload":  job.Payload.Ptr(),
+		"result":   job.Result.Ptr(),
+		"created_at": job.CreatedAt,
+		"updated_at": job.UpdatedAt,
+	}
+	body, _ = json.Marshal(out)
+	return http.StatusOK, body, auditRec
+}
+
+func handleArtifactGet(ctx context.Context, store database.Store, args map[string]interface{}, rec *models.McpToolCallAuditLog) (code int, body []byte, auditRec *models.McpToolCallAuditLog) {
+	auditRec = rec
+	taskID := uuidArg(args, "task_id")
+	path := strArg(args, "path")
+	if taskID == nil || path == "" {
+		rec.Decision = auditDecisionDeny
+		rec.Status = auditStatusError
+		rec.ErrorType = strPtr("invalid_arguments")
+		return http.StatusBadRequest, []byte(`{"error":"task_id and path required"}`), auditRec
+	}
+	rec.TaskID = taskID
+	art, err := store.GetArtifactByTaskIDAndPath(ctx, *taskID, path)
+	if err != nil {
+		code, body := writePreferenceErrToAudit(err, rec)
+		return code, body, auditRec
+	}
+	rec.Decision = auditDecisionAllow
+	rec.Status = auditStatusSuccess
+	rec.ErrorType = nil
+	out := map[string]interface{}{
+		"task_id":    art.TaskID,
+		"path":       art.Path,
+		"storage_ref": art.StorageRef,
+		"size_bytes":  art.SizeBytes,
+		"content_type": art.ContentType,
+		"checksum_sha256": art.ChecksumSHA256,
+		"created_at": art.CreatedAt,
+		"updated_at": art.UpdatedAt,
+	}
+	if art.RunID != nil {
+		out["run_id"] = art.RunID
+	}
+	body, _ = json.Marshal(out)
 	return http.StatusOK, body, auditRec
 }
 

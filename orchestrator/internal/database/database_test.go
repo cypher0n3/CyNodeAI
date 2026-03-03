@@ -32,6 +32,18 @@ func TestErrNotFound(t *testing.T) {
 	}
 }
 
+func TestErrExists(t *testing.T) {
+	if !errors.Is(ErrExists, ErrExists) {
+		t.Error("ErrExists should be errors.Is(self)")
+	}
+}
+
+func TestErrConflict(t *testing.T) {
+	if !errors.Is(ErrConflict, ErrConflict) {
+		t.Error("ErrConflict should be errors.Is(self)")
+	}
+}
+
 func TestWrapErr_Nil(t *testing.T) {
 	if wrapErr(nil, "op") != nil {
 		t.Error("wrapErr(nil) should return nil")

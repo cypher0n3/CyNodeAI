@@ -20,6 +20,12 @@ import (
 // ErrNotFound is returned when a record is not found.
 var ErrNotFound = errors.New("not found")
 
+// ErrExists is returned when a create would violate a unique constraint (e.g. preference key already exists).
+var ErrExists = errors.New("already exists")
+
+// ErrConflict is returned when an update or delete fails due to version mismatch (expected_version).
+var ErrConflict = errors.New("version conflict")
+
 func wrapErr(err error, op string) error {
 	if err == nil {
 		return nil
@@ -85,10 +91,16 @@ type Store interface {
 	// MCP tool call audit (P2-02): write one record per routed tool call (allow/deny, success/error).
 	CreateMcpToolCallAuditLog(ctx context.Context, rec *models.McpToolCallAuditLog) error
 
-	// Preference operations (P2-03): db.preference.get, list, effective.
+	// Preference operations (P2-03): db.preference.get, list, effective, create, update, delete.
 	GetPreference(ctx context.Context, scopeType string, scopeID *uuid.UUID, key string) (*models.PreferenceEntry, error)
 	ListPreferences(ctx context.Context, scopeType string, scopeID *uuid.UUID, keyPrefix string, limit int, cursor string) ([]*models.PreferenceEntry, string, error)
 	GetEffectivePreferencesForTask(ctx context.Context, taskID uuid.UUID) (map[string]interface{}, error)
+	CreatePreference(ctx context.Context, scopeType string, scopeID *uuid.UUID, key, value, valueType string, reason, updatedBy *string) (*models.PreferenceEntry, error)
+	UpdatePreference(ctx context.Context, scopeType string, scopeID *uuid.UUID, key, value, valueType string, expectedVersion *int, reason, updatedBy *string) (*models.PreferenceEntry, error)
+	DeletePreference(ctx context.Context, scopeType string, scopeID *uuid.UUID, key string, expectedVersion *int, reason *string) error
+
+	// Task artifacts (artifact.get MCP tool).
+	GetArtifactByTaskIDAndPath(ctx context.Context, taskID uuid.UUID, path string) (*models.TaskArtifact, error)
 
 	// Chat threads and messages (OpenAI-compatible chat API).
 	GetOrCreateActiveChatThread(ctx context.Context, userID uuid.UUID, projectID *uuid.UUID) (*models.ChatThread, error)

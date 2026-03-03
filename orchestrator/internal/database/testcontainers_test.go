@@ -475,3 +475,69 @@ func TestWithTestcontainers_Preferences(t *testing.T) {
 		t.Errorf("effective missing tc.pref.key: %v", effective)
 	}
 }
+
+// TestWithTestcontainers_PreferenceCRUDAndArtifact exercises CreatePreference, UpdatePreference, DeletePreference and GetArtifactByTaskIDAndPath.
+func TestWithTestcontainers_PreferenceCRUDAndArtifact(t *testing.T) {
+	ctx := context.Background()
+	store := tcOpenDB(t, ctx)
+	key := "tc.crud." + uuid.New().String()
+	ent, err := store.CreatePreference(ctx, "system", nil, key, `"v1"`, "string", nil, nil)
+	if err != nil {
+		t.Fatalf("CreatePreference: %v", err)
+	}
+	if ent.Version != 1 {
+		t.Errorf("CreatePreference: want version 1, got %d", ent.Version)
+	}
+	_, err = store.CreatePreference(ctx, "system", nil, key, `"v2"`, "string", nil, nil)
+	if err != ErrExists {
+		t.Errorf("CreatePreference duplicate: want ErrExists, got %v", err)
+	}
+	ev := ent.Version
+	ent2, err := store.UpdatePreference(ctx, "system", nil, key, `"updated"`, "string", &ev, nil, nil)
+	if err != nil {
+		t.Fatalf("UpdatePreference: %v", err)
+	}
+	if ent2.Version <= ent.Version {
+		t.Errorf("UpdatePreference: version should increase, got %d then %d", ent.Version, ent2.Version)
+	}
+	cur, err := store.GetPreference(ctx, "system", nil, key)
+	if err != nil {
+		t.Fatalf("GetPreference before delete: %v", err)
+	}
+	evDel := cur.Version
+	err = store.DeletePreference(ctx, "system", nil, key, &evDel, nil)
+	if err != nil {
+		t.Fatalf("DeletePreference: %v", err)
+	}
+	_, err = store.GetPreference(ctx, "system", nil, key)
+	if err != ErrNotFound {
+		t.Errorf("after DeletePreference: want ErrNotFound, got %v", err)
+	}
+	task, err := store.CreateTask(ctx, nil, "tc-artifact-task", nil)
+	if err != nil {
+		t.Fatalf("CreateTask: %v", err)
+	}
+	db := store.(*DB)
+	art := &models.TaskArtifact{
+		ID:         uuid.New(),
+		TaskID:     task.ID,
+		Path:       "tc/out.txt",
+		StorageRef: "ref:xyz",
+		CreatedAt:  time.Now().UTC(),
+		UpdatedAt:  time.Now().UTC(),
+	}
+	if err := db.GORM().WithContext(ctx).Create(art).Error; err != nil {
+		t.Fatalf("create task artifact: %v", err)
+	}
+	got, err := store.GetArtifactByTaskIDAndPath(ctx, task.ID, "tc/out.txt")
+	if err != nil {
+		t.Fatalf("GetArtifactByTaskIDAndPath: %v", err)
+	}
+	if got.StorageRef != "ref:xyz" {
+		t.Errorf("GetArtifactByTaskIDAndPath: got storage_ref %q", got.StorageRef)
+	}
+	_, err = store.GetArtifactByTaskIDAndPath(ctx, task.ID, "missing")
+	if err != ErrNotFound {
+		t.Errorf("GetArtifactByTaskIDAndPath missing: want ErrNotFound, got %v", err)
+	}
+}

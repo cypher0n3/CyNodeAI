@@ -47,8 +47,11 @@ COMPOSE_FILE = os.path.join(PROJECT_ROOT, "orchestrator", "docker-compose.yml")
 NODE_MANAGER_PID_FILE = os.path.join(
     tempfile.gettempdir(), "cynodeai-node-manager.pid"
 )
-NODE_MANAGER_BIN = os.path.join(PROJECT_ROOT, "worker_node", "bin", "node-manager")
-NODE_MANAGER_WORKER_API_BIN = os.path.join(PROJECT_ROOT, "worker_node", "bin", "worker-api")
+# Dev builds (faster; use just build-dev)
+NODE_MANAGER_BIN = os.path.join(PROJECT_ROOT, "worker_node", "bin", "node-manager-dev")
+NODE_MANAGER_WORKER_API_BIN = os.path.join(
+    PROJECT_ROOT, "worker_node", "bin", "worker-api-dev"
+)
 
 
 def ensure_runtime():

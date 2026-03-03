@@ -407,6 +407,217 @@ func TestIntegration_Preferences_EffectiveWithNilValue(t *testing.T) {
 	}
 }
 
+func TestIntegration_Preferences_CreateUpdateDelete(t *testing.T) {
+	db, ctx := integrationDB(t)
+	key := "crud.key." + uuid.New().String()
+	ent, err := db.CreatePreference(ctx, "system", nil, key, `"v1"`, "string", nil, nil)
+	if err != nil {
+		t.Fatalf("CreatePreference: %v", err)
+	}
+	if ent.Key != key || ent.Version < 1 {
+		t.Errorf("CreatePreference: got %+v", ent)
+	}
+	_, err = db.CreatePreference(ctx, "system", nil, key, `"v2"`, "string", nil, nil)
+	if err != ErrExists {
+		t.Errorf("CreatePreference duplicate: want ErrExists, got %v", err)
+	}
+	ev := ent.Version
+	ent2, err := db.UpdatePreference(ctx, "system", nil, key, `"v1updated"`, "string", &ev, nil, nil)
+	if err != nil {
+		t.Fatalf("UpdatePreference: %v", err)
+	}
+	if ent2.Version <= ent.Version {
+		t.Errorf("UpdatePreference: version should increase, got %d then %d", ent.Version, ent2.Version)
+	}
+	evBad := 999
+	_, err = db.UpdatePreference(ctx, "system", nil, key, `"x"`, "string", &evBad, nil, nil)
+	if err != ErrConflict {
+		t.Errorf("UpdatePreference version mismatch: want ErrConflict, got %v", err)
+	}
+	// Delete using current version (re-fetch in case of shared DB skew)
+	cur, err := db.GetPreference(ctx, "system", nil, key)
+	if err != nil {
+		t.Fatalf("GetPreference before delete: %v", err)
+	}
+	evDel := cur.Version
+	err = db.DeletePreference(ctx, "system", nil, key, &evDel, nil)
+	if err != nil {
+		t.Fatalf("DeletePreference: %v", err)
+	}
+	_, err = db.GetPreference(ctx, "system", nil, key)
+	if err != ErrNotFound {
+		t.Errorf("DeletePreference: want ErrNotFound after delete, got %v", err)
+	}
+}
+
+func TestIntegration_Preferences_DeleteNotFound(t *testing.T) {
+	db, ctx := integrationDB(t)
+	key := "nonexistent.delete." + uuid.New().String()
+	err := db.DeletePreference(ctx, "system", nil, key, nil, nil)
+	if err != ErrNotFound {
+		t.Errorf("DeletePreference nonexistent: want ErrNotFound, got %v", err)
+	}
+}
+
+func TestIntegration_Preferences_DeleteVersionConflict(t *testing.T) {
+	db, ctx := integrationDB(t)
+	key := "conflict.delete." + uuid.New().String()
+	ent, err := db.CreatePreference(ctx, "system", nil, key, `"v"`, "string", nil, nil)
+	if err != nil {
+		t.Fatalf("CreatePreference: %v", err)
+	}
+	evWrong := ent.Version + 999
+	err = db.DeletePreference(ctx, "system", nil, key, &evWrong, nil)
+	if err != ErrConflict {
+		t.Errorf("DeletePreference version mismatch: want ErrConflict, got %v", err)
+	}
+	// Clean up
+	ev := ent.Version
+	_ = db.DeletePreference(ctx, "system", nil, key, &ev, nil)
+}
+
+func TestIntegration_Preferences_ListWithKeyPrefixAndCursor(t *testing.T) {
+	db, ctx := integrationDB(t)
+	prefix := "listpfx." + uuid.New().String()
+	for i := 0; i < 3; i++ {
+		key := prefix + "." + fmt.Sprintf("%d", i)
+		_, err := db.CreatePreference(ctx, "system", nil, key, `"v"`, "string", nil, nil)
+		if err != nil {
+			t.Fatalf("CreatePreference: %v", err)
+		}
+	}
+	entries, next, err := db.ListPreferences(ctx, "system", nil, prefix, 2, "")
+	if err != nil {
+		t.Fatalf("ListPreferences: %v", err)
+	}
+	if len(entries) != 2 || next == "" {
+		t.Errorf("expected 2 entries and next cursor, got len=%d next=%q", len(entries), next)
+	}
+	entries2, next2, err := db.ListPreferences(ctx, "system", nil, prefix, 2, next)
+	if err != nil {
+		t.Fatalf("ListPreferences page2: %v", err)
+	}
+	if len(entries2) != 1 {
+		t.Errorf("expected 1 entry on second page, got %d", len(entries2))
+	}
+	_ = next2
+}
+
+func TestIntegration_Preferences_CreateWithEmptyValue(t *testing.T) {
+	db, ctx := integrationDB(t)
+	key := "emptyval." + uuid.New().String()
+	ent, err := db.CreatePreference(ctx, "system", nil, key, "", "string", nil, nil)
+	if err != nil {
+		t.Fatalf("CreatePreference: %v", err)
+	}
+	if ent.Value != nil {
+		t.Errorf("expected nil Value for empty string, got %v", ent.Value)
+	}
+	got, _ := db.GetPreference(ctx, "system", nil, key)
+	if got == nil {
+		t.Fatal("GetPreference: not found")
+	}
+	if got.Value != nil {
+		t.Errorf("expected nil Value, got %v", got.Value)
+	}
+	_ = db.DeletePreference(ctx, "system", nil, key, &ent.Version, nil)
+}
+
+func TestIntegration_Preferences_UpdateWithEmptyValue(t *testing.T) {
+	db, ctx := integrationDB(t)
+	key := "updempty." + uuid.New().String()
+	ent, err := db.CreatePreference(ctx, "system", nil, key, `"initial"`, "string", nil, nil)
+	if err != nil {
+		t.Fatalf("CreatePreference: %v", err)
+	}
+	updated, err := db.UpdatePreference(ctx, "system", nil, key, "", "string", &ent.Version, nil, nil)
+	if err != nil {
+		t.Fatalf("UpdatePreference: %v", err)
+	}
+	if updated.Value != nil {
+		t.Errorf("expected nil Value after update to empty, got %v", updated.Value)
+	}
+	_ = db.DeletePreference(ctx, "system", nil, key, &updated.Version, nil)
+}
+
+func TestIntegration_Preferences_ListInvalidCursor(t *testing.T) {
+	db, ctx := integrationDB(t)
+	key := "invcur." + uuid.New().String()
+	_, err := db.CreatePreference(ctx, "system", nil, key, `"v"`, "string", nil, nil)
+	if err != nil {
+		t.Fatalf("CreatePreference: %v", err)
+	}
+	entries, next, err := db.ListPreferences(ctx, "system", nil, "", 10, "not-a-number")
+	if err != nil {
+		t.Fatalf("ListPreferences: %v", err)
+	}
+	if len(entries) == 0 && next != "" {
+		t.Errorf("invalid cursor should be treated as offset 0; got next=%q", next)
+	}
+	_ = db.DeletePreference(ctx, "system", nil, key, nil, nil)
+}
+
+func TestIntegration_Preferences_ListLimitCapped(t *testing.T) {
+	db, ctx := integrationDB(t)
+	// Request more than MaxPreferenceListLimit; implementation caps to MaxPreferenceListLimit.
+	_, _, err := db.ListPreferences(ctx, "system", nil, "", 999, "")
+	if err != nil {
+		t.Fatalf("ListPreferences(limit 999): %v", err)
+	}
+}
+
+func TestIntegration_GetEffectivePreferencesForTask_NotFound(t *testing.T) {
+	db, ctx := integrationDB(t)
+	_, err := db.GetEffectivePreferencesForTask(ctx, uuid.New())
+	if err == nil {
+		t.Fatal("GetEffectivePreferencesForTask(nonexistent task) should fail")
+	}
+}
+
+func TestIntegration_Preferences_CreateDuplicateKey(t *testing.T) {
+	db, ctx := integrationDB(t)
+	key := "dupkey." + uuid.New().String()
+	_, err := db.CreatePreference(ctx, "system", nil, key, `"v"`, "string", nil, nil)
+	if err != nil {
+		t.Fatalf("CreatePreference: %v", err)
+	}
+	_, err = db.CreatePreference(ctx, "system", nil, key, `"v2"`, "string", nil, nil)
+	if err != ErrExists {
+		t.Errorf("CreatePreference duplicate: want ErrExists, got %v", err)
+	}
+	_ = db.DeletePreference(ctx, "system", nil, key, nil, nil)
+}
+
+func TestIntegration_GetArtifactByTaskIDAndPath(t *testing.T) {
+	db, ctx := integrationDB(t)
+	task, err := db.CreateTask(ctx, nil, "artifact-task", nil)
+	if err != nil {
+		t.Fatalf("CreateTask: %v", err)
+	}
+	art := &models.TaskArtifact{
+		ID:         uuid.New(),
+		TaskID:     task.ID,
+		Path:       "out/report.md",
+		StorageRef: "ref:abc",
+		CreatedAt:  time.Now().UTC(),
+		UpdatedAt:  time.Now().UTC(),
+	}
+	if err := db.GORM().WithContext(ctx).Create(art).Error; err != nil {
+		t.Fatalf("create task artifact: %v", err)
+	}
+	got, err := db.GetArtifactByTaskIDAndPath(ctx, task.ID, "out/report.md")
+	if err != nil {
+		t.Fatalf("GetArtifactByTaskIDAndPath: %v", err)
+	}
+	if got.Path != "out/report.md" || got.StorageRef != "ref:abc" {
+		t.Errorf("GetArtifactByTaskIDAndPath: got %+v", got)
+	}
+	_, err = db.GetArtifactByTaskIDAndPath(ctx, task.ID, "missing")
+	if err != ErrNotFound {
+		t.Errorf("GetArtifactByTaskIDAndPath missing: want ErrNotFound, got %v", err)
+	}
+}
+
 func integrationDB(t *testing.T) (*DB, context.Context) {
 	t.Helper()
 	dsn := os.Getenv(integrationEnv)

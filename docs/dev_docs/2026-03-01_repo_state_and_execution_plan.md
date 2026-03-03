@@ -280,8 +280,8 @@ This keeps scope focused on baseline stability and high-impact drift fixes befor
   - description: Complete Phase 2 MCP core slice
   - requirement ids: REQ-MCPGAT-0001, REQ-MCPGAT-0002, REQ-MCPTOO-0109, REQ-MCPTOO-0110
   - spec ids: `mcp_gateway_enforcement.md`, `mcp_tool_catalog.md`, `mcp_tool_call_auditing.md`, `user_preferences.md`
-  - validation: testcontainers + `just test-go`
-  - status: Not started
+  - validation: testcontainers + `just test-go`; `just ci` (coverage ≥90%)
+  - status: Done (implementation complete; preference CRUD, db.task.get, db.job.get, artifact.get; audit on every call; `just ci` green with coverage ≥90% for orchestrator/internal/database and cmd/mcp-gateway)
 - **Step:** 5
   - description: PMA implementation alignment
   - requirement ids: REQ-PMAGNT-0001, REQ-PMAGNT-0100, REQ-PMAGNT-0101

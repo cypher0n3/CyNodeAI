@@ -11,18 +11,26 @@ class TestTaskList(unittest.TestCase):
 
     def test_task_list(self):
         """Assert task list returns JSON with tasks list containing state.TASK_ID."""
+        self.assertIsNotNone(
+            state.TASK_ID,
+            "state.TASK_ID must be set by e2e_050 (task create); run tests in order",
+        )
         ok, out, err = helpers.run_cynork(
             ["task", "list", "-o", "json", "-l", "10"],
             state.CONFIG_PATH,
         )
         self.assertTrue(ok, f"task list failed: {out} {err}")
         data = helpers.parse_json_safe(out)
-        self.assertIsNotNone(data)
+        self.assertIsNotNone(data, f"task list response not JSON: {out}")
         tasks = data.get("tasks") if isinstance(data, dict) else None
         self.assertIsInstance(tasks, list, "tasks should be a list")
         self.assertGreaterEqual(
             len(tasks), 1,
-            "at least one task from e2e_03 create",
+            "at least one task from e2e_050 create",
         )
         ids = [t.get("task_id") or t.get("id") for t in tasks if isinstance(t, dict)]
-        self.assertIn(state.TASK_ID, ids, f"created task {state.TASK_ID} should be in list")
+        self.assertIn(
+            state.TASK_ID,
+            ids,
+            f"created task {state.TASK_ID!r} should be in list (got ids: {ids})",
+        )

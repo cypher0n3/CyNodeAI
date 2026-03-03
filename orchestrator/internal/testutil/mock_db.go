@@ -37,6 +37,7 @@ type MockDB struct {
 	ChatThreads       map[uuid.UUID]*models.ChatThread
 	ChatMessages      map[uuid.UUID][]*models.ChatMessage
 	PreferenceEntries []*models.PreferenceEntry
+	TaskArtifacts     []*models.TaskArtifact
 
 	// Error injection
 	ForceError error
@@ -47,6 +48,13 @@ type MockDB struct {
 	ListPreferencesErr error
 	// GetEffectivePreferencesForTaskErr, when set, makes GetEffectivePreferencesForTask return this error.
 	GetEffectivePreferencesForTaskErr error
+	// CreatePreferenceErr, UpdatePreferenceErr, DeletePreferenceErr for testing MCP handler internal-error paths.
+	CreatePreferenceErr   error
+	UpdatePreferenceErr  error
+	DeletePreferenceErr  error
+	GetTaskByIDErr       error
+	GetJobByIDErr        error
+	GetArtifactByTaskIDAndPathErr error
 }
 
 // NodeCapabilitySnapshot represents a stored capability snapshot.
@@ -341,6 +349,9 @@ func (m *MockDB) CreateTask(_ context.Context, createdBy *uuid.UUID, prompt stri
 
 // GetTaskByID retrieves a task by ID.
 func (m *MockDB) GetTaskByID(_ context.Context, id uuid.UUID) (*models.Task, error) {
+	if m.GetTaskByIDErr != nil {
+		return nil, m.GetTaskByIDErr
+	}
 	return getByKeyLocked(m, m.Tasks, id)
 }
 
@@ -449,6 +460,9 @@ func (m *MockDB) CreateJobCompleted(_ context.Context, taskID, jobID uuid.UUID, 
 
 // GetJobByID retrieves a job by ID.
 func (m *MockDB) GetJobByID(_ context.Context, id uuid.UUID) (*models.Job, error) {
+	if m.GetJobByIDErr != nil {
+		return nil, m.GetJobByIDErr
+	}
 	return getByKeyLocked(m, m.Jobs, id)
 }
 
@@ -757,6 +771,102 @@ func (m *MockDB) GetEffectivePreferencesForTask(ctx context.Context, taskID uuid
 		}
 	}
 	return effective, nil
+}
+
+// CreatePreference creates a preference in the mock; returns database.ErrExists if key already exists.
+func (m *MockDB) CreatePreference(_ context.Context, scopeType string, scopeID *uuid.UUID, key, value, valueType string, reason, updatedBy *string) (*models.PreferenceEntry, error) {
+	_ = reason
+	if m.CreatePreferenceErr != nil {
+		return nil, m.CreatePreferenceErr
+	}
+	return runWithLock(m, true, func() (*models.PreferenceEntry, error) {
+		for _, e := range m.PreferenceEntries {
+			if matchPreferenceGet(e, scopeType, scopeID, key) {
+				return nil, database.ErrExists
+			}
+		}
+		valPtr := (*string)(nil)
+		if value != "" {
+			valPtr = &value
+		}
+		ent := &models.PreferenceEntry{
+			ID:        uuid.New(),
+			ScopeType: scopeType,
+			ScopeID:   scopeID,
+			Key:       key,
+			Value:     valPtr,
+			ValueType: valueType,
+			Version:   1,
+			UpdatedAt: time.Now().UTC(),
+			UpdatedBy: updatedBy,
+		}
+		m.PreferenceEntries = append(m.PreferenceEntries, ent)
+		return ent, nil
+	})
+}
+
+// UpdatePreference updates a preference in the mock; returns database.ErrNotFound or database.ErrConflict as appropriate.
+func (m *MockDB) UpdatePreference(_ context.Context, scopeType string, scopeID *uuid.UUID, key, value, valueType string, expectedVersion *int, reason, updatedBy *string) (*models.PreferenceEntry, error) {
+	_ = reason
+	if m.UpdatePreferenceErr != nil {
+		return nil, m.UpdatePreferenceErr
+	}
+	return runWithLock(m, true, func() (*models.PreferenceEntry, error) {
+		for _, e := range m.PreferenceEntries {
+			if !matchPreferenceGet(e, scopeType, scopeID, key) {
+				continue
+			}
+			if expectedVersion != nil && e.Version != *expectedVersion {
+				return nil, database.ErrConflict
+			}
+			valPtr := (*string)(nil)
+			if value != "" {
+				valPtr = &value
+			}
+			e.Value = valPtr
+			e.ValueType = valueType
+			e.Version++
+			e.UpdatedAt = time.Now().UTC()
+			e.UpdatedBy = updatedBy
+			return e, nil
+		}
+		return nil, database.ErrNotFound
+	})
+}
+
+// DeletePreference deletes a preference in the mock; returns database.ErrNotFound or database.ErrConflict as appropriate.
+func (m *MockDB) DeletePreference(_ context.Context, scopeType string, scopeID *uuid.UUID, key string, expectedVersion *int, reason *string) error {
+	_ = reason
+	if m.DeletePreferenceErr != nil {
+		return m.DeletePreferenceErr
+	}
+	return runWithWLockErr(m, func() error {
+		for i, e := range m.PreferenceEntries {
+			if matchPreferenceGet(e, scopeType, scopeID, key) {
+				if expectedVersion != nil && e.Version != *expectedVersion {
+					return database.ErrConflict
+				}
+				m.PreferenceEntries = append(m.PreferenceEntries[:i], m.PreferenceEntries[i+1:]...)
+				return nil
+			}
+		}
+		return database.ErrNotFound
+	})
+}
+
+// GetArtifactByTaskIDAndPath returns a matching task artifact or database.ErrNotFound.
+func (m *MockDB) GetArtifactByTaskIDAndPath(_ context.Context, taskID uuid.UUID, path string) (*models.TaskArtifact, error) {
+	if m.GetArtifactByTaskIDAndPathErr != nil {
+		return nil, m.GetArtifactByTaskIDAndPathErr
+	}
+	return runWithLock(m, false, func() (*models.TaskArtifact, error) {
+		for _, a := range m.TaskArtifacts {
+			if a.TaskID == taskID && a.Path == path {
+				return a, nil
+			}
+		}
+		return nil, database.ErrNotFound
+	})
 }
 
 // GetOrCreateActiveChatThread returns or creates a chat thread for (userID, projectID).

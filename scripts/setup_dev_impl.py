@@ -168,12 +168,14 @@ def clean_postgres():
 
 
 def build_binaries():
-    """Run just build."""
-    log_info("Building all binaries (just build)...")
-    if not run(["just", "build"], timeout=600):
-        log_error("just build failed")
+    """Run just build-dev (faster; no strip/upx)."""
+    log_info("Building all dev binaries (just build-dev)...")
+    if not run(["just", "build-dev"], timeout=600):
+        log_error("just build-dev failed")
         return False
-    log_info("Binaries built: orchestrator/bin, worker_node/bin, cynork/bin, agents/bin")
+    log_info(
+        "Dev binaries built: orchestrator/bin, worker_node/bin, cynork/bin, agents/bin"
+    )
     return True
 
 
