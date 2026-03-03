@@ -88,3 +88,33 @@ func TestCallChatCompletion_DoError(t *testing.T) {
 		t.Error("expected error when server unreachable")
 	}
 }
+
+// pmaHandoffBody mirrors the PMA InternalChatCompletionRequest so we can verify
+// the orchestrator handoff format is compatible (messages required; project_id, task_id, additional_context optional).
+type pmaHandoffBody struct {
+	Messages          []ChatMessage `json:"messages"`
+	ProjectID         string        `json:"project_id,omitempty"`
+	TaskID            string        `json:"task_id,omitempty"`
+	UserID            string        `json:"user_id,omitempty"`
+	AdditionalContext string        `json:"additional_context,omitempty"`
+}
+
+// TestHandoffRequestFormat verifies the request body we send to PMA is valid and decodable as PMA handoff (messages only).
+func TestHandoffRequestFormat(t *testing.T) {
+	msgs := []ChatMessage{{Role: "user", Content: "hello"}}
+	body := CompletionRequest{Messages: msgs}
+	raw, err := json.Marshal(body)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	var decoded pmaHandoffBody
+	if err := json.Unmarshal(raw, &decoded); err != nil {
+		t.Fatalf("PMA handoff decode: %v", err)
+	}
+	if len(decoded.Messages) != 1 || decoded.Messages[0].Content != "hello" {
+		t.Errorf("decoded messages = %+v", decoded.Messages)
+	}
+	if decoded.ProjectID != "" || decoded.TaskID != "" || decoded.AdditionalContext != "" {
+		t.Errorf("optional fields should be empty in minimal handoff: %+v", decoded)
+	}
+}

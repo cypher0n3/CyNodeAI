@@ -86,6 +86,7 @@ Gaps (e.g. 011-019 between 010 and 020) allow inserting new tests without renumb
 - **e2e_090_task_inference** - Create task with `--use-inference` (skipped if `INFERENCE_PROXY_IMAGE` unset).
 - **e2e_100_task_prompt** - Prompt (LLM) task; asserts non-empty stdout.
 - **e2e_110_task_models_and_chat** - Models list; one-shot chat (skipped if `E2E_SKIP_INFERENCE_SMOKE`).
+- **e2e_115_pma_chat_context** - One-shot chat with `--project-id` (OpenAI-Project header); PMA handoff path (skipped if `E2E_SKIP_INFERENCE_SMOKE`).
 - **e2e_120_sba_task** - SBA task; asserts job result contains `sba_result`; sets `state.SBA_TASK_ID`.
 - **e2e_130_sba_task_result_contract** - SBA result shape (protocol_version, job_id, status, steps, artifacts).
 - **e2e_140_sba_task_inference** - SBA task with inference prompt (skipped if `E2E_SKIP_INFERENCE_SMOKE`).

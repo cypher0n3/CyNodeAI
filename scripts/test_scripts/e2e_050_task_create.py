@@ -72,7 +72,8 @@ class TestTaskCreate(unittest.TestCase):
             )
             self.assertTrue(
                 re.match(r"^e2e-task-name(-\d+)?$", name),
-                f"task name should be e2e-task-name or e2e-task-name-N: got {name!r}; full response: {get_data}",
+                f"task name should be e2e-task-name or e2e-task-name-N: got {name!r}; "
+                f"full response: {get_data}",
             )
             return
         self.fail("unreachable")

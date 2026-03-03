@@ -16,8 +16,10 @@ import (
 
 	"github.com/cucumber/godog"
 
+	"github.com/cypher0n3/cynodeai/agents/internal/pma"
 	"github.com/cypher0n3/cynodeai/agents/internal/sba"
 	"github.com/cypher0n3/cynodeai/go_shared_libs/contracts/sbajob"
+	"log/slog"
 )
 
 type agentsTestState struct {
@@ -40,6 +42,13 @@ type agentsTestState struct {
 	lifecycleServer   *httptest.Server
 	lifecycleStatuses []string
 	lifecycleMu       sync.Mutex
+	// PMA internal chat completion
+	pmaRequestJSON     []byte
+	pmaMockInference   *httptest.Server
+	pmaCapturedPrompt  string
+	pmaResponseStatus  int
+	pmaResponseBody    []byte
+	pmaOldOllamaURL    string // restored in After when mock was used
 }
 
 // InitializeAgentsSuite sets up the godog suite for agents features.
@@ -63,6 +72,20 @@ func InitializeAgentsSuite(sc *godog.ScenarioContext, state *agentsTestState) {
 			state.lifecycleServer = nil
 		}
 		state.lifecycleStatuses = nil
+		state.pmaRequestJSON = nil
+		if state.pmaMockInference != nil {
+			state.pmaMockInference.Close()
+			state.pmaMockInference = nil
+		}
+		state.pmaCapturedPrompt = ""
+		state.pmaResponseStatus = 0
+		state.pmaResponseBody = nil
+		if state.pmaOldOllamaURL != "" {
+			os.Setenv("OLLAMA_BASE_URL", state.pmaOldOllamaURL)
+		} else if state.pmaMockInference != nil {
+			os.Unsetenv("OLLAMA_BASE_URL")
+		}
+		state.pmaOldOllamaURL = ""
 		return ctx, nil
 	})
 
@@ -76,6 +99,7 @@ func InitializeAgentsSuite(sc *godog.ScenarioContext, state *agentsTestState) {
 	registerSBAContractSteps(sc, state)
 	registerSBARunnerSteps(sc, state)
 	registerSBALifecycleSteps(sc, state)
+	registerPMASteps(sc, state)
 }
 
 // registerSBAContractSteps registers steps for SBA job spec and result contract validation.
@@ -454,5 +478,101 @@ func registerSBALifecycleSteps(sc *godog.ScenarioContext, state *agentsTestState
 			}
 		}
 		return fmt.Errorf("lifecycle server did not receive %q (got %v)", status, got)
+	})
+}
+
+func registerPMASteps(sc *godog.ScenarioContext, state *agentsTestState) {
+	sc.Step(`^I have an internal chat completion request with messages only "([^"]*)"$`, func(ctx context.Context, content string) error {
+		state.pmaRequestJSON = []byte(fmt.Sprintf(`{"messages":[{"role":"user","content":%q}]}`, content))
+		return nil
+	})
+	sc.Step(`^I have an internal chat completion request with project_id "([^"]*)" and task_id "([^"]*)" and additional_context "([^"]*)"$`,
+		func(ctx context.Context, projectID, taskID, additionalContext string) error {
+			state.pmaRequestJSON = []byte(fmt.Sprintf(`{"messages":[{"role":"user","content":"hi"}],"project_id":%q,"task_id":%q,"additional_context":%q}`,
+				projectID, taskID, additionalContext))
+			return nil
+		})
+	sc.Step(`^I have a mock inference server$`, func(ctx context.Context) error {
+		state.pmaOldOllamaURL = os.Getenv("OLLAMA_BASE_URL")
+		state.pmaMockInference = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"response":"ok"}`))
+		}))
+		os.Setenv("OLLAMA_BASE_URL", state.pmaMockInference.URL)
+		os.Unsetenv("MCP_GATEWAY_URL")
+		os.Unsetenv("PMA_MCP_GATEWAY_URL")
+		return nil
+	})
+	sc.Step(`^I have a mock inference server that captures the prompt$`, func(ctx context.Context) error {
+		state.pmaOldOllamaURL = os.Getenv("OLLAMA_BASE_URL")
+		state.pmaMockInference = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.Method != http.MethodPost {
+				w.WriteHeader(http.StatusMethodNotAllowed)
+				return
+			}
+			var body struct {
+				Prompt string `json:"prompt"`
+			}
+			if err := json.NewDecoder(r.Body).Decode(&body); err == nil {
+				state.pmaCapturedPrompt = body.Prompt
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"response":"ok"}`))
+		}))
+		os.Setenv("OLLAMA_BASE_URL", state.pmaMockInference.URL)
+		os.Unsetenv("MCP_GATEWAY_URL")
+		os.Unsetenv("PMA_MCP_GATEWAY_URL")
+		return nil
+	})
+	sc.Step(`^I send the request to the PMA internal chat completion endpoint$`, func(ctx context.Context) error {
+		if len(state.pmaRequestJSON) == 0 {
+			return fmt.Errorf("no PMA request body set")
+		}
+		handler := pma.ChatCompletionHandler("baseline", slog.Default())
+		req := httptest.NewRequest(http.MethodPost, "/internal/chat/completion", strings.NewReader(string(state.pmaRequestJSON)))
+		req.Header.Set("Content-Type", "application/json")
+		rec := httptest.NewRecorder()
+		handler(rec, req)
+		state.pmaResponseStatus = rec.Code
+		state.pmaResponseBody = rec.Body.Bytes()
+		return nil
+	})
+	sc.Step(`^the response status is 200$`, func(ctx context.Context) error {
+		if state.pmaResponseStatus != 200 {
+			return fmt.Errorf("response status %d, want 200", state.pmaResponseStatus)
+		}
+		return nil
+	})
+	sc.Step(`^the response content is non-empty$`, func(ctx context.Context) error {
+		var out struct {
+			Content string `json:"content"`
+		}
+		if err := json.Unmarshal(state.pmaResponseBody, &out); err != nil {
+			return err
+		}
+		if out.Content == "" {
+			return fmt.Errorf("response content is empty")
+		}
+		return nil
+	})
+	sc.Step(`^the captured prompt contains "([^"]*)"$`, func(ctx context.Context, sub string) error {
+		if !strings.Contains(state.pmaCapturedPrompt, sub) {
+			return fmt.Errorf("captured prompt does not contain %q", sub)
+		}
+		return nil
+	})
+	sc.Step(`^"([^"]*)" appears before "([^"]*)" in the captured prompt$`, func(ctx context.Context, before, after string) error {
+		i := strings.Index(state.pmaCapturedPrompt, before)
+		j := strings.Index(state.pmaCapturedPrompt, after)
+		if i < 0 {
+			return fmt.Errorf("captured prompt does not contain %q", before)
+		}
+		if j < 0 {
+			return fmt.Errorf("captured prompt does not contain %q", after)
+		}
+		if i >= j {
+			return fmt.Errorf("%q does not appear before %q (indices %d, %d)", before, after, i, j)
+		}
+		return nil
 	})
 }

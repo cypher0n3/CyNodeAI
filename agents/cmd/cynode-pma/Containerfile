@@ -1,10 +1,12 @@
 # Build cynode-pma (agents module). Build context: repo root.
+# Agents module replace go_shared_libs => ../go_shared_libs; include both in workspace.
 # Example: podman build -f agents/cmd/cynode-pma/Containerfile -t cynodeai-cynode-pma:dev .
 FROM golang:1.25-alpine AS build
 WORKDIR /build
 RUN apk add --no-cache ca-certificates upx
 ENV CGO_ENABLED=0
-RUN printf '%s\n' 'go 1.25.7' 'use (' './agents' ')' > go.work
+RUN printf '%s\n' 'go 1.25.7' 'use (' './agents' './go_shared_libs' ')' > go.work
+COPY go_shared_libs ./go_shared_libs
 COPY agents ./agents
 RUN go build -ldflags="-s -w" -o /cynode-pma ./agents/cmd/cynode-pma \
     && upx --best /cynode-pma

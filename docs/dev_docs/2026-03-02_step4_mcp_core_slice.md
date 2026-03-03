@@ -40,7 +40,8 @@ Scoped-ID validation and audit: all new tools in `requiredScopedIds`; audit on e
 
 - `just test-go` and `just test-bdd` pass.
 - `just lint-go` passes.
-- `just ci` passes. Coverage: `orchestrator/internal/database` and `orchestrator/cmd/mcp-gateway` meet the 90% gate.
+- `just ci` passes.
+  Coverage: `orchestrator/internal/database` and `orchestrator/cmd/mcp-gateway` meet the 90% gate.
   All new code paths are covered by unit and/or integration/testcontainers tests.
 
 ## Traceability

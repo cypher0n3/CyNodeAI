@@ -33,6 +33,7 @@ Follow-up to reach CI green: extra control-plane and handler tests for coverage;
 
 ## Remaining
 
-- **Step 4** (Phase 2 MCP core slice) is complete as of 2026-03-03: preference CRUD, db.task.get, db.job.get, artifact.get; coverage ≥90% for database and mcp-gateway; `just ci` green. See [2026-03-02_step4_mcp_core_slice.md](2026-03-02_step4_mcp_core_slice.md).
+- **Step 4** (Phase 2 MCP core slice) is complete as of 2026-03-03: preference CRUD, db.task.get, db.job.get, artifact.get; coverage >=90% for database and mcp-gateway; `just ci` green.
+  See [2026-03-02_step4_mcp_core_slice.md](2026-03-02_step4_mcp_core_slice.md).
 - Steps 5--9 of the plan are not started.
 - `just ci` is green as of this report.

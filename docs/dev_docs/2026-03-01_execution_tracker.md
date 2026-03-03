@@ -14,8 +14,8 @@ Done = code + tests + docs update + passing validation commands.
   - Status: Done
 - **Step 3:** Close P1/P1.7 requirement drift | REQ-ORCHES-0150, REQ-ORCHES-0131, REQ-ORCHES-0132 | orchestrator_bootstrap.md, openai_compatible_chat_api.md, user_api_gateway.md | unit + BDD for gating, chat, task-create
   - Status: Done (coverage >=90%; `just ci` green)
-- **Step 4:** Complete Phase 2 MCP core slice | REQ-MCPGAT-0001, REQ-MCPGAT-0002, REQ-MCPTOO-0109, REQ-MCPTOO-0110 | mcp_gateway_enforcement.md, mcp_tool_catalog.md, user_preferences.md | testcontainers + `just test-go`; `just ci` (coverage ≥90%)
-  - Status: Done (`just ci` green; database and mcp-gateway ≥90% coverage)
+- **Step 4:** Complete Phase 2 MCP core slice | REQ-MCPGAT-0001, REQ-MCPGAT-0002, REQ-MCPTOO-0109, REQ-MCPTOO-0110 | mcp_gateway_enforcement.md, mcp_tool_catalog.md, user_preferences.md | testcontainers + `just test-go`; `just ci` (coverage >=90%)
+  - Status: Done (`just ci` green; database and mcp-gateway >=90% coverage)
 - **Step 5:** PMA implementation alignment | REQ-PMAGNT-0001, REQ-PMAGNT-0100, REQ-PMAGNT-0101 | cynode_pma.md, project_manager_agent.md | context composition tests, handoff tests
   - Status: Not started
 - **Step 6:** Skills vertical slice | REQ-SKILLS-* | skills_storage_and_inference.md, cynork_cli.md, mcp_tool_catalog.md | gateway + CLI + MCP E2E, audit Status: Not started

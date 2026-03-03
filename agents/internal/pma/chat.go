@@ -51,7 +51,17 @@ func ChatCompletionHandler(instructionsContent string, logger *slog.Logger) http
 			return
 		}
 		systemContext := buildSystemContext(instructionsContent, &req)
-		content, err := callInference(r.Context(), systemContext, req.Messages, logger)
+		mcpClient := NewMCPClient()
+		var content string
+		var err error
+		if mcpClient.BaseURL != "" {
+			// REQ-PMAGNT-0100/0101: one production path uses langchaingo + MCP tool calls (project_manager_agent.md).
+			fullPrompt := buildFullPrompt(systemContext, req.Messages)
+			content, err = runCompletionWithLangchainWithTimeout(r.Context(), fullPrompt, mcpClient, logger, 120*time.Second)
+		} else {
+			// Direct-inference fallback when MCP gateway not configured.
+			content, err = callInference(r.Context(), systemContext, req.Messages, logger)
+		}
 		if err != nil {
 			logger.Error("chat completion inference error", "error", err)
 			writeJSON(w, http.StatusInternalServerError, InternalChatCompletionResponse{Content: ""})
@@ -59,6 +69,26 @@ func ChatCompletionHandler(instructionsContent string, logger *slog.Logger) http
 		}
 		writeJSON(w, http.StatusOK, InternalChatCompletionResponse{Content: content})
 	}
+}
+
+// buildFullPrompt returns system context plus formatted messages for langchaingo (same order as callInference).
+func buildFullPrompt(systemContext string, messages []struct {
+	Role    string `json:"role"`
+	Content string `json:"content"`
+}) string {
+	var b strings.Builder
+	if systemContext != "" {
+		b.WriteString(systemContext)
+		b.WriteString("\n\n")
+	}
+	for _, m := range messages {
+		b.WriteString(m.Role)
+		b.WriteString(": ")
+		b.WriteString(m.Content)
+		b.WriteString("\n")
+	}
+	b.WriteString("assistant: ")
+	return b.String()
 }
 
 // buildSystemContext composes system context per CYNAI.PMAGNT.LLMContextComposition order:
