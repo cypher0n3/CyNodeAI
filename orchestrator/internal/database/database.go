@@ -26,6 +26,9 @@ var ErrExists = errors.New("already exists")
 // ErrConflict is returned when an update or delete fails due to version mismatch (expected_version).
 var ErrConflict = errors.New("version conflict")
 
+// ErrLeaseHeld is returned when a task workflow lease is held by another holder (or by same holder with different lease_id).
+var ErrLeaseHeld = errors.New("lease held")
+
 func wrapErr(err error, op string) error {
 	if err == nil {
 		return nil
@@ -114,6 +117,13 @@ type Store interface {
 	UpdateSkill(ctx context.Context, id uuid.UUID, name, content, scope *string) (*models.Skill, error)
 	DeleteSkill(ctx context.Context, id uuid.UUID) error
 	EnsureDefaultSkill(ctx context.Context, content string) error
+
+	// Workflow lease and checkpoint (REQ-ORCHES-0144--0147, langgraph_mvp.md).
+	AcquireTaskWorkflowLease(ctx context.Context, taskID uuid.UUID, leaseID uuid.UUID, holderID string, expiresAt time.Time) (*models.TaskWorkflowLease, error)
+	ReleaseTaskWorkflowLease(ctx context.Context, taskID uuid.UUID, leaseID uuid.UUID) error
+	GetTaskWorkflowLease(ctx context.Context, taskID uuid.UUID) (*models.TaskWorkflowLease, error)
+	GetWorkflowCheckpoint(ctx context.Context, taskID uuid.UUID) (*models.WorkflowCheckpoint, error)
+	UpsertWorkflowCheckpoint(ctx context.Context, cp *models.WorkflowCheckpoint) error
 }
 
 // DB wraps GORM database operations.

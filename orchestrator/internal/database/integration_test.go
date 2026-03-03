@@ -5,6 +5,7 @@ package database
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"os"
@@ -18,6 +19,8 @@ import (
 const integrationEnv = "POSTGRES_TEST_DSN"
 
 const integrationTestPreferenceValue = `"v1"`
+
+const integrationTestPayloadX1 = `{"x":1}`
 
 func TestIntegration_User(t *testing.T) {
 	db, ctx := integrationDB(t)
@@ -55,11 +58,11 @@ func TestIntegration_TaskAndJob(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateTask: %v", err)
 	}
-	job, err := db.CreateJob(ctx, task.ID, `{"x":1}`)
+	job, err := db.CreateJob(ctx, task.ID, integrationTestPayloadX1)
 	if err != nil {
 		t.Fatalf("CreateJob: %v", err)
 	}
-	if job.Payload.Ptr() == nil || *job.Payload.Ptr() != `{"x":1}` {
+	if job.Payload.Ptr() == nil || *job.Payload.Ptr() != integrationTestPayloadX1 {
 		t.Errorf("CreateJob: payload not round-tripped")
 	}
 	if _, err := db.GetTaskByID(ctx, task.ID); err != nil {
@@ -639,6 +642,168 @@ func integrationDB(t *testing.T) (*DB, context.Context) {
 	return db, ctx
 }
 
+func TestIntegration_WorkflowLeaseAndCheckpoint(t *testing.T) {
+	db, ctx := integrationDB(t)
+	task, err := db.CreateTask(ctx, nil, "workflow-lease-test", nil)
+	if err != nil {
+		t.Fatalf("CreateTask: %v", err)
+	}
+	leaseID := uuid.New()
+	holderID := "runner-1"
+	expiresAt := time.Now().UTC().Add(time.Hour)
+	lease, err := db.AcquireTaskWorkflowLease(ctx, task.ID, leaseID, holderID, expiresAt)
+	if err != nil {
+		t.Fatalf("AcquireTaskWorkflowLease: %v", err)
+	}
+	if lease.LeaseID != leaseID {
+		t.Errorf("lease_id: got %s", lease.LeaseID)
+	}
+	gotLease, err := db.GetTaskWorkflowLease(ctx, task.ID)
+	if err != nil || gotLease.LeaseID != leaseID {
+		t.Fatalf("GetTaskWorkflowLease: %v, got %+v", err, gotLease)
+	}
+	_, err = db.AcquireTaskWorkflowLease(ctx, task.ID, uuid.New(), "runner-2", expiresAt)
+	if !errors.Is(err, ErrLeaseHeld) {
+		t.Errorf("duplicate acquire: want ErrLeaseHeld, got %v", err)
+	}
+	if err := db.ReleaseTaskWorkflowLease(ctx, task.ID, leaseID); err != nil {
+		t.Fatalf("ReleaseTaskWorkflowLease: %v", err)
+	}
+	state := `{"task_id":"` + task.ID.String() + `"}`
+	cp := &models.WorkflowCheckpoint{TaskID: task.ID, State: &state, LastNodeID: "plan_steps"}
+	if err := db.UpsertWorkflowCheckpoint(ctx, cp); err != nil {
+		t.Fatalf("UpsertWorkflowCheckpoint: %v", err)
+	}
+	got, err := db.GetWorkflowCheckpoint(ctx, task.ID)
+	if err != nil {
+		t.Fatalf("GetWorkflowCheckpoint: %v", err)
+	}
+	if got.LastNodeID != "plan_steps" {
+		t.Errorf("GetWorkflowCheckpoint: last_node_id %q", got.LastNodeID)
+	}
+	// Update path: upsert again with new last_node_id.
+	cp2 := &models.WorkflowCheckpoint{TaskID: task.ID, State: &state, LastNodeID: "dispatch_step"}
+	if err := db.UpsertWorkflowCheckpoint(ctx, cp2); err != nil {
+		t.Fatalf("UpsertWorkflowCheckpoint update: %v", err)
+	}
+	got2, _ := db.GetWorkflowCheckpoint(ctx, task.ID)
+	if got2.LastNodeID != "dispatch_step" {
+		t.Errorf("after update: last_node_id %q", got2.LastNodeID)
+	}
+}
+
+func TestIntegration_WorkflowLease_ExpiredReacquire(t *testing.T) {
+	db, ctx := integrationDB(t)
+	task, err := db.CreateTask(ctx, nil, "workflow-lease-expiry", nil)
+	if err != nil {
+		t.Fatalf("CreateTask: %v", err)
+	}
+	leaseID1 := uuid.New()
+	_, err = db.AcquireTaskWorkflowLease(ctx, task.ID, leaseID1, "runner-1", time.Now().UTC().Add(time.Hour))
+	if err != nil {
+		t.Fatalf("AcquireTaskWorkflowLease: %v", err)
+	}
+	// Expire the lease in DB so a different holder can re-acquire.
+	past := time.Now().UTC().Add(-time.Minute)
+	if err := db.GORM().WithContext(ctx).Model(&models.TaskWorkflowLease{}).Where("task_id = ?", task.ID).Update("expires_at", past).Error; err != nil {
+		t.Fatalf("update expires_at: %v", err)
+	}
+	leaseID2 := uuid.New()
+	lease2, err := db.AcquireTaskWorkflowLease(ctx, task.ID, leaseID2, "runner-2", time.Now().UTC().Add(time.Hour))
+	if err != nil {
+		t.Fatalf("Re-acquire after expiry: %v", err)
+	}
+	if lease2.HolderID == nil || *lease2.HolderID != "runner-2" || lease2.LeaseID != leaseID2 {
+		t.Errorf("re-acquired lease: got %+v", lease2)
+	}
+}
+
+func TestIntegration_WorkflowLease_IdempotentAcquire(t *testing.T) {
+	db, ctx := integrationDB(t)
+	task, err := db.CreateTask(ctx, nil, "workflow-idempotent", nil)
+	if err != nil {
+		t.Fatalf("CreateTask: %v", err)
+	}
+	leaseID := uuid.New()
+	expiresAt := time.Now().UTC().Add(time.Hour)
+	lease1, err := db.AcquireTaskWorkflowLease(ctx, task.ID, leaseID, "runner-1", expiresAt)
+	if err != nil {
+		t.Fatalf("first acquire: %v", err)
+	}
+	lease2, err := db.AcquireTaskWorkflowLease(ctx, task.ID, leaseID, "runner-1", expiresAt)
+	if err != nil {
+		t.Fatalf("second acquire (idempotent): %v", err)
+	}
+	if lease2.LeaseID != lease1.LeaseID || lease2.ID != lease1.ID {
+		t.Errorf("idempotent acquire: got %+v, want same as %+v", lease2, lease1)
+	}
+}
+
+func TestIntegration_WorkflowLease_ReleaseThenReacquire(t *testing.T) {
+	db, ctx := integrationDB(t)
+	task, err := db.CreateTask(ctx, nil, "workflow-release-reacquire", nil)
+	if err != nil {
+		t.Fatalf("CreateTask: %v", err)
+	}
+	leaseID1 := uuid.New()
+	_, err = db.AcquireTaskWorkflowLease(ctx, task.ID, leaseID1, "runner-1", time.Now().UTC().Add(time.Hour))
+	if err != nil {
+		t.Fatalf("Acquire: %v", err)
+	}
+	if err := db.ReleaseTaskWorkflowLease(ctx, task.ID, leaseID1); err != nil {
+		t.Fatalf("Release: %v", err)
+	}
+	leaseID2 := uuid.New()
+	lease2, err := db.AcquireTaskWorkflowLease(ctx, task.ID, leaseID2, "runner-2", time.Now().UTC().Add(time.Hour))
+	if err != nil {
+		t.Fatalf("Re-acquire after release: %v", err)
+	}
+	if lease2.LeaseID != leaseID2 || lease2.HolderID == nil || *lease2.HolderID != "runner-2" {
+		t.Errorf("re-acquired lease: got %+v", lease2)
+	}
+}
+
+func TestIntegration_WorkflowErrNotFound(t *testing.T) {
+	db, ctx := integrationDB(t)
+	task, err := db.CreateTask(ctx, nil, "workflow-err-not-found", nil)
+	if err != nil {
+		t.Fatalf("CreateTask: %v", err)
+	}
+	_, err = db.GetWorkflowCheckpoint(ctx, task.ID)
+	if err != ErrNotFound {
+		t.Errorf("GetWorkflowCheckpoint: want ErrNotFound, got %v", err)
+	}
+	_, err = db.GetTaskWorkflowLease(ctx, task.ID)
+	if err != ErrNotFound {
+		t.Errorf("GetTaskWorkflowLease: want ErrNotFound, got %v", err)
+	}
+}
+
+func TestIntegration_UpsertWorkflowCheckpoint_WithPreSetID(t *testing.T) {
+	db, ctx := integrationDB(t)
+	task, err := db.CreateTask(ctx, nil, "workflow-checkpoint-preset-id", nil)
+	if err != nil {
+		t.Fatalf("CreateTask: %v", err)
+	}
+	state := integrationTestPayloadX1
+	cp := &models.WorkflowCheckpoint{
+		ID:         uuid.New(),
+		TaskID:     task.ID,
+		State:      &state,
+		LastNodeID: "step1",
+	}
+	if err := db.UpsertWorkflowCheckpoint(ctx, cp); err != nil {
+		t.Fatalf("UpsertWorkflowCheckpoint: %v", err)
+	}
+	got, err := db.GetWorkflowCheckpoint(ctx, task.ID)
+	if err != nil {
+		t.Fatalf("GetWorkflowCheckpoint: %v", err)
+	}
+	if got.ID != cp.ID || got.LastNodeID != "step1" {
+		t.Errorf("checkpoint: got %+v", got)
+	}
+}
+
 func TestIntegration_GetNextQueuedJob_ErrNotFound(t *testing.T) {
 	db, ctx := integrationDB(t)
 	// Drain queue so we can assert ErrNotFound when empty (tests share one DB).
@@ -872,6 +1037,23 @@ func TestIntegration_GetActiveRefreshSession_ErrNotFound(t *testing.T) {
 	}
 }
 
+func TestIntegration_CreateJobWithID_DuplicateID_ReturnsError(t *testing.T) {
+	db, ctx := integrationDB(t)
+	task, err := db.CreateTask(ctx, nil, "job-dup-id", nil)
+	if err != nil {
+		t.Fatalf("CreateTask: %v", err)
+	}
+	jobID := uuid.New()
+	_, err = db.CreateJobWithID(ctx, task.ID, jobID, integrationTestPayloadX1)
+	if err != nil {
+		t.Fatalf("first CreateJobWithID: %v", err)
+	}
+	_, err = db.CreateJobWithID(ctx, task.ID, jobID, integrationTestPayloadX1)
+	if err == nil {
+		t.Error("second CreateJobWithID with same ID: expected error")
+	}
+}
+
 func TestIntegration_ListTasksByUser_Empty(t *testing.T) {
 	db, ctx := integrationDB(t)
 	user, err := db.CreateUser(ctx, "notasks-"+uuid.New().String(), nil)
@@ -939,5 +1121,61 @@ func TestIntegration_ChatThreadsAndMessages(t *testing.T) {
 	}
 	if rec.ID == uuid.Nil || rec.CreatedAt.IsZero() {
 		t.Error("CreateChatAuditLog: expected ID and CreatedAt set")
+	}
+}
+
+func TestIntegration_ChatThread_WithProjectID(t *testing.T) {
+	db, ctx := integrationDB(t)
+	user, err := db.CreateUser(ctx, "chat-proj-"+uuid.New().String(), nil)
+	if err != nil {
+		t.Fatalf("CreateUser: %v", err)
+	}
+	now := time.Now().UTC()
+	proj := &models.Project{
+		ID:          uuid.New(),
+		Slug:        "chat-proj-" + uuid.New().String()[:8],
+		DisplayName: "Chat Project",
+		IsActive:    true,
+		CreatedAt:   now,
+		UpdatedAt:   now,
+	}
+	if err := db.GORM().WithContext(ctx).Create(proj).Error; err != nil {
+		t.Fatalf("create project: %v", err)
+	}
+	thread, err := db.GetOrCreateActiveChatThread(ctx, user.ID, &proj.ID)
+	if err != nil {
+		t.Fatalf("GetOrCreateActiveChatThread(projectID): %v", err)
+	}
+	if thread.ProjectID == nil || *thread.ProjectID != proj.ID {
+		t.Errorf("thread.ProjectID: got %v, want %s", thread.ProjectID, proj.ID)
+	}
+	thread2, err := db.GetOrCreateActiveChatThread(ctx, user.ID, &proj.ID)
+	if err != nil {
+		t.Fatalf("second GetOrCreateActiveChatThread: %v", err)
+	}
+	if thread2.ID != thread.ID {
+		t.Errorf("reuse within cutoff: got thread id %s, want %s", thread2.ID, thread.ID)
+	}
+}
+
+func TestIntegration_CreateRefreshSession_ReturnsSession(t *testing.T) {
+	db, ctx := integrationDB(t)
+	user, err := db.CreateUser(ctx, "refresh-sess-"+uuid.New().String(), nil)
+	if err != nil {
+		t.Fatalf("CreateUser: %v", err)
+	}
+	expires := time.Now().UTC().Add(time.Hour)
+	session, err := db.CreateRefreshSession(ctx, user.ID, []byte("tokenhash"), expires)
+	if err != nil {
+		t.Fatalf("CreateRefreshSession: %v", err)
+	}
+	if session == nil {
+		t.Fatal("CreateRefreshSession: expected non-nil session")
+	}
+	if session.ID == uuid.Nil || session.UserID != user.ID {
+		t.Errorf("CreateRefreshSession: got id=%s user_id=%s", session.ID, session.UserID)
+	}
+	if !session.IsActive || session.ExpiresAt.Before(time.Now().UTC()) {
+		t.Errorf("CreateRefreshSession: IsActive=%v ExpiresAt=%v", session.IsActive, session.ExpiresAt)
 	}
 }

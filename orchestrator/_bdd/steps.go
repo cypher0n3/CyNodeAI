@@ -53,15 +53,78 @@ type testState struct {
 	workerRequestMu    sync.Mutex
 	workerRequest      *http.Request
 	workerRequestBody  []byte // captured so we can inspect after handler returns (Body may be closed)
-	workerToken        string
-	lastTaskResultBody []byte
-	// Mock inference server for Chat scenario (POST /api/generate); closed in After
-	inferenceServer *httptest.Server
-}
+		workerToken        string
+		lastTaskResultBody []byte
+		// Mock inference server for Chat scenario (POST /api/generate); closed in After
+		inferenceServer *httptest.Server
+		// Workflow: last start response body and stored lease_id for release step
+		workflowStartBody []byte
+		storedLeaseID     string
+		// API egress stub config (per-scenario) and last response body
+		egressBearer    string
+		egressAllowlist string
+		lastResponseBody []byte
+	}
 
 func getState(ctx context.Context) *testState {
 	s, _ := ctx.Value(stateKey).(*testState)
 	return s
+}
+
+func bddGetEnv(key, def string) string {
+	if v := os.Getenv(key); v != "" {
+		return v
+	}
+	return def
+}
+
+// apiEgressStub returns a handler that mimics api-egress POST /v1/call: bearer auth, allowlist, 403/501.
+func apiEgressStub(state *testState) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			w.Header().Set("Content-Type", "application/problem+json")
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{"title": "Method Not Allowed", "status": 405})
+			return
+		}
+		if state.egressBearer != "" {
+			auth := r.Header.Get("Authorization")
+			if !strings.HasPrefix(auth, "Bearer ") || strings.TrimPrefix(auth, "Bearer ") != state.egressBearer {
+				w.Header().Set("Content-Type", "application/problem+json")
+				w.WriteHeader(http.StatusUnauthorized)
+				_ = json.NewEncoder(w).Encode(map[string]interface{}{"title": "Unauthorized", "status": 401})
+				return
+			}
+		}
+		var req struct {
+			Provider  string `json:"provider"`
+			Operation string `json:"operation"`
+			TaskID    string `json:"task_id"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			w.Header().Set("Content-Type", "application/problem+json")
+			w.WriteHeader(http.StatusBadRequest)
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{"title": "Bad Request", "status": 400, "detail": "invalid JSON"})
+			return
+		}
+		allowed := make(map[string]bool)
+		for _, p := range strings.Split(state.egressAllowlist, ",") {
+			p = strings.TrimSpace(strings.ToLower(p))
+			if p != "" {
+				allowed[p] = true
+			}
+		}
+		provider := strings.TrimSpace(strings.ToLower(req.Provider))
+		if !allowed[provider] {
+			w.Header().Set("Content-Type", "application/problem+json")
+			w.WriteHeader(http.StatusForbidden)
+			_ = json.NewEncoder(w).Encode(map[string]interface{}{"title": "Forbidden", "status": 403, "detail": "provider not allowed"})
+			return
+		}
+		w.Header().Set("Content-Type", "application/problem+json")
+		w.WriteHeader(http.StatusNotImplemented)
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{"title": "Not Implemented", "status": 501, "detail": "operation not implemented"})
+	})
 }
 
 // InitializeOrchestratorSuite sets up the godog suite with a test server and DB.
@@ -143,6 +206,15 @@ func InitializeOrchestratorSuite(sc *godog.ScenarioContext, state *testState) {
 		mux.Handle("GET /v1/nodes/config", authMiddleware.RequireNodeAuth(http.HandlerFunc(nodeHandler.GetConfig)))
 		mux.Handle("POST /v1/nodes/config", authMiddleware.RequireNodeAuth(http.HandlerFunc(nodeHandler.ConfigAck)))
 		mux.Handle("POST /v1/nodes/capability", authMiddleware.RequireNodeAuth(http.HandlerFunc(nodeHandler.ReportCapability)))
+		workflowHandler := handlers.NewWorkflowHandler(db, nil)
+		workflowAuth := middleware.RequireWorkflowRunnerAuth("")
+		mux.Handle("POST /v1/workflow/start", workflowAuth(http.HandlerFunc(workflowHandler.Start)))
+		mux.Handle("POST /v1/workflow/resume", workflowAuth(http.HandlerFunc(workflowHandler.Resume)))
+		mux.Handle("POST /v1/workflow/checkpoint", workflowAuth(http.HandlerFunc(workflowHandler.SaveCheckpoint)))
+		mux.Handle("POST /v1/workflow/release", workflowAuth(http.HandlerFunc(workflowHandler.Release)))
+		state.egressBearer = bddGetEnv("API_EGRESS_BEARER_TOKEN", "egress-bearer")
+		state.egressAllowlist = bddGetEnv("API_EGRESS_ALLOWED", "openai,github")
+		mux.Handle("POST /v1/call", apiEgressStub(state))
 
 		state.server = httptest.NewServer(mux)
 		state.db = db
@@ -180,6 +252,9 @@ func InitializeOrchestratorSuite(sc *godog.ScenarioContext, state *testState) {
 		state.lastConfigVersion = ""
 		state.lastStatusCode = 0
 		state.lastTaskResultBody = nil
+		state.workflowStartBody = nil
+		state.storedLeaseID = ""
+		state.lastResponseBody = nil
 		return ctx, nil
 	})
 
@@ -813,6 +888,445 @@ func RegisterOrchestratorSteps(sc *godog.ScenarioContext, state *testState) {
 		}
 		if out.TaskName == nil || *out.TaskName != wantName {
 			return fmt.Errorf("task name got %v, want %q", out.TaskName, wantName)
+		}
+		return nil
+	})
+	// Workflow start/resume/checkpoint/release (REQ-ORCHES-0144--0147)
+	sc.Step(`^I start workflow for task with holder "([^"]*)"$`, func(ctx context.Context, holder string) error {
+		st := getState(ctx)
+		if st == nil || st.server == nil || st.taskID == "" {
+			return godog.ErrSkip
+		}
+		body, _ := json.Marshal(map[string]string{"task_id": st.taskID, "holder_id": holder})
+		req, _ := http.NewRequest("POST", st.server.URL+"/v1/workflow/start", bytes.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			return err
+		}
+		defer resp.Body.Close()
+		st.lastStatusCode = resp.StatusCode
+		st.workflowStartBody, _ = io.ReadAll(resp.Body)
+		return nil
+	})
+	sc.Step(`^workflow start response status is (\d+)$`, func(ctx context.Context, want int) error {
+		st := getState(ctx)
+		if st == nil {
+			return godog.ErrSkip
+		}
+		if st.lastStatusCode != want {
+			return fmt.Errorf("workflow start status got %d, want %d", st.lastStatusCode, want)
+		}
+		return nil
+	})
+	sc.Step(`^workflow start response includes run_id$`, func(ctx context.Context) error {
+		st := getState(ctx)
+		if st == nil || len(st.workflowStartBody) == 0 {
+			return godog.ErrSkip
+		}
+		var out struct {
+			RunID string `json:"run_id"`
+		}
+		if err := json.Unmarshal(st.workflowStartBody, &out); err != nil {
+			return err
+		}
+		if out.RunID == "" {
+			return fmt.Errorf("workflow start response missing run_id")
+		}
+		return nil
+	})
+	sc.Step(`^I save checkpoint for task with last_node_id "([^"]*)"$`, func(ctx context.Context, nodeID string) error {
+		st := getState(ctx)
+		if st == nil || st.server == nil || st.taskID == "" {
+			return godog.ErrSkip
+		}
+		body, _ := json.Marshal(map[string]string{"task_id": st.taskID, "last_node_id": nodeID})
+		req, _ := http.NewRequest("POST", st.server.URL+"/v1/workflow/checkpoint", bytes.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			return err
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusNoContent {
+			return fmt.Errorf("save checkpoint returned %d", resp.StatusCode)
+		}
+		return nil
+	})
+	sc.Step(`^I resume workflow for task$`, func(ctx context.Context) error {
+		st := getState(ctx)
+		if st == nil || st.server == nil || st.taskID == "" {
+			return godog.ErrSkip
+		}
+		body, _ := json.Marshal(map[string]string{"task_id": st.taskID})
+		req, _ := http.NewRequest("POST", st.server.URL+"/v1/workflow/resume", bytes.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			return err
+		}
+		defer resp.Body.Close()
+		st.lastStatusCode = resp.StatusCode
+		st.lastTaskResultBody, _ = io.ReadAll(resp.Body)
+		return nil
+	})
+	sc.Step(`^workflow resume response status is (\d+)$`, func(ctx context.Context, want int) error {
+		st := getState(ctx)
+		if st == nil {
+			return godog.ErrSkip
+		}
+		if st.lastStatusCode != want {
+			return fmt.Errorf("workflow resume status got %d, want %d", st.lastStatusCode, want)
+		}
+		return nil
+	})
+	sc.Step(`^workflow resume response includes last_node_id "([^"]*)"$`, func(ctx context.Context, want string) error {
+		st := getState(ctx)
+		if st == nil || len(st.lastTaskResultBody) == 0 {
+			return godog.ErrSkip
+		}
+		var out struct {
+			LastNodeID string `json:"last_node_id"`
+		}
+		if err := json.Unmarshal(st.lastTaskResultBody, &out); err != nil {
+			return err
+		}
+		if out.LastNodeID != want {
+			return fmt.Errorf("workflow resume last_node_id got %q, want %q", out.LastNodeID, want)
+		}
+		return nil
+	})
+	sc.Step(`^I store the lease_id from workflow start response$`, func(ctx context.Context) error {
+		st := getState(ctx)
+		if st == nil || len(st.workflowStartBody) == 0 {
+			return godog.ErrSkip
+		}
+		var out struct {
+			LeaseID string `json:"lease_id"`
+		}
+		if err := json.Unmarshal(st.workflowStartBody, &out); err != nil {
+			return err
+		}
+		st.storedLeaseID = out.LeaseID
+		return nil
+	})
+	sc.Step(`^I release workflow for task with stored lease_id$`, func(ctx context.Context) error {
+		st := getState(ctx)
+		if st == nil || st.server == nil || st.taskID == "" || st.storedLeaseID == "" {
+			return godog.ErrSkip
+		}
+		body, _ := json.Marshal(map[string]string{"task_id": st.taskID, "lease_id": st.storedLeaseID})
+		req, _ := http.NewRequest("POST", st.server.URL+"/v1/workflow/release", bytes.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			return err
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusNoContent {
+			return fmt.Errorf("workflow release returned %d", resp.StatusCode)
+		}
+		return nil
+	})
+	// Compound workflow steps (one When per scenario for only-one-when)
+	sc.Step(`^I create a task with prompt "([^"]*)" and start workflow for task with holder "([^"]*)"$`, func(ctx context.Context, prompt, holder string) error {
+		st := getState(ctx)
+		if st == nil || st.server == nil {
+			return godog.ErrSkip
+		}
+		body, _ := json.Marshal(map[string]string{"prompt": prompt})
+		req, _ := http.NewRequest("POST", st.server.URL+"/v1/tasks", bytes.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer "+st.accessToken)
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			return err
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusCreated {
+			return fmt.Errorf("create task returned %d", resp.StatusCode)
+		}
+		var out struct {
+			TaskID string `json:"task_id"`
+		}
+		if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+			return err
+		}
+		st.taskID = out.TaskID
+		body2, _ := json.Marshal(map[string]string{"task_id": st.taskID, "holder_id": holder})
+		req2, _ := http.NewRequest("POST", st.server.URL+"/v1/workflow/start", bytes.NewReader(body2))
+		req2.Header.Set("Content-Type", "application/json")
+		resp2, err := http.DefaultClient.Do(req2)
+		if err != nil {
+			return err
+		}
+		defer resp2.Body.Close()
+		st.lastStatusCode = resp2.StatusCode
+		st.workflowStartBody, _ = io.ReadAll(resp2.Body)
+		return nil
+	})
+	sc.Step(`^I create a task with prompt "([^"]*)" and start workflow for task with holder "([^"]*)" and start workflow for task with holder "([^"]*)"$`, func(ctx context.Context, prompt, h1, h2 string) error {
+		st := getState(ctx)
+		if st == nil || st.server == nil {
+			return godog.ErrSkip
+		}
+		body, _ := json.Marshal(map[string]string{"prompt": prompt})
+		req, _ := http.NewRequest("POST", st.server.URL+"/v1/tasks", bytes.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer "+st.accessToken)
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			return err
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusCreated {
+			return fmt.Errorf("create task returned %d", resp.StatusCode)
+		}
+		var out struct {
+			TaskID string `json:"task_id"`
+		}
+		if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+			return err
+		}
+		st.taskID = out.TaskID
+		body2, _ := json.Marshal(map[string]string{"task_id": st.taskID, "holder_id": h1})
+		req2, _ := http.NewRequest("POST", st.server.URL+"/v1/workflow/start", bytes.NewReader(body2))
+		req2.Header.Set("Content-Type", "application/json")
+		if resp2, err := http.DefaultClient.Do(req2); err != nil {
+			return err
+		} else {
+			resp2.Body.Close()
+		}
+		body3, _ := json.Marshal(map[string]string{"task_id": st.taskID, "holder_id": h2})
+		req3, _ := http.NewRequest("POST", st.server.URL+"/v1/workflow/start", bytes.NewReader(body3))
+		req3.Header.Set("Content-Type", "application/json")
+		resp3, err := http.DefaultClient.Do(req3)
+		if err != nil {
+			return err
+		}
+		defer resp3.Body.Close()
+		st.lastStatusCode = resp3.StatusCode
+		st.workflowStartBody, _ = io.ReadAll(resp3.Body)
+		return nil
+	})
+	sc.Step(`^I create a task with prompt "([^"]*)" and start workflow for task with holder "([^"]*)" and save checkpoint for task with last_node_id "([^"]*)" and resume workflow for task$`, func(ctx context.Context, prompt, holder, nodeID string) error {
+		st := getState(ctx)
+		if st == nil || st.server == nil {
+			return godog.ErrSkip
+		}
+		body, _ := json.Marshal(map[string]string{"prompt": prompt})
+		req, _ := http.NewRequest("POST", st.server.URL+"/v1/tasks", bytes.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer "+st.accessToken)
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			return err
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusCreated {
+			return fmt.Errorf("create task returned %d", resp.StatusCode)
+		}
+		var out struct {
+			TaskID string `json:"task_id"`
+		}
+		if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+			return err
+		}
+		st.taskID = out.TaskID
+		body2, _ := json.Marshal(map[string]string{"task_id": st.taskID, "holder_id": holder})
+		req2, _ := http.NewRequest("POST", st.server.URL+"/v1/workflow/start", bytes.NewReader(body2))
+		req2.Header.Set("Content-Type", "application/json")
+		if resp2, err := http.DefaultClient.Do(req2); err != nil {
+			return err
+		} else {
+			resp2.Body.Close()
+		}
+		body3, _ := json.Marshal(map[string]string{"task_id": st.taskID, "last_node_id": nodeID})
+		req3, _ := http.NewRequest("POST", st.server.URL+"/v1/workflow/checkpoint", bytes.NewReader(body3))
+		req3.Header.Set("Content-Type", "application/json")
+		if resp3, err := http.DefaultClient.Do(req3); err != nil {
+			return err
+		} else if resp3.StatusCode != http.StatusNoContent {
+			resp3.Body.Close()
+			return fmt.Errorf("checkpoint returned %d", resp3.StatusCode)
+		} else {
+			resp3.Body.Close()
+		}
+		body4, _ := json.Marshal(map[string]string{"task_id": st.taskID})
+		req4, _ := http.NewRequest("POST", st.server.URL+"/v1/workflow/resume", bytes.NewReader(body4))
+		req4.Header.Set("Content-Type", "application/json")
+		resp4, err := http.DefaultClient.Do(req4)
+		if err != nil {
+			return err
+		}
+		defer resp4.Body.Close()
+		st.lastStatusCode = resp4.StatusCode
+		st.lastTaskResultBody, _ = io.ReadAll(resp4.Body)
+		return nil
+	})
+	sc.Step(`^I create a task with prompt "([^"]*)" and start workflow for task with holder "([^"]*)" and store the lease_id from workflow start response and release workflow for task with stored lease_id and start workflow for task with holder "([^"]*)"$`, func(ctx context.Context, prompt, h1, h2 string) error {
+		st := getState(ctx)
+		if st == nil || st.server == nil {
+			return godog.ErrSkip
+		}
+		body, _ := json.Marshal(map[string]string{"prompt": prompt})
+		req, _ := http.NewRequest("POST", st.server.URL+"/v1/tasks", bytes.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer "+st.accessToken)
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			return err
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusCreated {
+			return fmt.Errorf("create task returned %d", resp.StatusCode)
+		}
+		var out struct {
+			TaskID string `json:"task_id"`
+		}
+		if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+			return err
+		}
+		st.taskID = out.TaskID
+		body2, _ := json.Marshal(map[string]string{"task_id": st.taskID, "holder_id": h1})
+		req2, _ := http.NewRequest("POST", st.server.URL+"/v1/workflow/start", bytes.NewReader(body2))
+		req2.Header.Set("Content-Type", "application/json")
+		resp2, err := http.DefaultClient.Do(req2)
+		if err != nil {
+			return err
+		}
+		defer resp2.Body.Close()
+		st.workflowStartBody, _ = io.ReadAll(resp2.Body)
+		var startOut struct {
+			LeaseID string `json:"lease_id"`
+		}
+		_ = json.Unmarshal(st.workflowStartBody, &startOut)
+		st.storedLeaseID = startOut.LeaseID
+		body3, _ := json.Marshal(map[string]string{"task_id": st.taskID, "lease_id": st.storedLeaseID})
+		req3, _ := http.NewRequest("POST", st.server.URL+"/v1/workflow/release", bytes.NewReader(body3))
+		req3.Header.Set("Content-Type", "application/json")
+		if resp3, err := http.DefaultClient.Do(req3); err != nil {
+			return err
+		} else if resp3.StatusCode != http.StatusNoContent {
+			resp3.Body.Close()
+			return fmt.Errorf("release returned %d", resp3.StatusCode)
+		} else {
+			resp3.Body.Close()
+		}
+		body4, _ := json.Marshal(map[string]string{"task_id": st.taskID, "holder_id": h2})
+		req4, _ := http.NewRequest("POST", st.server.URL+"/v1/workflow/start", bytes.NewReader(body4))
+		req4.Header.Set("Content-Type", "application/json")
+		resp4, err := http.DefaultClient.Do(req4)
+		if err != nil {
+			return err
+		}
+		defer resp4.Body.Close()
+		st.lastStatusCode = resp4.StatusCode
+		st.workflowStartBody, _ = io.ReadAll(resp4.Body)
+		return nil
+	})
+	// API egress stub (POST /v1/call)
+	sc.Step(`^the API egress stub is configured with bearer token "([^"]*)" and allowlist "([^"]*)"$`, func(ctx context.Context, bearer, allowlist string) error {
+		st := getState(ctx)
+		if st == nil {
+			return nil
+		}
+		st.egressBearer = bearer
+		st.egressAllowlist = allowlist
+		return nil
+	})
+	sc.Step(`^the API egress stub is configured with bearer token "([^"]*)"$`, func(ctx context.Context, bearer string) error {
+		st := getState(ctx)
+		if st == nil {
+			return nil
+		}
+		st.egressBearer = bearer
+		return nil
+	})
+	sc.Step(`^I call POST "([^"]*)" with bearer "([^"]*)" and body provider "([^"]*)" operation "([^"]*)" task_id "([^"]*)"$`, func(ctx context.Context, path, bearer, provider, operation, taskID string) error {
+		st := getState(ctx)
+		if st == nil || st.server == nil {
+			return godog.ErrSkip
+		}
+		body, _ := json.Marshal(map[string]string{"provider": provider, "operation": operation, "task_id": taskID})
+		req, _ := http.NewRequest("POST", st.server.URL+path, bytes.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer "+bearer)
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			return err
+		}
+		defer resp.Body.Close()
+		st.lastStatusCode = resp.StatusCode
+		st.lastResponseBody, _ = io.ReadAll(resp.Body)
+		return nil
+	})
+	sc.Step(`^I call POST "([^"]*)" without bearer with body provider "([^"]*)" operation "([^"]*)" task_id "([^"]*)"$`, func(ctx context.Context, path, provider, operation, taskID string) error {
+		st := getState(ctx)
+		if st == nil || st.server == nil {
+			return godog.ErrSkip
+		}
+		body, _ := json.Marshal(map[string]string{"provider": provider, "operation": operation, "task_id": taskID})
+		req, _ := http.NewRequest("POST", st.server.URL+path, bytes.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			return err
+		}
+		defer resp.Body.Close()
+		st.lastStatusCode = resp.StatusCode
+		st.lastResponseBody, _ = io.ReadAll(resp.Body)
+		return nil
+	})
+	sc.Step(`^the response status is (\d+)$`, func(ctx context.Context, statusStr string) error {
+		st := getState(ctx)
+		if st == nil {
+			return godog.ErrSkip
+		}
+		var want int
+		if _, err := fmt.Sscanf(statusStr, "%d", &want); err != nil {
+			return err
+		}
+		if st.lastStatusCode != want {
+			return fmt.Errorf("expected status %d, got %d", want, st.lastStatusCode)
+		}
+		return nil
+	})
+	sc.Step(`^the response JSON has "([^"]*)" equal to "([^"]*)"$`, func(ctx context.Context, key, want string) error {
+		st := getState(ctx)
+		if st == nil || st.lastResponseBody == nil {
+			return godog.ErrSkip
+		}
+		var m map[string]interface{}
+		if err := json.Unmarshal(st.lastResponseBody, &m); err != nil {
+			return err
+		}
+		v, ok := m[key]
+		if !ok {
+			return fmt.Errorf("response JSON missing key %q", key)
+		}
+		s, _ := v.(string)
+		if s != want {
+			return fmt.Errorf("response JSON %q: got %q, want %q", key, s, want)
+		}
+		return nil
+	})
+	sc.Step(`^the response JSON has "([^"]*)" containing "([^"]*)"$`, func(ctx context.Context, key, sub string) error {
+		st := getState(ctx)
+		if st == nil || st.lastResponseBody == nil {
+			return godog.ErrSkip
+		}
+		var m map[string]interface{}
+		if err := json.Unmarshal(st.lastResponseBody, &m); err != nil {
+			return err
+		}
+		v, ok := m[key]
+		if !ok {
+			return fmt.Errorf("response JSON missing key %q", key)
+		}
+		s, _ := v.(string)
+		if !strings.Contains(s, sub) {
+			return fmt.Errorf("response JSON %q %q does not contain %q", key, s, sub)
 		}
 		return nil
 	})

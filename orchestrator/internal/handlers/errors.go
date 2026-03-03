@@ -43,6 +43,11 @@ func WriteNotFound(w http.ResponseWriter, detail string) {
 	WriteError(w, http.StatusNotFound, problem.TypeNotFound, "Not Found", detail)
 }
 
+// WriteConflict writes a 409 error (e.g. lease held).
+func WriteConflict(w http.ResponseWriter, detail string) {
+	WriteError(w, http.StatusConflict, "https://cynode.ai/specs/conflict", "Conflict", detail)
+}
+
 // WriteTooManyRequests writes a 429 error.
 func WriteTooManyRequests(w http.ResponseWriter, detail string) {
 	WriteError(w, http.StatusTooManyRequests, problem.TypeRateLimit, "Too Many Requests", detail)

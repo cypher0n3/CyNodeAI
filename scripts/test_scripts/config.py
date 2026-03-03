@@ -17,6 +17,21 @@ CONTROL_PLANE_PORT = int(os.environ.get("CONTROL_PLANE_PORT", "12082"))
 USER_API = f"http://localhost:{ORCHESTRATOR_PORT}"
 CONTROL_PLANE_API = f"http://localhost:{CONTROL_PLANE_PORT}"
 
+# API egress (orchestrator/docker-compose.yml profile optional; port must match compose)
+API_EGRESS_PORT = int(os.environ.get("API_EGRESS_PORT", "12084"))
+API_EGRESS_API = os.environ.get("API_EGRESS_API") or f"http://localhost:{API_EGRESS_PORT}"
+
+# Worker API (for telemetry E2E; dev stack uses same token as setup_dev_config)
+WORKER_PORT = int(os.environ.get("WORKER_PORT", "12090"))
+WORKER_API = os.environ.get("WORKER_API") or f"http://localhost:{WORKER_PORT}"
+WORKER_API_BEARER_TOKEN = os.environ.get(
+    "WORKER_API_BEARER_TOKEN", "dev-worker-api-token-change-me"
+)
+
+# Optional bearer tokens (when set, E2E sends them)
+WORKFLOW_RUNNER_BEARER_TOKEN = os.environ.get("WORKFLOW_RUNNER_BEARER_TOKEN", "")
+API_EGRESS_BEARER_TOKEN = os.environ.get("API_EGRESS_BEARER_TOKEN", "")
+
 # Auth and node
 ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "admin123")
 NODE_PSK = os.environ.get("NODE_PSK", "dev-node-psk-secret")

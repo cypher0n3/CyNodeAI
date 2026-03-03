@@ -221,8 +221,10 @@ def start_orchestrator_stack_compose(extra_env=None):
     env = _cfg.compose_env()
     if extra_env:
         env.update(extra_env)
+    # Use same profiles as up (ollama + optional) so profile services are torn down.
     subprocess.run(
-        [_cfg.RUNTIME, "compose", "-f", _cfg.COMPOSE_FILE, "down"],
+        [_cfg.RUNTIME, "compose", "-f", _cfg.COMPOSE_FILE,
+         "--profile", "ollama", "--profile", "optional", "down"],
         cwd=_cfg.PROJECT_ROOT,
         capture_output=True,
         timeout=60,
@@ -236,9 +238,10 @@ def start_orchestrator_stack_compose(extra_env=None):
         check=False,
         shell=False,
     )
-    # Default: include ollama profile so inference is available.
+    # Default: ollama (inference) + optional (api-egress, mcp-gateway) so E2E has no skips.
     if not run(
-        [_cfg.RUNTIME, "compose", "-f", _cfg.COMPOSE_FILE, "--profile", "ollama", "up", "-d"],
+        [_cfg.RUNTIME, "compose", "-f", _cfg.COMPOSE_FILE,
+         "--profile", "ollama", "--profile", "optional", "up", "-d"],
         env=env, timeout=600,
     ):
         log_error("Compose up failed")
@@ -253,8 +256,10 @@ def stop_orchestrator_stack_compose(leave_ollama_running=False):
         return False
     log_info("Stopping orchestrator stack...")
     if os.path.isfile(_cfg.COMPOSE_FILE):
+        # Use same profiles as up so optional (mcp-gateway, api-egress) and ollama are stopped.
         subprocess.run(
-            [_cfg.RUNTIME, "compose", "-f", _cfg.COMPOSE_FILE, "down"],
+            [_cfg.RUNTIME, "compose", "-f", _cfg.COMPOSE_FILE,
+             "--profile", "ollama", "--profile", "optional", "down"],
             cwd=_cfg.PROJECT_ROOT,
             capture_output=True,
             timeout=60,
@@ -413,6 +418,7 @@ def stop_all(leave_ollama_running=False):
                     [
                         _cfg.RUNTIME, "rm", "-f", "cynodeai-postgres",
                         _cfg.CONTROL_PLANE_CONTAINER_NAME, _cfg.USER_GATEWAY_CONTAINER_NAME,
+                        "cynodeai-mcp-gateway", "cynodeai-api-egress",
                     ],
                     capture_output=True, check=False, shell=False, timeout=30,
                 )

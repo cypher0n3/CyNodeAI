@@ -153,6 +153,8 @@ func run(ctx context.Context, store database.Store, cfg *config.OrchestratorConf
 
 	nodeHandler := handlers.NewNodeHandler(store, jwtManager, cfg.NodeRegistrationPSK, cfg.OrchestratorPublicURL, cfg.WorkerAPIBearerToken, cfg.WorkerAPITargetURL, logger)
 	authMiddleware := middleware.NewAuthMiddleware(jwtManager, logger)
+	workflowHandler := handlers.NewWorkflowHandler(store, logger)
+	workflowAuth := middleware.RequireWorkflowRunnerAuth(cfg.WorkflowRunnerBearerToken)
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", healthzHandler)
@@ -162,6 +164,11 @@ func run(ctx context.Context, store database.Store, cfg *config.OrchestratorConf
 	mux.Handle("GET /v1/nodes/config", authMiddleware.RequireNodeAuth(http.HandlerFunc(nodeHandler.GetConfig)))
 	mux.Handle("POST /v1/nodes/config", authMiddleware.RequireNodeAuth(http.HandlerFunc(nodeHandler.ConfigAck)))
 	mux.Handle("POST /v1/nodes/capability", authMiddleware.RequireNodeAuth(http.HandlerFunc(nodeHandler.ReportCapability)))
+
+	mux.Handle("POST /v1/workflow/start", workflowAuth(http.HandlerFunc(workflowHandler.Start)))
+	mux.Handle("POST /v1/workflow/resume", workflowAuth(http.HandlerFunc(workflowHandler.Resume)))
+	mux.Handle("POST /v1/workflow/checkpoint", workflowAuth(http.HandlerFunc(workflowHandler.SaveCheckpoint)))
+	mux.Handle("POST /v1/workflow/release", workflowAuth(http.HandlerFunc(workflowHandler.Release)))
 
 	handler := middleware.Recovery(logger)(middleware.Logging(logger)(mux))
 

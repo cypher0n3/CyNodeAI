@@ -275,3 +275,38 @@ func TestRunMainWithContextCancel(t *testing.T) {
 		t.Errorf("runMain after cancel should return 0, got %d", code)
 	}
 }
+
+func TestTelemetryEndpoints(t *testing.T) {
+	mux := newMux(executor.New("direct", time.Second, 1024, "", "", nil), "telemetry-token", "", slog.Default())
+	telemetryGetAndCheck(t, mux, "/v1/worker/telemetry/node:info", "node_slug")
+	telemetryGetAndCheck(t, mux, "/v1/worker/telemetry/node:stats", "captured_at")
+}
+
+func telemetryGetAndCheck(t *testing.T, mux *http.ServeMux, path, requiredKey string) {
+	t.Helper()
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodGet, path, http.NoBody)
+	r.Header.Set("Authorization", "Bearer telemetry-token")
+	mux.ServeHTTP(w, r)
+	if w.Code != http.StatusOK {
+		t.Errorf("%s: got %d %s", path, w.Code, w.Body.String())
+		return
+	}
+	var m map[string]interface{}
+	if err := json.NewDecoder(w.Body).Decode(&m); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if m["version"] != float64(1) || m[requiredKey] == nil {
+		t.Errorf("%s body %+v", path, m)
+	}
+}
+
+func TestTelemetryUnauthorized(t *testing.T) {
+	mux := newMux(executor.New("direct", time.Second, 1024, "", "", nil), "telemetry-token", "", slog.Default())
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodGet, "/v1/worker/telemetry/node:info", http.NoBody)
+	mux.ServeHTTP(w, r)
+	if w.Code != http.StatusUnauthorized {
+		t.Errorf("node:info no bearer: got %d", w.Code)
+	}
+}

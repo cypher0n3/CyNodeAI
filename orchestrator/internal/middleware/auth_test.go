@@ -165,6 +165,49 @@ func TestAuthMiddleware_RequireAdminAuth(t *testing.T) {
 	})
 }
 
+func TestRequireWorkflowRunnerAuth(t *testing.T) {
+	t.Run("empty_token_allows", func(t *testing.T) {
+		called := false
+		h := RequireWorkflowRunnerAuth("")(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { called = true; w.WriteHeader(http.StatusOK) }))
+		req := httptest.NewRequest("POST", "/v1/workflow/start", http.NoBody)
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, req)
+		if w.Code != http.StatusOK || !called {
+			t.Errorf("empty token: code=%d called=%v", w.Code, called)
+		}
+	})
+	t.Run("token_set_missing_returns_401", func(t *testing.T) {
+		h := RequireWorkflowRunnerAuth("secret")(http.HandlerFunc(func(http.ResponseWriter, *http.Request) { t.Error("should not run") }))
+		req := httptest.NewRequest("POST", "/v1/workflow/start", http.NoBody)
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, req)
+		if w.Code != http.StatusUnauthorized {
+			t.Errorf("missing auth: code=%d", w.Code)
+		}
+	})
+	t.Run("token_set_wrong_returns_401", func(t *testing.T) {
+		h := RequireWorkflowRunnerAuth("secret")(http.HandlerFunc(func(http.ResponseWriter, *http.Request) { t.Error("should not run") }))
+		req := httptest.NewRequest("POST", "/v1/workflow/start", http.NoBody)
+		req.Header.Set("Authorization", "Bearer wrong")
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, req)
+		if w.Code != http.StatusUnauthorized {
+			t.Errorf("wrong token: code=%d", w.Code)
+		}
+	})
+	t.Run("token_set_correct_passes", func(t *testing.T) {
+		called := false
+		h := RequireWorkflowRunnerAuth("secret")(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { called = true; w.WriteHeader(http.StatusOK) }))
+		req := httptest.NewRequest("POST", "/v1/workflow/start", http.NoBody)
+		req.Header.Set("Authorization", "Bearer secret")
+		w := httptest.NewRecorder()
+		h.ServeHTTP(w, req)
+		if w.Code != http.StatusOK || !called {
+			t.Errorf("correct token: code=%d called=%v", w.Code, called)
+		}
+	})
+}
+
 func TestExtractBearerToken(t *testing.T) {
 	tests := []struct {
 		name   string

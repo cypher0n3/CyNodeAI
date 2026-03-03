@@ -1,8 +1,12 @@
 package main
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"log/slog"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"testing"
 	"time"
@@ -90,4 +94,86 @@ func TestRunMain_RunFails(t *testing.T) {
 	if code != 1 {
 		t.Errorf("runMain when run fails: got %d", code)
 	}
+}
+
+func TestCallHandler_MethodNotAllowed(t *testing.T) {
+	h := newCallHandler(slog.Default(), "secret", "openai,github")
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodGet, "/v1/call", http.NoBody)
+	h.ServeHTTP(w, r)
+	if w.Code != http.StatusMethodNotAllowed {
+		t.Errorf("GET: got %d", w.Code)
+	}
+}
+
+func TestCallHandler_Unauthorized(t *testing.T) {
+	h := newCallHandler(slog.Default(), "secret", "openai,github")
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodPost, "/v1/call", bytes.NewReader([]byte(`{"provider":"openai","operation":"chat"}`)))
+	r.Header.Set("Content-Type", "application/json")
+	h.ServeHTTP(w, r)
+	if w.Code != http.StatusUnauthorized {
+		t.Errorf("no bearer: got %d", w.Code)
+	}
+	w2 := httptest.NewRecorder()
+	r2 := httptest.NewRequest(http.MethodPost, "/v1/call", bytes.NewReader([]byte(`{"provider":"openai","operation":"chat"}`)))
+	r2.Header.Set("Content-Type", "application/json")
+	r2.Header.Set("Authorization", "Bearer wrong")
+	h.ServeHTTP(w2, r2)
+	if w2.Code != http.StatusUnauthorized {
+		t.Errorf("wrong bearer: got %d", w2.Code)
+	}
+}
+
+func TestCallHandler_BadRequest(t *testing.T) {
+	h := newCallHandler(slog.Default(), "secret", "openai,github")
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodPost, "/v1/call", bytes.NewReader([]byte("not json")))
+	r.Header.Set("Content-Type", "application/json")
+	r.Header.Set("Authorization", "Bearer secret")
+	h.ServeHTTP(w, r)
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("invalid JSON: got %d", w.Code)
+	}
+}
+
+func TestCallHandler_Forbidden(t *testing.T) {
+	h := newCallHandler(slog.Default(), "secret", "openai,github")
+	body := map[string]string{"provider": "unknown", "operation": "op", "task_id": "t1"}
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodPost, "/v1/call", bytes.NewReader(mustJSON(body)))
+	r.Header.Set("Content-Type", "application/json")
+	r.Header.Set("Authorization", "Bearer secret")
+	h.ServeHTTP(w, r)
+	if w.Code != http.StatusForbidden {
+		t.Errorf("disallowed provider: got %d", w.Code)
+	}
+}
+
+func TestCallHandler_AllowedReturns501(t *testing.T) {
+	h := newCallHandler(slog.Default(), "secret", "openai,github")
+	body := map[string]string{"provider": "openai", "operation": "chat", "task_id": "t2"}
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodPost, "/v1/call", bytes.NewReader(mustJSON(body)))
+	r.Header.Set("Content-Type", "application/json")
+	r.Header.Set("Authorization", "Bearer secret")
+	h.ServeHTTP(w, r)
+	if w.Code != http.StatusNotImplemented {
+		t.Errorf("allowed provider: got %d", w.Code)
+	}
+	var resp map[string]interface{}
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatal(err)
+	}
+	if resp["title"] != "Not Implemented" {
+		t.Errorf("title: %v", resp["title"])
+	}
+}
+
+func mustJSON(v interface{}) []byte {
+	b, err := json.Marshal(v)
+	if err != nil {
+		panic(err)
+	}
+	return b
 }

@@ -14,3 +14,30 @@ func TestTasksSkippedWithoutDSN(t *testing.T) {
 	}
 	t.Skipf("task/job tests require real Postgres; set %s and run integration tests", integrationEnv)
 }
+
+func TestNormalizeTaskName_Empty(t *testing.T) {
+	if got := normalizeTaskName(""); got != "" {
+		t.Errorf("normalizeTaskName(%q) = %q, want \"\"", "", got)
+	}
+	if got := normalizeTaskName("   "); got != "" {
+		t.Errorf("normalizeTaskName(%q) = %q, want \"\"", "   ", got)
+	}
+}
+
+func TestNormalizeTaskName_RepeatedDashes(t *testing.T) {
+	if got := normalizeTaskName("foo---bar"); got != "foo-bar" {
+		t.Errorf("normalizeTaskName(\"foo---bar\") = %q, want \"foo-bar\"", got)
+	}
+	if got := normalizeTaskName("  My  Task  "); got != "my-task" {
+		t.Errorf("normalizeTaskName(\"  My  Task  \") = %q, want \"my-task\"", got)
+	}
+}
+
+func TestNormalizeTaskName_LowercaseAndTrim(t *testing.T) {
+	if got := normalizeTaskName("AlreadyClean"); got != "alreadyclean" {
+		t.Errorf("normalizeTaskName(\"AlreadyClean\") = %q, want \"alreadyclean\"", got)
+	}
+	if got := normalizeTaskName("-leading-trailing-"); got != "leading-trailing" {
+		t.Errorf("normalizeTaskName(\"-leading-trailing-\") = %q, want \"leading-trailing\"", got)
+	}
+}

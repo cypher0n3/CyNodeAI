@@ -82,7 +82,45 @@ func newMux(exec *executor.Executor, bearerToken, workspaceRoot string, logger *
 	// REQ-WORKER-0140, REQ-WORKER-0142: unauthenticated GET /readyz
 	mux.HandleFunc("GET /readyz", readyzHandler(exec))
 	mux.HandleFunc("POST /v1/worker/jobs:run", handleRunJob(exec, bearerToken, workspaceRoot, logger))
+	// REQ-WORKER-0200--0243: Worker Telemetry API (first slice: node:info, node:stats).
+	mux.HandleFunc("GET /v1/worker/telemetry/node:info", telemetryAuth(bearerToken, handleNodeInfo(logger)))
+	mux.HandleFunc("GET /v1/worker/telemetry/node:stats", telemetryAuth(bearerToken, handleNodeStats(logger)))
 	return mux
+}
+
+func telemetryAuth(bearerToken string, next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if !requireBearerToken(r, bearerToken) {
+			writeProblem(w, http.StatusUnauthorized, problem.TypeAuthentication, "Unauthorized", "Invalid or missing bearer token")
+			return
+		}
+		next(w, r)
+	}
+}
+
+func handleNodeInfo(logger *slog.Logger) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		nodeSlug := getEnv("NODE_SLUG", "default")
+		writeJSON(w, http.StatusOK, map[string]interface{}{
+			"version": 1,
+			"node_slug": nodeSlug,
+			"build": map[string]string{"build_version": "dev", "git_sha": ""},
+			"platform": map[string]string{"os": "linux", "arch": "amd64", "kernel_version": ""},
+		})
+	}
+}
+
+func handleNodeStats(logger *slog.Logger) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, http.StatusOK, map[string]interface{}{
+			"version":    1,
+			"captured_at": time.Now().UTC().Format("2006-01-02T15:04:05Z07:00"),
+			"cpu":        map[string]interface{}{"cores": 0, "load1": 0.0, "load5": 0.0, "load15": 0.0},
+			"memory":     map[string]interface{}{"total_mb": 0, "used_mb": 0, "free_mb": 0},
+			"disk":       map[string]interface{}{"state_dir_free_mb": 0, "state_dir_total_mb": 0},
+			"container_runtime": map[string]string{"runtime": getEnv("CONTAINER_RUNTIME", "podman"), "version": ""},
+		})
+	}
 }
 
 // readyzHandler implements REQ-WORKER-0142: 200 "ready" when ready to accept jobs, 503 otherwise.

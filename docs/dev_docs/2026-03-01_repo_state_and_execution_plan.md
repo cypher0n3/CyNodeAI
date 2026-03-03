@@ -299,18 +299,18 @@ This keeps scope focused on baseline stability and high-impact drift fixes befor
   - requirement ids: REQ-ORCHES-0144, REQ-ORCHES-0145, REQ-ORCHES-0146, REQ-ORCHES-0147
   - spec ids: `langgraph_mvp.md`, `orchestrator.md`, `postgres_schema.md`
   - validation: start/resume API tests, lease tests
-  - status: Not started
+  - status: Done (workflow start/resume/checkpoint/release API on control-plane; lease acquire/release/expiry in DB; checkpoint upsert/get; integration and handler tests; duplicate start returns 409)
 - **Step:** 8
   - description: API Egress and telemetry
   - requirement ids: REQ-APIEGR-0001, REQ-APIEGR-0110--0119, REQ-ORCHES-0141--0143, REQ-WORKER-0200--0243
   - spec ids: `api_egress_server.md`, `access_control.md`, `worker_telemetry_api.md`
   - validation: authz + audit tests, telemetry pull tests
-  - status: Not started
+  - status: Partial (API Egress POST /v1/call with authz and audit log; Worker Telemetry node:info and node:stats stubs; full telemetry SQLite and orchestrator pull deferred)
 - **Step:** 9
   - description: Final hardening and acceptance
   - requirement ids: (CI/doc/E2E)
   - spec ids: `docs/mvp_plan.md`
   - validation: `just ci`, `just docs-check`, `just e2e --stop-on-success`
-  - status: Not started
+  - status: Done (report `docs/dev_docs/2026-03-03_steps_7_8_9_execution_report.md`; coverage raised; `just ci` passes)
 
 Fill **Status** per step (e.g. not started / in progress / done).

@@ -29,8 +29,8 @@ def run_cynork(args, config_path, env_extra=None, capture=True):
         return False, "", str(e)
 
 
-def run_curl(method, url, data=None, headers=None):
-    """Run curl; return (ok, body). With -w %{http_code}, body is stdout minus last 3 chars."""
+def run_curl_with_status(method, url, data=None, headers=None):
+    """Run curl; return (status_code, body). Caller can assert on code (e.g. 200, 403, 501)."""
     cmd = ["curl", "-s", "-w", "%{http_code}", "-X", method, url]
     if headers:
         for h, v in headers.items():
@@ -48,9 +48,15 @@ def run_curl(method, url, data=None, headers=None):
         else:
             code = 0
             body = out
-        return 200 <= code < 300, body
+        return code, body
     except (subprocess.TimeoutExpired, FileNotFoundError):
-        return False, ""
+        return 0, ""
+
+
+def run_curl(method, url, data=None, headers=None):
+    """Run curl; return (ok, body). ok is True when status is 2xx."""
+    code, body = run_curl_with_status(method, url, data=data, headers=headers)
+    return 200 <= code < 300, body
 
 
 def wait_for_gateway(max_attempts=30, sleep=1):

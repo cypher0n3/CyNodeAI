@@ -669,13 +669,16 @@ Optional E2E/BDD scenario for SBA job and `job.result` containing `sba_result` r
 
 ### Suggested Next Work
 
-1. **Optional E2E/BDD for SBA job (low):** Done.
+1. **Execution report 2026-03-03 (Steps 7, 8, 9):** See [docs/dev_docs/2026-03-03_steps_7_8_9_execution_report.md](dev_docs/2026-03-03_steps_7_8_9_execution_report.md).
+   Step 7 (workflow runner and lease) done; Step 8 minimal (API Egress POST /v1/call, Worker Telemetry node:info/node:stats stubs); Step 9 done.
+   Coverage raised; `just ci` passes (all packages >=90%, BDD and E2E for workflow, API egress, worker telemetry).
+2. **Optional E2E/BDD for SBA job (low):** Done.
    E2E Test 5e in `scripts/setup-dev.sh` creates task with `--use-sba`, polls until completed, asserts job result contains `sba_result`; full-demo builds SBA runner image.
-2. **MCP gateway allow path or scope (medium):** Document MVP scope (only db.preference.* implemented; others 501) or implement allow path for one sandbox/orchestrator tool.
-3. **PMA langchaingo refactor (medium):** Refactor PMA from direct Ollama HTTP to langchaingo; MCP tools as langchaingo tools; multiple tool calls where supported.
-4. **LangGraph workflow (P2-04--P2-08):** Workflow start/resume API (Go to Python LangGraph); graph nodes to MCP DB and Worker API; lease acquisition; Verify Step Result (PMA tasking Project Analyst / SBA).
-5. **Lower priority when needed:** Task create attachments and task name normalization; model warm-up; step executor, SBA timeout extension, Worker API cmd.
-6. **P1.7-05 PMA/SBA instructions buildout:** See task P1.7-05 under [Phase 1.7 Task Breakdown](#phase-17-agent-artifacts-pma-first-then-sba).
+3. **MCP gateway allow path or scope (medium):** Document MVP scope (only db.preference.* implemented; others 501) or implement allow path for one sandbox/orchestrator tool.
+4. **PMA langchaingo refactor (medium):** Refactor PMA from direct Ollama HTTP to langchaingo; MCP tools as langchaingo tools; multiple tool calls where supported.
+5. **LangGraph workflow (P2-04--P2-08):** Workflow start/resume API (Go to Python LangGraph); graph nodes to MCP DB and Worker API; lease acquisition; Verify Step Result (PMA tasking Project Analyst / SBA).
+6. **Lower priority when needed:** Task create attachments and task name normalization; model warm-up; step executor, SBA timeout extension, Worker API cmd.
+7. **P1.7-05 PMA/SBA instructions buildout:** See task P1.7-05 under [Phase 1.7 Task Breakdown](#phase-17-agent-artifacts-pma-first-then-sba).
 
 ## References
 

@@ -36,9 +36,11 @@ type MockDB struct {
 	AuditLogs         []*AuthAuditLog
 	ChatThreads       map[uuid.UUID]*models.ChatThread
 	ChatMessages      map[uuid.UUID][]*models.ChatMessage
-	PreferenceEntries []*models.PreferenceEntry
-	TaskArtifacts     []*models.TaskArtifact
-	Skills            map[uuid.UUID]*models.Skill
+	PreferenceEntries     []*models.PreferenceEntry
+	TaskArtifacts         []*models.TaskArtifact
+	Skills                map[uuid.UUID]*models.Skill
+	TaskWorkflowLeases    map[uuid.UUID]*models.TaskWorkflowLease
+	WorkflowCheckpoints   map[uuid.UUID]*models.WorkflowCheckpoint
 
 	// Error injection
 	ForceError error
@@ -94,9 +96,11 @@ func NewMockDB() *MockDB {
 		Tasks:           make(map[uuid.UUID]*models.Task),
 		Jobs:            make(map[uuid.UUID]*models.Job),
 		JobsByTask:      make(map[uuid.UUID][]*models.Job),
-		ChatThreads:     make(map[uuid.UUID]*models.ChatThread),
-		ChatMessages:    make(map[uuid.UUID][]*models.ChatMessage),
-		Skills:          make(map[uuid.UUID]*models.Skill),
+		ChatThreads:         make(map[uuid.UUID]*models.ChatThread),
+		ChatMessages:        make(map[uuid.UUID][]*models.ChatMessage),
+		Skills:              make(map[uuid.UUID]*models.Skill),
+		TaskWorkflowLeases:  make(map[uuid.UUID]*models.TaskWorkflowLease),
+		WorkflowCheckpoints: make(map[uuid.UUID]*models.WorkflowCheckpoint),
 	}
 }
 
@@ -929,13 +933,7 @@ func (m *MockDB) CreateSkill(_ context.Context, name, content, scope string, own
 
 // GetSkillByID returns a skill by id from the mock.
 func (m *MockDB) GetSkillByID(_ context.Context, id uuid.UUID) (*models.Skill, error) {
-	return runWithLock(m, false, func() (*models.Skill, error) {
-		s, ok := m.Skills[id]
-		if !ok {
-			return nil, database.ErrNotFound
-		}
-		return s, nil
-	})
+	return getByKeyLocked(m, m.Skills, id)
 }
 
 // ListSkillsForUser returns skills visible to user (owner_id = userID or is_system).
@@ -1017,6 +1015,77 @@ func (m *MockDB) EnsureDefaultSkill(_ context.Context, content string) error {
 		}
 		now := time.Now().UTC()
 		m.Skills[id] = &models.Skill{ID: id, Name: "CyNodeAI interaction", Content: content, Scope: "global", IsSystem: true, CreatedAt: now, UpdatedAt: now}
+		return nil
+	})
+}
+
+func (m *MockDB) AcquireTaskWorkflowLease(_ context.Context, taskID, leaseID uuid.UUID, holderID string, expiresAt time.Time) (*models.TaskWorkflowLease, error) {
+	return runWithLock(m, true, func() (*models.TaskWorkflowLease, error) {
+		now := time.Now().UTC()
+		existing, ok := m.TaskWorkflowLeases[taskID]
+		if ok && existing.ExpiresAt != nil && existing.ExpiresAt.Before(now) {
+			existing.LeaseID = leaseID
+			h := holderID
+			existing.HolderID = &h
+			existing.ExpiresAt = &expiresAt
+			existing.UpdatedAt = now
+			return existing, nil
+		}
+		if ok && existing.HolderID != nil && *existing.HolderID == holderID && existing.LeaseID == leaseID {
+			return existing, nil
+		}
+		if ok {
+			return nil, database.ErrLeaseHeld
+		}
+		row := &models.TaskWorkflowLease{
+			ID:        uuid.New(),
+			TaskID:    taskID,
+			LeaseID:   leaseID,
+			HolderID:  &holderID,
+			ExpiresAt: &expiresAt,
+			CreatedAt: now,
+			UpdatedAt: now,
+		}
+		m.TaskWorkflowLeases[taskID] = row
+		return row, nil
+	})
+}
+
+func (m *MockDB) ReleaseTaskWorkflowLease(_ context.Context, taskID, leaseID uuid.UUID) error {
+	return runWithWLockErr(m, func() error {
+		row, ok := m.TaskWorkflowLeases[taskID]
+		if !ok || row.LeaseID != leaseID {
+			return nil
+		}
+		row.HolderID = nil
+		row.ExpiresAt = nil
+		row.UpdatedAt = time.Now().UTC()
+		return nil
+	})
+}
+
+func (m *MockDB) GetTaskWorkflowLease(_ context.Context, taskID uuid.UUID) (*models.TaskWorkflowLease, error) {
+	return getByKeyLocked(m, m.TaskWorkflowLeases, taskID)
+}
+
+func (m *MockDB) GetWorkflowCheckpoint(_ context.Context, taskID uuid.UUID) (*models.WorkflowCheckpoint, error) {
+	return getByKeyLocked(m, m.WorkflowCheckpoints, taskID)
+}
+
+func (m *MockDB) UpsertWorkflowCheckpoint(_ context.Context, cp *models.WorkflowCheckpoint) error {
+	return runWithWLockErr(m, func() error {
+		now := time.Now().UTC()
+		cp.UpdatedAt = now
+		if existing, ok := m.WorkflowCheckpoints[cp.TaskID]; ok {
+			existing.State = cp.State
+			existing.LastNodeID = cp.LastNodeID
+			existing.UpdatedAt = now
+			return nil
+		}
+		if cp.ID == uuid.Nil {
+			cp.ID = uuid.New()
+		}
+		m.WorkflowCheckpoints[cp.TaskID] = cp
 		return nil
 	})
 }

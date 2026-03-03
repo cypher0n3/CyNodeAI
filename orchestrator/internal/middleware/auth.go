@@ -129,3 +129,22 @@ func extractBearerToken(r *http.Request) string {
 
 	return parts[1]
 }
+
+// RequireWorkflowRunnerAuth returns a middleware that requires Authorization: Bearer equal to token when token is non-empty.
+// When token is empty, all requests are allowed (for dev). Used for workflow start/resume/checkpoint/release API.
+func RequireWorkflowRunnerAuth(token string) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if token == "" {
+				next.ServeHTTP(w, r)
+				return
+			}
+			got := extractBearerToken(r)
+			if got == "" || got != token {
+				handlers.WriteUnauthorized(w, "Missing or invalid workflow runner token")
+				return
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
+}

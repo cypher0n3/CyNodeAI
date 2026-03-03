@@ -1,0 +1,54 @@
+# E2E: control-plane workflow start/resume/checkpoint/release. Uses state.TASK_ID.
+
+import json
+import unittest
+
+from scripts.test_scripts import config, helpers
+import scripts.test_scripts.e2e_state as state
+
+
+class TestWorkflowAPI(unittest.TestCase):
+    """E2E: POST /v1/workflow/start, resume, checkpoint, release on control-plane."""
+
+    def test_workflow_start_returns_run_id(self):
+        """Start workflow for task; 200 with run_id, or 409 if lease already held."""
+        if not getattr(state, "TASK_ID", None):
+            self.skipTest("TASK_ID not set (run after task create)")
+        headers = {}
+        if getattr(config, "WORKFLOW_RUNNER_BEARER_TOKEN", ""):
+            headers["Authorization"] = f"Bearer {config.WORKFLOW_RUNNER_BEARER_TOKEN}"
+        body = json.dumps({"task_id": state.TASK_ID, "holder_id": "e2e-holder"})
+        code, resp_body = helpers.run_curl_with_status(
+            "POST",
+            f"{config.CONTROL_PLANE_API}/v1/workflow/start",
+            data=body,
+            headers=headers or None,
+        )
+        self.assertIn(code, (200, 409), f"workflow start: {code} {resp_body}")
+        if code == 200:
+            data = helpers.parse_json_safe(resp_body)
+            self.assertIn("run_id", data or {}, "run_id in response")
+
+    def test_workflow_start_duplicate_returns_409(self):
+        """Start workflow twice for same task; second returns 409."""
+        if not getattr(state, "TASK_ID", None):
+            self.skipTest("TASK_ID not set")
+        headers = {}
+        if getattr(config, "WORKFLOW_RUNNER_BEARER_TOKEN", ""):
+            headers["Authorization"] = f"Bearer {config.WORKFLOW_RUNNER_BEARER_TOKEN}"
+        body = json.dumps({"task_id": state.TASK_ID, "holder_id": "e2e-holder-2"})
+        code1, _ = helpers.run_curl_with_status(
+            "POST",
+            f"{config.CONTROL_PLANE_API}/v1/workflow/start",
+            data=body,
+            headers=headers or None,
+        )
+        code2, _ = helpers.run_curl_with_status(
+            "POST",
+            f"{config.CONTROL_PLANE_API}/v1/workflow/start",
+            data=body,
+            headers=headers or None,
+        )
+        self.assertIn(code1, (200, 409), "first start 200 or 409")
+        if code1 == 200:
+            self.assertEqual(code2, 409, "second start must be 409 when lease held")

@@ -110,6 +110,35 @@ func workerMux(exec *executor.Executor, bearerToken string) *http.ServeMux {
 		}
 		writeJSON(w, http.StatusOK, resp)
 	})
+	// Worker Telemetry API (REQ-WORKER-0230--0232)
+	mux.HandleFunc("GET /v1/worker/telemetry/node:info", func(w http.ResponseWriter, r *http.Request) {
+		const prefix = "Bearer "
+		authz := r.Header.Get("Authorization")
+		if len(authz) <= len(prefix) || authz[:len(prefix)] != prefix || authz[len(prefix):] != bearerToken {
+			writeProblem(w, http.StatusUnauthorized, problem.TypeAuthentication, "Unauthorized", "Invalid or missing bearer token")
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]interface{}{
+			"version": 1, "node_slug": getEnv("NODE_SLUG", "bdd-node"),
+			"build": map[string]string{"build_version": "test", "git_sha": ""},
+			"platform": map[string]string{"os": "linux", "arch": "amd64", "kernel_version": ""},
+		})
+	})
+	mux.HandleFunc("GET /v1/worker/telemetry/node:stats", func(w http.ResponseWriter, r *http.Request) {
+		const prefix = "Bearer "
+		authz := r.Header.Get("Authorization")
+		if len(authz) <= len(prefix) || authz[:len(prefix)] != prefix || authz[len(prefix):] != bearerToken {
+			writeProblem(w, http.StatusUnauthorized, problem.TypeAuthentication, "Unauthorized", "Invalid or missing bearer token")
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]interface{}{
+			"version": 1, "captured_at": time.Now().UTC().Format("2006-01-02T15:04:05Z07:00"),
+			"cpu": map[string]interface{}{"cores": 0, "load1": 0.0, "load5": 0.0, "load15": 0.0},
+			"memory": map[string]interface{}{"total_mb": 0, "used_mb": 0, "free_mb": 0},
+			"disk": map[string]interface{}{"state_dir_free_mb": 0, "state_dir_total_mb": 0},
+			"container_runtime": map[string]string{"runtime": getEnv("CONTAINER_RUNTIME", "direct"), "version": ""},
+		})
+	})
 	return mux
 }
 
@@ -330,6 +359,104 @@ func RegisterWorkerNodeSteps(sc *godog.ScenarioContext, state *workerTestState) 
 		got := m["body"]
 		if got != want {
 			return fmt.Errorf("response body %q, want %q", got, want)
+		}
+		return nil
+	})
+	sc.Step(`^a Worker API is running with bearer token "([^"]*)"$`, func(ctx context.Context, token string) error {
+		st := getWorkerState(ctx)
+		if st == nil || st.server == nil {
+			return fmt.Errorf("worker API not started")
+		}
+		st.bearerToken = token
+		return nil
+	})
+	sc.Step(`^I call GET "([^"]*)" with bearer token "([^"]*)"$`, func(ctx context.Context, path, token string) error {
+		st := getWorkerState(ctx)
+		if st == nil || st.server == nil {
+			return fmt.Errorf("worker API not started")
+		}
+		req, _ := http.NewRequest(http.MethodGet, st.server.URL+path, nil)
+		req.Header.Set("Authorization", "Bearer "+token)
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			return err
+		}
+		defer resp.Body.Close()
+		st.lastStatus = resp.StatusCode
+		st.lastBody, _ = io.ReadAll(resp.Body)
+		return nil
+	})
+	sc.Step(`^I call GET "([^"]*)" without authorization$`, func(ctx context.Context, path string) error {
+		st := getWorkerState(ctx)
+		if st == nil || st.server == nil {
+			return fmt.Errorf("worker API not started")
+		}
+		req, _ := http.NewRequest(http.MethodGet, st.server.URL+path, nil)
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			return err
+		}
+		defer resp.Body.Close()
+		st.lastStatus = resp.StatusCode
+		st.lastBody, _ = io.ReadAll(resp.Body)
+		return nil
+	})
+	sc.Step(`^the response status is (\d+)$`, func(ctx context.Context, statusStr string) error {
+		st := getWorkerState(ctx)
+		if st == nil {
+			return fmt.Errorf("no state")
+		}
+		var want int
+		if _, err := fmt.Sscanf(statusStr, "%d", &want); err != nil {
+			return err
+		}
+		if st.lastStatus != want {
+			return fmt.Errorf("expected status %d, got %d", want, st.lastStatus)
+		}
+		return nil
+	})
+	sc.Step(`^the response JSON has "([^"]*)"$`, func(ctx context.Context, key string) error {
+		st := getWorkerState(ctx)
+		if st == nil || st.lastBody == nil {
+			return fmt.Errorf("no response body")
+		}
+		var m map[string]interface{}
+		if err := json.Unmarshal(st.lastBody, &m); err != nil {
+			return err
+		}
+		if _, ok := m[key]; !ok {
+			return fmt.Errorf("response JSON missing key %q", key)
+		}
+		return nil
+	})
+	sc.Step(`^the response JSON has "([^"]*)" equal to (\d+)$`, func(ctx context.Context, key string, valueStr string) error {
+		st := getWorkerState(ctx)
+		if st == nil || st.lastBody == nil {
+			return fmt.Errorf("no response body")
+		}
+		var m map[string]interface{}
+		if err := json.Unmarshal(st.lastBody, &m); err != nil {
+			return err
+		}
+		v, ok := m[key]
+		if !ok {
+			return fmt.Errorf("response JSON missing key %q", key)
+		}
+		var want float64
+		if _, err := fmt.Sscanf(valueStr, "%f", &want); err != nil {
+			return err
+		}
+		switch n := v.(type) {
+		case float64:
+			if n != want {
+				return fmt.Errorf("response JSON %q: got %v, want %v", key, n, want)
+			}
+		case int:
+			if float64(n) != want {
+				return fmt.Errorf("response JSON %q: got %v, want %v", key, n, want)
+			}
+		default:
+			return fmt.Errorf("response JSON %q is not a number: %T", key, v)
 		}
 		return nil
 	})
