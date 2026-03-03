@@ -16,6 +16,7 @@ import (
 
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/database"
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/models"
+	"github.com/cypher0n3/cynodeai/orchestrator/internal/skillscan"
 )
 
 const scopeTypeSystem = "system"
@@ -145,6 +146,11 @@ var requiredScopedIds = map[string]struct{ TaskID, RunID, JobID bool }{
 	"db.task.get":            {TaskID: true},
 	"db.job.get":              {JobID: true},
 	"artifact.get":           {TaskID: true},
+	"skills.create":          {TaskID: true},
+	"skills.list":            {TaskID: true},
+	"skills.get":             {TaskID: true},
+	"skills.update":          {TaskID: true},
+	"skills.delete":          {TaskID: true},
 }
 
 // validateRequiredScopedIds returns an error message if required scoped ids are missing or invalid for the tool.
@@ -277,6 +283,16 @@ func routeToolCall(ctx context.Context, store database.Store, toolName string, a
 		code, body, rec = handleJobGet(ctx, store, args, rec)
 	case "artifact.get":
 		code, body, rec = handleArtifactGet(ctx, store, args, rec)
+	case "skills.create":
+		code, body, rec = handleSkillsCreate(ctx, store, args, rec)
+	case "skills.list":
+		code, body, rec = handleSkillsList(ctx, store, args, rec)
+	case "skills.get":
+		code, body, rec = handleSkillsGet(ctx, store, args, rec)
+	case "skills.update":
+		code, body, rec = handleSkillsUpdate(ctx, store, args, rec)
+	case "skills.delete":
+		code, body, rec = handleSkillsDelete(ctx, store, args, rec)
 	default:
 		code = http.StatusNotImplemented
 		body = []byte(`{"error":"tool routing not implemented"}`)
@@ -691,4 +707,285 @@ func handleArtifactGet(ctx context.Context, store database.Store, args map[strin
 	return http.StatusOK, body, auditRec
 }
 
+// --- Skills tools (REQ-SKILLS-0114; contract in skills_storage_and_inference.md) ---
+
+func handleSkillsCreate(ctx context.Context, store database.Store, args map[string]interface{}, rec *models.McpToolCallAuditLog) (code int, body []byte, auditRec *models.McpToolCallAuditLog) {
+	auditRec = rec
+	taskID := uuidArg(args, "task_id")
+	if taskID == nil {
+		rec.Decision = auditDecisionDeny
+		rec.Status = auditStatusError
+		rec.ErrorType = strPtr("invalid_arguments")
+		return http.StatusBadRequest, []byte(`{"error":"task_id required"}`), auditRec
+	}
+	rec.TaskID = taskID
+	task, err := store.GetTaskByID(ctx, *taskID)
+	if err != nil {
+		code, body := writePreferenceErrToAudit(err, rec)
+		return code, body, auditRec
+	}
+	userID := task.CreatedBy
+	if userID == nil {
+		rec.Decision = auditDecisionAllow
+		rec.Status = auditStatusError
+		rec.ErrorType = strPtr("internal_error")
+		return http.StatusInternalServerError, []byte(`{"error":"task has no owner"}`), auditRec
+	}
+	content := strArg(args, "content")
+	if content == "" {
+		rec.Decision = auditDecisionDeny
+		rec.Status = auditStatusError
+		rec.ErrorType = strPtr("invalid_arguments")
+		return http.StatusBadRequest, []byte(`{"error":"content required"}`), auditRec
+	}
+	if m := skillscan.ScanContent(content); m != nil {
+		return skillsPolicyViolationResponse(rec, m, auditRec)
+	}
+	name := strArg(args, "name")
+	if name == "" {
+		name = "Untitled skill"
+	}
+	scope := strArg(args, "scope")
+	if scope == "" {
+		scope = "user"
+	}
+	skill, err := store.CreateSkill(ctx, name, content, scope, userID, false)
+	if err != nil {
+		rec.Decision = auditDecisionAllow
+		rec.Status = auditStatusError
+		rec.ErrorType = strPtr("internal_error")
+		return http.StatusInternalServerError, []byte(`{"error":"internal error"}`), auditRec
+	}
+	rec.Decision = auditDecisionAllow
+	rec.Status = auditStatusSuccess
+	rec.ErrorType = nil
+	out := map[string]interface{}{"id": skill.ID.String(), "name": skill.Name, "scope": skill.Scope, "updated_at": skill.UpdatedAt}
+	b, _ := json.Marshal(out)
+	return http.StatusOK, b, auditRec
+}
+
+func handleSkillsList(ctx context.Context, store database.Store, args map[string]interface{}, rec *models.McpToolCallAuditLog) (code int, body []byte, auditRec *models.McpToolCallAuditLog) {
+	auditRec = rec
+	taskID := uuidArg(args, "task_id")
+	if taskID == nil {
+		rec.Decision = auditDecisionDeny
+		rec.Status = auditStatusError
+		rec.ErrorType = strPtr("invalid_arguments")
+		return http.StatusBadRequest, []byte(`{"error":"task_id required"}`), auditRec
+	}
+	rec.TaskID = taskID
+	task, err := store.GetTaskByID(ctx, *taskID)
+	if err != nil {
+		code, body := writePreferenceErrToAudit(err, rec)
+		return code, body, auditRec
+	}
+	userID := task.CreatedBy
+	if userID == nil {
+		rec.Decision = auditDecisionAllow
+		rec.Status = auditStatusError
+		rec.ErrorType = strPtr("internal_error")
+		return http.StatusInternalServerError, []byte(`{"error":"task has no owner"}`), auditRec
+	}
+	scopeFilter := strArg(args, "scope")
+	ownerFilter := strArg(args, "owner")
+	skills, err := store.ListSkillsForUser(ctx, *userID, scopeFilter, ownerFilter)
+	if err != nil {
+		rec.Decision = auditDecisionAllow
+		rec.Status = auditStatusError
+		rec.ErrorType = strPtr("internal_error")
+		return http.StatusInternalServerError, []byte(`{"error":"internal error"}`), auditRec
+	}
+	rec.Decision = auditDecisionAllow
+	rec.Status = auditStatusSuccess
+	rec.ErrorType = nil
+	items := make([]map[string]interface{}, 0, len(skills))
+	for _, s := range skills {
+		items = append(items, map[string]interface{}{
+			"id":         s.ID.String(),
+			"name":       s.Name,
+			"scope":      s.Scope,
+			"updated_at": s.UpdatedAt,
+		})
+	}
+	out := map[string]interface{}{"skills": items}
+	b, _ := json.Marshal(out)
+	return http.StatusOK, b, auditRec
+}
+
+func handleSkillsGet(ctx context.Context, store database.Store, args map[string]interface{}, rec *models.McpToolCallAuditLog) (code int, body []byte, auditRec *models.McpToolCallAuditLog) {
+	auditRec = rec
+	taskID := uuidArg(args, "task_id")
+	skillIDStr := strArg(args, "skill_id")
+	if taskID == nil || skillIDStr == "" {
+		rec.Decision = auditDecisionDeny
+		rec.Status = auditStatusError
+		rec.ErrorType = strPtr("invalid_arguments")
+		return http.StatusBadRequest, []byte(`{"error":"task_id and skill_id required"}`), auditRec
+	}
+	rec.TaskID = taskID
+	skillID, err := uuid.Parse(skillIDStr)
+	if err != nil {
+		rec.Decision = auditDecisionDeny
+		rec.Status = auditStatusError
+		rec.ErrorType = strPtr("invalid_arguments")
+		return http.StatusBadRequest, []byte(`{"error":"invalid skill_id"}`), auditRec
+	}
+	task, err := store.GetTaskByID(ctx, *taskID)
+	if err != nil {
+		code, body := writePreferenceErrToAudit(err, rec)
+		return code, body, auditRec
+	}
+	userID := task.CreatedBy
+	if userID == nil {
+		rec.Decision = auditDecisionAllow
+		rec.Status = auditStatusError
+		rec.ErrorType = strPtr("internal_error")
+		return http.StatusInternalServerError, []byte(`{"error":"task has no owner"}`), auditRec
+	}
+	skill, err := store.GetSkillByID(ctx, skillID)
+	if err != nil {
+		code, body := writePreferenceErrToAudit(err, rec)
+		return code, body, auditRec
+	}
+	if !skill.IsSystem && (skill.OwnerID == nil || *skill.OwnerID != *userID) {
+		rec.Decision = auditDecisionAllow
+		rec.Status = auditStatusError
+		rec.ErrorType = strPtr("not_found")
+		return http.StatusNotFound, []byte(`{"error":"not found"}`), auditRec
+	}
+	rec.Decision = auditDecisionAllow
+	rec.Status = auditStatusSuccess
+	rec.ErrorType = nil
+	out := map[string]interface{}{"id": skill.ID.String(), "name": skill.Name, "scope": skill.Scope, "content": skill.Content, "updated_at": skill.UpdatedAt}
+	b, _ := json.Marshal(out)
+	return http.StatusOK, b, auditRec
+}
+
+func handleSkillsUpdate(ctx context.Context, store database.Store, args map[string]interface{}, rec *models.McpToolCallAuditLog) (code int, body []byte, auditRec *models.McpToolCallAuditLog) {
+	auditRec = rec
+	taskID := uuidArg(args, "task_id")
+	skillIDStr := strArg(args, "skill_id")
+	if taskID == nil || skillIDStr == "" {
+		rec.Decision = auditDecisionDeny
+		rec.Status = auditStatusError
+		rec.ErrorType = strPtr("invalid_arguments")
+		return http.StatusBadRequest, []byte(`{"error":"task_id and skill_id required"}`), auditRec
+	}
+	rec.TaskID = taskID
+	skillID, err := uuid.Parse(skillIDStr)
+	if err != nil {
+		rec.Decision = auditDecisionDeny
+		rec.Status = auditStatusError
+		rec.ErrorType = strPtr("invalid_arguments")
+		return http.StatusBadRequest, []byte(`{"error":"invalid skill_id"}`), auditRec
+	}
+	task, err := store.GetTaskByID(ctx, *taskID)
+	if err != nil {
+		code, body := writePreferenceErrToAudit(err, rec)
+		return code, body, auditRec
+	}
+	userID := task.CreatedBy
+	if userID == nil {
+		rec.Decision = auditDecisionAllow
+		rec.Status = auditStatusError
+		rec.ErrorType = strPtr("internal_error")
+		return http.StatusInternalServerError, []byte(`{"error":"task has no owner"}`), auditRec
+	}
+	skill, err := store.GetSkillByID(ctx, skillID)
+	if err != nil {
+		code, body := writePreferenceErrToAudit(err, rec)
+		return code, body, auditRec
+	}
+	if !skill.IsSystem && (skill.OwnerID == nil || *skill.OwnerID != *userID) {
+		rec.Decision = auditDecisionAllow
+		rec.Status = auditStatusError
+		rec.ErrorType = strPtr("not_found")
+		return http.StatusNotFound, []byte(`{"error":"not found"}`), auditRec
+	}
+	var name, content, scope *string
+	if v := strArg(args, "name"); v != "" {
+		name = &v
+	}
+		if v := strArg(args, "content"); v != "" {
+		if m := skillscan.ScanContent(v); m != nil {
+			return skillsPolicyViolationResponse(rec, m, auditRec)
+		}
+		content = &v
+	}
+	if v := strArg(args, "scope"); v != "" {
+		scope = &v
+	}
+	updated, err := store.UpdateSkill(ctx, skillID, name, content, scope)
+	if err != nil {
+		code, body := writePreferenceErrToAudit(err, rec)
+		return code, body, auditRec
+	}
+	rec.Decision = auditDecisionAllow
+	rec.Status = auditStatusSuccess
+	rec.ErrorType = nil
+	out := map[string]interface{}{"id": updated.ID.String(), "name": updated.Name, "scope": updated.Scope, "updated_at": updated.UpdatedAt}
+	b, _ := json.Marshal(out)
+	return http.StatusOK, b, auditRec
+}
+
+func handleSkillsDelete(ctx context.Context, store database.Store, args map[string]interface{}, rec *models.McpToolCallAuditLog) (code int, body []byte, auditRec *models.McpToolCallAuditLog) {
+	auditRec = rec
+	taskID := uuidArg(args, "task_id")
+	skillIDStr := strArg(args, "skill_id")
+	if taskID == nil || skillIDStr == "" {
+		rec.Decision = auditDecisionDeny
+		rec.Status = auditStatusError
+		rec.ErrorType = strPtr("invalid_arguments")
+		return http.StatusBadRequest, []byte(`{"error":"task_id and skill_id required"}`), auditRec
+	}
+	rec.TaskID = taskID
+	skillID, err := uuid.Parse(skillIDStr)
+	if err != nil {
+		rec.Decision = auditDecisionDeny
+		rec.Status = auditStatusError
+		rec.ErrorType = strPtr("invalid_arguments")
+		return http.StatusBadRequest, []byte(`{"error":"invalid skill_id"}`), auditRec
+	}
+	task, err := store.GetTaskByID(ctx, *taskID)
+	if err != nil {
+		code, body := writePreferenceErrToAudit(err, rec)
+		return code, body, auditRec
+	}
+	userID := task.CreatedBy
+	if userID == nil {
+		rec.Decision = auditDecisionAllow
+		rec.Status = auditStatusError
+		rec.ErrorType = strPtr("internal_error")
+		return http.StatusInternalServerError, []byte(`{"error":"task has no owner"}`), auditRec
+	}
+	skill, err := store.GetSkillByID(ctx, skillID)
+	if err != nil {
+		code, body := writePreferenceErrToAudit(err, rec)
+		return code, body, auditRec
+	}
+	if !skill.IsSystem && (skill.OwnerID == nil || *skill.OwnerID != *userID) {
+		rec.Decision = auditDecisionAllow
+		rec.Status = auditStatusError
+		rec.ErrorType = strPtr("not_found")
+		return http.StatusNotFound, []byte(`{"error":"not found"}`), auditRec
+	}
+	if err := store.DeleteSkill(ctx, skillID); err != nil {
+		code, body := writePreferenceErrToAudit(err, rec)
+		return code, body, auditRec
+	}
+	rec.Decision = auditDecisionAllow
+	rec.Status = auditStatusSuccess
+	rec.ErrorType = nil
+	return http.StatusOK, []byte(`{}`), auditRec
+}
+
 func strPtr(s string) *string { return &s }
+
+func skillsPolicyViolationResponse(rec *models.McpToolCallAuditLog, m *skillscan.Match, auditRec *models.McpToolCallAuditLog) (code int, body []byte, outRec *models.McpToolCallAuditLog) {
+	rec.Decision = auditDecisionAllow
+	rec.Status = auditStatusError
+	rec.ErrorType = strPtr("policy_violation")
+	out := map[string]interface{}{"error": "policy violation", "category": m.Category, "triggering_text": m.TriggeringText}
+	b, _ := json.Marshal(out)
+	return http.StatusBadRequest, b, auditRec
+}

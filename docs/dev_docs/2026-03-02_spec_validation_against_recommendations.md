@@ -10,7 +10,7 @@
 ## Summary
 
 - **Date:** 2026-03-02
-- **Source:** [2026-02-27_recommendations_tasks_projects_pma_spec_updates.md](2026-02-27_recommendations_tasks_projects_pma_spec_updates.md)
+- **Source:** 2026-02-27 recommendations (document removed).
 - **Reference:** [2026-03-02_spec_updates_from_recommendations.md](2026-03-02_spec_updates_from_recommendations.md)
 
 Validation confirms that the tech specs and requirements have been **properly updated** to reflect the 2026-02-27 recommendations.

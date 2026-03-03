@@ -106,6 +106,14 @@ type Store interface {
 	GetOrCreateActiveChatThread(ctx context.Context, userID uuid.UUID, projectID *uuid.UUID) (*models.ChatThread, error)
 	AppendChatMessage(ctx context.Context, threadID uuid.UUID, role, content string, metadata *string) (*models.ChatMessage, error)
 	CreateChatAuditLog(ctx context.Context, rec *models.ChatAuditLog) error
+
+	// Skills (REQ-SKILLS-*, skills_storage_and_inference.md).
+	CreateSkill(ctx context.Context, name, content, scope string, ownerID *uuid.UUID, isSystem bool) (*models.Skill, error)
+	GetSkillByID(ctx context.Context, id uuid.UUID) (*models.Skill, error)
+	ListSkillsForUser(ctx context.Context, userID uuid.UUID, scopeFilter, ownerFilter string) ([]*models.Skill, error)
+	UpdateSkill(ctx context.Context, id uuid.UUID, name, content, scope *string) (*models.Skill, error)
+	DeleteSkill(ctx context.Context, id uuid.UUID) error
+	EnsureDefaultSkill(ctx context.Context, content string) error
 }
 
 // DB wraps GORM database operations.

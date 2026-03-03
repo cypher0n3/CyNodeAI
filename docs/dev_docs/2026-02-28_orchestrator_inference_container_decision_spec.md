@@ -9,6 +9,7 @@
 - [Variant Selection Rules](#variant-selection-rules)
 - [VRAM Considerations](#vram-considerations)
 - [Compute Considerations](#compute-considerations)
+- [NPU and Hardware Model Considerations](#npu-and-hardware-model-considerations)
 - [Image Selection](#image-selection)
 - [Traceability](#traceability)
 
@@ -69,6 +70,16 @@ The orchestrator MUST use the following fields from the node capability report (
   - `ram_mb` (int): System memory (total) in MiB.
   - `ram_available_mb` (int, optional): Available system memory in MiB; tracked separately from total.
 - `platform.arch` (string): e.g. `amd64`, `arm64`.
+- `platform.os` (string, optional): e.g. `linux`, `darwin`; used with arch and hardware model for platform identity.
+- `hardware` (object, optional): Hardware identity and model information; see [NPU and Hardware Model Considerations](#npu-and-hardware-model-considerations).
+  - `product_name` (string, optional): Human-oriented product or machine name, e.g. `Mac mini`, `MacBook Pro`, `ThinkPad X1`.
+  - `chip` (string, optional): SoC or chip family identifier, e.g. `M2`, `M2 Pro`, `M3`, `Apple M1`.
+  - `machine_model` (string, optional): Stable machine/model identifier from the OS or firmware (e.g. `Mac14,12` for Mac mini M2).
+  - When present, the orchestrator MAY use these to recognize known-good CPU inference platforms (e.g. Mac mini M2 or newer).
+- `npu` (object, optional): Neural Processing Unit(s); see [NPU and Hardware Model Considerations](#npu-and-hardware-model-considerations).
+  - `present` (boolean, optional): Whether any NPU was detected.
+  - `devices` (array, optional): Each entry MAY include `vendor`, `model`, `device_id`, `features` (e.g. driver/runtime identifiers).
+  - When present, the orchestrator MAY use NPU for future variant selection (e.g. an `npu` variant) or policy.
 - `node.labels` (array of strings, optional): e.g. `sandbox_only`, `gpu`, `region_*`.
 
 Missing or omitted fields are treated as specified in the algorithm (e.g. missing `inference.supported` => treat as not supported unless other signals indicate otherwise; missing `inference.existing_service` => treat as false).
@@ -123,10 +134,12 @@ Variant MUST be chosen deterministically from the capability report and policy:
 
 1. **GPU present with ROCm:** If `gpu.present === true` and any entry in `gpu.devices` has `features.rocm_version` set (or vendor/model heuristics indicate AMD), use variant `rocm` if allowed by policy; otherwise fall back to next rule.
 2. **GPU present with CUDA:** If `gpu.present === true` and any entry in `gpu.devices` has `features.cuda_capability` set (or vendor/model heuristics indicate Nvidia), use variant `cuda` if allowed by policy; otherwise fall back to next rule.
-3. **CPU:** Use variant `cpu` for all other cases (no GPU, or GPU not matching a supported variant, or policy only allows `cpu`).
+3. **NPU (future):** If policy defines an `npu` variant and `npu.present === true` with supported device(s) reported, use variant `npu` if allowed by policy; otherwise fall back to next rule.
+4. **CPU:** Use variant `cpu` for all other cases (no GPU, or GPU not matching a supported variant, or policy only allows `cpu`).
+   Policy MAY use `hardware.product_name`, `hardware.chip`, and `platform.arch` to allow or prefer CPU inference on known-capable platforms (e.g. Mac mini M2 or newer: `product_name` "Mac mini" and `chip` matching M2/M2 Pro/M3 or later).
 
 When multiple GPUs of different types are reported, the orchestrator MAY define a deterministic tie-break (e.g. prefer first device, or prefer CUDA over ROCm over CPU by fixed priority).
-This spec recommends: prefer ROCm if any AMD device is present and policy allows; else prefer CUDA if any Nvidia device is present and policy allows; else `cpu`.
+This spec recommends: prefer ROCm if any AMD device is present and policy allows; else prefer CUDA if any Nvidia device is present and policy allows; else prefer NPU if `npu.present` and policy allows an `npu` variant; else `cpu`.
 
 ## VRAM Considerations
 
@@ -158,6 +171,23 @@ These inputs support policy thresholds and deterministic fallbacks (e.g. CPU-onl
 
 Any use of compute fields in the decision MUST be deterministic.
 Policy MAY define minimum cores, minimum base or boost clock, or minimum (total or available) system memory; when below threshold, the orchestrator falls back deterministically per algorithm order.
+
+## NPU and Hardware Model Considerations
+
+- Spec ID: `CYNAI.ORCHES.InferenceNpuAndHardwareModel` <a id="spec-cynai-orches-inferencenpuandhardwaremodel"></a>
+
+The orchestrator MUST track and MAY use NPU presence and hardware model information from the capability report when making the inference container decision.
+Detection of NPUs, specific CPU architecture (beyond `platform.arch`), and machine identity (e.g. product name, chip family) allows policy to treat certain nodes as well-suited for AI workloads even when no discrete GPU is present.
+
+- **NPU:** When `npu.present === true` and `npu.devices` is reported, the orchestrator MAY use this for future variant selection (e.g. a dedicated `npu` variant when runtime support exists) or to prefer NPU-backed inference over CPU when policy allows.
+  Any use of NPU in the decision MUST be deterministic (same report and policy yield the same result).
+- **Hardware model:** When `hardware.product_name`, `hardware.chip`, or `hardware.machine_model` are present, the orchestrator MAY use them to recognize known-good CPU inference platforms.
+  Example: a node reporting `product_name` "Mac mini" and `chip` "M2" (or "M2 Pro", "M3", etc.) can be treated as suitable for CPU (or future NPU) inference with appropriate policy (e.g. minimum RAM, allow CPU variant).
+  Policy MAY define allowlists or rules keyed by product name, chip family, or machine model; when matched, the orchestrator MAY enable or prefer inference on that node deterministically.
+- **CPU architecture:** `platform.arch` (e.g. `arm64`, `amd64`) is already an input; together with `compute.cpu_model` and optional `hardware.chip`, the orchestrator can distinguish e.g. Apple Silicon (arm64 + M-series chip) from other arm64 or amd64 systems for policy.
+
+Any use of NPU or hardware model fields in the decision MUST be deterministic.
+The node is responsible for populating these fields via platform-specific detection (e.g. sysfs, SMBIOS, macOS system profiler, or vendor APIs); schema and detection methods belong in the payload spec and node capability-reporting logic.
 
 ## Image Selection
 

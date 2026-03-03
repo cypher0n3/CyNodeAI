@@ -425,3 +425,18 @@ type TaskArtifact struct {
 }
 
 func (TaskArtifact) TableName() string { return "task_artifacts" }
+
+// Skill stores AI skill content and metadata. Per docs/tech_specs/skills_storage_and_inference.md.
+// Stable id for retrieval; scope: user | group | project | global; default user. is_system true for default CyNodeAI skill.
+type Skill struct {
+	ID        uuid.UUID  `gorm:"type:uuid;primaryKey" json:"id"`
+	Name      string     `gorm:"column:name;index" json:"name"`
+	Content   string     `gorm:"column:content;type:text" json:"content"`
+	Scope     string     `gorm:"column:scope;index" json:"scope"` // user, group, project, global
+	OwnerID   *uuid.UUID `gorm:"column:owner_id;index" json:"owner_id,omitempty"`
+	IsSystem  bool       `gorm:"column:is_system;index" json:"is_system"`
+	CreatedAt time.Time  `gorm:"column:created_at;index" json:"created_at"`
+	UpdatedAt time.Time  `gorm:"column:updated_at;index" json:"updated_at"`
+}
+
+func (Skill) TableName() string { return "skills" }

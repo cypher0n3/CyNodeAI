@@ -527,6 +527,43 @@ func TestToolCallHandler_PreferenceUpdate_Conflict(t *testing.T) {
 	callToolHandlerWithStore(t, mock, body, http.StatusConflict)
 }
 
+// TestHandlePreferenceUpdate_ExpectedVersionInt hits the int branch of expected_version (JSON unmarshals numbers as float64).
+func TestHandlePreferenceUpdate_ExpectedVersionInt(t *testing.T) {
+	mock := mockWithSystemPreference(t, "intver.key")
+	ctx := context.Background()
+	args := map[string]interface{}{
+		"scope_type": "system", "key": "intver.key", "value": `"v2"`, "value_type": "string",
+		"expected_version": 1, // int type
+	}
+	rec := &models.McpToolCallAuditLog{}
+	code, body, _ := handlePreferenceUpdate(ctx, mock, args, rec)
+	if code != http.StatusOK {
+		t.Fatalf("got status %d %s", code, body)
+	}
+	var out map[string]interface{}
+	if err := json.Unmarshal(body, &out); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if out["version"] != float64(2) {
+		t.Errorf("version = %v", out["version"])
+	}
+}
+
+// TestHandlePreferenceDelete_ExpectedVersionInt hits the int branch of expected_version.
+func TestHandlePreferenceDelete_ExpectedVersionInt(t *testing.T) {
+	mock := mockWithSystemPreference(t, "intdel.key")
+	ctx := context.Background()
+	args := map[string]interface{}{"scope_type": "system", "key": "intdel.key", "expected_version": 1}
+	rec := &models.McpToolCallAuditLog{}
+	code, _, _ := handlePreferenceDelete(ctx, mock, args, rec)
+	if code != http.StatusOK {
+		t.Fatalf("got status %d", code)
+	}
+	if len(mock.PreferenceEntries) != 0 {
+		t.Error("expected preference deleted")
+	}
+}
+
 func TestToolCallHandler_PreferenceDelete_Success(t *testing.T) {
 	mock := mockWithSystemPreference(t, "del.key")
 	body := `{"tool_name":"db.preference.delete","arguments":{"scope_type":"system","key":"del.key"}}`
@@ -614,8 +651,7 @@ func TestToolCallHandler_ArtifactGet_Success(t *testing.T) {
 }
 
 func TestToolCallHandler_ArtifactGet_NotFound(t *testing.T) {
-	mock := testutil.NewMockDB()
-	task, _ := mock.CreateTask(context.Background(), nil, "p", nil)
+	mock, task := mockDBWithTaskNoUser(t)
 	body := `{"tool_name":"artifact.get","arguments":{"task_id":"` + task.ID.String() + `","path":"missing/path"}}`
 	callToolHandlerWithStore(t, mock, body, http.StatusNotFound)
 }
@@ -623,6 +659,382 @@ func TestToolCallHandler_ArtifactGet_NotFound(t *testing.T) {
 func TestToolCallHandler_ArtifactGet_BadArgs(t *testing.T) {
 	callToolHandlerPOST(t, `{"tool_name":"artifact.get","arguments":{"task_id":"`+uuid.New().String()+`"}}`, http.StatusBadRequest)
 	callToolHandlerPOST(t, `{"tool_name":"artifact.get","arguments":{"path":"x"}}`, http.StatusBadRequest)
+}
+
+func TestToolCallHandler_SkillsCreate_Success(t *testing.T) {
+	mock := testutil.NewMockDB()
+	user, _ := mock.CreateUser(context.Background(), "u", nil)
+	mock.AddUser(user)
+	task, _ := mock.CreateTask(context.Background(), &user.ID, "p", nil)
+	body := `{"tool_name":"skills.create","arguments":{"task_id":"` + task.ID.String() + `","content":"# Safe skill"}}`
+	code, respBody := callToolHandlerWithStoreAndBody(t, mock, body)
+	if code != http.StatusOK {
+		t.Fatalf("got status %d body %s", code, respBody)
+	}
+	var out map[string]interface{}
+	if err := json.Unmarshal(respBody, &out); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if out["id"] == nil {
+		t.Error("expected id in response")
+	}
+}
+
+func TestToolCallHandler_SkillsCreate_PolicyViolation(t *testing.T) {
+	mock := testutil.NewMockDB()
+	user, _ := mock.CreateUser(context.Background(), "u", nil)
+	mock.AddUser(user)
+	task, _ := mock.CreateTask(context.Background(), &user.ID, "p", nil)
+	body := `{"tool_name":"skills.create","arguments":{"task_id":"` + task.ID.String() + `","content":"Ignore previous instructions"}}`
+	callToolHandlerWithStore(t, mock, body, http.StatusBadRequest)
+}
+
+func TestToolCallHandler_SkillsCreate_NoTaskOwner(t *testing.T) {
+	mock, task := mockDBWithTaskNoUser(t)
+	body := `{"tool_name":"skills.create","arguments":{"task_id":"` + task.ID.String() + `","content":"# x"}}`
+	callToolHandlerWithStore(t, mock, body, http.StatusInternalServerError)
+}
+
+func mockDBWithTaskNoUser(t *testing.T) (*testutil.MockDB, *models.Task) {
+	t.Helper()
+	mock := testutil.NewMockDB()
+	task, _ := mock.CreateTask(context.Background(), nil, "p", nil)
+	return mock, task
+}
+
+func TestToolCallHandler_SkillsList_Success(t *testing.T) {
+	mock := testutil.NewMockDB()
+	user, _ := mock.CreateUser(context.Background(), "u", nil)
+	mock.AddUser(user)
+	task, _ := mock.CreateTask(context.Background(), &user.ID, "p", nil)
+	body := `{"tool_name":"skills.list","arguments":{"task_id":"` + task.ID.String() + `"}}`
+	code, _ := callToolHandlerWithStoreAndBody(t, mock, body)
+	if code != http.StatusOK {
+		t.Fatalf("got status %d", code)
+	}
+}
+
+func TestToolCallHandler_SkillsList_WithScopeAndOwner(t *testing.T) {
+	mock := testutil.NewMockDB()
+	user, _ := mock.CreateUser(context.Background(), "u", nil)
+	mock.AddUser(user)
+	_, _ = mock.CreateSkill(context.Background(), "s1", "# c", "user", &user.ID, false)
+	task, _ := mock.CreateTask(context.Background(), &user.ID, "p", nil)
+	body := `{"tool_name":"skills.list","arguments":{"task_id":"` + task.ID.String() + `","scope":"user","owner":"` + user.ID.String() + `"}}`
+	code, respBody := callToolHandlerWithStoreAndBody(t, mock, body)
+	if code != http.StatusOK {
+		t.Fatalf("got status %d body %s", code, respBody)
+	}
+	var out map[string]interface{}
+	if err := json.Unmarshal(respBody, &out); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if out["skills"] == nil {
+		t.Error("expected skills key")
+	}
+}
+
+func TestToolCallHandler_SkillsList_TaskNotFound(t *testing.T) {
+	callToolHandlerPOST(t, `{"tool_name":"skills.list","arguments":{"task_id":"`+uuid.New().String()+`"}}`, http.StatusNotFound)
+}
+
+func TestToolCallHandler_SkillsList_NoTaskID(t *testing.T) {
+	callToolHandlerPOST(t, `{"tool_name":"skills.list","arguments":{}}`, http.StatusBadRequest)
+}
+
+func TestToolCallHandler_SkillsList_NoTaskOwner(t *testing.T) {
+	mock, task := mockDBWithTaskNoUser(t)
+	body := `{"tool_name":"skills.list","arguments":{"task_id":"` + task.ID.String() + `"}}`
+	callToolHandlerWithStore(t, mock, body, http.StatusInternalServerError)
+}
+
+//nolint:dupl // skills internal-error pattern repeated for coverage
+func TestToolCallHandler_SkillsList_InternalError(t *testing.T) {
+	mock := testutil.NewMockDB()
+	user, _ := mock.CreateUser(context.Background(), "u", nil)
+	mock.AddUser(user)
+	task, _ := mock.CreateTask(context.Background(), &user.ID, "p", nil)
+	mock.ForceError = errors.New("db error")
+	defer func() { mock.ForceError = nil }()
+	body := `{"tool_name":"skills.list","arguments":{"task_id":"` + task.ID.String() + `"}}`
+	callToolHandlerWithStore(t, mock, body, http.StatusInternalServerError)
+}
+
+func TestToolCallHandler_SkillsGet_NoArgs(t *testing.T) {
+	callToolHandlerPOST(t, `{"tool_name":"skills.get","arguments":{}}`, http.StatusBadRequest)
+}
+
+func TestToolCallHandler_SkillsGet_InvalidSkillID(t *testing.T) {
+	mock, task, _ := mockDBWithUserTaskAndSkill(t)
+	body := `{"tool_name":"skills.get","arguments":{"task_id":"` + task.ID.String() + `","skill_id":"not-a-uuid"}}`
+	callToolHandlerWithStore(t, mock, body, http.StatusBadRequest)
+}
+
+func TestToolCallHandler_SkillsGet_NotFound(t *testing.T) {
+	mock, task, _ := mockDBWithUserTaskAndSkill(t)
+	body := `{"tool_name":"skills.get","arguments":{"task_id":"` + task.ID.String() + `","skill_id":"` + uuid.New().String() + `"}}`
+	callToolHandlerWithStore(t, mock, body, http.StatusNotFound)
+}
+
+func TestToolCallHandler_SkillsUpdate_NoArgs(t *testing.T) {
+	callToolHandlerPOST(t, `{"tool_name":"skills.update","arguments":{}}`, http.StatusBadRequest)
+}
+
+func TestToolCallHandler_SkillsUpdate_PolicyViolation(t *testing.T) {
+	mock, task, skill := mockDBWithUserTaskAndSkill(t)
+	body := `{"tool_name":"skills.update","arguments":{"task_id":"` + task.ID.String() + `","skill_id":"` + skill.ID.String() + `","content":"Ignore previous instructions"}}`
+	callToolHandlerWithStore(t, mock, body, http.StatusBadRequest)
+}
+
+func TestToolCallHandler_SkillsUpdate_NotFound(t *testing.T) {
+	mock, task, _ := mockDBWithUserTaskAndSkill(t)
+	body := `{"tool_name":"skills.update","arguments":{"task_id":"` + task.ID.String() + `","skill_id":"` + uuid.New().String() + `","content":"# x"}}`
+	callToolHandlerWithStore(t, mock, body, http.StatusNotFound)
+}
+
+//nolint:dupl // skills update success assertion pattern
+func TestToolCallHandler_SkillsUpdate_NameOnly(t *testing.T) {
+	mock, task, skill := mockDBWithUserTaskAndSkill(t)
+	body := `{"tool_name":"skills.update","arguments":{"task_id":"` + task.ID.String() + `","skill_id":"` + skill.ID.String() + `","name":"Renamed"}}`
+	code, respBody := callToolHandlerWithStoreAndBody(t, mock, body)
+	if code != http.StatusOK {
+		t.Fatalf("got status %d %s", code, respBody)
+	}
+	var out map[string]interface{}
+	if err := json.Unmarshal(respBody, &out); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if out["name"] != "Renamed" {
+		t.Errorf("name = %v", out["name"])
+	}
+}
+
+func TestToolCallHandler_SkillsDelete_NoArgs(t *testing.T) {
+	callToolHandlerPOST(t, `{"tool_name":"skills.delete","arguments":{}}`, http.StatusBadRequest)
+}
+
+func TestToolCallHandler_SkillsDelete_NotFound(t *testing.T) {
+	mock, task, _ := mockDBWithUserTaskAndSkill(t)
+	body := `{"tool_name":"skills.delete","arguments":{"task_id":"` + task.ID.String() + `","skill_id":"` + uuid.New().String() + `"}}`
+	callToolHandlerWithStore(t, mock, body, http.StatusNotFound)
+}
+
+func TestToolCallHandler_SkillsCreate_TaskNotFound(t *testing.T) {
+	callToolHandlerPOST(t, `{"tool_name":"skills.create","arguments":{"task_id":"`+uuid.New().String()+`","content":"# x"}}`, http.StatusNotFound)
+}
+
+func TestToolCallHandler_SkillsCreate_NoContent(t *testing.T) {
+	mock, task, _ := mockDBWithUserTaskAndSkill(t)
+	body := `{"tool_name":"skills.create","arguments":{"task_id":"` + task.ID.String() + `"}}`
+	callToolHandlerWithStore(t, mock, body, http.StatusBadRequest)
+}
+
+//nolint:dupl // skills internal-error pattern repeated for coverage
+func TestToolCallHandler_SkillsCreate_InternalError(t *testing.T) {
+	mock := testutil.NewMockDB()
+	user, _ := mock.CreateUser(context.Background(), "u", nil)
+	mock.AddUser(user)
+	task, _ := mock.CreateTask(context.Background(), &user.ID, "p", nil)
+	mock.ForceError = errors.New("db error")
+	defer func() { mock.ForceError = nil }()
+	body := `{"tool_name":"skills.create","arguments":{"task_id":"` + task.ID.String() + `","content":"# x"}}`
+	callToolHandlerWithStore(t, mock, body, http.StatusInternalServerError)
+}
+
+func TestToolCallHandler_SkillsCreate_WithNameAndScope(t *testing.T) {
+	mock := testutil.NewMockDB()
+	user, _ := mock.CreateUser(context.Background(), "u", nil)
+	mock.AddUser(user)
+	task, _ := mock.CreateTask(context.Background(), &user.ID, "p", nil)
+	body := `{"tool_name":"skills.create","arguments":{"task_id":"` + task.ID.String() + `","content":"# doc","name":"MySkill","scope":"project"}}`
+	code, respBody := callToolHandlerWithStoreAndBody(t, mock, body)
+	if code != http.StatusOK {
+		t.Fatalf("got status %d %s", code, respBody)
+	}
+	var out map[string]interface{}
+	if err := json.Unmarshal(respBody, &out); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if out["name"] != "MySkill" || out["scope"] != "project" {
+		t.Errorf("name/scope = %v %v", out["name"], out["scope"])
+	}
+}
+
+func TestToolCallHandler_SkillsGet_NoTaskOwner(t *testing.T) {
+	mock, task := mockDBWithTaskNoUser(t)
+	body := `{"tool_name":"skills.get","arguments":{"task_id":"` + task.ID.String() + `","skill_id":"` + uuid.New().String() + `"}}`
+	callToolHandlerWithStore(t, mock, body, http.StatusInternalServerError)
+}
+
+//nolint:dupl // skills internal-error pattern with per-method error injection
+func TestToolCallHandler_SkillsUpdate_InternalError(t *testing.T) {
+	mock, task, skill := mockDBWithUserTaskAndSkill(t)
+	mock.UpdateSkillErr = errors.New("db error")
+	defer func() { mock.UpdateSkillErr = nil }()
+	body := `{"tool_name":"skills.update","arguments":{"task_id":"` + task.ID.String() + `","skill_id":"` + skill.ID.String() + `","content":"# x"}}`
+	callToolHandlerWithStore(t, mock, body, http.StatusInternalServerError)
+}
+
+//nolint:dupl // skills internal-error pattern with per-method error injection
+func TestToolCallHandler_SkillsDelete_InternalError(t *testing.T) {
+	mock, task, skill := mockDBWithUserTaskAndSkill(t)
+	mock.DeleteSkillErr = errors.New("db error")
+	defer func() { mock.DeleteSkillErr = nil }()
+	body := `{"tool_name":"skills.delete","arguments":{"task_id":"` + task.ID.String() + `","skill_id":"` + skill.ID.String() + `"}}`
+	callToolHandlerWithStore(t, mock, body, http.StatusInternalServerError)
+}
+
+func TestToolCallHandler_PreferenceEffective_EmptyEffective(t *testing.T) {
+	mock := testutil.NewMockDB()
+	task, _ := mock.CreateTask(context.Background(), nil, "p", nil)
+	body := `{"tool_name":"db.preference.effective","arguments":{"task_id":"` + task.ID.String() + `"}}`
+	code, respBody := callToolHandlerWithStoreAndBody(t, mock, body)
+	if code != http.StatusOK {
+		t.Fatalf("got status %d %s", code, respBody)
+	}
+	var out map[string]interface{}
+	if err := json.Unmarshal(respBody, &out); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if out["effective"] == nil {
+		t.Error("expected effective key")
+	}
+}
+
+func TestToolCallHandler_PreferenceUpdate_UserScopeNoScopeID(t *testing.T) {
+	callToolHandlerPOST(t, `{"tool_name":"db.preference.update","arguments":{"scope_type":"user","key":"k","value":"\"v\"","value_type":"string"}}`, http.StatusBadRequest)
+}
+
+func TestToolCallHandler_PreferenceUpdate_BadArgs(t *testing.T) {
+	callToolHandlerPOST(t, `{"tool_name":"db.preference.update","arguments":{"scope_type":"system","key":"k"}}`, http.StatusBadRequest)
+}
+
+func TestToolCallHandler_PreferenceDelete_ScopeTypeKeyRequired(t *testing.T) {
+	callToolHandlerPOST(t, `{"tool_name":"db.preference.delete","arguments":{}}`, http.StatusBadRequest)
+	callToolHandlerPOST(t, `{"tool_name":"db.preference.delete","arguments":{"scope_type":"system"}}`, http.StatusBadRequest)
+	callToolHandlerPOST(t, `{"tool_name":"db.preference.delete","arguments":{"key":"k"}}`, http.StatusBadRequest)
+}
+
+func TestToolCallHandler_PreferenceDelete_UserScopeNoScopeID(t *testing.T) {
+	callToolHandlerPOST(t, `{"tool_name":"db.preference.delete","arguments":{"scope_type":"user","key":"k"}}`, http.StatusBadRequest)
+}
+
+func TestToolCallHandler_PreferenceDelete_ExpectedVersionFloat(t *testing.T) {
+	mock := mockWithSystemPreference(t, "verfloat")
+	body := `{"tool_name":"db.preference.delete","arguments":{"scope_type":"system","key":"verfloat","expected_version":1.0}}`
+	callToolHandlerWithStore(t, mock, body, http.StatusOK)
+	if len(mock.PreferenceEntries) != 0 {
+		t.Errorf("expected deleted, got %d entries", len(mock.PreferenceEntries))
+	}
+}
+
+func TestToolCallHandler_TaskGet_BadArgs(t *testing.T) {
+	callToolHandlerPOST(t, `{"tool_name":"db.task.get","arguments":{}}`, http.StatusBadRequest)
+}
+
+func TestToolCallHandler_JobGet_BadArgs(t *testing.T) {
+	callToolHandlerPOST(t, `{"tool_name":"db.job.get","arguments":{}}`, http.StatusBadRequest)
+}
+
+func TestToolCallHandler_SkillsDelete_TaskNotFound(t *testing.T) {
+	body := `{"tool_name":"skills.delete","arguments":{"task_id":"` + uuid.New().String() + `","skill_id":"` + uuid.New().String() + `"}}`
+	callToolHandlerPOST(t, body, http.StatusNotFound)
+}
+
+//nolint:dupl // skills update success assertion pattern
+func TestToolCallHandler_SkillsUpdate_ScopeOnly(t *testing.T) {
+	mock, task, skill := mockDBWithUserTaskAndSkill(t)
+	body := `{"tool_name":"skills.update","arguments":{"task_id":"` + task.ID.String() + `","skill_id":"` + skill.ID.String() + `","scope":"project"}}`
+	code, respBody := callToolHandlerWithStoreAndBody(t, mock, body)
+	if code != http.StatusOK {
+		t.Fatalf("got status %d %s", code, respBody)
+	}
+	var out map[string]interface{}
+	if err := json.Unmarshal(respBody, &out); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if out["scope"] != "project" {
+		t.Errorf("scope = %v", out["scope"])
+	}
+}
+
+func TestToolCallHandler_SkillsGet_OtherUserSkill_NotFound(t *testing.T) {
+	mock := testutil.NewMockDB()
+	owner, _ := mock.CreateUser(context.Background(), "owner", nil)
+	mock.AddUser(owner)
+	other, _ := mock.CreateUser(context.Background(), "other", nil)
+	mock.AddUser(other)
+	task, _ := mock.CreateTask(context.Background(), &other.ID, "p", nil)
+	skill, _ := mock.CreateSkill(context.Background(), "s", "# c", "user", &owner.ID, false)
+	body := `{"tool_name":"skills.get","arguments":{"task_id":"` + task.ID.String() + `","skill_id":"` + skill.ID.String() + `"}}`
+	callToolHandlerWithStore(t, mock, body, http.StatusNotFound)
+}
+
+func TestToolCallHandler_SkillsDelete_InvalidSkillID(t *testing.T) {
+	mock, task, _ := mockDBWithUserTaskAndSkill(t)
+	body := `{"tool_name":"skills.delete","arguments":{"task_id":"` + task.ID.String() + `","skill_id":"not-a-uuid"}}`
+	callToolHandlerWithStore(t, mock, body, http.StatusBadRequest)
+}
+
+func TestToolCallHandler_SkillsDelete_NoTaskOwner(t *testing.T) {
+	mock, task := mockDBWithTaskNoUser(t)
+	body := `{"tool_name":"skills.delete","arguments":{"task_id":"` + task.ID.String() + `","skill_id":"` + uuid.New().String() + `"}}`
+	callToolHandlerWithStore(t, mock, body, http.StatusInternalServerError)
+}
+
+func TestToolCallHandler_SkillsUpdate_NoTaskOwner(t *testing.T) {
+	mock, task := mockDBWithTaskNoUser(t)
+	body := `{"tool_name":"skills.update","arguments":{"task_id":"` + task.ID.String() + `","skill_id":"` + uuid.New().String() + `","content":"# x"}}`
+	callToolHandlerWithStore(t, mock, body, http.StatusInternalServerError)
+}
+
+func TestToolCallHandler_SkillsGet_TaskNotFound(t *testing.T) {
+	body := `{"tool_name":"skills.get","arguments":{"task_id":"` + uuid.New().String() + `","skill_id":"` + uuid.New().String() + `"}}`
+	callToolHandlerPOST(t, body, http.StatusNotFound)
+}
+
+func TestToolCallHandler_SkillsGet_Success(t *testing.T) {
+	mock, task, skill := mockDBWithUserTaskAndSkill(t)
+	body := `{"tool_name":"skills.get","arguments":{"task_id":"` + task.ID.String() + `","skill_id":"` + skill.ID.String() + `"}}`
+	code, respBody := callToolHandlerWithStoreAndBody(t, mock, body)
+	if code != http.StatusOK {
+		t.Fatalf("got status %d", code)
+	}
+	var out map[string]interface{}
+	if err := json.Unmarshal(respBody, &out); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if out["content"] != "# c" {
+		t.Errorf("content = %v", out["content"])
+	}
+}
+
+func TestToolCallHandler_SkillsUpdateAndDelete_Success(t *testing.T) {
+	mock, task, skill := mockDBWithUserTaskAndSkill(t)
+	for _, tc := range []struct {
+		name string
+		body string
+	}{
+		{"update", `{"tool_name":"skills.update","arguments":{"task_id":"` + task.ID.String() + `","skill_id":"` + skill.ID.String() + `","content":"# updated"}}`},
+		{"delete", `{"tool_name":"skills.delete","arguments":{"task_id":"` + task.ID.String() + `","skill_id":"` + skill.ID.String() + `"}}`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			code, _ := callToolHandlerWithStoreAndBody(t, mock, tc.body)
+			if code != http.StatusOK {
+				t.Fatalf("got status %d", code)
+			}
+		})
+	}
+}
+
+func mockDBWithUserTaskAndSkill(t *testing.T) (*testutil.MockDB, *models.Task, *models.Skill) {
+	t.Helper()
+	mock := testutil.NewMockDB()
+	user, _ := mock.CreateUser(context.Background(), "u", nil)
+	mock.AddUser(user)
+	task, _ := mock.CreateTask(context.Background(), &user.ID, "p", nil)
+	skill, _ := mock.CreateSkill(context.Background(), "s1", "# c", "user", &user.ID, false)
+	return mock, task, skill
 }
 
 func TestToolCallHandler_PreferenceUpdate_NotFound(t *testing.T) {
@@ -735,6 +1147,7 @@ func TestRun_WithTestDatabaseOpen(t *testing.T) {
 func TestRun_WithTestStore(t *testing.T) {
 	testStore = testutil.NewMockDB()
 	defer func() { testStore = nil }()
+
 	oldAddr := os.Getenv("LISTEN_ADDR")
 	_ = os.Setenv("LISTEN_ADDR", "127.0.0.1:19083")
 	defer func() {

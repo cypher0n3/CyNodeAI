@@ -293,7 +293,7 @@ This keeps scope focused on baseline stability and high-impact drift fixes befor
   - requirement ids: REQ-SKILLS-0001, REQ-SKILLS-0100--0108, REQ-SKILLS-0110--0117
   - spec ids: `skills_storage_and_inference.md`, `cynork_cli.md`, `mcp_tool_catalog.md`
   - validation: gateway + CLI + MCP E2E, audit records
-  - status: Not started
+  - status: Done (feature `features/cynork/cynork_skills.feature`, BDD steps and mock in cynork/_bdd; Python e2e_116_skills_gateway; orchestrator/internal/handlers, internal/database, cmd/mcp-gateway and cynork cmd, internal/gateway all >=90% coverage; `just ci` green; report `2026-03-02_step6_skills_vertical_slice.md`)
 - **Step:** 7
   - description: Workflow runner and lease
   - requirement ids: REQ-ORCHES-0144, REQ-ORCHES-0145, REQ-ORCHES-0146, REQ-ORCHES-0147

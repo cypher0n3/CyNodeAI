@@ -553,7 +553,58 @@ func TestClient_ChatWithOptions_ModelAndProject(t *testing.T) {
 }
 
 const pathV1Prefs = "/v1/prefs"
+const pathV1Skill = "/v1/skills/s1"
 
+//nolint:dupl // PutBytes/DeleteBytes success handler pattern
+func TestClient_PutBytes_Success(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != pathV1Skill || r.Method != http.MethodPut {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("{}"))
+	}))
+	defer server.Close()
+	client := NewClient(server.URL)
+	client.SetToken("tok")
+	body, err := client.PutBytes(pathV1Skill, []byte(`{"content":"# x"}`))
+	if err != nil {
+		t.Fatalf("PutBytes: %v", err)
+	}
+	if string(body) != "{}" {
+		t.Errorf("body = %q", body)
+	}
+}
+
+//nolint:dupl // PutBytes/DeleteBytes no-content handler pattern
+func TestClient_PutBytes_NoContent(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != pathV1Skill || r.Method != http.MethodPut {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer server.Close()
+	client := NewClient(server.URL)
+	client.SetToken("tok")
+	body, err := client.PutBytes(pathV1Skill, []byte(`{}`))
+	if err != nil {
+		t.Fatalf("PutBytes: %v", err)
+	}
+	if body != nil {
+		t.Errorf("body = %v, want nil", body)
+	}
+}
+
+func TestClient_PutBytes_Error(t *testing.T) {
+	expectHTTPError(t, jsonHandler(http.StatusBadRequest, problem.Details{Detail: "bad", Status: 400}),
+		func(c *Client) error { _, err := c.PutBytes(pathV1Skill, []byte("{}")); return err })
+}
+
+//nolint:dupl // PutBytes/DeleteBytes success handler pattern
 func TestClient_DeleteBytes_Success(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != pathV1Prefs || r.Method != http.MethodDelete {
@@ -576,6 +627,7 @@ func TestClient_DeleteBytes_Success(t *testing.T) {
 	}
 }
 
+//nolint:dupl // PutBytes/DeleteBytes no-content handler pattern
 func TestClient_DeleteBytes_NoContent(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != pathV1Prefs || r.Method != http.MethodDelete {

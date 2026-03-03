@@ -38,6 +38,7 @@ type MockDB struct {
 	ChatMessages      map[uuid.UUID][]*models.ChatMessage
 	PreferenceEntries []*models.PreferenceEntry
 	TaskArtifacts     []*models.TaskArtifact
+	Skills            map[uuid.UUID]*models.Skill
 
 	// Error injection
 	ForceError error
@@ -55,6 +56,10 @@ type MockDB struct {
 	GetTaskByIDErr       error
 	GetJobByIDErr        error
 	GetArtifactByTaskIDAndPathErr error
+	// UpdateSkillErr, when set, makes UpdateSkill return this error (for handler tests).
+	UpdateSkillErr error
+	// DeleteSkillErr, when set, makes DeleteSkill return this error (for handler tests).
+	DeleteSkillErr error
 }
 
 // NodeCapabilitySnapshot represents a stored capability snapshot.
@@ -91,6 +96,7 @@ func NewMockDB() *MockDB {
 		JobsByTask:      make(map[uuid.UUID][]*models.Job),
 		ChatThreads:     make(map[uuid.UUID]*models.ChatThread),
 		ChatMessages:    make(map[uuid.UUID][]*models.ChatMessage),
+		Skills:          make(map[uuid.UUID]*models.Skill),
 	}
 }
 
@@ -908,6 +914,111 @@ func (m *MockDB) AppendChatMessage(_ context.Context, threadID uuid.UUID, role, 
 // CreateChatAuditLog writes a chat audit log entry (no-op storage for mock).
 func (m *MockDB) CreateChatAuditLog(_ context.Context, _ *models.ChatAuditLog) error {
 	return runWithWLockErr(m, func() error { return nil })
+}
+
+// CreateSkill stores a skill in the mock.
+func (m *MockDB) CreateSkill(_ context.Context, name, content, scope string, ownerID *uuid.UUID, isSystem bool) (*models.Skill, error) {
+	return runWithLock(m, true, func() (*models.Skill, error) {
+		id := uuid.New()
+		now := time.Now().UTC()
+		s := &models.Skill{ID: id, Name: name, Content: content, Scope: scope, OwnerID: ownerID, IsSystem: isSystem, CreatedAt: now, UpdatedAt: now}
+		m.Skills[id] = s
+		return s, nil
+	})
+}
+
+// GetSkillByID returns a skill by id from the mock.
+func (m *MockDB) GetSkillByID(_ context.Context, id uuid.UUID) (*models.Skill, error) {
+	return runWithLock(m, false, func() (*models.Skill, error) {
+		s, ok := m.Skills[id]
+		if !ok {
+			return nil, database.ErrNotFound
+		}
+		return s, nil
+	})
+}
+
+// ListSkillsForUser returns skills visible to user (owner_id = userID or is_system).
+func (m *MockDB) ListSkillsForUser(_ context.Context, userID uuid.UUID, scopeFilter, ownerFilter string) ([]*models.Skill, error) {
+	return runWithLock(m, false, func() ([]*models.Skill, error) {
+		var out []*models.Skill
+		for _, s := range m.Skills {
+			if mockSkillVisible(s, userID, scopeFilter) {
+				out = append(out, s)
+			}
+		}
+		return out, nil
+	})
+}
+
+func mockSkillVisible(s *models.Skill, userID uuid.UUID, scopeFilter string) bool {
+	if scopeFilter != "" && s.Scope != scopeFilter {
+		return false
+	}
+	if s.IsSystem {
+		return true
+	}
+	return s.OwnerID != nil && *s.OwnerID == userID
+}
+
+// UpdateSkill updates a skill in the mock.
+func (m *MockDB) UpdateSkill(ctx context.Context, id uuid.UUID, name, content, scope *string) (*models.Skill, error) {
+	if m.UpdateSkillErr != nil {
+		return nil, m.UpdateSkillErr
+	}
+	return runWithLock(m, true, func() (*models.Skill, error) {
+		s, ok := m.Skills[id]
+		if !ok {
+			return nil, database.ErrNotFound
+		}
+		if s.IsSystem {
+			return nil, fmt.Errorf("cannot update system skill")
+		}
+		if name != nil {
+			s.Name = *name
+		}
+		if content != nil {
+			s.Content = *content
+		}
+		if scope != nil {
+			s.Scope = *scope
+		}
+		s.UpdatedAt = time.Now().UTC()
+		return s, nil
+	})
+}
+
+// DeleteSkill removes a skill from the mock.
+func (m *MockDB) DeleteSkill(_ context.Context, id uuid.UUID) error {
+	if m.DeleteSkillErr != nil {
+		return m.DeleteSkillErr
+	}
+	return runWithWLockErr(m, func() error {
+		s, ok := m.Skills[id]
+		if !ok {
+			return database.ErrNotFound
+		}
+		if s.IsSystem {
+			return fmt.Errorf("cannot delete system skill")
+		}
+		delete(m.Skills, id)
+		return nil
+	})
+}
+
+// EnsureDefaultSkill creates or updates the default skill in the mock.
+func (m *MockDB) EnsureDefaultSkill(_ context.Context, content string) error {
+	return runWithWLockErr(m, func() error {
+		id := database.DefaultSkillID
+		if s, ok := m.Skills[id]; ok {
+			s.Content = content
+			s.UpdatedAt = time.Now().UTC()
+			return nil
+		}
+		now := time.Now().UTC()
+		m.Skills[id] = &models.Skill{ID: id, Name: "CyNodeAI interaction", Content: content, Scope: "global", IsSystem: true, CreatedAt: now, UpdatedAt: now}
+		return nil
+	})
 }
 
 // AddUser adds a pre-created user to the mock database.

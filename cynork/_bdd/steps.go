@@ -35,6 +35,7 @@ type cynorkState struct {
 	userByToken map[string]string
 	tasks       map[string]string    // taskID -> prompt (for result echo)
 	taskNames   map[string]string   // taskID -> optional task name
+	lastSkillID string              // set by POST /v1/skills/load for list/get
 	mu          sync.Mutex
 }
 
@@ -364,12 +365,69 @@ func (s *cynorkState) mockGatewayMux() *http.ServeMux {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte("{}"))
 	})
+	mux.HandleFunc("GET /v1/skills", func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") == "" {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		s.mu.Lock()
+		id := s.lastSkillID
+		s.mu.Unlock()
+		skills := []map[string]any{}
+		if id != "" {
+			skills = append(skills, map[string]any{"id": id, "name": "Test skill", "scope": "user", "updated_at": "2026-01-01T00:00:00Z"})
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode(map[string]any{"skills": skills})
+	})
+	mux.HandleFunc("GET /v1/skills/{id}", func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") == "" {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		id := r.PathValue("id")
+		s.mu.Lock()
+		expected := s.lastSkillID
+		s.mu.Unlock()
+		if id != expected {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"id": id, "name": "Test skill", "scope": "user", "content": "# Test skill",
+			"updated_at": "2026-01-01T00:00:00Z",
+		})
+	})
 	mux.HandleFunc("POST /v1/skills/load", func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("Authorization") == "" {
 			w.WriteHeader(http.StatusUnauthorized)
 			return
 		}
-		w.WriteHeader(http.StatusOK)
+		var req struct {
+			Content string `json:"content"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		if strings.Contains(req.Content, "Ignore previous instructions") {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusBadRequest)
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"error": "policy violation", "category": "instruction_override",
+				"triggering_text": "Ignore previous instructions",
+			})
+			return
+		}
+		s.mu.Lock()
+		s.lastSkillID = "s1"
+		s.mu.Unlock()
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+		_ = json.NewEncoder(w).Encode(map[string]any{"id": "s1", "name": "Untitled skill", "scope": "user"})
 	})
 	return mux
 }
@@ -401,6 +459,7 @@ func InitializeCynorkSuite(sc *godog.ScenarioContext, state *cynorkState) {
 		state.tasks = nil
 		state.token = ""
 		state.taskID = ""
+		state.lastSkillID = ""
 		wd, err := os.Getwd()
 		if err != nil {
 			return ctx, err
@@ -461,6 +520,13 @@ func InitializeCynorkSuite(sc *godog.ScenarioContext, state *cynorkState) {
 		st := getState(ctx)
 		if st.lastExit != want {
 			return fmt.Errorf("cynork exit code %d, want %d (stderr: %s)", st.lastExit, want, st.lastStderr)
+		}
+		return nil
+	})
+	sc.Step(`^cynork exits with a non-zero code$`, func(ctx context.Context) error {
+		st := getState(ctx)
+		if st.lastExit == 0 {
+			return fmt.Errorf("cynork exit code 0, want non-zero (stderr: %s)", st.lastStderr)
 		}
 		return nil
 	})
@@ -827,10 +893,39 @@ func InitializeCynorkSuite(sc *godog.ScenarioContext, state *cynorkState) {
 		return os.WriteFile(path, []byte(content), 0o600)
 	})
 
+	sc.Step(`^I have loaded a skill$`, func(ctx context.Context) error {
+		st := getState(ctx)
+		path := filepath.Join(os.TempDir(), "bdd_skill_load.md")
+		if err := os.WriteFile(path, []byte("# Loaded skill"), 0o600); err != nil {
+			return err
+		}
+		env := []string{"CYNORK_GATEWAY_URL=" + st.mockServer.URL, "CYNORK_TOKEN=" + st.token}
+		args := []string{"--config", st.configPath, "skills", "load", path}
+		st.lastExit, st.lastStdout, st.lastStderr = st.runCynork(args, env...)
+		if st.lastExit != 0 {
+			return fmt.Errorf("skills load exited with %d: %s", st.lastExit, st.lastStderr)
+		}
+		return nil
+	})
+
 	sc.Step(`^I run cynork skills load with file "([^"]*)"$`, func(ctx context.Context, path string) error {
 		st := getState(ctx)
 		env := []string{"CYNORK_GATEWAY_URL=" + st.mockServer.URL, "CYNORK_TOKEN=" + st.token}
 		args := []string{"--config", st.configPath, "skills", "load", path}
+		st.lastExit, st.lastStdout, st.lastStderr = st.runCynork(args, env...)
+		return nil
+	})
+	sc.Step(`^I run cynork skills list$`, func(ctx context.Context) error {
+		st := getState(ctx)
+		env := []string{"CYNORK_GATEWAY_URL=" + st.mockServer.URL, "CYNORK_TOKEN=" + st.token}
+		args := []string{"--config", st.configPath, "skills", "list"}
+		st.lastExit, st.lastStdout, st.lastStderr = st.runCynork(args, env...)
+		return nil
+	})
+	sc.Step(`^I run cynork skills get "([^"]*)"$`, func(ctx context.Context, id string) error {
+		st := getState(ctx)
+		env := []string{"CYNORK_GATEWAY_URL=" + st.mockServer.URL, "CYNORK_TOKEN=" + st.token}
+		args := []string{"--config", st.configPath, "skills", "get", id}
 		st.lastExit, st.lastStdout, st.lastStderr = st.runCynork(args, env...)
 		return nil
 	})

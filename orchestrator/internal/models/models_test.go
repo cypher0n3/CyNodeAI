@@ -236,6 +236,7 @@ func TestTableNames(t *testing.T) {
 		{"SandboxImage", (SandboxImage{}).TableName(), "sandbox_images"},
 		{"SandboxImageVersion", (SandboxImageVersion{}).TableName(), "sandbox_image_versions"},
 		{"NodeSandboxImageAvailability", (NodeSandboxImageAvailability{}).TableName(), "node_sandbox_image_availability"},
+		{"Skill", (Skill{}).TableName(), "skills"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

@@ -25,6 +25,7 @@ import (
 
 const testStatusCompleted = "completed"
 const chatCompletionsPath = "/v1/chat/completions"
+const pathV1SkillsS1 = "/v1/skills/s1"
 
 func writeTempConfig(t *testing.T, content string) string {
 	t.Helper()
@@ -785,13 +786,29 @@ func TestRunSettingsGet_OK(t *testing.T) {
 }
 
 func TestRunSkillsLoad_OK(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusOK)
+	f, err := os.CreateTemp("", "skill-*.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = os.Remove(f.Name()) }()
+	if _, err := f.WriteString("# Test skill\n"); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Close(); err != nil {
+		t.Fatal(err)
+	}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost || r.URL.Path != "/v1/skills/load" {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		w.WriteHeader(http.StatusCreated)
+		_, _ = w.Write([]byte(`{"id":"s1","name":"Test skill"}`))
 	}))
 	defer server.Close()
 	cfg = &config.Config{GatewayURL: server.URL, Token: "tok"}
 	defer func() { cfg = nil }()
-	if err := runSkillsLoad(nil, []string{"tmp/skill.md"}); err != nil {
+	if err := runSkillsLoad(nil, []string{f.Name()}); err != nil {
 		t.Errorf("runSkillsLoad: %v", err)
 	}
 }
@@ -1039,6 +1056,64 @@ func TestRunAuditList(t *testing.T) {
 	defer func() { cfg = nil }()
 	if err := runAuditList(nil, nil); err != nil {
 		t.Errorf("runAuditList: %v", err)
+	}
+}
+
+func TestRunSkillsDelete_OK(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != pathV1SkillsS1 || r.Method != http.MethodDelete {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+	}))
+	defer server.Close()
+	cfg = &config.Config{GatewayURL: server.URL, Token: "tok"}
+	defer func() { cfg = nil }()
+	if err := runSkillsDelete(nil, []string{"s1"}); err != nil {
+		t.Errorf("runSkillsDelete: %v", err)
+	}
+}
+
+func TestRunSkillsDelete_NoAuth(t *testing.T) {
+	cfg = &config.Config{GatewayURL: "http://localhost"}
+	defer func() { cfg = nil }()
+	if err := runSkillsDelete(nil, []string{"s1"}); err == nil {
+		t.Fatal("expected auth error")
+	}
+}
+
+func TestRunSkillsUpdate_OK(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != pathV1SkillsS1 || r.Method != http.MethodPut {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("{}"))
+	}))
+	defer server.Close()
+	tmp := filepath.Join(t.TempDir(), "skill.md")
+	if err := os.WriteFile(tmp, []byte("# updated"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg = &config.Config{GatewayURL: server.URL, Token: "tok"}
+	skillsUpdateName, skillsUpdateScope = "", ""
+	defer func() { cfg = nil; skillsUpdateName, skillsUpdateScope = "", "" }()
+	if err := runSkillsUpdate(nil, []string{"s1", tmp}); err != nil {
+		t.Errorf("runSkillsUpdate: %v", err)
+	}
+}
+
+func TestRunSkillsUpdate_NoAuth(t *testing.T) {
+	tmp := filepath.Join(t.TempDir(), "skill.md")
+	if err := os.WriteFile(tmp, []byte("# x"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg = &config.Config{GatewayURL: "http://localhost"}
+	defer func() { cfg = nil }()
+	if err := runSkillsUpdate(nil, []string{"s1", tmp}); err == nil {
+		t.Fatal("expected auth error")
 	}
 }
 
@@ -1644,7 +1719,7 @@ func stubSlashServeSkills(w http.ResponseWriter, r *http.Request) bool {
 		_, _ = w.Write([]byte("[]"))
 		return true
 	}
-	if r.URL.Path == "/v1/skills/s1" && r.Method == http.MethodGet {
+	if r.URL.Path == pathV1SkillsS1 && r.Method == http.MethodGet {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte("{}"))
 		return true

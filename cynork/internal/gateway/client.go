@@ -344,6 +344,26 @@ func (c *Client) PostBytes(path string, body []byte) ([]byte, error) {
 	return io.ReadAll(resp.Body)
 }
 
+// PutBytes performs an authenticated PUT with body and returns the response body.
+func (c *Client) PutBytes(path string, body []byte) ([]byte, error) {
+	var r io.Reader
+	if len(body) > 0 {
+		r = bytes.NewReader(body)
+	}
+	resp, err := c.doRequest(http.MethodPut, path, nil, r)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusNoContent {
+		return nil, c.parseError(resp)
+	}
+	if resp.StatusCode == http.StatusNoContent {
+		return nil, nil
+	}
+	return io.ReadAll(resp.Body)
+}
+
 // DeleteBytes performs an authenticated DELETE and returns the response body.
 func (c *Client) DeleteBytes(path string) ([]byte, error) {
 	resp, err := c.doRequest(http.MethodDelete, path, nil, nil)

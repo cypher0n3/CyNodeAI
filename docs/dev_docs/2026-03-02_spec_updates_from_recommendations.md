@@ -3,7 +3,7 @@
 ## Summary
 
 - **Date:** 2026-03-02
-- **Source:** [2026-02-27_recommendations_tasks_projects_pma_spec_updates.md](2026-02-27_recommendations_tasks_projects_pma_spec_updates.md)
+- **Source:** 2026-02-27 recommendations (document removed).
 
 Tech specs and requirements were updated to align with the recommendations for project plans, default-project behavior, PMA plan building and clarification, plan lock, and multi-message clarification.
 
