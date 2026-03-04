@@ -98,11 +98,6 @@ It covers agent behaviors, responsibilities, and workflow integration.
 - **REQ-AGENTS-0122:** Sub-agents SHOULD be scoped to a single task to avoid cross-task state leakage.
   [CYNAI.AGENTS.ProjectManagerSubAgent](../tech_specs/project_manager_agent.md#spec-cynai-agents-pmsubagent)
   <a id="req-agents-0122"></a>
-- **REQ-AGENTS-0130:** The Project Manager Agent SHOULD eagerly delegate eligible tasks to Project Analyst agents for task-scoped monitoring and verification.
-  Delegation SHOULD occur as soon as a task is runnable and the system has capacity, subject to policy constraints and configured concurrency limits.
-  [CYNAI.AGENTS.ProjectManagerSubAgent](../tech_specs/project_manager_agent.md#spec-cynai-agents-pmsubagent)
-  [project_analyst_agent.md](../tech_specs/project_analyst_agent.md)
-  <a id="req-agents-0130"></a>
 - **REQ-AGENTS-0123:** The Project Analyst Agent MUST compute and use effective preferences for the task using the same precedence rules as the Project Manager Agent.
   The Project Analyst Agent MUST treat unknown keys as opaque and MUST pass them through to verification and reporting without interpretation.
   [CYNAI.AGENTS.ProjectAnalystPreferenceUsage](../tech_specs/project_analyst_agent.md#spec-cynai-agents-papreferenceusage)
@@ -130,6 +125,11 @@ It covers agent behaviors, responsibilities, and workflow integration.
   Task names MUST be all lowercase with dashes for word separation and MAY use trailing numbers for uniqueness (e.g. `deploy-docs`, `deploy-docs-2`).
   [CYNAI.AGENTS.ProjectManagerTaskNaming](../tech_specs/project_manager_agent.md#spec-cynai-agents-pmtasknaming)
   <a id="req-agents-0129"></a>
+- **REQ-AGENTS-0130:** The Project Manager Agent SHOULD eagerly delegate eligible tasks to Project Analyst agents for task-scoped monitoring and verification.
+  Delegation SHOULD occur as soon as a task is runnable and the system has capacity, subject to policy constraints and configured concurrency limits.
+  [CYNAI.AGENTS.ProjectManagerSubAgent](../tech_specs/project_manager_agent.md#spec-cynai-agents-pmsubagent)
+  [project_analyst_agent.md](../tech_specs/project_analyst_agent.md)
+  <a id="req-agents-0130"></a>
 - **REQ-AGENTS-0131:** When the user provides a project name or project id in a chat prompt, the Project Manager Agent SHOULD attempt to resolve the project and associate any tasks (or related work) created from that turn with that project if the user has access to it.
   Resolution and access MUST be performed via MCP or gateway; the PM MUST NOT assume access without verification.
   [CYNAI.AGENTS.PMProjectFromPrompt](../tech_specs/project_manager_agent.md#spec-cynai-agents-pmprojectfromprompt)

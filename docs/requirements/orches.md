@@ -59,16 +59,6 @@ It covers orchestrator control-plane behavior, task lifecycle, dispatch, and sta
 - **REQ-ORCHES-0114:** The orchestrator MUST support dynamic configuration updates after registration and must ingest node capability reports on registration and node startup.
   [orchestrator.md](../tech_specs/orchestrator.md)
   <a id="req-orches-0114"></a>
-- **REQ-ORCHES-0149:** The orchestrator MUST acknowledge node registration and return a node configuration payload that instructs the node whether and how to start the local inference backend (e.g. OLLAMA).
-  When the node has reported GPU or inference capabilities, the configuration MUST include inference backend instructions (e.g. container image and backend variant such as ROCm for AMD or CUDA for Nvidia) derived from the node capability report, so the node starts the correct OLLAMA (or equivalent) container.
-  [CYNAI.WORKER.ConfigurationDelivery](../tech_specs/worker_node.md#spec-cynai-worker-configurationdelivery)
-  [CYNAI.ORCHES.InferenceContainerDecision](../tech_specs/orchestrator_inference_container_decision.md#spec-cynai-orches-inferencecontainerdecision)
-  [CYNAI.WORKER.Payload.ConfigurationV1](../tech_specs/worker_node_payloads.md#spec-cynai-worker-payload-configuration-v1)
-  <a id="req-orches-0149"></a>
-- **REQ-ORCHES-0148:** The orchestrator MUST set each node's Worker API dispatch URL from the node-reported `worker_api.base_url` (in registration and capability reports) and MUST update it when the node reports a new value; an operator MAY configure an explicit override (e.g. same-host or dev), and when an override is used it MUST be clearly documented as an override.
-  [worker_node_payloads.md](../tech_specs/worker_node_payloads.md#spec-cynai-worker-payload-capabilityreport-v1)
-  [worker_node.md](../tech_specs/worker_node.md#spec-cynai-worker-registrationandbootstrap)
-  <a id="req-orches-0148"></a>
 - **REQ-ORCHES-0115:** The orchestrator MAY import bootstrap configuration from a YAML file at startup to seed PostgreSQL and external integrations.
   [orchestrator.md](../tech_specs/orchestrator.md)
   <a id="req-orches-0115"></a>
@@ -197,6 +187,16 @@ It covers orchestrator control-plane behavior, task lifecycle, dispatch, and sta
   [CYNAI.ORCHES.WorkflowStartTriggers](../tech_specs/langgraph_mvp.md#spec-cynai-orches-workflowstarttriggers)
   <a id="req-orches-0147"></a>
 
+- **REQ-ORCHES-0148:** The orchestrator MUST set each node's Worker API dispatch URL from the node-reported `worker_api.base_url` (in registration and capability reports) and MUST update it when the node reports a new value; an operator MAY configure an explicit override (e.g. same-host or dev), and when an override is used it MUST be clearly documented as an override.
+  [worker_node_payloads.md](../tech_specs/worker_node_payloads.md#spec-cynai-worker-payload-capabilityreport-v1)
+  [worker_node.md](../tech_specs/worker_node.md#spec-cynai-worker-registrationandbootstrap)
+  <a id="req-orches-0148"></a>
+- **REQ-ORCHES-0149:** The orchestrator MUST acknowledge node registration and return a node configuration payload that instructs the node whether and how to start the local inference backend (e.g. OLLAMA).
+  When the node has reported GPU or inference capabilities, the configuration MUST include inference backend instructions (e.g. container image and backend variant such as ROCm for AMD or CUDA for Nvidia) derived from the node capability report, so the node starts the correct OLLAMA (or equivalent) container.
+  [CYNAI.WORKER.ConfigurationDelivery](../tech_specs/worker_node.md#spec-cynai-worker-configurationdelivery)
+  [CYNAI.ORCHES.InferenceContainerDecision](../tech_specs/orchestrator_inference_container_decision.md#spec-cynai-orches-inferencecontainerdecision)
+  [CYNAI.WORKER.Payload.ConfigurationV1](../tech_specs/worker_node_payloads.md#spec-cynai-worker-payload-configuration-v1)
+  <a id="req-orches-0149"></a>
 - **REQ-ORCHES-0150:** The orchestrator MUST start the Project Manager Agent (cynode-pma) by instructing a worker node to run PMA as a managed service container when the first inference path becomes available: either the first worker node has reported ready to the orchestrator and is inference-capable, or the orchestrator has an LLM API key configured for PMA via the API Egress Server.
   The orchestrator MUST deliver the PMA start bundle via node configuration managed services desired state.
   The orchestrator MUST NOT instruct a node to start PMA before at least one of these conditions is satisfied.

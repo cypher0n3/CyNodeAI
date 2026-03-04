@@ -28,13 +28,6 @@ It covers storage, tracking, and exposure of AI skills files so that inference m
 - **REQ-SKILLS-0104:** Skills MUST be scoped so that only relevant skills are offered to a given inference request; scope levels include user, group, project, and global.
   [CYNAI.SKILLS.SkillRegistry](../tech_specs/skills_storage_and_inference.md#spec-cynai-skills-skillregistry)
   <a id="req-skills-0104"></a>
-- **REQ-SKILLS-0107:** Skills MUST be scoped to the user by default; a newly loaded skill is visible only to that user's inference requests unless the user directs a broader scope.
-  [CYNAI.SKILLS.SkillRegistry](../tech_specs/skills_storage_and_inference.md#spec-cynai-skills-skillregistry)
-  [CYNAI.SKILLS.SkillLoading](../tech_specs/skills_storage_and_inference.md#spec-cynai-skills-skillloading)
-  <a id="req-skills-0107"></a>
-- **REQ-SKILLS-0108:** A user MAY set a skill's scope to a broader level (group, project, or global) when they direct (e.g. at load time or on update); the system MUST allow this only if the user has appropriate permissions for that scope (e.g. group membership, project access, or global admin).
-  [CYNAI.SKILLS.SkillScopeElevation](../tech_specs/skills_storage_and_inference.md#spec-cynai-skills-skillscopeelevation)
-  <a id="req-skills-0108"></a>
 - **REQ-SKILLS-0105:** Users MUST be able to load (upload) skills through the web interface; the system MUST store the skill and register it for discovery.
   [CYNAI.SKILLS.SkillLoading](../tech_specs/skills_storage_and_inference.md#spec-cynai-skills-skillloading)
   [CYNAI.WEBCON.Security](../tech_specs/web_console.md#spec-cynai-webcon-security)
@@ -43,6 +36,13 @@ It covers storage, tracking, and exposure of AI skills files so that inference m
   [CYNAI.SKILLS.SkillLoading](../tech_specs/skills_storage_and_inference.md#spec-cynai-skills-skillloading)
   [CYNAI.CLIENT.CliSecurityModel](../tech_specs/cynork_cli.md#spec-cynai-client-clisecurity)
   <a id="req-skills-0106"></a>
+- **REQ-SKILLS-0107:** Skills MUST be scoped to the user by default; a newly loaded skill is visible only to that user's inference requests unless the user directs a broader scope.
+  [CYNAI.SKILLS.SkillRegistry](../tech_specs/skills_storage_and_inference.md#spec-cynai-skills-skillregistry)
+  [CYNAI.SKILLS.SkillLoading](../tech_specs/skills_storage_and_inference.md#spec-cynai-skills-skillloading)
+  <a id="req-skills-0107"></a>
+- **REQ-SKILLS-0108:** A user MAY set a skill's scope to a broader level (group, project, or global) when they direct (e.g. at load time or on update); the system MUST allow this only if the user has appropriate permissions for that scope (e.g. group membership, project access, or global admin).
+  [CYNAI.SKILLS.SkillScopeElevation](../tech_specs/skills_storage_and_inference.md#spec-cynai-skills-skillscopeelevation)
+  <a id="req-skills-0108"></a>
 - **REQ-SKILLS-0110:** The system MUST scan skill content for malicious or policy-violating patterns before accepting a load (or update) and MUST reject the load when a match is found.
   [CYNAI.SKILLS.SkillAuditing](../tech_specs/skills_storage_and_inference.md#spec-cynai-skills-skillauditing)
   <a id="req-skills-0110"></a>

@@ -23,7 +23,7 @@ PMA is part of the default compose services and is brought up with the stack.
    That starts **all** default services: postgres, control-plane, user-gateway, **cynode-pma** (plus profile services).
     So PMA starts at stack bring-up, before any worker has registered or sent a capability bundle.
 
-### User-Gateway Depends on Cynode-Pma
+### User-Gateway Depends on CyNode-Pma
 
    user-gateway has `depends_on: cynode-pma: condition: service_healthy`, so compose starts and waits for PMA as part of bringing up the stack.
 
@@ -73,7 +73,7 @@ Options to align dev startup with the bootstrap spec:
 - Have setup-dev, after starting the node and waiting for it to register, start the PMA container (e.g. second compose up with profile, or `runtime start cynodeai-cynode-pma`), so PMA starts only after the stack and node are up; or
 - Document that for spec-compliant dev flow, start PMA manually (or via a script) after the node is registered.
 
-### Remove User-Gateway Dependency on Cynode-Pma
+### Remove User-Gateway Dependency on CyNode-Pma
 
    If PMA is not started with the stack, user-gateway must not `depends_on: cynode-pma` (or the dependency must be optional / best-effort).
     The gateway already handles PMA unreachable (e.g. model=cynodeai.pm when PMA is down).

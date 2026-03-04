@@ -106,96 +106,6 @@ Web Console-specific requirements live in [webcon.md](webcon.md) (REQ-WEBCON-*).
   [CYNAI.WEBCON.Preferences](../tech_specs/web_console.md#spec-cynai-webcon-preferences)
   [CYNAI.CLIENT.CliPreferencesManagement](../tech_specs/cli_management_app_commands_admin.md#spec-cynai-client-clipreferences)
   <a id="req-client-0124"></a>
-- **REQ-CLIENT-0160:** The Web Console and the CLI MUST allow configuring Project Manager model selection for local inference via system settings.
-  At minimum, clients MUST allow editing `agents.project_manager.model.local_default_ollama_model` through the standard system settings management surface (no bespoke API required).
-  Clients SHOULD also surface the automatic selection policy keys for discoverability (for example `agents.project_manager.model.selection.execution_mode`, `agents.project_manager.model.selection.mode`, and `agents.project_manager.model.selection.prefer_orchestrator_host`).
-  System settings are distinct from user preferences; see [User preferences (Terminology)](../tech_specs/user_preferences.md#spec-cynai-stands-preferenceterminology).
-  [CYNAI.WEBCON.SystemSettings](../tech_specs/web_console.md#spec-cynai-webcon-systemsettings)
-  [CYNAI.CLIENT.CliSystemSettingsManagement](../tech_specs/cli_management_app_commands_admin.md#spec-cynai-client-clisystemsettings)
-  <a id="req-client-0160"></a>
-- **REQ-CLIENT-0161:** The CLI MUST provide a chat command that starts an interactive chat session with the Project Manager (PM) model.
-  The user MUST be able to send messages and receive responses in turn until they exit the session.
-  The chat session MUST use the same gateway and authentication as other CLI commands and MUST NOT expose secrets in history or output.
-  [CYNAI.CLIENT.CliChat](../tech_specs/cli_management_app_commands_chat.md#spec-cynai-client-clichat)
-  [CYNAI.USRGWY.OpenAIChatApi](../tech_specs/openai_compatible_chat_api.md#spec-cynai-usrgwy-openaichatapi)
-  <a id="req-client-0161"></a>
-- **REQ-CLIENT-0162:** The CLI chat command MUST render model responses with pretty-formatted output when the response contains Markdown.
-  The CLI MUST interpret common Markdown (headings, lists, code blocks, emphasis, links) and display them in a human-readable way in the terminal (e.g. indentation, styling, or syntax highlighting for code blocks).
-  The CLI MUST honor `--no-color` for chat output and SHOULD support a plain-text mode (e.g. `--plain`) that prints the raw response without Markdown rendering for scripting or piping.
-  [CYNAI.CLIENT.CliChat](../tech_specs/cli_management_app_commands_chat.md#spec-cynai-client-clichat)
-  <a id="req-client-0162"></a>
-- **REQ-CLIENT-0163:** The CLI MUST display all JSON as pretty-printed (indented, with newlines) whenever JSON is part of the output.
-  This applies to `--output json`, JSON embedded in chat or other responses, and any other CLI output that contains JSON.
-  [CYNAI.CLIENT.CliPrettyPrintJson](../tech_specs/cli_management_app_shell_output.md#spec-cynai-client-cliprettyprintjson)
-  <a id="req-client-0163"></a>
-- **REQ-CLIENT-0164:** The CLI chat command MUST display the available slash commands (e.g. `/exit`, `/quit`, `/help`) to the user.
-  Display MUST occur at session start or in response to a dedicated help command (e.g. `/help`) so users can discover slash commands.
-  [CYNAI.CLIENT.CliChatSlashCommands](../tech_specs/cli_management_app_commands_chat.md#spec-cynai-client-clichatslashcommands)
-  <a id="req-client-0164"></a>
-- **REQ-CLIENT-0165:** The CLI chat command MUST support slash-command autocomplete and inline suggestions when the user types `/`.
-  When the input line starts with `/`, the CLI MUST show the list of available slash commands with short descriptions (e.g. command on the left, description on the right) and MUST support Tab to complete or cycle and arrow-up/arrow-down to move through suggestions, with the current selection visually indicated.
-  [CYNAI.CLIENT.CliChatSlashAutocomplete](../tech_specs/cli_management_app_commands_chat.md#spec-cynai-client-clichatslashautocomplete)
-  <a id="req-client-0165"></a>
-- **REQ-CLIENT-0166:** The CLI chat command MUST support task operations via slash commands: list, get, create (with inline prompt), cancel, result, logs, and artifacts list.
-  These MUST use the same User API Gateway endpoints as `cynork task`; output MUST be shown inline in chat (pretty-printed when JSON).
-  [CYNAI.CLIENT.CliChatSlashTask](../tech_specs/cli_management_app_commands_chat.md#spec-cynai-client-clichatslashtask)
-  <a id="req-client-0166"></a>
-- **REQ-CLIENT-0167:** The CLI chat command MUST support `/status` and `/whoami` slash commands to show gateway reachability and current identity without leaving chat.
-  [CYNAI.CLIENT.CliChatSlashStatus](../tech_specs/cli_management_app_commands_chat.md#spec-cynai-client-clichatslashstatus)
-  <a id="req-client-0167"></a>
-- **REQ-CLIENT-0168:** The CLI chat command MUST support node listing and get via slash commands: `/nodes list`, `/nodes get <node_id>`.
-  [CYNAI.CLIENT.CliChatSlashNodes](../tech_specs/cli_management_app_commands_chat.md#spec-cynai-client-clichatslashnodes)
-  <a id="req-client-0168"></a>
-- **REQ-CLIENT-0169:** The CLI chat command MUST support preferences via slash commands: list, get, set, delete, and effective (e.g. `/prefs list`, `/prefs get [key]`, `/prefs set ...`, `/prefs delete ...`, `/prefs effective [--task-id <id>]`).
-  [CYNAI.CLIENT.CliChatSlashPrefs](../tech_specs/cli_management_app_commands_chat.md#spec-cynai-client-clichatslashprefs)
-  <a id="req-client-0169"></a>
-- **REQ-CLIENT-0170:** The CLI chat command MUST support skills list and get via slash commands: `/skills list`, `/skills get <skill_id>`.
-  [CYNAI.CLIENT.CliChatSlashSkills](../tech_specs/cli_management_app_commands_chat.md#spec-cynai-client-clichatslashskills)
-  <a id="req-client-0170"></a>
-- **REQ-CLIENT-0171:** The CLI chat command MUST support selecting an OpenAI model identifier for chat completions.
-  The CLI MUST support selecting the model at session start (e.g. `cynork chat --model <id>`) and within the session (e.g. `/model <id>`).
-  Model selection MUST only affect `POST /v1/chat/completions` requests and MUST NOT change system settings or user preferences.
-  [CYNAI.CLIENT.CliChatModelSelection](../tech_specs/cli_management_app_commands_chat.md#spec-cynai-client-clichatmodelselection)
-  [CYNAI.USRGWY.OpenAIChatApi.Endpoints](../tech_specs/openai_compatible_chat_api.md#spec-cynai-usrgwy-openaichatapi-endpoints)
-  <a id="req-client-0171"></a>
-- **REQ-CLIENT-0172:** The CLI chat command SHOULD support listing available OpenAI model identifiers from the gateway (e.g. `/models`).
-  This MUST call `GET /v1/models` and display model ids.
-  [CYNAI.CLIENT.CliChatModelSelection](../tech_specs/cli_management_app_commands_chat.md#spec-cynai-client-clichatmodelselection)
-  [CYNAI.USRGWY.OpenAIChatApi.Endpoints](../tech_specs/openai_compatible_chat_api.md#spec-cynai-usrgwy-openaichatapi-endpoints)
-  <a id="req-client-0172"></a>
-- **REQ-CLIENT-0173:** The CLI chat command MUST support setting an optional project context for the chat session.
-  When set, the CLI MUST send the project context using the OpenAI-standard `OpenAI-Project` request header on `POST /v1/chat/completions`.
-  When omitted, the CLI does not send the header and the gateway associates the thread with the user's default project (see [REQ-PROJCT-0104](../requirements/projct.md#req-projct-0104)).
-  [CYNAI.CLIENT.CliChatProjectContext](../tech_specs/cli_management_app_commands_chat.md#spec-cynai-client-clichatprojectcontext)
-  [CYNAI.ACCESS.Doc.ProjectsAndScopes](../tech_specs/projects_and_scopes.md#spec-cynai-access-doc-projectsandscopes)
-  <a id="req-client-0173"></a>
-- **REQ-CLIENT-0174:** The CLI and the Web Console MUST support basic project management (CRUD: create, list, get, update, delete or disable) via the User API Gateway.
-  Projects have a user-friendly title and optional text description (see [REQ-PROJCT-0103](../requirements/projct.md#req-projct-0103)); clients MUST allow setting and editing these in create and update flows.
-  Both clients MUST offer the same project CRUD capabilities (capability parity).
-  [CYNAI.CLIENT.CliProjectManagement](../tech_specs/cli_management_app_commands_admin.md#spec-cynai-client-cliprojectmanagement)
-  [CYNAI.WEBCON.ProjectManagement](../tech_specs/web_console.md#spec-cynai-webcon-projectmanagement)
-  [CYNAI.ACCESS.Doc.ProjectsAndScopes](../tech_specs/projects_and_scopes.md#spec-cynai-access-doc-projectsandscopes)
-  <a id="req-client-0174"></a>
-- **REQ-CLIENT-0175:** The CLI chat command MUST support a shell-escape syntax: input starting with `!` runs the remainder of the line as a shell command; the command's output is displayed inline and the chat session continues.
-  [CYNAI.CLIENT.CliChatShellEscape](../tech_specs/cli_management_app_commands_chat.md#spec-cynai-client-clichatshellescape)
-  <a id="req-client-0175"></a>
-- **REQ-CLIENT-0176:** When a slash command or shell-escape command fails in chat (e.g. gateway 404, command not found), the CLI MUST display the error and MUST NOT exit the chat session or show the top-level command Usage.
-  [CYNAI.CLIENT.CliChatSubcommandErrors](../tech_specs/cli_management_app_commands_chat.md#spec-cynai-client-clichatsubcommanderrors)
-  <a id="req-client-0176"></a>
-- **REQ-CLIENT-0177:** Clients that provide an interactive chat session (e.g. CLI chat command, Web Console chat UI) SHOULD call the gateway chat warm-up endpoint after auth and before the first user prompt when the gateway exposes it.
-  Warm-up MUST be non-blocking (e.g. fire-and-forget or short timeout) so the user can type immediately.
-  [CYNAI.USRGWY.OpenAIChatApi.WarmUp](../tech_specs/openai_compatible_chat_api.md#spec-cynai-usrgwy-openaichatapi-warmup)
-  [CYNAI.CLIENT.CliChatWarmUp](../tech_specs/cli_management_app_commands_chat.md#spec-cynai-client-clichatwarmup)
-  <a id="req-client-0177"></a>
-- **REQ-CLIENT-0178:** The Web Console and the CLI MUST support full CRUD for Agent personas (create, list, get, update, delete) via the User API Gateway, with capability parity between both clients.
-  Agent personas are reusable SBA role/identity descriptions (not customer or end-user personas); title, description, scope; create/update/delete subject to RBAC per scope; see [cynode_sba.md - Persona on the Job](../tech_specs/cynode_sba.md#spec-cynai-sbagnt-jobpersona).
-  [CYNAI.CLIENT.CliPersonasManagement](../tech_specs/cli_management_app_commands_admin.md#spec-cynai-client-clipersonasmanagement)
-  [CYNAI.WEBCON.PersonasManagement](../tech_specs/web_console.md#spec-cynai-webcon-personasmanagement)
-  <a id="req-client-0178"></a>
-- **REQ-CLIENT-0179:** The Web Console and the CLI MUST support project plan review (view plan, view revision history) and plan approve (and re-approve) via the User API Gateway, with capability parity between both clients.
-  [CYNAI.ACCESS.ProjectPlanReviewApprove](../tech_specs/projects_and_scopes.md#spec-cynai-access-projectplanreviewapprove)
-  [CYNAI.USRGWY.ProjectPlanApi](../tech_specs/user_api_gateway.md#spec-cynai-usrgwy-projectplanapi)
-  <a id="req-client-0179"></a>
 - **REQ-CLIENT-0125:** Node management MUST be mediated by the User API Gateway.
   [CYNAI.WEBCON.NodeManagement](../tech_specs/web_console.md#spec-cynai-webcon-nodemanagement)
   [CYNAI.CLIENT.CliNodeManagement](../tech_specs/cli_management_app_commands_admin.md#spec-cynai-client-clinodemgmt)
@@ -297,3 +207,93 @@ Web Console-specific requirements live in [webcon.md](webcon.md) (REQ-WEBCON-*).
 - **REQ-CLIENT-0159:** The CLI interactive mode MUST support tab-completion of task names when a task identifier is expected (e.g. for `task get`, `task result`, `task cancel`, `task logs`, `task artifacts list`, `task artifacts get`).
   [CYNAI.CLIENT.CliInteractiveMode](../tech_specs/cli_management_app_shell_output.md#spec-cynai-client-cliinteractivemode)
   <a id="req-client-0159"></a>
+- **REQ-CLIENT-0160:** The Web Console and the CLI MUST allow configuring Project Manager model selection for local inference via system settings.
+  At minimum, clients MUST allow editing `agents.project_manager.model.local_default_ollama_model` through the standard system settings management surface (no bespoke API required).
+  Clients SHOULD also surface the automatic selection policy keys for discoverability (for example `agents.project_manager.model.selection.execution_mode`, `agents.project_manager.model.selection.mode`, and `agents.project_manager.model.selection.prefer_orchestrator_host`).
+  System settings are distinct from user preferences; see [User preferences (Terminology)](../tech_specs/user_preferences.md#spec-cynai-stands-preferenceterminology).
+  [CYNAI.WEBCON.SystemSettings](../tech_specs/web_console.md#spec-cynai-webcon-systemsettings)
+  [CYNAI.CLIENT.CliSystemSettingsManagement](../tech_specs/cli_management_app_commands_admin.md#spec-cynai-client-clisystemsettings)
+  <a id="req-client-0160"></a>
+- **REQ-CLIENT-0161:** The CLI MUST provide a chat command that starts an interactive chat session with the Project Manager (PM) model.
+  The user MUST be able to send messages and receive responses in turn until they exit the session.
+  The chat session MUST use the same gateway and authentication as other CLI commands and MUST NOT expose secrets in history or output.
+  [CYNAI.CLIENT.CliChat](../tech_specs/cli_management_app_commands_chat.md#spec-cynai-client-clichat)
+  [CYNAI.USRGWY.OpenAIChatApi](../tech_specs/openai_compatible_chat_api.md#spec-cynai-usrgwy-openaichatapi)
+  <a id="req-client-0161"></a>
+- **REQ-CLIENT-0162:** The CLI chat command MUST render model responses with pretty-formatted output when the response contains Markdown.
+  The CLI MUST interpret common Markdown (headings, lists, code blocks, emphasis, links) and display them in a human-readable way in the terminal (e.g. indentation, styling, or syntax highlighting for code blocks).
+  The CLI MUST honor `--no-color` for chat output and SHOULD support a plain-text mode (e.g. `--plain`) that prints the raw response without Markdown rendering for scripting or piping.
+  [CYNAI.CLIENT.CliChat](../tech_specs/cli_management_app_commands_chat.md#spec-cynai-client-clichat)
+  <a id="req-client-0162"></a>
+- **REQ-CLIENT-0163:** The CLI MUST display all JSON as pretty-printed (indented, with newlines) whenever JSON is part of the output.
+  This applies to `--output json`, JSON embedded in chat or other responses, and any other CLI output that contains JSON.
+  [CYNAI.CLIENT.CliPrettyPrintJson](../tech_specs/cli_management_app_shell_output.md#spec-cynai-client-cliprettyprintjson)
+  <a id="req-client-0163"></a>
+- **REQ-CLIENT-0164:** The CLI chat command MUST display the available slash commands (e.g. `/exit`, `/quit`, `/help`) to the user.
+  Display MUST occur at session start or in response to a dedicated help command (e.g. `/help`) so users can discover slash commands.
+  [CYNAI.CLIENT.CliChatSlashCommands](../tech_specs/cli_management_app_commands_chat.md#spec-cynai-client-clichatslashcommands)
+  <a id="req-client-0164"></a>
+- **REQ-CLIENT-0165:** The CLI chat command MUST support slash-command autocomplete and inline suggestions when the user types `/`.
+  When the input line starts with `/`, the CLI MUST show the list of available slash commands with short descriptions (e.g. command on the left, description on the right) and MUST support Tab to complete or cycle and arrow-up/arrow-down to move through suggestions, with the current selection visually indicated.
+  [CYNAI.CLIENT.CliChatSlashAutocomplete](../tech_specs/cli_management_app_commands_chat.md#spec-cynai-client-clichatslashautocomplete)
+  <a id="req-client-0165"></a>
+- **REQ-CLIENT-0166:** The CLI chat command MUST support task operations via slash commands: list, get, create (with inline prompt), cancel, result, logs, and artifacts list.
+  These MUST use the same User API Gateway endpoints as `cynork task`; output MUST be shown inline in chat (pretty-printed when JSON).
+  [CYNAI.CLIENT.CliChatSlashTask](../tech_specs/cli_management_app_commands_chat.md#spec-cynai-client-clichatslashtask)
+  <a id="req-client-0166"></a>
+- **REQ-CLIENT-0167:** The CLI chat command MUST support `/status` and `/whoami` slash commands to show gateway reachability and current identity without leaving chat.
+  [CYNAI.CLIENT.CliChatSlashStatus](../tech_specs/cli_management_app_commands_chat.md#spec-cynai-client-clichatslashstatus)
+  <a id="req-client-0167"></a>
+- **REQ-CLIENT-0168:** The CLI chat command MUST support node listing and get via slash commands: `/nodes list`, `/nodes get <node_id>`.
+  [CYNAI.CLIENT.CliChatSlashNodes](../tech_specs/cli_management_app_commands_chat.md#spec-cynai-client-clichatslashnodes)
+  <a id="req-client-0168"></a>
+- **REQ-CLIENT-0169:** The CLI chat command MUST support preferences via slash commands: list, get, set, delete, and effective (e.g. `/prefs list`, `/prefs get [key]`, `/prefs set ...`, `/prefs delete ...`, `/prefs effective [--task-id <id>]`).
+  [CYNAI.CLIENT.CliChatSlashPrefs](../tech_specs/cli_management_app_commands_chat.md#spec-cynai-client-clichatslashprefs)
+  <a id="req-client-0169"></a>
+- **REQ-CLIENT-0170:** The CLI chat command MUST support skills list and get via slash commands: `/skills list`, `/skills get <skill_id>`.
+  [CYNAI.CLIENT.CliChatSlashSkills](../tech_specs/cli_management_app_commands_chat.md#spec-cynai-client-clichatslashskills)
+  <a id="req-client-0170"></a>
+- **REQ-CLIENT-0171:** The CLI chat command MUST support selecting an OpenAI model identifier for chat completions.
+  The CLI MUST support selecting the model at session start (e.g. `cynork chat --model <id>`) and within the session (e.g. `/model <id>`).
+  Model selection MUST only affect `POST /v1/chat/completions` requests and MUST NOT change system settings or user preferences.
+  [CYNAI.CLIENT.CliChatModelSelection](../tech_specs/cli_management_app_commands_chat.md#spec-cynai-client-clichatmodelselection)
+  [CYNAI.USRGWY.OpenAIChatApi.Endpoints](../tech_specs/openai_compatible_chat_api.md#spec-cynai-usrgwy-openaichatapi-endpoints)
+  <a id="req-client-0171"></a>
+- **REQ-CLIENT-0172:** The CLI chat command SHOULD support listing available OpenAI model identifiers from the gateway (e.g. `/models`).
+  This MUST call `GET /v1/models` and display model ids.
+  [CYNAI.CLIENT.CliChatModelSelection](../tech_specs/cli_management_app_commands_chat.md#spec-cynai-client-clichatmodelselection)
+  [CYNAI.USRGWY.OpenAIChatApi.Endpoints](../tech_specs/openai_compatible_chat_api.md#spec-cynai-usrgwy-openaichatapi-endpoints)
+  <a id="req-client-0172"></a>
+- **REQ-CLIENT-0173:** The CLI chat command MUST support setting an optional project context for the chat session.
+  When set, the CLI MUST send the project context using the OpenAI-standard `OpenAI-Project` request header on `POST /v1/chat/completions`.
+  When omitted, the CLI does not send the header and the gateway associates the thread with the user's default project (see [REQ-PROJCT-0104](../requirements/projct.md#req-projct-0104)).
+  [CYNAI.CLIENT.CliChatProjectContext](../tech_specs/cli_management_app_commands_chat.md#spec-cynai-client-clichatprojectcontext)
+  [CYNAI.ACCESS.Doc.ProjectsAndScopes](../tech_specs/projects_and_scopes.md#spec-cynai-access-doc-projectsandscopes)
+  <a id="req-client-0173"></a>
+- **REQ-CLIENT-0174:** The CLI and the Web Console MUST support basic project management (CRUD: create, list, get, update, delete or disable) via the User API Gateway.
+  Projects have a user-friendly title and optional text description (see [REQ-PROJCT-0103](../requirements/projct.md#req-projct-0103)); clients MUST allow setting and editing these in create and update flows.
+  Both clients MUST offer the same project CRUD capabilities (capability parity).
+  [CYNAI.CLIENT.CliProjectManagement](../tech_specs/cli_management_app_commands_admin.md#spec-cynai-client-cliprojectmanagement)
+  [CYNAI.WEBCON.ProjectManagement](../tech_specs/web_console.md#spec-cynai-webcon-projectmanagement)
+  [CYNAI.ACCESS.Doc.ProjectsAndScopes](../tech_specs/projects_and_scopes.md#spec-cynai-access-doc-projectsandscopes)
+  <a id="req-client-0174"></a>
+- **REQ-CLIENT-0175:** The CLI chat command MUST support a shell-escape syntax: input starting with `!` runs the remainder of the line as a shell command; the command's output is displayed inline and the chat session continues.
+  [CYNAI.CLIENT.CliChatShellEscape](../tech_specs/cli_management_app_commands_chat.md#spec-cynai-client-clichatshellescape)
+  <a id="req-client-0175"></a>
+- **REQ-CLIENT-0176:** When a slash command or shell-escape command fails in chat (e.g. gateway 404, command not found), the CLI MUST display the error and MUST NOT exit the chat session or show the top-level command Usage.
+  [CYNAI.CLIENT.CliChatSubcommandErrors](../tech_specs/cli_management_app_commands_chat.md#spec-cynai-client-clichatsubcommanderrors)
+  <a id="req-client-0176"></a>
+- **REQ-CLIENT-0177:** Clients that provide an interactive chat session (e.g. CLI chat command, Web Console chat UI) SHOULD call the gateway chat warm-up endpoint after auth and before the first user prompt when the gateway exposes it.
+  Warm-up MUST be non-blocking (e.g. fire-and-forget or short timeout) so the user can type immediately.
+  [CYNAI.USRGWY.OpenAIChatApi.WarmUp](../tech_specs/openai_compatible_chat_api.md#spec-cynai-usrgwy-openaichatapi-warmup)
+  [CYNAI.CLIENT.CliChatWarmUp](../tech_specs/cli_management_app_commands_chat.md#spec-cynai-client-clichatwarmup)
+  <a id="req-client-0177"></a>
+- **REQ-CLIENT-0178:** The Web Console and the CLI MUST support full CRUD for Agent personas (create, list, get, update, delete) via the User API Gateway, with capability parity between both clients.
+  Agent personas are reusable SBA role/identity descriptions (not customer or end-user personas); title, description, scope; create/update/delete subject to RBAC per scope; see [cynode_sba.md - Persona on the Job](../tech_specs/cynode_sba.md#spec-cynai-sbagnt-jobpersona).
+  [CYNAI.CLIENT.CliPersonasManagement](../tech_specs/cli_management_app_commands_admin.md#spec-cynai-client-clipersonasmanagement)
+  [CYNAI.WEBCON.PersonasManagement](../tech_specs/web_console.md#spec-cynai-webcon-personasmanagement)
+  <a id="req-client-0178"></a>
+- **REQ-CLIENT-0179:** The Web Console and the CLI MUST support project plan review (view plan, view revision history) and plan approve (and re-approve) via the User API Gateway, with capability parity between both clients.
+  [CYNAI.ACCESS.ProjectPlanReviewApprove](../tech_specs/projects_and_scopes.md#spec-cynai-access-projectplanreviewapprove)
+  [CYNAI.USRGWY.ProjectPlanApi](../tech_specs/user_api_gateway.md#spec-cynai-usrgwy-projectplanapi)
+  <a id="req-client-0179"></a>

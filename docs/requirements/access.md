@@ -61,10 +61,6 @@ It covers authorization, policy evaluation, RBAC, groups, and scope enforcement.
 - **REQ-ACCESS-0113:** Admin operations for groups/RBAC MUST be policy-gated.
   [CYNAI.ACCESS.UserApiDataRest](../tech_specs/rbac_and_groups.md#spec-cynai-access-userapirest)
   <a id="req-access-0113"></a>
-- **REQ-ACCESS-0120:** The Data REST API SHOULD expose groups, group memberships, roles, and role bindings to authorized users.
-  [CYNAI.ACCESS.UserApiDataRest](../tech_specs/rbac_and_groups.md#spec-cynai-access-userapirest)
-  <a id="req-access-0120"></a>
-
 - **REQ-ACCESS-0117:** The system SHOULD be default deny.
   [access_control.md](../tech_specs/access_control.md)
   <a id="req-access-0117"></a>
@@ -74,6 +70,10 @@ It covers authorization, policy evaluation, RBAC, groups, and scope enforcement.
 - **REQ-ACCESS-0119:** The orchestrator and the target service SHOULD both enforce policy.
   [access_control.md](../tech_specs/access_control.md)
   <a id="req-access-0119"></a>
+
+- **REQ-ACCESS-0120:** The Data REST API SHOULD expose groups, group memberships, roles, and role bindings to authorized users.
+  [CYNAI.ACCESS.UserApiDataRest](../tech_specs/rbac_and_groups.md#spec-cynai-access-userapirest)
+  <a id="req-access-0120"></a>
 
 - **REQ-ACCESS-0121:** Vector (similarity) retrieval MUST NOT bypass RBAC.
   Similarity search is only allowed within an already-authorized document set; authorization MUST be applied before similarity ranking.

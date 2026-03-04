@@ -34,6 +34,7 @@ docs-check *PATHS:
     @just fix-cynode {{ PATHS }}
     @just lint-md {{ PATHS }}
     @just validate-doc-links
+    @just validate-requirements
     @just validate-feature-files
 
 # Fix all instances of "Cynode" to "CyNode" in Markdown files. With no arguments fixes all .md; pass paths to fix only those.
@@ -333,6 +334,14 @@ validate-doc-links:
     pushd "{{ root_dir }}" >/dev/null
     trap 'popd >/dev/null 2>/dev/null || true' EXIT
     python3 .ci_scripts/validate_doc_links.py
+
+# Validate docs/requirements: no duplicate REQ ids, sequential ids, each REQ has a spec ref.
+validate-requirements:
+    #!/usr/bin/env bash
+    set -e
+    pushd "{{ root_dir }}" >/dev/null
+    trap 'popd >/dev/null 2>/dev/null || true' EXIT
+    python3 .ci_scripts/check_requirements.py
 
 # Validate Gherkin feature file conventions in features/
 validate-feature-files:

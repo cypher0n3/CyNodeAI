@@ -66,11 +66,6 @@ Technical specifications: [`docs/tech_specs/projects_and_scopes.md`](../tech_spe
   [CYNAI.ACCESS.ProjectPlan](../tech_specs/projects_and_scopes.md#spec-cynai-access-projectplan)
   [CYNAI.SCHEMA.TaskDependenciesTable](../tech_specs/postgres_schema.md#spec-cynai-schema-taskdependenciestable)
   <a id="req-projct-0111"></a>
-- **REQ-PROJCT-0123:** The system MUST support explicit task dependencies within a plan (task_dependencies table): a task may depend on one or more other tasks in the same plan; a task is runnable only when all its dependencies have status `completed`; failed or non-completed dependencies block dependents until the dependency is retried and completed; multiple tasks with no unsatisfied dependencies MAY run in parallel.
-  Editing a plan's task list or task dependencies MUST trigger plan revision and (when the plan is active) auto un-approve per REQ-PROJCT-0118 and REQ-PROJCT-0119.
-  [CYNAI.SCHEMA.TaskDependenciesTable](../tech_specs/postgres_schema.md#spec-cynai-schema-taskdependenciestable)
-  [CYNAI.ACCESS.ProjectPlanRevisions](../tech_specs/projects_and_scopes.md#spec-cynai-access-projectplanrevisions)
-  <a id="req-projct-0123"></a>
 - **REQ-PROJCT-0112:** The user's default project is a catch-all for unrelated tasks; the system (gateway, PMA) SHOULD prefer to associate to another project whenever possible (e.g. when the user or PMA can resolve a named project or the work clearly belongs to an existing non-default project).
   [CYNAI.ACCESS.DefaultProject](../tech_specs/projects_and_scopes.md#spec-cynai-access-defaultproject)
   <a id="req-projct-0112"></a>
@@ -98,6 +93,16 @@ Technical specifications: [`docs/tech_specs/projects_and_scopes.md`](../tech_spe
   [CYNAI.ACCESS.ProjectPlanAutoUnapprove](../tech_specs/projects_and_scopes.md#spec-cynai-access-projectplanautounapprove)
   [CYNAI.ACCESS.ProjectPlanState](../tech_specs/projects_and_scopes.md#spec-cynai-access-projectplanstate)
   <a id="req-projct-0118"></a>
+- **REQ-PROJCT-0119:** The system MUST store plan revisions so users can view plan change history (e.g. per-revision snapshot or delta).
+  Revisions MUST be created when the plan document, task list, or task dependencies change; storage format and retention are prescribed in tech specs.
+  [CYNAI.ACCESS.ProjectPlanRevisions](../tech_specs/projects_and_scopes.md#spec-cynai-access-projectplanrevisions)
+  [CYNAI.SCHEMA.ProjectPlanRevisionsTable](../tech_specs/postgres_schema.md#spec-cynai-schema-projectplanrevisionstable)
+  <a id="req-projct-0119"></a>
+- **REQ-PROJCT-0120:** Users MUST be able to review project plans and approve (or re-approve) plans via client tools (Web Console, CLI, or API).
+  Review includes viewing the plan document and task list and viewing plan revision history.
+  [CYNAI.ACCESS.ProjectPlanReviewApprove](../tech_specs/projects_and_scopes.md#spec-cynai-access-projectplanreviewapprove)
+  [CYNAI.USRGWY.ProjectPlanApi](../tech_specs/user_api_gateway.md#spec-cynai-usrgwy-projectplanapi)
+  <a id="req-projct-0120"></a>
 - **REQ-PROJCT-0121:** A plan's state MAY be set to completed only when the plan has at least one task and **all tasks** associated with that plan (tasks.plan_id = plan.id) **are closed** (`tasks.closed = true`; status is tracked separately per tech specs).
   A plan with no tasks is incomplete and MUST NOT be set to completed.
   The API (gateway) MUST enforce this condition and reject requests to set a plan to completed when the plan has no tasks or not all tasks are closed; agents and clients MUST use the API and are subject to the same enforcement.
@@ -109,16 +114,11 @@ Technical specifications: [`docs/tech_specs/projects_and_scopes.md`](../tech_spe
   [CYNAI.ACCESS.ProjectPlanState](../tech_specs/projects_and_scopes.md#spec-cynai-access-projectplanstate)
   [CYNAI.AGENTS.PlanApprovedPmaTasked](../tech_specs/project_manager_agent.md#spec-cynai-agents-planapprovedpmatasked)
   <a id="req-projct-0122"></a>
-- **REQ-PROJCT-0119:** The system MUST store plan revisions so users can view plan change history (e.g. per-revision snapshot or delta).
-  Revisions MUST be created when the plan document, task list, or task dependencies change; storage format and retention are prescribed in tech specs.
+- **REQ-PROJCT-0123:** The system MUST support explicit task dependencies within a plan (task_dependencies table): a task may depend on one or more other tasks in the same plan; a task is runnable only when all its dependencies have status `completed`; failed or non-completed dependencies block dependents until the dependency is retried and completed; multiple tasks with no unsatisfied dependencies MAY run in parallel.
+  Editing a plan's task list or task dependencies MUST trigger plan revision and (when the plan is active) auto un-approve per REQ-PROJCT-0118 and REQ-PROJCT-0119.
+  [CYNAI.SCHEMA.TaskDependenciesTable](../tech_specs/postgres_schema.md#spec-cynai-schema-taskdependenciestable)
   [CYNAI.ACCESS.ProjectPlanRevisions](../tech_specs/projects_and_scopes.md#spec-cynai-access-projectplanrevisions)
-  [CYNAI.SCHEMA.ProjectPlanRevisionsTable](../tech_specs/postgres_schema.md#spec-cynai-schema-projectplanrevisionstable)
-  <a id="req-projct-0119"></a>
-- **REQ-PROJCT-0120:** Users MUST be able to review project plans and approve (or re-approve) plans via client tools (Web Console, CLI, or API).
-  Review includes viewing the plan document and task list and viewing plan revision history.
-  [CYNAI.ACCESS.ProjectPlanReviewApprove](../tech_specs/projects_and_scopes.md#spec-cynai-access-projectplanreviewapprove)
-  [CYNAI.USRGWY.ProjectPlanApi](../tech_specs/user_api_gateway.md#spec-cynai-usrgwy-projectplanapi)
-  <a id="req-projct-0120"></a>
+  <a id="req-projct-0123"></a>
 - **REQ-PROJCT-0124:** The system MUST support an **archived** flag on plans (separate from state) for UI/API views and filtering.
   Archived plans MUST NOT run workflow (the workflow start gate MUST deny workflow start for tasks in an archived plan).
   Archived plans MUST NOT be the active plan (the API MUST reject setting a plan to active when archived = true, and MUST reject setting archived = true while the plan is active; the plan must be suspended or cancelled first).

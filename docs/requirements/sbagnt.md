@@ -61,13 +61,6 @@ Sandbox image and isolation requirements remain in the `SANDBX` domain.
   [CYNAI.SBAGNT.JobContext](../tech_specs/cynode_sba.md#spec-cynai-sbagnt-jobcontext)
   <a id="req-sbagnt-0107"></a>
 
-- **REQ-SBAGNT-0111:** The sandbox agent MUST receive and use baseline context (identity, role, responsibilities, non-goals) for every LLM it calls, and MUST receive user-configurable additional context resolved from preferences (same scope precedence as other preferences) and include it in LLM prompts.
-  [REQ-AGENTS-0132](./agents.md#req-agents-0132)
-  [REQ-AGENTS-0133](./agents.md#req-agents-0133)
-  [CYNAI.AGENTS.LLMContext](../tech_specs/project_manager_agent.md#spec-cynai-agents-llmcontext)
-  [CYNAI.SBAGNT.JobContext](../tech_specs/cynode_sba.md#spec-cynai-sbagnt-jobcontext)
-  <a id="req-sbagnt-0111"></a>
-
 - **REQ-SBAGNT-0108:** `cynode-sba` MUST be able to build and manage its own todo list based on the job (requirements, acceptance criteria, and any optional suggested steps in the job).
   The todo list MUST be derived from job context and updated as the SBA executes; the implementation MUST persist todo state as needed and MAY include a summary in the result contract.
   [CYNAI.SBAGNT.TodoList](../tech_specs/cynode_sba.md#spec-cynai-sbagnt-todolist)
@@ -85,6 +78,13 @@ Sandbox image and isolation requirements remain in the `SANDBX` domain.
   [CYNAI.SBAGNT.JobLifecycle](../tech_specs/cynode_sba.md#spec-cynai-sbagnt-joblifecycle)
   [CYNAI.WORKER.JobLifecycleResultPersistence](../tech_specs/worker_api.md#spec-cynai-worker-joblifecycleresultpersistence)
   <a id="req-sbagnt-0110"></a>
+
+- **REQ-SBAGNT-0111:** The sandbox agent MUST receive and use baseline context (identity, role, responsibilities, non-goals) for every LLM it calls, and MUST receive user-configurable additional context resolved from preferences (same scope precedence as other preferences) and include it in LLM prompts.
+  [REQ-AGENTS-0132](./agents.md#req-agents-0132)
+  [REQ-AGENTS-0133](./agents.md#req-agents-0133)
+  [CYNAI.AGENTS.LLMContext](../tech_specs/project_manager_agent.md#spec-cynai-agents-llmcontext)
+  [CYNAI.SBAGNT.JobContext](../tech_specs/cynode_sba.md#spec-cynai-sbagnt-jobcontext)
+  <a id="req-sbagnt-0111"></a>
 
 - **REQ-SBAGNT-0112:** The SBA MUST have the capabilities (local execution, outbound channels, job lifecycle reporting, MCP tools) specified in CYNAI.
   SBAGNT.
