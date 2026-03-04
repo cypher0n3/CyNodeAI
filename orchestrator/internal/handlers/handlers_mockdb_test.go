@@ -520,6 +520,40 @@ func TestTaskHandler_CreateTask_WithTaskName(t *testing.T) {
 	}
 }
 
+func TestTaskHandler_CreateTask_WithAttachments(t *testing.T) {
+	mockDB := testutil.NewMockDB()
+	logger := newTestLogger()
+	handler := NewTaskHandler(mockDB, logger, "", "")
+	userID := uuid.New()
+	ctx := context.WithValue(context.Background(), contextKeyUserID, userID)
+	body := userapi.CreateTaskRequest{
+		Prompt:      "prompt",
+		Attachments: []string{"a.txt", "subdir/b.csv"},
+	}
+	jsonBody, _ := json.Marshal(body)
+	req := httptest.NewRequest("POST", "/v1/tasks", bytes.NewBuffer(jsonBody)).WithContext(ctx)
+	rec := httptest.NewRecorder()
+	handler.CreateTask(rec, req)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("expected status 201, got %d: %s", rec.Code, rec.Body.String())
+	}
+	var resp userapi.TaskResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("unmarshal response: %v", err)
+	}
+	if len(resp.Attachments) != 2 {
+		t.Errorf("expected 2 attachments in response, got %d: %v", len(resp.Attachments), resp.Attachments)
+	}
+	taskID, _ := uuid.Parse(resp.ResolveTaskID())
+	paths, err := mockDB.ListArtifactPathsByTaskID(ctx, taskID)
+	if err != nil {
+		t.Fatalf("ListArtifactPathsByTaskID: %v", err)
+	}
+	if len(paths) != 2 {
+		t.Errorf("expected 2 artifact paths stored, got %d: %v", len(paths), paths)
+	}
+}
+
 func TestTaskHandler_CreateTaskWithUseInference_StoresUseInferenceInJobPayload(t *testing.T) {
 	mockDB := testutil.NewMockDB()
 	logger := newTestLogger()

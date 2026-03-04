@@ -43,3 +43,42 @@ class TestWorkerTelemetry(unittest.TestCase):
         self.assertIsNotNone(data)
         self.assertIn("version", data)
         self.assertIn("captured_at", data)
+
+    def test_containers_returns_list(self):
+        """GET containers with bearer returns 200 and containers array."""
+        if not config.WORKER_API_BEARER_TOKEN:
+            self.fail("WORKER_API_BEARER_TOKEN not set")
+        headers = {"Authorization": f"Bearer {config.WORKER_API_BEARER_TOKEN}"}
+        code, body = helpers.run_curl_with_status(
+            "GET",
+            f"{config.WORKER_API}/v1/worker/telemetry/containers",
+            headers=headers,
+        )
+        if not code:
+            self.fail("worker API not reachable")
+        self.assertEqual(code, 200, f"containers {code} {body}")
+        data = helpers.parse_json_safe(body)
+        self.assertIsNotNone(data)
+        self.assertIn("containers", data)
+        self.assertIsInstance(data["containers"], list)
+
+    def test_logs_returns_entries(self):
+        """GET logs with bearer returns 200 and events list."""
+        if not config.WORKER_API_BEARER_TOKEN:
+            self.fail("WORKER_API_BEARER_TOKEN not set")
+        headers = {"Authorization": f"Bearer {config.WORKER_API_BEARER_TOKEN}"}
+        code, body = helpers.run_curl_with_status(
+            "GET",
+            (
+                f"{config.WORKER_API}/v1/worker/telemetry/logs"
+                "?source_kind=service&source_name=node-manager"
+            ),
+            headers=headers,
+        )
+        if not code:
+            self.fail("worker API not reachable")
+        self.assertEqual(code, 200, f"logs {code} {body}")
+        data = helpers.parse_json_safe(body)
+        self.assertIsNotNone(data)
+        self.assertIn("events", data)
+        self.assertIsInstance(data["events"], list)

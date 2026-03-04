@@ -32,3 +32,19 @@ Scenario: Get node stats with bearer returns snapshot
 Scenario: Telemetry without bearer returns 401
   When I call GET "/v1/worker/telemetry/node:info" without authorization
   Then the response status is 401
+
+@req_worker_0240
+@req_worker_0241
+@spec_cynai_worker_telemetrysurface_v1
+Scenario: Get containers list with bearer returns array
+  When I call GET "/v1/worker/telemetry/containers" with bearer token "test-bearer-token"
+  Then the response status is 200
+  And the response JSON has "containers"
+
+@req_worker_0242
+@req_worker_0243
+@spec_cynai_worker_telemetrysurface_v1
+Scenario: Get logs with bearer returns entries
+  When I call GET "/v1/worker/telemetry/logs?source_kind=service&source_name=node-manager" with bearer token "test-bearer-token"
+  Then the response status is 200
+  And the response JSON has "events"

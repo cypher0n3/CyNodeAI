@@ -139,6 +139,25 @@ func workerMux(exec *executor.Executor, bearerToken string) *http.ServeMux {
 			"container_runtime": map[string]string{"runtime": getEnv("CONTAINER_RUNTIME", "direct"), "version": ""},
 		})
 	})
+	// Containers and logs (REQ-WORKER-0240--0243); BDD stub returns empty list/entries.
+	mux.HandleFunc("GET /v1/worker/telemetry/containers", func(w http.ResponseWriter, r *http.Request) {
+		const prefix = "Bearer "
+		authz := r.Header.Get("Authorization")
+		if len(authz) <= len(prefix) || authz[:len(prefix)] != prefix || authz[len(prefix):] != bearerToken {
+			writeProblem(w, http.StatusUnauthorized, problem.TypeAuthentication, "Unauthorized", "Invalid or missing bearer token")
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]interface{}{"containers": []interface{}{}})
+	})
+	mux.HandleFunc("GET /v1/worker/telemetry/logs", func(w http.ResponseWriter, r *http.Request) {
+		const prefix = "Bearer "
+		authz := r.Header.Get("Authorization")
+		if len(authz) <= len(prefix) || authz[:len(prefix)] != prefix || authz[len(prefix):] != bearerToken {
+			writeProblem(w, http.StatusUnauthorized, problem.TypeAuthentication, "Unauthorized", "Invalid or missing bearer token")
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]interface{}{"events": []interface{}{}, "truncated": false})
+	})
 	return mux
 }
 

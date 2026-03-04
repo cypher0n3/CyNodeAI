@@ -23,6 +23,7 @@ import (
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/database"
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/dispatcher"
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/models"
+	"github.com/cypher0n3/cynodeai/orchestrator/internal/nodetelemetry"
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/testutil"
 )
 
@@ -1398,4 +1399,74 @@ func TestDispatchOnce_WorkerAPIInvalidJSON(t *testing.T) {
 	if err != nil {
 		t.Fatalf("dispatchOnce should complete job as failed on invalid JSON: %v", err)
 	}
+}
+
+func TestPullNodeTelemetry(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("{}"))
+	}))
+	defer srv.Close()
+
+	ctx := context.Background()
+	client := nodetelemetry.NewClient()
+	logger := slog.Default()
+	pullNodeTelemetry(ctx, client, srv.URL, "", "node-1", logger)
+}
+
+// telemetryListErrorStore fails ListDispatchableNodes for runTelemetryPullLoop tests.
+type telemetryListErrorStore struct {
+	*testutil.MockDB
+}
+
+func (m *telemetryListErrorStore) ListDispatchableNodes(_ context.Context) ([]*models.Node, error) {
+	return nil, errors.New("list nodes failed")
+}
+
+func TestRunTelemetryPullLoop_ListFails(t *testing.T) {
+	store := &telemetryListErrorStore{MockDB: testutil.NewMockDB()}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	orig := telemetryPullInterval
+	telemetryPullInterval = 15 * time.Millisecond
+	defer func() { telemetryPullInterval = orig }()
+
+	done := make(chan struct{})
+	go func() {
+		runTelemetryPullLoop(ctx, store, slog.Default())
+		close(done)
+	}()
+	time.Sleep(25 * time.Millisecond) // one tick
+	cancel()
+	<-done
+}
+
+func TestRunTelemetryPullLoop_OneTick(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("{}"))
+	}))
+	defer srv.Close()
+
+	mock := testutil.NewMockDB()
+	ctx := context.Background()
+	node, _ := mock.CreateNode(ctx, "n1")
+	makeDispatchableNode(t, mock, ctx, node, srv.URL, "tok")
+
+	runCtx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	orig := telemetryPullInterval
+	telemetryPullInterval = 15 * time.Millisecond
+	defer func() { telemetryPullInterval = orig }()
+
+	done := make(chan struct{})
+	go func() {
+		runTelemetryPullLoop(runCtx, mock, slog.Default())
+		close(done)
+	}()
+	time.Sleep(35 * time.Millisecond) // allow one tick to run
+	cancel()
+	<-done
 }

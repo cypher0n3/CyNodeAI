@@ -25,6 +25,13 @@ Scenario: Duplicate start with different holder returns 409
   When I create a task with prompt "lease test" and start workflow for task with holder "runner-1" and start workflow for task with holder "runner-2"
   Then workflow start response status is 409
 
+@req_orches_0145
+@spec_cynai_orches_workflowstartresumeapi
+Scenario: Same holder start again returns 200 already_running
+  When I create a task with prompt "idempotent start" and start workflow for task with holder "runner-1" and start workflow for task again with holder "runner-1"
+  Then workflow start response status is 200
+  And workflow start response has status "already_running"
+
 @req_orches_0144
 @spec_cynai_orches_workflowstartresumeapi
 Scenario: Resume workflow returns checkpoint when saved

@@ -13,6 +13,20 @@ from scripts import setup_dev_impl
 PROJECT_ROOT = setup_dev_config.PROJECT_ROOT
 
 
+def _default_inference_env():
+    """Return default inference env for node startup and e2e."""
+    setup_dev_config.ensure_runtime()
+    host = setup_dev_config.CONTAINER_HOST_ALIAS or "host.containers.internal"
+    return {
+        "INFERENCE_PROXY_IMAGE": os.environ.get(
+            "INFERENCE_PROXY_IMAGE", "cynodeai-inference-proxy:dev"
+        ),
+        "OLLAMA_UPSTREAM_URL": os.environ.get(
+            "OLLAMA_UPSTREAM_URL", f"http://{host}:11434"
+        ),
+    }
+
+
 def show_help():
     """Print usage (parity with setup-dev.sh help)."""
     print("CyNodeAI Development Setup (Python)")
@@ -43,6 +57,10 @@ def show_help():
 
 def cmd_start(opts):
     """Build, start compose stack, wait for control-plane, start node."""
+    opts.extra_env = getattr(opts, "extra_env", None) or {}
+    defaults = _default_inference_env()
+    for k, v in defaults.items():
+        opts.extra_env.setdefault(k, v)
     if not setup_dev_impl.build_binaries():
         return False
     if not setup_dev_impl.start_orchestrator_stack_compose(extra_env=opts.extra_env):
@@ -127,7 +145,7 @@ def _run_stop():
 
 
 def _run_test_e2e():
-    return setup_dev_impl.run_python_e2e()
+    return setup_dev_impl.run_python_e2e(extra_env=_default_inference_env())
 
 
 def _run_restart():

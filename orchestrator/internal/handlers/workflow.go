@@ -68,31 +68,25 @@ type ReleaseWorkflowRequest struct {
 	LeaseID string `json:"lease_id"`
 }
 
-// Start handles POST /v1/workflow/start.
-func (h *WorkflowHandler) Start(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		WriteError(w, http.StatusMethodNotAllowed, "https://cynode.ai/specs/method-not-allowed", "Method Not Allowed", "")
-		return
+// startGateDenied runs the workflow start gate; returns true if the response was written (deny or error).
+func (h *WorkflowHandler) startGateDenied(w http.ResponseWriter, r *http.Request, task *models.Task, taskID uuid.UUID) bool {
+	requestedByPMA := r.Header.Get("X-Cynode-Workflow-Requested-By") == "pma"
+	denyReason, err := h.db.EvaluateWorkflowStartGate(r.Context(), task, requestedByPMA)
+	if err != nil {
+		h.logger.Error("workflow start gate failed", "error", err, "task_id", taskID)
+		WriteInternalError(w, "failed to evaluate workflow start gate")
+		return true
 	}
-	var req StartWorkflowRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		WriteBadRequest(w, "invalid JSON body")
-		return
+	if denyReason != "" {
+		WriteConflict(w, denyReason)
+		return true
 	}
-	taskID, err := uuid.Parse(req.TaskID)
-	if err != nil || req.HolderID == "" {
-		WriteBadRequest(w, "task_id and holder_id required")
-		return
-	}
-	if _, err := h.db.GetTaskByID(r.Context(), taskID); err != nil {
-		if errors.Is(err, database.ErrNotFound) {
-			WriteNotFound(w, "task not found")
-			return
-		}
-		h.logger.Error("get task failed", "error", err, "task_id", taskID)
-		WriteInternalError(w, "failed to get task")
-		return
-	}
+	return false
+}
+
+// startAcquireAndRespond acquires the workflow lease and writes the start response or an error.
+// When the lease is already held by the same holder (idempotent re-request), returns 200 with status "already_running" per REQ-ORCHES-0145.
+func (h *WorkflowHandler) startAcquireAndRespond(w http.ResponseWriter, r *http.Request, taskID uuid.UUID, req *StartWorkflowRequest) {
 	ttl := defaultLeaseTTL
 	if req.ExpiresInSec != nil && *req.ExpiresInSec > 0 {
 		ttl = time.Duration(*req.ExpiresInSec) * time.Second
@@ -103,6 +97,16 @@ func (h *WorkflowHandler) Start(w http.ResponseWriter, r *http.Request) {
 		if id, err := uuid.Parse(req.IdempotencyKey); err == nil {
 			leaseID = id
 		}
+	}
+	existing, err := h.db.GetTaskWorkflowLease(r.Context(), taskID)
+	if err == nil && existing != nil && existing.HolderID != nil && *existing.HolderID == req.HolderID &&
+		existing.LeaseID == leaseID && existing.ExpiresAt != nil && existing.ExpiresAt.After(time.Now().UTC()) {
+		WriteJSON(w, http.StatusOK, StartWorkflowResponse{
+			RunID:   existing.LeaseID.String(),
+			LeaseID: existing.LeaseID.String(),
+			Status:  "already_running",
+		})
+		return
 	}
 	lease, err := h.db.AcquireTaskWorkflowLease(r.Context(), taskID, leaseID, req.HolderID, expiresAt)
 	if err != nil {
@@ -119,6 +123,38 @@ func (h *WorkflowHandler) Start(w http.ResponseWriter, r *http.Request) {
 		LeaseID: lease.LeaseID.String(),
 		Status:  "started",
 	})
+}
+
+// Start handles POST /v1/workflow/start.
+func (h *WorkflowHandler) Start(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		WriteError(w, http.StatusMethodNotAllowed, "https://cynode.ai/specs/method-not-allowed", "Method Not Allowed", "")
+		return
+	}
+	var req StartWorkflowRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		WriteBadRequest(w, "invalid JSON body")
+		return
+	}
+	taskID, err := uuid.Parse(req.TaskID)
+	if err != nil || req.HolderID == "" {
+		WriteBadRequest(w, "task_id and holder_id required")
+		return
+	}
+	task, err := h.db.GetTaskByID(r.Context(), taskID)
+	if err != nil {
+		if errors.Is(err, database.ErrNotFound) {
+			WriteNotFound(w, "task not found")
+			return
+		}
+		h.logger.Error("get task failed", "error", err, "task_id", taskID)
+		WriteInternalError(w, "failed to get task")
+		return
+	}
+	if h.startGateDenied(w, r, task, taskID) {
+		return
+	}
+	h.startAcquireAndRespond(w, r, taskID, &req)
 }
 
 // Resume handles POST /v1/workflow/resume.

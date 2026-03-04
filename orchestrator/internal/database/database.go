@@ -102,8 +102,10 @@ type Store interface {
 	UpdatePreference(ctx context.Context, scopeType string, scopeID *uuid.UUID, key, value, valueType string, expectedVersion *int, reason, updatedBy *string) (*models.PreferenceEntry, error)
 	DeletePreference(ctx context.Context, scopeType string, scopeID *uuid.UUID, key string, expectedVersion *int, reason *string) error
 
-	// Task artifacts (artifact.get MCP tool).
+	// Task artifacts (artifact.get MCP tool; REQ-ORCHES-0127 attachment ingestion).
 	GetArtifactByTaskIDAndPath(ctx context.Context, taskID uuid.UUID, path string) (*models.TaskArtifact, error)
+	CreateTaskArtifact(ctx context.Context, taskID uuid.UUID, path, storageRef string, sizeBytes *int64) (*models.TaskArtifact, error)
+	ListArtifactPathsByTaskID(ctx context.Context, taskID uuid.UUID) ([]string, error)
 
 	// Chat threads and messages (OpenAI-compatible chat API).
 	GetOrCreateActiveChatThread(ctx context.Context, userID uuid.UUID, projectID *uuid.UUID) (*models.ChatThread, error)
@@ -118,12 +120,21 @@ type Store interface {
 	DeleteSkill(ctx context.Context, id uuid.UUID) error
 	EnsureDefaultSkill(ctx context.Context, content string) error
 
+	// Workflow start gate (REQ-ORCHES-0152, REQ-ORCHES-0153, langgraph_mvp.md WorkflowStartGatePlanApproved).
+	EvaluateWorkflowStartGate(ctx context.Context, task *models.Task, requestedByPMA bool) (denyReason string, err error)
+
 	// Workflow lease and checkpoint (REQ-ORCHES-0144--0147, langgraph_mvp.md).
 	AcquireTaskWorkflowLease(ctx context.Context, taskID uuid.UUID, leaseID uuid.UUID, holderID string, expiresAt time.Time) (*models.TaskWorkflowLease, error)
 	ReleaseTaskWorkflowLease(ctx context.Context, taskID uuid.UUID, leaseID uuid.UUID) error
 	GetTaskWorkflowLease(ctx context.Context, taskID uuid.UUID) (*models.TaskWorkflowLease, error)
 	GetWorkflowCheckpoint(ctx context.Context, taskID uuid.UUID) (*models.WorkflowCheckpoint, error)
 	UpsertWorkflowCheckpoint(ctx context.Context, cp *models.WorkflowCheckpoint) error
+
+	// Access control and API egress (REQ-APIEGR-0110--0113, access_control.md).
+	ListAccessControlRulesForApiCall(ctx context.Context, subjectType string, subjectID *uuid.UUID, action, resourceType string) ([]*models.AccessControlRule, error)
+	CreateAccessControlAuditLog(ctx context.Context, rec *models.AccessControlAuditLog) error
+	HasActiveApiCredentialForUserAndProvider(ctx context.Context, userID uuid.UUID, provider string) (bool, error)
+	HasAnyActiveApiCredential(ctx context.Context) (bool, error)
 }
 
 // DB wraps GORM database operations.

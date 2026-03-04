@@ -26,7 +26,9 @@ class TestAPIEgressCall(unittest.TestCase):
             headers=headers or None,
         )
         if not code:
-            self.fail("api-egress not reachable (start stack with optional profile: just setup-dev start)")
+            self.fail(
+                "api-egress not reachable (start stack: just setup-dev start)"
+            )
         self.assertEqual(code, 501, f"allowed provider: {code} {resp_body}")
         data = helpers.parse_json_safe(resp_body)
         self.assertIsNotNone(data)

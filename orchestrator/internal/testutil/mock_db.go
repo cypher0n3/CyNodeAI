@@ -42,6 +42,11 @@ type MockDB struct {
 	TaskWorkflowLeases    map[uuid.UUID]*models.TaskWorkflowLease
 	WorkflowCheckpoints   map[uuid.UUID]*models.WorkflowCheckpoint
 
+	// Access control and API egress (for handler tests).
+	AccessControlRules       []*models.AccessControlRule
+	HasActiveApiCredential   bool
+	HasAnyActiveApiCredentialResult bool // for control-plane inference-path readiness (external key)
+
 	// Error injection
 	ForceError error
 
@@ -62,6 +67,10 @@ type MockDB struct {
 	UpdateSkillErr error
 	// DeleteSkillErr, when set, makes DeleteSkill return this error (for handler tests).
 	DeleteSkillErr error
+	// EvaluateWorkflowStartGateDenyReason, when set, makes EvaluateWorkflowStartGate return (this, nil).
+	EvaluateWorkflowStartGateDenyReason string
+	// EvaluateWorkflowStartGateErr, when set, makes EvaluateWorkflowStartGate return ("", this).
+	EvaluateWorkflowStartGateErr error
 }
 
 // NodeCapabilitySnapshot represents a stored capability snapshot.
@@ -879,6 +888,37 @@ func (m *MockDB) GetArtifactByTaskIDAndPath(_ context.Context, taskID uuid.UUID,
 	})
 }
 
+// CreateTaskArtifact appends an artifact to the mock slice.
+func (m *MockDB) CreateTaskArtifact(_ context.Context, taskID uuid.UUID, path, storageRef string, sizeBytes *int64) (*models.TaskArtifact, error) {
+	return runWithLock(m, true, func() (*models.TaskArtifact, error) {
+		now := time.Now().UTC()
+		ent := &models.TaskArtifact{
+			ID:         uuid.New(),
+			TaskID:     taskID,
+			Path:       path,
+			StorageRef: storageRef,
+			SizeBytes:  sizeBytes,
+			CreatedAt:  now,
+			UpdatedAt:  now,
+		}
+		m.TaskArtifacts = append(m.TaskArtifacts, ent)
+		return ent, nil
+	})
+}
+
+// ListArtifactPathsByTaskID returns paths of artifacts for the task.
+func (m *MockDB) ListArtifactPathsByTaskID(_ context.Context, taskID uuid.UUID) ([]string, error) {
+	return runWithLock(m, false, func() ([]string, error) {
+		var paths []string
+		for _, a := range m.TaskArtifacts {
+			if a.TaskID == taskID {
+				paths = append(paths, a.Path)
+			}
+		}
+		return paths, nil
+	})
+}
+
 // GetOrCreateActiveChatThread returns or creates a chat thread for (userID, projectID).
 func (m *MockDB) GetOrCreateActiveChatThread(_ context.Context, userID uuid.UUID, projectID *uuid.UUID) (*models.ChatThread, error) {
 	return runWithLock(m, true, func() (*models.ChatThread, error) {
@@ -1019,6 +1059,13 @@ func (m *MockDB) EnsureDefaultSkill(_ context.Context, content string) error {
 	})
 }
 
+func (m *MockDB) EvaluateWorkflowStartGate(_ context.Context, _ *models.Task, _ bool) (string, error) {
+	if m.EvaluateWorkflowStartGateErr != nil {
+		return "", m.EvaluateWorkflowStartGateErr
+	}
+	return m.EvaluateWorkflowStartGateDenyReason, nil
+}
+
 func (m *MockDB) AcquireTaskWorkflowLease(_ context.Context, taskID, leaseID uuid.UUID, holderID string, expiresAt time.Time) (*models.TaskWorkflowLease, error) {
 	return runWithLock(m, true, func() (*models.TaskWorkflowLease, error) {
 		now := time.Now().UTC()
@@ -1087,6 +1134,37 @@ func (m *MockDB) UpsertWorkflowCheckpoint(_ context.Context, cp *models.Workflow
 		}
 		m.WorkflowCheckpoints[cp.TaskID] = cp
 		return nil
+	})
+}
+
+func (m *MockDB) ListAccessControlRulesForApiCall(_ context.Context, subjectType string, subjectID *uuid.UUID, action, resourceType string) ([]*models.AccessControlRule, error) {
+	return runWithLock(m, false, func() ([]*models.AccessControlRule, error) {
+		if m.AccessControlRules == nil {
+			return nil, nil
+		}
+		out := make([]*models.AccessControlRule, 0, len(m.AccessControlRules))
+		for _, r := range m.AccessControlRules {
+			if r != nil && r.Action == action && r.ResourceType == resourceType {
+				out = append(out, r)
+			}
+		}
+		return out, nil
+	})
+}
+
+func (m *MockDB) CreateAccessControlAuditLog(_ context.Context, _ *models.AccessControlAuditLog) error {
+	return nil
+}
+
+func (m *MockDB) HasActiveApiCredentialForUserAndProvider(_ context.Context, _ uuid.UUID, _ string) (bool, error) {
+	return runWithLock(m, false, func() (bool, error) {
+		return m.HasActiveApiCredential, nil
+	})
+}
+
+func (m *MockDB) HasAnyActiveApiCredential(_ context.Context) (bool, error) {
+	return runWithLock(m, false, func() (bool, error) {
+		return m.HasAnyActiveApiCredentialResult, nil
 	})
 }
 

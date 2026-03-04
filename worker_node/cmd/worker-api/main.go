@@ -20,6 +20,7 @@ import (
 	"github.com/cypher0n3/cynodeai/go_shared_libs/contracts/problem"
 	"github.com/cypher0n3/cynodeai/go_shared_libs/contracts/workerapi"
 	"github.com/cypher0n3/cynodeai/worker_node/cmd/worker-api/executor"
+	"github.com/cypher0n3/cynodeai/worker_node/internal/telemetry"
 )
 
 func main() {
@@ -46,7 +47,16 @@ func runMain(ctx context.Context) int {
 		nil,
 	)
 	workspaceRoot := getEnv("WORKSPACE_ROOT", filepath.Join(os.TempDir(), "cynodeai-workspaces"))
-	mux := newMux(exec, bearerToken, workspaceRoot, logger)
+	stateDir := getEnv("WORKER_API_STATE_DIR", filepath.Join(os.TempDir(), "cynode", "state"))
+	var telemetryStore *telemetry.Store
+	if ts, err := telemetry.Open(ctx, stateDir); err != nil {
+		logger.Warn("telemetry store unavailable, containers/logs endpoints disabled", "error", err)
+	} else {
+		telemetryStore = ts
+		defer func() { _ = telemetryStore.Close() }()
+		go runRetentionAndVacuum(ctx, telemetryStore, logger)
+	}
+	mux := newMux(exec, bearerToken, workspaceRoot, telemetryStore, logger)
 	srv := newServer(mux)
 
 	serverErr := make(chan error, 1)
@@ -71,7 +81,43 @@ func runMain(ctx context.Context) int {
 	return 0
 }
 
-func newMux(exec *executor.Executor, bearerToken, workspaceRoot string, logger *slog.Logger) *http.ServeMux {
+// doRetentionAndVacuumOnce runs retention and vacuum once; used by runRetentionAndVacuum and tests.
+func doRetentionAndVacuumOnce(ctx context.Context, store *telemetry.Store, logger *slog.Logger) {
+	if err := store.EnforceRetention(ctx); err != nil {
+		logger.Warn("telemetry retention", "error", err)
+	}
+	if err := store.Vacuum(ctx); err != nil {
+		logger.Warn("telemetry vacuum", "error", err)
+	}
+}
+
+// retentionTickerInterval and vacuumTickerInterval are used by runRetentionAndVacuum; tests may override for coverage.
+var retentionTickerInterval = time.Hour
+var vacuumTickerInterval = 24 * time.Hour
+
+func runRetentionAndVacuum(ctx context.Context, store *telemetry.Store, logger *slog.Logger) {
+	doRetentionAndVacuumOnce(ctx, store, logger)
+	retentionTicker := time.NewTicker(retentionTickerInterval)
+	defer retentionTicker.Stop()
+	vacuumTicker := time.NewTicker(vacuumTickerInterval)
+	defer vacuumTicker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-retentionTicker.C:
+			if err := store.EnforceRetention(ctx); err != nil {
+				logger.Warn("telemetry retention", "error", err)
+			}
+		case <-vacuumTicker.C:
+			if err := store.Vacuum(ctx); err != nil {
+				logger.Warn("telemetry vacuum", "error", err)
+			}
+		}
+	}
+}
+
+func newMux(exec *executor.Executor, bearerToken, workspaceRoot string, telemetryStore *telemetry.Store, logger *slog.Logger) *http.ServeMux {
 	mux := http.NewServeMux()
 	// REQ-WORKER-0140, REQ-WORKER-0141: unauthenticated GET /healthz; body plain text "ok" per worker_api.md
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
@@ -82,9 +128,14 @@ func newMux(exec *executor.Executor, bearerToken, workspaceRoot string, logger *
 	// REQ-WORKER-0140, REQ-WORKER-0142: unauthenticated GET /readyz
 	mux.HandleFunc("GET /readyz", readyzHandler(exec))
 	mux.HandleFunc("POST /v1/worker/jobs:run", handleRunJob(exec, bearerToken, workspaceRoot, logger))
-	// REQ-WORKER-0200--0243: Worker Telemetry API (first slice: node:info, node:stats).
+	// REQ-WORKER-0200--0243: Worker Telemetry API.
 	mux.HandleFunc("GET /v1/worker/telemetry/node:info", telemetryAuth(bearerToken, handleNodeInfo(logger)))
 	mux.HandleFunc("GET /v1/worker/telemetry/node:stats", telemetryAuth(bearerToken, handleNodeStats(logger)))
+	if telemetryStore != nil {
+		mux.HandleFunc("GET /v1/worker/telemetry/containers", telemetryAuth(bearerToken, handleListContainers(telemetryStore)))
+		mux.HandleFunc("GET /v1/worker/telemetry/containers/", telemetryAuth(bearerToken, handleGetContainer(telemetryStore)))
+		mux.HandleFunc("GET /v1/worker/telemetry/logs", telemetryAuth(bearerToken, handleQueryLogs(telemetryStore)))
+	}
 	return mux
 }
 
@@ -260,6 +311,106 @@ func writeProblem(w http.ResponseWriter, status int, typ, title, detail string) 
 		Status: status,
 		Detail: detail,
 	})
+}
+
+func handleListContainers(store *telemetry.Store) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			writeProblem(w, http.StatusMethodNotAllowed, problem.TypeValidation, "Method Not Allowed", "")
+			return
+		}
+		q := r.URL.Query()
+		limit := 100
+		if l := q.Get("limit"); l != "" {
+			if n, err := strconv.Atoi(l); err == nil && n > 0 && n <= 1000 {
+				limit = n
+			}
+		}
+		list, nextToken, err := store.ListContainers(r.Context(), q.Get("kind"), q.Get("status"), q.Get("task_id"), q.Get("job_id"), q.Get("page_token"), limit)
+		if err != nil {
+			writeProblem(w, http.StatusInternalServerError, problem.TypeInternal, "Internal Server Error", "")
+			return
+		}
+		if list == nil {
+			list = []telemetry.ContainerRow{}
+		}
+		resp := map[string]interface{}{"version": 1, "containers": list}
+		if nextToken != "" {
+			resp["next_page_token"] = nextToken
+		}
+		writeJSON(w, http.StatusOK, resp)
+	}
+}
+
+func handleGetContainer(store *telemetry.Store) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			writeProblem(w, http.StatusMethodNotAllowed, problem.TypeValidation, "Method Not Allowed", "")
+			return
+		}
+		containerID := strings.TrimPrefix(r.URL.Path, "/v1/worker/telemetry/containers/")
+		if containerID == "" {
+			writeProblem(w, http.StatusNotFound, problem.TypeNotFound, "Not Found", "container_id required")
+			return
+		}
+		c, err := store.GetContainer(r.Context(), containerID)
+		if err != nil {
+			writeProblem(w, http.StatusInternalServerError, problem.TypeInternal, "Internal Server Error", "")
+			return
+		}
+		if c == nil {
+			writeProblem(w, http.StatusNotFound, problem.TypeNotFound, "Not Found", "container not found")
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]interface{}{"version": 1, "container": c})
+	}
+}
+
+func parseLogsLimit(limitParam string) int {
+	const defaultLimit, maxLimit = 1000, 5000
+	if limitParam == "" {
+		return defaultLimit
+	}
+	n, err := strconv.Atoi(limitParam)
+	if err != nil || n <= 0 || n > maxLimit {
+		return defaultLimit
+	}
+	return n
+}
+
+func validateLogsQuery(sourceKind, containerID string) string {
+	if sourceKind != "" || containerID != "" {
+		return ""
+	}
+	return "source_kind+source_name or source_kind=container+container_id required"
+}
+
+func handleQueryLogs(store *telemetry.Store) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet {
+			writeProblem(w, http.StatusMethodNotAllowed, problem.TypeValidation, "Method Not Allowed", "")
+			return
+		}
+		q := r.URL.Query()
+		if msg := validateLogsQuery(q.Get("source_kind"), q.Get("container_id")); msg != "" {
+			writeProblem(w, http.StatusBadRequest, problem.TypeValidation, "Bad Request", msg)
+			return
+		}
+		limit := parseLogsLimit(q.Get("limit"))
+		events, truncated, nextToken, err := store.QueryLogs(r.Context(), q.Get("source_kind"), q.Get("source_name"), q.Get("container_id"), q.Get("stream"), q.Get("since"), q.Get("until"), q.Get("page_token"), limit)
+		if err != nil {
+			writeProblem(w, http.StatusBadRequest, problem.TypeValidation, "Bad Request", err.Error())
+			return
+		}
+		if events == nil {
+			events = []telemetry.LogEventRow{}
+		}
+		resp := map[string]interface{}{"version": 1, "events": events, "truncated": truncated}
+		if nextToken != "" {
+			resp["next_page_token"] = nextToken
+		}
+		writeJSON(w, http.StatusOK, resp)
+	}
 }
 
 func writeJSON(w http.ResponseWriter, status int, v any) {

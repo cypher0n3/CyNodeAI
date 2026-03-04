@@ -517,6 +517,11 @@ func TestWithTestcontainers_PreferenceCRUDAndArtifact(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateTask: %v", err)
 	}
+	tcAssertTaskArtifacts(t, store, ctx, task)
+}
+
+func tcAssertTaskArtifacts(t *testing.T, store Store, ctx context.Context, task *models.Task) {
+	t.Helper()
 	db := store.(*DB)
 	art := &models.TaskArtifact{
 		ID:         uuid.New(),
@@ -539,5 +544,121 @@ func TestWithTestcontainers_PreferenceCRUDAndArtifact(t *testing.T) {
 	_, err = store.GetArtifactByTaskIDAndPath(ctx, task.ID, "missing")
 	if err != ErrNotFound {
 		t.Errorf("GetArtifactByTaskIDAndPath missing: want ErrNotFound, got %v", err)
+	}
+	art2, errArt := store.CreateTaskArtifact(ctx, task.ID, "upload/a.txt", "", nil)
+	if errArt != nil {
+		t.Fatalf("CreateTaskArtifact: %v", errArt)
+	}
+	if art2.Path != "upload/a.txt" || art2.TaskID != task.ID {
+		t.Errorf("CreateTaskArtifact: got %+v", art2)
+	}
+	paths, err := store.ListArtifactPathsByTaskID(ctx, task.ID)
+	if err != nil {
+		t.Fatalf("ListArtifactPathsByTaskID: %v", err)
+	}
+	if len(paths) != 2 {
+		t.Errorf("ListArtifactPathsByTaskID: want 2 paths, got %d: %v", len(paths), paths)
+	}
+	pathSet := make(map[string]bool)
+	for _, p := range paths {
+		pathSet[p] = true
+	}
+	if !pathSet["tc/out.txt"] || !pathSet["upload/a.txt"] {
+		t.Errorf("ListArtifactPathsByTaskID: want tc/out.txt and upload/a.txt, got %v", paths)
+	}
+	_, errDup := store.CreateTaskArtifact(ctx, task.ID, "upload/a.txt", "", nil)
+	if errDup == nil {
+		t.Error("CreateTaskArtifact duplicate path: expected error")
+	}
+}
+
+func tcAssertHasAnyActiveApiCredential(t *testing.T, store Store, ctx context.Context, want bool) {
+	t.Helper()
+	got, err := store.HasAnyActiveApiCredential(ctx)
+	if err != nil {
+		t.Fatalf("HasAnyActiveApiCredential: %v", err)
+	}
+	if got != want {
+		t.Errorf("HasAnyActiveApiCredential: got %v want %v", got, want)
+	}
+}
+
+func TestWithTestcontainers_AccessControlAndApiCredential(t *testing.T) {
+	ctx := context.Background()
+	store := tcOpenDB(t, ctx)
+	user, err := store.CreateUser(ctx, "tc-ac-user", nil)
+	if err != nil {
+		t.Fatalf("CreateUser: %v", err)
+	}
+	task, err := store.CreateTask(ctx, &user.ID, "tc-ac-task", nil)
+	if err != nil {
+		t.Fatalf("CreateTask: %v", err)
+	}
+	tcAssertHasAnyActiveApiCredential(t, store, ctx, false)
+	db := store.(*DB)
+	now := time.Now().UTC()
+	rule := &models.AccessControlRule{
+		ID:              uuid.New(),
+		SubjectType:     "user",
+		SubjectID:       &user.ID,
+		Action:          ActionApiCall,
+		ResourceType:    ResourceTypeProviderOperation,
+		ResourcePattern: "openai/chat",
+		Effect:          "allow",
+		Priority:        10,
+		CreatedAt:       now,
+		UpdatedAt:       now,
+	}
+	if err := db.GORM().WithContext(ctx).Create(rule).Error; err != nil {
+		t.Fatalf("create access_control_rule: %v", err)
+	}
+	cred := &models.ApiCredential{
+		ID:           uuid.New(),
+		OwnerType:    "user",
+		OwnerID:      user.ID,
+		Provider:     "openai",
+		CredentialType: "api_key",
+		CredentialName: "default",
+		IsActive:     true,
+		CreatedAt:    now,
+		UpdatedAt:    now,
+	}
+	if err := db.GORM().WithContext(ctx).Create(cred).Error; err != nil {
+		t.Fatalf("create api_credential: %v", err)
+	}
+	rules, err := store.ListAccessControlRulesForApiCall(ctx, "user", &user.ID, ActionApiCall, ResourceTypeProviderOperation)
+	if err != nil {
+		t.Fatalf("ListAccessControlRulesForApiCall: %v", err)
+	}
+	if len(rules) < 1 {
+		t.Errorf("ListAccessControlRulesForApiCall: want at least one rule, got %d", len(rules))
+	}
+	hasCred, err := store.HasActiveApiCredentialForUserAndProvider(ctx, user.ID, "openai")
+	if err != nil {
+		t.Fatalf("HasActiveApiCredentialForUserAndProvider: %v", err)
+	}
+	if !hasCred {
+		t.Error("HasActiveApiCredentialForUserAndProvider: want true")
+	}
+	tcAssertHasAnyActiveApiCredential(t, store, ctx, true)
+	cancelCtx, cancel := context.WithCancel(ctx)
+	cancel()
+	if _, err := store.HasAnyActiveApiCredential(cancelCtx); err == nil {
+		t.Error("HasAnyActiveApiCredential with cancelled context: expected error")
+	}
+	auditRec := &models.AccessControlAuditLog{
+		SubjectType:  "user",
+		SubjectID:    &user.ID,
+		Action:       ActionApiCall,
+		ResourceType: ResourceTypeProviderOperation,
+		Resource:     "openai/chat",
+		Decision:     "allow",
+		TaskID:       &task.ID,
+	}
+	if err := store.CreateAccessControlAuditLog(ctx, auditRec); err != nil {
+		t.Fatalf("CreateAccessControlAuditLog: %v", err)
+	}
+	if auditRec.ID == uuid.Nil || auditRec.CreatedAt.IsZero() {
+		t.Error("CreateAccessControlAuditLog: expected ID and CreatedAt set")
 	}
 }

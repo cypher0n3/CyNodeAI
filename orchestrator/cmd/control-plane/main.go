@@ -21,6 +21,7 @@ import (
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/database"
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/handlers"
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/middleware"
+	"github.com/cypher0n3/cynodeai/orchestrator/internal/nodetelemetry"
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/pmasubprocess"
 )
 
@@ -201,6 +202,7 @@ func run(ctx context.Context, store database.Store, cfg *config.OrchestratorConf
 	if cfg.PMAEnabled {
 		go startPMAWhenInferencePathReady(ctx, store, cfg, logger, &pmaCmdMu, &pmaCmd)
 	}
+	go runTelemetryPullLoop(ctx, store, logger)
 
 	done := make(chan os.Signal, 1)
 	signal.Notify(done, os.Interrupt, syscall.SIGTERM)
@@ -245,7 +247,23 @@ func run(ctx context.Context, store database.Store, cfg *config.OrchestratorConf
 // testPMAPollInterval, when set by tests, shortens the poll interval in startPMAWhenInferencePathReady.
 var testPMAPollInterval time.Duration
 
-// waitForInferencePath polls ListDispatchableNodes until at least one node is available or ctx is done.
+// inferencePathAvailable returns true when at least one inference path exists: dispatchable node or external API credential (REQ-ORCHES-0150, orchestrator_bootstrap.md).
+func inferencePathAvailable(ctx context.Context, store database.Store) (bool, error) {
+	nodes, err := store.ListDispatchableNodes(ctx)
+	if err != nil {
+		return false, err
+	}
+	if len(nodes) > 0 {
+		return true, nil
+	}
+	hasCred, err := store.HasAnyActiveApiCredential(ctx)
+	if err != nil {
+		return false, err
+	}
+	return hasCred, nil
+}
+
+// waitForInferencePath polls until at least one inference path is available (node or external key) or ctx is done.
 // Returns true when inference path is available, false when ctx cancelled. Used by startPMAWhenInferencePathReady and tests.
 func waitForInferencePath(ctx context.Context, store database.Store, logger *slog.Logger) bool {
 	pollInterval := 2 * time.Second
@@ -258,15 +276,15 @@ func waitForInferencePath(ctx context.Context, store database.Store, logger *slo
 			return false
 		default:
 		}
-		nodes, err := store.ListDispatchableNodes(ctx)
+		ok, err := inferencePathAvailable(ctx, store)
 		if err != nil {
 			if logger != nil {
-				logger.Warn("PMA startup check: list nodes failed", "error", err)
+				logger.Warn("PMA startup check: inference path check failed", "error", err)
 			}
 			time.Sleep(pollInterval)
 			continue
 		}
-		if len(nodes) > 0 {
+		if ok {
 			return true
 		}
 		time.Sleep(pollInterval)
@@ -291,6 +309,53 @@ func startPMAWhenInferencePathReady(ctx context.Context, store database.Store, c
 		pmaCmdMu.Lock()
 		*pmaCmdPtr = cmd
 		pmaCmdMu.Unlock()
+	}
+}
+
+// telemetryPullInterval is the period for pulling node telemetry; tests may override.
+var telemetryPullInterval = 60 * time.Second
+
+// pullNodeTelemetry pulls node:info and node:stats for one node; logs errors only.
+func pullNodeTelemetry(ctx context.Context, client *nodetelemetry.Client, baseURL, bearer, nodeID string, logger *slog.Logger) {
+	pullCtx, cancel := context.WithTimeout(ctx, nodetelemetry.DefaultTimeout+time.Second)
+	defer cancel()
+	if _, err := client.PullNodeInfo(pullCtx, baseURL, bearer); err != nil {
+		logger.Debug("telemetry pull node:info failed", "node_id", nodeID, "error", err)
+	}
+	if _, err := client.PullNodeStats(pullCtx, baseURL, bearer); err != nil {
+		logger.Debug("telemetry pull node:stats failed", "node_id", nodeID, "error", err)
+	}
+}
+
+// runTelemetryPullLoop periodically pulls node:info and node:stats from dispatchable nodes (REQ-ORCHES-0141--0143).
+// Failures are logged and do not affect control-plane stability.
+func runTelemetryPullLoop(ctx context.Context, store database.Store, logger *slog.Logger) {
+	client := nodetelemetry.NewClient()
+	ticker := time.NewTicker(telemetryPullInterval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+		}
+		listCtx, listCancel := context.WithTimeout(ctx, 5*time.Second)
+		nodes, err := store.ListDispatchableNodes(listCtx)
+		listCancel()
+		if err != nil {
+			logger.Debug("telemetry pull: list nodes failed", "error", err)
+			continue
+		}
+		for _, n := range nodes {
+			if n.WorkerAPITargetURL == nil || *n.WorkerAPITargetURL == "" {
+				continue
+			}
+			bearer := ""
+			if n.WorkerAPIBearerToken != nil {
+				bearer = *n.WorkerAPIBearerToken
+			}
+			pullNodeTelemetry(ctx, client, *n.WorkerAPITargetURL, bearer, n.ID.String(), logger)
+		}
 	}
 }
 
@@ -328,7 +393,7 @@ func pmaReady(ctx context.Context, listenAddr string) bool {
 func readyzHandler(store database.Store, cfg *config.OrchestratorConfig, logger *slog.Logger) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		ctx := r.Context()
-		nodes, err := store.ListDispatchableNodes(ctx)
+		hasPath, err := inferencePathAvailable(ctx, store)
 		if err != nil {
 			if logger != nil {
 				logger.Error("readyz check failed", "error", err)
@@ -338,8 +403,8 @@ func readyzHandler(store database.Store, cfg *config.OrchestratorConfig, logger 
 			_, _ = w.Write([]byte("readiness check failed (database error)"))
 			return
 		}
-		// REQ-ORCHES-0120: require at least one inference path before reporting ready.
-		if len(nodes) == 0 {
+		// REQ-ORCHES-0120: require at least one inference path (dispatchable node or external API credential) before reporting ready.
+		if !hasPath {
 			w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 			w.WriteHeader(http.StatusServiceUnavailable)
 			_, _ = w.Write([]byte("no inference path available (no dispatchable nodes; register and configure a worker node or configure external provider keys)"))

@@ -381,6 +381,10 @@ func TestIntegration_Preferences_ListLimitAndCursor(t *testing.T) {
 	_, _, _ = db.ListPreferences(ctx, "system", nil, "cap.key.", 2, next2)
 }
 
+// Invalid JSON in preference value cannot be stored (value column is JSONB); the skip-on-unmarshal
+// path in GetEffectivePreferencesForTask is defensive. Parser behavior is covered by
+// TestParsePreferenceValue_InvalidJSON in preferences_test.go.
+
 // TestIntegration_Preferences_EffectiveWithNilValue covers GetEffectivePreferencesForTask when an entry has nil value (skip unmarshal).
 func TestIntegration_Preferences_EffectiveWithNilValue(t *testing.T) {
 	db, ctx := integrationDB(t)
@@ -1177,5 +1181,178 @@ func TestIntegration_CreateRefreshSession_ReturnsSession(t *testing.T) {
 	}
 	if !session.IsActive || session.ExpiresAt.Before(time.Now().UTC()) {
 		t.Errorf("CreateRefreshSession: IsActive=%v ExpiresAt=%v", session.IsActive, session.ExpiresAt)
+	}
+}
+
+// workflowGateCreateProjectAndPlan creates a project and plan for workflow gate tests.
+func workflowGateCreateProjectAndPlan(t *testing.T, db *DB, ctx context.Context, now time.Time, state string, archived bool) (*models.Project, uuid.UUID) {
+	t.Helper()
+	proj := &models.Project{
+		ID:          uuid.New(),
+		Slug:        "gate-proj-" + uuid.New().String()[:8],
+		DisplayName: "Gate Project",
+		IsActive:    true,
+		CreatedAt:   now,
+		UpdatedAt:   now,
+	}
+	if err := db.GORM().WithContext(ctx).Create(proj).Error; err != nil {
+		t.Fatalf("create project: %v", err)
+	}
+	planID := uuid.New()
+	plan := &models.ProjectPlan{
+		ID:        planID,
+		ProjectID: proj.ID,
+		State:     state,
+		Archived:  archived,
+		CreatedAt: now,
+		UpdatedAt: now,
+	}
+	if err := db.GORM().WithContext(ctx).Create(plan).Error; err != nil {
+		t.Fatalf("create plan: %v", err)
+	}
+	return proj, planID
+}
+
+// workflowGateCreateTaskWithPlan creates a task with plan_id set.
+func workflowGateCreateTaskWithPlan(t *testing.T, db *DB, ctx context.Context, planID uuid.UUID, slug string) *models.Task {
+	t.Helper()
+	task, err := db.CreateTask(ctx, nil, slug, nil)
+	if err != nil {
+		t.Fatalf("CreateTask: %v", err)
+	}
+	if err := db.GORM().WithContext(ctx).Model(&models.Task{}).Where("id = ?", task.ID).Update("plan_id", planID).Error; err != nil {
+		t.Fatalf("update task plan_id: %v", err)
+	}
+	task, err = db.GetTaskByID(ctx, task.ID)
+	if err != nil {
+		t.Fatalf("GetTaskByID: %v", err)
+	}
+	return task
+}
+
+func TestIntegration_WorkflowStartGate_NoPlan(t *testing.T) {
+	db, ctx := integrationDB(t)
+	task, err := db.CreateTask(ctx, nil, "workflow-gate-noplan", nil)
+	if err != nil {
+		t.Fatalf("CreateTask: %v", err)
+	}
+	deny, err := db.EvaluateWorkflowStartGate(ctx, task, false)
+	if err != nil {
+		t.Fatalf("EvaluateWorkflowStartGate: %v", err)
+	}
+	if deny != "" {
+		t.Errorf("got deny=%q want allow", deny)
+	}
+}
+
+func TestIntegration_WorkflowStartGate_PlanNotFound(t *testing.T) {
+	db, ctx := integrationDB(t)
+	task, err := db.CreateTask(ctx, nil, "workflow-gate-badplan", nil)
+	if err != nil {
+		t.Fatalf("CreateTask: %v", err)
+	}
+	nonexistentPlanID := uuid.New()
+	if err := db.GORM().WithContext(ctx).Model(&models.Task{}).Where("id = ?", task.ID).Update("plan_id", nonexistentPlanID).Error; err != nil {
+		t.Fatalf("update: %v", err)
+	}
+	task, err = db.GetTaskByID(ctx, task.ID)
+	if err != nil {
+		t.Fatalf("GetTaskByID: %v", err)
+	}
+	deny, err := db.EvaluateWorkflowStartGate(ctx, task, false)
+	if err != nil {
+		t.Fatalf("EvaluateWorkflowStartGate: %v", err)
+	}
+	if deny != "plan not found" {
+		t.Errorf("got deny=%q want plan not found", deny)
+	}
+}
+
+func TestIntegration_WorkflowStartGate_PlanState(t *testing.T) {
+	db, ctx := integrationDB(t)
+	now := time.Now().UTC()
+	cases := []struct {
+		name       string
+		state      string
+		archived   bool
+		pma        bool
+		wantDeny   string
+	}{
+		{"draft_deny", "draft", false, false, "plan not active"},
+		{"draft_pma_allow", "draft", false, true, ""},
+		{"archived_deny", "active", true, false, "plan is archived"},
+		{"active_allow", "active", false, false, ""},
+	}
+	for _, c := range cases {
+		c := c
+		t.Run(c.name, func(t *testing.T) {
+			_, planID := workflowGateCreateProjectAndPlan(t, db, ctx, now, c.state, c.archived)
+			task := workflowGateCreateTaskWithPlan(t, db, ctx, planID, "workflow-gate-"+c.name)
+			deny, err := db.EvaluateWorkflowStartGate(ctx, task, c.pma)
+			if err != nil {
+				t.Fatalf("EvaluateWorkflowStartGate: %v", err)
+			}
+			if deny != c.wantDeny {
+				t.Errorf("got deny=%q want %q", deny, c.wantDeny)
+			}
+		})
+	}
+}
+
+func TestIntegration_WorkflowStartGate_DepsNotSatisfied(t *testing.T) {
+	db, ctx := integrationDB(t)
+	now := time.Now().UTC()
+	_, planID := workflowGateCreateProjectAndPlan(t, db, ctx, now, "active", false)
+	task := workflowGateCreateTaskWithPlan(t, db, ctx, planID, "workflow-gate-deps")
+	depTask, err := db.CreateTask(ctx, nil, "gate-dep-task", nil)
+	if err != nil {
+		t.Fatalf("CreateTask dep: %v", err)
+	}
+	if err := db.GORM().WithContext(ctx).Model(&models.Task{}).Where("id = ?", depTask.ID).Update("plan_id", planID).Error; err != nil {
+		t.Fatalf("update dep plan_id: %v", err)
+	}
+	depRow := &models.TaskDependency{ID: uuid.New(), TaskID: task.ID, DependsOnTaskID: depTask.ID}
+	if err := db.GORM().WithContext(ctx).Create(depRow).Error; err != nil {
+		t.Fatalf("create task_dependency: %v", err)
+	}
+	task, err = db.GetTaskByID(ctx, task.ID)
+	if err != nil {
+		t.Fatalf("GetTaskByID: %v", err)
+	}
+	deny, err := db.EvaluateWorkflowStartGate(ctx, task, false)
+	if err != nil {
+		t.Fatalf("EvaluateWorkflowStartGate: %v", err)
+	}
+	if deny != "dependencies not satisfied" {
+		t.Errorf("got deny=%q want dependencies not satisfied", deny)
+	}
+}
+
+func TestIntegration_WorkflowStartGate_DepTaskNotFound(t *testing.T) {
+	db, ctx := integrationDB(t)
+	now := time.Now().UTC()
+	_, planID := workflowGateCreateProjectAndPlan(t, db, ctx, now, "active", false)
+	task := workflowGateCreateTaskWithPlan(t, db, ctx, planID, "workflow-gate-dep-missing")
+	missingDepID := uuid.New()
+	depRow := &models.TaskDependency{ID: uuid.New(), TaskID: task.ID, DependsOnTaskID: missingDepID}
+	if err := db.GORM().WithContext(ctx).Create(depRow).Error; err != nil {
+		t.Fatalf("create task_dependency: %v", err)
+	}
+	deny, err := db.EvaluateWorkflowStartGate(ctx, task, false)
+	if err != nil {
+		t.Fatalf("EvaluateWorkflowStartGate: %v", err)
+	}
+	if deny != "dependency task not found" {
+		t.Errorf("got deny=%q want dependency task not found", deny)
+	}
+}
+
+func TestIntegration_HasAnyActiveApiCredential_CancelledContext(t *testing.T) {
+	db, _ := integrationDB(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	_, err := db.HasAnyActiveApiCredential(ctx)
+	if err == nil {
+		t.Error("HasAnyActiveApiCredential with cancelled context: expected error")
 	}
 }

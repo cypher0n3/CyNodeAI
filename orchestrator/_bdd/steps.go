@@ -935,6 +935,22 @@ func RegisterOrchestratorSteps(sc *godog.ScenarioContext, state *testState) {
 		}
 		return nil
 	})
+	sc.Step(`^workflow start response has status "([^"]*)"$`, func(ctx context.Context, want string) error {
+		st := getState(ctx)
+		if st == nil || len(st.workflowStartBody) == 0 {
+			return godog.ErrSkip
+		}
+		var out struct {
+			Status string `json:"status"`
+		}
+		if err := json.Unmarshal(st.workflowStartBody, &out); err != nil {
+			return err
+		}
+		if out.Status != want {
+			return fmt.Errorf("workflow start status field got %q, want %q", out.Status, want)
+		}
+		return nil
+	})
 	sc.Step(`^I save checkpoint for task with last_node_id "([^"]*)"$`, func(ctx context.Context, nodeID string) error {
 		st := getState(ctx)
 		if st == nil || st.server == nil || st.taskID == "" {
@@ -1223,6 +1239,65 @@ func RegisterOrchestratorSteps(sc *godog.ScenarioContext, state *testState) {
 		defer resp4.Body.Close()
 		st.lastStatusCode = resp4.StatusCode
 		st.workflowStartBody, _ = io.ReadAll(resp4.Body)
+		return nil
+	})
+	sc.Step(`^I create a task with prompt "([^"]*)" and start workflow for task with holder "([^"]*)" and start workflow for task again with holder "([^"]*)"$`, func(ctx context.Context, prompt, holder, holderAgain string) error {
+		st := getState(ctx)
+		if st == nil || st.server == nil {
+			return godog.ErrSkip
+		}
+		body, _ := json.Marshal(map[string]string{"prompt": prompt})
+		req, _ := http.NewRequest("POST", st.server.URL+"/v1/tasks", bytes.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer "+st.accessToken)
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			return err
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusCreated {
+			return fmt.Errorf("create task returned %d", resp.StatusCode)
+		}
+		var out struct {
+			TaskID string `json:"task_id"`
+		}
+		if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+			return err
+		}
+		st.taskID = out.TaskID
+		body2, _ := json.Marshal(map[string]string{"task_id": st.taskID, "holder_id": holder})
+		req2, _ := http.NewRequest("POST", st.server.URL+"/v1/workflow/start", bytes.NewReader(body2))
+		req2.Header.Set("Content-Type", "application/json")
+		resp2, err := http.DefaultClient.Do(req2)
+		if err != nil {
+			return err
+		}
+		defer resp2.Body.Close()
+		st.lastStatusCode = resp2.StatusCode
+		st.workflowStartBody, _ = io.ReadAll(resp2.Body)
+		if st.lastStatusCode != http.StatusOK {
+			return nil
+		}
+		var startOut struct {
+			LeaseID string `json:"lease_id"`
+		}
+		if err := json.Unmarshal(st.workflowStartBody, &startOut); err != nil || startOut.LeaseID == "" {
+			return fmt.Errorf("first start response missing lease_id (need for idempotency)")
+		}
+		body3, _ := json.Marshal(map[string]string{
+			"task_id":         st.taskID,
+			"holder_id":       holderAgain,
+			"idempotency_key": startOut.LeaseID,
+		})
+		req3, _ := http.NewRequest("POST", st.server.URL+"/v1/workflow/start", bytes.NewReader(body3))
+		req3.Header.Set("Content-Type", "application/json")
+		resp3, err := http.DefaultClient.Do(req3)
+		if err != nil {
+			return err
+		}
+		defer resp3.Body.Close()
+		st.lastStatusCode = resp3.StatusCode
+		st.workflowStartBody, _ = io.ReadAll(resp3.Body)
 		return nil
 	})
 	// API egress stub (POST /v1/call)

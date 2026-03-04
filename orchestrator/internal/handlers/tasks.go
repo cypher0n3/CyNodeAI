@@ -47,6 +47,29 @@ const InputModePrompt = "prompt"
 
 const streamParamAll = "all"
 
+const maxAttachmentPathLen = 2048
+
+// persistTaskAttachments validates and persists attachment path references for the task (REQ-ORCHES-0127).
+// Returns the list of paths that were stored (for response).
+func (h *TaskHandler) persistTaskAttachments(ctx context.Context, taskID uuid.UUID, raw []string) []string {
+	if len(raw) == 0 {
+		return nil
+	}
+	var stored []string
+	for _, p := range raw {
+		path := strings.TrimSpace(p)
+		if path == "" || len(path) > maxAttachmentPathLen {
+			continue
+		}
+		if _, err := h.db.CreateTaskArtifact(ctx, taskID, path, "", nil); err != nil {
+			h.logger.Warn("create task artifact", "task_id", taskID, "path", path, "error", err)
+			continue
+		}
+		stored = append(stored, path)
+	}
+	return stored
+}
+
 // taskStatusToSpec maps internal task status to userapi status enum (queued, running, completed, failed, canceled).
 func taskStatusToSpec(status string) string {
 	switch status {
@@ -59,8 +82,8 @@ func taskStatusToSpec(status string) string {
 	}
 }
 
-func taskToResponse(t *models.Task, status string) userapi.TaskResponse {
-	return userapi.TaskResponse{
+func taskToResponse(t *models.Task, status string, attachmentPaths []string) userapi.TaskResponse {
+	resp := userapi.TaskResponse{
 		ID:        t.ID.String(),
 		TaskID:    t.ID.String(),
 		Status:    status,
@@ -70,6 +93,10 @@ func taskToResponse(t *models.Task, status string) userapi.TaskResponse {
 		CreatedAt: t.CreatedAt.Format(time.RFC3339),
 		UpdatedAt: t.UpdatedAt.Format(time.RFC3339),
 	}
+	if len(attachmentPaths) > 0 {
+		resp.Attachments = attachmentPaths
+	}
+	return resp
 }
 
 // CreateTask handles POST /v1/tasks.
@@ -95,13 +122,15 @@ func (h *TaskHandler) CreateTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	attachmentPaths := h.persistTaskAttachments(ctx, task.ID, req.Attachments)
+
 	inputMode := req.InputMode
 	if inputMode == "" {
 		inputMode = InputModePrompt
 	}
 
 	if req.UseSBA {
-		if h.createTaskSBA(ctx, w, task, req.Prompt) {
+		if h.createTaskSBA(ctx, w, task, req.Prompt, attachmentPaths) {
 			return
 		}
 	}
@@ -111,7 +140,7 @@ func (h *TaskHandler) CreateTask(w http.ResponseWriter, r *http.Request) {
 		job, inferErr := h.createTaskWithOrchestratorInference(ctx, task.ID, req.Prompt)
 		if inferErr == nil {
 			_ = job // job already completed
-			WriteJSON(w, http.StatusCreated, taskToResponse(task, taskStatusToSpec(models.TaskStatusCompleted)))
+			WriteJSON(w, http.StatusCreated, taskToResponse(task, taskStatusToSpec(models.TaskStatusCompleted), attachmentPaths))
 			return
 		}
 		// Fall back to sandbox job path on inference failure
@@ -135,7 +164,7 @@ func (h *TaskHandler) CreateTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	WriteJSON(w, http.StatusCreated, taskToResponse(task, taskStatusToSpec(task.Status)))
+	WriteJSON(w, http.StatusCreated, taskToResponse(task, taskStatusToSpec(task.Status), attachmentPaths))
 }
 
 // createTaskWithOrchestratorInference calls the PM model with the prompt and stores the result as a completed job.
@@ -200,7 +229,7 @@ except Exception as e: print('[Ollama request failed]', str(e), file=sys.stderr)
 `
 
 // createTaskSBA creates a single job with SBA runner (job_spec_json) and writes 201 or 5xx (P2-10).
-func (h *TaskHandler) createTaskSBA(ctx context.Context, w http.ResponseWriter, task *models.Task, prompt string) bool {
+func (h *TaskHandler) createTaskSBA(ctx context.Context, w http.ResponseWriter, task *models.Task, prompt string, attachmentPaths []string) bool {
 	jobID := uuid.New()
 	payload, err := buildSBAJobPayload(task.ID, jobID, prompt)
 	if err != nil {
@@ -213,7 +242,7 @@ func (h *TaskHandler) createTaskSBA(ctx context.Context, w http.ResponseWriter, 
 		WriteInternalError(w, "Failed to create task job")
 		return true
 	}
-	WriteJSON(w, http.StatusCreated, taskToResponse(task, taskStatusToSpec(task.Status)))
+	WriteJSON(w, http.StatusCreated, taskToResponse(task, taskStatusToSpec(task.Status), attachmentPaths))
 	return true
 }
 
@@ -302,7 +331,8 @@ func (h *TaskHandler) GetTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	WriteJSON(w, http.StatusOK, taskToResponse(task, taskStatusToSpec(task.Status)))
+	paths, _ := h.db.ListArtifactPathsByTaskID(ctx, task.ID)
+	WriteJSON(w, http.StatusOK, taskToResponse(task, taskStatusToSpec(task.Status), paths))
 }
 
 func jobToResponse(job *models.Job) userapi.JobResponse {
@@ -412,7 +442,8 @@ func (h *TaskHandler) ListTasks(w http.ResponseWriter, r *http.Request) {
 		if statusFilter != "" && taskStatusToSpec(t.Status) != statusFilter {
 			continue
 		}
-		out = append(out, taskToResponse(t, taskStatusToSpec(t.Status)))
+		paths, _ := h.db.ListArtifactPathsByTaskID(ctx, t.ID)
+		out = append(out, taskToResponse(t, taskStatusToSpec(t.Status), paths))
 	}
 	resp := userapi.ListTasksResponse{Tasks: out}
 	if hasMore {

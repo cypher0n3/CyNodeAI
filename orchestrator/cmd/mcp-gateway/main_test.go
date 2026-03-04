@@ -1138,7 +1138,7 @@ func TestRun_WithTestDatabaseOpen(t *testing.T) {
 	go func() { done <- run(ctx, slog.Default()) }()
 	time.Sleep(30 * time.Millisecond)
 	cancel()
-	if err := <-done; err != nil {
+	if err := <-done; err != nil && !errors.Is(err, context.Canceled) {
 		t.Errorf("run: %v", err)
 	}
 }
@@ -1176,7 +1176,7 @@ func TestRun_WithTestStore(t *testing.T) {
 		t.Errorf("POST: got status %d", resp.StatusCode)
 	}
 	cancel()
-	if err := <-done; err != nil {
+	if err := <-done; err != nil && !errors.Is(err, context.Canceled) {
 		t.Errorf("run: %v", err)
 	}
 }

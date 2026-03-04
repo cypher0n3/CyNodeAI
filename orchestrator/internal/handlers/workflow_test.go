@@ -91,6 +91,41 @@ func TestWorkflowHandler_Start_TaskNotFound(t *testing.T) {
 	}
 }
 
+func TestWorkflowHandler_Start_GateDenied(t *testing.T) {
+	mock := testutil.NewMockDB()
+	taskID := uuid.New()
+	planID := uuid.New()
+	mock.AddTask(&models.Task{ID: taskID, Status: models.TaskStatusPending, PlanID: &planID})
+	mock.EvaluateWorkflowStartGateDenyReason = "plan not active"
+	h := NewWorkflowHandler(mock, slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelError})))
+
+	body := map[string]interface{}{"task_id": taskID.String(), "holder_id": "runner-1"}
+	req := httptest.NewRequest("POST", "/v1/workflow/start", jsonBody(t, body))
+	rec := httptest.NewRecorder()
+	h.Start(rec, req)
+
+	if rec.Code != http.StatusConflict {
+		t.Errorf("Start gate denied: got %d %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestWorkflowHandler_Start_GateError(t *testing.T) {
+	mock := testutil.NewMockDB()
+	taskID := uuid.New()
+	mock.AddTask(&models.Task{ID: taskID, Status: models.TaskStatusPending})
+	mock.EvaluateWorkflowStartGateErr = errors.New("db unavailable")
+	h := NewWorkflowHandler(mock, slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelError})))
+
+	body := map[string]interface{}{"task_id": taskID.String(), "holder_id": "runner-1"}
+	req := httptest.NewRequest("POST", "/v1/workflow/start", jsonBody(t, body))
+	rec := httptest.NewRecorder()
+	h.Start(rec, req)
+
+	if rec.Code != http.StatusInternalServerError {
+		t.Errorf("Start gate error: got %d %s", rec.Code, rec.Body.String())
+	}
+}
+
 func TestWorkflowHandler_Start_DuplicateDifferentHolder_Conflict(t *testing.T) {
 	mock := testutil.NewMockDB()
 	taskID := uuid.New()

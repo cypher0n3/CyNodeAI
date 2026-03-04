@@ -21,40 +21,49 @@ Go implementation drift against:
 - API egress and worker telemetry are implemented as minimal slices and remain
   materially below full MVP requirement coverage.
 
+## Execution Status
+
+Completed (as of 2026-03-03): P2-1, P0-1, P0-2, P0-3, P1-1, P1-2, P1-3, P1-4.
+See `docs/dev_docs/2026-03-03_remediation_execution_report.md`.
+
 ## Rank-Ordered Remediation Items
+
+Items below are ordered by dependency; execute in the order given in Dependency Order.
 
 ### P0-1: Complete API Egress Access-Control and Credential Model
 
-#### Why This Rank
+Access-control and credential checks per API egress requirements.
+
+#### Why This Rank (P0-1)
 
 - Current implementation only enforces bearer and provider allowlist.
 - High drift from `REQ-APIEGR-0111` through `REQ-APIEGR-0113`.
 
-#### Traceability
+#### Traceability Links (P0-1)
 
 - Requirements: `REQ-APIEGR-0110`, `REQ-APIEGR-0111`, `REQ-APIEGR-0112`,
   `REQ-APIEGR-0113`, `REQ-APIEGR-0119`, `REQ-APIEGR-0001`
 - Specs: `api_egress_server.md`, `access_control.md`
 
-#### Implementation Targets
+#### Implementation Targets (P0-1)
 
 - `orchestrator/cmd/api-egress/main.go`
 - supporting orchestrator storage/policy integration surfaces
 
-#### Remediation Scope
+#### Remediation Scope (P0-1)
 
 - Resolve subject identity from request context (not only static bearer match).
 - Enforce provider + operation policy checks.
 - Add credential authorization checks (`active`, owner/scope constraints).
 - Preserve and extend audit event shape (allow/deny, task context, decision reason).
 
-#### Acceptance Criteria
+#### Acceptance Criteria (P0-1)
 
 - Disallowed subject/provider/operation combinations return explicit denial.
 - Unauthorized credential usage is blocked even when provider is allowed.
 - Audit records contain subject, task, provider, operation, decision, and reason.
 
-#### Validation
+#### Validation Steps (P0-1)
 
 - `just test-go`
 - targeted API egress unit/integration tests
@@ -63,12 +72,14 @@ Go implementation drift against:
 
 ### P0-2: Implement Worker Telemetry API Contract and SQLite Telemetry Store
 
-#### Why This Rank
+SQLite store, retention, and telemetry endpoints per worker telemetry spec.
+
+#### Why This Rank (P0-2)
 
 - Current node telemetry surface is stub-only (`node:info`, `node:stats`).
 - Major unmet requirements across storage, retention, log query, and inventory.
 
-#### Traceability
+#### Traceability Links (P0-2)
 
 - Requirements: `REQ-WORKER-0210`, `REQ-WORKER-0211`, `REQ-WORKER-0212`,
   `REQ-WORKER-0220`, `REQ-WORKER-0221`, `REQ-WORKER-0222`,
@@ -77,12 +88,12 @@ Go implementation drift against:
   `REQ-WORKER-0241`, `REQ-WORKER-0242`, `REQ-WORKER-0243`
 - Specs: `worker_telemetry_api.md`
 
-#### Implementation Targets
+#### Implementation Targets (P0-2)
 
 - `worker_node/cmd/worker-api/main.go`
 - new worker telemetry persistence and retention packages/files
 
-#### Remediation Scope
+#### Remediation Scope (P0-2)
 
 - Add SQLite telemetry DB at `${storage.state_dir}/telemetry/telemetry.db`.
 - Implement required schema and startup migrations.
@@ -90,13 +101,13 @@ Go implementation drift against:
 - Add telemetry endpoints: containers list/get and logs query with strict bounds.
 - Enforce source filter and pagination semantics for log queries.
 
-#### Acceptance Criteria
+#### Acceptance Criteria (P0-2)
 
 - Endpoint contract matches required request/response fields and limits.
 - Log query enforces 1 MiB max response and truncation metadata.
 - Telemetry rows preserve `task_id` and `job_id` where known.
 
-#### Validation
+#### Validation Steps (P0-2)
 
 - `just test-go`
 - worker telemetry unit/integration coverage
@@ -105,36 +116,38 @@ Go implementation drift against:
 
 ### P0-3: Enforce Workflow Start Gate for Plan State and Dependencies
 
-#### Why This Rank
+Plan and dependency gates before workflow start per langgraph_mvp.
+
+#### Why This Rank (P0-3)
 
 - Current workflow start checks task existence and lease only.
 - Required gating for plan approval/dependencies is missing.
 
-#### Traceability
+#### Traceability Links (P0-3)
 
 - Requirements: `REQ-ORCHES-0152`, `REQ-ORCHES-0153`
 - Specs: `langgraph_mvp.md` (`WorkflowStartGatePlanApproved`,
   `WorkflowPlanOrder`)
 
-#### Implementation Targets
+#### Implementation Targets (P0-3)
 
 - `orchestrator/internal/handlers/workflow.go`
 - database layer for plan/dependency lookup and gate evaluation
 
-#### Remediation Scope
+#### Remediation Scope (P0-3)
 
 - Implement plan gate algorithm before lease acquisition.
 - Deny start when plan not active unless explicit PMA handoff path applies.
 - Enforce dependency-complete checks for `task_dependencies`.
 - Return defined conflict/forbidden errors with clear reason strings.
 
-#### Acceptance Criteria
+#### Acceptance Criteria (P0-3)
 
 - Planned task with unsatisfied dependency cannot start.
 - Planned task with non-active plan cannot start unless PMA override semantics apply.
 - Unplanned task path remains startable under existing lease semantics.
 
-#### Validation
+#### Validation Steps (P0-3)
 
 - `just test-go`
 - workflow handler + DB integration tests
@@ -143,163 +156,173 @@ Go implementation drift against:
 
 ### P1-1: Align PMA Startup and Readiness Gating With Full Inference-Path Rule
 
-#### Why This Rank
+Readiness includes external inference path; see orchestrator_bootstrap.
+
+#### Why This Rank (P1-1)
 
 - Current readiness/startup depends on dispatchable nodes only.
 - External-key inference path semantics are not modeled.
 
-#### Traceability
+#### Traceability Links (P1-1)
 
 - Requirements: `REQ-ORCHES-0150`, `REQ-ORCHES-0120`
 - Specs: `orchestrator_bootstrap.md`
 
-#### Implementation Targets
+#### Implementation Targets (P1-1)
 
 - `orchestrator/cmd/control-plane/main.go`
 - relevant config and readiness helpers
 
-#### Remediation Scope
+#### Remediation Scope (P1-1)
 
 - Expand inference-path check to include configured PMA external-provider path.
 - Ensure PMA startup is triggered by either valid local inference path or valid
   external key path.
 - Keep readiness reasons explicit and actionable.
 
-#### Acceptance Criteria
+#### Acceptance Criteria (P1-1)
 
 - PMA does not start before first valid inference path.
 - Ready state is consistent with PMA reachability and inference-path availability.
 
-#### Validation
+#### Validation Steps (P1-1)
 
 - `just test-go`
 - control-plane readiness/startup tests
 
 ### P1-2: Implement Task Attachment Ingestion and Propagation
 
-#### Why This Rank
+Task create must persist and expose attachment references per user_api_gateway.
+
+#### Why This Rank (P1-2)
 
 - Contract accepts attachments, but task create path ignores them.
 - This is direct drift against user gateway requirements.
 
-#### Traceability
+#### Traceability Links (P1-2)
 
 - Requirements: `REQ-ORCHES-0127`, `REQ-CLIENT-0157`
 - Specs: `user_api_gateway.md`, task-create sections
 
-#### Implementation Targets
+#### Implementation Targets (P1-2)
 
 - `orchestrator/internal/handlers/tasks.go`
 - database/artifact persistence paths
 - shared request/response contracts as needed
 
-#### Remediation Scope
+#### Remediation Scope (P1-2)
 
 - Validate and persist attachment references on task creation.
 - Connect attachment metadata to task/job execution context.
 - Expose consistent retrieval semantics for API and CLI consumers.
 
-#### Acceptance Criteria
+#### Acceptance Criteria (P1-2)
 
 - Create-task with attachments stores and returns usable attachment linkage.
 - Downstream task execution can access declared attachments.
 
-#### Validation
+#### Validation Steps (P1-2)
 
 - `just test-go`
 - BDD/e2e attachment scenarios in orchestrator and cynork suites
 
 ### P1-3: Add Explicit "Already_running_running" Workflow Start Idempotency Response
 
-#### Why This Rank
+Support idempotent start with explicit already_running where the contract allows.
+
+#### Why This Rank (P1-3)
 
 - Workflow spec allows 409 or explicit already-running response.
 - Current behavior always returns 409 unless same holder + same lease ID.
 
-#### Traceability
+#### Traceability Links (P1-3)
 
 - Requirements: `REQ-ORCHES-0145`
 - Specs: `langgraph_mvp.md` (`WorkflowStartResumeAPI`)
 
-#### Implementation Targets
+#### Implementation Targets (P1-3)
 
 - `orchestrator/internal/handlers/workflow.go`
 - `orchestrator/internal/database/workflow.go`
 
-#### Remediation Scope
+#### Remediation Scope (P1-3)
 
 - Support idempotent start behavior with explicit `already_running` status where
   contract calls for it.
 - Preserve single-active-workflow guarantee.
 
-#### Acceptance Criteria
+#### Acceptance Criteria (P1-3)
 
 - Duplicate start semantics are deterministic and documented in response payloads.
 - No second workflow instance starts for same task.
 
-#### Validation
+#### Validation Steps (P1-3)
 
 - `just test-go`
 - workflow handler tests for both 409 and already-running paths (as designed)
 
 ### P1-4: Implement Orchestrator-Side Worker Telemetry Pull With Timeout Tolerance
 
-#### Why This Rank
+Orchestrator pulls node:info and node:stats with timeout-tolerant failure handling.
+
+#### Why This Rank (P1-4)
 
 - Worker telemetry endpoint foundation exists, but orchestrator consumption path is absent.
 
-#### Traceability
+#### Traceability Links (P1-4)
 
 - Requirements: `REQ-ORCHES-0141`, `REQ-ORCHES-0142`, `REQ-ORCHES-0143`
 - Specs: `worker_telemetry_api.md` (`NodeTelemetryPull`)
 
-#### Implementation Targets
+#### Implementation Targets (P1-4)
 
 - orchestrator runtime service/client layer for worker telemetry calls
 
-#### Remediation Scope
+#### Remediation Scope (P1-4)
 
 - Add orchestrator client calls for `node:info` and `node:stats`.
 - Enforce per-request timeout and tolerant failure handling.
 - Ensure telemetry data remains non-authoritative for correctness decisions.
 
-#### Acceptance Criteria
+#### Acceptance Criteria (P1-4)
 
 - Node telemetry pull failures degrade gracefully without destabilizing control-plane.
 - Telemetry pull logic is test-covered for timeout/unavailable node cases.
 
-#### Validation
+#### Validation Steps (P1-4)
 
 - `just test-go`
 - targeted orchestrator telemetry pull tests
 
 ### P2-1: Restore and Lock Quality-Gate Reliability
 
-#### Why This Rank
+Fix failing integration test and ensure `just ci` passes.
+
+#### Why This Rank (P2-1)
 
 - Current branch fails `just ci`, reducing confidence in all further remediation.
 
-#### Traceability
+#### Traceability Links (P2-1)
 
 - Plan alignment: `docs/mvp_plan.md` quality-gate expectations
 
-#### Implementation Targets
+#### Implementation Targets (P2-1)
 
 - `orchestrator/internal/database/integration_test.go`
 - any related DB helper code if required
 
-#### Remediation Scope
+#### Remediation Scope (P2-1)
 
 - Fix invalid JSON preference integration test setup so it remains deterministic
   and schema-valid.
 - Reconfirm package coverage thresholds remain above gate levels.
 
-#### Acceptance Criteria
+#### Acceptance Criteria (P2-1)
 
 - `just ci` passes locally.
 - No regression in BDD pass state.
 
-#### Validation
+#### Validation Steps (P2-1)
 
 - `just ci`
 - `just test-bdd`

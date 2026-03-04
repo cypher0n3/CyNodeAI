@@ -17,6 +17,7 @@ import (
 
 var taskCreatePrompt string
 var taskCreateTaskName string
+var taskCreateAttachments []string
 var taskCreateUseInference bool
 var taskCreateInputMode string
 var taskCreateUseSBA bool
@@ -105,6 +106,7 @@ func init() {
 	taskWatchCmd.Flags().BoolVar(&taskWatchNoClear, "no-clear", false, "do not clear screen between polls")
 	taskCreateCmd.Flags().StringVarP(&taskCreatePrompt, "prompt", "p", "", "task prompt (natural language or command)")
 	taskCreateCmd.Flags().StringVar(&taskCreateTaskName, "task-name", "", "optional task name (normalized per Task Naming)")
+	taskCreateCmd.Flags().StringArrayVar(&taskCreateAttachments, "attachment", nil, "attachment path (repeatable)")
 	taskCreateCmd.Flags().BoolVar(&taskCreateUseInference, "use-inference", false, "run job in a pod with inference proxy (OLLAMA_BASE_URL in sandbox)")
 	taskCreateCmd.Flags().StringVar(&taskCreateInputMode, "input-mode", "prompt", "input mode: prompt (default, use inference), script, or commands (literal shell)")
 	taskCreateCmd.Flags().BoolVar(&taskCreateUseSBA, "use-sba", false, "create task with SBA runner job (job_spec_json); prompt as task context (P2-10)")
@@ -127,7 +129,7 @@ func runTaskCreate(_ *cobra.Command, _ []string) error {
 	if inputMode == "" {
 		inputMode = "prompt"
 	}
-	req := userapi.CreateTaskRequest{Prompt: taskCreatePrompt, UseInference: taskCreateUseInference, InputMode: inputMode, UseSBA: taskCreateUseSBA}
+	req := userapi.CreateTaskRequest{Prompt: taskCreatePrompt, UseInference: taskCreateUseInference, InputMode: inputMode, UseSBA: taskCreateUseSBA, Attachments: taskCreateAttachments}
 	if taskCreateTaskName != "" {
 		req.TaskName = &taskCreateTaskName
 	}
@@ -137,7 +139,7 @@ func runTaskCreate(_ *cobra.Command, _ []string) error {
 	}
 	taskID := task.ResolveTaskID()
 	if outputFmt == outputFormatJSON {
-		_ = jsonOutputEncoder().Encode(map[string]string{"task_id": taskID})
+		_ = jsonOutputEncoder().Encode(task)
 		return nil
 	}
 	fmt.Println("task_id=" + taskID)
@@ -165,7 +167,8 @@ func runTaskList(_ *cobra.Command, _ []string) error {
 		_ = jsonOutputEncoder().Encode(resp)
 		return nil
 	}
-	for _, t := range resp.Tasks {
+	for i := range resp.Tasks {
+		t := &resp.Tasks[i]
 		line := fmt.Sprintf("task_id=%s status=%s", t.ResolveTaskID(), t.Status)
 		if t.TaskName != nil && *t.TaskName != "" {
 			line += " task_name=" + *t.TaskName
@@ -186,11 +189,7 @@ func runTaskGet(_ *cobra.Command, args []string) error {
 		return exitFromGatewayErr(err)
 	}
 	if outputFmt == outputFormatJSON {
-		out := map[string]string{"task_id": task.ResolveTaskID(), "status": task.Status}
-		if task.TaskName != nil {
-			out["task_name"] = *task.TaskName
-		}
-		_ = jsonOutputEncoder().Encode(out)
+		_ = jsonOutputEncoder().Encode(task)
 		return nil
 	}
 	line := fmt.Sprintf("task_id=%s status=%s", task.ResolveTaskID(), task.Status)

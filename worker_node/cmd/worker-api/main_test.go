@@ -16,6 +16,7 @@ import (
 
 	"github.com/cypher0n3/cynodeai/go_shared_libs/contracts/workerapi"
 	"github.com/cypher0n3/cynodeai/worker_node/cmd/worker-api/executor"
+	"github.com/cypher0n3/cynodeai/worker_node/internal/telemetry"
 )
 
 func TestGetEnv(t *testing.T) {
@@ -130,7 +131,7 @@ func runJobCmd() []string {
 
 func TestHandleRunJob(t *testing.T) {
 	exec := executor.New("direct", 5*time.Second, 1024, "", "", nil)
-	mux := newMux(exec, "test-bearer", "", slog.Default())
+	mux := newMux(exec, "test-bearer", "", nil, slog.Default())
 	cmd := runJobCmd()
 	reqBody := workerapi.RunJobRequest{
 		Version: 1, TaskID: "task-1", JobID: "job-1",
@@ -150,7 +151,7 @@ func TestHandleRunJob(t *testing.T) {
 		postRunJobSuccess(t, mux, body)
 	})
 	t.Run("success with workspace root", func(t *testing.T) {
-		muxWithWorkspace := newMux(executor.New("direct", 5*time.Second, 1024, "", "", nil), "test-bearer", t.TempDir(), slog.Default())
+		muxWithWorkspace := newMux(executor.New("direct", 5*time.Second, 1024, "", "", nil), "test-bearer", t.TempDir(), nil, slog.Default())
 		postRunJobSuccess(t, muxWithWorkspace, body)
 	})
 	t.Run("workspace creation failure returns 500", func(t *testing.T) {
@@ -160,7 +161,7 @@ func TestHandleRunJob(t *testing.T) {
 			t.Fatal(err)
 		}
 		// workspaceDir will be blocker/job-1; MkdirAll fails because blocker is a file
-		muxBad := newMux(executor.New("direct", 5*time.Second, 1024, "", "", nil), "test-bearer", blocker, slog.Default())
+		muxBad := newMux(executor.New("direct", 5*time.Second, 1024, "", "", nil), "test-bearer", blocker, nil, slog.Default())
 		w := httptest.NewRecorder()
 		r := httptest.NewRequest(http.MethodPost, "/v1/worker/jobs:run", bytes.NewReader(body))
 		r.Header.Set("Authorization", "Bearer test-bearer")
@@ -215,7 +216,7 @@ func postRunJobExpectBadRequest(t *testing.T, mux *http.ServeMux, badReq *worker
 }
 
 func TestHealthz(t *testing.T) {
-	mux := newMux(executor.New("direct", time.Second, 1024, "", "", nil), "token", "", slog.Default())
+	mux := newMux(executor.New("direct", time.Second, 1024, "", "", nil), "token", "", nil, slog.Default())
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest(http.MethodGet, "/healthz", http.NoBody)
 	mux.ServeHTTP(w, r)
@@ -225,7 +226,7 @@ func TestHealthz(t *testing.T) {
 }
 
 func TestReadyz(t *testing.T) {
-	mux := newMux(executor.New("direct", time.Second, 1024, "", "", nil), "token", "", slog.Default())
+	mux := newMux(executor.New("direct", time.Second, 1024, "", "", nil), "token", "", nil, slog.Default())
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest(http.MethodGet, "/readyz", http.NoBody)
 	mux.ServeHTTP(w, r)
@@ -234,8 +235,19 @@ func TestReadyz(t *testing.T) {
 	}
 }
 
+func TestReadyz_notReady(t *testing.T) {
+	exec := executor.New("nonexistent-runtime-xyz", time.Second, 1024, "", "", nil)
+	mux := newMux(exec, "token", "", nil, slog.Default())
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodGet, "/readyz", http.NoBody)
+	mux.ServeHTTP(w, r)
+	if w.Code != http.StatusServiceUnavailable {
+		t.Errorf("readyz when not ready: %d %s", w.Code, w.Body.String())
+	}
+}
+
 func TestRunJob_RequestTooLarge(t *testing.T) {
-	mux := newMux(executor.New("direct", time.Second, 1024, "", "", nil), "token", "", slog.Default())
+	mux := newMux(executor.New("direct", time.Second, 1024, "", "", nil), "token", "", nil, slog.Default())
 	// Body > 10 MiB so MaxBytesReader triggers; use valid JSON shape so the error is "request body too large" not "invalid JSON"
 	big := bytes.Repeat([]byte("x"), 11*1024*1024)
 	body := []byte(`{"version":1,"task_id":"t","job_id":"j","sandbox":{"image":"a","command":["`)
@@ -277,7 +289,7 @@ func TestRunMainWithContextCancel(t *testing.T) {
 }
 
 func TestTelemetryEndpoints(t *testing.T) {
-	mux := newMux(executor.New("direct", time.Second, 1024, "", "", nil), "telemetry-token", "", slog.Default())
+	mux := newMux(executor.New("direct", time.Second, 1024, "", "", nil), "telemetry-token", "", nil, slog.Default())
 	telemetryGetAndCheck(t, mux, "/v1/worker/telemetry/node:info", "node_slug")
 	telemetryGetAndCheck(t, mux, "/v1/worker/telemetry/node:stats", "captured_at")
 }
@@ -302,11 +314,208 @@ func telemetryGetAndCheck(t *testing.T, mux *http.ServeMux, path, requiredKey st
 }
 
 func TestTelemetryUnauthorized(t *testing.T) {
-	mux := newMux(executor.New("direct", time.Second, 1024, "", "", nil), "telemetry-token", "", slog.Default())
+	mux := newMux(executor.New("direct", time.Second, 1024, "", "", nil), "telemetry-token", "", nil, slog.Default())
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest(http.MethodGet, "/v1/worker/telemetry/node:info", http.NoBody)
 	mux.ServeHTTP(w, r)
 	if w.Code != http.StatusUnauthorized {
 		t.Errorf("node:info no bearer: got %d", w.Code)
+	}
+}
+
+func telemetryMuxWithStore(t *testing.T) (context.Context, *telemetry.Store, *http.ServeMux) {
+	t.Helper()
+	ctx := context.Background()
+	store, err := telemetry.Open(ctx, t.TempDir())
+	if err != nil {
+		t.Fatalf("telemetry Open: %v", err)
+	}
+	t.Cleanup(func() { _ = store.Close() })
+	doRetentionAndVacuumOnce(ctx, store, slog.Default())
+	mux := newMux(executor.New("direct", time.Second, 1024, "", "", nil), "telemetry-token", "", store, slog.Default())
+	return ctx, store, mux
+}
+
+func telemetryGET(t *testing.T, mux *http.ServeMux, path string, wantCode int) {
+	t.Helper()
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodGet, path, http.NoBody)
+	r.Header.Set("Authorization", "Bearer telemetry-token")
+	mux.ServeHTTP(w, r)
+	if w.Code != wantCode {
+		t.Errorf("%s: got %d want %d", path, w.Code, wantCode)
+	}
+}
+
+func TestTelemetryListContainersEmpty(t *testing.T) {
+	_, _, mux := telemetryMuxWithStore(t)
+	telemetryGET(t, mux, "/v1/worker/telemetry/containers", http.StatusOK)
+}
+
+func TestTelemetryGetContainerNotFound(t *testing.T) {
+	_, _, mux := telemetryMuxWithStore(t)
+	telemetryGET(t, mux, "/v1/worker/telemetry/containers/nonexistent", http.StatusNotFound)
+}
+
+func TestTelemetryLogsMissingParams(t *testing.T) {
+	_, _, mux := telemetryMuxWithStore(t)
+	telemetryGET(t, mux, "/v1/worker/telemetry/logs", http.StatusBadRequest)
+}
+
+func TestTelemetryLogsOkEmpty(t *testing.T) {
+	_, _, mux := telemetryMuxWithStore(t)
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodGet, "/v1/worker/telemetry/logs?source_kind=service&source_name=worker-api", http.NoBody)
+	r.Header.Set("Authorization", "Bearer telemetry-token")
+	mux.ServeHTTP(w, r)
+	if w.Code != http.StatusOK {
+		t.Errorf("logs: %d", w.Code)
+		return
+	}
+	var m map[string]interface{}
+	if err := json.NewDecoder(w.Body).Decode(&m); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if m["version"] != float64(1) {
+		t.Errorf("body %+v", m)
+	}
+	if _, ok := m["events"]; !ok {
+		t.Errorf("body missing events key %+v", m)
+	}
+	if _, ok := m["truncated"]; !ok {
+		t.Errorf("body missing truncated key %+v", m)
+	}
+}
+
+func TestTelemetryContainersMethodNotAllowed(t *testing.T) {
+	_, _, mux := telemetryMuxWithStore(t)
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodPost, "/v1/worker/telemetry/containers", http.NoBody)
+	r.Header.Set("Authorization", "Bearer telemetry-token")
+	mux.ServeHTTP(w, r)
+	if w.Code != http.StatusMethodNotAllowed {
+		t.Errorf("POST containers: %d", w.Code)
+	}
+}
+
+func TestTelemetryListContainersWithLimit(t *testing.T) {
+	_, _, mux := telemetryMuxWithStore(t)
+	telemetryGET(t, mux, "/v1/worker/telemetry/containers?limit=50", http.StatusOK)
+}
+
+func TestTelemetryLogsWithLimit(t *testing.T) {
+	_, _, mux := telemetryMuxWithStore(t)
+	telemetryGET(t, mux, "/v1/worker/telemetry/logs?source_kind=service&source_name=x&limit=100", http.StatusOK)
+}
+
+func TestTelemetryGetContainerFound(t *testing.T) {
+	ctx, store, mux := telemetryMuxWithStore(t)
+	if err := store.InsertTestContainer(ctx, "found-id", "found-name", "managed", "running", "task-1", "job-1"); err != nil {
+		t.Fatalf("insert: %v", err)
+	}
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodGet, "/v1/worker/telemetry/containers/found-id", http.NoBody)
+	r.Header.Set("Authorization", "Bearer telemetry-token")
+	mux.ServeHTTP(w, r)
+	if w.Code != http.StatusOK {
+		t.Errorf("get container: %d %s", w.Code, w.Body.String())
+		return
+	}
+	var m map[string]interface{}
+	if err := json.NewDecoder(w.Body).Decode(&m); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	cont, _ := m["container"].(map[string]interface{})
+	if cont == nil || cont["container_id"] != "found-id" {
+		t.Errorf("container: %+v", m)
+	}
+}
+
+func TestTelemetryListContainersNextPageToken(t *testing.T) {
+	ctx, store, mux := telemetryMuxWithStore(t)
+	_ = store.InsertTestContainer(ctx, "p1", "n1", "managed", "running", "", "")
+	_ = store.InsertTestContainer(ctx, "p2", "n2", "managed", "running", "", "")
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodGet, "/v1/worker/telemetry/containers?limit=1", http.NoBody)
+	r.Header.Set("Authorization", "Bearer telemetry-token")
+	mux.ServeHTTP(w, r)
+	if w.Code != http.StatusOK {
+		t.Errorf("list: %d", w.Code)
+		return
+	}
+	var m map[string]interface{}
+	if err := json.NewDecoder(w.Body).Decode(&m); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if m["next_page_token"] == nil || m["next_page_token"] == "" {
+		t.Errorf("expected next_page_token: %+v", m)
+	}
+}
+
+func TestTelemetryGetContainerEmptyID(t *testing.T) {
+	_, _, mux := telemetryMuxWithStore(t)
+	telemetryGET(t, mux, "/v1/worker/telemetry/containers/", http.StatusNotFound)
+}
+
+func TestRunRetentionAndVacuum_TickerBranches(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	store, err := telemetry.Open(ctx, t.TempDir())
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	defer func() { _ = store.Close() }()
+	oldRet, oldVac := retentionTickerInterval, vacuumTickerInterval
+	retentionTickerInterval = 2 * time.Millisecond
+	vacuumTickerInterval = 5 * time.Millisecond
+	defer func() { retentionTickerInterval, vacuumTickerInterval = oldRet, oldVac }()
+	done := make(chan struct{})
+	go func() {
+		runRetentionAndVacuum(ctx, store, slog.Default())
+		close(done)
+	}()
+	time.Sleep(15 * time.Millisecond)
+	cancel()
+	<-done
+}
+
+func TestDoRetentionAndVacuumOnce_ErrorPaths(t *testing.T) {
+	ctx := context.Background()
+	store, err := telemetry.Open(ctx, t.TempDir())
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	_ = store.Close()
+	doRetentionAndVacuumOnce(ctx, store, slog.Default())
+}
+
+func TestTelemetryContainersClosedStore(t *testing.T) {
+	ctx := context.Background()
+	store, err := telemetry.Open(ctx, t.TempDir())
+	if err != nil {
+		t.Fatalf("telemetry Open: %v", err)
+	}
+	_ = store.Close()
+	mux := newMux(executor.New("direct", time.Second, 1024, "", "", nil), "telemetry-token", "", store, slog.Default())
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodGet, "/v1/worker/telemetry/containers", http.NoBody)
+	r.Header.Set("Authorization", "Bearer telemetry-token")
+	mux.ServeHTTP(w, r)
+	if w.Code != http.StatusInternalServerError {
+		t.Errorf("closed store list containers: %d", w.Code)
+	}
+	w2 := httptest.NewRecorder()
+	r2 := httptest.NewRequest(http.MethodGet, "/v1/worker/telemetry/containers/some-id", http.NoBody)
+	r2.Header.Set("Authorization", "Bearer telemetry-token")
+	mux.ServeHTTP(w2, r2)
+	if w2.Code != http.StatusInternalServerError {
+		t.Errorf("closed store get container: %d", w2.Code)
+	}
+	w3 := httptest.NewRecorder()
+	r3 := httptest.NewRequest(http.MethodGet, "/v1/worker/telemetry/logs?source_kind=service&source_name=x", http.NoBody)
+	r3.Header.Set("Authorization", "Bearer telemetry-token")
+	mux.ServeHTTP(w3, r3)
+	if w3.Code != http.StatusBadRequest {
+		t.Errorf("closed store logs: %d", w3.Code)
 	}
 }

@@ -237,6 +237,9 @@ func TestTableNames(t *testing.T) {
 		{"SandboxImageVersion", (SandboxImageVersion{}).TableName(), "sandbox_image_versions"},
 		{"NodeSandboxImageAvailability", (NodeSandboxImageAvailability{}).TableName(), "node_sandbox_image_availability"},
 		{"Skill", (Skill{}).TableName(), "skills"},
+		{"AccessControlRule", (AccessControlRule{}).TableName(), "access_control_rules"},
+		{"AccessControlAuditLog", (AccessControlAuditLog{}).TableName(), "access_control_audit_log"},
+		{"ApiCredential", (ApiCredential{}).TableName(), "api_credentials"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

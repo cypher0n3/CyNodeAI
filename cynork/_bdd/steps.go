@@ -786,10 +786,8 @@ func InitializeCynorkSuite(sc *godog.ScenarioContext, state *cynorkState) {
 	sc.Step(`^I run cynork task create with prompt "([^"]*)" and attachments "([^"]*)" "([^"]*)"$`, func(ctx context.Context, prompt, a1, a2 string) error {
 		st := getState(ctx)
 		env := []string{"CYNORK_GATEWAY_URL=" + st.mockServer.URL, "CYNORK_TOKEN=" + st.token}
-		args := []string{"--config", st.configPath, "task", "create", "-p", prompt}
+		args := []string{"--config", st.configPath, "task", "create", "-p", prompt, "--attachment", a1, "--attachment", a2}
 		st.lastExit, st.lastStdout, st.lastStderr = st.runCynork(args, env...)
-		_ = a1
-		_ = a2
 		return nil
 	})
 

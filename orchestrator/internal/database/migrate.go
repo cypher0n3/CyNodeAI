@@ -39,6 +39,8 @@ func (db *DB) runAutoMigrate(ctx context.Context, logger *slog.Logger) error {
 		&models.PreferenceEntry{},
 		&models.PreferenceAuditLog{},
 		&models.Project{},
+		&models.ProjectPlan{},
+		&models.TaskDependency{},
 		&models.Session{},
 		&models.ChatThread{},
 		&models.ChatMessage{},
@@ -50,6 +52,9 @@ func (db *DB) runAutoMigrate(ctx context.Context, logger *slog.Logger) error {
 		&models.NodeSandboxImageAvailability{},
 		&models.TaskArtifact{},
 		&models.Skill{},
+		&models.AccessControlRule{},
+		&models.AccessControlAuditLog{},
+		&models.ApiCredential{},
 	)
 	if err != nil {
 		return fmt.Errorf("auto migrate: %w", err)

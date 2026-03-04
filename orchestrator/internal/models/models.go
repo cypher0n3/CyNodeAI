@@ -167,7 +167,9 @@ type Task struct {
 	ID                 uuid.UUID  `gorm:"type:uuid;primaryKey" json:"id"`
 	CreatedBy          *uuid.UUID `gorm:"column:created_by;index" json:"created_by,omitempty"`
 	ProjectID          *uuid.UUID `gorm:"column:project_id;index" json:"project_id,omitempty"`
+	PlanID             *uuid.UUID `gorm:"column:plan_id;index" json:"plan_id,omitempty"`
 	Status             string     `gorm:"column:status;index" json:"status"`
+	Closed             bool       `gorm:"column:closed;index" json:"closed"`
 	Prompt             *string    `gorm:"column:prompt" json:"prompt,omitempty"`
 	AcceptanceCriteria *string    `gorm:"column:acceptance_criteria;type:jsonb" json:"acceptance_criteria,omitempty"`
 	Summary            *string    `gorm:"column:summary" json:"summary,omitempty"`
@@ -177,6 +179,27 @@ type Task struct {
 }
 
 func (Task) TableName() string { return "tasks" }
+
+// ProjectPlan represents a project plan (postgres_schema.md project_plans). Used by workflow start gate.
+type ProjectPlan struct {
+	ID        uuid.UUID  `gorm:"type:uuid;primaryKey" json:"id"`
+	ProjectID uuid.UUID  `gorm:"column:project_id;index" json:"project_id"`
+	State     string     `gorm:"column:state;index" json:"state"`
+	Archived  bool       `gorm:"column:archived;index" json:"archived"`
+	CreatedAt time.Time  `gorm:"column:created_at" json:"created_at"`
+	UpdatedAt time.Time  `gorm:"column:updated_at" json:"updated_at"`
+}
+
+func (ProjectPlan) TableName() string { return "project_plans" }
+
+// TaskDependency represents task_dependencies (task_id depends on depends_on_task_id).
+type TaskDependency struct {
+	ID               uuid.UUID `gorm:"type:uuid;primaryKey" json:"id"`
+	TaskID           uuid.UUID `gorm:"column:task_id;index" json:"task_id"`
+	DependsOnTaskID  uuid.UUID `gorm:"column:depends_on_task_id;index" json:"depends_on_task_id"`
+}
+
+func (TaskDependency) TableName() string { return "task_dependencies" }
 
 // Job represents a unit of work dispatched to a node.
 // Payload and Result are stored as jsonb via JSONBString.
@@ -440,3 +463,56 @@ type Skill struct {
 }
 
 func (Skill) TableName() string { return "skills" }
+
+// AccessControlRule defines an allow/deny rule for a subject, action, and resource. Per docs/tech_specs/access_control.md.
+type AccessControlRule struct {
+	ID             uuid.UUID  `gorm:"type:uuid;primaryKey" json:"id"`
+	SubjectType    string     `gorm:"column:subject_type;index:idx_ac_rules_subject" json:"subject_type"`
+	SubjectID      *uuid.UUID `gorm:"column:subject_id;index:idx_ac_rules_subject" json:"subject_id,omitempty"`
+	Action         string     `gorm:"column:action;index" json:"action"`
+	ResourceType   string     `gorm:"column:resource_type;index" json:"resource_type"`
+	ResourcePattern string     `gorm:"column:resource_pattern" json:"resource_pattern"`
+	Effect         string     `gorm:"column:effect" json:"effect"` // allow | deny
+	Priority       int        `gorm:"column:priority;index" json:"priority"`
+	Conditions     *string    `gorm:"column:conditions;type:jsonb" json:"conditions,omitempty"`
+	CreatedAt      time.Time  `gorm:"column:created_at" json:"created_at"`
+	UpdatedAt      time.Time  `gorm:"column:updated_at" json:"updated_at"`
+	UpdatedBy      *string    `gorm:"column:updated_by" json:"updated_by,omitempty"`
+}
+
+func (AccessControlRule) TableName() string { return "access_control_rules" }
+
+// AccessControlAuditLog records an access control decision. Per docs/tech_specs/access_control.md.
+type AccessControlAuditLog struct {
+	ID          uuid.UUID  `gorm:"type:uuid;primaryKey" json:"id"`
+	SubjectType string     `gorm:"column:subject_type" json:"subject_type"`
+	SubjectID   *uuid.UUID `gorm:"column:subject_id" json:"subject_id,omitempty"`
+	Action      string     `gorm:"column:action" json:"action"`
+	ResourceType string     `gorm:"column:resource_type" json:"resource_type"`
+	Resource     string     `gorm:"column:resource" json:"resource"`
+	Decision    string     `gorm:"column:decision" json:"decision"` // allow | deny
+	Reason      *string    `gorm:"column:reason" json:"reason,omitempty"`
+	TaskID      *uuid.UUID `gorm:"column:task_id;index" json:"task_id,omitempty"`
+	CreatedAt   time.Time  `gorm:"column:created_at;index" json:"created_at"`
+}
+
+func (AccessControlAuditLog) TableName() string { return "access_control_audit_log" }
+
+// ApiCredential stores an encrypted API credential for egress. Per docs/tech_specs/postgres_schema.md (API Credentials Table).
+type ApiCredential struct {
+	ID                 uuid.UUID  `gorm:"type:uuid;primaryKey" json:"id"`
+	OwnerType          string     `gorm:"column:owner_type;uniqueIndex:idx_api_cred_owner_provider_name" json:"owner_type"` // user | group
+	OwnerID            uuid.UUID  `gorm:"column:owner_id;uniqueIndex:idx_api_cred_owner_provider_name" json:"owner_id"`
+	Provider           string     `gorm:"column:provider;uniqueIndex:idx_api_cred_owner_provider_name;index" json:"provider"`
+	CredentialType     string     `gorm:"column:credential_type" json:"credential_type"`
+	CredentialName     string     `gorm:"column:credential_name;uniqueIndex:idx_api_cred_owner_provider_name" json:"credential_name"`
+	CredentialCiphertext []byte   `gorm:"column:credential_ciphertext;type:bytea" json:"-"`
+	CredentialKID      *string    `gorm:"column:credential_kid" json:"credential_kid,omitempty"`
+	IsActive           bool       `gorm:"column:is_active;index" json:"is_active"`
+	ExpiresAt          *time.Time `gorm:"column:expires_at" json:"expires_at,omitempty"`
+	CreatedAt          time.Time  `gorm:"column:created_at" json:"created_at"`
+	UpdatedAt          time.Time  `gorm:"column:updated_at" json:"updated_at"`
+	UpdatedBy          *string    `gorm:"column:updated_by" json:"updated_by,omitempty"`
+}
+
+func (ApiCredential) TableName() string { return "api_credentials" }
