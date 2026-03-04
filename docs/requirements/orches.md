@@ -100,7 +100,6 @@ It covers orchestrator control-plane behavior, task lifecycle, dispatch, and sta
   [model_management.md](../tech_specs/model_management.md)
   [external_model_routing.md](../tech_specs/external_model_routing.md)
   <a id="req-orches-0119"></a>
-
 - **REQ-ORCHES-0120:** The orchestrator MUST remain running while it is not ready due to missing Project Manager inference prerequisites, and MUST expose health endpoints that distinguish "process alive" from "ready to accept work".
   `GET /healthz` MUST return 200 when the orchestrator process is alive.
   `GET /readyz` MUST return 200 only when the orchestrator is in a ready state; otherwise it MUST return 503 with a reason indicating what prerequisites are missing.
@@ -109,14 +108,6 @@ It covers orchestrator control-plane behavior, task lifecycle, dispatch, and sta
   While not ready, the orchestrator MUST allow users to configure system settings and credentials required to become ready.
   [CYNAI.ORCHES.Rule.HealthEndpoints](../tech_specs/orchestrator.md#spec-cynai-orches-rule-healthendpoints)
   <a id="req-orches-0120"></a>
-- **REQ-ORCHES-0150:** The orchestrator MUST start the Project Manager Agent (cynode-pma) when the first inference path becomes available: either the first worker node has reported ready to the orchestrator and is inference-capable, or the orchestrator has an LLM API key configured for PMA via the API Egress Server.
-  The orchestrator MUST NOT start PMA before at least one of these conditions is satisfied.
-  [CYNAI.BOOTST.OrchestratorReadinessAndPmaStartup](../tech_specs/orchestrator_bootstrap.md#spec-cynai-bootst-orchestratorreadinessandpmastartup)
-  <a id="req-orches-0150"></a>
-- **REQ-ORCHES-0151:** The Project Manager Agent MUST inform the orchestrator when it has come online (e.g. via health check or registration callback) so that the orchestrator can use it and update readiness accordingly.
-  [CYNAI.PMAGNT.PmaInformsOrchestratorOnline](../tech_specs/cynode_pma.md#spec-cynai-pmagnt-pmainformsorchestratoronline)
-  <a id="req-orches-0151"></a>
-
 - **REQ-ORCHES-0121:** The orchestrator MUST persist tasks and their lifecycle state in PostgreSQL with stable identifiers.
   [orchestrator.md](../tech_specs/orchestrator.md)
   <a id="req-orches-0121"></a>
@@ -154,15 +145,6 @@ It covers orchestrator control-plane behavior, task lifecycle, dispatch, and sta
   [user_api_gateway.md](../tech_specs/user_api_gateway.md)
   [cli_management_app_commands_tasks.md](../tech_specs/cli_management_app_commands_tasks.md#spec-cynai-client-clitaskcreateprompt)
   <a id="req-orches-0128"></a>
-- **REQ-ORCHES-0133:** Task creation MUST associate the task with the authenticated user (set `created_by` to that user) when the request is authenticated.
-  When created by the system (including unauthenticated bootstrap), `created_by` MUST be set to the reserved system user identity (see [REQ-IDENTY-0121](../requirements/identy.md#req-identy-0121)), and the task MUST be associated with the **system user's default project** (the system user has a default project in the same way as any user; when there is no authenticated user, that default project is used).
-  Task creation MUST accept an optional `project_id`; when `project_id` is omitted, the task MUST be associated with the creating user's default project (authenticated user's default project, or system user's default project when created by the system) (see [REQ-PROJCT-0104](../requirements/projct.md#req-projct-0104)).
-  Tasks MUST be associable with both a user (creator) and a project (default or explicitly set) per schema.
-  [REQ-PROJCT-0001](../requirements/projct.md#req-projct-0001)
-  [REQ-PROJCT-0104](../requirements/projct.md#req-projct-0104)
-  [projects_and_scopes.md](../tech_specs/projects_and_scopes.md)
-  [postgres_schema.md](../tech_specs/postgres_schema.md)
-  <a id="req-orches-0133"></a>
 - **REQ-ORCHES-0129:** The orchestrator MUST continuously validate that the selected Project Manager model remains online after startup.
   If the selected Project Manager model becomes unavailable due to node loss, eviction, failure, or relevant system setting changes, the orchestrator MUST transition out of ready state and MUST re-run Project Manager model selection and warmup until a Project Manager model is online again.
   [CYNAI.ORCHES.Rule.MonitorProjectManagerModel](../tech_specs/orchestrator.md#spec-cynai-orches-rule-monitorprojectmanagermodel)
@@ -180,6 +162,15 @@ It covers orchestrator control-plane behavior, task lifecycle, dispatch, and sta
 - **REQ-ORCHES-0132:** The orchestrator MUST retry transient inference failures with bounded backoff before using a fallback path for OpenAI-compatible chat completions.
   [CYNAI.USRGWY.OpenAIChatApi.Reliability](../tech_specs/openai_compatible_chat_api.md#spec-cynai-usrgwy-openaichatapi-reliability)
   <a id="req-orches-0132"></a>
+- **REQ-ORCHES-0133:** Task creation MUST associate the task with the authenticated user (set `created_by` to that user) when the request is authenticated.
+  When created by the system (including unauthenticated bootstrap), `created_by` MUST be set to the reserved system user identity (see [REQ-IDENTY-0121](../requirements/identy.md#req-identy-0121)), and the task MUST be associated with the **system user's default project** (the system user has a default project in the same way as any user; when there is no authenticated user, that default project is used).
+  Task creation MUST accept an optional `project_id`; when `project_id` is omitted, the task MUST be associated with the creating user's default project (authenticated user's default project, or system user's default project when created by the system) (see [REQ-PROJCT-0104](../requirements/projct.md#req-projct-0104)).
+  Tasks MUST be associable with both a user (creator) and a project (default or explicitly set) per schema.
+  [REQ-PROJCT-0001](../requirements/projct.md#req-projct-0001)
+  [REQ-PROJCT-0104](../requirements/projct.md#req-projct-0104)
+  [projects_and_scopes.md](../tech_specs/projects_and_scopes.md)
+  [postgres_schema.md](../tech_specs/postgres_schema.md)
+  <a id="req-orches-0133"></a>
 - **REQ-ORCHES-0141:** The orchestrator MUST be able to pull node operational telemetry (logs, system info, container inventory/state) from nodes via the Worker Telemetry API.
   [CYNAI.ORCHES.NodeTelemetryPull](../tech_specs/worker_telemetry_api.md#spec-cynai-orches-nodetelemetrypull)
   <a id="req-orches-0141"></a>
@@ -205,6 +196,17 @@ It covers orchestrator control-plane behavior, task lifecycle, dispatch, and sta
   The orchestrator MUST follow these triggers when starting the workflow runner.
   [CYNAI.ORCHES.WorkflowStartTriggers](../tech_specs/langgraph_mvp.md#spec-cynai-orches-workflowstarttriggers)
   <a id="req-orches-0147"></a>
+
+- **REQ-ORCHES-0150:** The orchestrator MUST start the Project Manager Agent (cynode-pma) by instructing a worker node to run PMA as a managed service container when the first inference path becomes available: either the first worker node has reported ready to the orchestrator and is inference-capable, or the orchestrator has an LLM API key configured for PMA via the API Egress Server.
+  The orchestrator MUST deliver the PMA start bundle via node configuration managed services desired state.
+  The orchestrator MUST NOT instruct a node to start PMA before at least one of these conditions is satisfied.
+  [CYNAI.BOOTST.OrchestratorReadinessAndPmaStartup](../tech_specs/orchestrator_bootstrap.md#spec-cynai-bootst-orchestratorreadinessandpmastartup)
+  [CYNAI.ORCHES.ManagedServicesWorkerManaged](../tech_specs/orchestrator.md#spec-cynai-orches-managedservices)
+  <a id="req-orches-0150"></a>
+- **REQ-ORCHES-0151:** The orchestrator MUST learn that PMA has come online via worker-reported managed service status (and worker-mediated endpoint) so that the orchestrator can use PMA and update readiness accordingly.
+  [CYNAI.PMAGNT.PmaInformsOrchestratorOnline](../tech_specs/cynode_pma.md#spec-cynai-pmagnt-pmainformsorchestratoronline)
+  [CYNAI.WORKER.Payload.CapabilityReportV1](../tech_specs/worker_node_payloads.md#spec-cynai-worker-payload-capabilityreport-v1)
+  <a id="req-orches-0151"></a>
 - **REQ-ORCHES-0152:** When a task is associated with a plan (task.plan_id set), the orchestrator MUST NOT start a workflow for that task until that plan's state is active (the one approved plan per project) or the PMA has explicitly requested workflow start for that task (handoff).
   When the task has no plan_id (or the project has no plans), the orchestrator MAY start the workflow per the normal triggers.
   [CYNAI.ORCHES.WorkflowStartGatePlanApproved](../tech_specs/langgraph_mvp.md#spec-cynai-orches-workflowstartgateplanapproved)
@@ -221,3 +223,16 @@ It covers orchestrator control-plane behavior, task lifecycle, dispatch, and sta
   [CYNAI.ORCHES.CancelCascadesToDependents](../tech_specs/langgraph_mvp.md#spec-cynai-orches-cancelcascadestodependents)
   [CYNAI.SCHEMA.TaskDependenciesTable](../tech_specs/postgres_schema.md#spec-cynai-schema-taskdependenciestable)
   <a id="req-orches-0154"></a>
+
+- **REQ-ORCHES-0160:** The orchestrator MUST manage worker-managed services using a desired state model delivered via node configuration payloads, and MUST be able to update that desired state after registration.
+  [CYNAI.ORCHES.ManagedServicesWorkerManaged](../tech_specs/orchestrator.md#spec-cynai-orches-managedservices)
+  [CYNAI.WORKER.Payload.ConfigurationV1](../tech_specs/worker_node_payloads.md#spec-cynai-worker-payload-configuration-v1)
+  <a id="req-orches-0160"></a>
+- **REQ-ORCHES-0161:** The orchestrator MUST track observed state and worker-mediated endpoint(s) for managed services from worker capability reports and MUST treat those endpoints as dynamic for routing.
+  [CYNAI.ORCHES.ManagedServicesWorkerManaged](../tech_specs/orchestrator.md#spec-cynai-orches-managedservices)
+  [CYNAI.WORKER.Payload.CapabilityReportV1](../tech_specs/worker_node_payloads.md#spec-cynai-worker-payload-capabilityreport-v1)
+  <a id="req-orches-0161"></a>
+- **REQ-ORCHES-0162:** The orchestrator MUST route `model=cynodeai.pm` traffic to PMA using the worker-mediated endpoint reported by the worker and MUST NOT rely on compose DNS or direct host-port addressing for PMA.
+  [CYNAI.ORCHES.ManagedServicesWorkerManaged](../tech_specs/orchestrator.md#spec-cynai-orches-managedservices)
+  [CYNAI.WORKER.ManagedAgentProxyBidirectional](../tech_specs/worker_api.md#spec-cynai-worker-managedagentproxy)
+  <a id="req-orches-0162"></a>

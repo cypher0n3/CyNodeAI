@@ -2,6 +2,8 @@
 
 - [Document Overview](#document-overview)
 - [Node Manager](#node-manager)
+- [Managed Service Containers](#managed-service-containers)
+- [Worker Proxy Bidirectional (Managed Agents)](#worker-proxy-bidirectional-managed-agents)
 - [Sandbox Control Plane](#sandbox-control-plane)
   - [Sandbox Workspace and Job Mounts](#sandbox-workspace-and-job-mounts)
   - [Sandbox Rootless Execution](#sandbox-rootless-execution)
@@ -45,6 +47,57 @@ The Node Manager is a host-level system service responsible for:
 - When the runtime supports rootless execution (e.g. Podman), the node MUST use rootless operations for sandbox containers unless overridden by the operator; see [Sandbox rootless execution](#sandbox-rootless-execution).
 - Receiving configuration updates from the orchestrator and applying them locally.
 - Managing local secure storage for pull credentials and certificates.
+- Starting, supervising, and restarting orchestrator-directed managed service containers (for example PMA).
+
+## Managed Service Containers
+
+- Spec ID: `CYNAI.WORKER.ManagedServiceContainers` <a id="spec-cynai-worker-managedservicecontainers"></a>
+
+This section defines worker-managed service containers directed by the orchestrator.
+Managed services are long-lived containers that are part of the system control plane and are distinct from per-job sandbox containers.
+
+Normative behavior:
+
+- The worker MUST support orchestrator-directed managed services via the node configuration payload.
+  See [`docs/tech_specs/worker_node_payloads.md`](worker_node_payloads.md) `node_configuration_payload_v1` `managed_services`.
+- The worker MUST treat managed services as desired state.
+  When a desired service is present in configuration, the worker MUST converge to the desired state:
+  - If missing, create and start it.
+  - If running with a different spec (image/env/args), update it per the rollout policy (stop old, start new).
+  - If exited or unhealthy, restart it per `restart_policy` with backoff.
+- The worker MUST report managed service observed state to the orchestrator.
+  See [`docs/tech_specs/worker_node_payloads.md`](worker_node_payloads.md) `node_capability_report_v1` `managed_services_status`.
+- The worker MUST NOT treat managed service containers as sandbox containers.
+  Managed services may be privileged relative to sandbox workloads, but must still comply with system security boundaries.
+
+PMA as managed service (normative):
+
+- PMA is a core system feature and is always required.
+- The orchestrator MUST instruct a worker to run PMA as a managed service container.
+- The worker MUST start and keep PMA running when configured as a managed service.
+
+## Worker Proxy Bidirectional (Managed Agents)
+
+- Spec ID: `CYNAI.WORKER.WorkerProxyBidirectionalManagedAgents` <a id="spec-cynai-worker-proxybidirectional"></a>
+
+Managed agent runtimes (for example PMA) MUST communicate with the orchestrator through the worker proxy in both directions.
+
+Normative behavior:
+
+- **Orchestrator to agent:** The worker MUST expose a worker-mediated endpoint (via Worker API reverse proxy) that the orchestrator
+  (and user-gateway, when applicable) can call to reach the managed agent container (e.g. PMA chat handoff and health).
+- **Agent to orchestrator:** The worker MUST expose worker-local proxy endpoints that the managed agent uses to call:
+  - the orchestrator MCP gateway (for tool calls), and
+  - any orchestrator callback/ready endpoints.
+  The worker proxy forwards those requests to the orchestrator.
+- The managed agent container MUST NOT be configured to call orchestrator hostnames or ports directly.
+  All agent-to-orchestrator traffic flows through the worker proxy.
+
+Authentication and auditing:
+
+- The worker MUST authenticate and authorize proxy requests according to orchestrator-issued credentials (agent tokens, capability
+  leases) and MUST fail closed when validation fails.
+- The worker MUST emit auditable records for proxy activity sufficient to attribute actions to the agent identity and context.
 
 ## Sandbox Control Plane
 

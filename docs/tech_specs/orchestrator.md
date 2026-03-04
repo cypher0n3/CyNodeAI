@@ -16,6 +16,7 @@
 - [User API Gateway](#user-api-gateway)
 - [Sandbox Image Registry](#sandbox-image-registry)
 - [Node Bootstrap and Configuration](#node-bootstrap-and-configuration)
+- [Managed Services (Worker-Managed)](#managed-services-worker-managed)
 - [MCP Tool Interface](#mcp-tool-interface)
 - [Workflow Engine](#workflow-engine)
   - [Task Workflow Lease Lifecycle](#task-workflow-lease-lifecycle)
@@ -36,6 +37,7 @@ This document describes the orchestrator responsibilities and its relationship t
 - Dispatches sandboxed execution to worker nodes (via the worker API).
 - Routes model inference to local nodes or to external providers when allowed.
 - Schedules sandbox execution independently of where inference occurs.
+- Tracks worker-managed long-lived services (including PMA) and their endpoints for routing and readiness.
 
 ## Health Checks
 
@@ -107,7 +109,8 @@ See job dispatch and node selection in [`docs/tech_specs/worker_node.md`](worker
 
 ## Project Manager Agent
 
-The Project Manager Agent is a long-lived orchestrator-side agent that continuously drives work to completion.
+The Project Manager Agent (PMA) is a long-lived agent runtime that continuously drives work to completion.
+In this system, PMA is hosted as a **worker-managed service container** and is always required.
 
 - Reads tasks and their acceptance criteria from the database.
 - Retrieves user preferences and standards from the database and applies them during planning and verification.
@@ -118,6 +121,37 @@ The Project Manager Agent is a long-lived orchestrator-side agent that continuou
 See [`docs/tech_specs/project_manager_agent.md`](project_manager_agent.md), [`docs/tech_specs/project_analyst_agent.md`](project_analyst_agent.md), and [`docs/tech_specs/user_preferences.md`](user_preferences.md).
 
 Orchestrator-side agents MAY use external AI providers for planning and verification when policy allows it.
+
+## Managed Services (Worker-Managed)
+
+- Spec ID: `CYNAI.ORCHES.ManagedServicesWorkerManaged` <a id="spec-cynai-orches-managedservices"></a>
+
+This section defines how the orchestrator manages and tracks worker-managed long-lived services such as PMA.
+
+Definitions
+
+- **Managed service**: A long-lived service container started and supervised by a worker node based on orchestrator-delivered desired state.
+- **Desired state**: Orchestrator intent delivered via node configuration (`managed_services`).
+- **Observed state**: Worker-reported service state and endpoints (`managed_services_status`).
+
+Normative behavior
+
+- The orchestrator MUST express managed services as desired state in node configuration payloads.
+  See [`docs/tech_specs/worker_node_payloads.md`](worker_node_payloads.md) `node_configuration_payload_v1` `managed_services`.
+- The orchestrator MUST track observed state from worker capability reports and MUST treat service endpoints as dynamic.
+  See [`docs/tech_specs/worker_node_payloads.md`](worker_node_payloads.md) `node_capability_report_v1` `managed_services_status`.
+- The orchestrator MUST route traffic to managed services using the worker-mediated endpoint(s) reported by the worker.
+  The orchestrator MUST NOT rely on compose DNS or direct host-port addressing for managed services.
+- The orchestrator MUST consider PMA online only when a recent worker report indicates `state=ready` for the PMA service instance.
+- The orchestrator MUST reconcile service placement:
+  - If the selected hosting node is unavailable or not reporting, the orchestrator MUST select a replacement eligible node and deliver updated desired state.
+- The orchestrator MUST ensure PMA has the required bootstrap information in desired state:
+  inference connectivity mode and details, and worker-proxy URLs for agent-to-orchestrator communication (MCP, callbacks).
+
+See also:
+
+- [`docs/tech_specs/orchestrator_bootstrap.md`](orchestrator_bootstrap.md) (readiness and PMA startup)
+- [`docs/tech_specs/worker_node.md`](worker_node.md) (managed service containers and worker proxy bidirectional)
 External provider calls MUST use API Egress and SHOULD use agent-specific routing preferences.
 See [`docs/tech_specs/external_model_routing.md`](external_model_routing.md) and [`docs/tech_specs/api_egress_server.md`](api_egress_server.md).
 

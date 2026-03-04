@@ -119,6 +119,12 @@ Traces To:
 This section defines an edge enforcement mode for tool calls that are not routed by the orchestrator MCP gateway.
 The primary use case is a node-local agent runtime interacting directly with a node-local MCP server on the same host for low-latency sandbox operations.
 
+Managed agent runtimes (normative integration)
+
+- Node-local agent runtimes include worker-managed long-lived agent service containers (for example PMA) when co-located with a worker node.
+- When a managed agent runtime uses edge enforcement mode, the same capability lease rules and auditing requirements apply.
+- This mode is complementary to worker-managed agent proxying: agent-to-orchestrator communication is worker-proxied, while node-local sandbox tool calls may be edge-enforced under leases.
+
 Requirements
 
 - Edge enforcement MUST NOT extend MCP wire messages.

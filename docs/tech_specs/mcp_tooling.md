@@ -180,6 +180,8 @@ Node-hosted sandbox MCP
 - Remote agents MUST call sandbox tools through the orchestrator and MUST NOT call node MCP servers directly.
   Node-local agent runtimes MAY call node-hosted sandbox tools directly only when the node enforces orchestrator-issued capability leases and produces auditable tool call records.
   See `docs/tech_specs/worker_node.md#node-local-agent-sandbox-control-low-latency-path`.
+  Node-local agent runtimes include worker-managed long-lived agent service containers (for example PMA) when co-located with a worker node.
+  In all cases, agent-to-orchestrator communication remains worker-proxied; edge enforcement applies only to node-local tool calls.
 
 Recommended sandbox tool operations
 

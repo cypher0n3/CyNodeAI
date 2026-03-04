@@ -201,6 +201,22 @@ It covers worker-node behavior and the worker API contract for job execution and
 - **REQ-WORKER-0156:** The node MUST audit direct sandbox tool calls made through the low-latency control path and MUST make audit records available to the orchestrator for centralized retention and inspection.
   [CYNAI.WORKER.NodeLocalAgentSandboxControl](../tech_specs/worker_node.md#spec-cynai-worker-nodelocalagentsandboxcontrol)
   <a id="req-worker-0156"></a>
+- **REQ-WORKER-0160:** The worker node MUST support orchestrator-directed managed service containers (long-lived service containers distinct from per-job sandboxes) and MUST reconcile desired state delivered via node configuration.
+  [CYNAI.WORKER.ManagedServiceContainers](../tech_specs/worker_node.md#spec-cynai-worker-managedservicecontainers)
+  [CYNAI.WORKER.Payload.ConfigurationV1](../tech_specs/worker_node_payloads.md#spec-cynai-worker-payload-configuration-v1)
+  <a id="req-worker-0160"></a>
+- **REQ-WORKER-0161:** The worker node MUST report observed state and worker-mediated endpoint(s) for managed services to the orchestrator and MUST update the report when state changes.
+  [CYNAI.WORKER.Payload.CapabilityReportV1](../tech_specs/worker_node_payloads.md#spec-cynai-worker-payload-capabilityreport-v1)
+  [CYNAI.WORKER.ManagedServiceContainers](../tech_specs/worker_node.md#spec-cynai-worker-managedservicecontainers)
+  <a id="req-worker-0161"></a>
+- **REQ-WORKER-0162:** The Worker API MUST provide a bidirectional proxy for managed agent runtimes so (1) the orchestrator can reach managed agents through the Worker API and (2) managed agents can reach orchestrator control surfaces (MCP gateway, callbacks) through the Worker API without direct orchestrator network access.
+  [CYNAI.WORKER.ManagedAgentProxyBidirectional](../tech_specs/worker_api.md#spec-cynai-worker-managedagentproxy)
+  [CYNAI.WORKER.WorkerProxyBidirectionalManagedAgents](../tech_specs/worker_node.md#spec-cynai-worker-proxybidirectional)
+  <a id="req-worker-0162"></a>
+- **REQ-WORKER-0163:** Agent-to-orchestrator proxy endpoints exposed by the Worker API MUST be bound only to loopback or a Unix domain socket, MUST authenticate using orchestrator-issued agent credentials or capability leases, and MUST emit audit records sufficient to attribute actions to agent identity and task context.
+  [CYNAI.WORKER.ManagedAgentProxyBidirectional](../tech_specs/worker_api.md#spec-cynai-worker-managedagentproxy)
+  [CYNAI.MCPGAT.EdgeEnforcementMode](../tech_specs/mcp_gateway_enforcement.md#spec-cynai-mcpgat-edgeenforcement)
+  <a id="req-worker-0163"></a>
 - **REQ-WORKER-0200:** Worker Telemetry API MUST require bearer token authentication for all telemetry endpoints.
   [CYNAI.WORKER.TelemetryApiAuth](../tech_specs/worker_telemetry_api.md#spec-cynai-worker-telemetryauth)
   <a id="req-worker-0200"></a>

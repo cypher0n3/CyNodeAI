@@ -117,7 +117,8 @@ These behaviors are reflected in Phase 1 (inference path requirement), Phase 2 (
   See [Known Drifts](#known-drifts-evidence-based).
   **Chat routing (OpenAI-compatible):** Implemented and verified per spec.
   User-gateway exposes `GET /v1/models` and `POST /v1/chat/completions`; effective model `cynodeai.pm` routes to PM agent (cynode-pma), any other to direct inference; legacy `POST /v1/chat` removed.
-  Compose: user-gateway has `PMA_BASE_URL`; cynode-pma has `OLLAMA_BASE_URL` so PMA can call Ollama for completions.
+  Routing and connectivity (spec): PMA is hosted as a worker-managed service container.
+  Orchestrator and user-gateway route to PMA via worker-mediated endpoints (Worker API reverse proxy), and PMA reaches inference via node-local inference, API Egress, or another node as specified by the orchestrator-provided start bundle.
     E2E script includes Test 5d (list-models + chat completions); `just e2e` / full-demo passes.
 - **E2E script and image cache:** Script-driven E2E (`just e2e` / `./scripts/setup-dev.sh full-demo`) uses conditional container image rebuild: build-context hash cached under `tmp/e2e-image-cache`; images rebuild only on delta.
   Create-task step retries on 000/5xx; Test 5c (prompt-mode task create) retries up to 3 times on transient EOF/connection errors.
@@ -616,14 +617,14 @@ Items below are implemented.
 - Inference proxy and pod/network: worker node supports `use_inference: true` jobs via Podman pod (sandbox + proxy sidecar, `OLLAMA_BASE_URL` in sandbox env).
 - P1.5-01-P1.5-03: input_mode and interpretation-by-default; minimal prompt-as-model-input path (Option A); BDD for natural-language prompt (default) and commands mode; feature files and orchestrator/worker_node BDD steps (readyz, 413).
 - P1.7-01, P1.7-02: PMAGNT/SBAGNT requirements and cynode_pma/cynode_sba tech specs; PM/PA integration and OpenAI chat mapping (docs complete).
-- P1.7-03, P1.7-04: `cynode-pma` binary in `agents/` module; PMA startup integrated into orchestrator (control-plane starts/stops subprocess when enabled).
+- P1.7-03, P1.7-04: `cynode-pma` binary in `agents/` module; PMA runs as a worker-managed service container and is tracked/routed via worker-mediated endpoints (Worker API proxy).
 - P2-01: MCP gateway enforces required scoped ids (task_id for db.preference.effective; scope_id for get/list) per tool; rejects with 400 when missing.
 - P2-02: MCP tool call audit table and store; mcp-gateway `POST /v1/mcp/tools/call` writes audit for every call; allow path for `db.preference.*` (200); other tools return 501; testcontainers for real-DB path (>=90% coverage).
 - P2-03: Preference tools db.preference.get, db.preference.list, db.preference.effective implemented in mcp-gateway with store integration.
 - P2-09: cynode-sba binary and SBA runner image (agents module; job spec from `/job/job.json`, result contract to `/job/result.json`; MVP step types and constraints).
 - P2-10 worker side: Worker API and node integration for SBA runner jobs; node runs container with cynode-sba, derives response from `/job/result.json`, returns `sba_result`/artifacts in RunJobResponse; orchestrator persists via `applyJobResult`.
 - P2-10-orchestrator: Dispatcher `ParseSandboxSpec` accepts `job_spec_json` and default SBA runner image; job payload may contain `job_spec_json`; `CreateJobWithID` for SBA jobs; task create API `use_sba` and cynork `--use-sba`; `buildSBAJobPayload` builds minimal SBA spec (context, one run_command step).
-- E2E and OpenAI chat: Test 5d in `run_e2e_test` (GET /v1/models, POST /v1/chat/completions with `cynodeai.pm`); compose stack has user-gateway `PMA_BASE_URL` and cynode-pma `OLLAMA_BASE_URL`; orchestrator BDD uses OpenAI endpoints; chat routing in `openai_chat.go` aligned with openai_compatible_chat_api.md (effective model, PMA vs direct inference). `just e2e` passes.
+- E2E and OpenAI chat: Test 5d in `run_e2e_test` (GET /v1/models, POST /v1/chat/completions with `cynodeai.pm`); routing to PMA is worker-mediated (Worker API proxy) and PMA inference connectivity is specified by the orchestrator start bundle; chat routing in `openai_chat.go` aligned with openai_compatible_chat_api.md (effective model, PMA vs direct inference). `just e2e` passes.
 - E2E script: conditional image rebuild (hash cache in `tmp/e2e-image-cache`), create-task retries, post-healthz delay; `E2E_FORCE_REBUILD` and `E2E_IMAGE_CACHE_DIR` documented in script usage.
 - Shared Go libs: `go_shared_libs/contracts/userapi` added; orchestrator handlers and cynork use shared User API Gateway types; orchestrator uses `problem.Details` from go_shared_libs for error responses.
 - Coverage and CI: `just ci` runs fmt, lint, test-go-cover (>=90%), vulncheck-go, test-bdd for orchestrator, worker_node, cynork; `just docs-check` (fix-cynode, lint-md, validate-doc-links, validate-feature-files) passes.

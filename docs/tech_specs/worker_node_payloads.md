@@ -125,6 +125,30 @@ Source requirements: [`docs/tech_specs/worker_node.md`](worker_node.md#spec-cyna
   - `base_url` (string, required when `worker_api` is present)
     - Full URL the orchestrator MUST use to call the Worker API (e.g. `http://hostname:12090`, `https://worker-01.example.com:12090`).
     - MUST include scheme and authority (host and port).
+- `managed_services` (object, optional)
+  - Declares whether this node supports orchestrator-directed managed services (long-lived service containers) and related proxy functionality.
+  - `supported` (boolean, optional)
+  - `features` (array of strings, optional)
+    - examples: `service_containers`, `agent_orchestrator_proxy_bidirectional`
+- `managed_services_status` (object, optional)
+  - Observed state for managed services running on this node.
+  - Nodes SHOULD include this at startup and SHOULD send updated capability reports when managed service state changes.
+  - `services` (array of objects, optional)
+    - each service:
+      - `service_id` (string, required)
+      - `service_type` (string, required)
+      - `state` (string, required)
+        - values: `stopped` | `starting` | `ready` | `unhealthy` | `error`
+      - `endpoints` (array of strings, optional)
+        - Orchestrator-callable endpoints for this service.
+        - Endpoints MUST be worker-mediated by default and MUST NOT rely on direct host-port assumptions.
+      - `ready_at` (string, optional)
+        - RFC 3339 UTC timestamp
+      - `image` (string, optional)
+      - `container_id` (string, optional)
+      - `restart_count` (int, optional)
+      - `observed_generation` (string, optional)
+      - `last_error` (string, optional)
 - `tls` (object, optional)
   - `trust_material_status` (string, optional)
     - examples: ok, missing, invalid
@@ -292,6 +316,43 @@ Traces To:
   - `variant` (string, optional): Backend variant derived by the orchestrator from the node capability report (e.g. `cuda`, `rocm`, `cpu`).
     The node MUST use this to select or configure the correct image or runtime (ROCM for AMD GPUs, CUDA for Nvidia GPUs when reported in capabilities).
   - `port` (int, optional): listen port for the inference API (default 11434 for Ollama).
+- `managed_services` (object, optional)
+  - Desired state for orchestrator-directed managed services that this node MUST run and supervise.
+  - Managed services are long-lived service containers (distinct from per-job sandbox containers).
+  - `services` (array of objects, optional)
+    - Each element declares a desired managed service instance on this node.
+    - Required fields (minimum):
+      - `service_id` (string)
+        - Stable id assigned by orchestrator; used as the reconciliation key.
+      - `service_type` (string)
+        - examples: `pma`, `paa`, `model_cache`, `tooling_proxy`
+      - `image` (string)
+        - OCI image reference
+      - `args` (array of strings, optional)
+      - `env` (object, optional)
+      - `healthcheck` (object, optional)
+        - At minimum: `path` (string), `expected_status` (int)
+      - `restart_policy` (string, optional)
+        - recommended: `always`
+      - `network` (object, optional)
+      - `resources` (object, optional)
+    - Agent runtime services (e.g. `service_type=pma`) MUST additionally include:
+      - `role` (string)
+      - `inference` (object)
+        - `mode` (string): `node_local` | `external` | `remote_node`
+        - `base_url` (string, optional): required for `node_local` and `remote_node`
+        - `api_egress_base_url` (string, optional): required for `external`
+        - `provider_id` (string, optional): optional selector when `external` supports multiple providers
+        - `default_model` (string, optional)
+        - `warmup_required` (boolean, optional)
+      - `orchestrator` (object)
+        - `mcp_gateway_proxy_url` (string)
+          - Worker-proxy URL the agent uses for MCP tool calls; the agent MUST NOT call the orchestrator MCP gateway directly.
+        - `ready_callback_proxy_url` (string, optional)
+          - Worker-proxy URL for ready/callback signaling; the agent MUST NOT call orchestrator endpoints directly.
+        - `agent_token` (string, optional)
+        - `agent_token_ref` (object, optional)
+          - Reference for how the agent or worker obtains a short-lived token; raw secrets MUST be handled as secrets.
 - `notes` (string, optional)
 - `constraints` (object, optional)
   - `max_request_bytes` (int, optional)

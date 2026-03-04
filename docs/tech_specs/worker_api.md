@@ -15,6 +15,7 @@
   - [Node-Mediated SBA Result (Sync)](#node-mediated-sba-result-sync)
   - [Node-Mediated Step-Executor Result (Sync)](#node-mediated-step-executor-result-sync)
   - [Session Sandbox (Long-Running)](#session-sandbox-long-running)
+  - [Managed Agent Proxy (Bidirectional)](#managed-agent-proxy-bidirectional)
 - [Sandbox Execution Requirements (Initial Implementation)](#sandbox-execution-requirements-initial-implementation)
   - [Applicable Requirements (Sandbox Execution)](#applicable-requirements-sandbox-execution)
 - [Logging and Output Limits](#logging-and-output-limits)
@@ -367,6 +368,67 @@ For longer-running tasks, the Worker API MUST support **session sandboxes**: the
 - Exact endpoint paths, request/response payloads, and timeout semantics for session create, exec, and end are to be defined in a later revision of this spec or in a dedicated session-sandbox subsection; this Spec Item establishes the required capability and behavior.
 
 See [`docs/tech_specs/sandbox_container.md`](sandbox_container.md#spec-cynai-sandbx-longrunningsession) for the sandbox contract for long-running sessions.
+
+### Managed Agent Proxy (Bidirectional)
+
+- Spec ID: `CYNAI.WORKER.ManagedAgentProxyBidirectional` <a id="spec-cynai-worker-managedagentproxy"></a>
+
+The Worker API MUST support a bidirectional proxy for worker-managed agent runtimes (for example PMA):
+
+- orchestrator (and user-gateway) -> agent container, and
+- agent container -> orchestrator (MCP gateway and control-plane callbacks).
+
+This is required so managed agent containers do not need direct network access to orchestrator endpoints and so the orchestrator
+does not need direct network access to agent containers.
+
+#### Orchestrator to Agent Proxy
+
+Recommended endpoint:
+
+- `POST /v1/worker/managed-services/{service_id}/proxy:http`
+
+Request body (minimum):
+
+- `version` (int, required): must be 1
+- `method` (string, required): `GET` | `POST` | `PUT` | `PATCH` | `DELETE`
+- `path` (string, required): path to call on the managed service
+- `headers` (object, optional): worker-enforced allowlist
+- `body_b64` (string, optional): base64 body
+
+Response body (minimum):
+
+- `version` (int, required): must be 1
+- `status` (int, required): upstream status
+- `headers` (object, optional): sanitized response headers
+- `body_b64` (string, optional): base64 response body
+
+Normative constraints:
+
+- The worker MUST allow proxying only to services present in desired state (`managed_services`) and MUST reject unknown `service_id`.
+- The worker MUST enforce strict request and response size limits and MUST apply header allowlists.
+- The worker MUST audit proxy calls with at least: `service_id`, `service_type`, caller identity (orchestrator), and timing.
+
+#### Agent to Orchestrator Proxy
+
+Agent-to-orchestrator proxy endpoints are used by the managed agent container at runtime.
+
+Binding:
+
+- These endpoints MUST be exposed only on loopback (`127.0.0.1`), a Unix domain socket, or both.
+  They MUST NOT be exposed on a non-loopback network interface.
+
+Minimum proxy operations:
+
+- **MCP gateway proxy**
+  - `POST /v1/worker/internal/orchestrator/mcp:call`
+  - Proxies a request to the orchestrator MCP gateway.
+  - The managed agent MUST authenticate using an agent-scoped token or API key (or a capability lease) and the worker MUST fail closed.
+  - The worker MUST emit audit records sufficient to attribute actions to the agent identity and task context.
+
+- **Ready/callback proxy**
+  - `POST /v1/worker/internal/orchestrator/agent:ready`
+  - Proxies readiness/registration callbacks to the orchestrator control-plane.
+  - Authentication and auditing requirements are the same as MCP gateway proxy.
 
 ### Session Sandbox PTY (Interactive Terminal Stream)
 

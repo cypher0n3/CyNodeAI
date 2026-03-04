@@ -111,7 +111,7 @@ Traces To:
 
 - [REQ-BOOTST-0105](../requirements/bootst.md#req-bootst-0105)
 
-The orchestrator control-plane and core services (user-gateway, api-egress, cynode-pma when enabled) MUST start and run independently of any OLLAMA or node-local inference container.
+The orchestrator control-plane and core services (user-gateway, api-egress) MUST start and run independently of any OLLAMA or node-local inference container.
 OLLAMA (or equivalent local inference backend) is a **node-side** concern: worker nodes start and manage the inference container after registering with the orchestrator and receiving configuration that instructs them to do so (including backend variant, e.g. ROCm or CUDA).
 
 - The orchestrator MUST NOT require an OLLAMA container as part of its own process or compose stack for correct operation.
@@ -171,19 +171,22 @@ The orchestrator cannot report fully ready until at least one inference path exi
 
 ### PMA Startup
 
-- The orchestrator MUST start the Project Manager Agent (cynode-pma) when the **first** inference path becomes available: either the first worker node has reported ready and is inference-capable, or the orchestrator has an LLM API key configured for PMA via API Egress.
-- The orchestrator MUST NOT start PMA before at least one of these conditions is satisfied.
+- The orchestrator MUST start the Project Manager Agent by instructing a worker node to run PMA as a **managed service container** when the **first** inference path becomes available: either the first worker node has reported ready and is inference-capable, or the orchestrator has an LLM API key configured for PMA via API Egress.
+- The orchestrator MUST deliver the PMA start bundle via node configuration (managed services desired state); see [`docs/tech_specs/worker_node_payloads.md`](worker_node_payloads.md) `node_configuration_payload_v1` `managed_services`.
+- The orchestrator MUST NOT instruct a node to start PMA before at least one of these conditions is satisfied.
 
 ### PMA Informs Orchestrator
 
-- The PMA MUST inform the orchestrator when it has come online (e.g. by responding to a health check or via a registration/ready callback) so the orchestrator can use it and set its own readiness to ready when all other prerequisites are met.
+- The orchestrator MUST learn that PMA is online via **worker-reported managed service status** (and endpoints) for PMA.
+  The worker determines readiness by health checking the PMA container per the configured health contract and reports `state=ready`.
+  See [`docs/tech_specs/worker_node_payloads.md`](worker_node_payloads.md) `node_capability_report_v1` `managed_services_status`.
 
 ## Recommended Behavior (Summary)
 
 - The orchestrator MUST ensure at least one inference path is available before reporting ready.
   If no worker has reported ready with inference and no PMA-facing LLM API key is configured, the orchestrator MUST refuse to enter a ready state.
 - The orchestrator MUST start PMA when the first inference path exists (worker ready and inference-capable, or API Egress key for PMA).
-- The orchestrator MUST NOT report ready until the PMA is online and reachable (PMA has informed the orchestrator and responds to e.g. `GET /healthz`).
+- The orchestrator MUST NOT report ready until the PMA is online and reachable (per worker-reported `managed_services_status` and endpoint contract).
   PMA is a core system feature and is always required; disabling PMA is not supported.
 - **PMA inference preference:** PMA configuration MUST prefer local inference via worker nodes unless overridden by user-specified config (e.g. `agents.project_manager.model.selection.execution_mode=force_external`).
   When a dispatchable local inference worker is available, the orchestrator MUST prefer a local Project Manager model; external inference via API Egress is used only when no local worker is available or when the user has explicitly overridden to force external.

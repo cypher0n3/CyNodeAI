@@ -33,10 +33,16 @@ Behavioral responsibilities remain defined by:
 
 ## Purpose and Trust Boundary
 
-`cynode-pma` is an orchestrator-side (control-plane) agent runtime.
-It is not a sandboxed worker.
+`cynode-pma` is an orchestrator-owned agent runtime hosted as a **worker-managed service container**.
+It is not a per-task sandbox container and it is not a worker agent.
 It MUST NOT execute arbitrary code locally.
 It delegates execution to worker nodes and sandbox containers through orchestrator-mediated mechanisms.
+
+Network and routing constraints (normative):
+
+- `cynode-pma` MUST NOT connect directly to orchestrator hostnames or ports.
+  Agent-to-orchestrator communication (MCP tool calls and callbacks) MUST flow through the worker proxy.
+  See [`docs/tech_specs/worker_api.md`](worker_api.md#spec-cynai-worker-managedagentproxy).
 
 ## Request Source and Orchestrator Handoff
 
@@ -44,6 +50,12 @@ It delegates execution to worker nodes and sandbox containers through orchestrat
 
 `cynode-pma` receives all agent-responsibility work from the **orchestrator**; it MUST NOT be invoked directly by the gateway or by external clients.
 The orchestrator routes to PMA whenever inference, planning, task refinement, job dispatch, or sub-agent coordination is needed, and performs sanitization, logging, and persistence at the boundary (e.g. per the [Chat completion routing path](openai_compatible_chat_api.md#spec-cynai-usrgwy-openaichatapi-routingpath) for chat).
+
+Handoff transport (normative):
+
+- Orchestrator-to-PMA traffic MUST be worker-mediated (reverse proxy through the Worker API).
+  The orchestrator MUST NOT rely on compose DNS or direct addressing to reach PMA.
+  See [`docs/tech_specs/worker_api.md`](worker_api.md#spec-cynai-worker-managedagentproxy).
 
 ### What is Handed off to `cynode-pma`
 
@@ -191,8 +203,10 @@ See:
 
 - Spec ID: `CYNAI.PMAGNT.McpToolAccess` <a id="spec-cynai-pmagnt-mcptoolaccess"></a>
 
-`cynode-pma` MUST invoke all tool operations through the **orchestrator MCP gateway**.
-It MUST NOT call MCP servers or internal services directly; the gateway is the single enforcement and audit point.
+`cynode-pma` MUST invoke all tool operations through the orchestrator MCP gateway.
+In this model, it does so via a worker-proxy URL that forwards to the orchestrator MCP gateway.
+`cynode-pma` MUST NOT call orchestrator endpoints directly; the worker proxy is the single egress from the agent container.
+The gateway remains the single enforcement and audit point at the orchestrator.
 When making MCP requests, `cynode-pma` MUST present an **agent-scoped token or API key** issued by the orchestrator for that agent (PM or PA) and user context; see [Agent-Scoped Tokens or API Keys](mcp_gateway_enforcement.md#spec-cynai-mcpgat-agentscopedtokens).
 The gateway authenticates the token and restricts tool access to the allowlist and per-tool scope for the resolved agent type.
 The gateway restricts PM/PA to tools that have **PM scope** (or **both**) in the orchestrator's per-tool scope; see [Per-tool scope: Sandbox vs PM](mcp_gateway_enforcement.md#spec-cynai-mcpgat-pertoolscope).
@@ -233,9 +247,15 @@ Traces To:
 - [REQ-PMAGNT-0110](../requirements/pmagnt.md#req-pmagnt-0110)
 - [REQ-ORCHES-0151](../requirements/orches.md#req-orches-0151)
 
-`cynode-pma` MUST inform the orchestrator when it has come online so that the orchestrator can use it and update its own readiness state (e.g. set `GET /readyz` to 200 when all other prerequisites are met).
-The mechanism MAY be: the orchestrator probes PMA's health endpoint (e.g. `GET /healthz` on the PMA listen address) and treats a successful response as "PMA is online", or PMA sends a registration/ready callback to the orchestrator after startup.
-The implementation MUST ensure the orchestrator learns that PMA is reachable before the orchestrator reports ready.
+`cynode-pma` MUST expose a health endpoint so the worker can determine readiness.
+The orchestrator MUST learn that PMA is online via worker-reported managed service status (and endpoints), not by probing a PMA listen address directly.
+
+Normative behavior:
+
+- `cynode-pma` MUST expose `GET /healthz` that returns HTTP 200 when the agent is online.
+- The worker MUST health check PMA per its managed service health contract and report `state=ready` and endpoint(s) to the orchestrator.
+  See [`docs/tech_specs/worker_node_payloads.md`](worker_node_payloads.md) `managed_services_status`.
+- The orchestrator MUST use the worker-reported status and endpoint(s) to determine readiness.
 
 ## Skills and Default Skill
 
@@ -263,6 +283,10 @@ Required configuration values
 
 - Role mode selection (command-line flag; override via config file or environment when supported).
 - Instructions bundle root and role-specific bundle paths (configurable; defaults as in [Instructions Loading and Routing](#instructions-loading-and-routing)).
+- Inference connectivity configuration (how PMA obtains inference and connection details), supplied by the orchestrator in the PMA managed service start bundle.
+- Worker-proxy endpoints for agent-to-orchestrator communication:
+  - Worker-proxy URL for MCP gateway calls.
+  - Worker-proxy URL for any required callback/ready signaling.
 
 Optional configuration values
 
