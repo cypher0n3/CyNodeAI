@@ -76,6 +76,9 @@ def cmd_start(opts):
     if not setup_dev_impl.start_node(extra_env=extra):
         setup_dev_impl.stop_all()
         return False
+    if not setup_dev_impl.start_pma_after_inference_path(extra_env=extra):
+        setup_dev_impl.stop_all()
+        return False
     setup_dev_impl.log_info(
         f"Services started: User API http://localhost:{setup_dev_config.ORCHESTRATOR_PORT} "
         f"Control-plane http://localhost:{setup_dev_config.CONTROL_PLANE_PORT} "

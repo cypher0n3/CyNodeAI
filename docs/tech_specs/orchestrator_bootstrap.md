@@ -155,7 +155,7 @@ Traces To:
 - [REQ-ORCHES-0150](../requirements/orches.md#req-orches-0150)
 - [REQ-ORCHES-0151](../requirements/orches.md#req-orches-0151)
 
-The orchestrator cannot report fully ready until at least one inference path exists and, when PMA is enabled, until the PMA has informed the orchestrator that it is online.
+The orchestrator cannot report fully ready until at least one inference path exists and until the PMA has informed the orchestrator that it is online.
 
 ### Inference Path
 
@@ -183,8 +183,8 @@ The orchestrator cannot report fully ready until at least one inference path exi
 - The orchestrator MUST ensure at least one inference path is available before reporting ready.
   If no worker has reported ready with inference and no PMA-facing LLM API key is configured, the orchestrator MUST refuse to enter a ready state.
 - The orchestrator MUST start PMA when the first inference path exists (worker ready and inference-capable, or API Egress key for PMA).
-- When PMA is enabled, the orchestrator MUST NOT report ready until the PMA is online and reachable (PMA has informed the orchestrator and responds to e.g. `GET /healthz`).
-  PMA is enabled by default (control-plane env `PMA_ENABLED=true`); set `PMA_ENABLED=false` to run without cynode-pma.
+- The orchestrator MUST NOT report ready until the PMA is online and reachable (PMA has informed the orchestrator and responds to e.g. `GET /healthz`).
+  PMA is a core system feature and is always required; disabling PMA is not supported.
 - **PMA inference preference:** PMA configuration MUST prefer local inference via worker nodes unless overridden by user-specified config (e.g. `agents.project_manager.model.selection.execution_mode=force_external`).
   When a dispatchable local inference worker is available, the orchestrator MUST prefer a local Project Manager model; external inference via API Egress is used only when no local worker is available or when the user has explicitly overridden to force external.
 - The orchestrator MUST select an effective Project Manager model once a local inference worker is available and ensure the model is loaded and ready before entering ready state when using local inference.

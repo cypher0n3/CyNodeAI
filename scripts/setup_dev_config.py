@@ -33,6 +33,8 @@ USER_GATEWAY_CONTAINER_NAME = os.environ.get(
 ORCHESTRATOR_PORT = os.environ.get("ORCHESTRATOR_PORT", "12080")
 CONTROL_PLANE_PORT = os.environ.get("CONTROL_PLANE_PORT", "12082")
 OLLAMA_CONTAINER_NAME = os.environ.get("OLLAMA_CONTAINER_NAME", "cynodeai-ollama")
+PMA_CONTAINER_NAME = os.environ.get("PMA_CONTAINER_NAME", "cynodeai-cynode-pma")
+PMA_PORT = os.environ.get("PMA_PORT", "8090")
 JWT_SECRET = os.environ.get("JWT_SECRET", "dev-jwt-secret-change-in-production")
 NODE_PSK = os.environ.get("NODE_PSK", "dev-node-psk-secret")
 ADMIN_PASSWORD = os.environ.get("ADMIN_PASSWORD", "admin123")
@@ -106,6 +108,7 @@ def compose_env():
         "WORKER_API_BEARER_TOKEN": WORKER_API_BEARER_TOKEN,
         "CONTROL_PLANE_PORT": CONTROL_PLANE_PORT,
         "ORCHESTRATOR_PORT": ORCHESTRATOR_PORT,
+        "PMA_PORT": PMA_PORT,
         "WORKER_API_TARGET_URL": f"http://{CONTAINER_HOST_ALIAS}:{WORKER_PORT}",
         "BOOTSTRAP_ADMIN_PASSWORD": ADMIN_PASSWORD,
     }

@@ -48,7 +48,7 @@ This section defines the orchestrator health and readiness endpoints.
 Traces To: [REQ-ORCHES-0120](../requirements/orches.md#req-orches-0120), [REQ-ORCHES-0150](../requirements/orches.md#req-orches-0150), [REQ-ORCHES-0151](../requirements/orches.md#req-orches-0151), [REQ-BOOTST-0002](../requirements/bootst.md#req-bootst-0002)
 
 The orchestrator exposes health endpoints that distinguish "process alive" from "ready to accept work".
-The orchestrator cannot report fully ready until at least one inference path exists (a worker that has reported ready and is inference-capable, or an LLM API key for PMA via API Egress) and, when PMA is enabled, until the PMA has informed the orchestrator that it is online.
+The orchestrator cannot report fully ready until at least one inference path exists (a worker that has reported ready and is inference-capable, or an LLM API key for PMA via API Egress) and until the PMA has informed the orchestrator that it is online.
 See [Orchestrator Readiness and PMA Startup](orchestrator_bootstrap.md#spec-cynai-bootst-orchestratorreadinessandpmastartup).
 
 Endpoints
@@ -59,8 +59,8 @@ Endpoints
 - `GET /readyz`
   - Returns 200 only when the orchestrator is in a ready state.
   - Returns 503 when prerequisites for readiness are not yet satisfied (no eligible inference path, PMA not started or not yet online, Project Manager model not loaded when using local inference, or required credentials/policy not present).
-  - The orchestrator MUST NOT return 200 until at least one inference path exists and, when PMA is enabled, until the PMA has informed the orchestrator that it is online and is reachable (e.g. responds to its health check).
-  - PMA is enabled by default (control-plane config `PMA_ENABLED`, default true); set to false to run without cynode-pma.
+  - The orchestrator MUST NOT return 200 until at least one inference path exists and until the PMA has informed the orchestrator that it is online and is reachable (e.g. responds to its health check).
+  - PMA is a core system feature and is always required; disabling PMA is not supported.
   - The response MUST include a reason that is actionable for an operator.
   - While `GET /readyz` returns 503, the orchestrator continues to serve the management surfaces required to become ready (for example system settings and credential configuration).
 

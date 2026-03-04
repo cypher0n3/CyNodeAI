@@ -1,6 +1,7 @@
-# Full orchestrator stack: Postgres + control-plane + user-gateway + cynode-pma. Ollama is optional (profile "ollama").
-# Ports: postgres 5432, control-plane 12082, user-gateway 12080, cynode-pma 8090, ollama 11434 (when profile used).
-# Core stack starts without OLLAMA. To include inference: docker compose --profile ollama up -d
+# Full orchestrator stack: Postgres + control-plane + user-gateway. cynode-pma and Ollama are profile-based.
+# Ports: postgres 5432, control-plane 12082, user-gateway 12080, cynode-pma 8090 (profile "pma"), ollama 11434 (profile "ollama").
+# Per orchestrator_bootstrap.md: PMA MUST NOT start until first inference path exists (worker ready or API Egress key).
+# Dev setup starts PMA only after node has registered (--profile pma up cynode-pma). Core stack: compose up -d (no pma profile).
 # Run from repo root: docker compose -f orchestrator/docker-compose.yml up -d
 # Explicit network for stable DNS and connectivity across restarts (mitigates recurring EOF/flaky host-gateway issues).
 networks:
@@ -76,12 +77,11 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-      cynode-pma:
-        condition: service_healthy
     networks:
       - orchestrator_net
 
   cynode-pma:
+    profiles: ["pma"]
     image: cynodeai-cynode-pma:dev
     build:
       context: ..

@@ -188,8 +188,8 @@ def build_orchestrator_compose_images():
         return False
     log_info("Building orchestrator compose images (control-plane, user-gateway, cynode-pma)...")
     if not run(
-        [_cfg.RUNTIME, "compose", "-f", _cfg.COMPOSE_FILE, "build",
-         "control-plane", "user-gateway", "cynode-pma"],
+        [_cfg.RUNTIME, "compose", "-f", _cfg.COMPOSE_FILE,
+         "--profile", "pma", "build", "control-plane", "user-gateway", "cynode-pma"],
         cwd=_cfg.PROJECT_ROOT,
         timeout=600,
     ):
@@ -221,10 +221,10 @@ def start_orchestrator_stack_compose(extra_env=None):
     env = _cfg.compose_env()
     if extra_env:
         env.update(extra_env)
-    # Use same profiles as up (ollama + optional) so profile services are torn down.
+    # Use same profiles as up (ollama + optional + pma) so profile services are torn down.
     subprocess.run(
         [_cfg.RUNTIME, "compose", "-f", _cfg.COMPOSE_FILE,
-         "--profile", "ollama", "--profile", "optional", "down"],
+         "--profile", "ollama", "--profile", "optional", "--profile", "pma", "down"],
         cwd=_cfg.PROJECT_ROOT,
         capture_output=True,
         timeout=60,
@@ -233,12 +233,12 @@ def start_orchestrator_stack_compose(extra_env=None):
     )
     subprocess.run(
         [_cfg.RUNTIME, "rm", "-f", _cfg.CONTROL_PLANE_CONTAINER_NAME,
-         _cfg.USER_GATEWAY_CONTAINER_NAME],
+         _cfg.USER_GATEWAY_CONTAINER_NAME, _cfg.PMA_CONTAINER_NAME],
         capture_output=True,
         check=False,
         shell=False,
     )
-    # Default: ollama (inference) + optional (api-egress, mcp-gateway) so E2E has no skips.
+    # Default: ollama + optional (no pma); PMA started later after node registers (start_pma_after_inference_path).
     if not run(
         [_cfg.RUNTIME, "compose", "-f", _cfg.COMPOSE_FILE,
          "--profile", "ollama", "--profile", "optional", "up", "-d"],
@@ -256,10 +256,10 @@ def stop_orchestrator_stack_compose(leave_ollama_running=False):
         return False
     log_info("Stopping orchestrator stack...")
     if os.path.isfile(_cfg.COMPOSE_FILE):
-        # Use same profiles as up so optional (mcp-gateway, api-egress) and ollama are stopped.
+        # Use same profiles as up so optional, ollama, and pma are stopped.
         subprocess.run(
             [_cfg.RUNTIME, "compose", "-f", _cfg.COMPOSE_FILE,
-             "--profile", "ollama", "--profile", "optional", "down"],
+             "--profile", "ollama", "--profile", "optional", "--profile", "pma", "down"],
             cwd=_cfg.PROJECT_ROOT,
             capture_output=True,
             timeout=60,
@@ -357,6 +357,58 @@ def start_node(extra_env=None):
     return True
 
 
+# Seconds to wait after node worker-api is up before starting PMA (node registration -> inference path).
+_PMA_START_DELAY_AFTER_NODE = 5
+
+
+def start_pma_container(extra_env=None):
+    """Start cynode-pma container via compose profile 'pma' (spec: after inference path exists)."""
+    if not _cfg.ensure_runtime():
+        return False
+    if not os.path.isfile(_cfg.COMPOSE_FILE):
+        return False
+    env = _cfg.compose_env()
+    if extra_env:
+        env.update(extra_env)
+    log_info("Starting PMA container (orchestrator_bootstrap: after inference path)...")
+    if not run(
+        [_cfg.RUNTIME, "compose", "-f", _cfg.COMPOSE_FILE,
+         "--profile", "ollama", "--profile", "optional", "--profile", "pma",
+         "up", "-d", "cynode-pma"],
+        env=env,
+        timeout=120,
+    ):
+        log_error("PMA container start failed")
+        return False
+    return True
+
+
+def wait_for_pma_healthz(timeout_sec=45):
+    """Wait for PMA /healthz to return 200. Return True on success."""
+    url = f"http://127.0.0.1:{_cfg.PMA_PORT}/healthz"
+    log_info(f"Waiting for PMA at {url} (up to {timeout_sec}s)...")
+    for _ in range(timeout_sec):
+        try:
+            req = urllib.request.Request(url)
+            with urllib.request.urlopen(req, timeout=2) as resp:
+                if resp.getcode() == 200:
+                    log_info("PMA is ready")
+                    return True
+        except (OSError, urllib.error.URLError):
+            pass
+        time.sleep(1)
+    log_error(f"PMA not ready after {timeout_sec}s")
+    return False
+
+
+def start_pma_after_inference_path(extra_env=None):
+    """Start PMA only after node is up (inference path). Per orchestrator_bootstrap.md."""
+    time.sleep(_PMA_START_DELAY_AFTER_NODE)
+    if not start_pma_container(extra_env=extra_env):
+        return False
+    return wait_for_pma_healthz()
+
+
 def _stop_all_step(step_name, func):
     """Run one teardown step; on exception log step, error, and traceback; do not raise."""
     try:
@@ -418,6 +470,7 @@ def stop_all(leave_ollama_running=False):
                     [
                         _cfg.RUNTIME, "rm", "-f", "cynodeai-postgres",
                         _cfg.CONTROL_PLANE_CONTAINER_NAME, _cfg.USER_GATEWAY_CONTAINER_NAME,
+                        _cfg.PMA_CONTAINER_NAME,
                         "cynodeai-mcp-gateway", "cynodeai-api-egress",
                     ],
                     capture_output=True, check=False, shell=False, timeout=30,

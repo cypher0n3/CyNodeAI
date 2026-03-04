@@ -31,6 +31,7 @@
   - [Remaining (Order)](#remaining-order)
 - [Remediation Status and Next Work](#remediation-status-and-next-work)
   - [Remediation Status (Done / Deferred / Pending)](#remediation-status-done--deferred--pending)
+  - [Known Drifts (Evidence-Based)](#known-drifts-evidence-based)
   - [P2-10 Orchestrator (Completed)](#p2-10-orchestrator-completed)
   - [Suggested Next Work](#suggested-next-work)
 - [References](#references)
@@ -111,7 +112,7 @@ These behaviors are reflected in Phase 1 (inference path requirement), Phase 2 (
   CLI (cynork), inference proxy sidecar, and prompt interpretation: `input_mode` (prompt/script/commands), default prompt-as-model path (sandbox job with fixed model-call script), BDD/feature coverage.
   `just ci` passes (lint, coverage >=90%, BDD orchestrator/worker_node/cynork).
 - **Phase 1.7:** Complete (with known drifts).
-  `agents/` Go module with `cynode-pma` binary (role flag, instructions paths, Containerfile); control-plane starts cynode-pma by default (`PMA_ENABLED=true`) and stops it on shutdown; `GET /readyz` returns 503 until PMA is reachable when enabled; cynode-pma runs as a container in the orchestrator stack (compose + e2e).
+  `agents/` Go module with `cynode-pma` binary (role flag, instructions paths, Containerfile); `GET /readyz` returns 503 until PMA is reachable.
   **Partial:** PMA startup is eager (not gated on first inference path per REQ-ORCHES-0150); chat completions do not yet enforce max wait or retry (REQ-ORCHES-0131, REQ-ORCHES-0132).
   See [Known Drifts](#known-drifts-evidence-based).
   **Chat routing (OpenAI-compatible):** Implemented and verified per spec.
@@ -651,7 +652,7 @@ Content was consolidated from dev_docs that have been deleted.
 The following gaps between current implementation and requirements/specs are tracked for remediation.
 See [docs/dev_docs/2026-03-01_repo_state_and_execution_plan.md](dev_docs/2026-03-01_repo_state_and_execution_plan.md) and execution tracker for status.
 
-- **PMA startup (REQ-ORCHES-0150):** Implemented behavior starts PMA eagerly when `PMA_ENABLED=true`.
+- **PMA startup (REQ-ORCHES-0150):** Implemented behavior starts PMA eagerly.
   Requirement: start PMA only when the first inference path is available (worker ready and inference-capable, or API Egress key for PMA).
   Remediation: Step 3 of 2026-03-01 execution plan.
 - **Chat completion reliability (REQ-ORCHES-0131, REQ-ORCHES-0132):** Bounded wait duration and transient retry with backoff are not yet implemented in the chat completions handler.

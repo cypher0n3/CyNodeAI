@@ -104,8 +104,8 @@ It covers orchestrator control-plane behavior, task lifecycle, dispatch, and sta
 - **REQ-ORCHES-0120:** The orchestrator MUST remain running while it is not ready due to missing Project Manager inference prerequisites, and MUST expose health endpoints that distinguish "process alive" from "ready to accept work".
   `GET /healthz` MUST return 200 when the orchestrator process is alive.
   `GET /readyz` MUST return 200 only when the orchestrator is in a ready state; otherwise it MUST return 503 with a reason indicating what prerequisites are missing.
-  The orchestrator MUST NOT report ready until at least one inference path exists (a worker node that has reported ready to the orchestrator and is inference-capable, or an LLM API key for PMA via API Egress) and, when PMA is enabled, until the PMA has informed the orchestrator that it is online and is reachable.
-  PMA is enabled by default (config `PMA_ENABLED=true`).
+  The orchestrator MUST NOT report ready until at least one inference path exists (a worker node that has reported ready to the orchestrator and is inference-capable, or an LLM API key for PMA via API Egress) and until the PMA has informed the orchestrator that it is online and is reachable.
+  PMA is a core system feature and is always required; disabling PMA is not supported.
   While not ready, the orchestrator MUST allow users to configure system settings and credentials required to become ready.
   [CYNAI.ORCHES.Rule.HealthEndpoints](../tech_specs/orchestrator.md#spec-cynai-orches-rule-healthendpoints)
   <a id="req-orches-0120"></a>
