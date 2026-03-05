@@ -12,6 +12,7 @@ import urllib.request
 
 # Import after repo root is on path
 import scripts.setup_dev_config as _cfg
+import scripts.setup_dev_build_cache as _build_cache
 
 # Mutable state set at start of start_orchestrator_stack_compose; used by stop_all.
 OLLAMA_TEARDOWN_STATE = {"was_running_before": False}
@@ -179,13 +180,53 @@ def build_binaries():
     return True
 
 
-def build_orchestrator_compose_images():
-    """Build control-plane, user-gateway, cynode-pma images so compose up uses latest code."""
+def _image_exists(tag):
+    """Return True if the image tag exists locally (podman/docker images -q tag)."""
+    cmd = runtime_cmd("images", "-q", tag)
+    if not cmd:
+        return False
+    try:
+        r = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=False,
+            shell=False,
+        )
+        return bool((r.stdout or "").strip())
+    except (subprocess.TimeoutExpired, FileNotFoundError):
+        return False
+
+
+def build_orchestrator_compose_images(force=False):
+    """Build control-plane, user-gateway, cynode-pma images so compose up uses latest code.
+
+    If force is False, skip build when stamp hash matches and all three images exist.
+    Set force=True (e.g. from E2E_FORCE_REBUILD) to always rebuild.
+    """
     if not _cfg.ensure_runtime():
         return False
     if not os.path.isfile(_cfg.COMPOSE_FILE):
         log_error(f"Compose file not found: {_cfg.COMPOSE_FILE}")
         return False
+    stamp_path = os.path.join(_cfg.PROJECT_ROOT, "tmp", "setup_dev_compose_images.stamp")
+    compose_images = [
+        "cynodeai-control-plane:dev",
+        "cynodeai-user-gateway:dev",
+        "cynodeai-cynode-pma:dev",
+    ]
+    if not force:
+        current_hash = _build_cache.compute_compose_images_hash(
+            _cfg.COMPOSE_FILE, _cfg.PROJECT_ROOT
+        )
+        stored = _build_cache.read_stamp(stamp_path)
+        if (
+            stored == current_hash
+            and all(_image_exists(tag) for tag in compose_images)
+        ):
+            log_info("Orchestrator compose images up to date.")
+            return True
     log_info("Building orchestrator compose images (control-plane, user-gateway, cynode-pma)...")
     if not run(
         [_cfg.RUNTIME, "compose", "-f", _cfg.COMPOSE_FILE,
@@ -195,6 +236,11 @@ def build_orchestrator_compose_images():
     ):
         log_error("Orchestrator compose build failed")
         return False
+    os.makedirs(os.path.dirname(stamp_path), exist_ok=True)
+    _build_cache.write_stamp(
+        stamp_path,
+        _build_cache.compute_compose_images_hash(_cfg.COMPOSE_FILE, _cfg.PROJECT_ROOT),
+    )
     return True
 
 
@@ -203,8 +249,12 @@ def get_ollama_was_running_before():
     return OLLAMA_TEARDOWN_STATE["was_running_before"]
 
 
-def start_orchestrator_stack_compose(extra_env=None):
-    """Compose down, rm stray containers, compose up -d with env."""
+def start_orchestrator_stack_compose(extra_env=None, ollama_in_stack=False):
+    """Compose down, rm stray containers, compose up -d with env.
+
+    ollama_in_stack: if True (bypass), include ollama profile so OLLAMA runs in compose.
+    Prescribed sequence (default): False, orchestrator starts without OLLAMA; node starts inference when instructed.
+    """
     if not _cfg.ensure_runtime():
         return False
     if not os.path.isfile(_cfg.COMPOSE_FILE):
@@ -214,6 +264,10 @@ def start_orchestrator_stack_compose(extra_env=None):
         _cfg.OLLAMA_CONTAINER_NAME, running=True
     )
     log_info("=== Orchestrator stack startup ===")
+    if ollama_in_stack:
+        log_info("  (bypass: OLLAMA in stack)")
+    else:
+        log_info("  (prescribed: no OLLAMA in stack; node starts inference when instructed)")
     log_info(
         f"  postgres :5432, control-plane :{_cfg.CONTROL_PLANE_PORT}, "
         f"user-gateway :{_cfg.ORCHESTRATOR_PORT}"
@@ -221,7 +275,7 @@ def start_orchestrator_stack_compose(extra_env=None):
     env = _cfg.compose_env()
     if extra_env:
         env.update(extra_env)
-    # Use same profiles as up (ollama + optional + pma) so profile services are torn down.
+    # Down: always use all profiles so every profile service is torn down.
     subprocess.run(
         [_cfg.RUNTIME, "compose", "-f", _cfg.COMPOSE_FILE,
          "--profile", "ollama", "--profile", "optional", "--profile", "pma", "down"],
@@ -238,10 +292,12 @@ def start_orchestrator_stack_compose(extra_env=None):
         check=False,
         shell=False,
     )
-    # Default: ollama + optional (no pma); PMA started later after node registers (start_pma_after_inference_path).
+    # Up: optional always; ollama only when bypass; pma never (PMA via compose or orchestrator later).
+    up_profiles = ["--profile", "optional"]
+    if ollama_in_stack:
+        up_profiles.extend(["--profile", "ollama"])
     if not run(
-        [_cfg.RUNTIME, "compose", "-f", _cfg.COMPOSE_FILE,
-         "--profile", "ollama", "--profile", "optional", "up", "-d"],
+        [_cfg.RUNTIME, "compose", "-f", _cfg.COMPOSE_FILE] + up_profiles + ["up", "-d"],
         env=env, timeout=600,
     ):
         log_error("Compose up failed")
@@ -294,6 +350,24 @@ def wait_for_control_plane_listening():
             pass
         time.sleep(1)
     log_error("Control-plane not listening after 90s")
+    return False
+
+
+def wait_for_orchestrator_readyz(timeout_sec=120):
+    """Wait for control-plane /readyz 200 (orchestrator fully ready, PMA up per worker report)."""
+    url = f"http://127.0.0.1:{_cfg.CONTROL_PLANE_PORT}/readyz"
+    log_info(f"Waiting for orchestrator ready at {url} (up to {timeout_sec}s)...")
+    for _ in range(timeout_sec):
+        try:
+            req = urllib.request.Request(url)
+            with urllib.request.urlopen(req, timeout=2) as resp:
+                if resp.getcode() == 200:
+                    log_info("Orchestrator is ready (readyz 200)")
+                    return True
+        except (OSError, urllib.error.URLError):
+            pass
+        time.sleep(1)
+    log_error(f"Orchestrator not ready (readyz 200) after {timeout_sec}s")
     return False
 
 
@@ -401,12 +475,23 @@ def wait_for_pma_healthz(timeout_sec=45):
     return False
 
 
-def start_pma_after_inference_path(extra_env=None):
-    """Start PMA only after node is up (inference path). Per orchestrator_bootstrap.md."""
+def start_pma_after_inference_path(extra_env=None, pma_via_compose=False):
+    """After node is up: either start PMA via compose (bypass) or rely on prescribed path.
+
+    pma_via_compose: if True (bypass), start cynode-pma container via compose and wait for healthz.
+    Prescribed (default False): do not start PMA here; orchestrator instructs worker to start PMA when inference path exists.
+    When prescribed we optionally wait for orchestrator /readyz 200 (PMA reported by worker).
+    """
     time.sleep(_PMA_START_DELAY_AFTER_NODE)
-    if not start_pma_container(extra_env=extra_env):
-        return False
-    return wait_for_pma_healthz()
+    if pma_via_compose:
+        log_info("(bypass: starting PMA via compose)")
+        if not start_pma_container(extra_env=extra_env):
+            return False
+        return wait_for_pma_healthz()
+    log_info(
+        "(prescribed: PMA started by orchestrator/worker when inference path exists; waiting for readyz)"
+    )
+    return wait_for_orchestrator_readyz()
 
 
 def _stop_all_step(step_name, func):
@@ -484,22 +569,57 @@ def stop_all(leave_ollama_running=False):
     return True
 
 
-def build_e2e_images():
-    """Build inference-proxy and cynode-sba images."""
+def build_e2e_images(force=False):
+    """Build inference-proxy and cynode-sba images.
+
+    If force is False, skip each image when its stamp hash matches and the image exists.
+    Set force=True (e.g. from E2E_FORCE_REBUILD) to always rebuild.
+    """
     if not _cfg.ensure_runtime():
         return False
     rt = _cfg.RUNTIME
+    root = _cfg.PROJECT_ROOT
+    cache_dir = os.environ.get(
+        "E2E_IMAGE_CACHE_DIR",
+        os.path.join(root, "tmp", "e2e-image-cache"),
+    )
+    # (containerfile rel, tag, extra_paths for context hash)
     images = [
-        ("worker_node/cmd/inference-proxy/Containerfile", "cynodeai-inference-proxy:dev"),
-        ("agents/cmd/cynode-sba/Containerfile", "cynodeai-cynode-sba:dev"),
+        (
+            "worker_node/cmd/inference-proxy/Containerfile",
+            "cynodeai-inference-proxy:dev",
+            ["go_shared_libs", "worker_node"],
+        ),
+        (
+            "agents/cmd/cynode-sba/Containerfile",
+            "cynodeai-cynode-sba:dev",
+            ["go_shared_libs", "agents"],
+        ),
     ]
-    for dockerfile_rel, tag in images:
-        if not os.path.isfile(os.path.join(_cfg.PROJECT_ROOT, dockerfile_rel)):
+    for dockerfile_rel, tag, extra_paths in images:
+        if not os.path.isfile(os.path.join(root, dockerfile_rel)):
             log_error(f"Dockerfile not found: {dockerfile_rel}")
             return False
+        stamp_name = tag.replace(":", "-") + ".stamp"
+        stamp_path = os.path.join(cache_dir, stamp_name)
+        if not force:
+            current_hash = _build_cache.compute_context_hash(
+                dockerfile_rel, root, extra_paths=extra_paths
+            )
+            stored = _build_cache.read_stamp(stamp_path)
+            if stored == current_hash and _image_exists(tag):
+                log_info(f"Image {tag} up to date.")
+                continue
         log_info(f"Building {tag}...")
         if not run([rt, "build", "-f", dockerfile_rel, "-t", tag, "."], timeout=600):
             return False
+        os.makedirs(cache_dir, exist_ok=True)
+        _build_cache.write_stamp(
+            stamp_path,
+            _build_cache.compute_context_hash(
+                dockerfile_rel, root, extra_paths=extra_paths
+            ),
+        )
     return True
 
 

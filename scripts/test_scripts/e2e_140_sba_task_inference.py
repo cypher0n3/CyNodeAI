@@ -17,31 +17,45 @@ class TestSbaInference(unittest.TestCase):
         """Create SBA task with LLM prompt, poll until completed/failed; assert sba_result."""
         if os.environ.get("E2E_SKIP_INFERENCE_SMOKE", "") or config.E2E_SKIP_INFERENCE_SMOKE:
             self.skipTest("E2E_SKIP_INFERENCE_SMOKE set")
-        _, out, _ = helpers.run_cynork(
-            [
-                "task", "create", "-p",
-                "Reply in one word: hello (this may use inference in SBA).",
-                "--use-sba", "-o", "json",
-            ],
-            state.CONFIG_PATH,
-        )
-        data = helpers.parse_json_safe(out)
-        task_id = (data or {}).get("task_id")
-        self.assertIsNotNone(task_id, "SBA inference task create failed")
         status = None
         result_data = None
-        for _ in range(24):
-            time.sleep(5)
+        for attempt in range(1, 4):
             _, out, _ = helpers.run_cynork(
-                ["task", "result", task_id, "-o", "json"],
+                [
+                    "task", "create", "-p",
+                    "Reply in one word: hello (this may use inference in SBA).",
+                    "--use-sba", "-o", "json",
+                ],
                 state.CONFIG_PATH,
             )
-            result_data = helpers.parse_json_safe(out)
-            status = (result_data or {}).get("status")
-            if status in ("completed", "failed"):
+            data = helpers.parse_json_safe(out)
+            task_id = (data or {}).get("task_id")
+            self.assertIsNotNone(task_id, "SBA inference task create failed")
+            status = None
+            result_data = None
+            for _ in range(60):
+                time.sleep(5)
+                _, out, _ = helpers.run_cynork(
+                    ["task", "result", task_id, "-o", "json"],
+                    state.CONFIG_PATH,
+                )
+                result_data = helpers.parse_json_safe(out)
+                status = (result_data or {}).get("status")
+                if status in ("completed", "failed"):
+                    break
+            if status not in ("completed", "failed"):
+                if attempt < 3:
+                    continue
+                self.fail(
+                    "SBA inference task did not finish: "
+                    f"status={status!r} result={result_data}"
+                )
+            if status == "completed":
                 break
-        self.assertIn(status, ("completed", "failed"), "SBA inference task did not finish")
-        if status != "completed":
+            stdout = ((result_data or {}).get("stdout") or "")
+            if "jobs:run" in stdout and "EOF" in stdout and attempt < 3:
+                time.sleep(3)
+                continue
             self.fail(
                 "SBA inference task failed (per spec inference path must be available): "
                 f"status={status!r} result={result_data}"

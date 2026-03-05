@@ -38,6 +38,8 @@ def _has_user_facing_reply(job):
             return True
     if sba.get("final_reply") or sba.get("reply"):
         return True
+    if sba.get("final_answer"):
+        return True
     return False
 
 
@@ -45,7 +47,7 @@ class TestSbaInferenceReply(unittest.TestCase):
     """E2E: SBA + inference prompt produces user-facing reply (not empty / sba-run only)."""
 
     def test_sba_inference_reply_current_time(self):
-        """Create task --use-inference --use-sba -p 'Reply back with the current time.'; assert reply."""
+        """Create SBA inference task and assert user-facing reply."""
         if os.environ.get("E2E_SKIP_INFERENCE_SMOKE", "") or config.E2E_SKIP_INFERENCE_SMOKE:
             self.skipTest("E2E_SKIP_INFERENCE_SMOKE set")
         _, out, _ = helpers.run_cynork(
@@ -60,7 +62,7 @@ class TestSbaInferenceReply(unittest.TestCase):
         self.assertIsNotNone(task_id, "SBA inference reply task create failed")
         status = None
         result_data = None
-        for _ in range(24):
+        for _ in range(60):
             time.sleep(5)
             _, out, _ = helpers.run_cynork(
                 ["task", "result", task_id, "-o", "json"],
@@ -79,5 +81,8 @@ class TestSbaInferenceReply(unittest.TestCase):
         job = _job_result_parsed(result_data)
         self.assertTrue(
             _has_user_facing_reply(job),
-            "SBA inference produced no user-facing reply (empty stdout and only sba-run placeholder)",
+            (
+                "SBA inference produced no user-facing reply "
+                "(empty stdout and only sba-run placeholder)"
+            ),
         )

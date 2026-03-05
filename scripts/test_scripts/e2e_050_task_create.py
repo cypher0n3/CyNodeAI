@@ -2,10 +2,12 @@
 # Traces: REQ-ORCHES-0122, 0126; CYNAI.CLIENT.CliCommandSurface (task subset).
 
 import re
+import os
 import time
 import unittest
 
 from scripts.test_scripts import helpers
+from scripts.test_scripts import config
 import scripts.test_scripts.e2e_state as state
 
 
@@ -81,6 +83,12 @@ class TestTaskCreate(unittest.TestCase):
 
     def test_task_create_with_attachments(self):
         """Create task with --attachment paths; assert task_id and attachments in get."""
+        tmp_dir = os.path.join(config.PROJECT_ROOT, "tmp")
+        os.makedirs(tmp_dir, exist_ok=True)
+        with open(os.path.join(tmp_dir, "att1.txt"), "w", encoding="utf-8") as f:
+            f.write("att1")
+        with open(os.path.join(tmp_dir, "att2.txt"), "w", encoding="utf-8") as f:
+            f.write("att2")
         for attempt in range(1, 4):
             if attempt > 1:
                 time.sleep(5)

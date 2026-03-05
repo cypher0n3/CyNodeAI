@@ -19,8 +19,8 @@ class TestTaskListStatusFilter(unittest.TestCase):
         )
         data = helpers.parse_json_safe(out)
         self.assertIsNotNone(data, "task list response should be JSON")
-        self.assertIn("data", data, "task list should have data key (or tasks)")
-        tasks = data.get("data") or data.get("tasks") or []
+        self.assertIn("tasks", data, "task list should have tasks key")
+        tasks = data.get("tasks") or []
         self.assertIsInstance(tasks, list, "tasks should be a list")
         for t in tasks:
             self.assertIsInstance(t, dict, "each task should be an object")

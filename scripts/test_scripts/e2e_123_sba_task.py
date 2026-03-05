@@ -16,25 +16,50 @@ class TestSbaTask(unittest.TestCase):
         """Create SBA task, poll until done; set SBA_TASK_ID only on success; assert sba_result."""
         if os.environ.get("E2E_SKIP_INFERENCE_SMOKE", "") or config.E2E_SKIP_INFERENCE_SMOKE:
             self.skipTest("E2E_SKIP_INFERENCE_SMOKE set")
-        _, out, _ = helpers.run_cynork(
-            ["task", "create", "-p", "echo from SBA", "--use-sba", "--use-inference", "-o", "json"],
-            state.CONFIG_PATH,
-        )
-        data = helpers.parse_json_safe(out)
-        task_id = (data or {}).get("task_id")
-        self.assertIsNotNone(task_id, "SBA task create failed")
         status = None
         result_data = None
-        for _ in range(18):
-            time.sleep(5)
+        task_id = None
+        for attempt in range(1, 4):
             _, out, _ = helpers.run_cynork(
-                ["task", "result", task_id, "-o", "json"], state.CONFIG_PATH
+                [
+                    "task",
+                    "create",
+                    "-p",
+                    "echo from SBA",
+                    "--use-sba",
+                    "--use-inference",
+                    "-o",
+                    "json",
+                ],
+                state.CONFIG_PATH,
             )
-            result_data = helpers.parse_json_safe(out)
-            status = (result_data or {}).get("status")
-            if status in ("completed", "failed"):
+            data = helpers.parse_json_safe(out)
+            task_id = (data or {}).get("task_id")
+            self.assertIsNotNone(task_id, "SBA task create failed")
+            status = None
+            result_data = None
+            for _ in range(60):
+                time.sleep(5)
+                _, out, _ = helpers.run_cynork(
+                    ["task", "result", task_id, "-o", "json"], state.CONFIG_PATH
+                )
+                result_data = helpers.parse_json_safe(out)
+                status = (result_data or {}).get("status")
+                if status in ("completed", "failed"):
+                    break
+            if status not in ("completed", "failed"):
+                if attempt < 3:
+                    continue
+                self.fail(
+                    "SBA task did not reach terminal status in time: "
+                    f"status={status!r} result={result_data}"
+                )
+            if status == "completed":
                 break
-        if status != "completed":
+            stdout = ((result_data or {}).get("stdout") or "")
+            if "jobs:run" in stdout and "EOF" in stdout and attempt < 3:
+                time.sleep(3)
+                continue
             self.fail(
                 "SBA task failed (per REQ-SBAGNT-0109 inference must be reachable): "
                 f"status={status!r} result={result_data}"

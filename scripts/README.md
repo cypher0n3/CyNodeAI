@@ -16,8 +16,9 @@ Python dev setup replaces bash for all commands; the bash script remains for ref
 
 ## Directory Layout
 
-- **setup_dev.py**, **setup_dev_config.py**, **setup_dev_impl.py** - Python dev setup (no bash dependency).
+- **setup_dev.py**, **setup_dev_config.py**, **setup_dev_impl.py**, **setup_dev_build_cache.py** - Python dev setup (no bash dependency).
   Same commands as `setup-dev.sh`; see [Python dev setup](#python-dev-setup).
+  `setup_dev_build_cache.py` provides stamp/hash helpers for incremental compose and E2E image builds.
 - **test_scripts/** - Python E2E suite (unittest; discovers `e2e_*.py`).
   See [test_scripts/README.md](test_scripts/README.md) for test layout, state, and how to add tests.
 - **setup-dev.sh** - Legacy bash dev setup (start-db, build, start, stop, test-e2e, full-demo).
@@ -36,25 +37,30 @@ Commands (same as `setup-dev.sh`):
 - **stop-db** - Stop the Postgres container.
 - **clean-db** - Stop and remove the Postgres container and volume.
 - **migrate** - No-op; migrations run when control-plane starts.
-- **build** - Run `just build` (orchestrator, worker_node, cynork, agents binaries).
-- **build-e2e-images** - Build inference-proxy and cynode-sba images for E2E.
+- **build** - Run `just build-dev` (orchestrator, worker_node, cynork, agents binaries).
+- **build-e2e-images** - Build inference-proxy and cynode-sba images for E2E (incremental when unchanged; use `E2E_FORCE_REBUILD=1` or `SETUP_DEV_FORCE_BUILD=1` to force).
 - **start** - Build, compose up (orchestrator stack), wait for control-plane, start node-manager.
+  Default is **prescribed sequence** (orchestrator without OLLAMA in stack; PMA started by orchestrator/worker when inference path exists).
+  Use **bypasses** for convenience: `--ollama-in-stack` and/or `--pma-via-compose`, or env `SETUP_DEV_OLLAMA_IN_STACK=1`, `SETUP_DEV_PMA_VIA_COMPOSE=1`.
 - **stop** - Kill node-manager, free worker port, compose down, remove containers.
-- **restart** - Stop all then start (same as stop + start).
+- **restart** - Stop all then start (same as stop + start); accepts same bypass flags as start.
 - **clean** - Stop all services and remove postgres container/volume.
 - **test-e2e** - Run the Python E2E suite ([test_scripts/run_e2e.py](test_scripts/run_e2e.py)); stack must be up.
 - **full-demo** - Build, build E2E images, start stack and node, run E2E suite; optionally stop on success.
   Use `--stop-on-success` or `STOP_ON_SUCCESS_ENV=1` to tear down after tests pass.
-- **help** - Show usage and environment variables.
+  Accepts same bypass flags as start; use `--ollama-in-stack --pma-via-compose` if E2E expects OLLAMA and PMA from compose.
+- **help** - Show usage, bypass flags, and environment variables.
 
 Examples:
 
 ```bash
 PYTHONPATH=. python scripts/setup_dev.py build
+PYTHONPATH=. python scripts/setup_dev.py start
+PYTHONPATH=. python scripts/setup_dev.py start --ollama-in-stack --pma-via-compose
 PYTHONPATH=. python scripts/setup_dev.py full-demo --stop-on-success
 ```
 
-Or via just: `just setup-dev build`, `just setup-dev full-demo --stop-on-success`.
+Or via just: `just setup-dev build`, `just setup-dev start`, `just setup-dev start --ollama-in-stack --pma-via-compose`, `just setup-dev full-demo --stop-on-success`.
 
 ## E2E Test Suite
 
@@ -75,7 +81,9 @@ Use `just setup-dev stop` to stop all services; `just setup-dev clean-db` to rem
 ## Environment
 
 Environment variables match `setup-dev.sh`; see `python scripts/setup_dev.py help` for the full list.
-Common ones: `POSTGRES_PORT`, `ORCHESTRATOR_PORT`, `CONTROL_PLANE_PORT`, `ADMIN_PASSWORD`, `NODE_PSK`, `WORKER_PORT`, `E2E_FORCE_REBUILD`, `STOP_ON_SUCCESS_ENV`, `INFERENCE_PROXY_IMAGE`, `OLLAMA_UPSTREAM_URL`.
+Common ones: `POSTGRES_PORT`, `ORCHESTRATOR_PORT`, `CONTROL_PLANE_PORT`, `ADMIN_PASSWORD`, `NODE_PSK`, `WORKER_PORT`, `STOP_ON_SUCCESS_ENV`, `INFERENCE_PROXY_IMAGE`, `OLLAMA_UPSTREAM_URL`.
+Startup bypasses (optional): `SETUP_DEV_OLLAMA_IN_STACK=1`, `SETUP_DEV_PMA_VIA_COMPOSE=1` (same as `--ollama-in-stack`, `--pma-via-compose`).
+Incremental builds: `E2E_FORCE_REBUILD=1` or `SETUP_DEV_FORCE_BUILD=1` to force rebuild of E2E and compose images.
 Ports and endpoints are documented in [docs/tech_specs/ports_and_endpoints.md](docs/tech_specs/ports_and_endpoints.md).
 
 ## Lint

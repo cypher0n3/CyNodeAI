@@ -49,21 +49,37 @@ def show_help():
     print("                  Use --stop-on-success to stop after E2E passes")
     print("  help            Show this message")
     print("")
+    print("Startup (start / full-demo / restart): default is prescribed sequence.")
+    print("  --ollama-in-stack   Bypass: run OLLAMA in orchestrator compose.")
+    print("  --pma-via-compose   Bypass: start PMA via compose after node.")
+    print("  SETUP_DEV_OLLAMA_IN_STACK=1, SETUP_DEV_PMA_VIA_COMPOSE=1  Same as flags.")
+    print("")
     print("Environment (same as setup-dev.sh):")
     print("  POSTGRES_PORT, ORCHESTRATOR_PORT, CONTROL_PLANE_PORT, ADMIN_PASSWORD")
-    print("  NODE_PSK, WORKER_PORT, E2E_FORCE_REBUILD, STOP_ON_SUCCESS_ENV")
+    print("  NODE_PSK, WORKER_PORT, E2E_FORCE_REBUILD, SETUP_DEV_FORCE_BUILD, STOP_ON_SUCCESS_ENV")
     print("  INFERENCE_PROXY_IMAGE, OLLAMA_UPSTREAM_URL, CONTAINER_HOST_ALIAS")
 
 
+def _resolve_bypass(name, arg_value, env_key):
+    """True if bypass is enabled via arg or env (e.g. SETUP_DEV_OLLAMA_IN_STACK=1)."""
+    if arg_value:
+        return True
+    return os.environ.get(env_key, "").strip() == "1"
+
+
 def cmd_start(opts):
-    """Build, start compose stack, wait for control-plane, start node."""
+    """Build, start compose stack, wait for control-plane, start node. Prescribed sequence by default."""
     opts.extra_env = getattr(opts, "extra_env", None) or {}
     defaults = _default_inference_env()
     for k, v in defaults.items():
         opts.extra_env.setdefault(k, v)
+    ollama_in_stack = getattr(opts, "ollama_in_stack", False)
+    pma_via_compose = getattr(opts, "pma_via_compose", False)
     if not setup_dev_impl.build_binaries():
         return False
-    if not setup_dev_impl.start_orchestrator_stack_compose(extra_env=opts.extra_env):
+    if not setup_dev_impl.start_orchestrator_stack_compose(
+        extra_env=opts.extra_env, ollama_in_stack=ollama_in_stack
+    ):
         setup_dev_impl.stop_all()
         return False
     if not setup_dev_impl.wait_for_control_plane_listening():
@@ -76,7 +92,9 @@ def cmd_start(opts):
     if not setup_dev_impl.start_node(extra_env=extra):
         setup_dev_impl.stop_all()
         return False
-    if not setup_dev_impl.start_pma_after_inference_path(extra_env=extra):
+    if not setup_dev_impl.start_pma_after_inference_path(
+        extra_env=extra, pma_via_compose=pma_via_compose
+    ):
         setup_dev_impl.stop_all()
         return False
     setup_dev_impl.log_info(
@@ -88,13 +106,20 @@ def cmd_start(opts):
     return True
 
 
+def _force_rebuild():
+    """True if E2E_FORCE_REBUILD or SETUP_DEV_FORCE_BUILD is set (skip incremental cache)."""
+    return bool(
+        os.environ.get("E2E_FORCE_REBUILD") or os.environ.get("SETUP_DEV_FORCE_BUILD")
+    )
+
+
 def cmd_full_demo(opts):
     """Build binaries, E2E images, orchestrator images; start stack; run E2E; optionally stop."""
     if not setup_dev_impl.build_binaries():
         return False
-    if not setup_dev_impl.build_e2e_images():
+    if not setup_dev_impl.build_e2e_images(force=_force_rebuild()):
         return False
-    if not setup_dev_impl.build_orchestrator_compose_images():
+    if not setup_dev_impl.build_orchestrator_compose_images(force=_force_rebuild()):
         return False
     setup_dev_config.ensure_runtime()
     host = setup_dev_config.CONTAINER_HOST_ALIAS or "host.containers.internal"
@@ -140,7 +165,7 @@ def _run_build():
 
 
 def _run_build_e2e_images():
-    return setup_dev_impl.build_e2e_images()
+    return setup_dev_impl.build_e2e_images(force=_force_rebuild())
 
 
 def _run_stop():
@@ -151,13 +176,21 @@ def _run_test_e2e():
     return setup_dev_impl.run_python_e2e(extra_env=_default_inference_env())
 
 
-def _run_restart():
+def _run_restart(args):
     """Stop all then start (parity with dev-setup.sh restart)."""
     setup_dev_impl.stop_all()
     time.sleep(2)
 
     class Opts:
         extra_env = None
+        ollama_in_stack = _resolve_bypass(
+            "ollama_in_stack", getattr(args, "ollama_in_stack", False),
+            "SETUP_DEV_OLLAMA_IN_STACK"
+        )
+        pma_via_compose = _resolve_bypass(
+            "pma_via_compose", getattr(args, "pma_via_compose", False),
+            "SETUP_DEV_PMA_VIA_COMPOSE"
+        )
     return cmd_start(Opts())
 
 
@@ -176,7 +209,6 @@ def run_command(args):
         "build": _run_build,
         "build-e2e-images": _run_build_e2e_images,
         "stop": _run_stop,
-        "restart": _run_restart,
         "clean": _run_clean,
         "test-e2e": _run_test_e2e,
     }
@@ -186,6 +218,14 @@ def run_command(args):
     if args.command == "start":
         class Opts:
             extra_env = None
+            ollama_in_stack = _resolve_bypass(
+                "ollama_in_stack", getattr(args, "ollama_in_stack", False),
+                "SETUP_DEV_OLLAMA_IN_STACK"
+            )
+            pma_via_compose = _resolve_bypass(
+                "pma_via_compose", getattr(args, "pma_via_compose", False),
+                "SETUP_DEV_PMA_VIA_COMPOSE"
+            )
         return 0 if cmd_start(Opts()) else 1
     if args.command == "full-demo":
         class FullDemoOpts:
@@ -193,7 +233,17 @@ def run_command(args):
                 os.environ.get("STOP_ON_SUCCESS_ENV", "")
             )
             extra_env = None
+            ollama_in_stack = _resolve_bypass(
+                "ollama_in_stack", getattr(args, "ollama_in_stack", False),
+                "SETUP_DEV_OLLAMA_IN_STACK"
+            )
+            pma_via_compose = _resolve_bypass(
+                "pma_via_compose", getattr(args, "pma_via_compose", False),
+                "SETUP_DEV_PMA_VIA_COMPOSE"
+            )
         return 0 if cmd_full_demo(FullDemoOpts()) else 1
+    if args.command == "restart":
+        return 0 if _run_restart(args) else 1
     if args.command in handlers:
         return 0 if handlers[args.command]() else 1
     return 1
@@ -216,6 +266,16 @@ def main():
         "--stop-on-success",
         action="store_true",
         help="For full-demo: stop services after E2E passes",
+    )
+    parser.add_argument(
+        "--ollama-in-stack",
+        action="store_true",
+        help="Bypass: run OLLAMA in orchestrator compose (prescribed: node starts inference when instructed)",
+    )
+    parser.add_argument(
+        "--pma-via-compose",
+        action="store_true",
+        help="Bypass: start PMA container via compose after node (prescribed: orchestrator instructs worker to start PMA)",
     )
     args = parser.parse_args()
     if args.command == "help":
