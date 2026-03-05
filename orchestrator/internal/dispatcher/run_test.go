@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cypher0n3/cynodeai/go_shared_libs/contracts/sbajob"
 	"github.com/cypher0n3/cynodeai/go_shared_libs/contracts/workerapi"
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/database"
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/models"
@@ -189,4 +190,32 @@ func makeDispatchable(t *testing.T, mock *testutil.MockDB, ctx context.Context, 
 	_ = mock.UpdateNodeWorkerAPIConfig(ctx, node.ID, workerURL, bearerToken)
 	ackAt := time.Now().UTC()
 	_ = mock.UpdateNodeConfigAck(ctx, node.ID, "1", "applied", ackAt, nil)
+}
+
+func TestNormalizeSBAResultSurface(t *testing.T) {
+	tests := []struct {
+		name       string
+		stdout     string
+		final      string
+		wantStdout string
+	}{
+		{name: "maps final answer when stdout empty", stdout: "", final: "model answer", wantStdout: "model answer"},
+		{name: "preserves existing stdout", stdout: "worker stdout", final: "model answer", wantStdout: "worker stdout"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			resp := &workerapi.RunJobResponse{
+				Status: workerapi.StatusCompleted,
+				Stdout: tt.stdout,
+				SbaResult: &sbajob.Result{
+					Status:      "success",
+					FinalAnswer: tt.final,
+				},
+			}
+			normalizeSBAResultSurface(resp)
+			if resp.Stdout != tt.wantStdout {
+				t.Errorf("stdout = %q, want %q", resp.Stdout, tt.wantStdout)
+			}
+		})
+	}
 }

@@ -40,3 +40,13 @@ Scenario: Single-node task execution with inference in sandbox
   When I login as "admin" with password "admin123" and a node with slug "test-node-01" registers with the orchestrator using a valid PSK and the node requests its configuration and the node applies the configuration and sends a config acknowledgement with status "applied" and I create a task with command "sh -c 'echo $OLLAMA_BASE_URL'" and the orchestrator dispatches a job to the node and the node executes the sandbox job in a pod with inference proxy
   Then the job result contains stdout "http://localhost:11434"
   And the task status becomes "completed"
+
+@inference_in_sandbox
+@req_sbagnt_0109
+@spec_cynai_sbagnt_workerproxies
+@spec_cynai_sbagnt_resultcontract
+Scenario: Single-node SBA task with inference completes with user-facing reply
+  When I login as "admin" with password "admin123" and a node with slug "test-node-01" registers with the orchestrator using a valid PSK and the node requests its configuration and the node applies the configuration and sends a config acknowledgement with status "applied" and I create a SBA task with inference and prompt "Reply back with the current time" and the orchestrator dispatches the job to the node and the node runs the SBA and returns the result
+  Then the task status becomes "completed"
+  And the job result contains "sba_result"
+  And the job result has a user-facing reply

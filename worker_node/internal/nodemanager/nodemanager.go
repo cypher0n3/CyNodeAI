@@ -402,6 +402,10 @@ func buildCapability(ctx context.Context, cfg *Config) nodepayloads.CapabilityRe
 			Features:       []string{"netns"},
 			MaxConcurrency: 4,
 		},
+		ManagedServices: &nodepayloads.ManagedServices{
+			Supported: true,
+			Features:  []string{"service_containers", "agent_orchestrator_proxy_bidirectional"},
+		},
 	}
 	if strings.TrimSpace(cfg.AdvertisedWorkerAPIURL) != "" {
 		report.WorkerAPI = &nodepayloads.WorkerAPIReport{BaseURL: strings.TrimSpace(cfg.AdvertisedWorkerAPIURL)}

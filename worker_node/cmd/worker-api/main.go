@@ -3,10 +3,13 @@
 package main
 
 import (
+	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"os"
@@ -22,6 +25,28 @@ import (
 	"github.com/cypher0n3/cynodeai/worker_node/cmd/worker-api/executor"
 	"github.com/cypher0n3/cynodeai/worker_node/internal/telemetry"
 )
+
+const maxManagedProxyBodyBytes = 1 << 20 // 1 MiB
+
+type managedServiceTarget struct {
+	ServiceType string `json:"service_type"`
+	BaseURL     string `json:"base_url"`
+}
+
+type managedServiceProxyRequest struct {
+	Version int                 `json:"version"`
+	Method  string              `json:"method"`
+	Path    string              `json:"path"`
+	Headers map[string][]string `json:"headers,omitempty"`
+	BodyB64 string              `json:"body_b64,omitempty"`
+}
+
+type managedServiceProxyResponse struct {
+	Version int                 `json:"version"`
+	Status  int                 `json:"status"`
+	Headers map[string][]string `json:"headers,omitempty"`
+	BodyB64 string              `json:"body_b64,omitempty"`
+}
 
 func main() {
 	os.Exit(runMain(context.Background()))
@@ -119,6 +144,7 @@ func runRetentionAndVacuum(ctx context.Context, store *telemetry.Store, logger *
 
 func newMux(exec *executor.Executor, bearerToken, workspaceRoot string, telemetryStore *telemetry.Store, logger *slog.Logger) *http.ServeMux {
 	mux := http.NewServeMux()
+	managedServiceTargets := loadManagedServiceTargetsFromEnv(logger)
 	// REQ-WORKER-0140, REQ-WORKER-0141: unauthenticated GET /healthz; body plain text "ok" per worker_api.md
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
@@ -128,6 +154,7 @@ func newMux(exec *executor.Executor, bearerToken, workspaceRoot string, telemetr
 	// REQ-WORKER-0140, REQ-WORKER-0142: unauthenticated GET /readyz
 	mux.HandleFunc("GET /readyz", readyzHandler(exec))
 	mux.HandleFunc("POST /v1/worker/jobs:run", handleRunJob(exec, bearerToken, workspaceRoot, logger))
+	mux.HandleFunc("POST /v1/worker/managed-services/{service_id}/proxy:http", handleManagedServiceProxy(bearerToken, managedServiceTargets, logger))
 	// REQ-WORKER-0200--0243: Worker Telemetry API.
 	mux.HandleFunc("GET /v1/worker/telemetry/node:info", telemetryAuth(bearerToken, handleNodeInfo(logger)))
 	mux.HandleFunc("GET /v1/worker/telemetry/node:stats", telemetryAuth(bearerToken, handleNodeStats(logger)))
@@ -137,6 +164,188 @@ func newMux(exec *executor.Executor, bearerToken, workspaceRoot string, telemetr
 		mux.HandleFunc("GET /v1/worker/telemetry/logs", telemetryAuth(bearerToken, handleQueryLogs(telemetryStore)))
 	}
 	return mux
+}
+
+func loadManagedServiceTargetsFromEnv(logger *slog.Logger) map[string]managedServiceTarget {
+	raw := strings.TrimSpace(os.Getenv("WORKER_MANAGED_SERVICE_TARGETS_JSON"))
+	if raw == "" {
+		return map[string]managedServiceTarget{}
+	}
+	targets := make(map[string]managedServiceTarget)
+	if err := json.Unmarshal([]byte(raw), &targets); err == nil {
+		return targets
+	}
+	var simple map[string]string
+	if err := json.Unmarshal([]byte(raw), &simple); err != nil {
+		if logger != nil {
+			logger.Warn("invalid WORKER_MANAGED_SERVICE_TARGETS_JSON; managed service proxy disabled", "error", err)
+		}
+		return map[string]managedServiceTarget{}
+	}
+	for serviceID, baseURL := range simple {
+		targets[serviceID] = managedServiceTarget{ServiceType: "unknown", BaseURL: baseURL}
+	}
+	return targets
+}
+
+func handleManagedServiceProxy(bearerToken string, targets map[string]managedServiceTarget, logger *slog.Logger) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if !requireBearerToken(r, bearerToken) {
+			writeProblem(w, http.StatusUnauthorized, problem.TypeAuthentication, "Unauthorized", "Invalid or missing bearer token")
+			return
+		}
+		serviceID := strings.TrimSpace(r.PathValue("service_id"))
+		target, ok := targets[serviceID]
+		if !ok || strings.TrimSpace(target.BaseURL) == "" {
+			writeProblem(w, http.StatusNotFound, problem.TypeNotFound, "Not Found", "Unknown managed service")
+			return
+		}
+		reqPayload, reqBody, ok := decodeManagedProxyRequest(w, r)
+		if !ok {
+			return
+		}
+		start := time.Now()
+		respPayload, status, detail := forwardManagedProxyRequest(r.Context(), target, reqPayload, reqBody)
+		if status != 0 {
+			writeProblem(w, status, problem.TypeValidation, http.StatusText(status), detail)
+			return
+		}
+		if logger != nil {
+			logger.Info("managed service proxy call",
+				"service_id", serviceID,
+				"service_type", target.ServiceType,
+				"method", reqPayload.Method,
+				"path", reqPayload.Path,
+				"upstream_status", respPayload.Status,
+				"duration_ms", int(time.Since(start).Milliseconds()),
+			)
+		}
+		writeJSON(w, http.StatusOK, respPayload)
+	}
+}
+
+func decodeManagedProxyRequest(w http.ResponseWriter, r *http.Request) (*managedServiceProxyRequest, []byte, bool) {
+	r.Body = http.MaxBytesReader(w, r.Body, maxManagedProxyBodyBytes)
+	var req managedServiceProxyRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		if strings.Contains(err.Error(), "request body too large") {
+			writeProblem(w, http.StatusRequestEntityTooLarge, problem.TypeValidation, "Request Entity Too Large", "Proxy request exceeds maximum size")
+			return nil, nil, false
+		}
+		writeProblem(w, http.StatusBadRequest, problem.TypeValidation, "Bad Request", "Invalid proxy request body")
+		return nil, nil, false
+	}
+	if req.Version != 1 {
+		writeProblem(w, http.StatusBadRequest, problem.TypeValidation, "Bad Request", "unsupported proxy request version")
+		return nil, nil, false
+	}
+	method := strings.ToUpper(strings.TrimSpace(req.Method))
+	if !isAllowedProxyMethod(method) {
+		writeProblem(w, http.StatusBadRequest, problem.TypeValidation, "Bad Request", "unsupported proxy method")
+		return nil, nil, false
+	}
+	req.Method = method
+	if !isSafeProxyPath(req.Path) {
+		writeProblem(w, http.StatusBadRequest, problem.TypeValidation, "Bad Request", "invalid proxy path")
+		return nil, nil, false
+	}
+	if req.BodyB64 == "" {
+		return &req, nil, true
+	}
+	body, err := base64.StdEncoding.DecodeString(req.BodyB64)
+	if err != nil {
+		writeProblem(w, http.StatusBadRequest, problem.TypeValidation, "Bad Request", "invalid body_b64")
+		return nil, nil, false
+	}
+	if len(body) > maxManagedProxyBodyBytes {
+		writeProblem(w, http.StatusRequestEntityTooLarge, problem.TypeValidation, "Request Entity Too Large", "decoded proxy request body exceeds maximum size")
+		return nil, nil, false
+	}
+	return &req, body, true
+}
+
+func forwardManagedProxyRequest(
+	ctx context.Context,
+	target managedServiceTarget,
+	req *managedServiceProxyRequest,
+	body []byte,
+) (resp *managedServiceProxyResponse, statusCode int, detail string) {
+	upstreamURL := strings.TrimSuffix(target.BaseURL, "/") + req.Path
+	httpReq, err := http.NewRequestWithContext(ctx, req.Method, upstreamURL, bytes.NewReader(body))
+	if err != nil {
+		return nil, http.StatusBadRequest, "failed to build upstream request"
+	}
+	for name, values := range req.Headers {
+		if !isAllowedProxyRequestHeader(name) {
+			continue
+		}
+		for _, v := range values {
+			httpReq.Header.Add(name, v)
+		}
+	}
+	client := &http.Client{Timeout: 30 * time.Second}
+	httpResp, err := client.Do(httpReq)
+	if err != nil {
+		return nil, http.StatusBadGateway, "upstream request failed"
+	}
+	defer func() { _ = httpResp.Body.Close() }()
+	limited := io.LimitReader(httpResp.Body, maxManagedProxyBodyBytes+1)
+	respBody, err := io.ReadAll(limited)
+	if err != nil {
+		return nil, http.StatusBadGateway, "failed to read upstream response"
+	}
+	if len(respBody) > maxManagedProxyBodyBytes {
+		return nil, http.StatusBadGateway, "upstream response exceeds maximum size"
+	}
+	respHeaders := make(map[string][]string)
+	for name, values := range httpResp.Header {
+		if !isAllowedProxyResponseHeader(name) {
+			continue
+		}
+		cp := append([]string(nil), values...)
+		respHeaders[name] = cp
+	}
+	return &managedServiceProxyResponse{
+		Version: 1,
+		Status:  httpResp.StatusCode,
+		Headers: respHeaders,
+		BodyB64: base64.StdEncoding.EncodeToString(respBody),
+	}, 0, ""
+}
+
+func isAllowedProxyMethod(method string) bool {
+	switch method {
+	case http.MethodGet, http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete:
+		return true
+	default:
+		return false
+	}
+}
+
+func isSafeProxyPath(path string) bool {
+	path = strings.TrimSpace(path)
+	if path == "" || !strings.HasPrefix(path, "/") {
+		return false
+	}
+	return !strings.Contains(path, "://")
+}
+
+func isAllowedProxyRequestHeader(name string) bool {
+	switch strings.ToLower(strings.TrimSpace(name)) {
+	case "accept", "content-type", "authorization", "x-request-id":
+		return true
+	default:
+		return false
+	}
+}
+
+func isAllowedProxyResponseHeader(name string) bool {
+	switch strings.ToLower(strings.TrimSpace(name)) {
+	case "content-type", "x-request-id", "cache-control":
+		return true
+	default:
+		return false
+	}
 }
 
 func telemetryAuth(bearerToken string, next http.HandlerFunc) http.HandlerFunc {

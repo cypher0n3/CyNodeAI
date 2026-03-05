@@ -43,6 +43,16 @@ Scenario: Get task result after create
   And cynork stdout contains "status=completed"
   And cynork stdout contains "hello"
 
+@req_orches_0124
+@req_orches_0125
+@spec_cynai_client_clicommandsurface
+Scenario: Task result status is valid CLI enum
+  Given I am logged in with username "alice" and password "secret"
+  And I have created a task with prompt "echo hello" and stored the task id
+  When I run cynork task result with the stored task id in JSON mode
+  Then cynork exits with code 0
+  And the task result status is one of "queued", "running", "completed", "failed", "cancelled", "superseded"
+
 @req_client_0151
 @spec_cynai_client_clitaskcreateprompt
 Scenario: Create task from task file (text or Markdown)

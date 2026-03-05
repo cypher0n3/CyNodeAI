@@ -49,3 +49,17 @@ Scenario: SBA result contract has required shape for orchestrator storage
   And the JSON contains "status"
   And the JSON contains "steps"
   And the JSON contains "artifacts"
+
+@req_sbagnt_0103
+@spec_cynai_sbagnt_resultcontract
+@spec_cynai_worker_nodemediatedsbaresultsync
+Scenario: SBA result contract from task result is validated only when task is completed
+  Given I have a completed task that used the SBA runner
+  When I get the task result and extract the first job result
+  Then the task status is "completed"
+  And the job result contains "sba_result"
+  And the sba_result contains "protocol_version"
+  And the sba_result contains "job_id"
+  And the sba_result contains "status"
+  And the sba_result contains "steps"
+  And the sba_result contains "artifacts"

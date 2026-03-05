@@ -253,6 +253,17 @@ func isSBARunnerImage(image string) bool {
 
 // runJobSBA runs a job with an SBA runner image: write job_spec_json to /job/job.json, mount /job and /workspace, run container (entrypoint cynode-sba), read /job/result.json into resp.SbaResult.
 func (e *Executor) runJobSBA(ctx context.Context, req *workerapi.RunJobRequest, resp *workerapi.RunJobResponse, workspaceDir string) (*workerapi.RunJobResponse, error) {
+	spec, err := sbajob.ParseAndValidateJobSpec([]byte(req.Sandbox.JobSpecJSON))
+	if err != nil {
+		setSBAError(resp, "invalid SBA job_spec_json: "+err.Error())
+		return resp, nil
+	}
+	executionMode := sbajob.EffectiveExecutionMode(spec)
+	if executionMode != sbajob.ExecutionModeAgentInference && executionMode != sbajob.ExecutionModeDirectSteps {
+		setSBAError(resp, "unsupported SBA execution_mode: "+executionMode)
+		return resp, nil
+	}
+
 	jobDir, err := os.MkdirTemp("", "cynodeai-job-")
 	if err != nil {
 		setSBAError(resp, "failed to create job dir: "+err.Error())
@@ -290,7 +301,7 @@ func (e *Executor) runJobSBA(ctx context.Context, req *workerapi.RunJobRequest, 
 		workspaceDirToUse = tmpWorkspace
 	}
 
-	args := buildSBARunArgs(req, jobDir, workspaceDirToUse, e)
+	args := buildSBARunArgs(req, jobDir, workspaceDirToUse, e, executionMode)
 	fullArgv := append([]string{e.runtime}, args...)
 	diag := &workerapi.RunDiagnostics{
 		Runtime:      e.runtime,
@@ -340,7 +351,7 @@ func setSBAError(resp *workerapi.RunJobResponse, msg string) {
 	resp.Stderr = msg
 }
 
-func buildSBARunArgs(req *workerapi.RunJobRequest, jobDir, workspaceDir string, e *Executor) []string {
+func buildSBARunArgs(req *workerapi.RunJobRequest, jobDir, workspaceDir string, e *Executor, executionMode string) []string {
 	args := []string{"run", "--rm", "--network=none"}
 	// Rootless podman: keep host UID so the container can write to the bind-mounted jobDir (result.json).
 	if e.runtime == runtimePodman {
@@ -367,8 +378,11 @@ func buildSBARunArgs(req *workerapi.RunJobRequest, jobDir, workspaceDir string, 
 	for k, v := range env {
 		args = append(args, "-e", fmt.Sprintf("%s=%s", k, v))
 	}
-	// Direct step execution (no LLM) so jobs with only run_command/write_file/etc. succeed without Ollama in container.
-	args = append(args, "-e", "SBA_DIRECT_STEPS=1", req.Sandbox.Image)
+	args = append(args, "-e", fmt.Sprintf("SBA_EXECUTION_MODE=%s", executionMode))
+	if executionMode == sbajob.ExecutionModeDirectSteps {
+		args = append(args, "-e", "SBA_DIRECT_STEPS=1")
+	}
+	args = append(args, req.Sandbox.Image)
 	if len(req.Sandbox.Command) > 0 {
 		args = append(args, req.Sandbox.Command...)
 	}

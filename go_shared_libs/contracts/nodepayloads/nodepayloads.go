@@ -14,6 +14,8 @@ type CapabilityReport struct {
 	Sandbox          *SandboxSupport   `json:"sandbox,omitempty"`
 	Network          *NetworkInfo      `json:"network,omitempty"`
 	Inference        *InferenceInfo    `json:"inference,omitempty"`
+	ManagedServices  *ManagedServices  `json:"managed_services,omitempty"`
+	ManagedServicesStatus *ManagedServicesStatus `json:"managed_services_status,omitempty"`
 	TLS              *TLSInfo          `json:"tls,omitempty"`
 	// WorkerAPI is the node-reported Worker API address; orchestrator uses it for dispatch unless an explicit override is set.
 	WorkerAPI *WorkerAPIReport `json:"worker_api,omitempty"`
@@ -86,6 +88,31 @@ type InferenceInfo struct {
 	Running         bool   `json:"running,omitempty"`
 }
 
+// ManagedServices declares whether worker-managed long-lived services are supported by the node.
+type ManagedServices struct {
+	Supported bool     `json:"supported,omitempty"`
+	Features  []string `json:"features,omitempty"`
+}
+
+// ManagedServicesStatus reports observed state of worker-managed services.
+type ManagedServicesStatus struct {
+	Services []ManagedServiceStatus `json:"services,omitempty"`
+}
+
+// ManagedServiceStatus is one observed managed service state in capability reports.
+type ManagedServiceStatus struct {
+	ServiceID          string   `json:"service_id"`
+	ServiceType        string   `json:"service_type"`
+	State              string   `json:"state"`
+	Endpoints          []string `json:"endpoints,omitempty"`
+	ReadyAt            string   `json:"ready_at,omitempty"`
+	Image              string   `json:"image,omitempty"`
+	ContainerID        string   `json:"container_id,omitempty"`
+	RestartCount       int      `json:"restart_count,omitempty"`
+	ObservedGeneration string   `json:"observed_generation,omitempty"`
+	LastError          string   `json:"last_error,omitempty"`
+}
+
 type TLSInfo struct {
 	TrustMaterialStatus string `json:"trust_material_status,omitempty"`
 }
@@ -141,6 +168,7 @@ type NodeConfigurationPayload struct {
 	Policy            *ConfigPolicy                `json:"policy,omitempty"`
 	WorkerAPI         *ConfigWorkerAPI             `json:"worker_api,omitempty"`
 	InferenceBackend  *ConfigInferenceBackend      `json:"inference_backend,omitempty"`
+	ManagedServices   *ConfigManagedServices       `json:"managed_services,omitempty"`
 	Notes             string                       `json:"notes,omitempty"`
 	Constraints       *ConfigConstraints           `json:"constraints,omitempty"`
 }
@@ -153,6 +181,48 @@ type ConfigInferenceBackend struct {
 	Image   string `json:"image,omitempty"`
 	Variant string `json:"variant,omitempty"`
 	Port    int    `json:"port,omitempty"`
+}
+
+// ConfigManagedServices is desired state for worker-managed long-lived services.
+type ConfigManagedServices struct {
+	Services []ConfigManagedService `json:"services,omitempty"`
+}
+
+// ConfigManagedService defines desired state for one managed service.
+type ConfigManagedService struct {
+	ServiceID     string                        `json:"service_id"`
+	ServiceType   string                        `json:"service_type"`
+	Image         string                        `json:"image"`
+	Args          []string                      `json:"args,omitempty"`
+	Env           map[string]string             `json:"env,omitempty"`
+	Healthcheck   *ConfigManagedServiceHealthcheck `json:"healthcheck,omitempty"`
+	RestartPolicy string                        `json:"restart_policy,omitempty"`
+	Role          string                        `json:"role,omitempty"`
+	Inference     *ConfigManagedServiceInference `json:"inference,omitempty"`
+	Orchestrator  *ConfigManagedServiceOrchestrator `json:"orchestrator,omitempty"`
+}
+
+// ConfigManagedServiceHealthcheck defines HTTP health probing for managed services.
+type ConfigManagedServiceHealthcheck struct {
+	Path           string `json:"path,omitempty"`
+	ExpectedStatus int    `json:"expected_status,omitempty"`
+}
+
+// ConfigManagedServiceInference configures agent inference mode.
+type ConfigManagedServiceInference struct {
+	Mode             string `json:"mode,omitempty"`
+	BaseURL          string `json:"base_url,omitempty"`
+	APIEgressBaseURL string `json:"api_egress_base_url,omitempty"`
+	ProviderID       string `json:"provider_id,omitempty"`
+	DefaultModel     string `json:"default_model,omitempty"`
+	WarmupRequired   bool   `json:"warmup_required,omitempty"`
+}
+
+// ConfigManagedServiceOrchestrator configures agent-to-orchestrator proxy routes and auth.
+type ConfigManagedServiceOrchestrator struct {
+	MCPGatewayProxyURL    string `json:"mcp_gateway_proxy_url,omitempty"`
+	ReadyCallbackProxyURL string `json:"ready_callback_proxy_url,omitempty"`
+	AgentToken            string `json:"agent_token,omitempty"`
 }
 
 // ConfigOrchestrator contains orchestrator base URL and endpoints for node config.

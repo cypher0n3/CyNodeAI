@@ -1,4 +1,5 @@
-# E2E parity: task result. Requires e2e_03 (state.TASK_ID).
+# E2E parity: task result. Requires e2e_050 (state.TASK_ID).
+# Traces: REQ-ORCHES-0124, 0125; cli_management_app_commands_tasks.
 
 import unittest
 
@@ -19,3 +20,8 @@ class TestTaskResult(unittest.TestCase):
         data = helpers.parse_json_safe(out)
         self.assertIsNotNone(data, f"task result failed: {out} {err}")
         self.assertIn("status", data)
+        self.assertIn(
+            data.get("status"),
+            ("queued", "running", "completed", "failed", "cancelled", "superseded"),
+            f"task result status must be valid enum per CLI spec: {data.get('status')!r}",
+        )

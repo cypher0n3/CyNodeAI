@@ -14,6 +14,12 @@ import (
 // Unknown major versions must be refused per CYNAI.SBAGNT.ProtocolVersioning.
 const SupportedProtocolMajor = 1
 
+// SBA execution modes.
+const (
+	ExecutionModeAgentInference = "agent_inference"
+	ExecutionModeDirectSteps    = "direct_steps"
+)
+
 // JobSpec is the shared job specification (job.json) used by both the SBA and the step executor.
 // Validation MUST occur before the runner starts; unknown fields are rejected.
 // Steps is optional in the schema: when absent or empty, the SBA treats it as no suggested to-dos;
@@ -22,6 +28,7 @@ type JobSpec struct {
 	ProtocolVersion string         `json:"protocol_version"`
 	JobID           string         `json:"job_id"`
 	TaskID          string         `json:"task_id"`
+	ExecutionMode   string         `json:"execution_mode,omitempty"`
 	Constraints     JobConstraints `json:"constraints"`
 	Steps           []StepSpec     `json:"steps,omitempty"`
 	Inference       *InferenceSpec `json:"inference,omitempty"`
@@ -68,6 +75,8 @@ type Result struct {
 	JobID           string `json:"job_id"`
 	// Status is one of: success, failure, timeout (see CYNAI.SBAGNT.ResultContract).
 	Status         string        `json:"status"`
+	FinalAnswer    string        `json:"final_answer,omitempty"`
+	InferenceUsed  *bool         `json:"inference_used,omitempty"`
 	Steps          []StepResult  `json:"steps"`
 	Artifacts      []ArtifactRef `json:"artifacts"`
 	FailureCode    *string       `json:"failure_code,omitempty"`
@@ -144,6 +153,14 @@ func ValidateJobSpec(spec *JobSpec) error {
 	if spec.TaskID == "" {
 		return &ValidationError{Field: "task_id", Message: "required"}
 	}
+	if spec.ExecutionMode != "" &&
+		spec.ExecutionMode != ExecutionModeAgentInference &&
+		spec.ExecutionMode != ExecutionModeDirectSteps {
+		return &ValidationError{
+			Field:   "execution_mode",
+			Message: "must be one of: " + ExecutionModeAgentInference + ", " + ExecutionModeDirectSteps,
+		}
+	}
 	if spec.Constraints.MaxRuntimeSeconds <= 0 {
 		return &ValidationError{Field: "constraints.max_runtime_seconds", Message: "must be positive"}
 	}
@@ -152,6 +169,24 @@ func ValidateJobSpec(spec *JobSpec) error {
 	}
 	// steps is optional: nil or empty is valid for SBA; step executor must call ValidateStepExecutorJobSpec
 	return nil
+}
+
+// EffectiveExecutionMode resolves the runtime mode for a job.
+// Explicit execution_mode always wins. For backward compatibility:
+// - jobs with steps and no mode default to direct_steps
+// - jobs without steps and no mode default to agent_inference
+func EffectiveExecutionMode(spec *JobSpec) string {
+	if spec == nil {
+		return ExecutionModeAgentInference
+	}
+	mode := strings.TrimSpace(spec.ExecutionMode)
+	if mode != "" {
+		return mode
+	}
+	if len(spec.Steps) > 0 {
+		return ExecutionModeDirectSteps
+	}
+	return ExecutionModeAgentInference
 }
 
 // ValidateStepExecutorJobSpec validates the job spec for the step executor: it MUST pass ValidateJobSpec

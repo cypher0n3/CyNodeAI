@@ -30,6 +30,8 @@ Task status enum
 - `cancelled`
 - `superseded`
 
+The task result `status` field (from gateway or CLI output) MUST be exactly one of these values when returning task state to the client.
+
 ### `cynork task create`
 
 Invocation

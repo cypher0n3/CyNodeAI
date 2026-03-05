@@ -56,6 +56,11 @@ type OrchestratorConfig struct {
 	PMAInstructionsRoot string // PMA_INSTRUCTIONS_ROOT; optional
 	// PMABaseURL is the base URL for the user-gateway to call cynode-pma (e.g. http://localhost:8090 or http://cynode-pma:8090). Used for model=cynodeai.pm routing.
 	PMABaseURL string // PMA_BASE_URL; empty means PM chat path is unavailable
+	// PMA managed-service desired-state defaults (worker-managed PMA path).
+	PMAServiceID       string // PMA_SERVICE_ID
+	PMAImage           string // PMA_IMAGE
+	PMAHostNodeSlug    string // PMA_HOST_NODE_SLUG (optional explicit placement override)
+	PMAPreferHostLabel string // PMA_PREFER_HOST_LABEL
 
 	// Workflow runner: bearer token for workflow start/resume/checkpoint/release API. When set, requests must include Authorization: Bearer <value>.
 	WorkflowRunnerBearerToken string // WORKFLOW_RUNNER_BEARER_TOKEN; optional
@@ -113,6 +118,10 @@ func LoadOrchestratorConfig() *OrchestratorConfig {
 		PMAListenAddr:          getEnv("PMA_LISTEN_ADDR", ":8090"),
 		PMAInstructionsRoot:    getEnv("PMA_INSTRUCTIONS_ROOT", ""),
 		PMABaseURL:                 getEnv("PMA_BASE_URL", ""),
+		PMAServiceID:               getEnv("PMA_SERVICE_ID", "pma-main"),
+		PMAImage:                   getEnv("PMA_IMAGE", "ghcr.io/cypher0n3/cynode-pma:latest"),
+		PMAHostNodeSlug:            getEnv("PMA_HOST_NODE_SLUG", ""),
+		PMAPreferHostLabel:         getEnv("PMA_PREFER_HOST_LABEL", "orchestrator_host"),
 		WorkflowRunnerBearerToken:  getEnv("WORKFLOW_RUNNER_BEARER_TOKEN", ""),
 	}
 }

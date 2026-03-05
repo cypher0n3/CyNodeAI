@@ -2,6 +2,7 @@ package pmaclient
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -86,6 +87,110 @@ func TestCallChatCompletion_DoError(t *testing.T) {
 	_, err := CallChatCompletion(context.Background(), nil, "http://127.0.0.1:19999", []ChatMessage{{Role: "user", Content: "hi"}})
 	if err == nil {
 		t.Error("expected error when server unreachable")
+	}
+}
+
+func TestCallChatCompletion_ManagedProxySuccess(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost || r.URL.Path != "/v1/worker/managed-services/pma-main/proxy:http" {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		var req managedProxyRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		if req.Path != "/internal/chat/completion" {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		completion := CompletionResponse{Content: "proxied-ok"}
+		completionRaw, _ := json.Marshal(completion)
+		_ = json.NewEncoder(w).Encode(managedProxyResponse{
+			Version: 1,
+			Status:  http.StatusOK,
+			BodyB64: base64.StdEncoding.EncodeToString(completionRaw),
+		})
+	}))
+	defer server.Close()
+	url := server.URL + "/v1/worker/managed-services/pma-main/proxy:http"
+	content, err := CallChatCompletion(context.Background(), nil, url, []ChatMessage{{Role: "user", Content: "hi"}})
+	if err != nil {
+		t.Fatalf("CallChatCompletion via proxy: %v", err)
+	}
+	if content != "proxied-ok" {
+		t.Errorf("content want proxied-ok, got %q", content)
+	}
+}
+
+func TestCallChatCompletion_ManagedProxyUpstreamError(t *testing.T) {
+	assertManagedProxyCallError(t, managedProxyResponse{
+		Version: 1,
+		Status:  http.StatusBadGateway,
+		BodyB64: "",
+	})
+}
+
+func TestCallChatCompletion_ManagedProxyTransportStatusError(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusBadGateway)
+	}))
+	defer server.Close()
+	url := server.URL + "/v1/worker/managed-services/pma-main/proxy:http"
+	_, err := CallChatCompletion(context.Background(), nil, url, []ChatMessage{{Role: "user", Content: "hi"}})
+	if err == nil {
+		t.Error("expected error when managed proxy endpoint returns non-200 status")
+	}
+}
+
+func TestCallChatCompletion_ManagedProxyInvalidBase64(t *testing.T) {
+	assertManagedProxyCallError(t, managedProxyResponse{
+		Version: 1,
+		Status:  http.StatusOK,
+		BodyB64: "%%%not-base64%%%",
+	})
+}
+
+func TestCallChatCompletion_ManagedProxyInvalidJSONResponse(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = w.Write([]byte("not-json"))
+	}))
+	defer server.Close()
+	url := server.URL + "/v1/worker/managed-services/pma-main/proxy:http"
+	_, err := CallChatCompletion(context.Background(), nil, url, []ChatMessage{{Role: "user", Content: "hi"}})
+	if err == nil {
+		t.Error("expected error for invalid JSON managed proxy response")
+	}
+}
+
+func TestLooksLikeManagedProxyEndpoint(t *testing.T) {
+	if !looksLikeManagedProxyEndpoint("http://x/v1/worker/managed-services/svc/proxy:http") {
+		t.Error("expected managed proxy URL to match")
+	}
+	if looksLikeManagedProxyEndpoint("http://x/internal/chat/completion") {
+		t.Error("direct PMA URL should not be treated as managed proxy URL")
+	}
+}
+
+func TestCallChatCompletion_ManagedProxyInvalidCompletionJSON(t *testing.T) {
+	assertManagedProxyCallError(t, managedProxyResponse{
+		Version: 1,
+		Status:  http.StatusOK,
+		BodyB64: base64.StdEncoding.EncodeToString([]byte("{not-json")),
+	})
+}
+
+func assertManagedProxyCallError(t *testing.T, resp managedProxyResponse) {
+	t.Helper()
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_ = json.NewEncoder(w).Encode(resp)
+	}))
+	defer server.Close()
+	url := server.URL + "/v1/worker/managed-services/pma-main/proxy:http"
+	_, err := CallChatCompletion(context.Background(), nil, url, []ChatMessage{{Role: "user", Content: "hi"}})
+	if err == nil {
+		t.Fatalf("expected managed proxy call to fail for response %+v", resp)
 	}
 }
 

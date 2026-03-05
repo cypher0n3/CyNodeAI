@@ -9,11 +9,13 @@ import (
 	"net"
 	"net/http"
 	"regexp"
+	"sort"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
 
+	"github.com/cypher0n3/cynodeai/go_shared_libs/contracts/nodepayloads"
 	"github.com/cypher0n3/cynodeai/go_shared_libs/contracts/userapi"
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/database"
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/inference"
@@ -30,6 +32,7 @@ const chatCompletionBackoffBase = 500 * time.Millisecond
 
 // Effective model default per spec: omitted or empty model MUST behave as cynodeai.pm.
 const EffectiveModelPM = "cynodeai.pm"
+const managedServiceTypePMA = "pma"
 
 const secretRedacted = "SECRET_REDACTED"
 
@@ -192,7 +195,8 @@ func (h *OpenAIChatHandler) routeAndComplete(ctx context.Context, effectiveModel
 }
 
 func (h *OpenAIChatHandler) completeViaPMA(ctx context.Context, effectiveModel string, redacted []userapi.ChatMessage) (content string, status int, code, msg string) {
-	if h.pmaBaseURL == "" {
+	pmaEndpoint := h.resolvePMAEndpoint(ctx)
+	if pmaEndpoint == "" {
 		h.logger.Warn("PMA base URL not configured; cannot route to cynodeai.pm")
 		return "", http.StatusServiceUnavailable, "model_unavailable", "PM agent is not available"
 	}
@@ -202,7 +206,7 @@ func (h *OpenAIChatHandler) completeViaPMA(ctx context.Context, effectiveModel s
 	}
 	var err error
 	for attempt := 0; attempt < chatCompletionMaxRetries; attempt++ {
-		content, err = pmaclient.CallChatCompletion(ctx, nil, h.pmaBaseURL, msgs)
+		content, err = pmaclient.CallChatCompletion(ctx, nil, pmaEndpoint, msgs)
 		if err == nil {
 			h.logger.Info("chat completion path", "path", "pma", "model", effectiveModel)
 			return content, 0, "", ""
@@ -219,6 +223,70 @@ func (h *OpenAIChatHandler) completeViaPMA(ctx context.Context, effectiveModel s
 	}
 	h.logger.Error("PMA chat completion failed after retries", "error", err)
 	return "", http.StatusBadGateway, inferenceFailedCode, completionFailedMsg
+}
+
+func (h *OpenAIChatHandler) resolvePMAEndpoint(ctx context.Context) string {
+	if strings.TrimSpace(h.pmaBaseURL) != "" {
+		return strings.TrimSpace(h.pmaBaseURL)
+	}
+	if h.db == nil {
+		return ""
+	}
+	candidates := h.collectReadyPMACandidates(ctx)
+	if len(candidates) == 0 {
+		return ""
+	}
+	sort.Slice(candidates, func(i, j int) bool {
+		if candidates[i].readyAt.Equal(candidates[j].readyAt) {
+			return candidates[i].endpoint < candidates[j].endpoint
+		}
+		return candidates[i].readyAt.After(candidates[j].readyAt)
+	})
+	return candidates[0].endpoint
+}
+
+type pmaEndpointCandidate struct {
+	endpoint string
+	readyAt  time.Time
+}
+
+func (h *OpenAIChatHandler) collectReadyPMACandidates(ctx context.Context) []pmaEndpointCandidate {
+	nodes, err := h.db.ListActiveNodes(ctx)
+	if err != nil || len(nodes) == 0 {
+		return nil
+	}
+	candidates := make([]pmaEndpointCandidate, 0)
+	for _, node := range nodes {
+		snap, snapErr := h.db.GetLatestNodeCapabilitySnapshot(ctx, node.ID)
+		if snapErr != nil || strings.TrimSpace(snap) == "" {
+			continue
+		}
+		candidates = append(candidates, readyPMACandidatesFromSnapshot(snap)...)
+	}
+	return candidates
+}
+
+func readyPMACandidatesFromSnapshot(snapshot string) []pmaEndpointCandidate {
+	var report nodepayloads.CapabilityReport
+	if json.Unmarshal([]byte(snapshot), &report) != nil || report.ManagedServicesStatus == nil {
+		return nil
+	}
+	candidates := make([]pmaEndpointCandidate, 0)
+	for i := range report.ManagedServicesStatus.Services {
+		svc := &report.ManagedServicesStatus.Services[i]
+		if svc.ServiceType != managedServiceTypePMA || svc.State != "ready" || len(svc.Endpoints) == 0 {
+			continue
+		}
+		readyAt := time.Time{}
+		if t, parseErr := time.Parse(time.RFC3339, svc.ReadyAt); parseErr == nil {
+			readyAt = t.UTC()
+		}
+		candidates = append(candidates, pmaEndpointCandidate{
+			endpoint: svc.Endpoints[0],
+			readyAt:  readyAt,
+		})
+	}
+	return candidates
 }
 
 func (h *OpenAIChatHandler) completeViaDirectInference(ctx context.Context, effectiveModel, lastUserContent string) (content string, status int, code, msg string) {

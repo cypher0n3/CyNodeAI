@@ -88,6 +88,7 @@ func markJobAndTaskFailed(ctx context.Context, db database.Store, job *models.Jo
 }
 
 func applyJobResult(ctx context.Context, db database.Store, job *models.Job, result *workerapi.RunJobResponse) error {
+	normalizeSBAResultSurface(result)
 	resultJSON, _ := json.Marshal(result)
 	jobStatus := models.JobStatusCompleted
 	taskStatus := models.TaskStatusCompleted
@@ -100,6 +101,19 @@ func applyJobResult(ctx context.Context, db database.Store, job *models.Job, res
 	}
 	_ = db.UpdateTaskStatus(ctx, job.TaskID, taskStatus)
 	return nil
+}
+
+func normalizeSBAResultSurface(result *workerapi.RunJobResponse) {
+	if result == nil || result.SbaResult == nil {
+		return
+	}
+	if strings.TrimSpace(result.Stdout) != "" {
+		return
+	}
+	answer := strings.TrimSpace(result.SbaResult.FinalAnswer)
+	if answer != "" {
+		result.Stdout = answer
+	}
 }
 
 func callWorkerAPI(ctx context.Context, client *http.Client, workerBaseURL, bearerToken string, req *workerapi.RunJobRequest) (*workerapi.RunJobResponse, error) {

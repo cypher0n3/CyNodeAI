@@ -231,8 +231,12 @@ except Exception as e: print('[Ollama request failed]', str(e), file=sys.stderr)
 // createTaskSBA creates a single job with SBA runner (job_spec_json) and writes 201 or 5xx (P2-10).
 func (h *TaskHandler) createTaskSBA(ctx context.Context, w http.ResponseWriter, task *models.Task, prompt string, attachmentPaths []string) bool {
 	jobID := uuid.New()
-	payload, err := buildSBAJobPayload(task.ID, jobID, prompt)
+	payload, err := buildSBAJobPayload(task.ID, jobID, prompt, h.inferenceModel)
 	if err != nil {
+		if strings.Contains(err.Error(), "inference readiness") {
+			WriteBadRequest(w, err.Error())
+			return true
+		}
 		h.logger.Error("build SBA job payload", "error", err)
 		WriteInternalError(w, "Failed to create SBA job")
 		return true
@@ -247,16 +251,20 @@ func (h *TaskHandler) createTaskSBA(ctx context.Context, w http.ResponseWriter, 
 }
 
 // buildSBAJobPayload returns a job payload with job_spec_json and SBA runner image (P2-10).
-func buildSBAJobPayload(taskID, jobID uuid.UUID, prompt string) (string, error) {
+func buildSBAJobPayload(taskID, jobID uuid.UUID, prompt, inferenceModel string) (string, error) {
+	model := strings.TrimSpace(inferenceModel)
+	if model == "" {
+		return "", errors.New("SBA inference readiness failed: no allowed model configured")
+	}
 	spec := &sbajob.JobSpec{
 		ProtocolVersion: "1.0",
 		JobID:           jobID.String(),
 		TaskID:          taskID.String(),
+		ExecutionMode:   sbajob.ExecutionModeAgentInference,
 		Constraints:     sbajob.JobConstraints{MaxRuntimeSeconds: 60, MaxOutputBytes: 1024},
+		Inference:       &sbajob.InferenceSpec{AllowedModels: []string{model}, Source: "orchestrator"},
 		Context:         &sbajob.ContextSpec{TaskContext: prompt},
-		Steps: []sbajob.StepSpec{
-			{Type: "run_command", Args: json.RawMessage(`{"argv":["echo","sba-run"]}`)},
-		},
+		Steps:           nil,
 	}
 	specJSON, err := json.Marshal(spec)
 	if err != nil {

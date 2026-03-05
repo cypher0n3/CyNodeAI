@@ -98,3 +98,8 @@ Sandbox image and isolation requirements remain in the `SANDBX` domain.
   [CYNAI.SBAGNT.LlmPromptConstruction](../tech_specs/cynode_sba.md#spec-cynai-sbagnt-llmpromptconstruction)
   [CYNAI.SBAGNT.JobPersona](../tech_specs/cynode_sba.md#spec-cynai-sbagnt-jobpersona)
   <a id="req-sbagnt-0113"></a>
+
+- **REQ-SBAGNT-0114:** Acceptance and E2E tests that exercise SBA tasks with inference MUST treat task status `failed` as a test failure when the test was not explicitly gated to skip inference (e.g. when `E2E_SKIP_INFERENCE_SMOKE` or equivalent is not set).
+  Treating such failures as an environmental skip is not permitted, because it masks product regressions (inference path or SBA runtime).
+  [CYNAI.SBAGNT.JobInferenceModel](../tech_specs/cynode_sba.md#spec-cynai-sbagnt-jobinferencemodel)
+  <a id="req-sbagnt-0114"></a>

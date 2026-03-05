@@ -819,7 +819,7 @@ func TestBuildSBARunArgs(t *testing.T) {
 			JobSpecJSON: `{}`,
 		},
 	}
-	args := buildSBARunArgs(req, "/tmp/job", "/tmp/ws", e)
+	args := buildSBARunArgs(req, "/tmp/job", "/tmp/ws", e, "direct_steps")
 	argStr := strings.Join(args, " ")
 	if !strings.Contains(argStr, "/tmp/job") || !strings.Contains(argStr, "/job") {
 		t.Errorf("buildSBARunArgs should mount job dir: %s", argStr)
@@ -842,7 +842,7 @@ func TestBuildSBARunArgs_Docker(t *testing.T) {
 			JobSpecJSON: `{}`,
 		},
 	}
-	args := buildSBARunArgs(req, "/tmp/job", "", e)
+	args := buildSBARunArgs(req, "/tmp/job", "", e, "direct_steps")
 	argStr := strings.Join(args, " ")
 	if strings.Contains(argStr, ":z") {
 		t.Errorf("docker runtime should not add :z (SELinux), got %s", argStr)
@@ -867,9 +867,29 @@ func TestBuildSBARunArgs_WithCommand(t *testing.T) {
 			Command:     []string{"--custom", "arg"},
 		},
 	}
-	args := buildSBARunArgs(req, "/tmp/job", "/tmp/ws", e)
+	args := buildSBARunArgs(req, "/tmp/job", "/tmp/ws", e, "direct_steps")
 	if len(args) < 3 || args[len(args)-2] != "--custom" || args[len(args)-1] != "arg" {
 		t.Errorf("buildSBARunArgs with Command should append command, got %v", args)
+	}
+}
+
+func TestBuildSBARunArgs_AgentInference_NoDirectStepsEnv(t *testing.T) {
+	e := New("podman", 30*time.Second, 4096, "", "", nil)
+	req := &workerapi.RunJobRequest{
+		TaskID: "t1",
+		JobID:  "j1",
+		Sandbox: workerapi.SandboxSpec{
+			Image:       "cynode-sba:dev",
+			JobSpecJSON: `{}`,
+		},
+	}
+	args := buildSBARunArgs(req, "/tmp/job", "/tmp/ws", e, "agent_inference")
+	argStr := strings.Join(args, " ")
+	if strings.Contains(argStr, "SBA_DIRECT_STEPS=1") {
+		t.Errorf("agent_inference mode must not set SBA_DIRECT_STEPS=1: %s", argStr)
+	}
+	if !strings.Contains(argStr, "SBA_EXECUTION_MODE=agent_inference") {
+		t.Errorf("missing SBA_EXECUTION_MODE env in args: %s", argStr)
 	}
 }
 

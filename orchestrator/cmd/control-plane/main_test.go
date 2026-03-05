@@ -406,6 +406,37 @@ func (m *listDispatchableNodesErrorStore) ListActiveNodes(ctx context.Context) (
 	return m.MockDB.ListActiveNodes(ctx)
 }
 
+// listDispatchableNodesFlakyStore fails ListDispatchableNodes until setListError(false) is called.
+// It avoids unsafely mutating MockDB.ForceError from another goroutine in race tests.
+type listDispatchableNodesFlakyStore struct {
+	*testutil.MockDB
+	mu        sync.RWMutex
+	listError bool
+}
+
+func newListDispatchableNodesFlakyStore() *listDispatchableNodesFlakyStore {
+	return &listDispatchableNodesFlakyStore{
+		MockDB:    testutil.NewMockDB(),
+		listError: true,
+	}
+}
+
+func (m *listDispatchableNodesFlakyStore) setListError(enabled bool) {
+	m.mu.Lock()
+	m.listError = enabled
+	m.mu.Unlock()
+}
+
+func (m *listDispatchableNodesFlakyStore) ListDispatchableNodes(ctx context.Context) ([]*models.Node, error) {
+	m.mu.RLock()
+	listError := m.listError
+	m.mu.RUnlock()
+	if listError {
+		return nil, errors.New("list failed")
+	}
+	return m.MockDB.ListDispatchableNodes(ctx)
+}
+
 func TestStartDispatcher_DispatchOnceReturnsError(t *testing.T) {
 	_ = os.Setenv("DISPATCHER_ENABLED", "true")
 	_ = os.Setenv("WORKER_API_BEARER_TOKEN", "token")
@@ -523,6 +554,7 @@ func TestRun_ListenAndServeFails(t *testing.T) {
 	}()
 	ctx := context.Background()
 	cfg := config.LoadOrchestratorConfig()
+	cfg.PMAEnabled = false
 	mock := testutil.NewMockDB()
 	logger := slog.Default()
 	err := run(ctx, mock, cfg, logger)
@@ -877,11 +909,10 @@ func TestWaitForInferencePath_ListFailsThenNode(t *testing.T) {
 	defer func() { testPMAPollInterval = 0 }()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	mockDB := testutil.NewMockDB()
-	mockDB.ForceError = errors.New("list failed")
+	mockDB := newListDispatchableNodesFlakyStore()
 	go func() {
 		time.Sleep(5 * time.Millisecond)
-		mockDB.ForceError = nil
+		mockDB.setListError(false)
 		node, _ := mockDB.CreateNode(ctx, "n1")
 		_ = mockDB.UpdateNodeStatus(ctx, node.ID, models.NodeStatusActive)
 		_ = mockDB.UpdateNodeConfigVersion(ctx, node.ID, "1")

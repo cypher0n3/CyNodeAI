@@ -643,6 +643,25 @@ func TestTaskHandler_CreateTask_UseSBA_StoresSBAJobPayload(t *testing.T) {
 	if pl.Image == "" {
 		t.Error("expected image in payload")
 	}
+	var jobSpec struct {
+		ExecutionMode string `json:"execution_mode"`
+		Inference     struct {
+			AllowedModels []string `json:"allowed_models"`
+		} `json:"inference"`
+		Steps []struct{} `json:"steps"`
+	}
+	if err := json.Unmarshal([]byte(pl.JobSpecJSON), &jobSpec); err != nil {
+		t.Fatalf("unmarshal job_spec_json: %v", err)
+	}
+	if jobSpec.ExecutionMode != "agent_inference" {
+		t.Errorf("execution_mode want agent_inference got %q", jobSpec.ExecutionMode)
+	}
+	if len(jobSpec.Inference.AllowedModels) == 0 {
+		t.Error("expected non-empty inference.allowed_models")
+	}
+	if len(jobSpec.Steps) != 0 {
+		t.Errorf("expected no forced placeholder steps, got %d", len(jobSpec.Steps))
+	}
 }
 
 func TestTaskHandler_CreateTask_InputModePrompt_StoresPromptJobPayload(t *testing.T) {

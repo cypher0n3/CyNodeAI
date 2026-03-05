@@ -1,4 +1,5 @@
 # E2E parity: task create (echo). Requires login; sets state.task_id.
+# Traces: REQ-ORCHES-0122, 0126; CYNAI.CLIENT.CliCommandSurface (task subset).
 
 import re
 import time

@@ -42,7 +42,10 @@ class TestSbaInference(unittest.TestCase):
                 break
         self.assertIn(status, ("completed", "failed"), "SBA inference task did not finish")
         if status != "completed":
-            self.skipTest("SBA inference task failed (inference may be unavailable)")
+            self.fail(
+                "SBA inference task failed (per spec inference path must be available): "
+                f"status={status!r} result={result_data}"
+            )
         job_result = helpers.jq_get(result_data, "jobs", 0, "result")
         if not job_result and result_data:
             raw = result_data.get("stdout")

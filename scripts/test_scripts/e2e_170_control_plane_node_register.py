@@ -1,4 +1,5 @@
 # E2E parity: control-plane node register. Sets state.node_jwt.
+# Traces: REQ-ORCHES-0113, 0114; CYNAI.WORKER.Payload.CapabilityReportV1.
 
 import json
 import unittest
@@ -21,6 +22,7 @@ class TestNodeRegister(unittest.TestCase):
                 "node": {"node_slug": "test-e2e-node"},
                 "platform": {"os": "linux", "arch": "amd64"},
                 "compute": {"cpu_cores": 4, "ram_mb": 8192},
+                "worker_api": {"base_url": config.WORKER_API},
             },
         }
         ok, body = helpers.run_curl(

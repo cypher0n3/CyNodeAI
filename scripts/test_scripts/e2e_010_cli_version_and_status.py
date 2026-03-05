@@ -1,4 +1,5 @@
 # E2E: cynork version (no auth) and status (gateway health). Runs before login.
+# Traces: CYNAI.STANDS.CliCynork, REQ-ORCHES-0120 (healthz).
 
 import unittest
 

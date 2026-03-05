@@ -42,6 +42,7 @@ func RunAgent(ctx context.Context, spec *sbajob.JobSpec, workspace string, opts 
 		ProtocolVersion: spec.ProtocolVersion,
 		JobID:           spec.JobID,
 		Status:          statusSuccess,
+		InferenceUsed:   boolPtr(true),
 		Steps:           nil,
 		Artifacts:       nil,
 	}
@@ -84,11 +85,18 @@ func RunAgent(ctx context.Context, spec *sbajob.JobSpec, workspace string, opts 
 		setResultFromExecErr(result, ctx, err)
 		return result
 	}
+	if final, ok := outputs["output"].(string); ok {
+		result.FinalAnswer = strings.TrimSpace(final)
+	}
 	processStepsToResult(outputs, result)
 	if opts != nil && opts.JobDir != "" {
 		collectArtifactsToResult(opts.JobDir, result)
 	}
 	return result
+}
+
+func boolPtr(v bool) *bool {
+	return &v
 }
 
 func setResultFromExecErr(result *sbajob.Result, ctx context.Context, err error) {

@@ -9,6 +9,8 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"os"
+	"sort"
 	"strings"
 	"time"
 
@@ -291,7 +293,106 @@ func (h *NodeHandler) buildNodeConfigPayload(ctx context.Context, node *models.N
 	if backend := h.deriveInferenceBackend(ctx, node.ID); backend != nil {
 		payload.InferenceBackend = backend
 	}
+	payload.ManagedServices = h.buildManagedServicesDesiredState(ctx, node)
 	return payload
+}
+
+func (h *NodeHandler) buildManagedServicesDesiredState(ctx context.Context, node *models.Node) *nodepayloads.ConfigManagedServices {
+	if h.db == nil || node == nil || !boolEnvDefault("PMA_ENABLED", true) {
+		return nil
+	}
+	serviceID := strings.TrimSpace(getEnvDefault("PMA_SERVICE_ID", "pma-main"))
+	image := strings.TrimSpace(getEnvDefault("PMA_IMAGE", "ghcr.io/cypher0n3/cynode-pma:latest"))
+	if serviceID == "" || image == "" {
+		return nil
+	}
+	selectedNodeSlug := h.selectPMAHostNodeSlug(ctx, node.NodeSlug)
+	if selectedNodeSlug == "" || selectedNodeSlug != node.NodeSlug {
+		return nil
+	}
+	inferenceBaseURL := strings.TrimSpace(getEnvDefault("OLLAMA_BASE_URL", getEnvDefault("INFERENCE_URL", "http://127.0.0.1:11434")))
+	defaultModel := strings.TrimSpace(getEnvDefault("INFERENCE_MODEL", "tinyllama"))
+	return &nodepayloads.ConfigManagedServices{
+		Services: []nodepayloads.ConfigManagedService{
+			{
+				ServiceID:   serviceID,
+				ServiceType: "pma",
+				Image:       image,
+				Args:        []string{"--role=project_manager"},
+				Healthcheck: &nodepayloads.ConfigManagedServiceHealthcheck{
+					Path:           "/healthz",
+					ExpectedStatus: http.StatusOK,
+				},
+				RestartPolicy: "always",
+				Role:          "project_manager",
+				Inference: &nodepayloads.ConfigManagedServiceInference{
+					Mode:         "node_local",
+					BaseURL:      inferenceBaseURL,
+					DefaultModel: defaultModel,
+				},
+				Orchestrator: &nodepayloads.ConfigManagedServiceOrchestrator{
+					MCPGatewayProxyURL:    "http://127.0.0.1:12090/v1/worker/internal/orchestrator/mcp:call",
+					ReadyCallbackProxyURL: "http://127.0.0.1:12090/v1/worker/internal/orchestrator/agent:ready",
+				},
+			},
+		},
+	}
+}
+
+func (h *NodeHandler) selectPMAHostNodeSlug(ctx context.Context, fallbackNodeSlug string) string {
+	explicit := strings.TrimSpace(getEnvDefault("PMA_HOST_NODE_SLUG", ""))
+	if explicit != "" {
+		return explicit
+	}
+	nodes, err := h.db.ListActiveNodes(ctx)
+	if err != nil || len(nodes) == 0 {
+		return fallbackNodeSlug
+	}
+	sort.Slice(nodes, func(i, j int) bool { return nodes[i].NodeSlug < nodes[j].NodeSlug })
+	preferLabel := strings.TrimSpace(getEnvDefault("PMA_PREFER_HOST_LABEL", "orchestrator_host"))
+	if preferLabel != "" {
+		for _, n := range nodes {
+			if h.nodeHasLabel(ctx, n.ID, preferLabel) {
+				return n.NodeSlug
+			}
+		}
+	}
+	return nodes[0].NodeSlug
+}
+
+func (h *NodeHandler) nodeHasLabel(ctx context.Context, nodeID uuid.UUID, label string) bool {
+	snapJSON, err := h.db.GetLatestNodeCapabilitySnapshot(ctx, nodeID)
+	if err != nil {
+		return false
+	}
+	var report nodepayloads.CapabilityReport
+	if err := json.Unmarshal([]byte(snapJSON), &report); err != nil {
+		return false
+	}
+	for _, got := range report.Node.Labels {
+		if got == label {
+			return true
+		}
+	}
+	return false
+}
+
+func getEnvDefault(key, def string) string {
+	if v := strings.TrimSpace(os.Getenv(key)); v != "" {
+		return v
+	}
+	return def
+}
+
+func boolEnvDefault(key string, def bool) bool {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv(key))) {
+	case "1", "true", "yes", "on":
+		return true
+	case "0", "false", "no", "off":
+		return false
+	default:
+		return def
+	}
 }
 
 func (h *NodeHandler) deriveInferenceBackend(ctx context.Context, nodeID uuid.UUID) *nodepayloads.ConfigInferenceBackend {

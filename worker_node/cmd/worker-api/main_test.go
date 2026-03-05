@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"encoding/base64"
 	"context"
 	"encoding/json"
 	"log/slog"
@@ -517,5 +518,188 @@ func TestTelemetryContainersClosedStore(t *testing.T) {
 	mux.ServeHTTP(w3, r3)
 	if w3.Code != http.StatusBadRequest {
 		t.Errorf("closed store logs: %d", w3.Code)
+	}
+}
+
+func TestManagedServiceProxy_Success(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/internal/chat/completion" || r.Method != http.MethodPost {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		if r.Header.Get("X-Request-ID") != "req-123" {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.Header().Set("X-Request-ID", "req-123")
+		_, _ = w.Write([]byte(`{"content":"ok"}`))
+	}))
+	defer upstream.Close()
+	targetsJSON := map[string]managedServiceTarget{
+		"pma-main": {ServiceType: "pma", BaseURL: upstream.URL},
+	}
+	rawTargets, _ := json.Marshal(targetsJSON)
+	t.Setenv("WORKER_MANAGED_SERVICE_TARGETS_JSON", string(rawTargets))
+	mux := newMux(executor.New("direct", time.Second, 1024, "", "", nil), "token", "", nil, slog.Default())
+	reqBody := managedServiceProxyRequest{
+		Version: 1,
+		Method:  http.MethodPost,
+		Path:    "/internal/chat/completion",
+		Headers: map[string][]string{
+			"X-Request-ID": {"req-123"},
+			"X-Unsafe":     {"blocked"},
+		},
+		BodyB64: base64.StdEncoding.EncodeToString([]byte(`{"messages":[{"role":"user","content":"hi"}]}`)),
+	}
+	rawReq, _ := json.Marshal(reqBody)
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodPost, "/v1/worker/managed-services/pma-main/proxy:http", bytes.NewReader(rawReq))
+	r.Header.Set("Authorization", "Bearer token")
+	mux.ServeHTTP(w, r)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status %d body %s", w.Code, w.Body.String())
+	}
+	var resp managedServiceProxyResponse
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if resp.Status != http.StatusOK {
+		t.Fatalf("upstream status %d", resp.Status)
+	}
+	decoded, _ := base64.StdEncoding.DecodeString(resp.BodyB64)
+	if !strings.Contains(string(decoded), `"content":"ok"`) {
+		t.Fatalf("unexpected proxied body: %s", string(decoded))
+	}
+	if _, ok := resp.Headers["X-Request-Id"]; !ok {
+		t.Fatalf("expected response allowlisted header, got %+v", resp.Headers)
+	}
+}
+
+func TestManagedServiceProxy_AuthAndUnknownService(t *testing.T) {
+	t.Setenv("WORKER_MANAGED_SERVICE_TARGETS_JSON", `{"pma-main":{"service_type":"pma","base_url":"http://127.0.0.1:1"}}`)
+	mux := newMux(executor.New("direct", time.Second, 1024, "", "", nil), "token", "", nil, slog.Default())
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodPost, "/v1/worker/managed-services/pma-main/proxy:http", bytes.NewReader([]byte(`{}`)))
+	mux.ServeHTTP(w, r)
+	if w.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401, got %d", w.Code)
+	}
+	w2 := httptest.NewRecorder()
+	r2 := httptest.NewRequest(http.MethodPost, "/v1/worker/managed-services/unknown/proxy:http", bytes.NewReader([]byte(`{}`)))
+	r2.Header.Set("Authorization", "Bearer token")
+	mux.ServeHTTP(w2, r2)
+	if w2.Code != http.StatusNotFound {
+		t.Fatalf("expected 404, got %d", w2.Code)
+	}
+}
+
+func TestManagedServiceProxy_RequestValidation(t *testing.T) {
+	t.Setenv("WORKER_MANAGED_SERVICE_TARGETS_JSON", `{"pma-main":{"service_type":"pma","base_url":"http://127.0.0.1:1"}}`)
+	mux := newMux(executor.New("direct", time.Second, 1024, "", "", nil), "token", "", nil, slog.Default())
+	cases := []struct {
+		name string
+		body string
+		code int
+	}{
+		{name: "invalid json", body: `not-json`, code: http.StatusBadRequest},
+		{name: "bad version", body: `{"version":2,"method":"POST","path":"/x"}`, code: http.StatusBadRequest},
+		{name: "bad method", body: `{"version":1,"method":"TRACE","path":"/x"}`, code: http.StatusBadRequest},
+		{name: "bad path", body: `{"version":1,"method":"POST","path":"http://x"}`, code: http.StatusBadRequest},
+		{name: "bad body_b64", body: `{"version":1,"method":"POST","path":"/x","body_b64":"%%%"}`, code: http.StatusBadRequest},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			w := httptest.NewRecorder()
+			r := httptest.NewRequest(http.MethodPost, "/v1/worker/managed-services/pma-main/proxy:http", bytes.NewReader([]byte(tc.body)))
+			r.Header.Set("Authorization", "Bearer token")
+			mux.ServeHTTP(w, r)
+			if w.Code != tc.code {
+				t.Fatalf("status %d want %d body %s", w.Code, tc.code, w.Body.String())
+			}
+		})
+	}
+}
+
+func TestManagedServiceProxy_UpstreamErrors(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write(bytes.Repeat([]byte("a"), maxManagedProxyBodyBytes+4))
+	}))
+	defer upstream.Close()
+	targetsJSON := map[string]managedServiceTarget{
+		"pma-main": {ServiceType: "pma", BaseURL: upstream.URL},
+	}
+	rawTargets, _ := json.Marshal(targetsJSON)
+	t.Setenv("WORKER_MANAGED_SERVICE_TARGETS_JSON", string(rawTargets))
+	mux := newMux(executor.New("direct", time.Second, 1024, "", "", nil), "token", "", nil, slog.Default())
+	reqBody := `{"version":1,"method":"GET","path":"/x"}`
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodPost, "/v1/worker/managed-services/pma-main/proxy:http", bytes.NewReader([]byte(reqBody)))
+	r.Header.Set("Authorization", "Bearer token")
+	mux.ServeHTTP(w, r)
+	if w.Code != http.StatusBadGateway {
+		t.Fatalf("expected 502, got %d body %s", w.Code, w.Body.String())
+	}
+}
+
+func TestLoadManagedServiceTargetsFromEnv(t *testing.T) {
+	t.Run("empty", func(t *testing.T) {
+		t.Setenv("WORKER_MANAGED_SERVICE_TARGETS_JSON", "")
+		got := loadManagedServiceTargetsFromEnv(slog.Default())
+		if len(got) != 0 {
+			t.Fatalf("expected empty targets, got %+v", got)
+		}
+	})
+	t.Run("typed map", func(t *testing.T) {
+		t.Setenv("WORKER_MANAGED_SERVICE_TARGETS_JSON", `{"pma-main":{"service_type":"pma","base_url":"http://x"}}`)
+		got := loadManagedServiceTargetsFromEnv(slog.Default())
+		if got["pma-main"].ServiceType != "pma" || got["pma-main"].BaseURL != "http://x" {
+			t.Fatalf("unexpected targets: %+v", got)
+		}
+	})
+	t.Run("simple map fallback", func(t *testing.T) {
+		t.Setenv("WORKER_MANAGED_SERVICE_TARGETS_JSON", `{"svc":"http://y"}`)
+		got := loadManagedServiceTargetsFromEnv(slog.Default())
+		if got["svc"].BaseURL != "http://y" {
+			t.Fatalf("unexpected targets: %+v", got)
+		}
+	})
+	t.Run("invalid", func(t *testing.T) {
+		t.Setenv("WORKER_MANAGED_SERVICE_TARGETS_JSON", `{`)
+		got := loadManagedServiceTargetsFromEnv(slog.Default())
+		if len(got) != 0 {
+			t.Fatalf("expected empty targets on invalid json, got %+v", got)
+		}
+	})
+}
+
+func TestManagedProxyHelpers(t *testing.T) {
+	if !isAllowedProxyMethod(http.MethodPatch) || isAllowedProxyMethod(http.MethodOptions) {
+		t.Fatal("method allowlist mismatch")
+	}
+	if !isSafeProxyPath("/ok") || isSafeProxyPath("http://bad") || isSafeProxyPath("bad") {
+		t.Fatal("path validation mismatch")
+	}
+	if !isAllowedProxyRequestHeader("Content-Type") || isAllowedProxyRequestHeader("X-Unsafe") {
+		t.Fatal("request header allowlist mismatch")
+	}
+	if !isAllowedProxyResponseHeader("X-Request-Id") || isAllowedProxyResponseHeader("Set-Cookie") {
+		t.Fatal("response header allowlist mismatch")
+	}
+}
+
+func TestForwardManagedProxyRequest_ConnectionError(t *testing.T) {
+	req := &managedServiceProxyRequest{
+		Version: 1, Method: http.MethodGet, Path: "/x",
+	}
+	_, status, detail := forwardManagedProxyRequest(
+		context.Background(),
+		managedServiceTarget{ServiceType: "pma", BaseURL: "http://127.0.0.1:1"},
+		req,
+		nil,
+	)
+	if status != http.StatusBadGateway || detail == "" {
+		t.Fatalf("expected bad gateway detail, got status=%d detail=%q", status, detail)
 	}
 }

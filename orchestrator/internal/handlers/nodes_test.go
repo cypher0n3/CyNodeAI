@@ -11,6 +11,9 @@ import (
 	"time"
 
 	"github.com/cypher0n3/cynodeai/go_shared_libs/contracts/nodepayloads"
+	"github.com/cypher0n3/cynodeai/orchestrator/internal/models"
+	"github.com/cypher0n3/cynodeai/orchestrator/internal/testutil"
+	"github.com/google/uuid"
 )
 
 const testOrchestratorURL = "http://test-orchestrator"
@@ -500,5 +503,147 @@ func TestValidateRegistrationRequestValid(t *testing.T) {
 	}
 	if result != nil && result.Capability.Node.NodeSlug != "valid-node" {
 		t.Errorf("expected node slug 'valid-node', got %s", result.Capability.Node.NodeSlug)
+	}
+}
+
+func TestBuildNodeConfigPayload_IncludesManagedServicesWhenSelected(t *testing.T) {
+	_ = os.Setenv("PMA_ENABLED", "true")
+	_ = os.Setenv("PMA_HOST_NODE_SLUG", "node-01")
+	defer func() {
+		_ = os.Unsetenv("PMA_ENABLED")
+		_ = os.Unsetenv("PMA_HOST_NODE_SLUG")
+	}()
+	mockDB := testutil.NewMockDB()
+	node := &models.Node{
+		ID:        uuid.New(),
+		NodeSlug:  "node-01",
+		Status:    models.NodeStatusActive,
+		CreatedAt: time.Now().UTC(),
+		UpdatedAt: time.Now().UTC(),
+	}
+	mockDB.AddNode(node)
+	h := NewNodeHandler(mockDB, nil, "psk", testOrchestratorURL, "", "", nil)
+	payload := h.buildNodeConfigPayload(t.Context(), node, "cfg-1", "http://worker:12090")
+	if payload.ManagedServices == nil || len(payload.ManagedServices.Services) != 1 {
+		t.Fatalf("expected one managed service, got %+v", payload.ManagedServices)
+	}
+	svc := payload.ManagedServices.Services[0]
+	if svc.ServiceType != "pma" || svc.ServiceID == "" {
+		t.Errorf("unexpected managed service: %+v", svc)
+	}
+}
+
+func TestBuildNodeConfigPayload_OmitsManagedServicesWhenNotSelected(t *testing.T) {
+	_ = os.Setenv("PMA_ENABLED", "true")
+	_ = os.Setenv("PMA_HOST_NODE_SLUG", "other-node")
+	defer func() {
+		_ = os.Unsetenv("PMA_ENABLED")
+		_ = os.Unsetenv("PMA_HOST_NODE_SLUG")
+	}()
+	mockDB := testutil.NewMockDB()
+	node := &models.Node{
+		ID:        uuid.New(),
+		NodeSlug:  "node-01",
+		Status:    models.NodeStatusActive,
+		CreatedAt: time.Now().UTC(),
+		UpdatedAt: time.Now().UTC(),
+	}
+	mockDB.AddNode(node)
+	h := NewNodeHandler(mockDB, nil, "psk", testOrchestratorURL, "", "", nil)
+	payload := h.buildNodeConfigPayload(t.Context(), node, "cfg-1", "http://worker:12090")
+	if payload.ManagedServices != nil {
+		t.Errorf("expected no managed services for unselected node, got %+v", payload.ManagedServices)
+	}
+}
+
+func TestSelectPMAHostNodeSlug_PrefersLabeledNode(t *testing.T) {
+	_ = os.Unsetenv("PMA_HOST_NODE_SLUG")
+	_ = os.Setenv("PMA_PREFER_HOST_LABEL", "orchestrator_host")
+	defer func() { _ = os.Unsetenv("PMA_PREFER_HOST_LABEL") }()
+	mockDB := testutil.NewMockDB()
+	node1 := &models.Node{
+		ID:        uuid.New(),
+		NodeSlug:  "node-a",
+		Status:    models.NodeStatusActive,
+		CreatedAt: time.Now().UTC(),
+		UpdatedAt: time.Now().UTC(),
+	}
+	node2 := &models.Node{
+		ID:        uuid.New(),
+		NodeSlug:  "node-b",
+		Status:    models.NodeStatusActive,
+		CreatedAt: time.Now().UTC(),
+		UpdatedAt: time.Now().UTC(),
+	}
+	mockDB.AddNode(node1)
+	mockDB.AddNode(node2)
+	report := nodepayloads.CapabilityReport{
+		Version:    1,
+		ReportedAt: time.Now().UTC().Format(time.RFC3339),
+		Node: nodepayloads.CapabilityNode{
+			NodeSlug: "node-b",
+			Labels:   []string{"orchestrator_host"},
+		},
+		Platform: nodepayloads.Platform{OS: "linux", Arch: "amd64"},
+		Compute:  nodepayloads.Compute{CPUCores: 4, RAMMB: 8192},
+	}
+	raw, _ := json.Marshal(report)
+	_ = mockDB.SaveNodeCapabilitySnapshot(t.Context(), node2.ID, string(raw))
+	h := NewNodeHandler(mockDB, nil, "psk", testOrchestratorURL, "", "", nil)
+	if got := h.selectPMAHostNodeSlug(t.Context(), "fallback-node"); got != "node-b" {
+		t.Errorf("selectPMAHostNodeSlug() = %q, want node-b", got)
+	}
+}
+
+func TestBoolEnvDefault(t *testing.T) {
+	_ = os.Setenv("TEST_BOOL_ENV", "true")
+	if !boolEnvDefault("TEST_BOOL_ENV", false) {
+		t.Error("boolEnvDefault true parsing failed")
+	}
+	_ = os.Setenv("TEST_BOOL_ENV", "no")
+	if boolEnvDefault("TEST_BOOL_ENV", true) {
+		t.Error("boolEnvDefault false parsing failed")
+	}
+	_ = os.Unsetenv("TEST_BOOL_ENV")
+	if !boolEnvDefault("TEST_BOOL_ENV", true) {
+		t.Error("boolEnvDefault should return default when unset")
+	}
+}
+
+func TestGetEnvDefault(t *testing.T) {
+	_ = os.Setenv("TEST_ENV_DEFAULT", "value")
+	if got := getEnvDefault("TEST_ENV_DEFAULT", "fallback"); got != "value" {
+		t.Errorf("getEnvDefault() = %q, want value", got)
+	}
+	_ = os.Unsetenv("TEST_ENV_DEFAULT")
+	if got := getEnvDefault("TEST_ENV_DEFAULT", "fallback"); got != "fallback" {
+		t.Errorf("getEnvDefault() = %q, want fallback", got)
+	}
+}
+
+func TestSelectPMAHostNodeSlug_ExplicitOverride(t *testing.T) {
+	_ = os.Setenv("PMA_HOST_NODE_SLUG", "explicit-node")
+	defer func() { _ = os.Unsetenv("PMA_HOST_NODE_SLUG") }()
+	h := NewNodeHandler(testutil.NewMockDB(), nil, "psk", testOrchestratorURL, "", "", nil)
+	if got := h.selectPMAHostNodeSlug(t.Context(), "fallback"); got != "explicit-node" {
+		t.Errorf("selectPMAHostNodeSlug() = %q, want explicit-node", got)
+	}
+}
+
+func TestBuildManagedServicesDesiredState_Disabled(t *testing.T) {
+	_ = os.Setenv("PMA_ENABLED", "false")
+	defer func() { _ = os.Unsetenv("PMA_ENABLED") }()
+	mockDB := testutil.NewMockDB()
+	node := &models.Node{
+		ID:        uuid.New(),
+		NodeSlug:  "node-01",
+		Status:    models.NodeStatusActive,
+		CreatedAt: time.Now().UTC(),
+		UpdatedAt: time.Now().UTC(),
+	}
+	mockDB.AddNode(node)
+	h := NewNodeHandler(mockDB, nil, "psk", testOrchestratorURL, "", "", nil)
+	if got := h.buildManagedServicesDesiredState(t.Context(), node); got != nil {
+		t.Errorf("buildManagedServicesDesiredState() should return nil when disabled, got %+v", got)
 	}
 }

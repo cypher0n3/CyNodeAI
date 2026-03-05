@@ -88,14 +88,21 @@ Gaps (e.g. 011-019 between 010 and 020) allow inserting new tests without renumb
 - **e2e_110_task_models_and_chat** - Models list; one-shot chat (skipped if `E2E_SKIP_INFERENCE_SMOKE`).
 - **e2e_115_pma_chat_context** - One-shot chat with `--project-id` (OpenAI-Project header); PMA handoff path (skipped if `E2E_SKIP_INFERENCE_SMOKE`).
 - **e2e_116_skills_gateway** - Skills list, load (from file), get by id, delete via cynork against user-gateway; requires auth (e2e_020).
-- **e2e_120_sba_task** - SBA task; asserts job result contains `sba_result`; sets `state.SBA_TASK_ID`.
+- **e2e_123_sba_task** - SBA task; asserts job result contains `sba_result`; sets `state.SBA_TASK_ID`.
 - **e2e_130_sba_task_result_contract** - SBA result shape (protocol_version, job_id, status, steps, artifacts).
+  Requires state.SBA_TASK_ID from e2e_123.
 - **e2e_140_sba_task_inference** - SBA task with inference prompt (skipped if `E2E_SKIP_INFERENCE_SMOKE`).
+- **e2e_145_sba_inference_reply** - SBA + inference prompt "Reply back with the current time."; asserts user-facing reply (not empty stdout / sba-run only); skipped if `E2E_SKIP_INFERENCE_SMOKE`.
 - **e2e_150_task_logs** - Task logs for `state.TASK_ID`.
 - **e2e_160_task_cancel** - Create task, cancel with `-y`, assert terminal status canceled.
 - **e2e_170_control_plane_node_register** - POST `/v1/nodes/register`; sets `state.NODE_JWT`.
 - **e2e_180_control_plane_capability** - POST `/v1/nodes/capability` with node JWT.
 - **e2e_190_auth_refresh** - Auth refresh and whoami.
+- **e2e_192_chat_reliability** - One-shot chat with extended timeout and retries; assert timely reply or clear error (skipped if `E2E_SKIP_INFERENCE_SMOKE`).
+- **e2e_193_chat_sequential_messages** - Two-turn chat via POST /v1/chat/completions; assert both replies (skipped if `E2E_SKIP_INFERENCE_SMOKE`).
+- **e2e_194_chat_simultaneous_messages** - Three concurrent chat requests; assert at least one succeeds with non-empty reply (skipped if `E2E_SKIP_INFERENCE_SMOKE`).
+- **e2e_195_gateway_health_readyz** - GET /healthz and /readyz; assert 200 or 503 per spec.
+- **e2e_196_task_list_status_filter** - Task list with --status completed/queued; assert JSON shape and status enum.
 - **e2e_200_auth_logout** - Auth logout; cleans `state.CONFIG_DIR`.
 
 ## Execution Order and State

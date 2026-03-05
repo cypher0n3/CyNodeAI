@@ -1,4 +1,5 @@
 # E2E parity: auth login. Run after gateway is up; creates shared config dir.
+# Traces: REQ-IDENTY-0103, 0104; CYNAI.IDENTY.AuthenticationModel.
 
 import unittest
 

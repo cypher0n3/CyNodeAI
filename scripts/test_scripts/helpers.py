@@ -12,14 +12,14 @@ import time
 from scripts.test_scripts import config
 
 
-def run_cynork(args, config_path, env_extra=None, capture=True):
+def run_cynork(args, config_path, env_extra=None, capture=True, timeout=120):
     """Run cynork-dev with --config; return (ok, stdout, stderr)."""
     cmd = [config.CYNORK_BIN, "--config", config_path] + list(args)
     env = os.environ.copy()
     env["CYNORK_GATEWAY_URL"] = config.USER_API
     if env_extra:
         env.update(env_extra)
-    kw = {"env": env, "capture_output": capture, "text": True, "timeout": 120}
+    kw = {"env": env, "capture_output": capture, "text": True, "timeout": timeout}
     try:
         r = subprocess.run(cmd, check=False, **kw)
         out = r.stdout or ""
@@ -29,7 +29,7 @@ def run_cynork(args, config_path, env_extra=None, capture=True):
         return False, "", str(e)
 
 
-def run_curl_with_status(method, url, data=None, headers=None):
+def run_curl_with_status(method, url, data=None, headers=None, timeout=30):
     """Run curl; return (status_code, body). Caller can assert on code (e.g. 200, 403, 501)."""
     cmd = ["curl", "-s", "-w", "%{http_code}", "-X", method, url]
     if headers:
@@ -39,7 +39,7 @@ def run_curl_with_status(method, url, data=None, headers=None):
         cmd.extend(["-H", "Content-Type: application/json", "-d", data])
     try:
         r = subprocess.run(
-            cmd, capture_output=True, text=True, timeout=30, check=False
+            cmd, capture_output=True, text=True, timeout=timeout, check=False
         )
         out = (r.stdout or "").strip()
         if len(out) >= 3 and out[-3:].isdigit():
@@ -53,10 +53,28 @@ def run_curl_with_status(method, url, data=None, headers=None):
         return 0, ""
 
 
-def run_curl(method, url, data=None, headers=None):
+def run_curl(method, url, data=None, headers=None, timeout=30):
     """Run curl; return (ok, body). ok is True when status is 2xx."""
-    code, body = run_curl_with_status(method, url, data=data, headers=headers)
+    code, body = run_curl_with_status(
+        method, url, data=data, headers=headers, timeout=timeout
+    )
     return 200 <= code < 300, body
+
+
+def read_token_from_config(config_path):
+    """Read Bearer token from cynork config (YAML-like token: value). Return None if missing."""
+    if not config_path or not os.path.isfile(config_path):
+        return None
+    try:
+        with open(config_path, encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if line.startswith("token:"):
+                    val = line.split(":", 1)[1].strip().strip('"\'')
+                    return val or None
+    except OSError:
+        pass
+    return None
 
 
 def wait_for_gateway(max_attempts=30, sleep=1):

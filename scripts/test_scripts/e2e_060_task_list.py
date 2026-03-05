@@ -1,4 +1,4 @@
-# E2E: task list. Requires login and at least one task (e2e_03 sets state.TASK_ID).
+# E2E: task list. Requires login and at least one task (e2e_050 sets state.TASK_ID).
 
 import unittest
 

@@ -1,4 +1,5 @@
 # E2E parity: models list and one-shot chat. Skip chat if E2E_SKIP_INFERENCE_SMOKE.
+# Traces: REQ-USRGWY-0121, 0127; CYNAI.USRGWY.OpenAIChatApi; REQ-CLIENT-0161.
 
 import os
 import time

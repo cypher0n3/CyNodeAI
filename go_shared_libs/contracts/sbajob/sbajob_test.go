@@ -83,6 +83,9 @@ func TestParseAndValidateJobSpec_StepsOptional(t *testing.T) {
 	if spec.Steps != nil {
 		t.Errorf("Steps should be nil when omitted, got len=%d", len(spec.Steps))
 	}
+	if EffectiveExecutionMode(spec) != ExecutionModeAgentInference {
+		t.Errorf("EffectiveExecutionMode() = %q, want %q", EffectiveExecutionMode(spec), ExecutionModeAgentInference)
+	}
 }
 
 func TestValidateStepExecutorJobSpec_EmptyStepsFails(t *testing.T) {
@@ -118,6 +121,35 @@ func TestValidateStepExecutorJobSpec_Valid(t *testing.T) {
 	}
 	if err := ValidateStepExecutorJobSpec(spec); err != nil {
 		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestParseAndValidateJobSpec_InvalidExecutionMode(t *testing.T) {
+	data := []byte(`{
+		"protocol_version": "1.0",
+		"job_id": "j1",
+		"task_id": "t1",
+		"execution_mode": "invalid_mode",
+		"constraints": {"max_runtime_seconds": 300, "max_output_bytes": 1048576},
+		"steps": []
+	}`)
+	parseAndExpectValidationError(t, data, "execution_mode", "must be one of")
+}
+
+func TestEffectiveExecutionMode_BackwardCompatibleFallback(t *testing.T) {
+	spec := &JobSpec{
+		ProtocolVersion: "1.0",
+		JobID:           "j1",
+		TaskID:          "t1",
+		Constraints:     JobConstraints{MaxRuntimeSeconds: 60, MaxOutputBytes: 1024},
+		Steps:           []StepSpec{{Type: "run_command"}},
+	}
+	if got := EffectiveExecutionMode(spec); got != ExecutionModeDirectSteps {
+		t.Errorf("EffectiveExecutionMode(with steps) = %q, want %q", got, ExecutionModeDirectSteps)
+	}
+	spec.ExecutionMode = ExecutionModeAgentInference
+	if got := EffectiveExecutionMode(spec); got != ExecutionModeAgentInference {
+		t.Errorf("EffectiveExecutionMode(explicit) = %q, want %q", got, ExecutionModeAgentInference)
 	}
 }
 

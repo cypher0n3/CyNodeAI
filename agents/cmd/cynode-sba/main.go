@@ -70,20 +70,8 @@ func run(args []string) int {
 	defer cancel()
 
 	jobDir := filepath.Dir(*resultPath)
-	var result *sbajob.Result
-	if os.Getenv("SBA_DIRECT_STEPS") == "1" {
-		result = sba.RunStepsDirect(ctx, spec, *workspace, jobDir)
-	} else {
-		opts := &sba.RunAgentOptions{JobDir: jobDir}
-		if os.Getenv("SBA_USE_MOCK_LLM") == "1" {
-			mock := &sba.MockLLM{}
-			if resp := os.Getenv("SBA_MOCK_RESPONSES"); resp != "" {
-				_ = json.Unmarshal([]byte(resp), &mock.Responses)
-			}
-			opts.LLM = mock
-		}
-		result = sba.RunAgent(ctx, spec, *workspace, opts)
-	}
+	executionMode := resolveExecutionMode(spec)
+	result := runByExecutionMode(ctx, executionMode, spec, *workspace, jobDir)
 
 	lifecycle.NotifyCompletion(context.Background(), result)
 
@@ -100,6 +88,37 @@ func run(args []string) int {
 		return 1
 	}
 	return 0
+}
+
+func resolveExecutionMode(spec *sbajob.JobSpec) string {
+	mode := sbajob.EffectiveExecutionMode(spec)
+	if os.Getenv("SBA_DIRECT_STEPS") == "1" {
+		mode = sbajob.ExecutionModeDirectSteps
+	}
+	if v := strings.TrimSpace(os.Getenv("SBA_EXECUTION_MODE")); v != "" {
+		mode = v
+	}
+	return mode
+}
+
+func runByExecutionMode(ctx context.Context, executionMode string, spec *sbajob.JobSpec, workspace, jobDir string) *sbajob.Result {
+	switch executionMode {
+	case sbajob.ExecutionModeDirectSteps:
+		return sba.RunStepsDirect(ctx, spec, workspace, jobDir)
+	case sbajob.ExecutionModeAgentInference:
+		opts := &sba.RunAgentOptions{JobDir: jobDir}
+		if os.Getenv("SBA_USE_MOCK_LLM") == "1" {
+			mock := &sba.MockLLM{}
+			if resp := os.Getenv("SBA_MOCK_RESPONSES"); resp != "" {
+				_ = json.Unmarshal([]byte(resp), &mock.Responses)
+			}
+			opts.LLM = mock
+		}
+		return sba.RunAgent(ctx, spec, workspace, opts)
+	default:
+		msg := "unsupported execution_mode: " + executionMode
+		return failureResult("schema_validation", msg)
+	}
 }
 
 func applyEnvOverrides(stdinStdout *bool, jobPath, resultPath, workspace *string) {

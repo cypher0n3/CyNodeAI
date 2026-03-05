@@ -42,6 +42,9 @@ func TestBuildCapability_SetsInference(t *testing.T) {
 	if report.WorkerAPI == nil || report.WorkerAPI.BaseURL != "http://worker:12090" {
 		t.Errorf("expected worker_api.base_url from config, got %+v", report.WorkerAPI)
 	}
+	if report.ManagedServices == nil || !report.ManagedServices.Supported {
+		t.Errorf("expected managed_services.supported=true, got %+v", report.ManagedServices)
+	}
 }
 
 func TestBuildCapability_NilConfig(t *testing.T) {
