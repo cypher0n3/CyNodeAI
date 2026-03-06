@@ -356,6 +356,7 @@ Traces To:
             For **system-level** managed agents (e.g. PMA), the orchestrator does not associate the token with a specific user.
             For **user-scoped** managed agents (e.g. PAA when deployed as a managed service), the orchestrator MUST associate the token with the user on whose behalf the agent is acting, so the gateway can resolve user context for preferences, access control, and auditing.
             Traces To: [REQ-WORKER-0164](../requirements/worker.md#req-worker-0164).
+            See also: [CYNAI.WORKER.NodeLocalSecureStore](worker_node.md#spec-cynai-worker-nodelocalsecurestore), [CYNAI.WORKER.AgentTokenStorageAndLifecycle](worker_node.md#spec-cynai-worker-agenttokenstorageandlifecycle).
         - `agent_token_ref` (object, optional)
           - Reference for how the **worker** obtains a short-lived token; raw secrets MUST be handled by the worker only and MUST NOT be given to agents.
 - `notes` (string, optional)

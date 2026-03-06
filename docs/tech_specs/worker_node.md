@@ -110,6 +110,41 @@ Traces To: [REQ-WORKER-0164](../requirements/worker.md#req-worker-0164).
 - The worker MUST authenticate and authorize proxy requests according to orchestrator-issued credentials (agent tokens, capability leases) that the **worker** holds and MUST fail closed when validation fails.
 - The worker MUST emit auditable records for proxy activity sufficient to attribute actions to the agent identity and context.
 
+### Agent Token Storage and Lifecycle
+
+- Spec ID: `CYNAI.WORKER.AgentTokenStorageAndLifecycle` <a id="spec-cynai-worker-agenttokenstorageandlifecycle"></a>
+
+Traces To:
+
+- [REQ-WORKER-0164](../requirements/worker.md#req-worker-0164)
+- [REQ-WORKER-0165](../requirements/worker.md#req-worker-0165)
+- [REQ-WORKER-0166](../requirements/worker.md#req-worker-0166)
+- [REQ-WORKER-0167](../requirements/worker.md#req-worker-0167)
+- [REQ-WORKER-0168](../requirements/worker.md#req-worker-0168)
+
+The worker MUST store agent tokens in the node-local secure store defined by [CYNAI.WORKER.NodeLocalSecureStore](#spec-cynai-worker-nodelocalsecurestore) and MUST NOT pass agent tokens into any agent container (including managed-service containers such as PMA).
+
+Required behavior:
+
+- The worker MUST key agent tokens by the managed-service identity (e.g. `service_id`) so the worker proxy can deterministically select the correct token for the calling agent runtime.
+- The worker proxy MUST attach the correct agent token to agent-originated requests when forwarding to the orchestrator.
+- The worker MUST NOT expose agent tokens to sandboxes or agents via env vars, files, mounts, or logs.
+
+Observability:
+
+- Agent tokens MUST NOT appear in logs, metrics, audit payloads (beyond opaque identifiers such as `service_id` or agent identity), debug endpoints, or telemetry responses.
+  Redaction MUST NOT be relied upon.
+
+#### `AgentTokenStorageAndLifecycle` Algorithm
+
+<a id="algo-cynai-worker-agenttokenstorageandlifecycle"></a>
+
+1. On configuration apply, for each `managed_services.services[]` entry that includes `orchestrator.agent_token` or `agent_token_ref`, the worker resolves the token value and writes it to the node-local secure store under the key for that service identity. <a id="algo-cynai-worker-agenttokenstorageandlifecycle-step-1"></a>
+2. The worker MUST NOT pass the token value to the managed-service container or agent runtime. <a id="algo-cynai-worker-agenttokenstorageandlifecycle-step-2"></a>
+3. When the worker proxy receives an agent-originated request, it determines the calling service identity, loads the corresponding token from the secure store, attaches it to the outbound request, and forwards to the orchestrator. <a id="algo-cynai-worker-agenttokenstorageandlifecycle-step-3"></a>
+4. On configuration update or service removal, the worker removes or overwrites the stored token for that service identity so the old token is no longer available. <a id="algo-cynai-worker-agenttokenstorageandlifecycle-step-4"></a>
+5. When an expiry is provided (e.g. `agent_token_expires_at`), the worker MUST treat expired tokens as invalid and MUST NOT use them to forward requests; the worker SHOULD request a configuration refresh where applicable. <a id="algo-cynai-worker-agenttokenstorageandlifecycle-step-5"></a>
+
 ## Sandbox Control Plane
 
 This section defines how agents and the orchestrator interact with sandbox containers on a node.
@@ -799,6 +834,68 @@ Traces To:
 - [REQ-WORKER-0128](../requirements/worker.md#req-worker-0128)
 - [REQ-WORKER-0129](../requirements/worker.md#req-worker-0129)
 - [REQ-WORKER-0130](../requirements/worker.md#req-worker-0130)
+
+### Node-Local Secure Store
+
+- Spec ID: `CYNAI.WORKER.NodeLocalSecureStore` <a id="spec-cynai-worker-nodelocalsecurestore"></a>
+
+Traces To:
+
+- [REQ-WORKER-0128](../requirements/worker.md#req-worker-0128)
+- [REQ-WORKER-0132](../requirements/worker.md#req-worker-0132)
+- [REQ-WORKER-0165](../requirements/worker.md#req-worker-0165)
+- [REQ-WORKER-0166](../requirements/worker.md#req-worker-0166)
+- [REQ-WORKER-0167](../requirements/worker.md#req-worker-0167)
+- [REQ-WORKER-0168](../requirements/worker.md#req-worker-0168)
+- [REQ-WORKER-0169](../requirements/worker.md#req-worker-0169)
+- [REQ-WORKER-0170](../requirements/worker.md#req-worker-0170)
+
+This section defines the **single** node-local secure store used by the worker for orchestrator-issued secrets (pull credentials, orchestrator bearer token, agent tokens, and capability leases).
+
+Scope and boundaries:
+
+- The secure store MUST be host-only and MUST NOT be accessible from inside any sandbox or managed-service container.
+- No path, filesystem partition, or volume that is part of the secure store MUST be mounted into any container.
+- The secure store MUST NOT be the Worker Telemetry API SQLite database and MUST be distinct from `${storage.state_dir}/telemetry/telemetry.db`.
+- No API (including Worker Telemetry API endpoints) MUST query or expose the secure store.
+
+Backing and location:
+
+- The secure store ciphertext MUST be stored under `${storage.state_dir}/secrets/` (or `/var/lib/cynode/state/secrets/` when `storage.state_dir` is unset).
+- Store files MUST be owned by the worker / Node Manager user and MUST use permissions:
+  - files: `0600`
+  - directories (when used): `0700`
+
+Encryption at rest:
+
+- All secret values persisted to disk MUST be encrypted at rest before being written and decrypted only when needed by the worker.
+- The worker MUST use a post-quantum resistant symmetric algorithm for encryption at rest (e.g. AES-256-GCM) with a per-record nonce.
+- The secure store master key MUST NOT be stored in plaintext on disk and MUST NOT be logged.
+
+Master key acquisition precedence:
+
+The worker MUST obtain a single 256-bit master key using the first available source in this order:
+
+1. TPM-sealed key (when supported and configured).
+2. OS key store.
+3. System service credentials (e.g. systemd credential).
+4. Environment variable fallback `CYNODE_SECURE_STORE_MASTER_KEY_B64` (base64-encoded 32 bytes).
+   This is an emergency fallback only.
+
+When `CYNODE_SECURE_STORE_MASTER_KEY_B64` is used:
+
+- The worker MUST fail closed if the env var is invalid base64 or the decoded length is not exactly 32 bytes.
+- The worker MUST NOT log the env var value, decoded bytes, or derived key material.
+- The worker MUST NOT pass the env var into any container.
+- The worker MUST emit a startup warning indicating the backend `env_b64` and a remediation hint.
+
+FIPS mode:
+
+- When the host system is configured for FIPS mode, the worker MUST use only FIPS-approved algorithms and MUST use FIPS-validated cryptographic modules where required by the platform.
+
+Go 1.26 secure secret handling (implementation requirement):
+
+- The worker SHOULD use `runtime/secret` (Go 1.26, via `GOEXPERIMENT=secret`) to wrap code that handles the master key or decrypted plaintext secrets so temporaries are erased before returning.
 
 ## Required Node Configuration
 

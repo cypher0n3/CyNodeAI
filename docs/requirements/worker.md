@@ -221,10 +221,30 @@ It covers worker-node behavior and the worker API contract for job execution and
   The worker MUST NOT pass agent tokens or other orchestrator-issued secrets to agent containers or to agents; agents MUST NOT be given tokens or secrets directly.
   [CYNAI.WORKER.WorkerProxyBidirectionalManagedAgents](../tech_specs/worker_node.md#spec-cynai-worker-proxybidirectional)
   [CYNAI.WORKER.AgentTokensWorkerHeldOnly](../tech_specs/worker_node.md#spec-cynai-worker-agenttokensworkerheldonly)
+  [CYNAI.WORKER.AgentTokenStorageAndLifecycle](../tech_specs/worker_node.md#spec-cynai-worker-agenttokenstorageandlifecycle)
   [CYNAI.WORKER.Payload.ConfigurationV1](../tech_specs/worker_node_payloads.md#spec-cynai-worker-payload-configuration-v1)
   [CYNAI.MCPGAT.AgentScopedTokens](../tech_specs/mcp_gateway_enforcement.md#spec-cynai-mcpgat-agentscopedtokens)
   [CYNAI.MCPGAT.AgentTokensWorkerProxyOnly](../tech_specs/mcp_gateway_enforcement.md#spec-cynai-mcpgat-agenttokensworkerproxyonly)
   <a id="req-worker-0164"></a>
+- **REQ-WORKER-0165:** Nodes MUST store orchestrator-issued secrets in a node-local secure store and MUST encrypt those secrets at rest when persisted to disk.
+  [CYNAI.WORKER.NodeLocalSecureStore](../tech_specs/worker_node.md#spec-cynai-worker-nodelocalsecurestore)
+  <a id="req-worker-0165"></a>
+- **REQ-WORKER-0166:** The node-local secure store master key MUST NOT be stored in plaintext on disk and MUST NOT be written to logs.
+  [CYNAI.WORKER.NodeLocalSecureStore](../tech_specs/worker_node.md#spec-cynai-worker-nodelocalsecurestore)
+  <a id="req-worker-0166"></a>
+- **REQ-WORKER-0167:** Nodes MUST support master key acquisition using a deterministic precedence order and MUST support an emergency environment variable fallback.
+  Nodes MUST emit a startup warning when using the env var fallback or any backend weaker than TPM, OS key store, or system service credentials.
+  [CYNAI.WORKER.NodeLocalSecureStore](../tech_specs/worker_node.md#spec-cynai-worker-nodelocalsecurestore)
+  <a id="req-worker-0167"></a>
+- **REQ-WORKER-0168:** Nodes MUST NOT mount or expose any part of the node-local secure store (including ciphertext files) into sandbox containers or managed-service containers.
+  [CYNAI.WORKER.NodeLocalSecureStore](../tech_specs/worker_node.md#spec-cynai-worker-nodelocalsecurestore)
+  <a id="req-worker-0168"></a>
+- **REQ-WORKER-0169:** The node-local secure store MUST be distinct from the Worker Telemetry API SQLite database and MUST NOT be exposed by any API surface.
+  [CYNAI.WORKER.NodeLocalSecureStore](../tech_specs/worker_node.md#spec-cynai-worker-nodelocalsecurestore)
+  <a id="req-worker-0169"></a>
+- **REQ-WORKER-0170:** When the host system is configured for FIPS mode, the worker MUST use only FIPS-approved cryptographic algorithms and MUST use FIPS-validated cryptographic modules where required by the platform.
+  [CYNAI.WORKER.NodeLocalSecureStore](../tech_specs/worker_node.md#spec-cynai-worker-nodelocalsecurestore)
+  <a id="req-worker-0170"></a>
 - **REQ-WORKER-0200:** Worker Telemetry API MUST require bearer token authentication for all telemetry endpoints.
   [CYNAI.WORKER.TelemetryApiAuth](../tech_specs/worker_telemetry_api.md#spec-cynai-worker-telemetryauth)
   <a id="req-worker-0200"></a>
