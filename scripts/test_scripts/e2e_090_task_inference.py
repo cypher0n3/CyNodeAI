@@ -10,6 +10,8 @@ import scripts.test_scripts.e2e_state as state
 class TestInferenceTask(unittest.TestCase):
     """E2E: task create with --use-inference; poll result for OLLAMA_BASE_URL in stdout."""
 
+    tags = ["suite_worker_node"]
+
     def test_inference_task(self):
         """Create inference task, poll until completed; assert stdout contains Ollama URL."""
         if not config.INFERENCE_PROXY_IMAGE:

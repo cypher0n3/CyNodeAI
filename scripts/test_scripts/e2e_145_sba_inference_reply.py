@@ -46,6 +46,8 @@ def _has_user_facing_reply(job):
 class TestSbaInferenceReply(unittest.TestCase):
     """E2E: SBA + inference prompt produces user-facing reply (not empty / sba-run only)."""
 
+    tags = ["suite_agents"]
+
     def test_sba_inference_reply_current_time(self):
         """Create SBA inference task and assert user-facing reply."""
         if os.environ.get("E2E_SKIP_INFERENCE_SMOKE", "") or config.E2E_SKIP_INFERENCE_SMOKE:

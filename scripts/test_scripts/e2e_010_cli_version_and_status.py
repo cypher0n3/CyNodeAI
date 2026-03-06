@@ -10,6 +10,8 @@ import scripts.test_scripts.e2e_state as state
 class TestStatusVersion(unittest.TestCase):
     """E2E: cynork version and status (gateway health), no auth required."""
 
+    tags = ["suite_cynork"]
+
     def setUp(self):
         """Create shared config dir for cynork invocations."""
         state.init_config()

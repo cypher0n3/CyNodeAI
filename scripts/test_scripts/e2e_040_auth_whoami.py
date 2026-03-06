@@ -9,6 +9,8 @@ import scripts.test_scripts.e2e_state as state
 class TestWhoami(unittest.TestCase):
     """E2E: auth whoami after login; expects handle=admin."""
 
+    tags = ["suite_cynork"]
+
     def test_whoami(self):
         """Assert whoami succeeds and output contains handle=admin."""
         ok, out, err = helpers.run_cynork(["auth", "whoami"], state.CONFIG_PATH)

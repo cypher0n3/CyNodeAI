@@ -10,6 +10,8 @@ import scripts.test_scripts.e2e_state as state
 class TestPromptTask(unittest.TestCase):
     """E2E: LLM prompt task create; poll result; assert completed with non-empty stdout."""
 
+    tags = ["suite_cynork"]
+
     def test_prompt_task(self):
         """Create prompt task, poll until completed; set state.PROMPT_TASK_ID; assert stdout."""
         task_id = None

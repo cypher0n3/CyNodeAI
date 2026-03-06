@@ -8,6 +8,8 @@ from scripts.test_scripts import config, helpers
 class TestWorkerTelemetry(unittest.TestCase):
     """E2E: GET /v1/worker/telemetry/node:info and node:stats; assert 200 and JSON shape."""
 
+    tags = ["suite_worker_node"]
+
     def test_node_info_returns_version_and_slug(self):
         """GET node:info with bearer returns 200, version and node_slug."""
         if not config.WORKER_API_BEARER_TOKEN:
@@ -82,3 +84,22 @@ class TestWorkerTelemetry(unittest.TestCase):
         self.assertIsNotNone(data)
         self.assertIn("events", data)
         self.assertIsInstance(data["events"], list)
+
+    def test_telemetry_responses_do_not_contain_bearer_token(self):
+        """Telemetry response bodies must not contain the bearer token (no credential leak)."""
+        if not config.WORKER_API_BEARER_TOKEN:
+            self.fail("WORKER_API_BEARER_TOKEN not set")
+        token = config.WORKER_API_BEARER_TOKEN
+        headers = {"Authorization": f"Bearer {token}"}
+        for path in ("/v1/worker/telemetry/node:info", "/v1/worker/telemetry/node:stats"):
+            code, body = helpers.run_curl_with_status(
+                "GET", f"{config.WORKER_API}{path}", headers=headers
+            )
+            if not code:
+                self.fail("worker API not reachable")
+            self.assertEqual(code, 200, f"{path} {code} {body}")
+            self.assertNotIn(
+                token,
+                body,
+                f"{path} response must not contain bearer token",
+            )

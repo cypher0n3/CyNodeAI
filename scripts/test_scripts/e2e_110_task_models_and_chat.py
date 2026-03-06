@@ -12,6 +12,8 @@ import scripts.test_scripts.e2e_state as state
 class TestModelsAndChat(unittest.TestCase):
     """E2E: models list -o json; optional one-shot chat (skipped if E2E_SKIP_INFERENCE_SMOKE)."""
 
+    tags = ["suite_orchestrator"]
+
     def test_models_and_chat(self):
         """Assert models list returns list; run one-shot chat unless inference smoke skipped."""
         ok, out, _ = helpers.run_cynork(

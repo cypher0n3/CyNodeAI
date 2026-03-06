@@ -89,10 +89,10 @@ Build and test new required components before any dependent work.
   - [x] FIPS mode enforcement: when host reports FIPS mode (Linux `/proc/sys/crypto/fips_enabled`), env fallback is rejected (fail closed); FIPS-approved algorithm (AES-256-GCM) only.
   - [x] Best-effort secure erasure (zeroing) for master key and plaintext; Go 1.26 `runtime/secret` integration remains optional (SHOULD when available).
   - [x] Secure-store process-boundary documented in `docs/dev_docs/2026-03-06_secure_store_process_boundary.md`; unit test asserts managed-service container run args never mount the secrets path.
-- **Phase 4a: Not started (addresses [phase1-4 gap report](2026-03-06_phase1_4_independent_validation_gap_report.md) Phase 4 gaps).**
-  - [ ] Use post-quantum KEM (e.g. NIST FIPS 203 ML-KEM) by default to protect secure store key material; use strong symmetric AEAD (e.g. AES-256-GCM) for ciphertext; per-record nonce.
-  - [ ] When PQ KEM is not available or not permitted (e.g. FIPS validated module without ML-KEM), use only FIPS-approved symmetric AEAD (e.g. AES-256-GCM) with per-record nonce.
-  - [ ] Satisfy REQ-WORKER-0173 and NodeLocalSecureStore encryption-at-rest spec.
+- **Phase 4a: Completed.**
+  - [x] Use post-quantum KEM (e.g. NIST FIPS 203 ML-KEM) by default to protect secure store key material; use strong symmetric AEAD (e.g. AES-256-GCM) for ciphertext; per-record nonce.
+  - [x] When PQ KEM is not available or not permitted (e.g. FIPS validated module without ML-KEM), use only FIPS-approved symmetric AEAD (e.g. AES-256-GCM) with per-record nonce.
+  - [x] Satisfy REQ-WORKER-0173 and NodeLocalSecureStore encryption-at-rest spec.
   - (Phase 4 validation doc vs test location: no change required; phase4_validation.md and plan line 90 are correct.)
 - **Phase 5: In progress (required before Phase 6, 8).**
   - [x] Added dedicated internal listener configuration (`WORKER_INTERNAL_LISTEN_ADDR`).

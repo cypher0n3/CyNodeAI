@@ -49,3 +49,6 @@ INFERENCE_PROXY_IMAGE = os.environ.get("INFERENCE_PROXY_IMAGE", "")
 # Ollama smoke (container name must match worker_node node-manager)
 OLLAMA_CONTAINER_NAME = os.environ.get("OLLAMA_CONTAINER_NAME", "cynodeai-ollama")
 OLLAMA_E2E_MODEL = os.environ.get("OLLAMA_E2E_MODEL", "tinyllama")
+
+# Optional: node state dir for E2E that assert on secure store (e.g. full-demo); skip tests if unset
+NODE_STATE_DIR = os.environ.get("NODE_STATE_DIR", "").strip()

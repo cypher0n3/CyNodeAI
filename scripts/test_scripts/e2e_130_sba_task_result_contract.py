@@ -11,6 +11,8 @@ import scripts.test_scripts.e2e_state as state
 class TestSbaResultContract(unittest.TestCase):
     """E2E: SBA task result must include protocol_version, job_id, status, steps, artifacts."""
 
+    tags = ["suite_agents"]
+
     def test_sba_result_contract_shape(self):
         """Assert sba_result in job result contains all required contract keys."""
         if not state.SBA_TASK_ID:

@@ -11,6 +11,8 @@ import scripts.test_scripts.e2e_state as state
 class TestSbaTask(unittest.TestCase):
     """E2E: task create --use-sba --use-inference; poll result; assert job result has sba_result."""
 
+    tags = ["suite_agents"]
+
     def test_sba_task(self):
         """Create SBA task, poll until done; set SBA_TASK_ID only on success; assert sba_result."""
         if os.environ.get("E2E_SKIP_INFERENCE_SMOKE", "") or config.E2E_SKIP_INFERENCE_SMOKE:

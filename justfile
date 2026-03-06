@@ -351,6 +351,14 @@ validate-feature-files:
     trap 'popd >/dev/null 2>/dev/null || true' EXIT
     python3 .ci_scripts/validate_feature_files.py
 
+# Check E2E test scripts for required tags and tags-after-docstring convention.
+check-e2e-tags:
+    #!/usr/bin/env bash
+    set -e
+    pushd "{{ root_dir }}" >/dev/null
+    trap 'popd >/dev/null 2>/dev/null || true' EXIT
+    python3 .ci_scripts/check_e2e_tags.py
+
 # Lint Gherkin .feature files in features/ (requires gherkin-lint; run just install-gherkin-lint).
 lint-gherkin: install-gherkin-lint
     #!/usr/bin/env bash
@@ -677,7 +685,7 @@ test-go-race: install-go
     done
 
 # All linting (shell, Go, Python, Markdown, containers, doc links, feature files, Gherkin).
-lint: lint-sh lint-go lint-go-ci lint-python lint-md validate-doc-links validate-feature-files lint-gherkin lint-containerfiles
+lint: lint-sh lint-go lint-go-ci lint-python lint-md validate-doc-links validate-feature-files check-e2e-tags lint-gherkin lint-containerfiles
     @:
 
 # All tests
@@ -716,9 +724,10 @@ setup-dev CMD *ARGS:
     python3 scripts/setup_dev.py {{ CMD }} {{ ARGS }}
 
 # Python E2E test suite (scripts/test_scripts/run_e2e.py). Pass options through.
-# Options: --no-build, --skip-ollama, --list; unittest: -v, -k PATTERN, -f.
-# Example: just e2e --no-build -v
-# Run Python E2E suite (run_e2e.py); options: --no-build, -v, etc.
+# Options: --no-build, --skip-ollama, --list; --tags TAG1,TAG2 (suite_* as in features);
+# unittest: -v, -k PATTERN, -f.
+# Example: just e2e --no-build -v; just e2e --tags suite_worker_node
+# Run Python E2E suite (run_e2e.py); options: --no-build, --tags, -v, etc.
 e2e *ARGS:
     #!/usr/bin/env bash
     set -e

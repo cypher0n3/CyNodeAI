@@ -42,6 +42,8 @@ def _one_chat_request(token, message, timeout=CHAT_TIMEOUT_SEC):
 class TestChatSimultaneousMessages(unittest.TestCase):
     """E2E: Run several one-shot chat requests in parallel; assert all complete or fail clearly."""
 
+    tags = ["suite_orchestrator"]
+
     def test_chat_simultaneous_three_requests(self):
         """Start three chat requests concurrently; each gets a reply or a clear error."""
         if os.environ.get("E2E_SKIP_INFERENCE_SMOKE", "") or config.E2E_SKIP_INFERENCE_SMOKE:

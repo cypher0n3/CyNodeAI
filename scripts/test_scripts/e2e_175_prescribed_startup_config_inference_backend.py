@@ -11,6 +11,8 @@ from scripts.test_scripts import config, helpers
 class TestPrescribedStartupConfigInferenceBackend(unittest.TestCase):
     """E2E: register inference-capable node; GET config must include inference_backend."""
 
+    tags = ["suite_orchestrator"]
+
     def test_config_includes_inference_backend_when_node_inference_capable_not_existing(self):
         """Register inference-capable node, GET nodes/config; assert inference_backend.enabled."""
         payload = {
@@ -52,4 +54,14 @@ class TestPrescribedStartupConfigInferenceBackend(unittest.TestCase):
         self.assertTrue(
             backend.get("enabled", False),
             "inference_backend.enabled should be true",
+        )
+        self.assertNotIn(
+            config.NODE_PSK,
+            config_body,
+            "config response must not contain PSK",
+        )
+        self.assertNotIn(
+            jwt,
+            config_body,
+            "config response must not contain node JWT",
         )

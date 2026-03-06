@@ -11,6 +11,8 @@ import scripts.test_scripts.e2e_state as state
 class TestSkillsGateway(unittest.TestCase):
     """E2E: cynork skills list, load, get, delete against user-gateway."""
 
+    tags = ["suite_orchestrator"]
+
     def test_skills_list_load_get_delete(self):
         """Assert skills list returns JSON; load a skill; get by id; delete."""
         if not state.CONFIG_PATH or not os.path.isfile(state.CONFIG_PATH):

@@ -9,6 +9,8 @@ from scripts.test_scripts import config, helpers
 class TestGatewayHealthReadyz(unittest.TestCase):
     """E2E: GET /healthz returns 200; GET /readyz returns 200 or 503 with reason."""
 
+    tags = ["suite_orchestrator"]
+
     def test_healthz_ok(self):
         """Assert user-gateway healthz returns 200 (process alive)."""
         code, _ = helpers.run_curl_with_status(

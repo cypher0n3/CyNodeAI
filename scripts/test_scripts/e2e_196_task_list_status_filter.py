@@ -11,6 +11,8 @@ import scripts.test_scripts.e2e_state as state
 class TestTaskListStatusFilter(unittest.TestCase):
     """E2E: task list --status completed (and optionally other statuses); assert JSON shape."""
 
+    tags = ["suite_cynork"]
+
     def test_task_list_status_completed(self):
         """Task list with --status completed returns JSON array; may be empty."""
         _, out, _ = helpers.run_cynork(

@@ -12,6 +12,8 @@ import scripts.test_scripts.e2e_state as state
 class TestPmaChatContext(unittest.TestCase):
     """E2E: one-shot chat with --project-id (OpenAI-Project header); PMA handoff path."""
 
+    tags = ["suite_e2e", "suite_orchestrator"]
+
     def test_chat_with_project_context(self):
         """Send chat with --project-id; assert success when inference is available."""
         if os.environ.get("E2E_SKIP_INFERENCE_SMOKE", "") or config.E2E_SKIP_INFERENCE_SMOKE:

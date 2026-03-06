@@ -38,6 +38,8 @@ def _content_from_response(body):
 class TestChatSequentialMessages(unittest.TestCase):
     """E2E: Send two turns (user, then user again with context); assert both replies."""
 
+    tags = ["suite_orchestrator"]
+
     def test_chat_sequential_two_turns(self):
         """Two turns: first 'Say one word: first', then 'What word?'; assert both replies."""
         if os.environ.get("E2E_SKIP_INFERENCE_SMOKE", "") or config.E2E_SKIP_INFERENCE_SMOKE:

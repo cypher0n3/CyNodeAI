@@ -4,6 +4,7 @@ package securestore
 import (
 	"crypto/aes"
 	"crypto/cipher"
+	"crypto/mlkem"
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
@@ -13,6 +14,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -23,7 +25,10 @@ const (
 	agentTokenStoreDir                  = "agent_tokens"
 	agentTokenEncryptedFileSuffix       = ".json.enc"
 	agentTokenEncryptionAlgorithm       = "AES-256-GCM"
-	envelopeVersion               int   = 1
+	envelopeVersionAEAD                 = 1
+	envelopeVersionPQ                    = 2
+	algorithmPQKEM                       = "ML-KEM-768+AES-256-GCM"
+	kemKeystoreFile                     = ".kem_keystore.enc"
 	requiredKeyLenBytes                 = 32
 )
 
@@ -49,10 +54,11 @@ const (
 )
 
 type encryptedEnvelope struct {
-	Version    int    `json:"version"`
-	Algorithm  string `json:"algorithm"`
-	NonceB64   string `json:"nonce_b64"`
-	PayloadB64 string `json:"payload_b64"`
+	Version           int    `json:"version"`
+	Algorithm         string `json:"algorithm"`
+	KemCiphertextB64  string `json:"kem_ciphertext_b64,omitempty"` // v2 only
+	NonceB64          string `json:"nonce_b64"`
+	PayloadB64        string `json:"payload_b64"`
 }
 
 // AgentTokenRecord is the plaintext token record stored encrypted at rest.
@@ -65,8 +71,10 @@ type AgentTokenRecord struct {
 
 // Store is the secure-store handle.
 type Store struct {
-	rootDir string
-	key     []byte
+	rootDir   string
+	key       []byte
+	kemKey    *mlkem.DecapsulationKey768
+	kemKeyMu  sync.Mutex
 }
 
 // Open initializes the secure store under <state_dir>/secrets and resolves a master key.
@@ -210,15 +218,9 @@ func (s *Store) PutAgentToken(serviceID, token, expiresAt string) error {
 		return fmt.Errorf("marshal token record: %w", err)
 	}
 	defer zeroBytes(plaintext)
-	ciphertext, nonce, err := encrypt(plaintext, s.key)
+	env, err := s.buildEncryptedEnvelope(plaintext)
 	if err != nil {
 		return err
-	}
-	env := encryptedEnvelope{
-		Version:    envelopeVersion,
-		Algorithm:  agentTokenEncryptionAlgorithm,
-		NonceB64:   base64.StdEncoding.EncodeToString(nonce),
-		PayloadB64: base64.StdEncoding.EncodeToString(ciphertext),
 	}
 	serialized, err := json.Marshal(env)
 	if err != nil {
@@ -259,9 +261,6 @@ func (s *Store) GetAgentToken(serviceID string) (*AgentTokenRecord, error) {
 	if err := json.Unmarshal(raw, &env); err != nil {
 		return nil, fmt.Errorf("decode encrypted envelope: %w", err)
 	}
-	if env.Version != envelopeVersion || env.Algorithm != agentTokenEncryptionAlgorithm {
-		return nil, errors.New("unsupported secure store envelope")
-	}
 	nonce, err := base64.StdEncoding.DecodeString(env.NonceB64)
 	if err != nil {
 		return nil, fmt.Errorf("decode envelope nonce: %w", err)
@@ -270,7 +269,7 @@ func (s *Store) GetAgentToken(serviceID string) (*AgentTokenRecord, error) {
 	if err != nil {
 		return nil, fmt.Errorf("decode envelope payload: %w", err)
 	}
-	plaintext, err := decrypt(payload, nonce, s.key)
+	plaintext, err := s.decryptEnvelope(&env, nonce, payload)
 	if err != nil {
 		return nil, err
 	}
@@ -367,4 +366,189 @@ func zeroBytes(b []byte) {
 	for i := range b {
 		b[i] = 0
 	}
+}
+
+// isPQPermitted reports whether post-quantum KEM is allowed. When FIPS mode is on we use AEAD-only fallback.
+func isPQPermitted() bool {
+	return !isFIPSMode()
+}
+
+func (s *Store) kemKeystorePath() string {
+	return filepath.Join(s.rootDir, kemKeystoreFile)
+}
+
+// getOrCreateKEMKey returns the store's ML-KEM decapsulation key, creating and persisting it if needed.
+func (s *Store) getOrCreateKEMKey() (*mlkem.DecapsulationKey768, error) {
+	s.kemKeyMu.Lock()
+	defer s.kemKeyMu.Unlock()
+	if s.kemKey != nil {
+		return s.kemKey, nil
+	}
+	path := s.kemKeystorePath()
+	dk, err := s.loadKEMKeyFromFile(path)
+	if err == nil {
+		s.kemKey = dk
+		return dk, nil
+	}
+	if !errors.Is(err, os.ErrNotExist) {
+		return nil, err
+	}
+	dk, err = s.persistNewKEMKey(path)
+	if err != nil {
+		return nil, err
+	}
+	s.kemKey = dk
+	return dk, nil
+}
+
+func (s *Store) loadKEMKeyFromFile(path string) (*mlkem.DecapsulationKey768, error) {
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	var env encryptedEnvelope
+	if err := json.Unmarshal(raw, &env); err != nil {
+		return nil, fmt.Errorf("decode kem keystore envelope: %w", err)
+	}
+	if env.Version != envelopeVersionAEAD || env.Algorithm != agentTokenEncryptionAlgorithm {
+		return nil, errors.New("unsupported kem keystore envelope")
+	}
+	nonce, err := base64.StdEncoding.DecodeString(env.NonceB64)
+	if err != nil {
+		return nil, fmt.Errorf("decode kem keystore nonce: %w", err)
+	}
+	payload, err := base64.StdEncoding.DecodeString(env.PayloadB64)
+	if err != nil {
+		return nil, fmt.Errorf("decode kem keystore payload: %w", err)
+	}
+	seed, err := decrypt(payload, nonce, s.key)
+	if err != nil {
+		return nil, fmt.Errorf("decrypt kem keystore: %w", err)
+	}
+	defer zeroBytes(seed)
+	if len(seed) != mlkem.SeedSize {
+		return nil, fmt.Errorf("kem keystore payload length %d, want %d", len(seed), mlkem.SeedSize)
+	}
+	return mlkem.NewDecapsulationKey768(seed)
+}
+
+func (s *Store) persistNewKEMKey(path string) (*mlkem.DecapsulationKey768, error) {
+	dk, err := mlkem.GenerateKey768()
+	if err != nil {
+		return nil, fmt.Errorf("generate kem key: %w", err)
+	}
+	seed := dk.Bytes()
+	ciphertext, nonce, err := encrypt(seed, s.key)
+	zeroBytes(seed)
+	if err != nil {
+		return nil, fmt.Errorf("encrypt kem keystore: %w", err)
+	}
+	env := encryptedEnvelope{
+		Version:    envelopeVersionAEAD,
+		Algorithm:  agentTokenEncryptionAlgorithm,
+		NonceB64:   base64.StdEncoding.EncodeToString(nonce),
+		PayloadB64: base64.StdEncoding.EncodeToString(ciphertext),
+	}
+	serialized, err := json.Marshal(env)
+	if err != nil {
+		return nil, fmt.Errorf("marshal kem keystore: %w", err)
+	}
+	if err := os.WriteFile(path, serialized, 0o600); err != nil {
+		return nil, fmt.Errorf("write kem keystore: %w", err)
+	}
+	return dk, nil
+}
+
+func (s *Store) buildEncryptedEnvelope(plaintext []byte) (encryptedEnvelope, error) {
+	if isPQPermitted() {
+		kemCt, nonce, gcmCt, err := s.encryptPQ(plaintext)
+		if err != nil {
+			return encryptedEnvelope{}, err
+		}
+		return encryptedEnvelope{
+			Version:          envelopeVersionPQ,
+			Algorithm:       algorithmPQKEM,
+			KemCiphertextB64: base64.StdEncoding.EncodeToString(kemCt),
+			NonceB64:         base64.StdEncoding.EncodeToString(nonce),
+			PayloadB64:       base64.StdEncoding.EncodeToString(gcmCt),
+		}, nil
+	}
+	ciphertext, nonce, err := encrypt(plaintext, s.key)
+	if err != nil {
+		return encryptedEnvelope{}, err
+	}
+	return encryptedEnvelope{
+		Version:    envelopeVersionAEAD,
+		Algorithm:  agentTokenEncryptionAlgorithm,
+		NonceB64:   base64.StdEncoding.EncodeToString(nonce),
+		PayloadB64: base64.StdEncoding.EncodeToString(ciphertext),
+	}, nil
+}
+
+func (s *Store) decryptEnvelope(env *encryptedEnvelope, nonce, payload []byte) ([]byte, error) {
+	if env.Version == envelopeVersionPQ && env.Algorithm == algorithmPQKEM {
+		if env.KemCiphertextB64 == "" {
+			return nil, errors.New("missing kem_ciphertext_b64 in v2 envelope")
+		}
+		kemCt, err := base64.StdEncoding.DecodeString(env.KemCiphertextB64)
+		if err != nil {
+			return nil, fmt.Errorf("decode envelope kem_ciphertext: %w", err)
+		}
+		return s.decryptPQ(kemCt, nonce, payload)
+	}
+	if env.Version == envelopeVersionAEAD && env.Algorithm == agentTokenEncryptionAlgorithm {
+		return decrypt(payload, nonce, s.key)
+	}
+	return nil, errors.New("unsupported secure store envelope")
+}
+
+// encryptPQ encrypts plaintext using ML-KEM-768 + AES-256-GCM; returns (kemCiphertext, nonce, gcmCiphertext).
+func (s *Store) encryptPQ(plaintext []byte) (kemCt, nonce, gcmCt []byte, err error) {
+	dk, err := s.getOrCreateKEMKey()
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	ek := dk.EncapsulationKey()
+	sharedKey, kemCt := ek.Encapsulate()
+	defer zeroBytes(sharedKey)
+	block, err := aes.NewCipher(sharedKey)
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("create cipher: %w", err)
+	}
+	gcm, err := cipher.NewGCM(block)
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("create gcm: %w", err)
+	}
+	nonce = make([]byte, gcm.NonceSize())
+	if _, err = io.ReadFull(rand.Reader, nonce); err != nil {
+		return nil, nil, nil, fmt.Errorf("read nonce: %w", err)
+	}
+	gcmCt = gcm.Seal(nil, nonce, plaintext, nil)
+	return kemCt, nonce, gcmCt, nil
+}
+
+// decryptPQ decrypts a v2 envelope payload using the store's ML-KEM key.
+func (s *Store) decryptPQ(kemCt, nonce, gcmCt []byte) ([]byte, error) {
+	dk, err := s.getOrCreateKEMKey()
+	if err != nil {
+		return nil, err
+	}
+	sharedKey, err := dk.Decapsulate(kemCt)
+	if err != nil {
+		return nil, fmt.Errorf("mlkem decapsulate: %w", err)
+	}
+	defer zeroBytes(sharedKey)
+	block, err := aes.NewCipher(sharedKey)
+	if err != nil {
+		return nil, fmt.Errorf("create cipher: %w", err)
+	}
+	gcm, err := cipher.NewGCM(block)
+	if err != nil {
+		return nil, fmt.Errorf("create gcm: %w", err)
+	}
+	plaintext, err := gcm.Open(nil, nonce, gcmCt, nil)
+	if err != nil {
+		return nil, fmt.Errorf("decrypt payload: %w", err)
+	}
+	return plaintext, nil
 }

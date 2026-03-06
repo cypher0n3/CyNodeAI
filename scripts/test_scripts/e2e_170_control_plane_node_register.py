@@ -12,6 +12,8 @@ import scripts.test_scripts.e2e_state as state
 class TestNodeRegister(unittest.TestCase):
     """E2E: POST /v1/nodes/register with PSK and capability; store node_jwt in state."""
 
+    tags = ["suite_orchestrator"]
+
     def test_node_register(self):
         """Register node via control-plane API; assert node_jwt in response; set state.NODE_JWT."""
         payload = {

@@ -14,6 +14,8 @@ import scripts.test_scripts.e2e_state as state
 class TestTaskCreate(unittest.TestCase):
     """E2E: task create (echo) and create with task name; sets state.TASK_ID."""
 
+    tags = ["suite_cynork"]
+
     def test_task_create(self):
         """Create echo task, retry up to 3 times; store task_id in state."""
         for attempt in range(1, 4):

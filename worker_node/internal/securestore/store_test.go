@@ -3,6 +3,7 @@ package securestore
 import (
 	cryptorand "crypto/rand"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"io"
 	"os"
@@ -232,6 +233,263 @@ func TestPutAgentToken_EncryptedAtRest(t *testing.T) {
 	}
 }
 
+// TestPutGetAgentToken_PQPath asserts that when PQ is permitted (FIPS off), Put/Get use ML-KEM-768 + AES-256-GCM (v2 envelope).
+func TestPutGetAgentToken_PQPath(t *testing.T) {
+	testFIPSModeKnownOff = true
+	defer func() { testFIPSModeKnownOff = true }()
+	t.Setenv(masterKeyEnvName, validMasterKeyB64())
+	stateDir := t.TempDir()
+	store, _, err := Open(stateDir)
+	if err != nil {
+		t.Fatalf("Open failed: %v", err)
+	}
+	if err := store.PutAgentToken("pma-pq", "tok-pq", ""); err != nil {
+		t.Fatalf("PutAgentToken failed: %v", err)
+	}
+	path := filepath.Join(stateDir, "secrets", "agent_tokens", "pma-pq"+agentTokenEncryptedFileSuffix)
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read token file: %v", err)
+	}
+	var env struct {
+		Version   int    `json:"version"`
+		Algorithm string `json:"algorithm"`
+	}
+	if err := json.Unmarshal(raw, &env); err != nil {
+		t.Fatalf("decode envelope: %v", err)
+	}
+	if env.Version != envelopeVersionPQ || env.Algorithm != algorithmPQKEM {
+		t.Fatalf("expected v2 PQ envelope, got version=%d algorithm=%q", env.Version, env.Algorithm)
+	}
+	record, err := store.GetAgentToken("pma-pq")
+	if err != nil {
+		t.Fatalf("GetAgentToken failed: %v", err)
+	}
+	if record.Token != "tok-pq" || record.ServiceID != "pma-pq" {
+		t.Fatalf("unexpected record: %+v", record)
+	}
+}
+
+// TestPutGetAgentToken_AEADOnlyFallback asserts that when FIPS is on, Put/Get use AEAD-only (v1 envelope).
+func TestPutGetAgentToken_AEADOnlyFallback(t *testing.T) {
+	testFIPSModeKnownOff = false
+	defer func() { testFIPSModeKnownOff = true }()
+	tmpDir := t.TempDir()
+	fipsFile := filepath.Join(tmpDir, "fips")
+	if err := os.WriteFile(fipsFile, []byte("1"), 0o644); err != nil {
+		t.Fatalf("write fips file: %v", err)
+	}
+	credDir := filepath.Join(tmpDir, "cred")
+	if err := os.MkdirAll(credDir, 0o700); err != nil {
+		t.Fatalf("mkdir cred: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(credDir, systemCredentialMasterKeyFile), []byte(validMasterKeyB64()), 0o600); err != nil {
+		t.Fatalf("write system credential: %v", err)
+	}
+	prevPath := testFIPSPath
+	testFIPSPath = fipsFile
+	defer func() { testFIPSPath = prevPath }()
+	t.Setenv("CREDENTIALS_DIRECTORY", credDir)
+	stateDir := filepath.Join(tmpDir, "state")
+	store, _, err := Open(stateDir)
+	if err != nil {
+		t.Fatalf("Open failed: %v", err)
+	}
+	if err := store.PutAgentToken("pma-aead", "tok-aead", ""); err != nil {
+		t.Fatalf("PutAgentToken failed: %v", err)
+	}
+	path := filepath.Join(stateDir, "secrets", "agent_tokens", "pma-aead"+agentTokenEncryptedFileSuffix)
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read token file: %v", err)
+	}
+	var env struct {
+		Version   int    `json:"version"`
+		Algorithm string `json:"algorithm"`
+	}
+	if err := json.Unmarshal(raw, &env); err != nil {
+		t.Fatalf("decode envelope: %v", err)
+	}
+	if env.Version != envelopeVersionAEAD || env.Algorithm != agentTokenEncryptionAlgorithm {
+		t.Fatalf("expected v1 AEAD envelope, got version=%d algorithm=%q", env.Version, env.Algorithm)
+	}
+	record, err := store.GetAgentToken("pma-aead")
+	if err != nil {
+		t.Fatalf("GetAgentToken failed: %v", err)
+	}
+	if record.Token != "tok-aead" || record.ServiceID != "pma-aead" {
+		t.Fatalf("unexpected record: %+v", record)
+	}
+}
+
+// TestGetAgentToken_LoadsKEMKeyFromFile asserts that a second Open loads the KEM key from .kem_keystore.enc (not only from cache).
+func TestGetAgentToken_LoadsKEMKeyFromFile(t *testing.T) {
+	testFIPSModeKnownOff = true
+	defer func() { testFIPSModeKnownOff = true }()
+	t.Setenv(masterKeyEnvName, validMasterKeyB64())
+	stateDir := t.TempDir()
+	store1, _, err := Open(stateDir)
+	if err != nil {
+		t.Fatalf("Open failed: %v", err)
+	}
+	if err := store1.PutAgentToken("svc-kem", "tok-kem", ""); err != nil {
+		t.Fatalf("PutAgentToken failed: %v", err)
+	}
+	store2, _, err := Open(stateDir)
+	if err != nil {
+		t.Fatalf("second Open failed: %v", err)
+	}
+	record, err := store2.GetAgentToken("svc-kem")
+	if err != nil {
+		t.Fatalf("GetAgentToken failed: %v", err)
+	}
+	if record.Token != "tok-kem" || record.ServiceID != "svc-kem" {
+		t.Fatalf("unexpected record: %+v", record)
+	}
+}
+
+// TestGetAgentToken_ReadsV1Envelope asserts backward compatibility: v1 (AEAD-only) envelopes are still readable.
+func TestGetAgentToken_ReadsV1Envelope(t *testing.T) {
+	t.Setenv(masterKeyEnvName, validMasterKeyB64())
+	stateDir := t.TempDir()
+	store, _, err := Open(stateDir)
+	if err != nil {
+		t.Fatalf("Open failed: %v", err)
+	}
+	record := []byte(`{"service_id":"legacy","token":"legacy-tok","expires_at":"","written_at":"2026-03-06T00:00:00Z"}`)
+	ciphertext, nonce, err := encrypt(record, store.key)
+	if err != nil {
+		t.Fatalf("encrypt: %v", err)
+	}
+	envelope := `{"version":1,"algorithm":"AES-256-GCM","nonce_b64":"` +
+		base64.StdEncoding.EncodeToString(nonce) +
+		`","payload_b64":"` + base64.StdEncoding.EncodeToString(ciphertext) + `"}`
+	tokenDir := filepath.Join(stateDir, "secrets", "agent_tokens")
+	if err := os.MkdirAll(tokenDir, 0o700); err != nil {
+		t.Fatalf("mkdir token dir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(tokenDir, "legacy"+agentTokenEncryptedFileSuffix), []byte(envelope), 0o600); err != nil {
+		t.Fatalf("write v1 envelope: %v", err)
+	}
+	got, err := store.GetAgentToken("legacy")
+	if err != nil {
+		t.Fatalf("GetAgentToken failed: %v", err)
+	}
+	if got.Token != "legacy-tok" || got.ServiceID != "legacy" {
+		t.Fatalf("unexpected record: %+v", got)
+	}
+}
+
+// TestGetAgentToken_V2InvalidKEMCiphertext asserts that a v2 envelope with invalid KEM ciphertext fails decapsulation.
+func TestGetAgentToken_V2InvalidKEMCiphertext(t *testing.T) {
+	testFIPSModeKnownOff = true
+	defer func() { testFIPSModeKnownOff = true }()
+	t.Setenv(masterKeyEnvName, validMasterKeyB64())
+	stateDir := t.TempDir()
+	store, _, err := Open(stateDir)
+	if err != nil {
+		t.Fatalf("Open failed: %v", err)
+	}
+	_ = store.PutAgentToken("dummy", "x", "")
+	path := filepath.Join(stateDir, "secrets", "agent_tokens", "bad"+agentTokenEncryptedFileSuffix)
+	invalidKEMCt := base64.StdEncoding.EncodeToString(make([]byte, 100))
+	nonce := base64.StdEncoding.EncodeToString(make([]byte, 12))
+	payload := base64.StdEncoding.EncodeToString(make([]byte, 32))
+	env := `{"version":2,"algorithm":"ML-KEM-768+AES-256-GCM","kem_ciphertext_b64":"` + invalidKEMCt + `","nonce_b64":"` + nonce + `","payload_b64":"` + payload + `"}`
+	if err := os.WriteFile(path, []byte(env), 0o600); err != nil {
+		t.Fatalf("write v2 bad envelope: %v", err)
+	}
+	if _, err := store.GetAgentToken("bad"); err == nil {
+		t.Fatal("expected GetAgentToken to fail for invalid v2 KEM ciphertext")
+	}
+}
+
+// TestGetAgentToken_CorruptKEMKeystore asserts that a corrupt .kem_keystore.enc yields a clear error.
+func TestGetAgentToken_CorruptKEMKeystore(t *testing.T) {
+	testFIPSModeKnownOff = true
+	defer func() { testFIPSModeKnownOff = true }()
+	t.Setenv(masterKeyEnvName, validMasterKeyB64())
+	stateDir := t.TempDir()
+	store1, _, err := Open(stateDir)
+	if err != nil {
+		t.Fatalf("Open failed: %v", err)
+	}
+	if err := store1.PutAgentToken("svc", "tok", ""); err != nil {
+		t.Fatalf("PutAgentToken failed: %v", err)
+	}
+	kemPath := filepath.Join(stateDir, "secrets", kemKeystoreFile)
+	if err := os.WriteFile(kemPath, []byte(`{"version":99,"algorithm":"AES-256-GCM","nonce_b64":"","payload_b64":""}`), 0o600); err != nil {
+		t.Fatalf("overwrite kem keystore: %v", err)
+	}
+	store2, _, err := Open(stateDir)
+	if err != nil {
+		t.Fatalf("second Open failed: %v", err)
+	}
+	if _, err := store2.GetAgentToken("svc"); err == nil {
+		t.Fatal("expected GetAgentToken to fail when kem keystore is corrupt")
+	}
+}
+
+// TestGetAgentToken_UnsupportedEnvelopeAlgorithm asserts that envelope with wrong algorithm is rejected.
+func TestGetAgentToken_UnsupportedEnvelopeAlgorithm(t *testing.T) {
+	t.Setenv(masterKeyEnvName, validMasterKeyB64())
+	stateDir := t.TempDir()
+	store, _, err := Open(stateDir)
+	if err != nil {
+		t.Fatalf("Open failed: %v", err)
+	}
+	tokenDir := filepath.Join(stateDir, "secrets", "agent_tokens")
+	if err := os.MkdirAll(tokenDir, 0o700); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	path := filepath.Join(tokenDir, "x"+agentTokenEncryptedFileSuffix)
+	env := `{"version":1,"algorithm":"UNKNOWN","nonce_b64":"AAAAAAAAAAAAAAAAAAAAAA==","payload_b64":"AAAAAAAAAAAAAAAAAAAAAA=="}`
+	if err := os.WriteFile(path, []byte(env), 0o600); err != nil {
+		t.Fatalf("write envelope: %v", err)
+	}
+	if _, err := store.GetAgentToken("x"); err == nil {
+		t.Fatal("expected GetAgentToken to fail for unsupported algorithm")
+	}
+}
+
+// TestGetAgentToken_V2WrongKey asserts that a v2 envelope from another store (different master key) fails to decrypt.
+func TestGetAgentToken_V2WrongKey(t *testing.T) {
+	testFIPSModeKnownOff = true
+	defer func() { testFIPSModeKnownOff = true }()
+	keyA := base64.StdEncoding.EncodeToString([]byte("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"))
+	keyB := base64.StdEncoding.EncodeToString([]byte("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"))
+	dirA := t.TempDir()
+	dirB := t.TempDir()
+	t.Setenv(masterKeyEnvName, keyA)
+	storeA, _, err := Open(dirA)
+	if err != nil {
+		t.Fatalf("Open A: %v", err)
+	}
+	if err := storeA.PutAgentToken("svc", "secret", ""); err != nil {
+		t.Fatalf("Put A: %v", err)
+	}
+	tokenFile := filepath.Join(dirA, "secrets", "agent_tokens", "svc"+agentTokenEncryptedFileSuffix)
+	enc, err := os.ReadFile(tokenFile)
+	if err != nil {
+		t.Fatalf("read token file: %v", err)
+	}
+	t.Setenv(masterKeyEnvName, keyB)
+	storeB, _, err := Open(dirB)
+	if err != nil {
+		t.Fatalf("Open B: %v", err)
+	}
+	tokenDirB := filepath.Join(dirB, "secrets", "agent_tokens")
+	if err := os.MkdirAll(tokenDirB, 0o700); err != nil {
+		t.Fatalf("mkdir B: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(tokenDirB, "svc"+agentTokenEncryptedFileSuffix), enc, 0o600); err != nil {
+		t.Fatalf("copy token to B: %v", err)
+	}
+	if _, err := storeB.GetAgentToken("svc"); err == nil {
+		t.Fatal("expected GetAgentToken to fail when v2 envelope was encrypted with different key")
+	}
+}
+
 func TestGetAgentToken_Expired(t *testing.T) {
 	t.Setenv(masterKeyEnvName, validMasterKeyB64())
 	store, _, err := Open(t.TempDir())
@@ -299,7 +557,8 @@ func TestGetAgentToken_EnvelopeDecodeFailures(t *testing.T) {
 		envelope string
 	}{
 		{"invalid b64 fields", `{"version":1,"algorithm":"AES-256-GCM","nonce_b64":"bad","payload_b64":"bad"}`},
-		{"unsupported version", `{"version":2,"algorithm":"AES-256-GCM","nonce_b64":"AA==","payload_b64":"AA=="}`},
+		{"unsupported version", `{"version":99,"algorithm":"AES-256-GCM","nonce_b64":"AA==","payload_b64":"AA=="}`},
+		{"v2 missing kem_ciphertext_b64", `{"version":2,"algorithm":"ML-KEM-768+AES-256-GCM","nonce_b64":"AAAAAAAAAAAAAAAAAAAAAA==","payload_b64":"AAAAAAAAAAAAAAAAAAAAAA=="}`},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			if err := os.WriteFile(path, []byte(tt.envelope), 0o600); err != nil {

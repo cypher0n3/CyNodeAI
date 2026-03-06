@@ -13,6 +13,7 @@ import time
 import unittest
 
 from scripts.test_scripts import config, helpers
+from scripts.test_scripts import e2e_tags
 
 # Repo root (parent of scripts/)
 _ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -22,7 +23,10 @@ def parse_args():
     """Parse our options; return (namespace, remaining argv for unittest)."""
     p = argparse.ArgumentParser(
         description="Run E2E tests (discovers e2e_*.py in scripts/test_scripts).",
-        epilog="Pass -k PATTERN, -v, -f to filter/verbosity/failfast (unittest).",
+        epilog=(
+            "Pass -k PATTERN, -v, -f to filter/verbosity/failfast (unittest). "
+            "Tags match features/README.md suite tags (e.g. suite_orchestrator)."
+        ),
     )
     p.add_argument(
         "--no-build",
@@ -38,6 +42,18 @@ def parse_args():
         "--list",
         action="store_true",
         help="List test names and exit (no run)",
+    )
+    p.add_argument(
+        "--tags",
+        type=str,
+        default="",
+        help="Comma-separated suite tags to include (e.g. suite_worker_node,suite_cynork)",
+    )
+    p.add_argument(
+        "--exclude-tags",
+        type=str,
+        default="",
+        help="Comma-separated tags to exclude (e.g. wip)",
     )
     return p.parse_known_args()
 
@@ -71,28 +87,31 @@ def ensure_cynork_dev():
     return True
 
 
-def main():
-    """Discover and run E2E tests; exit 0 on success, 1 on failure or setup error."""
-    opts, unknown = parse_args()
-    # Leave only script name + unittest args (-k, -v, -f) for unittest
-    sys.argv = [sys.argv[0]] + unknown
-
+def _discover_suite(opts):
+    """Discover E2E tests and apply tag filter. Return TestSuite."""
     loader = unittest.TestLoader()
     start_dir = os.path.join(_ROOT, "scripts", "test_scripts")
     suite = loader.discover(start_dir, pattern="e2e_*.py")
+    include_tags = [t.strip() for t in (opts.tags or "").split(",") if t.strip()]
+    exclude_tags = [t.strip() for t in (opts.exclude_tags or "").split(",") if t.strip()]
+    if include_tags or exclude_tags:
+        suite = e2e_tags.filter_suite_by_tags(
+            suite, include_tags=include_tags or None, exclude_tags=exclude_tags or None
+        )
+    return suite
 
-    if opts.list:
-        def iter_tests(suite_or_case):
-            """Recursively yield individual test cases from a suite."""
-            try:
-                for t in suite_or_case:
-                    yield from iter_tests(t)
-            except TypeError:
-                yield suite_or_case
-        for t in iter_tests(suite):
-            print(t.id())
-        sys.exit(0)
 
+def _iter_tests(suite_or_case):
+    """Recursively yield individual test cases from a suite."""
+    try:
+        for t in suite_or_case:
+            yield from _iter_tests(t)
+    except TypeError:
+        yield suite_or_case
+
+
+def _ensure_cynork_ready(opts):
+    """Build or verify cynork-dev; exit 1 on failure."""
     if not opts.no_build and not ensure_cynork_dev():
         sys.exit(1)
     if opts.no_build:
@@ -104,20 +123,35 @@ def main():
             print(config.CYNORK_BIN, file=sys.stderr)
             sys.exit(1)
 
-    if opts.skip_ollama:
-        os.environ["E2E_SKIP_INFERENCE_SMOKE"] = "1"
 
+def _run_prereq_checks():
+    """Wait for gateway and run Ollama smoke; exit 1 on failure."""
     if not helpers.wait_for_gateway():
         print("Error: user-gateway not ready (healthz) after 30s", file=sys.stderr)
         sys.exit(1)
     time.sleep(3)
-
     if not helpers.run_ollama_inference_smoke():
         print("Error: Ollama inference smoke failed", file=sys.stderr)
         sys.exit(1)
 
-    runner = unittest.runner.TextTestRunner(verbosity=2)
-    result = runner.run(suite)
+
+def main():
+    """Discover and run E2E tests; exit 0 on success, 1 on failure or setup error."""
+    opts, unknown = parse_args()
+    sys.argv = [sys.argv[0]] + unknown
+
+    suite = _discover_suite(opts)
+    if opts.list:
+        for t in _iter_tests(suite):
+            print(t.id())
+        sys.exit(0)
+
+    _ensure_cynork_ready(opts)
+    if opts.skip_ollama:
+        os.environ["E2E_SKIP_INFERENCE_SMOKE"] = "1"
+    _run_prereq_checks()
+
+    result = unittest.runner.TextTestRunner(verbosity=2).run(suite)
     sys.exit(0 if result.wasSuccessful() else 1)
 
 
