@@ -1,12 +1,12 @@
 # SBA runner image (cynode-sba). Build context: repo root.
 # Spec: docs/tech_specs/sandbox_container.md (SBA Runner Image), docs/tech_specs/cynode_sba.md.
 # Example: podman build -f agents/cmd/cynode-sba/Containerfile -t cynodeai-cynode-sba:dev .
-# For ARM64: use Containerfile.arm or podman build --platform linux/arm64 -f ... -t cynodeai-cynode-sba:dev-arm64 .
-FROM golang:1.25-alpine AS build
+# For ARM64: use podman build --platform linux/arm64 -f ... -t cynodeai-cynode-sba:dev-arm64 .
+FROM golang:1.26-alpine AS build
 WORKDIR /build
 RUN apk add --no-cache ca-certificates upx
 ENV CGO_ENABLED=0
-RUN printf '%s\n' 'go 1.25.7' 'use (' './agents' './go_shared_libs' ')' > go.work
+RUN printf '%s\n' 'go 1.26.0' 'use (' './agents' './go_shared_libs' ')' > go.work
 COPY agents ./agents
 COPY go_shared_libs ./go_shared_libs
 RUN go build -ldflags="-s -w" -o /cynode-sba ./agents/cmd/cynode-sba \

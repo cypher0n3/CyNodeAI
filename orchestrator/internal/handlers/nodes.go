@@ -24,25 +24,27 @@ import (
 
 // NodeHandler handles node registration and management endpoints.
 type NodeHandler struct {
-	db                    database.Store
-	jwt                   *auth.JWTManager
-	registrationPSK       string
-	orchestratorPublicURL string
-	workerAPIBearerToken  string
-	workerAPITargetURL    string
-	logger                *slog.Logger
+	db                        database.Store
+	jwt                       *auth.JWTManager
+	registrationPSK           string
+	orchestratorPublicURL      string
+	workerAPIBearerToken       string
+	workerAPITargetURL         string
+	workerInternalAgentToken   string
+	logger                     *slog.Logger
 }
 
 // NewNodeHandler creates a new node handler.
-func NewNodeHandler(db database.Store, jwt *auth.JWTManager, registrationPSK, orchestratorPublicURL, workerAPIBearerToken, workerAPITargetURL string, logger *slog.Logger) *NodeHandler {
+func NewNodeHandler(db database.Store, jwt *auth.JWTManager, registrationPSK, orchestratorPublicURL, workerAPIBearerToken, workerAPITargetURL, workerInternalAgentToken string, logger *slog.Logger) *NodeHandler {
 	return &NodeHandler{
-		db:                    db,
-		jwt:                   jwt,
-		registrationPSK:       registrationPSK,
-		orchestratorPublicURL: orchestratorPublicURL,
-		workerAPIBearerToken:  workerAPIBearerToken,
-		workerAPITargetURL:    workerAPITargetURL,
-		logger:                logger,
+		db:                      db,
+		jwt:                     jwt,
+		registrationPSK:         registrationPSK,
+		orchestratorPublicURL:   orchestratorPublicURL,
+		workerAPIBearerToken:    workerAPIBearerToken,
+		workerAPITargetURL:      workerAPITargetURL,
+		workerInternalAgentToken: workerInternalAgentToken,
+		logger:                  logger,
 	}
 }
 
@@ -333,6 +335,7 @@ func (h *NodeHandler) buildManagedServicesDesiredState(ctx context.Context, node
 				Orchestrator: &nodepayloads.ConfigManagedServiceOrchestrator{
 					MCPGatewayProxyURL:    "http://127.0.0.1:12090/v1/worker/internal/orchestrator/mcp:call",
 					ReadyCallbackProxyURL: "http://127.0.0.1:12090/v1/worker/internal/orchestrator/agent:ready",
+					AgentToken:            strings.TrimSpace(h.workerInternalAgentToken),
 				},
 			},
 		},

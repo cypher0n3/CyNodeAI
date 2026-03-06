@@ -152,7 +152,7 @@ func run(ctx context.Context, store database.Store, cfg *config.OrchestratorConf
 		cfg.JWTNodeDuration,
 	)
 
-	nodeHandler := handlers.NewNodeHandler(store, jwtManager, cfg.NodeRegistrationPSK, cfg.OrchestratorPublicURL, cfg.WorkerAPIBearerToken, cfg.WorkerAPITargetURL, logger)
+	nodeHandler := handlers.NewNodeHandler(store, jwtManager, cfg.NodeRegistrationPSK, cfg.OrchestratorPublicURL, cfg.WorkerAPIBearerToken, cfg.WorkerAPITargetURL, cfg.WorkerInternalAgentToken, logger)
 	authMiddleware := middleware.NewAuthMiddleware(jwtManager, logger)
 	workflowHandler := handlers.NewWorkflowHandler(store, logger)
 	workflowAuth := middleware.RequireWorkflowRunnerAuth(cfg.WorkflowRunnerBearerToken)

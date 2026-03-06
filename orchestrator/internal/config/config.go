@@ -39,6 +39,10 @@ type OrchestratorConfig struct {
 	// Worker API target URL for single-node Phase 1 (optional; used when node has not yet reported its URL).
 	WorkerAPITargetURL string
 
+	// Worker internal agent token: when set, included in managed_services.services[].orchestrator.agent_token
+	// so agents (e.g. PMA) can authenticate to the worker's internal orchestrator proxy. Optional; no default.
+	WorkerInternalAgentToken string
+
 	// Bootstrap
 	BootstrapAdminPassword string
 
@@ -107,8 +111,9 @@ func LoadOrchestratorConfig() *OrchestratorConfig {
 		JWTNodeDuration:        getDurationEnv("JWT_NODE_DURATION", 24*time.Hour),
 		NodeRegistrationPSK:    getEnv("NODE_REGISTRATION_PSK", "default-psk-change-me"),
 		OrchestratorPublicURL:  getEnv("ORCHESTRATOR_PUBLIC_URL", "http://localhost:12082"),
-		WorkerAPIBearerToken:   getEnv("WORKER_API_BEARER_TOKEN", "phase1-static-token"),
-		WorkerAPITargetURL:     getEnv("WORKER_API_TARGET_URL", ""),
+		WorkerAPIBearerToken:     getEnv("WORKER_API_BEARER_TOKEN", "phase1-static-token"),
+		WorkerAPITargetURL:       getEnv("WORKER_API_TARGET_URL", ""),
+		WorkerInternalAgentToken: getEnv("WORKER_INTERNAL_AGENT_TOKEN", ""),
 		BootstrapAdminPassword: getEnv("BOOTSTRAP_ADMIN_PASSWORD", "admin123"),
 		RateLimitPerMinute:     getIntEnv("RATE_LIMIT_PER_MINUTE", 60),
 		InferenceURL:           getEnv("OLLAMA_BASE_URL", getEnv("INFERENCE_URL", "")),

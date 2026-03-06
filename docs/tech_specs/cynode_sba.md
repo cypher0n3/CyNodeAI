@@ -21,6 +21,7 @@
 - [Local Tools (MVP)](#local-tools-mvp)
   - [Tool Argument Schemas and Common Use Cases](#tool-argument-schemas-and-common-use-cases)
 - [Result Contract](#result-contract)
+  - [Task Result Consumption](#task-result-consumption)
   - [Canonical Failure Codes](#canonical-failure-codes)
 - [Sandbox Boundary and Security](#sandbox-boundary-and-security)
   - [Shape of Sandboxed Containers](#shape-of-sandboxed-containers)
@@ -628,8 +629,10 @@ See:
 - Spec ID: `CYNAI.SBAGNT.McpToolAccess` <a id="spec-cynai-sbagnt-mcptoolaccess"></a>
 
 Sandbox agents (including `cynode-sba` when operating as an agent that can call tools) MUST use MCP tools only through the **orchestrator MCP gateway** and MUST invoke only tools that are on the **sandbox (worker) allowlist** and designated as available to sandbox agents in the orchestrator's per-tool scope (see [Per-tool scope: Sandbox vs PM](mcp_gateway_enforcement.md#spec-cynai-mcpgat-pertoolscope)).
-When making MCP requests, a sandbox agent MUST present an **agent-scoped token or API key** issued by the orchestrator for that sandbox context (e.g. task_id, job_id, user); the gateway authenticates the token and restricts tool access to the sandbox allowlist and sandbox-scoped tools.
+When making MCP requests, the sandbox agent calls the **worker proxy** (e.g. worker-mediated MCP URL); the agent MUST NOT receive or present an agent token.
+The **worker proxy** holds the sandbox agent token (issued by the orchestrator for that sandbox context, delivered to the worker) and attaches it when forwarding requests to the orchestrator MCP gateway; the token MUST be bound to task_id, project_id, and session scope, and MUST be associated with the user (e.g. task creator).
 See [Agent-Scoped Tokens or API Keys](mcp_gateway_enforcement.md#spec-cynai-mcpgat-agentscopedtokens).
+The gateway authenticates the token and restricts tool access to the sandbox allowlist and sandbox-scoped tools.
 
 Sandbox allowlist (built-in)
 

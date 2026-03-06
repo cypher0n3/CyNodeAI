@@ -4,6 +4,8 @@
 - [Node Manager](#node-manager)
 - [Managed Service Containers](#managed-service-containers)
 - [Worker Proxy Bidirectional (Managed Agents)](#worker-proxy-bidirectional-managed-agents)
+- [Token and Credential Handling](#token-and-credential-handling)
+  - [Token Authentication and Auditing](#token-authentication-and-auditing)
 - [Sandbox Control Plane](#sandbox-control-plane)
   - [Sandbox Workspace and Job Mounts](#sandbox-workspace-and-job-mounts)
   - [Sandbox Rootless Execution](#sandbox-rootless-execution)
@@ -93,10 +95,19 @@ Normative behavior:
 - The managed agent container MUST NOT be configured to call orchestrator hostnames or ports directly.
   All agent-to-orchestrator traffic flows through the worker proxy.
 
-Authentication and auditing:
+## Token and Credential Handling
 
-- The worker MUST authenticate and authorize proxy requests according to orchestrator-issued credentials (agent tokens, capability
-  leases) and MUST fail closed when validation fails.
+- Spec ID: `CYNAI.WORKER.AgentTokensWorkerHeldOnly` <a id="spec-cynai-worker-agenttokensworkerheldonly"></a>
+
+- **Agents MUST NOT be given tokens or secrets directly.**
+  The worker proxy MUST hold orchestrator-issued credentials (agent tokens, capability leases) and MUST attach the appropriate credential when forwarding agent-originated requests to the orchestrator.
+  The worker MUST NOT pass agent tokens or other orchestrator-issued secrets into agent containers or to agents; the agent calls the worker proxy (e.g. worker-proxy URL for MCP), and the worker proxy adds the token when forwarding to the gateway.
+
+Traces To: [REQ-WORKER-0164](../requirements/worker.md#req-worker-0164).
+
+### Token Authentication and Auditing
+
+- The worker MUST authenticate and authorize proxy requests according to orchestrator-issued credentials (agent tokens, capability leases) that the **worker** holds and MUST fail closed when validation fails.
 - The worker MUST emit auditable records for proxy activity sufficient to attribute actions to the agent identity and context.
 
 ## Sandbox Control Plane

@@ -7,6 +7,26 @@
 - Those are worker-proxy URLs; the agent MUST NOT call the orchestrator directly.
 - The node MUST run and supervise managed service containers from this desired state.
 
+## Spec Validation (PMA and Worker)
+
+The following spec anchors confirm that PMA receives worker-proxy URLs from the managed-service start bundle and that the **worker** holds the agent token (agents must never receive tokens or secrets directly).
+
+- **`cynode_pma.md` Configuration Surface:** Worker-proxy URLs for MCP gateway and callback/ready signaling.
+  Inference connectivity is in the PMA start bundle.
+- **`cynode_pma.md` MCP Tool Access:** PMA calls the worker proxy; the worker proxy holds the PM agent token (delivered to the worker in node config) and attaches it when forwarding to the MCP gateway.
+  PMA does not receive or present the token.
+  See [Agent-Scoped Tokens or API Keys](../tech_specs/mcp_gateway_enforcement.md#spec-cynai-mcpgat-agentscopedtokens).
+- **`cynode_pma.md` Purpose and Trust Boundary:** Agent-to-orchestrator communication MUST flow through the worker proxy.
+  PMA MUST NOT call orchestrator directly.
+- **`worker_node_payloads.md`** `managed_services.services[]` for agent runtime (e.g. `service_type=pma`) MUST include `orchestrator` with `mcp_gateway_proxy_url`, `ready_callback_proxy_url` (optional), `agent_token` (optional), `agent_token_ref` (optional).
+  The `agent_token` is delivered to the **worker**; the worker proxy MUST hold it and attach it when forwarding.
+  The token MUST NOT be passed to the agent container.
+  See [CYNAI.WORKER.AgentTokensWorkerHeldOnly](../tech_specs/worker_node.md#spec-cynai-worker-agenttokensworkerheldonly).
+- **`worker_node.md` Token and credential handling:** Agents MUST NOT be given tokens or secrets directly; the worker proxy holds orchestrator-issued credentials and attaches them when forwarding agent-originated requests.
+- **PMA token is system-level:** Per `mcp_gateway_enforcement.md`, the PM (PMA) token is not bound to a user; only PA and sandbox tokens are user-associated.
+- **`orchestrator_bootstrap.md` PMA Startup:** The orchestrator delivers the PMA start bundle via node configuration (managed services desired state).
+- **`worker_node.md` Managed Service Containers:** The worker MUST converge to desired state (create/start when missing) and keep PMA running when configured.
+
 ## Current Behavior
 
 What the orchestrator and worker do today with managed-service config.
@@ -18,18 +38,20 @@ What the orchestrator and worker do today with managed-service config.
   - `Inference`: `Mode`, `BaseURL`, `DefaultModel`
   - `Orchestrator`: `MCPGatewayProxyURL`, `ReadyCallbackProxyURL` (worker internal proxy URLs).
 - Example: `http://127.0.0.1:12090/v1/worker/internal/orchestrator/mcp:call` and `.../agent:ready`.
-- **Gap:** Orchestrator does **not** set `Orchestrator.AgentToken` in the payload.
-- Internal proxy auth on the worker relies on `WORKER_INTERNAL_AGENT_TOKENS_JSON` or config; without token in config, PMA would have no token for internal proxy calls.
+- **Closed:** Orchestrator sets `Orchestrator.AgentToken` when `WORKER_INTERNAL_AGENT_TOKEN` is set.
+  Token is delivered to the **worker** (in node config); the worker proxy holds it and attaches it when forwarding internal proxy calls to the orchestrator.
+  Per spec, the token is not given to the agent.
 
 ### Worker Node (Node-Manager)
 
 - On config apply: writes `WORKER_NODE_CONFIG_JSON`, `ORCHESTRATOR_INTERNAL_PROXY_BASE_URL`, and `WORKER_MANAGED_SERVICE_TARGETS_JSON`.
 - `buildManagedServiceTargetsFromConfig`: builds a map from config's `ManagedServices.Services` but **base_url is always from env `PMA_BASE_URL`** (default `http://127.0.0.1:8090`).
 - Config's `Inference.BaseURL` is **not** used.
-- **Gap:** There is **no** code that starts a PMA (or any managed service) container from `nodeConfig.ManagedServices.Services`.
-- No image/args/env/healthcheck from config is used to run a container.
-- Only Ollama is started via `StartOllama`.
-- So when the orchestrator sends "run PMA as managed service," the worker does **not** start the PMA container; it only configures proxy targets assuming PMA is already running.
+- **Closed:** Node-manager starts managed service containers from `nodeConfig.ManagedServices.Services` via `StartManagedServices` (RunOptions).
+  When config has `managed_services.services[]`, the node runs each service with image/args/env/restart_policy and passes worker-proxy URLs as env (MCP_GATEWAY_PROXY_URL, READY_CALLBACK_PROXY_URL) so the agent knows where to call.
+  Per spec, the **worker** holds the agent token and must not pass it to the container; implementation may still pass AGENT_TOKEN as env and should be updated to have the worker proxy attach the token instead.
+  Container names: `cynodeai-managed-<service_id>`; PMA type publishes port 8090.
+  Implemented in `worker_node/cmd/node-manager/main.go` (startManagedServices) and `worker_node/internal/nodemanager/nodemanager.go` (maybeStartManagedServices).
 
 ### Worker API
 
@@ -40,28 +62,34 @@ What the orchestrator and worker do today with managed-service config.
 - **Agent -> orchestrator:** Internal mux exposes `POST .../internal/orchestrator/mcp:call` and `.../agent:ready`.
 - They forward to `ORCHESTRATOR_INTERNAL_PROXY_BASE_URL`.
 - Auth uses `AllowedTokens` (from config's `ManagedServices.Services[].Orchestrator.AgentToken` or `WORKER_INTERNAL_AGENT_TOKENS_JSON`).
+  The worker holds these tokens and attaches the appropriate one when forwarding agent-originated requests; the agent is not given the token.
 - **Endpoints exist.**
-- PMA would need to be given the proxy URLs and a token.
 - **Gap:** `deriveManagedServiceTargetsFromNodeConfig` returns empty; targets are env-only.
 - Config's `inference.base_url` is not used for routing.
 
 ## Summary: Does PMA Get Worker Proxy per Spec?
 
 - **Spec expectation:** Node starts PMA container from managed_services desired state.
-  - **Current state:** **No.** Worker never starts a managed service container from config.
-- **Spec expectation:** PMA receives worker-proxy URLs (mcp_gateway_proxy_url, ready_callback_proxy_url).
-  - **Current state:** **No.** Nothing starts PMA or passes config's `Orchestrator` (or env) into a PMA process.
+  - **Current state:** **Yes.**
+    Node-manager starts managed service containers via StartManagedServices when config has managed_services.services[].
+- **Spec expectation:** PMA receives worker-proxy URLs (mcp_gateway_proxy_url, ready_callback_proxy_url) so it knows where to call; the worker holds the agent token and attaches it when forwarding (agent never receives the token).
+  - **Current state:** **Yes.**
+    Node-manager passes proxy URLs as MCP_GATEWAY_PROXY_URL and READY_CALLBACK_PROXY_URL when starting the container.
+    Token is in config for the worker; spec requires worker to hold and use it without passing to the agent (implementation may still pass token as env; see Recommendations).
 - **Spec expectation:** Orchestrator -> PMA via worker proxy.
-  - **Current state:** **Yes**, if PMA is already running at `PMA_BASE_URL`.
+  - **Current state:** **Yes**, when PMA is running at the target URL.
 - **Spec expectation:** PMA -> orchestrator via worker internal proxy.
-  - **Current state:** **Endpoints exist** on worker; PMA is not given the URLs or agent token by the worker (orchestrator also does not send `agent_token` in config).
+  - **Current state:** **Yes.**
+    Endpoints exist on the worker; the worker proxy forwards to the orchestrator and (per spec) holds and attaches the agent token; the agent does not receive the token.
 
 ## Recommendations
 
-1. **Lifecycle:** Add managed-service reconciliation in the worker (e.g. in node-manager or a dedicated component).
-   - When config has `managed_services.services[]`, start/update/stop containers from image/args/env/healthcheck.
-   - Pass `orchestrator.mcp_gateway_proxy_url`, `orchestrator.ready_callback_proxy_url`, and `orchestrator.agent_token` (or ref) as env to the container so PMA uses worker proxy per spec.
-2. **Orchestrator:** Populate `Orchestrator.AgentToken` (or a secure ref) in the managed service payload so the worker can pass it to the agent and the worker-api can authorize internal proxy calls.
-3. **Targets:** Optionally derive managed-service target `base_url` from config's `Inference.BaseURL` when present (e.g. for node-local PMA) instead of relying only on `PMA_BASE_URL` env.
+1. **Lifecycle:** Done.
+   Node-manager `StartManagedServices` starts containers from `managed_services.services[]`; passes proxy URLs as env so the agent calls the worker proxy.
+   Per spec the worker holds the agent token and must not pass it to the container; if the implementation still injects AGENT_TOKEN into the container env, remove it and have the worker proxy attach the token when forwarding.
+2. **Orchestrator:** Done.
+   Set `WORKER_INTERNAL_AGENT_TOKEN`; orchestrator populates `Orchestrator.AgentToken` in the payload.
+   The token is for the **worker** to hold and use when forwarding; it must not be given to the agent.
+3. **Targets:** Optionally derive managed-service target `base_url` from config's `Inference.BaseURL` when present instead of relying only on `PMA_BASE_URL` env.
 
 See also: `docs/dev_docs/2026-03-05_worker_proxy_spec_reconciliation_plan.md` (Phase 5 desired-state wiring and full managed-service lifecycle).

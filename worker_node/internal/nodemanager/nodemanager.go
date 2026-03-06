@@ -68,9 +68,11 @@ type BootstrapData struct {
 // RunOptions allows optional service starters for production; nil means skip (e.g. in tests).
 // StartWorkerAPI receives the bearer token from config; callers must not log it.
 // StartOllama is Phase 1 inference; image/variant come from config or env; if it returns an error, Run fails (fail-fast).
+// StartManagedServices starts orchestrator-directed managed service containers (e.g. PMA) from desired state; if it returns an error, Run fails.
 type RunOptions struct {
-	StartWorkerAPI func(bearerToken string) error
-	StartOllama    func(image, variant string) error
+	StartWorkerAPI      func(bearerToken string) error
+	StartOllama         func(image, variant string) error
+	StartManagedServices func(services []nodepayloads.ConfigManagedService) error
 }
 
 // Run performs registration, config fetch, service startup, config ack, then capability reporting until ctx is cancelled.
@@ -130,6 +132,9 @@ func applyConfigAndStartServices(ctx context.Context, logger *slog.Logger, cfg *
 	}
 	existingService, _ := detectExistingInference(ctx)
 	if err := maybeStartOllama(ctx, logger, nodeConfig, opts, existingService); err != nil {
+		return err
+	}
+	if err := maybeStartManagedServices(ctx, logger, nodeConfig, opts); err != nil {
 		return err
 	}
 	if err := SendConfigAck(ctx, cfg, bootstrap, nodeConfig, "applied"); err != nil {
@@ -200,6 +205,20 @@ func maybeStartOllama(ctx context.Context, logger *slog.Logger, nodeConfig *node
 	}
 	if logger != nil {
 		logger.Info("inference container started")
+	}
+	return nil
+}
+
+func maybeStartManagedServices(ctx context.Context, logger *slog.Logger, nodeConfig *nodepayloads.NodeConfigurationPayload, opts *RunOptions) error {
+	if opts == nil || opts.StartManagedServices == nil ||
+		nodeConfig == nil || nodeConfig.ManagedServices == nil || len(nodeConfig.ManagedServices.Services) == 0 {
+		return nil
+	}
+	if err := opts.StartManagedServices(nodeConfig.ManagedServices.Services); err != nil {
+		return fmt.Errorf("start managed services: %w", err)
+	}
+	if logger != nil {
+		logger.Info("managed services started", "count", len(nodeConfig.ManagedServices.Services))
 	}
 	return nil
 }

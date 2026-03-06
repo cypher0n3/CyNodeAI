@@ -7,7 +7,7 @@
 set shell := ["bash", "-euo", "pipefail", "-c"]
 
 # Go version to install when using install-go (match go.mod / toolchain)
-go_version := "1.25.7"
+go_version := "1.26.0"
 
 # Directory containing this justfile (repo root when justfile is at root)
 root_dir := justfile_directory()
@@ -452,7 +452,7 @@ _build_prod name pkg_path out_dir:
     pushd "$root" >/dev/null
     trap 'popd >/dev/null 2>/dev/null || true' EXIT
     echo "Building {{ name }} (production)..."
-    CGO_ENABLED=0 go build -ldflags="-s -w" -o "$root/$out/{{ name }}" {{ pkg_path }}
+    CGO_ENABLED=0 GOEXPERIMENT=secret go build -ldflags="-s -w" -o "$root/$out/{{ name }}" {{ pkg_path }}
     if command -v upx >/dev/null 2>&1; then
       upx --best "$root/$out/{{ name }}" || { r=$?; [ "$r" -eq 2 ] && true || exit "$r"; }
     else
@@ -469,7 +469,7 @@ _build_dev name pkg_path out_dir:
     pushd "$root" >/dev/null
     trap 'popd >/dev/null 2>/dev/null || true' EXIT
     echo "Building {{ name }} (dev, debug)..."
-    go build -gcflags="all=-N -l" -o "$root/$out/{{ name }}-dev" {{ pkg_path }}
+    GOEXPERIMENT=secret go build -gcflags="all=-N -l" -o "$root/$out/{{ name }}-dev" {{ pkg_path }}
     echo "Built: $root/$out/{{ name }}-dev"
 
 # --- Cynork ---

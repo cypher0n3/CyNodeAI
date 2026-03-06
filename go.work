@@ -1,9 +1,9 @@
-go 1.25.7
+go 1.26
 
 use (
 	./agents
+	./cynork
 	./go_shared_libs
 	./orchestrator
 	./worker_node
-	./cynork
 )

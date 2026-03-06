@@ -167,7 +167,9 @@ func TestRun_StdinMode_ReadsJobWritesResultToStdout(t *testing.T) {
 	dir := t.TempDir()
 	validJob := []byte(`{"protocol_version":"1.0","job_id":"j1","task_id":"t1","constraints":{"max_runtime_seconds":60,"max_output_bytes":1024},"steps":[]}`)
 	exe := filepath.Join(dir, "cynode-sba")
-	if err := exec.Command("go", "build", "-o", exe, ".").Run(); err != nil {
+	buildCmd := exec.Command("go", "build", "-o", exe, ".")
+	buildCmd.Env = append(os.Environ(), "GOEXPERIMENT=secret")
+	if err := buildCmd.Run(); err != nil {
 		t.Skipf("build cynode-sba: %v", err)
 	}
 	cmd := exec.Command(exe, "-stdin", "-workspace="+dir)

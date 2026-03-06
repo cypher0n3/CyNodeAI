@@ -73,8 +73,13 @@ It covers MCP gateway enforcement and auditing for tool invocation.
   [CYNAI.MCPGAT.PerToolScope](../tech_specs/mcp_gateway_enforcement.md#spec-cynai-mcpgat-pertoolscope)
   <a id="req-mcpgat-0115"></a>
 - **REQ-MCPGAT-0116:** The system MUST support controlling MCP tool access via agent-scoped tokens or API keys.
-  The orchestrator MUST be able to issue tokens (or API keys) for PM/PA agents and for sandbox agents; agents present the token when making MCP requests; the gateway MUST authenticate using the token and restrict tool access to the allowlist and per-tool scope for the resolved agent type (PM, PA, or sandbox).
+  The orchestrator MUST be able to issue tokens (or API keys) for use when the worker proxy forwards MCP requests on behalf of PM/PA or sandbox agents; tokens are delivered to the worker and held by the worker proxy; agents MUST NOT be given tokens or secrets directly.
+  The worker proxy attaches the token when forwarding agent-originated requests to the gateway; the gateway MUST authenticate using the token and restrict tool access to the allowlist and per-tool scope for the resolved agent type (PM, PA, or sandbox).
+  **PM (PMA)** tokens are system-level and are not bound to a user.
+  **PA (PAA)** and **sandbox (SBA)** tokens MUST be associated with the user on whose behalf the agent is acting; the gateway MUST use the resolved user context for preference resolution, access control to user- and project-scoped resources, and audit attribution.
+  **Sandbox (SBA)** tokens MUST also be bound to task_id, project_id, and session scope.
   This MAY be used instead of or in addition to resolving identity from orchestrator state.
-  Audit records MUST include the resolved agent type and user/task context from the token.
+  Audit records MUST include the resolved agent type and, for user-associated tokens (PA, sandbox), the user/task context from the token.
   [CYNAI.MCPGAT.AgentScopedTokens](../tech_specs/mcp_gateway_enforcement.md#spec-cynai-mcpgat-agentscopedtokens)
+  [CYNAI.MCPGAT.AgentTokensWorkerProxyOnly](../tech_specs/mcp_gateway_enforcement.md#spec-cynai-mcpgat-agenttokensworkerproxyonly)
   <a id="req-mcpgat-0116"></a>

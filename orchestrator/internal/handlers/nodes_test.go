@@ -19,7 +19,7 @@ import (
 const testOrchestratorURL = "http://test-orchestrator"
 
 func TestNewNodeHandler(t *testing.T) {
-	handler := NewNodeHandler(nil, nil, "test-psk", testOrchestratorURL, "", "", nil)
+	handler := NewNodeHandler(nil, nil, "test-psk", testOrchestratorURL, "", "", "", nil)
 	if handler == nil {
 		t.Fatal("NewNodeHandler returned nil")
 	}
@@ -522,7 +522,7 @@ func TestBuildNodeConfigPayload_IncludesManagedServicesWhenSelected(t *testing.T
 		UpdatedAt: time.Now().UTC(),
 	}
 	mockDB.AddNode(node)
-	h := NewNodeHandler(mockDB, nil, "psk", testOrchestratorURL, "", "", nil)
+	h := NewNodeHandler(mockDB, nil, "psk", testOrchestratorURL, "", "", "", nil)
 	payload := h.buildNodeConfigPayload(t.Context(), node, "cfg-1", "http://worker:12090")
 	if payload.ManagedServices == nil || len(payload.ManagedServices.Services) != 1 {
 		t.Fatalf("expected one managed service, got %+v", payload.ManagedServices)
@@ -530,6 +530,37 @@ func TestBuildNodeConfigPayload_IncludesManagedServicesWhenSelected(t *testing.T
 	svc := payload.ManagedServices.Services[0]
 	if svc.ServiceType != "pma" || svc.ServiceID == "" {
 		t.Errorf("unexpected managed service: %+v", svc)
+	}
+	if svc.Orchestrator != nil && svc.Orchestrator.AgentToken != "" {
+		t.Errorf("expected no agent_token when handler has none, got %q", svc.Orchestrator.AgentToken)
+	}
+}
+
+func TestBuildNodeConfigPayload_ManagedServicesIncludeAgentTokenWhenSet(t *testing.T) {
+	_ = os.Setenv("PMA_ENABLED", "true")
+	_ = os.Unsetenv("PMA_HOST_NODE_SLUG")
+	defer func() { _ = os.Unsetenv("PMA_ENABLED") }()
+	mockDB := testutil.NewMockDB()
+	node := &models.Node{
+		ID:        uuid.New(),
+		NodeSlug:  "node-01",
+		Status:    models.NodeStatusActive,
+		CreatedAt: time.Now().UTC(),
+		UpdatedAt: time.Now().UTC(),
+	}
+	mockDB.AddNode(node)
+	const agentToken = "internal-agent-token-123"
+	h := NewNodeHandler(mockDB, nil, "psk", testOrchestratorURL, "", "", agentToken, nil)
+	payload := h.buildNodeConfigPayload(t.Context(), node, "cfg-1", "http://worker:12090")
+	if payload.ManagedServices == nil || len(payload.ManagedServices.Services) != 1 {
+		t.Fatalf("expected one managed service, got %+v", payload.ManagedServices)
+	}
+	svc := payload.ManagedServices.Services[0]
+	if svc.Orchestrator == nil {
+		t.Fatal("expected orchestrator block in managed service")
+	}
+	if svc.Orchestrator.AgentToken != agentToken {
+		t.Errorf("Orchestrator.AgentToken = %q, want %q", svc.Orchestrator.AgentToken, agentToken)
 	}
 }
 
@@ -549,7 +580,7 @@ func TestBuildNodeConfigPayload_OmitsManagedServicesWhenNotSelected(t *testing.T
 		UpdatedAt: time.Now().UTC(),
 	}
 	mockDB.AddNode(node)
-	h := NewNodeHandler(mockDB, nil, "psk", testOrchestratorURL, "", "", nil)
+	h := NewNodeHandler(mockDB, nil, "psk", testOrchestratorURL, "", "", "", nil)
 	payload := h.buildNodeConfigPayload(t.Context(), node, "cfg-1", "http://worker:12090")
 	if payload.ManagedServices != nil {
 		t.Errorf("expected no managed services for unselected node, got %+v", payload.ManagedServices)
@@ -589,7 +620,7 @@ func TestSelectPMAHostNodeSlug_PrefersLabeledNode(t *testing.T) {
 	}
 	raw, _ := json.Marshal(report)
 	_ = mockDB.SaveNodeCapabilitySnapshot(t.Context(), node2.ID, string(raw))
-	h := NewNodeHandler(mockDB, nil, "psk", testOrchestratorURL, "", "", nil)
+	h := NewNodeHandler(mockDB, nil, "psk", testOrchestratorURL, "", "", "", nil)
 	if got := h.selectPMAHostNodeSlug(t.Context(), "fallback-node"); got != "node-b" {
 		t.Errorf("selectPMAHostNodeSlug() = %q, want node-b", got)
 	}
@@ -624,7 +655,7 @@ func TestGetEnvDefault(t *testing.T) {
 func TestSelectPMAHostNodeSlug_ExplicitOverride(t *testing.T) {
 	_ = os.Setenv("PMA_HOST_NODE_SLUG", "explicit-node")
 	defer func() { _ = os.Unsetenv("PMA_HOST_NODE_SLUG") }()
-	h := NewNodeHandler(testutil.NewMockDB(), nil, "psk", testOrchestratorURL, "", "", nil)
+	h := NewNodeHandler(testutil.NewMockDB(), nil, "psk", testOrchestratorURL, "", "", "", nil)
 	if got := h.selectPMAHostNodeSlug(t.Context(), "fallback"); got != "explicit-node" {
 		t.Errorf("selectPMAHostNodeSlug() = %q, want explicit-node", got)
 	}
@@ -642,7 +673,7 @@ func TestBuildManagedServicesDesiredState_Disabled(t *testing.T) {
 		UpdatedAt: time.Now().UTC(),
 	}
 	mockDB.AddNode(node)
-	h := NewNodeHandler(mockDB, nil, "psk", testOrchestratorURL, "", "", nil)
+	h := NewNodeHandler(mockDB, nil, "psk", testOrchestratorURL, "", "", "", nil)
 	if got := h.buildManagedServicesDesiredState(t.Context(), node); got != nil {
 		t.Errorf("buildManagedServicesDesiredState() should return nil when disabled, got %+v", got)
 	}

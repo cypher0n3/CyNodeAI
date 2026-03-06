@@ -217,6 +217,14 @@ It covers worker-node behavior and the worker API contract for job execution and
   [CYNAI.WORKER.ManagedAgentProxyBidirectional](../tech_specs/worker_api.md#spec-cynai-worker-managedagentproxy)
   [CYNAI.MCPGAT.EdgeEnforcementMode](../tech_specs/mcp_gateway_enforcement.md#spec-cynai-mcpgat-edgeenforcement)
   <a id="req-worker-0163"></a>
+- **REQ-WORKER-0164:** The worker MUST hold orchestrator-issued agent tokens (and capability leases when used) and MUST attach the appropriate credential when forwarding agent-originated requests to the orchestrator.
+  The worker MUST NOT pass agent tokens or other orchestrator-issued secrets to agent containers or to agents; agents MUST NOT be given tokens or secrets directly.
+  [CYNAI.WORKER.WorkerProxyBidirectionalManagedAgents](../tech_specs/worker_node.md#spec-cynai-worker-proxybidirectional)
+  [CYNAI.WORKER.AgentTokensWorkerHeldOnly](../tech_specs/worker_node.md#spec-cynai-worker-agenttokensworkerheldonly)
+  [CYNAI.WORKER.Payload.ConfigurationV1](../tech_specs/worker_node_payloads.md#spec-cynai-worker-payload-configuration-v1)
+  [CYNAI.MCPGAT.AgentScopedTokens](../tech_specs/mcp_gateway_enforcement.md#spec-cynai-mcpgat-agentscopedtokens)
+  [CYNAI.MCPGAT.AgentTokensWorkerProxyOnly](../tech_specs/mcp_gateway_enforcement.md#spec-cynai-mcpgat-agenttokensworkerproxyonly)
+  <a id="req-worker-0164"></a>
 - **REQ-WORKER-0200:** Worker Telemetry API MUST require bearer token authentication for all telemetry endpoints.
   [CYNAI.WORKER.TelemetryApiAuth](../tech_specs/worker_telemetry_api.md#spec-cynai-worker-telemetryauth)
   <a id="req-worker-0200"></a>

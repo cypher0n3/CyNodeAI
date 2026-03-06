@@ -236,3 +236,11 @@ It covers orchestrator control-plane behavior, task lifecycle, dispatch, and sta
   [CYNAI.ORCHES.ManagedServicesWorkerManaged](../tech_specs/orchestrator.md#spec-cynai-orches-managedservices)
   [CYNAI.WORKER.ManagedAgentProxyBidirectional](../tech_specs/worker_api.md#spec-cynai-worker-managedagentproxy)
   <a id="req-orches-0162"></a>
+- **REQ-ORCHES-0163:** For **user-scoped** agents (PAA, SBA), the orchestrator MUST associate each agent token it issues with the **user on whose behalf the agent is acting** (and MUST track this association) so that when the worker proxy forwards requests on behalf of the agent (using the token the worker holds), the gateway can resolve user context for preferences, access control to user- and project-scoped data, and audit attribution.
+  Agent tokens are delivered to the worker for the worker proxy to hold; agents MUST NOT be given tokens or secrets directly.
+  For **SBA**, the token MUST also be bound to task_id, project_id, and session scope.
+  For **system-level** agents (PMA), the agent token is not user-associated.
+  [CYNAI.MCPGAT.AgentScopedTokens](../tech_specs/mcp_gateway_enforcement.md#spec-cynai-mcpgat-agentscopedtokens)
+  [CYNAI.WORKER.Payload.ConfigurationV1](../tech_specs/worker_node_payloads.md#spec-cynai-worker-payload-configuration-v1) (managed_services orchestrator.agent_token)
+  [CYNAI.WORKER.AgentTokensWorkerHeldOnly](../tech_specs/worker_node.md#spec-cynai-worker-agenttokensworkerheldonly)
+  <a id="req-orches-0163"></a>

@@ -269,7 +269,7 @@ func ensureNodeManagerBinary() (string, error) {
 	}
 	build := exec.Command("go", "build", "-o", outBin, "./cmd/node-manager")
 	build.Dir = moduleRoot
-	build.Env = os.Environ()
+	build.Env = append(os.Environ(), "GOEXPERIMENT=secret")
 	if out, err := build.CombinedOutput(); err != nil {
 		return "", fmt.Errorf("go build node-manager: %w: %s", err, bytes.TrimSpace(out))
 	}

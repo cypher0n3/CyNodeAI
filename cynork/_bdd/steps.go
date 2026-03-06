@@ -476,7 +476,7 @@ func InitializeCynorkSuite(sc *godog.ScenarioContext, state *cynorkState) {
 		cynorkDir := filepath.Join(root, "cynork")
 		build := exec.Command("go", "build", "-o", bin, ".")
 		build.Dir = cynorkDir
-		build.Env = os.Environ()
+		build.Env = append(os.Environ(), "GOEXPERIMENT=secret")
 		if err := build.Run(); err != nil {
 			return ctx, fmt.Errorf("build cynork: %w", err)
 		}

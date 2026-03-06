@@ -7,6 +7,7 @@
   - [Applicable Requirements (Standard MCP Usage)](#applicable-requirements-standard-mcp-usage)
 - [Gateway Enforcement Responsibilities](#gateway-enforcement-responsibilities)
 - [Agent-Scoped Tokens or API Keys](#agent-scoped-tokens-or-api-keys)
+  - [Token Handling (Normative)](#token-handling-normative)
 - [Edge Enforcement Mode (Node-Local Agent Runtimes)](#edge-enforcement-mode-node-local-agent-runtimes)
 - [Role-Based Tool Allowlists](#role-based-tool-allowlists)
   - [Worker Agent Allowlist](#worker-agent-allowlist)
@@ -83,18 +84,38 @@ If required context is missing for a tool call, the call MUST be rejected.
 Tool access for PM/PA and sandbox agents MAY be controlled by **agent-scoped tokens or API keys** instead of (or in addition to) resolving identity from orchestrator state.
 This avoids the need for a separate RBAC spec for agents when the goal is only to restrict which tools an agent can call.
 
-Issuance
+### Token Handling (Normative)
 
-- The orchestrator MUST be able to **issue tokens or API keys** for use by PM/PA agents and by sandbox agents when they make MCP requests.
-- A **PM or PA agent token** (or key) is issued when the orchestrator starts or hands off to the agent (e.g. when handling a chat completion for `cynodeai.pm`).
-  The token MUST be associated with at least: agent type (PM or PA), and user context (the user on whose behalf the agent is acting).
+- Spec ID: `CYNAI.MCPGAT.AgentTokensWorkerProxyOnly` <a id="spec-cynai-mcpgat-agenttokensworkerproxyonly"></a>
+
+Agents MUST NOT be given tokens or secrets directly.
+The orchestrator delivers agent tokens to the **worker** (e.g. in node configuration); the **worker proxy** holds them and attaches the appropriate token when forwarding agent-originated requests to the MCP gateway.
+The agent never sees or presents the token; the gateway receives requests from the worker proxy with the token already attached.
+
+Traces To: [REQ-WORKER-0164](../requirements/worker.md#req-worker-0164).
+
+#### Token Issuance
+
+- The orchestrator MUST be able to **issue tokens or API keys** for use when the **worker proxy** forwards MCP requests on behalf of PM/PA or sandbox agents.
+  Tokens are delivered to the worker (e.g. in managed service desired state or job payload); the worker proxy MUST hold and use them; the worker MUST NOT pass tokens or secrets to agent containers or to agents.
+- A **PM agent token** (Project Manager Agent, PMA) is issued when the orchestrator starts or hands off to the PM agent (e.g. when PMA is run as a managed service).
+  The token is **system-level**: it MUST be associated with agent type (PM) only and MUST NOT be bound to a specific user.
+  The gateway does not resolve a user from the token; user context for a given request may come from the conversation or task context instead.
+- A **PA agent token** (Project Analyst Agent, PAA) is issued when the orchestrator hands off to the PA agent for a user- or task-scoped interaction.
+  The token MUST be associated with agent type (PA) and with **the user on whose behalf the agent is acting**.
+  The orchestrator MUST track this association so the gateway can resolve user context for preferences, access control to user- and project-scoped data, and audit attribution.
   The token MAY also carry or be bound to task_id, project_id, or session scope.
-- A **sandbox agent token** (or key) is issued when a sandbox job or agent context is created (e.g. when the orchestrator dispatches work to a node or when cynode-sba runs in agent mode).
-  The token MUST be associated with at least: agent type (sandbox), and task/job context (task_id, job_id, and user or project when available).
+- A **sandbox agent token** (SBA) is issued when a sandbox job or agent context is created (e.g. when the orchestrator dispatches work to a node or when cynode-sba runs in agent mode).
+  The token MUST be associated with at least: agent type (sandbox), and task/job context (task_id, job_id, and **user** or project when available).
+  The orchestrator MUST associate the token with the user (e.g. task creator) so the gateway can resolve user context for preferences, access control, and audit attribution.
+  The token MUST also be bound to task_id, project_id, and session scope.
 
-Use at the gateway
+#### Token Use at the Gateway
 
-- When an MCP request includes an agent-scoped token or API key, the gateway MUST **authenticate** the request using that credential (e.g. validate signature or lookup in a credential store) and MUST resolve from it: **agent type** (PM, PA, or sandbox) and **user/task context** as stored at issuance.
+- Requests that carry an agent-scoped token or API key arrive from the **worker proxy**, which attaches the token when forwarding on behalf of an agent; the agent does not present the token.
+  The gateway MUST **authenticate** the request using that credential (e.g. validate signature or lookup in a credential store) and MUST resolve from it: **agent type** (PM, PA, or sandbox) and **user/task context** as stored at issuance (if any).
+  For **PA and sandbox** tokens, the gateway MUST use the resolved user context for preference resolution, access control to user- and project-scoped resources, and audit attribution.
+  For **PM** tokens, no user is bound to the token; user context for the request (when needed) comes from other request or session context.
 - The gateway MUST then restrict tool access to the **allowlist and per-tool scope for that agent type**.
   For example: a token issued for a PM agent allows only tools on the Project Manager allowlist with scope PM or both; a token issued for a sandbox agent allows only tools on the Worker allowlist with scope sandbox or both.
   No separate RBAC evaluation is required for agent-type restriction; the token itself conveys agent type.
@@ -102,11 +123,12 @@ Use at the gateway
 
 Audit
 
-- Audit records for tool calls made with an agent-scoped token MUST include the resolved agent type and the user/task context derived from the token so that tool use remains attributable.
+- Audit records for tool calls made with an agent-scoped token MUST include the resolved agent type and, when the token is user-associated (PA, sandbox), the user/task context derived from the token so that tool use remains attributable.
 
 Traces To:
 
 - [REQ-MCPGAT-0116](../requirements/mcpgat.md#req-mcpgat-0116)
+- [REQ-WORKER-0164](../requirements/worker.md#req-worker-0164)
 
 ## Edge Enforcement Mode (Node-Local Agent Runtimes)
 

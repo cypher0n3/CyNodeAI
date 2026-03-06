@@ -138,6 +138,10 @@ Normative behavior
 
 - The orchestrator MUST express managed services as desired state in node configuration payloads.
   See [`docs/tech_specs/worker_node_payloads.md`](worker_node_payloads.md) `node_configuration_payload_v1` `managed_services`.
+- When the orchestrator includes an agent token in managed service desired state, the token is delivered to the **worker** for the worker proxy to hold and use when forwarding agent requests; the token MUST NOT be given to the agent.
+  For **user-scoped** managed services (e.g. PAA), the orchestrator MUST associate that token with the user on whose behalf the agent is acting, so the gateway can resolve user context for preferences, access control, and audit attribution.
+  For **system-level** managed services (e.g. PMA), the token is not user-associated.
+  Traces To: [REQ-ORCHES-0163](../requirements/orches.md#req-orches-0163), [REQ-WORKER-0164](../requirements/worker.md#req-worker-0164).
 - The orchestrator MUST track observed state from worker capability reports and MUST treat service endpoints as dynamic.
   See [`docs/tech_specs/worker_node_payloads.md`](worker_node_payloads.md) `node_capability_report_v1` `managed_services_status`.
 - The orchestrator MUST route traffic to managed services using the worker-mediated endpoint(s) reported by the worker.

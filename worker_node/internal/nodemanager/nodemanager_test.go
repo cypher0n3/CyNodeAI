@@ -781,6 +781,168 @@ func TestRunWithOptions_StartWorkerAPICalled(t *testing.T) {
 	}
 }
 
+func TestRunWithOptions_StartManagedServicesCalled(t *testing.T) {
+	t.Setenv("NODE_MANAGER_TEST_NO_EXISTING_INFERENCE", "1")
+	payloadWithManaged := nodepayloads.NodeConfigurationPayload{
+		Version:       1,
+		ConfigVersion:  "1",
+		IssuedAt:      time.Now().UTC().Format(time.RFC3339),
+		NodeSlug:      "x",
+		WorkerAPI:     &nodepayloads.ConfigWorkerAPI{OrchestratorBearerToken: "test-bearer"},
+		InferenceBackend: &nodepayloads.ConfigInferenceBackend{Enabled: true, Image: "ollama/ollama"},
+		ManagedServices: &nodepayloads.ConfigManagedServices{
+			Services: []nodepayloads.ConfigManagedService{
+				{
+					ServiceID:   "pma-main",
+					ServiceType: "pma",
+					Image:       "ghcr.io/example/pma:latest",
+					Args:        []string{"--role=project_manager"},
+					RestartPolicy: "always",
+					Orchestrator: &nodepayloads.ConfigManagedServiceOrchestrator{
+						MCPGatewayProxyURL:    "http://127.0.0.1:12090/v1/worker/internal/orchestrator/mcp:call",
+						ReadyCallbackProxyURL: "http://127.0.0.1:12090/v1/worker/internal/orchestrator/agent:ready",
+						AgentToken:            "agent-tok",
+					},
+				},
+			},
+		},
+	}
+	var baseURL string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == pathReadyz {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+		if r.URL.Path == pathNodesRegister {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			_ = json.NewEncoder(w).Encode(nodepayloads.BootstrapResponse{
+				Version:  1,
+				IssuedAt: time.Now().UTC().Format(time.RFC3339),
+				Orchestrator: nodepayloads.BootstrapOrchestrator{
+					Endpoints: nodepayloads.BootstrapEndpoints{
+						NodeReportURL: baseURL + pathNodesCapability,
+						NodeConfigURL: baseURL + pathNodesConfig,
+					},
+				},
+				Auth: nodepayloads.BootstrapAuth{NodeJWT: "jwt", ExpiresAt: "2026-01-01T00:00:00Z"},
+			})
+			return
+		}
+		if r.URL.Path == pathNodesConfig {
+			if r.Method == "GET" {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusOK)
+				_ = json.NewEncoder(w).Encode(payloadWithManaged)
+				return
+			}
+			if r.Method == "POST" {
+				w.WriteHeader(http.StatusNoContent)
+			}
+			return
+		}
+		if r.URL.Path == pathNodesCapability {
+			w.WriteHeader(http.StatusNoContent)
+		}
+	}))
+	defer srv.Close()
+	baseURL = srv.URL
+
+	var servicesReceived []nodepayloads.ConfigManagedService
+	cfg := &Config{
+		OrchestratorURL:          srv.URL,
+		NodeSlug:                 "x",
+		NodeName:                 "x",
+		RegistrationPSK:          "psk",
+		CapabilityReportInterval:  20 * time.Millisecond,
+		HTTPTimeout:              5 * time.Second,
+	}
+	opts := &RunOptions{
+		StartWorkerAPI: func(string) error { return nil },
+		StartOllama:    func(_, _ string) error { return nil },
+		StartManagedServices: func(svcs []nodepayloads.ConfigManagedService) error {
+			servicesReceived = append([]nodepayloads.ConfigManagedService(nil), svcs...)
+			return nil
+		},
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 80*time.Millisecond)
+	defer cancel()
+	logger := slog.New(slog.NewJSONHandler(io.Discard, nil))
+
+	err := RunWithOptions(ctx, logger, cfg, opts)
+	if err != nil {
+		t.Fatalf("RunWithOptions: %v", err)
+	}
+	if len(servicesReceived) != 1 {
+		t.Fatalf("StartManagedServices should be called with 1 service, got %d", len(servicesReceived))
+	}
+	svc := servicesReceived[0]
+	if svc.ServiceID != "pma-main" || svc.ServiceType != "pma" || svc.Image != "ghcr.io/example/pma:latest" {
+		t.Errorf("unexpected service: service_id=%q service_type=%q image=%q", svc.ServiceID, svc.ServiceType, svc.Image)
+	}
+	if svc.Orchestrator == nil || svc.Orchestrator.AgentToken != "agent-tok" {
+		t.Errorf("orchestrator block and agent_token should be passed through: %+v", svc.Orchestrator)
+	}
+}
+
+func TestRunWithOptions_ManagedServicesFailFast(t *testing.T) {
+	t.Setenv("NODE_MANAGER_TEST_NO_EXISTING_INFERENCE", "1")
+	payloadWithManaged := nodepayloads.NodeConfigurationPayload{
+		Version: 1, ConfigVersion: "1", NodeSlug: "x",
+		WorkerAPI:         &nodepayloads.ConfigWorkerAPI{OrchestratorBearerToken: "tok"},
+		InferenceBackend:  &nodepayloads.ConfigInferenceBackend{Enabled: true, Image: "ollama/ollama"},
+		ManagedServices:   &nodepayloads.ConfigManagedServices{
+			Services: []nodepayloads.ConfigManagedService{
+				{ServiceID: "pma-main", ServiceType: "pma", Image: "pma:latest"},
+			},
+		},
+	}
+	var baseURL string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == pathReadyz { w.WriteHeader(http.StatusOK); return }
+		if r.URL.Path == pathNodesRegister {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			_ = json.NewEncoder(w).Encode(nodepayloads.BootstrapResponse{
+				Version: 1, IssuedAt: time.Now().UTC().Format(time.RFC3339),
+				Orchestrator: nodepayloads.BootstrapOrchestrator{
+					Endpoints: nodepayloads.BootstrapEndpoints{
+						NodeReportURL: baseURL + pathNodesCapability,
+						NodeConfigURL: baseURL + pathNodesConfig,
+					},
+				},
+				Auth: nodepayloads.BootstrapAuth{NodeJWT: "jwt", ExpiresAt: "2026-01-01T00:00:00Z"},
+			})
+			return
+		}
+		if r.URL.Path == pathNodesConfig && r.Method == "GET" {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			_ = json.NewEncoder(w).Encode(payloadWithManaged)
+			return
+		}
+		if r.URL.Path == pathNodesConfig && r.Method == "POST" { w.WriteHeader(http.StatusNoContent); return }
+		if r.URL.Path == pathNodesCapability { w.WriteHeader(http.StatusNoContent) }
+	}))
+	defer srv.Close()
+	baseURL = srv.URL
+
+	cfg := &Config{OrchestratorURL: srv.URL, NodeSlug: "x", NodeName: "x", RegistrationPSK: "psk", HTTPTimeout: 5 * time.Second}
+	opts := &RunOptions{
+		StartWorkerAPI:       func(string) error { return nil },
+		StartOllama:         func(_, _ string) error { return nil },
+		StartManagedServices: func([]nodepayloads.ConfigManagedService) error { return errors.New("managed service start failed") },
+	}
+	ctx := context.Background()
+	err := RunWithOptions(ctx, nil, cfg, opts)
+	if err == nil {
+		t.Fatal("RunWithOptions should fail when StartManagedServices returns error")
+	}
+	if !strings.Contains(err.Error(), "start managed services") || !strings.Contains(err.Error(), "managed service start failed") {
+		t.Errorf("unexpected error: %v", err)
+	}
+}
+
 func TestApplyWorkerProxyConfigEnv_SetsOrchestratorBaseURL(t *testing.T) {
 	_ = os.Unsetenv("ORCHESTRATOR_INTERNAL_PROXY_BASE_URL")
 	cfg := &nodepayloads.NodeConfigurationPayload{

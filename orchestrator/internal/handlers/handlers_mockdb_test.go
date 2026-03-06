@@ -1084,7 +1084,7 @@ func TestNodeHandler_RegisterNewNode(t *testing.T) {
 	jwtMgr := auth.NewJWTManager("test-secret-key-1234567890123456", 15*time.Minute, 7*24*time.Hour, 24*time.Hour)
 	logger := newTestLogger()
 
-	handler := NewNodeHandler(mockDB, jwtMgr, "test-psk-secret", testOrchestratorURL, "", "", logger)
+	handler := NewNodeHandler(mockDB, jwtMgr, "test-psk-secret", testOrchestratorURL, "", "", "", logger)
 
 	body := nodepayloads.RegistrationRequest{PSK: "test-psk-secret", Capability: testNodeCapabilityReport("test-node-1", "Test Node 1", 8, 16384)}
 	jsonBody, _ := json.Marshal(body)
@@ -1123,7 +1123,7 @@ func TestNodeHandler_RegisterNewNode_StoresWorkerAPIURLFromCapability(t *testing
 	jwtMgr := auth.NewJWTManager("test-secret-key-1234567890123456", 15*time.Minute, 7*24*time.Hour, 24*time.Hour)
 	logger := newTestLogger()
 	workerURL := "http://worker-01.example.com:12090"
-	handler := NewNodeHandler(mockDB, jwtMgr, "test-psk-secret", testOrchestratorURL, "bearer-token", "", logger)
+	handler := NewNodeHandler(mockDB, jwtMgr, "test-psk-secret", testOrchestratorURL, "bearer-token", "", "", logger)
 
 	capReport := testNodeCapabilityReport("node-with-url", "Node With URL", 4, 8192)
 	capReport.WorkerAPI = &nodepayloads.WorkerAPIReport{BaseURL: workerURL}
@@ -1152,7 +1152,7 @@ func TestNodeHandler_RegisterExistingNode(t *testing.T) {
 	jwtMgr := auth.NewJWTManager("test-secret-key-1234567890123456", 15*time.Minute, 7*24*time.Hour, 24*time.Hour)
 	logger := newTestLogger()
 
-	handler := NewNodeHandler(mockDB, jwtMgr, "test-psk-secret", testOrchestratorURL, "", "", logger)
+	handler := NewNodeHandler(mockDB, jwtMgr, "test-psk-secret", testOrchestratorURL, "", "", "", logger)
 
 	// Create existing node
 	node := &models.Node{
@@ -1183,7 +1183,7 @@ func TestNodeHandler_RegisterDBError(t *testing.T) {
 	jwtMgr := auth.NewJWTManager("test-secret-key-1234567890123456", 15*time.Minute, 7*24*time.Hour, 24*time.Hour)
 	logger := newTestLogger()
 
-	handler := NewNodeHandler(mockDB, jwtMgr, "test-psk-secret", testOrchestratorURL, "", "", logger)
+	handler := NewNodeHandler(mockDB, jwtMgr, "test-psk-secret", testOrchestratorURL, "", "", "", logger)
 
 	body := nodepayloads.RegistrationRequest{
 		PSK: "test-psk-secret",
@@ -1216,7 +1216,7 @@ func TestNodeHandler_ReportCapabilitySuccess(t *testing.T) {
 	jwtMgr := auth.NewJWTManager("test-secret-key-1234567890123456", 15*time.Minute, 7*24*time.Hour, 24*time.Hour)
 	logger := newTestLogger()
 
-	handler := NewNodeHandler(mockDB, jwtMgr, "test-psk-secret", testOrchestratorURL, "", "", logger)
+	handler := NewNodeHandler(mockDB, jwtMgr, "test-psk-secret", testOrchestratorURL, "", "", "", logger)
 
 	// Create node
 	node := &models.Node{
@@ -1248,7 +1248,7 @@ func TestNodeHandler_GetConfig_Success(t *testing.T) {
 	jwtMgr := auth.NewJWTManager("test-secret-key-1234567890123456", 15*time.Minute, 7*24*time.Hour, 24*time.Hour)
 	logger := newTestLogger()
 
-	handler := NewNodeHandler(mockDB, jwtMgr, "test-psk", testOrchestratorURL, "bearer-token-1", "http://node:12090", logger)
+	handler := NewNodeHandler(mockDB, jwtMgr, "test-psk", testOrchestratorURL, "bearer-token-1", "http://node:12090", "", logger)
 
 	cfgVer := "1"
 	node := &models.Node{
@@ -1288,7 +1288,7 @@ func TestNodeHandler_GetConfig_Success(t *testing.T) {
 func TestNodeHandler_GetConfig_ReturnsInferenceBackendWhenCapabilityInferenceSupported(t *testing.T) {
 	mockDB := testutil.NewMockDB()
 	jwtMgr := auth.NewJWTManager("test-secret-key-1234567890123456", 15*time.Minute, 7*24*time.Hour, 24*time.Hour)
-	handler := NewNodeHandler(mockDB, jwtMgr, "test-psk", testOrchestratorURL, "bearer-token", "http://node:12090", nil)
+	handler := NewNodeHandler(mockDB, jwtMgr, "test-psk", testOrchestratorURL, "bearer-token", "http://node:12090", "", nil)
 
 	node := &models.Node{
 		ID:        uuid.New(),
@@ -1326,7 +1326,7 @@ func TestNodeHandler_GetConfig_ReturnsInferenceBackendWhenCapabilityInferenceSup
 func TestNodeHandler_GetConfig_OmitsInferenceBackendWhenCapabilityExistingService(t *testing.T) {
 	mockDB := testutil.NewMockDB()
 	jwtMgr := auth.NewJWTManager("test-secret-key-1234567890123456", 15*time.Minute, 7*24*time.Hour, 24*time.Hour)
-	handler := NewNodeHandler(mockDB, jwtMgr, "test-psk", testOrchestratorURL, "bearer-token", "http://node:12090", nil)
+	handler := NewNodeHandler(mockDB, jwtMgr, "test-psk", testOrchestratorURL, "bearer-token", "http://node:12090", "", nil)
 
 	node := &models.Node{
 		ID:        uuid.New(),
@@ -1361,7 +1361,7 @@ func TestNodeHandler_GetConfig_OmitsInferenceBackendWhenCapabilityExistingServic
 func TestNodeHandler_GetConfig_ReturnsInferenceBackendWithVariantFromGPU(t *testing.T) {
 	mockDB := testutil.NewMockDB()
 	jwtMgr := auth.NewJWTManager("test-secret-key-1234567890123456", 15*time.Minute, 7*24*time.Hour, 24*time.Hour)
-	handler := NewNodeHandler(mockDB, jwtMgr, "test-psk", testOrchestratorURL, "bearer-token", "http://node:12090", nil)
+	handler := NewNodeHandler(mockDB, jwtMgr, "test-psk", testOrchestratorURL, "bearer-token", "http://node:12090", "", nil)
 
 	node := &models.Node{
 		ID:        uuid.New(),
@@ -1395,7 +1395,7 @@ func TestNodeHandler_GetConfig_ReturnsInferenceBackendWithVariantFromGPU(t *test
 
 func TestNodeHandler_GetConfig_NoNodeID(t *testing.T) {
 	mockDB := testutil.NewMockDB()
-	handler := NewNodeHandler(mockDB, nil, "test-psk", testOrchestratorURL, "", "", nil)
+	handler := NewNodeHandler(mockDB, nil, "test-psk", testOrchestratorURL, "", "", "", nil)
 
 	req := httptest.NewRequest("GET", "/v1/nodes/config", http.NoBody)
 	rec := httptest.NewRecorder()
@@ -1409,7 +1409,7 @@ func TestNodeHandler_GetConfig_NoNodeID(t *testing.T) {
 
 func TestNodeHandler_GetConfig_NodeNotFound(t *testing.T) {
 	mockDB := testutil.NewMockDB()
-	handler := NewNodeHandler(mockDB, nil, "test-psk", testOrchestratorURL, "", "", nil)
+	handler := NewNodeHandler(mockDB, nil, "test-psk", testOrchestratorURL, "", "", "", nil)
 
 	ctx := context.WithValue(context.Background(), contextKeyNodeID, uuid.New())
 	req := httptest.NewRequest("GET", "/v1/nodes/config", http.NoBody).WithContext(ctx)
@@ -1425,7 +1425,7 @@ func TestNodeHandler_GetConfig_NodeNotFound(t *testing.T) {
 func TestNodeHandler_ConfigAck_Success(t *testing.T) {
 	mockDB := testutil.NewMockDB()
 	logger := newTestLogger()
-	handler := NewNodeHandler(mockDB, nil, "test-psk", testOrchestratorURL, "", "", logger)
+	handler := NewNodeHandler(mockDB, nil, "test-psk", testOrchestratorURL, "", "", "", logger)
 
 	node := &models.Node{
 		ID:        uuid.New(),
@@ -1461,7 +1461,7 @@ func TestNodeHandler_ConfigAck_Success(t *testing.T) {
 }
 
 func TestNodeHandler_ConfigAck_NoNodeID(t *testing.T) {
-	handler := NewNodeHandler(nil, nil, "test-psk", testOrchestratorURL, "", "", nil)
+	handler := NewNodeHandler(nil, nil, "test-psk", testOrchestratorURL, "", "", "", nil)
 
 	ack := nodepayloads.ConfigAck{Version: 1, NodeSlug: "x", ConfigVersion: "1", AckAt: time.Now().UTC().Format(time.RFC3339), Status: "applied"}
 	jsonBody, _ := json.Marshal(ack)
@@ -1497,7 +1497,7 @@ func TestNodeHandler_ConfigAck_BadRequestCases(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			mockDB := testutil.NewMockDB()
-			handler := NewNodeHandler(mockDB, nil, "test-psk", testOrchestratorURL, "", "", nil)
+			handler := NewNodeHandler(mockDB, nil, "test-psk", testOrchestratorURL, "", "", "", nil)
 			node := &models.Node{
 				ID: uuid.New(), NodeSlug: tt.nodeSlug, Status: models.NodeStatusActive,
 				CreatedAt: time.Now().UTC(), UpdatedAt: time.Now().UTC(),
@@ -1517,7 +1517,7 @@ func TestNodeHandler_ConfigAck_BadRequestCases(t *testing.T) {
 
 func TestNodeHandler_GetConfig_SetsConfigVersionWhenNil(t *testing.T) {
 	mockDB := testutil.NewMockDB()
-	handler := NewNodeHandler(mockDB, nil, "test-psk", testOrchestratorURL, "tok", "", nil)
+	handler := NewNodeHandler(mockDB, nil, "test-psk", testOrchestratorURL, "tok", "", "", nil)
 
 	node := &models.Node{
 		ID:        uuid.New(),
@@ -1547,7 +1547,7 @@ func TestNodeHandler_GetConfig_SetsConfigVersionWhenNil(t *testing.T) {
 
 func TestNodeHandler_ConfigAck_InvalidBody(t *testing.T) {
 	mockDB := testutil.NewMockDB()
-	handler := NewNodeHandler(mockDB, nil, "test-psk", testOrchestratorURL, "", "", nil)
+	handler := NewNodeHandler(mockDB, nil, "test-psk", testOrchestratorURL, "", "", "", nil)
 
 	node := &models.Node{
 		ID:        uuid.New(),
@@ -1572,7 +1572,7 @@ func TestNodeHandler_ConfigAck_InvalidBody(t *testing.T) {
 func TestNodeHandler_GetConfig_DBError(t *testing.T) {
 	mockDB := testutil.NewMockDB()
 	mockDB.ForceError = errors.New("db error")
-	handler := NewNodeHandler(mockDB, nil, "test-psk", testOrchestratorURL, "", "", nil)
+	handler := NewNodeHandler(mockDB, nil, "test-psk", testOrchestratorURL, "", "", "", nil)
 
 	node := &models.Node{
 		ID:        uuid.New(),
@@ -1597,7 +1597,7 @@ func TestNodeHandler_GetConfig_DBError(t *testing.T) {
 func TestNodeHandler_ConfigAck_DBError(t *testing.T) {
 	mockDB := testutil.NewMockDB()
 	mockDB.ForceError = errors.New("db error")
-	handler := NewNodeHandler(mockDB, nil, "test-psk", testOrchestratorURL, "", "", nil)
+	handler := NewNodeHandler(mockDB, nil, "test-psk", testOrchestratorURL, "", "", "", nil)
 
 	node := &models.Node{
 		ID:        uuid.New(),
@@ -1633,7 +1633,7 @@ func TestNodeHandler_ReportCapabilityDBError(t *testing.T) {
 	jwtMgr := auth.NewJWTManager("test-secret-key-1234567890123456", 15*time.Minute, 7*24*time.Hour, 24*time.Hour)
 	logger := newTestLogger()
 
-	handler := NewNodeHandler(mockDB, jwtMgr, "test-psk-secret", testOrchestratorURL, "", "", logger)
+	handler := NewNodeHandler(mockDB, jwtMgr, "test-psk-secret", testOrchestratorURL, "", "", "", logger)
 
 	nodeID := uuid.New()
 	report := nodepayloads.CapabilityReport{
@@ -1802,7 +1802,7 @@ func TestNodeHandler_handleExistingNodeDBError(t *testing.T) {
 	mockDB.AddNode(node)
 	mockDB.ForceError = errors.New("db error on update")
 
-	handler := NewNodeHandler(mockDB, jwtMgr, "test-psk", testOrchestratorURL, "", "", logger)
+	handler := NewNodeHandler(mockDB, jwtMgr, "test-psk", testOrchestratorURL, "", "", "", logger)
 
 	body := nodepayloads.RegistrationRequest{
 		PSK: "test-psk",
@@ -3003,7 +3003,7 @@ func TestNodeHandler_ReportCapabilityWithSandbox(t *testing.T) {
 	jwtMgr := auth.NewJWTManager("test-secret-key-1234567890123456", 15*time.Minute, 7*24*time.Hour, 24*time.Hour)
 	logger := newTestLogger()
 
-	handler := NewNodeHandler(mockDB, jwtMgr, "test-psk-secret", testOrchestratorURL, "", "", logger)
+	handler := NewNodeHandler(mockDB, jwtMgr, "test-psk-secret", testOrchestratorURL, "", "", "", logger)
 
 	node := &models.Node{
 		ID:        uuid.New(),
@@ -3131,7 +3131,7 @@ func TestNodeHandler_NewNodeRegistrationJWTError(t *testing.T) {
 	jwtMgr := auth.NewJWTManager("", 15*time.Minute, 7*24*time.Hour, 24*time.Hour)
 	logger := newTestLogger()
 
-	handler := NewNodeHandler(mockDB, jwtMgr, "test-psk-secret", testOrchestratorURL, "", "", logger)
+	handler := NewNodeHandler(mockDB, jwtMgr, "test-psk-secret", testOrchestratorURL, "", "", "", logger)
 
 	body := nodepayloads.RegistrationRequest{
 		PSK: "test-psk-secret",
@@ -3179,7 +3179,7 @@ func TestNodeHandler_ExistingNodeJWTError(t *testing.T) {
 	mockDB := testutil.NewMockDB()
 	mockDB.AddNode(node)
 
-	handler := NewNodeHandler(mockDB, jwtMgr, "test-psk", testOrchestratorURL, "", "", logger)
+	handler := NewNodeHandler(mockDB, jwtMgr, "test-psk", testOrchestratorURL, "", "", "", logger)
 
 	body := nodepayloads.RegistrationRequest{
 		PSK: "test-psk",
@@ -3274,7 +3274,7 @@ func TestNodeHandler_ReportCapabilityUpdateErrors(t *testing.T) {
 	}
 	mockDB.AddNode(node)
 
-	handler := NewNodeHandler(mockDB, jwtMgr, "test-psk", testOrchestratorURL, "", "", logger)
+	handler := NewNodeHandler(mockDB, jwtMgr, "test-psk", testOrchestratorURL, "", "", "", logger)
 
 	report := nodepayloads.CapabilityReport{
 		Version: 1,
@@ -3339,7 +3339,7 @@ func TestNodeHandler_RegisterExistingNode_UpdateNodeStatusFails(t *testing.T) {
 	}
 	mockDB.AddNode(node)
 	jwtMgr := auth.NewJWTManager("test-secret-key-1234567890123456", 15*time.Minute, 7*24*time.Hour, 24*time.Hour)
-	handler := NewNodeHandler(mockDB, jwtMgr, "test-psk", testOrchestratorURL, "", "", newTestLogger())
+	handler := NewNodeHandler(mockDB, jwtMgr, "test-psk", testOrchestratorURL, "", "", "", newTestLogger())
 
 	body := nodepayloads.RegistrationRequest{
 		PSK: "test-psk",
@@ -3371,7 +3371,7 @@ func (m *createNodeErrorStore) CreateNode(_ context.Context, _ string) (*models.
 func TestNodeHandler_RegisterNewNode_CreateNodeFails(t *testing.T) {
 	mockDB := &createNodeErrorStore{MockDB: testutil.NewMockDB()}
 	jwtMgr := auth.NewJWTManager("test-secret-key-1234567890123456", 15*time.Minute, 7*24*time.Hour, 24*time.Hour)
-	handler := NewNodeHandler(mockDB, jwtMgr, "test-psk", testOrchestratorURL, "", "", newTestLogger())
+	handler := NewNodeHandler(mockDB, jwtMgr, "test-psk", testOrchestratorURL, "", "", "", newTestLogger())
 
 	body := nodepayloads.RegistrationRequest{
 		PSK: "test-psk",

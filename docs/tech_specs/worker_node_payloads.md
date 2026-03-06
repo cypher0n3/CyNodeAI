@@ -351,8 +351,13 @@ Traces To:
         - `ready_callback_proxy_url` (string, optional)
           - Worker-proxy URL for ready/callback signaling; the agent MUST NOT call orchestrator endpoints directly.
         - `agent_token` (string, optional)
+          - Token delivered to the **worker** (in node config); the **worker proxy** MUST hold it and attach it when forwarding agent-originated requests to the orchestrator (e.g. internal proxy to MCP gateway).
+            The token MUST NOT be passed to the agent container or given to the agent; agents MUST NOT receive tokens or secrets directly.
+            For **system-level** managed agents (e.g. PMA), the orchestrator does not associate the token with a specific user.
+            For **user-scoped** managed agents (e.g. PAA when deployed as a managed service), the orchestrator MUST associate the token with the user on whose behalf the agent is acting, so the gateway can resolve user context for preferences, access control, and auditing.
+            Traces To: [REQ-WORKER-0164](../requirements/worker.md#req-worker-0164).
         - `agent_token_ref` (object, optional)
-          - Reference for how the agent or worker obtains a short-lived token; raw secrets MUST be handled as secrets.
+          - Reference for how the **worker** obtains a short-lived token; raw secrets MUST be handled by the worker only and MUST NOT be given to agents.
 - `notes` (string, optional)
 - `constraints` (object, optional)
   - `max_request_bytes` (int, optional)

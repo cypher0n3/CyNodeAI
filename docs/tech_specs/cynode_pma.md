@@ -207,7 +207,9 @@ See:
 In this model, it does so via a worker-proxy URL that forwards to the orchestrator MCP gateway.
 `cynode-pma` MUST NOT call orchestrator endpoints directly; the worker proxy is the single egress from the agent container.
 The gateway remains the single enforcement and audit point at the orchestrator.
-When making MCP requests, `cynode-pma` MUST present an **agent-scoped token or API key** issued by the orchestrator for that agent (PM or PA) and user context; see [Agent-Scoped Tokens or API Keys](mcp_gateway_enforcement.md#spec-cynai-mcpgat-agentscopedtokens).
+When making MCP requests, `cynode-pma` calls the **worker proxy** (e.g. the URL in `mcp_gateway_proxy_url`); `cynode-pma` MUST NOT receive or present an agent token.
+The **worker proxy** holds the PM agent token (issued by the orchestrator, delivered to the worker in node config) and attaches it when forwarding requests to the orchestrator MCP gateway; see [Agent-Scoped Tokens or API Keys](mcp_gateway_enforcement.md#spec-cynai-mcpgat-agentscopedtokens).
+The PM token is system-level (not bound to a specific user); user context for a given request comes from the conversation or task when applicable.
 The gateway authenticates the token and restricts tool access to the allowlist and per-tool scope for the resolved agent type.
 The gateway restricts PM/PA to tools that have **PM scope** (or **both**) in the orchestrator's per-tool scope; see [Per-tool scope: Sandbox vs PM](mcp_gateway_enforcement.md#spec-cynai-mcpgat-pertoolscope).
 Tools that are sandbox-only MUST NOT be invokable by `cynode-pma`.

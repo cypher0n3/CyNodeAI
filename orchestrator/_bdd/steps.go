@@ -169,7 +169,7 @@ func InitializeOrchestratorSuite(sc *godog.ScenarioContext, state *testState) {
 			inferenceModel = "tinyllama"
 		}
 		taskHandler := handlers.NewTaskHandler(db, nil, inferenceURL, inferenceModel)
-		nodeHandler := handlers.NewNodeHandler(db, jwtManager, cfg.NodeRegistrationPSK, cfg.OrchestratorPublicURL, cfg.WorkerAPIBearerToken, cfg.WorkerAPITargetURL, nil)
+		nodeHandler := handlers.NewNodeHandler(db, jwtManager, cfg.NodeRegistrationPSK, cfg.OrchestratorPublicURL, cfg.WorkerAPIBearerToken, cfg.WorkerAPITargetURL, cfg.WorkerInternalAgentToken, nil)
 		authMiddleware := middleware.NewAuthMiddleware(jwtManager, nil)
 
 		mux := http.NewServeMux()
