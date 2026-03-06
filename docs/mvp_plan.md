@@ -651,7 +651,7 @@ Content was consolidated from dev_docs that have been deleted.
 ### Known Drifts (Evidence-Based)
 
 The following gaps between current implementation and requirements/specs are tracked for remediation.
-See [docs/dev_docs/2026-03-01_repo_state_and_execution_plan.md](dev_docs/2026-03-01_repo_state_and_execution_plan.md) and execution tracker for status.
+See the remediation notes in this section and the execution tracker for status.
 
 - **PMA startup (REQ-ORCHES-0150):** Implemented behavior starts PMA eagerly.
   Requirement: start PMA only when the first inference path is available (worker ready and inference-capable, or API Egress key for PMA).
@@ -671,7 +671,7 @@ Optional E2E/BDD scenario for SBA job and `job.result` containing `sba_result` r
 
 ### Suggested Next Work
 
-1. **Execution report 2026-03-03 (Steps 7, 8, 9):** See [docs/dev_docs/2026-03-03_steps_7_8_9_execution_report.md](dev_docs/2026-03-03_steps_7_8_9_execution_report.md).
+1. **Execution report 2026-03-03 (Steps 7, 8, 9):** Content was consolidated and the original dev_doc was deleted.
    Step 7 (workflow runner and lease) done; Step 8 minimal (API Egress POST /v1/call, Worker Telemetry node:info/node:stats stubs); Step 9 done.
    Coverage raised; `just ci` passes (all packages >=90%, BDD and E2E for workflow, API egress, worker telemetry).
 2. **Optional E2E/BDD for SBA job (low):** Done.

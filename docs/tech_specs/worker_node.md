@@ -102,6 +102,8 @@ Normative behavior:
 - **Agents MUST NOT be given tokens or secrets directly.**
   The worker proxy MUST hold orchestrator-issued credentials (agent tokens, capability leases) and MUST attach the appropriate credential when forwarding agent-originated requests to the orchestrator.
   The worker MUST NOT pass agent tokens or other orchestrator-issued secrets into agent containers or to agents; the agent calls the worker proxy (e.g. worker-proxy URL for MCP), and the worker proxy adds the token when forwarding to the gateway.
+  For managed agent internal proxy calls, this document specifies agent-token handling only.
+  Capability leases (for example for the node-local sandbox control path) are out of scope for the managed agent internal proxy token lifecycle defined below.
 
 Traces To: [REQ-WORKER-0164](../requirements/worker.md#req-worker-0164).
 
@@ -135,15 +137,97 @@ Observability:
 - Agent tokens MUST NOT appear in logs, metrics, audit payloads (beyond opaque identifiers such as `service_id` or agent identity), debug endpoints, or telemetry responses.
   Redaction MUST NOT be relied upon.
 
+#### Agent Token Ref Resolution
+
+- Spec ID: `CYNAI.WORKER.AgentTokenRefResolution` <a id="spec-cynai-worker-agenttokenrefresolution"></a>
+
+This section defines how the worker resolves `managed_services.services[].orchestrator.agent_token_ref` into an agent token.
+
+Traces To:
+
+- [REQ-WORKER-0164](../requirements/worker.md#req-worker-0164)
+
+Required behavior:
+
+- The worker MUST support `agent_token_ref` as specified in [CYNAI.WORKER.Payload.AgentTokenRef](worker_node_payloads.md#spec-cynai-worker-payload-agenttokenref).
+- The worker MUST resolve `agent_token_ref` during configuration apply.
+- Resolution failures MUST fail closed.
+  The worker MUST treat the service token as missing and MUST NOT forward any agent-originated requests for that `service_id`.
+- The worker MUST NOT pass the reference object or resolved token material to any managed service container or agent runtime.
+
+`kind=orchestrator_endpoint` contract:
+
+- The worker MUST perform an HTTP `POST` request to `agent_token_ref.url`.
+- The worker MUST use `Content-Type: application/json`.
+- The request body MUST be a JSON object with fields:
+  - `node_slug` (string)
+  - `service_id` (string)
+  - `service_type` (string)
+  - `role` (string, optional)
+- The response body MUST be a JSON object with fields:
+  - `agent_token` (string)
+  - `agent_token_expires_at` (string, optional, RFC 3339 UTC timestamp)
+- Non-2xx responses, invalid JSON, missing `agent_token`, or an invalid `agent_token_expires_at` value MUST be treated as resolution failures.
+- The worker MUST treat the response body as secret material.
+  The worker MUST NOT log it and MUST NOT expose it via metrics, telemetry, or debug endpoints.
+
+#### Agent-To-Orchestrator UDS Binding (Required)
+
+This section defines the required identity-binding mechanism for managed agent internal proxy calls.
+It makes the managed agent identity (`service_id`) derivable from the connection binding without relying on secrets inside the agent container or request.
+
+Host-side socket layout:
+
+- The worker MUST create a per-service directory under the effective node state directory:
+  - Base directory: `${storage.state_dir}/run/managed_agent_proxy/` when `storage.state_dir` is set.
+  - Base directory: `/var/lib/cynode/state/run/managed_agent_proxy/` when `storage.state_dir` is unset.
+- For each managed agent runtime instance, the worker MUST create:
+  - Directory: `<base>/<service_id>/` with permissions `0700`.
+  - Socket file: `<base>/<service_id>/proxy.sock` with permissions `0600`.
+- The worker MUST ensure the directory and socket are owned by the worker / Node Manager user.
+- The worker MUST NOT place these sockets under the secure store path (`${storage.state_dir}/secrets/`).
+
+Container-side mount and path:
+
+- The worker MUST mount the per-service host directory `<base>/<service_id>/` into the managed service container at:
+  - Container path: `/run/cynode/managed_agent_proxy/` (directory).
+- The managed agent runtime MUST use the socket path:
+  - `/run/cynode/managed_agent_proxy/proxy.sock`
+- The worker MUST mount only the calling service's UDS directory into that container.
+  No other managed service container MUST receive this mount.
+- The worker MUST mount the directory read-write for the duration of the container lifetime.
+  The agent runtime is the client and the worker is the server, so the agent only needs connect permissions, but read-write mount avoids runtime-specific socket permission edge cases.
+
+HTTP binding:
+
+- The worker internal proxy server MUST serve HTTP over this UDS.
+- The worker MUST resolve the calling `service_id` from which UDS listener accepted the connection (socket identity), not from request headers.
+- This document does not specify `per_service_loopback_listener` binding for managed agent internal proxy identity.
+
+Container runtime mount options (minimum):
+
+- The mount MUST be a bind mount of the host directory into the container.
+- The mount MUST NOT be propagated to other containers.
+- For rootless runtimes, the worker MUST ensure the host path is accessible to the container runtime user namespace without relaxing permissions beyond those specified above.
+
 #### `AgentTokenStorageAndLifecycle` Algorithm
 
 <a id="algo-cynai-worker-agenttokenstorageandlifecycle"></a>
 
 1. On configuration apply, for each `managed_services.services[]` entry that includes `orchestrator.agent_token` or `agent_token_ref`, the worker resolves the token value and writes it to the node-local secure store under the key for that service identity. <a id="algo-cynai-worker-agenttokenstorageandlifecycle-step-1"></a>
+   If `agent_token_ref` is present, the worker MUST resolve it per [CYNAI.WORKER.AgentTokenRefResolution](#spec-cynai-worker-agenttokenrefresolution).
+   Resolution failures MUST fail closed.
 2. The worker MUST NOT pass the token value to the managed-service container or agent runtime. <a id="algo-cynai-worker-agenttokenstorageandlifecycle-step-2"></a>
 3. When the worker proxy receives an agent-originated request, it determines the calling service identity, loads the corresponding token from the secure store, attaches it to the outbound request, and forwards to the orchestrator. <a id="algo-cynai-worker-agenttokenstorageandlifecycle-step-3"></a>
+   The worker MUST determine the calling service identity without relying on any secret in the agent container or request.
+   The worker MUST achieve this using an identity-bound per-service internal proxy binding.
+   The required mechanism is per-service Unix domain sockets:
+   - For each `service_id`, the worker creates a dedicated UDS listener for agent-to-orchestrator internal proxy operations.
+   - The worker mounts only that service's UDS into the corresponding managed service container (no other managed service container receives that mount).
+   - The worker resolves the calling `service_id` from the specific UDS listener that accepted the connection.
+   Unknown or ambiguous caller identities MUST fail closed.
 4. On configuration update or service removal, the worker removes or overwrites the stored token for that service identity so the old token is no longer available. <a id="algo-cynai-worker-agenttokenstorageandlifecycle-step-4"></a>
-5. When an expiry is provided (e.g. `agent_token_expires_at`), the worker MUST treat expired tokens as invalid and MUST NOT use them to forward requests; the worker SHOULD request a configuration refresh where applicable. <a id="algo-cynai-worker-agenttokenstorageandlifecycle-step-5"></a>
+5. When an expiry is provided (e.g. `managed_services.services[].orchestrator.agent_token_expires_at` in [CYNAI.WORKER.Payload.ConfigurationV1](worker_node_payloads.md#spec-cynai-worker-payload-configuration-v1)), the worker MUST treat expired tokens as invalid and MUST NOT use them to forward requests; the worker SHOULD request a configuration refresh where applicable. <a id="algo-cynai-worker-agenttokenstorageandlifecycle-step-5"></a>
 
 ## Sandbox Control Plane
 
@@ -896,6 +980,31 @@ FIPS mode:
 Go 1.26 secure secret handling (implementation requirement):
 
 - The worker SHOULD use `runtime/secret` (Go 1.26, via `GOEXPERIMENT=secret`) to wrap code that handles the master key or decrypted plaintext secrets so temporaries are erased before returning.
+- When `runtime/secret` is not available, the worker MUST use best-effort secure erasure of temporaries (e.g. zeroing buffers) before returning from code paths that handle the master key or decrypted plaintext secrets.
+
+### Secure Store Process Boundary
+
+- Spec ID: `CYNAI.WORKER.SecureStoreProcessBoundary` <a id="spec-cynai-worker-securestoreprocessboundary"></a>
+
+Traces To:
+
+- [REQ-WORKER-0168](../requirements/worker.md#req-worker-0168)
+- [REQ-WORKER-0169](../requirements/worker.md#req-worker-0169)
+
+This section defines the required trusted boundary between secure store writers and readers.
+
+Definitions:
+
+- The secure store writer is the component that applies node configuration (typically the Node Manager).
+- The secure store reader for managed agent proxy credentials is the worker internal proxy handler.
+
+Required behavior:
+
+- When the Node Manager and Worker API run in the same process, that process boundary is the trusted boundary.
+- When the Node Manager and Worker API run as separate processes, the implementation MUST enforce a trusted boundary so that:
+  - only the config-apply component can write secrets, and
+  - only the worker proxy component can read the secrets required for proxying.
+- In all deployment models, the implementation MUST document which component writes the secure store, which component reads it, and how the trusted boundary is enforced.
 
 ## Required Node Configuration
 

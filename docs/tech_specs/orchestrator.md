@@ -4,9 +4,11 @@
 - [Document Overview](#document-overview)
 - [Core Responsibilities](#core-responsibilities)
 - [Health Checks](#health-checks)
+  - [`Orchestrator.HealthEndpoints` Rule](#orchestratorhealthendpoints-rule)
 - [Task Scheduler](#task-scheduler)
   - [Scheduled Run Routing to Project Manager Agent](#scheduled-run-routing-to-project-manager-agent)
 - [Project Manager Agent](#project-manager-agent)
+- [Managed Services (Worker-Managed)](#managed-services-worker-managed)
   - [Project Manager Model (Startup Selection and Warmup)](#project-manager-model-startup-selection-and-warmup)
 - [API Egress Server](#api-egress-server)
 - [Web Egress Proxy](#web-egress-proxy)
@@ -16,7 +18,6 @@
 - [User API Gateway](#user-api-gateway)
 - [Sandbox Image Registry](#sandbox-image-registry)
 - [Node Bootstrap and Configuration](#node-bootstrap-and-configuration)
-- [Managed Services (Worker-Managed)](#managed-services-worker-managed)
 - [MCP Tool Interface](#mcp-tool-interface)
 - [Workflow Engine](#workflow-engine)
   - [Task Workflow Lease Lifecycle](#task-workflow-lease-lifecycle)
@@ -144,6 +145,9 @@ Normative behavior
   Traces To: [REQ-ORCHES-0163](../requirements/orches.md#req-orches-0163), [REQ-WORKER-0164](../requirements/worker.md#req-worker-0164).
 - The orchestrator MUST track observed state from worker capability reports and MUST treat service endpoints as dynamic.
   See [`docs/tech_specs/worker_node_payloads.md`](worker_node_payloads.md) `node_capability_report_v1` `managed_services_status`.
+- When a worker reports `managed_services_status.services[].agent_to_orchestrator_proxy`, the orchestrator SHOULD ingest and store the worker-generated identity-bound agent-to-orchestrator proxy endpoints.
+  These endpoints are used by the managed agent runtime to call worker internal proxy operations without holding credentials.
+  The orchestrator MAY use these fields for diagnostics and reconciliation when directing managed services.
 - The orchestrator MUST route traffic to managed services using the worker-mediated endpoint(s) reported by the worker.
   The orchestrator MUST NOT rely on compose DNS or direct host-port addressing for managed services.
 - The orchestrator MUST consider PMA online only when a recent worker report indicates `state=ready` for the PMA service instance.
@@ -151,6 +155,7 @@ Normative behavior
   - If the selected hosting node is unavailable or not reporting, the orchestrator MUST select a replacement eligible node and deliver updated desired state.
 - The orchestrator MUST ensure PMA has the required bootstrap information in desired state:
   inference connectivity mode and details, and worker-proxy URLs for agent-to-orchestrator communication (MCP, callbacks).
+  When supported by the worker, the orchestrator MAY set those worker-proxy URL fields to the sentinel value `auto` to require the worker to generate identity-bound endpoints and report them in `managed_services_status`.
 
 See also:
 

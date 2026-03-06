@@ -416,19 +416,41 @@ Binding:
 
 - These endpoints MUST be exposed only on loopback (`127.0.0.1`), a Unix domain socket, or both.
   They MUST NOT be exposed on a non-loopback network interface.
+- These endpoints MUST be identity-bound to a single managed agent runtime instance.
+  The worker MUST be able to deterministically resolve the calling managed service identity (for example `service_id`) from the binding used.
+  The worker MUST NOT rely on any secret being present in the agent container or request to establish identity.
+  Unknown, ambiguous, or unresolvable caller identities MUST fail closed.
+- The required identity-binding mechanism is **per-service Unix domain socket (UDS)**:
+  - For each managed agent runtime instance (identified by `service_id`), the worker MUST create a dedicated UDS listener for the internal proxy operations.
+  - The worker MUST mount only that service's UDS into the corresponding managed service container.
+  - The worker MUST resolve the calling `service_id` from the specific UDS listener that accepted the connection (socket identity), not from request headers.
+  - The managed service container MUST NOT be able to access any other service's internal proxy UDS.
+  - If UDS binding is not supported by the selected container runtime configuration, the worker MUST fail the managed service start and report `state=error` with a structured reason in `managed_services_status`.
 
 Minimum proxy operations:
 
 - **MCP gateway proxy**
   - `POST /v1/worker/internal/orchestrator/mcp:call`
   - Proxies a request to the orchestrator MCP gateway.
-  - The managed agent MUST authenticate using an agent-scoped token or API key (or a capability lease) and the worker MUST fail closed.
-  - The worker MUST emit audit records sufficient to attribute actions to the agent identity and task context.
+  - The managed agent MUST NOT receive or present an agent token or other secret credential.
+  - The orchestrator delivers the agent token to the worker in node configuration.
+  - The worker proxy holds the token and attaches it when forwarding to the orchestrator MCP gateway.
+  - The worker MUST emit audit records sufficient to attribute actions to the managed agent identity and available request context.
+  - Error semantics (minimum):
+    - If the worker cannot resolve the calling `service_id` from the binding, return 403 with Problem Details `type=https://cynode.ai/problems/managed-agent-identity-unresolved`.
+    - If the worker has no token for the resolved `service_id`, return 503 with Problem Details `type=https://cynode.ai/problems/managed-agent-token-unavailable`.
+    - If the resolved token is expired, return 503 with Problem Details `type=https://cynode.ai/problems/managed-agent-token-expired`.
 
 - **Ready/callback proxy**
   - `POST /v1/worker/internal/orchestrator/agent:ready`
   - Proxies readiness/registration callbacks to the orchestrator control-plane.
   - Authentication and auditing requirements are the same as MCP gateway proxy.
+
+See also:
+
+- [`docs/tech_specs/mcp_gateway_enforcement.md`](mcp_gateway_enforcement.md#spec-cynai-mcpgat-agenttokensworkerproxyonly) (`CYNAI.MCPGAT.AgentTokensWorkerProxyOnly`)
+- [`docs/tech_specs/worker_node.md`](worker_node.md#spec-cynai-worker-agenttokensworkerheldonly) (`CYNAI.WORKER.AgentTokensWorkerHeldOnly`)
+- [`docs/tech_specs/worker_node.md`](worker_node.md#spec-cynai-worker-agenttokenstorageandlifecycle) (`CYNAI.WORKER.AgentTokenStorageAndLifecycle`)
 
 ### Session Sandbox PTY (Interactive Terminal Stream)
 

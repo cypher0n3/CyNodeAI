@@ -129,7 +129,9 @@ Source requirements: [`docs/tech_specs/worker_node.md`](worker_node.md#spec-cyna
   - Declares whether this node supports orchestrator-directed managed services (long-lived service containers) and related proxy functionality.
   - `supported` (boolean, optional)
   - `features` (array of strings, optional)
-    - examples: `service_containers`, `agent_orchestrator_proxy_bidirectional`
+    - examples: `service_containers`, `agent_orchestrator_proxy_bidirectional`, `agent_orchestrator_proxy_identity_bound`, `agent_proxy_urls_auto`
+    - `agent_orchestrator_proxy_identity_bound` means the node supports identity-bound agent-to-orchestrator proxy endpoints where the worker can deterministically resolve the calling `service_id` from the binding used.
+    - `agent_proxy_urls_auto` means the node supports the sentinel `auto` value for `managed_services.services[].orchestrator.{mcp_gateway_proxy_url,ready_callback_proxy_url}` and will generate and inject identity-bound endpoints and report them in `managed_services_status.services[].agent_to_orchestrator_proxy`.
 - `managed_services_status` (object, optional)
   - Observed state for managed services running on this node.
   - Nodes SHOULD include this at startup and SHOULD send updated capability reports when managed service state changes.
@@ -142,6 +144,20 @@ Source requirements: [`docs/tech_specs/worker_node.md`](worker_node.md#spec-cyna
       - `endpoints` (array of strings, optional)
         - Orchestrator-callable endpoints for this service.
         - Endpoints MUST be worker-mediated by default and MUST NOT rely on direct host-port assumptions.
+      - `agent_to_orchestrator_proxy` (object, optional)
+        - Worker-generated, identity-bound endpoints for agent-to-orchestrator proxy calls from this managed service runtime.
+        - The orchestrator SHOULD ingest and store these endpoints as part of node state for diagnostics and reconciliation.
+        - `mcp_gateway_proxy_url` (string, optional)
+          - Worker-local proxy URL the managed agent runtime uses for MCP tool calls.
+          - This URL MUST be identity-bound to this service instance, so the worker can deterministically resolve the calling `service_id` without any secret in the agent request.
+        - `ready_callback_proxy_url` (string, optional)
+          - Worker-local proxy URL the managed agent runtime uses for ready/callback signaling.
+          - This URL MUST be identity-bound to this service instance, so the worker can deterministically resolve the calling `service_id` without any secret in the agent request.
+        - `binding` (string, optional)
+          - How identity-binding is achieved for this service instance.
+          - Values: `per_service_loopback_listener` | `per_service_uds` | `other`
+          - `per_service_uds` means the worker created a dedicated Unix domain socket for this `service_id` and mounted it into only this managed service container.
+          - When `binding=per_service_uds`, the `mcp_gateway_proxy_url` and `ready_callback_proxy_url` MUST be `http+unix://...` endpoints.
       - `ready_at` (string, optional)
         - RFC 3339 UTC timestamp
       - `image` (string, optional)
@@ -348,8 +364,20 @@ Traces To:
       - `orchestrator` (object)
         - `mcp_gateway_proxy_url` (string)
           - Worker-proxy URL the agent uses for MCP tool calls; the agent MUST NOT call the orchestrator MCP gateway directly.
+          - This value is consumed by the managed agent runtime inside the managed service container.
+          - If the value is `auto`, the worker MUST generate and inject an identity-bound endpoint for this specific managed service instance and SHOULD report it in `managed_services_status.services[].agent_to_orchestrator_proxy.mcp_gateway_proxy_url`.
+          - If the value is not `auto`, it MUST be a concrete endpoint string in one of these forms:
+            - `http://127.0.0.1:<port>/v1/worker/internal/orchestrator/mcp:call` (loopback-only).
+            - `http+unix://<percent-encoded-absolute-uds-path>/v1/worker/internal/orchestrator/mcp:call` (HTTP over Unix domain socket).
+          - The worker MUST ensure the chosen binding is identity-bound such that the worker can deterministically resolve the calling `service_id` without any secret in the agent request.
         - `ready_callback_proxy_url` (string, optional)
           - Worker-proxy URL for ready/callback signaling; the agent MUST NOT call orchestrator endpoints directly.
+          - This value is consumed by the managed agent runtime inside the managed service container.
+          - If the value is `auto`, the worker MUST generate and inject an identity-bound endpoint for this specific managed service instance and SHOULD report it in `managed_services_status.services[].agent_to_orchestrator_proxy.ready_callback_proxy_url`.
+          - If the value is not `auto`, it MUST be a concrete endpoint string in one of these forms:
+            - `http://127.0.0.1:<port>/v1/worker/internal/orchestrator/agent:ready` (loopback-only).
+            - `http+unix://<percent-encoded-absolute-uds-path>/v1/worker/internal/orchestrator/agent:ready` (HTTP over Unix domain socket).
+          - The worker MUST ensure the chosen binding is identity-bound such that the worker can deterministically resolve the calling `service_id` without any secret in the agent request.
         - `agent_token` (string, optional)
           - Token delivered to the **worker** (in node config); the **worker proxy** MUST hold it and attach it when forwarding agent-originated requests to the orchestrator (e.g. internal proxy to MCP gateway).
             The token MUST NOT be passed to the agent container or given to the agent; agents MUST NOT receive tokens or secrets directly.
@@ -357,12 +385,41 @@ Traces To:
             For **user-scoped** managed agents (e.g. PAA when deployed as a managed service), the orchestrator MUST associate the token with the user on whose behalf the agent is acting, so the gateway can resolve user context for preferences, access control, and auditing.
             Traces To: [REQ-WORKER-0164](../requirements/worker.md#req-worker-0164).
             See also: [CYNAI.WORKER.NodeLocalSecureStore](worker_node.md#spec-cynai-worker-nodelocalsecurestore), [CYNAI.WORKER.AgentTokenStorageAndLifecycle](worker_node.md#spec-cynai-worker-agenttokenstorageandlifecycle).
+        - `agent_token_expires_at` (string, optional)
+          - RFC 3339 UTC timestamp.
+          - When present, the worker MUST treat the token as invalid after this time.
+          - The worker MUST NOT use expired tokens to forward agent-originated requests to the orchestrator.
+          - When applicable, the worker SHOULD request a configuration refresh.
         - `agent_token_ref` (object, optional)
-          - Reference for how the **worker** obtains a short-lived token; raw secrets MUST be handled by the worker only and MUST NOT be given to agents.
+          - Reference for how the **worker** obtains a short-lived token.
+          - Raw secrets MUST be handled by the worker only and MUST NOT be given to agents.
+          - See [CYNAI.WORKER.Payload.AgentTokenRef](#spec-cynai-worker-payload-agenttokenref).
 - `notes` (string, optional)
 - `constraints` (object, optional)
   - `max_request_bytes` (int, optional)
   - `max_job_timeout_seconds` (int, optional)
+
+#### Agent Token Reference Object `agent_token_ref`
+
+- Spec ID: `CYNAI.WORKER.Payload.AgentTokenRef` <a id="spec-cynai-worker-payload-agenttokenref"></a>
+
+This section defines the schema and semantics for `managed_services.services[].orchestrator.agent_token_ref`.
+
+Scope:
+
+- `agent_token_ref` is consumed by the worker only.
+  The worker MUST NOT pass the reference object to any managed service container or agent runtime.
+- Resolution failures MUST fail closed.
+  A failure MUST result in no agent token being written to the node-local secure store for that `service_id`.
+
+Schema:
+
+- `kind` (string, required)
+  - Defines the resolution mechanism used by the worker.
+  - Allowed values: `orchestrator_endpoint`.
+- `url` (string, required when `kind=orchestrator_endpoint`)
+  - HTTPS URL that the worker calls to obtain a short-lived agent token for this managed service instance.
+  - The worker MUST treat any response content as secret material.
 
 ## Node Configuration Acknowledgement
 
@@ -392,6 +449,16 @@ Traces To:
   - `message` (string)
   - `details` (object, optional)
 - `effective_config_hash` (string, optional)
+- `managed_services_status` (object, optional)
+  - Initial endpoint registration snapshot for managed services directed by this config version.
+  - The worker SHOULD include this when the applied configuration contains `managed_services.services[]`.
+  - The worker MUST include this when the applied configuration contains any agent runtime managed service (for example `service_type=pma`).
+  - Semantics:
+    - This is an immediate post-apply snapshot, intended to provide initial service endpoint registration and identity-bound agent-to-orchestrator proxy endpoints without waiting for the next periodic capability report.
+    - The schema is the same as `node_capability_report_v1.managed_services_status`.
+    - For each service in desired state, the worker MUST include at least: `service_id`, `service_type`, `state`, and any known `endpoints` and `agent_to_orchestrator_proxy` values.
+    - If `orchestrator.{mcp_gateway_proxy_url,ready_callback_proxy_url}` were `auto`, the worker MUST include the generated concrete endpoints in `managed_services_status.services[].agent_to_orchestrator_proxy` and MUST also inject those values into the managed service container runtime configuration.
+    - Services that failed to start MUST be reported with `state=error` and `last_error`.
 
 ## Compatibility and Versioning
 
