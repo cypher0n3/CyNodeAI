@@ -60,7 +60,7 @@ def show_help():
     print("  INFERENCE_PROXY_IMAGE, OLLAMA_UPSTREAM_URL, CONTAINER_HOST_ALIAS")
 
 
-def _resolve_bypass(name, arg_value, env_key):
+def _resolve_bypass(_name, arg_value, env_key):
     """True if bypass is enabled via arg or env (e.g. SETUP_DEV_OLLAMA_IN_STACK=1)."""
     if arg_value:
         return True
@@ -94,9 +94,10 @@ def cmd_start(opts):
     ):
         setup_dev_impl.stop_all()
         return False
-    # Node-manager polls orchestrator /readyz itself (worker_node startup procedure); script does not wait.
+    # Node-manager polls orchestrator /readyz (worker_node startup); script does not wait.
+    port = setup_dev_config.WORKER_PORT
     setup_dev_impl.log_info(
-        f"Starting node (node-manager polls control-plane, then worker-api on :{setup_dev_config.WORKER_PORT})..."
+        f"Starting node (node-manager polls control-plane, worker-api :{port})..."
     )
     extra = getattr(opts, "extra_env", None)
     if not setup_dev_impl.start_node(extra_env=extra):
@@ -112,7 +113,7 @@ def cmd_start(opts):
             return False
     else:
         setup_dev_impl.log_info(
-            "Prescribed: PMA is started by worker when orchestrator directs; script does not start or wait for PMA."
+            "Prescribed: PMA by worker when orchestrator directs; script does not start/wait."
         )
     setup_dev_impl.log_info(
         f"Services started: User API http://localhost:{setup_dev_config.ORCHESTRATOR_PORT} "
@@ -287,12 +288,12 @@ def main():
     parser.add_argument(
         "--ollama-in-stack",
         action="store_true",
-        help="Bypass: run OLLAMA in orchestrator compose (prescribed: node starts inference when instructed)",
+        help="Bypass: run OLLAMA in orchestrator compose (prescribed: node starts inference)",
     )
     parser.add_argument(
         "--pma-via-compose",
         action="store_true",
-        help="Bypass: start PMA container via compose after node (prescribed: orchestrator instructs worker to start PMA)",
+        help="Bypass: start PMA via compose after node (prescribed: orchestrator instructs worker)",
     )
     args = parser.parse_args()
     if args.command == "help":
