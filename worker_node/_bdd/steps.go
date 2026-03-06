@@ -13,6 +13,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -27,6 +28,7 @@ import (
 	"github.com/cypher0n3/cynodeai/go_shared_libs/contracts/sbajob"
 	"github.com/cypher0n3/cynodeai/go_shared_libs/contracts/workerapi"
 	"github.com/cypher0n3/cynodeai/worker_node/cmd/worker-api/executor"
+	"github.com/cypher0n3/cynodeai/worker_node/internal/inferenceproxy"
 	"github.com/cypher0n3/cynodeai/worker_node/internal/nodemanager"
 	"github.com/cypher0n3/cynodeai/worker_node/internal/securestore"
 )
@@ -53,11 +55,16 @@ type workerTestState struct {
 	sbaResult             *sbajob.Result
 	sbaResultJSON         []byte
 	// Secure store (Phase 4) scenario state
-	secureStoreStateDir   string
-	secureStoreMasterKey  string
-	secureStoreSource     securestore.MasterKeySource
+	secureStoreStateDir    string
+	secureStoreMasterKey   string
+	secureStoreSource      securestore.MasterKeySource
 	managedServiceRunArgs  []string
-	secureStoreOpenErr    error
+	secureStoreOpenErr     error
+	// Phase 7 desired-state: mock config may include managed_services; record StartManagedServices call
+	mockConfigWithManagedServices bool
+	managedServicesStarted        []nodepayloads.ConfigManagedService
+	// Phase 1 inference proxy BDD
+	inferenceProxyServer *httptest.Server
 }
 
 func getWorkerState(ctx context.Context) *workerTestState {
@@ -224,8 +231,15 @@ func InitializeWorkerNodeSuite(sc *godog.ScenarioContext, state *workerTestState
 		state.secureStoreMasterKey = ""
 		state.managedServiceRunArgs = nil
 		state.secureStoreOpenErr = nil
+		state.mockConfigWithManagedServices = false
+		state.managedServicesStarted = nil
+		if state.inferenceProxyServer != nil {
+			state.inferenceProxyServer.Close()
+			state.inferenceProxyServer = nil
+		}
 		_ = os.Unsetenv("CYNODE_FIPS_MODE")
 		_ = os.Unsetenv("CYNODE_SECURE_STORE_MASTER_KEY_B64")
+		_ = os.Unsetenv("WORKER_API_STATE_DIR")
 		return ctx, nil
 	})
 
@@ -233,6 +247,7 @@ func InitializeWorkerNodeSuite(sc *godog.ScenarioContext, state *workerTestState
 	RegisterSecureStoreSteps(sc, state)
 	RegisterWorkerNodeSBASteps(sc, state)
 	RegisterNodeManagerConfigSteps(sc, state)
+	RegisterInferenceProxySteps(sc, state)
 }
 
 func getEnv(key, def string) string {
@@ -865,17 +880,26 @@ func RegisterNodeManagerConfigSteps(sc *godog.ScenarioContext, state *workerTest
 				if r.Method == "GET" {
 					state.mu.Lock()
 					state.getConfigCalled = true
+					withManaged := state.mockConfigWithManagedServices
 					state.mu.Unlock()
-					w.Header().Set("Content-Type", "application/json")
-					w.WriteHeader(http.StatusOK)
-					_ = json.NewEncoder(w).Encode(nodepayloads.NodeConfigurationPayload{
+					payload := nodepayloads.NodeConfigurationPayload{
 						Version:          1,
 						ConfigVersion:    "1",
 						IssuedAt:         time.Now().UTC().Format(time.RFC3339),
 						NodeSlug:         "bdd-node",
 						WorkerAPI:        &nodepayloads.ConfigWorkerAPI{OrchestratorBearerToken: "delivered-token"},
 						InferenceBackend: &nodepayloads.ConfigInferenceBackend{Enabled: true},
-					})
+					}
+					if withManaged {
+						payload.ManagedServices = &nodepayloads.ConfigManagedServices{
+							Services: []nodepayloads.ConfigManagedService{
+								{ServiceID: "pma-main", ServiceType: "pma", Image: "pma:latest"},
+							},
+						}
+					}
+					w.Header().Set("Content-Type", "application/json")
+					w.WriteHeader(http.StatusOK)
+					_ = json.NewEncoder(w).Encode(payload)
 					return
 				}
 				if r.Method == "POST" {
@@ -896,6 +920,12 @@ func RegisterNodeManagerConfigSteps(sc *godog.ScenarioContext, state *workerTest
 	sc.Step(`^the mock returns node config with worker_api bearer token$`, func(ctx context.Context) error {
 		return nil
 	})
+	sc.Step(`^the mock returns node config with managed_services containing service "([^"]*)" of type "([^"]*)"$`, func(ctx context.Context, serviceID, serviceType string) error {
+		state.mu.Lock()
+		state.mockConfigWithManagedServices = true
+		state.mu.Unlock()
+		return nil
+	})
 	sc.Step(`^the node manager runs the startup sequence against the mock orchestrator$`, func(ctx context.Context) error {
 		st := getWorkerState(ctx)
 		if st == nil || st.mockOrch == nil {
@@ -911,6 +941,21 @@ func RegisterNodeManagerConfigSteps(sc *godog.ScenarioContext, state *workerTest
 				_ = os.Setenv("NODE_MANAGER_TEST_NO_EXISTING_INFERENCE", prev)
 			}
 		}()
+		// When config may include managed_services, secure store must be available (syncManagedServiceAgentTokens).
+		if st.mockConfigWithManagedServices {
+			if st.secureStoreStateDir == "" {
+				st.secureStoreStateDir = filepath.Join(os.TempDir(), fmt.Sprintf("bdd-phase7-%d", time.Now().UnixNano()))
+			}
+			if st.secureStoreMasterKey == "" {
+				key := make([]byte, 32)
+				for i := range key {
+					key[i] = byte(i + 10)
+				}
+				st.secureStoreMasterKey = base64.StdEncoding.EncodeToString(key)
+			}
+			_ = os.Setenv("WORKER_API_STATE_DIR", st.secureStoreStateDir)
+			_ = os.Setenv("CYNODE_SECURE_STORE_MASTER_KEY_B64", st.secureStoreMasterKey)
+		}
 		cfg := &nodemanager.Config{
 			OrchestratorURL:          st.mockOrch.URL,
 			NodeSlug:                 "bdd-node",
@@ -924,6 +969,12 @@ func RegisterNodeManagerConfigSteps(sc *godog.ScenarioContext, state *workerTest
 				if st != nil && st.failInferenceStartup {
 					return errors.New("inference startup failed")
 				}
+				return nil
+			},
+			StartManagedServices: func(svcs []nodepayloads.ConfigManagedService) error {
+				st.mu.Lock()
+				st.managedServicesStarted = append([]nodepayloads.ConfigManagedService(nil), svcs...)
+				st.mu.Unlock()
 				return nil
 			},
 		}
@@ -1000,6 +1051,95 @@ func RegisterNodeManagerConfigSteps(sc *godog.ScenarioContext, state *workerTest
 		msg := st.nodeManagerErr.Error()
 		if !strings.Contains(msg, "inference") && !strings.Contains(msg, "Ollama") {
 			return fmt.Errorf("error %q does not indicate inference startup failure", msg)
+		}
+		return nil
+	})
+	sc.Step(`^the worker API returns status 404$`, func(ctx context.Context) error {
+		st := getWorkerState(ctx)
+		if st == nil {
+			return fmt.Errorf("no state")
+		}
+		if st.lastStatus != http.StatusNotFound {
+			return fmt.Errorf("expected 404, got %d", st.lastStatus)
+		}
+		return nil
+	})
+	sc.Step(`^I POST to the worker API path "([^"]*)" with body "([^"]*)"$`, func(ctx context.Context, path, body string) error {
+		st := getWorkerState(ctx)
+		if st == nil || st.server == nil {
+			return fmt.Errorf("worker API not started")
+		}
+		req, err := http.NewRequest(http.MethodPost, st.server.URL+path, strings.NewReader(body))
+		if err != nil {
+			return err
+		}
+		req.Header.Set("Content-Type", "application/json")
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			return err
+		}
+		defer resp.Body.Close()
+		st.lastStatus = resp.StatusCode
+		return nil
+	})
+	sc.Step(`^the node manager started managed services from config$`, func(ctx context.Context) error {
+		st := getWorkerState(ctx)
+		if st == nil {
+			return fmt.Errorf("no state")
+		}
+		st.mu.Lock()
+		svcs := st.managedServicesStarted
+		st.mu.Unlock()
+		if len(svcs) == 0 {
+			return fmt.Errorf("expected node manager to start managed services from config, got none")
+		}
+		if st.nodeManagerErr != nil {
+			return fmt.Errorf("node manager failed: %w", st.nodeManagerErr)
+		}
+		found := false
+		for i := range svcs {
+			if strings.TrimSpace(svcs[i].ServiceID) == "pma-main" && strings.TrimSpace(svcs[i].ServiceType) == "pma" {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return fmt.Errorf("expected started services to include pma-main (pma), got %+v", svcs)
+		}
+		return nil
+	})
+}
+
+// RegisterInferenceProxySteps registers steps for worker_inference_proxy.feature (Phase 1).
+func RegisterInferenceProxySteps(sc *godog.ScenarioContext, state *workerTestState) {
+	sc.Step(`^the inference proxy is configured with an upstream$`, func(ctx context.Context) error {
+		backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+		}))
+		upstreamURL, _ := url.Parse(backend.URL)
+		proxy := inferenceproxy.NewProxy(upstreamURL)
+		state.inferenceProxyServer = httptest.NewServer(proxy)
+		return nil
+	})
+	sc.Step(`^I send a request to the inference proxy with body size exceeding 10 MiB$`, func(ctx context.Context) error {
+		if state.inferenceProxyServer == nil {
+			return fmt.Errorf("inference proxy not started")
+		}
+		const overLimit = 10*1024*1024 + 1
+		body := bytes.Repeat([]byte("x"), overLimit)
+		req, _ := http.NewRequest(http.MethodPost, state.inferenceProxyServer.URL+"/", bytes.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			return err
+		}
+		defer resp.Body.Close()
+		state.lastStatus = resp.StatusCode
+		return nil
+	})
+	sc.Step(`^the inference proxy responds with status 413$`, func(ctx context.Context) error {
+		if state.lastStatus != http.StatusRequestEntityTooLarge {
+			return fmt.Errorf("expected 413, got %d", state.lastStatus)
 		}
 		return nil
 	})

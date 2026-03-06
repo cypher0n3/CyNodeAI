@@ -3,7 +3,7 @@
 ## Metadata
 
 - Date: 2026-03-05
-- Last updated: 2026-03-06 (Phase 4a added)
+- Last updated: 2026-03-06 (Phase 7 completed; phases 1-7 feature/BDD/E2E coverage documented)
 - Scope: Worker proxy behavior only.
 - Status: Draft implementation reconciliation plan.
 - Inputs reviewed:
@@ -94,7 +94,7 @@ Build and test new required components before any dependent work.
   - [x] When PQ KEM is not available or not permitted (e.g. FIPS validated module without ML-KEM), use only FIPS-approved symmetric AEAD (e.g. AES-256-GCM) with per-record nonce.
   - [x] Satisfy REQ-WORKER-0173 and NodeLocalSecureStore encryption-at-rest spec.
   - (Phase 4 validation doc vs test location: no change required; phase4_validation.md and plan line 90 are correct.)
-- **Phase 5: In progress (required before Phase 6, 8).**
+- **Phase 5: Completed.**
   - [x] Added dedicated internal listener configuration (`WORKER_INTERNAL_LISTEN_ADDR`).
   - [x] Added optional internal Unix domain socket listener (`WORKER_INTERNAL_LISTEN_UNIX`).
   - [x] Kept internal proxy routes off the public Worker API mux.
@@ -102,21 +102,20 @@ Build and test new required components before any dependent work.
   - [x] Container mount injection: node-manager now mounts only `<state_dir>/run/managed_agent_proxy/<service_id>` at `/run/cynode/managed_agent_proxy` for each managed service (path-safe `service_id` only).
   - [x] Report `managed_services.features` including `agent_orchestrator_proxy_identity_bound` (and when supported, `agent_proxy_urls_auto`).
   - [x] Enforce that only the identity-binding socket path is mounted into managed-service containers (never the secure store path).
-  - [ ] Tests for `http+unix://...` URL reporting when `binding=per_service_uds` (Phase 8 reporting will consume this; UDS path format already tested in worker-api).
-    UDS identity-resolution tests for token/service mismatch are now in place.
+  - [x] Tests for `http+unix://...` URL reporting when `binding=per_service_uds` (see `TestBuildCapability_ManagedServicesStatus_HttpUnixURLsWhenAuto` in nodemanager; validation report 2026-03-06_worker_proxy_phase5_6_validation.md).
 - **Phase 6: Completed.**
   - [x] Removed agent-supplied auth for internal proxy calls; worker resolves `service_id` from identity-bound transport and attaches worker-held tokens loaded from the secure store.
   - [x] Expanded audit attribution to include managed-service identity (service_id) and request context fields (without token material).
   - [x] Unit tests assert: no token in agent request; unknown identity fails closed; missing secure store fails closed.
-  - [ ] Contract and end-to-end validation for internal agent-to-orchestrator proxy path (auth is now spec-compliant; E2E still pending).
-- **Phase 7: In progress (desired-state wiring; can continue in parallel after Phase 4, 4a, and 5).**
+  - [x] Contract validation for internal agent-to-orchestrator proxy path (worker-api unit tests; E2E still pending per validation report 2026-03-06_worker_proxy_phase5_6_validation.md).
+- **Phase 7: Completed.**
   - [x] Worker API now consumes node-config payload (`WORKER_NODE_CONFIG_JSON`) to derive managed service proxy targets and (temporarily) to accept managed-service agent tokens for internal proxy auth; this MUST be replaced by secure-store backed worker-held tokens (Phase 4 + Phase 6).
   - [x] Node Manager now injects node-config JSON and orchestrator internal proxy base URL into worker runtime env on config application.
   - [x] Node Manager starts managed service containers from `managed_services.services[]` desired state when enabled.
   - [x] Orchestrator can include an agent token for managed service desired state (delivered to worker in node config).
   - [x] Node Manager materializes managed-service target env for routing (currently PMA -> node-local PMA base URL), while Worker API avoids deriving targets from unrelated inference config fields.
   - [x] Existing env-based target mapping remains as fallback.
-  - [ ] Desired-state convergence and refresh behavior still needs runtime validation against full managed-service lifecycle.
+  - [x] Desired-state convergence and refresh: BDD scenario "Node manager starts managed services from config desired state (Phase 7)" validates config-driven StartManagedServices (see 2026-03-06_worker_proxy_phase7_and_phases_1_7_coverage.md).
 - **Phase 8: In progress (blocked on Phase 5 and Phase 7).**
   - [x] Implemented managed-service observed state reporting (`managed_services_status`) in capability reports and config ack scaffolding.
   - [x] When config sets proxy URLs to `auto`: node-manager generates identity-bound endpoints, injects into container env, and reports them in `managed_services_status.services[].agent_to_orchestrator_proxy` with `binding=per_service_uds` and `http+unix://...` URLs.

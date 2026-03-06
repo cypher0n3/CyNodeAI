@@ -22,6 +22,16 @@ Scenario: Node manager sends config acknowledgement after applying config
   When the node manager runs the startup sequence against the mock orchestrator
   Then the node manager sent a config acknowledgement with status "applied"
 
+@req_worker_0162
+@spec_cynai_worker_workerproxybidirectionalmanagedagents
+Scenario: Node manager starts managed services from config desired state (Phase 7)
+  Given a mock orchestrator that returns bootstrap with node_config_url
+  And the mock returns node config with worker_api bearer token
+  And the mock returns node config with managed_services containing service "pma-main" of type "pma"
+  When the node manager runs the startup sequence against the mock orchestrator
+  Then the node manager started managed services from config
+  And the node manager sent a config acknowledgement with status "applied"
+
 @req_worker_0002
 @spec_cynai_worker_failfast
 @wip

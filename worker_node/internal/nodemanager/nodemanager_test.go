@@ -104,6 +104,56 @@ func TestBuildCapability_NilConfig(t *testing.T) {
 	}
 }
 
+// TestBuildCapability_ManagedServicesStatus_HttpUnixURLsWhenAuto asserts that when config sets
+// proxy URLs to "auto", managed_services_status reports binding=per_service_uds and http+unix:// URLs
+// (Phase 5 reconciliation plan: URL reporting when binding=per_service_uds).
+func TestBuildCapability_ManagedServicesStatus_HttpUnixURLsWhenAuto(t *testing.T) {
+	t.Setenv("NODE_MANAGER_TEST_NO_EXISTING_INFERENCE", "1")
+	stateDir := t.TempDir()
+	t.Setenv("WORKER_API_STATE_DIR", stateDir)
+	defer func() { _ = os.Unsetenv("WORKER_API_STATE_DIR") }()
+
+	ctx := context.Background()
+	cfg := &Config{NodeSlug: "test-slug", NodeName: "Test", AdvertisedWorkerAPIURL: "http://worker:12090"}
+	nodeConfig := &nodepayloads.NodeConfigurationPayload{
+		ManagedServices: &nodepayloads.ConfigManagedServices{
+			Services: []nodepayloads.ConfigManagedService{
+				{
+					ServiceID:   "pma-main",
+					ServiceType: "pma",
+					Orchestrator: &nodepayloads.ConfigManagedServiceOrchestrator{
+						MCPGatewayProxyURL:    "auto",
+						ReadyCallbackProxyURL: "auto",
+					},
+				},
+			},
+		},
+	}
+	report := buildCapability(ctx, cfg, nodeConfig)
+	if report.ManagedServicesStatus == nil || len(report.ManagedServicesStatus.Services) == 0 {
+		t.Fatalf("expected managed_services_status with one service, got %+v", report.ManagedServicesStatus)
+	}
+	proxy := report.ManagedServicesStatus.Services[0].AgentToOrchestratorProxy
+	if proxy == nil {
+		t.Fatal("expected agent_to_orchestrator_proxy when orchestrator URLs are auto")
+	}
+	if proxy.Binding != "per_service_uds" {
+		t.Errorf("expected binding=per_service_uds, got %q", proxy.Binding)
+	}
+	if proxy.MCPGatewayProxyURL == "" || !strings.HasPrefix(proxy.MCPGatewayProxyURL, "http+unix://") {
+		t.Errorf("expected MCP gateway proxy URL with http+unix:// prefix, got %q", proxy.MCPGatewayProxyURL)
+	}
+	if !strings.Contains(proxy.MCPGatewayProxyURL, "/v1/worker/internal/orchestrator/mcp:call") {
+		t.Errorf("expected MCP URL to contain mcp:call path, got %q", proxy.MCPGatewayProxyURL)
+	}
+	if proxy.ReadyCallbackProxyURL == "" || !strings.HasPrefix(proxy.ReadyCallbackProxyURL, "http+unix://") {
+		t.Errorf("expected ready callback proxy URL with http+unix:// prefix, got %q", proxy.ReadyCallbackProxyURL)
+	}
+	if !strings.Contains(proxy.ReadyCallbackProxyURL, "/v1/worker/internal/orchestrator/agent:ready") {
+		t.Errorf("expected ready URL to contain agent:ready path, got %q", proxy.ReadyCallbackProxyURL)
+	}
+}
+
 // TestBuildCapability_DetectExistingInferenceFails covers detectExistingInference when exec fails (e.g. no container runtime).
 func TestBuildCapability_DetectExistingInferenceFails(t *testing.T) {
 	_ = os.Unsetenv("NODE_MANAGER_TEST_NO_EXISTING_INFERENCE")
