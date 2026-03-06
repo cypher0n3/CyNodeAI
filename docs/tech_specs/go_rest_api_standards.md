@@ -8,6 +8,7 @@
 - [Request and Response Model](#request-and-response-model)
 - [Error Format and Status Codes](#error-format-and-status-codes)
 - [Authentication, Authorization, and Security](#authentication-authorization-and-security)
+- [Secret Handling in Go](#secret-handling-in-go)
 - [Observability](#observability)
 - [Database Access](#database-access)
 - [Reliability and Idempotency](#reliability-and-idempotency)
@@ -159,6 +160,23 @@ Recommended security practices
 - Prefer bearer tokens over cookie auth for API clients unless a browser-only flow is required.
 - Apply CORS only where required and avoid wildcard origins for authenticated requests.
 - Avoid logging request bodies and headers that may contain secrets.
+
+## Secret Handling in Go
+
+The following requirement applies to any Go code that handles secrets, credentials, or tokens in process (including master keys and decrypted plaintext).
+
+### Secret Handling Applicable Requirements
+
+- Spec ID: `CYNAI.STANDS.SecretHandling` <a id="spec-cynai-stands-secrethandling"></a>
+
+Traces To:
+
+- [REQ-STANDS-0133](../requirements/stands.md#req-stands-0133)
+
+Implementation requirement
+
+- Go code that touches secrets, credentials, or tokens (e.g. bearer tokens, API keys, decrypted credential plaintext, secure-store master keys) MUST use the Go 1.26 `runtime/secret` package (enabled via `GOEXPERIMENT=secret` at build time) to wrap the code path so that temporaries (registers, stack, heap used during the operation) are securely erased before returning.
+- When `runtime/secret` is not available (unsupported platform or Go version), implementations MUST use best-effort secure erasure (e.g. zeroing buffers that held plaintext or keys) before returning from those code paths and MUST NOT log or retain plaintext.
 
 ## Observability
 

@@ -101,6 +101,7 @@ Security notes
 - Encryption SHOULD be envelope encryption with a master key that is not stored in PostgreSQL.
 - The API Egress Server SHOULD be the only service with permission to decrypt credentials.
 - Credential rotation SHOULD be supported without changing agent behavior.
+- Go code that decrypts or holds credential plaintext (or the envelope master key) MUST use `runtime/secret` when available per [REQ-STANDS-0133](../requirements/stands.md#req-stands-0133); when not available, MUST use best-effort secure erasure before returning.
 
 ## Access Control
 

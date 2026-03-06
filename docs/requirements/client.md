@@ -38,6 +38,7 @@ Web Console-specific requirements live in [webcon.md](webcon.md) (REQ-WEBCON-*).
   [CYNAI.CLIENT.CliSecurityModel](../tech_specs/cynork_cli.md#spec-cynai-client-clisecurity)
   [CYNAI.CLIENT.CliConfigFileLocation](../tech_specs/cynork_cli.md#spec-cynai-client-cliconfigfilelocation)
   [CYNAI.CLIENT.CliCredentialHelperProtocol](../tech_specs/cynork_cli.md#spec-cynai-client-clicredentialhelperprotocol)
+  [REQ-STANDS-0133](../requirements/stands.md#req-stands-0133) (Go code handling secrets)
   <a id="req-client-0103"></a>
 - **REQ-CLIENT-0104:** The CLI MUST support least privilege and MUST fail closed on authorization errors.
   [CYNAI.CLIENT.CliSecurityModel](../tech_specs/cynork_cli.md#spec-cynai-client-clisecurity)
@@ -45,6 +46,7 @@ Web Console-specific requirements live in [webcon.md](webcon.md) (REQ-WEBCON-*).
 - **REQ-CLIENT-0105:** The CLI MUST support token-based authentication.
   [CYNAI.CLIENT.CliAuthConfig](../tech_specs/cynork_cli.md#spec-cynai-client-cliauth)
   [CYNAI.CLIENT.CliTokenResolution](../tech_specs/cynork_cli.md#spec-cynai-client-clitokenresolution)
+  [REQ-STANDS-0133](../requirements/stands.md#req-stands-0133) (Go code handling tokens)
   <a id="req-client-0105"></a>
 - **REQ-CLIENT-0106:** The CLI SHOULD support reading tokens from env vars for CI usage.
   [CYNAI.CLIENT.CliAuthConfig](../tech_specs/cynork_cli.md#spec-cynai-client-cliauth)

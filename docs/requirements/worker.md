@@ -28,6 +28,7 @@ It covers worker-node behavior and the worker API contract for job execution and
   <a id="req-worker-0101"></a>
 - **REQ-WORKER-0102:** Tokens MUST be treated as secrets and MUST NOT be logged.
   [CYNAI.WORKER.WorkerApiAuth](../tech_specs/worker_api.md#spec-cynai-worker-workerauth)
+  [REQ-STANDS-0133](../requirements/stands.md#req-stands-0133) (Go code handling tokens)
   <a id="req-worker-0102"></a>
 - **REQ-WORKER-0103:** Nodes MUST support sandbox execution using a container runtime (Podman preferred).
   [CYNAI.WORKER.SandboxExecution](../tech_specs/worker_api.md#spec-cynai-worker-sandboxexec)
@@ -228,9 +229,11 @@ It covers worker-node behavior and the worker API contract for job execution and
   <a id="req-worker-0164"></a>
 - **REQ-WORKER-0165:** Nodes MUST store orchestrator-issued secrets in a node-local secure store and MUST encrypt those secrets at rest when persisted to disk.
   [CYNAI.WORKER.NodeLocalSecureStore](../tech_specs/worker_node.md#spec-cynai-worker-nodelocalsecurestore)
+  [REQ-STANDS-0133](../requirements/stands.md#req-stands-0133) (Go code handling secrets)
   <a id="req-worker-0165"></a>
 - **REQ-WORKER-0166:** The node-local secure store master key MUST NOT be stored in plaintext on disk and MUST NOT be written to logs.
   [CYNAI.WORKER.NodeLocalSecureStore](../tech_specs/worker_node.md#spec-cynai-worker-nodelocalsecurestore)
+  [REQ-STANDS-0133](../requirements/stands.md#req-stands-0133) (Go code handling master key or plaintext)
   <a id="req-worker-0166"></a>
 - **REQ-WORKER-0167:** Nodes MUST support master key acquisition using a deterministic precedence order and MUST support an emergency environment variable fallback.
   Nodes MUST emit a startup warning when using the env var fallback or any backend weaker than TPM, OS key store, or system service credentials.
@@ -260,6 +263,7 @@ It covers worker-node behavior and the worker API contract for job execution and
   <a id="req-worker-0200"></a>
 - **REQ-WORKER-0201:** Telemetry API bearer tokens MUST be treated as secrets and MUST NOT be logged.
   [CYNAI.WORKER.TelemetryApiAuth](../tech_specs/worker_telemetry_api.md#spec-cynai-worker-telemetryauth)
+  [REQ-STANDS-0133](../requirements/stands.md#req-stands-0133) (Go code handling tokens)
   <a id="req-worker-0201"></a>
 - **REQ-WORKER-0210:** Nodes MUST maintain a node-local SQLite database used to index and query telemetry for the Worker Telemetry API.
   [CYNAI.WORKER.TelemetryStorageSqlite](../tech_specs/worker_telemetry_api.md#spec-cynai-worker-telemetrystorage-sqlite)

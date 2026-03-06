@@ -982,7 +982,8 @@ FIPS mode:
 
 Go 1.26 secure secret handling (implementation requirement):
 
-- The worker SHOULD use `runtime/secret` (Go 1.26, via `GOEXPERIMENT=secret`) to wrap code that handles the master key or decrypted plaintext secrets so temporaries are erased before returning.
+- The worker MUST use `runtime/secret` (Go 1.26, via `GOEXPERIMENT=runtimesecret` at build time) when available to wrap code that handles the master key or decrypted plaintext secrets so temporaries are erased before returning.
+  [REQ-STANDS-0133](../requirements/stands.md#req-stands-0133)
 - When `runtime/secret` is not available, the worker MUST use best-effort secure erasure of temporaries (e.g. zeroing buffers) before returning from code paths that handle the master key or decrypted plaintext secrets.
 
 ### Secure Store Process Boundary

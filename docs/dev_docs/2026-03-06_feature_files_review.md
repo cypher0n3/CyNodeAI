@@ -9,9 +9,9 @@
 ## Summary
 
 - **29 feature files** across five suites; all describe current or explicitly @wip behavior.
-- **Four suites** have Godog BDD runners (`orchestrator`, `worker_node`, `cynork`, `agents`); **one suite** (`e2e`) has no BDD runner.
+- **All five suites** have Godog BDD runners (`orchestrator`, `worker_node`, `cynork`, `agents`, `e2e`); `just test-bdd` runs each module's `_bdd` package.
 - **One scenario** is tagged @wip and excluded from BDD via `~@wip`.
-- **Skipped steps** exist only in the orchestrator BDD suite: conditional skips when prerequisites are missing, plus five always-skip stub steps for E2E/worker wording.
+- **Skipped steps:** orchestrator (conditional + five always-skip stubs); e2e (conditional when gateway is unreachable).
 
 ## Validation Status
 
@@ -32,7 +32,7 @@
 
 ## BDD Implementation
 
-- **`just test-bdd`** runs Godog for each Go module that has an `_bdd` directory (from `go.work`: orchestrator, worker_node, cynork, agents).
+- **`just test-bdd`** runs Godog for each Go module that has an `_bdd` directory (from `go.work`: orchestrator, worker_node, cynork, agents, e2e).
 - Each suite's `_bdd/suite_test.go` sets `Paths: []string{featurePath()}` to its own `features/<suite>/` directory and `Tags: "~@wip"`.
 - **orchestrator**: `orchestrator/_bdd` -> `features/orchestrator/`.
   DB-dependent scenarios require `POSTGRES_TEST_DSN` or testcontainers (see `orchestrator/_bdd/testmain_test.go`).
@@ -40,17 +40,10 @@
   Steps in `steps.go` cover sandbox execution, node manager config, SBA, secure store, telemetry, inference proxy, internal proxy (public mux 404).
 - **cynork**: `cynork/_bdd` -> `features/cynork/`.
 - **agents**: `agents/_bdd` -> `features/agents/`.
-- **e2e**: No `_bdd` package.
-  `features/e2e/` is never run by Godog; similar flows are covered by the Python E2E suite (`just e2e`).
-
-## Missing Actual BDD Tests
-
-**Suite @suite_e2e** (2 feature files) has no Godog BDD runner:
-
-- `features/e2e/single_node_happy_path.feature`
-- `features/e2e/chat_openai_compatible.feature`
-
-Their Gherkin scenarios are specification-only for BDD; behavior is partially covered by Python E2E (`scripts/test_scripts/run_e2e.py`).
+- **e2e**: `e2e/_bdd` -> `features/e2e/`.
+  Steps call the real gateway at `E2E_GATEWAY_URL` (default `http://localhost:12080`).
+  Scenarios skip when the orchestrator API is not running (e.g. first Background step "the orchestrator API is running" returns `ErrSkip`).
+  With the stack up, scenarios run login, task create, poll for completion, and chat/GET models; same flows are also covered by the Python E2E suite (`just e2e`).
 
 ## Skipped Steps
 
@@ -65,6 +58,8 @@ Only the **orchestrator** BDD suite uses `godog.ErrSkip`.
   - `the job result contains stdout "…"`
   - `the task status becomes "…"`
   They match wording in `features/e2e/single_node_happy_path.feature`, but the orchestrator suite only runs `features/orchestrator/`, so no scenario executed by `just test-bdd` invokes them.
+
+**e2e** steps return `ErrSkip` when the gateway is unreachable (e.g. "a running PostgreSQL database", "the orchestrator API is running").
 
 **worker_node**, **cynork**, and **agents** _bdd steps do not use `ErrSkip`.
 
@@ -92,8 +87,8 @@ Registry only: `@suite_admin_web_console`, `@suite_api_egress_server`, `@suite_s
 ## Conclusion
 
 - **29 feature files**; 28 aligned with current functionality, 1 scenario @wip.
-- **27 files** are run by Godog via their suite's `_bdd` package; **2 files** (e2e) have no BDD runner.
-- **Skipped steps:** orchestrator only (conditional + 5 stubs); other suites have none.
+- **All 29 files** are run by Godog via their suite's `_bdd` package (including `e2e/_bdd` for `features/e2e/`).
+- **Skipped steps:** orchestrator (conditional + 5 stubs); e2e (conditional when gateway down); worker_node, cynork, agents none.
 
 ## References
 

@@ -47,6 +47,7 @@ It covers controlled egress services and their policy and auditing constraints.
   <a id="req-apiegr-0107"></a>
 - **REQ-APIEGR-0108:** The API Egress Server SHOULD be the only service with permission to decrypt credentials.
   [CYNAI.APIEGR.CredentialStorage](../tech_specs/api_egress_server.md#spec-cynai-apiegr-credentialstorage)
+  [REQ-STANDS-0133](../requirements/stands.md#req-stands-0133) (Go code that decrypts or holds credentials)
   <a id="req-apiegr-0108"></a>
 - **REQ-APIEGR-0109:** Credential rotation SHOULD be supported without changing agent behavior.
   [CYNAI.APIEGR.CredentialStorage](../tech_specs/api_egress_server.md#spec-cynai-apiegr-credentialstorage)

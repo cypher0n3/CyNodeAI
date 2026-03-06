@@ -114,3 +114,6 @@ It covers cross-cutting standards and conventions that apply across components.
 - **REQ-STANDS-0132:** Backward-incompatible changes MUST require a new major API version.
   [CYNAI.STANDS.ApiEvolution](../tech_specs/go_rest_api_standards.md#spec-cynai-stands-apievolution)
   <a id="req-stands-0132"></a>
+- **REQ-STANDS-0133:** Go code that handles secrets, credentials, or tokens (including master keys and decrypted plaintext) MUST use `runtime/secret` (Go 1.26, via `GOEXPERIMENT=secret`) when available to wrap such code so temporaries are erased before returning; when `runtime/secret` is not available, implementations MUST use best-effort secure erasure (e.g. zeroing buffers) before returning from those code paths.
+  [CYNAI.STANDS.SecretHandling](../tech_specs/go_rest_api_standards.md#spec-cynai-stands-secrethandling)
+  <a id="req-stands-0133"></a>

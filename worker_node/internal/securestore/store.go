@@ -78,6 +78,7 @@ type Store struct {
 }
 
 // Open initializes the secure store under <state_dir>/secrets and resolves a master key.
+// Master key resolution runs inside runtime/secret when available so temporaries are erased.
 func Open(stateDir string) (*Store, MasterKeySource, error) {
 	if strings.TrimSpace(stateDir) == "" {
 		stateDir = defaultStateDir
@@ -89,7 +90,12 @@ func Open(stateDir string) (*Store, MasterKeySource, error) {
 	if err := os.Chmod(rootDir, 0o700); err != nil {
 		return nil, "", fmt.Errorf("set secure store dir permissions: %w", err)
 	}
-	key, source, err := resolveMasterKey()
+	var key []byte
+	var source MasterKeySource
+	var err error
+	runWithSecret(func() {
+		key, source, err = resolveMasterKey()
+	})
 	if err != nil {
 		return nil, "", err
 	}
@@ -213,14 +219,24 @@ func (s *Store) PutAgentToken(serviceID, token, expiresAt string) error {
 		ExpiresAt: expiresAt,
 		WrittenAt: time.Now().UTC().Format(time.RFC3339),
 	}
-	plaintext, err := json.Marshal(record)
-	if err != nil {
-		return fmt.Errorf("marshal token record: %w", err)
-	}
-	defer zeroBytes(plaintext)
-	env, err := s.buildEncryptedEnvelope(plaintext)
-	if err != nil {
-		return err
+	var env encryptedEnvelope
+	var encErr error
+	runWithSecret(func() {
+		plaintext, marshalErr := json.Marshal(record)
+		if marshalErr != nil {
+			encErr = fmt.Errorf("marshal token record: %w", marshalErr)
+			return
+		}
+		defer zeroBytes(plaintext)
+		var e encryptedEnvelope
+		e, encErr = s.buildEncryptedEnvelope(plaintext)
+		if encErr != nil {
+			return
+		}
+		env = e
+	})
+	if encErr != nil {
+		return encErr
 	}
 	serialized, err := json.Marshal(env)
 	if err != nil {
@@ -248,6 +264,7 @@ func (s *Store) PutAgentToken(serviceID, token, expiresAt string) error {
 }
 
 // GetAgentToken reads and decrypts a per-service token record.
+// Decrypt and plaintext handling run inside runtime/secret when available; zeroBytes remains fallback.
 func (s *Store) GetAgentToken(serviceID string) (*AgentTokenRecord, error) {
 	path, err := s.tokenPath(serviceID)
 	if err != nil {
@@ -269,25 +286,37 @@ func (s *Store) GetAgentToken(serviceID string) (*AgentTokenRecord, error) {
 	if err != nil {
 		return nil, fmt.Errorf("decode envelope payload: %w", err)
 	}
-	plaintext, err := s.decryptEnvelope(&env, nonce, payload)
-	if err != nil {
-		return nil, err
-	}
-	defer zeroBytes(plaintext)
-	var record AgentTokenRecord
-	if err := json.Unmarshal(plaintext, &record); err != nil {
-		return nil, fmt.Errorf("decode token record: %w", err)
-	}
-	if strings.TrimSpace(record.ExpiresAt) != "" {
-		expiresAt, err := time.Parse(time.RFC3339, record.ExpiresAt)
+	var record *AgentTokenRecord
+	var decErr error
+	runWithSecret(func() {
+		plaintext, err := s.decryptEnvelope(&env, nonce, payload)
 		if err != nil {
-			return nil, fmt.Errorf("invalid stored expires_at: %w", err)
+			decErr = err
+			return
 		}
-		if !time.Now().UTC().Before(expiresAt) {
-			return nil, ErrTokenExpired
+		defer zeroBytes(plaintext)
+		var r AgentTokenRecord
+		if err := json.Unmarshal(plaintext, &r); err != nil {
+			decErr = fmt.Errorf("decode token record: %w", err)
+			return
 		}
+		if strings.TrimSpace(r.ExpiresAt) != "" {
+			expiresAt, err := time.Parse(time.RFC3339, r.ExpiresAt)
+			if err != nil {
+				decErr = fmt.Errorf("invalid stored expires_at: %w", err)
+				return
+			}
+			if !time.Now().UTC().Before(expiresAt) {
+				decErr = ErrTokenExpired
+				return
+			}
+		}
+		record = &r
+	})
+	if decErr != nil {
+		return nil, decErr
 	}
-	return &record, nil
+	return record, nil
 }
 
 // DeleteAgentToken removes a per-service token record.
@@ -421,15 +450,25 @@ func (s *Store) loadKEMKeyFromFile(path string) (*mlkem.DecapsulationKey768, err
 	if err != nil {
 		return nil, fmt.Errorf("decode kem keystore payload: %w", err)
 	}
-	seed, err := decrypt(payload, nonce, s.key)
-	if err != nil {
-		return nil, fmt.Errorf("decrypt kem keystore: %w", err)
+	var dk *mlkem.DecapsulationKey768
+	var loadErr error
+	runWithSecret(func() {
+		seed, err := decrypt(payload, nonce, s.key)
+		if err != nil {
+			loadErr = fmt.Errorf("decrypt kem keystore: %w", err)
+			return
+		}
+		defer zeroBytes(seed)
+		if len(seed) != mlkem.SeedSize {
+			loadErr = fmt.Errorf("kem keystore payload length %d, want %d", len(seed), mlkem.SeedSize)
+			return
+		}
+		dk, loadErr = mlkem.NewDecapsulationKey768(seed)
+	})
+	if loadErr != nil {
+		return nil, loadErr
 	}
-	defer zeroBytes(seed)
-	if len(seed) != mlkem.SeedSize {
-		return nil, fmt.Errorf("kem keystore payload length %d, want %d", len(seed), mlkem.SeedSize)
-	}
-	return mlkem.NewDecapsulationKey768(seed)
+	return dk, nil
 }
 
 func (s *Store) persistNewKEMKey(path string) (*mlkem.DecapsulationKey768, error) {
@@ -437,11 +476,15 @@ func (s *Store) persistNewKEMKey(path string) (*mlkem.DecapsulationKey768, error
 	if err != nil {
 		return nil, fmt.Errorf("generate kem key: %w", err)
 	}
-	seed := dk.Bytes()
-	ciphertext, nonce, err := encrypt(seed, s.key)
-	zeroBytes(seed)
-	if err != nil {
-		return nil, fmt.Errorf("encrypt kem keystore: %w", err)
+	var ciphertext, nonce []byte
+	var persistErr error
+	runWithSecret(func() {
+		seed := dk.Bytes()
+		defer zeroBytes(seed)
+		ciphertext, nonce, persistErr = encrypt(seed, s.key)
+	})
+	if persistErr != nil {
+		return nil, fmt.Errorf("encrypt kem keystore: %w", persistErr)
 	}
 	env := encryptedEnvelope{
 		Version:    envelopeVersionAEAD,

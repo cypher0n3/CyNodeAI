@@ -115,6 +115,8 @@ Recommended model
 
 See [`docs/tech_specs/api_egress_server.md`](api_egress_server.md) for credential handling patterns.
 
+Go code that retrieves or decrypts Git credentials MUST use `runtime/secret` when available per [REQ-STANDS-0133](../requirements/stands.md#req-stands-0133); when not available, MUST use best-effort secure erasure before returning.
+
 ## Access Control
 
 Git egress MUST be default-deny.

@@ -382,6 +382,7 @@ Traces To:
 - [REQ-CLIENT-0101](../requirements/client.md#req-client-0101)
 - [REQ-CLIENT-0102](../requirements/client.md#req-client-0102)
 - [REQ-CLIENT-0103](../requirements/client.md#req-client-0103)
+- [REQ-STANDS-0133](../requirements/stands.md#req-stands-0133) (Go code handling tokens or secrets)
 
 The CLI MUST be implemented in Go using Cobra for the command tree.
 Implementation MUST follow [Go REST API Standards](go_rest_api_standards.md) where applicable (e.g. HTTP client behavior, error handling).
@@ -411,6 +412,7 @@ Secrets and logging
 
 - The CLI MUST NOT log config file contents, token values, credential helper stdin/stdout containing secrets, or any flag value that is a secret (e.g. `--secret-file` path MAY be logged; file contents MUST NOT).
 - When reading secrets from stdin or a file, buffers MUST be cleared or not retained longer than necessary for the single request.
+- Go code that handles the resolved token, credential helper I/O, or any secret value MUST use `runtime/secret` when available per [REQ-STANDS-0133](../requirements/stands.md#req-stands-0133); when not available, MUST use best-effort secure erasure before returning.
 
 ## MVP Scope
 
