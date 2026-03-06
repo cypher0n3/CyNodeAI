@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -20,6 +21,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/cypher0n3/cynodeai/go_shared_libs/contracts/nodepayloads"
 	"github.com/cypher0n3/cynodeai/go_shared_libs/contracts/problem"
 	"github.com/cypher0n3/cynodeai/go_shared_libs/contracts/workerapi"
 	"github.com/cypher0n3/cynodeai/worker_node/cmd/worker-api/executor"
@@ -46,6 +48,11 @@ type managedServiceProxyResponse struct {
 	Status  int                 `json:"status"`
 	Headers map[string][]string `json:"headers,omitempty"`
 	BodyB64 string              `json:"body_b64,omitempty"`
+}
+
+type internalOrchestratorProxyConfig struct {
+	UpstreamBaseURL string
+	AllowedTokens   map[string]string // token -> service_id
 }
 
 func main() {
@@ -81,8 +88,11 @@ func runMain(ctx context.Context) int {
 		defer func() { _ = telemetryStore.Close() }()
 		go runRetentionAndVacuum(ctx, telemetryStore, logger)
 	}
-	mux := newMux(exec, bearerToken, workspaceRoot, telemetryStore, logger)
+	cfg := loadWorkerProxyConfig(logger)
+	mux := newMux(exec, bearerToken, workspaceRoot, telemetryStore, logger, cfg.ManagedServiceTargets)
+	internalMux := newInternalMux(cfg.InternalProxy, logger)
 	srv := newServer(mux)
+	internalSrv := newInternalServer(internalMux)
 
 	serverErr := make(chan error, 1)
 	go func() {
@@ -90,6 +100,33 @@ func runMain(ctx context.Context) int {
 			serverErr <- err
 		}
 	}()
+	if internalSrv.Addr != "" {
+		go func() {
+			if err := internalSrv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+				serverErr <- err
+			}
+		}()
+	}
+	if socketPath := strings.TrimSpace(os.Getenv("WORKER_INTERNAL_LISTEN_UNIX")); socketPath != "" {
+		if err := os.RemoveAll(socketPath); err != nil {
+			logger.Error("failed to prepare internal unix socket", "path", socketPath, "error", err)
+			return 1
+		}
+		l, err := net.Listen("unix", socketPath)
+		if err != nil {
+			logger.Error("failed to listen on internal unix socket", "path", socketPath, "error", err)
+			return 1
+		}
+		defer func() {
+			_ = l.Close()
+			_ = os.Remove(socketPath)
+		}()
+		go func() {
+			if err := internalSrv.Serve(l); err != nil && !errors.Is(err, http.ErrServerClosed) {
+				serverErr <- err
+			}
+		}()
+	}
 	done := make(chan os.Signal, 1)
 	signal.Notify(done, os.Interrupt, syscall.SIGTERM)
 	select {
@@ -101,6 +138,9 @@ func runMain(ctx context.Context) int {
 	shutdownCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
 	defer cancel()
 	if err := srv.Shutdown(shutdownCtx); err != nil {
+		return 1
+	}
+	if err := internalSrv.Shutdown(shutdownCtx); err != nil {
 		return 1
 	}
 	return 0
@@ -142,9 +182,14 @@ func runRetentionAndVacuum(ctx context.Context, store *telemetry.Store, logger *
 	}
 }
 
-func newMux(exec *executor.Executor, bearerToken, workspaceRoot string, telemetryStore *telemetry.Store, logger *slog.Logger) *http.ServeMux {
+func newMux(exec *executor.Executor, bearerToken, workspaceRoot string, telemetryStore *telemetry.Store, logger *slog.Logger, managedServiceTargets ...map[string]managedServiceTarget) *http.ServeMux {
 	mux := http.NewServeMux()
-	managedServiceTargets := loadManagedServiceTargetsFromEnv(logger)
+	var targets map[string]managedServiceTarget
+	if len(managedServiceTargets) > 0 && managedServiceTargets[0] != nil {
+		targets = managedServiceTargets[0]
+	} else {
+		targets = loadManagedServiceTargetsFromEnv(logger)
+	}
 	// REQ-WORKER-0140, REQ-WORKER-0141: unauthenticated GET /healthz; body plain text "ok" per worker_api.md
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
@@ -154,7 +199,7 @@ func newMux(exec *executor.Executor, bearerToken, workspaceRoot string, telemetr
 	// REQ-WORKER-0140, REQ-WORKER-0142: unauthenticated GET /readyz
 	mux.HandleFunc("GET /readyz", readyzHandler(exec))
 	mux.HandleFunc("POST /v1/worker/jobs:run", handleRunJob(exec, bearerToken, workspaceRoot, logger))
-	mux.HandleFunc("POST /v1/worker/managed-services/{service_id}/proxy:http", handleManagedServiceProxy(bearerToken, managedServiceTargets, logger))
+	mux.HandleFunc("POST /v1/worker/managed-services/{service_id}/proxy:http", handleManagedServiceProxy(bearerToken, targets, logger))
 	// REQ-WORKER-0200--0243: Worker Telemetry API.
 	mux.HandleFunc("GET /v1/worker/telemetry/node:info", telemetryAuth(bearerToken, handleNodeInfo(logger)))
 	mux.HandleFunc("GET /v1/worker/telemetry/node:stats", telemetryAuth(bearerToken, handleNodeStats(logger)))
@@ -164,6 +209,163 @@ func newMux(exec *executor.Executor, bearerToken, workspaceRoot string, telemetr
 		mux.HandleFunc("GET /v1/worker/telemetry/logs", telemetryAuth(bearerToken, handleQueryLogs(telemetryStore)))
 	}
 	return mux
+}
+
+func newInternalMux(cfg internalOrchestratorProxyConfig, logger *slog.Logger) *http.ServeMux {
+	mux := http.NewServeMux()
+	mux.HandleFunc("POST /v1/worker/internal/orchestrator/mcp:call", handleInternalOrchestratorProxy(cfg, logger, "mcp"))
+	mux.HandleFunc("POST /v1/worker/internal/orchestrator/agent:ready", handleInternalOrchestratorProxy(cfg, logger, "ready"))
+	return mux
+}
+
+type workerProxyConfig struct {
+	ManagedServiceTargets map[string]managedServiceTarget
+	InternalProxy         internalOrchestratorProxyConfig
+}
+
+func loadWorkerProxyConfig(logger *slog.Logger) workerProxyConfig {
+	out := workerProxyConfig{
+		ManagedServiceTargets: map[string]managedServiceTarget{},
+		InternalProxy: internalOrchestratorProxyConfig{
+			UpstreamBaseURL: strings.TrimSpace(os.Getenv("ORCHESTRATOR_INTERNAL_PROXY_BASE_URL")),
+			AllowedTokens:   map[string]string{},
+		},
+	}
+	nodeCfgRaw := strings.TrimSpace(os.Getenv("WORKER_NODE_CONFIG_JSON"))
+	if nodeCfgRaw != "" {
+		var nodeCfg nodepayloads.NodeConfigurationPayload
+		if err := json.Unmarshal([]byte(nodeCfgRaw), &nodeCfg); err != nil {
+			if logger != nil {
+				logger.Warn("invalid WORKER_NODE_CONFIG_JSON; falling back to env-only proxy config", "error", err)
+			}
+		} else {
+			out.ManagedServiceTargets = deriveManagedServiceTargetsFromNodeConfig(&nodeCfg)
+			if out.InternalProxy.UpstreamBaseURL == "" {
+				out.InternalProxy.UpstreamBaseURL = strings.TrimSpace(nodeCfg.Orchestrator.BaseURL)
+			}
+			if nodeCfg.ManagedServices != nil {
+				for _, svc := range nodeCfg.ManagedServices.Services {
+					if svc.Orchestrator == nil {
+						continue
+					}
+					token := strings.TrimSpace(svc.Orchestrator.AgentToken)
+					if token == "" {
+						continue
+					}
+					out.InternalProxy.AllowedTokens[token] = strings.TrimSpace(svc.ServiceID)
+				}
+			}
+		}
+	}
+	if len(out.ManagedServiceTargets) == 0 {
+		out.ManagedServiceTargets = loadManagedServiceTargetsFromEnv(logger)
+	}
+	if len(out.InternalProxy.AllowedTokens) == 0 {
+		out.InternalProxy.AllowedTokens = loadInternalProxyTokensFromEnv()
+	}
+	if out.InternalProxy.UpstreamBaseURL == "" {
+		out.InternalProxy.UpstreamBaseURL = strings.TrimSpace(os.Getenv("ORCHESTRATOR_URL"))
+	}
+	return out
+}
+
+func deriveManagedServiceTargetsFromNodeConfig(cfg *nodepayloads.NodeConfigurationPayload) map[string]managedServiceTarget {
+	// Node configuration does not currently include managed-service endpoint URLs.
+	// Targets are supplied via worker env (hydrated by node-manager from desired state).
+	_ = cfg
+	return map[string]managedServiceTarget{}
+}
+
+func loadInternalProxyTokensFromEnv() map[string]string {
+	raw := strings.TrimSpace(os.Getenv("WORKER_INTERNAL_AGENT_TOKENS_JSON"))
+	if raw == "" {
+		return map[string]string{}
+	}
+	var mapped map[string]string
+	if err := json.Unmarshal([]byte(raw), &mapped); err != nil {
+		return map[string]string{}
+	}
+	return mapped
+}
+
+func handleInternalOrchestratorProxy(cfg internalOrchestratorProxyConfig, logger *slog.Logger, endpoint string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if !isLoopbackRequest(r) {
+			writeProblem(w, http.StatusForbidden, problem.TypeAuthentication, "Forbidden", "internal endpoint requires loopback or unix-socket access")
+			return
+		}
+		token, serviceID, ok := authenticateInternalProxyRequest(r, cfg)
+		if !ok {
+			writeProblem(w, http.StatusUnauthorized, problem.TypeAuthentication, "Unauthorized", "invalid or missing agent token or capability lease")
+			return
+		}
+		if strings.TrimSpace(cfg.UpstreamBaseURL) == "" {
+			writeProblem(w, http.StatusBadGateway, problem.TypeInternal, "Bad Gateway", "internal proxy upstream not configured")
+			return
+		}
+		reqPayload, reqBody, ok := decodeManagedProxyRequest(w, r)
+		if !ok {
+			return
+		}
+		target := managedServiceTarget{
+			ServiceType: "orchestrator",
+			BaseURL:     strings.TrimSpace(cfg.UpstreamBaseURL),
+		}
+		start := time.Now()
+		respPayload, status, detail := forwardManagedProxyRequest(r.Context(), target, reqPayload, reqBody)
+		if status != 0 {
+			writeProblem(w, status, problem.TypeValidation, http.StatusText(status), detail)
+			return
+		}
+		if logger != nil {
+			logger.Info(
+				"internal orchestrator proxy call",
+				"endpoint", endpoint,
+				"service_id", serviceID,
+				"token_present", token != "",
+				"method", reqPayload.Method,
+				"path", reqPayload.Path,
+				"upstream_status", respPayload.Status,
+				"duration_ms", int(time.Since(start).Milliseconds()),
+			)
+		}
+		writeJSON(w, http.StatusOK, respPayload)
+	}
+}
+
+func authenticateInternalProxyRequest(r *http.Request, cfg internalOrchestratorProxyConfig) (token, serviceID string, ok bool) {
+	if t := strings.TrimSpace(r.Header.Get("X-Cynode-Capability-Lease")); t != "" {
+		if sid, exists := cfg.AllowedTokens[t]; exists {
+			return t, sid, true
+		}
+	}
+	authz := r.Header.Get("Authorization")
+	const prefix = "Bearer "
+	if len(authz) <= len(prefix) || authz[:len(prefix)] != prefix {
+		return "", "", false
+	}
+	t := authz[len(prefix):]
+	sid, exists := cfg.AllowedTokens[t]
+	if !exists {
+		return "", "", false
+	}
+	return t, sid, true
+}
+
+func isLoopbackRequest(r *http.Request) bool {
+	if local := r.Context().Value(http.LocalAddrContextKey); local != nil {
+		if addr, ok := local.(net.Addr); ok && addr.Network() == "unix" {
+			return true
+		}
+	}
+	host := r.RemoteAddr
+	if strings.Contains(host, ":") {
+		if h, _, err := net.SplitHostPort(host); err == nil {
+			host = h
+		}
+	}
+	ip := net.ParseIP(strings.Trim(host, "[]"))
+	return ip != nil && ip.IsLoopback()
 }
 
 func loadManagedServiceTargetsFromEnv(logger *slog.Logger) map[string]managedServiceTarget {
@@ -477,6 +679,20 @@ func prepareWorkspace(workspaceRoot, jobID string) (dir string, cleanup func(), 
 func newServer(handler http.Handler) *http.Server {
 	return &http.Server{
 		Addr:              getEnv("LISTEN_ADDR", ":9190"),
+		Handler:           handler,
+		ReadHeaderTimeout: 30 * time.Second,
+		ReadTimeout:       30 * time.Second,
+		// /v1/worker/jobs:run is synchronous and can exceed 30s for SBA/inference workloads.
+		// Keep write timeout disabled so long-running jobs do not terminate with EOF mid-flight.
+		WriteTimeout:   0,
+		IdleTimeout:       120 * time.Second,
+		MaxHeaderBytes:    1 << 20,
+	}
+}
+
+func newInternalServer(handler http.Handler) *http.Server {
+	return &http.Server{
+		Addr:              getEnv("WORKER_INTERNAL_LISTEN_ADDR", "127.0.0.1:9191"),
 		Handler:           handler,
 		ReadHeaderTimeout: 30 * time.Second,
 		ReadTimeout:       30 * time.Second,

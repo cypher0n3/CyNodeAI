@@ -253,7 +253,9 @@ def start_orchestrator_stack_compose(extra_env=None, ollama_in_stack=False):
     """Compose down, rm stray containers, compose up -d with env.
 
     ollama_in_stack: if True (bypass), include ollama profile so OLLAMA runs in compose.
-    Prescribed sequence (default): False, orchestrator starts without OLLAMA; node starts inference when instructed.
+    Prescribed (default False): orchestrator starts without OLLAMA per
+    docs/tech_specs/orchestrator_bootstrap.md CYNAI.BOOTST.OrchestratorIndependentStartup
+    and prescribed startup sequence (node starts inference when instructed via config).
     """
     if not _cfg.ensure_runtime():
         return False
@@ -292,7 +294,9 @@ def start_orchestrator_stack_compose(extra_env=None, ollama_in_stack=False):
         check=False,
         shell=False,
     )
-    # Up: optional always; ollama only when bypass; pma never (PMA via compose or orchestrator later).
+    # Up: optional always; ollama only when bypass (--ollama-in-stack); pma never at initial up
+    # (PMA started later: by script when --pma-via-compose, or by orchestrator/worker when prescribed).
+    # Ref: orchestrator_bootstrap.md Orchestrator Independent Startup, PMA Startup.
     up_profiles = ["--profile", "optional"]
     if ollama_in_stack:
         up_profiles.extend(["--profile", "ollama"])
@@ -335,7 +339,11 @@ def stop_orchestrator_stack_compose(leave_ollama_running=False):
 
 
 def wait_for_control_plane_listening():
-    """Wait for control-plane /readyz 200 or 503."""
+    """Wait for control-plane /readyz 200 or 503.
+
+    Unused by normal startup: node-manager polls orchestrator readiness itself (worker_node spec).
+    Kept for optional use by other flows (e.g. scripts that need to assert control-plane up without starting a node).
+    """
     url = f"http://127.0.0.1:{_cfg.CONTROL_PLANE_PORT}/readyz"
     log_info(f"Waiting for control-plane at {url} (up to 90s)...")
     for _ in range(90):
@@ -374,6 +382,9 @@ def wait_for_orchestrator_readyz(timeout_sec=120):
 def start_node(extra_env=None):
     """Start node-manager in background; wait for worker-api healthz.
 
+    The node-manager is responsible for polling the orchestrator control-plane /readyz before
+    registering (worker_node startup procedure; see docs/tech_specs/worker_node.md). This script
+    does not wait for control-plane; it starts the node immediately after compose up.
     extra_env: optional dict merged into node process env (e.g.
     INFERENCE_PROXY_IMAGE, OLLAMA_UPSTREAM_URL for full-demo).
     """
@@ -436,7 +447,13 @@ _PMA_START_DELAY_AFTER_NODE = 5
 
 
 def start_pma_container(extra_env=None):
-    """Start cynode-pma container via compose profile 'pma' (spec: after inference path exists)."""
+    """Start cynode-pma container only, via compose profile 'pma'.
+
+    Used only when bypass --pma-via-compose is set (orchestrator_bootstrap.md: prescribed
+    path is orchestrator instructs worker to start PMA; bypass = script starts PMA here).
+    We start cynode-pma only; do not start ollama (ollama is either already in stack via
+    --ollama-in-stack or not used per prescribed sequence).
+    """
     if not _cfg.ensure_runtime():
         return False
     if not os.path.isfile(_cfg.COMPOSE_FILE):
@@ -444,7 +461,7 @@ def start_pma_container(extra_env=None):
     env = _cfg.compose_env()
     if extra_env:
         env.update(extra_env)
-    log_info("Starting PMA container (orchestrator_bootstrap: after inference path)...")
+    log_info("Starting PMA container (bypass: compose profile pma)...")
     if not run(
         [_cfg.RUNTIME, "compose", "-f", _cfg.COMPOSE_FILE,
          "--profile", "ollama", "--profile", "optional", "--profile", "pma",
@@ -479,8 +496,10 @@ def start_pma_after_inference_path(extra_env=None, pma_via_compose=False):
     """After node is up: either start PMA via compose (bypass) or rely on prescribed path.
 
     pma_via_compose: if True (bypass), start cynode-pma container via compose and wait for healthz.
-    Prescribed (default False): do not start PMA here; orchestrator instructs worker to start PMA when inference path exists.
-    When prescribed we optionally wait for orchestrator /readyz 200 (PMA reported by worker).
+    Prescribed (default False): do not start PMA here; orchestrator instructs worker to start PMA
+    when inference path exists (orchestrator_bootstrap.md CYNAI.BOOTST.OrchestratorReadinessAndPmaStartup).
+    When prescribed we wait for orchestrator /readyz 200 only; no compose fallback (use --pma-via-compose
+    if worker-managed PMA is not yet implemented).
     """
     time.sleep(_PMA_START_DELAY_AFTER_NODE)
     if pma_via_compose:

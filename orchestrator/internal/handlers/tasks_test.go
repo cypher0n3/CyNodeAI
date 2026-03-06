@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -94,6 +95,109 @@ func TestCreateTaskRequestJSON(t *testing.T) {
 	roundTripJSON(t, userapi.CreateTaskRequest{Prompt: "p", UseSBA: true}, &parsed)
 	if parsed.Prompt != "p" || !parsed.UseSBA {
 		t.Errorf("expected prompt 'p' UseSBA true, got %q %v", parsed.Prompt, parsed.UseSBA)
+	}
+	projectID := uuid.New().String()
+	roundTripJSON(t, userapi.CreateTaskRequest{Prompt: "p", ProjectID: &projectID}, &parsed)
+	if parsed.ProjectID == nil || *parsed.ProjectID != projectID {
+		t.Errorf("expected project_id %q, got %v", projectID, parsed.ProjectID)
+	}
+}
+
+func TestTaskStatusToSpec(t *testing.T) {
+	tests := []struct {
+		in   string
+		want string
+	}{
+		{in: models.TaskStatusPending, want: userapi.StatusQueued},
+		{in: models.TaskStatusCancelled, want: userapi.StatusCancelled},
+		{in: models.TaskStatusSuperseded, want: userapi.StatusSuperseded},
+		{in: models.TaskStatusCompleted, want: models.TaskStatusCompleted},
+	}
+	for _, tt := range tests {
+		if got := taskStatusToSpec(tt.in); got != tt.want {
+			t.Errorf("taskStatusToSpec(%q) = %q, want %q", tt.in, got, tt.want)
+		}
+	}
+}
+
+func TestResolveTaskProjectID(t *testing.T) {
+	mockDB := testutil.NewMockDB()
+	handler := NewTaskHandler(mockDB, slog.Default(), "", "")
+	userID := uuid.New()
+
+	reqProjectID := uuid.New().String()
+	projectID, err := handler.resolveTaskProjectID(context.Background(), &userID, &reqProjectID)
+	if err != nil {
+		t.Fatalf("resolveTaskProjectID explicit: %v", err)
+	}
+	if projectID == nil || projectID.String() != reqProjectID {
+		t.Fatalf("resolved project_id = %v, want %s", projectID, reqProjectID)
+	}
+
+	bad := "bad-id"
+	_, err = handler.resolveTaskProjectID(context.Background(), &userID, &bad)
+	if !errors.Is(err, errInvalidProjectID) {
+		t.Fatalf("expected errInvalidProjectID, got %v", err)
+	}
+
+	projectID, err = handler.resolveTaskProjectID(context.Background(), &userID, nil)
+	if err != nil {
+		t.Fatalf("resolveTaskProjectID default: %v", err)
+	}
+	if projectID == nil {
+		t.Fatal("expected default project id")
+	}
+
+	projectID, err = handler.resolveTaskProjectID(context.Background(), nil, nil)
+	if err != nil {
+		t.Fatalf("resolveTaskProjectID nil user: %v", err)
+	}
+	if projectID != nil {
+		t.Fatalf("expected nil project id for nil user, got %v", projectID)
+	}
+}
+
+func TestParseListTasksParams_StatusAliasCanceled(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "/v1/tasks?status=canceled", http.NoBody)
+	_, _, status, _, errCode := parseListTasksParams(req)
+	if errCode != 0 {
+		t.Fatalf("unexpected errCode=%d", errCode)
+	}
+	if status != userapi.StatusCancelled {
+		t.Fatalf("status=%q, want %q", status, userapi.StatusCancelled)
+	}
+}
+
+func TestParseListTasksParams_CursorRoundTrip(t *testing.T) {
+	req := httptest.NewRequest(http.MethodGet, "/v1/tasks?cursor=20", http.NoBody)
+	_, _, _, cursor, errCode := parseListTasksParams(req)
+	if errCode != 0 {
+		t.Fatalf("unexpected errCode=%d", errCode)
+	}
+	if cursor != "20" {
+		t.Fatalf("cursor=%q", cursor)
+	}
+}
+
+func TestPersistTaskAttachments_FilterAndStore(t *testing.T) {
+	mockDB := testutil.NewMockDB()
+	handler := NewTaskHandler(mockDB, slog.Default(), "", "")
+	taskID := uuid.New()
+	tooLong := strings.Repeat("x", maxAttachmentPathLen+1)
+	in := []string{"", "  ", tooLong, "valid/a.txt"}
+	stored := handler.persistTaskAttachments(context.Background(), taskID, in)
+	if len(stored) != 1 || stored[0] != "valid/a.txt" {
+		t.Fatalf("stored=%v", stored)
+	}
+}
+
+func TestPersistTaskAttachments_CreateArtifactError(t *testing.T) {
+	mockDB := testutil.NewMockDB()
+	mockDB.ForceError = errors.New("db error")
+	handler := NewTaskHandler(mockDB, slog.Default(), "", "")
+	stored := handler.persistTaskAttachments(context.Background(), uuid.New(), []string{"valid/a.txt"})
+	if len(stored) != 0 {
+		t.Fatalf("expected no stored paths on artifact error, got %v", stored)
 	}
 }
 

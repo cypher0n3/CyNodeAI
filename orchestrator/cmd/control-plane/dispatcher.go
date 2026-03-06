@@ -22,7 +22,7 @@ func loadDispatcherConfig() dispatcherConfig {
 	return dispatcherConfig{
 		Enabled:      getEnv("DISPATCHER_ENABLED", "true") == "true",
 		PollInterval: getDurationEnv("DISPATCH_POLL_INTERVAL", 1*time.Second),
-		HTTPTimeout:  getDurationEnv("DISPATCH_HTTP_TIMEOUT", 5*time.Minute),
+		HTTPTimeout:  getDurationEnv("DISPATCH_HTTP_TIMEOUT", 90*time.Second),
 	}
 }
 

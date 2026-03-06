@@ -13,6 +13,7 @@ func TestTaskStatusConstants(t *testing.T) {
 		TaskStatusCompleted,
 		TaskStatusFailed,
 		TaskStatusCancelled,
+		TaskStatusSuperseded,
 	}
 
 	for _, s := range statuses {

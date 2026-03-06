@@ -227,6 +227,7 @@ const (
 	TaskStatusCompleted = "completed"
 	TaskStatusFailed    = "failed"
 	TaskStatusCancelled = "cancelled"
+	TaskStatusSuperseded = "superseded"
 )
 
 // JobStatus constants.

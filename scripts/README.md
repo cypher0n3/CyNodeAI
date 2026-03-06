@@ -1,10 +1,12 @@
 # Scripts
 
 - [Overview](#overview)
-- [Directory layout](#directory-layout)
-- [Python dev setup](#python-dev-setup)
-- [E2E test suite](#e2e-test-suite)
-- [Justfile entry points](#justfile-entry-points)
+- [Directory Layout](#directory-layout)
+- [Python Dev Setup](#python-dev-setup)
+  - [Startup Sequence (Start / Full-Demo / Restart)](#startup-sequence-start--full-demo--restart)
+  - [`setup-dev` Commands](#setup-dev-commands)
+- [E2E Test Suite](#e2e-test-suite)
+- [Justfile Entry Points](#justfile-entry-points)
 - [Environment](#environment)
 - [Lint](#lint)
 
@@ -31,7 +33,23 @@ Python dev setup replaces bash for all commands; the bash script remains for ref
 Run from repo root with `PYTHONPATH=.` so the `scripts` package resolves.
 Use **just setup-dev** so PYTHONPATH is set for you.
 
-Commands (same as `setup-dev.sh`):
+### Startup Sequence (Start / Full-Demo / Restart)
+
+When you run `just setup-dev start`, `full-demo`, or `restart`, the following run in order:
+
+1. **Build binaries** - `just build-dev` (orchestrator, worker_node, cynork, agents).
+2. **Compose up (orchestrator stack)** - Postgres, control-plane, user-gateway, optional profile (mcp-gateway, api-egress).
+   OLLAMA and PMA are not started at this step unless bypasses are used.
+3. **Start node** - Script runs the node-manager binary (worker_node/bin/node-manager-dev).
+   The node-manager polls the orchestrator control-plane `/readyz` itself before registering (per worker_node startup procedure); the script does not wait for control-plane.
+   Script then waits for worker-api `/healthz` up to 15s.
+4. **PMA (bypass only)** - If bypass `--pma-via-compose`: script starts cynode-pma container and waits for PMA healthz.
+   Prescribed (default): script does not start or wait for PMA; the worker node starts PMA when the orchestrator directs (orchestrator_bootstrap.md, worker_node managed services).
+
+Compose images (control-plane, user-gateway, cynode-pma) are not built by `start`; they are built by `full-demo` before this sequence.
+For `just setup-dev start` to reach the node step, those images must already exist (e.g. run `full-demo` once, or build them separately).
+
+### `setup-dev` Commands
 
 - **start-db** - Start standalone Postgres container (podman/docker).
 - **stop-db** - Stop the Postgres container.
@@ -39,9 +57,8 @@ Commands (same as `setup-dev.sh`):
 - **migrate** - No-op; migrations run when control-plane starts.
 - **build** - Run `just build-dev` (orchestrator, worker_node, cynork, agents binaries).
 - **build-e2e-images** - Build inference-proxy and cynode-sba images for E2E (incremental when unchanged; use `E2E_FORCE_REBUILD=1` or `SETUP_DEV_FORCE_BUILD=1` to force).
-- **start** - Build, compose up (orchestrator stack), wait for control-plane, start node-manager.
-  Default is **prescribed sequence** (orchestrator without OLLAMA in stack; PMA started by orchestrator/worker when inference path exists).
-  Use **bypasses** for convenience: `--ollama-in-stack` and/or `--pma-via-compose`, or env `SETUP_DEV_OLLAMA_IN_STACK=1`, `SETUP_DEV_PMA_VIA_COMPOSE=1`.
+- **start** - Runs the full startup sequence above (build binaries, compose up, **start node** (node polls control-plane), then PMA step).
+  Default is prescribed sequence; use bypasses `--ollama-in-stack` and/or `--pma-via-compose` (or env) for OLLAMA/PMA via compose.
 - **stop** - Kill node-manager, free worker port, compose down, remove containers.
 - **restart** - Stop all then start (same as stop + start); accepts same bypass flags as start.
 - **clean** - Stop all services and remove postgres container/volume.

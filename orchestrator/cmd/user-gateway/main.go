@@ -76,6 +76,11 @@ func run(ctx context.Context, cfg *config.OrchestratorConfig, store database.Sto
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte("ok"))
 	})
+	mux.HandleFunc("GET /readyz", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("ready"))
+	})
 
 	maxBodyBytes := int64(cfg.MaxRequestBodyMB) * 1024 * 1024
 

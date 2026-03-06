@@ -99,6 +99,13 @@ func TestRun_StartAndShutdown(t *testing.T) {
 			t.Errorf("healthz: got %d", resp.StatusCode)
 		}
 	}
+	readyResp, readyErr := http.Get("http://127.0.0.1:18080/readyz")
+	if readyErr == nil {
+		_ = readyResp.Body.Close()
+		if readyResp.StatusCode != http.StatusOK && readyResp.StatusCode != http.StatusServiceUnavailable {
+			t.Errorf("readyz: got %d", readyResp.StatusCode)
+		}
+	}
 	cancel()
 	time.Sleep(150 * time.Millisecond)
 	select {

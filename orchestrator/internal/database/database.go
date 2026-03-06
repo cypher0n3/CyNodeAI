@@ -61,7 +61,7 @@ type Store interface {
 	CreateAuthAuditLog(ctx context.Context, userID *uuid.UUID, eventType string, success bool, ipAddress, userAgent, subjectHandle, reason *string) error
 
 	// Task operations (taskName optional; when set, normalized and made unique per user).
-	CreateTask(ctx context.Context, createdBy *uuid.UUID, prompt string, taskName *string) (*models.Task, error)
+	CreateTask(ctx context.Context, createdBy *uuid.UUID, prompt string, taskName *string, projectID ...*uuid.UUID) (*models.Task, error)
 	GetTaskByID(ctx context.Context, id uuid.UUID) (*models.Task, error)
 	UpdateTaskStatus(ctx context.Context, taskID uuid.UUID, status string) error
 	UpdateTaskSummary(ctx context.Context, taskID uuid.UUID, summary string) error
@@ -106,6 +106,7 @@ type Store interface {
 	GetArtifactByTaskIDAndPath(ctx context.Context, taskID uuid.UUID, path string) (*models.TaskArtifact, error)
 	CreateTaskArtifact(ctx context.Context, taskID uuid.UUID, path, storageRef string, sizeBytes *int64) (*models.TaskArtifact, error)
 	ListArtifactPathsByTaskID(ctx context.Context, taskID uuid.UUID) ([]string, error)
+	GetOrCreateDefaultProjectForUser(ctx context.Context, userID uuid.UUID) (*models.Project, error)
 
 	// Chat threads and messages (OpenAI-compatible chat API).
 	GetOrCreateActiveChatThread(ctx context.Context, userID uuid.UUID, projectID *uuid.UUID) (*models.ChatThread, error)

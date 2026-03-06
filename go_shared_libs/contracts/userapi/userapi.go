@@ -5,11 +5,14 @@ package userapi
 
 // API-facing task/job status constants (returned in REST responses; used by CLI/Web Console).
 const (
-	StatusQueued    = "queued"
-	StatusRunning   = "running"
-	StatusCompleted = "completed"
-	StatusFailed    = "failed"
-	StatusCanceled  = "canceled"
+	StatusQueued     = "queued"
+	StatusRunning    = "running"
+	StatusCompleted  = "completed"
+	StatusFailed     = "failed"
+	StatusCancelled  = "cancelled"
+	StatusSuperseded = "superseded"
+	// StatusCanceled is kept as a compatibility alias for older clients.
+	StatusCanceled = StatusCancelled
 )
 
 // --- Auth ---
@@ -51,6 +54,7 @@ type UserResponse struct {
 // CreateTaskRequest is the body for POST /v1/tasks.
 type CreateTaskRequest struct {
 	Prompt       string   `json:"prompt"`
+	ProjectID    *string  `json:"project_id,omitempty"`
 	UseInference bool     `json:"use_inference,omitempty"`
 	InputMode    string   `json:"input_mode,omitempty"`
 	// UseSBA when true creates a single job with SBA runner (job_spec_json); prompt is passed as task context (P2-10).

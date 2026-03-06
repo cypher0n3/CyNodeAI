@@ -74,14 +74,25 @@ type RunOptions struct {
 }
 
 // Run performs registration, config fetch, service startup, config ack, then capability reporting until ctx is cancelled.
-// Order: register => fetch config => start worker API (if token present) => start Ollama (if set) => config ack => capability loop.
+// Order (per worker_node.md Node Startup Procedure): wait for orchestrator readiness => run startup checks
+// (container runtime, existing inference detection) => register => fetch config => start worker API => start Ollama (if instructed) => config ack => capability loop.
 func Run(ctx context.Context, logger *slog.Logger, cfg *Config) error {
 	return RunWithOptions(ctx, logger, cfg, nil)
 }
 
 // RunWithOptions is like Run but accepts optional StartWorkerAPI and StartOllama; nil means skip that step.
+// The node is responsible for waiting for the orchestrator control-plane to be reachable before
+// registering (see worker_node.md / startup procedure); the script does not poll for control-plane readiness.
+// Per Node Startup Procedure and Node Startup Checks (worker_node.md): the node performs initial
+// startup checks (container runtime, existing inference detection) before registering with the orchestrator.
 func RunWithOptions(ctx context.Context, logger *slog.Logger, cfg *Config, opts *RunOptions) error {
 	if err := cfg.Validate(); err != nil {
+		return err
+	}
+	if err := waitForOrchestratorReadiness(ctx, logger, cfg); err != nil {
+		return err
+	}
+	if err := runStartupChecks(ctx, logger, cfg); err != nil {
 		return err
 	}
 	bootstrap, err := register(ctx, cfg)
@@ -108,6 +119,7 @@ func RunWithOptions(ctx context.Context, logger *slog.Logger, cfg *Config, opts 
 // applyConfigAndStartServices starts Worker API and Ollama from opts (if set), then sends config ack.
 // OLLAMA is started only when no existing host inference is detected and config instructs (inference_backend.enabled).
 func applyConfigAndStartServices(ctx context.Context, logger *slog.Logger, cfg *Config, bootstrap *BootstrapData, nodeConfig *nodepayloads.NodeConfigurationPayload, opts *RunOptions) error {
+	applyWorkerProxyConfigEnv(nodeConfig)
 	if opts != nil && opts.StartWorkerAPI != nil && nodeConfig != nil && nodeConfig.WorkerAPI != nil && nodeConfig.WorkerAPI.OrchestratorBearerToken != "" {
 		if err := opts.StartWorkerAPI(nodeConfig.WorkerAPI.OrchestratorBearerToken); err != nil {
 			return fmt.Errorf("start worker API: %w", err)
@@ -127,6 +139,50 @@ func applyConfigAndStartServices(ctx context.Context, logger *slog.Logger, cfg *
 		logger.Info("config applied and acknowledged", "config_version", nodeConfig.ConfigVersion)
 	}
 	return nil
+}
+
+func applyWorkerProxyConfigEnv(nodeConfig *nodepayloads.NodeConfigurationPayload) {
+	if nodeConfig == nil {
+		return
+	}
+	if raw, err := json.Marshal(nodeConfig); err == nil {
+		_ = os.Setenv("WORKER_NODE_CONFIG_JSON", string(raw))
+	}
+	if nodeConfig.Orchestrator.BaseURL != "" {
+		_ = os.Setenv("ORCHESTRATOR_INTERNAL_PROXY_BASE_URL", nodeConfig.Orchestrator.BaseURL)
+	}
+	if targets := buildManagedServiceTargetsFromConfig(nodeConfig); len(targets) > 0 {
+		if raw, err := json.Marshal(targets); err == nil {
+			_ = os.Setenv("WORKER_MANAGED_SERVICE_TARGETS_JSON", string(raw))
+		}
+	}
+}
+
+func buildManagedServiceTargetsFromConfig(nodeConfig *nodepayloads.NodeConfigurationPayload) map[string]map[string]string {
+	targets := map[string]map[string]string{}
+	if nodeConfig == nil || nodeConfig.ManagedServices == nil {
+		return targets
+	}
+	pmaBaseURL := strings.TrimSpace(getEnv("PMA_BASE_URL", "http://127.0.0.1:8090"))
+	for _, svc := range nodeConfig.ManagedServices.Services {
+		serviceID := strings.TrimSpace(svc.ServiceID)
+		serviceType := strings.TrimSpace(svc.ServiceType)
+		if serviceID == "" || serviceType == "" {
+			continue
+		}
+		baseURL := ""
+		switch serviceType {
+		case "pma":
+			baseURL = pmaBaseURL
+		default:
+			continue
+		}
+		targets[serviceID] = map[string]string{
+			"service_type": serviceType,
+			"base_url":     baseURL,
+		}
+	}
+	return targets
 }
 
 func maybeStartOllama(ctx context.Context, logger *slog.Logger, nodeConfig *nodepayloads.NodeConfigurationPayload, opts *RunOptions, existingService bool) error {
@@ -229,6 +285,91 @@ func SendConfigAck(ctx context.Context, cfg *Config, bootstrap *BootstrapData, n
 		var p problem.Details
 		_ = json.NewDecoder(resp.Body).Decode(&p)
 		return fmt.Errorf("config ack: %s (%d) %s", resp.Status, resp.StatusCode, p.Detail)
+	}
+	return nil
+}
+
+// waitForOrchestratorReadiness polls the control-plane /readyz until it returns 200 or 503
+// (control-plane is listening). Per worker_node startup procedure and orchestrator_bootstrap.md:
+// the node handles orchestrator readiness; the dev script does not poll before starting the node.
+const defaultOrchestratorReadinessTimeout = 90 * time.Second
+const orchestratorReadinessInterval = 1 * time.Second
+
+func waitForOrchestratorReadiness(ctx context.Context, logger *slog.Logger, cfg *Config) error {
+	timeout := defaultOrchestratorReadinessTimeout
+	if d := getDurationEnv("NODE_MANAGER_READINESS_TIMEOUT", 0); d > 0 {
+		timeout = d
+	}
+	url := strings.TrimSuffix(cfg.OrchestratorURL, "/") + "/readyz"
+	deadline := time.Now().Add(timeout)
+	client := &http.Client{Timeout: 2 * time.Second}
+	for time.Now().Before(deadline) {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+		if err != nil {
+			time.Sleep(orchestratorReadinessInterval)
+			continue
+		}
+		resp, err := client.Do(req)
+		if err != nil {
+			time.Sleep(orchestratorReadinessInterval)
+			continue
+		}
+		_ = resp.Body.Close()
+		if resp.StatusCode == http.StatusOK || resp.StatusCode == http.StatusServiceUnavailable {
+			if logger != nil {
+				logger.Info("orchestrator control-plane reachable", "readyz", resp.StatusCode)
+			}
+			return nil
+		}
+		time.Sleep(orchestratorReadinessInterval)
+	}
+	return fmt.Errorf("orchestrator control-plane not reachable at %s within %v", url, timeout)
+}
+
+// runStartupChecks runs initial startup checks before registering with the orchestrator.
+// Per docs/tech_specs/worker_node.md Node Startup Procedure (steps 3–4) and Node Startup Checks:
+// verify container runtime can run containers; detect existing inference (OLLAMA) and log so
+// the capability report sent at registration is accurate. The node MUST NOT report ready until
+// these pass; we run them before register so we fail fast if the runtime is unavailable.
+func runStartupChecks(ctx context.Context, logger *slog.Logger, cfg *Config) error {
+	if err := checkContainerRuntime(ctx, logger, cfg); err != nil {
+		return fmt.Errorf("startup check (container runtime): %w", err)
+	}
+	existing, running := detectExistingInference(ctx)
+	if logger != nil {
+		logger.Info("startup check: existing inference", "existing_service", existing, "running", running)
+	}
+	return nil
+}
+
+const containerRuntimeCheckTimeout = 30 * time.Second
+
+// checkContainerRuntime verifies the configured container runtime (Podman or Docker) can create
+// and run a container. Per worker_node.md Node Startup Checks: if the runtime is unavailable
+// or fails the check, the node MUST NOT report ready. Skip when NODE_MANAGER_SKIP_CONTAINER_CHECK is set (e.g. tests).
+func checkContainerRuntime(ctx context.Context, logger *slog.Logger, cfg *Config) error {
+	if getEnv("NODE_MANAGER_SKIP_CONTAINER_CHECK", "") != "" {
+		if logger != nil {
+			logger.Info("startup check: container runtime skipped (NODE_MANAGER_SKIP_CONTAINER_CHECK)")
+		}
+		return nil
+	}
+	rt := getEnv("CONTAINER_RUNTIME", "podman")
+	// Use a minimal image and run a no-op; image may be pulled on first run.
+	image := getEnv("NODE_MANAGER_RUNTIME_CHECK_IMAGE", "docker.io/library/busybox:latest")
+	checkCtx, cancel := context.WithTimeout(ctx, containerRuntimeCheckTimeout)
+	defer cancel()
+	cmd := exec.CommandContext(checkCtx, rt, "run", "--rm", image, "true")
+	cmd.Env = os.Environ()
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("%s run --rm %s true: %w (output: %s)", rt, image, err, strings.TrimSpace(string(out)))
+	}
+	if logger != nil {
+		logger.Info("startup check: container runtime OK", "runtime", rt)
 	}
 	return nil
 }

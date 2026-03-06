@@ -41,3 +41,22 @@ func TestNormalizeTaskName_LowercaseAndTrim(t *testing.T) {
 		t.Errorf("normalizeTaskName(\"-leading-trailing-\") = %q, want \"leading-trailing\"", got)
 	}
 }
+
+func TestIsTerminalTaskStatus(t *testing.T) {
+	tests := []struct {
+		status string
+		want   bool
+	}{
+		{status: "pending", want: false},
+		{status: "running", want: false},
+		{status: "completed", want: true},
+		{status: "failed", want: true},
+		{status: "cancelled", want: true},
+		{status: "superseded", want: true},
+	}
+	for _, tt := range tests {
+		if got := isTerminalTaskStatus(tt.status); got != tt.want {
+			t.Errorf("isTerminalTaskStatus(%q) = %v, want %v", tt.status, got, tt.want)
+		}
+	}
+}

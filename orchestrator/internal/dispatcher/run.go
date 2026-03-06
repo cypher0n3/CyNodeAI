@@ -7,6 +7,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -117,6 +118,26 @@ func normalizeSBAResultSurface(result *workerapi.RunJobResponse) {
 }
 
 func callWorkerAPI(ctx context.Context, client *http.Client, workerBaseURL, bearerToken string, req *workerapi.RunJobRequest) (*workerapi.RunJobResponse, error) {
+	var lastErr error
+	for attempt := 0; attempt < 3; attempt++ {
+		runResp, err := callWorkerAPIOnce(ctx, client, workerBaseURL, bearerToken, req)
+		if err == nil {
+			return runResp, nil
+		}
+		lastErr = err
+		if !isTransientWorkerDispatchError(err) || attempt == 2 {
+			break
+		}
+		select {
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		case <-time.After(500 * time.Millisecond):
+		}
+	}
+	return nil, lastErr
+}
+
+func callWorkerAPIOnce(ctx context.Context, client *http.Client, workerBaseURL, bearerToken string, req *workerapi.RunJobRequest) (*workerapi.RunJobResponse, error) {
 	b, err := json.Marshal(req)
 	if err != nil {
 		return nil, err
@@ -145,4 +166,19 @@ func callWorkerAPI(ctx context.Context, client *http.Client, workerBaseURL, bear
 		return nil, fmt.Errorf("unsupported worker response version: %d", runResp.Version)
 	}
 	return &runResp, nil
+}
+
+func isTransientWorkerDispatchError(err error) bool {
+	if err == nil {
+		return false
+	}
+	msg := strings.ToLower(err.Error())
+	return errorsIsEOF(err) ||
+		strings.Contains(msg, "connection refused") ||
+		strings.Contains(msg, "connection reset") ||
+		strings.Contains(msg, "timeout")
+}
+
+func errorsIsEOF(err error) bool {
+	return err == io.EOF || strings.Contains(strings.ToLower(err.Error()), "eof")
 }

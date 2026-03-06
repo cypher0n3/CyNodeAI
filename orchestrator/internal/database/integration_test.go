@@ -39,7 +39,7 @@ func TestIntegration_User(t *testing.T) {
 
 func TestIntegration_CreateTaskWithNilCreatedBy(t *testing.T) {
 	db, ctx := integrationDB(t)
-	task, err := db.CreateTask(ctx, nil, "prompt-nil-createdby", nil)
+	task, err := db.CreateTask(ctx, nil, "prompt-nil-createdby", nil, nil)
 	if err != nil {
 		t.Fatalf("CreateTask(nil createdBy): %v", err)
 	}
@@ -54,7 +54,7 @@ func TestIntegration_TaskAndJob(t *testing.T) {
 	if err != nil {
 		t.Skip("create inttest-user first (run TestIntegration_User)")
 	}
-	task, err := db.CreateTask(ctx, &user.ID, "prompt", nil)
+	task, err := db.CreateTask(ctx, &user.ID, "prompt", nil, nil)
 	if err != nil {
 		t.Fatalf("CreateTask: %v", err)
 	}
@@ -239,7 +239,7 @@ func TestIntegration_Preferences_EffectiveAndCursor(t *testing.T) {
 	if err := db.GORM().WithContext(ctx).Create(ent).Error; err != nil {
 		t.Fatalf("create preference: %v", err)
 	}
-	task, err := db.CreateTask(ctx, nil, "eff-prompt", nil)
+	task, err := db.CreateTask(ctx, nil, "eff-prompt", nil, nil)
 	if err != nil {
 		t.Fatalf("CreateTask: %v", err)
 	}
@@ -316,13 +316,13 @@ func TestIntegration_Preferences_EffectiveWithProject(t *testing.T) {
 		pid := uuid.New()
 		now := time.Now().UTC()
 		_ = db.GORM().WithContext(ctx).Create(&models.Project{ID: pid, Slug: "default", DisplayName: "Default", IsActive: true, CreatedAt: now, UpdatedAt: now}).Error
-		task2, _ := db.CreateTask(ctx, &user.ID, "eff2", nil)
+		task2, _ := db.CreateTask(ctx, &user.ID, "eff2", nil, nil)
 		if task2 != nil {
 			_ = db.GORM().WithContext(ctx).Model(&models.Task{}).Where("id = ?", task2.ID).Update("project_id", pid).Error
 			_, _ = db.GetEffectivePreferencesForTask(ctx, task2.ID)
 		}
 	} else {
-		task2, _ := db.CreateTask(ctx, &user.ID, "eff2", nil)
+		task2, _ := db.CreateTask(ctx, &user.ID, "eff2", nil, nil)
 		if task2 != nil {
 			_ = db.GORM().WithContext(ctx).Model(&models.Task{}).Where("id = ?", task2.ID).Update("project_id", proj.ID).Error
 			_, _ = db.GetEffectivePreferencesForTask(ctx, task2.ID)
@@ -401,7 +401,7 @@ func TestIntegration_Preferences_EffectiveWithNilValue(t *testing.T) {
 	if err := db.GORM().WithContext(ctx).Create(ent).Error; err != nil {
 		t.Fatalf("create preference: %v", err)
 	}
-	task, err := db.CreateTask(ctx, nil, "eff-nil-val", nil)
+	task, err := db.CreateTask(ctx, nil, "eff-nil-val", nil, nil)
 	if err != nil {
 		t.Fatalf("CreateTask: %v", err)
 	}
@@ -597,7 +597,7 @@ func TestIntegration_Preferences_CreateDuplicateKey(t *testing.T) {
 
 func TestIntegration_GetArtifactByTaskIDAndPath(t *testing.T) {
 	db, ctx := integrationDB(t)
-	task, err := db.CreateTask(ctx, nil, "artifact-task", nil)
+	task, err := db.CreateTask(ctx, nil, "artifact-task", nil, nil)
 	if err != nil {
 		t.Fatalf("CreateTask: %v", err)
 	}
@@ -648,7 +648,7 @@ func integrationDB(t *testing.T) (*DB, context.Context) {
 
 func TestIntegration_WorkflowLeaseAndCheckpoint(t *testing.T) {
 	db, ctx := integrationDB(t)
-	task, err := db.CreateTask(ctx, nil, "workflow-lease-test", nil)
+	task, err := db.CreateTask(ctx, nil, "workflow-lease-test", nil, nil)
 	if err != nil {
 		t.Fatalf("CreateTask: %v", err)
 	}
@@ -698,7 +698,7 @@ func TestIntegration_WorkflowLeaseAndCheckpoint(t *testing.T) {
 
 func TestIntegration_WorkflowLease_ExpiredReacquire(t *testing.T) {
 	db, ctx := integrationDB(t)
-	task, err := db.CreateTask(ctx, nil, "workflow-lease-expiry", nil)
+	task, err := db.CreateTask(ctx, nil, "workflow-lease-expiry", nil, nil)
 	if err != nil {
 		t.Fatalf("CreateTask: %v", err)
 	}
@@ -724,7 +724,7 @@ func TestIntegration_WorkflowLease_ExpiredReacquire(t *testing.T) {
 
 func TestIntegration_WorkflowLease_IdempotentAcquire(t *testing.T) {
 	db, ctx := integrationDB(t)
-	task, err := db.CreateTask(ctx, nil, "workflow-idempotent", nil)
+	task, err := db.CreateTask(ctx, nil, "workflow-idempotent", nil, nil)
 	if err != nil {
 		t.Fatalf("CreateTask: %v", err)
 	}
@@ -745,7 +745,7 @@ func TestIntegration_WorkflowLease_IdempotentAcquire(t *testing.T) {
 
 func TestIntegration_WorkflowLease_ReleaseThenReacquire(t *testing.T) {
 	db, ctx := integrationDB(t)
-	task, err := db.CreateTask(ctx, nil, "workflow-release-reacquire", nil)
+	task, err := db.CreateTask(ctx, nil, "workflow-release-reacquire", nil, nil)
 	if err != nil {
 		t.Fatalf("CreateTask: %v", err)
 	}
@@ -769,7 +769,7 @@ func TestIntegration_WorkflowLease_ReleaseThenReacquire(t *testing.T) {
 
 func TestIntegration_WorkflowErrNotFound(t *testing.T) {
 	db, ctx := integrationDB(t)
-	task, err := db.CreateTask(ctx, nil, "workflow-err-not-found", nil)
+	task, err := db.CreateTask(ctx, nil, "workflow-err-not-found", nil, nil)
 	if err != nil {
 		t.Fatalf("CreateTask: %v", err)
 	}
@@ -785,7 +785,7 @@ func TestIntegration_WorkflowErrNotFound(t *testing.T) {
 
 func TestIntegration_UpsertWorkflowCheckpoint_WithPreSetID(t *testing.T) {
 	db, ctx := integrationDB(t)
-	task, err := db.CreateTask(ctx, nil, "workflow-checkpoint-preset-id", nil)
+	task, err := db.CreateTask(ctx, nil, "workflow-checkpoint-preset-id", nil, nil)
 	if err != nil {
 		t.Fatalf("CreateTask: %v", err)
 	}
@@ -829,7 +829,7 @@ func TestIntegration_GetNextQueuedJob_ErrNotFound(t *testing.T) {
 
 func TestIntegration_CompleteJobRoundTrip(t *testing.T) {
 	db, ctx := integrationDB(t)
-	task, _ := db.CreateTask(ctx, nil, "p", nil)
+	task, _ := db.CreateTask(ctx, nil, "p", nil, nil)
 	job, _ := db.CreateJob(ctx, task.ID, "payload")
 	result := `{"status":"ok"}`
 	if err := db.CompleteJob(ctx, job.ID, result, models.JobStatusCompleted); err != nil {
@@ -846,7 +846,7 @@ func TestIntegration_CompleteJobRoundTrip(t *testing.T) {
 
 func TestIntegration_CreateJobCompleted(t *testing.T) {
 	db, ctx := integrationDB(t)
-	task, _ := db.CreateTask(ctx, nil, "prompt-task", nil)
+	task, _ := db.CreateTask(ctx, nil, "prompt-task", nil, nil)
 	jobID := uuid.New()
 	result := `{"version":1,"task_id":"` + task.ID.String() + `","job_id":"` + jobID.String() + `","status":"completed","stdout":"hi"}`
 	job, err := db.CreateJobCompleted(ctx, task.ID, jobID, result)
@@ -908,7 +908,7 @@ func storeRoundTripNode(t *testing.T, db Store, ctx context.Context) *models.Nod
 
 func storeRoundTripTaskJobNode(t *testing.T, db Store, ctx context.Context, userID uuid.UUID, node *models.Node) {
 	t.Helper()
-	task, err := db.CreateTask(ctx, &userID, "roundtrip-prompt", nil)
+	task, err := db.CreateTask(ctx, &userID, "roundtrip-prompt", nil, nil)
 	if err != nil {
 		t.Fatalf("CreateTask: %v", err)
 	}
@@ -1043,7 +1043,7 @@ func TestIntegration_GetActiveRefreshSession_ErrNotFound(t *testing.T) {
 
 func TestIntegration_CreateJobWithID_DuplicateID_ReturnsError(t *testing.T) {
 	db, ctx := integrationDB(t)
-	task, err := db.CreateTask(ctx, nil, "job-dup-id", nil)
+	task, err := db.CreateTask(ctx, nil, "job-dup-id", nil, nil)
 	if err != nil {
 		t.Fatalf("CreateTask: %v", err)
 	}
@@ -1075,7 +1075,7 @@ func TestIntegration_ListTasksByUser_Empty(t *testing.T) {
 
 func TestIntegration_GetJobsByTaskID_Empty(t *testing.T) {
 	db, ctx := integrationDB(t)
-	task, err := db.CreateTask(ctx, nil, "no-jobs-task", nil)
+	task, err := db.CreateTask(ctx, nil, "no-jobs-task", nil, nil)
 	if err != nil {
 		t.Fatalf("CreateTask: %v", err)
 	}
@@ -1216,7 +1216,7 @@ func workflowGateCreateProjectAndPlan(t *testing.T, db *DB, ctx context.Context,
 // workflowGateCreateTaskWithPlan creates a task with plan_id set.
 func workflowGateCreateTaskWithPlan(t *testing.T, db *DB, ctx context.Context, planID uuid.UUID, slug string) *models.Task {
 	t.Helper()
-	task, err := db.CreateTask(ctx, nil, slug, nil)
+	task, err := db.CreateTask(ctx, nil, slug, nil, nil)
 	if err != nil {
 		t.Fatalf("CreateTask: %v", err)
 	}
@@ -1232,7 +1232,7 @@ func workflowGateCreateTaskWithPlan(t *testing.T, db *DB, ctx context.Context, p
 
 func TestIntegration_WorkflowStartGate_NoPlan(t *testing.T) {
 	db, ctx := integrationDB(t)
-	task, err := db.CreateTask(ctx, nil, "workflow-gate-noplan", nil)
+	task, err := db.CreateTask(ctx, nil, "workflow-gate-noplan", nil, nil)
 	if err != nil {
 		t.Fatalf("CreateTask: %v", err)
 	}
@@ -1247,7 +1247,7 @@ func TestIntegration_WorkflowStartGate_NoPlan(t *testing.T) {
 
 func TestIntegration_WorkflowStartGate_PlanNotFound(t *testing.T) {
 	db, ctx := integrationDB(t)
-	task, err := db.CreateTask(ctx, nil, "workflow-gate-badplan", nil)
+	task, err := db.CreateTask(ctx, nil, "workflow-gate-badplan", nil, nil)
 	if err != nil {
 		t.Fatalf("CreateTask: %v", err)
 	}
@@ -1304,7 +1304,7 @@ func TestIntegration_WorkflowStartGate_DepsNotSatisfied(t *testing.T) {
 	now := time.Now().UTC()
 	_, planID := workflowGateCreateProjectAndPlan(t, db, ctx, now, "active", false)
 	task := workflowGateCreateTaskWithPlan(t, db, ctx, planID, "workflow-gate-deps")
-	depTask, err := db.CreateTask(ctx, nil, "gate-dep-task", nil)
+	depTask, err := db.CreateTask(ctx, nil, "gate-dep-task", nil, nil)
 	if err != nil {
 		t.Fatalf("CreateTask dep: %v", err)
 	}

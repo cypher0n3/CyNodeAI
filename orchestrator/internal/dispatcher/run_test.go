@@ -39,7 +39,7 @@ func TestRunOnce_Success(t *testing.T) {
 
 	mock := testutil.NewMockDB()
 	ctx := context.Background()
-	task, _ := mock.CreateTask(ctx, nil, "prompt", nil)
+	task, _ := mock.CreateTask(ctx, nil, "prompt", nil, nil)
 	job, _ := mock.CreateJob(ctx, task.ID, testPayload)
 	node, _ := mock.CreateNode(ctx, "node-1")
 	makeDispatchable(t, mock, ctx, node, server.URL, "token")
@@ -71,7 +71,7 @@ func TestRunOnce_ErrNotFound(t *testing.T) {
 func TestRunOnce_NoDispatchableNodes(t *testing.T) {
 	mock := testutil.NewMockDB()
 	ctx := context.Background()
-	task, _ := mock.CreateTask(ctx, nil, "p", nil)
+	task, _ := mock.CreateTask(ctx, nil, "p", nil, nil)
 	_, _ = mock.CreateJob(ctx, task.ID, testPayload)
 	node, _ := mock.CreateNode(ctx, "n1")
 	_ = mock.UpdateNodeStatus(ctx, node.ID, models.NodeStatusActive)
@@ -97,7 +97,7 @@ func TestRunOnce_WorkerReturnsFailed(t *testing.T) {
 
 	mock := testutil.NewMockDB()
 	ctx := context.Background()
-	task, _ := mock.CreateTask(ctx, nil, "p", nil)
+	task, _ := mock.CreateTask(ctx, nil, "p", nil, nil)
 	job, _ := mock.CreateJob(ctx, task.ID, testPayload)
 	node, _ := mock.CreateNode(ctx, "n1")
 	makeDispatchable(t, mock, ctx, node, server.URL, "token")
@@ -116,7 +116,7 @@ func TestRunOnce_WorkerReturnsFailed(t *testing.T) {
 func TestRunOnce_BadPayload(t *testing.T) {
 	mock := testutil.NewMockDB()
 	ctx := context.Background()
-	task, _ := mock.CreateTask(ctx, nil, "p", nil)
+	task, _ := mock.CreateTask(ctx, nil, "p", nil, nil)
 	job, _ := mock.CreateJob(ctx, task.ID, `{"image":"x"}`) // no command
 	node, _ := mock.CreateNode(ctx, "n1")
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) }))
@@ -142,7 +142,7 @@ func TestRunOnce_WorkerHTTPError(t *testing.T) {
 
 	mock := testutil.NewMockDB()
 	ctx := context.Background()
-	task, _ := mock.CreateTask(ctx, nil, "p", nil)
+	task, _ := mock.CreateTask(ctx, nil, "p", nil, nil)
 	job, _ := mock.CreateJob(ctx, task.ID, testPayload)
 	node, _ := mock.CreateNode(ctx, "n1")
 	makeDispatchable(t, mock, ctx, node, server.URL, "token")
@@ -168,7 +168,7 @@ func TestRunOnce_WorkerReturnsWrongVersion(t *testing.T) {
 
 	mock := testutil.NewMockDB()
 	ctx := context.Background()
-	task, _ := mock.CreateTask(ctx, nil, "p", nil)
+	task, _ := mock.CreateTask(ctx, nil, "p", nil, nil)
 	job, _ := mock.CreateJob(ctx, task.ID, testPayload)
 	node, _ := mock.CreateNode(ctx, "n1")
 	makeDispatchable(t, mock, ctx, node, server.URL, "token")
@@ -180,6 +180,47 @@ func TestRunOnce_WorkerReturnsWrongVersion(t *testing.T) {
 	}
 	j, _ := mock.GetJobByID(ctx, job.ID)
 	if j.Status != models.JobStatusFailed {
+		t.Errorf("job status %s", j.Status)
+	}
+}
+
+func TestRunOnce_WorkerTransientEOFThenSuccess(t *testing.T) {
+	first := true
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		if first {
+			first = false
+			if hj, ok := w.(http.Hijacker); ok {
+				conn, _, err := hj.Hijack()
+				if err == nil {
+					_ = conn.Close()
+					return
+				}
+			}
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode(&workerapi.RunJobResponse{
+			Version: 1, TaskID: "t1", JobID: "j1",
+			Status: workerapi.StatusCompleted, ExitCode: 0,
+			StartedAt: "2026-01-01T00:00:00Z", EndedAt: "2026-01-01T00:00:01Z",
+		})
+	}))
+	defer server.Close()
+
+	mock := testutil.NewMockDB()
+	ctx := context.Background()
+	task, _ := mock.CreateTask(ctx, nil, "p", nil, nil)
+	job, _ := mock.CreateJob(ctx, task.ID, testPayload)
+	node, _ := mock.CreateNode(ctx, "n1")
+	makeDispatchable(t, mock, ctx, node, server.URL, "token")
+
+	client := &http.Client{Timeout: 5 * time.Second}
+	err := RunOnce(ctx, mock, client, 5*time.Second, nil)
+	if err != nil {
+		t.Fatalf("RunOnce: %v", err)
+	}
+	j, _ := mock.GetJobByID(ctx, job.ID)
+	if j.Status != models.JobStatusCompleted {
 		t.Errorf("job status %s", j.Status)
 	}
 }

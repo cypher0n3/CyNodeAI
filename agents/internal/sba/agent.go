@@ -124,11 +124,35 @@ func setResultFromExecErr(result *sbajob.Result, ctx context.Context, err error)
 		result.FailureMessage = &msg
 		return
 	}
+	if answer := salvageFinalAnswerFromParseError(err); answer != "" {
+		// Some small models emit non-ReAct text; salvage it as user-facing answer.
+		result.Status = statusSuccess
+		result.FinalAnswer = answer
+		return
+	}
 	result.Status = statusFailed
 	code := failureCodeStepFailed
 	msg := err.Error()
 	result.FailureCode = &code
 	result.FailureMessage = &msg
+}
+
+func salvageFinalAnswerFromParseError(err error) string {
+	if err == nil {
+		return ""
+	}
+	msg := strings.TrimSpace(err.Error())
+	const prefix = "unable to parse agent output:"
+	lower := strings.ToLower(msg)
+	if !strings.Contains(lower, prefix) {
+		return ""
+	}
+	idx := strings.Index(lower, prefix)
+	if idx < 0 || idx+len(prefix) >= len(msg) {
+		return ""
+	}
+	raw := strings.TrimSpace(msg[idx+len(prefix):])
+	return raw
 }
 
 func processStepsToResult(outputs map[string]any, result *sbajob.Result) {

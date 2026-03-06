@@ -18,12 +18,15 @@ func TestClient_ListTasks_WithLimitOffset(t *testing.T) {
 			w.WriteHeader(http.StatusNotFound)
 			return
 		}
+		if got := r.URL.Query().Get("cursor"); got != "2" {
+			t.Errorf("cursor query = %q, want 2", got)
+		}
 		jsonHandler(http.StatusOK, userapi.ListTasksResponse{Tasks: []userapi.TaskResponse{}})(w, r)
 	}))
 	defer server.Close()
 	client := NewClient(server.URL)
 	client.SetToken("tok")
-	_, err := client.ListTasks(ListTasksRequest{Limit: 5, Offset: 10})
+	_, err := client.ListTasks(ListTasksRequest{Limit: 5, Offset: 10, Cursor: "2"})
 	if err != nil {
 		t.Fatalf("ListTasks: %v", err)
 	}

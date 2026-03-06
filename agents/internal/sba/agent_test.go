@@ -2,6 +2,7 @@ package sba
 
 import (
 	"context"
+	"errors"
 	"os"
 	"strings"
 	"testing"
@@ -54,6 +55,18 @@ func TestSetResultFromExecErr_StepFailed(t *testing.T) {
 	}
 	if result2.FailureCode == nil || *result2.FailureCode != failureCodeStepFailed {
 		t.Errorf("FailureCode = %v", result2.FailureCode)
+	}
+}
+
+func TestSetResultFromExecErr_SalvageParseError(t *testing.T) {
+	result := &sbajob.Result{Status: statusFailed}
+	err := errors.New("unable to parse agent output: Final answer: hello")
+	setResultFromExecErr(result, context.Background(), err)
+	if result.Status != statusSuccess {
+		t.Fatalf("status=%q, want success", result.Status)
+	}
+	if !strings.Contains(result.FinalAnswer, "hello") {
+		t.Fatalf("final_answer=%q", result.FinalAnswer)
 	}
 }
 

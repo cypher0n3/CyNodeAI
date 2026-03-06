@@ -99,6 +99,7 @@ func (c *Client) Health() error {
 type ListTasksRequest struct {
 	Limit  int    // default 50, max 200
 	Offset int    // for pagination
+	Cursor string // cursor-based pagination (opaque string from next_cursor)
 	Status string // optional filter: queued, running, completed, failed, cancelled/canceled
 }
 
@@ -110,6 +111,9 @@ func (c *Client) ListTasks(req ListTasksRequest) (*userapi.ListTasksResponse, er
 	}
 	if req.Offset > 0 {
 		q.Set("offset", fmt.Sprint(req.Offset))
+	}
+	if req.Cursor != "" {
+		q.Set("cursor", req.Cursor)
 	}
 	if req.Status != "" {
 		q.Set("status", req.Status)

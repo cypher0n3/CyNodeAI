@@ -554,6 +554,83 @@ func TestTaskHandler_CreateTask_WithAttachments(t *testing.T) {
 	}
 }
 
+func TestTaskHandler_CreateTask_WithProjectID(t *testing.T) {
+	mockDB := testutil.NewMockDB()
+	handler := NewTaskHandler(mockDB, newTestLogger(), "", "")
+	userID := uuid.New()
+	ctx := context.WithValue(context.Background(), contextKeyUserID, userID)
+	projectID := uuid.New().String()
+	body := userapi.CreateTaskRequest{Prompt: "prompt", ProjectID: &projectID}
+	jsonBody, _ := json.Marshal(body)
+	req := httptest.NewRequest("POST", "/v1/tasks", bytes.NewBuffer(jsonBody)).WithContext(ctx)
+	rec := httptest.NewRecorder()
+	handler.CreateTask(rec, req)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("expected status 201, got %d: %s", rec.Code, rec.Body.String())
+	}
+	var resp userapi.TaskResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("unmarshal response: %v", err)
+	}
+	taskID, err := uuid.Parse(resp.ResolveTaskID())
+	if err != nil {
+		t.Fatalf("parse task ID: %v", err)
+	}
+	task, err := mockDB.GetTaskByID(ctx, taskID)
+	if err != nil {
+		t.Fatalf("GetTaskByID: %v", err)
+	}
+	if task.ProjectID == nil || task.ProjectID.String() != projectID {
+		t.Fatalf("expected task.project_id=%s, got %v", projectID, task.ProjectID)
+	}
+}
+
+func TestTaskHandler_CreateTask_DefaultProjectAssignedWhenProjectIDOmitted(t *testing.T) {
+	mockDB := testutil.NewMockDB()
+	handler := NewTaskHandler(mockDB, newTestLogger(), "", "")
+	userID := uuid.New()
+	ctx := context.WithValue(context.Background(), contextKeyUserID, userID)
+	body := userapi.CreateTaskRequest{Prompt: "prompt"}
+	jsonBody, _ := json.Marshal(body)
+	req := httptest.NewRequest("POST", "/v1/tasks", bytes.NewBuffer(jsonBody)).WithContext(ctx)
+	rec := httptest.NewRecorder()
+	handler.CreateTask(rec, req)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("expected status 201, got %d: %s", rec.Code, rec.Body.String())
+	}
+	var resp userapi.TaskResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("unmarshal response: %v", err)
+	}
+	taskID, err := uuid.Parse(resp.ResolveTaskID())
+	if err != nil {
+		t.Fatalf("parse task ID: %v", err)
+	}
+	task, err := mockDB.GetTaskByID(ctx, taskID)
+	if err != nil {
+		t.Fatalf("GetTaskByID: %v", err)
+	}
+	if task.ProjectID == nil {
+		t.Fatal("expected default project to be assigned")
+	}
+}
+
+func TestTaskHandler_CreateTask_InvalidProjectID(t *testing.T) {
+	mockDB := testutil.NewMockDB()
+	handler := NewTaskHandler(mockDB, newTestLogger(), "", "")
+	userID := uuid.New()
+	ctx := context.WithValue(context.Background(), contextKeyUserID, userID)
+	bad := "not-a-uuid"
+	body := userapi.CreateTaskRequest{Prompt: "prompt", ProjectID: &bad}
+	jsonBody, _ := json.Marshal(body)
+	req := httptest.NewRequest("POST", "/v1/tasks", bytes.NewBuffer(jsonBody)).WithContext(ctx)
+	rec := httptest.NewRecorder()
+	handler.CreateTask(rec, req)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
 func TestTaskHandler_CreateTaskWithUseInference_StoresUseInferenceInJobPayload(t *testing.T) {
 	mockDB := testutil.NewMockDB()
 	logger := newTestLogger()
@@ -1922,6 +1999,7 @@ func TestTaskHandler_ListTasksInvalidParams(t *testing.T) {
 		{"invalid limit", "limit=invalid", http.StatusBadRequest},
 		{"limit out of range", "limit=0", http.StatusBadRequest},
 		{"invalid offset", "offset=-1", http.StatusBadRequest},
+		{"invalid cursor", "cursor=bad", http.StatusBadRequest},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -1967,6 +2045,42 @@ func TestTaskHandler_ListTasksWithNextOffset(t *testing.T) {
 	if resp.NextOffset == nil || *resp.NextOffset != 2 {
 		t.Errorf("expected next_offset=2, got %v", resp.NextOffset)
 	}
+	if resp.NextCursor != "2" {
+		t.Errorf("expected next_cursor=2, got %q", resp.NextCursor)
+	}
+}
+
+func TestTaskHandler_ListTasksWithCursor(t *testing.T) {
+	mockDB := testutil.NewMockDB()
+	handler := NewTaskHandler(mockDB, newTestLogger(), "", "")
+	userID := uuid.New()
+	prompt := testPrompt
+	tasks := []*models.Task{
+		{ID: uuid.New(), CreatedBy: &userID, Status: models.TaskStatusPending, Prompt: &prompt, CreatedAt: time.Now().UTC(), UpdatedAt: time.Now().UTC()},
+		{ID: uuid.New(), CreatedBy: &userID, Status: models.TaskStatusPending, Prompt: &prompt, CreatedAt: time.Now().UTC(), UpdatedAt: time.Now().UTC()},
+		{ID: uuid.New(), CreatedBy: &userID, Status: models.TaskStatusPending, Prompt: &prompt, CreatedAt: time.Now().UTC(), UpdatedAt: time.Now().UTC()},
+	}
+	for _, task := range tasks {
+		mockDB.AddTask(task)
+	}
+	req := httptest.NewRequest("GET", "/v1/tasks?limit=1&cursor=1", http.NoBody).WithContext(
+		context.WithValue(context.Background(), contextKeyUserID, userID),
+	)
+	rec := httptest.NewRecorder()
+	handler.ListTasks(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	var resp userapi.ListTasksResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if len(resp.Tasks) != 1 {
+		t.Fatalf("expected 1 task, got %d", len(resp.Tasks))
+	}
+	if resp.NextCursor == "" {
+		t.Fatal("expected next_cursor when has more tasks")
+	}
 }
 
 func TestTaskHandler_ListTasksWithCancelledTask(t *testing.T) {
@@ -1993,8 +2107,8 @@ func TestTaskHandler_ListTasksWithCancelledTask(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
-	if len(resp.Tasks) != 1 || resp.Tasks[0].Status != "canceled" {
-		t.Errorf("expected one task with status canceled, got %+v", resp.Tasks)
+	if len(resp.Tasks) != 1 || resp.Tasks[0].Status != "cancelled" {
+		t.Errorf("expected one task with status cancelled, got %+v", resp.Tasks)
 	}
 }
 

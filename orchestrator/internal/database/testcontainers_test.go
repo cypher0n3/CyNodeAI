@@ -244,7 +244,7 @@ func tcCreateUserAndVerify(t *testing.T, db Store, ctx context.Context) *models.
 
 func tcCreateTaskJobAndVerifyPayload(t *testing.T, db Store, ctx context.Context, user *models.User) (*models.Task, *models.Job) {
 	t.Helper()
-	task, err := db.CreateTask(ctx, &user.ID, "prompt", nil)
+	task, err := db.CreateTask(ctx, &user.ID, "prompt", nil, nil)
 	if err != nil {
 		t.Fatalf("CreateTask: %v", err)
 	}
@@ -260,7 +260,7 @@ func tcCreateTaskJobAndVerifyPayload(t *testing.T, db Store, ctx context.Context
 
 func tcCreateTaskAndJobWithID(t *testing.T, db Store, ctx context.Context, user *models.User, jobID uuid.UUID, payload string) (*models.Task, *models.Job) {
 	t.Helper()
-	task, err := db.CreateTask(ctx, &user.ID, "sba-prompt", nil)
+	task, err := db.CreateTask(ctx, &user.ID, "sba-prompt", nil, nil)
 	if err != nil {
 		t.Fatalf("CreateTask: %v", err)
 	}
@@ -286,7 +286,7 @@ func TestWithTestcontainers_CreateTask_WithTaskName(t *testing.T) {
 		t.Fatalf("CreateUser: %v", err)
 	}
 	name1 := "My Task  Name"
-	task1, err := db.CreateTask(ctx, &user.ID, "prompt1", &name1)
+	task1, err := db.CreateTask(ctx, &user.ID, "prompt1", &name1, nil)
 	if err != nil {
 		t.Fatalf("CreateTask with task name: %v", err)
 	}
@@ -294,12 +294,42 @@ func TestWithTestcontainers_CreateTask_WithTaskName(t *testing.T) {
 		t.Errorf("CreateTask task name normalized: got %q, want my-task-name", ptrVal(task1.Summary))
 	}
 	name2 := "My Task  Name"
-	task2, err := db.CreateTask(ctx, &user.ID, "prompt2", &name2)
+	task2, err := db.CreateTask(ctx, &user.ID, "prompt2", &name2, nil)
 	if err != nil {
 		t.Fatalf("second CreateTask same name: %v", err)
 	}
 	if task2.Summary == nil || *task2.Summary != "my-task-name-2" {
 		t.Errorf("CreateTask uniqueness: got %q, want my-task-name-2", ptrVal(task2.Summary))
+	}
+}
+
+func TestWithTestcontainers_DefaultProjectAndTaskProjectID(t *testing.T) {
+	ctx := context.Background()
+	db := tcOpenDB(t, ctx)
+	user, err := db.CreateUser(ctx, "tc-user-proj-"+uuid.New().String()[:8], nil)
+	if err != nil {
+		t.Fatalf("CreateUser: %v", err)
+	}
+	defaultProj, err := db.GetOrCreateDefaultProjectForUser(ctx, user.ID)
+	if err != nil {
+		t.Fatalf("GetOrCreateDefaultProjectForUser: %v", err)
+	}
+	if defaultProj == nil || defaultProj.ID == uuid.Nil {
+		t.Fatal("expected default project")
+	}
+	sameProj, err := db.GetOrCreateDefaultProjectForUser(ctx, user.ID)
+	if err != nil {
+		t.Fatalf("second GetOrCreateDefaultProjectForUser: %v", err)
+	}
+	if sameProj.ID != defaultProj.ID {
+		t.Fatalf("default project should be stable: %s vs %s", sameProj.ID, defaultProj.ID)
+	}
+	task, err := db.CreateTask(ctx, &user.ID, "prompt", nil, &defaultProj.ID)
+	if err != nil {
+		t.Fatalf("CreateTask with project id: %v", err)
+	}
+	if task.ProjectID == nil || *task.ProjectID != defaultProj.ID {
+		t.Fatalf("task.ProjectID = %v, want %s", task.ProjectID, defaultProj.ID)
 	}
 }
 
@@ -318,7 +348,7 @@ func TestWithTestcontainers_CreateJobWithID_DuplicateIDReturnsError(t *testing.T
 	if err != nil {
 		t.Fatalf("CreateUser: %v", err)
 	}
-	task, err := db.CreateTask(ctx, &user.ID, "prompt", nil)
+	task, err := db.CreateTask(ctx, &user.ID, "prompt", nil, nil)
 	if err != nil {
 		t.Fatalf("CreateTask: %v", err)
 	}
@@ -463,7 +493,7 @@ func TestWithTestcontainers_Preferences(t *testing.T) {
 		t.Errorf("ListPreferences: got %d entries", len(list))
 	}
 	_ = next
-	task, err := store.CreateTask(ctx, nil, "tc-pref-task", nil)
+	task, err := store.CreateTask(ctx, nil, "tc-pref-task", nil, nil)
 	if err != nil {
 		t.Fatalf("CreateTask: %v", err)
 	}
@@ -513,7 +543,7 @@ func TestWithTestcontainers_PreferenceCRUDAndArtifact(t *testing.T) {
 	if err != ErrNotFound {
 		t.Errorf("after DeletePreference: want ErrNotFound, got %v", err)
 	}
-	task, err := store.CreateTask(ctx, nil, "tc-artifact-task", nil)
+	task, err := store.CreateTask(ctx, nil, "tc-artifact-task", nil, nil)
 	if err != nil {
 		t.Fatalf("CreateTask: %v", err)
 	}
@@ -590,7 +620,7 @@ func TestWithTestcontainers_AccessControlAndApiCredential(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateUser: %v", err)
 	}
-	task, err := store.CreateTask(ctx, &user.ID, "tc-ac-task", nil)
+	task, err := store.CreateTask(ctx, &user.ID, "tc-ac-task", nil, nil)
 	if err != nil {
 		t.Fatalf("CreateTask: %v", err)
 	}

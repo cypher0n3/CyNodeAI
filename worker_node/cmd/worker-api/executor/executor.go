@@ -148,7 +148,7 @@ func (e *Executor) RunJob(ctx context.Context, req *workerapi.RunJobRequest, wor
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
 
-	err := cmd.Run()
+	runErr := cmd.Run()
 	endedAt := time.Now().UTC()
 	resp.EndedAt = endedAt.Format(time.RFC3339)
 
@@ -169,8 +169,8 @@ func (e *Executor) RunJob(ctx context.Context, req *workerapi.RunJobRequest, wor
 		return resp, nil
 	}
 
-	if err != nil {
-		e.setRunError(resp, err)
+	if runErr != nil {
+		e.setRunError(resp, runErr)
 		return resp, nil
 	}
 
@@ -193,12 +193,21 @@ func (e *Executor) runJobWithPodInference(ctx context.Context, req *workerapi.Ru
 
 	proxyArgs := buildProxyRunArgs(podName, e.ollamaUpstreamURL, e.inferenceProxyImage, e.inferenceProxyCommand)
 	runProxy := exec.CommandContext(ctx, e.runtime, proxyArgs...)
-	if out, err := runProxy.CombinedOutput(); err != nil {
-		setPodInferenceError(resp, "proxy start", out)
+	proxyOut, err := runProxy.CombinedOutput()
+	if err != nil {
+		setPodInferenceError(resp, "proxy start", proxyOut)
 		return resp, nil
 	}
-
-	time.Sleep(2 * time.Second)
+	proxyContainerID := strings.TrimSpace(string(proxyOut))
+	if proxyContainerID == "" {
+		setPodInferenceError(resp, "proxy start", []byte("missing proxy container id"))
+		return resp, nil
+	}
+	useHealthProbe := len(e.inferenceProxyCommand) == 0
+	if err := waitForProxyReady(ctx, e.runtime, proxyContainerID, 10*time.Second, useHealthProbe); err != nil {
+		setPodInferenceError(resp, "proxy readiness", []byte(err.Error()))
+		return resp, nil
+	}
 
 	image := req.Sandbox.Image
 	if image == "" {
@@ -212,7 +221,7 @@ func (e *Executor) runJobWithPodInference(ctx context.Context, req *workerapi.Ru
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr
-	err := cmd.Run()
+	runErr := cmd.Run()
 	endedAt := time.Now().UTC()
 	resp.EndedAt = endedAt.Format(time.RFC3339)
 
@@ -230,13 +239,73 @@ func (e *Executor) runJobWithPodInference(ctx context.Context, req *workerapi.Ru
 		resp.ExitCode = -1
 		return resp, nil
 	}
-	if err != nil {
-		e.setRunError(resp, err)
+	if runErr != nil {
+		e.setRunError(resp, runErr)
 		return resp, nil
 	}
 	resp.Status = workerapi.StatusCompleted
 	resp.ExitCode = 0
 	return resp, nil
+}
+
+var probeProxyHealthFunc = probeProxyHealthOnce
+var probeProxyRunningFunc = probeProxyRunningOnce
+
+func waitForProxyReady(ctx context.Context, runtime, proxyContainerID string, timeout time.Duration, useHealthProbe bool) error {
+	if timeout <= 0 {
+		timeout = 10 * time.Second
+	}
+	deadlineCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+	var lastErr error
+	for {
+		var err error
+		if useHealthProbe {
+			err = probeProxyHealthFunc(deadlineCtx, runtime, proxyContainerID)
+		} else {
+			err = probeProxyRunningFunc(deadlineCtx, runtime, proxyContainerID)
+		}
+		if err == nil {
+			return nil
+		}
+		lastErr = err
+		select {
+		case <-deadlineCtx.Done():
+			if lastErr != nil {
+				return fmt.Errorf("proxy health probe timeout: %w", lastErr)
+			}
+			return fmt.Errorf("proxy health probe timeout: %w", deadlineCtx.Err())
+		case <-time.After(200 * time.Millisecond):
+		}
+	}
+}
+
+func probeProxyHealthOnce(ctx context.Context, runtime, proxyContainerID string) error {
+	probeCmd := exec.CommandContext(
+		ctx,
+		runtime,
+		"exec",
+		proxyContainerID,
+		"/inference-proxy",
+		"--healthcheck-url",
+		"http://127.0.0.1:11434/healthz",
+	)
+	if out, err := probeCmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("exec proxy healthcheck: %w: %s", err, strings.TrimSpace(string(out)))
+	}
+	return nil
+}
+
+func probeProxyRunningOnce(ctx context.Context, runtime, proxyContainerID string) error {
+	inspectCmd := exec.CommandContext(ctx, runtime, "inspect", "-f", "{{.State.Running}}", proxyContainerID)
+	out, err := inspectCmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("inspect proxy container: %w: %s", err, strings.TrimSpace(string(out)))
+	}
+	if strings.TrimSpace(string(out)) != "true" {
+		return fmt.Errorf("proxy container not running")
+	}
+	return nil
 }
 
 func setPodInferenceError(resp *workerapi.RunJobResponse, prefix string, out []byte) {
@@ -283,6 +352,11 @@ func (e *Executor) runJobSBA(ctx context.Context, req *workerapi.RunJobRequest, 
 		setSBAError(resp, "failed to pre-create result.json: "+err.Error())
 		return resp, nil
 	}
+	// os.WriteFile honors umask; force mode so non-owner container users can overwrite.
+	if err := os.Chmod(resultPath, 0o666); err != nil {
+		setSBAError(resp, "failed to chmod result.json: "+err.Error())
+		return resp, nil
+	}
 	if err := os.Chmod(jobDir, 0o777); err != nil {
 		setSBAError(resp, "failed to chmod job dir: "+err.Error())
 		return resp, nil
@@ -299,6 +373,13 @@ func (e *Executor) runJobSBA(ctx context.Context, req *workerapi.RunJobRequest, 
 		}
 		defer func() { _ = os.RemoveAll(tmpWorkspace) }()
 		workspaceDirToUse = tmpWorkspace
+	}
+	if err := os.MkdirAll(workspaceDirToUse, 0o700); err != nil {
+		setSBAError(resp, "failed to prepare workspace dir: "+err.Error())
+		return resp, nil
+	}
+	if e.shouldUseSBAPodInference(executionMode) {
+		return e.runJobSBAWithPodInference(ctx, req, resp, workspaceDirToUse, jobDir, executionMode)
 	}
 
 	args := buildSBARunArgs(req, jobDir, workspaceDirToUse, e, executionMode)
@@ -339,6 +420,95 @@ func (e *Executor) runJobSBA(ctx context.Context, req *workerapi.RunJobRequest, 
 	return resp, nil
 }
 
+func (e *Executor) shouldUseSBAPodInference(executionMode string) bool {
+	return executionMode == sbajob.ExecutionModeAgentInference &&
+		e.runtime == runtimePodman &&
+		strings.TrimSpace(e.ollamaUpstreamURL) != "" &&
+		strings.TrimSpace(e.inferenceProxyImage) != ""
+}
+
+func (e *Executor) runJobSBAWithPodInference(
+	ctx context.Context,
+	req *workerapi.RunJobRequest,
+	resp *workerapi.RunJobResponse,
+	workspaceDir string,
+	jobDir string,
+	executionMode string,
+) (*workerapi.RunJobResponse, error) {
+	podName := "cynodeai-job-" + sanitizePodName(req.JobID)
+	if out, err := e.createOrReplacePod(ctx, podName); err != nil {
+		setPodInferenceError(resp, "pod create", out)
+		return resp, nil
+	}
+	cleanupCtx := context.WithoutCancel(ctx)
+	defer func() { _ = exec.CommandContext(cleanupCtx, e.runtime, "pod", "rm", "-f", podName).Run() }()
+
+	proxyArgs := buildProxyRunArgs(podName, e.ollamaUpstreamURL, e.inferenceProxyImage, e.inferenceProxyCommand)
+	runProxy := exec.CommandContext(ctx, e.runtime, proxyArgs...)
+	proxyOut, err := runProxy.CombinedOutput()
+	if err != nil {
+		setPodInferenceError(resp, "proxy start", proxyOut)
+		return resp, nil
+	}
+	proxyContainerID := strings.TrimSpace(string(proxyOut))
+	if proxyContainerID == "" {
+		setPodInferenceError(resp, "proxy start", []byte("missing proxy container id"))
+		return resp, nil
+	}
+	useHealthProbe := len(e.inferenceProxyCommand) == 0
+	if err := waitForProxyReady(ctx, e.runtime, proxyContainerID, 10*time.Second, useHealthProbe); err != nil {
+		setPodInferenceError(resp, "proxy readiness", []byte(err.Error()))
+		return resp, nil
+	}
+
+	args := buildSBARunArgsForPod(req, podName, jobDir, workspaceDir, e, executionMode)
+	fullArgv := append([]string{e.runtime}, args...)
+	resp.RunDiagnostics = &workerapi.RunDiagnostics{
+		Runtime:          e.runtime,
+		RuntimeArgv:      fullArgv,
+		JobDir:           jobDir,
+		WorkspaceDir:     workspaceDir,
+		Image:            req.Sandbox.Image,
+		ContainerStarted: false,
+	}
+	cmd := exec.CommandContext(ctx, e.runtime, args...)
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+	runErr := cmd.Run()
+	resp.EndedAt = time.Now().UTC().Format(time.RFC3339)
+	resp.RunDiagnostics.ContainerStarted = runErr == nil || isExitError(runErr)
+
+	resp.Truncated.Stdout = len(stdout.String()) > e.maxOutputBytes
+	resp.Truncated.Stderr = len(stderr.String()) > e.maxOutputBytes
+	resp.Stdout = truncateUTF8(stdout.String(), e.maxOutputBytes)
+	resp.Stderr = truncateUTF8(stderr.String(), e.maxOutputBytes)
+	if ctx.Err() == context.DeadlineExceeded {
+		resp.Status = workerapi.StatusTimeout
+		resp.ExitCode = -1
+		return resp, nil
+	}
+	if runErr != nil {
+		e.setRunError(resp, runErr)
+	}
+	applySbaResultFromDir(jobDir, resp)
+	return resp, nil
+}
+
+func (e *Executor) createOrReplacePod(ctx context.Context, podName string) ([]byte, error) {
+	create := exec.CommandContext(ctx, e.runtime, "pod", "create", "--name", podName)
+	out, err := create.CombinedOutput()
+	if err == nil {
+		return out, nil
+	}
+	if !strings.Contains(strings.ToLower(string(out)), "already exists") {
+		return out, err
+	}
+	_ = exec.CommandContext(context.WithoutCancel(ctx), e.runtime, "pod", "rm", "-f", podName).Run()
+	retry := exec.CommandContext(ctx, e.runtime, "pod", "create", "--name", podName)
+	return retry.CombinedOutput()
+}
+
 func isExitError(err error) bool {
 	_, ok := err.(*exec.ExitError)
 	return ok
@@ -352,7 +522,12 @@ func setSBAError(resp *workerapi.RunJobResponse, msg string) {
 }
 
 func buildSBARunArgs(req *workerapi.RunJobRequest, jobDir, workspaceDir string, e *Executor, executionMode string) []string {
-	args := []string{"run", "--rm", "--network=none"}
+	args := []string{"run", "--rm"}
+	ollamaUpstream := strings.TrimSpace(e.ollamaUpstreamURL)
+	useAgentInferenceNetwork := executionMode == sbajob.ExecutionModeAgentInference && ollamaUpstream != ""
+	if !useAgentInferenceNetwork {
+		args = append(args, "--network=none")
+	}
 	// Rootless podman: keep host UID so the container can write to the bind-mounted jobDir (result.json).
 	if e.runtime == runtimePodman {
 		args = append(args, "--userns=keep-id")
@@ -379,9 +554,43 @@ func buildSBARunArgs(req *workerapi.RunJobRequest, jobDir, workspaceDir string, 
 		args = append(args, "-e", fmt.Sprintf("%s=%s", k, v))
 	}
 	args = append(args, "-e", fmt.Sprintf("SBA_EXECUTION_MODE=%s", executionMode))
+	if useAgentInferenceNetwork {
+		args = append(args, "-e", fmt.Sprintf("%s=%s", envOllamaBaseURL, ollamaUpstream))
+	}
 	if executionMode == sbajob.ExecutionModeDirectSteps {
 		args = append(args, "-e", "SBA_DIRECT_STEPS=1")
 	}
+	args = append(args, req.Sandbox.Image)
+	if len(req.Sandbox.Command) > 0 {
+		args = append(args, req.Sandbox.Command...)
+	}
+	return args
+}
+
+func buildSBARunArgsForPod(req *workerapi.RunJobRequest, podName, jobDir, workspaceDir string, e *Executor, executionMode string) []string {
+	args := []string{"run", "--rm", "--pod", podName}
+	jobMountOpt := fmt.Sprintf("%s:%s", jobDir, jobMount)
+	if e.runtime == runtimePodman {
+		jobMountOpt += ":z"
+	}
+	args = append(args,
+		"-v", jobMountOpt,
+		"--label", fmt.Sprintf("cynodeai.task_id=%s", req.TaskID),
+		"--label", fmt.Sprintf("cynodeai.job_id=%s", req.JobID),
+	)
+	if workspaceDir != "" {
+		wsMountOpt := fmt.Sprintf("%s:%s", workspaceDir, workspaceMount)
+		if e.runtime == runtimePodman {
+			wsMountOpt += ":z"
+		}
+		args = append(args, "-v", wsMountOpt, "-w", workspaceMount)
+	}
+	env := e.buildTaskEnv(req, workspaceMount)
+	env[envOllamaBaseURL] = ollamaBaseURLInPod
+	for k, v := range env {
+		args = append(args, "-e", fmt.Sprintf("%s=%s", k, v))
+	}
+	args = append(args, "-e", fmt.Sprintf("SBA_EXECUTION_MODE=%s", executionMode))
 	args = append(args, req.Sandbox.Image)
 	if len(req.Sandbox.Command) > 0 {
 		args = append(args, req.Sandbox.Command...)

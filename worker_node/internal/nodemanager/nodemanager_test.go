@@ -18,11 +18,43 @@ import (
 	"github.com/cypher0n3/cynodeai/go_shared_libs/contracts/nodepayloads"
 )
 
+func TestMain(m *testing.M) {
+	// Skip container runtime startup check in tests (no podman/docker or image in test env).
+	_ = os.Setenv("NODE_MANAGER_SKIP_CONTAINER_CHECK", "1")
+	os.Exit(m.Run())
+}
+
 const (
 	pathNodesRegister   = "/v1/nodes/register"
 	pathNodesConfig     = "/v1/nodes/config"
 	pathNodesCapability = "/v1/nodes/capability"
+	pathReadyz          = "/readyz"
 )
+
+func TestRunStartupChecks_SkipWhenEnvSet(t *testing.T) {
+	t.Setenv("NODE_MANAGER_SKIP_CONTAINER_CHECK", "1")
+	t.Setenv("NODE_MANAGER_TEST_NO_EXISTING_INFERENCE", "1")
+	ctx := context.Background()
+	cfg := &Config{OrchestratorURL: "http://x", NodeSlug: "x", RegistrationPSK: "psk"}
+	err := runStartupChecks(ctx, nil, cfg)
+	if err != nil {
+		t.Fatalf("runStartupChecks with skip set: %v", err)
+	}
+}
+
+func TestCheckContainerRuntime_FailsWhenRuntimeUnavailable(t *testing.T) {
+	t.Setenv("NODE_MANAGER_SKIP_CONTAINER_CHECK", "")
+	t.Setenv("CONTAINER_RUNTIME", "nonexistent-runtime-binary-xyz")
+	ctx := context.Background()
+	cfg := &Config{}
+	err := checkContainerRuntime(ctx, nil, cfg)
+	if err == nil {
+		t.Fatal("checkContainerRuntime should fail when runtime binary is unavailable")
+	}
+	if !strings.Contains(err.Error(), "startup check") && !strings.Contains(err.Error(), "nonexistent-runtime-binary-xyz") {
+		t.Errorf("error should mention startup check or runtime: %v", err)
+	}
+}
 
 func TestBuildCapability_SetsInference(t *testing.T) {
 	t.Setenv("NODE_MANAGER_TEST_NO_EXISTING_INFERENCE", "1")
@@ -300,11 +332,15 @@ func configHandler(nodeSlug string) http.HandlerFunc {
 	}
 }
 
-// mockOrchWithConfig returns a test server that handles register, config GET/POST, and capability.
+// mockOrchWithConfig returns a test server that handles readyz, register, config GET/POST, and capability.
 func mockOrchWithConfig(t *testing.T) *httptest.Server {
 	t.Helper()
 	var baseURL string
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == pathReadyz {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
 		if r.URL.Path == pathNodesRegister {
 			registerOKHandler(baseURL)(w, r)
 			return
@@ -325,6 +361,10 @@ func TestRun(t *testing.T) {
 	reportCalled := false
 	var srv *httptest.Server
 	srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == pathReadyz {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
 		if r.URL.Path == pathNodesRegister {
 			registerOKHandler(srv.URL)(w, r)
 			return
@@ -371,6 +411,7 @@ func TestRunValidateFails(t *testing.T) {
 }
 
 func TestRunRegisterFails(t *testing.T) {
+	t.Setenv("NODE_MANAGER_READINESS_TIMEOUT", "50ms")
 	cfg := &Config{
 		OrchestratorURL: "http://127.0.0.1:1",
 		NodeSlug:        "x",
@@ -389,7 +430,14 @@ func TestRunRegisterFails(t *testing.T) {
 
 func runWithServerExpectError(t *testing.T, handler http.HandlerFunc, errMsg string) {
 	t.Helper()
-	server := httptest.NewServer(handler)
+	wrapped := func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == pathReadyz {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+		handler(w, r)
+	}
+	server := httptest.NewServer(http.HandlerFunc(wrapped))
 	defer server.Close()
 	cfg := &Config{
 		OrchestratorURL: server.URL,
@@ -434,6 +482,10 @@ func TestRunRegisterErrorStatusAndBadJSON(t *testing.T) {
 
 func TestRunRegisterInvalidBootstrap(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == pathReadyz {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
 		if r.URL.Path != pathNodesRegister {
 			if r.URL.Path == "/v1/nodes/config" {
 				configHandler("x")(w, r)
@@ -515,6 +567,10 @@ func TestRunReportCapabilitiesErrorBranch(t *testing.T) {
 func TestRunReportCapabilitiesConnectionFails(t *testing.T) {
 	var srv *httptest.Server
 	srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == pathReadyz {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
 		if r.URL.Path == pathNodesRegister {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusCreated)
@@ -557,6 +613,10 @@ func TestRunReportCapabilitiesConnectionFails(t *testing.T) {
 func TestRunContextCancelledAfterRegister(t *testing.T) {
 	var srv *httptest.Server
 	srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == pathReadyz {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
 		if r.URL.Path == pathNodesRegister {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusCreated)
@@ -715,6 +775,62 @@ func TestRunWithOptions_StartWorkerAPICalled(t *testing.T) {
 	}
 	if tokenReceived != "test-bearer" {
 		t.Errorf("StartWorkerAPI should receive token from config, got %q", tokenReceived)
+	}
+	if got := os.Getenv("WORKER_NODE_CONFIG_JSON"); got == "" {
+		t.Error("expected WORKER_NODE_CONFIG_JSON to be set from node config")
+	}
+}
+
+func TestApplyWorkerProxyConfigEnv_SetsOrchestratorBaseURL(t *testing.T) {
+	_ = os.Unsetenv("ORCHESTRATOR_INTERNAL_PROXY_BASE_URL")
+	cfg := &nodepayloads.NodeConfigurationPayload{
+		Version: 1,
+		Orchestrator: nodepayloads.ConfigOrchestrator{
+			BaseURL: "http://orchestrator.example:12082",
+		},
+	}
+	applyWorkerProxyConfigEnv(cfg)
+	if got := os.Getenv("ORCHESTRATOR_INTERNAL_PROXY_BASE_URL"); got != "http://orchestrator.example:12082" {
+		t.Fatalf("unexpected ORCHESTRATOR_INTERNAL_PROXY_BASE_URL: %q", got)
+	}
+}
+
+func TestBuildManagedServiceTargetsFromConfig(t *testing.T) {
+	cfg := &nodepayloads.NodeConfigurationPayload{
+		ManagedServices: &nodepayloads.ConfigManagedServices{
+			Services: []nodepayloads.ConfigManagedService{
+				{ServiceID: "pma-main", ServiceType: "pma"},
+				{ServiceID: "other", ServiceType: "tooling_proxy"},
+			},
+		},
+	}
+	_ = os.Setenv("PMA_BASE_URL", "http://127.0.0.1:8090")
+	defer func() { _ = os.Unsetenv("PMA_BASE_URL") }()
+	targets := buildManagedServiceTargetsFromConfig(cfg)
+	got, ok := targets["pma-main"]
+	if !ok {
+		t.Fatalf("expected pma-main target, got %+v", targets)
+	}
+	if got["base_url"] != "http://127.0.0.1:8090" || got["service_type"] != "pma" {
+		t.Fatalf("unexpected pma target values: %+v", got)
+	}
+	if _, ok := targets["other"]; ok {
+		t.Fatalf("unexpected non-pma target in mapping: %+v", targets["other"])
+	}
+}
+
+func TestApplyWorkerProxyConfigEnv_SetsManagedServiceTargetsEnv(t *testing.T) {
+	_ = os.Unsetenv("WORKER_MANAGED_SERVICE_TARGETS_JSON")
+	cfg := &nodepayloads.NodeConfigurationPayload{
+		ManagedServices: &nodepayloads.ConfigManagedServices{
+			Services: []nodepayloads.ConfigManagedService{
+				{ServiceID: "pma-main", ServiceType: "pma"},
+			},
+		},
+	}
+	applyWorkerProxyConfigEnv(cfg)
+	if got := os.Getenv("WORKER_MANAGED_SERVICE_TARGETS_JSON"); got == "" || !strings.Contains(got, "pma-main") {
+		t.Fatalf("expected WORKER_MANAGED_SERVICE_TARGETS_JSON to be populated, got %q", got)
 	}
 }
 

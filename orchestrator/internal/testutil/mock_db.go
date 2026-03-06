@@ -29,6 +29,8 @@ type MockDB struct {
 	SessionsByHash    map[string]*models.RefreshSession
 	Nodes             map[uuid.UUID]*models.Node
 	NodesBySlug       map[string]*models.Node
+	Projects          map[uuid.UUID]*models.Project
+	DefaultProjectsByUser map[uuid.UUID]*models.Project
 	Tasks             map[uuid.UUID]*models.Task
 	Jobs              map[uuid.UUID]*models.Job
 	JobsByTask        map[uuid.UUID][]*models.Job
@@ -102,6 +104,8 @@ func NewMockDB() *MockDB {
 		SessionsByHash:  make(map[string]*models.RefreshSession),
 		Nodes:           make(map[uuid.UUID]*models.Node),
 		NodesBySlug:     make(map[string]*models.Node),
+		Projects:        make(map[uuid.UUID]*models.Project),
+		DefaultProjectsByUser: make(map[uuid.UUID]*models.Project),
 		Tasks:           make(map[uuid.UUID]*models.Task),
 		Jobs:            make(map[uuid.UUID]*models.Job),
 		JobsByTask:      make(map[uuid.UUID][]*models.Job),
@@ -344,7 +348,11 @@ func (m *MockDB) ListDispatchableNodes(_ context.Context) ([]*models.Node, error
 }
 
 // CreateTask creates a new task. When taskName is set, mock sets Summary to it for response tests.
-func (m *MockDB) CreateTask(_ context.Context, createdBy *uuid.UUID, prompt string, taskName *string) (*models.Task, error) {
+func (m *MockDB) CreateTask(_ context.Context, createdBy *uuid.UUID, prompt string, taskName *string, projectID ...*uuid.UUID) (*models.Task, error) {
+	var effectiveProjectID *uuid.UUID
+	if len(projectID) > 0 {
+		effectiveProjectID = projectID[0]
+	}
 	return runWithLock(m, true, func() (*models.Task, error) {
 		var summary string
 		if taskName != nil {
@@ -355,6 +363,7 @@ func (m *MockDB) CreateTask(_ context.Context, createdBy *uuid.UUID, prompt stri
 		task := &models.Task{
 			ID:        uuid.New(),
 			CreatedBy: createdBy,
+			ProjectID: effectiveProjectID,
 			Status:    models.TaskStatusPending,
 			Prompt:    &prompt,
 			Summary:   &summary,
@@ -363,6 +372,27 @@ func (m *MockDB) CreateTask(_ context.Context, createdBy *uuid.UUID, prompt stri
 		}
 		m.Tasks[task.ID] = task
 		return task, nil
+	})
+}
+
+// GetOrCreateDefaultProjectForUser returns a deterministic per-user default project from the mock.
+func (m *MockDB) GetOrCreateDefaultProjectForUser(_ context.Context, userID uuid.UUID) (*models.Project, error) {
+	return runWithLock(m, true, func() (*models.Project, error) {
+		if p, ok := m.DefaultProjectsByUser[userID]; ok {
+			return p, nil
+		}
+		now := time.Now().UTC()
+		p := &models.Project{
+			ID:          uuid.New(),
+			Slug:        "default-" + userID.String(),
+			DisplayName: "Default Project",
+			IsActive:    true,
+			CreatedAt:   now,
+			UpdatedAt:   now,
+		}
+		m.Projects[p.ID] = p
+		m.DefaultProjectsByUser[userID] = p
+		return p, nil
 	})
 }
 

@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -257,6 +258,229 @@ func TestRunTaskCreate_OK(t *testing.T) {
 	defer func() { cfg = nil; taskCreatePrompt = "" }()
 	if err := runTaskCreate(nil, nil); err != nil {
 		t.Errorf("runTaskCreate: %v", err)
+	}
+}
+
+func TestRunTaskCreate_RequiresExactlyOneInputMode(t *testing.T) {
+	cfg = &config.Config{GatewayURL: "http://localhost", Token: "tok"}
+	defer func() {
+		cfg = nil
+		taskCreateTask = ""
+		taskCreatePrompt = ""
+		taskCreateTaskFile = ""
+		taskCreateScript = ""
+		taskCreateCommands = nil
+		taskCreateCommandsFile = ""
+	}()
+	err := runTaskCreate(nil, nil)
+	if err == nil {
+		t.Fatal("expected usage error when no input mode is set")
+	}
+	if exit.CodeOf(err) != 2 {
+		t.Fatalf("exit code = %d, want 2", exit.CodeOf(err))
+	}
+	taskCreateTask = "a"
+	taskCreatePrompt = "b"
+	err = runTaskCreate(nil, nil)
+	if err == nil {
+		t.Fatal("expected usage error when multiple input modes are set")
+	}
+	if exit.CodeOf(err) != 2 {
+		t.Fatalf("exit code = %d, want 2", exit.CodeOf(err))
+	}
+}
+
+func TestRunTaskCreate_TaskFileModeAndProjectID(t *testing.T) {
+	var got userapi.CreateTaskRequest
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/v1/tasks" && r.Method == http.MethodPost {
+			_ = json.NewDecoder(r.Body).Decode(&got)
+			w.WriteHeader(http.StatusCreated)
+			_ = json.NewEncoder(w).Encode(userapi.TaskResponse{ID: "task-1", Status: "queued"})
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+	taskFile := filepath.Join(t.TempDir(), "task.md")
+	if err := os.WriteFile(taskFile, []byte("file task prompt"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	projectID := "11111111-2222-3333-4444-555555555555"
+	cfg = &config.Config{GatewayURL: server.URL, Token: "tok"}
+	taskCreateTaskFile = taskFile
+	taskCreateProjectID = projectID
+	taskCreateTaskName = "from-file"
+	defer func() {
+		cfg = nil
+		taskCreateTaskFile = ""
+		taskCreateProjectID = ""
+		taskCreateTaskName = ""
+	}()
+	if err := runTaskCreate(nil, nil); err != nil {
+		t.Fatalf("runTaskCreate: %v", err)
+	}
+	if got.InputMode != "prompt" {
+		t.Fatalf("input_mode = %q, want prompt", got.InputMode)
+	}
+	if strings.TrimSpace(got.Prompt) != "file task prompt" {
+		t.Fatalf("prompt = %q", got.Prompt)
+	}
+	if got.ProjectID == nil || *got.ProjectID != projectID {
+		t.Fatalf("project_id = %v, want %s", got.ProjectID, projectID)
+	}
+}
+
+func TestRunTaskCreate_ResultWait(t *testing.T) {
+	first := true
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		if r.URL.Path == "/v1/tasks" && r.Method == http.MethodPost {
+			w.WriteHeader(http.StatusCreated)
+			_ = json.NewEncoder(w).Encode(userapi.TaskResponse{ID: "task-1", Status: "queued"})
+			return
+		}
+		if r.URL.Path == "/v1/tasks/task-1/result" && r.Method == http.MethodGet {
+			if first {
+				first = false
+				_ = json.NewEncoder(w).Encode(userapi.TaskResultResponse{TaskID: "task-1", Status: "running", Jobs: []userapi.JobResponse{}})
+				return
+			}
+			_ = json.NewEncoder(w).Encode(userapi.TaskResultResponse{TaskID: "task-1", Status: "completed", Jobs: []userapi.JobResponse{}})
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+	cfg = &config.Config{GatewayURL: server.URL, Token: "tok"}
+	taskCreatePrompt = "echo hi"
+	taskCreateResult = true
+	defer func() {
+		cfg = nil
+		taskCreatePrompt = ""
+		taskCreateResult = false
+	}()
+	if err := runTaskCreate(nil, nil); err != nil {
+		t.Fatalf("runTaskCreate --result: %v", err)
+	}
+}
+
+func TestRunTaskCreate_AttachValidation(t *testing.T) {
+	cfg = &config.Config{GatewayURL: "http://localhost", Token: "tok"}
+	taskCreatePrompt = "echo hi"
+	taskCreateAttachments = []string{t.TempDir()}
+	defer func() {
+		cfg = nil
+		taskCreatePrompt = ""
+		taskCreateAttachments = nil
+	}()
+	err := runTaskCreate(nil, nil)
+	if err == nil {
+		t.Fatal("expected validation error for non-regular attachment")
+	}
+	if exit.CodeOf(err) != 2 {
+		t.Fatalf("exit code = %d, want 2", exit.CodeOf(err))
+	}
+}
+
+func TestResolveTaskCreateInput_Modes(t *testing.T) {
+	defer func() {
+		taskCreateTask = ""
+		taskCreatePrompt = ""
+		taskCreateTaskFile = ""
+		taskCreateScript = ""
+		taskCreateCommands = nil
+		taskCreateCommandsFile = ""
+	}()
+	taskCreateTask = "inline"
+	prompt, mode, err := resolveTaskCreateInput()
+	if err != nil || mode != "prompt" || prompt != "inline" {
+		t.Fatalf("inline mode: prompt=%q mode=%q err=%v", prompt, mode, err)
+	}
+	taskCreateTask = ""
+	taskCreatePrompt = "inline-prompt"
+	prompt, mode, err = resolveTaskCreateInput()
+	if err != nil || mode != "prompt" || prompt != "inline-prompt" {
+		t.Fatalf("prompt mode: prompt=%q mode=%q err=%v", prompt, mode, err)
+	}
+	taskCreatePrompt = ""
+	taskCreateCommands = []string{"echo a", "echo b"}
+	prompt, mode, err = resolveTaskCreateInput()
+	if err != nil || mode != "commands" || !strings.Contains(prompt, "echo b") {
+		t.Fatalf("commands mode: prompt=%q mode=%q err=%v", prompt, mode, err)
+	}
+	taskCreateCommands = nil
+	taskCreateTask = "a"
+	taskCreatePrompt = "b"
+	_, _, err = resolveTaskCreateInput()
+	if err == nil {
+		t.Fatal("expected error when both --task and --prompt are set")
+	}
+	taskCreateTask = ""
+	taskCreatePrompt = ""
+	taskFile := filepath.Join(t.TempDir(), "task.txt")
+	if err := os.WriteFile(taskFile, []byte("from-task-file"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	taskCreateTaskFile = taskFile
+	prompt, mode, err = resolveTaskCreateInput()
+	if err != nil || mode != "prompt" || prompt != "from-task-file" {
+		t.Fatalf("task-file mode: prompt=%q mode=%q err=%v", prompt, mode, err)
+	}
+	taskCreateTaskFile = ""
+	cmdsFile := filepath.Join(t.TempDir(), "commands.txt")
+	if err := os.WriteFile(cmdsFile, []byte("echo from file"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	taskCreateCommandsFile = cmdsFile
+	prompt, mode, err = resolveTaskCreateInput()
+	if err != nil || mode != "commands" || !strings.Contains(prompt, "from file") {
+		t.Fatalf("commands-file mode: prompt=%q mode=%q err=%v", prompt, mode, err)
+	}
+}
+
+func TestReadModeFile_SizeLimit(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "f.txt")
+	if err := os.WriteFile(path, []byte("abcdef"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := readModeFile(path, "task-file", 3); err == nil {
+		t.Fatal("expected size limit error")
+	}
+	content, err := readModeFile(path, "task-file", 16)
+	if err != nil {
+		t.Fatalf("readModeFile: %v", err)
+	}
+	if content != "abcdef" {
+		t.Fatalf("content=%q", content)
+	}
+}
+
+func TestValidateAttachments_CountLimit(t *testing.T) {
+	paths := make([]string, maxAttachmentCount+1)
+	for i := range paths {
+		p := filepath.Join(t.TempDir(), fmt.Sprintf("a-%d.txt", i))
+		if err := os.WriteFile(p, []byte("x"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		paths[i] = p
+	}
+	if err := validateAttachments(paths); err == nil {
+		t.Fatal("expected too many attachments error")
+	}
+}
+
+func TestValidateRegularReadableFile_SymlinkRejected(t *testing.T) {
+	target := filepath.Join(t.TempDir(), "target.txt")
+	if err := os.WriteFile(target, []byte("x"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	link := filepath.Join(t.TempDir(), "link.txt")
+	if err := os.Symlink(target, link); err != nil {
+		t.Skipf("symlink not supported: %v", err)
+	}
+	if _, err := validateRegularReadableFile(link); err == nil {
+		t.Fatal("expected symlink rejection")
 	}
 }
 

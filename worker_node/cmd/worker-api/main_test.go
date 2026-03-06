@@ -15,6 +15,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cypher0n3/cynodeai/go_shared_libs/contracts/nodepayloads"
 	"github.com/cypher0n3/cynodeai/go_shared_libs/contracts/workerapi"
 	"github.com/cypher0n3/cynodeai/worker_node/cmd/worker-api/executor"
 	"github.com/cypher0n3/cynodeai/worker_node/internal/telemetry"
@@ -275,7 +276,15 @@ func TestRunMainMissingToken(t *testing.T) {
 
 func TestRunMainWithContextCancel(t *testing.T) {
 	_ = os.Setenv("WORKER_API_BEARER_TOKEN", "test-token")
+	_ = os.Setenv("LISTEN_ADDR", "127.0.0.1:0")
+	_ = os.Setenv("WORKER_INTERNAL_LISTEN_ADDR", "")
+	blocker := filepath.Join(t.TempDir(), "state-blocker")
+	_ = os.WriteFile(blocker, []byte("x"), 0o600)
+	_ = os.Setenv("WORKER_API_STATE_DIR", blocker)
 	defer func() { _ = os.Unsetenv("WORKER_API_BEARER_TOKEN") }()
+	defer func() { _ = os.Unsetenv("LISTEN_ADDR") }()
+	defer func() { _ = os.Unsetenv("WORKER_INTERNAL_LISTEN_ADDR") }()
+	defer func() { _ = os.Unsetenv("WORKER_API_STATE_DIR") }()
 
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan int, 1)
@@ -286,6 +295,26 @@ func TestRunMainWithContextCancel(t *testing.T) {
 	code := <-done
 	if code != 0 {
 		t.Errorf("runMain after cancel should return 0, got %d", code)
+	}
+}
+
+func TestRunMain_InternalUnixListenFailure(t *testing.T) {
+	_ = os.Setenv("WORKER_API_BEARER_TOKEN", "test-token")
+	_ = os.Setenv("LISTEN_ADDR", "127.0.0.1:0")
+	_ = os.Setenv("WORKER_INTERNAL_LISTEN_ADDR", "")
+	_ = os.Setenv("WORKER_INTERNAL_LISTEN_UNIX", "/this/path/does/not/exist/worker.sock")
+	blocker := filepath.Join(t.TempDir(), "state-blocker")
+	_ = os.WriteFile(blocker, []byte("x"), 0o600)
+	_ = os.Setenv("WORKER_API_STATE_DIR", blocker)
+	defer func() { _ = os.Unsetenv("WORKER_API_BEARER_TOKEN") }()
+	defer func() { _ = os.Unsetenv("LISTEN_ADDR") }()
+	defer func() { _ = os.Unsetenv("WORKER_INTERNAL_LISTEN_ADDR") }()
+	defer func() { _ = os.Unsetenv("WORKER_INTERNAL_LISTEN_UNIX") }()
+	defer func() { _ = os.Unsetenv("WORKER_API_STATE_DIR") }()
+
+	code := runMain(context.Background())
+	if code != 1 {
+		t.Fatalf("runMain should fail when unix socket path cannot be listened, got %d", code)
 	}
 }
 
@@ -701,5 +730,240 @@ func TestForwardManagedProxyRequest_ConnectionError(t *testing.T) {
 	)
 	if status != http.StatusBadGateway || detail == "" {
 		t.Fatalf("expected bad gateway detail, got status=%d detail=%q", status, detail)
+	}
+}
+
+func TestLoadWorkerProxyConfig_FromNodeConfig(t *testing.T) {
+	cfg := nodepayloads.NodeConfigurationPayload{
+		Version: 1,
+		Orchestrator: nodepayloads.ConfigOrchestrator{
+			BaseURL: "http://orchestrator.internal:12082",
+		},
+		ManagedServices: &nodepayloads.ConfigManagedServices{
+			Services: []nodepayloads.ConfigManagedService{
+				{
+					ServiceID:   "pma-main",
+					ServiceType: "pma",
+					Inference:   &nodepayloads.ConfigManagedServiceInference{BaseURL: "http://127.0.0.1:8090"},
+					Orchestrator: &nodepayloads.ConfigManagedServiceOrchestrator{
+						AgentToken: "agent-token-1",
+					},
+				},
+			},
+		},
+	}
+	raw, _ := json.Marshal(cfg)
+	t.Setenv("WORKER_NODE_CONFIG_JSON", string(raw))
+	t.Setenv("ORCHESTRATOR_INTERNAL_PROXY_BASE_URL", "")
+	out := loadWorkerProxyConfig(slog.Default())
+	if len(out.ManagedServiceTargets) != 0 {
+		t.Fatalf("expected no direct managed targets from node config, got %+v", out.ManagedServiceTargets)
+	}
+	if out.InternalProxy.UpstreamBaseURL != "http://orchestrator.internal:12082" {
+		t.Fatalf("unexpected internal upstream: %q", out.InternalProxy.UpstreamBaseURL)
+	}
+	if out.InternalProxy.AllowedTokens["agent-token-1"] != "pma-main" {
+		t.Fatalf("expected allowed token from node config, got %+v", out.InternalProxy.AllowedTokens)
+	}
+}
+
+func TestLoadWorkerProxyConfig_FallbackFromEnv(t *testing.T) {
+	t.Setenv("WORKER_NODE_CONFIG_JSON", "")
+	t.Setenv("WORKER_MANAGED_SERVICE_TARGETS_JSON", `{"pma-main":{"service_type":"pma","base_url":"http://127.0.0.1:8090"}}`)
+	t.Setenv("WORKER_INTERNAL_AGENT_TOKENS_JSON", `{"tok":"svc"}`)
+	t.Setenv("ORCHESTRATOR_URL", "http://orchestrator:12082")
+	out := loadWorkerProxyConfig(slog.Default())
+	if out.ManagedServiceTargets["pma-main"].BaseURL != "http://127.0.0.1:8090" {
+		t.Fatalf("managed targets fallback failed: %+v", out.ManagedServiceTargets)
+	}
+	if out.InternalProxy.AllowedTokens["tok"] != "svc" {
+		t.Fatalf("internal tokens fallback failed: %+v", out.InternalProxy.AllowedTokens)
+	}
+	if out.InternalProxy.UpstreamBaseURL != "http://orchestrator:12082" {
+		t.Fatalf("internal upstream fallback failed: %q", out.InternalProxy.UpstreamBaseURL)
+	}
+}
+
+func TestLoadWorkerProxyConfig_InvalidNodeConfigFallsBack(t *testing.T) {
+	t.Setenv("WORKER_NODE_CONFIG_JSON", `{`)
+	t.Setenv("WORKER_MANAGED_SERVICE_TARGETS_JSON", `{"svc":{"service_type":"pma","base_url":"http://127.0.0.1:8090"}}`)
+	out := loadWorkerProxyConfig(slog.Default())
+	if out.ManagedServiceTargets["svc"].BaseURL != "http://127.0.0.1:8090" {
+		t.Fatalf("expected env fallback targets, got %+v", out.ManagedServiceTargets)
+	}
+}
+
+func TestInternalOrchestratorProxy_MCP(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/mcp/call" || r.Method != http.MethodPost {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"ok":true}`))
+	}))
+	defer upstream.Close()
+	cfg := internalOrchestratorProxyConfig{
+		UpstreamBaseURL: upstream.URL,
+		AllowedTokens:   map[string]string{"agent-token": "pma-main"},
+	}
+	mux := newInternalMux(cfg, slog.Default())
+	body := `{"version":1,"method":"POST","path":"/mcp/call"}`
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodPost, "/v1/worker/internal/orchestrator/mcp:call", bytes.NewReader([]byte(body)))
+	r.RemoteAddr = "127.0.0.1:12345"
+	r.Header.Set("Authorization", "Bearer agent-token")
+	mux.ServeHTTP(w, r)
+	if w.Code != http.StatusOK {
+		t.Fatalf("status=%d body=%s", w.Code, w.Body.String())
+	}
+}
+
+func TestInternalOrchestratorProxy_AuthAndLoopback(t *testing.T) {
+	cfg := internalOrchestratorProxyConfig{
+		UpstreamBaseURL: "http://127.0.0.1:1",
+		AllowedTokens:   map[string]string{"agent-token": "svc"},
+	}
+	mux := newInternalMux(cfg, slog.Default())
+	body := `{"version":1,"method":"POST","path":"/x"}`
+
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodPost, "/v1/worker/internal/orchestrator/agent:ready", bytes.NewReader([]byte(body)))
+	r.RemoteAddr = "192.0.2.10:12345"
+	r.Header.Set("Authorization", "Bearer agent-token")
+	mux.ServeHTTP(w, r)
+	if w.Code != http.StatusForbidden {
+		t.Fatalf("expected 403 for non-loopback, got %d", w.Code)
+	}
+
+	w2 := httptest.NewRecorder()
+	r2 := httptest.NewRequest(http.MethodPost, "/v1/worker/internal/orchestrator/agent:ready", bytes.NewReader([]byte(body)))
+	r2.RemoteAddr = "127.0.0.1:12345"
+	mux.ServeHTTP(w2, r2)
+	if w2.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401 for missing token, got %d", w2.Code)
+	}
+}
+
+func TestInternalOrchestratorProxy_UpstreamMissing(t *testing.T) {
+	cfg := internalOrchestratorProxyConfig{
+		AllowedTokens: map[string]string{"agent-token": "svc"},
+	}
+	mux := newInternalMux(cfg, slog.Default())
+	body := `{"version":1,"method":"POST","path":"/x"}`
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodPost, "/v1/worker/internal/orchestrator/mcp:call", bytes.NewReader([]byte(body)))
+	r.RemoteAddr = "127.0.0.1:12345"
+	r.Header.Set("Authorization", "Bearer agent-token")
+	mux.ServeHTTP(w, r)
+	if w.Code != http.StatusBadGateway {
+		t.Fatalf("expected 502 for missing upstream, got %d", w.Code)
+	}
+}
+
+func TestPublicMux_DoesNotExposeInternalProxyRoutes(t *testing.T) {
+	mux := newMux(executor.New("direct", time.Second, 1024, "", "", nil), "token", "", nil, slog.Default())
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodPost, "/v1/worker/internal/orchestrator/mcp:call", bytes.NewReader([]byte(`{}`)))
+	mux.ServeHTTP(w, r)
+	if w.Code != http.StatusNotFound {
+		t.Fatalf("expected 404 for internal route on public mux, got %d", w.Code)
+	}
+}
+
+func TestLoadInternalProxyTokensFromEnv(t *testing.T) {
+	t.Setenv("WORKER_INTERNAL_AGENT_TOKENS_JSON", `{"tok-a":"svc-a"}`)
+	got := loadInternalProxyTokensFromEnv()
+	if got["tok-a"] != "svc-a" {
+		t.Fatalf("unexpected internal tokens: %+v", got)
+	}
+	t.Setenv("WORKER_INTERNAL_AGENT_TOKENS_JSON", `{`)
+	got = loadInternalProxyTokensFromEnv()
+	if len(got) != 0 {
+		t.Fatalf("expected empty tokens for invalid json, got %+v", got)
+	}
+}
+
+func TestDeriveManagedServiceTargetsFromNodeConfig(t *testing.T) {
+	cfg := &nodepayloads.NodeConfigurationPayload{
+		ManagedServices: &nodepayloads.ConfigManagedServices{
+			Services: []nodepayloads.ConfigManagedService{
+				{
+					ServiceID:   "svc-1",
+					ServiceType: "pma",
+					Inference:   &nodepayloads.ConfigManagedServiceInference{BaseURL: "http://127.0.0.1:8090"},
+				},
+				{
+					ServiceID:   "svc-2",
+					ServiceType: "pma",
+				},
+			},
+		},
+	}
+	got := deriveManagedServiceTargetsFromNodeConfig(cfg)
+	if len(got) != 0 {
+		t.Fatalf("expected no targets derived directly from node config, got %+v", got)
+	}
+}
+
+type fakeAddr struct {
+	network string
+	addr    string
+}
+
+func (f fakeAddr) Network() string { return f.network }
+func (f fakeAddr) String() string  { return f.addr }
+
+func TestIsLoopbackRequest(t *testing.T) {
+	r := httptest.NewRequest(http.MethodPost, "/", http.NoBody)
+	r.RemoteAddr = "127.0.0.1:1234"
+	if !isLoopbackRequest(r) {
+		t.Fatal("expected loopback remote addr to pass")
+	}
+	r2 := httptest.NewRequest(http.MethodPost, "/", http.NoBody)
+	r2.RemoteAddr = "192.0.2.1:1234"
+	if isLoopbackRequest(r2) {
+		t.Fatal("expected non-loopback remote addr to fail")
+	}
+	r3 := httptest.NewRequest(http.MethodPost, "/", http.NoBody)
+	r3 = r3.WithContext(context.WithValue(r3.Context(), http.LocalAddrContextKey, fakeAddr{network: "unix", addr: "/tmp/worker.sock"}))
+	r3.RemoteAddr = "192.0.2.1:1234"
+	if !isLoopbackRequest(r3) {
+		t.Fatal("expected unix local addr to pass")
+	}
+}
+
+func TestAuthenticateInternalProxyRequest(t *testing.T) {
+	cfg := internalOrchestratorProxyConfig{
+		AllowedTokens: map[string]string{"tok-a": "svc-a", "lease-a": "svc-lease"},
+	}
+	r := httptest.NewRequest(http.MethodPost, "/", http.NoBody)
+	r.Header.Set("Authorization", "Bearer tok-a")
+	if _, sid, ok := authenticateInternalProxyRequest(r, cfg); !ok || sid != "svc-a" {
+		t.Fatalf("bearer auth mismatch: ok=%v sid=%q", ok, sid)
+	}
+	r2 := httptest.NewRequest(http.MethodPost, "/", http.NoBody)
+	r2.Header.Set("X-Cynode-Capability-Lease", "lease-a")
+	if _, sid, ok := authenticateInternalProxyRequest(r2, cfg); !ok || sid != "svc-lease" {
+		t.Fatalf("lease auth mismatch: ok=%v sid=%q", ok, sid)
+	}
+	r3 := httptest.NewRequest(http.MethodPost, "/", http.NoBody)
+	r3.Header.Set("Authorization", "Bearer bad-token")
+	if _, _, ok := authenticateInternalProxyRequest(r3, cfg); ok {
+		t.Fatal("expected bad bearer token to fail")
+	}
+}
+
+func TestNewInternalServerAddr(t *testing.T) {
+	_ = os.Unsetenv("WORKER_INTERNAL_LISTEN_ADDR")
+	srv := newInternalServer(http.NewServeMux())
+	if srv.Addr != "127.0.0.1:9191" {
+		t.Fatalf("unexpected default internal addr: %q", srv.Addr)
+	}
+	_ = os.Setenv("WORKER_INTERNAL_LISTEN_ADDR", "127.0.0.1:9991")
+	defer func() { _ = os.Unsetenv("WORKER_INTERNAL_LISTEN_ADDR") }()
+	srv2 := newInternalServer(http.NewServeMux())
+	if srv2.Addr != "127.0.0.1:9991" {
+		t.Fatalf("unexpected overridden internal addr: %q", srv2.Addr)
 	}
 }

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"strconv"
 	"strings"
 	"time"
 
@@ -48,6 +49,28 @@ const InputModePrompt = "prompt"
 const streamParamAll = "all"
 
 const maxAttachmentPathLen = 2048
+var errInvalidProjectID = errors.New("invalid project_id")
+
+func (h *TaskHandler) resolveTaskProjectID(ctx context.Context, userID *uuid.UUID, reqProjectID *string) (*uuid.UUID, error) {
+	if reqProjectID != nil && strings.TrimSpace(*reqProjectID) != "" {
+		parsed, err := uuid.Parse(strings.TrimSpace(*reqProjectID))
+		if err != nil {
+			return nil, errInvalidProjectID
+		}
+		return &parsed, nil
+	}
+	if userID == nil {
+		return nil, nil
+	}
+	proj, err := h.db.GetOrCreateDefaultProjectForUser(ctx, *userID)
+	if err != nil {
+		return nil, err
+	}
+	if proj == nil {
+		return nil, nil
+	}
+	return &proj.ID, nil
+}
 
 // persistTaskAttachments validates and persists attachment path references for the task (REQ-ORCHES-0127).
 // Returns the list of paths that were stored (for response).
@@ -70,13 +93,15 @@ func (h *TaskHandler) persistTaskAttachments(ctx context.Context, taskID uuid.UU
 	return stored
 }
 
-// taskStatusToSpec maps internal task status to userapi status enum (queued, running, completed, failed, canceled).
+// taskStatusToSpec maps internal task status to userapi status enum (queued, running, completed, failed, cancelled, superseded).
 func taskStatusToSpec(status string) string {
 	switch status {
 	case models.TaskStatusPending:
 		return userapi.StatusQueued
 	case models.TaskStatusCancelled:
-		return userapi.StatusCanceled
+		return userapi.StatusCancelled
+	case models.TaskStatusSuperseded:
+		return userapi.StatusSuperseded
 	default:
 		return status
 	}
@@ -115,7 +140,17 @@ func (h *TaskHandler) CreateTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	task, err := h.db.CreateTask(ctx, userID, req.Prompt, req.TaskName)
+	projectID, err := h.resolveTaskProjectID(ctx, userID, req.ProjectID)
+	if err != nil {
+		if errors.Is(err, errInvalidProjectID) {
+			WriteBadRequest(w, "Invalid project_id")
+			return
+		}
+		h.logger.Error("resolve task project", "error", err)
+		WriteInternalError(w, "Failed to create task")
+		return
+	}
+	task, err := h.db.CreateTask(ctx, userID, req.Prompt, req.TaskName, projectID)
 	if err != nil {
 		h.logger.Error("create task", "error", err)
 		WriteInternalError(w, "Failed to create task")
@@ -261,7 +296,7 @@ func buildSBAJobPayload(taskID, jobID uuid.UUID, prompt, inferenceModel string) 
 		JobID:           jobID.String(),
 		TaskID:          taskID.String(),
 		ExecutionMode:   sbajob.ExecutionModeAgentInference,
-		Constraints:     sbajob.JobConstraints{MaxRuntimeSeconds: 60, MaxOutputBytes: 1024},
+		Constraints:     sbajob.JobConstraints{MaxRuntimeSeconds: 300, MaxOutputBytes: 1024},
 		Inference:       &sbajob.InferenceSpec{AllowedModels: []string{model}, Source: "orchestrator"},
 		Context:         &sbajob.ContextSpec{TaskContext: prompt},
 		Steps:           nil,
@@ -402,12 +437,12 @@ func (h *TaskHandler) GetTaskResult(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-func parseListTasksParams(r *http.Request) (limit, offset int, statusFilter string, errCode int) {
+func parseListTasksParams(r *http.Request) (limit, offset int, statusFilter, cursor string, errCode int) {
 	limit = 50
 	if l := r.URL.Query().Get("limit"); l != "" {
 		n, err := parseInt(l, 1, 200)
 		if err != nil {
-			return 0, 0, "", http.StatusBadRequest
+			return 0, 0, "", "", http.StatusBadRequest
 		}
 		limit = n
 	}
@@ -415,11 +450,16 @@ func parseListTasksParams(r *http.Request) (limit, offset int, statusFilter stri
 	if o := r.URL.Query().Get("offset"); o != "" {
 		n, err := parseInt(o, 0, 1<<31-1)
 		if err != nil {
-			return 0, 0, "", http.StatusBadRequest
+			return 0, 0, "", "", http.StatusBadRequest
 		}
 		offset = n
 	}
-	return limit, offset, r.URL.Query().Get("status"), 0
+	statusFilter = r.URL.Query().Get("status")
+	if statusFilter == "canceled" {
+		statusFilter = userapi.StatusCancelled
+	}
+	cursor = strings.TrimSpace(r.URL.Query().Get("cursor"))
+	return limit, offset, statusFilter, cursor, 0
 }
 
 // ListTasks handles GET /v1/tasks.
@@ -430,12 +470,21 @@ func (h *TaskHandler) ListTasks(w http.ResponseWriter, r *http.Request) {
 		WriteUnauthorized(w, "Authentication required")
 		return
 	}
-	limit, offset, statusFilter, errCode := parseListTasksParams(r)
+	limit, offset, statusFilter, cursor, errCode := parseListTasksParams(r)
 	if errCode != 0 {
-		WriteBadRequest(w, "Invalid limit or offset")
+		WriteBadRequest(w, "Invalid limit, offset, or cursor")
 		return
 	}
-	tasks, err := h.db.ListTasksByUser(ctx, *userID, limit+1, offset)
+	effectiveOffset := offset
+	if cursor != "" {
+		n, err := strconv.Atoi(cursor)
+		if err != nil || n < 0 {
+			WriteBadRequest(w, "Invalid limit, offset, or cursor")
+			return
+		}
+		effectiveOffset = n
+	}
+	tasks, err := h.db.ListTasksByUser(ctx, *userID, limit+1, effectiveOffset)
 	if err != nil {
 		h.logger.Error("list tasks", "error", err)
 		WriteInternalError(w, "Failed to list tasks")
@@ -455,8 +504,9 @@ func (h *TaskHandler) ListTasks(w http.ResponseWriter, r *http.Request) {
 	}
 	resp := userapi.ListTasksResponse{Tasks: out}
 	if hasMore {
-		next := offset + limit
+		next := effectiveOffset + limit
 		resp.NextOffset = &next
+		resp.NextCursor = strconv.Itoa(next)
 	}
 	WriteJSON(w, http.StatusOK, resp)
 }
@@ -605,7 +655,10 @@ func (h *TaskHandler) chatPollUntilTerminal(ctx context.Context, taskID uuid.UUI
 			h.logger.Error("chat get task", "error", err)
 			return "", http.StatusInternalServerError
 		}
-		if t.Status == models.TaskStatusCompleted || t.Status == models.TaskStatusFailed || t.Status == models.TaskStatusCancelled {
+		if t.Status == models.TaskStatusCompleted ||
+			t.Status == models.TaskStatusFailed ||
+			t.Status == models.TaskStatusCancelled ||
+			t.Status == models.TaskStatusSuperseded {
 			jobs, err := h.db.GetJobsByTaskID(ctx, taskID)
 			if err != nil {
 				return "", http.StatusInternalServerError
@@ -641,7 +694,13 @@ func (h *TaskHandler) Chat(w http.ResponseWriter, r *http.Request) {
 		WriteBadRequest(w, "Message is required")
 		return
 	}
-	task, err := h.db.CreateTask(ctx, userID, req.Message, nil)
+	projectID, err := h.resolveTaskProjectID(ctx, userID, nil)
+	if err != nil {
+		h.logger.Error("chat resolve project", "error", err)
+		WriteInternalError(w, "Failed to process message")
+		return
+	}
+	task, err := h.db.CreateTask(ctx, userID, req.Message, nil, projectID)
 	if err != nil {
 		h.logger.Error("chat create task", "error", err)
 		WriteInternalError(w, "Failed to process message")

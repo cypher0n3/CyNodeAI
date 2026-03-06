@@ -68,7 +68,17 @@ def _resolve_bypass(name, arg_value, env_key):
 
 
 def cmd_start(opts):
-    """Build, start compose stack, wait for control-plane, start node. Prescribed sequence by default."""
+    """Run full startup sequence: build binaries, compose up, start node. PMA only when bypass.
+
+    Order (normal startup for start / full-demo / restart):
+    1. build_binaries() - just build-dev
+    2. start_orchestrator_stack_compose() - postgres, control-plane, user-gateway, optional profile
+    3. start_node() - node-manager binary (polls orchestrator /readyz itself per worker_node spec),
+       then worker-api on WORKER_PORT; script waits for worker-api healthz
+    4. (bypass only) If --pma-via-compose: script starts PMA via compose and waits for healthz.
+       Prescribed: script does not start or wait for PMA; worker node starts PMA when orchestrator
+       directs (orchestrator_bootstrap.md, worker_node managed services).
+    """
     opts.extra_env = getattr(opts, "extra_env", None) or {}
     defaults = _default_inference_env()
     for k, v in defaults.items():
@@ -77,26 +87,33 @@ def cmd_start(opts):
     pma_via_compose = getattr(opts, "pma_via_compose", False)
     if not setup_dev_impl.build_binaries():
         return False
+    # Prescribed sequence (docs/tech_specs/orchestrator_bootstrap.md): do not build compose
+    # images here; start uses existing images. full-demo builds them before calling cmd_start.
     if not setup_dev_impl.start_orchestrator_stack_compose(
         extra_env=opts.extra_env, ollama_in_stack=ollama_in_stack
     ):
         setup_dev_impl.stop_all()
         return False
-    if not setup_dev_impl.wait_for_control_plane_listening():
-        setup_dev_impl.stop_all()
-        return False
+    # Node-manager polls orchestrator /readyz itself (worker_node startup procedure); script does not wait.
     setup_dev_impl.log_info(
-        f"Starting node (node-manager then worker-api on :{setup_dev_config.WORKER_PORT})..."
+        f"Starting node (node-manager polls control-plane, then worker-api on :{setup_dev_config.WORKER_PORT})..."
     )
     extra = getattr(opts, "extra_env", None)
     if not setup_dev_impl.start_node(extra_env=extra):
         setup_dev_impl.stop_all()
         return False
-    if not setup_dev_impl.start_pma_after_inference_path(
-        extra_env=extra, pma_via_compose=pma_via_compose
-    ):
-        setup_dev_impl.stop_all()
-        return False
+    # PMA: prescribed path = worker node starts PMA when orchestrator directs; script does nothing.
+    # Bypass (--pma-via-compose) = script starts PMA via compose and waits for healthz.
+    if pma_via_compose:
+        if not setup_dev_impl.start_pma_after_inference_path(
+            extra_env=extra, pma_via_compose=True
+        ):
+            setup_dev_impl.stop_all()
+            return False
+    else:
+        setup_dev_impl.log_info(
+            "Prescribed: PMA is started by worker when orchestrator directs; script does not start or wait for PMA."
+        )
     setup_dev_impl.log_info(
         f"Services started: User API http://localhost:{setup_dev_config.ORCHESTRATOR_PORT} "
         f"Control-plane http://localhost:{setup_dev_config.CONTROL_PLANE_PORT} "

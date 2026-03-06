@@ -2,6 +2,7 @@ package executor
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -75,6 +76,127 @@ func TestBuildProxyRunArgs(t *testing.T) {
 	argsWithCmd := buildProxyRunArgs("p", "http://x", "img", []string{"sleep", "60"})
 	if len(argsWithCmd) < 8 {
 		t.Errorf("with command expected more args, got %v", argsWithCmd)
+	}
+}
+
+func TestWaitForProxyReady(t *testing.T) {
+	orig := probeProxyHealthFunc
+	defer func() { probeProxyHealthFunc = orig }()
+	attempts := 0
+	probeProxyHealthFunc = func(context.Context, string, string) error {
+		attempts++
+		if attempts < 3 {
+			return os.ErrNotExist
+		}
+		return nil
+	}
+	if err := waitForProxyReady(context.Background(), "podman", "proxy-id", 2*time.Second, true); err != nil {
+		t.Fatalf("waitForProxyReady: %v", err)
+	}
+	if attempts != 3 {
+		t.Fatalf("attempts=%d, want 3", attempts)
+	}
+}
+
+func TestWaitForProxyReady_Timeout(t *testing.T) {
+	orig := probeProxyHealthFunc
+	defer func() { probeProxyHealthFunc = orig }()
+	probeProxyHealthFunc = func(context.Context, string, string) error { return os.ErrDeadlineExceeded }
+	err := waitForProxyReady(context.Background(), "podman", "proxy-id", 300*time.Millisecond, true)
+	if err == nil {
+		t.Fatal("expected timeout error")
+	}
+}
+
+func TestWaitForProxyReady_ContainerRunningProbe(t *testing.T) {
+	orig := probeProxyRunningFunc
+	defer func() { probeProxyRunningFunc = orig }()
+	attempts := 0
+	probeProxyRunningFunc = func(context.Context, string, string) error {
+		attempts++
+		if attempts < 2 {
+			return os.ErrNotExist
+		}
+		return nil
+	}
+	if err := waitForProxyReady(context.Background(), "podman", "proxy-id", time.Second, false); err != nil {
+		t.Fatalf("waitForProxyReady: %v", err)
+	}
+}
+
+func TestProxyProbeHelpers(t *testing.T) {
+	runtimePath := filepath.Join(t.TempDir(), "fake-runtime.sh")
+	script := `#!/bin/sh
+if [ "$1" = "exec" ]; then
+  if [ "$2" = "cid-ok" ] && [ "$3" = "/inference-proxy" ] && [ "$4" = "--healthcheck-url" ]; then
+    exit 0
+  fi
+  echo "exec failed"
+  exit 1
+fi
+if [ "$1" = "inspect" ]; then
+  if [ "$4" = "cid-ok" ]; then
+    echo true
+  else
+    echo false
+  fi
+  exit 0
+fi
+echo "unsupported"
+exit 1
+`
+	if err := os.WriteFile(runtimePath, []byte(script), 0o700); err != nil {
+		t.Fatalf("write fake runtime: %v", err)
+	}
+	if err := probeProxyHealthOnce(context.Background(), runtimePath, "cid-ok"); err != nil {
+		t.Fatalf("probeProxyHealthOnce: %v", err)
+	}
+	if err := probeProxyRunningOnce(context.Background(), runtimePath, "cid-ok"); err != nil {
+		t.Fatalf("probeProxyRunningOnce: %v", err)
+	}
+	if err := probeProxyRunningOnce(context.Background(), runtimePath, "cid-bad"); err == nil {
+		t.Fatal("expected probeProxyRunningOnce error for non-running container")
+	}
+}
+
+func TestProbeProxyHealthOnce_Error(t *testing.T) {
+	runtimePath := filepath.Join(t.TempDir(), "fake-runtime.sh")
+	script := "#!/bin/sh\nexit 1\n"
+	if err := os.WriteFile(runtimePath, []byte(script), 0o700); err != nil {
+		t.Fatalf("write fake runtime: %v", err)
+	}
+	if err := probeProxyHealthOnce(context.Background(), runtimePath, "cid-any"); err == nil {
+		t.Fatal("expected probeProxyHealthOnce error")
+	}
+}
+
+func TestWaitForProxyReady_ContainerProbeTimeout(t *testing.T) {
+	orig := probeProxyRunningFunc
+	defer func() { probeProxyRunningFunc = orig }()
+	probeProxyRunningFunc = func(context.Context, string, string) error { return os.ErrNotExist }
+	err := waitForProxyReady(context.Background(), "podman", "proxy-id", 250*time.Millisecond, false)
+	if err == nil {
+		t.Fatal("expected timeout error")
+	}
+}
+
+func TestWaitForProxyReady_DefaultTimeout(t *testing.T) {
+	orig := probeProxyHealthFunc
+	defer func() { probeProxyHealthFunc = orig }()
+	probeProxyHealthFunc = func(context.Context, string, string) error { return nil }
+	if err := waitForProxyReady(context.Background(), "podman", "proxy-id", 0, true); err != nil {
+		t.Fatalf("waitForProxyReady default timeout: %v", err)
+	}
+}
+
+func TestProbeProxyRunningOnce_Error(t *testing.T) {
+	runtimePath := filepath.Join(t.TempDir(), "fake-runtime.sh")
+	script := "#!/bin/sh\nexit 1\n"
+	if err := os.WriteFile(runtimePath, []byte(script), 0o700); err != nil {
+		t.Fatalf("write fake runtime: %v", err)
+	}
+	if err := probeProxyRunningOnce(context.Background(), runtimePath, "cid"); err == nil {
+		t.Fatal("expected probeProxyRunningOnce error")
 	}
 }
 
@@ -206,6 +328,75 @@ func TestRunJobWithPodInference_pod_create_fail(t *testing.T) {
 	}
 	if resp.Stderr == "" || !strings.Contains(resp.Stderr, "pod create") {
 		t.Errorf("expected stderr about pod create, got %q", resp.Stderr)
+	}
+}
+
+func TestCreateOrReplacePod_Success(t *testing.T) {
+	runtimePath := filepath.Join(t.TempDir(), "fake-runtime.sh")
+	script := `#!/bin/sh
+if [ "$1" = "pod" ] && [ "$2" = "create" ]; then
+  echo "pod-123"
+  exit 0
+fi
+exit 1
+`
+	if err := os.WriteFile(runtimePath, []byte(script), 0o700); err != nil {
+		t.Fatalf("write fake runtime: %v", err)
+	}
+	e := New(runtimePath, 10*time.Second, 1024, "", "", nil)
+	if _, err := e.createOrReplacePod(context.Background(), "pod-a"); err != nil {
+		t.Fatalf("createOrReplacePod should succeed: %v", err)
+	}
+}
+
+func TestCreateOrReplacePod_AlreadyExistsThenReplace(t *testing.T) {
+	tmpDir := t.TempDir()
+	runtimePath := filepath.Join(tmpDir, "fake-runtime.sh")
+	firstCreate := filepath.Join(tmpDir, "first-create")
+	rmCalled := filepath.Join(tmpDir, "rm-called")
+	script := fmt.Sprintf(`#!/bin/sh
+if [ "$1" = "pod" ] && [ "$2" = "create" ]; then
+  if [ ! -f "%s" ]; then
+    touch "%s"
+    echo "name \"pod-a\" is in use: pod already exists"
+    exit 1
+  fi
+  echo "pod-456"
+  exit 0
+fi
+if [ "$1" = "pod" ] && [ "$2" = "rm" ]; then
+  touch "%s"
+  exit 0
+fi
+exit 1
+`, firstCreate, firstCreate, rmCalled)
+	if err := os.WriteFile(runtimePath, []byte(script), 0o700); err != nil {
+		t.Fatalf("write fake runtime: %v", err)
+	}
+	e := New(runtimePath, 10*time.Second, 1024, "", "", nil)
+	if _, err := e.createOrReplacePod(context.Background(), "pod-a"); err != nil {
+		t.Fatalf("createOrReplacePod should recover from existing pod: %v", err)
+	}
+	if _, err := os.Stat(rmCalled); err != nil {
+		t.Fatalf("expected pod rm to be called, stat err: %v", err)
+	}
+}
+
+func TestCreateOrReplacePod_NonExistingError(t *testing.T) {
+	runtimePath := filepath.Join(t.TempDir(), "fake-runtime.sh")
+	script := `#!/bin/sh
+if [ "$1" = "pod" ] && [ "$2" = "create" ]; then
+  echo "permission denied"
+  exit 1
+fi
+exit 1
+`
+	if err := os.WriteFile(runtimePath, []byte(script), 0o700); err != nil {
+		t.Fatalf("write fake runtime: %v", err)
+	}
+	e := New(runtimePath, 10*time.Second, 1024, "", "", nil)
+	if _, err := e.createOrReplacePod(context.Background(), "pod-a"); err == nil {
+		t.Fatal("expected createOrReplacePod to return error")
 	}
 }
 
@@ -798,6 +989,242 @@ func TestRunJobSBAPathNoRuntime(t *testing.T) {
 	}
 }
 
+func TestRunJobSBA_WorkspacePrepareFailure(t *testing.T) {
+	e := New("nonexistent-runtime-xyz", 10*time.Second, 1024, "", "", nil)
+	blocker := filepath.Join(t.TempDir(), "blocker")
+	if err := os.WriteFile(blocker, []byte("x"), 0o644); err != nil {
+		t.Fatalf("write blocker: %v", err)
+	}
+	req := &workerapi.RunJobRequest{
+		Version: 1,
+		TaskID:  "t1",
+		JobID:   "j1",
+		Sandbox: workerapi.SandboxSpec{
+			Image:       "cynodeai-cynode-sba:dev",
+			Command:     nil,
+			JobSpecJSON: `{"protocol_version":"1.0","job_id":"j1","task_id":"t1","constraints":{"max_runtime_seconds":60,"max_output_bytes":1024},"steps":[]}`,
+		},
+	}
+	resp, err := e.RunJob(context.Background(), req, filepath.Join(blocker, "workspace"))
+	if err != nil {
+		t.Fatalf("RunJob: %v", err)
+	}
+	if resp.Status != workerapi.StatusFailed {
+		t.Fatalf("status=%s, want failed", resp.Status)
+	}
+	if !strings.Contains(resp.Stderr, "failed to prepare workspace dir") {
+		t.Fatalf("stderr=%q should mention workspace prepare failure", resp.Stderr)
+	}
+}
+
+func TestRunJobSBA_AgentInferencePodPath_PodCreateFail(t *testing.T) {
+	if _, err := exec.LookPath("podman"); err != nil {
+		t.Skip("podman not in path")
+	}
+	_ = os.Setenv("CONTAINER_HOST", "unix:///nonexistent/podman.sock")
+	defer func() { _ = os.Unsetenv("CONTAINER_HOST") }()
+
+	e := New("podman", 10*time.Second, 1024, "http://host.containers.internal:11434", "alpine:latest", nil)
+	req := &workerapi.RunJobRequest{
+		Version: 1,
+		TaskID:  "t1",
+		JobID:   "j1",
+		Sandbox: workerapi.SandboxSpec{
+			Image:       "cynodeai-cynode-sba:dev",
+			Command:     nil,
+			JobSpecJSON: `{"protocol_version":"1.0","job_id":"j1","task_id":"t1","constraints":{"max_runtime_seconds":60,"max_output_bytes":1024}}`,
+		},
+	}
+	resp, err := e.RunJob(context.Background(), req, "")
+	if err != nil {
+		t.Fatalf("RunJob: %v", err)
+	}
+	if resp.Status != workerapi.StatusFailed {
+		t.Fatalf("status=%s, want failed", resp.Status)
+	}
+	if !strings.Contains(resp.Stderr, "pod create") {
+		t.Fatalf("stderr=%q should contain pod create", resp.Stderr)
+	}
+}
+
+func TestRunJobSBA_AgentInferencePodPath_Success(t *testing.T) {
+	runtimeDir := t.TempDir()
+	runtimePath := filepath.Join(runtimeDir, "podman")
+	script := `#!/bin/sh
+cmd="$1"
+shift
+if [ "$cmd" = "pod" ] && [ "$1" = "create" ]; then
+  exit 0
+fi
+if [ "$cmd" = "pod" ] && [ "$1" = "rm" ]; then
+  exit 0
+fi
+if [ "$cmd" = "run" ] && [ "$1" = "-d" ]; then
+  echo "cid-proxy-1"
+  exit 0
+fi
+if [ "$cmd" = "exec" ]; then
+  exit 0
+fi
+if [ "$cmd" = "run" ]; then
+  job_dir=""
+  prev=""
+  for arg in "$@"; do
+    if [ "$prev" = "-v" ]; then
+      case "$arg" in
+        *:/job|*:/job:z) job_dir="${arg%%:/job*}" ;;
+      esac
+    fi
+    prev="$arg"
+  done
+  if [ -z "$job_dir" ]; then
+    echo "missing job mount"
+    exit 1
+  fi
+  printf '%s\n' '{"protocol_version":"1.0","job_id":"j1","status":"success"}' > "$job_dir/result.json"
+  echo "ok"
+  exit 0
+fi
+echo "unsupported args: $cmd $*"
+exit 1
+`
+	if err := os.WriteFile(runtimePath, []byte(script), 0o700); err != nil {
+		t.Fatalf("write fake runtime: %v", err)
+	}
+	origPath := os.Getenv("PATH")
+	_ = os.Setenv("PATH", runtimeDir+string(os.PathListSeparator)+origPath)
+	defer func() { _ = os.Setenv("PATH", origPath) }()
+
+	e := New("podman", 10*time.Second, 4096, "http://host.containers.internal:11434", "proxy:latest", nil)
+	req := &workerapi.RunJobRequest{
+		Version: 1,
+		TaskID:  "t1",
+		JobID:   "j1",
+		Sandbox: workerapi.SandboxSpec{
+			Image:       "cynodeai-cynode-sba:dev",
+			Command:     nil,
+			JobSpecJSON: `{"protocol_version":"1.0","job_id":"j1","task_id":"t1","constraints":{"max_runtime_seconds":60,"max_output_bytes":1024}}`,
+		},
+	}
+	resp, err := e.RunJob(context.Background(), req, "")
+	if err != nil {
+		t.Fatalf("RunJob: %v", err)
+	}
+	if resp.Status != workerapi.StatusCompleted {
+		t.Fatalf("status=%s stderr=%q", resp.Status, resp.Stderr)
+	}
+	if resp.SbaResult == nil || resp.SbaResult.Status != "success" {
+		t.Fatalf("expected sba success result, got %#v", resp.SbaResult)
+	}
+	if resp.RunDiagnostics == nil {
+		t.Fatal("expected run diagnostics")
+	}
+	diagStr := strings.Join(resp.RunDiagnostics.RuntimeArgv, " ")
+	if !strings.Contains(diagStr, "--pod") || !strings.Contains(diagStr, "OLLAMA_BASE_URL=http://localhost:11434") {
+		t.Fatalf("unexpected runtime argv diagnostics: %s", diagStr)
+	}
+}
+
+func TestRunJobSBA_AgentInferencePodPath_ProxyReadinessFail(t *testing.T) {
+	runtimeDir := t.TempDir()
+	runtimePath := filepath.Join(runtimeDir, "podman")
+	script := `#!/bin/sh
+cmd="$1"
+shift
+if [ "$cmd" = "pod" ] && [ "$1" = "create" ]; then
+  exit 0
+fi
+if [ "$cmd" = "pod" ] && [ "$1" = "rm" ]; then
+  exit 0
+fi
+if [ "$cmd" = "run" ] && [ "$1" = "-d" ]; then
+  echo "cid-proxy-1"
+  exit 0
+fi
+echo "unsupported args: $cmd $*"
+exit 1
+`
+	if err := os.WriteFile(runtimePath, []byte(script), 0o700); err != nil {
+		t.Fatalf("write fake runtime: %v", err)
+	}
+	origPath := os.Getenv("PATH")
+	_ = os.Setenv("PATH", runtimeDir+string(os.PathListSeparator)+origPath)
+	defer func() { _ = os.Setenv("PATH", origPath) }()
+
+	orig := probeProxyHealthFunc
+	defer func() { probeProxyHealthFunc = orig }()
+	probeProxyHealthFunc = func(context.Context, string, string) error { return os.ErrDeadlineExceeded }
+	e := New("podman", 300*time.Millisecond, 4096, "http://host.containers.internal:11434", "proxy:latest", nil)
+	req := &workerapi.RunJobRequest{
+		Version: 1,
+		TaskID:  "t1",
+		JobID:   "j1",
+		Sandbox: workerapi.SandboxSpec{
+			Image:       "cynodeai-cynode-sba:dev",
+			Command:     nil,
+			JobSpecJSON: `{"protocol_version":"1.0","job_id":"j1","task_id":"t1","constraints":{"max_runtime_seconds":60,"max_output_bytes":1024}}`,
+		},
+	}
+	resp, err := e.RunJob(context.Background(), req, "")
+	if err != nil {
+		t.Fatalf("RunJob: %v", err)
+	}
+	if resp.Status != workerapi.StatusFailed {
+		t.Fatalf("status=%s, want failed", resp.Status)
+	}
+	if !strings.Contains(resp.Stderr, "proxy readiness") {
+		t.Fatalf("stderr=%q should contain proxy readiness", resp.Stderr)
+	}
+}
+
+func TestRunJobSBA_AgentInferencePodPath_ProxyStartMissingContainerID(t *testing.T) {
+	runtimeDir := t.TempDir()
+	runtimePath := filepath.Join(runtimeDir, "podman")
+	script := `#!/bin/sh
+cmd="$1"
+shift
+if [ "$cmd" = "pod" ] && [ "$1" = "create" ]; then
+  exit 0
+fi
+if [ "$cmd" = "pod" ] && [ "$1" = "rm" ]; then
+  exit 0
+fi
+if [ "$cmd" = "run" ] && [ "$1" = "-d" ]; then
+  exit 0
+fi
+echo "unsupported args: $cmd $*"
+exit 1
+`
+	if err := os.WriteFile(runtimePath, []byte(script), 0o700); err != nil {
+		t.Fatalf("write fake runtime: %v", err)
+	}
+	origPath := os.Getenv("PATH")
+	_ = os.Setenv("PATH", runtimeDir+string(os.PathListSeparator)+origPath)
+	defer func() { _ = os.Setenv("PATH", origPath) }()
+
+	e := New("podman", 300*time.Millisecond, 4096, "http://host.containers.internal:11434", "proxy:latest", nil)
+	req := &workerapi.RunJobRequest{
+		Version: 1,
+		TaskID:  "t1",
+		JobID:   "j1",
+		Sandbox: workerapi.SandboxSpec{
+			Image:       "cynodeai-cynode-sba:dev",
+			Command:     nil,
+			JobSpecJSON: `{"protocol_version":"1.0","job_id":"j1","task_id":"t1","constraints":{"max_runtime_seconds":60,"max_output_bytes":1024}}`,
+		},
+	}
+	resp, err := e.RunJob(context.Background(), req, "")
+	if err != nil {
+		t.Fatalf("RunJob: %v", err)
+	}
+	if resp.Status != workerapi.StatusFailed {
+		t.Fatalf("status=%s, want failed", resp.Status)
+	}
+	if !strings.Contains(resp.Stderr, "missing proxy container id") {
+		t.Fatalf("stderr=%q should mention missing proxy container id", resp.Stderr)
+	}
+}
+
 func TestSetSBAError(t *testing.T) {
 	resp := &workerapi.RunJobResponse{}
 	setSBAError(resp, "test error")
@@ -890,6 +1317,83 @@ func TestBuildSBARunArgs_AgentInference_NoDirectStepsEnv(t *testing.T) {
 	}
 	if !strings.Contains(argStr, "SBA_EXECUTION_MODE=agent_inference") {
 		t.Errorf("missing SBA_EXECUTION_MODE env in args: %s", argStr)
+	}
+	if !strings.Contains(argStr, "--network=none") {
+		t.Errorf("agent_inference without upstream should keep network none: %s", argStr)
+	}
+}
+
+func TestBuildSBARunArgs_AgentInference_WithUpstreamSetsEnvAndNetwork(t *testing.T) {
+	e := New("podman", 30*time.Second, 4096, "http://host.containers.internal:11434", "", nil)
+	req := &workerapi.RunJobRequest{
+		TaskID: "t1",
+		JobID:  "j1",
+		Sandbox: workerapi.SandboxSpec{
+			Image:       "cynode-sba:dev",
+			JobSpecJSON: `{}`,
+		},
+	}
+	args := buildSBARunArgs(req, "/tmp/job", "/tmp/ws", e, "agent_inference")
+	argStr := strings.Join(args, " ")
+	if strings.Contains(argStr, "--network=none") {
+		t.Errorf("agent_inference with upstream should not force network none: %s", argStr)
+	}
+	if !strings.Contains(argStr, "OLLAMA_BASE_URL=http://host.containers.internal:11434") {
+		t.Errorf("missing OLLAMA_BASE_URL for agent inference with upstream: %s", argStr)
+	}
+}
+
+func TestShouldUseSBAPodInference(t *testing.T) {
+	e := New("podman", 30*time.Second, 4096, "http://host.containers.internal:11434", "proxy:latest", nil)
+	if !e.shouldUseSBAPodInference("agent_inference") {
+		t.Fatal("expected shouldUseSBAPodInference to be true")
+	}
+	e2 := New("podman", 30*time.Second, 4096, "http://host.containers.internal:11434", "", nil)
+	if e2.shouldUseSBAPodInference("agent_inference") {
+		t.Fatal("expected shouldUseSBAPodInference to be false without proxy image")
+	}
+}
+
+func TestBuildSBARunArgsForPod_AgentInferenceLocalhost(t *testing.T) {
+	e := New("podman", 30*time.Second, 4096, "http://host.containers.internal:11434", "proxy:latest", nil)
+	req := &workerapi.RunJobRequest{
+		TaskID: "t1",
+		JobID:  "j1",
+		Sandbox: workerapi.SandboxSpec{
+			Image:       "cynode-sba:dev",
+			JobSpecJSON: `{}`,
+		},
+	}
+	args := buildSBARunArgsForPod(req, "pod-1", "/tmp/job", "/tmp/ws", e, "agent_inference")
+	argStr := strings.Join(args, " ")
+	if !strings.Contains(argStr, "--pod pod-1") {
+		t.Fatalf("expected pod argument, got: %s", argStr)
+	}
+	if !strings.Contains(argStr, "OLLAMA_BASE_URL=http://localhost:11434") {
+		t.Fatalf("expected localhost OLLAMA_BASE_URL, got: %s", argStr)
+	}
+	if strings.Contains(argStr, "OLLAMA_BASE_URL=http://host.containers.internal:11434") {
+		t.Fatalf("unexpected upstream OLLAMA_BASE_URL in pod args: %s", argStr)
+	}
+	if strings.Contains(argStr, "--userns=keep-id") {
+		t.Fatalf("pod-run args must not set --userns=keep-id, got: %s", argStr)
+	}
+}
+
+func TestBuildSBARunArgsForPod_WithCommand(t *testing.T) {
+	e := New("podman", 30*time.Second, 4096, "http://host.containers.internal:11434", "proxy:latest", nil)
+	req := &workerapi.RunJobRequest{
+		TaskID: "t1",
+		JobID:  "j1",
+		Sandbox: workerapi.SandboxSpec{
+			Image:       "cynode-sba:dev",
+			JobSpecJSON: `{}`,
+			Command:     []string{"--custom", "arg"},
+		},
+	}
+	args := buildSBARunArgsForPod(req, "pod-1", "/tmp/job", "/tmp/ws", e, "agent_inference")
+	if len(args) < 2 || args[len(args)-2] != "--custom" || args[len(args)-1] != "arg" {
+		t.Fatalf("expected command at end, got %v", args)
 	}
 }
 

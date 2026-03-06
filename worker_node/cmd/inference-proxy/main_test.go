@@ -4,6 +4,7 @@ import (
 	"context"
 	"net"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"testing"
 	"time"
@@ -76,5 +77,119 @@ func TestRun_nil_listener_starts_then_shuts_down(t *testing.T) {
 			t.Skipf("run returned 1 (port 11434 may be in use)")
 		}
 		t.Errorf("run() after shutdown = %d, want 0", code)
+	}
+}
+
+func TestParseHealthcheckURL(t *testing.T) {
+	got := parseHealthcheckURL([]string{"--healthcheck-url", "http://127.0.0.1:11434/healthz"})
+	if got != "http://127.0.0.1:11434/healthz" {
+		t.Fatalf("healthcheck-url=%q", got)
+	}
+	if parseHealthcheckURL(nil) != "" {
+		t.Fatal("expected empty healthcheck-url")
+	}
+}
+
+func TestRunHealthcheck(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+	if code := runHealthcheck(context.Background(), srv.URL); code != 0 {
+		t.Fatalf("runHealthcheck ok=%d", code)
+	}
+	if code := runHealthcheck(context.Background(), "://bad-url"); code != 1 {
+		t.Fatalf("runHealthcheck invalid=%d", code)
+	}
+}
+
+func TestRunHealthcheck_NonOKAndUnreachable(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusServiceUnavailable)
+	}))
+	defer srv.Close()
+	if code := runHealthcheck(context.Background(), srv.URL); code != 1 {
+		t.Fatalf("runHealthcheck non-ok=%d", code)
+	}
+	if code := runHealthcheck(context.Background(), "http://127.0.0.1:1/healthz"); code != 1 {
+		t.Fatalf("runHealthcheck unreachable=%d", code)
+	}
+}
+
+func TestRun_WithCustomListener_HealthAndProxy(t *testing.T) {
+	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/v1/test" {
+			_, _ = w.Write([]byte("proxied"))
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	defer backend.Close()
+	_ = os.Setenv("OLLAMA_UPSTREAM_URL", backend.URL)
+	defer func() { _ = os.Unsetenv("OLLAMA_UPSTREAM_URL") }()
+
+	l, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatalf("listen: %v", err)
+	}
+	defer func() { _ = l.Close() }()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan int, 1)
+	go func() { done <- run(ctx, l, "") }()
+
+	baseURL := "http://" + l.Addr().String()
+	for i := 0; i < 20; i++ {
+		resp, err := http.Get(baseURL + "/healthz")
+		if err == nil {
+			_ = resp.Body.Close()
+			break
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	resp, err := http.Get(baseURL + "/healthz")
+	if err != nil {
+		cancel()
+		<-done
+		t.Fatalf("healthz request failed: %v", err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("healthz status=%d", resp.StatusCode)
+	}
+	_ = resp.Body.Close()
+
+	resp, err = http.Get(baseURL + "/v1/test")
+	if err != nil {
+		cancel()
+		<-done
+		t.Fatalf("proxy request failed: %v", err)
+	}
+	if resp.StatusCode != http.StatusOK {
+		t.Fatalf("proxy status=%d", resp.StatusCode)
+	}
+	_ = resp.Body.Close()
+
+	cancel()
+	if code := <-done; code != 0 {
+		t.Fatalf("run exit code=%d", code)
+	}
+}
+
+func TestRun_ListenAddrOverride(t *testing.T) {
+	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer backend.Close()
+	_ = os.Setenv("OLLAMA_UPSTREAM_URL", backend.URL)
+	defer func() { _ = os.Unsetenv("OLLAMA_UPSTREAM_URL") }()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan int, 1)
+	go func() { done <- run(ctx, nil, "127.0.0.1:0") }()
+	time.Sleep(50 * time.Millisecond)
+	cancel()
+	code := <-done
+	if code != 0 && code != 1 {
+		t.Fatalf("run() code=%d", code)
 	}
 }

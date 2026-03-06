@@ -30,7 +30,11 @@ func normalizeTaskName(s string) string {
 }
 
 // CreateTask creates a new task. If taskName is non-nil and non-empty after normalize, it is used as summary and made unique per user; otherwise task_name_###.
-func (db *DB) CreateTask(ctx context.Context, createdBy *uuid.UUID, prompt string, taskName *string) (*models.Task, error) {
+func (db *DB) CreateTask(ctx context.Context, createdBy *uuid.UUID, prompt string, taskName *string, projectID ...*uuid.UUID) (*models.Task, error) {
+	var effectiveProjectID *uuid.UUID
+	if len(projectID) > 0 {
+		effectiveProjectID = projectID[0]
+	}
 	summary := ""
 	if taskName != nil {
 		summary = normalizeTaskName(*taskName)
@@ -56,6 +60,7 @@ func (db *DB) CreateTask(ctx context.Context, createdBy *uuid.UUID, prompt strin
 	task := &models.Task{
 		ID:        uuid.New(),
 		CreatedBy: createdBy,
+		ProjectID: effectiveProjectID,
 		Status:    models.TaskStatusPending,
 		Prompt:    &prompt,
 		Summary:   &summary,
@@ -68,6 +73,27 @@ func (db *DB) CreateTask(ctx context.Context, createdBy *uuid.UUID, prompt strin
 	return task, nil
 }
 
+// GetOrCreateDefaultProjectForUser gets the deterministic default project for the user, creating it when missing.
+func (db *DB) GetOrCreateDefaultProjectForUser(ctx context.Context, userID uuid.UUID) (*models.Project, error) {
+	slug := "default-" + userID.String()
+	now := time.Now().UTC()
+	proj := models.Project{Slug: slug}
+	err := db.db.WithContext(ctx).
+		Where(&models.Project{Slug: slug}).
+		Attrs(models.Project{
+			ID:          uuid.New(),
+			DisplayName: "Default Project",
+			IsActive:    true,
+			CreatedAt:   now,
+			UpdatedAt:   now,
+		}).
+		FirstOrCreate(&proj).Error
+	if err != nil {
+		return nil, wrapErr(err, "get or create default project")
+	}
+	return &proj, nil
+}
+
 // GetTaskByID retrieves a task by ID.
 func (db *DB) GetTaskByID(ctx context.Context, id uuid.UUID) (*models.Task, error) {
 	return getByID[models.Task](db, ctx, id, "get task by id")
@@ -75,8 +101,18 @@ func (db *DB) GetTaskByID(ctx context.Context, id uuid.UUID) (*models.Task, erro
 
 // UpdateTaskStatus updates a task's status.
 func (db *DB) UpdateTaskStatus(ctx context.Context, taskID uuid.UUID, status string) error {
+	closed := isTerminalTaskStatus(status)
 	return db.updateWhere(ctx, &models.Task{}, "id", taskID,
-		map[string]interface{}{"status": status}, "update task status")
+		map[string]interface{}{"status": status, "closed": closed}, "update task status")
+}
+
+func isTerminalTaskStatus(status string) bool {
+	switch status {
+	case models.TaskStatusCompleted, models.TaskStatusFailed, models.TaskStatusCancelled, models.TaskStatusSuperseded:
+		return true
+	default:
+		return false
+	}
 }
 
 // UpdateTaskSummary updates a task's summary.
