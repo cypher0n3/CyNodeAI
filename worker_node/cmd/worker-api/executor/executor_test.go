@@ -99,12 +99,40 @@ func TestWaitForProxyReady(t *testing.T) {
 }
 
 func TestWaitForProxyReady_Timeout(t *testing.T) {
-	orig := probeProxyHealthFunc
-	defer func() { probeProxyHealthFunc = orig }()
-	probeProxyHealthFunc = func(context.Context, string, string) error { return os.ErrDeadlineExceeded }
-	err := waitForProxyReady(context.Background(), "podman", "proxy-id", 300*time.Millisecond, true)
-	if err == nil {
-		t.Fatal("expected timeout error")
+	origHealth := probeProxyHealthFunc
+	origRunning := probeProxyRunningFunc
+	defer func() {
+		probeProxyHealthFunc = origHealth
+		probeProxyRunningFunc = origRunning
+	}()
+
+	for _, tt := range []struct {
+		name   string
+		health bool
+		setup  func()
+	}{
+		{
+			name:   "health probe timeout",
+			health: true,
+			setup: func() {
+				probeProxyHealthFunc = func(context.Context, string, string) error { return os.ErrDeadlineExceeded }
+			},
+		},
+		{
+			name:   "container running probe timeout",
+			health: false,
+			setup: func() {
+				probeProxyRunningFunc = func(context.Context, string, string) error { return os.ErrNotExist }
+			},
+		},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			tt.setup()
+			err := waitForProxyReady(context.Background(), "podman", "proxy-id", 250*time.Millisecond, tt.health)
+			if err == nil {
+				t.Fatal("expected timeout error")
+			}
+		})
 	}
 }
 
@@ -159,24 +187,24 @@ exit 1
 	}
 }
 
-func TestProbeProxyHealthOnce_Error(t *testing.T) {
+func TestProxyProbeOnce_ErrorCases(t *testing.T) {
 	runtimePath := filepath.Join(t.TempDir(), "fake-runtime.sh")
 	script := "#!/bin/sh\nexit 1\n"
 	if err := os.WriteFile(runtimePath, []byte(script), 0o700); err != nil {
 		t.Fatalf("write fake runtime: %v", err)
 	}
-	if err := probeProxyHealthOnce(context.Background(), runtimePath, "cid-any"); err == nil {
-		t.Fatal("expected probeProxyHealthOnce error")
-	}
-}
-
-func TestWaitForProxyReady_ContainerProbeTimeout(t *testing.T) {
-	orig := probeProxyRunningFunc
-	defer func() { probeProxyRunningFunc = orig }()
-	probeProxyRunningFunc = func(context.Context, string, string) error { return os.ErrNotExist }
-	err := waitForProxyReady(context.Background(), "podman", "proxy-id", 250*time.Millisecond, false)
-	if err == nil {
-		t.Fatal("expected timeout error")
+	for _, tt := range []struct {
+		name string
+		fn   func() error
+	}{
+		{"health", func() error { return probeProxyHealthOnce(context.Background(), runtimePath, "cid-any") }},
+		{"running", func() error { return probeProxyRunningOnce(context.Background(), runtimePath, "cid") }},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			if err := tt.fn(); err == nil {
+				t.Fatal("expected error")
+			}
+		})
 	}
 }
 
@@ -189,16 +217,7 @@ func TestWaitForProxyReady_DefaultTimeout(t *testing.T) {
 	}
 }
 
-func TestProbeProxyRunningOnce_Error(t *testing.T) {
-	runtimePath := filepath.Join(t.TempDir(), "fake-runtime.sh")
-	script := "#!/bin/sh\nexit 1\n"
-	if err := os.WriteFile(runtimePath, []byte(script), 0o700); err != nil {
-		t.Fatalf("write fake runtime: %v", err)
-	}
-	if err := probeProxyRunningOnce(context.Background(), runtimePath, "cid"); err == nil {
-		t.Fatal("expected probeProxyRunningOnce error")
-	}
-}
+// Note: probeProxyHealthOnce/probeProxyRunningOnce error cases are covered by TestProxyProbeOnce_ErrorCases.
 
 func TestBuildSandboxRunArgsForPod(t *testing.T) {
 	req := &workerapi.RunJobRequest{

@@ -21,12 +21,12 @@ const PerRequestTimeout = 120 * time.Second
 
 // NewProxy returns an http.Handler that forwards requests to upstream with size and timeout limits.
 func NewProxy(upstream *url.URL) http.Handler {
-	rp := httputil.NewSingleHostReverseProxy(upstream)
-	rp.Transport = &http.Transport{ResponseHeaderTimeout: PerRequestTimeout}
-	rp.Director = func(req *http.Request) {
-		req.URL.Scheme = upstream.Scheme
-		req.URL.Host = upstream.Host
-		req.Host = upstream.Host
+	rp := &httputil.ReverseProxy{
+		Transport: &http.Transport{ResponseHeaderTimeout: PerRequestTimeout},
+		Rewrite: func(req *httputil.ProxyRequest) {
+			req.SetURL(upstream)
+			req.Out.Host = upstream.Host
+		},
 	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		body, err := io.ReadAll(io.LimitReader(r.Body, MaxRequestBodyBytes+1))

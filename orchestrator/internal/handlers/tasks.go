@@ -124,19 +124,65 @@ func taskToResponse(t *models.Task, status string, attachmentPaths []string) use
 	return resp
 }
 
+func decodeCreateTaskRequest(w http.ResponseWriter, r *http.Request) (userapi.CreateTaskRequest, bool) {
+	var req userapi.CreateTaskRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		WriteBadRequest(w, "Invalid request body")
+		return userapi.CreateTaskRequest{}, false
+	}
+	if req.Prompt == "" {
+		WriteBadRequest(w, "Prompt is required")
+		return userapi.CreateTaskRequest{}, false
+	}
+	return req, true
+}
+
+func normalizeInputMode(mode string) string {
+	if strings.TrimSpace(mode) == "" {
+		return InputModePrompt
+	}
+	return mode
+}
+
+func (h *TaskHandler) tryCompleteWithOrchestratorInference(
+	ctx context.Context,
+	w http.ResponseWriter,
+	task *models.Task,
+	prompt string,
+	attachmentPaths []string,
+	inputMode string,
+) bool {
+	if inputMode != InputModePrompt || strings.TrimSpace(h.inferenceURL) == "" {
+		return false
+	}
+	job, err := h.createTaskWithOrchestratorInference(ctx, task.ID, prompt)
+	if err == nil {
+		_ = job // job already completed
+		WriteJSON(w, http.StatusCreated, taskToResponse(task, taskStatusToSpec(models.TaskStatusCompleted), attachmentPaths))
+		return true
+	}
+	h.logger.Warn("orchestrator inference failed, falling back to sandbox job", "error", err)
+	return false
+}
+
+func (h *TaskHandler) createSandboxJob(ctx context.Context, taskID uuid.UUID, prompt string, useInference bool, inputMode string) error {
+	payload, err := marshalJobPayload(prompt, useInference, inputMode)
+	if err != nil {
+		return fmt.Errorf("marshal job payload: %w", err)
+	}
+	if _, err := h.db.CreateJob(ctx, taskID, payload); err != nil {
+		return fmt.Errorf("create job: %w", err)
+	}
+	return nil
+}
+
 // CreateTask handles POST /v1/tasks.
 func (h *TaskHandler) CreateTask(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	userID := getUserIDFromContext(ctx)
 
-	var req userapi.CreateTaskRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		WriteBadRequest(w, "Invalid request body")
-		return
-	}
-
-	if req.Prompt == "" {
-		WriteBadRequest(w, "Prompt is required")
+	req, ok := decodeCreateTaskRequest(w, r)
+	if !ok {
 		return
 	}
 
@@ -159,10 +205,7 @@ func (h *TaskHandler) CreateTask(w http.ResponseWriter, r *http.Request) {
 
 	attachmentPaths := h.persistTaskAttachments(ctx, task.ID, req.Attachments)
 
-	inputMode := req.InputMode
-	if inputMode == "" {
-		inputMode = InputModePrompt
-	}
+	inputMode := normalizeInputMode(req.InputMode)
 
 	if req.UseSBA {
 		if h.createTaskSBA(ctx, w, task, req.Prompt, attachmentPaths) {
@@ -170,16 +213,9 @@ func (h *TaskHandler) CreateTask(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	// Prompt mode: send prompt to the model so it MUST work (MVP Phase 1). Prefer orchestrator-side inference when configured.
-	if inputMode == InputModePrompt && h.inferenceURL != "" {
-		job, inferErr := h.createTaskWithOrchestratorInference(ctx, task.ID, req.Prompt)
-		if inferErr == nil {
-			_ = job // job already completed
-			WriteJSON(w, http.StatusCreated, taskToResponse(task, taskStatusToSpec(models.TaskStatusCompleted), attachmentPaths))
-			return
-		}
-		// Fall back to sandbox job path on inference failure
-		h.logger.Warn("orchestrator inference failed, falling back to sandbox job", "error", inferErr)
+	// Prompt mode: prefer orchestrator-side inference when configured; fall back to sandbox job path on error.
+	if h.tryCompleteWithOrchestratorInference(ctx, w, task, req.Prompt, attachmentPaths, inputMode) {
+		return
 	}
 
 	// Create a single queued job (sandbox path).
@@ -187,14 +223,8 @@ func (h *TaskHandler) CreateTask(w http.ResponseWriter, r *http.Request) {
 	if inputMode == InputModePrompt {
 		useInference = true
 	}
-	payload, err := marshalJobPayload(req.Prompt, useInference, inputMode)
-	if err != nil {
-		h.logger.Error("marshal job payload", "error", err)
-		WriteInternalError(w, "Failed to create task job")
-		return
-	}
-	if _, err := h.db.CreateJob(ctx, task.ID, payload); err != nil {
-		h.logger.Error("create job", "error", err)
+	if err := h.createSandboxJob(ctx, task.ID, req.Prompt, useInference, inputMode); err != nil {
+		h.logger.Error("create sandbox job", "error", err)
 		WriteInternalError(w, "Failed to create task job")
 		return
 	}

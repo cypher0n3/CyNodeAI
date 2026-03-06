@@ -3,7 +3,7 @@
 ## Metadata
 
 - Date: 2026-03-05
-- Last updated: 2026-03-05
+- Last updated: 2026-03-06 (Phase 4a added)
 - Scope: Worker proxy behavior only.
 - Status: Draft implementation reconciliation plan.
 - Inputs reviewed:
@@ -47,10 +47,11 @@ The phases below must explicitly include building these subsystems (still within
 Build and test new required components before any dependent work.
 
 1. **Phase 1, 2, 3** (already done or in progress): inference proxy stabilization, SBA inference path, internal proxy endpoint scaffolding.
-2. **Phase 4 then Phase 5** (next): Build and test the new required subsystems first.
+2. **Phase 4, then Phase 4a, then Phase 5** (next): Build and test the new required subsystems first.
    - Phase 4: Node-local secure store and agent token lifecycle (write/rotate/delete on config apply).
+   - Phase 4a: Post-quantum KEM for secure store encryption at rest (REQ-WORKER-0173, NodeLocalSecureStore); fallback to AES-256-GCM only when PQ not permitted.
    - Phase 5: Identity-bound per-service UDS binding and transport.
-   - Do not proceed to Phase 6, 7, or 8 until Phase 4 and Phase 5 are implemented and tested.
+   - Do not proceed to Phase 6, 7, or 8 until Phase 4, Phase 4a, and Phase 5 are implemented and tested.
 3. **Phase 6** (depends on 4 and 5): Switch internal proxy auth to worker-held tokens; remove agent-supplied auth.
 4. **Phase 7**: Desired-state wiring for managed service targets (can overlap with 6 once 4 and 5 are done).
 5. **Phase 8** (depends on 5 and 7): Managed-service observed state reporting and routing source of truth; `auto` proxy URLs.
@@ -78,27 +79,37 @@ Build and test new required components before any dependent work.
   - [x] Added interim auth checks (header-based) for internal proxy calls.
   - [x] Added audit logging fields for internal proxy calls.
   - [x] Added unit tests for internal proxy happy-path and auth/loopback failures.
-- **Phase 4: Not started (required before Phase 6, 7, 8).**
-  - [ ] Implement `CYNAI.WORKER.NodeLocalSecureStore` end-to-end (host-only, encrypted at rest, strict permissions, master key precedence, fail closed).
-  - [ ] FIPS mode: when host is in FIPS mode, use only FIPS-approved algorithms and validated modules per worker_node.md.
-  - [ ] Go 1.26: use `runtime/secret` for master key and plaintext handling per worker_node.md.
-  - [ ] On config apply, write/rotate/delete tokens in secure store keyed by `service_id` (including `agent_token_ref` resolution when spec is defined; expiry handling when payload field is defined).
-  - [ ] Enforce "no container mount" boundary for the secure store path and token material.
-  - [ ] Unit and integration tests for secure store and token lifecycle; no token leakage in logs or env.
+- **Phase 4: Completed (required before Phase 6, 7, 8).**
+  - [x] Implemented encrypted-at-rest node-local secure store under `<state_dir>/secrets/agent_tokens` with strict file permissions (0700 dirs, 0600 files), fail-closed master-key validation, and AES-256-GCM envelope format.
+  - [x] Implemented config-apply token lifecycle in Node Manager: write/rotate/delete by `service_id`, including `agent_token_ref` (`kind=orchestrator_endpoint`) resolution and expiry validation.
+  - [x] Removed managed-service container `AGENT_TOKEN` env injection; agent tokens remain worker-held.
+  - [x] Redacted `agent_token` and `agent_token_ref` from `WORKER_NODE_CONFIG_JSON` worker env payload.
+  - [x] Master key precedence implemented in spec order: TPM (stub), OS key store (stub), systemd credential, env fallback.
+    TPM and OS key store sources return not-configured and are ready for future implementation.
+  - [x] FIPS mode enforcement: when host reports FIPS mode (Linux `/proc/sys/crypto/fips_enabled`), env fallback is rejected (fail closed); FIPS-approved algorithm (AES-256-GCM) only.
+  - [x] Best-effort secure erasure (zeroing) for master key and plaintext; Go 1.26 `runtime/secret` integration remains optional (SHOULD when available).
+  - [x] Secure-store process-boundary documented in `docs/dev_docs/2026-03-06_secure_store_process_boundary.md`; unit test asserts managed-service container run args never mount the secrets path.
+- **Phase 4a: Not started (addresses [phase1-4 gap report](2026-03-06_phase1_4_independent_validation_gap_report.md) Phase 4 gaps).**
+  - [ ] Use post-quantum KEM (e.g. NIST FIPS 203 ML-KEM) by default to protect secure store key material; use strong symmetric AEAD (e.g. AES-256-GCM) for ciphertext; per-record nonce.
+  - [ ] When PQ KEM is not available or not permitted (e.g. FIPS validated module without ML-KEM), use only FIPS-approved symmetric AEAD (e.g. AES-256-GCM) with per-record nonce.
+  - [ ] Satisfy REQ-WORKER-0173 and NodeLocalSecureStore encryption-at-rest spec.
+  - (Phase 4 validation doc vs test location: no change required; phase4_validation.md and plan line 90 are correct.)
 - **Phase 5: In progress (required before Phase 6, 8).**
   - [x] Added dedicated internal listener configuration (`WORKER_INTERNAL_LISTEN_ADDR`).
   - [x] Added optional internal Unix domain socket listener (`WORKER_INTERNAL_LISTEN_UNIX`).
   - [x] Kept internal proxy routes off the public Worker API mux.
-  - [ ] Implement normative per-service UDS binding: host `<state_dir>/run/managed_agent_proxy/<service_id>/proxy.sock`, container mount `/run/cynode/managed_agent_proxy/`, identity from accepting listener; sockets not under secure store path.
-  - [ ] Report `managed_services.features` including `agent_orchestrator_proxy_identity_bound` (and when supported, `agent_proxy_urls_auto`).
-  - [ ] Enforce that only the identity-binding socket path is mounted into managed-service containers (never the secure store path).
-  - [ ] Tests for UDS identity resolution and `http+unix://...` URL reporting when `binding=per_service_uds`.
-- **Phase 6: Not started (blocked on Phase 4 and Phase 5).**
-  - [ ] Remove agent-supplied auth for internal proxy calls and attach worker-held tokens loaded from the secure store based on resolved `service_id`.
-  - [ ] Expand audit attribution to include managed-service identity and resolved request context where available.
-  - [ ] Unit and integration tests: no token in agent container or request; unknown identity fails closed.
-  - [ ] Contract and end-to-end validation for internal agent-to-orchestrator proxy path (once auth is spec-compliant).
-- **Phase 7: In progress (desired-state wiring; can continue in parallel after Phase 4/5).**
+  - [x] Implemented worker-side per-service UDS listener paths at `<state_dir>/run/managed_agent_proxy/<service_id>/proxy.sock` (0700 parent dir, 0600 socket) with caller identity bound from accepting listener context.
+  - [x] Container mount injection: node-manager now mounts only `<state_dir>/run/managed_agent_proxy/<service_id>` at `/run/cynode/managed_agent_proxy` for each managed service (path-safe `service_id` only).
+  - [x] Report `managed_services.features` including `agent_orchestrator_proxy_identity_bound` (and when supported, `agent_proxy_urls_auto`).
+  - [x] Enforce that only the identity-binding socket path is mounted into managed-service containers (never the secure store path).
+  - [ ] Tests for `http+unix://...` URL reporting when `binding=per_service_uds` (Phase 8 reporting will consume this; UDS path format already tested in worker-api).
+    UDS identity-resolution tests for token/service mismatch are now in place.
+- **Phase 6: Completed.**
+  - [x] Removed agent-supplied auth for internal proxy calls; worker resolves `service_id` from identity-bound transport and attaches worker-held tokens loaded from the secure store.
+  - [x] Expanded audit attribution to include managed-service identity (service_id) and request context fields (without token material).
+  - [x] Unit tests assert: no token in agent request; unknown identity fails closed; missing secure store fails closed.
+  - [ ] Contract and end-to-end validation for internal agent-to-orchestrator proxy path (auth is now spec-compliant; E2E still pending).
+- **Phase 7: In progress (desired-state wiring; can continue in parallel after Phase 4, 4a, and 5).**
   - [x] Worker API now consumes node-config payload (`WORKER_NODE_CONFIG_JSON`) to derive managed service proxy targets and (temporarily) to accept managed-service agent tokens for internal proxy auth; this MUST be replaced by secure-store backed worker-held tokens (Phase 4 + Phase 6).
   - [x] Node Manager now injects node-config JSON and orchestrator internal proxy base URL into worker runtime env on config application.
   - [x] Node Manager starts managed service containers from `managed_services.services[]` desired state when enabled.
@@ -106,9 +117,9 @@ Build and test new required components before any dependent work.
   - [x] Node Manager materializes managed-service target env for routing (currently PMA -> node-local PMA base URL), while Worker API avoids deriving targets from unrelated inference config fields.
   - [x] Existing env-based target mapping remains as fallback.
   - [ ] Desired-state convergence and refresh behavior still needs runtime validation against full managed-service lifecycle.
-- **Phase 8: Not started (blocked on Phase 5 and Phase 7).**
-  - [ ] Implement managed-service observed state reporting (`managed_services_status`) in capability reports and config ack (required when config contains agent-runtime managed services).
-  - [ ] When config sets proxy URLs to `auto`: generate identity-bound endpoints, inject into container, report in `managed_services_status.services[].agent_to_orchestrator_proxy` (with `binding`, `http+unix://...` when UDS); config ack MUST include generated endpoints.
+- **Phase 8: In progress (blocked on Phase 5 and Phase 7).**
+  - [x] Implemented managed-service observed state reporting (`managed_services_status`) in capability reports and config ack scaffolding.
+  - [x] When config sets proxy URLs to `auto`: node-manager generates identity-bound endpoints, injects into container env, and reports them in `managed_services_status.services[].agent_to_orchestrator_proxy` with `binding=per_service_uds` and `http+unix://...` URLs.
   - [ ] Shift orchestrator and worker routing to worker-reported endpoints only (no compose DNS or direct host-port).
   - [ ] SBA inference E2E acceptance (e2e_140, e2e_145); run after worker proxy is spec-compliant (Phases 4, 5, 6 done).
     Resolve any remaining SBA pod workspace mount flakiness (`statfs ... /tmp/cynodeai-workspaces/...`) once full proxy path is in place.
@@ -376,6 +387,25 @@ Phase summary: implement the worker node secure store and token lifecycle requir
 - `agent_token_ref` resolution failures fail closed without leaking secrets.
 - No managed-service container or sandbox can access the secure store path (only identity-binding sockets may be mounted later).
 
+## Phase 4A: Post-Quantum KEM for Secure Store Encryption at Rest
+
+Phase summary: address the Phase 4 gap identified in the [phase1-4 independent validation gap report](2026-03-06_phase1_4_independent_validation_gap_report.md).
+Spec and REQ-WORKER-0173 now require post-quantum key encapsulation by default with FIPS-approved symmetric fallback when PQ is not permitted; implementation currently uses AES-256-GCM only.
+
+### Phase 4A Change Set
+
+- Use a post-quantum key encapsulation mechanism (e.g. NIST FIPS 203 ML-KEM) by default to protect the key material used for secure store encryption at rest; use a strong symmetric AEAD (e.g. AES-256-GCM) for the ciphertext; each record MUST use a distinct nonce.
+- When the post-quantum KEM is not available or not permitted (e.g. FIPS-only environment where the validated cryptographic module does not yet include ML-KEM), use only a FIPS-approved symmetric AEAD (e.g. AES-256-GCM) with a per-record nonce.
+- Preserve backward compatibility or migration path for existing AES-256-GCM-only envelopes (e.g. envelope version/algorithm id so readers can distinguish PQ-wrapped vs AEAD-only).
+- No change required for "Phase 4 validation doc vs test location" gap: phase4_validation.md and the plan's unit-test assertion wording are correct; no code or doc change for that item.
+
+### Phase 4A Acceptance Criteria
+
+- Default path uses post-quantum KEM to protect key material and AES-256-GCM for ciphertext; per-record nonce.
+- Fallback path uses only FIPS-approved symmetric AEAD when PQ KEM is not permitted; behavior consistent with REQ-WORKER-0170 in FIPS mode.
+- REQ-WORKER-0173 and NodeLocalSecureStore encryption-at-rest bullets are satisfied.
+- Unit tests cover both default (PQ KEM + AEAD) and fallback (AEAD-only) code paths where applicable.
+
 ## Phase 5: Identity-Bound Internal Proxy Transport and Binding Hardening
 
 Phase summary: implement the required per-service UDS binding and optional loopback so the worker can deterministically resolve calling `service_id` without secrets in the agent container or request.
@@ -477,11 +507,11 @@ This section defines verification layers and target suites.
 ## Delivery Order and Risk
 
 - **Mandatory order:** Phase 1 -> Phase 2 -> Phase 3 (done or in progress).
-  Then **Phase 4 -> Phase 5** (build and test new required components first).
+  Then **Phase 4 -> Phase 4a -> Phase 5** (build and test new required components first).
   Then Phase 6 -> Phase 7 -> Phase 8.
-  Do not start Phase 6, 7, or 8 until Phase 4 and Phase 5 are implemented and tested.
+  Do not start Phase 6, 7, or 8 until Phase 4, Phase 4a, and Phase 5 are implemented and tested.
 - Highest operational risk is in Phase 2 because it changes SBA inference execution topology.
-- Highest security risk is unresolved until Phase 6 is complete (Phase 4 and Phase 5 are prerequisites).
+- Highest security risk is unresolved until Phase 6 is complete (Phase 4, 4a, and 5 are prerequisites).
 
 ## Definition of Done
 

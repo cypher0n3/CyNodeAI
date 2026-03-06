@@ -25,10 +25,16 @@ import (
 	"github.com/cypher0n3/cynodeai/go_shared_libs/contracts/problem"
 	"github.com/cypher0n3/cynodeai/go_shared_libs/contracts/workerapi"
 	"github.com/cypher0n3/cynodeai/worker_node/cmd/worker-api/executor"
+	"github.com/cypher0n3/cynodeai/worker_node/internal/securestore"
 	"github.com/cypher0n3/cynodeai/worker_node/internal/telemetry"
 )
 
 const maxManagedProxyBodyBytes = 1 << 20 // 1 MiB
+const internalProxySocketBaseDir = "run/managed_agent_proxy"
+
+type contextKey string
+
+const callerServiceIDContextKey contextKey = "caller_service_id"
 
 type managedServiceTarget struct {
 	ServiceType string `json:"service_type"`
@@ -52,7 +58,8 @@ type managedServiceProxyResponse struct {
 
 type internalOrchestratorProxyConfig struct {
 	UpstreamBaseURL string
-	AllowedTokens   map[string]string // token -> service_id
+	SocketByService map[string]string // service_id -> socket path
+	SecureStore     *securestore.Store
 }
 
 func main() {
@@ -78,55 +85,35 @@ func runMain(ctx context.Context) int {
 		getEnv("INFERENCE_PROXY_IMAGE", ""),
 		nil,
 	)
-	workspaceRoot := getEnv("WORKSPACE_ROOT", filepath.Join(os.TempDir(), "cynodeai-workspaces"))
 	stateDir := getEnv("WORKER_API_STATE_DIR", filepath.Join(os.TempDir(), "cynode", "state"))
-	var telemetryStore *telemetry.Store
-	if ts, err := telemetry.Open(ctx, stateDir); err != nil {
-		logger.Warn("telemetry store unavailable, containers/logs endpoints disabled", "error", err)
-	} else {
-		telemetryStore = ts
+	workspaceRoot := getEnv("WORKSPACE_ROOT", filepath.Join(os.TempDir(), "cynodeai-workspaces"))
+	telemetryStore, cfg := setupWorkerStateAndProxyConfig(ctx, stateDir, logger)
+	if telemetryStore != nil {
 		defer func() { _ = telemetryStore.Close() }()
 		go runRetentionAndVacuum(ctx, telemetryStore, logger)
 	}
-	cfg := loadWorkerProxyConfig(logger)
 	mux := newMux(exec, bearerToken, workspaceRoot, telemetryStore, logger, cfg.ManagedServiceTargets)
 	internalMux := newInternalMux(cfg.InternalProxy, logger)
 	srv := newServer(mux)
 	internalSrv := newInternalServer(internalMux)
-
 	serverErr := make(chan error, 1)
-	go func() {
-		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			serverErr <- err
+	startPublicAndInternalServers(srv, internalSrv, serverErr)
+	if socketPath := strings.TrimSpace(os.Getenv("WORKER_INTERNAL_LISTEN_UNIX")); socketPath != "" {
+		cleanup, exitCode := listenInternalUnix(socketPath, internalSrv, serverErr, logger)
+		if exitCode != 0 {
+			return exitCode
+		}
+		defer cleanup()
+	}
+	internalUDSServers, internalUDSListeners, exitCode := startInternalUDSListeners(logger, internalMux, &cfg.InternalProxy, serverErr)
+	if exitCode != 0 {
+		return exitCode
+	}
+	defer func() {
+		for _, l := range internalUDSListeners {
+			_ = os.Remove(l.Addr().String())
 		}
 	}()
-	if internalSrv.Addr != "" {
-		go func() {
-			if err := internalSrv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-				serverErr <- err
-			}
-		}()
-	}
-	if socketPath := strings.TrimSpace(os.Getenv("WORKER_INTERNAL_LISTEN_UNIX")); socketPath != "" {
-		if err := os.RemoveAll(socketPath); err != nil {
-			logger.Error("failed to prepare internal unix socket", "path", socketPath, "error", err)
-			return 1
-		}
-		l, err := net.Listen("unix", socketPath)
-		if err != nil {
-			logger.Error("failed to listen on internal unix socket", "path", socketPath, "error", err)
-			return 1
-		}
-		defer func() {
-			_ = l.Close()
-			_ = os.Remove(socketPath)
-		}()
-		go func() {
-			if err := internalSrv.Serve(l); err != nil && !errors.Is(err, http.ErrServerClosed) {
-				serverErr <- err
-			}
-		}()
-	}
 	done := make(chan os.Signal, 1)
 	signal.Notify(done, os.Interrupt, syscall.SIGTERM)
 	select {
@@ -142,6 +129,9 @@ func runMain(ctx context.Context) int {
 	}
 	if err := internalSrv.Shutdown(shutdownCtx); err != nil {
 		return 1
+	}
+	for _, s := range internalUDSServers {
+		_ = s.Shutdown(shutdownCtx)
 	}
 	return 0
 }
@@ -228,45 +218,179 @@ func loadWorkerProxyConfig(logger *slog.Logger) workerProxyConfig {
 		ManagedServiceTargets: map[string]managedServiceTarget{},
 		InternalProxy: internalOrchestratorProxyConfig{
 			UpstreamBaseURL: strings.TrimSpace(os.Getenv("ORCHESTRATOR_INTERNAL_PROXY_BASE_URL")),
-			AllowedTokens:   map[string]string{},
+			SocketByService: map[string]string{},
+			SecureStore:     nil,
 		},
 	}
-	nodeCfgRaw := strings.TrimSpace(os.Getenv("WORKER_NODE_CONFIG_JSON"))
-	if nodeCfgRaw != "" {
-		var nodeCfg nodepayloads.NodeConfigurationPayload
-		if err := json.Unmarshal([]byte(nodeCfgRaw), &nodeCfg); err != nil {
-			if logger != nil {
-				logger.Warn("invalid WORKER_NODE_CONFIG_JSON; falling back to env-only proxy config", "error", err)
-			}
-		} else {
-			out.ManagedServiceTargets = deriveManagedServiceTargetsFromNodeConfig(&nodeCfg)
-			if out.InternalProxy.UpstreamBaseURL == "" {
-				out.InternalProxy.UpstreamBaseURL = strings.TrimSpace(nodeCfg.Orchestrator.BaseURL)
-			}
-			if nodeCfg.ManagedServices != nil {
-				for _, svc := range nodeCfg.ManagedServices.Services {
-					if svc.Orchestrator == nil {
-						continue
-					}
-					token := strings.TrimSpace(svc.Orchestrator.AgentToken)
-					if token == "" {
-						continue
-					}
-					out.InternalProxy.AllowedTokens[token] = strings.TrimSpace(svc.ServiceID)
-				}
-			}
-		}
+	stateDir := getEnv("WORKER_API_STATE_DIR", filepath.Join(os.TempDir(), "cynode", "state"))
+	if nodeCfgRaw := strings.TrimSpace(os.Getenv("WORKER_NODE_CONFIG_JSON")); nodeCfgRaw != "" {
+		applyNodeConfigToWorkerProxyConfig(&out, stateDir, nodeCfgRaw, logger)
 	}
 	if len(out.ManagedServiceTargets) == 0 {
 		out.ManagedServiceTargets = loadManagedServiceTargetsFromEnv(logger)
-	}
-	if len(out.InternalProxy.AllowedTokens) == 0 {
-		out.InternalProxy.AllowedTokens = loadInternalProxyTokensFromEnv()
 	}
 	if out.InternalProxy.UpstreamBaseURL == "" {
 		out.InternalProxy.UpstreamBaseURL = strings.TrimSpace(os.Getenv("ORCHESTRATOR_URL"))
 	}
 	return out
+}
+
+func applyNodeConfigToWorkerProxyConfig(out *workerProxyConfig, stateDir, nodeCfgRaw string, logger *slog.Logger) {
+	var nodeCfg nodepayloads.NodeConfigurationPayload
+	if err := json.Unmarshal([]byte(nodeCfgRaw), &nodeCfg); err != nil {
+		if logger != nil {
+			logger.Warn("invalid WORKER_NODE_CONFIG_JSON; falling back to env-only proxy config", "error", err)
+		}
+		return
+	}
+	out.ManagedServiceTargets = deriveManagedServiceTargetsFromNodeConfig(&nodeCfg)
+	if out.InternalProxy.UpstreamBaseURL == "" {
+		out.InternalProxy.UpstreamBaseURL = strings.TrimSpace(nodeCfg.Orchestrator.BaseURL)
+	}
+	if nodeCfg.ManagedServices != nil {
+		for i := range nodeCfg.ManagedServices.Services {
+			svc := &nodeCfg.ManagedServices.Services[i]
+			serviceID := strings.TrimSpace(svc.ServiceID)
+			if serviceID != "" && svc.Orchestrator != nil {
+				if path, ok := managedAgentProxySocketPath(stateDir, serviceID); ok {
+					out.InternalProxy.SocketByService[serviceID] = path
+				}
+			}
+		}
+	}
+}
+
+// startPublicAndInternalServers starts srv and optionally internalSrv in goroutines; errors are sent to serverErr.
+func startPublicAndInternalServers(srv, internalSrv *http.Server, serverErr chan error) {
+	go func() {
+		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			serverErr <- err
+		}
+	}()
+	if internalSrv.Addr != "" {
+		go func() {
+			if err := internalSrv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+				serverErr <- err
+			}
+		}()
+	}
+}
+
+// setupWorkerStateAndProxyConfig opens telemetry (if available) and loads proxy config with secure store. Returns (telemetryStore, cfg).
+func setupWorkerStateAndProxyConfig(ctx context.Context, stateDir string, logger *slog.Logger) (*telemetry.Store, workerProxyConfig) {
+	var telemetryStore *telemetry.Store
+	if ts, err := telemetry.Open(ctx, stateDir); err != nil {
+		if logger != nil {
+			logger.Warn("telemetry store unavailable, containers/logs endpoints disabled", "error", err)
+		}
+	} else {
+		telemetryStore = ts
+	}
+	cfg := loadWorkerProxyConfig(logger)
+	if store, source, err := securestore.Open(stateDir); err == nil {
+		cfg.InternalProxy.SecureStore = store
+		if logger != nil && source == securestore.MasterKeySourceEnvB64 {
+			logger.Warn("secure store uses env_b64 master key backend; migrate to stronger host-backed key source")
+		}
+	} else if logger != nil {
+		logger.Error("secure store unavailable; internal orchestrator proxy will fail closed", "error", err)
+	}
+	return telemetryStore, cfg
+}
+
+// listenInternalUnix binds the internal server to a unix socket. Returns cleanup and 0 on success, or (nil, 1) on error.
+func listenInternalUnix(socketPath string, srv *http.Server, serverErr chan error, logger *slog.Logger) (cleanup func(), exitCode int) {
+	if err := os.RemoveAll(socketPath); err != nil {
+		logger.Error("failed to prepare internal unix socket", "path", socketPath, "error", err)
+		return nil, 1
+	}
+	l, err := net.Listen("unix", socketPath)
+	if err != nil {
+		logger.Error("failed to listen on internal unix socket", "path", socketPath, "error", err)
+		return nil, 1
+	}
+	go func() {
+		if err := srv.Serve(l); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			serverErr <- err
+		}
+	}()
+	return func() {
+		_ = l.Close()
+		_ = os.Remove(socketPath)
+	}, 0
+}
+
+// startInternalUDSListeners starts per-service UDS listeners for the internal proxy. Returns (servers, listeners, 0) or (nil, nil, 1) on error.
+func startInternalUDSListeners(logger *slog.Logger, internalMux *http.ServeMux, cfg *internalOrchestratorProxyConfig, serverErr chan error) ([]*http.Server, []net.Listener, int) {
+	var servers []*http.Server
+	var listeners []net.Listener
+	for serviceID, socketPath := range cfg.SocketByService {
+		if err := os.MkdirAll(filepath.Dir(socketPath), 0o700); err != nil {
+			logger.Error("failed to create managed-agent proxy socket directory", "service_id", serviceID, "path", socketPath, "error", err)
+			return nil, nil, 1
+		}
+		if err := os.RemoveAll(socketPath); err != nil {
+			logger.Error("failed to prepare managed-agent proxy socket", "service_id", serviceID, "path", socketPath, "error", err)
+			return nil, nil, 1
+		}
+		l, err := net.Listen("unix", socketPath)
+		if err != nil {
+			logger.Error("failed to listen on managed-agent proxy socket", "service_id", serviceID, "path", socketPath, "error", err)
+			return nil, nil, 1
+		}
+		if err := os.Chmod(socketPath, 0o600); err != nil {
+			_ = l.Close()
+			logger.Error("failed to set managed-agent proxy socket permissions", "service_id", serviceID, "path", socketPath, "error", err)
+			return nil, nil, 1
+		}
+		serviceMux := withCallerServiceID(internalMux, serviceID)
+		serviceSrv := newInternalServer(serviceMux)
+		servers = append(servers, serviceSrv)
+		listeners = append(listeners, l)
+		go func(s *http.Server, listener net.Listener) {
+			if err := s.Serve(listener); err != nil && !errors.Is(err, http.ErrServerClosed) {
+				serverErr <- err
+			}
+		}(serviceSrv, l)
+	}
+	return servers, listeners, 0
+}
+
+// validateInternalProxyRequest checks loopback, caller identity, secure store, and upstream. On failure writes problem and returns (_, _, false).
+func validateInternalProxyRequest(w http.ResponseWriter, r *http.Request, cfg internalOrchestratorProxyConfig) (serviceID string, record *securestore.AgentTokenRecord, ok bool) {
+	if !isLoopbackRequest(r) {
+		writeProblem(w, http.StatusForbidden, problem.TypeAuthentication, "Forbidden", "internal endpoint requires loopback or unix-socket access")
+		return "", nil, false
+	}
+	serviceID, ok = callerServiceIDFromRequest(r)
+	if !ok {
+		writeProblem(w, http.StatusUnauthorized, problem.TypeAuthentication, "Unauthorized", "missing caller identity binding")
+		return "", nil, false
+	}
+	if cfg.SecureStore == nil {
+		writeProblem(w, http.StatusBadGateway, problem.TypeInternal, "Bad Gateway", "secure store unavailable")
+		return "", nil, false
+	}
+	var err error
+	record, err = cfg.SecureStore.GetAgentToken(serviceID)
+	if err != nil {
+		writeProblem(w, http.StatusUnauthorized, problem.TypeAuthentication, "Unauthorized", "agent token unavailable for caller identity")
+		return "", nil, false
+	}
+	if strings.TrimSpace(cfg.UpstreamBaseURL) == "" {
+		writeProblem(w, http.StatusBadGateway, problem.TypeInternal, "Bad Gateway", "internal proxy upstream not configured")
+		return "", nil, false
+	}
+	return serviceID, record, true
+}
+
+func managedAgentProxySocketPath(stateDir, serviceID string) (string, bool) {
+	serviceID = strings.TrimSpace(serviceID)
+	if serviceID == "" || strings.Contains(serviceID, "/") || strings.Contains(serviceID, "\\") || strings.Contains(serviceID, "..") {
+		return "", false
+	}
+	base := filepath.Join(stateDir, internalProxySocketBaseDir, serviceID)
+	return filepath.Join(base, "proxy.sock"), true
 }
 
 func deriveManagedServiceTargetsFromNodeConfig(cfg *nodepayloads.NodeConfigurationPayload) map[string]managedServiceTarget {
@@ -276,41 +400,21 @@ func deriveManagedServiceTargetsFromNodeConfig(cfg *nodepayloads.NodeConfigurati
 	return map[string]managedServiceTarget{}
 }
 
-func loadInternalProxyTokensFromEnv() map[string]string {
-	raw := strings.TrimSpace(os.Getenv("WORKER_INTERNAL_AGENT_TOKENS_JSON"))
-	if raw == "" {
-		return map[string]string{}
-	}
-	var mapped map[string]string
-	if err := json.Unmarshal([]byte(raw), &mapped); err != nil {
-		return map[string]string{}
-	}
-	return mapped
-}
-
 func handleInternalOrchestratorProxy(cfg internalOrchestratorProxyConfig, logger *slog.Logger, endpoint string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if !isLoopbackRequest(r) {
-			writeProblem(w, http.StatusForbidden, problem.TypeAuthentication, "Forbidden", "internal endpoint requires loopback or unix-socket access")
-			return
-		}
-		token, serviceID, ok := authenticateInternalProxyRequest(r, cfg)
+		serviceID, record, ok := validateInternalProxyRequest(w, r, cfg)
 		if !ok {
-			writeProblem(w, http.StatusUnauthorized, problem.TypeAuthentication, "Unauthorized", "invalid or missing agent token or capability lease")
-			return
-		}
-		if strings.TrimSpace(cfg.UpstreamBaseURL) == "" {
-			writeProblem(w, http.StatusBadGateway, problem.TypeInternal, "Bad Gateway", "internal proxy upstream not configured")
 			return
 		}
 		reqPayload, reqBody, ok := decodeManagedProxyRequest(w, r)
 		if !ok {
 			return
 		}
-		target := managedServiceTarget{
-			ServiceType: "orchestrator",
-			BaseURL:     strings.TrimSpace(cfg.UpstreamBaseURL),
+		target := managedServiceTarget{ServiceType: "orchestrator", BaseURL: strings.TrimSpace(cfg.UpstreamBaseURL)}
+		if reqPayload.Headers == nil {
+			reqPayload.Headers = map[string][]string{}
 		}
+		reqPayload.Headers["Authorization"] = []string{"Bearer " + record.Token}
 		start := time.Now()
 		respPayload, status, detail := forwardManagedProxyRequest(r.Context(), target, reqPayload, reqBody)
 		if status != 0 {
@@ -322,7 +426,7 @@ func handleInternalOrchestratorProxy(cfg internalOrchestratorProxyConfig, logger
 				"internal orchestrator proxy call",
 				"endpoint", endpoint,
 				"service_id", serviceID,
-				"token_present", token != "",
+				"token_present", true,
 				"method", reqPayload.Method,
 				"path", reqPayload.Path,
 				"upstream_status", respPayload.Status,
@@ -333,23 +437,19 @@ func handleInternalOrchestratorProxy(cfg internalOrchestratorProxyConfig, logger
 	}
 }
 
-func authenticateInternalProxyRequest(r *http.Request, cfg internalOrchestratorProxyConfig) (token, serviceID string, ok bool) {
-	if t := strings.TrimSpace(r.Header.Get("X-Cynode-Capability-Lease")); t != "" {
-		if sid, exists := cfg.AllowedTokens[t]; exists {
-			return t, sid, true
-		}
+func withCallerServiceID(next http.Handler, serviceID string) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), callerServiceIDContextKey, serviceID)
+		next.ServeHTTP(w, r.WithContext(ctx))
+	})
+}
+
+func callerServiceIDFromRequest(r *http.Request) (string, bool) {
+	serviceID, ok := r.Context().Value(callerServiceIDContextKey).(string)
+	if !ok || strings.TrimSpace(serviceID) == "" {
+		return "", false
 	}
-	authz := r.Header.Get("Authorization")
-	const prefix = "Bearer "
-	if len(authz) <= len(prefix) || authz[:len(prefix)] != prefix {
-		return "", "", false
-	}
-	t := authz[len(prefix):]
-	sid, exists := cfg.AllowedTokens[t]
-	if !exists {
-		return "", "", false
-	}
-	return t, sid, true
+	return serviceID, true
 }
 
 func isLoopbackRequest(r *http.Request) bool {

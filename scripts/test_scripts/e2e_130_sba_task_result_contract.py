@@ -25,11 +25,7 @@ class TestSbaResultContract(unittest.TestCase):
             result_data.get("status"), "completed",
             "e2e_130 validates contract only for completed SBA tasks (SBA_TASK_ID from e2e_123)"
         )
-        job_result = helpers.jq_get(result_data, "jobs", 0, "result")
-        if not job_result and result_data:
-            raw = result_data.get("stdout")
-            if isinstance(raw, str):
-                job_result = helpers.parse_json_safe(raw)
+        job_result = helpers.get_sba_job_result(result_data)
         if not job_result:
             self.skipTest("no job result for SBA task")
         sba_result = (job_result or {}).get("sba_result")

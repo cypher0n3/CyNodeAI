@@ -9,14 +9,23 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"os"
 	"os/exec"
-	"runtime"
+	"path/filepath"
 	"strings"
+	"runtime"
 	"time"
 
 	"github.com/cypher0n3/cynodeai/go_shared_libs/contracts/nodepayloads"
 	"github.com/cypher0n3/cynodeai/go_shared_libs/contracts/problem"
+	"github.com/cypher0n3/cynodeai/worker_node/internal/securestore"
+)
+
+const (
+	agentTokenRefKindOrchestratorEndpoint = "orchestrator_endpoint"
+	serviceTypePMA                       = "pma"
+	proxyURLAuto                         = "auto"
 )
 
 // Config holds node manager configuration from the environment.
@@ -115,12 +124,15 @@ func RunWithOptions(ctx context.Context, logger *slog.Logger, cfg *Config, opts 
 		return err
 	}
 
-	return runCapabilityLoop(ctx, cfg, bootstrap)
+	return runCapabilityLoop(ctx, cfg, bootstrap, nodeConfig)
 }
 
 // applyConfigAndStartServices starts Worker API and Ollama from opts (if set), then sends config ack.
 // OLLAMA is started only when no existing host inference is detected and config instructs (inference_backend.enabled).
 func applyConfigAndStartServices(ctx context.Context, logger *slog.Logger, cfg *Config, bootstrap *BootstrapData, nodeConfig *nodepayloads.NodeConfigurationPayload, opts *RunOptions) error {
+	if err := syncManagedServiceAgentTokens(ctx, cfg, nodeConfig, logger); err != nil {
+		return err
+	}
 	applyWorkerProxyConfigEnv(nodeConfig)
 	if opts != nil && opts.StartWorkerAPI != nil && nodeConfig != nil && nodeConfig.WorkerAPI != nil && nodeConfig.WorkerAPI.OrchestratorBearerToken != "" {
 		if err := opts.StartWorkerAPI(nodeConfig.WorkerAPI.OrchestratorBearerToken); err != nil {
@@ -146,11 +158,173 @@ func applyConfigAndStartServices(ctx context.Context, logger *slog.Logger, cfg *
 	return nil
 }
 
+func effectiveStateDir() string {
+	if v := strings.TrimSpace(getEnv("WORKER_API_STATE_DIR", "")); v != "" {
+		return v
+	}
+	if v := strings.TrimSpace(getEnv("CYNODE_STATE_DIR", "")); v != "" {
+		return v
+	}
+	return "/var/lib/cynode/state"
+}
+
+type resolvedAgentToken struct {
+	token     string
+	expiresAt string
+}
+
+func computeDesiredAgentTokens(ctx context.Context, cfg *Config, nodeConfig *nodepayloads.NodeConfigurationPayload) (map[string]resolvedAgentToken, error) {
+	desired := map[string]resolvedAgentToken{}
+	for i := range nodeConfig.ManagedServices.Services {
+		svc := &nodeConfig.ManagedServices.Services[i]
+		serviceID := strings.TrimSpace(svc.ServiceID)
+		if serviceID == "" {
+			continue
+		}
+		token, expiresAt, hasToken, err := resolveManagedServiceToken(ctx, cfg, svc)
+		if err != nil {
+			return nil, fmt.Errorf("resolve managed service agent token (service_id=%s): %w", serviceID, err)
+		}
+		if hasToken {
+			desired[serviceID] = resolvedAgentToken{token: token, expiresAt: expiresAt}
+		}
+	}
+	return desired, nil
+}
+
+func syncManagedServiceAgentTokens(ctx context.Context, cfg *Config, nodeConfig *nodepayloads.NodeConfigurationPayload, logger *slog.Logger) error {
+	if nodeConfig == nil || nodeConfig.ManagedServices == nil {
+		return nil
+	}
+	store, source, err := securestore.Open(effectiveStateDir())
+	if err != nil {
+		return fmt.Errorf("secure store unavailable for managed service token lifecycle: %w", err)
+	}
+	if logger != nil && source == securestore.MasterKeySourceEnvB64 {
+		logger.Warn("secure store uses env_b64 master key backend; migrate to stronger host-backed key source")
+	}
+	desired, err := computeDesiredAgentTokens(ctx, cfg, nodeConfig)
+	if err != nil {
+		return err
+	}
+	existing, err := store.ListAgentTokenServiceIDs()
+	if err != nil {
+		return fmt.Errorf("list stored managed service agent tokens: %w", err)
+	}
+	return reconcileAgentTokenStore(store, desired, existing)
+}
+
+func reconcileAgentTokenStore(store *securestore.Store, desired map[string]resolvedAgentToken, existing []string) error {
+	for _, serviceID := range existing {
+		if _, keep := desired[serviceID]; !keep {
+			if err := store.DeleteAgentToken(serviceID); err != nil {
+				return fmt.Errorf("delete stale managed service agent token (service_id=%s): %w", serviceID, err)
+			}
+		}
+	}
+	for serviceID, tok := range desired {
+		if err := store.PutAgentToken(serviceID, tok.token, tok.expiresAt); err != nil {
+			return fmt.Errorf("write managed service agent token (service_id=%s): %w", serviceID, err)
+		}
+	}
+	return nil
+}
+
+func resolveManagedServiceToken(ctx context.Context, cfg *Config, svc *nodepayloads.ConfigManagedService) (token, expiresAt string, hasToken bool, err error) {
+	if svc == nil || svc.Orchestrator == nil {
+		return "", "", false, nil
+	}
+	directToken := strings.TrimSpace(svc.Orchestrator.AgentToken)
+	if directToken != "" {
+		expires := strings.TrimSpace(svc.Orchestrator.AgentTokenExpiresAt)
+		if expires != "" {
+			if _, parseErr := time.Parse(time.RFC3339, expires); parseErr != nil {
+				return "", "", false, fmt.Errorf("invalid agent_token_expires_at: %w", parseErr)
+			}
+		}
+		return directToken, expires, true, nil
+	}
+	if svc.Orchestrator.AgentTokenRef == nil {
+		return "", "", false, nil
+	}
+	return resolveAgentTokenRef(ctx, cfg, svc)
+}
+
+func resolveAgentTokenRef(ctx context.Context, cfg *Config, svc *nodepayloads.ConfigManagedService) (token, expiresAt string, hasToken bool, err error) {
+	if svc == nil || svc.Orchestrator == nil {
+		return "", "", false, nil
+	}
+	ref := svc.Orchestrator.AgentTokenRef
+	if ref == nil {
+		return "", "", false, nil
+	}
+	if strings.TrimSpace(ref.Kind) != agentTokenRefKindOrchestratorEndpoint {
+		return "", "", false, errors.New("unsupported agent_token_ref.kind")
+	}
+	refURL := strings.TrimSpace(ref.URL)
+	if refURL == "" {
+		return "", "", false, errors.New("agent_token_ref.url is required")
+	}
+	token, expiresAt, err = doAgentTokenRefRequest(ctx, cfg, svc, refURL)
+	if err != nil {
+		return "", "", false, err
+	}
+	return token, expiresAt, true, nil
+}
+
+func doAgentTokenRefRequest(ctx context.Context, cfg *Config, svc *nodepayloads.ConfigManagedService, refURL string) (token, expiresAt string, err error) {
+	reqBody := map[string]string{
+		"node_slug":    strings.TrimSpace(cfg.NodeSlug),
+		"service_id":   strings.TrimSpace(svc.ServiceID),
+		"service_type": strings.TrimSpace(svc.ServiceType),
+	}
+	if role := strings.TrimSpace(svc.Role); role != "" {
+		reqBody["role"] = role
+	}
+	raw, err := json.Marshal(reqBody)
+	if err != nil {
+		return "", "", fmt.Errorf("marshal agent_token_ref request: %w", err)
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, refURL, bytes.NewReader(raw))
+	if err != nil {
+		return "", "", fmt.Errorf("create agent_token_ref request: %w", err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	client := &http.Client{Timeout: cfg.HTTPTimeout}
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", "", fmt.Errorf("agent_token_ref request failed: %w", err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return "", "", fmt.Errorf("agent_token_ref non-2xx status: %d", resp.StatusCode)
+	}
+	var tokenResp struct {
+		AgentToken          string `json:"agent_token"`
+		AgentTokenExpiresAt string `json:"agent_token_expires_at,omitempty"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&tokenResp); err != nil {
+		return "", "", fmt.Errorf("decode agent_token_ref response: %w", err)
+	}
+	token = strings.TrimSpace(tokenResp.AgentToken)
+	if token == "" {
+		return "", "", errors.New("agent_token_ref response missing agent_token")
+	}
+	expiresAt = strings.TrimSpace(tokenResp.AgentTokenExpiresAt)
+	if expiresAt != "" {
+		if _, parseErr := time.Parse(time.RFC3339, expiresAt); parseErr != nil {
+			return "", "", fmt.Errorf("invalid agent_token_ref response agent_token_expires_at: %w", parseErr)
+		}
+	}
+	return token, expiresAt, nil
+}
+
 func applyWorkerProxyConfigEnv(nodeConfig *nodepayloads.NodeConfigurationPayload) {
 	if nodeConfig == nil {
 		return
 	}
-	if raw, err := json.Marshal(nodeConfig); err == nil {
+	sanitized := sanitizeNodeConfigForWorkerEnv(nodeConfig)
+	if raw, err := json.Marshal(sanitized); err == nil {
 		_ = os.Setenv("WORKER_NODE_CONFIG_JSON", string(raw))
 	}
 	if nodeConfig.Orchestrator.BaseURL != "" {
@@ -163,13 +337,40 @@ func applyWorkerProxyConfigEnv(nodeConfig *nodepayloads.NodeConfigurationPayload
 	}
 }
 
+func sanitizeNodeConfigForWorkerEnv(nodeConfig *nodepayloads.NodeConfigurationPayload) *nodepayloads.NodeConfigurationPayload {
+	if nodeConfig == nil {
+		return nil
+	}
+	cp := *nodeConfig
+	if nodeConfig.ManagedServices != nil {
+		managed := *nodeConfig.ManagedServices
+		if len(nodeConfig.ManagedServices.Services) > 0 {
+			managed.Services = make([]nodepayloads.ConfigManagedService, 0, len(nodeConfig.ManagedServices.Services))
+			for i := range nodeConfig.ManagedServices.Services {
+				svc := &nodeConfig.ManagedServices.Services[i]
+				svcCopy := *svc
+				if svc.Orchestrator != nil {
+					orch := *svc.Orchestrator
+					orch.AgentToken = ""
+					orch.AgentTokenRef = nil
+					svcCopy.Orchestrator = &orch
+				}
+				managed.Services = append(managed.Services, svcCopy)
+			}
+		}
+		cp.ManagedServices = &managed
+	}
+	return &cp
+}
+
 func buildManagedServiceTargetsFromConfig(nodeConfig *nodepayloads.NodeConfigurationPayload) map[string]map[string]string {
 	targets := map[string]map[string]string{}
 	if nodeConfig == nil || nodeConfig.ManagedServices == nil {
 		return targets
 	}
 	pmaBaseURL := strings.TrimSpace(getEnv("PMA_BASE_URL", "http://127.0.0.1:8090"))
-	for _, svc := range nodeConfig.ManagedServices.Services {
+	for i := range nodeConfig.ManagedServices.Services {
+		svc := &nodeConfig.ManagedServices.Services[i]
 		serviceID := strings.TrimSpace(svc.ServiceID)
 		serviceType := strings.TrimSpace(svc.ServiceType)
 		if serviceID == "" || serviceType == "" {
@@ -177,7 +378,7 @@ func buildManagedServiceTargetsFromConfig(nodeConfig *nodepayloads.NodeConfigura
 		}
 		baseURL := ""
 		switch serviceType {
-		case "pma":
+		case serviceTypePMA:
 			baseURL = pmaBaseURL
 		default:
 			continue
@@ -223,7 +424,7 @@ func maybeStartManagedServices(ctx context.Context, logger *slog.Logger, nodeCon
 	return nil
 }
 
-func runCapabilityLoop(ctx context.Context, cfg *Config, bootstrap *BootstrapData) error {
+func runCapabilityLoop(ctx context.Context, cfg *Config, bootstrap *BootstrapData, nodeConfig *nodepayloads.NodeConfigurationPayload) error {
 	ticker := time.NewTicker(cfg.CapabilityReportInterval)
 	defer ticker.Stop()
 	for {
@@ -231,7 +432,7 @@ func runCapabilityLoop(ctx context.Context, cfg *Config, bootstrap *BootstrapDat
 		case <-ctx.Done():
 			return nil
 		case <-ticker.C:
-			if err := reportCapabilities(ctx, cfg, bootstrap); err != nil {
+			if err := reportCapabilities(ctx, cfg, bootstrap, nodeConfig); err != nil {
 				_ = err
 			}
 		}
@@ -240,7 +441,7 @@ func runCapabilityLoop(ctx context.Context, cfg *Config, bootstrap *BootstrapDat
 
 // FetchConfig fetches the node configuration from the bootstrap node_config_url (GET).
 func FetchConfig(ctx context.Context, cfg *Config, bootstrap *BootstrapData) (*nodepayloads.NodeConfigurationPayload, error) {
-	req, err := http.NewRequestWithContext(ctx, "GET", bootstrap.NodeConfigURL, http.NoBody)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, bootstrap.NodeConfigURL, http.NoBody)
 	if err != nil {
 		return nil, fmt.Errorf("create config request: %w", err)
 	}
@@ -280,13 +481,14 @@ func SendConfigAck(ctx context.Context, cfg *Config, bootstrap *BootstrapData, n
 		ConfigVersion: nodeConfig.ConfigVersion,
 		AckAt:         time.Now().UTC().Format(time.RFC3339),
 		Status:        status,
+		ManagedServicesStatus: buildManagedServicesStatus(nodeConfig),
 	}
 	body, err := json.Marshal(ack)
 	if err != nil {
 		return fmt.Errorf("marshal config ack: %w", err)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, "POST", bootstrap.NodeConfigURL, bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, bootstrap.NodeConfigURL, bytes.NewReader(body))
 	if err != nil {
 		return fmt.Errorf("create config ack request: %w", err)
 	}
@@ -319,14 +521,14 @@ func waitForOrchestratorReadiness(ctx context.Context, logger *slog.Logger, cfg 
 	if d := getDurationEnv("NODE_MANAGER_READINESS_TIMEOUT", 0); d > 0 {
 		timeout = d
 	}
-	url := strings.TrimSuffix(cfg.OrchestratorURL, "/") + "/readyz"
+	readyzURL := strings.TrimSuffix(cfg.OrchestratorURL, "/") + "/readyz"
 	deadline := time.Now().Add(timeout)
 	client := &http.Client{Timeout: 2 * time.Second}
 	for time.Now().Before(deadline) {
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
-		req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, readyzURL, http.NoBody)
 		if err != nil {
 			time.Sleep(orchestratorReadinessInterval)
 			continue
@@ -345,7 +547,7 @@ func waitForOrchestratorReadiness(ctx context.Context, logger *slog.Logger, cfg 
 		}
 		time.Sleep(orchestratorReadinessInterval)
 	}
-	return fmt.Errorf("orchestrator control-plane not reachable at %s within %v", url, timeout)
+	return fmt.Errorf("orchestrator control-plane not reachable at %s within %v", readyzURL, timeout)
 }
 
 // runStartupChecks runs initial startup checks before registering with the orchestrator.
@@ -394,7 +596,7 @@ func checkContainerRuntime(ctx context.Context, logger *slog.Logger, cfg *Config
 }
 
 func register(ctx context.Context, cfg *Config) (*BootstrapData, error) {
-	capability := buildCapability(ctx, cfg)
+	capability := buildCapability(ctx, cfg, nil)
 
 	req := nodepayloads.RegistrationRequest{
 		PSK:        cfg.RegistrationPSK,
@@ -406,8 +608,8 @@ func register(ctx context.Context, cfg *Config) (*BootstrapData, error) {
 		return nil, fmt.Errorf("marshal registration request: %w", err)
 	}
 
-	url := cfg.OrchestratorURL + "/v1/nodes/register"
-	httpReq, err := http.NewRequestWithContext(ctx, "POST", url, bytes.NewReader(body))
+	registerURL := cfg.OrchestratorURL + "/v1/nodes/register"
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, registerURL, bytes.NewReader(body))
 	if err != nil {
 		return nil, fmt.Errorf("create registration request: %w", err)
 	}
@@ -460,14 +662,14 @@ func ValidateBootstrap(b *nodepayloads.BootstrapResponse) error {
 	return nil
 }
 
-func reportCapabilities(ctx context.Context, cfg *Config, bootstrap *BootstrapData) error {
-	report := buildCapability(ctx, cfg)
+func reportCapabilities(ctx context.Context, cfg *Config, bootstrap *BootstrapData, nodeConfig *nodepayloads.NodeConfigurationPayload) error {
+	report := buildCapability(ctx, cfg, nodeConfig)
 	body, err := json.Marshal(report)
 	if err != nil {
 		return fmt.Errorf("marshal capability report: %w", err)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, "POST", bootstrap.NodeReportURL, bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, bootstrap.NodeReportURL, bytes.NewReader(body))
 	if err != nil {
 		return fmt.Errorf("create capability request: %w", err)
 	}
@@ -518,7 +720,7 @@ func detectExistingInference(ctx context.Context) (existingService, running bool
 	}
 	// Container is running; optionally verify reachability (e.g. HTTP to 11434).
 	port := getEnv("OLLAMA_PORT", "11434")
-	req, err := http.NewRequestWithContext(ctx, "GET", "http://127.0.0.1:"+port+"/api/tags", http.NoBody)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://127.0.0.1:"+port+"/api/tags", http.NoBody)
 	if err != nil {
 		return true, true
 	}
@@ -532,7 +734,7 @@ func detectExistingInference(ctx context.Context) (existingService, running bool
 	return true, running
 }
 
-func buildCapability(ctx context.Context, cfg *Config) nodepayloads.CapabilityReport {
+func buildCapability(ctx context.Context, cfg *Config, nodeConfig *nodepayloads.NodeConfigurationPayload) nodepayloads.CapabilityReport {
 	if cfg == nil {
 		return nodepayloads.CapabilityReport{
 			Version:    1,
@@ -564,7 +766,12 @@ func buildCapability(ctx context.Context, cfg *Config) nodepayloads.CapabilityRe
 		},
 		ManagedServices: &nodepayloads.ManagedServices{
 			Supported: true,
-			Features:  []string{"service_containers", "agent_orchestrator_proxy_bidirectional"},
+			Features: []string{
+				"service_containers",
+				"agent_orchestrator_proxy_bidirectional",
+				"agent_orchestrator_proxy_identity_bound",
+				"agent_proxy_urls_auto",
+			},
 		},
 	}
 	if strings.TrimSpace(cfg.AdvertisedWorkerAPIURL) != "" {
@@ -576,7 +783,60 @@ func buildCapability(ctx context.Context, cfg *Config) nodepayloads.CapabilityRe
 		ExistingService: existing,
 		Running:         running,
 	}
+	report.ManagedServicesStatus = buildManagedServicesStatus(nodeConfig)
 	return report
+}
+
+func buildManagedServicesStatus(nodeConfig *nodepayloads.NodeConfigurationPayload) *nodepayloads.ManagedServicesStatus {
+	if nodeConfig == nil || nodeConfig.ManagedServices == nil || len(nodeConfig.ManagedServices.Services) == 0 {
+		return nil
+	}
+	stateDir := effectiveStateDir()
+	out := &nodepayloads.ManagedServicesStatus{Services: []nodepayloads.ManagedServiceStatus{}}
+	for i := range nodeConfig.ManagedServices.Services {
+		svc := &nodeConfig.ManagedServices.Services[i]
+		serviceID := strings.TrimSpace(svc.ServiceID)
+		serviceType := strings.TrimSpace(svc.ServiceType)
+		if serviceID == "" || serviceType == "" {
+			continue
+		}
+		status := nodepayloads.ManagedServiceStatus{
+			ServiceID:   serviceID,
+			ServiceType: serviceType,
+			State:       "starting",
+		}
+		status.AgentToOrchestratorProxy = buildAgentToOrchestratorProxyStatus(stateDir, serviceID, svc.Orchestrator)
+		out.Services = append(out.Services, status)
+	}
+	return out
+}
+
+func buildAgentToOrchestratorProxyStatus(
+	stateDir, serviceID string,
+	orch *nodepayloads.ConfigManagedServiceOrchestrator,
+) *nodepayloads.AgentToOrchestratorProxyStatus {
+	if orch == nil {
+		return nil
+	}
+	mcpURL := strings.TrimSpace(orch.MCPGatewayProxyURL)
+	readyURL := strings.TrimSpace(orch.ReadyCallbackProxyURL)
+	if mcpURL == "" && readyURL == "" {
+		return nil
+	}
+	socketPath := filepath.Join(stateDir, "run", "managed_agent_proxy", serviceID, "proxy.sock")
+	escaped := url.PathEscape(socketPath)
+	out := &nodepayloads.AgentToOrchestratorProxyStatus{Binding: "per_service_uds"}
+	if mcpURL == proxyURLAuto {
+		out.MCPGatewayProxyURL = "http+unix://" + escaped + "/v1/worker/internal/orchestrator/mcp:call"
+	} else if mcpURL != "" {
+		out.MCPGatewayProxyURL = mcpURL
+	}
+	if readyURL == proxyURLAuto {
+		out.ReadyCallbackProxyURL = "http+unix://" + escaped + "/v1/worker/internal/orchestrator/agent:ready"
+	} else if readyURL != "" {
+		out.ReadyCallbackProxyURL = readyURL
+	}
+	return out
 }
 
 func getEnv(key, def string) string {

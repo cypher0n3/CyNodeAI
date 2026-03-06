@@ -1,0 +1,370 @@
+// Package securestore provides encrypted-at-rest secret persistence for worker-node secrets.
+package securestore
+
+import (
+	"crypto/aes"
+	"crypto/cipher"
+	"crypto/rand"
+	"encoding/base64"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"io"
+	"os"
+	"path/filepath"
+	"strings"
+	"time"
+)
+
+const (
+	defaultStateDir                     = "/var/lib/cynode/state"
+	masterKeyEnvName                    = "CYNODE_SECURE_STORE_MASTER_KEY_B64"
+	systemCredentialMasterKeyFile       = "cynode-secure-store-master-key.b64"
+	agentTokenStoreDir                  = "agent_tokens"
+	agentTokenEncryptedFileSuffix       = ".json.enc"
+	agentTokenEncryptionAlgorithm       = "AES-256-GCM"
+	envelopeVersion               int   = 1
+	requiredKeyLenBytes                 = 32
+)
+
+var (
+	// ErrMasterKeyNotConfigured indicates that no secure-store master key source was available.
+	ErrMasterKeyNotConfigured = errors.New("secure store master key is not configured")
+	// ErrMasterKeyInvalid indicates the configured key is invalid.
+	ErrMasterKeyInvalid = errors.New("secure store master key is invalid")
+	// ErrTokenExpired indicates a stored token has expired and must not be used.
+	ErrTokenExpired = errors.New("agent token expired")
+	// ErrFIPSRequiresNonEnvKey indicates FIPS mode is on and env fallback is not allowed; use TPM, OS key store, or system credential.
+	ErrFIPSRequiresNonEnvKey = errors.New("FIPS mode: secure store master key must not come from env; use TPM, OS key store, or system credential")
+)
+
+// MasterKeySource identifies which master-key backend was used.
+type MasterKeySource string
+
+const (
+	MasterKeySourceTPM              MasterKeySource = "tpm"
+	MasterKeySourceOSKeyStore       MasterKeySource = "os_key_store"
+	MasterKeySourceSystemCredential MasterKeySource = "system_credential"
+	MasterKeySourceEnvB64           MasterKeySource = "env_b64"
+)
+
+type encryptedEnvelope struct {
+	Version    int    `json:"version"`
+	Algorithm  string `json:"algorithm"`
+	NonceB64   string `json:"nonce_b64"`
+	PayloadB64 string `json:"payload_b64"`
+}
+
+// AgentTokenRecord is the plaintext token record stored encrypted at rest.
+type AgentTokenRecord struct {
+	ServiceID string `json:"service_id"`
+	Token     string `json:"token"`
+	ExpiresAt string `json:"expires_at,omitempty"`
+	WrittenAt string `json:"written_at"`
+}
+
+// Store is the secure-store handle.
+type Store struct {
+	rootDir string
+	key     []byte
+}
+
+// Open initializes the secure store under <state_dir>/secrets and resolves a master key.
+func Open(stateDir string) (*Store, MasterKeySource, error) {
+	if strings.TrimSpace(stateDir) == "" {
+		stateDir = defaultStateDir
+	}
+	rootDir := filepath.Join(stateDir, "secrets")
+	if err := os.MkdirAll(rootDir, 0o700); err != nil {
+		return nil, "", fmt.Errorf("create secure store dir: %w", err)
+	}
+	if err := os.Chmod(rootDir, 0o700); err != nil {
+		return nil, "", fmt.Errorf("set secure store dir permissions: %w", err)
+	}
+	key, source, err := resolveMasterKey()
+	if err != nil {
+		return nil, "", err
+	}
+	// Per CYNAI.WORKER.NodeLocalSecureStore: in FIPS mode, do not allow env fallback (use stronger key source).
+	if isFIPSMode() && source == MasterKeySourceEnvB64 {
+		zeroBytes(key)
+		return nil, "", ErrFIPSRequiresNonEnvKey
+	}
+	return &Store{rootDir: rootDir, key: key}, source, nil
+}
+
+// resolveMasterKey returns the 256-bit master key using spec precedence: TPM, OS key store, system credential, env fallback.
+func resolveMasterKey() ([]byte, MasterKeySource, error) {
+	if key, err := loadMasterKeyFromTPM(); err == nil {
+		return key, MasterKeySourceTPM, nil
+	}
+	if key, err := loadMasterKeyFromOSKeyStore(); err == nil {
+		return key, MasterKeySourceOSKeyStore, nil
+	}
+	if key, err := loadMasterKeyFromSystemCredential(); err == nil {
+		return key, MasterKeySourceSystemCredential, nil
+	}
+	key, err := loadMasterKeyFromEnv()
+	if err == nil {
+		return key, MasterKeySourceEnvB64, nil
+	}
+	if errors.Is(err, ErrMasterKeyNotConfigured) {
+		return nil, "", ErrMasterKeyNotConfigured
+	}
+	return nil, "", err
+}
+
+// loadMasterKeyFromTPM returns the master key from TPM-sealed storage when supported and configured. Not yet implemented.
+func loadMasterKeyFromTPM() ([]byte, error) {
+	return nil, ErrMasterKeyNotConfigured
+}
+
+// loadMasterKeyFromOSKeyStore returns the master key from the OS key store when supported and configured. Not yet implemented.
+func loadMasterKeyFromOSKeyStore() ([]byte, error) {
+	return nil, ErrMasterKeyNotConfigured
+}
+
+func loadMasterKeyFromSystemCredential() ([]byte, error) {
+	credDir := strings.TrimSpace(os.Getenv("CREDENTIALS_DIRECTORY"))
+	if credDir == "" {
+		return nil, ErrMasterKeyNotConfigured
+	}
+	path := filepath.Join(credDir, systemCredentialMasterKeyFile)
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return nil, ErrMasterKeyNotConfigured
+		}
+		return nil, fmt.Errorf("read secure store system credential: %w", err)
+	}
+	return decodeMasterKey(strings.TrimSpace(string(raw)))
+}
+
+func loadMasterKeyFromEnv() ([]byte, error) {
+	raw := strings.TrimSpace(os.Getenv(masterKeyEnvName))
+	if raw == "" {
+		return nil, ErrMasterKeyNotConfigured
+	}
+	return decodeMasterKey(raw)
+}
+
+func decodeMasterKey(rawB64 string) ([]byte, error) {
+	key, err := base64.StdEncoding.DecodeString(rawB64)
+	if err != nil {
+		return nil, fmt.Errorf("%w: base64 decode", ErrMasterKeyInvalid)
+	}
+	if len(key) != requiredKeyLenBytes {
+		return nil, fmt.Errorf("%w: expected 32 bytes", ErrMasterKeyInvalid)
+	}
+	return key, nil
+}
+
+func (s *Store) tokenDir() string {
+	return filepath.Join(s.rootDir, agentTokenStoreDir)
+}
+
+func sanitizeServiceID(serviceID string) (string, error) {
+	serviceID = strings.TrimSpace(serviceID)
+	if serviceID == "" {
+		return "", errors.New("service_id is required")
+	}
+	if strings.Contains(serviceID, "/") || strings.Contains(serviceID, "\\") || strings.Contains(serviceID, "..") {
+		return "", errors.New("invalid service_id path")
+	}
+	return serviceID, nil
+}
+
+func (s *Store) tokenPath(serviceID string) (string, error) {
+	serviceID, err := sanitizeServiceID(serviceID)
+	if err != nil {
+		return "", err
+	}
+	filename := serviceID + agentTokenEncryptedFileSuffix
+	return filepath.Join(s.tokenDir(), filename), nil
+}
+
+// PutAgentToken writes or rotates a per-service token record.
+func (s *Store) PutAgentToken(serviceID, token, expiresAt string) error {
+	serviceID, err := sanitizeServiceID(serviceID)
+	if err != nil {
+		return err
+	}
+	token = strings.TrimSpace(token)
+	if token == "" {
+		return errors.New("agent token is required")
+	}
+	expiresAt = strings.TrimSpace(expiresAt)
+	if expiresAt != "" {
+		if _, err := time.Parse(time.RFC3339, expiresAt); err != nil {
+			return fmt.Errorf("invalid expires_at: %w", err)
+		}
+	}
+	record := AgentTokenRecord{
+		ServiceID: serviceID,
+		Token:     token,
+		ExpiresAt: expiresAt,
+		WrittenAt: time.Now().UTC().Format(time.RFC3339),
+	}
+	plaintext, err := json.Marshal(record)
+	if err != nil {
+		return fmt.Errorf("marshal token record: %w", err)
+	}
+	defer zeroBytes(plaintext)
+	ciphertext, nonce, err := encrypt(plaintext, s.key)
+	if err != nil {
+		return err
+	}
+	env := encryptedEnvelope{
+		Version:    envelopeVersion,
+		Algorithm:  agentTokenEncryptionAlgorithm,
+		NonceB64:   base64.StdEncoding.EncodeToString(nonce),
+		PayloadB64: base64.StdEncoding.EncodeToString(ciphertext),
+	}
+	serialized, err := json.Marshal(env)
+	if err != nil {
+		return fmt.Errorf("marshal encrypted envelope: %w", err)
+	}
+	dir := s.tokenDir()
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return fmt.Errorf("create token dir: %w", err)
+	}
+	path, err := s.tokenPath(serviceID)
+	if err != nil {
+		return err
+	}
+	tmpPath := path + ".tmp"
+	if err := os.WriteFile(tmpPath, serialized, 0o600); err != nil {
+		return fmt.Errorf("write token tmp file: %w", err)
+	}
+	if err := os.Rename(tmpPath, path); err != nil {
+		return fmt.Errorf("commit token file: %w", err)
+	}
+	if err := os.Chmod(path, 0o600); err != nil {
+		return fmt.Errorf("set token file permissions: %w", err)
+	}
+	return nil
+}
+
+// GetAgentToken reads and decrypts a per-service token record.
+func (s *Store) GetAgentToken(serviceID string) (*AgentTokenRecord, error) {
+	path, err := s.tokenPath(serviceID)
+	if err != nil {
+		return nil, err
+	}
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
+	var env encryptedEnvelope
+	if err := json.Unmarshal(raw, &env); err != nil {
+		return nil, fmt.Errorf("decode encrypted envelope: %w", err)
+	}
+	if env.Version != envelopeVersion || env.Algorithm != agentTokenEncryptionAlgorithm {
+		return nil, errors.New("unsupported secure store envelope")
+	}
+	nonce, err := base64.StdEncoding.DecodeString(env.NonceB64)
+	if err != nil {
+		return nil, fmt.Errorf("decode envelope nonce: %w", err)
+	}
+	payload, err := base64.StdEncoding.DecodeString(env.PayloadB64)
+	if err != nil {
+		return nil, fmt.Errorf("decode envelope payload: %w", err)
+	}
+	plaintext, err := decrypt(payload, nonce, s.key)
+	if err != nil {
+		return nil, err
+	}
+	defer zeroBytes(plaintext)
+	var record AgentTokenRecord
+	if err := json.Unmarshal(plaintext, &record); err != nil {
+		return nil, fmt.Errorf("decode token record: %w", err)
+	}
+	if strings.TrimSpace(record.ExpiresAt) != "" {
+		expiresAt, err := time.Parse(time.RFC3339, record.ExpiresAt)
+		if err != nil {
+			return nil, fmt.Errorf("invalid stored expires_at: %w", err)
+		}
+		if !time.Now().UTC().Before(expiresAt) {
+			return nil, ErrTokenExpired
+		}
+	}
+	return &record, nil
+}
+
+// DeleteAgentToken removes a per-service token record.
+func (s *Store) DeleteAgentToken(serviceID string) error {
+	path, err := s.tokenPath(serviceID)
+	if err != nil {
+		return err
+	}
+	if err := os.Remove(path); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	return nil
+}
+
+// ListAgentTokenServiceIDs returns service IDs present in the token store.
+func (s *Store) ListAgentTokenServiceIDs() ([]string, error) {
+	entries, err := os.ReadDir(s.tokenDir())
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return []string{}, nil
+		}
+		return nil, err
+	}
+	out := []string{}
+	for _, e := range entries {
+		if e.IsDir() {
+			continue
+		}
+		name := e.Name()
+		if !strings.HasSuffix(name, agentTokenEncryptedFileSuffix) {
+			continue
+		}
+		serviceID := strings.TrimSuffix(name, agentTokenEncryptedFileSuffix)
+		if _, err := sanitizeServiceID(serviceID); err != nil {
+			continue
+		}
+		out = append(out, serviceID)
+	}
+	return out, nil
+}
+
+func encrypt(plaintext, key []byte) (ciphertext, nonce []byte, err error) {
+	block, err := aes.NewCipher(key)
+	if err != nil {
+		return nil, nil, fmt.Errorf("create cipher: %w", err)
+	}
+	gcm, err := cipher.NewGCM(block)
+	if err != nil {
+		return nil, nil, fmt.Errorf("create gcm: %w", err)
+	}
+	nonce = make([]byte, gcm.NonceSize())
+	if _, err = io.ReadFull(rand.Reader, nonce); err != nil {
+		return nil, nil, fmt.Errorf("read nonce: %w", err)
+	}
+	ciphertext = gcm.Seal(nil, nonce, plaintext, nil)
+	return ciphertext, nonce, nil
+}
+
+func decrypt(ciphertext, nonce, key []byte) ([]byte, error) {
+	block, err := aes.NewCipher(key)
+	if err != nil {
+		return nil, fmt.Errorf("create cipher: %w", err)
+	}
+	gcm, err := cipher.NewGCM(block)
+	if err != nil {
+		return nil, fmt.Errorf("create gcm: %w", err)
+	}
+	plaintext, err := gcm.Open(nil, nonce, ciphertext, nil)
+	if err != nil {
+		return nil, fmt.Errorf("decrypt payload: %w", err)
+	}
+	return plaintext, nil
+}
+
+func zeroBytes(b []byte) {
+	for i := range b {
+		b[i] = 0
+	}
+}

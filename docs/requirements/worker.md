@@ -252,6 +252,9 @@ It covers worker-node behavior and the worker API contract for job execution and
 - **REQ-WORKER-0172:** When the Node Manager and Worker API run as separate processes, the node MUST enforce a trusted boundary for the node-local secure store and MUST document which component writes secrets and which component reads them for proxying.
   [CYNAI.WORKER.SecureStoreProcessBoundary](../tech_specs/worker_node.md#spec-cynai-worker-securestoreprocessboundary)
   <a id="req-worker-0172"></a>
+- **REQ-WORKER-0173:** Encryption at rest for the node-local secure store MUST use a post-quantum key encapsulation mechanism when permitted by the platform and MUST fall back to a FIPS-approved symmetric AEAD when the post-quantum mechanism is not available or not permitted.
+  [CYNAI.WORKER.NodeLocalSecureStore](../tech_specs/worker_node.md#spec-cynai-worker-nodelocalsecurestore)
+  <a id="req-worker-0173"></a>
 - **REQ-WORKER-0200:** Worker Telemetry API MUST require bearer token authentication for all telemetry endpoints.
   [CYNAI.WORKER.TelemetryApiAuth](../tech_specs/worker_telemetry_api.md#spec-cynai-worker-telemetryauth)
   <a id="req-worker-0200"></a>

@@ -320,6 +320,45 @@ func isSBARunnerImage(image string) bool {
 	return strings.Contains(image, "cynode-sba") || strings.Contains(image, "cynodeai-cynode-sba")
 }
 
+// prepareSBAJobAndWorkspace creates job dir, writes job.json and result.json, resolves workspace dir. Caller must remove jobDir.
+func prepareSBAJobAndWorkspace(req *workerapi.RunJobRequest, workspaceDir string) (jobDir, workspaceDirToUse string, err error) {
+	jobDir, err = os.MkdirTemp("", "cynodeai-job-")
+	if err != nil {
+		return "", "", fmt.Errorf("failed to create job dir: %w", err)
+	}
+	jobPath := filepath.Join(jobDir, jobSpecFilename)
+	if err := os.WriteFile(jobPath, []byte(req.Sandbox.JobSpecJSON), 0o644); err != nil {
+		_ = os.RemoveAll(jobDir)
+		return "", "", fmt.Errorf("failed to write job.json: %w", err)
+	}
+	resultPath := filepath.Join(jobDir, resultFilename)
+	if err := os.WriteFile(resultPath, []byte("\n"), 0o666); err != nil {
+		_ = os.RemoveAll(jobDir)
+		return "", "", fmt.Errorf("failed to pre-create result.json: %w", err)
+	}
+	if err := os.Chmod(resultPath, 0o666); err != nil {
+		_ = os.RemoveAll(jobDir)
+		return "", "", fmt.Errorf("failed to chmod result.json: %w", err)
+	}
+	if err := os.Chmod(jobDir, 0o777); err != nil {
+		_ = os.RemoveAll(jobDir)
+		return "", "", fmt.Errorf("failed to chmod job dir: %w", err)
+	}
+	workspaceDirToUse = workspaceDir
+	if workspaceDirToUse == "" {
+		workspaceDirToUse, err = os.MkdirTemp("", "cynodeai-ws-")
+		if err != nil {
+			_ = os.RemoveAll(jobDir)
+			return "", "", fmt.Errorf("failed to create temp workspace: %w", err)
+		}
+	}
+	if err := os.MkdirAll(workspaceDirToUse, 0o700); err != nil {
+		_ = os.RemoveAll(jobDir)
+		return "", "", fmt.Errorf("failed to prepare workspace dir: %w", err)
+	}
+	return jobDir, workspaceDirToUse, nil
+}
+
 // runJobSBA runs a job with an SBA runner image: write job_spec_json to /job/job.json, mount /job and /workspace, run container (entrypoint cynode-sba), read /job/result.json into resp.SbaResult.
 func (e *Executor) runJobSBA(ctx context.Context, req *workerapi.RunJobRequest, resp *workerapi.RunJobResponse, workspaceDir string) (*workerapi.RunJobResponse, error) {
 	spec, err := sbajob.ParseAndValidateJobSpec([]byte(req.Sandbox.JobSpecJSON))
@@ -332,51 +371,14 @@ func (e *Executor) runJobSBA(ctx context.Context, req *workerapi.RunJobRequest, 
 		setSBAError(resp, "unsupported SBA execution_mode: "+executionMode)
 		return resp, nil
 	}
-
-	jobDir, err := os.MkdirTemp("", "cynodeai-job-")
+	jobDir, workspaceDirToUse, err := prepareSBAJobAndWorkspace(req, workspaceDir)
 	if err != nil {
-		setSBAError(resp, "failed to create job dir: "+err.Error())
+		setSBAError(resp, err.Error())
 		return resp, nil
 	}
 	defer func() { _ = os.RemoveAll(jobDir) }()
-
-	jobPath := filepath.Join(jobDir, jobSpecFilename)
-	if err := os.WriteFile(jobPath, []byte(req.Sandbox.JobSpecJSON), 0o644); err != nil {
-		setSBAError(resp, "failed to write job.json: "+err.Error())
-		return resp, nil
-	}
-	resultPath := filepath.Join(jobDir, resultFilename)
-	// Pre-create result.json so the container can overwrite it; avoid EACCES when container UID != host (rootless).
-	// Use invalid JSON so applySbaResultFromDir won't set SbaResult if the container never runs.
-	if err := os.WriteFile(resultPath, []byte("\n"), 0o666); err != nil {
-		setSBAError(resp, "failed to pre-create result.json: "+err.Error())
-		return resp, nil
-	}
-	// os.WriteFile honors umask; force mode so non-owner container users can overwrite.
-	if err := os.Chmod(resultPath, 0o666); err != nil {
-		setSBAError(resp, "failed to chmod result.json: "+err.Error())
-		return resp, nil
-	}
-	if err := os.Chmod(jobDir, 0o777); err != nil {
-		setSBAError(resp, "failed to chmod job dir: "+err.Error())
-		return resp, nil
-	}
-
-	// When no workspace is provided, mount a host-owned temp dir at /workspace so the container can chdir
-	// (image /workspace is owned by sba:1000, which may not match host UID with --userns=keep-id).
-	workspaceDirToUse := workspaceDir
-	if workspaceDirToUse == "" {
-		tmpWorkspace, err := os.MkdirTemp("", "cynodeai-ws-")
-		if err != nil {
-			setSBAError(resp, "failed to create temp workspace: "+err.Error())
-			return resp, nil
-		}
-		defer func() { _ = os.RemoveAll(tmpWorkspace) }()
-		workspaceDirToUse = tmpWorkspace
-	}
-	if err := os.MkdirAll(workspaceDirToUse, 0o700); err != nil {
-		setSBAError(resp, "failed to prepare workspace dir: "+err.Error())
-		return resp, nil
+	if workspaceDir == "" {
+		defer func() { _ = os.RemoveAll(workspaceDirToUse) }()
 	}
 	if e.shouldUseSBAPodInference(executionMode) {
 		return e.runJobSBAWithPodInference(ctx, req, resp, workspaceDirToUse, jobDir, executionMode)
@@ -560,10 +562,7 @@ func buildSBARunArgs(req *workerapi.RunJobRequest, jobDir, workspaceDir string, 
 	if executionMode == sbajob.ExecutionModeDirectSteps {
 		args = append(args, "-e", "SBA_DIRECT_STEPS=1")
 	}
-	args = append(args, req.Sandbox.Image)
-	if len(req.Sandbox.Command) > 0 {
-		args = append(args, req.Sandbox.Command...)
-	}
+	args = append(append(args, req.Sandbox.Image), req.Sandbox.Command...)
 	return args
 }
 
@@ -591,10 +590,7 @@ func buildSBARunArgsForPod(req *workerapi.RunJobRequest, podName, jobDir, worksp
 		args = append(args, "-e", fmt.Sprintf("%s=%s", k, v))
 	}
 	args = append(args, "-e", fmt.Sprintf("SBA_EXECUTION_MODE=%s", executionMode))
-	args = append(args, req.Sandbox.Image)
-	if len(req.Sandbox.Command) > 0 {
-		args = append(args, req.Sandbox.Command...)
-	}
+	args = append(append(args, req.Sandbox.Image), req.Sandbox.Command...)
 	return args
 }
 

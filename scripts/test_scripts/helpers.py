@@ -112,6 +112,55 @@ def jq_get(obj, *keys, default=None):
     return obj
 
 
+def get_sba_job_result(result_data):
+    """Job result from task result (jobs[0].result or parsed stdout). Return dict or None."""
+    job_result = jq_get(result_data, "jobs", 0, "result")
+    if not job_result and result_data:
+        raw = result_data.get("stdout")
+        if isinstance(raw, str):
+            job_result = parse_json_safe(raw)
+    return job_result
+
+
+def poll_task_result(task_id, config_path, loops=60):
+    """Poll task result until completed/failed or loops exhausted. Return (status, result_data)."""
+    result_data = None
+    for _ in range(loops):
+        time.sleep(5)
+        _, out, _ = run_cynork(
+            ["task", "result", task_id, "-o", "json"],
+            config_path,
+        )
+        result_data = parse_json_safe(out)
+        status = (result_data or {}).get("status")
+        if status in ("completed", "failed"):
+            return status, result_data
+    return None, result_data
+
+
+def create_and_poll_sba_task(create_args, config_path, max_attempts=3):
+    """Create SBA task and poll until terminal status. Return (task_id, status, result_data)."""
+    for attempt in range(1, max_attempts + 1):
+        _, out, _ = run_cynork(create_args, config_path)
+        data = parse_json_safe(out)
+        task_id = (data or {}).get("task_id")
+        if not task_id:
+            return None, None, None
+        status, result_data = poll_task_result(task_id, config_path)
+        if status not in ("completed", "failed"):
+            if attempt < max_attempts:
+                continue
+            return task_id, status, result_data
+        if status == "completed":
+            return task_id, status, result_data
+        stdout = ((result_data or {}).get("stdout") or "")
+        if "jobs:run" in stdout and "EOF" in stdout and attempt < max_attempts:
+            time.sleep(3)
+            continue
+        return task_id, status, result_data
+    return None, None, None
+
+
 def _container_runtime():
     """Return 'podman' or 'docker' or None."""
     for runtime in ("podman", "docker"):

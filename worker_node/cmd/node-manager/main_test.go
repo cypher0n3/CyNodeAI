@@ -3,14 +3,18 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"os/exec"
+	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/cypher0n3/cynodeai/go_shared_libs/contracts/nodepayloads"
+	"github.com/cypher0n3/cynodeai/worker_node/internal/nodemanager"
 )
 
 func TestGetEnv(t *testing.T) {
@@ -22,6 +26,70 @@ func TestGetEnv(t *testing.T) {
 	defer func() { _ = os.Unsetenv("TEST_NM_ENV") }()
 	if getEnv("TEST_NM_ENV", "def") != "val" {
 		t.Error("expected from env")
+	}
+}
+
+func TestEffectiveStateDir(t *testing.T) {
+	_ = os.Unsetenv("WORKER_API_STATE_DIR")
+	_ = os.Unsetenv("CYNODE_STATE_DIR")
+	defer func() {
+		_ = os.Unsetenv("WORKER_API_STATE_DIR")
+		_ = os.Unsetenv("CYNODE_STATE_DIR")
+	}()
+	if got := effectiveStateDir(); got != "/var/lib/cynode/state" {
+		t.Errorf("default state dir: got %q", got)
+	}
+	_ = os.Setenv("CYNODE_STATE_DIR", "/tmp/cynode-state")
+	if got := effectiveStateDir(); got != "/tmp/cynode-state" {
+		t.Errorf("CYNODE_STATE_DIR: got %q", got)
+	}
+	_ = os.Setenv("WORKER_API_STATE_DIR", "/tmp/worker-state")
+	if got := effectiveStateDir(); got != "/tmp/worker-state" {
+		t.Errorf("WORKER_API_STATE_DIR precedence: got %q", got)
+	}
+}
+
+func TestServiceIDPathSafe(t *testing.T) {
+	for _, tt := range []struct {
+		id   string
+		safe bool
+	}{
+		{"", false},
+		{"pma-main", true},
+		{"svc_a", true},
+		{"a/b", false},
+		{"..", false},
+		{"a..b", false},
+		{"a\\b", false},
+	} {
+		if got := nodemanager.ServiceIDPathSafe(tt.id); got != tt.safe {
+			t.Errorf("serviceIDPathSafe(%q)=%v, want %v", tt.id, got, tt.safe)
+		}
+	}
+}
+
+// TestBuildManagedServiceRunArgs_NoSecretsMount asserts that managed service container run args
+// never mount the secure store path (per CYNAI.WORKER.NodeLocalSecureStore and process boundary).
+func TestBuildManagedServiceRunArgs_NoSecretsMount(t *testing.T) {
+	stateDir := t.TempDir()
+	t.Setenv("WORKER_API_STATE_DIR", stateDir)
+	defer func() { _ = os.Unsetenv("WORKER_API_STATE_DIR") }()
+
+	svc := &nodepayloads.ConfigManagedService{
+		ServiceID: "pma-main", ServiceType: "pma", Image: "pma:latest",
+		Orchestrator: &nodepayloads.ConfigManagedServiceOrchestrator{},
+	}
+	args := buildManagedServiceRunArgs(svc, "pma-main", "pma", "pma:latest", "cynodeai-managed-pma-main")
+
+	for i := 0; i < len(args)-1; i++ {
+		if args[i] != "-v" {
+			continue
+		}
+		mount := args[i+1]
+		hostPath, _, _ := strings.Cut(mount, ":")
+		if strings.Contains(hostPath, "secrets") {
+			t.Errorf("managed service mount must not include secure store path: got host path %q", hostPath)
+		}
 	}
 }
 
@@ -216,28 +284,156 @@ func TestStartOllama_ContainerExists(t *testing.T) {
 	}
 }
 
-func TestStartOllama_RunFails(t *testing.T) {
-	_ = os.Setenv("CONTAINER_RUNTIME", "false")
-	_ = os.Setenv("OLLAMA_IMAGE", "ollama/ollama")
-	defer func() {
-		_ = os.Unsetenv("CONTAINER_RUNTIME")
-		_ = os.Unsetenv("OLLAMA_IMAGE")
-	}()
-	err := startOllama("", "")
-	if err == nil {
-		t.Error("startOllama should fail when container run fails")
+func TestStartOllama_RuntimeFailureCases(t *testing.T) {
+	for _, tt := range []struct {
+		name    string
+		image   string
+		variant string
+	}{
+		{"default image", "ollama/ollama", ""},
+		{"custom image and variant", "custom-ollama", "rocm"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			_ = os.Setenv("CONTAINER_RUNTIME", "false")
+			_ = os.Setenv("OLLAMA_IMAGE", tt.image)
+			defer func() {
+				_ = os.Unsetenv("CONTAINER_RUNTIME")
+				_ = os.Unsetenv("OLLAMA_IMAGE")
+			}()
+			if err := startOllama("", tt.variant); err == nil {
+				t.Error("startOllama should fail when runtime fails")
+			}
+		})
 	}
 }
 
-func TestStartOllama_ImageFromEnvAndVariant(t *testing.T) {
-	_ = os.Setenv("CONTAINER_RUNTIME", "false")
-	_ = os.Setenv("OLLAMA_IMAGE", "custom-ollama")
-	defer func() {
-		_ = os.Unsetenv("CONTAINER_RUNTIME")
-		_ = os.Unsetenv("OLLAMA_IMAGE")
-	}()
-	err := startOllama("", "rocm")
-	if err == nil {
-		t.Error("startOllama should fail when runtime fails")
+func TestSanitizeContainerName(t *testing.T) {
+	if got := sanitizeContainerName(" pma main "); got != "pma_main" {
+		t.Fatalf("unexpected sanitized name: %q", got)
+	}
+	if got := sanitizeContainerName("x/y\\z"); got != "xyz" {
+		t.Fatalf("unexpected sanitized name: %q", got)
+	}
+}
+
+func TestDefaultPortForServiceType(t *testing.T) {
+	if got := nodemanager.DefaultPortForServiceType("pma"); got != "8090" {
+		t.Fatalf("unexpected PMA port: %q", got)
+	}
+	if got := nodemanager.DefaultPortForServiceType("unknown"); got != "" {
+		t.Fatalf("unexpected unknown service port: %q", got)
+	}
+}
+
+func writeFakeRuntime(t *testing.T, script string) string {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "fake-runtime.sh")
+	if err := os.WriteFile(path, []byte(script), 0o700); err != nil {
+		t.Fatalf("write fake runtime: %v", err)
+	}
+	return path
+}
+
+func TestStartManagedServices_InjectsProxyEnvWithoutAgentToken(t *testing.T) {
+	logPath := filepath.Join(t.TempDir(), "runtime-args.log")
+	rt := writeFakeRuntime(t, fmt.Sprintf(`#!/bin/sh
+if [ "$1" = "ps" ]; then
+  exit 0
+fi
+if [ "$1" = "run" ]; then
+  printf '%%s\n' "$@" > "%s"
+  exit 0
+fi
+if [ "$1" = "start" ]; then
+  exit 0
+fi
+exit 0
+`, logPath))
+	t.Setenv("CONTAINER_RUNTIME", rt)
+	services := []nodepayloads.ConfigManagedService{
+		{
+			ServiceID:   "pma-main",
+			ServiceType: "pma",
+			Image:       "ghcr.io/example/pma:latest",
+			RestartPolicy: "always",
+			Orchestrator: &nodepayloads.ConfigManagedServiceOrchestrator{
+				MCPGatewayProxyURL:    "http://127.0.0.1:9191/v1/worker/internal/orchestrator/mcp:call",
+				ReadyCallbackProxyURL: "http://127.0.0.1:9191/v1/worker/internal/orchestrator/agent:ready",
+				AgentToken:            "must-not-be-injected",
+			},
+		},
+	}
+	if err := startManagedServices(services); err != nil {
+		t.Fatalf("startManagedServices failed: %v", err)
+	}
+	raw, err := os.ReadFile(logPath)
+	if err != nil {
+		t.Fatalf("read runtime args log: %v", err)
+	}
+	args := string(raw)
+	if !strings.Contains(args, "MCP_GATEWAY_PROXY_URL=") || !strings.Contains(args, "READY_CALLBACK_PROXY_URL=") {
+		t.Fatalf("missing expected proxy env args: %s", args)
+	}
+	if strings.Contains(args, "AGENT_TOKEN=") || strings.Contains(args, "must-not-be-injected") {
+		t.Fatalf("agent token must not be injected in container args: %s", args)
+	}
+}
+
+func TestStartManagedServices_ExistingContainerStartsInsteadOfRun(t *testing.T) {
+	logPath := filepath.Join(t.TempDir(), "runtime-ops.log")
+	rt := writeFakeRuntime(t, fmt.Sprintf(`#!/bin/sh
+if [ "$1" = "ps" ]; then
+  if [ "$2" = "-a" ]; then
+    echo cynodeai-managed-pma-main
+  fi
+  exit 0
+fi
+if [ "$1" = "start" ]; then
+  echo start >> "%s"
+  exit 0
+fi
+if [ "$1" = "run" ]; then
+  echo run >> "%s"
+  exit 0
+fi
+exit 0
+`, logPath, logPath))
+	t.Setenv("CONTAINER_RUNTIME", rt)
+	services := []nodepayloads.ConfigManagedService{
+		{
+			ServiceID:   "pma-main",
+			ServiceType: "pma",
+			Image:       "ghcr.io/example/pma:latest",
+		},
+	}
+	if err := startManagedServices(services); err != nil {
+		t.Fatalf("startManagedServices failed: %v", err)
+	}
+	raw, _ := os.ReadFile(logPath)
+	if strings.Contains(string(raw), "run") {
+		t.Fatalf("expected no run when container already exists: %s", string(raw))
+	}
+	if !strings.Contains(string(raw), "start") {
+		t.Fatalf("expected start operation when container exists: %s", string(raw))
+	}
+}
+
+func TestStartManagedServices_RunFailure(t *testing.T) {
+	rt := writeFakeRuntime(t, `#!/bin/sh
+if [ "$1" = "ps" ]; then
+  exit 0
+fi
+if [ "$1" = "run" ]; then
+  echo fail >&2
+  exit 1
+fi
+exit 0
+`)
+	t.Setenv("CONTAINER_RUNTIME", rt)
+	services := []nodepayloads.ConfigManagedService{
+		{ServiceID: "pma-main", ServiceType: "pma", Image: "ghcr.io/example/pma:latest"},
+	}
+	if err := startManagedServices(services); err == nil {
+		t.Fatal("expected startManagedServices to fail on runtime run error")
 	}
 }

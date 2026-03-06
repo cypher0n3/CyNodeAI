@@ -27,6 +27,10 @@ import (
 const testStatusCompleted = "completed"
 const chatCompletionsPath = "/v1/chat/completions"
 const pathV1SkillsS1 = "/v1/skills/s1"
+const pathV1Tasks = "/v1/tasks"
+const testPromptEchoHi = "echo hi"
+const inputModePrompt = "prompt"
+const inputModeCommands = "commands"
 
 func writeTempConfig(t *testing.T, content string) string {
 	t.Helper()
@@ -254,7 +258,7 @@ func TestRunTaskCreate_OK(t *testing.T) {
 	server := mockJSONServer(t, http.StatusCreated, userapi.TaskResponse{ID: "task-1", Status: "queued"})
 	defer server.Close()
 	cfg = &config.Config{GatewayURL: server.URL, Token: "tok"}
-	taskCreatePrompt = "echo hi"
+	taskCreatePrompt = testPromptEchoHi
 	defer func() { cfg = nil; taskCreatePrompt = "" }()
 	if err := runTaskCreate(nil, nil); err != nil {
 		t.Errorf("runTaskCreate: %v", err)
@@ -293,7 +297,7 @@ func TestRunTaskCreate_RequiresExactlyOneInputMode(t *testing.T) {
 func TestRunTaskCreate_TaskFileModeAndProjectID(t *testing.T) {
 	var got userapi.CreateTaskRequest
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/v1/tasks" && r.Method == http.MethodPost {
+		if r.URL.Path == pathV1Tasks && r.Method == http.MethodPost {
 			_ = json.NewDecoder(r.Body).Decode(&got)
 			w.WriteHeader(http.StatusCreated)
 			_ = json.NewEncoder(w).Encode(userapi.TaskResponse{ID: "task-1", Status: "queued"})
@@ -320,8 +324,8 @@ func TestRunTaskCreate_TaskFileModeAndProjectID(t *testing.T) {
 	if err := runTaskCreate(nil, nil); err != nil {
 		t.Fatalf("runTaskCreate: %v", err)
 	}
-	if got.InputMode != "prompt" {
-		t.Fatalf("input_mode = %q, want prompt", got.InputMode)
+	if got.InputMode != inputModePrompt {
+		t.Fatalf("input_mode = %q, want %s", got.InputMode, inputModePrompt)
 	}
 	if strings.TrimSpace(got.Prompt) != "file task prompt" {
 		t.Fatalf("prompt = %q", got.Prompt)
@@ -335,7 +339,7 @@ func TestRunTaskCreate_ResultWait(t *testing.T) {
 	first := true
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		if r.URL.Path == "/v1/tasks" && r.Method == http.MethodPost {
+		if r.URL.Path == pathV1Tasks && r.Method == http.MethodPost {
 			w.WriteHeader(http.StatusCreated)
 			_ = json.NewEncoder(w).Encode(userapi.TaskResponse{ID: "task-1", Status: "queued"})
 			return
@@ -353,7 +357,7 @@ func TestRunTaskCreate_ResultWait(t *testing.T) {
 	}))
 	defer server.Close()
 	cfg = &config.Config{GatewayURL: server.URL, Token: "tok"}
-	taskCreatePrompt = "echo hi"
+	taskCreatePrompt = testPromptEchoHi
 	taskCreateResult = true
 	defer func() {
 		cfg = nil
@@ -367,7 +371,7 @@ func TestRunTaskCreate_ResultWait(t *testing.T) {
 
 func TestRunTaskCreate_AttachValidation(t *testing.T) {
 	cfg = &config.Config{GatewayURL: "http://localhost", Token: "tok"}
-	taskCreatePrompt = "echo hi"
+	taskCreatePrompt = testPromptEchoHi
 	taskCreateAttachments = []string{t.TempDir()}
 	defer func() {
 		cfg = nil
@@ -383,59 +387,81 @@ func TestRunTaskCreate_AttachValidation(t *testing.T) {
 	}
 }
 
-func TestResolveTaskCreateInput_Modes(t *testing.T) {
-	defer func() {
-		taskCreateTask = ""
-		taskCreatePrompt = ""
-		taskCreateTaskFile = ""
-		taskCreateScript = ""
-		taskCreateCommands = nil
-		taskCreateCommandsFile = ""
-	}()
+func resetTaskCreateInputGlobals() {
+	taskCreateTask = ""
+	taskCreatePrompt = ""
+	taskCreateTaskFile = ""
+	taskCreateScript = ""
+	taskCreateCommands = nil
+	taskCreateCommandsFile = ""
+}
+
+func TestResolveTaskCreateInput_InlineTask(t *testing.T) {
+	defer resetTaskCreateInputGlobals()
+	resetTaskCreateInputGlobals()
 	taskCreateTask = "inline"
 	prompt, mode, err := resolveTaskCreateInput()
-	if err != nil || mode != "prompt" || prompt != "inline" {
-		t.Fatalf("inline mode: prompt=%q mode=%q err=%v", prompt, mode, err)
+	if err != nil || mode != inputModePrompt || prompt != "inline" {
+		t.Fatalf("inline task: prompt=%q mode=%q err=%v", prompt, mode, err)
 	}
-	taskCreateTask = ""
+}
+
+func TestResolveTaskCreateInput_InlinePrompt(t *testing.T) {
+	defer resetTaskCreateInputGlobals()
+	resetTaskCreateInputGlobals()
 	taskCreatePrompt = "inline-prompt"
-	prompt, mode, err = resolveTaskCreateInput()
-	if err != nil || mode != "prompt" || prompt != "inline-prompt" {
-		t.Fatalf("prompt mode: prompt=%q mode=%q err=%v", prompt, mode, err)
+	prompt, mode, err := resolveTaskCreateInput()
+	if err != nil || mode != inputModePrompt || prompt != "inline-prompt" {
+		t.Fatalf("inline prompt: prompt=%q mode=%q err=%v", prompt, mode, err)
 	}
-	taskCreatePrompt = ""
+}
+
+func TestResolveTaskCreateInput_Commands(t *testing.T) {
+	defer resetTaskCreateInputGlobals()
+	resetTaskCreateInputGlobals()
 	taskCreateCommands = []string{"echo a", "echo b"}
-	prompt, mode, err = resolveTaskCreateInput()
-	if err != nil || mode != "commands" || !strings.Contains(prompt, "echo b") {
-		t.Fatalf("commands mode: prompt=%q mode=%q err=%v", prompt, mode, err)
+	prompt, mode, err := resolveTaskCreateInput()
+	if err != nil || mode != inputModeCommands || !strings.Contains(prompt, "echo b") {
+		t.Fatalf("commands: prompt=%q mode=%q err=%v", prompt, mode, err)
 	}
-	taskCreateCommands = nil
+}
+
+func TestResolveTaskCreateInput_TaskAndPromptBothSet(t *testing.T) {
+	defer resetTaskCreateInputGlobals()
+	resetTaskCreateInputGlobals()
 	taskCreateTask = "a"
 	taskCreatePrompt = "b"
-	_, _, err = resolveTaskCreateInput()
+	_, _, err := resolveTaskCreateInput()
 	if err == nil {
 		t.Fatal("expected error when both --task and --prompt are set")
 	}
-	taskCreateTask = ""
-	taskCreatePrompt = ""
+}
+
+func TestResolveTaskCreateInput_TaskFile(t *testing.T) {
+	defer resetTaskCreateInputGlobals()
+	resetTaskCreateInputGlobals()
 	taskFile := filepath.Join(t.TempDir(), "task.txt")
 	if err := os.WriteFile(taskFile, []byte("from-task-file"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	taskCreateTaskFile = taskFile
-	prompt, mode, err = resolveTaskCreateInput()
-	if err != nil || mode != "prompt" || prompt != "from-task-file" {
-		t.Fatalf("task-file mode: prompt=%q mode=%q err=%v", prompt, mode, err)
+	prompt, mode, err := resolveTaskCreateInput()
+	if err != nil || mode != inputModePrompt || prompt != "from-task-file" {
+		t.Fatalf("task file: prompt=%q mode=%q err=%v", prompt, mode, err)
 	}
-	taskCreateTaskFile = ""
+}
+
+func TestResolveTaskCreateInput_CommandsFile(t *testing.T) {
+	defer resetTaskCreateInputGlobals()
+	resetTaskCreateInputGlobals()
 	cmdsFile := filepath.Join(t.TempDir(), "commands.txt")
 	if err := os.WriteFile(cmdsFile, []byte("echo from file"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	taskCreateCommandsFile = cmdsFile
-	prompt, mode, err = resolveTaskCreateInput()
-	if err != nil || mode != "commands" || !strings.Contains(prompt, "from file") {
-		t.Fatalf("commands-file mode: prompt=%q mode=%q err=%v", prompt, mode, err)
+	prompt, mode, err := resolveTaskCreateInput()
+	if err != nil || mode != inputModeCommands || !strings.Contains(prompt, "from file") {
+		t.Fatalf("commands file: prompt=%q mode=%q err=%v", prompt, mode, err)
 	}
 }
 

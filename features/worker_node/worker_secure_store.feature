@@ -14,6 +14,7 @@ Scenario: Worker stores orchestrator-issued secrets encrypted at rest
   And the persisted secret values are encrypted at rest
 
 @req_worker_0164
+@req_worker_0171
 @spec_cynai_worker_agenttokenstorageandlifecycle
 Scenario: Worker holds agent token and does not pass it to managed-service containers
   Given the orchestrator configures a managed agent service with an agent token
@@ -30,3 +31,29 @@ Scenario: Worker warns when using env var master key fallback
   Then the node uses the env_b64 master key backend
   And the node emits a startup warning indicating a less-secure master key backend
 
+@req_worker_0168
+@spec_cynai_worker_nodelocalsecurestore
+Scenario: Managed-service container run args do not mount secure store
+  Given a managed service is configured for the node
+  When the node manager builds run args for the managed-service container
+  Then the run args do not contain any mount of the secure store or secrets path
+
+@req_worker_0169
+@spec_cynai_worker_nodelocalsecurestore
+Scenario: Secure store is distinct from telemetry database
+  Given the node state directory is set
+  Then the secure store path is under state_dir and distinct from the telemetry database path
+
+@req_worker_0170
+@spec_cynai_worker_nodelocalsecurestore
+Scenario: FIPS mode rejects env master key fallback
+  Given FIPS mode is enabled or unknown on the host
+  And the environment variable CYNODE_SECURE_STORE_MASTER_KEY_B64 is set
+  When the node opens the secure store with env master key only
+  Then opening the secure store fails with FIPS-related error
+
+@req_worker_0172
+@spec_cynai_worker_securestoreprocessboundary
+Scenario: Process boundary for secure store is documented
+  Given the worker node codebase
+  Then the secure store process boundary document exists and states writer and reader components

@@ -3,50 +3,10 @@
 # that may trigger inference, polls for completion, asserts sba_result present.
 
 import os
-import time
 import unittest
 
 from scripts.test_scripts import config, helpers
 import scripts.test_scripts.e2e_state as state
-
-
-def _poll_task_result(task_id, loops=60):
-    """Poll task result until completed/failed or loops exhausted. Return (status, result_data)."""
-    result_data = None
-    for _ in range(loops):
-        time.sleep(5)
-        _, out, _ = helpers.run_cynork(
-            ["task", "result", task_id, "-o", "json"],
-            state.CONFIG_PATH,
-        )
-        result_data = helpers.parse_json_safe(out)
-        status = (result_data or {}).get("status")
-        if status in ("completed", "failed"):
-            return status, result_data
-    return None, result_data
-
-
-def _create_and_poll_sba_inference(create_args, max_attempts=3):
-    """Create SBA task and poll until terminal status. Return (task_id, status, result_data)."""
-    for attempt in range(1, max_attempts + 1):
-        _, out, _ = helpers.run_cynork(create_args, state.CONFIG_PATH)
-        data = helpers.parse_json_safe(out)
-        task_id = (data or {}).get("task_id")
-        if not task_id:
-            return None, None, None
-        status, result_data = _poll_task_result(task_id)
-        if status not in ("completed", "failed"):
-            if attempt < max_attempts:
-                continue
-            return task_id, status, result_data
-        if status == "completed":
-            return task_id, status, result_data
-        stdout = ((result_data or {}).get("stdout") or "")
-        if "jobs:run" in stdout and "EOF" in stdout and attempt < max_attempts:
-            time.sleep(3)
-            continue
-        return task_id, status, result_data
-    return None, None, None
 
 
 class TestSbaInference(unittest.TestCase):
@@ -61,7 +21,9 @@ class TestSbaInference(unittest.TestCase):
             "Reply in one word: hello (this may use inference in SBA).",
             "--use-sba", "-o", "json",
         ]
-        task_id, status, result_data = _create_and_poll_sba_inference(create_args)
+        task_id, status, result_data = helpers.create_and_poll_sba_task(
+            create_args, state.CONFIG_PATH
+        )
         self.assertIsNotNone(task_id, "SBA inference task create failed")
         if status not in ("completed", "failed"):
             self.fail(
@@ -73,11 +35,7 @@ class TestSbaInference(unittest.TestCase):
                 "SBA inference task failed (per spec inference path must be available): "
                 f"status={status!r} result={result_data}"
             )
-        job_result = helpers.jq_get(result_data, "jobs", 0, "result")
-        if not job_result and result_data:
-            raw = result_data.get("stdout")
-            if isinstance(raw, str):
-                job_result = helpers.parse_json_safe(raw)
+        job_result = helpers.get_sba_job_result(result_data)
         self.assertIsNotNone(job_result)
         self.assertIsNotNone(
             (job_result or {}).get("sba_result"),

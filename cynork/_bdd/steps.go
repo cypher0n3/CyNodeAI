@@ -25,6 +25,7 @@ const stateKey ctxKey = 0
 type cynorkState struct {
 	mockServer *httptest.Server
 	cynorkBin  string
+	bddRoot    string // working directory for cynork subprocess (so tmp/doc1.txt etc. resolve)
 	configPath string // path to config file for session persistence (login writes, whoami reads)
 	lastExit   int
 	lastStdout string
@@ -435,6 +436,9 @@ func (s *cynorkState) mockGatewayMux() *http.ServeMux {
 func (s *cynorkState) runCynork(args []string, env ...string) (exit int, stdout, stderr string) {
 	cmd := exec.Command(s.cynorkBin, args...)
 	cmd.Env = append(os.Environ(), env...)
+	if s.bddRoot != "" {
+		cmd.Dir = s.bddRoot
+	}
 	var outBuf, errBuf bytes.Buffer
 	cmd.Stdout = &outBuf
 	cmd.Stderr = &errBuf
@@ -472,15 +476,18 @@ func InitializeCynorkSuite(sc *godog.ScenarioContext, state *cynorkState) {
 		_ = os.MkdirAll(tmpDir, 0o755)
 		state.configPath = filepath.Join(tmpDir, "cynork-bdd-config.yaml")
 		_ = os.WriteFile(state.configPath, []byte("gateway_url: http://localhost\n"), 0o600)
+		// Create attachment files for scenarios that use "tmp/doc1.txt" and "tmp/doc2.txt" (paths relative to cwd).
+		_ = os.WriteFile(filepath.Join(tmpDir, "doc1.txt"), []byte("first attachment\n"), 0o600)
+		_ = os.WriteFile(filepath.Join(tmpDir, "doc2.txt"), []byte("second attachment\n"), 0o600)
 		bin := filepath.Join(tmpDir, "cynork-bdd")
 		cynorkDir := filepath.Join(root, "cynork")
 		build := exec.Command("go", "build", "-o", bin, ".")
 		build.Dir = cynorkDir
-		build.Env = append(os.Environ(), "GOEXPERIMENT=secret")
 		if err := build.Run(); err != nil {
 			return ctx, fmt.Errorf("build cynork: %w", err)
 		}
 		state.cynorkBin = bin
+		state.bddRoot = root
 		return context.WithValue(ctx, stateKey, state), nil
 	})
 
@@ -764,6 +771,9 @@ func InitializeCynorkSuite(sc *godog.ScenarioContext, state *cynorkState) {
 	})
 
 	sc.Step(`^a task file "([^"]*)" exists with content "([^"]*)"$`, func(ctx context.Context, path, content string) error {
+		if st := getState(ctx); st.bddRoot != "" && !filepath.IsAbs(path) {
+			path = filepath.Join(st.bddRoot, path)
+		}
 		dir := filepath.Dir(path)
 		if dir != "." {
 			_ = os.MkdirAll(dir, 0o755)
@@ -792,6 +802,9 @@ func InitializeCynorkSuite(sc *godog.ScenarioContext, state *cynorkState) {
 	})
 
 	sc.Step(`^a script file "([^"]*)" exists$`, func(ctx context.Context, path string) error {
+		if st := getState(ctx); st.bddRoot != "" && !filepath.IsAbs(path) {
+			path = filepath.Join(st.bddRoot, path)
+		}
 		dir := filepath.Dir(path)
 		if dir != "." {
 			_ = os.MkdirAll(dir, 0o755)
@@ -884,6 +897,9 @@ func InitializeCynorkSuite(sc *godog.ScenarioContext, state *cynorkState) {
 	})
 
 	sc.Step(`^a markdown file "([^"]*)" exists with content "([^"]*)"$`, func(ctx context.Context, path, content string) error {
+		if st := getState(ctx); st.bddRoot != "" && !filepath.IsAbs(path) {
+			path = filepath.Join(st.bddRoot, path)
+		}
 		dir := filepath.Dir(path)
 		if dir != "." {
 			_ = os.MkdirAll(dir, 0o755)

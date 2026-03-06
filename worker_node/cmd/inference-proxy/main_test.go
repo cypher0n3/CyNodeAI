@@ -90,29 +90,31 @@ func TestParseHealthcheckURL(t *testing.T) {
 	}
 }
 
-func TestRunHealthcheck(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+func TestRunHealthcheck_Cases(t *testing.T) {
+	okSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}))
-	defer srv.Close()
-	if code := runHealthcheck(context.Background(), srv.URL); code != 0 {
-		t.Fatalf("runHealthcheck ok=%d", code)
-	}
-	if code := runHealthcheck(context.Background(), "://bad-url"); code != 1 {
-		t.Fatalf("runHealthcheck invalid=%d", code)
-	}
-}
-
-func TestRunHealthcheck_NonOKAndUnreachable(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	defer okSrv.Close()
+	nonOKSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusServiceUnavailable)
 	}))
-	defer srv.Close()
-	if code := runHealthcheck(context.Background(), srv.URL); code != 1 {
-		t.Fatalf("runHealthcheck non-ok=%d", code)
-	}
-	if code := runHealthcheck(context.Background(), "http://127.0.0.1:1/healthz"); code != 1 {
-		t.Fatalf("runHealthcheck unreachable=%d", code)
+	defer nonOKSrv.Close()
+
+	for _, tt := range []struct {
+		name string
+		url  string
+		want int
+	}{
+		{"ok", okSrv.URL, 0},
+		{"non-ok", nonOKSrv.URL, 1},
+		{"invalid url", "://bad-url", 1},
+		{"unreachable", "http://127.0.0.1:1/healthz", 1},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			if code := runHealthcheck(context.Background(), tt.url); code != tt.want {
+				t.Fatalf("runHealthcheck=%d, want %d", code, tt.want)
+			}
+		})
 	}
 }
 

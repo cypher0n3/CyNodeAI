@@ -115,22 +115,28 @@ func sanitizeContainerName(serviceID string) string {
 	}, strings.TrimSpace(serviceID))
 }
 
-// defaultPortForServiceType returns the host port to publish for the service type (e.g. PMA 8090).
-func defaultPortForServiceType(serviceType string) string {
-	switch strings.ToLower(strings.TrimSpace(serviceType)) {
-	case "pma":
-		return "8090"
-	default:
-		return ""
+// effectiveStateDir returns state directory for socket paths; matches nodemanager precedence so worker-api and node-manager agree.
+func effectiveStateDir() string {
+	if v := strings.TrimSpace(getEnv("WORKER_API_STATE_DIR", "")); v != "" {
+		return v
 	}
+	if v := strings.TrimSpace(getEnv("CYNODE_STATE_DIR", "")); v != "" {
+		return v
+	}
+	return "/var/lib/cynode/state"
+}
+
+// buildManagedServiceRunArgs returns the container run args for one managed service (delegates to nodemanager).
+func buildManagedServiceRunArgs(svc *nodepayloads.ConfigManagedService, serviceID, serviceType, image, name string) []string {
+	return nodemanager.BuildManagedServiceRunArgs(effectiveStateDir(), svc, serviceID, serviceType, image, name)
 }
 
 // startManagedServices starts each desired managed service container (e.g. PMA) from config.
 // Containers are named cynodeai-managed-<service_id>. If a container already exists, it is started if stopped.
-// Orchestrator URLs and agent token are passed as env so the agent can use the worker proxy.
 func startManagedServices(services []nodepayloads.ConfigManagedService) error {
 	rt := getEnv("CONTAINER_RUNTIME", "podman")
-	for _, svc := range services {
+	for i := range services {
+		svc := &services[i]
 		serviceID := strings.TrimSpace(svc.ServiceID)
 		serviceType := strings.TrimSpace(svc.ServiceType)
 		image := strings.TrimSpace(svc.Image)
@@ -141,41 +147,13 @@ func startManagedServices(services []nodepayloads.ConfigManagedService) error {
 		if name == managedServiceContainerPrefix {
 			continue
 		}
-		// Check if container already exists
 		check := exec.Command(rt, "ps", "-a", "--format", "{{.Names}}")
 		out, err := check.Output()
 		if err == nil && strings.Contains(string(out), name) {
 			_ = exec.Command(rt, "start", name).Run()
 			continue
 		}
-		// Build run args: -d --name <name> [--restart always] [-p host:container] [-e K=V...] image [args...]
-		args := []string{"run", "-d", "--name", name}
-		if strings.TrimSpace(svc.RestartPolicy) == "always" {
-			args = append(args, "--restart", "always")
-		}
-		if port := defaultPortForServiceType(serviceType); port != "" {
-			args = append(args, "-p", port+":"+port)
-		}
-		// Env: orchestrator proxy URLs and agent token so agent uses worker proxy
-		if svc.Orchestrator != nil {
-			if u := strings.TrimSpace(svc.Orchestrator.MCPGatewayProxyURL); u != "" {
-				args = append(args, "-e", "MCP_GATEWAY_PROXY_URL="+u)
-			}
-			if u := strings.TrimSpace(svc.Orchestrator.ReadyCallbackProxyURL); u != "" {
-				args = append(args, "-e", "READY_CALLBACK_PROXY_URL="+u)
-			}
-			if t := strings.TrimSpace(svc.Orchestrator.AgentToken); t != "" {
-				args = append(args, "-e", "AGENT_TOKEN="+t)
-			}
-		}
-		for k, v := range svc.Env {
-			if k == "" {
-				continue
-			}
-			args = append(args, "-e", k+"="+v)
-		}
-		args = append(args, image)
-		args = append(args, svc.Args...)
+		args := buildManagedServiceRunArgs(svc, serviceID, serviceType, image, name)
 		cmd := exec.Command(rt, args...)
 		cmd.Env = os.Environ()
 		if out, err := cmd.CombinedOutput(); err != nil {

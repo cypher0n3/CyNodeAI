@@ -933,6 +933,7 @@ Traces To:
 - [REQ-WORKER-0168](../requirements/worker.md#req-worker-0168)
 - [REQ-WORKER-0169](../requirements/worker.md#req-worker-0169)
 - [REQ-WORKER-0170](../requirements/worker.md#req-worker-0170)
+- [REQ-WORKER-0173](../requirements/worker.md#req-worker-0173)
 
 This section defines the **single** node-local secure store used by the worker for orchestrator-issued secrets (pull credentials, orchestrator bearer token, agent tokens, and capability leases).
 
@@ -953,7 +954,9 @@ Backing and location:
 Encryption at rest:
 
 - All secret values persisted to disk MUST be encrypted at rest before being written and decrypted only when needed by the worker.
-- The worker MUST use a post-quantum resistant symmetric algorithm for encryption at rest (e.g. AES-256-GCM) with a per-record nonce.
+- Default (post-quantum): The worker MUST use a post-quantum key encapsulation mechanism to protect the key material used for encryption at rest (e.g. NIST FIPS 203 ML-KEM), with a strong symmetric AEAD for the ciphertext (e.g. AES-256-GCM).
+- Fallback: When the post-quantum KEM is not available or not permitted (e.g. in a FIPS-only environment where the validated cryptographic module does not yet include ML-KEM), the worker MUST use only a FIPS-approved symmetric AEAD (e.g. AES-256-GCM).
+- Each record MUST use a distinct nonce.
 - The secure store master key MUST NOT be stored in plaintext on disk and MUST NOT be logged.
 
 Master key acquisition precedence:

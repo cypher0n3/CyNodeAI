@@ -105,12 +105,20 @@ type ManagedServiceStatus struct {
 	ServiceType        string   `json:"service_type"`
 	State              string   `json:"state"`
 	Endpoints          []string `json:"endpoints,omitempty"`
+	AgentToOrchestratorProxy *AgentToOrchestratorProxyStatus `json:"agent_to_orchestrator_proxy,omitempty"`
 	ReadyAt            string   `json:"ready_at,omitempty"`
 	Image              string   `json:"image,omitempty"`
 	ContainerID        string   `json:"container_id,omitempty"`
 	RestartCount       int      `json:"restart_count,omitempty"`
 	ObservedGeneration string   `json:"observed_generation,omitempty"`
 	LastError          string   `json:"last_error,omitempty"`
+}
+
+// AgentToOrchestratorProxyStatus reports identity-bound internal proxy endpoints for a managed service.
+type AgentToOrchestratorProxyStatus struct {
+	MCPGatewayProxyURL    string `json:"mcp_gateway_proxy_url,omitempty"`
+	ReadyCallbackProxyURL string `json:"ready_callback_proxy_url,omitempty"`
+	Binding               string `json:"binding,omitempty"` // per_service_loopback_listener | per_service_uds | other
 }
 
 type TLSInfo struct {
@@ -223,6 +231,14 @@ type ConfigManagedServiceOrchestrator struct {
 	MCPGatewayProxyURL    string `json:"mcp_gateway_proxy_url,omitempty"`
 	ReadyCallbackProxyURL string `json:"ready_callback_proxy_url,omitempty"`
 	AgentToken            string `json:"agent_token,omitempty"`
+	AgentTokenExpiresAt   string `json:"agent_token_expires_at,omitempty"`
+	AgentTokenRef         *ConfigManagedServiceAgentTokenRef `json:"agent_token_ref,omitempty"`
+}
+
+// ConfigManagedServiceAgentTokenRef defines worker-only token reference resolution settings.
+type ConfigManagedServiceAgentTokenRef struct {
+	Kind string `json:"kind,omitempty"`
+	URL  string `json:"url,omitempty"`
 }
 
 // ConfigOrchestrator contains orchestrator base URL and endpoints for node config.
@@ -281,6 +297,7 @@ type ConfigAck struct {
 	Status              string          `json:"status"`
 	Error               *ConfigAckError `json:"error,omitempty"`
 	EffectiveConfigHash string          `json:"effective_config_hash,omitempty"`
+	ManagedServicesStatus *ManagedServicesStatus `json:"managed_services_status,omitempty"`
 }
 
 // ConfigAckError holds error details in a config ack.

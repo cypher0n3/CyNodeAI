@@ -152,6 +152,12 @@ const (
 	maxAttachmentCount   = 16
 )
 
+const (
+	taskInputModePrompt   = "prompt"
+	taskInputModeScript   = "script"
+	taskInputModeCommands = "commands"
+)
+
 func validateRegularReadableFile(path string) (int64, error) {
 	info, err := os.Lstat(path)
 	if err != nil {
@@ -186,7 +192,7 @@ func readModeFile(path, mode string, maxBytes int64) (string, error) {
 	return string(b), nil
 }
 
-func resolveTaskCreateInput() (prompt string, inputMode string, err error) {
+func resolveTaskCreateInput() (prompt, inputMode string, err error) {
 	modeCount := 0
 	taskSet := strings.TrimSpace(taskCreateTask) != ""
 	promptSet := strings.TrimSpace(taskCreatePrompt) != ""
@@ -214,23 +220,23 @@ func resolveTaskCreateInput() (prompt string, inputMode string, err error) {
 	}
 	if inline {
 		if strings.TrimSpace(taskCreateTask) != "" {
-			return taskCreateTask, "prompt", nil
+			return taskCreateTask, taskInputModePrompt, nil
 		}
-		return taskCreatePrompt, "prompt", nil
+		return taskCreatePrompt, taskInputModePrompt, nil
 	}
 	if strings.TrimSpace(taskCreateTaskFile) != "" {
 		p, e := readModeFile(taskCreateTaskFile, "task-file", maxTaskFileBytes)
-		return p, "prompt", e
+		return p, taskInputModePrompt, e
 	}
 	if strings.TrimSpace(taskCreateScript) != "" {
 		p, e := readModeFile(taskCreateScript, "script", maxScriptFileBytes)
-		return p, "script", e
+		return p, taskInputModeScript, e
 	}
 	if len(taskCreateCommands) > 0 {
-		return strings.Join(taskCreateCommands, "\n"), "commands", nil
+		return strings.Join(taskCreateCommands, "\n"), taskInputModeCommands, nil
 	}
 	p, e := readModeFile(taskCreateCommandsFile, "commands-file", maxCommandsFileBytes)
-	return p, "commands", e
+	return p, taskInputModeCommands, e
 }
 
 func validateAttachments(paths []string) error {
@@ -250,64 +256,91 @@ func validateAttachments(paths []string) error {
 }
 
 func runTaskCreate(_ *cobra.Command, _ []string) error {
-	if cfg.Token == "" {
-		return exit.Auth(fmt.Errorf("not logged in: run 'cynork auth login'"))
+	if err := requireAuthToken(); err != nil {
+		return err
 	}
 	prompt, mode, err := resolveTaskCreateInput()
+	if err != nil {
+		return exit.Usage(err)
+	}
+	projectID, err := parseOptionalProjectID(taskCreateProjectID)
 	if err != nil {
 		return exit.Usage(err)
 	}
 	if err := validateAttachments(taskCreateAttachments); err != nil {
 		return exit.Usage(err)
 	}
-	var projectID *string
-	if strings.TrimSpace(taskCreateProjectID) != "" {
-		trimmedProjectID := strings.TrimSpace(taskCreateProjectID)
-		if _, err := uuid.Parse(trimmedProjectID); err != nil {
-			return exit.Usage(fmt.Errorf("invalid --project-id: %w", err))
-		}
-		projectID = &trimmedProjectID
-	}
 	client := gateway.NewClient(cfg.GatewayURL)
 	client.SetToken(cfg.Token)
-	req := userapi.CreateTaskRequest{
-		Prompt:       prompt,
-		ProjectID:    projectID,
-		UseInference: taskCreateUseInference,
-		InputMode:    mode,
-		UseSBA:       taskCreateUseSBA,
-		Attachments:  taskCreateAttachments,
-	}
-	if taskCreateInputMode != "" && taskCreateInputMode != "prompt" && mode == "prompt" {
-		req.InputMode = taskCreateInputMode
-	}
-	if taskCreateTaskName != "" {
-		req.TaskName = &taskCreateTaskName
-	}
+	req := buildCreateTaskRequest(prompt, mode, projectID, taskCreateAttachments)
 	task, err := client.CreateTask(&req)
 	if err != nil {
 		return exitFromGatewayErr(err)
 	}
 	taskID := task.ResolveTaskID()
 	if taskCreateResult {
-		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
-		defer stop()
-		for {
-			result, err := client.GetTaskResult(taskID)
-			if err != nil {
-				return exitFromGatewayErr(err)
-			}
-			if terminalTaskStatuses[result.Status] {
-				printTaskResult(result)
-				return nil
-			}
-			select {
-			case <-ctx.Done():
-				return nil
-			case <-time.After(2 * time.Second):
-			}
+		return waitAndPrintTaskResult(client, taskID)
+	}
+	return printTaskCreateOutput(task, taskID)
+}
+
+func requireAuthToken() error {
+	if cfg.Token == "" {
+		return exit.Auth(fmt.Errorf("not logged in: run 'cynork auth login'"))
+	}
+	return nil
+}
+
+func parseOptionalProjectID(raw string) (*string, error) {
+	if strings.TrimSpace(raw) == "" {
+		return nil, nil
+	}
+	trimmed := strings.TrimSpace(raw)
+	if _, err := uuid.Parse(trimmed); err != nil {
+		return nil, fmt.Errorf("invalid --project-id: %w", err)
+	}
+	return &trimmed, nil
+}
+
+func buildCreateTaskRequest(prompt, mode string, projectID *string, attachments []string) userapi.CreateTaskRequest {
+	req := userapi.CreateTaskRequest{
+		Prompt:       prompt,
+		ProjectID:    projectID,
+		UseInference: taskCreateUseInference,
+		InputMode:    mode,
+		UseSBA:       taskCreateUseSBA,
+		Attachments:  attachments,
+	}
+	if taskCreateInputMode != "" && taskCreateInputMode != taskInputModePrompt && mode == taskInputModePrompt {
+		req.InputMode = taskCreateInputMode
+	}
+	if taskCreateTaskName != "" {
+		req.TaskName = &taskCreateTaskName
+	}
+	return req
+}
+
+func waitAndPrintTaskResult(client *gateway.Client, taskID string) error {
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+	defer stop()
+	for {
+		result, err := client.GetTaskResult(taskID)
+		if err != nil {
+			return exitFromGatewayErr(err)
+		}
+		if terminalTaskStatuses[result.Status] {
+			printTaskResult(result)
+			return nil
+		}
+		select {
+		case <-ctx.Done():
+			return nil
+		case <-time.After(2 * time.Second):
 		}
 	}
+}
+
+func printTaskCreateOutput(task *userapi.TaskResponse, taskID string) error {
 	if outputFmt == outputFormatJSON {
 		_ = jsonOutputEncoder().Encode(task)
 		return nil

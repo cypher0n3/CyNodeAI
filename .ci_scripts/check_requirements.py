@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
-Validate docs/requirements/*.md: no duplicate REQ ids, sequential ids per file, each REQ has a spec ref.
+Validate docs/requirements/*.md: no duplicate REQ ids, sequential ids per file,
+each REQ has a spec ref.
 
 Checks:
 - No duplicate REQ ids across all requirement files.
@@ -8,7 +9,7 @@ Checks:
 - Every REQ entry has at least one spec reference (markdown link to tech_specs).
 
 Exit code: 0 if all checks pass, 1 otherwise. Output to stdout; optional --report to file.
-With --fix-ordering, reorder REQ blocks within each file so numeric ids are ascending.
+With --fix-ordering, reorder REQ blocks so numeric ids are ascending.
 """
 
 from __future__ import annotations
@@ -104,12 +105,11 @@ def _req_id_to_num(req_id: str) -> int:
 
 
 def _check_sequential_per_file(
-    path: Path,
+    _path: Path,
     entries: list[tuple[str, int, list[str]]],
 ) -> list[tuple[str, int, int]]:
     """
-    Return list of (req_id, line_no, expected_num) for every entry where numeric part is not sequential.
-
+    Return (req_id, line_no, expected_num) for entries where numeric part is not sequential.
     Report all violations: only advance expected sequence when we see a strictly greater num.
     """
     errors: list[tuple[str, int, int]] = []
@@ -142,7 +142,7 @@ def _parse_file_into_blocks(path: Path) -> tuple[list[str], list[tuple[int, list
     while i < len(lines):
         match = _REQ_LINE_RE.search(lines[i])
         if match:
-            domain, num_str = match.group(1), match.group(2)
+            _, num_str = match.group(1), match.group(2)
             num = int(num_str, 10)
             block = [lines[i]]
             j = i + 1
@@ -161,9 +161,7 @@ def _parse_file_into_blocks(path: Path) -> tuple[list[str], list[tuple[int, list
 
 
 def _fix_ordering_in_file(path: Path) -> bool:
-    """
-    Rewrite path so REQ blocks are sorted by numeric id. Return True if file was changed.
-    """
+    """Rewrite path so REQ blocks are sorted by numeric id. Return True if changed."""
     preamble, blocks, postamble = _parse_file_into_blocks(path)
     if not blocks:
         return False
@@ -175,8 +173,8 @@ def _fix_ordering_in_file(path: Path) -> bool:
     return True
 
 
-def _fix_ordering(reqs_dir: Path, paths_with_errors: list[Path]) -> list[Path]:
-    """Fix ordering in each path that has sequential errors. Return list of paths that were changed."""
+def _fix_ordering(_reqs_dir: Path, paths_with_errors: list[Path]) -> list[Path]:
+    """Fix ordering in each path that has sequential errors. Return paths that were changed."""
     changed: list[Path] = []
     for path in paths_with_errors:
         if _fix_ordering_in_file(path):
@@ -185,7 +183,7 @@ def _fix_ordering(reqs_dir: Path, paths_with_errors: list[Path]) -> list[Path]:
 
 
 def _check_missing_spec_refs(
-    path: Path,
+    _path: Path,
     entries: list[tuple[str, int, list[str]]],
 ) -> list[tuple[str, int]]:
     """Return list of (req_id, line_no) for entries with no spec reference in their block."""

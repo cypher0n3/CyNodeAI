@@ -14,8 +14,7 @@ Feature: SBA Inference and User-Facing Reply
 @spec_cynai_sbagnt_jobinferencemodel
 Scenario: SBA task with inference completes with sba_result and user-facing reply
   Given inference path is available and SBA runner is configured
-  When I create a SBA task with inference and prompt "Reply back with the current time"
-  And the task runs to terminal status
+  When I create a SBA task with inference and prompt "Reply back with the current time" and the task runs to terminal status
   Then the task status is "completed"
   And the job result contains "sba_result"
   And the job result has a user-facing reply (non-empty stdout or sba_result steps/reply)
