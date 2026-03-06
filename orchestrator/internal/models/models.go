@@ -226,7 +226,7 @@ const (
 	TaskStatusRunning   = "running"
 	TaskStatusCompleted = "completed"
 	TaskStatusFailed    = "failed"
-	TaskStatusCancelled = "cancelled"
+	TaskStatusCanceled = "canceled"
 	TaskStatusSuperseded = "superseded"
 )
 
@@ -236,7 +236,7 @@ const (
 	JobStatusRunning      = "running"
 	JobStatusCompleted    = "completed"
 	JobStatusFailed       = "failed"
-	JobStatusCancelled    = "cancelled"
+	JobStatusCanceled = "canceled"
 	JobStatusLeaseExpired = "lease_expired"
 )
 

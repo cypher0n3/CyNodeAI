@@ -36,7 +36,7 @@ func runMain(ctx context.Context) int {
 	return 0
 }
 
-// run sets up and runs the server until ctx is cancelled. Used by main and tests.
+// run sets up and runs the server until ctx is canceled. Used by main and tests.
 func run(ctx context.Context, logger *slog.Logger) error {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {

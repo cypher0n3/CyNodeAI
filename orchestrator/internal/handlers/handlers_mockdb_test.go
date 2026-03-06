@@ -2083,7 +2083,7 @@ func TestTaskHandler_ListTasksWithCursor(t *testing.T) {
 	}
 }
 
-func TestTaskHandler_ListTasksWithCancelledTask(t *testing.T) {
+func TestTaskHandler_ListTasksWithCanceledTask(t *testing.T) {
 	mockDB := testutil.NewMockDB()
 	handler := NewTaskHandler(mockDB, newTestLogger(), "", "")
 	userID := uuid.New()
@@ -2091,7 +2091,7 @@ func TestTaskHandler_ListTasksWithCancelledTask(t *testing.T) {
 	task := &models.Task{
 		ID:        uuid.New(),
 		CreatedBy: &userID,
-		Status:    models.TaskStatusCancelled,
+		Status:    models.TaskStatusCanceled,
 		Prompt:    &prompt,
 		CreatedAt: time.Now().UTC(),
 		UpdatedAt: time.Now().UTC(),
@@ -2107,8 +2107,8 @@ func TestTaskHandler_ListTasksWithCancelledTask(t *testing.T) {
 	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
-	if len(resp.Tasks) != 1 || resp.Tasks[0].Status != "cancelled" {
-		t.Errorf("expected one task with status cancelled, got %+v", resp.Tasks)
+	if len(resp.Tasks) != 1 || resp.Tasks[0].Status != "canceled" {
+		t.Errorf("expected one task with status canceled, got %+v", resp.Tasks)
 	}
 }
 
@@ -2633,7 +2633,7 @@ func TestTaskHandler_ChatContextCanceled(t *testing.T) {
 	}()
 	handler.Chat(rec, req)
 	if rec.Code != http.StatusInternalServerError {
-		t.Errorf("expected 500 when context cancelled, got %d", rec.Code)
+		t.Errorf("expected 500 when context canceled, got %d", rec.Code)
 	}
 }
 

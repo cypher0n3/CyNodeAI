@@ -127,7 +127,7 @@ func TestRunMainValidateFails(t *testing.T) {
 	}
 }
 
-func TestRunMainContextCancelled(t *testing.T) {
+func TestRunMainContextCanceled(t *testing.T) {
 	_ = os.Setenv("NODE_SLUG", "x")
 	_ = os.Setenv("ORCHESTRATOR_URL", "http://127.0.0.1:1")
 	_ = os.Setenv("NODE_REGISTRATION_PSK", "psk")

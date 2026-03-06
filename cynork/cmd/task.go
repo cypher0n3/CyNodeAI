@@ -109,8 +109,7 @@ var taskArtifactsListCmd = &cobra.Command{
 var terminalTaskStatuses = map[string]bool{
 	"completed":  true,
 	"failed":     true,
-	"canceled":   true,
-	"cancelled":  true,
+	"canceled": true,
 	"superseded": true,
 }
 

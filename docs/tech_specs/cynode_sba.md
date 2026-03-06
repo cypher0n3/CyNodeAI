@@ -569,7 +569,7 @@ The SBA MUST use one of the defined failure codes when applicable; for other cas
 ### Task Result Consumption
 
 When asserting or validating the SBA result contract from a task result (e.g. gateway task result API or CLI task result), the consumer MUST only interpret or validate the `sba_result` shape when the task status is `completed`.
-For task status `failed`, `cancelled`, or `superseded`, the job result and any `sba_result` field may be partial or absent; contract validation is undefined.
+For task status `failed`, `canceled`, or `superseded`, the job result and any `sba_result` field may be partial or absent; contract validation is undefined.
 
 ### Canonical Failure Codes
 

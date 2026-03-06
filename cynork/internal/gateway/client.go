@@ -100,7 +100,7 @@ type ListTasksRequest struct {
 	Limit  int    // default 50, max 200
 	Offset int    // for pagination
 	Cursor string // cursor-based pagination (opaque string from next_cursor)
-	Status string // optional filter: queued, running, completed, failed, cancelled/canceled
+	Status string // optional filter: queued, running, completed, failed, canceled
 }
 
 // ListTasks calls GET /v1/tasks (requires auth).

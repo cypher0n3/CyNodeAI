@@ -63,7 +63,7 @@ func TestGetEnv_USER_GATEWAY_LISTEN_ADDR(t *testing.T) {
 	}
 }
 
-func TestRun_CancelledContext(t *testing.T) {
+func TestRun_CanceledContext(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	cfg := config.LoadOrchestratorConfig()
@@ -71,7 +71,7 @@ func TestRun_CancelledContext(t *testing.T) {
 	logger := slog.Default()
 	err := run(ctx, cfg, mockDB, logger)
 	if err != nil {
-		t.Errorf("run with cancelled context: %v", err)
+		t.Errorf("run with canceled context: %v", err)
 	}
 }
 

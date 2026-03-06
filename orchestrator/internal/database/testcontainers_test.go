@@ -674,7 +674,7 @@ func TestWithTestcontainers_AccessControlAndApiCredential(t *testing.T) {
 	cancelCtx, cancel := context.WithCancel(ctx)
 	cancel()
 	if _, err := store.HasAnyActiveApiCredential(cancelCtx); err == nil {
-		t.Error("HasAnyActiveApiCredential with cancelled context: expected error")
+		t.Error("HasAnyActiveApiCredential with canceled context: expected error")
 	}
 	auditRec := &models.AccessControlAuditLog{
 		SubjectType:  "user",

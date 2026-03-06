@@ -139,7 +139,7 @@ func runMainWithContext(ctx context.Context, store database.Store) int {
 	return 0
 }
 
-// run bootstraps admin, starts the HTTP server and dispatcher until ctx is cancelled. Used by main and tests.
+// run bootstraps admin, starts the HTTP server and dispatcher until ctx is canceled. Used by main and tests.
 func run(ctx context.Context, store database.Store, cfg *config.OrchestratorConfig, logger *slog.Logger) error {
 	if err := bootstrapAdminUser(ctx, store, cfg.BootstrapAdminPassword, logger); err != nil {
 		return err
@@ -264,7 +264,7 @@ func inferencePathAvailable(ctx context.Context, store database.Store) (bool, er
 }
 
 // waitForInferencePath polls until at least one inference path is available (node or external key) or ctx is done.
-// Returns true when inference path is available, false when ctx cancelled. Used by startPMAWhenInferencePathReady and tests.
+// Returns true when inference path is available, false when ctx canceled. Used by startPMAWhenInferencePathReady and tests.
 func waitForInferencePath(ctx context.Context, store database.Store, logger *slog.Logger) bool {
 	pollInterval := 2 * time.Second
 	if testPMAPollInterval > 0 {

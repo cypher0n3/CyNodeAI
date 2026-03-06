@@ -21,6 +21,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/cypher0n3/cynodeai/go_shared_libs/contracts/nodepayloads"
+	"github.com/cypher0n3/cynodeai/go_shared_libs/contracts/userapi"
 	"github.com/cypher0n3/cynodeai/go_shared_libs/contracts/workerapi"
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/auth"
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/config"
@@ -1752,7 +1753,7 @@ func RegisterOrchestratorSteps(sc *godog.ScenarioContext, state *testState) {
 		}
 		return nil
 	})
-	sc.Step(`^the task status is cancelled$`, func(ctx context.Context) error {
+	sc.Step(`^the task status is canceled$`, func(ctx context.Context) error {
 		st := getState(ctx)
 		if st == nil || st.server == nil || st.taskID == "" {
 			return godog.ErrSkip
@@ -1770,8 +1771,8 @@ func RegisterOrchestratorSteps(sc *godog.ScenarioContext, state *testState) {
 		if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
 			return err
 		}
-		if out.Status != "canceled" {
-			return fmt.Errorf("task status %q, want canceled", out.Status)
+		if out.Status != userapi.StatusCanceled {
+			return fmt.Errorf("task status %q, want %s", out.Status, userapi.StatusCanceled)
 		}
 		return nil
 	})

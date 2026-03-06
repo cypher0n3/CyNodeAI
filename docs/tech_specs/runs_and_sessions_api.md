@@ -49,7 +49,7 @@ Recommended run fields
 - `job_id` (uuid, optional)
 - `session_id` (uuid, optional)
 - `parent_run_id` (uuid, optional)
-- `status` (e.g. pending, running, completed, failed, cancelled)
+- `status` (e.g. pending, running, completed, failed, canceled)
 - `started_at`, `ended_at` (timestamptz, optional)
 - `metadata` (jsonb, optional)
 

@@ -51,7 +51,7 @@ Scenario: Task result status is valid CLI enum
   And I have created a task with prompt "echo hello" and stored the task id
   When I run cynork task result with the stored task id in JSON mode
   Then cynork exits with code 0
-  And the task result status is one of "queued", "running", "completed", "failed", "cancelled", "superseded"
+  And the task result status is one of "queued", "running", "completed", "failed", "canceled", "superseded"
 
 @req_client_0151
 @spec_cynai_client_clitaskcreateprompt

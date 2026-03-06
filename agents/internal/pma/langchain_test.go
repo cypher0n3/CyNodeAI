@@ -36,7 +36,7 @@ func TestRunCompletionWithLangchain_EmptyClient(t *testing.T) {
 	}
 }
 
-func TestRunCompletionWithLangchain_CancelledContext(t *testing.T) {
+func TestRunCompletionWithLangchain_CanceledContext(t *testing.T) {
 	mcpSrv := newMockMCPServer(t, `{}`)
 	defer mcpSrv.Close()
 	client := &MCPClient{BaseURL: mcpSrv.URL}
@@ -48,7 +48,7 @@ func TestRunCompletionWithLangchain_CancelledContext(t *testing.T) {
 	cancel()
 	_, err := runCompletionWithLangchain(ctx, "p", client, slog.Default())
 	if err == nil {
-		t.Error("expected error with cancelled context")
+		t.Error("expected error with canceled context")
 	}
 }
 

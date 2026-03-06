@@ -16,7 +16,7 @@ type MockLLM struct {
 }
 
 // GenerateContent returns the next response from Responses, or "Final Answer: Done" if none left.
-// If ctx is already cancelled, returns ctx.Err() so timeout tests can pass.
+// If ctx is already canceled, returns ctx.Err() so timeout tests can pass.
 func (m *MockLLM) GenerateContent(ctx context.Context, messages []llms.MessageContent, options ...llms.CallOption) (*llms.ContentResponse, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err

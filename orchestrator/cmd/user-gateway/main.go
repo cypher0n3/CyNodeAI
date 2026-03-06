@@ -48,7 +48,7 @@ func runMainWithStore(ctx context.Context, cfg *config.OrchestratorConfig, store
 	return 0
 }
 
-// run sets up handlers and runs the server until ctx is cancelled. Used by main and tests.
+// run sets up handlers and runs the server until ctx is canceled. Used by main and tests.
 func run(ctx context.Context, cfg *config.OrchestratorConfig, store database.Store, logger *slog.Logger) error {
 	jwtManager := auth.NewJWTManager(
 		cfg.JWTSecret,

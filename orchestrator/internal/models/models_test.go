@@ -12,7 +12,7 @@ func TestTaskStatusConstants(t *testing.T) {
 		TaskStatusRunning,
 		TaskStatusCompleted,
 		TaskStatusFailed,
-		TaskStatusCancelled,
+		TaskStatusCanceled,
 		TaskStatusSuperseded,
 	}
 
@@ -29,7 +29,7 @@ func TestJobStatusConstants(t *testing.T) {
 		JobStatusRunning,
 		JobStatusCompleted,
 		JobStatusFailed,
-		JobStatusCancelled,
+		JobStatusCanceled,
 		JobStatusLeaseExpired,
 	}
 

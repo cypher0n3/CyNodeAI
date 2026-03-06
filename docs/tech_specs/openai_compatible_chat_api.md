@@ -247,7 +247,7 @@ Traces To:
 
 The gateway MUST return errors that allow clients and operators to distinguish at least:
 
-- Request cancelled.
+- Request canceled.
 - Orchestrator inference failed.
 - Completion did not finish before the maximum wait duration.
 
@@ -272,7 +272,7 @@ Error format for OpenAI-compatible endpoints:
 
 HTTP status mapping:
 
-- Request cancelled: `408`.
+- Request canceled: `408`.
 - Orchestrator inference failed: `502` or `503` depending on whether the failure is upstream or overload.
 - Completion timeout (poll cap reached): `504`.
 

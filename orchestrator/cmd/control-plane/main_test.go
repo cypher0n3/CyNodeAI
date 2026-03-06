@@ -629,7 +629,7 @@ func TestDispatchOnce_WorkerAPIBadVersion(t *testing.T) {
 	}
 }
 
-func TestRun_CancelledContext(t *testing.T) {
+func TestRun_CanceledContext(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	cfg := config.LoadOrchestratorConfig()
@@ -642,7 +642,7 @@ func TestRun_CancelledContext(t *testing.T) {
 	}
 }
 
-// TestRun_ShutdownSucceeds covers the shutdown success path (server started, then ctx cancelled, shutdown succeeds).
+// TestRun_ShutdownSucceeds covers the shutdown success path (server started, then ctx canceled, shutdown succeeds).
 func TestRun_ShutdownSucceeds(t *testing.T) {
 	oldListen := os.Getenv("LISTEN_ADDR")
 	_ = os.Setenv("LISTEN_ADDR", ":0")
@@ -873,14 +873,14 @@ func TestStartPMAWhenInferencePathReady_Direct(t *testing.T) {
 	}
 }
 
-// TestWaitForInferencePath_ContextCancelled covers waitForInferencePath returning false when ctx is cancelled.
-func TestWaitForInferencePath_ContextCancelled(t *testing.T) {
+// TestWaitForInferencePath_ContextCanceled covers waitForInferencePath returning false when ctx is canceled.
+func TestWaitForInferencePath_ContextCanceled(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	mockDB := testutil.NewMockDB()
 	got := waitForInferencePath(ctx, mockDB, slog.Default())
 	if got {
-		t.Error("waitForInferencePath with cancelled ctx should return false")
+		t.Error("waitForInferencePath with canceled ctx should return false")
 	}
 }
 
@@ -1097,7 +1097,7 @@ func TestRunMainWithContext_Success(t *testing.T) {
 	mockDB := testutil.NewMockDB()
 	code := runMainWithContext(ctx, mockDB)
 	if code != 0 {
-		t.Errorf("runMainWithContext(cancelled ctx, mockDB) = %d, want 0", code)
+		t.Errorf("runMainWithContext(canceled ctx, mockDB) = %d, want 0", code)
 	}
 }
 

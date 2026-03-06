@@ -84,7 +84,7 @@ type RunOptions struct {
 	StartManagedServices func(services []nodepayloads.ConfigManagedService) error
 }
 
-// Run performs registration, config fetch, service startup, config ack, then capability reporting until ctx is cancelled.
+// Run performs registration, config fetch, service startup, config ack, then capability reporting until ctx is canceled.
 // Order (per worker_node.md Node Startup Procedure): wait for orchestrator readiness => run startup checks
 // (container runtime, existing inference detection) => register => fetch config => start worker API => start Ollama (if instructed) => config ack => capability loop.
 func Run(ctx context.Context, logger *slog.Logger, cfg *Config) error {

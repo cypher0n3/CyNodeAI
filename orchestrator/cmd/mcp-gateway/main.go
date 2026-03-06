@@ -44,7 +44,7 @@ var testStore database.Store
 // testDatabaseOpen is set by tests to provide a store without opening a real DB (avoids needing RunSchema).
 var testDatabaseOpen func(ctx context.Context, dsn string) (database.Store, error)
 
-// run sets up and runs the server until ctx is cancelled. Used by main and tests.
+// run sets up and runs the server until ctx is canceled. Used by main and tests.
 // When DATABASE_URL is set (or testStore/testDatabaseOpen is set in tests), tool-call handler writes audit records.
 func run(ctx context.Context, logger *slog.Logger) error {
 	var store database.Store

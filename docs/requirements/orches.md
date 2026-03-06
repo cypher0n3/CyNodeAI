@@ -212,14 +212,14 @@ It covers orchestrator control-plane behavior, task lifecycle, dispatch, and sta
   [CYNAI.ORCHES.WorkflowStartGatePlanApproved](../tech_specs/langgraph_mvp.md#spec-cynai-orches-workflowstartgateplanapproved)
   <a id="req-orches-0152"></a>
 - **REQ-ORCHES-0153:** When a task in a plan has dependencies (task_dependencies rows), the orchestrator MUST NOT start a workflow for that task until every dependency (depends_on_task_id) has status `completed`.
-  Tasks that depend on a failed, cancelled, or superseded task MUST NOT start until that dependency is retried and reaches status `completed`.
+  Tasks that depend on a failed, canceled, or superseded task MUST NOT start until that dependency is retried and reaches status `completed`.
   Multiple tasks MAY be started in parallel when they have no unsatisfied dependencies (no dependencies, or all dependencies have status `completed`).
   Execution order and runnability are defined only by task dependencies (no ordinal).
   [CYNAI.ORCHES.WorkflowPlanOrder](../tech_specs/langgraph_mvp.md#spec-cynai-orches-workflowplanorder)
   [CYNAI.SCHEMA.TaskDependenciesTable](../tech_specs/postgres_schema.md#spec-cynai-schema-taskdependenciestable)
   <a id="req-orches-0153"></a>
-- **REQ-ORCHES-0154:** When a task is set to status `cancelled`, the system MUST automatically set to `cancelled` every task that depends on it (each task_id that has this task as depends_on_task_id in task_dependencies).
-  This MUST be applied transitively: dependents of those tasks are also cancelled, so the entire downstream dependency graph from the cancelled task is cancelled.
+- **REQ-ORCHES-0154:** When a task is set to status `canceled`, the system MUST automatically set to `canceled` every task that depends on it (each task_id that has this task as depends_on_task_id in task_dependencies).
+  This MUST be applied transitively: dependents of those tasks are also canceled, so the entire downstream dependency graph from the canceled task is canceled.
   [CYNAI.ORCHES.CancelCascadesToDependents](../tech_specs/langgraph_mvp.md#spec-cynai-orches-cancelcascadestodependents)
   [CYNAI.SCHEMA.TaskDependenciesTable](../tech_specs/postgres_schema.md#spec-cynai-schema-taskdependenciestable)
   <a id="req-orches-0154"></a>

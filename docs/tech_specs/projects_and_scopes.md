@@ -127,7 +127,7 @@ Traces To:
 - [REQ-PROJCT-0122](../requirements/projct.md#req-projct-0122)
 - [REQ-PROJCT-0124](../requirements/projct.md#req-projct-0124)
 
-Each plan has a **state**: `draft`, `ready`, `active`, `suspended`, `completed`, or `cancelled`.
+Each plan has a **state**: `draft`, `ready`, `active`, `suspended`, `completed`, or `canceled`.
 **At most one plan per project may be active at a time**; all other plans in that project have a non-active state.
 
 - **draft:** Plan is not approved; workflow for tasks in this plan MUST NOT start (unless PMA handoff per workflow gate).
@@ -139,7 +139,7 @@ Each plan has a **state**: `draft`, `ready`, `active`, `suspended`, `completed`,
 - **completed:** Plan was previously active and all work (tasks associated with the plan) is done; no longer the active plan.
   A plan MAY be set to completed **only when the plan has at least one task and all such tasks are closed** (`tasks.closed = true`; see [Task status and closed state](../tech_specs/postgres_schema.md#spec-cynai-schema-taskstatusandclosed)); [REQ-PROJCT-0121](../requirements/projct.md#req-projct-0121).
   **A plan with no tasks is incomplete** and MUST NOT be set to completed.
-- **cancelled:** Plan was abandoned (from draft, ready, active, or suspended); workflow MUST NOT run.
+- **canceled:** Plan was abandoned (from draft, ready, active, or suspended); workflow MUST NOT run.
 
 When a plan is set to **active**, any other plan in the same project that is currently active MUST be set to **draft**, **suspended**, or (if all its tasks are closed) **completed** so that only one plan per project is active.
 **All plans must have at least one task** to be considered ready for execution; see [REQ-PROJCT-0122](../requirements/projct.md#req-projct-0122).
@@ -147,7 +147,7 @@ When a plan is approved (set to **ready**) by the user, the **first action** the
 Storage is prescribed in [`postgres_schema.md`](postgres_schema.md): `project_plans.state`, `project_plans.archived`, and partial unique constraint on `(project_id)` WHERE `state = 'active'`.
 
 **Archived flag:** Plans have an **archived** boolean (separate from state) for UI/API views and filtering.
-**Archived plans MUST NOT run workflow** and **MUST NOT be the active plan**; the API MUST reject setting a plan to active when `archived = true`, and MUST reject setting `archived = true` while the plan is active (the plan must be suspended or cancelled first).
+**Archived plans MUST NOT run workflow** and **MUST NOT be the active plan**; the API MUST reject setting a plan to active when `archived = true`, and MUST reject setting `archived = true` while the plan is active (the plan must be suspended or canceled first).
 See [REQ-PROJCT-0124](../requirements/projct.md#req-projct-0124).
 
 ### Project Plan Client Edit
@@ -193,7 +193,7 @@ Traces To:
 - [REQ-PROJCT-0117](../requirements/projct.md#req-projct-0117)
 - [REQ-AGENTS-0136](../requirements/agents.md#req-agents-0136)
 
-The system stores **plan state** (draft, ready, active, suspended, completed, cancelled), the **archived** flag, and for the approved plan (ready or active) **who** approved it and **when** (see [Project plan state](#project-plan-state)).
+The system stores **plan state** (draft, ready, active, suspended, completed, canceled), the **archived** flag, and for the approved plan (ready or active) **who** approved it and **when** (see [Project plan state](#project-plan-state)).
 Storage is prescribed in [`postgres_schema.md`](postgres_schema.md): `project_plans.state`, `project_plans.archived`, `project_plans.plan_approved_at`, `project_plans.plan_approved_by`.
 When a plan's state is `active` and the plan is not archived, workflow for tasks in that plan MAY be started subject to [REQ-ORCHES-0152](../requirements/orches.md#req-orches-0152).
 Only a principal with `project_plan.approve` permission MAY approve (set to ready); with `project_plan.activate` MAY activate (ready -> active); see [Project plan actions](access_control.md#spec-cynai-access-projectplanactions).

@@ -22,6 +22,6 @@ class TestTaskResult(unittest.TestCase):
         self.assertIn("status", data)
         self.assertIn(
             data.get("status"),
-            ("queued", "running", "completed", "failed", "cancelled", "superseded"),
+            ("queued", "running", "completed", "failed", "canceled", "superseded"),
             f"task result status must be valid enum per CLI spec: {data.get('status')!r}",
         )

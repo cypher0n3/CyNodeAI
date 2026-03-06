@@ -132,7 +132,7 @@ When a task is associated with a plan (`task.plan_id` set; see [Project plan](pr
 **Runnable:** A task in a plan is **runnable** when: (1) the plan's state is `active`, (2) the task is not closed, and (3) every task it depends on (each `depends_on_task_id` in `task_dependencies` for this `task_id`) has `status = 'completed'`.
 A task with no dependencies in `task_dependencies` is runnable once the plan is active and the task is not closed (subject to the workflow start gate).
 
-**Blocking on failed dependencies:** Tasks that depend on a task with status `failed`, `cancelled`, or `superseded` MUST NOT have their workflow started until that dependency is retried and reaches `status = 'completed'`.
+**Blocking on failed dependencies:** Tasks that depend on a task with status `failed`, `canceled`, or `superseded` MUST NOT have their workflow started until that dependency is retried and reaches `status = 'completed'`.
 The orchestrator MUST enforce this in the workflow start gate (see [Workflow start gate: dependency check](#workflow-start-gate-plan-approved)).
 
 **Parallel execution:** Multiple tasks MAY be started in parallel when each is runnable (no unsatisfied dependencies).
@@ -148,10 +148,10 @@ Traces To:
 
 - [REQ-ORCHES-0154](../requirements/orches.md#req-orches-0154)
 
-When a task is set to status `cancelled`, the system MUST automatically set to `cancelled` every task that depends on it (each `task_id` that has this task as `depends_on_task_id` in `task_dependencies`).
-This MUST be applied **transitively**: any task that depends on a task that was just cancelled is also cancelled, and so on, so that the entire downstream dependency graph from the cancelled task is cancelled.
-Each cascaded task MUST have its `status` set to `cancelled` and `closed` set to `true`.
-The gateway and orchestrator MUST enforce this when processing a cancel request or when any component sets a task's status to `cancelled`.
+When a task is set to status `canceled`, the system MUST automatically set to `canceled` every task that depends on it (each `task_id` that has this task as `depends_on_task_id` in `task_dependencies`).
+This MUST be applied **transitively**: any task that depends on a task that was just canceled is also canceled, and so on, so that the entire downstream dependency graph from the canceled task is canceled.
+Each cascaded task MUST have its `status` set to `canceled` and `closed` set to `true`.
+The gateway and orchestrator MUST enforce this when processing a cancel request or when any component sets a task's status to `canceled`.
 
 ### Workflow Start Gate (Plan Approved)
 
@@ -178,7 +178,7 @@ Before the orchestrator starts a workflow for a task, it MUST apply the followin
 2. If `plan_id` is null, allow workflow start (no plan gate). <a id="algo-cynai-orches-workflowstartgateplanapproved-step-2"></a>
 3. Load the plan row (`project_plans`).
    If the plan's `archived` flag is true, deny workflow start and return a defined error (e.g. 409 or 403 with reason "plan is archived").
-   If the plan's `state` is not `active` (e.g. `draft`, `ready`, `suspended`, `completed`, `cancelled`): if the workflow start was requested explicitly by the PMA (e.g. MCP tool or internal "start workflow for task_id" from PMA), continue to step 5 (PMA handoff); otherwise deny workflow start and return a defined error (e.g. 409 or 403 with reason "plan not active"). <a id="algo-cynai-orches-workflowstartgateplanapproved-step-3"></a>
+   If the plan's `state` is not `active` (e.g. `draft`, `ready`, `suspended`, `completed`, `canceled`): if the workflow start was requested explicitly by the PMA (e.g. MCP tool or internal "start workflow for task_id" from PMA), continue to step 5 (PMA handoff); otherwise deny workflow start and return a defined error (e.g. 409 or 403 with reason "plan not active"). <a id="algo-cynai-orches-workflowstartgateplanapproved-step-3"></a>
 4. If the plan's `state` is `active`, continue to step 5. <a id="algo-cynai-orches-workflowstartgateplanapproved-step-4"></a>
 5. **Dependency check** (whenever `plan_id` is set): Load all rows from `task_dependencies` where `task_id` = this task.
    For each such row, load the dependency task (`depends_on_task_id`).

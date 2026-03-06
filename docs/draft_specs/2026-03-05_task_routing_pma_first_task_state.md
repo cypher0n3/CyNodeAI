@@ -99,7 +99,7 @@ Add a new field to the task resource:
 
 This state is distinct from `tasks.status` in `postgres_schema.md`.
 
-`tasks.status` continues to represent execution lifecycle (`pending`, `running`, `completed`, `failed`, `cancelled`, `superseded`).
+`tasks.status` continues to represent execution lifecycle (`pending`, `running`, `completed`, `failed`, `canceled`, `superseded`).
 
 The API must expose `planning_state` in task create, get, and list responses.
 
@@ -289,7 +289,7 @@ Existing tasks must be assigned a planning state during migration.
 
 Suggested mapping:
 
-- If `tasks.status` is `running`, `completed`, `failed`, `cancelled`, or `superseded`, set `planning_state=ready`.
+- If `tasks.status` is `running`, `completed`, `failed`, `canceled`, or `superseded`, set `planning_state=ready`.
 
 - If `tasks.status` is `pending`, set `planning_state=draft` or `ready` based on deployment choice.
 

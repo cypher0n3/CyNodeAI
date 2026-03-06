@@ -4,15 +4,14 @@
 package userapi
 
 // API-facing task/job status constants (returned in REST responses; used by CLI/Web Console).
+// Canonical spelling is American "canceled".
 const (
 	StatusQueued     = "queued"
-	StatusRunning    = "running"
-	StatusCompleted  = "completed"
-	StatusFailed     = "failed"
-	StatusCancelled  = "cancelled"
+	StatusRunning   = "running"
+	StatusCompleted = "completed"
+	StatusFailed    = "failed"
+	StatusCanceled   = "canceled"
 	StatusSuperseded = "superseded"
-	// StatusCanceled is kept as a compatibility alias for older clients.
-	StatusCanceled = StatusCancelled
 )
 
 // --- Auth ---

@@ -26,7 +26,7 @@ func getEnv(key, def string) string {
 	return def
 }
 
-// runMain loads config and runs the node manager until ctx is cancelled.
+// runMain loads config and runs the node manager until ctx is canceled.
 // Returns 0 on success, 1 on failure. Extracted for testability.
 func runMain(ctx context.Context) int {
 	level := slog.LevelInfo

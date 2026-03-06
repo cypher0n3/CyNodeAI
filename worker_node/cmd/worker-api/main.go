@@ -66,7 +66,7 @@ func main() {
 	os.Exit(runMain(context.Background()))
 }
 
-// runMain builds and runs the server until ctx is cancelled.
+// runMain builds and runs the server until ctx is canceled.
 // Returns 0 on success, 1 on failure. Extracted for testability.
 func runMain(ctx context.Context) int {
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
@@ -121,7 +121,7 @@ func runMain(ctx context.Context) int {
 	case <-done:
 	case <-serverErr:
 	}
-	// Shutdown with a timeout; derive from ctx so contextcheck passes, but use WithoutCancel so we get a grace period even when ctx is already cancelled.
+	// Shutdown with a timeout; derive from ctx so contextcheck passes, but use WithoutCancel so we get a grace period even when ctx is already canceled.
 	shutdownCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
 	defer cancel()
 	if err := srv.Shutdown(shutdownCtx); err != nil {

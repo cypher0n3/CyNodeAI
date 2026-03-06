@@ -64,8 +64,8 @@ func TestGetEnv(t *testing.T) {
 	}
 }
 
-func TestRun_CancelledContext(t *testing.T) {
-	// Ensure no real DB so run() uses nil store and exits on cancelled ctx without hitting Open.
+func TestRun_CanceledContext(t *testing.T) {
+	// Ensure no real DB so run() uses nil store and exits on canceled ctx without hitting Open.
 	oldDSN := os.Getenv("DATABASE_URL")
 	_ = os.Unsetenv("DATABASE_URL")
 	defer func() {

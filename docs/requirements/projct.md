@@ -83,7 +83,7 @@ Technical specifications: [`docs/tech_specs/projects_and_scopes.md`](../tech_spe
 - **REQ-PROJCT-0116:** RBAC MUST allow assigning lock and unlock permissions for shared (group) project plans.
   [CYNAI.ACCESS.ProjectPlanLockRbac](../tech_specs/rbac_and_groups.md#spec-cynai-access-projectplanlockrbac)
   <a id="req-projct-0116"></a>
-- **REQ-PROJCT-0117:** The system MUST track plan state (draft, ready, active, suspended, completed, cancelled) and the archived flag; for the approved plan (ready or active), who approved it and when.
+- **REQ-PROJCT-0117:** The system MUST track plan state (draft, ready, active, suspended, completed, canceled) and the archived flag; for the approved plan (ready or active), who approved it and when.
   Only one plan per project may be active at a time; workflow for tasks in that plan MAY proceed subject to the orchestrator workflow start gate (REQ-ORCHES-0152).
   [CYNAI.ACCESS.ProjectPlanApprovedState](../tech_specs/projects_and_scopes.md#spec-cynai-access-projectplanapprovedstate)
   [CYNAI.ACCESS.ProjectPlanState](../tech_specs/projects_and_scopes.md#spec-cynai-access-projectplanstate)
@@ -121,7 +121,7 @@ Technical specifications: [`docs/tech_specs/projects_and_scopes.md`](../tech_spe
   <a id="req-projct-0123"></a>
 - **REQ-PROJCT-0124:** The system MUST support an **archived** flag on plans (separate from state) for UI/API views and filtering.
   Archived plans MUST NOT run workflow (the workflow start gate MUST deny workflow start for tasks in an archived plan).
-  Archived plans MUST NOT be the active plan (the API MUST reject setting a plan to active when archived = true, and MUST reject setting archived = true while the plan is active; the plan must be suspended or cancelled first).
+  Archived plans MUST NOT be the active plan (the API MUST reject setting a plan to active when archived = true, and MUST reject setting archived = true while the plan is active; the plan must be suspended or canceled first).
   [CYNAI.ACCESS.ProjectPlanState](../tech_specs/projects_and_scopes.md#spec-cynai-access-projectplanstate)
   [CYNAI.SCHEMA.ProjectPlansTable](../tech_specs/postgres_schema.md#spec-cynai-schema-projectplanstable)
   <a id="req-projct-0124"></a>

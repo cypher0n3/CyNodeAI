@@ -124,7 +124,7 @@ Authorization MUST use the actions defined in [Project plan actions](access_cont
 #### `ProjectPlanApi` Operations
 
 - **List plans for project**
-  - Inputs: `project_id` (path or query), optional filter by state (draft, ready, active, suspended, completed, cancelled), optional filter by `archived` (true/false; default view MAY exclude archived), optional pagination.
+  - Inputs: `project_id` (path or query), optional filter by state (draft, ready, active, suspended, completed, canceled), optional filter by `archived` (true/false; default view MAY exclude archived), optional pagination.
   - Outputs: List of plans (plan_id, plan_name, state, archived, plan_approved_at, plan_approved_by, is_plan_locked, created_at, updated_at); ordered by updated_at descending or by state (e.g. active first).
   - Method: GET (e.g. `GET /v1/projects/{project_id}/plans`).
   - Error conditions: 404 if project missing; 403 if subject lacks `project_plan.read`.
@@ -184,9 +184,9 @@ Authorization MUST use the actions defined in [Project plan actions](access_cont
 
 - **Cancel plan**
   - Inputs: `plan_id` (path).
-  - Outputs: Updated plan state (`cancelled`).
+  - Outputs: Updated plan state (`canceled`).
   - Method: POST or PATCH (e.g. `POST /v1/plans/{plan_id}/cancel`).
-    Workflow MUST NOT run for cancelled plans.
+    Workflow MUST NOT run for canceled plans.
   - Error conditions: 404 if plan missing; 403 if subject lacks `project_plan.update` or equivalent.
 
 - **Archive plan**

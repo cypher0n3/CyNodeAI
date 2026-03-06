@@ -109,7 +109,7 @@ func TestTaskStatusToSpec(t *testing.T) {
 		want string
 	}{
 		{in: models.TaskStatusPending, want: userapi.StatusQueued},
-		{in: models.TaskStatusCancelled, want: userapi.StatusCancelled},
+		{in: models.TaskStatusCanceled, want: userapi.StatusCanceled},
 		{in: models.TaskStatusSuperseded, want: userapi.StatusSuperseded},
 		{in: models.TaskStatusCompleted, want: models.TaskStatusCompleted},
 	}
@@ -163,8 +163,8 @@ func TestParseListTasksParams_StatusAliasCanceled(t *testing.T) {
 	if errCode != 0 {
 		t.Fatalf("unexpected errCode=%d", errCode)
 	}
-	if status != userapi.StatusCancelled {
-		t.Fatalf("status=%q, want %q", status, userapi.StatusCancelled)
+	if status != userapi.StatusCanceled {
+		t.Fatalf("status=%q, want %q", status, userapi.StatusCanceled)
 	}
 }
 

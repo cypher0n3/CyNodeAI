@@ -67,7 +67,7 @@ Scenario: List tasks as authenticated user
 @spec_cynai_orches_doc_orchestrator
 Scenario: Cancel task as owner
   When I create a task with prompt "cancel me" and I cancel the task
-  Then the task status is cancelled
+  Then the task status is canceled
 
 @req_orches_0123
 @spec_cynai_orches_doc_orchestrator

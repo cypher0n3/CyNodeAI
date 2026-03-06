@@ -108,7 +108,7 @@ func (db *DB) UpdateTaskStatus(ctx context.Context, taskID uuid.UUID, status str
 
 func isTerminalTaskStatus(status string) bool {
 	switch status {
-	case models.TaskStatusCompleted, models.TaskStatusFailed, models.TaskStatusCancelled, models.TaskStatusSuperseded:
+	case models.TaskStatusCompleted, models.TaskStatusFailed, models.TaskStatusCanceled, models.TaskStatusSuperseded:
 		return true
 	default:
 		return false

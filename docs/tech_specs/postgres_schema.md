@@ -238,7 +238,7 @@ Constraints
 - Spec ID: `CYNAI.SCHEMA.ProjectPlansTable` <a id="spec-cynai-schema-projectplanstable"></a>
 
 A project MAY have multiple plans; at most one plan per project may be active at a time.
-Plan state values: `draft`, `ready`, `active`, `suspended`, `completed`, `cancelled` (see [Project plan state](projects_and_scopes.md#spec-cynai-access-projectplanstate)).
+Plan state values: `draft`, `ready`, `active`, `suspended`, `completed`, `canceled` (see [Project plan state](projects_and_scopes.md#spec-cynai-access-projectplanstate)).
 **Archived** is a separate boolean flag for UI/API views; archived plans MUST NOT run workflow and MUST NOT be the active plan (enforced by API).
 
 Source: [REQ-PROJCT-0110](../requirements/projct.md#req-projct-0110), [Project plan state](projects_and_scopes.md#spec-cynai-access-projectplanstate), [REQ-PROJCT-0124](../requirements/projct.md#req-projct-0124).
@@ -250,7 +250,7 @@ Source: [REQ-PROJCT-0110](../requirements/projct.md#req-projct-0110), [Project p
 - `plan_body` (text, nullable)
   - plan document body; MUST be stored as Markdown (see [REQ-PROJCT-0114](../requirements/projct.md#req-projct-0114))
 - `state` (text, NOT NULL)
-  - one of: `draft`, `ready`, `active`, `suspended`, `completed`, `cancelled`
+  - one of: `draft`, `ready`, `active`, `suspended`, `completed`, `canceled`
   - only one row per project may have `state = 'active'` (enforced by partial unique index); archived plans MUST NOT have state `active` (API enforces)
 - `archived` (boolean, NOT NULL, default false)
   - when true, plan is archived for history/views; workflow MUST NOT run for this plan and this plan MUST NOT be set to active; used by UIs/APIs for filtering and display
@@ -664,10 +664,10 @@ Sources: [`docs/tech_specs/orchestrator.md`](orchestrator.md), [`docs/tech_specs
   - when set, task belongs to this plan; workflow for this task is gated on plan state active and on task dependencies (see [Task dependencies](#task-dependencies-table)).
 - `status` (text)
   - Task lifecycle status; stored separately from open/closed.
-  - Values include: pending, running, completed, failed, cancelled, superseded (see [Task status and closed state](#task-status-and-closed-state)).
+  - Values include: pending, running, completed, failed, canceled, superseded (see [Task status and closed state](#task-status-and-closed-state)).
 - `closed` (boolean, not null)
   - Binary open/closed state; when true, the task is closed (no further work).
-    MUST be set consistently when status changes (e.g. true when status is completed, failed, cancelled, superseded).
+    MUST be set consistently when status changes (e.g. true when status is completed, failed, canceled, superseded).
 - `description` (text, nullable)
   - task description for user-facing display and editing; MUST be stored as Markdown (see [REQ-PROJCT-0114](../requirements/projct.md#req-projct-0114))
 - `acceptance_criteria` (jsonb, nullable)
@@ -693,7 +693,7 @@ Constraints
 - Spec ID: `CYNAI.SCHEMA.TaskDependenciesTable` <a id="spec-cynai-schema-taskdependenciestable"></a>
 
 Stores explicit task-within-plan dependencies; execution order and runnability are determined solely by the dependency graph (prerequisite and dependent tasks).
-When a task is set to `cancelled`, all tasks that depend on it (directly or transitively) MUST be set to `cancelled` automatically; see [REQ-ORCHES-0154](../requirements/orches.md#req-orches-0154) and [Cancel cascades to dependents](langgraph_mvp.md#spec-cynai-orches-cancelcascadestodependents).
+When a task is set to `canceled`, all tasks that depend on it (directly or transitively) MUST be set to `canceled` automatically; see [REQ-ORCHES-0154](../requirements/orches.md#req-orches-0154) and [Cancel cascades to dependents](langgraph_mvp.md#spec-cynai-orches-cancelcascadestodependents).
 A task is **runnable** when all tasks it depends on have `status = 'completed'`; see [Project plan and task dependencies](langgraph_mvp.md#spec-cynai-orches-workflowplanorder) and [REQ-ORCHES-0153](../requirements/orches.md#req-orches-0153).
 
 - `id` (uuid, pk)
@@ -717,9 +717,9 @@ Indexes
 
 - Spec ID: `CYNAI.SCHEMA.TaskStatusAndClosed` <a id="spec-cynai-schema-taskstatusandclosed"></a>
 
-Task **status** is stored in `tasks.status` and represents the lifecycle state (e.g. pending, running, completed, failed, cancelled, superseded).
+Task **status** is stored in `tasks.status` and represents the lifecycle state (e.g. pending, running, completed, failed, canceled, superseded).
 Task **closed** is stored in `tasks.closed` (boolean): when true, the task is closed (no further work); when false, the task is open.
-The system MUST keep `closed` consistent with `status` (e.g. set `closed = true` when status becomes completed, failed, cancelled, or superseded).
+The system MUST keep `closed` consistent with `status` (e.g. set `closed = true` when status becomes completed, failed, canceled, or superseded).
 Plan completion (set plan to completed) requires the plan to have at least one task and **all such tasks to have `closed = true`**; see [REQ-PROJCT-0121](../requirements/projct.md#req-projct-0121) and [Project plan state](projects_and_scopes.md#spec-cynai-access-projectplanstate).
 
 ### Jobs Table
@@ -731,7 +731,7 @@ Plan completion (set plan to completed) requires the plan to have at least one t
 - `node_id` (uuid, fk to `nodes.id`, nullable)
   - set when job is dispatched to a node
 - `status` (text)
-  - examples: queued, running, completed, failed, cancelled, lease_expired
+  - examples: queued, running, completed, failed, canceled, lease_expired
 - `payload` (jsonb, nullable)
   - job input (e.g. command, image, env)
 - `result` (jsonb, nullable)
@@ -937,7 +937,7 @@ Source: [`docs/tech_specs/runs_and_sessions_api.md`](runs_and_sessions_api.md).
 - `session_id` (uuid, fk to `sessions.id`, nullable)
 - `parent_run_id` (uuid, fk to `runs.id`, nullable)
 - `status` (text)
-  - examples: pending, running, completed, failed, cancelled
+  - examples: pending, running, completed, failed, canceled
 - `started_at` (timestamptz, nullable)
 - `ended_at` (timestamptz, nullable)
 - `metadata` (jsonb, nullable)
@@ -1247,7 +1247,7 @@ It MUST NOT store full message content.
 - `user_id` (uuid, fk to `users.id`, nullable)
 - `project_id` (uuid, fk to `projects.id`, nullable)
 - `outcome` (text)
-  - examples: success, error, cancelled, timeout
+  - examples: success, error, canceled, timeout
 - `error_code` (text, nullable)
 - `redaction_applied` (boolean)
 - `redaction_kinds` (jsonb, nullable)

@@ -819,7 +819,7 @@ func TestIntegration_GetNextQueuedJob_ErrNotFound(t *testing.T) {
 		if err != nil {
 			t.Fatalf("GetNextQueuedJob: %v", err)
 		}
-		_ = db.CompleteJob(ctx, job.ID, "", models.JobStatusCancelled)
+		_ = db.CompleteJob(ctx, job.ID, "", models.JobStatusCanceled)
 	}
 	_, err := db.GetNextQueuedJob(ctx)
 	if err != ErrNotFound {
@@ -1347,12 +1347,12 @@ func TestIntegration_WorkflowStartGate_DepTaskNotFound(t *testing.T) {
 	}
 }
 
-func TestIntegration_HasAnyActiveApiCredential_CancelledContext(t *testing.T) {
+func TestIntegration_HasAnyActiveApiCredential_CanceledContext(t *testing.T) {
 	db, _ := integrationDB(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	_, err := db.HasAnyActiveApiCredential(ctx)
 	if err == nil {
-		t.Error("HasAnyActiveApiCredential with cancelled context: expected error")
+		t.Error("HasAnyActiveApiCredential with canceled context: expected error")
 	}
 }

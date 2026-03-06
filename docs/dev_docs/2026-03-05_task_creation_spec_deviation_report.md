@@ -11,7 +11,7 @@
 
 The current implementation supports basic task create (prompt, task name, attachments as paths, input modes, SBA, orchestrator inference).
 
-It deviates from specs and requirements in project association, task closed consistency, gateway contract (project_id, cursor pagination), CLI task input modes and flags, path and size validation, and status enum (superseded, cancelled vs canceled).
+It deviates from specs and requirements in project association, task closed consistency, gateway contract (project_id, cursor pagination), CLI task input modes and flags, path and size validation, and status enum (superseded; spelling canonical: canceled).
 
 This document describes deviations and a remediation plan only; no code changes.
 
@@ -44,35 +44,36 @@ The gateway MUST associate the task with the default project when no project is 
 
 ### 2.2 Task Closed Flag (`CYNAI.SCHEMA.TaskStatusAndClosed`, `postgres_schema.md`)
 
-When status becomes completed, failed, cancelled, or superseded, `tasks.closed` MUST be set to `true` (postgres_schema.md).
+When status becomes completed, failed, canceled, or superseded, `tasks.closed` MUST be set to `true` (postgres_schema.md).
 
-- **Spec:** When status becomes completed, failed, cancelled, or superseded, `tasks.closed` MUST be set to `true` (postgres_schema.md).
+- **Spec:** When status becomes completed, failed, canceled, or superseded, `tasks.closed` MUST be set to `true` (postgres_schema.md).
 - **Current implementation:** `UpdateTaskStatus` updates only `status`; it does not set `closed`.
 - **Deviation:** `closed` is never updated; it can remain false for terminal statuses.
 
 #### 2.2.1 Steps for Closed Flag
 
-- Whenever task status is set to a terminal value (completed, failed, cancelled, superseded), also set `closed = true`.
+- Whenever task status is set to a terminal value (completed, failed, canceled, superseded), also set `closed = true`.
   Options: (a) extend `UpdateTaskStatus` to accept or derive `closed` and update both columns; (b) add a helper that sets status and closed together; (c) use a DB trigger.
   Ensure all call sites (handlers, dispatcher) use the same rule.
 
-### 2.3 Status Enum: Superseded and Cancelled vs Canceled
+### 2.3 Status Enum: Superseded and Canceled
 
 Task status enum in spec includes `superseded` (cli_management_app_commands_tasks.md, postgres_schema.md).
 
-Terminal statuses are completed, failed, cancelled, superseded.
+Terminal statuses are completed, failed, canceled, superseded.
 
 - **Spec:** Task status enum includes `superseded`.
-  Terminal statuses: completed, failed, cancelled, superseded.
-- **Current implementation:** userapi constants use queued, running, completed, failed, canceled (US).
-  Models use `TaskStatusCancelled` = "cancelled" (UK).
-  Handler maps to `userapi.StatusCanceled` ("canceled").
+  Terminal statuses: completed, failed, canceled, superseded.
+- **Current implementation:** userapi uses `StatusCanceled` = "canceled"; handler maps internal `TaskStatusCanceled` to `userapi.StatusCanceled`.
+  Models use `TaskStatusCanceled` = "canceled".
+    BDD expects "canceled".
   No handling of "superseded".
-- **Deviation:** API exposes "canceled" vs spec "cancelled"; "superseded" is not in userapi or handler mapping.
+- **Deviation:** "superseded" is not in userapi or handler mapping; status spelling is aligned (canceled).
 
 #### 2.3.1 Steps for Status Enum
 
-- Align API with spec: either (a) use "cancelled" and "superseded" in userapi and responses, or (b) document a spec exception for "canceled" and add "superseded" to the enum and to `taskStatusToSpec` (and any list/result filters).
+- Add "superseded" to userapi and to `taskStatusToSpec` (and any list/result filters).
+  Status "canceled" is already aligned.
   Ensure task list/result and CLI treat superseded as terminal and display it correctly.
 
 ### 2.4 List Tasks Pagination (`cli_management_app_commands_tasks.md`)
@@ -189,7 +190,7 @@ Prioritized list (P1 highest).
   Area: Orchestrator/DB.
   Dependency: None.
 - **P1.**
-  Add "superseded" to status handling and align cancelled/canceled (2.3).
+  Add "superseded" to status handling and canonical status spelling: canceled (2.3).
   Area: Gateway / userapi.
   Dependency: None.
 - **P2.**

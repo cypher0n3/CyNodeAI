@@ -51,7 +51,7 @@ func TestIsTerminalTaskStatus(t *testing.T) {
 		{status: "running", want: false},
 		{status: "completed", want: true},
 		{status: "failed", want: true},
-		{status: "cancelled", want: true},
+		{status: "canceled", want: true},
 		{status: "superseded", want: true},
 	}
 	for _, tt := range tests {

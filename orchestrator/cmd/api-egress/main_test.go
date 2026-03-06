@@ -31,7 +31,7 @@ func TestGetEnv(t *testing.T) {
 	}
 }
 
-func TestRun_CancelledContext(t *testing.T) {
+func TestRun_CanceledContext(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	logger := slog.Default()

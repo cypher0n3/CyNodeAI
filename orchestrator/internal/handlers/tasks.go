@@ -93,13 +93,13 @@ func (h *TaskHandler) persistTaskAttachments(ctx context.Context, taskID uuid.UU
 	return stored
 }
 
-// taskStatusToSpec maps internal task status to userapi status enum (queued, running, completed, failed, cancelled, superseded).
+// taskStatusToSpec maps internal task status to userapi status enum (queued, running, completed, failed, canceled, superseded).
 func taskStatusToSpec(status string) string {
 	switch status {
 	case models.TaskStatusPending:
 		return userapi.StatusQueued
-	case models.TaskStatusCancelled:
-		return userapi.StatusCancelled
+	case models.TaskStatusCanceled:
+		return userapi.StatusCanceled
 	case models.TaskStatusSuperseded:
 		return userapi.StatusSuperseded
 	default:
@@ -486,7 +486,7 @@ func parseListTasksParams(r *http.Request) (limit, offset int, statusFilter, cur
 	}
 	statusFilter = r.URL.Query().Get("status")
 	if statusFilter == "canceled" {
-		statusFilter = userapi.StatusCancelled
+		statusFilter = userapi.StatusCanceled
 	}
 	cursor = strings.TrimSpace(r.URL.Query().Get("cursor"))
 	return limit, offset, statusFilter, cursor, 0
@@ -576,7 +576,7 @@ func (h *TaskHandler) CancelTask(w http.ResponseWriter, r *http.Request) {
 		WriteForbidden(w, "Not task owner")
 		return
 	}
-	if err := h.db.UpdateTaskStatus(ctx, taskID, models.TaskStatusCancelled); err != nil {
+	if err := h.db.UpdateTaskStatus(ctx, taskID, models.TaskStatusCanceled); err != nil {
 		h.logger.Error("update task status", "error", err)
 		WriteInternalError(w, "Failed to cancel task")
 		return
@@ -588,8 +588,8 @@ func (h *TaskHandler) CancelTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	for _, j := range jobs {
-		if j.Status != models.JobStatusCompleted && j.Status != models.JobStatusFailed && j.Status != models.JobStatusCancelled {
-			_ = h.db.UpdateJobStatus(ctx, j.ID, models.JobStatusCancelled)
+		if j.Status != models.JobStatusCompleted && j.Status != models.JobStatusFailed && j.Status != models.JobStatusCanceled {
+			_ = h.db.UpdateJobStatus(ctx, j.ID, models.JobStatusCanceled)
 		}
 	}
 	WriteJSON(w, http.StatusOK, userapi.CancelTaskResponse{TaskID: taskID.String(), Canceled: true})
@@ -687,7 +687,7 @@ func (h *TaskHandler) chatPollUntilTerminal(ctx context.Context, taskID uuid.UUI
 		}
 		if t.Status == models.TaskStatusCompleted ||
 			t.Status == models.TaskStatusFailed ||
-			t.Status == models.TaskStatusCancelled ||
+			t.Status == models.TaskStatusCanceled ||
 			t.Status == models.TaskStatusSuperseded {
 			jobs, err := h.db.GetJobsByTaskID(ctx, taskID)
 			if err != nil {
@@ -757,7 +757,7 @@ func (h *TaskHandler) Chat(w http.ResponseWriter, r *http.Request) {
 	}
 	out, errCode := h.chatPollUntilTerminal(ctx, task.ID)
 	if errCode != 0 {
-		WriteInternalError(w, "Request cancelled")
+		WriteInternalError(w, "Request canceled")
 		return
 	}
 	WriteJSON(w, http.StatusOK, ChatResponse{Response: out})

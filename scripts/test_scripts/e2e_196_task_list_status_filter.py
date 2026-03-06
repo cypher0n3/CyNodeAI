@@ -27,7 +27,7 @@ class TestTaskListStatusFilter(unittest.TestCase):
             if "status" in t:
                 self.assertIn(
                     t["status"],
-                    ("queued", "running", "completed", "failed", "cancelled", "superseded"),
+                    ("queued", "running", "completed", "failed", "canceled", "superseded"),
                     f"task status should be valid enum: {t.get('status')}",
                 )
 

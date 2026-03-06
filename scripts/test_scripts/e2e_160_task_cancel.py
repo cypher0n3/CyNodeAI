@@ -8,10 +8,10 @@ import scripts.test_scripts.e2e_state as state
 
 
 class TestTaskCancel(unittest.TestCase):
-    """E2E: create long-running task, cancel with -y; assert status becomes canceled/cancelled."""
+    """E2E: create long-running task, cancel with -y; assert status becomes canceled."""
 
     def test_task_cancel(self):
-        """Create sleep task, cancel it, poll result until status is canceled or cancelled."""
+        """Create sleep task, cancel it, poll result until status is canceled."""
         _, out, _ = helpers.run_cynork(
             ["task", "create", "-p", "sleep 300", "-o", "json"],
             state.CONFIG_PATH,
@@ -32,9 +32,9 @@ class TestTaskCancel(unittest.TestCase):
             )
             result = helpers.parse_json_safe(out)
             status = (result or {}).get("status", "")
-            if status in ("canceled", "cancelled", "completed", "failed"):
+            if status in ("canceled", "completed", "failed"):
                 break
         self.assertIn(
-            status, ("canceled", "cancelled"),
+            status, ("canceled",),
             f"expected canceled status, got {status}",
         )

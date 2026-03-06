@@ -27,7 +27,7 @@ Task status enum
 - `running`
 - `completed`
 - `failed`
-- `cancelled`
+- `canceled`
 - `superseded`
 
 The task result `status` field (from gateway or CLI output) MUST be exactly one of these values when returning task state to the client.
@@ -63,7 +63,7 @@ Optional flags
   See [Projects and Scope Model](projects_and_scopes.md).
 - `--result`.
   Default is false.
-  When set, after creating the task the CLI MUST poll the gateway for the task result until the task reaches a closed (terminal) status (`completed`, `failed`, `cancelled`, or `superseded`), then MUST print the result in the same format as `cynork task result`.
+  When set, after creating the task the CLI MUST poll the gateway for the task result until the task reaches a closed (terminal) status (`completed`, `failed`, `canceled`, or `superseded`), then MUST print the result in the same format as `cynork task result`.
   If the user interrupts (e.g. Ctrl+C) before the task reaches a terminal status, the CLI MUST exit without printing the result.
 
 Behavior
@@ -112,7 +112,7 @@ Invocation
 Optional flags
 
 - `--status <status>`.
-  Allowed values include `queued`, `running`, `completed`, `failed`, `cancelled`, and `superseded`.
+  Allowed values include `queued`, `running`, `completed`, `failed`, `canceled`, and `superseded`.
 - `-l, --limit <n>`.
   Default is `50`.
   Allowed range is `1` to `200`.
@@ -170,7 +170,7 @@ Optional flags
 Output
 
 - If `--wait` is set, the CLI MUST poll the gateway until the task reaches a terminal status.
-  Closed (terminal) statuses are `completed`, `failed`, `cancelled`, and `superseded`; see [Task status and closed state](../tech_specs/postgres_schema.md#spec-cynai-schema-taskstatusandclosed).
+  Closed (terminal) statuses are `completed`, `failed`, `canceled`, and `superseded`; see [Task status and closed state](../tech_specs/postgres_schema.md#spec-cynai-schema-taskstatusandclosed).
 - Table mode MUST print exactly one line and MUST include at least `task_id=<id>`, `status=<status>`, and when the system provides a task name, `task_name=<name>`.
 - If the task is in a terminal status, table mode MUST also include `stdout=<...>` and `stderr=<...>`.
 - JSON mode MUST print a single JSON object with at least `task_id`, `status`, and when provided, `task_name`; and when terminal, `stdout` and `stderr`.
@@ -186,7 +186,7 @@ Behavior
 - The CLI MUST poll the gateway for the task result at a fixed interval and redraw the output, similar to the Linux `watch(1)` command.
 - The CLI MUST use the same output format as `cynork task result` (task_id, task_name when provided, status, jobs and results).
 - When stdout is a terminal and `--no-clear` is not set, the CLI MUST clear the screen before each redraw so the display updates in place.
-- The CLI MUST exit with code 0 when the task reaches a closed (terminal) status (`completed`, `failed`, `cancelled`, or `superseded`), or when the user interrupts (e.g. Ctrl+C).
+- The CLI MUST exit with code 0 when the task reaches a closed (terminal) status (`completed`, `failed`, `canceled`, or `superseded`), or when the user interrupts (e.g. Ctrl+C).
 
 Optional flags
 

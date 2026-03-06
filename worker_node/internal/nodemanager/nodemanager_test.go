@@ -617,7 +617,7 @@ func TestRunReportCapabilitiesConnectionFails(t *testing.T) {
 	}
 }
 
-func TestRunContextCancelledAfterRegister(t *testing.T) {
+func TestRunContextCanceledAfterRegister(t *testing.T) {
 	var srv *httptest.Server
 	srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == pathReadyz {
