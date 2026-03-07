@@ -10,7 +10,7 @@ import scripts.test_scripts.e2e_state as state
 class TestLogin(unittest.TestCase):
     """E2E: auth login; persists token into shared config for later tests."""
 
-    tags = ["suite_cynork"]
+    tags = ["suite_cynork", "full_demo", "auth"]
 
     def setUp(self):
         """Create shared config dir for login output."""

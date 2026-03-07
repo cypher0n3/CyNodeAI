@@ -375,12 +375,13 @@ def wait_for_control_plane_listening():
 
 
 def wait_for_control_plane_stopped(timeout_sec=15):
-    """Wait until control-plane is no longer reachable (e.g. after stop_all). Returns True when stopped."""
+    """Wait until control-plane is no longer reachable (e.g. after stop_all). True when stopped."""
     url = f"http://127.0.0.1:{_cfg.CONTROL_PLANE_PORT}/readyz"
     for _ in range(timeout_sec):
         try:
             req = urllib.request.Request(url)
-            urllib.request.urlopen(req, timeout=1)
+            with urllib.request.urlopen(req, timeout=1) as _:
+                pass
         except (OSError, urllib.error.URLError):
             log_info("Control-plane is stopped (readyz unreachable)")
             return True
@@ -430,8 +431,12 @@ def start_node(extra_env=None):
         f"http://{_cfg.CONTAINER_HOST_ALIAS}:{_cfg.WORKER_PORT}",
     )
     env["CONTAINER_RUNTIME"] = os.environ.get("CONTAINER_RUNTIME", "podman")
-    # Use a known state dir so E2E can assert on secure store (e.g. e2e_122); node writes secrets here.
-    state_dir = os.environ.get("WORKER_API_STATE_DIR") or os.environ.get("NODE_STATE_DIR") or _cfg.NODE_STATE_DIR
+    # Known state dir for E2E secure store (e2e_122); node writes secrets here.
+    state_dir = (
+        os.environ.get("WORKER_API_STATE_DIR")
+        or os.environ.get("NODE_STATE_DIR")
+        or _cfg.NODE_STATE_DIR
+    )
     try:
         os.makedirs(state_dir, 0o700, exist_ok=True)
     except OSError as e:
@@ -456,7 +461,7 @@ def start_node(extra_env=None):
         except OSError:
             pass
         log_info(f"Node-manager started (PID {proc.pid}); waiting for worker-api...")
-        for attempt in range(30):
+        for _ in range(30):
             if proc.poll() is not None:
                 log_error("Failed to start node-manager (process exited)")
                 return False
@@ -542,9 +547,19 @@ def start_pma_after_inference_path(extra_env=None, pma_via_compose=False):
 
 def _stop_all_step(step_name, func):
     """Run one teardown step; on exception log step, error, and traceback; do not raise."""
+    _teardown_exceptions = (
+        OSError,
+        ValueError,
+        RuntimeError,
+        TypeError,
+        KeyError,
+        AttributeError,
+        subprocess.SubprocessError,
+        FileNotFoundError,
+    )
     try:
         func()
-    except Exception as e:  # pylint: disable=broad-except
+    except _teardown_exceptions as e:
         log_warn(f"stop_all: {step_name} failed: {type(e).__name__}: {e}")
         traceback.print_exc(file=sys.stderr)
         sys.stderr.flush()
@@ -608,7 +623,8 @@ def stop_all(leave_ollama_running=False):
                 )
 
         _stop_all_step("rm containers", rm_containers)
-    except Exception as e:  # pylint: disable=broad-except
+    except (OSError, ValueError, RuntimeError, TypeError, KeyError, AttributeError,
+            subprocess.SubprocessError, FileNotFoundError) as e:
         log_warn(f"stop_all: teardown failed: {type(e).__name__}: {e}")
         traceback.print_exc(file=sys.stderr)
         sys.stderr.flush()
@@ -669,8 +685,11 @@ def build_e2e_images(force=False):
     return True
 
 
-def run_python_e2e(extra_env=None):
-    """Run scripts/test_scripts/run_e2e.py (discovers e2e_*.py)."""
+def run_python_e2e(extra_env=None, e2e_args=None):
+    """Run scripts/test_scripts/run_e2e.py (discovers e2e_*.py).
+
+    e2e_args: optional list of extra args (e.g. ["--tags", "full_demo"]).
+    """
     env = os.environ.copy()
     env["PYTHONPATH"] = _cfg.PROJECT_ROOT
     if extra_env:
@@ -681,8 +700,11 @@ def run_python_e2e(extra_env=None):
     if not os.path.isfile(run_e2e):
         log_error("scripts/test_scripts/run_e2e.py not found")
         return False
+    cmd = [sys.executable, run_e2e]
+    if e2e_args:
+        cmd.extend(e2e_args)
     r = subprocess.run(
-        [sys.executable, run_e2e],
+        cmd,
         cwd=_cfg.PROJECT_ROOT,
         env=env,
         check=False,

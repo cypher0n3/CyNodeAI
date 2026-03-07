@@ -29,7 +29,7 @@ import (
 	"github.com/cypher0n3/cynodeai/go_shared_libs/contracts/workerapi"
 	"github.com/cypher0n3/cynodeai/worker_node/cmd/worker-api/executor"
 	"github.com/cypher0n3/cynodeai/worker_node/internal/inferenceproxy"
-	"github.com/cypher0n3/cynodeai/worker_node/internal/nodemanager"
+	"github.com/cypher0n3/cynodeai/worker_node/internal/nodeagent"
 	"github.com/cypher0n3/cynodeai/worker_node/internal/securestore"
 )
 
@@ -956,7 +956,7 @@ func RegisterNodeManagerConfigSteps(sc *godog.ScenarioContext, state *workerTest
 			_ = os.Setenv("WORKER_API_STATE_DIR", st.secureStoreStateDir)
 			_ = os.Setenv("CYNODE_SECURE_STORE_MASTER_KEY_B64", st.secureStoreMasterKey)
 		}
-		cfg := &nodemanager.Config{
+		cfg := &nodeagent.Config{
 			OrchestratorURL:          st.mockOrch.URL,
 			NodeSlug:                 "bdd-node",
 			NodeName:                 "BDD Node",
@@ -964,7 +964,7 @@ func RegisterNodeManagerConfigSteps(sc *godog.ScenarioContext, state *workerTest
 			CapabilityReportInterval: 50 * time.Millisecond,
 			HTTPTimeout:              5 * time.Second,
 		}
-		opts := &nodemanager.RunOptions{
+		opts := &nodeagent.RunOptions{
 			StartOllama: func(_, _ string) error {
 				if st != nil && st.failInferenceStartup {
 					return errors.New("inference startup failed")
@@ -980,7 +980,7 @@ func RegisterNodeManagerConfigSteps(sc *godog.ScenarioContext, state *workerTest
 		}
 		runCtx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 		defer cancel()
-		runErr := nodemanager.RunWithOptions(runCtx, slog.Default(), cfg, opts)
+		runErr := nodeagent.RunWithOptions(runCtx, slog.Default(), cfg, opts)
 		if runErr != nil {
 			st.nodeManagerErr = runErr
 		}
@@ -1230,7 +1230,7 @@ func RegisterSecureStoreSteps(sc *godog.ScenarioContext, state *workerTestState)
 			ServiceID: "pma-main", ServiceType: "pma", Image: "pma:latest",
 			Orchestrator: &nodepayloads.ConfigManagedServiceOrchestrator{},
 		}
-		state.managedServiceRunArgs = nodemanager.BuildManagedServiceRunArgs(state.secureStoreStateDir, svc, "pma-main", "pma", "pma:latest", "cynodeai-managed-pma-main")
+		state.managedServiceRunArgs = nodeagent.BuildManagedServiceRunArgs(state.secureStoreStateDir, svc, "pma-main", "pma", "pma:latest", "cynodeai-managed-pma-main")
 		return nil
 	})
 	sc.Step(`^the managed-service container does not receive the agent token via env vars, files, or mounts$`, func(ctx context.Context) error {
@@ -1325,7 +1325,7 @@ func RegisterSecureStoreSteps(sc *godog.ScenarioContext, state *workerTestState)
 			ServiceID: "pma-main", ServiceType: "pma", Image: "pma:latest",
 			Orchestrator: &nodepayloads.ConfigManagedServiceOrchestrator{},
 		}
-		state.managedServiceRunArgs = nodemanager.BuildManagedServiceRunArgs(state.secureStoreStateDir, svc, "pma-main", "pma", "pma:latest", "cynodeai-managed-pma-main")
+		state.managedServiceRunArgs = nodeagent.BuildManagedServiceRunArgs(state.secureStoreStateDir, svc, "pma-main", "pma", "pma:latest", "cynodeai-managed-pma-main")
 		return nil
 	})
 	sc.Step(`^the run args do not contain any mount of the secure store or secrets path$`, func(ctx context.Context) error {

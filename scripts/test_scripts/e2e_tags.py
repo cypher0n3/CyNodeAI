@@ -4,6 +4,13 @@ Test classes may set a class attribute: tags = ["suite_orchestrator", ...].
 Multiple tags are allowed; run_e2e.py --tags X runs any test that has at least one matching tag.
 When include_tags is used, prereq modules (config, login, task create) are run first so
 dependencies and setup steps are satisfied in the correct sequence.
+
+Targeted tags for subsets:
+- full_demo: run during `just setup-dev full-demo` (excludes tests that use a subset of the stack).
+- inference: any test that exercises the inference path (Ollama/LLM).
+- pma_inference: inference via PMA (gateway chat, worker PMA proxy with inference).
+- sba_inference: SBA tasks that use inference.
+- auth, task, chat, worker: smaller subsets for focused runs.
 """
 
 import unittest
@@ -16,6 +23,17 @@ SUITE_CYNORK = "suite_cynork"
 SUITE_E2E = "suite_e2e"
 # Minimal proxy + PMA (no orchestrator; worker proxy and PMA only)
 SUITE_PROXY_PMA = "suite_proxy_pma"
+
+# Full-demo and inference subset tags
+TAG_FULL_DEMO = "full_demo"
+TAG_INFERENCE = "inference"
+TAG_PMA_INFERENCE = "pma_inference"
+TAG_SBA_INFERENCE = "sba_inference"
+TAG_AUTH = "auth"
+TAG_TASK = "task"
+TAG_CHAT = "chat"
+TAG_WORKER = "worker"
+TAG_PMA = "pma"
 
 # Modules that provide shared state for other E2E tests. When filtering by include_tags,
 # these are always included (in discovery order) so dependencies run before tag-matched tests.

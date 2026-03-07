@@ -12,7 +12,7 @@ import scripts.test_scripts.e2e_state as state
 class TestSbaInference(unittest.TestCase):
     """E2E: SBA task with inference prompt; skip if E2E_SKIP_INFERENCE_SMOKE; assert sba_result."""
 
-    tags = ["suite_agents"]
+    tags = ["suite_agents", "full_demo", "inference", "sba_inference"]
 
     def test_sba_task_with_inference_prompt(self):
         """Create SBA task with LLM prompt, poll until completed/failed; assert sba_result."""

@@ -1483,6 +1483,9 @@ func TestTruncateUTF8(t *testing.T) {
 		{"over ascii", "123456789012345", 10, "1234567890"},
 		{"rune boundary", "a\u00e9b", 3, "a\u00e9"}, // U+00E9 is 2 bytes in UTF-8
 		{"mid multi-byte", "1234\u00e9xyz", 6, "1234\u00e9"}, // truncate at 6 bytes, ends at rune boundary
+		{"zero maxBytes", "hello", 0, ""},
+		// Continuation byte at boundary: backup then return (covers truncateUTF8 loop b=b[:i] path)
+		{"back up from continuation", "a" + "\x80" + "x", 2, "a"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -1491,5 +1494,101 @@ func TestTruncateUTF8(t *testing.T) {
 				t.Errorf("truncateUTF8(%q, %d) = %q, want %q", tt.s, tt.maxBytes, got, tt.want)
 			}
 		})
+	}
+}
+
+func TestPrepareSBAJobAndWorkspace_Success(t *testing.T) {
+	workspaceDir := t.TempDir()
+	req := &workerapi.RunJobRequest{
+		TaskID: "task-1",
+		JobID:  "job-1",
+		Sandbox: workerapi.SandboxSpec{
+			JobSpecJSON: `{"version":1,"execution_mode":"direct_steps","steps":[]}`,
+		},
+	}
+	jobDir, wsUsed, err := prepareSBAJobAndWorkspace(req, workspaceDir)
+	if err != nil {
+		t.Fatalf("prepareSBAJobAndWorkspace: %v", err)
+	}
+	defer os.RemoveAll(jobDir)
+	if wsUsed != workspaceDir {
+		t.Errorf("workspaceDirToUse = %q, want %q", wsUsed, workspaceDir)
+	}
+	if _, err := os.Stat(filepath.Join(jobDir, jobSpecFilename)); err != nil {
+		t.Errorf("job.json not created: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(jobDir, resultFilename)); err != nil {
+		t.Errorf("result.json not created: %v", err)
+	}
+}
+
+func TestPrepareSBAJobAndWorkspace_EmptyWorkspaceCreatesTemp(t *testing.T) {
+	req := &workerapi.RunJobRequest{
+		TaskID: "task-1",
+		JobID:  "job-1",
+		Sandbox: workerapi.SandboxSpec{
+			JobSpecJSON: `{"version":1}`,
+		},
+	}
+	jobDir, wsUsed, err := prepareSBAJobAndWorkspace(req, "")
+	if err != nil {
+		t.Fatalf("prepareSBAJobAndWorkspace: %v", err)
+	}
+	defer os.RemoveAll(jobDir)
+	if wsUsed == "" {
+		t.Error("expected non-empty workspaceDirToUse when workspaceDir empty")
+	}
+	defer os.RemoveAll(wsUsed)
+}
+
+func TestPrepareSBAJobAndWorkspace_WorkspaceDirIsFileFails(t *testing.T) {
+	f := filepath.Join(t.TempDir(), "file")
+	if err := os.WriteFile(f, []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	req := &workerapi.RunJobRequest{
+		TaskID: "task-1",
+		JobID:  "job-1",
+		Sandbox: workerapi.SandboxSpec{
+			JobSpecJSON: `{"version":1}`,
+		},
+	}
+	_, _, err := prepareSBAJobAndWorkspace(req, f)
+	if err == nil {
+		t.Fatal("expected error when workspaceDir is a file")
+	}
+	if !strings.Contains(err.Error(), "workspace") {
+		t.Errorf("error should mention workspace: %v", err)
+	}
+}
+
+func TestPrepareSBAJobAndWorkspace_MkdirTempFails(t *testing.T) {
+	// TMPDIR as a file (not a dir) causes MkdirTemp to fail.
+	tmpFile := filepath.Join(t.TempDir(), "notadir")
+	if err := os.WriteFile(tmpFile, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	orig := os.Getenv("TMPDIR")
+	os.Setenv("TMPDIR", tmpFile)
+	defer func() {
+		if orig == "" {
+			os.Unsetenv("TMPDIR")
+		} else {
+			os.Setenv("TMPDIR", orig)
+		}
+	}()
+	req := &workerapi.RunJobRequest{
+		TaskID: "task-1",
+		JobID:  "job-1",
+		Sandbox: workerapi.SandboxSpec{
+			JobSpecJSON: `{"version":1}`,
+		},
+	}
+	_, _, err := prepareSBAJobAndWorkspace(req, "")
+	if err == nil {
+		t.Fatal("expected error when TMPDIR is not a directory")
+	}
+	if !strings.Contains(err.Error(), "job dir") {
+		t.Errorf("error should mention job dir: %v", err)
 	}
 }

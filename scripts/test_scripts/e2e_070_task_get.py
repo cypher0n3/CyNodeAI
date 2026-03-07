@@ -9,7 +9,7 @@ import scripts.test_scripts.e2e_state as state
 class TestTaskGet(unittest.TestCase):
     """E2E: task get by ID; assert JSON response includes status."""
 
-    tags = ["suite_cynork"]
+    tags = ["suite_cynork", "full_demo", "task"]
 
     def test_task_get(self):
         """Assert task get state.TASK_ID returns JSON with status field."""

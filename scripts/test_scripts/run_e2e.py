@@ -24,7 +24,8 @@ def parse_args():
         description="Run E2E tests (discovers e2e_*.py in scripts/test_scripts).",
         epilog=(
             "Pass -k PATTERN, -v, -f to filter/verbosity/failfast (unittest). "
-            "Tags match features/README.md suite tags (e.g. suite_orchestrator)."
+            "Tags: suite_* (suite_orchestrator, suite_worker_node, ...), full_demo, "
+            "inference, pma_inference, sba_inference, auth, task, chat, worker, pma."
         ),
     )
     p.add_argument(
@@ -46,7 +47,7 @@ def parse_args():
         "--tags",
         type=str,
         default="",
-        help="Comma-separated suite tags to include (e.g. suite_worker_node,suite_cynork)",
+        help="Comma-separated tags to include (e.g. full_demo, suite_worker_node, inference)",
     )
     p.add_argument(
         "--exclude-tags",

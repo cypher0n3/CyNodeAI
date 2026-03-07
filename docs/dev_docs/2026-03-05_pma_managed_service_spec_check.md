@@ -61,7 +61,7 @@ What the orchestrator and worker do today with managed-service config.
   Per spec the worker MUST store the agent token in the **node-local secure store** and MUST NOT pass it to the container; the worker proxy loads the token from the store when forwarding.
   Implementation may still pass AGENT_TOKEN as env or use in-memory AllowedTokens; it should be updated to implement [AgentTokenStorageAndLifecycle](../tech_specs/worker_node.md#spec-cynai-worker-agenttokenstorageandlifecycle) (secure store, no token in env/mounts/logs).
   Container names: `cynodeai-managed-<service_id>`; PMA type publishes port 8090.
-  Implemented in `worker_node/cmd/node-manager/main.go` (startManagedServices) and `worker_node/internal/nodemanager/nodemanager.go` (maybeStartManagedServices).
+  Implemented in `worker_node/cmd/node-manager/main.go` (startManagedServices) and `worker_node/internal/nodeagent/nodemanager.go` (maybeStartManagedServices).
 
 ### Worker API
 

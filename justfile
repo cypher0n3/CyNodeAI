@@ -594,7 +594,7 @@ go_coverage_min_mcp_gateway := "90"
 go_coverage_min_agents := "90"
 go_coverage_min_sba := "90"  # internal/sba: agent/LLM paths need live Ollama or more mocks to reach 90%
 go_coverage_min_sba_cmd := "90"  # cmd/cynode-sba: stdin path exercised via subprocess (not instrumented)
-go_coverage_min_securestore := "86"  # internal/securestore: platform FIPS (getFIPSStatusLinux/Windows) not covered in unit tests
+go_coverage_min_securestore := "90" # internal/securestore: platform FIPS (getFIPSStatusLinux/Windows) not covered in unit tests
 
 # Run Go tests with coverage for all go_modules; fail if any package is below go_coverage_min.
 # Orchestrator uses testcontainers for Postgres when POSTGRES_TEST_DSN is unset (run just podman-setup first).

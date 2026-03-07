@@ -5,7 +5,6 @@
 import argparse
 import os
 import sys
-import time
 
 from scripts import setup_dev_config
 from scripts import setup_dev_impl
@@ -161,9 +160,11 @@ def cmd_full_demo(opts):
     if not setup_dev_impl.wait_for_orchestrator_readyz(timeout_sec=120):
         return False
     e2e_env = {"INFERENCE_PROXY_IMAGE": opts.extra_env["INFERENCE_PROXY_IMAGE"]}
-    # So e2e_122 (secure store envelope) can assert on node state dir; must match node's WORKER_API_STATE_DIR.
+    # e2e_122 asserts on node state dir; must match node WORKER_API_STATE_DIR.
     e2e_env["NODE_STATE_DIR"] = setup_dev_config.NODE_STATE_DIR
-    ok = setup_dev_impl.run_python_e2e(extra_env=e2e_env)
+    ok = setup_dev_impl.run_python_e2e(
+        extra_env=e2e_env, e2e_args=["--tags", "full_demo"]
+    )
     if opts.stop_on_success and ok:
         setup_dev_impl.log_info("Demo completed! Stopping services (--stop-on-success).")
         leave_ollama = setup_dev_impl.get_ollama_was_running_before()

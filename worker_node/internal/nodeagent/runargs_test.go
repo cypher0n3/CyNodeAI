@@ -1,4 +1,4 @@
-package nodemanager
+package nodeagent
 
 import (
 	"path/filepath"

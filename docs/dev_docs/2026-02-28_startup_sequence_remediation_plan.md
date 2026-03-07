@@ -55,7 +55,7 @@ The following gaps exist between the prescribed sequence and the current impleme
 
 ### 3. Node Manager Starts OLLAMA Without Orchestrator Instruction
 
-- **Location:** `worker_node/internal/nodemanager/nodemanager.go`, `worker_node/cmd/node-manager/main.go`
+- **Location:** `worker_node/internal/nodeagent/nodemanager.go`, `worker_node/cmd/node-manager/main.go`
 - **Gap:** Node starts OLLAMA via `StartOllama()` using only local env (`OLLAMA_IMAGE`); no check for orchestrator-provided `inference_backend` in config; no [Existing Inference Service on Host](../tech_specs/worker_node.md#spec-cynai-worker-existinginferenceservice) check ([REQ-WORKER-0255](../requirements/worker.md#req-worker-0255)); capability report may omit `inference.existing_service` and `inference.running` ([REQ-WORKER-0256](../requirements/worker.md#req-worker-0256)).
 - **Effect:** Node may start OLLAMA even when orchestrator did not instruct it, or when an existing host inference service is already present; or with wrong image/variant (e.g. generic image instead of ROCm/CUDA).
 - **Remediation:** In Node Manager, apply Existing Inference Service on Host first: if an inference service is already running on the host and reachable, use it and do not start another; report `inference.existing_service` (and `inference.running`) in the capability report.
@@ -65,7 +65,7 @@ The following gaps exist between the prescribed sequence and the current impleme
 
 ### 4. Startup Order: Worker API vs Registration
 
-- **Location:** `worker_node/internal/nodemanager/nodemanager.go` (RunWithOptions order).
+- **Location:** `worker_node/internal/nodeagent/nodemanager.go` (RunWithOptions order).
 - **Current order:** Register -> fetch config -> start Worker API -> start Ollama -> config ack -> capability loop.
 - **Spec:** Worker API must be started **before** starting OLLAMA; registration and capability report must occur **before** starting OLLAMA.
   Current order is already: register and fetch config first, then start Worker API, then start Ollama.

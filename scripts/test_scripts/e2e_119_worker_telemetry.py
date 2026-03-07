@@ -8,7 +8,7 @@ from scripts.test_scripts import config, helpers
 class TestWorkerTelemetry(unittest.TestCase):
     """E2E: GET /v1/worker/telemetry/node:info and node:stats; assert 200 and JSON shape."""
 
-    tags = ["suite_worker_node"]
+    tags = ["suite_worker_node", "full_demo", "worker"]
 
     def test_node_info_returns_version_and_slug(self):
         """GET node:info with bearer returns 200, version and node_slug."""

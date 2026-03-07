@@ -9,7 +9,7 @@ import scripts.test_scripts.e2e_state as state
 class TestWhoami(unittest.TestCase):
     """E2E: auth whoami after login; expects handle=admin."""
 
-    tags = ["suite_cynork"]
+    tags = ["suite_cynork", "full_demo", "auth"]
 
     def test_whoami(self):
         """Assert whoami succeeds and output contains handle=admin."""

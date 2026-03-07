@@ -9,7 +9,7 @@ import scripts.test_scripts.e2e_state as state
 class TestTaskList(unittest.TestCase):
     """E2E: task list -o json; assert created task appears in list."""
 
-    tags = ["suite_cynork"]
+    tags = ["suite_cynork", "full_demo", "task"]
 
     def test_task_list(self):
         """Assert task list returns JSON with tasks list containing state.TASK_ID."""

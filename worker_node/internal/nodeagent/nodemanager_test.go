@@ -1,4 +1,4 @@
-package nodemanager
+package nodeagent
 
 import (
 	"encoding/base64"
@@ -151,6 +151,91 @@ func TestBuildCapability_ManagedServicesStatus_HttpUnixURLsWhenAuto(t *testing.T
 	}
 	if !strings.Contains(proxy.ReadyCallbackProxyURL, "/v1/worker/internal/orchestrator/agent:ready") {
 		t.Errorf("expected ready URL to contain agent:ready path, got %q", proxy.ReadyCallbackProxyURL)
+	}
+}
+
+// TestBuildManagedServicesStatus_PMAAdvertisedURLFallback asserts that when NODE_ADVERTISED_WORKER_API_URL
+// is unset but PMA_ADVERTISED_URL is set, PMA service reports ready with that URL.
+func TestBuildManagedServicesStatus_PMAAdvertisedURLFallback(t *testing.T) {
+	t.Setenv("NODE_ADVERTISED_WORKER_API_URL", "")
+	t.Setenv("PMA_ADVERTISED_URL", "http://pma.example:8090")
+	t.Setenv("WORKER_API_STATE_DIR", t.TempDir())
+	defer func() {
+		_ = os.Unsetenv("NODE_ADVERTISED_WORKER_API_URL")
+		_ = os.Unsetenv("PMA_ADVERTISED_URL")
+		_ = os.Unsetenv("WORKER_API_STATE_DIR")
+	}()
+	nodeConfig := &nodepayloads.NodeConfigurationPayload{
+		ManagedServices: &nodepayloads.ConfigManagedServices{
+			Services: []nodepayloads.ConfigManagedService{
+				{ServiceID: "pma-main", ServiceType: "pma"},
+			},
+		},
+	}
+	out := buildManagedServicesStatus(nodeConfig)
+	if out == nil || len(out.Services) != 1 {
+		t.Fatalf("expected one service, got %+v", out)
+	}
+	s := out.Services[0]
+	if s.State != "ready" {
+		t.Errorf("expected state ready, got %q", s.State)
+	}
+	if len(s.Endpoints) != 1 || s.Endpoints[0] != "http://pma.example:8090" {
+		t.Errorf("expected PMA_ADVERTISED_URL endpoint, got %v", s.Endpoints)
+	}
+}
+
+// TestBuildManagedServicesStatus_NonPMAServiceStaysStarting asserts that non-PMA service types keep state "starting".
+func TestBuildManagedServicesStatus_NonPMAServiceStaysStarting(t *testing.T) {
+	t.Setenv("WORKER_API_STATE_DIR", t.TempDir())
+	defer func() { _ = os.Unsetenv("WORKER_API_STATE_DIR") }()
+	nodeConfig := &nodepayloads.NodeConfigurationPayload{
+		ManagedServices: &nodepayloads.ConfigManagedServices{
+			Services: []nodepayloads.ConfigManagedService{
+				{ServiceID: "other-svc", ServiceType: "tooling_proxy"},
+			},
+		},
+	}
+	out := buildManagedServicesStatus(nodeConfig)
+	if out == nil || len(out.Services) != 1 {
+		t.Fatalf("expected one service, got %+v", out)
+	}
+	if out.Services[0].State != "starting" {
+		t.Errorf("expected state starting for non-PMA, got %q", out.Services[0].State)
+	}
+	if len(out.Services[0].Endpoints) != 0 {
+		t.Errorf("expected no endpoints for non-PMA, got %v", out.Services[0].Endpoints)
+	}
+}
+
+// TestBuildManagedServicesStatus_ExplicitProxyURLs asserts agent_to_orchestrator_proxy when URLs are not "auto".
+func TestBuildManagedServicesStatus_ExplicitProxyURLs(t *testing.T) {
+	t.Setenv("WORKER_API_STATE_DIR", t.TempDir())
+	defer func() { _ = os.Unsetenv("WORKER_API_STATE_DIR") }()
+	nodeConfig := &nodepayloads.NodeConfigurationPayload{
+		ManagedServices: &nodepayloads.ConfigManagedServices{
+			Services: []nodepayloads.ConfigManagedService{
+				{
+					ServiceID:   "pma-main",
+					ServiceType: "pma",
+					Orchestrator: &nodepayloads.ConfigManagedServiceOrchestrator{
+						MCPGatewayProxyURL:    "http://worker:12090/mcp",
+						ReadyCallbackProxyURL: "http://worker:12090/ready",
+					},
+				},
+			},
+		},
+	}
+	out := buildManagedServicesStatus(nodeConfig)
+	if out == nil || len(out.Services) != 1 {
+		t.Fatalf("expected one service, got %+v", out)
+	}
+	proxy := out.Services[0].AgentToOrchestratorProxy
+	if proxy == nil {
+		t.Fatal("expected agent_to_orchestrator_proxy")
+	}
+	if proxy.MCPGatewayProxyURL != "http://worker:12090/mcp" || proxy.ReadyCallbackProxyURL != "http://worker:12090/ready" {
+		t.Errorf("expected explicit URLs, got MCP=%q Ready=%q", proxy.MCPGatewayProxyURL, proxy.ReadyCallbackProxyURL)
 	}
 }
 

@@ -44,7 +44,11 @@ PYTHONPATH=. python scripts/test_scripts/run_e2e.py
 - `--no-build` - skip building cynork-dev; use existing binary (faster re-runs)
 - `--skip-ollama` - skip Ollama inference smoke and one-shot chat (sets `E2E_SKIP_INFERENCE_SMOKE`)
 - `--list` - list test names and exit (no run)
+- `--tags TAG1,TAG2` - run only tests that have at least one of these tags
+- `--exclude-tags TAG1,TAG2` - exclude tests that have any of these tags
 - Unittest pass-through: `-k PATTERN` (filter tests), `-v` (verbosity), `-f` (failfast)
+
+Tags: `suite_*` (suite_orchestrator, suite_worker_node, suite_agents, suite_cynork, suite_proxy_pma), `full_demo` (run during `just setup-dev full-demo`; excludes subset-only tests), `inference`, `pma_inference`, `sba_inference`, `auth`, `task`, `chat`, `worker`, `pma`.
 
 Examples:
 
@@ -53,6 +57,9 @@ PYTHONPATH=. python scripts/test_scripts/run_e2e.py --no-build
 PYTHONPATH=. python scripts/test_scripts/run_e2e.py --list
 PYTHONPATH=. python scripts/test_scripts/run_e2e.py -k test_login
 PYTHONPATH=. python scripts/test_scripts/run_e2e.py -k test_05 -v
+PYTHONPATH=. python scripts/test_scripts/run_e2e.py --tags full_demo
+PYTHONPATH=. python scripts/test_scripts/run_e2e.py --tags inference
+PYTHONPATH=. python scripts/test_scripts/run_e2e.py --tags suite_proxy_pma
 ```
 
 ### Via Just
@@ -60,8 +67,8 @@ PYTHONPATH=. python scripts/test_scripts/run_e2e.py -k test_05 -v
 - `just e2e` - run the Python E2E suite (stack must already be up).
   Pass options: `just e2e --no-build`, `just e2e -v`, etc.
 - `just setup-dev test-e2e` - run the suite via `scripts/setup_dev.py` (same as above, ensures PYTHONPATH).
-- `just setup-dev full-demo` - start stack and node, then run the suite; use `--stop-on-success` to tear down after pass.
-  For E2E that expects OLLAMA and PMA from compose, use `just setup-dev full-demo --ollama-in-stack --pma-via-compose`.
+- `just setup-dev full-demo` - start stack and node, then run only tests tagged `full_demo` (excludes subset-only tests such as proxy+PMA functional tests that start their own services); use `--stop-on-success` to tear down after pass.
+  - For E2E that expects OLLAMA and PMA from compose, use `just setup-dev full-demo --ollama-in-stack --pma-via-compose`.
 
 ## Test Layout
 

@@ -9,7 +9,7 @@ from scripts.test_scripts import config, helpers
 class TestAPIEgressCall(unittest.TestCase):
     """E2E: POST /v1/call on api-egress; assert 501 for allowed, 403 for disallowed."""
 
-    tags = ["suite_orchestrator"]
+    tags = ["suite_orchestrator", "full_demo"]
 
     def test_allowed_provider_returns_501(self):
         """Allowed provider returns 501 Not Implemented."""

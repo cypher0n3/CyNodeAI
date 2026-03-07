@@ -12,7 +12,7 @@ import scripts.test_scripts.e2e_state as state
 class TestModelsAndChat(unittest.TestCase):
     """E2E: models list -o json; optional one-shot chat (skipped if E2E_SKIP_INFERENCE_SMOKE)."""
 
-    tags = ["suite_orchestrator"]
+    tags = ["suite_orchestrator", "full_demo", "inference", "pma_inference", "chat"]
 
     def test_models_and_chat(self):
         """Assert models list returns list; run one-shot chat unless inference smoke skipped."""
@@ -39,7 +39,7 @@ class TestModelsAndChat(unittest.TestCase):
         for attempt in range(1, 4):
             if attempt > 1:
                 time.sleep(5)
-            ok_chat, out, err = helpers.run_cynork(
+            _, out, err = helpers.run_cynork(
                 ["chat", "--message", "Reply with exactly: OK", "--plain"],
                 state.CONFIG_PATH,
             )

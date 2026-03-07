@@ -9,7 +9,7 @@ import scripts.test_scripts.e2e_state as state
 class TestLogout(unittest.TestCase):
     """E2E: auth logout; tearDown removes shared config dir."""
 
-    tags = ["suite_cynork"]
+    tags = ["suite_cynork", "full_demo", "auth"]
 
     def test_logout(self):
         """Run auth logout (exit code not asserted; CLI may return non-zero)."""

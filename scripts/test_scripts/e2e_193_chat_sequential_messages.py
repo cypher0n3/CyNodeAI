@@ -38,7 +38,7 @@ def _content_from_response(body):
 class TestChatSequentialMessages(unittest.TestCase):
     """E2E: Send two turns (user, then user again with context); assert both replies."""
 
-    tags = ["suite_orchestrator"]
+    tags = ["suite_orchestrator", "full_demo", "inference", "chat"]
 
     def test_chat_sequential_two_turns(self):
         """Two turns: first 'Say one word: first', then 'What word?'; assert both replies."""

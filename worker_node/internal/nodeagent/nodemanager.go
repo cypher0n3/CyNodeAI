@@ -1,5 +1,6 @@
-// Package nodemanager provides node registration and capability reporting.
-package nodemanager
+// Package nodeagent provides node registration and capability reporting.
+// It is used by the node-manager command (cmd/node-manager).
+package nodeagent
 
 import (
 	"bytes"
@@ -806,13 +807,22 @@ func buildManagedServicesStatus(nodeConfig *nodepayloads.NodeConfigurationPayloa
 			State:       "starting",
 		}
 		// PMA: report "ready" with endpoint so orchestrator can route chat (REQ-ORCHES-0162).
-		// Endpoint must be reachable by the orchestrator/gateway (e.g. PMA_ADVERTISED_URL in full-demo).
+		// The gateway must call the worker's proxy URL (not direct PMA) so the request reaches this node's PMA.
+		// Prefer worker proxy URL when NODE_ADVERTISED_WORKER_API_URL is set; fallback to PMA_ADVERTISED_URL for backward compat.
 		if serviceType == serviceTypePMA {
-			advertised := strings.TrimSpace(getEnv("PMA_ADVERTISED_URL", getEnv("PMA_BASE_URL", "http://127.0.0.1:8090")))
-			if advertised != "" {
+			workerBase := strings.TrimSpace(getEnv("NODE_ADVERTISED_WORKER_API_URL", ""))
+			if workerBase != "" {
+				proxyURL := strings.TrimSuffix(workerBase, "/") + "/v1/worker/managed-services/" + serviceID + "/proxy:http"
 				status.State = "ready"
-				status.Endpoints = []string{advertised}
+				status.Endpoints = []string{proxyURL}
 				status.ReadyAt = time.Now().UTC().Format(time.RFC3339)
+			} else {
+				advertised := strings.TrimSpace(getEnv("PMA_ADVERTISED_URL", getEnv("PMA_BASE_URL", "")))
+				if advertised != "" {
+					status.State = "ready"
+					status.Endpoints = []string{advertised}
+					status.ReadyAt = time.Now().UTC().Format(time.RFC3339)
+				}
 			}
 		}
 		status.AgentToOrchestratorProxy = buildAgentToOrchestratorProxyStatus(stateDir, serviceID, svc.Orchestrator)

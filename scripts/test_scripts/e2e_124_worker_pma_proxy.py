@@ -4,6 +4,7 @@
 # Traces: worker_api.md managed service proxy; REQ-ORCHES-0162 PMA routing via worker.
 
 import base64
+import contextlib
 import json
 import os
 import subprocess
@@ -15,7 +16,21 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 from scripts.test_scripts import config, helpers
 
 
+@contextlib.contextmanager
+def _popen_keepalive(*args, **kwargs):
+    """Context manager for Popen; process is not terminated on exit (caller must in tearDown)."""
+    proc = subprocess.Popen(*args, **kwargs)
+    try:
+        yield proc
+    finally:
+        pass  # caller terminates in tearDownClass
+
+
+# Bearer token for proxy PMA E2E (worker-api expects this; test-only, not a production secret).
+_PROXY_PMA_E2E_BEARER = "proxy-test-token"
+
 # --- Proxy protocol (matches worker_api main.go managedProxyRequest / managedProxyResponse) ---
+
 
 def build_proxy_request(method, path, body_bytes, headers=None):
     """Build JSON body for POST /v1/worker/managed-services/{id}/proxy:http."""
@@ -50,7 +65,7 @@ def build_chat_completion_body(messages):
 class TestProxyPayloadEncoding(unittest.TestCase):
     """Unit tests: proxy request/response encoding and decoding."""
 
-    tags = ["suite_proxy_pma", "suite_worker_node"]
+    tags = ["suite_proxy_pma", "suite_worker_node", "full_demo", "pma"]
 
     def test_build_proxy_request_shape(self):
         """Proxy request has version, method, path, headers, body_b64."""
@@ -87,7 +102,7 @@ class TestProxyPmaFunctional(unittest.TestCase):
     same payload shape (method, path, body_b64) used for PMA chat handoff.
     """
 
-    tags = ["suite_proxy_pma", "suite_worker_node"]
+    tags = ["suite_proxy_pma", "suite_worker_node", "pma"]
 
     _pma_proc = None
     _worker_proc = None
@@ -108,7 +123,7 @@ class TestProxyPmaFunctional(unittest.TestCase):
         env_pma["PMA_LISTEN_ADDR"] = f"127.0.0.1:{config.PROXY_PMA_TEST_PMA_PORT}"
         env_pma["PMA_ROLE"] = "project_manager"
         agents_dir = os.path.join(config.PROJECT_ROOT, "agents")
-        cls._pma_proc = subprocess.Popen(
+        with _popen_keepalive(
             [
                 config.PMA_BIN,
                 "--listen",
@@ -120,35 +135,37 @@ class TestProxyPmaFunctional(unittest.TestCase):
             env=env_pma,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.PIPE,
-        )
-        if not _wait_http(f"{cls._pma_base}/healthz", timeout=15):
-            cls._pma_proc.terminate()
-            cls._pma_proc.wait(timeout=5)
-            raise unittest.SkipTest("PMA did not become ready (healthz)")
+        ) as proc:
+            cls._pma_proc = proc
+            if not _wait_http(f"{cls._pma_base}/healthz", timeout=15):
+                cls._pma_proc.terminate()
+                cls._pma_proc.wait(timeout=5)
+                raise unittest.SkipTest("PMA did not become ready (healthz)")
 
         # Start worker-api with single managed service target pointing at PMA
         targets_json = json.dumps({"pma-main": cls._pma_base})
         state_dir = os.path.join(config.PROJECT_ROOT, "tmp", "proxy-pma-test-state")
         os.makedirs(state_dir, 0o700, exist_ok=True)
         env_worker = os.environ.copy()
-        env_worker["WORKER_API_BEARER_TOKEN"] = "proxy-test-token"
+        env_worker["WORKER_API_BEARER_TOKEN"] = _PROXY_PMA_E2E_BEARER
         env_worker["WORKER_MANAGED_SERVICE_TARGETS_JSON"] = targets_json
         env_worker["LISTEN_ADDR"] = f"127.0.0.1:{config.PROXY_PMA_TEST_WORKER_PORT}"
         env_worker["WORKER_API_STATE_DIR"] = state_dir
-        cls._worker_proc = subprocess.Popen(
+        with _popen_keepalive(
             [config.WORKER_API_BIN],
             cwd=config.PROJECT_ROOT,
             env=env_worker,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.PIPE,
-        )
-        if not _wait_http(f"{cls._worker_base}/healthz", timeout=15):
-            cls._worker_proc.terminate()
-            cls._worker_proc.wait(timeout=5)
-            if cls._pma_proc:
-                cls._pma_proc.terminate()
-                cls._pma_proc.wait(timeout=5)
-            raise unittest.SkipTest("worker-api did not become ready (healthz)")
+        ) as proc:
+            cls._worker_proc = proc
+            if not _wait_http(f"{cls._worker_base}/healthz", timeout=15):
+                cls._worker_proc.terminate()
+                cls._worker_proc.wait(timeout=5)
+                if cls._pma_proc:
+                    cls._pma_proc.terminate()
+                    cls._pma_proc.wait(timeout=5)
+                raise unittest.SkipTest("worker-api did not become ready (healthz)")
 
     @classmethod
     def tearDownClass(cls):
@@ -168,7 +185,7 @@ class TestProxyPmaFunctional(unittest.TestCase):
             data=json.dumps(body),
             headers={
                 "Content-Type": "application/json",
-                "Authorization": "Bearer proxy-test-token",
+                "Authorization": f"Bearer {_PROXY_PMA_E2E_BEARER}",
             },
             timeout=10,
         )
@@ -178,7 +195,7 @@ class TestProxyPmaFunctional(unittest.TestCase):
         self.assertIn(b"ok", raw)
 
     def test_proxy_forwards_chat_completion(self):
-        """Proxy forwards POST /internal/chat/completion to PMA; upstream 200 with content or 500 if no inference."""
+        """Proxy forwards POST /internal/chat/completion to PMA; 200 or 500 if no inference."""
         chat_body = build_chat_completion_body([{"role": "user", "content": "Reply with OK"}])
         proxy_body = build_proxy_request("POST", "/internal/chat/completion", chat_body)
         code, resp_body = helpers.run_curl_with_status(
@@ -187,7 +204,7 @@ class TestProxyPmaFunctional(unittest.TestCase):
             data=json.dumps(proxy_body),
             headers={
                 "Content-Type": "application/json",
-                "Authorization": "Bearer proxy-test-token",
+                "Authorization": f"Bearer {_PROXY_PMA_E2E_BEARER}",
             },
             timeout=15,
         )
@@ -221,7 +238,7 @@ class TestProxyPmaFunctional(unittest.TestCase):
             data=json.dumps(body),
             headers={
                 "Content-Type": "application/json",
-                "Authorization": "Bearer proxy-test-token",
+                "Authorization": f"Bearer {_PROXY_PMA_E2E_BEARER}",
             },
             timeout=5,
         )
@@ -232,10 +249,11 @@ class TestProxyPmaFunctional(unittest.TestCase):
 
 
 def _make_mock_inference_handler(response_text):
-    """Return a handler class that responds to POST /api/generate with {"response": response_text}."""
+    """Return a handler class for POST /api/generate with {"response": response_text}."""
 
     class Handler(BaseHTTPRequestHandler):
-        def do_POST(self):
+        # Method name required by BaseHTTPRequestHandler (do_<METHOD> dispatch).
+        def do_POST(self):  # pylint: disable=invalid-name
             if self.path == "/api/generate" or self.path.startswith("/api/generate?"):
                 self.send_response(200)
                 self.send_header("Content-Type", "application/json")
@@ -247,7 +265,8 @@ def _make_mock_inference_handler(response_text):
                 self.send_response(404)
                 self.end_headers()
 
-        def log_message(self, format, *args):
+        # Parameter name must match BaseHTTPRequestHandler.log_message(self, format, *args).
+        def log_message(self, format, *args):  # pylint: disable=redefined-builtin
             pass
 
     return Handler
@@ -263,7 +282,7 @@ class TestProxyPmaWithInference(unittest.TestCase):
     -> worker-api proxy. Asserts proxy -> PMA -> inference path returns 200 with content.
     """
 
-    tags = ["suite_proxy_pma", "suite_worker_node"]
+    tags = ["suite_proxy_pma", "suite_worker_node", "inference", "pma_inference", "pma"]
 
     _mock_server = None
     _mock_thread = None
@@ -308,7 +327,7 @@ class TestProxyPmaWithInference(unittest.TestCase):
         env_pma["PMA_LISTEN_ADDR"] = f"127.0.0.1:{pma_port}"
         env_pma["PMA_ROLE"] = "project_manager"
         env_pma["OLLAMA_BASE_URL"] = mock_url
-        cls._pma_proc = subprocess.Popen(
+        with _popen_keepalive(
             [
                 config.PMA_BIN,
                 "--listen",
@@ -320,39 +339,41 @@ class TestProxyPmaWithInference(unittest.TestCase):
             env=env_pma,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.PIPE,
-        )
-        if not _wait_http(f"{pma_base}/healthz", timeout=15):
-            cls._pma_proc.terminate()
-            cls._pma_proc.wait(timeout=5)
-            if cls._mock_server:
-                cls._mock_server.shutdown()
-            raise unittest.SkipTest("PMA did not become ready (healthz)")
+        ) as proc:
+            cls._pma_proc = proc
+            if not _wait_http(f"{pma_base}/healthz", timeout=15):
+                cls._pma_proc.terminate()
+                cls._pma_proc.wait(timeout=5)
+                if cls._mock_server:
+                    cls._mock_server.shutdown()
+                raise unittest.SkipTest("PMA did not become ready (healthz)")
 
         # Start worker-api with target to PMA (state dir for telemetry/securestore init)
         targets_json = json.dumps({"pma-main": pma_base})
         state_dir = os.path.join(config.PROJECT_ROOT, "tmp", "proxy-pma-test-state")
         os.makedirs(state_dir, 0o700, exist_ok=True)
         env_worker = os.environ.copy()
-        env_worker["WORKER_API_BEARER_TOKEN"] = "proxy-test-token"
+        env_worker["WORKER_API_BEARER_TOKEN"] = _PROXY_PMA_E2E_BEARER
         env_worker["WORKER_MANAGED_SERVICE_TARGETS_JSON"] = targets_json
         env_worker["LISTEN_ADDR"] = f"127.0.0.1:{worker_port}"
         env_worker["WORKER_API_STATE_DIR"] = state_dir
-        cls._worker_proc = subprocess.Popen(
+        with _popen_keepalive(
             [config.WORKER_API_BIN],
             cwd=config.PROJECT_ROOT,
             env=env_worker,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.PIPE,
-        )
-        if not _wait_http(f"{cls._worker_base}/healthz", timeout=15):
-            cls._worker_proc.terminate()
-            cls._worker_proc.wait(timeout=5)
-            if cls._pma_proc:
-                cls._pma_proc.terminate()
-                cls._pma_proc.wait(timeout=5)
-            if cls._mock_server:
-                cls._mock_server.shutdown()
-            raise unittest.SkipTest("worker-api did not become ready (healthz)")
+        ) as proc:
+            cls._worker_proc = proc
+            if not _wait_http(f"{cls._worker_base}/healthz", timeout=15):
+                cls._worker_proc.terminate()
+                cls._worker_proc.wait(timeout=5)
+                if cls._pma_proc:
+                    cls._pma_proc.terminate()
+                    cls._pma_proc.wait(timeout=5)
+                if cls._mock_server:
+                    cls._mock_server.shutdown()
+                raise unittest.SkipTest("worker-api did not become ready (healthz)")
 
     @classmethod
     def tearDownClass(cls):
@@ -375,7 +396,7 @@ class TestProxyPmaWithInference(unittest.TestCase):
             data=json.dumps(proxy_body),
             headers={
                 "Content-Type": "application/json",
-                "Authorization": "Bearer proxy-test-token",
+                "Authorization": f"Bearer {_PROXY_PMA_E2E_BEARER}",
             },
             timeout=15,
         )
@@ -441,7 +462,7 @@ def _wait_ollama_ready(base_url, timeout=60):
 
 
 def _ollama_ensure_model(runtime, container_name, model):
-    """Pull model if not listed, then warm up (run one prompt) so first PMA request is fast. Return True if model is available."""
+    """Pull model if not listed, warm up (one prompt); return True if model is available."""
     r = subprocess.run(
         [runtime, "exec", container_name, "ollama", "list"],
         capture_output=True,
@@ -457,7 +478,7 @@ def _ollama_ensure_model(runtime, container_name, model):
             timeout=600,
             check=False,
         )
-        if r.returncode != 0:
+        if r.returncode:
             return False
     # Warm up: load model so first PMA chat request does not timeout
     subprocess.run(
@@ -474,13 +495,13 @@ def _ollama_ensure_model(runtime, container_name, model):
 
 
 class TestProxyPmaWithRealOllama(unittest.TestCase):
-    """Functional test: real Ollama container + PMA + worker proxy; chat returns LLM content.
+    """Functional test: real Ollama + PMA + worker proxy; chat returns LLM content.
 
-    Starts: Ollama container (host port) -> PMA (OLLAMA_BASE_URL=Ollama) -> worker-api proxy.
-    Requires: podman or docker, ollama/ollama image. Skips if container runtime or image unavailable.
+    Starts: Ollama container -> PMA -> worker-api proxy. Requires podman/docker,
+    ollama/ollama image. Skips if runtime or image unavailable.
     """
 
-    tags = ["suite_proxy_pma", "suite_worker_node"]
+    tags = ["suite_proxy_pma", "suite_worker_node", "inference", "pma_inference", "pma"]
 
     _runtime = None
     _ollama_container = None
@@ -504,7 +525,7 @@ class TestProxyPmaWithRealOllama(unittest.TestCase):
         if not os.path.isfile(config.WORKER_API_BIN):
             raise unittest.SkipTest(f"worker-api binary not found: {config.WORKER_API_BIN}")
 
-        cls._runtime = helpers._container_runtime()
+        cls._runtime = helpers.container_runtime()
         if not cls._runtime:
             raise unittest.SkipTest("no container runtime (podman/docker) for Ollama")
 
@@ -535,7 +556,7 @@ class TestProxyPmaWithRealOllama(unittest.TestCase):
         env_pma["PMA_ROLE"] = "project_manager"
         env_pma["OLLAMA_BASE_URL"] = ollama_url
         env_pma["INFERENCE_MODEL"] = config.OLLAMA_E2E_MODEL
-        cls._pma_proc = subprocess.Popen(
+        with _popen_keepalive(
             [
                 config.PMA_BIN,
                 "--listen",
@@ -547,40 +568,42 @@ class TestProxyPmaWithRealOllama(unittest.TestCase):
             env=env_pma,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.PIPE,
-        )
-        if not _wait_http(f"{pma_base}/healthz", timeout=15):
-            cls._pma_proc.terminate()
-            cls._pma_proc.wait(timeout=5)
-            _stop_ollama_container(cls._runtime, container_name)
-            cls._ollama_container = None
-            raise unittest.SkipTest("PMA did not become ready (healthz)")
+        ) as proc:
+            cls._pma_proc = proc
+            if not _wait_http(f"{pma_base}/healthz", timeout=15):
+                cls._pma_proc.terminate()
+                cls._pma_proc.wait(timeout=5)
+                _stop_ollama_container(cls._runtime, container_name)
+                cls._ollama_container = None
+                raise unittest.SkipTest("PMA did not become ready (healthz)")
 
         # Start worker-api with target to PMA
         state_dir = os.path.join(config.PROJECT_ROOT, "tmp", "proxy-pma-test-state")
         os.makedirs(state_dir, 0o700, exist_ok=True)
         targets_json = json.dumps({"pma-main": pma_base})
         env_worker = os.environ.copy()
-        env_worker["WORKER_API_BEARER_TOKEN"] = "proxy-test-token"
+        env_worker["WORKER_API_BEARER_TOKEN"] = _PROXY_PMA_E2E_BEARER
         env_worker["WORKER_MANAGED_SERVICE_TARGETS_JSON"] = targets_json
         env_worker["LISTEN_ADDR"] = f"127.0.0.1:{worker_port}"
         env_worker["WORKER_API_STATE_DIR"] = state_dir
         env_worker["WORKER_MANAGED_PROXY_UPSTREAM_TIMEOUT_SEC"] = "120"
-        cls._worker_proc = subprocess.Popen(
+        with _popen_keepalive(
             [config.WORKER_API_BIN],
             cwd=config.PROJECT_ROOT,
             env=env_worker,
             stdout=subprocess.DEVNULL,
             stderr=subprocess.PIPE,
-        )
-        if not _wait_http(f"{cls._worker_base}/healthz", timeout=15):
-            cls._worker_proc.terminate()
-            cls._worker_proc.wait(timeout=5)
-            if cls._pma_proc:
-                cls._pma_proc.terminate()
-                cls._pma_proc.wait(timeout=5)
-            _stop_ollama_container(cls._runtime, container_name)
-            cls._ollama_container = None
-            raise unittest.SkipTest("worker-api did not become ready (healthz)")
+        ) as proc:
+            cls._worker_proc = proc
+            if not _wait_http(f"{cls._worker_base}/healthz", timeout=15):
+                cls._worker_proc.terminate()
+                cls._worker_proc.wait(timeout=5)
+                if cls._pma_proc:
+                    cls._pma_proc.terminate()
+                    cls._pma_proc.wait(timeout=5)
+                _stop_ollama_container(cls._runtime, container_name)
+                cls._ollama_container = None
+                raise unittest.SkipTest("worker-api did not become ready (healthz)")
 
     @classmethod
     def tearDownClass(cls):
@@ -605,7 +628,7 @@ class TestProxyPmaWithRealOllama(unittest.TestCase):
             data=json.dumps(proxy_body),
             headers={
                 "Content-Type": "application/json",
-                "Authorization": "Bearer proxy-test-token",
+                "Authorization": f"Bearer {_PROXY_PMA_E2E_BEARER}",
             },
             timeout=120,
         )

@@ -46,23 +46,26 @@ var (
 
 // OpenAIChatHandler handles GET /v1/models and POST /v1/chat/completions.
 type OpenAIChatHandler struct {
-	db             database.Store
-	logger         *slog.Logger
-	inferenceURL   string
-	inferenceModel string
+	db                   database.Store
+	logger               *slog.Logger
+	inferenceURL         string
+	inferenceModel       string
+	workerAPIBearerToken string
 }
 
 // NewOpenAIChatHandler creates a handler for the OpenAI-compatible chat surface.
 // PMA routing is only via worker-reported endpoints (capability managed_services_status); no env fallback.
-func NewOpenAIChatHandler(db database.Store, logger *slog.Logger, inferenceURL, inferenceModel string) *OpenAIChatHandler {
+// workerAPIBearerToken is sent when calling worker proxy URLs so the worker-api accepts the request.
+func NewOpenAIChatHandler(db database.Store, logger *slog.Logger, inferenceURL, inferenceModel, workerAPIBearerToken string) *OpenAIChatHandler {
 	if inferenceModel == "" {
 		inferenceModel = "tinyllama"
 	}
 	return &OpenAIChatHandler{
-		db:             db,
-		logger:         logger,
-		inferenceURL:   inferenceURL,
-		inferenceModel: inferenceModel,
+		db:                   db,
+		logger:               logger,
+		inferenceURL:         inferenceURL,
+		inferenceModel:       inferenceModel,
+		workerAPIBearerToken: workerAPIBearerToken,
 	}
 }
 
@@ -205,7 +208,7 @@ func (h *OpenAIChatHandler) completeViaPMA(ctx context.Context, effectiveModel s
 	}
 	var err error
 	for attempt := 0; attempt < chatCompletionMaxRetries; attempt++ {
-		content, err = pmaclient.CallChatCompletion(ctx, nil, pmaEndpoint, msgs)
+		content, err = pmaclient.CallChatCompletion(ctx, nil, pmaEndpoint, msgs, h.workerAPIBearerToken)
 		if err == nil {
 			h.logger.Info("chat completion path", "path", "pma", "model", effectiveModel)
 			return content, 0, "", ""

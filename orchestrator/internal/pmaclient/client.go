@@ -47,8 +47,9 @@ type managedProxyResponse struct {
 }
 
 // CallChatCompletion sends the sanitized messages to cynode-pma and returns the completion content.
-// baseURL is the PMA base URL (e.g. http://localhost:8090). Returns (content, nil) or ("", error).
-func CallChatCompletion(ctx context.Context, client *http.Client, baseURL string, messages []ChatMessage) (string, error) {
+// baseURL is the PMA base URL or the worker proxy URL (e.g. .../proxy:http).
+// workerBearerToken is required when baseURL is a managed proxy URL so the worker-api accepts the request.
+func CallChatCompletion(ctx context.Context, client *http.Client, baseURL string, messages []ChatMessage, workerBearerToken string) (string, error) {
 	if baseURL == "" {
 		return "", fmt.Errorf("PMA base URL is required")
 	}
@@ -62,7 +63,7 @@ func CallChatCompletion(ctx context.Context, client *http.Client, baseURL string
 		return "", err
 	}
 	if looksLikeManagedProxyEndpoint(baseURL) {
-		return callViaManagedProxy(ctx, client, baseURL, b)
+		return callViaManagedProxy(ctx, client, baseURL, b, workerBearerToken)
 	}
 	url := strings.TrimSuffix(baseURL, "/") + "/internal/chat/completion"
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(b))
@@ -91,7 +92,7 @@ func looksLikeManagedProxyEndpoint(baseURL string) bool {
 		strings.HasSuffix(trimmed, "/proxy:http")
 }
 
-func callViaManagedProxy(ctx context.Context, client *http.Client, proxyURL string, handoffBody []byte) (string, error) {
+func callViaManagedProxy(ctx context.Context, client *http.Client, proxyURL string, handoffBody []byte, workerBearerToken string) (string, error) {
 	reqBody := managedProxyRequest{
 		Version: 1,
 		Method:  http.MethodPost,
@@ -110,6 +111,9 @@ func callViaManagedProxy(ctx context.Context, client *http.Client, proxyURL stri
 		return "", err
 	}
 	req.Header.Set("Content-Type", "application/json")
+	if workerBearerToken != "" {
+		req.Header.Set("Authorization", "Bearer "+workerBearerToken)
+	}
 	resp, err := client.Do(req)
 	if err != nil {
 		return "", err

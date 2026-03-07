@@ -13,7 +13,7 @@ import (
 	"unicode"
 
 	"github.com/cypher0n3/cynodeai/go_shared_libs/contracts/nodepayloads"
-	"github.com/cypher0n3/cynodeai/worker_node/internal/nodemanager"
+	"github.com/cypher0n3/cynodeai/worker_node/internal/nodeagent"
 )
 
 func main() {
@@ -37,8 +37,8 @@ func runMain(ctx context.Context) int {
 	}
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: level}))
 	slog.SetDefault(logger)
-	cfg := nodemanager.LoadConfig()
-	opts := &nodemanager.RunOptions{
+	cfg := nodeagent.LoadConfig()
+	opts := &nodeagent.RunOptions{
 		StartWorkerAPI:       startWorkerAPI,
 		StartOllama:          startOllama,
 		StartManagedServices: startManagedServices,
@@ -46,7 +46,7 @@ func runMain(ctx context.Context) int {
 	if getEnv("NODE_MANAGER_SKIP_SERVICES", "") != "" {
 		opts = nil
 	}
-	if err := nodemanager.RunWithOptions(ctx, logger, &cfg, opts); err != nil {
+	if err := nodeagent.RunWithOptions(ctx, logger, &cfg, opts); err != nil {
 		logger.Error("node manager failed", "error", err)
 		return 1
 	}
@@ -142,7 +142,7 @@ func waitForPMAReady(port string, timeout time.Duration) {
 	}
 }
 
-// effectiveStateDir returns state directory for socket paths; matches nodemanager precedence so worker-api and node-manager agree.
+// effectiveStateDir returns state directory for socket paths; matches nodeagent precedence so worker-api and node-manager agree.
 func effectiveStateDir() string {
 	if v := strings.TrimSpace(getEnv("WORKER_API_STATE_DIR", "")); v != "" {
 		return v
@@ -153,9 +153,9 @@ func effectiveStateDir() string {
 	return "/var/lib/cynode/state"
 }
 
-// buildManagedServiceRunArgs returns the container run args for one managed service (delegates to nodemanager).
+// buildManagedServiceRunArgs returns the container run args for one managed service (delegates to nodeagent).
 func buildManagedServiceRunArgs(svc *nodepayloads.ConfigManagedService, serviceID, serviceType, image, name string) []string {
-	return nodemanager.BuildManagedServiceRunArgs(effectiveStateDir(), svc, serviceID, serviceType, image, name)
+	return nodeagent.BuildManagedServiceRunArgs(effectiveStateDir(), svc, serviceID, serviceType, image, name)
 }
 
 // startManagedServices starts each desired managed service container (e.g. PMA) from config.

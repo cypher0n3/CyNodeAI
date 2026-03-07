@@ -203,7 +203,7 @@ func InitializeOrchestratorSuite(sc *godog.ScenarioContext, state *testState) {
 		mux.Handle("GET /v1/tasks/{id}/result", authMiddleware.RequireUserAuth(http.HandlerFunc(taskHandler.GetTaskResult)))
 		mux.Handle("POST /v1/tasks/{id}/cancel", authMiddleware.RequireUserAuth(http.HandlerFunc(taskHandler.CancelTask)))
 		mux.Handle("GET /v1/tasks/{id}/logs", authMiddleware.RequireUserAuth(http.HandlerFunc(taskHandler.GetTaskLogs)))
-		openAIChatHandler := handlers.NewOpenAIChatHandler(db, slog.Default(), inferenceURL, inferenceModel)
+		openAIChatHandler := handlers.NewOpenAIChatHandler(db, slog.Default(), inferenceURL, inferenceModel, bddGetEnv("WORKER_API_BEARER_TOKEN", ""))
 		mux.Handle("GET /v1/models", authMiddleware.RequireUserAuth(http.HandlerFunc(openAIChatHandler.ListModels)))
 		mux.Handle("POST /v1/chat/completions", authMiddleware.RequireUserAuth(http.HandlerFunc(openAIChatHandler.ChatCompletions)))
 		mux.HandleFunc("POST /v1/nodes/register", nodeHandler.Register)

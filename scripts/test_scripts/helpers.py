@@ -184,6 +184,11 @@ def _container_runtime():
     return None
 
 
+def container_runtime():
+    """Public wrapper for _container_runtime (for E2E that need podman/docker)."""
+    return _container_runtime()
+
+
 def run_ollama_inference_smoke():
     """Run inference smoke: wait for Ollama container, pull model if needed, run one prompt.
     Skip if E2E_SKIP_INFERENCE_SMOKE set or container not present. Return True on success.
@@ -222,7 +227,7 @@ def run_ollama_inference_smoke():
             r = subprocess.run(
                 [runtime, "exec", config.OLLAMA_CONTAINER_NAME, "ollama", "pull",
                  config.OLLAMA_E2E_MODEL],
-                capture_output=True, text=True, timeout=120, check=False
+                capture_output=True, text=True, timeout=600, check=False
             )
             if not r.returncode:
                 break

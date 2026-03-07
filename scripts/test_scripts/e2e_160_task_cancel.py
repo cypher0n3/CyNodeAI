@@ -10,7 +10,7 @@ import scripts.test_scripts.e2e_state as state
 class TestTaskCancel(unittest.TestCase):
     """E2E: create long-running task, cancel with -y; assert status becomes canceled."""
 
-    tags = ["suite_cynork"]
+    tags = ["suite_cynork", "full_demo", "task"]
 
     def test_task_cancel(self):
         """Create sleep task, cancel it, poll result until status is canceled."""

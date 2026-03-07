@@ -9,7 +9,7 @@ import scripts.test_scripts.e2e_state as state
 class TestTaskLogs(unittest.TestCase):
     """E2E: task logs by ID; assert JSON response is dict or list."""
 
-    tags = ["suite_cynork"]
+    tags = ["suite_cynork", "full_demo", "task"]
 
     def test_task_logs(self):
         """Assert task logs state.TASK_ID returns success and JSON (dict or list)."""

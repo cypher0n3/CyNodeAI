@@ -11,7 +11,7 @@ from scripts.test_scripts import config, helpers
 class TestAuthNegative(unittest.TestCase):
     """E2E: whoami without prior login must fail with expected error message."""
 
-    tags = ["suite_cynork"]
+    tags = ["suite_cynork", "full_demo", "auth"]
 
     def test_whoami_without_login_fails(self):
         """Assert whoami with no token returns failure and login-related stderr."""

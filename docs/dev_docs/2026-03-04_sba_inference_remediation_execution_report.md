@@ -15,7 +15,7 @@
   - `orchestrator/internal/handlers`
   - `orchestrator/internal/pmaclient`
   - `worker_node/cmd/worker-api`
-  - `worker_node/internal/nodemanager`
+  - `worker_node/internal/nodeagent`
 
 ## Validation Commands Run
 

@@ -11,7 +11,7 @@ from scripts.test_scripts import config
 class TestSecureStoreEnvelopeStructure(unittest.TestCase):
     """E2E: Assert secure store token files (when state dir available) are encrypted envelopes."""
 
-    tags = ["suite_worker_node"]
+    tags = ["suite_worker_node", "full_demo"]
 
     def test_agent_token_files_are_envelopes_and_not_plaintext(self):
         """State dir secrets/agent_tokens files are valid envelopes, no plaintext token."""

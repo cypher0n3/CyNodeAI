@@ -11,7 +11,7 @@ import scripts.test_scripts.e2e_state as state
 class TestCapability(unittest.TestCase):
     """E2E: POST /v1/nodes/capability with Bearer node_jwt; assert success."""
 
-    tags = ["suite_orchestrator"]
+    tags = ["suite_orchestrator", "full_demo"]
 
     def test_capability(self):
         """Report capability with state.NODE_JWT; assert 2xx response."""

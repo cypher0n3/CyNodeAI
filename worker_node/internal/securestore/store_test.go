@@ -430,6 +430,60 @@ func TestGetAgentToken_CorruptKEMKeystore(t *testing.T) {
 	}
 }
 
+// TestGetAgentToken_KEMKeystoreInvalidJSON asserts that .kem_keystore.enc with invalid JSON yields an error (covers loadKEMKeyFromFile decode path).
+func TestGetAgentToken_KEMKeystoreInvalidJSON(t *testing.T) {
+	testFIPSModeKnownOff = true
+	defer func() { testFIPSModeKnownOff = true }()
+	t.Setenv(masterKeyEnvName, validMasterKeyB64())
+	stateDir := t.TempDir()
+	store1, _, err := Open(stateDir)
+	if err != nil {
+		t.Fatalf("Open failed: %v", err)
+	}
+	if err := store1.PutAgentToken("svc", "tok", ""); err != nil {
+		t.Fatalf("PutAgentToken failed: %v", err)
+	}
+	kemPath := filepath.Join(stateDir, "secrets", kemKeystoreFile)
+	if err := os.WriteFile(kemPath, []byte("not valid json"), 0o600); err != nil {
+		t.Fatalf("overwrite kem keystore: %v", err)
+	}
+	store2, _, err := Open(stateDir)
+	if err != nil {
+		t.Fatalf("second Open failed: %v", err)
+	}
+	if _, err := store2.GetAgentToken("svc"); err == nil {
+		t.Fatal("expected GetAgentToken to fail when kem keystore is invalid JSON")
+	}
+}
+
+// TestGetAgentToken_KEMKeystoreInvalidBase64 asserts that .kem_keystore.enc with invalid base64 in envelope yields an error (covers loadKEMKeyFromFile base64 path).
+func TestGetAgentToken_KEMKeystoreInvalidBase64(t *testing.T) {
+	testFIPSModeKnownOff = true
+	defer func() { testFIPSModeKnownOff = true }()
+	t.Setenv(masterKeyEnvName, validMasterKeyB64())
+	stateDir := t.TempDir()
+	store1, _, err := Open(stateDir)
+	if err != nil {
+		t.Fatalf("Open failed: %v", err)
+	}
+	if err := store1.PutAgentToken("svc", "tok", ""); err != nil {
+		t.Fatalf("PutAgentToken failed: %v", err)
+	}
+	kemPath := filepath.Join(stateDir, "secrets", kemKeystoreFile)
+	// Valid JSON envelope but nonce_b64 is not valid base64.
+	invalidEnv := `{"version":1,"algorithm":"AES-256-GCM","nonce_b64":"!!!","payload_b64":"AAAAAAAAAAAAAAAAAAAAAA=="}`
+	if err := os.WriteFile(kemPath, []byte(invalidEnv), 0o600); err != nil {
+		t.Fatalf("overwrite kem keystore: %v", err)
+	}
+	store2, _, err := Open(stateDir)
+	if err != nil {
+		t.Fatalf("second Open failed: %v", err)
+	}
+	if _, err := store2.GetAgentToken("svc"); err == nil {
+		t.Fatal("expected GetAgentToken to fail when kem keystore has invalid base64")
+	}
+}
+
 // TestGetAgentToken_UnsupportedEnvelopeAlgorithm asserts that envelope with wrong algorithm is rejected.
 func TestGetAgentToken_UnsupportedEnvelopeAlgorithm(t *testing.T) {
 	t.Setenv(masterKeyEnvName, validMasterKeyB64())

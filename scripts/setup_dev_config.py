@@ -100,7 +100,7 @@ def compose_env():
     """Env dict for compose up (exported to subprocess)."""
     ensure_runtime()
     _sync_runtime_aliases()
-    # PMA routing is only via worker-reported capability (orchestrator ↔ worker proxy); no PMA_BASE_URL for chat.
+    # PMA via worker capability (orchestrator <-> worker proxy); no PMA_BASE_URL for chat.
     return {
         "POSTGRES_USER": POSTGRES_USER,
         "POSTGRES_PASSWORD": POSTGRES_PASSWORD,

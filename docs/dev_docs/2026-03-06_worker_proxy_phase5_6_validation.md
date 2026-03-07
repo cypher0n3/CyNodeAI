@@ -13,11 +13,11 @@ Phase 5 required tests for `http+unix://...` URL reporting when `binding=per_ser
 ### Completed Work
 
 - **Tests for `http+unix://...` URL reporting when `binding=per_service_uds`**
-  - Added `TestBuildCapability_ManagedServicesStatus_HttpUnixURLsWhenAuto` in `worker_node/internal/nodemanager/nodemanager_test.go`.
+  - Added `TestBuildCapability_ManagedServicesStatus_HttpUnixURLsWhenAuto` in `worker_node/internal/nodeagent/nodemanager_test.go`.
   - Asserts that when node config sets `orchestrator.mcp_gateway_proxy_url` and `orchestrator.ready_callback_proxy_url` to `"auto"`, the capability report's `managed_services_status.services[].agent_to_orchestrator_proxy` has:
     - `binding == "per_service_uds"`
     - `mcp_gateway_proxy_url` and `ready_callback_proxy_url` with prefix `http+unix://` and the correct path suffixes (`/v1/worker/internal/orchestrator/mcp:call`, `/v1/worker/internal/orchestrator/agent:ready`).
-  - Run with: `cd worker_node && go test ./internal/nodemanager/... -run TestBuildCapability_ManagedServicesStatus_HttpUnixURLsWhenAuto -v`
+  - Run with: `cd worker_node && go test ./internal/nodeagent/... -run TestBuildCapability_ManagedServicesStatus_HttpUnixURLsWhenAuto -v`
 
 ### Phase 5 Result
 
@@ -66,4 +66,4 @@ Run with: `cd worker_node && go test ./cmd/worker-api/... -run TestInternalOrche
 
 - Plan: `docs/dev_docs/2026-03-05_worker_proxy_spec_reconciliation_plan.md`
 - Spec: `docs/tech_specs/worker_node.md` (Agent-To-Orchestrator UDS Binding), `docs/tech_specs/worker_api.md` (CYNAI.WORKER.ManagedAgentProxyBidirectional)
-- Code: `worker_node/internal/nodemanager/nodemanager.go` (`buildAgentToOrchestratorProxyStatus`, `buildManagedServicesStatus`), `worker_node/cmd/worker-api/main.go` (`handleInternalOrchestratorProxy`, `validateInternalProxyRequest`)
+- Code: `worker_node/internal/nodeagent/nodemanager.go` (`buildAgentToOrchestratorProxyStatus`, `buildManagedServicesStatus`), `worker_node/cmd/worker-api/main.go` (`handleInternalOrchestratorProxy`, `validateInternalProxyRequest`)

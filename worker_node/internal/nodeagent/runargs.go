@@ -1,7 +1,7 @@
-// Package nodemanager: BuildManagedServiceRunArgs builds container run args for a managed service.
+// Package nodeagent: BuildManagedServiceRunArgs builds container run args for a managed service.
 // Used by node-manager main and by BDD to assert no secure-store mount (REQ-WORKER-0168).
 
-package nodemanager
+package nodeagent
 
 import (
 	"net/url"
