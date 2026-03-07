@@ -119,7 +119,8 @@ Build and test new required components before any dependent work.
 - **Phase 8: In progress.**
   - [x] Implemented managed-service observed state reporting (`managed_services_status`) in capability reports and config ack scaffolding.
   - [x] When config sets proxy URLs to `auto`: node-manager generates identity-bound endpoints, injects into container env, and reports them in `managed_services_status.services[].agent_to_orchestrator_proxy` with `binding=per_service_uds` and `http+unix://...` URLs.
-  - [x] Orchestrator PMA routing uses **only** worker-reported endpoints from capability snapshots (`resolvePMAEndpoint`); no env or other path is allowed (REQ-ORCHES-0162). See 2026-03-06_reconciliation_phase8_routing_and_ci.md.
+  - [x] Orchestrator PMA routing uses **only** worker-reported endpoints from capability snapshots (`resolvePMAEndpoint`); no env or other path is allowed (REQ-ORCHES-0162).
+    See 2026-03-06_reconciliation_phase8_routing_and_ci.md.
   - [ ] SBA inference E2E acceptance (e2e_140, e2e_145); run after worker proxy is spec-compliant (Phases 4, 5, 6 done).
     Resolve any remaining SBA pod workspace mount flakiness (`statfs ... /tmp/cynodeai-workspaces/...`) once full proxy path is in place.
 
@@ -175,7 +176,8 @@ This section summarizes what currently exists and where the gaps remain.
 
 4. **Managed service observed-state reporting and routing are incomplete.**
    Specs require the worker to report `managed_services_status` and for the orchestrator to route to managed services using worker-reported endpoints.
-   Orchestrator PMA routing now uses only worker-reported endpoints (no `PMA_BASE_URL` or direct addressing). Worker-side target mapping for where the worker reaches PMA may still use env; orchestrator does not.
+   Orchestrator PMA routing now uses only worker-reported endpoints (no `PMA_BASE_URL` or direct addressing).
+    Worker-side target mapping for where the worker reaches PMA may still use env; orchestrator does not.
 
 ## Not-Yet-Built Components and Code Paths (Explicit)
 
@@ -469,7 +471,8 @@ Phase summary: implement managed-service observed state reporting, support `auto
 - Implement worker reporting of `managed_services_status` in capability reports and in config ack (required when config contains agent-runtime managed services per worker_node_payloads config ack schema).
 - When config sets `orchestrator.mcp_gateway_proxy_url` or `ready_callback_proxy_url` to `auto`: worker MUST generate identity-bound endpoints (e.g. per Phase 5 UDS), inject them into the managed service container, and report them in `managed_services_status.services[].agent_to_orchestrator_proxy` with `mcp_gateway_proxy_url`, `ready_callback_proxy_url`, and `binding` (e.g. `per_service_uds`); when UDS, URLs MUST be `http+unix://...` per payloads spec.
 - Config ack: when applied config had `auto` for either proxy URL, worker MUST include generated concrete endpoints in config ack `managed_services_status` and MUST have injected those values into the container.
-- Orchestrator MUST route to PMA using only worker-reported endpoints (no env, compose DNS, or direct host-port); REQ-ORCHES-0162. Implemented: no fallback.
+- Orchestrator MUST route to PMA using only worker-reported endpoints (no env, compose DNS, or direct host-port); REQ-ORCHES-0162.
+  Implemented: no fallback.
 - Worker-side target mapping (where the worker forwards requests to) may still use env for dev; orchestrator does not use env for PMA routing.
 
 ### Phase 8 Acceptance Criteria

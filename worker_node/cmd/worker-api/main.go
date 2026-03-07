@@ -585,7 +585,11 @@ func forwardManagedProxyRequest(
 			httpReq.Header.Add(name, v)
 		}
 	}
-	client := &http.Client{Timeout: 30 * time.Second}
+	timeoutSec := getEnvInt("WORKER_MANAGED_PROXY_UPSTREAM_TIMEOUT_SEC", 30)
+	if timeoutSec < 1 {
+		timeoutSec = 30
+	}
+	client := &http.Client{Timeout: time.Duration(timeoutSec) * time.Second}
 	httpResp, err := client.Do(httpReq)
 	if err != nil {
 		return nil, http.StatusBadGateway, "upstream request failed"

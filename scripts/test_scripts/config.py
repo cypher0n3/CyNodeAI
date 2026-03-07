@@ -57,6 +57,29 @@ NODE_STATE_DIR = os.environ.get("NODE_STATE_DIR", "").strip()
 # Ports used only when running test_proxy_pma (avoid clash with main stack)
 PROXY_PMA_TEST_PMA_PORT = int(os.environ.get("PROXY_PMA_TEST_PMA_PORT", "18090"))
 PROXY_PMA_TEST_WORKER_PORT = int(os.environ.get("PROXY_PMA_TEST_WORKER_PORT", "18091"))
+# Proxy + PMA with mock inference (separate ports to run alongside or after no-inference suite)
+PROXY_PMA_TEST_MOCK_INFERENCE_PORT = int(
+    os.environ.get("PROXY_PMA_TEST_MOCK_INFERENCE_PORT", "18092")
+)
+PROXY_PMA_TEST_PMA_PORT_WITH_INFERENCE = int(
+    os.environ.get("PROXY_PMA_TEST_PMA_PORT_WITH_INFERENCE", "18093")
+)
+PROXY_PMA_TEST_WORKER_PORT_WITH_INFERENCE = int(
+    os.environ.get("PROXY_PMA_TEST_WORKER_PORT_WITH_INFERENCE", "18094")
+)
+# Real Ollama (container) for proxy+PMA+inference test; avoid clash with main stack
+PROXY_PMA_TEST_OLLAMA_CONTAINER_NAME = os.environ.get(
+    "PROXY_PMA_TEST_OLLAMA_CONTAINER_NAME", "cynodeai-ollama-proxy-test"
+)
+PROXY_PMA_TEST_OLLAMA_PORT = int(
+    os.environ.get("PROXY_PMA_TEST_OLLAMA_PORT", "18100")
+)
+PROXY_PMA_TEST_PMA_PORT_REAL_OLLAMA = int(
+    os.environ.get("PROXY_PMA_TEST_PMA_PORT_REAL_OLLAMA", "18101")
+)
+PROXY_PMA_TEST_WORKER_PORT_REAL_OLLAMA = int(
+    os.environ.get("PROXY_PMA_TEST_WORKER_PORT_REAL_OLLAMA", "18102")
+)
 WORKER_API_BIN = os.environ.get("WORKER_API_BIN") or os.path.join(
     PROJECT_ROOT, "worker_node", "bin", "worker-api-dev"
 )
