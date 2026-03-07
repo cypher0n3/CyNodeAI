@@ -46,7 +46,12 @@ class TestPmaChatContext(unittest.TestCase):
             )
             if unavailable:
                 self.skipTest("project chat unavailable in current environment")
+            # Success: exit 0, or non-empty response without error/502
             if ok or (out_stripped and not bad):
                 chat_ok = True
                 break
-        self.assertTrue(chat_ok, f"chat with project-id failed: out={last_out!r} err={last_err!r}")
+        self.assertTrue(
+            chat_ok,
+            f"chat with project-id failed (ok=False or empty/bad response): "
+            f"stdout={last_out!r} stderr={last_err!r}",
+        )

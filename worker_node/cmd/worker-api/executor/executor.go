@@ -209,6 +209,13 @@ func (e *Executor) runJobWithPodInference(ctx context.Context, req *workerapi.Ru
 		return resp, nil
 	}
 
+	if workspaceDir != "" {
+		if err := os.MkdirAll(workspaceDir, 0o700); err != nil {
+			setPodInferenceError(resp, "workspace dir", []byte(err.Error()))
+			return resp, nil
+		}
+	}
+
 	image := req.Sandbox.Image
 	if image == "" {
 		image = workerapi.DefaultImage
@@ -461,6 +468,15 @@ func (e *Executor) runJobSBAWithPodInference(
 	if err := waitForProxyReady(ctx, e.runtime, proxyContainerID, 10*time.Second, useHealthProbe); err != nil {
 		setPodInferenceError(resp, "proxy readiness", []byte(err.Error()))
 		return resp, nil
+	}
+
+	// Ensure workspace dir exists immediately before podman run so bind-mount source is present
+	// (avoids statfs "no such file or directory" when worker-api and podman run in different contexts).
+	if workspaceDir != "" {
+		if err := os.MkdirAll(workspaceDir, 0o700); err != nil {
+			setSBAError(resp, "workspace dir: "+err.Error())
+			return resp, nil
+		}
 	}
 
 	args := buildSBARunArgsForPod(req, podName, jobDir, workspaceDir, e, executionMode)

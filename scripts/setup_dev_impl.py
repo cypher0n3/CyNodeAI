@@ -102,8 +102,22 @@ def start_postgres():
     if container_exists(_cfg.POSTGRES_CONTAINER_NAME, running=False):
         log_info("Starting existing PostgreSQL container")
         run([rt, "start", _cfg.POSTGRES_CONTAINER_NAME], check=False)
-        time.sleep(2)
-        return True
+        log_info("Waiting for PostgreSQL to be ready...")
+        for _ in range(30):
+            r = subprocess.run(
+                [rt, "exec", _cfg.POSTGRES_CONTAINER_NAME, "pg_isready",
+                 "-U", _cfg.POSTGRES_USER, "-d", _cfg.POSTGRES_DB],
+                capture_output=True,
+                timeout=5,
+                check=False,
+                shell=False,
+            )
+            if not r.returncode:
+                log_info("PostgreSQL is ready")
+                return True
+            time.sleep(1)
+        log_error("PostgreSQL failed to become ready within 30s")
+        return False
     run([
         rt, "run", "-d", "--name", _cfg.POSTGRES_CONTAINER_NAME,
         "-e", f"POSTGRES_USER={_cfg.POSTGRES_USER}",
@@ -114,8 +128,7 @@ def start_postgres():
         _cfg.POSTGRES_IMAGE,
     ])
     log_info("Waiting for PostgreSQL to be ready...")
-    time.sleep(3)
-    for _ in range(30):
+    for _ in range(60):
         r = subprocess.run(
             [rt, "exec", _cfg.POSTGRES_CONTAINER_NAME, "pg_isready",
              "-U", _cfg.POSTGRES_USER, "-d", _cfg.POSTGRES_DB],
@@ -128,7 +141,7 @@ def start_postgres():
             log_info("PostgreSQL is ready")
             return True
         time.sleep(1)
-    log_error("PostgreSQL failed to start within 30 seconds")
+    log_error("PostgreSQL failed to start within 60 seconds")
     return False
 
 
@@ -361,6 +374,21 @@ def wait_for_control_plane_listening():
     return False
 
 
+def wait_for_control_plane_stopped(timeout_sec=15):
+    """Wait until control-plane is no longer reachable (e.g. after stop_all). Returns True when stopped."""
+    url = f"http://127.0.0.1:{_cfg.CONTROL_PLANE_PORT}/readyz"
+    for _ in range(timeout_sec):
+        try:
+            req = urllib.request.Request(url)
+            urllib.request.urlopen(req, timeout=1)
+        except (OSError, urllib.error.URLError):
+            log_info("Control-plane is stopped (readyz unreachable)")
+            return True
+        time.sleep(1)
+    log_warn(f"Control-plane still reachable after {timeout_sec}s")
+    return False
+
+
 def wait_for_orchestrator_readyz(timeout_sec=120):
     """Wait for control-plane /readyz 200 (orchestrator fully ready, PMA up per worker report)."""
     url = f"http://127.0.0.1:{_cfg.CONTROL_PLANE_PORT}/readyz"
@@ -402,6 +430,14 @@ def start_node(extra_env=None):
         f"http://{_cfg.CONTAINER_HOST_ALIAS}:{_cfg.WORKER_PORT}",
     )
     env["CONTAINER_RUNTIME"] = os.environ.get("CONTAINER_RUNTIME", "podman")
+    # Use a known state dir so E2E can assert on secure store (e.g. e2e_122); node writes secrets here.
+    state_dir = os.environ.get("WORKER_API_STATE_DIR") or os.environ.get("NODE_STATE_DIR") or _cfg.NODE_STATE_DIR
+    try:
+        os.makedirs(state_dir, 0o700, exist_ok=True)
+    except OSError as e:
+        log_error(f"failed to create node state dir {state_dir}: {e}")
+        return False
+    env["WORKER_API_STATE_DIR"] = state_dir
     if not os.path.isfile(_cfg.NODE_MANAGER_BIN):
         log_error(f"node-manager not found: {_cfg.NODE_MANAGER_BIN}")
         return False
@@ -419,18 +455,16 @@ def start_node(extra_env=None):
                 f.write(str(proc.pid))
         except OSError:
             pass
-        time.sleep(2)
-        if proc.poll() is not None:
-            log_error("Failed to start node-manager")
-            return False
         log_info(f"Node-manager started (PID {proc.pid}); waiting for worker-api...")
-        for _ in range(15):
-            time.sleep(1)
+        for attempt in range(30):
+            if proc.poll() is not None:
+                log_error("Failed to start node-manager (process exited)")
+                return False
             try:
                 req = urllib.request.Request(
                     f"http://localhost:{_cfg.WORKER_PORT}/healthz"
                 )
-                with urllib.request.urlopen(req, timeout=1) as resp:
+                with urllib.request.urlopen(req, timeout=2) as resp:
                     if resp.getcode() == 200:
                         log_info(
                             f"Worker API listening on http://localhost:{_cfg.WORKER_PORT}"
@@ -438,12 +472,9 @@ def start_node(extra_env=None):
                         return True
             except (OSError, urllib.error.URLError):
                 pass
-        log_warn(f"Worker API did not respond on :{_cfg.WORKER_PORT} within 15s")
+            time.sleep(1)
+        log_warn(f"Worker API did not respond on :{_cfg.WORKER_PORT} within 30s")
     return True
-
-
-# Seconds to wait after node worker-api is up before starting PMA (node registration -> inference).
-_PMA_START_DELAY_AFTER_NODE = 5
 
 
 def start_pma_container(extra_env=None):
@@ -497,10 +528,9 @@ def start_pma_after_inference_path(extra_env=None, pma_via_compose=False):
 
     pma_via_compose: if True (bypass), start cynode-pma via compose and wait for healthz.
     Prescribed (False): do not start PMA here; orchestrator instructs worker when inference path
-    exists (orchestrator_bootstrap.md). We wait for /readyz 200 only; use --pma-via-compose
+    exists (orchestrator_bootstrap.md). We wait for /readyz 200 (poll) only; use --pma-via-compose
     if worker-managed PMA is not yet implemented.
     """
-    time.sleep(_PMA_START_DELAY_AFTER_NODE)
     if pma_via_compose:
         log_info("(bypass: starting PMA via compose)")
         if not start_pma_container(extra_env=extra_env):

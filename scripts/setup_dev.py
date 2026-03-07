@@ -150,10 +150,19 @@ def cmd_full_demo(opts):
         "OLLAMA_UPSTREAM_URL",
         os.environ.get("OLLAMA_UPSTREAM_URL", f"http://{host}:11434"),
     )
+    # So the worker reports a PMA endpoint the gateway (in container) can reach (REQ-ORCHES-0162).
+    opts.extra_env.setdefault(
+        "PMA_ADVERTISED_URL",
+        f"http://{host}:{setup_dev_config.PMA_PORT}",
+    )
     if not cmd_start(opts):
         return False
-    time.sleep(3)
+    # Let node register, apply config, send ack so it is dispatchable before E2E creates tasks.
+    if not setup_dev_impl.wait_for_orchestrator_readyz(timeout_sec=120):
+        return False
     e2e_env = {"INFERENCE_PROXY_IMAGE": opts.extra_env["INFERENCE_PROXY_IMAGE"]}
+    # So e2e_122 (secure store envelope) can assert on node state dir; must match node's WORKER_API_STATE_DIR.
+    e2e_env["NODE_STATE_DIR"] = setup_dev_config.NODE_STATE_DIR
     ok = setup_dev_impl.run_python_e2e(extra_env=e2e_env)
     if opts.stop_on_success and ok:
         setup_dev_impl.log_info("Demo completed! Stopping services (--stop-on-success).")
@@ -197,7 +206,7 @@ def _run_test_e2e():
 def _run_restart(args):
     """Stop all then start (parity with dev-setup.sh restart)."""
     setup_dev_impl.stop_all()
-    time.sleep(2)
+    setup_dev_impl.wait_for_control_plane_stopped(timeout_sec=15)
 
     class Opts:
         extra_env = None

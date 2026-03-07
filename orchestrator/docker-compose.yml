@@ -67,8 +67,7 @@ services:
       WRITE_TIMEOUT: 120s
       JWT_SECRET: ${JWT_SECRET:-dev-jwt-secret-change-in-production}
       BOOTSTRAP_ADMIN_PASSWORD: ${BOOTSTRAP_ADMIN_PASSWORD:-admin123}
-      # OpenAI chat model=cynodeai.pm routes to PMA.
-      PMA_BASE_URL: http://cynode-pma:8090
+      # PMA for model=cynodeai.pm is only via worker-reported capability (orchestrator ↔ worker proxy); no env URL.
       # Prompt-mode tasks: orchestrator calls PM model so prompt→model MUST work (MVP Phase 1).
       OLLAMA_BASE_URL: http://ollama:11434
       INFERENCE_MODEL: ${INFERENCE_MODEL:-tinyllama}

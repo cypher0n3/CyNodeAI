@@ -36,12 +36,14 @@ class TestInferenceTask(unittest.TestCase):
             status = (data or {}).get("status")
             if status in ("completed", "failed"):
                 break
-        self.assertEqual(status, "completed", "inference task did not complete")
-        inner = helpers.jq_get(data, "stdout")
-        if isinstance(inner, str):
-            inner = helpers.parse_json_safe(inner)
-        stdout = (inner or {}).get("stdout") if isinstance(inner, dict) else None
+        self.assertEqual(
+            status, "completed",
+            f"inference task did not complete (status={status!r})",
+        )
+        raw = helpers.jq_get(data, "jobs", 0, "result")
+        job_result = helpers.parse_json_safe(raw) if isinstance(raw, str) else raw
+        stdout = (job_result or {}).get("stdout") if isinstance(job_result, dict) else None
         self.assertTrue(
             stdout and "http://localhost:11434" in str(stdout),
-            "OLLAMA_BASE_URL missing in stdout",
+            f"OLLAMA_BASE_URL missing in stdout (stdout={stdout!r})",
         )

@@ -9,7 +9,6 @@ import argparse
 import os
 import subprocess
 import sys
-import time
 import unittest
 
 from scripts.test_scripts import config, helpers
@@ -129,10 +128,18 @@ def _run_prereq_checks():
     if not helpers.wait_for_gateway():
         print("Error: user-gateway not ready (healthz) after 30s", file=sys.stderr)
         sys.exit(1)
-    time.sleep(3)
+    if not helpers.wait_for_gateway_readyz(timeout_sec=30):
+        print("Error: user-gateway readyz not 200 after 30s", file=sys.stderr)
+        sys.exit(1)
     if not helpers.run_ollama_inference_smoke():
         print("Error: Ollama inference smoke failed", file=sys.stderr)
         sys.exit(1)
+
+
+def _proxy_pma_only(opts):
+    """True when only suite_proxy_pma is requested (minimal services; no gateway/cynork)."""
+    include = [t.strip() for t in (opts.tags or "").split(",") if t.strip()]
+    return include == ["suite_proxy_pma"]
 
 
 def main():
@@ -146,10 +153,14 @@ def main():
             print(t.id())
         sys.exit(0)
 
-    _ensure_cynork_ready(opts)
-    if opts.skip_ollama:
-        os.environ["E2E_SKIP_INFERENCE_SMOKE"] = "1"
-    _run_prereq_checks()
+    if _proxy_pma_only(opts):
+        # Proxy + PMA tests start their own minimal services; no gateway or cynork.
+        pass
+    else:
+        _ensure_cynork_ready(opts)
+        if opts.skip_ollama:
+            os.environ["E2E_SKIP_INFERENCE_SMOKE"] = "1"
+        _run_prereq_checks()
 
     result = unittest.runner.TextTestRunner(verbosity=2).run(suite)
     sys.exit(0 if result.wasSuccessful() else 1)

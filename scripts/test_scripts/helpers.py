@@ -87,6 +87,16 @@ def wait_for_gateway(max_attempts=30, sleep=1):
     return False
 
 
+def wait_for_gateway_readyz(timeout_sec=30):
+    """Wait for user-gateway /readyz 200 (ready to accept work). Return True when 200."""
+    for _ in range(timeout_sec):
+        ok, _ = run_curl("GET", f"{config.USER_API}/readyz", timeout=5)
+        if ok:
+            return True
+        time.sleep(1)
+    return False
+
+
 def temp_config_dir():
     """Return a temporary directory path for cynork config (caller cleans up)."""
     return tempfile.mkdtemp(prefix="cynodeai_e2e_config_")

@@ -14,6 +14,8 @@ SUITE_WORKER_NODE = "suite_worker_node"
 SUITE_AGENTS = "suite_agents"
 SUITE_CYNORK = "suite_cynork"
 SUITE_E2E = "suite_e2e"
+# Minimal proxy + PMA (no orchestrator; worker proxy and PMA only)
+SUITE_PROXY_PMA = "suite_proxy_pma"
 
 # Modules that provide shared state for other E2E tests. When filtering by include_tags,
 # these are always included (in discovery order) so dependencies run before tag-matched tests.

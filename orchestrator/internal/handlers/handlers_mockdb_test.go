@@ -2665,8 +2665,48 @@ func TestTaskHandler_ChatErrorPaths(t *testing.T) {
 
 // --- OpenAIChatHandler tests (GET /v1/models, POST /v1/chat/completions) ---
 
+// mockDBWithPMAEndpoint returns a MockDB with one active node whose capability snapshot reports PMA ready at pmaURL.
+func mockDBWithPMAEndpoint(t *testing.T, pmaURL string) *testutil.MockDB {
+	t.Helper()
+	db := testutil.NewMockDB()
+	nodeID := uuid.New()
+	db.AddNode(&models.Node{
+		ID:        nodeID,
+		NodeSlug:  "node-pma",
+		Status:    models.NodeStatusActive,
+		CreatedAt: time.Now().UTC(),
+		UpdatedAt: time.Now().UTC(),
+	})
+	report := nodepayloads.CapabilityReport{
+		Version:    1,
+		ReportedAt: time.Now().UTC().Format(time.RFC3339),
+		Node:       nodepayloads.CapabilityNode{NodeSlug: "node-pma"},
+		Platform:   nodepayloads.Platform{OS: "linux", Arch: "amd64"},
+		Compute:    nodepayloads.Compute{CPUCores: 4, RAMMB: 8192},
+		ManagedServicesStatus: &nodepayloads.ManagedServicesStatus{
+			Services: []nodepayloads.ManagedServiceStatus{
+				{
+					ServiceID:   "pma-main",
+					ServiceType: "pma",
+					State:       "ready",
+					Endpoints:   []string{pmaURL},
+					ReadyAt:     time.Now().UTC().Format(time.RFC3339),
+				},
+			},
+		},
+	}
+	raw, err := json.Marshal(report)
+	if err != nil {
+		t.Fatalf("marshal capability report: %v", err)
+	}
+	if err := db.SaveNodeCapabilitySnapshot(context.Background(), nodeID, string(raw)); err != nil {
+		t.Fatalf("save capability snapshot: %v", err)
+	}
+	return db
+}
+
 func TestOpenAIChatHandler_ListModels(t *testing.T) {
-	h := NewOpenAIChatHandler(testutil.NewMockDB(), newTestLogger(), "http://localhost:11434", "tinyllama", "")
+	h := NewOpenAIChatHandler(testutil.NewMockDB(), newTestLogger(), "http://localhost:11434", "tinyllama")
 	req := httptest.NewRequest("GET", "/v1/models", http.NoBody).WithContext(context.WithValue(context.Background(), contextKeyUserID, uuid.New()))
 	rec := httptest.NewRecorder()
 	h.ListModels(rec, req)
@@ -2691,7 +2731,7 @@ func TestOpenAIChatHandler_ListModels(t *testing.T) {
 }
 
 func TestOpenAIChatHandler_ChatCompletions_NoUser(t *testing.T) {
-	h := NewOpenAIChatHandler(testutil.NewMockDB(), newTestLogger(), "", "", "")
+	h := NewOpenAIChatHandler(testutil.NewMockDB(), newTestLogger(), "", "")
 	body := []byte(`{"messages":[{"role":"user","content":"hi"}]}`)
 	req := httptest.NewRequest("POST", "/v1/chat/completions", bytes.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
@@ -2716,7 +2756,7 @@ func TestOpenAIChatHandler_ChatCompletions_BadRequestCases(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			h := NewOpenAIChatHandler(testutil.NewMockDB(), newTestLogger(), "", "tinyllama", "")
+			h := NewOpenAIChatHandler(testutil.NewMockDB(), newTestLogger(), "", "tinyllama")
 			req := httptest.NewRequest("POST", "/v1/chat/completions", bytes.NewReader(tt.body)).WithContext(ctx)
 			req.Header.Set("Content-Type", "application/json")
 			rec := httptest.NewRecorder()
@@ -2733,7 +2773,7 @@ func TestOpenAIChatHandler_ChatCompletions_DirectInference(t *testing.T) {
 		_ = json.NewEncoder(w).Encode(map[string]any{"response": "Hello from model.", "done": true})
 	}))
 	defer mockOllama.Close()
-	h := NewOpenAIChatHandler(testutil.NewMockDB(), newTestLogger(), mockOllama.URL, "tinyllama", "")
+	h := NewOpenAIChatHandler(testutil.NewMockDB(), newTestLogger(), mockOllama.URL, "tinyllama")
 	body := []byte(`{"model":"tinyllama","messages":[{"role":"user","content":"hi"}]}`)
 	req := httptest.NewRequest("POST", "/v1/chat/completions", bytes.NewReader(body)).WithContext(context.WithValue(context.Background(), contextKeyUserID, uuid.New()))
 	req.Header.Set("Content-Type", "application/json")
@@ -2760,7 +2800,8 @@ func TestOpenAIChatHandler_ChatCompletions_PMA(t *testing.T) {
 		_ = json.NewEncoder(w).Encode(map[string]string{"content": "PMA reply."})
 	}))
 	defer mockPMA.Close()
-	h := NewOpenAIChatHandler(testutil.NewMockDB(), newTestLogger(), "", "", mockPMA.URL)
+	db := mockDBWithPMAEndpoint(t, mockPMA.URL)
+	h := NewOpenAIChatHandler(db, newTestLogger(), "", "")
 	body := []byte(`{"model":"cynodeai.pm","messages":[{"role":"user","content":"hi"}]}`)
 	req := httptest.NewRequest("POST", "/v1/chat/completions", bytes.NewReader(body)).WithContext(context.WithValue(context.Background(), contextKeyUserID, uuid.New()))
 	req.Header.Set("Content-Type", "application/json")
@@ -2783,7 +2824,8 @@ func TestOpenAIChatHandler_ChatCompletions_DefaultModelIsPM(t *testing.T) {
 		_ = json.NewEncoder(w).Encode(map[string]string{"content": "Default PM."})
 	}))
 	defer mockPMA.Close()
-	h := NewOpenAIChatHandler(testutil.NewMockDB(), newTestLogger(), "", "", mockPMA.URL)
+	db := mockDBWithPMAEndpoint(t, mockPMA.URL)
+	h := NewOpenAIChatHandler(db, newTestLogger(), "", "")
 	body := []byte(`{"messages":[{"role":"user","content":"hi"}]}`)
 	req := httptest.NewRequest("POST", "/v1/chat/completions", bytes.NewReader(body)).WithContext(context.WithValue(context.Background(), contextKeyUserID, uuid.New()))
 	req.Header.Set("Content-Type", "application/json")
@@ -2802,7 +2844,7 @@ func TestOpenAIChatHandler_ChatCompletions_DefaultModelIsPM(t *testing.T) {
 }
 
 func TestOpenAIChatHandler_ChatCompletions_PMAUnavailable(t *testing.T) {
-	h := NewOpenAIChatHandler(testutil.NewMockDB(), newTestLogger(), "", "", "")
+	h := NewOpenAIChatHandler(testutil.NewMockDB(), newTestLogger(), "", "")
 	body := []byte(`{"model":"cynodeai.pm","messages":[{"role":"user","content":"hi"}]}`)
 	req := httptest.NewRequest("POST", "/v1/chat/completions", bytes.NewReader(body)).WithContext(context.WithValue(context.Background(), contextKeyUserID, uuid.New()))
 	req.Header.Set("Content-Type", "application/json")
@@ -2814,7 +2856,7 @@ func TestOpenAIChatHandler_ChatCompletions_PMAUnavailable(t *testing.T) {
 }
 
 func TestOpenAIChatHandler_ChatCompletions_InvalidBody(t *testing.T) {
-	h := NewOpenAIChatHandler(testutil.NewMockDB(), newTestLogger(), "", "", "")
+	h := NewOpenAIChatHandler(testutil.NewMockDB(), newTestLogger(), "", "")
 	req := httptest.NewRequest("POST", "/v1/chat/completions", strings.NewReader("not json")).WithContext(context.WithValue(context.Background(), contextKeyUserID, uuid.New()))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
@@ -2829,7 +2871,7 @@ func TestOpenAIChatHandler_ChatCompletions_DirectInferenceFails(t *testing.T) {
 		w.WriteHeader(http.StatusInternalServerError)
 	}))
 	defer mockOllama.Close()
-	h := NewOpenAIChatHandler(testutil.NewMockDB(), newTestLogger(), mockOllama.URL, "tinyllama", "")
+	h := NewOpenAIChatHandler(testutil.NewMockDB(), newTestLogger(), mockOllama.URL, "tinyllama")
 	body := []byte(`{"model":"tinyllama","messages":[{"role":"user","content":"hi"}]}`)
 	req := httptest.NewRequest("POST", "/v1/chat/completions", bytes.NewReader(body)).WithContext(context.WithValue(context.Background(), contextKeyUserID, uuid.New()))
 	req.Header.Set("Content-Type", "application/json")
@@ -2845,7 +2887,7 @@ func TestOpenAIChatHandler_ChatCompletions_RedactsSecrets(t *testing.T) {
 		_ = json.NewEncoder(w).Encode(map[string]any{"response": "ok", "done": true})
 	}))
 	defer mockOllama.Close()
-	h := NewOpenAIChatHandler(testutil.NewMockDB(), newTestLogger(), mockOllama.URL, "tinyllama", "")
+	h := NewOpenAIChatHandler(testutil.NewMockDB(), newTestLogger(), mockOllama.URL, "tinyllama")
 	body := []byte(`{"model":"tinyllama","messages":[{"role":"user","content":"my key is sk-abcdefghij1234567890abcdefghij"}]}`)
 	req := httptest.NewRequest("POST", "/v1/chat/completions", bytes.NewReader(body)).WithContext(context.WithValue(context.Background(), contextKeyUserID, uuid.New()))
 	req.Header.Set("Content-Type", "application/json")
@@ -2862,7 +2904,7 @@ func TestOpenAIChatHandler_ChatCompletions_ProjectHeaderAndApiKeyRedaction(t *te
 	}))
 	defer mockOllama.Close()
 	projID := uuid.New()
-	h := NewOpenAIChatHandler(testutil.NewMockDB(), newTestLogger(), mockOllama.URL, "tinyllama", "")
+	h := NewOpenAIChatHandler(testutil.NewMockDB(), newTestLogger(), mockOllama.URL, "tinyllama")
 	body := []byte(`{"model":"tinyllama","messages":[{"role":"user","content":"apikey: secret123"}]}`)
 	req := httptest.NewRequest("POST", "/v1/chat/completions", bytes.NewReader(body)).WithContext(context.WithValue(context.Background(), contextKeyUserID, uuid.New()))
 	req.Header.Set("Content-Type", "application/json")
@@ -2888,7 +2930,8 @@ func TestOpenAIChatHandler_ChatCompletions_PMAFails(t *testing.T) {
 		w.WriteHeader(http.StatusInternalServerError)
 	}))
 	defer mockPMA.Close()
-	h := NewOpenAIChatHandler(testutil.NewMockDB(), newTestLogger(), "", "", mockPMA.URL)
+	db := mockDBWithPMAEndpoint(t, mockPMA.URL)
+	h := NewOpenAIChatHandler(db, newTestLogger(), "", "")
 	body := []byte(`{"model":"cynodeai.pm","messages":[{"role":"user","content":"hi"}]}`)
 	req := httptest.NewRequest("POST", "/v1/chat/completions", bytes.NewReader(body)).WithContext(context.WithValue(context.Background(), contextKeyUserID, uuid.New()))
 	req.Header.Set("Content-Type", "application/json")
@@ -2907,9 +2950,10 @@ func TestOpenAIChatHandler_ChatCompletions_Timeout(t *testing.T) {
 		_, _ = w.Write([]byte(`{"content":"ok"}`))
 	}))
 	defer mockPMA.Close()
+	db := mockDBWithPMAEndpoint(t, mockPMA.URL)
 	ctx, cancel := context.WithDeadline(context.WithValue(context.Background(), contextKeyUserID, uuid.New()), time.Now().Add(-time.Second))
 	defer cancel()
-	h := NewOpenAIChatHandler(testutil.NewMockDB(), newTestLogger(), "", "", mockPMA.URL)
+	h := NewOpenAIChatHandler(db, newTestLogger(), "", "")
 	body := []byte(`{"model":"cynodeai.pm","messages":[{"role":"user","content":"hi"}]}`)
 	req := httptest.NewRequest("POST", "/v1/chat/completions", bytes.NewReader(body)).WithContext(ctx)
 	req.Header.Set("Content-Type", "application/json")
@@ -2927,7 +2971,7 @@ func TestOpenAIChatHandler_ChatCompletions_Timeout(t *testing.T) {
 func TestOpenAIChatHandler_ChatCompletions_DirectInferenceTimeout(t *testing.T) {
 	ctx, cancel := context.WithDeadline(context.WithValue(context.Background(), contextKeyUserID, uuid.New()), time.Now().Add(-time.Second))
 	defer cancel()
-	h := NewOpenAIChatHandler(testutil.NewMockDB(), newTestLogger(), "http://localhost:11434", "tinyllama", "")
+	h := NewOpenAIChatHandler(testutil.NewMockDB(), newTestLogger(), "http://localhost:11434", "tinyllama")
 	body := []byte(`{"model":"tinyllama","messages":[{"role":"user","content":"hi"}]}`)
 	req := httptest.NewRequest("POST", "/v1/chat/completions", bytes.NewReader(body)).WithContext(ctx)
 	req.Header.Set("Content-Type", "application/json")
@@ -2950,7 +2994,7 @@ func TestOpenAIChatHandler_ChatCompletions_DirectInference_RetryThenSuccess(t *t
 		_ = json.NewEncoder(w).Encode(map[string]any{"response": "retry-ok", "done": true})
 	}))
 	defer mockOllama.Close()
-	h := NewOpenAIChatHandler(testutil.NewMockDB(), newTestLogger(), mockOllama.URL, "tinyllama", "")
+	h := NewOpenAIChatHandler(testutil.NewMockDB(), newTestLogger(), mockOllama.URL, "tinyllama")
 	body := []byte(`{"model":"tinyllama","messages":[{"role":"user","content":"hi"}]}`)
 	req := httptest.NewRequest("POST", "/v1/chat/completions", bytes.NewReader(body)).WithContext(context.WithValue(context.Background(), contextKeyUserID, uuid.New()))
 	req.Header.Set("Content-Type", "application/json")
@@ -2967,7 +3011,7 @@ func TestOpenAIChatHandler_ChatCompletions_DirectInference_RetryThenSuccess(t *t
 func TestOpenAIChatHandler_ChatCompletions_GetThreadError(t *testing.T) {
 	mockDB := testutil.NewMockDB()
 	mockDB.ForceError = errors.New("db error")
-	h := NewOpenAIChatHandler(mockDB, newTestLogger(), "http://localhost:11434", "tinyllama", "")
+	h := NewOpenAIChatHandler(mockDB, newTestLogger(), "http://localhost:11434", "tinyllama")
 	body := []byte(`{"model":"tinyllama","messages":[{"role":"user","content":"hi"}]}`)
 	req := httptest.NewRequest("POST", "/v1/chat/completions", bytes.NewReader(body)).WithContext(context.WithValue(context.Background(), contextKeyUserID, uuid.New()))
 	req.Header.Set("Content-Type", "application/json")
@@ -2987,7 +3031,7 @@ func TestOpenAIChatHandler_ChatCompletions_NonDefaultModelUsesInferenceModel(t *
 		_ = json.NewEncoder(w).Encode(map[string]any{"response": "from-" + body.Model, "done": true})
 	}))
 	defer mockOllama.Close()
-	h := NewOpenAIChatHandler(testutil.NewMockDB(), newTestLogger(), mockOllama.URL, "tinyllama", "")
+	h := NewOpenAIChatHandler(testutil.NewMockDB(), newTestLogger(), mockOllama.URL, "tinyllama")
 	body := []byte(`{"model":"llama2","messages":[{"role":"user","content":"hi"}]}`)
 	req := httptest.NewRequest("POST", "/v1/chat/completions", bytes.NewReader(body)).WithContext(context.WithValue(context.Background(), contextKeyUserID, uuid.New()))
 	req.Header.Set("Content-Type", "application/json")

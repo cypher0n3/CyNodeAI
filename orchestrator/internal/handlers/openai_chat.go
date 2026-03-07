@@ -50,11 +50,11 @@ type OpenAIChatHandler struct {
 	logger         *slog.Logger
 	inferenceURL   string
 	inferenceModel string
-	pmaBaseURL     string
 }
 
 // NewOpenAIChatHandler creates a handler for the OpenAI-compatible chat surface.
-func NewOpenAIChatHandler(db database.Store, logger *slog.Logger, inferenceURL, inferenceModel, pmaBaseURL string) *OpenAIChatHandler {
+// PMA routing is only via worker-reported endpoints (capability managed_services_status); no env fallback.
+func NewOpenAIChatHandler(db database.Store, logger *slog.Logger, inferenceURL, inferenceModel string) *OpenAIChatHandler {
 	if inferenceModel == "" {
 		inferenceModel = "tinyllama"
 	}
@@ -63,7 +63,6 @@ func NewOpenAIChatHandler(db database.Store, logger *slog.Logger, inferenceURL, 
 		logger:         logger,
 		inferenceURL:   inferenceURL,
 		inferenceModel: inferenceModel,
-		pmaBaseURL:     pmaBaseURL,
 	}
 }
 
@@ -225,10 +224,9 @@ func (h *OpenAIChatHandler) completeViaPMA(ctx context.Context, effectiveModel s
 	return "", http.StatusBadGateway, inferenceFailedCode, completionFailedMsg
 }
 
+// resolvePMAEndpoint returns the PMA base URL for chat routing.
+// Only worker-reported endpoints from capability snapshots (managed_services_status) are used; no other path is allowed.
 func (h *OpenAIChatHandler) resolvePMAEndpoint(ctx context.Context) string {
-	if strings.TrimSpace(h.pmaBaseURL) != "" {
-		return strings.TrimSpace(h.pmaBaseURL)
-	}
 	if h.db == nil {
 		return ""
 	}

@@ -47,6 +47,10 @@ What the orchestrator and worker do today with managed-service config.
   Token is delivered to the **worker** (in node config); the worker proxy holds it and attaches it when forwarding internal proxy calls to the orchestrator.
   Per spec, the token is not given to the agent.
 
+### Orchestrator (user-gateway / openai_chat)
+
+- **PMA routing:** The orchestrator MUST route `model=cynodeai.pm` traffic to PMA using only worker-reported endpoints from capability snapshots (`managed_services_status`). It MUST NOT use `PMA_BASE_URL` or direct addressing (REQ-ORCHES-0162). Implemented: `resolvePMAEndpoint` returns only from `collectReadyPMACandidates`; no env fallback.
+
 ### Worker Node (Node-Manager)
 
 - On config apply: writes `WORKER_NODE_CONFIG_JSON`, `ORCHESTRATOR_INTERNAL_PROXY_BASE_URL`, and `WORKER_MANAGED_SERVICE_TARGETS_JSON`.
@@ -62,8 +66,7 @@ What the orchestrator and worker do today with managed-service config.
 ### Worker API
 
 - **Orchestrator -> agent:** `POST /v1/worker/managed-services/{service_id}/proxy:http` forwards to the target's `BaseURL`.
-- Targets come from `WORKER_MANAGED_SERVICE_TARGETS_JSON` (filled by node-manager from config + `PMA_BASE_URL`).
-- So if PMA is running at `PMA_BASE_URL`, orchestrator can reach it via the worker.
+- Targets come from `WORKER_MANAGED_SERVICE_TARGETS_JSON` (filled by node-manager from config + `PMA_BASE_URL`). The **orchestrator** does not use this env; it uses only the endpoint(s) the worker reports in capability `managed_services_status` (REQ-ORCHES-0162).
 - **OK.**
 - **Agent -> orchestrator:** Internal mux exposes `POST .../internal/orchestrator/mcp:call` and `.../agent:ready`.
 - They forward to `ORCHESTRATOR_INTERNAL_PROXY_BASE_URL`.

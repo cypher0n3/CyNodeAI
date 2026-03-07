@@ -5,9 +5,11 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"os"
 	"os/exec"
 	"strings"
+	"time"
 	"unicode"
 
 	"github.com/cypher0n3/cynodeai/go_shared_libs/contracts/nodepayloads"
@@ -52,7 +54,8 @@ func runMain(ctx context.Context) int {
 }
 
 // startWorkerAPI starts the worker-api process with the given bearer token in env.
-// The token must not be logged. Returns when the process has been started (or an error).
+// Passes through INFERENCE_PROXY_IMAGE, OLLAMA_UPSTREAM_URL, CONTAINER_RUNTIME, WORKER_API_STATE_DIR
+// so inference jobs (pod path) and executor config are correct when node is started with extra_env (e.g. full-demo).
 func startWorkerAPI(bearerToken string) error {
 	bin := getEnv("NODE_MANAGER_WORKER_API_BIN", "worker-api")
 	if !strings.Contains(bin, "/") {
@@ -63,7 +66,14 @@ func startWorkerAPI(bearerToken string) error {
 		bin = path
 	}
 	cmd := exec.CommandContext(context.Background(), bin)
-	cmd.Env = append(os.Environ(), "WORKER_API_BEARER_TOKEN="+bearerToken)
+	env := os.Environ()
+	env = append(env, "WORKER_API_BEARER_TOKEN="+bearerToken)
+	for _, key := range []string{"INFERENCE_PROXY_IMAGE", "OLLAMA_UPSTREAM_URL", "CONTAINER_RUNTIME", "WORKER_API_STATE_DIR"} {
+		if v := os.Getenv(key); v != "" {
+			env = append(env, key+"="+v)
+		}
+	}
+	cmd.Env = env
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	if err := cmd.Start(); err != nil {
@@ -115,6 +125,23 @@ func sanitizeContainerName(serviceID string) string {
 	}, strings.TrimSpace(serviceID))
 }
 
+// waitForPMAReady polls http://127.0.0.1:port/healthz until 200 or timeout so we do not report "ready" before the container is reachable.
+func waitForPMAReady(port string, timeout time.Duration) {
+	url := "http://127.0.0.1:" + strings.TrimSpace(port) + "/healthz"
+	client := &http.Client{Timeout: 2 * time.Second}
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		resp, err := client.Get(url)
+		if err == nil {
+			_ = resp.Body.Close()
+			if resp.StatusCode == http.StatusOK {
+				return
+			}
+		}
+		time.Sleep(500 * time.Millisecond)
+	}
+}
+
 // effectiveStateDir returns state directory for socket paths; matches nodemanager precedence so worker-api and node-manager agree.
 func effectiveStateDir() string {
 	if v := strings.TrimSpace(getEnv("WORKER_API_STATE_DIR", "")); v != "" {
@@ -133,6 +160,7 @@ func buildManagedServiceRunArgs(svc *nodepayloads.ConfigManagedService, serviceI
 
 // startManagedServices starts each desired managed service container (e.g. PMA) from config.
 // Containers are named cynodeai-managed-<service_id>. If a container already exists, it is started if stopped.
+// For PMA, waits for the service to respond on /healthz before returning so the orchestrator does not get "ready" before the container is reachable.
 func startManagedServices(services []nodepayloads.ConfigManagedService) error {
 	rt := getEnv("CONTAINER_RUNTIME", "podman")
 	for i := range services {
@@ -151,6 +179,9 @@ func startManagedServices(services []nodepayloads.ConfigManagedService) error {
 		out, err := check.Output()
 		if err == nil && strings.Contains(string(out), name) {
 			_ = exec.Command(rt, "start", name).Run()
+			if strings.EqualFold(serviceType, "pma") {
+				waitForPMAReady(getEnv("PMA_PORT", "8090"), 30*time.Second)
+			}
 			continue
 		}
 		args := buildManagedServiceRunArgs(svc, serviceID, serviceType, image, name)
@@ -158,6 +189,9 @@ func startManagedServices(services []nodepayloads.ConfigManagedService) error {
 		cmd.Env = os.Environ()
 		if out, err := cmd.CombinedOutput(); err != nil {
 			return fmt.Errorf("managed service %q: %w: %s", serviceID, err, strings.TrimSpace(string(out)))
+		}
+		if strings.EqualFold(serviceType, "pma") {
+			waitForPMAReady(getEnv("PMA_PORT", "8090"), 30*time.Second)
 		}
 	}
 	return nil

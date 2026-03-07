@@ -16,27 +16,41 @@ class TestModelsAndChat(unittest.TestCase):
 
     def test_models_and_chat(self):
         """Assert models list returns list; run one-shot chat unless inference smoke skipped."""
-        ok, out, _ = helpers.run_cynork(
+        ok, out, err = helpers.run_cynork(
             ["models", "list", "-o", "json"], state.CONFIG_PATH
         )
-        self.assertTrue(ok, "models list failed")
+        self.assertTrue(
+            ok, f"models list failed: stdout={out!r} stderr={err!r}"
+        )
         data = helpers.parse_json_safe(out)
-        self.assertIsNotNone(data)
-        self.assertEqual(data.get("object"), "list")
-        self.assertGreaterEqual(len(data.get("data") or []), 1)
+        self.assertIsNotNone(
+            data, f"models list returned no valid JSON: stdout={out!r} stderr={err!r}"
+        )
+        self.assertEqual(data.get("object"), "list", f"object not list: {data!r}")
+        data_list = data.get("data") or []
+        self.assertGreaterEqual(
+            len(data_list), 1,
+            f"models list empty: data={data_list!r}",
+        )
         if os.environ.get("E2E_SKIP_INFERENCE_SMOKE", "") or config.E2E_SKIP_INFERENCE_SMOKE:
             return
         chat_ok = False
+        last_out, last_err = "", ""
         for attempt in range(1, 4):
             if attempt > 1:
                 time.sleep(5)
-            _, out, _ = helpers.run_cynork(
+            ok_chat, out, err = helpers.run_cynork(
                 ["chat", "--message", "Reply with exactly: OK", "--plain"],
                 state.CONFIG_PATH,
             )
-            out_stripped = (out or "").strip()
-            bad = "error:" in out.lower() or "eof" in out.lower() or "502" in out
+            last_out, last_err = out or "", err or ""
+            merged = (last_out + "\n" + last_err).lower()
+            bad = "error:" in merged or "eof" in merged or "502" in merged
+            out_stripped = last_out.strip()
             if out_stripped and not bad:
                 chat_ok = True
                 break
-        self.assertTrue(chat_ok, "one-shot chat failed after retries")
+        self.assertTrue(
+            chat_ok,
+            f"one-shot chat failed after retries: stdout={last_out!r} stderr={last_err!r}",
+        )

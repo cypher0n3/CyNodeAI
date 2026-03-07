@@ -61,7 +61,7 @@ func run(ctx context.Context, cfg *config.OrchestratorConfig, store database.Sto
 	authHandler := handlers.NewAuthHandler(store, jwtManager, rateLimiter, logger)
 	userHandler := handlers.NewUserHandler(store, logger)
 	taskHandler := handlers.NewTaskHandler(store, logger, cfg.InferenceURL, cfg.InferenceModel)
-	openAIChatHandler := handlers.NewOpenAIChatHandler(store, logger, cfg.InferenceURL, cfg.InferenceModel, cfg.PMABaseURL)
+	openAIChatHandler := handlers.NewOpenAIChatHandler(store, logger, cfg.InferenceURL, cfg.InferenceModel)
 	skillsHandler := handlers.NewSkillsHandler(store, logger)
 
 	if err := store.EnsureDefaultSkill(ctx, defaultSkillContent); err != nil {

@@ -52,3 +52,14 @@ OLLAMA_E2E_MODEL = os.environ.get("OLLAMA_E2E_MODEL", "tinyllama")
 
 # Optional: node state dir for E2E that assert on secure store (e.g. full-demo); skip tests if unset
 NODE_STATE_DIR = os.environ.get("NODE_STATE_DIR", "").strip()
+
+# Proxy + PMA isolated tests (minimal services: worker-api proxy + PMA; no orchestrator)
+# Ports used only when running test_proxy_pma (avoid clash with main stack)
+PROXY_PMA_TEST_PMA_PORT = int(os.environ.get("PROXY_PMA_TEST_PMA_PORT", "18090"))
+PROXY_PMA_TEST_WORKER_PORT = int(os.environ.get("PROXY_PMA_TEST_WORKER_PORT", "18091"))
+WORKER_API_BIN = os.environ.get("WORKER_API_BIN") or os.path.join(
+    PROJECT_ROOT, "worker_node", "bin", "worker-api-dev"
+)
+PMA_BIN = os.environ.get("PMA_BIN") or os.path.join(
+    PROJECT_ROOT, "agents", "bin", "cynode-pma-dev"
+)

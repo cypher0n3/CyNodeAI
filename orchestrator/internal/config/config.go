@@ -58,8 +58,8 @@ type OrchestratorConfig struct {
 	PMABinaryPath       string // PMA_BINARY; path to cynode-pma binary
 	PMAListenAddr       string // PMA_LISTEN_ADDR; default :8090
 	PMAInstructionsRoot string // PMA_INSTRUCTIONS_ROOT; optional
-	// PMABaseURL is the base URL for the user-gateway to call cynode-pma (e.g. http://localhost:8090 or http://cynode-pma:8090). Used for model=cynodeai.pm routing.
-	PMABaseURL string // PMA_BASE_URL; empty means PM chat path is unavailable
+	// PMABaseURL is deprecated for chat routing. PMA is only reachable via worker-reported capability (orchestrator ↔ worker proxy). Kept for backward compat / other use.
+	PMABaseURL string // PMA_BASE_URL; not used for resolvePMAEndpoint
 	// PMA managed-service desired-state defaults (worker-managed PMA path).
 	PMAServiceID       string // PMA_SERVICE_ID
 	PMAImage           string // PMA_IMAGE

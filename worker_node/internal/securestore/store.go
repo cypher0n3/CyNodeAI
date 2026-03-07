@@ -197,6 +197,16 @@ func (s *Store) tokenPath(serviceID string) (string, error) {
 	return filepath.Join(s.tokenDir(), filename), nil
 }
 
+// buildEncryptedEnvelopeFromRecord marshals the record and builds an encrypted envelope (call inside runWithSecret).
+func (s *Store) buildEncryptedEnvelopeFromRecord(record AgentTokenRecord) (encryptedEnvelope, error) {
+	plaintext, err := json.Marshal(record)
+	if err != nil {
+		return encryptedEnvelope{}, fmt.Errorf("marshal token record: %w", err)
+	}
+	defer zeroBytes(plaintext)
+	return s.buildEncryptedEnvelope(plaintext)
+}
+
 // PutAgentToken writes or rotates a per-service token record.
 func (s *Store) PutAgentToken(serviceID, token, expiresAt string) error {
 	serviceID, err := sanitizeServiceID(serviceID)
@@ -222,18 +232,7 @@ func (s *Store) PutAgentToken(serviceID, token, expiresAt string) error {
 	var env encryptedEnvelope
 	var encErr error
 	runWithSecret(func() {
-		plaintext, marshalErr := json.Marshal(record)
-		if marshalErr != nil {
-			encErr = fmt.Errorf("marshal token record: %w", marshalErr)
-			return
-		}
-		defer zeroBytes(plaintext)
-		var e encryptedEnvelope
-		e, encErr = s.buildEncryptedEnvelope(plaintext)
-		if encErr != nil {
-			return
-		}
-		env = e
+		env, encErr = s.buildEncryptedEnvelopeFromRecord(record)
 	})
 	if encErr != nil {
 		return encErr
@@ -263,6 +262,29 @@ func (s *Store) PutAgentToken(serviceID, token, expiresAt string) error {
 	return nil
 }
 
+// decryptAndParseTokenRecord decrypts the envelope and parses the token record, checking expiry (call inside runWithSecret).
+func (s *Store) decryptAndParseTokenRecord(env *encryptedEnvelope, nonce, payload []byte) (*AgentTokenRecord, error) {
+	plaintext, err := s.decryptEnvelope(env, nonce, payload)
+	if err != nil {
+		return nil, err
+	}
+	defer zeroBytes(plaintext)
+	var r AgentTokenRecord
+	if err := json.Unmarshal(plaintext, &r); err != nil {
+		return nil, fmt.Errorf("decode token record: %w", err)
+	}
+	if strings.TrimSpace(r.ExpiresAt) != "" {
+		expiresAt, err := time.Parse(time.RFC3339, r.ExpiresAt)
+		if err != nil {
+			return nil, fmt.Errorf("invalid stored expires_at: %w", err)
+		}
+		if !time.Now().UTC().Before(expiresAt) {
+			return nil, ErrTokenExpired
+		}
+	}
+	return &r, nil
+}
+
 // GetAgentToken reads and decrypts a per-service token record.
 // Decrypt and plaintext handling run inside runtime/secret when available; zeroBytes remains fallback.
 func (s *Store) GetAgentToken(serviceID string) (*AgentTokenRecord, error) {
@@ -289,29 +311,7 @@ func (s *Store) GetAgentToken(serviceID string) (*AgentTokenRecord, error) {
 	var record *AgentTokenRecord
 	var decErr error
 	runWithSecret(func() {
-		plaintext, err := s.decryptEnvelope(&env, nonce, payload)
-		if err != nil {
-			decErr = err
-			return
-		}
-		defer zeroBytes(plaintext)
-		var r AgentTokenRecord
-		if err := json.Unmarshal(plaintext, &r); err != nil {
-			decErr = fmt.Errorf("decode token record: %w", err)
-			return
-		}
-		if strings.TrimSpace(r.ExpiresAt) != "" {
-			expiresAt, err := time.Parse(time.RFC3339, r.ExpiresAt)
-			if err != nil {
-				decErr = fmt.Errorf("invalid stored expires_at: %w", err)
-				return
-			}
-			if !time.Now().UTC().Before(expiresAt) {
-				decErr = ErrTokenExpired
-				return
-			}
-		}
-		record = &r
+		record, decErr = s.decryptAndParseTokenRecord(&env, nonce, payload)
 	})
 	if decErr != nil {
 		return nil, decErr

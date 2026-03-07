@@ -805,6 +805,16 @@ func buildManagedServicesStatus(nodeConfig *nodepayloads.NodeConfigurationPayloa
 			ServiceType: serviceType,
 			State:       "starting",
 		}
+		// PMA: report "ready" with endpoint so orchestrator can route chat (REQ-ORCHES-0162).
+		// Endpoint must be reachable by the orchestrator/gateway (e.g. PMA_ADVERTISED_URL in full-demo).
+		if serviceType == serviceTypePMA {
+			advertised := strings.TrimSpace(getEnv("PMA_ADVERTISED_URL", getEnv("PMA_BASE_URL", "http://127.0.0.1:8090")))
+			if advertised != "" {
+				status.State = "ready"
+				status.Endpoints = []string{advertised}
+				status.ReadyAt = time.Now().UTC().Format(time.RFC3339)
+			}
+		}
 		status.AgentToOrchestratorProxy = buildAgentToOrchestratorProxyStatus(stateDir, serviceID, svc.Orchestrator)
 		out.Services = append(out.Services, status)
 	}

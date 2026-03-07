@@ -58,6 +58,9 @@ type testState struct {
 		lastTaskResultBody []byte
 		// Mock inference server for Chat scenario (POST /api/generate); closed in After
 		inferenceServer *httptest.Server
+		// Mock PMA server for Chat via PMA path (worker-reported endpoint); closed in After
+		pmaMockServer   *httptest.Server
+		pmaMockServerURL string
 		// Workflow: last start response body and stored lease_id for release step
 		workflowStartBody []byte
 		storedLeaseID     string
@@ -200,7 +203,7 @@ func InitializeOrchestratorSuite(sc *godog.ScenarioContext, state *testState) {
 		mux.Handle("GET /v1/tasks/{id}/result", authMiddleware.RequireUserAuth(http.HandlerFunc(taskHandler.GetTaskResult)))
 		mux.Handle("POST /v1/tasks/{id}/cancel", authMiddleware.RequireUserAuth(http.HandlerFunc(taskHandler.CancelTask)))
 		mux.Handle("GET /v1/tasks/{id}/logs", authMiddleware.RequireUserAuth(http.HandlerFunc(taskHandler.GetTaskLogs)))
-		openAIChatHandler := handlers.NewOpenAIChatHandler(db, slog.Default(), inferenceURL, inferenceModel, "")
+		openAIChatHandler := handlers.NewOpenAIChatHandler(db, slog.Default(), inferenceURL, inferenceModel)
 		mux.Handle("GET /v1/models", authMiddleware.RequireUserAuth(http.HandlerFunc(openAIChatHandler.ListModels)))
 		mux.Handle("POST /v1/chat/completions", authMiddleware.RequireUserAuth(http.HandlerFunc(openAIChatHandler.ChatCompletions)))
 		mux.HandleFunc("POST /v1/nodes/register", nodeHandler.Register)
@@ -226,6 +229,11 @@ func InitializeOrchestratorSuite(sc *godog.ScenarioContext, state *testState) {
 		if state.inferenceServer != nil {
 			state.inferenceServer.Close()
 			state.inferenceServer = nil
+		}
+		if state.pmaMockServer != nil {
+			state.pmaMockServer.Close()
+			state.pmaMockServer = nil
+			state.pmaMockServerURL = ""
 		}
 		if state.workerServer != nil {
 			state.workerServer.Close()
@@ -1806,30 +1814,75 @@ func RegisterOrchestratorSteps(sc *godog.ScenarioContext, state *testState) {
 		}
 		return nil
 	})
-	sc.Step(`^I send a chat message "([^"]*)"$`, func(ctx context.Context, message string) error {
+	sc.Step(`^a mock PMA server is running$`, func(ctx context.Context) error {
 		st := getState(ctx)
-		if st == nil || st.server == nil {
+		if st == nil {
 			return godog.ErrSkip
 		}
-		// Use inference model so mock inference server is used (pmaBaseURL not set in BDD)
-		body, _ := json.Marshal(map[string]interface{}{
-			"model":    "tinyllama",
-			"messages": []map[string]string{{"role": "user", "content": message}},
-		})
-		req, _ := http.NewRequest("POST", st.server.URL+"/v1/chat/completions", bytes.NewReader(body))
-		req.Header.Set("Content-Type", "application/json")
-		req.Header.Set("Authorization", "Bearer "+st.accessToken)
-		resp, err := http.DefaultClient.Do(req)
+		if st.pmaMockServer != nil {
+			return nil
+		}
+		st.pmaMockServer = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.Method != http.MethodPost || r.URL.Path != "/internal/chat/completion" {
+				w.WriteHeader(http.StatusNotFound)
+				return
+			}
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			_ = json.NewEncoder(w).Encode(map[string]string{"content": "mock pma response"})
+		}))
+		st.pmaMockServerURL = st.pmaMockServer.URL
+		return nil
+	})
+	sc.Step(`^a node "([^"]*)" exists and has reported PMA ready at the mock PMA server$`, func(ctx context.Context, slug string) error {
+		st := getState(ctx)
+		if st == nil || st.db == nil || st.pmaMockServerURL == "" {
+			return godog.ErrSkip
+		}
+		node, err := st.db.GetNodeBySlug(ctx, slug)
+		if errors.Is(err, database.ErrNotFound) {
+			if err := nodeRegisterStep(ctx, slug, ""); err != nil {
+				return err
+			}
+			node, err = st.db.GetNodeBySlug(ctx, slug)
+			if err != nil {
+				return err
+			}
+		} else if err != nil {
+			return err
+		}
+		if err := st.db.UpdateNodeStatus(ctx, node.ID, "active"); err != nil {
+			return err
+		}
+		report := nodepayloads.CapabilityReport{
+			Version:    1,
+			ReportedAt: time.Now().UTC().Format(time.RFC3339),
+			Node:       nodepayloads.CapabilityNode{NodeSlug: slug},
+			Platform:   nodepayloads.Platform{OS: "linux", Arch: "amd64"},
+			Compute:    nodepayloads.Compute{CPUCores: 2, RAMMB: 4096},
+			ManagedServicesStatus: &nodepayloads.ManagedServicesStatus{
+				Services: []nodepayloads.ManagedServiceStatus{
+					{
+						ServiceID:   "pma-bdd",
+						ServiceType: "pma",
+						State:       "ready",
+						Endpoints:   []string{st.pmaMockServerURL},
+						ReadyAt:     time.Now().UTC().Format(time.RFC3339),
+					},
+				},
+			},
+		}
+		raw, err := json.Marshal(report)
 		if err != nil {
 			return err
 		}
-		defer resp.Body.Close()
-		st.lastStatusCode = resp.StatusCode
-		if resp.StatusCode != http.StatusOK {
-			return fmt.Errorf("chat/completions returned %d", resp.StatusCode)
-		}
-		st.lastTaskResultBody, _ = io.ReadAll(resp.Body)
-		return nil
+		return st.db.SaveNodeCapabilitySnapshot(ctx, node.ID, string(raw))
+	})
+	sc.Step(`^I send a chat message "([^"]*)"$`, func(ctx context.Context, message string) error {
+		return sendChatMessage(ctx, message, "tinyllama")
+	})
+	sc.Step(`^I send a chat message "([^"]*)" with model cynodeai\.pm$`, func(ctx context.Context, message string) error {
+		return sendChatMessage(ctx, message, "cynodeai.pm")
 	})
 	sc.Step(`^I receive a 200 response with non-empty response field$`, func(ctx context.Context) error {
 		st := getState(ctx)
@@ -2393,6 +2446,31 @@ func getTaskResult(ctx context.Context) error {
 	st.lastStatusCode = resp.StatusCode
 	st.lastTaskResultBody, err = io.ReadAll(resp.Body)
 	return err
+}
+
+func sendChatMessage(ctx context.Context, message, model string) error {
+	st := getState(ctx)
+	if st == nil || st.server == nil {
+		return godog.ErrSkip
+	}
+	body, _ := json.Marshal(map[string]interface{}{
+		"model":    model,
+		"messages": []map[string]string{{"role": "user", "content": message}},
+	})
+	req, _ := http.NewRequest("POST", st.server.URL+"/v1/chat/completions", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+st.accessToken)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	st.lastStatusCode = resp.StatusCode
+	st.lastTaskResultBody, _ = io.ReadAll(resp.Body)
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("chat/completions returned %d", resp.StatusCode)
+	}
+	return nil
 }
 
 func nodeRegisterStep(ctx context.Context, slug, advertisedWorkerAPIURL string) error {

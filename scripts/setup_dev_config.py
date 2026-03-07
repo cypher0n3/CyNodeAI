@@ -49,6 +49,8 @@ COMPOSE_FILE = os.path.join(PROJECT_ROOT, "orchestrator", "docker-compose.yml")
 NODE_MANAGER_PID_FILE = os.path.join(
     tempfile.gettempdir(), "cynodeai-node-manager.pid"
 )
+# Node state dir for full-demo: node writes secrets here; E2E reads NODE_STATE_DIR to assert on it.
+NODE_STATE_DIR = os.path.join(PROJECT_ROOT, "tmp", "cynodeai-node-state")
 # Dev builds (faster; use just build-dev)
 NODE_MANAGER_BIN = os.path.join(PROJECT_ROOT, "worker_node", "bin", "node-manager-dev")
 NODE_MANAGER_WORKER_API_BIN = os.path.join(
@@ -98,6 +100,7 @@ def compose_env():
     """Env dict for compose up (exported to subprocess)."""
     ensure_runtime()
     _sync_runtime_aliases()
+    # PMA routing is only via worker-reported capability (orchestrator ↔ worker proxy); no PMA_BASE_URL for chat.
     return {
         "POSTGRES_USER": POSTGRES_USER,
         "POSTGRES_PASSWORD": POSTGRES_PASSWORD,

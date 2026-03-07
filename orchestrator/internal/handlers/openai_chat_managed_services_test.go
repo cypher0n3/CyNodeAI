@@ -51,18 +51,11 @@ func TestResolvePMAEndpoint_FromManagedServicesStatus(t *testing.T) {
 	if saveErr := db.SaveNodeCapabilitySnapshot(context.Background(), nodeID, string(raw)); saveErr != nil {
 		t.Fatalf("save capability snapshot: %v", saveErr)
 	}
-	h := NewOpenAIChatHandler(db, newTestLogger(), "", "", "")
+	h := NewOpenAIChatHandler(db, newTestLogger(), "", "")
 	got := h.resolvePMAEndpoint(context.Background())
 	want := "http://worker.local/v1/worker/managed-services/pma-main/proxy:http"
 	if got != want {
 		t.Errorf("resolvePMAEndpoint() = %q, want %q", got, want)
-	}
-}
-
-func TestResolvePMAEndpoint_StaticOverride(t *testing.T) {
-	h := NewOpenAIChatHandler(testutil.NewMockDB(), newTestLogger(), "", "", "http://static-pma")
-	if got := h.resolvePMAEndpoint(context.Background()); got != "http://static-pma" {
-		t.Errorf("resolvePMAEndpoint() = %q, want static override", got)
 	}
 }
 
@@ -90,7 +83,7 @@ func TestResolvePMAEndpoint_RequiresReadyService(t *testing.T) {
 	}
 	raw, _ := json.Marshal(report)
 	_ = db.SaveNodeCapabilitySnapshot(context.Background(), nodeID, string(raw))
-	h := NewOpenAIChatHandler(db, newTestLogger(), "", "", "")
+	h := NewOpenAIChatHandler(db, newTestLogger(), "", "")
 	if got := h.resolvePMAEndpoint(context.Background()); got != "" {
 		t.Errorf("resolvePMAEndpoint() = %q, want empty for non-ready service", got)
 	}
@@ -131,7 +124,7 @@ func TestResolvePMAEndpoint_PicksMostRecentReadyAt(t *testing.T) {
 	}
 	addNodeWithReady("node-old", "http://old", now.Add(-10*time.Minute))
 	addNodeWithReady("node-new", "http://new", now)
-	h := NewOpenAIChatHandler(db, newTestLogger(), "", "", "")
+	h := NewOpenAIChatHandler(db, newTestLogger(), "", "")
 	if got := h.resolvePMAEndpoint(context.Background()); got != "http://new" {
 		t.Errorf("resolvePMAEndpoint() = %q, want most recent endpoint", got)
 	}
