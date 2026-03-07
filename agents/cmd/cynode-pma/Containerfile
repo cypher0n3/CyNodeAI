@@ -11,7 +11,7 @@ COPY agents ./agents
 RUN go build -ldflags="-s -w" -o /cynode-pma ./agents/cmd/cynode-pma \
     && upx --best /cynode-pma
 
-FROM alpine:3
+FROM alpine:3.20
 RUN apk add --no-cache ca-certificates wget
 # Non-root user for PMA (aligns with sandbox container practice; see docs/tech_specs/sandbox_container.md)
 RUN adduser -D -u 1000 -h /home/pma pma

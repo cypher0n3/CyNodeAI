@@ -454,7 +454,7 @@ def _ollama_ensure_model(runtime, container_name, model):
             [runtime, "exec", container_name, "ollama", "pull", model],
             capture_output=True,
             text=True,
-            timeout=180,
+            timeout=600,
             check=False,
         )
         if r.returncode != 0:
