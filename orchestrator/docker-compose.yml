@@ -1,7 +1,5 @@
-# Full orchestrator stack: Postgres + control-plane + user-gateway. cynode-pma and Ollama are profile-based.
-# Ports: postgres 5432, control-plane 12082, user-gateway 12080, cynode-pma 8090 (profile "pma"), ollama 11434 (profile "ollama").
-# Per orchestrator_bootstrap.md: PMA MUST NOT start until first inference path exists (worker ready or API Egress key).
-# Dev setup starts PMA only after node has registered (--profile pma up cynode-pma). Core stack: compose up -d (no pma profile).
+# Full orchestrator stack: Postgres + control-plane + user-gateway + mcp-gateway + api-egress. Ollama is profile-based (profile "ollama").
+# Ports: postgres 5432, control-plane 12082, user-gateway 12080, mcp-gateway 12083, api-egress 12084, ollama 11434 (profile "ollama").
 # Run from repo root: docker compose -f orchestrator/docker-compose.yml up -d
 # Explicit network for stable DNS and connectivity across restarts (mitigates recurring EOF/flaky host-gateway issues).
 networks:
@@ -38,8 +36,6 @@ services:
     environment:
       DATABASE_URL: postgres://${POSTGRES_USER:-cynodeai}:${POSTGRES_PASSWORD:-cynodeai-dev-password}@postgres:5432/${POSTGRES_DB:-cynodeai}?sslmode=disable
       CONTROL_PLANE_LISTEN_ADDR: ":12082"
-      # PMA runs as separate container; do not start cynode-pma subprocess inside this container.
-      PMA_ENABLED: "false"
       JWT_SECRET: ${JWT_SECRET:-dev-jwt-secret-change-in-production}
       NODE_REGISTRATION_PSK: ${NODE_REGISTRATION_PSK:-dev-node-psk-secret}
       BOOTSTRAP_ADMIN_PASSWORD: ${BOOTSTRAP_ADMIN_PASSWORD:-admin123}
@@ -79,30 +75,6 @@ services:
     networks:
       - orchestrator_net
 
-  cynode-pma:
-    profiles: ["pma"]
-    image: cynodeai-cynode-pma:dev
-    build:
-      context: ..
-      dockerfile: agents/cmd/cynode-pma/Containerfile
-    container_name: cynodeai-cynode-pma
-    environment:
-      PMA_ROLE: project_manager
-      PMA_LISTEN_ADDR: ":8090"
-      # PMA calls Ollama for chat completion; use compose service name.
-      OLLAMA_BASE_URL: http://ollama:11434
-      INFERENCE_MODEL: ${INFERENCE_MODEL:-tinyllama}
-    ports:
-      - "${PMA_PORT:-8090}:8090"
-    healthcheck:
-      test: ["CMD", "wget", "-q", "-O", "-", "http://localhost:8090/healthz"]
-      interval: 5s
-      timeout: 3s
-      retries: 5
-      start_period: 5s
-    networks:
-      - orchestrator_net
-
   ollama:
     profiles: ["ollama"]
     image: ${OLLAMA_IMAGE:-ollama/ollama}
@@ -113,14 +85,13 @@ services:
       - ollama-data:/root/.ollama
     # Use explicit DNS to avoid runtime DNS degradation after repeated stack restarts
     # (Podman/Docker default resolver can fail with "i/o timeout" after many down/up cycles).
-    dns:
-      - 8.8.8.8
-      - 8.8.4.4
+    # dns:
+    #   - 8.8.8.8
+    #   - 8.8.4.4
     networks:
       - orchestrator_net
 
   mcp-gateway:
-    profiles: ["optional"]
     build:
       context: ..
       dockerfile: orchestrator/cmd/mcp-gateway/Containerfile
@@ -133,7 +104,6 @@ services:
       - orchestrator_net
 
   api-egress:
-    profiles: ["optional"]
     build:
       context: ..
       dockerfile: orchestrator/cmd/api-egress/Containerfile
