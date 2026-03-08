@@ -14,9 +14,9 @@
   - [Step 1.3: Remove Ambiguous Prompt-Mode Inputs](#step-13-remove-ambiguous-prompt-mode-inputs)
   - [Phase 1 Exit Criteria](#phase-1-exit-criteria)
 - [Phase 2: Tighten the Highest-Value Assertions](#phase-2-tighten-the-highest-value-assertions)
-  - [Step 2.1: Tighten Task Result and Logs Coverage](#step-21-tighten-task-result-and-logs-coverage)
+  - [Step 2.1: Tighten Task Result Coverage and Reintroduce Proper Logs Coverage](#step-21-tighten-task-result-coverage-and-reintroduce-proper-logs-coverage)
   - [Step 2.2: Add Name-Based Task Identifier Coverage](#step-22-add-name-based-task-identifier-coverage)
-  - [Step 2.3: Harden Auth Refresh and Logout Assertions](#step-23-harden-auth-refresh-and-logout-assertions)
+  - [Step 2.3: Harden Auth Refresh Assertions and Reintroduce Proper Logout Coverage](#step-23-harden-auth-refresh-assertions-and-reintroduce-proper-logout-coverage)
   - [Step 2.4: Harden Chat Assertions](#step-24-harden-chat-assertions)
   - [Step 2.5: Tighten Worker Telemetry Assertions](#step-25-tighten-worker-telemetry-assertions)
   - [Step 2.6: Add Internal Managed-Agent Proxy Acceptance Coverage](#step-26-add-internal-managed-agent-proxy-acceptance-coverage)
@@ -240,13 +240,16 @@ Checklist:
 
 This phase hardens the tests that are currently green but too permissive.
 
-### Step 2.1: Tighten Task Result and Logs Coverage
+### Step 2.1: Tighten Task Result Coverage and Reintroduce Proper Logs Coverage
 
 Primary tests:
 
 - `scripts/test_scripts/e2e_080_task_result.py`
-- `scripts/test_scripts/e2e_150_task_logs.py`
 - `scripts/test_scripts/e2e_196_task_list_status_filter.py`
+
+New test to add:
+
+- a replacement `task logs` E2E module with strict contract assertions
 
 Primary Go files to keep in mind:
 
@@ -257,7 +260,7 @@ Checklist:
 
 - [ ] Make `task result` assertions check exact required fields, not just `status`.
 
-- [ ] Make `task logs` assertions check the expected contract shape, not just that JSON was returned.
+- [ ] Add a replacement `task logs` E2E that checks the expected contract shape rather than only proving that some JSON was returned.
 
 - [ ] Tighten list filtering assertions to the canonical response shape rather than accepting multiple shapes.
 
@@ -269,8 +272,11 @@ Primary tests to add or expand:
 
 - `scripts/test_scripts/e2e_070_task_get.py`
 - `scripts/test_scripts/e2e_080_task_result.py`
-- `scripts/test_scripts/e2e_150_task_logs.py`
 - `scripts/test_scripts/e2e_160_task_cancel.py`
+
+New test to add:
+
+- a replacement `task logs` E2E module that also covers name-based task references
 
 Checklist:
 
@@ -280,12 +286,15 @@ Checklist:
 
 - [ ] Confirm failure behavior is clear if name resolution is not implemented.
 
-### Step 2.3: Harden Auth Refresh and Logout Assertions
+### Step 2.3: Harden Auth Refresh Assertions and Reintroduce Proper Logout Coverage
 
 Primary tests:
 
 - `scripts/test_scripts/e2e_190_auth_refresh.py`
-- `scripts/test_scripts/e2e_200_auth_logout.py`
+
+New test to add:
+
+- a replacement auth logout E2E that asserts actual post-logout behavior
 
 Checklist:
 
@@ -293,7 +302,7 @@ Checklist:
 
 - [ ] Assert the old refresh token cannot still be treated as the current session token.
 
-- [ ] Assert logout clears local state and leaves the config in the expected post-logout shape.
+- [ ] Add a replacement logout test that asserts logout clears local state and leaves the config in the expected post-logout shape.
 
 - [ ] If the product contract requires server-side invalidation, add an assertion that proves the old access path is rejected.
 

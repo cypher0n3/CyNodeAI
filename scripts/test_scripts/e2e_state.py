@@ -8,7 +8,7 @@ import shutil
 import sys
 import tempfile
 
-# Set by e2e_01_login; cleaned by e2e_09_logout
+# Set by auth login tests; cleanup is manual or handled by callers.
 CONFIG_DIR = None
 CONFIG_PATH = None
 

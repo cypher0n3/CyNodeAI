@@ -109,7 +109,6 @@ Gaps (e.g. 011-019 between 010 and 020) allow inserting new tests without renumb
   Requires state.SBA_TASK_ID from e2e_123.
 - **e2e_140_sba_task_inference** - SBA task with inference prompt (skipped if `E2E_SKIP_INFERENCE_SMOKE`).
 - **e2e_145_sba_inference_reply** - SBA + inference prompt "Reply back with the current time."; asserts user-facing reply (not empty stdout / sba-run only); skipped if `E2E_SKIP_INFERENCE_SMOKE`.
-- **e2e_150_task_logs** - Task logs for `state.TASK_ID`.
 - **e2e_160_task_cancel** - Create task, cancel with `-y`, assert terminal status canceled.
 - **e2e_170_control_plane_node_register** - POST `/v1/nodes/register`; sets `state.NODE_JWT`.
 - **e2e_175_prescribed_startup_config_inference_backend** - Node config includes inference_backend when inference-capable.
@@ -120,12 +119,11 @@ Gaps (e.g. 011-019 between 010 and 020) allow inserting new tests without renumb
 - **e2e_194_chat_simultaneous_messages** - Three concurrent chat requests; assert at least one succeeds with non-empty reply (skipped if `E2E_SKIP_INFERENCE_SMOKE`).
 - **e2e_195_gateway_health_readyz** - GET /healthz and /readyz; assert 200 or 503 per spec.
 - **e2e_196_task_list_status_filter** - Task list with --status completed/queued; assert JSON shape and status enum.
-- **e2e_200_auth_logout** - Auth logout; cleans `state.CONFIG_DIR`.
 
 ## Execution Order and State
 
-Discovery order is alphabetical by module name (010, 020, ... 200).
-Several tests depend on shared state: login (020) creates the config and token; later tests use `state.CONFIG_PATH` and task/JWT IDs set by earlier tests; logout (200) removes the config dir.
+Discovery order is alphabetical by module name.
+Several tests depend on shared state: login (020) creates the config and token; later tests use `state.CONFIG_PATH` and task/JWT IDs set by earlier tests.
 Running a single test in isolation (e.g. `-k test_task_create`) will fail if it expects `state.TASK_ID` or `state.CONFIG_PATH` from a prior test; run the full suite or a contiguous subset.
 
 ## Environment
