@@ -210,7 +210,7 @@ func TestQueryLogs_withData(t *testing.T) {
 	now := time.Now().UTC().Format(time.RFC3339)
 	if err := s.db.WithContext(ctx).Create(&LogEvent{
 		LogID: "log-1", OccurredAt: now, SourceKind: "container", SourceName: "cname", ContainerID: "cid-1",
-		Stream: "stdout", Message: "hello", FieldsJSON: "{}",
+		Stream: StreamStdout, Message: "hello", FieldsJSON: "{}",
 	}).Error; err != nil {
 		t.Fatalf("insert: %v", err)
 	}
@@ -218,7 +218,7 @@ func TestQueryLogs_withData(t *testing.T) {
 	if err != nil {
 		t.Fatalf("QueryLogs: %v", err)
 	}
-	if len(events) != 1 || events[0].Message != "hello" || events[0].Stream != "stdout" {
+	if len(events) != 1 || events[0].Message != "hello" || events[0].Stream != StreamStdout {
 		t.Errorf("events: %+v", events)
 	}
 	if truncated.LimitedBy != limitedByNone || next != "" {

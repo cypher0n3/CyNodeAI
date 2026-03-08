@@ -122,15 +122,23 @@ def start_postgres():
             time.sleep(1)
         log_error("PostgreSQL failed to become ready within 30s")
         return False
-    run([
+    run_args = [
         rt, "run", "-d", "--name", _cfg.POSTGRES_CONTAINER_NAME,
         "-e", f"POSTGRES_USER={_cfg.POSTGRES_USER}",
         "-e", f"POSTGRES_PASSWORD={_cfg.POSTGRES_PASSWORD}",
         "-e", f"POSTGRES_DB={_cfg.POSTGRES_DB}",
         "-p", f"{_cfg.POSTGRES_PORT}:5432",
         "-v", "cynodeai-postgres-data:/var/lib/postgresql/data",
-        _cfg.POSTGRES_IMAGE,
-    ])
+    ]
+    if rt == "podman":
+        run_args.extend([
+            "--health-cmd", f"pg_isready -U {_cfg.POSTGRES_USER} -d {_cfg.POSTGRES_DB}",
+            "--health-interval", "2s",
+            "--health-timeout", "2s",
+            "--health-retries", "30",
+        ])
+    run_args.append(_cfg.POSTGRES_IMAGE)
+    run(run_args)
     log_info("Waiting for PostgreSQL to be ready...")
     for _ in range(60):
         r = subprocess.run(
@@ -466,7 +474,7 @@ def wait_for_orchestrator_readyz(timeout_sec=60):
             last_code = e.code
             try:
                 last_body = e.read().decode("utf-8", errors="replace").strip()
-            except Exception:
+            except (OSError, ValueError):
                 last_body = ""
         except (OSError, urllib.error.URLError):
             last_code = None
@@ -479,7 +487,8 @@ def wait_for_orchestrator_readyz(timeout_sec=60):
             last_log = elapsed
         time.sleep(1)
     if last_code is not None and last_body is not None:
-        log_error(f"Orchestrator not ready after {timeout_sec}s (last readyz {last_code}: {last_body[:120]})")
+        snippet = (last_body[:80] + "..") if len(last_body) > 80 else last_body
+        log_error(f"Orchestrator not ready after {timeout_sec}s (readyz {last_code}: {snippet})")
     else:
         log_error(f"Orchestrator not ready after {timeout_sec}s (readyz did not return 200)")
     return False
@@ -497,6 +506,45 @@ def _log_proc_streams(proc):
                 log_error(f"node-manager {label}:\n{decoded}")
         except OSError:
             pass
+
+
+def _start_node_popen(env, stdout_dest, stderr_dest):
+    """Run node-manager subprocess and wait for worker-api healthz; returns True if ready."""
+    log_info("=== Node startup (node-manager -> worker-api) ===")
+    with _popen_no_wait(
+        [_cfg.NODE_MANAGER_BIN],
+        cwd=_cfg.PROJECT_ROOT,
+        env=env,
+        stdout=stdout_dest,
+        stderr=stderr_dest,
+        shell=False,
+    ) as proc:
+        try:
+            with open(_cfg.NODE_MANAGER_PID_FILE, "w", encoding="utf-8") as f:
+                f.write(str(proc.pid))
+        except OSError:
+            pass
+        log_info(f"Node-manager started (PID {proc.pid}); waiting for worker-api...")
+        for _ in range(30):
+            if proc.poll() is not None:
+                log_error("Failed to start node-manager (process exited)")
+                _log_proc_streams(proc)
+                return False
+            try:
+                req = urllib.request.Request(
+                    f"http://localhost:{_cfg.WORKER_PORT}/healthz"
+                )
+                with urllib.request.urlopen(req, timeout=2) as resp:
+                    if resp.getcode() == 200:
+                        log_info(
+                            f"Worker API listening on http://localhost:{_cfg.WORKER_PORT}"
+                        )
+                        return True
+            except (OSError, urllib.error.URLError):
+                pass
+            time.sleep(1)
+        log_warn(f"Worker API did not respond on :{_cfg.WORKER_PORT} within 30s")
+    return False
 
 
 def start_node(extra_env=None):
@@ -549,49 +597,15 @@ def start_node(extra_env=None):
         log_warn(f"could not create logs dir {_cfg.LOGS_DIR}: {e}")
     node_log_path = os.path.join(_cfg.LOGS_DIR, "node-manager.log")
     try:
-        node_log_file = open(node_log_path, "w", encoding="utf-8")
+        with open(node_log_path, "w", encoding="utf-8") as log_file:
+            return _start_node_popen(env, log_file, log_file)
     except OSError as e:
         log_warn(f"could not open {node_log_path}: {e}")
-        node_log_file = None
-    log_info("=== Node startup (node-manager -> worker-api) ===")
-    with _popen_no_wait(
-        [_cfg.NODE_MANAGER_BIN],
-        cwd=_cfg.PROJECT_ROOT,
-        env=env,
-        stdout=node_log_file if node_log_file else subprocess.PIPE,
-        stderr=node_log_file if node_log_file else subprocess.PIPE,
-        shell=False,
-    ) as proc:
-        try:
-            with open(_cfg.NODE_MANAGER_PID_FILE, "w", encoding="utf-8") as f:
-                f.write(str(proc.pid))
-        except OSError:
-            pass
-        log_info(f"Node-manager started (PID {proc.pid}); waiting for worker-api...")
-        for _ in range(30):
-            if proc.poll() is not None:
-                log_error("Failed to start node-manager (process exited)")
-                _log_proc_streams(proc)
-                return False
-            try:
-                req = urllib.request.Request(
-                    f"http://localhost:{_cfg.WORKER_PORT}/healthz"
-                )
-                with urllib.request.urlopen(req, timeout=2) as resp:
-                    if resp.getcode() == 200:
-                        log_info(
-                            f"Worker API listening on http://localhost:{_cfg.WORKER_PORT}"
-                        )
-                        return True
-            except (OSError, urllib.error.URLError):
-                pass
-            time.sleep(1)
-        log_warn(f"Worker API did not respond on :{_cfg.WORKER_PORT} within 30s")
-    return True
+        return _start_node_popen(env, subprocess.PIPE, subprocess.PIPE)
 
 
 def capture_container_logs():
-    """Capture logs from all cynodeai-* containers to LOGS_DIR (persistent; overwritten each run)."""
+    """Capture logs from all cynodeai-* containers to LOGS_DIR (overwritten each run)."""
     if not _cfg.ensure_runtime():
         return
     try:
@@ -680,7 +694,7 @@ def stop_all(leave_ollama_running=False):
             os.kill(int(pid), signal.SIGTERM)
 
     def stop_managed_containers():
-        """Stop and remove node-started containers: managed services (cynodeai-managed-*) and worker-api (cynodeai-worker-api)."""
+        """Stop node-started containers: managed services (cynodeai-managed-*) and worker-api."""
         if not _cfg.ensure_runtime():
             return
         for name_filter in ["cynodeai-managed-", "cynodeai-worker-api"]:

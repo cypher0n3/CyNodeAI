@@ -9,10 +9,14 @@ Background:
   Given a mock orchestrator that returns bootstrap with node_config_url
   And the mock returns node config with worker_api bearer token
 
+@req_worker_0253
+@spec_cynai_worker_payload_configurationv1
 Scenario: Node manager starts worker API during startup sequence
   When the node manager runs the startup sequence against the mock orchestrator
   Then the worker API was started
 
+@req_worker_0253
+@spec_cynai_worker_payload_configurationv1
 Scenario: Node manager starts worker API as container when configured with image
   Given the node is configured to start worker-api as a container with image "cynodeai-worker-api"
   When the node manager runs the startup sequence against the mock orchestrator

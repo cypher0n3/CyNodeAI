@@ -34,4 +34,4 @@ class TestNodeManagerTelemetry(unittest.TestCase):
         self.assertIn("events", data)
         self.assertIsInstance(data["events"], list)
         self.assertIn("truncated", data)
-        # When node-manager has exited, events may include "node manager shutdown" (source_name=node_manager).
+        # When node-manager has exited, events may include "node manager shutdown".

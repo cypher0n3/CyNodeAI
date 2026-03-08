@@ -59,7 +59,7 @@ func runMain(ctx context.Context) int {
 		logger.Warn("telemetry store unavailable, lifecycle events will not be persisted", "error", err)
 	} else {
 		defer func() {
-			recordNodeManagerShutdown(telemetryStore, logger)
+			recordNodeManagerShutdown(runCtx, telemetryStore, logger)
 			_ = telemetryStore.Close()
 		}()
 		if err := recordNodeBootTelemetry(runCtx, telemetryStore, logger); err != nil {
@@ -134,8 +134,7 @@ func runTelemetryRetentionAndVacuum(ctx context.Context, store *telemetry.Store,
 }
 
 // recordNodeManagerShutdown writes a service log event before exit (REQ-WORKER-0258, worker_telemetry_api.md).
-func recordNodeManagerShutdown(store *telemetry.Store, logger *slog.Logger) {
-	ctx := context.Background()
+func recordNodeManagerShutdown(ctx context.Context, store *telemetry.Store, logger *slog.Logger) {
 	err := store.InsertLogEvent(ctx, &telemetry.LogEventInput{
 		LogID:      uuid.New().String(),
 		OccurredAt: time.Now().UTC().Format(time.RFC3339),
@@ -297,8 +296,8 @@ func effectiveStateDir() string {
 }
 
 // buildManagedServiceRunArgs returns the container run args for one managed service (delegates to nodeagent).
-func buildManagedServiceRunArgs(svc *nodepayloads.ConfigManagedService, serviceID, serviceType, image, name string) []string {
-	return nodeagent.BuildManagedServiceRunArgs(effectiveStateDir(), svc, serviceID, serviceType, image, name)
+func buildManagedServiceRunArgs(rt string, svc *nodepayloads.ConfigManagedService, serviceID, serviceType, image, name string) []string {
+	return nodeagent.BuildManagedServiceRunArgs(effectiveStateDir(), svc, serviceID, serviceType, image, name, rt)
 }
 
 // startOneManagedService ensures the managed service container is running and, for PMA, waits for /healthz.
@@ -312,7 +311,7 @@ func startOneManagedService(rt string, svc *nodepayloads.ConfigManagedService, s
 		}
 		return nil
 	}
-	args := buildManagedServiceRunArgs(svc, serviceID, serviceType, image, name)
+	args := buildManagedServiceRunArgs(rt, svc, serviceID, serviceType, image, name)
 	cmd := exec.Command(rt, args...)
 	cmd.Env = os.Environ()
 	if out, err := cmd.CombinedOutput(); err != nil {

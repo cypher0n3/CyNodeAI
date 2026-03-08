@@ -62,7 +62,7 @@ NODE_MANAGER_BIN = os.path.join(PROJECT_ROOT, "worker_node", "bin", "node-manage
 NODE_MANAGER_WORKER_API_BIN = os.path.join(
     PROJECT_ROOT, "worker_node", "bin", "worker-api-dev"
 )
-# When set, node-manager starts worker-api as a container (worker-managed service) instead of the binary.
+# When set, node-manager starts worker-api as a container (worker-managed service).
 # Build the image with: just build-worker-api-image
 NODE_MANAGER_WORKER_API_IMAGE = os.environ.get("NODE_MANAGER_WORKER_API_IMAGE", "")
 

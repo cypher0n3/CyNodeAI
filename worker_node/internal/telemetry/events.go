@@ -28,6 +28,12 @@ func (s *Store) InsertContainerEvent(ctx context.Context, eventID, occurredAt, c
 	}).Error
 }
 
+// Stream name constants for log events (schema CHECK allows only these).
+const (
+	StreamStdout = "stdout"
+	StreamStderr = "stderr"
+)
+
 // LogEventInput is used to insert a log_event row per worker_telemetry_api.md.
 type LogEventInput struct {
 	LogID       string
@@ -35,7 +41,7 @@ type LogEventInput struct {
 	SourceKind  string            // "service" or "container"
 	SourceName  string            // e.g. "worker_api", "node_manager", or container name
 	ContainerID string            // optional when source_kind=container
-	Stream      string            // "stdout" or "stderr" for container
+	Stream      string            // StreamStdout or StreamStderr for container
 	Level       string            // optional
 	Message     string
 	Fields      map[string]string // optional structured fields
@@ -51,8 +57,8 @@ func (s *Store) InsertLogEvent(ctx context.Context, in *LogEventInput) error {
 		in.OccurredAt = time.Now().UTC().Format(time.RFC3339)
 	}
 	stream := in.Stream
-	if stream != "stdout" && stream != "stderr" {
-		stream = "stdout" // sentinel for service-origin events (schema CHECK allows only stdout/stderr)
+	if stream != StreamStdout && stream != StreamStderr {
+		stream = StreamStdout // sentinel for service-origin events (schema CHECK allows only stdout/stderr)
 	}
 	fieldsJSON := "{}"
 	if in.Fields != nil {

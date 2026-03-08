@@ -21,6 +21,12 @@ services:
       - worker-api-state:/var/lib/cynode/state
     ports:
       - "${WORKER_API_PORT:-12090}:12090"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:12090/healthz || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
 
 volumes:
   worker-api-state:

@@ -50,6 +50,12 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:12082/healthz || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
     networks:
       - orchestrator_net
 
@@ -74,6 +80,12 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:12080/healthz || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
     networks:
       - orchestrator_net
 
@@ -85,6 +97,12 @@ services:
       - "11434:11434"
     volumes:
       - ollama-data:/root/.ollama
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:11434/ || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
     # Use explicit DNS to avoid runtime DNS degradation after repeated stack restarts
     # (Podman/Docker default resolver can fail with "i/o timeout" after many down/up cycles).
     # dns:
@@ -102,6 +120,12 @@ services:
       LISTEN_ADDR: ":12083"
     ports:
       - "${MCP_GATEWAY_PORT:-12083}:12083"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:12083/healthz || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
     networks:
       - orchestrator_net
 
@@ -114,6 +138,12 @@ services:
       LISTEN_ADDR: ":12084"
     ports:
       - "${API_EGRESS_PORT:-12084}:12084"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:12084/healthz || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
     networks:
       - orchestrator_net
 

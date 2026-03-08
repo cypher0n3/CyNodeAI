@@ -1,6 +1,6 @@
 # E2E: Worker API when run as a managed service (container started by node-manager).
-# When NODE_MANAGER_WORKER_API_IMAGE is set, node-manager starts worker-api as cynodeai-worker-api container.
-# These tests assert worker-api responds (healthz, node:info) and optionally that the container exists.
+# When NODE_MANAGER_WORKER_API_IMAGE is set, node-manager starts worker-api as container.
+# Tests assert worker-api responds (healthz, node:info) and optionally that the container exists.
 
 import os
 import subprocess
@@ -10,7 +10,7 @@ from scripts.test_scripts import config, helpers
 
 
 class TestWorkerApiManagedService(unittest.TestCase):
-    """E2E: Worker API as managed service (container); healthz and node:info when worker-api is up."""
+    """E2E: Worker API as managed service; healthz and node:info when worker-api is up."""
 
     tags = ["suite_worker_node", "full_demo", "worker"]
 
@@ -46,7 +46,7 @@ class TestWorkerApiManagedService(unittest.TestCase):
         """When NODE_MANAGER_WORKER_API_IMAGE is set, cynodeai-worker-api container exists."""
         image_env = os.environ.get("NODE_MANAGER_WORKER_API_IMAGE", "").strip()
         if not image_env:
-            self.skipTest("NODE_MANAGER_WORKER_API_IMAGE not set (run with worker-api as container)")
+            self.skipTest("NODE_MANAGER_WORKER_API_IMAGE not set (use worker-api as container)")
         runtime = os.environ.get("CONTAINER_RUNTIME", "podman")
         try:
             r = subprocess.run(

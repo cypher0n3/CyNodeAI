@@ -1,0 +1,250 @@
+# just setup-dev test-e2e
+test_status (e2e_010_cli_version_and_status.TestStatusVersion.test_status)
+Assert cynork status reports gateway ok. ... ok
+test_status_json (e2e_010_cli_version_and_status.TestStatusVersion.test_status_json)
+Assert cynork status -o json returns gateway: ok. ... ok
+test_version (e2e_010_cli_version_and_status.TestStatusVersion.test_version)
+Assert cynork version exits successfully and output contains 'cynork'. ... ok
+test_login (e2e_020_auth_login.TestLogin.test_login)
+Assert auth login succeeds and config file contains token. ... ok
+test_whoami_without_login_fails (e2e_030_auth_negative_whoami.TestAuthNegative.test_whoami_without_login_fails)
+Assert whoami with no token returns failure and login-related stderr. ... ok
+test_whoami (e2e_040_auth_whoami.TestWhoami.test_whoami)
+Assert whoami succeeds and output contains handle=admin. ... ok
+test_task_create (e2e_050_task_create.TestTaskCreate.test_task_create)
+Create echo task, retry up to 3 times; store task_id in state. ... ok
+test_task_create_named (e2e_050_task_create.TestTaskCreate.test_task_create_named)
+Create task with --task-name, then task get; assert task_name in response. ... ok
+test_task_create_with_attachments (e2e_050_task_create.TestTaskCreate.test_task_create_with_attachments)
+Create task with --attachment paths; assert task_id and attachments in get. ... ok
+test_task_list (e2e_060_task_list.TestTaskList.test_task_list)
+Assert task list returns JSON with tasks list containing state.TASK_ID. ... ok
+test_task_get (e2e_070_task_get.TestTaskGet.test_task_get)
+Assert task get state.TASK_ID returns JSON with status field. ... ok
+test_task_result (e2e_080_task_result.TestTaskResult.test_task_result)
+Assert task result state.TASK_ID returns JSON with status. ... ok
+test_inference_task (e2e_090_task_inference.TestInferenceTask.test_inference_task)
+Create inference task, poll until completed; assert stdout contains Ollama URL. ... FAIL
+test_prompt_task (e2e_100_task_prompt.TestPromptTask.test_prompt_task)
+Create prompt task, poll until completed; set state.PROMPT_TASK_ID; assert stdout. ... ok
+test_models_and_chat (e2e_110_task_models_and_chat.TestModelsAndChat.test_models_and_chat)
+Assert models list returns list; run one-shot chat unless inference smoke skipped. ... FAIL
+test_chat_with_project_context (e2e_115_pma_chat_context.TestPmaChatContext.test_chat_with_project_context)
+Send chat with --project-id; assert success when inference is available. ... FAIL
+test_skills_list_load_get_delete (e2e_116_skills_gateway.TestSkillsGateway.test_skills_list_load_get_delete)
+Assert skills list returns JSON; load a skill; get by id; delete. ... ok
+test_workflow_start_duplicate_returns_409 (e2e_117_workflow_api.TestWorkflowAPI.test_workflow_start_duplicate_returns_409)
+Start workflow twice for same task; second returns 409. ... ok
+test_workflow_start_returns_run_id (e2e_117_workflow_api.TestWorkflowAPI.test_workflow_start_returns_run_id)
+Start workflow for task; 200 with run_id, or 409 if lease already held. ... ok
+test_workflow_start_same_holder_returns_200_already_running (e2e_117_workflow_api.TestWorkflowAPI.test_workflow_start_same_holder_returns_200_already_running)
+Same holder starts again with idempotency_key=lease_id; expect 200 already_running. ... ok
+test_allowed_provider_returns_501 (e2e_118_api_egress_call.TestAPIEgressCall.test_allowed_provider_returns_501)
+Allowed provider returns 501 Not Implemented. ... ok
+test_disallowed_provider_returns_403 (e2e_118_api_egress_call.TestAPIEgressCall.test_disallowed_provider_returns_403)
+Disallowed provider returns 403 Forbidden. ... ok
+test_containers_response_has_version (e2e_119_worker_telemetry.TestWorkerTelemetry.test_containers_response_has_version)
+GET containers response has version 1 and containers array per spec. ... ok
+test_containers_returns_list (e2e_119_worker_telemetry.TestWorkerTelemetry.test_containers_returns_list)
+GET containers with bearer returns 200 and containers array. ... ok
+test_get_container_not_found_returns_404 (e2e_119_worker_telemetry.TestWorkerTelemetry.test_get_container_not_found_returns_404)
+GET containers/{id} for non-existent id returns 404. ... ok
+test_logs_response_has_truncated_metadata (e2e_119_worker_telemetry.TestWorkerTelemetry.test_logs_response_has_truncated_metadata)
+GET logs response has events and truncated.limited_by, truncated.max_bytes per spec. ... ok
+test_logs_returns_entries (e2e_119_worker_telemetry.TestWorkerTelemetry.test_logs_returns_entries)
+GET logs with bearer returns 200 and events list. ... ok
+test_node_info_returns_version_and_slug (e2e_119_worker_telemetry.TestWorkerTelemetry.test_node_info_returns_version_and_slug)
+GET node:info with bearer returns 200, version and node_slug. ... ok
+test_node_stats_returns_captured_at (e2e_119_worker_telemetry.TestWorkerTelemetry.test_node_stats_returns_captured_at)
+GET node:stats with bearer returns 200 and captured_at. ... ok
+test_telemetry_responses_do_not_contain_bearer_token (e2e_119_worker_telemetry.TestWorkerTelemetry.test_telemetry_responses_do_not_contain_bearer_token)
+Telemetry response bodies must not contain the bearer token (no credential leak). ... ok
+test_worker_healthz_returns_200 (e2e_120_worker_api_health_readyz.TestWorkerApiHealthReadyz.test_worker_healthz_returns_200)
+Worker API healthz returns 200 when process is up. ... ok
+test_worker_readyz_returns_200_or_503 (e2e_120_worker_api_health_readyz.TestWorkerApiHealthReadyz.test_worker_readyz_returns_200_or_503)
+Worker API readyz returns 200 (ready) or 503 (not ready); no other status. ... ok
+test_worker_api_container_exists_when_image_configured (e2e_121_worker_api_managed_service.TestWorkerApiManagedService.test_worker_api_container_exists_when_image_configured)
+When NODE_MANAGER_WORKER_API_IMAGE is set, cynodeai-worker-api container exists. ... skipped 'NODE_MANAGER_WORKER_API_IMAGE not set (run with worker-api as container)'
+test_worker_api_healthz_when_running (e2e_121_worker_api_managed_service.TestWorkerApiManagedService.test_worker_api_healthz_when_running)
+Worker API (binary or container) healthz returns 200. ... ok
+test_worker_api_node_info_when_running (e2e_121_worker_api_managed_service.TestWorkerApiManagedService.test_worker_api_node_info_when_running)
+Worker API (binary or container) node:info returns 200, version and node_slug. ... ok
+test_logs_node_manager_source_returns_200 (e2e_122_node_manager_telemetry.TestNodeManagerTelemetry.test_logs_node_manager_source_returns_200)
+GET logs?source_kind=service&source_name=node_manager returns 200 and events list. ... ok
+test_agent_token_files_are_envelopes_and_not_plaintext (e2e_122_secure_store_envelope_structure.TestSecureStoreEnvelopeStructure.test_agent_token_files_are_envelopes_and_not_plaintext)
+State dir secrets/agent_tokens files are valid envelopes, no plaintext token. ... skipped 'NODE_STATE_DIR not set'
+test_sba_task (e2e_123_sba_task.TestSbaTask.test_sba_task)
+Create SBA task, poll until done; set SBA_TASK_ID only on success; assert sba_result. ... ok
+test_build_proxy_request_shape (e2e_124_worker_pma_proxy.TestProxyPayloadEncoding.test_build_proxy_request_shape)
+Proxy request has version, method, path, headers, body_b64. ... ok
+test_parse_proxy_response (e2e_124_worker_pma_proxy.TestProxyPayloadEncoding.test_parse_proxy_response)
+Parse proxy response status and body_b64. ... ok
+setUpClass (e2e_124_worker_pma_proxy.TestProxyPmaFunctional) ... skipped 'worker-api did not become ready (healthz)'
+setUpClass (e2e_124_worker_pma_proxy.TestProxyPmaWithInference) ... skipped 'worker-api did not become ready (healthz)'
+setUpClass (e2e_124_worker_pma_proxy.TestProxyPmaWithRealOllama) ... skipped 'worker-api did not become ready (healthz)'
+test_sba_result_contract_shape (e2e_130_sba_task_result_contract.TestSbaResultContract.test_sba_result_contract_shape)
+Assert sba_result in job result contains all required contract keys. ... ok
+test_sba_task_with_inference_prompt (e2e_140_sba_task_inference.TestSbaInference.test_sba_task_with_inference_prompt)
+Create SBA task with LLM prompt, poll until completed/failed; assert sba_result. ... FAIL
+test_sba_inference_reply_current_time (e2e_145_sba_inference_reply.TestSbaInferenceReply.test_sba_inference_reply_current_time)
+Create SBA inference task and assert user-facing reply. ... FAIL
+test_task_logs (e2e_150_task_logs.TestTaskLogs.test_task_logs)
+Assert task logs state.TASK_ID returns success and JSON (dict or list). ... ok
+test_task_cancel (e2e_160_task_cancel.TestTaskCancel.test_task_cancel)
+Create sleep task, cancel it, poll result until status is canceled. ... ok
+test_node_register (e2e_170_control_plane_node_register.TestNodeRegister.test_node_register)
+Register node via control-plane API; assert node_jwt in response; set state.NODE_JWT. ... ok
+test_config_includes_inference_backend_when_node_inference_capable_not_existing (e2e_175_prescribed_startup_config_inference_backend.TestPrescribedStartupConfigInferenceBackend.test_config_includes_inference_backend_when_node_inference_capable_not_existing)
+Register inference-capable node, GET nodes/config; assert inference_backend.enabled. ... ok
+test_capability (e2e_180_control_plane_capability.TestCapability.test_capability)
+Report capability with state.NODE_JWT; assert 2xx response. ... ok
+test_refresh (e2e_190_auth_refresh.TestRefresh.test_refresh)
+Assert auth refresh and whoami succeed; whoami output contains handle=admin. ... ok
+test_chat_completes_or_clear_error (e2e_192_chat_reliability.TestChatReliability.test_chat_completes_or_clear_error)
+Run one-shot chat with extended timeout and retries; assert reply or structured error. ... FAIL
+test_chat_sequential_two_turns (e2e_193_chat_sequential_messages.TestChatSequentialMessages.test_chat_sequential_two_turns)
+Two turns: first 'Say one word: first', then 'What word?'; assert both replies. ... FAIL
+test_chat_simultaneous_three_requests (e2e_194_chat_simultaneous_messages.TestChatSimultaneousMessages.test_chat_simultaneous_three_requests)
+Start three chat requests concurrently; each gets a reply or a clear error. ... FAIL
+test_healthz_ok (e2e_195_gateway_health_readyz.TestGatewayHealthReadyz.test_healthz_ok)
+Assert user-gateway healthz returns 200 (process alive). ... ok
+test_readyz_200_or_503 (e2e_195_gateway_health_readyz.TestGatewayHealthReadyz.test_readyz_200_or_503)
+Assert readyz returns 200 (ready) or 503 (not ready); no other status. ... ok
+test_task_list_status_completed (e2e_196_task_list_status_filter.TestTaskListStatusFilter.test_task_list_status_completed)
+Task list with --status completed returns JSON array; may be empty. ... ok
+test_task_list_status_queued (e2e_196_task_list_status_filter.TestTaskListStatusFilter.test_task_list_status_queued)
+Task list with --status queued returns JSON array. ... ok
+test_logout (e2e_200_auth_logout.TestLogout.test_logout)
+Run auth logout (exit code not asserted; CLI may return non-zero). ... ok
+
+======================================================================
+FAIL: test_inference_task (e2e_090_task_inference.TestInferenceTask.test_inference_task)
+Create inference task, poll until completed; assert stdout contains Ollama URL.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/cypher/GoogleDrive/github/cynodeai-enterprise/cynodeai/scripts/test_scripts/e2e_090_task_inference.py", line 46, in test_inference_task
+    self.assertTrue(
+    ~~~~~~~~~~~~~~~^
+        stdout and "http://localhost:11434" in str(stdout),
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        f"OLLAMA_BASE_URL missing in stdout (stdout={stdout!r})",
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+AssertionError: None is not true : OLLAMA_BASE_URL missing in stdout (stdout=None)
+
+======================================================================
+FAIL: test_models_and_chat (e2e_110_task_models_and_chat.TestModelsAndChat.test_models_and_chat)
+Assert models list returns list; run one-shot chat unless inference smoke skipped.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/cypher/GoogleDrive/github/cynodeai-enterprise/cynodeai/scripts/test_scripts/e2e_110_task_models_and_chat.py", line 62, in test_models_and_chat
+    self.assertTrue(
+    ~~~~~~~~~~~~~~~^
+        chat_ok,
+        ^^^^^^^^
+        f"one-shot chat failed after retries: stdout={last_out!r} stderr={last_err!r}",
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+AssertionError: False is not true : one-shot chat failed after retries: stdout='' stderr='Error: 502 Bad Gateway\nUsage:\n  cynork chat [flags]\n\nFlags:\n  -h, --help                help for chat\n  -m, --message string      send one message and print response (non-interactive)\n      --plain               print model responses as raw text without Markdown formatting (for scripting or piping)\n      --project-id string   project to associate with chat session (sent as OpenAI-Project header)\n\nGlobal Flags:\n      --config string   config file (default ~/.config/cynork/config.yaml)\n      --no-color        disable colored output\n  -o, --output string   output format: table | json (default "table")\n\n502 Bad Gateway\n'
+
+======================================================================
+FAIL: test_chat_with_project_context (e2e_115_pma_chat_context.TestPmaChatContext.test_chat_with_project_context)
+Send chat with --project-id; assert success when inference is available.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/cypher/GoogleDrive/github/cynodeai-enterprise/cynodeai/scripts/test_scripts/e2e_115_pma_chat_context.py", line 65, in test_chat_with_project_context
+    self.assertTrue(
+    ~~~~~~~~~~~~~~~^
+        chat_ok,
+        ^^^^^^^^
+        f"chat with project-id failed (ok=False or empty/bad response): "
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        f"stdout={last_out!r} stderr={last_err!r}",
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+AssertionError: False is not true : chat with project-id failed (ok=False or empty/bad response): stdout='' stderr='Error: 502 Bad Gateway\nUsage:\n  cynork chat [flags]\n\nFlags:\n  -h, --help                help for chat\n  -m, --message string      send one message and print response (non-interactive)\n      --plain               print model responses as raw text without Markdown formatting (for scripting or piping)\n      --project-id string   project to associate with chat session (sent as OpenAI-Project header)\n\nGlobal Flags:\n      --config string   config file (default ~/.config/cynork/config.yaml)\n      --no-color        disable colored output\n  -o, --output string   output format: table | json (default "table")\n\n502 Bad Gateway\n'
+
+======================================================================
+FAIL: test_sba_task_with_inference_prompt (e2e_140_sba_task_inference.TestSbaInference.test_sba_task_with_inference_prompt)
+Create SBA task with LLM prompt, poll until completed/failed; assert sba_result.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/cypher/GoogleDrive/github/cynodeai-enterprise/cynodeai/scripts/test_scripts/e2e_140_sba_task_inference.py", line 36, in test_sba_task_with_inference_prompt
+    self.fail(
+    ~~~~~~~~~^
+        "SBA inference task failed (per spec inference path must be available): "
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        f"status={status!r} result={result_data}"
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+AssertionError: SBA inference task failed (per spec inference path must be available): status='failed' result={'status': 'failed', 'stdout': '{"error":"Post \\"http://host.containers.internal:12090/v1/worker/jobs:run\\": context deadline exceeded (Client.Timeout exceeded while awaiting headers)","status":"failed","version":1}', 'task_id': '99efc90b-6ee6-49d4-944d-5a24a394b81c'}
+
+======================================================================
+FAIL: test_sba_inference_reply_current_time (e2e_145_sba_inference_reply.TestSbaInferenceReply.test_sba_inference_reply_current_time)
+Create SBA inference task and assert user-facing reply.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/cypher/GoogleDrive/github/cynodeai-enterprise/cynodeai/scripts/test_scripts/e2e_145_sba_inference_reply.py", line 84, in test_sba_inference_reply_current_time
+    self.assertTrue(
+    ~~~~~~~~~~~~~~~^
+        _has_user_facing_reply(job),
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    ...<3 lines>...
+        ),
+        ^^
+    )
+    ^
+AssertionError: False is not true : SBA inference produced no user-facing reply (empty stdout and only sba-run placeholder)
+
+======================================================================
+FAIL: test_chat_completes_or_clear_error (e2e_192_chat_reliability.TestChatReliability.test_chat_completes_or_clear_error)
+Run one-shot chat with extended timeout and retries; assert reply or structured error.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/cypher/GoogleDrive/github/cynodeai-enterprise/cynodeai/scripts/test_scripts/e2e_192_chat_reliability.py", line 41, in test_chat_completes_or_clear_error
+    self.fail(
+    ~~~~~~~~~^
+        f"chat did not return a timely reply after {CHAT_RETRIES} attempts. Last: {last_err!r}"
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+AssertionError: chat did not return a timely reply after 3 attempts. Last: 'Error: 502 Bad Gateway\nUsage:\n  cynork chat [flags]\n\nFlags:\n  -h, --help                help for chat\n  -m, --message string      send one message and print response (non-interactive)\n      --plain               print model responses as raw text without Markdown formatting (for scripting or piping)\n      --project-id string   project to associate with chat session (sent as OpenAI-Project header)\n\nGlobal Flags:\n      --config string   config file (default ~/.config/cynork/config.yaml)\n      --no-color        disable colored output\n  -o, --output string   output format: table | json (default "table")\n\n502 Bad Gateway\n'
+
+======================================================================
+FAIL: test_chat_sequential_two_turns (e2e_193_chat_sequential_messages.TestChatSequentialMessages.test_chat_sequential_two_turns)
+Two turns: first 'Say one word: first', then 'What word?'; assert both replies.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/cypher/GoogleDrive/github/cynodeai-enterprise/cynodeai/scripts/test_scripts/e2e_193_chat_sequential_messages.py", line 51, in test_chat_sequential_two_turns
+    self.assertTrue(ok, f"first chat request failed: {body}")
+    ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: False is not true : first chat request failed: {"error":{"code":"orchestrator_inference_failed","message":"Completion failed","param":null,"type":"cynodeai_error"}}
+
+
+======================================================================
+FAIL: test_chat_simultaneous_three_requests (e2e_194_chat_simultaneous_messages.TestChatSimultaneousMessages.test_chat_simultaneous_three_requests)
+Start three chat requests concurrently; each gets a reply or a clear error.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/cypher/GoogleDrive/github/cynodeai-enterprise/cynodeai/scripts/test_scripts/e2e_194_chat_simultaneous_messages.py", line 68, in test_chat_simultaneous_three_requests
+    self.assertGreaterEqual(
+    ~~~~~~~~~~~~~~~~~~~~~~~^
+        successes, 1,
+        ^^^^^^^^^^^^^
+        f"at least one concurrent chat should succeed; failures: {failures}",
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+AssertionError: 0 not greater than or equal to 1 : at least one concurrent chat should succeed; failures: [(False, '{"error":{"code":"orchestrator_inference_failed","message":"Completion failed","param":null,"type":"cynodeai_error"}}\n'), (False, '{"error":{"code":"orchestrator_inference_failed","message":"Completion failed","param":null,"type":"cynodeai_error"}}\n'), (False, '{"error":{"code":"orchestrator_inference_failed","message":"Completion failed","param":null,"type":"cynodeai_error"}}\n')]
+
+----------------------------------------------------------------------
+Ran 57 tests in 726.710s
+
+FAILED (failures=8, skipped=5)
+error: Recipe `setup-dev` failed with exit code 1
+
+# just setup-dev stop

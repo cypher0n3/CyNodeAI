@@ -73,7 +73,7 @@ func TestInsertLogEvent_container(t *testing.T) {
 		SourceKind:  "container",
 		SourceName:  "sbox-1",
 		ContainerID: "cid-1",
-		Stream:      "stdout",
+		Stream:      StreamStdout,
 		Message:    "container line",
 		Fields:     map[string]string{"job_id": "j1"},
 	}
@@ -84,7 +84,7 @@ func TestInsertLogEvent_container(t *testing.T) {
 	if err != nil {
 		t.Fatalf("QueryLogs: %v", err)
 	}
-	if len(events) != 1 || events[0].Message != "container line" || events[0].Stream != "stdout" {
+	if len(events) != 1 || events[0].Message != "container line" || events[0].Stream != StreamStdout {
 		t.Errorf("QueryLogs: %+v", events)
 	}
 }

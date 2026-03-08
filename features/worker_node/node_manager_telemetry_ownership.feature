@@ -9,13 +9,11 @@ Feature: Node Manager Telemetry Ownership
   and records a service log event on shutdown (source_name=node_manager). Worker-api skips node_boot
   when NODE_SKIP_NODE_BOOT_RECORD is set (e.g. when started by node-manager).
 
-Background:
-  Given a Worker API is running with bearer token "test-bearer-token"
-
 @req_worker_0258
 @spec_cynai_worker_telemetry_lifecycle
 Scenario: Node manager shutdown event is visible in telemetry logs
-  Given a service log event is recorded for source "node_manager" with message "node manager shutdown"
+  Given a Worker API is running with bearer token "test-bearer-token"
+  And a service log event is recorded for source "node_manager" with message "node manager shutdown"
   When I call GET "/v1/worker/telemetry/logs?source_kind=service&source_name=node_manager" with bearer token "test-bearer-token"
   Then the response status is 200
   And the response contains a log event with message "node manager shutdown"

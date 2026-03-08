@@ -1550,7 +1550,7 @@ func RegisterSecureStoreSteps(sc *godog.ScenarioContext, state *workerTestState)
 			ServiceID: "pma-main", ServiceType: "pma", Image: "pma:latest",
 			Orchestrator: &nodepayloads.ConfigManagedServiceOrchestrator{},
 		}
-		state.managedServiceRunArgs = nodeagent.BuildManagedServiceRunArgs(state.secureStoreStateDir, svc, "pma-main", "pma", "pma:latest", "cynodeai-managed-pma-main")
+		state.managedServiceRunArgs = nodeagent.BuildManagedServiceRunArgs(state.secureStoreStateDir, svc, "pma-main", "pma", "pma:latest", "cynodeai-managed-pma-main", "podman")
 		return nil
 	})
 	sc.Step(`^the managed-service container does not receive the agent token via env vars, files, or mounts$`, func(ctx context.Context) error {
@@ -1645,7 +1645,7 @@ func RegisterSecureStoreSteps(sc *godog.ScenarioContext, state *workerTestState)
 			ServiceID: "pma-main", ServiceType: "pma", Image: "pma:latest",
 			Orchestrator: &nodepayloads.ConfigManagedServiceOrchestrator{},
 		}
-		state.managedServiceRunArgs = nodeagent.BuildManagedServiceRunArgs(state.secureStoreStateDir, svc, "pma-main", "pma", "pma:latest", "cynodeai-managed-pma-main")
+		state.managedServiceRunArgs = nodeagent.BuildManagedServiceRunArgs(state.secureStoreStateDir, svc, "pma-main", "pma", "pma:latest", "cynodeai-managed-pma-main", "podman")
 		return nil
 	})
 	sc.Step(`^the run args do not contain any mount of the secure store or secrets path$`, func(ctx context.Context) error {
@@ -1657,6 +1657,31 @@ func RegisterSecureStoreSteps(sc *godog.ScenarioContext, state *workerTestState)
 					return fmt.Errorf("run args must not mount secure store: got host path %q", hostPath)
 				}
 			}
+		}
+		return nil
+	})
+	sc.Step(`^the node manager builds run args for the managed-service container with healthcheck and runtime podman$`, func(ctx context.Context) error {
+		if state.secureStoreStateDir == "" {
+			state.secureStoreStateDir = filepath.Join(os.TempDir(), fmt.Sprintf("bdd-runargs-%d", time.Now().UnixNano()))
+		}
+		svc := &nodepayloads.ConfigManagedService{
+			ServiceID: "pma-main", ServiceType: "pma", Image: "pma:latest",
+			Orchestrator: &nodepayloads.ConfigManagedServiceOrchestrator{},
+			Healthcheck:  &nodepayloads.ConfigManagedServiceHealthcheck{Path: "/healthz", ExpectedStatus: 200},
+		}
+		state.managedServiceRunArgs = nodeagent.BuildManagedServiceRunArgs(state.secureStoreStateDir, svc, "pma-main", "pma", "pma:latest", "cynodeai-managed-pma-main", "podman")
+		return nil
+	})
+	sc.Step(`^the run args include podman health-check options$`, func(ctx context.Context) error {
+		var hasHealthCmd bool
+		for i := 0; i < len(state.managedServiceRunArgs)-1; i++ {
+			if state.managedServiceRunArgs[i] == "--health-cmd" {
+				hasHealthCmd = true
+				break
+			}
+		}
+		if !hasHealthCmd {
+			return fmt.Errorf("run args should include --health-cmd when config has healthcheck and runtime is podman")
 		}
 		return nil
 	})

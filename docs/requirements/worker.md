@@ -349,3 +349,7 @@ It covers worker-node behavior and the worker API contract for job execution and
 - **REQ-WORKER-0258:** The node MUST log to the telemetry database: Node Manager and Worker API startup and shutdown; container start and stop (managed and sandbox); and job run lifecycle (e.g. sandbox run start and completion).
   [CYNAI.WORKER.TelemetryLifecycleEvents](../tech_specs/worker_telemetry_api.md#spec-cynai-worker-telemetrylifecycleevents)
   <a id="req-worker-0258"></a>
+- **REQ-WORKER-0259:** When starting a managed service container and the orchestrator config includes a `healthcheck` (path and expected_status), the node SHOULD configure the container runtime with health checks where supported (e.g. Podman `--health-cmd`) so the container reports healthy in runtime listing (e.g. `podman ps`).
+  Docker run does not support inline health checks.
+  [worker_node_payloads.md managed_services healthcheck](../tech_specs/worker_node_payloads.md)
+  <a id="req-worker-0259"></a>

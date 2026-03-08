@@ -14,7 +14,7 @@ func TestBuildManagedServiceRunArgs_NoSecretsMount(t *testing.T) {
 		ServiceID: "pma-main", ServiceType: "pma", Image: "pma:latest",
 		Orchestrator: &nodepayloads.ConfigManagedServiceOrchestrator{},
 	}
-	args := BuildManagedServiceRunArgs(stateDir, svc, "pma-main", "pma", "pma:latest", "cynodeai-managed-pma-main")
+	args := BuildManagedServiceRunArgs(stateDir, svc, "pma-main", "pma", "pma:latest", "cynodeai-managed-pma-main", "")
 	for i := 0; i < len(args)-1; i++ {
 		if args[i] != "-v" {
 			continue
@@ -33,7 +33,7 @@ func TestBuildManagedServiceRunArgs_UDSPathWhenServiceIDPathSafe(t *testing.T) {
 		ServiceID: "pma-main", ServiceType: serviceTypePMA, Image: "pma:latest",
 		Orchestrator: &nodepayloads.ConfigManagedServiceOrchestrator{},
 	}
-	args := BuildManagedServiceRunArgs(stateDir, svc, "pma-main", "pma", "pma:latest", "name")
+	args := BuildManagedServiceRunArgs(stateDir, svc, "pma-main", "pma", "pma:latest", "name", "")
 	expectedHost := filepath.Join(stateDir, ManagedAgentProxySocketBaseDir, "pma-main")
 	var found bool
 	for i := 0; i < len(args)-1; i++ {
@@ -61,7 +61,7 @@ func TestBuildManagedServiceRunArgs_NoAGENT_TOKEN(t *testing.T) {
 		Orchestrator: &nodepayloads.ConfigManagedServiceOrchestrator{},
 		Env:         map[string]string{"OTHER": "val"},
 	}
-	args := BuildManagedServiceRunArgs(stateDir, svc, "pma-main", "pma", "pma:latest", "name")
+	args := BuildManagedServiceRunArgs(stateDir, svc, "pma-main", "pma", "pma:latest", "name", "")
 	for i := 0; i < len(args)-1; i++ {
 		if args[i] == "-e" {
 			env := args[i+1]
@@ -81,7 +81,7 @@ func TestBuildManagedServiceRunArgs_AutoProxyURLs(t *testing.T) {
 			ReadyCallbackProxyURL: proxyURLAuto,
 		},
 	}
-	args := BuildManagedServiceRunArgs(stateDir, svc, "pma-main", "pma", "pma:latest", "name")
+	args := BuildManagedServiceRunArgs(stateDir, svc, "pma-main", "pma", "pma:latest", "name", "")
 	var hasMCP, hasReady bool
 	for i := 0; i < len(args)-1; i++ {
 		if args[i] == "-e" {
@@ -117,10 +117,51 @@ func TestBuildManagedServiceRunArgs_UnsafeServiceIDNoUDSMount(t *testing.T) {
 		ServiceID: "a/b", ServiceType: "pma", Image: "pma:latest",
 		Orchestrator: &nodepayloads.ConfigManagedServiceOrchestrator{},
 	}
-	args := BuildManagedServiceRunArgs(stateDir, svc, "a/b", "pma", "pma:latest", "name")
+	args := BuildManagedServiceRunArgs(stateDir, svc, "a/b", "pma", "pma:latest", "name", "")
 	for i := 0; i < len(args)-1; i++ {
 		if args[i] == "-v" && strings.Contains(args[i+1], "managed_agent_proxy") {
 			t.Error("unsafe service ID must not get UDS mount")
+		}
+	}
+}
+
+func TestBuildManagedServiceRunArgs_HealthcheckWhenPodman(t *testing.T) {
+	stateDir := t.TempDir()
+	svc := &nodepayloads.ConfigManagedService{
+		ServiceID: "pma-main", ServiceType: "pma", Image: "pma:latest",
+		Healthcheck: &nodepayloads.ConfigManagedServiceHealthcheck{
+			Path:           "/healthz",
+			ExpectedStatus: 200,
+		},
+	}
+	args := BuildManagedServiceRunArgs(stateDir, svc, "pma-main", "pma", "pma:latest", "name", "podman")
+	var hasHealthCmd, hasInterval bool
+	for i := 0; i < len(args)-1; i++ {
+		if args[i] == "--health-cmd" {
+			hasHealthCmd = true
+			if !strings.Contains(args[i+1], "localhost:8090/healthz") {
+				t.Errorf("health-cmd should target 8090/healthz, got %q", args[i+1])
+			}
+		}
+		if args[i] == "--health-interval" && args[i+1] == "10s" {
+			hasInterval = true
+		}
+	}
+	if !hasHealthCmd || !hasInterval {
+		t.Errorf("podman runtime with Healthcheck should add health args; health-cmd=%v interval=%v", hasHealthCmd, hasInterval)
+	}
+}
+
+func TestBuildManagedServiceRunArgs_NoHealthcheckWhenDocker(t *testing.T) {
+	stateDir := t.TempDir()
+	svc := &nodepayloads.ConfigManagedService{
+		ServiceID: "pma-main", ServiceType: "pma", Image: "pma:latest",
+		Healthcheck: &nodepayloads.ConfigManagedServiceHealthcheck{Path: "/healthz"},
+	}
+	args := BuildManagedServiceRunArgs(stateDir, svc, "pma-main", "pma", "pma:latest", "name", "docker")
+	for i := range args {
+		if args[i] == "--health-cmd" {
+			t.Error("docker runtime must not get podman-only health-cmd")
 		}
 	}
 }

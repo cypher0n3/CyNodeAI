@@ -348,6 +348,8 @@ Traces To:
       - `env` (object, optional)
       - `healthcheck` (object, optional)
         - At minimum: `path` (string), `expected_status` (int)
+        - When the node uses Podman, it SHOULD pass container health-check options (e.g. `--health-cmd`) so the container reports `(healthy)` in `podman ps`.
+          Docker run does not support inline health checks.
       - `restart_policy` (string, optional)
         - recommended: `always`
       - `network` (object, optional)

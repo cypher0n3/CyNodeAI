@@ -38,6 +38,12 @@ Scenario: Managed-service container run args do not mount secure store
   When the node manager builds run args for the managed-service container
   Then the run args do not contain any mount of the secure store or secrets path
 
+@req_worker_0259
+@spec_cynai_worker_payload_configurationv1
+Scenario: Managed-service container run args include health-check when config has healthcheck and runtime is podman
+  When the node manager builds run args for the managed-service container with healthcheck and runtime podman
+  Then the run args include podman health-check options
+
 @req_worker_0169
 @spec_cynai_worker_nodelocalsecurestore
 Scenario: Secure store is distinct from telemetry database

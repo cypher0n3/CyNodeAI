@@ -16,14 +16,18 @@ const ManagedAgentProxySocketBaseDir = "run/managed_agent_proxy"
 
 // BuildManagedServiceRunArgs returns the container run args for one managed service (env, mounts, image, args).
 // stateDir is the node state directory (e.g. from WORKER_API_STATE_DIR or CYNODE_STATE_DIR).
+// runtime is the container runtime ("podman" or "docker"); healthcheck is only added for podman.
 // Used by cmd/node-manager and by BDD to verify run args never mount the secure store.
-func BuildManagedServiceRunArgs(stateDir string, svc *nodepayloads.ConfigManagedService, serviceID, serviceType, image, name string) []string {
+func BuildManagedServiceRunArgs(stateDir string, svc *nodepayloads.ConfigManagedService, serviceID, serviceType, image, name, runtime string) []string {
 	args := []string{"run", "-d", "--name", name}
 	if strings.TrimSpace(svc.RestartPolicy) == "always" {
 		args = append(args, "--restart", "always")
 	}
 	if port := defaultPortForServiceType(serviceType); port != "" {
 		args = append(args, "-p", port+":"+port)
+	}
+	if hc := podmanHealthcheckArgs(svc, serviceType, runtime); len(hc) > 0 {
+		args = append(args, hc...)
 	}
 	if serviceIDPathSafe(serviceID) {
 		hostUDSDir := filepath.Join(stateDir, ManagedAgentProxySocketBaseDir, serviceID)
@@ -71,6 +75,29 @@ func defaultPortForServiceType(serviceType string) string {
 		return "8090"
 	default:
 		return ""
+	}
+}
+
+// podmanHealthcheckArgs returns podman --health-* args when runtime is podman and svc has a healthcheck; otherwise nil.
+func podmanHealthcheckArgs(svc *nodepayloads.ConfigManagedService, serviceType, runtime string) []string {
+	if strings.TrimSpace(runtime) != "podman" || svc.Healthcheck == nil {
+		return nil
+	}
+	path := strings.TrimSpace(svc.Healthcheck.Path)
+	if path == "" {
+		path = "/healthz"
+	}
+	port := defaultPortForServiceType(serviceType)
+	if port == "" {
+		return nil
+	}
+	healthURL := "http://localhost:" + port + path
+	return []string{
+		"--health-cmd", "CMD-SHELL wget -q -O /dev/null " + healthURL + " || exit 1",
+		"--health-interval", "10s",
+		"--health-timeout", "3s",
+		"--health-retries", "3",
+		"--health-start-period", "5s",
 	}
 }
 
