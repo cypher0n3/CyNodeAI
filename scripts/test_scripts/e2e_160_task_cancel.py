@@ -15,10 +15,11 @@ class TestTaskCancel(unittest.TestCase):
 
     def test_task_cancel(self):
         """Create sleep task, cancel it, poll result until status is canceled."""
-        _, out, _ = helpers.run_cynork(
+        ok, out, err = helpers.run_cynork(
             ["task", "create", "-p", "sleep 300", "-o", "json"],
             state.CONFIG_PATH,
         )
+        self.assertTrue(ok, f"task create for cancel failed: {out} {err}")
         data = helpers.parse_json_safe(out)
         task_id = (data or {}).get("task_id")
         self.assertIsNotNone(task_id, "task create for cancel failed")
@@ -27,6 +28,18 @@ class TestTaskCancel(unittest.TestCase):
             state.CONFIG_PATH,
         )
         self.assertTrue(ok, f"task cancel failed: {out} {err}")
+        cancel_data = helpers.parse_json_safe(out)
+        self.assertIsNotNone(cancel_data, f"task cancel response not JSON: {out}")
+        self.assertEqual(
+            cancel_data.get("task_id"),
+            task_id,
+            f"task cancel should return requested task_id: {cancel_data}",
+        )
+        self.assertIs(
+            cancel_data.get("canceled"),
+            True,
+            f"task cancel response should confirm cancellation: {cancel_data}",
+        )
         for _ in range(6):
             time.sleep(2)
             _, out, _ = helpers.run_cynork(
@@ -37,6 +50,11 @@ class TestTaskCancel(unittest.TestCase):
             status = (result or {}).get("status", "")
             if status in ("canceled", "completed", "failed"):
                 break
+        self.assertEqual(
+            (result or {}).get("task_id"),
+            task_id,
+            f"task result after cancel should reference the canceled task: {result}",
+        )
         self.assertIn(
             status, ("canceled",),
             f"expected canceled status, got {status}",

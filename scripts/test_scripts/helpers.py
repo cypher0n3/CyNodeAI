@@ -77,6 +77,23 @@ def read_token_from_config(config_path):
     return None
 
 
+def read_config_value(config_path, key):
+    """Read a simple YAML-like scalar config value by key. Return None if missing."""
+    if not config_path or not os.path.isfile(config_path):
+        return None
+    prefix = f"{key}:"
+    try:
+        with open(config_path, encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if line.startswith(prefix):
+                    val = line.split(":", 1)[1].strip().strip('"\'')
+                    return val or None
+    except OSError:
+        pass
+    return None
+
+
 def wait_for_gateway(max_attempts=30, sleep=1):
     """Wait for user-gateway healthz; return True when 200."""
     for _ in range(max_attempts):

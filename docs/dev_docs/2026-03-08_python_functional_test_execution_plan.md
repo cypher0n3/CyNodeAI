@@ -266,6 +266,12 @@ Checklist:
 
 - [ ] Re-run only the task subset first, then rerun the full task tag group.
 
+Progress:
+
+- [x] Added a replacement `task logs` E2E module with meaningful JSON assertions.
+
+- [x] Tightened `task result`, `task get`, `task cancel`, and status-filter assertions so they validate more than simple JSON parseability.
+
 ### Step 2.2: Add Name-Based Task Identifier Coverage
 
 Primary tests to add or expand:
@@ -306,6 +312,12 @@ Checklist:
 
 - [ ] If the product contract requires server-side invalidation, add an assertion that proves the old access path is rejected.
 
+Progress:
+
+- [x] Added a replacement logout E2E that verifies local tokens are cleared and `whoami` fails after logout.
+
+- [x] Strengthened the refresh test so it verifies stored auth values exist before and after refresh.
+
 ### Step 2.4: Harden Chat Assertions
 
 Primary tests:
@@ -325,6 +337,14 @@ Checklist:
 - [ ] For reliability tests, assert a meaningful success threshold rather than minimal survivability.
 
 - [ ] For error-path tests, assert the canonical error shape.
+
+Progress:
+
+- [x] Removed ad-hoc login from inference chat tests that were mutating shared state in `setUp`.
+
+- [x] Standardized inference-test setup to require the shared auth prereq config and token from `e2e_020_auth_login`.
+
+- [ ] The project-context test still needs a real project identifier instead of the current `"default"` placeholder.
 
 ### Step 2.5: Tighten Worker Telemetry Assertions
 

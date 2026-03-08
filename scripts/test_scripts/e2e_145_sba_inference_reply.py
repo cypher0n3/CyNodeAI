@@ -52,6 +52,11 @@ class TestSbaInferenceReply(unittest.TestCase):
         """Create SBA inference task and assert user-facing reply."""
         if os.environ.get("E2E_SKIP_INFERENCE_SMOKE", "") or config.E2E_SKIP_INFERENCE_SMOKE:
             self.skipTest("E2E_SKIP_INFERENCE_SMOKE set")
+        if not state.CONFIG_PATH or not os.path.isfile(state.CONFIG_PATH):
+            self.skipTest("CONFIG_PATH not set (run after auth login prereq)")
+        token = helpers.read_token_from_config(state.CONFIG_PATH)
+        if not token:
+            self.skipTest("auth token missing from config (run after auth login prereq)")
         _, out, _ = helpers.run_cynork(
             [
                 "task", "create", "-p", "Reply back with the current time.",

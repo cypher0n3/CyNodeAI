@@ -13,9 +13,20 @@ class TestRefresh(unittest.TestCase):
     tags = ["suite_cynork", "full_demo", "auth"]
 
     def test_refresh(self):
-        """Assert auth refresh and whoami succeed; whoami output contains handle=admin."""
-        ok, out, _ = helpers.run_cynork(["auth", "refresh"], state.CONFIG_PATH)
-        self.assertTrue(ok, "auth refresh failed")
+        """Assert auth refresh preserves usable session state and whoami still works."""
+        before_token = helpers.read_config_value(state.CONFIG_PATH, "token")
+        before_refresh = helpers.read_config_value(state.CONFIG_PATH, "refresh_token")
+        self.assertTrue(before_token, "precondition failed: token missing before refresh")
+        self.assertTrue(before_refresh, "precondition failed: refresh_token missing before refresh")
+
+        ok, out, err = helpers.run_cynork(["auth", "refresh"], state.CONFIG_PATH)
+        self.assertTrue(ok, f"auth refresh failed: {out} {err}")
+
+        after_token = helpers.read_config_value(state.CONFIG_PATH, "token")
+        after_refresh = helpers.read_config_value(state.CONFIG_PATH, "refresh_token")
+        self.assertTrue(after_token, "token missing after refresh")
+        self.assertTrue(after_refresh, "refresh_token missing after refresh")
+
         ok, out, _ = helpers.run_cynork(["auth", "whoami"], state.CONFIG_PATH)
         self.assertTrue(ok, "whoami after refresh failed")
         self.assertIn("handle=admin", out)

@@ -211,6 +211,7 @@ It covers worker-node behavior and the worker API contract for job execution and
   [CYNAI.WORKER.ManagedServiceContainers](../tech_specs/worker_node.md#spec-cynai-worker-managedservicecontainers)
   <a id="req-worker-0161"></a>
 - **REQ-WORKER-0162:** The Worker API MUST provide a bidirectional proxy for managed agent runtimes so (1) the orchestrator can reach managed agents through the Worker API and (2) managed agents can reach orchestrator control surfaces (MCP gateway, callbacks) through the Worker API without direct orchestrator network access.
+  Whenever an agent runtime (e.g. PMA, PAA, SBA) runs on a worker, it MUST use this proxy for all orchestrator communication; there is no exception or direct-orchestrator path.
   [CYNAI.WORKER.ManagedAgentProxyBidirectional](../tech_specs/worker_api.md#spec-cynai-worker-managedagentproxy)
   [CYNAI.WORKER.WorkerProxyBidirectionalManagedAgents](../tech_specs/worker_node.md#spec-cynai-worker-proxybidirectional)
   <a id="req-worker-0162"></a>

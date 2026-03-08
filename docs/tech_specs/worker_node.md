@@ -5,8 +5,10 @@
   - [Node Manager Shutdown](#node-manager-shutdown)
 - [Managed Service Containers](#managed-service-containers)
 - [Worker Proxy Bidirectional (Managed Agents)](#worker-proxy-bidirectional-managed-agents)
+  - [Worker Proxy Normative Behavior](#worker-proxy-normative-behavior)
 - [Token and Credential Handling](#token-and-credential-handling)
   - [Token Authentication and Auditing](#token-authentication-and-auditing)
+  - [Agent Token Storage and Lifecycle](#agent-token-storage-and-lifecycle)
 - [Sandbox Control Plane](#sandbox-control-plane)
   - [Sandbox Workspace and Job Mounts](#sandbox-workspace-and-job-mounts)
   - [Sandbox Rootless Execution](#sandbox-rootless-execution)
@@ -32,6 +34,8 @@
 - [Dynamic Configuration Updates](#dynamic-configuration-updates)
 - [Credential Handling](#credential-handling)
   - [Credential Handling Applicable Requirements](#credential-handling-applicable-requirements)
+  - [Node-Local Secure Store](#node-local-secure-store)
+  - [Secure Store Process Boundary](#secure-store-process-boundary)
 - [Required Node Configuration](#required-node-configuration)
 
 ## Document Overview
@@ -102,9 +106,10 @@ PMA as managed service (normative):
 
 - Spec ID: `CYNAI.WORKER.WorkerProxyBidirectionalManagedAgents` <a id="spec-cynai-worker-proxybidirectional"></a>
 
-Managed agent runtimes (for example PMA) MUST communicate with the orchestrator through the worker proxy in both directions.
+Whenever an agent runtime (PMA, PAA, SBA, or other managed agent) runs on a worker, it MUST communicate with the orchestrator through the worker proxy in both directions.
+There is no exception: the agent MUST NOT be given direct orchestrator URLs or network access; all traffic flows through the worker proxy.
 
-Normative behavior:
+### Worker Proxy Normative Behavior
 
 - **Orchestrator to agent:** The worker MUST expose a worker-mediated endpoint (via Worker API reverse proxy) that the orchestrator
   (and user-gateway, when applicable) can call to reach the managed agent container (e.g. PMA chat handoff and health).

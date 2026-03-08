@@ -8,7 +8,7 @@ import shutil
 import sys
 import tempfile
 
-# Set by auth login tests; cleanup is manual or handled by callers.
+# Set by auth login tests; cleanup is manual or handled by callers such as logout tests.
 CONFIG_DIR = None
 CONFIG_PATH = None
 

@@ -44,6 +44,8 @@ class TestChatSequentialMessages(unittest.TestCase):
         """Two turns: first 'Say one word: first', then 'What word?'; assert both replies."""
         if os.environ.get("E2E_SKIP_INFERENCE_SMOKE", "") or config.E2E_SKIP_INFERENCE_SMOKE:
             self.skipTest("E2E_SKIP_INFERENCE_SMOKE set")
+        if not state.CONFIG_PATH or not os.path.isfile(state.CONFIG_PATH):
+            self.skipTest("CONFIG_PATH not set (run after auth login prereq)")
         token = helpers.read_token_from_config(state.CONFIG_PATH)
         self.assertIsNotNone(token, "no token in config (run login first)")
         messages = [{"role": "user", "content": "Say one word: first"}]

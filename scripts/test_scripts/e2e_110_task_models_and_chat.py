@@ -1,4 +1,4 @@
-# E2E parity: models list and one-shot chat. Skip chat if E2E_SKIP_INFERENCE_SMOKE.
+# E2E parity: models list and one-shot chat. Requires auth config from e2e_020.
 # Traces: REQ-USRGWY-0121, 0127; CYNAI.USRGWY.OpenAIChatApi; REQ-CLIENT-0161.
 
 import os
@@ -15,13 +15,11 @@ class TestModelsAndChat(unittest.TestCase):
     tags = ["suite_orchestrator", "full_demo", "inference", "pma_inference", "chat"]
 
     def setUp(self):
-        state.init_config()
-        ok, _, _ = helpers.run_cynork(
-            ["auth", "login", "-u", "admin", "-p", config.ADMIN_PASSWORD],
-            state.CONFIG_PATH,
-        )
-        if not ok:
-            self.skipTest("auth login failed (gateway or config)")
+        if not state.CONFIG_PATH or not os.path.isfile(state.CONFIG_PATH):
+            self.skipTest("CONFIG_PATH not set (run after auth login prereq)")
+        token = helpers.read_token_from_config(state.CONFIG_PATH)
+        if not token:
+            self.skipTest("auth token missing from config (run after auth login prereq)")
 
     def test_models_and_chat(self):
         """Assert models list returns list; run one-shot chat unless inference smoke skipped."""

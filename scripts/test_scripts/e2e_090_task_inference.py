@@ -1,6 +1,7 @@
-# E2E parity: inference-in-sandbox task. Skip if INFERENCE_PROXY_IMAGE unset.
+# E2E parity: inference-in-sandbox task. Requires auth config from e2e_020.
 # Traces: REQ-WORKER-0114 (node inference path); REQ-ORCHES-0123 (dispatch to worker).
 
+import os
 import time
 import unittest
 
@@ -17,6 +18,11 @@ class TestInferenceTask(unittest.TestCase):
         """Create inference task, poll until completed; assert stdout contains Ollama URL."""
         if not config.INFERENCE_PROXY_IMAGE:
             self.skipTest("INFERENCE_PROXY_IMAGE not set")
+        if not state.CONFIG_PATH or not os.path.isfile(state.CONFIG_PATH):
+            self.skipTest("CONFIG_PATH not set (run after auth login prereq)")
+        token = helpers.read_token_from_config(state.CONFIG_PATH)
+        if not token:
+            self.skipTest("auth token missing from config (run after auth login prereq)")
         _, out, _ = helpers.run_cynork(
             ["task", "create", "-p", "sh -c 'echo $OLLAMA_BASE_URL'",
              "--use-inference", "--input-mode", "commands", "-o", "json"],

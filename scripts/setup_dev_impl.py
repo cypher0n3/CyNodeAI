@@ -350,7 +350,6 @@ def start_orchestrator_stack_compose(extra_env=None, ollama_in_stack=False):
     if extra_env:
         env.update(extra_env)
     env["PMA_IMAGE"] = "cynodeai-cynode-pma:dev"
-    env["NODE_PMA_OLLAMA_BASE_URL"] = "http://host.containers.internal:11434"
     # Prescribed: node starts PMA; do not start PMA as control-plane subprocess.
     env["PMA_ENABLED"] = "false"
     # Down: always use all profiles so every profile service is torn down.
