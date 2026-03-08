@@ -66,7 +66,8 @@ It covers cross-cutting standards and conventions that apply across components.
 - **REQ-STANDS-0116:** Services SHOULD support distributed tracing and metrics collection.
   [CYNAI.STANDS.Observability](../tech_specs/go_rest_api_standards.md#spec-cynai-stands-observ)
   <a id="req-stands-0116"></a>
-- **REQ-STANDS-0117:** Services SHOULD use GORM as the default database access layer.
+- **REQ-STANDS-0117:** All Go SQL database access in the codebase MUST use GORM (models, queries, and schema workflow).
+  [CYNAI.STANDS.GoSqlGorm](../tech_specs/go_sql_database_standards.md#spec-cynai-stands-gosqlgorm)
   [CYNAI.STANDS.DatabaseAccess](../tech_specs/go_rest_api_standards.md#spec-cynai-stands-dbaccess)
   <a id="req-stands-0117"></a>
 - **REQ-STANDS-0118:** Services MUST use GORM's PostgreSQL driver with `pgx`.
@@ -117,3 +118,7 @@ It covers cross-cutting standards and conventions that apply across components.
 - **REQ-STANDS-0133:** Go code that handles secrets, credentials, or tokens (including master keys and decrypted plaintext) MUST use `runtime/secret` (Go 1.26, via `GOEXPERIMENT=secret`) when available to wrap such code so temporaries are erased before returning; when `runtime/secret` is not available, implementations MUST use best-effort secure erasure (e.g. zeroing buffers) before returning from those code paths.
   [CYNAI.STANDS.SecretHandling](../tech_specs/go_rest_api_standards.md#spec-cynai-stands-secrethandling)
   <a id="req-stands-0133"></a>
+- **REQ-STANDS-0134:** When a component uses SQLite (e.g. worker node telemetry), it MUST use GORM with a GORM-compatible SQLite driver for all access and MUST apply schema via the same GORM-based workflow (AutoMigrate or explicit migrations) as for other SQL backends.
+  [CYNAI.STANDS.GoSqlGorm](../tech_specs/go_sql_database_standards.md#spec-cynai-stands-gosqlgorm)
+  [CYNAI.WORKER.TelemetryStorageSqlite](../tech_specs/worker_telemetry_api.md#spec-cynai-worker-telemetrystorage-sqlite)
+  <a id="req-stands-0134"></a>

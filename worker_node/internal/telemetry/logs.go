@@ -2,9 +2,10 @@ package telemetry
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
 	"fmt"
+
+	"gorm.io/gorm"
 )
 
 // LogEventRow is one log_event for API response.
@@ -29,96 +30,69 @@ const limitedByBytes = "bytes"
 const limitedByCount = "count"
 const limitedByNone = "none"
 
-func buildLogsQuery(sourceKind, sourceName, containerID, stream, since, until, pageToken string, limit int) (q string, args []interface{}, offset int, err error) {
-	if sourceKind == "" && containerID == "" {
-		return "", nil, 0, fmt.Errorf("at least one of source_kind+source_name or source_kind=container+container_id required")
-	}
-	q = "SELECT occurred_at, source_kind, source_name, container_id, stream, level, message, fields_json FROM log_event WHERE 1=1"
-	if sourceKind != "" {
-		q += " AND source_kind = ?"
-		args = append(args, sourceKind)
-	}
-	if sourceName != "" {
-		q += " AND source_name = ?"
-		args = append(args, sourceName)
-	}
-	if containerID != "" {
-		q += " AND container_id = ?"
-		args = append(args, containerID)
-	}
-	if stream != "" {
-		q += " AND stream = ?"
-		args = append(args, stream)
-	}
-	if since != "" {
-		q += " AND occurred_at >= ?"
-		args = append(args, since)
-	}
-	if until != "" {
-		q += " AND occurred_at < ?"
-		args = append(args, until)
-	}
-	q += " ORDER BY occurred_at, log_id LIMIT ? OFFSET ?"
-	if pageToken != "" {
-		var o int
-		if _, scanErr := fmt.Sscanf(pageToken, "%d", &o); scanErr == nil && o >= 0 {
-			offset = o
-		}
-	}
-	args = append(args, limit+1, offset)
-	return q, args, offset, nil
-}
-
-func scanLogEventRow(containerIDVal, streamVal, levelVal sql.NullString, fieldsJSON string, e *LogEventRow) {
-	if containerIDVal.Valid {
-		e.ContainerID = containerIDVal.String
-	}
-	if streamVal.Valid {
-		e.Stream = streamVal.String
-	}
-	if levelVal.Valid {
-		e.Level = levelVal.String
-	}
-	e.Fields = make(map[string]string)
-	_ = json.Unmarshal([]byte(fieldsJSON), &e.Fields)
-}
-
 // QueryLogs returns events with optional filters and pagination. Max response 1 MiB.
 func (s *Store) QueryLogs(ctx context.Context, sourceKind, sourceName, containerID, stream, since, until, pageToken string, limit int) (events []LogEventRow, truncated TruncatedMetadata, nextToken string, err error) {
 	truncated.MaxBytes = maxLogRespBytes
 	if limit <= 0 || limit > 5000 {
 		limit = 1000
 	}
-	q, args, offset, err := buildLogsQuery(sourceKind, sourceName, containerID, stream, since, until, pageToken, limit)
-	if err != nil {
+	if sourceKind == "" && containerID == "" {
+		return nil, truncated, "", fmt.Errorf("at least one of source_kind+source_name or source_kind=container+container_id required")
+	}
+	offset := parseLogPageToken(pageToken)
+	q := s.buildLogQuery(ctx, sourceKind, sourceName, containerID, stream, since, until)
+	var rows []LogEvent
+	if err := q.Order("occurred_at, log_id").Offset(offset).Limit(limit + 1).Find(&rows).Error; err != nil {
 		return nil, truncated, "", err
 	}
-	rows, err := s.db.QueryContext(ctx, q, args...)
-	if err != nil {
-		return nil, truncated, "", err
+	list, truncated, nextToken := applyLogTruncation(rows, limit, offset, truncated)
+	return list, truncated, nextToken, nil
+}
+
+func parseLogPageToken(pageToken string) int {
+	var offset int
+	if n, _ := fmt.Sscanf(pageToken, "%d", &offset); n == 1 && offset >= 0 {
+		return offset
 	}
-	defer func() { _ = rows.Close() }()
-	var list []LogEventRow
+	return 0
+}
+
+func (s *Store) buildLogQuery(ctx context.Context, sourceKind, sourceName, containerID, stream, since, until string) *gorm.DB {
+	q := s.db.WithContext(ctx).Model(&LogEvent{})
+	if sourceKind != "" {
+		q = q.Where("source_kind = ?", sourceKind)
+	}
+	if sourceName != "" {
+		q = q.Where("source_name = ?", sourceName)
+	}
+	if containerID != "" {
+		q = q.Where("container_id = ?", containerID)
+	}
+	if stream != "" {
+		q = q.Where("stream = ?", stream)
+	}
+	if since != "" {
+		q = q.Where("occurred_at >= ?", since)
+	}
+	if until != "" {
+		q = q.Where("occurred_at < ?", until)
+	}
+	return q
+}
+
+func applyLogTruncation(rows []LogEvent, limit, offset int, truncated TruncatedMetadata) ([]LogEventRow, TruncatedMetadata, string) {
+	list := make([]LogEventRow, 0, len(rows))
 	approxBytes := 0
-	for rows.Next() {
-		var e LogEventRow
-		var containerIDVal sql.NullString
-		var streamVal, levelVal sql.NullString
-		var fieldsJSON string
-		if err := rows.Scan(&e.OccurredAt, &e.SourceKind, &e.SourceName, &containerIDVal, &streamVal, &levelVal, &e.Message, &fieldsJSON); err != nil {
-			return nil, truncated, "", err
-		}
-		scanLogEventRow(containerIDVal, streamVal, levelVal, fieldsJSON, &e)
-		approxBytes += len(e.Message) + len(e.OccurredAt) + len(fieldsJSON) + 128
+	for i := range rows {
+		e := logEventToRow(&rows[i])
+		approxBytes += len(e.Message) + len(e.OccurredAt) + 128
 		if approxBytes > maxLogRespBytes {
 			truncated.LimitedBy = limitedByBytes
 			break
 		}
 		list = append(list, e)
 	}
-	if err := rows.Err(); err != nil {
-		return nil, truncated, "", err
-	}
+	var nextToken string
 	if len(list) > limit {
 		list = list[:limit]
 		if truncated.LimitedBy == "" {
@@ -129,5 +103,20 @@ func (s *Store) QueryLogs(ctx context.Context, sourceKind, sourceName, container
 	if truncated.LimitedBy == "" {
 		truncated.LimitedBy = limitedByNone
 	}
-	return list, truncated, nextToken, nil
+	return list, truncated, nextToken
+}
+
+func logEventToRow(m *LogEvent) LogEventRow {
+	e := LogEventRow{
+		OccurredAt:  m.OccurredAt,
+		SourceKind:  m.SourceKind,
+		SourceName:  m.SourceName,
+		ContainerID: m.ContainerID,
+		Stream:      m.Stream,
+		Level:       m.Level,
+		Message:     m.Message,
+		Fields:      make(map[string]string),
+	}
+	_ = json.Unmarshal([]byte(m.FieldsJSON), &e.Fields)
+	return e
 }

@@ -15,6 +15,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/database"
+	"github.com/cypher0n3/cynodeai/orchestrator/internal/middleware"
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/models"
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/skillscan"
 )
@@ -82,9 +83,10 @@ func run(ctx context.Context, logger *slog.Logger) error {
 	})
 	mux.HandleFunc("POST /v1/mcp/tools/call", toolCallHandler(store, logger))
 
+	handler := middleware.Logging(logger)(mux)
 	srv := &http.Server{
 		Addr:              getEnv("LISTEN_ADDR", ":8083"),
-		Handler:           mux,
+		Handler:           handler,
 		ReadHeaderTimeout: 30 * time.Second,
 		ReadTimeout:       30 * time.Second,
 		WriteTimeout:      30 * time.Second,
@@ -106,6 +108,7 @@ func run(ctx context.Context, logger *slog.Logger) error {
 	case err := <-serverErr:
 		return err
 	}
+	logger.Info("shutting down mcp-gateway")
 	shutdownCtx, cancel := context.WithTimeout(ctx, shutdownTimeout())
 	defer cancel()
 	return srv.Shutdown(shutdownCtx)

@@ -17,6 +17,10 @@ import scripts.setup_dev_build_cache as _build_cache
 # Mutable state set at start of start_orchestrator_stack_compose; used by stop_all.
 OLLAMA_TEARDOWN_STATE = {"was_running_before": False}
 
+# Dev-only secure store master key (32 bytes, base64). Same as worker_node nodemanager_test.go.
+# Used when CYNODE_SECURE_STORE_MASTER_KEY_B64 is not set so node-manager can run PMA.
+_DEV_SECURE_STORE_MASTER_KEY_B64 = "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY="
+
 
 @contextlib.contextmanager
 def _popen_no_wait(*args, **kwargs):
@@ -287,9 +291,33 @@ def start_orchestrator_stack_compose(extra_env=None, ollama_in_stack=False):
         f"  postgres :5432, control-plane :{_cfg.CONTROL_PLANE_PORT}, "
         f"user-gateway :{_cfg.ORCHESTRATOR_PORT}"
     )
+    # PMA is always required; build cynode-pma so the node can run it (avoid 403 on default image).
+    log_info("  Building cynode-pma image...")
+    if not run(
+        [_cfg.RUNTIME, "compose", "-f", _cfg.COMPOSE_FILE,
+         "--profile", "pma", "build", "cynode-pma"],
+        cwd=_cfg.PROJECT_ROOT,
+        timeout=600,
+    ):
+        log_error("cynode-pma image build failed")
+        return False
+    if ollama_in_stack:
+        log_info("  Building control-plane image (PMA-in-stack)...")
+        if not run(
+            [_cfg.RUNTIME, "compose", "-f", _cfg.COMPOSE_FILE,
+             "--profile", "pma", "build", "control-plane"],
+            cwd=_cfg.PROJECT_ROOT,
+            timeout=600,
+        ):
+            log_error("control-plane image build failed")
+            return False
     env = _cfg.compose_env()
     if extra_env:
         env.update(extra_env)
+    env["PMA_IMAGE"] = "cynodeai-cynode-pma:dev"
+    env["NODE_PMA_OLLAMA_BASE_URL"] = "http://host.containers.internal:11434"
+    # Prescribed: node starts PMA; do not start PMA as control-plane subprocess.
+    env["PMA_ENABLED"] = "false"
     # Down: always use all profiles so every profile service is torn down.
     subprocess.run(
         [_cfg.RUNTIME, "compose", "-f", _cfg.COMPOSE_FILE,
@@ -307,8 +335,7 @@ def start_orchestrator_stack_compose(extra_env=None, ollama_in_stack=False):
         check=False,
         shell=False,
     )
-    # Up: optional always; ollama only when bypass; pma never at initial up.
-    # PMA later: by script (--pma-via-compose) or by orchestrator/worker when prescribed.
+    # Up: optional always; ollama only when bypass. PMA is started by the worker when instructed.
     # Ref: orchestrator_bootstrap.md Orchestrator Independent Startup, PMA Startup.
     up_profiles = ["--profile", "optional"]
     if ollama_in_stack:
@@ -391,7 +418,7 @@ def wait_for_control_plane_stopped(timeout_sec=15):
 
 
 def wait_for_orchestrator_readyz(timeout_sec=120):
-    """Wait for control-plane /readyz 200 (orchestrator fully ready, PMA up per worker report)."""
+    """Wait for control-plane /readyz 200 (inference path + worker-reported PMA ready)."""
     url = f"http://127.0.0.1:{_cfg.CONTROL_PLANE_PORT}/readyz"
     log_info(f"Waiting for orchestrator ready at {url} (up to {timeout_sec}s)...")
     for _ in range(timeout_sec):
@@ -406,6 +433,20 @@ def wait_for_orchestrator_readyz(timeout_sec=120):
         time.sleep(1)
     log_error(f"Orchestrator not ready (readyz 200) after {timeout_sec}s")
     return False
+
+
+def _log_proc_streams(proc):
+    """Log stdout/stderr of a process that has exited (for diagnostics)."""
+    for label, stream in [("stdout", proc.stdout), ("stderr", proc.stderr)]:
+        if not stream:
+            continue
+        try:
+            out = stream.read()
+            if out:
+                decoded = out.decode("utf-8", errors="replace").strip()
+                log_error(f"node-manager {label}:\n{decoded}")
+        except OSError:
+            pass
 
 
 def start_node(extra_env=None):
@@ -443,6 +484,9 @@ def start_node(extra_env=None):
         log_error(f"failed to create node state dir {state_dir}: {e}")
         return False
     env["WORKER_API_STATE_DIR"] = state_dir
+    # Secure store master key required for managed service (PMA) token lifecycle. Dev-only default.
+    if not os.environ.get("CYNODE_SECURE_STORE_MASTER_KEY_B64", "").strip():
+        env["CYNODE_SECURE_STORE_MASTER_KEY_B64"] = _DEV_SECURE_STORE_MASTER_KEY_B64
     if not os.path.isfile(_cfg.NODE_MANAGER_BIN):
         log_error(f"node-manager not found: {_cfg.NODE_MANAGER_BIN}")
         return False
@@ -451,7 +495,7 @@ def start_node(extra_env=None):
         [_cfg.NODE_MANAGER_BIN],
         cwd=_cfg.PROJECT_ROOT,
         env=env,
-        stdout=subprocess.DEVNULL,
+        stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
         shell=False,
     ) as proc:
@@ -464,6 +508,7 @@ def start_node(extra_env=None):
         for _ in range(30):
             if proc.poll() is not None:
                 log_error("Failed to start node-manager (process exited)")
+                _log_proc_streams(proc)
                 return False
             try:
                 req = urllib.request.Request(
@@ -480,69 +525,6 @@ def start_node(extra_env=None):
             time.sleep(1)
         log_warn(f"Worker API did not respond on :{_cfg.WORKER_PORT} within 30s")
     return True
-
-
-def start_pma_container(extra_env=None):
-    """Start cynode-pma container only, via compose profile 'pma'.
-
-    Used only when bypass --pma-via-compose is set (orchestrator_bootstrap.md: prescribed
-    path is orchestrator instructs worker to start PMA; bypass = script starts PMA here).
-    We start cynode-pma only; do not start ollama (ollama is either already in stack via
-    --ollama-in-stack or not used per prescribed sequence).
-    """
-    if not _cfg.ensure_runtime():
-        return False
-    if not os.path.isfile(_cfg.COMPOSE_FILE):
-        return False
-    env = _cfg.compose_env()
-    if extra_env:
-        env.update(extra_env)
-    log_info("Starting PMA container (bypass: compose profile pma)...")
-    if not run(
-        [_cfg.RUNTIME, "compose", "-f", _cfg.COMPOSE_FILE,
-         "--profile", "ollama", "--profile", "optional", "--profile", "pma",
-         "up", "-d", "cynode-pma"],
-        env=env,
-        timeout=120,
-    ):
-        log_error("PMA container start failed")
-        return False
-    return True
-
-
-def wait_for_pma_healthz(timeout_sec=45):
-    """Wait for PMA /healthz to return 200. Return True on success."""
-    url = f"http://127.0.0.1:{_cfg.PMA_PORT}/healthz"
-    log_info(f"Waiting for PMA at {url} (up to {timeout_sec}s)...")
-    for _ in range(timeout_sec):
-        try:
-            req = urllib.request.Request(url)
-            with urllib.request.urlopen(req, timeout=2) as resp:
-                if resp.getcode() == 200:
-                    log_info("PMA is ready")
-                    return True
-        except (OSError, urllib.error.URLError):
-            pass
-        time.sleep(1)
-    log_error(f"PMA not ready after {timeout_sec}s")
-    return False
-
-
-def start_pma_after_inference_path(extra_env=None, pma_via_compose=False):
-    """After node is up: start PMA via compose (bypass) or rely on prescribed path.
-
-    pma_via_compose: if True (bypass), start cynode-pma via compose and wait for healthz.
-    Prescribed (False): do not start PMA here; orchestrator instructs worker when inference path
-    exists (orchestrator_bootstrap.md). We wait for /readyz 200 (poll) only; use --pma-via-compose
-    if worker-managed PMA is not yet implemented.
-    """
-    if pma_via_compose:
-        log_info("(bypass: starting PMA via compose)")
-        if not start_pma_container(extra_env=extra_env):
-            return False
-        return wait_for_pma_healthz()
-    log_info("(prescribed: PMA by orchestrator/worker when inference path exists; waiting readyz)")
-    return wait_for_orchestrator_readyz()
 
 
 def _stop_all_step(step_name, func):
@@ -576,7 +558,10 @@ def stop_all(leave_ollama_running=False):
             return
         with open(_cfg.NODE_MANAGER_PID_FILE, encoding="utf-8") as f:
             pid = int(f.read().strip())
-        os.kill(pid, signal.SIGTERM)
+        try:
+            os.kill(pid, signal.SIGTERM)
+        except ProcessLookupError:
+            pass  # already exited
         try:
             os.remove(_cfg.NODE_MANAGER_PID_FILE)
         except OSError:
@@ -596,9 +581,31 @@ def stop_all(leave_ollama_running=False):
         for pid in (r.stdout or "").strip().split():
             os.kill(int(pid), signal.SIGTERM)
 
+    def stop_managed_containers():
+        """Stop and remove node-started managed service containers (e.g. cynodeai-managed-pma-*)."""
+        if not _cfg.ensure_runtime():
+            return
+        r = subprocess.run(
+            [_cfg.RUNTIME, "ps", "-aq", "--filter", "name=cynodeai-managed-"],
+            capture_output=True, text=True, timeout=10, check=False, shell=False,
+        )
+        ids = (r.stdout or "").strip().split()
+        if not ids:
+            return
+        for cid in ids:
+            subprocess.run(
+                [_cfg.RUNTIME, "stop", cid],
+                capture_output=True, timeout=15, check=False, shell=False,
+            )
+            subprocess.run(
+                [_cfg.RUNTIME, "rm", "-f", cid],
+                capture_output=True, timeout=10, check=False, shell=False,
+            )
+
     log_info("Stopping all services...")
     try:
         _stop_all_step("kill node-manager", kill_node_manager)
+        _stop_all_step("stop managed containers (node PMA etc.)", stop_managed_containers)
         try:
             free_worker_port()
         except (FileNotFoundError, subprocess.TimeoutExpired) as e:

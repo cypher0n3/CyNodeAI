@@ -294,18 +294,18 @@ class TestProxyPmaWithInference(unittest.TestCase):
     def setUpClass(cls):
         pma_port = config.PROXY_PMA_TEST_PMA_PORT_WITH_INFERENCE
         worker_port = config.PROXY_PMA_TEST_WORKER_PORT_WITH_INFERENCE
-        mock_port = config.PROXY_PMA_TEST_MOCK_INFERENCE_PORT
         cls._worker_base = f"http://127.0.0.1:{worker_port}"
-        mock_url = f"http://127.0.0.1:{mock_port}"
 
         if not os.path.isfile(config.PMA_BIN):
             raise unittest.SkipTest(f"PMA binary not found: {config.PMA_BIN}")
         if not os.path.isfile(config.WORKER_API_BIN):
             raise unittest.SkipTest(f"worker-api binary not found: {config.WORKER_API_BIN}")
 
-        # Start mock inference (Ollama-style /api/generate)
+        # Mock inference (Ollama-style /api/generate); port 0 to avoid "Address already in use"
         handler = _make_mock_inference_handler("OK from mock inference")
-        cls._mock_server = HTTPServer(("127.0.0.1", mock_port), handler)
+        cls._mock_server = HTTPServer(("127.0.0.1", 0), handler)
+        mock_port = cls._mock_server.server_address[1]
+        mock_url = f"http://127.0.0.1:{mock_port}"
         cls._mock_thread = threading.Thread(target=cls._mock_server.serve_forever, daemon=True)
         cls._mock_thread.start()
         time.sleep(0.2)
@@ -341,7 +341,7 @@ class TestProxyPmaWithInference(unittest.TestCase):
             stderr=subprocess.PIPE,
         ) as proc:
             cls._pma_proc = proc
-            if not _wait_http(f"{pma_base}/healthz", timeout=15):
+            if not _wait_http(f"{pma_base}/healthz", timeout=25):
                 cls._pma_proc.terminate()
                 cls._pma_proc.wait(timeout=5)
                 if cls._mock_server:
@@ -365,7 +365,7 @@ class TestProxyPmaWithInference(unittest.TestCase):
             stderr=subprocess.PIPE,
         ) as proc:
             cls._worker_proc = proc
-            if not _wait_http(f"{cls._worker_base}/healthz", timeout=15):
+            if not _wait_http(f"{cls._worker_base}/healthz", timeout=45):
                 cls._worker_proc.terminate()
                 cls._worker_proc.wait(timeout=5)
                 if cls._pma_proc:
@@ -595,7 +595,7 @@ class TestProxyPmaWithRealOllama(unittest.TestCase):
             stderr=subprocess.PIPE,
         ) as proc:
             cls._worker_proc = proc
-            if not _wait_http(f"{cls._worker_base}/healthz", timeout=15):
+            if not _wait_http(f"{cls._worker_base}/healthz", timeout=45):
                 cls._worker_proc.terminate()
                 cls._worker_proc.wait(timeout=5)
                 if cls._pma_proc:

@@ -260,6 +260,16 @@ func (h *NodeHandler) GetConfig(w http.ResponseWriter, r *http.Request) {
 
 	payload := h.buildNodeConfigPayload(ctx, node, configVersion, workerAPITargetURL)
 
+	managedCount := 0
+	if payload.ManagedServices != nil {
+		managedCount = len(payload.ManagedServices.Services)
+	}
+	h.logInfo("node config built",
+		"node_slug", node.NodeSlug,
+		"config_version", configVersion,
+		"inference_backend", payload.InferenceBackend != nil,
+		"managed_services_count", managedCount)
+
 	if workerAPITargetURL != "" && h.workerAPIBearerToken != "" {
 		if err := h.db.UpdateNodeWorkerAPIConfig(ctx, node.ID, workerAPITargetURL, h.workerAPIBearerToken); err != nil {
 			h.logError("update node worker api config", "error", err)
@@ -300,20 +310,41 @@ func (h *NodeHandler) buildNodeConfigPayload(ctx context.Context, node *models.N
 }
 
 func (h *NodeHandler) buildManagedServicesDesiredState(ctx context.Context, node *models.Node) *nodepayloads.ConfigManagedServices {
-	if h.db == nil || node == nil || !boolEnvDefault("PMA_ENABLED", true) {
+	if h.db == nil || node == nil {
+		if h.logger != nil {
+			h.logger.Debug("managed services skipped", "reason", "db_or_node_nil")
+		}
 		return nil
 	}
 	serviceID := strings.TrimSpace(getEnvDefault("PMA_SERVICE_ID", "pma-main"))
 	image := strings.TrimSpace(getEnvDefault("PMA_IMAGE", "ghcr.io/cypher0n3/cynode-pma:latest"))
 	if serviceID == "" || image == "" {
+		if h.logger != nil {
+			h.logger.Debug("managed services skipped", "reason", "pma_service_id_or_image_empty", "node_slug", node.NodeSlug)
+		}
 		return nil
 	}
 	selectedNodeSlug := h.selectPMAHostNodeSlug(ctx, node.NodeSlug)
 	if selectedNodeSlug == "" || selectedNodeSlug != node.NodeSlug {
+		if h.logger != nil {
+			h.logger.Info("managed services skipped for node",
+				"node_slug", node.NodeSlug,
+				"selected_pma_host", selectedNodeSlug,
+				"reason", "pma_host_is_other_node")
+		}
 		return nil
 	}
-	inferenceBaseURL := strings.TrimSpace(getEnvDefault("OLLAMA_BASE_URL", getEnvDefault("INFERENCE_URL", "http://127.0.0.1:11434")))
+	// URL for PMA container (node-run) to reach Ollama. Use NODE_PMA_OLLAMA_BASE_URL when set
+	// (e.g. http://host.containers.internal:11434 so node's PMA container can reach host-mapped Ollama).
+	inferenceBaseURL := strings.TrimSpace(getEnvDefault("NODE_PMA_OLLAMA_BASE_URL", getEnvDefault("OLLAMA_BASE_URL", getEnvDefault("INFERENCE_URL", "http://127.0.0.1:11434"))))
 	defaultModel := strings.TrimSpace(getEnvDefault("INFERENCE_MODEL", "tinyllama"))
+	if h.logger != nil {
+		h.logger.Info("managed services desired state built",
+			"node_slug", node.NodeSlug,
+			"pma_service_id", serviceID,
+			"pma_image", image,
+			"count", 1)
+	}
 	return &nodepayloads.ConfigManagedServices{
 		Services: []nodepayloads.ConfigManagedService{
 			{

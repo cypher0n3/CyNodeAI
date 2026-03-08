@@ -50,8 +50,7 @@ def show_help():
     print("")
     print("Startup (start / full-demo / restart): default is prescribed sequence.")
     print("  --ollama-in-stack   Bypass: run OLLAMA in orchestrator compose.")
-    print("  --pma-via-compose   Bypass: start PMA via compose after node.")
-    print("  SETUP_DEV_OLLAMA_IN_STACK=1, SETUP_DEV_PMA_VIA_COMPOSE=1  Same as flags.")
+    print("  SETUP_DEV_OLLAMA_IN_STACK=1  Same as --ollama-in-stack.")
     print("")
     print("Environment (same as setup-dev.sh):")
     print("  POSTGRES_PORT, ORCHESTRATOR_PORT, CONTROL_PLANE_PORT, ADMIN_PASSWORD")
@@ -67,23 +66,21 @@ def _resolve_bypass(_name, arg_value, env_key):
 
 
 def cmd_start(opts):
-    """Run full startup sequence: build binaries, compose up, start node. PMA only when bypass.
+    """Run full startup sequence: build binaries, compose up, start node.
 
-    Order (normal startup for start / full-demo / restart):
+    Order (start / full-demo / restart):
     1. build_binaries() - just build-dev
-    2. start_orchestrator_stack_compose() - postgres, control-plane, user-gateway, optional profile
-    3. start_node() - node-manager binary (polls orchestrator /readyz itself per worker_node spec),
-       then worker-api on WORKER_PORT; script waits for worker-api healthz
-    4. (bypass only) If --pma-via-compose: script starts PMA via compose and waits for healthz.
-       Prescribed: script does not start or wait for PMA; worker node starts PMA when orchestrator
-       directs (orchestrator_bootstrap.md, worker_node managed services).
+    2. start_orchestrator_stack_compose() - postgres, control-plane, user-gateway
+    3. start_node() - node-manager (polls orchestrator /readyz, then worker-api on WORKER_PORT);
+       script waits for worker-api healthz
+    4. wait_for_orchestrator_readyz() - PMA is started by the worker when orchestrator directs
+       (orchestrator_bootstrap.md, worker_node managed services).
     """
     opts.extra_env = getattr(opts, "extra_env", None) or {}
     defaults = _default_inference_env()
     for k, v in defaults.items():
         opts.extra_env.setdefault(k, v)
     ollama_in_stack = getattr(opts, "ollama_in_stack", False)
-    pma_via_compose = getattr(opts, "pma_via_compose", False)
     if not setup_dev_impl.build_binaries():
         return False
     # Prescribed sequence (docs/tech_specs/orchestrator_bootstrap.md): do not build compose
@@ -102,18 +99,12 @@ def cmd_start(opts):
     if not setup_dev_impl.start_node(extra_env=extra):
         setup_dev_impl.stop_all()
         return False
-    # PMA: prescribed path = worker node starts PMA when orchestrator directs; script does nothing.
-    # Bypass (--pma-via-compose) = script starts PMA via compose and waits for healthz.
-    if pma_via_compose:
-        if not setup_dev_impl.start_pma_after_inference_path(
-            extra_env=extra, pma_via_compose=True
-        ):
-            setup_dev_impl.stop_all()
-            return False
-    else:
-        setup_dev_impl.log_info(
-            "Prescribed: PMA by worker when orchestrator directs; script does not start/wait."
-        )
+    setup_dev_impl.log_info(
+        "PMA by worker when orchestrator directs; waiting for readyz..."
+    )
+    if not setup_dev_impl.wait_for_orchestrator_readyz():
+        setup_dev_impl.stop_all()
+        return False
     setup_dev_impl.log_info(
         f"Services started: User API http://localhost:{setup_dev_config.ORCHESTRATOR_PORT} "
         f"Control-plane http://localhost:{setup_dev_config.CONTROL_PLANE_PORT} "
@@ -215,10 +206,6 @@ def _run_restart(args):
             "ollama_in_stack", getattr(args, "ollama_in_stack", False),
             "SETUP_DEV_OLLAMA_IN_STACK"
         )
-        pma_via_compose = _resolve_bypass(
-            "pma_via_compose", getattr(args, "pma_via_compose", False),
-            "SETUP_DEV_PMA_VIA_COMPOSE"
-        )
     return cmd_start(Opts())
 
 
@@ -250,10 +237,6 @@ def run_command(args):
                 "ollama_in_stack", getattr(args, "ollama_in_stack", False),
                 "SETUP_DEV_OLLAMA_IN_STACK"
             )
-            pma_via_compose = _resolve_bypass(
-                "pma_via_compose", getattr(args, "pma_via_compose", False),
-                "SETUP_DEV_PMA_VIA_COMPOSE"
-            )
         return 0 if cmd_start(Opts()) else 1
     if args.command == "full-demo":
         class FullDemoOpts:
@@ -264,10 +247,6 @@ def run_command(args):
             ollama_in_stack = _resolve_bypass(
                 "ollama_in_stack", getattr(args, "ollama_in_stack", False),
                 "SETUP_DEV_OLLAMA_IN_STACK"
-            )
-            pma_via_compose = _resolve_bypass(
-                "pma_via_compose", getattr(args, "pma_via_compose", False),
-                "SETUP_DEV_PMA_VIA_COMPOSE"
             )
         return 0 if cmd_full_demo(FullDemoOpts()) else 1
     if args.command == "restart":
@@ -299,11 +278,6 @@ def main():
         "--ollama-in-stack",
         action="store_true",
         help="Bypass: run OLLAMA in orchestrator compose (prescribed: node starts inference)",
-    )
-    parser.add_argument(
-        "--pma-via-compose",
-        action="store_true",
-        help="Bypass: start PMA via compose after node (prescribed: orchestrator instructs worker)",
     )
     args = parser.parse_args()
     if args.command == "help":

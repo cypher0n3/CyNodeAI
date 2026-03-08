@@ -50,7 +50,8 @@ NODE_MANAGER_PID_FILE = os.path.join(
     tempfile.gettempdir(), "cynodeai-node-manager.pid"
 )
 # Node state dir for full-demo: node writes secrets here; E2E reads NODE_STATE_DIR to assert on it.
-NODE_STATE_DIR = os.path.join(PROJECT_ROOT, "tmp", "cynodeai-node-state")
+# Use a path under TMPDIR so the managed-agent proxy socket stays under UNIX_PATH_MAX (108).
+NODE_STATE_DIR = os.path.join(tempfile.gettempdir(), "cynodeai-node-state")
 # Dev builds (faster; use just build-dev)
 NODE_MANAGER_BIN = os.path.join(PROJECT_ROOT, "worker_node", "bin", "node-manager-dev")
 NODE_MANAGER_WORKER_API_BIN = os.path.join(

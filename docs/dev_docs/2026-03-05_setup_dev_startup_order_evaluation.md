@@ -30,17 +30,14 @@ Dev/single-host MAY use OLLAMA in the same compose as a convenience but MUST NOT
 ## What Setup-Dev Actually Does
 
 The following steps are implemented in the Python setup scripts.
-Relevant entry points: `cmd_start`, `start_orchestrator_stack_compose`, `start_node`, `start_pma_after_inference_path`.
+Relevant entry points: `cmd_start`, `start_orchestrator_stack_compose`, `start_node`, `wait_for_orchestrator_readyz`.
 
 1. Build binaries (`just build-dev`).
-2. Compose up with `--profile ollama --profile optional` (no `pma`): starts postgres, control-plane, user-gateway, ollama, mcp-gateway, api-egress.
-3. Wait for control-plane `/readyz` (200 or 503).
-4. Start node: run node-manager binary (registers, fetches config, starts Worker API, starts inference per current node-manager behavior).
-5. After 5s delay: run `compose --profile pma up -d cynode-pma` (script starts PMA container via compose).
-6. Wait for PMA `/healthz` 200.
+2. Compose up with `--profile optional` (and `--profile ollama` only when bypass): starts postgres, control-plane, user-gateway, mcp-gateway, api-egress; optionally ollama.
+3. Start node: run node-manager binary (registers, fetches config, starts Worker API, starts PMA when instructed).
+4. Wait for control-plane `/readyz` 200 (inference path + worker-reported PMA ready).
 
-OLLAMA is part of the initial stack.
-PMA is started by the setup script via a second compose up, not by the orchestrator instructing the worker.
+PMA is started by the worker when the orchestrator directs (no script bypass to start PMA via compose).
 
 ## Bypasses Identified
 
@@ -109,5 +106,5 @@ Setup-dev should either drive that path or document the gap.
 - `docs/dev_docs/2026-02-28_startup_sequence_remediation_plan.md` (Prescribed Startup Sequence, Remediation Tasks)
 - `docs/dev_docs/2026-03-04_pma_worker_managed_lifecycle_spec_proposal.md` (Required Startup Sequence Single-Host Dev)
 - `docs/dev_docs/2026-03-04_pma_auto_start_root_cause.md` (PMA auto-start root cause; note compose now uses profile "pma" for cynode-pma)
-- `scripts/setup_dev.py`, `scripts/setup_dev_impl.py` (cmd_start, start_orchestrator_stack_compose, start_node, start_pma_after_inference_path)
+- `scripts/setup_dev.py`, `scripts/setup_dev_impl.py` (cmd_start, start_orchestrator_stack_compose, start_node, wait_for_orchestrator_readyz)
 - `orchestrator/docker-compose.yml` (profiles: ollama, optional, pma)

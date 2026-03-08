@@ -22,12 +22,23 @@ def _repo_root() -> Path:
 
 
 # Allowed suite tags (must match e2e_tags.py and features/README.md).
+# Includes suite_* plus descriptive tags used by e2e test classes.
 ALLOWED_TAGS = frozenset({
     "suite_orchestrator",
     "suite_worker_node",
     "suite_agents",
     "suite_cynork",
     "suite_e2e",
+    "suite_proxy_pma",
+    "full_demo",
+    "auth",
+    "task",
+    "inference",
+    "sba_inference",
+    "pma_inference",
+    "pma",
+    "chat",
+    "worker",
 })
 
 

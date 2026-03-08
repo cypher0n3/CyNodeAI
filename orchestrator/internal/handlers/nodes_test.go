@@ -507,12 +507,8 @@ func TestValidateRegistrationRequestValid(t *testing.T) {
 }
 
 func TestBuildNodeConfigPayload_IncludesManagedServicesWhenSelected(t *testing.T) {
-	_ = os.Setenv("PMA_ENABLED", "true")
 	_ = os.Setenv("PMA_HOST_NODE_SLUG", "node-01")
-	defer func() {
-		_ = os.Unsetenv("PMA_ENABLED")
-		_ = os.Unsetenv("PMA_HOST_NODE_SLUG")
-	}()
+	defer func() { _ = os.Unsetenv("PMA_HOST_NODE_SLUG") }()
 	mockDB := testutil.NewMockDB()
 	node := &models.Node{
 		ID:        uuid.New(),
@@ -537,9 +533,8 @@ func TestBuildNodeConfigPayload_IncludesManagedServicesWhenSelected(t *testing.T
 }
 
 func TestBuildNodeConfigPayload_ManagedServicesIncludeAgentTokenWhenSet(t *testing.T) {
-	_ = os.Setenv("PMA_ENABLED", "true")
 	_ = os.Unsetenv("PMA_HOST_NODE_SLUG")
-	defer func() { _ = os.Unsetenv("PMA_ENABLED") }()
+	defer func() { _ = os.Unsetenv("PMA_HOST_NODE_SLUG") }()
 	mockDB := testutil.NewMockDB()
 	node := &models.Node{
 		ID:        uuid.New(),
@@ -565,12 +560,8 @@ func TestBuildNodeConfigPayload_ManagedServicesIncludeAgentTokenWhenSet(t *testi
 }
 
 func TestBuildNodeConfigPayload_OmitsManagedServicesWhenNotSelected(t *testing.T) {
-	_ = os.Setenv("PMA_ENABLED", "true")
 	_ = os.Setenv("PMA_HOST_NODE_SLUG", "other-node")
-	defer func() {
-		_ = os.Unsetenv("PMA_ENABLED")
-		_ = os.Unsetenv("PMA_HOST_NODE_SLUG")
-	}()
+	defer func() { _ = os.Unsetenv("PMA_HOST_NODE_SLUG") }()
 	mockDB := testutil.NewMockDB()
 	node := &models.Node{
 		ID:        uuid.New(),
@@ -661,20 +652,4 @@ func TestSelectPMAHostNodeSlug_ExplicitOverride(t *testing.T) {
 	}
 }
 
-func TestBuildManagedServicesDesiredState_Disabled(t *testing.T) {
-	_ = os.Setenv("PMA_ENABLED", "false")
-	defer func() { _ = os.Unsetenv("PMA_ENABLED") }()
-	mockDB := testutil.NewMockDB()
-	node := &models.Node{
-		ID:        uuid.New(),
-		NodeSlug:  "node-01",
-		Status:    models.NodeStatusActive,
-		CreatedAt: time.Now().UTC(),
-		UpdatedAt: time.Now().UTC(),
-	}
-	mockDB.AddNode(node)
-	h := NewNodeHandler(mockDB, nil, "psk", testOrchestratorURL, "", "", "", nil)
-	if got := h.buildManagedServicesDesiredState(t.Context(), node); got != nil {
-		t.Errorf("buildManagedServicesDesiredState() should return nil when disabled, got %+v", got)
-	}
-}
+// PMA is always required; there is no "disabled" state for managed services.

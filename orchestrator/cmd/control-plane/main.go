@@ -4,6 +4,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"flag"
 	"log/slog"
@@ -12,10 +13,12 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
 
+	"github.com/cypher0n3/cynodeai/go_shared_libs/contracts/nodepayloads"
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/auth"
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/config"
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/database"
@@ -366,6 +369,34 @@ func healthzHandler(w http.ResponseWriter, _ *http.Request) {
 	_, _ = w.Write([]byte("ok"))
 }
 
+// hasWorkerReportedPMAReady returns true when at least one dispatchable node has reported
+// PMA as ready in its capability snapshot (worker-reported managed_services_status per orchestrator_bootstrap.md).
+func hasWorkerReportedPMAReady(ctx context.Context, store database.Store) bool {
+	nodes, err := store.ListDispatchableNodes(ctx)
+	if err != nil || len(nodes) == 0 {
+		return false
+	}
+	for _, n := range nodes {
+		snap, err := store.GetLatestNodeCapabilitySnapshot(ctx, n.ID)
+		if err != nil || snap == "" {
+			continue
+		}
+		var report nodepayloads.CapabilityReport
+		if json.Unmarshal([]byte(snap), &report) != nil || report.ManagedServicesStatus == nil {
+			continue
+		}
+		for i := range report.ManagedServicesStatus.Services {
+			svc := &report.ManagedServicesStatus.Services[i]
+			if strings.EqualFold(strings.TrimSpace(svc.ServiceType), "pma") &&
+				strings.TrimSpace(svc.State) == "ready" &&
+				len(svc.Endpoints) > 0 {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // pmaReady checks whether the PMA (cynode-pma) is reachable at the configured listen address.
 // It performs a GET to /healthz with a short timeout. Returns true only on HTTP 200.
 func pmaReady(ctx context.Context, listenAddr string) bool {
@@ -410,13 +441,15 @@ func readyzHandler(store database.Store, cfg *config.OrchestratorConfig, logger 
 			_, _ = w.Write([]byte("no inference path available (no dispatchable nodes; register and configure a worker node or configure external provider keys)"))
 			return
 		}
-		if cfg != nil && cfg.PMAEnabled {
-			if !pmaReady(ctx, cfg.PMAListenAddr) {
-				w.Header().Set("Content-Type", "text/plain; charset=utf-8")
-				w.WriteHeader(http.StatusServiceUnavailable)
-				_, _ = w.Write([]byte("PMA not ready (cynode-pma not reachable or not yet started)"))
-				return
-			}
+		// REQ-ORCHES-0151 / orchestrator_bootstrap.md: PMA must be online before ready.
+		// PMA can be local (subprocess, when PMA_ENABLED) or worker-managed; accept either.
+		localReady := cfg != nil && cfg.PMAEnabled && pmaReady(ctx, cfg.PMAListenAddr)
+		workerReportedReady := hasWorkerReportedPMAReady(ctx, store)
+		if !localReady && !workerReportedReady {
+			w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+			w.WriteHeader(http.StatusServiceUnavailable)
+			_, _ = w.Write([]byte("PMA not ready (no local PMA and no worker has reported PMA ready)"))
+			return
 		}
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 		w.WriteHeader(http.StatusOK)

@@ -30,6 +30,7 @@ const (
 	pathNodesConfig     = "/v1/nodes/config"
 	pathNodesCapability = "/v1/nodes/capability"
 	pathReadyz          = "/readyz"
+	stateReady          = "ready"
 )
 
 func testSecureStoreMasterKeyB64() string {
@@ -177,11 +178,40 @@ func TestBuildManagedServicesStatus_PMAAdvertisedURLFallback(t *testing.T) {
 		t.Fatalf("expected one service, got %+v", out)
 	}
 	s := out.Services[0]
-	if s.State != "ready" {
-		t.Errorf("expected state ready, got %q", s.State)
+	if s.State != stateReady {
+		t.Errorf("expected state %s, got %q", stateReady, s.State)
 	}
 	if len(s.Endpoints) != 1 || s.Endpoints[0] != "http://pma.example:8090" {
 		t.Errorf("expected PMA_ADVERTISED_URL endpoint, got %v", s.Endpoints)
+	}
+}
+
+// TestBuildManagedServicesStatus_WorkerProxyURL asserts PMA gets "ready" with worker proxy URL when NODE_ADVERTISED_WORKER_API_URL is set.
+func TestBuildManagedServicesStatus_WorkerProxyURL(t *testing.T) {
+	t.Setenv("WORKER_API_STATE_DIR", t.TempDir())
+	t.Setenv("NODE_ADVERTISED_WORKER_API_URL", "http://worker:12090")
+	defer func() {
+		_ = os.Unsetenv("WORKER_API_STATE_DIR")
+		_ = os.Unsetenv("NODE_ADVERTISED_WORKER_API_URL")
+	}()
+	nodeConfig := &nodepayloads.NodeConfigurationPayload{
+		ManagedServices: &nodepayloads.ConfigManagedServices{
+			Services: []nodepayloads.ConfigManagedService{
+				{ServiceID: "pma-1", ServiceType: "pma"},
+			},
+		},
+	}
+	out := buildManagedServicesStatus(nodeConfig)
+	if out == nil || len(out.Services) != 1 {
+		t.Fatalf("expected one service, got %+v", out)
+	}
+	s := out.Services[0]
+	if s.State != stateReady {
+		t.Errorf("expected state %s, got %q", s.State, stateReady)
+	}
+	want := "http://worker:12090/v1/worker/managed-services/pma-1/proxy:http"
+	if len(s.Endpoints) != 1 || s.Endpoints[0] != want {
+		t.Errorf("expected worker proxy endpoint %q, got %v", want, s.Endpoints)
 	}
 }
 
@@ -220,7 +250,7 @@ func TestBuildManagedServicesStatus_ExplicitProxyURLs(t *testing.T) {
 					ServiceType: "pma",
 					Orchestrator: &nodepayloads.ConfigManagedServiceOrchestrator{
 						MCPGatewayProxyURL:    "http://worker:12090/mcp",
-						ReadyCallbackProxyURL: "http://worker:12090/ready",
+						ReadyCallbackProxyURL: "http://worker:12090/" + stateReady,
 					},
 				},
 			},
@@ -234,7 +264,7 @@ func TestBuildManagedServicesStatus_ExplicitProxyURLs(t *testing.T) {
 	if proxy == nil {
 		t.Fatal("expected agent_to_orchestrator_proxy")
 	}
-	if proxy.MCPGatewayProxyURL != "http://worker:12090/mcp" || proxy.ReadyCallbackProxyURL != "http://worker:12090/ready" {
+	if proxy.MCPGatewayProxyURL != "http://worker:12090/mcp" || proxy.ReadyCallbackProxyURL != "http://worker:12090/"+stateReady {
 		t.Errorf("expected explicit URLs, got MCP=%q Ready=%q", proxy.MCPGatewayProxyURL, proxy.ReadyCallbackProxyURL)
 	}
 }
@@ -1371,6 +1401,10 @@ func TestEffectiveStateDirPrecedence(t *testing.T) {
 	t.Setenv("WORKER_API_STATE_DIR", "")
 	if got := effectiveStateDir(); got != "/tmp/cynode-state" {
 		t.Fatalf("expected CYNODE_STATE_DIR fallback, got %q", got)
+	}
+	t.Setenv("CYNODE_STATE_DIR", "")
+	if got := effectiveStateDir(); got != "/var/lib/cynode/state" {
+		t.Fatalf("expected default when both unset, got %q", got)
 	}
 }
 

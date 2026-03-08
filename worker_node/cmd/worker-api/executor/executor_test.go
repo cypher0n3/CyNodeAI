@@ -1510,7 +1510,7 @@ func TestPrepareSBAJobAndWorkspace_Success(t *testing.T) {
 	if err != nil {
 		t.Fatalf("prepareSBAJobAndWorkspace: %v", err)
 	}
-	defer os.RemoveAll(jobDir)
+	defer func() { _ = os.RemoveAll(jobDir) }()
 	if wsUsed != workspaceDir {
 		t.Errorf("workspaceDirToUse = %q, want %q", wsUsed, workspaceDir)
 	}
@@ -1534,11 +1534,15 @@ func TestPrepareSBAJobAndWorkspace_EmptyWorkspaceCreatesTemp(t *testing.T) {
 	if err != nil {
 		t.Fatalf("prepareSBAJobAndWorkspace: %v", err)
 	}
-	defer os.RemoveAll(jobDir)
+	defer func() {
+		_ = os.RemoveAll(jobDir)
+		if wsUsed != "" {
+			_ = os.RemoveAll(wsUsed)
+		}
+	}()
 	if wsUsed == "" {
 		t.Error("expected non-empty workspaceDirToUse when workspaceDir empty")
 	}
-	defer os.RemoveAll(wsUsed)
 }
 
 func TestPrepareSBAJobAndWorkspace_WorkspaceDirIsFileFails(t *testing.T) {
@@ -1569,12 +1573,12 @@ func TestPrepareSBAJobAndWorkspace_MkdirTempFails(t *testing.T) {
 		t.Fatal(err)
 	}
 	orig := os.Getenv("TMPDIR")
-	os.Setenv("TMPDIR", tmpFile)
+	_ = os.Setenv("TMPDIR", tmpFile)
 	defer func() {
 		if orig == "" {
-			os.Unsetenv("TMPDIR")
+			_ = os.Unsetenv("TMPDIR")
 		} else {
-			os.Setenv("TMPDIR", orig)
+			_ = os.Setenv("TMPDIR", orig)
 		}
 	}()
 	req := &workerapi.RunJobRequest{

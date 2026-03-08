@@ -161,7 +161,36 @@ def main():
         _ensure_cynork_ready(opts)
         if opts.skip_ollama:
             os.environ["E2E_SKIP_INFERENCE_SMOKE"] = "1"
+        else:
+            include_tags = [t.strip() for t in (opts.tags or "").split(",") if t.strip()]
+            if "pma_inference" in include_tags and not opts.skip_ollama:
+                if not helpers.ollama_container_running():
+                    print(
+                        "Error: pma_inference needs stack started with Ollama (node starts PMA).",
+                        file=sys.stderr,
+                    )
+                    print(
+                        "Start the stack with: SETUP_DEV_OLLAMA_IN_STACK=1 just setup-dev start",
+                        file=sys.stderr,
+                    )
+                    print(
+                        "Then run: just e2e --tags pma_inference",
+                        file=sys.stderr,
+                    )
+                    sys.exit(1)
         _run_prereq_checks()
+        include_tags = [t.strip() for t in (opts.tags or "").split(",") if t.strip()]
+        if "pma_inference" in include_tags and not opts.skip_ollama:
+            if not helpers.wait_for_pma_chat_ready(timeout_sec=180, poll_interval=5):
+                print(
+                    "Error: PMA chat not ready within 180s (node may not have reported PMA).",
+                    file=sys.stderr,
+                )
+                print(
+                    "Use: SETUP_DEV_OLLAMA_IN_STACK=1 just setup-dev start",
+                    file=sys.stderr,
+                )
+                sys.exit(1)
 
     result = unittest.runner.TextTestRunner(verbosity=2).run(suite)
     sys.exit(0 if result.wasSuccessful() else 1)

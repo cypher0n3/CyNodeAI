@@ -2,17 +2,27 @@
 
 - [Document Overview](#document-overview)
 - [Scope](#scope)
+  - [Scope Applicable Requirements](#scope-applicable-requirements)
 - [Language and Toolchain](#language-and-toolchain)
 - [HTTP Routing and Handlers](#http-routing-and-handlers)
 - [Timeouts and Resource Limits](#timeouts-and-resource-limits)
+  - [Timeouts and Resource Limits Applicable Requirements](#timeouts-and-resource-limits-applicable-requirements)
 - [Request and Response Model](#request-and-response-model)
+  - [Request and Response Model Applicable Requirements](#request-and-response-model-applicable-requirements)
 - [Error Format and Status Codes](#error-format-and-status-codes)
+  - [Error Format and Status Codes Applicable Requirements](#error-format-and-status-codes-applicable-requirements)
 - [Authentication, Authorization, and Security](#authentication-authorization-and-security)
+  - [Authentication, Authorization, and Security Applicable Requirements](#authentication-authorization-and-security-applicable-requirements)
 - [Secret Handling in Go](#secret-handling-in-go)
+  - [Secret Handling Applicable Requirements](#secret-handling-applicable-requirements)
 - [Observability](#observability)
+  - [Observability Applicable Requirements](#observability-applicable-requirements)
 - [Database Access](#database-access)
+  - [Database Access Applicable Requirements](#database-access-applicable-requirements)
 - [Reliability and Idempotency](#reliability-and-idempotency)
+  - [Reliability and Idempotency Applicable Requirements](#reliability-and-idempotency-applicable-requirements)
 - [API Evolution and Compatibility](#api-evolution-and-compatibility)
+  - [API Evolution and Compatibility Applicable Requirements](#api-evolution-and-compatibility-applicable-requirements)
 - [Testing and Quality Gates](#testing-and-quality-gates)
 
 ## Document Overview
@@ -213,6 +223,8 @@ Recommended log fields
 - `duration_ms`
 
 ## Database Access
+
+All Go SQL database access in the codebase MUST use GORM; see [Go SQL database standards (GORM)](go_sql_database_standards.md#spec-cynai-stands-gosqlgorm).
 
 This section defines standards for services that access PostgreSQL.
 It applies to the User API Gateway, worker services that persist state, and any internal orchestrator services that own database credentials.

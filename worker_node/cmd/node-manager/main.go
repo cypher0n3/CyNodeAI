@@ -158,6 +158,29 @@ func buildManagedServiceRunArgs(svc *nodepayloads.ConfigManagedService, serviceI
 	return nodeagent.BuildManagedServiceRunArgs(effectiveStateDir(), svc, serviceID, serviceType, image, name)
 }
 
+// startOneManagedService ensures the managed service container is running and, for PMA, waits for /healthz.
+func startOneManagedService(rt string, svc *nodepayloads.ConfigManagedService, serviceID, serviceType, image, name string) error {
+	check := exec.Command(rt, "ps", "-a", "--format", "{{.Names}}")
+	out, err := check.Output()
+	if err == nil && strings.Contains(string(out), name) {
+		_ = exec.Command(rt, "start", name).Run()
+		if strings.EqualFold(serviceType, "pma") {
+			waitForPMAReady(getEnv("PMA_PORT", "8090"), 30*time.Second)
+		}
+		return nil
+	}
+	args := buildManagedServiceRunArgs(svc, serviceID, serviceType, image, name)
+	cmd := exec.Command(rt, args...)
+	cmd.Env = os.Environ()
+	if out, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("managed service %q: %w: %s", serviceID, err, strings.TrimSpace(string(out)))
+	}
+	if strings.EqualFold(serviceType, "pma") {
+		waitForPMAReady(getEnv("PMA_PORT", "8090"), 30*time.Second)
+	}
+	return nil
+}
+
 // startManagedServices starts each desired managed service container (e.g. PMA) from config.
 // Containers are named cynodeai-managed-<service_id>. If a container already exists, it is started if stopped.
 // For PMA, waits for the service to respond on /healthz before returning so the orchestrator does not get "ready" before the container is reachable.
@@ -175,23 +198,8 @@ func startManagedServices(services []nodepayloads.ConfigManagedService) error {
 		if name == managedServiceContainerPrefix {
 			continue
 		}
-		check := exec.Command(rt, "ps", "-a", "--format", "{{.Names}}")
-		out, err := check.Output()
-		if err == nil && strings.Contains(string(out), name) {
-			_ = exec.Command(rt, "start", name).Run()
-			if strings.EqualFold(serviceType, "pma") {
-				waitForPMAReady(getEnv("PMA_PORT", "8090"), 30*time.Second)
-			}
-			continue
-		}
-		args := buildManagedServiceRunArgs(svc, serviceID, serviceType, image, name)
-		cmd := exec.Command(rt, args...)
-		cmd.Env = os.Environ()
-		if out, err := cmd.CombinedOutput(); err != nil {
-			return fmt.Errorf("managed service %q: %w: %s", serviceID, err, strings.TrimSpace(string(out)))
-		}
-		if strings.EqualFold(serviceType, "pma") {
-			waitForPMAReady(getEnv("PMA_PORT", "8090"), 30*time.Second)
+		if err := startOneManagedService(rt, svc, serviceID, serviceType, image, name); err != nil {
+			return err
 		}
 	}
 	return nil

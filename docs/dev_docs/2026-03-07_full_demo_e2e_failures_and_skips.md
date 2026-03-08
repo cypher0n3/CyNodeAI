@@ -15,19 +15,21 @@
 
 ## Failures
 
-### 1. `e2e_090_task_inference.TestInferenceTask.test_inference_task`
+Three tests failed; all depend on the prescribed inference + PMA path.
+
+### Failure 1: `e2e_090_task_inference.TestInferenceTask.test_inference_task`
 
 - **Assertion:** Create inference task (`--use-inference`), poll until completed; job stdout must contain `http://localhost:11434` (OLLAMA_BASE_URL in sandbox).
 - **Likely cause:** Inference task either did not reach `completed`, or the job ran in a context where OLLAMA_BASE_URL is not that value (e.g. different URL in sandbox, or task failed).
   Prescribed path: node starts inference when instructed; timing or routing may mean the inference container/sandbox is not ready or not used for this task.
 
-### 2. `e2e_110_task_models_and_chat.TestModelsAndChat.test_models_and_chat`
+### Failure 2: `e2e_110_task_models_and_chat.TestModelsAndChat.test_models_and_chat`
 
 - **Assertion:** `cynork models list -o json` returns `object: list` with at least one model; then one-shot `cynork chat --message "Reply with exactly: OK"` succeeds (unless E2E_SKIP_INFERENCE_SMOKE).
 - **Likely cause:** Either models list returned empty/failed, or the chat call failed (error/eof/502 in output).
   Depends on gateway + PMA + inference path being available.
 
-### 3. `e2e_115_pma_chat_context.TestPmaChatContext.test_chat_with_project_context`
+### Failure 3: `e2e_115_pma_chat_context.TestPmaChatContext.test_chat_with_project_context`
 
 - **Assertion:** `cynork chat --message "Reply with OK" --project-id default --plain` succeeds when inference is available (or skips with "project chat unavailable").
 - **Likely cause:** Chat with project-id failed (PMA handoff or completion not returned).
@@ -35,19 +37,21 @@
 
 **Common thread:** All three failures depend on the **prescribed** inference + PMA path: node-manager starts inference (and possibly PMA) when the orchestrator directs; gateway models/chat go through PMA.
 If PMA is not yet registered or inference not ready when E2E runs, or if routing is incomplete, these tests will fail.
-Options: run with bypasses `--ollama-in-stack --pma-via-compose` for a more predictable env, or fix timing/routing so prescribed path is ready before E2E.
+Options: run with `--ollama-in-stack` when OLLAMA in compose is needed, or fix timing/routing so prescribed path is ready before E2E.
 
 ---
 
 ## Skips
 
-### 1. `e2e_122_secure_store_envelope_structure.test_agent_token_files_are_envelopes_and_not_plaintext`
+Four tests skipped; two categories below.
+
+### Skip 1: `e2e_122_secure_store_envelope_structure.test_agent_token_files_are_envelopes_and_not_plaintext`
 
 - **Reason:** `secrets/agent_tokens dir not present (no managed services)`.
 - **Explanation:** Test asserts that under `NODE_STATE_DIR`, `secrets/agent_tokens` files are encrypted envelopes.
   With prescribed startup, managed services (and thus agent tokens) may not be created yet, so the test correctly skips.
 
-### 2. `e2e_124_worker_pma_proxy` (TestProxyPmaFunctional, TestProxyPmaWithInference, TestProxyPmaWithRealOllama)
+### Skip 2: `e2e_124_worker_pma_proxy` (TestProxyPmaFunctional, TestProxyPmaWithInference, TestProxyPmaWithRealOllama)
 
 - **Reason:** `worker-api did not become ready (healthz)` in setUpClass.
 - **Explanation:** These tests start a **second** worker-api (and PMA/mock or real Ollama) on isolated ports (e.g. 18091, 18094).
@@ -62,7 +66,7 @@ Options: run with bypasses `--ollama-in-stack --pma-via-compose` for a more pred
 ## Recommendations
 
 1. **Inference/PMA failures (e2e_090, e2e_110, e2e_115):** Run full-demo with bypasses to confirm E2E pass when OLLAMA and PMA are in compose:
-   `just setup-dev full-demo --ollama-in-stack --pma-via-compose`
+   `just setup-dev full-demo --ollama-in-stack`
    If that passes, the gap is in the prescribed path (timing, registration, or routing).
 
 2. **e2e_124 proxy skips:** Run proxy PMA tests alone with stack down:

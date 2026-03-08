@@ -48,3 +48,23 @@ Scenario: Get logs with bearer returns entries
   When I call GET "/v1/worker/telemetry/logs?source_kind=service&source_name=node-manager" with bearer token "test-bearer-token"
   Then the response status is 200
   And the response JSON has "events"
+
+@req_worker_0240
+@req_worker_0241
+@spec_cynai_worker_telemetrysurface_v1
+Scenario: Get containers list returns recorded container when store has data
+  Given a sandbox container is recorded for task "task-bdd-1" job "job-bdd-1"
+  When I call GET "/v1/worker/telemetry/containers" with bearer token "test-bearer-token"
+  Then the response status is 200
+  And the response contains a container with task_id "task-bdd-1" and job_id "job-bdd-1"
+
+@req_worker_0240
+@req_worker_0241
+@req_worker_0242
+@req_worker_0243
+@spec_cynai_worker_telemetrysurface_v1
+Scenario: Get logs returns recorded service log when store has data
+  Given a service log event is recorded for source "worker_api" with message "BDD test log line"
+  When I call GET "/v1/worker/telemetry/logs?source_kind=service&source_name=worker_api" with bearer token "test-bearer-token"
+  Then the response status is 200
+  And the response contains a log event with message "BDD test log line"

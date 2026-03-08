@@ -90,6 +90,7 @@ It uses a central orchestrator to coordinate node-local workers, sandboxed execu
 
 ### Protocols and Standards
 
+- Go SQL database standards (GORM): [`docs/tech_specs/go_sql_database_standards.md`](go_sql_database_standards.md)
 - MCP tooling: [`docs/tech_specs/mcp_tooling.md`](mcp_tooling.md)
 - MCP gateway enforcement: [`docs/tech_specs/mcp_gateway_enforcement.md`](mcp_gateway_enforcement.md)
 - User-installable MCP tools: [`docs/tech_specs/user_installable_mcp_tools.md`](user_installable_mcp_tools.md)

@@ -34,7 +34,6 @@
   - [Personas Table](#personas-table)
 - [Tasks, Jobs, and Nodes](#tasks-jobs-and-nodes)
   - [Tasks Table](#tasks-table)
-  - [Task Dependencies Table](#task-dependencies-table)
   - [Jobs Table](#jobs-table)
   - [Nodes Table](#nodes-table)
   - [Node Capabilities Table](#node-capabilities-table)
@@ -96,6 +95,8 @@ Implementations MUST keep the Go database models and schema bootstrap logic in s
 ### Storing This Schema in Code Applicable Requirements
 
 - Spec ID: `CYNAI.SCHEMA.StoringInCode` <a id="spec-cynai-schema-storingcode"></a>
+
+All orchestrator PostgreSQL access MUST use GORM per [Go SQL database standards](go_sql_database_standards.md#spec-cynai-stands-gosqlgorm).
 
 Traces To:
 

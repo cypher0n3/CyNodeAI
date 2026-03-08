@@ -17,6 +17,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -31,6 +32,7 @@ import (
 	"github.com/cypher0n3/cynodeai/worker_node/internal/inferenceproxy"
 	"github.com/cypher0n3/cynodeai/worker_node/internal/nodeagent"
 	"github.com/cypher0n3/cynodeai/worker_node/internal/securestore"
+	"github.com/cypher0n3/cynodeai/worker_node/internal/telemetry"
 )
 
 type ctxKey int
@@ -65,6 +67,9 @@ type workerTestState struct {
 	managedServicesStarted        []nodepayloads.ConfigManagedService
 	// Phase 1 inference proxy BDD
 	inferenceProxyServer *httptest.Server
+	// Telemetry store for Worker Telemetry API BDD (containers, logs with data)
+	telemetryStore   *telemetry.Store
+	telemetryStateDir string
 }
 
 func getWorkerState(ctx context.Context) *workerTestState {
@@ -73,7 +78,8 @@ func getWorkerState(ctx context.Context) *workerTestState {
 }
 
 // workerMux builds the same routes as worker-api main for testing.
-func workerMux(exec *executor.Executor, bearerToken string) *http.ServeMux {
+// If telemetryStore is non-nil, GET .../containers and GET .../logs use the store; otherwise they return empty.
+func workerMux(exec *executor.Executor, bearerToken string, telemetryStore *telemetry.Store) *http.ServeMux {
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
@@ -135,7 +141,7 @@ func workerMux(exec *executor.Executor, bearerToken string) *http.ServeMux {
 		}
 		writeJSON(w, http.StatusOK, map[string]interface{}{
 			"version": 1, "node_slug": getEnv("NODE_SLUG", "bdd-node"),
-			"build": map[string]string{"build_version": "test", "git_sha": ""},
+			"build": map[string]string{"build_version": "test"},
 			"platform": map[string]string{"os": "linux", "arch": "amd64", "kernel_version": ""},
 		})
 	})
@@ -154,26 +160,107 @@ func workerMux(exec *executor.Executor, bearerToken string) *http.ServeMux {
 			"container_runtime": map[string]string{"runtime": getEnv("CONTAINER_RUNTIME", "direct"), "version": ""},
 		})
 	})
-	// Containers and logs (REQ-WORKER-0240--0243); BDD stub returns empty list/entries.
-	mux.HandleFunc("GET /v1/worker/telemetry/containers", func(w http.ResponseWriter, r *http.Request) {
+	// Containers and logs (REQ-WORKER-0240--0243); use store when non-nil, else empty.
+	registerTelemetryHandlers(mux, bearerToken, telemetryStore)
+	return mux
+}
+
+func registerTelemetryHandlers(mux *http.ServeMux, bearerToken string, store *telemetry.Store) {
+	authTelemetry := func(w http.ResponseWriter, r *http.Request) bool {
 		const prefix = "Bearer "
 		authz := r.Header.Get("Authorization")
 		if len(authz) <= len(prefix) || authz[:len(prefix)] != prefix || authz[len(prefix):] != bearerToken {
 			writeProblem(w, http.StatusUnauthorized, problem.TypeAuthentication, "Unauthorized", "Invalid or missing bearer token")
+			return false
+		}
+		return true
+	}
+	mux.HandleFunc("GET /v1/worker/telemetry/containers", func(w http.ResponseWriter, r *http.Request) {
+		if !authTelemetry(w, r) {
 			return
 		}
-		writeJSON(w, http.StatusOK, map[string]interface{}{"containers": []interface{}{}})
+		if store == nil {
+			writeJSON(w, http.StatusOK, map[string]interface{}{"version": 1, "containers": []interface{}{}})
+			return
+		}
+		q := r.URL.Query()
+		limit := 100
+		if l := q.Get("limit"); l != "" {
+			if n, err := strconv.Atoi(l); err == nil && n > 0 && n <= 1000 {
+				limit = n
+			}
+		}
+		list, nextToken, err := store.ListContainers(r.Context(), q.Get("kind"), q.Get("status"), q.Get("task_id"), q.Get("job_id"), q.Get("page_token"), limit)
+		if err != nil {
+			writeProblem(w, http.StatusInternalServerError, problem.TypeInternal, "Internal Server Error", "")
+			return
+		}
+		if list == nil {
+			list = []telemetry.ContainerRow{}
+		}
+		resp := map[string]interface{}{"version": 1, "containers": list}
+		if nextToken != "" {
+			resp["next_page_token"] = nextToken
+		}
+		writeJSON(w, http.StatusOK, resp)
+	})
+	mux.HandleFunc("GET /v1/worker/telemetry/containers/", func(w http.ResponseWriter, r *http.Request) {
+		if !authTelemetry(w, r) {
+			return
+		}
+		containerID := strings.TrimPrefix(r.URL.Path, "/v1/worker/telemetry/containers/")
+		if containerID == "" {
+			writeProblem(w, http.StatusNotFound, problem.TypeNotFound, "Not Found", "container_id required")
+			return
+		}
+		if store == nil {
+			writeProblem(w, http.StatusNotFound, problem.TypeNotFound, "Not Found", "container not found")
+			return
+		}
+		c, err := store.GetContainer(r.Context(), containerID)
+		if err != nil {
+			writeProblem(w, http.StatusInternalServerError, problem.TypeInternal, "Internal Server Error", "")
+			return
+		}
+		if c == nil {
+			writeProblem(w, http.StatusNotFound, problem.TypeNotFound, "Not Found", "container not found")
+			return
+		}
+		writeJSON(w, http.StatusOK, map[string]interface{}{"version": 1, "container": c})
 	})
 	mux.HandleFunc("GET /v1/worker/telemetry/logs", func(w http.ResponseWriter, r *http.Request) {
-		const prefix = "Bearer "
-		authz := r.Header.Get("Authorization")
-		if len(authz) <= len(prefix) || authz[:len(prefix)] != prefix || authz[len(prefix):] != bearerToken {
-			writeProblem(w, http.StatusUnauthorized, problem.TypeAuthentication, "Unauthorized", "Invalid or missing bearer token")
+		if !authTelemetry(w, r) {
 			return
 		}
-		writeJSON(w, http.StatusOK, map[string]interface{}{"events": []interface{}{}, "truncated": false})
+		if store == nil {
+			writeJSON(w, http.StatusOK, map[string]interface{}{"version": 1, "events": []interface{}{}, "truncated": map[string]interface{}{"limited_by": "none", "max_bytes": 1048576}})
+			return
+		}
+		q := r.URL.Query()
+		if q.Get("source_kind") == "" && q.Get("container_id") == "" {
+			writeProblem(w, http.StatusBadRequest, problem.TypeValidation, "Bad Request", "source_kind+source_name or source_kind=container+container_id required")
+			return
+		}
+		limit := 1000
+		if l := q.Get("limit"); l != "" {
+			if n, err := strconv.Atoi(l); err == nil && n > 0 && n <= 5000 {
+				limit = n
+			}
+		}
+		events, truncated, nextToken, err := store.QueryLogs(r.Context(), q.Get("source_kind"), q.Get("source_name"), q.Get("container_id"), q.Get("stream"), q.Get("since"), q.Get("until"), q.Get("page_token"), limit)
+		if err != nil {
+			writeProblem(w, http.StatusBadRequest, problem.TypeValidation, "Bad Request", err.Error())
+			return
+		}
+		if events == nil {
+			events = []telemetry.LogEventRow{}
+		}
+		resp := map[string]interface{}{"version": 1, "events": events, "truncated": truncated}
+		if nextToken != "" {
+			resp["next_page_token"] = nextToken
+		}
+		writeJSON(w, http.StatusOK, resp)
 	})
-	return mux
 }
 
 func writeProblem(w http.ResponseWriter, status int, typ, title, detail string) {
@@ -190,7 +277,7 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 
 // InitializeWorkerNodeSuite sets up the godog suite for worker_node features.
 func InitializeWorkerNodeSuite(sc *godog.ScenarioContext, state *workerTestState) {
-	sc.Before(func(ctx context.Context, s *godog.Scenario) (context.Context, error) {
+	sc.Before(func(ctx context.Context, sc *godog.Scenario) (context.Context, error) {
 		exec := executor.New(
 			getEnv("CONTAINER_RUNTIME", "direct"),
 			30*time.Second,
@@ -203,16 +290,30 @@ func InitializeWorkerNodeSuite(sc *godog.ScenarioContext, state *workerTestState
 		if t := os.Getenv("WORKER_API_BEARER_TOKEN"); t != "" {
 			state.bearerToken = t
 		}
-		state.server = httptest.NewServer(workerMux(exec, state.bearerToken))
+		state.telemetryStateDir, _ = os.MkdirTemp("", "bdd-telemetry-")
+		if state.telemetryStateDir != "" {
+			if ts, err := telemetry.Open(ctx, state.telemetryStateDir); err == nil {
+				state.telemetryStore = ts
+			}
+		}
+		state.server = httptest.NewServer(workerMux(exec, state.bearerToken, state.telemetryStore))
 		return context.WithValue(ctx, stateKey, state), nil
 	})
 
-	sc.After(func(ctx context.Context, s *godog.Scenario, err error) (context.Context, error) {
+	sc.After(func(ctx context.Context, sc *godog.Scenario, err error) (context.Context, error) {
 		if state.server != nil {
 			state.server.Close()
 		}
 		if state.mockOrch != nil {
 			state.mockOrch.Close()
+		}
+		if state.telemetryStore != nil {
+			_ = state.telemetryStore.Close()
+			state.telemetryStore = nil
+		}
+		if state.telemetryStateDir != "" {
+			_ = os.RemoveAll(state.telemetryStateDir)
+			state.telemetryStateDir = ""
 		}
 		state.server = nil
 		state.mockOrch = nil
@@ -244,6 +345,7 @@ func InitializeWorkerNodeSuite(sc *godog.ScenarioContext, state *workerTestState
 	})
 
 	RegisterWorkerNodeSteps(sc, state)
+	RegisterTelemetryDataSteps(sc, state)
 	RegisterSecureStoreSteps(sc, state)
 	RegisterWorkerNodeSBASteps(sc, state)
 	RegisterNodeManagerConfigSteps(sc, state)
@@ -749,6 +851,87 @@ func RegisterWorkerNodeSteps(sc *godog.ScenarioContext, state *workerTestState) 
 			}
 		}
 		return nil
+	})
+}
+
+// RegisterTelemetryDataSteps registers steps for Worker Telemetry API scenarios that assert on stored data (containers, logs).
+func RegisterTelemetryDataSteps(sc *godog.ScenarioContext, state *workerTestState) {
+	sc.Step(`^a sandbox container is recorded for task "([^"]*)" job "([^"]*)"$`, func(ctx context.Context, taskID, jobID string) error {
+		if state.telemetryStore == nil {
+			return fmt.Errorf("telemetry store not available")
+		}
+		now := time.Now().UTC().Format(time.RFC3339)
+		row := telemetry.ContainerRow{
+			ContainerID:   "bdd-sandbox-" + taskID + "-" + jobID,
+			ContainerName: "sandbox-" + jobID,
+			Kind:          "sandbox",
+			Runtime:       "podman",
+			ImageRef:      "test:latest",
+			CreatedAt:     now,
+			LastSeenAt:    now,
+			Status:        "running",
+			TaskID:        taskID,
+			JobID:         jobID,
+			Labels:        map[string]string{"cynodeai.task_id": taskID, "cynodeai.job_id": jobID},
+		}
+		return state.telemetryStore.UpsertContainerInventory(ctx, &row)
+	})
+	sc.Step(`^a service log event is recorded for source "([^"]*)" with message "([^"]*)"$`, func(ctx context.Context, sourceName, message string) error {
+		if state.telemetryStore == nil {
+			return fmt.Errorf("telemetry store not available")
+		}
+		in := telemetry.LogEventInput{
+			LogID:      "bdd-log-" + fmt.Sprintf("%d", time.Now().UnixNano()),
+			SourceKind: "service",
+			SourceName: sourceName,
+			Message:    message,
+		}
+		return state.telemetryStore.InsertLogEvent(ctx, &in)
+	})
+	sc.Step(`^the response contains a container with task_id "([^"]*)" and job_id "([^"]*)"$`, func(ctx context.Context, taskID, jobID string) error {
+		st := getWorkerState(ctx)
+		if st == nil || st.lastBody == nil {
+			return fmt.Errorf("no response body")
+		}
+		var m map[string]interface{}
+		if err := json.Unmarshal(st.lastBody, &m); err != nil {
+			return err
+		}
+		containers, _ := m["containers"].([]interface{})
+		for _, c := range containers {
+			cm, _ := c.(map[string]interface{})
+			if cm == nil {
+				continue
+			}
+			t, _ := cm["task_id"].(string)
+			j, _ := cm["job_id"].(string)
+			if t == taskID && j == jobID {
+				return nil
+			}
+		}
+		return fmt.Errorf("response containers did not contain task_id=%q job_id=%q", taskID, jobID)
+	})
+	sc.Step(`^the response contains a log event with message "([^"]*)"$`, func(ctx context.Context, message string) error {
+		st := getWorkerState(ctx)
+		if st == nil || st.lastBody == nil {
+			return fmt.Errorf("no response body")
+		}
+		var m map[string]interface{}
+		if err := json.Unmarshal(st.lastBody, &m); err != nil {
+			return err
+		}
+		events, _ := m["events"].([]interface{})
+		for _, e := range events {
+			em, _ := e.(map[string]interface{})
+			if em == nil {
+				continue
+			}
+			msg, _ := em["message"].(string)
+			if msg == message {
+				return nil
+			}
+		}
+		return fmt.Errorf("response events did not contain message %q", message)
 	})
 }
 

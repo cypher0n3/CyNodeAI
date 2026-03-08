@@ -22,7 +22,8 @@ Updates made for Phase 8 routing and CI.
 
 ### Orchestrator: Worker-Reported Endpoints First
 
-- `orchestrator/internal/handlers/openai_chat.go`: `resolvePMAEndpoint` uses **only** worker-reported endpoints from capability snapshots (`managed_services_status`). No env or other path; REQ-ORCHES-0162 enforced.
+- `orchestrator/internal/handlers/openai_chat.go`: `resolvePMAEndpoint` uses **only** worker-reported endpoints from capability snapshots (`managed_services_status`).
+  No env or other path; REQ-ORCHES-0162 enforced.
 - Existing tests (FromManagedServicesStatus, RequiresReadyService, PicksMostRecentReadyAt) pass; StaticOverride removed (no fallback).
 
 ### Securestore: Gocognit Compliance

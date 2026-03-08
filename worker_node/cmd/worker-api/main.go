@@ -16,6 +16,7 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"strings"
 	"syscall"
@@ -91,6 +92,13 @@ func runMain(ctx context.Context) int {
 	if telemetryStore != nil {
 		defer func() { _ = telemetryStore.Close() }()
 		go runRetentionAndVacuum(ctx, telemetryStore, logger)
+		recordNodeBoot(ctx, telemetryStore, logger)
+		logger = slog.New(&telemetry.LogHandler{
+			Inner:  slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}),
+			Store:  telemetryStore,
+			Source: "worker_api",
+		})
+		slog.SetDefault(logger)
 	}
 	mux := newMux(exec, bearerToken, workspaceRoot, telemetryStore, logger, cfg.ManagedServiceTargets)
 	internalMux := newInternalMux(cfg.InternalProxy, logger)
@@ -134,6 +142,25 @@ func runMain(ctx context.Context) int {
 		_ = s.Shutdown(shutdownCtx)
 	}
 	return 0
+}
+
+// recordNodeBoot writes one node_boot row to the telemetry store per worker_telemetry_api.md (once per process boot).
+func recordNodeBoot(ctx context.Context, store *telemetry.Store, logger *slog.Logger) {
+	bootID := getEnv("NODE_BOOT_ID", "")
+	if bootID == "" {
+		bootID = fmt.Sprintf("boot-%d", time.Now().UTC().UnixNano())
+	}
+	row := telemetry.NodeBootRow{
+		BootID:        bootID,
+		NodeSlug:      getEnv("NODE_SLUG", "default"),
+		BuildVersion:  getEnv("BUILD_VERSION", "dev"),
+		PlatformOS:    runtime.GOOS,
+		PlatformArch:  runtime.GOARCH,
+		KernelVersion: getEnv("KERNEL_VERSION", ""),
+	}
+	if err := store.InsertNodeBoot(ctx, &row); err != nil && logger != nil {
+		logger.Warn("telemetry node_boot insert failed", "error", err)
+	}
 }
 
 // doRetentionAndVacuumOnce runs retention and vacuum once; used by runRetentionAndVacuum and tests.
@@ -670,7 +697,7 @@ func handleNodeInfo(logger *slog.Logger) http.HandlerFunc {
 		writeJSON(w, http.StatusOK, map[string]interface{}{
 			"version": 1,
 			"node_slug": nodeSlug,
-			"build": map[string]string{"build_version": "dev", "git_sha": ""},
+			"build": map[string]string{"build_version": "dev"},
 			"platform": map[string]string{"os": "linux", "arch": "amd64", "kernel_version": ""},
 		})
 	}
@@ -709,8 +736,8 @@ func readyzHandler(exec *executor.Executor) http.HandlerFunc {
 func decodeRunJobRequest(w http.ResponseWriter, r *http.Request, maxBytes int64) (*workerapi.RunJobRequest, bool) {
 	r.Body = http.MaxBytesReader(w, r.Body, maxBytes)
 	var req workerapi.RunJobRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		if err != nil && strings.Contains(err.Error(), "request body too large") {
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		if strings.Contains(err.Error(), "request body too large") {
 			writeProblem(w, http.StatusRequestEntityTooLarge, problem.TypeValidation, "Request Entity Too Large", "Request body exceeds maximum size")
 			return nil, false
 		}

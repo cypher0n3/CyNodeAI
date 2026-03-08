@@ -130,7 +130,6 @@ CREATE TABLE IF NOT EXISTS node_boot (
   booted_at TEXT NOT NULL,
   node_slug TEXT NOT NULL,
   build_version TEXT NOT NULL,
-  git_sha TEXT NOT NULL,
   platform_os TEXT NOT NULL,
   platform_arch TEXT NOT NULL,
   kernel_version TEXT NOT NULL
@@ -281,7 +280,6 @@ Response fields
 - `node_slug` (string, required)
 - `build` (object, required)
   - `build_version` (string, required)
-  - `git_sha` (string, required)
 - `platform` (object, required)
   - `os` (string, required)
   - `arch` (string, required)

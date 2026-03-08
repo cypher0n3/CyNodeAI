@@ -14,6 +14,15 @@ class TestModelsAndChat(unittest.TestCase):
 
     tags = ["suite_orchestrator", "full_demo", "inference", "pma_inference", "chat"]
 
+    def setUp(self):
+        state.init_config()
+        ok, _, _ = helpers.run_cynork(
+            ["auth", "login", "-u", "admin", "-p", config.ADMIN_PASSWORD],
+            state.CONFIG_PATH,
+        )
+        if not ok:
+            self.skipTest("auth login failed (gateway or config)")
+
     def test_models_and_chat(self):
         """Assert models list returns list; run one-shot chat unless inference smoke skipped."""
         ok, out, err = helpers.run_cynork(

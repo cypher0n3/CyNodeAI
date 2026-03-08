@@ -97,6 +97,41 @@ def wait_for_gateway_readyz(timeout_sec=30):
     return False
 
 
+def wait_for_pma_chat_ready(timeout_sec=120, poll_interval=5):
+    """Wait until gateway accepts PMA chat (POST /v1/chat/completions returns 2xx not 503).
+    Logs in via cynork to get a token, then polls until PM agent is available or timeout.
+    Return True when chat returns 2xx; False on timeout or auth failure.
+    """
+    with tempfile.TemporaryDirectory(prefix="cynodeai_e2e_wait_chat_") as tmpdir:
+        config_path = os.path.join(tmpdir, "config.yaml")
+        ok, _, _ = run_cynork(
+            ["auth", "login", "-u", "admin", "-p", config.ADMIN_PASSWORD],
+            config_path,
+        )
+        if not ok:
+            return False
+        token = read_token_from_config(config_path)
+        if not token:
+            return False
+    body = '{"model":"cynodeai.pm","messages":[{"role":"user","content":"hi"}]}'
+    headers = {"Authorization": f"Bearer {token}"}
+    deadline = time.monotonic() + timeout_sec
+    while time.monotonic() < deadline:
+        code, _ = run_curl_with_status(
+            "POST",
+            f"{config.USER_API}/v1/chat/completions",
+            data=body,
+            headers=headers,
+            timeout=15,
+        )
+        if 200 <= code < 300:
+            return True
+        if code != 503:
+            return False
+        time.sleep(poll_interval)
+    return False
+
+
 def temp_config_dir():
     """Return a temporary directory path for cynork config (caller cleans up)."""
     return tempfile.mkdtemp(prefix="cynodeai_e2e_config_")
@@ -187,6 +222,66 @@ def _container_runtime():
 def container_runtime():
     """Public wrapper for _container_runtime (for E2E that need podman/docker)."""
     return _container_runtime()
+
+
+def ensure_ollama_container_for_e2e():
+    """Start Ollama container via orchestrator compose (profile ollama) if not already running.
+    Used when running pma_inference E2E so chat has inference. Return True if container is or
+    becomes running; False on failure. Call before the node is started (e.g. in full-demo);
+    if the stack was already started without Ollama, the node will not have PMA.
+    """
+    runtime = _container_runtime()
+    if not runtime:
+        return False
+    try:
+        r = subprocess.run(
+            [runtime, "ps", "--format", "{{.Names}}"],
+            capture_output=True, text=True, timeout=10, check=False
+        )
+        names = (r.stdout or "").strip().splitlines()
+        if config.OLLAMA_CONTAINER_NAME in names:
+            return True
+    except (subprocess.TimeoutExpired, FileNotFoundError):
+        return False
+    compose_file = os.path.join(config.PROJECT_ROOT, "orchestrator", "docker-compose.yml")
+    if not os.path.isfile(compose_file):
+        return False
+    env = os.environ.copy()
+    r = subprocess.run(
+        [runtime, "compose", "-f", compose_file, "--profile", "ollama", "up", "-d", "ollama"],
+        cwd=config.PROJECT_ROOT,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=120,
+        check=False,
+    )
+    if r.returncode:
+        return False
+    for _ in range(30):
+        r = subprocess.run(
+            [runtime, "ps", "--format", "{{.Names}}"],
+            capture_output=True, text=True, timeout=5, check=False
+        )
+        if config.OLLAMA_CONTAINER_NAME in (r.stdout or "").strip().splitlines():
+            return True
+        time.sleep(1)
+    return False
+
+
+def ollama_container_running():
+    """Return True if the E2E Ollama container is running."""
+    runtime = _container_runtime()
+    if not runtime:
+        return False
+    try:
+        r = subprocess.run(
+            [runtime, "ps", "--format", "{{.Names}}"],
+            capture_output=True, text=True, timeout=10, check=False
+        )
+        return config.OLLAMA_CONTAINER_NAME in (r.stdout or "").strip().splitlines()
+    except (subprocess.TimeoutExpired, FileNotFoundError):
+        return False
 
 
 def run_ollama_inference_smoke():

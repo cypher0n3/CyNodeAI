@@ -17,6 +17,15 @@ class TestPmaChatContext(unittest.TestCase):
         "pma_inference", "chat", "pma",
     ]
 
+    def setUp(self):
+        state.init_config()
+        ok, _, _ = helpers.run_cynork(
+            ["auth", "login", "-u", "admin", "-p", config.ADMIN_PASSWORD],
+            state.CONFIG_PATH,
+        )
+        if not ok:
+            self.skipTest("auth login failed (gateway or config)")
+
     def test_chat_with_project_context(self):
         """Send chat with --project-id; assert success when inference is available."""
         if os.environ.get("E2E_SKIP_INFERENCE_SMOKE", "") or config.E2E_SKIP_INFERENCE_SMOKE:

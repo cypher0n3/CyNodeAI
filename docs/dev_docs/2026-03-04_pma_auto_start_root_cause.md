@@ -87,8 +87,8 @@ Options to align dev startup with the bootstrap spec:
 
 - **Compose:** `cynode-pma` is behind profile `pma`; user-gateway no longer `depends_on` cynode-pma.
   Initial `compose up -d` does not start PMA.
-- **Setup script:** After starting the stack and the node, `start_pma_after_inference_path()` waits 5s for node registration, then runs `compose --profile pma up -d cynode-pma` and waits for PMA /healthz.
-  Both `just setup-dev start` and `just setup-dev full-demo` use this flow.
+- **Setup script:** (Historical.) A bypass previously started PMA via compose; that option was removed.
+  PMA is now only started by the worker when the orchestrator directs.
 - **Teardown:** Compose down and rm list include profile `pma` and container `cynodeai-cynode-pma` so PMA is stopped and removed with the stack.
 
 **Date:** 2026-03-04

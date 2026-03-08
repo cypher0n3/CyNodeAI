@@ -120,6 +120,16 @@ func RunWithOptions(ctx context.Context, logger *slog.Logger, cfg *Config, opts 
 	if err != nil {
 		return fmt.Errorf("fetch config: %w", err)
 	}
+	managedCount := 0
+	if nodeConfig.ManagedServices != nil {
+		managedCount = len(nodeConfig.ManagedServices.Services)
+	}
+	if logger != nil {
+		logger.Info("config fetched",
+			"config_version", nodeConfig.ConfigVersion,
+			"inference_backend", nodeConfig.InferenceBackend != nil,
+			"managed_services_count", managedCount)
+	}
 
 	if err := applyConfigAndStartServices(ctx, logger, cfg, bootstrap, nodeConfig, opts); err != nil {
 		return err
@@ -412,15 +422,30 @@ func maybeStartOllama(ctx context.Context, logger *slog.Logger, nodeConfig *node
 }
 
 func maybeStartManagedServices(ctx context.Context, logger *slog.Logger, nodeConfig *nodepayloads.NodeConfigurationPayload, opts *RunOptions) error {
-	if opts == nil || opts.StartManagedServices == nil ||
-		nodeConfig == nil || nodeConfig.ManagedServices == nil || len(nodeConfig.ManagedServices.Services) == 0 {
+	if opts == nil || opts.StartManagedServices == nil {
+		if logger != nil {
+			logger.Debug("managed services skipped", "reason", "no_start_managed_services_runner")
+		}
+		return nil
+	}
+	if nodeConfig == nil || nodeConfig.ManagedServices == nil || len(nodeConfig.ManagedServices.Services) == 0 {
+		if logger != nil {
+			logger.Info("managed services skipped", "reason", "no_managed_services_in_config")
+		}
 		return nil
 	}
 	if err := opts.StartManagedServices(nodeConfig.ManagedServices.Services); err != nil {
+		if logger != nil {
+			logger.Error("managed services start failed", "error", err, "count", len(nodeConfig.ManagedServices.Services))
+		}
 		return fmt.Errorf("start managed services: %w", err)
 	}
 	if logger != nil {
-		logger.Info("managed services started", "count", len(nodeConfig.ManagedServices.Services))
+		ids := make([]string, 0, len(nodeConfig.ManagedServices.Services))
+		for i := range nodeConfig.ManagedServices.Services {
+			ids = append(ids, nodeConfig.ManagedServices.Services[i].ServiceID)
+		}
+		logger.Info("managed services started", "count", len(nodeConfig.ManagedServices.Services), "service_ids", ids)
 	}
 	return nil
 }

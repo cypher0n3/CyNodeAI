@@ -136,6 +136,9 @@ func TestReadyzHandler_WithNode(t *testing.T) {
 	_ = mock.UpdateNodeWorkerAPIConfig(ctx, node.ID, url, token)
 	_ = mock.UpdateNodeConfigAck(ctx, node.ID, "01HXYZ", "applied", time.Now().UTC(), nil)
 	_ = mock.UpdateNodeStatus(ctx, node.ID, "active")
+	// Worker-reported PMA ready so readyz can return 200 (prescribed path).
+	capWithPMAReady := `{"version":1,"managed_services_status":{"services":[{"service_id":"pma-main","service_type":"pma","state":"ready","endpoints":["http://127.0.0.1:8090"]}]}}`
+	_ = mock.SaveNodeCapabilitySnapshot(ctx, node.ID, capWithPMAReady)
 	cfg := &config.OrchestratorConfig{PMAEnabled: false}
 	handler := readyzHandler(mock, cfg, slog.Default())
 	w := httptest.NewRecorder()
@@ -200,6 +203,9 @@ func TestReadyzHandler_WithNode_NilConfig(t *testing.T) {
 	_ = mock.UpdateNodeWorkerAPIConfig(ctx, node.ID, testWorkerAPIURL, testWorkerAPIToken)
 	_ = mock.UpdateNodeConfigAck(ctx, node.ID, "01HXYZ", "applied", time.Now().UTC(), nil)
 	_ = mock.UpdateNodeStatus(ctx, node.ID, "active")
+	// Worker-reported PMA ready so readyz can return 200.
+	capWithPMAReady := `{"version":1,"managed_services_status":{"services":[{"service_id":"pma-main","service_type":"pma","state":"ready","endpoints":["http://127.0.0.1:8090"]}]}}`
+	_ = mock.SaveNodeCapabilitySnapshot(ctx, node.ID, capWithPMAReady)
 	handler := readyzHandler(mock, nil, slog.Default())
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest(http.MethodGet, "/readyz", http.NoBody)

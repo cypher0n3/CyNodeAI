@@ -43,8 +43,8 @@ When you run `just setup-dev start`, `full-demo`, or `restart`, the following ru
 3. **Start node** - Script runs the node-manager binary (worker_node/bin/node-manager-dev).
    The node-manager polls the orchestrator control-plane `/readyz` itself before registering (per worker_node startup procedure); the script does not wait for control-plane.
    Script then waits for worker-api `/healthz` up to 15s.
-4. **PMA (bypass only)** - If bypass `--pma-via-compose`: script starts cynode-pma container and waits for PMA healthz.
-   Prescribed (default): script does not start or wait for PMA; the worker node starts PMA when the orchestrator directs (orchestrator_bootstrap.md, worker_node managed services).
+4. **PMA** - The worker node starts PMA when the orchestrator directs (orchestrator_bootstrap.md, worker_node managed services).
+   Script waits for readyz.
 
 Compose images (control-plane, user-gateway, cynode-pma) are not built by `start`; they are built by `full-demo` before this sequence.
 For `just setup-dev start` to reach the node step, those images must already exist (e.g. run `full-demo` once, or build them separately).
@@ -57,15 +57,15 @@ For `just setup-dev start` to reach the node step, those images must already exi
 - **migrate** - No-op; migrations run when control-plane starts.
 - **build** - Run `just build-dev` (orchestrator, worker_node, cynork, agents binaries).
 - **build-e2e-images** - Build inference-proxy and cynode-sba images for E2E (incremental when unchanged; use `E2E_FORCE_REBUILD=1` or `SETUP_DEV_FORCE_BUILD=1` to force).
-- **start** - Runs the full startup sequence above (build binaries, compose up, **start node** (node polls control-plane), then PMA step).
-  Default is prescribed sequence; use bypasses `--ollama-in-stack` and/or `--pma-via-compose` (or env) for OLLAMA/PMA via compose.
+- **start** - Runs the full startup sequence above (build binaries, compose up, **start node** (node polls control-plane), wait for readyz).
+  Use `--ollama-in-stack` (or `SETUP_DEV_OLLAMA_IN_STACK=1`) for OLLAMA in compose.
 - **stop** - Kill node-manager, free worker port, compose down, remove containers.
 - **restart** - Stop all then start (same as stop + start); accepts same bypass flags as start.
 - **clean** - Stop all services and remove postgres container/volume.
 - **test-e2e** - Run the Python E2E suite ([test_scripts/run_e2e.py](test_scripts/run_e2e.py)); stack must be up.
 - **full-demo** - Build, build E2E images, start stack and node, run E2E suite; optionally stop on success.
   Use `--stop-on-success` or `STOP_ON_SUCCESS_ENV=1` to tear down after tests pass.
-  Accepts same bypass flags as start; use `--ollama-in-stack --pma-via-compose` if E2E expects OLLAMA and PMA from compose.
+  Accepts same bypass flags as start; use `--ollama-in-stack` if E2E expects OLLAMA in compose.
 - **help** - Show usage, bypass flags, and environment variables.
 
 Examples:
@@ -73,11 +73,11 @@ Examples:
 ```bash
 PYTHONPATH=. python scripts/setup_dev.py build
 PYTHONPATH=. python scripts/setup_dev.py start
-PYTHONPATH=. python scripts/setup_dev.py start --ollama-in-stack --pma-via-compose
+PYTHONPATH=. python scripts/setup_dev.py start --ollama-in-stack
 PYTHONPATH=. python scripts/setup_dev.py full-demo --stop-on-success
 ```
 
-Or via just: `just setup-dev build`, `just setup-dev start`, `just setup-dev start --ollama-in-stack --pma-via-compose`, `just setup-dev full-demo --stop-on-success`.
+Or via just: `just setup-dev build`, `just setup-dev start`, `just setup-dev start --ollama-in-stack`, `just setup-dev full-demo --stop-on-success`.
 
 ## E2E Test Suite
 
@@ -99,7 +99,7 @@ Use `just setup-dev stop` to stop all services; `just setup-dev clean-db` to rem
 
 Environment variables match `setup-dev.sh`; see `python scripts/setup_dev.py help` for the full list.
 Common ones: `POSTGRES_PORT`, `ORCHESTRATOR_PORT`, `CONTROL_PLANE_PORT`, `ADMIN_PASSWORD`, `NODE_PSK`, `WORKER_PORT`, `STOP_ON_SUCCESS_ENV`, `INFERENCE_PROXY_IMAGE`, `OLLAMA_UPSTREAM_URL`.
-Startup bypasses (optional): `SETUP_DEV_OLLAMA_IN_STACK=1`, `SETUP_DEV_PMA_VIA_COMPOSE=1` (same as `--ollama-in-stack`, `--pma-via-compose`).
+Startup bypass (optional): `SETUP_DEV_OLLAMA_IN_STACK=1` (same as `--ollama-in-stack`).
 Incremental builds: `E2E_FORCE_REBUILD=1` or `SETUP_DEV_FORCE_BUILD=1` to force rebuild of E2E and compose images.
 Ports and endpoints are documented in [docs/tech_specs/ports_and_endpoints.md](docs/tech_specs/ports_and_endpoints.md).
 

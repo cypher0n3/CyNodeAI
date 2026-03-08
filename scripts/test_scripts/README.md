@@ -26,7 +26,7 @@ Standard library only plus subprocess (cynork, curl); no extra Python deps.
 - **Stack running:** orchestrator (compose), node (node-manager + worker-api).
   Start with `just setup-dev start` or `just setup-dev full-demo` (which runs the suite after start).
   Default startup uses the **prescribed sequence** (orchestrator without OLLAMA in stack; PMA via orchestrator/worker).
-  If the stack does not reach ready (e.g. worker-managed PMA not yet implemented), use bypasses: `just setup-dev start --ollama-in-stack --pma-via-compose` or set `SETUP_DEV_OLLAMA_IN_STACK=1` and `SETUP_DEV_PMA_VIA_COMPOSE=1`.
+  If the stack does not reach ready, use `--ollama-in-stack` or `SETUP_DEV_OLLAMA_IN_STACK=1` when OLLAMA in compose is needed.
 - **Cynork:** `just build-cynork-dev` (or let `run_e2e.py` build it unless you pass `--no-build`).
 - **Python 3:** run from repo root with `PYTHONPATH=.` so `scripts.test_scripts` resolves.
 
@@ -68,7 +68,7 @@ PYTHONPATH=. python scripts/test_scripts/run_e2e.py --tags suite_proxy_pma
   Pass options: `just e2e --no-build`, `just e2e -v`, etc.
 - `just setup-dev test-e2e` - run the suite via `scripts/setup_dev.py` (same as above, ensures PYTHONPATH).
 - `just setup-dev full-demo` - start stack and node, then run only tests tagged `full_demo` (excludes subset-only tests such as proxy+PMA functional tests that start their own services); use `--stop-on-success` to tear down after pass.
-  - For E2E that expects OLLAMA and PMA from compose, use `just setup-dev full-demo --ollama-in-stack --pma-via-compose`.
+  - For E2E that expects OLLAMA in compose, use `just setup-dev full-demo --ollama-in-stack`.
 
 ## Test Layout
 
@@ -129,7 +129,7 @@ Same as `scripts/setup_dev.py`; see also `docs/tech_specs/ports_and_endpoints.md
 - **Auth/node:** `ADMIN_PASSWORD` (default admin123), `NODE_PSK` (default dev-node-psk-secret)
 - **Inference:** `E2E_SKIP_INFERENCE_SMOKE` - set to skip Ollama pull and inference smoke; `INFERENCE_PROXY_IMAGE` - set to run inference-in-sandbox (05b) and prompt/chat (05c, 05d)
 - **Overrides:** `CYNORK_BIN`, `PROJECT_ROOT`, `OLLAMA_CONTAINER_NAME`, `OLLAMA_E2E_MODEL`
-- **Setup-dev bypasses** (when starting the stack): `SETUP_DEV_OLLAMA_IN_STACK=1`, `SETUP_DEV_PMA_VIA_COMPOSE=1` so OLLAMA and PMA run in compose for E2E.
+- **Setup-dev bypass** (when starting the stack): `SETUP_DEV_OLLAMA_IN_STACK=1` so OLLAMA runs in compose for E2E.
 
 ## Adding Tests
 
@@ -146,7 +146,7 @@ Same as `scripts/setup_dev.py`; see also `docs/tech_specs/ports_and_endpoints.md
 
 - **"user-gateway not ready (healthz) after 30s"** - Start the stack first (`just setup-dev start` or `just setup-dev full-demo`); ensure nothing else is bound to `ORCHESTRATOR_PORT`.
 - **"Orchestrator not ready (readyz 200) after 120s"** - Default startup uses the prescribed sequence (PMA via orchestrator/worker).
-  If that path is not yet implemented, use bypasses: `just setup-dev start --ollama-in-stack --pma-via-compose`.
+  Use `--ollama-in-stack` when OLLAMA in compose is needed.
 - **"cynork-dev not found"** - Run `just build-cynork-dev` or omit `--no-build` so the runner builds it.
 - **"Ollama inference smoke failed"** - Ollama must be running (e.g. start with `--ollama-in-stack` or set `SETUP_DEV_OLLAMA_IN_STACK=1`); or set `E2E_SKIP_INFERENCE_SMOKE=1` or pass `--skip-ollama`.
 - **Test 090 (task_inference) skipped** - Set `INFERENCE_PROXY_IMAGE` (e.g. `cynodeai-inference-proxy:dev`) when starting the node so inference-in-sandbox is available.

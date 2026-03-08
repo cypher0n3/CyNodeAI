@@ -85,6 +85,62 @@ class TestWorkerTelemetry(unittest.TestCase):
         self.assertIn("events", data)
         self.assertIsInstance(data["events"], list)
 
+    def test_containers_response_has_version(self):
+        """GET containers response has version 1 and containers array per spec."""
+        if not config.WORKER_API_BEARER_TOKEN:
+            self.fail("WORKER_API_BEARER_TOKEN not set")
+        headers = {"Authorization": f"Bearer {config.WORKER_API_BEARER_TOKEN}"}
+        code, body = helpers.run_curl_with_status(
+            "GET",
+            f"{config.WORKER_API}/v1/worker/telemetry/containers",
+            headers=headers,
+        )
+        if not code:
+            self.fail("worker API not reachable")
+        self.assertEqual(code, 200, f"containers {code} {body}")
+        data = helpers.parse_json_safe(body)
+        self.assertIsNotNone(data)
+        self.assertEqual(data.get("version"), 1, "response must have version 1")
+        self.assertIn("containers", data)
+        self.assertIsInstance(data["containers"], list)
+
+    def test_logs_response_has_truncated_metadata(self):
+        """GET logs response has events and truncated.limited_by, truncated.max_bytes per spec."""
+        if not config.WORKER_API_BEARER_TOKEN:
+            self.fail("WORKER_API_BEARER_TOKEN not set")
+        headers = {"Authorization": f"Bearer {config.WORKER_API_BEARER_TOKEN}"}
+        code, body = helpers.run_curl_with_status(
+            "GET",
+            f"{config.WORKER_API}/v1/worker/telemetry/logs"
+            "?source_kind=service&source_name=worker_api",
+            headers=headers,
+        )
+        if not code:
+            self.fail("worker API not reachable")
+        self.assertEqual(code, 200, f"logs {code} {body}")
+        data = helpers.parse_json_safe(body)
+        self.assertIsNotNone(data)
+        self.assertIn("events", data)
+        self.assertIsInstance(data["events"], list)
+        self.assertIn("truncated", data)
+        self.assertIn("limited_by", data["truncated"])
+        self.assertIn("max_bytes", data["truncated"])
+        self.assertEqual(data["truncated"]["max_bytes"], 1048576)
+
+    def test_get_container_not_found_returns_404(self):
+        """GET containers/{id} for non-existent id returns 404."""
+        if not config.WORKER_API_BEARER_TOKEN:
+            self.fail("WORKER_API_BEARER_TOKEN not set")
+        headers = {"Authorization": f"Bearer {config.WORKER_API_BEARER_TOKEN}"}
+        code, _ = helpers.run_curl_with_status(
+            "GET",
+            f"{config.WORKER_API}/v1/worker/telemetry/containers/nonexistent-container-id-404",
+            headers=headers,
+        )
+        if not code:
+            self.fail("worker API not reachable")
+        self.assertEqual(code, 404, "GET container by unknown id must return 404")
+
     def test_telemetry_responses_do_not_contain_bearer_token(self):
         """Telemetry response bodies must not contain the bearer token (no credential leak)."""
         if not config.WORKER_API_BEARER_TOKEN:
