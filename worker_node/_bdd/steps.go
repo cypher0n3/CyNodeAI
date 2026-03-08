@@ -70,6 +70,10 @@ type workerTestState struct {
 	// Telemetry store for Worker Telemetry API BDD (containers, logs with data)
 	telemetryStore   *telemetry.Store
 	telemetryStateDir string
+	// Task result contract scenario (SBA result from task result; mock, no orchestrator)
+	taskResultJSON []byte
+	taskStatus     string
+	firstJobResult map[string]interface{}
 }
 
 func getWorkerState(ctx context.Context) *workerTestState {
@@ -338,6 +342,9 @@ func InitializeWorkerNodeSuite(sc *godog.ScenarioContext, state *workerTestState
 			state.inferenceProxyServer.Close()
 			state.inferenceProxyServer = nil
 		}
+		state.taskResultJSON = nil
+		state.taskStatus = ""
+		state.firstJobResult = nil
 		_ = os.Unsetenv("CYNODE_FIPS_MODE")
 		_ = os.Unsetenv("CYNODE_SECURE_STORE_MASTER_KEY_B64")
 		_ = os.Unsetenv("WORKER_API_STATE_DIR")
@@ -1030,6 +1037,86 @@ func RegisterWorkerNodeSBASteps(sc *godog.ScenarioContext, state *workerTestStat
 		}
 		if _, ok := m[key]; !ok {
 			return fmt.Errorf("JSON does not contain key %q", key)
+		}
+		return nil
+	})
+
+	// SBA result contract from task result (mock task result; no orchestrator in worker_node suite)
+	sc.Step(`^I have a completed task that used the SBA runner$`, func(ctx context.Context) error {
+		sbaResult := map[string]interface{}{
+			"protocol_version": "1.0",
+			"job_id":           "j1",
+			"status":           "success",
+			"steps":            []interface{}{},
+			"artifacts":        []interface{}{},
+		}
+		jobResult := map[string]interface{}{
+			"stdout":     "",
+			"exit_code":  0,
+			"sba_result": sbaResult,
+		}
+		jobResultBytes, _ := json.Marshal(jobResult)
+		jobResultStr := string(jobResultBytes)
+		taskResult := map[string]interface{}{
+			"task_id": "t1",
+			"status":  "completed",
+			"jobs":    []interface{}{map[string]interface{}{"id": "j1", "status": "completed", "result": jobResultStr}},
+		}
+		var err error
+		state.taskResultJSON, err = json.Marshal(taskResult)
+		return err
+	})
+	sc.Step(`^I get the task result and extract the first job result$`, func(ctx context.Context) error {
+		if len(state.taskResultJSON) == 0 {
+			return fmt.Errorf("no task result in state (run I have a completed task that used the SBA runner first)")
+		}
+		var taskResult struct {
+			Status string `json:"status"`
+			Jobs   []struct {
+				Result *string `json:"result"`
+			} `json:"jobs"`
+		}
+		if err := json.Unmarshal(state.taskResultJSON, &taskResult); err != nil {
+			return err
+		}
+		state.taskStatus = taskResult.Status
+		if len(taskResult.Jobs) == 0 || taskResult.Jobs[0].Result == nil {
+			return fmt.Errorf("task result has no jobs or first job has no result")
+		}
+		if err := json.Unmarshal([]byte(*taskResult.Jobs[0].Result), &state.firstJobResult); err != nil {
+			return err
+		}
+		return nil
+	})
+	sc.Step(`^the task status is "([^"]*)"$`, func(ctx context.Context, want string) error {
+		if state.taskStatus != want {
+			return fmt.Errorf("task status %q, want %q", state.taskStatus, want)
+		}
+		return nil
+	})
+	sc.Step(`^the job result contains "([^"]*)"$`, func(ctx context.Context, key string) error {
+		if state.firstJobResult == nil {
+			return fmt.Errorf("no job result in state (run I get the task result and extract the first job result first)")
+		}
+		if _, ok := state.firstJobResult[key]; !ok {
+			return fmt.Errorf("job result does not contain key %q", key)
+		}
+		return nil
+	})
+	sc.Step(`^the sba_result contains "([^"]*)"$`, func(ctx context.Context, key string) error {
+		if state.firstJobResult == nil {
+			return fmt.Errorf("no job result in state")
+		}
+		sbaRaw, ok := state.firstJobResult["sba_result"]
+		if !ok {
+			return fmt.Errorf("job result has no sba_result")
+		}
+		sbaMap, ok := sbaRaw.(map[string]interface{})
+		if !ok {
+			return fmt.Errorf("sba_result is not an object")
+		}
+		if _, ok := sbaMap[key]; !ok {
+			return fmt.Errorf("sba_result does not contain key %q", key)
 		}
 		return nil
 	})

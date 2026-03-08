@@ -247,11 +247,26 @@ def build_orchestrator_compose_images(force=False):
     log_info("Building orchestrator compose images (control-plane, user-gateway, cynode-pma)...")
     if not run(
         [_cfg.RUNTIME, "compose", "-f", _cfg.COMPOSE_FILE,
-         "--profile", "pma", "build", "control-plane", "user-gateway", "cynode-pma"],
+         "build", "control-plane", "user-gateway"],
         cwd=_cfg.PROJECT_ROOT,
         timeout=600,
     ):
         log_error("Orchestrator compose build failed")
+        return False
+    pma_dockerfile = os.path.join(
+        _cfg.PROJECT_ROOT, "agents", "cmd", "cynode-pma", "Containerfile"
+    )
+    if os.path.isfile(pma_dockerfile) and not run(
+        [
+            _cfg.RUNTIME, "build",
+            "-f", pma_dockerfile,
+            "-t", "cynodeai-cynode-pma:dev",
+            _cfg.PROJECT_ROOT,
+        ],
+        cwd=_cfg.PROJECT_ROOT,
+        timeout=600,
+    ):
+        log_error("cynode-pma image build failed")
         return False
     os.makedirs(os.path.dirname(stamp_path), exist_ok=True)
     _build_cache.write_stamp(
@@ -291,11 +306,23 @@ def start_orchestrator_stack_compose(extra_env=None, ollama_in_stack=False):
         f"  postgres :5432, control-plane :{_cfg.CONTROL_PLANE_PORT}, "
         f"user-gateway :{_cfg.ORCHESTRATOR_PORT}"
     )
-    # PMA is always required; build cynode-pma so the node can run it (avoid 403 on default image).
+    # Build cynode-pma image so the node can run it when orchestrator sends managed_services
+    # (avoid 403 on default image). Build directly; compose --profile pma build fails on some
+    # podman-compose versions with "missing services [cynode-pma]".
     log_info("  Building cynode-pma image...")
+    pma_dockerfile = os.path.join(
+        _cfg.PROJECT_ROOT, "agents", "cmd", "cynode-pma", "Containerfile"
+    )
+    if not os.path.isfile(pma_dockerfile):
+        log_error(f"cynode-pma Containerfile not found: {pma_dockerfile}")
+        return False
     if not run(
-        [_cfg.RUNTIME, "compose", "-f", _cfg.COMPOSE_FILE,
-         "--profile", "pma", "build", "cynode-pma"],
+        [
+            _cfg.RUNTIME, "build",
+            "-f", pma_dockerfile,
+            "-t", "cynodeai-cynode-pma:dev",
+            _cfg.PROJECT_ROOT,
+        ],
         cwd=_cfg.PROJECT_ROOT,
         timeout=600,
     ):
