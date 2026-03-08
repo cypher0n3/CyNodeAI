@@ -1,6 +1,7 @@
 # E2E: SBA task that uses inference (LLM). Requires SBA runner and inference.
 # Skip if E2E_SKIP_INFERENCE_SMOKE or no inference; creates SBA task with prompt
 # that may trigger inference, polls for completion, asserts sba_result present.
+# Traces: REQ-SBAGNT-0106, 0109; SBA with inference path.
 
 import os
 import unittest

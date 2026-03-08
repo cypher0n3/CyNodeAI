@@ -1,6 +1,6 @@
 # E2E: Worker API when run as a managed service (container started by node-manager).
 # When NODE_MANAGER_WORKER_API_IMAGE is set, node-manager starts worker-api as container.
-# Tests assert worker-api responds (healthz, node:info) and optionally that the container exists.
+# Traces: REQ-WORKER-0160, 0161; worker_api.md (managed service, observed state).
 
 import os
 import subprocess

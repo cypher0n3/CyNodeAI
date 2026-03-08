@@ -1,4 +1,5 @@
-# E2E: task logs. Requires state.TASK_ID (e2e_03).
+# E2E: task logs. Requires state.TASK_ID (e2e_050).
+# Traces: REQ-ORCHES-0124; cli_management_app_commands_tasks (task logs).
 
 import unittest
 

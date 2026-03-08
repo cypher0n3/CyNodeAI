@@ -1,4 +1,5 @@
-# E2E parity: auth whoami. Requires login (e2e_01) first.
+# E2E parity: auth whoami. Requires login (e2e_020) first.
+# Traces: REQ-IDENTY-0103, 0104; CYNAI.IDENTY.AuthenticationModel (whoami identity).
 
 import unittest
 

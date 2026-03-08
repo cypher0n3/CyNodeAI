@@ -1,4 +1,5 @@
 # E2E: task cancel. Create a task, cancel it with -y, assert terminal status.
+# Traces: REQ-ORCHES-0125; cli_management_app_commands_tasks (task cancel).
 
 import time
 import unittest

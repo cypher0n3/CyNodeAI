@@ -1,4 +1,5 @@
 # E2E parity: prompt task (LLM). Sets state.prompt_task_id.
+# Traces: REQ-ORCHES-0122, 0126; cli_management_app_commands_tasks (prompt task).
 
 import time
 import unittest

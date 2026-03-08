@@ -359,6 +359,14 @@ check-e2e-tags:
     trap 'popd >/dev/null 2>/dev/null || true' EXIT
     python3 .ci_scripts/check_e2e_tags.py
 
+# Check E2E test scripts for proper requirements traces (# Traces: with REQ-*).
+check-e2e-requirements-traces:
+    #!/usr/bin/env bash
+    set -e
+    pushd "{{ root_dir }}" >/dev/null
+    trap 'popd >/dev/null 2>/dev/null || true' EXIT
+    python3 .ci_scripts/check_e2e_requirements_traces.py
+
 # Lint Gherkin .feature files in features/ (requires gherkin-lint; run just install-gherkin-lint).
 lint-gherkin: install-gherkin-lint
     #!/usr/bin/env bash
@@ -689,7 +697,7 @@ test-go-race: install-go
     done
 
 # All linting (shell, Go, Python, Markdown, containers, doc links, feature files, Gherkin).
-lint: lint-sh lint-go lint-go-ci lint-python lint-md validate-doc-links validate-feature-files check-e2e-tags lint-gherkin lint-containerfiles
+lint: lint-sh lint-go lint-go-ci lint-python lint-md validate-doc-links validate-feature-files check-e2e-tags check-e2e-requirements-traces lint-gherkin lint-containerfiles
     @:
 
 # All tests

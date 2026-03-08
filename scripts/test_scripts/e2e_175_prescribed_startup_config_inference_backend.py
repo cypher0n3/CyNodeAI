@@ -1,5 +1,6 @@
 # E2E: prescribed startup - node config includes inference_backend when inference-capable,
 # not existing_service. Registers with inference; GET config; asserts inference_backend.
+# Traces: REQ-ORCHES-0149 (node config inference backend); REQ-ORCHES-0113, 0114.
 
 import json
 import unittest

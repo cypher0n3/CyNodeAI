@@ -98,7 +98,13 @@ Gaps (e.g. 011-019 between 010 and 020) allow inserting new tests without renumb
 - **e2e_110_task_models_and_chat** - Models list; one-shot chat (skipped if `E2E_SKIP_INFERENCE_SMOKE`).
 - **e2e_115_pma_chat_context** - One-shot chat with `--project-id` (OpenAI-Project header); PMA handoff path (skipped if `E2E_SKIP_INFERENCE_SMOKE`).
 - **e2e_116_skills_gateway** - Skills list, load (from file), get by id, delete via cynork against user-gateway; requires auth (e2e_020).
+- **e2e_117_workflow_api** - Control-plane workflow start/resume/checkpoint/release; uses `state.TASK_ID`.
+- **e2e_119_worker_telemetry** - Worker API telemetry node:info and node:stats; requires WORKER_API and bearer.
+- **e2e_120_worker_api_health_readyz** - Worker API healthz and readyz (process alive vs ready for jobs).
+- **e2e_121_worker_api_managed_service** - Worker API as managed service (container started by node-manager).
+- **e2e_122_node_manager_telemetry** - Telemetry logs for source_name=node_manager (node-manager lifecycle).
 - **e2e_123_sba_task** - SBA task; asserts job result contains `sba_result`; sets `state.SBA_TASK_ID`.
+- **e2e_124_worker_pma_proxy** - Worker managed-service proxy and PMA handoff (suite_proxy_pma).
 - **e2e_130_sba_task_result_contract** - SBA result shape (protocol_version, job_id, status, steps, artifacts).
   Requires state.SBA_TASK_ID from e2e_123.
 - **e2e_140_sba_task_inference** - SBA task with inference prompt (skipped if `E2E_SKIP_INFERENCE_SMOKE`).
@@ -106,6 +112,7 @@ Gaps (e.g. 011-019 between 010 and 020) allow inserting new tests without renumb
 - **e2e_150_task_logs** - Task logs for `state.TASK_ID`.
 - **e2e_160_task_cancel** - Create task, cancel with `-y`, assert terminal status canceled.
 - **e2e_170_control_plane_node_register** - POST `/v1/nodes/register`; sets `state.NODE_JWT`.
+- **e2e_175_prescribed_startup_config_inference_backend** - Node config includes inference_backend when inference-capable.
 - **e2e_180_control_plane_capability** - POST `/v1/nodes/capability` with node JWT.
 - **e2e_190_auth_refresh** - Auth refresh and whoami.
 - **e2e_192_chat_reliability** - One-shot chat with extended timeout and retries; assert timely reply or clear error (skipped if `E2E_SKIP_INFERENCE_SMOKE`).

@@ -1,4 +1,5 @@
 # E2E: task list. Requires login and at least one task (e2e_050 sets state.TASK_ID).
+# Traces: REQ-ORCHES-0125; cli_management_app_commands_tasks (task list).
 
 import unittest
 

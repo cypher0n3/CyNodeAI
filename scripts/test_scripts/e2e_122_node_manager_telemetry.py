@@ -1,6 +1,6 @@
 # E2E: Node manager telemetry ownership (worker_telemetry_api.md).
 # Node-manager owns telemetry DB: records node_boot, shutdown log (source_name=node_manager).
-# Worker-api serves GET /v1/worker/telemetry/* and may show node_manager shutdown events.
+# Traces: REQ-WORKER-0200, 0230; worker_telemetry_api.md (source_kind=service, source_name).
 
 import unittest
 

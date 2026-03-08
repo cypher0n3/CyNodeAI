@@ -1,4 +1,5 @@
 # E2E parity: auth refresh and whoami.
+# Traces: REQ-IDENTY-0104, 0105 (refresh token, rotation); CYNAI.IDENTY.AuthenticationModel.
 
 import unittest
 

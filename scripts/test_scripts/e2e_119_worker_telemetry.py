@@ -1,4 +1,5 @@
 # E2E: Worker API telemetry node:info and node:stats. Requires WORKER_API and bearer.
+# Traces: REQ-WORKER-0200, 0230, 0231, 0232, 0234; worker_telemetry_api.md.
 
 import unittest
 

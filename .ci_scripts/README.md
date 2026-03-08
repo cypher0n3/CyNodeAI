@@ -4,6 +4,7 @@
 - [Scripts](#scripts)
   - [Doc links validator](#doc-links-validator)
   - [Feature files validator](#feature-files-validator)
+  - [E2E requirements traces checker](#e2e-requirements-traces-checker)
   - [Tech spec duplication checker](#tech-spec-duplication-checker)
 
 ## Overview
@@ -36,6 +37,16 @@ Each can be run from the repo root; some are wired to justfile targets.
   [docs/docs_standards/spec_authoring_writing_and_validation.md](../docs/docs_standards/spec_authoring_writing_and_validation.md).
 - Exit 0 when all feature files are valid, 1 when any validation errors are found.
 - **Run:** `just validate-feature-files`
+
+### E2E Requirements Traces Checker
+
+[check_e2e_requirements_traces.py](check_e2e_requirements_traces.py) checks each Python functional test under [scripts/test_scripts/](../scripts/test_scripts/) for proper requirements traceability.
+
+- Scans `e2e_*.py` (excludes `e2e_state.py`, `e2e_tags.py`).
+- Each file must have a `# Traces:` comment in the header (within the first 40 lines).
+- The Traces block must reference at least one canonical requirement id: `REQ-<DOMAIN>-<NNNN>`.
+- Exit 0 when all files have valid traces; 1 when any fail (errors to stderr).
+- **Run:** `just check-e2e-requirements-traces`
 
 ### Tech Spec Duplication Checker
 

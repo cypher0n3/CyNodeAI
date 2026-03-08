@@ -1,4 +1,5 @@
 # E2E: auth negative - whoami without login fails.
+# Traces: REQ-IDENTY-0122 (gateway validates token); REQ-IDENTY-0103, 0104 (auth model).
 
 import os
 import shutil

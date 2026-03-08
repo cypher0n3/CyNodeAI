@@ -1,4 +1,5 @@
 # E2E: skills list, load, get, delete via gateway (requires auth from e2e_020).
+# Traces: REQ-CLIENT-0146; REQ-SKILLS-0106, 0115; skills CRUD via gateway.
 
 import os
 import tempfile

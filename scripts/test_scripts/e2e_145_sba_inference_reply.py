@@ -1,7 +1,7 @@
 # E2E: SBA task with --use-inference --use-sba and prompt "Reply back with the current time."
 # Validates the fix for empty stdout / placeholder "sba-run" only: task must complete with
 # a user-facing reply (non-empty job stdout or SBA result that indicates inference was used).
-# Skip if E2E_SKIP_INFERENCE_SMOKE (inference may be unavailable).
+# Traces: REQ-SBAGNT-0103, 0109; user-facing SBA reply with inference.
 
 import os
 import time

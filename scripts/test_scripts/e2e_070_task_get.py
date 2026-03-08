@@ -1,4 +1,5 @@
-# E2E parity: task get. Requires e2e_03 (state.TASK_ID).
+# E2E parity: task get. Requires e2e_050 (state.TASK_ID).
+# Traces: REQ-ORCHES-0125; cli_management_app_commands_tasks (task get).
 
 import unittest
 

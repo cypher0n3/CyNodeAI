@@ -1,4 +1,5 @@
 # E2E parity: auth logout. Cleans up shared config dir.
+# Traces: REQ-IDENTY-0106 (revocation); REQ-CLIENT-0150 (session credentials cleared).
 
 import unittest
 

@@ -1,4 +1,5 @@
-# E2E parity: control-plane capability report. Requires state.node_jwt (e2e_06).
+# E2E parity: control-plane capability report. Requires state.NODE_JWT (e2e_170).
+# Traces: REQ-ORCHES-0114; CYNAI.WORKER.Payload.CapabilityReportV1.
 
 import json
 import unittest

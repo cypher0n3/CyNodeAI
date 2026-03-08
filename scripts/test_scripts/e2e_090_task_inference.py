@@ -1,4 +1,5 @@
 # E2E parity: inference-in-sandbox task. Skip if INFERENCE_PROXY_IMAGE unset.
+# Traces: REQ-WORKER-0114 (node inference path); REQ-ORCHES-0123 (dispatch to worker).
 
 import time
 import unittest

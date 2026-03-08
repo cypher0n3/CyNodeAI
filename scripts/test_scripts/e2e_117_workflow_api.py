@@ -1,4 +1,5 @@
 # E2E: control-plane workflow start/resume/checkpoint/release. Uses state.TASK_ID.
+# Traces: REQ-ORCHES-0144, 0145, 0146; workflow start/resume/lease API.
 
 import json
 import unittest

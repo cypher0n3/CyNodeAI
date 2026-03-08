@@ -1,5 +1,6 @@
 # E2E: PMA chat with project context (OpenAI-Project header).
 # Verifies gateway accepts chat with project-id and returns completion (PMA handoff).
+# Traces: REQ-USRGWY-0131 (task/project association); REQ-CLIENT-0173 (project context for chat).
 
 import os
 import time
