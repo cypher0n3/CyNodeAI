@@ -2,6 +2,7 @@
 
 - [Document Overview](#document-overview)
 - [Node Manager](#node-manager)
+  - [Node Manager Shutdown](#node-manager-shutdown)
 - [Managed Service Containers](#managed-service-containers)
 - [Worker Proxy Bidirectional (Managed Agents)](#worker-proxy-bidirectional-managed-agents)
 - [Token and Credential Handling](#token-and-credential-handling)
@@ -50,6 +51,25 @@ The Node Manager is a host-level system service responsible for:
 - Receiving configuration updates from the orchestrator and applying them locally.
 - Managing local secure storage for pull credentials and certificates.
 - Starting, supervising, and restarting orchestrator-directed managed service containers (for example PMA).
+
+### Node Manager Shutdown
+
+- Spec ID: `CYNAI.WORKER.NodeManagerShutdown` <a id="spec-cynai-worker-nodemanagershutdown"></a>
+
+Traces To:
+
+- [REQ-WORKER-0257](../requirements/worker.md#req-worker-0257)
+
+When the Node Manager receives a shutdown command (e.g. SIGTERM, SIGINT, or systemd stop), it MUST:
+
+1. Send shutdown (stop) commands to all containers it is running: managed service containers (e.g. Ollama, PMA) and any sandbox containers still under its control.
+2. Allow a configurable grace period for containers to stop gracefully (e.g. runtime stop with timeout).
+3. If a container does not stop within the grace period, the Node Manager MUST force-stop or kill it (per runtime semantics) and continue shutdown.
+4. After attempting to stop all dependent containers, the Node Manager MUST exit.
+5. If any dependent container failed to shut down (e.g. did not exit cleanly within the grace period, or force-stop failed), the Node Manager MUST exit with a non-zero exit code.
+   If all containers shut down successfully, the Node Manager MUST exit with exit code zero.
+
+Shutdown and its outcome (success or failure, including which containers failed) MUST be recorded in the node telemetry database per [CYNAI.WORKER.TelemetryLifecycleEvents](worker_telemetry_api.md#spec-cynai-worker-telemetrylifecycleevents).
 
 ## Managed Service Containers
 

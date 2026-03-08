@@ -101,6 +101,9 @@ Environment variables match `setup-dev.sh`; see `python scripts/setup_dev.py hel
 Common ones: `POSTGRES_PORT`, `ORCHESTRATOR_PORT`, `CONTROL_PLANE_PORT`, `ADMIN_PASSWORD`, `NODE_PSK`, `WORKER_PORT`, `STOP_ON_SUCCESS_ENV`, `INFERENCE_PROXY_IMAGE`, `OLLAMA_UPSTREAM_URL`.
 Startup bypass (optional): `SETUP_DEV_OLLAMA_IN_STACK=1` (same as `--ollama-in-stack`).
 Incremental builds: `E2E_FORCE_REBUILD=1` or `SETUP_DEV_FORCE_BUILD=1` to force rebuild of E2E and compose images.
+**Logs:** On `just setup-dev stop`, container logs are captured to a persistent directory (default `$TMPDIR/cynodeai-setup-dev-logs` or `/tmp/cynodeai-setup-dev-logs`).
+Override with `CYNODEAI_LOGS_DIR`.
+Node-manager stdout/stderr is written to `node-manager.log` there when the node is started.
 Ports and endpoints are documented in [docs/tech_specs/ports_and_endpoints.md](docs/tech_specs/ports_and_endpoints.md).
 
 ## Lint

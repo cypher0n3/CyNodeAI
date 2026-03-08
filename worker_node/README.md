@@ -21,7 +21,8 @@ This directory is a standalone Go module defined by [`go.mod`](go.mod).
   - [`cmd/node-manager/`](cmd/node-manager/): The node manager service entrypoint and container definition.
   - [`cmd/worker-api/`](cmd/worker-api/): The worker API service entrypoint, container definition, and executor package.
   - [`cmd/inference-proxy/`](cmd/inference-proxy/): The inference proxy service for sandbox-side inference routing.
-- [`docker-compose.yml`](docker-compose.yml): Development compose stack for local worker services.
+- [`docker-compose.yml`](docker-compose.yml): Development compose stack for **worker-api only**.
+  Node-manager is intended to run on the host (e.g. `just start`) so it can manage podman/docker for PMA and sandboxes.
 - [`systemd/`](systemd/): Service definitions and notes for running on a host.
 
 This module depends on shared contracts in [`go_shared_libs/`](../go_shared_libs/) via a local replace in [`go.mod`](go.mod).
@@ -37,8 +38,10 @@ Run `just e2e` from the repository root.
 
 ### 3.2 Run With the Local Compose Stack
 
-This directory includes a compose file for local development at [`docker-compose.yml`](docker-compose.yml).
-Configuration is provided via environment variables documented inline in that compose file.
+This directory includes a compose file at [`docker-compose.yml`](docker-compose.yml) that runs **worker-api only** (no node-manager in a container).
+Use it when you need the worker API in a container (e.g. telemetry or job endpoints).
+For full node behavior (registration, config fetch, PMA, sandbox containers), run node-manager on the host via `just start` from the repo root; node-manager will start worker-api and manage podman/docker.
+Configuration is via environment variables documented inline in the compose file.
 
 ## 4 Testing and Linting
 

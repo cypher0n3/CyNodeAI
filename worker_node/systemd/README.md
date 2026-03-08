@@ -3,10 +3,12 @@
 - [Overview](#overview)
 - [Generate Units](#generate-units)
 - [Install](#install)
+- [Node-Manager on the Host](#node-manager-on-the-host)
 
 ## Overview
 
-Generated unit files for running worker-api and node-manager under systemd.
+Generated unit files for running the worker-api container under systemd.
+Node-manager is intended to run on the host (not in a container) so it can manage podman/docker for PMA and sandboxes; see [Node-Manager on the Host](#node-manager-on-the-host).
 
 ## Generate Units
 
@@ -29,7 +31,12 @@ mkdir -p ~/.config/systemd/user
 cp worker_node/systemd/container-*.service ~/.config/systemd/user/
 systemctl --user daemon-reload
 systemctl --user enable --now container-cynodeai-worker-api.service
-systemctl --user enable --now container-cynodeai-node-manager.service
 ```
 
-Ensure `ORCHESTRATOR_URL` (and shared `WORKER_API_BEARER_TOKEN` / `NODE_REGISTRATION_PSK`) are set in the environment or in the generated unit files.
+Ensure `WORKER_API_BEARER_TOKEN` and (if using the API) other env are set in the environment or in the generated unit file.
+
+## Node-Manager on the Host
+
+For full node behavior (register with orchestrator, fetch config, start PMA and sandbox containers), run node-manager on the host so it can call podman/docker.
+Use the repo `just start` flow (orchestrator + node-manager binary) or run the node-manager binary with the right env; it will start worker-api and manage containers.
+The worker_node compose stack is worker-api only.

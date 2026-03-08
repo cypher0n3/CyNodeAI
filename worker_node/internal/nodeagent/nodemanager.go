@@ -157,14 +157,16 @@ func applyConfigAndStartServices(ctx context.Context, logger *slog.Logger, cfg *
 	if err := maybeStartOllama(ctx, logger, nodeConfig, opts, existingService); err != nil {
 		return err
 	}
-	if err := maybeStartManagedServices(ctx, logger, nodeConfig, opts); err != nil {
-		return err
-	}
+	// Send config ack before starting managed services so the node becomes dispatchable immediately.
+	// Otherwise a PMA start failure would block ack and readyz would never see an inference path.
 	if err := SendConfigAck(ctx, cfg, bootstrap, nodeConfig, "applied"); err != nil {
 		return fmt.Errorf("config ack: %w", err)
 	}
 	if logger != nil {
 		logger.Info("config applied and acknowledged", "config_version", nodeConfig.ConfigVersion)
+	}
+	if err := maybeStartManagedServices(ctx, logger, nodeConfig, opts); err != nil {
+		return err
 	}
 	return nil
 }
@@ -451,6 +453,10 @@ func maybeStartManagedServices(ctx context.Context, logger *slog.Logger, nodeCon
 }
 
 func runCapabilityLoop(ctx context.Context, cfg *Config, bootstrap *BootstrapData, nodeConfig *nodepayloads.NodeConfigurationPayload) error {
+	// Report immediately so orchestrator readyz can become 200 without waiting for first tick.
+	if err := reportCapabilities(ctx, cfg, bootstrap, nodeConfig); err != nil {
+		_ = err
+	}
 	ticker := time.NewTicker(cfg.CapabilityReportInterval)
 	defer ticker.Stop()
 	for {

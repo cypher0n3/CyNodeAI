@@ -148,7 +148,7 @@ def cmd_full_demo(opts):
     if not cmd_start(opts):
         return False
     # Let node register, apply config, send ack so it is dispatchable before E2E creates tasks.
-    if not setup_dev_impl.wait_for_orchestrator_readyz(timeout_sec=120):
+    if not setup_dev_impl.wait_for_orchestrator_readyz(timeout_sec=60):
         return False
     e2e_env = {"INFERENCE_PROXY_IMAGE": opts.extra_env["INFERENCE_PROXY_IMAGE"]}
     # e2e_122 asserts on node state dir; must match node WORKER_API_STATE_DIR.

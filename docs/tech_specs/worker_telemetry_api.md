@@ -6,9 +6,14 @@
 - [Versioning](#versioning)
 - [Authentication](#authentication)
 - [Telemetry Storage (SQLite)](#telemetry-storage-sqlite)
+  - [Database Location](#database-location)
+  - [SQLite Configuration Requirements](#sqlite-configuration-requirements)
+  - [Schema (V1)](#schema-v1)
 - [Retention and Vacuuming](#retention-and-vacuuming)
+  - [Retention Defaults (Required)](#retention-defaults-required)
+  - [Retention Implementation Requirements](#retention-implementation-requirements)
 - [API Error Handling](#api-error-handling)
-- [Worker Telemetry API Surface (v1)](#worker-telemetry-api-surface-v1)
+- [Worker Telemetry API Surface (V1)](#worker-telemetry-api-surface-v1)
   - [Get Node Info](#get-node-info)
   - [Get Node Stats (Snapshot)](#get-node-stats-snapshot)
   - [List Containers (Inventory)](#list-containers-inventory)
@@ -193,11 +198,18 @@ CREATE INDEX IF NOT EXISTS idx_log_event_container_time
   ON log_event(container_id, occurred_at);
 ```
 
+Implementation note: GORM AutoMigrate (and similar) does not drop columns.
+If the telemetry DB was created with an older schema that has since been changed (e.g. a column was removed from the model), recreate the DB for a clean schema: remove `${storage.state_dir}/telemetry/telemetry.db` or the entire `telemetry` directory so the next startup creates tables from the current schema.
+
 Field semantics
 
 - `*_at` timestamps MUST be RFC 3339 strings in UTC.
 - `labels_json`, `details_json`, and `fields_json` MUST be valid JSON objects encoded as UTF-8 text.
 - `task_id` and `job_id` MUST be UUID strings when present.
+- **node_boot.build_version:** Build or version identifier (e.g. from `BUILD_VERSION` env).
+  Dev builds MAY use `"dev"`; no git_sha or other format is required.
+- **log_event.stream:** MUST be `stdout` or `stderr`.
+  Service-origin events use a sentinel (e.g. `stdout`); container-origin events use the actual stream.
 
 Event sourcing requirements
 
@@ -208,6 +220,22 @@ Event sourcing requirements
   - container log events for node-managed containers and sandbox containers
 - When a container is associated with a `task_id` and `job_id`, those fields MUST be populated in both `container_inventory`
   and `container_event` rows.
+
+#### Lifecycle Event Coverage
+
+- Spec ID: `CYNAI.WORKER.TelemetryLifecycleEvents` <a id="spec-cynai-worker-telemetrylifecycleevents"></a>
+
+Traces To:
+
+- [REQ-WORKER-0258](../requirements/worker.md#req-worker-0258)
+
+The node MUST log the following to the telemetry database (using `log_event`, `container_event`, and `container_inventory` as appropriate):
+
+- **Node Manager and Worker API:** startup and shutdown of each service (as service log events with `source_kind=service`, `source_name=node_manager` or `source_name=worker_api`).
+- **Containers:** every container start and stop (managed and sandbox), recorded as container events and inventory updates; container events MUST include `action` and `status` (e.g. start, stop, create, remove).
+- **Job runs:** job run lifecycle (e.g. sandbox run start and completion) MUST be reflected via the same container events and inventory for the sandbox container(s) used for that run, with `task_id` and `job_id` populated.
+
+Shutdown outcomes (e.g. Node Manager shutdown success or failure, including container stop failures) MUST be recorded as service log events before the Node Manager process exits.
 
 ## Retention and Vacuuming
 

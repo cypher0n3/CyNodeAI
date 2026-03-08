@@ -134,11 +134,14 @@ To stop: `just setup-dev stop`.
 
 ### 5. Docker Compose (Worker Node)
 
+The worker_node compose runs **worker-api only** (no node-manager in a container).
+Node-manager is intended to run on the host so it can manage podman/docker for PMA and sandboxes; use `just setup-dev start` for the full node (orchestrator + node-manager binary that starts worker-api).
+
+To run only the worker-api container (e.g. for telemetry or job endpoints):
+
 ```bash
 cd worker_node
-WORKER_API_BEARER_TOKEN=dev-worker-api-token NODE_REGISTRATION_PSK=dev-node-psk \
-  ORCHESTRATOR_URL=http://host.containers.internal:12082 \
-  docker compose up -d   # or podman compose up -d
+WORKER_API_BEARER_TOKEN=dev-worker-api-token docker compose up -d   # or podman compose up -d
 ```
 
 ## Testing the API
@@ -245,7 +248,9 @@ Compose uses `POSTGRES_*`, `ORCHESTRATOR_PORT`, `CONTROL_PLANE_PORT`, `OLLAMA_IM
 - `ORCHESTRATOR_URL` - Control-plane URL (node-manager)
 - `NODE_REGISTRATION_PSK` - Must match control-plane
 - `WORKER_API_BEARER_TOKEN` - Must match control-plane
-- `NODE_MANAGER_WORKER_API_BIN` - Path to worker-api binary (e.g. when using script)
+- `NODE_MANAGER_WORKER_API_BIN` - Path to worker-api binary (default when using `just setup-dev start`)
+- `NODE_MANAGER_WORKER_API_IMAGE` - When set, node-manager starts worker-api as a container (worker-managed service) instead of the binary.
+  Build the image with `just build-worker-api-image` (tags `cynodeai-worker-api`).
 - `NODE_ADVERTISED_WORKER_API_URL` - Full URL the node reports at registration and in capability reports so the orchestrator can dispatch jobs (e.g. `http://host.containers.internal:12090` when orchestrator is in a container).
 - `OLLAMA_UPSTREAM_URL` - For inference proxy (e.g. <http://host.containers.internal:11434>)
 - `INFERENCE_PROXY_IMAGE` - Image for inference proxy (inference-in-sandbox)

@@ -10,7 +10,8 @@ REPO_ROOT="$(dirname "$SCRIPT_DIR")"
 cd "$REPO_ROOT"
 
 ORCHESTRATOR_CONTAINERS=(cynodeai-postgres cynodeai-control-plane cynodeai-user-gateway cynodeai-mcp-gateway cynodeai-api-egress)
-WORKER_CONTAINERS=(cynodeai-worker-api cynodeai-node-manager)
+# worker_node compose runs worker-api only; node-manager runs on the host (see worker_node/README.md).
+WORKER_CONTAINERS=(cynodeai-worker-api)
 
 generate_for() {
     local name=$1

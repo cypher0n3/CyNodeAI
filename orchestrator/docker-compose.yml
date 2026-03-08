@@ -41,6 +41,8 @@ services:
       BOOTSTRAP_ADMIN_PASSWORD: ${BOOTSTRAP_ADMIN_PASSWORD:-admin123}
       WORKER_API_TARGET_URL: ${WORKER_API_TARGET_URL:-http://host.containers.internal:12090}
       WORKER_API_BEARER_TOKEN: ${WORKER_API_BEARER_TOKEN:-dev-worker-api-token-change-me}
+      PMA_ENABLED: ${PMA_ENABLED:-true}
+      PMA_IMAGE: ${PMA_IMAGE:-ghcr.io/cypher0n3/cynode-pma:latest}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     ports:

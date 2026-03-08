@@ -444,21 +444,44 @@ def wait_for_control_plane_stopped(timeout_sec=15):
     return False
 
 
-def wait_for_orchestrator_readyz(timeout_sec=120):
+def wait_for_orchestrator_readyz(timeout_sec=60):
     """Wait for control-plane /readyz 200 (inference path + worker-reported PMA ready)."""
     url = f"http://127.0.0.1:{_cfg.CONTROL_PLANE_PORT}/readyz"
     log_info(f"Waiting for orchestrator ready at {url} (up to {timeout_sec}s)...")
-    for _ in range(timeout_sec):
+    last_log = 0
+    last_code = None
+    last_body = None
+    for elapsed in range(timeout_sec):
         try:
             req = urllib.request.Request(url)
             with urllib.request.urlopen(req, timeout=2) as resp:
-                if resp.getcode() == 200:
+                code = resp.getcode()
+                body = resp.read().decode("utf-8", errors="replace").strip()
+                if code == 200:
                     log_info("Orchestrator is ready (readyz 200)")
                     return True
+                last_code = code
+                last_body = body
+        except urllib.error.HTTPError as e:
+            last_code = e.code
+            try:
+                last_body = e.read().decode("utf-8", errors="replace").strip()
+            except Exception:
+                last_body = ""
         except (OSError, urllib.error.URLError):
-            pass
+            last_code = None
+            last_body = None
+        if elapsed - last_log >= 15:
+            if last_code is not None and last_body is not None:
+                log_info(f"  [{elapsed}s] readyz {last_code}: {last_body[:80]}")
+            else:
+                log_info(f"  [{elapsed}s] readyz unreachable")
+            last_log = elapsed
         time.sleep(1)
-    log_error(f"Orchestrator not ready (readyz 200) after {timeout_sec}s")
+    if last_code is not None and last_body is not None:
+        log_error(f"Orchestrator not ready after {timeout_sec}s (last readyz {last_code}: {last_body[:120]})")
+    else:
+        log_error(f"Orchestrator not ready after {timeout_sec}s (readyz did not return 200)")
     return False
 
 
@@ -479,9 +502,10 @@ def _log_proc_streams(proc):
 def start_node(extra_env=None):
     """Start node-manager in background; wait for worker-api healthz.
 
-    The node-manager is responsible for polling the orchestrator control-plane /readyz before
-    registering (worker_node startup procedure; see docs/tech_specs/worker_node.md). This script
-    does not wait for control-plane; it starts the node immediately after compose up.
+    Node-manager runs on the host and starts worker-api (binary or container). It polls the
+    orchestrator control-plane /readyz before registering (worker_node startup procedure).
+    By default worker-api runs as a host binary. To run worker-api in a container (worker-managed
+    service), set NODE_MANAGER_WORKER_API_IMAGE (e.g. after `just build-worker-api-image`).
     extra_env: optional dict merged into node process env (e.g.
     INFERENCE_PROXY_IMAGE, OLLAMA_UPSTREAM_URL for full-demo).
     """
@@ -493,6 +517,8 @@ def start_node(extra_env=None):
     env["NODE_SLUG"] = _cfg.NODE_SLUG
     env["NODE_NAME"] = _cfg.NODE_NAME
     env["NODE_MANAGER_WORKER_API_BIN"] = _cfg.NODE_MANAGER_WORKER_API_BIN
+    if _cfg.NODE_MANAGER_WORKER_API_IMAGE:
+        env["NODE_MANAGER_WORKER_API_IMAGE"] = _cfg.NODE_MANAGER_WORKER_API_IMAGE
     env["LISTEN_ADDR"] = f":{_cfg.WORKER_PORT}"
     env["NODE_ADVERTISED_WORKER_API_URL"] = os.environ.get(
         "NODE_ADVERTISED_WORKER_API_URL",
@@ -517,13 +543,23 @@ def start_node(extra_env=None):
     if not os.path.isfile(_cfg.NODE_MANAGER_BIN):
         log_error(f"node-manager not found: {_cfg.NODE_MANAGER_BIN}")
         return False
+    try:
+        os.makedirs(_cfg.LOGS_DIR, 0o750, exist_ok=True)
+    except OSError as e:
+        log_warn(f"could not create logs dir {_cfg.LOGS_DIR}: {e}")
+    node_log_path = os.path.join(_cfg.LOGS_DIR, "node-manager.log")
+    try:
+        node_log_file = open(node_log_path, "w", encoding="utf-8")
+    except OSError as e:
+        log_warn(f"could not open {node_log_path}: {e}")
+        node_log_file = None
     log_info("=== Node startup (node-manager -> worker-api) ===")
     with _popen_no_wait(
         [_cfg.NODE_MANAGER_BIN],
         cwd=_cfg.PROJECT_ROOT,
         env=env,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
+        stdout=node_log_file if node_log_file else subprocess.PIPE,
+        stderr=node_log_file if node_log_file else subprocess.PIPE,
         shell=False,
     ) as proc:
         try:
@@ -552,6 +588,41 @@ def start_node(extra_env=None):
             time.sleep(1)
         log_warn(f"Worker API did not respond on :{_cfg.WORKER_PORT} within 30s")
     return True
+
+
+def capture_container_logs():
+    """Capture logs from all cynodeai-* containers to LOGS_DIR (persistent; overwritten each run)."""
+    if not _cfg.ensure_runtime():
+        return
+    try:
+        os.makedirs(_cfg.LOGS_DIR, 0o750, exist_ok=True)
+    except OSError as e:
+        log_warn(f"capture_container_logs: could not create {_cfg.LOGS_DIR}: {e}")
+        return
+    r = subprocess.run(
+        [_cfg.RUNTIME, "ps", "-a", "--format", "{{.Names}}"],
+        capture_output=True, text=True, timeout=10, check=False, shell=False,
+    )
+    names = [n.strip() for n in (r.stdout or "").strip().splitlines() if n.strip()]
+    for name in names:
+        if "cynodeai" not in name:
+            continue
+        safe = name.replace("/", "-")
+        log_path = os.path.join(_cfg.LOGS_DIR, f"{safe}.log")
+        try:
+            out = subprocess.run(
+                [_cfg.RUNTIME, "logs", name],
+                capture_output=True, text=True, timeout=30, check=False, shell=False,
+            )
+            with open(log_path, "w", encoding="utf-8") as f:
+                if out.stdout:
+                    f.write(out.stdout)
+                if out.stderr:
+                    f.write(out.stderr)
+            log_info(f"Captured logs: {log_path}")
+        except (OSError, subprocess.TimeoutExpired) as e:
+            log_warn(f"capture_container_logs: {name}: {e}")
+    log_info(f"Logs from this run: {_cfg.LOGS_DIR}")
 
 
 def _stop_all_step(step_name, func):
@@ -609,28 +680,28 @@ def stop_all(leave_ollama_running=False):
             os.kill(int(pid), signal.SIGTERM)
 
     def stop_managed_containers():
-        """Stop and remove node-started managed service containers (e.g. cynodeai-managed-pma-*)."""
+        """Stop and remove node-started containers: managed services (cynodeai-managed-*) and worker-api (cynodeai-worker-api)."""
         if not _cfg.ensure_runtime():
             return
-        r = subprocess.run(
-            [_cfg.RUNTIME, "ps", "-aq", "--filter", "name=cynodeai-managed-"],
-            capture_output=True, text=True, timeout=10, check=False, shell=False,
-        )
-        ids = (r.stdout or "").strip().split()
-        if not ids:
-            return
-        for cid in ids:
-            subprocess.run(
-                [_cfg.RUNTIME, "stop", cid],
-                capture_output=True, timeout=15, check=False, shell=False,
+        for name_filter in ["cynodeai-managed-", "cynodeai-worker-api"]:
+            r = subprocess.run(
+                [_cfg.RUNTIME, "ps", "-aq", "--filter", f"name={name_filter}"],
+                capture_output=True, text=True, timeout=10, check=False, shell=False,
             )
-            subprocess.run(
-                [_cfg.RUNTIME, "rm", "-f", cid],
-                capture_output=True, timeout=10, check=False, shell=False,
-            )
+            ids = (r.stdout or "").strip().split()
+            for cid in ids:
+                subprocess.run(
+                    [_cfg.RUNTIME, "stop", cid],
+                    capture_output=True, timeout=15, check=False, shell=False,
+                )
+                subprocess.run(
+                    [_cfg.RUNTIME, "rm", "-f", cid],
+                    capture_output=True, timeout=10, check=False, shell=False,
+                )
 
     log_info("Stopping all services...")
     try:
+        _stop_all_step("capture container logs", capture_container_logs)
         _stop_all_step("kill node-manager", kill_node_manager)
         _stop_all_step("stop managed containers (node PMA etc.)", stop_managed_containers)
         try:

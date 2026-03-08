@@ -531,6 +531,10 @@ build-worker-api: install-go
 build-worker-api-dev: install-go
     @just _build_dev worker-api ./worker_node/cmd/worker-api worker_node/bin
 
+# Build worker-api container image (for NODE_MANAGER_WORKER_API_IMAGE; node-manager starts it as a managed service).
+build-worker-api-image:
+    @podman build -f worker_node/cmd/worker-api/Containerfile -t cynodeai-worker-api . || docker build -f worker_node/cmd/worker-api/Containerfile -t cynodeai-worker-api .
+
 # Build node manager (production binary).
 build-node-manager: install-go
     @just _build_prod node-manager ./worker_node/cmd/node-manager worker_node/bin

@@ -91,8 +91,10 @@ func runMain(ctx context.Context) int {
 	telemetryStore, cfg := setupWorkerStateAndProxyConfig(ctx, stateDir, logger)
 	if telemetryStore != nil {
 		defer func() { _ = telemetryStore.Close() }()
-		go runRetentionAndVacuum(ctx, telemetryStore, logger)
-		recordNodeBoot(ctx, telemetryStore, logger)
+		// Retention/vacuum and node_boot are owned by node-manager when it starts worker-api; worker-api only serves GET /v1/worker/telemetry/* and writes service logs.
+		if os.Getenv("NODE_SKIP_NODE_BOOT_RECORD") == "" {
+			recordNodeBoot(ctx, telemetryStore, logger)
+		}
 		logger = slog.New(&telemetry.LogHandler{
 			Inner:  slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}),
 			Store:  telemetryStore,
@@ -158,8 +160,14 @@ func recordNodeBoot(ctx context.Context, store *telemetry.Store, logger *slog.Lo
 		PlatformArch:  runtime.GOARCH,
 		KernelVersion: getEnv("KERNEL_VERSION", ""),
 	}
-	if err := store.InsertNodeBoot(ctx, &row); err != nil && logger != nil {
-		logger.Warn("telemetry node_boot insert failed", "error", err)
+	if err := store.InsertNodeBoot(ctx, &row); err != nil {
+		if logger != nil {
+			logger.Warn("telemetry node_boot insert failed", "error", err)
+		}
+		return
+	}
+	if logger != nil {
+		logger.Info("telemetry node_boot recorded", "boot_id", bootID, "node_slug", row.NodeSlug)
 	}
 }
 

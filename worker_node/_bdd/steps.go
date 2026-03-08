@@ -74,6 +74,10 @@ type workerTestState struct {
 	taskResultJSON []byte
 	taskStatus     string
 	firstJobResult map[string]interface{}
+	// Worker API as managed service (container vs binary)
+	workerAPIStarted          bool
+	workerAPIStartedAsContainer bool
+	workerAPIAsContainerImage  string
 }
 
 func getWorkerState(ctx context.Context) *workerTestState {
@@ -1235,6 +1239,13 @@ func RegisterNodeManagerConfigSteps(sc *godog.ScenarioContext, state *workerTest
 			HTTPTimeout:              5 * time.Second,
 		}
 		opts := &nodeagent.RunOptions{
+			StartWorkerAPI: func(_ string) error {
+				st.mu.Lock()
+				st.workerAPIStarted = true
+				st.workerAPIStartedAsContainer = st.workerAPIAsContainerImage != ""
+				st.mu.Unlock()
+				return nil
+			},
 			StartOllama: func(_, _ string) error {
 				if st != nil && st.failInferenceStartup {
 					return errors.New("inference startup failed")
@@ -1292,6 +1303,45 @@ func RegisterNodeManagerConfigSteps(sc *godog.ScenarioContext, state *workerTest
 		}
 		if st.nodeManagerErr != nil {
 			return fmt.Errorf("node manager failed: %w", st.nodeManagerErr)
+		}
+		return nil
+	})
+	sc.Step(`^the node is configured to start worker-api as a container with image "([^"]*)"$`, func(ctx context.Context, image string) error {
+		st := getWorkerState(ctx)
+		if st == nil {
+			return fmt.Errorf("no state")
+		}
+		st.mu.Lock()
+		st.workerAPIAsContainerImage = image
+		st.mu.Unlock()
+		return nil
+	})
+	sc.Step(`^the worker API was started$`, func(ctx context.Context) error {
+		st := getWorkerState(ctx)
+		if st == nil {
+			return fmt.Errorf("no state")
+		}
+		st.mu.Lock()
+		ok := st.workerAPIStarted
+		st.mu.Unlock()
+		if !ok {
+			return fmt.Errorf("worker API was not started")
+		}
+		if st.nodeManagerErr != nil {
+			return fmt.Errorf("node manager failed: %w", st.nodeManagerErr)
+		}
+		return nil
+	})
+	sc.Step(`^the worker API was started as a container$`, func(ctx context.Context) error {
+		st := getWorkerState(ctx)
+		if st == nil {
+			return fmt.Errorf("no state")
+		}
+		st.mu.Lock()
+		ok := st.workerAPIStartedAsContainer
+		st.mu.Unlock()
+		if !ok {
+			return fmt.Errorf("worker API was not started as a container")
 		}
 		return nil
 	})

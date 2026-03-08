@@ -8,12 +8,17 @@ import (
 	"net/http"
 	"os"
 	"os/exec"
+	"os/signal"
+	"runtime"
 	"strings"
+	"syscall"
 	"time"
 	"unicode"
 
 	"github.com/cypher0n3/cynodeai/go_shared_libs/contracts/nodepayloads"
 	"github.com/cypher0n3/cynodeai/worker_node/internal/nodeagent"
+	"github.com/cypher0n3/cynodeai/worker_node/internal/telemetry"
+	"github.com/google/uuid"
 )
 
 func main() {
@@ -29,6 +34,7 @@ func getEnv(key, def string) string {
 }
 
 // runMain loads config and runs the node manager until ctx is canceled.
+// Node-manager owns the telemetry DB per spec: ensures dir, records node_boot, runs retention/vacuum, records shutdown.
 // Returns 0 on success, 1 on failure. Extracted for testability.
 func runMain(ctx context.Context) int {
 	level := slog.LevelInfo
@@ -37,6 +43,32 @@ func runMain(ctx context.Context) int {
 	}
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: level}))
 	slog.SetDefault(logger)
+	// Cancelable context so signal handler can stop the node.
+	runCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM)
+	go func() {
+		<-sigCh
+		cancel()
+	}()
+	// Telemetry: node-manager owns DB lifecycle (REQ-WORKER-0210, 0220–0222, 0258).
+	stateDir := effectiveStateDir()
+	telemetryStore, err := telemetry.Open(runCtx, stateDir)
+	if err != nil {
+		logger.Warn("telemetry store unavailable, lifecycle events will not be persisted", "error", err)
+	} else {
+		defer func() {
+			recordNodeManagerShutdown(telemetryStore, logger)
+			_ = telemetryStore.Close()
+		}()
+		if err := recordNodeBootTelemetry(runCtx, telemetryStore, logger); err != nil {
+			logger.Warn("telemetry node_boot failed", "error", err)
+		}
+		go runTelemetryRetentionAndVacuum(runCtx, telemetryStore, logger)
+		// Worker-api (binary or container) must not record node_boot again; node-manager already did.
+		_ = os.Setenv("NODE_SKIP_NODE_BOOT_RECORD", "1")
+	}
 	cfg := nodeagent.LoadConfig()
 	opts := &nodeagent.RunOptions{
 		StartWorkerAPI:       startWorkerAPI,
@@ -46,17 +78,92 @@ func runMain(ctx context.Context) int {
 	if getEnv("NODE_MANAGER_SKIP_SERVICES", "") != "" {
 		opts = nil
 	}
-	if err := nodeagent.RunWithOptions(ctx, logger, &cfg, opts); err != nil {
+	if err := nodeagent.RunWithOptions(runCtx, logger, &cfg, opts); err != nil {
 		logger.Error("node manager failed", "error", err)
 		return 1
 	}
 	return 0
 }
 
-// startWorkerAPI starts the worker-api process with the given bearer token in env.
-// Passes through INFERENCE_PROXY_IMAGE, OLLAMA_UPSTREAM_URL, CONTAINER_RUNTIME, WORKER_API_STATE_DIR
-// so inference jobs (pod path) and executor config are correct when node is started with extra_env (e.g. full-demo).
+// recordNodeBootTelemetry writes one node_boot row (node-manager owns this per spec).
+func recordNodeBootTelemetry(ctx context.Context, store *telemetry.Store, logger *slog.Logger) error {
+	bootID := getEnv("NODE_BOOT_ID", "")
+	if bootID == "" {
+		bootID = fmt.Sprintf("boot-%d", time.Now().UTC().UnixNano())
+	}
+	row := &telemetry.NodeBootRow{
+		BootID:        bootID,
+		NodeSlug:      getEnv("NODE_SLUG", "default"),
+		BuildVersion:  getEnv("BUILD_VERSION", "dev"),
+		PlatformOS:    runtime.GOOS,
+		PlatformArch:  runtime.GOARCH,
+		KernelVersion: getEnv("KERNEL_VERSION", ""),
+	}
+	if err := store.InsertNodeBoot(ctx, row); err != nil {
+		return err
+	}
+	if logger != nil {
+		logger.Info("telemetry node_boot recorded", "boot_id", bootID, "node_slug", row.NodeSlug)
+	}
+	return nil
+}
+
+// runTelemetryRetentionAndVacuum runs retention on startup and hourly, vacuum daily (REQ-WORKER-0220, 0221, 0222).
+func runTelemetryRetentionAndVacuum(ctx context.Context, store *telemetry.Store, logger *slog.Logger) {
+	if err := store.EnforceRetention(ctx); err != nil && logger != nil {
+		logger.Warn("telemetry retention on startup", "error", err)
+	}
+	retentionTicker := time.NewTicker(time.Hour)
+	defer retentionTicker.Stop()
+	vacuumTicker := time.NewTicker(24 * time.Hour)
+	defer vacuumTicker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-retentionTicker.C:
+			if err := store.EnforceRetention(ctx); err != nil && logger != nil {
+				logger.Warn("telemetry retention", "error", err)
+			}
+		case <-vacuumTicker.C:
+			if err := store.Vacuum(ctx); err != nil && logger != nil {
+				logger.Warn("telemetry vacuum", "error", err)
+			}
+		}
+	}
+}
+
+// recordNodeManagerShutdown writes a service log event before exit (REQ-WORKER-0258, worker_telemetry_api.md).
+func recordNodeManagerShutdown(store *telemetry.Store, logger *slog.Logger) {
+	ctx := context.Background()
+	err := store.InsertLogEvent(ctx, &telemetry.LogEventInput{
+		LogID:      uuid.New().String(),
+		OccurredAt: time.Now().UTC().Format(time.RFC3339),
+		SourceKind: "service",
+		SourceName: "node_manager",
+		Level:      "info",
+		Message:    "node manager shutdown",
+	})
+	if err != nil && logger != nil {
+		logger.Warn("telemetry shutdown log failed", "error", err)
+	}
+}
+
+// workerAPIContainerName is the name of the worker-api container when run as a managed service.
+const workerAPIContainerName = "cynodeai-worker-api"
+
+// startWorkerAPI starts the worker-api process or container. When NODE_MANAGER_WORKER_API_IMAGE is set,
+// starts worker-api as a container (worker-managed service); otherwise starts the binary from
+// NODE_MANAGER_WORKER_API_BIN. Passes through INFERENCE_PROXY_IMAGE, OLLAMA_UPSTREAM_URL, CONTAINER_RUNTIME,
+// WORKER_API_STATE_DIR so inference jobs and executor config are correct.
 func startWorkerAPI(bearerToken string) error {
+	if image := strings.TrimSpace(getEnv("NODE_MANAGER_WORKER_API_IMAGE", "")); image != "" {
+		return startWorkerAPIContainer(image, bearerToken)
+	}
+	return startWorkerAPIBinary(bearerToken)
+}
+
+func startWorkerAPIBinary(bearerToken string) error {
 	bin := getEnv("NODE_MANAGER_WORKER_API_BIN", "worker-api")
 	if !strings.Contains(bin, "/") {
 		path, err := exec.LookPath(bin)
@@ -80,6 +187,42 @@ func startWorkerAPI(bearerToken string) error {
 		return err
 	}
 	go func() { _ = cmd.Wait() }()
+	return nil
+}
+
+// startWorkerAPIContainer starts worker-api as a container (worker-managed service). Uses effectiveStateDir
+// for the state volume so telemetry and secure store persist. If the container already exists, starts it.
+func startWorkerAPIContainer(image, bearerToken string) error {
+	rt := getEnv("CONTAINER_RUNTIME", "podman")
+	stateDir := effectiveStateDir()
+	check := exec.Command(rt, "ps", "-a", "--format", "{{.Names}}")
+	out, err := check.Output()
+	if err == nil && strings.Contains(string(out), workerAPIContainerName) {
+		if out2, err2 := exec.Command(rt, "start", workerAPIContainerName).CombinedOutput(); err2 != nil {
+			return fmt.Errorf("start existing worker-api container: %w: %s", err2, strings.TrimSpace(string(out2)))
+		}
+		return nil
+	}
+	// run -d --name cynodeai-worker-api -p 12090:12090 -e ... -v stateDir:/var/lib/cynode/state image
+	args := []string{
+		"run", "-d", "--name", workerAPIContainerName,
+		"-p", "12090:12090",
+		"-e", "WORKER_API_BEARER_TOKEN=" + bearerToken,
+		"-e", "WORKER_API_STATE_DIR=/var/lib/cynode/state",
+		"-e", "LISTEN_ADDR=:12090",
+		"-e", "NODE_SKIP_NODE_BOOT_RECORD=1",
+		"-v", stateDir + ":/var/lib/cynode/state",
+	}
+	for _, key := range []string{"INFERENCE_PROXY_IMAGE", "OLLAMA_UPSTREAM_URL", "CONTAINER_RUNTIME"} {
+		if v := os.Getenv(key); v != "" {
+			args = append(args, "-e", key+"="+v)
+		}
+	}
+	args = append(args, image)
+	cmd := exec.Command(rt, args...)
+	if out, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("worker-api container: %w: %s", err, strings.TrimSpace(string(out)))
+	}
 	return nil
 }
 

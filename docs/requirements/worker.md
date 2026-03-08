@@ -342,3 +342,10 @@ It covers worker-node behavior and the worker API contract for job execution and
   [CYNAI.WORKER.CapabilityReporting](../tech_specs/worker_node.md#spec-cynai-worker-capabilityreporting)
   [CYNAI.WORKER.Payload.CapabilityReportV1](../tech_specs/worker_node_payloads.md#spec-cynai-worker-payload-capabilityreport-v1)
   <a id="req-worker-0256"></a>
+- **REQ-WORKER-0257:** When the Node Manager receives a shutdown command (e.g. SIGTERM or stop request), it MUST send shutdown commands to any containers it is running (managed services and sandbox containers).
+  The Node Manager MUST still exit if dependent containers fail to shut down (e.g. after a configured timeout or kill); in that case it MUST exit with a non-zero exit code.
+  [CYNAI.WORKER.NodeManagerShutdown](../tech_specs/worker_node.md#spec-cynai-worker-nodemanagershutdown)
+  <a id="req-worker-0257"></a>
+- **REQ-WORKER-0258:** The node MUST log to the telemetry database: Node Manager and Worker API startup and shutdown; container start and stop (managed and sandbox); and job run lifecycle (e.g. sandbox run start and completion).
+  [CYNAI.WORKER.TelemetryLifecycleEvents](../tech_specs/worker_telemetry_api.md#spec-cynai-worker-telemetrylifecycleevents)
+  <a id="req-worker-0258"></a>

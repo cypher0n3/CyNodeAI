@@ -42,12 +42,17 @@ type LogEventInput struct {
 }
 
 // InsertLogEvent inserts one log_event row.
+// For source_kind=service, stream must still be a valid CHECK value; we use "stdout" as sentinel.
 func (s *Store) InsertLogEvent(ctx context.Context, in *LogEventInput) error {
 	if in == nil {
 		return nil
 	}
 	if in.OccurredAt == "" {
 		in.OccurredAt = time.Now().UTC().Format(time.RFC3339)
+	}
+	stream := in.Stream
+	if stream != "stdout" && stream != "stderr" {
+		stream = "stdout" // sentinel for service-origin events (schema CHECK allows only stdout/stderr)
 	}
 	fieldsJSON := "{}"
 	if in.Fields != nil {
@@ -60,7 +65,7 @@ func (s *Store) InsertLogEvent(ctx context.Context, in *LogEventInput) error {
 		SourceKind:  in.SourceKind,
 		SourceName:  in.SourceName,
 		ContainerID: in.ContainerID,
-		Stream:      in.Stream,
+		Stream:      stream,
 		Level:       in.Level,
 		Message:     in.Message,
 		FieldsJSON:  fieldsJSON,

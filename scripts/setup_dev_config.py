@@ -52,11 +52,19 @@ NODE_MANAGER_PID_FILE = os.path.join(
 # Node state dir for full-demo: node writes secrets here; E2E reads NODE_STATE_DIR to assert on it.
 # Use a path under TMPDIR so the managed-agent proxy socket stays under UNIX_PATH_MAX (108).
 NODE_STATE_DIR = os.path.join(tempfile.gettempdir(), "cynodeai-node-state")
+# Persistent dir for setup_dev run logs (container + node-manager); overwritten each run.
+LOGS_DIR = os.environ.get(
+    "CYNODEAI_LOGS_DIR",
+    os.path.join(tempfile.gettempdir(), "cynodeai-setup-dev-logs"),
+)
 # Dev builds (faster; use just build-dev)
 NODE_MANAGER_BIN = os.path.join(PROJECT_ROOT, "worker_node", "bin", "node-manager-dev")
 NODE_MANAGER_WORKER_API_BIN = os.path.join(
     PROJECT_ROOT, "worker_node", "bin", "worker-api-dev"
 )
+# When set, node-manager starts worker-api as a container (worker-managed service) instead of the binary.
+# Build the image with: just build-worker-api-image
+NODE_MANAGER_WORKER_API_IMAGE = os.environ.get("NODE_MANAGER_WORKER_API_IMAGE", "")
 
 
 def ensure_runtime():
@@ -101,7 +109,8 @@ def compose_env():
     """Env dict for compose up (exported to subprocess)."""
     ensure_runtime()
     _sync_runtime_aliases()
-    # PMA via worker capability (orchestrator <-> worker proxy); no PMA_BASE_URL for chat.
+    # PMA via worker capability (orchestrator <-> worker proxy); no local PMA in control-plane.
+    # PMA_IMAGE so control-plane sends dev image to node (node runs managed PMA container).
     return {
         "POSTGRES_USER": POSTGRES_USER,
         "POSTGRES_PASSWORD": POSTGRES_PASSWORD,
@@ -115,4 +124,6 @@ def compose_env():
         "PMA_PORT": PMA_PORT,
         "WORKER_API_TARGET_URL": f"http://{CONTAINER_HOST_ALIAS}:{WORKER_PORT}",
         "BOOTSTRAP_ADMIN_PASSWORD": ADMIN_PASSWORD,
+        "PMA_ENABLED": "false",
+        "PMA_IMAGE": os.environ.get("PMA_IMAGE", "cynodeai-cynode-pma:dev"),
     }
