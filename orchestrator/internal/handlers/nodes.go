@@ -8,7 +8,9 @@ import (
 	"encoding/json"
 	"errors"
 	"log/slog"
+	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"sort"
 	"strings"
@@ -24,27 +26,27 @@ import (
 
 // NodeHandler handles node registration and management endpoints.
 type NodeHandler struct {
-	db                        database.Store
-	jwt                       *auth.JWTManager
-	registrationPSK           string
-	orchestratorPublicURL      string
-	workerAPIBearerToken       string
-	workerAPITargetURL         string
-	workerInternalAgentToken   string
-	logger                     *slog.Logger
+	db                       database.Store
+	jwt                      *auth.JWTManager
+	registrationPSK          string
+	orchestratorPublicURL    string
+	workerAPIBearerToken     string
+	workerAPITargetURL       string
+	workerInternalAgentToken string
+	logger                   *slog.Logger
 }
 
 // NewNodeHandler creates a new node handler.
 func NewNodeHandler(db database.Store, jwt *auth.JWTManager, registrationPSK, orchestratorPublicURL, workerAPIBearerToken, workerAPITargetURL, workerInternalAgentToken string, logger *slog.Logger) *NodeHandler {
 	return &NodeHandler{
-		db:                      db,
-		jwt:                     jwt,
-		registrationPSK:         registrationPSK,
-		orchestratorPublicURL:   orchestratorPublicURL,
-		workerAPIBearerToken:    workerAPIBearerToken,
-		workerAPITargetURL:      workerAPITargetURL,
+		db:                       db,
+		jwt:                      jwt,
+		registrationPSK:          registrationPSK,
+		orchestratorPublicURL:    orchestratorPublicURL,
+		workerAPIBearerToken:     workerAPIBearerToken,
+		workerAPITargetURL:       workerAPITargetURL,
 		workerInternalAgentToken: workerInternalAgentToken,
-		logger:                  logger,
+		logger:                   logger,
 	}
 }
 
@@ -305,11 +307,11 @@ func (h *NodeHandler) buildNodeConfigPayload(ctx context.Context, node *models.N
 	if backend := h.deriveInferenceBackend(ctx, node.ID); backend != nil {
 		payload.InferenceBackend = backend
 	}
-	payload.ManagedServices = h.buildManagedServicesDesiredState(ctx, node)
+	payload.ManagedServices = h.buildManagedServicesDesiredState(ctx, node, workerAPITargetURL)
 	return payload
 }
 
-func (h *NodeHandler) buildManagedServicesDesiredState(ctx context.Context, node *models.Node) *nodepayloads.ConfigManagedServices {
+func (h *NodeHandler) buildManagedServicesDesiredState(ctx context.Context, node *models.Node, workerAPITargetURL string) *nodepayloads.ConfigManagedServices {
 	if h.db == nil || node == nil {
 		if h.logger != nil {
 			h.logger.Debug("managed services skipped", "reason", "db_or_node_nil")
@@ -334,9 +336,9 @@ func (h *NodeHandler) buildManagedServicesDesiredState(ctx context.Context, node
 		}
 		return nil
 	}
-	// URL for PMA container (node-run) to reach Ollama. Use NODE_PMA_OLLAMA_BASE_URL when set
-	// (e.g. http://host.containers.internal:11434 so node's PMA container can reach host-mapped Ollama).
-	inferenceBaseURL := strings.TrimSpace(getEnvDefault("NODE_PMA_OLLAMA_BASE_URL", getEnvDefault("OLLAMA_BASE_URL", getEnvDefault("INFERENCE_URL", "http://127.0.0.1:11434"))))
+	// For node-local inference, derive the node host from the worker API dispatch URL.
+	// If unavailable/loopback, leave base_url empty and let the worker resolve a local default.
+	inferenceBaseURL := deriveNodeLocalInferenceBaseURL(workerAPITargetURL)
 	defaultModel := strings.TrimSpace(getEnvDefault("INFERENCE_MODEL", "tinyllama"))
 	if h.logger != nil {
 		h.logger.Info("managed services desired state built",
@@ -371,6 +373,25 @@ func (h *NodeHandler) buildManagedServicesDesiredState(ctx context.Context, node
 			},
 		},
 	}
+}
+
+func deriveNodeLocalInferenceBaseURL(workerAPITargetURL string) string {
+	dispatchURL := strings.TrimSpace(workerAPITargetURL)
+	if dispatchURL == "" {
+		return ""
+	}
+	parsed, err := url.Parse(dispatchURL)
+	if err != nil || parsed.Hostname() == "" {
+		return ""
+	}
+	host := strings.TrimSpace(parsed.Hostname())
+	if host == "" || strings.EqualFold(host, "localhost") {
+		return ""
+	}
+	if ip := net.ParseIP(host); ip != nil && ip.IsLoopback() {
+		return ""
+	}
+	return "http://" + host + ":11434"
 }
 
 func (h *NodeHandler) selectPMAHostNodeSlug(ctx context.Context, fallbackNodeSlug string) string {

@@ -111,7 +111,7 @@ func LoadOrchestratorConfig() *OrchestratorConfig {
 		JWTNodeDuration:        getDurationEnv("JWT_NODE_DURATION", 24*time.Hour),
 		NodeRegistrationPSK:    getEnv("NODE_REGISTRATION_PSK", "default-psk-change-me"),
 		OrchestratorPublicURL:  getEnv("ORCHESTRATOR_PUBLIC_URL", "http://localhost:12082"),
-		WorkerAPIBearerToken:     getEnv("WORKER_API_BEARER_TOKEN", "phase1-static-token"),
+		WorkerAPIBearerToken:     getEnv("WORKER_API_BEARER_TOKEN", "dev-worker-api-token-change-me"),
 		WorkerAPITargetURL:       getEnv("WORKER_API_TARGET_URL", ""),
 		WorkerInternalAgentToken: getEnv("WORKER_INTERNAL_AGENT_TOKEN", ""),
 		BootstrapAdminPassword: getEnv("BOOTSTRAP_ADMIN_PASSWORD", "admin123"),

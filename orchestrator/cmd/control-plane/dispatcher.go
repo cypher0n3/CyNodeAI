@@ -22,7 +22,8 @@ func loadDispatcherConfig() dispatcherConfig {
 	return dispatcherConfig{
 		Enabled:      getEnv("DISPATCHER_ENABLED", "true") == "true",
 		PollInterval: getDurationEnv("DISPATCH_POLL_INTERVAL", 1*time.Second),
-		HTTPTimeout:  getDurationEnv("DISPATCH_HTTP_TIMEOUT", 90*time.Second),
+		// Worker /v1/worker/jobs:run is synchronous and may run close to SBA max_runtime_seconds.
+		HTTPTimeout:  getDurationEnv("DISPATCH_HTTP_TIMEOUT", 300*time.Second),
 	}
 }
 

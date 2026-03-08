@@ -1,6 +1,7 @@
 package nodeagent
 
 import (
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -59,7 +60,7 @@ func TestBuildManagedServiceRunArgs_NoAGENT_TOKEN(t *testing.T) {
 	svc := &nodepayloads.ConfigManagedService{
 		ServiceID: "pma-main", ServiceType: "pma", Image: "pma:latest",
 		Orchestrator: &nodepayloads.ConfigManagedServiceOrchestrator{},
-		Env:         map[string]string{"OTHER": "val"},
+		Env:          map[string]string{"OTHER": "val"},
 	}
 	args := BuildManagedServiceRunArgs(stateDir, svc, "pma-main", "pma", "pma:latest", "name", "")
 	for i := 0; i < len(args)-1; i++ {
@@ -77,7 +78,7 @@ func TestBuildManagedServiceRunArgs_AutoProxyURLs(t *testing.T) {
 	svc := &nodepayloads.ConfigManagedService{
 		ServiceID: "pma-main", ServiceType: "pma", Image: "pma:latest",
 		Orchestrator: &nodepayloads.ConfigManagedServiceOrchestrator{
-			MCPGatewayProxyURL:   proxyURLAuto,
+			MCPGatewayProxyURL:    proxyURLAuto,
 			ReadyCallbackProxyURL: proxyURLAuto,
 		},
 	}
@@ -163,5 +164,107 @@ func TestBuildManagedServiceRunArgs_NoHealthcheckWhenDocker(t *testing.T) {
 		if args[i] == "--health-cmd" {
 			t.Error("docker runtime must not get podman-only health-cmd")
 		}
+	}
+}
+
+func TestBuildManagedServiceRunArgs_InferenceEnvFromConfig(t *testing.T) {
+	stateDir := t.TempDir()
+	svc := &nodepayloads.ConfigManagedService{
+		ServiceID:   "pma-main",
+		ServiceType: "pma",
+		Image:       "pma:latest",
+		Inference: &nodepayloads.ConfigManagedServiceInference{
+			Mode:         "node_local",
+			BaseURL:      "http://inference.internal:11434",
+			DefaultModel: "tinyllama",
+		},
+	}
+	args := BuildManagedServiceRunArgs(stateDir, svc, "pma-main", "pma", "pma:latest", "name", "podman")
+	argv := strings.Join(args, " ")
+	if !strings.Contains(argv, "OLLAMA_BASE_URL=http://inference.internal:11434") {
+		t.Fatalf("expected OLLAMA_BASE_URL from config inference.base_url, got args=%q", argv)
+	}
+	if !strings.Contains(argv, "INFERENCE_MODEL=tinyllama") {
+		t.Fatalf("expected INFERENCE_MODEL from config inference.default_model, got args=%q", argv)
+	}
+}
+
+func TestBuildManagedServiceRunArgs_InferenceEnvRuntimeDefault(t *testing.T) {
+	tests := []struct {
+		runtime       string
+		wantOllamaURL string
+	}{
+		{"docker", "OLLAMA_BASE_URL=http://host.docker.internal:11434"},
+		{"podman", "OLLAMA_BASE_URL=http://host.containers.internal:11434"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.runtime, func(t *testing.T) {
+			stateDir := t.TempDir()
+			svc := &nodepayloads.ConfigManagedService{
+				ServiceID:   "pma-main",
+				ServiceType: "pma",
+				Image:       "pma:latest",
+				Inference: &nodepayloads.ConfigManagedServiceInference{
+					Mode: "node_local",
+				},
+			}
+			args := BuildManagedServiceRunArgs(stateDir, svc, "pma-main", "pma", "pma:latest", "name", tt.runtime)
+			argv := strings.Join(args, " ")
+			if !strings.Contains(argv, tt.wantOllamaURL) {
+				t.Fatalf("expected %s runtime default OLLAMA_BASE_URL, got args=%q", tt.runtime, argv)
+			}
+		})
+	}
+}
+
+func TestBuildManagedServiceRunArgs_InferenceEnvUsesContainerHostAliasOverride(t *testing.T) {
+	original := os.Getenv("CONTAINER_HOST_ALIAS")
+	_ = os.Setenv("CONTAINER_HOST_ALIAS", "custom.host.internal")
+	defer func() {
+		if original == "" {
+			_ = os.Unsetenv("CONTAINER_HOST_ALIAS")
+		} else {
+			_ = os.Setenv("CONTAINER_HOST_ALIAS", original)
+		}
+	}()
+	stateDir := t.TempDir()
+	svc := &nodepayloads.ConfigManagedService{
+		ServiceID:   "pma-main",
+		ServiceType: "pma",
+		Image:       "pma:latest",
+		Inference: &nodepayloads.ConfigManagedServiceInference{
+			Mode: "node_local",
+		},
+	}
+	args := BuildManagedServiceRunArgs(stateDir, svc, "pma-main", "pma", "pma:latest", "name", "docker")
+	argv := strings.Join(args, " ")
+	if !strings.Contains(argv, "OLLAMA_BASE_URL=http://custom.host.internal:11434") {
+		t.Fatalf("expected CONTAINER_HOST_ALIAS override in OLLAMA_BASE_URL, got args=%q", argv)
+	}
+}
+
+func TestBuildManagedServiceRunArgs_InferenceEnvExternalHints(t *testing.T) {
+	stateDir := t.TempDir()
+	svc := &nodepayloads.ConfigManagedService{
+		ServiceID:   "pma-main",
+		ServiceType: "pma",
+		Image:       "pma:latest",
+		Inference: &nodepayloads.ConfigManagedServiceInference{
+			Mode:             "external",
+			APIEgressBaseURL: "http://api-egress.internal:12084",
+			ProviderID:       "openai",
+			DefaultModel:     "gpt-4o-mini",
+		},
+	}
+	args := BuildManagedServiceRunArgs(stateDir, svc, "pma-main", "pma", "pma:latest", "name", "podman")
+	argv := strings.Join(args, " ")
+	if !strings.Contains(argv, "API_EGRESS_BASE_URL=http://api-egress.internal:12084") {
+		t.Fatalf("expected API_EGRESS_BASE_URL for external mode, got args=%q", argv)
+	}
+	if !strings.Contains(argv, "INFERENCE_PROVIDER_ID=openai") {
+		t.Fatalf("expected INFERENCE_PROVIDER_ID for external mode, got args=%q", argv)
+	}
+	if !strings.Contains(argv, "INFERENCE_MODEL=gpt-4o-mini") {
+		t.Fatalf("expected INFERENCE_MODEL for external mode, got args=%q", argv)
 	}
 }

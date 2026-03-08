@@ -42,6 +42,7 @@ func BuildManagedServiceRunArgs(stateDir string, svc *nodepayloads.ConfigManaged
 			args = append(args, "-e", "READY_CALLBACK_PROXY_URL="+readyURL)
 		}
 	}
+	args = applyManagedServiceInferenceEnv(args, svc, runtime)
 	for k, v := range svc.Env {
 		if k != "" {
 			args = append(args, "-e", k+"="+v)
@@ -128,4 +129,49 @@ func applyAutoProxyURLs(stateDir, serviceID, mcpURL, readyURL string) (resolvedM
 		resolvedReady = readyURL
 	}
 	return resolvedMCP, resolvedReady
+}
+
+func applyManagedServiceInferenceEnv(args []string, svc *nodepayloads.ConfigManagedService, runtime string) []string {
+	if svc == nil || svc.Inference == nil {
+		return args
+	}
+	inf := svc.Inference
+	mode := strings.ToLower(strings.TrimSpace(inf.Mode))
+	if mode == "" {
+		mode = "node_local"
+	}
+	switch mode {
+	case "node_local", "remote_node":
+		baseURL := strings.TrimSpace(inf.BaseURL)
+		if baseURL == "" {
+			baseURL = defaultNodeLocalInferenceBaseURL(runtime)
+		}
+		if baseURL != "" {
+			args = append(args, "-e", "OLLAMA_BASE_URL="+baseURL)
+		}
+	case "external":
+		// Keep external-routing hints available to the agent runtime.
+		if apiEgressURL := strings.TrimSpace(inf.APIEgressBaseURL); apiEgressURL != "" {
+			args = append(args, "-e", "API_EGRESS_BASE_URL="+apiEgressURL)
+		}
+		if providerID := strings.TrimSpace(inf.ProviderID); providerID != "" {
+			args = append(args, "-e", "INFERENCE_PROVIDER_ID="+providerID)
+		}
+	}
+	if model := strings.TrimSpace(inf.DefaultModel); model != "" {
+		args = append(args, "-e", "INFERENCE_MODEL="+model)
+	}
+	return args
+}
+
+func defaultNodeLocalInferenceBaseURL(runtime string) string {
+	alias := strings.TrimSpace(getEnv("CONTAINER_HOST_ALIAS", ""))
+	if alias == "" {
+		if strings.TrimSpace(runtime) == "docker" {
+			alias = "host.docker.internal"
+		} else {
+			alias = "host.containers.internal"
+		}
+	}
+	return "http://" + alias + ":11434"
 }

@@ -113,6 +113,20 @@ Checklist:
 
 - [ ] Verify that `e2e_110`, `e2e_115`, `e2e_192`, `e2e_193`, and `e2e_194` now reach the chat path reliably enough to exercise behavior rather than fail immediately at transport.
 
+Progress:
+
+- [x] Fixed worker API bearer-token mismatch on orchestrator side (`orchestrator/internal/config/config.go` default now matches worker default token).
+
+- [x] Removed compose-level PMA inference workaround path (`NODE_PMA_OLLAMA_BASE_URL`) from the orchestrator stack.
+
+- [x] Implemented dynamic PMA inference base-url derivation in orchestrator managed-service desired state (`orchestrator/internal/handlers/nodes.go`) using node worker API target host.
+
+- [x] Added/updated tests for orchestrator managed-service inference URL derivation (`orchestrator/internal/handlers/nodes_test.go`).
+
+- [x] Runtime check after restart confirms managed PMA container now receives `OLLAMA_BASE_URL` and `INFERENCE_MODEL` from managed-service config, not from compose env override.
+
+- [ ] Chat E2E coverage is still partially blocked by auth-prereq/config gating in the inference-tag run (`CONFIG_PATH not set` skips); this is now a test harness/prereq issue, not the original PMA endpoint wiring gap.
+
 ### Step 0.3: Fix SBA Inference Dispatch Failures
 
 Target symptom:
@@ -142,6 +156,14 @@ Checklist:
 
 - [ ] Verify that `e2e_140` and `e2e_145` move past transport timeout failures.
 
+Progress:
+
+- [x] Increased dispatcher HTTP timeout to align with synchronous worker job execution windows (`orchestrator/cmd/control-plane/dispatcher.go` and compose env).
+
+- [x] Verified control-plane now emits managed-service desired state and config-ack flow for PMA host node without inference URL fallback env.
+
+- [ ] SBA inference-tag E2E is still blocked by test-side config/prereq issues (`CONFIG_PATH not set` skips and `e2e_123` helper `NoneType` path failure) and needs separate remediation in Python test setup/helpers.
+
 ### Step 0.4: Make Worker Proxy Functional Tests Actually Run
 
 Target symptom:
@@ -170,6 +192,14 @@ Checklist:
 
 - [ ] Verify that the proxy test classes execute real assertions.
 
+Progress:
+
+- [x] Implemented the worker-side managed-service inference wiring gap in `BuildManagedServiceRunArgs` so PMA runtime env is derived from `managed_services.services[].inference`.
+
+- [x] Added targeted worker-node unit tests for inference env propagation, runtime defaults, and host alias override (`worker_node/internal/nodeagent/runargs_test.go`).
+
+- [ ] `suite_proxy_pma` functional classes still intermittently skip on worker health fixture timing in full-tag runs and require focused fixture hardening in `e2e_124_worker_pma_proxy.py`.
+
 ### Phase 0 Exit Criteria
 
 - [ ] The inference-tagged subset no longer fails immediately on transport or startup issues.
@@ -177,6 +207,12 @@ Checklist:
 - [ ] Proxy-functional E2E setup is reliable enough to execute its assertions.
 
 - [ ] A new baseline run is saved for comparison before moving to Phase 1.
+
+Current status note:
+
+- Managed-service PMA inference configuration now uses the orchestrator -> worker desired-state contract and worker runtime application.
+
+- The remaining blockers in Phase 0 are primarily Python E2E harness/setup issues (auth config prereqs, proxy fixture readiness, and SBA helper path handling).
 
 ## Phase 1: Stop Locking in Known Drift
 

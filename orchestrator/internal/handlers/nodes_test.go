@@ -527,6 +527,9 @@ func TestBuildNodeConfigPayload_IncludesManagedServicesWhenSelected(t *testing.T
 	if svc.ServiceType != "pma" || svc.ServiceID == "" {
 		t.Errorf("unexpected managed service: %+v", svc)
 	}
+	if svc.Inference == nil || svc.Inference.BaseURL != "http://worker:11434" {
+		t.Errorf("expected inference.base_url from worker API target host, got %+v", svc.Inference)
+	}
 	if svc.Orchestrator != nil && svc.Orchestrator.AgentToken != "" {
 		t.Errorf("expected no agent_token when handler has none, got %q", svc.Orchestrator.AgentToken)
 	}
@@ -640,6 +643,37 @@ func TestGetEnvDefault(t *testing.T) {
 	_ = os.Unsetenv("TEST_ENV_DEFAULT")
 	if got := getEnvDefault("TEST_ENV_DEFAULT", "fallback"); got != "fallback" {
 		t.Errorf("getEnvDefault() = %q, want fallback", got)
+	}
+}
+
+func TestDeriveNodeLocalInferenceBaseURL(t *testing.T) {
+	tests := []struct {
+		name             string
+		workerAPITarget  string
+		wantInferenceURL string
+	}{
+		{
+			name:             "non-loopback host",
+			workerAPITarget:  "http://worker.internal:12090",
+			wantInferenceURL: "http://worker.internal:11434",
+		},
+		{
+			name:             "loopback host",
+			workerAPITarget:  "http://127.0.0.1:12090",
+			wantInferenceURL: "",
+		},
+		{
+			name:             "invalid URL",
+			workerAPITarget:  "not-a-url",
+			wantInferenceURL: "",
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := deriveNodeLocalInferenceBaseURL(tt.workerAPITarget); got != tt.wantInferenceURL {
+				t.Fatalf("deriveNodeLocalInferenceBaseURL() = %q, want %q", got, tt.wantInferenceURL)
+			}
+		})
 	}
 }
 

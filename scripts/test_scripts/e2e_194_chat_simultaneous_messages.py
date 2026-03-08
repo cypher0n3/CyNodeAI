@@ -1,5 +1,6 @@
 # E2E: Simultaneous chat requests - multiple one-shot chats in parallel.
-# Traces: CYNAI.USRGWY.OpenAIChatApi.Reliability; gateway handles concurrent completions.
+# Traces: REQ-ORCHES-0131, REQ-ORCHES-0132; CYNAI.USRGWY.OpenAIChatApi.Reliability;
+# gateway handles concurrent completions.
 # Skip if E2E_SKIP_INFERENCE_SMOKE. Requires auth (e2e_020).
 
 import json
