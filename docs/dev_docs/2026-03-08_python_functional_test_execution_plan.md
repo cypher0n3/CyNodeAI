@@ -19,7 +19,7 @@
   - [Step 2.3: Harden Auth Refresh Assertions and Reintroduce Proper Logout Coverage](#step-23-harden-auth-refresh-assertions-and-reintroduce-proper-logout-coverage)
   - [Step 2.4: Harden Chat Assertions](#step-24-harden-chat-assertions)
   - [Step 2.5: Tighten Worker Telemetry Assertions](#step-25-tighten-worker-telemetry-assertions)
-  - [Step 2.6: Add Internal Managed-Agent Proxy Acceptance Coverage](#step-26-add-internal-managed-agent-proxy-acceptance-coverage)
+  - [Step 2.6: Add Managed-Agent Proxy and Network-Restriction Acceptance Coverage](#step-26-add-managed-agent-proxy-and-network-restriction-acceptance-coverage)
   - [Phase 2 Exit Criteria](#phase-2-exit-criteria)
 - [Phase 3: Fix Go Drifts Exposed by Hardened Tests](#phase-3-fix-go-drifts-exposed-by-hardened-tests)
   - [Step 3.1: Align CLI Auth Behavior](#step-31-align-cli-auth-behavior)
@@ -27,7 +27,7 @@
   - [Step 3.3: Implement Task-Name Resolution](#step-33-implement-task-name-resolution)
   - [Step 3.4: Revisit Readiness Semantics](#step-34-revisit-readiness-semantics)
   - [Step 3.5: Replace Placeholder Worker Telemetry](#step-35-replace-placeholder-worker-telemetry)
-  - [Step 3.6: Reconcile Internal Worker Proxy Status Codes](#step-36-reconcile-internal-worker-proxy-status-codes)
+  - [Step 3.6: Reconcile Worker Proxy Behavior With Agent Network Restriction](#step-36-reconcile-worker-proxy-behavior-with-agent-network-restriction)
   - [Phase 3 Exit Criteria](#phase-3-exit-criteria)
 - [Phase 4: Reduce Flakiness and Suite Coupling](#phase-4-reduce-flakiness-and-suite-coupling)
   - [Step 4.1: Reduce Shared Mutable Test State](#step-41-reduce-shared-mutable-test-state)
@@ -44,6 +44,11 @@ Date: 2026-03-08.
 This document turns the ordered remediation plan from `docs/dev_docs/2026-03-08_python_functional_test_spec_impl_review.md` into a concrete execution checklist for an engineer who is not already familiar with the codebase.
 
 The goal is to improve the Python functional suite in the required order while keeping each step small, testable, and reviewable.
+
+This plan also incorporates the updated worker proxy and security-boundary contract in
+`REQ-WORKER-0174`, `REQ-WORKER-0162`, `REQ-WORKER-0163`, `docs/tech_specs/worker_node.md`,
+and `docs/tech_specs/worker_api.md`: all agent runtimes on a worker are network-restricted,
+and all inbound and outbound traffic to or from those agents must route through worker proxies.
 
 ## Working Rules
 
@@ -154,6 +159,9 @@ Checklist:
 - [ ] Reproduce the proxy test setup failure in isolation.
 
 - [ ] Identify whether the failure is due to missing env vars, binary startup assumptions, fixed port collisions, or health/readiness mismatch.
+
+- [ ] Keep the updated security-boundary contract in mind while fixing setup:
+  getting the test class to execute is necessary, but it must not lock in direct-network behavior that is now out of spec under `REQ-WORKER-0174`.
 
 - [ ] Fix the setup path so the test class runs its assertions instead of skipping.
 
@@ -363,11 +371,17 @@ Checklist:
 
 - [ ] Verify truncated metadata fields exactly where required by the telemetry spec.
 
-### Step 2.6: Add Internal Managed-Agent Proxy Acceptance Coverage
+### Step 2.6: Add Managed-Agent Proxy and Network-Restriction Acceptance Coverage
 
 Primary test area:
 
 - `scripts/test_scripts/e2e_124_worker_pma_proxy.py`
+
+Primary implementation areas to keep in mind:
+
+- `worker_node/cmd/worker-api/main.go`
+- `worker_node/internal/nodeagent/runargs.go`
+- `worker_node/cmd/node-manager/main.go`
 
 Checklist:
 
@@ -377,6 +391,13 @@ Checklist:
 
 - [ ] Keep this distinct from the external bearer-token managed-service proxy coverage.
 
+- [ ] Add acceptance assertions that reflect the updated security contract:
+  agent traffic must go through worker proxies in both directions, and direct inbound or outbound network paths to the agent are not acceptable.
+
+- [ ] Make sure proxy-focused acceptance coverage does not bless published-port or other direct-network shortcuts as valid product behavior.
+
+- [ ] If the current implementation still depends on direct-network behavior for orchestrator-to-agent traffic, capture that as an expected implementation gap to be fixed in Phase 3 rather than weakening the acceptance contract.
+
 ### Phase 2 Exit Criteria
 
 - [ ] The previously weak green tests now enforce exact contract details.
@@ -384,6 +405,8 @@ Checklist:
 - [ ] At least one task reference test uses task name rather than UUID for each supported surface.
 
 - [ ] Chat, auth, telemetry, and proxy assertions are strict enough to catch contract drift rather than just endpoint responsiveness.
+
+- [ ] Proxy-focused acceptance tests now enforce the updated agent network-restriction security boundary, not just happy-path proxy responsiveness.
 
 ## Phase 3: Fix Go Drifts Exposed by Hardened Tests
 
@@ -461,21 +484,32 @@ Checklist:
 
 - [ ] Re-run the telemetry E2E subset after the change.
 
-### Step 3.6: Reconcile Internal Worker Proxy Status Codes
+### Step 3.6: Reconcile Worker Proxy Behavior With Agent Network Restriction
 
 Primary file:
 
 - `worker_node/cmd/worker-api/main.go`
 
+Additional primary areas:
+
+- `worker_node/internal/nodeagent/runargs.go`
+- `worker_node/cmd/node-manager/main.go`
+
 Checklist:
 
 - [ ] Align internal proxy error translation with the expected managed-agent proxy contract.
+
+- [ ] Remove or replace any direct-network orchestrator-to-agent path that conflicts with `REQ-WORKER-0174`.
+
+- [ ] Ensure agent containers are started with network restriction and that both inbound and outbound agent traffic go through worker proxy paths.
+
+- [ ] Replace published-port or equivalent direct-network reachability with a proxy-compatible non-direct path if needed (for example a worker-mediated local binding rather than direct container networking).
 
 - [ ] Re-run the internal proxy acceptance tests after the change.
 
 ### Phase 3 Exit Criteria
 
-- [ ] The Go implementation now passes the hardened tests for auth, task, readiness, telemetry, and proxy behavior.
+- [ ] The Go implementation now passes the hardened tests for auth, task, readiness, telemetry, proxy behavior, and agent network restriction.
 
 - [ ] No temporary compatibility shortcuts were introduced without clear justification.
 

@@ -103,7 +103,37 @@ Worker API loads `WORKER_NODE_CONFIG_JSON` once at startup.
 It does not re-read config when the orchestrator later adds or removes managed services (e.g. dynamic config).
 So new managed services only get internal proxy listeners after a Worker API restart that receives the updated config.
 
-## 6. Summary Table
+## 6. Does the Proxy Setup Support Agent Containers With No Networking?
+
+**Short answer: No.**
+The current implementation does not start managed agent containers (PMA, PAA, SBA) with no networking (e.g. `--network none`).
+
+### 6.1 Spec and Requirement Stance
+
+Per [REQ-WORKER-0174](../requirements/worker.md#req-worker-0174) and [worker_node.md](../tech_specs/worker_node.md) (CYNAI.WORKER.AgentNetworkRestriction): **all** agent runtimes on a worker (whether managed service or not, including PMA, PAA, SBA) MUST be network restricted, and all inbound and outbound traffic MUST route through worker proxies; violating this violates a security boundary and is not acceptable.
+Managed service containers MUST be started with network restriction so they have no network path except to the worker proxy.
+Sandbox containers (job runners, including SBA) are already required to be network-restricted per [sandbox_container.md](../tech_specs/sandbox_container.md).
+Implementation MUST converge to this; the current implementation (port-publish for orchestrator-to-agent) is a gap until orchestrator-to-agent uses a non-network path (e.g. UDS).
+
+### 6.2 Current Implementation
+
+In `worker_node/internal/nodeagent/runargs.go`, `BuildManagedServiceRunArgs`:
+
+- Mounts the per-service UDS directory so the agent can call the internal proxy (agent-to-orchestrator) with no network.
+- Does **not** set `--network none` (or equivalent).
+- Publishes a host port for the service type (e.g. `-p 8090:8090` for PMA) so the Worker API can reach the agent for **orchestrator-to-agent** traffic (chat handoff, health).
+
+Orchestrator-to-agent is implemented as Worker API issuing HTTP requests to the agent (e.g. `http://127.0.0.1:8090` or `host.containers.internal:8090`).
+That requires the agent container to be reachable on a port, so the container is started with the default bridge (or host) network and port publish.
+So the proxy setup today does **not** support starting agent containers with no networking.
+
+### 6.3 What Would Be Needed for No-Network Agent Containers
+
+Agent-to-orchestrator already uses UDS (no network).
+To run agent containers with `--network none`, orchestrator-to-agent would also need a non-network path: for example a second UDS (or shared socket) on which the agent listens for incoming requests and the Worker API connects, so that no TCP port or network namespace is required.
+That would be a design and implementation change (agent image would need to support a UDS server for incoming proxy requests, and the worker would need to use that instead of HTTP to a published port).
+
+## 7. Summary Table
 
 - **Scenario:** Node Manager starts Worker API **binary**; config has managed_services
   - internal proxy uds listeners (agent-to-orchestrator): Yes (env inherited; Worker API creates listeners).
@@ -114,9 +144,10 @@ So new managed services only get internal proxy listeners after a Worker API res
 - **Scenario:** Config has no managed_services
   - internal proxy uds listeners (agent-to-orchestrator): No (nothing to listen for).
 
-## 7. References
+## 8. References
 
-- Spec: [Worker Node](../tech_specs/worker_node.md) - Worker Proxy Bidirectional (Managed Agents), Agent-To-Orchestrator UDS Binding.
+- Requirement: [REQ-WORKER-0174](../requirements/worker.md#req-worker-0174) - All agents network restricted; all traffic via worker proxies; security boundary.
+- Spec: [Worker Node](../tech_specs/worker_node.md) - Worker Proxy Bidirectional (Managed Agents), Agent Network Restriction (CYNAI.WORKER.AgentNetworkRestriction), Agent-To-Orchestrator UDS Binding.
 - Spec: [Worker API](../tech_specs/worker_api.md) - Internal proxy routes and per-service UDS.
 - Implementation: `worker_node/cmd/worker-api/main.go` - `loadWorkerProxyConfig`, `applyNodeConfigToWorkerProxyConfig`, `startInternalUDSListeners`.
 - Implementation: `worker_node/cmd/node-manager/main.go` - `startWorkerAPIBinary` (inherits env), `startWorkerAPIContainer` (does not pass node config env).

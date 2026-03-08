@@ -95,6 +95,7 @@ Normative behavior:
   See [`docs/tech_specs/worker_node_payloads.md`](worker_node_payloads.md) `node_capability_report_v1` `managed_services_status`.
 - The worker MUST NOT treat managed service containers as sandbox containers.
   Managed services may be privileged relative to sandbox workloads, but must still comply with system security boundaries.
+- The worker MUST start managed service containers (agent runtimes) with network restriction so that all inbound and outbound traffic routes through worker proxies; see [Worker Proxy Bidirectional (Managed Agents)](#worker-proxy-bidirectional-managed-agents) and [REQ-WORKER-0174](../requirements/worker.md#req-worker-0174).
 
 PMA as managed service (normative):
 
@@ -107,7 +108,18 @@ PMA as managed service (normative):
 - Spec ID: `CYNAI.WORKER.WorkerProxyBidirectionalManagedAgents` <a id="spec-cynai-worker-proxybidirectional"></a>
 
 Whenever an agent runtime (PMA, PAA, SBA, or other managed agent) runs on a worker, it MUST communicate with the orchestrator through the worker proxy in both directions.
-There is no exception: the agent MUST NOT be given direct orchestrator URLs or network access; all traffic flows through the worker proxy.
+The agent MUST NOT be given direct orchestrator URLs or network access; all traffic flows through the worker proxy.
+
+### Agent Network Restriction (Security Boundary)
+
+- Spec ID: `CYNAI.WORKER.AgentNetworkRestriction` <a id="spec-cynai-worker-agentnetworkrestriction"></a>
+
+Traces To: [REQ-WORKER-0174](../requirements/worker.md#req-worker-0174).
+
+All agent runtimes on a worker (whether running as a managed service or not, including PMA, PAA, SBA, and any other agent) MUST be network restricted.
+All inbound and outbound traffic to or from those agents MUST route through worker proxies; there MUST be no direct network path that bypasses the worker proxy.
+Violating this violates a security boundary and is not acceptable.
+Managed service containers (e.g. PMA, PAA) MUST be started with network restriction so that they have no network path except to the worker proxy (e.g. loopback or UDS to proxy endpoints); the worker MUST NOT start agent containers with unrestricted network access.
 
 ### Worker Proxy Normative Behavior
 

@@ -378,8 +378,9 @@ The Worker API MUST support a bidirectional proxy for worker-managed agent runti
 - orchestrator (and user-gateway) -> agent container, and
 - agent container -> orchestrator (MCP gateway and control-plane callbacks).
 
-This is required so managed agent containers do not need direct network access to orchestrator endpoints and so the orchestrator
-does not need direct network access to agent containers.
+All agent runtimes on a worker (whether managed service or not) MUST be network restricted; all inbound and outbound traffic MUST route through worker proxies.
+Violating this violates a security boundary and is not acceptable ([REQ-WORKER-0174](../requirements/worker.md#req-worker-0174)).
+Managed agent containers MUST NOT be given direct network access to the orchestrator or any other external endpoint; the orchestrator MUST NOT be given direct network access to agent containers; all traffic flows through the Worker API proxy.
 
 #### Orchestrator to Agent Proxy
 

@@ -259,6 +259,12 @@ It covers worker-node behavior and the worker API contract for job execution and
 - **REQ-WORKER-0173:** Encryption at rest for the node-local secure store MUST use a post-quantum key encapsulation mechanism when permitted by the platform and MUST fall back to a FIPS-approved symmetric AEAD when the post-quantum mechanism is not available or not permitted.
   [CYNAI.WORKER.NodeLocalSecureStore](../tech_specs/worker_node.md#spec-cynai-worker-nodelocalsecurestore)
   <a id="req-worker-0173"></a>
+- **REQ-WORKER-0174:** All agent runtimes on a worker (whether running as a managed service or not, including PMA, PAA, SBA, and any other agent) MUST be network restricted.
+  All inbound and outbound traffic to or from those agents MUST route through worker proxies; there MUST be no direct network path that bypasses the worker proxy.
+  Violating this requirement violates a security boundary and is not acceptable.
+  [CYNAI.WORKER.AgentNetworkRestriction](../tech_specs/worker_node.md#spec-cynai-worker-agentnetworkrestriction)
+  [CYNAI.WORKER.WorkerProxyBidirectionalManagedAgents](../tech_specs/worker_node.md#spec-cynai-worker-proxybidirectional)
+  <a id="req-worker-0174"></a>
 - **REQ-WORKER-0200:** Worker Telemetry API MUST require bearer token authentication for all telemetry endpoints.
   [CYNAI.WORKER.TelemetryApiAuth](../tech_specs/worker_telemetry_api.md#spec-cynai-worker-telemetryauth)
   <a id="req-worker-0200"></a>
