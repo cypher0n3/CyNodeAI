@@ -2,8 +2,8 @@ package main
 
 import (
 	"bytes"
-	"encoding/base64"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"log/slog"
 	"net/http"
@@ -23,8 +23,8 @@ import (
 )
 
 const (
-	testAddrLoopback     = "127.0.0.1:12345"
-	testBodyProxyPostX   = `{"version":1,"method":"POST","path":"/x"}`
+	testAddrLoopback   = "127.0.0.1:12345"
+	testBodyProxyPostX = `{"version":1,"method":"POST","path":"/x"}`
 )
 
 func TestGetEnv(t *testing.T) {
@@ -173,6 +173,10 @@ func TestHandleRunJob(t *testing.T) {
 	t.Run("success with workspace root", func(t *testing.T) {
 		muxWithWorkspace := newMux(executor.New("direct", 5*time.Second, 1024, "", "", nil), "test-bearer", t.TempDir(), nil, slog.Default())
 		postRunJobSuccess(t, muxWithWorkspace, body)
+	})
+	t.Run("success with empty workspace root", func(t *testing.T) {
+		muxEmptyRoot := newMux(executor.New("direct", 5*time.Second, 1024, "", "", nil), "test-bearer", "", nil, slog.Default())
+		postRunJobSuccess(t, muxEmptyRoot, body)
 	})
 	t.Run("workspace creation failure returns 500", func(t *testing.T) {
 		dir := t.TempDir()
@@ -529,6 +533,72 @@ func TestTelemetryListContainersNextPageToken(t *testing.T) {
 func TestTelemetryGetContainerEmptyID(t *testing.T) {
 	_, _, mux := telemetryMuxWithStore(t)
 	telemetryGET(t, mux, "/v1/worker/telemetry/containers/", http.StatusNotFound)
+}
+
+func TestPrepareWorkspace(t *testing.T) {
+	dir, cleanup, err := prepareWorkspace("", "job-1")
+	if err != nil || dir != "" || cleanup != nil {
+		t.Fatalf("empty root: dir=%q err=%v", dir, err)
+	}
+	root := t.TempDir()
+	dir, cleanup, err = prepareWorkspace(root, "job-1")
+	if err != nil || dir == "" || cleanup == nil {
+		t.Fatalf("normal: dir=%q err=%v", dir, err)
+	}
+	defer cleanup()
+	if !strings.Contains(dir, "job-1") {
+		t.Errorf("dir should contain job id: %s", dir)
+	}
+}
+
+func TestRecordNodeBoot_InsertFails(t *testing.T) {
+	ctx := context.Background()
+	store, err := telemetry.Open(ctx, t.TempDir())
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	_ = store.Close()
+	logger := slog.Default()
+	recordNodeBoot(ctx, store, logger)
+	recordNodeBoot(ctx, store, nil)
+}
+
+func TestListenInternalUnix_Success(t *testing.T) {
+	socketPath := filepath.Join(t.TempDir(), "internal.sock")
+	srv := newInternalServer(newInternalMux(internalOrchestratorProxyConfig{}, slog.Default()))
+	serverErr := make(chan error, 1)
+	cleanup, code := listenInternalUnix(socketPath, srv, serverErr, slog.Default())
+	if code != 0 || cleanup == nil {
+		t.Fatalf("listenInternalUnix: code=%d", code)
+	}
+	cleanup()
+}
+
+func TestForwardManagedProxyRequest_TimeoutClamped(t *testing.T) {
+	t.Setenv("WORKER_MANAGED_PROXY_UPSTREAM_TIMEOUT_SEC", "0")
+	req := &managedServiceProxyRequest{Version: 1, Method: http.MethodGet, Path: "/x"}
+	_, status, _ := forwardManagedProxyRequest(
+		context.Background(),
+		managedServiceTarget{ServiceType: "pma", BaseURL: "http://127.0.0.1:1"},
+		req, nil,
+	)
+	if status != http.StatusBadGateway {
+		t.Errorf("expected 502, got %d", status)
+	}
+}
+
+func TestDecodeManagedProxyRequest_RequestBodyTooLarge(t *testing.T) {
+	t.Setenv("WORKER_MANAGED_SERVICE_TARGETS_JSON", `{"x":{"service_type":"pma","base_url":"http://127.0.0.1:1"}}`)
+	mux := newMux(executor.New("direct", time.Second, 1024, "", "", nil), "token", "", nil, slog.Default())
+	bigBody := bytes.Repeat([]byte("x"), maxManagedProxyBodyBytes+1)
+	body := []byte(`{"version":1,"method":"POST","path":"/y","body_b64":"` + base64.StdEncoding.EncodeToString(bigBody) + `"}`)
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodPost, "/v1/worker/managed-services/x/proxy:http", bytes.NewReader(body))
+	r.Header.Set("Authorization", "Bearer token")
+	mux.ServeHTTP(w, r)
+	if w.Code != http.StatusRequestEntityTooLarge {
+		t.Errorf("expected 413, got %d %s", w.Code, w.Body.String())
+	}
 }
 
 func TestRunRetentionAndVacuum_TickerBranches(t *testing.T) {

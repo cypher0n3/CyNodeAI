@@ -21,6 +21,34 @@ import (
 	"github.com/google/uuid"
 )
 
+// cmdRunner is used for exec operations so tests can inject a fake. Production uses realCmdRunner.
+type cmdRunner interface {
+	LookPath(string) (string, error)
+	CombinedOutput(string, ...string) ([]byte, error)
+	StartDetached(string, []string, []string) error
+}
+
+var runner cmdRunner = realCmdRunner{}
+
+type realCmdRunner struct{}
+
+func (realCmdRunner) LookPath(bin string) (string, error) { return exec.LookPath(bin) }
+func (realCmdRunner) CombinedOutput(name string, args ...string) ([]byte, error) {
+	cmd := exec.Command(name, args...)
+	return cmd.CombinedOutput()
+}
+func (realCmdRunner) StartDetached(name string, args, env []string) error {
+	cmd := exec.CommandContext(context.Background(), name, args...)
+	cmd.Env = env
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if err := cmd.Start(); err != nil {
+		return err
+	}
+	go func() { _ = cmd.Wait() }()
+	return nil
+}
+
 func main() {
 	os.Exit(runMain(context.Background()))
 }
@@ -108,14 +136,18 @@ func recordNodeBootTelemetry(ctx context.Context, store *telemetry.Store, logger
 	return nil
 }
 
+// retentionTickerInterval and vacuumTickerInterval are used by runTelemetryRetentionAndVacuum; tests may override for coverage.
+var retentionTickerInterval = time.Hour
+var vacuumTickerInterval = 24 * time.Hour
+
 // runTelemetryRetentionAndVacuum runs retention on startup and hourly, vacuum daily (REQ-WORKER-0220, 0221, 0222).
 func runTelemetryRetentionAndVacuum(ctx context.Context, store *telemetry.Store, logger *slog.Logger) {
 	if err := store.EnforceRetention(ctx); err != nil && logger != nil {
 		logger.Warn("telemetry retention on startup", "error", err)
 	}
-	retentionTicker := time.NewTicker(time.Hour)
+	retentionTicker := time.NewTicker(retentionTickerInterval)
 	defer retentionTicker.Stop()
-	vacuumTicker := time.NewTicker(24 * time.Hour)
+	vacuumTicker := time.NewTicker(vacuumTickerInterval)
 	defer vacuumTicker.Stop()
 	for {
 		select {
@@ -165,13 +197,12 @@ func startWorkerAPI(bearerToken string) error {
 func startWorkerAPIBinary(bearerToken string) error {
 	bin := getEnv("NODE_MANAGER_WORKER_API_BIN", "worker-api")
 	if !strings.Contains(bin, "/") {
-		path, err := exec.LookPath(bin)
+		path, err := runner.LookPath(bin)
 		if err != nil {
 			return err
 		}
 		bin = path
 	}
-	cmd := exec.CommandContext(context.Background(), bin)
 	env := os.Environ()
 	env = append(env, "WORKER_API_BEARER_TOKEN="+bearerToken)
 	for _, key := range []string{"INFERENCE_PROXY_IMAGE", "OLLAMA_UPSTREAM_URL", "CONTAINER_RUNTIME", "WORKER_API_STATE_DIR"} {
@@ -179,14 +210,7 @@ func startWorkerAPIBinary(bearerToken string) error {
 			env = append(env, key+"="+v)
 		}
 	}
-	cmd.Env = env
-	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
-	if err := cmd.Start(); err != nil {
-		return err
-	}
-	go func() { _ = cmd.Wait() }()
-	return nil
+	return runner.StartDetached(bin, nil, env)
 }
 
 // startWorkerAPIContainer starts worker-api as a container (worker-managed service). Uses effectiveStateDir
@@ -194,10 +218,9 @@ func startWorkerAPIBinary(bearerToken string) error {
 func startWorkerAPIContainer(image, bearerToken string) error {
 	rt := getEnv("CONTAINER_RUNTIME", "podman")
 	stateDir := effectiveStateDir()
-	check := exec.Command(rt, "ps", "-a", "--format", "{{.Names}}")
-	out, err := check.Output()
+	out, err := runner.CombinedOutput(rt, "ps", "-a", "--format", "{{.Names}}")
 	if err == nil && strings.Contains(string(out), workerAPIContainerName) {
-		if out2, err2 := exec.Command(rt, "start", workerAPIContainerName).CombinedOutput(); err2 != nil {
+		if out2, err2 := runner.CombinedOutput(rt, "start", workerAPIContainerName); err2 != nil {
 			return fmt.Errorf("start existing worker-api container: %w: %s", err2, strings.TrimSpace(string(out2)))
 		}
 		return nil
@@ -218,8 +241,7 @@ func startWorkerAPIContainer(image, bearerToken string) error {
 		}
 	}
 	args = append(args, image)
-	cmd := exec.Command(rt, args...)
-	if out, err := cmd.CombinedOutput(); err != nil {
+	if out, err := runner.CombinedOutput(rt, args...); err != nil {
 		return fmt.Errorf("worker-api container: %w: %s", err, strings.TrimSpace(string(out)))
 	}
 	return nil
@@ -234,18 +256,14 @@ func startOllama(image, variant string) error {
 	}
 	name := getEnv("OLLAMA_CONTAINER_NAME", "cynodeai-ollama")
 	// Skip if already present (e.g. started by orchestrator compose with ollama profile)
-	check := exec.Command(rt, "ps", "-a", "--format", "{{.Names}}")
-	out, err := check.Output()
+	out, err := runner.CombinedOutput(rt, "ps", "-a", "--format", "{{.Names}}")
 	if err == nil && strings.Contains(string(out), name) {
-		_ = exec.Command(rt, "start", name).Run()
+		_, _ = runner.CombinedOutput(rt, "start", name)
 		return nil
 	}
 	// variant (rocm, cuda, cpu) can be used for image selection or env; Phase 1 we use image as-is.
-	cmd := exec.Command(rt, "run", "-d", "--name", name, "-p", "11434:11434", image)
-	if variant != "" {
-		cmd.Env = append(os.Environ(), "OLLAMA_GPU_DRIVER="+variant)
-	}
-	if out, err := cmd.CombinedOutput(); err != nil {
+	args := []string{"run", "-d", "--name", name, "-p", "11434:11434", image}
+	if out, err := runner.CombinedOutput(rt, args...); err != nil {
 		return fmt.Errorf("%w: %s", err, strings.TrimSpace(string(out)))
 	}
 	return nil
@@ -302,19 +320,16 @@ func buildManagedServiceRunArgs(rt string, svc *nodepayloads.ConfigManagedServic
 
 // startOneManagedService ensures the managed service container is running and, for PMA, waits for /healthz.
 func startOneManagedService(rt string, svc *nodepayloads.ConfigManagedService, serviceID, serviceType, image, name string) error {
-	check := exec.Command(rt, "ps", "-a", "--format", "{{.Names}}")
-	out, err := check.Output()
+	out, err := runner.CombinedOutput(rt, "ps", "-a", "--format", "{{.Names}}")
 	if err == nil && strings.Contains(string(out), name) {
-		_ = exec.Command(rt, "start", name).Run()
+		_, _ = runner.CombinedOutput(rt, "start", name)
 		if strings.EqualFold(serviceType, "pma") {
 			waitForPMAReady(getEnv("PMA_PORT", "8090"), 30*time.Second)
 		}
 		return nil
 	}
 	args := buildManagedServiceRunArgs(rt, svc, serviceID, serviceType, image, name)
-	cmd := exec.Command(rt, args...)
-	cmd.Env = os.Environ()
-	if out, err := cmd.CombinedOutput(); err != nil {
+	if out, err := runner.CombinedOutput(rt, args...); err != nil {
 		return fmt.Errorf("managed service %q: %w: %s", serviceID, err, strings.TrimSpace(string(out)))
 	}
 	if strings.EqualFold(serviceType, "pma") {

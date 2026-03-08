@@ -13,6 +13,7 @@ import unittest
 
 from scripts.test_scripts import config, helpers
 from scripts.test_scripts import e2e_tags
+import scripts.test_scripts.e2e_state as state
 
 # Repo root (parent of scripts/)
 _ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -137,6 +138,25 @@ def _run_prereq_checks():
         sys.exit(1)
 
 
+def _ensure_shared_auth_config():
+    """Ensure shared E2E auth config exists with a valid token for dependent tests."""
+    state.init_config()
+    token = helpers.read_token_from_config(state.CONFIG_PATH)
+    if token:
+        return
+    ok, out, err = helpers.run_cynork(
+        ["auth", "login", "-u", "admin", "-p", config.ADMIN_PASSWORD],
+        state.CONFIG_PATH,
+    )
+    if not ok:
+        print("Error: auth login prereq failed for shared E2E config", file=sys.stderr)
+        if out:
+            print(out, file=sys.stderr)
+        if err:
+            print(err, file=sys.stderr)
+        sys.exit(1)
+
+
 def _proxy_pma_only(opts):
     """True when only suite_proxy_pma is requested (minimal services; no gateway/cynork)."""
     include = [t.strip() for t in (opts.tags or "").split(",") if t.strip()]
@@ -179,6 +199,7 @@ def main():
                     )
                     sys.exit(1)
         _run_prereq_checks()
+        _ensure_shared_auth_config()
         include_tags = [t.strip() for t in (opts.tags or "").split(",") if t.strip()]
         if "pma_inference" in include_tags and not opts.skip_ollama:
             if not helpers.wait_for_pma_chat_ready(timeout_sec=180, poll_interval=5):

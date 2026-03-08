@@ -75,15 +75,21 @@ Do not harden chat or SBA assertions until the baseline runtime path is working.
 
 ### Step 0.1: Capture a Clean Baseline
 
-- [ ] Start the stack with the same recipe used by the failing run.
+- [x] Start the stack with the same recipe used by the failing run.
 
-- [ ] Capture a fresh inference-focused baseline with:
+- [x] Capture a fresh inference-focused baseline with:
   `just e2e --no-build -v --tags inference`
 
-- [ ] Save the full output to a timestamped file in `docs/dev_docs` or `tmp`.
+- [x] Save the full output to a timestamped file in `docs/dev_docs` or `tmp`.
 
 - [ ] Confirm the current failing set still includes:
   `e2e_090`, `e2e_110`, `e2e_115`, `e2e_140`, `e2e_145`, `e2e_192`, `e2e_193`, and `e2e_194`.
+
+Progress:
+
+- [x] Fresh baseline captured in `tmp/e2e_inference_baseline_20260308-035321.log`.
+
+- [ ] Current failure shape has shifted from the original set: the latest inference-tag run is dominated by config-prereq skips and one SBA helper crash (`NoneType` config path), so this specific "same failing set" check remains open.
 
 ### Step 0.2: Fix Orchestrator Chat Inference Failures
 
@@ -102,13 +108,13 @@ Primary files to inspect:
 
 Checklist:
 
-- [ ] Trace how chat requests flow from `cynork` to the gateway and then to orchestrator inference.
+- [x] Trace how chat requests flow from `cynork` to the gateway and then to orchestrator inference.
 
-- [ ] Determine whether the failure is caused by upstream inference configuration, connection routing, timeout handling, or bad error translation.
+- [x] Determine whether the failure is caused by upstream inference configuration, connection routing, timeout handling, or bad error translation.
 
-- [ ] Fix the root cause without weakening error handling.
+- [x] Fix the root cause without weakening error handling.
 
-- [ ] Re-run:
+- [x] Re-run:
   `just e2e --no-build -v --tags chat`
 
 - [ ] Verify that `e2e_110`, `e2e_115`, `e2e_192`, `e2e_193`, and `e2e_194` now reach the chat path reliably enough to exercise behavior rather than fail immediately at transport.
@@ -143,15 +149,15 @@ Primary files to inspect:
 
 Checklist:
 
-- [ ] Trace how SBA tasks are turned into worker job requests.
+- [x] Trace how SBA tasks are turned into worker job requests.
 
-- [ ] Confirm the expected worker API base URL and port are reachable from the caller making the request.
+- [x] Confirm the expected worker API base URL and port are reachable from the caller making the request.
 
 - [ ] Check whether the worker API is started, healthy, and actually ready when the SBA request is sent.
 
-- [ ] Fix the root cause of the timeout.
+- [x] Fix the root cause of the timeout.
 
-- [ ] Re-run:
+- [x] Re-run:
   `just e2e --no-build -v --tags sba_inference`
 
 - [ ] Verify that `e2e_140` and `e2e_145` move past transport timeout failures.
@@ -178,16 +184,16 @@ Primary files to inspect:
 
 Checklist:
 
-- [ ] Reproduce the proxy test setup failure in isolation.
+- [x] Reproduce the proxy test setup failure in isolation.
 
-- [ ] Identify whether the failure is due to missing env vars, binary startup assumptions, fixed port collisions, or health/readiness mismatch.
+- [x] Identify whether the failure is due to missing env vars, binary startup assumptions, fixed port collisions, or health/readiness mismatch.
 
 - [ ] Keep the updated security-boundary contract in mind while fixing setup:
   getting the test class to execute is necessary, but it must not lock in direct-network behavior that is now out of spec under `REQ-WORKER-0174`.
 
 - [ ] Fix the setup path so the test class runs its assertions instead of skipping.
 
-- [ ] Re-run:
+- [x] Re-run:
   `just e2e --no-build -v --tags suite_proxy_pma`
 
 - [ ] Verify that the proxy test classes execute real assertions.
@@ -206,7 +212,7 @@ Progress:
 
 - [ ] Proxy-functional E2E setup is reliable enough to execute its assertions.
 
-- [ ] A new baseline run is saved for comparison before moving to Phase 1.
+- [x] A new baseline run is saved for comparison before moving to Phase 1.
 
 Current status note:
 

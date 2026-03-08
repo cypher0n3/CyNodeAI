@@ -13,6 +13,13 @@ class TestSbaTask(unittest.TestCase):
 
     tags = ["suite_agents", "full_demo", "inference", "sba_inference"]
 
+    def setUp(self):
+        if not state.CONFIG_PATH or not os.path.isfile(state.CONFIG_PATH):
+            self.skipTest("CONFIG_PATH not set (run after auth login prereq)")
+        token = helpers.read_token_from_config(state.CONFIG_PATH)
+        if not token:
+            self.skipTest("auth token missing from config (run after auth login prereq)")
+
     def test_sba_task(self):
         """Create SBA task, poll until done; set SBA_TASK_ID only on success; assert sba_result."""
         if os.environ.get("E2E_SKIP_INFERENCE_SMOKE", "") or config.E2E_SKIP_INFERENCE_SMOKE:
