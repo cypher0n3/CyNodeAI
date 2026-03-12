@@ -1,0 +1,114 @@
+# Orchestrator Bootstrap Example (Minimal for Phase 1)
+
+# Load at Startup via Config (`e.g`. Bootstrap.yaml_path.yaml_path)
+
+# Secrets MUST NOT Be Stored Here; Use Environment Variables or a Secrets Manager
+
+# Example: Set CYNODE_NODE_REGISTRATION_PSK for Node Registration PSK
+
+version: 1
+
+# Preference Defaults (Scope_type=system_type=system); Optional
+
+# These Are User-Facing Task-Execution Preferences and Constraints Written to Preference_entries_entries
+
+# This is Not Deployment or Service Configuration
+
+preferences:
+
+- key: output.summary_style
+    value: concise
+    value_type: string
+- key: language.preferred
+    value: en
+    value_type: string
+- key: code.language.rank_ordered
+    value:
+  - language: go
+        preferred_for:
+          project_kinds:
+            - backend
+            - cli
+            - infra
+  - language: python
+        preferred_for:
+          project_kinds:
+            - data
+            - tooling
+            - scripts
+    value_type: array
+- key: code.language.disallowed
+    value:
+  - php
+  - perl
+    value_type: array
+- key: standards.markdown.line_length
+    value: 100
+    value_type: number
+- key: definition_of_done.required_checks
+    value:
+  - lint
+  - unit_tests
+  - docs_updated
+    value_type: array
+
+# System Settings (Operational Configuration and Policy Parameters); Optional
+
+# System Settings Are Not User Task-Execution Preferences
+
+system_settings:
+
+- key: agents.project_manager.model.selection.execution_mode
+    value: auto
+    value_type: string
+- key: agents.project_manager.model.selection.mode
+    value: auto_sliding_scale
+    value_type: string
+- key: agents.project_manager.model.selection.prefer_orchestrator_host
+    value: true
+    value_type: boolean
+
+# Optional Override
+
+# - When Set, Pins the Effective Local Project Manager Model Name
+
+# - When Unset, the Effective Local Project Manager Model is Selected Automatically
+
+# - `qwen3.5:0.8b` is the Smallest Supported Fallback Model for Limited Systems
+
+#
+
+# - Key: Agents.project_manager.model.local_default_ollama_model.project_manager.model.local_default_ollama_model
+
+# Value: `qwen3.5:0.8b`
+
+# Value_type_type: String
+
+# Model Management Defaults (Operational Settings)
+
+- key: models.cache.max_bytes
+    value: 107374182400
+    value_type: number
+- key: models.download.require_user_approval
+    value: true
+    value_type: boolean
+
+# Access Control Rules; Optional
+
+# Used to Seed Access_control_rules_control_rules for Policy Enforcement
+
+access_control_rules: []
+
+# Optional: Sandbox Image Registry Defaults (Registry URL, Policy)
+
+# Sandbox_image_registry_image_registry: {}
+
+# Optional: Initial Admin User for Fresh Install (REQ-IDENTY-0113)
+
+# Password MUST Come From Env or Secrets Manager; Do Not Put Hashes Here
+
+# Admin_user_user
+
+# Handle: Admin
+
+# Password_env_env: CYNODE_ADMIN_PASSWORD
