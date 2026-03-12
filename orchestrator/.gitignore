@@ -1,14 +1,11 @@
 # Binaries (just build outputs and local go build)
 bin/
-!**/control-plane/
-control-plane
-control-plane-dev
-!**/user-gateway/
-user-gateway
-user-gateway-dev
-!**/api-egress/
-api-egress
-api-egress-dev
-!**/mcp-gateway/
-mcp-gateway
-mcp-gateway-dev
+# Only ignore binaries at module root, not cmd/<name>/ source dirs
+/control-plane
+/control-plane-dev
+/user-gateway
+/user-gateway-dev
+/api-egress
+/api-egress-dev
+/mcp-gateway
+/mcp-gateway-dev

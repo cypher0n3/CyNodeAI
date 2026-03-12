@@ -10,25 +10,28 @@ bin-dev/
 **/bin/
 **/bin-dev/
 
-# Go build binary names (justfile build-* outputs; ignore anywhere in tree)
-cynode-pma
-!agents/cmd/cynode-pma/
-**/cynode-pma-dev
-cynode-sba
-!agents/cmd/cynode-sba/
-**/cynode-sba-dev
-**/control-plane-dev
-**/user-gateway-dev
-**/api-egress-dev
-**/mcp-gateway-dev
-**/worker-api-dev
-node-manager
-!worker_node/cmd/node-manager/
-**/node-manager-dev
-**/cynodeai-wnm-dev
-inference-proxy
-!worker_node/cmd/inference-proxy/
-**/inference-proxy-dev
+# Go build binary names (justfile build-* outputs; bin/ already ignored via **/bin/)
+# Only match binaries at module root, not cmd/<name>/ source dirs
+agents/cynode-pma
+agents/cynode-pma-dev
+agents/cynode-sba
+agents/cynode-sba-dev
+orchestrator/control-plane
+orchestrator/control-plane-dev
+orchestrator/user-gateway
+orchestrator/user-gateway-dev
+orchestrator/api-egress
+orchestrator/api-egress-dev
+orchestrator/mcp-gateway
+orchestrator/mcp-gateway-dev
+worker_node/worker-api
+worker_node/worker-api-dev
+worker_node/node-manager
+worker_node/node-manager-dev
+worker_node/cynodeai-wnm
+worker_node/cynodeai-wnm-dev
+worker_node/inference-proxy
+worker_node/inference-proxy-dev
 
 # File Patterns
 *.backup*
