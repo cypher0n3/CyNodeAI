@@ -226,19 +226,19 @@ This phase defines the shared implementation seams that both the fullscreen TUI 
 
 ### Controller and Session State
 
-- [ ] Extract reusable chat-session or controller logic out of the CLI command layer so request shaping, slash handling, thread actions, and in-flight chat state are not owned only by the fullscreen UI.
+- [x] Extract reusable chat-session or controller logic out of the CLI command layer so request shaping, slash handling, thread actions, and in-flight chat state are not owned only by the fullscreen UI.
 
-- [ ] Keep session state for model, project, thread, and auth recovery on instance-bound objects rather than package-level globals so parallel test execution and PTY automation remain reliable.
+- [x] Keep session state for model, project, thread, and auth recovery on instance-bound objects rather than package-level globals so parallel test execution and PTY automation remain reliable.
 
-- [ ] Define stable controller-facing actions and state transitions for send-message, fresh-thread, thread-switch, project-switch, model-switch, and auth-recovery flows.
+- [x] Define stable controller-facing actions and state transitions for send-message, fresh-thread, thread-switch, project-switch, model-switch, and auth-recovery flows.
 
 ### Transport and Rendering Seams
 
-- [ ] Add a client-side chat transport abstraction that can target both `POST /v1/chat/completions` and `POST /v1/responses`.
+- [x] Add a client-side chat transport abstraction that can target both `POST /v1/chat/completions` and `POST /v1/responses`.
 
-- [ ] Keep transcript assembly and canonical visible-text projection reusable so non-interactive CLI paths, PTY automation, and the fullscreen TUI all validate the same logical turn behavior.
+- [x] Keep transcript assembly and canonical visible-text projection reusable so non-interactive CLI paths, PTY automation, and the fullscreen TUI all validate the same logical turn behavior.
 
-- [ ] Add stable machine-detectable UI landmarks and reduced-noise test semantics where needed so PTY tests can assert on state transitions without depending on fragile redraw timing.
+- [x] Add stable machine-detectable UI landmarks and reduced-noise test semantics where needed so PTY tests can assert on state transitions without depending on fragile redraw timing.
 
 ## Phase 5 `cynork` TUI and Python PTY Harness Implementation
 
@@ -424,3 +424,6 @@ They must be developed in tandem so each validates the other as behavior lands, 
   `GetThreadByResponseID` reimplemented with GORM (jsonb containment + GetChatThreadByID); no Raw SQL; integration passes.
   Execution order step five done.
   Next: Phase 4 shared chat controller and testable seams.
+
+- **2026-03-12:** Phase 4 shared chat controller and testable seams completed: added `cynork/internal/chat` with `Session`, `ChatTransport` (CompletionsTransport, ResponsesTransport), `AssistantTurn`, and machine-detectable landmarks; refactored `cmd/chat.go` and `cmd/chat_slash.go` to use instance-bound session; gateway client now has `ResponsesWithOptions`; `just ci` passes.
+  Next: Phase 5 cynork TUI and Python PTY harness implementation.

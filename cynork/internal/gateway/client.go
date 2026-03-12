@@ -294,6 +294,67 @@ func (c *Client) ChatWithOptions(message, model, projectID string) (*ChatRespons
 	return &ChatResponse{Response: content}, nil
 }
 
+// ResponsesResponse is the parsed result from POST /v1/responses (canonical visible text from output items).
+type ResponsesResponse struct {
+	VisibleText string // concatenated text from output items with type "text"
+	ResponseID  string // id from response for continuation
+}
+
+// ResponsesWithOptions calls POST /v1/responses with input as a single user message string.
+// If model or projectID is non-empty they are sent in the body or as OpenAI-Project header respectively.
+func (c *Client) ResponsesWithOptions(message, model, projectID string) (*ResponsesResponse, error) {
+	input, err := json.Marshal(message)
+	if err != nil {
+		return nil, fmt.Errorf("marshal input: %w", err)
+	}
+	req := userapi.ResponsesCreateRequest{
+		Model: model,
+		Input: input,
+	}
+	body, err := json.Marshal(req)
+	if err != nil {
+		return nil, fmt.Errorf("marshal responses request: %w", err)
+	}
+	base, err := url.Parse(c.BaseURL)
+	if err != nil {
+		return nil, fmt.Errorf("invalid base URL: %w", err)
+	}
+	u, err := base.Parse("/v1/responses")
+	if err != nil {
+		return nil, fmt.Errorf("invalid path: %w", err)
+	}
+	httpReq, err := http.NewRequest(http.MethodPost, u.String(), bytes.NewReader(body))
+	if err != nil {
+		return nil, err
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+	if c.Token != "" {
+		httpReq.Header.Set("Authorization", "Bearer "+c.Token)
+	}
+	if projectID != "" {
+		httpReq.Header.Set("OpenAI-Project", projectID)
+	}
+	resp, err := c.HTTPClient.Do(httpReq)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		return nil, c.parseError(resp)
+	}
+	var out userapi.ResponsesCreateResponse
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		return nil, fmt.Errorf("decode responses: %w", err)
+	}
+	visible := ""
+	for _, item := range out.Output {
+		if item.Type == "text" {
+			visible += item.Text
+		}
+	}
+	return &ResponsesResponse{VisibleText: visible, ResponseID: out.ID}, nil
+}
+
 // NewChatThread calls POST /v1/chat/threads and returns the new thread ID.
 // Use this when the user wants to start a fresh conversation context.
 func (c *Client) NewChatThread(projectID string) (string, error) {

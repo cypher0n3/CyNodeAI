@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"bufio"
+	"context"
 	"fmt"
 	"io"
 	"os"
@@ -10,6 +11,7 @@ import (
 
 	"github.com/charmbracelet/glamour"
 	"github.com/charmbracelet/glamour/styles"
+	"github.com/cypher0n3/cynodeai/cynork/internal/chat"
 	"github.com/cypher0n3/cynodeai/cynork/internal/exit"
 	"github.com/cypher0n3/cynodeai/cynork/internal/gateway"
 	"github.com/peterh/liner"
@@ -21,10 +23,6 @@ var chatPlain bool
 var chatMessage string
 var chatProjectID string // --project-id flag (initial project for session)
 var chatThreadNew bool   // --thread-new flag: create a fresh thread before sending/opening session
-
-// chatSessionModel and chatSessionProjectID are the in-session model and project (set via /model, /project).
-var chatSessionModel string
-var chatSessionProjectID string
 
 var chatCmd = &cobra.Command{
 	Use:          "chat",
@@ -74,23 +72,27 @@ func runChat(_ *cobra.Command, _ []string) error {
 	}
 	client := gateway.NewClient(cfg.GatewayURL)
 	client.SetToken(cfg.Token)
-	chatSessionModel = ""
-	chatSessionProjectID = chatProjectID
+	session := chat.NewSession(client)
+	session.ProjectID = chatProjectID
+	session.Plain = chatPlain
+	session.NoColor = noColor
 	if chatThreadNew {
-		if err := startNewThread(client); err != nil {
-			return err
+		threadID, err := session.NewThread()
+		if err != nil {
+			return fmt.Errorf("start new thread: %w", err)
 		}
+		fmt.Fprintf(os.Stderr, "New thread started: %s\n", threadID)
 	}
 	if chatMessage != "" {
-		return sendAndPrintChat(client, chatMessage)
+		return sendAndPrintChat(session, chatMessage)
 	}
 	// Discoverability: show slash commands and shell escape at session start (spec CliChatSlashCommands, CliChatShellEscape).
 	fmt.Fprintln(os.Stderr, "Slash commands: /help for list. ! <cmd> run in shell.")
 	printSlashHelp()
 	if term.IsTerminal(int(os.Stdin.Fd())) && term.IsTerminal(int(os.Stdout.Fd())) {
-		return runChatLoopLiner(client)
+		return runChatLoopLiner(session)
 	}
-	return runChatLoopScanner(client)
+	return runChatLoopScanner(session)
 }
 
 // chatLineReader is set by tests to inject a line source; nil means use liner/scanner.
@@ -99,18 +101,18 @@ var chatLineReader func(prompt string) (string, error)
 // chatLinerGetLine is set by tests to use an injected getLine in runChatLoopLiner instead of creating liner state.
 var chatLinerGetLine func(prompt string) (string, error)
 
-func runChatLoopLiner(client *gateway.Client) error {
+func runChatLoopLiner(session *chat.Session) error {
 	if chatLinerGetLine != nil {
-		return runChatLoopWithReader(client, "> ", chatLinerGetLine)
+		return runChatLoopWithReader(session, "> ", chatLinerGetLine)
 	}
 	if chatLineReader != nil {
-		return runChatLoopWithReader(client, "> ", chatLineReader)
+		return runChatLoopWithReader(session, "> ", chatLineReader)
 	}
 	state := liner.NewLiner()
 	defer func() { _ = state.Close() }()
 	state.SetCompleter(slashCompleter)
 	state.SetCtrlCAborts(true)
-	return runChatLoopWithReader(client, "> ", func(prompt string) (string, error) {
+	return runChatLoopWithReader(session, "> ", func(prompt string) (string, error) {
 		line, err := state.Prompt(prompt)
 		if err == liner.ErrPromptAborted {
 			return "", liner.ErrPromptAborted
@@ -120,7 +122,7 @@ func runChatLoopLiner(client *gateway.Client) error {
 }
 
 // runChatLoopWithReader runs the chat loop using getLine for input; getLine returns ("", err) on EOF/abort.
-func runChatLoopWithReader(client *gateway.Client, prompt string, getLine func(string) (string, error)) error {
+func runChatLoopWithReader(session *chat.Session, prompt string, getLine func(string) (string, error)) error {
 	for {
 		line, err := getLine(prompt)
 		if err != nil {
@@ -129,7 +131,7 @@ func runChatLoopWithReader(client *gateway.Client, prompt string, getLine func(s
 			}
 			return err
 		}
-		exitSession, err := processChatLine(client, strings.TrimSpace(line))
+		exitSession, err := processChatLine(session, strings.TrimSpace(line))
 		if err != nil {
 			return err
 		}
@@ -142,7 +144,7 @@ func runChatLoopWithReader(client *gateway.Client, prompt string, getLine func(s
 // processChatLine handles one line of input; returns (exitSession, err). Empty line is no-op and returns (false, nil).
 // Slash, shell-escape, and chat message gateway errors are printed to stderr and do not exit the session
 // (spec CliChatSubcommandErrors). Only session-exit actions return exitSession=true.
-func processChatLine(client *gateway.Client, line string) (bool, error) {
+func processChatLine(session *chat.Session, line string) (bool, error) {
 	if line == "" {
 		return false, nil
 	}
@@ -151,14 +153,14 @@ func processChatLine(client *gateway.Client, line string) (bool, error) {
 		return false, nil
 	}
 	if strings.HasPrefix(line, "/") {
-		exitSession, err := runSlashCommand(client, line)
+		exitSession, err := runSlashCommand(session, line)
 		if err != nil {
 			fmt.Fprintln(os.Stderr, err)
 			return false, nil
 		}
 		return exitSession, nil
 	}
-	if err := sendAndPrintChat(client, line); err != nil {
+	if err := sendAndPrintChat(session, line); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 	}
 	return false, nil
@@ -200,7 +202,7 @@ func slashCompleter(line string) []string {
 	return out
 }
 
-func runChatLoopScanner(client *gateway.Client) error {
+func runChatLoopScanner(session *chat.Session) error {
 	scanner := bufio.NewScanner(os.Stdin)
 	getLine := func(prompt string) (string, error) {
 		fmt.Fprint(os.Stderr, prompt)
@@ -212,31 +214,21 @@ func runChatLoopScanner(client *gateway.Client) error {
 		}
 		return scanner.Text(), nil
 	}
-	return runChatLoopWithReader(client, "> ", getLine)
+	return runChatLoopWithReader(session, "> ", getLine)
 }
 
-// startNewThread calls POST /v1/chat/threads and prints confirmation to stderr.
-func startNewThread(client *gateway.Client) error {
-	threadID, err := client.NewChatThread(chatSessionProjectID)
-	if err != nil {
-		return fmt.Errorf("start new thread: %w", err)
-	}
-	fmt.Fprintf(os.Stderr, "New thread started: %s\n", threadID)
-	return nil
-}
-
-// sendAndPrintChat sends the line to the gateway and prints the response (formatted or raw).
-func sendAndPrintChat(client *gateway.Client, line string) error {
-	resp, err := client.ChatWithOptions(line, chatSessionModel, chatSessionProjectID)
+// sendAndPrintChat sends the line via the session transport and prints the visible text (formatted or raw).
+func sendAndPrintChat(session *chat.Session, line string) error {
+	turn, err := session.SendMessage(context.Background(), line)
 	if err != nil {
 		return exitFromGatewayErr(err)
 	}
-	if resp.Response == "" {
+	if turn == nil || turn.VisibleText == "" {
 		return nil
 	}
-	out, err := formatChatResponseFn(resp.Response, chatPlain, noColor)
+	out, err := formatChatResponseFn(turn.VisibleText, session.Plain, session.NoColor)
 	if err != nil {
-		fmt.Println(resp.Response)
+		fmt.Println(turn.VisibleText)
 		return nil
 	}
 	fmt.Print(out)

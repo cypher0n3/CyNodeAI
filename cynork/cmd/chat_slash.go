@@ -6,8 +6,8 @@ import (
 	"os/exec"
 	"strings"
 
+	"github.com/cypher0n3/cynodeai/cynork/internal/chat"
 	"github.com/cypher0n3/cynodeai/cynork/internal/config"
-	"github.com/cypher0n3/cynodeai/cynork/internal/gateway"
 )
 
 // SlashCommand describes one slash command for help and autocomplete.
@@ -55,55 +55,55 @@ func parseSlash(line string) (cmd, rest string, ok bool) {
 	return strings.ToLower(line[:idx]), strings.TrimSpace(line[idx+1:]), true
 }
 
-type slashHandler func(*gateway.Client, string) (bool, error)
+type slashHandler func(*chat.Session, string) (bool, error)
 
 var slashHandlers = map[string]slashHandler{
-	"exit":    func(*gateway.Client, string) (bool, error) { return true, nil },
-	"quit":    func(*gateway.Client, string) (bool, error) { return true, nil },
-	"help":    func(*gateway.Client, string) (bool, error) { printSlashHelp(); return false, nil },
-	"clear":   func(*gateway.Client, string) (bool, error) { clearTerminal(); return false, nil },
-	"version": func(*gateway.Client, string) (bool, error) { fmt.Println("cynork", version); return false, nil },
-	"models": func(_ *gateway.Client, rest string) (bool, error) {
+	"exit":    func(*chat.Session, string) (bool, error) { return true, nil },
+	"quit":    func(*chat.Session, string) (bool, error) { return true, nil },
+	"help":    func(*chat.Session, string) (bool, error) { printSlashHelp(); return false, nil },
+	"clear":   func(*chat.Session, string) (bool, error) { clearTerminal(); return false, nil },
+	"version": func(*chat.Session, string) (bool, error) { fmt.Println("cynork", version); return false, nil },
+	"models": func(_ *chat.Session, rest string) (bool, error) {
 		r := strings.TrimSpace(rest)
 		if r == "" {
 			r = "list"
 		}
 		return false, runCynorkSubcommandForSlash("models", r)
 	},
-	"model":   func(c *gateway.Client, rest string) (bool, error) { return false, runSlashModel(c, rest) },
-	"project": func(c *gateway.Client, rest string) (bool, error) { return false, runSlashProjectDelegated(c, rest) },
-	"task": func(_ *gateway.Client, rest string) (bool, error) {
+	"model":   func(s *chat.Session, rest string) (bool, error) { return false, runSlashModel(s, rest) },
+	"project": func(s *chat.Session, rest string) (bool, error) { return false, runSlashProjectDelegated(s, rest) },
+	"task": func(_ *chat.Session, rest string) (bool, error) {
 		return false, runCynorkSubcommandForSlash("task", rest)
 	},
-	"status": func(_ *gateway.Client, rest string) (bool, error) {
+	"status": func(_ *chat.Session, rest string) (bool, error) {
 		return false, runCynorkSubcommandForSlash("status", rest)
 	},
-	"whoami": func(_ *gateway.Client, rest string) (bool, error) {
+	"whoami": func(_ *chat.Session, rest string) (bool, error) {
 		return false, runCynorkSubcommandForSlash("auth", "whoami")
 	},
-	"auth": func(c *gateway.Client, rest string) (bool, error) { return false, runSlashAuthDelegated(c, rest) },
-	"nodes": func(_ *gateway.Client, rest string) (bool, error) {
+	"auth": func(s *chat.Session, rest string) (bool, error) { return false, runSlashAuthDelegated(s, rest) },
+	"nodes": func(_ *chat.Session, rest string) (bool, error) {
 		return false, runCynorkSubcommandForSlash("nodes", rest)
 	},
-	"prefs": func(_ *gateway.Client, rest string) (bool, error) {
+	"prefs": func(_ *chat.Session, rest string) (bool, error) {
 		return false, runCynorkSubcommandForSlash("prefs", rest)
 	},
-	"skills": func(_ *gateway.Client, rest string) (bool, error) {
+	"skills": func(_ *chat.Session, rest string) (bool, error) {
 		return false, runCynorkSubcommandForSlash("skills", rest)
 	},
-	"thread": func(c *gateway.Client, rest string) (bool, error) {
-		return false, runSlashThread(c, rest)
+	"thread": func(s *chat.Session, rest string) (bool, error) {
+		return false, runSlashThread(s, rest)
 	},
 }
 
 // runSlashCommand executes a slash command. Returns (exitSession, err). exitSession true means chat should exit.
-func runSlashCommand(client *gateway.Client, line string) (exitSession bool, err error) {
+func runSlashCommand(session *chat.Session, line string) (exitSession bool, err error) {
 	cmd, rest, ok := parseSlash(line)
 	if !ok {
 		return false, nil
 	}
 	if h, ok := slashHandlers[cmd]; ok {
-		return h(client, rest)
+		return h(session, rest)
 	}
 	fmt.Fprintln(os.Stderr, "Unknown command. Type /help for available commands.")
 	return false, nil
@@ -174,8 +174,8 @@ func clearTerminal() {
 	_, _ = fmt.Fprint(os.Stdout, "\033[H\033[2J")
 }
 
-// runSlashAuthDelegated runs "cynork auth <rest>" then syncs chat client token on login/refresh/logout.
-func runSlashAuthDelegated(chatClient *gateway.Client, rest string) error {
+// runSlashAuthDelegated runs "cynork auth <rest>" then syncs session token on login/refresh/logout.
+func runSlashAuthDelegated(session *chat.Session, rest string) error {
 	if err := runCynorkSubcommandForSlash("auth", rest); err != nil {
 		return err
 	}
@@ -185,7 +185,7 @@ func runSlashAuthDelegated(chatClient *gateway.Client, rest string) error {
 		return nil
 	}
 	sub := strings.ToLower(parts[0])
-	if chatClient == nil {
+	if session == nil {
 		return nil
 	}
 	switch sub {
@@ -197,60 +197,66 @@ func runSlashAuthDelegated(chatClient *gateway.Client, rest string) error {
 		if effectivePath != "" {
 			if c, err := config.Load(effectivePath); err == nil {
 				cfg = c
-				chatClient.SetToken(cfg.Token)
+				session.SetToken(cfg.Token)
 			}
 		}
 	case "logout":
-		chatClient.SetToken("")
+		session.SetToken("")
 	}
 	return nil
 }
 
-func runSlashModel(_ *gateway.Client, rest string) error {
+func runSlashModel(session *chat.Session, rest string) error {
 	rest = strings.TrimSpace(rest)
 	if rest == "" {
-		if chatSessionModel == "" {
+		if session.Model == "" {
 			fmt.Fprintln(os.Stderr, "model: (default)")
 		} else {
-			fmt.Fprintln(os.Stderr, "model:", chatSessionModel)
+			fmt.Fprintln(os.Stderr, "model:", session.Model)
 		}
 		return nil
 	}
-	chatSessionModel = rest
+	session.SetModel(rest)
 	fmt.Fprintln(os.Stderr, "model set to:", rest)
 	return nil
 }
 
-// runSlashProjectDelegated runs "cynork project <rest>" then syncs chat session project when "set" was used.
-func runSlashProjectDelegated(_ *gateway.Client, rest string) error {
+// runSlashProjectDelegated runs "cynork project <rest>" then syncs session project when "set" was used.
+func runSlashProjectDelegated(session *chat.Session, rest string) error {
 	if err := runCynorkSubcommandForSlash("project", rest); err != nil {
 		return err
 	}
 	parts := parseArgs(strings.TrimSpace(rest))
 	if len(parts) >= 2 && strings.EqualFold(parts[0], "set") {
-		setChatSessionProject(parts[1])
+		setChatSessionProject(session, parts[1])
 	}
 	return nil
 }
 
-func setChatSessionProject(id string) {
-	chatSessionProjectID = id
-	if chatSessionProjectID == "none" || chatSessionProjectID == `""` {
-		chatSessionProjectID = ""
+func setChatSessionProject(session *chat.Session, id string) {
+	if id == "none" || id == `""` {
+		id = ""
 	}
-	fmt.Fprintln(os.Stderr, "project set to:", chatSessionProjectID)
+	session.SetProjectID(id)
+	fmt.Fprintln(os.Stderr, "project set to:", session.ProjectID)
 }
 
 // runSlashThread handles /thread <subcommand>. Currently supports "new".
-func runSlashThread(client *gateway.Client, rest string) error {
+func runSlashThread(session *chat.Session, rest string) error {
 	sub := strings.ToLower(strings.TrimSpace(rest))
 	switch sub {
 	case "new", "":
-		if client == nil {
+		if session == nil || session.Client == nil {
 			fmt.Fprintln(os.Stderr, "thread: not connected")
 			return nil
 		}
-		return startNewThread(client)
+		threadID, err := session.NewThread()
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "thread: %v\n", err)
+			return nil
+		}
+		fmt.Fprintf(os.Stderr, "New thread started: %s\n", threadID)
+		return nil
 	default:
 		fmt.Fprintf(os.Stderr, "thread: unknown subcommand %q — use: /thread new\n", sub)
 		return nil

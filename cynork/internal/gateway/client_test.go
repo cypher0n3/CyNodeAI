@@ -12,6 +12,8 @@ import (
 	"github.com/cypher0n3/cynodeai/go_shared_libs/contracts/userapi"
 )
 
+const testProjectID = "proj-1"
+
 func TestClient_ListTasks_WithLimitOffset(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/v1/tasks" {
@@ -524,8 +526,8 @@ func TestClient_ChatWithOptions_ModelAndProject(t *testing.T) {
 			w.WriteHeader(http.StatusNotFound)
 			return
 		}
-		if r.Header.Get("OpenAI-Project") != "proj-1" {
-			t.Errorf("OpenAI-Project = %q, want proj-1", r.Header.Get("OpenAI-Project"))
+		if r.Header.Get("OpenAI-Project") != testProjectID {
+			t.Errorf("OpenAI-Project = %q, want %s", r.Header.Get("OpenAI-Project"), testProjectID)
 		}
 		var req userapi.ChatCompletionsRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -546,7 +548,7 @@ func TestClient_ChatWithOptions_ModelAndProject(t *testing.T) {
 	defer server.Close()
 	client := NewClient(server.URL)
 	client.SetToken("tok")
-	resp, err := client.ChatWithOptions("hi", "gpt-4", "proj-1")
+	resp, err := client.ChatWithOptions("hi", "gpt-4", testProjectID)
 	if err != nil {
 		t.Fatalf("ChatWithOptions: %v", err)
 	}
@@ -709,6 +711,119 @@ func TestClient_ChatWithOptions_RequestFails(t *testing.T) {
 	_, err := client.ChatWithOptions("hi", "", "")
 	if err == nil {
 		t.Fatal("expected request error")
+	}
+}
+
+func TestClient_ResponsesWithOptions_Success(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/responses" || r.Method != http.MethodPost {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		if r.Header.Get("OpenAI-Project") != testProjectID {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"id": "resp-123",
+			"output": []map[string]any{
+				{"type": "text", "text": "Hello back"},
+			},
+		})
+	}))
+	defer server.Close()
+	client := NewClient(server.URL)
+	client.SetToken("tok")
+	resp, err := client.ResponsesWithOptions("hello", "gpt-4", testProjectID)
+	if err != nil {
+		t.Fatalf("ResponsesWithOptions: %v", err)
+	}
+	if resp.VisibleText != "Hello back" || resp.ResponseID != "resp-123" {
+		t.Errorf("resp = %+v", resp)
+	}
+}
+
+func TestClient_ResponsesWithOptions_ErrorPaths(t *testing.T) {
+	t.Run("ServerError", func(t *testing.T) {
+		server := httptest.NewServer(jsonHandler(http.StatusBadGateway, problem.Details{Detail: "bad gateway", Status: 502}))
+		defer server.Close()
+		client := NewClient(server.URL)
+		client.SetToken("tok")
+		if _, err := client.ResponsesWithOptions("hi", "", ""); err == nil {
+			t.Fatal("expected error")
+		}
+	})
+	t.Run("DecodeError", func(t *testing.T) {
+		server := httptest.NewServer(rawHandler(http.StatusOK, "not json"))
+		defer server.Close()
+		client := NewClient(server.URL)
+		client.SetToken("tok")
+		if _, err := client.ResponsesWithOptions("hi", "", ""); err == nil {
+			t.Fatal("expected decode error")
+		}
+	})
+}
+
+func TestClient_ResponsesWithOptions_InvalidBaseURL(t *testing.T) {
+	client := NewClient("://invalid")
+	client.SetToken("tok")
+	_, err := client.ResponsesWithOptions("hi", "", "")
+	if err == nil {
+		t.Fatal("expected error for invalid base URL")
+	}
+}
+
+func TestClient_ResponsesWithOptions_RequestFails(t *testing.T) {
+	client := NewClient("http://127.0.0.1:0")
+	client.SetToken("tok")
+	_, err := client.ResponsesWithOptions("hi", "", "")
+	if err == nil {
+		t.Fatal("expected error when request fails")
+	}
+}
+
+func TestClient_ResponsesWithOptions_MultipleTextOutputs(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"id": "r-2",
+			"output": []map[string]any{
+				{"type": "text", "text": "one"},
+				{"type": "other"},
+				{"type": "text", "text": "two"},
+			},
+		})
+	}))
+	defer server.Close()
+	client := NewClient(server.URL)
+	client.SetToken("tok")
+	resp, err := client.ResponsesWithOptions("hi", "", "")
+	if err != nil {
+		t.Fatalf("ResponsesWithOptions: %v", err)
+	}
+	if resp.VisibleText != "onetwo" || resp.ResponseID != "r-2" {
+		t.Errorf("resp = %+v", resp)
+	}
+}
+
+func TestClient_ResponsesWithOptions_EmptyOutput(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode(map[string]any{"id": "r-empty", "output": []any{}})
+	}))
+	defer server.Close()
+	client := NewClient(server.URL)
+	client.SetToken("tok")
+	resp, err := client.ResponsesWithOptions("hi", "", "")
+	if err != nil {
+		t.Fatalf("ResponsesWithOptions: %v", err)
+	}
+	if resp.VisibleText != "" || resp.ResponseID != "r-empty" {
+		t.Errorf("resp = %+v", resp)
 	}
 }
 
@@ -1013,7 +1128,7 @@ func TestClient_NewChatThread_Success(t *testing.T) {
 
 func TestClient_NewChatThread_WithProject(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Header.Get("OpenAI-Project") != "proj-1" {
+		if r.Header.Get("OpenAI-Project") != testProjectID {
 			t.Errorf("expected OpenAI-Project header, got %q", r.Header.Get("OpenAI-Project"))
 		}
 		w.Header().Set("Content-Type", "application/json")
@@ -1022,7 +1137,7 @@ func TestClient_NewChatThread_WithProject(t *testing.T) {
 	}))
 	defer srv.Close()
 	c := NewClient(srv.URL)
-	_, err := c.NewChatThread("proj-1")
+	_, err := c.NewChatThread(testProjectID)
 	if err != nil {
 		t.Fatalf("NewChatThread: %v", err)
 	}

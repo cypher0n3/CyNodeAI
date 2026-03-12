@@ -3,7 +3,7 @@
 ## Summary
 
 - **Date:** 2026-03-12
-- **Plan:** [.cursor/plans/justfile_modularization_and_setup-dev_native_a55d31a1.plan.md](../../.cursor/plans/justfile_modularization_and_setup-dev_native_a55d31a1.plan.md)
+- **Plan:** justfile_modularization_and_setup-dev_native (Cursor plan, local only)
 
 Justfiles were placed in **existing** directories and scoped to each dir's work.
 Python-based setup-dev was replaced with native just/shell.

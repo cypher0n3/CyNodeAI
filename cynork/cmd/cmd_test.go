@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/creack/pty"
+	"github.com/cypher0n3/cynodeai/cynork/internal/chat"
 	"github.com/cypher0n3/cynodeai/cynork/internal/config"
 	"github.com/cypher0n3/cynodeai/cynork/internal/exit"
 	"github.com/cypher0n3/cynodeai/cynork/internal/gateway"
@@ -26,7 +27,10 @@ import (
 
 const testUser = "alice"
 const testStatusCompleted = "completed"
-const chatCompletionsPath = "/v1/chat/completions"
+const (
+	chatCompletionsPath = "/v1/chat/completions"
+	chatThreadsPath     = "/v1/chat/threads"
+)
 const pathV1SkillsS1 = "/v1/skills/s1"
 const pathV1Tasks = "/v1/tasks"
 const testPromptEchoHi = "echo hi"
@@ -1301,6 +1305,24 @@ func TestRunChat_NoToken(t *testing.T) {
 	}
 }
 
+func TestRunChat_ThreadNewError(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == chatThreadsPath && r.Method == http.MethodPost {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+	cfg = &config.Config{GatewayURL: server.URL, Token: "tok"}
+	defer func() { cfg = nil }()
+	chatThreadNew = true
+	defer func() { chatThreadNew = false }()
+	if err := runChat(nil, nil); err == nil {
+		t.Fatal("expected error when NewThread fails")
+	}
+}
+
 func TestRunCredsList_NoToken(t *testing.T) {
 	cfg = &config.Config{}
 	defer func() { cfg = nil }()
@@ -2081,16 +2103,16 @@ func TestParseSlash(t *testing.T) {
 }
 
 func TestRunSlashCommand_HelpAndVersion(t *testing.T) {
-	client := gateway.NewClient("http://localhost")
-	client.SetToken("tok")
-	exitSession, err := runSlashCommand(client, "/help")
+	session := chat.NewSession(gateway.NewClient("http://localhost"))
+	session.SetToken("tok")
+	exitSession, err := runSlashCommand(session, "/help")
 	if err != nil {
 		t.Errorf("runSlashCommand /help: %v", err)
 	}
 	if exitSession {
 		t.Error("runSlashCommand /help should not exit session")
 	}
-	exitSession, err = runSlashCommand(client, "/version")
+	exitSession, err = runSlashCommand(session, "/version")
 	if err != nil {
 		t.Errorf("runSlashCommand /version: %v", err)
 	}
@@ -2100,20 +2122,20 @@ func TestRunSlashCommand_HelpAndVersion(t *testing.T) {
 }
 
 func TestRunSlashCommand_Exit(t *testing.T) {
-	client := gateway.NewClient("http://localhost")
-	exitSession, _ := runSlashCommand(client, "/exit")
+	session := chat.NewSession(gateway.NewClient("http://localhost"))
+	exitSession, _ := runSlashCommand(session, "/exit")
 	if !exitSession {
 		t.Error("runSlashCommand /exit should set exitSession true")
 	}
-	exitSession, _ = runSlashCommand(client, "/quit")
+	exitSession, _ = runSlashCommand(session, "/quit")
 	if !exitSession {
 		t.Error("runSlashCommand /quit should set exitSession true")
 	}
 }
 
 func TestRunSlashCommand_Unknown(t *testing.T) {
-	client := gateway.NewClient("http://localhost")
-	exitSession, err := runSlashCommand(client, "/unknown")
+	session := chat.NewSession(gateway.NewClient("http://localhost"))
+	exitSession, err := runSlashCommand(session, "/unknown")
 	if err != nil {
 		t.Errorf("runSlashCommand /unknown: %v", err)
 	}
@@ -2139,17 +2161,17 @@ func TestProcessChatLine(t *testing.T) {
 	defer server.Close()
 	cfg = &config.Config{GatewayURL: server.URL, Token: "tok"}
 	defer func() { cfg = nil }()
-	client := gateway.NewClient(server.URL)
-	client.SetToken(cfg.Token)
-	exitSession, err := processChatLine(client, "")
+	session := chat.NewSession(gateway.NewClient(server.URL))
+	session.SetToken(cfg.Token)
+	exitSession, err := processChatLine(session, "")
 	if err != nil || exitSession {
 		t.Errorf("processChatLine empty: exit=%v err=%v", exitSession, err)
 	}
-	exitSession, err = processChatLine(client, "/help")
+	exitSession, err = processChatLine(session, "/help")
 	if err != nil || exitSession {
 		t.Errorf("processChatLine /help: exit=%v err=%v", exitSession, err)
 	}
-	exitSession, err = processChatLine(client, "hello")
+	exitSession, err = processChatLine(session, "hello")
 	if err != nil || exitSession {
 		t.Errorf("processChatLine hello: exit=%v err=%v", exitSession, err)
 	}
@@ -2158,8 +2180,8 @@ func TestProcessChatLine(t *testing.T) {
 func TestProcessChatLine_ShellEscape(t *testing.T) {
 	cfg = &config.Config{GatewayURL: "http://localhost", Token: "tok"}
 	defer func() { cfg = nil }()
-	client := gateway.NewClient("http://localhost")
-	client.SetToken("tok")
+	session := chat.NewSession(gateway.NewClient("http://localhost"))
+	session.SetToken("tok")
 	// ! echo hi -> output to stdout
 	r, w, _ := os.Pipe()
 	oldStdout := os.Stdout
@@ -2171,7 +2193,7 @@ func TestProcessChatLine_ShellEscape(t *testing.T) {
 		_, _ = io.Copy(&out, r)
 		close(done)
 	}()
-	exitSession, err := processChatLine(client, "! echo hi")
+	exitSession, err := processChatLine(session, "! echo hi")
 	_ = w.Close()
 	<-done
 	if err != nil || exitSession {
@@ -2190,7 +2212,7 @@ func TestProcessChatLine_ShellEscape(t *testing.T) {
 		_, _ = io.Copy(&errOut, r2)
 		close(done2)
 	}()
-	_, _ = processChatLine(client, "!")
+	_, _ = processChatLine(session, "!")
 	_ = w2.Close()
 	<-done2
 	os.Stderr = oldStderr
@@ -2206,7 +2228,7 @@ func TestProcessChatLine_ShellEscape(t *testing.T) {
 		_, _ = io.Copy(&errOut2, r3)
 		close(done3)
 	}()
-	exitSession, err = processChatLine(client, "! false")
+	exitSession, err = processChatLine(session, "! false")
 	_ = w3.Close()
 	<-done3
 	os.Stderr = oldStderr
@@ -2230,8 +2252,8 @@ func TestProcessChatLine_SlashErrorDoesNotExit(t *testing.T) {
 	oldRunner := runCynorkSubcommandForSlash
 	runCynorkSubcommandForSlash = runCynorkSubcommandInProcess
 	defer func() { runCynorkSubcommandForSlash = oldRunner; configPath = ""; cfg = nil }()
-	client := gateway.NewClient(server.URL)
-	client.SetToken("tok")
+	session := chat.NewSession(gateway.NewClient(server.URL))
+	session.SetToken("tok")
 	oldStderr := os.Stderr
 	r, w, _ := os.Pipe()
 	os.Stderr = w
@@ -2241,7 +2263,7 @@ func TestProcessChatLine_SlashErrorDoesNotExit(t *testing.T) {
 		_, _ = io.Copy(&errOut, r)
 		close(done)
 	}()
-	exitSession, err := processChatLine(client, "/skills list")
+	exitSession, err := processChatLine(session, "/skills list")
 	_ = w.Close()
 	<-done
 	os.Stderr = oldStderr
@@ -2267,8 +2289,8 @@ func TestProcessChatLine_GatewayErrorDoesNotExit(t *testing.T) {
 	defer server.Close()
 	cfg = &config.Config{GatewayURL: server.URL, Token: "tok"}
 	defer func() { cfg = nil }()
-	client := gateway.NewClient(server.URL)
-	client.SetToken("tok")
+	session := chat.NewSession(gateway.NewClient(server.URL))
+	session.SetToken("tok")
 	oldStderr := os.Stderr
 	r, w, _ := os.Pipe()
 	os.Stderr = w
@@ -2278,7 +2300,7 @@ func TestProcessChatLine_GatewayErrorDoesNotExit(t *testing.T) {
 		_, _ = io.Copy(&errOut, r)
 		close(done)
 	}()
-	exitSession, err := processChatLine(client, "Hello!")
+	exitSession, err := processChatLine(session, "Hello!")
 	_ = w.Close()
 	<-done
 	os.Stderr = oldStderr
@@ -2365,13 +2387,13 @@ func TestRunSlashCommand_StatusWhoami(t *testing.T) {
 	oldRunner := runCynorkSubcommandForSlash
 	runCynorkSubcommandForSlash = runCynorkSubcommandInProcess
 	defer func() { runCynorkSubcommandForSlash = oldRunner; configPath = ""; cfg = nil }()
-	client := gateway.NewClient(server.URL)
-	client.SetToken("tok")
-	_, err := runSlashCommand(client, "/status")
+	session := chat.NewSession(gateway.NewClient(server.URL))
+	session.SetToken("tok")
+	_, err := runSlashCommand(session, "/status")
 	if err != nil {
 		t.Errorf("runSlashCommand /status: %v", err)
 	}
-	_, err = runSlashCommand(client, "/whoami")
+	_, err = runSlashCommand(session, "/whoami")
 	if err != nil {
 		t.Errorf("runSlashCommand /whoami: %v", err)
 	}
@@ -2396,9 +2418,9 @@ func TestRunSlashCommand_Models(t *testing.T) {
 	oldRunner := runCynorkSubcommandForSlash
 	runCynorkSubcommandForSlash = runCynorkSubcommandInProcess
 	defer func() { runCynorkSubcommandForSlash = oldRunner; configPath = ""; cfg = nil }()
-	client := gateway.NewClient(server.URL)
-	client.SetToken("tok")
-	_, err := runSlashCommand(client, "/models")
+	session := chat.NewSession(gateway.NewClient(server.URL))
+	session.SetToken("tok")
+	_, err := runSlashCommand(session, "/models")
 	if err != nil {
 		t.Errorf("runSlashCommand /models: %v", err)
 	}
@@ -2535,8 +2557,8 @@ func TestRunSlashCommand_StubEndpoints(t *testing.T) {
 	oldRunner := runCynorkSubcommandForSlash
 	runCynorkSubcommandForSlash = runCynorkSubcommandInProcess
 	defer func() { runCynorkSubcommandForSlash = oldRunner; configPath = ""; cfg = nil }()
-	client := gateway.NewClient(server.URL)
-	client.SetToken("tok")
+	session := chat.NewSession(gateway.NewClient(server.URL))
+	session.SetToken("tok")
 	cmds := []string{
 		"/auth whoami", "/nodes list", "/nodes get n1", "/skills list", "/skills get s1",
 		"/prefs list", "/prefs get", "/prefs effective", "/prefs delete",
@@ -2546,7 +2568,7 @@ func TestRunSlashCommand_StubEndpoints(t *testing.T) {
 		"/clear",
 	}
 	for _, cmd := range cmds {
-		_, err := runSlashCommand(client, cmd)
+		_, err := runSlashCommand(session, cmd)
 		if err != nil {
 			t.Errorf("runSlashCommand %q: %v", cmd, err)
 		}
@@ -2560,8 +2582,8 @@ func TestRunSlashCommand_UsagePaths(t *testing.T) {
 	oldRunner := runCynorkSubcommandForSlash
 	runCynorkSubcommandForSlash = runCynorkSubcommandInProcess
 	defer func() { runCynorkSubcommandForSlash = oldRunner; configPath = ""; cfg = nil }()
-	client := gateway.NewClient("http://localhost")
-	client.SetToken("tok")
+	session := chat.NewSession(gateway.NewClient("http://localhost"))
+	session.SetToken("tok")
 	// Exercise usage/error paths that don't call gateway.
 	for _, cmd := range []string{
 		"/task", "/task foo", "/task create", "/task cancel", "/task result", "/task logs",
@@ -2570,7 +2592,7 @@ func TestRunSlashCommand_UsagePaths(t *testing.T) {
 		"/nodes", "/nodes foo x", "/skills", "/skills get", "/prefs", "/project get",
 		"/project help", "/project --help",
 	} {
-		_, err := runSlashCommand(client, cmd)
+		_, err := runSlashCommand(session, cmd)
 		if err != nil {
 			t.Errorf("runSlashCommand %q: %v", cmd, err)
 		}
@@ -2593,7 +2615,8 @@ func TestRunCynorkSubcommand_ExecPath(t *testing.T) {
 	}
 	runCynorkSubcommandForSlash = runCynorkSubcommand
 	defer func() { getCynorkExeForSubcommand = oldExe; runCynorkSubcommandForSlash = oldRunner }()
-	_, err := runSlashCommand(nil, "/task create --help")
+	session := chat.NewSession(gateway.NewClient("http://localhost"))
+	_, err := runSlashCommand(session, "/task create --help")
 	if err != nil {
 		t.Errorf("runSlashCommand /task create --help (exec path): %v", err)
 	}
@@ -2611,8 +2634,8 @@ func TestRunSlashAuth_LoginRefreshLogoutUpdateClient(t *testing.T) {
 	oldRunner := runCynorkSubcommandForSlash
 	runCynorkSubcommandForSlash = runCynorkSubcommandInProcess
 	defer func() { runCynorkSubcommandForSlash = oldRunner; configPath = ""; cfg = nil }()
-	client := gateway.NewClient(server.URL)
-	client.SetToken("old-tok")
+	session := chat.NewSession(gateway.NewClient(server.URL))
+	session.SetToken("old-tok")
 	oldStdin := os.Stdin
 	r, w, err := os.Pipe()
 	if err != nil {
@@ -2622,7 +2645,7 @@ func TestRunSlashAuth_LoginRefreshLogoutUpdateClient(t *testing.T) {
 	_, _ = w.WriteString("p\n")
 	_ = w.Close()
 	defer func() { os.Stdin = oldStdin }()
-	if err := runSlashAuthDelegated(client, "login -u u --password-stdin"); err != nil {
+	if err := runSlashAuthDelegated(session, "login -u u --password-stdin"); err != nil {
 		t.Errorf("runSlashAuthDelegated login: %v", err)
 	}
 	if cfg.Token != "new-tok" {
@@ -2631,7 +2654,7 @@ func TestRunSlashAuth_LoginRefreshLogoutUpdateClient(t *testing.T) {
 
 	cfg.Token = "x"
 	cfg.RefreshToken = ""
-	if err := runSlashAuthDelegated(client, "logout"); err != nil {
+	if err := runSlashAuthDelegated(session, "logout"); err != nil {
 		t.Errorf("runSlashAuthDelegated logout: %v", err)
 	}
 
@@ -2644,9 +2667,9 @@ func TestRunSlashAuth_LoginRefreshLogoutUpdateClient(t *testing.T) {
 	cfg.RefreshToken = "old-refresh"
 	path2 := writeTempConfig(t, "gateway_url: "+refreshServer.URL+"\nrefresh_token: old-refresh\n")
 	configPath = path2
-	client2 := gateway.NewClient(refreshServer.URL)
-	client2.SetToken("old")
-	if err := runSlashAuthDelegated(client2, "refresh"); err != nil {
+	session2 := chat.NewSession(gateway.NewClient(refreshServer.URL))
+	session2.SetToken("old")
+	if err := runSlashAuthDelegated(session2, "refresh"); err != nil {
 		t.Errorf("runSlashAuthDelegated refresh: %v", err)
 	}
 	if cfg.Token != "refreshed-tok" {
@@ -2752,11 +2775,11 @@ func TestRunChatLoopWithReader(t *testing.T) {
 		return s, nil
 	}
 	defer func() { chatLineReader = nil }()
-	client := gateway.NewClient("http://localhost")
-	client.SetToken("tok")
+	session := chat.NewSession(gateway.NewClient("http://localhost"))
+	session.SetToken("tok")
 	cfg = &config.Config{GatewayURL: "http://localhost", Token: "tok"}
 	defer func() { cfg = nil }()
-	err := runChatLoopLiner(client)
+	err := runChatLoopLiner(session)
 	if err != nil {
 		t.Errorf("runChatLoopLiner with injected reader: %v", err)
 	}
@@ -2767,11 +2790,11 @@ func TestRunChatLoopLiner_WithLinerGetLine(t *testing.T) {
 		return "/exit", nil
 	}
 	defer func() { chatLinerGetLine = nil }()
-	client := gateway.NewClient("http://localhost")
-	client.SetToken("tok")
+	session := chat.NewSession(gateway.NewClient("http://localhost"))
+	session.SetToken("tok")
 	cfg = &config.Config{GatewayURL: "http://localhost", Token: "tok"}
 	defer func() { cfg = nil }()
-	err := runChatLoopLiner(client)
+	err := runChatLoopLiner(session)
 	if err != nil {
 		t.Errorf("runChatLoopLiner with chatLinerGetLine: %v", err)
 	}
@@ -2782,10 +2805,10 @@ func TestRunChatLoopWithReader_EOFImmediate(t *testing.T) {
 		return "", io.EOF
 	}
 	defer func() { chatLineReader = nil }()
-	client := gateway.NewClient("http://localhost")
+	session := chat.NewSession(gateway.NewClient("http://localhost"))
 	cfg = &config.Config{GatewayURL: "http://localhost", Token: "tok"}
 	defer func() { cfg = nil }()
-	err := runChatLoopLiner(client)
+	err := runChatLoopLiner(session)
 	if err != nil {
 		t.Errorf("runChatLoopLiner EOF: %v", err)
 	}
@@ -2855,9 +2878,9 @@ func TestSendAndPrintChat_EmptyResponse(t *testing.T) {
 	defer server.Close()
 	cfg = &config.Config{GatewayURL: server.URL, Token: "tok"}
 	defer func() { cfg = nil }()
-	client := gateway.NewClient(server.URL)
-	client.SetToken("tok")
-	if err := sendAndPrintChat(client, "hi"); err != nil {
+	session := chat.NewSession(gateway.NewClient(server.URL))
+	session.SetToken("tok")
+	if err := sendAndPrintChat(session, "hi"); err != nil {
 		t.Errorf("sendAndPrintChat empty response: %v", err)
 	}
 }
@@ -2882,9 +2905,9 @@ func TestSendAndPrintChat_FormatErrorFallback(t *testing.T) {
 	old := formatChatResponseFn
 	formatChatResponseFn = func(string, bool, bool) (string, error) { return "", errors.New("injected") }
 	defer func() { formatChatResponseFn = old }()
-	client := gateway.NewClient(server.URL)
-	client.SetToken("tok")
-	if err := sendAndPrintChat(client, "hi"); err != nil {
+	session := chat.NewSession(gateway.NewClient(server.URL))
+	session.SetToken("tok")
+	if err := sendAndPrintChat(session, "hi"); err != nil {
 		t.Errorf("sendAndPrintChat format error fallback: %v", err)
 	}
 }
@@ -2911,12 +2934,11 @@ func TestRunSlashCommand_SendAndPrintUsesSessionModel(t *testing.T) {
 	defer server.Close()
 	cfg = &config.Config{GatewayURL: server.URL, Token: "tok"}
 	defer func() { cfg = nil }()
-	chatSessionModel = "gpt-4"
-	chatSessionProjectID = "proj-1"
-	defer func() { chatSessionModel = ""; chatSessionProjectID = "" }()
-	client := gateway.NewClient(server.URL)
-	client.SetToken("tok")
-	if err := sendAndPrintChat(client, "hi"); err != nil {
+	session := chat.NewSession(gateway.NewClient(server.URL))
+	session.SetToken("tok")
+	session.SetModel("gpt-4")
+	session.SetProjectID("proj-1")
+	if err := sendAndPrintChat(session, "hi"); err != nil {
 		t.Fatalf("sendAndPrintChat: %v", err)
 	}
 	if gotModel != "gpt-4" || gotProject != "proj-1" {
@@ -2926,7 +2948,7 @@ func TestRunSlashCommand_SendAndPrintUsesSessionModel(t *testing.T) {
 
 func TestStartNewThread_Success(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == http.MethodPost && r.URL.Path == "/v1/chat/threads" {
+		if r.Method == http.MethodPost && r.URL.Path == chatThreadsPath {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusCreated)
 			_ = json.NewEncoder(w).Encode(map[string]string{"thread_id": "test-tid"})
@@ -2935,12 +2957,14 @@ func TestStartNewThread_Success(t *testing.T) {
 		w.WriteHeader(http.StatusNotFound)
 	}))
 	defer srv.Close()
-	client := gateway.NewClient(srv.URL)
-	client.SetToken("tok")
-	chatSessionProjectID = ""
-	defer func() { chatSessionProjectID = "" }()
-	if err := startNewThread(client); err != nil {
-		t.Fatalf("startNewThread: %v", err)
+	session := chat.NewSession(gateway.NewClient(srv.URL))
+	session.SetToken("tok")
+	threadID, err := session.NewThread()
+	if err != nil {
+		t.Fatalf("session.NewThread: %v", err)
+	}
+	if threadID != "test-tid" {
+		t.Errorf("threadID = %q, want test-tid", threadID)
 	}
 }
 
@@ -2953,15 +2977,15 @@ func TestStartNewThread_Error(t *testing.T) {
 		})
 	}))
 	defer srv.Close()
-	client := gateway.NewClient(srv.URL)
-	if err := startNewThread(client); err == nil {
+	session := chat.NewSession(gateway.NewClient(srv.URL))
+	if _, err := session.NewThread(); err == nil {
 		t.Fatal("expected error on non-201 response")
 	}
 }
 
 func TestRunSlashThread_New(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == http.MethodPost && r.URL.Path == "/v1/chat/threads" {
+		if r.Method == http.MethodPost && r.URL.Path == chatThreadsPath {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusCreated)
 			_ = json.NewEncoder(w).Encode(map[string]string{"thread_id": "new-tid"})
@@ -2970,11 +2994,9 @@ func TestRunSlashThread_New(t *testing.T) {
 		w.WriteHeader(http.StatusNotFound)
 	}))
 	defer srv.Close()
-	client := gateway.NewClient(srv.URL)
-	client.SetToken("tok")
-	chatSessionProjectID = ""
-	defer func() { chatSessionProjectID = "" }()
-	if err := runSlashThread(client, "new"); err != nil {
+	session := chat.NewSession(gateway.NewClient(srv.URL))
+	session.SetToken("tok")
+	if err := runSlashThread(session, "new"); err != nil {
 		t.Fatalf("runSlashThread new: %v", err)
 	}
 }
@@ -2986,23 +3008,24 @@ func TestRunSlashThread_EmptyRest(t *testing.T) {
 		_ = json.NewEncoder(w).Encode(map[string]string{"thread_id": "tid"})
 	}))
 	defer srv.Close()
-	client := gateway.NewClient(srv.URL)
-	client.SetToken("tok")
-	if err := runSlashThread(client, ""); err != nil {
+	session := chat.NewSession(gateway.NewClient(srv.URL))
+	session.SetToken("tok")
+	if err := runSlashThread(session, ""); err != nil {
 		t.Fatalf("runSlashThread empty: %v", err)
 	}
 }
 
 func TestRunSlashThread_Unknown(t *testing.T) {
 	// Unknown subcommand should print to stderr and return nil (not an error).
-	client := gateway.NewClient("http://localhost:1")
-	if err := runSlashThread(client, "delete"); err != nil {
+	session := chat.NewSession(gateway.NewClient("http://localhost:1"))
+	if err := runSlashThread(session, "delete"); err != nil {
 		t.Fatalf("unknown subcommand should not return error, got: %v", err)
 	}
 }
 
 func TestRunSlashThread_NilClient(t *testing.T) {
-	if err := runSlashThread(nil, "new"); err != nil {
+	session := &chat.Session{}
+	if err := runSlashThread(session, "new"); err != nil {
 		t.Fatalf("nil client should print message and return nil, got: %v", err)
 	}
 }
