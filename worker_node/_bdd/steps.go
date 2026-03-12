@@ -1756,7 +1756,7 @@ func RegisterSecureStoreSteps(sc *godog.ScenarioContext, state *workerTestState)
 		return nil
 	})
 	sc.Step(`^the secure store process boundary document exists and states writer and reader components$`, func(ctx context.Context) error {
-		docPath := "docs/dev_docs/2026-03-06_secure_store_process_boundary.md"
+		docPath := "docs/tech_specs/worker_node.md"
 		for _, root := range []string{"../..", "..", "."} {
 			p := filepath.Join(root, docPath)
 			if _, err := os.Stat(p); err == nil {
