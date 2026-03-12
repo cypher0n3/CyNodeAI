@@ -3,7 +3,7 @@
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 [![Go Workspace](https://img.shields.io/badge/Go-workspace-00ADD8?logo=go)](go.work)
 [![Docs](https://img.shields.io/badge/docs-tech%20specs-blueviolet)](docs/README.md)
-[![CI](https://github.com/cynodeai-enterprise/cynodeai/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/cynodeai-enterprise/cynodeai/actions/workflows/ci.yml?query=branch%3Amain)
+[![CI](https://img.shields.io/github/actions/workflow/status/cypher0n3/CyNodeAI/ci.yml)](https://github.com/cypher0n3/CyNodeAI/actions/workflows/ci.yml)
 
 ## Overview
 
