@@ -25,7 +25,7 @@ const stateKey ctxKey = 0
 type cynorkState struct {
 	mockServer *httptest.Server
 	cynorkBin  string
-	bddRoot    string // working directory for cynork subprocess (so tmp/doc1.txt etc. resolve)
+	bddRoot    string // working directory for cynork subprocess (cynork/_bdd; tmp/ under it)
 	configPath string // path to config file for session persistence (login writes, whoami reads)
 	lastExit   int
 	lastStdout string
@@ -472,11 +472,12 @@ func InitializeCynorkSuite(sc *godog.ScenarioContext, state *cynorkState) {
 		if strings.HasSuffix(wd, string(filepath.Separator)+"_bdd") || filepath.Base(wd) == "_bdd" {
 			root = filepath.Join(wd, "..", "..")
 		}
-		tmpDir := filepath.Join(root, "tmp")
+		state.bddRoot = filepath.Join(root, "cynork", "_bdd")
+		tmpDir := filepath.Join(state.bddRoot, "tmp")
 		_ = os.MkdirAll(tmpDir, 0o755)
 		state.configPath = filepath.Join(tmpDir, "cynork-bdd-config.yaml")
 		_ = os.WriteFile(state.configPath, []byte("gateway_url: http://localhost\n"), 0o600)
-		// Create attachment files for scenarios that use "tmp/doc1.txt" and "tmp/doc2.txt" (paths relative to cwd).
+		// Attachment files for scenarios that use tmp/doc1.txt, tmp/doc2.txt.
 		_ = os.WriteFile(filepath.Join(tmpDir, "doc1.txt"), []byte("first attachment\n"), 0o600)
 		_ = os.WriteFile(filepath.Join(tmpDir, "doc2.txt"), []byte("second attachment\n"), 0o600)
 		bin := filepath.Join(tmpDir, "cynork-bdd")
@@ -487,7 +488,6 @@ func InitializeCynorkSuite(sc *godog.ScenarioContext, state *cynorkState) {
 			return ctx, fmt.Errorf("build cynork: %w", err)
 		}
 		state.cynorkBin = bin
-		state.bddRoot = root
 		return context.WithValue(ctx, stateKey, state), nil
 	})
 

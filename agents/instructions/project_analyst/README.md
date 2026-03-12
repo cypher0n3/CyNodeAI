@@ -1,5 +1,7 @@
 # Project Analyst Instruction Bundle
 
+## Contents
+
 This directory contains the instruction bundle for `cynode-pma` in `project_analyst` mode.
 
 Files are loaded in this order:

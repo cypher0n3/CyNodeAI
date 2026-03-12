@@ -9,6 +9,9 @@ bin/
 bin-dev/
 **/bin/
 **/bin-dev/
+.markdownlint-rules
+.markdownlint-rules/
+.markdownlint-repo/
 
 # Go build binary names (justfile build-* outputs; bin/ already ignored via **/bin/)
 # Only match binaries at module root, not cmd/<name>/ source dirs

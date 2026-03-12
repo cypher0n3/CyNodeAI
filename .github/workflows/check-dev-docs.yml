@@ -1,0 +1,32 @@
+name: Check dev_docs Directory
+
+on:
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  check-dev-docs:
+    name: Verify dev_docs cleanup
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Check for stray files in dev_docs
+        run: |
+          echo "Checking docs/dev_docs/ directory for files other than README.md..."
+
+          # Count files in dev_docs excluding README.md
+          STRAY_FILES=$(find docs/dev_docs -type f ! -name "README.md" 2>/dev/null || true)
+
+          if [ -n "$STRAY_FILES" ]; then
+            echo "ERROR: Found stray files in docs/dev_docs/ directory!"
+            echo "The following files must be removed or moved before merging to main:"
+            echo "$STRAY_FILES"
+            echo ""
+            echo "Per docs/dev_docs/README.md: Only README.md should remain in this directory before merge."
+            exit 1
+          fi
+
+          echo "SUCCESS: docs/dev_docs/ directory is clean (only README.md present)."

@@ -9,7 +9,7 @@ require (
 	github.com/cypher0n3/cynodeai/go_shared_libs v0.0.0
 	github.com/glebarez/sqlite v1.11.0
 	github.com/google/uuid v1.6.0
-	golang.org/x/sys v0.41.0
+	golang.org/x/sys v0.42.0
 	gorm.io/gorm v1.31.1
 )
 
@@ -18,7 +18,7 @@ require (
 	github.com/cucumber/messages/go/v21 v21.0.1 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
-	github.com/glebarez/go-sqlite v1.21.2 // indirect
+	github.com/glebarez/go-sqlite v1.22.0 // indirect
 	github.com/gofrs/uuid v4.4.0+incompatible // indirect
 	github.com/hashicorp/go-immutable-radix v1.3.1 // indirect
 	github.com/hashicorp/go-memdb v1.3.5 // indirect
@@ -31,13 +31,11 @@ require (
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
 	github.com/spf13/pflag v1.0.10 // indirect
 	github.com/stretchr/testify v1.11.1 // indirect
-	golang.org/x/exp v0.0.0-20251023183803-a4bb9ffd2546 // indirect
-	golang.org/x/text v0.20.0 // indirect
-	golang.org/x/tools v0.41.0 // indirect
-	modernc.org/libc v1.67.6 // indirect
+	golang.org/x/text v0.35.0 // indirect
+	modernc.org/libc v1.70.0 // indirect
 	modernc.org/mathutil v1.7.1 // indirect
 	modernc.org/memory v1.11.0 // indirect
-	modernc.org/sqlite v1.23.1 // indirect
+	modernc.org/sqlite v1.46.1 // indirect
 )
 
 replace github.com/cypher0n3/cynodeai/go_shared_libs => ../go_shared_libs
