@@ -17,6 +17,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/charmbracelet/bubbletea"
 	"github.com/creack/pty"
 	"github.com/cypher0n3/cynodeai/cynork/internal/chat"
 	"github.com/cypher0n3/cynodeai/cynork/internal/config"
@@ -90,6 +91,60 @@ func TestExecute_LoadConfigFails(t *testing.T) {
 	got := runWithArgs(t, "--config", path, "version")
 	if got != 2 {
 		t.Errorf("Execute() = %d, want 2 (usage)", got)
+	}
+}
+
+func TestExecute_TUI_RequiresAuth(t *testing.T) {
+	path := writeTempConfig(t, "gateway_url: http://localhost\n")
+	got := runWithArgs(t, "--config", path, "tui")
+	if got != 3 {
+		t.Errorf("Execute(tui) without token = %d, want 3 (auth)", got)
+	}
+}
+
+func TestExecute_TUI_WithToken(t *testing.T) {
+	oldRun := tuiRunProgram
+	tuiRunProgram = func(_ *tea.Program) (tea.Model, error) { return nil, nil }
+	defer func() { tuiRunProgram = oldRun }()
+	path := writeTempConfig(t, "gateway_url: http://localhost\ntoken: x\n")
+	got := runWithArgs(t, "--config", path, "tui")
+	if got != 0 {
+		t.Errorf("Execute(tui) with token and mock run = %d, want 0", got)
+	}
+}
+
+func TestExecute_TUI_RunReturnsError(t *testing.T) {
+	oldRun := tuiRunProgram
+	tuiRunProgram = func(_ *tea.Program) (tea.Model, error) {
+		return nil, errors.New("program error")
+	}
+	defer func() { tuiRunProgram = oldRun }()
+	path := writeTempConfig(t, "gateway_url: http://localhost\ntoken: x\n")
+	got := runWithArgs(t, "--config", path, "tui")
+	if got != 1 {
+		t.Errorf("Execute(tui) when run returns error = %d, want 1", got)
+	}
+}
+
+func TestExecute_TUI_ThreadNew(t *testing.T) {
+	threadID := "thread-123"
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost && r.URL.Path == "/v1/chat/threads" {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusCreated)
+			_ = json.NewEncoder(w).Encode(map[string]string{"thread_id": threadID})
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+	oldRun := tuiRunProgram
+	tuiRunProgram = func(_ *tea.Program) (tea.Model, error) { return nil, nil }
+	defer func() { tuiRunProgram = oldRun }()
+	path := writeTempConfig(t, "gateway_url: "+server.URL+"\ntoken: x\n")
+	got := runWithArgs(t, "--config", path, "tui", "--thread-new")
+	if got != 0 {
+		t.Errorf("Execute(tui --thread-new) = %d, want 0", got)
 	}
 }
 

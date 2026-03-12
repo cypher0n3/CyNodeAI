@@ -13,6 +13,20 @@ import (
 )
 
 const testProjectID = "proj-1"
+const pathV1ChatThreads = "/v1/chat/threads"
+
+// threadsAPIHandler returns a handler that responds with status and body when path matches (for thread API tests).
+func threadsAPIHandler(path string, status int, body string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != path {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(status)
+		_, _ = w.Write([]byte(body))
+	}
+}
 
 func TestClient_ListTasks_WithLimitOffset(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -359,7 +373,11 @@ func TestClient_ListTasks_Success(t *testing.T) {
 			return
 		}
 		jsonHandler(http.StatusOK, userapi.ListTasksResponse{
-			Tasks: []userapi.TaskResponse{{ID: "t1", Status: "completed"}, {TaskID: "t2", ID: "t2", Status: "queued"}},
+			Tasks: []userapi.TaskResponse{
+				{ID: "t1", Status: "completed"},
+				{TaskID: "t2", ID: "t2", Status: "queued"},
+				{TaskID: "t3", Status: "queued"},
+			},
 		})(w, r)
 	}))
 	defer server.Close()
@@ -369,11 +387,14 @@ func TestClient_ListTasks_Success(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ListTasks: %v", err)
 	}
-	if len(resp.Tasks) != 2 {
+	if len(resp.Tasks) != 3 {
 		t.Fatalf("len(Tasks)=%d", len(resp.Tasks))
 	}
-	if resp.Tasks[0].ResolveTaskID() != "t1" || resp.Tasks[1].ResolveTaskID() != "t2" {
-		t.Errorf("Tasks[0].ResolveTaskID()=%q Tasks[1].ResolveTaskID()=%q", resp.Tasks[0].ResolveTaskID(), resp.Tasks[1].ResolveTaskID())
+	if resp.Tasks[0].ResolveTaskID() != "t1" || resp.Tasks[1].ResolveTaskID() != "t2" || resp.Tasks[2].ResolveTaskID() != "t3" {
+		t.Errorf("ResolveTaskID: %q, %q, %q", resp.Tasks[0].ResolveTaskID(), resp.Tasks[1].ResolveTaskID(), resp.Tasks[2].ResolveTaskID())
+	}
+	if resp.Tasks[2].ID != "t3" {
+		t.Errorf("normalizeTaskResponse: Tasks[2].ID = %q, want t3", resp.Tasks[2].ID)
 	}
 }
 
@@ -387,14 +408,18 @@ func TestClient_ListTasks_Unauthorized(t *testing.T) {
 	}
 }
 
-func TestClient_GetTask_Success(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/v1/tasks/tid-1" {
+func taskGetHandler(path string, task *userapi.TaskResponse) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != path {
 			w.WriteHeader(http.StatusNotFound)
 			return
 		}
-		jsonHandler(http.StatusOK, userapi.TaskResponse{ID: "tid-1", Status: "running"})(w, r)
-	}))
+		jsonHandler(http.StatusOK, task)(w, r)
+	}
+}
+
+func TestClient_GetTask_Success(t *testing.T) {
+	server := httptest.NewServer(taskGetHandler("/v1/tasks/tid-1", &userapi.TaskResponse{ID: "tid-1", Status: "running"}))
 	defer server.Close()
 	client := NewClient(server.URL)
 	client.SetToken("tok")
@@ -404,6 +429,20 @@ func TestClient_GetTask_Success(t *testing.T) {
 	}
 	if task.ResolveTaskID() != "tid-1" || task.Status != "running" {
 		t.Errorf("task = %+v", task)
+	}
+}
+
+func TestClient_GetTask_NormalizesTaskID(t *testing.T) {
+	server := httptest.NewServer(taskGetHandler("/v1/tasks/tid-only", &userapi.TaskResponse{TaskID: "tid-only", Status: "completed"}))
+	defer server.Close()
+	client := NewClient(server.URL)
+	client.SetToken("tok")
+	task, err := client.GetTask("tid-only")
+	if err != nil {
+		t.Fatalf("GetTask: %v", err)
+	}
+	if task.ID != "tid-only" || task.TaskID != "tid-only" {
+		t.Errorf("normalizeTaskResponse: ID=%q TaskID=%q", task.ID, task.TaskID)
 	}
 }
 
@@ -1106,7 +1145,7 @@ func TestHTTPError_Unwrap(t *testing.T) {
 func TestClient_NewChatThread_Success(t *testing.T) {
 	wantID := "abc123-thread-id"
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost || r.URL.Path != "/v1/chat/threads" {
+		if r.Method != http.MethodPost || r.URL.Path != pathV1ChatThreads {
 			w.WriteHeader(http.StatusNotFound)
 			return
 		}
@@ -1144,13 +1183,8 @@ func TestClient_NewChatThread_WithProject(t *testing.T) {
 }
 
 func TestClient_NewChatThread_Error(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusUnauthorized)
-		_ = json.NewEncoder(w).Encode(map[string]interface{}{
-			"error": map[string]string{"message": "unauthorized", "code": "unauthorized"},
-		})
-	}))
+	errBody := map[string]interface{}{"error": map[string]string{"message": "unauthorized", "code": "unauthorized"}}
+	srv := httptest.NewServer(jsonHandler(http.StatusUnauthorized, errBody))
 	defer srv.Close()
 	c := NewClient(srv.URL)
 	_, err := c.NewChatThread("")
@@ -1160,15 +1194,7 @@ func TestClient_NewChatThread_Error(t *testing.T) {
 }
 
 func TestClient_NewChatThread_BadJSON(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/v1/chat/threads" {
-			w.WriteHeader(http.StatusNotFound)
-			return
-		}
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusCreated)
-		_, _ = w.Write([]byte("not-json{{{"))
-	}))
+	srv := httptest.NewServer(threadsAPIHandler(pathV1ChatThreads, http.StatusCreated, "not-json{{{"))
 	defer srv.Close()
 	c := NewClient(srv.URL)
 	_, err := c.NewChatThread("")
@@ -1190,5 +1216,123 @@ func TestClient_NewChatThread_InvalidBaseURL(t *testing.T) {
 	_, err := c.NewChatThread("")
 	if err == nil {
 		t.Fatal("expected error on invalid base URL")
+	}
+}
+
+func TestClient_ListChatThreads_Success(t *testing.T) {
+	wantID := "thread-1"
+	title := "First"
+	body := `{"data":[{"id":"` + wantID + `","title":"` + title + `","created_at":"2024-01-01T00:00:00Z","updated_at":"2024-01-01T00:00:00Z"}]}`
+	srv := httptest.NewServer(threadsAPIHandler(pathV1ChatThreads, http.StatusOK, body))
+	defer srv.Close()
+	c := NewClient(srv.URL)
+	c.SetToken("tok")
+	list, err := c.ListChatThreads("", 20, 0)
+	if err != nil {
+		t.Fatalf("ListChatThreads: %v", err)
+	}
+	if len(list) != 1 || list[0].ID != wantID {
+		t.Errorf("list = %+v", list)
+	}
+	if list[0].Title == nil || *list[0].Title != title {
+		t.Errorf("list[0].Title = %v", list[0].Title)
+	}
+}
+
+func TestClient_PatchThreadTitle_Success(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPatch || r.URL.Path != pathV1ChatThreads+"/thread-1" {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"id":"thread-1"}`))
+	}))
+	defer srv.Close()
+	c := NewClient(srv.URL)
+	c.SetToken("tok")
+	err := c.PatchThreadTitle("thread-1", "New Title")
+	if err != nil {
+		t.Fatalf("PatchThreadTitle: %v", err)
+	}
+}
+
+func TestClient_ListChatThreads_WithProjectAndPagination(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodGet || r.URL.Path != pathV1ChatThreads {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		if r.Header.Get("OpenAI-Project") != "proj-1" {
+			t.Errorf("OpenAI-Project = %q", r.Header.Get("OpenAI-Project"))
+		}
+		if r.URL.Query().Get("limit") != "5" || r.URL.Query().Get("offset") != "10" {
+			t.Errorf("query = %s", r.URL.RawQuery)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"data":[]}`))
+	}))
+	defer srv.Close()
+	c := NewClient(srv.URL)
+	c.SetToken("tok")
+	_, err := c.ListChatThreads("proj-1", 5, 10)
+	if err != nil {
+		t.Fatalf("ListChatThreads: %v", err)
+	}
+}
+
+func TestClient_PatchThreadTitle_DoFails(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(http.StatusOK) }))
+	u := srv.URL
+	srv.Close()
+	c := NewClient(u)
+	c.SetToken("tok")
+	err := c.PatchThreadTitle("thread-1", "Title")
+	if err == nil {
+		t.Fatal("expected error when server closed")
+	}
+}
+
+func TestClient_PatchThreadTitle_Error(t *testing.T) {
+	errBody := map[string]interface{}{"error": map[string]string{"message": "not found", "code": "not_found"}}
+	srv := httptest.NewServer(jsonHandler(http.StatusNotFound, errBody))
+	defer srv.Close()
+	c := NewClient(srv.URL)
+	c.SetToken("tok")
+	err := c.PatchThreadTitle("thread-1", "Title")
+	if err == nil {
+		t.Fatal("expected error from PatchThreadTitle")
+	}
+}
+
+func TestClient_ListChatThreads_Error(t *testing.T) {
+	body := `{"error":{"message":"unauthorized","code":"unauthorized"}}`
+	srv := httptest.NewServer(threadsAPIHandler(pathV1ChatThreads, http.StatusUnauthorized, body))
+	defer srv.Close()
+	c := NewClient(srv.URL)
+	c.SetToken("tok")
+	_, err := c.ListChatThreads("", 20, 0)
+	if err == nil {
+		t.Fatal("expected error from ListChatThreads")
+	}
+}
+
+func TestClient_ListChatThreads_InvalidBaseURL(t *testing.T) {
+	c := NewClient("://bad")
+	_, err := c.ListChatThreads("", 20, 0)
+	if err == nil {
+		t.Fatal("expected error from ListChatThreads")
+	}
+}
+
+func TestClient_ListChatThreads_BadJSON(t *testing.T) {
+	srv := httptest.NewServer(threadsAPIHandler(pathV1ChatThreads, http.StatusOK, "not json"))
+	defer srv.Close()
+	c := NewClient(srv.URL)
+	c.SetToken("tok")
+	_, err := c.ListChatThreads("", 20, 0)
+	if err == nil {
+		t.Fatal("expected error from ListChatThreads")
 	}
 }

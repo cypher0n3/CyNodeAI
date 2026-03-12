@@ -123,6 +123,60 @@ func TestSession_NewThread(t *testing.T) {
 	if threadID != "tid-1" {
 		t.Errorf("threadID = %q", threadID)
 	}
+	if session.CurrentThreadID != "tid-1" {
+		t.Errorf("CurrentThreadID = %q", session.CurrentThreadID)
+	}
+}
+
+func TestSession_ListThreads(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/chat/threads" || r.Method != http.MethodGet {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"data": []map[string]interface{}{{"id": "t1", "title": "A", "created_at": "", "updated_at": ""}},
+		})
+	}))
+	defer server.Close()
+	client := gateway.NewClient(server.URL)
+	client.SetToken("tok")
+	session := NewSession(client)
+	list, err := session.ListThreads(10, 0)
+	if err != nil {
+		t.Fatalf("ListThreads: %v", err)
+	}
+	if len(list) != 1 || list[0].ID != "t1" {
+		t.Errorf("list = %+v", list)
+	}
+}
+
+func TestSession_PatchThreadTitle(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/chat/threads/t1" || r.Method != http.MethodPatch {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+	client := gateway.NewClient(server.URL)
+	client.SetToken("tok")
+	session := NewSession(client)
+	err := session.PatchThreadTitle("t1", "Title")
+	if err != nil {
+		t.Fatalf("PatchThreadTitle: %v", err)
+	}
+}
+
+func TestSession_SetCurrentThreadID(t *testing.T) {
+	session := NewSession(gateway.NewClient("http://localhost"))
+	session.SetCurrentThreadID("thread-abc")
+	if session.CurrentThreadID != "thread-abc" {
+		t.Errorf("CurrentThreadID = %q", session.CurrentThreadID)
+	}
 }
 
 func TestSession_SetToken_NilClient(t *testing.T) {

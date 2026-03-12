@@ -14,6 +14,8 @@ type Session struct {
 
 	Model     string
 	ProjectID string
+	// CurrentThreadID is set when the user creates or switches to a thread (for display and rename).
+	CurrentThreadID string
 
 	Plain   bool
 	NoColor bool
@@ -45,6 +47,11 @@ func (s *Session) SetProjectID(id string) {
 	s.ProjectID = id
 }
 
+// SetCurrentThreadID sets the active thread (for display and rename).
+func (s *Session) SetCurrentThreadID(id string) {
+	s.CurrentThreadID = id
+}
+
 // SetToken updates the underlying client token (e.g. after auth refresh).
 func (s *Session) SetToken(token string) {
 	if s.Client != nil {
@@ -58,6 +65,25 @@ func (s *Session) SendMessage(ctx context.Context, message string) (*AssistantTu
 }
 
 // NewThread creates a new chat thread via the gateway; uses session project context.
+// On success sets CurrentThreadID to the new thread id.
 func (s *Session) NewThread() (threadID string, err error) {
-	return s.Client.NewChatThread(s.ProjectID)
+	threadID, err = s.Client.NewChatThread(s.ProjectID)
+	if err != nil {
+		return "", err
+	}
+	s.CurrentThreadID = threadID
+	return threadID, nil
+}
+
+// ListThreads returns threads for the current user and project (recent-first, paginated).
+func (s *Session) ListThreads(limit, offset int) ([]gateway.ChatThreadItem, error) {
+	return s.Client.ListChatThreads(s.ProjectID, limit, offset)
+}
+
+// PatchThreadTitle renames the thread; requires CurrentThreadID or pass threadID.
+func (s *Session) PatchThreadTitle(threadID, title string) error {
+	if threadID == "" {
+		threadID = s.CurrentThreadID
+	}
+	return s.Client.PatchThreadTitle(threadID, title)
 }

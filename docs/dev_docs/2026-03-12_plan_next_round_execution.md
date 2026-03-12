@@ -1,5 +1,39 @@
 # Next Round Execution Plan
 
+- [Purpose](#purpose)
+- [Round Goals](#round-goals)
+- [Execution Principles](#execution-principles)
+- [Phase 0 Locked Scope Decisions](#phase-0-locked-scope-decisions)
+- [Phase 1 TUI-Enabling Spec Alignment](#phase-1-tui-enabling-spec-alignment)
+  - [Chat Thread Creation and Acquisition](#chat-thread-creation-and-acquisition)
+  - [CLI Thread Controls](#cli-thread-controls)
+  - [PMA Conversation History](#pma-conversation-history)
+  - [Rich Chat and Dual-Surface Contracts](#rich-chat-and-dual-surface-contracts)
+- [Phase 2 TUI MVP Spec Cut](#phase-2-tui-mvp-spec-cut)
+  - [Must Land in the First TUI Rollout](#must-land-in-the-first-tui-rollout)
+  - [Explicitly Deferred From the First TUI Rollout](#explicitly-deferred-from-the-first-tui-rollout)
+- [Phase 3 Backend Prerequisites Required for TUI Chat](#phase-3-backend-prerequisites-required-for-tui-chat)
+  - [Minimum Backend Surface](#minimum-backend-surface)
+  - [Required Backend Validation Before TUI Wiring](#required-backend-validation-before-tui-wiring)
+  - [Deferred Backend Work This Round](#deferred-backend-work-this-round)
+- [Phase 4 Shared Chat Controller and Testable Seams](#phase-4-shared-chat-controller-and-testable-seams)
+  - [Controller and Session State](#controller-and-session-state)
+  - [Transport and Rendering Seams](#transport-and-rendering-seams)
+- [Phase 5 `cynork` TUI and Python PTY Harness Implementation](#phase-5-cynork-tui-and-python-pty-harness-implementation)
+  - [Entry Point and Core Wiring](#entry-point-and-core-wiring)
+  - [Core TUI Experience](#core-tui-experience)
+  - [Thread and Session UX](#thread-and-session-ux)
+  - [Auth Recovery](#auth-recovery)
+  - [Python PTY Harness](#python-pty-harness)
+  - [Tandem TUI and Harness Validation](#tandem-tui-and-harness-validation)
+  - [TUI Chat-Complete Exit for Implementation](#tui-chat-complete-exit-for-implementation)
+- [Phase 6 TUI Validation and BDD](#phase-6-tui-validation-and-bdd)
+- [Phase 7 Remaining MVP Phase 2 Work After TUI MVP](#phase-7-remaining-mvp-phase-2-work-after-tui-mvp)
+- [Phase 8 Worker Deployment Simplification Docs](#phase-8-worker-deployment-simplification-docs)
+- [Recommended Execution Order](#recommended-execution-order)
+- [Exit Criteria for This Round](#exit-criteria-for-this-round)
+- [Progress Notes](#progress-notes)
+
 ## Purpose
 
 This temporary plan tracks the next round of work for CyNodeAI as of 2026-03-12.
@@ -247,7 +281,7 @@ They must be developed in tandem so each validates the other as behavior lands, 
 
 ### Entry Point and Core Wiring
 
-- [ ] Add the `cynork tui` command path.
+- [x] Add the `cynork tui` command path.
 
 - [ ] Make interactive `cynork chat` invoke the same fullscreen TUI entry flow as `cynork tui`, while keeping `cynork chat --message` and non-interactive usage line-oriented and parseable.
 
@@ -257,9 +291,10 @@ They must be developed in tandem so each validates the other as behavior lands, 
 
 ### Core TUI Experience
 
-- [ ] Implement the full-screen layout with scrollback, composer, status bar, and a togglable context pane.
+- [x] Implement the full-screen layout with scrollback, composer, status bar, and a togglable context pane.
 
-- [ ] Implement a multi-line composer with clear send semantics.
+- [x] Implement a multi-line composer with clear send semantics.
+  (Enter = send, Shift+Enter = newline; status bar hint; visible lines capped at 5.)
 
 - [ ] Implement scrollback navigation, search, and copy behavior.
 
@@ -273,11 +308,14 @@ They must be developed in tandem so each validates the other as behavior lands, 
 
 ### Thread and Session UX
 
-- [ ] Implement thread list and thread switching.
+- [x] Implement thread list and thread switching.
+  (Gateway `ListChatThreads`, `PatchThreadTitle`; session `CurrentThreadID`, `ListThreads`, `SetCurrentThreadID`; TUI `/thread list`, `/thread switch <id>`.)
 
 - [ ] Implement fresh-thread creation from startup controls and in-session controls.
+  (In-session `/thread new` implemented; startup `--thread-new` still to wire.)
 
-- [ ] Implement thread rename.
+- [x] Implement thread rename.
+  (TUI `/thread rename <title>`; session `PatchThreadTitle`; gateway PATCH thread.)
 
 - [ ] Implement project-context switching in-session.
 
@@ -387,7 +425,7 @@ They must be developed in tandem so each validates the other as behavior lands, 
 
 - [x] Fifth, implement the backend chat prerequisites in this order: `POST /v1/responses`, continuation metadata, normalized assistant-turn persistence, redaction-before-persistence guarantees, then thread retrieval and rename support.
 
-- [ ] Sixth, extract or define the reusable chat or controller seams that both the TUI and Python PTY harness will depend on.
+- [x] Sixth, extract or define the reusable chat or controller seams that both the TUI and Python PTY harness will depend on.
 
 - [ ] Seventh, implement the `cynork` TUI and the Python PTY harness in tandem, using each to validate the other as behavior lands.
 
@@ -414,7 +452,9 @@ They must be developed in tandem so each validates the other as behavior lands, 
 - **2026-03-12:** Phase 1 (TUI-enabling spec alignment) completed: chat threads and messages updated (active vs explicit thread, POST /v1/chat/threads), REQ-USRGWY-0135 and REQ-CLIENT-0181 added, CYNAI.CLIENT.CliChatThreadControls and CYNAI.PMAGNT.ConversationHistory added.
   Follow-up correction applied the same day: explicit fresh-thread creation remains a separate CyNodeAI Data REST capability, but subsequent `POST /v1/chat/completions` requests remain OpenAI-compatible and do not require any CyNodeAI-specific thread identifier.
   Execution order steps one and two done.
+
 - **2026-03-12:** Rich-chat and dual-surface spec promotion completed for the TUI track: the stable docs now cover both `POST /v1/chat/completions` and `POST /v1/responses`, structured turns, hidden thinking, ordered assistant output, TUI transcript rendering, generation state, orchestrator continuation state, and the full end-to-end chat flow.
+
 - **2026-03-12:** Phase 0 locked scope decisions and Phase 2 TUI MVP spec cut completed: cynork_cli.md updated (TUI scope and locked decisions, deprecate shell, cynork tui + chat in Required Commands, MVP Scope); `cynork_tui.md` defines the minimum layout, composer, thread history, status bar, transcript rendering, generation state, slash parity, auth recovery, and explicitly deferred list.
   Execution order steps three and four done.
   Next: Phase 3 backend prerequisites, Phase 4 shared controller and test seams, Phase 5 TUI plus Python PTY harness implementation, Phase 6 validation, then follow-on docs and non-TUI MVP work.
@@ -427,3 +467,20 @@ They must be developed in tandem so each validates the other as behavior lands, 
 
 - **2026-03-12:** Phase 4 shared chat controller and testable seams completed: added `cynork/internal/chat` with `Session`, `ChatTransport` (CompletionsTransport, ResponsesTransport), `AssistantTurn`, and machine-detectable landmarks; refactored `cmd/chat.go` and `cmd/chat_slash.go` to use instance-bound session; gateway client now has `ResponsesWithOptions`; `just ci` passes.
   Next: Phase 5 cynork TUI and Python PTY harness implementation.
+
+- **2026-03-12:** Phase 5 first slice: added `cynork tui` command and `cynork/internal/tui` Bubble Tea TUI with scrollback, single-line composer (Enter to send), status bar (gateway, project, model, landmarks), and chat session wiring.
+  Interactive `cynork chat` still uses line-oriented flow; TUI is entrypoint via `cynork tui`.
+  Tests and coverage for cmd and tui added; `tuiRunProgram` hook for tests. `just ci` passes.
+
+- **2026-03-12:** Execution order step Sixth marked complete (Phase 4 delivered the shared controller and testable seams).
+  `just test-bdd` run and passed; prior failure was an ephemeral port conflict from another agent running tests in parallel.
+
+- **2026-03-12:** Phase 5 slice (multi-line composer, thread UX): Multi-line composer with Enter=send and Shift+Enter=newline, status bar hint, and 5-line cap.
+  Gateway `ListChatThreads` (GET with pagination, optional OpenAI-Project) and `PatchThreadTitle` (PATCH).
+  Session `CurrentThreadID`, `NewThread()`, `SetCurrentThreadID`, `ListThreads`, `PatchThreadTitle`.
+  TUI `/thread new`, `/thread list`, `/thread switch <id>`, `/thread rename <title>`, status bar shows current thread (truncated).
+  Tests and coverage for gateway, session, and tui; lint fixes (evalOrder, httpNoBody, goconst, dupl).
+  Re-run `just ci` if a previous run failed with "parallel golangci-lint is running".
+  Follow-up: Coverage raised to >=90% for cynork/internal/tui and cynork/internal/gateway (tests for threadListCmd/threadRenameCmd nil session and list-with-items, ListTasks/GetTask normalizeTaskResponse, PatchThreadTitle Do failure).
+  Lint: dupl (taskGetHandler), goconst (threadListHeader, inputThreadList), hugeParam (task by pointer).
+  `just ci` passes.

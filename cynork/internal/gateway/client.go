@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"net/url"
+	"strconv"
 	"strings"
 
 	"github.com/cypher0n3/cynodeai/go_shared_libs/contracts/problem"
@@ -391,6 +392,93 @@ func (c *Client) NewChatThread(projectID string) (string, error) {
 		return "", fmt.Errorf("decode thread response: %w", err)
 	}
 	return out.ThreadID, nil
+}
+
+// ChatThreadItem is one thread in a list from GET /v1/chat/threads.
+type ChatThreadItem struct {
+	ID        string  `json:"id"`
+	Title     *string `json:"title,omitempty"`
+	CreatedAt string  `json:"created_at"`
+	UpdatedAt string  `json:"updated_at"`
+}
+
+// ListChatThreads calls GET /v1/chat/threads with optional project and pagination.
+func (c *Client) ListChatThreads(projectID string, limit, offset int) ([]ChatThreadItem, error) {
+	base, err := url.Parse(c.BaseURL)
+	if err != nil {
+		return nil, fmt.Errorf("invalid base URL: %w", err)
+	}
+	u, err := base.Parse("/v1/chat/threads")
+	if err != nil {
+		return nil, fmt.Errorf("invalid path: %w", err)
+	}
+	q := u.Query()
+	if limit > 0 {
+		q.Set("limit", strconv.Itoa(limit))
+	}
+	if offset > 0 {
+		q.Set("offset", strconv.Itoa(offset))
+	}
+	u.RawQuery = q.Encode()
+	req, err := http.NewRequest(http.MethodGet, u.String(), http.NoBody)
+	if err != nil {
+		return nil, err
+	}
+	if c.Token != "" {
+		req.Header.Set("Authorization", "Bearer "+c.Token)
+	}
+	if projectID != "" {
+		req.Header.Set("OpenAI-Project", projectID)
+	}
+	resp, err := c.HTTPClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		return nil, c.parseError(resp)
+	}
+	var out struct {
+		Data []ChatThreadItem `json:"data"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		return nil, fmt.Errorf("decode list threads response: %w", err)
+	}
+	return out.Data, nil
+}
+
+// PatchThreadTitle calls PATCH /v1/chat/threads/{id} to set the thread title.
+func (c *Client) PatchThreadTitle(threadID, title string) error {
+	base, err := url.Parse(c.BaseURL)
+	if err != nil {
+		return fmt.Errorf("invalid base URL: %w", err)
+	}
+	u, err := base.Parse("/v1/chat/threads/" + url.PathEscape(threadID))
+	if err != nil {
+		return fmt.Errorf("invalid path: %w", err)
+	}
+	body := map[string]string{"title": title}
+	raw, err := json.Marshal(body)
+	if err != nil {
+		return err
+	}
+	req, err := http.NewRequest(http.MethodPatch, u.String(), bytes.NewReader(raw))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	if c.Token != "" {
+		req.Header.Set("Authorization", "Bearer "+c.Token)
+	}
+	resp, err := c.HTTPClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		return c.parseError(resp)
+	}
+	return nil
 }
 
 // CreateTask calls POST /v1/tasks (requires auth).
