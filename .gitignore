@@ -5,10 +5,30 @@
 node_modules/
 Abacus.ai*/
 tmp/
-# install-markdownlint: cloned repo and rules (dir or symlink)
-.markdownlint-repo/
-.markdownlint-rules
-.markdownlint-rules/
+bin/
+bin-dev/
+**/bin/
+**/bin-dev/
+
+# Go build binary names (justfile build-* outputs; ignore anywhere in tree)
+cynode-pma
+!agents/cmd/cynode-pma/
+**/cynode-pma-dev
+cynode-sba
+!agents/cmd/cynode-sba/
+**/cynode-sba-dev
+**/control-plane-dev
+**/user-gateway-dev
+**/api-egress-dev
+**/mcp-gateway-dev
+**/worker-api-dev
+node-manager
+!worker_node/cmd/node-manager/
+**/node-manager-dev
+**/cynodeai-wnm-dev
+inference-proxy
+!worker_node/cmd/inference-proxy/
+**/inference-proxy-dev
 
 # File Patterns
 *.backup*
@@ -17,6 +37,7 @@ tmp/
 *.doc
 *.docx
 *.eps
+*.exe
 *.gif
 *.ico
 *.jpeg
@@ -46,5 +67,6 @@ coverage.*
 **/__pycache__/
 
 # Ignore local files
-meta.md
 .markdownlint-cli2.jsonc
+.env*
+!.env.example

@@ -1,0 +1,10 @@
+go 1.26
+
+use (
+	./agents
+	./cynork
+	./e2e
+	./go_shared_libs
+	./orchestrator
+	./worker_node
+)

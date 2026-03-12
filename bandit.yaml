@@ -1,0 +1,7 @@
+# Bandit skips: justified for dev/setup and E2E scripts (scripts/, .ci_scripts/).
+# Add a comment here when adding a new skip.
+skips:
+  - B404  # subprocess import/calls: dev and E2E scripts run just, podman, curl, python; required for automation.
+  - B603  # subprocess without shell: we use list-args and known binaries; skipping avoids noise on safe usage.
+  - B310  # urllib urlopen: scripts use urlopen for health checks (gateway, control-plane); HTTP only, timeout set.
+  - B607  # partial executable path: scripts invoke just, python3, podman by name; PATH under developer control.

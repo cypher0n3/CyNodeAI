@@ -25,8 +25,8 @@ linters:
         - opinionated
         - performance
         - style
-      disabled-checks:
-        - dupImport
+      # disabled-checks:
+      #   - dupImport
     goconst:
       min-len: 3
     gocognit:
