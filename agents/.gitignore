@@ -1,8 +1,7 @@
 # Binaries (just build outputs and local go build)
 bin/
-!**/cynode-pma/
-cynode-pma
-cynode-pma-dev
-!**/cynode-sba/
-cynode-sba
-cynode-sba-dev
+# Only ignore binaries at module root, not cmd/<name>/ source dirs
+/cynode-pma
+/cynode-pma-dev
+/cynode-sba
+/cynode-sba-dev

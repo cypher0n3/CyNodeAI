@@ -1,13 +1,11 @@
 # Binaries (just build outputs and local go build)
 bin/
-!**/worker-api/
-worker-api
-worker-api-dev
-!**/node-manager/
-node-manager
-node-manager-dev
-cynodeai-wnm
-cynodeai-wnm-dev
-!**/inference-proxy/
-inference-proxy
-inference-proxy-dev
+# Only ignore binaries at module root, not cmd/<name>/ source dirs
+/worker-api
+/worker-api-dev
+/node-manager
+/node-manager-dev
+/cynodeai-wnm
+/cynodeai-wnm-dev
+/inference-proxy
+/inference-proxy-dev
