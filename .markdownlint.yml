@@ -23,6 +23,20 @@ MD033:
   allowed_elements:
     - "a"
 
+# No asterisks lists
+MD004:
+  style: dash
+
+# Disabled because AI has a hard time with table column alignment and we have easy tools to fix (VSCode Prettier).
+MD060: false
+  # style: any
+
+# MD046/code-block-style - enforce fenced code block style (``` or ~~~).
+# Options:
+#   style: string (default "fenced"); "fenced" = fenced code block, "indented" = indented code block
+MD046:
+  style: fenced
+
 # NOTE: This project uses custom markdownlint rules from https://github.com/cypher0n3/docs-as-code-tools.
 
 # -----------------------------------------------------------------------------
@@ -45,20 +59,29 @@ MD033:
 # ---
 allow-custom-anchors:
   allowedIdPatterns:
+    # Spec ID definitions pattern
     - pattern: "^spec-[a-z0-9-]+$"
       placement:
-        lineMatch: '^- Spec ID:\s+`NP\.[^`]+`'
+        lineMatch: '^- Spec ID:\s+`CYNAI\.[A-Z]{6}\.[^`]+`'
         anchorImmediatelyAfterHeading: true
+        maxPerSection: 1
+    # Requirement ID definitions pattern
+    - pattern: "^req-[a-z]{6}-[0-9]{4}$"
+      placement:
+        standaloneLine: true
+    # Code block reference anchors pattern
     - pattern: "^ref-[a-z0-9]+-[a-z0-9-]+$"
       placement:
         standaloneLine: true
         requireAfter:
           - blank
           - fencedBlock
+    # Algorithm step specifications when fine-grained algorithm is used
     - pattern: "^algo-[a-z0-9-]+-step-[0-9]+(?:-[0-9]+)*$"
       placement:
         headingMatch: '^#{1,6} .*`[^`]+`.*\bAlgorithm\b'
-        lineMatch: '^\s*(?:[-*+]\s+|\d+[.)]\s+)'
+        # lineMatch: '^\s*(?:[-*+]\s+|\d+[.)]\s+)'
+    # Algorithm specification pattern
     - pattern: '^algo-[a-z0-9-]+$'
       placement:
         headingMatch: '^\s*#{1,6}\s+.*`[^`]+`.*\bAlgorithm\b'
@@ -89,7 +112,8 @@ allow-custom-anchors:
 # ---
 ascii-only:
   allowedPathPatternsUnicode:
-    # - "README.md"
+    - "README.md"
+    - "**/README.md"
   allowedPathPatternsEmoji:
     - "dev_docs/**"
     - "docs/docs_standards/markdown_conventions.md"
@@ -114,8 +138,8 @@ ascii-only:
 # ---
 document-length:
   maximum: 1500
-#   # excludePathPatterns:
-#   #   - "**/long/**"
+  excludePathPatterns:
+    - "docs/requirements/**"
 
 # -----------------------------------------------------------------------------
 # fenced-code-under-heading (custom)
@@ -267,6 +291,19 @@ no-heading-like-lines:
 #   # defaultHeadingLevel: 2
 #   # fixedHeadingLevel: 3
 #   # punctuationMarks: ".,;!?"
+#   # excludePathPatterns:
+#   #   - "**/*.md"
+
+# -----------------------------------------------------------------------------
+# no-tables (custom)
+# -----------------------------------------------------------------------------
+# To override: Uncomment the block; set convert-to and/or excludePathPatterns. Disallow GFM tables; when convert-to is "list", suggest converting each table to a list.
+# Options (all optional):
+#   convert-to: string (default "none"); "none" = short message only, "list" = show suggested list format in detail
+#   excludePathPatterns: list of globs; skip this rule for matching file paths
+# ---
+no-tables:
+  convert-to: list
 #   # excludePathPatterns:
 #   #   - "**/*.md"
 
