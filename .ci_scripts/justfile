@@ -192,9 +192,12 @@ lint-containerfiles:
         if command -v hadolint >/dev/null 2>&1; then
           hadolint "$root/$f"
         elif command -v podman >/dev/null 2>&1; then
-          podman run --rm -v "$root:/lint:ro" -w /lint hadolint/hadolint hadolint "/lint/$f"
+          podman run --rm -v "$root:/lint:ro" -w /lint hadolint/hadolint:latest-alpine hadolint "/lint/$f"
+        elif command -v docker >/dev/null 2>&1; then
+          docker run --rm -v "$root:/lint:ro" -w /lint hadolint/hadolint:latest-alpine hadolint "/lint/$f"
         else
-          docker run --rm -v "$root:/lint:ro" -w /lint hadolint/hadolint hadolint "/lint/$f"
+          echo "hadolint not found; install hadolint or podman/docker for container fallback" >&2
+          exit 1
         fi
     done
     echo "Containerfile lint: OK"

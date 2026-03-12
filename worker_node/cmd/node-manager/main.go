@@ -21,6 +21,7 @@ import (
 	"github.com/cypher0n3/cynodeai/go_shared_libs/contracts/nodepayloads"
 	"github.com/cypher0n3/cynodeai/worker_node/internal/nodeagent"
 	"github.com/cypher0n3/cynodeai/worker_node/internal/telemetry"
+	"github.com/cypher0n3/cynodeai/worker_node/internal/workerapiserver"
 	"github.com/google/uuid"
 )
 
@@ -64,17 +65,15 @@ func getEnv(key, def string) string {
 	return def
 }
 
-// stopNodeManagedContainers stops and removes all node-manager-owned containers:
-// - cynodeai-managed-* (PMA and other managed service containers)
-// - cynodeai-worker-api (worker-api container when run as a managed service)
-//
-// This is called on graceful shutdown so the dev setup-dev stop sequence does not
-// leave stray containers behind. Best-effort: errors are logged but not returned.
+// embeddedWorkerAPIShutdown is set when the Worker API runs embedded; defer calls it before stopping containers.
+var embeddedWorkerAPIShutdown func()
+
+// stopNodeManagedContainers stops and removes all node-manager-owned containers (cynodeai-managed-*).
+// Called on graceful shutdown after the embedded Worker API server has been shut down.
+// Best-effort: errors are logged but not returned.
 func stopNodeManagedContainers(logger *slog.Logger) {
 	rt := getEnv("CONTAINER_RUNTIME", "podman")
-	for _, f := range []string{"cynodeai-managed-", "cynodeai-worker-api"} {
-		stopManagedContainersMatching(rt, f, logger)
-	}
+	stopManagedContainersMatching(rt, "cynodeai-managed-", logger)
 }
 
 func stopManagedContainersMatching(rt, nameFilter string, logger *slog.Logger) {
@@ -117,9 +116,12 @@ func runMain(ctx context.Context) int {
 		<-sigCh
 		cancel()
 	}()
-	// On exit (signal or error), stop containers that node-manager started so the
-	// dev setup-dev stop sequence does not leave stray managed-service containers.
+	// On exit: shut down embedded Worker API first, then stop managed containers (NodeManagerShutdown order).
 	defer func() {
+		if embeddedWorkerAPIShutdown != nil {
+			embeddedWorkerAPIShutdown()
+			embeddedWorkerAPIShutdown = nil
+		}
 		if logger != nil {
 			logger.Info("node manager stopping managed containers")
 		}
@@ -148,7 +150,7 @@ func runMain(ctx context.Context) int {
 	}
 	cfg := nodeagent.LoadConfig()
 	opts := &nodeagent.RunOptions{
-		StartWorkerAPI:       startWorkerAPI,
+		StartWorkerAPI:       func(tok string) error { return startEmbeddedWorkerAPI(runCtx, tok, stateDir, telemetryStore, logger) },
 		StartOllama:          startOllama,
 		StartManagedServices: startManagedServices,
 		PullModels:           pullModels,
@@ -239,74 +241,29 @@ func recordNodeManagerShutdown(ctx context.Context, store *telemetry.Store, logg
 	}
 }
 
-// workerAPIContainerName is the name of the worker-api container when run as a managed service.
-const workerAPIContainerName = "cynodeai-worker-api"
-
-// startWorkerAPI starts the worker-api process or container. When NODE_MANAGER_WORKER_API_IMAGE is set,
-// starts worker-api as a container (worker-managed service); otherwise starts the binary from
-// NODE_MANAGER_WORKER_API_BIN. Passes through INFERENCE_PROXY_IMAGE, OLLAMA_UPSTREAM_URL, CONTAINER_RUNTIME,
-// WORKER_API_STATE_DIR so inference jobs and executor config are correct.
-// Inference backend env vars (e.g. OLLAMA_NUM_CTX) are NOT propagated here; they are passed
-// directly to the Ollama container via startOllama and to managed service containers via
-// ConfigManagedServiceInference.BackendEnv in the orchestrator config payload.
-func startWorkerAPI(bearerToken string) error {
-	if image := strings.TrimSpace(getEnv("NODE_MANAGER_WORKER_API_IMAGE", "")); image != "" {
-		return startWorkerAPIContainer(image, bearerToken)
+// startEmbeddedWorkerAPI starts the Worker API in-process (single binary). It waits for the server to be
+// listening before returning. Shutdown is registered in embeddedWorkerAPIShutdown and runs before containers.
+func startEmbeddedWorkerAPI(ctx context.Context, bearerToken, stateDir string, telemetryStore *telemetry.Store, logger *slog.Logger) error {
+	readyCh, shutdown, err := workerapiserver.RunEmbedded(ctx, workerapiserver.EmbedConfig{
+		BearerToken:    bearerToken,
+		StateDir:       stateDir,
+		TelemetryStore: telemetryStore,
+		Logger:         logger,
+	})
+	if err != nil {
+		return err
 	}
-	return startWorkerAPIBinary(bearerToken)
-}
-
-func startWorkerAPIBinary(bearerToken string) error {
-	bin := getEnv("NODE_MANAGER_WORKER_API_BIN", "worker-api")
-	if !strings.Contains(bin, "/") {
-		path, err := runner.LookPath(bin)
-		if err != nil {
-			return err
-		}
-		bin = path
-	}
-	env := os.Environ()
-	env = append(env, "WORKER_API_BEARER_TOKEN="+bearerToken)
-	for _, key := range []string{"INFERENCE_PROXY_IMAGE", "OLLAMA_UPSTREAM_URL", "CONTAINER_RUNTIME", "WORKER_API_STATE_DIR"} {
-		if v := os.Getenv(key); v != "" {
-			env = append(env, key+"="+v)
-		}
-	}
-	return runner.StartDetached(bin, nil, env)
-}
-
-// startWorkerAPIContainer starts worker-api as a container (worker-managed service). Uses effectiveStateDir
-// for the state volume so telemetry and secure store persist. If the container already exists, starts it.
-func startWorkerAPIContainer(image, bearerToken string) error {
-	rt := getEnv("CONTAINER_RUNTIME", "podman")
-	stateDir := effectiveStateDir()
-	out, err := runner.CombinedOutput(rt, "ps", "-a", "--format", "{{.Names}}")
-	if err == nil && strings.Contains(string(out), workerAPIContainerName) {
-		if out2, err2 := runner.CombinedOutput(rt, "start", workerAPIContainerName); err2 != nil {
-			return fmt.Errorf("start existing worker-api container: %w: %s", err2, strings.TrimSpace(string(out2)))
-		}
+	select {
+	case <-ctx.Done():
+		shutdown()
+		return ctx.Err()
+	case <-readyCh:
+		embeddedWorkerAPIShutdown = shutdown
 		return nil
+	case <-time.After(30 * time.Second):
+		shutdown()
+		return fmt.Errorf("worker API did not become ready within 30s")
 	}
-	// run -d --name cynodeai-worker-api -p 12090:12090 -e ... -v stateDir:/var/lib/cynode/state image
-	args := []string{
-		"run", "-d", "--name", workerAPIContainerName,
-		"-p", "12090:12090",
-		"-e", "WORKER_API_BEARER_TOKEN=" + bearerToken,
-		"-e", "WORKER_API_STATE_DIR=/var/lib/cynode/state",
-		"-e", "LISTEN_ADDR=:12090",
-		"-e", "NODE_SKIP_NODE_BOOT_RECORD=1",
-		"-v", stateDir + ":/var/lib/cynode/state",
-	}
-	for _, key := range []string{"INFERENCE_PROXY_IMAGE", "OLLAMA_UPSTREAM_URL", "CONTAINER_RUNTIME"} {
-		if v := os.Getenv(key); v != "" {
-			args = append(args, "-e", key+"="+v)
-		}
-	}
-	args = append(args, image)
-	if out, err := runner.CombinedOutput(rt, args...); err != nil {
-		return fmt.Errorf("worker-api container: %w: %s", err, strings.TrimSpace(string(out)))
-	}
-	return nil
 }
 
 // startOllama starts the Phase 1 inference container (Ollama). image/variant from config or env. Fail-fast on error.

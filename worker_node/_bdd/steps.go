@@ -29,7 +29,7 @@ import (
 	"github.com/cypher0n3/cynodeai/go_shared_libs/contracts/problem"
 	"github.com/cypher0n3/cynodeai/go_shared_libs/contracts/sbajob"
 	"github.com/cypher0n3/cynodeai/go_shared_libs/contracts/workerapi"
-	"github.com/cypher0n3/cynodeai/worker_node/cmd/worker-api/executor"
+	"github.com/cypher0n3/cynodeai/worker_node/internal/executor"
 	"github.com/cypher0n3/cynodeai/worker_node/internal/inferenceproxy"
 	"github.com/cypher0n3/cynodeai/worker_node/internal/nodeagent"
 	"github.com/cypher0n3/cynodeai/worker_node/internal/securestore"
@@ -1140,6 +1140,10 @@ func RegisterNodeManagerConfigSteps(sc *godog.ScenarioContext, state *workerTest
 		defer state.mu.Unlock()
 		var srv *httptest.Server
 		srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.URL.Path == "/readyz" && r.Method == http.MethodGet {
+				w.WriteHeader(http.StatusOK)
+				return
+			}
 			if r.URL.Path == "/v1/nodes/register" && r.Method == "POST" {
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(http.StatusCreated)
@@ -1212,6 +1216,9 @@ func RegisterNodeManagerConfigSteps(sc *godog.ScenarioContext, state *workerTest
 		if st == nil || st.mockOrch == nil {
 			return fmt.Errorf("mock orchestrator not started")
 		}
+		// Skip container runtime check so BDD does not run real podman/docker.
+		prevSkip := os.Getenv("NODE_MANAGER_SKIP_CONTAINER_CHECK")
+		_ = os.Setenv("NODE_MANAGER_SKIP_CONTAINER_CHECK", "1")
 		// Force no existing inference so StartOllama is invoked when config has inference_backend (BDD determinism).
 		prev := os.Getenv("NODE_MANAGER_TEST_NO_EXISTING_INFERENCE")
 		_ = os.Setenv("NODE_MANAGER_TEST_NO_EXISTING_INFERENCE", "1")
@@ -1219,6 +1226,11 @@ func RegisterNodeManagerConfigSteps(sc *godog.ScenarioContext, state *workerTest
 		prevGPU := os.Getenv("NODE_MANAGER_TEST_NO_GPU_DETECT")
 		_ = os.Setenv("NODE_MANAGER_TEST_NO_GPU_DETECT", "1")
 		defer func() {
+			if prevSkip == "" {
+				_ = os.Unsetenv("NODE_MANAGER_SKIP_CONTAINER_CHECK")
+			} else {
+				_ = os.Setenv("NODE_MANAGER_SKIP_CONTAINER_CHECK", prevSkip)
+			}
 			if prev == "" {
 				_ = os.Unsetenv("NODE_MANAGER_TEST_NO_EXISTING_INFERENCE")
 			} else {

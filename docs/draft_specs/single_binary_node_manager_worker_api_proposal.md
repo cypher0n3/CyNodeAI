@@ -1,5 +1,7 @@
 # Proposal: Single Binary for Node Manager and Worker API (Host Binary Deployment)
 
+<!-- Canonicalized (2026-03-12): Merged into requirements (REQ-WORKER-0262, REQ-WORKER-0263) and worker_node.md (Deployment Topologies, Single-Process Host Binary). Implementation is single process only; Worker API as a separate service or container is not retained. -->
+
 - [Scope and Metadata](#scope-and-metadata)
 - [Summary](#summary)
 - [Design Decision: Option A](#design-decision-option-a)

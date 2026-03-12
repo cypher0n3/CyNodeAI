@@ -26,6 +26,8 @@
 - [Node Startup Procedure](#node-startup-procedure)
 - [Node Startup Checks and Readiness](#node-startup-checks-and-readiness)
 - [Deployment and Auto-Start](#deployment-and-auto-start)
+- [Deployment Topologies](#deployment-topologies)
+- [Single-Process Host Binary](#single-process-host-binary)
 - [Existing Inference Service on Host](#existing-inference-service-on-host)
 - [Ollama Container Policy](#ollama-container-policy)
 - [Sandbox-Only Nodes](#sandbox-only-nodes)
@@ -814,6 +816,88 @@ Worker node deployments MUST support auto-start on the host so that Node Manager
   Both user (rootless) and system (root) installs MUST be supported.
   See [`worker_node/systemd/README.md`](../../worker_node/systemd/README.md) for the reference layout and generation steps.
 - **macOS:** The implementation MUST provide launchd plist files for worker node services so that they can start on boot or on user login, with the same capability as the Linux systemd approach (start on boot, start on demand, enable/disable).
+
+## Deployment Topologies
+
+- Spec ID: `CYNAI.WORKER.DeploymentTopologies` <a id="spec-cynai-worker-deploymenttopologies"></a>
+
+Traces To:
+
+- [REQ-WORKER-0262](../requirements/worker.md#req-worker-0262)
+
+The implementation supports **single-process (host binary) only**.
+Node Manager and Worker API run in one process; one binary (`cynodeai-wnm`), one system service.
+No separate Worker API process and no Worker API as a managed container.
+
+Error conditions:
+
+- If the Worker API HTTP server cannot bind or start (e.g. port in use), the process MUST fail startup with a clear error and non-zero exit code.
+
+## Single-Process Host Binary
+
+- Spec ID: `CYNAI.WORKER.SingleProcessHostBinary` <a id="spec-cynai-worker-singleprocesshostbinary"></a>
+
+Traces To:
+
+- [REQ-WORKER-0262](../requirements/worker.md#req-worker-0262)
+- [REQ-WORKER-0263](../requirements/worker.md#req-worker-0263)
+- [REQ-WORKER-0172](../requirements/worker.md#req-worker-0172) (secure store boundary when separate processes)
+- [CYNAI.WORKER.NodeStartupProcedure](#spec-cynai-worker-nodestartupprocedure)
+- [CYNAI.WORKER.NodeManagerShutdown](#spec-cynai-worker-nodemanagershutdown)
+
+This rule defines the required behavior when the worker node is run in the single-process (host binary) topology: one process runs both Node Manager and Worker API.
+
+### Single-Process Host Binary Scope
+
+- Applies when the deployment topology is single-process (host binary).
+- The same process MUST perform: node registration, config fetch, config apply, telemetry DB lifecycle (node_boot, retention, vacuum, shutdown event), secure store writes (config apply) and reads (worker proxy), and Worker API HTTP server (healthz, jobs, telemetry, managed-service proxy, etc.).
+- The Worker API HTTP server MUST be started in the same process as the Node Manager after configuration is applied; the implementation MUST NOT spawn a separate Worker API process for this topology.
+
+### Single-Process Host Binary Preconditions
+
+- Node startup YAML (or equivalent) and environment are loaded; orchestrator URL, node identity, and registration PSK are available.
+- Container runtime (Podman or Docker) is available when the node is configured for sandbox or managed services.
+
+### Single-Process Host Binary Outcomes
+
+- The single process MUST open and own the telemetry SQLite database; MUST perform node_boot insert once per process start; MUST run retention and vacuum per [Worker Telemetry API](worker_telemetry_api.md) spec; MUST record node manager shutdown on exit.
+- The single process MUST apply node configuration (secure store writes) and MUST serve Worker API endpoints including the internal proxy that reads from the secure store; the process boundary is the trusted boundary per [CYNAI.WORKER.SecureStoreProcessBoundary](#spec-cynai-worker-securestoreprocessboundary).
+- Worker API listen address and port (e.g. `0.0.0.0:12090`) MUST be taken from node startup YAML or environment; the same process MUST bind and serve the Worker API and internal proxy (e.g. UDS for managed agents) until shutdown.
+- On shutdown (SIGTERM, SIGINT, or systemd stop), the process MUST follow [CYNAI.WORKER.NodeManagerShutdown](#spec-cynai-worker-nodemanagershutdown): stop all managed containers and sandbox containers, then exit; the Worker API HTTP server MUST stop accepting new requests and MUST drain or close in coordination with that shutdown.
+
+### `SingleProcessHostBinary` Algorithm
+
+<a id="algo-cynai-worker-singleprocesshostbinary-startup"></a>
+
+1. Start the single process and load node startup YAML and environment. <a id="algo-cynai-worker-singleprocesshostbinary-startup-step-1"></a>
+2. Open telemetry store (create directory if needed); run retention on startup; insert node_boot once; start background retention and vacuum goroutines per telemetry spec. <a id="algo-cynai-worker-singleprocesshostbinary-startup-step-2"></a>
+3. Perform node startup checks (container runtime, sandbox mount root if applicable) per [Node Startup Checks and Readiness](#spec-cynai-worker-nodestartupchecks). <a id="algo-cynai-worker-singleprocesshostbinary-startup-step-3"></a>
+4. Register with orchestrator and send capability report; obtain bootstrap data (JWT, report URL, config URL). <a id="algo-cynai-worker-singleprocesshostbinary-startup-step-4"></a>
+5. Fetch node configuration from orchestrator. <a id="algo-cynai-worker-singleprocesshostbinary-startup-step-5"></a>
+6. Apply configuration: resolve and write secrets to secure store; apply worker proxy config. <a id="algo-cynai-worker-singleprocesshostbinary-startup-step-6"></a>
+7. Start the Worker API HTTP server in the same process (bind to configured listen address/port and optional internal UDS); do not spawn a separate process. <a id="algo-cynai-worker-singleprocesshostbinary-startup-step-7"></a>
+8. Start local inference container (Ollama) only when no existing host inference is detected and config instructs, per [Node Startup Procedure](#spec-cynai-worker-nodestartupprocedure). <a id="algo-cynai-worker-singleprocesshostbinary-startup-step-8"></a>
+9. Start orchestrator-directed managed service containers (e.g. PMA) per config. <a id="algo-cynai-worker-singleprocesshostbinary-startup-step-9"></a>
+10. Send config ack to orchestrator; run capability reporting loop until shutdown. <a id="algo-cynai-worker-singleprocesshostbinary-startup-step-10"></a>
+
+The algorithm above defines the required startup order for the single-process topology and extends the [Node Startup Procedure](#spec-cynai-worker-nodestartupprocedure) by specifying that the Worker API is started in-process (step 7).
+
+### Single-Process Host Binary Error Conditions
+
+- If telemetry store cannot be opened or node_boot fails, the process MUST log the error and MAY continue without telemetry or MUST exit with non-zero exit code depending on implementation policy; the spec does not mandate exit for telemetry failure.
+- If registration, config fetch, or config apply fails, the process MUST exit with non-zero exit code.
+- If the Worker API HTTP server fails to bind or start (e.g. port in use), the process MUST exit with non-zero exit code.
+- If startup checks fail, the process MUST NOT report ready and MUST exit or retry per [Node Startup Checks and Readiness](#spec-cynai-worker-nodestartupchecks).
+
+### Single-Process Host Binary Observability
+
+- The single process MUST emit logs with a source identifier (e.g. `node_manager` or a unified node source) so that telemetry and logs can attribute events to the node.
+- Shutdown MUST be recorded in the telemetry store per [CYNAI.WORKER.TelemetryLifecycleEvents](worker_telemetry_api.md#spec-cynai-worker-telemetrylifecycleevents).
+
+### Binary Name and Invocation (Informational)
+
+- The implementation MUST document the single binary name `cynodeai-wnm` and invocation for host deployment.
+- One invocation runs both Node Manager and Worker API in the same process; no second binary or subcommand is required for normal operation.
 
 ## Existing Inference Service on Host
 

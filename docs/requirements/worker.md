@@ -371,3 +371,13 @@ It covers worker-node behavior and the worker API contract for job execution and
   [CYNAI.WORKER.OrchestratorShutdownNotification](../tech_specs/worker_node.md#spec-cynai-worker-orchestratorshutdownnotification)
   [REQ-ORCHES-0164](../requirements/orches.md#req-orches-0164)
   <a id="req-worker-0261"></a>
+- **REQ-WORKER-0262:** The worker node MUST run the Node Manager and Worker API in a single process; one binary (cynodeai-wnm), one system service.
+  No separate Worker API process and no Worker API as a managed container.
+  [CYNAI.WORKER.SingleProcessHostBinary](../tech_specs/worker_node.md#spec-cynai-worker-singleprocesshostbinary)
+  [CYNAI.WORKER.DeploymentTopologies](../tech_specs/worker_node.md#spec-cynai-worker-deploymenttopologies)
+  <a id="req-worker-0262"></a>
+- **REQ-WORKER-0263:** Node Manager and Worker API MUST share one process boundary; secure store and telemetry lifecycle MUST follow the same-process behavior in
+  [CYNAI.WORKER.SecureStoreProcessBoundary](../tech_specs/worker_node.md#spec-cynai-worker-securestoreprocessboundary) and node-manager-owned telemetry (node_boot, retention, vacuum, shutdown).
+  Orchestrator-facing behavior (registration, config, capability reporting, Worker API contract) MUST be unchanged.
+  [CYNAI.WORKER.SingleProcessHostBinary](../tech_specs/worker_node.md#spec-cynai-worker-singleprocesshostbinary)
+  <a id="req-worker-0263"></a>

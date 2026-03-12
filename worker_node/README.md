@@ -11,18 +11,19 @@
 This directory contains the Go implementation of CyNodeAI worker node services.
 Worker nodes register with the orchestrator, report capabilities, accept jobs, execute sandboxed work, and report results.
 
-At a high level, the worker side is split into a node manager (registration and orchestration-facing control) and a worker API (job execution surface).
+The worker node runs as a **single process** (one binary, `cynodeai-wnm`): the node manager and Worker API run together.
+There is no separate Worker API process or container.
 
 ## 2 What This Directory Contains
 
 This directory is a standalone Go module defined by [`go.mod`](go.mod).
 
 - [`cmd/`](cmd/): Entrypoints for worker node services.
-  - [`cmd/node-manager/`](cmd/node-manager/): The node manager service entrypoint and container definition.
-  - [`cmd/worker-api/`](cmd/worker-api/): The worker API service entrypoint, container definition, and executor package.
+  - [`cmd/node-manager/`](cmd/node-manager/): The **single binary** (`cynodeai-wnm`) that runs both the node manager and the Worker API in one process.
+  - [`cmd/worker-api/`](cmd/worker-api/): Standalone Worker API entrypoint (used for tests or legacy compose; not the supported deployment topology).
   - [`cmd/inference-proxy/`](cmd/inference-proxy/): The inference proxy service for sandbox-side inference routing.
-- [`docker-compose.yml`](docker-compose.yml): Development compose stack for **worker-api only**.
-  Node-manager is intended to run on the host (for example via `just setup-dev start`) so it can manage podman/docker for PMA and sandboxes.
+- [`docker-compose.yml`](docker-compose.yml): Development compose stack for **worker-api only** (e.g. telemetry/job endpoints in isolation).
+  For full node behavior (registration, config fetch, PMA, sandbox), run the single binary on the host via `just setup-dev start` from the repo root.
 - [`systemd/`](systemd/): Service definitions and notes for running on a host.
 
 This module depends on shared contracts in [`go_shared_libs/`](../go_shared_libs/) via a local replace in [`go.mod`](go.mod).
@@ -38,9 +39,8 @@ Run `just e2e` from the repository root.
 
 ### 3.2 Run With the Local Compose Stack
 
-This directory includes a compose file at [`docker-compose.yml`](docker-compose.yml) that runs **worker-api only** (no node-manager in a container).
-Use it when you need the worker API in a container (for example telemetry or job endpoints).
-For full node behavior (registration, config fetch, PMA, sandbox containers), run node-manager on the host via `just setup-dev start` from the repo root; node-manager will start worker-api and manage podman/docker.
+This directory includes a compose file at [`docker-compose.yml`](docker-compose.yml) that runs **worker-api only** (e.g. for telemetry or job endpoints in isolation).
+For full node behavior (registration, config fetch, PMA, sandbox), run the **single binary** on the host via `just setup-dev start` from the repo root; it runs both the node manager and Worker API in one process and manages podman/docker for PMA and sandboxes.
 Configuration is via environment variables documented inline in the compose file.
 
 ## 4 Testing and Linting

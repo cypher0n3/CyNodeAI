@@ -25,7 +25,10 @@ func (h *LogHandler) Enabled(ctx context.Context, level slog.Level) bool {
 
 // Handle implements slog.Handler. It forwards to Inner and, if Store is set, inserts a log_event asynchronously.
 //
-//nolint:gocritic // hugeParam: slog.Handler.Handle requires value by interface.
+// hugeParam exception: slog.Handler.Handle(ctx, r slog.Record) is fixed by the standard library; we cannot
+// take *slog.Record without breaking the interface. Approved by code owner (cypher0n3).
+//
+//nolint:gocritic // hugeParam
 func (h *LogHandler) Handle(ctx context.Context, r slog.Record) error {
 	if h.Inner != nil {
 		_ = h.Inner.Handle(ctx, r)

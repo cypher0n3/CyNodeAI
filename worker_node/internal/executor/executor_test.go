@@ -323,6 +323,174 @@ func TestRunJobWithPodInference(t *testing.T) {
 	t.Skipf("pod path failed (podman/env not ready): status=%s stderr=%s", resp.Status, resp.Stderr)
 }
 
+// TestRunJobWithPodInference_FakeRuntime covers the full runJobWithPodInference path with a script named "podman" on PATH and mocked waitForProxyReady.
+func TestRunJobWithPodInference_FakeRuntime(t *testing.T) {
+	dir := t.TempDir()
+	// Must be named "podman" so e.runtime == runtimePodman and RunJob calls runJobWithPodInference.
+	runtimePath := filepath.Join(dir, "podman")
+	script := `#!/bin/sh
+if [ "$1" = "pod" ] && [ "$2" = "create" ]; then
+  exit 0
+fi
+if [ "$1" = "pod" ] && [ "$2" = "rm" ]; then
+  exit 0
+fi
+if [ "$1" = "run" ]; then
+  # Proxy run has -d; sandbox run does not.
+  for a in "$@"; do
+    if [ "$a" = "-d" ]; then
+      echo "proxy-container-id"
+      exit 0
+    fi
+  done
+  # Sandbox run: echo and exit 0
+  echo "in-pod-output"
+  exit 0
+fi
+exit 1
+`
+	if err := os.WriteFile(runtimePath, []byte(script), 0o700); err != nil {
+		t.Fatalf("write script: %v", err)
+	}
+	origPath := os.Getenv("PATH")
+	_ = os.Setenv("PATH", dir+string(filepath.ListSeparator)+origPath)
+	defer func() { _ = os.Setenv("PATH", origPath) }()
+
+	origHealth := probeProxyHealthFunc
+	origRunning := probeProxyRunningFunc
+	defer func() {
+		probeProxyHealthFunc = origHealth
+		probeProxyRunningFunc = origRunning
+	}()
+	probeProxyHealthFunc = func(context.Context, string, string) error { return nil }
+	probeProxyRunningFunc = func(context.Context, string, string) error { return nil }
+
+	e := New("podman", 30*time.Second, 4096, "http://host:11434", "proxyimg", nil)
+	req := &workerapi.RunJobRequest{
+		Version: 1,
+		TaskID:  "t1",
+		JobID:   "j1-fake",
+		Sandbox: workerapi.SandboxSpec{
+			Command:      []string{"echo", "in-pod-output"},
+			UseInference: true,
+			Image:        "alpine:latest",
+		},
+	}
+	resp, err := e.RunJob(context.Background(), req, "")
+	if err != nil {
+		t.Fatalf("RunJob: %v", err)
+	}
+	if resp.Status != workerapi.StatusCompleted || resp.ExitCode != 0 {
+		t.Errorf("status=%s exitCode=%d stderr=%s", resp.Status, resp.ExitCode, resp.Stderr)
+	}
+	if !strings.Contains(resp.Stdout, "in-pod-output") {
+		t.Errorf("stdout=%q", resp.Stdout)
+	}
+}
+
+// TestRunJobWithPodInference_FakeRuntime_WithWorkspace covers runJobWithPodInference when workspaceDir is non-empty.
+func TestRunJobWithPodInference_FakeRuntime_WithWorkspace(t *testing.T) {
+	dir := t.TempDir()
+	workspaceDir := filepath.Join(dir, "ws")
+	if err := os.MkdirAll(workspaceDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	runtimePath := filepath.Join(dir, "podman")
+	script := `#!/bin/sh
+if [ "$1" = "pod" ] && [ "$2" = "create" ]; then exit 0; fi
+if [ "$1" = "pod" ] && [ "$2" = "rm" ]; then exit 0; fi
+if [ "$1" = "run" ]; then
+  for a in "$@"; do if [ "$a" = "-d" ]; then echo "proxy-cid"; exit 0; fi; done
+  echo "with-workspace"
+  exit 0
+fi
+exit 1
+`
+	if err := os.WriteFile(runtimePath, []byte(script), 0o700); err != nil {
+		t.Fatalf("write script: %v", err)
+	}
+	origPath := os.Getenv("PATH")
+	_ = os.Setenv("PATH", dir+string(filepath.ListSeparator)+origPath)
+	defer func() { _ = os.Setenv("PATH", origPath) }()
+
+	origHealth := probeProxyHealthFunc
+	origRunning := probeProxyRunningFunc
+	defer func() {
+		probeProxyHealthFunc = origHealth
+		probeProxyRunningFunc = origRunning
+	}()
+	probeProxyHealthFunc = func(context.Context, string, string) error { return nil }
+	probeProxyRunningFunc = func(context.Context, string, string) error { return nil }
+
+	e := New("podman", 30*time.Second, 4096, "http://host:11434", "proxyimg", nil)
+	req := &workerapi.RunJobRequest{
+		Version: 1,
+		TaskID:  "t1",
+		JobID:   "j1-ws",
+		Sandbox: workerapi.SandboxSpec{
+			Command: []string{"echo", "with-workspace"}, UseInference: true, Image: "alpine:latest",
+		},
+	}
+	resp, err := e.RunJob(context.Background(), req, workspaceDir)
+	if err != nil {
+		t.Fatalf("RunJob: %v", err)
+	}
+	if resp.Status != workerapi.StatusCompleted {
+		t.Errorf("status=%s stderr=%s", resp.Status, resp.Stderr)
+	}
+}
+
+// TestRunJobWithPodInference_FakeRuntime_SandboxRunFails covers runJobWithPodInference when the sandbox container exits non-zero.
+func TestRunJobWithPodInference_FakeRuntime_SandboxRunFails(t *testing.T) {
+	dir := t.TempDir()
+	runtimePath := filepath.Join(dir, "podman")
+	script := `#!/bin/sh
+if [ "$1" = "pod" ] && [ "$2" = "create" ]; then exit 0; fi
+if [ "$1" = "pod" ] && [ "$2" = "rm" ]; then exit 0; fi
+if [ "$1" = "run" ]; then
+  for a in "$@"; do if [ "$a" = "-d" ]; then echo "proxy-cid"; exit 0; fi; done
+  echo "sandbox stderr" >&2
+  exit 2
+fi
+exit 1
+`
+	if err := os.WriteFile(runtimePath, []byte(script), 0o700); err != nil {
+		t.Fatalf("write script: %v", err)
+	}
+	origPath := os.Getenv("PATH")
+	_ = os.Setenv("PATH", dir+string(filepath.ListSeparator)+origPath)
+	defer func() { _ = os.Setenv("PATH", origPath) }()
+
+	origHealth := probeProxyHealthFunc
+	origRunning := probeProxyRunningFunc
+	defer func() {
+		probeProxyHealthFunc = origHealth
+		probeProxyRunningFunc = origRunning
+	}()
+	probeProxyHealthFunc = func(context.Context, string, string) error { return nil }
+	probeProxyRunningFunc = func(context.Context, string, string) error { return nil }
+
+	e := New("podman", 30*time.Second, 4096, "http://host:11434", "proxyimg", nil)
+	req := &workerapi.RunJobRequest{
+		Version: 1,
+		TaskID:  "t1",
+		JobID:   "j1-fail",
+		Sandbox: workerapi.SandboxSpec{
+			Command: []string{"false"}, UseInference: true, Image: "alpine:latest",
+		},
+	}
+	resp, err := e.RunJob(context.Background(), req, "")
+	if err != nil {
+		t.Fatalf("RunJob: %v", err)
+	}
+	if resp.Status != workerapi.StatusFailed {
+		t.Errorf("status=%s", resp.Status)
+	}
+	if resp.ExitCode != 2 {
+		t.Errorf("exitCode=%d", resp.ExitCode)
+	}
+}
+
 // TestRunJobWithPodInference_pod_create_fail covers the error path when pod create fails.
 func TestRunJobWithPodInference_pod_create_fail(t *testing.T) {
 	if _, err := exec.LookPath("podman"); err != nil {
@@ -1530,6 +1698,8 @@ func TestTruncateUTF8(t *testing.T) {
 		{"zero maxBytes", "hello", 0, ""},
 		// Continuation byte at boundary: backup then return (covers truncateUTF8 loop b=b[:i] path)
 		{"back up from continuation", "a" + "\x80" + "x", 2, "a"},
+		// No rune start in truncated prefix: loop exits without return, then return string(b) (line 830)
+		{"continuation only", "\x80", 1, "\x80"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -1538,6 +1708,19 @@ func TestTruncateUTF8(t *testing.T) {
 				t.Errorf("truncateUTF8(%q, %d) = %q, want %q", tt.s, tt.maxBytes, got, tt.want)
 			}
 		})
+	}
+}
+
+// TestSetRunError_NonExitErrorWithStderr covers setRunError when err is not *exec.ExitError and resp.Stderr is already set.
+func TestSetRunError_NonExitErrorWithStderr(t *testing.T) {
+	e := New("direct", time.Second, 1024, "", "", nil)
+	resp := &workerapi.RunJobResponse{Stderr: "prior stderr"}
+	e.setRunError(resp, fmt.Errorf("executable not found"))
+	if resp.Status != workerapi.StatusFailed || resp.ExitCode != -1 {
+		t.Errorf("status=%s exitCode=%d", resp.Status, resp.ExitCode)
+	}
+	if !strings.Contains(resp.Stderr, "executable not found") || !strings.Contains(resp.Stderr, "--- runtime stderr ---\nprior stderr") {
+		t.Errorf("stderr should append prior: %q", resp.Stderr)
 	}
 }
 
@@ -1638,5 +1821,30 @@ func TestPrepareSBAJobAndWorkspace_MkdirTempFails(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "job dir") {
 		t.Errorf("error should mention job dir: %v", err)
+	}
+}
+
+// TestRunJobSBA_InvalidJobSpecJSON covers runJobSBA when JobSpecJSON fails to parse.
+func TestRunJobSBA_InvalidJobSpecJSON(t *testing.T) {
+	e := New("nonexistent-runtime-xyz", 10*time.Second, 1024, "", "", nil)
+	req := &workerapi.RunJobRequest{
+		Version: 1,
+		TaskID:  "t1",
+		JobID:   "j1",
+		Sandbox: workerapi.SandboxSpec{
+			Image:       "cynodeai-cynode-sba:dev",
+			Command:     nil,
+			JobSpecJSON: `{invalid json`,
+		},
+	}
+	resp, err := e.RunJob(context.Background(), req, "")
+	if err != nil {
+		t.Fatalf("RunJob: %v", err)
+	}
+	if resp.Status != workerapi.StatusFailed {
+		t.Errorf("status=%s, want failed", resp.Status)
+	}
+	if !strings.Contains(resp.Stderr, "invalid SBA job_spec_json") {
+		t.Errorf("stderr=%q should mention invalid job_spec_json", resp.Stderr)
 	}
 }

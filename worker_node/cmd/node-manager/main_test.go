@@ -3,11 +3,13 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
 	"net"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -98,6 +100,18 @@ func TestRecordNodeBootTelemetry(t *testing.T) {
 	}
 }
 
+func TestRecordNodeBootTelemetry_InsertFails(t *testing.T) {
+	ctx := context.Background()
+	store, err := telemetry.Open(ctx, t.TempDir())
+	if err != nil {
+		t.Fatalf("telemetry Open: %v", err)
+	}
+	_ = store.Close()
+	if err := recordNodeBootTelemetry(ctx, store, slog.Default()); err == nil {
+		t.Error("recordNodeBootTelemetry with closed store should return error")
+	}
+}
+
 func TestRecordNodeManagerShutdown(t *testing.T) {
 	ctx := context.Background()
 	store, err := telemetry.Open(ctx, t.TempDir())
@@ -108,6 +122,16 @@ func TestRecordNodeManagerShutdown(t *testing.T) {
 	logger := slog.Default()
 	recordNodeManagerShutdown(ctx, store, logger)
 	recordNodeManagerShutdown(ctx, store, nil)
+}
+
+func TestRecordNodeManagerShutdown_InsertFails(t *testing.T) {
+	ctx := context.Background()
+	store, err := telemetry.Open(ctx, t.TempDir())
+	if err != nil {
+		t.Fatalf("telemetry Open: %v", err)
+	}
+	_ = store.Close()
+	recordNodeManagerShutdown(ctx, store, slog.Default())
 }
 
 func TestRunTelemetryRetentionAndVacuum(t *testing.T) {
@@ -123,6 +147,44 @@ func TestRunTelemetryRetentionAndVacuum(t *testing.T) {
 		runTelemetryRetentionAndVacuum(ctx, store, logger)
 		close(done)
 	}()
+	cancel()
+	<-done
+}
+
+func TestRunTelemetryRetentionAndVacuum_EnforceRetentionError(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	store, err := telemetry.Open(ctx, t.TempDir())
+	if err != nil {
+		t.Fatalf("telemetry Open: %v", err)
+	}
+	_ = store.Close()
+	done := make(chan struct{})
+	go func() {
+		runTelemetryRetentionAndVacuum(ctx, store, slog.Default())
+		close(done)
+	}()
+	cancel()
+	<-done
+}
+
+func TestRunTelemetryRetentionAndVacuum_TickerFiresWithError(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	store, err := telemetry.Open(ctx, t.TempDir())
+	if err != nil {
+		t.Fatalf("telemetry Open: %v", err)
+	}
+	oldRet, oldVac := retentionTickerInterval, vacuumTickerInterval
+	retentionTickerInterval = 3 * time.Millisecond
+	vacuumTickerInterval = 5 * time.Millisecond
+	defer func() { retentionTickerInterval, vacuumTickerInterval = oldRet, oldVac }()
+	done := make(chan struct{})
+	go func() {
+		runTelemetryRetentionAndVacuum(ctx, store, slog.Default())
+		close(done)
+	}()
+	time.Sleep(2 * time.Millisecond)
+	_ = store.Close()
+	time.Sleep(15 * time.Millisecond)
 	cancel()
 	<-done
 }
@@ -161,7 +223,7 @@ func TestBuildManagedServiceRunArgs(t *testing.T) {
 	if len(args) == 0 {
 		t.Error("buildManagedServiceRunArgs returned empty")
 	}
-	if args[0] != "run" {
+	if args[0] != cmdRun {
 		t.Errorf("expected run first, got %q", args[0])
 	}
 }
@@ -257,100 +319,86 @@ func withRunner(t *testing.T, r cmdRunner) {
 	runner = r
 }
 
-func TestStartWorkerAPIBinary(t *testing.T) {
-	withRunner(t, fakeRunner{})
+func TestStartEmbeddedWorkerAPI_CancelledContext(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
 
-	if err := startWorkerAPIBinary("token"); err != nil {
-		t.Errorf("startWorkerAPIBinary: %v", err)
-	}
-}
-
-func TestStartWorkerAPIBinary_LookPathFails(t *testing.T) {
-	withRunner(t, fakeRunner{lookPathErr: os.ErrNotExist})
-
-	if err := startWorkerAPIBinary("token"); err == nil {
-		t.Error("expected error when LookPath fails")
-	}
-}
-
-func TestStartWorkerAPIBinary_RealRunner(t *testing.T) {
-	withRunner(t, realCmdRunner{})
-
-	_ = os.Setenv("NODE_MANAGER_WORKER_API_BIN", "true")
-	defer func() { _ = os.Unsetenv("NODE_MANAGER_WORKER_API_BIN") }()
-
-	if err := startWorkerAPIBinary("token"); err != nil {
-		t.Errorf("startWorkerAPIBinary with real runner: %v", err)
-	}
-}
-
-func TestStartWorkerAPI_BinaryAndContainerPath(t *testing.T) {
-	tests := []struct {
-		name    string
-		setup   func()
-		wantErr bool
-	}{
-		{
-			name: "binary",
-			setup: func() {
-				_ = os.Unsetenv("NODE_MANAGER_WORKER_API_IMAGE")
-			},
-		},
-		{
-			name: "container",
-			setup: func() {
-				_ = os.Setenv("NODE_MANAGER_WORKER_API_IMAGE", "worker-api:test")
-				t.Cleanup(func() { _ = os.Unsetenv("NODE_MANAGER_WORKER_API_IMAGE") })
-			},
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			withRunner(t, fakeRunner{})
-			tt.setup()
-			err := startWorkerAPI("token")
-			if (err != nil) != tt.wantErr {
-				t.Errorf("startWorkerAPI() err = %v", err)
-			}
-		})
-	}
-}
-
-func TestStartWorkerAPIContainer_ExistingContainer(t *testing.T) {
-	withRunner(t, fakeRunner{
-		combinedOutput: []byte("cynodeai-worker-api\n"),
+	logger := slog.Default()
+	_ = startEmbeddedWorkerAPI(ctx, "token", t.TempDir(), nil, logger)
+	// Clean up in case the embedded server started (readyCh won race with cancelled ctx).
+	t.Cleanup(func() {
+		if embeddedWorkerAPIShutdown != nil {
+			embeddedWorkerAPIShutdown()
+			embeddedWorkerAPIShutdown = nil
+		}
 	})
+}
 
-	if err := startWorkerAPIContainer("img", "tok"); err != nil {
-		t.Errorf("startWorkerAPIContainer existing: %v", err)
+func TestStartEmbeddedWorkerAPI_CancelAfterStartCausesCtxDone(t *testing.T) {
+	// Cancel shortly after start; we either get ctx.Canceled (select took <-ctx.Done()) or nil (server became ready first).
+	stateDir := t.TempDir()
+	t.Setenv("WORKER_API_STATE_DIR", stateDir)
+	t.Setenv("LISTEN_ADDR", "127.0.0.1:0")
+	t.Setenv("WORKER_INTERNAL_LISTEN_ADDR", "127.0.0.1:0")
+	defer func() {
+		_ = os.Unsetenv("WORKER_API_STATE_DIR")
+		_ = os.Unsetenv("LISTEN_ADDR")
+		_ = os.Unsetenv("WORKER_INTERNAL_LISTEN_ADDR")
+	}()
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() { done <- startEmbeddedWorkerAPI(ctx, "token", stateDir, nil, slog.Default()) }()
+	time.Sleep(5 * time.Millisecond)
+	cancel()
+	err := <-done
+	if err != nil {
+		t.Logf("startEmbeddedWorkerAPI returned error (ctx.Done branch): %v", err)
+	}
+	if embeddedWorkerAPIShutdown != nil {
+		embeddedWorkerAPIShutdown()
+		embeddedWorkerAPIShutdown = nil
 	}
 }
 
-func TestStartWorkerAPIContainer_StartExistingFails(t *testing.T) {
-	withRunner(t, fakeRunner{
-		combinedOutput: []byte("cynodeai-worker-api\n"),
-		combinedErr:    fmt.Errorf("start failed"),
-	})
-
-	if err := startWorkerAPIContainer("img", "tok"); err == nil {
-		t.Error("expected error when start existing fails")
+func TestStartEmbeddedWorkerAPI_Success(t *testing.T) {
+	stateDir := t.TempDir()
+	t.Setenv("WORKER_API_STATE_DIR", stateDir)
+	t.Setenv("LISTEN_ADDR", "127.0.0.1:0")
+	t.Setenv("WORKER_INTERNAL_LISTEN_ADDR", "127.0.0.1:0")
+	defer func() {
+		_ = os.Unsetenv("WORKER_API_STATE_DIR")
+		_ = os.Unsetenv("LISTEN_ADDR")
+		_ = os.Unsetenv("WORKER_INTERNAL_LISTEN_ADDR")
+	}()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	logger := slog.Default()
+	if err := startEmbeddedWorkerAPI(ctx, "token", stateDir, nil, logger); err != nil {
+		t.Fatalf("startEmbeddedWorkerAPI: %v", err)
 	}
+	if embeddedWorkerAPIShutdown == nil {
+		t.Fatal("embeddedWorkerAPIShutdown should be set")
+	}
+	embeddedWorkerAPIShutdown()
+	embeddedWorkerAPIShutdown = nil
 }
 
-func TestStartWorkerAPIContainer_RunNew(t *testing.T) {
-	withRunner(t, fakeRunner{}) // ps returns empty, so we run new container
-
-	if err := startWorkerAPIContainer("img", "tok"); err != nil {
-		t.Errorf("startWorkerAPIContainer run new: %v", err)
+func TestStartEmbeddedWorkerAPI_RunEmbeddedFails(t *testing.T) {
+	// Invalid listen address so workerapiserver.RunEmbedded fails (bind error).
+	t.Setenv("LISTEN_ADDR", "256.0.0.1:0")
+	t.Setenv("WORKER_INTERNAL_LISTEN_ADDR", "127.0.0.1:0")
+	defer func() {
+		_ = os.Unsetenv("LISTEN_ADDR")
+		_ = os.Unsetenv("WORKER_INTERNAL_LISTEN_ADDR")
+	}()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	logger := slog.Default()
+	err := startEmbeddedWorkerAPI(ctx, "token", t.TempDir(), nil, logger)
+	if err == nil {
+		t.Fatal("expected error when RunEmbedded fails")
 	}
-}
-
-func TestStartWorkerAPIContainer_RunNewFails(t *testing.T) {
-	withRunner(t, fakeRunner{combinedErr: fmt.Errorf("run failed")})
-
-	if err := startWorkerAPIContainer("img", "tok"); err == nil {
-		t.Error("expected error when run new fails")
-	}
+	_ = cancel
 }
 
 func TestStartOllama(t *testing.T) {
@@ -381,6 +429,58 @@ func TestStartOllama_ROCmImage_HasDeviceArgs(t *testing.T) {
 	}
 	if !sawKFD {
 		t.Errorf("expected /dev/kfd device arg for ROCm image; calls=%v", calls)
+	}
+}
+
+func TestStartOllama_ROCm_HSAOverrideGfxVersion(t *testing.T) {
+	var calls [][]string
+	fake := fakeRunnerFunc(func(name string, args ...string) ([]byte, error) {
+		calls = append(calls, append([]string{name}, args...))
+		return []byte(""), nil
+	})
+	withRunner(t, fake)
+	t.Setenv("HSA_OVERRIDE_GFX_VERSION", "9.0.0")
+	defer func() { _ = os.Unsetenv("HSA_OVERRIDE_GFX_VERSION") }()
+	if err := startOllama("ollama/ollama:rocm", "", nil); err != nil {
+		t.Fatalf("startOllama rocm HSA: %v", err)
+	}
+	var sawHSA bool
+	for _, c := range calls {
+		for _, a := range c {
+			if strings.HasPrefix(a, "HSA_OVERRIDE_GFX_VERSION=") {
+				sawHSA = true
+				break
+			}
+		}
+	}
+	if !sawHSA {
+		t.Errorf("expected HSA_OVERRIDE_GFX_VERSION in args; calls=%v", calls)
+	}
+}
+
+func TestStartOllama_CUDAVariant_PodmanHasDeviceArg(t *testing.T) {
+	var calls [][]string
+	fake := fakeRunnerFunc(func(name string, args ...string) ([]byte, error) {
+		calls = append(calls, append([]string{name}, args...))
+		return []byte(""), nil
+	})
+	withRunner(t, fake)
+	// CONTAINER_RUNTIME podman (default) with CUDA image -> nvidia.com/gpu=all
+	_ = os.Unsetenv("CONTAINER_RUNTIME")
+	if err := startOllama("ollama/ollama:cuda", "", nil); err != nil {
+		t.Fatalf("startOllama cuda podman: %v", err)
+	}
+	var sawNvidia bool
+	for _, c := range calls {
+		for _, a := range c {
+			if a == "nvidia.com/gpu=all" {
+				sawNvidia = true
+				break
+			}
+		}
+	}
+	if !sawNvidia {
+		t.Errorf("expected nvidia.com/gpu=all for CUDA with podman; calls=%v", calls)
 	}
 }
 
@@ -429,7 +529,7 @@ func TestStartOllama_ExistingContainer(t *testing.T) {
 func TestStartOllama_EnvVarsPassedAsFlags(t *testing.T) {
 	var runArgs []string
 	fake := fakeRunnerFunc(func(name string, args ...string) ([]byte, error) {
-		if len(args) > 0 && args[0] == "run" {
+		if len(args) > 0 && args[0] == cmdRun {
 			runArgs = append([]string{name}, args...)
 		}
 		return []byte(""), nil
@@ -492,6 +592,17 @@ func TestStartManagedServices_SuccessAndSkips(t *testing.T) {
 	}
 }
 
+func TestStartManagedServices_SkipsNameEqualToPrefix(t *testing.T) {
+	// ServiceID that sanitizes to "" so name == managedServiceContainerPrefix; should skip.
+	withRunner(t, fakeRunner{})
+	services := []nodepayloads.ConfigManagedService{
+		{ServiceID: "///", ServiceType: "pma", Image: "img"},
+	}
+	if err := startManagedServices(services); err != nil {
+		t.Errorf("startManagedServices (skip invalid name) should not error: %v", err)
+	}
+}
+
 func TestStartManagedServices_PropagatesError(t *testing.T) {
 	withRunner(t, fakeRunner{combinedErr: fmt.Errorf("container run failed")})
 
@@ -546,10 +657,10 @@ func TestStopNodeManagedContainers(t *testing.T) {
 	// Expect at least one stop and one rm call.
 	var sawStop, sawRM bool
 	for _, c := range calls {
-		if len(c) >= 2 && c[1] == "stop" {
+		if len(c) >= 2 && c[1] == cmdStop {
 			sawStop = true
 		}
-		if len(c) >= 2 && c[1] == "rm" {
+		if len(c) >= 2 && c[1] == cmdRm {
 			sawRM = true
 		}
 	}
@@ -567,13 +678,34 @@ func TestStopNodeManagedContainers_StopAndRmErrors(t *testing.T) {
 		if len(args) > 0 && args[len(args)-1] == "name=cynodeai-managed-" {
 			return []byte("abc123\n"), nil
 		}
-		if len(args) >= 3 && (args[1] == "stop" || args[1] == "rm") {
+		if len(args) >= 3 && (args[1] == cmdStop || args[1] == cmdRm) {
 			return nil, fmt.Errorf("simulated %s error", args[1])
 		}
 		return []byte(""), nil
 	})
 	withRunner(t, fake)
 	stopNodeManagedContainers(slog.Default()) // should not panic or return error
+}
+
+func TestStopAndRemoveContainer_LogsErrorsWhenLoggerSet(t *testing.T) {
+	var stopCalled, rmCalled bool
+	fake := fakeRunnerFunc(func(name string, args ...string) ([]byte, error) {
+		if len(args) > 0 && args[0] == cmdStop {
+			stopCalled = true
+			return nil, fmt.Errorf("stop failed")
+		}
+		if len(args) > 0 && args[0] == cmdRm {
+			rmCalled = true
+			return nil, fmt.Errorf("rm failed")
+		}
+		return []byte(""), nil
+	})
+	withRunner(t, fake)
+	logger := slog.Default()
+	stopAndRemoveContainer("podman", "cid1", logger)
+	if !stopCalled || !rmCalled {
+		t.Errorf("expected both stop and rm calls; stopCalled=%v rmCalled=%v", stopCalled, rmCalled)
+	}
 }
 
 func TestStopNodeManagedContainers_PSError(t *testing.T) {
@@ -583,6 +715,11 @@ func TestStopNodeManagedContainers_PSError(t *testing.T) {
 	})
 	withRunner(t, fake)
 	stopNodeManagedContainers(nil) // should not panic
+}
+
+func TestWaitForPMAReadyUDS_EmptyPath(t *testing.T) {
+	waitForPMAReadyUDS("", time.Second)
+	waitForPMAReadyUDS("  ", time.Second)
 }
 
 func TestWaitForPMAReadyUDS_Success(t *testing.T) {
@@ -628,6 +765,189 @@ func TestRunMain_TelemetryStoreUnavailable(t *testing.T) {
 	if code != 1 {
 		t.Errorf("runMain with bad state dir: got %d", code)
 	}
+}
+
+// Command names used in runner fakes (goconst).
+const cmdRun = "run"
+const cmdStop = "stop"
+const cmdRm = "rm"
+
+// Fake orchestrator paths (must match nodeagent expectations).
+const pathReadyz = "/readyz"
+const pathNodesRegister = "/v1/nodes/register"
+const pathNodesConfig = "/v1/nodes/config"
+const pathNodesCapability = "/v1/nodes/capability"
+
+// defaultNodeConfig is the config returned by fakeOrchestratorHandler when configPayload is nil.
+var defaultNodeConfig = nodepayloads.NodeConfigurationPayload{
+	Version: 1, ConfigVersion: "1", IssuedAt: time.Now().UTC().Format(time.RFC3339), NodeSlug: "test",
+	WorkerAPI:        &nodepayloads.ConfigWorkerAPI{OrchestratorBearerToken: "bearer"},
+	InferenceBackend: &nodepayloads.ConfigInferenceBackend{Enabled: true, Image: "ollama/ollama"},
+}
+
+func writeFakeBootstrapResponse(w http.ResponseWriter, baseURL string) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+	_ = json.NewEncoder(w).Encode(nodepayloads.BootstrapResponse{
+		Version:  1,
+		IssuedAt: time.Now().UTC().Format(time.RFC3339),
+		Orchestrator: nodepayloads.BootstrapOrchestrator{
+			Endpoints: nodepayloads.BootstrapEndpoints{
+				NodeReportURL: baseURL + pathNodesCapability,
+				NodeConfigURL: baseURL + pathNodesConfig,
+			},
+		},
+		Auth: nodepayloads.BootstrapAuth{NodeJWT: "jwt", ExpiresAt: "2026-01-01T00:00:00Z"},
+	})
+}
+
+func handleFakeNodesConfig(w http.ResponseWriter, r *http.Request, config *nodepayloads.NodeConfigurationPayload) bool {
+	if r.URL.Path != pathNodesConfig {
+		return false
+	}
+	if r.Method == http.MethodGet {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode(config)
+		return true
+	}
+	if r.Method == http.MethodPost {
+		w.WriteHeader(http.StatusNoContent)
+	}
+	return true
+}
+
+func fakeOrchestratorHandler(baseURL string, configPayload *nodepayloads.NodeConfigurationPayload) http.HandlerFunc {
+	config := configPayload
+	if config == nil {
+		config = &defaultNodeConfig
+	}
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == pathReadyz {
+			w.WriteHeader(http.StatusOK)
+			return
+		}
+		if r.URL.Path == pathNodesRegister && r.Method == http.MethodPost {
+			writeFakeBootstrapResponse(w, baseURL)
+			return
+		}
+		if handleFakeNodesConfig(w, r, config) {
+			return
+		}
+		if r.URL.Path == pathNodesCapability {
+			w.WriteHeader(http.StatusNoContent)
+		}
+	}
+}
+
+// fakeRunnerFailRunContaining returns a runner that fails "run" when any arg contains substr.
+func fakeRunnerFailRunContaining(substr string) func(string, ...string) ([]byte, error) {
+	return func(_ string, args ...string) ([]byte, error) {
+		if len(args) > 0 && args[0] == cmdRun {
+			for _, a := range args {
+				if strings.Contains(a, substr) {
+					return []byte(substr + " run failed"), fmt.Errorf("run failed")
+				}
+			}
+		}
+		if len(args) > 0 && args[0] == "ps" {
+			return []byte(""), nil
+		}
+		return []byte(""), nil
+	}
+}
+
+func TestRunMain_FailsWithStartInferenceError_LogsComponent(t *testing.T) {
+	var baseURL string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fakeOrchestratorHandler(baseURL, nil)(w, r)
+	}))
+	defer srv.Close()
+	baseURL = srv.URL
+
+	stateDir := t.TempDir()
+	t.Setenv("WORKER_API_STATE_DIR", stateDir)
+	t.Setenv("ORCHESTRATOR_URL", srv.URL)
+	t.Setenv("NODE_SLUG", "test-node")
+	t.Setenv("NODE_REGISTRATION_PSK", "test-psk")
+	t.Setenv("LISTEN_ADDR", "127.0.0.1:0")
+	t.Setenv("WORKER_INTERNAL_LISTEN_ADDR", "127.0.0.1:0")
+	defer unsetRunMainTestEnv()
+
+	withRunner(t, fakeRunnerFunc(fakeRunnerFailRunContaining("ollama")))
+
+	code := runMainUntilCancel(t, 3*time.Second)
+	if code != 1 {
+		t.Errorf("runMain expected 1 (start inference failure), got %d", code)
+	}
+	cleanupEmbeddedWorkerAPIShutdown()
+}
+
+func unsetRunMainTestEnv() {
+	_ = os.Unsetenv("WORKER_API_STATE_DIR")
+	_ = os.Unsetenv("ORCHESTRATOR_URL")
+	_ = os.Unsetenv("NODE_SLUG")
+	_ = os.Unsetenv("NODE_REGISTRATION_PSK")
+	_ = os.Unsetenv("LISTEN_ADDR")
+	_ = os.Unsetenv("WORKER_INTERNAL_LISTEN_ADDR")
+	_ = os.Unsetenv("NODE_MANAGER_SKIP_CONTAINER_CHECK")
+	_ = os.Unsetenv("CYNODE_SECURE_STORE_MASTER_KEY_B64")
+}
+
+func runMainUntilCancel(t *testing.T, sleep time.Duration) int {
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan int, 1)
+	go func() { done <- runMain(ctx) }()
+	t.Cleanup(cancel)
+	time.Sleep(sleep)
+	cancel()
+	return <-done
+}
+
+func cleanupEmbeddedWorkerAPIShutdown() {
+	if embeddedWorkerAPIShutdown != nil {
+		embeddedWorkerAPIShutdown()
+		embeddedWorkerAPIShutdown = nil
+	}
+}
+
+// TestRunMain_FailsWithStartManagedServicesError_LogsComponent covers runMain when StartManagedServices fails (component "managed_services" branch).
+func TestRunMain_FailsWithStartManagedServicesError_LogsComponent(t *testing.T) {
+	var baseURL string
+	configWithManagedService := nodepayloads.NodeConfigurationPayload{
+		Version: 1, ConfigVersion: "1", IssuedAt: time.Now().UTC().Format(time.RFC3339), NodeSlug: "test",
+		WorkerAPI:        &nodepayloads.ConfigWorkerAPI{OrchestratorBearerToken: "bearer"},
+		InferenceBackend: &nodepayloads.ConfigInferenceBackend{Enabled: true, Image: "ollama/ollama"},
+		ManagedServices: &nodepayloads.ConfigManagedServices{
+			Services: []nodepayloads.ConfigManagedService{
+				{ServiceID: "pma-main", ServiceType: "pma", Image: "cynodeai-pma:dev"},
+			},
+		},
+	}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		fakeOrchestratorHandler(baseURL, &configWithManagedService)(w, r)
+	}))
+	defer srv.Close()
+	baseURL = srv.URL
+
+	stateDir := t.TempDir()
+	t.Setenv("WORKER_API_STATE_DIR", stateDir)
+	t.Setenv("ORCHESTRATOR_URL", srv.URL)
+	t.Setenv("NODE_SLUG", "test-node")
+	t.Setenv("NODE_REGISTRATION_PSK", "test-psk")
+	t.Setenv("LISTEN_ADDR", "127.0.0.1:0")
+	t.Setenv("WORKER_INTERNAL_LISTEN_ADDR", "127.0.0.1:0")
+	t.Setenv("NODE_MANAGER_SKIP_CONTAINER_CHECK", "1")
+	t.Setenv("CYNODE_SECURE_STORE_MASTER_KEY_B64", "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=")
+	defer unsetRunMainTestEnv()
+
+	withRunner(t, fakeRunnerFunc(fakeRunnerFailRunContaining("cynodeai-managed-")))
+
+	code := runMainUntilCancel(t, 4*time.Second)
+	if code != 1 {
+		t.Errorf("runMain expected 1 (start managed services failure), got %d", code)
+	}
+	cleanupEmbeddedWorkerAPIShutdown()
 }
 
 func TestPullModels_ExecsPullForEachModel(t *testing.T) {

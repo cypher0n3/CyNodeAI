@@ -384,7 +384,6 @@ build-images *ARGS:
     @just orchestrator/build-user-gateway-image {{ ARGS }}
     @just orchestrator/build-mcp-gateway-image {{ ARGS }}
     @just orchestrator/build-api-egress-image {{ ARGS }}
-    @just worker_node/build-worker-api-image {{ ARGS }}
     @just worker_node/build-node-manager-image {{ ARGS }}
     @just worker_node/build-inference-proxy-image {{ ARGS }}
     @just agents/build-cynode-pma-image {{ ARGS }}
@@ -440,6 +439,8 @@ test-go-e2e:
 test-go-cover: install-go podman-setup
     #!/usr/bin/env bash
     set -euo pipefail
+    # Disable Ryuk reaper for Podman/crun compatibility (orchestrator testcontainers).
+    export TESTCONTAINERS_RYUK_DISABLED=true
     root="{{ root_dir }}"
     min="{{ go_coverage_min }}"
     fail=0
@@ -496,9 +497,22 @@ test: test-go
     @:
 
 # Run BDD tests (_bdd packages) in all modules. Optional timeout=.
-test-bdd timeout="": install-go
+test-bdd timeout="": install-go podman-setup
     #!/usr/bin/env bash
     set -e
+    # Disable Ryuk reaper: incompatible with Podman/crun (executable /bin/ryuk not found). Containers are still terminated by TestMain.
+    export TESTCONTAINERS_RYUK_DISABLED=true
+    # Ensure rootless Podman socket is used when available (same as test code expects).
+    if [ -z "${DOCKER_HOST:-}" ] && [ -n "${XDG_RUNTIME_DIR:-}" ] && [ -S "${XDG_RUNTIME_DIR}/podman/podman.sock" ]; then
+      export DOCKER_HOST="unix://${XDG_RUNTIME_DIR}/podman/podman.sock"
+    fi
+    # Remove leftover testcontainers from a previous crashed run so ports are free.
+    if command -v podman >/dev/null 2>&1; then
+      ids=$(podman ps -aq --filter "label=org.testcontainers.golang.sessionId" 2>/dev/null) || true
+      if [ -n "$ids" ]; then
+        podman rm -f $ids 2>/dev/null || true
+      fi
+    fi
     pushd "{{ root_dir }}" >/dev/null
     trap 'popd >/dev/null 2>/dev/null || true' EXIT
     extra=()
