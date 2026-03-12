@@ -1,10 +1,16 @@
 # CLI Management App - Chat Command
 
-- [Document overview](#document-overview)
+- [Document Overview](#document-overview)
 - [Chat Command](#chat-command)
+  - [`cynork chat` Invocation](#cynork-chat-invocation)
+  - [`cynork chat` Optional Flags](#cynork-chat-optional-flags)
+  - [Thread Controls](#thread-controls)
   - [One-Shot Mode](#one-shot-mode)
+  - [`cynork chat` Behavior](#cynork-chat-behavior)
   - [Chat Session Warm-Up](#chat-session-warm-up)
-- [Slash Command Reference](#slash-command-reference)
+  - [`cynork chat` Slash Commands and Discoverability](#cynork-chat-slash-commands-and-discoverability)
+  - [`cynork chat` Response Output (Pretty Formatting)](#cynork-chat-response-output-pretty-formatting)
+  - [`cynork chat` Error Conditions](#cynork-chat-error-conditions)
 
 ## Document Overview
 
@@ -20,6 +26,7 @@ Traces To:
 - [REQ-CLIENT-0161](../requirements/client.md#req-client-0161)
 - [REQ-CLIENT-0162](../requirements/client.md#req-client-0162)
 - [REQ-CLIENT-0164](../requirements/client.md#req-client-0164)
+- [REQ-CLIENT-0181](../requirements/client.md#req-client-0181)
 - [REQ-CLIENT-0165](../requirements/client.md#req-client-0165)
 - [REQ-CLIENT-0166](../requirements/client.md#req-client-0166)
 - [REQ-CLIENT-0167](../requirements/client.md#req-client-0167)
@@ -33,30 +40,74 @@ Traces To:
 - [REQ-CLIENT-0176](../requirements/client.md#req-client-0176)
 - [REQ-CLIENT-0177](../requirements/client.md#req-client-0177)
 - [REQ-CLIENT-0178](../requirements/client.md#req-client-0178)
+- [REQ-CLIENT-0182](../requirements/client.md#req-client-0182)
+- [REQ-CLIENT-0183](../requirements/client.md#req-client-0183)
+- [REQ-CLIENT-0184](../requirements/client.md#req-client-0184)
+- [REQ-CLIENT-0186](../requirements/client.md#req-client-0186)
 
 The CLI MUST provide a top-level `chat` command that starts an interactive chat session with the Project Manager (PM) model.
 The session MUST use the same User API Gateway and token resolution as other commands and MUST require auth.
-The chat interface MUST use the OpenAI-compatible chat API (`POST /v1/chat/completions`).
+The chat interface MUST use the gateway's OpenAI-compatible interactive chat API.
+`POST /v1/chat/completions` remains the baseline line-oriented chat contract.
+As part of the TUI rollout, the client chat implementation MUST also support `POST /v1/responses` under the same user-facing chat contract.
 See [`docs/tech_specs/openai_compatible_chat_api.md`](openai_compatible_chat_api.md).
 
 ### `cynork chat` Invocation
 
 - `cynork chat`.
 
-Optional flags
+### `cynork chat` Optional Flags
 
 - `-c, --config` (string): path to config file (global).
 - `--no-color` (bool): disable colored output (global).
 - `--plain` (bool, optional): print model responses as raw text without Markdown formatting; for scripting or piping.
 - `--model` (string, optional): OpenAI model identifier to use for chat completions.
-  This is sent as the OpenAI `model` field in requests to `POST /v1/chat/completions`.
+  This is sent as the OpenAI `model` field in interactive chat requests.
   If omitted, the CLI uses the gateway default.
 - `--project-id` (string, optional): Project identifier to associate with the chat thread and to use as project context for the session.
   If omitted, the CLI MUST use the **active project** from `cynork project set` when one is set; otherwise the CLI does not send `OpenAI-Project`, and the gateway associates the thread with the user's default project.
   When set (explicitly or from active project), the CLI MUST send this value using the OpenAI-standard `OpenAI-Project` request header on `POST /v1/chat/completions`.
 - `-m, --message` (string, optional): One-shot mode.
-  When provided, the CLI MUST send this single message to the gateway via `POST /v1/chat/completions`, print the completion content (subject to `--plain` and `--no-color`), and exit without entering the interactive loop.
+  When provided, the CLI MUST send this single message to the gateway via the configured OpenAI-compatible interactive chat surface, print the completion content (subject to `--plain` and `--no-color`), and exit without entering the interactive loop.
   When `--message` is present, slash commands and the interactive loop are not used; see [One-shot mode](#one-shot-mode).
+- `--thread-new` (bool, optional): At startup, create a new chat thread before the first completion request.
+  When set, the CLI MUST call `POST /v1/chat/threads` (with project context from `--project-id` or active project when set) before the first `POST /v1/chat/completions` request in the session.
+  Subsequent chat completion requests MUST remain OpenAI-compatible and MUST NOT require any CyNodeAI-specific thread identifier in the request body or headers.
+  When omitted, the CLI uses the gateway's active-thread behavior per (user, project) and does not create a thread explicitly.
+
+### Thread Controls
+
+- Spec ID: `CYNAI.CLIENT.CliChatThreadControls` <a id="spec-cynai-client-clichatthreadcontrols"></a>
+
+Traces To:
+
+- [REQ-CLIENT-0181](../requirements/client.md#req-client-0181)
+
+The CLI MUST support explicit fresh-thread creation at startup and during an active session, and MUST respect current project context for thread creation.
+
+#### Startup (`--thread-new`)
+
+- When the user invokes `cynork chat --thread-new`, the CLI MUST create a new thread via `POST /v1/chat/threads` before entering the interactive loop (or before sending the one-shot message if `--message` is also set).
+- The request body for `POST /v1/chat/threads` MUST include `project_id` when the session has a project context (from `--project-id` or the active project from `cynork project set`); when no project is set, the CLI MUST omit `project_id` so the gateway associates the thread with the user's default project.
+- Subsequent `POST /v1/chat/completions` requests in that session MUST remain OpenAI-compatible and MUST NOT require any CyNodeAI-specific thread identifier in the request body or headers.
+- The observable outcome for the user MUST be that the next completion starts a fresh conversation rather than reusing the previously active thread.
+
+#### In-Session (`/thread new`)
+
+- When the user types `/thread new` during an active chat session, the CLI MUST call `POST /v1/chat/threads` with the current session project context (same as for `--thread-new`: `project_id` when project is set, otherwise omitted).
+- After a successful create, the CLI MUST treat the session as switched to a fresh conversation for subsequent completions while keeping the `POST /v1/chat/completions` request shape OpenAI-compatible.
+- The chat session MUST continue (no exit).
+
+#### Unknown `/thread` Subcommands
+
+- Input that starts with `/thread` but is not a known subcommand (e.g. `/thread foo`) MUST be treated as an unknown command.
+- The CLI MUST print a brief error or hint (e.g. "Unknown /thread command. Use /thread new to start a new thread, /help for more.") and MUST NOT send the line to the PM model.
+- The session MUST continue; the current thread remains unchanged.
+
+#### Project Context and Openai-Project
+
+- Thread creation (startup or in-session) MUST use the same project scope as the current chat session: when the user has set a project (via `--project-id`, active project, or `/project set`), the new thread MUST be created with that `project_id` in the request body; when no project is set, the gateway assigns the user's default project.
+- After switching to a new thread, the CLI MUST continue sending the same `OpenAI-Project` header (or none) on `POST /v1/chat/completions` as before, so that completions remain in the same project scope.
 
 ### One-Shot Mode
 
@@ -69,8 +120,8 @@ Traces To:
 When `cynork chat` is invoked with `-m, --message <text>`, the CLI MUST operate in one-shot mode:
 
 - Resolve gateway URL and token as for interactive chat; if token is empty, exit with code 3.
-- Send exactly one request to `POST /v1/chat/completions` with the given message (OpenAI-format request body; `model` and `OpenAI-Project` from `--model` and `--project-id` or active project as for interactive chat).
-- Print the completion content from `choices[0].message.content` to stdout, honoring `--plain` (raw text) and `--no-color`.
+- Send exactly one request using the configured OpenAI-compatible interactive chat surface with the given message (`model` and `OpenAI-Project` from `--model` and `--project-id` or active project as for interactive chat).
+- Print the resulting assistant text to stdout, honoring `--plain` (raw text) and `--no-color`.
 - Exit with code 0 on success; on gateway error or non-2xx, exit with the same exit codes as defined for chat error conditions (e.g. 7 for 5xx, 3 for missing token).
 - The CLI MUST NOT enter the interactive loop, show slash-command prompts, or wait for further input.
 
@@ -80,7 +131,7 @@ The following applies when the CLI is not in one-shot mode (i.e. when `--message
 
 - The CLI MUST resolve the gateway URL and token using the same config load and token resolution as other commands.
   If the resolved token is empty, the CLI MUST exit with code 3 and MUST NOT start a chat session.
-- The CLI MUST open an interactive loop: read a line of user input, send it to the gateway via `POST /v1/chat/completions` using an OpenAI-format request body, receive the completion response, and print the response to the user.
+- The CLI MUST open an interactive loop: read a line of user input, send it to the gateway using the configured OpenAI-compatible interactive chat surface, receive the response, and print the response to the user.
   This loop MUST continue until the user exits (see below).
 - The CLI MUST support session-exit via the slash commands `/exit` and `/quit` (see [Slash command reference](#slash-command-reference)), or EOF (e.g. Ctrl+D).
   Implementations MUST support at least `/exit`, `/quit`, or EOF; supporting all three is recommended.
@@ -180,6 +231,11 @@ Required slash commands:
   - Print the cynork version string (same as `cynork version`).
   - No arguments.
   - Useful inside a long chat session without leaving the session.
+
+- **`/thread new`**
+  - Create a new chat thread and switch the session to it; see [Thread Controls](#thread-controls).
+  - The new thread uses the current session project context.
+  - No arguments.
 
 #### Model Selection Slash Commands
 
@@ -361,11 +417,27 @@ Traces To:
 
 ### `cynork chat` Response Output (Pretty Formatting)
 
-- When `--plain` is not set, the CLI MUST render model responses with pretty-formatted output: interpret Markdown in the response and display it in a human-readable way in the terminal.
+- Spec ID: `CYNAI.CLIENT.CliChatResponseOutput` <a id="spec-cynai-client-clichatresponseoutput"></a>
+
+Traces To:
+
+- [REQ-CLIENT-0162](../requirements/client.md#req-client-0162)
+- [REQ-CLIENT-0182](../requirements/client.md#req-client-0182)
+- [REQ-CLIENT-0183](../requirements/client.md#req-client-0183)
+- [REQ-CLIENT-0184](../requirements/client.md#req-client-0184)
+- [REQ-CLIENT-0186](../requirements/client.md#req-client-0186)
+
+- When `--plain` is not set, the CLI MUST render model responses with pretty-formatted output: interpret Markdown in the visible assistant text and display it in a human-readable way in the terminal.
 - The CLI MUST support at least: headings, lists (ordered and unordered), code blocks (with optional syntax highlighting), inline code, emphasis (bold/italic), and links.
   Display MAY use terminal styling (e.g. indentation, colors, or borders) so that structure is clear without raw Markdown syntax.
 - The CLI MUST honor `--no-color` for chat output (no colors or minimal styling when set).
-- When `--plain` is set, the CLI MUST print the raw response text with no Markdown parsing or styling, so that output is suitable for piping or scripting.
+- When structured turn data is available, the interactive chat UI SHOULD prefer it over scraping prose from plain assistant text.
+- Thinking or reasoning content MUST NOT be rendered as normal assistant transcript text by default.
+  When the CLI is running in a rich interactive chat UI, it MAY expose a collapsed placeholder or explicit expand action for available thinking data.
+- Tool activity SHOULD be rendered as distinct non-prose status rows when structured tool metadata is available.
+- When one user prompt yields multiple assistant-side output items, the interactive chat UI MUST render those items in order as one logical assistant turn.
+- When `--plain` is set, the CLI MUST print only the canonical visible assistant text with no Markdown parsing or styling, so that output is suitable for piping or scripting.
+  Hidden thinking data, tool metadata, and other non-text structured items MUST NOT be emitted in `--plain` mode.
 
 ### `cynork chat` Error Conditions
 

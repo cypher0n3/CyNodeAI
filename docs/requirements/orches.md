@@ -145,11 +145,11 @@ It covers orchestrator control-plane behavior, task lifecycle, dispatch, and sta
   [CYNAI.USRGWY.ChatSlashCommandSupport](../tech_specs/user_api_gateway.md#spec-cynai-usrgwy-chatslashcommandsupport)
   [cli_management_app_commands_chat.md](../tech_specs/cli_management_app_commands_chat.md#spec-cynai-client-clichatslashcommandreference)
   <a id="req-orches-0130"></a>
-- **REQ-ORCHES-0131:** The orchestrator MUST enforce a maximum total wait duration when producing an OpenAI-compatible chat completion response.
-  If the completion does not finish before the cap, the gateway MUST return a clear timeout error.
+- **REQ-ORCHES-0131:** The orchestrator MUST enforce a maximum total wait duration when producing an OpenAI-compatible interactive chat response.
+  If the response does not finish before the cap, the gateway MUST return a clear timeout error.
   [CYNAI.USRGWY.OpenAIChatApi.Reliability](../tech_specs/openai_compatible_chat_api.md#spec-cynai-usrgwy-openaichatapi-reliability)
   <a id="req-orches-0131"></a>
-- **REQ-ORCHES-0132:** The orchestrator MUST retry transient inference failures with bounded backoff before using a fallback path for OpenAI-compatible chat completions.
+- **REQ-ORCHES-0132:** The orchestrator MUST retry transient inference failures with bounded backoff before using a fallback path for OpenAI-compatible interactive chat requests.
   [CYNAI.USRGWY.OpenAIChatApi.Reliability](../tech_specs/openai_compatible_chat_api.md#spec-cynai-usrgwy-openaichatapi-reliability)
   <a id="req-orches-0132"></a>
 - **REQ-ORCHES-0133:** Task creation MUST associate the task with the authenticated user (set `created_by` to that user) when the request is authenticated.
@@ -233,6 +233,7 @@ It covers orchestrator control-plane behavior, task lifecycle, dispatch, and sta
   [CYNAI.WORKER.Payload.CapabilityReportV1](../tech_specs/worker_node_payloads.md#spec-cynai-worker-payload-capabilityreport-v1)
   <a id="req-orches-0161"></a>
 - **REQ-ORCHES-0162:** The orchestrator MUST route `model=cynodeai.pm` traffic to PMA using the worker-mediated endpoint reported by the worker and MUST NOT rely on compose DNS or direct host-port addressing for PMA.
+  This routing rule MUST apply to both `POST /v1/chat/completions` and `POST /v1/responses`.
   [CYNAI.ORCHES.ManagedServicesWorkerManaged](../tech_specs/orchestrator.md#spec-cynai-orches-managedservices)
   [CYNAI.WORKER.ManagedAgentProxyBidirectional](../tech_specs/worker_api.md#spec-cynai-worker-managedagentproxy)
   <a id="req-orches-0162"></a>
@@ -249,3 +250,13 @@ It covers orchestrator control-plane behavior, task lifecycle, dispatch, and sta
   [CYNAI.ORCHES.OrchestratorShutdown](../tech_specs/orchestrator.md#spec-cynai-orches-orchestratorshutdown)
   [CYNAI.WORKER.OrchestratorShutdownNotification](../tech_specs/worker_node.md#spec-cynai-worker-orchestratorshutdownnotification)
   <a id="req-orches-0164"></a>
+- **REQ-ORCHES-0165:** When handling `POST /v1/responses`, the orchestrator MUST resolve `previous_response_id` only within the authenticated user's retained response state and the effective project scope for the request.
+  Cross-user, cross-project, missing, or expired response references MUST NOT be used as continuation state.
+  [CYNAI.ORCHES.ResponsesContinuationState](../tech_specs/orchestrator.md#spec-cynai-orches-responsescontinuationstate)
+  [CYNAI.USRGWY.OpenAIChatApi](../tech_specs/openai_compatible_chat_api.md#spec-cynai-usrgwy-openaichatapi)
+  <a id="req-orches-0165"></a>
+- **REQ-ORCHES-0166:** When handling `POST /v1/responses`, the orchestrator MUST persist retained response metadata sufficient to support later `previous_response_id` continuation while that state remains within retention.
+  This retained response metadata MUST preserve CyNodeAI's canonical thread and message ownership model and MUST NOT require any CyNodeAI-specific thread identifier in OpenAI-compatible requests.
+  [CYNAI.ORCHES.ResponsesContinuationState](../tech_specs/orchestrator.md#spec-cynai-orches-responsescontinuationstate)
+  [CYNAI.USRGWY.OpenAIChatApi](../tech_specs/openai_compatible_chat_api.md#spec-cynai-usrgwy-openaichatapi)
+  <a id="req-orches-0166"></a>

@@ -4,6 +4,12 @@
 - [Scope and Goals](#scope-and-goals)
 - [Chat Threads](#chat-threads)
 - [Chat Messages](#chat-messages)
+- [Structured Turns](#structured-turns)
+  - [Canonical projection:](#canonical-projection)
+  - [Structured representation:](#structured-representation)
+  - [Ordering and grouping:](#ordering-and-grouping)
+  - [Thinking and reasoning:](#thinking-and-reasoning)
+  - [Tool and file metadata:](#tool-and-file-metadata)
 - [Retention and Transcripts](#retention-and-transcripts)
 - [Relationship to Runs and Sessions](#relationship-to-runs-and-sessions)
 - [API Surface (Data REST)](#api-surface-data-rest)
@@ -21,6 +27,9 @@ Traces To:
 - [REQ-USRGWY-0110](../requirements/usrgwy.md#req-usrgwy-0110)
 - [REQ-USRGWY-0111](../requirements/usrgwy.md#req-usrgwy-0111)
 - [REQ-USRGWY-0130](../requirements/usrgwy.md#req-usrgwy-0130)
+- [REQ-USRGWY-0136](../requirements/usrgwy.md#req-usrgwy-0136)
+- [REQ-USRGWY-0137](../requirements/usrgwy.md#req-usrgwy-0137)
+- [REQ-USRGWY-0138](../requirements/usrgwy.md#req-usrgwy-0138)
 
 ## Scope and Goals
 
@@ -50,9 +59,13 @@ A chat thread is a stable container for a conversation.
 
 Thread association rules:
 
-- For OpenAI-compatible chat completions, the orchestrator manages thread association server-side.
-- When no explicit thread identifier is provided by the client, the system SHOULD use a single active thread per `(user_id, project_id)` scope and rotate to a new thread after inactivity.
-- Inactivity threshold: 2 hours.
+- For OpenAI-compatible interactive chat requests, the orchestrator manages thread association server-side.
+- **Active-thread reuse:** When no explicit thread identifier is provided by the client, the gateway SHOULD use a single active thread per `(user_id, project_id)` scope and MAY rotate to a new thread after inactivity.
+  Project scope is taken from the `OpenAI-Project` request header when present; when absent, the user's default project applies (see [REQ-USRGWY-0131](../requirements/usrgwy.md#req-usrgwy-0131)).
+- **Explicit fresh-thread creation:** A client that needs a new conversation MUST call `POST /v1/chat/threads` to create a new thread.
+  This explicit create operation is a separate CyNodeAI Data REST endpoint and MUST NOT change the OpenAI-compatible `POST /v1/chat/completions` request shape by requiring any CyNodeAI-specific thread identifier in request bodies or headers.
+  Explicit creation does not affect the active-thread reuse state for other clients or sessions.
+- Inactivity threshold for active-thread rotation: 2 hours.
 
 Recommended fields:
 
@@ -97,11 +110,58 @@ Recommended fields:
 Recommended metadata keys:
 
 - `model_id` (string, optional)
+- `parts` (jsonb array, optional)
+- `response_id` (string, optional)
+- `turn_kind` (string, optional)
+- `reasoning_redacted` (boolean, optional)
 
 Constraints:
 
 - Foreign key: `thread_id` references `chat_threads.id`.
 - Index: (`thread_id`, `created_at`)
+
+## Structured Turns
+
+- Spec ID: `CYNAI.USRGWY.ChatThreadsMessages.StructuredTurns` <a id="spec-cynai-usrgwy-chatthreadsmessages-structuredturns"></a>
+
+Rich clients need more than plain transcript text to render reasoning visibility, tool activity, and multi-item assistant output cleanly.
+This spec uses the same general UX pattern seen in tools such as Open WebUI and LibreChat: keep the main answer readable, expose reasoning as secondary collapsed content, and avoid forcing clients to scrape prose for tool activity.
+
+### Canonical Projection
+
+- `content` remains the canonical plain-text transcript for simple clients, thread previews, title fallback, summaries, and text-only search.
+- Rich clients SHOULD prefer `metadata.parts` when present and MUST fall back to `content` when it is absent.
+
+### Structured Representation
+
+- `metadata.parts` is an optional ordered array representing one logical chat turn.
+- Allowed part kinds for the stable first pass are:
+  - `text`: visible assistant or user prose.
+  - `thinking`: hidden-by-default model reasoning or reasoning summary.
+  - `tool_call`: tool invocation metadata such as tool name, call identifier, and status.
+  - `tool_result`: tool outcome metadata such as status, content type, and bounded preview.
+  - `attachment_ref`: user-supplied file reference metadata.
+  - `download_ref`: assistant-produced downloadable file metadata.
+
+### Ordering and Grouping
+
+- When one interactive chat request produces multiple assistant-side output items, the gateway MUST preserve those items in `metadata.parts` order under one logical assistant turn.
+- The gateway SHOULD persist one assistant message row with ordered `metadata.parts` for that logical turn rather than multiple unrelated assistant message rows.
+- `content` for that assistant message MUST be the plain-text projection of the visible `text` parts only, in order.
+  It MAY be empty when a turn has no visible text parts.
+
+### Thinking and Reasoning
+
+- `thinking` parts MUST NOT be copied into canonical plain-text `content`.
+- `thinking` parts MUST NOT be used for thread title generation, summaries, or default list previews.
+- If preserved, `thinking` parts SHOULD be bounded in size.
+  When full reasoning is not retained, the gateway MAY instead persist a bounded reasoning summary or `reasoning_redacted: true` metadata.
+
+### Tool and File Metadata
+
+- Tool-call arguments and tool-result previews stored in `metadata.parts` MUST already be redacted and SHOULD be bounded in size.
+- `attachment_ref` and `download_ref` parts SHOULD carry stable identifiers and user-displayable metadata such as filename, media type, and size when known.
+- Local machine-specific file paths MUST NOT be persisted as canonical transcript content.
 
 ## Retention and Transcripts
 
@@ -152,12 +212,14 @@ Required operations:
 Standardized endpoints (Phase 1):
 
 - `POST /v1/chat/threads`
-  - Create a chat thread.
+  - Create a new chat thread (explicit fresh-thread creation).
   - Request body MUST allow:
-    - `project_id` (uuid, optional)
+    - `project_id` (uuid, optional): when present, the thread is scoped to that project; when absent, the server associates the thread with the authenticated user's default project (see [REQ-USRGWY-0131](../requirements/usrgwy.md#req-usrgwy-0131)).
     - `title` (string, optional)
   - The server MUST derive `user_id` from authentication.
   - The server MUST NOT allow the client to set `session_id`.
+  - The response MUST return the created thread (including `id`) for Data REST retrieval and management purposes.
+  - The gateway MUST NOT require the client to send that thread id on subsequent `POST /v1/chat/completions` requests.
 - `GET /v1/chat/threads`
   - List chat threads for the authenticated user.
   - SHOULD support filtering by `project_id`.
@@ -168,7 +230,7 @@ Standardized endpoints (Phase 1):
   - Append one message to a thread.
   - The gateway MUST reject attempts to append plaintext secrets (redaction must occur before persistence).
   - Clients MUST only append messages with `role: user`.
-  - The gateway writes assistant messages as part of `POST /v1/chat/completions`.
+  - The gateway writes assistant messages as part of the OpenAI-compatible interactive chat endpoints (`POST /v1/chat/completions` and `POST /v1/responses`).
 - `GET /v1/chat/threads/{thread_id}/messages`
   - List messages for a thread in ascending `created_at` order.
   - Pagination MUST use `limit` and `offset` query parameters.

@@ -219,6 +219,7 @@ Web Console-specific requirements live in [webcon.md](webcon.md) (REQ-WEBCON-*).
 - **REQ-CLIENT-0161:** The CLI MUST provide a chat command that starts an interactive chat session with the Project Manager (PM) model.
   The user MUST be able to send messages and receive responses in turn until they exit the session.
   The chat session MUST use the same gateway and authentication as other CLI commands and MUST NOT expose secrets in history or output.
+  The CLI chat implementation MUST support the gateway's OpenAI-compatible interactive chat surfaces as defined by the corresponding tech spec.
   [CYNAI.CLIENT.CliChat](../tech_specs/cli_management_app_commands_chat.md#spec-cynai-client-clichat)
   [CYNAI.USRGWY.OpenAIChatApi](../tech_specs/openai_compatible_chat_api.md#spec-cynai-usrgwy-openaichatapi)
   <a id="req-client-0161"></a>
@@ -257,7 +258,7 @@ Web Console-specific requirements live in [webcon.md](webcon.md) (REQ-WEBCON-*).
   <a id="req-client-0170"></a>
 - **REQ-CLIENT-0171:** The CLI chat command MUST support selecting an OpenAI model identifier for chat completions.
   The CLI MUST support selecting the model at session start (e.g. `cynork chat --model <id>`) and within the session (e.g. `/model <id>`).
-  Model selection MUST only affect `POST /v1/chat/completions` requests and MUST NOT change system settings or user preferences.
+  Model selection MUST only affect interactive chat requests (for example `POST /v1/chat/completions` or `POST /v1/responses`) and MUST NOT change system settings or user preferences.
   [CYNAI.CLIENT.CliChatModelSelection](../tech_specs/cli_management_app_commands_chat.md#spec-cynai-client-clichatmodelselection)
   [CYNAI.USRGWY.OpenAIChatApi.Endpoints](../tech_specs/openai_compatible_chat_api.md#spec-cynai-usrgwy-openaichatapi-endpoints)
   <a id="req-client-0171"></a>
@@ -267,7 +268,7 @@ Web Console-specific requirements live in [webcon.md](webcon.md) (REQ-WEBCON-*).
   [CYNAI.USRGWY.OpenAIChatApi.Endpoints](../tech_specs/openai_compatible_chat_api.md#spec-cynai-usrgwy-openaichatapi-endpoints)
   <a id="req-client-0172"></a>
 - **REQ-CLIENT-0173:** The CLI chat command MUST support setting an optional project context for the chat session.
-  When set, the CLI MUST send the project context using the OpenAI-standard `OpenAI-Project` request header on `POST /v1/chat/completions`.
+  When set, the CLI MUST send the project context using the OpenAI-standard `OpenAI-Project` request header on interactive chat requests that support that header (for example `POST /v1/chat/completions`).
   When omitted, the CLI does not send the header and the gateway associates the thread with the user's default project (see [REQ-PROJCT-0104](../requirements/projct.md#req-projct-0104)).
   [CYNAI.CLIENT.CliChatProjectContext](../tech_specs/cli_management_app_commands_chat.md#spec-cynai-client-clichatprojectcontext)
   [CYNAI.ACCESS.Doc.ProjectsAndScopes](../tech_specs/projects_and_scopes.md#spec-cynai-access-doc-projectsandscopes)
@@ -290,7 +291,7 @@ Web Console-specific requirements live in [webcon.md](webcon.md) (REQ-WEBCON-*).
   [CYNAI.USRGWY.OpenAIChatApi.WarmUp](../tech_specs/openai_compatible_chat_api.md#spec-cynai-usrgwy-openaichatapi-warmup)
   [CYNAI.CLIENT.CliChatWarmUp](../tech_specs/cli_management_app_commands_chat.md#spec-cynai-client-clichatwarmup)
   <a id="req-client-0177"></a>
-- **REQ-CLIENT-0178:** The CLI chat command MUST support a one-shot mode: when invoked with `-m, --message <text>`, the CLI MUST send that single message to the gateway via `POST /v1/chat/completions`, print the completion content (subject to `--plain` and `--no-color`), and exit.
+- **REQ-CLIENT-0178:** The CLI chat command MUST support a one-shot mode: when invoked with `-m, --message <text>`, the CLI MUST send that single message to the gateway via the configured OpenAI-compatible interactive chat surface, print the completion content (subject to `--plain` and `--no-color`), and exit.
   The CLI MUST NOT enter the interactive loop when `--message` is provided.
   One-shot mode MUST use the same auth, gateway URL, model, and project context as interactive chat (e.g. `--model`, `--project-id` apply when present).
   [CYNAI.CLIENT.CliChatOneShot](../tech_specs/cli_management_app_commands_chat.md#spec-cynai-client-clichatoneshot)
@@ -304,3 +305,32 @@ Web Console-specific requirements live in [webcon.md](webcon.md) (REQ-WEBCON-*).
   [CYNAI.ACCESS.ProjectPlanReviewApprove](../tech_specs/projects_and_scopes.md#spec-cynai-access-projectplanreviewapprove)
   [CYNAI.USRGWY.ProjectPlanApi](../tech_specs/user_api_gateway.md#spec-cynai-usrgwy-projectplanapi)
   <a id="req-client-0180"></a>
+- **REQ-CLIENT-0181:** The CLI chat command MUST support explicit fresh-thread creation: at session start (e.g. `--thread-new`) and during an active session (e.g. `/thread new`).
+  Thread creation MUST use the gateway `POST /v1/chat/threads` and MUST respect the current project context (e.g. `OpenAI-Project` header or active project) for the new thread.
+  Subsequent chat completion requests MUST remain OpenAI-compatible and MUST NOT require any CyNodeAI-specific thread identifier in the request body or headers.
+  [CYNAI.CLIENT.CliChatThreadControls](../tech_specs/cli_management_app_commands_chat.md#spec-cynai-client-clichatthreadcontrols)
+  [REQ-USRGWY-0135](../requirements/usrgwy.md#req-usrgwy-0135)
+  <a id="req-client-0181"></a>
+- **REQ-CLIENT-0182:** Clients with a rich chat UI MUST prefer the structured chat-turn representation when the gateway provides it and MUST fall back to canonical plain-text transcript content when it does not.
+  [CYNAI.CLIENT.CynorkTui.TranscriptRendering](../tech_specs/cynork_tui.md#spec-cynai-client-cynorktui-transcriptrendering)
+  [CYNAI.CLIENT.CliChatResponseOutput](../tech_specs/cli_management_app_commands_chat.md#spec-cynai-client-clichatresponseoutput)
+  <a id="req-client-0182"></a>
+- **REQ-CLIENT-0183:** Clients with a rich chat UI MUST NOT render model thinking or reasoning content as normal assistant transcript text by default.
+  When thinking data is available, the client MUST hide it by default and MAY offer an explicit user action to expand or inspect it.
+  [CYNAI.CLIENT.CynorkTui.TranscriptRendering](../tech_specs/cynork_tui.md#spec-cynai-client-cynorktui-transcriptrendering)
+  [CYNAI.CLIENT.CliChatResponseOutput](../tech_specs/cli_management_app_commands_chat.md#spec-cynai-client-clichatresponseoutput)
+  <a id="req-client-0183"></a>
+- **REQ-CLIENT-0184:** When one user prompt yields multiple assistant-side output items, clients with a rich chat UI MUST render those items in order as one logical assistant turn rather than as unrelated transcript entries.
+  At minimum, the client MUST distinguish visible assistant text from tool activity, and SHOULD render download or attachment references as explicit non-prose items when present.
+  [CYNAI.CLIENT.CynorkTui.TranscriptRendering](../tech_specs/cynork_tui.md#spec-cynai-client-cynorktui-transcriptrendering)
+  [CYNAI.CLIENT.CliChatResponseOutput](../tech_specs/cli_management_app_commands_chat.md#spec-cynai-client-clichatresponseoutput)
+  <a id="req-client-0184"></a>
+- **REQ-CLIENT-0185:** Interactive chat UIs SHOULD update the in-flight assistant turn progressively when the gateway or provider exposes streaming or incremental output.
+  When the final assistant turn is committed, the client SHOULD reconcile in-flight placeholders, thinking indicators, and tool-activity rows into the final ordered transcript without duplicating visible assistant text.
+  [CYNAI.CLIENT.CynorkTui.GenerationState](../tech_specs/cynork_tui.md#spec-cynai-client-cynorktui-generationstate)
+  <a id="req-client-0185"></a>
+- **REQ-CLIENT-0186:** Plain or one-shot chat output intended for piping or scripting MUST emit only the canonical visible assistant text.
+  Hidden thinking data, tool metadata, and other non-text structured items MUST NOT be emitted in `--plain` output unless the user explicitly opts into a structured output mode defined elsewhere.
+  [CYNAI.CLIENT.CliChatOneShot](../tech_specs/cli_management_app_commands_chat.md#spec-cynai-client-clichatoneshot)
+  [CYNAI.CLIENT.CliChatResponseOutput](../tech_specs/cli_management_app_commands_chat.md#spec-cynai-client-clichatresponseoutput)
+  <a id="req-client-0186"></a>

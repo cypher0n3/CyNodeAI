@@ -8,6 +8,8 @@
 - [Task Scheduler](#task-scheduler)
   - [Scheduled Run Routing to Project Manager Agent](#scheduled-run-routing-to-project-manager-agent)
 - [Project Manager Agent](#project-manager-agent)
+- [OpenAI-Compatible Interactive Chat Routing](#openai-compatible-interactive-chat-routing)
+  - [Responses Continuation State](#responses-continuation-state)
 - [Managed Services (Worker-Managed)](#managed-services-worker-managed)
   - [Project Manager Model (Startup Selection and Warmup)](#project-manager-model-startup-selection-and-warmup)
 - [API Egress Server](#api-egress-server)
@@ -123,6 +125,46 @@ In this system, PMA is hosted as a **worker-managed service container** and is a
 See [`docs/tech_specs/project_manager_agent.md`](project_manager_agent.md), [`docs/tech_specs/project_analyst_agent.md`](project_analyst_agent.md), and [`docs/tech_specs/user_preferences.md`](user_preferences.md).
 
 Orchestrator-side agents MAY use external AI providers for planning and verification when policy allows it.
+
+## OpenAI-Compatible Interactive Chat Routing
+
+- Spec ID: `CYNAI.ORCHES.OpenAIInteractiveChatRouting` <a id="spec-cynai-orches-openaiinteractivechatrouting"></a>
+
+Traces To:
+
+- [REQ-ORCHES-0131](../requirements/orches.md#req-orches-0131)
+- [REQ-ORCHES-0132](../requirements/orches.md#req-orches-0132)
+- [REQ-ORCHES-0162](../requirements/orches.md#req-orches-0162)
+
+The orchestrator is the single request-routing owner for the gateway's OpenAI-compatible interactive chat surfaces.
+This applies to both `POST /v1/chat/completions` and `POST /v1/responses`.
+
+Normative behavior:
+
+- The orchestrator MUST apply the same policy, audit, redaction, timeout, and bounded-retry rules to both interactive chat endpoints.
+- The orchestrator MUST derive one effective model identifier from the request `model` field when present and non-empty, otherwise `cynodeai.pm`.
+- When the effective model identifier is `cynodeai.pm`, the orchestrator MUST route the request to PMA using only the worker-mediated PMA endpoint reported by the worker.
+- When the effective model identifier is not `cynodeai.pm`, the orchestrator MUST route the request to the configured direct-inference path and MUST NOT invoke PMA for that request.
+- Endpoint-specific request and response shape differences are owned by the gateway compatibility layer, but the orchestrator-owned routing and policy decisions MUST remain consistent across both interactive chat surfaces.
+
+### Responses Continuation State
+
+- Spec ID: `CYNAI.ORCHES.ResponsesContinuationState` <a id="spec-cynai-orches-responsescontinuationstate"></a>
+
+Traces To:
+
+- [REQ-ORCHES-0165](../requirements/orches.md#req-orches-0165)
+- [REQ-ORCHES-0166](../requirements/orches.md#req-orches-0166)
+
+For `POST /v1/responses`, the orchestrator MUST support retained continuation state for `previous_response_id` without changing CyNodeAI's canonical thread and message ownership model.
+
+Normative behavior:
+
+- The orchestrator MUST resolve `previous_response_id` only against retained response metadata owned by the authenticated user and scoped to the effective project for the request.
+- The orchestrator MUST NOT use cross-user, cross-project, missing, or expired response references as continuation state.
+- When a valid `previous_response_id` is present, the orchestrator MUST reconstruct the prior conversation state needed for routing and PMA or inference handoff while preserving the current user input as the newest turn.
+- The orchestrator MUST persist retained response metadata sufficient to support later continuation while the response remains within retention.
+- This retained response metadata is continuation state for the OpenAI-compatible `responses` surface; it MUST NOT replace CyNodeAI chat threads and messages as the canonical persisted user-visible conversation history.
 
 ## Managed Services (Worker-Managed)
 

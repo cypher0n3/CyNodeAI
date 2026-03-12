@@ -100,8 +100,8 @@ It covers user-facing REST API gateway behavior and related API contracts.
   [CYNAI.USRGWY.WebConsole](../tech_specs/user_api_gateway.md#spec-cynai-usrgwy-webconsole)
   <a id="req-usrgwy-0126"></a>
 - **REQ-USRGWY-0127:** The User API Gateway MUST expose the OpenAI-compatible chat API as the only interactive chat interface.
-  This includes `GET /v1/models` and `POST /v1/chat/completions`.
-  The OpenAI-compatible contract MUST be pinned to the latest OpenAI Chat Completions API reference as of 2026-02-22.
+  This includes `GET /v1/models`, `POST /v1/chat/completions`, and `POST /v1/responses`.
+  The OpenAI-compatible contract MUST support both the OpenAI Chat Completions and OpenAI Responses surfaces as defined by the corresponding tech spec.
   The implementation MUST follow the OpenAI REST API version indicated by `openai-version: 2020-10-01` (as of 2026-02-22).
   The gateway MUST ignore unknown request fields for forward compatibility.
   `GET /v1/models` MUST return only model identifiers that the authenticated user is authorized to use (RBAC/policy).
@@ -114,7 +114,7 @@ It covers user-facing REST API gateway behavior and related API contracts.
   <a id="req-usrgwy-0128"></a>
 - **REQ-USRGWY-0129:** The gateway MUST provide distinct chat-completion error semantics and MUST log completion path selection for diagnostics.
   Errors MUST distinguish cancellation, inference failure, and completion timeout.
-  For the OpenAI-compatible endpoints (`GET /v1/models`, `POST /v1/chat/completions`), the gateway MUST return an OpenAI-style JSON error payload with a top-level `error` object.
+  For the OpenAI-compatible endpoints (`GET /v1/models`, `POST /v1/chat/completions`, and `POST /v1/responses`), the gateway MUST return an OpenAI-style JSON error payload with a top-level `error` object.
   [CYNAI.USRGWY.OpenAIChatApi.Errors](../tech_specs/openai_compatible_chat_api.md#spec-cynai-usrgwy-openaichatapi-errors)
   [CYNAI.USRGWY.OpenAIChatApi.Observability](../tech_specs/openai_compatible_chat_api.md#spec-cynai-usrgwy-openaichatapi-observability)
   <a id="req-usrgwy-0129"></a>
@@ -149,3 +149,23 @@ It covers user-facing REST API gateway behavior and related API contracts.
   The endpoint MUST require the same authentication as the chat API.
   [CYNAI.USRGWY.OpenAIChatApi.WarmUp](../tech_specs/openai_compatible_chat_api.md#spec-cynai-usrgwy-openaichatapi-warmup)
   <a id="req-usrgwy-0134"></a>
+- **REQ-USRGWY-0135:** The User API Gateway MUST support explicit creation of a new chat thread via `POST /v1/chat/threads`.
+  The created thread MUST be scoped to the authenticated user and to the requested or default project.
+  The response MUST return the created thread identifier for retrieval and management purposes, but the gateway MUST NOT require clients to send any CyNodeAI-specific thread identifier on subsequent OpenAI-compatible chat completion requests.
+  [CYNAI.USRGWY.ChatThreadsMessages.ApiSurface](../tech_specs/chat_threads_and_messages.md#spec-cynai-usrgwy-chatthreadsmessages-apisurface)
+  <a id="req-usrgwy-0135"></a>
+- **REQ-USRGWY-0136:** The User API Gateway MUST provide a structured chat-turn representation for rich clients while preserving a coherent plain-text fallback for simple clients.
+  The structured representation MUST allow clients to distinguish at least visible assistant text, hidden thinking or reasoning content, tool activity, and file or download references without scraping prose.
+  [CYNAI.USRGWY.ChatThreadsMessages.StructuredTurns](../tech_specs/chat_threads_and_messages.md#spec-cynai-usrgwy-chatthreadsmessages-structuredturns)
+  [CYNAI.USRGWY.OpenAIChatApi.NormalizedAssistantOutput](../tech_specs/openai_compatible_chat_api.md#spec-cynai-usrgwy-openaichatapi-normalizedassistantoutput)
+  <a id="req-usrgwy-0136"></a>
+- **REQ-USRGWY-0137:** When one interactive chat request yields multiple assistant-side output items, the gateway MUST preserve their order within one logical assistant turn.
+  This applies whether the upstream behavior comes from provider-native structured output, tool-call loops, or responses-style multi-item output.
+  [CYNAI.USRGWY.ChatThreadsMessages.StructuredTurns](../tech_specs/chat_threads_and_messages.md#spec-cynai-usrgwy-chatthreadsmessages-structuredturns)
+  [CYNAI.USRGWY.OpenAIChatApi.NormalizedAssistantOutput](../tech_specs/openai_compatible_chat_api.md#spec-cynai-usrgwy-openaichatapi-normalizedassistantoutput)
+  <a id="req-usrgwy-0137"></a>
+- **REQ-USRGWY-0138:** Thinking or reasoning content MUST NOT be included in the canonical plain-text transcript content used for thread title, summary, list preview, or other default user-visible transcript surfaces.
+  If the system preserves thinking at all, it MUST do so only as non-default structured data or bounded metadata, and rich clients MUST treat it as hidden-by-default display content.
+  [CYNAI.USRGWY.ChatThreadsMessages.StructuredTurns](../tech_specs/chat_threads_and_messages.md#spec-cynai-usrgwy-chatthreadsmessages-structuredturns)
+  [CYNAI.USRGWY.OpenAIChatApi.NormalizedAssistantOutput](../tech_specs/openai_compatible_chat_api.md#spec-cynai-usrgwy-openaichatapi-normalizedassistantoutput)
+  <a id="req-usrgwy-0138"></a>

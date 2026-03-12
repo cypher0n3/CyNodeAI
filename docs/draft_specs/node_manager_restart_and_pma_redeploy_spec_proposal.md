@@ -45,7 +45,7 @@ Node-manager must be restartable without tearing down the orchestrator stack.
   - **REQ-WORKER-0XXX (proposed):** The deployment and dev tooling MUST support restarting the Node Manager (and only the Node Manager and its dependent processes/containers) without stopping the orchestrator stack (control-plane, user-gateway, database, MCP gateway, API egress, etc.).
   - Trace: [worker_node.md](../tech_specs/worker_node.md) Node Manager, Deployment and Auto-Start; [development_setup.md](../development_setup.md).
 
-#### 1.2. Independent Restart Tech Spec (Worker_node_node)
+#### 1.2. Independent Restart Tech Spec (`Worker_node_node`)
 
 - In `docs/tech_specs/worker_node.md`, under Deployment and Auto-Start (or Node Manager):
   - State explicitly that the Node Manager is a separate deployable unit: it MAY be stopped and started independently of the orchestrator stack.
@@ -75,7 +75,7 @@ The orchestrator must be able to trigger PMA restart or redeploy on the node usi
   - Node Manager applies the update and, per [CYNAI.WORKER.ManagedServiceContainers](../tech_specs/worker_node.md#spec-cynai-worker-managedservicecontainers), converges to desired state: "If running with a different spec (image/env/args), update it per the rollout policy (stop old, start new)."
 - So the orchestrator "tells" the node to restart/redeploy PMA by pushing an updated node config that differs for the PMA managed service; the node reconciles and restarts/redeploys when `allow_service_restart` is true.
 
-#### 2.3. PMA Redeploy Tech Spec (Worker_node_node and Orchestrator)
+#### 2.3. PMA Redeploy Tech Spec (`Worker_node_node` and Orchestrator)
 
 - In `docs/tech_specs/worker_node.md`, under Dynamic Configuration Updates or Managed Service Containers:
   - State explicitly: When the orchestrator needs to trigger a PMA (or other managed service) restart or redeploy, it MUST deliver an updated node configuration payload that includes the revised `managed_services` entry for that service.

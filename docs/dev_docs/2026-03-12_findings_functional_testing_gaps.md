@@ -262,7 +262,7 @@ When run with `just test-bdd`, these appear as "undefined" and the runner prints
 Feature file: [sba_inference.feature](../../features/agents/sba_inference.feature).
 Two scenarios; the following steps are undefined in agents/_bdd.
 
-#### Scenario 1: SBA Task With Inference Completes With Sba_result_result and User-Facing Reply
+#### Scenario 1: SBA Task With Inference Completes With `Sba_result_result` and User-Facing Reply
 
 - `Given inference path is available and SBA runner is configured`
 - `When I create a SBA task with inference and prompt "Reply back with the current time" and the task runs to terminal status`
@@ -297,7 +297,7 @@ When `SKIP_TESTCONTAINERS=1` is set or podman is unavailable, DB-dependent scena
 - [node_registration_and_config.feature](../../features/orchestrator/node_registration_and_config.feature): Background and steps "the node is recorded in the database"
 - [orchestrator_task_lifecycle.feature](../../features/orchestrator/orchestrator_task_lifecycle.feature): Background "Given a running PostgreSQL database"
 - [workflow_start_resume_lease.feature](../../features/orchestrator/workflow_start_resume_lease.feature): Background "Given a running PostgreSQL database"
-- [chat_completion_reliability.feature](../../features/orchestrator/chat_completion_reliability.feature): Two scenarios with "Given a running PostgreSQL database"
+- [openai_compat_chat.feature](../../features/orchestrator/openai_compat_chat.feature): Two scenarios with "Given a running PostgreSQL database"
 
 So all seven orchestrator feature files either use the DB in Background or in scenario steps; none of the orchestrator BDD scenarios run without a database unless steps are skipped.
 

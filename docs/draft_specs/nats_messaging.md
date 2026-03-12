@@ -104,7 +104,7 @@ Notes:
 
 Streams below define durable storage and retention for each domain.
 
-### 5.1 Stream: CYNODE_JOBS
+### 5.1 Stream: `CYNODE_JOBS`
 
 Purpose:
 
@@ -132,7 +132,7 @@ Recommended max age:
 
 - 3 to 14 days (tune per audit and replay needs)
 
-### 5.2 Stream: CYNODE_EVENTS
+### 5.2 Stream: `CYNODE_EVENTS`
 
 Purpose:
 
@@ -154,7 +154,7 @@ Recommended max age:
 
 - 30 to 180 days (tune per compliance posture)
 
-### 5.3 Stream: CYNODE_TELEMETRY
+### 5.3 Stream: `CYNODE_TELEMETRY`
 
 Purpose:
 

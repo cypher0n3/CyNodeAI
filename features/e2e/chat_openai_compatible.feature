@@ -24,6 +24,22 @@ Scenario: OpenAI-compatible chat completion returns a completion response
   Then the response status is 200
   And the response contains a completion at "choices[0].message.content"
 
+@req_usrgwy_0127
+@spec_cynai_usrgwy_openaichatapi
+Scenario: OpenAI-compatible responses request returns a responses payload
+  When I call POST "/v1/responses" with supported OpenAI-format input
+  Then the response status is 200
+  And the response contains a stable response id
+  And the response contains text output in the OpenAI responses shape
+
+@req_usrgwy_0127
+@spec_cynai_usrgwy_openaichatapi
+Scenario: OpenAI-compatible responses request supports previous_response_id continuation
+  Given I previously called POST "/v1/responses" successfully
+  When I call POST "/v1/responses" with that previous_response_id and supported OpenAI-format input
+  Then the response status is 200
+  And the response contains a stable response id
+
 @req_usrgwy_0130
 @spec_cynai_usrgwy_openaichatapi
 Scenario: Chat does not imply one task per message

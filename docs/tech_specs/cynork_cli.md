@@ -19,6 +19,7 @@
   - [Standard Error Behavior](#standard-error-behavior)
 - [Command Details (Sub-Docs)](#command-details-sub-docs)
 - [Implementation Specification (Go + Cobra)](#implementation-specification-go--cobra)
+- [TUI Scope and Locked Decisions](#tui-scope-and-locked-decisions)
 - [MVP Scope](#mvp-scope)
 
 ## Document Overview
@@ -329,7 +330,8 @@ All subcommands that call the gateway MUST use the resolved gateway URL and reso
 - `cynork auth logout`: clear token from config file and optionally from credential helper; MUST NOT require gateway call.
 - `cynork auth whoami`: call gateway with current token; MUST require auth.
 - `cynork task ...`: create tasks, list tasks, get task status, watch task status, cancel tasks, and retrieve task results and artifacts; see [Task commands](cli_management_app_commands_tasks.md).
-- `cynork chat`: start an interactive chat session with the Project Manager (PM) model; see [Chat command](cli_management_app_commands_chat.md).
+- `cynork tui`: start the full-screen TUI (first interactive entrypoint for chat and thread management); see [TUI first rollout](cynork_tui.md).
+- `cynork chat`: start an interactive chat session with the Project Manager (PM) model; available as a compatibility path during TUI rollout; see [Chat command](cli_management_app_commands_chat.md).
 - `cynork creds ...`: see [Credential Management](cli_management_app_commands_admin.md#spec-cynai-client-clicredential); MUST use gateway credential endpoints.
 - `cynork prefs ...`: see [Preferences Management](cli_management_app_commands_admin.md#spec-cynai-client-clipreferences).
 - `cynork nodes ...`: see [Node Management](cli_management_app_commands_admin.md#spec-cynai-client-clinodemgmt).
@@ -370,6 +372,7 @@ On invalid config file (syntax error), the CLI MUST exit with code 2 before runn
 - Core commands (version, status, auth): [cli_management_app_commands_core.md](cli_management_app_commands_core.md)
 - Task commands: [cli_management_app_commands_tasks.md](cli_management_app_commands_tasks.md)
 - Chat command: [cli_management_app_commands_chat.md](cli_management_app_commands_chat.md)
+- TUI first rollout (minimum scope): [cynork_tui.md](cynork_tui.md)
 - Admin and resource commands (creds, prefs, system settings, nodes, project, persona, skills, audit): [cli_management_app_commands_admin.md](cli_management_app_commands_admin.md)
 - Interactive mode and output: [cli_management_app_shell_output.md](cli_management_app_shell_output.md)
 
@@ -414,12 +417,31 @@ Secrets and logging
 - When reading secrets from stdin or a file, buffers MUST be cleared or not retained longer than necessary for the single request.
 - Go code that handles the resolved token, credential helper I/O, or any secret value MUST use `runtime/secret` when available per [REQ-STANDS-0133](../requirements/stands.md#req-stands-0133); when not available, MUST use best-effort secure erasure before returning.
 
+## TUI Scope and Locked Decisions
+
+- Spec ID: `CYNAI.CLIENT.TuiScope` <a id="spec-cynai-client-tuiscope"></a>
+
+This section captures the current normative TUI scope and the locked decisions that shape it.
+
+- **`cynork shell`:** Deprecated in docs and implementation planning.
+  A temporary compatibility path MAY remain during migration; new behavior MUST NOT depend on shell.
+  See [MVP Scope](#mvp-scope) for current interactive surface.
+- **`cynork tui`:** The first full-screen TUI entrypoint; MUST be the primary interactive chat surface for the first rollout.
+- **`cynork chat`:** MUST remain available during the first rollout, either as the same surface as TUI or as a compatibility alias (e.g. line-oriented or TUI).
+- **Gateway chat API surfaces:** First-rollout TUI work includes support for both `POST /v1/chat/completions` and `POST /v1/responses`; the client-side chat abstraction MUST support both even if the initial default path remains implementation-defined.
+- **First TUI thread slice:** Limited to create, list, switch, and rename; thread summary and archive are deferred unless needed for first testing pass.
+- **Structured chat parts:** Minimum first-rollout model is thinking and tool activity only; full attachment upload UX and download refs are deferred unless promoted into the first slice.
+- **Single-binary worker:** The [single-binary node manager and worker API proposal](../draft_specs/single_binary_node_manager_worker_api_proposal.md) is promoted into stable requirements/worker-node tech specs this round; implementation of the single-binary worker is deferred until after the first TUI rollout.
+
+Normative TUI behavior and layout are defined in [cynork_tui.md](cynork_tui.md).
+
 ## MVP Scope
 
 Minimum viable CLI
 
 - Auth token support and `whoami`.
-- Interactive shell mode with tab completion for all MVP commands.
+- Full-screen TUI (`cynork tui`) as the primary interactive surface; `cynork chat` remains available.
+  Interactive shell mode (`cynork shell`) is deprecated; compatibility path MAY remain during migration.
 - Credential list, create, rotate, disable for API Egress.
 - Preference list, get, set for system and user scopes.
 - Effective preferences for a task.

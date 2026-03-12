@@ -9,6 +9,7 @@
 - [Role Modes](#role-modes)
 - [Instructions Loading and Routing](#instructions-loading-and-routing)
 - [LLM Context Composition](#llm-context-composition)
+- [PMA Conversation History](#pma-conversation-history)
 - [Chat Surface Mapping](#chat-surface-mapping)
 - [Policy and Tool Boundaries](#policy-and-tool-boundaries)
 - [MCP Tool Access](#mcp-tool-access)
@@ -38,7 +39,7 @@ It is not a per-task sandbox container and it is not a worker agent.
 It MUST NOT execute arbitrary code locally.
 It delegates execution to worker nodes and sandbox containers through orchestrator-mediated mechanisms.
 
-Network and routing constraints (normative):
+### Network and Routing Constraints (Normative)
 
 - `cynode-pma` MUST NOT connect directly to orchestrator hostnames or ports.
   Agent-to-orchestrator communication (MCP tool calls and callbacks) MUST flow through the worker proxy.
@@ -51,7 +52,7 @@ Network and routing constraints (normative):
 `cynode-pma` receives all agent-responsibility work from the **orchestrator**; it MUST NOT be invoked directly by the gateway or by external clients.
 The orchestrator routes to PMA whenever inference, planning, task refinement, job dispatch, or sub-agent coordination is needed, and performs sanitization, logging, and persistence at the boundary (e.g. per the [Chat completion routing path](openai_compatible_chat_api.md#spec-cynai-usrgwy-openaichatapi-routingpath) for chat).
 
-Handoff transport (normative):
+### Handoff Transport (Normative)
 
 - Orchestrator-to-PMA traffic MUST be worker-mediated (reverse proxy through the Worker API).
   The orchestrator MUST NOT rely on compose DNS or direct addressing to reach PMA.
@@ -128,12 +129,12 @@ The instructions bundle defines:
 - Role-specific responsibilities and non-goals.
 - Required references to canonical requirements and tech specs.
 
-Role separation requirement
+### Role Separation Requirement
 
 - `project_manager` and `project_analyst` MUST load distinct instruction bundles by default.
 - `project_analyst` MUST NOT reuse the Project Manager instruction bundle by default.
 
-Default layout (required)
+### Default Layout (Required)
 
 - The implementation MUST support a configurable instructions root directory and role-specific subpaths.
 - The default layout MUST be: instructions root `instructions/`, Project Manager bundle `instructions/project_manager/`, Project Analyst bundle `instructions/project_analyst/`.
@@ -167,19 +168,40 @@ When building the system message or prompt content sent to an LLM, `cynode-pma` 
 
 The implementation MUST resolve effective preferences for the current task/request context (including `user_id`, `project_id`, `task_id`, `group_ids`) and MUST include project-level and task-level context when available and the resolved additional context in every LLM request.
 
+## PMA Conversation History
+
+- Spec ID: `CYNAI.PMAGNT.ConversationHistory` <a id="spec-cynai-pmagnt-conversationhistory"></a>
+
+For multi-turn chat, prior conversation turns MUST be preserved and included in context sent to the LLM so the agent can reference earlier user and assistant messages.
+
+### Langchain-Capable Path
+
+- When the agent uses a LangChain-capable pipeline (e.g. LangGraph or a chain that accepts message history), prior turns MUST be included in the composed context passed to the model.
+- The system-context composition (baseline, role instructions, project/task context, preferences) MUST be sent as the system block or equivalent; prior user and assistant turns MUST be sent as conversation history in the prescribed order and MUST NOT be folded into the system block.
+
+### Executor Input
+
+- The final input to the executor (the prompt or message array used for the current inference step) MUST treat the **last user turn** as the current user message.
+- The last user turn MUST NOT be merged into the system block; it MUST remain a distinct user message so that the model correctly attributes it and can respond to it.
+
 ## Chat Surface Mapping
 
 - Spec ID: `CYNAI.PMAGNT.ChatSurfaceMapping` <a id="spec-cynai-pmagnt-chatsurfacemapping"></a>
 
-The OpenAI-compatible chat surface exposed by the User API Gateway defines a stable model id `cynodeai.pm`.
-That external model id MUST map to `cynode-pma` running in `project_manager` mode.
+The OpenAI-compatible interactive chat surfaces exposed by the User API Gateway define a stable model id `cynodeai.pm`.
+That external model id MUST map to `cynode-pma` running in `project_manager` mode for both `POST /v1/chat/completions` and `POST /v1/responses`.
 
 This mapping is required so that:
 
 - Open WebUI and cynork can select a stable id.
 - The underlying inference model name can remain decoupled from the agent surface identity.
 
-Reference contract
+### Responses-Surface Handoff
+
+- When the gateway normalizes a `POST /v1/responses` request for PMA handoff, any prior turns resolved from retained `previous_response_id` continuation state MUST be passed as conversation history in order.
+- The current user input for that request MUST remain the newest user turn and MUST NOT be folded into the system block.
+
+### Reference Contract
 
 - [`docs/tech_specs/openai_compatible_chat_api.md`](openai_compatible_chat_api.md)
 
@@ -214,7 +236,7 @@ The gateway authenticates the token and restricts tool access to the allowlist a
 The gateway restricts PM/PA to tools that have **PM scope** (or **both**) in the orchestrator's per-tool scope; see [Per-tool scope: Sandbox vs PM](mcp_gateway_enforcement.md#spec-cynai-mcpgat-pertoolscope).
 Tools that are sandbox-only MUST NOT be invokable by `cynode-pma`.
 
-Role-based allowlists
+### Role-Based Allowlists
 
 - When running as **project_manager**, `cynode-pma` MUST invoke only tools permitted by the [Project Manager Agent allowlist](mcp_gateway_enforcement.md#spec-cynai-mcpgat-pmagentallowlist).
   That allowlist includes `db.*`, `node.*`, `sandbox.*`, `artifact.*`, `model.*`, `connector.*`, `web.fetch`, `web.search`, `api.call`, `git.*`, `help.*`, and when the system setting permits, `sandbox.allowed_images.list` and `sandbox.allowed_images.add`.
@@ -252,7 +274,7 @@ Traces To:
 `cynode-pma` MUST expose a health endpoint so the worker can determine readiness.
 The orchestrator MUST learn that PMA is online via worker-reported managed service status (and endpoints), not by probing a PMA listen address directly.
 
-Normative behavior:
+### Normative Behavior
 
 - `cynode-pma` MUST expose `GET /healthz` that returns HTTP 200 when the agent is online.
 - The worker MUST health check PMA per its managed service health contract and report `state=ready` and endpoint(s) to the orchestrator.
@@ -266,7 +288,7 @@ Normative behavior:
 When the inference backend used by `cynode-pma` supports **skills**, the system MUST supply the **default CyNodeAI interaction skill** to each inference request so the agent has consistent guidance on MCP tools, gateway usage, and conventions.
 See [Default CyNodeAI Interaction Skill](skills_storage_and_inference.md#spec-cynai-skills-defaultcynodeaiskill) and [REQ-SKILLS-0116](../requirements/skills.md#req-skills-0116).
 
-Skills MCP tools
+### Skills MCP Tools
 
 - When the gateway allowlist and access control permit, `cynode-pma` MAY use the MCP skills tools `skills.create`, `skills.list`, `skills.get`, `skills.update`, and `skills.delete`.
   Permission is determined by the role allowlist in [mcp_gateway_enforcement.md](mcp_gateway_enforcement.md) and per-tool access control; the implementation MUST NOT invoke a skills tool if the gateway rejects the call.
@@ -281,7 +303,7 @@ See:
 
 This section defines the minimum configuration surface for `cynode-pma`.
 
-Required configuration values
+### Required Configuration Values
 
 - Role mode selection (command-line flag; override via config file or environment when supported).
 - Instructions bundle root and role-specific bundle paths (configurable; defaults as in [Instructions Loading and Routing](#instructions-loading-and-routing)).
@@ -290,12 +312,12 @@ Required configuration values
   - Worker-proxy URL for MCP gateway calls.
   - Worker-proxy URL for any required callback/ready signaling.
 
-Optional configuration values
+### Optional Configuration Values
 
 - Feature toggles for spawning analyst sub-agents.
 - Concurrency limits for analyst sub-agents.
 
-Config keys alignment
+### Config Keys Alignment
 
 - When `cynode-pma` is run in `project_manager` role, the preference keys defined for the Project Manager in [`user_preferences.md`](user_preferences.md) and [`external_model_routing.md`](external_model_routing.md) apply (including `agents.project_manager.model_routing.prefer_local`, `agents.project_manager.model_routing.allowed_external_providers`, `agents.project_manager.model_routing.fallback_provider_order`).
 - When `cynode-pma` is run in `project_analyst` role, the preference keys defined for the Project Analyst in those same specs apply (including `agents.project_analyst.model_routing.*`).

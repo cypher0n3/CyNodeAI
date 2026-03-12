@@ -1234,13 +1234,13 @@ Constraints
 
 - **Access control:** `access_control_audit_log` (see Access Control).
 - **Preferences:** `preference_audit_log` (see Preferences).
-- **Chat completions:** `chat_audit_log` (see OpenAI-compatible chat API and chat threads/messages).
+- **Interactive chat:** `chat_audit_log` (see OpenAI-compatible chat API and chat threads/messages).
 
 Additional domain-specific audit tables (e.g. MCP tool calls, connector operations, Git egress) MAY be added later; they SHOULD include at least `task_id` (nullable), subject identity, action, decision or outcome, and `created_at`.
 
 ### Chat Audit Log Table
 
-This table stores audit records for OpenAI-compatible chat completion requests.
+This table stores audit records for OpenAI-compatible interactive chat requests.
 It MUST NOT store full message content.
 
 - `id` (uuid, pk)

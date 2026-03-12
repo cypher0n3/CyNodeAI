@@ -503,27 +503,27 @@ Tool results are capped and reported in the result contract; the agent continues
 All tool paths MUST be under `/workspace` (or the tool-specified root); resolution MUST reject symlink escape outside workspace.
 Output from tools that return content (e.g. `run_command`, `read_file`, `list_tree`, `search_files`) MUST be capped by `constraints.max_output_bytes` or a tool-level cap; truncation MUST be indicated in the tool result (e.g. suffix or status).
 
-#### Run_command_command Step
+#### `Run_command_command` Step
 
 - Required args: `argv` (array of strings; non-empty).
   Optional args: `cwd` (string; path relative to workspace; default workspace root).
 - Use for arbitrary user-level commands, including: **grep/search in files** (e.g. `grep`, `rg` when present in the image), **find/glob** (e.g. `find`, shell globs), **head/sed** for line-oriented edits, and builds/tests.
   Command stdout+stderr are combined and capped; exit code is reflected in the step result.
 
-#### Read_file_file Step
+#### `Read_file_file` Step
 
 - Required args: `path` (string; file path relative to workspace).
   Optional args: `start_line`, `end_line` (integers, 1-based inclusive; when both present, only that line range is read; implementations MAY support this to avoid reading large files).
 - When line range is not supported or not provided, the full file is read.
   Output MUST be capped; out-of-range or missing file MUST produce a deterministic error in the tool result.
 
-#### Write_file_file Step
+#### `Write_file_file` Step
 
 - Required args: `path` (string), `content` (string).
   Parent directories MUST be created as needed.
   Rejects path that escapes workspace (symlink or traversal).
 
-#### Apply_unified_diff_unified_diff Step
+#### `Apply_unified_diff_unified_diff` Step
 
 - Required args: `diff` (string; unified diff body).
   Paths in the diff (e.g. from `---`/`+++` lines) MUST resolve under workspace; any path that would write outside workspace MUST be rejected before applying.
@@ -531,14 +531,14 @@ Output from tools that return content (e.g. `run_command`, `read_file`, `list_tr
   Optional arg `dry_run` (boolean) is reserved for future use (validate only, do not apply).
 - Use for **patching files**: generate a unified diff (e.g. from a model or tool) and apply it with this step.
 
-#### List_tree_tree Step
+#### `List_tree_tree` Step
 
 - Optional args: `path` (string; directory under workspace; default workspace root).
   Returns a structured tree (e.g. one path per line) for that directory.
   Optional arg `pattern` or `glob` is reserved for future use (filter entries by pattern).
 - For **glob/find by pattern**, use `run_command` with `find` or shell glob until `list_tree` supports a pattern.
 
-#### Search_files_files Step
+#### `Search_files_files` Step
 
 - Required args: `pattern` (string; regular expression to search for; RE2 syntax).
   Optional args: `path` (string; directory under workspace; default workspace root), `include` (string; glob to restrict files, e.g. `*.go`; when empty, all readable files are considered).

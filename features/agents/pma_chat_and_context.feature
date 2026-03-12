@@ -25,3 +25,14 @@ Scenario: Composed context order is baseline then project then task then additio
   And the captured prompt contains "## User additional context"
   And "## Project context" appears before "## Task context" in the captured prompt
   And "## Task context" appears before "## User additional context" in the captured prompt
+
+@req_orches_0165
+@spec_cynai_pmagnt_conversationhistory
+@spec_cynai_pmagnt_chatsurfacemapping
+Scenario: Responses-surface continuation preserves prior turns and keeps current user input distinct
+  Given I have a normalized PMA handoff from POST "/v1/responses" with retained prior turns and current input "Continue the plan"
+  And I have a mock inference server that captures the messages
+  When I send the request to the PMA internal chat completion endpoint
+  Then the captured messages include the retained prior user and assistant turns in order
+  And the last captured user message is "Continue the plan"
+  And the last captured user message is not folded into the system message
