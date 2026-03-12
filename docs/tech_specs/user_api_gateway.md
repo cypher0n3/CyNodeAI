@@ -4,15 +4,20 @@
 - [Gateway Purpose](#gateway-purpose)
 - [Core Capabilities](#core-capabilities)
 - [Client Compatibility](#client-compatibility)
+- [MCP Tool Interface](#mcp-tool-interface)
 - [Data REST API](#data-rest-api)
+  - [Project Plan API](#project-plan-api)
 - [Live Updates and Messaging](#live-updates-and-messaging)
   - [Delivery Methods](#delivery-methods)
   - [Event Types](#event-types)
   - [Subscriptions and Destinations](#subscriptions-and-destinations)
+- [Support for Cynork Chat Slash Commands](#support-for-cynork-chat-slash-commands)
 - [Authentication and Auditing](#authentication-and-auditing)
-- [Admin Web Console](#admin-web-console)
+- [Web Console](#web-console)
 
 ## Document Overview
+
+- Spec ID: `CYNAI.USRGWY.Doc.UserApiGateway` <a id="spec-cynai-usrgwy-doc-userapigateway"></a>
 
 This document defines the User API Gateway, a single user-facing endpoint exposed by the orchestrator.
 It provides a stable interface for user clients to submit work, query status, and retrieve artifacts.
@@ -25,10 +30,15 @@ It provides a stable interface for user clients to submit work, query status, an
 
 ## Core Capabilities
 
+- Spec ID: `CYNAI.USRGWY.CoreCapabilities` <a id="spec-cynai-usrgwy-corecapabilities"></a>
+
 The gateway SHOULD support:
 
 - Task submission and management
-  - Create tasks, set acceptance criteria, and attach artifacts.
+  - Create tasks with task input as **plain text or Markdown** (inline or from file), optional **attachments**, **script** (path/file), or **short series of commands**; for script/commands the system runs them in the sandbox; otherwise it interprets the task and may call an AI model and/or dispatch sandbox work.
+  Interpretation and inference are the **default** for task text; there is no user-facing "use inference" flag (see REQ-ORCHES-0126, REQ-ORCHES-0127, REQ-ORCHES-0128).
+  The create request MAY include an optional **task name**; the orchestrator MUST accept it, normalize it per [Task Naming](project_manager_agent.md#spec-cynai-agents-pmtasknaming), and ensure uniqueness (e.g. append numbers) when needed.
+  - Set acceptance criteria and attach artifacts.
   - List tasks, read status, and retrieve results.
 - Scheduler and cron
   - Create, list, update, disable, and delete scheduled jobs (cron or one-off).
@@ -36,6 +46,7 @@ The gateway SHOULD support:
   - Time-zone aware schedule evaluation (schedules specify or inherit a time zone).
   - Query queue depth and schedule state for user visibility.
   - Support wakeups and automation triggers via the same scheduler surface.
+  - When the API for creating scheduled jobs is specified, the schedule payload type (e.g. `task` / `prompt` vs `job_spec`) MUST be defined so that "requires interpretation" is deterministic and the orchestrator can route runs to the Project Manager Agent or to direct dispatch per [orchestrator.md - Scheduled run routing](orchestrator.md#spec-cynai-orches-scheduledrunrouting).
 - Runs and sessions
   - First-class runs and sessions API: create sessions, spawn sub-sessions, create and list runs, attach logs, stream status, store transcripts with retention policies.
   - See [`docs/tech_specs/runs_and_sessions_api.md`](runs_and_sessions_api.md).
@@ -51,22 +62,33 @@ The gateway SHOULD support:
 - Artifact ingress and egress
   - Upload files for tasks and download produced artifacts.
 - Admin operations
-  - Manage credentials, preferences, and basic node lifecycle controls through a single user-facing surface.
+  - Manage credentials, user preferences, Agent personas (CRUD, RBAC per scope), and basic node lifecycle controls through a single user-facing surface.
 - Groups and RBAC
   - Manage groups and membership (create group, add member, remove member), when allowed.
   - Manage role bindings (assign role to user or group), when allowed.
   - See [`docs/tech_specs/rbac_and_groups.md`](rbac_and_groups.md).
+- Projects
+  - Basic project CRUD (create, list, get, update, delete or disable) via the Data REST API; projects have a user-friendly title and optional text description.
+  - See [`docs/tech_specs/projects_and_scopes.md`](projects_and_scopes.md) and [Data REST API - Core Resources](data_rest_api.md#spec-cynai-datapi-coreresources).
 
 ## Client Compatibility
+
+- Spec ID: `CYNAI.USRGWY.ClientCompatibility` <a id="spec-cynai-usrgwy-clientcompatibility"></a>
 
 The gateway SHOULD provide compatibility modes to support common external tools.
 
 - Open WebUI compatibility
-  - The gateway MAY expose an OpenAI-compatible subset for chat and model listing, backed by orchestrator task workflows.
+  - The gateway MUST expose the OpenAI-compatible chat surface defined in [`docs/tech_specs/openai_compatible_chat_api.md`](openai_compatible_chat_api.md).
+  - This is the only interactive chat interface for Open WebUI, cynork, and E2E.
 - Messaging integrations
   - The gateway SHOULD support inbound messages via webhooks and outbound notifications via integration adapters.
 
 Compatibility layers MUST preserve orchestrator policy constraints and MUST not bypass auditing.
+
+Traces To:
+
+- [REQ-USRGWY-0121](../requirements/usrgwy.md#req-usrgwy-0121)
+- [REQ-USRGWY-0127](../requirements/usrgwy.md#req-usrgwy-0127)
 
 ## MCP Tool Interface
 
@@ -75,12 +97,118 @@ Agents use MCP tools as the standard tool interface, as defined in [`docs/tech_s
 
 ## Data REST API
 
+- Spec ID: `CYNAI.USRGWY.DataRestApi` <a id="spec-cynai-usrgwy-datarestapi"></a>
+
 The User API Gateway MUST provide a Data REST API for user clients and integrations.
 This API provides database-backed resources without exposing raw SQL.
 
+Traces To:
+
+- [REQ-USRGWY-0122](../requirements/usrgwy.md#req-usrgwy-0122)
+
 See [`docs/tech_specs/data_rest_api.md`](data_rest_api.md).
 
+### Project Plan API
+
+- Spec ID: `CYNAI.USRGWY.ProjectPlanApi` <a id="spec-cynai-usrgwy-projectplanapi"></a>
+
+Traces To:
+
+- [REQ-PROJCT-0120](../requirements/projct.md#req-projct-0120)
+- [REQ-CLIENT-0180](../requirements/client.md#req-client-0180)
+
+The gateway MUST expose the following operations for project plan review and approve.
+Plans are first-class entities per project; a project may have multiple plans; at most one plan per project may be active at a time (see [Project plan state](projects_and_scopes.md#spec-cynai-access-projectplanstate)).
+Authorization MUST use the actions defined in [Project plan actions](access_control.md#spec-cynai-access-projectplanactions): `project_plan.read` for list plans, get plan, list revisions, get revision; `project_plan.approve` for approve; `project_plan.activate` for activate; `project_plan.update` for create/update plan and state transitions (suspend, resume, cancel); `project_plan.archive` for archive.
+
+#### `ProjectPlanApi` Operations
+
+- **List plans for project**
+  - Inputs: `project_id` (path or query), optional filter by state (draft, ready, active, suspended, completed, canceled), optional filter by `archived` (true/false; default view MAY exclude archived), optional pagination.
+  - Outputs: List of plans (plan_id, plan_name, state, archived, plan_approved_at, plan_approved_by, is_plan_locked, created_at, updated_at); ordered by updated_at descending or by state (e.g. active first).
+  - Method: GET (e.g. `GET /v1/projects/{project_id}/plans`).
+  - Error conditions: 404 if project missing; 403 if subject lacks `project_plan.read`.
+- **Create plan**
+  - Inputs: `project_id`, optional plan_name, optional plan_body (initial state is `draft`).
+  - Outputs: plan_id, state (`draft`).
+  - Method: POST (e.g. `POST /v1/projects/{project_id}/plans`).
+  - Error conditions: 404 if project missing; 403 if subject lacks `project_plan.update`.
+- **Get plan**
+  - Inputs: `plan_id` (path or query).
+  - Outputs: Plan document (plan_name, plan_body), state, archived, task list with task dependencies (prerequisite/dependent), plan_approved_at, plan_approved_by, is_plan_locked, project_id.
+  - Method: GET (e.g. `GET /v1/plans/{plan_id}` or `GET /v1/projects/{project_id}/plans/{plan_id}`).
+  - Error conditions: 404 if plan missing; 403 if subject lacks `project_plan.read`.
+- **List plan revisions**
+  - Inputs: `plan_id`, optional pagination (limit, cursor or offset).
+  - Outputs: List of revisions (version, created_at, created_by, optional summary); ordered by version descending (newest first).
+  - Method: GET (e.g. `GET /v1/plans/{plan_id}/revisions`).
+  - Error conditions: 404 if plan missing; 403 if subject lacks `project_plan.read`.
+- **Get plan revision**
+  - Inputs: `plan_id`, `version` (integer).
+  - Outputs: Single revision snapshot (plan_name, plan_body, task_ids, task_dependencies, created_at, created_by).
+  - Method: GET (e.g. `GET /v1/plans/{plan_id}/revisions/{version}`).
+  - Error conditions: 404 if plan or version missing; 403 if subject lacks `project_plan.read`.
+- **Approve plan**
+  - Inputs: `plan_id` (path).
+  - Outputs: Updated plan state (`ready`), plan_approved_at, plan_approved_by.
+  - Method: POST (e.g. `POST /v1/plans/{plan_id}/approve`).
+  - Behavior: Set this plan's state to `ready` (not active); set `plan_approved_at` to current time and `plan_approved_by` to authenticated user (or the user on whose behalf the agent acts).
+    The gateway MUST reject if the plan is archived (per [REQ-PROJCT-0124](../requirements/projct.md#req-projct-0124)).
+    Per [REQ-PROJCT-0122](../requirements/projct.md#req-projct-0122), the backend MUST task the PMA to add or update tasks on the plan as the first action after the plan is set to ready.
+    When the request is from an agent, the agent is expected to have obtained explicit user approval before calling approve per [REQ-AGENTS-0136](../requirements/agents.md#req-agents-0136).
+  - Error conditions: 404 if plan missing; 403 if subject lacks `project_plan.approve`; 409 if plan is archived; 400 if plan has no content (optional validation).
+
+- **Activate plan** (ready -> active)
+  - Inputs: `plan_id` (path).
+  - Outputs: Updated plan state (`active`).
+  - Method: POST (e.g. `POST /v1/plans/{plan_id}/activate`).
+  - Behavior: Set this plan's state to `active` so workflow may run.
+    The gateway MUST reject with 409 if the plan is archived (archived plans must never be active; [REQ-PROJCT-0124](../requirements/projct.md#req-projct-0124)).
+    Any other plan in the same project that is currently `active` MUST be set to `draft`, `suspended`, or (if all its tasks are closed) `completed`.
+  - Error conditions: 404 if plan missing; 403 if subject lacks `project_plan.activate`; 409 if plan is archived or plan is not in state `ready`.
+
+- **Suspend plan** (active -> suspended)
+  - Inputs: `plan_id` (path).
+  - Outputs: Updated plan state (`suspended`).
+  - Method: POST or PATCH (e.g. `POST /v1/plans/{plan_id}/suspend`).
+    Workflow for tasks in this plan MUST NOT run while suspended.
+  - Error conditions: 404 if plan missing; 403 if subject lacks `project_plan.update` or equivalent; 409 if plan is not active.
+
+- **Resume plan** (suspended -> active)
+  - Inputs: `plan_id` (path).
+  - Outputs: Updated plan state (`active`).
+  - Method: POST or PATCH (e.g. `POST /v1/plans/{plan_id}/resume`).
+    The gateway MUST reject if plan is archived.
+    Any other plan in the same project that is currently active MUST be set to draft/suspended/completed so only one is active.
+  - Error conditions: 404 if plan missing; 403 if subject lacks `project_plan.update` or equivalent; 409 if plan is not suspended or if archived.
+
+- **Cancel plan**
+  - Inputs: `plan_id` (path).
+  - Outputs: Updated plan state (`canceled`).
+  - Method: POST or PATCH (e.g. `POST /v1/plans/{plan_id}/cancel`).
+    Workflow MUST NOT run for canceled plans.
+  - Error conditions: 404 if plan missing; 403 if subject lacks `project_plan.update` or equivalent.
+
+- **Archive plan**
+  - Inputs: `plan_id` (path).
+  - Outputs: Updated plan (`archived` = true).
+  - Method: POST or PATCH (e.g. `POST /v1/plans/{plan_id}/archive`).
+    The gateway MUST reject with 409 if the plan is active (must suspend or cancel first); see [REQ-PROJCT-0124](../requirements/projct.md#req-projct-0124).
+  - Error conditions: 404 if plan missing; 403 if subject lacks `project_plan.archive`; 409 if plan is active.
+
+- **Set plan to completed** (optional explicit operation, or result of approve when previous active plan has all tasks closed)
+  - Inputs: `plan_id` (path).
+  - Outputs: Updated plan state (`completed`).
+  - Method: POST or PATCH (e.g. `POST /v1/plans/{plan_id}/complete` or `PATCH /v1/plans/{plan_id}` with state=completed).
+  - **Precondition:** The gateway MUST reject the request with 409 (or 400) unless the plan has at least one task and all such tasks are closed (per [REQ-PROJCT-0121](../requirements/projct.md#req-projct-0121)).
+    A plan with no tasks is incomplete and MUST NOT be set to completed.
+  - Error conditions: 404 if plan missing; 403 if subject lacks `project_plan.update` or equivalent; 409 if plan has no tasks or not all tasks are closed.
+
+The Web Console and the CLI MUST provide capability parity for these operations per [REQ-CLIENT-0180](../requirements/client.md#req-client-0180).
+
 ## Live Updates and Messaging
+
+- Spec ID: `CYNAI.USRGWY.MessagingAndEvents` <a id="spec-cynai-usrgwy-messagingevents"></a>
 
 The User API Gateway is the single user-facing integration surface for live updates.
 Users can connect destinations and subscribe them to task and agent events.
@@ -95,6 +223,10 @@ Examples
 - Chat platform adapters (e.g. Matrix, Slack, Discord, Mattermost)
 
 Secrets required for delivery MUST be stored securely in PostgreSQL and MUST NOT be exposed to agents.
+
+Traces To:
+
+- [REQ-USRGWY-0123](../requirements/usrgwy.md#req-usrgwy-0123)
 
 ### Event Types
 
@@ -150,17 +282,57 @@ Constraints
 - Index: (`destination_id`)
 - Index: (`event_pattern`)
 
+## Support for Cynork Chat Slash Commands
+
+- Spec ID: `CYNAI.USRGWY.ChatSlashCommandSupport` <a id="spec-cynai-usrgwy-chatslashcommandsupport"></a>
+
+Traces To:
+
+- [REQ-ORCHES-0130](../requirements/orches.md#req-orches-0130)
+
+The User API Gateway MUST expose endpoints and operations that support every cynork chat slash command defined in the [CLI management app spec - Slash Command Reference](cli_management_app_commands_chat.md#spec-cynai-client-clichatslashcommandreference).
+The CLI executes slash commands by calling the same gateway APIs as the non-interactive CLI; the gateway and orchestrator MUST support that full surface.
+
+Required operation coverage:
+
+- **Status and identity:** Gateway reachability (status) and current identity (whoami) endpoints used by `/status` and `/whoami`.
+- **Tasks:** Task list, get, create, cancel, result, logs, artifacts list, and artifacts get (as used by `/task list`, `/task get`, `/task create`, `/task cancel`, `/task result`, `/task logs`, `/task artifacts list`, `/task artifacts get`).
+  Task create MUST accept prompt/task text, optional name, and optional attachments per the task-create API.
+- **Nodes:** Node list and node get (as used by `/nodes list`, `/nodes get <node_id>`).
+- **Preferences:** List, get, set, delete, and effective-preferences (as used by `/prefs list`, `/prefs get`, `/prefs set`, `/prefs delete`, `/prefs effective`).
+  Scope-type, scope-id, and key semantics MUST match the preferences API.
+- **Skills:** Skill list and skill get (as used by `/skills list`, `/skills get <skill_id>`).
+
+Implementation MUST use the existing Data REST API and gateway auth endpoints; no separate "chat API" is required.
+New gateway endpoints or resources added for other clients (e.g. admin console) MUST be taken into account so that slash commands can call the same operations where applicable.
+
 ## Authentication and Auditing
 
+- Spec ID: `CYNAI.USRGWY.AuthAuditing` <a id="spec-cynai-usrgwy-authauditing"></a>
+
+- **Every user-facing request MUST be authenticated and authorized.**
+  No endpoint may rely on network location or a previous request for identity; each request is verified independently.
 - The gateway MUST authenticate user clients.
-- The gateway MUST authorize user actions using policy and preferences.
+- The gateway MUST authorize user actions using policy and (when applicable) user task-execution preferences and constraints.
 - The gateway SHOULD emit audit logs for all user actions, including task submission and artifact access.
 - The gateway SHOULD support per-user rate limiting and request size limits.
 - For the MVP local user account model and secure credential handling requirements, see [`docs/tech_specs/local_user_accounts.md`](local_user_accounts.md).
 
-## Admin Web Console
+Traces To:
 
-The User API Gateway SHOULD support an admin-focused web console for managing credentials and preferences.
-The web console MUST be a client of the gateway and MUST NOT connect directly to PostgreSQL.
+- [REQ-USRGWY-0124](../requirements/usrgwy.md#req-usrgwy-0124)
+- [REQ-USRGWY-0125](../requirements/usrgwy.md#req-usrgwy-0125)
+- [REQ-USRGWY-0133](../requirements/usrgwy.md#req-usrgwy-0133)
 
-See [`docs/tech_specs/admin_web_console.md`](admin_web_console.md).
+## Web Console
+
+- Spec ID: `CYNAI.USRGWY.WebConsole` <a id="spec-cynai-usrgwy-webconsole"></a>
+
+The User API Gateway SHOULD support the Web Console for managing credentials and user preferences.
+The Web Console MUST be a client of the gateway and MUST NOT connect directly to PostgreSQL.
+
+Traces To:
+
+- [REQ-USRGWY-0126](../requirements/usrgwy.md#req-usrgwy-0126)
+
+See [`docs/tech_specs/web_console.md`](web_console.md).

@@ -5,6 +5,10 @@
 - [Integration With the Orchestrator](#integration-with-the-orchestrator)
   - [Runtime and Hosting](#runtime-and-hosting)
   - [Invocation Model](#invocation-model)
+  - [Workflow Start/Resume API Contract](#workflow-startresume-api-contract)
+  - [Workflow Start Triggers](#workflow-start-triggers)
+  - [Project Plan and Task Order](#project-plan-and-task-order)
+  - [Workflow Start Gate (Plan Approved)](#workflow-start-gate-plan-approved)
   - [Checkpoint Persistence Contract](#checkpoint-persistence-contract)
   - [Graph Nodes to Orchestrator Capabilities](#graph-nodes-to-orchestrator-capabilities)
   - [Sub-Agent Invocation](#sub-agent-invocation)
@@ -19,6 +23,8 @@
   - [Finalize Summary](#finalize-summary)
   - [Mark Failed](#mark-failed)
 - [Checkpointing and Resumability](#checkpointing-and-resumability)
+  - [Checkpoint schema (prescriptive)](#checkpoint-schema-prescriptive)
+- [Phase 2 flow summary](#phase-2-flow-summary)
 - [Tooling and Security Notes](#tooling-and-security-notes)
 
 ## Document Overview
@@ -44,8 +50,9 @@ This section defines how the LangGraph workflow is integrated with the orchestra
 ### Runtime and Hosting
 
 - The LangGraph workflow runs as part of the orchestrator's workflow engine.
-- The workflow engine MAY be implemented in a different language or process than the orchestrator's REST APIs (e.g. a Python LangGraph runtime invoked by the Go orchestrator).
-- If the workflow runs in a separate process, the orchestrator MUST provide a stable contract for starting workflows, passing `task_id`, and reading/writing checkpoints so that the graph can be resumed after any restart (orchestrator or workflow process).
+- **Phase 2 implementation:** The workflow engine MUST be a **separate Python LangGraph process** invoked by the Go orchestrator (e.g. HTTP or RPC).
+  The workflow process does not serve the orchestrator's REST APIs.
+- The orchestrator MUST provide a stable contract for starting workflows, passing `task_id`, and reading/writing checkpoints so that the graph can be resumed after any restart (orchestrator or workflow process).
 - The Project Manager Agent's behavior is implemented by this graph: the graph is the execution model for the agent.
   Planning, dispatch, verification, and finalization are graph nodes, not separate services.
 
@@ -53,24 +60,145 @@ This section defines how the LangGraph workflow is integrated with the orchestra
 
 - One workflow instance is scoped to one task (one `task_id`).
 - The orchestrator starts a workflow when a task is ready to be driven (e.g. after task creation via User API or when a task is unblocked).
-- How the orchestrator starts the workflow is implementation-defined (in-process call, out-of-process job, or queue consumer), but the following MUST hold:
+- The following MUST hold:
   - The workflow receives the task identifier and MUST load task context in the first node (Load Task Context).
-  - Only one active workflow instance per task at a time; duplicate starts for the same task MUST be prevented or coalesced (e.g. by lease or idempotency key).
+  - Only one active workflow instance per task at a time.
+  - The **single-active-workflow-per-task** guarantee is enforced by a **lease held in the orchestrator DB** (see [orchestrator.md](orchestrator.md) and [postgres_schema.md](postgres_schema.md)).
+  - The workflow runner MUST acquire or check the lease via the orchestrator before running; the orchestrator is the source of truth.
 - The orchestrator MAY run multiple workflow instances concurrently for different tasks.
+- When and how the orchestrator starts a workflow for a task is defined in [Workflow Start Triggers](#workflow-start-triggers) below.
+
+### Workflow Start/Resume API Contract
+
+- Spec ID: `CYNAI.ORCHES.WorkflowStartResumeAPI` <a id="spec-cynai-orches-workflowstartresumeapi"></a>
+
+Traces To:
+
+- [REQ-ORCHES-0144](../requirements/orches.md#req-orches-0144)
+- [REQ-ORCHES-0145](../requirements/orches.md#req-orches-0145)
+
+The orchestrator exposes a stable API to the workflow runner for starting and resuming workflows.
+The implementation uses HTTP; the contract is defined below.
+
+#### Workflow Start/Resume API Operations
+
+- **StartWorkflow:** Request includes `task_id` (uuid) and optional `idempotency_key` (string).
+  Response: 200 with run identifier or status; or 409 Conflict when the lease for the task is already held by another holder; or 200 with body indicating "already running" when the same holder re-requests (idempotent).
+  The start operation must not start a second workflow instance when the lease is already held.
+- **ResumeWorkflow:** Request includes `task_id`.
+  Response: 200 with current checkpoint pointer or status so the workflow runner can continue from the last node.
+
+The workflow runner acquires or validates the task workflow lease via this API (or a dedicated lease step that is part of start) before running graph steps.
+If the lease is already held for the task, the start call returns the defined response (409 or 200 already-running) and does not start a second instance.
+
+**Transport:** The API is exposed over HTTP by the orchestrator; the workflow runner is the client.
+
+### Workflow Start Triggers
+
+- Spec ID: `CYNAI.ORCHES.WorkflowStartTriggers` <a id="spec-cynai-orches-workflowstarttriggers"></a>
+
+Traces To:
+
+- [REQ-ORCHES-0147](../requirements/orches.md#req-orches-0147)
+
+The conditions under which the orchestrator starts a workflow for a task are:
+
+#### Task Created via User API
+
+When a task is created via the User API Gateway (e.g. POST that creates a task), the orchestrator treats the task as ready to be driven once creation succeeds (and any optional eligibility checks pass).
+The orchestrator invokes the workflow start contract (start workflow for that `task_id`) as defined in [Workflow Start/Resume API Contract](#workflow-startresume-api-contract).
+No separate "run task" step is required unless the API design explicitly separates create and run.
+
+#### Task Created via Chat (PMA/MCP)
+
+When PMA creates a task via MCP during a chat turn, PMA invokes an MCP tool or internal request to "start workflow for task_id" (or equivalent); the orchestrator performs the start for that `task_id` in response.
+The orchestrator does not infer workflow start from task-state subscription; the trigger is the explicit request from PMA.
+
+#### Scheduled Run
+
+When a scheduled run requires interpretation, the scheduler hands the run payload to PMA; PMA creates the task and starts the workflow internally.
+See [orchestrator.md](orchestrator.md) Scheduled Run Routing to Project Manager Agent.
+
+### Project Plan and Task Order
+
+- Spec ID: `CYNAI.ORCHES.WorkflowPlanOrder` <a id="spec-cynai-orches-workflowplanorder"></a>
+
+Traces To:
+
+- [REQ-ORCHES-0153](../requirements/orches.md#req-orches-0153)
+
+When a task is associated with a plan (`task.plan_id` set; see [Project plan](projects_and_scopes.md#spec-cynai-access-projectplan)), execution order and runnability are determined solely by **task dependencies** ([`task_dependencies`](postgres_schema.md#spec-cynai-schema-taskdependenciestable) table).
+
+**Runnable:** A task in a plan is **runnable** when: (1) the plan's state is `active`, (2) the task is not closed, and (3) every task it depends on (each `depends_on_task_id` in `task_dependencies` for this `task_id`) has `status = 'completed'`.
+A task with no dependencies in `task_dependencies` is runnable once the plan is active and the task is not closed (subject to the workflow start gate).
+
+**Blocking on failed dependencies:** Tasks that depend on a task with status `failed`, `canceled`, or `superseded` MUST NOT have their workflow started until that dependency is retried and reaches `status = 'completed'`.
+The orchestrator MUST enforce this in the workflow start gate (see [Workflow start gate: dependency check](#workflow-start-gate-plan-approved)).
+
+**Parallel execution:** Multiple tasks MAY be started in parallel when each is runnable (no unsatisfied dependencies).
+The orchestrator or PMA when selecting which task(s) to run next MUST consider all runnable tasks in the plan and MAY start any subset of them subject to resource and policy constraints.
+
+Tasks with no rows in `task_dependencies` for that plan are runnable once the plan is active and the task is not closed (no prerequisites).
+
+#### Cancel Cascades to Dependents
+
+- Spec ID: `CYNAI.ORCHES.CancelCascadesToDependents` <a id="spec-cynai-orches-cancelcascadestodependents"></a>
+
+Traces To:
+
+- [REQ-ORCHES-0154](../requirements/orches.md#req-orches-0154)
+
+When a task is set to status `canceled`, the system MUST automatically set to `canceled` every task that depends on it (each `task_id` that has this task as `depends_on_task_id` in `task_dependencies`).
+This MUST be applied **transitively**: any task that depends on a task that was just canceled is also canceled, and so on, so that the entire downstream dependency graph from the canceled task is canceled.
+Each cascaded task MUST have its `status` set to `canceled` and `closed` set to `true`.
+The gateway and orchestrator MUST enforce this when processing a cancel request or when any component sets a task's status to `canceled`.
+
+### Workflow Start Gate (Plan Approved)
+
+- Spec ID: `CYNAI.ORCHES.WorkflowStartGatePlanApproved` <a id="spec-cynai-orches-workflowstartgateplanapproved"></a>
+
+Traces To:
+
+- [REQ-ORCHES-0152](../requirements/orches.md#req-orches-0152)
+- [REQ-ORCHES-0153](../requirements/orches.md#req-orches-0153)
+- [REQ-PROJCT-0124](../requirements/projct.md#req-projct-0124)
+
+Before the orchestrator starts a workflow for a task, it MUST apply the following gate.
+
+#### `WorkflowStartGatePlanApproved` Scope
+
+- Applies to every workflow start request (whether triggered by User API task create, PMA/MCP "start workflow for task_id", or scheduled run handed to PMA).
+- The gate is evaluated after the trigger is recognized and before the workflow start API is invoked (or before the lease is acquired).
+
+#### `WorkflowStartGatePlanApproved` Algorithm
+
+<a id="algo-cynai-orches-workflowstartgateplanapproved"></a>
+
+1. Resolve the task's plan: `plan_id` from the task row. <a id="algo-cynai-orches-workflowstartgateplanapproved-step-1"></a>
+2. If `plan_id` is null, allow workflow start (no plan gate). <a id="algo-cynai-orches-workflowstartgateplanapproved-step-2"></a>
+3. Load the plan row (`project_plans`).
+   If the plan's `archived` flag is true, deny workflow start and return a defined error (e.g. 409 or 403 with reason "plan is archived").
+   If the plan's `state` is not `active` (e.g. `draft`, `ready`, `suspended`, `completed`, `canceled`): if the workflow start was requested explicitly by the PMA (e.g. MCP tool or internal "start workflow for task_id" from PMA), continue to step 5 (PMA handoff); otherwise deny workflow start and return a defined error (e.g. 409 or 403 with reason "plan not active"). <a id="algo-cynai-orches-workflowstartgateplanapproved-step-3"></a>
+4. If the plan's `state` is `active`, continue to step 5. <a id="algo-cynai-orches-workflowstartgateplanapproved-step-4"></a>
+5. **Dependency check** (whenever `plan_id` is set): Load all rows from `task_dependencies` where `task_id` = this task.
+   For each such row, load the dependency task (`depends_on_task_id`).
+   If any dependency task has `status != 'completed'`, deny workflow start and return a defined error (e.g. 409 with reason "dependencies not satisfied" or "dependency not completed").
+   If there are no dependency rows, or every dependency has `status = 'completed'`, allow workflow start. <a id="algo-cynai-orches-workflowstartgateplanapproved-step-5"></a>
+
+Implementations MUST set the plan's state to `draft` whenever that plan's document, task list, or task dependencies are updated while the plan is active (see [Project plan auto un-approve on edit](projects_and_scopes.md#spec-cynai-access-projectplanautounapprove)).
 
 ### Checkpoint Persistence Contract
 
 - The workflow MUST persist checkpoint data after each node transition so that state is durable and the graph can resume from the last checkpoint.
 - The checkpoint store MUST be backed by PostgreSQL (or an orchestrator-owned store that uses PostgreSQL as the source of truth).
 - The workflow implementation MUST support loading checkpoint state by `task_id` and continuing from the next node when the orchestrator or workflow process restarts.
-- Checkpoint schema and storage format are implementation-defined.
-  The normative requirement is that the workflow engine can save and load by `task_id` and that the state model in [State Model](#state-model) is represented.
+- The checkpoint schema and storage are prescriptive; see [Checkpoint schema (prescriptive)](#checkpoint-schema-prescriptive) under Checkpointing and Resumability.
 - The orchestrator MUST NOT run workflow steps without going through the checkpoint layer so that resumability is guaranteed.
 
 ### Graph Nodes to Orchestrator Capabilities
 
 Each graph node performs work by calling orchestrator-owned capabilities.
-The following mapping is normative for the MVP.
+The following mapping is the MVP reference mapping.
 
 - **Load Task Context**: MCP database tools (or equivalent internal API) to read task, acceptance criteria, artifacts; preference resolution.
 - **Plan Steps**: Orchestrator model routing (local or API Egress) for LLM calls; state write for the plan.
@@ -82,18 +210,22 @@ The following mapping is normative for the MVP.
 
 - All database reads and writes from the workflow MUST go through MCP database tools (or an internal service that enforces the same policy).
   The workflow MUST NOT connect directly to PostgreSQL.
-- Node selection and job dispatch MUST use the orchestrator's node registry, capability data, and worker API as defined in [`node.md`](node.md) and [`orchestrator.md`](orchestrator.md).
+- Node selection and job dispatch MUST use the orchestrator's node registry, capability data, and worker API as defined in [`worker_node.md`](worker_node.md) and [`orchestrator.md`](orchestrator.md).
+
+#### LLM and Tool Execution (Implementation)
+
+- The LLM and tool execution performed within graph nodes (e.g. Plan Steps, Verify Step Result) are implemented using **langchaingo** (Go), including **multiple simultaneous tool calls** where supported by the model and MCP gateway.
+- LangGraph remains the graph runner and checkpoint owner; see [Runtime and Hosting](#runtime-and-hosting) and [Checkpoint Persistence Contract](#checkpoint-persistence-contract).
+- See [Project Manager Agent - LLM and Tool Execution (Implementation)](project_manager_agent.md#spec-cynai-agents-pmllmtoolimplementation).
 
 ### Sub-Agent Invocation
 
 - The Project Analyst Agent is a sub-agent used for focused verification.
-  For the MVP, verification MAY be implemented either:
-  - entirely inside the **Verify Step Result** node (single process / same graph), or
-  - by the **Verify Step Result** node invoking the Project Analyst as a separate call (e.g. spawn a sub-agent workflow or call an internal verification API that uses the Project Analyst).
-- If the Project Analyst runs as a separate workflow or process, the orchestrator MUST pass task context and the step result, and MUST record the analyst's findings back into the main workflow state (or checkpoint) so that **Verify Step Result** can decide pass/fail and recommended actions.
-- Sub-agent invocation mechanism (same process vs. separate workflow vs. internal API) is implementation-defined.
-  The normative requirement is that verification findings and recommended actions are available to the graph state and that the Project Analyst does not bypass MCP or direct DB access rules.
-  See [`project_analyst_agent.md`](project_analyst_agent.md).
+- **MVP rule:** The **Orchestrator** kicks off work to **PMA** (e.g. when a task is ready to be driven, or when a scheduled run requires interpretation).
+  In the **Verify Step Result** node, **PMA tasks the Project Analyst (or another sandbox agent)** to perform verification; the orchestrator does not call an internal verification API directly.
+  Findings are written back into the main workflow state (or checkpoint) so that **Verify Step Result** can decide pass/fail and recommended actions.
+- The Project Analyst MUST NOT bypass MCP or direct DB access rules.
+  See [project_analyst_agent.md](project_analyst_agent.md) Handoff Model.
 
 ## Graph Topology
 
@@ -179,11 +311,17 @@ Each node is a bounded step that reads and writes the workflow state.
 
 ## Checkpointing and Resumability
 
-Normative requirements
+This section describes persistence of workflow state so work can resume after restarts.
 
-- The workflow MUST checkpoint progress to PostgreSQL after each node transition.
-- The workflow MUST be resumable after orchestrator restarts.
-- Each step attempt MUST be idempotent or have idempotency keys.
+### Applicable Requirements
+
+- Spec ID: `CYNAI.AGENTS.LanggraphCheckpointing` <a id="spec-cynai-agents-lgcheckpoint"></a>
+
+Traces To:
+
+- [REQ-AGENTS-0116](../requirements/agents.md#req-agents-0116)
+- [REQ-AGENTS-0117](../requirements/agents.md#req-agents-0117)
+- [REQ-AGENTS-0118](../requirements/agents.md#req-agents-0118)
 
 Recommended checkpoint points
 
@@ -192,6 +330,45 @@ Recommended checkpoint points
 - After each result collection.
 - After each verification.
 - On finalization or failure.
+
+### Checkpoint Schema (Prescriptive)
+
+The checkpoint store uses a single PostgreSQL table so that implementations are unambiguous.
+
+- **Table name:** `workflow_checkpoints`.
+- **Columns (minimum):**
+  - `id` (uuid, primary key)
+  - `task_id` (uuid, foreign key to `tasks.id`; one row per task for the "current" checkpoint; see constraints below)
+  - `state` (jsonb) holding the full [State Model](#state-model) (task_id, acceptance_criteria, preferences_effective, plan, current_step_index, attempts_by_step, last_result, verification)
+  - `last_node_id` (text) identity of the last completed graph node
+  - `updated_at` (timestamptz)
+- **Constraints:** Unique on `task_id` so that the latest checkpoint for a task is the single row for that task (upsert by task_id on each persist).
+- The workflow engine MUST save and load by `task_id`; the orchestrator MUST NOT run workflow steps without going through this checkpoint layer.
+
+See [postgres_schema.md](postgres_schema.md) for the full table definition and creation order.
+
+## Phase 2 Flow Summary
+
+End-to-end flow for task-driven execution and scheduled runs:
+
+```mermaid
+flowchart LR
+  subgraph task_driven [Task-driven]
+    T1[Task created/updated] --> O1[Orchestrator starts workflow]
+    O1 --> L[Lease in DB]
+    L --> W[Workflow runner runs graph]
+    W --> D[Dispatch Step]
+    D --> J[Job dispatch]
+    J --> C[Collect Result]
+    C --> V[Verify Step: PMA tasks PA]
+    V --> F[Finalize or Mark Failed]
+  end
+  subgraph scheduled [Scheduled run]
+    S[Scheduler fires] --> H[Scheduler hands payload to PMA]
+    H --> P[PMA creates task and starts workflow]
+    P --> O1
+  end
+```
 
 ## Tooling and Security Notes
 

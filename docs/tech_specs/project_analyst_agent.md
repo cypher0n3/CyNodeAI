@@ -3,14 +3,15 @@
 - [Document Overview](#document-overview)
 - [Agent Purpose](#agent-purpose)
 - [Agent Responsibilities](#agent-responsibilities)
+- [Handoff Model](#handoff-model)
 - [External Provider Usage](#external-provider-usage)
-  - [Normative Requirements](#normative-requirements)
 - [External Provider Configuration](#external-provider-configuration)
   - [Standalone Orchestrator Scenario](#standalone-orchestrator-scenario)
   - [Required Configuration Steps](#required-configuration-steps)
   - [Bootstrap and Runtime Configuration](#bootstrap-and-runtime-configuration)
 - [Tool Access and Database Access](#tool-access-and-database-access)
 - [Verification Outputs](#verification-outputs)
+- [LLM Context (Baseline and User-Configurable)](#llm-context-baseline-and-user-configurable)
 - [Preference Usage](#preference-usage)
 
 ## Document Overview
@@ -18,10 +19,18 @@
 This document defines the Project Analyst Agent, a sub-agent spawned by the Project Manager Agent to monitor a single task.
 It provides focused verification that task outputs satisfy acceptance criteria and user preferences.
 
+Implementation artifact
+
+- The concrete analyst runtime is `cynode-pma` running in `project_analyst` mode.
+- It MUST use a separate instructions bundle from the Project Manager role.
+- See [`docs/tech_specs/cynode_pma.md`](cynode_pma.md).
+
 ## Agent Purpose
 
 The Project Analyst Agent monitors a specific task and produces verification findings.
 It is intended to tighten feedback loops and keep task quality aligned with defined requirements.
+The Project Analyst Agent is task-scoped.
+It is responsible for managing and tracking a single task that has been handed off by the Project Manager Agent.
 
 ## Agent Responsibilities
 
@@ -38,16 +47,44 @@ It is intended to tighten feedback loops and keep task quality aligned with defi
 - Record findings
   - Write structured verification notes to PostgreSQL with timestamps and applied preference context.
 
+## Handoff Model
+
+Project Analyst agents are spawned and managed by the Project Manager Agent.
+The Project Manager Agent SHOULD eagerly hand off tasks to Project Analyst agents whenever possible.
+
+Handoff payload
+
+When the Project Manager Agent spawns a Project Analyst agent for a task, it SHOULD provide a task-scoped handoff payload that includes:
+
+- `task_id`
+- the current acceptance criteria and task metadata
+- a pointer to the effective preference computation for the task (or an effective preference snapshot with sources)
+- relevant artifacts and evidence pointers for verification (for example artifact paths and run or job identifiers)
+- any policy constraints relevant to verification (for example external provider allowance)
+
+Task scope constraint
+
+- A Project Analyst agent MUST treat its assigned `task_id` as its only authority scope for state, evidence, and outputs.
+- A Project Analyst agent MUST NOT read or write data for unrelated tasks except through explicitly allowlisted, non-task-specific tools.
+
+LangGraph MVP
+
+- **Orchestrator kicks off to PMA.**
+  In the **Verify Step Result** node of the LangGraph workflow, **PMA tasks the Project Analyst (or another sandbox agent)** to perform verification; findings are written back into the workflow state.
+  See [langgraph_mvp.md](langgraph_mvp.md) Sub-Agent Invocation section.
+
 ## External Provider Usage
 
 The Project Analyst Agent MAY use external AI providers for verification when allowed.
 External provider usage MUST be policy-controlled and audited.
 
-### Normative Requirements
+### Applicable Requirements
 
-- The agent MUST NOT store provider API keys.
-- External model calls MUST be routed through the API Egress Server.
-- The agent SHOULD prefer local execution when it satisfies capability and policy constraints.
+Traces To:
+
+- [REQ-AGENTS-0125](../requirements/agents.md#req-agents-0125)
+- [REQ-AGENTS-0126](../requirements/agents.md#req-agents-0126)
+- [REQ-AGENTS-0127](../requirements/agents.md#req-agents-0127)
 
 See [`docs/tech_specs/external_model_routing.md`](external_model_routing.md) and [`docs/tech_specs/api_egress_server.md`](api_egress_server.md).
 
@@ -90,10 +127,14 @@ Project Analyst agents are spawned by the Project Manager Agent and SHOULD follo
 The Project Analyst Agent is an orchestrator-side agent.
 It MUST use MCP tools for privileged operations.
 
-Normative requirements
+### Tool Access and Database Access Applicable Requirements
 
-- All PostgreSQL access MUST happen through MCP tools.
-- The agent MUST NOT connect directly to PostgreSQL.
+- Spec ID: `CYNAI.AGENTS.ProjectAnalystToolAccess` <a id="spec-cynai-agents-patoolaccess"></a>
+
+Traces To:
+
+- [REQ-AGENTS-0114](../requirements/agents.md#req-agents-0114)
+- [REQ-AGENTS-0115](../requirements/agents.md#req-agents-0115)
 
 ## Verification Outputs
 
@@ -105,11 +146,23 @@ Minimum recommended fields for recorded findings
 - `recommended_actions`: array of remediation steps
 - `preferences_applied`: preference scope identifiers and versions used for verification
 
+## LLM Context (Baseline and User-Configurable)
+
+The Project Analyst Agent MUST pass baseline context (identity, role, responsibilities, non-goals) to every LLM it uses and MUST include project-level and task-level context when in scope, and user-configurable additional context resolved from preferences.
+See [REQ-AGENTS-0132](../requirements/agents.md#req-agents-0132), [REQ-AGENTS-0133](../requirements/agents.md#req-agents-0133), [REQ-AGENTS-0134](../requirements/agents.md#req-agents-0134), and [LLM Context (Baseline and User-Configurable)](project_manager_agent.md#spec-cynai-agents-llmcontext).
+The preference key `agents.project_analyst.additional_context` supplies the user-configurable additional context for this agent.
+
 ## Preference Usage
 
-Normative requirements for verification.
+The following requirements apply.
 
-- The agent MUST compute and use effective preferences for the task using the same precedence rules as the Project Manager Agent.
-- The agent MUST record which preference set was applied for verification.
+### Preference Usage Applicable Requirements
+
+- Spec ID: `CYNAI.AGENTS.ProjectAnalystPreferenceUsage` <a id="spec-cynai-agents-papreferenceusage"></a>
+
+Traces To:
+
+- [REQ-AGENTS-0123](../requirements/agents.md#req-agents-0123)
+- [REQ-AGENTS-0124](../requirements/agents.md#req-agents-0124)
 
 See [`docs/tech_specs/user_preferences.md`](user_preferences.md).
