@@ -1,0 +1,32 @@
+# Worker-api only. Node-manager is intended to run on the host so it can manage
+# podman/docker (PMA, sandboxes). Run node-manager via `just start` or systemd
+# with the host binary; it will start worker-api and register with the orchestrator.
+services:
+  worker-api:
+    build:
+      context: ..
+      dockerfile: worker_node/cmd/worker-api/Containerfile
+    container_name: cynodeai-worker-api
+    environment:
+      LISTEN_ADDR: ":12090"
+      WORKER_API_BEARER_TOKEN: ${WORKER_API_BEARER_TOKEN:-dev-worker-api-token-change-me}
+      # State dir for telemetry DB and secure store; must match mounted volume.
+      WORKER_API_STATE_DIR: /var/lib/cynode/state
+      # Run the job command directly inside this container for dev.
+      # Production SHOULD use podman/docker on the host to create per-job sandboxes.
+      CONTAINER_RUNTIME: ${CONTAINER_RUNTIME:-direct}
+      DEFAULT_TIMEOUT_SECONDS: ${DEFAULT_TIMEOUT_SECONDS:-300}
+      MAX_OUTPUT_BYTES: ${MAX_OUTPUT_BYTES:-1048576}
+    volumes:
+      - worker-api-state:/var/lib/cynode/state
+    ports:
+      - "${WORKER_API_PORT:-12090}:12090"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:12090/healthz || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+
+volumes:
+  worker-api-state:

@@ -1,0 +1,13 @@
+# Binaries (just build outputs and local go build)
+bin/
+!**/worker-api/
+worker-api
+worker-api-dev
+!**/node-manager/
+node-manager
+node-manager-dev
+cynodeai-wnm
+cynodeai-wnm-dev
+!**/inference-proxy/
+inference-proxy
+inference-proxy-dev

@@ -1,0 +1,135 @@
+package nodeagent
+
+import (
+	"context"
+	"encoding/json"
+	"os/exec"
+	"strconv"
+	"strings"
+	"sync"
+	"time"
+
+	"github.com/cypher0n3/cynodeai/go_shared_libs/contracts/nodepayloads"
+)
+
+// gpuDetectTTL controls how long the GPU detection result is cached.
+// GPU hardware does not change at runtime; a long TTL avoids repeated
+// external-process invocations on every capability report cycle.
+const gpuDetectTTL = 5 * time.Minute
+
+var (
+	gpuCacheMu     sync.Mutex
+	gpuCacheResult *nodepayloads.GPUInfo
+	gpuCacheExpiry time.Time
+)
+
+// cachedGPUInfo returns a cached GPU detection result, refreshing it at most
+// once per gpuDetectTTL.  Detection is bounded by a 5-second context so slow
+// or missing tools do not stall the capability report loop.
+// When NODE_MANAGER_TEST_NO_GPU_DETECT is set (unit tests), returns nil immediately.
+func cachedGPUInfo(ctx context.Context) *nodepayloads.GPUInfo {
+	if getEnv("NODE_MANAGER_TEST_NO_GPU_DETECT", "") != "" {
+		return nil
+	}
+	gpuCacheMu.Lock()
+	defer gpuCacheMu.Unlock()
+	if time.Now().Before(gpuCacheExpiry) {
+		return gpuCacheResult
+	}
+	detectCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+	defer cancel()
+	gpuCacheResult = detectGPU(detectCtx)
+	gpuCacheExpiry = time.Now().Add(gpuDetectTTL)
+	return gpuCacheResult
+}
+
+// detectGPU probes available GPU hardware and returns a populated GPUInfo, or nil
+// if no GPU is detected or the required tools are unavailable.
+// Detection order: AMD ROCm (rocm-smi) → NVIDIA (nvidia-smi).
+func detectGPU(ctx context.Context) *nodepayloads.GPUInfo {
+	if info := detectROCmGPU(ctx); info != nil {
+		return info
+	}
+	if info := detectNVIDIAGPU(ctx); info != nil {
+		return info
+	}
+	return nil
+}
+
+// detectROCmGPU queries rocm-smi for AMD GPU information.
+func detectROCmGPU(ctx context.Context) *nodepayloads.GPUInfo {
+	out, err := exec.CommandContext(ctx, "rocm-smi", "--showproductname", "--showmeminfo", "vram", "--json").Output()
+	if err != nil {
+		return nil
+	}
+	return parseROCmSMIOutput(out)
+}
+
+// parseROCmSMIOutput parses the JSON emitted by `rocm-smi --json`.
+// rocm-smi emits a map keyed by "card0", "card1", etc.
+func parseROCmSMIOutput(out []byte) *nodepayloads.GPUInfo {
+	var raw map[string]map[string]interface{}
+	if json.Unmarshal(out, &raw) != nil {
+		return nil
+	}
+	var devices []nodepayloads.GPUDevice
+	for _, props := range raw {
+		dev := nodepayloads.GPUDevice{
+			Vendor:   "AMD",
+			Features: map[string]interface{}{"rocm_version": "unknown"},
+		}
+		if name, ok := props["Card series"].(string); ok {
+			dev.Model = strings.TrimSpace(name)
+		}
+		if name, ok := props["Card model"].(string); ok && dev.Model == "" {
+			dev.Model = strings.TrimSpace(name)
+		}
+		if v, ok := props["VRAM Total Memory (B)"].(string); ok {
+			if bytes, e := strconv.ParseInt(strings.TrimSpace(v), 10, 64); e == nil {
+				dev.VRAMMB = int(bytes / 1024 / 1024)
+			}
+		}
+		devices = append(devices, dev)
+	}
+	if len(devices) == 0 {
+		return nil
+	}
+	return &nodepayloads.GPUInfo{Present: true, Devices: devices}
+}
+
+// detectNVIDIAGPU queries nvidia-smi for NVIDIA GPU information.
+func detectNVIDIAGPU(ctx context.Context) *nodepayloads.GPUInfo {
+	out, err := exec.CommandContext(ctx,
+		"nvidia-smi",
+		"--query-gpu=name,memory.total",
+		"--format=csv,noheader,nounits",
+	).Output()
+	if err != nil {
+		return nil
+	}
+	return parseNvidiaSMIOutput(out)
+}
+
+// parseNvidiaSMIOutput parses CSV output from `nvidia-smi --query-gpu=name,memory.total`.
+func parseNvidiaSMIOutput(out []byte) *nodepayloads.GPUInfo {
+	var devices []nodepayloads.GPUDevice
+	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+		parts := strings.SplitN(line, ",", 2)
+		if len(parts) != 2 {
+			continue
+		}
+		dev := nodepayloads.GPUDevice{
+			Vendor:   "NVIDIA",
+			Model:    strings.TrimSpace(parts[0]),
+			Features: map[string]interface{}{"cuda_capability": "unknown"},
+		}
+		if vram, e := strconv.Atoi(strings.TrimSpace(parts[1])); e == nil {
+			dev.VRAMMB = vram
+		}
+		devices = append(devices, dev)
+	}
+	if len(devices) == 0 {
+		return nil
+	}
+	return &nodepayloads.GPUInfo{Present: true, Devices: devices}
+}
