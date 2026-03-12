@@ -1,0 +1,123 @@
+# MODELS Requirements
+
+- [1 Overview](#1-overview)
+- [2 Requirements](#2-requirements)
+
+## 1 Overview
+
+This document consolidates requirements for the `MODELS` domain.
+It covers model lifecycle requirements, routing, and model management behavior.
+
+## 2 Requirements
+
+- **REQ-MODELS-0001:** Model lifecycle, registration, and selection.
+  [CYNAI.MODELS.Doc.ModelManagement](../tech_specs/model_management.md#spec-cynai-models-doc-modelmanagement)
+  <a id="req-models-0001"></a>
+- **REQ-MODELS-0002:** External model calls routed via API Egress; no provider keys in agents or sandboxes.
+  [external_model_routing.md](../tech_specs/external_model_routing.md)
+  <a id="req-models-0002"></a>
+- **REQ-MODELS-0003:** MVP Phase 1 requires at least one inference-capable path (local inference on at least one node, or external provider routing with a configured key).
+  In the single-node case, startup must fail fast (or refuse to enter a ready state) if no local inference is available and no external provider key is configured.
+  [external_model_routing.md](../tech_specs/external_model_routing.md)
+  [orchestrator_bootstrap.md](../tech_specs/orchestrator_bootstrap.md)
+  [worker_node.md](../tech_specs/worker_node.md)
+  <a id="req-models-0003"></a>
+- **REQ-MODELS-0004:** When local inference is available (Ollama or similar), the orchestrator MUST be able to request that a node loads a specific model to satisfy the Project Manager model startup requirement.
+  The orchestrator MUST support at least one local Project Manager model for limited systems, and that smallest supported local model MUST be `qwen3.5:0.8b`.
+  [model_management.md](../tech_specs/model_management.md)
+  [project_manager_agent.md](../tech_specs/project_manager_agent.md)
+  [CYNAI.ORCHES.Operation.SelectProjectManagerModel](../tech_specs/orchestrator.md#spec-cynai-orches-operation-selectprojectmanagermodel)
+  <a id="req-models-0004"></a>
+- **REQ-MODELS-0005:** The orchestrator MUST support an automatic Project Manager model selection policy that chooses an effective local Project Manager model based on the available resources of the node that will run the model.
+  The effective model selection MUST be deterministic and MUST be specified by the `Orchestrator.SelectProjectManagerModel` algorithm.
+  [CYNAI.ORCHES.Operation.SelectProjectManagerModel](../tech_specs/orchestrator.md#spec-cynai-orches-operation-selectprojectmanagermodel)
+  [Orchestrator.SelectProjectManagerModel Algorithm](../tech_specs/orchestrator.md#algo-cynai-orches-operation-selectprojectmanagermodel)
+  <a id="req-models-0005"></a>
+- **REQ-MODELS-0006:** The automatic Project Manager model selection policy SHOULD standardize on the Qwen3.5 and Qwen2.5 model lines, with `qwen3.5:0.8b` as the minimum fallback when larger models are unavailable or incompatible with the serving stack.
+  [CYNAI.ORCHES.Operation.SelectProjectManagerModel](../tech_specs/orchestrator.md#spec-cynai-orches-operation-selectprojectmanagermodel)
+  <a id="req-models-0006"></a>
+- **REQ-MODELS-0007:** Operators MUST be able to override the effective local Project Manager model selection via system settings when needed (for example to pin a specific local model name).
+  [orchestrator_bootstrap.md](../tech_specs/orchestrator_bootstrap.md)
+  <a id="req-models-0007"></a>
+- **REQ-MODELS-0008:** The automatic Project Manager model selection policy MUST use VRAM-based tiers so that nodes with at least 8 GB VRAM default to Qwen3.5 9B (e.g. `qwen3.5:9b`) with `qwen3.5:0.8b` as fallback, nodes with at least 16 GB VRAM prefer Qwen3.5 9B or Qwen2.5 14B (e.g. `qwen2.5:14b`) when available, and higher VRAM tiers support Qwen3.5 35B and Qwen2.5 32B (e.g. `qwen3.5:35b`, `qwen2.5:32b`) as specified by the `Orchestrator.SelectProjectManagerModel` algorithm.
+  [CYNAI.ORCHES.Operation.SelectProjectManagerModel](../tech_specs/orchestrator.md#spec-cynai-orches-operation-selectprojectmanagermodel)
+  [Select effective local model_ref (step 5)](../tech_specs/orchestrator.md#algo-cynai-orches-operation-selectprojectmanagermodel-step-5)
+  <a id="req-models-0008"></a>
+- **REQ-MODELS-0100:** Worker nodes SHOULD load models from the orchestrator cache instead of downloading from external sources.
+  [CYNAI.MODELS.ModelCache](../tech_specs/model_management.md#spec-cynai-models-modelcache)
+  <a id="req-models-0100"></a>
+- **REQ-MODELS-0101:** The cache SHOULD be content-addressed by a strong hash (e.g. sha256).
+  [CYNAI.MODELS.ModelCache](../tech_specs/model_management.md#spec-cynai-models-modelcache)
+  <a id="req-models-0101"></a>
+- **REQ-MODELS-0102:** The cache MUST record artifact size and integrity metadata.
+  [CYNAI.MODELS.ModelCache](../tech_specs/model_management.md#spec-cynai-models-modelcache)
+  <a id="req-models-0102"></a>
+- **REQ-MODELS-0103:** The cache MAY store multiple formats for the same logical model.
+  [CYNAI.MODELS.ModelCache](../tech_specs/model_management.md#spec-cynai-models-modelcache)
+  <a id="req-models-0103"></a>
+- **REQ-MODELS-0104:** Nodes SHOULD retrieve model artifacts from the orchestrator cache using local network paths.
+  [CYNAI.MODELS.NodeLoadWorkflow](../tech_specs/model_management.md#spec-cynai-models-nodeloadworkflow)
+  <a id="req-models-0104"></a>
+- **REQ-MODELS-0105:** When selecting a node for a task, the Project Manager Agent SHOULD prefer nodes where the required model is already loaded.
+  [CYNAI.MODELS.NodeLoadWorkflow](../tech_specs/model_management.md#spec-cynai-models-nodeloadworkflow)
+  <a id="req-models-0105"></a>
+- **REQ-MODELS-0106:** The orchestrator MUST support user-directed actions to populate the cache.
+  [CYNAI.MODELS.UserDirectedDownloads](../tech_specs/model_management.md#spec-cynai-models-userdirecteddownloads)
+  <a id="req-models-0106"></a>
+- **REQ-MODELS-0107:** Model management actions MUST be policy-controlled and audited.
+  [CYNAI.MODELS.UserDirectedDownloads](../tech_specs/model_management.md#spec-cynai-models-userdirecteddownloads)
+  <a id="req-models-0107"></a>
+- **REQ-MODELS-0108:** Model management SHOULD be configurable via PostgreSQL system settings.
+  [CYNAI.MODELS.SystemSettingsConstraints](../tech_specs/model_management.md#spec-cynai-models-systemsettingsconstraints)
+  <a id="req-models-0108"></a>
+- **REQ-MODELS-0109:** The orchestrator SHOULD record all model downloads, imports, and evictions.
+  [CYNAI.MODELS.AuditingSafety](../tech_specs/model_management.md#spec-cynai-models-auditingsafety)
+  <a id="req-models-0109"></a>
+- **REQ-MODELS-0110:** The orchestrator SHOULD verify model artifact integrity using `sha256` before exposing artifacts to nodes.
+  [CYNAI.MODELS.AuditingSafety](../tech_specs/model_management.md#spec-cynai-models-auditingsafety)
+  <a id="req-models-0110"></a>
+- **REQ-MODELS-0111:** Nodes SHOULD be configured to avoid downloading models directly from the public internet.
+  [CYNAI.MODELS.AuditingSafety](../tech_specs/model_management.md#spec-cynai-models-auditingsafety)
+  <a id="req-models-0111"></a>
+- **REQ-MODELS-0112:** The orchestrator SHOULD prefer local execution when it can meet required capabilities and latency objectives.
+  [external_model_routing.md](../tech_specs/external_model_routing.md)
+  <a id="req-models-0112"></a>
+- **REQ-MODELS-0113:** The orchestrator MUST be able to route to configured external AI APIs when needed and when policy allows it.
+  [external_model_routing.md](../tech_specs/external_model_routing.md)
+  <a id="req-models-0113"></a>
+- **REQ-MODELS-0114:** If no worker can provide local inference and no external provider is configured (via API Egress), the system MUST fail fast (or refuse to enter a ready state).
+  [external_model_routing.md](../tech_specs/external_model_routing.md)
+  <a id="req-models-0114"></a>
+- **REQ-MODELS-0115:** The orchestrator MUST attempt local execution when a worker can satisfy capability requirements and is not overloaded.
+  [external_model_routing.md](../tech_specs/external_model_routing.md)
+  <a id="req-models-0115"></a>
+- **REQ-MODELS-0116:** The orchestrator SHOULD honor a user override selecting a specific external provider when policy allows it.
+  [external_model_routing.md](../tech_specs/external_model_routing.md)
+  <a id="req-models-0116"></a>
+- **REQ-MODELS-0117:** The orchestrator MUST deny external routing when policy does not allow it.
+  [external_model_routing.md](../tech_specs/external_model_routing.md)
+  <a id="req-models-0117"></a>
+- **REQ-MODELS-0118:** The orchestrator SHOULD record the routing decision and the primary reasons for it.
+  [external_model_routing.md](../tech_specs/external_model_routing.md)
+  <a id="req-models-0118"></a>
+- **REQ-MODELS-0119:** External model calls MUST be performed through the API Egress Server so credentials are not exposed to agents or sandbox containers.
+  [external_model_routing.md](../tech_specs/external_model_routing.md)
+  <a id="req-models-0119"></a>
+- **REQ-MODELS-0120:** Sandboxes MUST NOT receive provider API keys.
+  [external_model_routing.md](../tech_specs/external_model_routing.md)
+  <a id="req-models-0120"></a>
+- **REQ-MODELS-0121:** Sandboxes SHOULD access external capabilities only through orchestrator-mediated MCP tools.
+  [external_model_routing.md](../tech_specs/external_model_routing.md)
+  <a id="req-models-0121"></a>
+- **REQ-MODELS-0122:** Routing behavior SHOULD be configurable via PostgreSQL preferences.
+  [external_model_routing.md](../tech_specs/external_model_routing.md)
+  <a id="req-models-0122"></a>
+- **REQ-MODELS-0123:** Orchestrator-side agents MAY use separate preferences for external provider routing.
+  [external_model_routing.md](../tech_specs/external_model_routing.md)
+  <a id="req-models-0123"></a>
+- **REQ-MODELS-0124:** The API Egress Server MUST log each outbound call with task context and subject identity.
+  [external_model_routing.md](../tech_specs/external_model_routing.md)
+  <a id="req-models-0124"></a>
+- **REQ-MODELS-0125:** Responses SHOULD be filtered for secret leakage and stored with least privilege.
+  [external_model_routing.md](../tech_specs/external_model_routing.md)
+  <a id="req-models-0125"></a>
