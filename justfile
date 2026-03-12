@@ -298,7 +298,40 @@ install-markdownlint:
     # Bootstrap config with customRules and ignores so lint-md works out of the box
     if [ ! -f "$CONFIG" ]; then
         echo "Creating $CONFIG with customRules in $RULES_DIR/ ..."
-        printf '%s\n' '{"config":{"default":true,"extends":".markdownlint.yml"},"customRules":[".markdownlint-rules/allow-custom-anchors.js",".markdownlint-rules/ascii-only.js",".markdownlint-rules/document-length.js",".markdownlint-rules/fenced-code-under-heading.js",".markdownlint-rules/heading-min-words.js",".markdownlint-rules/heading-numbering.js",".markdownlint-rules/heading-title-case.js",".markdownlint-rules/no-duplicate-headings-normalized.js",".markdownlint-rules/no-empty-heading.js",".markdownlint-rules/no-h1-content.js",".markdownlint-rules/no-heading-like-lines.js",".markdownlint-rules/one-sentence-per-line.js"],"ignores":[".github/**","**/node_modules/**","tmp/**","**/*.plan.md"]}' > "$CONFIG"
+        cat > "$CONFIG" << ENDOFFILE
+    {
+      "config": {
+        "default": true,
+        "extends": ".markdownlint.yml"
+      },
+      "customRules": [
+        ".markdownlint-rules/allow-custom-anchors.js",
+        ".markdownlint-rules/ascii-only.js",
+        ".markdownlint-rules/document-length.js",
+        ".markdownlint-rules/fenced-code-under-heading.js",
+        ".markdownlint-rules/heading-min-words.js",
+        ".markdownlint-rules/heading-numbering.js",
+        ".markdownlint-rules/heading-title-case.js",
+        ".markdownlint-rules/no-duplicate-headings-normalized.js",
+        ".markdownlint-rules/no-empty-heading.js",
+        ".markdownlint-rules/no-h1-content.js",
+        ".markdownlint-rules/no-heading-like-lines.js",
+        ".markdownlint-rules/one-sentence-per-line.js"
+      ],
+      "ignores": [
+        ".github/**",
+        ".pytest_cache/**",
+        ".venv/**",
+        "**/node_modules/**",
+        "tmp/**",
+        "**/tmp/**",
+        "**/*.plan.md",
+        "*.cursor/**",
+        ".markdownlint-repo/",
+        ".markdownlint-rules/"
+      ]
+    }
+    ENDOFFILE
     fi
     # Only clone/update rules repo if config references .markdownlint-rules/
     if ! grep -q '"\.markdownlint-rules/' "$CONFIG" 2>/dev/null && ! grep -q '"./\.markdownlint-rules/' "$CONFIG" 2>/dev/null; then

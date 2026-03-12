@@ -1,5 +1,7 @@
 # Sandbox Agent Instruction Bundle
 
+## Contents
+
 This directory contains the canonical baseline instruction bundle for the Sandbox Agent (SBA).
 It can be supplied in the job payload (`context.baseline_context`) or baked into the SBA image.
 

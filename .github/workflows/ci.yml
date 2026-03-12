@@ -1,0 +1,252 @@
+# CI: mirrors `just ci` (build-dev, lint, vulncheck-go, test-go-cover, test-bdd).
+# E2E tests (just e2e) are excluded; run locally or on self-hosted runners.
+# Jobs run in parallel where possible. Uses latest stable action versions.
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint-shell:
+    name: lint-shell
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install just
+        uses: extractions/setup-just@v3
+
+      - name: Install shellcheck
+        run: sudo apt-get update && sudo apt-get install -y shellcheck
+
+      - name: Lint shell scripts
+        run: just lint-sh
+
+  lint-go:
+    name: lint-go
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.26"
+          cache-dependency-path: |
+            go_shared_libs/go.sum
+            orchestrator/go.sum
+            worker_node/go.sum
+            cynork/go.sum
+            agents/go.sum
+
+      - name: Install just
+        uses: extractions/setup-just@v3
+
+      - name: Lint Go (vet, staticcheck, golangci-lint, fmt)
+        run: |
+          just install-go-tools
+          just lint-go
+          just lint-go-ci
+          just go-fmt
+
+  lint-python:
+    name: lint-python
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install just
+        uses: extractions/setup-just@v3
+
+      - name: Create venv and lint Python
+        run: |
+          just venv
+          just lint-python
+
+  lint-docs:
+    name: lint-docs
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install just
+        uses: extractions/setup-just@v3
+
+      - name: Install markdownlint-cli2
+        run: npm install -g markdownlint-cli2
+
+      - name: Bootstrap markdownlint and run doc checks
+        run: |
+          rm -f .markdownlint-cli2.jsonc
+          just install-markdownlint
+          just lint-md
+          just validate-doc-links
+          just validate-requirements
+          just validate-feature-files
+
+  lint-e2e-checks:
+    name: lint-e2e-checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install just
+        uses: extractions/setup-just@v3
+
+      - name: E2E tag and requirements trace checks
+        run: |
+          just check-e2e-tags
+          just check-e2e-requirements-traces
+
+  lint-gherkin:
+    name: lint-gherkin
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install just
+        uses: extractions/setup-just@v3
+
+      - name: Lint Gherkin
+        run: just lint-gherkin
+
+  lint-containerfiles:
+    name: lint-containerfiles
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run hadolint (Dockerfile and Containerfile)
+        run: |
+          while IFS= read -r -d '' f; do
+            echo "==> hadolint $f"
+            docker run --rm -v "$PWD:/lint:ro" -w /lint hadolint/hadolint hadolint "/lint/$f"
+          done < <(find . -type f \( -name 'Containerfile*' -o -name 'Dockerfile*' \) ! -path '*/.git/*' -print0 | sort -z)
+
+  build:
+    name: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.26"
+          cache-dependency-path: |
+            go_shared_libs/go.sum
+            orchestrator/go.sum
+            worker_node/go.sum
+            cynork/go.sum
+            agents/go.sum
+
+      - name: Install just
+        uses: extractions/setup-just@v3
+
+      - name: Build dev binaries
+        run: just build-dev
+
+  vulncheck-go:
+    name: vulncheck-go
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.26"
+          cache-dependency-path: |
+            go_shared_libs/go.sum
+            orchestrator/go.sum
+            worker_node/go.sum
+            cynork/go.sum
+            agents/go.sum
+
+      - name: Install just
+        uses: extractions/setup-just@v3
+
+      - name: Go vulnerability check
+        run: |
+          just install-go-tools
+          just vulncheck-go
+
+  test-go-cover:
+    name: test-go-cover
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.26"
+          cache-dependency-path: |
+            go_shared_libs/go.sum
+            orchestrator/go.sum
+            worker_node/go.sum
+            cynork/go.sum
+            agents/go.sum
+
+      - name: Install just
+        uses: extractions/setup-just@v3
+
+      - name: Go tests with coverage
+        run: |
+          just install-go-tools
+          just test-go-cover
+
+  test-bdd:
+    name: test-bdd
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.26"
+          cache-dependency-path: |
+            go_shared_libs/go.sum
+            orchestrator/go.sum
+            worker_node/go.sum
+            cynork/go.sum
+            agents/go.sum
+
+      - name: Install just
+        uses: extractions/setup-just@v3
+
+      - name: BDD (Godog) tests
+        run: just test-bdd

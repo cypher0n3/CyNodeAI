@@ -3,6 +3,7 @@
 [![License: Apache 2.0](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 [![Go Workspace](https://img.shields.io/badge/Go-workspace-00ADD8?logo=go)](go.work)
 [![Docs](https://img.shields.io/badge/docs-tech%20specs-blueviolet)](docs/README.md)
+[![CI](https://github.com/cynodeai-enterprise/cynodeai/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/cynodeai-enterprise/cynodeai/actions/workflows/ci.yml?query=branch%3Amain)
 
 ## Overview
 
@@ -29,6 +30,9 @@ It is designed to keep credentials, policy decisions, and audit trails on the tr
 
 MVP Phases 1, 1.5, and 1.7 are complete for the current single-node product slice, including single-node execution, sandbox inference, the basic `cynork` CLI, Project Manager Agent (PMA) integration, and SandBox Agent (SBA) runner support.
 Phase 2 is in progress, with MCP gateway scoping/auditing, preference tools, and workflow/SBA foundations already landed.
+
+> [!IMPORTANT]
+> All existing code in this repository was AI-generated and still needs a thorough human review before being considered safe or stable for production use.
 
 For the roadmap, see [docs/mvp.md](docs/mvp.md) and [docs/mvp_plan.md](docs/mvp_plan.md).
 

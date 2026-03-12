@@ -1,5 +1,7 @@
 # Project Manager Instruction Bundle
 
+## Contents
+
 This directory contains the instruction bundle for `cynode-pma` in `project_manager` mode.
 
 Files are loaded in this order:
