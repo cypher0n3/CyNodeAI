@@ -8,6 +8,7 @@
 - [Authentication and Trust](#authentication-and-trust)
 - [Capability Reporting](#capability-reporting)
 - [Dispatch, Routing, and Policy](#dispatch-routing-and-policy)
+- [LLM Context (Baseline and User-Configurable)](#llm-context-baseline-and-user-configurable)
 - [Tool Access Model](#tool-access-model)
 - [Execution Environments](#execution-environments)
 - [Security and Auditing](#security-and-auditing)
@@ -34,7 +35,7 @@ Non-goals
 - This document does not define the full Worker API schema.
 - This document does not define the full sandbox security model for local execution.
 
-See [`docs/tech_specs/node.md`](node.md) for local node details.
+See [`docs/tech_specs/worker_node.md`](worker_node.md) for local node details.
 
 ## Definitions
 
@@ -79,11 +80,15 @@ Authoritative contract
 
 - The Worker API contract for nodes (endpoint surface and payload shapes) is defined in [`docs/tech_specs/worker_api.md`](worker_api.md).
 
-Normative requirements
+### Cloud Worker Contract Applicable Requirements
 
-- A cloud worker MUST NOT access PostgreSQL directly.
-- A cloud worker MUST use orchestrator-mediated tool access and MUST NOT embed provider API keys.
-- A cloud worker MUST support job retries and idempotency semantics as defined by the orchestrator.
+- Spec ID: `CYNAI.AGENTS.CloudWorkerContract` <a id="spec-cynai-agents-cwcontract"></a>
+
+Traces To:
+
+- [REQ-AGENTS-0100](../requirements/agents.md#req-agents-0100)
+- [REQ-AGENTS-0101](../requirements/agents.md#req-agents-0101)
+- [REQ-AGENTS-0102](../requirements/agents.md#req-agents-0102)
 
 ## Authentication and Trust
 
@@ -146,16 +151,27 @@ Policy integration
 
 See [`docs/tech_specs/access_control.md`](access_control.md).
 
+## LLM Context (Baseline and User-Configurable)
+
+Cloud workers that run agent code and call LLMs MUST receive baseline context (agent identity, role, responsibilities, non-goals), project-level and task-level context when applicable, and user-configurable additional context (resolved from preferences with the same scope precedence as other agents).
+All supplied context MUST be included in every LLM prompt or system message in the defined composition order.
+The orchestrator MUST supply this context in the job payload or handoff (e.g. in the same shape as for the Sandbox Agent, including `project_context` and `task_context` when in scope).
+See [REQ-AGENTS-0132](../requirements/agents.md#req-agents-0132), [REQ-AGENTS-0133](../requirements/agents.md#req-agents-0133), [REQ-AGENTS-0134](../requirements/agents.md#req-agents-0134), and [LLM Context (Baseline and User-Configurable)](project_manager_agent.md#spec-cynai-agents-llmcontext).
+
 ## Tool Access Model
 
 Cloud workers use the same tool model as local workers.
 Tool access is mediated through the orchestrator and MCP.
 
-Normative requirements
+### Tool Access Model Applicable Requirements
 
-- Cloud workers MUST call tools through the orchestrator MCP gateway.
-- Cloud workers MUST NOT call arbitrary outbound network endpoints directly unless explicitly allowed by policy.
-- Cloud workers MUST use API Egress for external API calls.
+- Spec ID: `CYNAI.AGENTS.CloudWorkerToolAccess` <a id="spec-cynai-agents-cwtoolaccess"></a>
+
+Traces To:
+
+- [REQ-AGENTS-0103](../requirements/agents.md#req-agents-0103)
+- [REQ-AGENTS-0104](../requirements/agents.md#req-agents-0104)
+- [REQ-AGENTS-0105](../requirements/agents.md#req-agents-0105)
 
 Relevant specs
 

@@ -1,10 +1,17 @@
 # Orchestrator Technical Spec
 
+- [Spec IDs](#spec-ids)
 - [Document Overview](#document-overview)
 - [Core Responsibilities](#core-responsibilities)
+- [Health Checks](#health-checks)
+  - [`Orchestrator.HealthEndpoints` Rule](#orchestratorhealthendpoints-rule)
 - [Task Scheduler](#task-scheduler)
+  - [Scheduled Run Routing to Project Manager Agent](#scheduled-run-routing-to-project-manager-agent)
 - [Project Manager Agent](#project-manager-agent)
+- [Managed Services (Worker-Managed)](#managed-services-worker-managed)
+  - [Project Manager Model (Startup Selection and Warmup)](#project-manager-model-startup-selection-and-warmup)
 - [API Egress Server](#api-egress-server)
+- [Web Egress Proxy](#web-egress-proxy)
 - [Secure Browser Service](#secure-browser-service)
 - [External Model Routing](#external-model-routing)
 - [Model Management](#model-management)
@@ -12,8 +19,14 @@
 - [Sandbox Image Registry](#sandbox-image-registry)
 - [Node Bootstrap and Configuration](#node-bootstrap-and-configuration)
 - [MCP Tool Interface](#mcp-tool-interface)
-- [Orchestrator Bootstrap Configuration](#orchestrator-bootstrap-configuration)
 - [Workflow Engine](#workflow-engine)
+  - [Task Workflow Lease Lifecycle](#task-workflow-lease-lifecycle)
+- [Orchestrator Shutdown](#orchestrator-shutdown)
+- [Orchestrator Bootstrap Configuration](#orchestrator-bootstrap-configuration)
+
+## Spec IDs
+
+- Spec ID: `CYNAI.ORCHES.Doc.Orchestrator` <a id="spec-cynai-orches-doc-orchestrator"></a>
 
 ## Document Overview
 
@@ -22,10 +35,38 @@ This document describes the orchestrator responsibilities and its relationship t
 ## Core Responsibilities
 
 - Acts as the control plane for nodes, jobs, tasks, and agent workflows.
-- Owns the source of truth for task state, results, logs, and user preferences in PostgreSQL.
+- Owns the source of truth for task state, results, logs, and user task-execution preferences in PostgreSQL.
 - Dispatches sandboxed execution to worker nodes (via the worker API).
 - Routes model inference to local nodes or to external providers when allowed.
 - Schedules sandbox execution independently of where inference occurs.
+- Tracks worker-managed long-lived services (including PMA) and their endpoints for routing and readiness.
+
+## Health Checks
+
+This section defines the orchestrator health and readiness endpoints.
+
+### `Orchestrator.HealthEndpoints` Rule
+
+- Spec ID: `CYNAI.ORCHES.Rule.HealthEndpoints` <a id="spec-cynai-orches-rule-healthendpoints"></a>
+
+Traces To: [REQ-ORCHES-0120](../requirements/orches.md#req-orches-0120), [REQ-ORCHES-0150](../requirements/orches.md#req-orches-0150), [REQ-ORCHES-0151](../requirements/orches.md#req-orches-0151), [REQ-BOOTST-0002](../requirements/bootst.md#req-bootst-0002)
+
+The orchestrator exposes health endpoints that distinguish "process alive" from "ready to accept work".
+The orchestrator cannot report fully ready until at least one inference path exists (a worker that has reported ready and is inference-capable, or an LLM API key for PMA via API Egress) and until the PMA has informed the orchestrator that it is online.
+See [Orchestrator Readiness and PMA Startup](orchestrator_bootstrap.md#spec-cynai-bootst-orchestratorreadinessandpmastartup).
+
+Endpoints
+
+- `GET /healthz`
+  - Returns 200 when the orchestrator process is alive and serving HTTP.
+  - This endpoint MUST NOT require that the Project Manager model is online.
+- `GET /readyz`
+  - Returns 200 only when the orchestrator is in a ready state.
+  - Returns 503 when prerequisites for readiness are not yet satisfied (no eligible inference path, PMA not started or not yet online, Project Manager model not loaded when using local inference, or required credentials/policy not present).
+  - The orchestrator MUST NOT return 200 until at least one inference path exists and until the PMA has informed the orchestrator that it is online and is reachable (e.g. responds to its health check).
+  - PMA is a core system feature and is always required; disabling PMA is not supported.
+  - The response MUST include a reason that is actionable for an operator.
+  - While `GET /readyz` returns 503, the orchestrator continues to serve the management surfaces required to become ready (for example system settings and credential configuration).
 
 ## Task Scheduler
 
@@ -35,6 +76,7 @@ Responsibilities
 
 - **Queue**: Maintain a queue of pending work (tasks and jobs) backed by PostgreSQL so state survives restarts.
 - **Dispatch**: Select eligible nodes based on capability, load, data locality, and model availability; dispatch jobs to the worker API; collect results and update task state.
+  When the orchestrator receives job completion (success, failure, or timeout), it MUST pass that reporting to the Project Manager Agent and/or Project Analyst Agent for additional work (e.g. verification, remediation, follow-up tasks).
 - **Retries and leases**: Support job leases, retries on failure, and idempotency so work is not lost or duplicated when nodes fail or restart.
 - **Cron tool**: MUST support a cron (or equivalent) facility for scheduled jobs, wakeups, and automation.
   Users and agents MUST be able to enqueue work at a future time or on a recurrence (cron expression or calendar-like).
@@ -48,22 +90,267 @@ The scheduler MAY be implemented as a background process, a worker that consumes
 Agents (e.g. Project Manager) and the cron facility enqueue work; the scheduler is responsible for dequeueing and dispatching to nodes.
 The scheduler MUST be available via the User API Gateway so users can create and manage scheduled jobs, query queue and schedule state, and trigger wakeups or automation.
 
-See job dispatch and node selection in [`docs/tech_specs/node.md`](node.md), the roadmap in [`docs/tech_specs/_main.md`](_main.md), and [`docs/tech_specs/user_api_gateway.md`](user_api_gateway.md).
+### Scheduled Run Routing to Project Manager Agent
+
+- Spec ID: `CYNAI.ORCHES.ScheduledRunRouting` <a id="spec-cynai-orches-scheduledrunrouting"></a>
+- Traces to: [REQ-ORCHES-0109](../requirements/orches.md#req-orches-0109), [Request Source and Orchestrator Handoff](cynode_pma.md#spec-cynai-pmagnt-requestsource)
+
+When a schedule **fires**, the orchestrator has a run payload (created at schedule-creation time: e.g. task description, prompt, or concrete job spec).
+Routing of that run MUST be determined by whether the payload requires agent reasoning, task interpretation, or planning:
+
+- When a scheduled run's payload **requires agent reasoning, task interpretation, or planning** (e.g. natural-language task, "daily standup reminder", "triage backlog"), the orchestrator MUST **hand the run payload directly to PMA** per the same handoff rules and context as in [cynode_pma.md](cynode_pma.md) (user, project, thread, schedule id, run id).
+  **PMA creates the task and starts the workflow internally**; there is no separate "enqueue workflow start" step.
+  The scheduler does not create the task or enqueue a workflow start; PMA owns task creation and workflow start for those runs.
+  PMA may use MCP (e.g. sandbox tools, scheduler MCP tools) to carry out work; when PMA or the workflow engine enqueues **concrete** jobs, the scheduler still uses the same node selection and job-dispatch contracts to dispatch them.
+- When the payload is a **pre-specified job** (e.g. concrete script/command/sandbox spec with no interpretation needed), the scheduler MAY enqueue it for **direct dispatch** using the same node selection and job-dispatch contracts, without handing off to PMA.
+
+Schedule payload types (e.g. `task` / `prompt` vs `job_spec`) that determine "requires interpretation" are defined in the User API Gateway or a dedicated scheduler API spec so that routing is deterministic and implementable.
+See [User API Gateway - Scheduler and cron](user_api_gateway.md#spec-cynai-usrgwy-corecapabilities).
+
+See job dispatch and node selection in [`docs/tech_specs/worker_node.md`](worker_node.md), the roadmap in [`docs/tech_specs/_main.md`](_main.md), and [`docs/tech_specs/user_api_gateway.md`](user_api_gateway.md).
 
 ## Project Manager Agent
 
-The Project Manager Agent is a long-lived orchestrator-side agent that continuously drives work to completion.
+The Project Manager Agent (PMA) is a long-lived agent runtime that continuously drives work to completion.
+In this system, PMA is hosted as a **worker-managed service container** and is always required.
 
 - Reads tasks and their acceptance criteria from the database.
 - Retrieves user preferences and standards from the database and applies them during planning and verification.
 - Assigns work to worker nodes, monitors progress, and requests remediation when results fail checks.
 - Continuously updates task state in PostgreSQL so the system remains resumable and auditable.
+- Eagerly spawns Project Analyst sub-agents for task-scoped monitoring and verification whenever possible.
 
 See [`docs/tech_specs/project_manager_agent.md`](project_manager_agent.md), [`docs/tech_specs/project_analyst_agent.md`](project_analyst_agent.md), and [`docs/tech_specs/user_preferences.md`](user_preferences.md).
 
 Orchestrator-side agents MAY use external AI providers for planning and verification when policy allows it.
+
+## Managed Services (Worker-Managed)
+
+- Spec ID: `CYNAI.ORCHES.ManagedServicesWorkerManaged` <a id="spec-cynai-orches-managedservices"></a>
+
+This section defines how the orchestrator manages and tracks worker-managed long-lived services such as PMA.
+
+Definitions
+
+- **Managed service**: A long-lived service container started and supervised by a worker node based on orchestrator-delivered desired state.
+- **Desired state**: Orchestrator intent delivered via node configuration (`managed_services`).
+- **Observed state**: Worker-reported service state and endpoints (`managed_services_status`).
+
+Normative behavior
+
+- The orchestrator MUST express managed services as desired state in node configuration payloads.
+  See [`docs/tech_specs/worker_node_payloads.md`](worker_node_payloads.md) `node_configuration_payload_v1` `managed_services`.
+- When the orchestrator includes an agent token in managed service desired state, the token is delivered to the **worker** for the worker proxy to hold and use when forwarding agent requests; the token MUST NOT be given to the agent.
+  For **user-scoped** managed services (e.g. PAA), the orchestrator MUST associate that token with the user on whose behalf the agent is acting, so the gateway can resolve user context for preferences, access control, and audit attribution.
+  For **system-level** managed services (e.g. PMA), the token is not user-associated.
+  Traces To: [REQ-ORCHES-0163](../requirements/orches.md#req-orches-0163), [REQ-WORKER-0164](../requirements/worker.md#req-worker-0164).
+- The orchestrator MUST track observed state from worker capability reports and MUST treat service endpoints as dynamic.
+  See [`docs/tech_specs/worker_node_payloads.md`](worker_node_payloads.md) `node_capability_report_v1` `managed_services_status`.
+- When a worker reports `managed_services_status.services[].agent_to_orchestrator_proxy`, the orchestrator SHOULD ingest and store the worker-generated identity-bound agent-to-orchestrator proxy endpoints.
+  These endpoints are used by the managed agent runtime to call worker internal proxy operations without holding credentials.
+  The orchestrator MAY use these fields for diagnostics and reconciliation when directing managed services.
+- The orchestrator MUST route traffic to managed services using the worker-mediated endpoint(s) reported by the worker.
+  The orchestrator MUST NOT rely on compose DNS or direct host-port addressing for managed services.
+- The orchestrator MUST consider PMA online only when a recent worker report indicates `state=ready` for the PMA service instance.
+- The orchestrator MUST reconcile service placement:
+  - If the selected hosting node is unavailable or not reporting, the orchestrator MUST select a replacement eligible node and deliver updated desired state.
+- The orchestrator MUST ensure PMA has the required bootstrap information in desired state:
+  inference connectivity mode and details, and worker-proxy URLs for agent-to-orchestrator communication (MCP, callbacks).
+  When supported by the worker, the orchestrator MAY set those worker-proxy URL fields to the sentinel value `auto` to require the worker to generate identity-bound endpoints and report them in `managed_services_status`.
+
+See also:
+
+- [`docs/tech_specs/orchestrator_bootstrap.md`](orchestrator_bootstrap.md) (readiness and PMA startup)
+- [`docs/tech_specs/worker_node.md`](worker_node.md) (managed service containers and worker proxy bidirectional)
 External provider calls MUST use API Egress and SHOULD use agent-specific routing preferences.
 See [`docs/tech_specs/external_model_routing.md`](external_model_routing.md) and [`docs/tech_specs/api_egress_server.md`](api_egress_server.md).
+
+### Project Manager Model (Startup Selection and Warmup)
+
+- Spec ID: `CYNAI.ORCHES.ProjectManagerModelStartup` <a id="spec-cynai-orches-projectmanagermodelstartup"></a>
+
+The orchestrator MUST select an effective "Project Manager model" on startup to run the Project Manager Agent.
+This selection is distinct from where sandbox jobs run.
+
+#### 1 `Orchestrator.SelectProjectManagerModel` Operation
+
+- Spec ID: `CYNAI.ORCHES.Operation.SelectProjectManagerModel` <a id="spec-cynai-orches-operation-selectprojectmanagermodel"></a>
+
+Traces To:
+
+- [REQ-ORCHES-0117](../requirements/orches.md#req-orches-0117)
+- [REQ-MODELS-0004](../requirements/models.md#req-models-0004)
+- [REQ-MODELS-0005](../requirements/models.md#req-models-0005)
+- [REQ-MODELS-0008](../requirements/models.md#req-models-0008)
+
+This Spec Item defines the deterministic selection of:
+
+- the Project Manager inference execution target (local node vs external provider routing path), and
+- the effective Project Manager model reference to run on that target.
+
+##### 1.1 `Orchestrator.SelectProjectManagerModel` Inputs
+
+- System settings:
+  - `agents.project_manager.model.selection.execution_mode` (string)
+    - `auto` (default)
+    - `force_local`
+    - `force_external`
+  - `agents.project_manager.model.selection.mode` (string)
+    - `auto_sliding_scale` (default)
+    - `fixed_model`
+  - `agents.project_manager.model.selection.prefer_orchestrator_host` (boolean, default true)
+  - `agents.project_manager.model.local_default_ollama_model` (string, optional; when set, pins the local PM model name)
+- Current node inventory and state:
+  - Dispatchable worker nodes that report local inference support.
+  - Each node's latest capability report fields:
+    - `node.labels[]`
+    - `compute.cpu_cores`, `compute.ram_mb`
+    - `gpu.devices[].vram_mb` (when present)
+  - Model availability for each candidate node (loaded vs not loaded), and the ability to request a model load.
+- External routing configuration and policy (when local inference is unavailable or cannot satisfy selection).
+
+##### 1.2 `Orchestrator.SelectProjectManagerModel` Outputs
+
+- An effective selection tuple:
+  - `execution_mode`: `local` or `external`
+  - `local_node_slug`: string (required when `execution_mode=local`)
+  - `model_ref`: string (local model name, or external provider model identifier)
+  - `selection_reason`: an ordered list of machine-readable reason codes (for audit/logging)
+
+##### 1.3 `Orchestrator.SelectProjectManagerModel` Behavior
+
+The orchestrator selects exactly one effective Project Manager model on startup.
+The required procedure is defined in the [Orchestrator.SelectProjectManagerModel Algorithm](#algo-cynai-orches-operation-selectprojectmanagermodel).
+
+Determinism requirements:
+
+- All tie-breaks in this operation are resolved lexicographically by `node_slug` (ascending).
+- If a required system setting key is unset, this operation uses the default value specified in Inputs.
+
+Definitions:
+
+- A node is considered "on the same host as the orchestrator" if its capability report `node.labels` contains the literal label `orchestrator_host`.
+- `vram_total_mb` for a node is computed as:
+  - sum of all present `gpu.devices[].vram_mb` values, ignoring devices that omit `vram_mb`
+  - if no `vram_mb` values are present, `vram_total_mb=0`
+
+##### 1.4 `Orchestrator.SelectProjectManagerModel` Error Conditions
+
+- If `agents.project_manager.model.selection.mode=fixed_model` and `agents.project_manager.model.local_default_ollama_model` is unset, selection fails.
+- If `execution_mode=local` is selected and no local candidate model can be loaded successfully, selection fails unless `execution_mode=external` is allowed and configured.
+- If selection fails and the orchestrator does not currently have an online Project Manager model, the orchestrator MUST continue to re-run selection when relevant inputs change until a Project Manager model is online.
+
+##### 1.5 `Orchestrator.SelectProjectManagerModel` Ordering and Determinism
+
+Selection proceeds in the strict order defined by the [Orchestrator.SelectProjectManagerModel Algorithm](#algo-cynai-orches-operation-selectprojectmanagermodel).
+
+##### 1.6 `Orchestrator.SelectProjectManagerModel` Algorithm
+
+<a id="algo-cynai-orches-operation-selectprojectmanagermodel"></a>
+
+1. Enumerate dispatchable local inference nodes. <a id="algo-cynai-orches-operation-selectprojectmanagermodel-step-1"></a>
+   - Candidate set is all registered, dispatchable worker nodes that report inference supported/enabled.
+2. Select `execution_mode`. <a id="algo-cynai-orches-operation-selectprojectmanagermodel-step-2"></a>
+   - If `agents.project_manager.model.selection.execution_mode=force_external`:
+     - Set `execution_mode=external` if an external routing path is configured and allowed.
+     - Otherwise, fail selection (external execution forced but no eligible external routing path exists).
+   - Else if `agents.project_manager.model.selection.execution_mode=force_local`:
+     - If the candidate set is non-empty, set `execution_mode=local`; otherwise fail selection (local execution forced but no dispatchable local inference worker exists).
+   - Else:
+     - If the candidate set is non-empty, set `execution_mode=local`.
+     - Otherwise, set `execution_mode=external` if an external routing path is configured and allowed.
+     - Otherwise, fail selection (no inference-capable path exists).
+3. If `execution_mode=external`, select the external routing path and `model_ref` using the configured external routing preferences and return. <a id="algo-cynai-orches-operation-selectprojectmanagermodel-step-3"></a>
+4. Select the local target node `local_node_slug`. <a id="algo-cynai-orches-operation-selectprojectmanagermodel-step-4"></a>
+   - If `agents.project_manager.model.selection.prefer_orchestrator_host=true` and one or more candidate nodes contain label `orchestrator_host`:
+     - Choose the lexicographically smallest `node_slug` among those labeled nodes.
+   - Otherwise:
+     - For each candidate node, compute `vram_total_mb`.
+     - Choose the node with the largest `vram_total_mb`.
+     - If there is a tie, choose the lexicographically smallest `node_slug`.
+5. Select the effective local `model_ref`. <a id="algo-cynai-orches-operation-selectprojectmanagermodel-step-5"></a>
+   - If `agents.project_manager.model.selection.mode=fixed_model`:
+     - Set `model_ref` to the value of `agents.project_manager.model.local_default_ollama_model`.
+   - Else if `agents.project_manager.model.local_default_ollama_model` is set:
+     - Set `model_ref` to the pinned value.
+   - Else compute a deterministic ordered candidate list based on `vram_total_mb` for the selected node:
+     - If `vram_total_mb >= 24000`:
+       - Candidates (in order): `qwen3.5:35b`, `qwen2.5:32b`, `qwen2.5:14b`, `qwen3.5:9b`, `qwen3.5:0.8b`.
+     - Else if `vram_total_mb >= 16000`:
+       - Candidates (in order): `qwen3.5:9b`, `qwen2.5:14b`, `qwen3.5:0.8b`.
+     - Else if `vram_total_mb >= 8000`:
+       - Candidates (in order): `qwen3.5:9b`, `qwen3.5:0.8b`.
+     - Else:
+       - Candidates (in order): `qwen3.5:0.8b`.
+     - Select the first candidate model that the orchestrator can satisfy by:
+       - detecting it is already loaded on the selected node, or
+       - successfully requesting the node load it (via the model load workflow).
+6. If no local candidate can be satisfied: <a id="algo-cynai-orches-operation-selectprojectmanagermodel-step-6"></a>
+   - If external routing is configured and allowed, set `execution_mode=external` and select an external `model_ref`.
+   - Otherwise, fail selection.
+
+#### 2 `Orchestrator.WarmupProjectManagerModel` Rule
+
+- Spec ID: `CYNAI.ORCHES.Rule.WarmupProjectManagerModel` <a id="spec-cynai-orches-rule-warmupprojectmanagermodel"></a>
+
+Traces To: [REQ-ORCHES-0117](../requirements/orches.md#req-orches-0117)
+
+This Spec Item defines the required startup warmup behavior after a local Project Manager model selection has been made.
+
+##### 2.1 `Orchestrator.WarmupProjectManagerModel` Outcomes
+
+- If `execution_mode=local`, the orchestrator transitions to ready state only after the selected local `model_ref` is reported as loaded and available by the selected node.
+- If `execution_mode=external`, warmup does not require a local model load.
+
+##### 2.2 `Orchestrator.WarmupProjectManagerModel` Algorithm
+
+<a id="algo-cynai-orches-rule-warmupprojectmanagermodel"></a>
+
+1. If `execution_mode=external`, skip local warmup and proceed with startup. <a id="algo-cynai-orches-rule-warmupprojectmanagermodel-step-1"></a>
+2. If `execution_mode=local`, require `node_model_availability.status=available` for (`local_node_slug`, `model_ref`). <a id="algo-cynai-orches-rule-warmupprojectmanagermodel-step-2"></a>
+3. If the model is not yet available, request the selected node load `model_ref` and block readiness until: <a id="algo-cynai-orches-rule-warmupprojectmanagermodel-step-3"></a>
+   - the node reports `available`, or
+   - the node reports `failed` (in which case the orchestrator re-runs `Orchestrator.SelectProjectManagerModel` and retries warmup), or
+   - prerequisites are still missing (in which case the orchestrator remains not ready and continues to wait and re-evaluate).
+4. While the orchestrator does not have an online Project Manager model, it MUST re-run `Orchestrator.SelectProjectManagerModel` and retry warmup when any of the following occur: <a id="algo-cynai-orches-rule-warmupprojectmanagermodel-step-4"></a>
+   - a system-scoped Project Manager model selection setting changes (for example `agents.project_manager.model.local_default_ollama_model`, `agents.project_manager.model.selection.mode`, `agents.project_manager.model.selection.prefer_orchestrator_host`)
+   - a node registers, becomes dispatchable, or updates its capability report
+   - a node model availability state changes for any candidate Project Manager model on any dispatchable local inference node
+
+#### 3 `Orchestrator.MonitorProjectManagerModel` Rule
+
+- Spec ID: `CYNAI.ORCHES.Rule.MonitorProjectManagerModel` <a id="spec-cynai-orches-rule-monitorprojectmanagermodel"></a>
+
+Traces To: [REQ-ORCHES-0129](../requirements/orches.md#req-orches-0129)
+
+This Spec Item defines continuous monitoring of the selected Project Manager model after startup.
+The goal is to ensure that readiness reflects the current availability of the Project Manager model and that the orchestrator reacts deterministically to node loss and relevant system setting changes.
+
+Triggers (non-exhaustive)
+
+The orchestrator MUST re-validate the currently selected Project Manager model when any of the following occur:
+
+- The selected local node becomes non-dispatchable (for example offline, drained, or lease-expired).
+- The selected local node capability report changes (for example inference disabled).
+- The selected local node reports the Project Manager model is no longer available (evicted, failed, or unknown).
+- Any Project Manager model selection system setting changes:
+  - `agents.project_manager.model.selection.execution_mode`
+  - `agents.project_manager.model.selection.mode`
+  - `agents.project_manager.model.selection.prefer_orchestrator_host`
+  - `agents.project_manager.model.local_default_ollama_model`
+- External routing configuration or policy changes that affect whether an external execution path is configured and allowed.
+
+Required behavior
+
+- If the orchestrator is in a ready state and the Project Manager model becomes unavailable, the orchestrator MUST transition out of ready state.
+- While not ready, the orchestrator MUST continue to serve the management surfaces required to become ready (for example system settings and credential configuration).
+- When the Project Manager model becomes unavailable or when relevant inputs change, the orchestrator MUST re-run `Orchestrator.SelectProjectManagerModel` and apply `Orchestrator.WarmupProjectManagerModel` until a Project Manager model is online again.
+- If the orchestrator must restart the Project Manager Agent due to a model availability change, it MUST restore the agent state from PostgreSQL so task progress remains resumable.
+
+Note:
+
+- For the MVP, the Project Manager model is responsible for all inference task assignment decisions.
+  See [REQ-ORCHES-0119](../requirements/orches.md#req-orches-0119) and [`docs/tech_specs/project_manager_agent.md`](project_manager_agent.md).
 
 ## API Egress Server
 
@@ -71,6 +358,13 @@ The orchestrator provides controlled external API access through an API Egress S
 This prevents API keys from being exposed to sandbox containers and enables policy and auditing.
 
 See [`docs/tech_specs/api_egress_server.md`](api_egress_server.md).
+
+## Web Egress Proxy
+
+The orchestrator provides controlled sandbox web egress through a Web Egress Proxy.
+This enables builds and verification steps that require dependency downloads without granting sandboxes direct, unrestricted internet access.
+
+See [`docs/tech_specs/web_egress_proxy.md`](web_egress_proxy.md).
 
 ## Secure Browser Service
 
@@ -98,11 +392,14 @@ See [`docs/tech_specs/model_management.md`](model_management.md).
 The orchestrator exposes a single user-facing API endpoint that surfaces its capabilities to external clients.
 This is intended for UIs and integrations such as Open WebUI and messaging services.
 
+OpenAI-compliant chat completions are processed by the orchestrator first: the orchestrator performs automatic sanitization, logging, and persistence, then either hands off to the PM agent (`cynode-pma`) when the model is `cynodeai.pm`, or routes to the selected inference model (node-local or external API via API Egress) when another model is selected.
+See [`docs/tech_specs/openai_compatible_chat_api.md`](openai_compatible_chat_api.md#spec-cynai-usrgwy-openaichatapi-routingpath).
+
 See [`docs/tech_specs/user_api_gateway.md`](user_api_gateway.md) and [`docs/tech_specs/data_rest_api.md`](data_rest_api.md).
 
 ## Sandbox Image Registry
 
-The orchestrator integrates with a sandbox container image registry for worker nodes to pull sandbox images from.
+The orchestrator uses a configurable rank-ordered list of sandbox container image registries; when none is configured, worker nodes pull sandbox images from Docker Hub (`docker.io`) only.
 Allowed sandbox images and their capabilities are tracked in PostgreSQL so tasks can request safe, appropriate execution environments.
 
 See [`docs/tech_specs/sandbox_image_registry.md`](sandbox_image_registry.md).
@@ -113,7 +410,20 @@ The orchestrator MUST be able to configure worker nodes at registration time.
 This includes distributing the correct endpoints, certificates, and pull credentials for orchestrator-provided services.
 The orchestrator MUST support dynamic configuration updates after registration and must ingest node capability reports on registration and node startup.
 
-See [`docs/tech_specs/node.md`](node.md).
+Config delivery
+
+- The orchestrator exposes the node config URL in the bootstrap payload (`node_config_url` in `node_bootstrap_payload_v1`).
+- GET on that URL returns `node_configuration_payload_v1` for the authenticated node.
+- POST on that URL accepts `node_config_ack_v1` and persists the acknowledgement; see [`docs/tech_specs/postgres_schema.md`](postgres_schema.md) Nodes table columns `config_ack_at`, `config_ack_status`, `config_ack_error`.
+- Endpoint paths are not mandated here; the bootstrap payload carries the concrete URLs so nodes do not rely on hard-coded paths.
+
+Job dispatch (initial implementation)
+
+- For the initial single-node implementation (Phase 1), the orchestrator dispatches jobs to the Worker API via direct HTTP.
+- The dispatcher uses the per-node `worker_api_target_url` and per-node bearer token; the URL is normally set from the node-reported `worker_api.base_url` at registration and when processing capability reports, and may be overridden by operator config (e.g. same-host: `WORKER_API_TARGET_URL`); see [`docs/tech_specs/postgres_schema.md`](postgres_schema.md) Nodes table and [`worker_node_payloads.md`](worker_node_payloads.md).
+- The MCP gateway is not in the loop for job dispatch in Phase 1.
+
+See [`docs/tech_specs/worker_node.md`](worker_node.md) and [`docs/tech_specs/worker_node_payloads.md`](worker_node_payloads.md).
 
 ## MCP Tool Interface
 
@@ -127,12 +437,62 @@ See [`docs/tech_specs/mcp_tooling.md`](mcp_tooling.md).
 The orchestrator uses LangGraph to implement multi-step and multi-agent workflows.
 The Project Manager Agent's behavior is implemented by the LangGraph MVP workflow.
 
-See [`docs/tech_specs/langgraph_mvp.md`](langgraph_mvp.md) for the graph topology, state model, and node behaviors.
-For how the graph is hosted, invoked, checkpointed, and wired to orchestrator capabilities (MCP, Worker API, model routing), see the "Integration with the Orchestrator" section of that document.
+**Phase 2 implementation:** The workflow engine is a **separate Python LangGraph process** (separate from the Go orchestrator process).
+The orchestrator invokes it via a stable start/resume and checkpoint contract.
+The workflow start/resume API contract and workflow start triggers are defined in [langgraph_mvp.md](langgraph_mvp.md): [Workflow Start/Resume API Contract](langgraph_mvp.md#spec-cynai-orches-workflowstartresumeapi) and [Workflow Start Triggers](langgraph_mvp.md#spec-cynai-orches-workflowstarttriggers).
+Lease lifecycle is defined in [Task Workflow Lease Lifecycle](#task-workflow-lease-lifecycle) below.
+
+**Process boundaries (Phase 2):** **cynode-pma** (chat, MCP tools) and the **workflow runner** (LangGraph graph execution) are **separate processes**.
+They share the MCP gateway and DB.
+The orchestrator starts the workflow runner for a given task; chat and planning requests go to PMA; the workflow runner executes the graph and does not serve chat.
+
+**Single-active-workflow-per-task:** The lease that enforces only one active workflow per task is **held in the orchestrator DB** (table or row semantics defined in [postgres_schema.md](postgres_schema.md)).
+The workflow runner acquires or checks the lease via the orchestrator before running.
+
+See [langgraph_mvp.md](langgraph_mvp.md) for the graph topology, state model, node behaviors, checkpoint schema, and wiring to orchestrator capabilities (MCP, Worker API, model routing).
+
+### Task Workflow Lease Lifecycle
+
+- Spec ID: `CYNAI.ORCHES.TaskWorkflowLeaseLifecycle` <a id="spec-cynai-orches-taskworkflowleaselifecycle"></a>
+
+Traces To:
+
+- [REQ-ORCHES-0146](../requirements/orches.md#req-orches-0146)
+
+The orchestrator grants and releases the task workflow lease; the workflow runner acquires or checks it via the orchestrator API (see [langgraph_mvp.md](langgraph_mvp.md#spec-cynai-orches-workflowstartresumeapi)).
+The lease table and columns are defined in [postgres_schema.md](postgres_schema.md) Task Workflow Leases Table.
+
+**Acquire.**
+The workflow runner calls the orchestrator (as part of the workflow start API or a dedicated lease endpoint) to acquire the lease for a `task_id`.
+The request includes the workflow runner identity (`holder_id`).
+The orchestrator grants the lease only if no other holder has it; otherwise it returns a defined error (e.g. 409 Conflict).
+Idempotent acquire: if the same holder re-requests for the same `task_id` with the same `lease_id` (or equivalent), the orchestrator returns success without changing state.
+
+**Release.**
+On normal workflow completion or failure, the workflow runner calls the orchestrator to release the lease (e.g. as part of a completion/failure report or a dedicated release operation).
+The orchestrator updates the lease row so the task is no longer held.
+If the workflow runner does not release (e.g. crash), the orchestrator may release on expiry (see Expiry).
+
+**Expiry.**
+Each lease row has an `expires_at` (timestamptz).
+The workflow runner may renew the lease before expiry (e.g. by sending a heartbeat or an explicit renew request that the orchestrator uses to extend `expires_at`).
+If the workflow runner does not renew before `expires_at`, the orchestrator treats the lease as released and may allow another start for that task.
+
+## Orchestrator Shutdown
+
+- Spec ID: `CYNAI.ORCHES.OrchestratorShutdown` <a id="spec-cynai-orches-orchestratorshutdown"></a>
+
+Traces To:
+
+- [REQ-ORCHES-0164](../requirements/orches.md#req-orches-0164)
+
+When the orchestrator shuts down (e.g. SIGTERM, SIGINT, or graceful stop), it MUST notify all registered worker nodes to stop all agents and jobs that it has directed, including the Project Manager Agent (PMA).
+The orchestrator MUST use the defined Worker API contract for this notification so that each node can stop orchestrator-directed managed services and all jobs dispatched by the orchestrator.
+See [Worker API - Stop All Orchestrator-Directed](worker_api.md#spec-cynai-worker-stopallorchestratordirected).
+The orchestrator MAY perform this notification before or in parallel with other shutdown steps; it MUST attempt to notify each registered worker that has an active `worker_api_target_url` (or equivalent) before the orchestrator process exits.
 
 ## Orchestrator Bootstrap Configuration
 
 The orchestrator MAY import bootstrap configuration from a YAML file at startup to seed PostgreSQL and external integrations.
-The orchestrator SHOULD support running as the sole service with zero worker nodes and using external AI providers when allowed.
-
-See [`docs/tech_specs/orchestrator_bootstrap.md`](orchestrator_bootstrap.md).
+The system always requires at least one worker node for normal operation; for single-system setups that node MAY be on the same host as the orchestrator.
+See [Worker Node Requirement](orchestrator_bootstrap.md#spec-cynai-bootst-workernoderequirement) and [`docs/tech_specs/orchestrator_bootstrap.md`](orchestrator_bootstrap.md).

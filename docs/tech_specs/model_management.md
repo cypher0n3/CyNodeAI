@@ -3,20 +3,35 @@
 - [Document Overview](#document-overview)
 - [Model Cache](#model-cache)
 - [Model Registry](#model-registry)
+  - [Models Table](#models-table)
+  - [Model Versions Table](#model-versions-table)
+  - [Model Artifacts Table](#model-artifacts-table)
+  - [Node Model Availability Table](#node-model-availability-table)
 - [Node Load Workflow](#node-load-workflow)
 - [User Directed Downloads](#user-directed-downloads)
-- [Preferences and Constraints](#preferences-and-constraints)
+- [System Settings and Constraints](#system-settings-and-constraints)
 - [Auditing and Safety](#auditing-and-safety)
 
 ## Document Overview
+
+- Spec ID: `CYNAI.MODELS.Doc.ModelManagement` <a id="spec-cynai-models-doc-modelmanagement"></a>
 
 This document defines how the orchestrator manages local model artifacts and model metadata.
 It includes a local model cache, a model registry in PostgreSQL, and workflows for worker nodes to load models without pulling from the public internet.
 
 ## Model Cache
 
+- Spec ID: `CYNAI.MODELS.ModelCache` <a id="spec-cynai-models-modelcache"></a>
+
 The orchestrator maintains a local cache of model artifacts.
 Worker nodes SHOULD load models from the orchestrator cache instead of downloading from external sources.
+
+Traces To:
+
+- [REQ-MODELS-0100](../requirements/models.md#req-models-0100)
+- [REQ-MODELS-0101](../requirements/models.md#req-models-0101)
+- [REQ-MODELS-0102](../requirements/models.md#req-models-0102)
+- [REQ-MODELS-0103](../requirements/models.md#req-models-0103)
 
 Cache properties
 
@@ -29,7 +44,7 @@ Cache properties
 The model registry stores model metadata used for routing and verification.
 It allows the Project Manager Agent to select appropriate models for tasks based on capabilities and availability.
 The Postgres schema is defined in [`docs/tech_specs/postgres_schema.md`](postgres_schema.md).
-See [Model Registry](postgres_schema.md#model-registry).
+See [Model Registry](postgres_schema.md#spec-cynai-schema-modelregistry).
 
 ### Models Table
 
@@ -103,14 +118,23 @@ Constraints
 
 ## Node Load Workflow
 
+- Spec ID: `CYNAI.MODELS.NodeLoadWorkflow` <a id="spec-cynai-models-nodeloadworkflow"></a>
+
 The orchestrator directs nodes to load models based on task needs and node capabilities.
 Nodes SHOULD retrieve model artifacts from the orchestrator cache using local network paths.
+
+Traces To:
+
+- [REQ-MODELS-0104](../requirements/models.md#req-models-0104)
+- [REQ-MODELS-0105](../requirements/models.md#req-models-0105)
 
 Recommended behavior
 
 - The orchestrator selects a model version that satisfies task capability requirements.
 - The orchestrator checks `node_model_availability` to find a suitable node with the model already available.
 - When selecting a node for a task, the Project Manager Agent SHOULD prefer nodes where the required model is already loaded.
+- On orchestrator startup (or when the first local inference worker becomes dispatchable), the orchestrator SHOULD request that at least one eligible node loads the effective Project Manager model so the Project Manager Agent can run.
+  Selection and warmup behavior (including system setting keys, sliding-scale policy, and orchestrator-host preference) are defined in [Project Manager Model (Startup Selection and Warmup)](orchestrator.md#spec-cynai-orches-projectmanagermodelstartup); do not restate them here.
 - The orchestrator configures nodes with the model cache endpoint and any required pull credentials during node registration.
 - If no node has the model, the orchestrator requests the target node to load the model.
 - The node retrieves the artifact from the orchestrator cache and installs it into Ollama or a compatible runtime.
@@ -118,7 +142,14 @@ Recommended behavior
 
 ## User Directed Downloads
 
+- Spec ID: `CYNAI.MODELS.UserDirectedDownloads` <a id="spec-cynai-models-userdirecteddownloads"></a>
+
 The orchestrator MUST support user-directed actions to populate the cache.
+
+Traces To:
+
+- [REQ-MODELS-0106](../requirements/models.md#req-models-0106)
+- [REQ-MODELS-0107](../requirements/models.md#req-models-0107)
 
 Examples
 
@@ -128,11 +159,18 @@ Examples
 
 These actions MUST be policy-controlled and audited.
 
-## Preferences and Constraints
+## System Settings and Constraints
 
-Model management SHOULD be configurable via PostgreSQL preferences.
+- Spec ID: `CYNAI.MODELS.SystemSettingsConstraints` <a id="spec-cynai-models-systemsettingsconstraints"></a>
 
-Suggested preference keys
+Model management SHOULD be configurable via PostgreSQL system settings.
+These settings are operational configuration and policy parameters.
+
+Traces To:
+
+- [REQ-MODELS-0108](../requirements/models.md#req-models-0108)
+
+Suggested system setting keys
 
 - `models.cache.max_bytes` (number)
 - `models.cache.evict_policy` (string)
@@ -141,6 +179,14 @@ Suggested preference keys
 - `models.nodes.prefer_local_cache` (boolean)
 
 ## Auditing and Safety
+
+- Spec ID: `CYNAI.MODELS.AuditingSafety` <a id="spec-cynai-models-auditingsafety"></a>
+
+Traces To:
+
+- [REQ-MODELS-0109](../requirements/models.md#req-models-0109)
+- [REQ-MODELS-0110](../requirements/models.md#req-models-0110)
+- [REQ-MODELS-0111](../requirements/models.md#req-models-0111)
 
 - The orchestrator SHOULD record all model downloads, imports, and evictions.
 - The orchestrator SHOULD verify model artifact integrity using `sha256` before exposing artifacts to nodes.

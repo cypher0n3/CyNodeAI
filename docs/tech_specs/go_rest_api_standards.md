@@ -2,15 +2,27 @@
 
 - [Document Overview](#document-overview)
 - [Scope](#scope)
+  - [Scope Applicable Requirements](#scope-applicable-requirements)
 - [Language and Toolchain](#language-and-toolchain)
 - [HTTP Routing and Handlers](#http-routing-and-handlers)
 - [Timeouts and Resource Limits](#timeouts-and-resource-limits)
+  - [Timeouts and Resource Limits Applicable Requirements](#timeouts-and-resource-limits-applicable-requirements)
 - [Request and Response Model](#request-and-response-model)
+  - [Request and Response Model Applicable Requirements](#request-and-response-model-applicable-requirements)
 - [Error Format and Status Codes](#error-format-and-status-codes)
+  - [Error Format and Status Codes Applicable Requirements](#error-format-and-status-codes-applicable-requirements)
 - [Authentication, Authorization, and Security](#authentication-authorization-and-security)
+  - [Authentication, Authorization, and Security Applicable Requirements](#authentication-authorization-and-security-applicable-requirements)
+- [Secret Handling in Go](#secret-handling-in-go)
+  - [Secret Handling Applicable Requirements](#secret-handling-applicable-requirements)
 - [Observability](#observability)
+  - [Observability Applicable Requirements](#observability-applicable-requirements)
+- [Database Access](#database-access)
+  - [Database Access Applicable Requirements](#database-access-applicable-requirements)
 - [Reliability and Idempotency](#reliability-and-idempotency)
+  - [Reliability and Idempotency Applicable Requirements](#reliability-and-idempotency-applicable-requirements)
 - [API Evolution and Compatibility](#api-evolution-and-compatibility)
+  - [API Evolution and Compatibility Applicable Requirements](#api-evolution-and-compatibility-applicable-requirements)
 - [Testing and Quality Gates](#testing-and-quality-gates)
 
 ## Document Overview
@@ -27,10 +39,14 @@ Applies to all REST APIs and HTTP services in this system, including:
 - API Egress Server
 - Secure Browser Service
 
-Normative requirements
+### Scope Applicable Requirements
 
-- All REST APIs MUST be implemented in Go.
-- REST APIs SHOULD prefer the Go standard library for HTTP whenever practical.
+- Spec ID: `CYNAI.STANDS.Scope` <a id="spec-cynai-stands-scope"></a>
+
+Traces To:
+
+- [REQ-STANDS-0100](../requirements/stands.md#req-stands-0100)
+- [REQ-STANDS-0101](../requirements/stands.md#req-stands-0101)
 
 ## Language and Toolchain
 
@@ -65,15 +81,17 @@ Recommended handler structure
 
 ## Timeouts and Resource Limits
 
-Normative requirements
+The following requirements apply.
 
-- Servers MUST set timeouts on `http.Server`, including:
-  - `ReadHeaderTimeout`
-  - `ReadTimeout`
-  - `WriteTimeout`
-  - `IdleTimeout`
-- Servers MUST set `MaxHeaderBytes` to a safe limit.
-- Endpoints that accept request bodies MUST limit body size (for example using `http.MaxBytesReader`).
+### Timeouts and Resource Limits Applicable Requirements
+
+- Spec ID: `CYNAI.STANDS.Timeouts` <a id="spec-cynai-stands-timeouts"></a>
+
+Traces To:
+
+- [REQ-STANDS-0102](../requirements/stands.md#req-stands-0102)
+- [REQ-STANDS-0103](../requirements/stands.md#req-stands-0103)
+- [REQ-STANDS-0104](../requirements/stands.md#req-stands-0104)
 
 Recommended behaviors
 
@@ -82,11 +100,17 @@ Recommended behaviors
 
 ## Request and Response Model
 
-Normative requirements
+The following requirements apply.
 
-- JSON endpoints MUST use `Content-Type: application/json` for requests and responses.
-- JSON decoders SHOULD reject unknown fields for request bodies to catch client mistakes early.
-- Responses MUST be deterministic and stable for the same request and resource state.
+### Request and Response Model Applicable Requirements
+
+- Spec ID: `CYNAI.STANDS.RequestResponse` <a id="spec-cynai-stands-reqresp"></a>
+
+Traces To:
+
+- [REQ-STANDS-0105](../requirements/stands.md#req-stands-0105)
+- [REQ-STANDS-0106](../requirements/stands.md#req-stands-0106)
+- [REQ-STANDS-0107](../requirements/stands.md#req-stands-0107)
 
 Recommended response conventions
 
@@ -97,11 +121,17 @@ Recommended response conventions
 
 ## Error Format and Status Codes
 
-Normative requirements
+The following requirements apply.
 
-- APIs MUST return a consistent structured error format across endpoints.
-- APIs SHOULD use Problem Details JSON (`application/problem+json`, RFC 9457) for error responses.
-- APIs MUST not leak secrets in error messages or error details.
+### Error Format and Status Codes Applicable Requirements
+
+- Spec ID: `CYNAI.STANDS.ErrorFormat` <a id="spec-cynai-stands-errorfmt"></a>
+
+Traces To:
+
+- [REQ-STANDS-0108](../requirements/stands.md#req-stands-0108)
+- [REQ-STANDS-0109](../requirements/stands.md#req-stands-0109)
+- [REQ-STANDS-0110](../requirements/stands.md#req-stands-0110)
 
 Recommended error fields
 
@@ -111,13 +141,29 @@ Recommended error fields
 - `detail`: safe detail for operators and users
 - `instance`: request identifier for correlating logs and traces
 
+Protocol compatibility exceptions
+
+Some gateway endpoints exist specifically to emulate an external protocol (for example OpenAI-compatible endpoints).
+In those cases, the endpoint MAY return the external protocol's error shape instead of the standard CyNodeAI error envelope.
+When an exception is used:
+
+- The endpoint's tech spec MUST define the exact error payload shape.
+- Implementations MUST not mix multiple error formats for the same endpoint.
+- Error payloads MUST remain safe (no secrets) and observable (include request identifiers in logs).
+
 ## Authentication, Authorization, and Security
 
-Normative requirements
+The following requirements apply.
 
-- All endpoints (except explicit health checks) MUST authenticate callers.
-- Authorization MUST be checked server-side on every request and MUST fail closed.
-- Services MUST validate and constrain outbound requests (for example API egress and web browsing) by policy.
+### Authentication, Authorization, and Security Applicable Requirements
+
+- Spec ID: `CYNAI.STANDS.AuthSecurity` <a id="spec-cynai-stands-authsec"></a>
+
+Traces To:
+
+- [REQ-STANDS-0111](../requirements/stands.md#req-stands-0111)
+- [REQ-STANDS-0112](../requirements/stands.md#req-stands-0112)
+- [REQ-STANDS-0113](../requirements/stands.md#req-stands-0113)
 
 Recommended security practices
 
@@ -125,16 +171,47 @@ Recommended security practices
 - Apply CORS only where required and avoid wildcard origins for authenticated requests.
 - Avoid logging request bodies and headers that may contain secrets.
 
+## Secret Handling in Go
+
+The following requirement applies to any Go code that handles secrets, credentials, or tokens in process (including master keys and decrypted plaintext).
+
+### Secret Handling Applicable Requirements
+
+- Spec ID: `CYNAI.STANDS.SecretHandling` <a id="spec-cynai-stands-secrethandling"></a>
+
+Traces To:
+
+- [REQ-STANDS-0133](../requirements/stands.md#req-stands-0133)
+
+Implementation requirement
+
+- Go code that touches secrets, credentials, or tokens (e.g. bearer tokens, API keys, decrypted credential plaintext, secure-store master keys) MUST use the Go 1.26 `runtime/secret` package (enabled via `GOEXPERIMENT=secret` at build time) to wrap the code path so that temporaries (registers, stack, heap used during the operation) are securely erased before returning.
+- When `runtime/secret` is not available (unsupported platform or Go version), implementations MUST use best-effort secure erasure (e.g. zeroing buffers that held plaintext or keys) before returning from those code paths and MUST NOT log or retain plaintext.
+
 ## Observability
 
-Normative requirements
+The following requirements apply.
 
-- Services MUST emit structured logs.
-  - Prefer the Go standard library `log/slog` for logging.
-- Services SHOULD expose health endpoints (for example `/healthz` and `/readyz`).
-- Services SHOULD support distributed tracing and metrics collection.
-  - Prefer OpenTelemetry for traces and metrics.
+### Observability Applicable Requirements
+
+- Spec ID: `CYNAI.STANDS.Observability` <a id="spec-cynai-stands-observ"></a>
+
+Traces To:
+
+- [REQ-STANDS-0114](../requirements/stands.md#req-stands-0114)
+- [REQ-STANDS-0115](../requirements/stands.md#req-stands-0115)
+- [REQ-STANDS-0116](../requirements/stands.md#req-stands-0116)
   - Prefer wrapping `net/http` handlers and clients with official instrumentation (for example `otelhttp`).
+
+Health and readiness endpoints
+
+All APIs MUST offer:
+
+- `GET /healthz`: liveness probe; MUST return 200 when the process is running (e.g. HTTP server is up).
+- `GET /readyz`: readiness probe; MUST return 200 only when the service is ready to accept traffic (e.g. dependencies connected); otherwise MUST return 503 with an actionable reason.
+
+Both endpoints MUST be unauthenticated so load balancers and orchestrators can probe them.
+Service-specific specs (e.g. orchestrator, Worker API) define exact response bodies and 503 semantics.
 
 Recommended log fields
 
@@ -145,12 +222,53 @@ Recommended log fields
 - `status`
 - `duration_ms`
 
+## Database Access
+
+All Go SQL database access in the codebase MUST use GORM; see [Go SQL database standards (GORM)](go_sql_database_standards.md#spec-cynai-stands-gosqlgorm).
+
+This section defines standards for services that access PostgreSQL.
+It applies to the User API Gateway, worker services that persist state, and any internal orchestrator services that own database credentials.
+
+### Database Access Applicable Requirements
+
+- Spec ID: `CYNAI.STANDS.DatabaseAccess` <a id="spec-cynai-stands-dbaccess"></a>
+
+Traces To:
+
+- [REQ-STANDS-0117](../requirements/stands.md#req-stands-0117)
+- [REQ-STANDS-0118](../requirements/stands.md#req-stands-0118)
+- [REQ-STANDS-0119](../requirements/stands.md#req-stands-0119)
+- [REQ-STANDS-0120](../requirements/stands.md#req-stands-0120)
+- [REQ-STANDS-0121](../requirements/stands.md#req-stands-0121)
+- [REQ-STANDS-0122](../requirements/stands.md#req-stands-0122)
+- [REQ-STANDS-0123](../requirements/stands.md#req-stands-0123)
+- [REQ-STANDS-0124](../requirements/stands.md#req-stands-0124)
+- [REQ-STANDS-0125](../requirements/stands.md#req-stands-0125)
+- [REQ-STANDS-0126](../requirements/stands.md#req-stands-0126)
+- [REQ-STANDS-0127](../requirements/stands.md#req-stands-0127)
+- [REQ-STANDS-0128](../requirements/stands.md#req-stands-0128)
+
+Recommended behaviors
+
+- Use explicit transactions for multi-table writes and for upserts involving embeddings.
+- Avoid selecting embeddings unless required.
+  Use `Select()` (or equivalent) to exclude embedding columns for list and read paths by default.
+- Enable structured ORM logging.
+  Disable full SQL logging in production, or sample it.
+- Track slow query thresholds and collect vector query latency separately from general query latency.
+
 ## Reliability and Idempotency
 
-Normative requirements
+The following requirements apply.
 
-- Mutating endpoints SHOULD support idempotency when clients may retry.
-- APIs MUST return non-2xx status codes on validation and authorization failures.
+### Reliability and Idempotency Applicable Requirements
+
+- Spec ID: `CYNAI.STANDS.ReliabilityIdempotency` <a id="spec-cynai-stands-idempotency"></a>
+
+Traces To:
+
+- [REQ-STANDS-0129](../requirements/stands.md#req-stands-0129)
+- [REQ-STANDS-0130](../requirements/stands.md#req-stands-0130)
 
 Recommended behaviors
 
@@ -159,10 +277,16 @@ Recommended behaviors
 
 ## API Evolution and Compatibility
 
-Normative requirements
+The following requirements apply.
 
-- REST APIs MUST have a stable versioning scheme (for example a `/v1/` path prefix).
-- Backward-incompatible changes MUST require a new major API version.
+### API Evolution and Compatibility Applicable Requirements
+
+- Spec ID: `CYNAI.STANDS.ApiEvolution` <a id="spec-cynai-stands-apievolution"></a>
+
+Traces To:
+
+- [REQ-STANDS-0131](../requirements/stands.md#req-stands-0131)
+- [REQ-STANDS-0132](../requirements/stands.md#req-stands-0132)
 
 Recommended change management
 

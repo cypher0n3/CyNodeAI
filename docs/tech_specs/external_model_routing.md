@@ -6,9 +6,9 @@
 - [Routing Policy](#routing-policy)
 - [External Provider Integration](#external-provider-integration)
 - [External Inference With Node Sandboxes](#external-inference-with-node-sandboxes)
-- [Preferences and Constraints](#preferences-and-constraints)
-  - [Suggested Preference Keys](#suggested-preference-keys)
-  - [Suggested Orchestrator-Side Agent Preference Keys](#suggested-orchestrator-side-agent-preference-keys)
+- [Settings and Constraints](#settings-and-constraints)
+  - [Suggested Setting Keys](#suggested-setting-keys)
+  - [Suggested Orchestrator-Side Agent Setting Keys](#suggested-orchestrator-side-agent-setting-keys)
 - [Auditing and Safety](#auditing-and-safety)
 
 ## Document Overview
@@ -20,6 +20,10 @@ External calls are intended as an allowed fallback when local workers are overlo
 
 The orchestrator SHOULD prefer local execution when it can meet required capabilities and latency objectives.
 The orchestrator MUST be able to route to configured external AI APIs when needed and when policy allows it.
+
+The system requires that at least one inference-capable path is available in the deployment.
+If no worker can provide local inference and no external provider is configured (via API Egress), the system MUST fail fast (or refuse to enter a ready state) because inference is unavailable.
+See [`docs/tech_specs/orchestrator_bootstrap.md`](orchestrator_bootstrap.md).
 
 ## Routing Signals
 
@@ -46,7 +50,7 @@ Recommended default routing behavior.
 - The orchestrator SHOULD route to an external provider when:
   - no available worker can satisfy capability requirements, or
   - workers are overloaded beyond configured thresholds, or
-  - there are no registered worker nodes and the orchestrator is operating in standalone mode, or
+  - no registered worker node is inference-capable or has reported ready with inference (so external provider is the only inference path), or
   - the task is marked as external-allowed and requires low latency that local capacity cannot meet.
 - The orchestrator SHOULD honor a user override selecting a specific external provider when policy allows it.
 - The orchestrator MUST deny external routing when policy does not allow it.
@@ -66,6 +70,8 @@ Integration expectations
 - The orchestrator receives the result and stores it in PostgreSQL as part of task history.
 
 ## External Inference With Node Sandboxes
+
+- Spec ID: `CYNAI.ORCHES.ExternalInferenceNodeSandboxes` <a id="spec-cynai-orches-externalinferencenodesandboxes"></a>
 
 External inference and sandbox execution are separate concerns.
 The orchestrator SHOULD support workflows where a task uses an external provider for model inference while still running tools inside a sandbox container on a node.
@@ -90,11 +96,11 @@ Example flow
 - The orchestrator dispatches a sandbox job to run tests or apply changes.
 - The sandbox job uses MCP tools for artifacts and controlled services.
 
-## Preferences and Constraints
+## Settings and Constraints
 
-Routing behavior SHOULD be configurable via PostgreSQL preferences.
+Routing behavior SHOULD be configurable via PostgreSQL settings.
 
-### Suggested Preference Keys
+### Suggested Setting Keys
 
 - `model_routing.prefer_local` (boolean)
 - `model_routing.allowed_external_providers` (array)
@@ -104,9 +110,9 @@ Routing behavior SHOULD be configurable via PostgreSQL preferences.
 - `model_routing.max_external_tokens` (number)
 - `model_routing.max_external_cost_usd` (number)
 
-### Suggested Orchestrator-Side Agent Preference Keys
+### Suggested Orchestrator-Side Agent Setting Keys
 
-Orchestrator-side agents MAY use separate preferences for external provider routing.
+Orchestrator-side agents MAY use separate settings for external provider routing.
 This allows enabling external providers for the Project Manager and Project Analyst agents without changing task routing defaults.
 
 - `agents.project_manager.model_routing.prefer_local` (boolean)
