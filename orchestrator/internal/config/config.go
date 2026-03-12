@@ -1,0 +1,187 @@
+// Package config provides configuration for CyNodeAI services.
+// See docs/tech_specs/orchestrator_bootstrap.md for bootstrap details.
+package config
+
+import (
+	"os"
+	"strconv"
+	"time"
+)
+
+// OrchestratorConfig holds orchestrator configuration.
+type OrchestratorConfig struct {
+	// Database
+	DatabaseURL string
+
+	// Server
+	ListenAddr       string
+	ReadTimeout      time.Duration
+	WriteTimeout     time.Duration
+	IdleTimeout      time.Duration
+	MaxHeaderBytes   int
+	MaxRequestBodyMB int
+
+	// JWT
+	JWTSecret          string
+	JWTAccessDuration  time.Duration
+	JWTRefreshDuration time.Duration
+	JWTNodeDuration    time.Duration
+
+	// Node Registration
+	NodeRegistrationPSK string
+
+	// Orchestrator public URL for bootstrap payload (emitted to nodes).
+	OrchestratorPublicURL string
+
+	// Worker API: bearer token delivered to nodes for orchestrator-to-node auth (Phase 1: static).
+	WorkerAPIBearerToken string
+
+	// Worker API target URL for single-node Phase 1 (optional; used when node has not yet reported its URL).
+	WorkerAPITargetURL string
+
+	// Worker internal agent token: when set, included in managed_services.services[].orchestrator.agent_token
+	// so agents (e.g. PMA) can authenticate to the worker's internal orchestrator proxy. Optional; no default.
+	WorkerInternalAgentToken string
+
+	// Bootstrap
+	BootstrapAdminPassword string
+
+	// Rate Limiting
+	RateLimitPerMinute int
+
+	// Inference (PM model): when set, prompt-mode tasks call this URL directly so prompt→model MUST work (MVP Phase 1).
+	InferenceURL   string // e.g. http://localhost:11434 or http://ollama:11434
+	InferenceModel string // e.g. qwen3.5:0.8b; default qwen3.5:0.8b
+
+	// PMA (cynode-pma): when enabled, control-plane starts cynode-pma as subprocess so PM chat surface is backed by the agent; GET /readyz returns 503 until PMA is reachable. Default true per REQ-ORCHES-0120 and orchestrator.md HealthEndpoints.
+	PMAEnabled          bool   // PMA_ENABLED; default true
+	PMABinaryPath       string // PMA_BINARY; path to cynode-pma binary
+	PMAListenAddr       string // PMA_LISTEN_ADDR; default :8090
+	PMAInstructionsRoot string // PMA_INSTRUCTIONS_ROOT; optional
+	// PMABaseURL is deprecated for chat routing. PMA is only reachable via worker-reported capability (orchestrator ↔ worker proxy). Kept for backward compat / other use.
+	PMABaseURL string // PMA_BASE_URL; not used for resolvePMAEndpoint
+	// PMA managed-service desired-state defaults (worker-managed PMA path).
+	PMAServiceID       string // PMA_SERVICE_ID
+	PMAImage           string // PMA_IMAGE
+	PMAHostNodeSlug    string // PMA_HOST_NODE_SLUG (optional explicit placement override)
+	PMAPreferHostLabel string // PMA_PREFER_HOST_LABEL
+
+	// Workflow runner: bearer token for workflow start/resume/checkpoint/release API. When set, requests must include Authorization: Bearer <value>.
+	WorkflowRunnerBearerToken string // WORKFLOW_RUNNER_BEARER_TOKEN; optional
+}
+
+// NodeConfig holds node manager configuration.
+type NodeConfig struct {
+	// Orchestrator
+	OrchestratorURL string
+	RegistrationPSK string
+
+	// Node identity
+	NodeSlug string
+	NodeName string
+
+	// Worker API
+	ListenAddr     string
+	ReadTimeout    time.Duration
+	WriteTimeout   time.Duration
+	IdleTimeout    time.Duration
+	MaxHeaderBytes int
+
+	// Container runtime
+	ContainerRuntime string
+
+	// Sandbox defaults
+	DefaultTimeoutSeconds int
+	MaxOutputBytes        int
+}
+
+// LoadOrchestratorConfig loads configuration from environment.
+func LoadOrchestratorConfig() *OrchestratorConfig {
+	return &OrchestratorConfig{
+		DatabaseURL:               getEnv("DATABASE_URL", "postgres://postgres:postgres@localhost:5432/cynodeai?sslmode=disable"),
+		ListenAddr:                getEnv("LISTEN_ADDR", ":12080"),
+		ReadTimeout:               getDurationEnv("READ_TIMEOUT", 30*time.Second),
+		WriteTimeout:              getDurationEnv("WRITE_TIMEOUT", 300*time.Second), // chat path with thinking models can take 3+ minutes
+		IdleTimeout:               getDurationEnv("IDLE_TIMEOUT", 120*time.Second),
+		MaxHeaderBytes:            getIntEnv("MAX_HEADER_BYTES", 1<<20),
+		MaxRequestBodyMB:          getIntEnv("MAX_REQUEST_BODY_MB", 10),
+		JWTSecret:                 getEnv("JWT_SECRET", "change-me-in-production"),
+		JWTAccessDuration:         getDurationEnv("JWT_ACCESS_DURATION", 15*time.Minute),
+		JWTRefreshDuration:        getDurationEnv("JWT_REFRESH_DURATION", 7*24*time.Hour),
+		JWTNodeDuration:           getDurationEnv("JWT_NODE_DURATION", 24*time.Hour),
+		NodeRegistrationPSK:       getEnv("NODE_REGISTRATION_PSK", "default-psk-change-me"),
+		OrchestratorPublicURL:     getEnv("ORCHESTRATOR_PUBLIC_URL", "http://localhost:12082"),
+		WorkerAPIBearerToken:      getEnv("WORKER_API_BEARER_TOKEN", "dev-worker-api-token-change-me"),
+		WorkerAPITargetURL:        getEnv("WORKER_API_TARGET_URL", ""),
+		WorkerInternalAgentToken:  getEnv("WORKER_INTERNAL_AGENT_TOKEN", ""),
+		BootstrapAdminPassword:    getEnv("BOOTSTRAP_ADMIN_PASSWORD", "admin123"),
+		RateLimitPerMinute:        getIntEnv("RATE_LIMIT_PER_MINUTE", 60),
+		InferenceURL:              getEnv("OLLAMA_BASE_URL", getEnv("INFERENCE_URL", "")),
+		InferenceModel:            getEnv("INFERENCE_MODEL", "qwen3.5:0.8b"),
+		PMAEnabled:                getBoolEnv("PMA_ENABLED", true),
+		PMABinaryPath:             getEnv("PMA_BINARY", "cynode-pma"),
+		PMAListenAddr:             getEnv("PMA_LISTEN_ADDR", ":8090"),
+		PMAInstructionsRoot:       getEnv("PMA_INSTRUCTIONS_ROOT", ""),
+		PMABaseURL:                getEnv("PMA_BASE_URL", ""),
+		PMAServiceID:              getEnv("PMA_SERVICE_ID", "pma-main"),
+		PMAImage:                  getEnv("PMA_IMAGE", "ghcr.io/cypher0n3/cynode-pma:latest"),
+		PMAHostNodeSlug:           getEnv("PMA_HOST_NODE_SLUG", ""),
+		PMAPreferHostLabel:        getEnv("PMA_PREFER_HOST_LABEL", "orchestrator_host"),
+		WorkflowRunnerBearerToken: getEnv("WORKFLOW_RUNNER_BEARER_TOKEN", ""),
+	}
+}
+
+// LoadNodeConfig loads node configuration from environment.
+func LoadNodeConfig() *NodeConfig {
+	return &NodeConfig{
+		OrchestratorURL:       getEnv("ORCHESTRATOR_URL", "http://localhost:12082"),
+		RegistrationPSK:       getEnv("NODE_REGISTRATION_PSK", "default-psk-change-me"),
+		NodeSlug:              getEnv("NODE_SLUG", "node-01"),
+		NodeName:              getEnv("NODE_NAME", "Default Node"),
+		ListenAddr:            getEnv("NODE_LISTEN_ADDR", ":12090"),
+		ReadTimeout:           getDurationEnv("NODE_READ_TIMEOUT", 30*time.Second),
+		WriteTimeout:          getDurationEnv("NODE_WRITE_TIMEOUT", 300*time.Second),
+		IdleTimeout:           getDurationEnv("NODE_IDLE_TIMEOUT", 120*time.Second),
+		MaxHeaderBytes:        getIntEnv("NODE_MAX_HEADER_BYTES", 1<<20),
+		ContainerRuntime:      getEnv("CONTAINER_RUNTIME", "podman"),
+		DefaultTimeoutSeconds: getIntEnv("DEFAULT_TIMEOUT_SECONDS", 300),
+		MaxOutputBytes:        getIntEnv("MAX_OUTPUT_BYTES", 1<<20),
+	}
+}
+
+func getEnv(key, defaultVal string) string {
+	if val := os.Getenv(key); val != "" {
+		return val
+	}
+	return defaultVal
+}
+
+func getIntEnv(key string, defaultVal int) int {
+	if val := os.Getenv(key); val != "" {
+		if i, err := strconv.Atoi(val); err == nil {
+			return i
+		}
+	}
+	return defaultVal
+}
+
+func getDurationEnv(key string, defaultVal time.Duration) time.Duration {
+	if val := os.Getenv(key); val != "" {
+		if d, err := time.ParseDuration(val); err == nil {
+			return d
+		}
+	}
+	return defaultVal
+}
+
+func getBoolEnv(key string, defaultVal bool) bool {
+	if val := os.Getenv(key); val != "" {
+		switch val {
+		case "1", "true", "yes", "on":
+			return true
+		case "0", "false", "no", "off":
+			return false
+		}
+	}
+	return defaultVal
+}
