@@ -1,0 +1,27 @@
+# Build cynode-pma (agents module). Build context: repo root.
+# Agents module replace go_shared_libs => ../go_shared_libs; include both in workspace.
+# Example: podman build -f agents/cmd/cynode-pma/Containerfile -t cynodeai-cynode-pma:dev .
+FROM golang:1.26-alpine AS build
+WORKDIR /build
+RUN apk add --no-cache ca-certificates upx
+ENV CGO_ENABLED=0
+RUN printf '%s\n' 'go 1.26.0' 'use (' './agents' './go_shared_libs' ')' > go.work
+COPY go_shared_libs ./go_shared_libs
+COPY agents ./agents
+RUN go build -ldflags="-s -w" -o /cynode-pma ./agents/cmd/cynode-pma \
+    && upx --best /cynode-pma
+
+FROM alpine:3.20
+RUN apk add --no-cache ca-certificates curl wget
+# Non-root user for PMA (aligns with sandbox container practice; see docs/tech_specs/sandbox_container.md)
+RUN adduser -D -u 1000 -h /home/pma pma
+# Wireable workspace: orchestrator can bind-mount project/workspace here at runtime
+RUN mkdir -p /workspace && chown pma:pma /workspace
+WORKDIR /app
+COPY --from=build /cynode-pma /app/cynode-pma
+COPY agents/instructions /app/instructions
+RUN chown -R pma:pma /app
+ENV PMA_INSTRUCTIONS_ROOT=/app/instructions
+EXPOSE 8090
+USER pma
+ENTRYPOINT ["/app/cynode-pma"]

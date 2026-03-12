@@ -1,0 +1,56 @@
+# SBA runner image (cynode-sba). Build context: repo root.
+# Spec: docs/tech_specs/sandbox_container.md (SBA Runner Image), docs/tech_specs/cynode_sba.md.
+# Example: podman build -f agents/cmd/cynode-sba/Containerfile -t cynodeai-cynode-sba:dev .
+# For ARM64: use podman build --platform linux/arm64 -f ... -t cynodeai-cynode-sba:dev-arm64 .
+FROM golang:1.26-alpine AS build
+WORKDIR /build
+RUN apk add --no-cache ca-certificates upx
+ENV CGO_ENABLED=0
+RUN printf '%s\n' 'go 1.26.0' 'use (' './agents' './go_shared_libs' ')' > go.work
+COPY agents ./agents
+COPY go_shared_libs ./go_shared_libs
+RUN go build -ldflags="-s -w" -o /cynode-sba ./agents/cmd/cynode-sba \
+    && upx --best /cynode-sba
+
+FROM fedora:43
+# SBA Runner Image minimum requirements: bash, coreutils, findutils, diffutils, procps, tar, gzip, unzip, jq, ca-certificates, git, python3; sandbox baseline also requires zip.
+# Extra tooling: make, just, zsh, shellcheck, markdownlint-cli2 (via npm).
+# hadolint ignore=DL3041
+RUN dnf install -y --setopt=install_weak_deps=False \
+    ShellCheck \
+    bash \
+    ca-certificates \
+    coreutils \
+    diffutils \
+    findutils \
+    git \
+    gzip \
+    jq \
+    just \
+    make \
+    nodejs \
+    nodejs-npm \
+    patch \
+    procps-ng \
+    python3 \
+    tar \
+    unzip \
+    wget \
+    zip \
+    zsh \
+    && dnf clean all
+# hadolint ignore=DL3016
+RUN npm install -g markdownlint-cli2
+# Non-root user per REQ-SBAGNT-0102 and sandbox_container.md
+RUN useradd -m -u 1000 -d /home/sba sba
+# /workspace and /job are bind-mounted by the node at runtime; image only provides placeholders.
+# 755 so any container user (e.g. with --userns=keep-id) can chdir when node does not mount a workspace.
+RUN mkdir -p /workspace /job/artifacts && chown -R sba:sba /workspace /job && chmod 755 /workspace
+WORKDIR /workspace
+COPY --from=build /cynode-sba /usr/local/bin/cynode-sba
+RUN chown sba:sba /usr/local/bin/cynode-sba
+# Image compatibility marking per sandbox_container.md (REQ-SANDBX-0124)
+LABEL io.cynodeai.sandbox.agent-compatible="true"
+LABEL io.cynodeai.sandbox.purpose="base-tools,build,test"
+USER sba
+ENTRYPOINT ["/usr/local/bin/cynode-sba"]
