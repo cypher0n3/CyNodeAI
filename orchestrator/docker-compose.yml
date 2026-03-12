@@ -1,0 +1,161 @@
+# Full orchestrator stack: Postgres + control-plane + user-gateway + mcp-gateway + api-egress. Ollama is profile-based (profile "ollama").
+# Ports: postgres 5432, control-plane 12082, user-gateway 12080, mcp-gateway 12083, api-egress 12084, ollama 11434 (profile "ollama").
+# Run from repo root: docker compose -f orchestrator/docker-compose.yml up -d
+# Explicit network for stable DNS and connectivity across restarts (mitigates recurring EOF/flaky host-gateway issues).
+networks:
+  orchestrator_net:
+    name: cynodeai-orchestrator
+    driver: bridge
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: cynodeai-postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-cynodeai}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-cynodeai-dev-password}
+      POSTGRES_DB: ${POSTGRES_DB:-cynodeai}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - cynodeai-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+    networks:
+      - orchestrator_net
+
+  control-plane:
+    image: cynodeai-control-plane:dev
+    build:
+      context: ..
+      dockerfile: orchestrator/cmd/control-plane/Containerfile
+    container_name: cynodeai-control-plane
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-cynodeai}:${POSTGRES_PASSWORD:-cynodeai-dev-password}@postgres:5432/${POSTGRES_DB:-cynodeai}?sslmode=disable
+      CONTROL_PLANE_LISTEN_ADDR: ":12082"
+      JWT_SECRET: ${JWT_SECRET:-dev-jwt-secret-change-in-production}
+      NODE_REGISTRATION_PSK: ${NODE_REGISTRATION_PSK:-dev-node-psk-secret}
+      BOOTSTRAP_ADMIN_PASSWORD: ${BOOTSTRAP_ADMIN_PASSWORD:-admin123}
+      WORKER_API_TARGET_URL: ${WORKER_API_TARGET_URL:-http://host.containers.internal:12090}
+      WORKER_API_BEARER_TOKEN: ${WORKER_API_BEARER_TOKEN:-dev-worker-api-token-change-me}
+      DISPATCH_HTTP_TIMEOUT: ${DISPATCH_HTTP_TIMEOUT:-300s}
+      PMA_ENABLED: ${PMA_ENABLED:-true}
+      PMA_IMAGE: ${PMA_IMAGE:-ghcr.io/cypher0n3/cynode-pma:latest}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "${CONTROL_PLANE_PORT:-12082}:12082"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:12082/healthz || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+    networks:
+      - orchestrator_net
+
+  user-gateway:
+    image: cynodeai-user-gateway:dev
+    build:
+      context: ..
+      dockerfile: orchestrator/cmd/user-gateway/Containerfile
+    container_name: cynodeai-user-gateway
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER:-cynodeai}:${POSTGRES_PASSWORD:-cynodeai-dev-password}@postgres:5432/${POSTGRES_DB:-cynodeai}?sslmode=disable
+      USER_GATEWAY_LISTEN_ADDR: ":12080"
+      WRITE_TIMEOUT: 300s
+      JWT_SECRET: ${JWT_SECRET:-dev-jwt-secret-change-in-production}
+      BOOTSTRAP_ADMIN_PASSWORD: ${BOOTSTRAP_ADMIN_PASSWORD:-admin123}
+      WORKER_API_BEARER_TOKEN: ${WORKER_API_BEARER_TOKEN:-dev-worker-api-token-change-me}
+      # PMA for model=cynodeai.pm is only via worker-reported capability (orchestrator ↔ worker proxy); no env URL.
+      # Prompt-mode tasks: orchestrator calls PM model so prompt→model MUST work (MVP Phase 1).
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://ollama:11434}
+      INFERENCE_MODEL: ${INFERENCE_MODEL:-qwen3.5:0.8b}
+    ports:
+      - "${ORCHESTRATOR_PORT:-12080}:12080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:12080/healthz || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+    networks:
+      - orchestrator_net
+
+  ollama:
+    profiles: ["ollama"]
+    image: ${OLLAMA_IMAGE:-ollama/ollama}
+    container_name: cynodeai-ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama-data:/root/.ollama
+    # healthcheck:
+    #   test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:11434/ || exit 1"]
+    #   interval: 15s
+    #   timeout: 5s
+    #   retries: 3
+    #   start_period: 30s
+    # Use explicit DNS to avoid runtime DNS degradation after repeated stack restarts
+    # (Podman/Docker default resolver can fail with "i/o timeout" after many down/up cycles).
+    # dns:
+    #   - 8.8.8.8
+    #   - 8.8.4.4
+    environment:
+    # Default context window for all loaded models.                                                               │
+    # qwen3:8b supports up to 40 960 tokens natively; 32 768 fits comfortably in the                              │
+    # ~11 GB of VRAM headroom available on an RX 7900 XT (20 GB total, 9.4 GB used by                             │
+    # the model weights), leaving the KV cache ~1.6 GB.  Override per-deployment with                             │
+    # OLLAMA_NUM_CTX if running on hardware with less VRAM.                                                       │
+      OLLAMA_NUM_CTX: ${OLLAMA_NUM_CTX:-32768}
+    networks:
+      - orchestrator_net
+
+  mcp-gateway:
+    build:
+      context: ..
+      dockerfile: orchestrator/cmd/mcp-gateway/Containerfile
+    container_name: cynodeai-mcp-gateway
+    environment:
+      LISTEN_ADDR: ":12083"
+    ports:
+      - "${MCP_GATEWAY_PORT:-12083}:12083"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:12083/healthz || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+    networks:
+      - orchestrator_net
+
+  api-egress:
+    build:
+      context: ..
+      dockerfile: orchestrator/cmd/api-egress/Containerfile
+    container_name: cynodeai-api-egress
+    environment:
+      LISTEN_ADDR: ":12084"
+    ports:
+      - "${API_EGRESS_PORT:-12084}:12084"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:12084/healthz || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 5s
+    networks:
+      - orchestrator_net
+
+volumes:
+  cynodeai-postgres-data: {}
+  ollama-data: {}

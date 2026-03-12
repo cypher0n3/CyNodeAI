@@ -1,0 +1,20 @@
+FROM golang:1.26-alpine AS build
+
+WORKDIR /src
+RUN apk add --no-cache ca-certificates git upx
+
+ENV CGO_ENABLED=0
+
+COPY . .
+
+RUN go build -ldflags="-s -w" -o /out/api-egress ./orchestrator/cmd/api-egress \
+    && upx --best /out/api-egress
+
+FROM alpine:3.20
+RUN apk add --no-cache ca-certificates
+
+WORKDIR /app
+COPY --from=build /out/api-egress /app/api-egress
+
+EXPOSE 8084
+ENTRYPOINT ["/app/api-egress"]
