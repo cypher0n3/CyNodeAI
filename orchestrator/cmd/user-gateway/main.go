@@ -98,7 +98,16 @@ func run(ctx context.Context, cfg *config.OrchestratorConfig, store database.Sto
 	mux.Handle("GET /v1/tasks/{id}/logs", authMiddleware.RequireUserAuth(http.HandlerFunc(taskHandler.GetTaskLogs)))
 	mux.Handle("GET /v1/models", authMiddleware.RequireUserAuth(http.HandlerFunc(openAIChatHandler.ListModels)))
 	mux.Handle("POST /v1/chat/completions", authMiddleware.RequireUserAuth(http.HandlerFunc(limitBody(maxBodyBytes, openAIChatHandler.ChatCompletions))))
-	mux.Handle("POST /v1/chat/threads", authMiddleware.RequireUserAuth(http.HandlerFunc(openAIChatHandler.NewThread)))
+	mux.Handle("POST /v1/responses", authMiddleware.RequireUserAuth(http.HandlerFunc(limitBody(maxBodyBytes, openAIChatHandler.Responses))))
+	mux.Handle("POST /v1/chat/threads", authMiddleware.RequireUserAuth(http.HandlerFunc(limitBody(maxBodyBytes, openAIChatHandler.NewThread))))
+	mux.Handle("GET /v1/chat/threads", authMiddleware.RequireUserAuth(http.HandlerFunc(openAIChatHandler.ListThreads)))
+	mux.Handle("GET /v1/chat/threads/{id}", authMiddleware.RequireUserAuth(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { openAIChatHandler.GetThread(w, r, r.PathValue("id")) })))
+	mux.Handle("GET /v1/chat/threads/{id}/messages", authMiddleware.RequireUserAuth(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		openAIChatHandler.ListThreadMessages(w, r, r.PathValue("id"))
+	})))
+	mux.Handle("PATCH /v1/chat/threads/{id}", authMiddleware.RequireUserAuth(http.HandlerFunc(limitBody(maxBodyBytes, func(w http.ResponseWriter, r *http.Request) {
+		openAIChatHandler.PatchThreadTitle(w, r, r.PathValue("id"))
+	}))))
 	mux.Handle("GET /v1/skills", authMiddleware.RequireUserAuth(http.HandlerFunc(skillsHandler.List)))
 	mux.Handle("GET /v1/skills/{id}", authMiddleware.RequireUserAuth(http.HandlerFunc(skillsHandler.Get)))
 	mux.Handle("POST /v1/skills/load", authMiddleware.RequireUserAuth(http.HandlerFunc(limitBody(maxBodyBytes, skillsHandler.Load))))

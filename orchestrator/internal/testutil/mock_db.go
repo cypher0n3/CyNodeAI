@@ -4,6 +4,7 @@ package testutil
 import (
 	"context"
 	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -1040,13 +1041,14 @@ func (m *MockDB) GetOrCreateActiveChatThread(_ context.Context, userID uuid.UUID
 }
 
 // CreateChatThread unconditionally creates a new thread.
-func (m *MockDB) CreateChatThread(_ context.Context, userID uuid.UUID, projectID *uuid.UUID) (*models.ChatThread, error) {
+func (m *MockDB) CreateChatThread(_ context.Context, userID uuid.UUID, projectID *uuid.UUID, title *string) (*models.ChatThread, error) {
 	return runWithLock(m, true, func() (*models.ChatThread, error) {
 		now := time.Now().UTC()
 		thread := &models.ChatThread{
 			ID:        uuid.New(),
 			UserID:    userID,
 			ProjectID: projectID,
+			Title:     title,
 			CreatedAt: now,
 			UpdatedAt: now,
 		}
@@ -1091,6 +1093,91 @@ func (m *MockDB) ListChatMessages(_ context.Context, threadID uuid.UUID, limit i
 // CreateChatAuditLog writes a chat audit log entry (no-op storage for mock).
 func (m *MockDB) CreateChatAuditLog(_ context.Context, _ *models.ChatAuditLog) error {
 	return runWithWLockErr(m, func() error { return nil })
+}
+
+// GetThreadByResponseID finds a thread by response_id stored in assistant message metadata.
+func (m *MockDB) GetThreadByResponseID(_ context.Context, responseID string, userID uuid.UUID) (*models.ChatThread, error) {
+	return runWithLock(m, false, func() (*models.ChatThread, error) {
+		if responseID == "" {
+			return nil, database.ErrNotFound
+		}
+		threadID := m.findThreadIDByResponseID(responseID)
+		if threadID == uuid.Nil {
+			return nil, database.ErrNotFound
+		}
+		t, ok := m.ChatThreads[threadID]
+		if !ok || t.UserID != userID {
+			return nil, database.ErrNotFound
+		}
+		return t, nil
+	})
+}
+
+func (m *MockDB) findThreadIDByResponseID(responseID string) uuid.UUID {
+	for threadID, msgs := range m.ChatMessages {
+		for _, msg := range msgs {
+			if msg.Metadata != nil && strings.Contains(*msg.Metadata, responseID) {
+				return threadID
+			}
+		}
+	}
+	return uuid.Nil
+}
+
+// ListChatThreads returns threads for the user, recent-first, optionally filtered by projectID.
+func (m *MockDB) ListChatThreads(_ context.Context, userID uuid.UUID, projectID *uuid.UUID, limit, offset int) ([]*models.ChatThread, error) {
+	return runWithLock(m, false, func() ([]*models.ChatThread, error) {
+		list := m.filterThreadsByUserAndProject(userID, projectID)
+		sort.Slice(list, func(i, j int) bool { return list[i].UpdatedAt.After(list[j].UpdatedAt) })
+		if offset >= len(list) {
+			return nil, nil
+		}
+		if offset > 0 {
+			list = list[offset:]
+		}
+		if limit > 0 && len(list) > limit {
+			list = list[:limit]
+		}
+		return list, nil
+	})
+}
+
+func (m *MockDB) filterThreadsByUserAndProject(userID uuid.UUID, projectID *uuid.UUID) []*models.ChatThread {
+	var list []*models.ChatThread
+	for _, t := range m.ChatThreads {
+		if t.UserID != userID {
+			continue
+		}
+		if projectID != nil && (t.ProjectID == nil || *t.ProjectID != *projectID) {
+			continue
+		}
+		list = append(list, t)
+	}
+	return list
+}
+
+// GetChatThreadByID returns the thread if it belongs to the user.
+func (m *MockDB) GetChatThreadByID(_ context.Context, threadID, userID uuid.UUID) (*models.ChatThread, error) {
+	return runWithLock(m, false, func() (*models.ChatThread, error) {
+		t, ok := m.ChatThreads[threadID]
+		if !ok || t.UserID != userID {
+			return nil, database.ErrNotFound
+		}
+		return t, nil
+	})
+}
+
+// UpdateChatThreadTitle updates the thread title.
+func (m *MockDB) UpdateChatThreadTitle(_ context.Context, threadID, userID uuid.UUID, title string) error {
+	return runWithWLockErr(m, func() error {
+		t, ok := m.ChatThreads[threadID]
+		if !ok || t.UserID != userID {
+			return database.ErrNotFound
+		}
+		t.Title = &title
+		t.UpdatedAt = time.Now().UTC()
+		return nil
+	})
 }
 
 // CreateSkill stores a skill in the mock.

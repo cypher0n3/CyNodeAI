@@ -1364,7 +1364,7 @@ func TestIntegration_CreateChatThread(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateUser: %v", err)
 	}
-	t1, err := db.CreateChatThread(ctx, user.ID, nil)
+	t1, err := db.CreateChatThread(ctx, user.ID, nil, nil)
 	if err != nil {
 		t.Fatalf("CreateChatThread: %v", err)
 	}
@@ -1372,7 +1372,7 @@ func TestIntegration_CreateChatThread(t *testing.T) {
 		t.Errorf("thread1: id or user_id mismatch")
 	}
 	// Second call must create a distinct thread even within the inactivity window.
-	t2, err := db.CreateChatThread(ctx, user.ID, nil)
+	t2, err := db.CreateChatThread(ctx, user.ID, nil, nil)
 	if err != nil {
 		t.Fatalf("CreateChatThread second: %v", err)
 	}
@@ -1407,5 +1407,206 @@ func assertListChatMessages(t *testing.T, db *DB, ctx context.Context, threadID 
 	}
 	if len(limited) != 1 {
 		t.Errorf("ListChatMessages (limit 1): expected 1, got %d", len(limited))
+	}
+}
+
+func TestIntegration_ListChatThreads_GetChatThread_UpdateTitle_GetThreadByResponseID(t *testing.T) {
+	db, ctx := integrationDB(t)
+	user, err := db.CreateUser(ctx, "lct-user-"+uuid.New().String(), nil)
+	if err != nil {
+		t.Fatalf("CreateUser: %v", err)
+	}
+	thread, err := db.CreateChatThread(ctx, user.ID, nil, nil)
+	if err != nil {
+		t.Fatalf("CreateChatThread: %v", err)
+	}
+	list, err := db.ListChatThreads(ctx, user.ID, nil, 10, 0)
+	if err != nil {
+		t.Fatalf("ListChatThreads: %v", err)
+	}
+	if len(list) < 1 {
+		t.Fatalf("ListChatThreads: expected at least 1, got %d", len(list))
+	}
+	got, err := db.GetChatThreadByID(ctx, thread.ID, user.ID)
+	if err != nil {
+		t.Fatalf("GetChatThreadByID: %v", err)
+	}
+	if got.ID != thread.ID {
+		t.Errorf("GetChatThreadByID: got %s, want %s", got.ID, thread.ID)
+	}
+	err = db.UpdateChatThreadTitle(ctx, thread.ID, user.ID, "New Title")
+	if err != nil {
+		t.Fatalf("UpdateChatThreadTitle: %v", err)
+	}
+	got, _ = db.GetChatThreadByID(ctx, thread.ID, user.ID)
+	if got.Title == nil || *got.Title != "New Title" {
+		t.Errorf("UpdateChatThreadTitle: got title %v", got.Title)
+	}
+	// GetThreadByResponseID (GORM jsonb containment) so integration can assert it.
+	respID := uuid.New().String()
+	meta := fmt.Sprintf(`{"response_id":%q}`, respID)
+	_, err = db.AppendChatMessage(ctx, thread.ID, "assistant", "reply", &meta)
+	if err != nil {
+		t.Fatalf("AppendChatMessage(metadata): %v", err)
+	}
+	resolved, err := db.GetThreadByResponseID(ctx, respID, user.ID)
+	if err != nil {
+		t.Fatalf("GetThreadByResponseID: %v", err)
+	}
+	if resolved.ID != thread.ID {
+		t.Errorf("GetThreadByResponseID: got thread %s, want %s", resolved.ID, thread.ID)
+	}
+}
+
+func TestIntegration_CreateChatThread_WithTitle(t *testing.T) {
+	db, ctx := integrationDB(t)
+	user, err := db.CreateUser(ctx, "ct-title-"+uuid.New().String(), nil)
+	if err != nil {
+		t.Fatalf("CreateUser: %v", err)
+	}
+	title := "My Chat"
+	thread, err := db.CreateChatThread(ctx, user.ID, nil, &title)
+	if err != nil {
+		t.Fatalf("CreateChatThread(with title): %v", err)
+	}
+	if thread.Title == nil || *thread.Title != title {
+		t.Errorf("CreateChatThread title: got %v", thread.Title)
+	}
+}
+
+func TestIntegration_ListAccessControlRulesForApiCall(t *testing.T) {
+	db, ctx := integrationDB(t)
+	now := time.Now().UTC()
+	rule := &models.AccessControlRule{
+		ID:              uuid.New(),
+		SubjectType:     "user",
+		SubjectID:       nil,
+		Action:          ActionApiCall,
+		ResourceType:    ResourceTypeProviderOperation,
+		ResourcePattern: "*",
+		Effect:          "allow",
+		Priority:        10,
+		CreatedAt:       now,
+		UpdatedAt:       now,
+	}
+	if err := db.GORM().WithContext(ctx).Create(rule).Error; err != nil {
+		t.Fatalf("create access control rule: %v", err)
+	}
+	rules, err := db.ListAccessControlRulesForApiCall(ctx, "user", nil, ActionApiCall, ResourceTypeProviderOperation)
+	if err != nil {
+		t.Fatalf("ListAccessControlRulesForApiCall: %v", err)
+	}
+	if len(rules) < 1 {
+		t.Errorf("ListAccessControlRulesForApiCall: expected at least 1 rule")
+	}
+	user, _ := db.CreateUser(ctx, "acr-user-"+uuid.New().String(), nil)
+	rule2 := &models.AccessControlRule{
+		ID:              uuid.New(),
+		SubjectType:     "user",
+		SubjectID:       &user.ID,
+		Action:          ActionApiCall,
+		ResourceType:    ResourceTypeProviderOperation,
+		ResourcePattern: "*",
+		Effect:          "allow",
+		Priority:        5,
+		CreatedAt:       now,
+		UpdatedAt:       now,
+	}
+	if err := db.GORM().WithContext(ctx).Create(rule2).Error; err != nil {
+		t.Fatalf("create rule with subject_id: %v", err)
+	}
+	rules2, err := db.ListAccessControlRulesForApiCall(ctx, "user", &user.ID, ActionApiCall, ResourceTypeProviderOperation)
+	if err != nil {
+		t.Fatalf("ListAccessControlRulesForApiCall(subjectID): %v", err)
+	}
+	if len(rules2) < 1 {
+		t.Errorf("ListAccessControlRulesForApiCall(subjectID): expected at least 1")
+	}
+}
+
+func TestIntegration_GetThreadByResponseID_EmptyID(t *testing.T) {
+	db, ctx := integrationDB(t)
+	user, err := db.CreateUser(ctx, "gtr-user-"+uuid.New().String(), nil)
+	if err != nil {
+		t.Fatalf("CreateUser: %v", err)
+	}
+	_, err = db.GetThreadByResponseID(ctx, "", user.ID)
+	if err == nil {
+		t.Fatal("expected error for empty response id")
+	}
+	if !errors.Is(err, ErrNotFound) {
+		t.Errorf("expected ErrNotFound, got %v", err)
+	}
+}
+
+func TestIntegration_GetChatThreadByID_ErrNotFound(t *testing.T) {
+	db, ctx := integrationDB(t)
+	user, err := db.CreateUser(ctx, "gct-user-"+uuid.New().String(), nil)
+	if err != nil {
+		t.Fatalf("CreateUser: %v", err)
+	}
+	_, err = db.GetChatThreadByID(ctx, uuid.New(), user.ID)
+	if err == nil {
+		t.Fatal("expected error for non-existent thread")
+	}
+	if !errors.Is(err, ErrNotFound) {
+		t.Errorf("expected ErrNotFound, got %v", err)
+	}
+}
+
+func TestIntegration_UpdateChatThreadTitle_ErrNotFound(t *testing.T) {
+	db, ctx := integrationDB(t)
+	user1, _ := db.CreateUser(ctx, "uct-u1-"+uuid.New().String(), nil)
+	user2, _ := db.CreateUser(ctx, "uct-u2-"+uuid.New().String(), nil)
+	thread, _ := db.CreateChatThread(ctx, user1.ID, nil, nil)
+	err := db.UpdateChatThreadTitle(ctx, thread.ID, user2.ID, "Other")
+	if err == nil {
+		t.Fatal("expected error when updating another user's thread")
+	}
+	if !errors.Is(err, ErrNotFound) {
+		t.Errorf("expected ErrNotFound, got %v", err)
+	}
+}
+
+func TestIntegration_ListChatThreads_WithProjectAndOffset(t *testing.T) {
+	db, ctx := integrationDB(t)
+	user, err := db.CreateUser(ctx, "lct-p-"+uuid.New().String(), nil)
+	if err != nil {
+		t.Fatalf("CreateUser: %v", err)
+	}
+	now := time.Now().UTC()
+	proj := &models.Project{
+		ID:          uuid.New(),
+		Slug:        "lct-proj-" + uuid.New().String()[:8],
+		DisplayName: "List Threads Project",
+		IsActive:    true,
+		CreatedAt:   now,
+		UpdatedAt:   now,
+	}
+	if err := db.GORM().WithContext(ctx).Create(proj).Error; err != nil {
+		t.Fatalf("create project: %v", err)
+	}
+	_, _ = db.CreateChatThread(ctx, user.ID, &proj.ID, nil)
+	_, _ = db.CreateChatThread(ctx, user.ID, &proj.ID, nil)
+	list, err := db.ListChatThreads(ctx, user.ID, &proj.ID, 10, 0)
+	if err != nil {
+		t.Fatalf("ListChatThreads(projectID): %v", err)
+	}
+	if len(list) < 2 {
+		t.Errorf("ListChatThreads(projectID): expected at least 2, got %d", len(list))
+	}
+	list1, err := db.ListChatThreads(ctx, user.ID, &proj.ID, 1, 0)
+	if err != nil {
+		t.Fatalf("ListChatThreads(limit 1): %v", err)
+	}
+	if len(list1) != 1 {
+		t.Errorf("ListChatThreads(limit 1): expected 1, got %d", len(list1))
+	}
+	listOffset, err := db.ListChatThreads(ctx, user.ID, &proj.ID, 10, 1)
+	if err != nil {
+		t.Fatalf("ListChatThreads(offset 1): %v", err)
+	}
+	if len(listOffset) != len(list)-1 {
+		t.Errorf("ListChatThreads(offset 1): expected %d, got %d", len(list)-1, len(listOffset))
 	}
 }

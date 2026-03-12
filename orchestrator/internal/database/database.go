@@ -114,8 +114,16 @@ type Store interface {
 	// Chat threads and messages (OpenAI-compatible chat API).
 	GetOrCreateActiveChatThread(ctx context.Context, userID uuid.UUID, projectID *uuid.UUID) (*models.ChatThread, error)
 	// CreateChatThread unconditionally creates a new thread for (userID, projectID), bypassing the inactivity reuse window.
-	// Use this when the user explicitly requests a new conversation (e.g. /thread new or --thread-new).
-	CreateChatThread(ctx context.Context, userID uuid.UUID, projectID *uuid.UUID) (*models.ChatThread, error)
+	// Title is optional. Use when the user explicitly requests a new conversation (e.g. /thread new or --thread-new).
+	CreateChatThread(ctx context.Context, userID uuid.UUID, projectID *uuid.UUID, title *string) (*models.ChatThread, error)
+	// GetThreadByResponseID resolves previous_response_id to the thread that owns that response (for continuation). Returns ErrNotFound if not found or not owned by userID.
+	GetThreadByResponseID(ctx context.Context, responseID string, userID uuid.UUID) (*models.ChatThread, error)
+	// ListChatThreads returns threads for the user, recent-first. Optional projectID filter. Pagination via limit and offset.
+	ListChatThreads(ctx context.Context, userID uuid.UUID, projectID *uuid.UUID, limit, offset int) ([]*models.ChatThread, error)
+	// GetChatThreadByID returns one thread if it belongs to the user; otherwise ErrNotFound.
+	GetChatThreadByID(ctx context.Context, threadID, userID uuid.UUID) (*models.ChatThread, error)
+	// UpdateChatThreadTitle updates the thread title (rename). Thread must belong to userID.
+	UpdateChatThreadTitle(ctx context.Context, threadID, userID uuid.UUID, title string) error
 	AppendChatMessage(ctx context.Context, threadID uuid.UUID, role, content string, metadata *string) (*models.ChatMessage, error)
 	// ListChatMessages returns up to limit messages for the given thread, ordered oldest-first.
 	// A limit of 0 returns all messages.

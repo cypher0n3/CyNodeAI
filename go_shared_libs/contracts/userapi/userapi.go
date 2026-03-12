@@ -3,6 +3,8 @@
 // See docs/tech_specs/user_api_gateway.md and REQ-CLIENT-0004 (CLI/Web Console parity).
 package userapi
 
+import "encoding/json"
+
 // API-facing task/job status constants (returned in REST responses; used by CLI/Web Console).
 // Canonical spelling is American "canceled".
 const (
@@ -153,4 +155,28 @@ type ChatCompletionsResponse struct {
 	Created int64                   `json:"created"`
 	Model   string                  `json:"model"`
 	Choices []ChatCompletionsChoice `json:"choices"`
+}
+
+// --- POST /v1/responses (OpenAI Responses API, first-pass) ---
+
+// ResponsesCreateRequest is the request body for POST /v1/responses.
+// Input can be a plain string or an ordered message-like array for multi-turn continuation.
+type ResponsesCreateRequest struct {
+	Model              string          `json:"model,omitempty"`
+	Input              json.RawMessage `json:"input"` // string or array of message-like items
+	PreviousResponseID string          `json:"previous_response_id,omitempty"`
+}
+
+// ResponsesOutputText is one output item in the responses format (visible text).
+type ResponsesOutputText struct {
+	Type string `json:"type"`
+	Text string `json:"text"`
+}
+
+// ResponsesCreateResponse is the response from POST /v1/responses (first-pass subset).
+type ResponsesCreateResponse struct {
+	ID      string                `json:"id"`
+	Object  string                `json:"object"`
+	Created int64                 `json:"created"`
+	Output  []ResponsesOutputText `json:"output"`
 }

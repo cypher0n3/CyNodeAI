@@ -182,29 +182,31 @@ The order inside this phase matters because later TUI work depends on these back
 
 ### Minimum Backend Surface
 
-- [ ] Implement `POST /v1/responses` on the gateway as an additive OpenAI-compatible interactive chat surface.
+- [x] Implement `POST /v1/responses` on the gateway as an additive OpenAI-compatible interactive chat surface.
 
-- [ ] Implement retained response metadata and `previous_response_id` continuation handling without changing CyNodeAI thread ownership rules.
+- [x] Implement retained response metadata and `previous_response_id` continuation handling without changing CyNodeAI thread ownership rules.
 
-- [ ] Implement normalized assistant-turn persistence so structured parts and canonical visible text are stored consistently for both interactive chat surfaces.
+- [x] Implement normalized assistant-turn persistence so structured parts and canonical visible text are stored consistently for both interactive chat surfaces.
+  (Assistant turns persisted with `response_id` in message metadata; same pipeline for completions and responses.)
 
-- [ ] Ensure chat secret redaction occurs before any chat data is persisted and before any inference handoff uses the content.
+- [x] Ensure chat secret redaction occurs before any chat data is persisted and before any inference handoff uses the content.
 
-- [ ] Implement explicit thread creation with the accepted contract.
+- [x] Implement explicit thread creation with the accepted contract.
 
-- [ ] Implement list-threads support with pagination and default recent-first ordering.
+- [x] Implement list-threads support with pagination and default recent-first ordering.
 
-- [ ] Implement get-thread and get-thread-messages behavior needed for thread history view and reload.
+- [x] Implement get-thread and get-thread-messages behavior needed for thread history view and reload.
 
-- [ ] Implement patch-thread-title support for rename flows in this round.
+- [x] Implement patch-thread-title support for rename flows in this round.
 
 ### Required Backend Validation Before TUI Wiring
 
-- [ ] Verify both interactive chat surfaces produce coherent canonical visible text plus structured-turn persistence for the same logical assistant turn.
+- [x] Verify both interactive chat surfaces produce coherent canonical visible text plus structured-turn persistence for the same logical assistant turn.
 
-- [ ] Verify the PMA path and direct-inference path both honor the same redaction, persistence, and normalized-output rules.
+- [x] Verify the PMA path and direct-inference path both honor the same redaction, persistence, and normalized-output rules.
 
-- [ ] Verify thread retrieval and active-thread behavior are stable enough that the TUI can depend on them for history and fresh-thread controls.
+- [x] Verify thread retrieval and active-thread behavior are stable enough that the TUI can depend on them for history and fresh-thread controls.
+  (Handlers and integration tests cover thread CRUD, list messages, patch title; `just ci` passes. See Progress Notes for database coverage exception.)
 
 ### Deferred Backend Work This Round
 
@@ -383,7 +385,7 @@ They must be developed in tandem so each validates the other as behavior lands, 
 - [x] Fourth, cut the TUI proposal down to the minimum first-rollout normative scope.
   (`cynork_tui.md` and Phase 0/2 checkboxes completed.)
 
-- [ ] Fifth, implement the backend chat prerequisites in this order: `POST /v1/responses`, continuation metadata, normalized assistant-turn persistence, redaction-before-persistence guarantees, then thread retrieval and rename support.
+- [x] Fifth, implement the backend chat prerequisites in this order: `POST /v1/responses`, continuation metadata, normalized assistant-turn persistence, redaction-before-persistence guarantees, then thread retrieval and rename support.
 
 - [ ] Sixth, extract or define the reusable chat or controller seams that both the TUI and Python PTY harness will depend on.
 
@@ -416,3 +418,9 @@ They must be developed in tandem so each validates the other as behavior lands, 
 - **2026-03-12:** Phase 0 locked scope decisions and Phase 2 TUI MVP spec cut completed: cynork_cli.md updated (TUI scope and locked decisions, deprecate shell, cynork tui + chat in Required Commands, MVP Scope); `cynork_tui.md` defines the minimum layout, composer, thread history, status bar, transcript rendering, generation state, slash parity, auth recovery, and explicitly deferred list.
   Execution order steps three and four done.
   Next: Phase 3 backend prerequisites, Phase 4 shared controller and test seams, Phase 5 TUI plus Python PTY harness implementation, Phase 6 validation, then follow-on docs and non-TUI MVP work.
+
+- **2026-03-12:** Phase 3 backend prerequisites completed: gateway exposes `POST /v1/responses`, thread CRUD, redaction before persistence, response metadata and `previous_response_id`, normalized assistant-turn persistence with `response_id` in metadata.
+  Handlers and database coverage >=90%.
+  `GetThreadByResponseID` reimplemented with GORM (jsonb containment + GetChatThreadByID); no Raw SQL; integration passes.
+  Execution order step five done.
+  Next: Phase 4 shared chat controller and testable seams.
