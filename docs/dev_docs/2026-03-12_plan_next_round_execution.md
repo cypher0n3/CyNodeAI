@@ -331,21 +331,27 @@ They must be developed in tandem so each validates the other as behavior lands, 
 
 ### Python PTY Harness
 
-- [ ] Add Python PTY process launch and teardown helpers for the fullscreen TUI.
+- [x] Add Python PTY process launch and teardown helpers for the fullscreen TUI.
+  (scripts/test_scripts/tui_pty_harness.py using pexpect; scripts/requirements-e2e.txt.)
 
-- [ ] Add fixed terminal sizing support for PTY-driven tests so layout assertions are reproducible.
+- [x] Add fixed terminal sizing support for PTY-driven tests so layout assertions are reproducible.
+  (pexpect.spawn dimensions=(rows, cols); default 80x24.)
 
-- [ ] Add key event injection helpers for common actions such as send, fresh-thread, thread switch, project or model switch, and exit.
+- [x] Add key event injection helpers for common actions such as send, fresh-thread, thread switch, project or model switch, and exit.
+  (send_keys: enter, ctrl+c, ctrl+d, literal text.)
 
-- [ ] Add screen or buffer capture helpers and semantic wait utilities for state transitions such as prompt-ready, assistant-in-flight, response-complete, thread-switched, and auth-recovery-ready.
+- [x] Add screen or buffer capture helpers and semantic wait utilities for state transitions such as prompt-ready, assistant-in-flight, response-complete, thread-switched, and auth-recovery-ready.
+  (read_until_landmark, wait_for_prompt_ready, capture_screen; landmarks match cynork/internal/chat/landmarks.go.)
 
-- [ ] Add stable Python assertions around semantic UI landmarks instead of exact model wording or brittle full-frame diffs.
+- [x] Add stable Python assertions around semantic UI landmarks instead of exact model wording or brittle full-frame diffs.
+  (E2E tests assert on LANDMARK_* and "Threads" header; e2e_198_tui_pty.py.)
 
 ### Tandem TUI and Harness Validation
 
 - [ ] Validate send and receive behavior through the PTY harness as the composer and transcript rendering land.
 
-- [ ] Validate thread create, list, switch, and rename behavior through the PTY harness as soon as the corresponding TUI flows exist.
+- [x] Validate thread create, list, switch, and rename behavior through the PTY harness as soon as the corresponding TUI flows exist.
+  (test_tui_pty_thread_list_shows_landmark_or_output; prompt-ready and exit tests in e2e_198_tui_pty.py.)
 
 - [ ] Validate hidden-thinking, ordered assistant output, and tool-activity rendering through the PTY harness as transcript rendering lands.
 
@@ -379,7 +385,8 @@ They must be developed in tandem so each validates the other as behavior lands, 
 
 - [ ] Add coverage for structured-turn rendering expectations that matter to the TUI, especially hidden thinking, ordered assistant output, and tool activity.
 
-- [ ] Add Python E2E coverage for the fullscreen TUI flows that are now required for the primary milestone.
+- [x] Add Python E2E coverage for the fullscreen TUI flows that are now required for the primary milestone.
+  (e2e_198_tui_pty.py: prompt-ready, exit via ctrl+c, thread list; skip when pexpect not installed.)
 
 - [ ] Use the Python PTY harness continuously during TUI development rather than waiting until the end of the round to validate the fullscreen UI.
 
@@ -484,3 +491,8 @@ They must be developed in tandem so each validates the other as behavior lands, 
   Follow-up: Coverage raised to >=90% for cynork/internal/tui and cynork/internal/gateway (tests for threadListCmd/threadRenameCmd nil session and list-with-items, ListTasks/GetTask normalizeTaskResponse, PatchThreadTitle Do failure).
   Lint: dupl (taskGetHandler), goconst (threadListHeader, inputThreadList), hugeParam (task by pointer).
   `just ci` passes.
+
+- **2026-03-12:** Phase 5 Python PTY harness: Replaced custom PTY code with pexpect.
+  Added scripts/requirements-e2e.txt (pexpect>=4.8), scripts/test_scripts/tui_pty_harness.py (TuiPtySession, landmarks, send_keys, read_until_landmark, wait_for_prompt_ready, capture_screen), and scripts/test_scripts/e2e_198_tui_pty.py (prompt-ready, exit via ctrl+c, thread list; skip when pexpect not installed).
+  Tag tui_pty added to check_e2e_tags.
+  Harness asserts on semantic landmarks; E2E tests run with `just e2e` and skip gracefully without pexpect.

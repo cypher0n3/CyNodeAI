@@ -41,6 +41,7 @@ ALLOWED_TAGS = frozenset({
     "chat_capable",
     "worker",
     "uds_routing",
+    "tui_pty",
 })
 
 

@@ -1,0 +1,4 @@
+# Optional E2E deps: PTY harness for cynork TUI tests.
+# Install with: pip install -r scripts/requirements-e2e.txt
+# TUI PTY tests are skipped if pexpect is not installed.
+pexpect>=4.8
