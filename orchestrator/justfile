@@ -1,0 +1,73 @@
+# Orchestrator module: build binaries and images. From repo root: just orchestrator/build-dev
+# shellcheck disable=SC2148,SC1007
+set shell := ["bash", "-euo", "pipefail", "-c"]
+
+root_dir := justfile_directory() / ".."
+
+_build_prod name pkg_path out_dir:
+    #!/usr/bin/env bash
+    set -e
+    root="$(cd "{{ root_dir }}" && pwd)"
+    mkdir -p "$root/{{ out_dir }}"
+    pushd "$root" >/dev/null
+    trap 'popd >/dev/null 2>/dev/null || true' EXIT
+    CGO_ENABLED=0 GOEXPERIMENT=runtimesecret go build -ldflags="-s -w" -o "$root/{{ out_dir }}/{{ name }}" {{ pkg_path }}
+    command -v upx >/dev/null 2>&1 && upx --best "$root/{{ out_dir }}/{{ name }}" || true
+    echo "Built: $root/{{ out_dir }}/{{ name }}"
+
+_build_dev name pkg_path out_dir:
+    #!/usr/bin/env bash
+    set -e
+    root="$(cd "{{ root_dir }}" && pwd)"
+    mkdir -p "$root/{{ out_dir }}"
+    pushd "$root" >/dev/null
+    trap 'popd >/dev/null 2>/dev/null || true' EXIT
+    GOEXPERIMENT=runtimesecret go build -gcflags="all=-N -l" -o "$root/{{ out_dir }}/{{ name }}-dev" {{ pkg_path }}
+    echo "Built: $root/{{ out_dir }}/{{ name }}-dev"
+
+_build_container containerfile tag *ARGS:
+    #!/usr/bin/env bash
+    set -e
+    root="$(cd "{{ root_dir }}" && pwd)"
+    pushd "$root" >/dev/null
+    trap 'popd >/dev/null 2>/dev/null || true' EXIT
+    if command -v podman >/dev/null 2>&1; then
+      podman build -f "{{ containerfile }}" -t "{{ tag }}" {{ ARGS }} .
+    else
+      docker build -f "{{ containerfile }}" -t "{{ tag }}" {{ ARGS }} .
+    fi
+
+install-go:
+    @just --justfile "{{ root_dir }}/justfile" --working-directory "{{ root_dir }}" install-go
+
+build: install-go
+    @just build-control-plane build-user-gateway build-api-egress build-mcp-gateway
+
+build-dev: install-go
+    @just build-control-plane-dev build-user-gateway-dev build-api-egress-dev build-mcp-gateway-dev
+
+build-control-plane: install-go
+    @just _build_prod control-plane ./orchestrator/cmd/control-plane orchestrator/bin
+build-control-plane-dev: install-go
+    @just _build_dev control-plane ./orchestrator/cmd/control-plane orchestrator/bin
+build-user-gateway: install-go
+    @just _build_prod user-gateway ./orchestrator/cmd/user-gateway orchestrator/bin
+build-user-gateway-dev: install-go
+    @just _build_dev user-gateway ./orchestrator/cmd/user-gateway orchestrator/bin
+build-api-egress: install-go
+    @just _build_prod api-egress ./orchestrator/cmd/api-egress orchestrator/bin
+build-api-egress-dev: install-go
+    @just _build_dev api-egress ./orchestrator/cmd/api-egress orchestrator/bin
+build-mcp-gateway: install-go
+    @just _build_prod mcp-gateway ./orchestrator/cmd/mcp-gateway orchestrator/bin
+build-mcp-gateway-dev: install-go
+    @just _build_dev mcp-gateway ./orchestrator/cmd/mcp-gateway orchestrator/bin
+
+build-control-plane-image *ARGS:
+    @just _build_container orchestrator/cmd/control-plane/Containerfile cynodeai-control-plane:dev {{ ARGS }}
+build-user-gateway-image *ARGS:
+    @just _build_container orchestrator/cmd/user-gateway/Containerfile cynodeai-user-gateway:dev {{ ARGS }}
+build-api-egress-image *ARGS:
+    @just _build_container orchestrator/cmd/api-egress/Containerfile cynodeai-api-egress:dev {{ ARGS }}
+build-mcp-gateway-image *ARGS:
+    @just _build_container orchestrator/cmd/mcp-gateway/Containerfile cynodeai-mcp-gateway:dev {{ ARGS }}

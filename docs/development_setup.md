@@ -35,6 +35,7 @@ This guide explains how to set up and run the CyNodeAI MVP Phase 1 development e
 - **curl**, **jq**: For testing API endpoints and E2E scripts
 
 Use the project [justfile](../justfile) for tooling; run `just` to list targets.
+Dev setup commands (`just setup-dev start`, etc.) are implemented in just/shell in `scripts/justfile`; run `just setup-dev help` for help.
 
 ## Quick Start
 

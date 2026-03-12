@@ -21,7 +21,7 @@ CONTROL_PLANE_API = f"http://localhost:{CONTROL_PLANE_PORT}"
 API_EGRESS_PORT = int(os.environ.get("API_EGRESS_PORT", "12084"))
 API_EGRESS_API = os.environ.get("API_EGRESS_API") or f"http://localhost:{API_EGRESS_PORT}"
 
-# Worker API (for telemetry E2E; dev stack uses same token as setup_dev_config)
+# Worker API (for telemetry E2E; dev stack uses same token as dev/justfile defaults)
 WORKER_PORT = int(os.environ.get("WORKER_PORT", "12090"))
 WORKER_API = os.environ.get("WORKER_API") or f"http://localhost:{WORKER_PORT}"
 WORKER_API_BEARER_TOKEN = os.environ.get(

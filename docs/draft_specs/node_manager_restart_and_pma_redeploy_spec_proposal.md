@@ -23,7 +23,7 @@ Three related capabilities:
 
 1. **Independent node-manager restart:** Operators and dev workflows must be able to restart the node-manager (and its managed services, including worker-api and PMA) without stopping the orchestrator stack (compose/control-plane, user-gateway, postgres, etc.).
 2. **Orchestrator-triggered PMA restart/redeploy:** The orchestrator must be able to instruct the node (node-manager) to restart or redeploy the PMA managed service when needed (e.g. config change, token rotation, image update), using current mechanisms where possible.
-3. **Python setup-dev:** The Python setup-dev scripts (`setup_dev.py` / `setup_dev_impl.py`) must support (1) and (2) using the same mechanisms as production (stop/start node only; PMA redeploy via config push or documented workflow).
+3. **Setup-dev (scripts/justfile):** The native just/shell dev setup (`scripts/justfile`) must support (1) and (2) using the same mechanisms as production (stop/start node only; PMA redeploy via config push or documented workflow).
 
 ## Goals
 
@@ -101,11 +101,11 @@ Python setup-dev must support stop-node, start-node, and restart-node using curr
   - stop-node: Stop only the node-manager (SIGTERM, wait for exit) and optionally clean node-managed containers; do not run compose down.
   - start-node: Start only the node-manager (assume orchestrator stack is already up); same env and binary as `start`; wait for worker-api healthz and optionally orchestrator readyz.
   - restart-node: stop-node then start-node.
-- Implementation in `scripts/setup_dev_impl.py`:
+- Implementation in `scripts/justfile` (native setup-dev):
   - Add `stop_node_only()` that performs: (1) capture container logs if desired, (2) kill node-manager (read PID from `NODE_MANAGER_PID_FILE`, SIGTERM, wait up to 15s, then SIGKILL if needed), (3) optionally run the same "stop node-managed containers" cleanup used in `stop_all()`.
   - Do not call `stop_orchestrator_stack_compose()` or free worker port in a way that affects other services.
   - Add or reuse `start_node()` for "start node only"; caller must ensure orchestrator stack is already up.
-- Implementation in `scripts/setup_dev.py`:
+- Entry point `just setup-dev`:
   - Add commands: `stop-node`, `start-node`, `restart-node` (restart-node = stop-node then start-node).
   - Document that these are invoked as `just setup-dev stop-node` etc. once the Python script supports them (justfile passes command through).
 - PMA redeploy in dev:
@@ -140,4 +140,4 @@ Python setup-dev must support stop-node, start-node, and restart-node using curr
 - [orchestrator_bootstrap.md](../tech_specs/orchestrator_bootstrap.md) (PMA startup, worker-reported status)
 - [development_setup.md](../development_setup.md) (setup-dev commands)
 - [scripts/README.md](../../scripts/README.md) (setup-dev commands, startup sequence)
-- [setup_dev_impl.py](../../scripts/setup_dev_impl.py) (`start_node`, `stop_all`, node-manager PID and cleanup)
+- [scripts/justfile](../../scripts/justfile) (`start`, `stop`, `_start_node`, `_stop_node`, node-manager PID and cleanup)

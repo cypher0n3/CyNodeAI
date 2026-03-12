@@ -1,0 +1,67 @@
+# Worker node module: build binaries and images. From repo root: just worker_node/build-dev
+# shellcheck disable=SC2148,SC1007
+set shell := ["bash", "-euo", "pipefail", "-c"]
+
+root_dir := justfile_directory() / ".."
+
+_build_prod name pkg_path out_dir:
+    #!/usr/bin/env bash
+    set -e
+    root="$(cd "{{ root_dir }}" && pwd)"
+    mkdir -p "$root/{{ out_dir }}"
+    pushd "$root" >/dev/null
+    trap 'popd >/dev/null 2>/dev/null || true' EXIT
+    CGO_ENABLED=0 GOEXPERIMENT=runtimesecret go build -ldflags="-s -w" -o "$root/{{ out_dir }}/{{ name }}" {{ pkg_path }}
+    command -v upx >/dev/null 2>&1 && upx --best "$root/{{ out_dir }}/{{ name }}" || true
+    echo "Built: $root/{{ out_dir }}/{{ name }}"
+
+_build_dev name pkg_path out_dir:
+    #!/usr/bin/env bash
+    set -e
+    root="$(cd "{{ root_dir }}" && pwd)"
+    mkdir -p "$root/{{ out_dir }}"
+    pushd "$root" >/dev/null
+    trap 'popd >/dev/null 2>/dev/null || true' EXIT
+    GOEXPERIMENT=runtimesecret go build -gcflags="all=-N -l" -o "$root/{{ out_dir }}/{{ name }}-dev" {{ pkg_path }}
+    echo "Built: $root/{{ out_dir }}/{{ name }}-dev"
+
+_build_container containerfile tag *ARGS:
+    #!/usr/bin/env bash
+    set -e
+    root="$(cd "{{ root_dir }}" && pwd)"
+    pushd "$root" >/dev/null
+    trap 'popd >/dev/null 2>/dev/null || true' EXIT
+    if command -v podman >/dev/null 2>&1; then
+      podman build -f "{{ containerfile }}" -t "{{ tag }}" {{ ARGS }} .
+    else
+      docker build -f "{{ containerfile }}" -t "{{ tag }}" {{ ARGS }} .
+    fi
+
+install-go:
+    @just --justfile "{{ root_dir }}/justfile" --working-directory "{{ root_dir }}" install-go
+
+build: install-go
+    @just build-worker-api build-node-manager build-inference-proxy
+
+build-dev: install-go
+    @just build-worker-api-dev build-node-manager-dev build-inference-proxy-dev
+
+build-worker-api: install-go
+    @just _build_prod worker-api ./worker_node/cmd/worker-api worker_node/bin
+build-worker-api-dev: install-go
+    @just _build_dev worker-api ./worker_node/cmd/worker-api worker_node/bin
+build-node-manager: install-go
+    @just _build_prod cynodeai-wnm ./worker_node/cmd/node-manager worker_node/bin
+build-node-manager-dev: install-go
+    @just _build_dev cynodeai-wnm ./worker_node/cmd/node-manager worker_node/bin
+build-inference-proxy: install-go
+    @just _build_prod inference-proxy ./worker_node/cmd/inference-proxy worker_node/bin
+build-inference-proxy-dev: install-go
+    @just _build_dev inference-proxy ./worker_node/cmd/inference-proxy worker_node/bin
+
+build-worker-api-image *ARGS:
+    @just _build_container worker_node/cmd/worker-api/Containerfile cynodeai-worker-api {{ ARGS }}
+build-node-manager-image *ARGS:
+    @just _build_container worker_node/cmd/node-manager/Containerfile cynodeai-node-manager:dev {{ ARGS }}
+build-inference-proxy-image *ARGS:
+    @just _build_container worker_node/cmd/inference-proxy/Containerfile cynodeai-inference-proxy:dev {{ ARGS }}

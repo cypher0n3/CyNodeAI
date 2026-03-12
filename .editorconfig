@@ -3,6 +3,10 @@
 # top-most EditorConfig file
 root = true
 
+[justfile]
+indent_style = space
+indent_size = 2
+
 [*.{md,sh,yml,yaml}]
 indent_style = space
 indent_size = 2

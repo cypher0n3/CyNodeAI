@@ -1,0 +1,34 @@
+# Cynork CLI module: build. From repo root: just cynork/build-dev
+# shellcheck disable=SC2148,SC1007
+set shell := ["bash", "-euo", "pipefail", "-c"]
+
+root_dir := justfile_directory() / ".."
+
+_build_prod name pkg_path out_dir:
+    #!/usr/bin/env bash
+    set -e
+    root="$(cd "{{ root_dir }}" && pwd)"
+    mkdir -p "$root/{{ out_dir }}"
+    pushd "$root" >/dev/null
+    trap 'popd >/dev/null 2>/dev/null || true' EXIT
+    CGO_ENABLED=0 GOEXPERIMENT=runtimesecret go build -ldflags="-s -w" -o "$root/{{ out_dir }}/{{ name }}" {{ pkg_path }}
+    command -v upx >/dev/null 2>&1 && upx --best "$root/{{ out_dir }}/{{ name }}" || true
+    echo "Built: $root/{{ out_dir }}/{{ name }}"
+
+_build_dev name pkg_path out_dir:
+    #!/usr/bin/env bash
+    set -e
+    root="$(cd "{{ root_dir }}" && pwd)"
+    mkdir -p "$root/{{ out_dir }}"
+    pushd "$root" >/dev/null
+    trap 'popd >/dev/null 2>/dev/null || true' EXIT
+    GOEXPERIMENT=runtimesecret go build -gcflags="all=-N -l" -o "$root/{{ out_dir }}/{{ name }}-dev" {{ pkg_path }}
+    echo "Built: $root/{{ out_dir }}/{{ name }}-dev"
+
+install-go:
+    @just --justfile "{{ root_dir }}/justfile" --working-directory "{{ root_dir }}" install-go
+
+build: install-go
+    @just _build_prod cynork ./cynork cynork/bin
+build-dev: install-go
+    @just _build_dev cynork ./cynork cynork/bin

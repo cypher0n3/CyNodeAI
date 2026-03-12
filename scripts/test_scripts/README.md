@@ -72,7 +72,7 @@ just e2e --tags suite_proxy_pma
 
 - `just e2e` - run the Python E2E suite (stack must already be up).
   Pass options: `just e2e --no-build`, `just e2e -v`, etc.
-- `just setup-dev test-e2e` - run the suite via `scripts/setup_dev.py` (same as above, ensures PYTHONPATH).
+- `just setup-dev test-e2e` - run the suite via scripts/justfile (same as above, ensures PYTHONPATH).
 - `just setup-dev full-demo` - start stack and node, then run only tests tagged `full_demo` (excludes subset-only tests such as proxy+PMA functional tests that start their own services); use `--stop-on-success` to tear down after pass.
   - For E2E that expects OLLAMA in compose, use `just setup-dev full-demo --ollama-in-stack`.
 
@@ -138,7 +138,7 @@ Running a single test in isolation (e.g. `-k test_task_create`) will fail if it 
 
 ## Environment
 
-Same as `scripts/setup_dev.py`; see also `docs/tech_specs/ports_and_endpoints.md`.
+Same as `just setup-dev` (scripts/justfile); see also `docs/tech_specs/ports_and_endpoints.md`.
 
 - **Ports:** `ORCHESTRATOR_PORT` (default 12080), `CONTROL_PLANE_PORT` (12082)
 - **Auth/node:** `ADMIN_PASSWORD` (default admin123), `NODE_PSK` (default dev-node-psk-secret)

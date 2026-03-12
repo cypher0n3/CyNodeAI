@@ -1,0 +1,363 @@
+# Dev setup and E2E (scripts/). Invoke from repo root: just setup-dev start, just scripts/start
+# shellcheck disable=SC2148,SC1007
+set shell := ["bash", "-euo", "pipefail", "-c"]
+
+root_dir := justfile_directory() / ".."
+compose_file := root_dir / "orchestrator" / "docker-compose.yml"
+
+_format_names := "{{" + ".Names}}"
+postgres_container := "cynodeai-postgres-dev"
+node_manager_pid_file := env('TMPDIR', '/tmp') + "/cynodeai-node-manager.pid"
+node_state_dir := env('TMPDIR', '/tmp') + "/cynodeai-node-state"
+logs_dir := env('CYNODEAI_LOGS_DIR', env('TMPDIR', '/tmp') + "/cynodeai-setup-dev-logs")
+node_manager_bin := root_dir / "worker_node" / "bin" / "cynodeai-wnm-dev"
+worker_api_bin := root_dir / "worker_node" / "bin" / "worker-api-dev"
+
+help:
+    @echo "CyNodeAI Development Setup (just/shell)"
+    @echo ""
+    @echo "Usage: just setup-dev <command> [OPTIONS]  or  just scripts/<command>"
+    @echo ""
+    @echo "Commands: start-db, stop-db, clean-db, migrate, build, build-e2e-images, start, stop, restart, clean, component <name> <action>, test-e2e, full-demo, e2e, help"
+
+start-db:
+    #!/usr/bin/env bash
+    set -e
+    root="$(cd "{{ root_dir }}" && pwd)"
+    if podman ps >/dev/null 2>&1; then
+      rt=podman
+      host_alias=host.containers.internal
+    elif docker ps >/dev/null 2>&1; then
+      rt=docker
+      host_alias=host.docker.internal
+    else
+      echo "[ERROR] podman or docker required"
+      exit 1
+    fi
+    pg_user="${POSTGRES_USER:-cynodeai}"
+    pg_pass="${POSTGRES_PASSWORD:-cynodeai-dev-password}"
+    pg_db="${POSTGRES_DB:-cynodeai}"
+    pg_port="${POSTGRES_PORT:-5432}"
+    pg_image="${POSTGRES_IMAGE:-pgvector/pgvector:pg16}"
+    name="{{ postgres_container }}"
+    if $rt ps --format '{{ _format_names }}' 2>/dev/null | grep -qx "$name"; then
+      echo "[INFO] PostgreSQL already running"
+      exit 0
+    fi
+    if $rt ps -a --format '{{ _format_names }}' 2>/dev/null | grep -qx "$name"; then
+      $rt start "$name"
+    else
+      $rt run -d --name "$name" \
+        -e "POSTGRES_USER=$pg_user" \
+        -e "POSTGRES_PASSWORD=$pg_pass" \
+        -e "POSTGRES_DB=$pg_db" \
+        -p "${pg_port}:5432" \
+        -v cynodeai-postgres-data:/var/lib/postgresql/data \
+        $pg_image
+    fi
+    for i in $(seq 1 60); do
+      $rt exec "$name" pg_isready -U "$pg_user" -d "$pg_db" 2>/dev/null && echo "[INFO] PostgreSQL is ready" && exit 0
+      sleep 1
+    done
+    echo "[ERROR] PostgreSQL did not become ready"; exit 1
+
+stop-db:
+    #!/usr/bin/env bash
+    set -e
+    rt=""
+    podman ps >/dev/null 2>&1 && rt=podman
+    [ -z "$rt" ] && docker ps >/dev/null 2>&1 && rt=docker
+    case "$rt" in
+    podman|docker)
+    $rt stop "{{ postgres_container }}" 2>/dev/null || true
+    echo "[INFO] PostgreSQL stopped"
+    ;;
+    *)
+    echo "[ERROR] podman or docker required"
+    exit 1
+    ;;
+    esac
+
+clean-db:
+    #!/usr/bin/env bash
+    set -e
+    rt=""
+    podman ps >/dev/null 2>&1 && rt=podman
+    [ -z "$rt" ] && docker ps >/dev/null 2>&1 && rt=docker
+    case "$rt" in
+    podman|docker)
+    $rt stop "{{ postgres_container }}" 2>/dev/null || true
+    $rt rm "{{ postgres_container }}" 2>/dev/null || true
+    $rt volume rm cynodeai-postgres-data 2>/dev/null || true
+    echo "[INFO] Done"
+    ;;
+    *)
+    echo "[ERROR] podman or docker required"
+    exit 1
+    ;;
+    esac
+
+migrate:
+    @echo "[INFO] Migrations run when control-plane starts."
+
+# Build all dev binaries (root delegates to modules)
+build:
+    @just build-dev
+
+# E2E images (worker_node + agents)
+build-e2e-images:
+    @just worker_node/build-inference-proxy-image
+    @just agents/build-cynode-sba-image
+
+start *ARGS:
+    just scripts/_start_impl {{ ARGS }}
+
+_start_impl *ARGS:
+    #!/usr/bin/env bash
+    set -e
+    root="$(cd "{{ root_dir }}" && pwd)"
+    [ -f "$root/.env.dev" ] && set -a && . "$root/.env.dev" && set +a
+    ollama_in_stack=false
+    for a in "$@"; do [ "$a" = "--ollama-in-stack" ] && ollama_in_stack=true; done
+    [ "$SETUP_DEV_OLLAMA_IN_STACK" = "1" ] && ollama_in_stack=true
+    echo "[INFO] Building dev binaries..."; just build-dev
+    echo "[INFO] Building cynode-pma image..."; just agents/build-cynode-pma-image
+    rt=""
+    podman ps >/dev/null 2>&1 && rt=podman
+    [ -z "$rt" ] && docker ps >/dev/null 2>&1 && rt=docker
+    case "$rt" in
+    podman)
+    host_alias=host.containers.internal
+    ;;
+    docker)
+    host_alias=host.docker.internal
+    ;;
+    *)
+    echo "[ERROR] podman or docker required"
+    exit 1
+    ;;
+    esac
+    export POSTGRES_USER="${POSTGRES_USER:-cynodeai}"
+    export POSTGRES_PASSWORD="${POSTGRES_PASSWORD:-cynodeai-dev-password}"
+    export POSTGRES_DB="${POSTGRES_DB:-cynodeai}"
+    export POSTGRES_PORT="${POSTGRES_PORT:-5432}"
+    export JWT_SECRET="${JWT_SECRET:-dev-jwt-secret-change-in-production}"
+    export NODE_REGISTRATION_PSK="${NODE_PSK:-dev-node-psk-secret}"
+    export WORKER_API_BEARER_TOKEN="${WORKER_API_BEARER_TOKEN:-dev-worker-api-token-change-me}"
+    export CONTROL_PLANE_PORT="${CONTROL_PLANE_PORT:-12082}"
+    export ORCHESTRATOR_PORT="${ORCHESTRATOR_PORT:-12080}"
+    export BOOTSTRAP_ADMIN_PASSWORD="${ADMIN_PASSWORD:-admin123}"
+    export PMA_ENABLED="false"
+    export PMA_IMAGE="cynodeai-cynode-pma:dev"
+    export WORKER_API_TARGET_URL="http://${host_alias}:${WORKER_PORT:-12090}"
+    export OLLAMA_BASE_URL="${OLLAMA_BASE_URL:-http://${host_alias}:11434}"
+    $rt compose -f "$root/orchestrator/docker-compose.yml" --profile ollama down 2>/dev/null || true
+    $rt rm -f cynodeai-control-plane cynodeai-user-gateway cynodeai-cynode-pma 2>/dev/null || true
+    profiles=""; $ollama_in_stack && profiles="--profile ollama"
+    (cd "$root" && $rt compose -f orchestrator/docker-compose.yml $profiles up -d)
+    export ORCHESTRATOR_URL="http://localhost:${CONTROL_PLANE_PORT}"
+    export NODE_REGISTRATION_PSK="${NODE_PSK:-dev-node-psk-secret}"
+    export NODE_SLUG="${NODE_SLUG:-dev-node-1}"
+    export NODE_NAME="${NODE_NAME:-Development Node}"
+    export NODE_MANAGER_WORKER_API_BIN="$root/worker_node/bin/worker-api-dev"
+    export LISTEN_ADDR=":${WORKER_PORT:-12090}"
+    export NODE_ADVERTISED_WORKER_API_URL="${NODE_ADVERTISED_WORKER_API_URL:-http://${host_alias}:${WORKER_PORT:-12090}}"
+    export CONTAINER_RUNTIME="${CONTAINER_RUNTIME:-podman}"
+    export OLLAMA_IMAGE="${OLLAMA_IMAGE:-ollama/ollama:rocm}"
+    export WORKER_API_STATE_DIR="${WORKER_API_STATE_DIR:-{{ node_state_dir }}}"
+    export CYNODE_SECURE_STORE_MASTER_KEY_B64="${CYNODE_SECURE_STORE_MASTER_KEY_B64:-}"
+    mkdir -p "$(dirname {{ node_manager_pid_file }})" "$WORKER_API_STATE_DIR" "{{ logs_dir }}"
+    [ ! -f "{{ node_manager_bin }}" ] && echo "[ERROR] node-manager not found" && exit 1
+    (pgrep -f cynodeai-wnm || true) | xargs -r kill -TERM 2>/dev/null || true
+    (pgrep -f worker-api-dev || true) | xargs -r kill -TERM 2>/dev/null || true
+    sleep 2
+    nohup "{{ node_manager_bin }}" >> "{{ logs_dir }}/cynodeai-wnm.log" 2>&1 &; echo $! > "{{ node_manager_pid_file }}"
+    for i in $(seq 1 30); do
+      curl -sf "http://localhost:${WORKER_PORT:-12090}/healthz" >/dev/null 2>&1 && break
+      sleep 1
+    done
+    for i in $(seq 1 60); do
+      code=$(curl -s -o /dev/null -w "%{http_code}" "http://localhost:${CONTROL_PLANE_PORT:-12082}/readyz" 2>/dev/null)
+      [ "$code" = "200" ] && echo "[INFO] Orchestrator is ready." && exit 0
+      sleep 1
+    done
+    echo "[ERROR] Orchestrator not ready after 60s"; exit 1
+
+stop:
+    #!/usr/bin/env bash
+    set -e
+    root="$(cd "{{ root_dir }}" && pwd)"
+    [ -f "{{ node_manager_pid_file }}" ] && kill -TERM "$(cat {{ node_manager_pid_file }})" 2>/dev/null || true; rm -f "{{ node_manager_pid_file }}"
+    (pgrep -f cynodeai-wnm || true) | xargs -r kill -TERM 2>/dev/null || true
+    (pgrep -f worker-api-dev || true) | xargs -r kill -TERM 2>/dev/null || true
+    sleep 2
+    rt=""
+    podman ps >/dev/null 2>&1 && rt=podman
+    [ -z "$rt" ] && docker ps >/dev/null 2>&1 && rt=docker
+    case "$rt" in
+    podman|docker) ;;
+    *) rt=podman ;;
+    esac
+    $rt compose -f "$root/orchestrator/docker-compose.yml" --profile ollama down 2>/dev/null || true
+    $rt rm -f cynodeai-postgres cynodeai-control-plane cynodeai-user-gateway cynodeai-cynode-pma cynodeai-mcp-gateway cynodeai-api-egress 2>/dev/null || true
+    echo "[INFO] Stopped."
+
+restart *ARGS:
+    @just scripts/stop
+    @sleep 3
+    @just scripts/start {{ ARGS }}
+
+clean:
+    @just scripts/stop
+    #!/usr/bin/env bash
+    set -e
+    rt=""
+    podman ps >/dev/null 2>&1 && rt=podman
+    [ -z "$rt" ] && docker ps >/dev/null 2>&1 && rt=docker
+    case "$rt" in
+    podman|docker)
+    $rt volume rm orchestrator_ollama-data 2>/dev/null || true
+    just scripts/clean-db
+    ;;
+    *) ;;
+    esac
+
+test-e2e *ARGS:
+    #!/usr/bin/env bash
+    set -e
+    root="$(cd "{{ root_dir }}" && pwd)"
+    pushd "$root" >/dev/null
+    trap 'popd >/dev/null 2>/dev/null || true' EXIT
+    export PYTHONPATH="$root"
+    export INFERENCE_PROXY_IMAGE="${INFERENCE_PROXY_IMAGE:-cynodeai-inference-proxy:dev}"
+    export OLLAMA_UPSTREAM_URL="${OLLAMA_UPSTREAM_URL:-http://host.containers.internal:11434}"
+    python3 scripts/test_scripts/run_e2e.py {{ ARGS }}
+
+full-demo *ARGS:
+    #!/usr/bin/env bash
+    set -e
+    root="$(cd "{{ root_dir }}" && pwd)"
+    stop_on_success=false
+    for a in "$@"; do [ "$a" = "--stop-on-success" ] && stop_on_success=true; done
+    [ "$STOP_ON_SUCCESS_ENV" = "1" ] && stop_on_success=true
+    just build-dev
+    just scripts/build-e2e-images
+    just orchestrator/build-control-plane-image
+    just orchestrator/build-user-gateway-image
+    just scripts/start
+    export NODE_STATE_DIR="{{ node_state_dir }}"
+    ok=0; (cd "$root" && PYTHONPATH="$root" python3 scripts/test_scripts/run_e2e.py --tags full_demo) && ok=1
+    [ "$stop_on_success" = "true" ] && [ "$ok" = "1" ] && just scripts/stop
+    [ "$ok" = "1" ] || exit 1
+
+component name action *ARGS:
+    #!/usr/bin/env bash
+    set -e
+    root="$(cd "{{ root_dir }}" && pwd)"
+    n="{{ name }}"; a="{{ action }}"
+    if [ "$n" = "node-manager" ]; then
+      [ "$a" = "start" ] && just scripts/_start_node
+      [ "$a" = "stop" ] && just scripts/_stop_node
+      [ "$a" = "restart" ] && { just scripts/_stop_node; sleep 2; just scripts/_start_node; }
+      [ "$a" = "rebuild" ] && just worker_node/build-node-manager-dev
+      exit 0
+    fi
+    rt=""
+    podman ps >/dev/null 2>&1 && rt=podman
+    [ -z "$rt" ] && docker ps >/dev/null 2>&1 && rt=docker
+    case "$rt" in
+    podman|docker) ;;
+    *)
+    echo "[ERROR] podman or docker required"
+    exit 1
+    ;;
+    esac
+    export POSTGRES_USER="${POSTGRES_USER:-cynodeai}"
+    export POSTGRES_PASSWORD="${POSTGRES_PASSWORD:-cynodeai-dev-password}"
+    export POSTGRES_DB="${POSTGRES_DB:-cynodeai}"
+    export JWT_SECRET="${JWT_SECRET:-dev-jwt-secret}"
+    export NODE_REGISTRATION_PSK="${NODE_PSK:-dev-node-psk-secret}"
+    export WORKER_API_BEARER_TOKEN="${WORKER_API_BEARER_TOKEN:-dev-worker-api-token}"
+    export CONTROL_PLANE_PORT="${CONTROL_PLANE_PORT:-12082}"
+    export ORCHESTRATOR_PORT="${ORCHESTRATOR_PORT:-12080}"
+    export BOOTSTRAP_ADMIN_PASSWORD="${ADMIN_PASSWORD:-admin123}"
+    export PMA_IMAGE="cynodeai-cynode-pma:dev"
+    case "$n" in
+      postgres)
+        if [ "$a" = "start" ]; then
+          (cd "$root" && $rt compose -f orchestrator/docker-compose.yml up -d postgres)
+        elif [ "$a" = "stop" ]; then
+          (cd "$root" && $rt compose -f orchestrator/docker-compose.yml stop postgres)
+        fi
+        ;;
+      control-plane)
+        if [ "$a" = "start" ]; then
+          (cd "$root" && $rt compose -f orchestrator/docker-compose.yml up -d control-plane)
+        elif [ "$a" = "stop" ]; then
+          (cd "$root" && $rt compose -f orchestrator/docker-compose.yml stop control-plane)
+        elif [ "$a" = "rebuild" ]; then
+          just orchestrator/build-control-plane-image
+        fi
+        ;;
+      user-gateway)
+        if [ "$a" = "start" ]; then
+          (cd "$root" && $rt compose -f orchestrator/docker-compose.yml up -d user-gateway)
+        elif [ "$a" = "stop" ]; then
+          (cd "$root" && $rt compose -f orchestrator/docker-compose.yml stop user-gateway)
+        elif [ "$a" = "rebuild" ]; then
+          just orchestrator/build-user-gateway-image
+        fi
+        ;;
+      *)
+        echo "[ERROR] Unknown component: $n $a"
+        exit 1
+        ;;
+    esac
+
+_start_node:
+    #!/usr/bin/env bash
+    set -e
+    root="$(cd "{{ root_dir }}" && pwd)"
+    [ -f "$root/.env.dev" ] && set -a && . "$root/.env.dev" && set +a
+    rt=""
+    podman ps >/dev/null 2>&1 && rt=podman
+    [ -z "$rt" ] && docker ps >/dev/null 2>&1 && rt=docker
+    case "$rt" in
+    podman)
+    host_alias=host.containers.internal
+    ;;
+    docker)
+    host_alias=host.docker.internal
+    ;;
+    *)
+    host_alias=host.containers.internal
+    ;;
+    esac
+    export ORCHESTRATOR_URL="http://localhost:${CONTROL_PLANE_PORT:-12082}"
+    export NODE_REGISTRATION_PSK="${NODE_PSK:-dev-node-psk-secret}"
+    export NODE_SLUG="${NODE_SLUG:-dev-node-1}"
+    export NODE_NAME="${NODE_NAME:-Development Node}"
+    export NODE_MANAGER_WORKER_API_BIN="$root/worker_node/bin/worker-api-dev"
+    export LISTEN_ADDR=":${WORKER_PORT:-12090}"
+    export WORKER_API_STATE_DIR="{{ node_state_dir }}"
+    export CYNODE_SECURE_STORE_MASTER_KEY_B64="${CYNODE_SECURE_STORE_MASTER_KEY_B64:-}"
+    mkdir -p "{{ node_state_dir }}"
+    nohup "{{ node_manager_bin }}" >> "{{ logs_dir }}/cynodeai-wnm.log" 2>&1 &; echo $! > "{{ node_manager_pid_file }}"
+    echo "[INFO] Node-manager started (PID $!)"
+
+_stop_node:
+    #!/usr/bin/env bash
+    set -e
+    [ -f "{{ node_manager_pid_file }}" ] && kill -TERM "$(cat {{ node_manager_pid_file }})" 2>/dev/null || true
+    rm -f "{{ node_manager_pid_file }}"
+    (pgrep -f cynodeai-wnm || true) | xargs -r kill -TERM 2>/dev/null || true
+    (pgrep -f worker-api-dev || true) | xargs -r kill -TERM 2>/dev/null || true
+
+e2e *ARGS:
+    #!/usr/bin/env bash
+    set -e
+    root="$(cd "{{ root_dir }}" && pwd)"
+    pushd "$root" >/dev/null
+    trap 'popd >/dev/null 2>/dev/null || true' EXIT
+    export PYTHONPATH="$root"
+    python3 scripts/test_scripts/run_e2e.py {{ ARGS }}
