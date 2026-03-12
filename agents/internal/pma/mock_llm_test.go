@@ -1,0 +1,48 @@
+// Package pma provides a mock LLM for tests (no real Ollama required).
+package pma
+
+import (
+	"context"
+	"sync"
+
+	"github.com/tmc/langchaingo/llms"
+)
+
+// mockLLM implements llms.Model for tests. Returns fixed response.
+type mockLLM struct {
+	mu        sync.Mutex
+	callNum   int
+	responses []string
+}
+
+func (m *mockLLM) GenerateContent(ctx context.Context, messages []llms.MessageContent, options ...llms.CallOption) (*llms.ContentResponse, error) {
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	m.mu.Lock()
+	i := m.callNum
+	m.callNum++
+	m.mu.Unlock()
+	var text string
+	if i < len(m.responses) {
+		text = m.responses[i]
+	} else {
+		text = "Done"
+	}
+	return &llms.ContentResponse{
+		Choices: []*llms.ContentChoice{{Content: text}},
+	}, nil
+}
+
+func (m *mockLLM) Call(ctx context.Context, prompt string, options ...llms.CallOption) (string, error) {
+	resp, err := m.GenerateContent(ctx, []llms.MessageContent{llms.TextParts(llms.ChatMessageTypeHuman, prompt)}, options...)
+	if err != nil {
+		return "", err
+	}
+	if len(resp.Choices) == 0 {
+		return "", nil
+	}
+	return resp.Choices[0].Content, nil
+}
+
+var _ llms.Model = (*mockLLM)(nil)
