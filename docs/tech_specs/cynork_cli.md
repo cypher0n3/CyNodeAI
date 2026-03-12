@@ -431,7 +431,6 @@ This section captures the current normative TUI scope and the locked decisions t
 - **Gateway chat API surfaces:** First-rollout TUI work includes support for both `POST /v1/chat/completions` and `POST /v1/responses`; the client-side chat abstraction MUST support both even if the initial default path remains implementation-defined.
 - **First TUI thread slice:** Limited to create, list, switch, and rename; thread summary and archive are deferred unless needed for first testing pass.
 - **Structured chat parts:** Minimum first-rollout model is thinking and tool activity only; full attachment upload UX and download refs are deferred unless promoted into the first slice.
-- **Single-binary worker:** The [single-binary node manager and worker API proposal](../draft_specs/single_binary_node_manager_worker_api_proposal.md) is promoted into stable requirements/worker-node tech specs this round; implementation of the single-binary worker is deferred until after the first TUI rollout.
 
 Normative TUI behavior and layout are defined in [cynork_tui.md](cynork_tui.md).
 

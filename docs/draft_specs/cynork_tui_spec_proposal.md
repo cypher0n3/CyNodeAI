@@ -3,8 +3,11 @@
 ## 1 Summary
 
 - **Date:** 2026-03-06
-- **Purpose:** Single cohesive draft merging (1) chat quality-of-life (history, naming, summaries, archive), (2) cynork chat as the primary TUI with shell deprecation, and (3) richer modern chat conventions such as hidden thinking, tool activity, attachments, and downloadable outputs.
-- **Status:** Draft only; not yet merged into `docs/requirements/` or `docs/tech_specs/`.
+- **Purpose:** Single cohesive draft merging (1) chat quality-of-life (history, naming, summaries, archive), (2) cynork chat as the primary TUI with shell deprecation, and (3) richer modern chat conventions such as hidden thinking, tool activity, and downloadable outputs (assistant-provided).
+  User message input is **text with Markdown syntax**.
+  File inclusion is supported only via an **`@` shorthand** (e.g. `@path` or `@filename`): the client resolves references from the filesystem and auto-uploads the referenced files when the message is submitted (Cursor-like).
+- **Status:** Draft; partially integrated via a TUI-first MVP (see [Integration Plan and Refinements](#21-integration-plan-and-refinements)).
+  Full proposal not yet merged; stable requirements and tech specs reflect deliberate refinements and repurposed REQ IDs.
 - **Supersedes:** Drafts dated 2026-03-02 (chat QOL) and 2026-03-05 (cynork chat TUI upgrade recommendations).
 
 Baseline references:
@@ -17,15 +20,53 @@ This document proposes requirements and spec extensions so that:
 
 - Clients (Web Console and cynork) offer a better chat UX: visible history, thread names, optional summaries, and list behavior.
 - `cynork chat` becomes the single interactive TUI (cursor-agent-like), with shell REPL deprecated or removed.
-- Richer LLM interaction conventions are handled explicitly instead of being left implicit in plain text, especially thinking blocks, tool-call activity, attachments, and file downloads.
+- Richer LLM interaction conventions are handled explicitly instead of being left implicit in plain text, especially thinking blocks, tool-call activity, and file downloads (assistant-provided).
+  User input is text with Markdown; file inclusion is only via `@` shorthand with auto-upload on submit.
 
 ## 2 Scope
 
 - **Gateway and data:** Thread title updates, optional thread summary, list sort/pagination/archive, and related API behavior.
-- **Gateway and data:** Structured turn metadata so tool activity, attachment refs, and download refs do not have to be scraped from prose.
-- **OpenAI-compatible chat surface:** Rich message inputs and attachment handling for modern multimodal or file-aware models.
+- **Gateway and data:** Structured turn metadata so tool activity and download refs do not have to be scraped from prose.
+- **OpenAI-compatible chat surface:** User message input is text (Markdown syntax supported).
+  File inclusion for user messages is only via **`@` shorthand**: filesystem lookup (e.g. `@path`, `@filename`) and auto-upload of referenced files when the message is submitted (Cursor-like).
+  Assistant-generated download refs are in scope.
+- **Backend (orchestrator, database, PMA):** Draft requirements and specs for file upload storage, retrieval, and passthrough to PMA/LLM so that `@`-referenced files are available in the completion path (see section 3.4 and 4.8).
 - **Client (all chat UIs):** History list, rename, summary display.
-- **Cynork-specific:** Chat as the only interactive surface; TUI layout and interaction (composer, panes, completion, status bar); rendering rules for thinking, tool calls, attachments, and downloads; deprecation/removal of `cynork shell`; local config and cache for chat TUI and completion data.
+- **Cynork-specific:** Chat as the only interactive surface; TUI layout (composer, panes, completion, status bar); **conversation history as formatted Markdown** (same as current `cynork chat`); **`! command`** shell escape maintained; **`@` file shorthand** (filesystem lookup, auto-upload on submit); rendering for thinking, tool calls, downloads (assistant-provided); deprecation/removal of `cynork shell`; local config and cache.
+
+### 2.1 Integration Plan and Refinements
+
+Execution followed the **TUI-first** plan in [2026-03-12_plan_next_round_execution.md](../dev_docs/2026-03-12_plan_next_round_execution.md).
+The plan cut this proposal down to a minimal first rollout; the refinements below differ from the original draft.
+
+#### 2.1.1 Promoted to Stable (First Rollout)
+
+- **Entry point:** `cynork tui` is the explicit first full-screen TUI entrypoint; `cynork chat` remains available as a compatibility path.
+  Bare `cynork` (no subcommand) does **not** launch the TUI in the first rollout (deferred).
+- **Thread UX:** Create (explicit fresh-thread), list, switch, rename.
+  Thread summary and archive are **deferred**.
+- **Gateway/data:** Explicit thread creation (`POST /v1/chat/threads`), list threads with pagination, get thread, patch thread title.
+  Structured turns (thinking hidden, ordered assistant output, tool activity) and dual chat surface (`POST /v1/chat/completions` and `POST /v1/responses`) are in scope.
+- **Stable requirements:** REQ-USRGWY-0135 (explicit thread creation), 0136--0138 (structured turns, ordering, thinking not in canonical transcript).
+  REQ-CLIENT-0181 (explicit fresh-thread creation), 0182--0186 (structured-turn preference, hide thinking, multi-item turn, in-flight update, plain output).
+  This draft uses **REQ-USRGWY-0142--0145** and **REQ-CLIENT-0199--0204** for the corresponding proposal items to avoid ID conflicts with stable.
+- **Stable specs:** [cynork_tui.md](../tech_specs/cynork_tui.md), [cynork_cli.md](../tech_specs/cynork_cli.md) TUI scope, [chat_threads_and_messages.md](../tech_specs/chat_threads_and_messages.md) StructuredTurns and API surface, [cli_management_app_commands_chat.md](../tech_specs/cli_management_app_commands_chat.md) thread controls.
+
+#### 2.1.2 Explicitly Deferred From First Rollout (Plan Phase 2)
+
+- Thread summary and archive; download-ref workflows (attachment upload for user messages is out of scope); queued drafts; making bare `cynork` launch the TUI; web/SSO login.
+- Proposal REQ-CLIENT-0187--0198 and USRGWY 0139--0141, 0142--0145 (as written here) are not yet in stable requirements.
+  Behavior for auth recovery, layout, and transcript rendering is specified in [cynork_tui.md](../tech_specs/cynork_tui.md) in prose.
+
+#### 2.1.3 REQ ID Mapping (Draft vs Stable)
+
+- This draft uses **non-overlapping** proposal IDs to avoid conflicts with stable:
+  - **USRGWY:** Stable 0135--0138 (thread creation, structured turns, order, thinking).
+    This draft uses **0142--0145** for thread title, thread summary, history list, archive.
+  - **CLIENT:** Stable 0181--0186 (fresh-thread, structured preference, hide thinking, multi-item turn, in-flight update, plain output).
+    This draft uses **0199--0204** for view history, rename thread, summary display, single UI, TUI experience, slash/shell parity.
+- Proposal 0187--0198 and 0139--0141 are used only in this draft; when promoted, they will be assigned stable IDs.
+- When comparing this draft to stable [usrgwy.md](../requirements/usrgwy.md) and [client.md](../requirements/client.md), use the stable docs as authoritative for the current contract.
 
 ## 3 Proposed Requirements
 
@@ -34,35 +75,35 @@ Each entry uses the canonical format: requirement line, spec reference link(s) t
 
 ### 3.1 Gateway and Data (USRGWY)
 
-- **REQ-USRGWY-0135 (proposed):** The Data REST API for chat threads MUST support updating a thread's user-facing title.
+- **REQ-USRGWY-0142 (proposed):** The Data REST API for chat threads MUST support updating a thread's user-facing title.
   Clients MUST be able to set and change the display name of a thread without creating a new thread.
   The gateway MUST derive `user_id` from authentication and MUST allow updates only for threads owned by that user.
   [CYNAI.USRGWY.ChatThreadsMessages.ThreadTitle](#spec-cynai-usrgwy-chatthreadsmessages-threadtitle)
-  <a id="req-usrgwy-0135"></a>
+  <a id="req-usrgwy-0142"></a>
 
-- **REQ-USRGWY-0136 (proposed):** The system MAY store an optional short summary for a chat thread (e.g. for list/sidebar display).
+- **REQ-USRGWY-0143 (proposed):** The system MAY store an optional short summary for a chat thread (e.g. for list/sidebar display).
   If supported, the summary MUST be derived or set in a way that does not require storing plaintext secrets; any summary derived from message content MUST use redacted content only.
   Summary generation MAY be best-effort or asynchronous.
   [CYNAI.USRGWY.ChatThreadsMessages.ThreadSummary](#spec-cynai-usrgwy-chatthreadsmessages-threadsummary)
-  <a id="req-usrgwy-0136"></a>
+  <a id="req-usrgwy-0143"></a>
 
-- **REQ-USRGWY-0137 (proposed):** List chat threads endpoints MUST support sort order by `updated_at` (default: descending) and MUST support pagination so clients can implement "chat history" lists of arbitrary size.
+- **REQ-USRGWY-0144 (proposed):** List chat threads endpoints MUST support sort order by `updated_at` (default: descending) and MUST support pagination so clients can implement "chat history" lists of arbitrary size.
   [CYNAI.USRGWY.ChatThreadsMessages.HistoryList](#spec-cynai-usrgwy-chatthreadsmessages-historylist)
-  <a id="req-usrgwy-0137"></a>
+  <a id="req-usrgwy-0144"></a>
 
-- **REQ-USRGWY-0138 (proposed):** The gateway MAY support soft-delete or archive state for chat threads so that users can hide threads from the default history list without losing data.
+- **REQ-USRGWY-0145 (proposed):** The gateway MAY support soft-delete or archive state for chat threads so that users can hide threads from the default history list without losing data.
   If supported, list endpoints MUST allow filtering by visibility (e.g. active vs archived) and retention MUST still apply per existing policy.
   [CYNAI.USRGWY.ChatThreadsMessages.Archive](#spec-cynai-usrgwy-chatthreadsmessages-archive)
-  <a id="req-usrgwy-0138"></a>
+  <a id="req-usrgwy-0145"></a>
 
-- **REQ-USRGWY-0139 (proposed):** The gateway SHOULD support structured chat-turn data so clients can distinguish visible assistant text, tool activity, attachment references, and downloadable outputs without parsing prose.
+- **REQ-USRGWY-0139 (proposed):** The gateway MUST support structured chat-turn data so clients can distinguish visible assistant text, tool activity, and downloadable outputs without parsing prose.
   Internal reasoning or thinking content MUST NOT be exposed as normal transcript content and MUST NOT be used as input for thread title or summary generation.
   [CYNAI.USRGWY.ChatThreadsMessages.StructuredTurns](#spec-cynai-usrgwy-chatthreadsmessages-structuredturns)
   <a id="req-usrgwy-0139"></a>
 
-- **REQ-USRGWY-0140 (proposed):** The OpenAI-compatible chat surface SHOULD define how rich message content and chat attachments are represented, validated, and persisted.
-  At minimum, the canonical spec MUST state how text parts, image or file references, unsupported part types, and storage references are handled.
-  [CYNAI.USRGWY.OpenAIChatApi.RichInputs](#spec-cynai-usrgwy-openaichatapi-richinputs)
+- **REQ-USRGWY-0140 (proposed):** The OpenAI-compatible chat surface MUST define user message content as text (plain string; Markdown syntax is supported for formatting).
+  File inclusion for user messages is only via the **@ shorthand** (see section 4.6.1); when the client sends a message that contains @-resolved file references, the gateway MUST accept the upload (or inline representation per spec) and associate the files with the message.
+  [CYNAI.USRGWY.OpenAIChatApi.TextInput](#spec-cynai-usrgwy-openaichatapi-textinput)
   <a id="req-usrgwy-0140"></a>
 
 - **REQ-USRGWY-0141 (proposed):** When chat completions or tool executions produce downloadable outputs, the gateway SHOULD expose stable authenticated references and metadata suitable for an explicit client download UX.
@@ -70,38 +111,51 @@ Each entry uses the canonical format: requirement line, spec reference link(s) t
   [CYNAI.USRGWY.ChatThreadsMessages.DownloadRefs](#spec-cynai-usrgwy-chatthreadsmessages-downloadrefs)
   <a id="req-usrgwy-0141"></a>
 
+**Integration note:** In the TUI-first rollout, stable REQ-USRGWY-0135 is **explicit thread creation** (`POST /v1/chat/threads`), not thread title.
+  Thread title update (PATCH) is implemented and specified in the API surface; stable 0136--0138 cover structured turns, ordered assistant turn, and thinking excluded from canonical transcript.
+  This draft's 0142 (thread title), 0143 (summary), 0145 (archive), and 0140/0141 (text input, download refs) remain proposed or deferred as noted.
+
 ### 3.2 Client (Chat UX and History)
 
-- **REQ-CLIENT-0181 (proposed):** Clients that provide a chat UI (e.g. Web Console, cynork chat) MUST expose a way for the user to view chat history (list of threads for the current user and project context).
+- **REQ-CLIENT-0199 (proposed):** Clients that provide a chat UI (e.g. Web Console, cynork chat) MUST expose a way for the user to view chat history (list of threads for the current user and project context).
   The list MUST show thread title (or a fallback such as first message preview or "Untitled") and SHOULD show last activity time.
   [CYNAI.USRGWY.ChatThreadsMessages.HistoryList](#spec-cynai-usrgwy-chatthreadsmessages-historylist)
-  <a id="req-client-0181"></a>
+  <a id="req-client-0199"></a>
 
-- **REQ-CLIENT-0182 (proposed):** Clients that provide a chat UI MUST allow the user to rename the current thread (set or update title) and SHOULD allow renaming from the thread list.
+- **REQ-CLIENT-0200 (proposed):** Clients that provide a chat UI MUST allow the user to rename the current thread (set or update title) and SHOULD allow renaming from the thread list.
   [CYNAI.USRGWY.ChatThreadsMessages.ThreadTitle](#spec-cynai-usrgwy-chatthreadsmessages-threadtitle)
-  <a id="req-client-0182"></a>
+  <a id="req-client-0200"></a>
 
-- **REQ-CLIENT-0183 (proposed):** When the gateway provides a thread summary, clients SHOULD display it in the thread list or sidebar (e.g. tooltip or subtitle) to help users identify conversations without opening them.
+- **REQ-CLIENT-0201 (proposed):** When the gateway provides a thread summary, clients SHOULD display it in the thread list or sidebar (e.g. tooltip or subtitle) to help users identify conversations without opening them.
   [CYNAI.USRGWY.ChatThreadsMessages.ThreadSummary](#spec-cynai-usrgwy-chatthreadsmessages-threadsummary)
-  <a id="req-client-0183"></a>
+  <a id="req-client-0201"></a>
+
+**Integration note:** In stable docs, REQ-CLIENT-0181 is **explicit fresh-thread creation** (not "view chat history").
+  Stable 0182--0186 cover structured-turn preference, hide thinking by default, multi-item assistant turn, in-flight update, and plain/one-shot output only.
+  Thread list and rename are in scope.
+    Summary display (0201 here) is deferred.
 
 ### 3.3 Client (Cynork Chat as Primary TUI)
 
-- **REQ-CLIENT-0184 (proposed):** The cynork CLI MUST provide a single interactive UI surface for chat.
+- **REQ-CLIENT-0202 (proposed):** The cynork CLI MUST provide a single interactive UI surface for chat.
   The interactive REPL mode (`cynork shell`) SHALL be deprecated or removed in favor of `cynork chat` as the primary TUI.
   [CYNAI.CLIENT.CynorkChat.TUILayout](#spec-cynai-client-cynorkchat-tuilayout)
-  <a id="req-client-0184"></a>
+  <a id="req-client-0202"></a>
+  **Refinement:** First rollout exposes the full-screen TUI as `cynork tui`; `cynork chat` remains a compatibility path.
+    Shell is deprecated, not removed.
 
-- **REQ-CLIENT-0185 (proposed):** The cynork chat TUI SHOULD support a cursor-agent-like experience: multi-line input composer, scrollback with search and copy, persistent status bar (gateway, identity, project, model), and an optional context pane (project, tasks, slash help).
+- **REQ-CLIENT-0203 (proposed):** The cynork chat TUI SHOULD support a cursor-agent-like experience: multi-line input composer, scrollback with search and copy, persistent status bar (gateway, identity, project, model), and an optional context pane (project, tasks, slash help).
+  The scrollback MUST distinguish user messages with a distinct background; MUST support Shift+Enter for newlines in the composer; Up/Down in the composer MUST cycle through previously sent messages; Ctrl+C MUST cancel the current operation (and successive Ctrl+C when idle MUST exit cleanly); and scrolling (e.g. Page Up/Page Down) MUST allow loading older history when the user scrolls back past loaded content.
   Completion and fuzzy selection SHOULD be available for task identifiers, project selection, and model selection within chat.
   [CYNAI.CLIENT.CynorkChat.TUILayout](#spec-cynai-client-cynorkchat-tuilayout)
   [CYNAI.CLIENT.CynorkChat.Completion](#spec-cynai-client-cynorkchat-completion)
-  <a id="req-client-0185"></a>
+  <a id="req-client-0203"></a>
 
-- **REQ-CLIENT-0186 (proposed):** Slash commands in cynork chat MUST provide parity with the command surface previously available in the shell REPL (tasks, status, whoami, nodes, prefs, skills, model, project).
-  Shell escape (`!`) MAY remain required by default or MAY be gated behind an explicit flag (e.g. `--enable-shell`); the chosen behavior SHALL be specified in the cynork chat tech spec.
+- **REQ-CLIENT-0204 (proposed):** Slash commands in cynork chat MUST provide parity with the command surface previously available in the shell REPL (tasks, status, whoami, nodes, prefs, skills, model, project).
+  The **`! command` shorthand** (shell escape) MUST be supported: input starting with `!` runs the remainder of the line as a shell command.
+  It SHOULD be enabled by default; the implementation MAY allow disabling it (e.g. `--enable-shell`) and MUST document the behavior in the cynork chat tech spec.
   [CYNAI.CLIENT.CynorkChat.TUILayout](#spec-cynai-client-cynorkchat-tuilayout)
-  <a id="req-client-0186"></a>
+  <a id="req-client-0204"></a>
 
 - **REQ-CLIENT-0187 (proposed):** The cynork chat TUI MAY persist local configuration for TUI preferences (e.g. default model, composer single vs multi-line, context pane default visibility, keybinding overrides).
   If supported, config MUST use the same config file or config directory as the rest of cynork (see [CliConfigFileLocation](../tech_specs/cynork_cli.md#spec-cynai-client-cliconfigfilelocation)); config MUST NOT store secrets (tokens, passwords, or message content).
@@ -140,12 +194,19 @@ Each entry uses the canonical format: requirement line, spec reference link(s) t
   [CYNAI.CLIENT.CynorkChat.TUILayout](#spec-cynai-client-cynorkchat-tuilayout)
   <a id="req-client-0193"></a>
 
-- **REQ-CLIENT-0194 (proposed):** Chat UIs SHOULD support user-selected attachments and explicit authenticated download actions for assistant-provided files when the gateway exposes them.
-  The UI MUST present file metadata clearly and MUST NOT auto-upload or auto-download without user action.
-  [CYNAI.USRGWY.OpenAIChatApi.RichInputs](#spec-cynai-usrgwy-openaichatapi-richinputs)
+- **REQ-CLIENT-0194 (proposed):** Chat UIs SHOULD support explicit authenticated download actions for assistant-provided files when the gateway exposes them.
+  The UI MUST present file metadata clearly and MUST NOT auto-download without user action.
+  [CYNAI.USRGWY.OpenAIChatApi.TextInput](#spec-cynai-usrgwy-openaichatapi-textinput)
   [CYNAI.USRGWY.ChatThreadsMessages.DownloadRefs](#spec-cynai-usrgwy-chatthreadsmessages-downloadrefs)
   [CYNAI.CLIENT.CynorkChat.TUILayout](#spec-cynai-client-cynorkchat-tuilayout)
   <a id="req-client-0194"></a>
+
+- **REQ-CLIENT-0198 (proposed):** Chat UIs MAY support an **@ shorthand** in the composer for referencing local files (Cursor-like).
+  When the user types `@`, the client MAY offer filesystem lookup (path or filename completion from a configurable search path, e.g. current directory or project root).
+  When the message is submitted, the client MUST resolve each @ reference to a local file path, upload that file (or include it per gateway contract), and send the message with the resulting file references so the model receives the file content or reference.
+  [CYNAI.USRGWY.OpenAIChatApi.TextInput](#spec-cynai-usrgwy-openaichatapi-textinput) (4.6.1)
+  [CYNAI.CLIENT.CynorkChat.AtFileReferences](#spec-cynai-client-cynorkchat-atfilereferences)
+  <a id="req-client-0198"></a>
 
 - **REQ-CLIENT-0195 (proposed):** Rich chat UIs SHOULD provide a user-level toggle to show or hide model thinking blocks when such blocks are available.
   Thinking MUST be hidden by default; when hidden, the transcript SHOULD show a compact placeholder indicating that a thinking block exists and can be expanded.
@@ -164,6 +225,36 @@ Each entry uses the canonical format: requirement line, spec reference link(s) t
   [CYNAI.CLIENT.CynorkTui.EntryPoint](#spec-cynai-client-cynorktui-entrypoint)
   [CYNAI.CLIENT.CynorkChat.TUILayout](#spec-cynai-client-cynorkchat-tuilayout)
   <a id="req-client-0197"></a>
+  **Refinement:** First rollout implements only the first sentence (`cynork tui` explicit entrypoint).
+  Making bare `cynork` launch the TUI is explicitly deferred (see [Integration Plan and Refinements](#21-integration-plan-and-refinements)); REQ-CLIENT-0187--0198 (and 0199--0204) are not yet in stable requirements.
+
+### 3.4 Orchestrator, Database, and PMA (File Upload and Retrieval)
+
+Backend support for `@`-shorthand file uploads so that user-attached files reach the PMA/LLM.
+These requirements are **proposed** and would live in the indicated requirements files if accepted.
+
+- **REQ-ORCHES-0167 (proposed):** When the User API Gateway receives an OpenAI-compatible chat completion request that includes user message file references (e.g. `file_id` from a prior upload or inline content parts), the orchestrator MUST resolve those references to retrievable content and MUST pass the resolved content (or stable refs the PMA can resolve) into the completion path so the model receives the file content in the request context.
+  Resolution MAY be delegated to the gateway or a dedicated service; the orchestrator MUST NOT drop or ignore file parts when forwarding to PMA or the inference backend.
+  [CYNAI.ORCHES.ChatFileUploadFlow](#spec-cynai-orches-chatfileuploadflow)
+  <a id="req-orches-0167"></a>
+
+- **REQ-ORCHES-0168 (proposed):** When the completion path uses retained response state or thread message history, the orchestrator (or gateway) MUST include any file content or file refs associated with user messages in that history when building the request to PMA or the LLM, so that multi-turn conversations that referenced files continue to have access to that content where the contract requires it.
+  [CYNAI.ORCHES.ChatFileUploadFlow](#spec-cynai-orches-chatfileuploadflow)
+  <a id="req-orches-0168"></a>
+
+- **REQ-SCHEMA-0114 (proposed):** When the gateway accepts user file uploads for chat (per section 4.6.1), the system MUST persist uploaded file content or stable references in a way that is scoped to the authenticated user and thread (or message) and is retrievable by the orchestrator or gateway for the duration of the completion request and any retention policy.
+  Storage MAY be in PostgreSQL (e.g. chat_message_attachments or blob table with message_id, user_id, thread_id) or in object storage with metadata that allows authorization and retrieval by the same user/thread.
+  File content MUST be subject to the same secret redaction and size/type limits as defined in the gateway upload contract.
+  [CYNAI.USRGWY.ChatThreadsMessages.FileUploadStorage](#spec-cynai-usrgwy-chatthreadsmessages-fileuploadstorage)
+  <a id="req-schema-0114"></a>
+
+- **REQ-PMAGNT-0115 (proposed):** When the Project Manager Agent (or equivalent chat-serving agent) receives a chat completion request that includes user message parts with file content or file references, the agent MUST include that content in the LLM request in a form the model supports (e.g. inline text, base64 image parts, or provider-specific `image_url` / `file` content blocks) so the model can use the attached files when generating the response.
+  The agent MUST NOT strip or ignore file parts that were accepted by the gateway and passed through the orchestrator.
+  [CYNAI.PMAGNT.ChatFileContext](#spec-cynai-pmagnt-chatfilecontext)
+  <a id="req-pmagnt-0115"></a>
+
+**Integration note:** File upload/retrieval for chat is deferred in the first TUI rollout; these requirements are for the phase when `@` shorthand and gateway upload are promoted.
+Stable orchestrator, schema, and PMA requirements do not yet include these IDs.
 
 ## 4 Proposed Spec Additions (Gateway and Chat Data)
 
@@ -174,7 +265,7 @@ Each Spec Item below follows the mandatory structure: Spec ID anchor on the firs
 
 - Spec ID: `CYNAI.USRGWY.ChatThreadsMessages.ThreadTitle` <a id="spec-cynai-usrgwy-chatthreadsmessages-threadtitle"></a>
 - Status: proposed
-- Traces To: [REQ-USRGWY-0135](#req-usrgwy-0135), [REQ-CLIENT-0182](#req-client-0182)
+- Traces To: [REQ-USRGWY-0142](#req-usrgwy-0142), [REQ-CLIENT-0200](#req-client-0200)
 - The existing thread model already recommends `title` (text, optional).
   Spec addition: the gateway MUST allow `PATCH /v1/chat/threads/{thread_id}` with a request body that includes `title` (string).
   The gateway MUST reject PATCH for threads not owned by the authenticated user.
@@ -186,7 +277,7 @@ Each Spec Item below follows the mandatory structure: Spec ID anchor on the firs
 
 - Spec ID: `CYNAI.USRGWY.ChatThreadsMessages.ThreadSummary` <a id="spec-cynai-usrgwy-chatthreadsmessages-threadsummary"></a>
 - Status: proposed
-- Traces To: [REQ-USRGWY-0136](#req-usrgwy-0136), [REQ-CLIENT-0183](#req-client-0183)
+- Traces To: [REQ-USRGWY-0143](#req-usrgwy-0143), [REQ-CLIENT-0201](#req-client-0201)
 - Optional field on thread: `summary` (text, optional), max length TBD (e.g. 200-500 characters).
   If present, it is a short plaintext summary for list/sidebar display.
   Generation: MAY be set by client on create/update; MAY be generated asynchronously by the server from redacted message content; MUST NOT contain plaintext secrets.
@@ -198,7 +289,7 @@ Each Spec Item below follows the mandatory structure: Spec ID anchor on the firs
 
 - Spec ID: `CYNAI.USRGWY.ChatThreadsMessages.HistoryList` <a id="spec-cynai-usrgwy-chatthreadsmessages-historylist"></a>
 - Status: proposed
-- Traces To: [REQ-USRGWY-0137](#req-usrgwy-0137), [REQ-CLIENT-0181](#req-client-0181)
+- Traces To: [REQ-USRGWY-0144](#req-usrgwy-0144), [REQ-CLIENT-0199](#req-client-0199)
 - `GET /v1/chat/threads` behavior to support "chat history" UX:
   - Query parameters: existing `project_id` filter and pagination (`limit`, `offset`).
   - Add optional `sort` (e.g. `updated_at_asc` | `updated_at_desc`); default MUST be `updated_at_desc`.
@@ -209,8 +300,8 @@ Each Spec Item below follows the mandatory structure: Spec ID anchor on the firs
 
 - Spec ID: `CYNAI.USRGWY.ChatThreadsMessages.Archive` <a id="spec-cynai-usrgwy-chatthreadsmessages-archive"></a>
 - Status: proposed
-- Traces To: [REQ-USRGWY-0138](#req-usrgwy-0138)
-- If REQ-USRGWY-0138 is accepted: add optional `archived_at` (timestamptz, nullable) to `chat_threads`.
+- Traces To: [REQ-USRGWY-0145](#req-usrgwy-0145)
+- If REQ-USRGWY-0145 is accepted: add optional `archived_at` (timestamptz, nullable) to `chat_threads`.
   When non-null, the thread is considered archived.
   `PATCH /v1/chat/threads/{thread_id}` MAY allow `archived: true | false`; setting `archived: true` sets `archived_at` to current time; `false` clears it.
   List threads MUST filter by `archived_at` according to the `archived` query parameter.
@@ -229,8 +320,8 @@ Each Spec Item below follows the mandatory structure: Spec ID anchor on the firs
   - `thinking`: optional model-emitted reasoning content that is hidden by default in clients and excluded from canonical plain-text transcript generation.
   - `tool_call`: tool invocation metadata such as `call_id`, `tool_name`, `status`, and a redacted or truncated argument preview.
   - `tool_result`: tool outcome metadata such as `call_id`, `status`, `content_type`, and a redacted or truncated result preview.
-  - `attachment_ref`: input file metadata such as `attachment_id`, `filename`, `media_type`, and `size_bytes`.
   - `download_ref`: output file metadata such as `download_id`, `filename`, `media_type`, and `size_bytes`.
+  User message input is text only (no `attachment_ref` or other rich parts for user-sent messages).
 - Thinking or reasoning content MUST NOT be included in the canonical plain-text `content` field, thread `summary`, or thread `title`.
   If preserved at all, it SHOULD be carried only as a dedicated `thinking` part or equivalent side-channel metadata so clients can hide it by default.
 - If the system needs observability for reasoning-aware models, it MAY persist bounded `thinking` parts for the originating message or a boolean marker such as `reasoning_redacted: true` in message metadata.
@@ -240,27 +331,32 @@ Each Spec Item below follows the mandatory structure: Spec ID anchor on the firs
   Rich clients SHOULD prefer `parts` when present and fall back to `content` otherwise.
 - If the separate LLM-routing draft is promoted, the canonical chat spec should reference that document as the single source of truth for model-specific thinking-block stripping behavior.
 
-### 4.6 Rich Inputs and Attachments
+### 4.6 Text Input (Markdown Only)
 
-- Spec ID: `CYNAI.USRGWY.OpenAIChatApi.RichInputs` <a id="spec-cynai-usrgwy-openaichatapi-richinputs"></a>
+- Spec ID: `CYNAI.USRGWY.OpenAIChatApi.TextInput` <a id="spec-cynai-usrgwy-openaichatapi-textinput"></a>
 - Status: proposed
 - Traces To: [REQ-USRGWY-0140](#req-usrgwy-0140), [REQ-CLIENT-0194](#req-client-0194)
-- The OpenAI-compatible request parser SHOULD accept message `content` in two forms:
-  - a plain string for text-only chat, or
-  - an ordered array of content parts for rich input.
-- The canonical first-pass rich-input subset SHOULD cover:
-  - text parts, and
-  - image or file references suitable for multimodal models.
-- Unsupported content-part types MUST return a validation error rather than being silently dropped.
+- User message content is text (plain string or Markdown).
+  The OpenAI-compatible request parser MUST accept `content` as a string for user messages.
+- Markdown syntax is supported for formatting (e.g. headings, lists, code blocks, emphasis); clients MAY render Markdown in the transcript.
+- File inclusion for user messages is only via the **@ shorthand** (see section 4.6.1).
+  Files referenced by @ are resolved from the filesystem and auto-uploaded when the message is submitted; the gateway MUST accept those uploads and associate them with the message per the contract in 4.6.1.
+- Unsupported or disallowed content-part types (other than @-originated file refs per 4.6.1) MUST return a validation error rather than being silently dropped.
   For the OpenAI-compatible endpoint, that validation error SHOULD use the same top-level `error` object shape as other chat errors.
-- Binary attachment bytes MUST NOT be stored inline in `chat_messages`.
-  Persist only safe metadata and a storage reference; the underlying bytes must live in a separate file or artifact store.
-- Raw local filesystem paths are client-local only.
-  A client MAY use a local path before send, but once the request crosses the gateway boundary the attachment must be represented as a gateway-owned file reference or a validated remote URL.
-- Before implementation begins, the canonical spec SHOULD choose one primary upload contract for chat attachments:
-  - gateway-managed upload that yields a stable `file_id`, or
-  - strict URL-reference mode for already-hosted resources.
-  The implementation should not try to support multiple half-specified upload paths in the first iteration.
+
+#### 4.6.1 File Reference Shorthand (@)
+
+- When the client sends a message that contains @ references (e.g. `@./path/to/file` or `@filename`), the client MUST have resolved each reference to a local file and MUST upload that file (or include it in the request per the chosen contract).
+- **Syntax:** The composer MAY support a shorthand such as `@` followed by a path or filename.
+  Resolution is implementation-defined (e.g. current working directory, project root, or a configurable search path).
+  Multiple @ references in one message are allowed.
+- **On submit:** Before sending the message to the gateway, the client MUST resolve each @ reference to an absolute or relative filesystem path, read the file (subject to size and type limits), and either:
+  - upload the file to a gateway-owned endpoint (e.g. `POST /v1/chat/uploads` or similar) and receive a stable `file_id`, then include `file_id` (or equivalent) in the message payload, or
+  - include the file content inline in the request (e.g. base64 or multipart) where the gateway spec allows it.
+- **Gateway contract:** The gateway MUST define one of: (1) an upload endpoint that returns a stable reference (e.g. `file_id`) for inclusion in the message, or (2) an accepted inline representation (e.g. content parts with type `file` or `image` keyed by @-resolved paths).
+  The gateway MUST associate uploaded or inline files with the user message so the model can use them.
+  Backend support (orchestrator resolution, storage, and PMA/LLM passthrough) is specified in [section 4.8](#48-backend-support-for-user-file-uploads-orchestrator-database-pma).
+- **Limits:** The canonical spec SHOULD define maximum file size and allowed media types for @-referenced uploads; the client SHOULD validate before upload and surface clear errors when a file is too large or disallowed.
 
 ### 4.7 Downloadable Chat Outputs
 
@@ -284,6 +380,45 @@ Each Spec Item below follows the mandatory structure: Spec ID anchor on the firs
   The system MUST NOT auto-download assistant files as part of normal transcript rendering.
 - If a referenced download has expired or been deleted, the download operation SHOULD fail cleanly with a user-displayable `404` or `410` style result without breaking transcript retrieval.
 
+### 4.8 Backend Support for User File Uploads (Orchestrator, Database, PMA)
+
+These spec items define how uploaded files (from the `@` shorthand and gateway upload contract in 4.6.1) flow through the orchestrator, are stored and retrieved, and are passed to the PMA/LLM.
+
+#### 4.8.1 Orchestrator Chat File Upload Flow
+
+- Spec ID: `CYNAI.ORCHES.ChatFileUploadFlow` <a id="spec-cynai-orches-chatfileuploadflow"></a>
+- Status: proposed
+- Traces To: [REQ-ORCHES-0167](#req-orches-0167), [REQ-ORCHES-0168](#req-orches-0168)
+- When the gateway receives a chat completion request (e.g. `POST /v1/chat/completions` or `POST /v1/responses`) with user message content that includes file references (e.g. `file_id` from `POST /v1/chat/uploads` or inline content parts), the gateway MUST pass those references or content to the orchestrator.
+- The orchestrator MUST resolve each file reference to content (or to a stable ref that the PMA or inference backend can resolve) before or when building the request to the Project Manager Agent or the inference endpoint.
+  Resolution MAY be done by the gateway (e.g. gateway stores uploads and injects content into the message payload sent to orchestrator) or by the orchestrator (e.g. orchestrator calls a storage or gateway API to fetch content by `file_id`).
+- When the completion path uses thread message history (e.g. for multi-turn context), the orchestrator (or the component that assembles the history) MUST include file content or resolvable file refs for any user message that had attachments, so that the LLM receives the same context as for the original turn.
+- File content MUST be subject to the same size and type limits and redaction rules as the gateway contract; the orchestrator MUST NOT forward content that the gateway would have rejected.
+
+#### 4.8.2 File Upload Storage (Chat Message Attachments)
+
+- Spec ID: `CYNAI.USRGWY.ChatThreadsMessages.FileUploadStorage` <a id="spec-cynai-usrgwy-chatthreadsmessages-fileuploadstorage"></a>
+- Status: proposed
+- Traces To: [REQ-SCHEMA-0114](#req-schema-0114), [REQ-USRGWY-0140](#req-usrgwy-0140)
+- When the gateway accepts file uploads (per 4.6.1), it MUST store the file content or a stable reference in a way that:
+  - Is scoped to the authenticated user and to the thread or message being composed.
+  - Allows retrieval by the orchestrator (or gateway) when building the completion request and when assembling thread history for subsequent turns.
+  - Enforces the same authorization as chat thread and message access (user, project, thread visibility).
+- Storage options (implementation-defined): PostgreSQL table(s) for chat message attachments (e.g. `chat_message_attachments` with `message_id`, `file_id`, `user_id`, `thread_id`, content or blob ref, `media_type`, `size_bytes`, `created_at`); or object storage with metadata that encodes user/thread scope and is used for retrieval with the same auth checks.
+- Retention: Uploaded file storage SHOULD follow the same or a documented retention policy as chat messages (e.g. purge when the associated message is purged or after a TTL).
+- Redaction: Content MUST be redacted for secrets before persistence per existing chat redaction requirements.
+
+#### 4.8.3 PMA Chat File Context
+
+- Spec ID: `CYNAI.PMAGNT.ChatFileContext` <a id="spec-cynai-pmagnt-chatfilecontext"></a>
+- Status: proposed
+- Traces To: [REQ-PMAGNT-0115](#req-pmagnt-0115)
+- When the Project Manager Agent (or the component that builds the LLM request for chat) receives a user message that includes file content or file references (from the orchestrator/gateway pipeline), the agent MUST include that content in the payload sent to the LLM.
+- Format: The agent MUST map stored or inline file content to the format(s) the target model supports (e.g. text parts, base64 image parts, or provider-specific `image_url` / file content blocks in the chat message array).
+  For multi-modal models, image and other non-text types SHOULD be sent as the appropriate content type; for text-only models, the agent MAY convert to a text representation (e.g. "Attachment: filename (N bytes)" or inline extracted text) when the model cannot accept binary parts.
+- The agent MUST NOT drop or ignore file parts that were successfully accepted by the gateway and passed through the orchestrator.
+- If the model does not support a given file type, the agent SHOULD surface a clear user-visible error or fallback (e.g. "Model does not support image attachments") rather than silently omitting the file.
+
 ## 5 Proposed Spec Additions (Cynork Chat TUI)
 
 These would extend [cli_management_app_commands_chat.md](../tech_specs/cli_management_app_commands_chat.md) and related cynork specs.
@@ -293,7 +428,7 @@ Spec IDs use the CLIENT domain per [requirements_domains.md](../docs_standards/r
 
 - Spec ID: `CYNAI.CLIENT.CynorkChat.TUILayout` <a id="spec-cynai-client-cynorkchat-tuilayout"></a>
 - Status: proposed
-- Traces To: [REQ-CLIENT-0184](#req-client-0184), [REQ-CLIENT-0185](#req-client-0185), [REQ-CLIENT-0186](#req-client-0186), [REQ-CLIENT-0189](#req-client-0189), [REQ-CLIENT-0192](#req-client-0192), [REQ-CLIENT-0193](#req-client-0193), [REQ-CLIENT-0194](#req-client-0194)
+- Traces To: [REQ-CLIENT-0202](#req-client-0202), [REQ-CLIENT-0203](#req-client-0203), [REQ-CLIENT-0204](#req-client-0204), [REQ-CLIENT-0189](#req-client-0189), [REQ-CLIENT-0192](#req-client-0192), [REQ-CLIENT-0193](#req-client-0193), [REQ-CLIENT-0194](#req-client-0194)
 - A dedicated section in the cynork chat spec specifying the chat TUI layout and interaction rules:
   - Multi-line composer (toggle, soft wrap, explicit send key).
   - Scrollback with selection and copy; in-TUI search over the visible buffer.
@@ -323,8 +458,13 @@ Regions are stacked and optionally split as follows; all coordinates are relativ
 - **Scrollback (main area, above composer):** Renders the conversation history and streaming assistant output.
   Fills all remaining vertical space above the composer (i.e. from top of terminal to composer top).
   Width: same as composer (full width or left region when context pane visible).
-  Content: user messages and assistant messages in order; Markdown rendering when `--plain` is not set; streaming updates append to the last assistant message until complete.
+  Content: user messages and assistant messages in order.
+  **Conversation history MUST be displayed as formatted Markdown** (same as current `cynork chat` for agent responses): headings, lists, code blocks, emphasis, and links MUST be rendered in the scrollback when `--plain` is not set; when `--plain` is set, the scrollback MAY show raw text only.
+  **User messages** in the scrollback MUST be visually distinguished from assistant messages (e.g. a slightly different background color or region styling) so user input stands out in the stream.
+  Streaming updates append to the last assistant message until complete.
   Scrolling: vertical scroll when content exceeds visible rows; scroll position MAY follow the latest content (auto-scroll) or stay fixed when user has scrolled up; behavior SHOULD be specified (e.g. follow by default, or "scroll to bottom" key).
+  **Scrollback history and reload:** The TUI MUST support scrolling through the conversation history (e.g. Page Up / Page Down by default).
+  When the user scrolls back beyond the currently loaded content, the client MUST fetch and append older messages (paginated history) so that scrolling can traverse the full thread history.
 
 - **Context pane (optional, right side):** When visible, a vertical split reserves a portion of the terminal width for the context pane.
   Recommended width: 24--32 columns or 20--30% of terminal width (whichever is smaller), with a minimum of 20 columns.
@@ -341,15 +481,26 @@ Regions are stacked and optionally split as follows; all coordinates are relativ
 - **Send message:** In single-line composer, Enter sends the current line (after trim) and clears the input.
   In multi-line composer, Enter inserts a newline; a dedicated "send" key (e.g. Ctrl+Enter or Alt+Enter) sends the full composer content and clears.
   The inverse (Enter to send in multi-line, Ctrl+Enter for newline) MAY be configurable; the spec SHALL pick a default and document it.
+- **Newline in composer:** **Shift+Enter** MUST insert a line break (newline) in the composer in both single-line and multi-line modes, so the user can add multiple lines without sending.
 - **Queue message:** A dedicated action (for example Ctrl+Q or a command-palette action) SHOULD move the current composer content into a queued-drafts list without sending it.
   The composer is then cleared so the user can continue drafting.
   A queued item MUST remain editable, reorderable, removable, and explicitly sendable later.
 
-- **Slash and shell:** Input starting with `/` is parsed as a slash command; input starting with `!` is shell escape (if enabled).
+- **Slash and shell:** Input starting with `/` is parsed as a slash command.
+  Input starting with **`!`** is the **shell escape** (`! command` shorthand): the remainder of the line is run as a shell command.
+  The CLI MUST support this shorthand; it SHOULD be enabled by default (configurable per implementation; see REQ-CLIENT-0204 (proposed)).
   Tab after `/` triggers slash-command completion; Tab in other contexts (e.g. after `/task get`) triggers context-specific completion (task id, project id, model id) per [5.2 Completion and Discovery](#spec-cynai-client-cynorkchat-completion).
 
-- **Scrollback interaction:** Arrow keys or Page Up / Page Down scroll the scrollback when focus is in scrollback (e.g. after clicking or focusing the main area).
-  Selection: mouse or shift+arrows to select text; Copy (e.g. Ctrl+C or platform copy) copies selection to system clipboard; no secrets in scrollback (per existing security rules).
+- **Composer input history:** **Up / Down arrow keys** when focus is in the composer MUST cycle through previously sent messages (composer history).
+  Up loads the previous sent message into the composer; Down loads the next (or clears toward the most recent).
+  This allows re-sending or editing a prior message without retyping.
+- **Cancellation and exit (Ctrl+C):** **Ctrl+C** MUST cancel the current operation when no text is selected (e.g. cancel an in-flight completion request, or clear the composer if appropriate).
+  When there is a selection, Ctrl+C copies to the system clipboard (platform copy) and does not cancel.
+  **Multiple successive Ctrl+C:** When the user presses Ctrl+C again with no selection and no operation in progress (e.g. idle at composer), the second consecutive Ctrl+C MUST exit the session cleanly (similar to Cursor agent).
+  Implementations MAY require two quick successive Ctrl+C within a short window (e.g. 1-2 seconds) to avoid accidental exit.
+- **Scrollback interaction:** Arrow keys or **Page Up / Page Down** (default) scroll the scrollback when focus is in scrollback (e.g. after clicking or focusing the main area).
+  When the user scrolls back past the loaded content, the client MUST load older message history (see scrollback history and reload above).
+  Selection: mouse or shift+arrows to select text; Copy (e.g. Ctrl+C or platform copy when selection is active) copies selection to system clipboard; no secrets in scrollback (per existing security rules).
   Search: Ctrl+F (or `/` when focus in scrollback) opens an inline search field; typing filters or jumps to next match; Escape closes search.
 
 - **Context pane:** A key (e.g. Ctrl+R or F9) toggles visibility of the context pane.
@@ -389,7 +540,6 @@ flowchart TB
     D --> E[Draw layout: status bar, composer, scrollback]
     E --> F[Focus composer]
   end
-
 
   subgraph loop["Main loop"]
     F --> G[User input in composer]
@@ -455,8 +605,11 @@ The following mockup illustrates the TUI with context pane visible and a sample 
 
 The scrollback SHOULD distinguish transcript item kinds instead of flattening everything into assistant prose.
 
+- **Conversation history and Markdown:** The full conversation history (user and assistant messages) in the scrollback MUST be displayed with **formatted Markdown** when `--plain` is not set, consistent with current `cynork chat` behavior for agent responses (headings, lists, code blocks, emphasis, links).
+  This applies to both stored history and streaming assistant output.
 - **User and assistant text:** Render as the main readable transcript.
-  When `--plain` is not set, assistant `text` parts MAY use Markdown-aware rendering as already proposed.
+  When `--plain` is not set, assistant `text` parts (and user message text, where applicable) MUST use Markdown-aware rendering so that conversation history is readable and formatted like current cynork chat.
+- **User message styling:** User messages in the scrollback MUST be shown with a distinct background (e.g. slightly different background color or subtle region styling) so they are clearly identifiable as user input in the conversation stream.
 - **Thinking or reasoning:** Thinking is a non-default transcript item kind.
   During generation the UI MAY show an ephemeral status row such as `Thinking...`, spinner text, or similar progress indicator.
   When the final response includes a `thinking` part and the user has not enabled expanded thinking view, the transcript SHOULD render only a compact placeholder for that block.
@@ -477,26 +630,34 @@ The TUI SHOULD support an explicit outbox-like draft queue for messages the user
 - **Operations:** The user SHOULD be able to add the current composer to the queue, edit a queued draft, remove a queued draft, reorder queued drafts, and send one queued draft or all queued drafts.
 - **Send semantics:** Sending a queued draft turns it into a normal user message at the time of actual send.
   The UI SHOULD indicate whether queued drafts will be sent sequentially and whether the client waits for each response before sending the next queued draft.
-- **Safety:** Attachments associated with a queued draft SHOULD remain visible with that draft.
-  If attachment paths or upload references become invalid before send, the UI SHOULD surface that clearly before attempting transmission.
+- **Safety:** Queued drafts may contain @ references; when sent, @-referenced files are uploaded at send time.
+  The UI SHOULD surface any validation or send failure (e.g. missing file, upload error) clearly.
 
-#### 5.1.9 Attachments and Downloads
+#### 5.1.9 Downloads (Assistant-Provided Only)
 
-When chat attachments or download refs are available, the TUI SHOULD surface them explicitly in both the composer and transcript.
-
-- **Composer attachments:** Before send, selected files SHOULD appear as removable chips or rows showing filename, media type, and size when known.
-  The user MUST be able to remove an attachment before sending the message.
-- **Transcript attachment refs:** A sent user turn SHOULD show attachment metadata near the message that referenced it.
-  Images MAY be previewed when the terminal renderer supports it; otherwise show metadata only.
-- **Download refs:** Assistant-provided files SHOULD appear as explicit download items with filename, media type, and size when known.
+- **Download refs:** When the gateway exposes assistant-provided files (e.g. via `download_ref` parts), the TUI SHOULD surface them as explicit download items with filename, media type, and size when known.
   The action label MAY be a keybinding, command palette action, or slash-command hint, but the interaction MUST require user intent.
-- **Path handling:** Local file paths MAY be shown locally before send for user confirmation, but once uploaded the persisted transcript SHOULD use only stable attachment or download references, not machine-specific local paths.
+  The UI MUST NOT auto-download without user action.
+
+#### 5.1.10 @ File References (Cursor-Like)
+
+- Spec ID: `CYNAI.CLIENT.CynorkChat.AtFileReferences` <a id="spec-cynai-client-cynorkchat-atfilereferences"></a>
+- Traces To: [REQ-CLIENT-0198](#req-client-0198)
+- **Composer:** The composer accepts text with Markdown.
+  The only mechanism for including files in a user message is the **@ shorthand** (no separate attachment picker or drag-and-drop).
+- **Trigger:** When the user types `@`, the TUI MAY open a filesystem lookup (autocomplete or browser).
+  Lookup SHOULD search from a configurable base (e.g. current working directory, project root, or `@`-search path in config).
+  The user selects a file or types a path; the TUI inserts the reference (e.g. `@./path/to/file` or `@filename`) into the composer text.
+- **On submit:** When the user sends the message, the client MUST resolve each @ reference in the text to a local file path, upload that file to the gateway (or include it per gateway contract), and send the message with the resulting file references so the model receives the file content.
+  Resolution MUST happen at send time; if a referenced file is missing or unreadable, the client MUST surface an error and MUST NOT send the message until the user fixes or removes the reference.
+- **Display:** The TUI MAY render @ references in the composer as chips or inline path hints so the user can see which files will be uploaded on send.
+  After send, the transcript MAY show that the message included file refs (e.g. "1 file attached") without duplicating the raw @ syntax in the stored message if the gateway normalizes it.
 
 ### 5.2 Completion and Discovery
 
 - Spec ID: `CYNAI.CLIENT.CynorkChat.Completion` <a id="spec-cynai-client-cynorkchat-completion"></a>
 - Status: proposed
-- Traces To: [REQ-CLIENT-0185](#req-client-0185)
+- Traces To: [REQ-CLIENT-0203](#req-client-0203)
 - Completion sources and constraints:
   - Autocomplete and fuzzy selection for: task identifiers (UUID and human-readable names) in slash commands; project selection for `/project set`; model selection for `/model`.
   - Completion data: task list, project list, model list calls as defined by existing APIs; no new gateway endpoints required.
@@ -507,7 +668,7 @@ When chat attachments or download refs are available, the TUI SHOULD surface the
 - Status: proposed
 - Behavior for non-interactive or scripted use (e.g. `--plain` and optional `--once` flag), so that chat can be driven from scripts without TUI embellishments.
 - In `--plain` or other script-oriented modes, stdout SHOULD contain only the final assistant text.
-  Structured tool rows, progress indicators, attachment chips, and download actions SHOULD be omitted from stdout so scripts do not need to parse UI chrome.
+  Structured tool rows, progress indicators, and download actions SHOULD be omitted from stdout so scripts do not need to parse UI chrome.
 - If the implementation chooses to surface non-text metadata in non-interactive mode, it SHOULD do so on stderr or via an explicit machine-readable output mode rather than mixing it into the assistant text stream.
 
 ### 5.4 Shell Deprecation and Doc Alignment
@@ -534,10 +695,10 @@ Doc changes (no new Spec ID; alignment of existing specs and requirements):
 ### 5.6 Default Entry Point and Explicit `tui` Command
 
 - Spec ID: `CYNAI.CLIENT.CynorkTui.EntryPoint` <a id="spec-cynai-client-cynorktui-entrypoint"></a>
-- Status: proposed
+- Status: proposed; first rollout implemented (explicit `cynork tui` only; bare `cynork` default deferred per [Integration Plan and Refinements](#21-integration-plan-and-refinements)).
 - Traces To: [REQ-CLIENT-0197](#req-client-0197)
 - Rollout order:
-  - First rollout: the CLI SHOULD expose the full-screen chat TUI explicitly as `cynork tui`.
+  - First rollout: the CLI SHOULD expose the full-screen chat TUI explicitly as `cynork tui`. **(Done in stable; see [cynork_tui.md](../tech_specs/cynork_tui.md) Entrypoint and Compatibility.)**
   - Later rollout: once the TUI is feature-complete for the intended initial scope, invoking `cynork` with no subcommand SHOULD launch that same TUI by default instead of printing top-level help.
 - Existing explicit commands and subcommands MUST remain available, including `cynork chat`, `cynork task`, `cynork project`, `cynork auth`, and other established command paths.
 - Compatibility handling:
@@ -604,13 +765,18 @@ Doc changes (no new Spec ID; alignment of existing specs and requirements):
 
 Assumes approval of the proposed requirements and spec changes above.
 
+**Actual execution (TUI-first):** The repository executed a **TUI-first MVP** rather than the full plan below.
+  See [2026-03-12_plan_next_round_execution.md](../dev_docs/2026-03-12_plan_next_round_execution.md) for phases 0--8, locked scope (Phase 0/2), backend prerequisites (Phase 3), shared controller and PTY harness (Phase 4--5), and validation (Phase 6).
+  Phases 0--2 and the minimum TUI spec cut are done; implementation (Phase 5) and validation (Phase 6) are in progress.
+  The refinements in [Integration Plan and Refinements](#21-integration-plan-and-refinements) summarize how the executed plan differs from this draft (entry point, deferred features, REQ ID repurposing).
+
 ### 6.1 Phase 0: Contract Decisions
 
 - Decide whether `cynork shell` is removed immediately or deprecated for one release.
-- Decide whether `!` shell escape remains required by default or becomes opt-in (`--enable-shell`); document in spec.
+- The `! command` shorthand (shell escape) MUST be supported and SHOULD be enabled by default; document in spec (see REQ-CLIENT-0204 (proposed)).
 - Decide minimal "cursor-agent-like" TUI scope for first iteration (e.g. layout + multi-line + completion + status bar).
 - Decide the canonical structured chat-turn schema (`content` only vs. `content` plus `parts`) before implementation starts.
-- Decide the first attachment transport contract (`file_id` upload flow vs. URL-reference-only) for chat messages.
+- User message input is text (Markdown) only; no attachment transport for chat input.
 - Decide the first authenticated download contract for assistant-generated files.
 - Decide whether persisted `thinking` parts are retained across reloads or are session-local only after response completion.
 - Decide whether queued drafts are local-memory only or optionally restored from local config or cache after restart.
@@ -618,20 +784,22 @@ Assumes approval of the proposed requirements and spec changes above.
 ### 6.2 Phase 1: Requirements, Specs, and BDD
 
 - Update `docs/requirements/usrgwy.md` and `docs/requirements/client.md` with the proposed requirements.
-- Update tech specs: Chat Threads and Messages (title, summary, history list, archive, structured turns, download refs); OpenAI-compatible chat API (rich inputs and attachment handling); cynork chat / TUI (layout, queued drafts, thinking toggle, non-interactive, default entrypoint); cynork_cli and shell_output (shell deprecation/removal).
+- Update tech specs: Chat Threads and Messages (title, summary, history list, archive, structured turns, download refs); OpenAI-compatible chat API (text/Markdown input only; no attachment handling for user messages); cynork chat / TUI (layout, queued drafts, thinking toggle, non-interactive, default entrypoint); cynork_cli and shell_output (shell deprecation/removal).
 - Update BDD: cynork_shell.feature => chat-based scenarios; extend cynork_chat.feature for TUI behavior.
 
 ### 6.3 Phase 2: Gateway and Chat Data (If Approved)
 
 - Implement PATCH thread title, optional summary field and API, list sort/pagination/archive per spec.
 - Implement structured chat-turn persistence and retrieval (`content` plus `parts` when approved).
-- Implement rich chat input validation for text plus attachments, and add the chosen upload contract if attachments are in MVP.
+- Implement chat input validation for text (Markdown allowed).
+  Implement the @ file-reference contract: gateway upload endpoint (or inline representation) for @-resolved files, and client resolution + auto-upload on message submit.
 - Implement authenticated download refs for assistant-produced files if download support is in MVP.
 
 ### 6.4 Phase 3: Cynork Chat TUI
 
 - Implement TUI layer for `cynork chat`: composer, panes, status bar, completion (task/project/model), scrollback and search.
-- Implement structured transcript rendering: thinking status, thinking placeholder plus toggle, tool call cards, tool result cards, attachment chips, queued drafts, and download actions.
+- Implement structured transcript rendering: thinking status, thinking placeholder plus toggle, tool call cards, tool result cards, queued drafts, and download actions.
+  Implement @ shorthand in the TUI composer: filesystem lookup when user types @, insert reference, and auto-upload referenced files on submit.
 - Implement local config (chat TUI preferences) and local cache (completion/list data) per [5.5 Local Config](#spec-cynai-client-cynorkchat-localconfig) and [5.6 Local Cache](#spec-cynai-client-cynorkchat-localcache).
 - Implement `cynork tui` as the first explicit entrypoint for the new TUI while preserving existing subcommands and leaving `cynork chat` in place as a supported compatibility alias.
 - Preserve: no secrets in local history, config, or cache; honor `--no-color`; do not print or persist tokens.
@@ -660,19 +828,19 @@ Assumes approval of the proposed requirements and spec changes above.
 
 Canonical links to requirement anchors and Spec Item anchors in this document:
 
-- [REQ-USRGWY-0135](#req-usrgwy-0135) => [Thread Title (4.1)](#spec-cynai-usrgwy-chatthreadsmessages-threadtitle)
-- [REQ-USRGWY-0136](#req-usrgwy-0136) => [Thread Summary (4.2)](#spec-cynai-usrgwy-chatthreadsmessages-threadsummary)
-- [REQ-USRGWY-0137](#req-usrgwy-0137) => [History List (4.3)](#spec-cynai-usrgwy-chatthreadsmessages-historylist)
-- [REQ-USRGWY-0138](#req-usrgwy-0138) => [Archive (4.4)](#spec-cynai-usrgwy-chatthreadsmessages-archive)
+- [REQ-USRGWY-0142](#req-usrgwy-0142) => [Thread Title (4.1)](#spec-cynai-usrgwy-chatthreadsmessages-threadtitle)
+- [REQ-USRGWY-0143](#req-usrgwy-0143) => [Thread Summary (4.2)](#spec-cynai-usrgwy-chatthreadsmessages-threadsummary)
+- [REQ-USRGWY-0144](#req-usrgwy-0144) => [History List (4.3)](#spec-cynai-usrgwy-chatthreadsmessages-historylist)
+- [REQ-USRGWY-0145](#req-usrgwy-0145) => [Archive (4.4)](#spec-cynai-usrgwy-chatthreadsmessages-archive)
 - [REQ-USRGWY-0139](#req-usrgwy-0139) => [Structured Chat Turns (4.5)](#spec-cynai-usrgwy-chatthreadsmessages-structuredturns)
-- [REQ-USRGWY-0140](#req-usrgwy-0140) => [Rich Inputs (4.6)](#spec-cynai-usrgwy-openaichatapi-richinputs)
+- [REQ-USRGWY-0140](#req-usrgwy-0140) => [Text Input (4.6)](#spec-cynai-usrgwy-openaichatapi-textinput)
 - [REQ-USRGWY-0141](#req-usrgwy-0141) => [Downloadable Chat Outputs (4.7)](#spec-cynai-usrgwy-chatthreadsmessages-downloadrefs)
-- [REQ-CLIENT-0181](#req-client-0181) => [History List (4.3)](#spec-cynai-usrgwy-chatthreadsmessages-historylist)
-- [REQ-CLIENT-0182](#req-client-0182) => [Thread Title (4.1)](#spec-cynai-usrgwy-chatthreadsmessages-threadtitle)
-- [REQ-CLIENT-0183](#req-client-0183) => [Thread Summary (4.2)](#spec-cynai-usrgwy-chatthreadsmessages-threadsummary)
-- [REQ-CLIENT-0184](#req-client-0184) => [TUI Layout (5.1)](#spec-cynai-client-cynorkchat-tuilayout)
-- [REQ-CLIENT-0185](#req-client-0185) => [TUI Layout (5.1)](#spec-cynai-client-cynorkchat-tuilayout), [Completion (5.2)](#spec-cynai-client-cynorkchat-completion)
-- [REQ-CLIENT-0186](#req-client-0186) => [TUI Layout (5.1)](#spec-cynai-client-cynorkchat-tuilayout)
+- [REQ-CLIENT-0199](#req-client-0199) => [History List (4.3)](#spec-cynai-usrgwy-chatthreadsmessages-historylist)
+- [REQ-CLIENT-0200](#req-client-0200) => [Thread Title (4.1)](#spec-cynai-usrgwy-chatthreadsmessages-threadtitle)
+- [REQ-CLIENT-0201](#req-client-0201) => [Thread Summary (4.2)](#spec-cynai-usrgwy-chatthreadsmessages-threadsummary)
+- [REQ-CLIENT-0202](#req-client-0202) => [TUI Layout (5.1)](#spec-cynai-client-cynorkchat-tuilayout)
+- [REQ-CLIENT-0203](#req-client-0203) => [TUI Layout (5.1)](#spec-cynai-client-cynorkchat-tuilayout), [Completion (5.2)](#spec-cynai-client-cynorkchat-completion)
+- [REQ-CLIENT-0204](#req-client-0204) => [TUI Layout (5.1)](#spec-cynai-client-cynorkchat-tuilayout)
 - [REQ-CLIENT-0187](#req-client-0187) => [Local Config (5.5)](#spec-cynai-client-cynorkchat-localconfig)
 - [REQ-CLIENT-0188](#req-client-0188) => [Local Cache (5.6)](#spec-cynai-client-cynorkchat-localcache)
 - [REQ-CLIENT-0189](#req-client-0189) => [TUI Layout (5.1)](#spec-cynai-client-cynorkchat-tuilayout), Shell Escape and Interactive Subprocesses (5.1.3)
@@ -680,10 +848,15 @@ Canonical links to requirement anchors and Spec Item anchors in this document:
 - [REQ-CLIENT-0191](#req-client-0191) => [Web Login (5.8)](#spec-cynai-client-cliweblogin)
 - [REQ-CLIENT-0192](#req-client-0192) => [Structured Chat Turns (4.5)](#spec-cynai-usrgwy-chatthreadsmessages-structuredturns), [TUI Layout (5.1)](#spec-cynai-client-cynorkchat-tuilayout)
 - [REQ-CLIENT-0193](#req-client-0193) => [Structured Chat Turns (4.5)](#spec-cynai-usrgwy-chatthreadsmessages-structuredturns), [TUI Layout (5.1)](#spec-cynai-client-cynorkchat-tuilayout)
-- [REQ-CLIENT-0194](#req-client-0194) => [Rich Inputs (4.6)](#spec-cynai-usrgwy-openaichatapi-richinputs), [Downloadable Chat Outputs (4.7)](#spec-cynai-usrgwy-chatthreadsmessages-downloadrefs), [TUI Layout (5.1)](#spec-cynai-client-cynorkchat-tuilayout)
+- [REQ-CLIENT-0194](#req-client-0194) => [Text Input (4.6)](#spec-cynai-usrgwy-openaichatapi-textinput), [Downloadable Chat Outputs (4.7)](#spec-cynai-usrgwy-chatthreadsmessages-downloadrefs), [TUI Layout (5.1)](#spec-cynai-client-cynorkchat-tuilayout)
 - [REQ-CLIENT-0195](#req-client-0195) => [Structured Chat Turns (4.5)](#spec-cynai-usrgwy-chatthreadsmessages-structuredturns), [TUI Layout (5.1)](#spec-cynai-client-cynorkchat-tuilayout)
 - [REQ-CLIENT-0196](#req-client-0196) => [TUI Layout (5.1)](#spec-cynai-client-cynorkchat-tuilayout), [Local Config (5.5)](#spec-cynai-client-cynorkchat-localconfig)
 - [REQ-CLIENT-0197](#req-client-0197) => [Default Entry Point (5.9)](#spec-cynai-client-cynorktui-entrypoint), [TUI Layout (5.1)](#spec-cynai-client-cynorkchat-tuilayout)
+- [REQ-CLIENT-0198](#req-client-0198) => [Text Input (4.6)](#spec-cynai-usrgwy-openaichatapi-textinput) (4.6.1), [@ File References (5.1.10)](#spec-cynai-client-cynorkchat-atfilereferences)
+- [REQ-ORCHES-0167](#req-orches-0167) => [Orchestrator Chat File Upload Flow (4.8.1)](#spec-cynai-orches-chatfileuploadflow)
+- [REQ-ORCHES-0168](#req-orches-0168) => [Orchestrator Chat File Upload Flow (4.8.1)](#spec-cynai-orches-chatfileuploadflow)
+- [REQ-SCHEMA-0114](#req-schema-0114) => [File Upload Storage (4.8.2)](#spec-cynai-usrgwy-chatthreadsmessages-fileuploadstorage)
+- [REQ-PMAGNT-0115](#req-pmagnt-0115) => [PMA Chat File Context (4.8.3)](#spec-cynai-pmagnt-chatfilecontext)
 
 ## 8 Out of Scope for This Draft
 
@@ -696,12 +869,16 @@ Canonical links to requirement anchors and Spec Item anchors in this document:
 ## 9 Notes and Risks
 
 - Removing or deprecating `cynork shell` requires coordinated changes to requirements, tech specs, and BDD.
-- History and naming alone can ride on existing thread endpoints plus PATCH, but rich attachments and authenticated downloads likely require at least one additional gateway-owned file contract.
+- History and naming alone can ride on existing thread endpoints plus PATCH.
+  User input is text/Markdown only (no attachment upload).
+  Authenticated downloads for assistant-produced files likely require at least one gateway-owned download contract.
 - Structured transcript items improve UX, but they also create a compatibility choice: whether to extend the chat-message schema now or overload existing metadata fields temporarily.
 - Making bare `cynork` enter the TUI improves discoverability, but that switch should happen only after the explicit `cynork tui` rollout has reached feature completeness and the CLI help path remains explicit and stable.
 
 ## 10 Related Documents
 
+- [2026-03-12_plan_next_round_execution.md](../dev_docs/2026-03-12_plan_next_round_execution.md) (TUI-first integration plan; source of refinements and deferred scope)
+- [cynork_tui.md](../tech_specs/cynork_tui.md) (stable TUI spec for first rollout)
 - [Chat Threads and Messages](../tech_specs/chat_threads_and_messages.md)
 - [OpenAI-Compatible Chat API](../tech_specs/openai_compatible_chat_api.md)
 - [User API Gateway requirements](../requirements/usrgwy.md) (REQ-USRGWY-0130)

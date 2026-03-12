@@ -530,7 +530,7 @@ setup-dev CMD *ARGS:
 e2e *ARGS:
     @just scripts/e2e {{ ARGS }}
 
-# Create .venv and install Python lint tooling (scripts/requirements-lint.txt). Use with lint-python.
+# Create .venv and install Python deps: lint (scripts/requirements-lint.txt) and E2E (scripts/requirements-e2e.txt). Use with lint-python and just e2e.
 venv:
     #!/usr/bin/env bash
     set -e
@@ -540,5 +540,6 @@ venv:
     python3 -m venv .venv
     .venv/bin/pip install -q --upgrade pip
     .venv/bin/pip install -q -r scripts/requirements-lint.txt
-    echo "Created .venv with lint tooling. Use 'just lint-python' (it will use .venv when present)."
+    .venv/bin/pip install -q -r scripts/requirements-e2e.txt
+    echo "Created .venv with lint and E2E tooling. Use 'just lint-python' and 'just e2e' (they use .venv when present)."
 

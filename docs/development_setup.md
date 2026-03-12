@@ -90,9 +90,10 @@ just setup-dev build
 # Or manually
 go build -o bin/control-plane ./orchestrator/cmd/control-plane
 go build -o bin/user-gateway ./orchestrator/cmd/user-gateway
-go build -o bin/worker-api ./worker_node/cmd/worker-api
 go build -o bin/cynodeai-wnm ./worker_node/cmd/node-manager
 ```
+
+The worker node is a single binary (`cynodeai-wnm`); it embeds the Worker API (no separate worker-api binary).
 
 ### 3. Run Services
 
@@ -117,7 +118,7 @@ export USER_GATEWAY_LISTEN_ADDR=:12080
 ./bin/user-gateway
 ```
 
-Optional (for job execution): start worker-api and node-manager with the same `WORKER_API_BEARER_TOKEN` and `NODE_REGISTRATION_PSK` as the control-plane.
+Optional (for job execution): start node-manager with the same `WORKER_API_BEARER_TOKEN` and `NODE_REGISTRATION_PSK` as the control-plane (Worker API runs inside the node-manager process).
 
 ### 4. Docker Compose (Orchestrator Stack)
 
@@ -211,6 +212,7 @@ Reference for the main REST endpoints.
 ## E2E Demo and Tests
 
 The end-to-end demo tests: admin auto-creation, login, create task, task status, node registration, capability reporting, token refresh, logout (and optionally inference-in-sandbox).
+TUI PTY tests (e.g. cynork TUI flows) require Python E2E deps; run `just venv` once to create `.venv` with lint and E2E requirements (`scripts/requirements-lint.txt`, `scripts/requirements-e2e.txt`), then `just e2e` will use that environment.
 
 ```bash
 # Full demo: build, start orchestrator stack (compose), build inference-proxy image, start node, run tests

@@ -40,7 +40,8 @@ This temporary plan tracks the next round of work for CyNodeAI as of 2026-03-12.
 
 The priority for this round is the `cynork` TUI because it is the fastest path to realistic user-level validation of the current stack.
 
-This plan is derived from [MVP scope](../mvp.md), [MVP implementation plan](../mvp_plan.md), [Cynork TUI draft proposal](../draft_specs/cynork_tui_spec_proposal.md), [Chat threads, PMA context, and backend env follow-ups](../draft_specs/chat_threads_pma_context_and_backend_env_followups.md), and [Single binary node manager and worker API proposal](../draft_specs/single_binary_node_manager_worker_api_proposal.md).
+This plan is derived from [MVP scope](../mvp.md), [MVP implementation plan](../mvp_plan.md), [Cynork TUI draft proposal](../draft_specs/cynork_tui_spec_proposal.md), and [Chat threads, PMA context, and backend env follow-ups](../draft_specs/chat_threads_pma_context_and_backend_env_followups.md).
+The single-binary worker track is in [worker requirements](../requirements/worker.md) and [worker_node.md](../tech_specs/worker_node.md); promotion to stable was completed in a prior round.
 
 ## Round Goals
 
@@ -195,6 +196,10 @@ This phase narrows the large TUI proposal down to the minimum first rollout that
 
 - [x] Define generation-state behavior for in-flight assistant updates and final reconciliation of partial output into one logical turn.
 
+- [ ] Promote to stable [cynork_tui.md](../tech_specs/cynork_tui.md): conversation history as formatted Markdown and user messages in scrollback with a distinct background (currently in [draft proposal](../draft_specs/cynork_tui_spec_proposal.md) only).
+
+- [ ] Promote to stable [cynork_tui.md](../tech_specs/cynork_tui.md): composer and scrollback keybindings -> Shift+Enter for newlines; Up/Down in composer for previously sent messages; Ctrl+C to cancel, successive Ctrl+C when idle to exit; Page Up/Page Down to scroll and load older history (currently in [draft proposal](../draft_specs/cynork_tui_spec_proposal.md) only).
+
 ### Explicitly Deferred From the First TUI Rollout
 
 - [x] Do not implement thread summary or archive in this round.
@@ -202,6 +207,7 @@ This phase narrows the large TUI proposal down to the minimum first rollout that
 - [x] Do not implement assistant download-reference workflows in this round.
 
 - [x] Do not implement full attachment upload UX in this round.
+  When promoted, backend support (orchestrator file resolution, storage, PMA/LLM passthrough) is specified in the [draft proposal](../draft_specs/cynork_tui_spec_proposal.md) section 3.4 and 4.8 (REQ-ORCHES-0167/0168, REQ-SCHEMA-0114, REQ-PMAGNT-0115).
 
 - [x] Do not implement queued drafts or deferred send behavior in this round.
 
@@ -251,6 +257,7 @@ The order inside this phase matters because later TUI work depends on these back
 - [ ] Do not implement download-ref contracts in this round.
 
 - [ ] Do not implement rich attachment storage contracts in this round.
+  The [draft proposal](../draft_specs/cynork_tui_spec_proposal.md) defines proposed orchestrator, schema, and PMA requirements and specs (section 3.4, 4.8) for file upload storage, retrieval, and passthrough to PMA/LLM when @ shorthand is promoted.
 
 - [ ] Do not implement context compaction or automatic summarization in this round.
 
@@ -296,13 +303,17 @@ They must be developed in tandem so each validates the other as behavior lands, 
 - [x] Implement a multi-line composer with clear send semantics.
   (Enter = send, Shift+Enter = newline; status bar hint; visible lines capped at 5.)
 
-- [ ] Implement scrollback navigation, search, and copy behavior.
+- [ ] Implement composer input history: Up/Down in composer cycles through previously sent messages.
+
+- [ ] Implement Ctrl+C semantics: cancel current operation when no selection; when selection active, copy; successive Ctrl+C when idle exits cleanly (Cursor-agent style).
+
+- [ ] Implement scrollback navigation (Page Up/Page Down), search, and copy behavior; load older message history when user scrolls back past loaded content.
 
 - [ ] Implement status-bar rendering for gateway, auth identity, project, model, and connectivity state.
 
 - [ ] Implement local slash-command discovery and execution within the TUI.
 
-- [ ] Implement transcript rendering for visible text, hidden-by-default thinking, tool activity rows, and ordered multi-item assistant turns.
+- [ ] Implement transcript rendering for visible text, hidden-by-default thinking, tool activity rows, and ordered multi-item assistant turns; user messages in scrollback with distinct background.
 
 - [ ] Implement in-flight generation handling so one assistant turn is updated progressively and reconciled cleanly on completion.
 
@@ -412,7 +423,7 @@ They must be developed in tandem so each validates the other as behavior lands, 
 
 ## Phase 8 Worker Deployment Simplification Docs
 
-- [ ] Promote [Single binary node manager and worker API proposal](../draft_specs/single_binary_node_manager_worker_api_proposal.md) into stable requirements and worker-node tech-spec updates in this round.
+- [x] Promote the single-binary node manager and worker API proposal into stable requirements and worker-node tech-spec updates (completed in a prior round; see [worker.md](../requirements/worker.md) and [worker_node.md](../tech_specs/worker_node.md)).
 
 - [ ] Keep single-binary worker implementation deferred until after the first TUI rollout.
 
@@ -496,3 +507,13 @@ They must be developed in tandem so each validates the other as behavior lands, 
   Added scripts/requirements-e2e.txt (pexpect>=4.8), scripts/test_scripts/tui_pty_harness.py (TuiPtySession, landmarks, send_keys, read_until_landmark, wait_for_prompt_ready, capture_screen), and scripts/test_scripts/e2e_198_tui_pty.py (prompt-ready, exit via ctrl+c, thread list; skip when pexpect not installed).
   Tag tui_pty added to check_e2e_tags.
   Harness asserts on semantic landmarks; E2E tests run with `just e2e` and skip gracefully without pexpect.
+  Doc/justfile follow-up: root `just venv` now installs both scripts/requirements-lint.txt and scripts/requirements-e2e.txt so one .venv supports lint and E2E (including TUI PTY); development_setup and scripts/README updated.
+
+- **2026-03-12:** Plan aligned with updated [Cynork TUI draft proposal](../draft_specs/cynork_tui_spec_proposal.md).
+  Draft now uses non-overlapping REQ IDs (USRGWY 0142--0145, CLIENT 0199--0204) to avoid conflicts with stable 0135--0138 and 0181--0186.
+  Draft adds: conversation history as formatted Markdown; user messages in scrollback with distinct background; Shift+Enter for newlines; Up/Down in composer for previously sent messages; Ctrl+C cancel and successive Ctrl+C exit; Page Up/Page Down scrollback with load-older-history when scrolling past loaded content; `! command` and @ shorthand (latter deferred in first rollout).
+  Phase 2 "Must Land" and Phase 5 "Core TUI Experience" updated to reflect these behaviors; broken link to single-binary proposal removed from Purpose (file not in repo); Phase 8 wording made link-free.
+
+- **2026-03-12:** Draft proposal extended with backend file upload/retrieval: section 3.4 (REQ-ORCHES-0167/0168, REQ-SCHEMA-0114, REQ-PMAGNT-0115) and section 4.8 (orchestrator chat file flow, file upload storage, PMA chat file context).
+  When @ shorthand and gateway upload are promoted, orchestrator must resolve file refs and pass to PMA; schema must persist uploads scoped to user/thread; PMA must include file content in LLM requests.
+  Plan Phase 2 deferred and Phase 3 deferred backend bullets updated to reference the draft.

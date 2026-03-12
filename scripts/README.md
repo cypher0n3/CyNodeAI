@@ -27,7 +27,9 @@ Development setup is implemented in **just/shell** in `scripts/justfile`; use `j
   Use `just setup-dev` for the usual entry point.
 - **justfile** – Dev and E2E recipes (start, stop, build, full-demo, e2e).
   Invoked from repo root via `just setup-dev` or `just scripts/<recipe>`.
-- **requirements-lint.txt** - Python lint tooling for `just venv` and `just lint-python`.
+- **requirements-lint.txt** - Python lint tooling; installed by `just venv` together with E2E deps.
+- **requirements-e2e.txt** - Optional E2E deps (e.g. pexpect for TUI PTY tests), installed by `just venv`.
+  TUI PTY tests are skipped if pexpect is not installed.
 - **podman-generate-units.sh** - Optional/auxiliary; see justfile for primary workflows.
 
 ## Dev Setup (Scripts/justfile)
