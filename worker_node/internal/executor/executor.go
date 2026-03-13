@@ -678,9 +678,12 @@ func applySbaResultFromDir(jobDir string, resp *workerapi.RunJobResponse) {
 }
 
 // buildProxyRunArgs returns the argv for running the inference proxy container in the pod.
+// REQ-SANDBX-0131 / REQ-WORKER-0260: the proxy MUST listen on the UDS socket path
+// (inferenceProxySockInContainer) shared within the pod so the SBA container can reach it.
 func buildProxyRunArgs(podName, ollamaUpstreamURL, image string, command []string) []string {
 	args := []string{"run", "-d", "--rm", "--pod", podName,
 		"-e", "OLLAMA_UPSTREAM_URL=" + ollamaUpstreamURL,
+		"-e", "INFERENCE_PROXY_SOCKET=" + inferenceProxySockInContainer,
 		image,
 	}
 	if len(command) > 0 {

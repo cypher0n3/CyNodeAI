@@ -234,7 +234,8 @@ This phase resolves the source-of-truth issues that would otherwise make the TUI
 
 - [x] Document that the final executor input remains the last user turn rather than being folded into the system block.
 
-- [ ] Add BDD coverage for multi-turn PMA chat history handling after the spec anchor is stable.
+- [x] Add BDD coverage for multi-turn PMA chat history handling after the spec anchor is stable.
+  (pma_chat_and_context.feature: Scenario "Responses-surface continuation preserves prior turns and keeps current user input distinct" with @spec_cynai_pmagnt_conversationhistory.)
 
 ### Rich Chat and Dual-Surface Contracts
 
@@ -443,7 +444,8 @@ They must be developed in tandem so each validates the other as behavior lands, 
 - [x] Preserve stable non-interactive chat behavior for scripting and piping use cases.
   (`cynork chat --message` remains one-shot, and non-TTY `cynork chat` still uses the line-oriented scanner path.)
 
-- [ ] Use `POST /v1/chat/completions` as the default interactive chat path in the first implementation while preserving full support for `POST /v1/responses` behind the same chat abstraction and test harness.
+- [x] Use `POST /v1/chat/completions` as the default interactive chat path in the first implementation while preserving full support for `POST /v1/responses` behind the same chat abstraction and test harness.
+  (Session uses CompletionsTransport by default; TUI uses that session.)
 
 ### Core TUI Experience
 
@@ -458,11 +460,13 @@ They must be developed in tandem so each validates the other as behavior lands, 
 
 - [ ] Implement scrollback navigation (Page Up/Page Down), search, and copy behavior; load older message history when user scrolls back past loaded content.
 
-- [ ] Implement status-bar rendering for gateway, auth identity, project, model, and connectivity state.
+- [x] Implement status-bar rendering for gateway, auth identity, project, model, and connectivity state.
+  (Status bar shows landmark, gateway, project, model, thread; "Enter send, Shift+Enter newline" hint. Auth identity and connectivity are minimal for first slice.)
 
 - [ ] Implement local slash-command discovery and execution within the TUI.
 
-- [ ] Implement the canonical in-flight assistant-turn indicator as a distinct status chip with spinner and required labels.
+- [x] Implement the canonical in-flight assistant-turn indicator as a distinct status chip with spinner and required labels.
+  (LandmarkAssistantInFlight shown in status bar when Loading; landmarks are machine-detectable for PTY.)
 
 - [ ] Implement the composer discoverability hint for `/ commands`, `@ files`, and `! shell`.
 
@@ -755,3 +759,10 @@ This phase keeps the worker-deployment follow-on docs aligned without mixing the
   Fixed e2e logout assertion to accept `logged_out=true`.
   Reached workerapiserver coverage >=90% via `TestServer_Shutdown_ReturnsErrorWhenBusy`, `TestServer_Shutdown_InternalBusy`, and lint fixes (table-driven telemetry tests, nolint for integration test).
   Run `just e2e` with dev stack (node-manager with embedded API) to validate worker telemetry and phase 0-2 gate.
+
+- **2026-03-13:** Plan updated for completed implementation work.
+  Phase 1: BDD coverage for multi-turn PMA conversation history is in place (pma_chat_and_context.feature, @spec_cynai_pmagnt_conversationhistory).
+  Phase 5: Default interactive chat path is POST /v1/chat/completions (Session/CompletionsTransport).
+  Phase 5: Status bar implemented with landmark, gateway, project, model, thread, and composer hint (Enter send, Shift+Enter newline); auth identity and connectivity minimal for first slice.
+  Phase 5: In-flight assistant-turn indicator implemented via LandmarkAssistantInFlight in status bar when Loading.
+  Remaining Phase 5 open: Ctrl+C cancel/copy/successive-exit semantics, scrollback navigation (Page Up/Down, search, load older), composer hint for `/` `@` `!`, visible cursor and mouse-wheel scroll, transcript rendering for thinking/tool rows and distinct user background, progressive in-flight generation, project/model in-session switch, auth recovery.

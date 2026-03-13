@@ -13,6 +13,7 @@ import (
 	"net/http/httputil"
 	"net/url"
 	"os"
+	"path/filepath"
 	"time"
 )
 
@@ -45,6 +46,7 @@ func RunUDSWithUpstream(ctx context.Context, sockPath, upstream string) int {
 		slog.Error("invalid OLLAMA_UPSTREAM_URL", "error", err)
 		return 1
 	}
+	_ = os.MkdirAll(filepath.Dir(sockPath), 0o755)
 	_ = os.Remove(sockPath) // clean up stale socket
 	listener, err := net.Listen("unix", sockPath)
 	if err != nil {

@@ -1434,6 +1434,25 @@ func TestSetSBAError(t *testing.T) {
 	}
 }
 
+// REQ-SANDBX-0131 / REQ-WORKER-0260: proxy sidecar in pod MUST set INFERENCE_PROXY_SOCKET
+// so it listens on the UDS path shared with the SBA container.
+func TestBuildProxyRunArgs_SetsInferenceProxySocket(t *testing.T) {
+	args := buildProxyRunArgs("pod-1", "http://host.containers.internal:11434", "inference-proxy:dev", nil)
+	argStr := strings.Join(args, " ")
+	if !strings.Contains(argStr, "INFERENCE_PROXY_SOCKET=") {
+		t.Errorf("proxy run args must set INFERENCE_PROXY_SOCKET (REQ-SANDBX-0131): %s", argStr)
+	}
+	if !strings.Contains(argStr, inferenceProxySockInContainer) {
+		t.Errorf("proxy run args must set INFERENCE_PROXY_SOCKET to %s: %s", inferenceProxySockInContainer, argStr)
+	}
+	if !strings.Contains(argStr, "OLLAMA_UPSTREAM_URL=http://host.containers.internal:11434") {
+		t.Errorf("proxy run args must set OLLAMA_UPSTREAM_URL: %s", argStr)
+	}
+	if !strings.Contains(argStr, "--pod pod-1") {
+		t.Errorf("proxy run args must include --pod: %s", argStr)
+	}
+}
+
 func TestBuildSBARunArgs(t *testing.T) {
 	e := New("podman", 30*time.Second, 4096, "", "", nil)
 	req := &workerapi.RunJobRequest{
