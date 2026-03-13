@@ -82,8 +82,11 @@ func NewServer(cfg *RunConfig) (*Server, error) {
 	if cfgCopy.ListenAddr == "" {
 		cfgCopy.ListenAddr = getEnv("LISTEN_ADDR", ":9190")
 	}
+	// InternalListenAddr left empty when caller passes "" (e.g. tests: no internal TCP listener).
 	if cfgCopy.InternalListenAddr == "" {
-		cfgCopy.InternalListenAddr = getEnv("WORKER_INTERNAL_LISTEN_ADDR", "127.0.0.1:9191")
+		if v := getEnv("WORKER_INTERNAL_LISTEN_ADDR", ""); v != "" {
+			cfgCopy.InternalListenAddr = v
+		}
 	}
 	if cfgCopy.Logger == nil {
 		cfgCopy.Logger = slog.Default()

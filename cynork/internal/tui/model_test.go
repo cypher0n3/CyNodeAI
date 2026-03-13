@@ -191,34 +191,35 @@ func TestModel_HandleKey_LoadingIgnoresKeys(t *testing.T) {
 }
 
 func TestModel_InputHistory_PushAndNavigate(t *testing.T) {
+	const inputFirst, inputSecond = "first", "second"
 	m := NewModel(&chat.Session{})
-	m.pushInputHistory("first")
-	m.pushInputHistory("second")
-	if len(m.InputHistory) != 2 || m.InputHistory[0] != "second" || m.InputHistory[1] != "first" {
+	m.pushInputHistory(inputFirst)
+	m.pushInputHistory(inputSecond)
+	if len(m.InputHistory) != 2 || m.InputHistory[0] != inputSecond || m.InputHistory[1] != inputFirst {
 		t.Errorf("InputHistory = %v", m.InputHistory)
 	}
-	m.pushInputHistory("second") // dedupe
+	m.pushInputHistory(inputSecond) // dedupe
 	if len(m.InputHistory) != 2 {
 		t.Errorf("dedupe: InputHistory = %v", m.InputHistory)
 	}
 	// Up from -1: show newest (index 0)
 	m.navigateInputHistory(true)
-	if m.InputHistoryIdx != 0 || m.Input != "second" {
+	if m.InputHistoryIdx != 0 || m.Input != inputSecond {
 		t.Errorf("Up from -1: idx=%d input=%q", m.InputHistoryIdx, m.Input)
 	}
 	// Up again: show older (index 1)
 	m.navigateInputHistory(true)
-	if m.InputHistoryIdx != 1 || m.Input != "first" {
+	if m.InputHistoryIdx != 1 || m.Input != inputFirst {
 		t.Errorf("Up again: idx=%d input=%q", m.InputHistoryIdx, m.Input)
 	}
 	// Up at end: no change
 	m.navigateInputHistory(true)
-	if m.InputHistoryIdx != 1 || m.Input != "first" {
+	if m.InputHistoryIdx != 1 || m.Input != inputFirst {
 		t.Errorf("Up at end: idx=%d input=%q", m.InputHistoryIdx, m.Input)
 	}
 	// Down: back to newer
 	m.navigateInputHistory(false)
-	if m.InputHistoryIdx != 0 || m.Input != "second" {
+	if m.InputHistoryIdx != 0 || m.Input != inputSecond {
 		t.Errorf("Down: idx=%d input=%q", m.InputHistoryIdx, m.Input)
 	}
 	// Down: exit history, clear input

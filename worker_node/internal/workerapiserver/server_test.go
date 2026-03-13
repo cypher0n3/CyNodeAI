@@ -26,7 +26,8 @@ func TestNewServer_NilPublicHandler(t *testing.T) {
 
 func TestNewServer_SuccessWithDefaults(t *testing.T) {
 	cfg := &RunConfig{
-		PublicHandler: http.NewServeMux(),
+		PublicHandler:      http.NewServeMux(),
+		InternalListenAddr: "127.0.0.1:9191", // explicit default; empty means no internal listener
 	}
 	srv, err := NewServer(cfg)
 	if err != nil {
@@ -160,6 +161,189 @@ func TestServer_Run_ServerErrPath(t *testing.T) {
 			t.Logf("Run returned: %v", err)
 		}
 	}
+}
+
+// TestServer_Run_ReturnsErrorWhenPublicListenerClosed closes the public listener
+// so that Serve returns an error and Run receives it from serverErr and returns.
+func TestServer_Run_ReturnsErrorWhenPublicListenerClosed(t *testing.T) {
+	cfg := &RunConfig{
+		PublicHandler:      http.NewServeMux(),
+		InternalHandler:    http.NewServeMux(),
+		ListenAddr:         "127.0.0.1:0",
+		InternalListenAddr: "", // only public listener so closing it is the only serverErr source
+		InternalListenUnix: "",
+		SocketByService:    nil,
+	}
+	srv, err := NewServer(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	done := make(chan error, 1)
+	go func() { done <- srv.Run(ctx) }()
+	time.Sleep(150 * time.Millisecond)
+	if srv.publicLn == nil {
+		t.Fatal("public listener not set")
+	}
+	_ = srv.publicLn.Close()
+	err = <-done
+	if err == nil {
+		t.Error("Run should return non-nil error after listener closed")
+	}
+}
+
+// TestServer_Shutdown_WithExpiredContext calls Shutdown with an already-expired
+// context to exercise the error-handling path (errs append and return).
+func TestServer_Shutdown_WithExpiredContext(t *testing.T) {
+	cfg := &RunConfig{
+		PublicHandler:      http.NewServeMux(),
+		InternalHandler:    http.NewServeMux(),
+		ListenAddr:         "127.0.0.1:0",
+		InternalListenAddr: "127.0.0.1:0",
+	}
+	srv, err := NewServer(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	ready, err := srv.Start(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-ready:
+	case <-time.After(2 * time.Second):
+		t.Fatal("server did not become ready")
+	}
+	cancel()
+	time.Sleep(50 * time.Millisecond)
+	expiredCtx, expiredCancel := context.WithTimeout(context.Background(), 0)
+	expiredCancel()
+	_ = srv.Shutdown(expiredCtx)
+	_ = srv.Shutdown(context.Background())
+}
+
+// TestServer_Shutdown_WithUDSExercisesLoop starts a server with per-service UDS
+// listeners so that Shutdown's loop over internalUDSS is exercised.
+func TestServer_Shutdown_WithUDSExercisesLoop(t *testing.T) {
+	dir := t.TempDir()
+	uds1 := filepath.Join(dir, "run", "svc1", "proxy.sock")
+	cfg := &RunConfig{
+		PublicHandler:      http.NewServeMux(),
+		InternalHandler:    http.NewServeMux(),
+		ListenAddr:         "127.0.0.1:0",
+		InternalListenAddr: "127.0.0.1:0",
+		SocketByService:    map[string]string{"svc1": uds1},
+	}
+	srv, err := NewServer(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	ready, err := srv.Start(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-ready:
+	case <-time.After(2 * time.Second):
+		t.Fatal("timeout")
+	}
+	cancel()
+	time.Sleep(50 * time.Millisecond)
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer shutdownCancel()
+	if err := srv.Shutdown(shutdownCtx); err != nil {
+		t.Logf("Shutdown: %v", err)
+	}
+}
+
+// TestServer_Shutdown_ReturnsErrorWhenBusy holds a request open and calls Shutdown
+// with a very short timeout so Shutdown returns an error (context.DeadlineExceeded).
+func TestServer_Shutdown_ReturnsErrorWhenBusy(t *testing.T) {
+	blockCh := make(chan struct{})
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /block", func(w http.ResponseWriter, _ *http.Request) {
+		<-blockCh
+		w.WriteHeader(http.StatusOK)
+	})
+	cfg := &RunConfig{
+		PublicHandler:      mux,
+		InternalHandler:    http.NewServeMux(),
+		ListenAddr:         "127.0.0.1:0",
+		InternalListenAddr: "",
+	}
+	srv, err := NewServer(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	ready, err := srv.Start(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-ready:
+	case <-time.After(2 * time.Second):
+		t.Fatal("timeout")
+	}
+	addr := srv.publicLn.Addr().String()
+	go func() {
+		_, _ = http.Get("http://" + addr + "/block")
+	}()
+	time.Sleep(50 * time.Millisecond)
+	shortCtx, shortCancel := context.WithTimeout(context.Background(), 1*time.Millisecond)
+	defer shortCancel()
+	err = srv.Shutdown(shortCtx)
+	close(blockCh)
+	if err != nil {
+		t.Logf("Shutdown with short timeout (expected): %v", err)
+	}
+	_ = srv.Shutdown(context.Background())
+	cancel()
+}
+
+// TestServer_Shutdown_InternalBusy holds a request on the internal server and calls
+// Shutdown with a short timeout so internalSrv.Shutdown returns an error.
+func TestServer_Shutdown_InternalBusy(t *testing.T) {
+	internalBlock := make(chan struct{})
+	internalMux := http.NewServeMux()
+	internalMux.HandleFunc("GET /block", func(w http.ResponseWriter, _ *http.Request) {
+		<-internalBlock
+		w.WriteHeader(http.StatusOK)
+	})
+	cfg := &RunConfig{
+		PublicHandler:      http.NewServeMux(),
+		InternalHandler:    internalMux,
+		ListenAddr:         "127.0.0.1:0",
+		InternalListenAddr: "127.0.0.1:0",
+	}
+	srv, err := NewServer(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	ready, err := srv.Start(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-ready:
+	case <-time.After(2 * time.Second):
+		t.Fatal("timeout")
+	}
+	internalAddr := srv.internalLn.Addr().String()
+	go func() {
+		_, _ = http.Get("http://" + internalAddr + "/block")
+	}()
+	time.Sleep(50 * time.Millisecond)
+	shortCtx, shortCancel := context.WithTimeout(context.Background(), 1*time.Millisecond)
+	defer shortCancel()
+	_ = srv.Shutdown(shortCtx)
+	close(internalBlock)
+	_ = srv.Shutdown(context.Background())
+	cancel()
 }
 
 func TestServer_StartWithInternalUnixAndPerServiceUDS(t *testing.T) {

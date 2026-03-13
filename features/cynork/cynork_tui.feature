@@ -47,8 +47,7 @@ Scenario: TUI shows an agent-working indicator during an in-flight turn
 @req_client_0198
 @spec_cynai_client_cynorkchat_atfilereferences
 Scenario: TUI validates @ file references before sending
-  When I compose a message with an @ file reference
-  And the referenced file is missing
+  When I compose a message with an @ file reference and the referenced file is missing
   Then the TUI shows a validation error
   And the message is not sent
 
@@ -56,8 +55,7 @@ Scenario: TUI validates @ file references before sending
 @spec_cynai_client_cynorkchat_tuilayout
 Scenario: Queued drafts can be reordered and explicitly sent later
   Given the TUI has two queued drafts
-  When I reorder the queued drafts
-  And I choose to send only the first queued draft
+  When I reorder the queued drafts and choose to send only the first queued draft
   Then the queued drafts remain distinct from sent transcript messages
   And the unsent queued draft remains available for later edit or send
 
@@ -65,8 +63,7 @@ Scenario: Queued drafts can be reordered and explicitly sent later
 @spec_cynai_client_cynorkchat_authrecovery
 Scenario: TUI prompts for re-authentication and retries the interrupted action
   Given the TUI is running with an expired login token
-  When a chat request returns an authorization error
-  And I complete the in-session login prompt successfully
+  When a chat request returns an authorization error and I complete the in-session login prompt successfully
   Then the TUI offers to retry the interrupted action once
   And the session continues without restarting the TUI
 

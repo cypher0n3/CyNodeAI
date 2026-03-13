@@ -20,8 +20,8 @@ Scenario: Thread list is recent-first and thread titles can be updated
   When I call GET "/v1/chat/threads"
   Then the response status is 200
   And the thread list is ordered by updated_at descending
-  When I call PATCH on one chat thread with a new title
-  Then the response status is 200
+  And I call PATCH on one chat thread with a new title
+  And the response status is 200
   And the thread title is updated
 
 @req_usrgwy_0141

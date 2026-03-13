@@ -13,10 +13,13 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/cypher0n3/cynodeai/go_shared_libs/contracts/nodepayloads"
+	"github.com/cypher0n3/cynodeai/go_shared_libs/contracts/problem"
 	"github.com/cypher0n3/cynodeai/worker_node/internal/executor"
 	"github.com/cypher0n3/cynodeai/worker_node/internal/securestore"
 	"github.com/cypher0n3/cynodeai/worker_node/internal/telemetry"
@@ -157,6 +160,7 @@ func buildMuxesFromEmbedConfig(
 	})
 	publicMux.HandleFunc("GET /readyz", embedReadyzHandler(exec))
 	publicMux.HandleFunc("POST /v1/worker/managed-services/{id}/proxy:http", managedServiceProxyHTTPHandler(bearerToken, proxyCfg.InternalProxy.SocketByService, logger))
+	registerEmbedTelemetryHandlers(publicMux, bearerToken, telemetryStore, logger)
 	internalMux = http.NewServeMux()
 	// Internal proxy routes would be added when moving handleInternalOrchestratorProxy
 	return publicMux, internalMux
@@ -168,107 +172,374 @@ func managedServiceProxyHTTPHandler(bearerToken string, socketByService map[stri
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
-		if bearerToken != "" {
-			auth := r.Header.Get("Authorization")
-			if !strings.HasPrefix(auth, "Bearer ") || strings.TrimSpace(auth[7:]) != bearerToken {
+		proxyReq, body, socketPath, errCode, err := validateManagedProxyRequest(r, bearerToken, socketByService, logger)
+		if err != nil {
+			if errCode == http.StatusUnauthorized {
 				w.Header().Set("Content-Type", "application/json")
-				w.WriteHeader(http.StatusUnauthorized)
+				w.WriteHeader(errCode)
 				_, _ = w.Write([]byte(`{"error":"unauthorized"}`))
 				return
 			}
-		}
-		serviceID := r.PathValue("id")
-		if serviceID == "" {
-			http.Error(w, "missing service id", http.StatusBadRequest)
+			http.Error(w, err.Error(), errCode)
 			return
 		}
-		proxySock, ok := socketByService[serviceID]
-		if !ok || proxySock == "" {
-			if logger != nil {
-				logger.Warn("managed-service proxy: no socket for service", "service_id", serviceID)
-			}
-			http.Error(w, "service not found", http.StatusNotFound)
-			return
-		}
-		// PMA listens on service.sock; SocketByService has proxy.sock (worker internal listener). Use service.sock for upstream.
-		socketPath := filepath.Join(filepath.Dir(proxySock), "service.sock")
-		var proxyReq managedProxyRequest
-		if err := json.NewDecoder(r.Body).Decode(&proxyReq); err != nil {
-			http.Error(w, "invalid request body", http.StatusBadRequest)
-			return
-		}
-		body, err := base64.StdEncoding.DecodeString(proxyReq.BodyB64)
+		proxyResp, errCode, err := doManagedProxyUpstream(r.Context(), proxyReq, body, socketPath, r.PathValue("id"), logger)
 		if err != nil {
-			http.Error(w, "invalid body_b64", http.StatusBadRequest)
+			http.Error(w, err.Error(), errCode)
 			return
-		}
-		path := proxyReq.Path
-		if path == "" {
-			path = "/"
-		}
-		if !strings.HasPrefix(path, "/") {
-			path = "/" + path
-		}
-		transport := &http.Transport{
-			DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
-				if network == "tcp" && (addr == "proxy:80" || addr == "proxy") {
-					return net.Dial("unix", socketPath)
-				}
-				return nil, fmt.Errorf("managed proxy only supports unix socket, got %q %q", network, addr)
-			},
-		}
-		client := &http.Client{Transport: transport, Timeout: 120 * time.Second}
-		upstreamURL := "http://proxy" + path
-		upstreamReq, err := http.NewRequestWithContext(r.Context(), proxyReq.Method, upstreamURL, nil)
-		if err != nil {
-			if logger != nil {
-				logger.Error("managed-service proxy: new request", "error", err)
-			}
-			http.Error(w, "internal error", http.StatusInternalServerError)
-			return
-		}
-		if proxyReq.Method != http.MethodGet && proxyReq.Method != http.MethodHead && len(body) > 0 {
-			upstreamReq.Body = io.NopCloser(bytes.NewReader(body))
-			upstreamReq.ContentLength = int64(len(body))
-		}
-		for k, v := range proxyReq.Headers {
-			for _, vv := range v {
-				upstreamReq.Header.Add(k, vv)
-			}
-		}
-		upstreamReq.Host = "proxy"
-		resp, err := client.Do(upstreamReq)
-		if err != nil {
-			if logger != nil {
-				logger.Error("managed-service proxy: upstream request", "service_id", serviceID, "error", err)
-			}
-			http.Error(w, "upstream error", http.StatusBadGateway)
-			return
-		}
-		defer func() { _ = resp.Body.Close() }()
-		respBody, err := io.ReadAll(resp.Body)
-		if err != nil {
-			if logger != nil {
-				logger.Error("managed-service proxy: read upstream body", "error", err)
-			}
-			http.Error(w, "internal error", http.StatusInternalServerError)
-			return
-		}
-		proxyResp := managedProxyResponse{
-			Version: 1,
-			Status:  resp.StatusCode,
-			Headers: map[string][]string{},
-			BodyB64: base64.StdEncoding.EncodeToString(respBody),
-		}
-		for k, v := range resp.Header {
-			if len(v) > 0 {
-				proxyResp.Headers[k] = v
-			}
 		}
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		_ = json.NewEncoder(w).Encode(proxyResp)
 	}
+}
+
+func validateManagedProxyRequest(r *http.Request, bearerToken string, socketByService map[string]string, logger *slog.Logger) (req *managedProxyRequest, body []byte, socketPath string, errCode int, err error) {
+	if bearerToken != "" {
+		auth := r.Header.Get("Authorization")
+		if !strings.HasPrefix(auth, "Bearer ") || strings.TrimSpace(auth[7:]) != bearerToken {
+			return nil, nil, "", http.StatusUnauthorized, fmt.Errorf("unauthorized")
+		}
+	}
+	serviceID := r.PathValue("id")
+	if serviceID == "" {
+		return nil, nil, "", http.StatusBadRequest, fmt.Errorf("missing service id")
+	}
+	proxySock, ok := socketByService[serviceID]
+	if !ok || proxySock == "" {
+		if logger != nil {
+			logger.Warn("managed-service proxy: no socket for service", "service_id", serviceID)
+		}
+		return nil, nil, "", http.StatusNotFound, fmt.Errorf("service not found")
+	}
+	socketPath = filepath.Join(filepath.Dir(proxySock), "service.sock")
+	var proxyReq managedProxyRequest
+	if err = json.NewDecoder(r.Body).Decode(&proxyReq); err != nil {
+		return nil, nil, "", http.StatusBadRequest, fmt.Errorf("invalid request body")
+	}
+	body, err = base64.StdEncoding.DecodeString(proxyReq.BodyB64)
+	if err != nil {
+		return nil, nil, "", http.StatusBadRequest, fmt.Errorf("invalid body_b64")
+	}
+	return &proxyReq, body, socketPath, 0, nil
+}
+
+func doManagedProxyUpstream(ctx context.Context, proxyReq *managedProxyRequest, body []byte, socketPath, serviceID string, logger *slog.Logger) (managedProxyResponse, int, error) {
+	path := proxyReq.Path
+	if path == "" {
+		path = "/"
+	}
+	if !strings.HasPrefix(path, "/") {
+		path = "/" + path
+	}
+	client := managedProxyHTTPClient(socketPath)
+	upstreamReq, err := buildManagedProxyUpstreamRequest(ctx, proxyReq, body, path)
+	if err != nil {
+		if logger != nil {
+			logger.Error("managed-service proxy: new request", "error", err)
+		}
+		return managedProxyResponse{}, http.StatusInternalServerError, fmt.Errorf("internal error")
+	}
+	resp, err := client.Do(upstreamReq)
+	if err != nil {
+		if logger != nil {
+			logger.Error("managed-service proxy: upstream request", "service_id", serviceID, "error", err)
+		}
+		return managedProxyResponse{}, http.StatusBadGateway, fmt.Errorf("upstream error")
+	}
+	defer func() { _ = resp.Body.Close() }()
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		if logger != nil {
+			logger.Error("managed-service proxy: read upstream body", "error", err)
+		}
+		return managedProxyResponse{}, http.StatusInternalServerError, fmt.Errorf("internal error")
+	}
+	return managedProxyResponseFromHTTP(resp.StatusCode, resp.Header, respBody), 0, nil
+}
+
+func managedProxyHTTPClient(socketPath string) *http.Client {
+	transport := &http.Transport{
+		DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
+			if network == "tcp" && (addr == "proxy:80" || addr == "proxy") {
+				return net.Dial("unix", socketPath)
+			}
+			return nil, fmt.Errorf("managed proxy only supports unix socket, got %q %q", network, addr)
+		},
+	}
+	return &http.Client{Transport: transport, Timeout: 120 * time.Second}
+}
+
+func buildManagedProxyUpstreamRequest(ctx context.Context, proxyReq *managedProxyRequest, body []byte, path string) (*http.Request, error) {
+	upstreamURL := "http://proxy" + path
+	req, err := http.NewRequestWithContext(ctx, proxyReq.Method, upstreamURL, http.NoBody)
+	if err != nil {
+		return nil, err
+	}
+	if proxyReq.Method != http.MethodGet && proxyReq.Method != http.MethodHead && len(body) > 0 {
+		req.Body = io.NopCloser(bytes.NewReader(body))
+		req.ContentLength = int64(len(body))
+	}
+	for k, v := range proxyReq.Headers {
+		for _, vv := range v {
+			req.Header.Add(k, vv)
+		}
+	}
+	req.Host = "proxy"
+	return req, nil
+}
+
+func managedProxyResponseFromHTTP(statusCode int, header http.Header, respBody []byte) managedProxyResponse {
+	out := managedProxyResponse{
+		Version: 1,
+		Status:  statusCode,
+		Headers: map[string][]string{},
+		BodyB64: base64.StdEncoding.EncodeToString(respBody),
+	}
+	for k, v := range header {
+		if len(v) > 0 {
+			out.Headers[k] = v
+		}
+	}
+	return out
+}
+
+func embedWriteProblem(w http.ResponseWriter, status int, typ, title, detail string) {
+	w.Header().Set("Content-Type", "application/problem+json")
+	w.WriteHeader(status)
+	_ = json.NewEncoder(w).Encode(problem.Details{Type: typ, Title: title, Status: status, Detail: detail})
+}
+
+func embedTelemetryAuth(w http.ResponseWriter, r *http.Request, bearerToken string) bool {
+	if bearerToken != "" {
+		auth := r.Header.Get("Authorization")
+		if !strings.HasPrefix(auth, "Bearer ") || strings.TrimSpace(auth[7:]) != bearerToken {
+			embedWriteProblem(w, http.StatusUnauthorized, problem.TypeAuthentication, "Unauthorized", "Invalid or missing bearer token")
+			return false
+		}
+	}
+	return true
+}
+
+func firstNonEmpty(a, b string) string {
+	if a != "" {
+		return a
+	}
+	return b
+}
+
+func embedNodeInfoFromStore(ctx context.Context, store *telemetry.Store, logger *slog.Logger) (nodeSlug, buildVersion, platformOS, platformArch, kernelVersion string) {
+	nodeSlug = firstNonEmpty(strings.TrimSpace(os.Getenv("NODE_SLUG")), "embedded-node")
+	buildVersion = firstNonEmpty(strings.TrimSpace(os.Getenv("BUILD_VERSION")), "dev")
+	platformOS, platformArch, kernelVersion = "linux", runtime.GOARCH, ""
+	if store == nil {
+		return nodeSlug, buildVersion, platformOS, platformArch, kernelVersion
+	}
+	row, err := store.GetLatestNodeBoot(ctx)
+	if err != nil && logger != nil {
+		logger.Warn("telemetry GetLatestNodeBoot", "error", err)
+	}
+	if row != nil {
+		nodeSlug = firstNonEmpty(row.NodeSlug, nodeSlug)
+		buildVersion = firstNonEmpty(row.BuildVersion, buildVersion)
+		platformOS = firstNonEmpty(row.PlatformOS, platformOS)
+		platformArch = firstNonEmpty(row.PlatformArch, platformArch)
+		kernelVersion = firstNonEmpty(row.KernelVersion, kernelVersion)
+	}
+	return nodeSlug, buildVersion, platformOS, platformArch, kernelVersion
+}
+
+func embedNodeInfoHandler(bearerToken string, store *telemetry.Store, logger *slog.Logger) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if !embedTelemetryAuth(w, r, bearerToken) {
+			return
+		}
+		nodeSlug, buildVersion, platformOS, platformArch, kernelVersion := embedNodeInfoFromStore(r.Context(), store, logger)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"version": 1, "node_slug": nodeSlug,
+			"build":    map[string]string{"build_version": buildVersion},
+			"platform": map[string]string{"os": platformOS, "arch": platformArch, "kernel_version": kernelVersion},
+		})
+	}
+}
+
+func embedNodeStatsHandler(bearerToken string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if !embedTelemetryAuth(w, r, bearerToken) {
+			return
+		}
+		cores := runtime.NumCPU()
+		if cores <= 0 {
+			cores = 1
+		}
+		rt := strings.TrimSpace(os.Getenv("CONTAINER_RUNTIME"))
+		if rt != "docker" && rt != "podman" {
+			rt = "podman"
+		}
+		rtVersion := strings.TrimSpace(os.Getenv("CONTAINER_RUNTIME_VERSION"))
+		if rtVersion == "" {
+			rtVersion = "dev"
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"version": 1, "captured_at": time.Now().UTC().Format(time.RFC3339),
+			"cpu":               map[string]interface{}{"cores": cores, "load1": 0.0, "load5": 0.0, "load15": 0.0},
+			"memory":            map[string]interface{}{"total_mb": 1024, "used_mb": 0, "free_mb": 1024},
+			"disk":              map[string]interface{}{"state_dir_free_mb": 100, "state_dir_total_mb": 100},
+			"container_runtime": map[string]string{"runtime": rt, "version": rtVersion},
+		})
+	}
+}
+
+func embedTelemetryContainersEmptyHandler(bearerToken string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if !embedTelemetryAuth(w, r, bearerToken) {
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{"version": 1, "containers": []interface{}{}})
+	}
+}
+
+func embedTelemetryContainerNotFoundHandler(bearerToken string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if !embedTelemetryAuth(w, r, bearerToken) {
+			return
+		}
+		embedWriteProblem(w, http.StatusNotFound, problem.TypeNotFound, "Not Found", "container not found")
+	}
+}
+
+func embedTelemetryLogsEmptyHandler(bearerToken string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if !embedTelemetryAuth(w, r, bearerToken) {
+			return
+		}
+		q := r.URL.Query()
+		if q.Get("source_kind") == "" && q.Get("container_id") == "" {
+			embedWriteProblem(w, http.StatusBadRequest, problem.TypeValidation, "Bad Request", "source_kind+source_name or source_kind=container+container_id required")
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"version": 1, "events": []interface{}{},
+			"truncated": map[string]interface{}{"limited_by": "none", "max_bytes": 1048576},
+		})
+	}
+}
+
+func embedTelemetryContainersHandler(bearerToken string, store *telemetry.Store) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if !embedTelemetryAuth(w, r, bearerToken) {
+			return
+		}
+		q := r.URL.Query()
+		limit := 100
+		if l := q.Get("limit"); l != "" {
+			if n, err := strconv.Atoi(l); err == nil && n > 0 && n <= 1000 {
+				limit = n
+			}
+		}
+		list, nextToken, err := store.ListContainers(r.Context(), q.Get("kind"), q.Get("status"), q.Get("task_id"), q.Get("job_id"), q.Get("page_token"), limit)
+		if err != nil {
+			embedWriteProblem(w, http.StatusInternalServerError, problem.TypeInternal, "Internal Server Error", "")
+			return
+		}
+		if list == nil {
+			list = []telemetry.ContainerRow{}
+		}
+		resp := map[string]interface{}{"version": 1, "containers": list}
+		if nextToken != "" {
+			resp["next_page_token"] = nextToken
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode(resp)
+	}
+}
+
+func embedTelemetryContainerByIDHandler(bearerToken string, store *telemetry.Store) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if !embedTelemetryAuth(w, r, bearerToken) {
+			return
+		}
+		containerID := strings.TrimPrefix(r.URL.Path, "/v1/worker/telemetry/containers/")
+		if containerID == "" {
+			embedWriteProblem(w, http.StatusNotFound, problem.TypeNotFound, "Not Found", "container_id required")
+			return
+		}
+		c, err := store.GetContainer(r.Context(), containerID)
+		if err != nil {
+			embedWriteProblem(w, http.StatusInternalServerError, problem.TypeInternal, "Internal Server Error", "")
+			return
+		}
+		if c == nil {
+			embedWriteProblem(w, http.StatusNotFound, problem.TypeNotFound, "Not Found", "container not found")
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{"version": 1, "container": c})
+	}
+}
+
+func embedTelemetryLogsLimit(q string) int {
+	limit := 1000
+	if q == "" {
+		return limit
+	}
+	if n, err := strconv.Atoi(q); err == nil && n > 0 && n <= 5000 {
+		return n
+	}
+	return limit
+}
+
+func embedTelemetryLogsHandler(bearerToken string, store *telemetry.Store) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if !embedTelemetryAuth(w, r, bearerToken) {
+			return
+		}
+		q := r.URL.Query()
+		if q.Get("source_kind") == "" && q.Get("container_id") == "" {
+			embedWriteProblem(w, http.StatusBadRequest, problem.TypeValidation, "Bad Request", "source_kind+source_name or source_kind=container+container_id required")
+			return
+		}
+		limit := embedTelemetryLogsLimit(q.Get("limit"))
+		events, truncated, nextToken, err := store.QueryLogs(r.Context(), q.Get("source_kind"), q.Get("source_name"), q.Get("container_id"), q.Get("stream"), q.Get("since"), q.Get("until"), q.Get("page_token"), limit)
+		if err != nil {
+			embedWriteProblem(w, http.StatusBadRequest, problem.TypeValidation, "Bad Request", err.Error())
+			return
+		}
+		if events == nil {
+			events = []telemetry.LogEventRow{}
+		}
+		resp := map[string]interface{}{"version": 1, "events": events, "truncated": truncated}
+		if nextToken != "" {
+			resp["next_page_token"] = nextToken
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode(resp)
+	}
+}
+
+func registerEmbedTelemetryHandlers(mux *http.ServeMux, bearerToken string, store *telemetry.Store, logger *slog.Logger) {
+	mux.HandleFunc("GET /v1/worker/telemetry/node:info", embedNodeInfoHandler(bearerToken, store, logger))
+	mux.HandleFunc("GET /v1/worker/telemetry/node:stats", embedNodeStatsHandler(bearerToken))
+	if store == nil {
+		mux.HandleFunc("GET /v1/worker/telemetry/containers", embedTelemetryContainersEmptyHandler(bearerToken))
+		mux.HandleFunc("GET /v1/worker/telemetry/containers/", embedTelemetryContainerNotFoundHandler(bearerToken))
+		mux.HandleFunc("GET /v1/worker/telemetry/logs", embedTelemetryLogsEmptyHandler(bearerToken))
+		return
+	}
+	mux.HandleFunc("GET /v1/worker/telemetry/containers", embedTelemetryContainersHandler(bearerToken, store))
+	mux.HandleFunc("GET /v1/worker/telemetry/containers/", embedTelemetryContainerByIDHandler(bearerToken, store))
+	mux.HandleFunc("GET /v1/worker/telemetry/logs", embedTelemetryLogsHandler(bearerToken, store))
 }
 
 func embedReadyzHandler(exec *executor.Executor) http.HandlerFunc {

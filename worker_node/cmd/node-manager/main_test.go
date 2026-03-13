@@ -872,6 +872,7 @@ func TestRunMain_FailsWithStartInferenceError_LogsComponent(t *testing.T) {
 	t.Setenv("NODE_REGISTRATION_PSK", "test-psk")
 	t.Setenv("LISTEN_ADDR", "127.0.0.1:0")
 	t.Setenv("WORKER_INTERNAL_LISTEN_ADDR", "127.0.0.1:0")
+	t.Setenv("NODE_MANAGER_TEST_NO_EXISTING_INFERENCE", "1")
 	defer unsetRunMainTestEnv()
 
 	withRunner(t, fakeRunnerFunc(fakeRunnerFailRunContaining("ollama")))
@@ -891,6 +892,7 @@ func unsetRunMainTestEnv() {
 	_ = os.Unsetenv("LISTEN_ADDR")
 	_ = os.Unsetenv("WORKER_INTERNAL_LISTEN_ADDR")
 	_ = os.Unsetenv("NODE_MANAGER_SKIP_CONTAINER_CHECK")
+	_ = os.Unsetenv("NODE_MANAGER_TEST_NO_EXISTING_INFERENCE")
 	_ = os.Unsetenv("CYNODE_SECURE_STORE_MASTER_KEY_B64")
 }
 

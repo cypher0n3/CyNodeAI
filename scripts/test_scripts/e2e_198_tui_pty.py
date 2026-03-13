@@ -47,8 +47,8 @@ class TestTuiPty(unittest.TestCase):
                 or harness.LANDMARK_PROMPT_READY_SHORT in out
                 or " (scrollback)" in out
                 or "> " in out,
-                "TUI did not show prompt-ready or first paint; output (first 500 chars): %s"
-                % (repr(out[:500]) if out else "(empty)"),
+                f"TUI did not show prompt-ready or first paint; output (first 500 chars): "
+                f"{repr(out[:500]) if out else '(empty)'}",
             )
             screen = session.capture_screen()
             self.assertTrue(
@@ -74,8 +74,7 @@ class TestTuiPty(unittest.TestCase):
                 or harness.LANDMARK_PROMPT_READY_SHORT in out
                 or " (scrollback)" in (out or "")
                 or "> " in (out or ""),
-                "TUI did not show prompt-ready or first paint; output: %s"
-                % repr((out or "")[:400]),
+                f"TUI did not show prompt-ready or first paint; output: {repr((out or '')[:400])}",
             )
             session.send_keys(["ctrl+c"])
 
@@ -96,8 +95,7 @@ class TestTuiPty(unittest.TestCase):
                 or harness.LANDMARK_PROMPT_READY_SHORT in out
                 or " (scrollback)" in (out or "")
                 or "> " in (out or ""),
-                "TUI did not show prompt-ready or first paint; output: %s"
-                % repr((out or "")[:500]),
+                f"TUI did not show prompt-ready or first paint; output: {repr((out or '')[:500])}",
             )
             session.send_keys(["/thread list", "enter"])
             out = session.read_until_landmark(
@@ -110,8 +108,7 @@ class TestTuiPty(unittest.TestCase):
                 or "thread" in out_s.lower()
                 or "Error" in out_s
                 or (len(out_s.strip()) >= 1 and len(out_s) < 20),
-                "thread list should show header/error or partial output; got: %s"
-                % repr(out_s[:400]),
+                f"thread list should show header/error or partial output; got: {repr(out_s[:400])}",
             )
 
     def test_tui_pty_send_receive_round_trip(self):
@@ -131,8 +128,7 @@ class TestTuiPty(unittest.TestCase):
                 or harness.LANDMARK_PROMPT_READY_SHORT in out
                 or " (scrollback)" in (out or "")
                 or "> " in (out or ""),
-                "TUI did not reach prompt-ready or first paint; output: %s"
-                % repr((out or "")[:500]),
+                f"TUI did not reach prompt-ready or first paint; output: {repr((out or '')[:500])}",
             )
             session.send_keys(["hi", "enter"])
             out2 = session.read_until_landmark(
@@ -146,6 +142,5 @@ class TestTuiPty(unittest.TestCase):
                 or harness.LANDMARK_PROMPT_READY_SHORT in out2_s
                 or "You:" in out2_s
                 or out2_s.strip() in ("Y", "Yo", "You", "You:"),
-                "TUI should return to prompt-ready or echo 'You:'; output: %s"
-                % repr(out2_s[:500]),
+                f"TUI should return to prompt-ready or echo 'You:'; output: {repr(out2_s[:500])}",
             )

@@ -257,16 +257,18 @@ func (m *Model) navigateInputHistory(up bool) {
 	if len(m.InputHistory) == 0 {
 		return
 	}
-	if up {
-		if m.InputHistoryIdx < 0 {
+	switch {
+	case up:
+		switch {
+		case m.InputHistoryIdx < 0:
 			m.InputHistoryIdx = 0
-		} else if m.InputHistoryIdx < len(m.InputHistory)-1 {
+		case m.InputHistoryIdx < len(m.InputHistory)-1:
 			m.InputHistoryIdx++
-		} else {
+		default:
 			return
 		}
 		m.Input = m.InputHistory[m.InputHistoryIdx]
-	} else {
+	default:
 		if m.InputHistoryIdx <= 0 {
 			m.InputHistoryIdx = -1
 			m.Input = ""

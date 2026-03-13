@@ -748,3 +748,10 @@ This phase keeps the worker-deployment follow-on docs aligned without mixing the
 - **2026-03-13:** Canonical docs were also normalized to remove rollout-phase wording from stable requirements, tech specs, and feature files where that wording had leaked out of planning documents.
   The TUI design mockup was retained with the canonical TUI spec under `docs/tech_specs/images/`, and the shell docs or feature coverage were tightened to treat `cynork shell` as compatibility rather than the primary interactive surface.
   The implementation guidance and agent canon now also explicitly prohibit guessed or simulated tool or system output.
+
+- **2026-03-13:** CI and phase 0-2 follow-up: fixed `TestNewServer_SuccessWithDefaults` (set `InternalListenAddr` explicitly so empty means no internal listener).
+  Added workerapiserver tests for managed-service proxy (method not allowed, auth, service not found, invalid body, success, upstream error, path normalization, empty bearer) and for embedded telemetry (node:info, node:stats, containers, logs with and without store).
+  Implemented telemetry routes on the embedded worker API (`registerEmbedTelemetryHandlers`: node:info, node:stats, containers, logs) so e2e worker telemetry tests get 200 when node-manager is running.
+  Fixed e2e logout assertion to accept `logged_out=true`.
+  Reached workerapiserver coverage >=90% via `TestServer_Shutdown_ReturnsErrorWhenBusy`, `TestServer_Shutdown_InternalBusy`, and lint fixes (table-driven telemetry tests, nolint for integration test).
+  Run `just e2e` with dev stack (node-manager with embedded API) to validate worker telemetry and phase 0-2 gate.

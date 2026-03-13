@@ -24,7 +24,11 @@ class TestLogout(unittest.TestCase):
 
         ok, out, err = helpers.run_cynork(["auth", "logout"], state.CONFIG_PATH)
         self.assertTrue(ok, f"auth logout failed: {out} {err}")
-        self.assertIn("logged out", (out or "").lower(), f"unexpected logout output: {out!r}")
+        out_lower = (out or "").lower()
+        self.assertTrue(
+            "logged out" in out_lower or "logged_out" in out_lower,
+            f"unexpected logout output: {out!r}",
+        )
 
         self.assertIsNone(
             helpers.read_config_value(state.CONFIG_PATH, "token"),

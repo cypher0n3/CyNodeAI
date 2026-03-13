@@ -14,7 +14,8 @@ from scripts.test_scripts import config
 
 # Landmarks (must match cynork/internal/chat/landmarks.go)
 LANDMARK_PROMPT_READY = "[CYNRK_PROMPT_READY]"
-LANDMARK_PROMPT_READY_SHORT = "[CYNRK_READY]"  # E2E: sent first in scrollback so PTY sees it in one chunk
+# E2E: sent first in scrollback so PTY sees it in one chunk
+LANDMARK_PROMPT_READY_SHORT = "[CYNRK_READY]"
 LANDMARK_ASSISTANT_IN_FLIGHT = "[CYNRK_ASSISTANT_IN_FLIGHT]"
 LANDMARK_RESPONSE_COMPLETE = "[CYNRK_RESPONSE_COMPLETE]"
 LANDMARK_THREAD_SWITCHED = "[CYNRK_THREAD_SWITCHED]"
@@ -68,7 +69,7 @@ class TuiPtySession:
         env = os.environ.copy()
         env["CYNORK_GATEWAY_URL"] = config.USER_API
         env.update(self.env_extra)
-        # Run TUI under script -q so it gets a proper PTY and stays up (avoids early exit after first paint)
+        # Run TUI under script -q so it gets a proper PTY and stays up
         cmd_str = " ".join(
             [config.CYNORK_BIN, "--config", shlex.quote(self.config_path), "tui"]
         )
@@ -118,7 +119,7 @@ class TuiPtySession:
                 self._proc.send(part)
 
     def read_until_landmark(self, landmark, timeout_sec=None):
-        """Read until landmark(s) appears or timeout. landmark: str or list of str. Return combined output (str)."""
+        """Read until landmark(s) or timeout. Returns combined output (landmark: str or list)."""
         if self._proc is None:
             raise RuntimeError("session closed")
         patterns = [landmark] if isinstance(landmark, str) else list(landmark)
@@ -141,7 +142,7 @@ class TuiPtySession:
         return total
 
     def wait_for_prompt_ready(self, timeout_sec=None):
-        """Wait until prompt-ready landmark (full or short) or initial paint appears. Return True if seen."""
+        """Wait until prompt-ready landmark or initial paint. Return True if seen."""
         out = self.read_until_landmark(
             [LANDMARK_PROMPT_READY, LANDMARK_PROMPT_READY_SHORT], timeout_sec
         )
