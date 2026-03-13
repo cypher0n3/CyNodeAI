@@ -7,7 +7,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
 	"time"
@@ -64,8 +66,38 @@ type RunAgentOptions struct {
 	JobDir string
 }
 
+// resolveInferenceURL returns the effective inference base URL and an http.Client.
+// Priority: INFERENCE_PROXY_URL (UDS) > OLLAMA_BASE_URL > defaultOllamaURL.
+// For http+unix:// URLs the returned client dials the Unix socket; the returned
+// serverURL is rewritten to http://localhost so standard HTTP libraries can use it.
+func resolveInferenceURL() (serverURL string, client *http.Client) {
+	raw := os.Getenv("INFERENCE_PROXY_URL")
+	if raw == "" {
+		raw = os.Getenv("OLLAMA_BASE_URL")
+	}
+	if raw == "" {
+		raw = defaultOllamaURL
+	}
+	trimmed := strings.TrimSpace(raw)
+	if strings.HasPrefix(trimmed, "http+unix://") {
+		encoded := strings.TrimPrefix(trimmed, "http+unix://")
+		if idx := strings.Index(encoded, "/"); idx > 0 {
+			encoded = encoded[:idx]
+		}
+		if sockPath, err := url.PathUnescape(encoded); err == nil && sockPath != "" {
+			transport := &http.Transport{
+				DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
+					return (&net.Dialer{}).DialContext(ctx, "unix", sockPath)
+				},
+			}
+			return "http://localhost", &http.Client{Timeout: 120 * time.Second, Transport: transport}
+		}
+	}
+	return trimmed, &http.Client{Timeout: 120 * time.Second}
+}
+
 // RunAgent runs the agent loop and returns the result contract.
-// When opts.LLM is nil, an Ollama LLM is created from OLLAMA_BASE_URL and spec.Inference.AllowedModels.
+// When opts.LLM is nil, an Ollama LLM is created from INFERENCE_PROXY_URL or OLLAMA_BASE_URL and spec.Inference.AllowedModels.
 func RunAgent(ctx context.Context, spec *sbajob.JobSpec, workspace string, opts *RunAgentOptions) *sbajob.Result {
 	if workspace == "" {
 		workspace = "/workspace"
@@ -161,17 +193,14 @@ func runDirectGeneration(ctx context.Context, spec *sbajob.JobSpec, opts *RunAge
 		result.InferenceUsed = boolPtr(true)
 		return result
 	}
-	baseURL := os.Getenv("OLLAMA_BASE_URL")
-	if baseURL == "" {
-		baseURL = defaultOllamaURL
-	}
+	serverURL, client := resolveInferenceURL()
 	prompt := buildUserPromptFromSpec(spec)
 	payload, _ := json.Marshal(map[string]interface{}{
 		"model":    model,
 		"messages": []map[string]string{{"role": "user", "content": prompt}},
 		"stream":   false,
 	})
-	reqURL := strings.TrimSuffix(baseURL, "/") + "/api/chat"
+	reqURL := strings.TrimSuffix(serverURL, "/") + "/api/chat"
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, reqURL, bytes.NewReader(payload))
 	if err != nil {
 		result.Status = statusFailed
@@ -182,7 +211,6 @@ func runDirectGeneration(ctx context.Context, spec *sbajob.JobSpec, opts *RunAge
 		return result
 	}
 	httpReq.Header.Set("Content-Type", "application/json")
-	client := &http.Client{Timeout: 120 * time.Second}
 	resp, err := client.Do(httpReq)
 	if err != nil {
 		result.Status = statusFailed
@@ -337,10 +365,7 @@ func getLLM(spec *sbajob.JobSpec, opts *RunAgentOptions) (llms.Model, error) {
 	if opts != nil && opts.LLM != nil {
 		return opts.LLM, nil
 	}
-	baseURL := os.Getenv("OLLAMA_BASE_URL")
-	if baseURL == "" {
-		baseURL = defaultOllamaURL
-	}
+	serverURL, httpClient := resolveInferenceURL()
 	// Model priority: job spec AllowedModels > INFERENCE_MODEL env > defaultModel.
 	model := os.Getenv("INFERENCE_MODEL")
 	if model == "" {
@@ -349,10 +374,12 @@ func getLLM(spec *sbajob.JobSpec, opts *RunAgentOptions) (llms.Model, error) {
 	if spec.Inference != nil && len(spec.Inference.AllowedModels) > 0 {
 		model = spec.Inference.AllowedModels[0]
 	}
-	llm, err := ollama.New(
-		ollama.WithServerURL(baseURL),
+	ollamaOpts := []ollama.Option{
+		ollama.WithServerURL(serverURL),
 		ollama.WithModel(model),
-	)
+		ollama.WithHTTPClient(httpClient),
+	}
+	llm, err := ollama.New(ollamaOpts...)
 	if err != nil {
 		return nil, fmt.Errorf("create ollama llm: %w", err)
 	}

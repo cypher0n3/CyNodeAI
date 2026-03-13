@@ -144,6 +144,49 @@ func TestRunEmbedded_WithNonPMATarget_SkipsInferenceProxy(t *testing.T) {
 	runEmbeddedWithTargetsJSON(t, `{"pma1":{"service_type":"pma","base_url":"http://localhost:1"},"other1":{"service_type":"other","base_url":"http://localhost:2"}}`)
 }
 
+func TestRunEmbedded_SBAInferenceProxySocketIsSet(t *testing.T) {
+	_ = os.Unsetenv(SBAInferenceProxySocketEnv)
+	stateDir := t.TempDir()
+	t.Setenv("LISTEN_ADDR", "127.0.0.1:0")
+	t.Setenv("WORKER_INTERNAL_LISTEN_ADDR", "127.0.0.1:0")
+	defer func() {
+		_ = os.Unsetenv("LISTEN_ADDR")
+		_ = os.Unsetenv("WORKER_INTERNAL_LISTEN_ADDR")
+	}()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	ready, shutdown, err := RunEmbedded(ctx, EmbedConfig{
+		BearerToken: "test-token",
+		StateDir:    stateDir,
+		Logger:      slog.Default(),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-ready:
+	case <-time.After(3 * time.Second):
+		t.Fatal("timeout waiting for ready")
+	}
+	defer shutdown()
+
+	// SBA_INFERENCE_PROXY_SOCKET must be set by embed.
+	sockPath := os.Getenv(SBAInferenceProxySocketEnv)
+	if sockPath == "" {
+		t.Fatalf("SBA_INFERENCE_PROXY_SOCKET not set after RunEmbedded (worker embed must start SBA inference proxy)")
+	}
+
+	// Socket file must appear within a reasonable timeout.
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		if _, err := os.Stat(sockPath); err == nil {
+			return
+		}
+		time.Sleep(25 * time.Millisecond)
+	}
+	t.Errorf("SBA inference proxy socket %q did not appear within 5s (REQ-WORKER-0260 non-pod path)", sockPath)
+}
+
 func TestRunEmbedded_WithStateDirAsFile_MkdirAllFailsInProxyStart(t *testing.T) {
 	t.Setenv("LISTEN_ADDR", "127.0.0.1:0")
 	t.Setenv("WORKER_INTERNAL_LISTEN_ADDR", "127.0.0.1:0")

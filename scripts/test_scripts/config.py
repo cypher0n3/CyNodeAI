@@ -86,9 +86,10 @@ PROXY_PMA_TEST_PMA_PORT_REAL_OLLAMA = int(
 PROXY_PMA_TEST_WORKER_PORT_REAL_OLLAMA = int(
     os.environ.get("PROXY_PMA_TEST_WORKER_PORT_REAL_OLLAMA", "18102")
 )
-WORKER_API_BIN = os.environ.get("WORKER_API_BIN") or os.path.join(
-    PROJECT_ROOT, "worker_node", "bin", "worker-api-dev"
+NODE_MANAGER_BIN = os.environ.get("NODE_MANAGER_BIN") or os.path.join(
+    PROJECT_ROOT, "worker_node", "bin", "cynodeai-wnm-dev"
 )
+WORKER_API_BIN = NODE_MANAGER_BIN
 PMA_BIN = os.environ.get("PMA_BIN") or os.path.join(
     PROJECT_ROOT, "agents", "bin", "cynode-pma-dev"
 )

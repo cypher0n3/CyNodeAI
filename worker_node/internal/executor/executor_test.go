@@ -1522,10 +1522,17 @@ func TestBuildSBARunArgs_AgentInference_NoDirectStepsEnv(t *testing.T) {
 }
 
 // REQ-WORKER-0174 / REQ-SANDBX-0131: SBA containers in direct (non-pod) mode always run
-// with --network=none. Inference is injected via a UDS socket mount + INFERENCE_PROXY_URL.
-// The ollamaUpstreamURL constructor param is now only used to construct the proxy socket path,
-// not forwarded as a TCP OLLAMA_BASE_URL to the container.
+// with --network=none. Inference is injected via a UDS socket mount + INFERENCE_PROXY_URL
+// when SBA_INFERENCE_PROXY_SOCKET is set (worker embed starts the proxy).
 func TestBuildSBARunArgs_AgentInference_WithUpstreamUsesUDSNotTCP(t *testing.T) {
+	dir := t.TempDir()
+	sockPath := filepath.Join(dir, "inference-proxy.sock")
+	if err := os.MkdirAll(filepath.Dir(sockPath), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	_ = os.Setenv("SBA_INFERENCE_PROXY_SOCKET", sockPath)
+	defer func() { _ = os.Unsetenv("SBA_INFERENCE_PROXY_SOCKET") }()
+
 	e := New("podman", 30*time.Second, 4096, "http://host.containers.internal:11434", "", nil)
 	req := &workerapi.RunJobRequest{
 		TaskID: "t1",
@@ -1537,9 +1544,13 @@ func TestBuildSBARunArgs_AgentInference_WithUpstreamUsesUDSNotTCP(t *testing.T) 
 	}
 	args := buildSBARunArgs(req, "/tmp/job", "/tmp/ws", e, "agent_inference")
 	argStr := strings.Join(args, " ")
-	// MUST include INFERENCE_PROXY_URL as UDS URL.
+	// MUST include INFERENCE_PROXY_URL as UDS URL when worker provides socket.
 	if !strings.Contains(argStr, "INFERENCE_PROXY_URL=http+unix://") {
 		t.Errorf("agent_inference must set INFERENCE_PROXY_URL=http+unix://... (REQ-SANDBX-0131): %s", argStr)
+	}
+	// MUST mount the host socket dir so the path exists in the container.
+	if !strings.Contains(argStr, "-v") || !strings.Contains(argStr, "/run/cynode") {
+		t.Errorf("agent_inference must mount inference proxy socket dir at /run/cynode: %s", argStr)
 	}
 	// MUST NOT inject TCP Ollama URL.
 	if strings.Contains(argStr, "OLLAMA_BASE_URL=http://") {
@@ -1548,6 +1559,26 @@ func TestBuildSBARunArgs_AgentInference_WithUpstreamUsesUDSNotTCP(t *testing.T) 
 	// MUST keep network=none; inference reaches in through socket mount, not network.
 	if !strings.Contains(argStr, "--network=none") {
 		t.Errorf("agent_inference SBA must keep --network=none (REQ-WORKER-0174): %s", argStr)
+	}
+}
+
+// When SBA_INFERENCE_PROXY_SOCKET is unset, non-pod agent_inference must not inject INFERENCE_PROXY_URL
+// (no socket is mounted, so pointing at /run/cynode/inference-proxy.sock would be invalid).
+func TestBuildSBARunArgs_AgentInference_NoSocketNoInferenceURL(t *testing.T) {
+	_ = os.Unsetenv("SBA_INFERENCE_PROXY_SOCKET")
+	e := New("podman", 30*time.Second, 4096, "http://localhost:11434", "", nil)
+	req := &workerapi.RunJobRequest{
+		TaskID: "t1",
+		JobID:  "j1",
+		Sandbox: workerapi.SandboxSpec{
+			Image:       "cynode-sba:dev",
+			JobSpecJSON: `{}`,
+		},
+	}
+	args := buildSBARunArgs(req, "/tmp/job", "/tmp/ws", e, "agent_inference")
+	argStr := strings.Join(args, " ")
+	if strings.Contains(argStr, "INFERENCE_PROXY_URL=") {
+		t.Errorf("without SBA_INFERENCE_PROXY_SOCKET must not set INFERENCE_PROXY_URL: %s", argStr)
 	}
 }
 

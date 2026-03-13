@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/cypher0n3/cynodeai/worker_node/internal/executor"
@@ -64,8 +65,13 @@ func RunEmbedded(ctx context.Context, cfg EmbedConfig) (readyCh <-chan struct{},
 	if err != nil {
 		return nil, nil, err
 	}
-	startManagedServiceInferenceProxies(ctx, stateDir, proxyCfg.ManagedServiceTargets, cfg.Logger)
+	proxyCtx, cancelProxies := context.WithCancel(context.WithoutCancel(ctx))
+	var proxyWg sync.WaitGroup
+	startManagedServiceInferenceProxies(proxyCtx, stateDir, proxyCfg.ManagedServiceTargets, cfg.Logger, &proxyWg)
+	startSBAInferenceProxy(proxyCtx, stateDir, cfg.Logger, &proxyWg)
 	shutdownFn := func() {
+		cancelProxies()
+		proxyWg.Wait()
 		shutdownCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
 		defer cancel()
 		_ = srv.Shutdown(shutdownCtx)
@@ -89,7 +95,7 @@ func embedGetEnvInt(key string, def int) int {
 	return def
 }
 
-func startManagedServiceInferenceProxies(ctx context.Context, stateDir string, targets map[string]embedManagedServiceTarget, logger *slog.Logger) {
+func startManagedServiceInferenceProxies(ctx context.Context, stateDir string, targets map[string]embedManagedServiceTarget, logger *slog.Logger, wg *sync.WaitGroup) {
 	rawUpstream := embedGetEnv("OLLAMA_UPSTREAM_URL", inferenceproxy.DefaultUpstream)
 	upstreamURL := strings.ReplaceAll(rawUpstream, "host.containers.internal", "localhost")
 	const internalProxySocketBaseDir = "run/managed_agent_proxy"
@@ -108,8 +114,43 @@ func startManagedServiceInferenceProxies(ctx context.Context, stateDir string, t
 		if logger != nil {
 			logger.Info("inference proxy started", "service_id", serviceID, "sock", sockPath, "upstream", upstreamURL)
 		}
+		wg.Add(1)
 		go func(id, sock, upstream string) {
+			defer wg.Done()
 			inferenceproxy.RunUDSWithUpstream(ctx, sock, upstream)
 		}(serviceID, sockPath, upstreamURL)
 	}
+}
+
+// SBAInferenceProxySocketEnv is the env key for the host path to the SBA inference proxy socket.
+// When set, the executor mounts this socket into SBA containers (non-pod path) for agent_inference.
+const SBAInferenceProxySocketEnv = "SBA_INFERENCE_PROXY_SOCKET"
+
+const sbaInferenceProxySubdir = "run/inference_proxy"
+const sbaInferenceProxySockName = "inference-proxy.sock"
+
+// startSBAInferenceProxy starts a single inference proxy for SBA jobs at stateDir/run/inference_proxy/inference-proxy.sock
+// and sets SBA_INFERENCE_PROXY_SOCKET so the executor can bind-mount it into non-pod SBA containers.
+func startSBAInferenceProxy(ctx context.Context, stateDir string, logger *slog.Logger, wg *sync.WaitGroup) {
+	rawUpstream := embedGetEnv("OLLAMA_UPSTREAM_URL", inferenceproxy.DefaultUpstream)
+	upstreamURL := strings.ReplaceAll(rawUpstream, "host.containers.internal", "localhost")
+	sockDir := filepath.Join(stateDir, sbaInferenceProxySubdir)
+	sockPath := filepath.Join(sockDir, sbaInferenceProxySockName)
+	if err := os.MkdirAll(sockDir, 0o700); err != nil {
+		if logger != nil {
+			logger.Error("SBA inference proxy: failed to create socket dir", "error", err)
+		}
+		return
+	}
+	if logger != nil {
+		logger.Info("SBA inference proxy started", "sock", sockPath, "upstream", upstreamURL)
+	}
+	if err := os.Setenv(SBAInferenceProxySocketEnv, sockPath); err != nil && logger != nil {
+		logger.Warn("SBA inference proxy: failed to set env", "error", err)
+	}
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		inferenceproxy.RunUDSWithUpstream(ctx, sockPath, upstreamURL)
+	}()
 }

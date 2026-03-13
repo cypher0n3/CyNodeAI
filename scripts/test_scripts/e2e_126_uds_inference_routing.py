@@ -283,3 +283,91 @@ class TestSBAPodRunArgsUDS(unittest.TestCase):
             f"SBA pod run args must NOT inject TCP upstream OLLAMA_BASE_URL "
             f"(REQ-SANDBX-0131). Got:\n{out}",
         )
+
+
+class TestSBADirectRunArgsUDS(unittest.TestCase):
+    """REQ-SANDBX-0131 / REQ-WORKER-0174: node-manager --print-sba-run-args diagnostic
+    prints the non-pod (direct) SBA container run args.
+
+    When SBA_INFERENCE_PROXY_SOCKET is set:
+      - INFERENCE_PROXY_URL must be http+unix://
+      - A /run/cynode volume mount must be present
+      - --network=none must be set
+
+    When SBA_INFERENCE_PROXY_SOCKET is unset:
+      - INFERENCE_PROXY_URL must NOT be present
+    """
+
+    tags = ["suite_worker_node", "uds_routing"]
+
+    def setUp(self):
+        if not os.path.isfile(config.NODE_MANAGER_BIN):
+            self.skipTest(
+                f"node-manager binary not found: {config.NODE_MANAGER_BIN} "
+                "(build with: just build-node-manager-dev)"
+            )
+
+    def _run_print_sba_run_args(self, extra_env: dict | None = None) -> str:
+        env = os.environ.copy()
+        env.pop("SBA_INFERENCE_PROXY_SOCKET", None)
+        if extra_env:
+            env.update(extra_env)
+        result = subprocess.run(
+            [
+                config.NODE_MANAGER_BIN,
+                "--print-sba-run-args",
+                "--sba-image", "cynode-sba:dev",
+                "--upstream-url", "http://host.containers.internal:11434",
+            ],
+            env=env,
+            capture_output=True,
+            text=True,
+            timeout=10,
+            check=False,
+        )
+        return result.stdout + result.stderr
+
+    def test_sba_direct_args_inject_inference_proxy_url_when_socket_set(self):
+        """Non-pod SBA run args must inject INFERENCE_PROXY_URL=http+unix:// when socket env set."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            sock_path = os.path.join(tmpdir, "inference-proxy.sock")
+            out = self._run_print_sba_run_args({"SBA_INFERENCE_PROXY_SOCKET": sock_path})
+            self.assertIn(
+                "INFERENCE_PROXY_URL=http+unix://",
+                out,
+                f"Non-pod SBA run args must inject INFERENCE_PROXY_URL=http+unix://... "
+                f"when SBA_INFERENCE_PROXY_SOCKET is set (REQ-SANDBX-0131). Got:\n{out}",
+            )
+
+    def test_sba_direct_args_mount_socket_dir_when_socket_set(self):
+        """Non-pod SBA run args must mount the inference proxy socket dir at /run/cynode."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            sock_path = os.path.join(tmpdir, "inference-proxy.sock")
+            out = self._run_print_sba_run_args({"SBA_INFERENCE_PROXY_SOCKET": sock_path})
+            self.assertIn(
+                "/run/cynode",
+                out,
+                f"Non-pod SBA run args must mount inference proxy dir at /run/cynode "
+                f"(REQ-SANDBX-0131). Got:\n{out}",
+            )
+
+    def test_sba_direct_args_keep_network_none(self):
+        """Non-pod SBA run args must always include --network=none."""
+        with tempfile.TemporaryDirectory() as tmpdir:
+            sock_path = os.path.join(tmpdir, "inference-proxy.sock")
+            out = self._run_print_sba_run_args({"SBA_INFERENCE_PROXY_SOCKET": sock_path})
+            self.assertIn(
+                "--network=none",
+                out,
+                f"Non-pod SBA run args must include --network=none (REQ-WORKER-0174). Got:\n{out}",
+            )
+
+    def test_sba_direct_args_no_inference_proxy_url_when_socket_unset(self):
+        """Non-pod SBA run args must NOT inject INFERENCE_PROXY_URL when socket env is absent."""
+        out = self._run_print_sba_run_args()
+        self.assertNotIn(
+            "INFERENCE_PROXY_URL=",
+            out,
+            f"Non-pod SBA run args must NOT inject INFERENCE_PROXY_URL when "
+            f"SBA_INFERENCE_PROXY_SOCKET is unset (REQ-SANDBX-0131). Got:\n{out}",
+        )

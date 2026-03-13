@@ -80,10 +80,14 @@ type workerTestState struct {
 	workerAPIStartedAsContainer bool
 	workerAPIAsContainerImage   string
 	// UDS inference proxy (REQ-WORKER-0260 / REQ-SANDBX-0131) scenario state
-	inferenceProxySocketPath string
-	inferenceProxyUDSCancel  context.CancelFunc
-	inferenceProxyUDSDone    chan int
-	sbaPodRunArgs            []string
+	inferenceProxySocketPath    string
+	inferenceProxyUDSCancel     context.CancelFunc
+	inferenceProxyUDSDone       chan int
+	sbaPodRunArgs               []string
+	// SBA non-pod (direct) path UDS contract state
+	sbaDirectExecutor           *executor.Executor
+	sbaDirectRunArgs            []string
+	sbaInferenceProxySocketPath string
 }
 
 func getWorkerState(ctx context.Context) *workerTestState {
@@ -1862,6 +1866,66 @@ func RegisterSecureStoreSteps(sc *godog.ScenarioContext, state *workerTestState)
 		argStr := strings.Join(state.sbaPodRunArgs, " ")
 		if strings.Contains(argStr, "OLLAMA_BASE_URL=http://localhost:") {
 			return fmt.Errorf("SBA pod args must not contain TCP OLLAMA_BASE_URL (REQ-SANDBX-0131), got: %s", argStr)
+		}
+		return nil
+	})
+
+	// REQ-SANDBX-0131 / REQ-WORKER-0174: SBA non-pod (direct) path with SBA_INFERENCE_PROXY_SOCKET.
+
+	sc.Step(`^the executor is configured with an upstream URL and no proxy image$`, func(ctx context.Context) error {
+		state := getWorkerState(ctx)
+		state.sbaDirectExecutor = executor.New("podman", 30*time.Second, 4096, "http://host.containers.internal:11434", "", nil)
+		return nil
+	})
+	sc.Step(`^SBA_INFERENCE_PROXY_SOCKET is set to a temp socket path$`, func(ctx context.Context) error {
+		state := getWorkerState(ctx)
+		state.sbaInferenceProxySocketPath = filepath.Join(os.TempDir(), fmt.Sprintf("bdd-sba-inf-%d.sock", time.Now().UnixNano()))
+		return os.Setenv("SBA_INFERENCE_PROXY_SOCKET", state.sbaInferenceProxySocketPath)
+	})
+	sc.Step(`^SBA_INFERENCE_PROXY_SOCKET is not set$`, func(ctx context.Context) error {
+		return os.Unsetenv("SBA_INFERENCE_PROXY_SOCKET")
+	})
+	sc.Step(`^the executor builds SBA direct run args for agent_inference mode$`, func(ctx context.Context) error {
+		state := getWorkerState(ctx)
+		if state.sbaDirectExecutor == nil {
+			return fmt.Errorf("executor not configured (run 'the executor is configured with an upstream URL and no proxy image' first)")
+		}
+		req := &workerapi.RunJobRequest{
+			TaskID: "bdd-t1", JobID: "bdd-j1",
+			Sandbox: workerapi.SandboxSpec{Image: "cynode-sba:dev", JobSpecJSON: `{}`},
+		}
+		state.sbaDirectRunArgs = executor.BuildSBARunArgs(req, "/tmp/bdd-job", "/tmp/bdd-ws", state.sbaDirectExecutor, "agent_inference")
+		return nil
+	})
+	sc.Step(`^the SBA direct container args contain INFERENCE_PROXY_URL with an http\+unix scheme$`, func(ctx context.Context) error {
+		state := getWorkerState(ctx)
+		argStr := strings.Join(state.sbaDirectRunArgs, " ")
+		if !strings.Contains(argStr, "INFERENCE_PROXY_URL=http+unix://") {
+			return fmt.Errorf("SBA direct args must contain INFERENCE_PROXY_URL=http+unix://... (REQ-SANDBX-0131), got: %s", argStr)
+		}
+		return nil
+	})
+	sc.Step(`^the SBA direct container args include a volume mount for the inference proxy socket dir$`, func(ctx context.Context) error {
+		state := getWorkerState(ctx)
+		argStr := strings.Join(state.sbaDirectRunArgs, " ")
+		if !strings.Contains(argStr, "/run/cynode") {
+			return fmt.Errorf("SBA direct args must mount inference proxy socket dir at /run/cynode (REQ-SANDBX-0131), got: %s", argStr)
+		}
+		return nil
+	})
+	sc.Step(`^the SBA direct container args keep --network=none$`, func(ctx context.Context) error {
+		state := getWorkerState(ctx)
+		argStr := strings.Join(state.sbaDirectRunArgs, " ")
+		if !strings.Contains(argStr, "--network=none") {
+			return fmt.Errorf("SBA direct args must keep --network=none (REQ-WORKER-0174), got: %s", argStr)
+		}
+		return nil
+	})
+	sc.Step(`^the SBA direct container args do not contain INFERENCE_PROXY_URL$`, func(ctx context.Context) error {
+		state := getWorkerState(ctx)
+		argStr := strings.Join(state.sbaDirectRunArgs, " ")
+		if strings.Contains(argStr, "INFERENCE_PROXY_URL=") {
+			return fmt.Errorf("SBA direct args must NOT contain INFERENCE_PROXY_URL when socket env is unset (REQ-SANDBX-0131), got: %s", argStr)
 		}
 		return nil
 	})

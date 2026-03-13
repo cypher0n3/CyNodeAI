@@ -164,6 +164,8 @@ _start_impl *ARGS:
     export NODE_ADVERTISED_WORKER_API_URL="${NODE_ADVERTISED_WORKER_API_URL:-http://${host_alias}:${WORKER_PORT:-12090}}"
     export CONTAINER_RUNTIME="${CONTAINER_RUNTIME:-podman}"
     export OLLAMA_IMAGE="${OLLAMA_IMAGE:-ollama/ollama:rocm}"
+    export INFERENCE_PROXY_IMAGE="${INFERENCE_PROXY_IMAGE:-cynodeai-inference-proxy:dev}"
+    export OLLAMA_UPSTREAM_URL="${OLLAMA_UPSTREAM_URL:-http://${host_alias}:11434}"
     export WORKER_API_STATE_DIR="${WORKER_API_STATE_DIR:-{{ node_state_dir }}}"
     export CYNODE_SECURE_STORE_MASTER_KEY_B64="${CYNODE_SECURE_STORE_MASTER_KEY_B64:-}"
     mkdir -p "$(dirname {{ node_manager_pid_file }})" "$WORKER_API_STATE_DIR" "{{ logs_dir }}"

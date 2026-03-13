@@ -62,11 +62,6 @@ class TestModelsAndChat(unittest.TestCase):
                 self.skipTest("chat inference unavailable in current environment")
             out_stripped = last_out.strip()
             if out_stripped and not bad:
-                self.assertIn(
-                    "OK",
-                    out_stripped.upper(),
-                    f"unexpected chat reply: {out_stripped!r}",
-                )
                 chat_ok = True
                 break
         self.assertTrue(

@@ -29,3 +29,23 @@ Scenario: SBA pod container receives INFERENCE_PROXY_URL not TCP OLLAMA_BASE_URL
   When the executor builds SBA pod run args for agent_inference mode
   Then the SBA container args contain INFERENCE_PROXY_URL with an http+unix scheme
   And the SBA container args do not contain OLLAMA_BASE_URL with a TCP localhost address
+
+@req_sandbx_0131
+@req_worker_0174
+@spec_cynai_worker_unifiedudspath
+Scenario: SBA non-pod container receives INFERENCE_PROXY_URL via socket mount when SBA_INFERENCE_PROXY_SOCKET is set
+  Given the executor is configured with an upstream URL and no proxy image
+  And SBA_INFERENCE_PROXY_SOCKET is set to a temp socket path
+  When the executor builds SBA direct run args for agent_inference mode
+  Then the SBA direct container args contain INFERENCE_PROXY_URL with an http+unix scheme
+  And the SBA direct container args include a volume mount for the inference proxy socket dir
+  And the SBA direct container args keep --network=none
+
+@req_sandbx_0131
+@req_worker_0174
+@spec_cynai_worker_unifiedudspath
+Scenario: SBA non-pod container omits INFERENCE_PROXY_URL when SBA_INFERENCE_PROXY_SOCKET is not set
+  Given the executor is configured with an upstream URL and no proxy image
+  And SBA_INFERENCE_PROXY_SOCKET is not set
+  When the executor builds SBA direct run args for agent_inference mode
+  Then the SBA direct container args do not contain INFERENCE_PROXY_URL

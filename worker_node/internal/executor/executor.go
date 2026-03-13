@@ -579,15 +579,28 @@ func buildSBARunArgs(req *workerapi.RunJobRequest, jobDir, workspaceDir string, 
 	}
 	args = append(args, "-e", fmt.Sprintf("SBA_EXECUTION_MODE=%s", executionMode))
 	if executionMode == sbajob.ExecutionModeAgentInference && strings.TrimSpace(e.ollamaUpstreamURL) != "" {
-		// REQ-SANDBX-0131: inject INFERENCE_PROXY_URL (UDS) so the sandbox can reach inference.
-		// The inference proxy socket is bind-mounted at inferenceProxySockInContainer.
-		args = append(args, "-e", fmt.Sprintf("%s=%s", envInferenceProxyURL, inferenceProxyUDSURL(inferenceProxySockInContainer)))
+		// REQ-SANDBX-0131: inject INFERENCE_PROXY_URL (UDS) only when the worker provides a proxy socket
+		// (SBA_INFERENCE_PROXY_SOCKET set by embed). Mount host socket dir so the path exists in the container.
+		if hostSock := os.Getenv("SBA_INFERENCE_PROXY_SOCKET"); hostSock != "" {
+			hostDir := filepath.Dir(hostSock)
+			mountOpt := hostDir + ":" + "/run/cynode"
+			if e.runtime == runtimePodman {
+				mountOpt += ":z"
+			}
+			args = append(args, "-v", mountOpt, "-e", fmt.Sprintf("%s=%s", envInferenceProxyURL, inferenceProxyUDSURL(inferenceProxySockInContainer)))
+		}
 	}
 	if executionMode == sbajob.ExecutionModeDirectSteps {
 		args = append(args, "-e", "SBA_DIRECT_STEPS=1")
 	}
 	args = append(append(args, req.Sandbox.Image), req.Sandbox.Command...)
 	return args
+}
+
+// BuildSBARunArgs is the exported entry point for BDD step definitions (non-pod / direct path).
+// REQ-SANDBX-0131: exported so BDD can assert the UDS contract without importing internal test helpers.
+func BuildSBARunArgs(req *workerapi.RunJobRequest, jobDir, workspaceDir string, e *Executor, executionMode string) []string {
+	return buildSBARunArgs(req, jobDir, workspaceDir, e, executionMode)
 }
 
 // BuildSBARunArgsForPod is the exported entry point for BDD step definitions.
