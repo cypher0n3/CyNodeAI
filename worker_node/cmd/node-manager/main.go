@@ -104,7 +104,7 @@ func main() {
 				JobID:   "diag-j1",
 				Sandbox: workerapi.SandboxSpec{Image: sbaImage, JobSpecJSON: `{}`},
 			}
-			podArgs := executor.BuildSBARunArgsForPod(req, "diag-pod", "/tmp/diag-job", "/tmp/diag-ws", e, "agent_inference")
+			podArgs := executor.BuildSBARunArgsForPod(req, "diag-pod", "/tmp/diag-job", "/tmp/diag-ws", "/tmp/diag-sock", e, "agent_inference")
 			fmt.Println(strings.Join(podArgs, "\n"))
 			os.Exit(0)
 

@@ -1847,7 +1847,7 @@ func RegisterSecureStoreSteps(sc *godog.ScenarioContext, state *workerTestState)
 			TaskID: "bdd-t1", JobID: "bdd-j1",
 			Sandbox: workerapi.SandboxSpec{Image: "cynode-sba:dev", JobSpecJSON: `{}`},
 		}
-		state.sbaPodRunArgs = executor.BuildSBARunArgsForPod(req, "pod-1", "/tmp/bdd-job", "/tmp/bdd-ws", e, "agent_inference")
+		state.sbaPodRunArgs = executor.BuildSBARunArgsForPod(req, "pod-1", "/tmp/bdd-job", "/tmp/bdd-ws", "/tmp/bdd-sock", e, "agent_inference")
 		return nil
 	})
 	sc.Step(`^the executor builds SBA pod run args for agent_inference mode$`, func(ctx context.Context) error {

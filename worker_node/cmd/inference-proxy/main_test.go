@@ -5,6 +5,7 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"path/filepath"
 	"testing"
@@ -291,6 +292,37 @@ func TestRunMain_HealthcheckArg_FailReturnsOne(t *testing.T) {
 	code := runMain(context.Background(), []string{"--healthcheck-url", "http://127.0.0.1:1/healthz"})
 	if code != 1 {
 		t.Errorf("runMain with unreachable healthcheck = %d, want 1", code)
+	}
+}
+
+// REQ-WORKER-0260: runHealthcheck MUST support http+unix:// so the executor can
+// health-check the proxy sidecar when it runs in UDS mode.
+func TestRunHealthcheck_UDS(t *testing.T) {
+	sockPath := filepath.Join(t.TempDir(), "proxy.sock")
+	ln, err := net.Listen("unix", sockPath)
+	if err != nil {
+		t.Fatalf("listen unix: %v", err)
+	}
+	defer func() { _ = ln.Close() }()
+
+	srv := &http.Server{
+		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.URL.Path == "/healthz" {
+				w.WriteHeader(http.StatusOK)
+				return
+			}
+			http.NotFound(w, r)
+		}),
+	}
+	go func() { _ = srv.Serve(ln) }()
+	defer func() { _ = srv.Close() }()
+
+	// Encode the socket path as http+unix://<url-encoded-path>/healthz
+	encoded := url.PathEscape(sockPath)
+	healthURL := "http+unix://" + encoded + "/healthz"
+
+	if code := runHealthcheck(context.Background(), healthURL); code != 0 {
+		t.Fatalf("runHealthcheck(UDS) = %d, want 0", code)
 	}
 }
 

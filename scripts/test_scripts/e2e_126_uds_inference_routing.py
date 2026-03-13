@@ -284,6 +284,16 @@ class TestSBAPodRunArgsUDS(unittest.TestCase):
             f"(REQ-SANDBX-0131). Got:\n{out}",
         )
 
+    def test_sba_pod_args_mount_sock_dir(self):
+        """SBA pod run args must mount the shared socket dir at /run/cynode."""
+        out = self._run_print_sba_pod_args()
+        self.assertIn(
+            "/run/cynode",
+            out,
+            f"SBA pod run args must mount shared socket dir at /run/cynode "
+            f"(REQ-WORKER-0260). Got:\n{out}",
+        )
+
 
 class TestSBADirectRunArgsUDS(unittest.TestCase):
     """REQ-SANDBX-0131 / REQ-WORKER-0174: node-manager --print-sba-run-args diagnostic

@@ -56,12 +56,13 @@ func TestSanitizePodName_Truncate(t *testing.T) {
 }
 
 func TestBuildProxyRunArgs(t *testing.T) {
-	args := buildProxyRunArgs("pod-1", "http://host:11434", "proxyimg", nil)
+	args := buildProxyRunArgs("pod-1", "http://host:11434", "proxyimg", nil, "/tmp/sock-dir")
 	if len(args) < 6 {
 		t.Fatalf("expected at least 6 args, got %d", len(args))
 	}
 	hasPod := false
 	hasUpstream := false
+	hasSockMount := false
 	for i, a := range args {
 		if a == "--pod" && i+1 < len(args) && args[i+1] == "pod-1" {
 			hasPod = true
@@ -69,11 +70,14 @@ func TestBuildProxyRunArgs(t *testing.T) {
 		if a == "OLLAMA_UPSTREAM_URL=http://host:11434" || (len(a) > 20 && a[:20] == "OLLAMA_UPSTREAM_URL=") {
 			hasUpstream = true
 		}
+		if a == "-v" && i+1 < len(args) && strings.HasPrefix(args[i+1], "/tmp/sock-dir:") {
+			hasSockMount = true
+		}
 	}
-	if !hasPod || !hasUpstream {
-		t.Errorf("args %v missing pod or upstream", args)
+	if !hasPod || !hasUpstream || !hasSockMount {
+		t.Errorf("args %v missing pod, upstream, or sock mount", args)
 	}
-	argsWithCmd := buildProxyRunArgs("p", "http://x", "img", []string{"sleep", "60"})
+	argsWithCmd := buildProxyRunArgs("p", "http://x", "img", []string{"sleep", "60"}, "/tmp/s")
 	if len(argsWithCmd) < 8 {
 		t.Errorf("with command expected more args, got %v", argsWithCmd)
 	}
@@ -227,18 +231,25 @@ func TestBuildSandboxRunArgsForPod(t *testing.T) {
 		Sandbox: workerapi.SandboxSpec{Command: []string{"echo", "hi"}, Image: "alpine"},
 	}
 	env := map[string]string{"CYNODE_TASK_ID": "t1", "CYNODE_JOB_ID": "j1", "CYNODE_WORKSPACE_DIR": "/workspace", envInferenceProxyURL: "http+unix://%2Frun%2Fcynode%2Finference-proxy.sock"}
-	args := buildSandboxRunArgsForPod(req, "mypod", "/tmp/ws", env, "alpine")
+	args := buildSandboxRunArgsForPod(req, "mypod", "/tmp/ws", "/tmp/sock-dir", env, "alpine")
 	hasInferenceProxy := false
-	for _, a := range args {
+	hasSockMount := false
+	for i, a := range args {
 		if strings.HasPrefix(a, "INFERENCE_PROXY_URL=http+unix://") {
 			hasInferenceProxy = true
 		}
 		if strings.HasPrefix(a, "OLLAMA_BASE_URL=http://localhost:") {
 			t.Errorf("args must not inject TCP OLLAMA_BASE_URL in pod (REQ-SANDBX-0131), got arg: %q; all args: %v", a, args)
 		}
+		if a == "-v" && i+1 < len(args) && strings.HasPrefix(args[i+1], "/tmp/sock-dir:") {
+			hasSockMount = true
+		}
 	}
 	if !hasInferenceProxy {
 		t.Errorf("args should contain INFERENCE_PROXY_URL=http+unix://... (REQ-SANDBX-0131), got %v", args)
+	}
+	if !hasSockMount {
+		t.Errorf("args should mount sock-dir at /run/cynode (REQ-WORKER-0260), got %v", args)
 	}
 	if args[len(args)-2] != "echo" || args[len(args)-1] != "hi" {
 		t.Errorf("command should be at end, got %v", args)
@@ -252,7 +263,7 @@ func TestBuildSandboxRunArgsForPod_NoWorkspace(t *testing.T) {
 		Sandbox: workerapi.SandboxSpec{Command: []string{"echo", "x"}, Image: "alpine"},
 	}
 	env := map[string]string{"CYNODE_TASK_ID": "t1", "CYNODE_JOB_ID": "j1", "CYNODE_WORKSPACE_DIR": ""}
-	args := buildSandboxRunArgsForPod(req, "mypod", "", env, "alpine")
+	args := buildSandboxRunArgsForPod(req, "mypod", "", "", env, "alpine")
 	argStr := strings.Join(args, " ")
 	if strings.Contains(argStr, workspaceMount) || strings.Contains(argStr, "-w") {
 		t.Errorf("empty workspaceDir should not add workspace mount or -w: %s", argStr)
@@ -358,12 +369,15 @@ exit 1
 
 	origHealth := probeProxyHealthFunc
 	origRunning := probeProxyRunningFunc
+	origSock := probeProxySocketExistsFunc
 	defer func() {
 		probeProxyHealthFunc = origHealth
 		probeProxyRunningFunc = origRunning
+		probeProxySocketExistsFunc = origSock
 	}()
 	probeProxyHealthFunc = func(context.Context, string, string) error { return nil }
 	probeProxyRunningFunc = func(context.Context, string, string) error { return nil }
+	probeProxySocketExistsFunc = func(string) error { return nil }
 
 	e := New("podman", 30*time.Second, 4096, "http://host:11434", "proxyimg", nil)
 	req := &workerapi.RunJobRequest{
@@ -415,12 +429,15 @@ exit 1
 
 	origHealth := probeProxyHealthFunc
 	origRunning := probeProxyRunningFunc
+	origSock := probeProxySocketExistsFunc
 	defer func() {
 		probeProxyHealthFunc = origHealth
 		probeProxyRunningFunc = origRunning
+		probeProxySocketExistsFunc = origSock
 	}()
 	probeProxyHealthFunc = func(context.Context, string, string) error { return nil }
 	probeProxyRunningFunc = func(context.Context, string, string) error { return nil }
+	probeProxySocketExistsFunc = func(string) error { return nil }
 
 	e := New("podman", 30*time.Second, 4096, "http://host:11434", "proxyimg", nil)
 	req := &workerapi.RunJobRequest{
@@ -463,12 +480,15 @@ exit 1
 
 	origHealth := probeProxyHealthFunc
 	origRunning := probeProxyRunningFunc
+	origSock := probeProxySocketExistsFunc
 	defer func() {
 		probeProxyHealthFunc = origHealth
 		probeProxyRunningFunc = origRunning
+		probeProxySocketExistsFunc = origSock
 	}()
 	probeProxyHealthFunc = func(context.Context, string, string) error { return nil }
 	probeProxyRunningFunc = func(context.Context, string, string) error { return nil }
+	probeProxySocketExistsFunc = func(string) error { return nil }
 
 	e := New("podman", 30*time.Second, 4096, "http://host:11434", "proxyimg", nil)
 	req := &workerapi.RunJobRequest{
@@ -1286,6 +1306,10 @@ exit 1
 	_ = os.Setenv("PATH", runtimeDir+string(os.PathListSeparator)+origPath)
 	defer func() { _ = os.Setenv("PATH", origPath) }()
 
+	origSock := probeProxySocketExistsFunc
+	defer func() { probeProxySocketExistsFunc = origSock }()
+	probeProxySocketExistsFunc = func(string) error { return nil }
+
 	e := New("podman", 10*time.Second, 4096, "http://host.containers.internal:11434", "proxy:latest", nil)
 	req := &workerapi.RunJobRequest{
 		Version: 1,
@@ -1350,8 +1374,13 @@ exit 1
 	defer func() { _ = os.Setenv("PATH", origPath) }()
 
 	orig := probeProxyHealthFunc
-	defer func() { probeProxyHealthFunc = orig }()
+	origSock := probeProxySocketExistsFunc
+	defer func() {
+		probeProxyHealthFunc = orig
+		probeProxySocketExistsFunc = origSock
+	}()
 	probeProxyHealthFunc = func(context.Context, string, string) error { return os.ErrDeadlineExceeded }
+	probeProxySocketExistsFunc = func(string) error { return os.ErrDeadlineExceeded }
 	e := New("podman", 300*time.Millisecond, 4096, "http://host.containers.internal:11434", "proxy:latest", nil)
 	req := &workerapi.RunJobRequest{
 		Version: 1,
@@ -1437,7 +1466,7 @@ func TestSetSBAError(t *testing.T) {
 // REQ-SANDBX-0131 / REQ-WORKER-0260: proxy sidecar in pod MUST set INFERENCE_PROXY_SOCKET
 // so it listens on the UDS path shared with the SBA container.
 func TestBuildProxyRunArgs_SetsInferenceProxySocket(t *testing.T) {
-	args := buildProxyRunArgs("pod-1", "http://host.containers.internal:11434", "inference-proxy:dev", nil)
+	args := buildProxyRunArgs("pod-1", "http://host.containers.internal:11434", "inference-proxy:dev", nil, "/tmp/sock-dir")
 	argStr := strings.Join(args, " ")
 	if !strings.Contains(argStr, "INFERENCE_PROXY_SOCKET=") {
 		t.Errorf("proxy run args must set INFERENCE_PROXY_SOCKET (REQ-SANDBX-0131): %s", argStr)
@@ -1450,6 +1479,9 @@ func TestBuildProxyRunArgs_SetsInferenceProxySocket(t *testing.T) {
 	}
 	if !strings.Contains(argStr, "--pod pod-1") {
 		t.Errorf("proxy run args must include --pod: %s", argStr)
+	}
+	if !strings.Contains(argStr, "/tmp/sock-dir:/run/cynode") {
+		t.Errorf("proxy run args must mount sock-dir at /run/cynode (REQ-WORKER-0260): %s", argStr)
 	}
 }
 
@@ -1625,7 +1657,7 @@ func TestBuildSBARunArgsForPod_AgentInferenceUsesUDS(t *testing.T) {
 			JobSpecJSON: `{}`,
 		},
 	}
-	args := buildSBARunArgsForPod(req, "pod-1", "/tmp/job", "/tmp/ws", e, "agent_inference")
+	args := buildSBARunArgsForPod(req, "pod-1", "/tmp/job", "/tmp/ws", "/tmp/sock-dir", e, "agent_inference")
 	argStr := strings.Join(args, " ")
 	if !strings.Contains(argStr, "--pod pod-1") {
 		t.Fatalf("expected pod argument, got: %s", argStr)
@@ -1633,6 +1665,10 @@ func TestBuildSBARunArgsForPod_AgentInferenceUsesUDS(t *testing.T) {
 	// MUST inject INFERENCE_PROXY_URL as UDS URL.
 	if !strings.Contains(argStr, "INFERENCE_PROXY_URL=http+unix://") {
 		t.Fatalf("expected INFERENCE_PROXY_URL=http+unix://... (REQ-SANDBX-0131), got: %s", argStr)
+	}
+	// MUST mount shared sock dir at /run/cynode.
+	if !strings.Contains(argStr, "/tmp/sock-dir:/run/cynode") {
+		t.Fatalf("expected sock-dir mount at /run/cynode (REQ-WORKER-0260), got: %s", argStr)
 	}
 	// MUST NOT inject any TCP OLLAMA_BASE_URL.
 	if strings.Contains(argStr, "OLLAMA_BASE_URL=http://localhost:") {
@@ -1654,7 +1690,7 @@ func TestBuildSBARunArgsForPod_ExportedWrapper(t *testing.T) {
 		TaskID: "t1", JobID: "j1",
 		Sandbox: workerapi.SandboxSpec{Image: "cynode-sba:dev", JobSpecJSON: `{}`},
 	}
-	args := BuildSBARunArgsForPod(req, "pod-1", "/tmp/job", "/tmp/ws", e, "agent_inference")
+	args := BuildSBARunArgsForPod(req, "pod-1", "/tmp/job", "/tmp/ws", "/tmp/sock-dir", e, "agent_inference")
 	argStr := strings.Join(args, " ")
 	if !strings.Contains(argStr, "INFERENCE_PROXY_URL=http+unix://") {
 		t.Errorf("exported BuildSBARunArgsForPod must inject INFERENCE_PROXY_URL=http+unix://..., got: %s", argStr)
@@ -1672,7 +1708,7 @@ func TestBuildSBARunArgsForPod_WithCommand(t *testing.T) {
 			Command:     []string{"--custom", "arg"},
 		},
 	}
-	args := buildSBARunArgsForPod(req, "pod-1", "/tmp/job", "/tmp/ws", e, "agent_inference")
+	args := buildSBARunArgsForPod(req, "pod-1", "/tmp/job", "/tmp/ws", "/tmp/sock-dir", e, "agent_inference")
 	if len(args) < 2 || args[len(args)-2] != "--custom" || args[len(args)-1] != "arg" {
 		t.Fatalf("expected command at end, got %v", args)
 	}

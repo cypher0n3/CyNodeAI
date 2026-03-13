@@ -384,12 +384,18 @@ def _ollama_wait_container_ready(runtime):
 
 def _ollama_ensure_model(runtime):
     """Pull OLLAMA_E2E_MODEL if not already listed. Return True on success."""
-    r = subprocess.run(
-        [runtime, "exec", config.OLLAMA_CONTAINER_NAME, "ollama", "list"],
-        capture_output=True, text=True, timeout=10, check=False
-    )
-    if config.OLLAMA_E2E_MODEL in (r.stdout or ""):
-        return True
+    for _attempt in range(3):
+        try:
+            r = subprocess.run(
+                [runtime, "exec", config.OLLAMA_CONTAINER_NAME, "ollama", "list"],
+                capture_output=True, text=True, timeout=30, check=False
+            )
+            if config.OLLAMA_E2E_MODEL in (r.stdout or ""):
+                return True
+            break
+        except subprocess.TimeoutExpired:
+            time.sleep(5)
+            continue
     for attempt in range(3):
         r = subprocess.run(
             [runtime, "exec", config.OLLAMA_CONTAINER_NAME, "ollama", "pull",

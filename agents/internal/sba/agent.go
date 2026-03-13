@@ -27,6 +27,10 @@ const (
 
 	failureCodeConstraintViolation = "constraint_violation"
 	failureCodeStepFailed          = "step_failed"
+
+	// inferenceHTTPTimeout is the HTTP client timeout for inference requests.
+	// Set generously to accommodate slow local models while still bounding runaway requests.
+	inferenceHTTPTimeout = 300 * time.Second
 )
 
 // smallModelSuffixes lists parameter-count suffixes that indicate a model too small
@@ -90,10 +94,10 @@ func resolveInferenceURL() (serverURL string, client *http.Client) {
 					return (&net.Dialer{}).DialContext(ctx, "unix", sockPath)
 				},
 			}
-			return "http://localhost", &http.Client{Timeout: 120 * time.Second, Transport: transport}
+			return "http://localhost", &http.Client{Timeout: inferenceHTTPTimeout, Transport: transport}
 		}
 	}
-	return trimmed, &http.Client{Timeout: 120 * time.Second}
+	return trimmed, &http.Client{Timeout: inferenceHTTPTimeout}
 }
 
 // RunAgent runs the agent loop and returns the result contract.

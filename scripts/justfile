@@ -251,6 +251,8 @@ full-demo *ARGS:
     (cd "$root" && just orchestrator/build-user-gateway-image)
     (cd "$root" && just scripts/start)
     export NODE_STATE_DIR="{{ node_state_dir }}"
+    # Export inference image so e2e_090 (UDS proxy URL in sandbox) and related tests run, not skip.
+    export INFERENCE_PROXY_IMAGE="${INFERENCE_PROXY_IMAGE:-cynodeai-inference-proxy:dev}"
     py="python3"; [ -x "$root/.venv/bin/python3" ] && py="$root/.venv/bin/python3"
     ok=0; (cd "$root" && PYTHONPATH="$root" "$py" scripts/test_scripts/run_e2e.py --tags full_demo) && ok=1
     [ "$stop_on_success" = "true" ] && [ "$ok" = "1" ] && (cd "$root" && just scripts/stop)

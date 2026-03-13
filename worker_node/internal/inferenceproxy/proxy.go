@@ -1,5 +1,5 @@
 // Package inferenceproxy provides a minimal HTTP reverse proxy to Ollama.
-// Per docs/tech_specs/worker_node.md: enforces request size (10 MiB) and per-request timeout (120s);
+// Per docs/tech_specs/worker_node.md: enforces request size (10 MiB) and per-request timeout;
 // MUST NOT expose credentials.
 package inferenceproxy
 
@@ -20,8 +20,8 @@ import (
 // MaxRequestBodyBytes is the maximum request body size (10 MiB per worker_node.md).
 const MaxRequestBodyBytes = 10 * 1024 * 1024
 
-// PerRequestTimeout is the per-request timeout (120s per worker_node.md).
-const PerRequestTimeout = 120 * time.Second
+// PerRequestTimeout is the per-request timeout (300s to accommodate slow local models).
+const PerRequestTimeout = 300 * time.Second
 
 // DefaultUpstream is the fallback Ollama URL when OLLAMA_UPSTREAM_URL is unset.
 const DefaultUpstream = "http://host.containers.internal:11434"
@@ -53,6 +53,10 @@ func RunUDSWithUpstream(ctx context.Context, sockPath, upstream string) int {
 		slog.Error("UDS listen failed", "path", sockPath, "error", err)
 		return 1
 	}
+	// REQ-WORKER-0260: allow other containers (SBA) to connect to this socket.
+	// The directory is mounted as a shared volume; chmod the socket to 0o666 so
+	// any container user can connect without privilege.
+	_ = os.Chmod(sockPath, 0o666)
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")

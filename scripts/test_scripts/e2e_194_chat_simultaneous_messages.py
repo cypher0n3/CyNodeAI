@@ -11,7 +11,7 @@ import unittest
 from scripts.test_scripts import config, helpers
 import scripts.test_scripts.e2e_state as state
 
-CHAT_TIMEOUT_SEC = 240
+CHAT_TIMEOUT_SEC = 150
 CHAT_URL = "/v1/chat/completions"
 CONCURRENT_REQUESTS = 3
 
@@ -81,14 +81,12 @@ class TestChatSimultaneousMessages(unittest.TestCase):
                 "orchestrator_inference_failed" in details
                 or "completion failed" in details
                 or "model_unavailable" in details
-                or "cynodeai_completion_timeout" in details
-                or "completion did not finish" in details
             ):
-                self.skipTest("chat inference unavailable or overloaded in current environment")
+                self.skipTest("chat inference unavailable in current environment")
         self.assertGreaterEqual(
             successes,
-            1,
-            f"expected >=1 concurrent successes; failures: {failures}",
+            2,
+            f"expected >=2 concurrent successes; failures: {failures}",
         )
         for ok, val in results:
             if ok:

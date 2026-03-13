@@ -1,7 +1,7 @@
 // inference-proxy is a minimal HTTP reverse proxy that forwards requests to Ollama.
 // REQ-WORKER-0260: when INFERENCE_PROXY_SOCKET is set, the proxy listens on a Unix domain
 // socket instead of TCP 127.0.0.1:11434, so that sandboxes receive inference via UDS.
-// Per docs/tech_specs/worker_node.md: enforces request size (10 MiB) and per-request timeout (120s);
+// Per docs/tech_specs/worker_node.md: enforces request size (10 MiB) and per-request timeout;
 // MUST NOT expose credentials.
 package main
 
@@ -14,6 +14,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/cypher0n3/cynodeai/worker_node/internal/inferenceproxy"
@@ -121,19 +122,40 @@ func parseHealthcheckURL(args []string) string {
 }
 
 func runHealthcheck(ctx context.Context, rawURL string) int {
-	u, err := url.Parse(rawURL)
-	if err != nil || u.Scheme == "" || u.Host == "" {
-		slog.Error("invalid healthcheck URL", "url", rawURL, "error", err)
-		return 1
-	}
 	reqCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
 	defer cancel()
-	req, err := http.NewRequestWithContext(reqCtx, http.MethodGet, rawURL, http.NoBody)
+
+	// Support http+unix:// for UDS health checks (REQ-WORKER-0260).
+	httpClient := http.DefaultClient
+	effectiveURL := rawURL
+	if strings.HasPrefix(rawURL, "http+unix://") {
+		encoded := strings.TrimPrefix(rawURL, "http+unix://")
+		sockPath := encoded
+		urlPath := "/healthz"
+		if idx := strings.Index(encoded, "/"); idx > 0 {
+			sockPath = encoded[:idx]
+			urlPath = encoded[idx:]
+		}
+		decoded, err := url.PathUnescape(sockPath)
+		if err != nil {
+			slog.Error("invalid healthcheck UDS path", "url", rawURL, "error", err)
+			return 1
+		}
+		transport := &http.Transport{
+			DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
+				return (&net.Dialer{}).DialContext(ctx, "unix", decoded)
+			},
+		}
+		httpClient = &http.Client{Timeout: 2 * time.Second, Transport: transport}
+		effectiveURL = "http://localhost" + urlPath
+	}
+
+	req, err := http.NewRequestWithContext(reqCtx, http.MethodGet, effectiveURL, http.NoBody)
 	if err != nil {
 		slog.Error("build healthcheck request failed", "error", err)
 		return 1
 	}
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := httpClient.Do(req)
 	if err != nil {
 		slog.Error("healthcheck request failed", "error", err)
 		return 1
