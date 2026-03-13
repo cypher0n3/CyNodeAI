@@ -599,7 +599,7 @@ Horizontal: scrollback and context pane share the top row; composer spans left c
 
 The following mockup illustrates the TUI with context pane visible and a sample conversation.
 
-![Cynork chat TUI mockup](./images/cynork_chat_tui_mockup.png)
+![Cynork chat TUI mockup](../tech_specs/images/cynork_chat_tui_mockup.png)
 
 #### 5.1.7 Structured Transcript Rendering
 

@@ -24,7 +24,7 @@
   - [Mark Failed](#mark-failed)
 - [Checkpointing and Resumability](#checkpointing-and-resumability)
   - [Checkpoint schema (prescriptive)](#checkpoint-schema-prescriptive)
-- [Phase 2 flow summary](#phase-2-flow-summary)
+  - [Workflow flow summary](#workflow-flow-summary)
 - [Tooling and Security Notes](#tooling-and-security-notes)
 
 ## Document Overview
@@ -50,7 +50,7 @@ This section defines how the LangGraph workflow is integrated with the orchestra
 ### Runtime and Hosting
 
 - The LangGraph workflow runs as part of the orchestrator's workflow engine.
-- **Phase 2 implementation:** The workflow engine MUST be a **separate Python LangGraph process** invoked by the Go orchestrator (e.g. HTTP or RPC).
+- The workflow engine MUST be a **separate Python LangGraph process** invoked by the Go orchestrator (e.g. HTTP or RPC).
   The workflow process does not serve the orchestrator's REST APIs.
 - The orchestrator MUST provide a stable contract for starting workflows, passing `task_id`, and reading/writing checkpoints so that the graph can be resumed after any restart (orchestrator or workflow process).
 - The Project Manager Agent's behavior is implemented by this graph: the graph is the execution model for the agent.
@@ -347,7 +347,7 @@ The checkpoint store uses a single PostgreSQL table so that implementations are 
 
 See [postgres_schema.md](postgres_schema.md) for the full table definition and creation order.
 
-## Phase 2 Flow Summary
+## Workflow Flow Summary
 
 End-to-end flow for task-driven execution and scheduled runs:
 

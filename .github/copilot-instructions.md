@@ -6,6 +6,8 @@ alwaysApply: true
 
 ## General Rules
 
+- Never guess or simulate output from tasks, database calls, tool calls, or external services.
+  Use actual results and report unavailability or errors; do not invent or assume values.
 - Always check existing files before making changes.
 - When creating new files, use `touch` to create the file first, then edit it.
 - Check the actual date using the `date` command before writing the date.

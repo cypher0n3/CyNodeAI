@@ -14,6 +14,8 @@ import (
 // defaultPlaceholder is shown for empty project/model in the status bar and orEmpty.
 const defaultPlaceholder = "(default)"
 
+const maxInputHistory = 50
+
 // sendResult is the message returned when a SendMessage completes.
 type sendResult struct {
 	visible string
@@ -33,23 +35,26 @@ type threadRenameResult struct {
 
 // Model holds the TUI state: session, scrollback, composer input, and dimensions.
 type Model struct {
-	Session    *chat.Session
-	Scrollback []string
-	Input      string
-	Width      int
-	Height     int
-	Loading    bool
-	Err        string
+	Session         *chat.Session
+	Scrollback      []string
+	Input           string
+	InputHistory    []string // newest first; Up/Down cycle through
+	InputHistoryIdx int      // -1 = not browsing; 0 = newest, 1 = older, ...
+	Width           int
+	Height          int
+	Loading         bool
+	Err             string
 }
 
 // NewModel returns an initial TUI model for the given session.
 func NewModel(session *chat.Session) *Model {
 	return &Model{
-		Session:    session,
-		Scrollback: []string{},
-		Input:      "",
-		Width:      80,
-		Height:     24,
+		Session:         session,
+		Scrollback:      []string{},
+		Input:           "",
+		InputHistoryIdx: -1,
+		Width:           80,
+		Height:          24,
 	}
 }
 
@@ -114,10 +119,18 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		// Not a thread command or sync thread command already applied; maybe send chat
 		if !strings.HasPrefix(line, "/") {
+			m.pushInputHistory(line)
+			m.InputHistoryIdx = -1
 			m.Loading = true
 			cmd := m.sendCmd(line)
 			return m, cmd
 		}
+		return m, nil
+	case "up":
+		m.navigateInputHistory(true)
+		return m, nil
+	case "down":
+		m.navigateInputHistory(false)
 		return m, nil
 	case "shift+enter":
 		m.Input += "\n"
@@ -226,6 +239,44 @@ func (m *Model) threadRenameCmd(title string) tea.Cmd {
 	}
 }
 
+func (m *Model) pushInputHistory(line string) {
+	if line == "" {
+		return
+	}
+	// Prepend so newest is index 0; drop duplicates of last sent
+	if len(m.InputHistory) > 0 && m.InputHistory[0] == line {
+		return
+	}
+	m.InputHistory = append([]string{line}, m.InputHistory...)
+	if len(m.InputHistory) > maxInputHistory {
+		m.InputHistory = m.InputHistory[:maxInputHistory]
+	}
+}
+
+func (m *Model) navigateInputHistory(up bool) {
+	if len(m.InputHistory) == 0 {
+		return
+	}
+	if up {
+		if m.InputHistoryIdx < 0 {
+			m.InputHistoryIdx = 0
+		} else if m.InputHistoryIdx < len(m.InputHistory)-1 {
+			m.InputHistoryIdx++
+		} else {
+			return
+		}
+		m.Input = m.InputHistory[m.InputHistoryIdx]
+	} else {
+		if m.InputHistoryIdx <= 0 {
+			m.InputHistoryIdx = -1
+			m.Input = ""
+			return
+		}
+		m.InputHistoryIdx--
+		m.Input = m.InputHistory[m.InputHistoryIdx]
+	}
+}
+
 func (m *Model) applySendResult(msg sendResult) {
 	m.Loading = false
 	if msg.err != nil {
@@ -265,10 +316,10 @@ func (m *Model) View() string {
 	}
 	composer := strings.Join(composerLines, "\n")
 
-	// Scrollback area (top)
+	// Scrollback area (top). When empty, show scrollback hint and short landmark for E2E.
 	sb := strings.Join(m.Scrollback, "\n")
 	if sb == "" {
-		sb = " (scrollback)"
+		sb = " (scrollback) " + chat.LandmarkPromptReadyShort
 	}
 	scrollbackHeight := m.Height - len(composerLines) - 1 - 1 // composer + status
 	if scrollbackHeight < 1 {

@@ -332,6 +332,11 @@ Traces To:
   - `variant` (string, optional): Backend variant derived by the orchestrator from the node capability report (e.g. `cuda`, `rocm`, `cpu`).
     The node MUST use this to select or configure the correct image or runtime (ROCM for AMD GPUs, CUDA for Nvidia GPUs when reported in capabilities).
   - `port` (int, optional): listen port for the inference API (default 11434 for Ollama).
+  - `env` (object, optional): orchestrator-directed environment values for the backend container.
+    - Keys and values MUST be strings.
+    - The node MUST pass these values through when launching the backend container.
+    - When a key is omitted, the node MAY use a node-local default for that key.
+    - When the orchestrator changes a configured value across config revisions, the node MUST reconcile the backend container so the effective runtime configuration matches the new value.
 - `managed_services` (object, optional)
   - Desired state for orchestrator-directed managed services that this node MUST run and supervise.
   - Managed services are long-lived service containers (distinct from per-job sandbox containers).
@@ -363,6 +368,9 @@ Traces To:
         - `provider_id` (string, optional): optional selector when `external` supports multiple providers
         - `default_model` (string, optional)
         - `warmup_required` (boolean, optional)
+        - `backend_env` (object, optional): orchestrator-directed backend environment values the managed service MUST receive when it depends on the same node-local inference backend.
+          - Keys and values MUST be strings.
+          - The worker MUST pass these values into the managed service container when `mode=node_local` and the configuration includes them.
       - `orchestrator` (object)
         - `mcp_gateway_proxy_url` (string)
           - Worker-proxy URL the agent uses for MCP tool calls; the agent MUST NOT call the orchestrator MCP gateway directly.
@@ -445,7 +453,7 @@ Traces To:
 - `ack_at` (string)
 - `status` (string)
   - examples: applied, failed, rolled_back
-  - For MVP Phase 1, only `applied` and `failed` are required; `rolled_back` may be supported in later phases.
+  - In the current minimum implementation, only `applied` and `failed` are required; `rolled_back` may be supported later.
 - `error` (object, optional)
   - `type` (string)
   - `message` (string)

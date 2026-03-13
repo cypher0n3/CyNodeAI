@@ -50,6 +50,8 @@ See:
   Normative obligations belong in `docs/requirements/` and should be referenced from tech specs.
 - Use the latest structured errors approach for error handling.
   Remove references to legacy sentinel errors.
+- When implementing from specs (including AI-assisted implementation), never guess or simulate output from tasks, database calls, APIs, or tool calls.
+  Use real invocations and surface errors or missing data; do not invent, fabricate, or assume values.
 
 ## Documentation Layers
 

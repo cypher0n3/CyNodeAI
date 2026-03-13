@@ -36,3 +36,12 @@ Scenario: Responses-surface continuation preserves prior turns and keeps current
   Then the captured messages include the retained prior user and assistant turns in order
   And the last captured user message is "Continue the plan"
   And the last captured user message is not folded into the system message
+
+@req_pmagnt_0116
+@spec_cynai_pmagnt_nodelocalinferenceenv
+Scenario: PMA applies node-local backend env values to local inference requests
+  Given cynode-pma is configured for node-local inference with orchestrator-directed backend env values derived from node capabilities and policy
+  And the managed-service inference config includes backend env key "OLLAMA_NUM_CTX"
+  And I have a mock local inference server that captures runner options
+  When I send a PMA internal chat completion request
+  Then the captured local inference request uses the effective context value from the managed-service backend env

@@ -30,7 +30,7 @@ This spec is split into multiple documents.
 Command and feature details live in: [Core commands (version, status, auth)](cli_management_app_commands_core.md), [Task commands](cli_management_app_commands_tasks.md), [Chat command](cli_management_app_commands_chat.md), [Admin and resource commands](cli_management_app_commands_admin.md), [Interactive mode and output](cli_management_app_shell_output.md).
 
 This document defines the cynork CLI management application for CyNodeAI.
-The CLI is intended to support the same administrative capabilities as the Web Console.
+The CLI is intended to support the same administrative capabilities as the Web Console and to host the primary interactive chat TUI.
 
 Traces To:
 
@@ -72,7 +72,7 @@ The following alignment is for implementers:
 
 ### Parity Baseline (REQ-CLIENT-0004)
 
-Current CLI capability set as of MVP Phase 1 (parity baseline for Web Console):
+Current CLI capability set for the present parity baseline with the Web Console:
 
 - **Auth:** login, refresh, logout, status (healthz + body "ok").
 - **User:** me, admin revoke_sessions.
@@ -429,8 +429,8 @@ This section captures the current normative TUI scope and the locked decisions t
 - **`cynork tui`:** The first full-screen TUI entrypoint; MUST be the primary interactive chat surface for the first rollout.
 - **`cynork chat`:** MUST remain available during the first rollout, either as the same surface as TUI or as a compatibility alias (e.g. line-oriented or TUI).
 - **Gateway chat API surfaces:** First-rollout TUI work includes support for both `POST /v1/chat/completions` and `POST /v1/responses`; the client-side chat abstraction MUST support both even if the initial default path remains implementation-defined.
-- **First TUI thread slice:** Limited to create, list, switch, and rename; thread summary and archive are deferred unless needed for first testing pass.
-- **Structured chat parts:** Minimum first-rollout model is thinking and tool activity only; full attachment upload UX and download refs are deferred unless promoted into the first slice.
+- **Thread UX:** The TUI thread surface covers create, list, switch, rename, and optional summary or archive display when the gateway exposes those fields.
+- **Structured chat parts:** The interactive chat contract includes thinking, tool activity, assistant download refs, and normalized attachment metadata for accepted `@` file references.
 
 Normative TUI behavior and layout are defined in [cynork_tui.md](cynork_tui.md).
 

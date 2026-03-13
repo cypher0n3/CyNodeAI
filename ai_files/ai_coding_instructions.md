@@ -34,7 +34,12 @@ These principles are non-negotiable and apply to all changes.
 - **Minimal changes:** Make only necessary modifications.
 - **No refactoring:** Avoid refactoring unless directly required.
 
-### 3.3 Repository Conventions
+### 3.3 No Simulated or Guessed Output
+
+- Never simulate or guess output from tasks, database calls, APIs, or tool calls.
+  Implement and test against real invocations; surface errors or missing data; do not invent, fabricate, or assume values.
+
+### 3.4 Repository Conventions
 
 - Do not disable or bypass linters; fix issues instead.
 - Do not commit secrets (API keys, tokens, credentials).

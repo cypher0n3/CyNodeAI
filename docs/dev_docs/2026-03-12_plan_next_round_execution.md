@@ -4,22 +4,28 @@
 - [Round Goals](#round-goals)
 - [Execution Principles](#execution-principles)
 - [Phase 0 Locked Scope Decisions](#phase-0-locked-scope-decisions)
+  - [Phase 0 Testing Gate](#phase-0-testing-gate)
 - [Phase 1 TUI-Enabling Spec Alignment](#phase-1-tui-enabling-spec-alignment)
+  - [Phase 1 Testing Gate](#phase-1-testing-gate)
   - [Chat Thread Creation and Acquisition](#chat-thread-creation-and-acquisition)
   - [CLI Thread Controls](#cli-thread-controls)
   - [PMA Conversation History](#pma-conversation-history)
   - [Rich Chat and Dual-Surface Contracts](#rich-chat-and-dual-surface-contracts)
 - [Phase 2 TUI MVP Spec Cut](#phase-2-tui-mvp-spec-cut)
+  - [Phase 2 Testing Gate](#phase-2-testing-gate)
   - [Must Land in the First TUI Rollout](#must-land-in-the-first-tui-rollout)
   - [Explicitly Deferred From the First TUI Rollout](#explicitly-deferred-from-the-first-tui-rollout)
 - [Phase 3 Backend Prerequisites Required for TUI Chat](#phase-3-backend-prerequisites-required-for-tui-chat)
+  - [Phase 3 Testing Gate](#phase-3-testing-gate)
   - [Minimum Backend Surface](#minimum-backend-surface)
   - [Required Backend Validation Before TUI Wiring](#required-backend-validation-before-tui-wiring)
   - [Deferred Backend Work This Round](#deferred-backend-work-this-round)
 - [Phase 4 Shared Chat Controller and Testable Seams](#phase-4-shared-chat-controller-and-testable-seams)
+  - [Phase 4 Testing Gate](#phase-4-testing-gate)
   - [Controller and Session State](#controller-and-session-state)
   - [Transport and Rendering Seams](#transport-and-rendering-seams)
 - [Phase 5 `cynork` TUI and Python PTY Harness Implementation](#phase-5-cynork-tui-and-python-pty-harness-implementation)
+  - [Phase 5 Testing Gate](#phase-5-testing-gate)
   - [Entry Point and Core Wiring](#entry-point-and-core-wiring)
   - [Core TUI Experience](#core-tui-experience)
   - [Thread and Session UX](#thread-and-session-ux)
@@ -28,31 +34,74 @@
   - [Tandem TUI and Harness Validation](#tandem-tui-and-harness-validation)
   - [TUI Chat-Complete Exit for Implementation](#tui-chat-complete-exit-for-implementation)
 - [Phase 6 TUI Validation and BDD](#phase-6-tui-validation-and-bdd)
+  - [Phase 6 Testing Gate](#phase-6-testing-gate)
 - [Phase 7 Remaining MVP Phase 2 Work After TUI MVP](#phase-7-remaining-mvp-phase-2-work-after-tui-mvp)
+  - [Phase 7 Testing Gate](#phase-7-testing-gate)
 - [Phase 8 Worker Deployment Simplification Docs](#phase-8-worker-deployment-simplification-docs)
+  - [Phase 8 Testing Gate](#phase-8-testing-gate)
 - [Recommended Execution Order](#recommended-execution-order)
 - [Exit Criteria for This Round](#exit-criteria-for-this-round)
 - [Progress Notes](#progress-notes)
 
 ## Purpose
 
-This temporary plan tracks the next round of work for CyNodeAI as of 2026-03-12.
+This temporary plan tracks the next round of work for CyNodeAI as of 2026-03-12 and reflects the stable spec, requirement, and feature updates through 2026-03-13.
 
-The priority for this round is the `cynork` TUI because it is the fastest path to realistic user-level validation of the current stack.
+The priority for this round is the `cynork` TUI because it is the fastest path to realistic
+user-level validation of the current stack.
 
-This plan is derived from [MVP scope](../mvp.md), [MVP implementation plan](../mvp_plan.md), [Cynork TUI draft proposal](../draft_specs/cynork_tui_spec_proposal.md), and [Chat threads, PMA context, and backend env follow-ups](../draft_specs/chat_threads_pma_context_and_backend_env_followups.md).
+This plan is derived from:
+
+- [MVP scope](../mvp.md)
+- [MVP implementation plan](../mvp_plan.md)
+- [client requirements](../requirements/client.md)
+- [USRGWY requirements](../requirements/usrgwy.md)
+- [ORCHES requirements](../requirements/orches.md)
+- [SCHEMA requirements](../requirements/schema.md)
+- [PMAGNT requirements](../requirements/pmagnt.md)
+- [cynork_tui.md](../tech_specs/cynork_tui.md)
+- [chat_threads_and_messages.md](../tech_specs/chat_threads_and_messages.md)
+- [openai_compatible_chat_api.md](../tech_specs/openai_compatible_chat_api.md)
+- [orchestrator.md](../tech_specs/orchestrator.md)
+- [orchestrator_inference_container_decision.md](../tech_specs/orchestrator_inference_container_decision.md)
+- [postgres_schema.md](../tech_specs/postgres_schema.md)
+- [cynode_pma.md](../tech_specs/cynode_pma.md)
+- [worker_node.md](../tech_specs/worker_node.md)
+- [worker_node_payloads.md](../tech_specs/worker_node_payloads.md)
+
+The original proposal remains useful as design history in:
+
+- [Cynork TUI draft proposal](../draft_specs/cynork_tui_spec_proposal.md)
+- [Chat threads, PMA context, and backend env follow-ups](../draft_specs/chat_threads_pma_context_and_backend_env_followups.md)
+
+The retained TUI design mockup now lives with the canonical TUI spec at:
+
+- [docs/tech_specs/images/cynork_chat_tui_mockup.png](../tech_specs/images/cynork_chat_tui_mockup.png)
+
+The behavior-spec layer for the promoted work now also includes:
+
+- [features/e2e/chat_openai_compatible.feature](../../features/e2e/chat_openai_compatible.feature)
+- [features/cynork/cynork_chat.feature](../../features/cynork/cynork_chat.feature)
+- [features/cynork/cynork_shell.feature](../../features/cynork/cynork_shell.feature)
+- [features/cynork/cynork_tui.feature](../../features/cynork/cynork_tui.feature)
+- [features/orchestrator/chat_thread_management.feature](../../features/orchestrator/chat_thread_management.feature)
+- [features/agents/pma_chat_file_context.feature](../../features/agents/pma_chat_file_context.feature)
+- [features/agents/pma_chat_and_context.feature](../../features/agents/pma_chat_and_context.feature)
+- [features/worker_node/node_manager_config_startup.feature](../../features/worker_node/node_manager_config_startup.feature)
+
 The single-binary worker track is in [worker requirements](../requirements/worker.md) and [worker_node.md](../tech_specs/worker_node.md); promotion to stable was completed in a prior round.
 
 ## Round Goals
 
-- [x] Promote the minimum set of chat and thread contracts required to support a usable TUI-first workflow.
-  (Phase 1 spec alignment completed 2026-03-12; REQ-USRGWY-0135, REQ-CLIENT-0181, thread controls and PMA conversation history in place.)
+- [x] Promote the chat, thread, TUI, and backend file-context contracts needed for a stable TUI-first source of truth.
+  (Stable coverage now includes [REQ-USRGWY-0135](../requirements/usrgwy.md#req-usrgwy-0135) through [REQ-USRGWY-0147](../requirements/usrgwy.md#req-usrgwy-0147), [REQ-CLIENT-0181](../requirements/client.md#req-client-0181) through [REQ-CLIENT-0207](../requirements/client.md#req-client-0207), and [REQ-ORCHES-0167](../requirements/orches.md#req-orches-0167) through [REQ-ORCHES-0169](../requirements/orches.md#req-orches-0169).)
+  (It also includes [REQ-SCHEMA-0114](../requirements/schema.md#req-schema-0114), [REQ-PMAGNT-0115](../requirements/pmagnt.md#req-pmagnt-0115), [REQ-PMAGNT-0116](../requirements/pmagnt.md#req-pmagnt-0116), and [REQ-WORKER-0264](../requirements/worker.md#req-worker-0264).)
 
 - [x] Extend the OpenAI-compatible chat contract and TUI work scope to support both `POST /v1/chat/completions` and `POST /v1/responses`.
   (Gateway, orchestrator, PMA, thread storage, and client-side spec anchors now cover both surfaces.)
 
-- [x] Define and lock a minimal first-rollout `cynork` TUI scope that is sufficient for end-to-end stack testing.
-  (Phase 0 and Phase 2 done; [cynork_tui.md](../tech_specs/cynork_tui.md) and locked scope in [cynork_cli.md](../tech_specs/cynork_cli.md).)
+- [x] Define and lock a first-rollout `cynork` TUI scope that is sufficient for end-to-end stack testing, while also promoting the broader stable contract for later slices.
+  (See [CYNAI.CLIENT.CynorkTui.EntryPoint](../tech_specs/cynork_tui.md#spec-cynai-client-cynorktui-entrypoint), [CYNAI.CLIENT.CynorkChat.TUILayout](../tech_specs/cynork_tui.md#spec-cynai-client-cynorkchat-tuilayout), [CYNAI.CLIENT.CynorkTui.TranscriptRendering](../tech_specs/cynork_tui.md#spec-cynai-client-cynorktui-transcriptrendering), and [CYNAI.CLIENT.TuiScope](../tech_specs/cynork_cli.md#spec-cynai-client-tuiscope).)
 
 - [ ] Implement the full first usable TUI chat interface and its backend prerequisites in a way that preserves existing CLI compatibility where needed.
   (This is the primary goal for the round and takes precedence over the remaining MVP Phase 2 work.)
@@ -71,7 +120,11 @@ The single-binary worker track is in [worker requirements](../requirements/worke
 - [x] Prefer the existing canonical chat scoping model based on the `OpenAI-Project` header instead of inventing a parallel project-scoping path.
   (Thread scoping and explicit fresh-thread creation wording now preserve the OpenAI-compatible chat-completions request shape.)
 
-- [ ] Keep one canonical owner for each contract and cross-link from related documents instead of duplicating source-of-truth content.
+- [x] Keep one canonical owner for each contract and cross-link from related documents instead of duplicating source-of-truth content.
+  (Stable ownership now lives in the requirement files above and in [cynork_tui.md](../tech_specs/cynork_tui.md), [chat_threads_and_messages.md](../tech_specs/chat_threads_and_messages.md), [openai_compatible_chat_api.md](../tech_specs/openai_compatible_chat_api.md), [orchestrator.md](../tech_specs/orchestrator.md), [postgres_schema.md](../tech_specs/postgres_schema.md), and [cynode_pma.md](../tech_specs/cynode_pma.md).)
+
+- [x] Use real tool, API, database, and system results during implementation and validation.
+  (The canon now explicitly forbids guessed or simulated output in [REQ-AGENTS-0137](../requirements/agents.md#req-agents-0137) and [CYNAI.AGENTS.NoSimulatedOutput](../tech_specs/project_manager_agent.md#spec-cynai-agents-nosimulatedoutput).)
 
 - [ ] Treat the first TUI rollout as a minimum viable product for user testing, not as the final complete chat experience.
 
@@ -85,6 +138,10 @@ The single-binary worker track is in [worker requirements](../requirements/worke
 
 - [ ] Prefer machine-detectable UI landmarks and explicit state transitions over visually clever but test-hostile behavior so Python automation can validate the TUI reliably.
 
+- [ ] Do not defer test creation, test updates, or test execution to a later phase; each phase must land its own unit, integration, BDD, and E2E coverage updates as applicable.
+
+- [ ] Treat `just ci` and `just e2e` as mandatory end-of-phase gates for every active phase; a phase stays open until both commands pass.
+
 ## Phase 0 Locked Scope Decisions
 
 - [x] Deprecate `cynork shell` in docs and implementation planning, while keeping a temporary compatibility path during migration.
@@ -92,9 +149,11 @@ The single-binary worker track is in [worker requirements](../requirements/worke
 
 - [x] Ship `cynork tui` as the first full-screen entrypoint and keep `cynork chat` available as a compatibility path during rollout.
 
-- [x] Keep the first TUI thread-management slice limited to create, list, switch, and rename.
+- [x] Keep the first implementation slice for TUI thread management limited to create, list, switch, and rename even though the stable docs now also define optional summary and archive contracts.
+  (Implementation slice anchored by [REQ-CLIENT-0199](../requirements/client.md#req-client-0199), [REQ-CLIENT-0200](../requirements/client.md#req-client-0200), [REQ-USRGWY-0142](../requirements/usrgwy.md#req-usrgwy-0142), and [REQ-USRGWY-0144](../requirements/usrgwy.md#req-usrgwy-0144); optional later scope in [REQ-CLIENT-0201](../requirements/client.md#req-client-0201), [REQ-USRGWY-0143](../requirements/usrgwy.md#req-usrgwy-0143), and [REQ-USRGWY-0145](../requirements/usrgwy.md#req-usrgwy-0145).)
 
-- [x] Include a minimal structured chat `parts` model for thinking and tool activity only.
+- [x] Keep the first implementation slice centered on thinking and tool activity while accepting the broader stable structured-turn model in the canonical docs.
+  (Stable model now includes `download_ref` and normalized `attachment_ref` metadata in [CYNAI.USRGWY.ChatThreadsMessages.StructuredTurns](../tech_specs/chat_threads_and_messages.md#spec-cynai-usrgwy-chatthreadsmessages-structuredturns), with download behavior in [CYNAI.USRGWY.ChatThreadsMessages.DownloadRefs](../tech_specs/chat_threads_and_messages.md#spec-cynai-usrgwy-chatthreadsmessages-downloadrefs).)
 
 - [x] Include dual interactive chat-surface support in the first TUI rollout scope: `POST /v1/chat/completions` and `POST /v1/responses`.
 
@@ -103,9 +162,35 @@ The single-binary worker track is in [worker requirements](../requirements/worke
 - [x] Promote the single-binary worker proposal docs in this round, but defer implementation until after the first TUI rollout.
   (Locked in cynork_cli; Phase 8 still to promote draft into stable requirements/worker-node tech-spec updates.)
 
+### Phase 0 Testing Gate
+
+- [ ] When Phase 0 scope is reopened or adjusted, update the affected docs, feature files, and any scope-sensitive tests in the same phase rather than carrying test debt forward.
+
+- [ ] Run `just docs-check` after the Phase 0 doc edits settle.
+
+- [ ] Run any targeted validation needed for impacted behavior or fixtures before leaving the phase.
+
+- [ ] Do not close the active Phase 0 slice until `just ci` passes.
+
+- [ ] Do not close the active Phase 0 slice until `just e2e` passes.
+
 ## Phase 1 TUI-Enabling Spec Alignment
 
 This phase resolves the source-of-truth issues that would otherwise make the TUI implementation unstable.
+
+### Phase 1 Testing Gate
+
+- [ ] For each Phase 1 contract or spec change, identify the affected BDD, integration, and E2E coverage before changing the source-of-truth docs.
+
+- [ ] Create or update those tests in the same Phase 1 slice as the contract change; do not defer them to backend or TUI implementation phases.
+
+- [ ] Run `just docs-check` after the spec and requirement edits settle.
+
+- [ ] Run the targeted tests that prove the contract wording still matches executable behavior before leaving the slice.
+
+- [ ] Do not close the active Phase 1 slice until `just ci` passes.
+
+- [ ] Do not close the active Phase 1 slice until `just e2e` passes.
 
 ### Chat Thread Creation and Acquisition
 
@@ -167,6 +252,20 @@ This phase resolves the source-of-truth issues that would otherwise make the TUI
 
 This phase narrows the large TUI proposal down to the minimum first rollout that should be treated as in-scope.
 
+### Phase 2 Testing Gate
+
+- [ ] For each Phase 2 scope or UX decision, identify which BDD, PTY, and integration tests must be added or updated to lock the rollout boundary.
+
+- [ ] Create or update those tests in the same Phase 2 slice as the scope decision so deferred items and required items stay machine-checkable.
+
+- [ ] Run `just docs-check` after the MVP-scope doc updates settle.
+
+- [ ] Run the targeted validation that proves the retained and deferred behaviors are covered before leaving the slice.
+
+- [ ] Do not close the active Phase 2 slice until `just ci` passes.
+
+- [ ] Do not close the active Phase 2 slice until `just e2e` passes.
+
 ### Must Land in the First TUI Rollout
 
 - [x] Define `cynork tui` as the explicit first full-screen TUI entrypoint in the normative docs.
@@ -196,29 +295,51 @@ This phase narrows the large TUI proposal down to the minimum first rollout that
 
 - [x] Define generation-state behavior for in-flight assistant updates and final reconciliation of partial output into one logical turn.
 
-- [ ] Promote to stable [cynork_tui.md](../tech_specs/cynork_tui.md): conversation history as formatted Markdown and user messages in scrollback with a distinct background (currently in [draft proposal](../draft_specs/cynork_tui_spec_proposal.md) only).
+- [x] Promote to stable [cynork_tui.md](../tech_specs/cynork_tui.md): conversation history as formatted Markdown and user messages in scrollback with a distinct background.
+  (See [CYNAI.CLIENT.CynorkChat.TUILayout](../tech_specs/cynork_tui.md#spec-cynai-client-cynorkchat-tuilayout).)
 
-- [ ] Promote to stable [cynork_tui.md](../tech_specs/cynork_tui.md): composer and scrollback keybindings -> Shift+Enter for newlines; Up/Down in composer for previously sent messages; Ctrl+C to cancel, successive Ctrl+C when idle to exit; Page Up/Page Down to scroll and load older history (currently in [draft proposal](../draft_specs/cynork_tui_spec_proposal.md) only).
+- [x] Promote to stable [cynork_tui.md](../tech_specs/cynork_tui.md): composer and scrollback keybindings -> Shift+Enter for newlines; Up/Down in composer for previously sent messages; Ctrl+C to cancel, successive Ctrl+C when idle to exit; Page Up/Page Down to scroll and load older history.
+  (See [REQ-CLIENT-0204](../requirements/client.md#req-client-0204) and [CYNAI.CLIENT.CynorkChat.TUILayout](../tech_specs/cynork_tui.md#spec-cynai-client-cynorkchat-tuilayout).)
+
+- [x] Promote to stable [cynork_tui.md](../tech_specs/cynork_tui.md): a visible assistant-turn status chip for in-flight work, a visible composer cursor, mouse-wheel transcript scrolling, and a composer hint for `/`, `@`, and `!`.
+  (See [REQ-CLIENT-0185](../requirements/client.md#req-client-0185), [REQ-CLIENT-0204](../requirements/client.md#req-client-0204), [REQ-CLIENT-0205](../requirements/client.md#req-client-0205), and [REQ-CLIENT-0206](../requirements/client.md#req-client-0206).)
 
 ### Explicitly Deferred From the First TUI Rollout
 
-- [x] Do not implement thread summary or archive in this round.
+- [x] Do not implement thread summary or archive in this round even though the stable canon now defines them.
+  (Stable anchors: [CYNAI.USRGWY.ChatThreadsMessages.ThreadSummary](../tech_specs/chat_threads_and_messages.md#spec-cynai-usrgwy-chatthreadsmessages-threadsummary) and [CYNAI.USRGWY.ChatThreadsMessages.Archive](../tech_specs/chat_threads_and_messages.md#spec-cynai-usrgwy-chatthreadsmessages-archive).)
 
-- [x] Do not implement assistant download-reference workflows in this round.
+- [x] Do not implement assistant download-reference workflows in this round even though the stable canon now defines them.
+  (Stable anchors: [REQ-USRGWY-0141](../requirements/usrgwy.md#req-usrgwy-0141), [REQ-CLIENT-0194](../requirements/client.md#req-client-0194), and [CYNAI.USRGWY.ChatThreadsMessages.DownloadRefs](../tech_specs/chat_threads_and_messages.md#spec-cynai-usrgwy-chatthreadsmessages-downloadrefs).)
 
-- [x] Do not implement full attachment upload UX in this round.
-  When promoted, backend support (orchestrator file resolution, storage, PMA/LLM passthrough) is specified in the [draft proposal](../draft_specs/cynork_tui_spec_proposal.md) section 3.4 and 4.8 (REQ-ORCHES-0167/0168, REQ-SCHEMA-0114, REQ-PMAGNT-0115).
+- [x] Do not implement full attachment upload UX in this round even though the stable canon now includes the contract.
+  (Stable requirement anchors: [REQ-USRGWY-0140](../requirements/usrgwy.md#req-usrgwy-0140), [REQ-CLIENT-0198](../requirements/client.md#req-client-0198), [REQ-ORCHES-0167](../requirements/orches.md#req-orches-0167), [REQ-ORCHES-0168](../requirements/orches.md#req-orches-0168), [REQ-SCHEMA-0114](../requirements/schema.md#req-schema-0114), and [REQ-PMAGNT-0115](../requirements/pmagnt.md#req-pmagnt-0115).)
+  (Stable spec anchors: [CYNAI.USRGWY.OpenAIChatApi.TextInput](../tech_specs/openai_compatible_chat_api.md#spec-cynai-usrgwy-openaichatapi-textinput), [CYNAI.ORCHES.ChatFileUploadFlow](../tech_specs/orchestrator.md#spec-cynai-orches-chatfileuploadflow), [CYNAI.SCHEMA.ChatMessageAttachmentsTable](../tech_specs/postgres_schema.md#spec-cynai-schema-chatmessageattachmentstable), and [CYNAI.PMAGNT.ChatFileContext](../tech_specs/cynode_pma.md#spec-cynai-pmagnt-chatfilecontext).)
 
-- [x] Do not implement queued drafts or deferred send behavior in this round.
+- [x] Do not implement queued drafts or deferred send behavior in this round even though the stable TUI requirements and spec now define the optional contract.
+  (See [REQ-CLIENT-0196](../requirements/client.md#req-client-0196) and [CYNAI.CLIENT.CynorkChat.TUILayout](../tech_specs/cynork_tui.md#spec-cynai-client-cynorkchat-tuilayout).)
 
 - [x] Do not make bare `cynork` launch the TUI by default in this round.
 
-- [x] Do not implement web-based login or SSO-specific flows in this round.
+- [x] Do not implement web-based login or SSO-specific flows in this round even though the stable contract now exists.
+  (See [REQ-CLIENT-0191](../requirements/client.md#req-client-0191) and [CYNAI.CLIENT.CliWebLogin](../tech_specs/cynork_tui.md#spec-cynai-client-cliweblogin).)
 
 ## Phase 3 Backend Prerequisites Required for TUI Chat
 
 This phase captures only the gateway, orchestrator, and data-path work required before the TUI can deliver the intended full chat experience.
 The order inside this phase matters because later TUI work depends on these backend behaviors being stable.
+
+### Phase 3 Testing Gate
+
+- [ ] Before each Phase 3 backend change, identify the unit, integration, BDD, and E2E coverage that must move with that behavior.
+
+- [ ] Create or update the backend-facing tests in the same slice as the implementation; do not leave contract or persistence coverage for a later cleanup pass.
+
+- [ ] Run the targeted backend and contract checks continuously as each handler, storage path, or transport behavior lands.
+
+- [ ] Do not close the active Phase 3 slice until `just ci` passes.
+
+- [ ] Do not close the active Phase 3 slice until `just e2e` passes.
 
 ### Minimum Backend Surface
 
@@ -254,16 +375,33 @@ The order inside this phase matters because later TUI work depends on these back
 
 - [ ] Do not implement archive or soft-delete in this round.
 
-- [ ] Do not implement download-ref contracts in this round.
+- [x] Do not implement download-ref contracts in this round even though the stable requirement and spec anchors now exist.
+  (See [REQ-USRGWY-0141](../requirements/usrgwy.md#req-usrgwy-0141) and [CYNAI.USRGWY.ChatThreadsMessages.DownloadRefs](../tech_specs/chat_threads_and_messages.md#spec-cynai-usrgwy-chatthreadsmessages-downloadrefs).)
 
-- [ ] Do not implement rich attachment storage contracts in this round.
-  The [draft proposal](../draft_specs/cynork_tui_spec_proposal.md) defines proposed orchestrator, schema, and PMA requirements and specs (section 3.4, 4.8) for file upload storage, retrieval, and passthrough to PMA/LLM when @ shorthand is promoted.
+- [x] Do not implement rich attachment storage contracts in this round even though the stable requirement and spec anchors now exist.
+  (See [REQ-ORCHES-0167](../requirements/orches.md#req-orches-0167), [REQ-ORCHES-0168](../requirements/orches.md#req-orches-0168), [REQ-SCHEMA-0114](../requirements/schema.md#req-schema-0114), [REQ-PMAGNT-0115](../requirements/pmagnt.md#req-pmagnt-0115), [CYNAI.ORCHES.ChatFileUploadFlow](../tech_specs/orchestrator.md#spec-cynai-orches-chatfileuploadflow), [CYNAI.SCHEMA.ChatMessageAttachmentsTable](../tech_specs/postgres_schema.md#spec-cynai-schema-chatmessageattachmentstable), and [CYNAI.PMAGNT.ChatFileContext](../tech_specs/cynode_pma.md#spec-cynai-pmagnt-chatfilecontext).)
 
-- [ ] Do not implement context compaction or automatic summarization in this round.
+- [x] Do not implement context compaction or automatic summarization in this round even though the stable gateway contract now exists.
+  (See [REQ-USRGWY-0146](../requirements/usrgwy.md#req-usrgwy-0146), [REQ-USRGWY-0147](../requirements/usrgwy.md#req-usrgwy-0147), [CYNAI.USRGWY.ChatThreadsMessages.ContextSizeTracking](../tech_specs/chat_threads_and_messages.md#spec-cynai-usrgwy-chatthreadsmessages-contextsizetracking), and [CYNAI.USRGWY.OpenAIChatApi.ContextCompaction](../tech_specs/openai_compatible_chat_api.md#spec-cynai-usrgwy-openaichatapi-contextcompaction).)
+
+- [x] Keep orchestrator-directed node-local inference context sizing and backend-env propagation as stable follow-on backend or deployment work unless the active TUI slice explicitly depends on it.
+  (See [REQ-ORCHES-0169](../requirements/orches.md#req-orches-0169), [REQ-WORKER-0264](../requirements/worker.md#req-worker-0264), [REQ-PMAGNT-0116](../requirements/pmagnt.md#req-pmagnt-0116), and [CYNAI.ORCHES.InferenceBackendEnv](../tech_specs/orchestrator_inference_container_decision.md#spec-cynai-orches-inferencebackendenv).)
 
 ## Phase 4 Shared Chat Controller and Testable Seams
 
 This phase defines the shared implementation seams that both the fullscreen TUI and the Python PTY harness depend on.
+
+### Phase 4 Testing Gate
+
+- [ ] Before extracting or refactoring shared chat seams, identify the unit and integration tests that must pin controller, transport, transcript, and state behavior.
+
+- [ ] Create or update those seam-level tests in the same Phase 4 slice as the refactor so behavior does not become indirectly validated only by later TUI tests.
+
+- [ ] Run the targeted controller and transport tests continuously while the seam work is landing.
+
+- [ ] Do not close the active Phase 4 slice until `just ci` passes.
+
+- [ ] Do not close the active Phase 4 slice until `just e2e` passes.
 
 ### Controller and Session State
 
@@ -286,13 +424,24 @@ This phase defines the shared implementation seams that both the fullscreen TUI 
 This phase delivers the first usable full-screen TUI slice and the Python PTY harness together.
 They must be developed in tandem so each validates the other as behavior lands, with minimal human intervention.
 
+### Phase 5 Testing Gate
+
+- [ ] Before each TUI slice, identify the matching Go tests, BDD coverage, and Python PTY or E2E assertions that must land with the UI behavior.
+
+- [ ] Create or update the PTY harness and the corresponding tests in the same slice as the TUI behavior; do not postpone harness work until after the UI "mostly works."
+
+- [ ] Run targeted TUI and PTY validation continuously during the phase as each command, rendering rule, or state transition lands.
+
+- [ ] Do not close the active Phase 5 slice until `just ci` passes.
+
+- [ ] Do not close the active Phase 5 slice until `just e2e` passes.
+
 ### Entry Point and Core Wiring
 
 - [x] Add the `cynork tui` command path.
 
-- [ ] Make interactive `cynork chat` invoke the same fullscreen TUI entry flow as `cynork tui`, while keeping `cynork chat --message` and non-interactive usage line-oriented and parseable.
-
-- [ ] Preserve stable non-interactive chat behavior for scripting and piping use cases.
+- [x] Preserve stable non-interactive chat behavior for scripting and piping use cases.
+  (`cynork chat --message` remains one-shot, and non-TTY `cynork chat` still uses the line-oriented scanner path.)
 
 - [ ] Use `POST /v1/chat/completions` as the default interactive chat path in the first implementation while preserving full support for `POST /v1/responses` behind the same chat abstraction and test harness.
 
@@ -303,7 +452,7 @@ They must be developed in tandem so each validates the other as behavior lands, 
 - [x] Implement a multi-line composer with clear send semantics.
   (Enter = send, Shift+Enter = newline; status bar hint; visible lines capped at 5.)
 
-- [ ] Implement composer input history: Up/Down in composer cycles through previously sent messages.
+- [x] Implement composer input history: Up/Down in composer cycles through previously sent messages.
 
 - [ ] Implement Ctrl+C semantics: cancel current operation when no selection; when selection active, copy; successive Ctrl+C when idle exits cleanly (Cursor-agent style).
 
@@ -312,6 +461,12 @@ They must be developed in tandem so each validates the other as behavior lands, 
 - [ ] Implement status-bar rendering for gateway, auth identity, project, model, and connectivity state.
 
 - [ ] Implement local slash-command discovery and execution within the TUI.
+
+- [ ] Implement the canonical in-flight assistant-turn indicator as a distinct status chip with spinner and required labels.
+
+- [ ] Implement the composer discoverability hint for `/ commands`, `@ files`, and `! shell`.
+
+- [ ] Implement visible composer-cursor behavior and mouse-wheel transcript scrolling that does not alter composer-history recall.
 
 - [ ] Implement transcript rendering for visible text, hidden-by-default thinking, tool activity rows, and ordered multi-item assistant turns; user messages in scrollback with distinct background.
 
@@ -322,8 +477,8 @@ They must be developed in tandem so each validates the other as behavior lands, 
 - [x] Implement thread list and thread switching.
   (Gateway `ListChatThreads`, `PatchThreadTitle`; session `CurrentThreadID`, `ListThreads`, `SetCurrentThreadID`; TUI `/thread list`, `/thread switch <id>`.)
 
-- [ ] Implement fresh-thread creation from startup controls and in-session controls.
-  (In-session `/thread new` implemented; startup `--thread-new` still to wire.)
+- [x] Implement fresh-thread creation from startup controls and in-session controls.
+  (Both `cynork tui --thread-new` and in-session `/thread new` now create a new gateway thread and set `CurrentThreadID`.)
 
 - [x] Implement thread rename.
   (TUI `/thread rename <title>`; session `PatchThreadTitle`; gateway PATCH thread.)
@@ -359,10 +514,11 @@ They must be developed in tandem so each validates the other as behavior lands, 
 
 ### Tandem TUI and Harness Validation
 
-- [ ] Validate send and receive behavior through the PTY harness as the composer and transcript rendering land.
+- [x] Validate send and receive behavior through the PTY harness as the composer and transcript rendering land.
+  (`test_tui_pty_send_receive_round_trip` waits for prompt-ready after a real send.)
 
-- [x] Validate thread create, list, switch, and rename behavior through the PTY harness as soon as the corresponding TUI flows exist.
-  (test_tui_pty_thread_list_shows_landmark_or_output; prompt-ready and exit tests in e2e_198_tui_pty.py.)
+- [ ] Validate thread create, list, switch, and rename behavior through the PTY harness as soon as the corresponding TUI flows exist.
+  (Current PTY coverage exercises thread list only; create, switch, and rename still need fullscreen validation.)
 
 - [ ] Validate hidden-thinking, ordered assistant output, and tool-activity rendering through the PTY harness as transcript rendering lands.
 
@@ -378,38 +534,78 @@ They must be developed in tandem so each validates the other as behavior lands, 
 
 ## Phase 6 TUI Validation and BDD
 
-- [ ] Update [Cynork chat feature](../../features/cynork/cynork_chat.feature) to cover the accepted first-rollout TUI behaviors.
+This phase turns the promoted chat and TUI contract into executable behavior checks and PTY-driven validation.
 
-- [ ] Keep [Cynork shell feature](../../features/cynork/cynork_shell.feature) as compatibility coverage during this round and do not retire it yet.
+### Phase 6 Testing Gate
 
-- [ ] Add BDD coverage for `--thread-new` before the first completion request.
+- [ ] For every Phase 6 coverage addition, identify the exact behavior gap first, then add or update the BDD and PTY or E2E checks in the same slice.
 
-- [ ] Add BDD coverage for `/thread new` during an active session.
+- [ ] Run `just docs-check` after feature-file or validation-doc edits settle.
 
-- [ ] Add BDD coverage for unknown `/thread` subcommands that keep the session alive.
+- [ ] Run `just test-bdd` in the same slice as the related feature or behavior updates; do not defer BDD execution.
 
-- [ ] Add BDD coverage for thread history navigation and thread rename.
+- [ ] Run targeted `just e2e` coverage while the TUI validation work is landing, then run full `just e2e` as the phase-closing gate.
+
+- [ ] Do not close the active Phase 6 slice until `just ci` passes.
+
+- [ ] Do not close the active Phase 6 slice until `just e2e` passes.
+
+- [x] Update [Cynork chat feature](../../features/cynork/cynork_chat.feature) to cover the accepted first-rollout chat and thread behaviors.
+
+- [x] Keep [Cynork shell feature](../../features/cynork/cynork_shell.feature) as compatibility coverage during this round and do not retire it yet.
+
+- [x] Add OpenAI-compatible thread-creation coverage in [chat_openai_compatible.feature](../../features/e2e/chat_openai_compatible.feature) and BDD coverage for `--thread-new` before the first completion request.
+
+- [x] Add BDD coverage for `/thread new` during an active session.
+
+- [x] Add BDD coverage for unknown `/thread` subcommands that keep the session alive.
+
+- [x] Add behavior-spec coverage for thread history navigation and thread rename.
+  ([cynork_tui.feature](../../features/cynork/cynork_tui.feature) and [chat_thread_management.feature](../../features/orchestrator/chat_thread_management.feature).)
 
 - [ ] Add BDD coverage for startup and in-session auth recovery.
 
 - [ ] Add coverage for both supported interactive chat surfaces so TUI and gateway behavior stays aligned across `POST /v1/chat/completions` and `POST /v1/responses`.
 
-- [ ] Add coverage for structured-turn rendering expectations that matter to the TUI, especially hidden thinking, ordered assistant output, and tool activity.
+- [x] Add behavior-spec coverage for structured-turn rendering expectations that matter to the TUI, especially hidden thinking, ordered assistant output, and tool activity.
+  ([cynork_tui.feature](../../features/cynork/cynork_tui.feature) and [chat_thread_management.feature](../../features/orchestrator/chat_thread_management.feature).)
+
+- [x] Add TUI behavior-spec coverage for the working indicator, composer hint, visible cursor, mouse-wheel transcript scrolling, queued drafts, auth recovery, and web login.
+  ([cynork_tui.feature](../../features/cynork/cynork_tui.feature).)
+
+- [x] Add backend-facing behavior-spec coverage for accepted file-context replay, PMA file-context consumption, PMA node-local backend-env consumption, and worker node-manager backend-env propagation.
+  ([chat_thread_management.feature](../../features/orchestrator/chat_thread_management.feature), [pma_chat_file_context.feature](../../features/agents/pma_chat_file_context.feature), [pma_chat_and_context.feature](../../features/agents/pma_chat_and_context.feature), and [node_manager_config_startup.feature](../../features/worker_node/node_manager_config_startup.feature).)
 
 - [x] Add Python E2E coverage for the fullscreen TUI flows that are now required for the primary milestone.
-  (e2e_198_tui_pty.py: prompt-ready, exit via ctrl+c, thread list; skip when pexpect not installed.)
+  (e2e_198_tui_pty.py: prompt-ready, exit via ctrl+c, thread list, and send/receive round-trip; skip when pexpect not installed.)
 
-- [ ] Use the Python PTY harness continuously during TUI development rather than waiting until the end of the round to validate the fullscreen UI.
+- [ ] Use the Python PTY harness continuously during TUI development; each TUI slice must add or update its PTY coverage before the slice is considered done.
 
-- [ ] Run `just docs-check` after the docs changes settle.
+- [ ] Make interactive `cynork chat` invoke the same fullscreen TUI entry flow as `cynork tui`, while keeping `cynork chat --message` and non-interactive usage line-oriented and parseable.
 
-- [ ] Run `just test-bdd` after the relevant feature and behavior changes land.
+- [ ] Run `just docs-check` after the docs changes settle inside the same phase as the doc or feature update.
 
-- [ ] Run the Python E2E suite or targeted Python PTY subset as part of the TUI acceptance gate.
+- [ ] Run `just test-bdd` after the relevant feature and behavior changes land in the same phase, not in a later cleanup pass.
 
-- [ ] Run `just ci` before considering the round complete.
+- [ ] Run the Python E2E suite or targeted Python PTY subset during implementation, then run full `just e2e` as part of the TUI acceptance gate.
+
+- [ ] Run `just ci` before considering the phase or round complete.
 
 ## Phase 7 Remaining MVP Phase 2 Work After TUI MVP
+
+This phase resumes non-TUI MVP Phase 2 implementation only after the first usable TUI path is stable.
+
+### Phase 7 Testing Gate
+
+- [ ] Before each resumed MVP Phase 2 slice, identify the unit, integration, BDD, and E2E coverage that must change with it.
+
+- [ ] Create or update those tests in the same Phase 7 slice rather than carrying test debt into follow-on planning.
+
+- [ ] Run the targeted validation for each resumed MVP behavior while that slice is active.
+
+- [ ] Do not close the active Phase 7 slice until `just ci` passes.
+
+- [ ] Do not close the active Phase 7 slice until `just e2e` passes.
 
 - [ ] Resume the remaining MVP Phase 2 MCP tool slices beyond the currently implemented `db.preference.*` set.
 
@@ -423,11 +619,26 @@ They must be developed in tandem so each validates the other as behavior lands, 
 
 ## Phase 8 Worker Deployment Simplification Docs
 
+This phase keeps the worker-deployment follow-on docs aligned without mixing them into the active TUI implementation slice.
+
+### Phase 8 Testing Gate
+
+- [ ] For each Phase 8 doc promotion or topology clarification, update any affected docs, feature files, and validation coverage in the same slice.
+
+- [ ] Run `just docs-check` after the worker-deployment doc edits settle.
+
+- [ ] Run any targeted validation needed for impacted examples, feature coverage, or deployment workflows before leaving the slice.
+
+- [ ] Do not close the active Phase 8 slice until `just ci` passes.
+
+- [ ] Do not close the active Phase 8 slice until `just e2e` passes.
+
 - [x] Promote the single-binary node manager and worker API proposal into stable requirements and worker-node tech-spec updates (completed in a prior round; see [worker.md](../requirements/worker.md) and [worker_node.md](../tech_specs/worker_node.md)).
 
-- [ ] Keep single-binary worker implementation deferred until after the first TUI rollout.
-
 - [ ] Ensure the promoted worker deployment docs clearly distinguish normative deployment topology decisions from deferred implementation work.
+
+- [x] Keep the promoted worker deployment follow-on docs aligned with the new orchestrator-directed local-inference sizing contract and matching feature coverage.
+  (See [orchestrator_inference_container_decision.md](../tech_specs/orchestrator_inference_container_decision.md), [worker_node.md](../tech_specs/worker_node.md), [worker_node_payloads.md](../tech_specs/worker_node_payloads.md), [pma_chat_and_context.feature](../../features/agents/pma_chat_and_context.feature), and [node_manager_config_startup.feature](../../features/worker_node/node_manager_config_startup.feature).)
 
 ## Recommended Execution Order
 
@@ -455,7 +666,7 @@ They must be developed in tandem so each validates the other as behavior lands, 
 
 ## Exit Criteria for This Round
 
-- [ ] The TUI-first docs are promoted far enough that implementation does not depend on unresolved source-of-truth conflicts.
+- [x] The TUI-first docs are promoted far enough that implementation does not depend on unresolved source-of-truth conflicts.
 
 - [ ] A user can log in, create or switch threads, chat in a multi-line TUI, and observe project and model context.
 
@@ -464,6 +675,8 @@ They must be developed in tandem so each validates the other as behavior lands, 
 - [ ] The first TUI rollout is covered by updated BDD, Python PTY validation, and passes repository validation.
 
 - [ ] The remaining MVP Phase 2 work is clearly separated as the next follow-on implementation stage rather than mixed into the TUI-first milestone.
+
+- [ ] Each active phase closed with its required same-phase test creation or updates completed and both `just ci` and `just e2e` passing.
 
 ## Progress Notes
 
@@ -504,7 +717,7 @@ They must be developed in tandem so each validates the other as behavior lands, 
   `just ci` passes.
 
 - **2026-03-12:** Phase 5 Python PTY harness: Replaced custom PTY code with pexpect.
-  Added scripts/requirements-e2e.txt (pexpect>=4.8), scripts/test_scripts/tui_pty_harness.py (TuiPtySession, landmarks, send_keys, read_until_landmark, wait_for_prompt_ready, capture_screen), and scripts/test_scripts/e2e_198_tui_pty.py (prompt-ready, exit via ctrl+c, thread list; skip when pexpect not installed).
+  Added scripts/requirements-e2e.txt (pexpect>=4.8), scripts/test_scripts/tui_pty_harness.py (TuiPtySession, landmarks, send_keys, read_until_landmark, wait_for_prompt_ready, capture_screen), and scripts/test_scripts/e2e_198_tui_pty.py (prompt-ready, exit via ctrl+c, thread list, send/receive round-trip; skip when pexpect not installed).
   Tag tui_pty added to check_e2e_tags.
   Harness asserts on semantic landmarks; E2E tests run with `just e2e` and skip gracefully without pexpect.
   Doc/justfile follow-up: root `just venv` now installs both scripts/requirements-lint.txt and scripts/requirements-e2e.txt so one .venv supports lint and E2E (including TUI PTY); development_setup and scripts/README updated.
@@ -517,3 +730,21 @@ They must be developed in tandem so each validates the other as behavior lands, 
 - **2026-03-12:** Draft proposal extended with backend file upload/retrieval: section 3.4 (REQ-ORCHES-0167/0168, REQ-SCHEMA-0114, REQ-PMAGNT-0115) and section 4.8 (orchestrator chat file flow, file upload storage, PMA chat file context).
   When @ shorthand and gateway upload are promoted, orchestrator must resolve file refs and pass to PMA; schema must persist uploads scoped to user/thread; PMA must include file content in LLM requests.
   Plan Phase 2 deferred and Phase 3 deferred backend bullets updated to reference the draft.
+
+- **2026-03-13:** Re-reviewed against the current repo state.
+  `cynork tui --thread-new` is now wired, composer input history (Up/Down recall) is implemented with tests, and the PTY suite now covers a basic send/receive round-trip in addition to prompt-ready, exit, and thread-list flows.
+  Interactive `cynork chat` still uses the line-oriented path rather than the fullscreen TUI entry flow, and richer TUI work remains open for Ctrl+C cancel semantics, scrollback navigation and search, identity/connectivity status fields, broader slash-command parity, auth recovery, formatted Markdown transcript rendering, and distinct user-message styling.
+
+- **2026-03-13:** The stable source-of-truth docs and behavior specs were expanded beyond the original TUI-first MVP cut.
+  Stable requirements now include:
+  [REQ-USRGWY-0139](../requirements/usrgwy.md#req-usrgwy-0139) through [REQ-USRGWY-0147](../requirements/usrgwy.md#req-usrgwy-0147), [REQ-CLIENT-0187](../requirements/client.md#req-client-0187) through [REQ-CLIENT-0207](../requirements/client.md#req-client-0207), and [REQ-ORCHES-0167](../requirements/orches.md#req-orches-0167) through [REQ-ORCHES-0169](../requirements/orches.md#req-orches-0169).
+  It also includes [REQ-SCHEMA-0114](../requirements/schema.md#req-schema-0114), [REQ-PMAGNT-0115](../requirements/pmagnt.md#req-pmagnt-0115), [REQ-PMAGNT-0116](../requirements/pmagnt.md#req-pmagnt-0116), and [REQ-WORKER-0264](../requirements/worker.md#req-worker-0264).
+  Stable tech-spec anchors now cover the same scope in [cynork_tui.md](../tech_specs/cynork_tui.md), [chat_threads_and_messages.md](../tech_specs/chat_threads_and_messages.md), [openai_compatible_chat_api.md](../tech_specs/openai_compatible_chat_api.md), [orchestrator.md](../tech_specs/orchestrator.md), and [orchestrator_inference_container_decision.md](../tech_specs/orchestrator_inference_container_decision.md).
+  They also cover [postgres_schema.md](../tech_specs/postgres_schema.md), [cynode_pma.md](../tech_specs/cynode_pma.md), [worker_node.md](../tech_specs/worker_node.md), and [worker_node_payloads.md](../tech_specs/worker_node_payloads.md).
+  Feature coverage was also expanded in [chat_openai_compatible.feature](../../features/e2e/chat_openai_compatible.feature), [cynork_chat.feature](../../features/cynork/cynork_chat.feature), [cynork_shell.feature](../../features/cynork/cynork_shell.feature), and [cynork_tui.feature](../../features/cynork/cynork_tui.feature).
+  It also expanded in [chat_thread_management.feature](../../features/orchestrator/chat_thread_management.feature), [pma_chat_file_context.feature](../../features/agents/pma_chat_file_context.feature), [pma_chat_and_context.feature](../../features/agents/pma_chat_and_context.feature), and [node_manager_config_startup.feature](../../features/worker_node/node_manager_config_startup.feature).
+  Planning implication: the canon is now broader than the intended first implementation slice, so the remaining execution work must treat summary or archive, downloads, `@` upload flow, queued drafts, web login, context compaction, and orchestrator-directed backend-env sizing or propagation as stable but intentionally deferred implementation items unless the round scope is reopened.
+
+- **2026-03-13:** Canonical docs were also normalized to remove rollout-phase wording from stable requirements, tech specs, and feature files where that wording had leaked out of planning documents.
+  The TUI design mockup was retained with the canonical TUI spec under `docs/tech_specs/images/`, and the shell docs or feature coverage were tightened to treat `cynork shell` as compatibility rather than the primary interactive surface.
+  The implementation guidance and agent canon now also explicitly prohibit guessed or simulated tool or system output.

@@ -190,6 +190,58 @@ func TestModel_HandleKey_LoadingIgnoresKeys(t *testing.T) {
 	}
 }
 
+func TestModel_InputHistory_PushAndNavigate(t *testing.T) {
+	m := NewModel(&chat.Session{})
+	m.pushInputHistory("first")
+	m.pushInputHistory("second")
+	if len(m.InputHistory) != 2 || m.InputHistory[0] != "second" || m.InputHistory[1] != "first" {
+		t.Errorf("InputHistory = %v", m.InputHistory)
+	}
+	m.pushInputHistory("second") // dedupe
+	if len(m.InputHistory) != 2 {
+		t.Errorf("dedupe: InputHistory = %v", m.InputHistory)
+	}
+	// Up from -1: show newest (index 0)
+	m.navigateInputHistory(true)
+	if m.InputHistoryIdx != 0 || m.Input != "second" {
+		t.Errorf("Up from -1: idx=%d input=%q", m.InputHistoryIdx, m.Input)
+	}
+	// Up again: show older (index 1)
+	m.navigateInputHistory(true)
+	if m.InputHistoryIdx != 1 || m.Input != "first" {
+		t.Errorf("Up again: idx=%d input=%q", m.InputHistoryIdx, m.Input)
+	}
+	// Up at end: no change
+	m.navigateInputHistory(true)
+	if m.InputHistoryIdx != 1 || m.Input != "first" {
+		t.Errorf("Up at end: idx=%d input=%q", m.InputHistoryIdx, m.Input)
+	}
+	// Down: back to newer
+	m.navigateInputHistory(false)
+	if m.InputHistoryIdx != 0 || m.Input != "second" {
+		t.Errorf("Down: idx=%d input=%q", m.InputHistoryIdx, m.Input)
+	}
+	// Down: exit history, clear input
+	m.navigateInputHistory(false)
+	if m.InputHistoryIdx != -1 || m.Input != "" {
+		t.Errorf("Down to exit: idx=%d input=%q", m.InputHistoryIdx, m.Input)
+	}
+}
+
+func TestModel_HandleKey_UpDownHistory(t *testing.T) {
+	m := NewModel(&chat.Session{})
+	m.InputHistory = []string{"newest", "older"}
+	m.InputHistoryIdx = -1
+	_, _ = m.handleKey(tea.KeyMsg{Type: tea.KeyUp})
+	if m.InputHistoryIdx != 0 || m.Input != "newest" {
+		t.Errorf("Up: idx=%d input=%q", m.InputHistoryIdx, m.Input)
+	}
+	_, _ = m.handleKey(tea.KeyMsg{Type: tea.KeyDown})
+	if m.InputHistoryIdx != -1 || m.Input != "" {
+		t.Errorf("Down from 0: idx=%d input=%q", m.InputHistoryIdx, m.Input)
+	}
+}
+
 func TestModel_HandleKey_DefaultRunes(t *testing.T) {
 	m := NewModel(&chat.Session{})
 	mod, cmd := m.handleKey(tea.KeyMsg{Runes: []rune("x")})

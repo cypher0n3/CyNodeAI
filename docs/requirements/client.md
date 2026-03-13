@@ -326,6 +326,7 @@ Web Console-specific requirements live in [webcon.md](webcon.md) (REQ-WEBCON-*).
   [CYNAI.CLIENT.CliChatResponseOutput](../tech_specs/cli_management_app_commands_chat.md#spec-cynai-client-clichatresponseoutput)
   <a id="req-client-0184"></a>
 - **REQ-CLIENT-0185:** Interactive chat UIs SHOULD update the in-flight assistant turn progressively when the gateway or provider exposes streaming or incremental output.
+  While a turn is still being processed, the interactive UI SHOULD show a visible in-flight status indicator for the active assistant turn.
   When the final assistant turn is committed, the client SHOULD reconcile in-flight placeholders, thinking indicators, and tool-activity rows into the final ordered transcript without duplicating visible assistant text.
   [CYNAI.CLIENT.CynorkTui.GenerationState](../tech_specs/cynork_tui.md#spec-cynai-client-cynorktui-generationstate)
   <a id="req-client-0185"></a>
@@ -334,3 +335,93 @@ Web Console-specific requirements live in [webcon.md](webcon.md) (REQ-WEBCON-*).
   [CYNAI.CLIENT.CliChatOneShot](../tech_specs/cli_management_app_commands_chat.md#spec-cynai-client-clichatoneshot)
   [CYNAI.CLIENT.CliChatResponseOutput](../tech_specs/cli_management_app_commands_chat.md#spec-cynai-client-clichatresponseoutput)
   <a id="req-client-0186"></a>
+- **REQ-CLIENT-0187:** The cynork chat TUI MAY persist local configuration for TUI preferences such as default model, composer mode, context-pane visibility, and keybinding overrides.
+  Any persisted TUI configuration MUST use the same config directory as the rest of cynork and MUST NOT store secrets, tokens, passwords, or message content.
+  [CYNAI.CLIENT.CynorkChat.LocalConfig](../tech_specs/cynork_tui.md#spec-cynai-client-cynorkchat-localconfig)
+  <a id="req-client-0187"></a>
+- **REQ-CLIENT-0188:** The cynork chat TUI MAY use a local cache for completion and list data such as task identifiers, project identifiers, model identifiers, and thread-list metadata.
+  Any such cache MUST live under the CLI cache directory, MUST NOT store secrets or message content, and SHOULD define bounded TTL or invalidation behavior.
+  [CYNAI.CLIENT.CynorkChat.LocalCache](../tech_specs/cynork_tui.md#spec-cynai-client-cynorkchat-localcache)
+  <a id="req-client-0188"></a>
+- **REQ-CLIENT-0189:** When the user invokes a shell command through chat shell escape syntax, the CLI MUST be interactive-subprocess safe.
+  Full-screen or TTY-owning subprocesses MUST receive the real terminal, and the TUI MUST restore itself cleanly after the subprocess exits.
+  [CYNAI.CLIENT.CliChatShellEscape](../tech_specs/cli_management_app_commands_chat.md#spec-cynai-client-clichatshellescape)
+  [CYNAI.CLIENT.CynorkChat.TUILayout](../tech_specs/cynork_tui.md#spec-cynai-client-cynorkchat-tuilayout)
+  <a id="req-client-0189"></a>
+- **REQ-CLIENT-0190:** When `cynork tui` or `cynork chat` starts without a usable login token, or loses authorization during a session, the interactive client MUST offer an in-session login and recovery path instead of forcing the user to restart outside the UI.
+  Login prompts MUST protect secret input and MUST resume startup or offer to retry the interrupted session flow when authentication succeeds.
+  [CYNAI.CLIENT.CynorkChat.AuthRecovery](../tech_specs/cynork_tui.md#spec-cynai-client-cynorkchat-authrecovery)
+  <a id="req-client-0190"></a>
+- **REQ-CLIENT-0191:** The CLI SHOULD support a web-based login flow suitable for SSO-capable deployments in addition to username/password login.
+  This flow MUST avoid printing or persisting secrets in shell history or logs, MUST support a bounded authorization lifetime or expiry, and MUST integrate with the existing cynork token-storage model.
+  [CYNAI.CLIENT.CliWebLogin](../tech_specs/cynork_tui.md#spec-cynai-client-cliweblogin)
+  <a id="req-client-0191"></a>
+- **REQ-CLIENT-0192:** Clients with a chat UI MUST NOT render model reasoning or thinking blocks as normal assistant transcript content.
+  While a response is in progress, the UI MAY show ephemeral progress text such as `Thinking`, but that status MUST NOT be persisted as normal transcript text.
+  [CYNAI.CLIENT.CynorkTui.TranscriptRendering](../tech_specs/cynork_tui.md#spec-cynai-client-cynorktui-transcriptrendering)
+  [CYNAI.CLIENT.CynorkChat.TUILayout](../tech_specs/cynork_tui.md#spec-cynai-client-cynorkchat-tuilayout)
+  <a id="req-client-0192"></a>
+- **REQ-CLIENT-0193:** Clients with a rich chat UI SHOULD render tool calls and tool results as structured transcript items distinct from assistant prose.
+  Tool argument and result previews SHOULD be redacted, truncated, and collapsible when verbose.
+  [CYNAI.CLIENT.CynorkTui.TranscriptRendering](../tech_specs/cynork_tui.md#spec-cynai-client-cynorktui-transcriptrendering)
+  [CYNAI.CLIENT.CynorkChat.TUILayout](../tech_specs/cynork_tui.md#spec-cynai-client-cynorkchat-tuilayout)
+  <a id="req-client-0193"></a>
+- **REQ-CLIENT-0194:** Chat UIs SHOULD support explicit authenticated download actions for assistant-provided files when the gateway exposes them.
+  The UI MUST present file metadata clearly and MUST NOT auto-download assistant files without explicit user action.
+  [CYNAI.USRGWY.ChatThreadsMessages.DownloadRefs](../tech_specs/chat_threads_and_messages.md#spec-cynai-usrgwy-chatthreadsmessages-downloadrefs)
+  [CYNAI.CLIENT.CynorkChat.TUILayout](../tech_specs/cynork_tui.md#spec-cynai-client-cynorkchat-tuilayout)
+  <a id="req-client-0194"></a>
+- **REQ-CLIENT-0195:** Rich chat UIs SHOULD provide a user-level toggle to show or hide available thinking blocks.
+  Thinking MUST be hidden by default; when hidden, the UI SHOULD render a compact placeholder rather than raw reasoning text.
+  [CYNAI.CLIENT.CynorkTui.TranscriptRendering](../tech_specs/cynork_tui.md#spec-cynai-client-cynorktui-transcriptrendering)
+  [CYNAI.CLIENT.CynorkChat.TUILayout](../tech_specs/cynork_tui.md#spec-cynai-client-cynorkchat-tuilayout)
+  <a id="req-client-0195"></a>
+- **REQ-CLIENT-0196:** The cynork chat TUI SHOULD support queueing one or more drafted messages for later send.
+  Queued drafts MUST remain clearly distinct from sent messages, MUST remain editable or removable before they are sent, and SHOULD support reorder plus explicit send-one or send-all actions.
+  [CYNAI.CLIENT.CynorkChat.TUILayout](../tech_specs/cynork_tui.md#spec-cynai-client-cynorkchat-tuilayout)
+  [CYNAI.CLIENT.CynorkChat.LocalConfig](../tech_specs/cynork_tui.md#spec-cynai-client-cynorkchat-localconfig)
+  <a id="req-client-0196"></a>
+- **REQ-CLIENT-0197:** The CLI SHOULD expose the full-screen TUI explicitly as `cynork tui`.
+  After that surface is feature-complete for the intended rollout, invoking bare `cynork` with no subcommand SHOULD launch the same TUI by default while keeping explicit command paths available during migration.
+  [CYNAI.CLIENT.CynorkTui.EntryPoint](../tech_specs/cynork_tui.md#spec-cynai-client-cynorktui-entrypoint)
+  <a id="req-client-0197"></a>
+- **REQ-CLIENT-0198:** Chat UIs MAY support an `@` shorthand in the composer for referencing local files.
+  When such references are used, the client MUST resolve each reference at send time, upload or include the file per the gateway contract, and surface a clear validation error if a referenced file cannot be read or accepted.
+  [CYNAI.CLIENT.CynorkChat.AtFileReferences](../tech_specs/cynork_tui.md#spec-cynai-client-cynorkchat-atfilereferences)
+  [CYNAI.USRGWY.OpenAIChatApi.TextInput](../tech_specs/openai_compatible_chat_api.md#spec-cynai-usrgwy-openaichatapi-textinput)
+  <a id="req-client-0198"></a>
+- **REQ-CLIENT-0199:** Clients that provide a chat UI MUST expose a way for the user to view chat history for the current user and effective project scope.
+  The history list MUST show a display title or fallback label and SHOULD show recent activity time.
+  [CYNAI.USRGWY.ChatThreadsMessages.HistoryList](../tech_specs/chat_threads_and_messages.md#spec-cynai-usrgwy-chatthreadsmessages-historylist)
+  <a id="req-client-0199"></a>
+- **REQ-CLIENT-0200:** Clients that provide a chat UI MUST allow the user to rename the current thread and SHOULD allow rename from the thread list when such a list is present.
+  [CYNAI.USRGWY.ChatThreadsMessages.ThreadTitle](../tech_specs/chat_threads_and_messages.md#spec-cynai-usrgwy-chatthreadsmessages-threadtitle)
+  <a id="req-client-0200"></a>
+- **REQ-CLIENT-0201:** When the gateway provides a thread summary, clients SHOULD display that summary in the thread list or sidebar so users can identify conversations without opening them.
+  [CYNAI.USRGWY.ChatThreadsMessages.ThreadSummary](../tech_specs/chat_threads_and_messages.md#spec-cynai-usrgwy-chatthreadsmessages-threadsummary)
+  <a id="req-client-0201"></a>
+- **REQ-CLIENT-0202:** The cynork CLI MUST provide a single primary interactive chat UI surface centered on the full-screen TUI.
+  `cynork shell` is deprecated as the primary interactive experience in favor of the TUI exposed through `cynork tui`, while `cynork chat` remains an allowed user-facing entrypoint for the same chat surface or a documented compatibility path.
+  [CYNAI.CLIENT.CynorkTui.EntryPoint](../tech_specs/cynork_tui.md#spec-cynai-client-cynorktui-entrypoint)
+  [CYNAI.CLIENT.CynorkChat.TUILayout](../tech_specs/cynork_tui.md#spec-cynai-client-cynorkchat-tuilayout)
+  <a id="req-client-0202"></a>
+- **REQ-CLIENT-0203:** The cynork chat TUI SHOULD provide a cursor-agent-like experience with a multi-line composer, scrollback, search and copy behavior, a persistent status bar, an optional context pane, message-history recall, structured-turn rendering, and completion for relevant chat actions.
+  [CYNAI.CLIENT.CynorkChat.TUILayout](../tech_specs/cynork_tui.md#spec-cynai-client-cynorkchat-tuilayout)
+  [CYNAI.CLIENT.CynorkChat.Completion](../tech_specs/cynork_tui.md#spec-cynai-client-cynorkchat-completion)
+  <a id="req-client-0203"></a>
+- **REQ-CLIENT-0204:** The cynork chat TUI MUST support newline insertion, cancellation, clean exit, and loading older history while scrolling back.
+  The focused composer MUST show a visible text cursor or caret at the current insertion point.
+  [CYNAI.CLIENT.CynorkChat.TUILayout](../tech_specs/cynork_tui.md#spec-cynai-client-cynorkchat-tuilayout)
+  <a id="req-client-0204"></a>
+- **REQ-CLIENT-0205:** Mouse-wheel scrolling in the cynork chat TUI MUST navigate transcript or output history in the scrollback and MUST NOT cycle composer history or mutate previously submitted messages.
+  [CYNAI.CLIENT.CynorkChat.TUILayout](../tech_specs/cynork_tui.md#spec-cynai-client-cynorkchat-tuilayout)
+  <a id="req-client-0205"></a>
+- **REQ-CLIENT-0206:** The cynork chat TUI MUST hint the availability of slash commands, `@` file lookup or attachment, and `!` shell shorthand in or adjacent to the composer.
+  [CYNAI.CLIENT.CynorkChat.TUILayout](../tech_specs/cynork_tui.md#spec-cynai-client-cynorkchat-tuilayout)
+  <a id="req-client-0206"></a>
+- **REQ-CLIENT-0207:** Slash commands in interactive chat MUST provide parity with the previously available shell command surface for tasks, status, identity, nodes, preferences, skills, model, project, and thread controls.
+  The `! command` shell-escape shorthand MUST be supported and documented as part of the chat interaction model.
+  [CYNAI.CLIENT.CliChatSlashCommandReference](../tech_specs/cli_management_app_commands_chat.md#spec-cynai-client-clichatslashcommandreference)
+  [CYNAI.CLIENT.CliChatShellEscape](../tech_specs/cli_management_app_commands_chat.md#spec-cynai-client-clichatshellescape)
+  [CYNAI.CLIENT.CynorkChat.TUILayout](../tech_specs/cynork_tui.md#spec-cynai-client-cynorkchat-tuilayout)
+  <a id="req-client-0207"></a>

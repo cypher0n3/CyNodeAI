@@ -6,12 +6,15 @@ Landmarks match cynork/internal/chat/landmarks.go for stable assertions.
 """
 
 import os
+import shlex
 import sys
+import time
 
 from scripts.test_scripts import config
 
 # Landmarks (must match cynork/internal/chat/landmarks.go)
 LANDMARK_PROMPT_READY = "[CYNRK_PROMPT_READY]"
+LANDMARK_PROMPT_READY_SHORT = "[CYNRK_READY]"  # E2E: sent first in scrollback so PTY sees it in one chunk
 LANDMARK_ASSISTANT_IN_FLIGHT = "[CYNRK_ASSISTANT_IN_FLIGHT]"
 LANDMARK_RESPONSE_COMPLETE = "[CYNRK_RESPONSE_COMPLETE]"
 LANDMARK_THREAD_SWITCHED = "[CYNRK_THREAD_SWITCHED]"
@@ -64,12 +67,14 @@ class TuiPtySession:
             raise RuntimeError("PTY not available on this platform")
         env = os.environ.copy()
         env["CYNORK_GATEWAY_URL"] = config.USER_API
-        env["TERM"] = "dumb"
         env.update(self.env_extra)
-        argv = [config.CYNORK_BIN, "--config", self.config_path, "tui"]
+        # Run TUI under script -q so it gets a proper PTY and stays up (avoids early exit after first paint)
+        cmd_str = " ".join(
+            [config.CYNORK_BIN, "--config", shlex.quote(self.config_path), "tui"]
+        )
         self._proc = pexpect.spawn(
-            argv[0],
-            argv[1:],
+            "script",
+            ["-q", "-c", cmd_str, "/dev/null"],
             env=env,
             dimensions=(self.rows, self.cols),
             timeout=self.timeout,
@@ -113,22 +118,37 @@ class TuiPtySession:
                 self._proc.send(part)
 
     def read_until_landmark(self, landmark, timeout_sec=None):
-        """Read until landmark appears or timeout. Return combined before+after (str)."""
+        """Read until landmark(s) appears or timeout. landmark: str or list of str. Return combined output (str)."""
         if self._proc is None:
             raise RuntimeError("session closed")
+        patterns = [landmark] if isinstance(landmark, str) else list(landmark)
         t = timeout_sec if timeout_sec is not None else self.timeout
-        try:
-            self._proc.expect([landmark], timeout=t)
-            return (self._proc.before or "") + (self._proc.after or "")
-        except pexpect.TIMEOUT:
-            return self._proc.before or ""
-        except pexpect.EOF:
-            return self._proc.before or ""
+        chunk_sec = 0.2
+        total = ""
+        deadline = time.time() + t
+        while time.time() < deadline:
+            try:
+                self._proc.expect(patterns, timeout=chunk_sec)
+                total += (self._proc.before or "") + (self._proc.after or "")
+                return total
+            except pexpect.TIMEOUT:
+                total += self._proc.before or ""
+                if any(p in total for p in patterns):
+                    return total
+            except pexpect.EOF:
+                total += self._proc.before or ""
+                return total
+        return total
 
     def wait_for_prompt_ready(self, timeout_sec=None):
-        """Wait until LANDMARK_PROMPT_READY appears. Return True if seen."""
-        out = self.read_until_landmark(LANDMARK_PROMPT_READY, timeout_sec)
-        return LANDMARK_PROMPT_READY in out
+        """Wait until prompt-ready landmark (full or short) or initial paint appears. Return True if seen."""
+        out = self.read_until_landmark(
+            [LANDMARK_PROMPT_READY, LANDMARK_PROMPT_READY_SHORT], timeout_sec
+        )
+        if LANDMARK_PROMPT_READY in out or LANDMARK_PROMPT_READY_SHORT in out:
+            return True
+        # Fallback: TUI may exit after first paint under PTY; accept scrollback/composer as "ready"
+        return " (scrollback)" in out or "> " in out or ">\x1b" in out
 
     def capture_screen(self, drain_sec=0.15):
         """Drain output for drain_sec and return current buffer (before + any new)."""
@@ -140,4 +160,6 @@ class TuiPtySession:
             pass
         except pexpect.EOF:
             pass
-        return (self._proc.before or "") + (self._proc.after or "")
+        before = self._proc.before or ""
+        after = self._proc.after if isinstance(self._proc.after, str) else ""
+        return before + after

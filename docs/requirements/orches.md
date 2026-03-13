@@ -260,3 +260,16 @@ It covers orchestrator control-plane behavior, task lifecycle, dispatch, and sta
   [CYNAI.ORCHES.ResponsesContinuationState](../tech_specs/orchestrator.md#spec-cynai-orches-responsescontinuationstate)
   [CYNAI.USRGWY.OpenAIChatApi](../tech_specs/openai_compatible_chat_api.md#spec-cynai-usrgwy-openaichatapi)
   <a id="req-orches-0166"></a>
+- **REQ-ORCHES-0167:** When the User API Gateway receives an OpenAI-compatible chat request that includes user-message file references accepted under the chat upload contract, the orchestrator MUST resolve those references to retrievable content and MUST pass that content or a stable resolvable reference into the PMA or inference path.
+  The orchestrator MUST NOT silently drop accepted chat file inputs.
+  [CYNAI.ORCHES.ChatFileUploadFlow](../tech_specs/orchestrator.md#spec-cynai-orches-chatfileuploadflow)
+  <a id="req-orches-0167"></a>
+- **REQ-ORCHES-0168:** When the completion path uses retained response state or thread message history, the orchestrator MUST include any file content or file references associated with those historical user turns when the chat contract requires that context to remain available.
+  The orchestrator MUST preserve the same user and project-scoped authorization that applied to the original uploaded file and MUST NOT broaden access when replaying shared-project file context.
+  [CYNAI.ORCHES.ChatFileUploadFlow](../tech_specs/orchestrator.md#spec-cynai-orches-chatfileuploadflow)
+  <a id="req-orches-0168"></a>
+- **REQ-ORCHES-0169:** When the orchestrator directs node-local inference or a managed service that depends on node-local inference, the orchestrator MUST determine the effective backend runtime configuration needed to maximize the safe usable context window for the node's expected local model workload within the node's available resources.
+  That determination MUST be derived deterministically from node capabilities and orchestrator policy, and any resulting backend-derived environment values MUST be delivered through the canonical node-configuration contract and kept consistent between the local inference backend configuration and any dependent managed-service inference configuration.
+  [CYNAI.ORCHES.InferenceDecisionOutput](../tech_specs/orchestrator_inference_container_decision.md#spec-cynai-orches-inferencedecisionoutput)
+  [CYNAI.WORKER.Payload.ConfigurationV1](../tech_specs/worker_node_payloads.md#spec-cynai-worker-payload-configuration-v1)
+  <a id="req-orches-0169"></a>

@@ -3,7 +3,7 @@ Feature: Worker Node Inference Proxy
 
   As a worker node
   I want a local inference proxy that binds loopback and exposes healthz
-  So that pod inference requests are routed without exposing credentials (Phase 1)
+  So that pod inference requests are routed without exposing credentials
 
 @req_worker_0114
 @req_worker_0115

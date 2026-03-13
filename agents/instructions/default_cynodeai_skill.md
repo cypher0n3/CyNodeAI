@@ -35,8 +35,9 @@ Do not modify or delete it via user-facing skill tools.
 
 ## Conventions
 
-- Use help.*
-  tools for on-demand documentation when available.
+- Do not guess or simulate output from tasks, database calls, tool calls, or external services.
+  Use actual tool and system results only; report unavailability or errors; do not invent or assume values.
+- Use `help.*` tools for on-demand documentation when available.
 - Skills (skills.list, skills.get, etc.) are available when the allowlist and access control permit; use them to load user-defined guidance.
   The default skill (this content) is always included.
 - Output and tool-use contracts are defined in your role instructions bundle; stay within those boundaries.

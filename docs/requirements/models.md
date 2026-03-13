@@ -16,7 +16,7 @@ It covers model lifecycle requirements, routing, and model management behavior.
 - **REQ-MODELS-0002:** External model calls routed via API Egress; no provider keys in agents or sandboxes.
   [external_model_routing.md](../tech_specs/external_model_routing.md)
   <a id="req-models-0002"></a>
-- **REQ-MODELS-0003:** MVP Phase 1 requires at least one inference-capable path (local inference on at least one node, or external provider routing with a configured key).
+- **REQ-MODELS-0003:** The system requires at least one inference-capable path (local inference on at least one node, or external provider routing with a configured key).
   In the single-node case, startup must fail fast (or refuse to enter a ready state) if no local inference is available and no external provider key is configured.
   [external_model_routing.md](../tech_specs/external_model_routing.md)
   [orchestrator_bootstrap.md](../tech_specs/orchestrator_bootstrap.md)

@@ -3,7 +3,7 @@ Feature: Worker Internal Agent-to-Orchestrator Proxy
 
   As a worker node
   I want internal proxy endpoints to be unreachable from the public API mux
-  So that agent-to-orchestrator forwarding is only via identity-bound transport (Phase 3)
+  So that agent-to-orchestrator forwarding is only via identity-bound transport
 
 @req_worker_0162
 @req_worker_0163

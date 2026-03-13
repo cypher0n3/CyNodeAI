@@ -8,6 +8,8 @@
   - [Forward Compatibility](#forward-compatibility)
   - [Project Scoping](#project-scoping)
   - [Model Identifiers](#model-identifiers)
+- [Text Input and File References](#text-input-and-file-references)
+  - [At-Reference Workflow](#at-reference-workflow)
 - [Chat Model Warm-Up](#chat-model-warm-up)
   - [When the Endpoint is Implemented](#when-the-endpoint-is-implemented)
 - [Conversation Model](#conversation-model)
@@ -32,6 +34,7 @@
 - [Observability](#observability)
 - [Request Processing Pipeline](#request-processing-pipeline)
   - [Pipeline Steps (Order is Mandatory)](#pipeline-steps-order-is-mandatory)
+- [Context Compaction](#context-compaction)
 - [Optional: Async Chat (Deferred)](#optional-async-chat-deferred)
 - [Related Documents](#related-documents)
 
@@ -55,6 +58,7 @@ Traces To:
 - [REQ-USRGWY-0136](../requirements/usrgwy.md#req-usrgwy-0136)
 - [REQ-USRGWY-0137](../requirements/usrgwy.md#req-usrgwy-0137)
 - [REQ-USRGWY-0138](../requirements/usrgwy.md#req-usrgwy-0138)
+- [REQ-USRGWY-0140](../requirements/usrgwy.md#req-usrgwy-0140)
 
 ## Single Chat Surface
 
@@ -122,6 +126,8 @@ The first-pass compatibility surface for both endpoints SHOULD also support norm
 
 - If an OpenAI-standard `OpenAI-Project` request header is present, the gateway MUST treat its value as the project context for persistence.
 - If the header is absent, the gateway MUST associate the thread (and any tasks created in that context) with the creating user's default project (see [REQ-PROJCT-0104](../requirements/projct.md#req-projct-0104) and [Default project](../tech_specs/projects_and_scopes.md#spec-cynai-access-defaultproject)).
+- The effective project context MUST be persisted as the thread's project association when the thread is created or reused.
+- The gateway MUST NOT require a CyNodeAI-specific `project_id` request-body field to preserve that association.
 
 ### Model Identifiers
 
@@ -131,6 +137,32 @@ The first-pass compatibility surface for both endpoints SHOULD also support norm
 - The gateway MUST also expose underlying inference model identifiers in `GET /v1/models`.
   These identifiers MUST be limited to the currently configured inference model(s) that the authenticated user is authorized to use.
   The gateway MUST NOT disclose model identifiers the user is not authorized to use.
+
+## Text Input and File References
+
+- Spec ID: `CYNAI.USRGWY.OpenAIChatApi.TextInput` <a id="spec-cynai-usrgwy-openaichatapi-textinput"></a>
+
+Traces To:
+
+- [REQ-USRGWY-0140](../requirements/usrgwy.md#req-usrgwy-0140)
+- [REQ-CLIENT-0198](../requirements/client.md#req-client-0198)
+
+User-authored chat input is text-first.
+
+- For `POST /v1/chat/completions`, user `messages[].content` MUST accept a string containing plain text or Markdown syntax.
+- For `POST /v1/responses`, user `input` MUST accept either a plain string or an ordered message-like structure whose user-authored text content follows the same text and Markdown rules.
+- The gateway MUST preserve the user-visible text exactly enough for transcript rendering, subject to redaction rules.
+- Unsupported user-message rich-part types MUST fail validation rather than being silently dropped.
+
+### At-Reference Workflow
+
+`@` file references are the only supported client-side shorthand for attaching local files to a user chat message.
+
+- The client resolves `@` references locally before submission.
+- The gateway MUST accept the resulting uploaded or inline file representation according to one documented contract.
+- That contract MAY use a gateway-owned upload endpoint that returns stable file identifiers, or MAY use an inline representation accepted by the OpenAI-compatible surface.
+- When the gateway accepts such a file reference, it MUST associate the uploaded file with the originating user message so that downstream components can reconstruct the same context.
+- Validation for file size, file type, or malformed attachment payloads MUST return a normal OpenAI-style error object for the relevant endpoint.
 
 ## Chat Model Warm-Up
 
@@ -179,6 +211,7 @@ Multi-message conversation is the intended way to clarify and lay out a task (or
 - The orchestrator MUST manage chat thread association server-side.
 - The orchestrator MUST maintain a single active thread per `(user_id, project_id)` scope.
   The orchestrator MUST rotate to a new active thread after 2 hours of inactivity.
+- A thread associated with one effective project scope MUST NOT be silently reused for a different effective project scope.
 
 Traces To:
 
@@ -461,17 +494,20 @@ This section defines the required request-processing steps for interactive chat 
    - The gateway MUST record whether redaction was applied and the kind(s) of secrets detected in `chat_audit_log`.
 5. Persist the amended (redacted) user message content to the database as a chat-thread message scoped to `(user_id, project_id)`.
    For `POST /v1/responses`, when `previous_response_id` is provided and valid, the gateway MUST treat the referenced response as continuation state for routing and persistence purposes.
-6. **Orchestrator routing:** Compute the effective model identifier (request `model` if present and non-empty, else `cynodeai.pm`).
+6. Compute the effective context size for the next completion and apply any required context compaction before inference handoff.
+   - Context-size tracking MUST use the canonical thread and request-construction rules in [Chat Threads and Messages](chat_threads_and_messages.md#spec-cynai-usrgwy-chatthreadsmessages-contextsizetracking).
+   - When compaction is required, the gateway MUST compact older conversation context before the request is routed.
+7. **Orchestrator routing:** Compute the effective model identifier (request `model` if present and non-empty, else `cynodeai.pm`).
    Using only the amended (redacted) messages and that identifier:
    - If the effective model identifier is exactly `cynodeai.pm`: hand off the request to the PM agent (`cynode-pma`) for processing and response generation.
      Do not call an inference API directly.
    - If the effective model identifier is not `cynodeai.pm`: route to direct inference (node-local or external API via API Egress per [External Model Routing](external_model_routing.md)).
      Do not invoke the PM agent.
-7. Persist the assistant output as a chat-thread message scoped to the same `(user_id, project_id)`.
+8. Persist the assistant output as a chat-thread message scoped to the same `(user_id, project_id)`.
    When structured output is available, the gateway SHOULD persist the normalized ordered assistant parts for that logical turn in the structured-turn representation.
    Any canonical plain-text projection for that assistant message MUST exclude hidden thinking content.
    For `POST /v1/responses`, the gateway MUST also persist enough response metadata to resolve a retained `previous_response_id` for future continuation while it remains within retention.
-8. Return the endpoint-specific OpenAI-compatible response shape.
+9. Return the endpoint-specific OpenAI-compatible response shape.
    - For `POST /v1/chat/completions`, return a chat-completions response where the content is present at `choices[0].message.content`.
    - For `POST /v1/responses`, return a responses-format object with a stable response `id` and the final text output in the normal responses shape.
 
@@ -481,11 +517,29 @@ Traces To:
 - [REQ-USRGWY-0127](../requirements/usrgwy.md#req-usrgwy-0127)
 - [REQ-USRGWY-0130](../requirements/usrgwy.md#req-usrgwy-0130)
 
+## Context Compaction
+
+- Spec ID: `CYNAI.USRGWY.OpenAIChatApi.ContextCompaction` <a id="spec-cynai-usrgwy-openaichatapi-contextcompaction"></a>
+
+Traces To:
+
+- [REQ-USRGWY-0147](../requirements/usrgwy.md#req-usrgwy-0147)
+- [CYNAI.USRGWY.ChatThreadsMessages.ContextSizeTracking](chat_threads_and_messages.md#spec-cynai-usrgwy-chatthreadsmessages-contextsizetracking)
+
+When the effective context size for the next interactive chat completion reaches at least 95 percent of the selected model's effective context window, the gateway MUST compact older conversation context before issuing the next completion request.
+
+- The effective context window MUST be derived from the selected model identifier and the gateway's model-capability knowledge for that model path.
+- Context compaction MUST run after the current user turn is normalized and persisted, and before the request is routed to PMA or direct inference.
+- The implementation MAY use deterministic summarization, deterministic truncation plus summary, or another deterministic compaction method, but the chosen method MUST be reviewable and consistent for the same inputs.
+- Context compaction MUST preserve enough recent unsummarized turns for the next user turn and expected assistant response to remain coherent.
+- The compacted summary artifact MUST be stored or injected in a thread-scoped derived form that is distinct from canonical raw user and assistant message content.
+- Compaction MUST NOT silently drop the most recent unsummarized user turn that triggered the request.
+
 ## Optional: Async Chat (Deferred)
 
 - Spec ID: `CYNAI.USRGWY.OpenAIChatApi.AsyncDeferred` <a id="spec-cynai-usrgwy-openaichatapi-asyncdeferred"></a>
 
-This spec defers an async chat mode to a later phase.
+This spec defers an async chat mode.
 If async chat is added, it MUST use a completion-scoped or chat-scoped identifier and poll endpoint.
 Async chat MUST NOT reuse task identifiers or task-result endpoints for chat.
 

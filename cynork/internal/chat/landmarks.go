@@ -6,6 +6,8 @@ package chat
 const (
 	// LandmarkPromptReady indicates the composer is ready for user input (e.g. status bar or footer).
 	LandmarkPromptReady = "[CYNRK_PROMPT_READY]"
+	// LandmarkPromptReadyShort is a shorter form for E2E so it fits in first PTY read chunk.
+	LandmarkPromptReadyShort = "[CYNRK_READY]"
 	// LandmarkAssistantInFlight indicates a request is in progress (thinking or streaming).
 	LandmarkAssistantInFlight = "[CYNRK_ASSISTANT_IN_FLIGHT]"
 	// LandmarkResponseComplete indicates the current assistant turn is finalized.

@@ -2,18 +2,43 @@
 package workerapiserver
 
 import (
+	"bytes"
+	"context"
+	"encoding/base64"
 	"encoding/json"
+	"fmt"
+	"io"
 	"log/slog"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/cypher0n3/cynodeai/go_shared_libs/contracts/nodepayloads"
 	"github.com/cypher0n3/cynodeai/worker_node/internal/executor"
 	"github.com/cypher0n3/cynodeai/worker_node/internal/securestore"
 	"github.com/cypher0n3/cynodeai/worker_node/internal/telemetry"
 )
+
+// managedProxyRequest is the JSON body for the managed-service proxy (orchestrator -> worker -> PMA).
+// Must match orchestrator/internal/pmaclient/client.go.
+type managedProxyRequest struct {
+	Version int                 `json:"version"`
+	Method  string              `json:"method"`
+	Path    string              `json:"path"`
+	Headers map[string][]string `json:"headers,omitempty"`
+	BodyB64 string              `json:"body_b64,omitempty"`
+}
+
+// managedProxyResponse is the JSON response from the managed-service proxy.
+type managedProxyResponse struct {
+	Version int                 `json:"version"`
+	Status  int                 `json:"status"`
+	Headers map[string][]string `json:"headers,omitempty"`
+	BodyB64 string              `json:"body_b64,omitempty"`
+}
 
 type embedManagedServiceTarget struct {
 	ServiceType string `json:"service_type"`
@@ -131,11 +156,119 @@ func buildMuxesFromEmbedConfig(
 		_, _ = w.Write([]byte("ok"))
 	})
 	publicMux.HandleFunc("GET /readyz", embedReadyzHandler(exec))
-	// Full handler set would be added here; for minimal embed we only have healthz and readyz.
-	// TODO: add handleRunJob, telemetry, managed-service proxy when moving handlers from main
+	publicMux.HandleFunc("POST /v1/worker/managed-services/{id}/proxy:http", managedServiceProxyHTTPHandler(bearerToken, proxyCfg.InternalProxy.SocketByService, logger))
 	internalMux = http.NewServeMux()
 	// Internal proxy routes would be added when moving handleInternalOrchestratorProxy
 	return publicMux, internalMux
+}
+
+func managedServiceProxyHTTPHandler(bearerToken string, socketByService map[string]string, logger *slog.Logger) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		if bearerToken != "" {
+			auth := r.Header.Get("Authorization")
+			if !strings.HasPrefix(auth, "Bearer ") || strings.TrimSpace(auth[7:]) != bearerToken {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusUnauthorized)
+				_, _ = w.Write([]byte(`{"error":"unauthorized"}`))
+				return
+			}
+		}
+		serviceID := r.PathValue("id")
+		if serviceID == "" {
+			http.Error(w, "missing service id", http.StatusBadRequest)
+			return
+		}
+		proxySock, ok := socketByService[serviceID]
+		if !ok || proxySock == "" {
+			if logger != nil {
+				logger.Warn("managed-service proxy: no socket for service", "service_id", serviceID)
+			}
+			http.Error(w, "service not found", http.StatusNotFound)
+			return
+		}
+		// PMA listens on service.sock; SocketByService has proxy.sock (worker internal listener). Use service.sock for upstream.
+		socketPath := filepath.Join(filepath.Dir(proxySock), "service.sock")
+		var proxyReq managedProxyRequest
+		if err := json.NewDecoder(r.Body).Decode(&proxyReq); err != nil {
+			http.Error(w, "invalid request body", http.StatusBadRequest)
+			return
+		}
+		body, err := base64.StdEncoding.DecodeString(proxyReq.BodyB64)
+		if err != nil {
+			http.Error(w, "invalid body_b64", http.StatusBadRequest)
+			return
+		}
+		path := proxyReq.Path
+		if path == "" {
+			path = "/"
+		}
+		if !strings.HasPrefix(path, "/") {
+			path = "/" + path
+		}
+		transport := &http.Transport{
+			DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
+				if network == "tcp" && (addr == "proxy:80" || addr == "proxy") {
+					return net.Dial("unix", socketPath)
+				}
+				return nil, fmt.Errorf("managed proxy only supports unix socket, got %q %q", network, addr)
+			},
+		}
+		client := &http.Client{Transport: transport, Timeout: 120 * time.Second}
+		upstreamURL := "http://proxy" + path
+		upstreamReq, err := http.NewRequestWithContext(r.Context(), proxyReq.Method, upstreamURL, nil)
+		if err != nil {
+			if logger != nil {
+				logger.Error("managed-service proxy: new request", "error", err)
+			}
+			http.Error(w, "internal error", http.StatusInternalServerError)
+			return
+		}
+		if proxyReq.Method != http.MethodGet && proxyReq.Method != http.MethodHead && len(body) > 0 {
+			upstreamReq.Body = io.NopCloser(bytes.NewReader(body))
+			upstreamReq.ContentLength = int64(len(body))
+		}
+		for k, v := range proxyReq.Headers {
+			for _, vv := range v {
+				upstreamReq.Header.Add(k, vv)
+			}
+		}
+		upstreamReq.Host = "proxy"
+		resp, err := client.Do(upstreamReq)
+		if err != nil {
+			if logger != nil {
+				logger.Error("managed-service proxy: upstream request", "service_id", serviceID, "error", err)
+			}
+			http.Error(w, "upstream error", http.StatusBadGateway)
+			return
+		}
+		defer func() { _ = resp.Body.Close() }()
+		respBody, err := io.ReadAll(resp.Body)
+		if err != nil {
+			if logger != nil {
+				logger.Error("managed-service proxy: read upstream body", "error", err)
+			}
+			http.Error(w, "internal error", http.StatusInternalServerError)
+			return
+		}
+		proxyResp := managedProxyResponse{
+			Version: 1,
+			Status:  resp.StatusCode,
+			Headers: map[string][]string{},
+			BodyB64: base64.StdEncoding.EncodeToString(respBody),
+		}
+		for k, v := range resp.Header {
+			if len(v) > 0 {
+				proxyResp.Headers[k] = v
+			}
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode(proxyResp)
+	}
 }
 
 func embedReadyzHandler(exec *executor.Executor) http.HandlerFunc {

@@ -117,6 +117,8 @@ Normative behavior:
 - The worker MUST NOT treat managed service containers as sandbox containers.
   Managed services may be privileged relative to sandbox workloads, but must still comply with system security boundaries.
 - The worker MUST start managed service containers (agent runtimes) with network restriction so that all inbound and outbound traffic routes through worker proxies; see [Worker Proxy Bidirectional (Managed Agents)](#worker-proxy-bidirectional-managed-agents) and [REQ-WORKER-0174](../requirements/worker.md#req-worker-0174).
+- When a managed service declares `inference.mode=node_local` and the configuration includes `inference.backend_env`, the worker MUST pass those backend environment values into the managed service container.
+- When the same node configuration also includes `inference_backend.env` for the local inference backend, the worker MUST keep the effective backend-derived values aligned between the backend container and managed services that depend on that backend so they use the same orchestrator-derived context-window and runner settings.
 
 PMA as managed service (normative):
 
@@ -359,13 +361,13 @@ Worker API contract
 
 - The Worker API endpoint surface and payload shapes are defined in [`docs/tech_specs/worker_api.md`](worker_api.md).
 
-Worker API operations (MVP Phase 1)
+Worker API operations
 
-For MVP Phase 1, the Worker API surface is intentionally minimal and MUST implement only:
+The Worker API surface is intentionally minimal and MUST implement only:
 
 - `POST /v1/worker/jobs:run`
 
-Future phases MAY add endpoints for file transfer, async job polling, and log streaming, but those MUST be defined in
+Future revisions MAY add endpoints for file transfer, async job polling, and log streaming, but those MUST be defined in
 [`docs/tech_specs/worker_api.md`](worker_api.md) before implementation.
 
 See [`docs/tech_specs/mcp_tooling.md`](mcp_tooling.md) for the MCP tool layer that orchestrator-side agents use.
@@ -429,7 +431,7 @@ Implementation notes
 
 ## Node Sandbox MCP Exposure
 
-For MVP Phase 2 and later, when the orchestrator needs to manage or interact with a sandbox on a node, sandbox
+When the orchestrator needs to manage or interact with a sandbox on a node, sandbox
 operations MUST be exposed as MCP tools on that node.
 The orchestrator acts as the default routing point for sandbox tools for remote agent runtimes.
 When an AI agent runtime is co-located on the same host as the worker node, the node MUST support a low-latency control path that allows direct interaction with node-hosted sandbox tools under orchestrator-issued capability leases.
@@ -760,6 +762,8 @@ On startup, the Node Manager MUST contact the orchestrator and receive configura
 The Worker API MUST be started and the node MUST register with the orchestrator (sending its capabilities bundle) before the node starts any local inference container.
 The orchestrator acknowledges registration and returns a node configuration payload that **instructs** the node whether and how to start the local inference backend (e.g. container image and backend variant such as ROCm for AMD or CUDA for Nvidia).
 The node MUST NOT start the Ollama container until it has received this instruction in the node configuration payload (see [`worker_node_payloads.md`](worker_node_payloads.md) `node_configuration_payload_v1` `inference_backend`).
+When the instruction includes `inference_backend.env`, the node MUST pass those orchestrator-directed backend environment values into the launched backend container.
+Those values represent the orchestrator's effective runtime configuration for maximizing the safe usable context window for the expected local model workload on that node.
 
 The system requires that the overall deployment has at least one inference-capable path.
 Inference may be provided by node-local inference (Ollama) or by external model routing through API Egress when configured.
@@ -776,7 +780,8 @@ Required startup flow (order is mandatory)
 6. Fetch the latest node configuration from orchestrator (orchestrator acks and returns config).
 7. Start the Worker API service (so the node is reachable for job dispatch).
 8. **Local inference:** Apply [Existing Inference Service on Host](#existing-inference-service-on-host): if an inference service (OLLAMA or equivalent) is already running on the host and reachable, the node MUST use it and MUST NOT start another.
-   Only when no existing service is detected and the node configuration instructs the node to start local inference (see `inference_backend` in [`worker_node_payloads.md`](worker_node_payloads.md)), the node starts the single Ollama (or equivalent) container per [Ollama Container Policy](#ollama-container-policy) (image and variant specified by the orchestrator, e.g. ROCm for AMD or CUDA for Nvidia; container granted access to all GPUs and NPUs).
+   In either case, the node MUST treat the orchestrator-delivered `inference_backend` contract, including any derived backend environment values, as the authoritative effective runtime configuration for the node-local inference path.
+   Only when no existing service is detected and the node configuration instructs the node to start local inference (see `inference_backend` in [`worker_node_payloads.md`](worker_node_payloads.md)), the node starts the single Ollama (or equivalent) container per [Ollama Container Policy](#ollama-container-policy) (image, variant, and any orchestrator-directed backend environment values specified by the orchestrator; container granted access to all GPUs and NPUs).
 9. Report startup status and effective configuration version to the orchestrator (config ack and ongoing capability reporting).
     The node MUST report to the orchestrator when it has become ready (e.g. via config ack with status applied after services are started) so the orchestrator can consider the node as an inference path and start the Project Manager Agent when appropriate; see [REQ-WORKER-0254](../requirements/worker.md#req-worker-0254).
 
@@ -1037,8 +1042,8 @@ Inference backend instruction in config
 Required behavior
 
 - The node MUST support receiving configuration at registration time.
-- For MVP Phase 1, the node MUST fetch configuration on startup and MUST NOT poll for configuration updates (no polling in Phase 1).
-- For MVP Phase 3 and later, the node MUST support configuration refresh by polling.
+- In the current minimum implementation, the node MUST fetch configuration on startup and MUST NOT poll for configuration updates.
+- In implementations that add configuration refresh, the node MUST support refresh by polling.
   The node MAY additionally support push notification.
   When an update is delivered via any supported channel (polling or push), the node MUST apply it.
 - The node MUST validate configuration authenticity and origin before applying it.

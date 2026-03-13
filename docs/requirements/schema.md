@@ -1,7 +1,8 @@
 # SCHEMA Requirements
 
-- [1 Overview](#1-overview)
-- [2 Requirements](#2-requirements)
+- [SCHEMA Requirements](#schema-requirements)
+  - [1 Overview](#1-overview)
+  - [2 Requirements](#2-requirements)
 
 ## 1 Overview
 
@@ -57,3 +58,7 @@ It covers data persistence requirements, schema-level invariants, and database c
 - **REQ-SCHEMA-0113:** The schema MUST include a project git repositories table that stores per-project Git repo associations (project_id, provider, repo_identifier, optional base_url override) with a foreign key to projects.id.
   [CYNAI.SCHEMA.ProjectGitReposTable](../tech_specs/postgres_schema.md#spec-cynai-schema-projectgitrepostable)
   <a id="req-schema-0113"></a>
+- **REQ-SCHEMA-0114:** When the gateway accepts user file uploads for chat, the system MUST persist uploaded file content or a stable reference in a way that is scoped to the authenticated user and associated thread or message and is retrievable for the duration required by the chat contract and retention policy.
+  The stored representation MUST enforce the same authorization scope as chat thread and message access, including the same project-scoped permissions when the originating chat thread belongs to a shared project, and MUST remain subject to secret-redaction and size or type limits defined by the gateway.
+  [CYNAI.SCHEMA.ChatMessageAttachmentsTable](../tech_specs/postgres_schema.md#spec-cynai-schema-chatmessageattachmentstable)
+  <a id="req-schema-0114"></a>

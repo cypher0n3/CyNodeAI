@@ -10,7 +10,9 @@
 - [Instructions Loading and Routing](#instructions-loading-and-routing)
 - [LLM Context Composition](#llm-context-composition)
 - [PMA Conversation History](#pma-conversation-history)
+- [Chat File Context](#chat-file-context)
 - [Chat Surface Mapping](#chat-surface-mapping)
+- [Node-Local Inference Backend Environment](#node-local-inference-backend-environment)
 - [Policy and Tool Boundaries](#policy-and-tool-boundaries)
 - [MCP Tool Access](#mcp-tool-access)
 - [Skills and Default Skill](#skills-and-default-skill)
@@ -184,6 +186,21 @@ For multi-turn chat, prior conversation turns MUST be preserved and included in 
 - The final input to the executor (the prompt or message array used for the current inference step) MUST treat the **last user turn** as the current user message.
 - The last user turn MUST NOT be merged into the system block; it MUST remain a distinct user message so that the model correctly attributes it and can respond to it.
 
+## Chat File Context
+
+- Spec ID: `CYNAI.PMAGNT.ChatFileContext` <a id="spec-cynai-pmagnt-chatfilecontext"></a>
+
+Traces To:
+
+- [REQ-PMAGNT-0115](../requirements/pmagnt.md#req-pmagnt-0115)
+
+When PMA receives chat input that includes accepted user-file references or resolved file content, that file context is part of the user turn and MUST remain available to the model request builder.
+
+- PMA MUST include accepted chat-file context in the LLM request in a representation supported by the selected model path.
+- For text-capable files, PMA MAY inline extracted or normalized text content.
+- For image or other multimodal files, PMA SHOULD use the provider-supported file or image part format when available.
+- When the selected model path cannot support a given accepted file type, PMA SHOULD return a clear user-visible error rather than silently omitting the file.
+
 ## Chat Surface Mapping
 
 - Spec ID: `CYNAI.PMAGNT.ChatSurfaceMapping` <a id="spec-cynai-pmagnt-chatsurfacemapping"></a>
@@ -204,6 +221,22 @@ This mapping is required so that:
 ### Reference Contract
 
 - [`docs/tech_specs/openai_compatible_chat_api.md`](openai_compatible_chat_api.md)
+
+## Node-Local Inference Backend Environment
+
+- Spec ID: `CYNAI.PMAGNT.NodeLocalInferenceEnv` <a id="spec-cynai-pmagnt-nodelocalinferenceenv"></a>
+
+Traces To:
+
+- [REQ-PMAGNT-0116](../requirements/pmagnt.md#req-pmagnt-0116)
+
+When `cynode-pma` uses node-local inference through the worker-managed service contract, it MUST consume orchestrator-directed backend environment values that affect runner behavior or effective context size when those values are supplied in the managed-service inference configuration.
+
+- Backend-derived values supplied through the managed-service inference configuration MUST be treated as authoritative runtime inputs for PMA's node-local inference path.
+- PMA MUST treat those values as the orchestrator's selected effective runtime settings for the node-local backend, including context-window sizing selected to maximize the safe usable context window for the expected workload on that node.
+- PMA MUST apply supported values such as `OLLAMA_NUM_CTX` to the corresponding per-request or per-runner inference options rather than ignoring them.
+- When an orchestrator-directed backend environment value is not supported by the selected local inference adapter, PMA SHOULD log a bounded operator-visible warning and MUST continue using only the supported subset.
+- PMA MUST NOT require direct access to worker host environment variables when the managed-service inference contract already supplies the needed backend-derived values.
 
 ## Policy and Tool Boundaries
 

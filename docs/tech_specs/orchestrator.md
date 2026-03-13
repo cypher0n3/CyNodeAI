@@ -9,8 +9,14 @@
   - [Scheduled Run Routing to Project Manager Agent](#scheduled-run-routing-to-project-manager-agent)
 - [Project Manager Agent](#project-manager-agent)
 - [OpenAI-Compatible Interactive Chat Routing](#openai-compatible-interactive-chat-routing)
+  - [OpenAI-Compatible Interactive Chat Routing Traces To](#openai-compatible-interactive-chat-routing-traces-to)
+  - [OpenAI-Compatible Interactive Chat Routing Behavior](#openai-compatible-interactive-chat-routing-behavior)
   - [Responses Continuation State](#responses-continuation-state)
+  - [Chat File Upload Flow](#chat-file-upload-flow)
 - [Managed Services (Worker-Managed)](#managed-services-worker-managed)
+  - [Managed Services Definitions](#managed-services-definitions)
+  - [Managed Services Behavior](#managed-services-behavior)
+  - [Managed Services Related Documents](#managed-services-related-documents)
   - [Project Manager Model (Startup Selection and Warmup)](#project-manager-model-startup-selection-and-warmup)
 - [API Egress Server](#api-egress-server)
 - [Web Egress Proxy](#web-egress-proxy)
@@ -20,10 +26,12 @@
 - [User API Gateway](#user-api-gateway)
 - [Sandbox Image Registry](#sandbox-image-registry)
 - [Node Bootstrap and Configuration](#node-bootstrap-and-configuration)
+  - [Job Dispatch](#job-dispatch)
 - [MCP Tool Interface](#mcp-tool-interface)
 - [Workflow Engine](#workflow-engine)
   - [Task Workflow Lease Lifecycle](#task-workflow-lease-lifecycle)
 - [Orchestrator Shutdown](#orchestrator-shutdown)
+  - [Orchestrator Shutdown Traces To](#orchestrator-shutdown-traces-to)
 - [Orchestrator Bootstrap Configuration](#orchestrator-bootstrap-configuration)
 
 ## Spec IDs
@@ -130,7 +138,7 @@ Orchestrator-side agents MAY use external AI providers for planning and verifica
 
 - Spec ID: `CYNAI.ORCHES.OpenAIInteractiveChatRouting` <a id="spec-cynai-orches-openaiinteractivechatrouting"></a>
 
-Traces To:
+### OpenAI-Compatible Interactive Chat Routing Traces To
 
 - [REQ-ORCHES-0131](../requirements/orches.md#req-orches-0131)
 - [REQ-ORCHES-0132](../requirements/orches.md#req-orches-0132)
@@ -139,7 +147,7 @@ Traces To:
 The orchestrator is the single request-routing owner for the gateway's OpenAI-compatible interactive chat surfaces.
 This applies to both `POST /v1/chat/completions` and `POST /v1/responses`.
 
-Normative behavior:
+### OpenAI-Compatible Interactive Chat Routing Behavior
 
 - The orchestrator MUST apply the same policy, audit, redaction, timeout, and bounded-retry rules to both interactive chat endpoints.
 - The orchestrator MUST derive one effective model identifier from the request `model` field when present and non-empty, otherwise `cynodeai.pm`.
@@ -151,14 +159,14 @@ Normative behavior:
 
 - Spec ID: `CYNAI.ORCHES.ResponsesContinuationState` <a id="spec-cynai-orches-responsescontinuationstate"></a>
 
-Traces To:
+#### Responses Continuation State Traces To
 
 - [REQ-ORCHES-0165](../requirements/orches.md#req-orches-0165)
 - [REQ-ORCHES-0166](../requirements/orches.md#req-orches-0166)
 
 For `POST /v1/responses`, the orchestrator MUST support retained continuation state for `previous_response_id` without changing CyNodeAI's canonical thread and message ownership model.
 
-Normative behavior:
+#### Responses Continuation State Behavior
 
 - The orchestrator MUST resolve `previous_response_id` only against retained response metadata owned by the authenticated user and scoped to the effective project for the request.
 - The orchestrator MUST NOT use cross-user, cross-project, missing, or expired response references as continuation state.
@@ -166,19 +174,39 @@ Normative behavior:
 - The orchestrator MUST persist retained response metadata sufficient to support later continuation while the response remains within retention.
 - This retained response metadata is continuation state for the OpenAI-compatible `responses` surface; it MUST NOT replace CyNodeAI chat threads and messages as the canonical persisted user-visible conversation history.
 
+### Chat File Upload Flow
+
+- Spec ID: `CYNAI.ORCHES.ChatFileUploadFlow` <a id="spec-cynai-orches-chatfileuploadflow"></a>
+
+#### Chat File Upload Flow Traces To
+
+- [REQ-ORCHES-0167](../requirements/orches.md#req-orches-0167)
+- [REQ-ORCHES-0168](../requirements/orches.md#req-orches-0168)
+
+When the gateway accepts user-message file references under the OpenAI-compatible chat contract, the orchestrator is responsible for preserving that accepted file context through routing, history replay, and PMA or direct-inference handoff.
+
+#### Chat File Upload Flow Behavior
+
+- The orchestrator MUST accept either stable file identifiers or already-resolved inline file payloads from the gateway compatibility layer.
+- The orchestrator MUST resolve each accepted file reference to content or to a stable downstream representation before invoking PMA or direct inference.
+- The orchestrator MUST preserve the association between the file context and the originating user turn.
+- When reconstructing history from chat-thread messages or retained `previous_response_id` continuation state, the orchestrator MUST include any required user-file context for prior turns instead of silently dropping it.
+- The orchestrator MUST apply the same size, type, and redaction constraints to replayed file context that applied when the gateway first accepted the file.
+- The orchestrator MUST preserve the same user and project-scoped authorization boundary that applied to the original uploaded file and MUST NOT broaden access when replaying or resolving file context for a shared-project thread.
+
 ## Managed Services (Worker-Managed)
 
 - Spec ID: `CYNAI.ORCHES.ManagedServicesWorkerManaged` <a id="spec-cynai-orches-managedservices"></a>
 
 This section defines how the orchestrator manages and tracks worker-managed long-lived services such as PMA.
 
-Definitions
+### Managed Services Definitions
 
 - **Managed service**: A long-lived service container started and supervised by a worker node based on orchestrator-delivered desired state.
 - **Desired state**: Orchestrator intent delivered via node configuration (`managed_services`).
 - **Observed state**: Worker-reported service state and endpoints (`managed_services_status`).
 
-Normative behavior
+### Managed Services Behavior
 
 - The orchestrator MUST express managed services as desired state in node configuration payloads.
   See [`docs/tech_specs/worker_node_payloads.md`](worker_node_payloads.md) `node_configuration_payload_v1` `managed_services`.
@@ -200,7 +228,7 @@ Normative behavior
   inference connectivity mode and details, and worker-proxy URLs for agent-to-orchestrator communication (MCP, callbacks).
   When supported by the worker, the orchestrator MAY set those worker-proxy URL fields to the sentinel value `auto` to require the worker to generate identity-bound endpoints and report them in `managed_services_status`.
 
-See also:
+### Managed Services Related Documents
 
 - [`docs/tech_specs/orchestrator_bootstrap.md`](orchestrator_bootstrap.md) (readiness and PMA startup)
 - [`docs/tech_specs/worker_node.md`](worker_node.md) (managed service containers and worker proxy bidirectional)
@@ -218,19 +246,19 @@ This selection is distinct from where sandbox jobs run.
 
 - Spec ID: `CYNAI.ORCHES.Operation.SelectProjectManagerModel` <a id="spec-cynai-orches-operation-selectprojectmanagermodel"></a>
 
-Traces To:
+##### 1.1 `Orchestrator.SelectProjectManagerModel` Traces To
 
 - [REQ-ORCHES-0117](../requirements/orches.md#req-orches-0117)
 - [REQ-MODELS-0004](../requirements/models.md#req-models-0004)
 - [REQ-MODELS-0005](../requirements/models.md#req-models-0005)
 - [REQ-MODELS-0008](../requirements/models.md#req-models-0008)
 
-This Spec Item defines the deterministic selection of:
+##### 1.2 `Orchestrator.SelectProjectManagerModel` Selection Scope
 
 - the Project Manager inference execution target (local node vs external provider routing path), and
 - the effective Project Manager model reference to run on that target.
 
-##### 1.1 `Orchestrator.SelectProjectManagerModel` Inputs
+##### 1.3 `Orchestrator.SelectProjectManagerModel` Inputs
 
 - System settings:
   - `agents.project_manager.model.selection.execution_mode` (string)
@@ -251,7 +279,7 @@ This Spec Item defines the deterministic selection of:
   - Model availability for each candidate node (loaded vs not loaded), and the ability to request a model load.
 - External routing configuration and policy (when local inference is unavailable or cannot satisfy selection).
 
-##### 1.2 `Orchestrator.SelectProjectManagerModel` Outputs
+##### 1.4 `Orchestrator.SelectProjectManagerModel` Outputs
 
 - An effective selection tuple:
   - `execution_mode`: `local` or `external`
@@ -259,34 +287,34 @@ This Spec Item defines the deterministic selection of:
   - `model_ref`: string (local model name, or external provider model identifier)
   - `selection_reason`: an ordered list of machine-readable reason codes (for audit/logging)
 
-##### 1.3 `Orchestrator.SelectProjectManagerModel` Behavior
+##### 1.5 `Orchestrator.SelectProjectManagerModel` Behavior
 
 The orchestrator selects exactly one effective Project Manager model on startup.
 The required procedure is defined in the [Orchestrator.SelectProjectManagerModel Algorithm](#algo-cynai-orches-operation-selectprojectmanagermodel).
 
-Determinism requirements:
+##### 1.6 `Orchestrator.SelectProjectManagerModel` Determinism Requirements
 
 - All tie-breaks in this operation are resolved lexicographically by `node_slug` (ascending).
 - If a required system setting key is unset, this operation uses the default value specified in Inputs.
 
-Definitions:
+##### 1.7 `Orchestrator.SelectProjectManagerModel` Definitions
 
 - A node is considered "on the same host as the orchestrator" if its capability report `node.labels` contains the literal label `orchestrator_host`.
 - `vram_total_mb` for a node is computed as:
   - sum of all present `gpu.devices[].vram_mb` values, ignoring devices that omit `vram_mb`
   - if no `vram_mb` values are present, `vram_total_mb=0`
 
-##### 1.4 `Orchestrator.SelectProjectManagerModel` Error Conditions
+##### 1.8 `Orchestrator.SelectProjectManagerModel` Error Conditions
 
 - If `agents.project_manager.model.selection.mode=fixed_model` and `agents.project_manager.model.local_default_ollama_model` is unset, selection fails.
 - If `execution_mode=local` is selected and no local candidate model can be loaded successfully, selection fails unless `execution_mode=external` is allowed and configured.
 - If selection fails and the orchestrator does not currently have an online Project Manager model, the orchestrator MUST continue to re-run selection when relevant inputs change until a Project Manager model is online.
 
-##### 1.5 `Orchestrator.SelectProjectManagerModel` Ordering and Determinism
+##### 1.9 `Orchestrator.SelectProjectManagerModel` Ordering and Determinism
 
 Selection proceeds in the strict order defined by the [Orchestrator.SelectProjectManagerModel Algorithm](#algo-cynai-orches-operation-selectprojectmanagermodel).
 
-##### 1.6 `Orchestrator.SelectProjectManagerModel` Algorithm
+##### 1.10 `Orchestrator.SelectProjectManagerModel` Algorithm
 
 <a id="algo-cynai-orches-operation-selectprojectmanagermodel"></a>
 
@@ -382,14 +410,14 @@ The orchestrator MUST re-validate the currently selected Project Manager model w
   - `agents.project_manager.model.local_default_ollama_model`
 - External routing configuration or policy changes that affect whether an external execution path is configured and allowed.
 
-Required behavior
+##### 3.1 `Orchestrator.MonitorProjectManagerModel` Required Behavior
 
 - If the orchestrator is in a ready state and the Project Manager model becomes unavailable, the orchestrator MUST transition out of ready state.
 - While not ready, the orchestrator MUST continue to serve the management surfaces required to become ready (for example system settings and credential configuration).
 - When the Project Manager model becomes unavailable or when relevant inputs change, the orchestrator MUST re-run `Orchestrator.SelectProjectManagerModel` and apply `Orchestrator.WarmupProjectManagerModel` until a Project Manager model is online again.
 - If the orchestrator must restart the Project Manager Agent due to a model availability change, it MUST restore the agent state from PostgreSQL so task progress remains resumable.
 
-Note:
+##### 3.2 `Orchestrator.MonitorProjectManagerModel` Note
 
 - For the MVP, the Project Manager model is responsible for all inference task assignment decisions.
   See [REQ-ORCHES-0119](../requirements/orches.md#req-orches-0119) and [`docs/tech_specs/project_manager_agent.md`](project_manager_agent.md).
@@ -459,11 +487,11 @@ Config delivery
 - POST on that URL accepts `node_config_ack_v1` and persists the acknowledgement; see [`docs/tech_specs/postgres_schema.md`](postgres_schema.md) Nodes table columns `config_ack_at`, `config_ack_status`, `config_ack_error`.
 - Endpoint paths are not mandated here; the bootstrap payload carries the concrete URLs so nodes do not rely on hard-coded paths.
 
-Job dispatch (initial implementation)
+### Job Dispatch
 
-- For the initial single-node implementation (Phase 1), the orchestrator dispatches jobs to the Worker API via direct HTTP.
+- For the initial single-node implementation, the orchestrator dispatches jobs to the Worker API via direct HTTP.
 - The dispatcher uses the per-node `worker_api_target_url` and per-node bearer token; the URL is normally set from the node-reported `worker_api.base_url` at registration and when processing capability reports, and may be overridden by operator config (e.g. same-host: `WORKER_API_TARGET_URL`); see [`docs/tech_specs/postgres_schema.md`](postgres_schema.md) Nodes table and [`worker_node_payloads.md`](worker_node_payloads.md).
-- The MCP gateway is not in the loop for job dispatch in Phase 1.
+- The MCP gateway is not in the loop for this job-dispatch path.
 
 See [`docs/tech_specs/worker_node.md`](worker_node.md) and [`docs/tech_specs/worker_node_payloads.md`](worker_node_payloads.md).
 
@@ -479,12 +507,12 @@ See [`docs/tech_specs/mcp_tooling.md`](mcp_tooling.md).
 The orchestrator uses LangGraph to implement multi-step and multi-agent workflows.
 The Project Manager Agent's behavior is implemented by the LangGraph MVP workflow.
 
-**Phase 2 implementation:** The workflow engine is a **separate Python LangGraph process** (separate from the Go orchestrator process).
+The workflow engine is a **separate Python LangGraph process** (separate from the Go orchestrator process).
 The orchestrator invokes it via a stable start/resume and checkpoint contract.
 The workflow start/resume API contract and workflow start triggers are defined in [langgraph_mvp.md](langgraph_mvp.md): [Workflow Start/Resume API Contract](langgraph_mvp.md#spec-cynai-orches-workflowstartresumeapi) and [Workflow Start Triggers](langgraph_mvp.md#spec-cynai-orches-workflowstarttriggers).
 Lease lifecycle is defined in [Task Workflow Lease Lifecycle](#task-workflow-lease-lifecycle) below.
 
-**Process boundaries (Phase 2):** **cynode-pma** (chat, MCP tools) and the **workflow runner** (LangGraph graph execution) are **separate processes**.
+**Process boundaries:** **cynode-pma** (chat, MCP tools) and the **workflow runner** (LangGraph graph execution) are **separate processes**.
 They share the MCP gateway and DB.
 The orchestrator starts the workflow runner for a given task; chat and planning requests go to PMA; the workflow runner executes the graph and does not serve chat.
 
@@ -497,7 +525,7 @@ See [langgraph_mvp.md](langgraph_mvp.md) for the graph topology, state model, no
 
 - Spec ID: `CYNAI.ORCHES.TaskWorkflowLeaseLifecycle` <a id="spec-cynai-orches-taskworkflowleaselifecycle"></a>
 
-Traces To:
+#### Task Workflow Lease Lifecycle Traces To
 
 - [REQ-ORCHES-0146](../requirements/orches.md#req-orches-0146)
 
@@ -524,7 +552,7 @@ If the workflow runner does not renew before `expires_at`, the orchestrator trea
 
 - Spec ID: `CYNAI.ORCHES.OrchestratorShutdown` <a id="spec-cynai-orches-orchestratorshutdown"></a>
 
-Traces To:
+### Orchestrator Shutdown Traces To
 
 - [REQ-ORCHES-0164](../requirements/orches.md#req-orches-0164)
 

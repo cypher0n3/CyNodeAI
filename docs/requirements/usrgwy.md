@@ -169,3 +169,41 @@ It covers user-facing REST API gateway behavior and related API contracts.
   [CYNAI.USRGWY.ChatThreadsMessages.StructuredTurns](../tech_specs/chat_threads_and_messages.md#spec-cynai-usrgwy-chatthreadsmessages-structuredturns)
   [CYNAI.USRGWY.OpenAIChatApi.NormalizedAssistantOutput](../tech_specs/openai_compatible_chat_api.md#spec-cynai-usrgwy-openaichatapi-normalizedassistantoutput)
   <a id="req-usrgwy-0138"></a>
+- **REQ-USRGWY-0139:** The User API Gateway MUST support structured chat-turn data so rich clients can distinguish visible assistant text, tool activity, downloadable outputs, and hidden thinking without scraping prose.
+  Internal reasoning or thinking content MUST NOT be used as canonical transcript content for thread title, summary, or list preview generation.
+  [CYNAI.USRGWY.ChatThreadsMessages.StructuredTurns](../tech_specs/chat_threads_and_messages.md#spec-cynai-usrgwy-chatthreadsmessages-structuredturns)
+  [CYNAI.USRGWY.OpenAIChatApi.NormalizedAssistantOutput](../tech_specs/openai_compatible_chat_api.md#spec-cynai-usrgwy-openaichatapi-normalizedassistantoutput)
+  <a id="req-usrgwy-0139"></a>
+- **REQ-USRGWY-0140:** The OpenAI-compatible chat surface MUST define user message input as text with Markdown syntax support.
+  File inclusion for user messages is allowed only through the documented `@`-reference workflow, and the gateway MUST accept the resulting uploaded or inline file references according to the chat contract.
+  When a chat thread is project-scoped, any uploaded file accepted as part of that user message MUST inherit the same project-scoped authorization as the originating thread and message.
+  [CYNAI.USRGWY.OpenAIChatApi.TextInput](../tech_specs/openai_compatible_chat_api.md#spec-cynai-usrgwy-openaichatapi-textinput)
+  <a id="req-usrgwy-0140"></a>
+- **REQ-USRGWY-0141:** When a completion or tool execution produces a downloadable output, the gateway SHOULD expose a stable authenticated download reference and metadata suitable for explicit client download UX.
+  Clients MUST NOT be forced to scrape assistant prose to discover downloadable files.
+  [CYNAI.USRGWY.ChatThreadsMessages.DownloadRefs](../tech_specs/chat_threads_and_messages.md#spec-cynai-usrgwy-chatthreadsmessages-downloadrefs)
+  <a id="req-usrgwy-0141"></a>
+- **REQ-USRGWY-0142:** The Data REST API for chat threads MUST support updating a thread's user-facing title.
+  Title updates MUST be authorized against the authenticated thread owner and MUST NOT require creating a new thread.
+  [CYNAI.USRGWY.ChatThreadsMessages.ThreadTitle](../tech_specs/chat_threads_and_messages.md#spec-cynai-usrgwy-chatthreadsmessages-threadtitle)
+  <a id="req-usrgwy-0142"></a>
+- **REQ-USRGWY-0143:** The system MAY store an optional short summary for a chat thread for list or sidebar display.
+  If a summary is derived from message content, it MUST use redacted content only and MUST NOT store plaintext secrets.
+  [CYNAI.USRGWY.ChatThreadsMessages.ThreadSummary](../tech_specs/chat_threads_and_messages.md#spec-cynai-usrgwy-chatthreadsmessages-threadsummary)
+  <a id="req-usrgwy-0143"></a>
+- **REQ-USRGWY-0144:** List chat-thread endpoints MUST support recent-activity ordering and pagination so clients can implement chat-history lists of arbitrary size.
+  Default ordering MUST be newest first by `updated_at`.
+  [CYNAI.USRGWY.ChatThreadsMessages.HistoryList](../tech_specs/chat_threads_and_messages.md#spec-cynai-usrgwy-chatthreadsmessages-historylist)
+  <a id="req-usrgwy-0144"></a>
+- **REQ-USRGWY-0145:** The gateway MAY support archive or soft-delete state for chat threads so users can hide threads from the default history list without losing retained data.
+  If archive state is supported, list endpoints MUST allow filtering by active versus archived visibility.
+  [CYNAI.USRGWY.ChatThreadsMessages.Archive](../tech_specs/chat_threads_and_messages.md#spec-cynai-usrgwy-chatthreadsmessages-archive)
+  <a id="req-usrgwy-0145"></a>
+- **REQ-USRGWY-0146:** The gateway MUST track the effective context size used to build the next chat completion request for a thread.
+  Context-size tracking MUST be model-aware and deterministic for a given thread state, accepted file context, and model selection.
+  [CYNAI.USRGWY.ChatThreadsMessages.ContextSizeTracking](../tech_specs/chat_threads_and_messages.md#spec-cynai-usrgwy-chatthreadsmessages-contextsizetracking)
+  <a id="req-usrgwy-0146"></a>
+- **REQ-USRGWY-0147:** When the effective context size for the next chat completion reaches at least 95 percent of the selected model's effective context window, the gateway MUST compact older conversation context before issuing the next completion request.
+  Context compaction MUST preserve enough recent unsummarized context for the next user turn and expected assistant response, and MUST preserve conversation continuity in a deterministic and reviewable way.
+  [CYNAI.USRGWY.OpenAIChatApi.ContextCompaction](../tech_specs/openai_compatible_chat_api.md#spec-cynai-usrgwy-openaichatapi-contextcompaction)
+  <a id="req-usrgwy-0147"></a>

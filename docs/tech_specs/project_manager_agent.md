@@ -2,6 +2,7 @@
 
 - [Agent Purpose](#agent-purpose)
 - [LLM and Tool Execution (Implementation)](#llm-and-tool-execution-implementation)
+- [No Simulated or Guessed Output](#no-simulated-or-guessed-output)
 - [Agent Responsibilities](#agent-responsibilities)
 - [External Provider Usage](#external-provider-usage)
   - [External Provider Usage Applicable Requirements](#external-provider-usage-applicable-requirements)
@@ -60,6 +61,18 @@ The [LangGraph MVP workflow](langgraph_mvp.md) remains the graph runner and chec
 Langchaingo implements the agentic steps within nodes (e.g. Plan Steps, Verify Step Result).
 MCP tool calls from PMA still go through the orchestrator MCP gateway.
 Langchaingo tools wrap those MCP calls.
+
+## No Simulated or Guessed Output
+
+- Spec ID: `CYNAI.AGENTS.NoSimulatedOutput` <a id="spec-cynai-agents-nosimulatedoutput"></a>
+
+Traces To:
+
+- [REQ-AGENTS-0137](../requirements/agents.md#req-agents-0137)
+
+Agents MUST NOT guess or simulate output from tasks, database calls, tool calls, or external services.
+They MUST use actual results from MCP tools, job callbacks, and system calls.
+When data or results are unavailable (e.g. tool error, timeout, or missing resource), the agent MUST report that to the user or caller and MUST NOT invent, fabricate, or assume values.
 
 ## Agent Responsibilities
 

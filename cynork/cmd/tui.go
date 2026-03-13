@@ -46,6 +46,12 @@ func runTUI(_ *cobra.Command, _ []string) error {
 		}
 		fmt.Fprintf(os.Stderr, "New thread started: %s\n", threadID)
 	}
+	return runTUIWithSession(session)
+}
+
+// runTUIWithSession starts the full-screen TUI with the given session. Used by both
+// "cynork tui" and interactive "cynork chat" (when stdin/stdout are a TTY).
+func runTUIWithSession(session *chat.Session) error {
 	m := tui.NewModel(session)
 	p := tea.NewProgram(m, tea.WithAltScreen())
 	if _, err := tuiRunProgram(p); err != nil {

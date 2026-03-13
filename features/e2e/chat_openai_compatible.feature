@@ -46,3 +46,11 @@ Scenario: Chat does not imply one task per message
   When I call POST "/v1/chat/completions" with OpenAI-format messages
   Then the response is a chat completion
   And no assertion is made that a user-visible task was created
+
+@req_usrgwy_0135
+@spec_cynai_usrgwy_chatthreadsmessages_apisurface
+@spec_cynai_usrgwy_chatthreadsmessages_threadacquisition
+Scenario: Explicit thread creation returns a distinct thread resource
+  When I call POST "/v1/chat/threads" as an authenticated user
+  Then the response status is 201
+  And the response contains a created chat thread identifier

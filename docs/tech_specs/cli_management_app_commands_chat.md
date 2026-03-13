@@ -15,13 +15,14 @@
 ## Document Overview
 
 This document specifies the `cynork chat` command and all chat slash commands.
+It defines the user-facing chat contract used by both the explicit `cynork tui` entrypoint and the `cynork chat` compatibility path.
 It is part of the [cynork CLI](cynork_cli.md) specification.
 
 ## Chat Command
 
 - Spec ID: `CYNAI.CLIENT.CliChat` <a id="spec-cynai-client-clichat"></a>
 
-Traces To:
+### Chat Command Traces To
 
 - [REQ-CLIENT-0161](../requirements/client.md#req-client-0161)
 - [REQ-CLIENT-0162](../requirements/client.md#req-client-0162)
@@ -71,7 +72,9 @@ See [`docs/tech_specs/openai_compatible_chat_api.md`](openai_compatible_chat_api
   When provided, the CLI MUST send this single message to the gateway via the configured OpenAI-compatible interactive chat surface, print the completion content (subject to `--plain` and `--no-color`), and exit without entering the interactive loop.
   When `--message` is present, slash commands and the interactive loop are not used; see [One-shot mode](#one-shot-mode).
 - `--thread-new` (bool, optional): At startup, create a new chat thread before the first completion request.
-  When set, the CLI MUST call `POST /v1/chat/threads` (with project context from `--project-id` or active project when set) before the first `POST /v1/chat/completions` request in the session.
+  When set, the CLI MUST call `POST /v1/chat/threads` using the effective project context from
+  `--project-id` or the active project when set before the first `POST /v1/chat/completions`
+  request in the session.
   Subsequent chat completion requests MUST remain OpenAI-compatible and MUST NOT require any CyNodeAI-specific thread identifier in the request body or headers.
   When omitted, the CLI uses the gateway's active-thread behavior per (user, project) and does not create a thread explicitly.
 
@@ -79,41 +82,52 @@ See [`docs/tech_specs/openai_compatible_chat_api.md`](openai_compatible_chat_api
 
 - Spec ID: `CYNAI.CLIENT.CliChatThreadControls` <a id="spec-cynai-client-clichatthreadcontrols"></a>
 
-Traces To:
+#### Thread Controls Traces To
 
 - [REQ-CLIENT-0181](../requirements/client.md#req-client-0181)
+- [REQ-CLIENT-0199](../requirements/client.md#req-client-0199)
+- [REQ-CLIENT-0200](../requirements/client.md#req-client-0200)
 
 The CLI MUST support explicit fresh-thread creation at startup and during an active session, and MUST respect current project context for thread creation.
+Interactive chat SHOULD also expose thread-list, switch, and rename operations using the same gateway thread APIs.
 
 #### Startup (`--thread-new`)
 
 - When the user invokes `cynork chat --thread-new`, the CLI MUST create a new thread via `POST /v1/chat/threads` before entering the interactive loop (or before sending the one-shot message if `--message` is also set).
-- The request body for `POST /v1/chat/threads` MUST include `project_id` when the session has a project context (from `--project-id` or the active project from `cynork project set`); when no project is set, the CLI MUST omit `project_id` so the gateway associates the thread with the user's default project.
+- The CLI MUST apply project context to `POST /v1/chat/threads` using the same effective project rules as the rest of chat.
+  When a project is set for the session, the CLI MUST use that project context; when no project is set, the gateway associates the thread with the user's default project.
 - Subsequent `POST /v1/chat/completions` requests in that session MUST remain OpenAI-compatible and MUST NOT require any CyNodeAI-specific thread identifier in the request body or headers.
 - The observable outcome for the user MUST be that the next completion starts a fresh conversation rather than reusing the previously active thread.
 
 #### In-Session (`/thread new`)
 
-- When the user types `/thread new` during an active chat session, the CLI MUST call `POST /v1/chat/threads` with the current session project context (same as for `--thread-new`: `project_id` when project is set, otherwise omitted).
+- When the user types `/thread new` during an active chat session, the CLI MUST call `POST /v1/chat/threads` with the current effective session project context.
 - After a successful create, the CLI MUST treat the session as switched to a fresh conversation for subsequent completions while keeping the `POST /v1/chat/completions` request shape OpenAI-compatible.
 - The chat session MUST continue (no exit).
+
+#### Additional `/thread` Actions
+
+- `/thread list` SHOULD list threads for the current user and effective project context using `GET /v1/chat/threads`.
+- `/thread switch <thread_id>` SHOULD switch the active interactive session to the specified thread when the thread is owned by the authenticated user.
+- `/thread rename <title>` SHOULD update the current thread title using `PATCH /v1/chat/threads/{thread_id}`.
+- When summary or archive support is present on the gateway, implementations MAY surface those fields through `/thread list` or additional thread subcommands.
 
 #### Unknown `/thread` Subcommands
 
 - Input that starts with `/thread` but is not a known subcommand (e.g. `/thread foo`) MUST be treated as an unknown command.
-- The CLI MUST print a brief error or hint (e.g. "Unknown /thread command. Use /thread new to start a new thread, /help for more.") and MUST NOT send the line to the PM model.
+- The CLI MUST print a brief error or hint (e.g. "Unknown /thread command. Use /thread new, /thread list, /thread switch, or /thread rename.") and MUST NOT send the line to the PM model.
 - The session MUST continue; the current thread remains unchanged.
 
 #### Project Context and Openai-Project
 
-- Thread creation (startup or in-session) MUST use the same project scope as the current chat session: when the user has set a project (via `--project-id`, active project, or `/project set`), the new thread MUST be created with that `project_id` in the request body; when no project is set, the gateway assigns the user's default project.
+- Thread creation (startup or in-session) MUST use the same effective project scope as the current chat session: when the user has set a project (via `--project-id`, active project, or `/project set`), the new thread MUST be created within that effective project scope; when no project is set, the gateway assigns the user's default project.
 - After switching to a new thread, the CLI MUST continue sending the same `OpenAI-Project` header (or none) on `POST /v1/chat/completions` as before, so that completions remain in the same project scope.
 
 ### One-Shot Mode
 
 - Spec ID: `CYNAI.CLIENT.CliChatOneShot` <a id="spec-cynai-client-clichatoneshot"></a>
 
-Traces To:
+#### One-Shot Mode Traces To
 
 - [REQ-CLIENT-0178](../requirements/client.md#req-client-0178)
 
@@ -142,7 +156,7 @@ The following applies when the CLI is not in one-shot mode (i.e. when `--message
 
 - Spec ID: `CYNAI.CLIENT.CliChatWarmUp` <a id="spec-cynai-client-clichatwarmup"></a>
 
-Traces To:
+#### Chat Session Warm-Up Traces To
 
 - [REQ-CLIENT-0177](../requirements/client.md#req-client-0177)
 
@@ -154,7 +168,7 @@ The model parameter MAY be omitted (gateway default) or set from the session def
 
 - Spec ID: `CYNAI.CLIENT.CliChatSlashCommands` <a id="spec-cynai-client-clichatslashcommands"></a>
 
-Traces To:
+#### Slash Commands and Discoverability Traces To
 
 - [REQ-CLIENT-0164](../requirements/client.md#req-client-0164)
 
@@ -167,7 +181,7 @@ Implementations MAY show a short description next to each command (e.g. `/exit -
 
 - Spec ID: `CYNAI.CLIENT.CliChatSlashAutocomplete` <a id="spec-cynai-client-clichatslashautocomplete"></a>
 
-Traces To:
+##### Slash Command Autocomplete Traces To
 
 - [REQ-CLIENT-0165](../requirements/client.md#req-client-0165)
 
@@ -194,7 +208,7 @@ The CLI MUST print a brief error or hint (e.g. "Unknown command. Type /help for 
 
 - Spec ID: `CYNAI.CLIENT.CliChatShellEscape` <a id="spec-cynai-client-clichatshellescape"></a>
 
-Traces To:
+##### Shell Escape Traces To
 
 - [REQ-CLIENT-0175](../requirements/client.md#req-client-0175)
 
@@ -203,8 +217,9 @@ The CLI MUST run the command in the user's underlying shell (e.g. `sh -c "<rest>
 The chat session MUST continue after the command completes; the command's exit code MAY be shown (e.g. on non-zero exit).
 If the command cannot be run (e.g. executable not found), the CLI MUST print an error to stderr and MUST NOT exit the chat session.
 Empty `!` (no command after the space) SHOULD print a brief usage hint (e.g. "usage: ! followed by a shell command") and continue the session.
+If the command is interactive and takes over the terminal, the implementation MUST suspend the TUI or chat renderer, hand the real TTY to the subprocess, and restore the chat session cleanly when the subprocess exits.
 
-Required slash commands:
+##### Required Slash Commands
 
 - **`/exit`**
   - End the chat session and return to the shell.
@@ -237,11 +252,21 @@ Required slash commands:
   - The new thread uses the current session project context.
   - No arguments.
 
+- **`/thread list`**
+  - List available chat threads for the current user and effective project context.
+  - Output SHOULD include thread id, display title, and recent activity.
+
+- **`/thread switch <thread_id>`**
+  - Switch the current session to an existing thread owned by the authenticated user.
+
+- **`/thread rename <title>`**
+  - Rename the current thread using the gateway thread-title update contract.
+
 #### Model Selection Slash Commands
 
 - Spec ID: `CYNAI.CLIENT.CliChatModelSelection` <a id="spec-cynai-client-clichatmodelselection"></a>
 
-Traces To:
+##### Model Selection Traces To
 
 - [REQ-CLIENT-0171](../requirements/client.md#req-client-0171)
 - [REQ-CLIENT-0172](../requirements/client.md#req-client-0172)
@@ -265,7 +290,7 @@ Model selection MUST NOT change any user preference or system setting.
 
 - Spec ID: `CYNAI.CLIENT.CliChatProjectContext` <a id="spec-cynai-client-clichatprojectcontext"></a>
 
-Traces To:
+##### Project Context Traces To
 
 - [REQ-CLIENT-0173](../requirements/client.md#req-client-0173)
 
@@ -296,7 +321,7 @@ Implementations SHOULD reuse the same request-building and output code paths as 
 
 - Spec ID: `CYNAI.CLIENT.CliChatSlashTask` <a id="spec-cynai-client-clichatslashtask"></a>
 
-Traces To:
+##### Task Slash Commands Traces To
 
 - [REQ-CLIENT-0166](../requirements/client.md#req-client-0166)
 
@@ -305,7 +330,7 @@ Each MUST call the same User API Gateway endpoints as the corresponding `cynork 
 Output MUST be shown inline in the chat (pretty-printed per [Pretty-Printed JSON Output](cli_management_app_shell_output.md#spec-cynai-client-cliprettyprintjson) when the output is JSON).
 Arguments are parsed from the remainder of the line after the slash command; the CLI MAY support a subset of flags (e.g. `--limit`, `--status`) where the chat input allows.
 
-Implementation guidance:
+##### Task Slash Commands Implementation Guidance
 
 - To prevent behavioral drift, implementations SHOULD reuse the existing cynork subcommand request-building and output code paths for the corresponding operations (task, prefs, nodes, skills, status, auth).
   Slash commands should be a thin adapter that selects a subcommand and passes the parsed arguments through.
@@ -346,7 +371,7 @@ Implementation guidance:
 
 - Spec ID: `CYNAI.CLIENT.CliChatSlashStatus` <a id="spec-cynai-client-clichatslashstatus"></a>
 
-Traces To:
+##### Status and Identity Traces To
 
 - [REQ-CLIENT-0167](../requirements/client.md#req-client-0167)
 
@@ -366,7 +391,7 @@ Traces To:
 
 - Spec ID: `CYNAI.CLIENT.CliChatSlashNodes` <a id="spec-cynai-client-clichatslashnodes"></a>
 
-Traces To:
+##### Node Slash Commands Traces To
 
 - [REQ-CLIENT-0168](../requirements/client.md#req-client-0168)
 
@@ -381,7 +406,7 @@ Traces To:
 
 - Spec ID: `CYNAI.CLIENT.CliChatSlashPrefs` <a id="spec-cynai-client-clichatslashprefs"></a>
 
-Traces To:
+##### Preferences Slash Commands Traces To
 
 - [REQ-CLIENT-0169](../requirements/client.md#req-client-0169)
 
@@ -405,7 +430,7 @@ Traces To:
 
 - Spec ID: `CYNAI.CLIENT.CliChatSlashSkills` <a id="spec-cynai-client-clichatslashskills"></a>
 
-Traces To:
+##### Skills Slash Commands Traces To
 
 - [REQ-CLIENT-0170](../requirements/client.md#req-client-0170)
 
@@ -419,7 +444,7 @@ Traces To:
 
 - Spec ID: `CYNAI.CLIENT.CliChatResponseOutput` <a id="spec-cynai-client-clichatresponseoutput"></a>
 
-Traces To:
+#### Response Output Traces To
 
 - [REQ-CLIENT-0162](../requirements/client.md#req-client-0162)
 - [REQ-CLIENT-0182](../requirements/client.md#req-client-0182)
@@ -449,7 +474,7 @@ Traces To:
 
 - Spec ID: `CYNAI.CLIENT.CliChatSubcommandErrors` <a id="spec-cynai-client-clichatsubcommanderrors"></a>
 
-Traces To:
+##### Subcommand Errors Traces To
 
 - [REQ-CLIENT-0176](../requirements/client.md#req-client-0176)
 

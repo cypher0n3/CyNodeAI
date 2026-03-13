@@ -158,3 +158,8 @@ It covers agent behaviors, responsibilities, and workflow integration.
   [CYNAI.ACCESS.ProjectPlanApprovedState](../tech_specs/projects_and_scopes.md#spec-cynai-access-projectplanapprovedstate)
   [CYNAI.AGENTS.PlanApprovalSeekExplicitApproval](../tech_specs/project_manager_agent.md#spec-cynai-agents-planapprovalseekexplicitapproval)
   <a id="req-agents-0136"></a>
+- **REQ-AGENTS-0137:** Agents MUST NOT guess or simulate output from tasks, database calls, tool calls, or external services.
+  They MUST use actual results from tools and system calls.
+  When data or results are unavailable, the agent MUST report that to the user or caller and MUST NOT invent, fabricate, or assume values.
+  [CYNAI.AGENTS.NoSimulatedOutput](../tech_specs/project_manager_agent.md#spec-cynai-agents-nosimulatedoutput)
+  <a id="req-agents-0137"></a>

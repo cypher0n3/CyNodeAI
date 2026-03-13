@@ -84,7 +84,7 @@ Token delivery
 - The orchestrator MUST deliver the Worker API bearer token to the node via the node configuration payload.
   - See [`docs/tech_specs/worker_node_payloads.md`](worker_node_payloads.md) `node_configuration_payload_v1`.
 
-Initial implementation (Phase 1) constraints
+Initial implementation constraints
 
 - Bearer token is static (delivered via node config; no refresh).
 - Component-to-component traffic MUST support HTTP (not HTTPS) for MVP.

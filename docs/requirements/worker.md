@@ -381,3 +381,9 @@ It covers worker-node behavior and the worker API contract for job execution and
   Orchestrator-facing behavior (registration, config, capability reporting, Worker API contract) MUST be unchanged.
   [CYNAI.WORKER.SingleProcessHostBinary](../tech_specs/worker_node.md#spec-cynai-worker-singleprocesshostbinary)
   <a id="req-worker-0263"></a>
+- **REQ-WORKER-0264:** In normal operation, when node configuration directs local inference through `inference_backend`, the Node Manager MUST start and supervise that backend using the orchestrator-delivered configuration, including any orchestrator-directed backend environment values derived to maximize the safe usable context window for the expected local model workload.
+  When a managed service depends on the same node-local inference backend, the Node Manager MUST pass through the corresponding orchestrator-directed backend environment values to that managed service when the configuration contract requires it so that the backend and dependent services use the same effective context-window settings.
+  [CYNAI.WORKER.NodeStartupProcedure](../tech_specs/worker_node.md#spec-cynai-worker-nodestartupprocedure)
+  [CYNAI.WORKER.ManagedServiceContainers](../tech_specs/worker_node.md#spec-cynai-worker-managedservicecontainers)
+  [CYNAI.WORKER.Payload.ConfigurationV1](../tech_specs/worker_node_payloads.md#spec-cynai-worker-payload-configuration-v1)
+  <a id="req-worker-0264"></a>

@@ -85,3 +85,11 @@ Behavioral and workflow requirements still live in `AGENTS` and `ORCHES`.
 - **REQ-PMAGNT-0114:** When a project plan is locked, the Project Manager Agent MUST NOT change the plan or its tasks; it MAY update completion status and comments on plans and tasks only.
   [CYNAI.AGENTS.WhenPlanLocked](../tech_specs/project_manager_agent.md#spec-cynai-agents-whenplanlocked)
   <a id="req-pmagnt-0114"></a>
+- **REQ-PMAGNT-0115:** When the Project Manager Agent receives chat input that includes user-file content or stable file references accepted under the gateway chat contract, the agent MUST include that file context in the LLM request in a form the target model supports.
+  The agent MUST NOT silently strip or ignore accepted chat file inputs.
+  [CYNAI.PMAGNT.ChatFileContext](../tech_specs/cynode_pma.md#spec-cynai-pmagnt-chatfilecontext)
+  <a id="req-pmagnt-0115"></a>
+- **REQ-PMAGNT-0116:** When `cynode-pma` uses a node-local inference backend, it MUST consume orchestrator-directed backend environment values that affect effective model context or runner behavior when those values are supplied through the managed-service inference contract.
+  PMA MUST apply those values consistently to its inference requests instead of silently ignoring them so that PMA uses the same orchestrator-derived effective context-window settings as the node-local backend it depends on.
+  [CYNAI.PMAGNT.NodeLocalInferenceEnv](../tech_specs/cynode_pma.md#spec-cynai-pmagnt-nodelocalinferenceenv)
+  <a id="req-pmagnt-0116"></a>

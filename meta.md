@@ -82,6 +82,8 @@ It coordinates sandboxed worker execution across local nodes and optional cloud 
 ## Contribution Expectations
 
 - When authoring or editing **tech specs**, **requirements**, **features**, or related design docs, you MUST follow the project's spec standards: [docs/docs_standards/spec_authoring_writing_and_validation.md](docs/docs_standards/spec_authoring_writing_and_validation.md).
+- Agents and AIs must not guess or simulate output from tasks, database calls, tool calls, or external services.
+  Use real tool/system results and report errors or missing data; do not invent or assume values.
 - Requirements in `docs/requirements/` take precedence over tech specs and code.
   If requirements, specs, and code differ, treat it as a **gap** and call it out to the user for direction.
 - Tech specs in `docs/tech_specs/` take precedence over code.

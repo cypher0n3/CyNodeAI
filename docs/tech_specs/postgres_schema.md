@@ -50,7 +50,9 @@
 - [Chat Threads and Messages](#chat-threads-and-messages)
   - [Chat Threads Table](#chat-threads-table)
   - [Chat Messages Table](#chat-messages-table)
+  - [Chat Message Attachments Table](#chat-message-attachments-table)
 - [Task Artifacts](#task-artifacts)
+  - [Task Artifacts Constraints](#task-artifacts-constraints)
 - [Vector Storage (`pgvector`)](#vector-storage-pgvector)
   - [Vector Storage Applicable Requirements](#vector-storage-applicable-requirements)
   - [Vector Items Table](#vector-items-table)
@@ -987,6 +989,8 @@ Source:
 - `project_id` (uuid, fk to `projects.id`, nullable)
 - `session_id` (uuid, fk to `sessions.id`, nullable)
 - `title` (text, nullable)
+- `summary` (text, nullable)
+- `archived_at` (timestamptz, nullable)
 - `created_at` (timestamptz)
 - `updated_at` (timestamptz)
 
@@ -1009,6 +1013,39 @@ Constraints
 
 - Index: (`thread_id`, `created_at`)
 
+### Chat Message Attachments Table
+
+- Spec ID: `CYNAI.SCHEMA.ChatMessageAttachmentsTable` <a id="spec-cynai-schema-chatmessageattachmentstable"></a>
+
+#### Chat Message Attachments Table Requirements Traces
+
+- [REQ-SCHEMA-0114](../requirements/schema.md#req-schema-0114)
+
+This table stores user-message file uploads or stable file references accepted through the chat `@`-reference workflow.
+When the originating chat thread is project-scoped, rows in this table inherit the same project authorization boundary as the thread and message they attach to.
+
+- `id` (uuid, pk)
+- `message_id` (uuid, fk to `chat_messages.id`)
+- `thread_id` (uuid, fk to `chat_threads.id`)
+- `user_id` (uuid, fk to `users.id`)
+- `file_id` (text)
+  - stable internal identifier returned by the upload layer
+- `filename` (text)
+- `media_type` (text, nullable)
+- `size_bytes` (bigint, nullable)
+- `storage_ref` (text)
+  - internal blob or object-storage reference
+- `checksum_sha256` (text, nullable)
+- `created_at` (timestamptz)
+
+#### Chat Message Attachments Table Constraints
+
+- Index: (`message_id`)
+- Index: (`thread_id`, `created_at`)
+- Index: (`user_id`, `created_at`)
+- Unique: (`message_id`, `file_id`)
+- Access to attachment rows and referenced storage MUST be enforced through the parent chat thread and message authorization, including shared-project permissions when the thread belongs to a shared project.
+
 ## Task Artifacts
 
 Artifacts are files or blobs produced or attached to a task (e.g. uploads, job outputs).
@@ -1027,7 +1064,7 @@ Metadata is stored in PostgreSQL; large content may be stored in object storage 
 - `created_at` (timestamptz)
 - `updated_at` (timestamptz)
 
-Constraints
+### Task Artifacts Constraints
 
 - Unique: (`task_id`, `path`)
 - Index: (`task_id`)

@@ -109,6 +109,7 @@ The output is the `inference_backend` object (or its absence) for `node_configur
   - `variant` (string): One of `cpu`, `cuda`, `rocm`, or another orchestrator-defined variant consistent with node capabilities.
   - `image` (string, optional): OCI image reference; when absent the node MAY use a node-local default.
   - `port` (int, optional): e.g. 11434 for Ollama.
+  - `env` (object, optional): deterministic orchestrator-derived environment values required for the selected backend behavior.
 
 ## Deterministic Decision Algorithm
 
@@ -136,7 +137,7 @@ The first condition that matches determines the outcome; no later steps are appl
 
 6. **Otherwise:** The node is inference-capable and should start a container. <a id="algo-cynai-orches-inferencedecisionalgorithm-step-6"></a>
    Compute `variant` per [Variant Selection Rules](#variant-selection-rules) and `image` per [Image Selection](#image-selection).
-   Output `inference_backend` with `enabled: true`, `variant`, and optionally `image` and `port`.
+   Output `inference_backend` with `enabled: true`, `variant`, and optionally `image`, `port`, and `env`.
 
 ## Variant Selection Rules
 
@@ -191,6 +192,18 @@ When policy does not specify an image for the variant, the orchestrator MAY omit
 
 Image selection MUST be deterministic for the same (variant, policy) pair.
 
+## Backend Environment Derivation
+
+- Spec ID: `CYNAI.ORCHES.InferenceBackendEnv` <a id="spec-cynai-orches-inferencebackendenv"></a>
+
+The orchestrator MUST determine the effective runtime configuration for node-local inference in a way that maximizes the safe usable context window for the expected local model workload within the node's available resources.
+
+- That determination MUST be deterministic for the same capability report and policy inputs.
+- Relevant inputs MAY include available VRAM, total VRAM, available system memory, backend variant, and the expected loaded model set or model class for the node.
+- When backend-specific environment values are required to realize that effective runtime configuration, the orchestrator MUST derive and emit them in `inference_backend.env`.
+- When the orchestrator also directs a managed service whose `inference.mode` is `node_local`, the orchestrator MUST mirror the same effective backend environment values into that managed service's `inference.backend_env` when the service requires the same backend behavior.
+- Example backend environment values include context-window sizing or runner-tuning inputs such as `OLLAMA_CONTEXT_LENGTH` or `OLLAMA_NUM_CTX`.
+
 ## Traceability
 
 - **REQ-ORCHES-0149:** [orches.md](../requirements/orches.md#req-orches-0149).
@@ -199,5 +212,7 @@ Image selection MUST be deterministic for the same (variant, policy) pair.
 - **Configuration Delivery:** [worker_node.md#spec-cynai-worker-configurationdelivery](worker_node.md#spec-cynai-worker-configurationdelivery).
   Orchestrator derives inference backend instruction from capability report and policy.
   It includes it when the node is inference-capable and inference is enabled.
+- **REQ-ORCHES-0169:** [orches.md](../requirements/orches.md#req-orches-0169).
+  Orchestrator owns effective backend-derived environment values and delivers them through the canonical node-configuration contract.
 - **Payload schema:** [worker_node_payloads.md#spec-cynai-worker-payload-configuration-v1](worker_node_payloads.md#spec-cynai-worker-payload-configuration-v1).
   `inference_backend` structure and semantics.

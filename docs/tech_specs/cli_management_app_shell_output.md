@@ -6,13 +6,14 @@
 
 ## Document Overview
 
-This document specifies the interactive shell (REPL) and output/scripting rules for the CLI.
+This document specifies legacy interactive shell compatibility and output or scripting rules for the CLI.
 It is part of the [cynork CLI](cynork_cli.md) specification.
 
 ## Interactive Mode (REPL)
 
-The CLI SHOULD provide an interactive mode that exposes the same command surface as the non-interactive CLI,
-and provides tab completion to accelerate discovery and reduce typing errors.
+The legacy `cynork shell` REPL is a compatibility surface only.
+The primary interactive chat experience is defined in [cynork_tui.md](cynork_tui.md).
+If the REPL remains shipped, it SHOULD expose the same command surface as the non-interactive CLI and provide tab completion to accelerate discovery and reduce typing errors.
 
 Entrypoint and invocation
 
