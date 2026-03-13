@@ -36,6 +36,52 @@ func TestEmbedGetEnvInt(t *testing.T) {
 	}
 }
 
+func TestRunEmbedded_StartFailsWithInvalidAddress(t *testing.T) {
+	t.Setenv("LISTEN_ADDR", "invalid-addr-no-port")
+	t.Setenv("WORKER_API_STATE_DIR", t.TempDir())
+	defer func() {
+		_ = os.Unsetenv("LISTEN_ADDR")
+		_ = os.Unsetenv("WORKER_API_STATE_DIR")
+	}()
+	_, _, err := RunEmbedded(context.Background(), EmbedConfig{
+		BearerToken: "tok",
+		StateDir:    "",
+		Logger:      slog.Default(),
+	})
+	if err == nil {
+		t.Fatal("expected Start to fail with invalid address")
+	}
+}
+
+func TestRunEmbedded_InvalidNodeConfigJSON(t *testing.T) {
+	t.Setenv("LISTEN_ADDR", "127.0.0.1:0")
+	t.Setenv("WORKER_INTERNAL_LISTEN_ADDR", "127.0.0.1:0")
+	t.Setenv("WORKER_API_STATE_DIR", t.TempDir())
+	t.Setenv("WORKER_NODE_CONFIG_JSON", "invalid-json")
+	defer func() {
+		_ = os.Unsetenv("LISTEN_ADDR")
+		_ = os.Unsetenv("WORKER_INTERNAL_LISTEN_ADDR")
+		_ = os.Unsetenv("WORKER_API_STATE_DIR")
+		_ = os.Unsetenv("WORKER_NODE_CONFIG_JSON")
+	}()
+	ctx, cancel := context.WithCancel(context.Background())
+	ready, shutdown, err := RunEmbedded(ctx, EmbedConfig{
+		BearerToken: "tok",
+		StateDir:    "",
+		Logger:      slog.Default(),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-ready:
+	case <-time.After(3 * time.Second):
+		t.Fatal("timeout")
+	}
+	shutdown()
+	cancel()
+}
+
 func TestRunEmbedded_StartAndShutdown(t *testing.T) {
 	t.Setenv("LISTEN_ADDR", "127.0.0.1:0")
 	t.Setenv("WORKER_INTERNAL_LISTEN_ADDR", "127.0.0.1:0")

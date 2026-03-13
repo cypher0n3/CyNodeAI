@@ -104,10 +104,10 @@ migrate:
 build:
     @just build-dev
 
-# E2E images (worker_node + agents)
+# E2E images (worker_node + agents). Run root justfile so worker_node/ and agents/ resolve to repo modules.
 build-e2e-images:
-    @just worker_node/build-inference-proxy-image
-    @just agents/build-cynode-sba-image
+    @(cd "{{ root_dir }}" && just worker_node/build-inference-proxy-image)
+    @(cd "{{ root_dir }}" && just agents/build-cynode-sba-image)
 
 start *ARGS:
     just _start_impl {{ ARGS }}

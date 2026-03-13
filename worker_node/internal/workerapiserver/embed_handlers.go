@@ -20,7 +20,7 @@ import (
 
 	"github.com/cypher0n3/cynodeai/go_shared_libs/contracts/nodepayloads"
 	"github.com/cypher0n3/cynodeai/go_shared_libs/contracts/problem"
-	"github.com/cypher0n3/cynodeai/worker_node/internal/executor"
+	"github.com/cypher0n3/cynodeai/go_shared_libs/contracts/workerapi"
 	"github.com/cypher0n3/cynodeai/worker_node/internal/securestore"
 	"github.com/cypher0n3/cynodeai/worker_node/internal/telemetry"
 )
@@ -145,8 +145,14 @@ func loadManagedServiceTargetsFromEnvEmbed(logger *slog.Logger) map[string]embed
 	return targets
 }
 
+// embedRunner is satisfied by *executor.Executor and by test doubles for jobs:run/readyz.
+type embedRunner interface {
+	RunJob(ctx context.Context, req *workerapi.RunJobRequest, workspaceDir string) (*workerapi.RunJobResponse, error)
+	Ready(ctx context.Context) (bool, string)
+}
+
 func buildMuxesFromEmbedConfig(
-	exec *executor.Executor,
+	runner embedRunner,
 	bearerToken, workspaceRoot string,
 	telemetryStore *telemetry.Store,
 	logger *slog.Logger,
@@ -158,7 +164,8 @@ func buildMuxesFromEmbedConfig(
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte("ok"))
 	})
-	publicMux.HandleFunc("GET /readyz", embedReadyzHandler(exec))
+	publicMux.HandleFunc("GET /readyz", embedReadyzHandler(runner))
+	publicMux.HandleFunc("POST /v1/worker/jobs:run", embedJobsRunHandler(runner, workspaceRoot, bearerToken))
 	publicMux.HandleFunc("POST /v1/worker/managed-services/{id}/proxy:http", managedServiceProxyHTTPHandler(bearerToken, proxyCfg.InternalProxy.SocketByService, logger))
 	registerEmbedTelemetryHandlers(publicMux, bearerToken, telemetryStore, logger)
 	internalMux = http.NewServeMux()
@@ -328,11 +335,22 @@ func firstNonEmpty(a, b string) string {
 	return b
 }
 
+var kernelVersionPath = "/proc/sys/kernel/osrelease" // override in tests to exercise error path
+
+func kernelVersionFromOS() string {
+	b, err := os.ReadFile(kernelVersionPath)
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(b))
+}
+
 func embedNodeInfoFromStore(ctx context.Context, store *telemetry.Store, logger *slog.Logger) (nodeSlug, buildVersion, platformOS, platformArch, kernelVersion string) {
 	nodeSlug = firstNonEmpty(strings.TrimSpace(os.Getenv("NODE_SLUG")), "embedded-node")
 	buildVersion = firstNonEmpty(strings.TrimSpace(os.Getenv("BUILD_VERSION")), "dev")
 	platformOS, platformArch, kernelVersion = "linux", runtime.GOARCH, ""
 	if store == nil {
+		kernelVersion = firstNonEmpty(kernelVersionFromOS(), kernelVersion)
 		return nodeSlug, buildVersion, platformOS, platformArch, kernelVersion
 	}
 	row, err := store.GetLatestNodeBoot(ctx)
@@ -345,6 +363,9 @@ func embedNodeInfoFromStore(ctx context.Context, store *telemetry.Store, logger 
 		platformOS = firstNonEmpty(row.PlatformOS, platformOS)
 		platformArch = firstNonEmpty(row.PlatformArch, platformArch)
 		kernelVersion = firstNonEmpty(row.KernelVersion, kernelVersion)
+	}
+	if kernelVersion == "" {
+		kernelVersion = kernelVersionFromOS()
 	}
 	return nodeSlug, buildVersion, platformOS, platformArch, kernelVersion
 }
@@ -542,9 +563,9 @@ func registerEmbedTelemetryHandlers(mux *http.ServeMux, bearerToken string, stor
 	mux.HandleFunc("GET /v1/worker/telemetry/logs", embedTelemetryLogsHandler(bearerToken, store))
 }
 
-func embedReadyzHandler(exec *executor.Executor) http.HandlerFunc {
+func embedReadyzHandler(runner embedRunner) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		ready, reason := exec.Ready(r.Context())
+		ready, reason := runner.Ready(r.Context())
 		if ready {
 			w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 			w.WriteHeader(http.StatusOK)
@@ -554,5 +575,42 @@ func embedReadyzHandler(exec *executor.Executor) http.HandlerFunc {
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 		w.WriteHeader(http.StatusServiceUnavailable)
 		_, _ = w.Write([]byte(reason))
+	}
+}
+
+const embedJobsRunMaxBodyBytes = 10 * 1024 * 1024
+
+func embedJobsRunHandler(runner embedRunner, workspaceRoot, bearerToken string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
+			return
+		}
+		if !embedTelemetryAuth(w, r, bearerToken) {
+			return
+		}
+		r.Body = http.MaxBytesReader(w, r.Body, embedJobsRunMaxBodyBytes)
+		var req workerapi.RunJobRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			if strings.Contains(err.Error(), "request body too large") {
+				embedWriteProblem(w, http.StatusRequestEntityTooLarge, problem.TypeValidation, "Request Entity Too Large", "Request body exceeds maximum size")
+				return
+			}
+			embedWriteProblem(w, http.StatusBadRequest, problem.TypeValidation, "Bad Request", "Invalid request body")
+			return
+		}
+		if req.Version != 1 || req.TaskID == "" || req.JobID == "" ||
+			(req.Sandbox.JobSpecJSON == "" && len(req.Sandbox.Command) == 0) {
+			embedWriteProblem(w, http.StatusBadRequest, problem.TypeValidation, "Bad Request", "validation failed")
+			return
+		}
+		resp, err := runner.RunJob(r.Context(), &req, workspaceRoot)
+		if err != nil {
+			embedWriteProblem(w, http.StatusInternalServerError, problem.TypeInternal, "Internal Server Error", "Job execution failed")
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode(resp)
 	}
 }

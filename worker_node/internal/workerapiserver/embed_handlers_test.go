@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net"
@@ -16,9 +17,23 @@ import (
 	"time"
 
 	"github.com/cypher0n3/cynodeai/go_shared_libs/contracts/nodepayloads"
+	"github.com/cypher0n3/cynodeai/go_shared_libs/contracts/workerapi"
 	"github.com/cypher0n3/cynodeai/worker_node/internal/executor"
 	"github.com/cypher0n3/cynodeai/worker_node/internal/telemetry"
 )
+
+// failingJobRunner implements embedRunner and returns an error from RunJob for testing the 500 path.
+type failingJobRunner struct {
+	*executor.Executor
+}
+
+func (failingJobRunner) RunJob(_ context.Context, _ *workerapi.RunJobRequest, _ string) (*workerapi.RunJobResponse, error) {
+	return nil, errors.New("injected failure")
+}
+
+func (f failingJobRunner) Ready(ctx context.Context) (ready bool, msg string) {
+	return f.Executor.Ready(ctx)
+}
 
 func TestManagedAgentProxySocketPathEmbed(t *testing.T) {
 	tests := []struct {
@@ -322,18 +337,178 @@ func TestBuildMuxesFromEmbedConfig_TelemetryContainersEmptyIDAndLogsBadRequest(t
 	}
 }
 
-func TestBuildMuxesFromEmbedConfig_TelemetryUnauthorized(t *testing.T) {
+func TestBuildMuxesFromEmbedConfig_JobsRun_Unauthorized(t *testing.T) {
 	exec := executor.New("direct", 5*time.Second, 1024, "", "", nil)
 	pub, _ := buildMuxesFromEmbedConfig(exec, "secret", t.TempDir(), nil, slog.Default(), embedProxyConfig{
 		ManagedServiceTargets: map[string]embedManagedServiceTarget{},
 		InternalProxy:         embedInternalProxyConfig{},
 	})
-	req := httptest.NewRequest(http.MethodGet, "/v1/worker/telemetry/node:info", http.NoBody)
-	req.Header.Set("Authorization", "Bearer wrong")
+	body, _ := json.Marshal(workerapi.RunJobRequest{
+		Version: 1, TaskID: "t1", JobID: "j1",
+		Sandbox: workerapi.SandboxSpec{Command: []string{"true"}},
+	})
+	req := httptest.NewRequest(http.MethodPost, "/v1/worker/jobs:run", bytes.NewReader(body))
 	w := httptest.NewRecorder()
 	pub.ServeHTTP(w, req)
 	if w.Code != http.StatusUnauthorized {
-		t.Errorf("node:info wrong token status = %d", w.Code)
+		t.Errorf("jobs:run without bearer status = %d, want 401", w.Code)
+	}
+}
+
+func TestBuildMuxesFromEmbedConfig_JobsRun_Success(t *testing.T) {
+	exec := executor.New("direct", 10*time.Second, 1024, "", "", nil)
+	dir := t.TempDir()
+	pub, _ := buildMuxesFromEmbedConfig(exec, "tok", dir, nil, slog.Default(), embedProxyConfig{
+		ManagedServiceTargets: map[string]embedManagedServiceTarget{},
+		InternalProxy:         embedInternalProxyConfig{},
+	})
+	body, _ := json.Marshal(workerapi.RunJobRequest{
+		Version: 1, TaskID: "t1", JobID: "j1",
+		Sandbox: workerapi.SandboxSpec{Command: []string{"true"}},
+	})
+	req := httptest.NewRequest(http.MethodPost, "/v1/worker/jobs:run", bytes.NewReader(body))
+	req.Header.Set("Authorization", "Bearer tok")
+	w := httptest.NewRecorder()
+	pub.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Errorf("jobs:run status = %d, body: %s", w.Code, w.Body.String())
+	}
+	var resp workerapi.RunJobResponse
+	if err := json.NewDecoder(w.Body).Decode(&resp); err != nil {
+		t.Fatal(err)
+	}
+	if resp.Status != workerapi.StatusCompleted {
+		t.Errorf("jobs:run status = %q, want completed", resp.Status)
+	}
+}
+
+func TestBuildMuxesFromEmbedConfig_JobsRun_InvalidBody(t *testing.T) {
+	exec := executor.New("direct", 5*time.Second, 1024, "", "", nil)
+	pub, _ := buildMuxesFromEmbedConfig(exec, "tok", t.TempDir(), nil, slog.Default(), embedProxyConfig{
+		ManagedServiceTargets: map[string]embedManagedServiceTarget{},
+		InternalProxy:         embedInternalProxyConfig{},
+	})
+	req := httptest.NewRequest(http.MethodPost, "/v1/worker/jobs:run", bytes.NewReader([]byte("not json")))
+	req.Header.Set("Authorization", "Bearer tok")
+	w := httptest.NewRecorder()
+	pub.ServeHTTP(w, req)
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("jobs:run invalid body status = %d, want 400", w.Code)
+	}
+}
+
+func TestBuildMuxesFromEmbedConfig_JobsRun_BodyTooLarge(t *testing.T) {
+	exec := executor.New("direct", 5*time.Second, 1024, "", "", nil)
+	pub, _ := buildMuxesFromEmbedConfig(exec, "tok", t.TempDir(), nil, slog.Default(), embedProxyConfig{
+		ManagedServiceTargets: map[string]embedManagedServiceTarget{},
+		InternalProxy:         embedInternalProxyConfig{},
+	})
+	// Valid JSON with >10MB string so Decode hits MaxBytesReader limit (same pattern as _bdd/steps.go).
+	big := bytes.Repeat([]byte("x"), 11*1024*1024)
+	body := []byte(`{"version":1,"task_id":"t","job_id":"j","sandbox":{"image":"a","command":["`)
+	body = append(body, big...)
+	body = append(body, []byte(`"]}}`)...)
+	req := httptest.NewRequest(http.MethodPost, "/v1/worker/jobs:run", bytes.NewReader(body))
+	req.Header.Set("Authorization", "Bearer tok")
+	w := httptest.NewRecorder()
+	pub.ServeHTTP(w, req)
+	if w.Code != http.StatusRequestEntityTooLarge {
+		t.Errorf("jobs:run body too large status = %d, want 413", w.Code)
+	}
+}
+
+func TestBuildMuxesFromEmbedConfig_JobsRun_ValidationFailed(t *testing.T) {
+	exec := executor.New("direct", 5*time.Second, 1024, "", "", nil)
+	pub, _ := buildMuxesFromEmbedConfig(exec, "tok", t.TempDir(), nil, slog.Default(), embedProxyConfig{
+		ManagedServiceTargets: map[string]embedManagedServiceTarget{},
+		InternalProxy:         embedInternalProxyConfig{},
+	})
+	body, _ := json.Marshal(workerapi.RunJobRequest{
+		Version: 1, TaskID: "t1", JobID: "j1",
+		Sandbox: workerapi.SandboxSpec{}, // no Command, no JobSpecJSON
+	})
+	req := httptest.NewRequest(http.MethodPost, "/v1/worker/jobs:run", bytes.NewReader(body))
+	req.Header.Set("Authorization", "Bearer tok")
+	w := httptest.NewRecorder()
+	pub.ServeHTTP(w, req)
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("jobs:run validation status = %d, want 400", w.Code)
+	}
+}
+
+func TestBuildMuxesFromEmbedConfig_JobsRun_RunnerReturnsError(t *testing.T) {
+	exec := executor.New("direct", 5*time.Second, 1024, "", "", nil)
+	runner := failingJobRunner{Executor: exec}
+	pub, _ := buildMuxesFromEmbedConfig(runner, "tok", t.TempDir(), nil, slog.Default(), embedProxyConfig{
+		ManagedServiceTargets: map[string]embedManagedServiceTarget{},
+		InternalProxy:         embedInternalProxyConfig{},
+	})
+	body, _ := json.Marshal(workerapi.RunJobRequest{
+		Version: 1, TaskID: "t1", JobID: "j1",
+		Sandbox: workerapi.SandboxSpec{Command: []string{"true"}},
+	})
+	req := httptest.NewRequest(http.MethodPost, "/v1/worker/jobs:run", bytes.NewReader(body))
+	req.Header.Set("Authorization", "Bearer tok")
+	w := httptest.NewRecorder()
+	pub.ServeHTTP(w, req)
+	if w.Code != http.StatusInternalServerError {
+		t.Errorf("jobs:run when runner returns error: status = %d, want 500", w.Code)
+	}
+}
+
+func TestBuildMuxesFromEmbedConfig_EmbedPublicHTTP_Status(t *testing.T) {
+	emptyCfg := embedProxyConfig{
+		ManagedServiceTargets: map[string]embedManagedServiceTarget{},
+		InternalProxy:         embedInternalProxyConfig{},
+	}
+	tests := []struct {
+		name     string
+		method   string
+		path     string
+		auth     string
+		wantCode int
+	}{
+		{"jobs_run_GET_method_not_allowed", http.MethodGet, "/v1/worker/jobs:run", "Bearer tok", http.StatusMethodNotAllowed},
+		{"telemetry_node_info_unauthorized", http.MethodGet, "/v1/worker/telemetry/node:info", "Bearer wrong", http.StatusUnauthorized},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			exec := executor.New("direct", 5*time.Second, 1024, "", "", nil)
+			pub, _ := buildMuxesFromEmbedConfig(exec, "secret", t.TempDir(), nil, slog.Default(), emptyCfg)
+			req := httptest.NewRequest(tt.method, tt.path, http.NoBody)
+			req.Header.Set("Authorization", tt.auth)
+			w := httptest.NewRecorder()
+			pub.ServeHTTP(w, req)
+			if w.Code != tt.wantCode {
+				t.Errorf("status = %d, want %d", w.Code, tt.wantCode)
+			}
+		})
+	}
+}
+
+func TestBuildMuxesFromEmbedConfig_NodeInfo_KernelVersionReadFails(t *testing.T) {
+	oldPath := kernelVersionPath
+	kernelVersionPath = "/nonexistent/path/for/coverage"
+	defer func() { kernelVersionPath = oldPath }()
+	exec := executor.New("direct", 5*time.Second, 1024, "", "", nil)
+	pub, _ := buildMuxesFromEmbedConfig(exec, "tok", t.TempDir(), nil, slog.Default(), embedProxyConfig{
+		ManagedServiceTargets: map[string]embedManagedServiceTarget{},
+		InternalProxy:         embedInternalProxyConfig{},
+	})
+	req := httptest.NewRequest(http.MethodGet, "/v1/worker/telemetry/node:info", http.NoBody)
+	req.Header.Set("Authorization", "Bearer tok")
+	w := httptest.NewRecorder()
+	pub.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("node:info status = %d", w.Code)
+	}
+	var data map[string]interface{}
+	if err := json.NewDecoder(w.Body).Decode(&data); err != nil {
+		t.Fatal(err)
+	}
+	platform, _ := data["platform"].(map[string]interface{})
+	if platform != nil && platform["kernel_version"] != "" {
+		t.Errorf("expected empty kernel_version when read fails, got %q", platform["kernel_version"])
 	}
 }
 
