@@ -78,7 +78,7 @@ For `just setup-dev start` to reach the node step, those images must already exi
   Accepts same bypass flags as start; use `--ollama-in-stack` if E2E expects OLLAMA in compose.
 - **help** - Show usage, bypass flags, and environment variables.
 
-#### Examples
+#### Setup Examples
 
 ```bash
 just setup-dev build

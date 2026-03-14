@@ -56,7 +56,7 @@ PYTHONPATH=. python scripts/test_scripts/run_e2e.py
 
 Tags: `suite_*` (suite_orchestrator, suite_worker_node, suite_agents, suite_cynork, suite_proxy_pma), `full_demo` (run during `just setup-dev full-demo`; excludes subset-only tests), `inference`, `pma_inference`, `sba_inference`, `auth`, `task`, `chat`, `worker`, `pma`.
 
-#### Examples
+#### E2E Invocation Examples
 
 ```bash
 just e2e --no-build

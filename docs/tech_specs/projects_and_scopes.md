@@ -97,7 +97,7 @@ The default project is a **catch-all for unrelated tasks**; the system (gateway,
 The default project MAY be created on first use (e.g. first task or first chat thread for that user) or at user creation; its slug/identity MUST be deterministic per user (e.g. `default-<user_handle>` or a stable id-derived slug).
 Clients and the PM/PA MAY allow users to explicitly select a different project; when they do, that project is used instead of the default project.
 
-#### Default Project Requirements Traces
+#### Default Project Slug and Identity Traces
 
 - [REQ-PROJCT-0112](../requirements/projct.md#req-projct-0112)
 

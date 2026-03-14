@@ -415,14 +415,14 @@ Source requirements: [`docs/tech_specs/worker_node.md`](worker_node.md#spec-cyna
 
 This section defines the schema and semantics for `managed_services.services[].orchestrator.agent_token_ref`.
 
-##### Scope
+##### AgentTokenRef Scope
 
 - `agent_token_ref` is consumed by the worker only.
   The worker MUST NOT pass the reference object to any managed service container or agent runtime.
 - Resolution failures MUST fail closed.
   A failure MUST result in no agent token being written to the node-local secure store for that `service_id`.
 
-##### Schema
+##### AgentTokenRef Schema
 
 - `kind` (string, required)
   - Defines the resolution mechanism used by the worker.

@@ -35,7 +35,7 @@
   - [TUI Chat-Complete Exit for Implementation](#tui-chat-complete-exit-for-implementation)
 - [Phase 6 TUI Validation and BDD](#phase-6-tui-validation-and-bdd)
   - [Phase 6 Testing Gate](#phase-6-testing-gate)
-- [Phase 7 Remaining MVP Phase 2 Work After TUI MVP](#phase-7-remaining-mvp-phase-2-work-after-tui-mvp)
+- [Phase 7 Remaining MVP Phase 2 Work After Streaming, Basic MCP, and TUI MVP](#phase-7-remaining-mvp-phase-2-work-after-streaming-basic-mcp-and-tui-mvp)
   - [Phase 7 Testing Gate](#phase-7-testing-gate)
 - [Phase 8 Worker Deployment Simplification Docs](#phase-8-worker-deployment-simplification-docs)
   - [Phase 8 Testing Gate](#phase-8-testing-gate)
@@ -107,6 +107,19 @@ The single-binary worker track is in [worker requirements](../requirements/worke
 - [ ] Implement the full first usable TUI chat interface and its backend prerequisites in a way that preserves existing CLI compatibility where needed.
   (This is the primary goal for the round and takes precedence over the remaining MVP Phase 2 work.)
 
+- [ ] Make end-to-end interactive streaming the next active implementation slice across gateway, PMA, shared chat transport, TUI rendering, and PTY/E2E validation.
+  (This now has stable canonical ownership in
+  [REQ-USRGWY-0149](../requirements/usrgwy.md#req-usrgwy-0149),
+  [REQ-USRGWY-0150](../requirements/usrgwy.md#req-usrgwy-0150),
+  [REQ-PMAGNT-0118](../requirements/pmagnt.md#req-pmagnt-0118),
+  [REQ-CLIENT-0209](../requirements/client.md#req-client-0209),
+  [CYNAI.USRGWY.OpenAIChatApi.Streaming](../tech_specs/openai_compatible_chat_api.md#spec-cynai-usrgwy-openaichatapi-streaming),
+  [CYNAI.PMAGNT.StreamingAssistantOutput](../tech_specs/cynode_pma.md#spec-cynai-pmagnt-streamingassistantoutput),
+  and [CYNAI.CLIENT.CynorkTui.GenerationState](../tech_specs/cynork_tui.md#spec-cynai-client-cynorktui-generationstate).)
+
+- [ ] Immediately after streaming, pull forward the minimum MCP-in-the-loop slice needed for PMA chat and tool-aware thinking models to use real MCP tools instead of tool-less fallback behavior.
+  (Minimum canonical ownership now lives in [REQ-PMAGNT-0106](../requirements/pmagnt.md#req-pmagnt-0106), [REQ-PMAGNT-0107](../requirements/pmagnt.md#req-pmagnt-0107), [CYNAI.PMAGNT.McpToolAccess](../tech_specs/cynode_pma.md#spec-cynai-pmagnt-mcptoolaccess), [CYNAI.MCPGAT.PmAgentAllowlist](../tech_specs/mcp_gateway_enforcement.md#spec-cynai-mcpgat-pmagentallowlist), and [CYNAI.AGENTS.PMLlmToolImplementation](../tech_specs/project_manager_agent.md#spec-cynai-agents-pmllmtoolimplementation).)
+
 - [ ] Build the Python PTY or fullscreen TUI harness in tandem with the TUI so the primary chat flows can be validated with minimal human intervention as behavior lands.
 
 - [ ] Resume the remaining MVP Phase 2 work after the TUI-first validation loop is in place.
@@ -133,7 +146,9 @@ The single-binary worker track is in [worker requirements](../requirements/worke
 
 - [ ] Keep `POST /v1/chat/completions` as the broad compatibility baseline while adding `POST /v1/responses` as an additive OpenAI-compatible surface owned by the gateway contract.
 
-- [ ] Do not pull forward non-TUI MVP Phase 2 work or worker-deployment follow-on work until the TUI can drive the full chat path end to end.
+- [ ] Pull forward only the minimum MCP-in-the-loop work required for PMA chat and tool-aware thinking models; keep the rest of the non-TUI MVP Phase 2 backlog deferred until the TUI can drive the full chat path end to end.
+
+- [ ] Finish end-to-end streaming before lower-priority TUI polish such as richer scrollback ergonomics, broader session UX refinement, or other non-blocking presentation work.
 
 - [ ] Keep the TUI implementation testable through stable seams: backend APIs first, then reusable chat or controller logic, then the fullscreen UI and Python PTY harness on top.
 
@@ -255,7 +270,7 @@ This phase resolves the source-of-truth issues that would otherwise make the TUI
   (Completed in [cynork_tui_slash_commands.md](../tech_specs/cynork_tui_slash_commands.md),
   including the `/show-thinking` and `/hide-thinking` contract.)
 
-- [ ] Add an explicit streaming contract for the OpenAI-compatible chat surface, PMA handoff, and
+- [x] Add an explicit streaming contract for the OpenAI-compatible chat surface, PMA handoff, and
   TUI generation state so cursor-agent-like progressive output is normative rather than optional.
 
 ## Phase 2 TUI MVP Spec Cut
@@ -307,13 +322,13 @@ This phase narrows the large TUI proposal down to the minimum first rollout that
   including the rule that the toggle applies to already loaded transcript rows and older assistant
   turns loaded later through scrollback history.
 
-- [ ] Define `/show-thinking` and `/hide-thinking` as persisted local-preference updates stored in
+- [x] Define `/show-thinking` and `/hide-thinking` as persisted local-preference updates stored in
   the cynork YAML config and loaded on future TUI or interactive chat startup.
 
-- [ ] Define required default streaming behavior for the interactive TUI path, including degraded
+- [x] Define required default streaming behavior for the interactive TUI path, including degraded
   fallback behavior when a selected backend path cannot provide true visible-text deltas.
 
-- [ ] Define collapsed-thinking presentation so the block remains visibly present with a subdued
+- [x] Define collapsed-thinking presentation so the block remains visibly present with a subdued
   secondary style and an expand hint such as `/show-thinking`.
 
 - [x] Define generation-state behavior for in-flight assistant updates and final reconciliation of partial output into one logical turn.
@@ -396,8 +411,18 @@ The order inside this phase matters because later TUI work depends on these back
   the TUI can reveal prior-turn thinking while scrolling back without leaking it into canonical
   plain-text content.
 
-- [ ] Verify `stream=true` is supported on both interactive chat surfaces and delivers ordered
-  incremental events suitable for progressive TUI rendering rather than only a buffered final turn.
+- [ ] Highest-priority backend slice: implement and verify `stream=true` on both interactive chat surfaces so the gateway delivers ordered incremental events suitable for progressive TUI rendering rather than only a buffered final turn.
+- [ ] In the same slice, implement and verify client-driven stream cancellation handling so disconnect or Ctrl+C-style cancellation is treated as canceled work, upstream generation is stopped or detached best-effort, and request-scoped resources are released.
+- [ ] In the same slice, implement and verify PMA incremental streaming upstream with hidden-thinking separation and no literal `<think>` leakage in visible deltas.
+
+### Minimum MCP Slice for PMA Thinking Models
+
+- [ ] Pull forward the minimum MCP gateway allow-path slice needed for PMA chat and tool-aware thinking models instead of deferring all MCP work until after the TUI milestone.
+- [ ] Expand the MCP allow path beyond `db.preference.*` for the minimum PMA-safe tool slice aligned with [CYNAI.MCPGAT.PmAgentAllowlist](../tech_specs/mcp_gateway_enforcement.md#spec-cynai-mcpgat-pmagentallowlist) and [CYNAI.PMAGNT.McpToolAccess](../tech_specs/cynode_pma.md#spec-cynai-pmagnt-mcptoolaccess).
+- [ ] Land the minimum PMA chat tool set needed to retrieve real context and use real tool results in chat flows, starting with the smallest viable subset from the stable catalog such as `db.task.get`, `db.project.get` or `db.project.list`, `db.system_setting.get` or `db.system_setting.list`, `artifact.*` where the active flow depends on artifacts, and `help.get`.
+- [ ] Wire PMA chat execution so langchaingo tool use goes through the worker proxy and orchestrator MCP gateway on the active chat path instead of relying on tool-less behavior for thinking-capable models.
+- [ ] Add or update backend and PMA-facing tests that prove MCP tool success, rejection, and ambiguity are surfaced as real tool outcomes rather than guessed or simulated content.
+- [ ] Validation gate: do not proceed to lower-priority TUI polish until the streaming slice and this minimum MCP slice are both passing their targeted backend and PMA validations.
 
 ### Deferred Backend Work This Round
 
@@ -449,6 +474,10 @@ This phase defines the shared implementation seams that both the fullscreen TUI 
 
 - [x] Add stable machine-detectable UI landmarks and reduced-noise test semantics where needed so PTY tests can assert on state transitions without depending on fragile redraw timing.
 
+- [ ] Next controller slice: extend the shared chat transport abstraction so it can consume streaming deltas, progress events, terminal completion or error signals, and explicit cancellation for both interactive chat surfaces.
+
+- [ ] Add controller-level cancellation propagation so Ctrl+C or equivalent user cancellation can stop the active stream, reconcile the in-flight turn deterministically, and keep the session alive unless the user explicitly exits.
+
 ## Phase 5 `cynork` TUI and Python PTY Harness Implementation
 
 This phase delivers the first usable full-screen TUI slice and the Python PTY harness together.
@@ -485,7 +514,11 @@ They must be developed in tandem so each validates the other as behavior lands, 
 
 - [x] Implement composer input history: Up/Down in composer cycles through previously sent messages.
 
-- [ ] Implement Ctrl+C semantics: cancel current operation when no selection; when selection active, copy; successive Ctrl+C when idle exits cleanly (Cursor-agent style).
+- [ ] First pending TUI slice: implement default interactive streaming on the shared chat transport and TUI path, with degraded fallback handling when a selected backend path cannot stream visible-text deltas.
+
+- [ ] In the same slice, implement in-flight generation handling so one assistant turn is updated progressively and reconciled cleanly on completion.
+
+- [ ] In the same slice, implement Ctrl+C semantics: cancel current operation when no selection; when selection active, copy; successive Ctrl+C when idle exits cleanly (Cursor-agent style).
 
 - [ ] Implement scrollback navigation (Page Up/Page Down), search, and copy behavior; load older message history when user scrolls back past loaded content.
 
@@ -508,11 +541,6 @@ They must be developed in tandem so each validates the other as behavior lands, 
 - [ ] Implement visible composer-cursor behavior and mouse-wheel transcript scrolling that does not alter composer-history recall.
 
 - [ ] Implement transcript rendering for visible text, hidden-by-default thinking, tool activity rows, and ordered multi-item assistant turns; user messages in scrollback with distinct background.
-
-- [ ] Implement in-flight generation handling so one assistant turn is updated progressively and reconciled cleanly on completion.
-
-- [ ] Implement default interactive streaming on the shared chat transport and TUI path, with
-  degraded fallback handling when a selected backend path cannot stream visible-text deltas.
 
 - [ ] Implement the collapsed-thinking visual affordance so it remains visible in scrollback with a
   subdued secondary style and a `/show-thinking` hint instead of disappearing completely.
@@ -566,6 +594,8 @@ They must be developed in tandem so each validates the other as behavior lands, 
   (Current PTY coverage exercises thread list only; create, switch, and rename still need fullscreen validation.)
 
 - [ ] Validate hidden-thinking, ordered assistant output, and tool-activity rendering through the PTY harness as transcript rendering lands.
+
+- [ ] Validate interactive streaming through the PTY harness, including progressive visible-text updates, cancellation via Ctrl+C, and clean in-place reconciliation of the final assistant turn.
 
 - [ ] Validate `/show-thinking` and `/hide-thinking` through the PTY harness, including scrollback
   or history-reload behavior for prior assistant turns with retained thinking.
@@ -622,6 +652,8 @@ This phase turns the promoted chat and TUI contract into executable behavior che
   progressive visible-text updates, final-turn reconciliation, and degraded fallback when streaming
   is unavailable.
 
+- [ ] Add behavior-spec and PTY or E2E coverage for stream cancellation, including client disconnect or Ctrl+C-style cancellation and deterministic cancellation-state reconciliation.
+
 - [x] Add behavior-spec coverage for structured-turn rendering expectations that matter to the TUI, especially hidden thinking, ordered assistant output, and tool activity.
   ([cynork_tui.feature](../../features/cynork/cynork_tui.feature) and [chat_thread_management.feature](../../features/orchestrator/chat_thread_management.feature).)
 
@@ -656,7 +688,7 @@ This phase turns the promoted chat and TUI contract into executable behavior che
 
 - [ ] Run `just ci` before considering the phase or round complete.
 
-## Phase 7 Remaining MVP Phase 2 Work After TUI MVP
+## Phase 7 Remaining MVP Phase 2 Work After Streaming, Basic MCP, and TUI MVP
 
 This phase resumes non-TUI MVP Phase 2 implementation only after the first usable TUI path is stable.
 
@@ -672,7 +704,7 @@ This phase resumes non-TUI MVP Phase 2 implementation only after the first usabl
 
 - [ ] Do not close the active Phase 7 slice until `just e2e` passes.
 
-- [ ] Resume the remaining MVP Phase 2 MCP tool slices beyond the currently implemented `db.preference.*` set.
+- [ ] Resume the remaining MVP Phase 2 MCP tool slices beyond the minimum PMA chat and thinking-model slice pulled forward earlier, starting from the currently implemented `db.preference.*` foundation.
 
 - [ ] Finish the remaining LangGraph graph-node work identified in [MVP implementation plan](../mvp_plan.md).
 
@@ -721,19 +753,27 @@ This phase keeps the worker-deployment follow-on docs aligned without mixing the
 
 - [x] Sixth, extract or define the reusable chat or controller seams that both the TUI and Python PTY harness will depend on.
 
-- [ ] Seventh, implement the `cynork` TUI and the Python PTY harness in tandem, using each to validate the other as behavior lands.
+- [ ] Seventh, complete the end-to-end streaming slice in this order: gateway `stream=true`, gateway cancellation semantics, PMA incremental streaming, shared transport streaming or cancellation support, then TUI progressive rendering and PTY or E2E validation.
 
-- [ ] Eighth, update feature coverage and run docs, BDD, Python E2E, and CI validation for the full TUI chat path.
+- [ ] Eighth, pull forward the minimum MCP-in-the-loop slice needed for PMA chat and thinking-capable models, then validate that PMA uses real MCP tool results through the worker proxy and MCP gateway.
 
-- [ ] Ninth, promote the single-binary worker deployment docs while keeping implementation deferred until after the first TUI rollout.
+- [ ] Ninth, implement the remaining `cynork` TUI and Python PTY harness slices in tandem, using each to validate the other as behavior lands.
 
-- [ ] Tenth, return to the remaining MVP Phase 2 orchestration and MCP work only after the TUI can drive realistic stack testing.
+- [ ] Tenth, update feature coverage and run docs, BDD, Python E2E, and CI validation for the full TUI chat path.
+
+- [ ] Eleventh, promote the single-binary worker deployment docs while keeping implementation deferred until after the first TUI rollout.
+
+- [ ] Twelfth, return to the remaining MVP Phase 2 orchestration and broader MCP work only after the TUI can drive realistic stack testing and the minimum PMA MCP slice is stable.
 
 ## Exit Criteria for This Round
 
 - [x] The TUI-first docs are promoted far enough that implementation does not depend on unresolved source-of-truth conflicts.
 
 - [ ] A user can log in, create or switch threads, chat in a multi-line TUI, and observe project and model context.
+
+- [ ] Interactive streaming works end to end on both supported chat surfaces, including progressive visible-text updates, deterministic final reconciliation, and explicit cancellation handling.
+
+- [ ] The minimum MCP-in-the-loop slice required for PMA chat and tool-aware thinking models is implemented and validated against real MCP tool results.
 
 - [ ] The fullscreen TUI can be driven end to end from the Python test scripts with minimal human intervention.
 

@@ -66,7 +66,7 @@ Each `Scenario` SHOULD include:
 - A spec tag: `@spec_<spec_id>` derived from a Spec ID (dots replaced with underscores, lowercased).
 - A suite tag at the Feature level: one `@suite_*` tag from the registry above.
 
-#### 3.2.1 Example
+#### 3.2.1 Tag Example
 
 - `REQ-IDENTY-0104` => `@req_identy_0104`
 - `CYNAI.IDENTY.AuthenticationModel` => `@spec_cynai_identy_authenticationmodel`

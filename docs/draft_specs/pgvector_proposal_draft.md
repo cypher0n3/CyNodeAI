@@ -113,7 +113,7 @@ Therefore, strict pre-filtering is mandatory.
 
 Use namespaces as coarse-grained policy boundaries:
 
-### 6.1. Examples
+### 6.1. Namespace Examples
 
 - docs
 - skills
@@ -195,7 +195,7 @@ cynode-pm may not:
 - Directly write embeddings
 - Write arbitrary memory
 
-#### 9.2.1 Instead
+#### 9.2.1 Instead Clause
 
 - It submits a "store_memory" request
 - Host validates:
@@ -290,7 +290,7 @@ Key risks and mitigations are summarized below.
 
 Embeddings may encode sensitive information.
 
-#### 15.1.1 Mitigations
+#### 15.1.1 Embedding Leakage Mitigations
 
 - No secret ingestion
 - No raw credential embedding
@@ -299,7 +299,9 @@ Embeddings may encode sensitive information.
 
 ### 15.2 Side-Channel Risks
 
-#### 15.2.1 Mitigate
+Side-channel mitigations reduce information leakage via timing or metadata.
+
+#### 15.2.1 Side-Channel Mitigations
 
 - Consistent query timing
 - Fixed top_k
@@ -328,7 +330,7 @@ MVP must include:
 - ingestion authorization checks
 - retrieval audit logs
 
-### 16.1. Defer
+### 16.1. Deferred Items
 
 - user-scoped memory
 - multi-project aggregation roles

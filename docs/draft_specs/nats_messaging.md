@@ -197,7 +197,7 @@ Pattern B - Workers pull-claim jobs:
 - First worker to claim persists locally and acks
 - Worker publishes `cynode.job.started/...` etc.
 
-#### 6.1.1 Recommendation
+#### 6.1.1 Pattern Recommendation
 
 - Start with Pattern A if you need scheduling constraints (GPU locality, model cache locality)
 - Use Pattern B for simple homogeneous clusters
@@ -279,11 +279,13 @@ Canonical payload shapes for core message types (versioned).
 
 ### 8.1 `job.requested` `v1.0.0`
 
-#### 8.1.1 Purpose
+Request execution of a sandbox job; payload and semantics below.
+
+#### 8.1.1 Purpose of `job.requested`
 
 - Request execution of a sandbox job (job.json) with constraints and references
 
-#### 8.1.2 Payload
+#### 8.1.2 Payload for `job.requested`
 
 - `job_id` (UUID)
 - `skill_id` (string)
@@ -337,7 +339,9 @@ Canonical payload shapes for core message types (versioned).
 
 ### 8.2 `job.assigned` `v1.0.0`
 
-#### 8.2.1 Payload
+Assignment notification from dispatcher to worker; payload below.
+
+#### 8.2.1 Payload for `job.assigned`
 
 - `job_id`
 - `node_id`
@@ -347,7 +351,9 @@ Canonical payload shapes for core message types (versioned).
 
 ### 8.3 `job.started` `v1.0.0`
 
-#### 8.3.1 Payload
+Worker has started the job; payload below.
+
+#### 8.3.1 Payload for `job.started`
 
 - `job_id`
 - `node_id`
@@ -372,7 +378,9 @@ Payload (keep small, high frequency):
 
 ### 8.5 `job.completed` `v1.0.0`
 
-#### 8.5.1 Payload
+Job finished; payload below.
+
+#### 8.5.1 Payload for `job.completed`
 
 - `job_id`
 - `node_id`
@@ -390,7 +398,9 @@ Payload (keep small, high frequency):
 
 ### 8.6 `workitem.created` `v1.0.0`
 
-#### 8.6.1 Payload
+Work item created in backlog; payload below.
+
+#### 8.6.1 Payload for `workitem.created`
 
 - `work_item_id`
 - `work_item_type` (epic|feature|story|task|subtask)
@@ -407,7 +417,9 @@ Payload (keep small, high frequency):
 
 ### 8.7 `workitem.transitioned` `v1.0.0`
 
-#### 8.7.1 Payload
+Work item status change; payload below.
+
+#### 8.7.1 Payload for `workitem.transitioned`
 
 - `work_item_id`
 - `from_status`
@@ -417,7 +429,9 @@ Payload (keep small, high frequency):
 
 ### 8.8 `requirement.created` `v1.0.0`
 
-#### 8.8.1 Payload
+Requirement created or updated; payload below.
+
+#### 8.8.1 Payload for `requirement.created`
 
 - `requirement_id` (e.g., `REQ-SEC-005`)
 - `type` (FR|NFR|SR|OR)
@@ -429,7 +443,9 @@ Payload (keep small, high frequency):
 
 ### 8.9 `acceptance.validated` `v1.0.0`
 
-#### 8.9.1 Payload
+Acceptance criterion validated; payload below.
+
+#### 8.9.1 Payload for `acceptance.validated`
 
 - `criteria_id`
 - `requirement_id`
@@ -443,7 +459,9 @@ Payload (keep small, high frequency):
 
 ### 8.10 `policy.requested` `v1.0.0`
 
-#### 8.10.1 Payload
+Policy decision requested; payload below.
+
+#### 8.10.1 Payload for `policy.requested`
 
 - `policy_request_id`
 - `action` (string)
@@ -457,7 +475,9 @@ Payload (keep small, high frequency):
 
 ### 8.11 `policy.decided` `v1.0.0`
 
-#### 8.11.1 Payload
+Policy decision recorded; payload below.
+
+#### 8.11.1 Payload for `policy.decided`
 
 - `policy_request_id`
 - `decision` (approved|denied)
@@ -489,7 +509,9 @@ Access is enforced at both NATS and message level.
 
 ## 10. Idempotency and Deduplication
 
-### 10.1. Requirements
+Consumers must handle duplicate delivery and apply updates idempotently.
+
+### 10.1. Idempotency Requirements
 
 - Every message includes `event_id` (unique)
 - Consumers must store processed `event_id`s (or a rolling window) to avoid double-apply

@@ -277,7 +277,7 @@ The following table is proposed for PostgreSQL (see [postgres_schema.md](../tech
 - `run_id` (uuid, nullable)
 - `created_at` (timestamptz, not null, default now())
 
-#### 5.1.1 Indexes
+#### 5.1.1 Index Definitions
 
 - (`subject_id`, `created_at`) for user-scoped aggregation
 - (`project_id`, `created_at`) for project-scoped aggregation

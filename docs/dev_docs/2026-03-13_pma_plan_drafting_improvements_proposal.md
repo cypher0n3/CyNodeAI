@@ -4,6 +4,9 @@
 - [Gaps Identified](#gaps-identified)
 - [Proposal 1: Dependency-Only Execution](#proposal-1-dependency-only-execution)
 - [Proposal 2: Task References in Plan Drafting](#proposal-2-task-references-in-plan-drafting)
+- [Proposal 2b: Task Tracking via YAML Frontmatter](#proposal-2b-task-tracking-via-yaml-frontmatter)
+- [Task Steps and Artifacts](#task-steps-and-artifacts)
+- [Representation: Markdown vs YAML](#representation-markdown-vs-yaml)
 - [Proposal 3: Plan Structure and Example](#proposal-3-plan-structure-and-example)
 - [Recommendations](#recommendations)
 
@@ -14,6 +17,7 @@ This proposal refines how the Project Manager Agent (PMA) drafts project plans s
 1. Execution order is driven **only by task dependencies**, not by a hard sequence in the plan document.
 2. Tasks (which are separate database entities) are referenced in the plan in a way that stays valid before and after task creation.
 3. Plans can clearly represent **parallelism**: any task with no unsatisfied dependencies may run; multiple such tasks may run simultaneously.
+4. **Task tracking refs** (task list, dependencies) MAY be expressed in **YAML frontmatter** for machine-parseable handling; steps and artifacts are clearly assigned to Markdown (narrative) vs YAML (structured) where appropriate.
 
 It addresses gaps in the current example plan ([2026-03-13_pma_plan_example_go_cli.md](2026-03-13_pma_plan_example_go_cli.md)) and suggests changes to plan-drafting guidance and optional spec/requirement clarifications.
 
@@ -86,22 +90,116 @@ Task names are unique within scope ([project_manager_agent.md - Task Naming](../
 **Spec/requirement clarification (optional):** Add an explicit note in the Project Manager Agent or projects_and_scopes spec: "In plan documents, tasks are referenced by human-readable task name (unique within scope).
 When persisting task_dependencies, the system resolves task name to task id within the same plan."
 
+## Proposal 2b: Task Tracking via YAML Frontmatter
+
+**Principle:** Allow (and recommend) **YAML frontmatter** at the top of the plan document to carry task list and dependencies in a machine-parseable form.
+The plan body remains Markdown; the frontmatter is the canonical source for task refs and dependency graph when present.
+
+### Frontmatter Shape
+
+- Plan documents MAY start with YAML between `---` delimiters.
+- When present, frontmatter SHOULD include:
+  - **`tasks`**: list of task definitions.
+    Each item: `name` (required, task name per [Task Naming](../tech_specs/project_manager_agent.md#spec-cynai-agents-pmtasknaming)), optional `depends_on` (list of task names), optional `description`, optional `acceptance_criteria` (list of strings or structured criteria).
+  - Task names in frontmatter MUST match the names used in the Markdown body and when creating `tasks` rows; `depends_on` MUST reference only task names from this list.
+- Parsing: the system (gateway, PMA, or CLI) parses frontmatter first to obtain task list and dependencies; the rest of the document is the plan body (Markdown).
+- If frontmatter is absent or invalid, fall back to the current behavior: task refs and "Depends on" only in Markdown body; name-to-id resolution at persist time as in Proposal 2.
+
+### Example Frontmatter
+
+```yaml
+---
+tasks:
+  - name: setup-module
+    depends_on: []
+    description: Create Go module and dir layout.
+  - name: add-specs
+    depends_on: [setup-module]
+  - name: add-tests
+    depends_on: [setup-module]
+  - name: implement-main
+    depends_on: [add-specs, add-tests]
+---
+```
+
+The body below the second `---` is the human-oriented plan (scope, constraints, per-task prose and acceptance criteria).
+When both frontmatter and body exist, **task list and dependencies** are authoritative in the frontmatter for creation and `task_dependencies` resolution; the body remains the source for narrative and for any acceptance criteria not duplicated in frontmatter.
+
+## Task Steps and Artifacts
+
+This section spells out how **task steps** (executable sub-items) and **artifacts** (outputs produced by a task) are represented in the plan and persisted.
+
+### Task Steps
+
+- **Definition:** A step is a discrete, orderable sub-unit of work within a task (e.g. "run tests", "run linter", "commit changes").
+  The PMA breaks work into steps suitable for worker nodes ([project_manager_agent.md](../tech_specs/project_manager_agent.md)); the plan may enumerate expected steps for clarity.
+- **In the plan document:**
+  - **Markdown:** Steps MAY be described in the plan body as prose or bullet lists under each task.
+    This is human- and LLM-friendly but not machine-parseable for execution order or tooling.
+  - **YAML:** For machine-parseable steps (e.g. APIs, round-trip editing, or future step-level tracking), steps SHOULD be listed in frontmatter under each task, e.g. `steps: [{ id, description }]` or a list of strings.
+  - If both are present, YAML is the source of truth for step identity and order; Markdown can elaborate.
+- **Persistence:** The DB does not require a dedicated "plan steps" table for MVP; steps are reflected in job payloads and workflow execution.
+  Plan-level steps in frontmatter are used when creating or updating tasks and when generating job payloads; they are not stored as separate rows unless a future spec adds a step table.
+
+### Task Artifacts (Expected vs Stored)
+
+- **Definition:** Artifacts are outputs produced during task execution (files, reports, logs) and are stored in `task_artifacts` ([postgres_schema.md](../tech_specs/postgres_schema.md)).
+- **In the plan document:**
+  - **Markdown:** Expected or required artifacts MAY be described in the plan body per task (e.g. "README with usage example", "test fixtures in `testdata/`").
+  - **YAML:** For machine-parseable expected artifacts (e.g. for validation or UI), list them in frontmatter per task, e.g. `artifacts: [{ path_or_type, description }]` or a list of strings.
+  - If both are present, YAML is the source of truth for expected-artifact identity; Markdown can elaborate.
+- **Persistence:** Actual artifacts are recorded in `task_artifacts` at runtime.
+  Plan-level "expected artifacts" in frontmatter are advisory (for PMA verification and user display); they are not stored as separate plan columns unless a future spec adds them.
+
+### Representation Summary
+
+- **Task list and deps.**
+  Prefer in plan: YAML frontmatter.
+  Machine-parseable: yes (frontmatter).
+  Persisted to DB: `tasks`, `task_dependencies`.
+- **Task description / acceptance (narrative).**
+  Prefer in plan: Markdown body.
+  Machine-parseable: optional (frontmatter can mirror).
+  Persisted to DB: `tasks.description`, `tasks.acceptance_criteria`.
+- **Task steps.**
+  Prefer in plan: YAML frontmatter if tooling needs them; else Markdown.
+  Machine-parseable: YAML.
+  Persisted to DB: via jobs/workflow; no dedicated step table for MVP.
+- **Expected artifacts.**
+  Prefer in plan: YAML frontmatter if validation/UI needs them; else Markdown.
+  Machine-parseable: YAML.
+  Persisted to DB: advisory only; actual artifacts in `task_artifacts`.
+
+## Representation: Markdown vs YAML
+
+- **YAML frontmatter** is best for:
+  - Task list (names), dependencies (`depends_on`), and optionally per-task steps and expected artifacts.
+  - Any field that tooling or APIs must parse without scraping prose (e.g. round-trip edit, dependency graph visualization, validation).
+- **Markdown body** is best for:
+  - Scope, goal, constraints, and narrative.
+  - Human-readable task descriptions and acceptance criteria (and can duplicate or summarize what is in frontmatter).
+- **When YAML is preferred for steps/artifacts:** When the system or UI needs to enumerate steps or expected artifacts (e.g. progress UI, validation of "all expected artifacts present"), represent them in frontmatter.
+  When the plan is primarily for human and LLM consumption, Markdown-only is sufficient; frontmatter can be minimal (tasks + deps only) or omitted with fallback to body-only parsing per Proposal 2.
+
 ## Proposal 3: Plan Structure and Example
 
 The following suggests a consistent structure for the tasks section and an example that exhibits parallel runnability.
 
 ### Suggested Structure for the "Tasks and Dependencies" Section
 
-1. **Intro sentence.**
+1. **Optional YAML frontmatter.**
+   When using frontmatter (Proposal 2b), place the task list and `depends_on` (and optionally per-task steps/artifacts) at the top of the document; the body below is the narrative.
+2. **Intro sentence (in body).**
    "The following tasks are part of this plan.
    Runnability is determined only by dependencies: a task may run when all tasks it depends on have status completed; tasks with no dependencies may run immediately; multiple tasks may run in parallel when their dependencies are satisfied."
-2. **Task list.**
-   For each task:
+3. **Task list.**
+   For each task (in body and/or frontmatter):
    - **Task name** (the ref used everywhere: `add-project-and-specs`, `implement-flag-and-file-read`, etc.)
    - Short description (prose).
    - Acceptance criteria (list).
    - **Depends on:** list of task names, or "None."
-3. **No numbering for execution.**
+   When frontmatter is used, task list and deps are authoritative there; the body may repeat for readability.
+4. **No numbering for execution.**
    Section numbering (e.g. 1.1, 1.2) may be used for document navigation only; it must not be read as "run first, run second."
 
 **Example that shows parallelism:** Replace or supplement the current Go CLI example with a scenario that has a clear DAG with parallel branches.
@@ -131,16 +229,19 @@ The plan document would list each task with "Depends on: ..." only; no "step 1, 
    - Rename "Tasks (Execution Order)" to "Tasks and dependencies."
    - Add the one-sentence runnability/dependency note at the top of that section.
    - For each task, keep "Depends on: &lt;names&gt; | None" and remove any implication that the document order is the run order.
+   - Optionally, add YAML frontmatter with `tasks` and `depends_on` as the machine-parseable source for task refs.
    - Optionally, replace the linear chain with the parallel-friendly example above (or add a second subsection with that example).
 
-2. **Document task refs in PMA/spec guidance.**
-   In the Project Manager Agent tech spec (or project plan building section), state explicitly that plan documents reference tasks by **task name** and that dependencies in the plan are expressed as "Depends on: [task names]"; when creating tasks and task_dependencies, the system uses those names to create `tasks` rows and to resolve ids for `task_dependencies` rows.
+2. **Document task refs and frontmatter in PMA/spec guidance.**
+   In the Project Manager Agent tech spec (or project plan building section), state that plan documents reference tasks by **task name**; that dependencies are expressed as "Depends on: [task names]" in the body and/or as `depends_on` in YAML frontmatter; and that when frontmatter is present, task list and dependencies are taken from it for creation and `task_dependencies` resolution.
+   Document that steps and expected artifacts may appear in Markdown (prose) or in frontmatter (machine-parseable); when both exist, frontmatter is the source of truth for steps and expected artifacts.
 
 3. **Leave schema as-is.**
-   No change to `tasks`, `task_dependencies`, or `project_plan_revisions` is required; the proposal only clarifies how the plan **body** (Markdown) is authored and how name-to-id resolution works when persisting.
+   No change to `tasks`, `task_dependencies`, `task_artifacts`, or `project_plan_revisions` is required; the proposal only clarifies how the plan document (frontmatter + body) is authored and how name-to-id resolution and optional steps/artifacts are handled when persisting.
 
 4. **Optional REQ/spec tweak.**
-   If desired, add a single sentence to REQ-PROJCT or to [CYNAI.ACCESS.ProjectPlan](../tech_specs/projects_and_scopes.md#spec-cynai-access-projectplan): "Plan documents reference tasks by human-readable task name; execution order and runnability are determined solely by the task dependency graph stored in task_dependencies, not by the order of tasks in the plan document."
+   If desired, add a single sentence to REQ-PROJCT or to [CYNAI.ACCESS.ProjectPlan](../tech_specs/projects_and_scopes.md#spec-cynai-access-projectplan): "Plan documents reference tasks by human-readable task name; execution order and runnability are determined solely by the task dependency graph stored in task_dependencies, not by the order of tasks in the plan document.
+   Task list and dependencies MAY be expressed in YAML frontmatter for machine-parseable task tracking."
 
 This file is a proposal in `docs/dev_docs/` and is not linked from stable docs.
 It may be moved or refined before any normative spec or requirement change.

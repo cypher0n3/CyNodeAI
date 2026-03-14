@@ -415,7 +415,7 @@ Normative constraints:
 
 Agent-to-orchestrator proxy endpoints are used by the managed agent container at runtime.
 
-##### Binding
+##### Endpoint Binding
 
 - Per [Unified UDS Path](worker_node.md#spec-cynai-worker-unifiedudspath), all container-facing proxy endpoints MUST use **Unix domain sockets (UDS)** only.
   Loopback TCP is not permitted for agent or sandbox container access; the worker MUST expose proxy endpoints to containers only via UDS (or `http+unix` URLs).

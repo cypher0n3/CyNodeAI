@@ -192,7 +192,7 @@ Required behavior:
 - The worker proxy MUST attach the correct agent token to agent-originated requests when forwarding to the orchestrator.
 - The worker MUST NOT expose agent tokens to sandboxes or agents via env vars, files, mounts, or logs.
 
-#### Observability
+#### Agent Token Observability
 
 - Agent tokens MUST NOT appear in logs, metrics, audit payloads (beyond opaque identifiers such as `service_id` or agent identity), debug endpoints, or telemetry responses.
   Redaction MUST NOT be relied upon.
@@ -1158,7 +1158,7 @@ Go 1.26 secure secret handling (implementation requirement):
 
 This section defines the required trusted boundary between secure store writers and readers.
 
-#### Definitions
+#### Trusted Boundary Definitions
 
 - The secure store writer is the component that applies node configuration (typically the Node Manager).
 - The secure store reader for managed agent proxy credentials is the worker internal proxy handler.
