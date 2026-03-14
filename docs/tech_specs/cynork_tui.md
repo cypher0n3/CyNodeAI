@@ -13,6 +13,8 @@
   - [Transcript Rendering Requirements Traces](#transcript-rendering-requirements-traces)
 - [Generation State](#generation-state)
   - [Generation State Traces To](#generation-state-traces-to)
+- [Connection Recovery](#connection-recovery)
+  - [Connection Recovery Traces To](#connection-recovery-traces-to)
 - [Completion and Discovery](#completion-and-discovery)
   - [Completion and Discovery Traces To](#completion-and-discovery-traces-to)
 - [Local File References](#local-file-references)
@@ -63,6 +65,7 @@ It is the canonical home for the cynork chat layout, structured transcript rende
 - [REQ-CLIENT-0205](../requirements/client.md#req-client-0205)
 - [REQ-CLIENT-0206](../requirements/client.md#req-client-0206)
 - [REQ-CLIENT-0207](../requirements/client.md#req-client-0207)
+- [REQ-CLIENT-0213](../requirements/client.md#req-client-0213)
 
 ### Related Documents
 
@@ -224,6 +227,22 @@ The TUI SHOULD follow the same broad rendering pattern used by modern chat tools
 - Final reconciliation MUST preserve already streamed visible assistant text, MUST keep the final item ordering, and MUST NOT duplicate visible assistant text that was already shown during streaming.
 - Final reconciliation MUST discard ephemeral progress-only labels and MUST retain only the final persisted transcript content and any separately rendered structured items.
 - If the selected backend path cannot provide true incremental visible-text streaming, the TUI MUST fall back to a degraded in-flight state indicator and then replace that row with the final ordered assistant turn once completion arrives.
+
+## Connection Recovery
+
+- Spec ID: `CYNAI.CLIENT.CynorkTui.ConnectionRecovery` <a id="spec-cynai-client-cynorktui-connectionrecovery"></a>
+
+When the connection to the gateway is lost or interrupted while a response is streaming (e.g. network drop, gateway restart, transport error), the TUI MUST attempt to auto-reconnect with bounded backoff.
+
+- Reconnect attempts MUST use a bounded backoff (e.g. exponential or stepped with a cap) so that the client does not hammer the gateway; the exact strategy is implementation-defined but MUST be finite and MUST NOT block the UI indefinitely.
+- After reconnection, the TUI MUST reconcile the in-flight assistant turn: retain any already-received visible text and structured content in the transcript, mark the turn as interrupted (e.g. status indicator or inline note), and allow the user to continue the session.
+- The TUI MUST preserve the current thread and session; the user MUST NOT be forced to exit or restart.
+  The user MAY send a new message, retry, or switch thread as usual.
+- The status bar or in-turn indicator SHOULD reflect connection state (e.g. "Reconnecting..." during backoff, "Connected" after success) so the user understands why the stream stopped and when the session is usable again.
+
+### Connection Recovery Traces To
+
+- [REQ-CLIENT-0213](../requirements/client.md#req-client-0213)
 
 ## Completion and Discovery
 

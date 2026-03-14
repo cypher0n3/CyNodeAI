@@ -152,6 +152,7 @@ The following applies when the CLI is not in one-shot mode (i.e. when `--message
   Implementations MUST support at least `/exit`, `/quit`, or EOF; supporting all three is recommended.
 - Chat input and model output MUST NOT be recorded in shell history or in any persistent history that could expose secrets; the same rules as interactive mode (REQ-CLIENT-0140) apply.
 - All communication with the PM model MUST go through the User API Gateway; the CLI MUST NOT connect directly to inference or to the database.
+- When the connection is interrupted mid-stream, the CLI MUST attempt to auto-reconnect and reconcile the in-flight turn per [Connection recovery](cynork_tui.md#spec-cynai-client-cynorktui-connectionrecovery) (REQ-CLIENT-0213).
 
 ### Chat Session Warm-Up
 

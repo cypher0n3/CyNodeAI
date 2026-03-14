@@ -476,3 +476,8 @@ Web Console-specific requirements live in [webcon.md](webcon.md) (REQ-WEBCON-*).
 - **REQ-CLIENT-0212:** The TUI MUST display the current thread title (or a fallback label) and MUST update the displayed thread title whenever it changes (e.g. after auto-title or `/thread rename`) and when the user switches to a different thread.
   [CYNAI.CLIENT.CynorkTui](../tech_specs/cynork_tui.md#spec-cynai-client-cynorktui)
   <a id="req-client-0212"></a>
+- **REQ-CLIENT-0213:** When the connection to the gateway is interrupted mid-stream (e.g. network drop, gateway restart), the interactive cynork chat surface MUST attempt to auto-reconnect with bounded backoff.
+  After reconnection, it MUST reconcile the in-flight turn: retain any already-received visible text and structured content, mark the turn as interrupted or show a clear indicator, and allow the user to continue the session (e.g. send a new message or retry).
+  The current thread and session MUST be preserved; the user MUST NOT be forced to restart.
+  [CYNAI.CLIENT.CynorkTui.ConnectionRecovery](../tech_specs/cynork_tui.md#spec-cynai-client-cynorktui-connectionrecovery)
+  <a id="req-client-0213"></a>
