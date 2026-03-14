@@ -1,7 +1,7 @@
 # Cynork TUI
 
 - [Document Overview](#document-overview)
-  - [Cynork TUI Traces To](#cynork-tui-traces-to)
+  - [`cynork` TUI Traces To](#cynork-tui-traces-to)
   - [Related Documents](#related-documents)
 - [Entrypoint and Compatibility](#entrypoint-and-compatibility)
   - [Entrypoint and Compatibility Traces To](#entrypoint-and-compatibility-traces-to)
@@ -33,9 +33,10 @@
 This spec defines the full-screen interactive chat TUI for cynork.
 It is the canonical home for the cynork chat layout, structured transcript rendering, thread-history UX, local TUI state, and interactive auth recovery.
 
-### Cynork TUI Traces To
+### `cynork` TUI Traces To
 
 - [CYNAI.CLIENT.TuiScope](cynork_cli.md#spec-cynai-client-tuiscope)
+- [REQ-CLIENT-0212](../requirements/client.md#req-client-0212)
 - [REQ-CLIENT-0181](../requirements/client.md#req-client-0181)
 - [REQ-CLIENT-0182](../requirements/client.md#req-client-0182)
 - [REQ-CLIENT-0183](../requirements/client.md#req-client-0183)
@@ -80,6 +81,8 @@ It is the canonical home for the cynork chat layout, structured transcript rende
 - [REQ-CLIENT-0202](../requirements/client.md#req-client-0202)
 
 - `cynork tui` is the explicit full-screen TUI entrypoint and MUST be provided as a top-level command.
+  It MUST accept the same thread semantics as the chat command: at startup, the session starts with a **new thread by default**; the user MAY supply `--resume-thread <thread_selector>` to start in an existing thread instead.
+  See [Chat command - Thread Controls](cli_management_app_commands_chat.md#thread-controls).
 - `cynork chat` MUST remain available as a supported user-facing path to the same chat contract.
   The implementation MAY share the same TUI code path or retain a documented compatibility wrapper, but user-visible behavior MUST remain aligned.
 - Bare `cynork` without a subcommand SHOULD remain help-first until the dedicated default-TUI switch is intentionally promoted.
@@ -89,6 +92,34 @@ It is the canonical home for the cynork chat layout, structured transcript rende
 ## Layout and Interaction
 
 - Spec ID: `CYNAI.CLIENT.CynorkChat.TUILayout` <a id="spec-cynai-client-cynorkchat-tuilayout"></a>
+
+The TUI is a full-screen chat surface composed of scrollback, composer, status bar, and an optional context pane.
+
+- The scrollback MUST render conversation history and structured chat-turn output.
+- The composer MUST support multi-line input suitable for long prompts and slash commands.
+- Exact slash-command semantics and execution algorithms are defined in [TUI slash commands](cynork_tui_slash_commands.md).
+- The TUI MUST surface a concise discoverability hint in or adjacent to the composer for slash commands, `@` file lookup or attachment, and `!` shell shorthand.
+  A canonical first-rollout hint is `/ commands · @ files · ! shell`.
+- The status bar MUST display at least gateway reachability, identity, effective project, selected model, connection state, and the current thread title (or a fallback label when the title is absent).
+- The TUI MUST update the displayed thread title whenever it changes (e.g. after auto-title from the backend or after `/thread rename`) and when the user switches to a different thread.
+- An optional context pane MAY show thread history, slash-command help, recent tasks, project context, queued drafts, or download items.
+- When the optional context pane is visible, the TUI SHOULD allow the user to switch between pane views without leaving the active chat session.
+- Visible assistant text and stored user messages SHOULD be rendered with Markdown-aware formatting when `--plain` is not set.
+- User messages in the scrollback SHOULD be visually distinct from assistant output.
+- The user MUST be able to scroll back through the conversation and fetch older history as needed.
+- Mouse-wheel scrolling MUST scroll the scrollback or output-history region.
+  It MUST NOT cycle composer-history recall and MUST NOT alter previously submitted messages.
+- When the composer has focus, the TUI MUST render a visible text cursor or caret at the current insertion point.
+- The cursor or caret MAY use the terminal's native cursor rendering or a TUI-rendered equivalent, but it MUST remain visually distinguishable from surrounding composer text.
+- `Shift+Enter` MUST insert a newline in the composer.
+- The TUI SHOULD support message-history recall from the composer and SHOULD support search and copy behavior inside the scrollback.
+- `Ctrl+C` SHOULD cancel an active generation first and SHOULD require an explicit repeated user action before exiting an idle session.
+- When the user invokes `! command`, non-interactive shell output MAY render inline, but interactive subprocesses MUST receive the real TTY and the TUI MUST restore itself cleanly afterward.
+- When the gateway exposes assistant download references, the TUI SHOULD render them as explicit download items that require user action.
+- Queued drafts, when supported, MUST remain local unsent state and MUST be clearly separated from sent messages.
+- When queued drafts are supported, the TUI SHOULD provide a dedicated queued-draft list, pane view, or overlay with clear queued labeling.
+- Queued drafts SHOULD support reorder, explicit send-one, and explicit send-all operations.
+- If the TUI supports send-all for queued drafts, it SHOULD indicate whether drafts are sent sequentially and whether the client waits for each response before sending the next queued draft.
 
 ### Layout and Interaction Traces To
 
@@ -110,33 +141,6 @@ It is the canonical home for the cynork chat layout, structured transcript rende
 - [REQ-CLIENT-0206](../requirements/client.md#req-client-0206)
 - [REQ-CLIENT-0207](../requirements/client.md#req-client-0207)
 
-The TUI is a full-screen chat surface composed of scrollback, composer, status bar, and an optional context pane.
-
-- The scrollback MUST render conversation history and structured chat-turn output.
-- The composer MUST support multi-line input suitable for long prompts and slash commands.
-- Exact slash-command semantics and execution algorithms are defined in [TUI slash commands](cynork_tui_slash_commands.md).
-- The TUI MUST surface a concise discoverability hint in or adjacent to the composer for slash commands, `@` file lookup or attachment, and `!` shell shorthand.
-  A canonical first-rollout hint is `/ commands · @ files · ! shell`.
-- The status bar MUST display at least gateway reachability, identity, effective project, selected model, and connection state.
-- An optional context pane MAY show thread history, slash-command help, recent tasks, project context, queued drafts, or download items.
-- When the optional context pane is visible, the TUI SHOULD allow the user to switch between pane views without leaving the active chat session.
-- Visible assistant text and stored user messages SHOULD be rendered with Markdown-aware formatting when `--plain` is not set.
-- User messages in the scrollback SHOULD be visually distinct from assistant output.
-- The user MUST be able to scroll back through the conversation and fetch older history as needed.
-- Mouse-wheel scrolling MUST scroll the scrollback or output-history region.
-  It MUST NOT cycle composer-history recall and MUST NOT alter previously submitted messages.
-- When the composer has focus, the TUI MUST render a visible text cursor or caret at the current insertion point.
-- The cursor or caret MAY use the terminal's native cursor rendering or a TUI-rendered equivalent, but it MUST remain visually distinguishable from surrounding composer text.
-- `Shift+Enter` MUST insert a newline in the composer.
-- The TUI SHOULD support message-history recall from the composer and SHOULD support search and copy behavior inside the scrollback.
-- `Ctrl+C` SHOULD cancel an active generation first and SHOULD require an explicit repeated user action before exiting an idle session.
-- When the user invokes `! command`, non-interactive shell output MAY render inline, but interactive subprocesses MUST receive the real TTY and the TUI MUST restore itself cleanly afterward.
-- When the gateway exposes assistant download references, the TUI SHOULD render them as explicit download items that require user action.
-- Queued drafts, when supported, MUST remain local unsent state and MUST be clearly separated from sent messages.
-- When queued drafts are supported, the TUI SHOULD provide a dedicated queued-draft list, pane view, or overlay with clear queued labeling.
-- Queued drafts SHOULD support reorder, explicit send-one, and explicit send-all operations.
-- If the TUI supports send-all for queued drafts, it SHOULD indicate whether drafts are sent sequentially and whether the client waits for each response before sending the next queued draft.
-
 ## Visual Mockup
 
 The canonical retained design mockup for the TUI is shown below.
@@ -146,6 +150,7 @@ The canonical retained design mockup for the TUI is shown below.
 ## Thread History
 
 - Create, list, switch, and rename thread behavior are part of the TUI baseline.
+- The TUI MUST display the current thread title (or a server-defined fallback) and MUST update that display whenever the title changes (e.g. after PMA auto-titling or `/thread rename`) and when the user switches to another thread.
 - Thread history MUST use the same gateway thread-management APIs as the chat command.
 - Recent-first ordering by `updated_at` SHOULD be the default presentation.
 - When thread summaries are available, the TUI SHOULD display them in the history list or sidebar.

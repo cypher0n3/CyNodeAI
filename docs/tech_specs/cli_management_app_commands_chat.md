@@ -72,12 +72,10 @@ See [`docs/tech_specs/openai_compatible_chat_api.md`](openai_compatible_chat_api
 - `-m, --message` (string, optional): One-shot mode.
   When provided, the CLI MUST send this single message to the gateway via the configured OpenAI-compatible interactive chat surface, print the completion content (subject to `--plain` and `--no-color`), and exit without entering the interactive loop.
   When `--message` is present, slash commands and the interactive loop are not used; see [One-shot mode](#one-shot-mode).
-- `--thread-new` (bool, optional): At startup, create a new chat thread before the first completion request.
-  When set, the CLI MUST call `POST /v1/chat/threads` using the effective project context from
-  `--project-id` or the active project when set before the first `POST /v1/chat/completions`
-  request in the session.
+- `--resume-thread` (string, optional): Thread selector for an existing thread to resume at startup.
+  When provided, the CLI MUST resolve the selector to a thread owned by the authenticated user (within effective project scope when applicable) and MUST start the session in that thread so that the first and subsequent completion requests continue that conversation.
+  When omitted, the CLI MUST start with a **new thread** (default): it MUST call `POST /v1/chat/threads` using the effective project context from `--project-id` or the active project when set, before the first `POST /v1/chat/completions` request in the session.
   Subsequent chat completion requests MUST remain OpenAI-compatible and MUST NOT require any CyNodeAI-specific thread identifier in the request body or headers.
-  When omitted, the CLI uses the gateway's active-thread behavior per (user, project) and does not create a thread explicitly.
 
 ### Thread Controls
 
@@ -89,16 +87,18 @@ See [`docs/tech_specs/openai_compatible_chat_api.md`](openai_compatible_chat_api
 - [REQ-CLIENT-0199](../requirements/client.md#req-client-0199)
 - [REQ-CLIENT-0200](../requirements/client.md#req-client-0200)
 
-The CLI MUST support explicit fresh-thread creation at startup and during an active session, and MUST respect current project context for thread creation.
+The CLI MUST support starting with a new thread by default and resuming a previous thread only when the user supplies an explicit startup option.
+It MUST support explicit fresh-thread creation during an active session (e.g. `/thread new`) and MUST respect current project context for thread creation.
 Interactive chat SHOULD also expose thread-list, switch, and rename operations using the same gateway thread APIs.
 
-#### Startup (`--thread-new`)
+#### Startup (Default: New Thread)
 
-- When the user invokes `cynork chat --thread-new`, the CLI MUST create a new thread via `POST /v1/chat/threads` before entering the interactive loop (or before sending the one-shot message if `--message` is also set).
+- **Default:** When the user invokes `cynork chat` (or `cynork tui`) without `--resume-thread`, the CLI MUST start with a **new thread**: it MUST call `POST /v1/chat/threads` before entering the interactive loop (or before sending the one-shot message if `--message` is also set).
 - The CLI MUST apply project context to `POST /v1/chat/threads` using the same effective project rules as the rest of chat.
   When a project is set for the session, the CLI MUST use that project context; when no project is set, the gateway associates the thread with the user's default project.
 - Subsequent `POST /v1/chat/completions` requests in that session MUST remain OpenAI-compatible and MUST NOT require any CyNodeAI-specific thread identifier in the request body or headers.
-- The observable outcome for the user MUST be that the next completion starts a fresh conversation rather than reusing the previously active thread.
+- **Resume:** When the user supplies `--resume-thread <thread_selector>`, the CLI MUST resolve the selector to a thread owned by the authenticated user (and within effective project scope when the gateway enforces it), MUST start the session in that thread, and MUST NOT create a new thread at startup.
+  The observable outcome MUST be that the first and subsequent completions continue the selected conversation.
 
 #### In-Session (`/thread new`)
 

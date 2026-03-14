@@ -321,7 +321,9 @@ Web Console-specific requirements live in [webcon.md](webcon.md) (REQ-WEBCON-*).
   [CYNAI.ACCESS.ProjectPlanReviewApprove](../tech_specs/projects_and_scopes.md#spec-cynai-access-projectplanreviewapprove)
   [CYNAI.USRGWY.ProjectPlanApi](../tech_specs/user_api_gateway.md#spec-cynai-usrgwy-projectplanapi)
   <a id="req-client-0180"></a>
-- **REQ-CLIENT-0181:** The interactive cynork chat surface MUST support explicit fresh-thread creation: at session start (e.g. `--thread-new`) and during an active session (e.g. `/thread new`).
+- **REQ-CLIENT-0181:** The interactive cynork chat surface MUST start each session with a **new thread by default**.
+  Resuming a previous thread MUST require an explicit startup option (e.g. `cynork tui --resume-thread <thread_selector>` or `cynork chat --resume-thread <thread_selector>`).
+  The surface MUST support explicit fresh-thread creation during an active session (e.g. `/thread new`).
   Thread creation MUST use the gateway `POST /v1/chat/threads` and MUST respect the current project context (e.g. `OpenAI-Project` header or active project) for the new thread.
   Subsequent chat completion requests MUST remain OpenAI-compatible and MUST NOT require any CyNodeAI-specific thread identifier in the request body or headers.
   [CYNAI.CLIENT.CliChatThreadControls](../tech_specs/cli_management_app_commands_chat.md#spec-cynai-client-clichatthreadcontrols)
@@ -471,3 +473,6 @@ Web Console-specific requirements live in [webcon.md](webcon.md) (REQ-WEBCON-*).
   [CYNAI.CLIENT.CynorkChat.LocalConfig](../tech_specs/cynork_tui.md#spec-cynai-client-cynorkchat-localconfig)
   [CYNAI.CLIENT.CynorkTui.LocalSlashCommands](../tech_specs/cynork_tui_slash_commands.md#spec-cynai-client-cynorktui-localslashcommands)
   <a id="req-client-0211"></a>
+- **REQ-CLIENT-0212:** The TUI MUST display the current thread title (or a fallback label) and MUST update the displayed thread title whenever it changes (e.g. after auto-title or `/thread rename`) and when the user switches to a different thread.
+  [CYNAI.CLIENT.CynorkTui](../tech_specs/cynork_tui.md#spec-cynai-client-cynorktui)
+  <a id="req-client-0212"></a>

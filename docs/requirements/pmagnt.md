@@ -101,3 +101,7 @@ Behavioral and workflow requirements still live in `AGENTS` and `ORCHES`.
   Hidden thinking or reasoning MUST remain separate from visible text throughout that streaming path.
   [CYNAI.PMAGNT.StreamingAssistantOutput](../tech_specs/cynode_pma.md#spec-cynai-pmagnt-streamingassistantoutput)
   <a id="req-pmagnt-0118"></a>
+- **REQ-PMAGNT-0119:** The PMA MUST title the thread automatically after the first user message in the thread if the user has not already titled the thread.
+  Auto-titling MUST NOT overwrite an existing title set by the user.
+  [CYNAI.AGENTS.ThreadTitling](../tech_specs/project_manager_agent.md#spec-cynai-agents-threadtitling)
+  <a id="req-pmagnt-0119"></a>

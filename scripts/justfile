@@ -12,6 +12,8 @@ node_state_dir := env('TMPDIR', '/tmp') + "/cynodeai-node-state"
 logs_dir := env('CYNODEAI_LOGS_DIR', env('TMPDIR', '/tmp') + "/cynodeai-setup-dev-logs")
 node_manager_bin := root_dir / "worker_node" / "bin" / "cynodeai-wnm-dev"
 worker_api_bin := root_dir / "worker_node" / "bin" / "worker-api-dev"
+# Default SKIP_UPX=1 for faster dev image builds; set SKIP_UPX=0 to enable UPX (e.g. for release-like builds).
+skip_upx := env('SKIP_UPX', '1')
 
 help:
     @echo "CyNodeAI Development Setup (just/shell)"
@@ -19,6 +21,7 @@ help:
     @echo "Usage: just setup-dev <command> [OPTIONS]  or  just scripts/<command>"
     @echo ""
     @echo "Commands: start-db, stop-db, clean-db, migrate, build, build-e2e-images, start, stop, restart, clean, component <name> <action>, test-e2e, full-demo, e2e, help"
+    @echo "Env: SKIP_UPX (default 1 for setup-dev; set to 0 to enable UPX in image builds)"
 
 start-db:
     #!/usr/bin/env bash
@@ -106,8 +109,8 @@ build:
 
 # E2E images (worker_node + agents). Run root justfile so worker_node/ and agents/ resolve to repo modules.
 build-e2e-images:
-    @(cd "{{ root_dir }}" && just worker_node/build-inference-proxy-image)
-    @(cd "{{ root_dir }}" && just agents/build-cynode-sba-image)
+    @(cd "{{ root_dir }}" && just worker_node/build-inference-proxy-image -- --build-arg SKIP_UPX={{ skip_upx }})
+    @(cd "{{ root_dir }}" && just agents/build-cynode-sba-image -- --build-arg SKIP_UPX={{ skip_upx }})
 
 start *ARGS:
     just _start_impl {{ ARGS }}
@@ -121,7 +124,7 @@ _start_impl *ARGS:
     for a in "$@"; do [ "$a" = "--ollama-in-stack" ] && ollama_in_stack=true; done
     [ "$SETUP_DEV_OLLAMA_IN_STACK" = "1" ] && ollama_in_stack=true
     echo "[INFO] Building dev binaries..."; (cd "$root" && just build-dev)
-    echo "[INFO] Building cynode-pma image..."; (cd "$root" && just agents/build-cynode-pma-image)
+    echo "[INFO] Building cynode-pma image..."; (cd "$root" && just agents/build-cynode-pma-image -- --build-arg SKIP_UPX="{{ skip_upx }}")
     rt=""
     podman ps >/dev/null 2>&1 && rt=podman
     [ -z "$rt" ] && docker ps >/dev/null 2>&1 && rt=docker
@@ -247,8 +250,8 @@ full-demo *ARGS:
     [ "$STOP_ON_SUCCESS_ENV" = "1" ] && stop_on_success=true
     (cd "$root" && just build-dev)
     (cd "$root" && just scripts/build-e2e-images)
-    (cd "$root" && just orchestrator/build-control-plane-image)
-    (cd "$root" && just orchestrator/build-user-gateway-image)
+    (cd "$root" && just orchestrator/build-control-plane-image -- --build-arg SKIP_UPX="{{ skip_upx }}")
+    (cd "$root" && just orchestrator/build-user-gateway-image -- --build-arg SKIP_UPX="{{ skip_upx }}")
     (cd "$root" && just scripts/start)
     export NODE_STATE_DIR="{{ node_state_dir }}"
     # Export inference image so e2e_090 (UDS proxy URL in sandbox) and related tests run, not skip.
@@ -304,7 +307,7 @@ component name action *ARGS:
         elif [ "$a" = "stop" ]; then
           (cd "$root" && $rt compose -f orchestrator/docker-compose.yml stop control-plane)
         elif [ "$a" = "rebuild" ]; then
-          (cd "$root" && just orchestrator/build-control-plane-image)
+          (cd "$root" && just orchestrator/build-control-plane-image -- --build-arg SKIP_UPX="{{ skip_upx }}")
         fi
         ;;
       user-gateway)
@@ -313,7 +316,7 @@ component name action *ARGS:
         elif [ "$a" = "stop" ]; then
           (cd "$root" && $rt compose -f orchestrator/docker-compose.yml stop user-gateway)
         elif [ "$a" = "rebuild" ]; then
-          (cd "$root" && just orchestrator/build-user-gateway-image)
+          (cd "$root" && just orchestrator/build-user-gateway-image -- --build-arg SKIP_UPX="{{ skip_upx }}")
         fi
         ;;
       *)

@@ -1,15 +1,17 @@
 # Build cynode-pma (agents module). Build context: repo root.
 # Agents module replace go_shared_libs => ../go_shared_libs; include both in workspace.
 # Example: podman build -f agents/cmd/cynode-pma/Containerfile -t cynodeai-cynode-pma:dev .
+# Dev build (skip UPX): add --build-arg SKIP_UPX=1 for faster iteration.
 FROM golang:1.26-alpine AS build
+ARG SKIP_UPX=0
 WORKDIR /build
-RUN apk add --no-cache ca-certificates upx
+RUN apk add --no-cache ca-certificates && ( [ "$SKIP_UPX" = "1" ] || apk add --no-cache upx )
 ENV CGO_ENABLED=0
 RUN printf '%s\n' 'go 1.26.0' 'use (' './agents' './go_shared_libs' ')' > go.work
 COPY go_shared_libs ./go_shared_libs
 COPY agents ./agents
 RUN go build -ldflags="-s -w" -o /cynode-pma ./agents/cmd/cynode-pma \
-    && upx --best /cynode-pma
+    && ( [ "$SKIP_UPX" = "1" ] || upx --best /cynode-pma )
 
 FROM alpine:3
 RUN apk add --no-cache ca-certificates curl wget

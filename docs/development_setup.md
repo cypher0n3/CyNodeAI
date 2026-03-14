@@ -263,6 +263,8 @@ Compose uses `POSTGRES_*`, `ORCHESTRATOR_PORT`, `CONTROL_PLANE_PORT`, `OLLAMA_IM
 - **Lint**: `just lint-go` or `just lint-go-ci`
 - **Full CI**: `just ci` (run before every commit)
 - **CLI (cynork)**: `just build-cynork`; run against localhost with default gateway URL `http://localhost:12080` (see [cynork/README.md](../cynork/README.md))
+- **Container images**: Use each module's justfile (e.g. `just build-cynode-pma-image` in agents, or orchestrator/worker_node image targets).
+  `just setup-dev` (start, full-demo, build-e2e-images, component rebuild) defaults to `SKIP_UPX=1` for faster image builds; set `SKIP_UPX=0` to enable UPX when needed.
 
 ## Systemd (Podman)
 

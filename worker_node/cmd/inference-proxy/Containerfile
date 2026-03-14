@@ -1,14 +1,16 @@
 # Build inference-proxy binary (worker_node module; requires go_shared_libs from workspace).
-# Build context must be repo root: podman build -f worker_node/cmd/inference-proxy/Dockerfile -t cynodeai-inference-proxy:dev .
+# Build context must be repo root: podman build -f worker_node/cmd/inference-proxy/Containerfile -t cynodeai-inference-proxy:dev .
+# Dev build (skip UPX): add --build-arg SKIP_UPX=1 for faster iteration.
 # Use a minimal go.work so we do not need to copy orchestrator or cynork.
 FROM golang:1.26-alpine AS builder
+ARG SKIP_UPX=0
 WORKDIR /build
-RUN apk add --no-cache upx
+RUN [ "$SKIP_UPX" = "1" ] || apk add --no-cache upx
 RUN printf '%s\n' 'go 1.26.0' 'use (' './go_shared_libs' './worker_node' ')' > go.work
 COPY go_shared_libs ./go_shared_libs
 COPY worker_node ./worker_node
 RUN go build -ldflags="-s -w" -o /inference-proxy ./worker_node/cmd/inference-proxy \
-    && upx --best /inference-proxy
+    && ( [ "$SKIP_UPX" = "1" ] || upx --best /inference-proxy )
 
 # Minimal runtime image.
 FROM alpine:3.20

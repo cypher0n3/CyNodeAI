@@ -3,7 +3,12 @@
 - [Agent Purpose](#agent-purpose)
 - [LLM and Tool Execution (Implementation)](#llm-and-tool-execution-implementation)
 - [No Simulated or Guessed Output](#no-simulated-or-guessed-output)
+  - [Traces to Requirements](#traces-to-requirements)
 - [Agent Responsibilities](#agent-responsibilities)
+  - [MVP inference assignment responsibility](#mvp-inference-assignment-responsibility)
+  - [Project Manager model capability requirements (MVP)](#project-manager-model-capability-requirements-mvp)
+  - [Thread Titling](#thread-titling)
+  - [Default Model Line (MVP)](#default-model-line-mvp)
 - [External Provider Usage](#external-provider-usage)
   - [External Provider Usage Applicable Requirements](#external-provider-usage-applicable-requirements)
 - [External Provider Configuration](#external-provider-configuration)
@@ -16,19 +21,25 @@
   - [Agent Inputs](#agent-inputs)
   - [Agent Outputs](#agent-outputs)
 - [LLM Context (Baseline and User-Configurable)](#llm-context-baseline-and-user-configurable)
+  - [LLM Context (Baseline and User-Configurable) Requirements Traces](#llm-context-baseline-and-user-configurable-requirements-traces)
   - [Baseline Context](#baseline-context)
   - [Project-Level Context](#project-level-context)
   - [Task-Level Context](#task-level-context)
   - [User-Configurable Additional Context](#user-configurable-additional-context)
   - [Persona Assignment for SBA Jobs](#persona-assignment-for-sba-jobs)
-- [Project plan building](#project-plan-building)
-- [Clarification before execution](#clarification-before-execution)
-- [When plan is locked](#when-plan-is-locked)
-- [Plan Approval: Seek Explicit User Approval](#plan-approval-seek-explicit-user-approval)
-- [Plan approved: PMA tasked to add or update tasks](#plan-approved-pma-tasked-to-add-or-update-tasks)
 - [Task Naming](#task-naming)
   - [Project Context From Chat Prompt](#project-context-from-chat-prompt)
   - [Task Naming Applicable Requirements](#task-naming-applicable-requirements)
+- [Project Plan Building](#project-plan-building)
+  - [Project Plan Building Requirements Traces](#project-plan-building-requirements-traces)
+- [Clarification Before Execution](#clarification-before-execution)
+  - [Clarification Before Execution Requirements Traces](#clarification-before-execution-requirements-traces)
+- [When Plan is Locked](#when-plan-is-locked)
+  - [When Plan is Locked Requirements Traces](#when-plan-is-locked-requirements-traces)
+- [Plan Approval: Seek Explicit User Approval](#plan-approval-seek-explicit-user-approval)
+  - [Plan Approval Seek Explicit User Approval Requirements Traces](#plan-approval-seek-explicit-user-approval-requirements-traces)
+- [Plan Approved: PMA Tasked to Add or Update Tasks](#plan-approved-pma-tasked-to-add-or-update-tasks)
+  - [Plan Approved PMA Tasked to Add or Update Tasks Requirements Traces](#plan-approved-pma-tasked-to-add-or-update-tasks-requirements-traces)
 - [Preference Usage](#preference-usage)
   - [Preference Usage Applicable Requirements](#preference-usage-applicable-requirements)
 - [Sub-Agent Model](#sub-agent-model)
@@ -98,6 +109,7 @@ When data or results are unavailable (e.g. tool error, timeout, or missing resou
 - Verification and remediation
   - Verify outputs against acceptance criteria and user preferences (style, security, completeness).
   - Request fixes or reruns when checks fail, and record rationale.
+- Thread titling: automatically title the thread after the first user message when the user has not already set a title (see [Thread titling](project_manager_agent.md#spec-cynai-agents-threadtitling)).
 - Model selection
   - Select models based on required capabilities and user task-execution preferences and constraints using the orchestrator model registry.
   - Request nodes to load required model versions when not already available.
@@ -105,7 +117,7 @@ When data or results are unavailable (e.g. tool error, timeout, or missing resou
   - When selecting the Project Manager model itself (startup selection), prefer models with reliable structured tool calling and stable long-horizon planning over coder-only checkpoints.
   - The selection and warmup algorithm is defined in [Project Manager Model (Startup Selection and Warmup)](orchestrator.md#spec-cynai-orches-projectmanagermodelstartup).
 
-MVP inference assignment responsibility
+### MVP Inference Assignment Responsibility
 
 - For the MVP, the Project Manager model is the single decision-maker for inference task assignments.
   It selects local vs external inference targets, selects the model/version, and requests model loads when required.
@@ -113,14 +125,22 @@ MVP inference assignment responsibility
   - Keep task/job status, artifacts, logs, and summaries up to date in PostgreSQL.
   - Ensure workflows are resumable after restarts (checkpointed state).
 
-Project Manager model capability requirements (MVP)
+### Project Manager Model Capability Requirements (MVP)
 
 - Consistent tool/function calling and structured JSON output.
 - Stable multi-step planning, task decomposition, and state tracking.
 - Strong performance on common operator tooling prompts (git workflows, patch planning, CI, container operations).
 - The Project Manager model SHOULD prioritize tool-use reliability and predictable latency over maximum coding intelligence.
 
-Recommended default model line (MVP)
+### Thread Titling
+
+- Spec ID: `CYNAI.AGENTS.ThreadTitling` <a id="spec-cynai-agents-threadtitling"></a>
+- [REQ-PMAGNT-0119](../requirements/pmagnt.md#req-pmagnt-0119)
+- The PMA MUST title the thread automatically after the first user message in the thread if the user has not already titled the thread.
+- Auto-titling MUST NOT overwrite an existing title set by the user.
+- The title SHOULD be derived from the first user message (e.g. truncated preview); persistence is via the gateway `PATCH /v1/chat/threads/{thread_id}` or an equivalent orchestrator-mediated update.
+
+### Default Model Line (MVP)
 
 - See [Project Manager Model (Startup Selection and Warmup)](orchestrator.md#spec-cynai-orches-projectmanagermodelstartup) for tier order and model baselines (Qwen3.5, Qwen2.5, `qwen3.5:0.8b`).
 

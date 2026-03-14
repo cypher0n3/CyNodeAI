@@ -130,6 +130,8 @@ A chat thread is a stable container for a conversation.
 
 The system defines exactly two thread-acquisition modes.
 
+- **Client default at session start:** Normative client behavior (e.g. cynork TUI and chat) is to start each session with a **new thread** by default.
+  Resuming a previous thread is done only when the user explicitly requests it at startup (e.g. `cynork tui --resume-thread <thread_selector>` or `cynork chat --resume-thread <thread_selector>`).
 - **Active-thread reuse:** When the client submits an OpenAI-compatible interactive chat request without explicit fresh-thread creation, the gateway MUST use the active thread for the effective `(user_id, project_id)` scope.
 - **Active-thread rotation:** The gateway MUST rotate to a new active thread after 2 hours of inactivity for that effective scope.
 - **Explicit fresh-thread creation:** When the client calls `POST /v1/chat/threads`, the gateway MUST create and return a distinct new thread for the authenticated user and effective project scope.
@@ -145,6 +147,7 @@ The system defines exactly two thread-acquisition modes.
 
 - [REQ-USRGWY-0142](../requirements/usrgwy.md#req-usrgwy-0142)
 - [REQ-CLIENT-0200](../requirements/client.md#req-client-0200)
+- [REQ-PMAGNT-0119](../requirements/pmagnt.md#req-pmagnt-0119)
 
 The gateway MUST allow the authenticated thread owner to update a thread title without creating a new thread.
 
@@ -152,6 +155,12 @@ The gateway MUST allow the authenticated thread owner to update a thread title w
 - The gateway MUST derive ownership from authentication and MUST reject updates for threads not owned by the authenticated user.
 - The gateway MUST update `updated_at` when a title change succeeds.
 - When `title` is absent or empty, clients MAY fall back to a derived label such as the first user-message preview or `New chat`.
+
+#### Auto-Titling by PMA
+
+- The system (PMA or the orchestrator path serving chat) MUST set the thread title automatically after the first user message in the thread when the user has not already set a title.
+- Auto-titling MUST NOT overwrite a title the user has already set (e.g. via `PATCH` or at creation).
+- The title MAY be derived from the first user message (e.g. truncated plain-text preview); implementation is defined in [Project Manager Agent - Thread titling](project_manager_agent.md#spec-cynai-agents-threadtitling).
 
 ## Thread Summary
 
