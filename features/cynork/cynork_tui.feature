@@ -17,57 +17,6 @@ Scenario: Explicit TUI entrypoint starts the interactive chat surface
   When I run cynork tui
   Then the full-screen chat TUI starts
 
-@req_client_0181
-@spec_cynai_client_cynorktui_entrypoint
-@spec_cynai_client_clichatthreadcontrols
-Scenario: TUI starts with a new thread by default
-  Given the mock gateway supports POST "/v1/chat/threads"
-  When I run cynork tui without resume-thread
-  Then the TUI creates a new chat thread before the first completion
-  And the session uses that new thread for subsequent turns
-
-@req_client_0181
-@spec_cynai_client_cynorktui_entrypoint
-@spec_cynai_client_clichatthreadcontrols
-Scenario: TUI resume-thread starts the session in an existing thread
-  Given the mock gateway returns at least one chat thread with selector "inbox"
-  When I run cynork tui with resume-thread "inbox"
-  Then the TUI session starts in the thread identified by selector "inbox"
-  And the first completion continues that thread's conversation
-
-@req_client_0213
-@spec_cynai_client_cynorktui_connectionrecovery
-Scenario: Connection interrupted mid-stream triggers auto-reconnect and preserves session
-  Given the TUI has sent a message and the gateway is streaming the assistant response
-  When the connection to the gateway is interrupted before the stream completes
-  Then the TUI attempts to auto-reconnect with bounded backoff
-  And after reconnection the TUI retains any already-received visible text in the transcript
-  And the in-flight turn is marked as interrupted or shows a clear indicator
-  And the current thread and session are preserved
-  And I can continue the session without restarting the TUI
-
-@req_client_0199
-@req_client_0200
-@req_client_0210
-@spec_cynai_client_cynorkchat_tuilayout
-Scenario: TUI exposes thread history and rename controls
-  Given the mock gateway returns multiple chat threads
-  When I open the thread history pane in the TUI
-  Then I can see recent threads for the current user
-  And each visible thread shows a user-typeable thread selector
-  And I can rename the selected thread
-
-@req_client_0212
-@spec_cynai_client_cynorkchat_tuilayout
-Scenario: TUI displays current thread title and updates when title or thread changes
-  Given the TUI is running with a current thread that has a title or fallback label
-  When I view the TUI status bar or thread display
-  Then the current thread title or fallback label is visible
-  When the thread title changes after auto-title or "/thread rename"
-  Then the TUI updates the displayed thread title
-  When I switch to a different thread
-  Then the TUI updates the display to show that thread's title or fallback label
-
 @req_client_0192
 @req_client_0195
 @spec_cynai_client_cynorktui_transcriptrendering
@@ -181,34 +130,3 @@ Scenario: Focused composer shows a visible insertion cursor
   Given the composer has focus
   When the TUI renders the composer
   Then the composer shows a visible text cursor or caret at the current insertion point
-
-@req_client_0204
-@req_usrgwy_0150
-@spec_cynai_client_cynorkchat_tuilayout
-@spec_cynai_usrgwy_openaichatapi_streaming
-Scenario: User cancellation stops the active stream and reconciles the in-flight turn
-  Given the TUI has sent a message and the gateway is streaming the assistant response
-  When I send Ctrl+C or otherwise cancel the active stream
-  Then the TUI treats the stream as canceled
-  And any already-received visible text is retained in the transcript
-  And the in-flight turn is reconciled deterministically without duplicating content
-  And the session remains active unless I explicitly exit
-
-@req_client_0209
-@spec_cynai_client_cynorktui_generationstate
-Scenario: TUI degrades to in-flight indicator when backend cannot stream visible-text deltas
-  Given the selected backend path does not support true incremental visible-text streaming
-  When I send a normal interactive chat turn from the TUI
-  Then the TUI shows a degraded in-flight state indicator
-  And when the final response arrives the TUI replaces that row with the final assistant turn
-  And visible assistant text is not duplicated
-
-@req_client_0202
-@spec_cynai_client_cynorktui_entrypoint
-Scenario: TUI remains coherent for both completions and responses chat surfaces
-  Given the gateway supports both POST "/v1/chat/completions" and POST "/v1/responses"
-  When I use the TUI with the completions surface
-  Then thread state, transcript, and session behavior are coherent
-  When I use the TUI with the responses surface
-  Then thread state, transcript, and session behavior are coherent
-  And the user-visible chat contract does not diverge between the two surfaces

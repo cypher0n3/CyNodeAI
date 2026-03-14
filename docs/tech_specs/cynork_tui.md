@@ -66,6 +66,7 @@ It is the canonical home for the cynork chat layout, structured transcript rende
 - [REQ-CLIENT-0206](../requirements/client.md#req-client-0206)
 - [REQ-CLIENT-0207](../requirements/client.md#req-client-0207)
 - [REQ-CLIENT-0213](../requirements/client.md#req-client-0213)
+- [REQ-CLIENT-0214](../requirements/client.md#req-client-0214)
 
 ### Related Documents
 
@@ -87,8 +88,9 @@ It is the canonical home for the cynork chat layout, structured transcript rende
   It MUST accept the same thread semantics as the chat command: at startup, the session starts with a **new thread by default**; the user MAY supply `--resume-thread <thread_selector>` to start in an existing thread instead.
   When the user does not supply `--resume-thread`, the TUI MUST create a new thread (e.g. via `POST /v1/chat/threads`) before the first completion request.
   See [Chat command - Thread Controls](cli_management_app_commands_chat.md#spec-cynai-client-clichatthreadcontrols).
-- `cynork chat` MUST remain available as a supported user-facing path to the same chat contract.
-  The implementation MAY share the same TUI code path or retain a documented compatibility wrapper, but user-visible behavior MUST remain aligned.
+- `cynork chat` MUST remain available as a **separate** entry point from `cynork tui`.
+  Chat MAY use a line-oriented or other distinct implementation so that it can be exercised independently for testing and compatibility; it MUST NOT be required to launch the fullscreen TUI.
+  The slash-command and chat contract (thread semantics, gateway API, auth) MUST remain aligned between chat and tui so that user-visible behavior is consistent.
 - Bare `cynork` without a subcommand SHOULD remain help-first until the dedicated default-TUI switch is intentionally promoted.
 - `cynork shell` is deprecated as the primary interactive experience.
   Interactive chat behavior belongs to the TUI and chat-command specs.

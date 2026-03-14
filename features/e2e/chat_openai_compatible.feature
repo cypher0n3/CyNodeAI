@@ -76,8 +76,8 @@ Scenario: Explicit thread creation returns a distinct thread resource
 @req_usrgwy_0150
 @spec_cynai_usrgwy_openaichatapi_streaming
 Scenario: Client cancel or disconnect causes gateway to treat streaming request as canceled
-  When I start a streaming POST "/v1/chat/completions" or POST "/v1/responses" with stream=true
-  And I close the connection or cancel the request before the stream completes
+  Given a streaming POST "/v1/chat/completions" or POST "/v1/responses" with stream=true is in progress
+  When the client closes the connection or cancels the request before the stream completes
   Then the gateway treats that stream as canceled
   And the gateway stops or detaches upstream generation on a best-effort basis
   And request-scoped resources are released even when the final assistant turn is incomplete

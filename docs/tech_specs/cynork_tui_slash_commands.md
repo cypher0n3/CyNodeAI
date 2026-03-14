@@ -91,6 +91,9 @@ The TUI MUST provide these local slash commands:
 - **`/help`**: Show the available slash commands and a short description for each command.
 - **`/clear`**: Clear or reset the visible transcript area without mutating persisted chat history.
 - **`/version`**: Show the current cynork version string.
+- **`/connect [<gateway_url>]`**: Set or display the gateway URL for the session.
+  When `<gateway_url>` is provided, the client MUST update the session gateway base URL to that value and SHOULD validate connectivity (e.g. `GET /healthz`) before continuing; the session continues with the new gateway for subsequent requests.
+  When omitted, the client MUST show the current gateway URL in the scrollback or status so the user can see which gateway is in use.
 - **`/show-thinking`**: Reveal retained `thinking` parts for the current session transcript.
 - **`/hide-thinking`**: Collapse retained `thinking` parts back to the hidden-by-default state.
 - **`/exit`**: End the session and return control to the shell.
@@ -103,6 +106,7 @@ The TUI MUST provide these local slash commands:
 - [REQ-CLIENT-0195](../requirements/client.md#req-client-0195)
 - [REQ-CLIENT-0208](../requirements/client.md#req-client-0208)
 - [REQ-CLIENT-0211](../requirements/client.md#req-client-0211)
+- [REQ-CLIENT-0214](../requirements/client.md#req-client-0214)
 
 ### Thinking Visibility Behavior
 
@@ -135,12 +139,13 @@ They MUST NOT modify stored message content in the database, canonical plain-tex
 2. For `/help`, render the command catalog defined by this document without sending a chat request.
 3. For `/clear`, clear the current visible transcript buffer or scrollback view and keep local session state intact.
 4. For `/version`, render the same version information as `cynork version`.
-5. For `/show-thinking`, set the session thinking-visibility mode to shown.
-6. Re-render all currently loaded assistant turns so retained `thinking` parts display as expanded thinking blocks instead of collapsed placeholders.
-7. Persist `tui.show_thinking_by_default: true` to the local cynork YAML config using the same atomic-write rules as the main config file.
-8. For `/hide-thinking`, set the session thinking-visibility mode to hidden and re-render all currently loaded assistant turns so retained `thinking` parts return to the collapsed presentation.
-9. Persist `tui.show_thinking_by_default: false` to the local cynork YAML config using the same atomic-write rules as the main config file.
-10. For `/exit` or `/quit`, close the interactive session cleanly and return success.
+5. For `/connect [<gateway_url>]`, if a URL is provided update the session gateway base URL and optionally validate (e.g. GET /healthz); if no URL is provided show the current gateway URL; render the result in the scrollback and keep the session active.
+6. For `/show-thinking`, set the session thinking-visibility mode to shown.
+7. Re-render all currently loaded assistant turns so retained `thinking` parts display as expanded thinking blocks instead of collapsed placeholders.
+8. Persist `tui.show_thinking_by_default: true` to the local cynork YAML config using the same atomic-write rules as the main config file.
+9. For `/hide-thinking`, set the session thinking-visibility mode to hidden and re-render all currently loaded assistant turns so retained `thinking` parts return to the collapsed presentation.
+10. Persist `tui.show_thinking_by_default: false` to the local cynork YAML config using the same atomic-write rules as the main config file.
+11. For `/exit` or `/quit`, close the interactive session cleanly and return success.
 
 ## Thread Slash Commands
 

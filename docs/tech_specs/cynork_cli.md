@@ -440,7 +440,7 @@ This section captures the current normative TUI scope and the locked decisions t
   A temporary compatibility path MAY remain during migration; new behavior MUST NOT depend on shell.
   See [MVP Scope](#mvp-scope) for current interactive surface.
 - **`cynork tui`:** The first full-screen TUI entrypoint; MUST be the primary interactive chat surface for the first rollout.
-- **`cynork chat`:** MUST remain available during the first rollout, either as the same surface as TUI or as a compatibility alias (e.g. line-oriented or TUI).
+- **`cynork chat`:** MUST remain available as a **separate** entry point from `cynork tui` (e.g. line-oriented chat); the two are kept distinct for testing and compatibility; user-visible contract (slash commands, thread semantics) MUST remain aligned.
 - **Gateway chat API surfaces:** First-rollout TUI work includes support for both `POST /v1/chat/completions` and `POST /v1/responses`; the client-side chat abstraction MUST support both even if the initial default path remains implementation-defined.
 - **Thread UX:** The TUI thread surface covers create, list, switch, rename, and optional summary or archive display when the gateway exposes those fields.
 - **Structured chat parts:** The interactive chat contract includes thinking, tool activity, assistant download refs, and normalized attachment metadata for accepted `@` file references.
@@ -452,7 +452,7 @@ Normative TUI behavior and layout are defined in [cynork_tui.md](cynork_tui.md).
 1. Minimum viable CLI
 
    - Auth token support and `whoami`.
-   - Full-screen TUI (`cynork tui`) as the primary interactive surface; `cynork chat` remains available.
+   - Full-screen TUI (`cynork tui`) as the primary interactive surface; `cynork chat` remains available as a separate entry point (e.g. line-oriented) for testing and compatibility.
      Interactive shell mode (`cynork shell`) is deprecated; compatibility path MAY remain during migration.
    - Credential list, create, rotate, disable for API Egress.
    - Preference list, get, set for system and user scopes.

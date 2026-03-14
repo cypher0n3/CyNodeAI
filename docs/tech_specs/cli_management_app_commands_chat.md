@@ -15,8 +15,9 @@
 
 ## Document Overview
 
-This document specifies the `cynork chat` command and the chat-surface compatibility contract used by both the explicit `cynork tui` entrypoint and the `cynork chat` compatibility path.
-The canonical TUI slash-command catalog and execution algorithms live in [cynork_tui_slash_commands.md](cynork_tui_slash_commands.md).
+This document specifies the `cynork chat` command as a **separate** entry point from `cynork tui`.
+Chat and tui share the same slash-command and chat contract (thread semantics, gateway API, auth); the canonical catalog and execution algorithms live in [cynork_tui_slash_commands.md](cynork_tui_slash_commands.md).
+Chat MAY use a line-oriented or other distinct implementation so it can be exercised independently for testing.
 It is part of the [cynork CLI](cynork_cli.md) specification.
 
 The CLI MUST provide a top-level `chat` command that starts an interactive chat session with the Project Manager (PM) model.

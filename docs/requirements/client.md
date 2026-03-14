@@ -221,7 +221,7 @@ Web Console-specific requirements live in [webcon.md](webcon.md) (REQ-WEBCON-*).
 - **REQ-CLIENT-0161:** The CLI MUST provide a single interactive cynork chat surface for chatting with the Project Manager (PM) model.
   The user MUST be able to send messages and receive responses in turn until they exit the session.
   The interactive surface MUST use the same gateway and authentication as other CLI commands and MUST NOT expose secrets in history or output.
-  `cynork tui` MUST be the canonical explicit entrypoint for that interactive surface, and interactive `cynork chat` MUST remain available as a user-facing path to the same surface rather than a separate long-term implementation.
+  `cynork tui` MUST be the canonical full-screen entrypoint; interactive `cynork chat` MUST remain available as a **separate** entry point (e.g. line-oriented) so that testing and compatibility can exercise it independently; slash-command and chat contract MUST remain aligned between chat and tui.
   The interactive surface MUST support the gateway's OpenAI-compatible interactive chat surfaces as defined by the corresponding tech spec.
   [CYNAI.CLIENT.CliChat](../tech_specs/cli_management_app_commands_chat.md#spec-cynai-client-clichat)
   [CYNAI.CLIENT.CynorkTui.EntryPoint](../tech_specs/cynork_tui.md#spec-cynai-client-cynorktui-entrypoint)
@@ -402,9 +402,9 @@ Web Console-specific requirements live in [webcon.md](webcon.md) (REQ-WEBCON-*).
   [CYNAI.CLIENT.CynorkChat.TUILayout](../tech_specs/cynork_tui.md#spec-cynai-client-cynorkchat-tuilayout)
   [CYNAI.CLIENT.CynorkChat.LocalConfig](../tech_specs/cynork_tui.md#spec-cynai-client-cynorkchat-localconfig)
   <a id="req-client-0196"></a>
-- **REQ-CLIENT-0197:** The CLI SHOULD expose the full-screen TUI explicitly as `cynork tui`.
-  After that surface is feature-complete for the intended rollout, interactive `cynork chat` SHOULD invoke that same TUI as an alias rather than maintaining a separate interactive implementation.
-  After the same rollout milestone, invoking bare `cynork` with no subcommand SHOULD launch the same TUI by default while keeping explicit command paths available during migration.
+- **REQ-CLIENT-0197:** The CLI MUST expose the full-screen TUI explicitly as `cynork tui`.
+  Interactive `cynork chat` MUST remain available as a **separate** entry point (e.g. line-oriented) for testing and compatibility; chat and tui need not share the same implementation.
+  Invoking bare `cynork` with no subcommand SHOULD remain help-first until the default launch is intentionally promoted.
   [CYNAI.CLIENT.CynorkTui.EntryPoint](../tech_specs/cynork_tui.md#spec-cynai-client-cynorktui-entrypoint)
   <a id="req-client-0197"></a>
 - **REQ-CLIENT-0198:** Chat UIs MAY support an `@` shorthand in the composer for referencing local files.
@@ -422,10 +422,9 @@ Web Console-specific requirements live in [webcon.md](webcon.md) (REQ-WEBCON-*).
 - **REQ-CLIENT-0201:** When the gateway provides a thread summary, clients SHOULD display that summary in the thread list or sidebar so users can identify conversations without opening them.
   [CYNAI.USRGWY.ChatThreadsMessages.ThreadSummary](../tech_specs/chat_threads_and_messages.md#spec-cynai-usrgwy-chatthreadsmessages-threadsummary)
   <a id="req-client-0201"></a>
-- **REQ-CLIENT-0202:** The cynork CLI MUST provide a single primary interactive chat UI surface centered on the full-screen TUI.
-  `cynork shell` is deprecated as the primary interactive experience in favor of the TUI exposed through `cynork tui`.
-  Interactive `cynork chat` MUST converge on that same TUI surface and, once the TUI rollout is complete, MUST behave as an alias to it rather than a distinct interactive UI path.
-  User-visible interactive behavior, slash commands, transcript rendering, and session-state semantics MUST NOT diverge between `cynork tui` and interactive `cynork chat`.
+- **REQ-CLIENT-0202:** The cynork CLI MUST provide a primary interactive chat UI surface centered on the full-screen TUI (`cynork tui`).
+  `cynork shell` is deprecated as the primary interactive experience in favor of the TUI.
+  Interactive `cynork chat` MAY remain a **separate** entry point (e.g. line-oriented) for testing and compatibility; when implemented separately, user-visible behavior, slash commands, transcript rendering, and session-state semantics MUST NOT diverge between `cynork tui` and interactive `cynork chat`.
   [CYNAI.CLIENT.CynorkTui.EntryPoint](../tech_specs/cynork_tui.md#spec-cynai-client-cynorktui-entrypoint)
   [CYNAI.CLIENT.CynorkChat.TUILayout](../tech_specs/cynork_tui.md#spec-cynai-client-cynorkchat-tuilayout)
   <a id="req-client-0202"></a>
@@ -481,3 +480,7 @@ Web Console-specific requirements live in [webcon.md](webcon.md) (REQ-WEBCON-*).
   The current thread and session MUST be preserved; the user MUST NOT be forced to restart.
   [CYNAI.CLIENT.CynorkTui.ConnectionRecovery](../tech_specs/cynork_tui.md#spec-cynai-client-cynorktui-connectionrecovery)
   <a id="req-client-0213"></a>
+- **REQ-CLIENT-0214:** The interactive cynork chat surface (TUI and chat) MUST support a `/connect [<gateway_url>]` slash command.
+  When `<gateway_url>` is provided, the client MUST update the session gateway base URL and SHOULD validate connectivity; when omitted, the client MUST show the current gateway URL.
+  [CYNAI.CLIENT.CynorkTui.LocalSlashCommands](../tech_specs/cynork_tui_slash_commands.md#spec-cynai-client-cynorktui-localslashcommands)
+  <a id="req-client-0214"></a>

@@ -33,6 +33,23 @@ Scenario: /version shows the cynork version string
   When I type "/version" and press Enter
   Then the scrollback contains the cynork version string
 
+@req_client_0214
+@spec_cynai_client_cynorktui_localslashcommands
+Scenario: /connect with URL updates session gateway
+  Given the TUI is running with gateway "https://gateway.example.com"
+  When I type "/connect https://other.example.com" and press Enter
+  Then the session gateway is updated to "https://other.example.com"
+  And the scrollback shows the new gateway or a success indicator
+  And the TUI session remains active
+
+@req_client_0214
+@spec_cynai_client_cynorktui_localslashcommands
+Scenario: /connect without URL shows current gateway
+  Given the TUI is running with gateway "https://gateway.example.com"
+  When I type "/connect" and press Enter
+  Then the scrollback shows the current gateway URL or "https://gateway.example.com"
+  And the TUI session remains active
+
 @req_client_0164
 @spec_cynai_client_cynorktui_localslashcommands
 Scenario: /exit ends the TUI session
