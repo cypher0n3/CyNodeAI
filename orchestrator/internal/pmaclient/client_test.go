@@ -4,10 +4,15 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
+
+const pathChatCompletion = "/internal/chat/completion"
+const pathManagedProxy = "/v1/worker/managed-services/pma-main/proxy:http"
 
 func TestCallChatCompletion_EmptyURL(t *testing.T) {
 	_, err := CallChatCompletion(context.Background(), nil, "", []ChatMessage{{Role: "user", Content: "hi"}}, "")
@@ -18,7 +23,7 @@ func TestCallChatCompletion_EmptyURL(t *testing.T) {
 
 func TestCallChatCompletion_Success(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost || r.URL.Path != "/internal/chat/completion" {
+		if r.Method != http.MethodPost || r.URL.Path != pathChatCompletion {
 			w.WriteHeader(http.StatusNotFound)
 			return
 		}
@@ -92,7 +97,7 @@ func TestCallChatCompletion_DoError(t *testing.T) {
 
 func TestCallChatCompletion_ManagedProxySuccess(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost || r.URL.Path != "/v1/worker/managed-services/pma-main/proxy:http" {
+		if r.Method != http.MethodPost || r.URL.Path != pathManagedProxy {
 			w.WriteHeader(http.StatusNotFound)
 			return
 		}
@@ -101,7 +106,7 @@ func TestCallChatCompletion_ManagedProxySuccess(t *testing.T) {
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
-		if req.Path != "/internal/chat/completion" {
+		if req.Path != pathChatCompletion {
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
@@ -114,7 +119,7 @@ func TestCallChatCompletion_ManagedProxySuccess(t *testing.T) {
 		})
 	}))
 	defer server.Close()
-	url := server.URL + "/v1/worker/managed-services/pma-main/proxy:http"
+	url := server.URL + pathManagedProxy
 	content, err := CallChatCompletion(context.Background(), nil, url, []ChatMessage{{Role: "user", Content: "hi"}}, "")
 	if err != nil {
 		t.Fatalf("CallChatCompletion via proxy: %v", err)
@@ -137,7 +142,7 @@ func TestCallChatCompletion_ManagedProxyTransportStatusError(t *testing.T) {
 		w.WriteHeader(http.StatusBadGateway)
 	}))
 	defer server.Close()
-	url := server.URL + "/v1/worker/managed-services/pma-main/proxy:http"
+	url := server.URL + pathManagedProxy
 	_, err := CallChatCompletion(context.Background(), nil, url, []ChatMessage{{Role: "user", Content: "hi"}}, "")
 	if err == nil {
 		t.Error("expected error when managed proxy endpoint returns non-200 status")
@@ -157,7 +162,7 @@ func TestCallChatCompletion_ManagedProxyInvalidJSONResponse(t *testing.T) {
 		_, _ = w.Write([]byte("not-json"))
 	}))
 	defer server.Close()
-	url := server.URL + "/v1/worker/managed-services/pma-main/proxy:http"
+	url := server.URL + pathManagedProxy
 	_, err := CallChatCompletion(context.Background(), nil, url, []ChatMessage{{Role: "user", Content: "hi"}}, "")
 	if err == nil {
 		t.Error("expected error for invalid JSON managed proxy response")
@@ -179,7 +184,7 @@ func TestCallChatCompletion_ManagedProxySendsBearerToken(t *testing.T) {
 	var authHeader string
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		authHeader = r.Header.Get("Authorization")
-		if r.Method != http.MethodPost || r.URL.Path != "/v1/worker/managed-services/pma-main/proxy:http" {
+		if r.Method != http.MethodPost || r.URL.Path != pathManagedProxy {
 			w.WriteHeader(http.StatusNotFound)
 			return
 		}
@@ -198,7 +203,7 @@ func TestCallChatCompletion_ManagedProxySendsBearerToken(t *testing.T) {
 		})
 	}))
 	defer server.Close()
-	url := server.URL + "/v1/worker/managed-services/pma-main/proxy:http"
+	url := server.URL + pathManagedProxy
 	_, err := CallChatCompletion(context.Background(), nil, url, []ChatMessage{{Role: "user", Content: "hi"}}, "secret-worker-token")
 	if err != nil {
 		t.Fatalf("CallChatCompletion via proxy: %v", err)
@@ -222,7 +227,7 @@ func assertManagedProxyCallError(t *testing.T, resp managedProxyResponse) {
 		_ = json.NewEncoder(w).Encode(resp)
 	}))
 	defer server.Close()
-	url := server.URL + "/v1/worker/managed-services/pma-main/proxy:http"
+	url := server.URL + pathManagedProxy
 	_, err := CallChatCompletion(context.Background(), nil, url, []ChatMessage{{Role: "user", Content: "hi"}}, "")
 	if err == nil {
 		t.Fatalf("expected managed proxy call to fail for response %+v", resp)
@@ -256,5 +261,184 @@ func TestHandoffRequestFormat(t *testing.T) {
 	}
 	if decoded.ProjectID != "" || decoded.TaskID != "" || decoded.AdditionalContext != "" {
 		t.Errorf("optional fields should be empty in minimal handoff: %+v", decoded)
+	}
+}
+
+func TestCallChatCompletionStream_EmptyURL(t *testing.T) {
+	err := CallChatCompletionStream(context.Background(), nil, "", nil, "", func(string) error { return nil })
+	if err == nil {
+		t.Error("expected error for empty base URL")
+	}
+}
+
+func TestCallChatCompletionStream_Success(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != pathChatCompletion {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		w.Header().Set("Content-Type", "application/x-ndjson")
+		_, _ = w.Write([]byte(`{"delta":"hello"}` + "\n"))
+		_, _ = w.Write([]byte(`{"delta":" world"}` + "\n"))
+	}))
+	defer server.Close()
+
+	var got string
+	err := CallChatCompletionStream(context.Background(), nil, server.URL,
+		[]ChatMessage{{Role: "user", Content: "hi"}}, "", func(d string) error {
+			got += d
+			return nil
+		})
+	if err != nil {
+		t.Fatalf("CallChatCompletionStream: %v", err)
+	}
+	if got != "hello world" {
+		t.Errorf("got %q, want %q", got, "hello world")
+	}
+}
+
+func TestCallChatCompletionStream_NonOK(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer server.Close()
+	err := CallChatCompletionStream(context.Background(), nil, server.URL, nil, "", func(string) error { return nil })
+	if err == nil {
+		t.Error("expected error for 500")
+	}
+}
+
+func TestCallChatCompletionStream_DoError(t *testing.T) {
+	err := CallChatCompletionStream(context.Background(), nil, "http://127.0.0.1:19998", nil, "", func(string) error { return nil })
+	if err == nil {
+		t.Error("expected error for unreachable host")
+	}
+}
+
+func TestCallChatCompletionStream_DeltaError(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/x-ndjson")
+		_, _ = w.Write([]byte(`{"delta":"x"}` + "\n"))
+	}))
+	defer server.Close()
+	wantErr := fmt.Errorf("delta handler err")
+	err := CallChatCompletionStream(context.Background(), nil, server.URL, nil, "", func(string) error {
+		return wantErr
+	})
+	if err == nil || err.Error() != wantErr.Error() {
+		t.Errorf("expected delta handler error, got %v", err)
+	}
+}
+
+func TestCallChatCompletionStream_ContextCancelled(t *testing.T) {
+	ready := make(chan struct{})
+	unblock := make(chan struct{})
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/x-ndjson")
+		if f, ok := w.(http.Flusher); ok {
+			f.Flush()
+		}
+		close(ready)
+		select {
+		case <-unblock:
+		case <-r.Context().Done():
+		}
+	}))
+	defer func() {
+		close(unblock)
+		server.Close()
+	}()
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() {
+		done <- CallChatCompletionStream(ctx, nil, server.URL, nil, "", func(string) error { return nil })
+	}()
+	<-ready
+	cancel()
+	err := <-done
+	if err == nil {
+		t.Error("expected context cancellation error")
+	}
+}
+
+func TestCallChatCompletionStream_ManagedProxyStream_Success(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != pathManagedProxy {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		var req managedProxyRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		w.Header().Set("Content-Type", "application/x-ndjson")
+		_, _ = w.Write([]byte(`{"delta":"proxied"}` + "\n"))
+	}))
+	defer server.Close()
+	url := server.URL + pathManagedProxy
+	var got string
+	err := CallChatCompletionStream(context.Background(), nil, url, nil, "tok", func(d string) error {
+		got += d
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("ManagedProxyStream: %v", err)
+	}
+	if got != "proxied" {
+		t.Errorf("got %q, want proxied", got)
+	}
+}
+
+func TestCallChatCompletionStream_ManagedProxyStream_NonOK(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusBadGateway)
+	}))
+	defer server.Close()
+	url := server.URL + pathManagedProxy
+	err := CallChatCompletionStream(context.Background(), nil, url, nil, "", func(string) error { return nil })
+	if err == nil {
+		t.Error("expected error for non-200 proxy response")
+	}
+}
+
+func TestReadNDJSONStream_UnexpectedContentType(t *testing.T) {
+	body := strings.NewReader("{}")
+	err := readNDJSONStream(context.Background(), body, "text/plain", func(d string) error { return nil })
+	if err == nil {
+		t.Error("expected error for unexpected content type")
+	}
+}
+
+func TestReadNDJSONStream_UnexpectedContentTypeSingleJSON(t *testing.T) {
+	body := strings.NewReader(`{"content":"ok"}`)
+	var got string
+	err := readNDJSONStream(context.Background(), body, "application/octet-stream", func(d string) error {
+		got = d
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("expected no error for decodable JSON body: %v", err)
+	}
+	if got != "ok" {
+		t.Errorf("got %q, want ok", got)
+	}
+}
+
+func TestProcessNDJSONLine_Empty(t *testing.T) {
+	if err := processNDJSONLine([]byte(""), func(string) error { return nil }); err != nil {
+		t.Errorf("empty line should not error: %v", err)
+	}
+}
+
+func TestProcessNDJSONLine_NoDelta(t *testing.T) {
+	if err := processNDJSONLine([]byte(`{"other":"x"}`), func(string) error { return nil }); err != nil {
+		t.Errorf("no delta should not error: %v", err)
+	}
+}
+
+func TestProcessNDJSONLine_InvalidJSON(t *testing.T) {
+	if err := processNDJSONLine([]byte(`not json`), func(string) error { return nil }); err != nil {
+		t.Errorf("invalid JSON should not error (skipped): %v", err)
 	}
 }

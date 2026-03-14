@@ -15,6 +15,7 @@ import (
 )
 
 const testProjectID = "proj-1"
+const testTaskID = "tid-1"
 const pathV1ChatThreads = "/v1/chat/threads"
 const pathV1ChatCompletions = "/v1/chat/completions"
 
@@ -422,15 +423,15 @@ func taskGetHandler(path string, task *userapi.TaskResponse) http.HandlerFunc {
 }
 
 func TestClient_GetTask_Success(t *testing.T) {
-	server := httptest.NewServer(taskGetHandler("/v1/tasks/tid-1", &userapi.TaskResponse{ID: "tid-1", Status: "running"}))
+	server := httptest.NewServer(taskGetHandler("/v1/tasks/tid-1", &userapi.TaskResponse{ID: testTaskID, Status: "running"}))
 	defer server.Close()
 	client := NewClient(server.URL)
 	client.SetToken("tok")
-	task, err := client.GetTask("tid-1")
+	task, err := client.GetTask(testTaskID)
 	if err != nil {
 		t.Fatalf("GetTask: %v", err)
 	}
-	if task.ResolveTaskID() != "tid-1" || task.Status != "running" {
+	if task.ResolveTaskID() != testTaskID || task.Status != "running" {
 		t.Errorf("task = %+v", task)
 	}
 }
@@ -457,7 +458,7 @@ func TestClient_ExpectError(t *testing.T) {
 		call   func(*Client) error
 	}{
 		{"GetTask_NotFound", http.StatusNotFound, problem.Details{Detail: "not found", Status: 404}, func(c *Client) error { _, err := c.GetTask("tid-missing"); return err }},
-		{"CancelTask_Forbidden", http.StatusForbidden, problem.Details{Detail: "not owner", Status: 403}, func(c *Client) error { _, err := c.CancelTask("tid-1"); return err }},
+		{"CancelTask_Forbidden", http.StatusForbidden, problem.Details{Detail: "not owner", Status: 403}, func(c *Client) error { _, err := c.CancelTask(testTaskID); return err }},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -478,16 +479,16 @@ func TestClient_CancelTask_Success(t *testing.T) {
 			w.WriteHeader(http.StatusNotFound)
 			return
 		}
-		jsonHandler(http.StatusOK, userapi.CancelTaskResponse{TaskID: "tid-1", Canceled: true})(w, r)
+		jsonHandler(http.StatusOK, userapi.CancelTaskResponse{TaskID: testTaskID, Canceled: true})(w, r)
 	}))
 	defer server.Close()
 	client := NewClient(server.URL)
 	client.SetToken("tok")
-	resp, err := client.CancelTask("tid-1")
+	resp, err := client.CancelTask(testTaskID)
 	if err != nil {
 		t.Fatalf("CancelTask: %v", err)
 	}
-	if !resp.Canceled || resp.TaskID != "tid-1" {
+	if !resp.Canceled || resp.TaskID != testTaskID {
 		t.Errorf("resp = %+v", resp)
 	}
 }
@@ -498,12 +499,12 @@ func TestClient_GetTaskLogs_Success(t *testing.T) {
 			w.WriteHeader(http.StatusNotFound)
 			return
 		}
-		jsonHandler(http.StatusOK, userapi.TaskLogsResponse{TaskID: "tid-1", Stdout: "out", Stderr: "err"})(w, r)
+		jsonHandler(http.StatusOK, userapi.TaskLogsResponse{TaskID: testTaskID, Stdout: "out", Stderr: "err"})(w, r)
 	}))
 	defer server.Close()
 	client := NewClient(server.URL)
 	client.SetToken("tok")
-	logs, err := client.GetTaskLogs("tid-1", "")
+	logs, err := client.GetTaskLogs(testTaskID, "")
 	if err != nil {
 		t.Fatalf("GetTaskLogs: %v", err)
 	}
@@ -1618,5 +1619,122 @@ func TestReadChatSSEStream_AmendmentEvent(t *testing.T) {
 	}
 	if amendment.String() != "SECRET_REDACTED" {
 		t.Errorf("amendment = %q", amendment.String())
+	}
+}
+
+// pathWithID builds a URL path like "/v1/chat/threads/tid-1" for use in mock servers.
+func pathWithID(base, id string) string { return base + "/" + id }
+
+// routeHandler returns an HTTP handler that serves body on path+method; returns 404 otherwise.
+func routeHandler(path, method string, body []byte) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != path || r.Method != method {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write(body)
+	}
+}
+
+func TestClient_GetChatThread_Success(t *testing.T) {
+	body := []byte(`{"id":"` + testTaskID + `","title":"My Thread"}`)
+	srv := httptest.NewServer(routeHandler(pathWithID("/v1/chat/threads", testTaskID), http.MethodGet, body))
+	defer srv.Close()
+	c := NewClient(srv.URL)
+	c.SetToken("tok")
+	thread, err := c.GetChatThread(testTaskID)
+	if err != nil {
+		t.Fatalf("GetChatThread: %v", err)
+	}
+	if thread.ID != testTaskID {
+		t.Errorf("ID = %q, want %s", thread.ID, testTaskID)
+	}
+}
+
+func TestClient_GetChatThread_NotFound(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer srv.Close()
+	c := NewClient(srv.URL)
+	c.SetToken("tok")
+	_, err := c.GetChatThread("missing")
+	if err == nil {
+		t.Error("expected error for 404")
+	}
+}
+
+func TestClient_GetChatThread_DecodeError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte("not json"))
+	}))
+	defer srv.Close()
+	c := NewClient(srv.URL)
+	c.SetToken("tok")
+	_, err := c.GetChatThread("t1")
+	if err == nil {
+		t.Error("expected decode error")
+	}
+}
+
+func TestClient_GetChatThread_InvalidBaseURL(t *testing.T) {
+	c := NewClient("://invalid")
+	_, err := c.GetChatThread("t1")
+	if err == nil {
+		t.Error("expected error for invalid base URL")
+	}
+}
+
+func TestClient_PatchThreadTitle_ServerError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer srv.Close()
+	c := NewClient(srv.URL)
+	c.SetToken("tok")
+	err := c.PatchThreadTitle("t1", "New Title")
+	if err == nil {
+		t.Error("expected error for 500")
+	}
+}
+
+func TestClient_Login_Refresh_Success(t *testing.T) {
+	body := []byte(`{"access_token":"new-tok","refresh_token":"new-ref","token_type":"Bearer","expires_in":900}`)
+	srv := httptest.NewServer(routeHandler("/v1/auth/refresh", http.MethodPost, body))
+	defer srv.Close()
+	c := NewClient(srv.URL)
+	resp, err := c.Refresh("old-refresh")
+	if err != nil {
+		t.Fatalf("Refresh: %v", err)
+	}
+	if resp.AccessToken != "new-tok" {
+		t.Errorf("AccessToken = %q, want new-tok", resp.AccessToken)
+	}
+}
+
+func TestClient_Login_Refresh_Error(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusUnauthorized)
+	}))
+	defer srv.Close()
+	c := NewClient(srv.URL)
+	_, err := c.Refresh("bad-refresh")
+	if err == nil {
+		t.Error("expected error for 401")
+	}
+}
+
+func TestClient_Login_Refresh_DecodeError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("not json"))
+	}))
+	defer srv.Close()
+	c := NewClient(srv.URL)
+	_, err := c.Refresh("tok")
+	if err == nil {
+		t.Error("expected decode error")
 	}
 }

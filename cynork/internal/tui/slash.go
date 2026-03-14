@@ -31,12 +31,16 @@ type shellExecDoneMsg struct {
 var slashHelpCatalog = []struct{ name, desc string }{
 	{"/auth", "login, logout, whoami, refresh"},
 	{"/clear", "clear scrollback"},
+	{"/connect", "show or set gateway URL"},
 	{"/exit", "end session"},
 	{"/help", "list slash commands"},
+	{"/hide-thinking", "collapse retained thinking parts"},
 	{"/model", "show or set session model"},
 	{"/models", "list available models"},
 	{"/project", "show or set project context"},
 	{"/quit", "end session (synonym for /exit)"},
+	{"/show-thinking", "reveal retained thinking parts"},
+	{"/status", "gateway reachability"},
 	{"/thread", "new, list, switch <selector>, rename"},
 	{"/version", "print cynork version"},
 	{"/whoami", "current identity"},
@@ -77,6 +81,14 @@ func (m *Model) handleSlashCmd(line string) (tea.Cmd, bool) {
 		return m.slashProjectCmd(rest), true
 	case "auth":
 		return m.slashAuthCmd(rest), true
+	case "connect":
+		return m.slashConnectCmd(rest), true
+	case "show-thinking", "hide-thinking":
+		return m.slashSetThinkingCmd(cmd == "show-thinking"), true
+	case "status":
+		return m.slashStatusCmd(), true
+	case "whoami":
+		return func() tea.Msg { return m.authWhoami() }, true
 	case "thread":
 		// Handled by existing handleThreadCommand path.
 		return nil, false
@@ -307,6 +319,82 @@ func (m *Model) authRefresh() slashResultMsg {
 	}
 	m.Session.SetToken(resp.AccessToken)
 	return slashResultMsg{lines: []string{"Token refreshed successfully."}}
+}
+
+// slashConnectCmd shows or updates the session gateway URL.
+func (m *Model) slashConnectCmd(rest string) tea.Cmd {
+	return func() tea.Msg {
+		url := strings.TrimSpace(rest)
+		if url == "" {
+			return m.connectShow()
+		}
+		return m.connectSet(url)
+	}
+}
+
+func (m *Model) connectShow() slashResultMsg {
+	url := "(unknown)"
+	if m.Session != nil && m.Session.Client != nil {
+		url = m.Session.Client.BaseURL
+	}
+	return slashResultMsg{lines: []string{"gateway: " + url}}
+}
+
+func (m *Model) connectSet(url string) slashResultMsg {
+	if m.Session != nil && m.Session.Client != nil {
+		m.Session.Client.BaseURL = url
+	}
+	if m.AuthProvider != nil {
+		m.AuthProvider.SetGatewayURL(url)
+		_ = m.AuthProvider.Save()
+	}
+	if m.Session != nil && m.Session.Client != nil {
+		if err := m.Session.Client.Health(); err != nil {
+			return slashResultMsg{lines: []string{
+				"gateway updated to: " + url,
+				"Warning: health check failed: " + err.Error(),
+			}}
+		}
+	}
+	return slashResultMsg{lines: []string{"gateway updated to: " + url}}
+}
+
+// slashSetThinkingCmd toggles thinking visibility and persists the preference.
+func (m *Model) slashSetThinkingCmd(show bool) tea.Cmd {
+	return func() tea.Msg {
+		m.ShowThinking = show
+		if m.AuthProvider != nil {
+			m.AuthProvider.SetShowThinkingByDefault(show)
+			if err := m.AuthProvider.Save(); err != nil {
+				return slashResultMsg{lines: []string{
+					fmt.Sprintf("thinking %s (warning: config save failed: %v)", thinkingLabel(show), err),
+				}}
+			}
+		}
+		return slashResultMsg{lines: []string{
+			fmt.Sprintf("thinking: %s", thinkingLabel(show)),
+		}}
+	}
+}
+
+func thinkingLabel(show bool) string {
+	if show {
+		return "visible"
+	}
+	return "hidden"
+}
+
+// slashStatusCmd checks gateway reachability and returns a scrollback line.
+func (m *Model) slashStatusCmd() tea.Cmd {
+	return func() tea.Msg {
+		if m.Session == nil || m.Session.Client == nil {
+			return slashResultMsg{lines: []string{"status: not connected"}}
+		}
+		if err := m.Session.Client.Health(); err != nil {
+			return slashResultMsg{lines: []string{"status: unreachable — " + err.Error()}}
+		}
+		return slashResultMsg{lines: []string{"status: ok — " + m.Session.Client.BaseURL}}
+	}
 }
 
 func (m *Model) dispatchProjectCmd(rest string) slashResultMsg {

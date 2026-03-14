@@ -8,6 +8,7 @@ import (
 
 	"github.com/cypher0n3/cynodeai/cynork/internal/chat"
 	"github.com/cypher0n3/cynodeai/cynork/internal/config"
+	"github.com/cypher0n3/cynodeai/cynork/internal/gateway"
 )
 
 // SlashCommand describes one slash command for help and autocomplete.
@@ -21,18 +22,28 @@ func AllSlashCommands() []SlashCommand {
 	return []SlashCommand{
 		{"/auth", "auth login, logout, whoami, refresh"},
 		{"/clear", "clear terminal display"},
+		{"/connect", "show or set gateway URL"},
 		{"/exit", "end chat session"},
 		{"/help", "list slash commands"},
+		{"/hide-thinking", "collapse retained thinking parts"},
 		{"/model", "show or set session model"},
 		{"/models", "list available models"},
 		{"/nodes", "nodes list, get"},
 		{"/prefs", "preferences list, get, set, delete, effective"},
 		{"/project", "show or set project context"},
 		{"/quit", "end chat session"},
-		{"/skills", "skills list, get"},
+		{"/show-thinking", "reveal retained thinking parts"},
+		{"/skills list", "list loaded skills"},
+		{"/skills get", "get a skill by selector"},
+		{"/skills load", "load a skill from a markdown file"},
+		{"/skills update", "update a skill by selector and file"},
+		{"/skills delete", "delete a skill by selector"},
 		{"/status", "gateway reachability"},
 		{"/task", "task list, get, create, cancel, result, logs, artifacts"},
-		{"/thread", "thread new — start a fresh conversation thread"},
+		{"/thread new", "start a fresh conversation thread"},
+		{"/thread list", "list recent threads"},
+		{"/thread switch", "switch to thread by selector"},
+		{"/thread rename", "rename current thread"},
 		{"/version", "print cynork version"},
 		{"/whoami", "current identity"},
 	}
@@ -66,12 +77,19 @@ var slashHandlers = map[string]slashHandler{
 	"models": func(_ *chat.Session, rest string) (bool, error) {
 		r := strings.TrimSpace(rest)
 		if r == "" {
-			r = "list"
+			r = subCmdList
 		}
 		return false, runCynorkSubcommandForSlash("models", r)
 	},
+	"connect": func(s *chat.Session, rest string) (bool, error) { return false, runSlashConnect(s, rest) },
+	"hide-thinking": func(s *chat.Session, _ string) (bool, error) {
+		return false, runSlashSetThinking(s, false)
+	},
 	"model":   func(s *chat.Session, rest string) (bool, error) { return false, runSlashModel(s, rest) },
 	"project": func(s *chat.Session, rest string) (bool, error) { return false, runSlashProjectDelegated(s, rest) },
+	"show-thinking": func(s *chat.Session, _ string) (bool, error) {
+		return false, runSlashSetThinking(s, true)
+	},
 	"task": func(_ *chat.Session, rest string) (bool, error) {
 		return false, runCynorkSubcommandForSlash("task", rest)
 	},
@@ -206,6 +224,59 @@ func runSlashAuthDelegated(session *chat.Session, rest string) error {
 	return nil
 }
 
+// runSlashConnect shows the current gateway URL or updates it (and optionally validates).
+func runSlashConnect(session *chat.Session, rest string) error {
+	rest = strings.TrimSpace(rest)
+	if rest == "" {
+		if session != nil && session.Client != nil {
+			fmt.Fprintln(os.Stderr, "gateway:", session.Client.BaseURL)
+		} else {
+			fmt.Fprintln(os.Stderr, "gateway: (not connected)")
+		}
+		return nil
+	}
+	if session != nil && session.Client != nil {
+		session.Client.BaseURL = rest
+	}
+	cfg.GatewayURL = rest
+	effectivePath := configPath
+	if effectivePath == "" {
+		effectivePath, _ = getDefaultConfigPath()
+	}
+	if effectivePath != "" {
+		_ = saveConfig()
+	}
+	if session != nil && session.Client != nil {
+		if err := session.Client.Health(); err != nil {
+			fmt.Fprintf(os.Stderr, "gateway updated to: %s (warning: health check failed: %v)\n", rest, err)
+			return nil
+		}
+	}
+	fmt.Fprintln(os.Stderr, "gateway updated to:", rest)
+	return nil
+}
+
+// runSlashSetThinking toggles the thinking visibility preference and persists it.
+func runSlashSetThinking(_ *chat.Session, show bool) error {
+	label := "hidden"
+	if show {
+		label = "visible"
+	}
+	cfg.TUI.ShowThinkingByDefault = show
+	effectivePath := configPath
+	if effectivePath == "" {
+		effectivePath, _ = getDefaultConfigPath()
+	}
+	if effectivePath != "" {
+		if err := saveConfig(); err != nil {
+			fmt.Fprintf(os.Stderr, "thinking: %s (warning: config save failed: %v)\n", label, err)
+			return nil
+		}
+	}
+	fmt.Fprintln(os.Stderr, "thinking:", label)
+	return nil
+}
+
 func runSlashModel(session *chat.Session, rest string) error {
 	rest = strings.TrimSpace(rest)
 	if rest == "" {
@@ -221,14 +292,28 @@ func runSlashModel(session *chat.Session, rest string) error {
 	return nil
 }
 
-// runSlashProjectDelegated runs "cynork project <rest>" then syncs session project when "set" was used.
+// runSlashProjectDelegated dispatches /project subcommands and syncs session state.
+// Bare id (not a known subcommand) sets the session project directly per ProjectSlashCommands algorithm.
 func runSlashProjectDelegated(session *chat.Session, rest string) error {
-	if err := runCynorkSubcommandForSlash("project", rest); err != nil {
-		return err
-	}
 	parts := parseArgs(strings.TrimSpace(rest))
-	if len(parts) >= 2 && strings.EqualFold(parts[0], "set") {
-		setChatSessionProject(session, parts[1])
+	if len(parts) == 0 {
+		// Show current project.
+		return runCynorkSubcommandForSlash("project", "")
+	}
+	sub := strings.ToLower(parts[0])
+	switch sub {
+	case "set":
+		if err := runCynorkSubcommandForSlash("project", rest); err != nil {
+			return err
+		}
+		if len(parts) >= 2 {
+			setChatSessionProject(session, parts[1])
+		}
+	case subCmdList, "get":
+		return runCynorkSubcommandForSlash("project", rest)
+	default:
+		// Bare id: treat as shorthand for "set <id>".
+		setChatSessionProject(session, rest)
 	}
 	return nil
 }
@@ -241,24 +326,103 @@ func setChatSessionProject(session *chat.Session, id string) {
 	fmt.Fprintln(os.Stderr, "project set to:", session.ProjectID)
 }
 
-// runSlashThread handles /thread <subcommand>. Currently supports "new".
+const (
+	slashThreadListLimit = 20
+	subCmdList           = "list"
+)
+
+// runSlashThread handles /thread <subcommand>: new, list, switch <selector>, rename <title>.
 func runSlashThread(session *chat.Session, rest string) error {
-	sub := strings.ToLower(strings.TrimSpace(rest))
+	parts := parseArgs(strings.TrimSpace(rest))
+	sub := ""
+	if len(parts) > 0 {
+		sub = strings.ToLower(parts[0])
+	}
+	switch sub {
+	case "new", "", subCmdList, "switch", "rename":
+	default:
+		fmt.Fprintf(os.Stderr, "Unknown /thread command %q. Use /thread new, /thread list, /thread switch <selector>, or /thread rename <title>.\n", sub)
+		return nil
+	}
+	if session == nil || session.Client == nil {
+		fmt.Fprintln(os.Stderr, "thread: not connected")
+		return nil
+	}
 	switch sub {
 	case "new", "":
-		if session == nil || session.Client == nil {
-			fmt.Fprintln(os.Stderr, "thread: not connected")
-			return nil
+		doSlashThreadNew(session)
+	case subCmdList:
+		doSlashThreadList(session)
+	case "switch":
+		doSlashThreadSwitch(session, parts)
+	case "rename":
+		doSlashThreadRename(session, parts)
+	}
+	return nil
+}
+
+func doSlashThreadNew(session *chat.Session) {
+	threadID, err := session.NewThread()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "thread: %v\n", err)
+		return
+	}
+	fmt.Fprintf(os.Stderr, "New thread started: %s\n", threadID)
+}
+
+func doSlashThreadList(session *chat.Session) {
+	items, err := session.ListThreads(slashThreadListLimit, 0)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "thread list: %v\n", err)
+		return
+	}
+	printThreadList(items)
+}
+
+func doSlashThreadSwitch(session *chat.Session, parts []string) {
+	selector := strings.TrimSpace(strings.Join(parts[1:], " "))
+	if selector == "" {
+		fmt.Fprintln(os.Stderr, "Usage: /thread switch <selector> (use ordinal, id, or title from /thread list)")
+		return
+	}
+	id, err := session.ResolveThreadSelector(selector, slashThreadListLimit)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "thread switch: %v\n", err)
+		return
+	}
+	session.SetCurrentThreadID(id)
+	fmt.Fprintf(os.Stderr, "Switched to thread: %s\n", id)
+}
+
+func doSlashThreadRename(session *chat.Session, parts []string) {
+	title := strings.TrimSpace(strings.Join(parts[1:], " "))
+	if title == "" {
+		fmt.Fprintln(os.Stderr, "Usage: /thread rename <title>")
+		return
+	}
+	if err := session.PatchThreadTitle("", title); err != nil {
+		fmt.Fprintf(os.Stderr, "thread rename: %v\n", err)
+		return
+	}
+	fmt.Fprintf(os.Stderr, "Thread renamed to: %s\n", title)
+}
+
+// printThreadList renders the thread list to stderr with user-typeable selectors.
+func printThreadList(items []gateway.ChatThreadItem) {
+	if len(items) == 0 {
+		fmt.Fprintln(os.Stderr, "(no threads)")
+		return
+	}
+	fmt.Fprintln(os.Stderr, "--- Threads (use ordinal, id, or title with /thread switch <selector>) ---")
+	for i, t := range items {
+		title := "(no title)"
+		if t.Title != nil && *t.Title != "" {
+			title = *t.Title
 		}
-		threadID, err := session.NewThread()
-		if err != nil {
-			fmt.Fprintf(os.Stderr, "thread: %v\n", err)
-			return nil
+		idShort := t.ID
+		if len(idShort) > 8 {
+			idShort = idShort[:8]
 		}
-		fmt.Fprintf(os.Stderr, "New thread started: %s\n", threadID)
-		return nil
-	default:
-		fmt.Fprintf(os.Stderr, "thread: unknown subcommand %q — use: /thread new\n", sub)
-		return nil
+		fmt.Fprintf(os.Stderr, "  %d  %s  %s\n", i+1, idShort, title)
 	}
 }

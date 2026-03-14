@@ -664,3 +664,112 @@ func TestCallInference_StreamErrorChunk(t *testing.T) {
 		t.Errorf("expected 500 on stream error chunk, got %d: %s", rec.Code, rec.Body.String())
 	}
 }
+
+func TestCanStreamCompletion_NoMCPClient(t *testing.T) {
+	// With no MCP gateway env vars set, BaseURL is empty so canStreamCompletion returns true.
+	t.Setenv("PMA_MCP_GATEWAY_URL", "")
+	t.Setenv("MCP_GATEWAY_URL", "")
+	req := &InternalChatCompletionRequest{
+		Messages: []struct {
+			Role    string `json:"role"`
+			Content string `json:"content"`
+		}{{Role: "user", Content: "hi"}},
+	}
+	if !canStreamCompletion(req) {
+		t.Error("canStreamCompletion should return true when no MCP gateway is configured")
+	}
+}
+
+func TestChatCompletionHandler_StreamTrue_Success(t *testing.T) {
+	mockInference := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/x-ndjson")
+		w.WriteHeader(http.StatusOK)
+		chunk, _ := json.Marshal(map[string]interface{}{
+			"message": map[string]string{"content": "streamed"},
+			"done":    false,
+		})
+		_, _ = w.Write(chunk)
+		_, _ = w.Write([]byte("\n"))
+		done, _ := json.Marshal(map[string]interface{}{
+			"message": map[string]string{"content": ""},
+			"done":    true,
+		})
+		_, _ = w.Write(done)
+		_, _ = w.Write([]byte("\n"))
+	}))
+	defer mockInference.Close()
+	t.Setenv("OLLAMA_BASE_URL", mockInference.URL)
+	t.Setenv("PMA_MCP_GATEWAY_URL", "")
+	t.Setenv("MCP_GATEWAY_URL", "")
+
+	handler := ChatCompletionHandler("sys", slog.Default())
+	body, _ := json.Marshal(map[string]interface{}{
+		"messages": []map[string]string{{"role": "user", "content": "hi"}},
+		"stream":   true,
+	})
+	req := httptest.NewRequest(http.MethodPost, "/internal/chat/completion", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	handler(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	}
+	if !strings.Contains(rec.Body.String(), "streamed") {
+		t.Errorf("expected 'streamed' in body; got %q", rec.Body.String())
+	}
+}
+
+func TestChatCompletionHandler_StreamTrue_InferenceError(t *testing.T) {
+	mockInference := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer mockInference.Close()
+	t.Setenv("OLLAMA_BASE_URL", mockInference.URL)
+	t.Setenv("PMA_MCP_GATEWAY_URL", "")
+	t.Setenv("MCP_GATEWAY_URL", "")
+
+	handler := ChatCompletionHandler("sys", slog.Default())
+	body, _ := json.Marshal(map[string]interface{}{
+		"messages": []map[string]string{{"role": "user", "content": "hi"}},
+		"stream":   true,
+	})
+	req := httptest.NewRequest(http.MethodPost, "/internal/chat/completion", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	handler(rec, req)
+	if rec.Code != http.StatusInternalServerError {
+		t.Errorf("expected 500 on inference error, got %d", rec.Code)
+	}
+}
+
+func TestStreamCompletionWriteChunk_Empty(t *testing.T) {
+	rec := httptest.NewRecorder()
+	enc := json.NewEncoder(rec)
+	done, stop := streamCompletionWriteChunk(enc, rec, []byte{}, slog.Default())
+	if done || stop {
+		t.Errorf("empty line: done=%v stop=%v, want false,false", done, stop)
+	}
+}
+
+func TestStreamCompletionWriteChunk_DoneChunk(t *testing.T) {
+	rec := httptest.NewRecorder()
+	enc := json.NewEncoder(rec)
+	line, _ := json.Marshal(map[string]interface{}{"done": true, "message": map[string]string{"content": ""}})
+	done, stop := streamCompletionWriteChunk(enc, rec, line, slog.Default())
+	if !done || stop {
+		t.Errorf("done chunk: done=%v stop=%v, want true,false", done, stop)
+	}
+}
+
+func TestStreamCompletionWriteChunk_ContentChunk(t *testing.T) {
+	rec := httptest.NewRecorder()
+	enc := json.NewEncoder(rec)
+	line, _ := json.Marshal(map[string]interface{}{"done": false, "message": map[string]string{"content": "tok"}})
+	done, stop := streamCompletionWriteChunk(enc, rec, line, slog.Default())
+	if done || stop {
+		t.Errorf("content chunk: done=%v stop=%v, want false,false", done, stop)
+	}
+	if !strings.Contains(rec.Body.String(), "tok") {
+		t.Errorf("expected 'tok' in output; got %q", rec.Body.String())
+	}
+}

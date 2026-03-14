@@ -1034,3 +1034,136 @@ func TestManagedServiceProxyHTTPHandler_UpstreamError(t *testing.T) {
 		t.Errorf("status = %d, want 502; body %s", w.Code, w.Body.String())
 	}
 }
+
+// buildTestMux creates a test public mux with a single registered service socket (no listener).
+func buildTestMux(t *testing.T, bearerToken, stateDir string) (pub *http.ServeMux, proxySockPath string) {
+	t.Helper()
+	svcDir := filepath.Join(stateDir, "svc1")
+	if err := os.MkdirAll(svcDir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	proxySockPath = filepath.Join(svcDir, "proxy.sock")
+	pub, _ = buildMuxesFromEmbedConfig(
+		executor.New("direct", 5*time.Second, 1024, "", "", nil),
+		bearerToken, t.TempDir(), nil, slog.Default(),
+		embedProxyConfig{
+			InternalProxy: embedInternalProxyConfig{
+				SocketByService: map[string]string{"svc1": proxySockPath},
+			},
+		},
+	)
+	return pub, proxySockPath
+}
+
+// buildNoStoreMux creates a test public mux with nil telemetry store and a bearer token of "tok".
+func buildNoStoreMux(t *testing.T) *http.ServeMux {
+	t.Helper()
+	pub, _ := buildMuxesFromEmbedConfig(
+		executor.New("direct", 5*time.Second, 1024, "", "", nil),
+		"tok", t.TempDir(), nil, slog.Default(), embedProxyConfig{},
+	)
+	return pub
+}
+
+func TestManagedServiceProxyHTTPHandler_MethodNotAllowed2(t *testing.T) {
+	pub, _ := buildTestMux(t, "tok", t.TempDir())
+	req := httptest.NewRequest(http.MethodGet, "/v1/worker/managed-services/svc1/proxy:http", http.NoBody)
+	req.Header.Set("Authorization", "Bearer tok")
+	w := httptest.NewRecorder()
+	pub.ServeHTTP(w, req)
+	if w.Code != http.StatusMethodNotAllowed {
+		t.Errorf("expected 405, got %d", w.Code)
+	}
+}
+
+func TestManagedServiceProxyHTTPHandler_Unauthorized2(t *testing.T) {
+	pub, _ := buildTestMux(t, "tok", t.TempDir())
+	body := managedProxyRequest{Version: 1, Method: "POST", Path: "/"}
+	bodyBytes, _ := json.Marshal(body)
+	req := httptest.NewRequest(http.MethodPost, "/v1/worker/managed-services/svc1/proxy:http", bytes.NewReader(bodyBytes))
+	req.Header.Set("Authorization", "Bearer wrong-token")
+	w := httptest.NewRecorder()
+	pub.ServeHTTP(w, req)
+	if w.Code != http.StatusUnauthorized {
+		t.Errorf("expected 401, got %d", w.Code)
+	}
+}
+
+func TestManagedServiceProxyHTTPHandler_Stream_UpstreamError(t *testing.T) {
+	pub, _ := buildTestMux(t, "tok", t.TempDir())
+	// body_b64 encodes {"stream":true} to trigger wantsStream
+	streamBody := base64.StdEncoding.EncodeToString([]byte(`{"stream":true}`))
+	body := managedProxyRequest{Version: 1, Method: "POST", Path: "/chat", BodyB64: streamBody}
+	bodyBytes, _ := json.Marshal(body)
+	req := httptest.NewRequest(http.MethodPost, "/v1/worker/managed-services/svc1/proxy:http", bytes.NewReader(bodyBytes))
+	req.Header.Set("Authorization", "Bearer tok")
+	w := httptest.NewRecorder()
+	pub.ServeHTTP(w, req)
+	// No socket listener → connection error → 502
+	if w.Code != http.StatusBadGateway {
+		t.Errorf("expected 502, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestManagedServiceProxyHTTPHandler_Stream_Success(t *testing.T) {
+	dir := t.TempDir()
+	svcDir := filepath.Join(dir, "svc1")
+	_ = os.MkdirAll(svcDir, 0o700)
+	proxySock := filepath.Join(svcDir, "proxy.sock")
+	serviceSock := filepath.Join(svcDir, "service.sock")
+	ln, err := net.Listen("unix", serviceSock)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = ln.Close() }()
+	go func() {
+		_ = http.Serve(ln, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.Header().Set("Content-Type", "application/x-ndjson")
+			w.WriteHeader(http.StatusOK)
+			_, _ = fmt.Fprintln(w, `{"choices":[{"delta":{"content":"hi"}}]}`)
+		}))
+	}()
+	pub, _ := buildMuxesFromEmbedConfig(
+		executor.New("direct", 5*time.Second, 1024, "", "", nil),
+		"tok", t.TempDir(), nil, slog.Default(),
+		embedProxyConfig{InternalProxy: embedInternalProxyConfig{SocketByService: map[string]string{"svc1": proxySock}}},
+	)
+	streamBody := base64.StdEncoding.EncodeToString([]byte(`{"stream":true}`))
+	body := managedProxyRequest{Version: 1, Method: "POST", Path: "/chat", BodyB64: streamBody}
+	bodyBytes, _ := json.Marshal(body)
+	req := httptest.NewRequest(http.MethodPost, "/v1/worker/managed-services/svc1/proxy:http", bytes.NewReader(bodyBytes))
+	req.Header.Set("Authorization", "Bearer tok")
+	w := httptest.NewRecorder()
+	pub.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Errorf("expected 200, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+func TestEmbedTelemetryHandlers_NoStore(t *testing.T) {
+	pub := buildNoStoreMux(t)
+	for _, tc := range []struct {
+		name string
+		url  string
+		auth string
+		want int
+	}{
+		{"container not found with auth", "/v1/worker/telemetry/containers/some-id", "Bearer tok", http.StatusNotFound},
+		{"container not found no auth", "/v1/worker/telemetry/containers/some-id", "", http.StatusUnauthorized},
+		{"logs missing params", "/v1/worker/telemetry/logs", "Bearer tok", http.StatusBadRequest},
+		{"logs with source_kind", "/v1/worker/telemetry/logs?source_kind=container", "Bearer tok", http.StatusOK},
+		{"containers list no auth", "/v1/worker/telemetry/containers", "", http.StatusUnauthorized},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			req := httptest.NewRequest(http.MethodGet, tc.url, http.NoBody)
+			if tc.auth != "" {
+				req.Header.Set("Authorization", tc.auth)
+			}
+			w := httptest.NewRecorder()
+			pub.ServeHTTP(w, req)
+			if w.Code != tc.want {
+				t.Errorf("expected %d, got %d: %s", tc.want, w.Code, w.Body.String())
+			}
+		})
+	}
+}

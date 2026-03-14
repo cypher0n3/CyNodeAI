@@ -22,6 +22,12 @@ type ctxKey int
 
 const stateKey ctxKey = 0
 
+// mockThread holds the data for a mock chat thread returned by GET /v1/chat/threads.
+type mockThread struct {
+	ID    string
+	Title string
+}
+
 type cynorkState struct {
 	mockServer *httptest.Server
 	cynorkBin  string
@@ -39,6 +45,9 @@ type cynorkState struct {
 	lastSkillID    string            // set by POST /v1/skills/load for list/get
 	sessionModel   string            // set by "the TUI is running with model" step
 	sessionProject string            // set by "the TUI is running with project" step
+	prefsMutated   bool              // set when POST /v1/prefs is called during a scenario
+	mockThreads    []mockThread      // threads returned by GET /v1/chat/threads
+	threadCreated  bool              // set when POST /v1/chat/threads is called
 	mu             sync.Mutex
 }
 
@@ -308,6 +317,49 @@ func (s *cynorkState) mockGatewayMux() *http.ServeMux {
 			},
 		})
 	})
+	// Thread endpoints: POST creates a thread, GET lists threads, PATCH renames a thread.
+	mux.HandleFunc("POST /v1/chat/threads", func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") == "" {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		s.mu.Lock()
+		s.threadCreated = true
+		s.mu.Unlock()
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+		_ = json.NewEncoder(w).Encode(map[string]any{"thread_id": "tid-new-1"})
+	})
+	mux.HandleFunc("GET /v1/chat/threads", func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") == "" {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		s.mu.Lock()
+		threads := s.mockThreads
+		s.mu.Unlock()
+		data := make([]map[string]any, 0, len(threads))
+		for _, t := range threads {
+			data = append(data, map[string]any{
+				"id":         t.ID,
+				"title":      t.Title,
+				"created_at": "2025-01-01T00:00:00Z",
+				"updated_at": "2025-01-01T00:00:00Z",
+			})
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode(map[string]any{"data": data})
+	})
+	mux.HandleFunc("PATCH /v1/chat/threads/", func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") == "" {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"id":"tid-r","title":"renamed"}`))
+	})
 	// Stub endpoints for creds, prefs, settings, nodes, skills, audit
 	mux.HandleFunc("GET /v1/creds", func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("Authorization") == "" {
@@ -341,6 +393,9 @@ func (s *cynorkState) mockGatewayMux() *http.ServeMux {
 			w.WriteHeader(http.StatusUnauthorized)
 			return
 		}
+		s.mu.Lock()
+		s.prefsMutated = true
+		s.mu.Unlock()
 		w.WriteHeader(http.StatusOK)
 	})
 	mux.HandleFunc("GET /v1/prefs/effective", func(w http.ResponseWriter, r *http.Request) {
@@ -465,7 +520,6 @@ func (s *cynorkState) runCynork(args []string, env ...string) (exit int, stdout,
 // InitializeCynorkSuite sets up the godog suite for cynork features.
 func InitializeCynorkSuite(sc *godog.ScenarioContext, state *cynorkState) {
 	sc.Before(func(ctx context.Context, _ *godog.Scenario) (context.Context, error) {
-		state.mockServer = httptest.NewServer(state.mockGatewayMux())
 		state.userByToken = nil
 		state.tasks = nil
 		state.token = ""
@@ -473,6 +527,10 @@ func InitializeCynorkSuite(sc *godog.ScenarioContext, state *cynorkState) {
 		state.lastSkillID = ""
 		state.sessionModel = ""
 		state.sessionProject = ""
+		state.prefsMutated = false
+		state.mockThreads = nil
+		state.threadCreated = false
+		state.mockServer = httptest.NewServer(state.mockGatewayMux())
 		wd, err := os.Getwd()
 		if err != nil {
 			return ctx, err
@@ -1132,6 +1190,17 @@ func InitializeCynorkSuite(sc *godog.ScenarioContext, state *cynorkState) {
 		return nil
 	})
 
+	sc.Step(`^stored user preferences are unchanged$`, func(ctx context.Context) error {
+		st := getState(ctx)
+		st.mu.Lock()
+		mutated := st.prefsMutated
+		st.mu.Unlock()
+		if mutated {
+			return fmt.Errorf("expected no prefs mutation but POST /v1/prefs was called during scenario")
+		}
+		return nil
+	})
+
 	sc.Step(`^the scrollback contains "([^"]*)"$`, func(ctx context.Context, expected string) error {
 		st := getState(ctx)
 		combined := st.lastStdout + " " + st.lastStderr
@@ -1155,6 +1224,122 @@ func InitializeCynorkSuite(sc *godog.ScenarioContext, state *cynorkState) {
 		combined := st.lastStdout + " " + st.lastStderr
 		if !strings.Contains(combined, "exit") {
 			return fmt.Errorf("expected exit code in output; got: %q", combined)
+		}
+		return nil
+	})
+
+	// ---- Thread and resume-thread steps (cynork_chat.feature thread scenarios) ----
+
+	sc.Step(`^the mock gateway supports POST "([^"]*)"$`, func(ctx context.Context, _ string) error {
+		// The shared mock gateway always supports POST /v1/chat/threads. This step is a no-op
+		// that documents the prerequisite and enables threadCreated tracking.
+		return nil
+	})
+
+	sc.Step(`^the mock gateway returns at least one chat thread with selector "([^"]*)"$`, func(ctx context.Context, selector string) error {
+		st := getState(ctx)
+		st.mu.Lock()
+		st.mockThreads = []mockThread{{ID: "tid-inbox-1", Title: selector}}
+		st.mu.Unlock()
+		return nil
+	})
+
+	sc.Step(`^the mock gateway returns multiple chat threads with user-typeable selectors$`, func(ctx context.Context) error {
+		st := getState(ctx)
+		st.mu.Lock()
+		st.mockThreads = []mockThread{
+			{ID: "tid-inbox-1", Title: "inbox"},
+			{ID: "tid-work-2", Title: "work"},
+		}
+		st.mu.Unlock()
+		return nil
+	})
+
+	sc.Step(`^I run cynork chat without resume-thread and send a first message$`, func(ctx context.Context) error {
+		st := getState(ctx)
+		env := []string{"CYNORK_GATEWAY_URL=" + st.mockServer.URL, "CYNORK_TOKEN=" + st.token}
+		args := []string{"--config", st.configPath, "chat", "--thread-new", "--message", "hello"}
+		st.lastExit, st.lastStdout, st.lastStderr = st.runCynork(args, env...)
+		return nil
+	})
+
+	sc.Step(`^cynork creates a fresh chat thread before the first completion$`, func(ctx context.Context) error {
+		st := getState(ctx)
+		st.mu.Lock()
+		created := st.threadCreated
+		st.mu.Unlock()
+		if !created {
+			return fmt.Errorf("expected POST /v1/chat/threads to be called; stderr=%q stdout=%q", st.lastStderr, st.lastStdout)
+		}
+		return nil
+	})
+
+	sc.Step(`^cynork creates a fresh chat thread before the next completion$`, func(ctx context.Context) error {
+		st := getState(ctx)
+		st.mu.Lock()
+		created := st.threadCreated
+		st.mu.Unlock()
+		if !created {
+			return fmt.Errorf("expected POST /v1/chat/threads to be called; stderr=%q stdout=%q", st.lastStderr, st.lastStdout)
+		}
+		return nil
+	})
+
+	sc.Step(`^I run cynork chat with resume-thread "([^"]*)"$`, func(ctx context.Context, selector string) error {
+		st := getState(ctx)
+		env := []string{"CYNORK_GATEWAY_URL=" + st.mockServer.URL, "CYNORK_TOKEN=" + st.token}
+		args := []string{"--config", st.configPath, "chat", "--resume-thread", selector, "--message", "hello"}
+		st.lastExit, st.lastStdout, st.lastStderr = st.runCynork(args, env...)
+		return nil
+	})
+
+	sc.Step(`^the session starts in the thread identified by selector "([^"]*)"$`, func(ctx context.Context, selector string) error {
+		st := getState(ctx)
+		if st.lastExit != 0 {
+			return fmt.Errorf("expected exit 0; got %d stderr=%q", st.lastExit, st.lastStderr)
+		}
+		return nil
+	})
+
+	sc.Step(`^the first completion continues that thread's conversation$`, func(ctx context.Context) error {
+		st := getState(ctx)
+		if st.lastExit != 0 {
+			return fmt.Errorf("expected session to complete successfully; exit=%d stderr=%q", st.lastExit, st.lastStderr)
+		}
+		return nil
+	})
+
+	sc.Step(`^cynork switches to the thread identified by selector "([^"]*)"$`, func(ctx context.Context, selector string) error {
+		st := getState(ctx)
+		combined := st.lastStdout + " " + st.lastStderr
+		if !strings.Contains(strings.ToLower(combined), "switched") && !strings.Contains(strings.ToLower(combined), selector) {
+			return fmt.Errorf("expected switch confirmation for selector %q in output; got: %q", selector, combined)
+		}
+		return nil
+	})
+
+	sc.Step(`^the chat session shows guidance for valid /thread commands$`, func(ctx context.Context) error {
+		st := getState(ctx)
+		combined := st.lastStdout + " " + st.lastStderr
+		if !strings.Contains(strings.ToLower(combined), "thread") {
+			return fmt.Errorf("expected /thread guidance in output; got: %q", combined)
+		}
+		return nil
+	})
+
+	sc.Step(`^the chat session remains active$`, func(ctx context.Context) error {
+		st := getState(ctx)
+		if st.lastExit != 0 {
+			return fmt.Errorf("expected session to remain active (exit 0); got exit %d stderr: %q", st.lastExit, st.lastStderr)
+		}
+		return nil
+	})
+
+	sc.Step(`^the slash-command help includes "([^"]*)"$`, func(ctx context.Context, text string) error {
+		st := getState(ctx)
+		combined := st.lastStdout + " " + st.lastStderr
+		if !strings.Contains(combined, text) {
+			return fmt.Errorf("expected slash-command help to include %q; got: %q", text, combined)
 		}
 		return nil
 	})

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -16,6 +17,9 @@ import (
 
 const threadListHeader = "--- Threads (use ordinal, id, or title with /thread switch <selector>) ---"
 const inputThreadList = "/thread list"
+const pathChatThreads = "/v1/chat/threads"
+const loginTestGatewayURL = "http://gw"
+const loginTestPassword = "pass"
 
 type mockTransport struct {
 	visible string
@@ -390,7 +394,7 @@ func TestModel_Update_ThreadRenameResult(t *testing.T) {
 
 func TestModel_ThreadCommand_New(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/v1/chat/threads" || r.Method != http.MethodPost {
+		if r.URL.Path != pathChatThreads || r.Method != http.MethodPost {
 			w.WriteHeader(http.StatusNotFound)
 			return
 		}
@@ -562,7 +566,7 @@ func TestModel_ThreadRenameCmd_NilSession(t *testing.T) {
 
 func TestModel_ThreadCommand_Switch(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/v1/chat/threads" || r.Method != http.MethodGet {
+		if r.URL.Path != pathChatThreads || r.Method != http.MethodGet {
 			w.WriteHeader(http.StatusNotFound)
 			return
 		}
@@ -1320,10 +1324,11 @@ func TestModel_View_ContainsComposerHint(t *testing.T) {
 
 // mockAuthProvider implements AuthProvider for tests.
 type mockAuthProvider struct {
-	token, refreshToken string
-	gatewayURL          string
-	saveErr             error
-	saved               bool
+	token, refreshToken   string
+	gatewayURL            string
+	saveErr               error
+	saved                 bool
+	showThinkingByDefault bool
 }
 
 func (m *mockAuthProvider) Token() string        { return m.token }
@@ -1336,6 +1341,10 @@ func (m *mockAuthProvider) SetGatewayURL(url string) { m.gatewayURL = url }
 func (m *mockAuthProvider) Save() error {
 	m.saved = true
 	return m.saveErr
+}
+func (m *mockAuthProvider) ShowThinkingByDefault() bool { return m.showThinkingByDefault }
+func (m *mockAuthProvider) SetShowThinkingByDefault(v bool) {
+	m.showThinkingByDefault = v
 }
 
 // TestModel_SlashAuth_NoArg verifies /auth with no args shows usage (login, logout, whoami, refresh).
@@ -1575,4 +1584,675 @@ func truncate(s string, n int) string {
 		return s
 	}
 	return s[:n]
+}
+
+// TestModel_SetResumeThreadSelector verifies the setter writes to the field.
+func TestModel_SetResumeThreadSelector(t *testing.T) {
+	m := NewModel(&chat.Session{})
+	m.SetResumeThreadSelector("selector-abc")
+	if m.ResumeThreadSelector != "selector-abc" {
+		t.Errorf("ResumeThreadSelector = %q, want selector-abc", m.ResumeThreadSelector)
+	}
+}
+
+// TestModel_Init_OpenLoginFormOnInit verifies Init returns a cmd that sends openLoginFormMsg.
+func TestModel_Init_OpenLoginFormOnInit(t *testing.T) {
+	m := NewModel(&chat.Session{})
+	m.OpenLoginFormOnInit = true
+	cmd := m.Init()
+	if cmd == nil {
+		t.Fatal("Init() with OpenLoginFormOnInit=true should return a cmd")
+	}
+	msg := cmd()
+	if _, ok := msg.(openLoginFormMsg); !ok {
+		t.Errorf("cmd() = %T, want openLoginFormMsg", msg)
+	}
+}
+
+// TestModel_Update_EnsureThreadResult_Error verifies applyEnsureThreadResult shows error in scrollback.
+func TestModel_Update_EnsureThreadResult_Error(t *testing.T) {
+	m := NewModel(&chat.Session{})
+	updated, cmd := m.Update(ensureThreadResult{err: errors.New("thread error")})
+	if cmd != nil {
+		t.Errorf("cmd = %v, want nil", cmd)
+	}
+	mod := updated.(*Model)
+	if len(mod.Scrollback) == 0 || !strings.Contains(mod.Scrollback[0], "thread error") {
+		t.Errorf("Scrollback = %v; expected error message", mod.Scrollback)
+	}
+}
+
+// TestModel_Update_EnsureThreadResult_Success verifies applyEnsureThreadResult adds thread ID line.
+func TestModel_Update_EnsureThreadResult_Success(t *testing.T) {
+	m := NewModel(&chat.Session{})
+	updated, cmd := m.Update(ensureThreadResult{threadID: "tid-ok"})
+	if cmd != nil {
+		t.Errorf("cmd = %v, want nil", cmd)
+	}
+	mod := updated.(*Model)
+	found := false
+	for _, line := range mod.Scrollback {
+		if strings.Contains(line, "tid-ok") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("Scrollback = %v; expected thread ID tid-ok", mod.Scrollback)
+	}
+}
+
+// TestModel_Update_EnsureThreadResult_NoThreadID verifies empty threadID is a no-op.
+func TestModel_Update_EnsureThreadResult_NoThreadID(t *testing.T) {
+	m := NewModel(&chat.Session{})
+	updated, _ := m.Update(ensureThreadResult{})
+	mod := updated.(*Model)
+	if len(mod.Scrollback) != 0 {
+		t.Errorf("Scrollback should be empty for empty ensureThreadResult; got %v", mod.Scrollback)
+	}
+}
+
+// TestModel_Update_OpenLoginForm verifies applyOpenLoginForm sets ShowLoginForm and clears fields.
+func TestModel_Update_OpenLoginForm(t *testing.T) {
+	session := &chat.Session{Client: gateway.NewClient(loginTestGatewayURL)}
+	m := NewModel(session)
+	m.Loading = true
+	updated, cmd := m.Update(openLoginFormMsg{})
+	if cmd != nil {
+		t.Errorf("cmd = %v, want nil", cmd)
+	}
+	mod := updated.(*Model)
+	if !mod.ShowLoginForm {
+		t.Error("ShowLoginForm should be true")
+	}
+	if mod.Loading {
+		t.Error("Loading should be false")
+	}
+	if mod.LoginGatewayURL != loginTestGatewayURL {
+		t.Errorf("LoginGatewayURL = %q, want http://gw", mod.LoginGatewayURL)
+	}
+}
+
+// TestModel_Update_OpenLoginForm_NoSession verifies LoginGatewayURL falls back when session is nil.
+func TestModel_Update_OpenLoginForm_NoSession(t *testing.T) {
+	m := NewModel(&chat.Session{})
+	m.Session.Client = nil
+	updated, _ := m.Update(openLoginFormMsg{})
+	mod := updated.(*Model)
+	if !mod.ShowLoginForm {
+		t.Error("ShowLoginForm should be true")
+	}
+}
+
+// TestModel_Update_OpenLoginForm_AuthProvider verifies LoginGatewayURL from AuthProvider.
+func TestModel_Update_OpenLoginForm_AuthProvider(t *testing.T) {
+	m := NewModel(&chat.Session{})
+	m.Session.Client = nil
+	m.SetAuthProvider(&mockAuthProvider{gatewayURL: "http://from-provider"})
+	updated, _ := m.Update(openLoginFormMsg{})
+	mod := updated.(*Model)
+	if mod.LoginGatewayURL != "http://from-provider" {
+		t.Errorf("LoginGatewayURL = %q, want http://from-provider", mod.LoginGatewayURL)
+	}
+}
+
+// TestModel_Update_LoginResult_Error verifies failed login shows error in scrollback.
+func TestModel_Update_LoginResult_Error(t *testing.T) {
+	m := NewModel(&chat.Session{})
+	m.ShowLoginForm = true
+	updated, cmd := m.Update(loginResultMsg{Err: errors.New("bad credentials")})
+	if cmd != nil {
+		t.Errorf("cmd = %v, want nil", cmd)
+	}
+	mod := updated.(*Model)
+	if mod.ShowLoginForm {
+		t.Error("ShowLoginForm should be false after login attempt")
+	}
+	if len(mod.Scrollback) == 0 || !strings.Contains(mod.Scrollback[0], "Login failed") {
+		t.Errorf("Scrollback = %v; expected Login failed", mod.Scrollback)
+	}
+}
+
+// newMockThreadServer starts a test server that responds to POST /v1/chat/threads with a JSON body
+// containing the given threadID, and returns 200 for all other requests.
+func newMockThreadServer(t *testing.T, threadID string) *httptest.Server {
+	t.Helper()
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == pathChatThreads && r.Method == http.MethodPost {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusCreated)
+			_, _ = fmt.Fprintf(w, `{"thread_id":%q}`, threadID)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+}
+
+// TestModel_Update_LoginResult_NoAuthProvider verifies login with no provider adds thread cmd.
+func TestModel_Update_LoginResult_NoAuthProvider(t *testing.T) {
+	server := newMockThreadServer(t, "new-tid")
+	defer server.Close()
+	session := &chat.Session{Client: gateway.NewClient("http://original")}
+	m := NewModel(session)
+	updated, cmd := m.Update(loginResultMsg{
+		GatewayURL:  server.URL,
+		AccessToken: "new-tok",
+	})
+	if cmd == nil {
+		t.Fatal("LoginResult success should return ensureThreadCmd")
+	}
+	mod := updated.(*Model)
+	if len(mod.Scrollback) == 0 || !strings.Contains(mod.Scrollback[0], "Logged in") {
+		t.Errorf("Scrollback = %v; expected Logged in", mod.Scrollback)
+	}
+}
+
+// TestModel_Update_LoginResult_WithAuthProvider_SaveError verifies save error is shown.
+func TestModel_Update_LoginResult_WithAuthProvider_SaveError(t *testing.T) {
+	provider := &mockAuthProvider{saveErr: errors.New("disk full")}
+	session := &chat.Session{Client: gateway.NewClient("http://orig")}
+	m := NewModel(session)
+	m.SetAuthProvider(provider)
+	updated, cmd := m.Update(loginResultMsg{GatewayURL: "http://gw2", AccessToken: "tok2"})
+	mod := updated.(*Model)
+	if cmd != nil {
+		t.Errorf("cmd = %v, want nil after save error", cmd)
+	}
+	found := false
+	for _, line := range mod.Scrollback {
+		if strings.Contains(line, "config save failed") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("Scrollback = %v; expected config save failed", mod.Scrollback)
+	}
+}
+
+// TestModel_Update_LoginResult_WithAuthProvider_Success verifies provider is updated and thread cmd issued.
+func TestModel_Update_LoginResult_WithAuthProvider_Success(t *testing.T) {
+	server := newMockThreadServer(t, "t-auth")
+	defer server.Close()
+	provider := &mockAuthProvider{}
+	session := &chat.Session{Client: gateway.NewClient("http://orig")}
+	m := NewModel(session)
+	m.SetAuthProvider(provider)
+	_, cmd := m.Update(loginResultMsg{
+		GatewayURL:   server.URL,
+		AccessToken:  "tok-a",
+		RefreshToken: "tok-r",
+	})
+	if cmd == nil {
+		t.Fatal("expected ensureThreadCmd after successful login with provider")
+	}
+	if !provider.saved {
+		t.Error("AuthProvider.Save should have been called")
+	}
+	if provider.token != "tok-a" || provider.refreshToken != "tok-r" {
+		t.Errorf("tokens: token=%q refresh=%q", provider.token, provider.refreshToken)
+	}
+}
+
+// TestModel_LoginFormKey_Esc verifies Esc dismisses the login form.
+func TestModel_LoginFormKey_Esc(t *testing.T) {
+	m := NewModel(&chat.Session{})
+	m.ShowLoginForm = true
+	m.LoginPassword = "secret"
+	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEscape})
+	if cmd != nil {
+		t.Errorf("Esc cmd = %v, want nil", cmd)
+	}
+	mod := updated.(*Model)
+	if mod.ShowLoginForm {
+		t.Error("ShowLoginForm should be false after Esc")
+	}
+	if mod.LoginPassword != "" {
+		t.Errorf("LoginPassword should be cleared, got %q", mod.LoginPassword)
+	}
+	if len(mod.Scrollback) == 0 || !strings.Contains(mod.Scrollback[0], "cancelled") {
+		t.Errorf("Scrollback = %v; expected Login cancelled", mod.Scrollback)
+	}
+}
+
+// TestModel_LoginFormKey_TabNavigation verifies Tab and Shift+Tab cycle focus.
+func TestModel_LoginFormKey_TabNavigation(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		key       tea.KeyType
+		wantFocus int
+	}{
+		{"Tab forward", tea.KeyTab, 1},
+		{"ShiftTab backward", tea.KeyShiftTab, 2},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			m := NewModel(&chat.Session{})
+			m.ShowLoginForm = true
+			m.LoginFocusedField = 0
+			m.Update(tea.KeyMsg{Type: tc.key})
+			if m.LoginFocusedField != tc.wantFocus {
+				t.Errorf("%s: focus = %d, want %d", tc.name, m.LoginFocusedField, tc.wantFocus)
+			}
+		})
+	}
+}
+
+// TestModel_LoginFormKey_Enter_MissingFields verifies Enter with empty fields shows validation error.
+func TestModel_LoginFormKey_Enter_MissingFields(t *testing.T) {
+	m := NewModel(&chat.Session{})
+	m.ShowLoginForm = true
+	m.LoginGatewayURL = ""
+	m.LoginUsername = ""
+	updated, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	if cmd != nil {
+		t.Errorf("Enter with missing fields cmd = %v, want nil", cmd)
+	}
+	mod := updated.(*Model)
+	if mod.LoginErr == "" {
+		t.Error("LoginErr should be set for missing fields")
+	}
+}
+
+// TestModel_LoginFormKey_Enter_Valid verifies Enter with fields set returns login cmd.
+func TestModel_LoginFormKey_Enter_Valid(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/v1/auth/login" {
+			_, _ = w.Write([]byte(`{"access_token":"tok","refresh_token":"ref","token_type":"Bearer","expires_in":900}`))
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+	m := NewModel(&chat.Session{})
+	m.ShowLoginForm = true
+	m.LoginGatewayURL = server.URL
+	m.LoginUsername = "alice"
+	m.LoginPassword = loginTestPassword
+	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	if cmd == nil {
+		t.Fatal("Enter with valid fields should return login cmd")
+	}
+	msg := cmd()
+	if res, ok := msg.(loginResultMsg); !ok || res.Err != nil {
+		t.Errorf("loginResultMsg = %T %+v, expected success", msg, msg)
+	}
+}
+
+// TestModel_LoginFormKey_Enter_LoginError verifies failed login returns loginResultMsg with Err.
+func TestModel_LoginFormKey_Enter_LoginError(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusUnauthorized)
+	}))
+	defer server.Close()
+	m := NewModel(&chat.Session{})
+	m.ShowLoginForm = true
+	m.LoginGatewayURL = server.URL
+	m.LoginUsername = "alice"
+	m.LoginPassword = "bad"
+	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	if cmd == nil {
+		t.Fatal("expected login cmd")
+	}
+	msg := cmd()
+	res, ok := msg.(loginResultMsg)
+	if !ok || res.Err == nil {
+		t.Errorf("expected loginResultMsg with Err; got %T %+v", msg, msg)
+	}
+}
+
+// TestModel_LoginFormKey_Backspace verifies backspace deletes from focused field.
+func TestModel_LoginFormKey_Backspace(t *testing.T) {
+	type bsCase struct {
+		name  string
+		field int
+		check func(*testing.T, *Model)
+	}
+	cases := []bsCase{
+		{"gateway", 0, func(t *testing.T, m *Model) {
+			if m.LoginGatewayURL != "http://g" {
+				t.Errorf("gateway = %q, want http://g", m.LoginGatewayURL)
+			}
+		}},
+		{"username", 1, func(t *testing.T, m *Model) {
+			if m.LoginUsername != string(RoleUser)[:3] {
+				t.Errorf("username = %q, want use", m.LoginUsername)
+			}
+		}},
+		{"password", 2, func(t *testing.T, m *Model) {
+			if m.LoginPassword != loginTestPassword[:3] {
+				t.Errorf("password = %q, want pas", m.LoginPassword)
+			}
+		}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			m := NewModel(&chat.Session{})
+			m.ShowLoginForm = true
+			m.LoginFocusedField = tc.field
+			m.LoginGatewayURL = loginTestGatewayURL
+			m.LoginUsername = string(RoleUser)
+			m.LoginPassword = loginTestPassword
+			m.Update(tea.KeyMsg{Type: tea.KeyBackspace})
+			tc.check(t, m)
+		})
+	}
+}
+
+// TestModel_LoginFormKey_Append verifies typing appends to focused field.
+func TestModel_LoginFormKey_Append(t *testing.T) {
+	type appendCase struct {
+		name  string
+		field int
+		check func(*testing.T, *Model)
+	}
+	cases := []appendCase{
+		{"gateway", 0, func(t *testing.T, m *Model) {
+			if m.LoginGatewayURL != "x" {
+				t.Errorf("gateway = %q, want x", m.LoginGatewayURL)
+			}
+		}},
+		{"username", 1, func(t *testing.T, m *Model) {
+			if m.LoginUsername != "x" {
+				t.Errorf("username = %q, want x", m.LoginUsername)
+			}
+		}},
+		{"password", 2, func(t *testing.T, m *Model) {
+			if m.LoginPassword != "x" {
+				t.Errorf("password = %q, want x", m.LoginPassword)
+			}
+		}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			m := NewModel(&chat.Session{})
+			m.ShowLoginForm = true
+			m.LoginFocusedField = tc.field
+			m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("x")})
+			tc.check(t, m)
+		})
+	}
+}
+
+// TestModel_EnsureThreadCmd_NilSession verifies ensureThreadCmd returns error when session is nil.
+func TestModel_EnsureThreadCmd_NilSession(t *testing.T) {
+	m := &Model{}
+	cmd := m.ensureThreadCmd()
+	if cmd == nil {
+		t.Fatal("ensureThreadCmd should return a cmd even with nil session")
+	}
+	msg := cmd()
+	res, ok := msg.(ensureThreadResult)
+	if !ok || res.err == nil {
+		t.Errorf("expected ensureThreadResult with err; got %T %+v", msg, msg)
+	}
+}
+
+// TestModel_ApplyStreamDelta_Amendment verifies the amendment branch replaces streamBuf.
+func TestModel_ApplyStreamDelta_Amendment(t *testing.T) {
+	m := NewModel(&chat.Session{})
+	m.Scrollback = append(m.Scrollback, "Assistant: original text")
+	m.streamBuf.WriteString("original text")
+	updated, _ := m.Update(streamDeltaMsg{amendment: "replaced text"})
+	mod := updated.(*Model)
+	if mod.streamBuf.String() != "replaced text" {
+		t.Errorf("streamBuf = %q, want replaced text", mod.streamBuf.String())
+	}
+	last := mod.Scrollback[len(mod.Scrollback)-1]
+	if last != "Assistant: replaced text" {
+		t.Errorf("scrollback = %q, want Assistant: replaced text", last)
+	}
+}
+
+// TestModel_ApplySlashResult_NilLines verifies nil lines clears scrollback.
+func TestModel_ApplySlashResult_NilLines(t *testing.T) {
+	m := NewModel(&chat.Session{})
+	m.Scrollback = []string{"existing"}
+	updated, _ := m.Update(slashResultMsg{lines: nil})
+	mod := updated.(*Model)
+	if len(mod.Scrollback) != 0 {
+		t.Errorf("Scrollback = %v, want empty after nil lines", mod.Scrollback)
+	}
+}
+
+// TestModel_ApplySlashResult_ExitModel verifies exitModel=true returns tea.Quit.
+func TestModel_ApplySlashResult_ExitModel(t *testing.T) {
+	m := NewModel(&chat.Session{})
+	_, cmd := m.Update(slashResultMsg{exitModel: true})
+	if cmd == nil {
+		t.Error("exitModel=true should return tea.Quit cmd")
+	}
+}
+
+// TestModel_PushInputHistory_Duplicate verifies duplicate last item is not pushed.
+func TestModel_PushInputHistory_Duplicate(t *testing.T) {
+	m := NewModel(&chat.Session{})
+	m.pushInputHistory("hello")
+	m.pushInputHistory("hello")
+	if len(m.InputHistory) != 1 {
+		t.Errorf("InputHistory len = %d, want 1 (no duplicate)", len(m.InputHistory))
+	}
+}
+
+// TestModel_PushInputHistory_MaxCap verifies history is capped at maxInputHistory.
+func TestModel_PushInputHistory_MaxCap(t *testing.T) {
+	m := NewModel(&chat.Session{})
+	for i := range maxInputHistory + 5 {
+		m.pushInputHistory(fmt.Sprintf("line-%d", i))
+	}
+	if len(m.InputHistory) != maxInputHistory {
+		t.Errorf("InputHistory len = %d, want %d", len(m.InputHistory), maxInputHistory)
+	}
+}
+
+// TestModel_EnsureThreadCmd_EnsureError verifies error from EnsureThread is returned.
+func TestModel_EnsureThreadCmd_EnsureError(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer server.Close()
+	client := gateway.NewClient(server.URL)
+	client.SetToken("tok")
+	session := &chat.Session{Client: client}
+	m := NewModel(session)
+	cmd := m.ensureThreadCmd()
+	msg := cmd()
+	res, ok := msg.(ensureThreadResult)
+	if !ok || res.err == nil {
+		t.Errorf("expected ensureThreadResult with err; got %T %+v", msg, msg)
+	}
+}
+
+// TestModel_EnsureThreadCmd_Success verifies successful EnsureThread returns threadID.
+func TestModel_EnsureThreadCmd_Success(t *testing.T) {
+	server := newMockThreadServer(t, "new-thread")
+	defer server.Close()
+	client := gateway.NewClient(server.URL)
+	client.SetToken("tok")
+	session := &chat.Session{Client: client}
+	m := NewModel(session)
+	cmd := m.ensureThreadCmd()
+	msg := cmd()
+	res, ok := msg.(ensureThreadResult)
+	if !ok || res.err != nil || res.threadID != "new-thread" {
+		t.Errorf("expected ensureThreadResult{threadID:new-thread}; got %T %+v", msg, msg)
+	}
+}
+
+func TestModel_SlashConnect_ShowURL(t *testing.T) {
+	client := gateway.NewClient("http://gw-test:9")
+	m := NewModel(&chat.Session{Client: client})
+	_, _ = m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("/connect")})
+	_, cmd := m.handleKey(tea.KeyMsg{Type: tea.KeyEnter})
+	if cmd == nil {
+		t.Fatal("Enter on /connect should produce cmd")
+	}
+	msg := cmd()
+	res, ok := msg.(slashResultMsg)
+	if !ok {
+		t.Fatalf("cmd() = %T, want slashResultMsg", msg)
+	}
+	found := false
+	for _, l := range res.lines {
+		if strings.Contains(l, "gateway") {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("/connect show expected gateway in lines; got %v", res.lines)
+	}
+}
+
+// newHealthzServer creates an httptest.Server that responds OK to /healthz.
+func newHealthzServer(t *testing.T) *httptest.Server {
+	t.Helper()
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/healthz" {
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte("ok"))
+		}
+	}))
+}
+
+func TestModel_SlashConnect_UpdateURL(t *testing.T) {
+	srv := newHealthzServer(t)
+	defer srv.Close()
+	client := gateway.NewClient("http://old:1")
+	m := NewModel(&chat.Session{Client: client})
+	provider := &mockAuthProvider{gatewayURL: "http://old:1"}
+	m.SetAuthProvider(provider)
+	_, _ = m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("/connect " + srv.URL)})
+	_, cmd := m.handleKey(tea.KeyMsg{Type: tea.KeyEnter})
+	if cmd == nil {
+		t.Fatal("Enter on /connect URL should produce cmd")
+	}
+	msg := cmd()
+	if _, ok := msg.(slashResultMsg); !ok {
+		t.Fatalf("cmd() = %T, want slashResultMsg", msg)
+	}
+	if client.BaseURL != srv.URL {
+		t.Errorf("expected BaseURL=%s, got %q", srv.URL, client.BaseURL)
+	}
+}
+
+func TestModel_SlashSetThinking_Show(t *testing.T) {
+	m := NewModel(&chat.Session{})
+	provider := &mockAuthProvider{}
+	m.SetAuthProvider(provider)
+	_, _ = m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("/show-thinking")})
+	_, cmd := m.handleKey(tea.KeyMsg{Type: tea.KeyEnter})
+	if cmd == nil {
+		t.Fatal("Enter on /show-thinking should produce cmd")
+	}
+	msg := cmd()
+	if _, ok := msg.(slashResultMsg); !ok {
+		t.Fatalf("cmd() = %T, want slashResultMsg", msg)
+	}
+	if !m.ShowThinking {
+		t.Error("expected ShowThinking=true after /show-thinking")
+	}
+	if !provider.showThinkingByDefault {
+		t.Error("expected provider.showThinkingByDefault=true after /show-thinking")
+	}
+}
+
+func TestModel_SlashSetThinking_Hide(t *testing.T) {
+	m := NewModel(&chat.Session{})
+	m.ShowThinking = true
+	provider := &mockAuthProvider{showThinkingByDefault: true}
+	m.SetAuthProvider(provider)
+	_, _ = m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("/hide-thinking")})
+	_, cmd := m.handleKey(tea.KeyMsg{Type: tea.KeyEnter})
+	if cmd == nil {
+		t.Fatal("Enter on /hide-thinking should produce cmd")
+	}
+	msg := cmd()
+	if _, ok := msg.(slashResultMsg); !ok {
+		t.Fatalf("cmd() = %T, want slashResultMsg", msg)
+	}
+	if m.ShowThinking {
+		t.Error("expected ShowThinking=false after /hide-thinking")
+	}
+	if provider.showThinkingByDefault {
+		t.Error("expected provider.showThinkingByDefault=false after /hide-thinking")
+	}
+}
+
+func TestModel_SlashStatus_OK(t *testing.T) {
+	srv := newHealthzServer(t)
+	defer srv.Close()
+	client := gateway.NewClient(srv.URL)
+	m := NewModel(&chat.Session{Client: client})
+	_, _ = m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("/status")})
+	_, cmd := m.handleKey(tea.KeyMsg{Type: tea.KeyEnter})
+	if cmd == nil {
+		t.Fatal("Enter on /status should produce cmd")
+	}
+	msg := cmd()
+	res, ok := msg.(slashResultMsg)
+	if !ok {
+		t.Fatalf("cmd() = %T, want slashResultMsg", msg)
+	}
+	found := false
+	for _, l := range res.lines {
+		if strings.Contains(l, "status") {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("/status expected 'status' in lines; got %v", res.lines)
+	}
+}
+
+func TestModel_SlashStatus_NotConnected(t *testing.T) {
+	m := NewModel(&chat.Session{})
+	_, _ = m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("/status")})
+	_, cmd := m.handleKey(tea.KeyMsg{Type: tea.KeyEnter})
+	if cmd == nil {
+		t.Fatal("Enter on /status should produce cmd")
+	}
+	msg := cmd()
+	res, ok := msg.(slashResultMsg)
+	if !ok {
+		t.Fatalf("cmd() = %T, want slashResultMsg", msg)
+	}
+	if len(res.lines) == 0 || !strings.Contains(res.lines[0], "not connected") {
+		t.Errorf("/status with nil client expected 'not connected'; got %v", res.lines)
+	}
+	// /status should never trigger the exit flow.
+	if res.exitModel {
+		t.Error("expected exitModel=false for /status not-connected")
+	}
+}
+
+func TestModel_SlashWhoami_Dispatch(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/v1/users/me" {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`{"id":"u1","handle":"alice"}`))
+		}
+	}))
+	defer srv.Close()
+	client := gateway.NewClient(srv.URL)
+	client.SetToken("tok")
+	m := NewModel(&chat.Session{Client: client})
+	_, _ = m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("/whoami")})
+	_, cmd := m.handleKey(tea.KeyMsg{Type: tea.KeyEnter})
+	if cmd == nil {
+		t.Fatal("Enter on /whoami should produce cmd")
+	}
+	msg := cmd()
+	res, ok := msg.(slashResultMsg)
+	if !ok {
+		t.Fatalf("cmd() = %T, want slashResultMsg", msg)
+	}
+	found := false
+	for _, l := range res.lines {
+		if strings.Contains(l, "alice") {
+			found = true
+		}
+	}
+	if !found {
+		t.Errorf("/whoami expected 'alice' in lines; got %v", res.lines)
+	}
 }

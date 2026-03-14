@@ -58,8 +58,12 @@ func (p *tuiAuthProvider) GatewayURL() string   { return p.cfg.GatewayURL }
 func (p *tuiAuthProvider) SetTokens(access, refresh string) {
 	p.cfg.Token, p.cfg.RefreshToken = access, refresh
 }
-func (p *tuiAuthProvider) SetGatewayURL(url string) { p.cfg.GatewayURL = url }
-func (p *tuiAuthProvider) Save() error              { return p.saveFn() }
+func (p *tuiAuthProvider) SetGatewayURL(url string)    { p.cfg.GatewayURL = url }
+func (p *tuiAuthProvider) Save() error                 { return p.saveFn() }
+func (p *tuiAuthProvider) ShowThinkingByDefault() bool { return p.cfg.TUI.ShowThinkingByDefault }
+func (p *tuiAuthProvider) SetShowThinkingByDefault(v bool) {
+	p.cfg.TUI.ShowThinkingByDefault = v
+}
 
 // runTUIWithSession starts the full-screen TUI with the given session. Used by both
 // "cynork tui" and interactive "cynork chat" (when stdin/stdout are a TTY).

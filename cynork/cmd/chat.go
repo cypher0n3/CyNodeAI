@@ -21,8 +21,10 @@ import (
 
 var chatPlain bool
 var chatMessage string
-var chatProjectID string // --project-id flag (initial project for session)
-var chatThreadNew bool   // --thread-new flag: create a fresh thread before sending/opening session
+var chatModel string        // --model flag (model ID for chat completions)
+var chatProjectID string    // --project-id flag (initial project for session)
+var chatThreadNew bool      // --thread-new flag: create a fresh thread before sending/opening session
+var chatResumeThread string // --resume-thread flag: resolve selector and resume existing thread
 
 var chatCmd = &cobra.Command{
 	Use:          "chat",
@@ -36,8 +38,10 @@ func init() {
 	rootCmd.AddCommand(chatCmd)
 	chatCmd.Flags().BoolVar(&chatPlain, "plain", false, "print model responses as raw text without Markdown formatting (for scripting or piping)")
 	chatCmd.Flags().StringVarP(&chatMessage, "message", "m", "", "send one message and print response (non-interactive)")
+	chatCmd.Flags().StringVar(&chatModel, "model", "", "model ID for chat completions (sent as OpenAI model field; gateway default if omitted)")
 	chatCmd.Flags().StringVar(&chatProjectID, "project-id", "", "project to associate with chat session (sent as OpenAI-Project header)")
 	chatCmd.Flags().BoolVar(&chatThreadNew, "thread-new", false, "start a new conversation thread before sending the first message")
+	chatCmd.Flags().StringVar(&chatResumeThread, "resume-thread", "", "start in an existing thread (selector: ordinal, id, or title from /thread list)")
 }
 
 // formatChatResponseFn is the implementation of formatChatResponse; tests may replace it to trigger error path.
@@ -73,10 +77,16 @@ func runChat(_ *cobra.Command, _ []string) error {
 	client := gateway.NewClient(cfg.GatewayURL)
 	client.SetToken(cfg.Token)
 	session := chat.NewSession(client)
+	session.Model = chatModel
 	session.ProjectID = chatProjectID
 	session.Plain = chatPlain
 	session.NoColor = noColor
-	if chatThreadNew {
+	switch {
+	case chatResumeThread != "":
+		if err := session.EnsureThread(chatResumeThread); err != nil {
+			return fmt.Errorf("resume thread: %w", err)
+		}
+	case chatThreadNew:
 		threadID, err := session.NewThread()
 		if err != nil {
 			return fmt.Errorf("start new thread: %w", err)

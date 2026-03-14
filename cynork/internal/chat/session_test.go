@@ -316,3 +316,132 @@ func TestSession_EnsureThread_NewAndResume(t *testing.T) {
 		t.Errorf("resume CurrentThreadID = %q", session.CurrentThreadID)
 	}
 }
+
+func TestSession_SetClient_ResponsesTransport(t *testing.T) {
+	oldClient := gateway.NewClient("http://old")
+	session := NewSessionWithResponses(oldClient)
+	newClient := gateway.NewClient("http://new")
+	session.SetClient(newClient)
+	if session.Client != newClient {
+		t.Errorf("Client = %p, want %p", session.Client, newClient)
+	}
+	if rt, ok := session.Transport.(*ResponsesTransport); ok && rt.Client != newClient {
+		t.Errorf("ResponsesTransport.Client = %p, want %p", rt.Client, newClient)
+	}
+}
+
+func TestSession_NewThread_Error(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer server.Close()
+	client := gateway.NewClient(server.URL)
+	client.SetToken("tok")
+	session := NewSession(client)
+	_, err := session.NewThread()
+	if err == nil {
+		t.Error("expected error from NewThread on 500 response")
+	}
+}
+
+func TestSession_PatchThreadTitle_Error(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+	client := gateway.NewClient(server.URL)
+	client.SetToken("tok")
+	session := NewSession(client)
+	err := session.PatchThreadTitle("t1", "Title")
+	if err == nil {
+		t.Error("expected error from PatchThreadTitle on 404")
+	}
+}
+
+func TestSession_ResolveThreadSelector_ListError(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer server.Close()
+	client := gateway.NewClient(server.URL)
+	client.SetToken("tok")
+	session := NewSession(client)
+	_, err := session.ResolveThreadSelector("1", 10)
+	if err == nil {
+		t.Error("expected error from ResolveThreadSelector when ListThreads fails")
+	}
+}
+
+func TestResolveThreadSelectorFromItems_TitleMatch(t *testing.T) {
+	title := "My Thread"
+	items := []gateway.ChatThreadItem{{ID: "t1", Title: &title}}
+	id, err := resolveThreadSelectorFromItems("my thread", items)
+	if err != nil {
+		t.Fatalf("resolveThreadSelectorFromItems: %v", err)
+	}
+	if id != "t1" {
+		t.Errorf("id = %q, want t1", id)
+	}
+}
+
+func TestResolveThreadSelectorFromItems_NoMatch(t *testing.T) {
+	title := "Other"
+	items := []gateway.ChatThreadItem{{ID: "t1", Title: &title}}
+	_, err := resolveThreadSelectorFromItems("nonexistent", items)
+	if err == nil {
+		t.Error("expected error for no match")
+	}
+}
+
+func TestResolveThreadSelectorFromItems_EmptyList(t *testing.T) {
+	_, err := resolveThreadSelectorFromItems("1", nil)
+	if err == nil {
+		t.Error("expected error for empty item list")
+	}
+}
+
+func TestResolveThreadSelectorFromItems_IDPrefix(t *testing.T) {
+	items := []gateway.ChatThreadItem{{ID: "tid-abc-123"}}
+	id, err := resolveThreadSelectorFromItems("tid-abc", items)
+	if err != nil {
+		t.Fatalf("resolveThreadSelectorFromItems: %v", err)
+	}
+	if id != "tid-abc-123" {
+		t.Errorf("id = %q, want tid-abc-123", id)
+	}
+}
+
+func TestSession_StreamMessage_ResponsesTransport_Error(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer server.Close()
+	client := gateway.NewClient(server.URL)
+	client.SetToken("tok")
+	session := NewSessionWithResponses(client)
+	ch, err := session.StreamMessage(context.Background(), "hi")
+	if err != nil {
+		t.Fatalf("StreamMessage initial: %v", err)
+	}
+	var lastDelta ChatStreamDelta
+	for d := range ch {
+		lastDelta = d
+	}
+	if !lastDelta.Done || lastDelta.Err == nil {
+		t.Errorf("expected Done with error; got %+v", lastDelta)
+	}
+}
+
+func TestSession_EnsureThread_ResolveError(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer server.Close()
+	client := gateway.NewClient(server.URL)
+	client.SetToken("tok")
+	session := NewSession(client)
+	err := session.EnsureThread("some-selector")
+	if err == nil {
+		t.Error("expected error from EnsureThread when resolve fails")
+	}
+}

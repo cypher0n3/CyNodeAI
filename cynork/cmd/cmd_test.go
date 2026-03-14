@@ -31,6 +31,9 @@ const testStatusCompleted = "completed"
 const (
 	chatCompletionsPath = "/v1/chat/completions"
 	chatThreadsPath     = "/v1/chat/threads"
+	testThreadSelector  = "inbox"
+	pathHealthz         = "/healthz"
+	testResumeThreadID  = "tid-r"
 )
 const pathV1SkillsS1 = "/v1/skills/s1"
 const pathV1Tasks = "/v1/tasks"
@@ -2446,7 +2449,7 @@ func TestRunTaskArtifactsList(t *testing.T) {
 
 func TestRunSlashCommand_StatusWhoami(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/healthz" {
+		if r.URL.Path == pathHealthz {
 			w.WriteHeader(http.StatusOK)
 			_, _ = w.Write([]byte("ok"))
 			return
@@ -3106,5 +3109,329 @@ func TestRunSlashThread_NilClient(t *testing.T) {
 	session := &chat.Session{}
 	if err := runSlashThread(session, "new"); err != nil {
 		t.Fatalf("nil client should print message and return nil, got: %v", err)
+	}
+}
+
+func TestSetChatSessionProject_None(t *testing.T) {
+	session := &chat.Session{}
+	setChatSessionProject(session, "none")
+	if session.ProjectID != "" {
+		t.Errorf("expected empty project ID after 'none', got %q", session.ProjectID)
+	}
+}
+
+func TestRunChatLoopWithReader_OtherError(t *testing.T) {
+	session := &chat.Session{}
+	expectedErr := errors.New("other read error")
+	getLine := func(string) (string, error) {
+		return "", expectedErr
+	}
+	err := runChatLoopWithReader(session, "> ", getLine)
+	if !errors.Is(err, expectedErr) {
+		t.Errorf("expected other read error, got %v", err)
+	}
+}
+
+func TestRunSlashThread_List(t *testing.T) {
+	title := testThreadSelector
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet && r.URL.Path == chatThreadsPath {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"data": []map[string]any{
+					{"id": "tid-list-1", "title": title, "created_at": "2025-01-01T00:00:00Z", "updated_at": "2025-01-01T00:00:00Z"},
+				},
+			})
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer srv.Close()
+	session := chat.NewSession(gateway.NewClient(srv.URL))
+	session.SetToken("tok")
+	if err := runSlashThread(session, "list"); err != nil {
+		t.Fatalf("runSlashThread list: %v", err)
+	}
+}
+
+func TestRunSlashThread_Switch(t *testing.T) {
+	title := testThreadSelector
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet && r.URL.Path == chatThreadsPath {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"data": []map[string]any{
+					{"id": "tid-switch-1", "title": title, "created_at": "2025-01-01T00:00:00Z", "updated_at": "2025-01-01T00:00:00Z"},
+				},
+			})
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer srv.Close()
+	session := chat.NewSession(gateway.NewClient(srv.URL))
+	session.SetToken("tok")
+	if err := runSlashThread(session, "switch "+testThreadSelector); err != nil {
+		t.Fatalf("runSlashThread switch: %v", err)
+	}
+	if session.CurrentThreadID != "tid-switch-1" {
+		t.Errorf("expected CurrentThreadID=tid-switch-1 after switch, got %q", session.CurrentThreadID)
+	}
+}
+
+func TestRunSlashThread_SwitchNoSelector(t *testing.T) {
+	session := chat.NewSession(gateway.NewClient("http://localhost:1"))
+	session.SetToken("tok")
+	if err := runSlashThread(session, "switch"); err != nil {
+		t.Fatalf("runSlashThread switch no selector should not error: %v", err)
+	}
+}
+
+func TestRunSlashThread_Rename(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPatch && strings.HasPrefix(r.URL.Path, chatThreadsPath) {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`{"id":testResumeThreadID,"title":"My Title"}`))
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer srv.Close()
+	session := chat.NewSession(gateway.NewClient(srv.URL))
+	session.SetToken("tok")
+	session.CurrentThreadID = testResumeThreadID
+	if err := runSlashThread(session, "rename My Title"); err != nil {
+		t.Fatalf("runSlashThread rename: %v", err)
+	}
+}
+
+func TestRunSlashThread_RenameNoTitle(t *testing.T) {
+	session := chat.NewSession(gateway.NewClient("http://localhost:1"))
+	session.SetToken("tok")
+	session.CurrentThreadID = testResumeThreadID
+	if err := runSlashThread(session, "rename"); err != nil {
+		t.Fatalf("runSlashThread rename no title should not error: %v", err)
+	}
+}
+
+func TestChatResumeThread_Flag(t *testing.T) {
+	title := testThreadSelector
+	called := false
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet && r.URL.Path == chatThreadsPath {
+			called = true
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"data": []map[string]any{
+					{"id": "tid-resume-1", "title": title, "created_at": "2025-01-01T00:00:00Z", "updated_at": "2025-01-01T00:00:00Z"},
+				},
+			})
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer srv.Close()
+
+	cfg = &config.Config{GatewayURL: srv.URL, Token: "tok"}
+	defer func() { cfg = nil }()
+
+	oldResume := chatResumeThread
+	chatResumeThread = testThreadSelector
+	defer func() { chatResumeThread = oldResume }()
+
+	chatLinerGetLine = func(_ string) (string, error) { return "", io.EOF }
+	defer func() { chatLinerGetLine = nil }()
+
+	if err := runChat(nil, nil); err != nil {
+		t.Fatalf("runChat with --resume-thread: %v", err)
+	}
+	if !called {
+		t.Error("expected GET /v1/chat/threads to be called when --resume-thread is set")
+	}
+}
+
+func TestChatResumeThread_Error(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusUnauthorized)
+	}))
+	defer srv.Close()
+
+	cfg = &config.Config{GatewayURL: srv.URL, Token: "tok"}
+	defer func() { cfg = nil }()
+
+	oldResume := chatResumeThread
+	chatResumeThread = testThreadSelector
+	defer func() { chatResumeThread = oldResume }()
+
+	if err := runChat(nil, nil); err == nil {
+		t.Fatal("expected error when --resume-thread resolution fails")
+	}
+}
+
+func TestRunSlashConnect_ShowURL(t *testing.T) {
+	session := chat.NewSession(gateway.NewClient("http://gw-test:1234"))
+	session.SetToken("tok")
+	if err := runSlashConnect(session, ""); err != nil {
+		t.Fatalf("runSlashConnect show: %v", err)
+	}
+}
+
+func TestRunSlashConnect_UpdateURL(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == pathHealthz {
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte("ok"))
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer srv.Close()
+	cfg = &config.Config{GatewayURL: "http://old:1", Token: "tok"}
+	defer func() { cfg = nil }()
+	session := chat.NewSession(gateway.NewClient("http://old:1"))
+	session.SetToken("tok")
+	if err := runSlashConnect(session, srv.URL); err != nil {
+		t.Fatalf("runSlashConnect update: %v", err)
+	}
+	if session.Client.BaseURL != srv.URL {
+		t.Errorf("session.Client.BaseURL not updated, got %q", session.Client.BaseURL)
+	}
+}
+
+func TestRunSlashConnect_HealthFail(t *testing.T) {
+	cfg = &config.Config{GatewayURL: "http://old:1", Token: "tok"}
+	defer func() { cfg = nil }()
+	session := chat.NewSession(gateway.NewClient("http://old:1"))
+	session.SetToken("tok")
+	if err := runSlashConnect(session, "http://localhost:9"); err != nil {
+		t.Fatalf("runSlashConnect health fail should not error: %v", err)
+	}
+}
+
+func TestRunSlashSetThinking_Show(t *testing.T) {
+	cfg = &config.Config{}
+	defer func() { cfg = nil }()
+	if err := runSlashSetThinking(nil, true); err != nil {
+		t.Fatalf("runSlashSetThinking show: %v", err)
+	}
+	if !cfg.TUI.ShowThinkingByDefault {
+		t.Error("expected ShowThinkingByDefault=true after show-thinking")
+	}
+}
+
+func TestRunSlashSetThinking_Hide(t *testing.T) {
+	cfg = &config.Config{TUI: config.TUIConfig{ShowThinkingByDefault: true}}
+	defer func() { cfg = nil }()
+	if err := runSlashSetThinking(nil, false); err != nil {
+		t.Fatalf("runSlashSetThinking hide: %v", err)
+	}
+	if cfg.TUI.ShowThinkingByDefault {
+		t.Error("expected ShowThinkingByDefault=false after hide-thinking")
+	}
+}
+
+func TestRunSlashCommand_ConnectAndThinking(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == pathHealthz {
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte("ok"))
+		}
+	}))
+	defer srv.Close()
+	cfg = &config.Config{GatewayURL: srv.URL, Token: "tok"}
+	defer func() { cfg = nil }()
+	session := chat.NewSession(gateway.NewClient(srv.URL))
+	session.SetToken("tok")
+	if _, err := runSlashCommand(session, "/connect"); err != nil {
+		t.Errorf("runSlashCommand /connect: %v", err)
+	}
+	if _, err := runSlashCommand(session, "/show-thinking"); err != nil {
+		t.Errorf("runSlashCommand /show-thinking: %v", err)
+	}
+	if _, err := runSlashCommand(session, "/hide-thinking"); err != nil {
+		t.Errorf("runSlashCommand /hide-thinking: %v", err)
+	}
+}
+
+func TestRunSlashThread_NewError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusUnauthorized)
+	}))
+	defer srv.Close()
+	session := chat.NewSession(gateway.NewClient(srv.URL))
+	session.SetToken("tok")
+	if err := runSlashThread(session, "new"); err != nil {
+		t.Fatalf("runSlashThread new error path should not return error: %v", err)
+	}
+}
+
+func TestRunSlashThread_ListError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusUnauthorized)
+	}))
+	defer srv.Close()
+	session := chat.NewSession(gateway.NewClient(srv.URL))
+	session.SetToken("tok")
+	if err := runSlashThread(session, subCmdList); err != nil {
+		t.Fatalf("runSlashThread list error path should not return error: %v", err)
+	}
+}
+
+func TestRunSlashThread_ListEmpty(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodGet && r.URL.Path == chatThreadsPath {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`{"data":[]}`))
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer srv.Close()
+	session := chat.NewSession(gateway.NewClient(srv.URL))
+	session.SetToken("tok")
+	if err := runSlashThread(session, subCmdList); err != nil {
+		t.Fatalf("runSlashThread list empty should not error: %v", err)
+	}
+}
+
+func TestRunSlashThread_SwitchError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusUnauthorized)
+	}))
+	defer srv.Close()
+	session := chat.NewSession(gateway.NewClient(srv.URL))
+	session.SetToken("tok")
+	if err := runSlashThread(session, "switch "+testThreadSelector); err != nil {
+		t.Fatalf("runSlashThread switch error path should not error: %v", err)
+	}
+}
+
+func TestRunSlashThread_RenameError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusUnauthorized)
+	}))
+	defer srv.Close()
+	session := chat.NewSession(gateway.NewClient(srv.URL))
+	session.SetToken("tok")
+	session.CurrentThreadID = testResumeThreadID
+	if err := runSlashThread(session, "rename My Title"); err != nil {
+		t.Fatalf("runSlashThread rename error path should not error: %v", err)
+	}
+}
+
+func TestRunCynorkSubcommand_ExeError(t *testing.T) {
+	old := getCynorkExeForSubcommand
+	getCynorkExeForSubcommand = func() (string, error) {
+		return "", errors.New("no executable found")
+	}
+	defer func() { getCynorkExeForSubcommand = old }()
+	err := runCynorkSubcommand("test", "")
+	if err == nil {
+		t.Error("expected error when getCynorkExeForSubcommand fails")
 	}
 }

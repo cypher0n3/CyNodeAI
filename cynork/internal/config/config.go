@@ -14,11 +14,17 @@ import (
 // See docs/tech_specs/ports_and_endpoints.md and cynork_cli.md.
 const DefaultGatewayURL = "http://localhost:12080"
 
+// TUIConfig holds TUI-specific preferences persisted in the config file.
+type TUIConfig struct {
+	ShowThinkingByDefault bool `yaml:"show_thinking_by_default" json:"show_thinking_by_default"`
+}
+
 // Config holds CLI configuration (file + env overrides).
 type Config struct {
-	GatewayURL   string `yaml:"gateway_url" json:"gateway_url"`
-	Token        string `yaml:"token" json:"token"`
-	RefreshToken string `yaml:"refresh_token" json:"refresh_token"`
+	GatewayURL   string    `yaml:"gateway_url" json:"gateway_url"`
+	Token        string    `yaml:"token" json:"token"`
+	RefreshToken string    `yaml:"refresh_token" json:"refresh_token"`
+	TUI          TUIConfig `yaml:"tui" json:"tui"`
 }
 
 // userHomeDir is overridable in tests.

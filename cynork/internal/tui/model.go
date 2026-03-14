@@ -91,6 +91,8 @@ type AuthProvider interface {
 	SetTokens(access, refresh string)
 	SetGatewayURL(url string)
 	Save() error
+	ShowThinkingByDefault() bool
+	SetShowThinkingByDefault(bool)
 }
 
 // Model holds the TUI state: session, scrollback, composer input, and dimensions.
@@ -123,6 +125,9 @@ type Model struct {
 	// Startup: when token was empty, show login on init; after login ensure thread.
 	OpenLoginFormOnInit  bool
 	ResumeThreadSelector string
+
+	// ShowThinking controls whether thinking parts are expanded (true) or collapsed (false).
+	ShowThinking bool
 }
 
 // NewModel returns an initial TUI model for the given session.
