@@ -190,6 +190,13 @@ func managedServiceProxyHTTPHandler(bearerToken string, socketByService map[stri
 			http.Error(w, err.Error(), errCode)
 			return
 		}
+		if wantsStream(body) {
+			errCode, err := doManagedProxyUpstreamStream(r.Context(), proxyReq, body, socketPath, r.PathValue("id"), w, logger)
+			if err != nil {
+				http.Error(w, err.Error(), errCode)
+			}
+			return
+		}
 		proxyResp, errCode, err := doManagedProxyUpstream(r.Context(), proxyReq, body, socketPath, r.PathValue("id"), logger)
 		if err != nil {
 			http.Error(w, err.Error(), errCode)
@@ -199,6 +206,59 @@ func managedServiceProxyHTTPHandler(bearerToken string, socketByService map[stri
 		w.WriteHeader(http.StatusOK)
 		_ = json.NewEncoder(w).Encode(proxyResp)
 	}
+}
+
+// wantsStream returns true if the decoded proxy body is JSON with "stream": true (e.g. PMA chat completion stream).
+func wantsStream(body []byte) bool {
+	var v struct {
+		Stream bool `json:"stream"`
+	}
+	return json.Unmarshal(body, &v) == nil && v.Stream
+}
+
+// doManagedProxyUpstreamStream forwards the request to the managed service and streams the upstream response body back.
+// Used when the request body has "stream": true so the client receives token-by-token output.
+func doManagedProxyUpstreamStream(ctx context.Context, proxyReq *managedProxyRequest, body []byte, socketPath, serviceID string, w http.ResponseWriter, logger *slog.Logger) (errCode int, err error) {
+	path := proxyReq.Path
+	if path == "" {
+		path = "/"
+	}
+	if !strings.HasPrefix(path, "/") {
+		path = "/" + path
+	}
+	client := managedProxyHTTPClient(socketPath)
+	upstreamReq, err := buildManagedProxyUpstreamRequest(ctx, proxyReq, body, path)
+	if err != nil {
+		if logger != nil {
+			logger.Error("managed-service proxy stream: new request", "error", err)
+		}
+		return http.StatusInternalServerError, fmt.Errorf("internal error")
+	}
+	resp, err := client.Do(upstreamReq)
+	if err != nil {
+		if logger != nil {
+			logger.Error("managed-service proxy stream: upstream request", "service_id", serviceID, "error", err)
+		}
+		return http.StatusBadGateway, fmt.Errorf("upstream error")
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		return resp.StatusCode, fmt.Errorf("upstream returned %s", resp.Status)
+	}
+	w.Header().Set("Content-Type", resp.Header.Get("Content-Type"))
+	if resp.Header.Get("Content-Type") == "" {
+		w.Header().Set("Content-Type", "application/x-ndjson")
+	}
+	w.Header().Set("X-Accel-Buffering", "no")
+	w.WriteHeader(http.StatusOK)
+	if flusher, ok := w.(http.Flusher); ok {
+		flusher.Flush()
+	}
+	_, err = io.Copy(w, resp.Body)
+	if err != nil && logger != nil {
+		logger.Warn("managed-service proxy stream: copy body", "error", err)
+	}
+	return 0, nil
 }
 
 func validateManagedProxyRequest(r *http.Request, bearerToken string, socketByService map[string]string, logger *slog.Logger) (req *managedProxyRequest, body []byte, socketPath string, errCode int, err error) {

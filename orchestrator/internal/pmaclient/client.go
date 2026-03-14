@@ -3,11 +3,13 @@
 package pmaclient
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
 	"time"
@@ -24,6 +26,7 @@ type ChatMessage struct {
 // CompletionRequest is the body sent to cynode-pma internal chat completion endpoint.
 type CompletionRequest struct {
 	Messages []ChatMessage `json:"messages"`
+	Stream   bool          `json:"stream,omitempty"`
 }
 
 // CompletionResponse is the response from cynode-pma.
@@ -86,7 +89,114 @@ func CallChatCompletion(ctx context.Context, client *http.Client, baseURL string
 	return out.Content, nil
 }
 
+// CallChatCompletionStream streams completion from PMA; onDelta is called for each token.
+// Supports both direct PMA URLs and managed proxy URLs (worker streams upstream response when request has stream: true).
+func CallChatCompletionStream(ctx context.Context, client *http.Client, baseURL string, messages []ChatMessage, workerBearerToken string, onDelta func(string) error) error {
+	if baseURL == "" {
+		return fmt.Errorf("PMA base URL is required")
+	}
+	if client == nil {
+		client = &http.Client{Timeout: defaultTimeout}
+	}
+	baseURL = strings.TrimSpace(baseURL)
+	body := CompletionRequest{Messages: messages, Stream: true}
+	b, err := json.Marshal(body)
+	if err != nil {
+		return err
+	}
+	if looksLikeManagedProxyEndpoint(baseURL) {
+		return callViaManagedProxyStream(ctx, client, baseURL, b, workerBearerToken, onDelta)
+	}
+	url := strings.TrimSuffix(baseURL, "/") + "/internal/chat/completion"
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(b))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("PMA chat completion returned %s", resp.Status)
+	}
+	return readNDJSONStream(ctx, resp.Body, resp.Header.Get("Content-Type"), onDelta)
+}
+
+func readNDJSONStream(ctx context.Context, body io.Reader, contentType string, onDelta func(string) error) error {
+	if contentType != "" && !strings.Contains(contentType, "application/x-ndjson") && !strings.Contains(contentType, "application/json") {
+		bodyBytes, _ := io.ReadAll(body)
+		var single CompletionResponse
+		if json.Unmarshal(bodyBytes, &single) == nil && single.Content != "" {
+			return onDelta(single.Content)
+		}
+		return fmt.Errorf("unexpected PMA response content-type: %s", contentType)
+	}
+	scanner := bufio.NewScanner(body)
+	for scanner.Scan() {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		line := bytes.TrimSpace(scanner.Bytes())
+		if len(line) == 0 {
+			continue
+		}
+		var chunk struct {
+			Delta string `json:"delta"`
+		}
+		if json.Unmarshal(line, &chunk) != nil {
+			continue
+		}
+		if chunk.Delta != "" {
+			if err := onDelta(chunk.Delta); err != nil {
+				return err
+			}
+		}
+	}
+	return scanner.Err()
+}
+
+// callViaManagedProxyStream POSTs a stream:true request to the managed proxy; the worker streams the upstream body back.
+func callViaManagedProxyStream(ctx context.Context, client *http.Client, proxyURL string, handoffBody []byte, workerBearerToken string, onDelta func(string) error) error {
+	reqBody := managedProxyRequest{
+		Version: 1,
+		Method:  http.MethodPost,
+		Path:    "/internal/chat/completion",
+		Headers: map[string][]string{
+			"Content-Type": {"application/json"},
+		},
+		BodyB64: base64.StdEncoding.EncodeToString(handoffBody),
+	}
+	rawReq, err := json.Marshal(reqBody)
+	if err != nil {
+		return err
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, proxyURL, bytes.NewReader(rawReq))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	if workerBearerToken != "" {
+		req.Header.Set("Authorization", "Bearer "+workerBearerToken)
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		return fmt.Errorf("PMA proxy stream returned %s", resp.Status)
+	}
+	return readNDJSONStream(ctx, resp.Body, resp.Header.Get("Content-Type"), onDelta)
+}
+
 func looksLikeManagedProxyEndpoint(baseURL string) bool {
+	return LooksLikeManagedProxyEndpoint(baseURL)
+}
+
+// LooksLikeManagedProxyEndpoint returns true when baseURL is a worker managed proxy URL.
+func LooksLikeManagedProxyEndpoint(baseURL string) bool {
 	trimmed := strings.TrimSuffix(baseURL, "/")
 	return strings.Contains(trimmed, "/v1/worker/managed-services/") &&
 		strings.HasSuffix(trimmed, "/proxy:http")

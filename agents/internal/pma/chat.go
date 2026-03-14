@@ -28,6 +28,7 @@ const pmaLangchainCompletionTimeout = 90 * time.Second
 
 // InternalChatCompletionRequest is the body for POST /internal/chat/completion (orchestrator handoff).
 // Optional fields support full context order per CYNAI.PMAGNT.LLMContextComposition: project, task, additional context.
+// When Stream is true the response is NDJSON with one {"delta":"..."} line per token (direct inference path only).
 type InternalChatCompletionRequest struct {
 	Messages []struct {
 		Role    string `json:"role"`
@@ -37,6 +38,7 @@ type InternalChatCompletionRequest struct {
 	TaskID            string `json:"task_id,omitempty"`
 	UserID            string `json:"user_id,omitempty"`
 	AdditionalContext string `json:"additional_context,omitempty"`
+	Stream            bool   `json:"stream,omitempty"`
 }
 
 // InternalChatCompletionResponse is the response body.
@@ -66,8 +68,75 @@ func ChatCompletionHandler(instructionsContent string, logger *slog.Logger) http
 		// a retry after context-window overflow can use a fresh timeout independent
 		// of the gateway request deadline.
 		detached := context.WithoutCancel(r.Context())
+		if req.Stream && canStreamCompletion(&req) {
+			streamCompletionToWriter(r.Context(), w, instructionsContent, &req, logger)
+			return
+		}
 		content, httpStatus := resolveContent(r.Context(), detached, instructionsContent, &req, logger)
 		writeJSON(w, httpStatus, InternalChatCompletionResponse{Content: content})
+	}
+}
+
+// canStreamCompletion returns true when the completion would use callInference (direct Ollama),
+// so we can stream token-by-token. Langchain/MCP path is blocking and does not support streaming.
+func canStreamCompletion(req *InternalChatCompletionRequest) bool {
+	mcpClient := NewMCPClient()
+	model := os.Getenv("INFERENCE_MODEL")
+	if model == "" {
+		model = pmaDefaultModel
+	}
+	return mcpClient.BaseURL == "" || !isCapableModel(model)
+}
+
+// streamCompletionToWriter runs direct inference and writes NDJSON lines {"delta":"..."} per token.
+func streamCompletionToWriter(ctx context.Context, w http.ResponseWriter, instructionsContent string, req *InternalChatCompletionRequest, logger *slog.Logger) {
+	systemContext := buildSystemContext(instructionsContent, req)
+	baseURL, model := resolveOllamaConfig()
+	chatMessages := buildChatMessages(systemContext, req.Messages)
+	inferenceURL, inferenceClient := resolveInferenceClient(baseURL, inferenceHTTPTimeout)
+	resp, err := doInferenceRequest(ctx, inferenceClient, inferenceURL, model, chatMessages)
+	if err != nil {
+		logger.Error("stream completion inference request failed", "error", err)
+		writeJSON(w, http.StatusInternalServerError, InternalChatCompletionResponse{})
+		return
+	}
+	defer func() { _ = resp.Body.Close() }()
+	w.Header().Set("Content-Type", "application/x-ndjson")
+	w.Header().Set("X-Accel-Buffering", "no")
+	w.WriteHeader(http.StatusOK)
+	if f, ok := w.(http.Flusher); ok {
+		f.Flush()
+	}
+	enc := json.NewEncoder(w)
+	enc.SetEscapeHTML(false)
+	scanner := bufio.NewScanner(resp.Body)
+	for scanner.Scan() {
+		if ctx.Err() != nil {
+			return
+		}
+		line := scanner.Bytes()
+		if len(line) == 0 {
+			continue
+		}
+		content, done, err := parseInferenceChunk(line, logger)
+		if err != nil {
+			logger.Warn("stream completion chunk error", "error", err)
+			return
+		}
+		if content != "" {
+			if encErr := enc.Encode(map[string]string{"delta": content}); encErr != nil {
+				return
+			}
+			if f, ok := w.(http.Flusher); ok {
+				f.Flush()
+			}
+		}
+		if done {
+			break
+		}
+	}
+	if err := scanner.Err(); err != nil {
+		logger.Warn("stream completion read error", "error", err)
 	}
 }
 

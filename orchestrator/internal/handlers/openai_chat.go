@@ -165,6 +165,18 @@ func (h *OpenAIChatHandler) ChatCompletions(w http.ResponseWriter, r *http.Reque
 	timeoutCtx, cancel := context.WithTimeout(ctx, chatCompletionTimeout)
 	defer cancel()
 	start := time.Now()
+	// True token-by-token streaming when client asked for stream and we route to PMA (proxy or direct).
+	if req.Stream && effectiveModel == EffectiveModelPM {
+		cand := h.resolvePMAEndpointCandidate(timeoutCtx)
+		if cand.endpoint != "" {
+			prepareSSEResponse(w)
+			err := h.completeViaPMAStream(timeoutCtx, w, cand, contextMessages, thread.ID, userID, projectID, start, effectiveModel, uuid.New().String(), nil)
+			if err != nil {
+				writeSSEError(w, "stream_error", err.Error())
+			}
+			return
+		}
+	}
 	content, status, code, msg := h.routeAndComplete(timeoutCtx, effectiveModel, contextMessages, lastUserContent)
 	if status != 0 {
 		if req.Stream {
@@ -292,6 +304,65 @@ func (h *OpenAIChatHandler) completeViaPMA(ctx context.Context, effectiveModel s
 		return pmaclient.CallChatCompletion(ctx, nil, candidate.endpoint, msgs, workerToken)
 	}
 	return h.runCompletionWithRetry(ctx, effectiveModel, "pma", "PMA chat completion failed", call)
+}
+
+// completeViaPMAStream streams completion from PMA token-by-token, persists the full reply and audit, then sends [DONE].
+// chunkID is used as the SSE chunk id (e.g. completion id or response_id); assistantMeta is optional message metadata (e.g. response_id for /v1/responses).
+// Caller must have called prepareSSEResponse(w) before calling this.
+func (h *OpenAIChatHandler) completeViaPMAStream(ctx context.Context, w http.ResponseWriter, cand pmaEndpointCandidate, redacted []userapi.ChatMessage, threadID uuid.UUID, userID *uuid.UUID, projectID *uuid.UUID, start time.Time, effectiveModel string, chunkID string, assistantMeta *string) error {
+	workerToken := strings.TrimSpace(cand.workerAPIBearerToken)
+	if workerToken == "" {
+		workerToken = h.workerAPIBearerToken
+	}
+	msgs := make([]pmaclient.ChatMessage, 0, len(redacted))
+	for _, m := range redacted {
+		msgs = append(msgs, pmaclient.ChatMessage{Role: m.Role, Content: m.Content})
+	}
+	var fullContent strings.Builder
+	stop := "stop"
+	open := userapi.ChatCompletionChunk{
+		ID:      chunkID,
+		Object:  "chat.completion.chunk",
+		Created: time.Now().Unix(),
+		Model:   effectiveModel,
+		Choices: []userapi.ChatCompletionChunkChoice{
+			{Index: 0, Delta: userapi.ChatCompletionChunkDelta{Role: "assistant"}, FinishReason: nil},
+		},
+	}
+	if b, err := json.Marshal(open); err == nil {
+		writeSSEEvent(w, string(b))
+	}
+	onDelta := func(delta string) error {
+		fullContent.WriteString(delta)
+		chunk := buildChatCompletionChunk(chunkID, effectiveModel, delta, nil)
+		b, err := json.Marshal(chunk)
+		if err != nil {
+			return err
+		}
+		writeSSEEvent(w, string(b))
+		return nil
+	}
+	if err := pmaclient.CallChatCompletionStream(ctx, nil, cand.endpoint, msgs, workerToken, onDelta); err != nil {
+		return err
+	}
+	content := fullContent.String()
+	if _, err := h.db.AppendChatMessage(ctx, threadID, chatRoleAssistant, content, assistantMeta); err != nil {
+		h.logger.Error("append assistant message (stream)", "error", err)
+	}
+	durationMs := int(time.Since(start).Milliseconds())
+	_ = h.db.CreateChatAuditLog(ctx, &models.ChatAuditLog{
+		UserID:           userID,
+		ProjectID:        projectID,
+		Outcome:          "success",
+		RedactionApplied: false,
+		DurationMs:       &durationMs,
+	})
+	final := buildChatCompletionChunk(chunkID, effectiveModel, "", &stop)
+	if b, err := json.Marshal(final); err == nil {
+		writeSSEEvent(w, string(b))
+	}
+	writeSSEDone(w)
+	return nil
 }
 
 // resolvePMAEndpoint returns the PMA base URL for chat routing.
@@ -697,6 +768,21 @@ func (h *OpenAIChatHandler) Responses(w http.ResponseWriter, r *http.Request) {
 	timeoutCtx, cancel := context.WithTimeout(ctx, chatCompletionTimeout)
 	defer cancel()
 	start := time.Now()
+	if req.Stream && effectiveModel == EffectiveModelPM {
+		cand := h.resolvePMAEndpointCandidate(timeoutCtx)
+		if cand.endpoint != "" {
+			responseID := "resp_" + uuid.New().String()
+			meta := map[string]string{"response_id": responseID}
+			metaJSON, _ := json.Marshal(meta)
+			metaStr := string(metaJSON)
+			prepareSSEResponse(w)
+			err := h.completeViaPMAStream(timeoutCtx, w, cand, contextMessages, thread.ID, userID, projectID, start, effectiveModel, responseID, &metaStr)
+			if err != nil {
+				writeSSEError(w, "stream_error", err.Error())
+			}
+			return
+		}
+	}
 	content, status, code, msg := h.routeAndComplete(timeoutCtx, effectiveModel, contextMessages, userContent)
 	if status != 0 {
 		if req.Stream {
