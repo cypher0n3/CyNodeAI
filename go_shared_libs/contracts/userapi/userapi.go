@@ -136,6 +136,7 @@ type ChatMessage struct {
 type ChatCompletionsRequest struct {
 	Model    string        `json:"model,omitempty"`
 	Messages []ChatMessage `json:"messages"`
+	Stream   bool          `json:"stream,omitempty"`
 }
 
 // ChatCompletionsChoice is one choice in the chat completions response.
@@ -165,6 +166,7 @@ type ResponsesCreateRequest struct {
 	Model              string          `json:"model,omitempty"`
 	Input              json.RawMessage `json:"input"` // string or array of message-like items
 	PreviousResponseID string          `json:"previous_response_id,omitempty"`
+	Stream             bool            `json:"stream,omitempty"`
 }
 
 // ResponsesOutputText is one output item in the responses format (visible text).
@@ -179,4 +181,29 @@ type ResponsesCreateResponse struct {
 	Object  string                `json:"object"`
 	Created int64                 `json:"created"`
 	Output  []ResponsesOutputText `json:"output"`
+}
+
+// --- SSE streaming types (CYNAI.USRGWY.OpenAIChatApi.Streaming) ---
+
+// ChatCompletionChunkDelta is the delta in a streaming chat completion chunk.
+type ChatCompletionChunkDelta struct {
+	Role    string `json:"role,omitempty"`
+	Content string `json:"content,omitempty"`
+}
+
+// ChatCompletionChunkChoice is one choice in a streaming chunk event.
+type ChatCompletionChunkChoice struct {
+	Index        int                      `json:"index"`
+	Delta        ChatCompletionChunkDelta `json:"delta"`
+	FinishReason *string                  `json:"finish_reason"`
+}
+
+// ChatCompletionChunk is the SSE event payload for streaming chat completions.
+// Object is "chat.completion.chunk".
+type ChatCompletionChunk struct {
+	ID      string                      `json:"id"`
+	Object  string                      `json:"object"`
+	Created int64                       `json:"created"`
+	Model   string                      `json:"model"`
+	Choices []ChatCompletionChunkChoice `json:"choices"`
 }

@@ -14,12 +14,26 @@ import (
 // defaultPlaceholder is shown for empty project/model in the status bar and orEmpty.
 const defaultPlaceholder = "(default)"
 
+// assistantPrefix is the prefix for assistant messages in the scrollback.
+const assistantPrefix = "Assistant: "
+
 const maxInputHistory = 50
 
-// sendResult is the message returned when a SendMessage completes.
+// sendResult is the message returned when a SendMessage completes (non-streaming fallback).
 type sendResult struct {
 	visible string
 	err     error
+}
+
+// streamDeltaMsg carries one incremental delta from the active streaming turn.
+type streamDeltaMsg struct {
+	delta string
+}
+
+// streamDoneMsg signals that the active streaming turn is complete.
+type streamDoneMsg struct {
+	responseID string
+	err        error
 }
 
 // threadListResult is the message when ListThreads completes.
@@ -44,6 +58,12 @@ type Model struct {
 	Height          int
 	Loading         bool
 	Err             string
+
+	// streaming state
+	streamCancel context.CancelFunc          // cancel the active stream; nil when idle
+	streamCh     <-chan chat.ChatStreamDelta  // active stream channel; nil when idle
+	streamBuf    strings.Builder             // accumulates in-flight visible text
+	ctrlCCount   int                         // successive Ctrl+C when idle → exit
 }
 
 // NewModel returns an initial TUI model for the given session.
@@ -72,6 +92,21 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.Width = msg.Width
 		m.Height = msg.Height
 		return m, nil
+	case streamDeltaMsg:
+		m.streamBuf.WriteString(msg.delta)
+		// Update the last scrollback line in place.
+		prefix := assistantPrefix
+		if len(m.Scrollback) > 0 && strings.HasPrefix(m.Scrollback[len(m.Scrollback)-1], prefix) {
+			m.Scrollback[len(m.Scrollback)-1] = prefix + m.streamBuf.String()
+		}
+		// Schedule reading the next delta.
+		if m.streamCh != nil {
+			return m, scheduleNextDelta(m.streamCh)
+		}
+		return m, nil
+	case streamDoneMsg:
+		m.applyStreamDone(msg)
+		return m, nil
 	case sendResult:
 		m.applySendResult(msg)
 		return m, nil
@@ -99,12 +134,18 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "ctrl+c":
+		return m.handleCtrlC()
+	case "ctrl+d":
+		return m, tea.Quit
+	}
+	// Reset successive ctrl+c count on any other key.
+	m.ctrlCCount = 0
 	if m.Loading {
 		return m, nil
 	}
 	switch msg.String() {
-	case "ctrl+c", "ctrl+d":
-		return m, tea.Quit
 	case "enter":
 		line := strings.TrimSpace(m.Input)
 		m.Input = ""
@@ -117,12 +158,12 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.Loading = true
 			return m, cmd
 		}
-		// Not a thread command or sync thread command already applied; maybe send chat
+		// Not a thread command; send as chat message.
 		if !strings.HasPrefix(line, "/") {
 			m.pushInputHistory(line)
 			m.InputHistoryIdx = -1
 			m.Loading = true
-			cmd := m.sendCmd(line)
+			cmd := m.streamCmd(line)
 			return m, cmd
 		}
 		return m, nil
@@ -146,6 +187,24 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	}
+}
+
+// handleCtrlC implements Ctrl+C semantics per spec:
+// - When a stream is in flight: cancel it (reconcile the partial turn).
+// - When idle: increment counter; successive Ctrl+C exits.
+func (m *Model) handleCtrlC() (tea.Model, tea.Cmd) {
+	if m.Loading && m.streamCancel != nil {
+		// Cancel the active stream; streamDoneMsg will reconcile.
+		m.streamCancel()
+		m.streamCancel = nil
+		return m, nil
+	}
+	m.ctrlCCount++
+	if m.ctrlCCount >= 2 { //nolint:mnd // two successive Ctrl+C exits per spec
+		return m, tea.Quit
+	}
+	m.Scrollback = append(m.Scrollback, "(Press Ctrl+C again to exit)")
+	return m, nil
 }
 
 // handleThreadCommand handles /thread new, list, switch, rename. Returns a tea.Cmd for async ops, or nil.
@@ -285,21 +344,90 @@ func (m *Model) applySendResult(msg sendResult) {
 		m.Err = msg.err.Error()
 		m.Scrollback = append(m.Scrollback, "Error: "+m.Err)
 	} else if msg.visible != "" {
-		m.Scrollback = append(m.Scrollback, "Assistant: "+msg.visible)
+		m.Scrollback = append(m.Scrollback, assistantPrefix+msg.visible)
 	}
 }
 
-func (m *Model) sendCmd(line string) tea.Cmd {
+func (m *Model) applyStreamDone(msg streamDoneMsg) {
+	m.Loading = false
+	m.streamCancel = nil
+	m.streamCh = nil
+	final := strings.TrimSpace(m.streamBuf.String())
+	m.streamBuf.Reset()
+	if msg.err != nil && final == "" {
+		// Stream failed with no partial content.
+		m.Err = msg.err.Error()
+		// Replace the placeholder line with an error line.
+		prefix := assistantPrefix
+		if len(m.Scrollback) > 0 && strings.HasPrefix(m.Scrollback[len(m.Scrollback)-1], prefix) {
+			m.Scrollback[len(m.Scrollback)-1] = "Error: " + m.Err
+		} else {
+			m.Scrollback = append(m.Scrollback, "Error: "+m.Err)
+		}
+		return
+	}
+	// Reconcile the final content into the scrollback line.
+	prefix := assistantPrefix
+	if len(m.Scrollback) > 0 && strings.HasPrefix(m.Scrollback[len(m.Scrollback)-1], prefix) {
+		if final == "" {
+			// Empty response — keep the line as "(no response)".
+			m.Scrollback[len(m.Scrollback)-1] = prefix + "(no response)"
+		} else {
+			m.Scrollback[len(m.Scrollback)-1] = prefix + final
+		}
+	}
+	if msg.err != nil {
+		// Partial content received but stream ended with error (e.g. cancel).
+		m.Scrollback = append(m.Scrollback, "(stream interrupted)")
+	}
+}
+
+// streamCmd starts a streaming send. It seeds the scrollback with a placeholder "Assistant: "
+// line that will be updated in-place as deltas arrive.
+// Per REQ-CLIENT-0209: the TUI requests streaming by default for interactive turns.
+func (m *Model) streamCmd(line string) tea.Cmd {
+	if m.Session == nil {
+		return func() tea.Msg { return sendResult{err: fmt.Errorf("no session")} }
+	}
+	// Seed the in-flight line.
+	m.Scrollback = append(m.Scrollback, assistantPrefix)
+	ctx, cancel := context.WithCancel(context.Background())
+	m.streamCancel = cancel
+	m.streamBuf.Reset()
+	session := m.Session
 	return func() tea.Msg {
-		turn, err := m.Session.SendMessage(context.Background(), line)
+		ch, err := session.StreamMessage(ctx, line)
 		if err != nil {
-			return sendResult{err: err}
+			cancel()
+			return streamDoneMsg{err: err}
 		}
-		visible := ""
-		if turn != nil {
-			visible = turn.VisibleText
-		}
-		return sendResult{visible: visible}
+		// Store channel reference so Update can chain subsequent reads.
+		m.streamCh = ch
+		return readNextDelta(ch)
+	}
+}
+
+// readNextDelta returns a tea.Cmd that reads the next delta from ch.
+// This chains: each delta event produces another tea.Cmd via tea.Sequence or direct Batch,
+// but for simplicity we use a self-scheduling approach: return a Msg that is immediately
+// handled, and the handler schedules the next read via tea.Cmd.
+// We use a direct goroutine-to-channel model instead: the goroutine fills the channel,
+// and each model Update call for streamDeltaMsg returns a Cmd to read the next item.
+func readNextDelta(ch <-chan chat.ChatStreamDelta) tea.Msg {
+	delta, ok := <-ch
+	if !ok {
+		return streamDoneMsg{}
+	}
+	if delta.Done {
+		return streamDoneMsg{responseID: delta.ResponseID, err: delta.Err}
+	}
+	return streamDeltaMsg{delta: delta.Delta}
+}
+
+// scheduleNextDelta returns a tea.Cmd that will read the next item from ch.
+func scheduleNextDelta(ch <-chan chat.ChatStreamDelta) tea.Cmd {
+	return func() tea.Msg {
+		return readNextDelta(ch)
 	}
 }
 

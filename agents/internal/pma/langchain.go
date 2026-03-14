@@ -26,6 +26,10 @@ const (
 	// for most real PM tasks (fetch context → act → summarise) while keeping total
 	// agent time well under the gateway write timeout.
 	pmaMaxIterations = 3
+	// inferenceHTTPTimeout is the HTTP client and streaming read timeout for direct Ollama
+	// inference calls. Thinking models (qwen3:8b) can take up to 300 s on modest hardware.
+	// See CYNAI.PMAGNT.StreamingAssistantOutput.
+	inferenceHTTPTimeout = 300 * time.Second
 	// xmlThinkOpen and xmlThinkClose delimit Qwen3/DeepSeek-R1 internal reasoning blocks.
 	// These are stripped from final output before returning to the caller.
 	xmlThinkOpen  = "<think>"

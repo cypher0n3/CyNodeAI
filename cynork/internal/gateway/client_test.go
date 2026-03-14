@@ -1,8 +1,10 @@
 package gateway
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -14,6 +16,7 @@ import (
 
 const testProjectID = "proj-1"
 const pathV1ChatThreads = "/v1/chat/threads"
+const pathV1ChatCompletions = "/v1/chat/completions"
 
 // threadsAPIHandler returns a handler that responds with status and body when path matches (for thread API tests).
 func threadsAPIHandler(path string, status int, body string) http.HandlerFunc {
@@ -526,7 +529,7 @@ func TestClient_GetTaskLogs_NotFound(t *testing.T) {
 
 func TestClient_Chat_Success(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/v1/chat/completions" || r.Method != http.MethodPost {
+		if r.URL.Path != pathV1ChatCompletions || r.Method != http.MethodPost {
 			w.WriteHeader(http.StatusNotFound)
 			return
 		}
@@ -561,7 +564,7 @@ func TestClient_Chat_Success(t *testing.T) {
 
 func TestClient_ChatWithOptions_ModelAndProject(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/v1/chat/completions" || r.Method != http.MethodPost {
+		if r.URL.Path != pathV1ChatCompletions || r.Method != http.MethodPost {
 			w.WriteHeader(http.StatusNotFound)
 			return
 		}
@@ -1334,5 +1337,258 @@ func TestClient_ListChatThreads_BadJSON(t *testing.T) {
 	_, err := c.ListChatThreads("", 20, 0)
 	if err == nil {
 		t.Fatal("expected error from ListChatThreads")
+	}
+}
+
+// sseChunkLine builds one SSE data line with a chat.completion.chunk payload.
+func sseChunkLine(content, finishReason string) string {
+	fr := "null"
+	if finishReason != "" {
+		fr = `"` + finishReason + `"`
+	}
+	return fmt.Sprintf("data: {\"id\":\"c1\",\"object\":\"chat.completion.chunk\",\"created\":1,\"model\":\"m\",\"choices\":[{\"index\":0,\"delta\":{\"content\":%q},\"finish_reason\":%s}]}\n\n",
+		content, fr)
+}
+
+func TestClient_ChatStream_Success(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != pathV1ChatCompletions || r.Method != http.MethodPost {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(sseChunkLine("hello", "")))
+		_, _ = w.Write([]byte(sseChunkLine(" world", "")))
+		_, _ = w.Write([]byte(sseChunkLine("", "stop")))
+		_, _ = w.Write([]byte("data: [DONE]\n\n"))
+	}))
+	defer srv.Close()
+	c := NewClient(srv.URL)
+	c.SetToken("tok")
+	var got strings.Builder
+	err := c.ChatStream(context.Background(), "hi", "m", "p", func(delta string) {
+		got.WriteString(delta)
+	})
+	if err != nil {
+		t.Fatalf("ChatStream: %v", err)
+	}
+	if got.String() != "hello world" {
+		t.Errorf("accumulated = %q, want %q", got.String(), "hello world")
+	}
+}
+
+func TestClient_ChatStream_HTTPError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusServiceUnavailable)
+	}))
+	defer srv.Close()
+	c := NewClient(srv.URL)
+	c.SetToken("tok")
+	err := c.ChatStream(context.Background(), "hi", "", "", func(_ string) {})
+	if err == nil {
+		t.Fatal("expected error from ChatStream on 503")
+	}
+}
+
+func TestClient_ChatStream_StructuredError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`data: {"error":{"message":"boom","code":"fail"}}` + "\n\n"))
+		_, _ = w.Write([]byte("data: [DONE]\n\n"))
+	}))
+	defer srv.Close()
+	c := NewClient(srv.URL)
+	c.SetToken("tok")
+	err := c.ChatStream(context.Background(), "hi", "", "", func(_ string) {})
+	if err == nil {
+		t.Fatal("expected structured error from stream")
+	}
+}
+
+func TestClient_ChatStream_InvalidBaseURL(t *testing.T) {
+	c := NewClient("://bad")
+	err := c.ChatStream(context.Background(), "hi", "", "", func(_ string) {})
+	if err == nil {
+		t.Fatal("expected error from invalid base URL")
+	}
+}
+
+func TestClient_ResponsesStream_Success(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/responses" || r.Method != http.MethodPost {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(sseChunkLine("resp text", "")))
+		_, _ = w.Write([]byte(sseChunkLine("", "stop")))
+		_, _ = w.Write([]byte("data: [DONE]\n\n"))
+	}))
+	defer srv.Close()
+	c := NewClient(srv.URL)
+	c.SetToken("tok")
+	var got strings.Builder
+	_, err := c.ResponsesStream(context.Background(), "hi", "m", "p", func(delta string) {
+		got.WriteString(delta)
+	})
+	if err != nil {
+		t.Fatalf("ResponsesStream: %v", err)
+	}
+	if got.String() != "resp text" {
+		t.Errorf("accumulated = %q, want %q", got.String(), "resp text")
+	}
+}
+
+func TestClient_ResponsesStream_HTTPError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusBadGateway)
+	}))
+	defer srv.Close()
+	c := NewClient(srv.URL)
+	c.SetToken("tok")
+	_, err := c.ResponsesStream(context.Background(), "hi", "", "", func(_ string) {})
+	if err == nil {
+		t.Fatal("expected error from ResponsesStream on 502")
+	}
+}
+
+func TestClient_ResponsesStream_InvalidBaseURL(t *testing.T) {
+	c := NewClient("://bad")
+	_, err := c.ResponsesStream(context.Background(), "hi", "", "", func(_ string) {})
+	if err == nil {
+		t.Fatal("expected error from invalid base URL")
+	}
+}
+
+func TestClient_ResponsesStream_WithProjectAndToken(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") == "" {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		if r.Header.Get("OpenAI-Project") == "" {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(sseChunkLine("projected", "")))
+		_, _ = w.Write([]byte("data: [DONE]\n\n"))
+	}))
+	defer srv.Close()
+	c := NewClient(srv.URL)
+	c.SetToken("tok")
+	var got strings.Builder
+	_, err := c.ResponsesStream(context.Background(), "hi", "m", "proj-1", func(delta string) {
+		got.WriteString(delta)
+	})
+	if err != nil {
+		t.Fatalf("ResponsesStream with project: %v", err)
+	}
+	if got.String() != "projected" {
+		t.Errorf("got %q, want %q", got.String(), "projected")
+	}
+}
+
+func TestClient_ChatStream_HTTPDoError(t *testing.T) {
+	// Use a closed server to force HTTP Do to fail.
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {}))
+	srv.Close()
+	c := NewClient(srv.URL)
+	c.SetToken("tok")
+	err := c.ChatStream(context.Background(), "hi", "", "", func(_ string) {})
+	if err == nil {
+		t.Fatal("expected error from HTTP Do on closed server")
+	}
+}
+
+func TestClient_ResponsesStream_HTTPDoError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {}))
+	srv.Close()
+	c := NewClient(srv.URL)
+	c.SetToken("tok")
+	_, err := c.ResponsesStream(context.Background(), "hi", "", "", func(_ string) {})
+	if err == nil {
+		t.Fatal("expected error from HTTP Do on closed server")
+	}
+}
+
+func TestReadChatSSEStream_SkipsNonDataLines(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(": comment line\n\n"))
+		_, _ = w.Write([]byte("event: ping\n\n"))
+		_, _ = w.Write([]byte(sseChunkLine("hi", "")))
+		_, _ = w.Write([]byte("data: [DONE]\n\n"))
+	}))
+	defer srv.Close()
+	c := NewClient(srv.URL)
+	c.SetToken("tok")
+	var got strings.Builder
+	err := c.ChatStream(context.Background(), "m", "", "", func(delta string) {
+		got.WriteString(delta)
+	})
+	if err != nil {
+		t.Fatalf("ChatStream: %v", err)
+	}
+	if got.String() != "hi" {
+		t.Errorf("got %q, want %q", got.String(), "hi")
+	}
+}
+
+
+func TestReadChatSSEStream_MalformedJSONChunkIgnored(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("data: not-json\n\n"))
+		_, _ = w.Write([]byte(sseChunkLine("ok", "")))
+		_, _ = w.Write([]byte("data: [DONE]\n\n"))
+	}))
+	defer srv.Close()
+	c := NewClient(srv.URL)
+	c.SetToken("tok")
+	var got strings.Builder
+	err := c.ChatStream(context.Background(), "m", "", "", func(delta string) {
+		got.WriteString(delta)
+	})
+	if err != nil {
+		t.Fatalf("ChatStream: %v", err)
+	}
+	if got.String() != "ok" {
+		t.Errorf("got %q, want %q", got.String(), "ok")
+	}
+}
+
+// errReader is an io.Reader that returns an error after a few successful reads.
+type errReader struct {
+	data []byte
+	pos  int
+	err  error
+}
+
+func (e *errReader) Read(p []byte) (int, error) {
+	if e.pos >= len(e.data) {
+		return 0, e.err
+	}
+	n := copy(p, e.data[e.pos:])
+	e.pos += n
+	return n, nil
+}
+
+// TestReadChatSSEStream_ScannerError verifies that a scanner error is surfaced as an error return.
+func TestReadChatSSEStream_ScannerError(t *testing.T) {
+	// Build a reader that returns an error after writing some data.
+	r := &errReader{
+		data: []byte("data: bad-json\n"),
+		err:  fmt.Errorf("simulated read error"),
+	}
+	err := readChatSSEStream(context.Background(), r, func(_ string) {})
+	if err == nil {
+		t.Fatal("expected error from scanner failure, got nil")
 	}
 }

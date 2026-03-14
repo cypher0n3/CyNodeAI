@@ -2,9 +2,11 @@
 package handlers
 
 import (
+	"bufio"
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net"
 	"net/http"
@@ -111,6 +113,7 @@ func (h *OpenAIChatHandler) ListModels(w http.ResponseWriter, r *http.Request) {
 }
 
 // ChatCompletions handles POST /v1/chat/completions with pipeline: auth (already done), decode, project_id, redact, persist user message, route, persist assistant, return.
+// When stream=true is requested the response uses Server-Sent Events per CYNAI.USRGWY.OpenAIChatApi.Streaming.
 func (h *OpenAIChatHandler) ChatCompletions(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	userID := getUserIDFromContext(ctx)
@@ -164,7 +167,13 @@ func (h *OpenAIChatHandler) ChatCompletions(w http.ResponseWriter, r *http.Reque
 	start := time.Now()
 	content, status, code, msg := h.routeAndComplete(timeoutCtx, effectiveModel, contextMessages, lastUserContent)
 	if status != 0 {
-		writeOpenAIError(w, status, code, msg)
+		if req.Stream {
+			// Headers not yet sent; we can send the pre-stream SSE error.
+			prepareSSEResponse(w)
+			writeSSEError(w, code, msg)
+		} else {
+			writeOpenAIError(w, status, code, msg)
+		}
 		return
 	}
 	if _, err := h.db.AppendChatMessage(ctx, thread.ID, chatRoleAssistant, content, nil); err != nil {
@@ -179,6 +188,15 @@ func (h *OpenAIChatHandler) ChatCompletions(w http.ResponseWriter, r *http.Reque
 		RedactionKinds:   kindsJSON(kinds),
 		DurationMs:       &durationMs,
 	})
+	if req.Stream {
+		// Emit content as SSE degraded-mode stream (full turn in one delta).
+		// Per spec: when upstream cannot provide true token deltas, still emit SSE
+		// with bounded in-progress status plus a terminal completion event.
+		completionID := uuid.New().String()
+		prepareSSEResponse(w)
+		emitContentAsSSE(w, completionID, effectiveModel, content)
+		return
+	}
 	writeOpenAIJSON(w, http.StatusOK, buildChatCompletionsResponse(effectiveModel, content)) //nolint:exhaustruct // response struct built inline; exhaustruct wants all fields set
 }
 
@@ -467,6 +485,101 @@ func writeOpenAIError(w http.ResponseWriter, status int, code, message string) {
 	})
 }
 
+// writeSSEEvent writes one Server-Sent Event line to w and flushes if possible.
+// Per CYNAI.USRGWY.OpenAIChatApi.Streaming: events must be flushed promptly.
+func writeSSEEvent(w http.ResponseWriter, data string) {
+	bw := bufio.NewWriter(w)
+	_, _ = fmt.Fprintf(bw, "data: %s\n\n", data)
+	_ = bw.Flush()
+	if f, ok := w.(http.Flusher); ok {
+		f.Flush()
+	}
+}
+
+// writeSSEDone writes the terminal [DONE] event per OpenAI SSE protocol.
+func writeSSEDone(w http.ResponseWriter) {
+	writeSSEEvent(w, "[DONE]")
+}
+
+// writeSSEError writes a terminal error event as a JSON data line then [DONE].
+// Clients that support structured error events will see the code; others see [DONE].
+func writeSSEError(w http.ResponseWriter, code, message string) {
+	errData, _ := json.Marshal(map[string]interface{}{
+		"error": map[string]interface{}{
+			"message": message,
+			"type":    "cynodeai_error",
+			"code":    code,
+		},
+	})
+	writeSSEEvent(w, string(errData))
+	writeSSEDone(w)
+}
+
+// prepareSSEResponse sets the response headers for a Server-Sent Events stream
+// and writes the 200 status code. Must be called before any SSE events are written
+// and before any JSON error is written.
+func prepareSSEResponse(w http.ResponseWriter) {
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+	w.Header().Set("X-Accel-Buffering", "no")
+	w.WriteHeader(http.StatusOK)
+}
+
+// buildChatCompletionChunk builds a streaming chunk SSE payload for one delta.
+// finishReason is nil for intermediate chunks and "stop" for the final chunk.
+func buildChatCompletionChunk(id, model, delta string, finishReason *string) userapi.ChatCompletionChunk {
+	return userapi.ChatCompletionChunk{
+		ID:      id,
+		Object:  "chat.completion.chunk",
+		Created: time.Now().Unix(),
+		Model:   model,
+		Choices: []userapi.ChatCompletionChunkChoice{
+			{
+				Index: 0,
+				Delta: userapi.ChatCompletionChunkDelta{
+					Role:    "assistant",
+					Content: delta,
+				},
+				FinishReason: finishReason,
+			},
+		},
+	}
+}
+
+// emitContentAsSSE emits content as SSE events: an opening role chunk, a content delta chunk,
+// and a final stop chunk, then [DONE]. This is the degraded-mode path when the upstream
+// cannot provide true token-by-token deltas (CYNAI.USRGWY.OpenAIChatApi.Streaming degraded mode).
+func emitContentAsSSE(w http.ResponseWriter, id, model, content string) {
+	stop := "stop"
+	// Opening chunk: role only, no content.
+	open := userapi.ChatCompletionChunk{
+		ID:      id,
+		Object:  "chat.completion.chunk",
+		Created: time.Now().Unix(),
+		Model:   model,
+		Choices: []userapi.ChatCompletionChunkChoice{
+			{Index: 0, Delta: userapi.ChatCompletionChunkDelta{Role: "assistant"}, FinishReason: nil},
+		},
+	}
+	if b, err := json.Marshal(open); err == nil {
+		writeSSEEvent(w, string(b))
+	}
+	// Content delta chunk.
+	if content != "" {
+		chunk := buildChatCompletionChunk(id, model, content, nil)
+		if b, err := json.Marshal(chunk); err == nil {
+			writeSSEEvent(w, string(b))
+		}
+	}
+	// Final stop chunk.
+	final := buildChatCompletionChunk(id, model, "", &stop)
+	if b, err := json.Marshal(final); err == nil {
+		writeSSEEvent(w, string(b))
+	}
+	writeSSEDone(w)
+}
+
 // trimHistoryToCharBudget returns the most recent messages from history whose cumulative
 // character count fits within budget. At least the last message is always included
 // regardless of budget so the current user turn is never dropped.
@@ -575,7 +688,12 @@ func (h *OpenAIChatHandler) Responses(w http.ResponseWriter, r *http.Request) {
 	start := time.Now()
 	content, status, code, msg := h.routeAndComplete(timeoutCtx, effectiveModel, contextMessages, userContent)
 	if status != 0 {
-		writeOpenAIError(w, status, code, msg)
+		if req.Stream {
+			prepareSSEResponse(w)
+			writeSSEError(w, code, msg)
+		} else {
+			writeOpenAIError(w, status, code, msg)
+		}
 		return
 	}
 	responseID := "resp_" + uuid.New().String()
@@ -594,6 +712,12 @@ func (h *OpenAIChatHandler) Responses(w http.ResponseWriter, r *http.Request) {
 		RedactionKinds:   kindsJSON(kinds),
 		DurationMs:       &durationMs,
 	})
+	if req.Stream {
+		// Degraded-mode SSE stream for /v1/responses when upstream is blocking.
+		prepareSSEResponse(w)
+		emitContentAsSSE(w, responseID, effectiveModel, content)
+		return
+	}
 	writeOpenAIJSON(w, http.StatusOK, userapi.ResponsesCreateResponse{
 		ID:      responseID,
 		Object:  "response",

@@ -3,6 +3,7 @@
 package pma
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -298,21 +299,49 @@ func resolveInferenceClient(baseURL string, timeout time.Duration) (serverURL st
 	return trimmed, &http.Client{Timeout: timeout}
 }
 
+// callInference sends messages to Ollama /api/chat using NDJSON streaming (stream:true).
+// It accumulates the full visible text from streaming chunks, strips <think>...</think>
+// blocks per CYNAI.PMAGNT.StreamingAssistantOutput, and returns the cleaned result.
 func callInference(ctx context.Context, systemContext string, messages []struct {
 	Role    string `json:"role"`
 	Content string `json:"content"`
 }, logger *slog.Logger) (string, error) {
-	baseURL := os.Getenv("OLLAMA_BASE_URL")
+	baseURL, model := resolveOllamaConfig()
+	chatMessages := buildChatMessages(systemContext, messages)
+	inferenceURL, inferenceClient := resolveInferenceClient(baseURL, inferenceHTTPTimeout)
+	resp, err := doInferenceRequest(ctx, inferenceClient, inferenceURL, model, chatMessages)
+	if err != nil {
+		return "", err
+	}
+	defer func() { _ = resp.Body.Close() }()
+	content, err := readInferenceStream(resp.Body, logger)
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(stripThinkBlocks(content)), nil
+}
+
+// resolveOllamaConfig returns the Ollama base URL and model from environment variables.
+func resolveOllamaConfig() (baseURL, model string) {
+	baseURL = os.Getenv("OLLAMA_BASE_URL")
 	if baseURL == "" {
 		baseURL = os.Getenv("INFERENCE_URL")
 	}
 	if baseURL == "" {
 		baseURL = pmaDefaultOllamaURL
 	}
-	model := os.Getenv("INFERENCE_MODEL")
+	model = os.Getenv("INFERENCE_MODEL")
 	if model == "" {
 		model = pmaDefaultModel
 	}
+	return baseURL, model
+}
+
+// buildChatMessages assembles the Ollama /api/chat messages array with optional system context.
+func buildChatMessages(systemContext string, messages []struct {
+	Role    string `json:"role"`
+	Content string `json:"content"`
+}) []map[string]string {
 	chatMessages := make([]map[string]string, 0, len(messages)+1)
 	if strings.TrimSpace(systemContext) != "" {
 		chatMessages = append(chatMessages, map[string]string{
@@ -326,12 +355,16 @@ func callInference(ctx context.Context, systemContext string, messages []struct 
 			"content": m.Content,
 		})
 	}
-	inferenceURL, inferenceClient := resolveInferenceClient(baseURL, 120*time.Second)
+	return chatMessages
+}
+
+// doInferenceRequest builds and executes the Ollama /api/chat HTTP request.
+func doInferenceRequest(ctx context.Context, client *http.Client, inferenceURL, model string, chatMessages []map[string]string) (*http.Response, error) {
 	chatURL := strings.TrimSuffix(inferenceURL, "/") + "/api/chat"
 	body := map[string]interface{}{
 		"model":    model,
 		"messages": chatMessages,
-		"stream":   false,
+		"stream":   true,
 	}
 	if n := ollamaNumCtxFromEnv(); n > 0 {
 		body["options"] = map[string]interface{}{"num_ctx": n}
@@ -339,34 +372,63 @@ func callInference(ctx context.Context, systemContext string, messages []struct 
 	raw, _ := json.Marshal(body)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, chatURL, bytes.NewReader(raw))
 	if err != nil {
-		return "", err
+		return nil, err
 	}
 	req.Header.Set("Content-Type", "application/json")
-	client := inferenceClient
 	resp, err := client.Do(req)
 	if err != nil {
-		return "", err
+		return nil, err
 	}
-	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("inference returned %s", resp.Status)
+		_ = resp.Body.Close()
+		return nil, fmt.Errorf("inference returned %s", resp.Status)
 	}
-	var out struct {
+	return resp, nil
+}
+
+// readInferenceStream reads Ollama NDJSON streaming response chunks and accumulates content.
+// Returns the concatenated content with no think-block processing applied.
+func readInferenceStream(body interface{ Read([]byte) (int, error) }, logger *slog.Logger) (string, error) {
+	var sb strings.Builder
+	scanner := bufio.NewScanner(body)
+	for scanner.Scan() {
+		line := scanner.Bytes()
+		if len(line) == 0 {
+			continue
+		}
+		content, done, err := parseInferenceChunk(line, logger)
+		if err != nil {
+			return "", err
+		}
+		sb.WriteString(content)
+		if done {
+			break
+		}
+	}
+	if err := scanner.Err(); err != nil {
+		return "", fmt.Errorf("reading inference stream: %w", err)
+	}
+	return sb.String(), nil
+}
+
+// parseInferenceChunk parses one NDJSON line from an Ollama streaming response.
+// Returns (content, done, error).
+func parseInferenceChunk(line []byte, logger *slog.Logger) (content string, done bool, err error) {
+	var chunk struct {
 		Message struct {
 			Content string `json:"content"`
 		} `json:"message"`
-		Response string `json:"response"`
-		Error    string `json:"error"`
+		Done  bool   `json:"done"`
+		Error string `json:"error"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
-		return "", err
+	if jsonErr := json.Unmarshal(line, &chunk); jsonErr != nil {
+		if logger != nil {
+			logger.Warn("callInference: failed to parse chunk", "error", jsonErr)
+		}
+		return "", false, nil
 	}
-	if out.Error != "" {
-		return "", fmt.Errorf("inference error: %s", out.Error)
+	if chunk.Error != "" {
+		return "", false, fmt.Errorf("inference error: %s", chunk.Error)
 	}
-	content := strings.TrimSpace(out.Message.Content)
-	if content == "" {
-		content = strings.TrimSpace(out.Response)
-	}
-	return content, nil
+	return chunk.Message.Content, chunk.Done, nil
 }

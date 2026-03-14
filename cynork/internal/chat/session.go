@@ -59,9 +59,15 @@ func (s *Session) SetToken(token string) {
 	}
 }
 
-// SendMessage sends one user message and returns the assistant turn.
+// SendMessage sends one user message and returns the assistant turn (non-streaming).
 func (s *Session) SendMessage(ctx context.Context, message string) (*AssistantTurn, error) {
 	return s.Transport.SendMessage(ctx, message, s.Model, s.ProjectID)
+}
+
+// StreamMessage sends one user message and returns a channel of incremental deltas.
+// The caller must drain the channel or cancel ctx. Per REQ-CLIENT-0209.
+func (s *Session) StreamMessage(ctx context.Context, message string) (<-chan ChatStreamDelta, error) {
+	return s.Transport.StreamMessage(ctx, message, s.Model, s.ProjectID)
 }
 
 // NewThread creates a new chat thread via the gateway; uses session project context.

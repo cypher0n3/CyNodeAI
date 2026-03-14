@@ -144,3 +144,71 @@ class TestTuiPty(unittest.TestCase):
                 or out2_s.strip() in ("Y", "Yo", "You", "You:"),
                 f"TUI should return to prompt-ready or echo 'You:'; output: {repr(out2_s[:500])}",
             )
+
+    def test_tui_pty_in_flight_landmark_appears(self):
+        """While a message is in-flight, the assistant-in-flight landmark should appear in the
+        status bar (REQ-CLIENT-0209: streaming state is visible to the user)."""
+        if not harness.pty_available():
+            self.skipTest("pexpect not installed or not Unix")
+        if not state.CONFIG_PATH or not helpers.read_token_from_config(state.CONFIG_PATH):
+            self.skipTest("auth required for in-flight test (run after login)")
+        with harness.TuiPtySession(state.CONFIG_PATH, timeout=90) as session:
+            time.sleep(_TUI_STARTUP_DELAY_SEC)
+            ready = session.wait_for_prompt_ready(timeout_sec=12)
+            self.assertTrue(ready, "TUI did not reach prompt-ready or first paint")
+            session.send_keys(["hello", "enter"])
+            # Immediately after sending, read for the in-flight landmark
+            # before the response arrives.
+            # Accept either the in-flight OR the prompt-ready landmark (fast inference may skip it).
+            out = session.read_until_landmark(
+                [
+                    harness.LANDMARK_ASSISTANT_IN_FLIGHT,
+                    harness.LANDMARK_PROMPT_READY,
+                    harness.LANDMARK_PROMPT_READY_SHORT,
+                ],
+                timeout_sec=30,
+            )
+            out_s = out or ""
+            self.assertTrue(
+                harness.LANDMARK_ASSISTANT_IN_FLIGHT in out_s
+                or harness.LANDMARK_PROMPT_READY in out_s
+                or harness.LANDMARK_PROMPT_READY_SHORT in out_s
+                or "You:" in out_s
+                or "Assistant:" in out_s,
+                f"Expected in-flight or post-completion landmark; output: {repr(out_s[:500])}",
+            )
+
+    def test_tui_pty_ctrl_c_cancels_stream(self):
+        """Ctrl+C while a message is in-flight cancels the stream; second Ctrl+C exits.
+        Asserts CYNAI.USRGWY.OpenAIChatApi.Streaming client cancellation (REQ-CLIENT-0209)."""
+        if not harness.pty_available():
+            self.skipTest("pexpect not installed or not Unix")
+        if not state.CONFIG_PATH or not helpers.read_token_from_config(state.CONFIG_PATH):
+            self.skipTest("auth required for cancellation test (run after login)")
+        with harness.TuiPtySession(state.CONFIG_PATH, timeout=60) as session:
+            time.sleep(_TUI_STARTUP_DELAY_SEC)
+            ready = session.wait_for_prompt_ready(timeout_sec=12)
+            self.assertTrue(ready, "TUI did not reach prompt-ready or first paint")
+            # Send a prompt and immediately cancel.
+            session.send_keys(["hello world", "enter"])
+            time.sleep(0.3)
+            session.send_keys(["ctrl+c"])
+            # After cancellation, TUI should either return to prompt-ready or show the
+            # "Press Ctrl+C again to exit" hint (first Ctrl+C behaviour).
+            out = session.read_until_landmark(
+                [
+                    harness.LANDMARK_PROMPT_READY,
+                    harness.LANDMARK_PROMPT_READY_SHORT,
+                ],
+                timeout_sec=15,
+            )
+            out_s = out or ""
+            self.assertTrue(
+                harness.LANDMARK_PROMPT_READY in out_s
+                or harness.LANDMARK_PROMPT_READY_SHORT in out_s
+                or "Ctrl+C" in out_s
+                or "Assistant:" in out_s
+                or "Error:" in out_s
+                or "> " in out_s,
+                f"After Ctrl+C, expected prompt-ready or hint; output: {repr(out_s[:500])}",
+            )

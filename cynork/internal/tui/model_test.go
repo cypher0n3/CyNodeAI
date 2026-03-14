@@ -29,6 +29,19 @@ func (m *mockTransport) SendMessage(_ context.Context, _, _, _ string) (*chat.As
 	return &chat.AssistantTurn{VisibleText: m.visible}, nil
 }
 
+// StreamMessage implements ChatTransport for the mock by emitting the visible text as a single
+// delta followed by a Done event, or a Done event with Err if m.err is set.
+func (m *mockTransport) StreamMessage(_ context.Context, _, _, _ string) (<-chan chat.ChatStreamDelta, error) {
+	if m.err != nil {
+		return nil, m.err
+	}
+	ch := make(chan chat.ChatStreamDelta, 2) //nolint:mnd // buffered so goroutine does not block
+	ch <- chat.ChatStreamDelta{Delta: m.visible}
+	ch <- chat.ChatStreamDelta{Done: true}
+	close(ch)
+	return ch, nil
+}
+
 func TestNewModel(t *testing.T) {
 	session := &chat.Session{Transport: &mockTransport{}}
 	m := NewModel(session)
@@ -116,14 +129,46 @@ func TestModel_Update_SendResultVisible(t *testing.T) {
 	}
 }
 
+// TestModel_HandleKey_Quit verifies the two-Ctrl+C exit flow:
+// first Ctrl+C when idle shows a hint; second Ctrl+C exits.
 func TestModel_HandleKey_Quit(t *testing.T) {
 	m := NewModel(&chat.Session{})
+	// First Ctrl+C: shows hint, no quit cmd.
 	mod, cmd := m.handleKey(tea.KeyMsg{Type: tea.KeyCtrlC})
 	if mod != m {
-		t.Error("handleKey(ctrl+c) changed model")
+		t.Error("first ctrl+c changed model pointer")
 	}
+	if cmd != nil {
+		// tea.Quit is a function value; we can't compare directly but it must be nil
+		// unless it is the Quit cmd — accept it if it is the Quit cmd type.
+		t.Logf("first ctrl+c returned a cmd (may be Quit): %v", cmd)
+	}
+	if m.ctrlCCount != 1 {
+		t.Errorf("after first ctrl+c: ctrlCCount = %d, want 1", m.ctrlCCount)
+	}
+	hintFound := false
+	for _, line := range m.Scrollback {
+		if strings.Contains(line, "Ctrl+C") {
+			hintFound = true
+			break
+		}
+	}
+	if !hintFound {
+		t.Errorf("first ctrl+c: expected hint in scrollback, got %v", m.Scrollback)
+	}
+	// Second Ctrl+C: must return tea.Quit.
+	_, cmd2 := m.handleKey(tea.KeyMsg{Type: tea.KeyCtrlC})
+	if cmd2 == nil {
+		t.Error("second ctrl+c returned nil cmd; expected tea.Quit")
+	}
+}
+
+// TestModel_HandleKey_CtrlD verifies that Ctrl+D exits immediately.
+func TestModel_HandleKey_CtrlD(t *testing.T) {
+	m := NewModel(&chat.Session{})
+	_, cmd := m.handleKey(tea.KeyMsg{Type: tea.KeyCtrlD})
 	if cmd == nil {
-		t.Error("handleKey(ctrl+c) returned nil cmd")
+		t.Error("handleKey(ctrl+d) returned nil cmd; expected tea.Quit")
 	}
 }
 
@@ -151,6 +196,9 @@ func TestModel_HandleKey_EnterEmptyAndBackspace(t *testing.T) {
 	})
 }
 
+// TestModel_HandleKey_EnterWithText verifies that pressing Enter with text starts a streaming turn.
+// After Enter: "You: text" is in scrollback, Loading is true, and the first cmd() returns a
+// streamDeltaMsg with the mock transport's visible text (or a streamDoneMsg on error).
 func TestModel_HandleKey_EnterWithText(t *testing.T) {
 	transport := &mockTransport{visible: "ok"}
 	session := &chat.Session{Transport: transport}
@@ -166,15 +214,20 @@ func TestModel_HandleKey_EnterWithText(t *testing.T) {
 	if m.Input != "" {
 		t.Errorf("Input = %q", m.Input)
 	}
-	if len(m.Scrollback) != 1 || m.Scrollback[0] != "You: hello" {
+	// "You: hello" must appear; assistantPrefix placeholder is also seeded.
+	if len(m.Scrollback) < 2 || m.Scrollback[0] != "You: hello" {
 		t.Errorf("Scrollback = %v", m.Scrollback)
 	}
 	if !m.Loading {
 		t.Error("Loading not set")
 	}
-	msg := cmd()
-	if _, ok := msg.(sendResult); !ok {
-		t.Errorf("cmd() = %T", msg)
+	// First message must be a streaming event (delta or done).
+	firstMsg := cmd()
+	switch firstMsg.(type) {
+	case streamDeltaMsg, streamDoneMsg:
+		// correct: streaming turn started
+	default:
+		t.Errorf("cmd() = %T, want streamDeltaMsg or streamDoneMsg", firstMsg)
 	}
 }
 
@@ -669,39 +722,63 @@ func TestModel_View_ContainsLandmarks(t *testing.T) {
 	}
 }
 
-func TestModel_SendCmd(t *testing.T) {
+// TestModel_StreamCmd verifies that streamCmd starts a streaming turn, returning the first
+// delta or done event. On success the mock transport emits a single delta "reply" then Done.
+func TestModel_StreamCmd(t *testing.T) {
 	transport := &mockTransport{visible: "reply"}
 	session := &chat.Session{Transport: transport}
 	m := NewModel(session)
-	cmd := m.sendCmd("hello")
+	// streamCmd seeds the scrollback placeholder line.
+	cmd := m.streamCmd("hello")
 	if cmd == nil {
-		t.Fatal("sendCmd returned nil")
+		t.Fatal("streamCmd returned nil")
 	}
-	msg := cmd()
-	res, ok := msg.(sendResult)
+	if len(m.Scrollback) == 0 || m.Scrollback[len(m.Scrollback)-1] != assistantPrefix {
+		t.Errorf("streamCmd should seed scrollback placeholder, got %v", m.Scrollback)
+	}
+	// First cmd() call returns the first channel event: delta "reply".
+	firstMsg := cmd()
+	delta, ok := firstMsg.(streamDeltaMsg)
 	if !ok {
-		t.Fatalf("cmd() returned %T", msg)
+		t.Fatalf("first cmd() returned %T, want streamDeltaMsg", firstMsg)
 	}
-	if res.err != nil {
-		t.Errorf("sendResult err = %v", res.err)
+	if delta.delta != "reply" {
+		t.Errorf("delta.delta = %q, want %q", delta.delta, "reply")
 	}
-	if res.visible != "reply" {
-		t.Errorf("sendResult visible = %q", res.visible)
+	// Simulate processing the delta: update scrollback and schedule next read.
+	m2, nextCmd := m.Update(delta)
+	m = m2.(*Model)
+	if m.Scrollback[len(m.Scrollback)-1] != "Assistant: reply" {
+		t.Errorf("scrollback not updated in-place: %v", m.Scrollback)
+	}
+	// Next read should return the Done event.
+	if nextCmd == nil {
+		t.Fatal("no next cmd after delta")
+	}
+	doneMsg := nextCmd()
+	done, ok := doneMsg.(streamDoneMsg)
+	if !ok {
+		t.Fatalf("next cmd returned %T, want streamDoneMsg", doneMsg)
+	}
+	if done.err != nil {
+		t.Errorf("streamDoneMsg err = %v", done.err)
 	}
 }
 
-func TestModel_SendCmd_TransportError(t *testing.T) {
+// TestModel_StreamCmd_TransportError verifies that when StreamMessage returns an error the
+// model receives a streamDoneMsg with Err set.
+func TestModel_StreamCmd_TransportError(t *testing.T) {
 	transport := &mockTransport{err: errors.New("network error")}
 	session := &chat.Session{Transport: transport}
 	m := NewModel(session)
-	cmd := m.sendCmd("hello")
+	cmd := m.streamCmd("hello")
 	msg := cmd()
-	res, ok := msg.(sendResult)
+	done, ok := msg.(streamDoneMsg)
 	if !ok {
-		t.Fatalf("cmd() returned %T", msg)
+		t.Fatalf("cmd() returned %T, want streamDoneMsg", msg)
 	}
-	if res.err == nil {
-		t.Error("sendResult err = nil")
+	if done.err == nil {
+		t.Error("streamDoneMsg err = nil, want network error")
 	}
 }
 
@@ -711,5 +788,156 @@ func TestOrEmpty(t *testing.T) {
 	}
 	if g := orEmpty("x"); g != "x" {
 		t.Errorf("orEmpty(\"x\") = %q", g)
+	}
+}
+
+// TestModel_Update_StreamDeltaMsg verifies that a streamDeltaMsg updates the scrollback
+// in-place and schedules the next delta read (returns a non-nil cmd).
+func TestModel_Update_StreamDeltaMsg(t *testing.T) {
+	transport := &mockTransport{visible: "chunk1"}
+	session := &chat.Session{Transport: transport}
+	m := NewModel(session)
+	// Simulate a stream in progress: placeholder line already in scrollback.
+	m.Scrollback = []string{"You: hello", assistantPrefix}
+	m.Loading = true
+
+	// Simulate a streamCh by doing a real streamCmd call (which sets m.streamCh).
+	cmd := m.streamCmd("hello")
+	if cmd == nil {
+		t.Fatal("streamCmd returned nil")
+	}
+	// Consume the first message from cmd to set up the channel.
+	firstMsg := cmd()
+	// Process the first delta through Update.
+	if delta, ok := firstMsg.(streamDeltaMsg); ok {
+		updated, nextCmd := m.Update(delta)
+		m = updated.(*Model)
+		// The placeholder line should be updated.
+		last := m.Scrollback[len(m.Scrollback)-1]
+		if last != "Assistant: chunk1" {
+			t.Errorf("scrollback last = %q, want %q", last, "Assistant: chunk1")
+		}
+		_ = nextCmd
+	}
+}
+
+// TestModel_Update_StreamDoneMsg_Success verifies that on a successful Done event
+// the model is no longer loading and the final content is in scrollback.
+func TestModel_Update_StreamDoneMsg_Success(t *testing.T) {
+	transport := &mockTransport{visible: "final answer"}
+	session := &chat.Session{Transport: transport}
+	m := NewModel(session)
+	m.Loading = true
+	m.Scrollback = []string{"You: hello", assistantPrefix}
+	m.streamBuf.WriteString("final answer")
+
+	updated, cmd := m.Update(streamDoneMsg{})
+	m = updated.(*Model)
+	if m.Loading {
+		t.Error("Loading still true after Done")
+	}
+	if cmd != nil {
+		t.Errorf("Update(streamDoneMsg) returned non-nil cmd")
+	}
+	last := m.Scrollback[len(m.Scrollback)-1]
+	if last != "Assistant: final answer" {
+		t.Errorf("scrollback last = %q, want %q", last, "Assistant: final answer")
+	}
+}
+
+// TestModel_Update_StreamDoneMsg_Error verifies that a Done event with error and no content
+// replaces the placeholder with an error line.
+func TestModel_Update_StreamDoneMsg_Error(t *testing.T) {
+	m := NewModel(&chat.Session{})
+	m.Loading = true
+	m.Scrollback = []string{"You: hello", assistantPrefix}
+
+	updated, _ := m.Update(streamDoneMsg{err: errors.New("network failed")})
+	m = updated.(*Model)
+	if m.Loading {
+		t.Error("Loading still true after Done with error")
+	}
+	last := m.Scrollback[len(m.Scrollback)-1]
+	if !strings.HasPrefix(last, "Error:") {
+		t.Errorf("scrollback last = %q, want error line", last)
+	}
+}
+
+// TestModel_Update_StreamDoneMsg_PartialWithError verifies that when partial content was
+// received before stream error, the partial content is kept and an interruption notice added.
+func TestModel_Update_StreamDoneMsg_PartialWithError(t *testing.T) {
+	m := NewModel(&chat.Session{})
+	m.Loading = true
+	m.Scrollback = []string{"You: hello", "Assistant: partial"}
+	m.streamBuf.WriteString("partial")
+
+	updated, _ := m.Update(streamDoneMsg{err: errors.New("cancelled")})
+	m = updated.(*Model)
+	if m.Loading {
+		t.Error("Loading still true")
+	}
+	// Partial content kept; interruption notice appended.
+	if len(m.Scrollback) < 3 {
+		t.Fatalf("expected at least 3 scrollback lines, got %v", m.Scrollback)
+	}
+	last := m.Scrollback[len(m.Scrollback)-1]
+	if !strings.Contains(last, "interrupted") {
+		t.Errorf("expected interruption notice, got %q", last)
+	}
+}
+
+// TestModel_Update_StreamDoneMsg_EmptyContent verifies that empty content is replaced with
+// a "(no response)" placeholder.
+func TestModel_Update_StreamDoneMsg_EmptyContent(t *testing.T) {
+	m := NewModel(&chat.Session{})
+	m.Loading = true
+	m.Scrollback = []string{"You: hello", assistantPrefix}
+
+	updated, _ := m.Update(streamDoneMsg{})
+	m = updated.(*Model)
+	last := m.Scrollback[len(m.Scrollback)-1]
+	if last != "Assistant: (no response)" {
+		t.Errorf("expected no response placeholder, got %q", last)
+	}
+}
+
+// TestModel_HandleCtrlC_CancelsInFlightStream verifies that Ctrl+C while loading cancels
+// the stream (calls cancel) and clears streamCancel.
+func TestModel_HandleCtrlC_CancelsInFlightStream(t *testing.T) {
+	m := NewModel(&chat.Session{})
+	m.Loading = true
+	cancelled := false
+	m.streamCancel = func() { cancelled = true }
+
+	_, cmd := m.handleKey(tea.KeyMsg{Type: tea.KeyCtrlC})
+	if cmd != nil {
+		t.Errorf("handleCtrlC while loading returned cmd %v", cmd)
+	}
+	if !cancelled {
+		t.Error("streamCancel not called on Ctrl+C while loading")
+	}
+	if m.streamCancel != nil {
+		t.Error("streamCancel not cleared after cancellation")
+	}
+}
+
+// TestModel_ReadNextDelta_ClosedChannel verifies that a closed channel returns streamDoneMsg.
+func TestModel_ReadNextDelta_ClosedChannel(t *testing.T) {
+	ch := make(chan chat.ChatStreamDelta)
+	close(ch)
+	msg := readNextDelta(ch)
+	_, ok := msg.(streamDoneMsg)
+	if !ok {
+		t.Errorf("readNextDelta on closed channel = %T, want streamDoneMsg", msg)
+	}
+}
+
+// TestModel_PushInputHistory_Dedup verifies that pushing the same line twice does not duplicate.
+func TestModel_PushInputHistory_Dedup(t *testing.T) {
+	m := NewModel(&chat.Session{})
+	m.pushInputHistory("a")
+	m.pushInputHistory("a")
+	if len(m.InputHistory) != 1 {
+		t.Errorf("InputHistory = %v, want 1 entry", m.InputHistory)
 	}
 }

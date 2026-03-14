@@ -11,13 +11,54 @@ import (
 	"testing"
 )
 
-// newMockInferenceServer starts an httptest.Server that responds with 200 and the given JSON body.
+// newMockInferenceServer starts an httptest.Server that responds to /api/chat with
+// Ollama-compatible NDJSON streaming (stream:true) whose final visible text is derived from
+// the "response" field of the given body JSON. Non-200 status passes through as-is.
+// callInference now uses stream:true, so tests must serve NDJSON.
 func newMockInferenceServer(t *testing.T, status int, body string) *httptest.Server {
 	t.Helper()
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(status)
-		_, _ = w.Write([]byte(body))
+		if status != http.StatusOK {
+			_, _ = w.Write([]byte(body))
+			return
+		}
+		// Parse the legacy single-JSON body to extract response/error text then
+		// re-emit as NDJSON stream so callInference (stream:true) can parse it.
+		var single struct {
+			Response string `json:"response"`
+			Message  struct {
+				Content string `json:"content"`
+			} `json:"message"`
+			Error string `json:"error"`
+		}
+		if err := json.Unmarshal([]byte(body), &single); err != nil {
+			// Unparseable: emit as error chunk.
+			_, _ = w.Write([]byte(`{"error":"mock parse error","done":true}` + "\n"))
+			return
+		}
+		if single.Error != "" {
+			_, _ = w.Write([]byte(`{"error":"` + single.Error + `","done":true}` + "\n"))
+			return
+		}
+		content := single.Message.Content
+		if content == "" {
+			content = single.Response
+		}
+		// Emit a content chunk then a done chunk.
+		chunk, _ := json.Marshal(map[string]interface{}{
+			"message": map[string]string{"content": content},
+			"done":    false,
+		})
+		_, _ = w.Write(chunk)
+		_, _ = w.Write([]byte("\n"))
+		done, _ := json.Marshal(map[string]interface{}{
+			"message": map[string]string{"content": ""},
+			"done":    true,
+		})
+		_, _ = w.Write(done)
+		_, _ = w.Write([]byte("\n"))
 	}))
 }
 
@@ -540,5 +581,86 @@ func TestChatCompletionHandler_EmptyOutputRetriesWithCurrentMessage(t *testing.T
 	}
 	if callCount < 2 {
 		t.Errorf("expected at least 2 Ollama calls (original + retry), got %d", callCount)
+	}
+}
+
+// TestCallInference_StreamWithEmptyLinesAndThinkBlocks covers the streaming scanner path:
+// empty lines skipped, think blocks stripped from accumulated content.
+func TestCallInference_StreamWithEmptyLinesAndThinkBlocks(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		// Empty line (should be skipped).
+		_, _ = w.Write([]byte("\n"))
+		// Chunk with thinking content.
+		chunk1, _ := json.Marshal(map[string]interface{}{
+			"message": map[string]string{"content": "<think>internal</think>"},
+			"done":    false,
+		})
+		_, _ = w.Write(chunk1)
+		_, _ = w.Write([]byte("\n"))
+		// Chunk with visible content.
+		chunk2, _ := json.Marshal(map[string]interface{}{
+			"message": map[string]string{"content": "visible"},
+			"done":    false,
+		})
+		_, _ = w.Write(chunk2)
+		_, _ = w.Write([]byte("\n"))
+		// Done chunk.
+		done, _ := json.Marshal(map[string]interface{}{
+			"message": map[string]string{"content": ""},
+			"done":    true,
+		})
+		_, _ = w.Write(done)
+		_, _ = w.Write([]byte("\n"))
+	}))
+	defer srv.Close()
+	t.Setenv("OLLAMA_BASE_URL", srv.URL)
+	t.Setenv("INFERENCE_MODEL", "qwen3.5:0.8b")
+
+	handler := ChatCompletionHandler("", slog.Default())
+	reqBody, _ := json.Marshal(map[string]interface{}{
+		"messages": []map[string]string{{"role": "user", "content": "hi"}},
+	})
+	req := httptest.NewRequest("POST", "/internal/chat/completion", bytes.NewReader(reqBody))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	handler(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("got status %d: %s", rec.Code, rec.Body.String())
+	}
+	var out InternalChatCompletionResponse
+	if err := json.NewDecoder(rec.Body).Decode(&out); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if out.Content != "visible" {
+		t.Errorf("expected think blocks stripped, got %q", out.Content)
+	}
+}
+
+// TestCallInference_StreamErrorChunk verifies that an error in a streaming chunk propagates.
+func TestCallInference_StreamErrorChunk(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		errChunk, _ := json.Marshal(map[string]interface{}{
+			"error": "context length exceeded",
+			"done":  true,
+		})
+		_, _ = w.Write(errChunk)
+		_, _ = w.Write([]byte("\n"))
+	}))
+	defer srv.Close()
+	t.Setenv("OLLAMA_BASE_URL", srv.URL)
+	t.Setenv("INFERENCE_MODEL", "qwen3.5:0.8b")
+
+	handler := ChatCompletionHandler("", slog.Default())
+	reqBody, _ := json.Marshal(map[string]interface{}{
+		"messages": []map[string]string{{"role": "user", "content": "hi"}},
+	})
+	req := httptest.NewRequest("POST", "/internal/chat/completion", bytes.NewReader(reqBody))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	handler(rec, req)
+	if rec.Code != http.StatusInternalServerError {
+		t.Errorf("expected 500 on stream error chunk, got %d: %s", rec.Code, rec.Body.String())
 	}
 }

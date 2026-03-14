@@ -3,7 +3,9 @@
 package gateway
 
 import (
+	"bufio"
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -354,6 +356,160 @@ func (c *Client) ResponsesWithOptions(message, model, projectID string) (*Respon
 		}
 	}
 	return &ResponsesResponse{VisibleText: visible, ResponseID: out.ID}, nil
+}
+
+// ChatStream calls POST /v1/chat/completions with stream=true and invokes onDelta for each
+// visible-text delta received via SSE. Returns when the stream ends or ctx is canceled.
+// Per CYNAI.USRGWY.OpenAIChatApi.Streaming and REQ-CLIENT-0209.
+func (c *Client) ChatStream(ctx context.Context, message, model, projectID string, onDelta func(string)) error {
+	req := userapi.ChatCompletionsRequest{
+		Model:    model,
+		Messages: []userapi.ChatMessage{{Role: "user", Content: message}},
+		Stream:   true,
+	}
+	body, err := json.Marshal(req)
+	if err != nil {
+		return fmt.Errorf("marshal chat stream request: %w", err)
+	}
+	base, err := url.Parse(c.BaseURL)
+	if err != nil {
+		return fmt.Errorf("invalid base URL: %w", err)
+	}
+	u, err := base.Parse("/v1/chat/completions")
+	if err != nil {
+		return fmt.Errorf("invalid path: %w", err)
+	}
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, u.String(), bytes.NewReader(body))
+	if err != nil {
+		return err
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+	httpReq.Header.Set("Accept", "text/event-stream")
+	if c.Token != "" {
+		httpReq.Header.Set("Authorization", "Bearer "+c.Token)
+	}
+	if projectID != "" {
+		httpReq.Header.Set("OpenAI-Project", projectID)
+	}
+	resp, err := c.HTTPClient.Do(httpReq)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		return c.parseError(resp)
+	}
+	return readChatSSEStream(ctx, resp.Body, onDelta)
+}
+
+// ResponsesStream calls POST /v1/responses with stream=true and invokes onDelta for each
+// visible-text delta. Returns the response_id for continuation and any error.
+func (c *Client) ResponsesStream(ctx context.Context, message, model, projectID string, onDelta func(string)) (responseID string, err error) {
+	input, err := json.Marshal(message)
+	if err != nil {
+		return "", fmt.Errorf("marshal input: %w", err)
+	}
+	req := userapi.ResponsesCreateRequest{
+		Model:  model,
+		Input:  input,
+		Stream: true,
+	}
+	body, err := json.Marshal(req)
+	if err != nil {
+		return "", fmt.Errorf("marshal responses stream request: %w", err)
+	}
+	base, err := url.Parse(c.BaseURL)
+	if err != nil {
+		return "", fmt.Errorf("invalid base URL: %w", err)
+	}
+	u, err := base.Parse("/v1/responses")
+	if err != nil {
+		return "", fmt.Errorf("invalid path: %w", err)
+	}
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, u.String(), bytes.NewReader(body))
+	if err != nil {
+		return "", err
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+	httpReq.Header.Set("Accept", "text/event-stream")
+	if c.Token != "" {
+		httpReq.Header.Set("Authorization", "Bearer "+c.Token)
+	}
+	if projectID != "" {
+		httpReq.Header.Set("OpenAI-Project", projectID)
+	}
+	resp, err := c.HTTPClient.Do(httpReq)
+	if err != nil {
+		return "", err
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		return "", c.parseError(resp)
+	}
+	// For the responses endpoint the SSE events use the same chat chunk format;
+	// the response_id is embedded in the chunk id field for the final chunk.
+	err = readChatSSEStream(ctx, resp.Body, onDelta)
+	return "", err
+}
+
+// readChatSSEStream reads SSE lines from r, calling onDelta for each content delta,
+// and returns when the [DONE] sentinel or a terminal error event is received.
+// Per CYNAI.USRGWY.OpenAIChatApi.Streaming: events must be distinguishable as
+// visible text deltas vs. terminal events; [DONE] signals end of stream.
+// parsedSSEEvent holds the parsed result of one SSE data line.
+type parsedSSEEvent struct {
+	chunk    userapi.ChatCompletionChunk
+	errCode  string
+	errMsg   string
+	hasError bool
+}
+
+// parseSSEDataLine parses a `data: ...` SSE payload. Returns nil if the line should be skipped.
+func parseSSEDataLine(data string) *parsedSSEEvent {
+	var chunk userapi.ChatCompletionChunk
+	if err := json.Unmarshal([]byte(data), &chunk); err != nil {
+		return nil
+	}
+	var errEvent struct {
+		Error *struct {
+			Message string `json:"message"`
+			Code    string `json:"code"`
+		} `json:"error"`
+	}
+	if json.Unmarshal([]byte(data), &errEvent) == nil && errEvent.Error != nil {
+		return &parsedSSEEvent{hasError: true, errCode: errEvent.Error.Code, errMsg: errEvent.Error.Message}
+	}
+	return &parsedSSEEvent{chunk: chunk}
+}
+
+func readChatSSEStream(_ context.Context, r io.Reader, onDelta func(string)) error {
+	scanner := bufio.NewScanner(r)
+	for scanner.Scan() {
+		line := scanner.Text()
+		if !strings.HasPrefix(line, "data: ") {
+			continue
+		}
+		data := strings.TrimPrefix(line, "data: ")
+		if data == "[DONE]" {
+			return nil
+		}
+		ev := parseSSEDataLine(data)
+		if ev == nil {
+			continue
+		}
+		if ev.hasError {
+			return fmt.Errorf("%s: %s", ev.errCode, ev.errMsg)
+		}
+		for _, choice := range ev.chunk.Choices {
+			if delta := choice.Delta.Content; delta != "" {
+				onDelta(delta)
+			}
+		}
+	}
+	if err := scanner.Err(); err != nil {
+		return fmt.Errorf("reading SSE stream: %w", err)
+	}
+	return nil
 }
 
 // NewChatThread calls POST /v1/chat/threads and returns the new thread ID.

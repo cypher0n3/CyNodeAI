@@ -3,8 +3,10 @@ package chat
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/cypher0n3/cynodeai/cynork/internal/gateway"
@@ -182,4 +184,47 @@ func TestSession_SetCurrentThreadID(t *testing.T) {
 func TestSession_SetToken_NilClient(t *testing.T) {
 	session := &Session{}
 	session.SetToken("x")
+}
+
+func TestSession_StreamMessage(t *testing.T) {
+	sseData := func(content, finishReason string) string {
+		fr := "null"
+		if finishReason != "" {
+			fr = `"` + finishReason + `"`
+		}
+		return fmt.Sprintf(`data: {"id":"c1","object":"chat.completion.chunk","created":1,"model":"m","choices":[{"index":0,"delta":{"content":%q},"finish_reason":%s}]}`,
+			content, fr) + "\n\n"
+	}
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/chat/completions" {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(sseData("stream reply", "")))
+		_, _ = w.Write([]byte(sseData("", "stop")))
+		_, _ = w.Write([]byte("data: [DONE]\n\n"))
+	}))
+	defer server.Close()
+	client := gateway.NewClient(server.URL)
+	client.SetToken("tok")
+	session := NewSession(client)
+	ch, err := session.StreamMessage(context.Background(), "hello")
+	if err != nil {
+		t.Fatalf("StreamMessage: %v", err)
+	}
+	var buf strings.Builder
+	for ev := range ch {
+		if ev.Done {
+			if ev.Err != nil {
+				t.Errorf("Done err = %v", ev.Err)
+			}
+			break
+		}
+		buf.WriteString(ev.Delta)
+	}
+	if buf.String() != "stream reply" {
+		t.Errorf("accumulated = %q, want %q", buf.String(), "stream reply")
+	}
 }
