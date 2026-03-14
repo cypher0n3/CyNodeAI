@@ -7,6 +7,7 @@ import (
 
 	"github.com/charmbracelet/bubbletea"
 	"github.com/cypher0n3/cynodeai/cynork/internal/chat"
+	"github.com/cypher0n3/cynodeai/cynork/internal/config"
 	"github.com/cypher0n3/cynodeai/cynork/internal/exit"
 	"github.com/cypher0n3/cynodeai/cynork/internal/gateway"
 	"github.com/cypher0n3/cynodeai/cynork/internal/tui"
@@ -49,10 +50,27 @@ func runTUI(_ *cobra.Command, _ []string) error {
 	return runTUIWithSession(session)
 }
 
+// tuiAuthProvider implements tui.AuthProvider so /auth login, logout, refresh can persist tokens and gateway URL.
+type tuiAuthProvider struct {
+	cfg    *config.Config
+	saveFn func() error
+}
+
+func (p *tuiAuthProvider) Token() string        { return p.cfg.Token }
+func (p *tuiAuthProvider) RefreshToken() string { return p.cfg.RefreshToken }
+func (p *tuiAuthProvider) GatewayURL() string   { return p.cfg.GatewayURL }
+func (p *tuiAuthProvider) SetTokens(access, refresh string) {
+	p.cfg.Token, p.cfg.RefreshToken = access, refresh
+}
+func (p *tuiAuthProvider) SetGatewayURL(url string) { p.cfg.GatewayURL = url }
+func (p *tuiAuthProvider) Save() error              { return p.saveFn() }
+
 // runTUIWithSession starts the full-screen TUI with the given session. Used by both
 // "cynork tui" and interactive "cynork chat" (when stdin/stdout are a TTY).
 func runTUIWithSession(session *chat.Session) error {
+	tui.SetTUIVersion(version)
 	m := tui.NewModel(session)
+	m.SetAuthProvider(&tuiAuthProvider{cfg: cfg, saveFn: saveConfig})
 	p := tea.NewProgram(m, tea.WithAltScreen())
 	if _, err := tuiRunProgram(p); err != nil {
 		return err

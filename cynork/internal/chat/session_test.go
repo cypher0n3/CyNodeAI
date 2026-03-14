@@ -186,6 +186,21 @@ func TestSession_SetToken_NilClient(t *testing.T) {
 	session.SetToken("x")
 }
 
+func TestSession_SetClient(t *testing.T) {
+	oldClient := gateway.NewClient("http://old")
+	oldClient.SetToken("old-tok")
+	session := NewSession(oldClient)
+	newClient := gateway.NewClient("http://new")
+	newClient.SetToken("new-tok")
+	session.SetClient(newClient)
+	if session.Client != newClient {
+		t.Errorf("Session.Client = %p, want %p", session.Client, newClient)
+	}
+	if comp, ok := session.Transport.(*CompletionsTransport); ok && comp.Client != newClient {
+		t.Errorf("CompletionsTransport.Client = %p, want %p (transport must use new client)", comp.Client, newClient)
+	}
+}
+
 func TestSession_StreamMessage(t *testing.T) {
 	sseData := func(content, finishReason string) string {
 		fr := "null"

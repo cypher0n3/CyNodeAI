@@ -5,14 +5,20 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/cypher0n3/cynodeai/cynork/internal/chat"
+	"github.com/cypher0n3/cynodeai/cynork/internal/gateway"
+	"github.com/cypher0n3/cynodeai/go_shared_libs/contracts/userapi"
 )
 
 // defaultPlaceholder is shown for empty project/model in the status bar and orEmpty.
 const defaultPlaceholder = "(default)"
+
+// loginFormCursor is the cursor shown in the focused login form field.
+const loginFormCursor = "▌"
 
 // assistantPrefix is the prefix for assistant messages in the scrollback.
 const assistantPrefix = "Assistant: "
@@ -53,9 +59,37 @@ type threadRenameResult struct {
 	err error
 }
 
+// openLoginFormMsg opens the in-TUI login overlay (per REQ-CLIENT-0190, Auth Recovery).
+type openLoginFormMsg struct{}
+
+// loginResultMsg is sent after a login attempt (success or failure).
+type loginResultMsg struct {
+	GatewayURL   string
+	AccessToken  string
+	RefreshToken string
+	Err          error
+}
+
+// streamPollMsg is sent when a stream read times out so we reschedule without blocking the event loop.
+type streamPollMsg struct{}
+
+const streamPollInterval = 80 * time.Millisecond
+
+// AuthProvider allows the TUI to read/write tokens and persist config (for /auth login, logout, refresh).
+// Set via SetAuthProvider when running under the CLI; may be nil in tests or when not available.
+type AuthProvider interface {
+	Token() string
+	RefreshToken() string
+	GatewayURL() string
+	SetTokens(access, refresh string)
+	SetGatewayURL(url string)
+	Save() error
+}
+
 // Model holds the TUI state: session, scrollback, composer input, and dimensions.
 type Model struct {
 	Session         *chat.Session
+	AuthProvider    AuthProvider // optional; used by /auth logout, refresh
 	Scrollback      []string
 	Input           string
 	InputHistory    []string // newest first; Up/Down cycle through
@@ -70,12 +104,21 @@ type Model struct {
 	streamCh     <-chan chat.ChatStreamDelta // active stream channel; nil when idle
 	streamBuf    strings.Builder             // accumulates in-flight visible text
 	ctrlCCount   int                         // successive Ctrl+C when idle → exit
+
+	// login form overlay (REQ-CLIENT-0190: in-session login; password not echoed)
+	ShowLoginForm     bool
+	LoginGatewayURL   string
+	LoginUsername     string
+	LoginPassword     string
+	LoginFocusedField int // 0=gateway, 1=username, 2=password
+	LoginErr          string
 }
 
 // NewModel returns an initial TUI model for the given session.
 func NewModel(session *chat.Session) *Model {
 	return &Model{
 		Session:         session,
+		AuthProvider:    nil,
 		Scrollback:      []string{},
 		Input:           "",
 		InputHistoryIdx: -1,
@@ -83,6 +126,9 @@ func NewModel(session *chat.Session) *Model {
 		Height:          24,
 	}
 }
+
+// SetAuthProvider sets the optional auth provider (used by /auth logout, refresh).
+func (m *Model) SetAuthProvider(p AuthProvider) { m.AuthProvider = p }
 
 // Init runs once at startup; no initial command.
 func (m *Model) Init() tea.Cmd {
@@ -103,17 +149,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.streamCh = msg.ch
 		return m, scheduleNextDelta(m.streamCh)
 	case streamDeltaMsg:
-		m.streamBuf.WriteString(msg.delta)
-		// Update the last scrollback line in place.
-		prefix := assistantPrefix
-		if len(m.Scrollback) > 0 && strings.HasPrefix(m.Scrollback[len(m.Scrollback)-1], prefix) {
-			m.Scrollback[len(m.Scrollback)-1] = prefix + m.streamBuf.String()
-		}
-		// Schedule reading the next delta.
-		if m.streamCh != nil {
-			return m, scheduleNextDelta(m.streamCh)
-		}
-		return m, nil
+		return m.applyStreamDelta(msg)
 	case streamDoneMsg:
 		m.applyStreamDone(msg)
 		return m, nil
@@ -121,21 +157,20 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.applySendResult(msg)
 		return m, nil
 	case threadListResult:
-		m.Loading = false
-		if msg.err != nil {
-			m.Err = msg.err.Error()
-			m.Scrollback = append(m.Scrollback, "Error: "+msg.err.Error())
-		} else {
-			m.Scrollback = append(m.Scrollback, msg.lines...)
-		}
-		return m, nil
+		return m.applyThreadListResult(msg)
 	case threadRenameResult:
-		m.Loading = false
-		if msg.err != nil {
-			m.Err = msg.err.Error()
-			m.Scrollback = append(m.Scrollback, "Error: "+msg.err.Error())
-		} else {
-			m.Scrollback = append(m.Scrollback, "Thread renamed.")
+		return m.applyThreadRenameResult(msg)
+	case slashResultMsg:
+		return m.applySlashResult(msg)
+	case shellExecDoneMsg:
+		return m.applyShellExecDone(msg)
+	case openLoginFormMsg:
+		return m.applyOpenLoginForm()
+	case loginResultMsg:
+		return m.applyLoginResult(msg)
+	case streamPollMsg:
+		if m.streamCh != nil {
+			return m, scheduleNextDelta(m.streamCh)
 		}
 		return m, nil
 	default:
@@ -144,6 +179,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	if m.ShowLoginForm {
+		return m.handleLoginFormKey(msg)
+	}
 	switch msg.String() {
 	case "ctrl+c":
 		return m.handleCtrlC()
@@ -152,31 +190,39 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	}
 	// Reset successive ctrl+c count on any other key.
 	m.ctrlCCount = 0
-	if m.Loading {
-		return m, nil
-	}
 	switch msg.String() {
 	case "enter":
 		line := strings.TrimSpace(m.Input)
+		// While a stream is in flight, don't send another message (allow typing in composer).
+		if m.Loading && line != "" {
+			return m, nil
+		}
 		m.Input = ""
 		if line == "" {
 			return m, nil
 		}
-		m.Scrollback = append(m.Scrollback, "You: "+line)
 		m.Err = ""
-		if cmd := m.handleThreadCommand(line); cmd != nil {
+
+		// Shell escape: ! <cmd> (REQ-CLIENT-0175, CliChatShellEscape).
+		if strings.HasPrefix(line, "!") {
+			m.Scrollback = append(m.Scrollback, "You: "+line)
 			m.Loading = true
-			return m, cmd
+			shellCmd := m.handleShellEscape(line)
+			return m, shellCmd
 		}
-		// Not a thread command; send as chat message.
-		if !strings.HasPrefix(line, "/") {
-			m.pushInputHistory(line)
-			m.InputHistoryIdx = -1
-			m.Loading = true
-			cmd := m.streamCmd(line)
-			return m, cmd
+
+		// Slash command dispatcher (REQ-CLIENT-0164, SlashCommandExecution).
+		if strings.HasPrefix(line, "/") {
+			return m.handleSlashLine(line)
 		}
-		return m, nil
+
+		// Regular chat message.
+		m.Scrollback = append(m.Scrollback, "You: "+line)
+		m.pushInputHistory(line)
+		m.InputHistoryIdx = -1
+		m.Loading = true
+		chatCmd := m.streamCmd(line)
+		return m, chatCmd
 	case "up":
 		m.navigateInputHistory(true)
 		return m, nil
@@ -197,6 +243,26 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	}
+}
+
+// handleSlashLine dispatches a slash-prefixed line to the correct handler.
+func (m *Model) handleSlashLine(line string) (tea.Model, tea.Cmd) {
+	m.Scrollback = append(m.Scrollback, "You: "+line)
+	// Thread commands use the existing thread path.
+	if strings.HasPrefix(strings.ToLower(line), "/thread") {
+		if cmd := m.handleThreadCommand(line); cmd != nil {
+			m.Loading = true
+			return m, cmd
+		}
+		return m, nil
+	}
+	tuiCmd, handled := m.handleSlashCmd(line)
+	if handled {
+		m.Loading = true
+		return m, tuiCmd
+	}
+	m.Scrollback = append(m.Scrollback, "Unknown command. Type /help for available commands.")
+	return m, nil
 }
 
 // handleCtrlC implements Ctrl+C semantics per spec:
@@ -348,6 +414,188 @@ func (m *Model) navigateInputHistory(up bool) {
 	}
 }
 
+func (m *Model) applyStreamDelta(msg streamDeltaMsg) (tea.Model, tea.Cmd) {
+	m.streamBuf.WriteString(msg.delta)
+	prefix := assistantPrefix
+	if len(m.Scrollback) > 0 && strings.HasPrefix(m.Scrollback[len(m.Scrollback)-1], prefix) {
+		m.Scrollback[len(m.Scrollback)-1] = prefix + m.streamBuf.String()
+	}
+	if m.streamCh != nil {
+		return m, scheduleNextDelta(m.streamCh)
+	}
+	return m, nil
+}
+
+func (m *Model) applyThreadListResult(msg threadListResult) (tea.Model, tea.Cmd) {
+	m.Loading = false
+	if msg.err != nil {
+		m.Err = msg.err.Error()
+		m.Scrollback = append(m.Scrollback, "Error: "+msg.err.Error())
+	} else {
+		m.Scrollback = append(m.Scrollback, msg.lines...)
+	}
+	return m, nil
+}
+
+func (m *Model) applyThreadRenameResult(msg threadRenameResult) (tea.Model, tea.Cmd) {
+	m.Loading = false
+	if msg.err != nil {
+		m.Err = msg.err.Error()
+		m.Scrollback = append(m.Scrollback, "Error: "+msg.err.Error())
+	} else {
+		m.Scrollback = append(m.Scrollback, "Thread renamed.")
+	}
+	return m, nil
+}
+
+func (m *Model) applySlashResult(msg slashResultMsg) (tea.Model, tea.Cmd) {
+	m.Loading = false
+	if msg.exitModel {
+		return m, tea.Quit
+	}
+	if msg.lines == nil {
+		m.Scrollback = []string{}
+	} else {
+		m.Scrollback = append(m.Scrollback, msg.lines...)
+	}
+	return m, nil
+}
+
+func (m *Model) applyShellExecDone(msg shellExecDoneMsg) (tea.Model, tea.Cmd) {
+	m.Loading = false
+	if msg.output != "" {
+		m.Scrollback = append(m.Scrollback, strings.Split(strings.TrimRight(msg.output, "\n"), "\n")...)
+	}
+	if msg.exitCode != 0 {
+		m.Scrollback = append(m.Scrollback, fmt.Sprintf("exit status %d", msg.exitCode))
+	}
+	return m, nil
+}
+
+func (m *Model) applyOpenLoginForm() (tea.Model, tea.Cmd) {
+	m.Loading = false
+	m.ShowLoginForm = true
+	m.LoginErr = ""
+	m.LoginUsername = ""
+	m.LoginPassword = ""
+	m.LoginFocusedField = 0
+	switch {
+	case m.Session != nil && m.Session.Client != nil && m.Session.Client.BaseURL != "":
+		m.LoginGatewayURL = m.Session.Client.BaseURL
+	case m.AuthProvider != nil:
+		m.LoginGatewayURL = m.AuthProvider.GatewayURL()
+	default:
+		m.LoginGatewayURL = ""
+	}
+	return m, nil
+}
+
+func (m *Model) applyLoginResult(msg loginResultMsg) (tea.Model, tea.Cmd) {
+	m.ShowLoginForm = false
+	m.LoginPassword = ""
+	m.LoginErr = ""
+	if msg.Err != nil {
+		m.Scrollback = append(m.Scrollback, "Login failed: "+msg.Err.Error())
+		return m, nil
+	}
+	client := gateway.NewClient(msg.GatewayURL)
+	client.SetToken(msg.AccessToken)
+	if m.Session != nil {
+		m.Session.SetClient(client)
+	}
+	if m.AuthProvider != nil {
+		m.AuthProvider.SetGatewayURL(msg.GatewayURL)
+		m.AuthProvider.SetTokens(msg.AccessToken, msg.RefreshToken)
+		if err := m.AuthProvider.Save(); err != nil {
+			m.Scrollback = append(m.Scrollback, "Logged in but config save failed: "+err.Error())
+			return m, nil
+		}
+	}
+	m.Scrollback = append(m.Scrollback, "Logged in.")
+	return m, nil
+}
+
+// handleLoginFormKey handles key events when the login overlay is visible (REQ-CLIENT-0190).
+func (m *Model) handleLoginFormKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	switch msg.String() {
+	case "esc":
+		m.ShowLoginForm = false
+		m.LoginPassword = ""
+		m.LoginErr = ""
+		m.Scrollback = append(m.Scrollback, "Login cancelled.")
+		return m, nil
+	case "tab":
+		m.LoginFocusedField = (m.LoginFocusedField + 1) % 3
+		return m, nil
+	case "shift+tab":
+		m.LoginFocusedField = (m.LoginFocusedField + 2) % 3
+		return m, nil
+	case "enter":
+		gatewayURL := strings.TrimSpace(m.LoginGatewayURL)
+		username := strings.TrimSpace(m.LoginUsername)
+		password := m.LoginPassword
+		if gatewayURL == "" || username == "" {
+			m.LoginErr = "Gateway URL and username are required"
+			return m, nil
+		}
+		return m, runLoginCmd(gatewayURL, username, password)
+	case "backspace":
+		m.loginFormBackspace()
+		m.LoginErr = ""
+		return m, nil
+	default:
+		if len(msg.Runes) > 0 {
+			m.loginFormAppend(string(msg.Runes))
+			m.LoginErr = ""
+		}
+		return m, nil
+	}
+}
+
+func (m *Model) loginFormBackspace() {
+	switch m.LoginFocusedField {
+	case 0:
+		if m.LoginGatewayURL != "" {
+			m.LoginGatewayURL = m.LoginGatewayURL[:len(m.LoginGatewayURL)-1]
+		}
+	case 1:
+		if m.LoginUsername != "" {
+			m.LoginUsername = m.LoginUsername[:len(m.LoginUsername)-1]
+		}
+	case 2:
+		if m.LoginPassword != "" {
+			m.LoginPassword = m.LoginPassword[:len(m.LoginPassword)-1]
+		}
+	}
+}
+
+func (m *Model) loginFormAppend(s string) {
+	switch m.LoginFocusedField {
+	case 0:
+		m.LoginGatewayURL += s
+	case 1:
+		m.LoginUsername += s
+	case 2:
+		m.LoginPassword += s
+	}
+}
+
+// runLoginCmd performs POST /v1/auth/login and returns loginResultMsg (blocks briefly).
+func runLoginCmd(gatewayURL, username, password string) tea.Cmd {
+	return func() tea.Msg {
+		client := gateway.NewClient(gatewayURL)
+		resp, err := client.Login(userapi.LoginRequest{Handle: username, Password: password})
+		if err != nil {
+			return loginResultMsg{GatewayURL: gatewayURL, Err: err}
+		}
+		return loginResultMsg{
+			GatewayURL:   gatewayURL,
+			AccessToken:  resp.AccessToken,
+			RefreshToken: resp.RefreshToken,
+		}
+	}
+}
+
 func (m *Model) applySendResult(msg sendResult) {
 	m.Loading = false
 	if msg.err != nil {
@@ -417,24 +665,24 @@ func (m *Model) streamCmd(line string) tea.Cmd {
 	}
 }
 
-// readNextDelta returns a tea.Cmd that reads the next delta from ch.
-// This chains: each delta event produces another tea.Cmd via tea.Sequence or direct Batch,
-// but for simplicity we use a self-scheduling approach: return a Msg that is immediately
-// handled, and the handler schedules the next read via tea.Cmd.
-// We use a direct goroutine-to-channel model instead: the goroutine fills the channel,
-// and each model Update call for streamDeltaMsg returns a Cmd to read the next item.
+// readNextDelta returns the next delta or streamPollMsg if nothing is ready within streamPollInterval,
+// so the event loop stays responsive and can process Ctrl+C instead of hanging.
 func readNextDelta(ch <-chan chat.ChatStreamDelta) tea.Msg {
-	delta, ok := <-ch
-	if !ok {
-		return streamDoneMsg{}
+	select {
+	case delta, ok := <-ch:
+		if !ok {
+			return streamDoneMsg{}
+		}
+		if delta.Done {
+			return streamDoneMsg{responseID: delta.ResponseID, err: delta.Err}
+		}
+		return streamDeltaMsg{delta: delta.Delta}
+	case <-time.After(streamPollInterval):
+		return streamPollMsg{}
 	}
-	if delta.Done {
-		return streamDoneMsg{responseID: delta.ResponseID, err: delta.Err}
-	}
-	return streamDeltaMsg{delta: delta.Delta}
 }
 
-// scheduleNextDelta returns a tea.Cmd that will read the next item from ch.
+// scheduleNextDelta returns a tea.Cmd that will read the next item from ch (with timeout).
 func scheduleNextDelta(ch <-chan chat.ChatStreamDelta) tea.Cmd {
 	return func() tea.Msg {
 		return readNextDelta(ch)
@@ -489,8 +737,8 @@ func (m *Model) View() string {
 			thread = thread[:8] + "…"
 		}
 	}
-	status := fmt.Sprintf("%s | gateway: %s | project: %s | model: %s | thread: %s | Enter send, Shift+Enter newline",
-		landmark, gatewayURL, projectID, model, thread)
+	status := fmt.Sprintf("%s | gateway: %s | project: %s | model: %s | thread: %s | %s",
+		landmark, gatewayURL, projectID, model, thread, composerHint)
 	statusBar := statusStyle.Width(m.Width).Render(status)
 
 	var errLine string
@@ -498,7 +746,80 @@ func (m *Model) View() string {
 		errLine = errStyle.Render(" " + m.Err)
 	}
 
-	return scrollbackBox + "\n" + composer + "\n" + statusBar + errLine
+	mainView := scrollbackBox + "\n" + composer + "\n" + statusBar + errLine
+	if m.ShowLoginForm {
+		mainView = m.renderLoginOverlay(mainView)
+	}
+	return mainView
+}
+
+// renderLoginOverlay draws the login box over the main view (password not echoed; REQ-CLIENT-0190).
+func (m *Model) renderLoginOverlay(mainView string) string {
+	const loginBoxWidth = 56
+	boxStyle := lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).Padding(0, 1).Width(loginBoxWidth)
+	labelStyle := lipgloss.NewStyle().Width(12)
+	errStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("9"))
+
+	gatewayLabel := labelStyle.Render("Gateway URL:")
+	userLabel := labelStyle.Render("Username:")
+	passLabel := labelStyle.Render("Password:")
+
+	gatewayVal := m.LoginGatewayURL
+	if gatewayVal == "" {
+		gatewayVal = " "
+	}
+	userVal := m.LoginUsername
+	if userVal == "" {
+		userVal = " "
+	}
+	passVal := strings.Repeat("*", len(m.LoginPassword))
+	if passVal == "" {
+		passVal = " "
+	}
+
+	cur := " "
+	f0, f1, f2 := cur, cur, cur
+	switch m.LoginFocusedField {
+	case 0:
+		f0 = loginFormCursor
+	case 1:
+		f1 = loginFormCursor
+	case 2:
+		f2 = loginFormCursor
+	}
+
+	// LandmarkAuthRecoveryReady so PTY/E2E can wait for the login form (tui_pty_harness).
+	lines := []string{
+		" Login " + chat.LandmarkAuthRecoveryReady,
+		"",
+		gatewayLabel + gatewayVal + f0,
+		userLabel + userVal + f1,
+		passLabel + passVal + f2,
+		"",
+		" [Enter] Login   [Esc] Cancel",
+	}
+	if m.LoginErr != "" {
+		lines = append(lines, "", errStyle.Render(m.LoginErr))
+	}
+	content := strings.Join(lines, "\n")
+	box := boxStyle.Render(content)
+	boxLines := strings.Split(box, "\n")
+	mainLines := strings.Split(mainView, "\n")
+	if len(mainLines) < len(boxLines) {
+		return mainView + "\n" + box
+	}
+	startRow := (len(mainLines) - len(boxLines)) / 2
+	if startRow < 0 {
+		startRow = 0
+	}
+	padStyle := lipgloss.NewStyle().Width(m.Width)
+	for i, line := range boxLines {
+		idx := startRow + i
+		if idx < len(mainLines) {
+			mainLines[idx] = padStyle.Render(line)
+		}
+	}
+	return strings.Join(mainLines, "\n")
 }
 
 func orEmpty(s string) string {

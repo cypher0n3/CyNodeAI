@@ -547,9 +547,13 @@ func buildChatCompletionChunk(id, model, delta string, finishReason *string) use
 	}
 }
 
-// emitContentAsSSE emits content as SSE events: an opening role chunk, a content delta chunk,
-// and a final stop chunk, then [DONE]. This is the degraded-mode path when the upstream
-// cannot provide true token-by-token deltas (CYNAI.USRGWY.OpenAIChatApi.Streaming degraded mode).
+// sseChunkSize is the approximate rune count per content delta in degraded-mode streaming
+// so the TUI receives incremental updates instead of one large event.
+const sseChunkSize = 48
+
+// emitContentAsSSE emits content as SSE events: an opening role chunk, content delta chunks
+// (split so the client sees incremental updates), and a final stop chunk, then [DONE].
+// Degraded mode when upstream cannot provide token-by-token deltas (CYNAI.USRGWY.OpenAIChatApi.Streaming).
 func emitContentAsSSE(w http.ResponseWriter, id, model, content string) {
 	stop := "stop"
 	// Opening chunk: role only, no content.
@@ -565,9 +569,16 @@ func emitContentAsSSE(w http.ResponseWriter, id, model, content string) {
 	if b, err := json.Marshal(open); err == nil {
 		writeSSEEvent(w, string(b))
 	}
-	// Content delta chunk.
-	if content != "" {
-		chunk := buildChatCompletionChunk(id, model, content, nil)
+	// Emit content in small chunks so the TUI can show incremental streaming.
+	runes := []rune(content)
+	for i := 0; i < len(runes); {
+		end := i + sseChunkSize
+		if end > len(runes) {
+			end = len(runes)
+		}
+		delta := string(runes[i:end])
+		i = end
+		chunk := buildChatCompletionChunk(id, model, delta, nil)
 		if b, err := json.Marshal(chunk); err == nil {
 			writeSSEEvent(w, string(b))
 		}

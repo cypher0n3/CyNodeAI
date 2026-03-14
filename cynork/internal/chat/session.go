@@ -53,9 +53,23 @@ func (s *Session) SetCurrentThreadID(id string) {
 }
 
 // SetToken updates the underlying client token (e.g. after auth refresh).
+// Both Session.Client and the Transport's client are the same at creation, so
+// updating one updates the other. Use SetClient when replacing the client entirely.
 func (s *Session) SetToken(token string) {
 	if s.Client != nil {
 		s.Client.SetToken(token)
+	}
+}
+
+// SetClient replaces the session's gateway client and updates the transport to use it.
+// Call this after /auth login or any client replacement so chat requests use the new client/token.
+func (s *Session) SetClient(client *gateway.Client) {
+	s.Client = client
+	switch t := s.Transport.(type) {
+	case *CompletionsTransport:
+		t.Client = client
+	case *ResponsesTransport:
+		t.Client = client
 	}
 }
 

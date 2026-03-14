@@ -310,8 +310,8 @@ func TestModel_HandleKey_DefaultRunes(t *testing.T) {
 func TestModel_View_ComposerHint(t *testing.T) {
 	m := NewModel(&chat.Session{})
 	v := m.View()
-	if !strings.Contains(v, "Enter send") || !strings.Contains(v, "Shift+Enter newline") {
-		t.Errorf("View() should show composer hint: %s", v)
+	if !strings.Contains(v, "/ commands") || !strings.Contains(v, "@ files") || !strings.Contains(v, "! shell") {
+		t.Errorf("View() should show composer hint (/ commands · @ files · ! shell): %s", v)
 	}
 }
 
@@ -962,4 +962,603 @@ func TestModel_PushInputHistory_Dedup(t *testing.T) {
 	if len(m.InputHistory) != 1 {
 		t.Errorf("InputHistory = %v, want 1 entry", m.InputHistory)
 	}
+}
+
+// ---- Slash command and shell escape tests ----
+
+// TestModel_SlashHelp verifies /help appends command catalog to scrollback.
+func TestModel_SlashHelp(t *testing.T) {
+	m := NewModel(&chat.Session{})
+	_, cmd := m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("/help")})
+	if cmd != nil {
+		t.Fatal("typing /help should not produce cmd yet")
+	}
+	_, cmd = m.handleKey(tea.KeyMsg{Type: tea.KeyEnter})
+	if cmd == nil {
+		t.Fatal("pressing Enter on /help should return a cmd")
+	}
+	msg := cmd()
+	res, ok := msg.(slashResultMsg)
+	if !ok {
+		t.Fatalf("cmd() = %T, want slashResultMsg", msg)
+	}
+	if res.exitModel {
+		t.Error("slashResultMsg.exitModel should be false for /help")
+	}
+	found := false
+	for _, l := range res.lines {
+		if strings.Contains(l, "/clear") || strings.Contains(l, "/exit") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("/help lines should contain /clear or /exit; got %v", res.lines)
+	}
+}
+
+// TestModel_SlashClear verifies /clear produces slashResultMsg with nil lines (clears scrollback).
+func TestModel_SlashClear(t *testing.T) {
+	m := NewModel(&chat.Session{})
+	m.Scrollback = []string{"old line"}
+	_, cmd := m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("/clear")})
+	if cmd != nil {
+		t.Fatal("typing chars should not produce cmd")
+	}
+	_, cmd = m.handleKey(tea.KeyMsg{Type: tea.KeyEnter})
+	if cmd == nil {
+		t.Fatal("Enter on /clear should return a cmd")
+	}
+	msg := cmd()
+	res, ok := msg.(slashResultMsg)
+	if !ok {
+		t.Fatalf("cmd() = %T, want slashResultMsg", msg)
+	}
+	// Apply via Update.
+	updated, _ := m.Update(res)
+	m = updated.(*Model)
+	// Only the "You: /clear" echo should remain (added before the command ran),
+	// and then Update with nil lines clears ALL scrollback including that echo.
+	if len(m.Scrollback) != 0 {
+		t.Errorf("After /clear scrollback should be empty, got %v", m.Scrollback)
+	}
+}
+
+// TestModel_SlashVersion verifies /version shows "cynork" in scrollback.
+func TestModel_SlashVersion(t *testing.T) {
+	m := NewModel(&chat.Session{})
+	_, _ = m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("/version")})
+	_, cmd := m.handleKey(tea.KeyMsg{Type: tea.KeyEnter})
+	if cmd == nil {
+		t.Fatal("Enter on /version should return a cmd")
+	}
+	msg := cmd()
+	res, ok := msg.(slashResultMsg)
+	if !ok {
+		t.Fatalf("cmd() = %T, want slashResultMsg", msg)
+	}
+	found := false
+	for _, l := range res.lines {
+		if strings.Contains(strings.ToLower(l), "cynork") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("/version lines should contain 'cynork'; got %v", res.lines)
+	}
+}
+
+// TestModel_SlashExit verifies /exit sets exitModel=true.
+func TestModel_SlashExit(t *testing.T) {
+	for _, slash := range []string{"/exit", "/quit"} {
+		t.Run(slash, func(t *testing.T) {
+			m := NewModel(&chat.Session{})
+			_, _ = m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(slash)})
+			_, cmd := m.handleKey(tea.KeyMsg{Type: tea.KeyEnter})
+			if cmd == nil {
+				t.Fatal("Enter on " + slash + " should return a cmd")
+			}
+			msg := cmd()
+			res, ok := msg.(slashResultMsg)
+			if !ok {
+				t.Fatalf("cmd() = %T, want slashResultMsg", msg)
+			}
+			if !res.exitModel {
+				t.Errorf("%s should set exitModel=true", slash)
+			}
+		})
+	}
+}
+
+// TestModel_SlashUnknown verifies unknown /command shows hint mentioning /help.
+func TestModel_SlashUnknown(t *testing.T) {
+	m := NewModel(&chat.Session{})
+	_, _ = m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("/notacommand")})
+	_, cmd := m.handleKey(tea.KeyMsg{Type: tea.KeyEnter})
+	if cmd == nil {
+		t.Fatal("Enter on unknown slash should return cmd")
+	}
+	msg := cmd()
+	res, ok := msg.(slashResultMsg)
+	if !ok {
+		t.Fatalf("cmd() = %T, want slashResultMsg", msg)
+	}
+	found := false
+	for _, l := range res.lines {
+		if strings.Contains(l, "/help") || strings.Contains(strings.ToLower(l), "unknown") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("unknown slash should mention /help; got %v", res.lines)
+	}
+	if res.exitModel {
+		t.Error("unknown slash should not exit model")
+	}
+}
+
+// TestModel_SlashModel_NoArg verifies /model with no arg shows current model.
+func TestModel_SlashModel_NoArg(t *testing.T) {
+	session := &chat.Session{Model: "my-model"}
+	m := NewModel(session)
+	_, _ = m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("/model")})
+	_, cmd := m.handleKey(tea.KeyMsg{Type: tea.KeyEnter})
+	if cmd == nil {
+		t.Fatal("Enter on /model should return cmd")
+	}
+	msg := cmd()
+	res, ok := msg.(slashResultMsg)
+	if !ok {
+		t.Fatalf("cmd() = %T, want slashResultMsg", msg)
+	}
+	found := false
+	for _, l := range res.lines {
+		if strings.Contains(l, "my-model") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("/model with no arg should show 'my-model'; got %v", res.lines)
+	}
+}
+
+// TestModel_SlashSessionFields verifies /model and /project set update the session fields.
+func TestModel_SlashSessionFields(t *testing.T) {
+	cases := []struct {
+		name      string
+		input     string
+		checkFunc func(t *testing.T, session *chat.Session)
+	}{
+		{
+			name:  "model set",
+			input: "/model new-model",
+			checkFunc: func(t *testing.T, session *chat.Session) {
+				t.Helper()
+				if session.Model != "new-model" {
+					t.Errorf("session.Model = %q, want %q", session.Model, "new-model")
+				}
+			},
+		},
+		{
+			name:  "project set",
+			input: "/project set proj-xyz",
+			checkFunc: func(t *testing.T, session *chat.Session) {
+				t.Helper()
+				if session.ProjectID != "proj-xyz" {
+					t.Errorf("session.ProjectID = %q, want %q", session.ProjectID, "proj-xyz")
+				}
+			},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			session := &chat.Session{}
+			m := NewModel(session)
+			for _, r := range tc.input {
+				_, _ = m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+			}
+			_, cmd := m.handleKey(tea.KeyMsg{Type: tea.KeyEnter})
+			if cmd == nil {
+				t.Fatalf("Enter on %q should return cmd", tc.input)
+			}
+			msg := cmd()
+			_, ok := msg.(slashResultMsg)
+			if !ok {
+				t.Fatalf("cmd() = %T, want slashResultMsg", msg)
+			}
+			tc.checkFunc(t, session)
+		})
+	}
+}
+
+// TestModel_SlashProject_NoArg verifies /project shows current project context.
+func TestModel_SlashProject_NoArg(t *testing.T) {
+	session := &chat.Session{ProjectID: "proj-abc"}
+	m := NewModel(session)
+	for _, r := range "/project" {
+		_, _ = m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+	}
+	_, cmd := m.handleKey(tea.KeyMsg{Type: tea.KeyEnter})
+	if cmd == nil {
+		t.Fatal("Enter on /project should return cmd")
+	}
+	msg := cmd()
+	res, ok := msg.(slashResultMsg)
+	if !ok {
+		t.Fatalf("cmd() = %T, want slashResultMsg", msg)
+	}
+	found := false
+	for _, l := range res.lines {
+		if strings.Contains(l, "proj-abc") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("/project should show 'proj-abc'; got %v", res.lines)
+	}
+}
+
+// TestModel_ShellEscape_Output verifies ! echo produces output in scrollback.
+func TestModel_ShellEscape_Output(t *testing.T) {
+	m := NewModel(&chat.Session{})
+	for _, r := range "! echo hello_test" {
+		_, _ = m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+	}
+	_, cmd := m.handleKey(tea.KeyMsg{Type: tea.KeyEnter})
+	if cmd == nil {
+		t.Fatal("Enter on ! echo should return cmd")
+	}
+	msg := cmd()
+	done, ok := msg.(shellExecDoneMsg)
+	if !ok {
+		t.Fatalf("cmd() = %T, want shellExecDoneMsg", msg)
+	}
+	if done.exitCode != 0 {
+		t.Errorf("echo exit code = %d, want 0", done.exitCode)
+	}
+	if !strings.Contains(done.output, "hello_test") {
+		t.Errorf("output = %q, want 'hello_test'", done.output)
+	}
+	// Apply via Update to verify scrollback.
+	updated, _ := m.Update(done)
+	m = updated.(*Model)
+	found := false
+	for _, l := range m.Scrollback {
+		if strings.Contains(l, "hello_test") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("scrollback should contain 'hello_test'; got %v", m.Scrollback)
+	}
+}
+
+// TestModel_ShellEscape_Empty verifies ! with no command shows usage hint.
+func TestModel_ShellEscape_Empty(t *testing.T) {
+	m := NewModel(&chat.Session{})
+	_, _ = m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("!")})
+	_, cmd := m.handleKey(tea.KeyMsg{Type: tea.KeyEnter})
+	if cmd == nil {
+		t.Fatal("Enter on ! should return cmd")
+	}
+	msg := cmd()
+	res, ok := msg.(slashResultMsg)
+	if !ok {
+		t.Fatalf("cmd() = %T, want slashResultMsg", msg)
+	}
+	found := false
+	for _, l := range res.lines {
+		if strings.Contains(strings.ToLower(l), "usage") || strings.Contains(l, "!") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("empty ! should show usage; got %v", res.lines)
+	}
+}
+
+// TestModel_ShellEscape_NonzeroExit verifies non-zero exit code appears in scrollback.
+func TestModel_ShellEscape_NonzeroExit(t *testing.T) {
+	m := NewModel(&chat.Session{})
+	for _, r := range "! sh -c 'exit 7'" {
+		_, _ = m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+	}
+	_, cmd := m.handleKey(tea.KeyMsg{Type: tea.KeyEnter})
+	if cmd == nil {
+		t.Fatal("Enter on ! sh -c 'exit 7' should return cmd")
+	}
+	msg := cmd()
+	done, ok := msg.(shellExecDoneMsg)
+	if !ok {
+		t.Fatalf("cmd() = %T, want shellExecDoneMsg", msg)
+	}
+	if done.exitCode != 7 {
+		t.Errorf("exit code = %d, want 7", done.exitCode)
+	}
+	updated, _ := m.Update(done)
+	m = updated.(*Model)
+	found := false
+	for _, l := range m.Scrollback {
+		if strings.Contains(l, "7") && strings.Contains(strings.ToLower(l), "exit") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("scrollback should show exit code 7; got %v", m.Scrollback)
+	}
+}
+
+// TestModel_View_ContainsComposerHint verifies composerHint is in the status bar.
+func TestModel_View_ContainsComposerHint(t *testing.T) {
+	m := NewModel(&chat.Session{})
+	v := m.View()
+	if !strings.Contains(v, composerHint) {
+		t.Errorf("View() should contain composerHint %q; got: %s", composerHint, truncate(v, 200))
+	}
+}
+
+// mockAuthProvider implements AuthProvider for tests.
+type mockAuthProvider struct {
+	token, refreshToken string
+	gatewayURL          string
+	saveErr             error
+	saved               bool
+}
+
+func (m *mockAuthProvider) Token() string        { return m.token }
+func (m *mockAuthProvider) RefreshToken() string { return m.refreshToken }
+func (m *mockAuthProvider) GatewayURL() string   { return m.gatewayURL }
+func (m *mockAuthProvider) SetTokens(access, refresh string) {
+	m.token, m.refreshToken = access, refresh
+}
+func (m *mockAuthProvider) SetGatewayURL(url string) { m.gatewayURL = url }
+func (m *mockAuthProvider) Save() error {
+	m.saved = true
+	return m.saveErr
+}
+
+// TestModel_SlashAuth_NoArg verifies /auth with no args shows usage (login, logout, whoami, refresh).
+func TestModel_SlashAuth_NoArg(t *testing.T) {
+	m := NewModel(&chat.Session{})
+	_, _ = m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("/auth")})
+	_, cmd := m.handleKey(tea.KeyMsg{Type: tea.KeyEnter})
+	if cmd == nil {
+		t.Fatal("Enter on /auth should return cmd")
+	}
+	msg := cmd()
+	res, ok := msg.(slashResultMsg)
+	if !ok {
+		t.Fatalf("cmd() = %T, want slashResultMsg", msg)
+	}
+	wantSubs := []string{"login", "logout", "whoami", "refresh"}
+	for _, sub := range wantSubs {
+		found := false
+		for _, l := range res.lines {
+			if strings.Contains(l, "auth "+sub) {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Errorf("/auth lines should contain 'auth %s'; got %v", sub, res.lines)
+		}
+	}
+}
+
+// TestModel_View_LoginFormShowsLandmark verifies the login overlay includes the auth-recovery landmark for PTY.
+func TestModel_View_LoginFormShowsLandmark(t *testing.T) {
+	m := NewModel(&chat.Session{})
+	m.ShowLoginForm = true
+	m.LoginGatewayURL = "http://localhost:12080"
+	m.Width = 80
+	m.Height = 24
+	v := m.View()
+	if !strings.Contains(v, chat.LandmarkAuthRecoveryReady) {
+		t.Errorf("View() with login form should contain %q for PTY; got (len=%d)",
+			chat.LandmarkAuthRecoveryReady, len(v))
+	}
+	if !strings.Contains(v, "Gateway URL") || !strings.Contains(v, "Username") {
+		t.Errorf("View() with login form should show Gateway URL and Username; got (len=%d)", len(v))
+	}
+}
+
+// TestModel_SlashAuth_LoginOpensForm verifies /auth login opens the in-TUI login form (openLoginFormMsg).
+func TestModel_SlashAuth_LoginOpensForm(t *testing.T) {
+	session := &chat.Session{}
+	m := NewModel(session)
+	_, _ = m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("/auth login")})
+	_, cmd := m.handleKey(tea.KeyMsg{Type: tea.KeyEnter})
+	if cmd == nil {
+		t.Fatal("Enter on /auth login should return cmd")
+	}
+	msg := cmd()
+	_, ok := msg.(openLoginFormMsg)
+	if !ok {
+		t.Fatalf("cmd() = %T, want openLoginFormMsg (login form)", msg)
+	}
+	// Apply the message so the form opens
+	updated, _ := m.Update(msg)
+	mod, ok := updated.(*Model)
+	if !ok {
+		t.Fatalf("Update returned %T", updated)
+	}
+	if !mod.ShowLoginForm {
+		t.Error("ShowLoginForm should be true after openLoginFormMsg")
+	}
+}
+
+// TestModel_SlashAuth_Whoami_NoClient verifies /auth whoami with nil client shows error.
+func TestModel_SlashAuth_Whoami_NoClient(t *testing.T) {
+	m := NewModel(&chat.Session{})
+	_, _ = m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("/auth whoami")})
+	_, cmd := m.handleKey(tea.KeyMsg{Type: tea.KeyEnter})
+	if cmd == nil {
+		t.Fatal("Enter on /auth whoami should return cmd")
+	}
+	msg := cmd()
+	res, ok := msg.(slashResultMsg)
+	if !ok {
+		t.Fatalf("cmd() = %T, want slashResultMsg", msg)
+	}
+	if len(res.lines) == 0 || !strings.Contains(res.lines[0], "not connected") {
+		t.Errorf("expected 'not connected'; got %v", res.lines)
+	}
+}
+
+// TestModel_SlashAuth_Whoami_Success verifies /auth whoami calls gateway and shows user.
+//
+//nolint:dupl // server handler pattern similar to TestModel_SlashAuth_Refresh_Success
+func TestModel_SlashAuth_Whoami_Success(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/users/me" || r.Method != http.MethodGet {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"id":"u1","handle":"alice","is_active":true}`))
+	}))
+	defer server.Close()
+	client := gateway.NewClient(server.URL)
+	client.SetToken("tok")
+	session := &chat.Session{Client: client}
+	m := NewModel(session)
+	_, _ = m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("/auth whoami")})
+	_, cmd := m.handleKey(tea.KeyMsg{Type: tea.KeyEnter})
+	if cmd == nil {
+		t.Fatal("Enter on /auth whoami should return cmd")
+	}
+	msg := cmd()
+	res, ok := msg.(slashResultMsg)
+	if !ok {
+		t.Fatalf("cmd() = %T, want slashResultMsg", msg)
+	}
+	if len(res.lines) == 0 || !strings.Contains(res.lines[0], "user=alice") || !strings.Contains(res.lines[0], "id=u1") {
+		t.Errorf("/auth whoami should show id and user; got %v", res.lines)
+	}
+}
+
+// TestModel_SlashAuth_NoProvider verifies /auth logout and /auth refresh without AuthProvider show not available.
+func TestModel_SlashAuth_NoProvider(t *testing.T) {
+	for _, tc := range []struct {
+		name, input string
+	}{
+		{"logout", "/auth logout"},
+		{"refresh", "/auth refresh"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			m := NewModel(&chat.Session{})
+			_, _ = m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(tc.input)})
+			_, cmd := m.handleKey(tea.KeyMsg{Type: tea.KeyEnter})
+			if cmd == nil {
+				t.Fatal("Enter should return cmd")
+			}
+			msg := cmd()
+			res, ok := msg.(slashResultMsg)
+			if !ok {
+				t.Fatalf("cmd() = %T, want slashResultMsg", msg)
+			}
+			if len(res.lines) == 0 || !strings.Contains(res.lines[0], "not available") {
+				t.Errorf("expected 'not available'; got %v", res.lines)
+			}
+		})
+	}
+}
+
+// TestModel_SlashAuth_Logout_Success verifies /auth logout clears tokens and shows logged_out.
+func TestModel_SlashAuth_Logout_Success(t *testing.T) {
+	provider := &mockAuthProvider{token: "t", refreshToken: "r"}
+	session := &chat.Session{Client: gateway.NewClient("http://localhost")}
+	session.SetToken("t")
+	m := NewModel(session)
+	m.SetAuthProvider(provider)
+	_, _ = m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("/auth logout")})
+	_, cmd := m.handleKey(tea.KeyMsg{Type: tea.KeyEnter})
+	if cmd == nil {
+		t.Fatal("Enter on /auth logout should return cmd")
+	}
+	msg := cmd()
+	res, ok := msg.(slashResultMsg)
+	if !ok {
+		t.Fatalf("cmd() = %T, want slashResultMsg", msg)
+	}
+	if len(res.lines) == 0 || res.lines[0] != "logged_out=true" {
+		t.Errorf("/auth logout should show logged_out=true; got %v", res.lines)
+	}
+	if !provider.saved {
+		t.Error("AuthProvider.Save should have been called")
+	}
+	if provider.token != "" || provider.refreshToken != "" {
+		t.Errorf("tokens should be cleared; got token=%q refresh=%q", provider.token, provider.refreshToken)
+	}
+}
+
+// TestModel_SlashAuth_Refresh_Success verifies /auth refresh updates tokens and shows success.
+//
+//nolint:dupl // server handler pattern similar to TestModel_SlashAuth_Whoami_Success
+func TestModel_SlashAuth_Refresh_Success(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/auth/refresh" || r.Method != http.MethodPost {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"access_token":"new-access","refresh_token":"new-refresh","token_type":"Bearer","expires_in":900}`))
+	}))
+	defer server.Close()
+	client := gateway.NewClient(server.URL)
+	client.SetToken("old-tok")
+	provider := &mockAuthProvider{token: "old-tok", refreshToken: "old-refresh"}
+	session := &chat.Session{Client: client}
+	session.SetToken("old-tok")
+	m := NewModel(session)
+	m.SetAuthProvider(provider)
+	_, _ = m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("/auth refresh")})
+	_, cmd := m.handleKey(tea.KeyMsg{Type: tea.KeyEnter})
+	if cmd == nil {
+		t.Fatal("Enter on /auth refresh should return cmd")
+	}
+	msg := cmd()
+	res, ok := msg.(slashResultMsg)
+	if !ok {
+		t.Fatalf("cmd() = %T, want slashResultMsg", msg)
+	}
+	if len(res.lines) == 0 || !strings.Contains(res.lines[0], "Token refreshed") {
+		t.Errorf("/auth refresh should show success; got %v", res.lines)
+	}
+	if !provider.saved || provider.token != "new-access" || provider.refreshToken != "new-refresh" {
+		t.Errorf("provider after refresh: saved=%v token=%q refresh=%q", provider.saved, provider.token, provider.refreshToken)
+	}
+}
+
+// TestParseSlashTUI verifies parseSlashTUI parses command and rest correctly.
+func TestParseSlashTUI(t *testing.T) {
+	cases := []struct{ line, wantCmd, wantRest string }{
+		{"/help", "help", ""},
+		{"/model test-model", "model", "test-model"},
+		{"/project set abc", "project", "set abc"},
+		{"/exit", "exit", ""},
+		{"/QUIT", "quit", ""},
+		{"/auth", "auth", ""},
+		{"/auth whoami", "auth", "whoami"},
+	}
+	for _, tc := range cases {
+		cmd, rest := parseSlashTUI(tc.line)
+		if cmd != tc.wantCmd || rest != tc.wantRest {
+			t.Errorf("parseSlashTUI(%q) = (%q, %q), want (%q, %q)", tc.line, cmd, rest, tc.wantCmd, tc.wantRest)
+		}
+	}
+}
+
+func truncate(s string, n int) string {
+	if len(s) < n {
+		return s
+	}
+	return s[:n]
 }

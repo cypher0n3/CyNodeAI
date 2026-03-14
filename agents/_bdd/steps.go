@@ -582,8 +582,10 @@ func registerPMASteps(sc *godog.ScenarioContext, state *agentsTestState) {
 	sc.Step(`^I have a mock inference server$`, func(ctx context.Context) error {
 		state.pmaOldOllamaURL = os.Getenv("OLLAMA_BASE_URL")
 		state.pmaMockInference = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// Emit an Ollama-compatible NDJSON stream so callInference (streaming) succeeds.
 			w.Header().Set("Content-Type", "application/json")
-			_, _ = w.Write([]byte(`{"response":"ok"}`))
+			_, _ = w.Write([]byte(`{"model":"test","created_at":"","message":{"role":"assistant","content":"ok"},"done":false}` + "\n"))
+			_, _ = w.Write([]byte(`{"model":"test","created_at":"","message":{"role":"assistant","content":""},"done":true,"done_reason":"stop"}` + "\n"))
 		}))
 		os.Setenv("OLLAMA_BASE_URL", state.pmaMockInference.URL)
 		os.Unsetenv("MCP_GATEWAY_URL")

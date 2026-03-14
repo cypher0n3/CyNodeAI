@@ -106,8 +106,14 @@ class TuiPtySession:
                 pass
         self._proc = None
 
+    def is_closed(self):
+        """Return True if the spawned process has exited."""
+        if self._proc is None:
+            return True
+        return not self._proc.isalive()
+
     def send_keys(self, key_sequence):
-        """Send key sequence. Use 'enter' for Return, 'ctrl+c' for Control+C, or literal text."""
+        """Send key sequence. Use 'enter' for Return, 'ctrl+c' for Control+C, 'esc' for Escape."""
         if self._proc is None:
             raise RuntimeError("session closed")
         if isinstance(key_sequence, str):
@@ -119,6 +125,8 @@ class TuiPtySession:
                 self._proc.sendcontrol("c")
             elif part == "ctrl+d":
                 self._proc.sendcontrol("d")
+            elif part == "esc" or part == "escape":
+                self._proc.send("\x1b")
             else:
                 self._proc.send(part)
 
@@ -162,6 +170,16 @@ class TuiPtySession:
             return True
         # Fallback: TUI may exit after first paint under PTY; accept scrollback/composer as "ready"
         return " (scrollback)" in out or "> " in out
+
+    def wait_for_login_form(self, timeout_sec=8):
+        """Wait until the /auth login overlay is visible. Return True if landmark or form text seen."""
+        out = self.read_until_landmark(
+            [LANDMARK_AUTH_RECOVERY_READY], timeout_sec
+        )
+        if LANDMARK_AUTH_RECOVERY_READY in out:
+            return True
+        # Fallback: form shows "Login" and "Gateway URL" or "Username"
+        return "Login" in out and ("Gateway URL" in out or "Username" in out)
 
     def capture_screen(self, drain_sec=0.15):
         """Drain output for drain_sec and return ANSI-stripped text content."""
