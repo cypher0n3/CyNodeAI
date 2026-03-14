@@ -8,6 +8,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/cypher0n3/cynodeai/go_shared_libs/contracts/sbajob"
 	"github.com/tmc/langchaingo/llms"
@@ -202,6 +203,19 @@ func TestAppendTimeRemaining_PastDeadline_NoOutput(t *testing.T) {
 	appendTimeRemaining(&b, ctx)
 	if b.Len() != 0 {
 		t.Errorf("expected no output for past deadline, got %q", b.String())
+	}
+}
+
+func TestAppendTimeRemaining_WithFutureDeadline(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	var b strings.Builder
+	appendTimeRemaining(&b, ctx)
+	if b.Len() == 0 {
+		t.Error("expected Time remaining for future deadline")
+	}
+	if !strings.Contains(b.String(), "Time remaining:") {
+		t.Errorf("prompt missing Time remaining: %q", b.String())
 	}
 }
 
@@ -408,6 +422,43 @@ func TestSalvageFinalAnswer_EmptySuffix(t *testing.T) {
 	err := errors.New("unable to parse agent output: ")
 	if got := salvageFinalAnswerFromParseError(err); got != "" {
 		t.Errorf("got %q, want empty for whitespace-only suffix", got)
+	}
+}
+
+func TestSalvageFinalAnswer_ExactPrefixNoSuffix(t *testing.T) {
+	// When message is exactly "unable to parse agent output:" (no space after colon), suffix is empty.
+	err := errors.New("unable to parse agent output:")
+	if got := salvageFinalAnswerFromParseError(err); got != "" {
+		t.Errorf("got %q, want empty for exact prefix with no suffix", got)
+	}
+}
+
+func TestResolveInferenceURL_HTTPUnix(t *testing.T) {
+	t.Setenv("INFERENCE_PROXY_URL", "http+unix://%2Ftmp%2Ftest.sock")
+	defer func() { _ = os.Unsetenv("INFERENCE_PROXY_URL") }()
+	serverURL, client := resolveInferenceURL()
+	if serverURL != udsRewrittenServerURL {
+		t.Errorf("serverURL = %q, want %q", serverURL, udsRewrittenServerURL)
+	}
+	if client == nil {
+		t.Error("client is nil")
+		return
+	}
+	if client.Transport == nil {
+		t.Error("expected custom transport for UDS")
+	}
+}
+
+func TestResolveInferenceURL_HTTPUnixWithPath(t *testing.T) {
+	// Encoded path includes trailing /path; only socket part is used.
+	t.Setenv("INFERENCE_PROXY_URL", "http+unix://%2Fvar%2Frun%2Fsock%2Fapi")
+	defer func() { _ = os.Unsetenv("INFERENCE_PROXY_URL") }()
+	serverURL, client := resolveInferenceURL()
+	if serverURL != udsRewrittenServerURL {
+		t.Errorf("serverURL = %q", serverURL)
+	}
+	if client == nil || client.Transport == nil {
+		t.Error("expected UDS client")
 	}
 }
 

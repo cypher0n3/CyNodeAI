@@ -6,11 +6,15 @@ Landmarks match cynork/internal/chat/landmarks.go for stable assertions.
 """
 
 import os
+import re
 import shlex
 import sys
 import time
 
 from scripts.test_scripts import config
+
+# Matches ANSI/VT100 escape sequences (CSI, OSC, etc.) for stripping from PTY output.
+_ANSI_RE = re.compile(r"\x1b(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])")
 
 # Landmarks (must match cynork/internal/chat/landmarks.go)
 LANDMARK_PROMPT_READY = "[CYNRK_PROMPT_READY]"
@@ -119,7 +123,13 @@ class TuiPtySession:
                 self._proc.send(part)
 
     def read_until_landmark(self, landmark, timeout_sec=None):
-        """Read until landmark(s) or timeout. Returns combined output (landmark: str or list)."""
+        """Read until landmark(s) or timeout. Returns ANSI-stripped text output.
+
+        Uses expect_exact for literal matching (landmarks contain [ ] which are regex
+        metacharacters and must not be treated as character classes). ANSI escape
+        sequences are stripped from the returned value so callers can do plain string
+        checks without worrying about interspersed terminal codes.
+        """
         if self._proc is None:
             raise RuntimeError("session closed")
         patterns = [landmark] if isinstance(landmark, str) else list(landmark)
@@ -129,30 +139,32 @@ class TuiPtySession:
         deadline = time.time() + t
         while time.time() < deadline:
             try:
-                self._proc.expect(patterns, timeout=chunk_sec)
+                self._proc.expect_exact(patterns, timeout=chunk_sec)
                 total += (self._proc.before or "") + (self._proc.after or "")
-                return total
+                return _ANSI_RE.sub("", total)
             except pexpect.TIMEOUT:
                 total += self._proc.before or ""
-                if any(p in total for p in patterns):
-                    return total
+                stripped = _ANSI_RE.sub("", total)
+                if any(p in stripped for p in patterns):
+                    return stripped
             except pexpect.EOF:
                 total += self._proc.before or ""
-                return total
-        return total
+                return _ANSI_RE.sub("", total)
+        return _ANSI_RE.sub("", total)
 
     def wait_for_prompt_ready(self, timeout_sec=None):
         """Wait until prompt-ready landmark or initial paint. Return True if seen."""
+        # read_until_landmark returns ANSI-stripped text.
         out = self.read_until_landmark(
             [LANDMARK_PROMPT_READY, LANDMARK_PROMPT_READY_SHORT], timeout_sec
         )
         if LANDMARK_PROMPT_READY in out or LANDMARK_PROMPT_READY_SHORT in out:
             return True
         # Fallback: TUI may exit after first paint under PTY; accept scrollback/composer as "ready"
-        return " (scrollback)" in out or "> " in out or ">\x1b" in out
+        return " (scrollback)" in out or "> " in out
 
     def capture_screen(self, drain_sec=0.15):
-        """Drain output for drain_sec and return current buffer (before + any new)."""
+        """Drain output for drain_sec and return ANSI-stripped text content."""
         if self._proc is None:
             raise RuntimeError("session closed")
         try:
@@ -163,4 +175,4 @@ class TuiPtySession:
             pass
         before = self._proc.before or ""
         after = self._proc.after if isinstance(self._proc.after, str) else ""
-        return before + after
+        return _ANSI_RE.sub("", before + after)

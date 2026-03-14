@@ -36,6 +36,12 @@ type streamDoneMsg struct {
 	err        error
 }
 
+// streamStartMsg is sent when StreamMessage succeeds and carries the channel to the
+// main Update loop so that m.streamCh is never written from a goroutine (data-race prevention).
+type streamStartMsg struct {
+	ch <-chan chat.ChatStreamDelta
+}
+
 // threadListResult is the message when ListThreads completes.
 type threadListResult struct {
 	lines []string
@@ -61,7 +67,7 @@ type Model struct {
 
 	// streaming state
 	streamCancel context.CancelFunc          // cancel the active stream; nil when idle
-	streamCh     <-chan chat.ChatStreamDelta  // active stream channel; nil when idle
+	streamCh     <-chan chat.ChatStreamDelta // active stream channel; nil when idle
 	streamBuf    strings.Builder             // accumulates in-flight visible text
 	ctrlCCount   int                         // successive Ctrl+C when idle → exit
 }
@@ -92,6 +98,10 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.Width = msg.Width
 		m.Height = msg.Height
 		return m, nil
+	case streamStartMsg:
+		// Store the channel in the main loop (safe — no goroutine write to model fields).
+		m.streamCh = msg.ch
+		return m, scheduleNextDelta(m.streamCh)
 	case streamDeltaMsg:
 		m.streamBuf.WriteString(msg.delta)
 		// Update the last scrollback line in place.
@@ -401,9 +411,9 @@ func (m *Model) streamCmd(line string) tea.Cmd {
 			cancel()
 			return streamDoneMsg{err: err}
 		}
-		// Store channel reference so Update can chain subsequent reads.
-		m.streamCh = ch
-		return readNextDelta(ch)
+		// Return streamStartMsg so the model stores ch in the main Update loop
+		// (avoids writing model fields from a goroutine — data race prevention).
+		return streamStartMsg{ch: ch}
 	}
 }
 

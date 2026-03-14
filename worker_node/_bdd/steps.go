@@ -80,10 +80,10 @@ type workerTestState struct {
 	workerAPIStartedAsContainer bool
 	workerAPIAsContainerImage   string
 	// UDS inference proxy (REQ-WORKER-0260 / REQ-SANDBX-0131) scenario state
-	inferenceProxySocketPath    string
-	inferenceProxyUDSCancel     context.CancelFunc
-	inferenceProxyUDSDone       chan int
-	sbaPodRunArgs               []string
+	inferenceProxySocketPath string
+	inferenceProxyUDSCancel  context.CancelFunc
+	inferenceProxyUDSDone    chan int
+	sbaPodRunArgs            []string
 	// SBA non-pod (direct) path UDS contract state
 	sbaDirectExecutor           *executor.Executor
 	sbaDirectRunArgs            []string

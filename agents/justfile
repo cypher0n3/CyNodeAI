@@ -31,10 +31,16 @@ _build_container containerfile tag *ARGS:
     root="$(cd "{{ root_dir }}" && pwd)"
     pushd "$root" >/dev/null
     trap 'popd >/dev/null 2>/dev/null || true' EXIT
+    # Strip a leading '--' sentinel that just passes through when callers use '-- ARGS' syntax.
+    extra_args=()
+    for a in {{ ARGS }}; do
+      [ "$a" = "--" ] && continue
+      extra_args+=("$a")
+    done
     if command -v podman >/dev/null 2>&1; then
-      podman build -f "{{ containerfile }}" -t "{{ tag }}" {{ ARGS }} .
+      podman build -f "{{ containerfile }}" -t "{{ tag }}" "${extra_args[@]}" .
     else
-      docker build -f "{{ containerfile }}" -t "{{ tag }}" {{ ARGS }} .
+      docker build -f "{{ containerfile }}" -t "{{ tag }}" "${extra_args[@]}" .
     fi
 
 install-go:

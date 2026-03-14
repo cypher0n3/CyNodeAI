@@ -23,7 +23,9 @@ import (
 
 const (
 	defaultOllamaURL = "http://localhost:11434"
-	defaultModel     = "llama3.2"
+	// udsRewrittenServerURL is the server URL returned when using http+unix; HTTP libs expect a host.
+	udsRewrittenServerURL = "http://localhost"
+	defaultModel          = "llama3.2"
 
 	failureCodeConstraintViolation = "constraint_violation"
 	failureCodeStepFailed          = "step_failed"
@@ -94,7 +96,7 @@ func resolveInferenceURL() (serverURL string, client *http.Client) {
 					return (&net.Dialer{}).DialContext(ctx, "unix", sockPath)
 				},
 			}
-			return "http://localhost", &http.Client{Timeout: inferenceHTTPTimeout, Transport: transport}
+			return udsRewrittenServerURL, &http.Client{Timeout: inferenceHTTPTimeout, Transport: transport}
 		}
 	}
 	return trimmed, &http.Client{Timeout: inferenceHTTPTimeout}

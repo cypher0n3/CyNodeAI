@@ -55,95 +55,114 @@ func (realCmdRunner) StartDetached(name string, args, env []string) error {
 	return nil
 }
 
-func main() {
-	args := os.Args[1:]
-	for i, a := range args {
-		switch a {
-		case "--print-sba-run-args":
-			// Prints non-pod (direct) SBA container run args and exits.
-			// Used by e2e tests to assert UDS contract (REQ-SANDBX-0131, REQ-WORKER-0174).
-			sbaImage := "cynode-sba:dev"
-			upstreamURL := "http://host.containers.internal:11434"
-			for j := i + 1; j < len(args)-1; j++ {
-				switch args[j] {
-				case "--sba-image":
-					sbaImage = args[j+1]
-				case "--upstream-url":
-					upstreamURL = args[j+1]
-				}
-			}
-			e := executor.New("podman", 30*time.Second, 262144, upstreamURL, "", nil)
-			req := &workerapi.RunJobRequest{
-				TaskID:  "diag-t1",
-				JobID:   "diag-j1",
-				Sandbox: workerapi.SandboxSpec{Image: sbaImage, JobSpecJSON: `{}`},
-			}
-			runArgs := executor.BuildSBARunArgs(req, "/tmp/diag-job", "/tmp/diag-ws", e, "agent_inference")
-			fmt.Println(strings.Join(runArgs, "\n"))
-			os.Exit(0)
-
-		case "--print-sba-pod-run-args":
-			// Prints pod-mode SBA container run args and exits.
-			// Used by e2e tests to assert UDS contract for the pod path (REQ-SANDBX-0131).
-			sbaImage := "cynode-sba:dev"
-			proxyImage := "inference-proxy:dev"
-			upstreamURL := "http://host.containers.internal:11434"
-			for j := i + 1; j < len(args)-1; j++ {
-				switch args[j] {
-				case "--sba-image":
-					sbaImage = args[j+1]
-				case "--proxy-image":
-					proxyImage = args[j+1]
-				case "--upstream-url":
-					upstreamURL = args[j+1]
-				}
-			}
-			e := executor.New("podman", 30*time.Second, 262144, upstreamURL, proxyImage, nil)
-			req := &workerapi.RunJobRequest{
-				TaskID:  "diag-t1",
-				JobID:   "diag-j1",
-				Sandbox: workerapi.SandboxSpec{Image: sbaImage, JobSpecJSON: `{}`},
-			}
-			podArgs := executor.BuildSBARunArgsForPod(req, "diag-pod", "/tmp/diag-job", "/tmp/diag-ws", "/tmp/diag-sock", e, "agent_inference")
-			fmt.Println(strings.Join(podArgs, "\n"))
-			os.Exit(0)
-
-		case "--print-managed-service-run-args":
-			// Prints managed-service container run args and exits.
-			// Used by e2e tests to assert UDS OLLAMA_BASE_URL contract (REQ-WORKER-0260, REQ-WORKER-0174).
-			serviceID := "pma-main"
-			serviceType := "pma"
-			serviceImage := "pma:latest"
-			stateDir := effectiveStateDir()
-			for j := i + 1; j < len(args)-1; j++ {
-				switch args[j] {
-				case "--service-id":
-					serviceID = args[j+1]
-				case "--service-type":
-					serviceType = args[j+1]
-				case "--service-image":
-					serviceImage = args[j+1]
-				case "--state-dir":
-					stateDir = args[j+1]
-				}
-			}
-			if v := os.Getenv("NODE_STATE_DIR"); v != "" {
-				stateDir = v
-			}
-			svc := &nodepayloads.ConfigManagedService{
-				ServiceID:    serviceID,
-				ServiceType:  serviceType,
-				Image:        serviceImage,
-				Orchestrator: &nodepayloads.ConfigManagedServiceOrchestrator{},
-				Inference:    &nodepayloads.ConfigManagedServiceInference{Mode: "node_local"},
-			}
-			name := managedServiceContainerPrefix + sanitizeContainerName(serviceID)
-			runArgs := nodeagent.BuildManagedServiceRunArgs(stateDir, svc, serviceID, serviceType, serviceImage, name, "podman")
-			fmt.Println(strings.Join(runArgs, "\n"))
-			os.Exit(0)
+// run executes the node-manager entry logic: either handle a --print-* flag and return 0,
+// or run the main loop and return its exit code. Extracted for testability.
+func run(ctx context.Context, args []string) int {
+	for i := range args {
+		if ok, code := runPrintSBARunArgs(args, i); ok {
+			return code
+		}
+		if ok, code := runPrintSBAPodRunArgs(args, i); ok {
+			return code
+		}
+		if ok, code := runPrintManagedServiceRunArgs(args, i); ok {
+			return code
 		}
 	}
-	os.Exit(runMain(context.Background()))
+	return runMain(ctx)
+}
+
+func runPrintSBARunArgs(args []string, i int) (handled bool, exitCode int) {
+	if i >= len(args) || args[i] != "--print-sba-run-args" {
+		return false, 0
+	}
+	sbaImage := "cynode-sba:dev"
+	upstreamURL := "http://host.containers.internal:11434"
+	for j := i + 1; j < len(args)-1; j++ {
+		switch args[j] {
+		case "--sba-image":
+			sbaImage = args[j+1]
+		case "--upstream-url":
+			upstreamURL = args[j+1]
+		}
+	}
+	e := executor.New("podman", 30*time.Second, 262144, upstreamURL, "", nil)
+	req := &workerapi.RunJobRequest{
+		TaskID:  "diag-t1",
+		JobID:   "diag-j1",
+		Sandbox: workerapi.SandboxSpec{Image: sbaImage, JobSpecJSON: `{}`},
+	}
+	runArgs := executor.BuildSBARunArgs(req, "/tmp/diag-job", "/tmp/diag-ws", e, "agent_inference")
+	fmt.Println(strings.Join(runArgs, "\n"))
+	return true, 0
+}
+
+func runPrintSBAPodRunArgs(args []string, i int) (handled bool, exitCode int) {
+	if i >= len(args) || args[i] != "--print-sba-pod-run-args" {
+		return false, 0
+	}
+	sbaImage := "cynode-sba:dev"
+	proxyImage := "inference-proxy:dev"
+	upstreamURL := "http://host.containers.internal:11434"
+	for j := i + 1; j < len(args)-1; j++ {
+		switch args[j] {
+		case "--sba-image":
+			sbaImage = args[j+1]
+		case "--proxy-image":
+			proxyImage = args[j+1]
+		case "--upstream-url":
+			upstreamURL = args[j+1]
+		}
+	}
+	e := executor.New("podman", 30*time.Second, 262144, upstreamURL, proxyImage, nil)
+	req := &workerapi.RunJobRequest{
+		TaskID:  "diag-t1",
+		JobID:   "diag-j1",
+		Sandbox: workerapi.SandboxSpec{Image: sbaImage, JobSpecJSON: `{}`},
+	}
+	podArgs := executor.BuildSBARunArgsForPod(req, "diag-pod", "/tmp/diag-job", "/tmp/diag-ws", "/tmp/diag-sock", e, "agent_inference")
+	fmt.Println(strings.Join(podArgs, "\n"))
+	return true, 0
+}
+
+func runPrintManagedServiceRunArgs(args []string, i int) (handled bool, exitCode int) {
+	if i >= len(args) || args[i] != "--print-managed-service-run-args" {
+		return false, 0
+	}
+	serviceID := "pma-main"
+	serviceType := "pma"
+	serviceImage := "pma:latest"
+	stateDir := effectiveStateDir()
+	for j := i + 1; j < len(args)-1; j++ {
+		switch args[j] {
+		case "--service-id":
+			serviceID = args[j+1]
+		case "--service-type":
+			serviceType = args[j+1]
+		case "--service-image":
+			serviceImage = args[j+1]
+		case "--state-dir":
+			stateDir = args[j+1]
+		}
+	}
+	if v := os.Getenv("NODE_STATE_DIR"); v != "" {
+		stateDir = v
+	}
+	svc := &nodepayloads.ConfigManagedService{
+		ServiceID:    serviceID,
+		ServiceType:  serviceType,
+		Image:        serviceImage,
+		Orchestrator: &nodepayloads.ConfigManagedServiceOrchestrator{},
+		Inference:    &nodepayloads.ConfigManagedServiceInference{Mode: "node_local"},
+	}
+	name := managedServiceContainerPrefix + sanitizeContainerName(serviceID)
+	runArgs := nodeagent.BuildManagedServiceRunArgs(stateDir, svc, serviceID, serviceType, serviceImage, name, "podman")
+	fmt.Println(strings.Join(runArgs, "\n"))
+	return true, 0
+}
+
+func main() {
+	os.Exit(run(context.Background(), os.Args[1:]))
 }
 
 // getEnv returns the environment variable key if set, otherwise def. Used for optional main-level config.

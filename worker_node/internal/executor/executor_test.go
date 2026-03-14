@@ -56,30 +56,37 @@ func TestSanitizePodName_Truncate(t *testing.T) {
 }
 
 func TestBuildProxyRunArgs(t *testing.T) {
-	args := buildProxyRunArgs("pod-1", "http://host:11434", "proxyimg", nil, "/tmp/sock-dir")
-	if len(args) < 6 {
-		t.Fatalf("expected at least 6 args, got %d", len(args))
+	t.Run("basic", func(t *testing.T) {
+		args := buildProxyRunArgs("pod-1", "http://host:11434", "proxyimg", nil, "/tmp/sock-dir")
+		assertProxyRunArgsContain(t, args, 6, "pod-1", "/tmp/sock-dir:")
+	})
+	t.Run("with command", func(t *testing.T) {
+		argsWithCmd := buildProxyRunArgs("p", "http://x", "img", []string{"sleep", "60"}, "/tmp/s")
+		if len(argsWithCmd) < 8 {
+			t.Errorf("with command expected more args, got %v", argsWithCmd)
+		}
+	})
+}
+
+func assertProxyRunArgsContain(t *testing.T, args []string, minLen int, podName, sockMountPrefix string) {
+	t.Helper()
+	if len(args) < minLen {
+		t.Fatalf("expected at least %d args, got %d", minLen, len(args))
 	}
-	hasPod := false
-	hasUpstream := false
-	hasSockMount := false
+	var hasPod, hasUpstream, hasSockMount bool
 	for i, a := range args {
-		if a == "--pod" && i+1 < len(args) && args[i+1] == "pod-1" {
+		if a == "--pod" && i+1 < len(args) && args[i+1] == podName {
 			hasPod = true
 		}
-		if a == "OLLAMA_UPSTREAM_URL=http://host:11434" || (len(a) > 20 && a[:20] == "OLLAMA_UPSTREAM_URL=") {
+		if strings.HasPrefix(a, "OLLAMA_UPSTREAM_URL=") {
 			hasUpstream = true
 		}
-		if a == "-v" && i+1 < len(args) && strings.HasPrefix(args[i+1], "/tmp/sock-dir:") {
+		if a == "-v" && i+1 < len(args) && strings.HasPrefix(args[i+1], sockMountPrefix) {
 			hasSockMount = true
 		}
 	}
 	if !hasPod || !hasUpstream || !hasSockMount {
-		t.Errorf("args %v missing pod, upstream, or sock mount", args)
-	}
-	argsWithCmd := buildProxyRunArgs("p", "http://x", "img", []string{"sleep", "60"}, "/tmp/s")
-	if len(argsWithCmd) < 8 {
-		t.Errorf("with command expected more args, got %v", argsWithCmd)
+		t.Errorf("args %v missing pod %q, upstream, or sock mount %q", args, podName, sockMountPrefix)
 	}
 }
 

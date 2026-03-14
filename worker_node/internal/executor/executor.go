@@ -289,12 +289,13 @@ func waitForProxyReadyWithSock(ctx context.Context, runtime, proxyContainerID, s
 	var lastErr error
 	for {
 		var err error
-		if sockHostPath != "" {
+		switch {
+		case sockHostPath != "":
 			// REQ-WORKER-0260: check host socket path directly — faster and avoids exec overhead.
 			err = probeProxySocketExistsFunc(sockHostPath)
-		} else if useHealthProbe {
+		case useHealthProbe:
 			err = probeProxyHealthFunc(deadlineCtx, runtime, proxyContainerID)
-		} else {
+		default:
 			err = probeProxyRunningFunc(deadlineCtx, runtime, proxyContainerID)
 		}
 		if err == nil {

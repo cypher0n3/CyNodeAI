@@ -221,13 +221,10 @@ func TestModel_HandleKey_EnterWithText(t *testing.T) {
 	if !m.Loading {
 		t.Error("Loading not set")
 	}
-	// First message must be a streaming event (delta or done).
+	// First message must be streamStartMsg (channel hand-off to main loop).
 	firstMsg := cmd()
-	switch firstMsg.(type) {
-	case streamDeltaMsg, streamDoneMsg:
-		// correct: streaming turn started
-	default:
-		t.Errorf("cmd() = %T, want streamDeltaMsg or streamDoneMsg", firstMsg)
+	if _, ok := firstMsg.(streamStartMsg); !ok {
+		t.Errorf("cmd() = %T, want streamStartMsg", firstMsg)
 	}
 }
 
@@ -736,26 +733,41 @@ func TestModel_StreamCmd(t *testing.T) {
 	if len(m.Scrollback) == 0 || m.Scrollback[len(m.Scrollback)-1] != assistantPrefix {
 		t.Errorf("streamCmd should seed scrollback placeholder, got %v", m.Scrollback)
 	}
-	// First cmd() call returns the first channel event: delta "reply".
+	// First cmd() returns streamStartMsg carrying the channel.
 	firstMsg := cmd()
-	delta, ok := firstMsg.(streamDeltaMsg)
+	start, ok := firstMsg.(streamStartMsg)
 	if !ok {
-		t.Fatalf("first cmd() returned %T, want streamDeltaMsg", firstMsg)
+		t.Fatalf("first cmd() returned %T, want streamStartMsg", firstMsg)
+	}
+	// Process streamStartMsg through Update: stores ch and returns scheduleNextDelta cmd.
+	m2, nextCmd := m.Update(start)
+	m = m2.(*Model)
+	if m.streamCh == nil {
+		t.Fatal("Update(streamStartMsg) did not set streamCh")
+	}
+	if nextCmd == nil {
+		t.Fatal("Update(streamStartMsg) returned nil cmd")
+	}
+	// Next cmd() returns the first delta "reply".
+	deltaMsg := nextCmd()
+	delta, ok := deltaMsg.(streamDeltaMsg)
+	if !ok {
+		t.Fatalf("scheduleNextDelta cmd returned %T, want streamDeltaMsg", deltaMsg)
 	}
 	if delta.delta != "reply" {
 		t.Errorf("delta.delta = %q, want %q", delta.delta, "reply")
 	}
 	// Simulate processing the delta: update scrollback and schedule next read.
-	m2, nextCmd := m.Update(delta)
-	m = m2.(*Model)
+	m3, nextCmd2 := m.Update(delta)
+	m = m3.(*Model)
 	if m.Scrollback[len(m.Scrollback)-1] != "Assistant: reply" {
 		t.Errorf("scrollback not updated in-place: %v", m.Scrollback)
 	}
 	// Next read should return the Done event.
-	if nextCmd == nil {
+	if nextCmd2 == nil {
 		t.Fatal("no next cmd after delta")
 	}
-	doneMsg := nextCmd()
+	doneMsg := nextCmd2()
 	done, ok := doneMsg.(streamDoneMsg)
 	if !ok {
 		t.Fatalf("next cmd returned %T, want streamDoneMsg", doneMsg)
@@ -801,23 +813,33 @@ func TestModel_Update_StreamDeltaMsg(t *testing.T) {
 	m.Scrollback = []string{"You: hello", assistantPrefix}
 	m.Loading = true
 
-	// Simulate a streamCh by doing a real streamCmd call (which sets m.streamCh).
+	// Simulate a streamCh by doing a real streamCmd call.
 	cmd := m.streamCmd("hello")
 	if cmd == nil {
 		t.Fatal("streamCmd returned nil")
 	}
-	// Consume the first message from cmd to set up the channel.
-	firstMsg := cmd()
-	// Process the first delta through Update.
-	if delta, ok := firstMsg.(streamDeltaMsg); ok {
-		updated, nextCmd := m.Update(delta)
+	// First message is streamStartMsg; process it to set m.streamCh.
+	startMsg := cmd()
+	start, ok := startMsg.(streamStartMsg)
+	if !ok {
+		t.Fatalf("streamCmd() returned %T, want streamStartMsg", startMsg)
+	}
+	m2, nextCmd := m.Update(start)
+	m = m2.(*Model)
+	if nextCmd == nil {
+		t.Fatal("Update(streamStartMsg) returned nil cmd")
+	}
+	// Next cmd delivers the first delta.
+	deltaMsg := nextCmd()
+	if delta, ok := deltaMsg.(streamDeltaMsg); ok {
+		updated, nextCmd2 := m.Update(delta)
 		m = updated.(*Model)
 		// The placeholder line should be updated.
 		last := m.Scrollback[len(m.Scrollback)-1]
 		if last != "Assistant: chunk1" {
 			t.Errorf("scrollback last = %q, want %q", last, "Assistant: chunk1")
 		}
-		_ = nextCmd
+		_ = nextCmd2
 	}
 }
 

@@ -2,10 +2,12 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"net"
 	"net/http"
@@ -1004,5 +1006,117 @@ func TestPullModels_ReturnsFirstError(t *testing.T) {
 	err := pullModels([]string{"qwen3.5:9b"})
 	if err == nil {
 		t.Error("expected error when exec fails, got nil")
+	}
+}
+
+func captureStdout(t *testing.T, fn func()) string {
+	t.Helper()
+	old := os.Stdout
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	os.Stdout = w
+	defer func() { os.Stdout = old }()
+	fn()
+	_ = w.Close()
+	var buf bytes.Buffer
+	if _, err := io.Copy(&buf, r); err != nil {
+		t.Fatal(err)
+	}
+	return buf.String()
+}
+
+func TestRun_PrintSBARunArgs(t *testing.T) {
+	var code int
+	out := captureStdout(t, func() { code = run(context.Background(), []string{"--print-sba-run-args"}) })
+	if code != 0 {
+		t.Errorf("run(--print-sba-run-args) = %d", code)
+	}
+	if out == "" {
+		t.Error("expected non-empty output")
+	}
+	if !strings.Contains(out, "run") {
+		t.Errorf("output should contain run args: %q", out)
+	}
+}
+
+func TestRun_PrintSBARunArgsWithFlags(t *testing.T) {
+	out := captureStdout(t, func() {
+		code := run(context.Background(), []string{"--print-sba-run-args", "--sba-image", "custom:tag", "--upstream-url", "http://custom:11434"})
+		if code != 0 {
+			t.Errorf("code = %d", code)
+		}
+	})
+	if !strings.Contains(out, "custom:tag") {
+		t.Errorf("expected custom image in output: %q", out)
+	}
+}
+
+func TestRun_PrintSBAPodRunArgs(t *testing.T) {
+	var code int
+	out := captureStdout(t, func() { code = run(context.Background(), []string{"--print-sba-pod-run-args"}) })
+	if code != 0 {
+		t.Errorf("run(--print-sba-pod-run-args) = %d", code)
+	}
+	if out == "" {
+		t.Error("expected non-empty output")
+	}
+}
+
+func TestRun_PrintManagedServiceRunArgs(t *testing.T) {
+	stateDir := t.TempDir()
+	t.Setenv("WORKER_API_STATE_DIR", stateDir)
+	defer func() { _ = os.Unsetenv("WORKER_API_STATE_DIR") }()
+	var code int
+	out := captureStdout(t, func() { code = run(context.Background(), []string{"--print-managed-service-run-args"}) })
+	if code != 0 {
+		t.Errorf("run(--print-managed-service-run-args) = %d", code)
+	}
+	if out == "" {
+		t.Error("expected non-empty output")
+	}
+	if !strings.Contains(out, "run") {
+		t.Errorf("output should contain run: %q", out)
+	}
+}
+
+func TestRun_PrintManagedServiceRunArgsWithFlags(t *testing.T) {
+	stateDir := t.TempDir()
+	t.Setenv("WORKER_API_STATE_DIR", stateDir)
+	defer func() { _ = os.Unsetenv("WORKER_API_STATE_DIR") }()
+	out := captureStdout(t, func() {
+		code := run(context.Background(), []string{"--print-managed-service-run-args", "--service-id", "my-pma", "--service-type", "pma", "--service-image", "myimg:latest"})
+		if code != 0 {
+			t.Errorf("code = %d", code)
+		}
+	})
+	if !strings.Contains(out, "myimg:latest") {
+		t.Errorf("expected service image in output: %q", out)
+	}
+}
+
+func TestRun_NoFlagCallsRunMain(t *testing.T) {
+	stateDir := t.TempDir()
+	t.Setenv("WORKER_API_STATE_DIR", stateDir)
+	t.Setenv("ORCHESTRATOR_URL", "http://127.0.0.1:19999")
+	t.Setenv("NODE_SLUG", "test-node")
+	t.Setenv("NODE_REGISTRATION_PSK", "test-psk")
+	t.Setenv("NODE_MANAGER_SKIP_SERVICES", "1")
+	defer func() {
+		_ = os.Unsetenv("WORKER_API_STATE_DIR")
+		_ = os.Unsetenv("ORCHESTRATOR_URL")
+		_ = os.Unsetenv("NODE_SLUG")
+		_ = os.Unsetenv("NODE_REGISTRATION_PSK")
+		_ = os.Unsetenv("NODE_MANAGER_SKIP_SERVICES")
+	}()
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan int, 1)
+	go func() { done <- run(ctx, []string{}) }()
+	time.Sleep(20 * time.Millisecond)
+	cancel()
+	code := <-done
+	if code != 1 {
+		t.Errorf("run(no args) should delegate to runMain and get 1, got %d", code)
 	}
 }
