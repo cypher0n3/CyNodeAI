@@ -118,6 +118,7 @@ ascii-only:
     - "dev_docs/**"
     - "docs/docs_standards/markdown_conventions.md"
     - "**/DEPENDENCY_LICENSES.md"
+    - "**/*_skill.md"
   # allowedUnicode:
   #   - "ń"   # additions on top of default (fixtures e.g. positive_general.md)
   # allowedUnicodeReplaceDefault: false  # true = use only allowedUnicode list, no default set
@@ -126,6 +127,7 @@ ascii-only:
     - "❌"
     - "📊"
     - "⚠️"
+    - "…"
 
 # -----------------------------------------------------------------------------
 # document-length (custom)

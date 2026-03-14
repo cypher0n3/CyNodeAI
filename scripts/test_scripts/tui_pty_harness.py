@@ -120,7 +120,8 @@ class TuiPtySession:
             key_sequence = [key_sequence]
         for part in key_sequence:
             if part == "enter":
-                self._proc.sendline("")
+                # bubbletea v1.3+ maps CR (\r=13) to KeyEnter; LF (\n=10) maps to ctrl+j.
+                self._proc.send("\r")
             elif part == "ctrl+c":
                 self._proc.sendcontrol("c")
             elif part == "ctrl+d":
