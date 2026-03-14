@@ -85,6 +85,7 @@ It is the canonical home for the cynork chat layout, structured transcript rende
 
 - `cynork tui` is the explicit full-screen TUI entrypoint and MUST be provided as a top-level command.
   It MUST accept the same thread semantics as the chat command: at startup, the session starts with a **new thread by default**; the user MAY supply `--resume-thread <thread_selector>` to start in an existing thread instead.
+  When the user does not supply `--resume-thread`, the TUI MUST create a new thread (e.g. via `POST /v1/chat/threads`) before the first completion request.
   See [Chat command - Thread Controls](cli_management_app_commands_chat.md#spec-cynai-client-clichatthreadcontrols).
 - `cynork chat` MUST remain available as a supported user-facing path to the same chat contract.
   The implementation MAY share the same TUI code path or retain a documented compatibility wrapper, but user-visible behavior MUST remain aligned.

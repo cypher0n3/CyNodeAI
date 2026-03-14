@@ -24,6 +24,16 @@ Scenario: Thread list is recent-first and thread titles can be updated
   And the response status is 200
   And the thread title is updated
 
+@req_pmagnt_0119
+@spec_cynai_usrgwy_chatthreadsmessages_threadtitle
+@spec_cynai_agents_threadtitling
+Scenario: Thread receives auto-title after first user message
+  Given I have a new chat thread with no user-set title
+  When I send the first user message in that thread
+  Then the system sets the thread title automatically
+  And the title is available via GET thread or thread list
+  And the title is derived from the first user message or a server-defined fallback
+
 @req_usrgwy_0141
 @req_usrgwy_0139
 @spec_cynai_usrgwy_chatthreadsmessages_structuredturns

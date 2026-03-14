@@ -57,6 +57,17 @@ Scenario: TUI exposes thread history and rename controls
   And each visible thread shows a user-typeable thread selector
   And I can rename the selected thread
 
+@req_client_0212
+@spec_cynai_client_cynorkchat_tuilayout
+Scenario: TUI displays current thread title and updates when title or thread changes
+  Given the TUI is running with a current thread that has a title or fallback label
+  When I view the TUI status bar or thread display
+  Then the current thread title or fallback label is visible
+  When the thread title changes after auto-title or "/thread rename"
+  Then the TUI updates the displayed thread title
+  When I switch to a different thread
+  Then the TUI updates the display to show that thread's title or fallback label
+
 @req_client_0192
 @req_client_0195
 @spec_cynai_client_cynorktui_transcriptrendering

@@ -867,3 +867,10 @@ This phase keeps the worker-deployment follow-on docs aligned without mixing the
   Phase 5: Status bar implemented with landmark, gateway, project, model, thread, and composer hint (Enter send, Shift+Enter newline); auth identity and connectivity minimal for first slice.
   Phase 5: In-flight assistant-turn indicator implemented via LandmarkAssistantInFlight in status bar when Loading.
   Remaining Phase 5 open: Ctrl+C cancel/copy/successive-exit semantics, scrollback navigation (Page Up/Down, search, load older), composer hint for `/` `@` `!`, visible cursor and mouse-wheel scroll, transcript rendering for thinking/tool rows and distinct user background, progressive in-flight generation, project/model in-session switch, auth recovery.
+
+- **2026-03-13:** Feature coverage added for TUI and components per Phase 6 and plan scope.
+  cynork_chat.feature: default new thread at startup, `--resume-thread` to start in existing thread (replacing thread-new).
+  cynork_tui.feature: TUI default new thread, TUI resume-thread at startup, connection recovery mid-stream (REQ-CLIENT-0213), user stream cancellation and in-flight reconciliation, degraded fallback when backend cannot stream, dual surface (completions and responses) coherence.
+  chat_openai_compatible.feature: client cancel or disconnect causes gateway to treat streaming request as canceled (REQ-USRGWY-0150).
+  chat_thread_management.feature: retained thinking survives persistence and thread-history retrieval for TUI scrollback.
+  New scenarios reference the appropriate REQ-* and spec anchors; step implementations may be added in the same or next implementation slice.
