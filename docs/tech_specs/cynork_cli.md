@@ -251,6 +251,8 @@ When the config contains a non-empty `credential_helper`, the CLI SHOULD use it 
 
 The CLI MUST be implemented as a single binary named `cynork` with subcommands.
 All commands that require gateway auth MUST fail immediately with a non-zero exit code and a clear message if the resolved token is empty (see [Token Resolution (Precedence)](#token-resolution-precedence)).
+**Exception:** `cynork tui` MUST start and render the TUI surface unconditionally without pre-checking the token; token validation is deferred to the initial gateway connection after the TUI is visible.
+See [Auth Recovery](cynork_tui.md#spec-cynai-client-cynorkchat-authrecovery).
 
 ### Command Surface Requirements Traces
 
@@ -342,7 +344,7 @@ All subcommands that call the gateway MUST use the resolved gateway URL and reso
 - `cynork auth logout`: clear token from config file and optionally from credential helper; MUST NOT require gateway call.
 - `cynork auth whoami`: call gateway with current token; MUST require auth.
 - `cynork task ...`: create tasks, list tasks, get task status, watch task status, cancel tasks, and retrieve task results and artifacts; see [Task commands](cli_management_app_commands_tasks.md).
-- `cynork tui`: start the full-screen TUI (first interactive entrypoint for chat and thread management); see [TUI first rollout](cynork_tui.md).
+- `cynork tui`: start the full-screen TUI (first interactive entrypoint for chat and thread management); MUST NOT require auth to start; token validation is deferred to the initial gateway connection after the TUI renders; see [TUI first rollout](cynork_tui.md).
 - `cynork chat`: start an interactive chat session with the Project Manager (PM) model; available as a compatibility path during TUI rollout; see [Chat command](cli_management_app_commands_chat.md).
 - `cynork creds ...`: see [Credential Management](cli_management_app_commands_admin.md#spec-cynai-client-clicredential); MUST use gateway credential endpoints.
 - `cynork prefs ...`: see [Preferences Management](cli_management_app_commands_admin.md#spec-cynai-client-clipreferences).

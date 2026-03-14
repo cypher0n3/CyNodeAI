@@ -368,7 +368,10 @@ Web Console-specific requirements live in [webcon.md](webcon.md) (REQ-WEBCON-*).
   [CYNAI.CLIENT.CliChatShellEscape](../tech_specs/cli_management_app_commands_chat.md#spec-cynai-client-clichatshellescape)
   [CYNAI.CLIENT.CynorkChat.TUILayout](../tech_specs/cynork_tui.md#spec-cynai-client-cynorkchat-tuilayout)
   <a id="req-client-0189"></a>
-- **REQ-CLIENT-0190:** When the interactive cynork chat surface starts without a usable login token, or loses authorization during a session, the interactive client MUST offer an in-session login and recovery path instead of forcing the user to restart outside the UI.
+- **REQ-CLIENT-0190:** `cynork tui` MUST start and render the TUI surface unconditionally, without requiring a valid login token at launch.
+  Token validation MUST be deferred to the initial gateway connection after the TUI is visible.
+  When the initial connection finds no usable token or the token is invalid, the TUI MUST prompt the user for login within the TUI instead of exiting.
+  When the interactive cynork chat surface loses authorization during a session, the interactive client MUST offer an in-session re-authentication path instead of forcing the user to restart outside the UI.
   Login prompts MUST protect secret input and MUST resume startup or offer to retry the interrupted session flow when authentication succeeds.
   [CYNAI.CLIENT.CynorkChat.AuthRecovery](../tech_specs/cynork_tui.md#spec-cynai-client-cynorkchat-authrecovery)
   <a id="req-client-0190"></a>

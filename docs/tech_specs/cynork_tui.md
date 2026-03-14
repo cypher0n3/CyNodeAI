@@ -86,6 +86,8 @@ The TUI expectation is real token-by-token streaming from the gateway: visible a
 - [REQ-CLIENT-0202](../requirements/client.md#req-client-0202)
 
 - `cynork tui` is the explicit full-screen TUI entrypoint and MUST be provided as a top-level command.
+  `cynork tui` MUST start and render the TUI surface unconditionally, without requiring a valid login token at launch.
+  Token resolution and validation MUST be deferred to the initial gateway connection after the TUI is visible; see [Auth Recovery](#auth-recovery).
   It MUST accept the same thread semantics as the chat command: at startup, the session starts with a **new thread by default**; the user MAY supply `--resume-thread <thread_selector>` to start in an existing thread instead.
   When the user does not supply `--resume-thread`, the TUI MUST create a new thread (e.g. via `POST /v1/chat/threads`) before the first completion request.
   See [Chat command - Thread Controls](cli_management_app_commands_chat.md#spec-cynai-client-clichatthreadcontrols).
@@ -328,9 +330,11 @@ The TUI MAY cache lightweight metadata that improves responsiveness of completio
 
 - [REQ-CLIENT-0190](../requirements/client.md#req-client-0190)
 
-The TUI MUST support interactive login recovery at startup and during the session.
+The TUI MUST start unconditionally without requiring a valid login token at launch and MUST support interactive login recovery at startup and during the session.
 
-- When startup token resolution fails, the TUI MUST offer an in-session login prompt instead of forcing an immediate external restart.
+- The TUI MUST NOT gate startup on token resolution or validation.
+  Token validation MUST be deferred to the initial gateway connection after the TUI surface is visible and rendered.
+- When the initial connection finds no usable token, or the token is expired or rejected by the gateway, the TUI MUST offer an in-session login prompt instead of exiting.
 - The startup login prompt SHOULD allow username entry, secret-safe password entry, and explicit cancel or abort.
 - When startup login is cancelled or fails, the TUI MUST exit with the normal auth failure outcome rather than entering a degraded chat session.
 - When a gateway request fails with an auth error during the session, the TUI MUST allow re-authentication and SHOULD offer to retry the interrupted action once.

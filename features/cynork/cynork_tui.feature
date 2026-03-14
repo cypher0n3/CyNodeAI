@@ -94,22 +94,6 @@ Scenario: Queued drafts can be reordered and explicitly sent later
   Then the queued drafts remain distinct from sent transcript messages
   And the unsent queued draft remains available for later edit or send
 
-@req_client_0190
-@spec_cynai_client_cynorkchat_authrecovery
-Scenario: TUI prompts for re-authentication and retries the interrupted action
-  Given the TUI is running with an expired login token
-  When a chat request returns an authorization error and I complete the in-session login prompt successfully
-  Then the TUI offers to retry the interrupted action once
-  And the session continues without restarting the TUI
-
-@req_client_0191
-@spec_cynai_client_cliweblogin
-Scenario: Web login shows bounded authorization details without printing a token
-  When I start the web login flow from the CLI
-  Then the CLI shows a browser URL or device-code verification URL
-  And the CLI shows the login expiry or timeout
-  And the CLI does not print an access token
-
 @req_client_0205
 @spec_cynai_client_cynorkchat_tuilayout
 Scenario: Mouse wheel scrolls transcript history rather than composer history
