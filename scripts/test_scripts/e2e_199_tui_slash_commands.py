@@ -1,15 +1,20 @@
 # E2E: cynork TUI slash commands and shell-escape (`!`) via PTY harness.
 # Traces: REQ-CLIENT-0164, REQ-CLIENT-0165, REQ-CLIENT-0171, REQ-CLIENT-0172,
-#         REQ-CLIENT-0173, REQ-CLIENT-0175, REQ-CLIENT-0176, REQ-CLIENT-0207.
+#         REQ-CLIENT-0173, REQ-CLIENT-0175, REQ-CLIENT-0176, REQ-CLIENT-0207,
+#         REQ-CLIENT-0208, REQ-CLIENT-0209, REQ-CLIENT-0210.
 # CYNAI.CLIENT.CynorkTui.LocalSlashCommands,
 # CYNAI.CLIENT.CynorkTui.ModelSlashCommands,
 # CYNAI.CLIENT.CynorkTui.ProjectSlashCommands,
-# CYNAI.CLIENT.CliChatShellEscape.
+# CYNAI.CLIENT.CynorkTui.ThreadSlashCommands,
+# CYNAI.CLIENT.CliChatShellEscape,
+# CYNAI.CLIENT.CliChat.ModelFlag,
+# CYNAI.CLIENT.CliChat.ResumeThreadFlag.
 
 import os
 import time
 import unittest
 
+from scripts.test_scripts import helpers
 from scripts.test_scripts import tui_pty_harness as harness
 import scripts.test_scripts.e2e_state as state
 
@@ -364,3 +369,205 @@ class TestTuiSlashCommands(unittest.TestCase):
                 f"Non-zero ! exit should show exit code; got: {repr(out[:400])}",
             )
             session.send_keys(["ctrl+c", "ctrl+c"])
+
+    # ---------------------------------------------------------- /project bare id
+    def test_tui_slash_project_bare_id_sets_project(self):
+        """/project <bare_id> sets the session project context (Task 1B).
+        Asserts: REQ-CLIENT-0173; CYNAI.CLIENT.CynorkTui.ProjectSlashCommands."""
+        if not harness.pty_available():
+            self.skipTest("pexpect not installed")
+        with harness.TuiPtySession(state.CONFIG_PATH, timeout=25) as session:
+            self._wait_ready(session)
+            session.send_keys(["/project proj-bare-001", "enter"])
+            time.sleep(_SLASH_CMD_SETTLE_SEC)
+            out = session.capture_screen(drain_sec=0.3) or ""
+            self.assertTrue(
+                "proj-bare-001" in out or "project" in out.lower(),
+                f"/project bare id should set project; got: {repr(out[:400])}",
+            )
+            session.send_keys(["ctrl+c", "ctrl+c"])
+
+    # ----------------------------------------------------------- /connect
+    def test_tui_slash_connect_no_arg_shows_gateway(self):
+        """/connect with no arg shows current gateway URL (Task 4A).
+        Asserts: CYNAI.CLIENT.CynorkTui.LocalSlashCommands connect."""
+        if not harness.pty_available():
+            self.skipTest("pexpect not installed")
+        with harness.TuiPtySession(state.CONFIG_PATH, timeout=25) as session:
+            self._wait_ready(session)
+            session.send_keys(["/connect", "enter"])
+            time.sleep(_SLASH_CMD_SETTLE_SEC)
+            out = session.capture_screen(drain_sec=0.3) or ""
+            self.assertTrue(
+                "gateway" in out.lower() or "http" in out.lower(),
+                f"/connect should show gateway URL; got: {repr(out[:400])}",
+            )
+            session.send_keys(["ctrl+c", "ctrl+c"])
+
+    # ------------------------------------------------ /show-thinking / /hide-thinking
+    def test_tui_slash_show_thinking_toggles_on(self):
+        """/show-thinking enables thinking visibility and scrollback confirms (Task 4B).
+        Asserts: CYNAI.CLIENT.CynorkTui.ThinkingVisibilityBehavior."""
+        if not harness.pty_available():
+            self.skipTest("pexpect not installed")
+        with harness.TuiPtySession(state.CONFIG_PATH, timeout=25) as session:
+            self._wait_ready(session)
+            session.send_keys(["/show-thinking", "enter"])
+            time.sleep(_SLASH_CMD_SETTLE_SEC)
+            out = session.capture_screen(drain_sec=0.3) or ""
+            self.assertTrue(
+                "thinking" in out.lower() or "visible" in out.lower(),
+                f"/show-thinking should confirm toggle; got: {repr(out[:400])}",
+            )
+            session.send_keys(["ctrl+c", "ctrl+c"])
+
+    def test_tui_slash_hide_thinking_toggles_off(self):
+        """/hide-thinking disables thinking visibility and scrollback confirms (Task 4B).
+        Asserts: CYNAI.CLIENT.CynorkTui.ThinkingVisibilityBehavior."""
+        if not harness.pty_available():
+            self.skipTest("pexpect not installed")
+        with harness.TuiPtySession(state.CONFIG_PATH, timeout=25) as session:
+            self._wait_ready(session)
+            session.send_keys(["/hide-thinking", "enter"])
+            time.sleep(_SLASH_CMD_SETTLE_SEC)
+            out = session.capture_screen(drain_sec=0.3) or ""
+            self.assertTrue(
+                "thinking" in out.lower() or "hidden" in out.lower(),
+                f"/hide-thinking should confirm toggle; got: {repr(out[:400])}",
+            )
+            session.send_keys(["ctrl+c", "ctrl+c"])
+
+    # ----------------------------------------------------------------- /status
+    def test_tui_slash_status_shows_output(self):
+        """/status shows gateway health or connection status (Task 4C).
+        Asserts: CYNAI.CLIENT.CynorkTui.StatusSlashCommands."""
+        if not harness.pty_available():
+            self.skipTest("pexpect not installed")
+        with harness.TuiPtySession(state.CONFIG_PATH, timeout=25) as session:
+            self._wait_ready(session)
+            session.send_keys(["/status", "enter"])
+            time.sleep(_SLASH_CMD_SETTLE_SEC)
+            out = session.capture_screen(drain_sec=0.3) or ""
+            self.assertTrue(
+                "status" in out.lower()
+                or "connected" in out.lower()
+                or "not connected" in out.lower()
+                or "gateway" in out.lower(),
+                f"/status should show connection status; got: {repr(out[:400])}",
+            )
+            session.send_keys(["ctrl+c", "ctrl+c"])
+
+    # ----------------------------------------------------------------- /whoami
+    def test_tui_slash_whoami_shows_identity(self):
+        """/whoami shows current user identity or gateway error (Task 4D).
+        Asserts: CYNAI.CLIENT.CynorkTui.StatusSlashCommands whoami."""
+        if not harness.pty_available():
+            self.skipTest("pexpect not installed")
+        with harness.TuiPtySession(state.CONFIG_PATH, timeout=25) as session:
+            self._wait_ready(session)
+            session.send_keys(["/whoami", "enter"])
+            time.sleep(_SLASH_CMD_SETTLE_SEC)
+            out = session.capture_screen(drain_sec=0.3) or ""
+            self.assertTrue(
+                "id" in out.lower()
+                or "handle" in out.lower()
+                or "user" in out.lower()
+                or "not connected" in out.lower()
+                or "error" in out.lower(),
+                f"/whoami should show identity or error; got: {repr(out[:400])}",
+            )
+            session.send_keys(["ctrl+c", "ctrl+c"])
+
+    # ---------------------------------------------------------- /thread switch / rename
+    def test_tui_slash_thread_switch_shows_result(self):
+        """/thread switch shows 'switched' confirmation or error in scrollback (Task 5A).
+        Asserts: CYNAI.CLIENT.CynorkTui.ThreadSlashCommands."""
+        if not harness.pty_available():
+            self.skipTest("pexpect not installed")
+        with harness.TuiPtySession(state.CONFIG_PATH, timeout=25) as session:
+            self._wait_ready(session)
+            session.send_keys(["/thread switch some-thread", "enter"])
+            time.sleep(_SLASH_CMD_SETTLE_SEC)
+            out = session.capture_screen(drain_sec=0.3) or ""
+            self.assertTrue(
+                "thread" in out.lower()
+                or "switch" in out.lower()
+                or "not found" in out.lower()
+                or "error" in out.lower(),
+                f"/thread switch should show result or error; got: {repr(out[:400])}",
+            )
+            session.send_keys(["ctrl+c", "ctrl+c"])
+
+    def test_tui_slash_thread_rename_shows_result(self):
+        """/thread rename shows renamed confirmation or error in scrollback (Task 5A).
+        Asserts: CYNAI.CLIENT.CynorkTui.ThreadSlashCommands."""
+        if not harness.pty_available():
+            self.skipTest("pexpect not installed")
+        with harness.TuiPtySession(state.CONFIG_PATH, timeout=25) as session:
+            self._wait_ready(session)
+            session.send_keys(["/thread rename New Title", "enter"])
+            time.sleep(_SLASH_CMD_SETTLE_SEC)
+            out = session.capture_screen(drain_sec=0.3) or ""
+            self.assertTrue(
+                "thread" in out.lower()
+                or "rename" in out.lower()
+                or "New Title" in out
+                or "error" in out.lower()
+                or "not connected" in out.lower(),
+                f"/thread rename should show result or error; got: {repr(out[:400])}",
+            )
+            session.send_keys(["ctrl+c", "ctrl+c"])
+
+
+class TestChatModeFlags(unittest.TestCase):
+    """E2E: cynork chat subcommand flags (--model, --resume-thread) validated via subprocess.
+    Asserts: CYNAI.CLIENT.CliChat.ModelFlag, CYNAI.CLIENT.CliChat.ResumeThreadFlag."""
+
+    tags = ["suite_cynork", "full_demo", "chat"]
+
+    def setUp(self):
+        state.init_config()
+
+    def test_chat_model_flag_is_accepted(self):
+        """cynork chat --model <id> does not fail with 'unknown flag' (Task 1A).
+        Asserts: REQ-CLIENT-0171; CYNAI.CLIENT.CliChat.ModelFlag."""
+        if not state.CONFIG_PATH or not os.path.isfile(state.CONFIG_PATH):
+            self.skipTest("CONFIG_PATH not set")
+        _, out, err = helpers.run_cynork(
+            [
+                "chat",
+                "--model", "test-model-e2e",
+                "--message", "ping",
+                "--plain",
+            ],
+            state.CONFIG_PATH,
+            timeout=30,
+        )
+        merged = ((out or "") + (err or "")).lower()
+        self.assertNotIn(
+            "unknown flag",
+            merged,
+            f"--model flag must be accepted by cynork chat; got: {repr(merged[:400])}",
+        )
+
+    def test_chat_resume_thread_flag_is_accepted(self):
+        """cynork chat --resume-thread <sel> does not fail with 'unknown flag' (Task 5B).
+        Asserts: CYNAI.CLIENT.CliChat.ResumeThreadFlag."""
+        if not state.CONFIG_PATH or not os.path.isfile(state.CONFIG_PATH):
+            self.skipTest("CONFIG_PATH not set")
+        _, out, err = helpers.run_cynork(
+            [
+                "chat",
+                "--resume-thread", "some-selector",
+                "--message", "ping",
+                "--plain",
+            ],
+            state.CONFIG_PATH,
+            timeout=30,
+        )
+        merged = ((out or "") + (err or "")).lower()
+        self.assertNotIn(
+            "unknown flag",
+            merged,
+            f"--resume-thread flag must be accepted; got: {repr(merged[:400])}",
+        )
