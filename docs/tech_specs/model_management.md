@@ -26,7 +26,7 @@ It includes a local model cache, a model registry in PostgreSQL, and workflows f
 The orchestrator maintains a local cache of model artifacts.
 Worker nodes SHOULD load models from the orchestrator cache instead of downloading from external sources.
 
-Traces To:
+### Traces to Requirements
 
 - [REQ-MODELS-0100](../requirements/models.md#req-models-0100)
 - [REQ-MODELS-0101](../requirements/models.md#req-models-0101)
@@ -123,7 +123,7 @@ Constraints
 The orchestrator directs nodes to load models based on task needs and node capabilities.
 Nodes SHOULD retrieve model artifacts from the orchestrator cache using local network paths.
 
-Traces To:
+### Node Load Workflow Requirements Traces
 
 - [REQ-MODELS-0104](../requirements/models.md#req-models-0104)
 - [REQ-MODELS-0105](../requirements/models.md#req-models-0105)
@@ -146,7 +146,7 @@ Recommended behavior
 
 The orchestrator MUST support user-directed actions to populate the cache.
 
-Traces To:
+### User Directed Downloads Requirements Traces
 
 - [REQ-MODELS-0106](../requirements/models.md#req-models-0106)
 - [REQ-MODELS-0107](../requirements/models.md#req-models-0107)
@@ -166,7 +166,7 @@ These actions MUST be policy-controlled and audited.
 Model management SHOULD be configurable via PostgreSQL system settings.
 These settings are operational configuration and policy parameters.
 
-Traces To:
+### System Settings and Constraints Requirements Traces
 
 - [REQ-MODELS-0108](../requirements/models.md#req-models-0108)
 
@@ -182,7 +182,7 @@ Suggested system setting keys
 
 - Spec ID: `CYNAI.MODELS.AuditingSafety` <a id="spec-cynai-models-auditingsafety"></a>
 
-Traces To:
+### Auditing and Safety Requirements Traces
 
 - [REQ-MODELS-0109](../requirements/models.md#req-models-0109)
 - [REQ-MODELS-0110](../requirements/models.md#req-models-0110)

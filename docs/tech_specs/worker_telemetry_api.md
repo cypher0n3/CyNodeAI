@@ -78,7 +78,7 @@ Out of scope for this spec
 
 - Spec ID: `CYNAI.WORKER.TelemetryApiAuth` <a id="spec-cynai-worker-telemetryauth"></a>
 
-Traces To:
+### Traces to Requirements
 
 - [REQ-WORKER-0200](../requirements/worker.md#req-worker-0200)
 - [REQ-WORKER-0201](../requirements/worker.md#req-worker-0201)
@@ -95,7 +95,7 @@ Requirements
 
 - Spec ID: `CYNAI.WORKER.TelemetryStorageSqlite` <a id="spec-cynai-worker-telemetrystorage-sqlite"></a>
 
-Traces To:
+### Telemetry Storage (SQLite) Requirements Traces
 
 - [REQ-WORKER-0210](../requirements/worker.md#req-worker-0210)
 - [REQ-WORKER-0211](../requirements/worker.md#req-worker-0211)
@@ -225,7 +225,7 @@ Event sourcing requirements
 
 - Spec ID: `CYNAI.WORKER.TelemetryLifecycleEvents` <a id="spec-cynai-worker-telemetrylifecycleevents"></a>
 
-Traces To:
+##### Lifecycle Event Coverage Requirements Traces
 
 - [REQ-WORKER-0258](../requirements/worker.md#req-worker-0258)
 
@@ -241,7 +241,7 @@ Shutdown outcomes (e.g. Node Manager shutdown success or failure, including cont
 
 - Spec ID: `CYNAI.WORKER.TelemetryRetention` <a id="spec-cynai-worker-telemetryretention"></a>
 
-Traces To:
+### Retention and Vacuuming Requirements Traces
 
 - [REQ-WORKER-0220](../requirements/worker.md#req-worker-0220)
 - [REQ-WORKER-0221](../requirements/worker.md#req-worker-0221)
@@ -280,7 +280,7 @@ See [`docs/tech_specs/go_rest_api_standards.md`](go_rest_api_standards.md#spec-c
 
 - Spec ID: `CYNAI.WORKER.TelemetryApiSurfaceV1` <a id="spec-cynai-worker-telemetrysurface-v1"></a>
 
-Traces To:
+### Worker Telemetry API Surface (V1) Requirements Traces
 
 - [REQ-WORKER-0230](../requirements/worker.md#req-worker-0230)
 - [REQ-WORKER-0231](../requirements/worker.md#req-worker-0231)
@@ -391,7 +391,7 @@ Response fields
 
 - Spec ID: `CYNAI.WORKER.TelemetryLogQueryV1` <a id="spec-cynai-worker-telemetrylogquery-v1"></a>
 
-Traces To:
+#### Query Logs Requirements Traces
 
 - [REQ-WORKER-0240](../requirements/worker.md#req-worker-0240)
 - [REQ-WORKER-0241](../requirements/worker.md#req-worker-0241)
@@ -451,7 +451,7 @@ Response size limits (required)
 
 - Spec ID: `CYNAI.ORCHES.NodeTelemetryPull` <a id="spec-cynai-orches-nodetelemetrypull"></a>
 
-Traces To:
+### Orchestrator Consumption Requirements Requirements Traces
 
 - [REQ-ORCHES-0141](../requirements/orches.md#req-orches-0141)
 - [REQ-ORCHES-0142](../requirements/orches.md#req-orches-0142)

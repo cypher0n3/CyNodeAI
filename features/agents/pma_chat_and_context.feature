@@ -45,3 +45,21 @@ Scenario: PMA applies node-local backend env values to local inference requests
   And I have a mock local inference server that captures runner options
   When I send a PMA internal chat completion request
   Then the captured local inference request uses the effective context value from the managed-service backend env
+
+@req_pmagnt_0117
+@spec_cynai_pmagnt_thinkingcontentseparation
+Scenario: PMA removes think tags from visible assistant text
+  Given the PMA inference backend returns visible assistant text mixed with "<think>internal reasoning</think>"
+  When I send the request to the PMA internal chat completion endpoint
+  Then the visible assistant response does not include "<think>"
+  And the visible assistant response does not include "internal reasoning"
+
+@req_pmagnt_0118
+@spec_cynai_pmagnt_streamingassistantoutput
+Scenario: PMA streams visible assistant text incrementally without leaking hidden thinking
+  Given the PMA inference backend supports incremental visible-text output
+  And the backend also emits hidden thinking updates
+  When I send an interactive PMA chat request on the standard streaming path
+  Then PMA emits ordered incremental visible assistant text updates
+  And PMA does not emit hidden thinking as visible text deltas
+  And PMA finishes with a terminal completion event

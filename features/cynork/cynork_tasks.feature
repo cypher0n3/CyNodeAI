@@ -106,6 +106,15 @@ Scenario: Get task status
 
 @req_client_0155
 @spec_cynai_client_clicommandsurface
+Scenario: Get task status by task name
+  Given I am logged in with username "alice" and password "secret"
+  And I have created a task with prompt "echo hello" and task name "my-task"
+  When I run cynork task get with task selector "my-task"
+  Then cynork exits with code 0
+  And cynork stdout contains "task_name=my-task"
+
+@req_client_0155
+@spec_cynai_client_clicommandsurface
 Scenario: Cancel task with yes
   Given I am logged in with username "alice" and password "secret"
   And I have created a task with prompt "echo hello" and stored the task id

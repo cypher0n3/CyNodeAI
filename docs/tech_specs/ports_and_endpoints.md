@@ -24,7 +24,7 @@ See [`docs/docs_standards/spec_authoring_writing_and_validation.md`](../docs_sta
 
 - Spec ID: `CYNAI.STANDS.PortsAndEndpoints` <a id="spec-cynai-stands-portsandendpoints"></a>
 
-Traces To:
+### Traces To
 
 - [REQ-WORKER-0114](../requirements/worker.md#req-worker-0114)
 - [REQ-WORKER-0115](../requirements/worker.md#req-worker-0115)

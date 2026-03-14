@@ -15,7 +15,7 @@
 This spec defines how users can install their own (custom) MCP tools with the orchestrator, configure per-tool scope (sandbox vs PM), and manage them via Web Console and CLI.
 Gateway enforcement of that scope is defined in [`mcp_gateway_enforcement.md`](mcp_gateway_enforcement.md); this spec is the single place for registration, configuration, and lifecycle of user-installed tools.
 
-Traces To:
+### Traces To
 
 - [REQ-MCPGAT-0115](../requirements/mcpgat.md#req-mcpgat-0115)
 

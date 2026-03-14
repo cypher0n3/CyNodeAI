@@ -48,7 +48,7 @@ Skills are persisted in a versioned store, registered with metadata for discover
 This document is the **single source of truth** for skills behavior and contracts (store, registry, CRUD, MCP tool `skills.create`, auditing).
 Other docs (requirements, CLI, admin console, MCP tool catalog) reference this spec and MUST NOT duplicate argument schemas, behavior, or control rules.
 
-Traces To:
+### Traces to Requirements
 
 - [REQ-SKILLS-0001](../requirements/skills.md#req-skills-0001)
 
@@ -61,7 +61,7 @@ Related specs
 
 - Spec ID: `CYNAI.SKILLS.DefaultCyNodeAISkill` <a id="spec-cynai-skills-defaultcynodeaiskill"></a>
 
-Traces To:
+### Default CyNodeAI Interaction Skill Requirements Traces
 
 - [REQ-SKILLS-0116](../requirements/skills.md#req-skills-0116)
 - [REQ-SKILLS-0117](../requirements/skills.md#req-skills-0117)
@@ -95,7 +95,7 @@ This skill is part of the MVP and ensures agents have consistent, up-to-date gui
 
 - Spec ID: `CYNAI.SKILLS.SkillStore` <a id="spec-cynai-skills-skillstore"></a>
 
-Traces To:
+### Skill Store Requirements Traces
 
 - [REQ-SKILLS-0100](../requirements/skills.md#req-skills-0100)
 
@@ -121,7 +121,7 @@ The skill store is the durable, versioned backing store for skill file content.
 
 - Spec ID: `CYNAI.SKILLS.SkillRegistry` <a id="spec-cynai-skills-skillregistry"></a>
 
-Traces To:
+### Skill Registry Requirements Traces
 
 - [REQ-SKILLS-0101](../requirements/skills.md#req-skills-0101)
 - [REQ-SKILLS-0104](../requirements/skills.md#req-skills-0104)
@@ -149,7 +149,7 @@ The skill registry holds metadata for each known skill so that callers can disco
 
 - Spec ID: `CYNAI.SKILLS.SkillScopeElevation` <a id="spec-cynai-skills-skillscopeelevation"></a>
 
-Traces To:
+### Skill Scope and Default Requirements Traces
 
 - [REQ-SKILLS-0107](../requirements/skills.md#req-skills-0107)
 - [REQ-SKILLS-0108](../requirements/skills.md#req-skills-0108)
@@ -176,7 +176,7 @@ By default a skill is user-scoped; the user may open up exposure to group, proje
 
 - Spec ID: `CYNAI.SKILLS.SkillLoading` <a id="spec-cynai-skills-skillloading"></a>
 
-Traces To:
+### Skill Loading (Web and CLI) Requirements Traces
 
 - [REQ-SKILLS-0105](../requirements/skills.md#req-skills-0105)
 - [REQ-SKILLS-0106](../requirements/skills.md#req-skills-0106)
@@ -215,7 +215,7 @@ Related specs
 
 - Spec ID: `CYNAI.SKILLS.SkillManagementCrud` <a id="spec-cynai-skills-skillmanagementcrud"></a>
 
-Traces To:
+### Skill Management CRUD (Web and CLI) Requirements Traces
 
 - [REQ-SKILLS-0115](../requirements/skills.md#req-skills-0115)
 
@@ -259,7 +259,7 @@ Related specs
 
 - Spec ID: `CYNAI.SKILLS.SkillToolsMcp` <a id="spec-cynai-skills-skilltoolsmcp"></a>
 
-Traces To:
+### Skill Tools via MCP (CRUD) Requirements Traces
 
 - [REQ-SKILLS-0114](../requirements/skills.md#req-skills-0114)
 
@@ -313,7 +313,7 @@ Related specs
 
 - Spec ID: `CYNAI.SKILLS.SkillAuditing` <a id="spec-cynai-skills-skillauditing"></a>
 
-Traces To:
+### Skill Auditing (Malicious Pattern Scanning) Requirements Traces
 
 - [REQ-SKILLS-0110](../requirements/skills.md#req-skills-0110)
 - [REQ-SKILLS-0111](../requirements/skills.md#req-skills-0111)
@@ -360,7 +360,7 @@ Related specs
 
 - Spec ID: `CYNAI.SKILLS.SkillRetrieval` <a id="spec-cynai-skills-skillretrieval"></a>
 
-Traces To:
+### Skill Retrieval Requirements Traces
 
 - [REQ-SKILLS-0102](../requirements/skills.md#req-skills-0102)
 
@@ -389,7 +389,7 @@ Retrieval returns full skill content by stable identifier.
 
 - Spec ID: `CYNAI.SKILLS.InferenceExposure` <a id="spec-cynai-skills-inferenceexposure"></a>
 
-Traces To:
+### Inference Exposure Requirements Traces
 
 - [REQ-SKILLS-0103](../requirements/skills.md#req-skills-0103)
 

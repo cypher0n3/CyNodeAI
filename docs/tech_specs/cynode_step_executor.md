@@ -5,14 +5,23 @@
 - [Design Principles](#design-principles)
 - [Relation to SBA](#relation-to-sba)
 - [Job Specification](#job-specification)
+  - [Traces to Requirements](#traces-to-requirements)
 - [Step Types](#step-types)
 - [Execution Model](#execution-model)
+  - [Execution Model Requirements Traces](#execution-model-requirements-traces)
 - [Result Contract](#result-contract)
   - [Canonical Failure Codes](#canonical-failure-codes)
+  - [Result Contract Requirements Traces](#result-contract-requirements-traces)
 - [Worker API Integration](#worker-api-integration)
+  - [Worker API Lifecycle](#worker-api-lifecycle)
+  - [See Also (Step Executor Overview)](#see-also-step-executor-overview)
+  - [Worker API Integration Requirements Traces](#worker-api-integration-requirements-traces)
 - [No Inference or MCP in Loop](#no-inference-or-mcp-in-loop)
 - [Sandbox Boundary](#sandbox-boundary)
+  - [Sandbox Boundary Requirements Traces](#sandbox-boundary-requirements-traces)
+  - [See Also (Constraints and References)](#see-also-constraints-and-references)
 - [Protocol Versioning](#protocol-versioning)
+  - [Protocol Versioning Requirements Traces](#protocol-versioning-requirements-traces)
 
 ## Document Overview
 
@@ -71,7 +80,7 @@ It is intended for simple, deterministic jobs (e.g. run these commands, write th
 
 - Spec ID: `CYNAI.STEPEX.SchemaValidation` <a id="spec-cynai-stepex-schemavalidation"></a>
 
-Traces To:
+### Traces to Requirements
 
 - [REQ-STEPEX-0101](../requirements/stepex.md#req-stepex-0101)
 
@@ -138,11 +147,6 @@ When `on_failure` is `continue`, the executor MUST record the step failure and p
 
 - Spec ID: `CYNAI.STEPEX.ExecutionModel` <a id="spec-cynai-stepex-executionmodel"></a>
 
-Traces To:
-
-- [REQ-STEPEX-0001](../requirements/stepex.md#req-stepex-0001)
-- [REQ-STEPEX-0102](../requirements/stepex.md#req-stepex-0102)
-
 The step executor runs as the main process inside a sandbox container.
 
 1. Read job input from the agreed location (e.g. `/job/job.json` or stdin).
@@ -194,13 +198,14 @@ flowchart TD
   AllDone --> WriteSuccess
 ```
 
+### Execution Model Requirements Traces
+
+- [REQ-STEPEX-0001](../requirements/stepex.md#req-stepex-0001)
+- [REQ-STEPEX-0102](../requirements/stepex.md#req-stepex-0102)
+
 ## Result Contract
 
 - Spec ID: `CYNAI.STEPEX.ResultContract` <a id="spec-cynai-stepex-resultcontract"></a>
-
-Traces To:
-
-- [REQ-STEPEX-0103](../requirements/stepex.md#req-stepex-0103)
 
 The step executor MUST emit a structured result object.
 The result MUST be complete JSON even on failure.
@@ -240,13 +245,13 @@ The step executor MUST set `failure_code` to one of the following when applicabl
 For other failure categories the implementation MAY use an implementation-defined code (documented and stable).
 `failure_message` (optional) is a human-readable explanation for the failure.
 
+### Result Contract Requirements Traces
+
+- [REQ-STEPEX-0103](../requirements/stepex.md#req-stepex-0103)
+
 ## Worker API Integration
 
 - Spec ID: `CYNAI.STEPEX.WorkerApiIntegration` <a id="spec-cynai-stepex-workerapiintegration"></a>
-
-Traces To:
-
-- [REQ-STEPEX-0104](../requirements/stepex.md#req-stepex-0104)
 
 The orchestrator dispatches jobs to the node via the [Worker API](worker_api.md) (e.g. `POST /v1/worker/jobs:run`).
 When the job uses an **image that runs the step-executor binary** as the main process (step-executor runner image), the node starts the container; the step executor reads the job spec from the agreed location (e.g. `/job/job.json`), executes the steps in order, and writes the [Result contract](#result-contract) (e.g. `/job/result.json`).
@@ -256,16 +261,20 @@ When the job uses an **image that runs the step-executor binary** as the main pr
 - When the job uses a step-executor runner image and the implementation uses the synchronous Run Job response, the node MAY read `/job/result.json` (and optionally `/job/artifacts/`) after the container exits and include the step-executor result in the response (e.g. a `step_executor_result` field or a generic runner result field), so the orchestrator can persist it to `jobs.result`.
   The exact response field name and shape are defined in [Worker API - Run Job](worker_api.md#spec-cynai-worker-workerapirunjobsync-v1) or a follow-on amendment; the step-executor result contract is the same as defined in this spec.
 
-Lifecycle
+### Worker API Lifecycle
 
 - The step executor MAY signal in-progress after validation (e.g. by writing a status file under `/job/` or by an outbound call if the node supports it).
   For MVP, if the node uses node-mediated delivery (blocking wait for container exit, then read `/job/result.json`), no outbound callback from the step executor is required.
 - On completion (success, failure, or timeout), the step executor MUST write the result to the agreed location (e.g. `/job/result.json`).
 
-See:
+### See Also (Step Executor Overview)
 
 - [`docs/tech_specs/worker_api.md`](worker_api.md)
 - [`docs/tech_specs/worker_api.md` - Job Lifecycle and Result Persistence](worker_api.md#spec-cynai-worker-joblifecycleresultpersistence)
+
+### Worker API Integration Requirements Traces
+
+- [REQ-STEPEX-0104](../requirements/stepex.md#req-stepex-0104)
 
 ## No Inference or MCP in Loop
 
@@ -279,10 +288,6 @@ Optional: the step executor MAY allow artifact staging under `/job/artifacts/` s
 
 - Spec ID: `CYNAI.STEPEX.SandboxBoundary` <a id="spec-cynai-stepex-sandboxboundary"></a>
 
-Traces To:
-
-- [REQ-STEPEX-0105](../requirements/stepex.md#req-stepex-0105)
-
 The step executor runs in the same sandbox boundary as other sandbox runners (see [sandbox_container.md](sandbox_container.md) and [cynode_sba.md - Sandbox Boundary and Security](cynode_sba.md#spec-cynai-sbagnt-sandboxboundary)).
 
 - **Filesystem**: Writable `/workspace` (full access for steps), `/job/` for job input and result, `/tmp` for temporary files.
@@ -291,7 +296,11 @@ The step executor runs in the same sandbox boundary as other sandbox runners (se
   When `constraints.ext_net_allowed` is true and the node configures the sandbox for egress, outbound traffic is only via worker proxies (e.g. web egress proxy for `run_command` steps that perform package installs).
 - **Secrets**: The step executor MUST NOT handle secrets; credentials stay outside the sandbox.
 
-See:
+### Sandbox Boundary Requirements Traces
+
+- [REQ-STEPEX-0105](../requirements/stepex.md#req-stepex-0105)
+
+### See Also (Constraints and References)
 
 - [`docs/requirements/sandbx.md`](../requirements/sandbx.md)
 - [`docs/tech_specs/sandbox_container.md`](sandbox_container.md)
@@ -300,10 +309,10 @@ See:
 
 - Spec ID: `CYNAI.STEPEX.ProtocolVersioning` <a id="spec-cynai-stepex-protocolversioning"></a>
 
-Traces To:
-
-- [REQ-STEPEX-0100](../requirements/stepex.md#req-stepex-0100)
-
 - `protocol_version` MUST be validated at startup.
 - Unknown major versions MUST be refused.
 - Minor versions MAY add backward-compatible fields.
+
+### Protocol Versioning Requirements Traces
+
+- [REQ-STEPEX-0100](../requirements/stepex.md#req-stepex-0100)

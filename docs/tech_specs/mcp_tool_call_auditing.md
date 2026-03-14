@@ -33,7 +33,7 @@ This section identifies the point in the system where tool call auditing is perf
 
 - Spec ID: `CYNAI.MCPGAT.ToolCallAuditPoint` <a id="spec-cynai-mcpgat-toolaudit"></a>
 
-Traces To:
+#### Traces to Requirements
 
 - [REQ-MCPGAT-0107](../requirements/mcpgat.md#req-mcpgat-0107)
 - [REQ-MCPGAT-0108](../requirements/mcpgat.md#req-mcpgat-0108)
@@ -43,7 +43,7 @@ Traces To:
 
 - Spec ID: `CYNAI.MCPGAT.EdgeToolCallAuditing` <a id="spec-cynai-mcpgat-edgetoolaudit"></a>
 
-Traces To:
+#### Edge Tool Call Auditing Requirements Traces
 
 - [REQ-MCPGAT-0112](../requirements/mcpgat.md#req-mcpgat-0112)
 

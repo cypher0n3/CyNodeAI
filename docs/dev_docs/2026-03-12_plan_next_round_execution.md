@@ -60,6 +60,7 @@ This plan is derived from:
 - [SCHEMA requirements](../requirements/schema.md)
 - [PMAGNT requirements](../requirements/pmagnt.md)
 - [cynork_tui.md](../tech_specs/cynork_tui.md)
+- [cynork_tui_slash_commands.md](../tech_specs/cynork_tui_slash_commands.md)
 - [chat_threads_and_messages.md](../tech_specs/chat_threads_and_messages.md)
 - [openai_compatible_chat_api.md](../tech_specs/openai_compatible_chat_api.md)
 - [orchestrator.md](../tech_specs/orchestrator.md)
@@ -249,6 +250,14 @@ This phase resolves the source-of-truth issues that would otherwise make the TUI
 
 - [x] Add orchestrator-side continuation-state requirements for `previous_response_id` so the TUI implementation has a stable backend contract for responses continuation.
 
+- [x] Add a dedicated TUI slash-command spec document with execution algorithms and cross-links from
+  the CLI chat and TUI docs.
+  (Completed in [cynork_tui_slash_commands.md](../tech_specs/cynork_tui_slash_commands.md),
+  including the `/show-thinking` and `/hide-thinking` contract.)
+
+- [ ] Add an explicit streaming contract for the OpenAI-compatible chat surface, PMA handoff, and
+  TUI generation state so cursor-agent-like progressive output is normative rather than optional.
+
 ## Phase 2 TUI MVP Spec Cut
 
 This phase narrows the large TUI proposal down to the minimum first rollout that should be treated as in-scope.
@@ -293,6 +302,19 @@ This phase narrows the large TUI proposal down to the minimum first rollout that
 - [x] Define non-interactive behavior so scripting mode remains stable and parseable.
 
 - [x] Define transcript rendering for hidden-by-default thinking, ordered multi-item assistant turns, and distinct tool activity rows.
+
+- [x] Define required thinking-visibility slash commands `/show-thinking` and `/hide-thinking`,
+  including the rule that the toggle applies to already loaded transcript rows and older assistant
+  turns loaded later through scrollback history.
+
+- [ ] Define `/show-thinking` and `/hide-thinking` as persisted local-preference updates stored in
+  the cynork YAML config and loaded on future TUI or interactive chat startup.
+
+- [ ] Define required default streaming behavior for the interactive TUI path, including degraded
+  fallback behavior when a selected backend path cannot provide true visible-text deltas.
+
+- [ ] Define collapsed-thinking presentation so the block remains visibly present with a subdued
+  secondary style and an expand hint such as `/show-thinking`.
 
 - [x] Define generation-state behavior for in-flight assistant updates and final reconciliation of partial output into one logical turn.
 
@@ -369,6 +391,13 @@ The order inside this phase matters because later TUI work depends on these back
 
 - [x] Verify thread retrieval and active-thread behavior are stable enough that the TUI can depend on them for history and fresh-thread controls.
   (Handlers and integration tests cover thread CRUD, list messages, patch title; `just ci` passes. See Progress Notes for database coverage exception.)
+
+- [ ] Verify retained `thinking` structured data survives persistence and thread-history retrieval so
+  the TUI can reveal prior-turn thinking while scrolling back without leaking it into canonical
+  plain-text content.
+
+- [ ] Verify `stream=true` is supported on both interactive chat surfaces and delivers ordered
+  incremental events suitable for progressive TUI rendering rather than only a buffered final turn.
 
 ### Deferred Backend Work This Round
 
@@ -465,6 +494,12 @@ They must be developed in tandem so each validates the other as behavior lands, 
 
 - [ ] Implement local slash-command discovery and execution within the TUI.
 
+- [ ] Implement `/show-thinking` and `/hide-thinking` so the session can toggle retained thinking
+  blocks for both currently loaded transcript rows and older turns loaded later through scrollback.
+
+- [ ] Persist `/show-thinking` and `/hide-thinking` to the cynork YAML config and load that
+  preference on future TUI or interactive chat startup.
+
 - [x] Implement the canonical in-flight assistant-turn indicator as a distinct status chip with spinner and required labels.
   (LandmarkAssistantInFlight shown in status bar when Loading; landmarks are machine-detectable for PTY.)
 
@@ -475,6 +510,12 @@ They must be developed in tandem so each validates the other as behavior lands, 
 - [ ] Implement transcript rendering for visible text, hidden-by-default thinking, tool activity rows, and ordered multi-item assistant turns; user messages in scrollback with distinct background.
 
 - [ ] Implement in-flight generation handling so one assistant turn is updated progressively and reconciled cleanly on completion.
+
+- [ ] Implement default interactive streaming on the shared chat transport and TUI path, with
+  degraded fallback handling when a selected backend path cannot stream visible-text deltas.
+
+- [ ] Implement the collapsed-thinking visual affordance so it remains visible in scrollback with a
+  subdued secondary style and a `/show-thinking` hint instead of disappearing completely.
 
 ### Thread and Session UX
 
@@ -526,6 +567,12 @@ They must be developed in tandem so each validates the other as behavior lands, 
 
 - [ ] Validate hidden-thinking, ordered assistant output, and tool-activity rendering through the PTY harness as transcript rendering lands.
 
+- [ ] Validate `/show-thinking` and `/hide-thinking` through the PTY harness, including scrollback
+  or history-reload behavior for prior assistant turns with retained thinking.
+
+- [ ] Validate that `/show-thinking` and `/hide-thinking` update the local YAML config and that a
+  later TUI session loads the stored preference on startup.
+
 - [ ] Validate startup and in-session auth recovery through the PTY harness as soon as the TUI flow exists.
 
 ### TUI Chat-Complete Exit for Implementation
@@ -571,8 +618,22 @@ This phase turns the promoted chat and TUI contract into executable behavior che
 
 - [ ] Add coverage for both supported interactive chat surfaces so TUI and gateway behavior stays aligned across `POST /v1/chat/completions` and `POST /v1/responses`.
 
+- [ ] Add coverage for interactive streaming behavior on both supported chat surfaces, including
+  progressive visible-text updates, final-turn reconciliation, and degraded fallback when streaming
+  is unavailable.
+
 - [x] Add behavior-spec coverage for structured-turn rendering expectations that matter to the TUI, especially hidden thinking, ordered assistant output, and tool activity.
   ([cynork_tui.feature](../../features/cynork/cynork_tui.feature) and [chat_thread_management.feature](../../features/orchestrator/chat_thread_management.feature).)
+
+- [ ] Add behavior-spec and PTY coverage for `/show-thinking` and `/hide-thinking`, including the
+  rule that retained prior-turn thinking remains available when the user scrolls back through chat
+  history.
+
+- [ ] Add behavior-spec and PTY coverage that proves `/show-thinking` and `/hide-thinking` persist
+  the default thinking visibility in the cynork YAML config across future executions.
+
+- [ ] Add behavior-spec and PTY coverage for the visible collapsed-thinking placeholder, including
+  the secondary styling or hint semantics and `/show-thinking` discovery.
 
 - [x] Add TUI behavior-spec coverage for the working indicator, composer hint, visible cursor, mouse-wheel transcript scrolling, queued drafts, auth recovery, and web login.
   ([cynork_tui.feature](../../features/cynork/cynork_tui.feature).)

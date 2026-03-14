@@ -270,11 +270,15 @@ This spec uses the same general UX pattern seen in tools such as Open WebUI and 
 - The gateway SHOULD persist one assistant message row with ordered `metadata.parts` for that logical turn rather than multiple unrelated assistant message rows.
 - `content` for that assistant message MUST be the plain-text projection of the visible `text` parts only, in order.
   It MAY be empty when a turn has no visible text parts.
+- Incremental stream events used during in-flight rendering are transport artifacts only.
+  They MUST reconcile into the same final logical assistant turn rather than being persisted as separate transcript rows.
 
 ### Thinking and Reasoning
 
 - `thinking` parts MUST NOT be copied into canonical plain-text `content`.
 - `thinking` parts MUST NOT be used for thread title generation, summaries, or default list previews.
+- When retained, `thinking` parts MUST remain associated with the same logical assistant turn in thread-history retrieval so rich clients can reveal them later without reconstructing prior raw provider output.
+- When `thinking` parts are collapsed in a rich client, the client SHOULD still be able to render a visible secondary affordance that indicates thinking is available without flattening that content into normal assistant prose.
 - If preserved, `thinking` parts SHOULD be bounded in size.
   When full reasoning is not retained, the gateway MAY instead persist a bounded reasoning summary or `reasoning_redacted: true` metadata.
 

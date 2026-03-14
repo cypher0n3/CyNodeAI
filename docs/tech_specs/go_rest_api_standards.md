@@ -43,7 +43,7 @@ Applies to all REST APIs and HTTP services in this system, including:
 
 - Spec ID: `CYNAI.STANDS.Scope` <a id="spec-cynai-stands-scope"></a>
 
-Traces To:
+#### Traces to Requirements
 
 - [REQ-STANDS-0100](../requirements/stands.md#req-stands-0100)
 - [REQ-STANDS-0101](../requirements/stands.md#req-stands-0101)
@@ -87,7 +87,7 @@ The following requirements apply.
 
 - Spec ID: `CYNAI.STANDS.Timeouts` <a id="spec-cynai-stands-timeouts"></a>
 
-Traces To:
+#### Timeouts and Resource Limits Applicable Requirements Requirements Traces
 
 - [REQ-STANDS-0102](../requirements/stands.md#req-stands-0102)
 - [REQ-STANDS-0103](../requirements/stands.md#req-stands-0103)
@@ -106,7 +106,7 @@ The following requirements apply.
 
 - Spec ID: `CYNAI.STANDS.RequestResponse` <a id="spec-cynai-stands-reqresp"></a>
 
-Traces To:
+#### Request and Response Model Applicable Requirements Requirements Traces
 
 - [REQ-STANDS-0105](../requirements/stands.md#req-stands-0105)
 - [REQ-STANDS-0106](../requirements/stands.md#req-stands-0106)
@@ -127,7 +127,7 @@ The following requirements apply.
 
 - Spec ID: `CYNAI.STANDS.ErrorFormat` <a id="spec-cynai-stands-errorfmt"></a>
 
-Traces To:
+#### Error Format and Status Codes Applicable Requirements Requirements Traces
 
 - [REQ-STANDS-0108](../requirements/stands.md#req-stands-0108)
 - [REQ-STANDS-0109](../requirements/stands.md#req-stands-0109)
@@ -159,7 +159,7 @@ The following requirements apply.
 
 - Spec ID: `CYNAI.STANDS.AuthSecurity` <a id="spec-cynai-stands-authsec"></a>
 
-Traces To:
+#### Authentication Authorization and Security Applicable Requirements Requirements Traces
 
 - [REQ-STANDS-0111](../requirements/stands.md#req-stands-0111)
 - [REQ-STANDS-0112](../requirements/stands.md#req-stands-0112)
@@ -179,7 +179,7 @@ The following requirement applies to any Go code that handles secrets, credentia
 
 - Spec ID: `CYNAI.STANDS.SecretHandling` <a id="spec-cynai-stands-secrethandling"></a>
 
-Traces To:
+#### Secret Handling Applicable Requirements Requirements Traces
 
 - [REQ-STANDS-0133](../requirements/stands.md#req-stands-0133)
 
@@ -196,7 +196,7 @@ The following requirements apply.
 
 - Spec ID: `CYNAI.STANDS.Observability` <a id="spec-cynai-stands-observ"></a>
 
-Traces To:
+#### Observability Applicable Requirements Requirements Traces
 
 - [REQ-STANDS-0114](../requirements/stands.md#req-stands-0114)
 - [REQ-STANDS-0115](../requirements/stands.md#req-stands-0115)
@@ -233,7 +233,7 @@ It applies to the User API Gateway, worker services that persist state, and any 
 
 - Spec ID: `CYNAI.STANDS.DatabaseAccess` <a id="spec-cynai-stands-dbaccess"></a>
 
-Traces To:
+#### Database Access Applicable Requirements Requirements Traces
 
 - [REQ-STANDS-0117](../requirements/stands.md#req-stands-0117)
 - [REQ-STANDS-0118](../requirements/stands.md#req-stands-0118)
@@ -265,7 +265,7 @@ The following requirements apply.
 
 - Spec ID: `CYNAI.STANDS.ReliabilityIdempotency` <a id="spec-cynai-stands-idempotency"></a>
 
-Traces To:
+#### Reliability and Idempotency Applicable Requirements Requirements Traces
 
 - [REQ-STANDS-0129](../requirements/stands.md#req-stands-0129)
 - [REQ-STANDS-0130](../requirements/stands.md#req-stands-0130)
@@ -283,7 +283,7 @@ The following requirements apply.
 
 - Spec ID: `CYNAI.STANDS.ApiEvolution` <a id="spec-cynai-stands-apievolution"></a>
 
-Traces To:
+#### API Evolution and Compatibility Applicable Requirements Requirements Traces
 
 - [REQ-STANDS-0131](../requirements/stands.md#req-stands-0131)
 - [REQ-STANDS-0132](../requirements/stands.md#req-stands-0132)

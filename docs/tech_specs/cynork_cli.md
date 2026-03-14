@@ -1,16 +1,22 @@
 # `cynork` CLI (Management App)
 
 - [Document Overview](#document-overview)
+  - [Document Overview Requirements Traces](#document-overview-requirements-traces)
+  - [Related Documents](#related-documents)
 - [Capability Parity With Web Console](#capability-parity-with-web-console)
+  - [Capability Parity Requirements Traces](#capability-parity-requirements-traces)
+  - [User-Gateway Alignment (Implementation Status)](#user-gateway-alignment-implementation-status)
+  - [Parity Baseline (REQ-CLIENT-0004)](#parity-baseline-req-client-0004)
 - [Goals and Non-Goals](#goals-and-non-goals)
 - [Security Model](#security-model)
-  - [Security Model Applicable Requirements](#security-model-applicable-requirements)
+  - [Security Model Requirements Traces](#security-model-requirements-traces)
 - [Authentication and Configuration](#authentication-and-configuration)
   - [Configuration File and Location](#configuration-file-and-location)
   - [Token Resolution (Precedence)](#token-resolution-precedence)
   - [Credential Helper Protocol](#credential-helper-protocol)
   - [Authentication and Configuration Applicable Requirements](#authentication-and-configuration-applicable-requirements)
 - [Command Surface](#command-surface)
+  - [Command Surface Requirements Traces](#command-surface-requirements-traces)
   - [Global Flags](#global-flags)
   - [Shorthand Flag Aliases (Stable Contract)](#shorthand-flag-aliases-stable-contract)
   - [Output Rules](#output-rules)
@@ -19,6 +25,11 @@
   - [Standard Error Behavior](#standard-error-behavior)
 - [Command Details (Sub-Docs)](#command-details-sub-docs)
 - [Implementation Specification (Go + Cobra)](#implementation-specification-go--cobra)
+  - [Required Package Layout](#required-package-layout)
+  - [Config Load and Lifecycle](#config-load-and-lifecycle)
+  - [Gateway Client Contract](#gateway-client-contract)
+  - [Secrets and Logging](#secrets-and-logging)
+  - [Implementation Specification Requirements Traces](#implementation-specification-requirements-traces)
 - [TUI Scope and Locked Decisions](#tui-scope-and-locked-decisions)
 - [MVP Scope](#mvp-scope)
 
@@ -27,17 +38,17 @@
 - Spec ID: `CYNAI.CLIENT.Doc.CliManagementApp` <a id="spec-cynai-client-doc-climanagementapp"></a>
 
 This spec is split into multiple documents.
-Command and feature details live in: [Core commands (version, status, auth)](cli_management_app_commands_core.md), [Task commands](cli_management_app_commands_tasks.md), [Chat command](cli_management_app_commands_chat.md), [Admin and resource commands](cli_management_app_commands_admin.md), [Interactive mode and output](cli_management_app_shell_output.md).
+Command and feature details live in: [Core commands (version, status, auth)](cli_management_app_commands_core.md), [Task commands](cli_management_app_commands_tasks.md), [Chat command](cli_management_app_commands_chat.md), [TUI slash commands](cynork_tui_slash_commands.md), [Admin and resource commands](cli_management_app_commands_admin.md), [Interactive mode and output](cli_management_app_shell_output.md).
 
 This document defines the cynork CLI management application for CyNodeAI.
 The CLI is intended to support the same administrative capabilities as the Web Console and to host the primary interactive chat TUI.
 
-Traces To:
+### Document Overview Requirements Traces
 
 - [REQ-CLIENT-0001](../requirements/client.md#req-client-0001)
 - [REQ-CLIENT-0004](../requirements/client.md#req-client-0004)
 
-Related documents
+### Related Documents
 
 - Client requirements: [`docs/requirements/client.md`](../requirements/client.md)
 - User API Gateway: [`docs/tech_specs/user_api_gateway.md`](user_api_gateway.md)
@@ -52,13 +63,13 @@ Related documents
 
 - Spec ID: `CYNAI.CLIENT.CliCapabilityParity` <a id="spec-cynai-client-clicapabilityparity"></a>
 
-Traces To:
-
-- [REQ-CLIENT-0004](../requirements/client.md#req-client-0004)
-
 The CLI and the [Web Console](web_console.md) MUST offer the same administrative capabilities.
 When adding or changing a capability in this spec (for example a new command, credential workflow, preference scope, node action, or skill operation), the Web Console spec and implementation MUST be updated to match, and vice versa.
 Use the same gateway APIs and the same authorization and auditing rules for both clients.
+
+### Capability Parity Requirements Traces
+
+- [REQ-CLIENT-0004](../requirements/client.md#req-client-0004)
 
 ### User-Gateway Alignment (Implementation Status)
 
@@ -96,13 +107,11 @@ Non-goals
 
 ## Security Model
 
-The following requirements apply.
-
-### Security Model Applicable Requirements
-
 - Spec ID: `CYNAI.CLIENT.CliSecurityModel` <a id="spec-cynai-client-clisecurity"></a>
 
-Traces To:
+### Security Model Requirements Traces
+
+The following requirements apply.
 
 - [REQ-CLIENT-0100](../requirements/client.md#req-client-0100)
 - [REQ-CLIENT-0101](../requirements/client.md#req-client-0101)
@@ -119,7 +128,7 @@ It authenticates to the User API Gateway and is authorized by the gateway.
 
 - Spec ID: `CYNAI.CLIENT.CliConfigFileLocation` <a id="spec-cynai-client-cliconfigfilelocation"></a>
 
-Traces To:
+#### Configuration File and Location Requirements Traces
 
 - [REQ-CLIENT-0149](../requirements/client.md#req-client-0149)
 - [REQ-CLIENT-0150](../requirements/client.md#req-client-0150)
@@ -137,6 +146,9 @@ Traces To:
   - `gateway_url` (string, optional): base URL of the User API Gateway (e.g. `http://localhost:12080`).
   - `token` (string, optional): bearer token for gateway auth; MAY be omitted when using a credential helper.
   - `credential_helper` (string, optional): command or helper name to obtain the token (see [Credential Helper Protocol](#credential-helper-protocol)).
+  - `tui` (object, optional): TUI-specific local preferences.
+    Supported first-pass field:
+    - `show_thinking_by_default` (boolean, optional): whether retained thinking blocks are expanded by default when a new interactive TUI or chat session starts.
 - Unknown keys MAY be ignored; the CLI MUST NOT fail load solely due to unknown keys.
 - When writing the config file (e.g. after login), the CLI MUST use file mode `0600` and MUST NOT log the contents or token value.
 
@@ -162,13 +174,13 @@ Traces To:
 
 - Spec ID: `CYNAI.CLIENT.CliTokenResolution` <a id="spec-cynai-client-clitokenresolution"></a>
 
-Traces To:
+The CLI MUST resolve the bearer token used for gateway requests by following this order; the first non-empty value wins.
+
+#### Token Resolution Requirements Traces
 
 - [REQ-CLIENT-0105](../requirements/client.md#req-client-0105)
 - [REQ-CLIENT-0106](../requirements/client.md#req-client-0106)
 - [REQ-CLIENT-0149](../requirements/client.md#req-client-0149)
-
-The CLI MUST resolve the bearer token used for gateway requests by following this order; the first non-empty value wins.
 
 #### Environment Variable
 
@@ -193,13 +205,9 @@ The CLI MUST NOT log or print the resolved token.
 
 - Spec ID: `CYNAI.CLIENT.CliCredentialHelperProtocol` <a id="spec-cynai-client-clicredentialhelperprotocol"></a>
 
-Traces To:
-
-- [REQ-CLIENT-0149](../requirements/client.md#req-client-0149)
-
 When the config contains a non-empty `credential_helper`, the CLI SHOULD use it to get and optionally store the token so the token is not stored in plaintext in the config file.
 
-Helper invocation
+#### Helper Invocation
 
 - The value of `credential_helper` is either a short name (e.g. `pass`, `keychain`) or an absolute path to an executable (e.g. `/usr/bin/cynork-credential-helper`).
 - The CLI invokes the helper as a subprocess with no arguments; communication is via JSON on stdin/stdout.
@@ -212,21 +220,25 @@ Helper invocation
 - The CLI MUST NOT pass the token on the command line or in environment variables; only via stdin for `store`.
 - Helper process MUST be invoked with minimal environment (e.g. no inherited env that could leak secrets); timeout SHOULD be applied (e.g. 10 seconds).
 
-Well-known helper names (optional)
+#### Well-Known Helper Names (Optional)
 
 - Implementers MAY map short names to platform stores: e.g. `keychain` to macOS Keychain (service `cynork`, account `token`), or `pass` to the pass utility (store path configurable or default e.g. `cynork/gateway-token`).
   If a short name is unknown, the CLI MAY treat it as a path and exec it only if it looks like a path (e.g. contains `/` or starts with `.`).
 
-Store on login
+#### Store on Login
 
 - When `cynork auth login` succeeds and `credential_helper` is set, the CLI SHOULD call the helper with `{"action":"store","secret":"<obtained_token>"}` so the token is persisted in the store.
 - The CLI MAY also write the token to the config file for backward compatibility, or MAY omit writing `token` to the config file when a credential helper is configured (so the config file stays free of plaintext tokens).
+
+#### Credential Helper Protocol Requirements Traces
+
+- [REQ-CLIENT-0149](../requirements/client.md#req-client-0149)
 
 ### Authentication and Configuration Applicable Requirements
 
 - Spec ID: `CYNAI.CLIENT.CliAuthConfig` <a id="spec-cynai-client-cliauth"></a>
 
-Traces To:
+#### Authentication and Configuration Requirements Traces
 
 - [REQ-CLIENT-0105](../requirements/client.md#req-client-0105)
 - [REQ-CLIENT-0106](../requirements/client.md#req-client-0106)
@@ -237,15 +249,15 @@ Traces To:
 
 - Spec ID: `CYNAI.CLIENT.CliCommandSurface` <a id="spec-cynai-client-clicommandsurface"></a>
 
-Traces To:
+The CLI MUST be implemented as a single binary named `cynork` with subcommands.
+All commands that require gateway auth MUST fail immediately with a non-zero exit code and a clear message if the resolved token is empty (see [Token Resolution (Precedence)](#token-resolution-precedence)).
+
+### Command Surface Requirements Traces
 
 - [REQ-CLIENT-0101](../requirements/client.md#req-client-0101)
 - [REQ-CLIENT-0155](../requirements/client.md#req-client-0155)
 - [REQ-CLIENT-0156](../requirements/client.md#req-client-0156)
 - [REQ-CLIENT-0158](../requirements/client.md#req-client-0158)
-
-The CLI MUST be implemented as a single binary named `cynork` with subcommands.
-All commands that require gateway auth MUST fail immediately with a non-zero exit code and a clear message if the resolved token is empty (see [Token Resolution (Precedence)](#token-resolution-precedence)).
 
 ### Global Flags
 
@@ -353,9 +365,9 @@ All subcommands that call the gateway MUST use the resolved gateway URL and reso
 - `cynork skills ...`: full CRUD via gateway; see [Skill Management CRUD (Web and CLI)](skills_storage_and_inference.md#spec-cynai-skills-skillmanagementcrud) and [Skills Management](cli_management_app_commands_admin.md#spec-cynai-client-cliskillsmanagement).
   - Create: `cynork skills load <file.md>` (required file path; optional `--name`, `--scope`).
   - List: `cynork skills list` (optional `--scope`, `--owner`).
-  - Get: `cynork skills get <skill_id>`.
-  - Update: `cynork skills update <skill_id> <file.md>` (optional `--name`, `--scope`).
-  - Delete: `cynork skills delete <skill_id>`.
+  - Get: `cynork skills get <skill_selector>`.
+  - Update: `cynork skills update <skill_selector> <file.md>` (optional `--name`, `--scope`).
+  - Delete: `cynork skills delete <skill_selector>`.
 - `cynork audit ...`: query audit logs; MUST require auth.
 
 ### Standard Error Behavior
@@ -373,6 +385,7 @@ On invalid config file (syntax error), the CLI MUST exit with code 2 before runn
 - Task commands: [cli_management_app_commands_tasks.md](cli_management_app_commands_tasks.md)
 - Chat command: [cli_management_app_commands_chat.md](cli_management_app_commands_chat.md)
 - TUI first rollout (minimum scope): [cynork_tui.md](cynork_tui.md)
+- TUI slash commands and execution algorithms: [cynork_tui_slash_commands.md](cynork_tui_slash_commands.md)
 - Admin and resource commands (creds, prefs, system settings, nodes, project, persona, skills, audit): [cli_management_app_commands_admin.md](cli_management_app_commands_admin.md)
 - Interactive mode and output: [cli_management_app_shell_output.md](cli_management_app_shell_output.md)
 
@@ -380,17 +393,10 @@ On invalid config file (syntax error), the CLI MUST exit with code 2 before runn
 
 - Spec ID: `CYNAI.CLIENT.CliImplementation` <a id="spec-cynai-client-cliimpl"></a>
 
-Traces To:
-
-- [REQ-CLIENT-0101](../requirements/client.md#req-client-0101)
-- [REQ-CLIENT-0102](../requirements/client.md#req-client-0102)
-- [REQ-CLIENT-0103](../requirements/client.md#req-client-0103)
-- [REQ-STANDS-0133](../requirements/stands.md#req-stands-0133) (Go code handling tokens or secrets)
-
 The CLI MUST be implemented in Go using Cobra for the command tree.
 Implementation MUST follow [Go REST API Standards](go_rest_api_standards.md) where applicable (e.g. HTTP client behavior, error handling).
 
-Required package layout
+### Required Package Layout
 
 - `cmd/`: Cobra root and subcommands; MUST NOT contain business logic beyond delegation to internal packages.
 - `internal/config/`: Config file load, XDG/default path resolution, env overrides, and token resolution (env then file then credential helper).
@@ -398,24 +404,31 @@ Required package layout
 - `internal/gateway/`: HTTP client for the User API Gateway; MUST set `Authorization: Bearer <token>` on every request when token is non-empty; MUST map 401/403/429/5xx to typed errors; MUST NOT log request or response bodies that may contain secrets.
 - `internal/output/`: Formatters for table and JSON output; MUST support `--output table` and `--output json` for list/get commands.
 
-Config load and lifecycle
+### Config Load and Lifecycle
 
 - Root command persistent pre-run (or equivalent) MUST: load config from `--config` or default path, apply env overrides, resolve token (including credential helper if configured), and store effective gateway URL and token in a shared struct or context used by all child commands.
 - If config file path is provided and the file exists but is invalid (e.g. invalid YAML), the CLI MUST exit with a non-zero code and MUST NOT proceed to run the requested command.
 - Config MUST be loaded once per process; child commands MUST use the same resolved values.
 
-Gateway client contract
+### Gateway Client Contract
 
 - All gateway calls MUST use the same base URL and token from the resolved config.
 - Requests MUST include a `User-Agent` or similar identifier (e.g. `cynork/<version>`).
 - Response bodies MUST be decoded into typed structs; gateway error responses (e.g. RFC 7807 or 4xx/5xx) MUST be mapped to errors that the CLI can report without leaking secrets.
 - The client MUST NOT persist or log the token; it MUST NOT include the token in any log line or error message.
 
-Secrets and logging
+### Secrets and Logging
 
 - The CLI MUST NOT log config file contents, token values, credential helper stdin/stdout containing secrets, or any flag value that is a secret (e.g. `--secret-file` path MAY be logged; file contents MUST NOT).
 - When reading secrets from stdin or a file, buffers MUST be cleared or not retained longer than necessary for the single request.
 - Go code that handles the resolved token, credential helper I/O, or any secret value MUST use `runtime/secret` when available per [REQ-STANDS-0133](../requirements/stands.md#req-stands-0133); when not available, MUST use best-effort secure erasure before returning.
+
+### Implementation Specification Requirements Traces
+
+- [REQ-CLIENT-0101](../requirements/client.md#req-client-0101)
+- [REQ-CLIENT-0102](../requirements/client.md#req-client-0102)
+- [REQ-CLIENT-0103](../requirements/client.md#req-client-0103)
+- [REQ-STANDS-0133](../requirements/stands.md#req-stands-0133) (Go code handling tokens or secrets)
 
 ## TUI Scope and Locked Decisions
 
@@ -436,19 +449,19 @@ Normative TUI behavior and layout are defined in [cynork_tui.md](cynork_tui.md).
 
 ## MVP Scope
 
-Minimum viable CLI
+1. Minimum viable CLI
 
-- Auth token support and `whoami`.
-- Full-screen TUI (`cynork tui`) as the primary interactive surface; `cynork chat` remains available.
-  Interactive shell mode (`cynork shell`) is deprecated; compatibility path MAY remain during migration.
-- Credential list, create, rotate, disable for API Egress.
-- Preference list, get, set for system and user scopes.
-- Effective preferences for a task.
-- Node list, get, enable, disable, drain.
+   - Auth token support and `whoami`.
+   - Full-screen TUI (`cynork tui`) as the primary interactive surface; `cynork chat` remains available.
+     Interactive shell mode (`cynork shell`) is deprecated; compatibility path MAY remain during migration.
+   - Credential list, create, rotate, disable for API Egress.
+   - Preference list, get, set for system and user scopes.
+   - Effective preferences for a task.
+   - Node list, get, enable, disable, drain.
 
-Related specifications
+2. Related specifications
 
-- [User API Gateway](user_api_gateway.md)
-- [Data REST API](data_rest_api.md)
-- [Web Console](web_console.md)
-- [Client requirements](../requirements/client.md)
+   - [User API Gateway](user_api_gateway.md)
+   - [Data REST API](data_rest_api.md)
+   - [Web Console](web_console.md)
+   - [Client requirements](../requirements/client.md)

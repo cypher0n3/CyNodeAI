@@ -55,8 +55,9 @@ It uses a central orchestrator to coordinate node-local workers, sandboxed execu
 
 ### User Interfaces
 
-- cynork CLI (management app): [`docs/tech_specs/cynork_cli.md`](cynork_cli.md)
-  - Cynork TUI: [`docs/tech_specs/cynork_tui.md`](cynork_tui.md)
+- `cynork` CLI (management app): [`docs/tech_specs/cynork_cli.md`](cynork_cli.md)
+  - `cynork` TUI: [`docs/tech_specs/cynork_tui.md`](cynork_tui.md)
+  - `cynork` TUI slash commands: [`docs/tech_specs/cynork_tui_slash_commands.md`](cynork_tui_slash_commands.md)
   - CLI core commands: [`docs/tech_specs/cli_management_app_commands_core.md`](cli_management_app_commands_core.md)
   - CLI task commands: [`docs/tech_specs/cli_management_app_commands_tasks.md`](cli_management_app_commands_tasks.md)
   - CLI chat command: [`docs/tech_specs/cli_management_app_commands_chat.md`](cli_management_app_commands_chat.md)

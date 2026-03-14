@@ -39,7 +39,7 @@ SDK
 - MCP SDK versions MUST be pinned in each service `go.mod`.
 - Avoid unpinned `go get` in documentation and scripts.
 
-Traces To:
+#### Traces to Requirements
 
 - [REQ-MCPTOO-0111](../requirements/mcptoo.md#req-mcptoo-0111)
 
@@ -50,7 +50,7 @@ Traces To:
 - Each Go service SHOULD have its own `go.mod` at the service root.
 - If a multi-module layout is used, a `go.work` MAY be used for local development.
 
-Traces To:
+#### Go Service Module Layout Requirements Traces
 
 - [REQ-MCPTOO-0112](../requirements/mcptoo.md#req-mcptoo-0112)
 - [REQ-MCPTOO-0113](../requirements/mcptoo.md#req-mcptoo-0113)
@@ -78,7 +78,7 @@ If the workflow runtime needs MCP protocol support directly, it SHOULD use the o
 
 - Spec ID: `CYNAI.MCPTOO.PythonSdkUsage` <a id="spec-cynai-mcptoo-pythonsdkusage"></a>
 
-Traces To:
+#### Python SDK Usage Requirements Traces
 
 - [REQ-MCPTOO-0114](../requirements/mcptoo.md#req-mcptoo-0114)
 
@@ -90,7 +90,7 @@ Traces To:
 - The workflow runtime MUST NOT connect directly to PostgreSQL.
   It MUST use MCP database tools (or an internal service that enforces the same policy).
 
-Traces To:
+#### Workflow Runtime Database Access Requirements Traces
 
 - [REQ-MCPTOO-0115](../requirements/mcptoo.md#req-mcptoo-0115)
 

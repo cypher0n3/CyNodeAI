@@ -10,7 +10,7 @@
 - [Visual Mockup](#visual-mockup)
 - [Thread History](#thread-history)
 - [Transcript Rendering](#transcript-rendering)
-  - [Transcript Rendering Traces To](#transcript-rendering-traces-to)
+  - [Transcript Rendering Requirements Traces](#transcript-rendering-requirements-traces)
 - [Generation State](#generation-state)
   - [Generation State Traces To](#generation-state-traces-to)
 - [Completion and Discovery](#completion-and-discovery)
@@ -66,6 +66,7 @@ It is the canonical home for the cynork chat layout, structured transcript rende
 ### Related Documents
 
 - [Chat command](cli_management_app_commands_chat.md)
+- [TUI slash commands](cynork_tui_slash_commands.md)
 - [Chat threads and messages](chat_threads_and_messages.md)
 - [OpenAI-compatible chat API](openai_compatible_chat_api.md)
 
@@ -113,6 +114,7 @@ The TUI is a full-screen chat surface composed of scrollback, composer, status b
 
 - The scrollback MUST render conversation history and structured chat-turn output.
 - The composer MUST support multi-line input suitable for long prompts and slash commands.
+- Exact slash-command semantics and execution algorithms are defined in [TUI slash commands](cynork_tui_slash_commands.md).
 - The TUI MUST surface a concise discoverability hint in or adjacent to the composer for slash commands, `@` file lookup or attachment, and `!` shell shorthand.
   A canonical first-rollout hint is `/ commands · @ files · ! shell`.
 - The status bar MUST display at least gateway reachability, identity, effective project, selected model, and connection state.
@@ -148,12 +150,39 @@ The canonical retained design mockup for the TUI is shown below.
 - Recent-first ordering by `updated_at` SHOULD be the default presentation.
 - When thread summaries are available, the TUI SHOULD display them in the history list or sidebar.
 - When archive support exists, archived threads SHOULD be accessible through an explicit filtered history view rather than the default active list.
+- Wherever the TUI offers thread switching, it MUST show a user-typeable thread selector for each visible thread rather than assuming the user will type a raw backend UUID.
+- The selector MAY be a stable short handle, a list ordinal within the current thread list view, an unambiguous displayed title form, or another compact human-typeable token, but the same selector form shown in the UI MUST be accepted by `/thread switch`.
 
 ## Transcript Rendering
 
 - Spec ID: `CYNAI.CLIENT.CynorkTui.TranscriptRendering` <a id="spec-cynai-client-cynorktui-transcriptrendering"></a>
 
-### Transcript Rendering Traces To
+The TUI SHOULD follow the same broad rendering pattern used by modern chat tools: keep the main assistant answer readable, keep reasoning secondary, and make tool activity explicit.
+
+- When the gateway provides structured turn data, the TUI MUST prefer it over scraping prose from plain assistant text.
+- `text` parts are the primary readable transcript content.
+- `thinking` parts MUST be hidden by default and rendered as compact placeholders until the user explicitly expands them.
+  The canonical slash-command controls for this behavior are `/show-thinking` and `/hide-thinking` as defined in [TUI slash commands](cynork_tui_slash_commands.md#spec-cynai-client-cynorktui-localslashcommands).
+- Hidden-by-default `thinking` placeholders MUST remain visibly present in the transcript rather than disappearing completely.
+- The collapsed `thinking` placeholder MUST render as its own dedicated transcript block within the same logical assistant turn; it MUST NOT be merged into normal assistant prose paragraphs and MUST NOT disappear entirely while collapsed.
+- The collapsed `thinking` block MUST contain all of the following visible elements:
+  - a primary label that begins with `Thinking`
+  - a collapsed-state affordance such as `...`, a chevron, or another compact indicator that the block is not currently expanded
+  - an explicit expand hint that includes the literal command `/show-thinking`
+- While collapsed, the block MUST NOT render any raw reasoning text, partial hidden-thinking text, or `<think>`-style tags.
+- The collapsed `thinking` block MUST use a secondary visual treatment that is distinct from normal assistant prose by applying all of the following at the same time:
+  - lower-emphasis foreground styling than the main assistant text
+  - a dedicated container treatment, such as a border, shaded background, or both
+  - compact padding and spacing so the block reads as metadata or auxiliary content rather than as the main answer body
+- The collapsed block SHOULD fit on one compact row when the label and hint fit within the available transcript width.
+  When they do not fit, the implementation MAY wrap to a second compact line, but the label and `/show-thinking` hint MUST remain visible without horizontal scrolling.
+- If hidden `thinking` updates arrive while the turn is still streaming and the block remains collapsed, the implementation MUST update the same placeholder block in place rather than appending duplicate collapsed-thinking rows.
+- `tool_call` and `tool_result` parts SHOULD render as distinct non-prose rows with redacted, truncated previews when needed.
+- `download_ref` and `attachment_ref` parts SHOULD render as explicit items rather than being flattened into prose.
+- When one user prompt yields multiple assistant-side items, the TUI MUST preserve their order as one logical assistant turn.
+- If only canonical plain-text content is available, the TUI MUST fall back to a coherent text transcript without inventing tool or thinking rows.
+
+### Transcript Rendering Requirements Traces
 
 - [REQ-CLIENT-0182](../requirements/client.md#req-client-0182)
 - [REQ-CLIENT-0183](../requirements/client.md#req-client-0183)
@@ -162,16 +191,7 @@ The canonical retained design mockup for the TUI is shown below.
 - [REQ-CLIENT-0193](../requirements/client.md#req-client-0193)
 - [REQ-CLIENT-0194](../requirements/client.md#req-client-0194)
 - [REQ-CLIENT-0195](../requirements/client.md#req-client-0195)
-
-The TUI SHOULD follow the same broad rendering pattern used by modern chat tools: keep the main assistant answer readable, keep reasoning secondary, and make tool activity explicit.
-
-- When the gateway provides structured turn data, the TUI MUST prefer it over scraping prose from plain assistant text.
-- `text` parts are the primary readable transcript content.
-- `thinking` parts MUST be hidden by default and rendered as compact placeholders until the user explicitly expands them.
-- `tool_call` and `tool_result` parts SHOULD render as distinct non-prose rows with redacted, truncated previews when needed.
-- `download_ref` and `attachment_ref` parts SHOULD render as explicit items rather than being flattened into prose.
-- When one user prompt yields multiple assistant-side items, the TUI MUST preserve their order as one logical assistant turn.
-- If only canonical plain-text content is available, the TUI MUST fall back to a coherent text transcript without inventing tool or thinking rows.
+- [REQ-CLIENT-0208](../requirements/client.md#req-client-0208)
 
 ## Generation State
 
@@ -180,6 +200,7 @@ The TUI SHOULD follow the same broad rendering pattern used by modern chat tools
 ### Generation State Traces To
 
 - [REQ-CLIENT-0185](../requirements/client.md#req-client-0185)
+- [REQ-CLIENT-0209](../requirements/client.md#req-client-0209)
 
 - While a response is in progress, the TUI MUST render exactly one in-flight assistant turn and MUST update that turn in place rather than appending duplicate assistant rows.
 - The in-flight status indicator MUST be attached to the active assistant turn, not only to a global status bar.
@@ -193,9 +214,11 @@ The TUI SHOULD follow the same broad rendering pattern used by modern chat tools
 - Canonical examples are `[⠋ Thinking...]`, `[⠋ Calling tool...]`, and `[⠋ Waiting for tool result...]`.
 - The in-flight indicator MAY also be mirrored in the status bar, but the assistant-turn indicator remains required.
 - When visible text streams incrementally, the TUI MUST append that text into the active in-flight turn below or after the current status indicator instead of creating a second assistant row.
+- When hidden thinking is available during streaming, the TUI SHOULD update the same collapsed thinking placeholder block in place rather than emitting raw reasoning text into the visible assistant answer area.
 - When the final assistant turn is committed, the TUI MUST remove the transient in-flight indicator and replace the in-flight row with the final ordered assistant turn content.
 - Final reconciliation MUST preserve already streamed visible assistant text, MUST keep the final item ordering, and MUST NOT duplicate visible assistant text that was already shown during streaming.
 - Final reconciliation MUST discard ephemeral progress-only labels and MUST retain only the final persisted transcript content and any separately rendered structured items.
+- If the selected backend path cannot provide true incremental visible-text streaming, the TUI MUST fall back to a degraded in-flight state indicator and then replace that row with the final ordered assistant turn once completion arrives.
 
 ## Completion and Discovery
 
@@ -234,11 +257,18 @@ The composer MAY support `@` references to local files.
 ### Local Config Traces To
 
 - [REQ-CLIENT-0187](../requirements/client.md#req-client-0187)
+- [REQ-CLIENT-0211](../requirements/client.md#req-client-0211)
 
 TUI-specific preferences MAY live in the same config directory as the rest of cynork.
 
+- TUI-specific preferences are stored in the same cynork YAML config file described in [cynork_cli.md](cynork_cli.md#spec-cynai-client-cliconfigfilelocation).
 - Supported fields MAY include default model, preferred composer mode, context-pane default visibility, queued-draft behavior, thinking-toggle default, and keybinding overrides.
 - Supported fields MAY also include context-pane width and queued-draft send mode when those behaviors are implemented.
+- The canonical first-pass key for persisted thinking visibility is `tui.show_thinking_by_default` (boolean).
+- When `tui.show_thinking_by_default` is `true`, newly started interactive TUI or chat sessions MUST expand retained thinking blocks by default.
+- When `tui.show_thinking_by_default` is `false` or absent, newly started interactive TUI or chat sessions MUST start in the collapsed-thinking presentation.
+- `/show-thinking` MUST update `tui.show_thinking_by_default` to `true` in the local config and apply that change immediately to the current session.
+- `/hide-thinking` MUST update `tui.show_thinking_by_default` to `false` in the local config and apply that change immediately to the current session.
 - TUI-specific config MUST NOT store secrets, passwords, tokens, or message content.
 - When written, TUI config SHOULD follow the same atomic-write and permission rules as the main cynork config.
 

@@ -19,7 +19,7 @@ It is part of the [cynork CLI](cynork_cli.md) specification.
 
 - Spec ID: `CYNAI.CLIENT.CliCredentialManagement` <a id="spec-cynai-client-clicredential"></a>
 
-Traces To:
+### Traces to Requirements
 
 - [REQ-CLIENT-0116](../requirements/client.md#req-client-0116)
 - [REQ-CLIENT-0117](../requirements/client.md#req-client-0117)
@@ -150,7 +150,7 @@ Output
 
 - Spec ID: `CYNAI.CLIENT.CliPreferencesManagement` <a id="spec-cynai-client-clipreferences"></a>
 
-Traces To:
+### Preferences Management Requirements Traces
 
 - [REQ-CLIENT-0121](../requirements/client.md#req-client-0121)
 - [REQ-CLIENT-0122](../requirements/client.md#req-client-0122)
@@ -190,7 +190,7 @@ Scope type enum
 
 - Spec ID: `CYNAI.CLIENT.CliSystemSettingsManagement` <a id="spec-cynai-client-clisystemsettings"></a>
 
-Traces To:
+### System Settings Management Requirements Traces
 
 - [REQ-CLIENT-0160](../requirements/client.md#req-client-0160)
 
@@ -333,7 +333,7 @@ Output
 
 - Spec ID: `CYNAI.CLIENT.CliNodeManagement` <a id="spec-cynai-client-clinodemgmt"></a>
 
-Traces To:
+### Node Management Requirements Traces
 
 - [REQ-CLIENT-0125](../requirements/client.md#req-client-0125)
 - [REQ-CLIENT-0126](../requirements/client.md#req-client-0126)
@@ -463,7 +463,7 @@ Output
 
 - Spec ID: `CYNAI.CLIENT.CliProjectManagement` <a id="spec-cynai-client-cliprojectmanagement"></a>
 
-Traces To:
+### Project Management Requirements Traces
 
 - [REQ-CLIENT-0174](../requirements/client.md#req-client-0174)
 - [REQ-CLIENT-0180](../requirements/client.md#req-client-0180)
@@ -701,7 +701,7 @@ Output
 
 - Spec ID: `CYNAI.CLIENT.CliPersonasManagement` <a id="spec-cynai-client-clipersonasmanagement"></a>
 
-Traces To:
+### Personas Management Requirements Traces
 
 - [REQ-CLIENT-0179](../requirements/client.md#req-client-0179)
 
@@ -804,13 +804,18 @@ Output
 
 - Spec ID: `CYNAI.CLIENT.CliSkillsManagement` <a id="spec-cynai-client-cliskillsmanagement"></a>
 
-Traces To:
+### Skills Management Requirements Traces
 
 - [REQ-CLIENT-0146](../requirements/client.md#req-client-0146)
 
 The CLI MUST support full CRUD for skills (create/load, list, get, update, delete) via the User API Gateway, with the same controls as defined in [Skill Management CRUD (Web and CLI)](skills_storage_and_inference.md#spec-cynai-skills-skillmanagementcrud).
 
 All skills commands MUST require auth.
+
+Skill selector
+
+- Where an existing skill is referenced (for example `skills get`, `skills update`, or `skills delete`), the CLI MUST accept either the backend `skill_id` or a user-typeable skill selector such as an unambiguous human-readable skill name.
+- If a user-typeable selector matches multiple visible skills, the CLI MUST fail with a concise ambiguity error and require the user to disambiguate.
 
 Scope enum
 
@@ -869,11 +874,11 @@ Output
 - JSON mode MUST print `{"skills":[...],"next_cursor":"<opaque>"}`.
   Each skill object MUST include at least `skill_id`, `name`, and `scope`.
 
-### `cynork skills get <skill_id>`
+### `cynork skills get <skill_selector>`
 
 Invocation
 
-- `cynork skills get <skill_id>`.
+- `cynork skills get <skill_selector>`.
 
 Output
 
@@ -881,11 +886,11 @@ Output
 - Table mode MUST include a metadata line containing at least `skill_id=<id>` and `scope=<scope>`.
 - JSON mode MUST print `{"skill_id":"<id>","name":"<name>","scope":"<scope>","scope_id":"<id_or_empty>","content_md":"<markdown>"}`.
 
-### `cynork skills update <skill_id> <file.md>`
+### `cynork skills update <skill_selector> <file.md>`
 
 Invocation
 
-- `cynork skills update <skill_id> <file.md>`.
+- `cynork skills update <skill_selector> <file.md>`.
 
 Optional flags
 
@@ -903,11 +908,11 @@ Output
 - Table mode MUST print exactly one line containing `skill_id=<id> updated=true`.
 - JSON mode MUST print `{"skill_id":"<id>","updated":true}`.
 
-### `cynork skills delete <skill_id>`
+### `cynork skills delete <skill_selector>`
 
 Invocation
 
-- `cynork skills delete <skill_id>`.
+- `cynork skills delete <skill_selector>`.
 
 Optional flags
 
@@ -916,7 +921,7 @@ Optional flags
 Behavior
 
 - If `--yes` is not provided, the CLI MUST prompt for confirmation.
-- The confirmation prompt MUST be `Delete skill <skill_id>? [y/N]`.
+- The confirmation prompt MUST be `Delete skill <skill_selector>? [y/N]`.
 - If the user does not enter `y` or `Y`, the CLI MUST exit with code 0 and MUST NOT make a gateway request.
 
 Output

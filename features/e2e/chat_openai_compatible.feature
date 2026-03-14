@@ -40,6 +40,24 @@ Scenario: OpenAI-compatible responses request supports previous_response_id cont
   Then the response status is 200
   And the response contains a stable response id
 
+@req_usrgwy_0149
+@spec_cynai_usrgwy_openaichatapi_streaming
+Scenario: OpenAI-compatible chat completions support stream=true
+  When I call POST "/v1/chat/completions" with OpenAI-format messages and stream=true
+  Then the response status is 200
+  And the response is a streaming chat payload
+  And the stream contains ordered incremental assistant events
+  And the stream ends with a terminal completion or error event
+
+@req_usrgwy_0149
+@spec_cynai_usrgwy_openaichatapi_streaming
+Scenario: OpenAI-compatible responses support stream=true
+  When I call POST "/v1/responses" with supported OpenAI-format input and stream=true
+  Then the response status is 200
+  And the response is a streaming chat payload
+  And the stream contains ordered incremental assistant events
+  And the stream ends with a terminal completion or error event
+
 @req_usrgwy_0130
 @spec_cynai_usrgwy_openaichatapi
 Scenario: Chat does not imply one task per message

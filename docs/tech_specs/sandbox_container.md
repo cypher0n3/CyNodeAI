@@ -61,7 +61,7 @@ Assumptions
 
 - Spec ID: `CYNAI.SANDBX.SandboxThreatModel` <a id="spec-cynai-sandbx-sandboxthreat"></a>
 
-Traces To:
+#### Traces to Requirements
 
 - [REQ-SANDBX-0100](../requirements/sandbx.md#req-sandbx-0100)
 - [REQ-SANDBX-0101](../requirements/sandbx.md#req-sandbx-0101)
@@ -75,7 +75,7 @@ Sandbox images MUST meet this contract for a given capability profile.
 
 - Spec ID: `CYNAI.SANDBX.RuntimeContractBaseline` <a id="spec-cynai-sandbx-runtimecontractbaseline"></a>
 
-Traces To:
+#### Runtime Contract Baseline Requirements Traces
 
 - [REQ-SANDBX-0104](../requirements/sandbx.md#req-sandbx-0104)
 - [REQ-SANDBX-0105](../requirements/sandbx.md#req-sandbx-0105)
@@ -92,7 +92,7 @@ Implementations MUST satisfy the following for every sandbox image used for disp
 
 - Spec ID: `CYNAI.SANDBX.ImageCompatibilityMarking` <a id="spec-cynai-sandbx-imagecompatibilitymarking"></a>
 
-Traces To:
+#### Image Compatibility Marking for Agent Workloads Requirements Traces
 
 - [REQ-SANDBX-0124](../requirements/sandbx.md#req-sandbx-0124)
 
@@ -107,7 +107,7 @@ See [Image Compatibility Marking and Task Type](sandbox_image_registry.md#spec-c
 
 - Spec ID: `CYNAI.SANDBX.ContainerPurposeUsageLabeling` <a id="spec-cynai-sandbx-containerpurposeusage"></a>
 
-Traces To:
+#### Container Purpose and Usage Labeling Requirements Traces
 
 - [REQ-SANDBX-0127](../requirements/sandbx.md#req-sandbx-0127)
 
@@ -150,7 +150,7 @@ Sandbox control is performed by the Node Manager using container runtime operati
 
 - Spec ID: `CYNAI.SANDBX.SandboxConnectivity` <a id="spec-cynai-sandbx-sandboxconn"></a>
 
-Traces To:
+#### Sandbox Connectivity Applicable Requirements Requirements Traces
 
 - [REQ-SANDBX-0102](../requirements/sandbx.md#req-sandbx-0102)
 - [REQ-SANDBX-0103](../requirements/sandbx.md#req-sandbx-0103)
@@ -184,7 +184,7 @@ See [`docs/tech_specs/worker_node.md`](worker_node.md#spec-cynai-worker-unifiedu
 
 - Spec ID: `CYNAI.SANDBX.MinimumRequiredSoftware` <a id="spec-cynai-sandbx-minimumrequiredsoftware"></a>
 
-Traces To:
+### Minimum Required Software Requirements Traces
 
 - [REQ-SANDBX-0126](../requirements/sandbx.md#req-sandbx-0126)
 
@@ -225,7 +225,7 @@ Compression and archive handling
 
 - Spec ID: `CYNAI.SANDBX.GitLocalOnly` <a id="spec-cynai-sandbx-gitlocalonly"></a>
 
-Traces To:
+### Git Behavior (Local-Only) Requirements Traces
 
 - [REQ-SANDBX-0123](../requirements/sandbx.md#req-sandbx-0123)
 
@@ -276,7 +276,7 @@ This section is the **definitive spec** for the SBA runner container image (`cyn
 It applies to the project's SBA Containerfile and to any party building an SBA-compatible image who does not use the project's image.
 Implementations MUST satisfy the minimum requirements below; recommendations are for interoperability and for custom builds.
 
-Traces To:
+### SandBox Agent (SBA) Runner Image (Containerfile) Requirements Traces
 
 - [REQ-SBAGNT-0001](../requirements/sbagnt.md#req-sbagnt-0001) (sandbox runner in container)
 - [REQ-SBAGNT-0104](../requirements/sbagnt.md#req-sbagnt-0104) (SANDBX compliance)
@@ -344,7 +344,7 @@ See [Sandbox workspace and job mounts](worker_node.md#spec-cynai-worker-sandboxw
 
 - Spec ID: `CYNAI.SANDBX.FilesystemWorkingDirs` <a id="spec-cynai-sandbx-sandboxfs"></a>
 
-Traces To:
+#### Filesystem and Working Directories Applicable Requirements Requirements Traces
 
 - [REQ-SANDBX-0108](../requirements/sandbx.md#req-sandbx-0108)
 - [REQ-SANDBX-0109](../requirements/sandbx.md#req-sandbx-0109)
@@ -380,7 +380,7 @@ When egress is allowed, it is only through orchestrator- and node-mediated proxi
 
 - Spec ID: `CYNAI.SANDBX.NetworkExpectations` <a id="spec-cynai-sandbx-networkexpect"></a>
 
-Traces To:
+#### Network Expectations Applicable Requirements Requirements Traces
 
 - [REQ-SANDBX-0111](../requirements/sandbx.md#req-sandbx-0111)
 - [REQ-SANDBX-0112](../requirements/sandbx.md#req-sandbx-0112)
@@ -400,7 +400,7 @@ Sandboxes exchange data with the orchestrator through artifacts and orchestrator
 
 - Spec ID: `CYNAI.SANDBX.ArtifactsDataExchange` <a id="spec-cynai-sandbx-artifactsexchange"></a>
 
-Traces To:
+#### Artifacts and Data Exchange Applicable Requirements Requirements Traces
 
 - [REQ-SANDBX-0113](../requirements/sandbx.md#req-sandbx-0113)
 - [REQ-SANDBX-0114](../requirements/sandbx.md#req-sandbx-0114)
@@ -411,7 +411,7 @@ See [`docs/tech_specs/user_api_gateway.md`](user_api_gateway.md) and [`docs/tech
 
 - Spec ID: `CYNAI.SANDBX.LongRunningSession` <a id="spec-cynai-sandbx-longrunningsession"></a>
 
-Traces To:
+### Long-Running Session Sandboxes Requirements Traces
 
 - [REQ-SANDBX-0121](../requirements/sandbx.md#req-sandbx-0121)
 - [REQ-SANDBX-0122](../requirements/sandbx.md#req-sandbx-0122)

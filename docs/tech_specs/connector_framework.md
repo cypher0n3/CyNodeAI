@@ -36,7 +36,7 @@ Terminology
 
 - Spec ID: `CYNAI.CONNEC.ConnectorModel` <a id="spec-cynai-connec-connectormodel"></a>
 
-Traces To:
+#### Traces to Requirements
 
 - [REQ-CONNEC-0100](../requirements/connec.md#req-connec-0100)
 - [REQ-CONNEC-0101](../requirements/connec.md#req-connec-0101)
@@ -75,7 +75,7 @@ Credential handling SHOULD follow the API Egress Server model.
 
 - Spec ID: `CYNAI.CONNEC.ConnectorCredentialStorage` <a id="spec-cynai-connec-conncredstorage"></a>
 
-Traces To:
+#### Credential Storage and Rotation Applicable Requirements Requirements Traces
 
 - [REQ-CONNEC-0104](../requirements/connec.md#req-connec-0104)
 - [REQ-CONNEC-0105](../requirements/connec.md#req-connec-0105)
@@ -92,7 +92,7 @@ Connector operations MUST be governed by access control and audited.
 
 - Spec ID: `CYNAI.CONNEC.ConnectorPolicyAuditing` <a id="spec-cynai-connec-connpolicy"></a>
 
-Traces To:
+#### Policy and Auditing Applicable Requirements Requirements Traces
 
 - [REQ-CONNEC-0108](../requirements/connec.md#req-connec-0108)
 - [REQ-CONNEC-0109](../requirements/connec.md#req-connec-0109)
@@ -120,7 +120,7 @@ Orchestrator-side agents SHOULD use MCP tools to manage and invoke connector ope
 
 - Spec ID: `CYNAI.CONNEC.ConnectorToolSurfaceMcp` <a id="spec-cynai-connec-conntoolmcp"></a>
 
-Traces To:
+#### Tool Surface MCP Applicable Requirements Requirements Traces
 
 - [REQ-CONNEC-0111](../requirements/connec.md#req-connec-0111)
 - [REQ-CONNEC-0112](../requirements/connec.md#req-connec-0112)
@@ -148,7 +148,7 @@ Connector management and connector operation visibility MUST be available to aut
 
 - Spec ID: `CYNAI.CONNEC.ConnectorUserApiGateway` <a id="spec-cynai-connec-connusergwy"></a>
 
-Traces To:
+#### User API Gateway Surface Applicable Requirements Requirements Traces
 
 - [REQ-CONNEC-0114](../requirements/connec.md#req-connec-0114)
 - [REQ-CONNEC-0115](../requirements/connec.md#req-connec-0115)
@@ -186,7 +186,7 @@ Key principle
 
 - Spec ID: `CYNAI.CONNEC.OpenClawCompatibility` <a id="spec-cynai-connec-openclaw"></a>
 
-Traces To:
+#### OpenClaw Connector Compatibility Applicable Requirements Requirements Traces
 
 - [REQ-CONNEC-0117](../requirements/connec.md#req-connec-0117)
 - [REQ-CONNEC-0118](../requirements/connec.md#req-connec-0118)

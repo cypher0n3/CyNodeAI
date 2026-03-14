@@ -4,6 +4,7 @@
 - [Purpose](#purpose)
 - [Design Principles](#design-principles)
 - [SBA Capabilities (What the Agent Can Call and How)](#sba-capabilities-what-the-agent-can-call-and-how)
+  - [Traces to Requirements](#traces-to-requirements)
   - [Local Execution (Inside the Container)](#local-execution-inside-the-container)
   - [Outbound Channels (Worker Proxies Only)](#outbound-channels-worker-proxies-only)
   - [Job Lifecycle Reporting (What the SBA Must Call)](#job-lifecycle-reporting-what-the-sba-must-call)
@@ -11,6 +12,7 @@
 - [Execution Model](#execution-model)
   - [Todo List](#todo-list)
 - [Integration With Worker API](#integration-with-worker-api)
+  - [See Also (SBA Overview)](#see-also-sba-overview)
   - [Job Lifecycle and Status Reporting](#job-lifecycle-and-status-reporting)
   - [Worker Proxies (Inference and Web Egress)](#worker-proxies-inference-and-web-egress)
   - [Inference Proxy (Unified UDS)](#inference-proxy-unified-uds)
@@ -32,6 +34,7 @@
   - [Shape of Sandboxed Containers](#shape-of-sandboxed-containers)
   - [Security Constraints](#security-constraints)
 - [MCP Tool Access (Sandbox Allowlist)](#mcp-tool-access-sandbox-allowlist)
+  - [See Also (Tool Scope)](#see-also-tool-scope)
 - [SBA Container Image (Containerfile)](#sba-container-image-containerfile)
 - [Go Implementation](#go-implementation)
 - [Protocol Versioning](#protocol-versioning)
@@ -79,7 +82,7 @@ Within the job, the SBA MUST be able to build and manage its own todo list (deri
 
 - Spec ID: `CYNAI.SBAGNT.Capabilities` <a id="spec-cynai-sbagnt-capabilities"></a>
 
-Traces To:
+### Traces to Requirements
 
 - [REQ-SBAGNT-0001](../requirements/sbagnt.md#req-sbagnt-0001)
 - [REQ-SBAGNT-0112](../requirements/sbagnt.md#req-sbagnt-0112)
@@ -188,7 +191,7 @@ Contract alignment
 
 Sandbox orchestration from the PM agent uses MCP tools (`sandbox.create`, `sandbox.exec`, etc.) per [mcp_tool_catalog.md](mcp_tool_catalog.md#spec-cynai-mcptoo-sandboxtools); the **content** of a sandbox run may be a `cynode-sba` job when the image is the SBA runner and the command/entrypoint invokes `cynode-sba`.
 
-See:
+### See Also (SBA Overview)
 
 - [`docs/tech_specs/worker_api.md`](worker_api.md)
 - [`docs/tech_specs/mcp_tool_catalog.md`](mcp_tool_catalog.md#spec-cynai-mcptoo-sandboxtools)
@@ -360,15 +363,6 @@ Agent persona model (stored in DB, embedded at job-build time):
 
 - Spec ID: `CYNAI.SBAGNT.JobContext` <a id="spec-cynai-sbagnt-jobcontext"></a>
 
-Traces To:
-
-- [REQ-SBAGNT-0107](../requirements/sbagnt.md#req-sbagnt-0107)
-- [REQ-SBAGNT-0111](../requirements/sbagnt.md#req-sbagnt-0111)
-- [REQ-SBAGNT-0113](../requirements/sbagnt.md#req-sbagnt-0113)
-- [REQ-AGENTS-0132](../requirements/agents.md#req-agents-0132)
-- [REQ-AGENTS-0133](../requirements/agents.md#req-agents-0133)
-- [REQ-AGENTS-0134](../requirements/agents.md#req-agents-0134)
-
 The orchestrator (or PM agent when constructing the job) MUST supply the sandbox agent with the context needed to perform its work.
 The SBA MAY fetch relevant skills via the orchestrator MCP gateway using the sandbox-allowed read tools (`skills.list`, `skills.get`) per [MCP Tool Access](#spec-cynai-sbagnt-mcptoolaccess).
 Skills (or skill content) MAY also be supplied in the job context by the orchestrator or PM; job context and MCP fetch MAY both be used.
@@ -433,13 +427,18 @@ Example shape (with optional context)
 - `constraints.ext_net_allowed`: when `true`, the job is permitted to use external network access (e.g. web egress, API Egress) via worker proxies; when `false`, only worker/orchestrator-mediated paths (inference, MCP, status) apply.
   The SBA always has proxy outbound for lifecycle and MCP.
 
+#### Context Supplied to SBA (Requirements Acceptance Criteria Preferences Skills) Requirements Traces
+
+- [REQ-SBAGNT-0107](../requirements/sbagnt.md#req-sbagnt-0107)
+- [REQ-SBAGNT-0111](../requirements/sbagnt.md#req-sbagnt-0111)
+- [REQ-SBAGNT-0113](../requirements/sbagnt.md#req-sbagnt-0113)
+- [REQ-AGENTS-0132](../requirements/agents.md#req-agents-0132)
+- [REQ-AGENTS-0133](../requirements/agents.md#req-agents-0133)
+- [REQ-AGENTS-0134](../requirements/agents.md#req-agents-0134)
+
 ### SBA LLM Prompt Construction
 
 - Spec ID: `CYNAI.SBAGNT.LlmPromptConstruction` <a id="spec-cynai-sbagnt-llmpromptconstruction"></a>
-
-Traces To:
-
-- [REQ-SBAGNT-0113](../requirements/sbagnt.md#req-sbagnt-0113)
 
 **Purpose:** Define the content and order of context sent to the LLM on each request (system message and/or user message), and how tools are presented.
 
@@ -462,6 +461,10 @@ The SBA MUST build each LLM prompt by including the following **in this order**:
 9. **Runtime context for this turn** - Remaining time or deadline; current todo list or step progress; and the current user/tool turn.
 
 The implementation MUST concatenate or structure these blocks in a deterministic way (e.g. clear section headers or role/system vs user message split) so that the model receives a consistent, ordered context.
+
+#### SBA LLM Prompt Construction Requirements Traces
+
+- [REQ-SBAGNT-0113](../requirements/sbagnt.md#req-sbagnt-0113)
 
 #### Tools Presented to the LLM
 
@@ -624,7 +627,7 @@ Sandboxed containers that run `cynode-sba` have a well-defined shape:
 - The SBA MUST assume outbound network may be blocked (when policy disallows egress).
   When egress is allowed, it MUST use only the proxy endpoints injected by the node (see [Worker Proxies (Inference and Web Egress)](#worker-proxies-inference-and-web-egress)).
 
-See:
+#### See Also (Egress and Proxies)
 
 - [`docs/requirements/sandbx.md`](../requirements/sandbx.md)
 - [`docs/tech_specs/sandbox_container.md`](sandbox_container.md)
@@ -650,7 +653,7 @@ User-installed tools
 - User-installed (custom) MCP tools that are configured with sandbox scope MUST be added to the set of tools a sandbox agent may invoke, subject to per-tool enable/disable and access control.
   The implementation MUST use the orchestrator's per-tool sandbox vs PM setting to decide whether a sandbox agent may call a given tool.
 
-See:
+### See Also (Tool Scope)
 
 - [`docs/tech_specs/mcp_gateway_enforcement.md`](mcp_gateway_enforcement.md)
 - [`docs/tech_specs/mcp_tool_catalog.md`](mcp_tool_catalog.md)

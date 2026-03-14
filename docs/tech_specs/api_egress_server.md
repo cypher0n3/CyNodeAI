@@ -4,13 +4,20 @@
 - [Service Purpose](#service-purpose)
 - [Agent Interaction Model](#agent-interaction-model)
 - [Credential Storage](#credential-storage)
+  - [Database Schema](#database-schema)
+  - [Credential Storage Requirements Traces](#credential-storage-requirements-traces)
   - [API Credentials Table](#api-credentials-table)
 - [Access Control](#access-control)
+  - [Recommended Checks](#recommended-checks)
+  - [Group-Scoped Credentials](#group-scoped-credentials)
+  - [Access Control Requirements Traces](#access-control-requirements-traces)
 - [Policy and Auditing](#policy-and-auditing)
+  - [Policy and Auditing Requirements Traces](#policy-and-auditing-requirements-traces)
 - [Sanity Check (Semantic Safety)](#sanity-check-semantic-safety)
   - [Sanity Checker Placement in Request Flow](#sanity-checker-placement-in-request-flow)
   - [Sanity Checker Inputs](#sanity-checker-inputs)
   - [Sanity Checker Outputs](#sanity-checker-outputs)
+  - [Escalate to Human Review](#escalate-to-human-review)
   - [Sanity Checker Detection Categories](#sanity-checker-detection-categories)
   - [Sanity Checker Security](#sanity-checker-security)
   - [Sanity Checker Audit](#sanity-checker-audit)
@@ -18,6 +25,12 @@
   - [Sanity Checker Model Configuration](#sanity-checker-model-configuration)
   - [Sanity Checker Req Traces](#sanity-checker-req-traces)
 - [Admin API (Gateway Endpoints)](#admin-api-gateway-endpoints)
+  - [Get Credential (Metadata Only)](#get-credential-metadata-only)
+  - [Create Credential](#create-credential)
+  - [Rotate Credential](#rotate-credential)
+  - [Disable Credential](#disable-credential)
+  - [Admin API Clients](#admin-api-clients)
+  - [Admin API Requirements Traces](#admin-api-requirements-traces)
 
 ## Document Overview
 
@@ -57,17 +70,17 @@ Minimum response fields
 Credentials are stored in PostgreSQL and are only retrievable by the API Egress Server.
 Agents MUST never receive credentials in responses.
 
-Traces To:
+### Database Schema
+
+- The Postgres schema is defined in [`docs/tech_specs/postgres_schema.md`](postgres_schema.md).
+- The API Egress credentials table is specified in the [API Egress Credentials](postgres_schema.md#spec-cynai-schema-apiegresscredentials) section.
+
+### Credential Storage Requirements Traces
 
 - [REQ-APIEGR-0106](../requirements/apiegr.md#req-apiegr-0106)
 - [REQ-APIEGR-0107](../requirements/apiegr.md#req-apiegr-0107)
 - [REQ-APIEGR-0108](../requirements/apiegr.md#req-apiegr-0108)
 - [REQ-APIEGR-0109](../requirements/apiegr.md#req-apiegr-0109)
-
-Database schema
-
-- The Postgres schema is defined in [`docs/tech_specs/postgres_schema.md`](postgres_schema.md).
-- The API Egress credentials table is specified in the [API Egress Credentials](postgres_schema.md#spec-cynai-schema-apiegresscredentials) section.
 
 ### API Credentials Table
 
@@ -110,7 +123,20 @@ Security notes
 The API Egress Server MUST enforce access control for outbound API calls.
 Access control rules are defined in [`docs/tech_specs/access_control.md`](access_control.md).
 
-Traces To:
+### Recommended Checks
+
+- Subject identity MUST be resolved to a user context.
+- The requested `provider` and `operation` MUST be validated against allow policy for that subject.
+- The chosen credential MUST be authorized for the request context and MUST be active.
+- The service SHOULD apply per-user and per-task constraints, such as rate limits and allowed operations.
+
+### Group-Scoped Credentials
+
+- The API Egress Server SHOULD support group-scoped credentials for shared enterprise integrations.
+- A group-scoped credential MUST be selectable only when the task context includes a group identity and policy allows group usage.
+- Access control rules SHOULD distinguish between user-scoped and group-scoped usage when needed.
+
+### Access Control Requirements Traces
 
 - [REQ-APIEGR-0110](../requirements/apiegr.md#req-apiegr-0110)
 - [REQ-APIEGR-0111](../requirements/apiegr.md#req-apiegr-0111)
@@ -122,33 +148,20 @@ Traces To:
 - [REQ-APIEGR-0117](../requirements/apiegr.md#req-apiegr-0117)
 - [REQ-APIEGR-0118](../requirements/apiegr.md#req-apiegr-0118)
 
-Recommended checks
-
-- Subject identity MUST be resolved to a user context.
-- The requested `provider` and `operation` MUST be validated against allow policy for that subject.
-- The chosen credential MUST be authorized for the request context and MUST be active.
-- The service SHOULD apply per-user and per-task constraints, such as rate limits and allowed operations.
-
-Group-scoped credentials
-
-- The API Egress Server SHOULD support group-scoped credentials for shared enterprise integrations.
-- A group-scoped credential MUST be selectable only when the task context includes a group identity and policy allows group usage.
-- Access control rules SHOULD distinguish between user-scoped and group-scoped usage when needed.
-
 ## Policy and Auditing
 
 - Spec ID: `CYNAI.APIEGR.PolicyAuditing` <a id="spec-cynai-apiegr-policyauditing"></a>
 
 The orchestrator and API Egress Server enforce outbound access policy.
 
-Traces To:
-
-- [REQ-APIEGR-0119](../requirements/apiegr.md#req-apiegr-0119)
-- [REQ-APIEGR-0120](../requirements/apiegr.md#req-apiegr-0120)
-
 - Policy checks SHOULD include provider allowlists, operation allowlists, and per-task constraints.
 - All calls SHOULD be logged with task context, provider, operation, and timing information.
 - Responses SHOULD be filtered to avoid accidental secret leakage.
+
+### Policy and Auditing Requirements Traces
+
+- [REQ-APIEGR-0119](../requirements/apiegr.md#req-apiegr-0119)
+- [REQ-APIEGR-0120](../requirements/apiegr.md#req-apiegr-0120)
 
 ## Sanity Check (Semantic Safety)
 
@@ -230,14 +243,6 @@ Allowlist-based or rule-based shortcuts for known-safe operations are permitted 
 The User API Gateway exposes credential management endpoints so that the Web Console and the CLI management app (cynork) can perform the same operations via the same API.
 Both clients MUST use these gateway endpoints; the endpoint contract is defined here so that capability parity (REQ-CLIENT-0004) is implementable.
 
-Traces To:
-
-- [REQ-CLIENT-0116](../requirements/client.md#req-client-0116)
-- [REQ-CLIENT-0117](../requirements/client.md#req-client-0117)
-- [REQ-CLIENT-0118](../requirements/client.md#req-client-0118)
-- [REQ-CLIENT-0119](../requirements/client.md#req-client-0119)
-- [REQ-CLIENT-0120](../requirements/client.md#req-client-0120)
-
 Endpoint contract
 
 - All endpoints MUST live under the gateway's versioned API prefix (e.g. `/v1/`) and MUST require authentication and authorization.
@@ -249,29 +254,37 @@ List credentials
 - Query params: optional filter by `provider`, `owner_type`, `owner_id`.
 - Response: array of credential metadata only (id, owner_type, owner_id, provider, credential_name, credential_type, is_active, expires_at, created_at, updated_at; no credential_ciphertext or secret).
 
-Get credential (metadata only)
+### Get Credential (Metadata Only)
 
 - `GET /v1/credentials/{id}`.
 - Response: single credential metadata; 404 if not found or not authorized.
 
-Create credential
+### Create Credential
 
 - `POST /v1/credentials`.
 - Body: provider, credential_name, owner_type, owner_id, credential_type, and secret (write-only; never echoed in response or logs).
 - Response: 201 with metadata of created credential (no secret).
 
-Rotate credential
+### Rotate Credential
 
 - `POST /v1/credentials/{id}/rotate` (or equivalent action).
 - Body: new secret only.
 - Response: 200 with updated metadata (no secret); 404 if not found or not authorized.
 
-Disable credential
+### Disable Credential
 
 - `PATCH /v1/credentials/{id}` with body indicating deactivation (e.g. `is_active: false`), or dedicated `POST /v1/credentials/{id}/disable`.
 - Response: 200 with updated metadata; 404 if not found or not authorized.
 
-Clients
+### Admin API Clients
 
 - The [Web Console](web_console.md) and the [cynork CLI](cynork_cli.md) MUST use the above endpoint contract for API Egress credential operations.
 - The gateway SHOULD expose this contract in its OpenAPI/Swagger spec for discovery and for the admin console Swagger UI.
+
+### Admin API Requirements Traces
+
+- [REQ-CLIENT-0116](../requirements/client.md#req-client-0116)
+- [REQ-CLIENT-0117](../requirements/client.md#req-client-0117)
+- [REQ-CLIENT-0118](../requirements/client.md#req-client-0118)
+- [REQ-CLIENT-0119](../requirements/client.md#req-client-0119)
+- [REQ-CLIENT-0120](../requirements/client.md#req-client-0120)

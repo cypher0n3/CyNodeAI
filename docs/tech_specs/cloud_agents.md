@@ -84,7 +84,7 @@ Authoritative contract
 
 - Spec ID: `CYNAI.AGENTS.CloudWorkerContract` <a id="spec-cynai-agents-cwcontract"></a>
 
-Traces To:
+#### Traces to Requirements
 
 - [REQ-AGENTS-0100](../requirements/agents.md#req-agents-0100)
 - [REQ-AGENTS-0101](../requirements/agents.md#req-agents-0101)
@@ -167,7 +167,7 @@ Tool access is mediated through the orchestrator and MCP.
 
 - Spec ID: `CYNAI.AGENTS.CloudWorkerToolAccess` <a id="spec-cynai-agents-cwtoolaccess"></a>
 
-Traces To:
+#### Tool Access Model Applicable Requirements Requirements Traces
 
 - [REQ-AGENTS-0103](../requirements/agents.md#req-agents-0103)
 - [REQ-AGENTS-0104](../requirements/agents.md#req-agents-0104)

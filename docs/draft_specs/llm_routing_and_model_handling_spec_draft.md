@@ -45,7 +45,7 @@ capability record and a deterministic path-selection algorithm that covers:
 - strong offline coding models,
 - a safe fallback for any model not explicitly listed.
 
-Traces To:
+### 1.1. Traces To
 
 - [REQ-PMAGNT-0100](../requirements/pmagnt.md#req-pmagnt-0100)
 - [REQ-PMAGNT-0101](../requirements/pmagnt.md#req-pmagnt-0101)
@@ -402,7 +402,7 @@ Each agent (PMA, SBA) must resolve a `ModelCapabilityRecord` for the configured
 `INFERENCE_MODEL` before invoking the LLM, then select the inference path according
 to the algorithm in [Section 5.2](#52-agentinferencepath-algorithm).
 
-Preconditions:
+#### 5.1.1 Inference Preconditions
 
 - `INFERENCE_MODEL` is set to a non-empty string.
 - The MCP gateway URL (`PMA_MCP_GATEWAY_URL` or equivalent) may or may not be set.

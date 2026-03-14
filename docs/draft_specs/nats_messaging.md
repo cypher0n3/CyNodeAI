@@ -27,7 +27,7 @@ NATS is transport and event backbone - not the authoritative system of record.
 - Use lowercase tokens separated by dots
 - Put tenant and project in the subject for routing, but do not include secrets or PII
 
-Recommended IDs:
+### 3.1. Recommended Ids
 
 - `tenant_id` - stable string or UUID
 - `project_id` - stable string or UUID
@@ -49,7 +49,7 @@ Subject names are hierarchical; the following sections list canonical subjects b
 - `cynode.job.canceled.<tenant_id>.<project_id>.<job_id>`
 - `cynode.job.failed.<tenant_id>.<project_id>.<job_id>`
 
-Notes:
+#### 4.1.1 Job Subject Notes
 
 - `requested` is produced by orchestrator/dispatcher
 - `assigned` is produced by dispatcher (or worker if using pull-claim)
@@ -66,7 +66,7 @@ Notes:
 - `cynode.acceptance.validated.<tenant_id>.<project_id>`
 - `cynode.acceptance.failed.<tenant_id>.<project_id>`
 
-Notes:
+#### 4.2.1 Work Item Notes
 
 - These are immutable events.
   Consumers update read models in Postgres.
@@ -76,7 +76,7 @@ Notes:
 - `cynode.policy.requested.<tenant_id>.<project_id>`
 - `cynode.policy.decided.<tenant_id>.<project_id>`
 
-Notes:
+#### 4.3.1 Policy Notes
 
 - Used for gated operations (network enablement, destructive actions, sensitive reads).
 
@@ -89,7 +89,7 @@ Notes:
 - `cynode.embedding.requested.<tenant_id>.<project_id>.<namespace>`
 - `cynode.embedding.completed.<tenant_id>.<project_id>.<namespace>`
 
-Notes:
+#### 4.4.1 Artifact Notes
 
 - `artifact.available` should reference object storage URIs and hashes
 - Indexing/embedding services subscribe and act asynchronously
@@ -106,11 +106,13 @@ Streams below define durable storage and retention for each domain.
 
 ### 5.1 Stream: `CYNODE_JOBS`
 
-Purpose:
+This stream stores job dispatch and lifecycle events.
+
+#### 5.1.1 Stream Purpose (`CYNODE_JOBS`)
 
 - Durable job dispatch and job lifecycle events needed for recovery
 
-Subjects:
+#### 5.1.2 Stream Subjects (`CYNODE_JOBS`)
 
 - `cynode.job.requested.*.*`
 - `cynode.job.assigned.*.*.*`
@@ -119,7 +121,7 @@ Subjects:
 - `cynode.job.failed.*.*.*`
 - `cynode.job.canceled.*.*.*`
 
-Retention:
+#### 5.1.3 Stream Retention (`CYNODE_JOBS`)
 
 - WorkQueue retention for `requested/assigned` (or Interest retention if multiple consumers must see all)
 - Time-based retention for lifecycle events (days) for postmortems
@@ -134,11 +136,13 @@ Recommended max age:
 
 ### 5.2 Stream: `CYNODE_EVENTS`
 
-Purpose:
+This stream stores work item and requirement events.
+
+#### 5.2.1 Stream Purpose (`CYNODE_EVENTS`)
 
 - Durable domain events for work items, requirements, policy, artifacts
 
-Subjects:
+#### 5.2.2 Stream Subjects (`CYNODE_EVENTS`)
 
 - `cynode.workitem.*.*.*`
 - `cynode.requirement.*.*.*`
@@ -146,7 +150,7 @@ Subjects:
 - `cynode.policy.*.*.*`
 - `cynode.artifact.*.*.*`
 
-Retention:
+#### 5.2.3 Stream Retention (`CYNODE_EVENTS`)
 
 - Limits or time-based (weeks to months), depending on audit requirements
 
@@ -156,16 +160,18 @@ Recommended max age:
 
 ### 5.3 Stream: `CYNODE_TELEMETRY`
 
-Purpose:
+This stream stores node heartbeats and capacity data.
+
+#### 5.3.1 Stream Purpose (`CYNODE_TELEMETRY`)
 
 - High-volume progress and node telemetry for live UX and short replay
 
-Subjects:
+#### 5.3.2 Stream Subjects (`CYNODE_TELEMETRY`)
 
 - `cynode.job.progress.*.*.*`
 - `cynode.node.*.*`
 
-Retention:
+#### 5.3.3 Stream Retention (`CYNODE_TELEMETRY`)
 
 - Short time-based retention (minutes to hours)
 
@@ -191,7 +197,7 @@ Pattern B - Workers pull-claim jobs:
 - First worker to claim persists locally and acks
 - Worker publishes `cynode.job.started/...` etc.
 
-Recommendation:
+#### 6.1.1 Recommendation
 
 - Start with Pattern A if you need scheduling constraints (GPU locality, model cache locality)
 - Use Pattern B for simple homogeneous clusters
@@ -273,11 +279,11 @@ Canonical payload shapes for core message types (versioned).
 
 ### 8.1 `job.requested` `v1.0.0`
 
-Purpose:
+#### 8.1.1 Purpose
 
 - Request execution of a sandbox job (job.json) with constraints and references
 
-Payload:
+#### 8.1.2 Payload
 
 - `job_id` (UUID)
 - `skill_id` (string)
@@ -331,7 +337,7 @@ Payload:
 
 ### 8.2 `job.assigned` `v1.0.0`
 
-Payload:
+#### 8.2.1 Payload
 
 - `job_id`
 - `node_id`
@@ -341,7 +347,7 @@ Payload:
 
 ### 8.3 `job.started` `v1.0.0`
 
-Payload:
+#### 8.3.1 Payload
 
 - `job_id`
 - `node_id`
@@ -366,7 +372,7 @@ Payload (keep small, high frequency):
 
 ### 8.5 `job.completed` `v1.0.0`
 
-Payload:
+#### 8.5.1 Payload
 
 - `job_id`
 - `node_id`
@@ -384,7 +390,7 @@ Payload:
 
 ### 8.6 `workitem.created` `v1.0.0`
 
-Payload:
+#### 8.6.1 Payload
 
 - `work_item_id`
 - `work_item_type` (epic|feature|story|task|subtask)
@@ -401,7 +407,7 @@ Payload:
 
 ### 8.7 `workitem.transitioned` `v1.0.0`
 
-Payload:
+#### 8.7.1 Payload
 
 - `work_item_id`
 - `from_status`
@@ -411,7 +417,7 @@ Payload:
 
 ### 8.8 `requirement.created` `v1.0.0`
 
-Payload:
+#### 8.8.1 Payload
 
 - `requirement_id` (e.g., `REQ-SEC-005`)
 - `type` (FR|NFR|SR|OR)
@@ -423,7 +429,7 @@ Payload:
 
 ### 8.9 `acceptance.validated` `v1.0.0`
 
-Payload:
+#### 8.9.1 Payload
 
 - `criteria_id`
 - `requirement_id`
@@ -437,7 +443,7 @@ Payload:
 
 ### 8.10 `policy.requested` `v1.0.0`
 
-Payload:
+#### 8.10.1 Payload
 
 - `policy_request_id`
 - `action` (string)
@@ -451,7 +457,7 @@ Payload:
 
 ### 8.11 `policy.decided` `v1.0.0`
 
-Payload:
+#### 8.11.1 Payload
 
 - `policy_request_id`
 - `decision` (approved|denied)
@@ -483,7 +489,7 @@ Access is enforced at both NATS and message level.
 
 ## 10. Idempotency and Deduplication
 
-Requirements:
+### 10.1. Requirements
 
 - Every message includes `event_id` (unique)
 - Consumers must store processed `event_id`s (or a rolling window) to avoid double-apply

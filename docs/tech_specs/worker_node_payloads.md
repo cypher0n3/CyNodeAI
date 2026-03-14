@@ -47,7 +47,7 @@ Behavioral requirements remain defined in [`docs/tech_specs/worker_node.md`](wor
 - Secrets MUST be short-lived where possible and MUST NOT be exposed to sandbox containers.
 - Nodes MUST store secrets only in a node-local secure store.
 
-Traces To:
+### Traces to Requirements
 
 - [REQ-WORKER-0131](../requirements/worker.md#req-worker-0131)
 - [REQ-WORKER-0132](../requirements/worker.md#req-worker-0132)
@@ -268,7 +268,7 @@ It is versioned so nodes can apply updates safely and atomically.
 
 Source requirements: [`docs/tech_specs/worker_node.md`](worker_node.md#spec-cynai-worker-configurationdelivery) and [`docs/tech_specs/worker_node.md`](worker_node.md#spec-cynai-worker-dynamicconfigurationupdates).
 
-Traces To:
+### Node Configuration Payload Requirements Traces
 
 - [REQ-ORCHES-0149](../requirements/orches.md#req-orches-0149)
 
@@ -415,14 +415,14 @@ Traces To:
 
 This section defines the schema and semantics for `managed_services.services[].orchestrator.agent_token_ref`.
 
-Scope:
+##### Scope
 
 - `agent_token_ref` is consumed by the worker only.
   The worker MUST NOT pass the reference object to any managed service container or agent runtime.
 - Resolution failures MUST fail closed.
   A failure MUST result in no agent token being written to the node-local secure store for that `service_id`.
 
-Schema:
+##### Schema
 
 - `kind` (string, required)
   - Defines the resolution mechanism used by the worker.
@@ -436,7 +436,7 @@ Schema:
 Nodes MUST report configuration application status back to the orchestrator.
 This acknowledgement allows safe rollout, retries, and visibility.
 
-Traces To:
+### Node Configuration Acknowledgement Requirements Traces
 
 - [REQ-WORKER-0135](../requirements/worker.md#req-worker-0135)
 - [REQ-WORKER-0137](../requirements/worker.md#req-worker-0137)

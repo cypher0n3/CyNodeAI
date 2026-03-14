@@ -66,7 +66,7 @@ Langchaingo tools wrap those MCP calls.
 
 - Spec ID: `CYNAI.AGENTS.NoSimulatedOutput` <a id="spec-cynai-agents-nosimulatedoutput"></a>
 
-Traces To:
+### Traces to Requirements
 
 - [REQ-AGENTS-0137](../requirements/agents.md#req-agents-0137)
 
@@ -133,7 +133,7 @@ External provider usage MUST be policy-controlled and audited.
 
 - Spec ID: `CYNAI.AGENTS.PMExternalProvider` <a id="spec-cynai-agents-pmexternalprovider"></a>
 
-Traces To:
+#### External Provider Usage Applicable Requirements Requirements Traces
 
 - [REQ-AGENTS-0106](../requirements/agents.md#req-agents-0106)
 - [REQ-AGENTS-0107](../requirements/agents.md#req-agents-0107)
@@ -193,7 +193,7 @@ It MUST use MCP tools for privileged operations.
 
 - Spec ID: `CYNAI.AGENTS.ProjectManagerToolAccess` <a id="spec-cynai-agents-pmtoolaccess"></a>
 
-Traces To:
+#### Tool Access and Database Access Applicable Requirements Requirements Traces
 
 - [REQ-AGENTS-0109](../requirements/agents.md#req-agents-0109)
 - [REQ-AGENTS-0110](../requirements/agents.md#req-agents-0110)
@@ -238,7 +238,7 @@ At minimum, the startup context MUST include:
 
 - Spec ID: `CYNAI.AGENTS.LLMContext` <a id="spec-cynai-agents-llmcontext"></a>
 
-Traces To:
+### LLM Context (Baseline and User-Configurable) Requirements Traces
 
 - [REQ-AGENTS-0132](../requirements/agents.md#req-agents-0132)
 - [REQ-AGENTS-0133](../requirements/agents.md#req-agents-0133)
@@ -317,7 +317,7 @@ APIs and the CLI MUST accept either the task UUID or the task name as the task i
 
 - Spec ID: `CYNAI.AGENTS.PMProjectFromPrompt` <a id="spec-cynai-agents-pmprojectfromprompt"></a>
 
-Traces To:
+#### Project Context From Chat Prompt Requirements Traces
 
 - [REQ-AGENTS-0131](../requirements/agents.md#req-agents-0131)
 
@@ -330,7 +330,7 @@ If the user does not mention a project in the prompt, the existing request conte
 
 - Spec ID: `CYNAI.AGENTS.ProjectManagerTaskNaming` <a id="spec-cynai-agents-pmtasknaming"></a>
 
-Traces To:
+#### Task Naming Applicable Requirements Requirements Traces
 
 - [REQ-AGENTS-0129](../requirements/agents.md#req-agents-0129)
 
@@ -338,7 +338,7 @@ Traces To:
 
 - Spec ID: `CYNAI.AGENTS.ProjectPlanBuilding` <a id="spec-cynai-agents-projectplanbuilding"></a>
 
-Traces To:
+### Project Plan Building Requirements Traces
 
 - [REQ-PMAGNT-0111](../requirements/pmagnt.md#req-pmagnt-0111)
 - [REQ-PMAGNT-0113](../requirements/pmagnt.md#req-pmagnt-0113)
@@ -351,7 +351,7 @@ The PMA SHOULD refine project plans as needed based on updated information from 
 
 - Spec ID: `CYNAI.AGENTS.ClarificationBeforeExecution` <a id="spec-cynai-agents-clarificationbeforeexecution"></a>
 
-Traces To:
+### Clarification Before Execution Requirements Traces
 
 - [REQ-PMAGNT-0112](../requirements/pmagnt.md#req-pmagnt-0112)
 - [REQ-AGENTS-0135](../requirements/agents.md#req-agents-0135)
@@ -365,7 +365,7 @@ See [`chat_threads_and_messages.md`](chat_threads_and_messages.md) and [`openai_
 
 - Spec ID: `CYNAI.AGENTS.WhenPlanLocked` <a id="spec-cynai-agents-whenplanlocked"></a>
 
-Traces To:
+### When Plan is Locked Requirements Traces
 
 - [REQ-PMAGNT-0114](../requirements/pmagnt.md#req-pmagnt-0114)
 
@@ -376,7 +376,7 @@ The API or gateway enforces the lock so that PMA tool calls that would edit the 
 
 - Spec ID: `CYNAI.AGENTS.PlanApprovalSeekExplicitApproval` <a id="spec-cynai-agents-planapprovalseekexplicitapproval"></a>
 
-Traces To:
+### Plan Approval Seek Explicit User Approval Requirements Traces
 
 - [REQ-AGENTS-0136](../requirements/agents.md#req-agents-0136)
 
@@ -389,7 +389,7 @@ The PMA may build and refine plans and may request workflow start for a task (su
 
 - Spec ID: `CYNAI.AGENTS.PlanApprovedPmaTasked` <a id="spec-cynai-agents-planapprovedpmatasked"></a>
 
-Traces To:
+### Plan Approved PMA Tasked to Add or Update Tasks Requirements Traces
 
 - [REQ-PROJCT-0122](../requirements/projct.md#req-projct-0122)
 
@@ -406,7 +406,7 @@ The following requirements apply.
 
 - Spec ID: `CYNAI.AGENTS.ProjectManagerPreferenceUsage` <a id="spec-cynai-agents-pmpreferenceusage"></a>
 
-Traces To:
+#### Preference Usage Applicable Requirements Requirements Traces
 
 - [REQ-AGENTS-0111](../requirements/agents.md#req-agents-0111)
 - [REQ-AGENTS-0112](../requirements/agents.md#req-agents-0112)
@@ -423,7 +423,7 @@ Sub-agents run as long-lived, focused workers that watch task state and validate
 
 - Spec ID: `CYNAI.AGENTS.ProjectManagerSubAgent` <a id="spec-cynai-agents-pmsubagent"></a>
 
-Traces To:
+#### Sub-Agent Model Applicable Requirements Requirements Traces
 
 - [REQ-AGENTS-0120](../requirements/agents.md#req-agents-0120)
 - [REQ-AGENTS-0121](../requirements/agents.md#req-agents-0121)

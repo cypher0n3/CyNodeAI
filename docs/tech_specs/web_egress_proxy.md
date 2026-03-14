@@ -1,14 +1,32 @@
 # Web Egress Proxy
 
 - [Document Overview](#document-overview)
+  - [Traces to Requirements](#traces-to-requirements)
 - [Service Purpose](#service-purpose)
+  - [Service Purpose Requirements Traces](#service-purpose-requirements-traces)
 - [Threat Model and Assumptions](#threat-model-and-assumptions)
+  - [Threat Model Assumptions](#threat-model-assumptions)
+  - [Threat Model and Assumptions Requirements Traces](#threat-model-and-assumptions-requirements-traces)
 - [Architecture and Data Flow](#architecture-and-data-flow)
+  - [Architecture and Data Flow Rationale](#architecture-and-data-flow-rationale)
+  - [Architecture Notes](#architecture-notes)
+  - [Architecture and Data Flow Requirements Traces](#architecture-and-data-flow-requirements-traces)
 - [Policy Model and Allowlisting](#policy-model-and-allowlisting)
+  - [Destination Normalization](#destination-normalization)
+  - [Allowlist Entry Model](#allowlist-entry-model)
+  - [Recommended Default Allowlist for Dependency Downloads](#recommended-default-allowlist-for-dependency-downloads)
+  - [DNS and Private Network Protections](#dns-and-private-network-protections)
 - [Dynamic Temporary Allowlist Exceptions](#dynamic-temporary-allowlist-exceptions)
+  - [Intended Use Cases](#intended-use-cases)
+  - [Dynamic Allowlist Request Model](#dynamic-allowlist-request-model)
+  - [Who Can Request Dynamic Entries](#who-can-request-dynamic-entries)
 - [Proxy Protocol and Client Compatibility](#proxy-protocol-and-client-compatibility)
+  - [Compatibility Notes](#compatibility-notes)
+  - [Proxy Protocol and Client Compatibility Requirements Traces](#proxy-protocol-and-client-compatibility-requirements-traces)
 - [Node and Sandbox Integration](#node-and-sandbox-integration)
+  - [Node and Sandbox Integration Requirements Traces](#node-and-sandbox-integration-requirements-traces)
 - [Auditing and Observability](#auditing-and-observability)
+  - [Auditing and Observability Requirements Traces](#auditing-and-observability-requirements-traces)
 - [Non-Goals](#non-goals)
 
 ## Document Overview
@@ -26,7 +44,7 @@ The Web Egress Proxy is distinct from:
 - Secure Browser Service, which fetches web pages and returns sanitized text.
   See [`docs/tech_specs/secure_browser_service.md`](secure_browser_service.md).
 
-Traces To:
+### Traces to Requirements
 
 - [REQ-WEBPRX-0100](../requirements/webprx.md#req-webprx-0100)
 - [REQ-WEBPRX-0101](../requirements/webprx.md#req-webprx-0101)
@@ -46,7 +64,7 @@ Primary goals:
 - Attribute egress activity to `task_id` and `job_id` for auditing.
 - Avoid exposing any long-lived secrets to sandboxes.
 
-Traces To:
+### Service Purpose Requirements Traces
 
 - [REQ-WEBPRX-0100](../requirements/webprx.md#req-webprx-0100)
 - [REQ-WEBPRX-0103](../requirements/webprx.md#req-webprx-0103)
@@ -56,7 +74,7 @@ Traces To:
 
 - Spec ID: `CYNAI.WEBPRX.ThreatModel.WebEgressProxy` <a id="spec-cynai-webprx-threatmodel-webegressproxy"></a>
 
-Assumptions:
+### Threat Model Assumptions
 
 - Sandbox code is untrusted.
 - Sandboxes are egress-restricted by default.
@@ -75,7 +93,7 @@ Threats this service does not fully eliminate:
 - Exfiltration via allowlisted destinations, including steganography within allowed protocols.
 - Dependency-based attacks (malicious packages) when an allowlisted registry is used.
 
-Traces To:
+### Threat Model and Assumptions Requirements Traces
 
 - [REQ-WEBPRX-0101](../requirements/webprx.md#req-webprx-0101)
 - [REQ-WEBPRX-0102](../requirements/webprx.md#req-webprx-0102)
@@ -91,17 +109,17 @@ High-level model:
 - The orchestrator service enforces allowlist and policy, performs DNS and private-network protections, and emits audit records.
 - The orchestrator service proxies the allowed request to the destination and streams the response back.
 
-Rationale:
+### Architecture and Data Flow Rationale
 
 - A node-local endpoint avoids requiring sandbox authentication and avoids embedding proxy credentials in sandbox config.
 - The orchestrator remains the central policy and audit point.
 
-Notes:
+### Architecture Notes
 
 - This spec intentionally does not constrain whether the node-local proxy is a process, a container sidecar, or a built-in Worker API feature.
 - This spec also does not constrain the exact transport between the node-local proxy and the orchestrator, as long as it is authenticated and auditable.
 
-Traces To:
+### Architecture and Data Flow Requirements Traces
 
 - [REQ-WEBPRX-0100](../requirements/webprx.md#req-webprx-0100)
 - [REQ-WEBPRX-0103](../requirements/webprx.md#req-webprx-0103)
@@ -121,7 +139,7 @@ The proxy normalizes every request into a destination tuple:
 - `host`: a DNS hostname (not an IP literal)
 - `port`: integer
 
-Rules:
+#### Destination Normalization Rules
 
 - IP-literal hosts are rejected.
 - `https` requests are proxied using the HTTP `CONNECT` method.
@@ -168,7 +186,7 @@ Recommended starting set:
   - `pypi.org`
   - `files.pythonhosted.org`
 
-Notes:
+#### Policy Notes
 
 - Direct VCS fetches (for example Go fetching from arbitrary Git hosts) should be avoided in favor of registry or proxy patterns.
 - Git remote operations remain governed by Git egress.
@@ -184,7 +202,7 @@ Recommended checks:
 - Reject destinations that resolve to multiple IPs if any resolved IP is private or reserved.
 - Enforce that redirects (including `Location` and 30x chains) are separately allowlisted under the same rules.
 
-Traces To:
+#### DNS and Private Network Protections Requirements Traces
 
 - [REQ-WEBPRX-0101](../requirements/webprx.md#req-webprx-0101)
 - [REQ-WEBPRX-0102](../requirements/webprx.md#req-webprx-0102)
@@ -231,7 +249,7 @@ Recommended approval policy:
 - Require a human-visible audit record including reason, duration, and the exact hosts.
 - When enabled, approve only entries that satisfy strict host and network constraints.
 
-Traces To:
+#### Who Can Request Dynamic Entries Requirements Traces
 
 - [REQ-WEBPRX-0104](../requirements/webprx.md#req-webprx-0104)
 - [REQ-WEBPRX-0105](../requirements/webprx.md#req-webprx-0105)
@@ -247,12 +265,12 @@ Compatibility should include:
 - HTTPS via `CONNECT` tunneling.
 - Standard proxy environment variables for sandbox tooling (`HTTP_PROXY`, `HTTPS_PROXY`, and `NO_PROXY`).
 
-Notes:
+### Compatibility Notes
 
 - The proxy does not need to implement content rewriting.
 - The proxy should avoid requiring proxy authentication from inside the sandbox.
 
-Traces To:
+### Proxy Protocol and Client Compatibility Requirements Traces
 
 - [REQ-WEBPRX-0100](../requirements/webprx.md#req-webprx-0100)
 
@@ -277,7 +295,7 @@ Node configuration integration:
 - The node startup configuration includes `sandbox.allowed_egress_domains` for allowlist-based policy.
   See [`docs/tech_specs/worker_node.md`](worker_node.md).
 
-Traces To:
+### Node and Sandbox Integration Requirements Traces
 
 - [REQ-SANDBX-0101](../requirements/sandbx.md#req-sandbx-0101)
 - [REQ-SANDBX-0112](../requirements/sandbx.md#req-sandbx-0112)
@@ -305,7 +323,7 @@ Observability notes:
 - Audit log volume can be high for package downloads.
   Implementations may aggregate by destination and time window as long as allow and deny decisions remain auditable.
 
-Traces To:
+### Auditing and Observability Requirements Traces
 
 - [REQ-WEBPRX-0103](../requirements/webprx.md#req-webprx-0103)
 

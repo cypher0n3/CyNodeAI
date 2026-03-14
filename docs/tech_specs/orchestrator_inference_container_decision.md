@@ -21,7 +21,7 @@
 This spec defines how the orchestrator deterministically decides what inference container instruction to include in the node configuration payload when a worker node registers (or re-registers at startup).
 Same capability report and policy MUST yield the same `inference_backend` result so that node behavior is predictable and testable.
 
-Traces To:
+### Traces To
 
 - [REQ-ORCHES-0149](../requirements/orches.md#req-orches-0149)
 

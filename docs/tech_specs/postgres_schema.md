@@ -48,6 +48,7 @@
   - [Runs Table](#runs-table)
   - [Sessions Table](#sessions-table)
 - [Chat Threads and Messages](#chat-threads-and-messages)
+  - [Source Documents](#source-documents)
   - [Chat Threads Table](#chat-threads-table)
   - [Chat Messages Table](#chat-messages-table)
   - [Chat Message Attachments Table](#chat-message-attachments-table)
@@ -100,7 +101,7 @@ Implementations MUST keep the Go database models and schema bootstrap logic in s
 
 All orchestrator PostgreSQL access MUST use GORM per [Go SQL database standards](go_sql_database_standards.md#spec-cynai-stands-gosqlgorm).
 
-Traces To:
+#### Traces to Requirements
 
 - [REQ-SCHEMA-0100](../requirements/schema.md#req-schema-0100)
 - [REQ-SCHEMA-0101](../requirements/schema.md#req-schema-0101)
@@ -977,7 +978,7 @@ Chat threads and chat messages store chat history separately from task lifecycle
 Chat message content MUST be the amended (redacted) content.
 Plaintext secrets MUST NOT be persisted in chat message content.
 
-Source:
+### Source Documents
 
 - [`docs/tech_specs/chat_threads_and_messages.md`](chat_threads_and_messages.md)
 - [`docs/tech_specs/openai_compatible_chat_api.md`](openai_compatible_chat_api.md)
@@ -1080,7 +1081,14 @@ Vector storage is used to support retrieval and semantic search over task-relate
 
 - Spec ID: `CYNAI.SCHEMA.VectorStorage` <a id="spec-cynai-schema-vectorstorage"></a>
 
-Traces To:
+#### Recommended Behavior
+
+- Prefer cosine distance for similarity search.
+- Use an approximate index (HNSW when available; otherwise IVFFLAT) to keep queries fast at scale.
+- Store only sanitized, policy-allowed content in vector storage.
+- Keep similarity search queries isolated in a repository layer so they can be tuned without changing callers.
+
+#### Vector Storage Applicable Requirements Requirements Traces
 
 - [REQ-SCHEMA-0106](../requirements/schema.md#req-schema-0106)
 - [REQ-SCHEMA-0107](../requirements/schema.md#req-schema-0107)
@@ -1089,13 +1097,6 @@ Traces To:
 - [REQ-SCHEMA-0110](../requirements/schema.md#req-schema-0110)
 - [REQ-SCHEMA-0111](../requirements/schema.md#req-schema-0111)
 - [REQ-ACCESS-0125](../requirements/access.md#req-access-0125)
-
-Recommended behavior
-
-- Prefer cosine distance for similarity search.
-- Use an approximate index (HNSW when available; otherwise IVFFLAT) to keep queries fast at scale.
-- Store only sanitized, policy-allowed content in vector storage.
-- Keep similarity search queries isolated in a repository layer so they can be tuned without changing callers.
 
 ### Vector Items Table
 
@@ -1167,7 +1168,7 @@ WITH (m = 16, ef_construction = 200);
 Vector retrieval MUST NOT bypass RBAC.
 Similarity search is only allowed within an already-authorized document set; authorization MUST be applied in SQL before similarity ranking.
 
-Traces To:
+#### Vector Retrieval and RBAC Requirements Traces
 
 - [REQ-ACCESS-0121](../requirements/access.md#req-access-0121)
 - [REQ-ACCESS-0122](../requirements/access.md#req-access-0122)

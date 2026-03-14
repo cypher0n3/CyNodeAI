@@ -24,7 +24,7 @@ Image metadata and capabilities are stored in PostgreSQL for planning, routing, 
 The user MAY configure a rank-ordered list of container registries for sandbox images.
 When the list is empty or not specified in deployment or node configuration, the system MUST use a single default registry: Docker Hub (`docker.io`).
 
-Traces To:
+### Traces to Requirements
 
 - [REQ-SANDBX-0115](../requirements/sandbx.md#req-sandbx-0115)
 - [REQ-SANDBX-0116](../requirements/sandbx.md#req-sandbx-0116)
@@ -49,7 +49,7 @@ When only the default is used, nodes pull from `docker.io` according to allowed 
 Agents MUST NOT push images directly to the registry.
 Instead, agents submit a publish request to the orchestrator, which performs validation and publishing.
 
-Traces To:
+### Image Publishing Workflow Requirements Traces
 
 - [REQ-SANDBX-0117](../requirements/sandbx.md#req-sandbx-0117)
 
@@ -86,7 +86,7 @@ Recommended behavior
 Allowed images and their capabilities MUST be stored in PostgreSQL.
 This enables the Project Manager Agent to choose a sandbox environment appropriate for a task.
 
-Traces To:
+### Allowed Images and Capabilities Requirements Traces
 
 - [REQ-SANDBX-0118](../requirements/sandbx.md#req-sandbx-0118)
 
@@ -155,7 +155,7 @@ Constraints
 
 Sandbox images MUST be distinguishable so that the system launches only CyNodeAI-compatible containers for agent workloads, unless the task is a basic command task that can run safely in a generic container.
 
-Traces To:
+### Image Compatibility Marking and Task Type Requirements Traces
 
 - [REQ-SANDBX-0124](../requirements/sandbx.md#req-sandbx-0124)
 
@@ -190,7 +190,7 @@ Images that are built for full CyNodeAI agent sandbox use (session sandboxes, MC
 Sandbox image registry behavior SHOULD be configurable via PostgreSQL preferences.
 These preferences are user-facing task-execution preferences and constraints, not deployment or service configuration.
 
-Traces To:
+### Preferences and Constraints Requirements Traces
 
 - [REQ-SANDBX-0119](../requirements/sandbx.md#req-sandbx-0119)
 
@@ -211,7 +211,7 @@ Suggested preference keys
 
 Publishing and use of sandbox images MUST be policy-controlled and audited.
 
-Traces To:
+### Access Control and Auditing Requirements Traces
 
 - [REQ-SANDBX-0120](../requirements/sandbx.md#req-sandbx-0120)
 
@@ -229,7 +229,7 @@ Traces To:
 
 - Spec ID: `CYNAI.SANDBX.PMAgentAddToAllowedImages` <a id="spec-cynai-sandbx-pmagentaddtoallowedimages"></a>
 
-Traces To:
+#### PM Agent Add to Allowed Images Requirements Traces
 
 - [REQ-SANDBX-0125](../requirements/sandbx.md#req-sandbx-0125)
 

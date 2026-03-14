@@ -45,7 +45,7 @@ This spec implements those requirements and adds implementation detail for the N
 
 - Spec ID: `CYNAI.CLIENT.WebConsoleCapabilityParity` <a id="spec-cynai-client-webconcapabilityparity"></a>
 
-Traces To:
+### Traces to Requirements
 
 - [REQ-CLIENT-0004](../requirements/client.md#req-client-0004)
 
@@ -72,7 +72,7 @@ The following requirements apply.
 
 - Spec ID: `CYNAI.WEBCON.Security` <a id="spec-cynai-webcon-security"></a>
 
-Traces To:
+#### Security Model Applicable Requirements Requirements Traces
 
 - [REQ-WEBCON-0001](../requirements/webcon.md#req-webcon-0001)
 - [REQ-WEBCON-0100](../requirements/webcon.md#req-webcon-0100)
@@ -104,7 +104,7 @@ Credential types: API Egress credentials (external model providers, SaaS APIs) a
 
 - Spec ID: `CYNAI.WEBCON.Credential` <a id="spec-cynai-webcon-credential"></a>
 
-Traces To:
+#### Credential Management Applicable Requirements Requirements Traces
 
 - [REQ-CLIENT-0116](../requirements/client.md#req-client-0116)
 - [REQ-CLIENT-0117](../requirements/client.md#req-client-0117)
@@ -124,7 +124,7 @@ It MUST provide an easy method for users to create, read, update, and delete the
 
 - Spec ID: `CYNAI.WEBCON.Preferences` <a id="spec-cynai-webcon-preferences"></a>
 
-Traces To:
+#### Preferences Management Applicable Requirements Requirements Traces
 
 - [REQ-CLIENT-0121](../requirements/client.md#req-client-0121)
 - [REQ-CLIENT-0122](../requirements/client.md#req-client-0122)
@@ -154,7 +154,7 @@ The following keys MUST be surfaced for MVP:
 
 - Spec ID: `CYNAI.WEBCON.SystemSettings` <a id="spec-cynai-webcon-systemsettings"></a>
 
-Traces To:
+### System Settings Management Requirements Traces
 
 - [REQ-CLIENT-0160](../requirements/client.md#req-client-0160)
 
@@ -174,7 +174,7 @@ Key semantics and the PM model selection/warmup algorithm are defined in [Projec
 
 - Spec ID: `CYNAI.WEBCON.SkillsManagement` <a id="spec-cynai-webcon-skillsmanagement"></a>
 
-Traces To:
+### Skills Management Requirements Traces
 
 - [REQ-WEBCON-0112](../requirements/webcon.md#req-webcon-0112)
 
@@ -193,7 +193,7 @@ UI MUST provide the following.
 
 - Spec ID: `CYNAI.WEBCON.PersonasManagement` <a id="spec-cynai-webcon-personasmanagement"></a>
 
-Traces To:
+### Personas Management Requirements Traces
 
 - [REQ-CLIENT-0179](../requirements/client.md#req-client-0179)
 
@@ -212,7 +212,7 @@ UI MUST provide:
 
 - Spec ID: `CYNAI.WEBCON.ProjectManagement` <a id="spec-cynai-webcon-projectmanagement"></a>
 
-Traces To:
+### Project Management Requirements Traces
 
 - [REQ-CLIENT-0174](../requirements/client.md#req-client-0174)
 
@@ -235,7 +235,7 @@ This MUST include inventory views, health status, and safe administrative contro
 
 - Spec ID: `CYNAI.WEBCON.NodeManagement` <a id="spec-cynai-webcon-nodemanagement"></a>
 
-Traces To:
+#### Node Management Applicable Requirements Requirements Traces
 
 - [REQ-CLIENT-0125](../requirements/client.md#req-client-0125)
 - [REQ-CLIENT-0126](../requirements/client.md#req-client-0126)
@@ -256,7 +256,7 @@ The console is a user-facing client and MUST interact with CyNodeAI only through
 
 - Spec ID: `CYNAI.WEBCON.Implementation` <a id="spec-cynai-webcon-implementation"></a>
 
-Traces To:
+#### Implementation Specification Applicable Requirements Requirements Traces
 
 - [REQ-WEBCON-0105](../requirements/webcon.md#req-webcon-0105)
 - [REQ-WEBCON-0106](../requirements/webcon.md#req-webcon-0106)
@@ -291,7 +291,7 @@ Build and runtime
 
 - Spec ID: `CYNAI.WEBCON.RuntimeAndDeployment` <a id="spec-cynai-webcon-runtimeanddeployment"></a>
 
-Traces To:
+#### Runtime Port and Container Requirements Traces
 
 - [REQ-WEBCON-0114](../requirements/webcon.md#req-webcon-0114)
 - [REQ-WEBCON-0115](../requirements/webcon.md#req-webcon-0115)
@@ -338,7 +338,7 @@ Implementation MUST use one of: a session cookie issued by the gateway after log
 
 - Spec ID: `CYNAI.WEBCON.AuthModel` <a id="spec-cynai-webcon-authmodel"></a>
 
-Traces To:
+#### Authentication Model Applicable Requirements Requirements Traces
 
 - [REQ-WEBCON-0108](../requirements/webcon.md#req-webcon-0108)
 - [REQ-WEBCON-0109](../requirements/webcon.md#req-webcon-0109)
@@ -378,7 +378,7 @@ Production deployments MUST enforce HTTPS per [REQ-WEBCON-0110](../requirements/
 
 - Spec ID: `CYNAI.WEBCON.Deployment` <a id="spec-cynai-webcon-deployment"></a>
 
-Traces To:
+#### Deployment Options Applicable Requirements Requirements Traces
 
 - [REQ-WEBCON-0110](../requirements/webcon.md#req-webcon-0110)
 - [REQ-WEBCON-0111](../requirements/webcon.md#req-webcon-0111)
@@ -407,7 +407,7 @@ See [`docs/tech_specs/user_api_gateway.md`](user_api_gateway.md) and [`docs/tech
 
 - Spec ID: `CYNAI.WEBCON.SwaggerUi` <a id="spec-cynai-webcon-swaggerui"></a>
 
-Traces To:
+### API Documentation (Swagger UI) Requirements Traces
 
 - [REQ-WEBCON-0113](../requirements/webcon.md#req-webcon-0113)
 

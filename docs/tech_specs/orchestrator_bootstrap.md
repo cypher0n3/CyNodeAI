@@ -37,7 +37,7 @@ Preferences and system settings are distinct: preferences are user task-executio
 
 - Spec ID: `CYNAI.BOOTST.BootstrapSource` <a id="spec-cynai-bootst-bootstrapsource"></a>
 
-Traces To:
+#### Traces to Requirements
 
 - [REQ-BOOTST-0100](../requirements/bootst.md#req-bootst-0100)
 - [REQ-BOOTST-0101](../requirements/bootst.md#req-bootst-0101)
@@ -107,7 +107,7 @@ Secrets
 
 - Spec ID: `CYNAI.BOOTST.OrchestratorIndependentStartup` <a id="spec-cynai-bootst-orchestratorindependentstartup"></a>
 
-Traces To:
+### Orchestrator Independent Startup Requirements Traces
 
 - [REQ-BOOTST-0105](../requirements/bootst.md#req-bootst-0105)
 
@@ -122,7 +122,7 @@ OLLAMA (or equivalent local inference backend) is a **node-side** concern: worke
 
 - Spec ID: `CYNAI.BOOTST.WorkerNodeRequirement` <a id="spec-cynai-bootst-workernoderequirement"></a>
 
-Traces To:
+### Worker Node Requirement Requirements Traces
 
 - [REQ-ORCHES-0116](../requirements/orches.md#req-orches-0116)
 
@@ -134,7 +134,7 @@ The orchestrator MUST NOT assume it can run as the sole service with zero worker
 
 - Spec ID: `CYNAI.BOOTST.DeploymentAutoStart` <a id="spec-cynai-bootst-deploymentautostart"></a>
 
-Traces To:
+### Deployment and Auto-Start Requirements Traces
 
 - [REQ-BOOTST-0104](../requirements/bootst.md#req-bootst-0104)
 
@@ -148,7 +148,7 @@ Orchestrator deployments MUST support auto-start on the host so that the orchest
 
 - Spec ID: `CYNAI.BOOTST.OrchestratorReadinessAndPmaStartup` <a id="spec-cynai-bootst-orchestratorreadinessandpmastartup"></a>
 
-Traces To:
+### Orchestrator Readiness and PMA Startup Requirements Traces
 
 - [REQ-BOOTST-0002](../requirements/bootst.md#req-bootst-0002)
 - [REQ-ORCHES-0117](../requirements/orches.md#req-orches-0117)

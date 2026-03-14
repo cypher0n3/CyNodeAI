@@ -53,7 +53,7 @@ The following requirements apply.
 
 - Spec ID: `CYNAI.ACCESS.GroupMembership` <a id="spec-cynai-access-groupmembership"></a>
 
-Traces To:
+#### Traces to Requirements
 
 - [REQ-ACCESS-0100](../requirements/access.md#req-access-0100)
 - [REQ-ACCESS-0101](../requirements/access.md#req-access-0101)
@@ -112,7 +112,7 @@ The following requirements apply.
 
 - Spec ID: `CYNAI.ACCESS.RbacModel` <a id="spec-cynai-access-rbacmodel"></a>
 
-Traces To:
+#### RBAC Model Applicable Requirements Requirements Traces
 
 - [REQ-ACCESS-0105](../requirements/access.md#req-access-0105)
 - [REQ-ACCESS-0106](../requirements/access.md#req-access-0106)
@@ -167,7 +167,7 @@ Permission mapping
 
 - Spec ID: `CYNAI.ACCESS.ProjectPlanLockRbac` <a id="spec-cynai-access-projectplanlockrbac"></a>
 
-Traces To:
+#### Project Plan Lock RBAC Requirements Traces
 
 - [REQ-PROJCT-0116](../requirements/projct.md#req-projct-0116)
 
@@ -187,7 +187,7 @@ The following requirements apply.
 
 - Spec ID: `CYNAI.ACCESS.PolicyEvaluation` <a id="spec-cynai-access-policyevaluation"></a>
 
-Traces To:
+#### Policy Evaluation Integration Applicable Requirements Requirements Traces
 
 - [REQ-ACCESS-0109](../requirements/access.md#req-access-0109)
 - [REQ-ACCESS-0110](../requirements/access.md#req-access-0110)
@@ -210,7 +210,7 @@ The following requirements apply.
 
 - Spec ID: `CYNAI.ACCESS.UserApiDataRest` <a id="spec-cynai-access-userapirest"></a>
 
-Traces To:
+#### User API and Data REST Resources Applicable Requirements Requirements Traces
 
 - [REQ-ACCESS-0112](../requirements/access.md#req-access-0112)
 - [REQ-ACCESS-0120](../requirements/access.md#req-access-0120)

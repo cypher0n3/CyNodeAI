@@ -3,9 +3,13 @@
 - [Document Overview](#document-overview)
 - [Goals and Non-Goals](#goals-and-non-goals)
 - [Project Git Repos Model](#project-git-repos-model)
+  - [`ProjectGitRepos` Type](#projectgitrepos-type)
 - [Repo Identifier Format (GitHub, GitLab, Gitea)](#repo-identifier-format-github-gitlab-gitea)
+  - [`RepoIdentifierFormat` Rule](#repoidentifierformat-rule)
 - [Project Git Repos and Git Egress](#project-git-repos-and-git-egress)
+  - [Git Egress Project-Scoped Allowlist](#git-egress-project-scoped-allowlist)
 - [MCP and Admin Surfaces](#mcp-and-admin-surfaces)
+  - [`ProjectGitReposMcp` Operation](#projectgitreposmcp-operation)
 - [MVP Notes](#mvp-notes)
 
 ## Document Overview
@@ -37,52 +41,52 @@ Non-goals
 
 Projects may have multiple Git repository associations stored in the database.
 
-### 1 `ProjectGitRepos` Type
+### `ProjectGitRepos` Type
 
 - Spec ID: `CYNAI.PROJCT.ProjectGitRepos` <a id="spec-cynai-projct-projectgitrepos"></a>
-
-Traces To:
-
-- [REQ-PROJCT-0106](../requirements/projct.md#req-projct-0106)
 
 A project MAY have zero or more associated Git repositories.
 Each association is stored as a row in `project_git_repos` with `project_id`, `provider`, `repo_identifier`, optional `base_url`, and optional fields for display and organization (e.g. `display_name`, `description`, `tags`, `metadata`).
 The same logical repo (same provider and repo_identifier) MAY be associated with multiple projects.
 Uniqueness is enforced per project: (`project_id`, `provider`, `repo_identifier`) MUST be unique.
 
-Storage
+#### `ProjectGitRepos` Storage
 
 - Canonical table: `project_git_repos` per [`docs/tech_specs/postgres_schema.md`](postgres_schema.md#spec-cynai-schema-projectgitrepostable).
 - Foreign key: `project_id` references `projects.id`; referential integrity MUST be enforced (e.g. on delete cascade or restrict per deployment policy).
 - Additional information: `display_name` (user-facing label), `description` (role or purpose in this project), `tags` (jsonb array of strings for filtering/grouping), `metadata` (jsonb for future extension).
 
-Use in tasks
+#### Use in Tasks
 
 - When a task has a non-null `project_id`, Git egress operations for that task MUST restrict allowed repos to those associated with that project (see [Project Git Repos and Git Egress](#project-git-repos-and-git-egress)).
+
+#### `ProjectGitRepos` Type Requirements Traces
+
+- [REQ-PROJCT-0106](../requirements/projct.md#req-projct-0106)
 
 ## Repo Identifier Format (GitHub, GitLab, Gitea)
 
 Provider and repo identifier formats below align with common Git hosting as of 2026.
 
-### 1 `RepoIdentifierFormat` Rule
+### `RepoIdentifierFormat` Rule
 
 - Spec ID: `CYNAI.PROJCT.RepoIdentifierFormat` <a id="spec-cynai-projct-repoidentifierformat"></a>
 
-Traces To:
+#### Repo Identifier Format Requirements Traces
 
 - [REQ-PROJCT-0107](../requirements/projct.md#req-projct-0107)
 - [REQ-PROJCT-0108](../requirements/projct.md#req-projct-0108)
 
-#### 1.1 `RepoIdentifierFormat` Scope
+#### `RepoIdentifierFormat` Scope
 
 Applicable to all project git repo associations and to Git egress request validation when project-scoped allowlist is used.
 
-#### 1.2 `RepoIdentifierFormat` Preconditions
+#### `RepoIdentifierFormat` Preconditions
 
 - `provider` is any provider identifier for which the system has support (e.g. github, gitlab, gitea; additional providers MAY be added later without schema change).
 - `repo_identifier` is a non-empty string that uniquely identifies the repository on the given provider (and base_url when present).
 
-#### 1.3 `RepoIdentifierFormat` Outcomes
+#### `RepoIdentifierFormat` Outcomes
 
 Semantics are defined per supported provider; the following are the canonical formats for commonly supported providers.
 Additional providers follow the same pattern (provider key, repo_identifier format, optional base_url).
@@ -106,13 +110,9 @@ Normalization
 
 When a task has a project_id, Git egress uses the project's associated repos as the allowlist.
 
-### 1 Git Egress Project-Scoped Allowlist
+### Git Egress Project-Scoped Allowlist
 
 - Spec ID: `CYNAI.APIEGR.GitEgressProjectScope` <a id="spec-cynai-apiegr-gitegressprojectscope"></a>
-
-Traces To:
-
-- [REQ-APIEGR-0127](../requirements/apiegr.md#req-apiegr-0127)
 
 When a Git egress request includes a task that has a non-null `project_id`, the service MUST resolve the task's project and MUST allow only operations targeting repos that appear in that project's `project_git_repos` set (matching `provider` and `repo_identifier`; when the request or stored row has a `base_url`, both MUST match).
 If the requested provider/repo (and base_url when applicable) is not in the project's associated repos, the request MUST be denied with a structured error indicating project-scoped allowlist violation.
@@ -120,20 +120,24 @@ When the task has no project_id, existing global or user/group allowlist policy 
 
 See [`docs/tech_specs/git_egress_mcp.md`](git_egress_mcp.md) for the Git egress tool interface and access control.
 
+#### Git Egress Project-Scoped Allowlist Requirements Traces
+
+- [REQ-APIEGR-0127](../requirements/apiegr.md#req-apiegr-0127)
+
 ## MCP and Admin Surfaces
 
 Project git repo associations are managed via MCP tools and admin clients with project-scoped authorization.
 
-### 1 `ProjectGitReposMcp` Operation
+### `ProjectGitReposMcp` Operation
 
 - Spec ID: `CYNAI.PROJCT.ProjectGitReposMcp` <a id="spec-cynai-projct-projectgitreposmcp"></a>
 
-Traces To:
-
-- [REQ-PROJCT-0109](../requirements/projct.md#req-projct-0109)
-
 Project git repo associations MUST be manageable via MCP tools and admin clients (Web Console and CLI) with the same authorization model as project list/get: the subject MAY only list, add, update, or remove repo associations for projects they are authorized to access (default project plus projects for which they or their groups have a role binding).
 Tool names and argument schemas (e.g. list repos for a project, add repo, remove repo) are defined in the MCP tool catalog; implementations MUST enforce project-scoped access and MUST NOT return or modify repos for projects outside the subject's authorized set.
+
+#### ProjectGitRepos MCP Requirements Traces
+
+- [REQ-PROJCT-0109](../requirements/projct.md#req-projct-0109)
 
 ## MVP Notes
 

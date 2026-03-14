@@ -1,21 +1,31 @@
 # OpenAI-Compatible Chat API
 
 - [Document Overview](#document-overview)
+  - [Traces to Requirements](#traces-to-requirements)
 - [Single Chat Surface](#single-chat-surface)
+  - [Single Chat Surface Requirements Traces](#single-chat-surface-requirements-traces)
 - [Compatibility Goals](#compatibility-goals)
+  - [Compatibility Goals Requirements Traces](#compatibility-goals-requirements-traces)
 - [Endpoints](#endpoints)
   - [Provider Interoperability](#provider-interoperability)
   - [Forward Compatibility](#forward-compatibility)
   - [Project Scoping](#project-scoping)
   - [Model Identifiers](#model-identifiers)
 - [Text Input and File References](#text-input-and-file-references)
+  - [Text Input and File References Requirements Traces](#text-input-and-file-references-requirements-traces)
   - [At-Reference Workflow](#at-reference-workflow)
 - [Chat Model Warm-Up](#chat-model-warm-up)
   - [When the Endpoint is Implemented](#when-the-endpoint-is-implemented)
 - [Conversation Model](#conversation-model)
   - [State Model](#state-model)
   - [Thread Identifiers and Association](#thread-identifiers-and-association)
+- [Streaming](#streaming)
+  - [Streaming Event Requirements](#streaming-event-requirements)
+  - [Persistence and Reconciliation Requirements](#persistence-and-reconciliation-requirements)
+  - [Streaming Traces To](#streaming-traces-to)
 - [Normalized Assistant Output](#normalized-assistant-output)
+  - [Normalization Rules](#normalization-rules)
+  - [Normalized Assistant Output Requirements Traces](#normalized-assistant-output-requirements-traces)
 - [Complete Chat Flow](#complete-chat-flow)
   - [Optional Explicit Thread Control](#optional-explicit-thread-control)
 - [Chat Completion Routing Path](#chat-completion-routing-path)
@@ -25,16 +35,22 @@
   - [What is Not Routed to the PM Agent](#what-is-not-routed-to-the-pm-agent)
   - [Routing Summary](#routing-summary)
 - [Tasks Versus Chat (Non-Goals)](#tasks-versus-chat-non-goals)
+  - [Tasks Versus Chat (Non-Goals) Requirements Traces](#tasks-versus-chat-non-goals-requirements-traces)
 - [Authentication, Policy, and Auditing](#authentication-policy-and-auditing)
+  - [Authentication Policy and Auditing Requirements Traces](#authentication-policy-and-auditing-requirements-traces)
 - [Gateway Timeouts and Long-Running Behavior](#gateway-timeouts-and-long-running-behavior)
+  - [Gateway Timeouts and Long-Running Behavior Requirements Traces](#gateway-timeouts-and-long-running-behavior-requirements-traces)
 - [Reliability Requirements](#reliability-requirements)
+  - [Reliability Requirements Requirements Traces](#reliability-requirements-requirements-traces)
 - [Error Semantics](#error-semantics)
   - [Error Format for OpenAI-Compatible Endpoints](#error-format-for-openai-compatible-endpoints)
   - [HTTP Status Mapping](#http-status-mapping)
 - [Observability](#observability)
+  - [Observability Requirements Traces](#observability-requirements-traces)
 - [Request Processing Pipeline](#request-processing-pipeline)
   - [Pipeline Steps (Order is Mandatory)](#pipeline-steps-order-is-mandatory)
 - [Context Compaction](#context-compaction)
+  - [Context Compaction Requirements Traces](#context-compaction-requirements-traces)
 - [Optional: Async Chat (Deferred)](#optional-async-chat-deferred)
 - [Related Documents](#related-documents)
 
@@ -51,7 +67,7 @@ Compatibility contract (pinned as of 2026-03-12):
 - The OpenAI REST API version header reported by the OpenAI API Overview is `openai-version: 2020-10-01` as of 2026-02-22.
 - Reference: [OpenAI API Overview](https://platform.openai.com/docs/api-reference), [Chat Completions API Reference](https://platform.openai.com/docs/api-reference/chat), and [Responses API Reference](https://platform.openai.com/docs/api-reference/responses).
 
-Traces To:
+### Traces to Requirements
 
 - [REQ-USRGWY-0121](../requirements/usrgwy.md#req-usrgwy-0121)
 - [REQ-USRGWY-0127](../requirements/usrgwy.md#req-usrgwy-0127)
@@ -59,6 +75,7 @@ Traces To:
 - [REQ-USRGWY-0137](../requirements/usrgwy.md#req-usrgwy-0137)
 - [REQ-USRGWY-0138](../requirements/usrgwy.md#req-usrgwy-0138)
 - [REQ-USRGWY-0140](../requirements/usrgwy.md#req-usrgwy-0140)
+- [REQ-USRGWY-0149](../requirements/usrgwy.md#req-usrgwy-0149)
 
 ## Single Chat Surface
 
@@ -67,7 +84,7 @@ Traces To:
 The User API Gateway MUST expose interactive chat only through the OpenAI-compatible API surface.
 There is no separate legacy chat endpoint.
 
-Traces To:
+### Single Chat Surface Requirements Traces
 
 - [REQ-USRGWY-0127](../requirements/usrgwy.md#req-usrgwy-0127)
 
@@ -81,7 +98,7 @@ The gateway MUST support:
 
 Compatibility layers MUST preserve orchestrator policy constraints and MUST NOT bypass auditing.
 
-Traces To:
+### Compatibility Goals Requirements Traces
 
 - [REQ-USRGWY-0121](../requirements/usrgwy.md#req-usrgwy-0121)
 
@@ -94,6 +111,7 @@ The gateway MUST provide:
 - `GET /v1/models` in OpenAI list-models format.
 - `POST /v1/chat/completions` in OpenAI chat-completions format.
 - `POST /v1/responses` in OpenAI responses format.
+- `stream=true` support on both interactive POST endpoints as defined in [Streaming](#streaming).
 
 The gateway MUST accept an OpenAI-format request body containing `messages: [{ role, content }, ...]`.
 The gateway MUST return an OpenAI-format response containing the completion content at `choices[0].message.content`.
@@ -142,17 +160,17 @@ The first-pass compatibility surface for both endpoints SHOULD also support norm
 
 - Spec ID: `CYNAI.USRGWY.OpenAIChatApi.TextInput` <a id="spec-cynai-usrgwy-openaichatapi-textinput"></a>
 
-Traces To:
-
-- [REQ-USRGWY-0140](../requirements/usrgwy.md#req-usrgwy-0140)
-- [REQ-CLIENT-0198](../requirements/client.md#req-client-0198)
-
 User-authored chat input is text-first.
 
 - For `POST /v1/chat/completions`, user `messages[].content` MUST accept a string containing plain text or Markdown syntax.
 - For `POST /v1/responses`, user `input` MUST accept either a plain string or an ordered message-like structure whose user-authored text content follows the same text and Markdown rules.
 - The gateway MUST preserve the user-visible text exactly enough for transcript rendering, subject to redaction rules.
 - Unsupported user-message rich-part types MUST fail validation rather than being silently dropped.
+
+### Text Input and File References Requirements Traces
+
+- [REQ-USRGWY-0140](../requirements/usrgwy.md#req-usrgwy-0140)
+- [REQ-CLIENT-0198](../requirements/client.md#req-client-0198)
 
 ### At-Reference Workflow
 
@@ -181,7 +199,7 @@ The gateway MAY expose an optional endpoint to warm the default (or a specified)
 - **Idempotency:** Multiple rapid warm-up calls for the same model (e.g. several tabs or restarts) MUST be safe; the implementation MAY debounce or ignore duplicate in-flight warm-up.
 - **Observability:** The implementation SHOULD log or emit a metric when warm-up is requested and when it succeeds or fails.
 
-Traces To:
+#### When the Endpoint is Implemented Requirements Traces
 
 - [REQ-USRGWY-0134](../requirements/usrgwy.md#req-usrgwy-0134)
 - [REQ-CLIENT-0177](../requirements/client.md#req-client-0177)
@@ -213,32 +231,69 @@ Multi-message conversation is the intended way to clarify and lay out a task (or
   The orchestrator MUST rotate to a new active thread after 2 hours of inactivity.
 - A thread associated with one effective project scope MUST NOT be silently reused for a different effective project scope.
 
-Traces To:
+#### Thread Identifiers and Association Requirements Traces
 
 - [REQ-USRGWY-0130](../requirements/usrgwy.md#req-usrgwy-0130)
+
+## Streaming
+
+- Spec ID: `CYNAI.USRGWY.OpenAIChatApi.Streaming` <a id="spec-cynai-usrgwy-openaichatapi-streaming"></a>
+
+The OpenAI-compatible interactive chat surface MUST support streaming mode for both `POST /v1/chat/completions` and `POST /v1/responses`.
+
+- When the client sends `stream=true`, the gateway MUST return a streaming response instead of waiting for the final assistant turn to complete before sending bytes.
+- The canonical transport for streaming mode is Server-Sent Events with `Content-Type: text/event-stream`.
+- The gateway MUST flush incremental events promptly enough for interactive terminal and web UI updates.
+- The gateway MUST NOT buffer the entire visible assistant answer and emit it only at completion on the standard streaming path.
+- The gateway MAY translate provider-native stream formats internally, but the external client contract MUST remain stable and OpenAI-compatible.
+- When a selected backend path cannot produce true visible-text deltas, the gateway SHOULD treat that path as degraded mode and still emit bounded in-progress status plus a terminal completion or error event rather than silently hanging until the final payload appears.
+- When the client closes or cancels the streaming request, the gateway MUST treat that request as canceled, stop or detach upstream generation work on a best-effort basis promptly, and release request-scoped resources even if the final assistant turn is incomplete.
+
+### Streaming Event Requirements
+
+- The stream MUST preserve event order for one logical assistant turn.
+- The stream MUST distinguish visible assistant text updates from hidden thinking or reasoning updates.
+- Hidden thinking or reasoning MUST NOT be emitted as canonical visible-text deltas.
+- Tool-progress updates SHOULD be emitted as explicit non-prose progress events when available.
+- The stream MUST end with a clear terminal completion event, terminal error event, or cancellation event so clients can reconcile the in-flight turn deterministically.
+- If the client disconnect prevents sending a final cancellation event, the gateway MUST still record and handle the request internally as canceled rather than allowing the stream job to run indefinitely.
+
+### Persistence and Reconciliation Requirements
+
+- Stream events are transport artifacts and MUST NOT be persisted as separate transcript rows.
+- The gateway MUST persist the final reconciled logical assistant turn using the same normalized structured-turn model defined elsewhere in this spec set.
+- The final canonical plain-text projection MUST be derived only from visible assistant text, whether that text arrived in one final payload or as ordered deltas.
+
+### Streaming Traces To
+
+- [REQ-USRGWY-0149](../requirements/usrgwy.md#req-usrgwy-0149)
+- [REQ-USRGWY-0150](../requirements/usrgwy.md#req-usrgwy-0150)
+- [REQ-CLIENT-0209](../requirements/client.md#req-client-0209)
 
 ## Normalized Assistant Output
 
 - Spec ID: `CYNAI.USRGWY.OpenAIChatApi.NormalizedAssistantOutput` <a id="spec-cynai-usrgwy-openaichatapi-normalizedassistantoutput"></a>
 
-Traces To:
-
-- [REQ-USRGWY-0136](../requirements/usrgwy.md#req-usrgwy-0136)
-- [REQ-USRGWY-0137](../requirements/usrgwy.md#req-usrgwy-0137)
-- [REQ-USRGWY-0138](../requirements/usrgwy.md#req-usrgwy-0138)
-
 The gateway MUST normalize provider-specific assistant output into one logical assistant turn for persistence and rich-client rendering.
 This follows the same broad UX pattern used by open source tools such as Open WebUI and LibreChat: the main answer stays readable, reasoning is secondary rather than merged into final prose, and tool activity is surfaced as distinct transcript items instead of being implied only by text.
 
-Normalization rules:
+### Normalization Rules
 
 - If the upstream provider returns only final visible text, the normalized assistant turn is a single `text` part and the canonical plain-text projection matches that text.
 - If the upstream provider returns reasoning, tool activity, file references, or multiple ordered output items, the gateway SHOULD project them into the structured turn model defined in [Chat Threads and Messages](chat_threads_and_messages.md#spec-cynai-usrgwy-chatthreadsmessages-structuredturns).
 - When one request yields multiple assistant-side output items, the gateway MUST preserve their order.
 - Reasoning or thinking content MUST NOT be copied into canonical plain-text transcript content such as `choices[0].message.content` or the plain-text projection used for thread titles, summaries, and list previews.
+- When the gateway retains thinking or reasoning content, it MUST keep that content only as structured assistant-turn data associated with the same logical assistant turn so authorized rich clients can reveal it later through thread history retrieval.
 - For `POST /v1/chat/completions`, the response surface remains the OpenAI chat-completions shape and therefore exposes only the canonical visible assistant text in `choices[0].message.content`.
 - For `POST /v1/responses`, the gateway MUST preserve the native responses-format shape while also persisting the same logical assistant turn in the normalized structured-turn model for retrieval and UI rendering.
 - Clients that ignore structured turn data MUST still receive a coherent answer from the canonical visible text alone.
+
+### Normalized Assistant Output Requirements Traces
+
+- [REQ-USRGWY-0136](../requirements/usrgwy.md#req-usrgwy-0136)
+- [REQ-USRGWY-0137](../requirements/usrgwy.md#req-usrgwy-0137)
+- [REQ-USRGWY-0138](../requirements/usrgwy.md#req-usrgwy-0138)
+- [REQ-USRGWY-0148](../requirements/usrgwy.md#req-usrgwy-0148)
 
 ## Complete Chat Flow
 
@@ -376,7 +431,7 @@ Users MAY create tasks manually through the task API or cynork task commands.
 If an implementation uses internal runs or jobs to produce a completion, that is an implementation detail.
 The external contract remains an interactive chat request and response.
 
-Traces To:
+### Tasks Versus Chat (Non-Goals) Requirements Traces
 
 - [REQ-USRGWY-0130](../requirements/usrgwy.md#req-usrgwy-0130)
 
@@ -387,7 +442,7 @@ Traces To:
 - Authentication MUST use the same Bearer token mechanism as the rest of the User API Gateway.
 - Requests MUST be subject to policy enforcement and MUST emit audit records.
 
-Traces To:
+### Authentication Policy and Auditing Requirements Traces
 
 - [REQ-USRGWY-0121](../requirements/usrgwy.md#req-usrgwy-0121)
 - [REQ-USRGWY-0124](../requirements/usrgwy.md#req-usrgwy-0124)
@@ -403,7 +458,7 @@ The gateway MUST support configuring these timeouts for deployments that use cha
 
 Documentation (dev_docs or operator docs) MUST describe the expected duration and required timeout tuning.
 
-Traces To:
+### Gateway Timeouts and Long-Running Behavior Requirements Traces
 
 - [REQ-USRGWY-0128](../requirements/usrgwy.md#req-usrgwy-0128)
 
@@ -419,7 +474,7 @@ The gateway handlers backing `POST /v1/chat/completions` and `POST /v1/responses
 - **Retry with backoff.**
   On transient orchestrator inference failures (for example connection error, 5xx, or model loading), the handler MUST retry a small number of times (for example 2-3) with short backoff before using a fallback path.
 
-Traces To:
+### Reliability Requirements Requirements Traces
 
 - [REQ-ORCHES-0131](../requirements/orches.md#req-orches-0131)
 - [REQ-ORCHES-0132](../requirements/orches.md#req-orches-0132)
@@ -459,7 +514,7 @@ Errors MUST NOT leak secrets.
 - Orchestrator inference failed: `502` or `503` depending on whether the failure is upstream or overload.
 - Completion timeout (poll cap reached): `504`.
 
-Traces To:
+#### HTTP Status Mapping Requirements Traces
 
 - [REQ-USRGWY-0129](../requirements/usrgwy.md#req-usrgwy-0129)
 
@@ -470,7 +525,7 @@ Traces To:
 The gateway MUST log which internal path was used for a completion (for example direct orchestrator inference versus fallback).
 The gateway MUST log timeouts and request cancellations.
 
-Traces To:
+### Observability Requirements Traces
 
 - [REQ-USRGWY-0129](../requirements/usrgwy.md#req-usrgwy-0129)
 
@@ -511,7 +566,7 @@ This section defines the required request-processing steps for interactive chat 
    - For `POST /v1/chat/completions`, return a chat-completions response where the content is present at `choices[0].message.content`.
    - For `POST /v1/responses`, return a responses-format object with a stable response `id` and the final text output in the normal responses shape.
 
-Traces To:
+#### Pipeline Steps (Order is Mandatory) Requirements Traces
 
 - [REQ-USRGWY-0121](../requirements/usrgwy.md#req-usrgwy-0121)
 - [REQ-USRGWY-0127](../requirements/usrgwy.md#req-usrgwy-0127)
@@ -521,11 +576,6 @@ Traces To:
 
 - Spec ID: `CYNAI.USRGWY.OpenAIChatApi.ContextCompaction` <a id="spec-cynai-usrgwy-openaichatapi-contextcompaction"></a>
 
-Traces To:
-
-- [REQ-USRGWY-0147](../requirements/usrgwy.md#req-usrgwy-0147)
-- [CYNAI.USRGWY.ChatThreadsMessages.ContextSizeTracking](chat_threads_and_messages.md#spec-cynai-usrgwy-chatthreadsmessages-contextsizetracking)
-
 When the effective context size for the next interactive chat completion reaches at least 95 percent of the selected model's effective context window, the gateway MUST compact older conversation context before issuing the next completion request.
 
 - The effective context window MUST be derived from the selected model identifier and the gateway's model-capability knowledge for that model path.
@@ -534,6 +584,11 @@ When the effective context size for the next interactive chat completion reaches
 - Context compaction MUST preserve enough recent unsummarized turns for the next user turn and expected assistant response to remain coherent.
 - The compacted summary artifact MUST be stored or injected in a thread-scoped derived form that is distinct from canonical raw user and assistant message content.
 - Compaction MUST NOT silently drop the most recent unsummarized user turn that triggered the request.
+
+### Context Compaction Requirements Traces
+
+- [REQ-USRGWY-0147](../requirements/usrgwy.md#req-usrgwy-0147)
+- [CYNAI.USRGWY.ChatThreadsMessages.ContextSizeTracking](chat_threads_and_messages.md#spec-cynai-usrgwy-chatthreadsmessages-contextsizetracking)
 
 ## Optional: Async Chat (Deferred)
 

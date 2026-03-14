@@ -3,8 +3,14 @@
 - [Spec IDs](#spec-ids)
 - [Document Overview](#document-overview)
 - [Core Concepts](#core-concepts)
+- [Project Plan Actions](#project-plan-actions)
+  - [`ProjectPlanActions` Scope](#projectplanactions-scope)
+  - [`ProjectPlanActions` Contract](#projectplanactions-contract)
 - [Policy Evaluation](#policy-evaluation)
+  - [Recommended Evaluation Order](#recommended-evaluation-order)
 - [Proposed Tables](#proposed-tables)
+  - [Access Control Rules Table](#access-control-rules-table)
+  - [Access Control Audit Log Table](#access-control-audit-log-table)
 - [Service Integration](#service-integration)
 
 ## Spec IDs
@@ -86,7 +92,7 @@ Implementations MUST use these exact strings when evaluating or recording policy
   - Meaning: Set or clear the archived flag on a plan (for UI/API views); archived plans must not run and must not be active.
   - When evaluated: Archive / unarchive operation.
 
-Rules:
+#### Rules for Action Evaluation
 
 - The orchestrator (or gateway) MUST evaluate the above action for the authenticated subject and resource (project) before permitting the operation.
 - Deny takes precedence when both allow and deny rules match.
@@ -97,7 +103,7 @@ Rules:
 The orchestrator and the target service SHOULD both enforce policy.
 The orchestrator acts as the first gate, while the service acts as the final gate.
 
-Recommended evaluation order
+### Recommended Evaluation Order
 
 - Verify request authenticity and subject identity (user context and task context).
 - Load effective preferences for the task and user, when applicable.

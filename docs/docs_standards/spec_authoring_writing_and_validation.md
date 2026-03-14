@@ -31,7 +31,7 @@
 
 These standards apply to this document.
 
-See:
+### See Also (Markdown Conventions)
 
 - [`markdown_conventions.md`](./markdown_conventions.md)
 
@@ -65,14 +65,14 @@ They are the canonical home for normative RFC-2119 obligations ("MUST", "SHOULD"
 They are implementation-agnostic and should not describe design choices or internal architecture.
 Requirements exist to state outcomes, constraints, and acceptance criteria at the "what" level.
 
-Rules:
+#### Rules for Requirements
 
 - Requirements should be atomic and testable.
   Prefer one obligation per `REQ-<DOMAIN>-<NNNN>` entry.
 - Requirements should link to the relevant implementation spec sections via `spec-*` anchors.
 - Requirements must be stable, uniquely identified, and easy to reference from specs and tests.
 
-See:
+#### See Also (Requirements)
 
 - [`docs/requirements/`](../requirements/)
 
@@ -83,12 +83,12 @@ They are **prescriptive**, **specific**, and **explicit**: they must describe ar
 Implementations must be verifiable against the spec without inferring author intent.
 Tech specs should define Spec Items with Spec IDs and stable anchors.
 
-Rules:
+#### Rules for Tech Specs
 
 - Tech specs should cross-link back to applicable `REQ-*` items.
   Do not duplicate long blocks of requirement text in specs.
 
-See:
+#### See Also (Tech Specs)
 
 - [`docs/tech_specs/`](../tech_specs/)
 
@@ -97,7 +97,7 @@ See:
 Feature files define **user stories and executable acceptance tests** in Gherkin.
 They exist to make requirements and specs testable end-to-end using Godog (Cucumber) scenarios.
 
-Rules:
+#### Rules for Feature Files
 
 - Feature files must live under [`features/`](../../features/).
 - Each feature file MUST be confined to a single major component so BDD can run per component without cross-component dependencies.
@@ -124,7 +124,7 @@ This section defines the required structure for Spec Items in `docs/tech_specs/`
   Spec ID domains must be kept in sync with the canonical requirements domains.
   See [`requirements_domains.md`](./requirements_domains.md).
 
-Rules:
+#### Rules for Spec Items
 
 - Spec IDs must not include the token `Normative` (or any `.Normative` suffix).
   Normative obligations belong in `docs/requirements/` as `REQ-*` entries.
@@ -148,7 +148,7 @@ Every Spec Item section must follow this structure in this order.
 Append the Spec Item anchor to the end of the `Spec ID:` bullet line (not the heading line).
 This avoids extra blank lines between the heading, anchor, and list blocks while keeping the anchor adjacent to the Spec ID it is derived from.
 
-Rules:
+##### Rules for Spec ID Anchor
 
 - The anchor must appear at the end of the `Spec ID:` bullet line.
 - Exactly one Spec ID anchor per Spec Item heading.
@@ -162,7 +162,7 @@ Immediately after the Spec Item heading line, add a dash-bulleted list whose fir
 - Spec ID: `CYNAI.DOMAIN.PATH` <a id="spec-cynai-domain-path"></a>
 ```
 
-Rules:
+##### Rules for Spec ID Line
 
 - The Spec ID line must be the first non-blank line after the Spec Item heading line.
 - Exactly one Spec ID line per Spec Item heading.
@@ -174,16 +174,21 @@ Rules:
 
 Optional metadata may follow the `Spec ID:` bullet as additional bullets in the same list.
 
-Examples:
+##### Optional Metadata Examples
 
 - `- Status: draft|stable|deprecated`
 - `- Since: vX.Y`
 - `- See also: <links>`
 
-Rules:
+##### Rules for Optional Metadata
 
 - Metadata lines must be single-line key/value pairs using `<Key>: <Value>`.
 - Any sub-bullets must be dash bullets and must be indented consistently under their parent bullet.
+
+#### Order of Content
+
+- All spec prose and contract content for a Spec Item must appear **after** the Spec ID line (and any optional metadata).
+  Do not place descriptive text or contract subsections before the Spec ID block.
 
 #### Contract Content
 
@@ -271,7 +276,7 @@ Algorithm anchors and step anchors:
 
 Language references are optional but strongly recommended.
 
-Rules:
+#### Rules for Language Reference Blocks
 
 - Reference headings must not exceed H5 (`#####`).
 - A Spec Item may include multiple references (one per language).
@@ -289,7 +294,8 @@ Use this canonical format:
 
 Each Reference section must define a stable reference anchor on its own line directly above the referenced fenced code block.
 The reference anchor line must be separated from the code block by a blank line (so there is always an empty line above the code fence).
-Example:
+
+##### Example (Reference Anchor)
 
 ````markdown
 <a id="ref-go-cynai-core-package-readfile"></a>
@@ -299,7 +305,7 @@ func (p *Package) ReadFile(path string) ([]byte, error)
 ```
 ````
 
-Rules:
+##### Rules for Reference Anchor
 
 - The language token must be lowercase (for example `go`, `rust`, `zig`).
 - The remainder must be derived from the Spec ID using the same normalization as Spec ID anchors.
@@ -319,7 +325,7 @@ Only these kind tokens are allowed:
 - `Field`
 - `Constant`
 
-Rules:
+#### Rules for Backticked Symbols
 
 - Do not use language-specific kind tokens like "Method", "Function", or "Struct" in canonical spec headings.
 - The backticked symbol should be stable across languages and avoid language-specific naming conventions when possible.
@@ -335,7 +341,7 @@ Inline HTML is disallowed except for these anchor forms:
 - Requirement entry anchors: `<a id="req-..."></a>` (requirements docs only; on a continuation line under the requirement list item, after any spec reference link lines).
 - Normative anchors: `<a id="norm-..."></a>` (deprecated; do not introduce in new tech specs).
 
-Rules:
+#### Rules for Inline HTML
 
 - Anchor tags must contain only an `id` attribute.
   Only this exact tag form is allowed: `<a id="..."></a>`.
@@ -355,7 +361,7 @@ This section defines how to link specs, requirements, and feature files and how 
 
 All cross-references into tech specs should prefer Spec ID anchors over heading-derived anchors.
 
-Example:
+#### Example (Canonical Link)
 
 - `../tech_specs/api_core.md#spec-cynai-core-package-readfile`
 
@@ -364,13 +370,13 @@ Example:
 In requirements docs, use a list-style requirements format.
 Each requirement is a list item with continuation lines for spec references and the requirement anchor.
 
-Example:
+#### Example (Requirements Entry)
 
 - REQ-MCPGAT-0001: The MCP gateway MUST enforce gateway policy for all MCP tool calls.
   [CYNAI.MCPGAT.Doc.GatewayEnforcement](../tech_specs/mcp_gateway_enforcement.md#spec-cynai-mcpgat-doc-gatewayenforcement)
   <a id="req-mcpgat-0001"></a>
 
-Rules:
+#### Rules for Requirements List Format
 
 - Each requirement entry is a list item: `- REQ-<DOMAIN>-<NNNN>: <short label>.`
 - Continuation lines: one or more spec reference links (Spec ID as link text, href to `spec-*` anchor), then the `req-*` anchor on its own line.
@@ -381,15 +387,16 @@ Rules:
 
 Tech specs must link to the applicable requirements they implement.
 
-Format:
+#### Traceability Format
 
 - `Traces To: [REQ-MCPGAT-0001](../requirements/mcpgat.md#req-mcpgat-0001), [REQ-MCPGAT-0002](../requirements/mcpgat.md#req-mcpgat-0002)`
 
-Rules:
+#### Rules for Spec Traceability
 
 - Requirement identifiers must be stable.
 - Do not embed long requirement text inside specs.
   Link instead.
+- When a Spec Item section lists requirement traces (e.g. `Traces To: ...`), place them in their **own subsection** at the **end** of that Spec Item section (after all contract subsections and reference blocks).
 
 ### Feature to Requirement and Spec References (Gherkin)
 
@@ -405,13 +412,13 @@ Requirement tag format:
 
 - `@req_worker_0001`
 
-Rules:
+#### Rules for Requirement Tags
 
 - Requirement tags must be derived from the requirement ID by removing `REQ-`, replacing `-` with `_`, and lowercasing.
   Example: `REQ-WORKER-0001` => `@req_worker_0001`.
 - Each Scenario must include both `@req_*` and `@spec_*` tags.
 
-Rules:
+#### Rules for Spec Tags
 
 - `@spec_*` tags must be derived from Spec ID by replacing `.` with `_` and lowercasing.
   Example: `CYNAI.MCPGAT.Doc.GatewayEnforcement` => `@spec_cynai_mcpgat_doc_gatewayenforcement`.
@@ -425,7 +432,7 @@ Requirement ID format:
 
 - `REQ-<DOMAIN>-<NNNN>` (4 digits, e.g. 0001-9999)
 
-Rules:
+#### Rules for Requirement IDs
 
 - IDs must be unique across the requirements set.
 - IDs must not encode file paths or heading numbers.

@@ -64,7 +64,7 @@ The Node Manager is a host-level system service responsible for:
 
 - Spec ID: `CYNAI.WORKER.NodeManagerShutdown` <a id="spec-cynai-worker-nodemanagershutdown"></a>
 
-Traces To:
+#### Traces to Requirements
 
 - [REQ-WORKER-0257](../requirements/worker.md#req-worker-0257)
 
@@ -83,7 +83,7 @@ Shutdown and its outcome (success or failure, including which containers failed)
 
 - Spec ID: `CYNAI.WORKER.OrchestratorShutdownNotification` <a id="spec-cynai-worker-orchestratorshutdownnotification"></a>
 
-Traces To:
+#### Orchestrator Shutdown Notification Requirements Traces
 
 - [REQ-WORKER-0261](../requirements/worker.md#req-worker-0261)
 - [REQ-ORCHES-0164](../requirements/orches.md#req-orches-0164)
@@ -176,7 +176,7 @@ Traces To: [REQ-WORKER-0164](../requirements/worker.md#req-worker-0164).
 
 - Spec ID: `CYNAI.WORKER.AgentTokenStorageAndLifecycle` <a id="spec-cynai-worker-agenttokenstorageandlifecycle"></a>
 
-Traces To:
+#### Agent Token Storage and Lifecycle Requirements Traces
 
 - [REQ-WORKER-0164](../requirements/worker.md#req-worker-0164)
 - [REQ-WORKER-0165](../requirements/worker.md#req-worker-0165)
@@ -192,7 +192,7 @@ Required behavior:
 - The worker proxy MUST attach the correct agent token to agent-originated requests when forwarding to the orchestrator.
 - The worker MUST NOT expose agent tokens to sandboxes or agents via env vars, files, mounts, or logs.
 
-Observability:
+#### Observability
 
 - Agent tokens MUST NOT appear in logs, metrics, audit payloads (beyond opaque identifiers such as `service_id` or agent identity), debug endpoints, or telemetry responses.
   Redaction MUST NOT be relied upon.
@@ -203,7 +203,7 @@ Observability:
 
 This section defines how the worker resolves `managed_services.services[].orchestrator.agent_token_ref` into an agent token.
 
-Traces To:
+##### Agent Token Ref Resolution Requirements Traces
 
 - [REQ-WORKER-0164](../requirements/worker.md#req-worker-0164)
 
@@ -300,7 +300,7 @@ See [Sandbox Boundary and Security](cynode_sba.md#spec-cynai-sbagnt-sandboxbound
 
 - Spec ID: `CYNAI.WORKER.SandboxWorkspaceJobMounts` <a id="spec-cynai-worker-sandboxworkspacejobmounts"></a>
 
-Traces To:
+#### Sandbox Workspace and Job Mounts Requirements Traces
 
 - [REQ-WORKER-0250](../requirements/worker.md#req-worker-0250)
 
@@ -329,7 +329,7 @@ The node MUST create the host directories before starting the container and MUST
 
 - Spec ID: `CYNAI.WORKER.SandboxRootless` <a id="spec-cynai-worker-sandboxrootless"></a>
 
-Traces To:
+#### Sandbox Rootless Execution Requirements Traces
 
 - [REQ-WORKER-0251](../requirements/worker.md#req-worker-0251)
 
@@ -349,7 +349,7 @@ The node MUST report rootless capability and effective state in the capability r
 
 - Spec ID: `CYNAI.WORKER.NodeSandboxControlPlane` <a id="spec-cynai-worker-nodesandbox"></a>
 
-Traces To:
+#### Sandbox Control Plane Applicable Requirements Requirements Traces
 
 - [REQ-WORKER-0109](../requirements/worker.md#req-worker-0109)
 - [REQ-WORKER-0110](../requirements/worker.md#req-worker-0110)
@@ -376,7 +376,7 @@ See [`docs/tech_specs/mcp_tooling.md`](mcp_tooling.md) for the MCP tool layer th
 
 - Spec ID: `CYNAI.WORKER.UnifiedUdsPath` <a id="spec-cynai-worker-unifiedudspath"></a>
 
-Traces To:
+### Unified UDS Path (Agent and Sandbox Containers) Requirements Traces
 
 - [REQ-WORKER-0260](../requirements/worker.md#req-worker-0260)
 
@@ -401,7 +401,7 @@ All container-facing endpoints MUST use UDS per [Unified UDS Path](#unified-uds-
 
 - Spec ID: `CYNAI.WORKER.NodeLocalInference` <a id="spec-cynai-worker-nodelocalinference"></a>
 
-Traces To:
+#### Node-Local Inference Applicable Requirements Requirements Traces
 
 - [REQ-WORKER-0114](../requirements/worker.md#req-worker-0114)
 - [REQ-WORKER-0115](../requirements/worker.md#req-worker-0115)
@@ -440,7 +440,7 @@ When an AI agent runtime is co-located on the same host as the worker node, the 
 
 - Spec ID: `CYNAI.WORKER.NodeSandboxMcpExposure` <a id="spec-cynai-worker-nodesandboxmcpexposure"></a>
 
-Traces To:
+#### Node Sandbox MCP Exposure Applicable Requirements Requirements Traces
 
 - [REQ-WORKER-0116](../requirements/worker.md#req-worker-0116)
 - [REQ-WORKER-0117](../requirements/worker.md#req-worker-0117)
@@ -460,7 +460,7 @@ Required sandbox MCP tool surface
 
 - Spec ID: `CYNAI.WORKER.NodeLocalAgentSandboxControl` <a id="spec-cynai-worker-nodelocalagentsandboxcontrol"></a>
 
-Traces To:
+#### Node-Local Agent Sandbox Control (Low-Latency Path) Requirements Traces
 
 - [REQ-WORKER-0154](../requirements/worker.md#req-worker-0154)
 - [REQ-WORKER-0155](../requirements/worker.md#req-worker-0155)
@@ -497,7 +497,7 @@ This file provides the minimum information required to contact the orchestrator 
 - Node startup YAML may impose stricter local constraints than the orchestrator requests.
 - If a local constraint prevents fulfilling an orchestrator request, the node must refuse the request and report the reason.
 
-Traces To:
+#### Node Startup YAML Applicable Requirements Requirements Traces
 
 - [REQ-WORKER-0120](../requirements/worker.md#req-worker-0120)
 - [REQ-WORKER-0121](../requirements/worker.md#req-worker-0121)
@@ -751,7 +751,7 @@ updates:
 
 - Spec ID: `CYNAI.WORKER.NodeStartupProcedure` <a id="spec-cynai-worker-nodestartupprocedure"></a>
 
-Traces To:
+### Node Startup Procedure Requirements Traces
 
 - [REQ-WORKER-0253](../requirements/worker.md#req-worker-0253)
 - [REQ-WORKER-0254](../requirements/worker.md#req-worker-0254)
@@ -789,7 +789,7 @@ Required startup flow (order is mandatory)
 
 - Spec ID: `CYNAI.WORKER.NodeStartupChecks` <a id="spec-cynai-worker-nodestartupchecks"></a>
 
-Traces To:
+### Node Startup Checks and Readiness Requirements Traces
 
 - [REQ-WORKER-0252](../requirements/worker.md#req-worker-0252)
 
@@ -811,7 +811,7 @@ When all applicable checks pass, `GET /readyz` MUST return 200 with body `ready`
 
 - Spec ID: `CYNAI.WORKER.DeploymentAutoStart` <a id="spec-cynai-worker-deploymentautostart"></a>
 
-Traces To:
+### Deployment and Auto-Start Requirements Traces
 
 - [REQ-BOOTST-0104](../requirements/bootst.md#req-bootst-0104)
 
@@ -826,7 +826,7 @@ Worker node deployments MUST support auto-start on the host so that Node Manager
 
 - Spec ID: `CYNAI.WORKER.DeploymentTopologies` <a id="spec-cynai-worker-deploymenttopologies"></a>
 
-Traces To:
+### Deployment Topologies Requirements Traces
 
 - [REQ-WORKER-0262](../requirements/worker.md#req-worker-0262)
 
@@ -842,7 +842,7 @@ Error conditions:
 
 - Spec ID: `CYNAI.WORKER.SingleProcessHostBinary` <a id="spec-cynai-worker-singleprocesshostbinary"></a>
 
-Traces To:
+### Single-Process Host Binary Requirements Traces
 
 - [REQ-WORKER-0262](../requirements/worker.md#req-worker-0262)
 - [REQ-WORKER-0263](../requirements/worker.md#req-worker-0263)
@@ -908,7 +908,7 @@ The algorithm above defines the required startup order for the single-process to
 
 - Spec ID: `CYNAI.WORKER.ExistingInferenceService` <a id="spec-cynai-worker-existinginferenceservice"></a>
 
-Traces To:
+### Existing Inference Service on Host Requirements Traces
 
 - [REQ-WORKER-0255](../requirements/worker.md#req-worker-0255)
 
@@ -936,7 +936,7 @@ These nodes exist to run sandbox containers for tool execution, builds, tests, a
 
 - Spec ID: `CYNAI.WORKER.SandboxOnlyNodes` <a id="spec-cynai-worker-sandboxonlynodes"></a>
 
-Traces To:
+#### Sandbox-Only Nodes Applicable Requirements Requirements Traces
 
 - [REQ-WORKER-0123](../requirements/worker.md#req-worker-0123)
 - [REQ-WORKER-0124](../requirements/worker.md#req-worker-0124)
@@ -972,7 +972,7 @@ Required flow
 
 - Spec ID: `CYNAI.WORKER.CapabilityReporting` <a id="spec-cynai-worker-capabilityreporting"></a>
 
-Traces To:
+### Capability Reporting Requirements Traces
 
 - [REQ-WORKER-0139](../requirements/worker.md#req-worker-0139)
 - [REQ-WORKER-0256](../requirements/worker.md#req-worker-0256)
@@ -1019,7 +1019,7 @@ Change reporting
 
 - Spec ID: `CYNAI.WORKER.ConfigurationDelivery` <a id="spec-cynai-worker-configurationdelivery"></a>
 
-Traces To:
+### Configuration Delivery Requirements Traces
 
 - [REQ-ORCHES-0149](../requirements/orches.md#req-orches-0149)
 - [REQ-WORKER-0135](../requirements/worker.md#req-worker-0135)
@@ -1073,7 +1073,7 @@ These credentials MUST be handled securely and with least privilege.
 
 - Spec ID: `CYNAI.WORKER.NodeCredentialHandling` <a id="spec-cynai-worker-nodecredentialhandling"></a>
 
-Traces To:
+#### Credential Handling Applicable Requirements Requirements Traces
 
 - [REQ-WORKER-0127](../requirements/worker.md#req-worker-0127)
 - [REQ-WORKER-0128](../requirements/worker.md#req-worker-0128)
@@ -1084,7 +1084,7 @@ Traces To:
 
 - Spec ID: `CYNAI.WORKER.NodeLocalSecureStore` <a id="spec-cynai-worker-nodelocalsecurestore"></a>
 
-Traces To:
+#### Node-Local Secure Store Requirements Traces
 
 - [REQ-WORKER-0128](../requirements/worker.md#req-worker-0128)
 - [REQ-WORKER-0132](../requirements/worker.md#req-worker-0132)
@@ -1151,14 +1151,14 @@ Go 1.26 secure secret handling (implementation requirement):
 
 - Spec ID: `CYNAI.WORKER.SecureStoreProcessBoundary` <a id="spec-cynai-worker-securestoreprocessboundary"></a>
 
-Traces To:
+#### Secure Store Process Boundary Requirements Traces
 
 - [REQ-WORKER-0168](../requirements/worker.md#req-worker-0168)
 - [REQ-WORKER-0169](../requirements/worker.md#req-worker-0169)
 
 This section defines the required trusted boundary between secure store writers and readers.
 
-Definitions:
+#### Definitions
 
 - The secure store writer is the component that applies node configuration (typically the Node Manager).
 - The secure store reader for managed agent proxy credentials is the worker internal proxy handler.

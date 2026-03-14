@@ -103,7 +103,7 @@ Validation enforces this via the `no-h1-content` markdownlint rule.
 
 Validation recommends Title Case for headings and can report suggestions.
 
-Rules:
+#### Heading Rules
 
 - Prefer Title Case for heading text.
 - Preserve the exact text inside backticks.

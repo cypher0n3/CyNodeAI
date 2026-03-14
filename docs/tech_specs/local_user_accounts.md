@@ -48,7 +48,7 @@ The following requirements apply.
 
 - Spec ID: `CYNAI.IDENTY.IdentityAccountModel` <a id="spec-cynai-identy-identityaccount"></a>
 
-Traces To:
+#### Traces to Requirements
 
 - [REQ-IDENTY-0100](../requirements/identy.md#req-identy-0100)
 - [REQ-IDENTY-0101](../requirements/identy.md#req-identy-0101)
@@ -73,7 +73,7 @@ The following requirements apply.
 
 - Spec ID: `CYNAI.IDENTY.AuthenticationModel` <a id="spec-cynai-identy-authmodel"></a>
 
-Traces To:
+#### Authentication Model Applicable Requirements Requirements Traces
 
 - [REQ-IDENTY-0103](../requirements/identy.md#req-identy-0103)
 - [REQ-IDENTY-0104](../requirements/identy.md#req-identy-0104)
@@ -99,7 +99,7 @@ Logout and revocation
 
 - Spec ID: `CYNAI.IDENTY.PerRequestTokenValidation` <a id="spec-cynai-identy-perrequesttokenvalidation"></a>
 
-Traces To:
+#### Per-Request Token Validation Requirements Traces
 
 - [REQ-IDENTY-0122](../requirements/identy.md#req-identy-0122)
 
@@ -116,7 +116,7 @@ The following requirements apply.
 - Spec ID: `CYNAI.IDENTY.AuthorizationRbac` <a id="spec-cynai-identy-authzrbac"></a>
 - Authentication identifies the user.
 
-Traces To:
+#### Authorization and RBAC Integration Applicable Requirements Requirements Traces
 
 - [REQ-IDENTY-0107](../requirements/identy.md#req-identy-0107)
 - [REQ-IDENTY-0108](../requirements/identy.md#req-identy-0108)
@@ -131,7 +131,7 @@ The following requirements apply.
 
 - Spec ID: `CYNAI.IDENTY.CredentialStorage` <a id="spec-cynai-identy-credstorage"></a>
 
-Traces To:
+#### Credential Storage Applicable Requirements Requirements Traces
 
 - [REQ-IDENTY-0109](../requirements/identy.md#req-identy-0109)
 - [REQ-IDENTY-0110](../requirements/identy.md#req-identy-0110)
@@ -183,7 +183,7 @@ The following requirements apply.
 
 - Spec ID: `CYNAI.IDENTY.BootstrapAdministration` <a id="spec-cynai-identy-bootstrapadmin"></a>
 
-Traces To:
+#### Bootstrap and Administration Applicable Requirements Requirements Traces
 
 - [REQ-IDENTY-0113](../requirements/identy.md#req-identy-0113)
 - [REQ-IDENTY-0114](../requirements/identy.md#req-identy-0114)
@@ -203,7 +203,7 @@ The following requirements apply.
 
 - Spec ID: `CYNAI.IDENTY.AuditAbuseControls` <a id="spec-cynai-identy-auditabuse"></a>
 
-Traces To:
+#### Audit and Abuse Controls Applicable Requirements Requirements Traces
 
 - [REQ-IDENTY-0116](../requirements/identy.md#req-identy-0116)
 - [REQ-IDENTY-0117](../requirements/identy.md#req-identy-0117)
@@ -228,7 +228,7 @@ The following requirements apply.
 
 - Spec ID: `CYNAI.IDENTY.UserApiGatewaySurface` <a id="spec-cynai-identy-userapigateway"></a>
 
-Traces To:
+#### User API Gateway Surface Applicable Requirements Requirements Traces
 
 - [REQ-IDENTY-0119](../requirements/identy.md#req-identy-0119)
 - [REQ-IDENTY-0120](../requirements/identy.md#req-identy-0120)

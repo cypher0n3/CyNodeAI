@@ -470,7 +470,7 @@ The following lists what fits declarative config well versus what needs extra ha
 
 Define a strict schema and versioning.
 
-Example YAML:
+#### 19.3.1 Example Yaml
 
 ```yaml
 apiVersion: cynodeai.io/v1alpha1
@@ -540,7 +540,7 @@ If you want single-file portability, you can support:
 - age/GPG-based encryption
 - platform decrypts via KMS or agent key
 
-Constraints:
+##### 19.4.2.1 Security Constraints
 
 - strict RBAC around who can decrypt
 - audit every decrypt
@@ -626,7 +626,7 @@ Even with YAML/JSON as the main interface, you still need primitives:
 - connector.instance.status.get
 - connector.op.invoke
 
-Optional:
+#### 19.9.1 Optional Tools
 
 - connector.spec.list
 - connector.spec.delete

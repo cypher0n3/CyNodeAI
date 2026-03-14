@@ -126,11 +126,11 @@ Output
 - JSON mode MUST print `{"tasks":[...],"next_cursor":"<opaque>"}`.
   Each task object MUST include at least `task_id`, `status`, and when provided, `task_name`.
 
-### `cynork task get <task_id>`
+### `cynork task get <task_selector>`
 
 Invocation
 
-- `cynork task get <task_id>`, where `<task_id>` is the task UUID or the human-readable task name.
+- `cynork task get <task_selector>`, where `<task_selector>` is the task UUID or the human-readable task name.
 
 Output
 
@@ -138,11 +138,11 @@ Output
 - JSON mode MUST print a single JSON object representing the task.
   The JSON object MUST include at least `task_id`, `status`, and when provided, `task_name`.
 
-### `cynork task cancel <task_id>`
+### `cynork task cancel <task_selector>`
 
 Invocation
 
-- `cynork task cancel <task_id>`.
+- `cynork task cancel <task_selector>`, where `<task_selector>` is the task UUID or the human-readable task name.
 
 Optional flags
 
@@ -151,16 +151,16 @@ Optional flags
 Behavior
 
 - If `--yes` is not provided, the CLI MUST prompt for confirmation.
-- The confirmation prompt MUST be `Cancel task <task_id>? [y/N]`.
+- The confirmation prompt MUST be `Cancel task <task_selector>? [y/N]`.
 - If the user does not enter `y` or `Y`, the CLI MUST exit with code 0 and MUST NOT make a gateway request.
 - On success, table mode MUST print exactly one line including `task_id=<id>`, `canceled=true`, and when the system provides a task name, `task_name=<name>`.
 - On success, JSON mode MUST print at least `task_id`, `canceled`, and when provided, `task_name`.
 
-### `cynork task result <task_id>`
+### `cynork task result <task_selector>`
 
 Invocation
 
-- `cynork task result <task_id>`.
+- `cynork task result <task_selector>`, where `<task_selector>` is the task UUID or the human-readable task name.
 
 Optional flags
 
@@ -175,11 +175,11 @@ Output
 - If the task is in a terminal status, table mode MUST also include `stdout=<...>` and `stderr=<...>`.
 - JSON mode MUST print a single JSON object with at least `task_id`, `status`, and when provided, `task_name`; and when terminal, `stdout` and `stderr`.
 
-### `cynork task watch <task_id>`
+### `cynork task watch <task_selector>`
 
 Invocation
 
-- `cynork task watch <task_id>`.
+- `cynork task watch <task_selector>`, where `<task_selector>` is the task UUID or the human-readable task name.
 
 Behavior
 
@@ -198,11 +198,11 @@ Optional flags
   Do not clear the screen between polls; output scrolls instead.
   Useful when stdout is not a terminal or when capturing output.
 
-### `cynork task logs <task_id>`
+### `cynork task logs <task_selector>`
 
 Invocation
 
-- `cynork task logs <task_id>`.
+- `cynork task logs <task_selector>`, where `<task_selector>` is the task UUID or the human-readable task name.
 
 Optional flags
 
@@ -217,11 +217,11 @@ Output
 - Table mode MUST print raw log lines to stdout.
 - JSON mode MUST print an object with at least `task_id`, `stream`, `lines`; and when the system provides a task name, `task_name`.
 
-### `cynork task artifacts list <task_id>`
+### `cynork task artifacts list <task_selector>`
 
 Invocation
 
-- `cynork task artifacts list <task_id>`.
+- `cynork task artifacts list <task_selector>`, where `<task_selector>` is the task UUID or the human-readable task name.
 
 Output
 
@@ -231,11 +231,11 @@ Output
 - JSON mode MUST print an object with at least `task_id`, `artifacts`; and when the system provides a task name, `task_name`.
   Each artifact object MUST include at least `artifact_id`, `name`, and `size_bytes`.
 
-### `cynork task artifacts get <task_id> <artifact_id> --out <path>`
+### `cynork task artifacts get <task_selector> <artifact_id> --out <path>`
 
 Invocation
 
-- `cynork task artifacts get <task_id> <artifact_id> --out <path>`.
+- `cynork task artifacts get <task_selector> <artifact_id> --out <path>`, where `<task_selector>` is the task UUID or the human-readable task name.
 
 Required flags
 
@@ -260,7 +260,14 @@ Output
 
 - Spec ID: `CYNAI.CLIENT.CliTaskCreatePrompt` <a id="spec-cynai-client-clitaskcreateprompt"></a>
 
-Traces To:
+Task create MUST accept the task as **inline text** (e.g. `--prompt "..."` or `--task "..."`) or from a **file** (e.g. `--task-file <path>`) containing plain text or Markdown.
+Exactly one task input mode MUST be supplied per `cynork task create` invocation.
+The CLI MUST support attachments via repeatable `--attach <path>`.
+The CLI MUST support running a script via `--script <path>`.
+The CLI MUST support running a short series of commands via repeatable `--command <string>` or via `--commands-file <path>`.
+The user task text MUST NOT be executed as a literal shell command unless the user explicitly selects `--script`, `--command`, or `--commands-file`.
+
+### Traces To
 
 - [REQ-ORCHES-0122](../requirements/orches.md#req-orches-0122)
 - [REQ-ORCHES-0126](../requirements/orches.md#req-orches-0126)
@@ -269,10 +276,3 @@ Traces To:
 - [REQ-CLIENT-0151](../requirements/client.md#req-client-0151)
 - [REQ-CLIENT-0153](../requirements/client.md#req-client-0153)
 - [REQ-CLIENT-0157](../requirements/client.md#req-client-0157)
-
-Task create MUST accept the task as **inline text** (e.g. `--prompt "..."` or `--task "..."`) or from a **file** (e.g. `--task-file <path>`) containing plain text or Markdown.
-Exactly one task input mode MUST be supplied per `cynork task create` invocation.
-The CLI MUST support attachments via repeatable `--attach <path>`.
-The CLI MUST support running a script via `--script <path>`.
-The CLI MUST support running a short series of commands via repeatable `--command <string>` or via `--commands-file <path>`.
-The user task text MUST NOT be executed as a literal shell command unless the user explicitly selects `--script`, `--command`, or `--commands-file`.

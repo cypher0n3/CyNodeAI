@@ -2,6 +2,7 @@
 
 - [Document Overview](#document-overview)
 - [Chat Command](#chat-command)
+  - [Chat Command Requirements Traces](#chat-command-requirements-traces)
   - [`cynork chat` Invocation](#cynork-chat-invocation)
   - [`cynork chat` Optional Flags](#cynork-chat-optional-flags)
   - [Thread Controls](#thread-controls)
@@ -14,15 +15,22 @@
 
 ## Document Overview
 
-This document specifies the `cynork chat` command and all chat slash commands.
-It defines the user-facing chat contract used by both the explicit `cynork tui` entrypoint and the `cynork chat` compatibility path.
+This document specifies the `cynork chat` command and the chat-surface compatibility contract used by both the explicit `cynork tui` entrypoint and the `cynork chat` compatibility path.
+The canonical TUI slash-command catalog and execution algorithms live in [cynork_tui_slash_commands.md](cynork_tui_slash_commands.md).
 It is part of the [cynork CLI](cynork_cli.md) specification.
+
+The CLI MUST provide a top-level `chat` command that starts an interactive chat session with the Project Manager (PM) model.
+The session MUST use the same User API Gateway and token resolution as other commands and MUST require auth.
+The chat interface MUST use the gateway's OpenAI-compatible interactive chat API.
+`POST /v1/chat/completions` remains the baseline line-oriented chat contract.
+As part of the TUI rollout, the client chat implementation MUST also support `POST /v1/responses` under the same user-facing chat contract.
+See [`docs/tech_specs/openai_compatible_chat_api.md`](openai_compatible_chat_api.md).
 
 ## Chat Command
 
 - Spec ID: `CYNAI.CLIENT.CliChat` <a id="spec-cynai-client-clichat"></a>
 
-### Chat Command Traces To
+### Chat Command Requirements Traces
 
 - [REQ-CLIENT-0161](../requirements/client.md#req-client-0161)
 - [REQ-CLIENT-0162](../requirements/client.md#req-client-0162)
@@ -45,13 +53,6 @@ It is part of the [cynork CLI](cynork_cli.md) specification.
 - [REQ-CLIENT-0183](../requirements/client.md#req-client-0183)
 - [REQ-CLIENT-0184](../requirements/client.md#req-client-0184)
 - [REQ-CLIENT-0186](../requirements/client.md#req-client-0186)
-
-The CLI MUST provide a top-level `chat` command that starts an interactive chat session with the Project Manager (PM) model.
-The session MUST use the same User API Gateway and token resolution as other commands and MUST require auth.
-The chat interface MUST use the gateway's OpenAI-compatible interactive chat API.
-`POST /v1/chat/completions` remains the baseline line-oriented chat contract.
-As part of the TUI rollout, the client chat implementation MUST also support `POST /v1/responses` under the same user-facing chat contract.
-See [`docs/tech_specs/openai_compatible_chat_api.md`](openai_compatible_chat_api.md).
 
 ### `cynork chat` Invocation
 
@@ -108,7 +109,7 @@ Interactive chat SHOULD also expose thread-list, switch, and rename operations u
 #### Additional `/thread` Actions
 
 - `/thread list` SHOULD list threads for the current user and effective project context using `GET /v1/chat/threads`.
-- `/thread switch <thread_id>` SHOULD switch the active interactive session to the specified thread when the thread is owned by the authenticated user.
+- `/thread switch <thread_selector>` SHOULD switch the active interactive session to the specified thread when the selector resolves to a thread owned by the authenticated user.
 - `/thread rename <title>` SHOULD update the current thread title using `PATCH /v1/chat/threads/{thread_id}`.
 - When summary or archive support is present on the gateway, implementations MAY surface those fields through `/thread list` or additional thread subcommands.
 
@@ -174,7 +175,7 @@ The model parameter MAY be omitted (gateway default) or set from the session def
 
 The CLI MUST make slash commands discoverable to the user.
 At least one of the following MUST be implemented: (1) display the list of available slash commands when the chat session starts, or (2) support `/help` (see below) so the user can request the list at any time.
-The list MUST include every slash command defined in this spec with at least the command name and a short description.
+The list MUST include every slash command defined in [cynork_tui_slash_commands.md](cynork_tui_slash_commands.md) with at least the command name and a short description.
 Implementations MAY show a short description next to each command (e.g. `/exit - end chat session`).
 
 #### Slash Command Autocomplete and Inline Suggestions
@@ -203,6 +204,7 @@ All slash commands start with `/` and are case-insensitive for the command name 
 Input that does not start with `/` or `!` is sent to the PM model as a chat message.
 Input that starts with `/` but does not match a known command SHOULD be treated as an unknown command.
 The CLI MUST print a brief error or hint (e.g. "Unknown command. Type /help for available commands.") and MUST NOT send the line to the PM model.
+Exact command semantics and execution algorithms are defined in [cynork_tui_slash_commands.md](cynork_tui_slash_commands.md).
 
 #### Shell Escape (`!` Command)
 
@@ -221,46 +223,9 @@ If the command is interactive and takes over the terminal, the implementation MU
 
 ##### Required Slash Commands
 
-- **`/exit`**
-  - End the chat session and return to the shell.
-  - The CLI MUST close the session, release resources, and exit with code 0.
-  - No arguments.
-  - Synonyms: none (use `/quit` for the same effect).
-
-- **`/quit`**
-  - Same behavior as `/exit`: end the chat session and return to the shell.
-  - No arguments.
-
-- **`/help`**
-  - Display the list of available slash commands and a short description of each.
-  - The CLI MUST NOT send `/help` as a message to the PM model; it is handled locally.
-  - No arguments.
-  - Output SHOULD match or extend the list shown at session start (if the implementation shows commands on start).
-
-- **`/clear`**
-  - Clear the terminal display (or scrollback) so the user can focus on the next exchange.
-  - No arguments.
-  - If not supported, the CLI MAY ignore the command or print a short message that clearing is not available.
-
-- **`/version`**
-  - Print the cynork version string (same as `cynork version`).
-  - No arguments.
-  - Useful inside a long chat session without leaving the session.
-
-- **`/thread new`**
-  - Create a new chat thread and switch the session to it; see [Thread Controls](#thread-controls).
-  - The new thread uses the current session project context.
-  - No arguments.
-
-- **`/thread list`**
-  - List available chat threads for the current user and effective project context.
-  - Output SHOULD include thread id, display title, and recent activity.
-
-- **`/thread switch <thread_id>`**
-  - Switch the current session to an existing thread owned by the authenticated user.
-
-- **`/thread rename <title>`**
-  - Rename the current thread using the gateway thread-title update contract.
+The canonical interactive slash-command catalog, syntax, argument rules, and execution semantics are defined in [cynork_tui_slash_commands.md](cynork_tui_slash_commands.md).
+Interactive `cynork chat` MUST implement the same slash-command contract without user-visible divergence.
+That canonical contract includes the local-session commands, thinking-visibility controls, and thread commands that used to be restated here.
 
 #### Model Selection Slash Commands
 
@@ -271,20 +236,8 @@ If the command is interactive and takes over the terminal, the implementation MU
 - [REQ-CLIENT-0171](../requirements/client.md#req-client-0171)
 - [REQ-CLIENT-0172](../requirements/client.md#req-client-0172)
 
-The CLI SHOULD support model selection and discovery within a chat session.
-Model selection affects only chat completion requests.
-Model selection MUST NOT change any user preference or system setting.
-
-- **`/models`**
-  - List available OpenAI model identifiers for the gateway.
-  - The CLI MUST call `GET /v1/models` and display the returned model ids.
-  - No arguments.
-
-- **`/model`** [`<model_id>`]
-  - Show or set the model used for subsequent `POST /v1/chat/completions` calls in the current session.
-  - With no argument, the CLI MUST print the current selected model id.
-  - With `<model_id>`, the CLI MUST set the current selected model id.
-  - The CLI SHOULD validate the id against `/models` when available.
+Interactive `cynork chat` MUST implement the model-selection slash commands exactly as defined in [CYNAI.CLIENT.CynorkTui.ModelSlashCommands](cynork_tui_slash_commands.md#spec-cynai-client-cynorktui-modelslashcommands).
+Model selection affects only interactive chat completion requests and MUST NOT change any user preference or system setting.
 
 #### Project Context Slash Commands
 
@@ -297,25 +250,8 @@ Model selection MUST NOT change any user preference or system setting.
 Project context affects only chat session association and any user-initiated task operations that accept a project context.
 Project context MUST NOT be implicitly assigned.
 When project context is set, the CLI MUST send it using the OpenAI-standard `OpenAI-Project` request header on subsequent `POST /v1/chat/completions` calls.
-
-The chat `/project` slash commands MUST leverage the same logic and (where applicable) the same gateway calls as the `cynork project` subcommands.
-Implementations SHOULD reuse the same request-building and output code paths as `cynork project list`, `cynork project get`, and `cynork project set` so that behavior stays consistent and slash commands remain a thin adapter.
-
-- **`/project`** [no args]
-  - Show the current project context for the chat session.
-  - Equivalent to showing the result of the active project (same semantics as after `cynork project set`); if none is set, indicate the user's default project is used by the gateway.
-
-- **`/project list`** [optional flags]
-  - List projects; same semantics as `cynork project list`.
-  - Optional: `--limit`, `--active-only`, cursor-style pagination when supported in the chat parser.
-
-- **`/project get <project_id>`**
-  - Show project details; same as `cynork project get <project_id>`.
-
-- **`/project set <project_id>`** or **`/project <project_id>`**
-  - Set the project context for the current chat session.
-  - Equivalent to `cynork project set <project_id>` for the duration of the chat session; the CLI MUST set the session project context and send it on subsequent `POST /v1/chat/completions` via the `OpenAI-Project` header.
-  - The CLI MUST treat an empty or \"none\" project selection as default project (no header sent; gateway uses user's default project).
+Interactive `cynork chat` MUST implement the project slash commands exactly as defined in [CYNAI.CLIENT.CynorkTui.ProjectSlashCommands](cynork_tui_slash_commands.md#spec-cynai-client-cynorktui-projectslashcommands).
+Implementations SHOULD reuse the same request-building and output code paths as `cynork project list`, `cynork project get`, and `cynork project set` so that slash commands remain a thin adapter.
 
 #### Task Slash Commands
 
@@ -325,47 +261,14 @@ Implementations SHOULD reuse the same request-building and output code paths as 
 
 - [REQ-CLIENT-0166](../requirements/client.md#req-client-0166)
 
-The CLI MUST support the following task slash commands in chat.
+Interactive `cynork chat` MUST implement the task slash commands exactly as defined in [CYNAI.CLIENT.CynorkTui.TaskSlashCommands](cynork_tui_slash_commands.md#spec-cynai-client-cynorktui-taskslashcommands).
 Each MUST call the same User API Gateway endpoints as the corresponding `cynork task` subcommand.
 Output MUST be shown inline in the chat (pretty-printed per [Pretty-Printed JSON Output](cli_management_app_shell_output.md#spec-cynai-client-cliprettyprintjson) when the output is JSON).
-Arguments are parsed from the remainder of the line after the slash command; the CLI MAY support a subset of flags (e.g. `--limit`, `--status`) where the chat input allows.
 
 ##### Task Slash Commands Implementation Guidance
 
 - To prevent behavioral drift, implementations SHOULD reuse the existing cynork subcommand request-building and output code paths for the corresponding operations (task, prefs, nodes, skills, status, auth).
   Slash commands should be a thin adapter that selects a subcommand and passes the parsed arguments through.
-
-- **`/task list`** [optional flags]
-  - List tasks; same semantics as `cynork task list`.
-  - Optional: `--limit <n>`, `--status <status>`, `--cursor <opaque>` (or equivalent).
-
-- **`/task get <task_id>`**
-  - Show task status; same as `cynork task get <task_id>`.
-  - `<task_id>` is UUID or human-readable task name.
-
-- **`/task create`** [prompt text or `--prompt "..."`]
-  - Create a task.
-  - The remainder of the line after `create` MAY be treated as the task prompt (plain text or Markdown).
-  - Implementations MAY support `--prompt "..."` or `--task "..."` for clarity; MAY support `--name <name>`.
-  - Attachments and `--task-file` are optional for chat (e.g. if the chat UI supports file references).
-
-- **`/task cancel <task_id>`**
-  - Cancel the task; same as `cynork task cancel <task_id>`.
-  - Confirmation MAY be required (e.g. prompt or `--yes` in the line).
-
-- **`/task result <task_id>`** [optional `--wait`]
-  - Show task result; same as `cynork task result <task_id>`.
-  - Optional `--wait` to poll until terminal status.
-
-- **`/task logs <task_id>`** [optional `--stream stdout|stderr|all`, `--follow`]
-  - Show task log lines; same as `cynork task logs <task_id>`.
-
-- **`/task artifacts list <task_id>`**
-  - List artifacts for the task; same as `cynork task artifacts list <task_id>`.
-
-- **`/task artifacts get <task_id> <artifact_id> --out <path>`**
-  - Optional in chat: requires a path; same semantics as `cynork task artifacts get`.
-  - Implementations MAY support this or omit it from the chat slash set if path input is impractical.
 
 #### Status and Identity Slash Commands
 
@@ -375,17 +278,7 @@ Arguments are parsed from the remainder of the line after the slash command; the
 
 - [REQ-CLIENT-0167](../requirements/client.md#req-client-0167)
 
-- **`/status`**
-  - Show gateway reachability and optionally auth status; same as `cynork status`.
-  - No arguments.
-
-- **`/whoami`**
-  - Show current identity (id, user); same as `cynork auth whoami`.
-  - No arguments.
-
-- **`/auth`** [login | logout | whoami | refresh]
-  - Same subcommands as `cynork auth`: `/auth whoami` (identity), `/auth logout`, `/auth refresh`, `/auth login` (optionally `-u username -p password`).
-  - With no arguments, print usage.
+Interactive `cynork chat` MUST implement the status and auth slash commands exactly as defined in [CYNAI.CLIENT.CynorkTui.StatusSlashCommands](cynork_tui_slash_commands.md#spec-cynai-client-cynorktui-statusslashcommands).
 
 #### Node Slash Commands
 
@@ -395,12 +288,7 @@ Arguments are parsed from the remainder of the line after the slash command; the
 
 - [REQ-CLIENT-0168](../requirements/client.md#req-client-0168)
 
-- **`/nodes list`** [optional flags]
-  - List nodes; same semantics as `cynork nodes list`.
-  - Optional: `--limit`, cursor-style pagination if supported.
-
-- **`/nodes get <node_id>`**
-  - Show node details; same as `cynork nodes get <node_id>`.
+Interactive `cynork chat` MUST implement the node slash commands exactly as defined in [CYNAI.CLIENT.CynorkTui.NodeSlashCommands](cynork_tui_slash_commands.md#spec-cynai-client-cynorktui-nodeslashcommands).
 
 #### Preferences Slash Commands
 
@@ -410,35 +298,18 @@ Arguments are parsed from the remainder of the line after the slash command; the
 
 - [REQ-CLIENT-0169](../requirements/client.md#req-client-0169)
 
-- **`/prefs list`** [optional scope flags]
-  - List preference entries; same as `cynork prefs list`.
-
-- **`/prefs get`** [key]
-  - Get one or all preferences; same as `cynork prefs get` (key optional).
-
-- **`/prefs set`** [--scope-type, --scope-id, --key, --value or --value-file]
-  - Set a preference; same as `cynork prefs set`.
-  - Scope and key are required; value via `--value <json>` or `--value-file <path>`.
-
-- **`/prefs delete`** [--scope-type, --scope-id, --key]
-  - Delete a preference; same as `cynork prefs delete`.
-
-- **`/prefs effective`** [optional `--task-id <id>`, `--project-id <id>`]
-  - Show effective preferences for context; same as `cynork prefs effective`.
+Interactive `cynork chat` MUST implement the preference slash commands exactly as defined in [CYNAI.CLIENT.CynorkTui.PreferenceSlashCommands](cynork_tui_slash_commands.md#spec-cynai-client-cynorktui-preferenceslashcommands).
 
 #### Skills Slash Commands
 
 - Spec ID: `CYNAI.CLIENT.CliChatSlashSkills` <a id="spec-cynai-client-clichatslashskills"></a>
 
+Interactive `cynork chat` MUST implement the skills slash commands exactly as defined in [CYNAI.CLIENT.CynorkTui.SkillSlashCommands](cynork_tui_slash_commands.md#spec-cynai-client-cynorktui-skillslashcommands).
+Each MUST call the same User API Gateway endpoints as the corresponding `cynork skills` subcommand.
+
 ##### Skills Slash Commands Traces To
 
 - [REQ-CLIENT-0170](../requirements/client.md#req-client-0170)
-
-- **`/skills list`** [optional `--scope`, `--owner`]
-  - List skills; same as `cynork skills list`.
-
-- **`/skills get <skill_id>`**
-  - Show skill content and metadata; same as `cynork skills get <skill_id>`.
 
 ### `cynork chat` Response Output (Pretty Formatting)
 

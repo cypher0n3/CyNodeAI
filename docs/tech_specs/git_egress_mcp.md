@@ -50,7 +50,7 @@ This section describes how Git operations are performed outside sandboxes and wi
 
 - Spec ID: `CYNAI.APIEGR.GitEgressArchitecture` <a id="spec-cynai-apiegr-gitegressarch"></a>
 
-Traces To:
+#### Traces to Requirements
 
 - [REQ-APIEGR-0100](../requirements/apiegr.md#req-apiegr-0100)
 - [REQ-APIEGR-0101](../requirements/apiegr.md#req-apiegr-0101)
@@ -177,7 +177,7 @@ Recommended formats
 
 - Spec ID: `CYNAI.APIEGR.GitEgressSandboxOutput` <a id="spec-cynai-apiegr-gitegressout"></a>
 
-Traces To:
+#### Sandbox Output Formats Applicable Requirements Requirements Traces
 
 - [REQ-APIEGR-0104](../requirements/apiegr.md#req-apiegr-0104)
 - [REQ-APIEGR-0105](../requirements/apiegr.md#req-apiegr-0105)

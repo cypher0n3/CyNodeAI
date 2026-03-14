@@ -74,7 +74,7 @@ This section describes the project database model and how referential integrity 
 
 - Spec ID: `CYNAI.ACCESS.ProjectsDatabaseModel` <a id="spec-cynai-access-projectsdb"></a>
 
-Traces To:
+#### Traces to Requirements
 
 - [REQ-PROJCT-0100](../requirements/projct.md#req-projct-0100)
 - [REQ-PROJCT-0101](../requirements/projct.md#req-projct-0101)
@@ -87,7 +87,7 @@ Each project MUST have a user-friendly title (stored as `display_name`) and MAY 
 
 - Spec ID: `CYNAI.ACCESS.DefaultProject` <a id="spec-cynai-access-defaultproject"></a>
 
-Traces To:
+#### Default Project Requirements Traces
 
 - [REQ-PROJCT-0104](../requirements/projct.md#req-projct-0104)
 
@@ -97,7 +97,7 @@ The default project is a **catch-all for unrelated tasks**; the system (gateway,
 The default project MAY be created on first use (e.g. first task or first chat thread for that user) or at user creation; its slug/identity MUST be deterministic per user (e.g. `default-<user_handle>` or a stable id-derived slug).
 Clients and the PM/PA MAY allow users to explicitly select a different project; when they do, that project is used instead of the default project.
 
-Traces To:
+#### Default Project Requirements Traces
 
 - [REQ-PROJCT-0112](../requirements/projct.md#req-projct-0112)
 
@@ -105,7 +105,7 @@ Traces To:
 
 - Spec ID: `CYNAI.ACCESS.ProjectPlan` <a id="spec-cynai-access-projectplan"></a>
 
-Traces To:
+### Project Plan Requirements Traces
 
 - [REQ-PROJCT-0110](../requirements/projct.md#req-projct-0110)
 - [REQ-PROJCT-0111](../requirements/projct.md#req-projct-0111)
@@ -118,7 +118,7 @@ Tasks are associated with a plan via `tasks.plan_id`; when set, execution order 
 
 - Spec ID: `CYNAI.ACCESS.ProjectPlanState` <a id="spec-cynai-access-projectplanstate"></a>
 
-Traces To:
+#### Project Plan State Requirements Traces
 
 - [REQ-PROJCT-0110](../requirements/projct.md#req-projct-0110)
 - [REQ-PROJCT-0117](../requirements/projct.md#req-projct-0117)
@@ -154,7 +154,7 @@ See [REQ-PROJCT-0124](../requirements/projct.md#req-projct-0124).
 
 - Spec ID: `CYNAI.ACCESS.ProjectPlanClientEdit` <a id="spec-cynai-access-projectplanclientedit"></a>
 
-Traces To:
+#### Project Plan Client Edit Requirements Traces
 
 - [REQ-PROJCT-0113](../requirements/projct.md#req-projct-0113)
 
@@ -165,7 +165,7 @@ The gateway API and client parity (Web Console, CLI) MUST support plan and task 
 
 - Spec ID: `CYNAI.ACCESS.ProjectPlanMarkdown` <a id="spec-cynai-access-projectplanmarkdown"></a>
 
-Traces To:
+#### Project Plan and Task Text as Markdown Requirements Traces
 
 - [REQ-PROJCT-0114](../requirements/projct.md#req-projct-0114)
 
@@ -175,7 +175,7 @@ Project plan and task description text, updates, and related editable content (e
 
 - Spec ID: `CYNAI.ACCESS.ProjectPlanLock` <a id="spec-cynai-access-projectplanlock"></a>
 
-Traces To:
+#### Project Plan Lock Requirements Traces
 
 - [REQ-PROJCT-0115](../requirements/projct.md#req-projct-0115)
 
@@ -188,7 +188,7 @@ RBAC MUST allow assigning lock and unlock permissions for shared (group) project
 
 - Spec ID: `CYNAI.ACCESS.ProjectPlanApprovedState` <a id="spec-cynai-access-projectplanapprovedstate"></a>
 
-Traces To:
+#### Project Plan Approved State Requirements Traces
 
 - [REQ-PROJCT-0117](../requirements/projct.md#req-projct-0117)
 - [REQ-AGENTS-0136](../requirements/agents.md#req-agents-0136)
@@ -204,7 +204,7 @@ Users may also approve and activate directly via Web Console, CLI, or user-authe
 
 - Spec ID: `CYNAI.ACCESS.ProjectPlanAutoUnapprove` <a id="spec-cynai-access-projectplanautounapprove"></a>
 
-Traces To:
+#### Project Plan Auto Un-Approve on Edit Requirements Traces
 
 - [REQ-PROJCT-0118](../requirements/projct.md#req-projct-0118)
 
@@ -216,7 +216,7 @@ Implementation MUST perform this clear in the same transaction or immediately af
 
 - Spec ID: `CYNAI.ACCESS.ProjectPlanRevisions` <a id="spec-cynai-access-projectplanrevisions"></a>
 
-Traces To:
+#### Plan Revisions Requirements Traces
 
 - [REQ-PROJCT-0119](../requirements/projct.md#req-projct-0119)
 
@@ -228,7 +228,7 @@ Clients MUST be able to list revisions for a plan and retrieve a specific revisi
 
 - Spec ID: `CYNAI.ACCESS.ProjectPlanReviewApprove` <a id="spec-cynai-access-projectplanreviewapprove"></a>
 
-Traces To:
+#### Project Plan Review and Approve Requirements Traces
 
 - [REQ-PROJCT-0120](../requirements/projct.md#req-projct-0120)
 - [REQ-CLIENT-0180](../requirements/client.md#req-client-0180)
@@ -287,7 +287,7 @@ When set, the project scope SHOULD be used for:
 
 - Spec ID: `CYNAI.ACCESS.ProjectsMcpSearch` <a id="spec-cynai-access-projectsmcpsearch"></a>
 
-Traces To:
+### Project Search via MCP Requirements Traces
 
 - [REQ-PROJCT-0105](../requirements/projct.md#req-projct-0105)
 

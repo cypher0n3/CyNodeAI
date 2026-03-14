@@ -4,16 +4,22 @@
 - [Gateway Purpose](#gateway-purpose)
 - [Core Capabilities](#core-capabilities)
 - [Client Compatibility](#client-compatibility)
+  - [Client Compatibility Requirements Traces](#client-compatibility-requirements-traces)
 - [MCP Tool Interface](#mcp-tool-interface)
 - [Data REST API](#data-rest-api)
+  - [Data REST API Requirements Traces](#data-rest-api-requirements-traces)
   - [Project Plan API](#project-plan-api)
 - [Live Updates and Messaging](#live-updates-and-messaging)
   - [Delivery Methods](#delivery-methods)
   - [Event Types](#event-types)
   - [Subscriptions and Destinations](#subscriptions-and-destinations)
-- [Support for Cynork Chat Slash Commands](#support-for-cynork-chat-slash-commands)
+- [Support for `cynork` Chat Slash Commands](#support-for-cynork-chat-slash-commands)
+  - [Required Operation Coverage](#required-operation-coverage)
+  - [Support for `cynork` Chat Slash Commands Requirements Traces](#support-for-cynork-chat-slash-commands-requirements-traces)
 - [Authentication and Auditing](#authentication-and-auditing)
+  - [Authentication and Auditing Requirements Traces](#authentication-and-auditing-requirements-traces)
 - [Web Console](#web-console)
+  - [Web Console Requirements Traces](#web-console-requirements-traces)
 
 ## Document Overview
 
@@ -85,7 +91,7 @@ The gateway SHOULD provide compatibility modes to support common external tools.
 
 Compatibility layers MUST preserve orchestrator policy constraints and MUST not bypass auditing.
 
-Traces To:
+### Client Compatibility Requirements Traces
 
 - [REQ-USRGWY-0121](../requirements/usrgwy.md#req-usrgwy-0121)
 - [REQ-USRGWY-0127](../requirements/usrgwy.md#req-usrgwy-0127)
@@ -102,7 +108,7 @@ Agents use MCP tools as the standard tool interface, as defined in [`docs/tech_s
 The User API Gateway MUST provide a Data REST API for user clients and integrations.
 This API provides database-backed resources without exposing raw SQL.
 
-Traces To:
+### Data REST API Requirements Traces
 
 - [REQ-USRGWY-0122](../requirements/usrgwy.md#req-usrgwy-0122)
 
@@ -112,14 +118,14 @@ See [`docs/tech_specs/data_rest_api.md`](data_rest_api.md).
 
 - Spec ID: `CYNAI.USRGWY.ProjectPlanApi` <a id="spec-cynai-usrgwy-projectplanapi"></a>
 
-Traces To:
-
-- [REQ-PROJCT-0120](../requirements/projct.md#req-projct-0120)
-- [REQ-CLIENT-0180](../requirements/client.md#req-client-0180)
-
 The gateway MUST expose the following operations for project plan review and approve.
 Plans are first-class entities per project; a project may have multiple plans; at most one plan per project may be active at a time (see [Project plan state](projects_and_scopes.md#spec-cynai-access-projectplanstate)).
 Authorization MUST use the actions defined in [Project plan actions](access_control.md#spec-cynai-access-projectplanactions): `project_plan.read` for list plans, get plan, list revisions, get revision; `project_plan.approve` for approve; `project_plan.activate` for activate; `project_plan.update` for create/update plan and state transitions (suspend, resume, cancel); `project_plan.archive` for archive.
+
+#### Project Plan API Requirements Traces
+
+- [REQ-PROJCT-0120](../requirements/projct.md#req-projct-0120)
+- [REQ-CLIENT-0180](../requirements/client.md#req-client-0180)
 
 #### `ProjectPlanApi` Operations
 
@@ -224,7 +230,7 @@ Examples
 
 Secrets required for delivery MUST be stored securely in PostgreSQL and MUST NOT be exposed to agents.
 
-Traces To:
+#### Delivery Methods Requirements Traces
 
 - [REQ-USRGWY-0123](../requirements/usrgwy.md#req-usrgwy-0123)
 
@@ -282,18 +288,15 @@ Constraints
 - Index: (`destination_id`)
 - Index: (`event_pattern`)
 
-## Support for Cynork Chat Slash Commands
+## Support for `cynork` Chat Slash Commands
 
 - Spec ID: `CYNAI.USRGWY.ChatSlashCommandSupport` <a id="spec-cynai-usrgwy-chatslashcommandsupport"></a>
 
-Traces To:
-
-- [REQ-ORCHES-0130](../requirements/orches.md#req-orches-0130)
-
-The User API Gateway MUST expose endpoints and operations that support every cynork chat slash command defined in the [CLI management app spec - Slash Command Reference](cli_management_app_commands_chat.md#spec-cynai-client-clichatslashcommandreference).
+The User API Gateway MUST expose endpoints and operations that support every cynork chat slash
+command defined in the [cynork TUI slash commands spec](cynork_tui_slash_commands.md#spec-cynai-client-cynorktuislashcommands).
 The CLI executes slash commands by calling the same gateway APIs as the non-interactive CLI; the gateway and orchestrator MUST support that full surface.
 
-Required operation coverage:
+### Required Operation Coverage
 
 - **Status and identity:** Gateway reachability (status) and current identity (whoami) endpoints used by `/status` and `/whoami`.
 - **Tasks:** Task list, get, create, cancel, result, logs, artifacts list, and artifacts get (as used by `/task list`, `/task get`, `/task create`, `/task cancel`, `/task result`, `/task logs`, `/task artifacts list`, `/task artifacts get`).
@@ -301,10 +304,14 @@ Required operation coverage:
 - **Nodes:** Node list and node get (as used by `/nodes list`, `/nodes get <node_id>`).
 - **Preferences:** List, get, set, delete, and effective-preferences (as used by `/prefs list`, `/prefs get`, `/prefs set`, `/prefs delete`, `/prefs effective`).
   Scope-type, scope-id, and key semantics MUST match the preferences API.
-- **Skills:** Skill list and skill get (as used by `/skills list`, `/skills get <skill_id>`).
+- **Skills:** Skill load, list, get, update, and delete (as used by `/skills load <file.md>`, `/skills list`, `/skills get <skill_selector>`, `/skills update <skill_selector> <file.md>`, `/skills delete <skill_selector>`).
 
 Implementation MUST use the existing Data REST API and gateway auth endpoints; no separate "chat API" is required.
 New gateway endpoints or resources added for other clients (e.g. admin console) MUST be taken into account so that slash commands can call the same operations where applicable.
+
+### Support for `cynork` Chat Slash Commands Requirements Traces
+
+- [REQ-ORCHES-0130](../requirements/orches.md#req-orches-0130)
 
 ## Authentication and Auditing
 
@@ -318,7 +325,7 @@ New gateway endpoints or resources added for other clients (e.g. admin console) 
 - The gateway SHOULD support per-user rate limiting and request size limits.
 - For the MVP local user account model and secure credential handling requirements, see [`docs/tech_specs/local_user_accounts.md`](local_user_accounts.md).
 
-Traces To:
+### Authentication and Auditing Requirements Traces
 
 - [REQ-USRGWY-0124](../requirements/usrgwy.md#req-usrgwy-0124)
 - [REQ-USRGWY-0125](../requirements/usrgwy.md#req-usrgwy-0125)
@@ -331,8 +338,8 @@ Traces To:
 The User API Gateway SHOULD support the Web Console for managing credentials and user preferences.
 The Web Console MUST be a client of the gateway and MUST NOT connect directly to PostgreSQL.
 
-Traces To:
+See [`docs/tech_specs/web_console.md`](web_console.md).
+
+### Web Console Requirements Traces
 
 - [REQ-USRGWY-0126](../requirements/usrgwy.md#req-usrgwy-0126)
-
-See [`docs/tech_specs/web_console.md`](web_console.md).

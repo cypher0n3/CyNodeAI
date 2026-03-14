@@ -25,7 +25,7 @@ This supports bulk updates to the model registry (e.g. adding or updating model 
 - **Out of scope:** Pushing model artifacts (binaries) or cache population; node delivery; worker API.
   Artifacts and cache remain under [CYNAI.MODELS.ModelCache](../tech_specs/model_management.md#spec-cynai-models-modelcache) and user-directed flows.
 
-Traces To:
+### 2.1. Traces To
 
 - [REQ-MODELS-0106](../requirements/models.md#req-models-0106)
 - [REQ-MODELS-0107](../requirements/models.md#req-models-0107)

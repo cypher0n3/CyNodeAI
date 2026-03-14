@@ -8,6 +8,8 @@
   - [Applicable Requirements (Authentication)](#applicable-requirements-authentication)
 - [HTTPS Transport and Reverse Proxy](#https-transport-and-reverse-proxy)
 - [Health Checks](#health-checks)
+  - [Health Check Endpoints](#health-check-endpoints)
+  - [Health Check Requirements Traces](#health-check-requirements-traces)
 - [Error Handling](#error-handling)
 - [Worker API Surface (Initial Implementation)](#worker-api-surface-initial-implementation)
   - [Run Job (Synchronous)](#run-job-synchronous)
@@ -17,12 +19,13 @@
   - [Session Sandbox (Long-Running)](#session-sandbox-long-running)
   - [Managed Agent Proxy (Bidirectional)](#managed-agent-proxy-bidirectional)
   - [Stop All Orchestrator-Directed (Orchestrator Shutdown)](#stop-all-orchestrator-directed-orchestrator-shutdown)
+  - [Session Sandbox PTY (Interactive Terminal Stream)](#session-sandbox-pty-interactive-terminal-stream)
 - [Sandbox Execution Requirements (Initial Implementation)](#sandbox-execution-requirements-initial-implementation)
-  - [Applicable Requirements (Sandbox Execution)](#applicable-requirements-sandbox-execution)
+  - [Sandbox Execution Requirements Traces](#sandbox-execution-requirements-traces)
 - [Logging and Output Limits](#logging-and-output-limits)
   - [Applicable Requirements (Logging and Output Limits)](#applicable-requirements-logging-and-output-limits)
   - [Request Size Limits (Required)](#request-size-limits-required)
-  - [Stdout/stderr Capture Limits (Required)](#stdoutstderr-capture-limits-required)
+  - [`stdout`/`stderr` Capture Limits (Required)](#stdoutstderr-capture-limits-required)
   - [Secret Handling (Required)](#secret-handling-required)
 
 ## Document Overview
@@ -73,7 +76,7 @@ The Worker API MUST authenticate all requests (except explicit health checks).
 
 - Spec ID: `CYNAI.WORKER.WorkerApiAuth` <a id="spec-cynai-worker-workerauth"></a>
 
-Traces To:
+#### Traces to Requirements
 
 - [REQ-WORKER-0100](../requirements/worker.md#req-worker-0100)
 - [REQ-WORKER-0101](../requirements/worker.md#req-worker-0101)
@@ -108,27 +111,25 @@ Self-signed certificate handling
 
 ## Health Checks
 
+- Spec ID: `CYNAI.WORKER.WorkerApiHealthChecks` <a id="spec-cynai-worker-workerapihealthchecks"></a>
+
 The Worker API MUST expose unauthenticated health checks intended for liveness and readiness probing.
 Health check endpoints MUST NOT require a `/v1/` prefix and MUST NOT require a JSON `version` field.
 
-### Applicable Requirements (Health Checks)
-
-- Spec ID: `CYNAI.WORKER.WorkerApiHealthChecks` <a id="spec-cynai-worker-workerapihealthchecks"></a>
-
-Traces To:
-
-- [REQ-WORKER-0140](../requirements/worker.md#req-worker-0140)
-- [REQ-WORKER-0141](../requirements/worker.md#req-worker-0141)
-- [REQ-WORKER-0142](../requirements/worker.md#req-worker-0142)
-- [REQ-WORKER-0252](../requirements/worker.md#req-worker-0252)
-
-Endpoints
+### Health Check Endpoints
 
 - `GET /healthz`
   - returns 200 with plain text body `ok` when the HTTP server is running
 - `GET /readyz`
   - returns 200 with plain text body `ready` only when the node has passed [node startup checks](worker_node.md#spec-cynai-worker-nodestartupchecks) and is ready to accept job execution requests
   - returns 503 when the node is not ready (e.g. startup checks not yet passed or failed)
+
+### Health Check Requirements Traces
+
+- [REQ-WORKER-0140](../requirements/worker.md#req-worker-0140)
+- [REQ-WORKER-0141](../requirements/worker.md#req-worker-0141)
+- [REQ-WORKER-0142](../requirements/worker.md#req-worker-0142)
+- [REQ-WORKER-0252](../requirements/worker.md#req-worker-0252)
 
 ## Error Handling
 
@@ -152,7 +153,7 @@ Run a sandbox job to completion and return a result in the same response.
 
 - Spec ID: `CYNAI.WORKER.WorkerApiRunJobSyncV1` <a id="spec-cynai-worker-workerapirunjobsync-v1"></a>
 
-Traces To:
+##### Applicable Requirements (Run Job) Requirements Traces
 
 - [REQ-WORKER-0143](../requirements/worker.md#req-worker-0143)
 - [REQ-WORKER-0144](../requirements/worker.md#req-worker-0144)
@@ -272,7 +273,7 @@ Timeout rules (required)
 
 - Spec ID: `CYNAI.WORKER.JobLifecycleResultPersistence` <a id="spec-cynai-worker-joblifecycleresultpersistence"></a>
 
-Traces To:
+#### Job Lifecycle and Result Persistence Requirements Traces
 
 - [REQ-WORKER-0149](../requirements/worker.md#req-worker-0149)
 
@@ -322,7 +323,7 @@ Result retention (required)
   The node SHOULD retain the job directory until orchestrator persistence is confirmed when the protocol supports it.
   This aligns with [cynode_sba.md - Result and Artifact Delivery](cynode_sba.md#spec-cynai-sbagnt-resultandartifactdelivery) (node-mediated delivery path).
 
-See:
+#### See Also (Result Delivery)
 
 - [cynode_sba.md - Job lifecycle and status reporting](cynode_sba.md#spec-cynai-sbagnt-joblifecycle) (SBA in-progress and completion contract)
 
@@ -338,7 +339,7 @@ See [cynode_step_executor.md - Worker API Integration](cynode_step_executor.md#s
 
 - Spec ID: `CYNAI.WORKER.SessionSandbox` <a id="spec-cynai-worker-sessionsandbox"></a>
 
-Traces To:
+#### Session Sandbox (Long-Running) Requirements Traces
 
 - [REQ-WORKER-0150](../requirements/worker.md#req-worker-0150)
 - [REQ-WORKER-0151](../requirements/worker.md#req-worker-0151)
@@ -414,7 +415,7 @@ Normative constraints:
 
 Agent-to-orchestrator proxy endpoints are used by the managed agent container at runtime.
 
-Binding:
+##### Binding
 
 - Per [Unified UDS Path](worker_node.md#spec-cynai-worker-unifiedudspath), all container-facing proxy endpoints MUST use **Unix domain sockets (UDS)** only.
   Loopback TCP is not permitted for agent or sandbox container access; the worker MUST expose proxy endpoints to containers only via UDS (or `http+unix` URLs).
@@ -460,15 +461,10 @@ See also:
 
 - Spec ID: `CYNAI.WORKER.StopAllOrchestratorDirected` <a id="spec-cynai-worker-stopallorchestratordirected"></a>
 
-Traces To:
-
-- [REQ-ORCHES-0164](../requirements/orches.md#req-orches-0164)
-- [REQ-WORKER-0261](../requirements/worker.md#req-worker-0261)
-
 When the orchestrator shuts down, it MUST notify each registered worker to stop all orchestrator-directed agents and jobs.
 The Worker API MUST expose an endpoint (or equivalent authenticated mechanism) that the orchestrator calls to signal the node to stop all orchestrator-directed managed services (including PMA) and all jobs that were dispatched by the orchestrator.
 
-Normative behavior:
+#### Normative Behavior
 
 - The orchestrator MUST call this mechanism for each registered worker that has an active worker API target before the orchestrator process exits.
 - The node MUST authenticate the request using the same bearer token contract as other Worker API calls.
@@ -477,13 +473,14 @@ Normative behavior:
 
 See [Orchestrator Shutdown](orchestrator.md#spec-cynai-orches-orchestratorshutdown) and [Orchestrator Shutdown Notification](worker_node.md#spec-cynai-worker-orchestratorshutdownnotification).
 
+#### Stop All Orchestrator-Directed (Orchestrator Shutdown) Requirements Traces
+
+- [REQ-ORCHES-0164](../requirements/orches.md#req-orches-0164)
+- [REQ-WORKER-0261](../requirements/worker.md#req-worker-0261)
+
 ### Session Sandbox PTY (Interactive Terminal Stream)
 
 - Spec ID: `CYNAI.WORKER.SessionSandboxPty` <a id="spec-cynai-worker-sessionsandboxpty"></a>
-
-Traces To:
-
-- [REQ-WORKER-0153](../requirements/worker.md#req-worker-0153)
 
 This section defines an interactive PTY mode for session sandboxes.
 It enables effectively interactive terminal control for long-running coding tasks without requiring inbound SSH or a network server inside the sandbox container.
@@ -506,7 +503,7 @@ The Worker API MUST support the following PTY lifecycle operations for a session
 - **Resize**: send terminal resize events (cols, rows).
 - **Close PTY**: close the interactive stream and release node-side buffers.
 
-Recommended API shape (subject to later endpoint finalization):
+#### Recommended API Shape (Subject to Later Endpoint Finalization)
 
 - `POST /v1/worker/sessions/{session_id}/pty:open`
 - `POST /v1/worker/sessions/{session_id}/pty:send`
@@ -514,20 +511,20 @@ Recommended API shape (subject to later endpoint finalization):
 - `POST /v1/worker/sessions/{session_id}/pty:close`
 - `GET /v1/worker/sessions/{session_id}/pty:recv`
 
-Recommended request fields (minimum):
+#### Recommended Request Fields (Minimum)
 
 - `version` (int, required): must be 1
 - `task_id` (uuid string, required)
 - `session_id` (uuid string, required)
 - `pty_id` (uuid string, required for send/recv/resize/close; returned by open)
 
-PTY I/O encoding:
+#### PTY I/O Encoding
 
 - PTY payloads MUST be treated as bytes, not as UTF-8 text.
 - Requests and responses SHOULD encode byte payloads using base64 fields (for example, `data_b64`) so the transport remains JSON-safe.
 - The node MUST enforce strict per-message and per-buffer size limits.
 
-Timeouts and lifecycle:
+#### Timeouts and Lifecycle
 
 - PTY streams MUST be bounded by the session lifetime and idle timeout rules.
 - The node MUST terminate PTY streams when the session ends.
@@ -546,15 +543,17 @@ Timeouts and lifecycle:
 PTY mode is an additional capability.
 Agents and orchestrator workflows SHOULD default to exec-round session operations for determinism and easier output bounding, and use PTY only when required by the task profile.
 
+#### Session Sandbox PTY (Interactive Terminal Stream) Requirements Traces
+
+- [REQ-WORKER-0153](../requirements/worker.md#req-worker-0153)
+
 ## Sandbox Execution Requirements (Initial Implementation)
-
-This section describes sandbox execution constraints required by the initial Worker API implementation.
-
-### Applicable Requirements (Sandbox Execution)
 
 - Spec ID: `CYNAI.WORKER.SandboxExecution` <a id="spec-cynai-worker-sandboxexec"></a>
 
-Traces To:
+This section describes sandbox execution constraints required by the initial Worker API implementation.
+
+### Sandbox Execution Requirements Traces
 
 - [REQ-WORKER-0103](../requirements/worker.md#req-worker-0103)
 - [REQ-WORKER-0104](../requirements/worker.md#req-worker-0104)
@@ -568,7 +567,7 @@ This section describes log capture and truncation limits for Worker API response
 
 - Spec ID: `CYNAI.WORKER.LoggingOutputLimits` <a id="spec-cynai-worker-loglimits"></a>
 
-Traces To:
+#### Applicable Requirements (Logging and Output Limits) Requirements Traces
 
 - [REQ-WORKER-0106](../requirements/worker.md#req-worker-0106)
 - [REQ-WORKER-0107](../requirements/worker.md#req-worker-0107)
@@ -578,10 +577,6 @@ Traces To:
 
 - Spec ID: `CYNAI.WORKER.WorkerApiRequestSizeLimits` <a id="spec-cynai-worker-workerapirequestsizelimits"></a>
 
-Traces To:
-
-- [REQ-WORKER-0145](../requirements/worker.md#req-worker-0145)
-
 - The node MUST enforce a maximum request body size for `POST /v1/worker/jobs:run`.
 - The effective maximum MUST be computed as the minimum of:
   - node startup YAML `worker_api.max_request_bytes` when set
@@ -589,14 +584,13 @@ Traces To:
   - otherwise 10485760 (10 MiB)
 - Requests larger than the effective maximum MUST be rejected with HTTP 413.
 
-### Stdout/stderr Capture Limits (Required)
+#### Request Size Limits (Required) Requirements Traces
+
+- [REQ-WORKER-0145](../requirements/worker.md#req-worker-0145)
+
+### `stdout`/`stderr` Capture Limits (Required)
 
 - Spec ID: `CYNAI.WORKER.WorkerApiStdIoCaptureLimits` <a id="spec-cynai-worker-workerapistdiocapturelimits"></a>
-
-Traces To:
-
-- [REQ-WORKER-0146](../requirements/worker.md#req-worker-0146)
-- [REQ-WORKER-0147](../requirements/worker.md#req-worker-0147)
 
 - The node MUST capture sandbox stdout and stderr as UTF-8 strings.
 - The node MUST enforce independent maximum sizes for `stdout` and `stderr` in the response.
@@ -608,16 +602,21 @@ Traces To:
   - preserve valid UTF-8 in the returned string
   - set `truncated.stdout=true` and/or `truncated.stderr=true` accordingly
 
+#### `stdout`/`stderr` Capture Limits (Required) Requirements Traces
+
+- [REQ-WORKER-0146](../requirements/worker.md#req-worker-0146)
+- [REQ-WORKER-0147](../requirements/worker.md#req-worker-0147)
+
 ### Secret Handling (Required)
 
 - Spec ID: `CYNAI.WORKER.WorkerApiSecretHandling` <a id="spec-cynai-worker-workerapisecrethandling"></a>
-
-Traces To:
-
-- [REQ-WORKER-0148](../requirements/worker.md#req-worker-0148)
-- [REQ-WORKER-0108](../requirements/worker.md#req-worker-0108)
 
 - Secrets MUST NOT be written to logs.
 - If a sandbox writes secrets to stdout/stderr, the node MUST treat that as best-effort user input and MUST NOT attempt
   to "fix" it by pattern-based redaction.
   The correct remediation is to prevent secrets from being placed into the sandbox environment in the first place.
+
+#### Secret Handling (Required) Requirements Traces
+
+- [REQ-WORKER-0148](../requirements/worker.md#req-worker-0148)
+- [REQ-WORKER-0108](../requirements/worker.md#req-worker-0108)

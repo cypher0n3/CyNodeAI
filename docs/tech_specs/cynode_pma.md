@@ -2,21 +2,47 @@
 
 - [Document Overview](#document-overview)
 - [Purpose and Trust Boundary](#purpose-and-trust-boundary)
+  - [Network and Routing Constraints (Normative)](#network-and-routing-constraints-normative)
 - [Request Source and Orchestrator Handoff](#request-source-and-orchestrator-handoff)
+  - [Handoff Transport (Normative)](#handoff-transport-normative)
   - [What is Handed off to `cynode-pma`](#what-is-handed-off-to-cynode-pma)
   - [What is Not Handed off to `cynode-pma`](#what-is-not-handed-off-to-cynode-pma)
   - [Process Boundaries and Workflow Runner](#process-boundaries-and-workflow-runner)
 - [Role Modes](#role-modes)
 - [Instructions Loading and Routing](#instructions-loading-and-routing)
+  - [Role Separation Requirement](#role-separation-requirement)
+  - [Default Layout (Required)](#default-layout-required)
 - [LLM Context Composition](#llm-context-composition)
+  - [LLM Context Composition Requirements Traces](#llm-context-composition-requirements-traces)
 - [PMA Conversation History](#pma-conversation-history)
+  - [Langchain-Capable Path](#langchain-capable-path)
+  - [Executor Input](#executor-input)
 - [Chat File Context](#chat-file-context)
+  - [Chat File Context Requirements Traces](#chat-file-context-requirements-traces)
 - [Chat Surface Mapping](#chat-surface-mapping)
+  - [Responses-Surface Handoff](#responses-surface-handoff)
+  - [Reference Contract](#reference-contract)
+- [Thinking Content Separation](#thinking-content-separation)
+  - [Thinking Content Separation Requirements Traces](#thinking-content-separation-requirements-traces)
+- [Streaming Assistant Output](#streaming-assistant-output)
+  - [Streaming Assistant Output Requirements Traces](#streaming-assistant-output-requirements-traces)
 - [Node-Local Inference Backend Environment](#node-local-inference-backend-environment)
+  - [Node-Local Inference Backend Environment Requirements Traces](#node-local-inference-backend-environment-requirements-traces)
 - [Policy and Tool Boundaries](#policy-and-tool-boundaries)
+  - [See Also (PMA Overview)](#see-also-pma-overview)
 - [MCP Tool Access](#mcp-tool-access)
+  - [Role-Based Allowlists](#role-based-allowlists)
+- [LLM via API Egress](#llm-via-api-egress)
+  - [LLM via API Egress Requirements Traces](#llm-via-api-egress-requirements-traces)
+- [PMA Informs Orchestrator When Online](#pma-informs-orchestrator-when-online)
+  - [PMA Informs Orchestrator When Online Requirements Traces](#pma-informs-orchestrator-when-online-requirements-traces)
+  - [Normative Behavior](#normative-behavior)
 - [Skills and Default Skill](#skills-and-default-skill)
+  - [Skills MCP Tools](#skills-mcp-tools)
 - [Configuration Surface](#configuration-surface)
+  - [Required Configuration Values](#required-configuration-values)
+  - [Optional Configuration Values](#optional-configuration-values)
+  - [Config Keys Alignment](#config-keys-alignment)
 
 ## Document Overview
 
@@ -147,13 +173,6 @@ The instructions bundle defines:
 
 - Spec ID: `CYNAI.PMAGNT.LLMContextComposition` <a id="spec-cynai-pmagnt-llmcontextcomposition"></a>
 
-Traces To:
-
-- [REQ-AGENTS-0132](../requirements/agents.md#req-agents-0132)
-- [REQ-AGENTS-0133](../requirements/agents.md#req-agents-0133)
-- [REQ-AGENTS-0134](../requirements/agents.md#req-agents-0134)
-- [REQ-PMAGNT-0108](../requirements/pmagnt.md#req-pmagnt-0108)
-
 When building the system message or prompt content sent to an LLM, `cynode-pma` MUST compose context in this order:
 
 1. **Baseline context** - Identity, role, responsibilities, and non-goals for the current role (`project_manager` or `project_analyst`).
@@ -169,6 +188,13 @@ When building the system message or prompt content sent to an LLM, `cynode-pma` 
 6. **Request-specific messages** - Conversation turns, tool results, and other request-scoped content.
 
 The implementation MUST resolve effective preferences for the current task/request context (including `user_id`, `project_id`, `task_id`, `group_ids`) and MUST include project-level and task-level context when available and the resolved additional context in every LLM request.
+
+### LLM Context Composition Requirements Traces
+
+- [REQ-AGENTS-0132](../requirements/agents.md#req-agents-0132)
+- [REQ-AGENTS-0133](../requirements/agents.md#req-agents-0133)
+- [REQ-AGENTS-0134](../requirements/agents.md#req-agents-0134)
+- [REQ-PMAGNT-0108](../requirements/pmagnt.md#req-pmagnt-0108)
 
 ## PMA Conversation History
 
@@ -190,7 +216,7 @@ For multi-turn chat, prior conversation turns MUST be preserved and included in 
 
 - Spec ID: `CYNAI.PMAGNT.ChatFileContext` <a id="spec-cynai-pmagnt-chatfilecontext"></a>
 
-Traces To:
+### Chat File Context Requirements Traces
 
 - [REQ-PMAGNT-0115](../requirements/pmagnt.md#req-pmagnt-0115)
 
@@ -222,13 +248,45 @@ This mapping is required so that:
 
 - [`docs/tech_specs/openai_compatible_chat_api.md`](openai_compatible_chat_api.md)
 
+## Thinking Content Separation
+
+- Spec ID: `CYNAI.PMAGNT.ThinkingContentSeparation` <a id="spec-cynai-pmagnt-thinkingcontentseparation"></a>
+
+When `cynode-pma` receives backend output that mixes hidden reasoning with visible assistant text in the same raw payload, PMA MUST separate the two before returning the assistant turn upstream.
+
+- Visible assistant text returned by PMA MUST exclude hidden reasoning content.
+- If the backend emits literal wrappers such as `<think>...</think>`, PMA MUST treat those wrapped segments as hidden thinking content and MUST NOT pass the literal tags or wrapped text through as visible assistant text.
+- When the PMA return path supports structured assistant-turn data, PMA SHOULD pass extracted hidden reasoning upstream as `thinking` data paired with visible `text` data in the original logical order.
+- When the PMA return path does not support structured thinking data, PMA MUST still remove hidden reasoning from the visible assistant text instead of leaking it to the user-facing canonical plain-text path.
+- PMA does not own transcript persistence.
+  Any retained thinking that should survive history retrieval MUST be passed upstream in structured assistant-turn data for orchestrator or gateway persistence.
+
+### Thinking Content Separation Requirements Traces
+
+- [REQ-PMAGNT-0117](../requirements/pmagnt.md#req-pmagnt-0117)
+- [REQ-USRGWY-0138](../requirements/usrgwy.md#req-usrgwy-0138)
+- [REQ-USRGWY-0148](../requirements/usrgwy.md#req-usrgwy-0148)
+
+## Streaming Assistant Output
+
+- Spec ID: `CYNAI.PMAGNT.StreamingAssistantOutput` <a id="spec-cynai-pmagnt-streamingassistantoutput"></a>
+
+When `cynode-pma` is serving an interactive chat turn, the standard PMA chat path MUST support incremental assistant-output streaming upstream to the orchestrator or gateway instead of buffering all visible text until the full turn is complete.
+
+- PMA MUST emit visible assistant text incrementally when the selected inference adapter exposes incremental output.
+- PMA MUST keep hidden thinking or reasoning separate from visible text throughout the streaming path.
+- PMA MUST NOT emit literal hidden-thinking wrappers such as `<think>...</think>` as visible text deltas.
+- When structured progress is available, PMA SHOULD surface separate thinking or tool-progress updates instead of flattening that progress into visible assistant prose.
+- If a selected inference adapter cannot provide true visible-text deltas, PMA SHOULD still emit bounded in-progress state plus a final reconciled assistant turn so the upstream interactive chat surface can degrade gracefully.
+
+### Streaming Assistant Output Requirements Traces
+
+- [REQ-PMAGNT-0118](../requirements/pmagnt.md#req-pmagnt-0118)
+- [REQ-USRGWY-0149](../requirements/usrgwy.md#req-usrgwy-0149)
+
 ## Node-Local Inference Backend Environment
 
 - Spec ID: `CYNAI.PMAGNT.NodeLocalInferenceEnv` <a id="spec-cynai-pmagnt-nodelocalinferenceenv"></a>
-
-Traces To:
-
-- [REQ-PMAGNT-0116](../requirements/pmagnt.md#req-pmagnt-0116)
 
 When `cynode-pma` uses node-local inference through the worker-managed service contract, it MUST consume orchestrator-directed backend environment values that affect runner behavior or effective context size when those values are supplied in the managed-service inference configuration.
 
@@ -237,6 +295,10 @@ When `cynode-pma` uses node-local inference through the worker-managed service c
 - PMA MUST apply supported values such as `OLLAMA_NUM_CTX` to the corresponding per-request or per-runner inference options rather than ignoring them.
 - When an orchestrator-directed backend environment value is not supported by the selected local inference adapter, PMA SHOULD log a bounded operator-visible warning and MUST continue using only the supported subset.
 - PMA MUST NOT require direct access to worker host environment variables when the managed-service inference contract already supplies the needed backend-derived values.
+
+### Node-Local Inference Backend Environment Requirements Traces
+
+- [REQ-PMAGNT-0116](../requirements/pmagnt.md#req-pmagnt-0116)
 
 ## Policy and Tool Boundaries
 
@@ -249,7 +311,7 @@ In particular:
 - External provider calls MUST be routed through API Egress.
 - Provider credentials MUST NOT be stored in the agent runtime.
 
-See:
+### See Also (PMA Overview)
 
 - [`docs/requirements/agents.md`](../requirements/agents.md)
 - [`docs/tech_specs/mcp_tooling.md`](mcp_tooling.md)
@@ -278,7 +340,7 @@ Tools that are sandbox-only MUST NOT be invokable by `cynode-pma`.
 
 Admin-configurable per-tool enable/disable and access control rules further restrict which tools succeed; the agent MUST treat gateway rejections as hard failures.
 
-See:
+#### See Also
 
 - [`docs/tech_specs/mcp_gateway_enforcement.md`](mcp_gateway_enforcement.md)
 - [`docs/tech_specs/mcp_tool_catalog.md`](mcp_tool_catalog.md)
@@ -287,25 +349,25 @@ See:
 
 - Spec ID: `CYNAI.PMAGNT.LLMViaApiEgress` <a id="spec-cynai-pmagnt-llmviaapiegress"></a>
 
-Traces To:
-
-- [REQ-PMAGNT-0109](../requirements/pmagnt.md#req-pmagnt-0109)
-
 When the orchestrator provides an LLM API key (or equivalent credential) for the Project Manager Agent via the API Egress Server (e.g. configured external provider and key for PMA inference), `cynode-pma` MUST be able to use that provider for inference.
 PMA MUST route such inference requests through the API Egress Server so credentials are not exposed to the agent process.
 See [`docs/tech_specs/api_egress_server.md`](api_egress_server.md) and [`docs/tech_specs/external_model_routing.md`](external_model_routing.md).
+
+### LLM via API Egress Requirements Traces
+
+- [REQ-PMAGNT-0109](../requirements/pmagnt.md#req-pmagnt-0109)
 
 ## PMA Informs Orchestrator When Online
 
 - Spec ID: `CYNAI.PMAGNT.PmaInformsOrchestratorOnline` <a id="spec-cynai-pmagnt-pmainformsorchestratoronline"></a>
 
-Traces To:
+`cynode-pma` MUST expose a health endpoint so the worker can determine readiness.
+The orchestrator MUST learn that PMA is online via worker-reported managed service status (and endpoints), not by probing a PMA listen address directly.
+
+### PMA Informs Orchestrator When Online Requirements Traces
 
 - [REQ-PMAGNT-0110](../requirements/pmagnt.md#req-pmagnt-0110)
 - [REQ-ORCHES-0151](../requirements/orches.md#req-orches-0151)
-
-`cynode-pma` MUST expose a health endpoint so the worker can determine readiness.
-The orchestrator MUST learn that PMA is online via worker-reported managed service status (and endpoints), not by probing a PMA listen address directly.
 
 ### Normative Behavior
 
@@ -327,7 +389,7 @@ See [Default CyNodeAI Interaction Skill](skills_storage_and_inference.md#spec-cy
   Permission is determined by the role allowlist in [mcp_gateway_enforcement.md](mcp_gateway_enforcement.md) and per-tool access control; the implementation MUST NOT invoke a skills tool if the gateway rejects the call.
 - All skill tool invocations are audited and subject to the same scope and malicious-pattern checks as web and CLI.
 
-See:
+#### See Also (Skills Tools)
 
 - [`docs/tech_specs/skills_storage_and_inference.md`](skills_storage_and_inference.md)
 - [`docs/tech_specs/mcp_tool_catalog.md`](mcp_tool_catalog.md#spec-cynai-mcptoo-skillstools)

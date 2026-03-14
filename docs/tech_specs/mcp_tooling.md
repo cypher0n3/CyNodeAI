@@ -35,7 +35,7 @@ The orchestrator is the policy and routing point for tools.
 - The User API Gateway is intended for external user clients and integrations, not for internal agent operations.
 - Direct access to internal services and databases should be avoided and restricted by policy.
 
-Traces To:
+#### Traces to Requirements
 
 - [REQ-MCPTOO-0100](../requirements/mcptoo.md#req-mcptoo-0100)
 - [REQ-MCPTOO-0101](../requirements/mcptoo.md#req-mcptoo-0101)
@@ -75,7 +75,7 @@ Tools exposed to agents SHOULD be grouped into categories.
 
 - Spec ID: `CYNAI.MCPTOO.HelpMcpServer` <a id="spec-cynai-mcptoo-helpmcpserver"></a>
 
-Traces To:
+### Help MCP Server Requirements Traces
 
 - [REQ-MCPTOO-0116](../requirements/mcptoo.md#req-mcptoo-0116)
 
@@ -142,7 +142,7 @@ User clients MAY access database-backed information through the User API Gateway
 - The orchestrator owns database credentials and exposes only scoped MCP database tools.
 - User-facing access must be mediated by the User API Gateway and must not expose raw SQL execution.
 
-Traces To:
+#### Database Access Rules Applicable Requirements Requirements Traces
 
 - [REQ-MCPTOO-0103](../requirements/mcptoo.md#req-mcptoo-0103)
 - [REQ-MCPTOO-0104](../requirements/mcptoo.md#req-mcptoo-0104)

@@ -55,7 +55,7 @@ This section describes how CyNodeAI uses MCP without extending MCP wire messages
 
 - Spec ID: `CYNAI.MCPGAT.StandardMcpUsage` <a id="spec-cynai-mcpgat-stdmcpusage"></a>
 
-Traces To:
+#### Traces to Requirements
 
 - [REQ-MCPGAT-0100](../requirements/mcpgat.md#req-mcpgat-0100)
 - [REQ-MCPGAT-0101](../requirements/mcpgat.md#req-mcpgat-0101)
@@ -125,7 +125,7 @@ Audit
 
 - Audit records for tool calls made with an agent-scoped token MUST include the resolved agent type and, when the token is user-associated (PA, sandbox), the user/task context derived from the token so that tool use remains attributable.
 
-Traces To:
+##### Token Use at the Gateway Requirements Traces
 
 - [REQ-MCPGAT-0116](../requirements/mcpgat.md#req-mcpgat-0116)
 - [REQ-WORKER-0164](../requirements/worker.md#req-worker-0164)
@@ -134,7 +134,7 @@ Traces To:
 
 - Spec ID: `CYNAI.MCPGAT.EdgeEnforcementMode` <a id="spec-cynai-mcpgat-edgeenforcement"></a>
 
-Traces To:
+### Edge Enforcement Mode (Node-Local Agent Runtimes) Requirements Traces
 
 - [REQ-MCPGAT-0112](../requirements/mcpgat.md#req-mcpgat-0112)
 
@@ -246,7 +246,7 @@ User-installed (custom) MCP tools
   Users MUST be able to install their own MCP tools and configure per-tool scope (sandbox only, PM only, or both); the orchestrator MUST persist that scope and the gateway MUST use it when enforcing the rules above.
   See [User-Installable MCP Tools](user_installable_mcp_tools.md).
 
-Traces To:
+### Per-Tool Scope Sandbox vs PM Requirements Traces
 
 - [REQ-MCPGAT-0114](../requirements/mcpgat.md#req-mcpgat-0114)
 - [REQ-MCPGAT-0115](../requirements/mcpgat.md#req-mcpgat-0115)
@@ -257,7 +257,7 @@ Traces To:
 
 Admins MUST be able to turn individual MCP tools on or off.
 
-Traces To:
+### Admin-Configurable Per-Tool EnableDisable Requirements Traces
 
 - [REQ-MCPGAT-0113](../requirements/mcpgat.md#req-mcpgat-0113)
 
@@ -275,7 +275,7 @@ Because CyNodeAI does not extend MCP wire messages, task scoping MUST be express
 
 - Spec ID: `CYNAI.MCPGAT.ToolArgumentSchema` <a id="spec-cynai-mcpgat-toolargschema"></a>
 
-Traces To:
+#### Applicable Requirements (Tool Argument Schemas) Requirements Traces
 
 - [REQ-MCPGAT-0103](../requirements/mcpgat.md#req-mcpgat-0103)
 - [REQ-MCPGAT-0104](../requirements/mcpgat.md#req-mcpgat-0104)

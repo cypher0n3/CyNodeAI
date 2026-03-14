@@ -93,3 +93,11 @@ Behavioral and workflow requirements still live in `AGENTS` and `ORCHES`.
   PMA MUST apply those values consistently to its inference requests instead of silently ignoring them so that PMA uses the same orchestrator-derived effective context-window settings as the node-local backend it depends on.
   [CYNAI.PMAGNT.NodeLocalInferenceEnv](../tech_specs/cynode_pma.md#spec-cynai-pmagnt-nodelocalinferenceenv)
   <a id="req-pmagnt-0116"></a>
+- **REQ-PMAGNT-0117:** When PMA inference output includes hidden thinking intermixed with visible assistant text, `cynode-pma` MUST separate the hidden thinking from the visible assistant text before returning the assistant turn upstream.
+  Literal hidden-thinking wrappers or payloads such as model-emitted `<think>...</think>` blocks MUST NOT leak into canonical visible assistant text.
+  [CYNAI.PMAGNT.ThinkingContentSeparation](../tech_specs/cynode_pma.md#spec-cynai-pmagnt-thinkingcontentseparation)
+  <a id="req-pmagnt-0117"></a>
+- **REQ-PMAGNT-0118:** When `cynode-pma` serves an interactive chat turn through the PMA chat surface, it MUST support incremental assistant-output streaming on the standard interactive path instead of buffering all visible text until the full turn completes.
+  Hidden thinking or reasoning MUST remain separate from visible text throughout that streaming path.
+  [CYNAI.PMAGNT.StreamingAssistantOutput](../tech_specs/cynode_pma.md#spec-cynai-pmagnt-streamingassistantoutput)
+  <a id="req-pmagnt-0118"></a>

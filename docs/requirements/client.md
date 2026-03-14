@@ -154,6 +154,7 @@ Web Console-specific requirements live in [webcon.md](webcon.md) (REQ-WEBCON-*).
   [CYNAI.CLIENT.CliOutputScripting](../tech_specs/cli_management_app_shell_output.md#spec-cynai-client-clioutputscripting)
   <a id="req-client-0145"></a>
 - **REQ-CLIENT-0146:** The CLI MUST support full CRUD for skills (create/load, list, get, update, delete) via the User API Gateway, with the same controls as defined in the skills spec (scope visibility, scope elevation permission, auditing on write).
+  When a CLI skills command references an existing skill, it MUST accept either the backend skill identifier or a user-typeable skill selector.
   [CYNAI.CLIENT.CliSkillsManagement](../tech_specs/cli_management_app_commands_admin.md#spec-cynai-client-cliskillsmanagement)
   [CYNAI.SKILLS.SkillManagementCrud](../tech_specs/skills_storage_and_inference.md#spec-cynai-skills-skillmanagementcrud)
   <a id="req-client-0146"></a>
@@ -190,7 +191,8 @@ Web Console-specific requirements live in [webcon.md](webcon.md) (REQ-WEBCON-*).
   [CYNAI.CLIENT.WebConsoleCapabilityParity](../tech_specs/web_console.md#spec-cynai-client-webconcapabilityparity)
   <a id="req-client-0154"></a>
 - **REQ-CLIENT-0155:** The CLI command surface for tasks MUST be fully specified and MUST be treated as a stable user-facing contract.
-  The CLI MUST implement the task subcommand set, flag names, argument ordering, mutual exclusions, default values, confirmation behavior, output schemas, and exit codes exactly as defined in the CLI management app spec.
+  The CLI MUST implement the task subcommand set, flag names, argument ordering, mutual exclusions, default values, confirmation behavior, output schemas, task-selector semantics, and exit codes exactly as defined in the CLI management app spec.
+  When a CLI task command references an existing task, it MUST accept either the backend task UUID or a user-typeable human-readable task name.
   [CYNAI.CLIENT.CliCommandSurface](../tech_specs/cynork_cli.md#spec-cynai-client-clicommandsurface)
   <a id="req-client-0155"></a>
 - **REQ-CLIENT-0156:** The CLI MUST return deterministic exit codes for common failure categories (usage error, auth error, gateway error, not found, conflict, validation error).
@@ -216,61 +218,75 @@ Web Console-specific requirements live in [webcon.md](webcon.md) (REQ-WEBCON-*).
   [CYNAI.WEBCON.SystemSettings](../tech_specs/web_console.md#spec-cynai-webcon-systemsettings)
   [CYNAI.CLIENT.CliSystemSettingsManagement](../tech_specs/cli_management_app_commands_admin.md#spec-cynai-client-clisystemsettings)
   <a id="req-client-0160"></a>
-- **REQ-CLIENT-0161:** The CLI MUST provide a chat command that starts an interactive chat session with the Project Manager (PM) model.
+- **REQ-CLIENT-0161:** The CLI MUST provide a single interactive cynork chat surface for chatting with the Project Manager (PM) model.
   The user MUST be able to send messages and receive responses in turn until they exit the session.
-  The chat session MUST use the same gateway and authentication as other CLI commands and MUST NOT expose secrets in history or output.
-  The CLI chat implementation MUST support the gateway's OpenAI-compatible interactive chat surfaces as defined by the corresponding tech spec.
+  The interactive surface MUST use the same gateway and authentication as other CLI commands and MUST NOT expose secrets in history or output.
+  `cynork tui` MUST be the canonical explicit entrypoint for that interactive surface, and interactive `cynork chat` MUST remain available as a user-facing path to the same surface rather than a separate long-term implementation.
+  The interactive surface MUST support the gateway's OpenAI-compatible interactive chat surfaces as defined by the corresponding tech spec.
   [CYNAI.CLIENT.CliChat](../tech_specs/cli_management_app_commands_chat.md#spec-cynai-client-clichat)
+  [CYNAI.CLIENT.CynorkTui.EntryPoint](../tech_specs/cynork_tui.md#spec-cynai-client-cynorktui-entrypoint)
   [CYNAI.USRGWY.OpenAIChatApi](../tech_specs/openai_compatible_chat_api.md#spec-cynai-usrgwy-openaichatapi)
   <a id="req-client-0161"></a>
-- **REQ-CLIENT-0162:** The CLI chat command MUST render model responses with pretty-formatted output when the response contains Markdown.
+- **REQ-CLIENT-0162:** The interactive cynork chat surface MUST render model responses with pretty-formatted output when the response contains Markdown.
   The CLI MUST interpret common Markdown (headings, lists, code blocks, emphasis, links) and display them in a human-readable way in the terminal (e.g. indentation, styling, or syntax highlighting for code blocks).
   The CLI MUST honor `--no-color` for chat output and SHOULD support a plain-text mode (e.g. `--plain`) that prints the raw response without Markdown rendering for scripting or piping.
   [CYNAI.CLIENT.CliChat](../tech_specs/cli_management_app_commands_chat.md#spec-cynai-client-clichat)
+  [CYNAI.CLIENT.CynorkChat.TUILayout](../tech_specs/cynork_tui.md#spec-cynai-client-cynorkchat-tuilayout)
   <a id="req-client-0162"></a>
 - **REQ-CLIENT-0163:** The CLI MUST display all JSON as pretty-printed (indented, with newlines) whenever JSON is part of the output.
   This applies to `--output json`, JSON embedded in chat or other responses, and any other CLI output that contains JSON.
   [CYNAI.CLIENT.CliPrettyPrintJson](../tech_specs/cli_management_app_shell_output.md#spec-cynai-client-cliprettyprintjson)
   <a id="req-client-0163"></a>
-- **REQ-CLIENT-0164:** The CLI chat command MUST display the available slash commands (e.g. `/exit`, `/quit`, `/help`) to the user.
+- **REQ-CLIENT-0164:** The interactive cynork chat surface MUST display the available slash commands (e.g. `/exit`, `/quit`, `/help`) to the user.
   Display MUST occur at session start or in response to a dedicated help command (e.g. `/help`) so users can discover slash commands.
   [CYNAI.CLIENT.CliChatSlashCommands](../tech_specs/cli_management_app_commands_chat.md#spec-cynai-client-clichatslashcommands)
+  [CYNAI.CLIENT.CynorkTui.LocalSlashCommands](../tech_specs/cynork_tui_slash_commands.md#spec-cynai-client-cynorktui-localslashcommands)
   <a id="req-client-0164"></a>
-- **REQ-CLIENT-0165:** The CLI chat command MUST support slash-command autocomplete and inline suggestions when the user types `/`.
+- **REQ-CLIENT-0165:** The interactive cynork chat surface MUST support slash-command autocomplete and inline suggestions when the user types `/`.
   When the input line starts with `/`, the CLI MUST show the list of available slash commands with short descriptions (e.g. command on the left, description on the right) and MUST support Tab to complete or cycle and arrow-up/arrow-down to move through suggestions, with the current selection visually indicated.
   [CYNAI.CLIENT.CliChatSlashAutocomplete](../tech_specs/cli_management_app_commands_chat.md#spec-cynai-client-clichatslashautocomplete)
   <a id="req-client-0165"></a>
-- **REQ-CLIENT-0166:** The CLI chat command MUST support task operations via slash commands: list, get, create (with inline prompt), cancel, result, logs, and artifacts list.
+- **REQ-CLIENT-0166:** The interactive cynork chat surface MUST support task operations via slash commands: list, get, create (with inline prompt), cancel, result, logs, and artifacts list.
   These MUST use the same User API Gateway endpoints as `cynork task`; output MUST be shown inline in chat (pretty-printed when JSON).
+  When a chat slash command references an existing task, it MUST accept either the backend task UUID or a user-typeable human-readable task name.
   [CYNAI.CLIENT.CliChatSlashTask](../tech_specs/cli_management_app_commands_chat.md#spec-cynai-client-clichatslashtask)
+  [CYNAI.CLIENT.CynorkTui.TaskSlashCommands](../tech_specs/cynork_tui_slash_commands.md#spec-cynai-client-cynorktui-taskslashcommands)
   <a id="req-client-0166"></a>
-- **REQ-CLIENT-0167:** The CLI chat command MUST support `/status` and `/whoami` slash commands to show gateway reachability and current identity without leaving chat.
+- **REQ-CLIENT-0167:** The interactive cynork chat surface MUST support `/status` and `/whoami` slash commands to show gateway reachability and current identity without leaving chat.
   [CYNAI.CLIENT.CliChatSlashStatus](../tech_specs/cli_management_app_commands_chat.md#spec-cynai-client-clichatslashstatus)
+  [CYNAI.CLIENT.CynorkTui.StatusSlashCommands](../tech_specs/cynork_tui_slash_commands.md#spec-cynai-client-cynorktui-statusslashcommands)
   <a id="req-client-0167"></a>
-- **REQ-CLIENT-0168:** The CLI chat command MUST support node listing and get via slash commands: `/nodes list`, `/nodes get <node_id>`.
+- **REQ-CLIENT-0168:** The interactive cynork chat surface MUST support node listing and get via slash commands: `/nodes list`, `/nodes get <node_id>`.
   [CYNAI.CLIENT.CliChatSlashNodes](../tech_specs/cli_management_app_commands_chat.md#spec-cynai-client-clichatslashnodes)
+  [CYNAI.CLIENT.CynorkTui.NodeSlashCommands](../tech_specs/cynork_tui_slash_commands.md#spec-cynai-client-cynorktui-nodeslashcommands)
   <a id="req-client-0168"></a>
-- **REQ-CLIENT-0169:** The CLI chat command MUST support preferences via slash commands: list, get, set, delete, and effective (e.g. `/prefs list`, `/prefs get [key]`, `/prefs set ...`, `/prefs delete ...`, `/prefs effective [--task-id <id>]`).
+- **REQ-CLIENT-0169:** The interactive cynork chat surface MUST support preferences via slash commands: list, get, set, delete, and effective (e.g. `/prefs list`, `/prefs get [key]`, `/prefs set ...`, `/prefs delete ...`, `/prefs effective [--task-id <id>]`).
   [CYNAI.CLIENT.CliChatSlashPrefs](../tech_specs/cli_management_app_commands_chat.md#spec-cynai-client-clichatslashprefs)
+  [CYNAI.CLIENT.CynorkTui.PreferenceSlashCommands](../tech_specs/cynork_tui_slash_commands.md#spec-cynai-client-cynorktui-preferenceslashcommands)
   <a id="req-client-0169"></a>
-- **REQ-CLIENT-0170:** The CLI chat command MUST support skills list and get via slash commands: `/skills list`, `/skills get <skill_id>`.
+- **REQ-CLIENT-0170:** The interactive cynork chat surface MUST support full skills CRUD via slash commands: `/skills list`, `/skills get <skill_selector>`, `/skills load <file.md>`, `/skills update <skill_selector> <file.md>`, and `/skills delete <skill_selector>`.
+  When a slash command references an existing skill, it MUST accept either the backend skill identifier or a user-typeable skill selector.
   [CYNAI.CLIENT.CliChatSlashSkills](../tech_specs/cli_management_app_commands_chat.md#spec-cynai-client-clichatslashskills)
+  [CYNAI.CLIENT.CynorkTui.SkillSlashCommands](../tech_specs/cynork_tui_slash_commands.md#spec-cynai-client-cynorktui-skillslashcommands)
   <a id="req-client-0170"></a>
-- **REQ-CLIENT-0171:** The CLI chat command MUST support selecting an OpenAI model identifier for chat completions.
+- **REQ-CLIENT-0171:** The interactive cynork chat surface MUST support selecting an OpenAI model identifier for chat completions.
   The CLI MUST support selecting the model at session start (e.g. `cynork chat --model <id>`) and within the session (e.g. `/model <id>`).
   Model selection MUST only affect interactive chat requests (for example `POST /v1/chat/completions` or `POST /v1/responses`) and MUST NOT change system settings or user preferences.
   [CYNAI.CLIENT.CliChatModelSelection](../tech_specs/cli_management_app_commands_chat.md#spec-cynai-client-clichatmodelselection)
+  [CYNAI.CLIENT.CynorkTui.ModelSlashCommands](../tech_specs/cynork_tui_slash_commands.md#spec-cynai-client-cynorktui-modelslashcommands)
   [CYNAI.USRGWY.OpenAIChatApi.Endpoints](../tech_specs/openai_compatible_chat_api.md#spec-cynai-usrgwy-openaichatapi-endpoints)
   <a id="req-client-0171"></a>
-- **REQ-CLIENT-0172:** The CLI chat command SHOULD support listing available OpenAI model identifiers from the gateway (e.g. `/models`).
+- **REQ-CLIENT-0172:** The interactive cynork chat surface SHOULD support listing available OpenAI model identifiers from the gateway (e.g. `/models`).
   This MUST call `GET /v1/models` and display model ids.
   [CYNAI.CLIENT.CliChatModelSelection](../tech_specs/cli_management_app_commands_chat.md#spec-cynai-client-clichatmodelselection)
+  [CYNAI.CLIENT.CynorkTui.ModelSlashCommands](../tech_specs/cynork_tui_slash_commands.md#spec-cynai-client-cynorktui-modelslashcommands)
   [CYNAI.USRGWY.OpenAIChatApi.Endpoints](../tech_specs/openai_compatible_chat_api.md#spec-cynai-usrgwy-openaichatapi-endpoints)
   <a id="req-client-0172"></a>
-- **REQ-CLIENT-0173:** The CLI chat command MUST support setting an optional project context for the chat session.
+- **REQ-CLIENT-0173:** The interactive cynork chat surface MUST support setting an optional project context for the chat session.
   When set, the CLI MUST send the project context using the OpenAI-standard `OpenAI-Project` request header on interactive chat requests that support that header (for example `POST /v1/chat/completions`).
   When omitted, the CLI does not send the header and the gateway associates the thread with the user's default project (see [REQ-PROJCT-0104](../requirements/projct.md#req-projct-0104)).
   [CYNAI.CLIENT.CliChatProjectContext](../tech_specs/cli_management_app_commands_chat.md#spec-cynai-client-clichatprojectcontext)
+  [CYNAI.CLIENT.CynorkTui.ProjectSlashCommands](../tech_specs/cynork_tui_slash_commands.md#spec-cynai-client-cynorktui-projectslashcommands)
   [CYNAI.ACCESS.Doc.ProjectsAndScopes](../tech_specs/projects_and_scopes.md#spec-cynai-access-doc-projectsandscopes)
   <a id="req-client-0173"></a>
 - **REQ-CLIENT-0174:** The CLI and the Web Console MUST support basic project management (CRUD: create, list, get, update, delete or disable) via the User API Gateway.
@@ -280,10 +296,10 @@ Web Console-specific requirements live in [webcon.md](webcon.md) (REQ-WEBCON-*).
   [CYNAI.WEBCON.ProjectManagement](../tech_specs/web_console.md#spec-cynai-webcon-projectmanagement)
   [CYNAI.ACCESS.Doc.ProjectsAndScopes](../tech_specs/projects_and_scopes.md#spec-cynai-access-doc-projectsandscopes)
   <a id="req-client-0174"></a>
-- **REQ-CLIENT-0175:** The CLI chat command MUST support a shell-escape syntax: input starting with `!` runs the remainder of the line as a shell command; the command's output is displayed inline and the chat session continues.
+- **REQ-CLIENT-0175:** The interactive cynork chat surface MUST support a shell-escape syntax: input starting with `!` runs the remainder of the line as a shell command; the command's output is displayed inline and the chat session continues.
   [CYNAI.CLIENT.CliChatShellEscape](../tech_specs/cli_management_app_commands_chat.md#spec-cynai-client-clichatshellescape)
   <a id="req-client-0175"></a>
-- **REQ-CLIENT-0176:** When a slash command or shell-escape command fails in chat (e.g. gateway 404, command not found), the CLI MUST display the error and MUST NOT exit the chat session or show the top-level command Usage.
+- **REQ-CLIENT-0176:** When a slash command or shell-escape command fails in the interactive cynork chat surface (e.g. gateway 404, command not found), the CLI MUST display the error and MUST NOT exit the chat session or show the top-level command Usage.
   [CYNAI.CLIENT.CliChatSubcommandErrors](../tech_specs/cli_management_app_commands_chat.md#spec-cynai-client-clichatsubcommanderrors)
   <a id="req-client-0176"></a>
 - **REQ-CLIENT-0177:** Clients that provide an interactive chat session (e.g. CLI chat command, Web Console chat UI) SHOULD call the gateway chat warm-up endpoint after auth and before the first user prompt when the gateway exposes it.
@@ -305,10 +321,11 @@ Web Console-specific requirements live in [webcon.md](webcon.md) (REQ-WEBCON-*).
   [CYNAI.ACCESS.ProjectPlanReviewApprove](../tech_specs/projects_and_scopes.md#spec-cynai-access-projectplanreviewapprove)
   [CYNAI.USRGWY.ProjectPlanApi](../tech_specs/user_api_gateway.md#spec-cynai-usrgwy-projectplanapi)
   <a id="req-client-0180"></a>
-- **REQ-CLIENT-0181:** The CLI chat command MUST support explicit fresh-thread creation: at session start (e.g. `--thread-new`) and during an active session (e.g. `/thread new`).
+- **REQ-CLIENT-0181:** The interactive cynork chat surface MUST support explicit fresh-thread creation: at session start (e.g. `--thread-new`) and during an active session (e.g. `/thread new`).
   Thread creation MUST use the gateway `POST /v1/chat/threads` and MUST respect the current project context (e.g. `OpenAI-Project` header or active project) for the new thread.
   Subsequent chat completion requests MUST remain OpenAI-compatible and MUST NOT require any CyNodeAI-specific thread identifier in the request body or headers.
   [CYNAI.CLIENT.CliChatThreadControls](../tech_specs/cli_management_app_commands_chat.md#spec-cynai-client-clichatthreadcontrols)
+  [CYNAI.CLIENT.CynorkTui.ThreadSlashCommands](../tech_specs/cynork_tui_slash_commands.md#spec-cynai-client-cynorktui-threadslashcommands)
   [REQ-USRGWY-0135](../requirements/usrgwy.md#req-usrgwy-0135)
   <a id="req-client-0181"></a>
 - **REQ-CLIENT-0182:** Clients with a rich chat UI MUST prefer the structured chat-turn representation when the gateway provides it and MUST fall back to canonical plain-text transcript content when it does not.
@@ -316,7 +333,8 @@ Web Console-specific requirements live in [webcon.md](webcon.md) (REQ-WEBCON-*).
   [CYNAI.CLIENT.CliChatResponseOutput](../tech_specs/cli_management_app_commands_chat.md#spec-cynai-client-clichatresponseoutput)
   <a id="req-client-0182"></a>
 - **REQ-CLIENT-0183:** Clients with a rich chat UI MUST NOT render model thinking or reasoning content as normal assistant transcript text by default.
-  When thinking data is available, the client MUST hide it by default and MAY offer an explicit user action to expand or inspect it.
+  When thinking data is available, the client MUST keep it collapsed by default behind a visible, visually distinct placeholder or block affordance rather than rendering raw reasoning inline as normal assistant prose.
+  [CYNAI.CLIENT.CynorkTui.ThinkingVisibilityBehavior](../tech_specs/cynork_tui_slash_commands.md#spec-cynai-client-cynorktui-thinkingvisibilitybehavior)
   [CYNAI.CLIENT.CynorkTui.TranscriptRendering](../tech_specs/cynork_tui.md#spec-cynai-client-cynorktui-transcriptrendering)
   [CYNAI.CLIENT.CliChatResponseOutput](../tech_specs/cli_management_app_commands_chat.md#spec-cynai-client-clichatresponseoutput)
   <a id="req-client-0183"></a>
@@ -335,11 +353,11 @@ Web Console-specific requirements live in [webcon.md](webcon.md) (REQ-WEBCON-*).
   [CYNAI.CLIENT.CliChatOneShot](../tech_specs/cli_management_app_commands_chat.md#spec-cynai-client-clichatoneshot)
   [CYNAI.CLIENT.CliChatResponseOutput](../tech_specs/cli_management_app_commands_chat.md#spec-cynai-client-clichatresponseoutput)
   <a id="req-client-0186"></a>
-- **REQ-CLIENT-0187:** The cynork chat TUI MAY persist local configuration for TUI preferences such as default model, composer mode, context-pane visibility, and keybinding overrides.
-  Any persisted TUI configuration MUST use the same config directory as the rest of cynork and MUST NOT store secrets, tokens, passwords, or message content.
+- **REQ-CLIENT-0187:** The interactive cynork chat surface MAY persist local configuration for UI preferences such as default model, composer mode, context-pane visibility, and keybinding overrides.
+  Any persisted interactive-chat configuration MUST use the same config directory as the rest of cynork and MUST NOT store secrets, tokens, passwords, or message content.
   [CYNAI.CLIENT.CynorkChat.LocalConfig](../tech_specs/cynork_tui.md#spec-cynai-client-cynorkchat-localconfig)
   <a id="req-client-0187"></a>
-- **REQ-CLIENT-0188:** The cynork chat TUI MAY use a local cache for completion and list data such as task identifiers, project identifiers, model identifiers, and thread-list metadata.
+- **REQ-CLIENT-0188:** The interactive cynork chat surface MAY use a local cache for completion and list data such as task identifiers, project identifiers, model identifiers, and thread-list metadata.
   Any such cache MUST live under the CLI cache directory, MUST NOT store secrets or message content, and SHOULD define bounded TTL or invalidation behavior.
   [CYNAI.CLIENT.CynorkChat.LocalCache](../tech_specs/cynork_tui.md#spec-cynai-client-cynorkchat-localcache)
   <a id="req-client-0188"></a>
@@ -348,7 +366,7 @@ Web Console-specific requirements live in [webcon.md](webcon.md) (REQ-WEBCON-*).
   [CYNAI.CLIENT.CliChatShellEscape](../tech_specs/cli_management_app_commands_chat.md#spec-cynai-client-clichatshellescape)
   [CYNAI.CLIENT.CynorkChat.TUILayout](../tech_specs/cynork_tui.md#spec-cynai-client-cynorkchat-tuilayout)
   <a id="req-client-0189"></a>
-- **REQ-CLIENT-0190:** When `cynork tui` or `cynork chat` starts without a usable login token, or loses authorization during a session, the interactive client MUST offer an in-session login and recovery path instead of forcing the user to restart outside the UI.
+- **REQ-CLIENT-0190:** When the interactive cynork chat surface starts without a usable login token, or loses authorization during a session, the interactive client MUST offer an in-session login and recovery path instead of forcing the user to restart outside the UI.
   Login prompts MUST protect secret input and MUST resume startup or offer to retry the interrupted session flow when authentication succeeds.
   [CYNAI.CLIENT.CynorkChat.AuthRecovery](../tech_specs/cynork_tui.md#spec-cynai-client-cynorkchat-authrecovery)
   <a id="req-client-0190"></a>
@@ -372,7 +390,8 @@ Web Console-specific requirements live in [webcon.md](webcon.md) (REQ-WEBCON-*).
   [CYNAI.CLIENT.CynorkChat.TUILayout](../tech_specs/cynork_tui.md#spec-cynai-client-cynorkchat-tuilayout)
   <a id="req-client-0194"></a>
 - **REQ-CLIENT-0195:** Rich chat UIs SHOULD provide a user-level toggle to show or hide available thinking blocks.
-  Thinking MUST be hidden by default; when hidden, the UI SHOULD render a compact placeholder rather than raw reasoning text.
+  Thinking MUST be hidden by default; when hidden, the UI SHOULD render a compact secondary-styled collapsed block that indicates the assistant is thinking and SHOULD hint how to expand it (for example `/show-thinking` in cynork).
+  [CYNAI.CLIENT.CynorkTui.ThinkingVisibilityBehavior](../tech_specs/cynork_tui_slash_commands.md#spec-cynai-client-cynorktui-thinkingvisibilitybehavior)
   [CYNAI.CLIENT.CynorkTui.TranscriptRendering](../tech_specs/cynork_tui.md#spec-cynai-client-cynorktui-transcriptrendering)
   [CYNAI.CLIENT.CynorkChat.TUILayout](../tech_specs/cynork_tui.md#spec-cynai-client-cynorkchat-tuilayout)
   <a id="req-client-0195"></a>
@@ -382,7 +401,8 @@ Web Console-specific requirements live in [webcon.md](webcon.md) (REQ-WEBCON-*).
   [CYNAI.CLIENT.CynorkChat.LocalConfig](../tech_specs/cynork_tui.md#spec-cynai-client-cynorkchat-localconfig)
   <a id="req-client-0196"></a>
 - **REQ-CLIENT-0197:** The CLI SHOULD expose the full-screen TUI explicitly as `cynork tui`.
-  After that surface is feature-complete for the intended rollout, invoking bare `cynork` with no subcommand SHOULD launch the same TUI by default while keeping explicit command paths available during migration.
+  After that surface is feature-complete for the intended rollout, interactive `cynork chat` SHOULD invoke that same TUI as an alias rather than maintaining a separate interactive implementation.
+  After the same rollout milestone, invoking bare `cynork` with no subcommand SHOULD launch the same TUI by default while keeping explicit command paths available during migration.
   [CYNAI.CLIENT.CynorkTui.EntryPoint](../tech_specs/cynork_tui.md#spec-cynai-client-cynorktui-entrypoint)
   <a id="req-client-0197"></a>
 - **REQ-CLIENT-0198:** Chat UIs MAY support an `@` shorthand in the composer for referencing local files.
@@ -401,27 +421,53 @@ Web Console-specific requirements live in [webcon.md](webcon.md) (REQ-WEBCON-*).
   [CYNAI.USRGWY.ChatThreadsMessages.ThreadSummary](../tech_specs/chat_threads_and_messages.md#spec-cynai-usrgwy-chatthreadsmessages-threadsummary)
   <a id="req-client-0201"></a>
 - **REQ-CLIENT-0202:** The cynork CLI MUST provide a single primary interactive chat UI surface centered on the full-screen TUI.
-  `cynork shell` is deprecated as the primary interactive experience in favor of the TUI exposed through `cynork tui`, while `cynork chat` remains an allowed user-facing entrypoint for the same chat surface or a documented compatibility path.
+  `cynork shell` is deprecated as the primary interactive experience in favor of the TUI exposed through `cynork tui`.
+  Interactive `cynork chat` MUST converge on that same TUI surface and, once the TUI rollout is complete, MUST behave as an alias to it rather than a distinct interactive UI path.
+  User-visible interactive behavior, slash commands, transcript rendering, and session-state semantics MUST NOT diverge between `cynork tui` and interactive `cynork chat`.
   [CYNAI.CLIENT.CynorkTui.EntryPoint](../tech_specs/cynork_tui.md#spec-cynai-client-cynorktui-entrypoint)
   [CYNAI.CLIENT.CynorkChat.TUILayout](../tech_specs/cynork_tui.md#spec-cynai-client-cynorkchat-tuilayout)
   <a id="req-client-0202"></a>
-- **REQ-CLIENT-0203:** The cynork chat TUI SHOULD provide a cursor-agent-like experience with a multi-line composer, scrollback, search and copy behavior, a persistent status bar, an optional context pane, message-history recall, structured-turn rendering, and completion for relevant chat actions.
+- **REQ-CLIENT-0203:** The interactive cynork chat surface SHOULD provide a cursor-agent-like experience with a multi-line composer, scrollback, search and copy behavior, a persistent status bar, an optional context pane, message-history recall, structured-turn rendering, and completion for relevant chat actions.
   [CYNAI.CLIENT.CynorkChat.TUILayout](../tech_specs/cynork_tui.md#spec-cynai-client-cynorkchat-tuilayout)
   [CYNAI.CLIENT.CynorkChat.Completion](../tech_specs/cynork_tui.md#spec-cynai-client-cynorkchat-completion)
   <a id="req-client-0203"></a>
-- **REQ-CLIENT-0204:** The cynork chat TUI MUST support newline insertion, cancellation, clean exit, and loading older history while scrolling back.
+- **REQ-CLIENT-0204:** The interactive cynork chat surface MUST support newline insertion, cancellation, clean exit, and loading older history while scrolling back.
   The focused composer MUST show a visible text cursor or caret at the current insertion point.
   [CYNAI.CLIENT.CynorkChat.TUILayout](../tech_specs/cynork_tui.md#spec-cynai-client-cynorkchat-tuilayout)
   <a id="req-client-0204"></a>
-- **REQ-CLIENT-0205:** Mouse-wheel scrolling in the cynork chat TUI MUST navigate transcript or output history in the scrollback and MUST NOT cycle composer history or mutate previously submitted messages.
+- **REQ-CLIENT-0205:** Mouse-wheel scrolling in the interactive cynork chat surface MUST navigate transcript or output history in the scrollback and MUST NOT cycle composer history or mutate previously submitted messages.
   [CYNAI.CLIENT.CynorkChat.TUILayout](../tech_specs/cynork_tui.md#spec-cynai-client-cynorkchat-tuilayout)
   <a id="req-client-0205"></a>
-- **REQ-CLIENT-0206:** The cynork chat TUI MUST hint the availability of slash commands, `@` file lookup or attachment, and `!` shell shorthand in or adjacent to the composer.
+- **REQ-CLIENT-0206:** The interactive cynork chat surface MUST hint the availability of slash commands, `@` file lookup or attachment, and `!` shell shorthand in or adjacent to the composer.
   [CYNAI.CLIENT.CynorkChat.TUILayout](../tech_specs/cynork_tui.md#spec-cynai-client-cynorkchat-tuilayout)
   <a id="req-client-0206"></a>
 - **REQ-CLIENT-0207:** Slash commands in interactive chat MUST provide parity with the previously available shell command surface for tasks, status, identity, nodes, preferences, skills, model, project, and thread controls.
   The `! command` shell-escape shorthand MUST be supported and documented as part of the chat interaction model.
   [CYNAI.CLIENT.CliChatSlashCommandReference](../tech_specs/cli_management_app_commands_chat.md#spec-cynai-client-clichatslashcommandreference)
+  [CYNAI.CLIENT.CynorkTuiSlashCommands](../tech_specs/cynork_tui_slash_commands.md#spec-cynai-client-cynorktuislashcommands)
   [CYNAI.CLIENT.CliChatShellEscape](../tech_specs/cli_management_app_commands_chat.md#spec-cynai-client-clichatshellescape)
   [CYNAI.CLIENT.CynorkChat.TUILayout](../tech_specs/cynork_tui.md#spec-cynai-client-cynorkchat-tuilayout)
   <a id="req-client-0207"></a>
+- **REQ-CLIENT-0208:** The cynork interactive chat surface MUST support `/show-thinking` and `/hide-thinking` slash commands.
+  `/show-thinking` MUST reveal retained thinking blocks for the current session, including already loaded transcript rows and older assistant turns loaded later through scrollback history.
+  `/hide-thinking` MUST return retained thinking blocks to the hidden-by-default collapsed presentation without changing canonical visible assistant text.
+  [CYNAI.CLIENT.CynorkTui.ThinkingVisibilityBehavior](../tech_specs/cynork_tui_slash_commands.md#spec-cynai-client-cynorktui-thinkingvisibilitybehavior)
+  [CYNAI.CLIENT.CynorkTui.LocalSlashCommands](../tech_specs/cynork_tui_slash_commands.md#spec-cynai-client-cynorktui-localslashcommands)
+  [CYNAI.CLIENT.CynorkTui.TranscriptRendering](../tech_specs/cynork_tui.md#spec-cynai-client-cynorktui-transcriptrendering)
+  <a id="req-client-0208"></a>
+- **REQ-CLIENT-0209:** The cynork interactive chat surface MUST request streaming output by default for normal interactive turns and MUST progressively update the single in-flight assistant turn as visible text or structured progress arrives.
+  If streaming is temporarily unavailable for a selected backend path, the client MUST fall back to a degraded in-flight indicator and final-turn replacement without duplicating transcript content.
+  [CYNAI.CLIENT.CynorkTui.GenerationState](../tech_specs/cynork_tui.md#spec-cynai-client-cynorktui-generationstate)
+  [CYNAI.USRGWY.OpenAIChatApi.Streaming](../tech_specs/openai_compatible_chat_api.md#spec-cynai-usrgwy-openaichatapi-streaming)
+  <a id="req-client-0209"></a>
+- **REQ-CLIENT-0210:** Clients that provide chat-thread switching controls MUST expose a user-typeable thread selector for each visible thread and MUST allow switching by that selector rather than requiring the user to type a raw backend UUID.
+  The selector MAY be a stable short handle, a list ordinal within the current thread list view, an unambiguous displayed title form, or another compact human-typable token, but it MUST be shown to the user wherever thread switching is offered.
+  [CYNAI.CLIENT.CynorkChat.TUILayout](../tech_specs/cynork_tui.md#spec-cynai-client-cynorkchat-tuilayout)
+  [CYNAI.CLIENT.CynorkTui.ThreadSlashCommands](../tech_specs/cynork_tui_slash_commands.md#spec-cynai-client-cynorktui-threadslashcommands)
+  <a id="req-client-0210"></a>
+- **REQ-CLIENT-0211:** In the cynork interactive chat surface, `/show-thinking` and `/hide-thinking` MUST update a persisted local TUI preference in the cynork YAML config file and that preference MUST be loaded on future executions of cynork.
+  The persisted preference MUST control the default thinking visibility for newly started TUI or interactive chat sessions, while still allowing the user to change it again with the same slash commands.
+  [CYNAI.CLIENT.CynorkTui.ThinkingVisibilityBehavior](../tech_specs/cynork_tui_slash_commands.md#spec-cynai-client-cynorktui-thinkingvisibilitybehavior)
+  [CYNAI.CLIENT.CynorkChat.LocalConfig](../tech_specs/cynork_tui.md#spec-cynai-client-cynorkchat-localconfig)
+  [CYNAI.CLIENT.CynorkTui.LocalSlashCommands](../tech_specs/cynork_tui_slash_commands.md#spec-cynai-client-cynorktui-localslashcommands)
+  <a id="req-client-0211"></a>

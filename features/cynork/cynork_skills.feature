@@ -34,10 +34,10 @@ Scenario: List skills shows loaded skill
 
 @req_skills_0106
 @spec_cynai_skills_skillretrieval
-Scenario: Get skill by id
+Scenario: Get skill by selector
   Given I am logged in with username "alice" and password "secret"
   And I have loaded a skill
-  When I run cynork skills get "s1"
+  When I run cynork skills get "team-guide"
   Then cynork exits with code 0
 
 @req_skills_0110

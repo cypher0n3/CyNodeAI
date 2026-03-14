@@ -10,7 +10,7 @@
 This document specifies the core CLI commands: `cynork version`, `cynork status`, and `cynork auth` (login, logout, whoami).
 It is part of the [cynork CLI](cynork_cli.md) specification.
 
-Traces To:
+### Traces To
 
 - [REQ-CLIENT-0101](../requirements/client.md#req-client-0101)
 - [REQ-CLIENT-0155](../requirements/client.md#req-client-0155)

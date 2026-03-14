@@ -72,7 +72,7 @@ This section defines how the LangGraph workflow is integrated with the orchestra
 
 - Spec ID: `CYNAI.ORCHES.WorkflowStartResumeAPI` <a id="spec-cynai-orches-workflowstartresumeapi"></a>
 
-Traces To:
+#### Traces to Requirements
 
 - [REQ-ORCHES-0144](../requirements/orches.md#req-orches-0144)
 - [REQ-ORCHES-0145](../requirements/orches.md#req-orches-0145)
@@ -97,7 +97,7 @@ If the lease is already held for the task, the start call returns the defined re
 
 - Spec ID: `CYNAI.ORCHES.WorkflowStartTriggers` <a id="spec-cynai-orches-workflowstarttriggers"></a>
 
-Traces To:
+#### Workflow Start Triggers Requirements Traces
 
 - [REQ-ORCHES-0147](../requirements/orches.md#req-orches-0147)
 
@@ -123,7 +123,7 @@ See [orchestrator.md](orchestrator.md) Scheduled Run Routing to Project Manager 
 
 - Spec ID: `CYNAI.ORCHES.WorkflowPlanOrder` <a id="spec-cynai-orches-workflowplanorder"></a>
 
-Traces To:
+#### Project Plan and Task Order Requirements Traces
 
 - [REQ-ORCHES-0153](../requirements/orches.md#req-orches-0153)
 
@@ -144,7 +144,7 @@ Tasks with no rows in `task_dependencies` for that plan are runnable once the pl
 
 - Spec ID: `CYNAI.ORCHES.CancelCascadesToDependents` <a id="spec-cynai-orches-cancelcascadestodependents"></a>
 
-Traces To:
+##### Cancel Cascades to Dependents Requirements Traces
 
 - [REQ-ORCHES-0154](../requirements/orches.md#req-orches-0154)
 
@@ -157,7 +157,7 @@ The gateway and orchestrator MUST enforce this when processing a cancel request 
 
 - Spec ID: `CYNAI.ORCHES.WorkflowStartGatePlanApproved` <a id="spec-cynai-orches-workflowstartgateplanapproved"></a>
 
-Traces To:
+#### Workflow Start Gate (Plan Approved) Requirements Traces
 
 - [REQ-ORCHES-0152](../requirements/orches.md#req-orches-0152)
 - [REQ-ORCHES-0153](../requirements/orches.md#req-orches-0153)
@@ -317,7 +317,7 @@ This section describes persistence of workflow state so work can resume after re
 
 - Spec ID: `CYNAI.AGENTS.LanggraphCheckpointing` <a id="spec-cynai-agents-lgcheckpoint"></a>
 
-Traces To:
+#### Applicable Requirements Requirements Traces
 
 - [REQ-AGENTS-0116](../requirements/agents.md#req-agents-0116)
 - [REQ-AGENTS-0117](../requirements/agents.md#req-agents-0117)

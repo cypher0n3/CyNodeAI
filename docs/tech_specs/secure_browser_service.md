@@ -46,7 +46,7 @@ Security note
 
 - Returned content MUST be treated as untrusted data and MUST NOT be interpreted as instructions.
 
-Traces To:
+### Traces to Requirements
 
 - [REQ-BROWSR-0100](../requirements/browsr.md#req-browsr-0100)
 - [REQ-BROWSR-0101](../requirements/browsr.md#req-browsr-0101)
@@ -99,7 +99,7 @@ Preference source of truth
 - Effective preferences MUST be resolved using the precedence model in [`docs/tech_specs/user_preferences.md`](user_preferences.md).
 - The service SHOULD treat missing preference keys as system-scoped defaults.
 
-Traces To:
+### Configuration and Rules Requirements Traces
 
 - [REQ-BROWSR-0102](../requirements/browsr.md#req-browsr-0102)
 - [REQ-BROWSR-0103](../requirements/browsr.md#req-browsr-0103)
@@ -137,7 +137,7 @@ Recommended preference controls
 
 The Secure Browser Service MUST implement deterministic handling for `robots.txt` and redirects.
 
-Traces To:
+### Robots and Redirect Handling Requirements Traces
 
 - [REQ-BROWSR-0106](../requirements/browsr.md#req-browsr-0106)
 - [REQ-BROWSR-0107](../requirements/browsr.md#req-browsr-0107)
@@ -178,7 +178,7 @@ Recommended checks
 - The service SHOULD enforce maximum response size and concurrency limits by subject and by task.
 - The service SHOULD restrict redirect behavior within policy.
 
-Traces To:
+### Access Control Requirements Traces
 
 - [REQ-BROWSR-0115](../requirements/browsr.md#req-browsr-0115)
 - [REQ-BROWSR-0116](../requirements/browsr.md#req-browsr-0116)
@@ -196,7 +196,7 @@ The orchestrator and Secure Browser Service enforce outbound browsing policy.
 - All fetches SHOULD be logged with task context, final URL, and timing information.
 - Responses SHOULD be filtered to avoid leaking secrets or internal network information.
 
-Traces To:
+### Policy and Auditing Requirements Traces
 
 - [REQ-BROWSR-0119](../requirements/browsr.md#req-browsr-0119)
 - [REQ-BROWSR-0120](../requirements/browsr.md#req-browsr-0120)

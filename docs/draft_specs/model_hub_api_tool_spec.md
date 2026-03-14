@@ -29,7 +29,7 @@ This document specifies a generic Model Hub API tool that integrates with the Cy
 Providers include public hubs (e.g. Hugging Face, Ollama library, ModelScope), private or custom model repositories, and any source that can be described by configuration (endpoint, auth, and capability flags).
 The tool supports configurable filtering to exclude NSFW or adult-only models and to exclude or include specific model classes (e.g. by pipeline tag, library, or provider-specific type).
 
-Traces To:
+### Traces to Requirements
 
 - [REQ-MODELS-0106](../requirements/models.md#req-models-0106) (user-directed cache population)
 - [REQ-MODELS-0107](../requirements/models.md#req-models-0107) (policy-controlled, audited)
@@ -202,7 +202,7 @@ Operation name: `resolve_cache` (or `ensure_cached`).
 The tool MUST support configurable filters to exclude models that are tagged or classified as NSFW or adult-only, and to exclude or restrict by model class (e.g. pipeline tag, library, or provider-specific type).
 Filtering is applied uniformly across providers where the provider exposes the necessary metadata; providers that do not expose such metadata MAY be configured to allow or block entirely (e.g. private allowlisted sources may skip content filter when policy allows).
 
-Traces To:
+### Content and Model-Class Filtering Requirements Traces
 
 - [REQ-MODELS-0107](../requirements/models.md#req-models-0107) (policy-controlled)
 - [REQ-MODELS-0108](../requirements/models.md#req-models-0108) (configurable via system settings)
@@ -315,7 +315,7 @@ Each built-in provider has a fixed provider id and a defined mapping of normaliz
 
 - Spec ID: `CYNAI.MODELS.ModelHub.AuditingSafety` <a id="spec-cynai-models-modelhub-auditingsafety"></a>
 
-Traces To:
+### Auditing and Safety Requirements Traces
 
 - [REQ-MODELS-0109](../requirements/models.md#req-models-0109)
 - [REQ-MODELS-0110](../requirements/models.md#req-models-0110)

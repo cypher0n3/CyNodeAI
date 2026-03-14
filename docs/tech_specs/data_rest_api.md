@@ -27,7 +27,7 @@ Agents MUST NOT use this API for internal operations and MUST use MCP tools inst
 
 - Spec ID: `CYNAI.DATAPI.ScopeBoundaries` <a id="spec-cynai-datapi-scopebound"></a>
 
-Traces To:
+#### Traces to Requirements
 
 - [REQ-DATAPI-0100](../requirements/datapi.md#req-datapi-0100)
 - [REQ-DATAPI-0101](../requirements/datapi.md#req-datapi-0101)
@@ -43,7 +43,7 @@ It serves database-backed resources without exposing PostgreSQL connectivity to 
 
 - Spec ID: `CYNAI.DATAPI.DatabaseAccessOrm` <a id="spec-cynai-datapi-dbaccessorm"></a>
 
-Traces To:
+#### Database Access and ORM Applicable Requirements Requirements Traces
 
 - [REQ-DATAPI-0104](../requirements/datapi.md#req-datapi-0104)
 - [REQ-DATAPI-0105](../requirements/datapi.md#req-datapi-0105)

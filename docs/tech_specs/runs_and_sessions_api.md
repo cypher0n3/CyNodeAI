@@ -35,7 +35,7 @@ Runs are first-class resources with stable identifiers.
 
 - Spec ID: `CYNAI.USRGWY.Runs` <a id="spec-cynai-usrgwy-runs"></a>
 
-Traces To:
+#### Traces to Requirements
 
 - [REQ-USRGWY-0100](../requirements/usrgwy.md#req-usrgwy-0100)
 - [REQ-USRGWY-0101](../requirements/usrgwy.md#req-usrgwy-0101)
@@ -63,7 +63,7 @@ See [`docs/tech_specs/chat_threads_and_messages.md`](chat_threads_and_messages.m
 
 - Spec ID: `CYNAI.USRGWY.Sessions` <a id="spec-cynai-usrgwy-sessions"></a>
 
-Traces To:
+#### Sessions Applicable Requirements Requirements Traces
 
 - [REQ-USRGWY-0104](../requirements/usrgwy.md#req-usrgwy-0104)
 - [REQ-USRGWY-0105](../requirements/usrgwy.md#req-usrgwy-0105)
@@ -90,7 +90,7 @@ See [`docs/tech_specs/chat_threads_and_messages.md`](chat_threads_and_messages.m
 
 - Spec ID: `CYNAI.USRGWY.LogsTranscripts` <a id="spec-cynai-usrgwy-logstrans"></a>
 
-Traces To:
+#### Logs and Transcripts Applicable Requirements Requirements Traces
 
 - [REQ-USRGWY-0108](../requirements/usrgwy.md#req-usrgwy-0108)
 - [REQ-USRGWY-0109](../requirements/usrgwy.md#req-usrgwy-0109)
@@ -105,7 +105,7 @@ Clients MUST be able to observe run and session status in near real time.
 
 - Spec ID: `CYNAI.USRGWY.StreamingStatus` <a id="spec-cynai-usrgwy-streamstatus"></a>
 
-Traces To:
+#### Streaming Status Applicable Requirements Requirements Traces
 
 - [REQ-USRGWY-0112](../requirements/usrgwy.md#req-usrgwy-0112)
 - [REQ-USRGWY-0113](../requirements/usrgwy.md#req-usrgwy-0113)
@@ -120,7 +120,7 @@ Long-running work inside a sandbox (e.g. a build or server process) MUST be mana
 
 - Spec ID: `CYNAI.USRGWY.BackgroundProcessManagement` <a id="spec-cynai-usrgwy-bgprocess"></a>
 
-Traces To:
+#### Background Process Management Applicable Requirements Requirements Traces
 
 - [REQ-USRGWY-0114](../requirements/usrgwy.md#req-usrgwy-0114)
 - [REQ-USRGWY-0115](../requirements/usrgwy.md#req-usrgwy-0115)
@@ -140,7 +140,7 @@ Transcript and log retention MUST be configurable so operators can meet complian
 
 - Spec ID: `CYNAI.USRGWY.RetentionPolicies` <a id="spec-cynai-usrgwy-retention"></a>
 
-Traces To:
+#### Retention Policies Applicable Requirements Requirements Traces
 
 - [REQ-USRGWY-0118](../requirements/usrgwy.md#req-usrgwy-0118)
 - [REQ-USRGWY-0119](../requirements/usrgwy.md#req-usrgwy-0119)

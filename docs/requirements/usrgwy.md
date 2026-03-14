@@ -207,3 +207,19 @@ It covers user-facing REST API gateway behavior and related API contracts.
   Context compaction MUST preserve enough recent unsummarized context for the next user turn and expected assistant response, and MUST preserve conversation continuity in a deterministic and reviewable way.
   [CYNAI.USRGWY.OpenAIChatApi.ContextCompaction](../tech_specs/openai_compatible_chat_api.md#spec-cynai-usrgwy-openaichatapi-contextcompaction)
   <a id="req-usrgwy-0147"></a>
+- **REQ-USRGWY-0148:** When the gateway retains hidden thinking or reasoning content for an assistant turn, it MUST retain that content as structured turn data associated with the same logical assistant turn so authorized rich clients can retrieve it later through thread-history reads.
+  Canonical plain-text transcript fields and projections MUST remain visible-text-only.
+  [CYNAI.USRGWY.ChatThreadsMessages.StructuredTurns](../tech_specs/chat_threads_and_messages.md#spec-cynai-usrgwy-chatthreadsmessages-structuredturns)
+  [CYNAI.USRGWY.OpenAIChatApi.NormalizedAssistantOutput](../tech_specs/openai_compatible_chat_api.md#spec-cynai-usrgwy-openaichatapi-normalizedassistantoutput)
+  <a id="req-usrgwy-0148"></a>
+- **REQ-USRGWY-0149:** The OpenAI-compatible interactive chat surface MUST support streaming chat responses for `POST /v1/chat/completions` and `POST /v1/responses` when the client requests `stream=true`.
+  The gateway MUST emit ordered incremental events promptly enough for interactive UX, MUST NOT buffer all visible assistant text until completion on the standard streaming path, and MUST finish with a clear terminal completion or error event.
+  [CYNAI.USRGWY.OpenAIChatApi.Streaming](../tech_specs/openai_compatible_chat_api.md#spec-cynai-usrgwy-openaichatapi-streaming)
+  [CYNAI.USRGWY.ChatThreadsMessages.StructuredTurns](../tech_specs/chat_threads_and_messages.md#spec-cynai-usrgwy-chatthreadsmessages-structuredturns)
+  <a id="req-usrgwy-0149"></a>
+- **REQ-USRGWY-0150:** When a client cancels or abandons an OpenAI-compatible streaming chat request, such as closing the connection or interrupting the client with Ctrl+C, the gateway MUST treat that stream as canceled.
+  The gateway MUST stop or detach upstream generation work on a best-effort basis promptly enough to avoid unnecessary continued token generation, and it MUST release request-scoped resources even when the final assistant turn is incomplete.
+  If the stream remains connected long enough to emit a final transport signal, the gateway MUST end it with a clear cancellation event or cancellation-class error rather than hanging indefinitely.
+  [CYNAI.USRGWY.OpenAIChatApi.Streaming](../tech_specs/openai_compatible_chat_api.md#spec-cynai-usrgwy-openaichatapi-streaming)
+  [CYNAI.USRGWY.OpenAIChatApi.Errors](../tech_specs/openai_compatible_chat_api.md#spec-cynai-usrgwy-openaichatapi-errors)
+  <a id="req-usrgwy-0150"></a>

@@ -5,14 +5,17 @@
 - [Agent Responsibilities](#agent-responsibilities)
 - [Handoff Model](#handoff-model)
 - [External Provider Usage](#external-provider-usage)
+  - [Applicable Requirements Traces](#applicable-requirements-traces)
 - [External Provider Configuration](#external-provider-configuration)
   - [Standalone Orchestrator Scenario](#standalone-orchestrator-scenario)
   - [Required Configuration Steps](#required-configuration-steps)
   - [Bootstrap and Runtime Configuration](#bootstrap-and-runtime-configuration)
 - [Tool Access and Database Access](#tool-access-and-database-access)
+  - [Tool Access and Database Access Applicable Requirements Requirements Traces](#tool-access-and-database-access-applicable-requirements-requirements-traces)
 - [Verification Outputs](#verification-outputs)
 - [LLM Context (Baseline and User-Configurable)](#llm-context-baseline-and-user-configurable)
 - [Preference Usage](#preference-usage)
+  - [Preference Usage Applicable Requirements Requirements Traces](#preference-usage-applicable-requirements-requirements-traces)
 
 ## Document Overview
 
@@ -78,15 +81,13 @@ LangGraph MVP
 The Project Analyst Agent MAY use external AI providers for verification when allowed.
 External provider usage MUST be policy-controlled and audited.
 
-### Applicable Requirements
+See [`docs/tech_specs/external_model_routing.md`](external_model_routing.md) and [`docs/tech_specs/api_egress_server.md`](api_egress_server.md).
 
-Traces To:
+### Applicable Requirements Traces
 
 - [REQ-AGENTS-0125](../requirements/agents.md#req-agents-0125)
 - [REQ-AGENTS-0126](../requirements/agents.md#req-agents-0126)
 - [REQ-AGENTS-0127](../requirements/agents.md#req-agents-0127)
-
-See [`docs/tech_specs/external_model_routing.md`](external_model_routing.md) and [`docs/tech_specs/api_egress_server.md`](api_egress_server.md).
 
 ## External Provider Configuration
 
@@ -124,14 +125,12 @@ Project Analyst agents are spawned by the Project Manager Agent and SHOULD follo
 
 ## Tool Access and Database Access
 
+- Spec ID: `CYNAI.AGENTS.ProjectAnalystToolAccess` <a id="spec-cynai-agents-patoolaccess"></a>
+
 The Project Analyst Agent is an orchestrator-side agent.
 It MUST use MCP tools for privileged operations.
 
-### Tool Access and Database Access Applicable Requirements
-
-- Spec ID: `CYNAI.AGENTS.ProjectAnalystToolAccess` <a id="spec-cynai-agents-patoolaccess"></a>
-
-Traces To:
+### Tool Access and Database Access Applicable Requirements Requirements Traces
 
 - [REQ-AGENTS-0114](../requirements/agents.md#req-agents-0114)
 - [REQ-AGENTS-0115](../requirements/agents.md#req-agents-0115)
@@ -154,13 +153,11 @@ The preference key `agents.project_analyst.additional_context` supplies the user
 
 ## Preference Usage
 
-The following requirements apply.
-
-### Preference Usage Applicable Requirements
-
 - Spec ID: `CYNAI.AGENTS.ProjectAnalystPreferenceUsage` <a id="spec-cynai-agents-papreferenceusage"></a>
 
-Traces To:
+The following requirements apply.
+
+### Preference Usage Applicable Requirements Requirements Traces
 
 - [REQ-AGENTS-0123](../requirements/agents.md#req-agents-0123)
 - [REQ-AGENTS-0124](../requirements/agents.md#req-agents-0124)

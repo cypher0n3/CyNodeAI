@@ -50,7 +50,7 @@ The following requirements apply.
 
 - Spec ID: `CYNAI.MCPTOO.ToolCatalogNaming` <a id="spec-cynai-mcptoo-toolnaming"></a>
 
-Traces To:
+#### Traces to Requirements
 
 - [REQ-MCPTOO-0106](../requirements/mcptoo.md#req-mcptoo-0106)
 - [REQ-MCPTOO-0107](../requirements/mcptoo.md#req-mcptoo-0107)
@@ -168,7 +168,7 @@ Results are returned through a secure path (e.g. Secure Browser Service or a ded
   - Implementation MUST NOT expose raw internet access; search MUST be routed through the same secure, policy-controlled mechanism as `web.fetch` (e.g. Secure Browser Service with search-specific rules) or a dedicated secure search endpoint.
   - Subject to the same access control and audit as `web.fetch`; action MAY be `web.search` in access control rules.
 
-Traces To:
+#### Secure Web Search Requirements Traces
 
 - [REQ-MCPTOO-0119](../requirements/mcptoo.md#req-mcptoo-0119)
 
@@ -352,7 +352,7 @@ The following requirements apply.
 
 - Spec ID: `CYNAI.MCPTOO.ToolCatalogResponseError` <a id="spec-cynai-mcptoo-toolresponse"></a>
 
-Traces To:
+#### Response and Error Model Applicable Requirements Requirements Traces
 
 - [REQ-MCPTOO-0109](../requirements/mcptoo.md#req-mcptoo-0109)
 - [REQ-MCPTOO-0110](../requirements/mcptoo.md#req-mcptoo-0110)
