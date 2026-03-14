@@ -32,11 +32,20 @@ Scenario: Chat one-shot mode prints one assistant response and exits
 
 @req_client_0181
 @spec_cynai_client_clichatthreadcontrols
-Scenario: Startup thread creation happens before the first completion
+Scenario: Default startup uses a new thread before the first completion
   Given I am logged in with username "alice" and password "secret"
   And the mock gateway supports POST "/v1/chat/threads"
-  When I run cynork chat with thread-new enabled and message "Start fresh"
+  When I run cynork chat without resume-thread and send a first message
   Then cynork creates a fresh chat thread before the first completion
+
+@req_client_0181
+@spec_cynai_client_clichatthreadcontrols
+Scenario: Resume-thread starts the session in an existing thread
+  Given I am logged in with username "alice" and password "secret"
+  And the mock gateway returns at least one chat thread with selector "inbox"
+  When I run cynork chat with resume-thread "inbox"
+  Then the session starts in the thread identified by selector "inbox"
+  And the first completion continues that thread's conversation
 
 @req_client_0181
 @req_client_0210

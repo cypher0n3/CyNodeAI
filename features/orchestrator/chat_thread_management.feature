@@ -61,3 +61,11 @@ Scenario: Gateway compacts older context before a near-limit chat completion
   Then the gateway deterministically computes the effective context size for that request
   And the gateway compacts older conversation context before issuing the completion request
   And enough recent unsummarized context remains for the next response
+
+@req_usrgwy_0139
+@spec_cynai_usrgwy_chatthreadsmessages_structuredturns
+Scenario: Retained thinking survives persistence and thread-history retrieval
+  Given I sent a chat message that produced an assistant turn with visible text and structured thinking
+  When I call GET "/v1/chat/threads/<thread_id>/messages" or equivalent thread history
+  Then the persisted messages include the visible text and the retained thinking as structured parts
+  And the thinking content is available for TUI display on scrollback without leaking into canonical plain-text content
