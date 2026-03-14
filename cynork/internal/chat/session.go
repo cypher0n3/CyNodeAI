@@ -2,6 +2,9 @@ package chat
 
 import (
 	"context"
+	"fmt"
+	"strconv"
+	"strings"
 
 	"github.com/cypher0n3/cynodeai/cynork/internal/gateway"
 )
@@ -106,4 +109,59 @@ func (s *Session) PatchThreadTitle(threadID, title string) error {
 		threadID = s.CurrentThreadID
 	}
 	return s.Client.PatchThreadTitle(threadID, title)
+}
+
+// ResolveThreadSelector resolves a user-typeable selector (ordinal "1", id prefix, or title) to a thread ID.
+// Lists threads with ListThreads(limit, 0) and returns the first matching thread's ID.
+// Ordinal: "1" = first thread, "2" = second, etc. Also matches full or prefix of thread ID, or title (case-insensitive).
+func (s *Session) ResolveThreadSelector(selector string, limit int) (threadID string, err error) {
+	if selector == "" {
+		return "", nil
+	}
+	items, err := s.ListThreads(limit, 0)
+	if err != nil {
+		return "", err
+	}
+	return resolveThreadSelectorFromItems(selector, items)
+}
+
+const defaultThreadListLimit = 50
+
+// EnsureThread ensures the session has a current thread: create new (if selector empty) or resolve and switch (if selector set).
+func (s *Session) EnsureThread(resumeSelector string) error {
+	if resumeSelector != "" {
+		id, err := s.ResolveThreadSelector(resumeSelector, defaultThreadListLimit)
+		if err != nil {
+			return err
+		}
+		s.CurrentThreadID = id
+		return nil
+	}
+	_, err := s.NewThread()
+	return err
+}
+
+// resolveThreadSelectorFromItems finds a thread ID from a selector and a list of gateway thread items.
+func resolveThreadSelectorFromItems(selector string, items []gateway.ChatThreadItem) (string, error) {
+	if len(items) == 0 {
+		return "", fmt.Errorf("no threads to match %q", selector)
+	}
+	selector = strings.TrimSpace(selector)
+	// Ordinal: 1-based index.
+	if ord, err := strconv.Atoi(selector); err == nil && ord >= 1 && ord <= len(items) {
+		return items[ord-1].ID, nil
+	}
+	// ID or ID prefix (case-sensitive).
+	for _, t := range items {
+		if t.ID == selector || strings.HasPrefix(t.ID, selector) {
+			return t.ID, nil
+		}
+	}
+	// Title (case-insensitive).
+	for _, t := range items {
+		if t.Title != nil && strings.EqualFold(strings.TrimSpace(*t.Title), selector) {
+			return t.ID, nil
+		}
+	}
+	return "", fmt.Errorf("no thread matches %q", selector)
 }

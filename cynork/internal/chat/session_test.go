@@ -12,6 +12,8 @@ import (
 	"github.com/cypher0n3/cynodeai/cynork/internal/gateway"
 )
 
+const pathV1ChatThreads = "/v1/chat/threads"
+
 func TestNewSession(t *testing.T) {
 	client := gateway.NewClient("http://localhost")
 	session := NewSession(client)
@@ -105,7 +107,7 @@ func TestSession_SendMessage_ResponsesTransport(t *testing.T) {
 
 func TestSession_NewThread(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/v1/chat/threads" || r.Method != http.MethodPost {
+		if r.URL.Path != pathV1ChatThreads || r.Method != http.MethodPost {
 			w.WriteHeader(http.StatusNotFound)
 			return
 		}
@@ -132,7 +134,7 @@ func TestSession_NewThread(t *testing.T) {
 
 func TestSession_ListThreads(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/v1/chat/threads" || r.Method != http.MethodGet {
+		if r.URL.Path != pathV1ChatThreads || r.Method != http.MethodGet {
 			w.WriteHeader(http.StatusNotFound)
 			return
 		}
@@ -241,5 +243,76 @@ func TestSession_StreamMessage(t *testing.T) {
 	}
 	if buf.String() != "stream reply" {
 		t.Errorf("accumulated = %q, want %q", buf.String(), "stream reply")
+	}
+}
+
+func TestSession_ResolveThreadSelector_OrdinalAndID(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != pathV1ChatThreads {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"data": []map[string]any{
+				{"id": "tid-first", "title": "First"},
+				{"id": "tid-second", "title": "Second"},
+			},
+		})
+	}))
+	defer server.Close()
+	client := gateway.NewClient(server.URL)
+	client.SetToken("tok")
+	session := NewSession(client)
+	id, err := session.ResolveThreadSelector("1", 10)
+	if err != nil {
+		t.Fatalf("ResolveThreadSelector(1): %v", err)
+	}
+	if id != "tid-first" {
+		t.Errorf("ordinal 1 = %q, want tid-first", id)
+	}
+	id, err = session.ResolveThreadSelector("tid-second", 10)
+	if err != nil {
+		t.Fatalf("ResolveThreadSelector(tid-second): %v", err)
+	}
+	if id != "tid-second" {
+		t.Errorf("id = %q, want tid-second", id)
+	}
+}
+
+func TestSession_EnsureThread_NewAndResume(t *testing.T) {
+	var created bool
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == pathV1ChatThreads && r.Method == http.MethodPost {
+			created = true
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusCreated)
+			_ = json.NewEncoder(w).Encode(map[string]string{"thread_id": "new-tid"})
+			return
+		}
+		if r.URL.Path == pathV1ChatThreads && r.Method == http.MethodGet {
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"data": []map[string]any{{"id": "resumed-tid", "title": "Resumed"}},
+			})
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+	client := gateway.NewClient(server.URL)
+	client.SetToken("tok")
+	session := NewSession(client)
+	if err := session.EnsureThread(""); err != nil {
+		t.Fatalf("EnsureThread() new: %v", err)
+	}
+	if !created || session.CurrentThreadID != "new-tid" {
+		t.Errorf("created=%v CurrentThreadID=%q", created, session.CurrentThreadID)
+	}
+	if err := session.EnsureThread("1"); err != nil {
+		t.Fatalf("EnsureThread(1): %v", err)
+	}
+	if session.CurrentThreadID != "resumed-tid" {
+		t.Errorf("resume CurrentThreadID = %q", session.CurrentThreadID)
 	}
 }

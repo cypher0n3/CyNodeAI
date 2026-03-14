@@ -27,22 +27,17 @@ type shellExecDoneMsg struct {
 	err      error
 }
 
-// slashCatalog is the canonical slash command list for /help (spec LocalSlashCommands).
-var slashCatalog = []struct{ name, desc string }{
-	{"/auth", "auth login, logout, whoami, refresh"},
+// slashHelpCatalog lists only slash commands that are actually implemented (/help shows this list per spec).
+var slashHelpCatalog = []struct{ name, desc string }{
+	{"/auth", "login, logout, whoami, refresh"},
 	{"/clear", "clear scrollback"},
 	{"/exit", "end session"},
 	{"/help", "list slash commands"},
 	{"/model", "show or set session model"},
 	{"/models", "list available models"},
-	{"/nodes", "nodes list, get"},
-	{"/prefs", "preferences list, get, set, delete, effective"},
 	{"/project", "show or set project context"},
 	{"/quit", "end session (synonym for /exit)"},
-	{"/skills", "skills list, get, load, update, delete"},
-	{"/status", "gateway reachability"},
-	{"/task", "task list, get, create, cancel, result, logs, artifacts"},
-	{"/thread", "thread new, list, switch, rename"},
+	{"/thread", "new, list, switch <selector>, rename"},
 	{"/version", "print cynork version"},
 	{"/whoami", "current identity"},
 }
@@ -156,9 +151,9 @@ func shellInteractiveCmd(shellCmd string) tea.Cmd {
 
 func (m *Model) slashHelpCmd() tea.Cmd {
 	return func() tea.Msg {
-		lines := make([]string, 0, len(slashCatalog)+1)
+		lines := make([]string, 0, len(slashHelpCatalog)+1)
 		lines = append(lines, "--- Slash Commands ---")
-		for _, e := range slashCatalog {
+		for _, e := range slashHelpCatalog {
 			lines = append(lines, fmt.Sprintf("  %-14s %s", e.name, e.desc))
 		}
 		return slashResultMsg{lines: lines}

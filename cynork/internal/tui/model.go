@@ -31,9 +31,10 @@ type sendResult struct {
 	err     error
 }
 
-// streamDeltaMsg carries one incremental delta from the active streaming turn.
+// streamDeltaMsg carries one incremental delta or an amendment (secret_redaction) for the in-flight turn.
 type streamDeltaMsg struct {
-	delta string
+	delta     string
+	amendment string
 }
 
 // streamDoneMsg signals that the active streaming turn is complete.
@@ -57,6 +58,12 @@ type threadListResult struct {
 // threadRenameResult is the message when PatchThreadTitle completes.
 type threadRenameResult struct {
 	err error
+}
+
+// ensureThreadResult is the message when EnsureThread completes (after login).
+type ensureThreadResult struct {
+	threadID string
+	err      error
 }
 
 // openLoginFormMsg opens the in-TUI login overlay (per REQ-CLIENT-0190, Auth Recovery).
@@ -112,6 +119,10 @@ type Model struct {
 	LoginPassword     string
 	LoginFocusedField int // 0=gateway, 1=username, 2=password
 	LoginErr          string
+
+	// Startup: when token was empty, show login on init; after login ensure thread.
+	OpenLoginFormOnInit  bool
+	ResumeThreadSelector string
 }
 
 // NewModel returns an initial TUI model for the given session.
@@ -130,12 +141,20 @@ func NewModel(session *chat.Session) *Model {
 // SetAuthProvider sets the optional auth provider (used by /auth logout, refresh).
 func (m *Model) SetAuthProvider(p AuthProvider) { m.AuthProvider = p }
 
-// Init runs once at startup; no initial command.
+// SetResumeThreadSelector sets the thread selector for --resume-thread (used after in-session login to ensure thread).
+func (m *Model) SetResumeThreadSelector(s string) { m.ResumeThreadSelector = s }
+
+// Init runs once at startup. When OpenLoginFormOnInit is true (startup token failure), opens login form.
 func (m *Model) Init() tea.Cmd {
+	if m.OpenLoginFormOnInit {
+		return func() tea.Msg { return openLoginFormMsg{} }
+	}
 	return nil
 }
 
 // Update handles key events, window resize, and async send results.
+//
+//nolint:gocyclo // message dispatch is inherently a large switch over tea and internal msg types
 func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
@@ -160,6 +179,8 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.applyThreadListResult(msg)
 	case threadRenameResult:
 		return m.applyThreadRenameResult(msg)
+	case ensureThreadResult:
+		return m.applyEnsureThreadResult(msg)
 	case slashResultMsg:
 		return m.applySlashResult(msg)
 	case shellExecDoneMsg:
@@ -188,41 +209,10 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "ctrl+d":
 		return m, tea.Quit
 	}
-	// Reset successive ctrl+c count on any other key.
 	m.ctrlCCount = 0
 	switch msg.String() {
 	case "enter":
-		line := strings.TrimSpace(m.Input)
-		// While a stream is in flight, don't send another message (allow typing in composer).
-		if m.Loading && line != "" {
-			return m, nil
-		}
-		m.Input = ""
-		if line == "" {
-			return m, nil
-		}
-		m.Err = ""
-
-		// Shell escape: ! <cmd> (REQ-CLIENT-0175, CliChatShellEscape).
-		if strings.HasPrefix(line, "!") {
-			m.Scrollback = append(m.Scrollback, "You: "+line)
-			m.Loading = true
-			shellCmd := m.handleShellEscape(line)
-			return m, shellCmd
-		}
-
-		// Slash command dispatcher (REQ-CLIENT-0164, SlashCommandExecution).
-		if strings.HasPrefix(line, "/") {
-			return m.handleSlashLine(line)
-		}
-
-		// Regular chat message.
-		m.Scrollback = append(m.Scrollback, "You: "+line)
-		m.pushInputHistory(line)
-		m.InputHistoryIdx = -1
-		m.Loading = true
-		chatCmd := m.streamCmd(line)
-		return m, chatCmd
+		return m.handleEnterKey()
 	case "up":
 		m.navigateInputHistory(true)
 		return m, nil
@@ -243,6 +233,33 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	}
+}
+
+func (m *Model) handleEnterKey() (tea.Model, tea.Cmd) {
+	line := strings.TrimSpace(m.Input)
+	if m.Loading && line != "" {
+		return m, nil
+	}
+	m.Input = ""
+	if line == "" {
+		return m, nil
+	}
+	m.Err = ""
+	if strings.HasPrefix(line, "!") {
+		m.Scrollback = append(m.Scrollback, "You: "+line)
+		m.Loading = true
+		cmd := m.handleShellEscape(line)
+		return m, cmd
+	}
+	if strings.HasPrefix(line, "/") {
+		return m.handleSlashLine(line)
+	}
+	m.Scrollback = append(m.Scrollback, "You: "+line)
+	m.pushInputHistory(line)
+	m.InputHistoryIdx = -1
+	m.Loading = true
+	cmd := m.streamCmd(line)
+	return m, cmd
 }
 
 // handleSlashLine dispatches a slash-prefixed line to the correct handler.
@@ -300,43 +317,64 @@ func (m *Model) handleThreadCommand(line string) tea.Cmd {
 	}
 	switch sub {
 	case "new":
-		threadID, err := m.Session.NewThread()
-		if err != nil {
-			m.Scrollback = append(m.Scrollback, "Error: "+err.Error())
-			return nil
-		}
-		m.Scrollback = append(m.Scrollback, chat.LandmarkThreadSwitched+" New thread: "+threadID)
-		return nil
+		return m.threadCommandNew()
 	case "list":
 		return m.threadListCmd()
 	case "switch":
-		if len(parts) < 2 {
-			m.Scrollback = append(m.Scrollback, "Usage: /thread switch <id>")
-			return nil
-		}
-		id := parts[1]
-		m.Session.SetCurrentThreadID(id)
-		m.Scrollback = append(m.Scrollback, chat.LandmarkThreadSwitched+" Switched to thread: "+id)
-		return nil
+		return m.threadCommandSwitch(parts, rest)
 	case "rename":
-		if len(parts) < 2 {
-			m.Scrollback = append(m.Scrollback, "Usage: /thread rename <title>")
-			return nil
-		}
-		title := strings.TrimSpace(strings.TrimPrefix(rest, "rename"))
-		title = strings.TrimSpace(title)
-		if title == "" {
-			m.Scrollback = append(m.Scrollback, "Usage: /thread rename <title>")
-			return nil
-		}
-		return m.threadRenameCmd(title)
+		return m.threadCommandRename(parts, rest)
 	default:
-		if rest != "" {
-			m.Scrollback = append(m.Scrollback, "Unknown: /thread "+rest+" (use new, list, switch, rename)")
-		} else {
-			m.Scrollback = append(m.Scrollback, "Thread: new, list, switch <id>, rename <title>")
-		}
+		m.threadCommandUsage(rest)
 		return nil
+	}
+}
+
+func (m *Model) threadCommandNew() tea.Cmd {
+	threadID, err := m.Session.NewThread()
+	if err != nil {
+		m.Scrollback = append(m.Scrollback, "Error: "+err.Error())
+		return nil
+	}
+	m.Scrollback = append(m.Scrollback, chat.LandmarkThreadSwitched+" New thread: "+threadID)
+	return nil
+}
+
+func (m *Model) threadCommandSwitch(parts []string, rest string) tea.Cmd {
+	if len(parts) < 2 {
+		m.Scrollback = append(m.Scrollback, "Usage: /thread switch <selector> (use ordinal, id, or title from /thread list)")
+		return nil
+	}
+	selector := strings.TrimSpace(strings.TrimPrefix(rest, "switch"))
+	id, err := m.Session.ResolveThreadSelector(selector, 50)
+	if err != nil {
+		m.Scrollback = append(m.Scrollback, "Error: "+err.Error())
+		return nil
+	}
+	m.Session.SetCurrentThreadID(id)
+	m.Scrollback = append(m.Scrollback, chat.LandmarkThreadSwitched+" Switched to thread: "+id)
+	return nil
+}
+
+func (m *Model) threadCommandRename(parts []string, rest string) tea.Cmd {
+	if len(parts) < 2 {
+		m.Scrollback = append(m.Scrollback, "Usage: /thread rename <title>")
+		return nil
+	}
+	title := strings.TrimSpace(strings.TrimPrefix(rest, "rename"))
+	title = strings.TrimSpace(title)
+	if title == "" {
+		m.Scrollback = append(m.Scrollback, "Usage: /thread rename <title>")
+		return nil
+	}
+	return m.threadRenameCmd(title)
+}
+
+func (m *Model) threadCommandUsage(rest string) {
+	if rest != "" {
+		m.Scrollback = append(m.Scrollback, "Unknown: /thread "+rest+" (use new, list, switch, rename)")
+	} else {
+		m.Scrollback = append(m.Scrollback, "Thread: new, list, switch <id>, rename <title>")
 	}
 }
 
@@ -349,8 +387,8 @@ func (m *Model) threadListCmd() tea.Cmd {
 		if err != nil {
 			return threadListResult{err: err}
 		}
-		lines := []string{"--- Threads ---"}
-		for _, t := range items {
+		lines := []string{"--- Threads (use ordinal, id, or title with /thread switch <selector>) ---"}
+		for i, t := range items {
 			title := ""
 			if t.Title != nil {
 				title = *t.Title
@@ -358,7 +396,8 @@ func (m *Model) threadListCmd() tea.Cmd {
 			if title == "" {
 				title = "(no title)"
 			}
-			lines = append(lines, fmt.Sprintf("  %s  %s", t.ID, title))
+			ordinal := fmt.Sprintf("%d", i+1)
+			lines = append(lines, fmt.Sprintf("  %s  %s  %s", ordinal, t.ID, title))
 		}
 		return threadListResult{lines: lines}
 	}
@@ -415,7 +454,12 @@ func (m *Model) navigateInputHistory(up bool) {
 }
 
 func (m *Model) applyStreamDelta(msg streamDeltaMsg) (tea.Model, tea.Cmd) {
-	m.streamBuf.WriteString(msg.delta)
+	if msg.amendment != "" {
+		m.streamBuf.Reset()
+		m.streamBuf.WriteString(msg.amendment)
+	} else {
+		m.streamBuf.WriteString(msg.delta)
+	}
 	prefix := assistantPrefix
 	if len(m.Scrollback) > 0 && strings.HasPrefix(m.Scrollback[len(m.Scrollback)-1], prefix) {
 		m.Scrollback[len(m.Scrollback)-1] = prefix + m.streamBuf.String()
@@ -444,6 +488,30 @@ func (m *Model) applyThreadRenameResult(msg threadRenameResult) (tea.Model, tea.
 		m.Scrollback = append(m.Scrollback, "Error: "+msg.err.Error())
 	} else {
 		m.Scrollback = append(m.Scrollback, "Thread renamed.")
+	}
+	return m, nil
+}
+
+func (m *Model) ensureThreadCmd() tea.Cmd {
+	return func() tea.Msg {
+		if m.Session == nil {
+			return ensureThreadResult{err: fmt.Errorf("no session")}
+		}
+		err := m.Session.EnsureThread(m.ResumeThreadSelector)
+		if err != nil {
+			return ensureThreadResult{err: err}
+		}
+		return ensureThreadResult{threadID: m.Session.CurrentThreadID}
+	}
+}
+
+func (m *Model) applyEnsureThreadResult(msg ensureThreadResult) (tea.Model, tea.Cmd) {
+	if msg.err != nil {
+		m.Scrollback = append(m.Scrollback, "Error: "+msg.err.Error())
+		return m, nil
+	}
+	if msg.threadID != "" {
+		m.Scrollback = append(m.Scrollback, chat.LandmarkThreadSwitched+" Thread: "+msg.threadID)
 	}
 	return m, nil
 }
@@ -512,7 +580,9 @@ func (m *Model) applyLoginResult(msg loginResultMsg) (tea.Model, tea.Cmd) {
 		}
 	}
 	m.Scrollback = append(m.Scrollback, "Logged in.")
-	return m, nil
+	// Ensure thread after login: new (default) or resolve --resume-thread (cynork_tui.md).
+	cmd := m.ensureThreadCmd()
+	return m, cmd
 }
 
 // handleLoginFormKey handles key events when the login overlay is visible (REQ-CLIENT-0190).
@@ -665,8 +735,7 @@ func (m *Model) streamCmd(line string) tea.Cmd {
 	}
 }
 
-// readNextDelta returns the next delta or streamPollMsg if nothing is ready within streamPollInterval,
-// so the event loop stays responsive and can process Ctrl+C instead of hanging.
+// readNextDelta returns the next delta, amendment, or streamPollMsg if nothing is ready.
 func readNextDelta(ch <-chan chat.ChatStreamDelta) tea.Msg {
 	select {
 	case delta, ok := <-ch:
@@ -675,6 +744,9 @@ func readNextDelta(ch <-chan chat.ChatStreamDelta) tea.Msg {
 		}
 		if delta.Done {
 			return streamDoneMsg{responseID: delta.ResponseID, err: delta.Err}
+		}
+		if delta.Amendment != "" {
+			return streamDeltaMsg{amendment: delta.Amendment}
 		}
 		return streamDeltaMsg{delta: delta.Delta}
 	case <-time.After(streamPollInterval):

@@ -19,17 +19,14 @@ type AssistantTurn struct {
 
 // ChatStreamDelta is one incremental event from a streaming assistant turn.
 // When Done is true the stream has ended; Err carries any terminal error.
-// Per CYNAI.USRGWY.OpenAIChatApi.Streaming: events are ordered visible-text deltas
-// followed by a terminal completion or error event.
+// Amendment is set when the gateway sends cynodeai.amendment (e.g. secret_redaction): replace accumulated visible text in place.
 type ChatStreamDelta struct {
-	// Delta is the incremental visible-text content for this event.
-	Delta string
-	// Done is true for the terminal event (no more deltas follow).
-	Done bool
-	// Err is set on the terminal event when the stream ended with an error.
-	Err error
-	// ResponseID is populated on the final Done event for responses-surface continuation.
+	Delta      string
+	Done       bool
+	Err        error
 	ResponseID string
+	// Amendment is the full redacted content when event type is secret_redaction; replace in-flight text in place.
+	Amendment string
 }
 
 // ChatTransport sends a user message and returns the assistant turn.
@@ -60,18 +57,23 @@ func (t *CompletionsTransport) SendMessage(ctx context.Context, message, model, 
 }
 
 // StreamMessage implements ChatTransport using the completions endpoint with stream=true.
-// Returns a channel of incremental deltas. The goroutine exits when the stream ends or
-// ctx is canceled, sending a terminal Done event.
 func (t *CompletionsTransport) StreamMessage(ctx context.Context, message, model, projectID string) (<-chan ChatStreamDelta, error) {
-	ch := make(chan ChatStreamDelta, 32) //nolint:mnd // buffer avoids blocking the SSE reader goroutine
+	ch := make(chan ChatStreamDelta, 32) //nolint:mnd // buffer size for streaming deltas
 	go func() {
 		defer close(ch)
-		err := t.Client.ChatStream(ctx, message, model, projectID, func(delta string) {
-			select {
-			case ch <- ChatStreamDelta{Delta: delta}:
-			case <-ctx.Done():
-			}
-		})
+		err := t.Client.ChatStream(ctx, message, model, projectID,
+			func(delta string) {
+				select {
+				case ch <- ChatStreamDelta{Delta: delta}:
+				case <-ctx.Done():
+				}
+			},
+			func(redacted string) {
+				select {
+				case ch <- ChatStreamDelta{Amendment: redacted}:
+				case <-ctx.Done():
+				}
+			})
 		ch <- ChatStreamDelta{Done: true, Err: err}
 	}()
 	return ch, nil
@@ -93,15 +95,22 @@ func (t *ResponsesTransport) SendMessage(ctx context.Context, message, model, pr
 
 // StreamMessage implements ChatTransport using the responses endpoint with stream=true.
 func (t *ResponsesTransport) StreamMessage(ctx context.Context, message, model, projectID string) (<-chan ChatStreamDelta, error) {
-	ch := make(chan ChatStreamDelta, 32) //nolint:mnd // buffer avoids blocking the SSE reader goroutine
+	ch := make(chan ChatStreamDelta, 32) //nolint:mnd // buffer size for streaming deltas
 	go func() {
 		defer close(ch)
-		respID, err := t.Client.ResponsesStream(ctx, message, model, projectID, func(delta string) {
-			select {
-			case ch <- ChatStreamDelta{Delta: delta}:
-			case <-ctx.Done():
-			}
-		})
+		respID, err := t.Client.ResponsesStream(ctx, message, model, projectID,
+			func(delta string) {
+				select {
+				case ch <- ChatStreamDelta{Delta: delta}:
+				case <-ctx.Done():
+				}
+			},
+			func(redacted string) {
+				select {
+				case ch <- ChatStreamDelta{Amendment: redacted}:
+				case <-ctx.Done():
+				}
+			})
 		ch <- ChatStreamDelta{Done: true, Err: err, ResponseID: respID}
 	}()
 	return ch, nil

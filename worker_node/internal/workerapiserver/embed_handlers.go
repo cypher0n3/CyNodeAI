@@ -194,6 +194,7 @@ func managedServiceProxyHTTPHandler(bearerToken string, socketByService map[stri
 			errCode, err := doManagedProxyUpstreamStream(r.Context(), proxyReq, body, socketPath, r.PathValue("id"), w, logger)
 			if err != nil {
 				http.Error(w, err.Error(), errCode)
+				return
 			}
 			return
 		}

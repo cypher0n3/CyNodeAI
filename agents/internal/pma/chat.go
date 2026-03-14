@@ -115,21 +115,9 @@ func streamCompletionToWriter(ctx context.Context, w http.ResponseWriter, instru
 			return
 		}
 		line := scanner.Bytes()
-		if len(line) == 0 {
-			continue
-		}
-		content, done, err := parseInferenceChunk(line, logger)
-		if err != nil {
-			logger.Warn("stream completion chunk error", "error", err)
+		done, stop := streamCompletionWriteChunk(enc, w, line, logger)
+		if stop {
 			return
-		}
-		if content != "" {
-			if encErr := enc.Encode(map[string]string{"delta": content}); encErr != nil {
-				return
-			}
-			if f, ok := w.(http.Flusher); ok {
-				f.Flush()
-			}
 		}
 		if done {
 			break
@@ -138,6 +126,28 @@ func streamCompletionToWriter(ctx context.Context, w http.ResponseWriter, instru
 	if err := scanner.Err(); err != nil {
 		logger.Warn("stream completion read error", "error", err)
 	}
+}
+
+// streamCompletionWriteChunk parses one inference chunk, optionally encodes a delta and flushes.
+// Returns (streamDone, stopLoop). stopLoop is true on encode error or parse error.
+func streamCompletionWriteChunk(enc *json.Encoder, w http.ResponseWriter, line []byte, logger *slog.Logger) (streamDone, stopLoop bool) {
+	if len(line) == 0 {
+		return false, false
+	}
+	content, done, err := parseInferenceChunk(line, logger)
+	if err != nil {
+		logger.Warn("stream completion chunk error", "error", err)
+		return false, true
+	}
+	if content != "" {
+		if encErr := enc.Encode(map[string]string{"delta": content}); encErr != nil {
+			return false, true
+		}
+		if f, ok := w.(http.Flusher); ok {
+			f.Flush()
+		}
+	}
+	return done, false
 }
 
 // resolveContent obtains the completion content for req, retrying with just the current user

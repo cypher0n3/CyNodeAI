@@ -3,51 +3,47 @@ package cmd
 
 import (
 	"fmt"
-	"os"
 
 	"github.com/charmbracelet/bubbletea"
 	"github.com/cypher0n3/cynodeai/cynork/internal/chat"
 	"github.com/cypher0n3/cynodeai/cynork/internal/config"
-	"github.com/cypher0n3/cynodeai/cynork/internal/exit"
 	"github.com/cypher0n3/cynodeai/cynork/internal/gateway"
 	"github.com/cypher0n3/cynodeai/cynork/internal/tui"
 	"github.com/spf13/cobra"
 )
 
 var tuiProjectID string
-var tuiThreadNew bool
+var tuiResumeThread string
 
 var tuiCmd = &cobra.Command{
 	Use:   "tui",
 	Short: "Full-screen TUI for chat and thread management",
-	Long:  "Starts the full-screen TUI. Use for interactive chat, thread list/switch/rename, and project/model context. See docs/tech_specs/cynork_tui.md.",
+	Long:  "Starts the full-screen TUI. By default starts with a new thread; use --resume-thread <selector> to start in an existing thread. See docs/tech_specs/cynork_tui.md.",
 	RunE:  runTUI,
 }
 
 func init() {
 	rootCmd.AddCommand(tuiCmd)
 	tuiCmd.Flags().StringVar(&tuiProjectID, "project-id", "", "project to associate with the session (OpenAI-Project header)")
-	tuiCmd.Flags().BoolVar(&tuiThreadNew, "thread-new", false, "create a new thread before starting the TUI")
+	tuiCmd.Flags().StringVar(&tuiResumeThread, "resume-thread", "", "start in an existing thread (selector: ordinal, id, or title from /thread list)")
 }
 
 func runTUI(_ *cobra.Command, _ []string) error {
-	if cfg.Token == "" {
-		return exit.Auth(fmt.Errorf("not logged in: run 'cynork auth login'"))
-	}
 	client := gateway.NewClient(cfg.GatewayURL)
-	client.SetToken(cfg.Token)
+	if cfg.Token != "" {
+		client.SetToken(cfg.Token)
+	}
 	session := chat.NewSession(client)
 	session.ProjectID = tuiProjectID
 	session.Plain = false
 	session.NoColor = noColor
-	if tuiThreadNew {
-		threadID, err := session.NewThread()
-		if err != nil {
-			return fmt.Errorf("start new thread: %w", err)
+	// When token present, ensure thread before TUI: new (default) or resolve --resume-thread.
+	if cfg.Token != "" {
+		if err := session.EnsureThread(tuiResumeThread); err != nil {
+			return fmt.Errorf("thread: %w", err)
 		}
-		fmt.Fprintf(os.Stderr, "New thread started: %s\n", threadID)
 	}
-	return runTUIWithSession(session)
+	return runTUIWithSession(session, tuiResumeThread)
 }
 
 // tuiAuthProvider implements tui.AuthProvider so /auth login, logout, refresh can persist tokens and gateway URL.
@@ -67,10 +63,16 @@ func (p *tuiAuthProvider) Save() error              { return p.saveFn() }
 
 // runTUIWithSession starts the full-screen TUI with the given session. Used by both
 // "cynork tui" and interactive "cynork chat" (when stdin/stdout are a TTY).
-func runTUIWithSession(session *chat.Session) error {
+// resumeThreadSelector is passed so that after in-session login the TUI can ensure thread (new or resume).
+func runTUIWithSession(session *chat.Session, resumeThreadSelector string) error {
 	tui.SetTUIVersion(version)
 	m := tui.NewModel(session)
 	m.SetAuthProvider(&tuiAuthProvider{cfg: cfg, saveFn: saveConfig})
+	m.SetResumeThreadSelector(resumeThreadSelector)
+	// Startup token failure: open in-session login instead of exiting (cynork_tui.md Auth Recovery).
+	if session.Client != nil && session.Client.Token == "" {
+		m.OpenLoginFormOnInit = true
+	}
 	p := tea.NewProgram(m, tea.WithAltScreen())
 	if _, err := tuiRunProgram(p); err != nil {
 		return err

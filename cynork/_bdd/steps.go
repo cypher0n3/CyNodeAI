@@ -393,14 +393,19 @@ func (s *cynorkState) mockGatewayMux() *http.ServeMux {
 		s.mu.Lock()
 		expected := s.lastSkillID
 		s.mu.Unlock()
-		if id != expected {
+		// Accept exact id or user-typeable selector (e.g. "team-guide" in Get skill by selector scenario).
+		if id != expected && id != "team-guide" {
 			w.WriteHeader(http.StatusNotFound)
 			return
+		}
+		resolveID := id
+		if id == "team-guide" && expected != "" {
+			resolveID = expected
 		}
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		_ = json.NewEncoder(w).Encode(map[string]any{
-			"id": id, "name": "Test skill", "scope": "user", "content": "# Test skill",
+			"id": resolveID, "name": "Test skill", "scope": "user", "content": "# Test skill",
 			"updated_at": "2026-01-01T00:00:00Z",
 		})
 	})

@@ -94,19 +94,33 @@ func TestExecute_LoadConfigFails(t *testing.T) {
 	}
 }
 
-func TestExecute_TUI_RequiresAuth(t *testing.T) {
+func TestExecute_TUI_StartsWithoutToken(t *testing.T) {
+	// Per spec: startup token failure opens in-session login; TUI starts instead of exiting with auth error.
+	oldRun := tuiRunProgram
+	tuiRunProgram = func(_ *tea.Program) (tea.Model, error) { return nil, nil }
+	defer func() { tuiRunProgram = oldRun }()
 	path := writeTempConfig(t, "gateway_url: http://localhost\n")
 	got := runWithArgs(t, "--config", path, "tui")
-	if got != 3 {
-		t.Errorf("Execute(tui) without token = %d, want 3 (auth)", got)
+	if got != 0 {
+		t.Errorf("Execute(tui) without token (in-session login) = %d, want 0", got)
 	}
 }
 
 func TestExecute_TUI_WithToken(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost && r.URL.Path == chatThreadsPath {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusCreated)
+			_ = json.NewEncoder(w).Encode(map[string]string{"thread_id": "tid"})
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
 	oldRun := tuiRunProgram
 	tuiRunProgram = func(_ *tea.Program) (tea.Model, error) { return nil, nil }
 	defer func() { tuiRunProgram = oldRun }()
-	path := writeTempConfig(t, "gateway_url: http://localhost\ntoken: x\n")
+	path := writeTempConfig(t, "gateway_url: "+server.URL+"\ntoken: x\n")
 	got := runWithArgs(t, "--config", path, "tui")
 	if got != 0 {
 		t.Errorf("Execute(tui) with token and mock run = %d, want 0", got)
@@ -114,22 +128,32 @@ func TestExecute_TUI_WithToken(t *testing.T) {
 }
 
 func TestExecute_TUI_RunReturnsError(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method == http.MethodPost && r.URL.Path == chatThreadsPath {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusCreated)
+			_ = json.NewEncoder(w).Encode(map[string]string{"thread_id": "tid"})
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
 	oldRun := tuiRunProgram
 	tuiRunProgram = func(_ *tea.Program) (tea.Model, error) {
 		return nil, errors.New("program error")
 	}
 	defer func() { tuiRunProgram = oldRun }()
-	path := writeTempConfig(t, "gateway_url: http://localhost\ntoken: x\n")
+	path := writeTempConfig(t, "gateway_url: "+server.URL+"\ntoken: x\n")
 	got := runWithArgs(t, "--config", path, "tui")
 	if got != 1 {
 		t.Errorf("Execute(tui) when run returns error = %d, want 1", got)
 	}
 }
 
-func TestExecute_TUI_ThreadNew(t *testing.T) {
+func TestExecute_TUI_DefaultNewThread(t *testing.T) {
 	threadID := "thread-123"
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == http.MethodPost && r.URL.Path == "/v1/chat/threads" {
+		if r.Method == http.MethodPost && r.URL.Path == chatThreadsPath {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusCreated)
 			_ = json.NewEncoder(w).Encode(map[string]string{"thread_id": threadID})
@@ -142,9 +166,9 @@ func TestExecute_TUI_ThreadNew(t *testing.T) {
 	tuiRunProgram = func(_ *tea.Program) (tea.Model, error) { return nil, nil }
 	defer func() { tuiRunProgram = oldRun }()
 	path := writeTempConfig(t, "gateway_url: "+server.URL+"\ntoken: x\n")
-	got := runWithArgs(t, "--config", path, "tui", "--thread-new")
+	got := runWithArgs(t, "--config", path, "tui")
 	if got != 0 {
-		t.Errorf("Execute(tui --thread-new) = %d, want 0", got)
+		t.Errorf("Execute(tui) default new thread = %d, want 0", got)
 	}
 }
 

@@ -138,23 +138,28 @@ func readNDJSONStream(ctx context.Context, body io.Reader, contentType string, o
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
-		line := bytes.TrimSpace(scanner.Bytes())
-		if len(line) == 0 {
-			continue
-		}
-		var chunk struct {
-			Delta string `json:"delta"`
-		}
-		if json.Unmarshal(line, &chunk) != nil {
-			continue
-		}
-		if chunk.Delta != "" {
-			if err := onDelta(chunk.Delta); err != nil {
-				return err
-			}
+		if err := processNDJSONLine(scanner.Bytes(), onDelta); err != nil {
+			return err
 		}
 	}
 	return scanner.Err()
+}
+
+func processNDJSONLine(line []byte, onDelta func(string) error) error {
+	line = bytes.TrimSpace(line)
+	if len(line) == 0 {
+		return nil
+	}
+	var chunk struct {
+		Delta string `json:"delta"`
+	}
+	if json.Unmarshal(line, &chunk) != nil {
+		return nil
+	}
+	if chunk.Delta != "" {
+		return onDelta(chunk.Delta)
+	}
+	return nil
 }
 
 // callViaManagedProxyStream POSTs a stream:true request to the managed proxy; the worker streams the upstream body back.

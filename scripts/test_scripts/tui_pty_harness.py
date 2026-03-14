@@ -125,7 +125,7 @@ class TuiPtySession:
                 self._proc.sendcontrol("c")
             elif part == "ctrl+d":
                 self._proc.sendcontrol("d")
-            elif part == "esc" or part == "escape":
+            elif part in ("esc", "escape"):
                 self._proc.send("\x1b")
             else:
                 self._proc.send(part)
@@ -172,7 +172,7 @@ class TuiPtySession:
         return " (scrollback)" in out or "> " in out
 
     def wait_for_login_form(self, timeout_sec=8):
-        """Wait until the /auth login overlay is visible. Return True if landmark or form text seen."""
+        """Wait until /auth login overlay is visible. True if landmark or form seen."""
         out = self.read_until_landmark(
             [LANDMARK_AUTH_RECOVERY_READY], timeout_sec
         )

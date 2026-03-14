@@ -1369,7 +1369,7 @@ func TestClient_ChatStream_Success(t *testing.T) {
 	var got strings.Builder
 	err := c.ChatStream(context.Background(), "hi", "m", "p", func(delta string) {
 		got.WriteString(delta)
-	})
+	}, nil)
 	if err != nil {
 		t.Fatalf("ChatStream: %v", err)
 	}
@@ -1385,7 +1385,7 @@ func TestClient_ChatStream_HTTPError(t *testing.T) {
 	defer srv.Close()
 	c := NewClient(srv.URL)
 	c.SetToken("tok")
-	err := c.ChatStream(context.Background(), "hi", "", "", func(_ string) {})
+	err := c.ChatStream(context.Background(), "hi", "", "", func(_ string) {}, nil)
 	if err == nil {
 		t.Fatal("expected error from ChatStream on 503")
 	}
@@ -1401,7 +1401,7 @@ func TestClient_ChatStream_StructuredError(t *testing.T) {
 	defer srv.Close()
 	c := NewClient(srv.URL)
 	c.SetToken("tok")
-	err := c.ChatStream(context.Background(), "hi", "", "", func(_ string) {})
+	err := c.ChatStream(context.Background(), "hi", "", "", func(_ string) {}, nil)
 	if err == nil {
 		t.Fatal("expected structured error from stream")
 	}
@@ -1409,7 +1409,7 @@ func TestClient_ChatStream_StructuredError(t *testing.T) {
 
 func TestClient_ChatStream_InvalidBaseURL(t *testing.T) {
 	c := NewClient("://bad")
-	err := c.ChatStream(context.Background(), "hi", "", "", func(_ string) {})
+	err := c.ChatStream(context.Background(), "hi", "", "", func(_ string) {}, nil)
 	if err == nil {
 		t.Fatal("expected error from invalid base URL")
 	}
@@ -1433,7 +1433,7 @@ func TestClient_ResponsesStream_Success(t *testing.T) {
 	var got strings.Builder
 	_, err := c.ResponsesStream(context.Background(), "hi", "m", "p", func(delta string) {
 		got.WriteString(delta)
-	})
+	}, nil)
 	if err != nil {
 		t.Fatalf("ResponsesStream: %v", err)
 	}
@@ -1449,7 +1449,7 @@ func TestClient_ResponsesStream_HTTPError(t *testing.T) {
 	defer srv.Close()
 	c := NewClient(srv.URL)
 	c.SetToken("tok")
-	_, err := c.ResponsesStream(context.Background(), "hi", "", "", func(_ string) {})
+	_, err := c.ResponsesStream(context.Background(), "hi", "", "", func(_ string) {}, nil)
 	if err == nil {
 		t.Fatal("expected error from ResponsesStream on 502")
 	}
@@ -1457,7 +1457,7 @@ func TestClient_ResponsesStream_HTTPError(t *testing.T) {
 
 func TestClient_ResponsesStream_InvalidBaseURL(t *testing.T) {
 	c := NewClient("://bad")
-	_, err := c.ResponsesStream(context.Background(), "hi", "", "", func(_ string) {})
+	_, err := c.ResponsesStream(context.Background(), "hi", "", "", func(_ string) {}, nil)
 	if err == nil {
 		t.Fatal("expected error from invalid base URL")
 	}
@@ -1484,7 +1484,7 @@ func TestClient_ResponsesStream_WithProjectAndToken(t *testing.T) {
 	var got strings.Builder
 	_, err := c.ResponsesStream(context.Background(), "hi", "m", "proj-1", func(delta string) {
 		got.WriteString(delta)
-	})
+	}, nil)
 	if err != nil {
 		t.Fatalf("ResponsesStream with project: %v", err)
 	}
@@ -1499,7 +1499,7 @@ func TestClient_ChatStream_HTTPDoError(t *testing.T) {
 	srv.Close()
 	c := NewClient(srv.URL)
 	c.SetToken("tok")
-	err := c.ChatStream(context.Background(), "hi", "", "", func(_ string) {})
+	err := c.ChatStream(context.Background(), "hi", "", "", func(_ string) {}, nil)
 	if err == nil {
 		t.Fatal("expected error from HTTP Do on closed server")
 	}
@@ -1510,7 +1510,7 @@ func TestClient_ResponsesStream_HTTPDoError(t *testing.T) {
 	srv.Close()
 	c := NewClient(srv.URL)
 	c.SetToken("tok")
-	_, err := c.ResponsesStream(context.Background(), "hi", "", "", func(_ string) {})
+	_, err := c.ResponsesStream(context.Background(), "hi", "", "", func(_ string) {}, nil)
 	if err == nil {
 		t.Fatal("expected error from HTTP Do on closed server")
 	}
@@ -1531,7 +1531,7 @@ func TestReadChatSSEStream_SkipsNonDataLines(t *testing.T) {
 	var got strings.Builder
 	err := c.ChatStream(context.Background(), "m", "", "", func(delta string) {
 		got.WriteString(delta)
-	})
+	}, nil)
 	if err != nil {
 		t.Fatalf("ChatStream: %v", err)
 	}
@@ -1554,7 +1554,7 @@ func TestReadChatSSEStream_MalformedJSONChunkIgnored(t *testing.T) {
 	var got strings.Builder
 	err := c.ChatStream(context.Background(), "m", "", "", func(delta string) {
 		got.WriteString(delta)
-	})
+	}, nil)
 	if err != nil {
 		t.Fatalf("ChatStream: %v", err)
 	}
@@ -1586,8 +1586,37 @@ func TestReadChatSSEStream_ScannerError(t *testing.T) {
 		data: []byte("data: bad-json\n"),
 		err:  fmt.Errorf("simulated read error"),
 	}
-	err := readChatSSEStream(context.Background(), r, func(_ string) {})
+	err := readChatSSEStream(context.Background(), r, func(_ string) {}, nil)
 	if err == nil {
 		t.Fatal("expected error from scanner failure, got nil")
+	}
+}
+
+func TestReadChatSSEStream_AmendmentEvent(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(sseChunkLine("secret", "")))
+		_, _ = w.Write([]byte("event: cynodeai.amendment\n"))
+		_, _ = w.Write([]byte(`data: {"type":"secret_redaction","content":"SECRET_REDACTED","redaction_kinds":["api_key"]}` + "\n\n"))
+		_, _ = w.Write([]byte("data: [DONE]\n\n"))
+	}))
+	defer srv.Close()
+	c := NewClient(srv.URL)
+	c.SetToken("tok")
+	var deltas, amendment strings.Builder
+	err := c.ChatStream(context.Background(), "m", "", "", func(d string) {
+		deltas.WriteString(d)
+	}, func(redacted string) {
+		amendment.WriteString(redacted)
+	})
+	if err != nil {
+		t.Fatalf("ChatStream: %v", err)
+	}
+	if deltas.String() != "secret" {
+		t.Errorf("deltas = %q", deltas.String())
+	}
+	if amendment.String() != "SECRET_REDACTED" {
+		t.Errorf("amendment = %q", amendment.String())
 	}
 }

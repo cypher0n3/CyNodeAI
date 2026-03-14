@@ -305,7 +305,8 @@ class TestTuiSlashCommands(unittest.TestCase):
                 "required" in out.lower()
                 or "Login failed" in out
                 or "Gateway URL" in out,
-                f"Empty submit should show required error or leave form open; got: {repr(out[:500])}",
+                "Empty submit should show required error or leave form open; got: "
+                + repr(out[:500]),
             )
             session.send_keys(["esc"])
             time.sleep(_SLASH_CMD_SETTLE_SEC)

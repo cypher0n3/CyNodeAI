@@ -20,10 +20,10 @@ func TestSetTUIVersion(t *testing.T) {
 	SetTUIVersion("dev") // restore
 }
 
-// TestSlashCatalogNotEmpty verifies slashCatalog is non-empty.
-func TestSlashCatalogNotEmpty(t *testing.T) {
-	if len(slashCatalog) == 0 {
-		t.Error("slashCatalog is empty")
+// TestSlashHelpCatalogNotEmpty verifies slashHelpCatalog is non-empty.
+func TestSlashHelpCatalogNotEmpty(t *testing.T) {
+	if len(slashHelpCatalog) == 0 {
+		t.Error("slashHelpCatalog is empty")
 	}
 }
 

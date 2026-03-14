@@ -14,7 +14,7 @@ import (
 	"github.com/cypher0n3/cynodeai/cynork/internal/gateway"
 )
 
-const threadListHeader = "--- Threads ---"
+const threadListHeader = "--- Threads (use ordinal, id, or title with /thread switch <selector>) ---"
 const inputThreadList = "/thread list"
 
 type mockTransport struct {
@@ -561,7 +561,21 @@ func TestModel_ThreadRenameCmd_NilSession(t *testing.T) {
 }
 
 func TestModel_ThreadCommand_Switch(t *testing.T) {
-	session := chat.NewSession(gateway.NewClient("http://localhost"))
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/chat/threads" || r.Method != http.MethodGet {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(map[string]interface{}{
+			"data": []map[string]interface{}{
+				{"id": "thread-123", "title": "Test"},
+			},
+		})
+	}))
+	defer server.Close()
+	session := chat.NewSession(gateway.NewClient(server.URL))
+	session.Client.SetToken("tok")
 	m := NewModel(session)
 	m.Input = "/thread switch thread-123"
 	m.Scrollback = nil

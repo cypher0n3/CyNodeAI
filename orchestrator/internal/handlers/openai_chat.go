@@ -114,6 +114,8 @@ func (h *OpenAIChatHandler) ListModels(w http.ResponseWriter, r *http.Request) {
 
 // ChatCompletions handles POST /v1/chat/completions with pipeline: auth (already done), decode, project_id, redact, persist user message, route, persist assistant, return.
 // When stream=true is requested the response uses Server-Sent Events per CYNAI.USRGWY.OpenAIChatApi.Streaming.
+//
+//nolint:gocognit,gocyclo // single HTTP handler with sequential validation and branching for stream vs non-stream
 func (h *OpenAIChatHandler) ChatCompletions(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	userID := getUserIDFromContext(ctx)
@@ -309,7 +311,7 @@ func (h *OpenAIChatHandler) completeViaPMA(ctx context.Context, effectiveModel s
 // completeViaPMAStream streams completion from PMA token-by-token, persists the full reply and audit, then sends [DONE].
 // chunkID is used as the SSE chunk id (e.g. completion id or response_id); assistantMeta is optional message metadata (e.g. response_id for /v1/responses).
 // Caller must have called prepareSSEResponse(w) before calling this.
-func (h *OpenAIChatHandler) completeViaPMAStream(ctx context.Context, w http.ResponseWriter, cand pmaEndpointCandidate, redacted []userapi.ChatMessage, threadID uuid.UUID, userID *uuid.UUID, projectID *uuid.UUID, start time.Time, effectiveModel string, chunkID string, assistantMeta *string) error {
+func (h *OpenAIChatHandler) completeViaPMAStream(ctx context.Context, w http.ResponseWriter, cand pmaEndpointCandidate, redacted []userapi.ChatMessage, threadID uuid.UUID, userID, projectID *uuid.UUID, start time.Time, effectiveModel, chunkID string, assistantMeta *string) error {
 	workerToken := strings.TrimSpace(cand.workerAPIBearerToken)
 	if workerToken == "" {
 		workerToken = h.workerAPIBearerToken
@@ -722,6 +724,8 @@ func (h *OpenAIChatHandler) NewThread(w http.ResponseWriter, r *http.Request) {
 
 // Responses handles POST /v1/responses (OpenAI Responses API). Same pipeline as chat/completions:
 // decode input, resolve thread (from previous_response_id or active), redact, persist user, route, persist assistant with response_id in metadata, return responses-format.
+//
+//nolint:gocognit,gocyclo // single HTTP handler with sequential validation and branching for stream vs non-stream
 func (h *OpenAIChatHandler) Responses(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	userID := getUserIDFromContext(ctx)

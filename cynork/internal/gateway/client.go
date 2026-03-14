@@ -359,9 +359,8 @@ func (c *Client) ResponsesWithOptions(message, model, projectID string) (*Respon
 }
 
 // ChatStream calls POST /v1/chat/completions with stream=true and invokes onDelta for each
-// visible-text delta received via SSE. Returns when the stream ends or ctx is canceled.
-// Per CYNAI.USRGWY.OpenAIChatApi.Streaming and REQ-CLIENT-0209.
-func (c *Client) ChatStream(ctx context.Context, message, model, projectID string, onDelta func(string)) error {
+// visible-text delta; onAmendment is called for cynodeai.amendment (e.g. secret_redaction) with the full redacted content.
+func (c *Client) ChatStream(ctx context.Context, message, model, projectID string, onDelta func(string), onAmendment func(redactedContent string)) error {
 	req := userapi.ChatCompletionsRequest{
 		Model:    model,
 		Messages: []userapi.ChatMessage{{Role: "user", Content: message}},
@@ -399,12 +398,12 @@ func (c *Client) ChatStream(ctx context.Context, message, model, projectID strin
 	if resp.StatusCode != http.StatusOK {
 		return c.parseError(resp)
 	}
-	return readChatSSEStream(ctx, resp.Body, onDelta)
+	return readChatSSEStream(ctx, resp.Body, onDelta, onAmendment)
 }
 
 // ResponsesStream calls POST /v1/responses with stream=true and invokes onDelta for each
-// visible-text delta. Returns the response_id for continuation and any error.
-func (c *Client) ResponsesStream(ctx context.Context, message, model, projectID string, onDelta func(string)) (responseID string, err error) {
+// visible-text delta; onAmendment is called for cynodeai.amendment (e.g. secret_redaction).
+func (c *Client) ResponsesStream(ctx context.Context, message, model, projectID string, onDelta func(string), onAmendment func(redactedContent string)) (responseID string, err error) {
 	input, err := json.Marshal(message)
 	if err != nil {
 		return "", fmt.Errorf("marshal input: %w", err)
@@ -446,9 +445,7 @@ func (c *Client) ResponsesStream(ctx context.Context, message, model, projectID 
 	if resp.StatusCode != http.StatusOK {
 		return "", c.parseError(resp)
 	}
-	// For the responses endpoint the SSE events use the same chat chunk format;
-	// the response_id is embedded in the chunk id field for the final chunk.
-	err = readChatSSEStream(ctx, resp.Body, onDelta)
+	err = readChatSSEStream(ctx, resp.Body, onDelta, onAmendment)
 	return "", err
 }
 
@@ -482,34 +479,66 @@ func parseSSEDataLine(data string) *parsedSSEEvent {
 	return &parsedSSEEvent{chunk: chunk}
 }
 
-func readChatSSEStream(_ context.Context, r io.Reader, onDelta func(string)) error {
+func readChatSSEStream(_ context.Context, r io.Reader, onDelta func(string), onAmendment func(redactedContent string)) error {
+	if onAmendment == nil {
+		onAmendment = func(string) {}
+	}
 	scanner := bufio.NewScanner(r)
+	var lastEvent string
 	for scanner.Scan() {
 		line := scanner.Text()
+		if strings.HasPrefix(line, "event: ") {
+			lastEvent = strings.TrimSpace(strings.TrimPrefix(line, "event:"))
+			continue
+		}
 		if !strings.HasPrefix(line, "data: ") {
 			continue
 		}
 		data := strings.TrimPrefix(line, "data: ")
-		if data == "[DONE]" {
+		done, err := processChatSSEDataLine(data, lastEvent, onDelta, onAmendment)
+		if err != nil {
+			return err
+		}
+		if done {
 			return nil
 		}
-		ev := parseSSEDataLine(data)
-		if ev == nil {
-			continue
-		}
-		if ev.hasError {
-			return fmt.Errorf("%s: %s", ev.errCode, ev.errMsg)
-		}
-		for _, choice := range ev.chunk.Choices {
-			if delta := choice.Delta.Content; delta != "" {
-				onDelta(delta)
-			}
-		}
+		lastEvent = ""
 	}
 	if err := scanner.Err(); err != nil {
 		return fmt.Errorf("reading SSE stream: %w", err)
 	}
 	return nil
+}
+
+// processChatSSEDataLine handles one "data: ..." line. Returns (streamDone, error).
+func processChatSSEDataLine(data, lastEvent string, onDelta, onAmendment func(string)) (streamDone bool, err error) {
+	if data == "[DONE]" {
+		return true, nil
+	}
+	if lastEvent == "cynodeai.amendment" {
+		var amendment struct {
+			Type    string   `json:"type"`
+			Content string   `json:"content"`
+			Kinds   []string `json:"redaction_kinds"`
+		}
+		if json.Unmarshal([]byte(data), &amendment) == nil && amendment.Type == "secret_redaction" {
+			onAmendment(amendment.Content)
+		}
+		return false, nil
+	}
+	ev := parseSSEDataLine(data)
+	if ev == nil {
+		return false, nil
+	}
+	if ev.hasError {
+		return false, fmt.Errorf("%s: %s", ev.errCode, ev.errMsg)
+	}
+	for _, choice := range ev.chunk.Choices {
+		if delta := choice.Delta.Content; delta != "" {
+			onDelta(delta)
+		}
+	}
+	return false, nil
 }
 
 // NewChatThread calls POST /v1/chat/threads and returns the new thread ID.
@@ -554,6 +583,8 @@ func (c *Client) NewChatThread(projectID string) (string, error) {
 type ChatThreadItem struct {
 	ID        string  `json:"id"`
 	Title     *string `json:"title,omitempty"`
+	Summary   *string `json:"summary,omitempty"`
+	ProjectID string  `json:"project_id,omitempty"`
 	CreatedAt string  `json:"created_at"`
 	UpdatedAt string  `json:"updated_at"`
 }
@@ -635,6 +666,38 @@ func (c *Client) PatchThreadTitle(threadID, title string) error {
 		return c.parseError(resp)
 	}
 	return nil
+}
+
+// GetChatThread calls GET /v1/chat/threads/{id} and returns the thread (title, summary, etc.).
+func (c *Client) GetChatThread(threadID string) (*ChatThreadItem, error) {
+	base, err := url.Parse(c.BaseURL)
+	if err != nil {
+		return nil, fmt.Errorf("invalid base URL: %w", err)
+	}
+	u, err := base.Parse("/v1/chat/threads/" + url.PathEscape(threadID))
+	if err != nil {
+		return nil, fmt.Errorf("invalid path: %w", err)
+	}
+	req, err := http.NewRequest(http.MethodGet, u.String(), http.NoBody)
+	if err != nil {
+		return nil, err
+	}
+	if c.Token != "" {
+		req.Header.Set("Authorization", "Bearer "+c.Token)
+	}
+	resp, err := c.HTTPClient.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		return nil, c.parseError(resp)
+	}
+	var out ChatThreadItem
+	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+		return nil, fmt.Errorf("decode thread response: %w", err)
+	}
+	return &out, nil
 }
 
 // CreateTask calls POST /v1/tasks (requires auth).
