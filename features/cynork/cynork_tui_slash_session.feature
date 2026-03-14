@@ -61,3 +61,53 @@ Scenario: /quit is a synonym for /exit
   Given the TUI is running
   When I type "/quit" and press Enter
   Then the TUI exits cleanly
+
+@req_client_0183
+@req_client_0195
+@req_client_0208
+@req_client_0211
+@spec_cynai_client_cynorktui_localslashcommands
+@spec_cynai_client_cynorktui_thinkingvisibilitybehavior
+Scenario: /show-thinking expands retained thinking blocks in the transcript
+  Given the TUI is running with transcript containing assistant turns that have retained thinking parts
+  When I type "/show-thinking" and press Enter
+  Then retained thinking parts in the scrollback are displayed as expanded thinking blocks
+  And the TUI session remains active
+
+@req_client_0183
+@req_client_0195
+@req_client_0208
+@req_client_0211
+@spec_cynai_client_cynorktui_localslashcommands
+@spec_cynai_client_cynorktui_thinkingvisibilitybehavior
+Scenario: /hide-thinking collapses retained thinking to placeholders
+  Given the TUI is running with transcript containing expanded thinking blocks
+  When I type "/hide-thinking" and press Enter
+  Then retained thinking parts are shown as collapsed placeholders
+  And placeholders hint "/show-thinking" as the expand action
+  And the TUI session remains active
+
+@req_client_0211
+@spec_cynai_client_cynorktui_localslashcommands
+@spec_cynai_client_cynorktui_thinkingvisibilitybehavior
+Scenario: /show-thinking persists tui.show_thinking_by_default to config
+  Given the TUI is running
+  When I type "/show-thinking" and press Enter
+  Then the local cynork config has "tui.show_thinking_by_default" set to true
+
+@req_client_0211
+@spec_cynai_client_cynorktui_localslashcommands
+@spec_cynai_client_cynorktui_thinkingvisibilitybehavior
+Scenario: /hide-thinking persists tui.show_thinking_by_default to config
+  Given the TUI is running
+  When I type "/hide-thinking" and press Enter
+  Then the local cynork config has "tui.show_thinking_by_default" set to false
+
+@req_client_0183
+@spec_cynai_client_cynorktui_thinkingvisibilitybehavior
+Scenario: Thinking visibility commands leave turns without thinking unchanged
+  Given the TUI is running with transcript containing only assistant turns that have no retained thinking part
+  When I type "/show-thinking" and press Enter
+  Then those turns are unchanged
+  When I type "/hide-thinking" and press Enter
+  Then those turns are unchanged

@@ -27,6 +27,15 @@ Scenario: /help includes model project thread and task command groups
   When I type "/help" and press Enter
   Then the scrollback contains references to model project thread and task commands
 
+@req_client_0164
+@req_client_0207
+@spec_cynai_client_cynorktui_localslashcommands
+@spec_cynai_client_cynorktui_slashcommandexecution
+Scenario: /help includes status auth nodes prefs and skills command groups
+  Given the TUI is running
+  When I type "/help" and press Enter
+  Then the scrollback contains references to status whoami auth nodes prefs and skills commands
+
 @req_client_0165
 @spec_cynai_client_cynorktui_slashcommandexecution
 Scenario: Case-insensitive dispatch works for slash commands
