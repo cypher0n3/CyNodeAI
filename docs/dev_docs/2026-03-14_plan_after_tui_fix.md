@@ -29,7 +29,7 @@ Outcome: end-to-end interactive streaming, minimum MCP-in-the-loop for PMA chat,
 ## Constraints
 
 - Requirements and tech specs are source of truth; implementation must align.
-- Do not start the next task until the current task's Testing validation gate passes.
+- Do not start the next task until the current task's Closeout is done and its validation gate has passed.
 - Use BDD/TDD: add or update specs and failing tests before implementation; implement smallest change to pass; refactor only after green.
 - Treat `just ci` and `just e2e` as mandatory end-of-task gates where applicable.
 - Do not implement summary generation, archive, or soft-delete in this plan (deferred per 2026-03-12).
@@ -65,7 +65,8 @@ When adding or updating: assert on landmarks, scrollback content, API response s
 ## Execution Plan
 
 Execute tasks in the order given in [Execution Order](#execution-order).
-Each task is self-contained: it has its own Requirements and Specifications, Discovery steps, and Testing gate.
+Each task is self-contained: it has its own Requirements and Specifications, Discovery steps, Red, Green, Refactor, Testing, and **Closeout** (task completion report, then mark completed steps with `- [x]` as the last step).
+Do not start a later task until the current task's Closeout is done and its validation gate has passed.
 
 ---
 
@@ -122,6 +123,12 @@ Deliver `stream=true` on both interactive chat surfaces, client-driven cancellat
 - [ ] Confirm gateway, transport, TUI, and PTY behavior match the specs listed in Task 1.
 - [ ] Validation gate: do not start Task 2 until all Task 1 checks pass.
 
+#### Closeout (Task 1)
+
+- [ ] Generate a **task completion report** for Task 1: what was done, what passed, any deviations or notes for follow-up.
+- [ ] Do not start Task 2 until this closeout is done.
+- [ ] Mark every completed step in this task's section of the plan with `- [x]`. (Last step.)
+
 ---
 
 ### Task 2: Minimum MCP-In-The-Loop Slice for PMA Chat
@@ -167,6 +174,12 @@ Pull forward the minimum MCP gateway allow-path and PMA chat tool set so PMA cha
 - [ ] Run `just ci` and any targeted E2E for PMA chat with MCP tools.
 - [ ] Confirm MCP tool success, rejection, and ambiguity are real outcomes per [REQ-AGENTS-0137](../requirements/agents.md) and [CYNAI.AGENTS.NoSimulatedOutput](../tech_specs/project_manager_agent.md).
 - [ ] Validation gate: do not start Task 3 until all Task 2 checks pass.
+
+#### Closeout (Task 2)
+
+- [ ] Generate a **task completion report** for Task 2: what was done, what passed, any deviations or notes for follow-up.
+- [ ] Do not start Task 3 until this closeout is done.
+- [ ] Mark every completed step in this task's section of the plan with `- [x]`. (Last step.)
 
 ---
 
@@ -222,6 +235,12 @@ Optionally align interactive `cynork chat` with the fullscreen TUI entry flow wh
 - [ ] Confirm TUI chat-complete exit: user can send, receive, see thread state, project/model context, continue conversation; user can start a fresh thread and continue in the new thread; TUI remains coherent for both chat-completions and responses paths.
 - [ ] Validation gate: do not start Task 4 until all Task 3 checks pass.
 
+#### Closeout (Task 3)
+
+- [ ] Generate a **task completion report** for Task 3: what was done, what passed, any deviations or notes for follow-up.
+- [ ] Do not start Task 4 until this closeout is done.
+- [ ] Mark every completed step in this task's section of the plan with `- [x]`. (Last step.)
+
 ---
 
 ### Task 4: BDD and PTY Coverage (Phase 6 Alignment)
@@ -267,6 +286,12 @@ Add or complete BDD and PTY coverage for auth recovery, both chat surfaces, inte
 - [ ] Confirm every Phase 6 behavior listed in 2026-03-12 has corresponding BDD or PTY/E2E coverage.
 - [ ] Validation gate: do not start Task 5 until all Task 4 checks pass.
 
+#### Closeout (Task 4)
+
+- [ ] Generate a **task completion report** for Task 4: what was done, what passed, any deviations or notes for follow-up.
+- [ ] Do not start Task 5 until this closeout is done.
+- [ ] Mark every completed step in this task's section of the plan with `- [x]`. (Last step.)
+
 ---
 
 ### Task 5: Worker Deployment Docs (Phase 8 Alignment)
@@ -301,6 +326,12 @@ Ensure the promoted worker deployment docs clearly distinguish normative deploym
 
 - [ ] Run `just docs-check` and any targeted validation for impacted examples or deployment workflows.
 - [ ] Validation gate: do not start Task 6 until all Task 5 checks pass.
+
+#### Closeout (Task 5)
+
+- [ ] Generate a **task completion report** for Task 5: what was done, what passed, any deviations or notes for follow-up.
+- [ ] Do not start Task 6 until this closeout is done.
+- [ ] Mark every completed step in this task's section of the plan with `- [x]`. (Last step.)
 
 ---
 
@@ -347,6 +378,12 @@ Resume non-TUI MVP Phase 2 implementation only after the first usable TUI path i
 - [ ] Confirm Phase 7 scope is complete and no test debt was deferred.
 - [ ] Validation gate: plan complete when Task 6 checks pass.
 
+#### Closeout (Task 6)
+
+- [ ] Generate a **task completion report** for Task 6: what was done, what passed, any deviations or notes for follow-up.
+- [ ] Do not start Task 7 until this closeout is done.
+- [ ] Mark every completed step in this task's section of the plan with `- [x]`. (Last step.)
+
 ---
 
 ### Task 7: Documentation and Closeout
@@ -374,6 +411,13 @@ Update cross-cutting docs and confirm no required follow-up work was left undocu
 - [ ] Confirm the full E2E run (in Red/Green above) passed with all tests passing and only expected skips.
 - [ ] Confirm all exit criteria below are met or explicitly documented as deferred.
 - [ ] Validation gate: plan complete.
+
+#### Closeout (Task 7)
+
+- [ ] Update any required user-facing or developer-facing documentation (if not already done).
+- [ ] Verify no required follow-up work was left undocumented.
+- [ ] Generate a **final plan completion report**: which tasks were completed, overall validation status (`just ci`, full E2E with only expected skips), any remaining risks or follow-up.
+- [ ] Mark all completed steps in the plan with `- [x]`. (Last step.)
 
 ---
 

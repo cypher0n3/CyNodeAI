@@ -42,7 +42,7 @@ Outcome: `just ci` passes and cynork TUI/chat behavior matches the technical spe
 ## Constraints
 
 - Requirements are source of truth; then tech specs; then implementation.
-- Do not proceed to the next task until the current task's Testing validation gate passes.
+- Do not proceed to the next task until the current task's Closeout is done and its validation gate has passed.
 - Use BDD/TDD: add or update specs and failing tests before implementation; implement smallest change to pass; refactor only after green.
 - Coverage is enforced per package (90% minimum) via `just test-go-cover`.
 - Only one `//nolint` is allowed: `worker_node/internal/telemetry/sloghandler.go` (gocritic hugeParam, owner-approved).
@@ -79,8 +79,8 @@ When adding or updating tests: assert on landmarks, scrollback content, exit cod
 ## Execution Plan
 
 Execute tasks in the order given in [Execution Order](#execution-order).
-Each task is self-contained: it has its own Requirements and Specifications, Discovery steps, and Testing gate.
-Do not start a later task until the current task's Testing steps pass.
+Each task is self-contained: it has its own Requirements and Specifications, Discovery steps, Red, Green, Refactor, Testing, and **Closeout** (task completion report, then mark completed steps with `- [x]` as the last step).
+Do not start a later task until the current task's Closeout is done and its validation gate has passed.
 
 ---
 
@@ -130,6 +130,12 @@ Fix the two BDD scenarios that currently fail so the BDD suite has zero failures
 - [ ] Before running E2E for this task: run `just setup-dev restart --force` (or `just setup-dev start --force` if the stack is not running).
 - [ ] Run `just e2e --tags tui_pty`; fix any failing E2E tests.
 - [ ] Validation gate: do not start Task 2 until all checks for this task pass.
+
+#### Closeout (Task 1)
+
+- [ ] Generate a **task completion report** for Task 1: what was done (summary of changes and artifacts), what passed (tests, lint, validation), any deviations or notes for follow-up.
+- [ ] Do not start Task 2 until this closeout is done.
+- [ ] Mark every completed step in this task's section of the plan with `- [x]`. (Last step.)
 
 ---
 
@@ -181,6 +187,12 @@ Address in order of gap size (largest first); after each package run `just test-
 - [ ] If any changed code is on the TUI/chat path: run `just setup-dev restart --force` (or `just setup-dev start --force` if the stack is not running); then run `just e2e --tags tui_pty` (and `just e2e --tags chat` if gateway/handlers changed); fix any failing E2E tests.
 - [ ] Validation gate: do not start Task 3 until all checks for this task pass.
 
+#### Closeout (Task 2)
+
+- [ ] Generate a **task completion report** for Task 2: what was done, what passed, any deviations or notes for follow-up.
+- [ ] Do not start Task 3 until this closeout is done.
+- [ ] Mark every completed step in this task's section of the plan with `- [x]`. (Last step.)
+
 ---
 
 ### Task 3: Undefined BDD Step Definitions
@@ -231,6 +243,12 @@ Group work by feature file; each group is independent and can be done in any ord
 - [ ] Run `just test-bdd` and confirm no new failures; undefined count reduced as intended.
 - [ ] Validation gate: do not start Task 4 until all checks for this task pass.
 
+#### Closeout (Task 3)
+
+- [ ] Generate a **task completion report** for Task 3: what was done, what passed, any deviations or notes for follow-up.
+- [ ] Do not start Task 4 until this closeout is done.
+- [ ] Mark every completed step in this task's section of the plan with `- [x]`. (Last step.)
+
 ---
 
 ### Task 4: Missing Slash Commands in TUI Dispatcher
@@ -277,6 +295,12 @@ Add the slash commands required by the spec to the TUI `slash.go` dispatcher (an
 - [ ] Add or update **e2e_199_tui_slash_commands.py** so that `/connect`, `/show-thinking`, `/hide-thinking`, `/status`, and `/whoami` are tested: assert scrollback shows expected output (current gateway URL, status output, whoami identity or error) and that thinking visibility toggle persists or is reflected in session.
 - [ ] Run `just setup-dev restart --force` (or `just setup-dev start --force` if the stack is not running); then run `just e2e --tags tui_pty`; fix any failing E2E tests.
 - [ ] Validation gate: do not start Task 5 until all checks for this task pass.
+
+#### Closeout (Task 4)
+
+- [ ] Generate a **task completion report** for Task 4: what was done, what passed, any deviations or notes for follow-up.
+- [ ] Do not start Task 5 until this closeout is done.
+- [ ] Mark every completed step in this task's section of the plan with `- [x]`. (Last step.)
 
 ---
 
@@ -325,6 +349,12 @@ Close implementation gaps where the code does not match the spec (thread command
 - [ ] Run `just setup-dev restart --force` (or `just setup-dev start --force` if the stack is not running); then run `just e2e --tags tui_pty` and `just e2e --tags chat`; fix any failing E2E tests.
 - [ ] Validation gate: do not start Task 6 until all checks for this task pass.
 
+#### Closeout (Task 5)
+
+- [ ] Generate a **task completion report** for Task 5: what was done, what passed, any deviations or notes for follow-up.
+- [ ] Do not start Task 6 until this closeout is done.
+- [ ] Mark every completed step in this task's section of the plan with `- [x]`. (Last step.)
+
 ---
 
 ### Task 6: Project List and Get Stubs in TUI
@@ -367,6 +397,12 @@ Replace stub strings for `/project list` and `/project get` with gateway API cal
 - [ ] Run `just setup-dev restart --force` (or `just setup-dev start --force` if the stack is not running); then run `just e2e --tags tui_pty`; fix any failing E2E tests.
 - [ ] Validation gate: do not start Task 7 until all checks for this task pass.
 
+#### Closeout (Task 6)
+
+- [ ] Generate a **task completion report** for Task 6: what was done, what passed, any deviations or notes for follow-up.
+- [ ] Do not start Task 7 until this closeout is done.
+- [ ] Mark every completed step in this task's section of the plan with `- [x]`. (Last step.)
+
 ---
 
 ### Task 7: Remove Lint Suppressions and Fix Underlying Issues
@@ -408,6 +444,12 @@ Remove all `//nolint` usages except the single owner-approved exception in `work
 - [ ] Run `just lint` and confirm no violations; confirm only one nolint in repo (sloghandler.go).
 - [ ] Validation gate: do not start Task 8 until all checks for this task pass.
 
+#### Closeout (Task 7)
+
+- [ ] Generate a **task completion report** for Task 7: what was done, what passed, any deviations or notes for follow-up.
+- [ ] Do not start Task 8 until this closeout is done.
+- [ ] Mark every completed step in this task's section of the plan with `- [x]`. (Last step.)
+
 ---
 
 ### Task 8: Documentation and Closeout
@@ -445,6 +487,13 @@ Update documentation and verify completion criteria.
 - [ ] Run `just ci` and confirm full CI passes.
 - [ ] Confirm no required follow-up work was left undocumented.
 - [ ] Validation gate: plan is complete when `just ci` passes, full E2E run passes with only expected skips, and follow-up is documented.
+
+#### Closeout (Task 8)
+
+- [ ] Update any required user-facing or developer-facing documentation (if not already done in Green).
+- [ ] Verify no required follow-up work was left undocumented.
+- [ ] Generate a **final plan completion report**: which tasks were completed, overall validation status (`just ci`, full E2E with only expected skips), any remaining risks or follow-up.
+- [ ] Mark all completed steps in the plan with `- [x]`. (Last step.)
 
 ---
 

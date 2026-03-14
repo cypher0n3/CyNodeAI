@@ -105,9 +105,14 @@ Scenario: /hide-thinking persists tui.show_thinking_by_default to config
 
 @req_client_0183
 @spec_cynai_client_cynorktui_thinkingvisibilitybehavior
-Scenario: Thinking visibility commands leave turns without thinking unchanged
+Scenario: /show-thinking does not alter assistant turns that have no retained thinking
   Given the TUI is running with transcript containing only assistant turns that have no retained thinking part
   When I type "/show-thinking" and press Enter
   Then those turns are unchanged
+
+@req_client_0183
+@spec_cynai_client_cynorktui_thinkingvisibilitybehavior
+Scenario: /hide-thinking does not alter assistant turns that have no retained thinking
+  Given the TUI is running with transcript containing only assistant turns that have no retained thinking part
   When I type "/hide-thinking" and press Enter
   Then those turns are unchanged

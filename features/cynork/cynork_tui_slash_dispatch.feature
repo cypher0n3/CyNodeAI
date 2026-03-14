@@ -53,6 +53,7 @@ Scenario: Unknown slash command shows a help hint without exiting
   Then the scrollback contains a hint mentioning "/help"
   And the TUI session remains active
 
+@req_client_0165
 @spec_cynai_client_cynorktui_slashcommandexecution
 Scenario: Unknown slash command is not sent to the PM model as chat text
   Given the TUI is running
