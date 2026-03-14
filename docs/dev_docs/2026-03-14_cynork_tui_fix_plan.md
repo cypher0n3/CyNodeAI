@@ -3,7 +3,25 @@
 - [Goal](#goal)
 - [References](#references)
 - [Constraints](#constraints)
+  - [E2E Test Inventory](#e2e-test-inventory)
 - [Execution Plan](#execution-plan)
+  - [Task 1: Fix the 2 Failing BDD Scenarios](#task-1-fix-the-2-failing-bdd-scenarios)
+  - [Task 2: Coverage Gaps (All Packages Below 90%)](#task-2-coverage-gaps-all-packages-below-90)
+  - [Task 3: Undefined BDD Step Definitions](#task-3-undefined-bdd-step-definitions)
+  - [Task 4: Missing Slash Commands in TUI Dispatcher](#task-4-missing-slash-commands-in-tui-dispatcher)
+  - [Task 5: Spec Compliance Gaps](#task-5-spec-compliance-gaps)
+  - [Task 6: Project List and Get Stubs in TUI](#task-6-project-list-and-get-stubs-in-tui)
+  - [Task 7: Remove Lint Suppressions and Fix Underlying Issues](#task-7-remove-lint-suppressions-and-fix-underlying-issues)
+  - [Task 8: Documentation and Closeout](#task-8-documentation-and-closeout)
+- [Senior Go Reviewer Findings (Context)](#senior-go-reviewer-findings-context)
+  - [Review Summary](#review-summary)
+  - [Specification Compliance Issues](#specification-compliance-issues)
+  - [Architectural Issues](#architectural-issues)
+  - [Concurrency / Safety Issues](#concurrency--safety-issues)
+  - [Security Risks](#security-risks)
+  - [Performance Concerns](#performance-concerns)
+  - [Maintainability Issues](#maintainability-issues)
+  - [Recommended Refactor Strategy](#recommended-refactor-strategy)
 - [Execution Order](#execution-order)
 - [Verification Checklist](#verification-checklist)
 
@@ -28,6 +46,35 @@ Outcome: `just ci` passes and cynork TUI/chat behavior matches the technical spe
 - Use BDD/TDD: add or update specs and failing tests before implementation; implement smallest change to pass; refactor only after green.
 - Coverage is enforced per package (90% minimum) via `just test-go-cover`.
 - Only one `//nolint` is allowed: `worker_node/internal/telemetry/sloghandler.go` (gocritic hugeParam, owner-approved).
+
+**E2E tests and dev stack:** Add or update E2E tests in `scripts/test_scripts/` to achieve full coverage of the application stack; each task that touches E2E-covered behavior should add or update the related tests in the same task.
+Before running E2E: run `just setup-dev restart --force` (or `just setup-dev start --force` if the stack is not running) so the stack is fully rebuilt; then run the relevant E2E tests.
+Per-task validation: run only the **relevant** E2E tests (via tags, e.g. `just e2e --tags tui_pty`); fix any failing tests before proceeding.
+Final task (Task 8): run the **full** E2E suite (`just e2e`) with all tests passing and only expected skips.
+
+### E2E Test Inventory
+
+Scripts live in `scripts/test_scripts/`.
+
+- **e2e_199_tui_slash_commands.py** - What to test: TUI slash commands via PTY (`/help`, `/clear`, `/version`, `/exit`, `/model`, `/project` list/set/get/bare-id, unknown command hint, shell-escape `!`; scrollback and session stay active).
+  Run with: `just e2e --tags tui_pty`.
+- **e2e_198_tui_pty.py** - What to test: TUI via PTY (prompt-ready landmark, exit via Ctrl+C, `/thread list` shows header or error, send/receive round-trip, in-flight landmark REQ-CLIENT-0209, Ctrl+C cancels stream then second Ctrl+C exits).
+  Run with: `just e2e --tags tui_pty`.
+- **e2e_127_sse_streaming.py** - What to test: Gateway SSE (`POST /v1/chat/completions` and `POST /v1/responses` with `stream=true`, SSE events, `[DONE]` sentinel, no `<think>` in visible content, non-empty content; REQ-USRGWY-0149).
+  Run with: `just e2e --tags chat` or `--tags pma_inference`.
+- **e2e_192_chat_reliability.py**, **e2e_193_chat_sequential_messages.py**, **e2e_194_chat_simultaneous_messages.py** - What to test: Chat reliability, sequential and simultaneous messages, gateway chat behavior.
+  Run with: `just e2e --tags chat`.
+- **e2e_020_auth_login.py**, **e2e_030_auth_negative_whoami.py**, **e2e_040_auth_whoami.py**, **e2e_190_auth_refresh.py**, **e2e_200_auth_logout.py** - What to test: Auth (login, whoami, negative whoami, refresh, logout).
+  Run with: `just e2e --tags auth`.
+- **e2e_050_task_create.py** through **e2e_196_task_list_status_filter.py** - What to test: Task CRUD, list, get, result, prompt, cancel, status filter.
+  Run with: `just e2e --tags task`.
+- **Gaps to add or extend:** (1) Thread: PTY test for `/thread new`, `/thread switch <id>`, `/thread rename <title>` (scrollback shows result or error).
+  (2) Project: PTY or chat test for `/project list`, `/project get <id>` or bare-id returning gateway output or stub.
+  (3) Thinking: PTY test that thinking is collapsed by default and `/show-thinking`/`/hide-thinking` toggle visibility.
+  (4) Connection recovery: PTY or API test that reconnect with backoff occurs and in-flight turn is reconciled.
+  Run with: `tui_pty` or `chat` as appropriate.
+
+When adding or updating tests: assert on landmarks, scrollback content, exit codes, or API response shape; tag new tests for the relevant per-task and full-demo runs.
 
 ## Execution Plan
 
@@ -79,6 +126,9 @@ Fix the two BDD scenarios that currently fail so the BDD suite has zero failures
 
 - [ ] Run `just test-bdd` and confirm 0 failed scenarios for cynork.
 - [ ] Run `just test-go-cover` and confirm `cynork/cmd` is not in the failure list (if it was below 90%).
+- [ ] If this task affects E2E-covered behavior: add or update **e2e_199_tui_slash_commands.py** so that (1) a scenario equivalent to "TUI running with model X" runs `cynork chat --model <id>` and session uses that model, and (2) `/project <bare_id>` updates session project and scrollback shows confirmation or current project.
+- [ ] Before running E2E for this task: run `just setup-dev restart --force` (or `just setup-dev start --force` if the stack is not running).
+- [ ] Run `just e2e --tags tui_pty`; fix any failing E2E tests.
 - [ ] Validation gate: do not start Task 2 until all checks for this task pass.
 
 ---
@@ -128,6 +178,7 @@ Address in order of gap size (largest first); after each package run `just test-
 #### Testing (Task 2)
 
 - [ ] Run `just test-go-cover` and confirm no package in any module is below 90% (except excluded e.g. testutil).
+- [ ] If any changed code is on the TUI/chat path: run `just setup-dev restart --force` (or `just setup-dev start --force` if the stack is not running); then run `just e2e --tags tui_pty` (and `just e2e --tags chat` if gateway/handlers changed); fix any failing E2E tests.
 - [ ] Validation gate: do not start Task 3 until all checks for this task pass.
 
 ---
@@ -175,6 +226,8 @@ Group work by feature file; each group is independent and can be done in any ord
 
 #### Testing (Task 3)
 
+- [ ] Add or update E2E tests so that BDD step behavior is covered: in **e2e_198_tui_pty.py** and **e2e_199_tui_slash_commands.py** add or extend tests that assert the same outcomes as the newly implemented steps (e.g. gateway model list, project list/get, scrollback content, thread list/switch/rename, auth recovery, streaming deltas).
+- [ ] Run `just setup-dev restart --force` (or `just setup-dev start --force` if the stack is not running); then run `just e2e --tags tui_pty` and, if chat API behavior changed, `just e2e --tags chat`; fix any failing E2E tests.
 - [ ] Run `just test-bdd` and confirm no new failures; undefined count reduced as intended.
 - [ ] Validation gate: do not start Task 4 until all checks for this task pass.
 
@@ -221,6 +274,8 @@ Add the slash commands required by the spec to the TUI `slash.go` dispatcher (an
 #### Testing (Task 4)
 
 - [ ] Run `just test-bdd` and lint for changed code.
+- [ ] Add or update **e2e_199_tui_slash_commands.py** so that `/connect`, `/show-thinking`, `/hide-thinking`, `/status`, and `/whoami` are tested: assert scrollback shows expected output (current gateway URL, status output, whoami identity or error) and that thinking visibility toggle persists or is reflected in session.
+- [ ] Run `just setup-dev restart --force` (or `just setup-dev start --force` if the stack is not running); then run `just e2e --tags tui_pty`; fix any failing E2E tests.
 - [ ] Validation gate: do not start Task 5 until all checks for this task pass.
 
 ---
@@ -266,6 +321,8 @@ Close implementation gaps where the code does not match the spec (thread command
 #### Testing (Task 5)
 
 - [ ] Run `just test-bdd` and `just test-go-cover` for affected packages.
+- [ ] Add or update **e2e_198_tui_pty.py** and **e2e_199_tui_slash_commands.py** so that: (1) `/thread list`, `/thread switch <id>`, `/thread rename <title>` are asserted in scrollback or status; (2) in-flight generation state (spinner/landmark) and final reconciliation are asserted; (3) if connection recovery is implemented, add a test that disconnects and asserts reconnect or backoff; (4) optionally extend **e2e_127_sse_streaming.py** to assert responseID in SSE when applicable.
+- [ ] Run `just setup-dev restart --force` (or `just setup-dev start --force` if the stack is not running); then run `just e2e --tags tui_pty` and `just e2e --tags chat`; fix any failing E2E tests.
 - [ ] Validation gate: do not start Task 6 until all checks for this task pass.
 
 ---
@@ -306,6 +363,8 @@ Replace stub strings for `/project list` and `/project get` with gateway API cal
 #### Testing (Task 6)
 
 - [ ] Run `just test-bdd` and lint for changed code.
+- [ ] Add or update **e2e_199_tui_slash_commands.py** so that `/project list` and `/project get <id>` are tested: assert scrollback shows project list output or project details (or graceful error/404 when gateway does not implement).
+- [ ] Run `just setup-dev restart --force` (or `just setup-dev start --force` if the stack is not running); then run `just e2e --tags tui_pty`; fix any failing E2E tests.
 - [ ] Validation gate: do not start Task 7 until all checks for this task pass.
 
 ---
@@ -380,9 +439,12 @@ Update documentation and verify completion criteria.
 
 #### Testing (Task 8)
 
+- [ ] Add or update any E2E tests that were deferred from earlier tasks so the suite has full coverage of the application stack.
+- [ ] Run `just setup-dev restart --force` (or `just setup-dev start --force` if the stack is not running).
+- [ ] Run the **full** E2E suite (`just e2e`); fix any failures until all tests pass and only expected skips remain.
 - [ ] Run `just ci` and confirm full CI passes.
 - [ ] Confirm no required follow-up work was left undocumented.
-- [ ] Validation gate: plan is complete when `just ci` passes and follow-up is documented.
+- [ ] Validation gate: plan is complete when `just ci` passes, full E2E run passes with only expected skips, and follow-up is documented.
 
 ---
 
@@ -478,4 +540,5 @@ After each task:
 - [ ] `just test-bdd`: no new failures for scenarios that have step definitions.
 - [ ] `just test-go-cover`: all packages at or above 90% (when Task 2 is complete).
 - [ ] `just lint`: no new violations; after Task 7, only one `//nolint` remains (sloghandler.go).
-- [ ] **Final gate (Task 8):** `just ci` passes before considering the plan complete.
+- [ ] **E2E:** When the task touches E2E-covered behavior: add or update the scripts and assertions listed in [E2E Test Inventory](#e2e-test-inventory) for that behavior; run `just setup-dev restart --force` (or `just setup-dev start --force` if the stack is not running); then run the relevant tag subset (e.g. `just e2e --tags tui_pty` or `--tags chat`); fix any failing E2E tests before completing the task.
+- [ ] **Final gate (Task 8):** Run `just setup-dev restart --force` (or `just setup-dev start --force` if the stack is not running); run the **full** E2E suite (`just e2e`); fix failures until all tests pass and only expected skips remain; run `just ci` and confirm it passes before considering the plan complete.
