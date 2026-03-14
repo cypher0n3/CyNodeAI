@@ -73,10 +73,10 @@ Scenario: TUI shows an agent-working indicator during an in-flight turn
 @spec_cynai_client_cynorktui_generationstate
 @spec_cynai_usrgwy_openaichatapi_streaming
 Scenario: TUI requests streaming output by default and updates one in-flight turn progressively
-  Given the gateway supports stream=true and emits ordered incremental assistant text updates
+  Given the gateway supports stream=true and emits real token-by-token visible assistant text
   When I send a normal interactive chat turn from the TUI
   Then the TUI requests streaming output by default
-  And visible assistant text is appended progressively within one in-flight assistant turn
+  And visible assistant text is appended token-by-token within one in-flight assistant turn
   And the final assistant turn replaces the in-flight row without duplicating visible text
 
 @req_client_0198

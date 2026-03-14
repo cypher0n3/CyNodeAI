@@ -23,6 +23,14 @@
   - [Streaming Event Requirements](#streaming-event-requirements)
   - [Persistence and Reconciliation Requirements](#persistence-and-reconciliation-requirements)
   - [Streaming Traces To](#streaming-traces-to)
+- [Streaming Redaction Pipeline](#streaming-redaction-pipeline)
+  - [Streaming Redaction Pipeline Diagram](#streaming-redaction-pipeline-diagram)
+  - [`StreamingRedactionPipeline` Algorithm](#streamingredactionpipeline-algorithm)
+  - [Streaming Redaction Pipeline Concurrency](#streaming-redaction-pipeline-concurrency)
+  - [Amendment Event Contract](#amendment-event-contract)
+  - [Streaming Redaction Pipeline Cancellation](#streaming-redaction-pipeline-cancellation)
+  - [Streaming Redaction Pipeline Error Conditions](#streaming-redaction-pipeline-error-conditions)
+  - [Streaming Redaction Pipeline Traces To](#streaming-redaction-pipeline-traces-to)
 - [Normalized Assistant Output](#normalized-assistant-output)
   - [Normalization Rules](#normalization-rules)
   - [Normalized Assistant Output Requirements Traces](#normalized-assistant-output-requirements-traces)
@@ -243,8 +251,9 @@ The OpenAI-compatible interactive chat surface MUST support streaming mode for b
 
 - When the client sends `stream=true`, the gateway MUST return a streaming response instead of waiting for the final assistant turn to complete before sending bytes.
 - The canonical transport for streaming mode is Server-Sent Events with `Content-Type: text/event-stream`.
-- The gateway MUST flush incremental events promptly enough for interactive terminal and web UI updates.
+- The gateway MUST deliver real token-by-token streaming: visible assistant text MUST be emitted as incremental token deltas promptly enough for interactive terminal and web UI updates.
 - The gateway MUST NOT buffer the entire visible assistant answer and emit it only at completion on the standard streaming path.
+- Secret redaction runs after the upstream stream terminates but before the terminal `[DONE]` event; see [Streaming Redaction Pipeline](#streaming-redaction-pipeline) for the full goroutine architecture, algorithm, synchronization model, and amendment event contract.
 - The gateway MAY translate provider-native stream formats internally, but the external client contract MUST remain stable and OpenAI-compatible.
 - When a selected backend path cannot produce true visible-text deltas, the gateway SHOULD treat that path as degraded mode and still emit bounded in-progress status plus a terminal completion or error event rather than silently hanging until the final payload appears.
 - When the client closes or cancels the streaming request, the gateway MUST treat that request as canceled, stop or detach upstream generation work on a best-effort basis promptly, and release request-scoped resources even if the final assistant turn is incomplete.
@@ -269,6 +278,176 @@ The OpenAI-compatible interactive chat surface MUST support streaming mode for b
 - [REQ-USRGWY-0149](../requirements/usrgwy.md#req-usrgwy-0149)
 - [REQ-USRGWY-0150](../requirements/usrgwy.md#req-usrgwy-0150)
 - [REQ-CLIENT-0209](../requirements/client.md#req-client-0209)
+
+## Streaming Redaction Pipeline
+
+- Spec ID: `CYNAI.USRGWY.OpenAIChatApi.StreamingRedactionPipeline` <a id="spec-cynai-usrgwy-openaichatapi-streamingredactionpipeline"></a>
+
+This section defines how token-by-token streaming and secret redaction coexist without blocking real-time delivery to the client.
+The gateway streams visible assistant text to the client immediately as tokens arrive from the upstream backend (PMA or direct inference).
+Secret redaction runs synchronously after the upstream stream terminates but before the terminal `[DONE]` event is emitted to the client.
+If secrets are detected, a post-stream amendment event replaces the client-side accumulated text and only the redacted version is persisted.
+
+The design uses two goroutines, one channel, and zero shared mutable state between goroutines.
+The handler goroutine is the sole writer to the HTTP response and the sole accessor of the accumulator buffer.
+The reader goroutine is the sole consumer of the upstream response body.
+
+### Streaming Redaction Pipeline Diagram
+
+```mermaid
+sequenceDiagram
+    participant Client as TUI / Client
+    participant Handler as Handler Goroutine
+    participant Reader as Reader Goroutine
+    participant Upstream as Upstream Backend
+    participant Scanner as Secret Scanner
+    participant DB as Database
+    participant Audit as Chat Audit Log
+
+    Client->>Handler: POST stream=true
+    Handler->>Upstream: Open streaming connection
+    Handler->>Reader: Launch reader goroutine (tokenCh)
+
+    loop Real-time token delivery
+        Upstream->>Reader: Token delta event
+        Reader->>Handler: tokenCh <- event
+        Handler->>Handler: Append delta to accumulator
+        Handler->>Client: SSE visible-text delta (flush)
+    end
+
+    Upstream->>Reader: Terminal upstream event
+    Reader->>Reader: Close tokenCh, close upstream body
+
+    Handler->>Scanner: Scan accumulated text for secrets
+    Scanner-->>Handler: Result (clean or redacted text + kinds)
+
+    alt Secrets detected
+        Handler->>Client: SSE amendment event (redacted content)
+        Handler->>Audit: redaction_applied=true, redaction_kinds
+        Handler->>DB: Persist redacted assistant message
+    else No secrets
+        Handler->>DB: Persist accumulated assistant message
+    end
+
+    Handler->>Client: SSE [DONE] terminal event
+    Handler->>Handler: Wait for reader goroutine exit, release resources
+```
+
+### `StreamingRedactionPipeline` Algorithm
+
+<a id="algo-cynai-usrgwy-openaichatapi-streamingredactionpipeline"></a>
+
+1. The handler goroutine opens a streaming connection to the upstream backend (PMA endpoint or direct inference) using the request `context.Context`. <a id="algo-cynai-usrgwy-openaichatapi-streamingredactionpipeline-step-1"></a>
+2. The handler goroutine creates a `tokenCh` channel (small bounded buffer, e.g. 8) carrying parsed upstream stream events and a `sync.WaitGroup` with delta 1. <a id="algo-cynai-usrgwy-openaichatapi-streamingredactionpipeline-step-2"></a>
+3. The handler goroutine launches the **reader goroutine**, which: <a id="algo-cynai-usrgwy-openaichatapi-streamingredactionpipeline-step-3"></a>
+   - Defers `wg.Done()` and defers closing the upstream response body.
+   - Reads and parses upstream SSE events in a loop.
+   - For each parsed event, selects on `tokenCh <- event` or `ctx.Done()`; if the context is canceled, the reader exits immediately.
+   - When the upstream stream terminates (EOF or terminal event), the reader closes `tokenCh` and returns.
+4. The handler goroutine initializes a `strings.Builder` as the **accumulator** for visible assistant text and enters a select loop over `tokenCh` and `ctx.Done()`: <a id="algo-cynai-usrgwy-openaichatapi-streamingredactionpipeline-step-4"></a>
+   - **Visible-text delta**: append the delta text to the accumulator, then write the corresponding SSE `data:` event to the `http.ResponseWriter` and flush immediately.
+     The SSE payload follows the OpenAI streaming format (e.g. `choices[0].delta.content`).
+   - **Thinking or reasoning delta**: write the SSE event with the appropriate non-visible-text type and flush.
+     Do not append to the visible-text accumulator.
+   - **Tool-progress event**: write the SSE event and flush.
+   - **Channel closed** (upstream done): exit the loop and proceed to step 5.
+   - **`ctx.Done()`**: proceed to [Cancellation](#streaming-redaction-pipeline-cancellation).
+5. After the loop exits, the handler goroutine runs the **secret scanner** on `accumulator.String()` synchronously.
+   The scanner is a CPU-local operation (regex or pattern matching); it does not perform I/O. <a id="algo-cynai-usrgwy-openaichatapi-streamingredactionpipeline-step-5"></a>
+6. If the scanner reports one or more detected secrets: <a id="algo-cynai-usrgwy-openaichatapi-streamingredactionpipeline-step-6"></a>
+   - Build the redacted text by replacing each detected secret span with the literal `SECRET_REDACTED`.
+   - Write an SSE **amendment event** to the client containing the full redacted assistant text (see [Amendment Event Contract](#amendment-event-contract)) and flush.
+   - Record `redaction_applied = true` and `redaction_kinds` (e.g. `["api_key"]`) in the `chat_audit_log` row for this request.
+   - Use the redacted text as the final assistant content for persistence.
+7. If the scanner reports no secrets, use the accumulated text as-is for persistence. <a id="algo-cynai-usrgwy-openaichatapi-streamingredactionpipeline-step-7"></a>
+8. Persist the final (possibly redacted) assistant message to the chat thread using the standard structured-turn persistence path. <a id="algo-cynai-usrgwy-openaichatapi-streamingredactionpipeline-step-8"></a>
+9. Write the terminal `[DONE]` SSE event to the client and flush. <a id="algo-cynai-usrgwy-openaichatapi-streamingredactionpipeline-step-9"></a>
+10. Call `wg.Wait()` to block until the reader goroutine has exited and released the upstream response body, then return from the handler. <a id="algo-cynai-usrgwy-openaichatapi-streamingredactionpipeline-step-10"></a>
+
+### Streaming Redaction Pipeline Concurrency
+
+The pipeline uses exactly two goroutines per streaming request.
+No shared mutable state exists between them; the channel is the sole communication path.
+
+- **Handler goroutine** (the HTTP handler's goroutine): sole writer to the `http.ResponseWriter`, sole accessor of the `strings.Builder` accumulator, sole caller of the secret scanner, sole writer of SSE events to the client.
+  No other goroutine touches the ResponseWriter or the accumulator at any time.
+- **Reader goroutine**: sole reader of the upstream HTTP response body, sole sender on `tokenCh`.
+  Closes `tokenCh` when the upstream stream terminates (this close is the happens-before signal that all upstream data has been delivered).
+  Defers closing the upstream response body.
+- **`tokenCh` channel**: bounded-buffer channel (recommended capacity 8).
+  The reader goroutine is the only sender; the handler goroutine is the only receiver.
+  Channel close by the reader is the termination signal.
+- **`sync.WaitGroup`**: used by the handler goroutine (step 10) to ensure the reader goroutine has fully exited and released the upstream body before the handler returns.
+  The reader calls `wg.Done()` as a deferred operation.
+- **`context.Context`**: the request context flows into both the upstream connection and the reader goroutine's select.
+  When the client disconnects, `ctx.Done()` fires in both goroutines, enabling prompt cleanup.
+
+Race condition prevention:
+
+- The `http.ResponseWriter` is accessed by the handler goroutine only.
+  Go's `http.ResponseWriter` is not safe for concurrent use; this design ensures single-goroutine access.
+- The `strings.Builder` accumulator is accessed by the handler goroutine only.
+  No lock is needed.
+- The upstream response body is read by the reader goroutine only.
+  No concurrent reads.
+- The `tokenCh` close happens in the reader goroutine only.
+  The handler goroutine observes closure via for-range termination or channel receive returning the zero value with `ok == false`.
+- `ctx.Done()` is a read-only channel safe for concurrent select by multiple goroutines.
+
+### Amendment Event Contract
+
+When the secret scanner detects secrets in the accumulated assistant text (algorithm step 6), the handler emits one SSE amendment event before the terminal `[DONE]` event.
+
+The amendment event uses a CyNodeAI-specific SSE event type so OpenAI-compatible clients that do not understand it can safely ignore it.
+
+SSE wire format:
+
+```text
+event: cynodeai.amendment
+data: {"type":"secret_redaction","content":"<full redacted assistant text>","redaction_kinds":["api_key"]}
+```
+
+- `event`: `cynodeai.amendment` (custom SSE event type; standard OpenAI clients listen only for unnamed `data:` lines and will ignore this event type).
+- `type`: `secret_redaction` (identifies the amendment reason).
+- `content`: the full redacted visible assistant text for this turn, with all detected secrets replaced by `SECRET_REDACTED`.
+- `redaction_kinds`: array of string identifiers for the kinds of secrets that were redacted (e.g. `api_key`, `token`, `password`).
+
+Clients that understand the amendment event (such as the cynork TUI) replace their accumulated visible assistant text for the in-flight turn with the `content` value from this event before finalizing the turn.
+Clients that do not understand it (such as vanilla OpenAI client libraries) ignore the custom event type and display the unredacted streamed text; the persisted and subsequently retrieved content is still redacted.
+
+### Streaming Redaction Pipeline Cancellation
+
+When the client disconnects or cancels (Ctrl+C) during streaming:
+
+1. `ctx.Done()` fires, observed by both the handler goroutine (in the select loop) and the reader goroutine (in the send select).
+2. The handler goroutine exits the token loop immediately.
+3. The reader goroutine stops reading from upstream and exits (deferred `wg.Done()` and upstream body close execute).
+4. The handler goroutine runs the secret scanner on whatever text has been accumulated so far (partial content).
+5. The handler goroutine persists the redacted partial content as an interrupted assistant turn (the message metadata should indicate the turn was interrupted/canceled).
+6. The handler goroutine does NOT write further SSE events to the client because the connection is gone; writes to a closed ResponseWriter are silently discarded or return an error that the handler ignores.
+7. The handler goroutine calls `wg.Wait()` to ensure the reader goroutine has exited, then returns.
+
+This ensures that even partial assistant output that may contain secrets is never persisted in unredacted form.
+
+### Streaming Redaction Pipeline Error Conditions
+
+- **Upstream error mid-stream**: the reader goroutine receives an error event from upstream, sends it on `tokenCh`, and closes `tokenCh`.
+  The handler goroutine processes the error event, runs redaction on accumulated text, persists the partial redacted turn, emits an SSE error event, and returns.
+- **Secret scanner failure**: if the scanner itself errors (e.g. regex compilation failure at startup is a program bug, but runtime OOM on very large text is possible), the handler MUST treat the content as potentially containing secrets.
+  It MUST NOT persist the unscanned content.
+  The handler should emit an SSE error event indicating an internal error, persist no assistant message, and record the failure in the audit log.
+- **Database persistence failure**: if the persist call (step 8) fails, the handler MUST still emit the terminal `[DONE]` or error event to the client.
+  The handler should log the persistence failure and record it in the audit log.
+  The client has already received the (possibly redacted) streamed text; a subsequent thread-history load will show the turn as missing until the persistence is retried or the issue is resolved.
+- **ResponseWriter flush failure**: indicates a client disconnect that was not yet reflected in `ctx.Done()`.
+  The handler should treat this as a cancellation and follow the cancellation path.
+
+### Streaming Redaction Pipeline Traces To
+
+- [REQ-USRGWY-0132](../requirements/usrgwy.md#req-usrgwy-0132)
+- [REQ-USRGWY-0149](../requirements/usrgwy.md#req-usrgwy-0149)
+- [REQ-USRGWY-0151](../requirements/usrgwy.md#req-usrgwy-0151)
+- [REQ-CLIENT-0215](../requirements/client.md#req-client-0215)
 
 ## Normalized Assistant Output
 

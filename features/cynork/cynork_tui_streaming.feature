@@ -2,7 +2,7 @@
 Feature: cynork TUI streaming behavior
 
   As a user of the cynork TUI
-  I want reliable streaming with correct cancellation and fallback handling
+  I want real token-by-token streaming with correct cancellation and fallback handling
   So that in-flight responses are always coherent and never duplicate content
 
 Background:
@@ -15,7 +15,7 @@ Background:
 @spec_cynai_client_cynorkchat_tuilayout
 @spec_cynai_usrgwy_openaichatapi_streaming
 Scenario: User cancellation stops the active stream and reconciles the in-flight turn
-  Given the TUI has sent a message and the gateway is streaming the assistant response
+  Given the TUI has sent a message and the gateway is streaming the assistant response token-by-token
   When I send Ctrl+C or otherwise cancel the active stream
   Then the TUI treats the stream as canceled
   And any already-received visible text is retained in the transcript
@@ -30,6 +30,28 @@ Scenario: TUI degrades to in-flight indicator when backend cannot stream visible
   Then the TUI shows a degraded in-flight state indicator
   And when the final response arrives the TUI replaces that row with the final assistant turn
   And visible assistant text is not duplicated
+
+@req_client_0215
+@req_usrgwy_0151
+@spec_cynai_usrgwy_openaichatapi_streamingredactionpipeline
+@spec_cynai_client_cynorktui_generationstate
+Scenario: TUI replaces streamed text when a post-stream amendment event arrives
+  Given the TUI has sent a message and the gateway is streaming the assistant response token-by-token
+  And the assistant response contains a detected secret
+  When the upstream stream terminates and the gateway emits a cynodeai.amendment event with redacted content
+  Then the TUI replaces the accumulated visible text for the in-flight turn with the amended content
+  And the final transcript row shows the redacted text without duplicated or stale content
+  And the turn is finalized after the terminal DONE event
+
+@req_client_0209
+@req_usrgwy_0151
+@spec_cynai_usrgwy_openaichatapi_streamingredactionpipeline
+Scenario: TUI finalizes cleanly when no amendment event arrives
+  Given the TUI has sent a message and the gateway is streaming the assistant response token-by-token
+  And the assistant response does not contain any detected secrets
+  When the upstream stream terminates without a cynodeai.amendment event
+  Then the accumulated visible text is used as the final transcript content
+  And the turn is finalized after the terminal DONE event
 
 @req_client_0202
 @spec_cynai_client_cynorktui_entrypoint

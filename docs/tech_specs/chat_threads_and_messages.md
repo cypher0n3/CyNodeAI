@@ -190,6 +190,9 @@ Messages are append-only.
 - Message `content` MUST be the amended (redacted) content.
 - The system MUST NOT persist plaintext secrets in chat message content.
 - If redaction occurs, it MUST be indicated directly in `content` by replacing detected secrets with the literal string `SECRET_REDACTED`.
+- For streaming assistant output, the gateway streams tokens to the client in real time and runs the secret scanner after the upstream stream terminates but before the terminal `[DONE]` event.
+  If secrets are detected, the gateway emits a post-stream amendment event carrying the redacted content and persists only the redacted version.
+  See [Streaming Redaction Pipeline](openai_compatible_chat_api.md#spec-cynai-usrgwy-openaichatapi-streamingredactionpipeline) for the full goroutine architecture, synchronization model, and amendment event contract.
 
 ### Canonical Persisted Message Fields
 

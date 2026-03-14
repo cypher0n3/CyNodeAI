@@ -34,6 +34,7 @@
 
 This spec defines the full-screen interactive chat TUI for cynork.
 It is the canonical home for the cynork chat layout, structured transcript rendering, thread-history UX, local TUI state, and interactive auth recovery.
+The TUI expectation is real token-by-token streaming from the gateway: visible assistant text MUST arrive as incremental deltas, not as a single buffered payload at completion.
 
 ### `cynork` TUI Traces To
 
@@ -212,7 +213,9 @@ The TUI SHOULD follow the same broad rendering pattern used by modern chat tools
 
 - [REQ-CLIENT-0185](../requirements/client.md#req-client-0185)
 - [REQ-CLIENT-0209](../requirements/client.md#req-client-0209)
+- [REQ-CLIENT-0215](../requirements/client.md#req-client-0215)
 
+- The TUI expects real token-by-token streaming: the gateway MUST deliver visible assistant text as incremental token deltas on the standard streaming path, not as one buffered payload at completion.
 - While a response is in progress, the TUI MUST render exactly one in-flight assistant turn and MUST update that turn in place rather than appending duplicate assistant rows.
 - The in-flight status indicator MUST be attached to the active assistant turn, not only to a global status bar.
 - The indicator MUST render as a visually distinct status chip rather than as bare transcript prose.
@@ -226,8 +229,11 @@ The TUI SHOULD follow the same broad rendering pattern used by modern chat tools
 - The in-flight indicator MAY also be mirrored in the status bar, but the assistant-turn indicator remains required.
 - When visible text streams incrementally, the TUI MUST append that text into the active in-flight turn below or after the current status indicator instead of creating a second assistant row.
 - When hidden thinking is available during streaming, the TUI SHOULD update the same collapsed thinking placeholder block in place rather than emitting raw reasoning text into the visible assistant answer area.
+- When the TUI receives a `cynodeai.amendment` SSE event with `type: secret_redaction` during a streaming turn, it MUST replace the accumulated visible assistant text for the in-flight turn with the `content` value from the amendment event.
+  The replacement MUST happen in place within the same in-flight row; the TUI MUST NOT append a second assistant row or leave stale unredacted text visible.
+  See [Streaming Redaction Pipeline](openai_compatible_chat_api.md#spec-cynai-usrgwy-openaichatapi-streamingredactionpipeline) for the gateway-side algorithm and amendment event wire format.
 - When the final assistant turn is committed, the TUI MUST remove the transient in-flight indicator and replace the in-flight row with the final ordered assistant turn content.
-- Final reconciliation MUST preserve already streamed visible assistant text, MUST keep the final item ordering, and MUST NOT duplicate visible assistant text that was already shown during streaming.
+- Final reconciliation MUST preserve already streamed visible assistant text (or the amended text if an amendment event was received), MUST keep the final item ordering, and MUST NOT duplicate visible assistant text that was already shown during streaming.
 - Final reconciliation MUST discard ephemeral progress-only labels and MUST retain only the final persisted transcript content and any separately rendered structured items.
 - If the selected backend path cannot provide true incremental visible-text streaming, the TUI MUST fall back to a degraded in-flight state indicator and then replace that row with the final ordered assistant turn once completion arrives.
 

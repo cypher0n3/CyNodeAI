@@ -73,6 +73,27 @@ Scenario: Explicit thread creation returns a distinct thread resource
   Then the response status is 201
   And the response contains a created chat thread identifier
 
+@req_usrgwy_0151
+@spec_cynai_usrgwy_openaichatapi_streamingredactionpipeline
+Scenario: Streaming response emits amendment event when assistant output contains secrets
+  Given a streaming POST "/v1/chat/completions" with stream=true is in progress
+  And the assistant response tokens include a pattern matching a detected secret
+  When the upstream stream terminates
+  Then the gateway emits a cynodeai.amendment SSE event before the terminal DONE event
+  And the amendment event contains the full redacted assistant text with SECRET_REDACTED
+  And the persisted assistant message content is the redacted version
+
+@req_usrgwy_0149
+@req_usrgwy_0151
+@spec_cynai_usrgwy_openaichatapi_streamingredactionpipeline
+Scenario: Streaming response omits amendment event when no secrets are detected
+  Given a streaming POST "/v1/chat/completions" with stream=true is in progress
+  And the assistant response tokens do not contain any detected secrets
+  When the upstream stream terminates
+  Then no cynodeai.amendment SSE event is emitted
+  And the stream ends with a terminal DONE event
+  And the persisted assistant message content matches the accumulated streamed text
+
 @req_usrgwy_0150
 @spec_cynai_usrgwy_openaichatapi_streaming
 Scenario: Client cancel or disconnect causes gateway to treat streaming request as canceled

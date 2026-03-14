@@ -137,6 +137,7 @@ It covers user-facing REST API gateway behavior and related API contracts.
 
 - **REQ-USRGWY-0132:** The User API Gateway MUST redact detected secrets from OpenAI-compatible chat messages before persisting or using them for inference.
   The gateway MUST persist only the amended (redacted) content in chat threads and chat messages.
+  For streaming assistant output, redaction MAY be performed in parallel in the orchestrator: the gateway MAY stream token-by-token to the client and apply post-facto redaction (e.g. persist redacted content and send updated NDJSON that removes secrets from the current chat) so that streaming is not blocked on redaction.
   [CYNAI.USRGWY.OpenAIChatApi.Pipeline](../tech_specs/openai_compatible_chat_api.md#spec-cynai-usrgwy-openaichatapi-pipeline)
   [CYNAI.USRGWY.ChatThreadsMessages.Messages](../tech_specs/chat_threads_and_messages.md#spec-cynai-usrgwy-chatthreadsmessages-messages)
   <a id="req-usrgwy-0132"></a>
@@ -213,7 +214,7 @@ It covers user-facing REST API gateway behavior and related API contracts.
   [CYNAI.USRGWY.OpenAIChatApi.NormalizedAssistantOutput](../tech_specs/openai_compatible_chat_api.md#spec-cynai-usrgwy-openaichatapi-normalizedassistantoutput)
   <a id="req-usrgwy-0148"></a>
 - **REQ-USRGWY-0149:** The OpenAI-compatible interactive chat surface MUST support streaming chat responses for `POST /v1/chat/completions` and `POST /v1/responses` when the client requests `stream=true`.
-  The gateway MUST emit ordered incremental events promptly enough for interactive UX, MUST NOT buffer all visible assistant text until completion on the standard streaming path, and MUST finish with a clear terminal completion or error event.
+  The gateway MUST emit real token-by-token (incremental) visible assistant text on the standard streaming path, MUST NOT buffer all visible assistant text until completion, and MUST finish with a clear terminal completion or error event.
   [CYNAI.USRGWY.OpenAIChatApi.Streaming](../tech_specs/openai_compatible_chat_api.md#spec-cynai-usrgwy-openaichatapi-streaming)
   [CYNAI.USRGWY.ChatThreadsMessages.StructuredTurns](../tech_specs/chat_threads_and_messages.md#spec-cynai-usrgwy-chatthreadsmessages-structuredturns)
   <a id="req-usrgwy-0149"></a>
@@ -223,3 +224,9 @@ It covers user-facing REST API gateway behavior and related API contracts.
   [CYNAI.USRGWY.OpenAIChatApi.Streaming](../tech_specs/openai_compatible_chat_api.md#spec-cynai-usrgwy-openaichatapi-streaming)
   [CYNAI.USRGWY.OpenAIChatApi.Errors](../tech_specs/openai_compatible_chat_api.md#spec-cynai-usrgwy-openaichatapi-errors)
   <a id="req-usrgwy-0150"></a>
+- **REQ-USRGWY-0151:** When secret redaction detects secrets in streaming assistant output, the gateway MUST emit a post-stream amendment SSE event before the terminal `[DONE]` event.
+  The amendment event MUST carry the full redacted assistant content so the client can replace the accumulated visible text for the in-flight turn.
+  The gateway MUST persist only the redacted content and MUST record redaction metadata in the chat audit log.
+  When no secrets are detected, no amendment event is emitted and the accumulated streamed text is persisted as-is.
+  [CYNAI.USRGWY.OpenAIChatApi.StreamingRedactionPipeline](../tech_specs/openai_compatible_chat_api.md#spec-cynai-usrgwy-openaichatapi-streamingredactionpipeline)
+  <a id="req-usrgwy-0151"></a>

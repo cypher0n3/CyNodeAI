@@ -456,7 +456,8 @@ Web Console-specific requirements live in [webcon.md](webcon.md) (REQ-WEBCON-*).
   [CYNAI.CLIENT.CynorkTui.LocalSlashCommands](../tech_specs/cynork_tui_slash_commands.md#spec-cynai-client-cynorktui-localslashcommands)
   [CYNAI.CLIENT.CynorkTui.TranscriptRendering](../tech_specs/cynork_tui.md#spec-cynai-client-cynorktui-transcriptrendering)
   <a id="req-client-0208"></a>
-- **REQ-CLIENT-0209:** The cynork interactive chat surface MUST request streaming output by default for normal interactive turns and MUST progressively update the single in-flight assistant turn as visible text or structured progress arrives.
+- **REQ-CLIENT-0209:** The cynork interactive chat surface MUST request streaming output by default for normal interactive turns and MUST expect real token-by-token streaming (incremental visible-text deltas) from the gateway.
+  The TUI MUST progressively update the single in-flight assistant turn as visible text or structured progress arrives.
   If streaming is temporarily unavailable for a selected backend path, the client MUST fall back to a degraded in-flight indicator and final-turn replacement without duplicating transcript content.
   [CYNAI.CLIENT.CynorkTui.GenerationState](../tech_specs/cynork_tui.md#spec-cynai-client-cynorktui-generationstate)
   [CYNAI.USRGWY.OpenAIChatApi.Streaming](../tech_specs/openai_compatible_chat_api.md#spec-cynai-usrgwy-openaichatapi-streaming)
@@ -484,3 +485,8 @@ Web Console-specific requirements live in [webcon.md](webcon.md) (REQ-WEBCON-*).
   When `<gateway_url>` is provided, the client MUST update the session gateway base URL and SHOULD validate connectivity; when omitted, the client MUST show the current gateway URL.
   [CYNAI.CLIENT.CynorkTui.LocalSlashCommands](../tech_specs/cynork_tui_slash_commands.md#spec-cynai-client-cynorktui-localslashcommands)
   <a id="req-client-0214"></a>
+- **REQ-CLIENT-0215:** When the TUI receives a post-stream amendment event during a streaming assistant turn, it MUST replace the accumulated visible assistant text for the in-flight turn with the amended (redacted) content before finalizing the turn.
+  The replacement MUST be seamless: the user MUST see the redacted version as the final transcript content for that turn without duplicated or stale text.
+  [CYNAI.CLIENT.CynorkTui.GenerationState](../tech_specs/cynork_tui.md#spec-cynai-client-cynorktui-generationstate)
+  [CYNAI.USRGWY.OpenAIChatApi.StreamingRedactionPipeline](../tech_specs/openai_compatible_chat_api.md#spec-cynai-usrgwy-openaichatapi-streamingredactionpipeline)
+  <a id="req-client-0215"></a>
