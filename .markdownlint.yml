@@ -192,6 +192,7 @@ heading-min-words:
   allowList:
     - "Cross-References"
     - "Overview"
+    - "Summary"
   # excludePaths:
   #   - "docs/docs_standards/requirements_domains.md"
   #   - "scripts/README.md"

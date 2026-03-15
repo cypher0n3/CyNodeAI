@@ -13,8 +13,10 @@ alwaysApply: true
 - Check the actual date using the `date` command before writing the date.
 - See [meta.md](../meta.md) for basic project info.
 - See [ai_files/](../ai_files/) for AI assisted coding instructions.
+- See [ai_files/doc_authoring_standards.md](../ai_files/doc_authoring_standards.md) when writing specs, requirements, or feature files.
 - See [docs/requirements/](../docs/requirements/) for canonical requirements ("what").
 - See [docs/tech_specs/](../docs/tech_specs/) for technical specifications and implementation guidance ("how").
+- Path-scoped rules for docs live in [.github/instructions/](../.github/instructions/) (specs, requirements, features).
 
 ## Tech Specs vs. Implementation
 
