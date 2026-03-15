@@ -23,6 +23,8 @@ This directory is a standalone Go module defined by [`go.mod`](go.mod).
 - [`contracts/userapi/`](contracts/userapi/): Types shared across user-facing API boundaries.
 - [`contracts/problem/`](contracts/problem/): Shared error and problem response types.
 - [`contracts/sbajob/`](contracts/sbajob/): Types for SBA job and result contracts.
+- [`secretutil/`](secretutil/): Shared utility for secret-bearing code paths (`RunWithSecret`), using `runtime/secret` when built with `GOEXPERIMENT=runtimesecret` and a no-op fallback otherwise.
+  Used by worker node, and intended for orchestrator, PMA, and cynork per REQ-STANDS-0135.
 
 The orchestrator and worker node modules depend on this module via local replaces in their respective `go.mod` files.
 

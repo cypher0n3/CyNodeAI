@@ -16,6 +16,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/cypher0n3/cynodeai/go_shared_libs/secretutil"
 )
 
 const (
@@ -93,7 +95,7 @@ func Open(stateDir string) (*Store, MasterKeySource, error) {
 	var key []byte
 	var source MasterKeySource
 	var err error
-	runWithSecret(func() {
+	secretutil.RunWithSecret(func() {
 		key, source, err = resolveMasterKey()
 	})
 	if err != nil {
@@ -197,7 +199,7 @@ func (s *Store) tokenPath(serviceID string) (string, error) {
 	return filepath.Join(s.tokenDir(), filename), nil
 }
 
-// buildEncryptedEnvelopeFromRecord marshals the record and builds an encrypted envelope (call inside runWithSecret).
+// buildEncryptedEnvelopeFromRecord marshals the record and builds an encrypted envelope (call inside secretutil.RunWithSecret).
 func (s *Store) buildEncryptedEnvelopeFromRecord(record AgentTokenRecord) (encryptedEnvelope, error) {
 	plaintext, err := json.Marshal(record)
 	if err != nil {
@@ -231,7 +233,7 @@ func (s *Store) PutAgentToken(serviceID, token, expiresAt string) error {
 	}
 	var env encryptedEnvelope
 	var encErr error
-	runWithSecret(func() {
+	secretutil.RunWithSecret(func() {
 		env, encErr = s.buildEncryptedEnvelopeFromRecord(record)
 	})
 	if encErr != nil {
@@ -262,7 +264,7 @@ func (s *Store) PutAgentToken(serviceID, token, expiresAt string) error {
 	return nil
 }
 
-// decryptAndParseTokenRecord decrypts the envelope and parses the token record, checking expiry (call inside runWithSecret).
+// decryptAndParseTokenRecord decrypts the envelope and parses the token record, checking expiry (call inside secretutil.RunWithSecret).
 func (s *Store) decryptAndParseTokenRecord(env *encryptedEnvelope, nonce, payload []byte) (*AgentTokenRecord, error) {
 	plaintext, err := s.decryptEnvelope(env, nonce, payload)
 	if err != nil {
@@ -310,7 +312,7 @@ func (s *Store) GetAgentToken(serviceID string) (*AgentTokenRecord, error) {
 	}
 	var record *AgentTokenRecord
 	var decErr error
-	runWithSecret(func() {
+	secretutil.RunWithSecret(func() {
 		record, decErr = s.decryptAndParseTokenRecord(&env, nonce, payload)
 	})
 	if decErr != nil {
@@ -452,7 +454,7 @@ func (s *Store) loadKEMKeyFromFile(path string) (*mlkem.DecapsulationKey768, err
 	}
 	var dk *mlkem.DecapsulationKey768
 	var loadErr error
-	runWithSecret(func() {
+	secretutil.RunWithSecret(func() {
 		seed, err := decrypt(payload, nonce, s.key)
 		if err != nil {
 			loadErr = fmt.Errorf("decrypt kem keystore: %w", err)
@@ -478,7 +480,7 @@ func (s *Store) persistNewKEMKey(path string) (*mlkem.DecapsulationKey768, error
 	}
 	var ciphertext, nonce []byte
 	var persistErr error
-	runWithSecret(func() {
+	secretutil.RunWithSecret(func() {
 		seed := dk.Bytes()
 		defer zeroBytes(seed)
 		ciphertext, nonce, persistErr = encrypt(seed, s.key)
