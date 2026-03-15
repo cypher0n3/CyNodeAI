@@ -1408,7 +1408,7 @@ func TestRunChat_ThreadNewError(t *testing.T) {
 func TestRunCredsList_NoToken(t *testing.T) {
 	cfg = &config.Config{}
 	defer func() { cfg = nil }()
-	if err := runCredsList(nil, nil); err == nil {
+	if err := runStubList("/v1/creds"); err == nil {
 		t.Fatal("expected error")
 	}
 }
@@ -1422,8 +1422,8 @@ func TestRunCredsList_OK(t *testing.T) {
 	defer server.Close()
 	cfg = &config.Config{GatewayURL: server.URL, Token: "tok"}
 	defer func() { cfg = nil }()
-	if err := runCredsList(nil, nil); err != nil {
-		t.Errorf("runCredsList: %v", err)
+	if err := runStubList("/v1/creds"); err != nil {
+		t.Errorf("runStubList /v1/creds: %v", err)
 	}
 }
 
@@ -1436,8 +1436,8 @@ func TestRunNodesList_OK(t *testing.T) {
 	defer server.Close()
 	cfg = &config.Config{GatewayURL: server.URL, Token: "tok"}
 	defer func() { cfg = nil }()
-	if err := runNodesList(nil, nil); err != nil {
-		t.Errorf("runNodesList: %v", err)
+	if err := runStubList("/v1/nodes"); err != nil {
+		t.Errorf("runStubList /v1/nodes: %v", err)
 	}
 }
 
@@ -1450,8 +1450,8 @@ func TestRunAuditList_OK(t *testing.T) {
 	defer server.Close()
 	cfg = &config.Config{GatewayURL: server.URL, Token: "tok"}
 	defer func() { cfg = nil }()
-	if err := runAuditList(nil, nil); err != nil {
-		t.Errorf("runAuditList: %v", err)
+	if err := runStubList("/v1/audit"); err != nil {
+		t.Errorf("runStubList /v1/audit: %v", err)
 	}
 }
 
@@ -1462,8 +1462,8 @@ func TestRunPrefsSet_OK(t *testing.T) {
 	defer server.Close()
 	cfg = &config.Config{GatewayURL: server.URL, Token: "tok"}
 	defer func() { cfg = nil }()
-	if err := runPrefsSet(nil, nil); err != nil {
-		t.Errorf("runPrefsSet: %v", err)
+	if err := runStubSet("/v1/prefs"); err != nil {
+		t.Errorf("runStubSet /v1/prefs: %v", err)
 	}
 }
 
@@ -1476,8 +1476,8 @@ func TestRunPrefsGet_OK(t *testing.T) {
 	defer server.Close()
 	cfg = &config.Config{GatewayURL: server.URL, Token: "tok"}
 	defer func() { cfg = nil }()
-	if err := runPrefsGet(nil, nil); err != nil {
-		t.Errorf("runPrefsGet: %v", err)
+	if err := runStubGet("/v1/prefs/effective"); err != nil {
+		t.Errorf("runStubGet /v1/prefs/effective: %v", err)
 	}
 }
 
@@ -1488,8 +1488,8 @@ func TestRunSettingsSet_OK(t *testing.T) {
 	defer server.Close()
 	cfg = &config.Config{GatewayURL: server.URL, Token: "tok"}
 	defer func() { cfg = nil }()
-	if err := runSettingsSet(nil, nil); err != nil {
-		t.Errorf("runSettingsSet: %v", err)
+	if err := runStubSet("/v1/settings"); err != nil {
+		t.Errorf("runStubSet /v1/settings: %v", err)
 	}
 }
 
@@ -1502,8 +1502,8 @@ func TestRunSettingsGet_OK(t *testing.T) {
 	defer server.Close()
 	cfg = &config.Config{GatewayURL: server.URL, Token: "tok"}
 	defer func() { cfg = nil }()
-	if err := runSettingsGet(nil, nil); err != nil {
-		t.Errorf("runSettingsGet: %v", err)
+	if err := runStubGet("/v1/settings"); err != nil {
+		t.Errorf("runStubGet /v1/settings: %v", err)
 	}
 }
 
@@ -1841,8 +1841,8 @@ func TestRunAuditList(t *testing.T) {
 	defer server.Close()
 	cfg = &config.Config{GatewayURL: server.URL, Token: "tok"}
 	defer func() { cfg = nil }()
-	if err := runAuditList(nil, nil); err != nil {
-		t.Errorf("runAuditList: %v", err)
+	if err := runStubList("/v1/audit"); err != nil {
+		t.Errorf("runStubList /v1/audit: %v", err)
 	}
 }
 
@@ -1911,8 +1911,8 @@ func TestRunCredsList(t *testing.T) {
 	defer server.Close()
 	cfg = &config.Config{GatewayURL: server.URL, Token: "tok"}
 	defer func() { cfg = nil }()
-	if err := runCredsList(nil, nil); err != nil {
-		t.Errorf("runCredsList: %v", err)
+	if err := runStubList("/v1/creds"); err != nil {
+		t.Errorf("runStubList /v1/creds: %v", err)
 	}
 }
 
@@ -1923,8 +1923,8 @@ func TestRunNodesList(t *testing.T) {
 	defer server.Close()
 	cfg = &config.Config{GatewayURL: server.URL, Token: "tok"}
 	defer func() { cfg = nil }()
-	if err := runNodesList(nil, nil); err != nil {
-		t.Errorf("runNodesList: %v", err)
+	if err := runStubList("/v1/nodes"); err != nil {
+		t.Errorf("runStubList /v1/nodes: %v", err)
 	}
 }
 
@@ -1935,8 +1935,8 @@ func TestRunPrefsSet(t *testing.T) {
 	defer server.Close()
 	cfg = &config.Config{GatewayURL: server.URL, Token: "tok"}
 	defer func() { cfg = nil }()
-	if err := runPrefsSet(nil, nil); err != nil {
-		t.Errorf("runPrefsSet: %v", err)
+	if err := runStubSet("/v1/prefs"); err != nil {
+		t.Errorf("runStubSet /v1/prefs: %v", err)
 	}
 }
 
@@ -1947,8 +1947,8 @@ func TestRunPrefsGet(t *testing.T) {
 	defer server.Close()
 	cfg = &config.Config{GatewayURL: server.URL, Token: "tok"}
 	defer func() { cfg = nil }()
-	if err := runPrefsGet(nil, nil); err != nil {
-		t.Errorf("runPrefsGet: %v", err)
+	if err := runStubGet("/v1/prefs/effective"); err != nil {
+		t.Errorf("runStubGet /v1/prefs/effective: %v", err)
 	}
 }
 
@@ -1959,8 +1959,8 @@ func TestRunSettingsSet(t *testing.T) {
 	defer server.Close()
 	cfg = &config.Config{GatewayURL: server.URL, Token: "tok"}
 	defer func() { cfg = nil }()
-	if err := runSettingsSet(nil, nil); err != nil {
-		t.Errorf("runSettingsSet: %v", err)
+	if err := runStubSet("/v1/settings"); err != nil {
+		t.Errorf("runStubSet /v1/settings: %v", err)
 	}
 }
 
@@ -1971,8 +1971,8 @@ func TestRunSettingsGet(t *testing.T) {
 	defer server.Close()
 	cfg = &config.Config{GatewayURL: server.URL, Token: "tok"}
 	defer func() { cfg = nil }()
-	if err := runSettingsGet(nil, nil); err != nil {
-		t.Errorf("runSettingsGet: %v", err)
+	if err := runStubGet("/v1/settings"); err != nil {
+		t.Errorf("runStubGet /v1/settings: %v", err)
 	}
 }
 
@@ -2394,6 +2394,36 @@ func TestProcessChatLine_GatewayErrorDoesNotExit(t *testing.T) {
 	}
 	if !strings.Contains(errOut.String(), "502") && !strings.Contains(errOut.String(), "Bad Gateway") {
 		t.Errorf("error should be printed to stderr, got %q", errOut.String())
+	}
+}
+
+func TestProcessChatLine_AtFileValidation(t *testing.T) {
+	cfg = &config.Config{GatewayURL: "http://localhost", Token: "tok"}
+	defer func() { cfg = nil }()
+	session := chat.NewSession(gateway.NewClient("http://localhost"))
+	session.SetToken("tok")
+	oldStderr := os.Stderr
+	r, w, _ := os.Pipe()
+	os.Stderr = w
+	var errOut bytes.Buffer
+	done := make(chan struct{})
+	go func() {
+		_, _ = io.Copy(&errOut, r)
+		close(done)
+	}()
+	// @ with no path prints error and continues.
+	exitSession, err := processChatLine(session, "@")
+	if err != nil || exitSession {
+		t.Errorf("@ with no path: exit=%v err=%v", exitSession, err)
+	}
+	// @/nonexistent_path prints "file not found" and continues.
+	_, _ = processChatLine(session, "@/nonexistent_file_bdd_test_xyz.txt")
+	_ = w.Close()
+	<-done
+	os.Stderr = oldStderr
+	errStr := errOut.String()
+	if !strings.Contains(errStr, "error") {
+		t.Errorf("expected error message for missing file; got: %q", errStr)
 	}
 }
 

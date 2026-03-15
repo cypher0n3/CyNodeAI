@@ -170,6 +170,17 @@ func processChatLine(session *chat.Session, line string) (bool, error) {
 		}
 		return exitSession, nil
 	}
+	if strings.HasPrefix(line, "@") {
+		path := strings.TrimSpace(line[1:])
+		if path == "" {
+			fmt.Fprintln(os.Stderr, "error: @ requires a file path")
+			return false, nil
+		}
+		if _, statErr := os.Stat(path); os.IsNotExist(statErr) {
+			fmt.Fprintf(os.Stderr, "error: file not found: %s\n", path)
+			return false, nil
+		}
+	}
 	if err := sendAndPrintChat(session, line); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 	}

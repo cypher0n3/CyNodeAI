@@ -25,6 +25,9 @@ const assistantPrefix = "Assistant: "
 
 const maxInputHistory = 50
 
+// ctrlCExitThreshold is the number of successive Ctrl+C presses (when idle) required to exit the TUI.
+const ctrlCExitThreshold = 2
+
 // sendResult is the message returned when a SendMessage completes (non-streaming fallback).
 type sendResult struct {
 	visible string
@@ -158,8 +161,6 @@ func (m *Model) Init() tea.Cmd {
 }
 
 // Update handles key events, window resize, and async send results.
-//
-//nolint:gocyclo // message dispatch is inherently a large switch over tea and internal msg types
 func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
@@ -195,13 +196,17 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case loginResultMsg:
 		return m.applyLoginResult(msg)
 	case streamPollMsg:
-		if m.streamCh != nil {
-			return m, scheduleNextDelta(m.streamCh)
-		}
-		return m, nil
+		return m.applyStreamPoll()
 	default:
 		return m, nil
 	}
+}
+
+func (m *Model) applyStreamPoll() (tea.Model, tea.Cmd) {
+	if m.streamCh == nil {
+		return m, nil
+	}
+	return m, scheduleNextDelta(m.streamCh)
 }
 
 func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
@@ -298,7 +303,7 @@ func (m *Model) handleCtrlC() (tea.Model, tea.Cmd) {
 		return m, nil
 	}
 	m.ctrlCCount++
-	if m.ctrlCCount >= 2 { //nolint:mnd // two successive Ctrl+C exits per spec
+	if m.ctrlCCount >= ctrlCExitThreshold {
 		return m, tea.Quit
 	}
 	m.Scrollback = append(m.Scrollback, "(Press Ctrl+C again to exit)")

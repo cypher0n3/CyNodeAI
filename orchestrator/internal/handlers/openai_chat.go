@@ -112,10 +112,36 @@ func (h *OpenAIChatHandler) ListModels(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// writeCompletionError writes either an SSE error or a JSON error depending on whether streaming was requested.
+func writeCompletionError(w http.ResponseWriter, stream bool, status int, code, msg string) {
+	if stream {
+		prepareSSEResponse(w)
+		writeSSEError(w, code, msg)
+		return
+	}
+	writeOpenAIError(w, status, code, msg)
+}
+
+// tryPMAStream attempts true token-by-token streaming via PMA when stream=true and model==PM.
+// responseID and assistantMeta are caller-supplied (chat uses a plain UUID, responses adds metadata).
+// Returns true if the response was fully handled (caller must return).
+func (h *OpenAIChatHandler) tryPMAStream(ctx context.Context, w http.ResponseWriter, stream bool, effectiveModel string, contextMessages []userapi.ChatMessage, threadID uuid.UUID, userID, projectID *uuid.UUID, start time.Time, responseID string, assistantMeta *string) bool {
+	if !stream || effectiveModel != EffectiveModelPM {
+		return false
+	}
+	cand := h.resolvePMAEndpointCandidate(ctx)
+	if cand.endpoint == "" {
+		return false
+	}
+	prepareSSEResponse(w)
+	if err := h.completeViaPMAStream(ctx, w, cand, contextMessages, threadID, userID, projectID, start, effectiveModel, responseID, assistantMeta); err != nil {
+		writeSSEError(w, "stream_error", err.Error())
+	}
+	return true
+}
+
 // ChatCompletions handles POST /v1/chat/completions with pipeline: auth (already done), decode, project_id, redact, persist user message, route, persist assistant, return.
 // When stream=true is requested the response uses Server-Sent Events per CYNAI.USRGWY.OpenAIChatApi.Streaming.
-//
-//nolint:gocognit,gocyclo // single HTTP handler with sequential validation and branching for stream vs non-stream
 func (h *OpenAIChatHandler) ChatCompletions(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	userID := getUserIDFromContext(ctx)
@@ -151,43 +177,17 @@ func (h *OpenAIChatHandler) ChatCompletions(w http.ResponseWriter, r *http.Reque
 		writeOpenAIError(w, http.StatusInternalServerError, "internal_error", "Failed to persist message")
 		return
 	}
-	// Load full thread history (capped) to give agents multi-turn context.
-	threadHistory, err := h.db.ListChatMessages(ctx, thread.ID, chatHistoryLimit)
-	if err != nil {
-		h.logger.Warn("failed to load chat history; falling back to single message", "error", err)
-		threadHistory = nil
-	}
-	var contextMessages []userapi.ChatMessage
-	if len(threadHistory) > 0 {
-		contextMessages = trimHistoryToCharBudget(threadHistory, chatHistoryCharBudget)
-	} else {
-		contextMessages = redacted
-	}
+	contextMessages := h.buildChatContextMessages(ctx, thread.ID, redacted)
 	// REQ-ORCHES-0131: enforce maximum total wait duration.
 	timeoutCtx, cancel := context.WithTimeout(ctx, chatCompletionTimeout)
 	defer cancel()
 	start := time.Now()
-	// True token-by-token streaming when client asked for stream and we route to PMA (proxy or direct).
-	if req.Stream && effectiveModel == EffectiveModelPM {
-		cand := h.resolvePMAEndpointCandidate(timeoutCtx)
-		if cand.endpoint != "" {
-			prepareSSEResponse(w)
-			err := h.completeViaPMAStream(timeoutCtx, w, cand, contextMessages, thread.ID, userID, projectID, start, effectiveModel, uuid.New().String(), nil)
-			if err != nil {
-				writeSSEError(w, "stream_error", err.Error())
-			}
-			return
-		}
+	if h.tryPMAStream(timeoutCtx, w, req.Stream, effectiveModel, contextMessages, thread.ID, userID, projectID, start, uuid.New().String(), nil) {
+		return
 	}
 	content, status, code, msg := h.routeAndComplete(timeoutCtx, effectiveModel, contextMessages, lastUserContent)
 	if status != 0 {
-		if req.Stream {
-			// Headers not yet sent; we can send the pre-stream SSE error.
-			prepareSSEResponse(w)
-			writeSSEError(w, code, msg)
-		} else {
-			writeOpenAIError(w, status, code, msg)
-		}
+		writeCompletionError(w, req.Stream, status, code, msg)
 		return
 	}
 	if _, err := h.db.AppendChatMessage(ctx, thread.ID, chatRoleAssistant, content, nil); err != nil {
@@ -203,15 +203,26 @@ func (h *OpenAIChatHandler) ChatCompletions(w http.ResponseWriter, r *http.Reque
 		DurationMs:       &durationMs,
 	})
 	if req.Stream {
-		// Emit content as SSE degraded-mode stream (full turn in one delta).
-		// Per spec: when upstream cannot provide true token deltas, still emit SSE
-		// with bounded in-progress status plus a terminal completion event.
+		// Degraded-mode SSE: upstream can't provide true token deltas; emit full turn in one event.
 		completionID := uuid.New().String()
 		prepareSSEResponse(w)
 		emitContentAsSSE(w, completionID, effectiveModel, content)
 		return
 	}
-	writeOpenAIJSON(w, http.StatusOK, buildChatCompletionsResponse(effectiveModel, content)) //nolint:exhaustruct // response struct built inline; exhaustruct wants all fields set
+	writeOpenAIJSON(w, http.StatusOK, buildChatCompletionsResponse(effectiveModel, content))
+}
+
+// buildChatContextMessages loads thread history and builds the context message slice for routing.
+// Falls back to fallback messages if history is unavailable or empty.
+func (h *OpenAIChatHandler) buildChatContextMessages(ctx context.Context, threadID uuid.UUID, fallback []userapi.ChatMessage) []userapi.ChatMessage {
+	history, err := h.db.ListChatMessages(ctx, threadID, chatHistoryLimit)
+	if err != nil || len(history) == 0 {
+		if err != nil {
+			h.logger.Warn("failed to load chat history; using request messages", "error", err)
+		}
+		return fallback
+	}
+	return trimHistoryToCharBudget(history, chatHistoryCharBudget)
 }
 
 func decodeOpenAIRequest(r *http.Request, dest interface{}) (status int, errMsg string) {
@@ -724,8 +735,6 @@ func (h *OpenAIChatHandler) NewThread(w http.ResponseWriter, r *http.Request) {
 
 // Responses handles POST /v1/responses (OpenAI Responses API). Same pipeline as chat/completions:
 // decode input, resolve thread (from previous_response_id or active), redact, persist user, route, persist assistant with response_id in metadata, return responses-format.
-//
-//nolint:gocognit,gocyclo // single HTTP handler with sequential validation and branching for stream vs non-stream
 func (h *OpenAIChatHandler) Responses(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	userID := getUserIDFromContext(ctx)
@@ -745,11 +754,11 @@ func (h *OpenAIChatHandler) Responses(w http.ResponseWriter, r *http.Request) {
 	projectID := projectIDFromHeader(r)
 	thread, errCode, errMsg := h.resolveThreadForResponses(ctx, *userID, projectID, req.PreviousResponseID)
 	if errCode != 0 {
-		code := "invalid_request"
+		errCode2 := "invalid_request"
 		if errCode == http.StatusInternalServerError {
-			code = "internal_error"
+			errCode2 = "internal_error"
 		}
-		writeOpenAIError(w, errCode, code, errMsg)
+		writeOpenAIError(w, errCode, errCode2, errMsg)
 		return
 	}
 	if thread == nil {
@@ -768,39 +777,26 @@ func (h *OpenAIChatHandler) Responses(w http.ResponseWriter, r *http.Request) {
 		writeOpenAIError(w, http.StatusInternalServerError, "internal_error", "Failed to persist message")
 		return
 	}
-	contextMessages := h.responsesContextMessages(ctx, thread.ID, redacted)
+	contextMessages := h.buildChatContextMessages(ctx, thread.ID, redacted)
 	timeoutCtx, cancel := context.WithTimeout(ctx, chatCompletionTimeout)
 	defer cancel()
 	start := time.Now()
-	if req.Stream && effectiveModel == EffectiveModelPM {
-		cand := h.resolvePMAEndpointCandidate(timeoutCtx)
-		if cand.endpoint != "" {
-			responseID := "resp_" + uuid.New().String()
-			meta := map[string]string{"response_id": responseID}
-			metaJSON, _ := json.Marshal(meta)
-			metaStr := string(metaJSON)
-			prepareSSEResponse(w)
-			err := h.completeViaPMAStream(timeoutCtx, w, cand, contextMessages, thread.ID, userID, projectID, start, effectiveModel, responseID, &metaStr)
-			if err != nil {
-				writeSSEError(w, "stream_error", err.Error())
-			}
-			return
-		}
+	responseID := "resp_" + uuid.New().String()
+	responsesMeta := func() *string {
+		meta := map[string]string{"response_id": responseID}
+		b, _ := json.Marshal(meta)
+		s := string(b)
+		return &s
+	}()
+	if h.tryPMAStream(timeoutCtx, w, req.Stream, effectiveModel, contextMessages, thread.ID, userID, projectID, start, responseID, responsesMeta) {
+		return
 	}
 	content, status, code, msg := h.routeAndComplete(timeoutCtx, effectiveModel, contextMessages, userContent)
 	if status != 0 {
-		if req.Stream {
-			prepareSSEResponse(w)
-			writeSSEError(w, code, msg)
-		} else {
-			writeOpenAIError(w, status, code, msg)
-		}
+		writeCompletionError(w, req.Stream, status, code, msg)
 		return
 	}
-	responseID := "resp_" + uuid.New().String()
-	meta := map[string]string{"response_id": responseID}
-	metaJSON, _ := json.Marshal(meta)
-	metaStr := string(metaJSON)
+	metaStr := *responsesMeta
 	if _, err := h.db.AppendChatMessage(ctx, thread.ID, chatRoleAssistant, content, &metaStr); err != nil {
 		h.logger.Error("append assistant message", "error", err)
 	}
@@ -845,18 +841,6 @@ func (h *OpenAIChatHandler) resolveThreadForResponses(ctx context.Context, userI
 		return nil, http.StatusInternalServerError, "Failed to get chat thread"
 	}
 	return thread, 0, ""
-}
-
-func (h *OpenAIChatHandler) responsesContextMessages(ctx context.Context, threadID uuid.UUID, redacted []userapi.ChatMessage) []userapi.ChatMessage {
-	threadHistory, err := h.db.ListChatMessages(ctx, threadID, chatHistoryLimit)
-	if err != nil {
-		h.logger.Warn("failed to load chat history", "error", err)
-		return redacted
-	}
-	if len(threadHistory) == 0 {
-		return redacted
-	}
-	return trimHistoryToCharBudget(threadHistory, chatHistoryCharBudget)
 }
 
 func extractUserContentFromResponsesInput(input json.RawMessage) string {

@@ -926,6 +926,48 @@ func TestClient_ListModels_Success(t *testing.T) {
 	}
 }
 
+func TestClient_ListProjects_Success(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/projects" || r.Method != http.MethodGet {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"data":[{"id":"p1","name":"Proj One"},{"id":"p2","name":"Proj Two"}]}`))
+	}))
+	defer server.Close()
+	client := NewClient(server.URL)
+	client.SetToken("tok")
+	resp, err := client.ListProjects()
+	if err != nil {
+		t.Fatalf("ListProjects: %v", err)
+	}
+	if len(resp.Data) != 2 || resp.Data[0].ID != "p1" || resp.Data[1].Name != "Proj Two" {
+		t.Errorf("resp = %+v", resp)
+	}
+}
+
+func TestClient_GetProject_Success(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/v1/projects/p1" && r.Method == http.MethodGet {
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"id":"p1","name":"Proj One"}`))
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+	client := NewClient(server.URL)
+	client.SetToken("tok")
+	proj, err := client.GetProject("p1")
+	if err != nil {
+		t.Fatalf("GetProject: %v", err)
+	}
+	if proj.ID != "p1" || proj.Name != "Proj One" {
+		t.Errorf("proj = %+v", proj)
+	}
+}
+
 func TestClient_UnauthorizedOrBadStatus(t *testing.T) {
 	unauth := jsonHandler(http.StatusUnauthorized, problem.Details{Detail: "expired", Status: 401})
 	tests := []struct {

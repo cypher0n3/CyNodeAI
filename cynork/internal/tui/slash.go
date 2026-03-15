@@ -37,10 +37,18 @@ var slashHelpCatalog = []struct{ name, desc string }{
 	{"/hide-thinking", "collapse retained thinking parts"},
 	{"/model", "show or set session model"},
 	{"/models", "list available models"},
+	{"/nodes", "nodes list, get"},
+	{"/prefs", "preferences list, get, set, delete, effective"},
 	{"/project", "show or set project context"},
 	{"/quit", "end session (synonym for /exit)"},
 	{"/show-thinking", "reveal retained thinking parts"},
+	{"/skills list", "list loaded skills"},
+	{"/skills get", "get a skill by selector"},
+	{"/skills load", "load a skill from a markdown file"},
+	{"/skills update", "update a skill by selector and file"},
+	{"/skills delete", "delete a skill by selector"},
 	{"/status", "gateway reachability"},
+	{"/task", "task list, get, create, cancel, result, logs, artifacts"},
 	{"/thread", "new, list, switch <selector>, rename"},
 	{"/version", "print cynork version"},
 	{"/whoami", "current identity"},
@@ -59,11 +67,23 @@ func parseSlashTUI(line string) (cmd, rest string) {
 	return strings.ToLower(line[:idx]), strings.TrimSpace(line[idx+1:])
 }
 
+// subprocSlashCmds maps slash command names that are fully delegated to a cynork subprocess.
+// Adding a command here automatically handles it without increasing handleSlashCmd complexity.
+var subprocSlashCmds = map[string]string{
+	"task":   "task",
+	"nodes":  "nodes",
+	"prefs":  "prefs",
+	"skills": "skills",
+}
+
 // handleSlashCmd dispatches a /command from the TUI.
 // It returns a tea.Cmd that will produce a slashResultMsg (or a tea.ExecProcess for interactive).
 // If the command is /thread, it returns (nil, false) so the existing thread handler can take over.
 func (m *Model) handleSlashCmd(line string) (tea.Cmd, bool) {
 	cmd, rest := parseSlashTUI(line)
+	if sub, ok := subprocSlashCmds[cmd]; ok {
+		return m.slashSubprocCmd(sub, rest), true
+	}
 	switch cmd {
 	case "help":
 		return m.slashHelpCmd(), true
@@ -85,10 +105,8 @@ func (m *Model) handleSlashCmd(line string) (tea.Cmd, bool) {
 		return m.slashConnectCmd(rest), true
 	case "show-thinking", "hide-thinking":
 		return m.slashSetThinkingCmd(cmd == "show-thinking"), true
-	case "status":
-		return m.slashStatusCmd(), true
-	case "whoami":
-		return func() tea.Msg { return m.authWhoami() }, true
+	case "status", cmdWhoami:
+		return m.slashStatusOrWhoamiCmd(cmd), true
 	case "thread":
 		// Handled by existing handleThreadCommand path.
 		return nil, false
@@ -384,6 +402,18 @@ func thinkingLabel(show bool) string {
 	return "hidden"
 }
 
+// cmdWhoami is the name of the /whoami slash command.
+const cmdWhoami = "whoami"
+
+// slashStatusOrWhoamiCmd dispatches /status and /whoami to their respective implementations.
+// Merging these two zero-arg session commands reduces handleSlashCmd cyclomatic complexity.
+func (m *Model) slashStatusOrWhoamiCmd(cmd string) tea.Cmd {
+	if cmd == cmdWhoami {
+		return func() tea.Msg { return m.authWhoami() }
+	}
+	return m.slashStatusCmd()
+}
+
 // slashStatusCmd checks gateway reachability and returns a scrollback line.
 func (m *Model) slashStatusCmd() tea.Cmd {
 	return func() tea.Msg {
@@ -407,12 +437,12 @@ func (m *Model) dispatchProjectCmd(rest string) slashResultMsg {
 	case "set":
 		return m.projectSetCmd(parts)
 	case "list":
-		return slashResultMsg{lines: []string{"project list: not yet supported (stub)"}}
+		return m.projectListCmd()
 	case "get":
 		if len(parts) < 2 {
 			return slashResultMsg{lines: []string{"Usage: /project get <project_id>"}}
 		}
-		return slashResultMsg{lines: []string{"project get: not yet supported (stub)"}}
+		return m.projectGetCmd(parts[1])
 	case "":
 		project := "(none)"
 		if m.Session != nil && m.Session.ProjectID != "" {
@@ -425,6 +455,44 @@ func (m *Model) dispatchProjectCmd(rest string) slashResultMsg {
 		}
 		return slashResultMsg{lines: []string{"project set to: " + rest}}
 	}
+}
+
+func (m *Model) projectListCmd() slashResultMsg {
+	if m.Session == nil || m.Session.Client == nil {
+		return slashResultMsg{lines: []string{"Error: not connected"}}
+	}
+	resp, err := m.Session.Client.ListProjects()
+	if err != nil {
+		return slashResultMsg{lines: []string{"Error: " + err.Error()}}
+	}
+	lines := make([]string, 0, len(resp.Data)+1)
+	lines = append(lines, "--- Projects ---")
+	for _, p := range resp.Data {
+		line := "  " + p.ID
+		if p.Name != "" {
+			line += "  " + p.Name
+		}
+		lines = append(lines, line)
+	}
+	if len(resp.Data) == 0 {
+		lines = append(lines, "  (no projects)")
+	}
+	return slashResultMsg{lines: lines}
+}
+
+func (m *Model) projectGetCmd(id string) slashResultMsg {
+	if m.Session == nil || m.Session.Client == nil {
+		return slashResultMsg{lines: []string{"Error: not connected"}}
+	}
+	proj, err := m.Session.Client.GetProject(id)
+	if err != nil {
+		return slashResultMsg{lines: []string{"Error: " + err.Error()}}
+	}
+	lines := []string{"  id:   " + proj.ID}
+	if proj.Name != "" {
+		lines = append(lines, "  name: "+proj.Name)
+	}
+	return slashResultMsg{lines: lines}
 }
 
 func (m *Model) projectSetCmd(parts []string) slashResultMsg {
@@ -442,6 +510,40 @@ func (m *Model) projectSetCmd(parts []string) slashResultMsg {
 		return slashResultMsg{lines: []string{"project context cleared"}}
 	}
 	return slashResultMsg{lines: []string{"project set to: " + id}}
+}
+
+// tuiGetExe returns the path to the currently-running executable.
+// Overridden in tests to inject a mock binary.
+var tuiGetExe = os.Executable
+
+// slashSubprocCmd runs `cynork <sub> <rest...>` as a subprocess with the session's gateway URL
+// and token injected via environment variables and captures combined output as scrollback lines.
+// This delegates to the same code paths and flags as the corresponding non-interactive CLI commands.
+func (m *Model) slashSubprocCmd(sub, rest string) tea.Cmd {
+	return func() tea.Msg {
+		if m.Session == nil || m.Session.Client == nil {
+			return slashResultMsg{lines: []string{"Error: not connected"}}
+		}
+		exe, err := tuiGetExe()
+		if err != nil {
+			return slashResultMsg{lines: []string{"Error: " + err.Error()}}
+		}
+		args := append([]string{sub}, strings.Fields(rest)...)
+		cmd := exec.Command(exe, args...)
+		cmd.Env = append(os.Environ(),
+			"CYNORK_GATEWAY_URL="+m.Session.Client.BaseURL,
+			"CYNORK_TOKEN="+m.Session.Client.Token,
+		)
+		var buf bytes.Buffer
+		cmd.Stdout = &buf
+		cmd.Stderr = &buf
+		_ = cmd.Run()
+		out := strings.TrimRight(buf.String(), "\n")
+		if out == "" {
+			return slashResultMsg{lines: nil}
+		}
+		return slashResultMsg{lines: strings.Split(out, "\n")}
+	}
 }
 
 // captureToLines runs fn with os.Stdout and os.Stderr redirected to a buffer,

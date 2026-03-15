@@ -144,15 +144,23 @@ func runCappedStepTool(raw string, te *ToolEnv, step func(int, json.RawMessage, 
 	return sr.Output, "", false
 }
 
-//nolint:dupl // same pattern as searchFilesTool, different step
-func readFileTool() *SBATool {
+// newCappedStepTool builds an SBATool that delegates to runCappedStepTool with the given step.
+func newCappedStepTool(name, desc string, step func(int, json.RawMessage, int, string) sbajob.StepResult) *SBATool {
 	return &SBATool{
-		name: "read_file",
-		desc: "Read a file under workspace. Input JSON: {\"path\": \"rel/path.txt\"}.",
-		call: func(ctx context.Context, raw string, te *ToolEnv) (out string, errMsg string, constraintViolation bool) {
-			return runCappedStepTool(raw, te, readFileStep)
+		name: name,
+		desc: desc,
+		call: func(_ context.Context, raw string, te *ToolEnv) (out string, errMsg string, constraintViolation bool) {
+			return runCappedStepTool(raw, te, step)
 		},
 	}
+}
+
+func readFileTool() *SBATool {
+	return newCappedStepTool(
+		"read_file",
+		"Read a file under workspace. Input JSON: {\"path\": \"rel/path.txt\"}.",
+		readFileStep,
+	)
 }
 
 func applyUnifiedDiffTool() *SBATool {
@@ -194,15 +202,12 @@ func listTreeTool() *SBATool {
 	}
 }
 
-//nolint:dupl // same pattern as readFileTool, different step
 func searchFilesTool() *SBATool {
-	return &SBATool{
-		name: "search_files",
-		desc: "Search for a regex pattern in files under workspace. Input JSON: {\"pattern\": \"regex\", \"path\": \"optional/subdir\", \"include\": \"*.go\"}. Returns path:line_num:content per match; output capped.",
-		call: func(ctx context.Context, raw string, te *ToolEnv) (out string, errMsg string, constraintViolation bool) {
-			return runCappedStepTool(raw, te, searchFilesStep)
-		},
-	}
+	return newCappedStepTool(
+		"search_files",
+		"Search for a regex pattern in files under workspace. Input JSON: {\"pattern\": \"regex\", \"path\": \"optional/subdir\", \"include\": \"*.go\"}. Returns path:line_num:content per match; output capped.",
+		searchFilesStep,
+	)
 }
 
 // EvalLocalTool runs a single tool by name with JSON input (for tests). It does not use context ToolEnv.

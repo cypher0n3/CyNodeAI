@@ -10,6 +10,10 @@ import (
 	"github.com/cypher0n3/cynodeai/cynork/internal/gateway"
 )
 
+// streamDeltaBufSize is the channel buffer for streaming delta events.
+// Sized to absorb short bursts while keeping the goroutine from blocking on the receiver.
+const streamDeltaBufSize = 32
+
 // AssistantTurn is the canonical one-logical-turn result from the gateway (visible text;
 // optional response_id for continuation). Used by CLI and TUI for transcript and display.
 type AssistantTurn struct {
@@ -58,7 +62,7 @@ func (t *CompletionsTransport) SendMessage(ctx context.Context, message, model, 
 
 // StreamMessage implements ChatTransport using the completions endpoint with stream=true.
 func (t *CompletionsTransport) StreamMessage(ctx context.Context, message, model, projectID string) (<-chan ChatStreamDelta, error) {
-	ch := make(chan ChatStreamDelta, 32) //nolint:mnd // buffer size for streaming deltas
+	ch := make(chan ChatStreamDelta, streamDeltaBufSize)
 	go func() {
 		defer close(ch)
 		err := t.Client.ChatStream(ctx, message, model, projectID,
@@ -95,7 +99,7 @@ func (t *ResponsesTransport) SendMessage(ctx context.Context, message, model, pr
 
 // StreamMessage implements ChatTransport using the responses endpoint with stream=true.
 func (t *ResponsesTransport) StreamMessage(ctx context.Context, message, model, projectID string) (<-chan ChatStreamDelta, error) {
-	ch := make(chan ChatStreamDelta, 32) //nolint:mnd // buffer size for streaming deltas
+	ch := make(chan ChatStreamDelta, streamDeltaBufSize)
 	go func() {
 		defer close(ch)
 		respID, err := t.Client.ResponsesStream(ctx, message, model, projectID,

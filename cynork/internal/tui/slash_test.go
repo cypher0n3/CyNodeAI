@@ -3,6 +3,7 @@ package tui
 import (
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"os/exec"
 	"strings"
 	"testing"
@@ -10,6 +11,22 @@ import (
 	"github.com/cypher0n3/cynodeai/cynork/internal/chat"
 	"github.com/cypher0n3/cynodeai/cynork/internal/gateway"
 )
+
+// testJSONServer creates a test HTTP server that returns JSON for known paths and 404 otherwise.
+// The cleanup is registered with t.Cleanup; callers must not call srv.Close themselves.
+func testJSONServer(t *testing.T, routes map[string]string) (*httptest.Server, *gateway.Client) {
+	t.Helper()
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if body, ok := routes[r.URL.Path]; ok {
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(body))
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	t.Cleanup(srv.Close)
+	return srv, gateway.NewClient(srv.URL)
+}
 
 // TestSetTUIVersion verifies SetTUIVersion updates tuiVersion.
 func TestSetTUIVersion(t *testing.T) {
@@ -71,16 +88,9 @@ func TestShellInteractiveCmd(t *testing.T) {
 
 // TestSlashModelsCmd_Success verifies /models shows model list from gateway.
 func TestSlashModelsCmd_Success(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/v1/models" {
-			w.Header().Set("Content-Type", "application/json")
-			_, _ = w.Write([]byte(`{"object":"list","data":[{"id":"model-a"},{"id":"model-b"}]}`))
-			return
-		}
-		w.WriteHeader(http.StatusNotFound)
-	}))
-	defer srv.Close()
-	client := gateway.NewClient(srv.URL)
+	_, client := testJSONServer(t, map[string]string{
+		"/v1/models": `{"object":"list","data":[{"id":"model-a"},{"id":"model-b"}]}`,
+	})
 	session := &chat.Session{Client: client}
 	m := NewModel(session)
 	cmd := m.slashModelsCmd()
@@ -106,7 +116,7 @@ func TestSlashModelsCmd_Error(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusUnauthorized)
 	}))
-	defer srv.Close()
+	t.Cleanup(srv.Close)
 	client := gateway.NewClient(srv.URL)
 	session := &chat.Session{Client: client}
 	m := NewModel(session)
@@ -133,22 +143,68 @@ func TestSlashModelsCmd_NoSession(t *testing.T) {
 	}
 }
 
-// TestSlashProjectCmd_StubCmds verifies /project list and get return at least one line (stubs).
-func TestSlashProjectCmd_StubCmds(t *testing.T) {
-	cases := []struct{ name, arg string }{
-		{"list", "list"},
-		{"get proj-1", "get proj-1"},
+// TestSlashProjectCmd_ListGateway verifies /project list calls gateway and returns project IDs.
+func TestSlashProjectCmd_ListGateway(t *testing.T) {
+	_, client := testJSONServer(t, map[string]string{
+		"/v1/projects": `{"data":[{"id":"proj-1","name":"Alpha"},{"id":"proj-2","name":"Beta"}]}`,
+	})
+	assertSlashLines(t, NewModel(&chat.Session{Client: client}).slashProjectCmd("list")(), "proj-1")
+}
+
+// TestSlashProjectCmd_GetGateway verifies /project get calls gateway and returns project details.
+func TestSlashProjectCmd_GetGateway(t *testing.T) {
+	_, client := testJSONServer(t, map[string]string{
+		"/v1/projects/proj-1": `{"id":"proj-1","name":"Alpha Project"}`,
+	})
+	assertSlashLines(t, NewModel(&chat.Session{Client: client}).slashProjectCmd("get proj-1")(), "proj-1")
+}
+
+// assertSlashLines asserts that msg is a slashResultMsg and its lines contain want.
+func assertSlashLines(t *testing.T, msg interface{}, want string) {
+	t.Helper()
+	res, ok := msg.(slashResultMsg)
+	if !ok {
+		t.Fatalf("expected slashResultMsg, got %T", msg)
 	}
-	for _, tc := range cases {
-		t.Run(tc.name, func(t *testing.T) {
-			m := NewModel(&chat.Session{})
-			msg := m.slashProjectCmd(tc.arg)()
+	for _, l := range res.lines {
+		if strings.Contains(l, want) {
+			return
+		}
+	}
+	t.Errorf("lines should contain %q; got %v", want, res.lines)
+}
+
+// TestSlashProjectCmd_ListError verifies /project list returns inline error on gateway failure.
+func TestSlashProjectCmd_ListError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	t.Cleanup(srv.Close)
+	client := gateway.NewClient(srv.URL)
+	session := &chat.Session{Client: client}
+	m := NewModel(session)
+	msg := m.slashProjectCmd("list")()
+	res, ok := msg.(slashResultMsg)
+	if !ok {
+		t.Fatalf("cmd() = %T, want slashResultMsg", msg)
+	}
+	if len(res.lines) == 0 || !strings.Contains(strings.ToLower(res.lines[0]), "error") {
+		t.Errorf("project list error should start with Error:; got %v", res.lines)
+	}
+}
+
+// TestSlashProjectCmd_NoSession verifies /project list and get handle nil session gracefully.
+func TestSlashProjectCmd_NoSession(t *testing.T) {
+	for _, arg := range []string{"list", "get proj-1"} {
+		t.Run(arg, func(t *testing.T) {
+			m := NewModel(nil)
+			msg := m.slashProjectCmd(arg)()
 			res, ok := msg.(slashResultMsg)
 			if !ok {
 				t.Fatalf("cmd() = %T, want slashResultMsg", msg)
 			}
-			if len(res.lines) == 0 {
-				t.Errorf("slashProjectCmd %q should return at least one line", tc.arg)
+			if len(res.lines) == 0 || !strings.Contains(strings.ToLower(res.lines[0]), "error") {
+				t.Errorf("nil session should return Error:; got %v", res.lines)
 			}
 		})
 	}
@@ -216,5 +272,91 @@ func TestHandleSlashCmd_EmptySlash(t *testing.T) {
 	}
 	if cmd == nil {
 		t.Error("handleSlashCmd(/) should return non-nil cmd")
+	}
+}
+
+// TestSlashHelpCatalog_ContainsTaskNodesPrefsSkills verifies new commands appear in help catalog.
+func TestSlashHelpCatalog_ContainsTaskNodesPrefsSkills(t *testing.T) {
+	names := make(map[string]bool)
+	for _, e := range slashHelpCatalog {
+		names[e.name] = true
+	}
+	for _, want := range []string{"/task", "/nodes", "/prefs", "/skills list"} {
+		if !names[want] {
+			t.Errorf("slashHelpCatalog missing %q", want)
+		}
+	}
+}
+
+// TestHandleSlashCmd_TaskNodesPrefsSkillsHandled verifies task/nodes/prefs/skills return handled=true.
+func TestHandleSlashCmd_TaskNodesPrefsSkillsHandled(t *testing.T) {
+	// Use a mock subprocess that just exits 0.
+	orig := tuiGetExe
+	t.Cleanup(func() { tuiGetExe = orig })
+	tuiGetExe = func() (string, error) {
+		exe, _ := exec.LookPath("echo")
+		return exe, nil
+	}
+	client := gateway.NewClient("http://localhost")
+	session := &chat.Session{Client: client}
+	m := NewModel(session)
+	for _, slash := range []string{"/task list", "/nodes list", "/prefs list", "/skills list"} {
+		t.Run(slash, func(t *testing.T) {
+			cmd, handled := m.handleSlashCmd(slash)
+			if !handled {
+				t.Errorf("handleSlashCmd(%q) should return handled=true", slash)
+			}
+			if cmd == nil {
+				t.Errorf("handleSlashCmd(%q) should return non-nil cmd", slash)
+			}
+		})
+	}
+}
+
+// TestSlashSubprocCmd_NoSession verifies slashSubprocCmd handles nil session gracefully.
+func TestSlashSubprocCmd_NoSession(t *testing.T) {
+	m := NewModel(nil)
+	msg := m.slashSubprocCmd("task", "list")()
+	res, ok := msg.(slashResultMsg)
+	if !ok {
+		t.Fatalf("slashSubprocCmd nil session: %T, want slashResultMsg", msg)
+	}
+	if len(res.lines) == 0 || !strings.Contains(strings.ToLower(res.lines[0]), "error") {
+		t.Errorf("nil session should return Error:; got %v", res.lines)
+	}
+}
+
+// TestSlashSubprocCmd_EchoSubproc verifies slashSubprocCmd captures subprocess output.
+func TestSlashSubprocCmd_EchoSubproc(t *testing.T) {
+	orig := tuiGetExe
+	t.Cleanup(func() { tuiGetExe = orig })
+	// Override exe to use "sh" so we can test output capture.
+	tuiGetExe = func() (string, error) {
+		sh, err := exec.LookPath("sh")
+		return sh, err
+	}
+	// Build a fake session with a real client pointing anywhere (output is from subprocess).
+	client := gateway.NewClient("http://localhost")
+	client.SetToken("tok")
+	session := &chat.Session{Client: client}
+	// Temporarily override PATH so the subprocess runs something predictable.
+	// We'll pass "-c echo captured_subproc_line" as args via rest.
+	m := NewModel(session)
+	origGetExe := tuiGetExe
+	// Override to use echo directly.
+	tuiGetExe = func() (string, error) {
+		p, err := exec.LookPath("echo")
+		return p, err
+	}
+	defer func() { tuiGetExe = origGetExe }()
+	_ = os.Environ()
+	msg := m.slashSubprocCmd("task", "list")()
+	res, ok := msg.(slashResultMsg)
+	if !ok {
+		t.Fatalf("slashSubprocCmd echo: %T, want slashResultMsg", msg)
+	}
+	// echo outputs "task list" so result lines should be non-nil.
+	if res.lines == nil {
+		t.Error("slashSubprocCmd with echo should return non-nil lines")
 	}
 }

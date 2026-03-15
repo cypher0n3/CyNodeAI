@@ -102,7 +102,7 @@ func TestResponsesContextMessages_EmptyHistory(t *testing.T) {
 	h := NewOpenAIChatHandler(db, newTestLogger(), "", "", "")
 	threadID := uuid.New()
 	redacted := buildTestChatMessages("user content")
-	result := h.responsesContextMessages(context.Background(), threadID, redacted)
+	result := h.buildChatContextMessages(context.Background(), threadID, redacted)
 	// Empty history → returns redacted unchanged.
 	if len(result) != len(redacted) {
 		t.Errorf("len = %d, want %d", len(result), len(redacted))
@@ -124,7 +124,7 @@ func TestResponsesContextMessages_WithHistory(t *testing.T) {
 		}
 	}
 	redacted := buildTestChatMessages("new question")
-	result := h.responsesContextMessages(context.Background(), threadID, redacted)
+	result := h.buildChatContextMessages(context.Background(), threadID, redacted)
 	// With history, trimHistoryToCharBudget is applied.
 	if len(result) == 0 {
 		t.Error("expected non-empty context messages")
@@ -220,7 +220,7 @@ func (m *listMsgErrDB) ListChatMessages(_ context.Context, _ uuid.UUID, _ int) (
 func TestResponsesContextMessages_ListError(t *testing.T) {
 	h := NewOpenAIChatHandler(&listMsgErrDB{testutil.NewMockDB()}, newTestLogger(), "", "", "")
 	redacted := buildTestChatMessages("hi")
-	result := h.responsesContextMessages(context.Background(), uuid.New(), redacted)
+	result := h.buildChatContextMessages(context.Background(), uuid.New(), redacted)
 	if len(result) != len(redacted) {
 		t.Errorf("expected redacted unchanged (len=%d), got len=%d", len(redacted), len(result))
 	}

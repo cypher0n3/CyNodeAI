@@ -307,29 +307,35 @@ func searchFilesStep(index int, raw json.RawMessage, maxOutputBytes int, workspa
 	return sr
 }
 
+// isSkippedDir reports whether the named directory should be excluded from file walks.
+func isSkippedDir(name string) bool {
+	return name == ".git" || name == "node_modules"
+}
+
+// matchesInclude reports whether full matches the glob include pattern (empty pattern matches all).
+func matchesInclude(include, full string) bool {
+	if include == "" {
+		return true
+	}
+	matched, _ := filepath.Match(include, filepath.Base(full))
+	return matched
+}
+
 // searchFilesWalkFn returns a filepath.WalkFunc for searchFilesStep.
-//
-//nolint:gocognit // walk callback has necessary branches for dir skip and include filter
 func searchFilesWalkFn(workspace string, args *searchFilesArgs, re *regexp.Regexp, maxOutputBytes int, out *strings.Builder) filepath.WalkFunc {
 	return func(full string, info os.FileInfo, walkErr error) error {
 		if walkErr != nil {
 			return walkErr
 		}
 		if info.IsDir() {
-			if info.Name() == ".git" || info.Name() == "node_modules" {
+			if isSkippedDir(info.Name()) {
 				return filepath.SkipDir
 			}
 			return nil
 		}
 		rel, relErr := filepath.Rel(workspace, full)
-		if relErr != nil {
+		if relErr != nil || !matchesInclude(args.Include, full) {
 			return nil
-		}
-		if args.Include != "" {
-			matched, _ := filepath.Match(args.Include, filepath.Base(full))
-			if !matched {
-				return nil
-			}
 		}
 		truncated, scanErr := searchFilesScanFile(full, rel, re, maxOutputBytes, out)
 		if truncated {

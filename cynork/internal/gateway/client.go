@@ -167,6 +167,16 @@ func (c *Client) GetTask(taskID string) (*userapi.TaskResponse, error) {
 	return &out, nil
 }
 
+// doTaskAction is a generic helper for task subpath operations that decode a typed response.
+func doTaskAction[T any](c *Client, method, taskID, suffix, decodeErrPrefix string) (*T, error) {
+	var out T
+	path := "/v1/tasks/" + url.PathEscape(taskID) + suffix
+	if err := c.doTaskPath(method, path, &out, decodeErrPrefix); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
 // doTaskPath performs a request to a task subpath and decodes the JSON response into out.
 func (c *Client) doTaskPath(method, path string, out interface{}, decodeErrPrefix string) error {
 	resp, err := c.doRequest(method, path, nil, nil)
@@ -184,14 +194,8 @@ func (c *Client) doTaskPath(method, path string, out interface{}, decodeErrPrefi
 }
 
 // CancelTask calls POST /v1/tasks/{id}/cancel (requires auth).
-//
-//nolint:dupl // same pattern as GetTaskResult by design
 func (c *Client) CancelTask(taskID string) (*userapi.CancelTaskResponse, error) {
-	var out userapi.CancelTaskResponse
-	if err := c.doTaskPath(http.MethodPost, "/v1/tasks/"+url.PathEscape(taskID)+"/cancel", &out, "decode cancel task response"); err != nil {
-		return nil, err
-	}
-	return &out, nil
+	return doTaskAction[userapi.CancelTaskResponse](c, http.MethodPost, taskID, "/cancel", "decode cancel task response")
 }
 
 // GetTaskLogs calls GET /v1/tasks/{id}/logs (requires auth).
@@ -238,6 +242,35 @@ type ListModelEntry struct {
 func (c *Client) ListModels() (*ListModelsResponse, error) {
 	var out ListModelsResponse
 	if err := c.doGetJSON("/v1/models", &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// ProjectEntry is one project returned by GET /v1/projects.
+type ProjectEntry struct {
+	ID   string `json:"id"`
+	Name string `json:"name"`
+}
+
+// ListProjectsResponse is the response from GET /v1/projects.
+type ListProjectsResponse struct {
+	Data []ProjectEntry `json:"data"`
+}
+
+// ListProjects calls GET /v1/projects (requires auth).
+func (c *Client) ListProjects() (*ListProjectsResponse, error) {
+	var out ListProjectsResponse
+	if err := c.doGetJSON("/v1/projects", &out); err != nil {
+		return nil, err
+	}
+	return &out, nil
+}
+
+// GetProject calls GET /v1/projects/{id} (requires auth).
+func (c *Client) GetProject(id string) (*ProjectEntry, error) {
+	var out ProjectEntry
+	if err := c.doGetJSON("/v1/projects/"+url.PathEscape(id), &out); err != nil {
 		return nil, err
 	}
 	return &out, nil
@@ -711,14 +744,8 @@ func (c *Client) CreateTask(req *userapi.CreateTaskRequest) (*userapi.TaskRespon
 }
 
 // GetTaskResult calls GET /v1/tasks/{id}/result (requires auth).
-//
-//nolint:dupl // same pattern as CancelTask by design
 func (c *Client) GetTaskResult(taskID string) (*userapi.TaskResultResponse, error) {
-	var out userapi.TaskResultResponse
-	if err := c.doTaskPath(http.MethodGet, "/v1/tasks/"+url.PathEscape(taskID)+"/result", &out, "decode task result response"); err != nil {
-		return nil, err
-	}
-	return &out, nil
+	return doTaskAction[userapi.TaskResultResponse](c, http.MethodGet, taskID, "/result", "decode task result response")
 }
 
 // GetBytes performs an authenticated GET and returns the body (for stub endpoints like /v1/creds).

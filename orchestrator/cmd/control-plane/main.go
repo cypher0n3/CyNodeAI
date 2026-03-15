@@ -51,38 +51,30 @@ func runMain() int {
 	return runMainWithContext(context.Background(), nil)
 }
 
+// openStoreWithHook opens a database.Store using openFn. Returns nil store when migrateOnly and open succeeds.
+func openStoreWithHook(ctx context.Context, openFn func(context.Context, string) (database.Store, error), connURL string, logger *slog.Logger, migrateOnly bool) (database.Store, error) {
+	s, err := openFn(ctx, connURL)
+	if err != nil {
+		logger.Error("failed to connect to database", "error", err)
+		return nil, err
+	}
+	if s != nil && migrateOnly {
+		logger.Info("schema applied (migrate-only)")
+		return nil, nil
+	}
+	return s, nil
+}
+
 // resolveStore opens the DB when store is nil (using testOpenStore or database.Open). Returns (store, nil), (nil, nil) when migrateOnly after open, or (nil, err).
-//
-//nolint:gocognit,dupl // test hooks and real open share the same migrateOnly handling by design
 func resolveStore(ctx context.Context, store database.Store, cfg *config.OrchestratorConfig, logger *slog.Logger, migrateOnly bool) (database.Store, error) {
 	if store != nil {
 		return store, nil
 	}
 	if testOpenStore != nil {
-		var err error
-		store, err = testOpenStore(ctx, cfg.DatabaseURL)
-		if err != nil {
-			logger.Error("failed to connect to database", "error", err)
-			return nil, err
-		}
-		if store != nil && migrateOnly {
-			logger.Info("schema applied (migrate-only)")
-			return nil, nil
-		}
-		return store, nil
+		return openStoreWithHook(ctx, testOpenStore, cfg.DatabaseURL, logger, migrateOnly)
 	}
 	if testDatabaseOpen != nil {
-		var err error
-		store, err = testDatabaseOpen(ctx, cfg.DatabaseURL)
-		if err != nil {
-			logger.Error("failed to connect to database", "error", err)
-			return nil, err
-		}
-		if store != nil && migrateOnly {
-			logger.Info("schema applied (migrate-only)")
-			return nil, nil
-		}
-		return store, nil
+		return openStoreWithHook(ctx, testDatabaseOpen, cfg.DatabaseURL, logger, migrateOnly)
 	}
 	db, err := database.Open(ctx, cfg.DatabaseURL)
 	if err != nil {
