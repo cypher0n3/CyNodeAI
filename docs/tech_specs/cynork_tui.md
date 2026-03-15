@@ -197,6 +197,7 @@ The TUI SHOULD follow the same broad rendering pattern used by modern chat tools
   When they do not fit, the implementation MAY wrap to a second compact line, but the label and `/show-thinking` hint MUST remain visible without horizontal scrolling.
 - If hidden `thinking` updates arrive while the turn is still streaming and the block remains collapsed, the implementation MUST update the same placeholder block in place rather than appending duplicate collapsed-thinking rows.
 - `tool_call` and `tool_result` parts MUST render as distinct non-prose rows.
+  The canonical slash-command controls for this behavior are `/show-tool-output` and `/hide-tool-output` as defined in [TUI slash commands](cynork_tui_slash_commands.md#spec-cynai-client-cynorktui-localslashcommands).
   When the user has "show tool output" enabled, tool-call invocations and results are displayed as distinct items with the same secondary visual treatment used for thinking blocks.
   When "show tool output" is disabled (the default), tool-call and tool-result parts render as compact collapsed placeholder rows (similar to thinking placeholders) with a primary label beginning with `Tool` and an explicit expand hint that includes the literal command `/show-tool-output`.
   The collapsed tool-output block MUST use the same secondary visual treatment as collapsed thinking blocks (lower-emphasis foreground, dedicated container, compact padding).
@@ -356,17 +357,23 @@ The composer MAY support `@` references to local files.
 
 - [REQ-CLIENT-0187](../requirements/client.md#req-client-0187)
 - [REQ-CLIENT-0211](../requirements/client.md#req-client-0211)
+- [REQ-CLIENT-0217](../requirements/client.md#req-client-0217)
 
 TUI-specific preferences MAY live in the same config directory as the rest of cynork.
 
 - TUI-specific preferences are stored in the same cynork YAML config file described in [cynork_cli.md](cynork_cli.md#spec-cynai-client-cliconfigfilelocation).
-- Supported fields MAY include default model, preferred composer mode, context-pane default visibility, queued-draft behavior, thinking-toggle default, and keybinding overrides.
+- Supported fields MAY include default model, preferred composer mode, context-pane default visibility, queued-draft behavior, thinking-toggle default, tool-output-toggle default, and keybinding overrides.
 - Supported fields MAY also include context-pane width and queued-draft send mode when those behaviors are implemented.
 - The canonical first-pass key for persisted thinking visibility is `tui.show_thinking_by_default` (boolean).
 - When `tui.show_thinking_by_default` is `true`, newly started interactive TUI or chat sessions MUST expand retained thinking blocks by default.
 - When `tui.show_thinking_by_default` is `false` or absent, newly started interactive TUI or chat sessions MUST start in the collapsed-thinking presentation.
 - `/show-thinking` MUST update `tui.show_thinking_by_default` to `true` in the local config and apply that change immediately to the current session.
 - `/hide-thinking` MUST update `tui.show_thinking_by_default` to `false` in the local config and apply that change immediately to the current session.
+- The canonical first-pass key for persisted tool-output visibility is `tui.show_tool_output_by_default` (boolean).
+- When `tui.show_tool_output_by_default` is `true`, newly started interactive TUI or chat sessions MUST expand retained `tool_call` and `tool_result` blocks by default.
+- When `tui.show_tool_output_by_default` is `false` or absent, newly started interactive TUI or chat sessions MUST start in the collapsed-tool-output presentation.
+- `/show-tool-output` MUST update `tui.show_tool_output_by_default` to `true` in the local config and apply that change immediately to the current session.
+- `/hide-tool-output` MUST update `tui.show_tool_output_by_default` to `false` in the local config and apply that change immediately to the current session.
 - TUI-specific config MUST NOT store secrets, passwords, tokens, or message content.
 - When written, TUI config SHOULD follow the same atomic-write and permission rules as the main cynork config.
 

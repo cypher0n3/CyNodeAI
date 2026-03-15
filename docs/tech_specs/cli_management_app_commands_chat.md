@@ -227,7 +227,7 @@ If the command is interactive and takes over the terminal, the implementation MU
 
 The canonical interactive slash-command catalog, syntax, argument rules, and execution semantics are defined in [cynork_tui_slash_commands.md](cynork_tui_slash_commands.md).
 Interactive `cynork chat` MUST implement the same slash-command contract without user-visible divergence.
-That canonical contract includes the local-session commands, thinking-visibility controls, and thread commands that used to be restated here.
+That canonical contract includes the local-session commands, thinking-visibility controls, tool-output-visibility controls, and thread commands that used to be restated here.
 
 #### Model Selection Slash Commands
 

@@ -8,6 +8,8 @@
   - [Local Session Slash Commands Traces To](#local-session-slash-commands-traces-to)
   - [Thinking Visibility Behavior](#thinking-visibility-behavior)
   - [Thinking Visibility Behavior Traces To](#thinking-visibility-behavior-traces-to)
+  - [Tool Output Visibility Behavior](#tool-output-visibility-behavior)
+  - [Tool Output Visibility Behavior Traces To](#tool-output-visibility-behavior-traces-to)
   - [`LocalSlashCommands` Algorithm](#localslashcommands-algorithm)
 - [Thread Slash Commands](#thread-slash-commands)
   - [Thread Slash Commands Traces To](#thread-slash-commands-traces-to)
@@ -96,6 +98,8 @@ The TUI MUST provide these local slash commands:
   When omitted, the client MUST show the current gateway URL in the scrollback or status so the user can see which gateway is in use.
 - **`/show-thinking`**: Reveal retained `thinking` parts for the current session transcript.
 - **`/hide-thinking`**: Collapse retained `thinking` parts back to the hidden-by-default state.
+- **`/show-tool-output`**: Reveal retained `tool_call` and `tool_result` parts for the current session transcript.
+- **`/hide-tool-output`**: Collapse retained `tool_call` and `tool_result` parts back to the hidden-by-default state.
 - **`/exit`**: End the session and return control to the shell.
 - **`/quit`**: Synonym for `/exit`.
 
@@ -103,10 +107,12 @@ The TUI MUST provide these local slash commands:
 
 - [REQ-CLIENT-0164](../requirements/client.md#req-client-0164)
 - [REQ-CLIENT-0183](../requirements/client.md#req-client-0183)
+- [REQ-CLIENT-0193](../requirements/client.md#req-client-0193)
 - [REQ-CLIENT-0195](../requirements/client.md#req-client-0195)
 - [REQ-CLIENT-0208](../requirements/client.md#req-client-0208)
 - [REQ-CLIENT-0211](../requirements/client.md#req-client-0211)
 - [REQ-CLIENT-0214](../requirements/client.md#req-client-0214)
+- [REQ-CLIENT-0217](../requirements/client.md#req-client-0217)
 
 ### Thinking Visibility Behavior
 
@@ -131,6 +137,27 @@ They MUST NOT modify stored message content in the database, canonical plain-tex
 - [REQ-CLIENT-0208](../requirements/client.md#req-client-0208)
 - [REQ-CLIENT-0211](../requirements/client.md#req-client-0211)
 
+### Tool Output Visibility Behavior
+
+- Spec ID: `CYNAI.CLIENT.CynorkTui.ToolOutputVisibilityBehavior` <a id="spec-cynai-client-cynorktui-tooloutputvisibilitybehavior"></a>
+
+Tool-output-visibility commands are local presentation controls.
+They MUST NOT modify stored message content in the database, canonical plain-text transcript content, or gateway-side persisted structured turn data.
+
+- `/show-tool-output` MUST apply to already loaded assistant turns in the current transcript view.
+- `/show-tool-output` MUST also apply to older assistant turns loaded later through scrollback or history retrieval in the same session.
+- `/hide-tool-output` MUST restore collapsed placeholders for retained `tool_call` and `tool_result` parts without removing the underlying retained structured data.
+- The collapsed placeholder restored by `/hide-tool-output` MUST remain visible as a secondary-styled transcript element that indicates tool activity and SHOULD hint `/show-tool-output` as the expand action.
+- When a turn has no retained `tool_call` or `tool_result` part, these commands MUST leave that turn unchanged.
+- `/show-tool-output` MUST update the persisted local config key `tui.show_tool_output_by_default` to `true`.
+- `/hide-tool-output` MUST update the persisted local config key `tui.show_tool_output_by_default` to `false`.
+- Future executions of `cynork tui` or interactive `cynork chat` MUST load that stored preference and use it as the starting tool-output-visibility mode.
+
+### Tool Output Visibility Behavior Traces To
+
+- [REQ-CLIENT-0193](../requirements/client.md#req-client-0193)
+- [REQ-CLIENT-0217](../requirements/client.md#req-client-0217)
+
 ### `LocalSlashCommands` Algorithm
 
 <a id="algo-cynai-client-cynorktui-localslashcommands"></a>
@@ -145,7 +172,12 @@ They MUST NOT modify stored message content in the database, canonical plain-tex
 8. Persist `tui.show_thinking_by_default: true` to the local cynork YAML config using the same atomic-write rules as the main config file.
 9. For `/hide-thinking`, set the session thinking-visibility mode to hidden and re-render all currently loaded assistant turns so retained `thinking` parts return to the collapsed presentation.
 10. Persist `tui.show_thinking_by_default: false` to the local cynork YAML config using the same atomic-write rules as the main config file.
-11. For `/exit` or `/quit`, close the interactive session cleanly and return success.
+11. For `/show-tool-output`, set the session tool-output-visibility mode to shown.
+12. Re-render all currently loaded assistant turns so retained `tool_call` and `tool_result` parts display as expanded non-prose items instead of collapsed placeholders.
+13. Persist `tui.show_tool_output_by_default: true` to the local cynork YAML config using the same atomic-write rules as the main config file.
+14. For `/hide-tool-output`, set the session tool-output-visibility mode to hidden and re-render all currently loaded assistant turns so retained `tool_call` and `tool_result` parts return to the collapsed presentation.
+15. Persist `tui.show_tool_output_by_default: false` to the local cynork YAML config using the same atomic-write rules as the main config file.
+16. For `/exit` or `/quit`, close the interactive session cleanly and return success.
 
 ## Thread Slash Commands
 
