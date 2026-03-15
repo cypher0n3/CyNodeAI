@@ -13,6 +13,11 @@
   - [Transcript Rendering Requirements Traces](#transcript-rendering-requirements-traces)
 - [Generation State](#generation-state)
   - [Generation State Traces To](#generation-state-traces-to)
+  - [Iteration Tracking and Per-Iteration Overwrite Handling](#iteration-tracking-and-per-iteration-overwrite-handling)
+  - [Heartbeat Rendering During Non-Streaming Fallback](#heartbeat-rendering-during-non-streaming-fallback)
+  - [Thinking Content Storage During Streaming](#thinking-content-storage-during-streaming)
+  - [Tool-Call Content Storage During Streaming](#tool-call-content-storage-during-streaming)
+  - [Secure Buffer Handling for In-Flight Streaming Content](#secure-buffer-handling-for-in-flight-streaming-content)
 - [Connection Recovery](#connection-recovery)
   - [Connection Recovery Traces To](#connection-recovery-traces-to)
 - [Completion and Discovery](#completion-and-discovery)
@@ -191,7 +196,10 @@ The TUI SHOULD follow the same broad rendering pattern used by modern chat tools
 - The collapsed block SHOULD fit on one compact row when the label and hint fit within the available transcript width.
   When they do not fit, the implementation MAY wrap to a second compact line, but the label and `/show-thinking` hint MUST remain visible without horizontal scrolling.
 - If hidden `thinking` updates arrive while the turn is still streaming and the block remains collapsed, the implementation MUST update the same placeholder block in place rather than appending duplicate collapsed-thinking rows.
-- `tool_call` and `tool_result` parts SHOULD render as distinct non-prose rows with redacted, truncated previews when needed.
+- `tool_call` and `tool_result` parts MUST render as distinct non-prose rows.
+  When the user has "show tool output" enabled, tool-call invocations and results are displayed as distinct items with the same secondary visual treatment used for thinking blocks.
+  When "show tool output" is disabled (the default), tool-call and tool-result parts render as compact collapsed placeholder rows (similar to thinking placeholders) with a primary label beginning with `Tool` and an explicit expand hint that includes the literal command `/show-tool-output`.
+  The collapsed tool-output block MUST use the same secondary visual treatment as collapsed thinking blocks (lower-emphasis foreground, dedicated container, compact padding).
 - `download_ref` and `attachment_ref` parts SHOULD render as explicit items rather than being flattened into prose.
 - When one user prompt yields multiple assistant-side items, the TUI MUST preserve their order as one logical assistant turn.
 - If only canonical plain-text content is available, the TUI MUST fall back to a coherent text transcript without inventing tool or thinking rows.
@@ -206,6 +214,8 @@ The TUI SHOULD follow the same broad rendering pattern used by modern chat tools
 - [REQ-CLIENT-0194](../requirements/client.md#req-client-0194)
 - [REQ-CLIENT-0195](../requirements/client.md#req-client-0195)
 - [REQ-CLIENT-0208](../requirements/client.md#req-client-0208)
+- [REQ-CLIENT-0216](../requirements/client.md#req-client-0216)
+- [REQ-CLIENT-0217](../requirements/client.md#req-client-0217)
 
 ## Generation State
 
@@ -216,6 +226,12 @@ The TUI SHOULD follow the same broad rendering pattern used by modern chat tools
 - [REQ-CLIENT-0185](../requirements/client.md#req-client-0185)
 - [REQ-CLIENT-0209](../requirements/client.md#req-client-0209)
 - [REQ-CLIENT-0215](../requirements/client.md#req-client-0215)
+- [REQ-CLIENT-0216](../requirements/client.md#req-client-0216)
+- [REQ-CLIENT-0217](../requirements/client.md#req-client-0217)
+- [REQ-CLIENT-0218](../requirements/client.md#req-client-0218)
+- [REQ-CLIENT-0219](../requirements/client.md#req-client-0219)
+- [REQ-CLIENT-0220](../requirements/client.md#req-client-0220)
+- [REQ-CLIENT-0221](../requirements/client.md#req-client-0221)
 
 - The TUI expects real token-by-token streaming: the gateway MUST deliver visible assistant text as incremental token deltas on the standard streaming path, not as one buffered payload at completion.
 - While a response is in progress, the TUI MUST render exactly one in-flight assistant turn and MUST update that turn in place rather than appending duplicate assistant rows.
@@ -238,6 +254,53 @@ The TUI SHOULD follow the same broad rendering pattern used by modern chat tools
 - Final reconciliation MUST preserve already streamed visible assistant text (or the amended text if an amendment event was received), MUST keep the final item ordering, and MUST NOT duplicate visible assistant text that was already shown during streaming.
 - Final reconciliation MUST discard ephemeral progress-only labels and MUST retain only the final persisted transcript content and any separately rendered structured items.
 - If the selected backend path cannot provide true incremental visible-text streaming, the TUI MUST fall back to a degraded in-flight state indicator and then replace that row with the final ordered assistant turn once completion arrives.
+
+### Iteration Tracking and Per-Iteration Overwrite Handling
+
+The TUI tracks iteration boundaries signaled by `cynodeai.iteration_start` SSE events during streaming.
+Each `iteration_start` event carries a 1-based iteration number; the TUI records the byte offset in its `streamBuf` where each iteration's visible text begins.
+
+- When a per-iteration scoped overwrite event arrives (`cynodeai.amendment` with `"scope": "iteration"` and an `"iteration"` field), the TUI replaces only the targeted iteration's visible text segment in `streamBuf` using the stored offset boundaries.
+  Text from other iterations remains unchanged.
+- When a per-turn scoped overwrite event arrives (`cynodeai.amendment` with `"scope": "turn"`), the TUI replaces the entire `streamBuf` content for the current assistant turn.
+- The TUI MUST handle multiple overwrite events per turn (e.g., one per-iteration overwrite for think-tag leakage followed by a post-stream per-turn overwrite for secret redaction).
+
+### Heartbeat Rendering During Non-Streaming Fallback
+
+When the gateway cannot provide real token streaming, it emits periodic `cynodeai.heartbeat` SSE events instead of visible-text deltas.
+
+- The TUI renders heartbeat events as a progress indicator attached to the in-flight assistant turn (e.g., "Still working... 15s") using the elapsed time from the heartbeat payload.
+- The heartbeat indicator replaces the default spinner label while heartbeats are active.
+- When the full response arrives as a single visible-text delta after the heartbeat phase, the TUI renders it as the normal in-flight content and removes the heartbeat indicator.
+- Heartbeat events are display-only; the TUI does not accumulate them in `streamBuf`.
+
+### Thinking Content Storage During Streaming
+
+The TUI accumulates full thinking content received as `cynodeai.thinking_delta` SSE events during streaming, stored per assistant turn.
+
+- Thinking content is accumulated in a dedicated thinking buffer, separate from the visible-text `streamBuf`.
+- When the user has "show thinking" enabled, thinking content is displayed in real time as it streams, rendered in the same collapsed/expandable block format used for thinking content in completed turns (see [Transcript Rendering](#spec-cynai-client-cynorktui-transcriptrendering)).
+- When "show thinking" is disabled (the default), thinking content is hidden during streaming but continues to be stored.
+  Toggling "show thinking" on after streaming completes (or mid-stream) instantly reveals the stored thinking content without re-fetching from the server.
+- The thinking buffer is not affected by visible-text overwrite events (thinking content has its own accumulation scope).
+
+### Tool-Call Content Storage During Streaming
+
+The TUI accumulates tool-call content received as `cynodeai.tool_call` SSE events during streaming, stored per assistant turn.
+
+- Tool-call content is accumulated in a dedicated tool-call buffer, separate from the visible-text `streamBuf`.
+- When the user has "show tool output" enabled, tool-call content is displayed in real time as distinct non-prose items in the transcript.
+- When "show tool output" is disabled (the default), tool-call content is hidden during streaming but continues to be stored.
+  Toggling "show tool output" on after streaming completes (or mid-stream) instantly reveals the stored tool-call content without re-fetching.
+- The tool-call buffer is not affected by visible-text overwrite events (tool-call content has its own accumulation scope).
+
+### Secure Buffer Handling for In-Flight Streaming Content
+
+Secret-bearing in-flight buffer code paths MUST run inside `runtime/secret` (`secret.Do`) when available, per REQ-STANDS-0133.
+This includes the `applyStreamDelta` method that appends to `streamBuf`, the amendment-replacement path, and the thinking/tool-call buffer append paths.
+
+The TUI's buffer is display-only and is not a persistence or redaction layer, but the in-memory content is secret-bearing until an amendment event replaces it.
+When `runtime/secret` is not available, the TUI MUST use best-effort secure erasure (zeroing the backing slice before dropping the reference), using the shared `runWithSecret` utility from `go_shared_libs/secretutil/` per [CYNAI.STANDS.SecretHandling](go_rest_api_standards.md#spec-cynai-stands-secrethandling).
 
 ## Connection Recovery
 

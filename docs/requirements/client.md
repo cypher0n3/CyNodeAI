@@ -493,3 +493,22 @@ Web Console-specific requirements live in [webcon.md](webcon.md) (REQ-WEBCON-*).
   [CYNAI.CLIENT.CynorkTui.GenerationState](../tech_specs/cynork_tui.md#spec-cynai-client-cynorktui-generationstate)
   [CYNAI.USRGWY.OpenAIChatApi.StreamingRedactionPipeline](../tech_specs/openai_compatible_chat_api.md#spec-cynai-usrgwy-openaichatapi-streamingredactionpipeline)
   <a id="req-client-0215"></a>
+- **REQ-CLIENT-0216:** The TUI MUST store full thinking content received during streaming and MUST support a user-togglable "show thinking" mode that displays or hides thinking content instantly without re-fetching from the server.
+  [CYNAI.CLIENT.CynorkTui.GenerationState](../tech_specs/cynork_tui.md#spec-cynai-client-cynorktui-generationstate)
+  <a id="req-client-0216"></a>
+- **REQ-CLIENT-0217:** The TUI MUST store tool-call content received during streaming and MUST support a user-togglable "show tool output" configuration option that displays or hides tool-call content instantly without re-fetching from the server.
+  [CYNAI.CLIENT.CynorkTui.GenerationState](../tech_specs/cynork_tui.md#spec-cynai-client-cynorktui-generationstate)
+  <a id="req-client-0217"></a>
+- **REQ-CLIENT-0218:** The TUI MUST track iteration boundaries signaled by `iteration_start` SSE events and MUST handle per-iteration scoped overwrite events by replacing only the targeted iteration's visible text segment.
+  [CYNAI.CLIENT.CynorkTui.GenerationState](../tech_specs/cynork_tui.md#spec-cynai-client-cynorktui-generationstate)
+  <a id="req-client-0218"></a>
+- **REQ-CLIENT-0219:** The TUI MUST handle per-turn scoped overwrite events by replacing the entire accumulated visible text for the current assistant turn.
+  [CYNAI.CLIENT.CynorkTui.GenerationState](../tech_specs/cynork_tui.md#spec-cynai-client-cynorktui-generationstate)
+  <a id="req-client-0219"></a>
+- **REQ-CLIENT-0220:** The TUI MUST render `cynodeai.heartbeat` events as a progress indicator when the backend cannot provide real token streaming.
+  [CYNAI.CLIENT.CynorkTui.GenerationState](../tech_specs/cynork_tui.md#spec-cynai-client-cynorktui-generationstate)
+  [CYNAI.USRGWY.OpenAIChatApi.StreamingHeartbeatFallback](../tech_specs/openai_compatible_chat_api.md#spec-cynai-usrgwy-openaichatapi-streamingheartbeatfallback)
+  <a id="req-client-0220"></a>
+- **REQ-CLIENT-0221:** The TUI MUST wrap secret-bearing in-flight buffer code paths inside `runtime/secret` (`secret.Do`) when available, per REQ-STANDS-0133.
+  [CYNAI.CLIENT.CynorkTui.GenerationState](../tech_specs/cynork_tui.md#spec-cynai-client-cynorktui-generationstate)
+  <a id="req-client-0221"></a>

@@ -230,3 +230,21 @@ It covers user-facing REST API gateway behavior and related API contracts.
   When no secrets are detected, no amendment event is emitted and the accumulated streamed text is persisted as-is.
   [CYNAI.USRGWY.OpenAIChatApi.StreamingRedactionPipeline](../tech_specs/openai_compatible_chat_api.md#spec-cynai-usrgwy-openaichatapi-streamingredactionpipeline)
   <a id="req-usrgwy-0151"></a>
+- **REQ-USRGWY-0152:** The gateway MUST use per-endpoint native SSE formats: the `/v1/chat/completions` endpoint MUST emit visible-text deltas in OpenAI Chat Completions format with `cynodeai.*` named SSE events for extensions; the `/v1/responses` endpoint MUST use the OpenAI Responses event model with `cynodeai.*` named SSE events for CyNodeAI-specific extensions.
+  [CYNAI.USRGWY.OpenAIChatApi.StreamingPerEndpointSSEFormat](../tech_specs/openai_compatible_chat_api.md#spec-cynai-usrgwy-openaichatapi-streamingperendpointsseformat)
+  <a id="req-usrgwy-0152"></a>
+- **REQ-USRGWY-0153:** The gateway MUST maintain separate accumulators for visible text, thinking content, and tool-call content during streaming, and MUST run the post-stream secret scanner on all three accumulators before emitting the terminal `[DONE]` event.
+  [CYNAI.USRGWY.OpenAIChatApi.StreamingRedactionPipeline](../tech_specs/openai_compatible_chat_api.md#spec-cynai-usrgwy-openaichatapi-streamingredactionpipeline)
+  <a id="req-usrgwy-0153"></a>
+- **REQ-USRGWY-0154:** The gateway MUST persist thinking content and tool-call content alongside visible text as part of the structured assistant turn, using only the redacted versions.
+  [CYNAI.USRGWY.OpenAIChatApi.StreamingRedactionPipeline](../tech_specs/openai_compatible_chat_api.md#spec-cynai-usrgwy-openaichatapi-streamingredactionpipeline)
+  <a id="req-usrgwy-0154"></a>
+- **REQ-USRGWY-0155:** The gateway MUST relay PMA overwrite events as `cynodeai.amendment` SSE events and MUST update its own accumulator to match the overwrite content, supporting both per-iteration and per-turn scoped overwrites.
+  [CYNAI.USRGWY.OpenAIChatApi.StreamingRedactionPipeline](../tech_specs/openai_compatible_chat_api.md#spec-cynai-usrgwy-openaichatapi-streamingredactionpipeline)
+  <a id="req-usrgwy-0155"></a>
+- **REQ-USRGWY-0156:** When the upstream PMA path cannot provide real token streaming, the gateway MUST emit periodic `cynodeai.heartbeat` SSE events instead of fake chunking or silent blocking, then MUST deliver the full response as a single visible-text delta followed by the terminal event.
+  [CYNAI.USRGWY.OpenAIChatApi.StreamingHeartbeatFallback](../tech_specs/openai_compatible_chat_api.md#spec-cynai-usrgwy-openaichatapi-streamingheartbeatfallback)
+  <a id="req-usrgwy-0156"></a>
+- **REQ-USRGWY-0157:** The gateway MUST wrap secret-bearing accumulator code paths inside `runtime/secret` (`secret.Do`) when available, per REQ-STANDS-0133.
+  [CYNAI.USRGWY.OpenAIChatApi.StreamingRedactionPipeline](../tech_specs/openai_compatible_chat_api.md#spec-cynai-usrgwy-openaichatapi-streamingredactionpipeline)
+  <a id="req-usrgwy-0157"></a>

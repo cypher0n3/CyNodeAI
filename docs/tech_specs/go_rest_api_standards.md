@@ -182,11 +182,21 @@ The following requirement applies to any Go code that handles secrets, credentia
 #### Secret Handling Applicable Requirements Requirements Traces
 
 - [REQ-STANDS-0133](../requirements/stands.md#req-stands-0133)
+- [REQ-STANDS-0135](../requirements/stands.md#req-stands-0135)
 
 Implementation requirement
 
 - Go code that touches secrets, credentials, or tokens (e.g. bearer tokens, API keys, decrypted credential plaintext, secure-store master keys) MUST use the Go 1.26 `runtime/secret` package (enabled via `GOEXPERIMENT=secret` at build time) to wrap the code path so that temporaries (registers, stack, heap used during the operation) are securely erased before returning.
 - When `runtime/secret` is not available (unsupported platform or Go version), implementations MUST use best-effort secure erasure (e.g. zeroing buffers that held plaintext or keys) before returning from those code paths and MUST NOT log or retain plaintext.
+
+#### Shared `RunWithSecret` Utility
+
+The build-tag-gated wrapper is implemented in `go_shared_libs/secretutil/` as `RunWithSecret(f func())`.
+It calls `runtime/secret.Do(f)` when built with `GOEXPERIMENT=runtimesecret` and runs `f()` otherwise (callers rely on best-effort secure erasure inside `f` when the experiment is not set).
+
+- Components that handle secret-bearing data (PMA, orchestrator, cynork, worker node) MUST import and use `secretutil.RunWithSecret` from `go_shared_libs/secretutil/` rather than duplicating the pattern.
+- The build-tag gating MUST be preserved: `goexperiment.runtimesecret` for the `secret.Do` path, `!goexperiment.runtimesecret` for the fallback.
+- New code that wraps secret-bearing code paths MUST use the shared utility; existing code that had its own copy MUST migrate to the shared import.
 
 ## Observability
 

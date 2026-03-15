@@ -31,6 +31,8 @@
   - [Streaming Redaction Pipeline Cancellation](#streaming-redaction-pipeline-cancellation)
   - [Streaming Redaction Pipeline Error Conditions](#streaming-redaction-pipeline-error-conditions)
   - [Streaming Redaction Pipeline Traces To](#streaming-redaction-pipeline-traces-to)
+  - [Streaming Per-Endpoint SSE Format Rule](#streaming-per-endpoint-sse-format-rule)
+  - [Streaming Heartbeat Fallback Operation](#streaming-heartbeat-fallback-operation)
 - [Normalized Assistant Output](#normalized-assistant-output)
   - [Normalization Rules](#normalization-rules)
   - [Normalized Assistant Output Requirements Traces](#normalized-assistant-output-requirements-traces)
@@ -263,9 +265,13 @@ The OpenAI-compatible interactive chat surface MUST support streaming mode for b
 - The stream MUST preserve event order for one logical assistant turn.
 - The stream MUST distinguish visible assistant text updates from hidden thinking or reasoning updates.
 - Hidden thinking or reasoning MUST NOT be emitted as canonical visible-text deltas.
+- Full thinking content MUST be relayed to the client as typed SSE events so that the client can store and optionally display it; see [DP-3 in the streaming assessment](../dev_docs/2026-03-14_pma_streaming_to_tui_assessment.md).
+- Tool-call content detected by PMA's state machine MUST be relayed as typed SSE events, separate from visible-text deltas.
 - Tool-progress updates SHOULD be emitted as explicit non-prose progress events when available.
+- Iteration boundary events (`iteration_start`) MUST be relayed so clients can track per-iteration overwrite scope boundaries.
 - The stream MUST end with a clear terminal completion event, terminal error event, or cancellation event so clients can reconcile the in-flight turn deterministically.
 - If the client disconnect prevents sending a final cancellation event, the gateway MUST still record and handle the request internally as canceled rather than allowing the stream job to run indefinitely.
+- When the upstream PMA path cannot provide real token streaming, the gateway MUST emit periodic `cynodeai.heartbeat` SSE events instead of fake chunking or silent blocking; see [Streaming Heartbeat Fallback](#spec-cynai-usrgwy-openaichatapi-streamingheartbeatfallback).
 
 ### Persistence and Reconciliation Requirements
 
@@ -277,6 +283,8 @@ The OpenAI-compatible interactive chat surface MUST support streaming mode for b
 
 - [REQ-USRGWY-0149](../requirements/usrgwy.md#req-usrgwy-0149)
 - [REQ-USRGWY-0150](../requirements/usrgwy.md#req-usrgwy-0150)
+- [REQ-USRGWY-0152](../requirements/usrgwy.md#req-usrgwy-0152)
+- [REQ-USRGWY-0156](../requirements/usrgwy.md#req-usrgwy-0156)
 - [REQ-CLIENT-0209](../requirements/client.md#req-client-0209)
 
 ## Streaming Redaction Pipeline
@@ -288,8 +296,24 @@ The gateway streams visible assistant text to the client immediately as tokens a
 Secret redaction runs synchronously after the upstream stream terminates but before the terminal `[DONE]` event is emitted to the client.
 If secrets are detected, a post-stream amendment event replaces the client-side accumulated text and only the redacted version is persisted.
 
+The handler goroutine maintains three `strings.Builder` accumulators: one for visible text, one for thinking content, and one for tool-call content.
+Every relayed visible-text delta, thinking delta, and tool-call event is appended to the corresponding accumulator.
+After the upstream PMA stream terminates, the post-stream secret scanner runs on **all three accumulators** before emitting the terminal `[DONE]` event.
+If secrets are detected in any accumulator, the handler emits a `cynodeai.amendment` SSE event scoped to the affected content type (using the `type` field to distinguish visible-text amendment from thinking-content amendment and tool-call-content amendment).
+
+When the handler receives an overwrite event from PMA (e.g., PMA-level secret detection or think-tag leakage correction), it MUST replace its own accumulator content to match, then relay the overwrite as a `cynodeai.amendment` SSE event.
+Per-iteration overwrites update the relevant segment of the accumulator; per-turn overwrites replace the entire accumulator content.
+See [CYNAI.PMAGNT.PMAStreamingOverwrite](cynode_pma.md#spec-cynai-pmagnt-pmastreamingoverwrite) for overwrite scope definitions.
+
+The gateway persists thinking content and tool-call content alongside visible text as part of the structured assistant turn, using only the redacted versions.
+On thread reload, the client can retrieve thinking and tool-call content and display them if the user has the corresponding display option enabled.
+
+Secret-bearing accumulator code paths MUST run inside `runtime/secret` (`secret.Do`) when available, per REQ-STANDS-0133.
+The per-delta append path and the post-stream scan-and-persist block should both run inside `secret.Do`.
+When `runtime/secret` is not available, the handler MUST use best-effort secure erasure, using the shared `runWithSecret` utility from `go_shared_libs/secretutil/` per [CYNAI.STANDS.SecretHandling](go_rest_api_standards.md#spec-cynai-stands-secrethandling).
+
 The design uses two goroutines, one channel, and zero shared mutable state between goroutines.
-The handler goroutine is the sole writer to the HTTP response and the sole accessor of the accumulator buffer.
+The handler goroutine is the sole writer to the HTTP response and the sole accessor of the accumulator buffers.
 The reader goroutine is the sole consumer of the upstream response body.
 
 ### Streaming Redaction Pipeline Diagram
@@ -344,23 +368,25 @@ sequenceDiagram
    - Reads and parses upstream SSE events in a loop.
    - For each parsed event, selects on `tokenCh <- event` or `ctx.Done()`; if the context is canceled, the reader exits immediately.
    - When the upstream stream terminates (EOF or terminal event), the reader closes `tokenCh` and returns.
-4. The handler goroutine initializes a `strings.Builder` as the **accumulator** for visible assistant text and enters a select loop over `tokenCh` and `ctx.Done()`: <a id="algo-cynai-usrgwy-openaichatapi-streamingredactionpipeline-step-4"></a>
-   - **Visible-text delta**: append the delta text to the accumulator, then write the corresponding SSE `data:` event to the `http.ResponseWriter` and flush immediately.
-     The SSE payload follows the OpenAI streaming format (e.g. `choices[0].delta.content`).
-   - **Thinking or reasoning delta**: write the SSE event with the appropriate non-visible-text type and flush.
-     Do not append to the visible-text accumulator.
+4. The handler goroutine initializes three `strings.Builder` instances as **accumulators** (visible text, thinking content, tool-call content) and enters a select loop over `tokenCh` and `ctx.Done()`: <a id="algo-cynai-usrgwy-openaichatapi-streamingredactionpipeline-step-4"></a>
+   - **Visible-text delta**: append the delta text to the visible-text accumulator, then write the corresponding SSE event to the `http.ResponseWriter` and flush immediately.
+     The SSE payload follows the per-endpoint format rules; see [StreamingPerEndpointSSEFormat](#spec-cynai-usrgwy-openaichatapi-streamingperendpointsseformat).
+   - **Thinking delta**: append to the thinking accumulator, then write the SSE event with the appropriate typed event name (e.g., `event: cynodeai.thinking_delta`) and flush.
+   - **Tool-call event**: append to the tool-call accumulator, then write the SSE event (e.g., `event: cynodeai.tool_call`) and flush.
+   - **Iteration-start event**: relay as `event: cynodeai.iteration_start` and flush.
    - **Tool-progress event**: write the SSE event and flush.
+   - **Overwrite event from PMA**: apply the overwrite to the handler's own accumulator (per-iteration overwrites update the relevant segment; per-turn overwrites replace the entire accumulator content), then relay as `event: cynodeai.amendment` SSE event and flush.
    - **Channel closed** (upstream done): exit the loop and proceed to step 5.
    - **`ctx.Done()`**: proceed to [Cancellation](#streaming-redaction-pipeline-cancellation).
-5. After the loop exits, the handler goroutine runs the **secret scanner** on `accumulator.String()` synchronously.
+5. After the loop exits, the handler goroutine runs the **secret scanner** on all three accumulators synchronously.
    The scanner is a CPU-local operation (regex or pattern matching); it does not perform I/O. <a id="algo-cynai-usrgwy-openaichatapi-streamingredactionpipeline-step-5"></a>
-6. If the scanner reports one or more detected secrets: <a id="algo-cynai-usrgwy-openaichatapi-streamingredactionpipeline-step-6"></a>
-   - Build the redacted text by replacing each detected secret span with the literal `SECRET_REDACTED`.
-   - Write an SSE **amendment event** to the client containing the full redacted assistant text (see [Amendment Event Contract](#amendment-event-contract)) and flush.
+6. If the scanner reports one or more detected secrets in any accumulator: <a id="algo-cynai-usrgwy-openaichatapi-streamingredactionpipeline-step-6"></a>
+   - Build the redacted text by replacing each detected secret span with the literal `SECRET_REDACTED` in the affected accumulator(s).
+   - Write an SSE **amendment event** to the client for each affected content type containing the full redacted content (see [Amendment Event Contract](#amendment-event-contract)) and flush.
    - Record `redaction_applied = true` and `redaction_kinds` (e.g. `["api_key"]`) in the `chat_audit_log` row for this request.
-   - Use the redacted text as the final assistant content for persistence.
-7. If the scanner reports no secrets, use the accumulated text as-is for persistence. <a id="algo-cynai-usrgwy-openaichatapi-streamingredactionpipeline-step-7"></a>
-8. Persist the final (possibly redacted) assistant message to the chat thread using the standard structured-turn persistence path. <a id="algo-cynai-usrgwy-openaichatapi-streamingredactionpipeline-step-8"></a>
+   - Use the redacted text as the final content for persistence for each affected content type.
+7. If the scanner reports no secrets, use the accumulated content as-is for persistence. <a id="algo-cynai-usrgwy-openaichatapi-streamingredactionpipeline-step-7"></a>
+8. Persist the final (possibly redacted) assistant message to the chat thread using the standard structured-turn persistence path; this includes visible text, thinking content, and tool-call content as part of the structured turn. <a id="algo-cynai-usrgwy-openaichatapi-streamingredactionpipeline-step-8"></a>
 9. Write the terminal `[DONE]` SSE event to the client and flush. <a id="algo-cynai-usrgwy-openaichatapi-streamingredactionpipeline-step-9"></a>
 10. Call `wg.Wait()` to block until the reader goroutine has exited and released the upstream response body, then return from the handler. <a id="algo-cynai-usrgwy-openaichatapi-streamingredactionpipeline-step-10"></a>
 
@@ -369,8 +395,8 @@ sequenceDiagram
 The pipeline uses exactly two goroutines per streaming request.
 No shared mutable state exists between them; the channel is the sole communication path.
 
-- **Handler goroutine** (the HTTP handler's goroutine): sole writer to the `http.ResponseWriter`, sole accessor of the `strings.Builder` accumulator, sole caller of the secret scanner, sole writer of SSE events to the client.
-  No other goroutine touches the ResponseWriter or the accumulator at any time.
+- **Handler goroutine** (the HTTP handler's goroutine): sole writer to the `http.ResponseWriter`, sole accessor of the three `strings.Builder` accumulators (visible text, thinking, tool-call), sole caller of the secret scanner, sole writer of SSE events to the client.
+  No other goroutine touches the ResponseWriter or the accumulators at any time.
 - **Reader goroutine**: sole reader of the upstream HTTP response body, sole sender on `tokenCh`.
   Closes `tokenCh` when the upstream stream terminates (this close is the happens-before signal that all upstream data has been delivered).
   Defers closing the upstream response body.
@@ -386,7 +412,7 @@ Race condition prevention:
 
 - The `http.ResponseWriter` is accessed by the handler goroutine only.
   Go's `http.ResponseWriter` is not safe for concurrent use; this design ensures single-goroutine access.
-- The `strings.Builder` accumulator is accessed by the handler goroutine only.
+- The `strings.Builder` accumulators (all three) are accessed by the handler goroutine only.
   No lock is needed.
 - The upstream response body is read by the reader goroutine only.
   No concurrent reads.
@@ -447,7 +473,87 @@ This ensures that even partial assistant output that may contain secrets is neve
 - [REQ-USRGWY-0132](../requirements/usrgwy.md#req-usrgwy-0132)
 - [REQ-USRGWY-0149](../requirements/usrgwy.md#req-usrgwy-0149)
 - [REQ-USRGWY-0151](../requirements/usrgwy.md#req-usrgwy-0151)
+- [REQ-USRGWY-0153](../requirements/usrgwy.md#req-usrgwy-0153)
+- [REQ-USRGWY-0154](../requirements/usrgwy.md#req-usrgwy-0154)
+- [REQ-USRGWY-0155](../requirements/usrgwy.md#req-usrgwy-0155)
+- [REQ-USRGWY-0157](../requirements/usrgwy.md#req-usrgwy-0157)
 - [REQ-CLIENT-0215](../requirements/client.md#req-client-0215)
+
+### Streaming Per-Endpoint SSE Format Rule
+
+- Spec ID: `CYNAI.USRGWY.OpenAIChatApi.StreamingPerEndpointSSEFormat` <a id="spec-cynai-usrgwy-openaichatapi-streamingperendpointsseformat"></a>
+
+The gateway exposes two streaming endpoints with different industry-standard format expectations.
+Each endpoint speaks its native format for standard content types, with CyNodeAI-specific extensions as additive named SSE events that non-aware clients safely ignore.
+
+#### Chat Completions Endpoint SSE Mapping
+
+`POST /v1/chat/completions` maps PMA NDJSON events as follows:
+
+```text
+PMA NDJSON         SSE Wire Format
+────────────       ──────────────────────────────────────────────────────
+delta              Unnamed data: with choices[0].delta.content (OpenAI CC)
+thinking           event: cynodeai.thinking_delta  data: {"content":"…"}
+iteration_start    event: cynodeai.iteration_start data: {"iteration":N}
+tool_call          event: cynodeai.tool_call       data: {"name":"…","arguments":"…"}
+tool_progress      event: cynodeai.tool_progress   data: {"state":"…","tool":"…","preview":"…"}
+overwrite          event: cynodeai.amendment        data: {"type":"overwrite","content":"…","reason":"…"}
+done               data: [DONE]
+```
+
+Standard OpenAI CC client libraries see only the unnamed `data:` text deltas and `[DONE]`; CyNodeAI-aware clients (TUI, web console) also handle the named `cynodeai.*` events.
+
+#### Responses Endpoint SSE Mapping
+
+`POST /v1/responses` maps PMA NDJSON events as follows:
+
+```text
+PMA NDJSON         SSE Wire Format
+────────────       ──────────────────────────────────────────────────────
+delta              response.output_text.delta (OpenAI Responses)
+thinking           response.reasoning_summary_text.delta where applicable;
+                   event: cynodeai.thinking_delta for full content
+iteration_start    event: cynodeai.iteration_start data: {"iteration":N}
+tool_call          response.function_call_arguments.delta/.done for
+                   standard calls; event: cynodeai.tool_call for MCP
+tool_progress      event: cynodeai.tool_progress
+overwrite          event: cynodeai.amendment
+done               response.completed
+```
+
+Non-CyNodeAI-aware clients safely ignore all `cynodeai.*` named events and see only the standard text/tool/reasoning events they expect.
+
+Industry alignment: both the OpenAI Responses API and Anthropic Messages API use named SSE `event:` lines for typed streaming events; the `cynodeai.*` extension pattern follows this industry direction.
+
+#### Streaming Per-Endpoint SSE Format Traces To
+
+- [REQ-USRGWY-0152](../requirements/usrgwy.md#req-usrgwy-0152)
+
+### Streaming Heartbeat Fallback Operation
+
+- Spec ID: `CYNAI.USRGWY.OpenAIChatApi.StreamingHeartbeatFallback` <a id="spec-cynai-usrgwy-openaichatapi-streamingheartbeatfallback"></a>
+
+When the upstream PMA path cannot provide real token streaming (streaming wrapper failure, unsupported model, or explicit configuration toggle), the gateway MUST NOT fall back to fake chunking of a complete payload or to a non-streaming JSON response.
+
+The gateway uses heartbeat-based SSE instead:
+
+- The handler goroutine starts a periodic ticker (recommended interval: 5 seconds) that emits `event: cynodeai.heartbeat` SSE events with minimal metadata: `{"elapsed_s": N, "status": "processing"}`.
+- The handler goroutine concurrently waits for the upstream PMA response to complete (which arrives as a single non-streaming JSON payload).
+- When the upstream response completes, the handler stops the ticker, delivers the full response content as a single visible-text delta event (using the per-endpoint format), and emits the terminal `[DONE]` / `response.completed` event.
+- The handler runs the standard post-stream secret scan on the complete response content before emitting the terminal event.
+- The TUI renders heartbeat events as a progress indicator (e.g., "Still working... 15s") instead of showing a dead spinner with no feedback.
+
+This approach avoids forcing the client into a completely different non-streaming code path and gives the user periodic confirmation that the request is alive.
+The heartbeat events are trivial to emit (a ticker in the handler goroutine) and trivial to consume (the client ignores them for content purposes and uses them only for progress display).
+
+The `emitContentAsSSE` function (which previously simulated streaming by splitting a complete payload into 48-rune chunks with no inter-chunk delay) is removed.
+Any path that previously fell through to `emitContentAsSSE` now uses the heartbeat fallback mechanism.
+
+#### Streaming Heartbeat Fallback Traces To
+
+- [REQ-USRGWY-0156](../requirements/usrgwy.md#req-usrgwy-0156)
+- [REQ-CLIENT-0220](../requirements/client.md#req-client-0220)
 
 ## Normalized Assistant Output
 

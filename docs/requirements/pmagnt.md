@@ -105,3 +105,24 @@ Behavioral and workflow requirements still live in `AGENTS` and `ORCHES`.
   Auto-titling MUST NOT overwrite an existing title set by the user.
   [CYNAI.AGENTS.ThreadTitling](../tech_specs/project_manager_agent.md#spec-cynai-agents-threadtitling)
   <a id="req-pmagnt-0119"></a>
+- **REQ-PMAGNT-0120:** PMA MUST implement a streaming LLM wrapper that satisfies the `langchaingo` `llms.Model` interface and tees Ollama tokens to both the output NDJSON stream and an internal buffer for `langchaingo` consumption, emitting `iteration_start` boundary events before each agent iteration.
+  [CYNAI.PMAGNT.StreamingLLMWrapper](../tech_specs/cynode_pma.md#spec-cynai-pmagnt-streamingllmwrapper)
+  <a id="req-pmagnt-0120"></a>
+- **REQ-PMAGNT-0121:** PMA MUST implement a configurable streaming state machine that classifies arriving tokens as visible text, thinking content, or tool-call content and routes each to the correct NDJSON event type, defaulting to recognizing `<think>`/`</think>` and tool-call markers.
+  [CYNAI.PMAGNT.StreamingTokenStateMachine](../tech_specs/cynode_pma.md#spec-cynai-pmagnt-streamingtokenstatemachine)
+  <a id="req-pmagnt-0121"></a>
+- **REQ-PMAGNT-0122:** PMA MUST emit full thinking content as `thinking` NDJSON events (not suppressed or summarized) so downstream clients can store and optionally display it.
+  [CYNAI.PMAGNT.PMAStreamingNDJSONFormat](../tech_specs/cynode_pma.md#spec-cynai-pmagnt-pmastreamingndjsonformat)
+  <a id="req-pmagnt-0122"></a>
+- **REQ-PMAGNT-0123:** PMA MUST emit tool-call content detected by the streaming state machine as `tool_call` NDJSON events, suppressed from the visible-text stream.
+  [CYNAI.PMAGNT.PMAStreamingNDJSONFormat](../tech_specs/cynode_pma.md#spec-cynai-pmagnt-pmastreamingndjsonformat)
+  <a id="req-pmagnt-0123"></a>
+- **REQ-PMAGNT-0124:** PMA MUST support per-iteration scoped and per-turn scoped overwrite events in the NDJSON stream for retroactive correction of leaked tokens, secret redaction, and agent output correction.
+  [CYNAI.PMAGNT.PMAStreamingOverwrite](../tech_specs/cynode_pma.md#spec-cynai-pmagnt-pmastreamingoverwrite)
+  <a id="req-pmagnt-0124"></a>
+- **REQ-PMAGNT-0125:** PMA MUST run an opportunistic secret scan on all accumulated content types (visible text, thinking, tool-call) after each LLM iteration and MUST emit an overwrite event if secrets are detected.
+  [CYNAI.PMAGNT.PMAOpportunisticSecretScan](../tech_specs/cynode_pma.md#spec-cynai-pmagnt-pmaopportunisticsecretscan)
+  <a id="req-pmagnt-0125"></a>
+- **REQ-PMAGNT-0126:** PMA MUST wrap secret-bearing stream buffer code paths inside `runtime/secret` (`secret.Do`) when available, per REQ-STANDS-0133.
+  [CYNAI.PMAGNT.StreamingLLMWrapper](../tech_specs/cynode_pma.md#spec-cynai-pmagnt-streamingllmwrapper)
+  <a id="req-pmagnt-0126"></a>

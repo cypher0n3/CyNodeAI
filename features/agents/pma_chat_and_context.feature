@@ -63,3 +63,57 @@ Scenario: PMA streams visible assistant text incrementally without leaking hidde
   Then PMA emits ordered incremental visible assistant text updates
   And PMA does not emit hidden thinking as visible text deltas
   And PMA finishes with a terminal completion event
+
+@req_pmagnt_0120
+@spec_cynai_pmagnt_streamingllmwrapper
+Scenario: PMA streaming wrapper tees tokens to output stream and internal buffer
+  Given the PMA is configured with a capable model and MCP gateway
+  And the inference backend streams tokens incrementally
+  When I send an interactive PMA chat request on the standard streaming path
+  Then PMA emits NDJSON delta events in real time as tokens arrive from the backend
+  And the langchaingo executor receives the complete buffered response after the LLM call completes
+  And the stream includes an iteration_start event before each agent iteration
+
+@req_pmagnt_0121
+@spec_cynai_pmagnt_streamingtokenstatemachine
+Scenario: PMA state machine classifies think tokens and tool-call tokens separately
+  Given the PMA inference backend emits a response containing "<think>internal reasoning</think>" followed by visible text and "<tool_call>" markers
+  When I send an interactive PMA chat request on the standard streaming path
+  Then PMA emits thinking NDJSON events for the content between think tags
+  And PMA emits tool_call NDJSON events for the content between tool-call markers
+  And PMA emits delta NDJSON events only for visible text content
+  And no think tags or tool-call markers appear in the delta events
+
+@req_pmagnt_0122
+@spec_cynai_pmagnt_pmastreamingndjsonformat
+Scenario: PMA emits full thinking content as NDJSON thinking events
+  Given the PMA inference backend emits a response containing "<think>step-by-step reasoning here</think>"
+  When I send an interactive PMA chat request on the standard streaming path
+  Then the NDJSON stream includes thinking events containing the full reasoning text
+  And the thinking content is not suppressed or summarized
+
+@req_pmagnt_0120
+@spec_cynai_pmagnt_pmastreamingndjsonformat
+Scenario: PMA emits iteration_start events between langchaingo iterations
+  Given the PMA is configured with a capable model and MCP gateway
+  And the langchaingo executor performs multiple iterations with tool calls
+  When I send an interactive PMA chat request on the standard streaming path
+  Then the NDJSON stream includes an iteration_start event with iteration number 1 before the first LLM call
+  And the NDJSON stream includes an iteration_start event with iteration number 2 before the second LLM call
+  And tool_progress events appear between the iterations
+
+@req_pmagnt_0124
+@spec_cynai_pmagnt_pmastreamingoverwrite
+Scenario: PMA emits per-iteration overwrite when think-tag tokens leak to visible text
+  Given the PMA inference backend streams tokens that include a partial think tag leaked before detection
+  When I send an interactive PMA chat request on the standard streaming path
+  Then PMA emits an overwrite NDJSON event with scope "iteration" and reason "think_tag_leaked"
+  And the overwrite content does not include the leaked tag characters
+
+@req_pmagnt_0124
+@spec_cynai_pmagnt_pmastreamingoverwrite
+Scenario: PMA emits per-turn overwrite on agent output correction
+  Given the PMA langchaingo executor returns output that triggers the unexecuted-tool-call fallback
+  When PMA falls back to direct inference and obtains corrected output
+  Then PMA emits an overwrite NDJSON event with scope "turn" and reason "agent_correction"
+  And the overwrite content contains the corrected direct-inference response

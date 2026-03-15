@@ -273,3 +273,16 @@ It covers orchestrator control-plane behavior, task lifecycle, dispatch, and sta
   [CYNAI.ORCHES.InferenceDecisionOutput](../tech_specs/orchestrator_inference_container_decision.md#spec-cynai-orches-inferencedecisionoutput)
   [CYNAI.WORKER.Payload.ConfigurationV1](../tech_specs/worker_node_payloads.md#spec-cynai-worker-payload-configuration-v1)
   <a id="req-orches-0169"></a>
+- **REQ-ORCHES-0170:** When routing a streaming interactive chat request (`stream=true`) to PMA, the orchestrator MUST forward `stream=true` to PMA and MUST consume PMA's NDJSON streaming output for real-time SSE relay to the client, using the per-endpoint SSE format rules defined in CYNAI.USRGWY.OpenAIChatApi.StreamingPerEndpointSSEFormat.
+  [CYNAI.ORCHES.OpenAIInteractiveChatRouting](../tech_specs/orchestrator.md#spec-cynai-orches-openaiinteractivechatrouting)
+  [CYNAI.USRGWY.OpenAIChatApi.StreamingPerEndpointSSEFormat](../tech_specs/openai_compatible_chat_api.md#spec-cynai-usrgwy-openaichatapi-streamingperendpointsseformat)
+  <a id="req-orches-0170"></a>
+- **REQ-ORCHES-0171:** The orchestrator MUST NOT use synthetic chunking of complete payloads (the former `emitContentAsSSE` behavior) for any streaming path; it MUST be removed entirely.
+  Any path that previously used synthetic chunking MUST use either real upstream PMA streaming or the heartbeat fallback defined in CYNAI.USRGWY.OpenAIChatApi.StreamingHeartbeatFallback.
+  [CYNAI.ORCHES.OpenAIInteractiveChatRouting](../tech_specs/orchestrator.md#spec-cynai-orches-openaiinteractivechatrouting)
+  [CYNAI.USRGWY.OpenAIChatApi.StreamingHeartbeatFallback](../tech_specs/openai_compatible_chat_api.md#spec-cynai-usrgwy-openaichatapi-streamingheartbeatfallback)
+  <a id="req-orches-0171"></a>
+- **REQ-ORCHES-0172:** When PMA signals that it cannot provide real token streaming (non-streaming JSON response, streaming wrapper failure, or explicit configuration toggle), the orchestrator MUST use the heartbeat fallback path instead of blocking silently or falling through to a non-streaming response.
+  [CYNAI.ORCHES.OpenAIInteractiveChatRouting](../tech_specs/orchestrator.md#spec-cynai-orches-openaiinteractivechatrouting)
+  [CYNAI.USRGWY.OpenAIChatApi.StreamingHeartbeatFallback](../tech_specs/openai_compatible_chat_api.md#spec-cynai-usrgwy-openaichatapi-streamingheartbeatfallback)
+  <a id="req-orches-0172"></a>

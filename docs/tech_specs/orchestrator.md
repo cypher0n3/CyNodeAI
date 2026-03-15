@@ -11,6 +11,8 @@
 - [OpenAI-Compatible Interactive Chat Routing](#openai-compatible-interactive-chat-routing)
   - [OpenAI-Compatible Interactive Chat Routing Traces To](#openai-compatible-interactive-chat-routing-traces-to)
   - [OpenAI-Compatible Interactive Chat Routing Behavior](#openai-compatible-interactive-chat-routing-behavior)
+  - [Streaming Relay to PMA](#streaming-relay-to-pma)
+  - [Shared Streaming Contract Types](#shared-streaming-contract-types)
   - [Responses Continuation State](#responses-continuation-state)
   - [Chat File Upload Flow](#chat-file-upload-flow)
 - [Managed Services (Worker-Managed)](#managed-services-worker-managed)
@@ -138,14 +140,17 @@ Orchestrator-side agents MAY use external AI providers for planning and verifica
 
 - Spec ID: `CYNAI.ORCHES.OpenAIInteractiveChatRouting` <a id="spec-cynai-orches-openaiinteractivechatrouting"></a>
 
+The orchestrator is the single request-routing owner for the gateway's OpenAI-compatible interactive chat surfaces.
+This applies to both `POST /v1/chat/completions` and `POST /v1/responses`.
+
 ### OpenAI-Compatible Interactive Chat Routing Traces To
 
 - [REQ-ORCHES-0131](../requirements/orches.md#req-orches-0131)
 - [REQ-ORCHES-0132](../requirements/orches.md#req-orches-0132)
 - [REQ-ORCHES-0162](../requirements/orches.md#req-orches-0162)
-
-The orchestrator is the single request-routing owner for the gateway's OpenAI-compatible interactive chat surfaces.
-This applies to both `POST /v1/chat/completions` and `POST /v1/responses`.
+- [REQ-ORCHES-0170](../requirements/orches.md#req-orches-0170)
+- [REQ-ORCHES-0171](../requirements/orches.md#req-orches-0171)
+- [REQ-ORCHES-0172](../requirements/orches.md#req-orches-0172)
 
 ### OpenAI-Compatible Interactive Chat Routing Behavior
 
@@ -154,6 +159,43 @@ This applies to both `POST /v1/chat/completions` and `POST /v1/responses`.
 - When the effective model identifier is `cynodeai.pm`, the orchestrator MUST route the request to PMA using only the worker-mediated PMA endpoint reported by the worker.
 - When the effective model identifier is not `cynodeai.pm`, the orchestrator MUST route the request to the configured direct-inference path and MUST NOT invoke PMA for that request.
 - Endpoint-specific request and response shape differences are owned by the gateway compatibility layer, but the orchestrator-owned routing and policy decisions MUST remain consistent across both interactive chat surfaces.
+
+### Streaming Relay to PMA
+
+When the client requests `stream=true` and the effective model is `cynodeai.pm`, the orchestrator MUST forward `stream=true` to PMA and MUST consume PMA's NDJSON streaming output for real-time SSE relay.
+The orchestrator is responsible for:
+
+- Opening a streaming connection to PMA and passing PMA's NDJSON events through the gateway handler goroutine, which maps each event to the per-endpoint SSE format (see [CYNAI.USRGWY.OpenAIChatApi.StreamingPerEndpointSSEFormat](openai_compatible_chat_api.md#spec-cynai-usrgwy-openaichatapi-streamingperendpointsseformat)).
+- Maintaining three `strings.Builder` accumulators (visible text, thinking content, tool-call content) and appending every relayed event to the corresponding accumulator.
+- Relaying PMA overwrite events as `cynodeai.amendment` SSE events and applying them to its own accumulators (per-iteration and per-turn scopes).
+- Running the authoritative post-stream secret scanner on all three accumulators before emitting the terminal `[DONE]` event (see [CYNAI.USRGWY.OpenAIChatApi.StreamingRedactionPipeline](openai_compatible_chat_api.md#spec-cynai-usrgwy-openaichatapi-streamingredactionpipeline)).
+- Persisting all three content types (visible text, thinking, tool-call) as part of the structured assistant turn, using only the redacted versions.
+
+The former `emitContentAsSSE` function (which simulated streaming by splitting a complete payload into 48-rune chunks with no inter-chunk delay) MUST be removed entirely.
+It violates the streaming spec by delivering zero progressive feedback and producing fake chunks that arrive within milliseconds of each other.
+
+When PMA signals that it cannot provide real token streaming (non-streaming JSON response, streaming wrapper failure, or configuration toggle), the orchestrator MUST use the heartbeat fallback path: emit periodic `cynodeai.heartbeat` SSE events, then deliver the full response as a single visible-text delta followed by `[DONE]` (see [CYNAI.USRGWY.OpenAIChatApi.StreamingHeartbeatFallback](openai_compatible_chat_api.md#spec-cynai-usrgwy-openaichatapi-streamingheartbeatfallback)).
+
+PMA NDJSON event types and SSE streaming types used in this relay MUST be defined as shared types in `go_shared_libs/contracts/userapi/` so that PMA and the orchestrator use identical wire-format structs (see [Shared Streaming Contract Types](#shared-streaming-contract-types)).
+
+### Shared Streaming Contract Types
+
+- Spec ID: `CYNAI.ORCHES.SharedStreamingContractTypes` <a id="spec-cynai-orches-sharedstreamingcontracttypes"></a>
+
+The PMA NDJSON event types and the orchestrator's SSE event types cross a network boundary between two separately compiled Go modules (PMA in `agents/` and the orchestrator in `orchestrator/`).
+Both sides MUST use identical struct definitions for serialization and deserialization.
+
+The following shared types MUST be defined in `go_shared_libs/contracts/userapi/`:
+
+- **PMA NDJSON event envelope:** a tagged-union struct (or set of structs) representing `delta`, `thinking`, `iteration_start`, `tool_call`, `tool_progress`, `overwrite`, and `done` events as defined in [CYNAI.PMAGNT.PMAStreamingNDJSONFormat](cynode_pma.md#spec-cynai-pmagnt-pmastreamingndjsonformat).
+- **Overwrite event payload:** a struct with `Content`, `Reason`, `Scope` (`"iteration"` or `"turn"`), and optional `Iteration` and `Kinds` fields.
+- **Extended SSE event types for `cynodeai.*` events:** structs for `cynodeai.thinking_delta`, `cynodeai.tool_call`, `cynodeai.tool_progress`, `cynodeai.amendment`, `cynodeai.heartbeat`, and `cynodeai.iteration_start` payloads.
+
+The existing `ChatCompletionChunk` and related types in `go_shared_libs/contracts/userapi/userapi.go` handle standard OpenAI CC streaming; the new types extend them for CyNodeAI-specific streaming events.
+
+#### Shared Streaming Contract Types Traces To
+
+- [REQ-ORCHES-0170](../requirements/orches.md#req-orches-0170)
 
 ### Responses Continuation State
 

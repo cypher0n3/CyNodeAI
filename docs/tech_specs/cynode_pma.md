@@ -25,6 +25,11 @@
 - [Thinking Content Separation](#thinking-content-separation)
   - [Thinking Content Separation Requirements Traces](#thinking-content-separation-requirements-traces)
 - [Streaming Assistant Output](#streaming-assistant-output)
+  - [Streaming LLM Wrapper Operation](#streaming-llm-wrapper-operation)
+  - [Streaming Token State Machine Rule](#streaming-token-state-machine-rule)
+  - [PMA Streaming NDJSON Format Type](#pma-streaming-ndjson-format-type)
+  - [PMA Streaming Overwrite Operation](#pma-streaming-overwrite-operation)
+  - [PMA Opportunistic Secret Scan Rule](#pma-opportunistic-secret-scan-rule)
   - [Streaming Assistant Output Requirements Traces](#streaming-assistant-output-requirements-traces)
 - [Node-Local Inference Backend Environment](#node-local-inference-backend-environment)
   - [Node-Local Inference Backend Environment Requirements Traces](#node-local-inference-backend-environment-requirements-traces)
@@ -279,9 +284,214 @@ When `cynode-pma` is serving an interactive chat turn, the standard PMA chat pat
 - When structured progress is available, PMA SHOULD surface separate thinking or tool-progress updates instead of flattening that progress into visible assistant prose.
 - If a selected inference adapter cannot provide true visible-text deltas, PMA SHOULD still emit bounded in-progress state plus a final reconciled assistant turn so the upstream interactive chat surface can degrade gracefully.
 
+PMA achieves real-time streaming while retaining `langchaingo` as the agent orchestration layer by providing a custom `llms.Model` implementation (the streaming LLM wrapper) that tees Ollama tokens to both the output NDJSON stream and an internal buffer.
+The wrapper uses a configurable streaming state machine to classify tokens in real time and route them to the correct NDJSON event type.
+Between `langchaingo` iterations, PMA injects agent-side events (tool progress, tool results) into the same stream.
+After each iteration, PMA runs an opportunistic secret scan on all accumulated content types and emits overwrite events if secrets are detected.
+
+The following diagram shows the end-to-end streaming flow through all components for a multi-iteration agent turn:
+
+```mermaid
+sequenceDiagram
+    participant TUI
+    participant Gateway as Gateway/Orch
+    participant PMA
+    participant StreamLLM as Streaming LLM Wrapper
+    participant Langchain as Langchaingo Executor
+    participant Ollama
+    participant MCP
+
+    TUI->>Gateway: POST stream=true
+    Gateway->>PMA: POST stream=true
+
+    Note over PMA: creates StreamLLM wrapper and output stream
+
+    PMA->>Langchain: exec.Call(input)
+    Langchain->>StreamLLM: GenerateContent(messages)
+    StreamLLM->>Ollama: /api/chat (stream: true)
+
+    loop Iteration 1 token stream
+        Ollama-->>StreamLLM: chunk token
+        StreamLLM-->>PMA: tee to output stream (delta/thinking)
+        PMA-->>Gateway: NDJSON event
+        Gateway-->>TUI: SSE event
+        Note over StreamLLM: also appends to internal buffer
+    end
+
+    StreamLLM-->>Langchain: return buffered response
+    Note over Langchain: parses tool_calls from response
+
+    Langchain->>MCP: tool call (via MCP tool)
+    Note over PMA: injects tool_progress into stream
+    PMA-->>Gateway: NDJSON tool_progress
+    Gateway-->>TUI: SSE tool_progress
+    MCP-->>Langchain: tool result
+    Note over PMA: injects tool_result into stream
+    PMA-->>Gateway: NDJSON tool_result
+    Gateway-->>TUI: SSE tool_result
+
+    Langchain->>StreamLLM: GenerateContent(messages + tool result)
+    StreamLLM->>Ollama: /api/chat round 2 (stream: true)
+
+    loop Iteration 2 token stream
+        Ollama-->>StreamLLM: chunk token
+        StreamLLM-->>PMA: tee to output stream
+        PMA-->>Gateway: NDJSON event
+        Gateway-->>TUI: SSE event
+    end
+
+    StreamLLM-->>Langchain: return buffered response
+    Langchain-->>PMA: final output (no more tool calls)
+    PMA-->>Gateway: NDJSON done
+    Gateway-->>TUI: SSE [DONE]
+```
+
+The subsections below define the streaming LLM wrapper, state machine, NDJSON format, overwrite semantics, and opportunistic secret scanning.
+
+### Streaming LLM Wrapper Operation
+
+- Spec ID: `CYNAI.PMAGNT.StreamingLLMWrapper` <a id="spec-cynai-pmagnt-streamingllmwrapper"></a>
+
+The streaming LLM wrapper is a custom `llms.Model` implementation that provides `langchaingo` with a synchronous LLM interface while streaming tokens to the output NDJSON stream in real time.
+
+- The wrapper opens a streaming HTTP connection to Ollama (`stream: true`) for each `GenerateContent` / `Call` invocation.
+- Each arriving token is tee'd to two destinations simultaneously: the output NDJSON stream (for real-time relay to the orchestrator and TUI) and an internal `strings.Builder` buffer (for `langchaingo`'s synchronous consumption).
+- Before each write to the output stream, the wrapper passes the token through the [streaming token state machine](#spec-cynai-pmagnt-streamingtokenstatemachine) to classify it as visible text, thinking content, or tool-call content and emit the correct NDJSON event type.
+- When the Ollama response completes, the wrapper returns the full buffered content to `langchaingo` exactly as the current blocking path would, including any `tool_calls` data from the Ollama response.
+- Ollama's `message.tool_calls` field contents go to the internal buffer (for `langchaingo` to parse) but are NOT emitted as visible-text deltas.
+- The wrapper emits an `iteration_start` NDJSON event before each `langchaingo` agent iteration to signal iteration boundaries to downstream consumers.
+- The wrapper propagates `context.Context` cancellation from the request to the Ollama HTTP connection, ensuring that TUI-initiated cancellation terminates the upstream LLM call.
+- Secret-bearing buffer code paths inside the wrapper MUST run inside `runtime/secret` (`secret.Do`) when available, per REQ-STANDS-0133.
+  The `Call()` / `GenerateContent()` method body is invoked synchronously by `langchaingo` and does not spawn goroutines, so wrapping it in `secret.Do` is permitted.
+  When `runtime/secret` is not available, the wrapper MUST use best-effort secure erasure (zeroing the backing slice before dropping the reference), using the shared `runWithSecret` utility from `go_shared_libs/secretutil/` per [CYNAI.STANDS.SecretHandling](go_rest_api_standards.md#spec-cynai-stands-secrethandling).
+- If the streaming Ollama connection fails, the wrapper MUST return an error to `langchaingo`; PMA SHOULD then fall back to the existing non-streaming `langchaingo` path and signal the orchestrator that the path is non-streaming (triggering heartbeat fallback at the gateway).
+
+#### Streaming LLM Wrapper Traces To
+
+- [REQ-PMAGNT-0118](../requirements/pmagnt.md#req-pmagnt-0118)
+- [REQ-PMAGNT-0120](../requirements/pmagnt.md#req-pmagnt-0120)
+- [REQ-PMAGNT-0126](../requirements/pmagnt.md#req-pmagnt-0126)
+
+### Streaming Token State Machine Rule
+
+- Spec ID: `CYNAI.PMAGNT.StreamingTokenStateMachine` <a id="spec-cynai-pmagnt-streamingtokenstatemachine"></a>
+
+The streaming token state machine classifies arriving tokens in real time as they pass through the streaming LLM wrapper.
+It routes each token to the correct NDJSON event type based on the current state.
+
+The state machine has five states:
+
+- **Normal:** tokens are emitted to the output stream as `delta` (visible text) NDJSON events.
+- **Potential-tag:** when a `<` character arrives, the state machine buffers subsequent tokens until it can determine whether a recognized tag is forming.
+  Nothing is emitted to the output stream during this ambiguous window.
+- **Thinking:** tokens between `<think>` and `</think>` are emitted as `thinking` NDJSON events carrying the full thinking content, not suppressed or summarized.
+- **Tool-call:** tokens between tool-call markers are suppressed from the visible-text stream and emitted as `tool_call` NDJSON events.
+- **Tag-rejected:** if buffered tokens in potential-tag state do not form a recognized tag, they are flushed to the visible-text stream as a batch of `delta` events.
+
+The recognized tag set MUST be configurable (defaulting to `<think>`/`</think>` and tool-call markers such as `<tool_call>`/`</tool_call>` and JSON function-call blocks) so that new model-specific tags can be added without code changes.
+
+Edge cases the state machine MUST handle:
+
+- Tags split across multiple tokens (e.g., `<thi` then `nk>`).
+- Nested or malformed tags (treated as unrecognized; flushed to visible text).
+- Unterminated `<think>` at end of stream (drop the partial tag content from visible text).
+- Tool-call format variation across models (XML-style tags, JSON function-call blocks); the configurable tag set accommodates both.
+- The state machine operates only on the character stream, not on JSON structure, so it is model-agnostic.
+
+When a partial tag has already leaked to the visible-text stream (e.g., an edge case not caught by potential-tag buffering), the [overwrite mechanism](#spec-cynai-pmagnt-pmastreamingoverwrite) corrects the visible text retroactively.
+
+#### Streaming Token State Machine Traces To
+
+- [REQ-PMAGNT-0121](../requirements/pmagnt.md#req-pmagnt-0121)
+
+### PMA Streaming NDJSON Format Type
+
+- Spec ID: `CYNAI.PMAGNT.PMAStreamingNDJSONFormat` <a id="spec-cynai-pmagnt-pmastreamingndjsonformat"></a>
+
+The PMA streaming output uses NDJSON (newline-delimited JSON).
+The struct definitions for these event types MUST be imported from `go_shared_libs/contracts/userapi/` (see [CYNAI.ORCHES.SharedStreamingContractTypes](orchestrator.md#spec-cynai-orches-sharedstreamingcontracttypes)) so PMA and the orchestrator use identical wire-format types.
+
+The event types are:
+
+- `{"delta": "..."}`: visible text tokens classified as normal content by the state machine.
+- `{"thinking": "..."}`: thinking/reasoning tokens (full content relayed, not suppressed).
+- `{"iteration_start": N}`: iteration boundary marker emitted before each `langchaingo` agent iteration, where N is the 1-based iteration number.
+- `{"tool_call": {"name": "...", "arguments": "..."}}`: tool-call content detected by the state machine, suppressed from the visible-text stream.
+- `{"tool_progress": {"state": "calling"|"waiting"|"result", "tool": "...", "preview": "..."}}`: tool activity injected between `langchaingo` iterations around MCP tool calls.
+- `{"overwrite": {"content": "...", "reason": "...", "scope": "iteration"|"turn", "iteration": N}}`: retroactive replacement of accumulated content; see [PMA Streaming Overwrite](#spec-cynai-pmagnt-pmastreamingoverwrite).
+- `{"done": true}`: stream termination signal.
+
+All events in the stream maintain a single ordered timeline.
+The orchestrator maps these events to per-endpoint SSE events; see [CYNAI.USRGWY.OpenAIChatApi.StreamingPerEndpointSSEFormat](openai_compatible_chat_api.md#spec-cynai-usrgwy-openaichatapi-streamingperendpointsseformat).
+
+A multi-iteration agent turn produces the following event sequence:
+
+- `iteration_start(1)` => `thinking` events => `delta` events => (optional `overwrite` targeting iteration 1).
+- Injected: `tool_progress` (calling) => `tool_progress` (result).
+- `iteration_start(2)` => `thinking` events => `delta` events => (optional `overwrite` targeting iteration 2).
+- Injected: `tool_progress` (calling) => `tool_progress` (result) (if more tools).
+- `iteration_start(N)` (final) => `thinking` events => `delta` events => `done`.
+
+The `tool_progress` events are injected by wrapping the existing `MCPTool.Call()` implementation: PMA emits a `tool_progress` event with state `"calling"` before the MCP call and a `tool_progress` event with state `"result"` (and a truncated preview of the result) after the MCP call returns.
+These injected events are interleaved with LLM token events in the same NDJSON stream, maintaining a single ordered timeline for the TUI.
+
+#### PMA Streaming NDJSON Format Traces To
+
+- [REQ-PMAGNT-0120](../requirements/pmagnt.md#req-pmagnt-0120)
+- [REQ-PMAGNT-0122](../requirements/pmagnt.md#req-pmagnt-0122)
+- [REQ-PMAGNT-0123](../requirements/pmagnt.md#req-pmagnt-0123)
+
+### PMA Streaming Overwrite Operation
+
+- Spec ID: `CYNAI.PMAGNT.PMAStreamingOverwrite` <a id="spec-cynai-pmagnt-pmastreamingoverwrite"></a>
+
+The PMA NDJSON stream supports retroactive replacement of previously-sent content through overwrite events.
+Overwrite events exist at the PMA NDJSON level (not only at the gateway SSE level) because the PMA is the first component to detect leaked tokens, partial tags, and early secret patterns.
+
+Overwrite events support two scopes:
+
+- **Per-iteration** (`"scope": "iteration"`): replaces the visible text accumulated within the specified iteration only, identified by the `"iteration"` field matching an earlier `iteration_start` event.
+  This is the default scope, used for think-tag leakage correction, tool-call marker leakage, and per-iteration secret detection.
+  The overwrite payload carries only the corrected text for the targeted iteration, keeping payloads small.
+- **Per-turn** (`"scope": "turn"`): replaces the entire visible text accumulated across all iterations for the current assistant turn.
+  Used when `langchaingo`'s post-processing modifies the final output (e.g., `looksLikeUnexecutedToolCall` fallback rewrites the response) or when a secret spans iteration boundaries.
+  The `"iteration"` field is omitted for turn-scoped overwrites.
+
+Overwrite reasons include: `"think_tag_leaked"`, `"tool_call_leaked"`, `"secret_redaction"` (with optional `"kinds"` array), and `"agent_correction"`.
+
+The orchestrator relays overwrite events as `cynodeai.amendment` SSE events and updates its own accumulators to match.
+The TUI handles per-iteration overwrites by replacing only the targeted iteration's segment in its `streamBuf`, and per-turn overwrites by replacing the entire `streamBuf`.
+
+#### PMA Streaming Overwrite Traces To
+
+- [REQ-PMAGNT-0124](../requirements/pmagnt.md#req-pmagnt-0124)
+
+### PMA Opportunistic Secret Scan Rule
+
+- Spec ID: `CYNAI.PMAGNT.PMAOpportunisticSecretScan` <a id="spec-cynai-pmagnt-pmaopportunisticsecretscan"></a>
+
+After each `langchaingo` iteration completes (after the streaming LLM wrapper returns the buffered response), PMA runs an opportunistic secret scan on all accumulated content types: visible text, thinking content, and tool-call content.
+
+- If the scan detects secrets in any content type, PMA emits a per-iteration overwrite event (`"scope": "iteration"`, `"reason": "secret_redaction"`) carrying the redacted content for the affected iteration.
+- PMA-level secret detection is best-effort: it catches obvious patterns (e.g., `sk-` prefix, `Bearer` tokens) early and reduces the window of leaked-token visibility for the user.
+- The gateway's post-stream secret scan remains the authoritative guarantee; PMA's scan is an optimization that reduces latency between token emission and redaction.
+- The scan runs inside a `secret.Do` block (or best-effort fallback) per REQ-STANDS-0133 because the accumulators being scanned are secret-bearing.
+
+#### PMA Opportunistic Secret Scan Traces To
+
+- [REQ-PMAGNT-0125](../requirements/pmagnt.md#req-pmagnt-0125)
+- [REQ-PMAGNT-0126](../requirements/pmagnt.md#req-pmagnt-0126)
+
 ### Streaming Assistant Output Requirements Traces
 
 - [REQ-PMAGNT-0118](../requirements/pmagnt.md#req-pmagnt-0118)
+- [REQ-PMAGNT-0120](../requirements/pmagnt.md#req-pmagnt-0120)
+- [REQ-PMAGNT-0121](../requirements/pmagnt.md#req-pmagnt-0121)
+- [REQ-PMAGNT-0122](../requirements/pmagnt.md#req-pmagnt-0122)
+- [REQ-PMAGNT-0123](../requirements/pmagnt.md#req-pmagnt-0123)
+- [REQ-PMAGNT-0124](../requirements/pmagnt.md#req-pmagnt-0124)
+- [REQ-PMAGNT-0125](../requirements/pmagnt.md#req-pmagnt-0125)
+- [REQ-PMAGNT-0126](../requirements/pmagnt.md#req-pmagnt-0126)
 - [REQ-USRGWY-0149](../requirements/usrgwy.md#req-usrgwy-0149)
 
 ## Node-Local Inference Backend Environment

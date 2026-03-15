@@ -122,3 +122,6 @@ It covers cross-cutting standards and conventions that apply across components.
   [CYNAI.STANDS.GoSqlGorm](../tech_specs/go_sql_database_standards.md#spec-cynai-stands-gosqlgorm)
   [CYNAI.WORKER.TelemetryStorageSqlite](../tech_specs/worker_telemetry_api.md#spec-cynai-worker-telemetrystorage-sqlite)
   <a id="req-stands-0134"></a>
+- **REQ-STANDS-0135:** The `runtime/secret` wrapper pattern (`runWithSecret` and its build-tag-gated fallback) MUST be provided as a shared utility in `go_shared_libs` so that all components that handle secret-bearing data (PMA, orchestrator, cynork, worker node) import the same implementation instead of maintaining separate copies.
+  [CYNAI.STANDS.SecretHandling](../tech_specs/go_rest_api_standards.md#spec-cynai-stands-secrethandling)
+  <a id="req-stands-0135"></a>
