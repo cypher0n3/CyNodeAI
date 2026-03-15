@@ -266,7 +266,7 @@ Source: [REQ-PROJCT-0110](../requirements/projct.md#req-projct-0110), [Project p
   - set when plan is approved (transition to ready or active); who approved and when
 - `plan_approved_by` (uuid, fk to `users.id`, nullable)
 - `comments` (jsonb, nullable)
-  - same structure as task comments; see [Comments structure (plans and tasks)](#comments-structure-plans-and-tasks)
+  - same structure as task comments; see [Comments structure (plans and tasks)](#spec-cynai-schema-commentsstructure)
 - `created_at` (timestamptz)
 - `updated_at` (timestamptz)
 - `created_by` (uuid, fk to `users.id`, nullable)
@@ -281,7 +281,7 @@ Constraints
 
 #### Comments Structure (Plans and Tasks)
 
-- Spec ID: `CYNAI.SCHEMA.CommentsStructure` <a id="comments-structure-plans-and-tasks"></a>
+- Spec ID: `CYNAI.SCHEMA.CommentsStructure` <a id="spec-cynai-schema-commentsstructure"></a>
 
 Plans and tasks both use the same JSON structure for **comments** (e.g. array of comment entries).
 Each entry typically has: author (or user id), timestamp, and body (text or Markdown).
@@ -670,6 +670,8 @@ Sources: [`docs/tech_specs/orchestrator.md`](orchestrator.md), [`docs/tech_specs
 
 ### Tasks Table
 
+- Spec ID: `CYNAI.SCHEMA.TasksTable` <a id="spec-cynai-schema-taskstable"></a>
+
 - `id` (uuid, pk)
 - `created_by` (uuid, fk to `users.id`)
   - creating user; set from authenticated request context when created via the gateway; for system-created and bootstrap tasks, use the reserved system user
@@ -688,7 +690,7 @@ Sources: [`docs/tech_specs/orchestrator.md`](orchestrator.md), [`docs/tech_specs
 - `acceptance_criteria` (jsonb, nullable)
   - structured criteria used by Project Manager for verification; any text fields used for editable criteria MUST be stored as Markdown
 - `requirements` (jsonb, nullable)
-  - optional array of **requirement** objects; see [Requirement object structure](#requirement-object-structure)
+  - optional array of **requirement** objects; see [Requirement object structure](#spec-cynai-schema-requirementobject)
 - `steps` (jsonb, NOT NULL)
   - required **map** of step objects keyed by numeric step ID (integer, stored as JSON number or string that parses to integer); MUST be non-empty.
     Keys define order: when read, steps MUST be sorted by numeric key ascending to obtain deterministic order.
@@ -701,7 +703,7 @@ Sources: [`docs/tech_specs/orchestrator.md`](orchestrator.md), [`docs/tech_specs
 - `post_execution_notes` (text, nullable)
   - Markdown notes added after task execution (e.g. by PMA, PAA, or user); for verification, handoff, or retrospective
 - `comments` (jsonb, nullable)
-  - same structure as plan comments; see [Comments structure (plans and tasks)](#comments-structure-plans-and-tasks); may be updated by agents or users when plan is locked (per lock rules)
+  - same structure as plan comments; see [Comments structure (plans and tasks)](#spec-cynai-schema-commentsstructure); may be updated by agents or users when plan is locked (per lock rules)
 - `metadata` (jsonb, nullable)
 - `created_at` (timestamptz)
 - `updated_at` (timestamptz)
@@ -718,7 +720,7 @@ Constraints
 
 #### Requirement Object Structure
 
-- Spec ID: `CYNAI.SCHEMA.RequirementObject` <a id="requirement-object-structure"></a>
+- Spec ID: `CYNAI.SCHEMA.RequirementObject` <a id="spec-cynai-schema-requirementobject"></a>
 
 The `tasks.requirements` column holds a JSON array of **requirement** objects (or null).
 Each object has:
@@ -736,7 +738,9 @@ Order in the array is significant unless otherwise specified; consumers MAY pres
 - Spec ID: `CYNAI.SCHEMA.TaskDependenciesTable` <a id="spec-cynai-schema-taskdependenciestable"></a>
 
 Stores explicit task-within-plan dependencies; execution order and runnability are determined solely by the dependency graph (prerequisite and dependent tasks).
-**Multiple prerequisites:** A task MAY depend on **multiple** other tasks; the table stores one row per (dependent task, prerequisite task). Thus `task_id` may appear in many rows with different `depends_on_task_id` values. The orchestrator and PMA use this structure to resolve all prerequisites for a task and to surface runnable tasks (see below).
+**Multiple prerequisites:** A task MAY depend on **multiple** other tasks; the table stores one row per (dependent task, prerequisite task).
+Thus `task_id` may appear in many rows with different `depends_on_task_id` values.
+The orchestrator and PMA use this structure to resolve all prerequisites for a task and to surface runnable tasks (see below).
 When a task is set to `canceled`, all tasks that depend on it (directly or transitively) MUST be set to `canceled` automatically; see [REQ-ORCHES-0154](../requirements/orches.md#req-orches-0154) and [Cancel cascades to dependents](langgraph_mvp.md#spec-cynai-orches-cancelcascadestodependents).
 A task is **runnable** when all tasks it depends on have `status = 'completed'`; see [Project plan and task dependencies](langgraph_mvp.md#spec-cynai-orches-workflowplanorder) and [REQ-ORCHES-0153](../requirements/orches.md#req-orches-0153).
 
@@ -757,7 +761,10 @@ Indexes
 - Index: (`task_id`) for "list all prerequisites of this task" (needed to decide if task is runnable)
 - Index: (`depends_on_task_id`) for "list all tasks that depend on this one" (e.g. cascade cancel, or "what becomes runnable when this completes")
 
-**Surfacing runnable tasks:** The orchestrator and PMA MUST be able to query tasks that can be executed (runnable) for a given plan. A task is runnable when: (1) its plan's state is `active`, (2) the task is not closed, and (3) either the task has **no** rows in `task_dependencies` for this `task_id`, or **every** row for this `task_id` has `depends_on_task_id` pointing to a task with `status = 'completed'`. Implementations SHOULD support an efficient query (e.g. tasks in plan where not closed and either no dependency rows exist for that task_id, or the set of depends_on_task_id for that task_id is a subset of completed task ids). The indexes above support "load dependencies of task" and "check all completed"; additional indexing (e.g. on `tasks.plan_id`, `tasks.closed`) supports "all runnable tasks for plan" patterns.
+**Surfacing runnable tasks:** The orchestrator and PMA MUST be able to query tasks that can be executed (runnable) for a given plan.
+A task is runnable when: (1) its plan's state is `active`, (2) the task is not closed, and (3) either the task has **no** rows in `task_dependencies` for this `task_id`, or **every** row for this `task_id` has `depends_on_task_id` pointing to a task with `status = 'completed'`.
+Implementations SHOULD support an efficient query (e.g. tasks in plan where not closed and either no dependency rows exist for that task_id, or the set of depends_on_task_id for that task_id is a subset of completed task ids).
+The indexes above support "load dependencies of task" and "check all completed"; additional indexing (e.g. on `tasks.plan_id`, `tasks.closed`) supports "all runnable tasks for plan" patterns.
 
 #### Task Status and Closed State
 
