@@ -35,6 +35,7 @@ var slashHelpCatalog = []struct{ name, desc string }{
 	{"/exit", "end session"},
 	{"/help", "list slash commands"},
 	{"/hide-thinking", "collapse retained thinking parts"},
+	{"/hide-tool-output", "collapse retained tool-call and tool-result parts"},
 	{"/model", "show or set session model"},
 	{"/models", "list available models"},
 	{"/nodes", "nodes list, get"},
@@ -42,6 +43,7 @@ var slashHelpCatalog = []struct{ name, desc string }{
 	{"/project", "show or set project context"},
 	{"/quit", "end session (synonym for /exit)"},
 	{"/show-thinking", "reveal retained thinking parts"},
+	{"/show-tool-output", "reveal retained tool-call and tool-result parts"},
 	{"/skills list", "list loaded skills"},
 	{"/skills get", "get a skill by selector"},
 	{"/skills load", "load a skill from a markdown file"},
@@ -76,6 +78,17 @@ var subprocSlashCmds = map[string]string{
 	"skills": "skills",
 }
 
+// handleTuiPrefSlash handles show-thinking, hide-thinking, show-tool-output, hide-tool-output.
+func (m *Model) handleTuiPrefSlash(cmd string) (tea.Cmd, bool) {
+	switch cmd {
+	case "show-thinking", "hide-thinking":
+		return m.slashSetThinkingCmd(cmd == "show-thinking"), true
+	case "show-tool-output", "hide-tool-output":
+		return m.slashSetToolOutputCmd(cmd == "show-tool-output"), true
+	}
+	return nil, false
+}
+
 // handleSlashCmd dispatches a /command from the TUI.
 // It returns a tea.Cmd that will produce a slashResultMsg (or a tea.ExecProcess for interactive).
 // If the command is /thread, it returns (nil, false) so the existing thread handler can take over.
@@ -83,6 +96,9 @@ func (m *Model) handleSlashCmd(line string) (tea.Cmd, bool) {
 	cmd, rest := parseSlashTUI(line)
 	if sub, ok := subprocSlashCmds[cmd]; ok {
 		return m.slashSubprocCmd(sub, rest), true
+	}
+	if c, ok := m.handleTuiPrefSlash(cmd); ok {
+		return c, true
 	}
 	switch cmd {
 	case "help":
@@ -103,8 +119,6 @@ func (m *Model) handleSlashCmd(line string) (tea.Cmd, bool) {
 		return m.slashAuthCmd(rest), true
 	case "connect":
 		return m.slashConnectCmd(rest), true
-	case "show-thinking", "hide-thinking":
-		return m.slashSetThinkingCmd(cmd == "show-thinking"), true
 	case "status", cmdWhoami:
 		return m.slashStatusOrWhoamiCmd(cmd), true
 	case "thread":
@@ -377,29 +391,51 @@ func (m *Model) connectSet(url string) slashResultMsg {
 	return slashResultMsg{lines: []string{"gateway updated to: " + url}}
 }
 
-// slashSetThinkingCmd toggles thinking visibility and persists the preference.
-func (m *Model) slashSetThinkingCmd(show bool) tea.Cmd {
+func (m *Model) slashSetTuiPrefCmd(label string, show bool, setModel, setProvider func(bool)) tea.Cmd {
 	return func() tea.Msg {
-		m.ShowThinking = show
+		setModel(show)
 		if m.AuthProvider != nil {
-			m.AuthProvider.SetShowThinkingByDefault(show)
+			setProvider(show)
 			if err := m.AuthProvider.Save(); err != nil {
 				return slashResultMsg{lines: []string{
-					fmt.Sprintf("thinking %s (warning: config save failed: %v)", thinkingLabel(show), err),
+					fmt.Sprintf("%s (warning: config save failed: %v)", label, err),
 				}}
 			}
 		}
-		return slashResultMsg{lines: []string{
-			fmt.Sprintf("thinking: %s", thinkingLabel(show)),
-		}}
+		return slashResultMsg{lines: []string{label}}
 	}
 }
 
-func thinkingLabel(show bool) string {
+func (m *Model) slashSetTuiPrefCmdByPrefix(prefix string, show bool, setModel, setProvider func(bool)) tea.Cmd {
+	label := prefix + ": hidden"
 	if show {
-		return "visible"
+		label = prefix + ": visible"
 	}
-	return "hidden"
+	return m.slashSetTuiPrefCmd(label, show, setModel, setProvider)
+}
+
+var tuiPrefSetters = map[string]struct {
+	prefix      string
+	setModel    func(*Model, bool)
+	setProvider func(AuthProvider, bool)
+}{
+	"thinking":    {"thinking", func(m *Model, b bool) { m.ShowThinking = b }, func(p AuthProvider, b bool) { p.SetShowThinkingByDefault(b) }},
+	"tool_output": {"tool output", func(m *Model, b bool) { m.ShowToolOutput = b }, func(p AuthProvider, b bool) { p.SetShowToolOutputByDefault(b) }},
+}
+
+func (m *Model) slashSetTuiPrefCmdByKey(key string, show bool) tea.Cmd {
+	s := tuiPrefSetters[key]
+	return m.slashSetTuiPrefCmdByPrefix(s.prefix, show,
+		func(b bool) { s.setModel(m, b) },
+		func(b bool) { s.setProvider(m.AuthProvider, b) })
+}
+
+func (m *Model) slashSetThinkingCmd(show bool) tea.Cmd {
+	return m.slashSetTuiPrefCmdByKey("thinking", show)
+}
+
+func (m *Model) slashSetToolOutputCmd(show bool) tea.Cmd {
+	return m.slashSetTuiPrefCmdByKey("tool_output", show)
 }
 
 // cmdWhoami is the name of the /whoami slash command.

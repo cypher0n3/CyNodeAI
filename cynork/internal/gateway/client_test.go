@@ -759,7 +759,7 @@ func TestClient_ChatWithOptions_RequestFails(t *testing.T) {
 
 func TestClient_ResponsesWithOptions_Success(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/v1/responses" || r.Method != http.MethodPost {
+		if r.URL.Path != pathV1Responses || r.Method != http.MethodPost {
 			w.WriteHeader(http.StatusNotFound)
 			return
 		}
@@ -1460,7 +1460,7 @@ func TestClient_ChatStream_InvalidBaseURL(t *testing.T) {
 
 func TestClient_ResponsesStream_Success(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/v1/responses" || r.Method != http.MethodPost {
+		if r.URL.Path != pathV1Responses || r.Method != http.MethodPost {
 			w.WriteHeader(http.StatusNotFound)
 			return
 		}
@@ -1503,6 +1503,36 @@ func TestClient_ResponsesStream_InvalidBaseURL(t *testing.T) {
 	_, err := c.ResponsesStream(context.Background(), "hi", "", "", func(_ string) {}, nil)
 	if err == nil {
 		t.Fatal("expected error from invalid base URL")
+	}
+}
+
+func TestClient_ResponsesStream_ReturnsStreamedResponseID(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != pathV1Responses {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte("data: {\"response_id\":\"resp-abc-123\"}\n\n"))
+		_, _ = w.Write([]byte(sseChunkLine("ok", "")))
+		_, _ = w.Write([]byte("data: [DONE]\n\n"))
+	}))
+	defer srv.Close()
+	c := NewClient(srv.URL)
+	c.SetToken("tok")
+	var got strings.Builder
+	respID, err := c.ResponsesStream(context.Background(), "hi", "m", "", func(delta string) {
+		got.WriteString(delta)
+	}, nil)
+	if err != nil {
+		t.Fatalf("ResponsesStream: %v", err)
+	}
+	if respID != "resp-abc-123" {
+		t.Errorf("response_id = %q, want resp-abc-123", respID)
+	}
+	if got.String() != "ok" {
+		t.Errorf("deltas = %q, want ok", got.String())
 	}
 }
 
@@ -1629,7 +1659,7 @@ func TestReadChatSSEStream_ScannerError(t *testing.T) {
 		data: []byte("data: bad-json\n"),
 		err:  fmt.Errorf("simulated read error"),
 	}
-	err := readChatSSEStream(context.Background(), r, func(_ string) {}, nil)
+	err := readChatSSEStream(context.Background(), r, func(_ string) {}, nil, nil)
 	if err == nil {
 		t.Fatal("expected error from scanner failure, got nil")
 	}

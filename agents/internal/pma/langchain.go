@@ -4,6 +4,7 @@ package pma
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -154,6 +155,75 @@ func runCompletionWithLangchain(ctx context.Context, fullPrompt string, mcpClien
 		return "", err
 	}
 	return extractOutput(outputs), nil
+}
+
+// runCompletionWithLangchainStreaming runs the same agent path as runCompletionWithLangchain
+// but streams NDJSON (iteration_start, delta, done) to w. Used when req.Stream is true
+// and the capable-model + MCP path is selected. Caller must set Content-Type and status.
+func runCompletionWithLangchainStreaming(ctx context.Context, fullPrompt string, mcpClient *MCPClient, w http.ResponseWriter, logger *slog.Logger) error {
+	if mcpClient == nil || mcpClient.BaseURL == "" {
+		return fmt.Errorf("MCP gateway URL not set")
+	}
+	baseURL := os.Getenv("OLLAMA_BASE_URL")
+	if baseURL == "" {
+		baseURL = os.Getenv("INFERENCE_URL")
+	}
+	if baseURL == "" {
+		baseURL = pmaDefaultOllamaURL
+	}
+	model := os.Getenv("INFERENCE_MODEL")
+	if model == "" {
+		model = pmaDefaultModel
+	}
+
+	var baseLLM llms.Model
+	if testLLMForCompletion != nil {
+		baseLLM = testLLMForCompletion
+	} else {
+		ollamaURL, httpClient := resolveOllamaClientConfig(baseURL)
+		opts := []ollama.Option{
+			ollama.WithServerURL(ollamaURL),
+			ollama.WithModel(model),
+		}
+		if httpClient != nil {
+			opts = append(opts, ollama.WithHTTPClient(httpClient))
+		}
+		if n := ollamaNumCtxFromEnv(); n > 0 {
+			opts = append(opts, ollama.WithRunnerNumCtx(n))
+		}
+		var err error
+		baseLLM, err = ollama.New(opts...)
+		if err != nil {
+			return fmt.Errorf("create ollama llm: %w", err)
+		}
+	}
+
+	iteration := 0
+	llm := newStreamingLLM(baseLLM, w, &iteration)
+	if logger != nil {
+		logger.Debug("using langchain streaming functions agent path", "model", model)
+	}
+	toolsList := []tools.Tool{NewMCPTool(mcpClient)}
+	agent := agents.NewOpenAIFunctionsAgent(llm, toolsList,
+		agents.WithMaxIterations(pmaMaxIterations),
+	)
+	exec := agents.NewExecutor(agent,
+		agents.WithReturnIntermediateSteps(),
+		agents.WithMaxIterations(pmaMaxIterations),
+	)
+	_, err := exec.Call(ctx, map[string]any{"input": fullPrompt})
+	if err != nil {
+		return err
+	}
+	enc := json.NewEncoder(w)
+	enc.SetEscapeHTML(false)
+	if err := enc.Encode(map[string]bool{"done": true}); err != nil {
+		return err
+	}
+	if f, ok := w.(http.Flusher); ok {
+		f.Flush()
+	}
+	return nil
 }
 
 func extractOutput(outputs map[string]any) string {

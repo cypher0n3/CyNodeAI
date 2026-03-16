@@ -341,9 +341,10 @@ func TestNewThread_DBError(t *testing.T) {
 func TestCompleteViaPMAStream_Success(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/x-ndjson")
-		_, _ = fmt.Fprintln(w, `{"choices":[{"delta":{"content":"hello "}}]}`)
-		_, _ = fmt.Fprintln(w, `{"choices":[{"delta":{"content":"world"}}]}`)
-		_, _ = fmt.Fprintln(w, `{"choices":[{"finish_reason":"stop"}]}`)
+		// PMA NDJSON: iteration_start then deltas (pmaclient processNDJSONLine expects top-level keys).
+		_, _ = fmt.Fprintln(w, `{"iteration_start":1}`)
+		_, _ = fmt.Fprintln(w, `{"delta":"hello "}`)
+		_, _ = fmt.Fprintln(w, `{"delta":"world"}`)
 	}))
 	defer srv.Close()
 
@@ -365,6 +366,9 @@ func TestCompleteViaPMAStream_Success(t *testing.T) {
 	body := rec.Body.String()
 	if !strings.Contains(body, "data:") {
 		t.Errorf("expected SSE data in response: %s", body)
+	}
+	if !strings.Contains(body, "event: cynodeai.iteration_start") {
+		t.Errorf("expected cynodeai.iteration_start event in response: %s", body)
 	}
 }
 

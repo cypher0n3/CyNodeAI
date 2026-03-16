@@ -18,6 +18,8 @@ import (
 	"github.com/cypher0n3/cynodeai/go_shared_libs/contracts/userapi"
 )
 
+const pathV1Responses = "/v1/responses"
+
 // Client calls the User API Gateway (auth, tasks, health).
 type Client struct {
 	BaseURL    string
@@ -355,7 +357,7 @@ func (c *Client) ResponsesWithOptions(message, model, projectID string) (*Respon
 	if err != nil {
 		return nil, fmt.Errorf("invalid base URL: %w", err)
 	}
-	u, err := base.Parse("/v1/responses")
+	u, err := base.Parse(pathV1Responses)
 	if err != nil {
 		return nil, fmt.Errorf("invalid path: %w", err)
 	}
@@ -431,11 +433,12 @@ func (c *Client) ChatStream(ctx context.Context, message, model, projectID strin
 	if resp.StatusCode != http.StatusOK {
 		return c.parseError(resp)
 	}
-	return readChatSSEStream(ctx, resp.Body, onDelta, onAmendment)
+	return readChatSSEStream(ctx, resp.Body, onDelta, onAmendment, nil)
 }
 
 // ResponsesStream calls POST /v1/responses with stream=true and invokes onDelta for each
 // visible-text delta; onAmendment is called for cynodeai.amendment (e.g. secret_redaction).
+// Returns the streamed response_id from the first event when the gateway sends it (Task 4).
 func (c *Client) ResponsesStream(ctx context.Context, message, model, projectID string, onDelta func(string), onAmendment func(redactedContent string)) (responseID string, err error) {
 	input, err := json.Marshal(message)
 	if err != nil {
@@ -454,7 +457,7 @@ func (c *Client) ResponsesStream(ctx context.Context, message, model, projectID 
 	if err != nil {
 		return "", fmt.Errorf("invalid base URL: %w", err)
 	}
-	u, err := base.Parse("/v1/responses")
+	u, err := base.Parse(pathV1Responses)
 	if err != nil {
 		return "", fmt.Errorf("invalid path: %w", err)
 	}
@@ -478,12 +481,15 @@ func (c *Client) ResponsesStream(ctx context.Context, message, model, projectID 
 	if resp.StatusCode != http.StatusOK {
 		return "", c.parseError(resp)
 	}
-	err = readChatSSEStream(ctx, resp.Body, onDelta, onAmendment)
-	return "", err
+	var streamedID string
+	err = readChatSSEStream(ctx, resp.Body, onDelta, onAmendment, func(rid string) { streamedID = rid })
+	return streamedID, err
 }
 
 // readChatSSEStream reads SSE lines from r, calling onDelta for each content delta,
 // and returns when the [DONE] sentinel or a terminal error event is received.
+// When onResponseID is non-nil, the first data line that is JSON with a "response_id"
+// field (e.g. from /v1/responses stream) is passed to it; other events are unchanged.
 // Per CYNAI.USRGWY.OpenAIChatApi.Streaming: events must be distinguishable as
 // visible text deltas vs. terminal events; [DONE] signals end of stream.
 // parsedSSEEvent holds the parsed result of one SSE data line.
@@ -512,7 +518,7 @@ func parseSSEDataLine(data string) *parsedSSEEvent {
 	return &parsedSSEEvent{chunk: chunk}
 }
 
-func readChatSSEStream(_ context.Context, r io.Reader, onDelta func(string), onAmendment func(redactedContent string)) error {
+func readChatSSEStream(_ context.Context, r io.Reader, onDelta func(string), onAmendment func(redactedContent string), onResponseID func(string)) error {
 	if onAmendment == nil {
 		onAmendment = func(string) {}
 	}
@@ -528,7 +534,7 @@ func readChatSSEStream(_ context.Context, r io.Reader, onDelta func(string), onA
 			continue
 		}
 		data := strings.TrimPrefix(line, "data: ")
-		done, err := processChatSSEDataLine(data, lastEvent, onDelta, onAmendment)
+		done, err := processChatSSEDataLine(data, lastEvent, onDelta, onAmendment, onResponseID)
 		if err != nil {
 			return err
 		}
@@ -544,7 +550,8 @@ func readChatSSEStream(_ context.Context, r io.Reader, onDelta func(string), onA
 }
 
 // processChatSSEDataLine handles one "data: ..." line. Returns (streamDone, error).
-func processChatSSEDataLine(data, lastEvent string, onDelta, onAmendment func(string)) (streamDone bool, err error) {
+// When onResponseID is non-nil and data is JSON with response_id (e.g. /v1/responses), invokes it and skips delta.
+func processChatSSEDataLine(data, lastEvent string, onDelta, onAmendment, onResponseID func(string)) (streamDone bool, err error) {
 	if data == "[DONE]" {
 		return true, nil
 	}
@@ -558,6 +565,15 @@ func processChatSSEDataLine(data, lastEvent string, onDelta, onAmendment func(st
 			onAmendment(amendment.Content)
 		}
 		return false, nil
+	}
+	if onResponseID != nil {
+		var respID struct {
+			ResponseID string `json:"response_id"`
+		}
+		if json.Unmarshal([]byte(data), &respID) == nil && respID.ResponseID != "" {
+			onResponseID(respID.ResponseID)
+			return false, nil
+		}
 	}
 	ev := parseSSEDataLine(data)
 	if ev == nil {

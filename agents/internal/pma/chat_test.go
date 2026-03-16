@@ -244,6 +244,41 @@ func TestChatCompletionHandler_SuccessWithMCPPath(t *testing.T) {
 	}
 }
 
+// TestChatCompletionHandler_StreamLangchainPath exercises streamCompletionLangchainToWriter
+// when Stream=true and canStreamCompletion is false (MCP + capable model).
+func TestChatCompletionHandler_StreamLangchainPath(t *testing.T) {
+	mcpSrv := newMockMCPServer(t, `{}`)
+	defer mcpSrv.Close()
+
+	t.Setenv("PMA_MCP_GATEWAY_URL", mcpSrv.URL)
+	t.Setenv("OLLAMA_BASE_URL", "http://127.0.0.1:1")
+	t.Setenv("INFERENCE_MODEL", "qwen3.5:9b")
+
+	oldHook := testLLMForCompletion
+	testLLMForCompletion = &mockLLM{responses: []string{"streamed"}}
+	defer func() { testLLMForCompletion = oldHook }()
+
+	handler := ChatCompletionHandler("sys", slog.Default())
+	body := `{"messages":[{"role":"user","content":"hi"}],"stream":true}`
+	req := httptest.NewRequest(http.MethodPost, "/internal/chat/completion", bytes.NewReader([]byte(body)))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	handler(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Errorf("got status %d, body %s", rec.Code, rec.Body.String())
+	}
+	if rec.Header().Get("Content-Type") != "application/x-ndjson" {
+		t.Errorf("Content-Type = %s", rec.Header().Get("Content-Type"))
+	}
+	b := rec.Body.Bytes()
+	if !bytes.Contains(b, []byte(`"iteration_start"`)) {
+		t.Errorf("body missing iteration_start: %s", b)
+	}
+	if !bytes.Contains(b, []byte(`"done"`)) {
+		t.Errorf("body missing done: %s", b)
+	}
+}
+
 // TestChatCompletionHandler_SmallModelDirectGeneration verifies that when INFERENCE_MODEL
 // is a small-variant model (e.g. qwen3.5:0.8b), the direct callInference path is used
 // (bypassing langchaingo, which cannot reliably return content for Qwen3.5 thinking mode
@@ -771,5 +806,33 @@ func TestStreamCompletionWriteChunk_ContentChunk(t *testing.T) {
 	}
 	if !strings.Contains(rec.Body.String(), "tok") {
 		t.Errorf("expected 'tok' in output; got %q", rec.Body.String())
+	}
+}
+
+func TestStreamCompletionWriteChunk_ErrorChunk(t *testing.T) {
+	rec := httptest.NewRecorder()
+	enc := json.NewEncoder(rec)
+	line, _ := json.Marshal(map[string]interface{}{"done": false, "message": map[string]string{}, "error": "inference failed"})
+	done, stop := streamCompletionWriteChunk(enc, rec, line, slog.Default())
+	if done || !stop {
+		t.Errorf("error chunk: done=%v stop=%v, want false,true", done, stop)
+	}
+}
+
+func TestStreamCompletionWriteChunk_InvalidJSON(t *testing.T) {
+	rec := httptest.NewRecorder()
+	enc := json.NewEncoder(rec)
+	done, stop := streamCompletionWriteChunk(enc, rec, []byte(`{invalid`), slog.Default())
+	if done || stop {
+		t.Errorf("invalid JSON: done=%v stop=%v, want false,false", done, stop)
+	}
+}
+
+func TestTruncate(t *testing.T) {
+	if got := truncate("short", 10); got != "short" {
+		t.Errorf("truncate(short,10)=%q", got)
+	}
+	if got := truncate("longer than five", 5); got != "longe…" {
+		t.Errorf("truncate(longer...,5)=%q", got)
 	}
 }

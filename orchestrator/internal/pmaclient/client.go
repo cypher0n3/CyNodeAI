@@ -89,9 +89,21 @@ func CallChatCompletion(ctx context.Context, client *http.Client, baseURL string
 	return out.Content, nil
 }
 
+// PMAStreamCallbacks are invoked for each NDJSON line from PMA stream. OnDelta is required; others are optional.
+type PMAStreamCallbacks struct {
+	OnDelta          func(string) error
+	OnIterationStart func(iteration int) error
+}
+
 // CallChatCompletionStream streams completion from PMA; onDelta is called for each token.
 // Supports both direct PMA URLs and managed proxy URLs (worker streams upstream response when request has stream: true).
 func CallChatCompletionStream(ctx context.Context, client *http.Client, baseURL string, messages []ChatMessage, workerBearerToken string, onDelta func(string) error) error {
+	cb := PMAStreamCallbacks{OnDelta: onDelta}
+	return CallChatCompletionStreamWithCallbacks(ctx, client, baseURL, messages, workerBearerToken, cb)
+}
+
+// CallChatCompletionStreamWithCallbacks streams completion from PMA and invokes callbacks for each NDJSON event (delta, iteration_start, etc.).
+func CallChatCompletionStreamWithCallbacks(ctx context.Context, client *http.Client, baseURL string, messages []ChatMessage, workerBearerToken string, cb PMAStreamCallbacks) error {
 	if baseURL == "" {
 		return fmt.Errorf("PMA base URL is required")
 	}
@@ -105,7 +117,7 @@ func CallChatCompletionStream(ctx context.Context, client *http.Client, baseURL 
 		return err
 	}
 	if looksLikeManagedProxyEndpoint(baseURL) {
-		return callViaManagedProxyStream(ctx, client, baseURL, b, workerBearerToken, onDelta)
+		return callViaManagedProxyStreamWithCallbacks(ctx, client, baseURL, b, workerBearerToken, cb)
 	}
 	url := strings.TrimSuffix(baseURL, "/") + "/internal/chat/completion"
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(b))
@@ -121,15 +133,19 @@ func CallChatCompletionStream(ctx context.Context, client *http.Client, baseURL 
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("PMA chat completion returned %s", resp.Status)
 	}
-	return readNDJSONStream(ctx, resp.Body, resp.Header.Get("Content-Type"), onDelta)
+	return readNDJSONStreamWithCallbacks(ctx, resp.Body, resp.Header.Get("Content-Type"), cb)
 }
 
 func readNDJSONStream(ctx context.Context, body io.Reader, contentType string, onDelta func(string) error) error {
+	return readNDJSONStreamWithCallbacks(ctx, body, contentType, PMAStreamCallbacks{OnDelta: onDelta})
+}
+
+func readNDJSONStreamWithCallbacks(ctx context.Context, body io.Reader, contentType string, cb PMAStreamCallbacks) error {
 	if contentType != "" && !strings.Contains(contentType, "application/x-ndjson") && !strings.Contains(contentType, "application/json") {
 		bodyBytes, _ := io.ReadAll(body)
 		var single CompletionResponse
-		if json.Unmarshal(bodyBytes, &single) == nil && single.Content != "" {
-			return onDelta(single.Content)
+		if json.Unmarshal(bodyBytes, &single) == nil && single.Content != "" && cb.OnDelta != nil {
+			return cb.OnDelta(single.Content)
 		}
 		return fmt.Errorf("unexpected PMA response content-type: %s", contentType)
 	}
@@ -138,32 +154,41 @@ func readNDJSONStream(ctx context.Context, body io.Reader, contentType string, o
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
-		if err := processNDJSONLine(scanner.Bytes(), onDelta); err != nil {
+		if err := processNDJSONLine(scanner.Bytes(), cb); err != nil {
 			return err
 		}
 	}
 	return scanner.Err()
 }
 
-func processNDJSONLine(line []byte, onDelta func(string) error) error {
+func processNDJSONLine(line []byte, cb PMAStreamCallbacks) error {
 	line = bytes.TrimSpace(line)
 	if len(line) == 0 {
 		return nil
 	}
-	var chunk struct {
-		Delta string `json:"delta"`
-	}
-	if json.Unmarshal(line, &chunk) != nil {
+	var raw map[string]json.RawMessage
+	if json.Unmarshal(line, &raw) != nil {
 		return nil
 	}
-	if chunk.Delta != "" {
-		return onDelta(chunk.Delta)
+	if n, ok := raw["iteration_start"]; ok && cb.OnIterationStart != nil {
+		var iter int
+		if json.Unmarshal(n, &iter) == nil {
+			if err := cb.OnIterationStart(iter); err != nil {
+				return err
+			}
+		}
 	}
+	if d, ok := raw["delta"]; ok && cb.OnDelta != nil {
+		var s string
+		if json.Unmarshal(d, &s) == nil && s != "" {
+			return cb.OnDelta(s)
+		}
+	}
+	// "done" and other keys are ignored; stream continues until body closes
 	return nil
 }
 
-// callViaManagedProxyStream POSTs a stream:true request to the managed proxy; the worker streams the upstream body back.
-func callViaManagedProxyStream(ctx context.Context, client *http.Client, proxyURL string, handoffBody []byte, workerBearerToken string, onDelta func(string) error) error {
+func callViaManagedProxyStreamWithCallbacks(ctx context.Context, client *http.Client, proxyURL string, handoffBody []byte, workerBearerToken string, cb PMAStreamCallbacks) error {
 	reqBody := managedProxyRequest{
 		Version: 1,
 		Method:  http.MethodPost,
@@ -193,7 +218,7 @@ func callViaManagedProxyStream(ctx context.Context, client *http.Client, proxyUR
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("PMA proxy stream returned %s", resp.Status)
 	}
-	return readNDJSONStream(ctx, resp.Body, resp.Header.Get("Content-Type"), onDelta)
+	return readNDJSONStreamWithCallbacks(ctx, resp.Body, resp.Header.Get("Content-Type"), cb)
 }
 
 func looksLikeManagedProxyEndpoint(baseURL string) bool {

@@ -2,9 +2,14 @@ package pma
 
 import (
 	"context"
+	"encoding/json"
 	"log/slog"
+	"net/http/httptest"
 	"os"
+	"strings"
 	"testing"
+
+	"github.com/tmc/langchaingo/llms"
 )
 
 func TestIsCapableModel(t *testing.T) {
@@ -140,6 +145,64 @@ func TestLooksLikeUnexecutedToolCall(t *testing.T) {
 	}
 }
 
+func TestRunCompletionWithLangchainStreaming_EmitsNDJSON(t *testing.T) {
+	mcpSrv := newMockMCPServer(t, `{}`)
+	defer mcpSrv.Close()
+	client := &MCPClient{BaseURL: mcpSrv.URL}
+	oldHook := testLLMForCompletion
+	testLLMForCompletion = &mockLLM{responses: []string{"streamed"}}
+	defer func() { testLLMForCompletion = oldHook }()
+	t.Setenv("INFERENCE_MODEL", "qwen3.5:9b")
+
+	rec := httptest.NewRecorder()
+	err := runCompletionWithLangchainStreaming(context.Background(), "prompt", client, rec, slog.Default())
+	if err != nil {
+		t.Fatalf("runCompletionWithLangchainStreaming: %v", err)
+	}
+	body := rec.Body.String()
+	// Must contain iteration_start and done (mock LLM invokes StreamingFunc so delta lines present).
+	if !strings.Contains(body, `"iteration_start"`) {
+		t.Errorf("response missing iteration_start: %s", body)
+	}
+	if !strings.Contains(body, `"done"`) {
+		t.Errorf("response missing done: %s", body)
+	}
+	// Parse first line as JSON (iteration_start).
+	lines := strings.Split(strings.TrimSpace(body), "\n")
+	if len(lines) < 1 {
+		t.Fatalf("expected at least one NDJSON line: %s", body)
+	}
+	var first map[string]json.RawMessage
+	if err := json.Unmarshal([]byte(lines[0]), &first); err != nil {
+		t.Fatalf("first line not JSON: %v", err)
+	}
+	if _, ok := first["iteration_start"]; !ok {
+		t.Errorf("first line missing iteration_start: %s", lines[0])
+	}
+}
+
+// TestStreamingLLM_Call exercises GenerateFromSinglePrompt on the streaming LLM.
+func TestStreamingLLM_Call(t *testing.T) {
+	rec := httptest.NewRecorder()
+	iter := 0
+	inner := &mockLLM{responses: []string{"call-result"}}
+	llm := newStreamingLLM(inner, rec, &iter)
+	s, err := llms.GenerateFromSinglePrompt(context.Background(), llm, "prompt")
+	if err != nil {
+		t.Fatalf("Call: %v", err)
+	}
+	if s != "call-result" {
+		t.Errorf("got %q, want call-result", s)
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, `"iteration_start"`) {
+		t.Errorf("body missing iteration_start: %s", body)
+	}
+	if !strings.Contains(body, `"delta"`) {
+		t.Errorf("body missing delta: %s", body)
+	}
+}
+
 func TestRunCompletionWithLangchain_EmptyClient(t *testing.T) {
 	_, err := runCompletionWithLangchain(context.Background(), "prompt", nil, slog.Default())
 	if err == nil {
@@ -243,6 +306,31 @@ func TestRunCompletionWithLangchain_WithMockLLMAndMCP_CapableModels(t *testing.T
 				t.Errorf("content = %q, want %q", content, tt.wantContent)
 			}
 		})
+	}
+}
+
+// TestRunCompletionWithLangchain_OllamaNumCtxFromEnv exercises ollamaNumCtxFromEnv by running
+// the real Ollama client path (testLLMForCompletion=nil) with OLLAMA_NUM_CTX set and a mock server.
+func TestRunCompletionWithLangchain_OllamaNumCtxFromEnv(t *testing.T) {
+	mockOllama := newMockInferenceServer(t, 200, `{"message":{"role":"assistant","content":"numctx-ok"},"done":true}`)
+	defer mockOllama.Close()
+	mcpSrv := newMockMCPServer(t, `{}`)
+	defer mcpSrv.Close()
+
+	t.Setenv("OLLAMA_BASE_URL", mockOllama.URL)
+	t.Setenv("OLLAMA_NUM_CTX", "4096")
+	t.Setenv("INFERENCE_MODEL", "qwen3.5:9b")
+	oldHook := testLLMForCompletion
+	testLLMForCompletion = nil
+	defer func() { testLLMForCompletion = oldHook }()
+
+	client := &MCPClient{BaseURL: mcpSrv.URL}
+	content, err := runCompletionWithLangchain(context.Background(), "hi", client, slog.Default())
+	if err != nil {
+		t.Fatalf("runCompletionWithLangchain: %v", err)
+	}
+	if content != "numctx-ok" {
+		t.Errorf("content = %q, want numctx-ok", content)
 	}
 }
 

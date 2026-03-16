@@ -1461,6 +1461,34 @@ func InitializeCynorkSuiteExtra(sc *godog.ScenarioContext, state *cynorkState) {
 		return nil
 	})
 
+	sc.Step(`^the local cynork YAML config stores `+"`tui.show_tool_output_by_default`"+` as (true|false)$`, func(ctx context.Context, val string) error {
+		st := getState(ctx)
+		data, err := os.ReadFile(st.configPath)
+		if err != nil {
+			return fmt.Errorf("read config: %w", err)
+		}
+		want := val == "true"
+		wantedLine := fmt.Sprintf("    show_tool_output_by_default: %v", want)
+		otherLine := fmt.Sprintf("    show_tool_output_by_default: %v", !want)
+		cfg := string(data)
+		if strings.Contains(cfg, wantedLine) {
+			return nil
+		}
+		if strings.Contains(cfg, otherLine) {
+			cfg = strings.ReplaceAll(cfg, otherLine, wantedLine)
+		} else if strings.Contains(cfg, "\ntui:\n") {
+			cfg = strings.ReplaceAll(cfg, "\ntui:\n", "\ntui:\n"+wantedLine+"\n")
+		} else if strings.Contains(cfg, "tui:") {
+			cfg = strings.ReplaceAll(cfg, "tui:", "tui:\n"+wantedLine)
+		} else {
+			cfg += "\ntui:\n" + wantedLine + "\n"
+		}
+		if err := os.WriteFile(st.configPath, []byte(cfg), 0o600); err != nil {
+			return fmt.Errorf("write config: %w", err)
+		}
+		return nil
+	})
+
 	sc.Step(`^retained thinking parts in the scrollback are displayed as expanded thinking blocks$`, func(_ context.Context) error {
 		return godog.ErrPending // streaming transcript state deferred
 	})

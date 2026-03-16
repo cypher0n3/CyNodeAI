@@ -47,3 +47,42 @@ func TestStatusConstants(t *testing.T) {
 		t.Error("status constants must be non-empty")
 	}
 }
+
+// TestSSEEventConstantsAndPayloads locks the CyNodeAI streaming SSE event names and payload shapes
+// per CYNAI.USRGWY.OpenAIChatApi.StreamingPerEndpointSSEFormat.
+func TestSSEEventConstantsAndPayloads(t *testing.T) {
+	eventNames := []string{
+		SSEEventThinkingDelta, SSEEventToolCall, SSEEventToolProgress,
+		SSEEventIterationStart, SSEEventAmendment, SSEEventHeartbeat,
+	}
+	for _, name := range eventNames {
+		if name == "" || len(name) < 5 {
+			t.Errorf("SSE event constant empty or too short: %q", name)
+		}
+		if len(name) < 9 || name[:9] != "cynodeai." {
+			t.Errorf("SSE event must have cynodeai. prefix: %q", name)
+		}
+	}
+
+	// Amendment payload roundtrip (secret_redaction and overwrite).
+	secretPayload := SSEAmendmentPayload{Type: "secret_redaction", Content: "redacted", RedactionKinds: []string{"api_key"}}
+	b, _ := json.Marshal(secretPayload)
+	var out SSEAmendmentPayload
+	if err := json.Unmarshal(b, &out); err != nil || out.Type != secretPayload.Type {
+		t.Errorf("amendment secret_redaction roundtrip: %v", err)
+	}
+	iter := 1
+	overwritePayload := SSEAmendmentPayload{Type: "overwrite", Content: "x", Scope: "iteration", Iteration: &iter}
+	b, _ = json.Marshal(overwritePayload)
+	if err := json.Unmarshal(b, &out); err != nil || out.Scope != "iteration" || out.Iteration == nil || *out.Iteration != 1 {
+		t.Errorf("amendment overwrite roundtrip: %v", err)
+	}
+
+	// Heartbeat payload roundtrip.
+	hb := SSEHeartbeatPayload{ElapsedS: 5, Status: "processing"}
+	b, _ = json.Marshal(hb)
+	var hbOut SSEHeartbeatPayload
+	if err := json.Unmarshal(b, &hbOut); err != nil || hbOut.ElapsedS != 5 {
+		t.Errorf("heartbeat roundtrip: %v", err)
+	}
+}

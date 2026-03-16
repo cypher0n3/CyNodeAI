@@ -297,6 +297,39 @@ func TestCallChatCompletionStream_Success(t *testing.T) {
 	}
 }
 
+func TestCallChatCompletionStreamWithCallbacks_IterationStart(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != pathChatCompletion {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		w.Header().Set("Content-Type", "application/x-ndjson")
+		_, _ = w.Write([]byte(`{"iteration_start":1}` + "\n"))
+		_, _ = w.Write([]byte(`{"delta":"a"}` + "\n"))
+		_, _ = w.Write([]byte(`{"iteration_start":2}` + "\n"))
+		_, _ = w.Write([]byte(`{"delta":"b"}` + "\n"))
+	}))
+	defer server.Close()
+
+	var deltas string
+	var iterations []int
+	cb := PMAStreamCallbacks{
+		OnDelta:          func(d string) error { deltas += d; return nil },
+		OnIterationStart: func(n int) error { iterations = append(iterations, n); return nil },
+	}
+	err := CallChatCompletionStreamWithCallbacks(context.Background(), nil, server.URL,
+		[]ChatMessage{{Role: "user", Content: "hi"}}, "", cb)
+	if err != nil {
+		t.Fatalf("CallChatCompletionStreamWithCallbacks: %v", err)
+	}
+	if deltas != "ab" {
+		t.Errorf("deltas = %q, want ab", deltas)
+	}
+	if len(iterations) != 2 || iterations[0] != 1 || iterations[1] != 2 {
+		t.Errorf("iterations = %v, want [1, 2]", iterations)
+	}
+}
+
 func TestCallChatCompletionStream_NonOK(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
@@ -426,19 +459,19 @@ func TestReadNDJSONStream_UnexpectedContentTypeSingleJSON(t *testing.T) {
 }
 
 func TestProcessNDJSONLine_Empty(t *testing.T) {
-	if err := processNDJSONLine([]byte(""), func(string) error { return nil }); err != nil {
+	if err := processNDJSONLine([]byte(""), PMAStreamCallbacks{OnDelta: func(string) error { return nil }}); err != nil {
 		t.Errorf("empty line should not error: %v", err)
 	}
 }
 
 func TestProcessNDJSONLine_NoDelta(t *testing.T) {
-	if err := processNDJSONLine([]byte(`{"other":"x"}`), func(string) error { return nil }); err != nil {
+	if err := processNDJSONLine([]byte(`{"other":"x"}`), PMAStreamCallbacks{OnDelta: func(string) error { return nil }}); err != nil {
 		t.Errorf("no delta should not error: %v", err)
 	}
 }
 
 func TestProcessNDJSONLine_InvalidJSON(t *testing.T) {
-	if err := processNDJSONLine([]byte(`not json`), func(string) error { return nil }); err != nil {
+	if err := processNDJSONLine([]byte(`not json`), PMAStreamCallbacks{OnDelta: func(string) error { return nil }}); err != nil {
 		t.Errorf("invalid JSON should not error (skipped): %v", err)
 	}
 }

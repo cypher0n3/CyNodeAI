@@ -333,6 +333,11 @@ func (h *OpenAIChatHandler) completeViaPMAStream(ctx context.Context, w http.Res
 	}
 	var fullContent strings.Builder
 	stop := "stop"
+	// For /v1/responses, emit response_id early so clients see streamed response_id (Task 1 contract).
+	if assistantMeta != nil {
+		b, _ := json.Marshal(map[string]string{"response_id": chunkID})
+		writeSSEEvent(w, string(b))
+	}
 	open := userapi.ChatCompletionChunk{
 		ID:      chunkID,
 		Object:  "chat.completion.chunk",
@@ -355,7 +360,17 @@ func (h *OpenAIChatHandler) completeViaPMAStream(ctx context.Context, w http.Res
 		writeSSEEvent(w, string(b))
 		return nil
 	}
-	if err := pmaclient.CallChatCompletionStream(ctx, nil, cand.endpoint, msgs, workerToken, onDelta); err != nil {
+	onIterationStart := func(iteration int) error {
+		payload := userapi.SSEIterationStartPayload{Iteration: iteration}
+		b, err := json.Marshal(payload)
+		if err != nil {
+			return err
+		}
+		writeSSENamedEvent(w, userapi.SSEEventIterationStart, string(b))
+		return nil
+	}
+	cb := pmaclient.PMAStreamCallbacks{OnDelta: onDelta, OnIterationStart: onIterationStart}
+	if err := pmaclient.CallChatCompletionStreamWithCallbacks(ctx, nil, cand.endpoint, msgs, workerToken, cb); err != nil {
 		return err
 	}
 	content := fullContent.String()
@@ -574,6 +589,16 @@ func writeOpenAIError(w http.ResponseWriter, status int, code, message string) {
 func writeSSEEvent(w http.ResponseWriter, data string) {
 	bw := bufio.NewWriter(w)
 	_, _ = fmt.Fprintf(bw, "data: %s\n\n", data)
+	_ = bw.Flush()
+	if f, ok := w.(http.Flusher); ok {
+		f.Flush()
+	}
+}
+
+// writeSSENamedEvent writes event name and data line (cynodeai.* extension events) and flushes.
+func writeSSENamedEvent(w http.ResponseWriter, eventName, data string) {
+	bw := bufio.NewWriter(w)
+	_, _ = fmt.Fprintf(bw, "event: %s\ndata: %s\n\n", eventName, data)
 	_ = bw.Flush()
 	if f, ok := w.(http.Flusher); ok {
 		f.Flush()

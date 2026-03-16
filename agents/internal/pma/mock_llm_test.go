@@ -29,6 +29,13 @@ func (m *mockLLM) GenerateContent(ctx context.Context, messages []llms.MessageCo
 	} else {
 		text = "Done"
 	}
+	var opts llms.CallOptions
+	for _, o := range options {
+		o(&opts)
+	}
+	if opts.StreamingFunc != nil && text != "" {
+		_ = opts.StreamingFunc(ctx, []byte(text))
+	}
 	return &llms.ContentResponse{
 		Choices: []*llms.ContentChoice{{Content: text}},
 	}, nil

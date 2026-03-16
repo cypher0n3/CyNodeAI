@@ -26,6 +26,7 @@ func AllSlashCommands() []SlashCommand {
 		{"/exit", "end chat session"},
 		{"/help", "list slash commands"},
 		{"/hide-thinking", "collapse retained thinking parts"},
+		{"/hide-tool-output", "collapse retained tool-call and tool-result parts"},
 		{"/model", "show or set session model"},
 		{"/models", "list available models"},
 		{"/nodes", "nodes list, get"},
@@ -33,6 +34,7 @@ func AllSlashCommands() []SlashCommand {
 		{"/project", "show or set project context"},
 		{"/quit", "end chat session"},
 		{"/show-thinking", "reveal retained thinking parts"},
+		{"/show-tool-output", "reveal retained tool-call and tool-result parts"},
 		{"/skills list", "list loaded skills"},
 		{"/skills get", "get a skill by selector"},
 		{"/skills load", "load a skill from a markdown file"},
@@ -85,10 +87,16 @@ var slashHandlers = map[string]slashHandler{
 	"hide-thinking": func(s *chat.Session, _ string) (bool, error) {
 		return false, runSlashSetThinking(s, false)
 	},
+	"hide-tool-output": func(s *chat.Session, _ string) (bool, error) {
+		return false, runSlashSetToolOutput(s, false)
+	},
 	"model":   func(s *chat.Session, rest string) (bool, error) { return false, runSlashModel(s, rest) },
 	"project": func(s *chat.Session, rest string) (bool, error) { return false, runSlashProjectDelegated(s, rest) },
 	"show-thinking": func(s *chat.Session, _ string) (bool, error) {
 		return false, runSlashSetThinking(s, true)
+	},
+	"show-tool-output": func(s *chat.Session, _ string) (bool, error) {
+		return false, runSlashSetToolOutput(s, true)
 	},
 	"task": func(_ *chat.Session, rest string) (bool, error) {
 		return false, runCynorkSubcommandForSlash("task", rest)
@@ -256,25 +264,32 @@ func runSlashConnect(session *chat.Session, rest string) error {
 	return nil
 }
 
-// runSlashSetThinking toggles the thinking visibility preference and persists it.
-func runSlashSetThinking(_ *chat.Session, show bool) error {
-	label := "hidden"
+func runSlashSetTuiPref(prefix string, show bool, apply func()) error {
+	label := prefix + ": hidden"
 	if show {
-		label = "visible"
+		label = prefix + ": visible"
 	}
-	cfg.TUI.ShowThinkingByDefault = show
-	effectivePath := configPath
-	if effectivePath == "" {
-		effectivePath, _ = getDefaultConfigPath()
+	apply()
+	path := configPath
+	if path == "" {
+		path, _ = getDefaultConfigPath()
 	}
-	if effectivePath != "" {
+	if path != "" {
 		if err := saveConfig(); err != nil {
-			fmt.Fprintf(os.Stderr, "thinking: %s (warning: config save failed: %v)\n", label, err)
+			fmt.Fprintf(os.Stderr, "%s (warning: config save failed: %v)\n", label, err)
 			return nil
 		}
 	}
-	fmt.Fprintln(os.Stderr, "thinking:", label)
+	fmt.Fprintln(os.Stderr, label)
 	return nil
+}
+
+func runSlashSetThinking(_ *chat.Session, show bool) error {
+	return runSlashSetTuiPref("thinking", show, func() { cfg.TUI.ShowThinkingByDefault = show })
+}
+
+func runSlashSetToolOutput(_ *chat.Session, show bool) error {
+	return runSlashSetTuiPref("tool output", show, func() { cfg.TUI.ShowToolOutputByDefault = show })
 }
 
 func runSlashModel(session *chat.Session, rest string) error {

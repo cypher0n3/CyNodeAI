@@ -93,6 +93,8 @@ class TestTaskCreate(unittest.TestCase):
 
     def test_task_create_with_attachments(self):
         """Create task with canonical --attach paths; assert attachments in create/get."""
+        if state.CONFIG_PATH is None:
+            self.skipTest("CONFIG_PATH not set (run full suite or auth first)")
         tmp_dir = os.path.join(config.PROJECT_ROOT, "tmp")
         os.makedirs(tmp_dir, exist_ok=True)
         with open(os.path.join(tmp_dir, "att1.txt"), "w", encoding="utf-8") as f:

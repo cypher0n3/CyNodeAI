@@ -207,3 +207,56 @@ type ChatCompletionChunk struct {
 	Model   string                      `json:"model"`
 	Choices []ChatCompletionChunkChoice `json:"choices"`
 }
+
+// --- CyNodeAI SSE extension events (StreamingPerEndpointSSEFormat) ---
+
+// SSE event type names for CyNodeAI streaming extensions.
+// Chat-completions and responses endpoints emit these as named event: lines.
+const (
+	SSEEventThinkingDelta  = "cynodeai.thinking_delta"
+	SSEEventToolCall       = "cynodeai.tool_call"
+	SSEEventToolProgress   = "cynodeai.tool_progress"
+	SSEEventIterationStart = "cynodeai.iteration_start"
+	SSEEventAmendment      = "cynodeai.amendment"
+	SSEEventHeartbeat      = "cynodeai.heartbeat"
+)
+
+// SSEThinkingDeltaPayload is the data payload for event: cynodeai.thinking_delta.
+type SSEThinkingDeltaPayload struct {
+	Content string `json:"content"`
+}
+
+// SSEToolCallPayload is the data payload for event: cynodeai.tool_call.
+type SSEToolCallPayload struct {
+	Name      string `json:"name"`
+	Arguments string `json:"arguments"`
+}
+
+// SSEToolProgressPayload is the data payload for event: cynodeai.tool_progress.
+type SSEToolProgressPayload struct {
+	State   string `json:"state"`
+	Tool    string `json:"tool"`
+	Preview string `json:"preview,omitempty"`
+}
+
+// SSEIterationStartPayload is the data payload for event: cynodeai.iteration_start.
+type SSEIterationStartPayload struct {
+	Iteration int `json:"iteration"`
+}
+
+// SSEAmendmentPayload is the data payload for event: cynodeai.amendment.
+// Type is "secret_redaction" or "overwrite"; scope/iteration for overwrite.
+type SSEAmendmentPayload struct {
+	Type           string   `json:"type"`
+	Content        string   `json:"content"`
+	RedactionKinds []string `json:"redaction_kinds,omitempty"`
+	Scope          string   `json:"scope,omitempty"`
+	Iteration      *int     `json:"iteration,omitempty"`
+	Reason         string   `json:"reason,omitempty"`
+}
+
+// SSEHeartbeatPayload is the data payload for event: cynodeai.heartbeat.
+type SSEHeartbeatPayload struct {
+	ElapsedS int    `json:"elapsed_s"`
+	Status   string `json:"status"`
+}

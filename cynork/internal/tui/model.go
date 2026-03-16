@@ -96,6 +96,8 @@ type AuthProvider interface {
 	Save() error
 	ShowThinkingByDefault() bool
 	SetShowThinkingByDefault(bool)
+	ShowToolOutputByDefault() bool
+	SetShowToolOutputByDefault(bool)
 }
 
 // Model holds the TUI state: session, scrollback, composer input, and dimensions.
@@ -131,6 +133,8 @@ type Model struct {
 
 	// ShowThinking controls whether thinking parts are expanded (true) or collapsed (false).
 	ShowThinking bool
+	// ShowToolOutput controls whether tool-call and tool-result parts are expanded (true) or collapsed (false).
+	ShowToolOutput bool
 }
 
 // NewModel returns an initial TUI model for the given session.
@@ -147,7 +151,14 @@ func NewModel(session *chat.Session) *Model {
 }
 
 // SetAuthProvider sets the optional auth provider (used by /auth logout, refresh).
-func (m *Model) SetAuthProvider(p AuthProvider) { m.AuthProvider = p }
+// When p is non-nil, syncs ShowThinking and ShowToolOutput from the provider's default preferences.
+func (m *Model) SetAuthProvider(p AuthProvider) {
+	m.AuthProvider = p
+	if p != nil {
+		m.ShowThinking = p.ShowThinkingByDefault()
+		m.ShowToolOutput = p.ShowToolOutputByDefault()
+	}
+}
 
 // SetResumeThreadSelector sets the thread selector for --resume-thread (used after in-session login to ensure thread).
 func (m *Model) SetResumeThreadSelector(s string) { m.ResumeThreadSelector = s }

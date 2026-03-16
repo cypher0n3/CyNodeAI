@@ -207,6 +207,31 @@ def temp_config_dir():
     return tempfile.mkdtemp(prefix="cynodeai_e2e_config_")
 
 
+def parse_sse_stream_typed(response):
+    """Parse SSE stream preserving event: and data: order.
+
+    Returns (events, found_done). Each event is {"event": type or None, "data": str}.
+    event is the value after 'event: ' (e.g. cynodeai.iteration_start); None for unnamed data.
+    """
+    events = []
+    found_done = False
+    current_event = None
+    for line in response.iter_lines(decode_unicode=True):
+        if not line:
+            continue
+        if line.startswith("event: "):
+            current_event = line[len("event: "):].strip()
+            continue
+        if line.startswith("data: "):
+            data = line[len("data: "):]
+            if data == "[DONE]":
+                found_done = True
+                break
+            events.append({"event": current_event, "data": data})
+            current_event = None
+    return events, found_done
+
+
 def parse_json_safe(text):
     """Parse JSON; return dict or None."""
     try:

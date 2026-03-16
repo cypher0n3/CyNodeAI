@@ -64,6 +64,10 @@ func (p *tuiAuthProvider) ShowThinkingByDefault() bool { return p.cfg.TUI.ShowTh
 func (p *tuiAuthProvider) SetShowThinkingByDefault(v bool) {
 	p.cfg.TUI.ShowThinkingByDefault = v
 }
+func (p *tuiAuthProvider) ShowToolOutputByDefault() bool { return p.cfg.TUI.ShowToolOutputByDefault }
+func (p *tuiAuthProvider) SetShowToolOutputByDefault(v bool) {
+	p.cfg.TUI.ShowToolOutputByDefault = v
+}
 
 // runTUIWithSession starts the full-screen TUI with the given session. Used by both
 // "cynork tui" and interactive "cynork chat" (when stdin/stdout are a TTY).

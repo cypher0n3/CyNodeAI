@@ -1324,11 +1324,12 @@ func TestModel_View_ContainsComposerHint(t *testing.T) {
 
 // mockAuthProvider implements AuthProvider for tests.
 type mockAuthProvider struct {
-	token, refreshToken   string
-	gatewayURL            string
-	saveErr               error
-	saved                 bool
-	showThinkingByDefault bool
+	token, refreshToken     string
+	gatewayURL              string
+	saveErr                 error
+	saved                   bool
+	showThinkingByDefault   bool
+	showToolOutputByDefault bool
 }
 
 func (m *mockAuthProvider) Token() string        { return m.token }
@@ -1345,6 +1346,10 @@ func (m *mockAuthProvider) Save() error {
 func (m *mockAuthProvider) ShowThinkingByDefault() bool { return m.showThinkingByDefault }
 func (m *mockAuthProvider) SetShowThinkingByDefault(v bool) {
 	m.showThinkingByDefault = v
+}
+func (m *mockAuthProvider) ShowToolOutputByDefault() bool { return m.showToolOutputByDefault }
+func (m *mockAuthProvider) SetShowToolOutputByDefault(v bool) {
+	m.showToolOutputByDefault = v
 }
 
 // TestModel_SlashAuth_NoArg verifies /auth with no args shows usage (login, logout, whoami, refresh).
@@ -2134,46 +2139,60 @@ func TestModel_SlashConnect_UpdateURL(t *testing.T) {
 	}
 }
 
-func TestModel_SlashSetThinking_Show(t *testing.T) {
-	m := NewModel(&chat.Session{})
-	provider := &mockAuthProvider{}
-	m.SetAuthProvider(provider)
-	_, _ = m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("/show-thinking")})
-	_, cmd := m.handleKey(tea.KeyMsg{Type: tea.KeyEnter})
-	if cmd == nil {
-		t.Fatal("Enter on /show-thinking should produce cmd")
+func TestModel_SlashSetTuiPref(t *testing.T) {
+	runSlashTuiPrefTest := func(t *testing.T, line string, initModel, initProvider, wantModel, wantProvider bool,
+		getModel func(*Model) *bool, getProvider func(*mockAuthProvider) *bool) {
+		t.Helper()
+		m := NewModel(&chat.Session{})
+		provider := &mockAuthProvider{}
+		if initModel {
+			*getModel(m) = true
+		}
+		if initProvider {
+			*getProvider(provider) = true
+		}
+		m.SetAuthProvider(provider)
+		_, _ = m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(line)})
+		_, cmd := m.handleKey(tea.KeyMsg{Type: tea.KeyEnter})
+		if cmd == nil {
+			t.Fatal("Enter should produce cmd")
+		}
+		if _, ok := cmd().(slashResultMsg); !ok {
+			t.Fatal("cmd should return slashResultMsg")
+		}
+		if got := *getModel(m); got != wantModel {
+			t.Errorf("model field = %v, want %v", got, wantModel)
+		}
+		if got := *getProvider(provider); got != wantProvider {
+			t.Errorf("provider field = %v, want %v", got, wantProvider)
+		}
 	}
-	msg := cmd()
-	if _, ok := msg.(slashResultMsg); !ok {
-		t.Fatalf("cmd() = %T, want slashResultMsg", msg)
+	tests := []struct {
+		name                    string
+		line                    string
+		initModel, initProvider bool
+		wantModel, wantProvider bool
+		getModel                func(*Model) *bool
+		getProvider             func(*mockAuthProvider) *bool
+	}{
+		{"thinking show", "/show-thinking", false, false, true, true,
+			func(m *Model) *bool { return &m.ShowThinking },
+			func(p *mockAuthProvider) *bool { return &p.showThinkingByDefault }},
+		{"thinking hide", "/hide-thinking", true, true, false, false,
+			func(m *Model) *bool { return &m.ShowThinking },
+			func(p *mockAuthProvider) *bool { return &p.showThinkingByDefault }},
+		{"tool output show", "/show-tool-output", false, false, true, true,
+			func(m *Model) *bool { return &m.ShowToolOutput },
+			func(p *mockAuthProvider) *bool { return &p.showToolOutputByDefault }},
+		{"tool output hide", "/hide-tool-output", true, true, false, false,
+			func(m *Model) *bool { return &m.ShowToolOutput },
+			func(p *mockAuthProvider) *bool { return &p.showToolOutputByDefault }},
 	}
-	if !m.ShowThinking {
-		t.Error("expected ShowThinking=true after /show-thinking")
-	}
-	if !provider.showThinkingByDefault {
-		t.Error("expected provider.showThinkingByDefault=true after /show-thinking")
-	}
-}
-
-func TestModel_SlashSetThinking_Hide(t *testing.T) {
-	m := NewModel(&chat.Session{})
-	m.ShowThinking = true
-	provider := &mockAuthProvider{showThinkingByDefault: true}
-	m.SetAuthProvider(provider)
-	_, _ = m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("/hide-thinking")})
-	_, cmd := m.handleKey(tea.KeyMsg{Type: tea.KeyEnter})
-	if cmd == nil {
-		t.Fatal("Enter on /hide-thinking should produce cmd")
-	}
-	msg := cmd()
-	if _, ok := msg.(slashResultMsg); !ok {
-		t.Fatalf("cmd() = %T, want slashResultMsg", msg)
-	}
-	if m.ShowThinking {
-		t.Error("expected ShowThinking=false after /hide-thinking")
-	}
-	if provider.showThinkingByDefault {
-		t.Error("expected provider.showThinkingByDefault=false after /hide-thinking")
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			runSlashTuiPrefTest(t, tt.line, tt.initModel, tt.initProvider, tt.wantModel, tt.wantProvider,
+				tt.getModel, tt.getProvider)
+		})
 	}
 }
 

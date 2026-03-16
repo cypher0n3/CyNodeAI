@@ -16,7 +16,8 @@ const DefaultGatewayURL = "http://localhost:12080"
 
 // TUIConfig holds TUI-specific preferences persisted in the config file.
 type TUIConfig struct {
-	ShowThinkingByDefault bool `yaml:"show_thinking_by_default" json:"show_thinking_by_default"`
+	ShowThinkingByDefault   bool `yaml:"show_thinking_by_default" json:"show_thinking_by_default"`
+	ShowToolOutputByDefault bool `yaml:"show_tool_output_by_default" json:"show_tool_output_by_default"`
 }
 
 // Config holds CLI configuration (file + env overrides).

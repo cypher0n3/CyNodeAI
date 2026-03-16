@@ -267,3 +267,110 @@ class TestSSEStreaming(unittest.TestCase):
         content = choices[0].get("message", {}).get("content", "")
         self.assertTrue(content.strip(), "Non-stream response content is empty")
         self.assertNotIn("<think>", content, "Non-stream content must not contain <think> blocks")
+
+    def test_chat_completions_stream_exposes_named_cynodeai_extension_events(self):
+        """Chat completions stream MUST expose named cynodeai.* SSE events per
+        CYNAI.USRGWY.OpenAIChatApi.StreamingPerEndpointSSEFormat (e.g. thinking_delta, tool_call).
+        """
+        headers = _auth_headers(state.CONFIG_PATH)
+        headers["Content-Type"] = "application/json"
+        headers["Accept"] = "text/event-stream"
+        payload = {
+            "model": "cynodeai.pm",
+            "stream": True,
+            "messages": [{"role": "user", "content": _SHORT_PROMPT}],
+        }
+        resp = requests.post(
+            f"{self._gateway_url()}/v1/chat/completions",
+            headers=headers,
+            json=payload,
+            stream=True,
+            timeout=_SSE_TIMEOUT_SEC,
+        )
+        self.assertEqual(resp.status_code, 200, f"Expected 200, got {resp.status_code}")
+        typed_events, found_done = helpers.parse_sse_stream_typed(resp)
+        _skip_if_inference_error(
+            self, [e["data"] for e in typed_events if e["data"]], "/v1/chat/completions"
+        )
+        self.assertTrue(found_done, "Stream must end with [DONE]")
+        cynodeai_events = [
+            e for e in typed_events
+            if e.get("event") and e["event"].startswith("cynodeai.")
+        ]
+        ev_list = [e.get("event") for e in typed_events]
+        self.assertGreater(
+            len(cynodeai_events), 0,
+            "Stream must expose at least one named cynodeai.* extension event "
+            f"(e.g. cynodeai.heartbeat or cynodeai.thinking_delta); got events: {ev_list}",
+        )
+
+    def test_chat_completions_stream_relays_thinking_tool_and_iteration_events(self):
+        """Chat completions stream MUST relay iteration_start (done). When PMA sends thinking/tool
+        events, gateway MUST relay cynodeai.thinking_delta / cynodeai.tool_* (Task 3 Red: fails
+        until relay implemented)."""
+        headers = _auth_headers(state.CONFIG_PATH)
+        headers["Content-Type"] = "application/json"
+        headers["Accept"] = "text/event-stream"
+        payload = {
+            "model": "cynodeai.pm",
+            "stream": True,
+            "messages": [{"role": "user", "content": _SHORT_PROMPT}],
+        }
+        resp = requests.post(
+            f"{self._gateway_url()}/v1/chat/completions",
+            headers=headers,
+            json=payload,
+            stream=True,
+            timeout=_SSE_TIMEOUT_SEC,
+        )
+        self.assertEqual(resp.status_code, 200, f"Expected 200, got {resp.status_code}")
+        typed_events, found_done = helpers.parse_sse_stream_typed(resp)
+        _skip_if_inference_error(
+            self, [e["data"] for e in typed_events if e["data"]], "/v1/chat/completions"
+        )
+        self.assertTrue(found_done, "Stream must end with [DONE]")
+        event_names = [e.get("event") for e in typed_events if e.get("event")]
+        iteration_starts = [e for e in event_names if e == "cynodeai.iteration_start"]
+        self.assertGreater(
+            len(iteration_starts), 0,
+            f"Stream must relay at least one cynodeai.iteration_start; got events: {event_names}",
+        )
+
+    def test_responses_stream_uses_native_responses_events_and_exposes_streamed_response_id(self):
+        """Responses stream MUST use native responses event shape and expose streamed response_id
+        per CYNAI.USRGWY.OpenAIChatApi.StreamingPerEndpointSSEFormat."""
+        headers = _auth_headers(state.CONFIG_PATH)
+        headers["Content-Type"] = "application/json"
+        headers["Accept"] = "text/event-stream"
+        payload = {
+            "model": "cynodeai.pm",
+            "stream": True,
+            "input": _SHORT_PROMPT,
+        }
+        resp = requests.post(
+            f"{self._gateway_url()}/v1/responses",
+            headers=headers,
+            json=payload,
+            stream=True,
+            timeout=_SSE_TIMEOUT_SEC,
+        )
+        self.assertEqual(resp.status_code, 200, f"Expected 200, got {resp.status_code}")
+        typed_events, found_done = helpers.parse_sse_stream_typed(resp)
+        _skip_if_inference_error(
+            self, [e["data"] for e in typed_events if e["data"]], "/v1/responses"
+        )
+        self.assertTrue(found_done, "Stream must terminate with completion/done")
+        response_ids = []
+        for ev in typed_events:
+            try:
+                obj = json.loads(ev["data"])
+            except json.JSONDecodeError:
+                continue
+            rid = obj.get("response_id") or (obj.get("response") or {}).get("id")
+            if rid:
+                response_ids.append(rid)
+        ev_preview = typed_events[:5]
+        self.assertGreater(
+            len(response_ids), 0,
+            f"Stream must expose response_id; got: {ev_preview}",
+        )

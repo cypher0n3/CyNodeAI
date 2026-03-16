@@ -47,11 +47,16 @@ class TestTaskGet(unittest.TestCase):
 
     def test_task_get_by_name(self):
         """task get by human-readable task name must succeed and return the task."""
-        self.assertIsNotNone(state.TASK_NAME, "state.TASK_NAME must be set by e2e_050")
+        if state.TASK_NAME is None:
+            self.skipTest(
+                "state.TASK_NAME not set (run full suite or e2e_050.test_task_create_named first)"
+            )
         ok, out, err = helpers.run_cynork(
             ["task", "get", state.TASK_NAME, "-o", "json"],
             state.CONFIG_PATH,
         )
+        if not ok:
+            self._assert_clear_name_resolution_error(out, err)
         self.assertTrue(ok, f"task get by name failed: {out} {err}")
         data = helpers.parse_json_safe(out)
         self.assertIsInstance(data, dict, f"task get by name should return JSON object: {out}")

@@ -72,6 +72,10 @@ func ChatCompletionHandler(instructionsContent string, logger *slog.Logger) http
 			streamCompletionToWriter(r.Context(), w, instructionsContent, &req, logger)
 			return
 		}
+		if req.Stream && !canStreamCompletion(&req) {
+			streamCompletionLangchainToWriter(r.Context(), w, instructionsContent, &req, logger)
+			return
+		}
 		content, httpStatus := resolveContent(r.Context(), detached, instructionsContent, &req, logger)
 		writeJSON(w, httpStatus, InternalChatCompletionResponse{Content: content})
 	}
@@ -86,6 +90,27 @@ func canStreamCompletion(req *InternalChatCompletionRequest) bool {
 		model = pmaDefaultModel
 	}
 	return mcpClient.BaseURL == "" || !isCapableModel(model)
+}
+
+// streamCompletionLangchainToWriter runs the capable-model + MCP path with streaming:
+// NDJSON lines iteration_start, delta, done. Used when req.Stream is true and canStreamCompletion is false.
+func streamCompletionLangchainToWriter(ctx context.Context, w http.ResponseWriter, instructionsContent string, req *InternalChatCompletionRequest, logger *slog.Logger) {
+	systemContext := buildSystemContext(instructionsContent, req)
+	systemContextWithHistory := buildSystemContextWithHistory(systemContext, req.Messages)
+	currentInput := lastUserMessage(req.Messages)
+	fullPrompt := buildAgentInput(systemContextWithHistory, currentInput)
+	mcpClient := NewMCPClient()
+	w.Header().Set("Content-Type", "application/x-ndjson")
+	w.Header().Set("X-Accel-Buffering", "no")
+	w.WriteHeader(http.StatusOK)
+	if f, ok := w.(http.Flusher); ok {
+		f.Flush()
+	}
+	if err := runCompletionWithLangchainStreaming(ctx, fullPrompt, mcpClient, w, logger); err != nil {
+		if logger != nil {
+			logger.Error("stream completion langchain failed", "error", err)
+		}
+	}
 }
 
 // streamCompletionToWriter runs direct inference and writes NDJSON lines {"delta":"..."} per token.

@@ -125,7 +125,7 @@ def _ensure_cynork_ready(opts):
             sys.exit(1)
 
 
-def _run_prereq_checks():
+def _run_prereq_checks(skip_ollama=False):
     """Wait for gateway and run Ollama smoke; exit 1 on failure."""
     if not helpers.wait_for_gateway():
         print("Error: user-gateway not ready (healthz) after 30s", file=sys.stderr)
@@ -133,7 +133,7 @@ def _run_prereq_checks():
     if not helpers.wait_for_gateway_readyz(timeout_sec=30):
         print("Error: user-gateway readyz not 200 after 30s", file=sys.stderr)
         sys.exit(1)
-    if not helpers.run_ollama_inference_smoke():
+    if not skip_ollama and not helpers.run_ollama_inference_smoke():
         print("Error: Ollama inference smoke failed", file=sys.stderr)
         sys.exit(1)
 
@@ -213,7 +213,7 @@ def main():
                         file=sys.stderr,
                     )
                     sys.exit(1)
-        _run_prereq_checks()
+        _run_prereq_checks(skip_ollama=opts.skip_ollama)
         _ensure_shared_auth_config()
         include_tags = [t.strip() for t in (opts.tags or "").split(",") if t.strip()]
         if "pma_inference" in include_tags and not opts.skip_ollama:

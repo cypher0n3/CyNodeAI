@@ -3364,6 +3364,28 @@ func TestRunSlashSetThinking_Hide(t *testing.T) {
 	}
 }
 
+func TestRunSlashSetToolOutput_Show(t *testing.T) {
+	cfg = &config.Config{}
+	defer func() { cfg = nil }()
+	if err := runSlashSetToolOutput(nil, true); err != nil {
+		t.Fatalf("runSlashSetToolOutput show: %v", err)
+	}
+	if !cfg.TUI.ShowToolOutputByDefault {
+		t.Error("expected ShowToolOutputByDefault=true after show-tool-output")
+	}
+}
+
+func TestRunSlashSetToolOutput_Hide(t *testing.T) {
+	cfg = &config.Config{TUI: config.TUIConfig{ShowToolOutputByDefault: true}}
+	defer func() { cfg = nil }()
+	if err := runSlashSetToolOutput(nil, false); err != nil {
+		t.Fatalf("runSlashSetToolOutput hide: %v", err)
+	}
+	if cfg.TUI.ShowToolOutputByDefault {
+		t.Error("expected ShowToolOutputByDefault=false after hide-tool-output")
+	}
+}
+
 func TestRunSlashCommand_ConnectAndThinking(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == pathHealthz {
@@ -3384,6 +3406,12 @@ func TestRunSlashCommand_ConnectAndThinking(t *testing.T) {
 	}
 	if _, err := runSlashCommand(session, "/hide-thinking"); err != nil {
 		t.Errorf("runSlashCommand /hide-thinking: %v", err)
+	}
+	if _, err := runSlashCommand(session, "/show-tool-output"); err != nil {
+		t.Errorf("runSlashCommand /show-tool-output: %v", err)
+	}
+	if _, err := runSlashCommand(session, "/hide-tool-output"); err != nil {
+		t.Errorf("runSlashCommand /hide-tool-output: %v", err)
 	}
 }
 
