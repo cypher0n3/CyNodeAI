@@ -1,0 +1,432 @@
+ERROR: test_responses_stream_uses_native_responses_events_and_exposes_streamed_response_id (e2e_127_sse_streaming.TestSSEStreaming.test_responses_stream_uses_native_responses_events_and_exposes_streamed_response_id)
+Responses stream MUST use native responses event shape and expose streamed response_id
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/cypher/projects/github-personal/cynodeai-enterprise/cynodeai/.venv/lib/python3.14/site-packages/urllib3/connectionpool.py", line 534, in _make_request
+    response = conn.getresponse()
+  File "/home/cypher/projects/github-personal/cynodeai-enterprise/cynodeai/.venv/lib/python3.14/site-packages/urllib3/connection.py", line 571, in getresponse
+    httplib_response = super().getresponse()
+  File "/usr/lib/python3.14/http/client.py", line 1450, in getresponse
+    response.begin()
+    ~~~~~~~~~~~~~~^^
+  File "/usr/lib/python3.14/http/client.py", line 336, in begin
+    version, status, reason = self._read_status()
+                              ~~~~~~~~~~~~~~~~~^^
+  File "/usr/lib/python3.14/http/client.py", line 297, in _read_status
+    line = str(self.fp.readline(_MAXLINE + 1), "iso-8859-1")
+               ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^
+  File "/usr/lib/python3.14/socket.py", line 725, in readinto
+    return self._sock.recv_into(b)
+           ~~~~~~~~~~~~~~~~~~~~^^^
+TimeoutError: timed out
+
+The above exception was the direct cause of the following exception:
+
+Traceback (most recent call last):
+  File "/home/cypher/projects/github-personal/cynodeai-enterprise/cynodeai/.venv/lib/python3.14/site-packages/requests/adapters.py", line 644, in send
+    resp = conn.urlopen(
+        method=request.method,
+    ...<9 lines>...
+        chunked=chunked,
+    )
+  File "/home/cypher/projects/github-personal/cynodeai-enterprise/cynodeai/.venv/lib/python3.14/site-packages/urllib3/connectionpool.py", line 841, in urlopen
+    retries = retries.increment(
+        method, url, error=new_e, _pool=self, _stacktrace=sys.exc_info()[2]
+    )
+  File "/home/cypher/projects/github-personal/cynodeai-enterprise/cynodeai/.venv/lib/python3.14/site-packages/urllib3/util/retry.py", line 490, in increment
+    raise reraise(type(error), error, _stacktrace)
+          ~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/cypher/projects/github-personal/cynodeai-enterprise/cynodeai/.venv/lib/python3.14/site-packages/urllib3/util/util.py", line 39, in reraise
+    raise value
+  File "/home/cypher/projects/github-personal/cynodeai-enterprise/cynodeai/.venv/lib/python3.14/site-packages/urllib3/connectionpool.py", line 787, in urlopen
+    response = self._make_request(
+        conn,
+    ...<10 lines>...
+        **response_kw,
+    )
+  File "/home/cypher/projects/github-personal/cynodeai-enterprise/cynodeai/.venv/lib/python3.14/site-packages/urllib3/connectionpool.py", line 536, in _make_request
+    self._raise_timeout(err=e, url=url, timeout_value=read_timeout)
+    ~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/cypher/projects/github-personal/cynodeai-enterprise/cynodeai/.venv/lib/python3.14/site-packages/urllib3/connectionpool.py", line 367, in _raise_timeout
+    raise ReadTimeoutError(
+        self, url, f"Read timed out. (read timeout={timeout_value})"
+    ) from err
+urllib3.exceptions.ReadTimeoutError: HTTPConnectionPool(host='localhost', port=12080): Read timed out. (read timeout=120)
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "/home/cypher/projects/github-personal/cynodeai-enterprise/cynodeai/scripts/test_scripts/e2e_127_sse_streaming.py", line 350, in test_responses_stream_uses_native_responses_events_and_exposes_streamed_response_id
+    resp = requests.post(
+        f"{self._gateway_url()}/v1/responses",
+    ...<3 lines>...
+        timeout=_SSE_TIMEOUT_SEC,
+    )
+  File "/home/cypher/projects/github-personal/cynodeai-enterprise/cynodeai/.venv/lib/python3.14/site-packages/requests/api.py", line 115, in post
+    return request("post", url, data=data, json=json, **kwargs)
+  File "/home/cypher/projects/github-personal/cynodeai-enterprise/cynodeai/.venv/lib/python3.14/site-packages/requests/api.py", line 59, in request
+    return session.request(method=method, url=url, **kwargs)
+           ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/home/cypher/projects/github-personal/cynodeai-enterprise/cynodeai/.venv/lib/python3.14/site-packages/requests/sessions.py", line 589, in request
+    resp = self.send(prep, **send_kwargs)
+  File "/home/cypher/projects/github-personal/cynodeai-enterprise/cynodeai/.venv/lib/python3.14/site-packages/requests/sessions.py", line 703, in send
+    r = adapter.send(request, **kwargs)
+  File "/home/cypher/projects/github-personal/cynodeai-enterprise/cynodeai/.venv/lib/python3.14/site-packages/requests/adapters.py", line 690, in send
+    raise ReadTimeout(e, request=request)
+requests.exceptions.ReadTimeout: HTTPConnectionPool(host='localhost', port=12080): Read timed out. (read timeout=120)
+
+======================================================================
+FAIL: test_task_create (e2e_050_task_create.TestTaskCreate.test_task_create)
+Create prompt task, retry up to 3 times; store task_id in state.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/cypher/projects/github-personal/cynodeai-enterprise/cynodeai/scripts/test_scripts/e2e_050_task_create.py", line 41, in test_task_create
+    self.fail(f"task create failed after 3 attempts: {out} {err}")
+    ~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: task create failed after 3 attempts:  Command '['/home/cypher/projects/github-personal/cynodeai-enterprise/cynodeai/cynork/bin/cynork-dev', '--config', '/tmp/cynodeai_e2e_rctgi1q1/config.yaml', 'task', 'create', '-p', 'Please reply with exactly: hello from task create.', '-o', 'json']' timed out after 120 seconds
+
+======================================================================
+FAIL: test_task_create_with_attachments (e2e_050_task_create.TestTaskCreate.test_task_create_with_attachments)
+Create task with canonical --attach paths; assert attachments in create/get.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/cypher/projects/github-personal/cynodeai-enterprise/cynodeai/scripts/test_scripts/e2e_050_task_create.py", line 124, in test_task_create_with_attachments
+    self.fail(f"task create with attachments failed: {out} {err}")
+    ~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: task create with attachments failed:  Command '['/home/cypher/projects/github-personal/cynodeai-enterprise/cynodeai/cynork/bin/cynork-dev', '--config', '/tmp/cynodeai_e2e_rctgi1q1/config.yaml', 'task', 'create', '-p', 'Read the attached files and acknowledge receipt.', '--attach', 'tmp/att1.txt', '--attach', 'tmp/att2.txt', '-o', 'json']' timed out after 120 seconds
+
+======================================================================
+FAIL: test_task_list (e2e_060_task_list.TestTaskList.test_task_list)
+Assert task list returns JSON with tasks list containing state.TASK_ID.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/cypher/projects/github-personal/cynodeai-enterprise/cynodeai/scripts/test_scripts/e2e_060_task_list.py", line 17, in test_task_list
+    self.assertIsNotNone(
+    ~~~~~~~~~~~~~~~~~~~~^
+        state.TASK_ID,
+        ^^^^^^^^^^^^^^
+        "state.TASK_ID must be set by e2e_050 (task create); run tests in order",
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+AssertionError: unexpectedly None : state.TASK_ID must be set by e2e_050 (task create); run tests in order
+
+======================================================================
+FAIL: test_task_get (e2e_070_task_get.TestTaskGet.test_task_get)
+Assert task get returns the created task ID and a valid status.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/cypher/projects/github-personal/cynodeai-enterprise/cynodeai/scripts/test_scripts/e2e_070_task_get.py", line 28, in test_task_get
+    self.assertIsNotNone(state.TASK_ID)
+    ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^
+AssertionError: unexpectedly None
+
+======================================================================
+FAIL: test_task_result (e2e_080_task_result.TestTaskResult.test_task_result)
+Assert task result includes required keys and terminal stdout/stderr fields.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/cypher/projects/github-personal/cynodeai-enterprise/cynodeai/scripts/test_scripts/e2e_080_task_result.py", line 27, in test_task_result
+    self.assertIsNotNone(state.TASK_ID)
+    ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^
+AssertionError: unexpectedly None
+
+======================================================================
+FAIL: test_inference_task (e2e_090_task_inference.TestInferenceTask.test_inference_task)
+Create inference task; assert sandbox receives UDS inference proxy URL.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/cypher/projects/github-personal/cynodeai-enterprise/cynodeai/scripts/test_scripts/e2e_090_task_inference.py", line 61, in test_inference_task
+    self.assertTrue(
+    ~~~~~~~~~~~~~~~^
+        stdout and "http+unix://" in str(stdout),
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        f"INFERENCE_PROXY_URL missing or non-UDS in stdout (stdout={stdout!r})",
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+AssertionError: None is not true : INFERENCE_PROXY_URL missing or non-UDS in stdout (stdout=None)
+
+======================================================================
+FAIL: test_prompt_task (e2e_100_task_prompt.TestPromptTask.test_prompt_task)
+Create prompt task, poll until completed; set state.PROMPT_TASK_ID; assert stdout.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/cypher/projects/github-personal/cynodeai-enterprise/cynodeai/scripts/test_scripts/e2e_100_task_prompt.py", line 31, in test_prompt_task
+    self.assertIsNotNone(task_id, "prompt task create failed")
+    ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: unexpectedly None : prompt task create failed
+
+======================================================================
+FAIL: test_models_and_chat (e2e_110_task_models_and_chat.TestModelsAndChat.test_models_and_chat)
+Assert models list returns list; run one-shot chat unless inference smoke skipped.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/cypher/projects/github-personal/cynodeai-enterprise/cynodeai/scripts/test_scripts/e2e_110_task_models_and_chat.py", line 68, in test_models_and_chat
+    self.assertTrue(
+    ~~~~~~~~~~~~~~~^
+        chat_ok,
+        ^^^^^^^^
+        f"one-shot chat failed after retries: stdout={last_out!r} stderr={last_err!r}",
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+AssertionError: False is not true : one-shot chat failed after retries: stdout='' stderr="Command '['/home/cypher/projects/github-personal/cynodeai-enterprise/cynodeai/cynork/bin/cynork-dev', '--config', '/tmp/cynodeai_e2e_rctgi1q1/config.yaml', 'chat', '--message', 'ping', '--plain']' timed out after 120 seconds"
+
+======================================================================
+FAIL: test_chat_with_project_context (e2e_115_pma_chat_context.TestPmaChatContext.test_chat_with_project_context)
+Send chat with --project-id; assert success when inference is available.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/cypher/projects/github-personal/cynodeai-enterprise/cynodeai/scripts/test_scripts/e2e_115_pma_chat_context.py", line 99, in test_chat_with_project_context
+    self.assertTrue(
+    ~~~~~~~~~~~~~~~^
+        chat_ok,
+        ^^^^^^^^
+        f"chat with project-id failed (ok=False or empty/bad response): "
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        f"stdout={last_out!r} stderr={last_err!r}",
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+AssertionError: False is not true : chat with project-id failed (ok=False or empty/bad response): stdout='' stderr="Command '['/home/cypher/projects/github-personal/cynodeai-enterprise/cynodeai/cynork/bin/cynork-dev', '--config', '/tmp/cynodeai_e2e_rctgi1q1/config.yaml', 'chat', '--message', 'Reply with exactly: OK', '--project-id', 'ec384b28-255b-44ed-a4f8-fc471c4b3abf', '--plain']' timed out after 120 seconds"
+
+======================================================================
+FAIL: test_sba_task (e2e_123_sba_task.TestSbaTask.test_sba_task)
+Create SBA task, poll until done; set SBA_TASK_ID only on success; assert sba_result.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/cypher/projects/github-personal/cynodeai-enterprise/cynodeai/scripts/test_scripts/e2e_123_sba_task.py", line 34, in test_sba_task
+    self.assertIsNotNone(task_id, "SBA task create failed")
+    ~~~~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: unexpectedly None : SBA task create failed
+
+======================================================================
+FAIL: test_chat_completions_non_stream_still_works (e2e_127_sse_streaming.TestSSEStreaming.test_chat_completions_non_stream_still_works)
+Regression: POST /v1/chat/completions without stream=true still returns JSON.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/cypher/projects/github-personal/cynodeai-enterprise/cynodeai/scripts/test_scripts/e2e_127_sse_streaming.py", line 243, in test_chat_completions_non_stream_still_works
+    self.fail(f"Non-stream request failed after retries: {last_exc}")
+    ~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: Non-stream request failed after retries: HTTPConnectionPool(host='localhost', port=12080): Read timed out. (read timeout=120)
+
+======================================================================
+FAIL: test_chat_completions_stream_exposes_named_cynodeai_extension_events (e2e_127_sse_streaming.TestSSEStreaming.test_chat_completions_stream_exposes_named_cynodeai_extension_events)
+Chat completions stream MUST expose named cynodeai.* SSE events per
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/cypher/projects/github-personal/cynodeai-enterprise/cynodeai/scripts/test_scripts/e2e_127_sse_streaming.py", line 301, in test_chat_completions_stream_exposes_named_cynodeai_extension_events
+    self.assertGreater(
+    ~~~~~~~~~~~~~~~~~~^
+        len(cynodeai_events), 0,
+        ^^^^^^^^^^^^^^^^^^^^^^^^
+        "Stream must expose at least one named cynodeai.* extension event "
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        f"(e.g. cynodeai.heartbeat or cynodeai.thinking_delta); got events: {ev_list}",
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+AssertionError: 0 not greater than 0 : Stream must expose at least one named cynodeai.* extension event (e.g. cynodeai.heartbeat or cynodeai.thinking_delta); got events: [None, None]
+
+======================================================================
+FAIL: test_chat_completions_stream_relays_thinking_tool_and_iteration_events (e2e_127_sse_streaming.TestSSEStreaming.test_chat_completions_stream_relays_thinking_tool_and_iteration_events)
+Chat completions stream MUST relay iteration_start (done). When PMA sends thinking/tool
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/cypher/projects/github-personal/cynodeai-enterprise/cynodeai/scripts/test_scripts/e2e_127_sse_streaming.py", line 334, in test_chat_completions_stream_relays_thinking_tool_and_iteration_events
+    self.assertGreater(
+    ~~~~~~~~~~~~~~~~~~^
+        len(iteration_starts), 0,
+        ^^^^^^^^^^^^^^^^^^^^^^^^^
+        f"Stream must relay at least one cynodeai.iteration_start; got events: {event_names}",
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+AssertionError: 0 not greater than 0 : Stream must relay at least one cynodeai.iteration_start; got events: []
+
+======================================================================
+FAIL: test_chat_completions_stream_returns_sse (e2e_127_sse_streaming.TestSSEStreaming.test_chat_completions_stream_returns_sse)
+POST /v1/chat/completions with stream=true returns SSE with chat.completion.chunk events
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/cypher/projects/github-personal/cynodeai-enterprise/cynodeai/scripts/test_scripts/e2e_127_sse_streaming.py", line 137, in test_chat_completions_stream_returns_sse
+    self.assertEqual(chunk.get("object"), "chat.completion.chunk",
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+                     f"chunk.object wrong: {chunk!r}")
+                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: None != 'chat.completion.chunk' : chunk.object wrong: {'error': {'code': 'stream_error', 'message': 'context deadline exceeded (Client.Timeout or context cancellation while reading body)', 'type': 'cynodeai_error'}}
+
+======================================================================
+FAIL: test_responses_stream_returns_sse (e2e_127_sse_streaming.TestSSEStreaming.test_responses_stream_returns_sse)
+POST /v1/responses with stream=true returns SSE events and a [DONE] sentinel
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/cypher/projects/github-personal/cynodeai-enterprise/cynodeai/scripts/test_scripts/e2e_127_sse_streaming.py", line 211, in test_responses_stream_returns_sse
+    self.assertTrue(
+    ~~~~~~~~~~~~~~~^
+        full_content.strip(),
+        ^^^^^^^^^^^^^^^^^^^^^
+        f"Accumulated /v1/responses stream content is empty; events={events!r}",
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+AssertionError: '' is not true : Accumulated /v1/responses stream content is empty; events=['{"response_id":"resp_d40fc40f-db35-4f06-af1a-02f1ad5b9e9b"}', '{"id":"resp_d40fc40f-db35-4f06-af1a-02f1ad5b9e9b","object":"chat.completion.chunk","created":1773657987,"model":"cynodeai.pm","choices":[{"index":0,"delta":{"role":"assistant"},"finish_reason":null}]}', '{"error":{"code":"stream_error","message":"context deadline exceeded (Client.Timeout or context cancellation while reading body)","type":"cynodeai_error"}}']
+
+======================================================================
+FAIL: test_sba_task_with_inference_prompt (e2e_140_sba_task_inference.TestSbaInference.test_sba_task_with_inference_prompt)
+Create SBA task with LLM prompt, poll until completed/failed; assert sba_result.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/cypher/projects/github-personal/cynodeai-enterprise/cynodeai/scripts/test_scripts/e2e_140_sba_task_inference.py", line 39, in test_sba_task_with_inference_prompt
+    self.fail(
+    ~~~~~~~~~^
+        "SBA inference task did not finish: "
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+        f"status={status!r} result={result_data}"
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+AssertionError: SBA inference task did not finish: status=None result=None
+
+======================================================================
+FAIL: test_task_logs (e2e_150_task_logs.TestTaskLogs.test_task_logs)
+Assert task logs returns JSON with task_id, stdout, and stderr fields.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/cypher/projects/github-personal/cynodeai-enterprise/cynodeai/scripts/test_scripts/e2e_150_task_logs.py", line 27, in test_task_logs
+    self.assertIsNotNone(
+    ~~~~~~~~~~~~~~~~~~~~^
+        state.TASK_ID,
+        ^^^^^^^^^^^^^^
+        "state.TASK_ID must be set by e2e_050 (task create); run tests in order",
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+AssertionError: unexpectedly None : state.TASK_ID must be set by e2e_050 (task create); run tests in order
+
+======================================================================
+FAIL: test_chat_completes_or_clear_error (e2e_192_chat_reliability.TestChatReliability.test_chat_completes_or_clear_error)
+Run one-shot chat with extended timeout and retries; assert reply or structured error.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/cypher/projects/github-personal/cynodeai-enterprise/cynodeai/scripts/test_scripts/e2e_192_chat_reliability.py", line 67, in test_chat_completes_or_clear_error
+    self.fail(
+    ~~~~~~~~~^
+        f"chat did not return a timely reply after {CHAT_RETRIES} attempts. Last: {last_err!r}"
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+AssertionError: chat did not return a timely reply after 3 attempts. Last: "Command '['/home/cypher/projects/github-personal/cynodeai-enterprise/cynodeai/cynork/bin/cynork-dev', '--config', '/tmp/cynodeai_e2e_rctgi1q1/config.yaml', 'chat', '--message', 'ping', '--plain']' timed out after 150 seconds"
+
+======================================================================
+FAIL: test_chat_sequential_two_turns (e2e_193_chat_sequential_messages.TestChatSequentialMessages.test_chat_sequential_two_turns)
+Two turns: first 'Say one word: first', then 'What word?'; assert both replies.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/cypher/projects/github-personal/cynodeai-enterprise/cynodeai/scripts/test_scripts/e2e_193_chat_sequential_messages.py", line 68, in test_chat_sequential_two_turns
+    self.assertTrue(ok, f"first chat request failed: {body}")
+    ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: False is not true : first chat request failed: {"error":{"code":"cynodeai_completion_timeout","message":"Completion did not finish before the maximum wait duration","param":null,"type":"cynodeai_error"}}
+
+
+======================================================================
+FAIL: test_chat_simultaneous_three_requests (e2e_194_chat_simultaneous_messages.TestChatSimultaneousMessages.test_chat_simultaneous_three_requests)
+Start three chat requests concurrently; each gets a reply or a clear error.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/cypher/projects/github-personal/cynodeai-enterprise/cynodeai/scripts/test_scripts/e2e_194_chat_simultaneous_messages.py", line 86, in test_chat_simultaneous_three_requests
+    self.assertGreaterEqual(
+    ~~~~~~~~~~~~~~~~~~~~~~~^
+        successes,
+        ^^^^^^^^^^
+        2,
+        ^^
+        f"expected >=2 concurrent successes; failures: {failures}",
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+AssertionError: 0 not greater than or equal to 2 : expected >=2 concurrent successes; failures: [(False, 'non-2xx'), (False, 'non-2xx'), (False, 'non-2xx')]
+
+======================================================================
+FAIL: test_tui_slash_thread_switch_shows_result (e2e_199_tui_slash_commands.TestTuiSlashCommands.test_tui_slash_thread_switch_shows_result)
+/thread switch shows 'switched' confirmation or error in scrollback (Task 5A).
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/cypher/projects/github-personal/cynodeai-enterprise/cynodeai/scripts/test_scripts/e2e_199_tui_slash_commands.py", line 481, in test_tui_slash_thread_switch_shows_result
+    self._wait_ready(session)
+    ~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/home/cypher/projects/github-personal/cynodeai-enterprise/cynodeai/scripts/test_scripts/e2e_199_tui_slash_commands.py", line 47, in _wait_ready
+    self.assertTrue(
+    ~~~~~~~~~~~~~~~^
+        ok,
+        ^^^
+        "TUI did not show prompt-ready landmark within timeout",
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+AssertionError: False is not true : TUI did not show prompt-ready landmark within timeout
+
+======================================================================
+FAIL: test_tui_slash_unknown_shows_hint (e2e_199_tui_slash_commands.TestTuiSlashCommands.test_tui_slash_unknown_shows_hint)
+Unknown slash command shows a hint without exiting the session.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/cypher/projects/github-personal/cynodeai-enterprise/cynodeai/scripts/test_scripts/e2e_199_tui_slash_commands.py", line 114, in test_tui_slash_unknown_shows_hint
+    self._wait_ready(session)
+    ~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/home/cypher/projects/github-personal/cynodeai-enterprise/cynodeai/scripts/test_scripts/e2e_199_tui_slash_commands.py", line 47, in _wait_ready
+    self.assertTrue(
+    ~~~~~~~~~~~~~~~^
+        ok,
+        ^^^
+        "TUI did not show prompt-ready landmark within timeout",
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+AssertionError: False is not true : TUI did not show prompt-ready landmark within timeout
+
+======================================================================
+FAIL: test_tui_slash_version (e2e_199_tui_slash_commands.TestTuiSlashCommands.test_tui_slash_version)
+/version shows cynork version string in scrollback.
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/cypher/projects/github-personal/cynodeai-enterprise/cynodeai/scripts/test_scripts/e2e_199_tui_slash_commands.py", line 98, in test_tui_slash_version
+    self._wait_ready(session)
+    ~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/home/cypher/projects/github-personal/cynodeai-enterprise/cynodeai/scripts/test_scripts/e2e_199_tui_slash_commands.py", line 47, in _wait_ready
+    self.assertTrue(
+    ~~~~~~~~~~~~~~~^
+        ok,
+        ^^^
+        "TUI did not show prompt-ready landmark within timeout",
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+AssertionError: False is not true : TUI did not show prompt-ready landmark within timeout
+
+======================================================================
+FAIL: test_tui_slash_whoami_shows_identity (e2e_199_tui_slash_commands.TestTuiSlashCommands.test_tui_slash_whoami_shows_identity)
+/whoami shows current user identity or gateway error (Task 4D).
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/home/cypher/projects/github-personal/cynodeai-enterprise/cynodeai/scripts/test_scripts/e2e_199_tui_slash_commands.py", line 457, in test_tui_slash_whoami_shows_identity
+    self._wait_ready(session)
+    ~~~~~~~~~~~~~~~~^^^^^^^^^
+  File "/home/cypher/projects/github-personal/cynodeai-enterprise/cynodeai/scripts/test_scripts/e2e_199_tui_slash_commands.py", line 47, in _wait_ready
+    self.assertTrue(
+    ~~~~~~~~~~~~~~~^
+        ok,
+        ^^^
+        "TUI did not show prompt-ready landmark within timeout",
+        ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    )
+    ^
+AssertionError: False is not true : TUI did not show prompt-ready landmark within timeout
+
+----------------------------------------------------------------------
+Ran 97 tests in 5225.454s
+
+FAILED (failures=24, errors=1, skipped=5)
+error: Recipe `full-demo` failed with exit code 1
+error: Recipe `setup-dev` failed on line 527 with exit code 1
