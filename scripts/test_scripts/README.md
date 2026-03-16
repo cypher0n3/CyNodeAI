@@ -27,6 +27,7 @@ Standard library only plus subprocess (cynork, curl); no extra Python deps.
   Start with `just setup-dev start` or `just setup-dev full-demo` (which runs the suite after start).
   Default startup uses the **prescribed sequence** (orchestrator without OLLAMA in stack; PMA via orchestrator/worker).
   If the stack does not reach ready, use `--ollama-in-stack` or `SETUP_DEV_OLLAMA_IN_STACK=1` when OLLAMA in compose is needed.
+  **AI agents must NOT use** these bypasses; they invalidate GPU variant E2E (e2e_205).
 - **Cynork:** `just build-cynork-dev` (or let `run_e2e.py` build it unless you pass `--no-build`).
 - **Python 3:** run from repo root with `PYTHONPATH=.` so `scripts.test_scripts` resolves.
 
@@ -75,6 +76,7 @@ just e2e --tags suite_proxy_pma
 - `just setup-dev test-e2e` - run the suite via scripts/justfile (same as above, ensures PYTHONPATH).
 - `just setup-dev full-demo` - start stack and node, then run only tests tagged `full_demo` (excludes subset-only tests such as proxy+PMA functional tests that start their own services); use `--stop-on-success` to tear down after pass.
   - For E2E that expects OLLAMA in compose, use `just setup-dev full-demo --ollama-in-stack`.
+    **AI agents must NOT use** this; node-manager must start Ollama for GPU variant validation.
 
 ## Test Layout
 
@@ -144,7 +146,8 @@ Same as `just setup-dev` (scripts/justfile); see also `docs/tech_specs/ports_and
 - **Auth/node:** `ADMIN_PASSWORD` (default admin123), `NODE_PSK` (default dev-node-psk-secret)
 - **Inference:** `E2E_SKIP_INFERENCE_SMOKE` - set to skip Ollama pull and inference smoke; `INFERENCE_PROXY_IMAGE` - set to run inference-in-sandbox (05b) and prompt/chat (05c, 05d)
 - **Overrides:** `CYNORK_BIN`, `PROJECT_ROOT`, `OLLAMA_CONTAINER_NAME`, `OLLAMA_E2E_MODEL`
-- **Setup-dev bypass** (when starting the stack): `SETUP_DEV_OLLAMA_IN_STACK=1` so OLLAMA runs in compose for E2E.
+  - **Setup-dev bypass** (when starting the stack): `SETUP_DEV_OLLAMA_IN_STACK=1` so OLLAMA runs in compose for E2E.
+    **AI agents must NOT use** this bypass.
 
 ## Adding Tests
 

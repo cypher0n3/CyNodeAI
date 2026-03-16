@@ -22,6 +22,7 @@ help:
     @echo ""
     @echo "Commands: start-db, stop-db, clean-db, migrate, build, build-e2e-images, start, stop, restart, clean, component <name> <action>, test-e2e, full-demo, e2e, help"
     @echo "Env: SKIP_UPX (default 1 for setup-dev; set to 0 to enable UPX in image builds)"
+    @echo "AI agents: do NOT use --ollama-in-stack or SETUP_DEV_OLLAMA_IN_STACK (invalidates GPU variant E2E)."
 
 start-db:
     #!/usr/bin/env bash
@@ -120,6 +121,8 @@ _start_impl *ARGS:
     set -e
     root="$(cd "{{ root_dir }}" && pwd)"
     [ -f "$root/.env.dev" ] && set -a && . "$root/.env.dev" && set +a
+    # Bypass: --ollama-in-stack / SETUP_DEV_OLLAMA_IN_STACK=1 runs Ollama in compose instead of node-manager.
+    # AI agents must NOT use these; they invalidate GPU variant validation (e2e_205, Bug 1 fix).
     ollama_in_stack=false
     for a in "$@"; do [ "$a" = "--ollama-in-stack" ] && ollama_in_stack=true; done
     [ "$SETUP_DEV_OLLAMA_IN_STACK" = "1" ] && ollama_in_stack=true

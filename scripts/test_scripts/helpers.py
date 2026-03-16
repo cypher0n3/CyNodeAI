@@ -379,6 +379,28 @@ def ollama_container_running():
         return False
 
 
+def get_ollama_container_image():
+    """Return the image string of the running Ollama container, or None if not found."""
+    runtime = _container_runtime()
+    if not runtime:
+        return None
+    try:
+        r = subprocess.run(
+            [
+                runtime, "ps", "-a",
+                "--filter", f"name={config.OLLAMA_CONTAINER_NAME}",
+                "--format", "{{.Image}}",
+            ],
+            capture_output=True, text=True, timeout=10, check=False,
+        )
+        if r.returncode or not r.stdout:
+            return None
+        img = (r.stdout or "").strip().splitlines()
+        return img[0] if img else None
+    except (subprocess.TimeoutExpired, FileNotFoundError):
+        return None
+
+
 def is_ollama_model_available(model_name: str) -> bool:
     """Return True if *model_name* is already pulled in the Ollama container."""
     runtime = _container_runtime()

@@ -3,6 +3,7 @@
 #
 # Commands: start-db | stop-db | clean-db | start | stop | restart | clean
 # Invoke from repo root: ./scripts/dev_stack.sh . <command> [ollama-in-stack]
+# AI agents must NOT pass ollama-in-stack; it bypasses node-manager and invalidates GPU variant E2E.
 # Or use the just front-end: just setup-dev start, just scripts/start (justfile
 # implements the same flow inline; this script is the canonical shell implementation).
 # No Python dependency; requires podman or docker and pre-built dev binaries.

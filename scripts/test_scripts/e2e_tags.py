@@ -34,6 +34,7 @@ TAG_TASK = "task"
 TAG_CHAT = "chat"
 TAG_WORKER = "worker"
 TAG_PMA = "pma"
+TAG_GPU_VARIANT = "gpu_variant"
 
 # Modules that provide shared state for other E2E tests. When filtering by include_tags,
 # these are always included (in discovery order) so dependencies run before tag-matched tests.
