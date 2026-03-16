@@ -5,16 +5,24 @@ Feature: Single Node Happy Path
   I want to create tasks that execute on that local worker node
   So that I can automate sandboxed execution of commands without a separate machine
 
-# Precondition: at least one inference-capable path must be available.
-# Inference may be node-local (Ollama or similar) or external via a configured provider key.
-# In the single-node case, startup should fail fast if neither is available.
-#
-# Script-driven E2E (just e2e / setup-dev.sh full-demo): after the node starts, the script
-# pulls the effective Project Manager model into Ollama and runs a basic inference smoke to verify inference works.
-# Default PM model is chosen by VRAM tier (8 GB: Qwen3.5 9B; 16 GB: Qwen3.5 9B / Qwen2.5 14B; `qwen3.5:0.8b` is smallest fallback).
-# See dev_docs/single_node_e2e_testing_plan.md.
+# Precondition: At Least One Inference-Capable Path Must Be available
 
-Background:
+# Inference May Be Node-Local (Ollama or Similar) or External via a Configured Provider key
+
+# In the Single-Node Case, Startup Should Fail Fast If Neither is available
+
+#
+
+# Script-Driven E2E (Just e2e / `setup-dev.sh` Full-Demo): After the Node Starts, the Script
+
+# Pulls the Effective Project Manager Model Into Ollama and Runs a Basic Inference Smoke to Verify Inference works
+
+# Default PM Model is Chosen by VRAM Tier (8 GB: `Qwen3.5` 9B; 16 GB: `Qwen3.5` 9B / `Qwen2.5` 14B; `qwen3.5:0.8b` is Smallest fallback)
+
+# See dev_docs/single_node_e2e_testing_plan.md
+
+## Background
+
   Given a running PostgreSQL database
   And the orchestrator API is running
   And an admin user exists with handle "admin"
@@ -31,7 +39,8 @@ Scenario: End-to-end single-node task execution (happy path)
   Then the job result contains stdout "hello"
   And the task status becomes "completed"
 
-  # Requires inference-capable node (proxy sidecar + model loaded). Select with: --tags=@inference_in_sandbox
+# Requires Inference-Capable Node (Proxy Sidecar + Model Loaded). Select With: --Tags=@inference_in_sandbox
+
 @inference_in_sandbox
 @req_orches_0112
 @spec_cynai_worker_sandboxexec

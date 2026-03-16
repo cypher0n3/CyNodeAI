@@ -5,7 +5,8 @@ Feature: Worker Node Sandbox Execution
   I want the worker API to authenticate requests and run sandboxed jobs
   So that job execution is isolated and results are returned reliably
 
-Background:
+## Background
+
   Given the worker API is running
 
 @req_worker_0100
@@ -67,7 +68,7 @@ Scenario: Sandbox has working directory and task context environment
 @req_worker_0104
 @spec_cynai_worker_sandboxexec
 @phase1_sandbox
-Scenario: Request env cannot override CYNODE_ task context
+Scenario: Request env cannot override CYNODE_task context
   Given the worker API is configured with a valid bearer token
   When I submit a sandbox job with env "CYNODE_TASK_ID=forged" that runs command "echo $CYNODE_TASK_ID"
   Then the sandbox job result stdout contains "bdd-task"

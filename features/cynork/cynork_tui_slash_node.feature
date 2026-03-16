@@ -5,7 +5,8 @@ Feature: cynork TUI /nodes slash commands
   I want to list and get nodes via slash commands
   So that I can inspect node inventory without leaving the chat surface
 
-Background:
+## Background
+
   Given a mock gateway is running
   And cynork is built
   And I am logged in with username "alice" and password "secret"

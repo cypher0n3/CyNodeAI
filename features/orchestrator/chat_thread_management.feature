@@ -5,7 +5,8 @@ Feature: Chat thread management and rich chat metadata
   I want the gateway and orchestrator to manage thread metadata and rich chat state
   So that clients can present history, downloads, and attached-file context without scraping prose
 
-Background:
+## Background
+
   Given a running PostgreSQL database
   And the orchestrator API is running
   And an admin user exists with handle "admin"

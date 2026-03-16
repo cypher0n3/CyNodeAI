@@ -336,7 +336,7 @@ It covers worker-node behavior and the worker API contract for job execution and
   <a id="req-worker-0252"></a>
 - **REQ-WORKER-0253:** The node MUST start the Worker API and contact the orchestrator with its capabilities bundle (registration and capability report) before starting any local inference (OLLAMA) container.
   The node MUST NOT start the OLLAMA (or equivalent) container until the orchestrator has acknowledged registration and returned node configuration that instructs the node to start the local inference backend (including backend variant, e.g. ROCm for AMD or CUDA for Nvidia, when applicable).
-  When starting the backend container, the node MUST use the orchestrator-supplied variant and, when `inference_backend.image` is omitted, MUST derive the container image from that variant (e.g. base image + variant tag); the node MUST NOT use a single node-local env default (e.g. `OLLAMA_IMAGE`) that could contradict the orchestrator-supplied variant.
+  When starting the backend container, the node MUST use the orchestrator-supplied variant and, when `inference_backend.image` is omitted, MUST derive the container image from that variant per payload spec (for Ollama: variant rocm -> `ollama/ollama:rocm`; variant cuda or cpu -> `ollama/ollama` or `ollama/ollama:latest`, since Ollama has no cuda tag); the node MUST NOT use a single node-local env default (e.g. `OLLAMA_IMAGE`) that could contradict the orchestrator-supplied variant.
   [CYNAI.WORKER.NodeStartupProcedure](../tech_specs/worker_node.md#spec-cynai-worker-nodestartupprocedure)
   [CYNAI.WORKER.RegistrationAndBootstrap](../tech_specs/worker_node.md#spec-cynai-worker-registrationandbootstrap)
   [CYNAI.WORKER.Payload.ConfigurationV1](../tech_specs/worker_node_payloads.md#spec-cynai-worker-payload-configuration-v1)
@@ -355,6 +355,15 @@ It covers worker-node behavior and the worker API contract for job execution and
   [CYNAI.WORKER.CapabilityReporting](../tech_specs/worker_node.md#spec-cynai-worker-capabilityreporting)
   [CYNAI.WORKER.Payload.CapabilityReportV1](../tech_specs/worker_node_payloads.md#spec-cynai-worker-payload-capabilityreport-v1)
   <a id="req-worker-0256"></a>
+- **REQ-WORKER-0265:** When the node has multiple GPU types (e.g. AMD and NVIDIA), the node MUST include in its capability report **all** GPU devices from all supported vendors, each with `vendor` and `vram_mb`, so the orchestrator can compute total VRAM per vendor and select the inference backend variant for the vendor with the greatest total VRAM.
+  [CYNAI.WORKER.Payload.CapabilityReportV1](../tech_specs/worker_node_payloads.md#spec-cynai-worker-payload-capabilityreport-v1)
+  [orchestrator_inference_container_decision.md](../tech_specs/orchestrator_inference_container_decision.md)
+  <a id="req-worker-0265"></a>
+- **REQ-WORKER-0266:** **Intel** GPU support (reporting Intel devices in capability and using an Intel inference backend variant/image) is **deferred until post-MVP**.
+  For MVP, the node MUST treat AMD and NVIDIA as the only supported GPU vendors for inference backend variant selection; if only Intel GPUs are present, the node SHALL report capability without selecting an Intel variant and the orchestrator will treat the node as CPU for inference per [REQ-ORCHES-0175](../requirements/orches.md#req-orches-0175).
+  [REQ-ORCHES-0175](../requirements/orches.md#req-orches-0175)
+  [worker_node_payloads.md - gpu.devices](../tech_specs/worker_node_payloads.md#spec-cynai-worker-payload-capabilityreport-v1)
+  <a id="req-worker-0266"></a>
 - **REQ-WORKER-0257:** When the Node Manager receives a shutdown command (e.g. SIGTERM or stop request), it MUST send shutdown commands to any containers it is running (managed services and sandbox containers).
   The Node Manager MUST still exit if dependent containers fail to shut down (e.g. after a configured timeout or kill); in that case it MUST exit with a non-zero exit code.
   [CYNAI.WORKER.NodeManagerShutdown](../tech_specs/worker_node.md#spec-cynai-worker-nodemanagershutdown)

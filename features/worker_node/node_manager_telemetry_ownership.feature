@@ -6,7 +6,8 @@ Feature: Node Manager Telemetry Ownership
   So that shutdown outcomes are recorded and worker-api does not duplicate node_boot when started by node manager
 
   Per worker_telemetry_api.md and worker_node.md: node-manager records node_boot, runs retention/vacuum,
-  and records a service log event on shutdown (source_name=node_manager). Worker-api skips node_boot
+  and records a service log event on shutdown (source_name=node_manager).
+    Worker-api skips node_boot
   when NODE_SKIP_NODE_BOOT_RECORD is set (e.g. when started by node-manager).
 
 @req_worker_0258

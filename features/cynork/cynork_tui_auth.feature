@@ -5,7 +5,8 @@ Feature: cynork TUI authentication and login recovery
   I want the TUI to start without requiring a valid token and prompt me to login if needed
   So that I am never blocked from launching the interactive chat surface
 
-Background:
+## Background
+
   Given a mock gateway is running
   And cynork is built
 
@@ -104,7 +105,8 @@ Scenario: Mid-session auth failure prompts re-authentication and retries
   Then the TUI offers to retry the interrupted action once
   And the session continues without restarting the TUI
 
-# NOTE: capability not implemented yet
+# NOTE: Capability Not Implemented Yet
+
 @req_client_0191
 @spec_cynai_client_cliweblogin
 Scenario: Web login shows bounded authorization details without printing a token

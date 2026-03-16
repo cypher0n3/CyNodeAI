@@ -11,6 +11,9 @@ The test never received a `task_id` in stdout, so it failed on the third attempt
 - **Root cause:** `helpers.run_cynork()` uses a default timeout of 120 seconds.
   The subprocess running `cynork task create -p "Please reply with exactly: hello from task create." -o json` was killed by `subprocess.TimeoutExpired` before the CLI returned.
 - **Effect:** No JSON output was captured; `parse_json_safe(out)` returned nothing useful, so `task_id` stayed empty and `state.TASK_ID` was never set.
+- **Possible contributing factor:** On hosts affected by [Bug 1: ROCM Ollama on Nvidia GPU](../_bugs.md#bug-1-rocm-ollama-on-nvidia-gpu), the wrong Ollama variant (rocm) may be running on an NVIDIA GPU, which can cause inference to be slow, fail, or hang.
+  That would make the prompt-mode task create path (which blocks on orchestrator inference) more likely to exceed the 120s timeout.
+  See [Identified Bugs](../_bugs.md) for causes, spec violations, and desired behavior.
 
 ## 3 Specific Code Paths Involved
 
@@ -57,6 +60,7 @@ Traceability for this test:
 - **Spec/requirement intent:** Task create MUST complete and return a task identifier so that clients can list, get, result, and cancel the task.
 - **Observed behavior:** The create path (gateway plus orchestrator plus worker/PMA) does not respond within 120 seconds in the E2E environment, so the CLI times out and the test never sees a `task_id`.
 - **Deviation:** The system fails to meet the implied "timely response" needed for the E2E test; the implementation may be correct but the environment (e.g. inference startup, PMA routing, or resource contention) causes the create flow to exceed the test's timeout, or the gateway/orchestrator does not respond promptly (e.g. blocking until task completion instead of returning after task creation).
+- **Related bugs:** [Identified Bugs](../_bugs.md) documents Bug 1 (ROCM Ollama on Nvidia GPU), which can cause the wrong inference backend to run and contribute to inference path slowness or failure in E2E.
 
 ## 6 What Needs to Be Fixed in the Implementation
 
@@ -120,7 +124,7 @@ To align specs with the intended task-create handoff flow and support implementa
 - Ensure **Job Lifecycle Reporting** (or equivalent) states that SBA reports execution results back to the caller (PMA) per the job lifecycle; no change may be needed if this is already clear.
 - If the orchestrator-PMA-SBA flow is not spelled out, add a short note that SBA is invoked by PMA for task execution and reports results to PMA, which then reports to the orchestrator.
 
-### 7.4 CLI and Gateway ([`cli_management_app_commands_tasks.md`](../../tech_specs/cli_management_app_commands_tasks.md), [User_api_gateway.md](../../tech_specs/user_api_gateway.md))
+### 7.4 CLI and Gateway ([`cli_management_app_commands_tasks.md`](../../tech_specs/cli_management_app_commands_tasks.md), [`user_api_gateway.md`](../../tech_specs/user_api_gateway.md))
 
 - In the task create section: state that `POST /v1/tasks` (and thus `cynork task create`) returns the task identifier in the response **without waiting for task completion**; clients poll task get/result for status and outcome.
 - This may be a single sentence or bullet in each spec to make the "create returns promptly" expectation explicit and testable.

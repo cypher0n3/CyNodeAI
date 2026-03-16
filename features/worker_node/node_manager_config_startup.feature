@@ -56,6 +56,17 @@ Scenario: Node manager starts inference backend with orchestrator-supplied varia
   When the node manager runs the startup sequence against the mock orchestrator
   Then the node manager started the local inference backend with variant "cuda"
 
+@req_worker_0253
+@req_worker_0265
+@spec_cynai_worker_nodestartupprocedure
+@spec_cynai_worker_payload_configurationv1
+Scenario: Node manager starts inference backend with rocm variant when orchestrator selects AMD
+  Given a mock orchestrator that returns bootstrap with node_config_url
+  And the mock returns node config with worker_api bearer token
+  And the mock returns node config with inference_backend enabled and variant "rocm" and no image
+  When the node manager runs the startup sequence against the mock orchestrator
+  Then the node manager started the local inference backend with variant "rocm"
+
 @req_worker_0002
 @spec_cynai_worker_failfast
 @wip

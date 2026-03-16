@@ -5,7 +5,8 @@ Feature: Orchestrator Job Timeout Tracking
   I want the orchestrator to track job effective deadlines and mark overdue jobs as failed (timeout)
   So that jobs are not left in an ambiguous state when a node does not report back
 
-Background:
+## Background
+
   Given a running PostgreSQL database
   And the orchestrator API is running
   And an admin user exists with handle "admin"

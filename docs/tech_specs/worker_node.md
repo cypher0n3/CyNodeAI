@@ -762,7 +762,7 @@ On startup, the Node Manager MUST contact the orchestrator and receive configura
 The Worker API MUST be started and the node MUST register with the orchestrator (sending its capabilities bundle) before the node starts any local inference container.
 The orchestrator acknowledges registration and returns a node configuration payload that **instructs** the node whether and how to start the local inference backend (e.g. container image and backend variant such as ROCm for AMD or CUDA for Nvidia).
 The node MUST NOT start the Ollama container until it has received this instruction in the node configuration payload (see [`worker_node_payloads.md`](worker_node_payloads.md) `node_configuration_payload_v1` `inference_backend`).
-When the orchestrator omits `inference_backend.image`, the node MUST derive the backend container image from `inference_backend.variant` (e.g. base image + variant tag) and MUST NOT use a node-local env default (e.g. a single `OLLAMA_IMAGE`) that ignores or overrides the orchestrator-supplied variant.
+When the orchestrator omits `inference_backend.image`, the node MUST derive the backend container image from `inference_backend.variant` per [worker_node_payloads.md](worker_node_payloads.md) (for Ollama: variant `rocm` -> `ollama/ollama:rocm`; variant `cuda` or `cpu` -> `ollama/ollama` or `ollama/ollama:latest`, since Ollama has no cuda tag) and MUST NOT use a node-local env default (e.g. a single `OLLAMA_IMAGE`) that ignores or overrides the orchestrator-supplied variant.
 When the instruction includes `inference_backend.env`, the node MUST pass those orchestrator-directed backend environment values into the launched backend container.
 Those values represent the orchestrator's effective runtime configuration for maximizing the safe usable context window for the expected local model workload on that node.
 
@@ -1038,6 +1038,7 @@ Inference backend instruction in config
 
 - The node configuration payload MAY include `inference_backend` (see [`worker_node_payloads.md`](worker_node_payloads.md) `node_configuration_payload_v1`).
 - The orchestrator MUST derive the inference backend instruction (whether to start, which image, and variant such as ROCm or CUDA) using the deterministic algorithm in [orchestrator_inference_container_decision.md](orchestrator_inference_container_decision.md#spec-cynai-orches-inferencecontainerdecision), and MUST include it in the config when the node is inference-capable and inference is enabled.
+  Variant MUST be derived by **model and/or VRAM**, not vendor alone: when the node reports multiple GPU types, the orchestrator uses **total VRAM per vendor** (sum of `vram_mb` per vendor) and selects the variant for the vendor with the greatest total VRAM; the node MUST report all GPUs (all vendors) with per-device `vram_mb` so this is correct (see [worker_node_payloads.md](worker_node_payloads.md) and [REQ-WORKER-0265](../requirements/worker.md#req-worker-0265)).
 - The node MUST NOT start the OLLAMA (or equivalent) container until it has received this instruction; see [Node Startup Procedure](#node-startup-procedure).
 
 Required behavior

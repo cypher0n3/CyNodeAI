@@ -11,6 +11,7 @@ Feature: cynork task commands
   And cynork is built
 
 # Intended Semantics: Task is Text or Markdown; System Interprets and May Call Model And/or Run Sandbox
+
 # This Scenario Uses a Literal Shell Command for MVP Testing Until Prompt Interpretation is Implemented
 
 @req_client_0101

@@ -5,7 +5,8 @@ Feature: cynork TUI /thread slash commands
   I want to create, list, switch, and rename threads via slash commands
   So that I can manage conversation threads without leaving the chat surface
 
-Background:
+## Background
+
   Given a mock gateway is running
   And cynork is built
   And I am logged in with username "alice" and password "secret"

@@ -95,6 +95,34 @@ The intended behavior is: the **orchestrator** directs whether and how to start 
 
 Implementation details (detection of discrete vs integrated, payload shape, and container run args) belong in a tech spec or implementation plan when code changes are made.
 
+### Bug 1 Updated References (Requirements and Specs)
+
+Authoritative req/spec sources that were updated to clarify correct behavior (orchestrator directs inference backend; node derives image from variant when image absent; node must not use env default that overrides variant):
+
+- **Type:** Requirement
+  - id / doc: REQ-WORKER-0253
+  - location: [worker.md](../requirements/worker.md#req-worker-0253)
+- **Type:** Requirement
+  - id / doc: REQ-ORCHES-0149
+  - location: [orches.md](../requirements/orches.md#req-orches-0149)
+- **Type:** Spec (payload)
+  - id / doc: node_configuration_payload_v1 `inference_backend`
+  - location: [worker_node_payloads.md](../tech_specs/worker_node_payloads.md)
+- **Type:** Spec (orchestrator decision)
+  - id / doc: CYNAI.ORCHES.InferenceContainerDecision
+  - location: [orchestrator_inference_container_decision.md](../tech_specs/orchestrator_inference_container_decision.md)
+- **Type:** Spec (node startup)
+  - id / doc: CYNAI.WORKER.NodeStartupProcedure
+  - location: [worker_node.md](../tech_specs/worker_node.md#spec-cynai-worker-nodestartupprocedure)
+- **Type:** Spec (payload config)
+  - id / doc: CYNAI.WORKER.Payload.ConfigurationV1
+  - location: [worker_node_payloads.md](../tech_specs/worker_node_payloads.md#spec-cynai-worker-payload-configuration-v1)
+
+Feature files with scenarios added for variant/image behavior:
+
+- [features/worker_node/node_manager_config_startup.feature](../../features/worker_node/node_manager_config_startup.feature): "Node manager starts inference backend with orchestrator-supplied variant when image is absent"
+- [features/orchestrator/node_registration_and_config.feature](../../features/orchestrator/node_registration_and_config.feature): "GET config returns inference_backend with variant consistent with node GPU capability"
+
 ### Bug 1 Suggested Tests (To Catch This and Prevent Regressions)
 
 - **Unit tests (worker_node)**

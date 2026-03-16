@@ -5,7 +5,8 @@ Feature: cynork TUI slash command dispatch and help
   I want slash commands to be dispatched locally and discoverable via /help
   So that I can control the session without leaving the chat surface
 
-Background:
+## Background
+
   Given a mock gateway is running
   And cynork is built
   And I am logged in with username "alice" and password "secret"
@@ -65,6 +66,6 @@ Scenario: Unknown slash command is not sent to the PM model as chat text
 @spec_cynai_client_cynorktui_slashcommandexecution
 Scenario: Slash command failure does not terminate the session
   Given the TUI is running
-  When I type "/connect https://unreachable.invalid" and press Enter
+  When I type "/connect <https://unreachable.invalid>" and press Enter
   Then the scrollback shows an error or connectivity failure
   And the TUI session remains active

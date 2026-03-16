@@ -5,7 +5,8 @@ Feature: cynork TUI /status and /auth slash commands
   I want to check gateway status and run auth commands via slash commands
   So that I can manage connectivity and identity without leaving the chat surface
 
-Background:
+## Background
+
   Given a mock gateway is running
   And cynork is built
   And I am logged in with username "alice" and password "secret"

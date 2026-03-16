@@ -5,7 +5,8 @@ Feature: API Egress call endpoint
   I want to call external providers via POST /v1/call
   So that tasks can trigger allowed provider operations with audit
 
-Background:
+## Background
+
   Given the API egress stub is configured with bearer token "egress-bearer" and allowlist "openai,github"
 
 @req_apiegr_0110

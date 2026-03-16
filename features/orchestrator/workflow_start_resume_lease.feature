@@ -5,7 +5,8 @@ Feature: Workflow Start Resume and Lease
   I want to start, resume, checkpoint, and release task workflows
   So that at most one active workflow runs per task and state is durable
 
-Background:
+## Background
+
   Given a running PostgreSQL database
   And the orchestrator API is running
   And an admin user exists with handle "admin"

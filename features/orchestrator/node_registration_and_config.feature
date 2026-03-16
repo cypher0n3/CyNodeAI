@@ -24,7 +24,7 @@ Scenario: Node registration with PSK
 @req_orches_0148
 @spec_cynai_worker_payload_capabilityreport_v1
 Scenario: Node registration includes worker API base_url
-  Given a node with slug "test-node-02" and valid PSK and worker API URL "http://worker-02.example.com:12090"
+  Given a node with slug "test-node-02" and valid PSK and worker API URL "<http://worker-02.example.com:12090>"
   When the node registers with the orchestrator
   Then the node is recorded in the database
   And the orchestrator stored worker_api_target_url from the node-reported base_url for "test-node-02"
@@ -80,9 +80,42 @@ Scenario: GET config returns inference_backend when node is inference-capable an
 @req_orches_0149
 @spec_cynai_orches_inferencecontainerdecision
 @spec_cynai_worker_payload_configurationv1
-Scenario: GET config returns inference_backend with variant consistent with node GPU capability
+Scenario: GET config returns inference_backend with variant from vendor with most total VRAM (single vendor)
   Given a node with slug "gpu-node-01" and valid PSK
   And the node registers with capability inference supported and GPU NVIDIA reported
   When the node requests its configuration
   Then the orchestrator returns a configuration payload for "gpu-node-01"
   And the payload includes inference_backend with enabled true and variant "cuda"
+
+@req_orches_0149
+@req_worker_0265
+@spec_cynai_orches_inferencecontainerdecision
+@spec_cynai_worker_payload_configurationv1
+Scenario: GET config returns inference_backend with variant from vendor with most total VRAM (mixed GPUs)
+  Given a node with slug "mixed-gpu-node-01" and valid PSK
+  And the node registers with capability inference supported and GPUs reported with 1 AMD device 20480 vram_mb and 3 NVIDIA devices each 12288 vram_mb
+  When the node requests its configuration
+  Then the orchestrator returns a configuration payload for "mixed-gpu-node-01"
+  And the payload includes inference_backend with enabled true and variant "cuda"
+
+@req_orches_0149
+@req_worker_0265
+@spec_cynai_orches_inferencecontainerdecision
+@spec_cynai_worker_payload_configurationv1
+Scenario: GET config returns inference_backend with variant when multiple GPUs same vendor
+  Given a node with slug "multi-nvidia-node-01" and valid PSK
+  And the node registers with capability inference supported and GPUs reported with 3 NVIDIA devices each 12288 vram_mb
+  When the node requests its configuration
+  Then the orchestrator returns a configuration payload for "multi-nvidia-node-01"
+  And the payload includes inference_backend with enabled true and variant "cuda"
+
+@req_orches_0149
+@req_worker_0265
+@spec_cynai_orches_inferencecontainerdecision
+@spec_cynai_worker_payload_configurationv1
+Scenario: GET config returns inference_backend with variant when AMD total VRAM exceeds NVIDIA
+  Given a node with slug "amd-dominant-node-01" and valid PSK
+  And the node registers with capability inference supported and GPUs reported with 1 NVIDIA device 12288 vram_mb and 3 AMD devices each 8192 vram_mb
+  When the node requests its configuration
+  Then the orchestrator returns a configuration payload for "amd-dominant-node-01"
+  And the payload includes inference_backend with enabled true and variant "rocm"

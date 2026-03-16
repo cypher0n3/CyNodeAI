@@ -5,7 +5,8 @@ Feature: cynork chat
   I want to chat with the PM/PA via the OpenAI-compatible gateway
   So that I can converse, manage threads, and use slash commands from cynork
 
-Background:
+## Background
+
   Given a mock gateway is running
   And cynork is built
 

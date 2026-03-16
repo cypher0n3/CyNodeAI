@@ -1,8 +1,10 @@
 # Orchestrator Deterministic Inference Container Decision
 
 - [Document Overview](#document-overview)
+  - [Traces To](#traces-to)
   - [Related Specs](#related-specs)
 - [Scope and Goals](#scope-and-goals)
+  - [Vendor Support (MVP vs Post-MVP)](#vendor-support-mvp-vs-post-mvp)
 - [Decision Contract](#decision-contract)
 - [Inputs](#inputs)
   - [From Node Capability Report](#from-node-capability-report)
@@ -11,9 +13,11 @@
 - [Deterministic Decision Algorithm](#deterministic-decision-algorithm)
   - [`InferenceDecision` Algorithm](#inferencedecision-algorithm)
 - [Variant Selection Rules](#variant-selection-rules)
+  - [When Multiple GPU Types (Mixed Vendors) Are Reported](#when-multiple-gpu-types-mixed-vendors-are-reported)
 - [VRAM Considerations](#vram-considerations)
 - [Compute Considerations](#compute-considerations)
 - [Image Selection](#image-selection)
+- [Backend Environment Derivation](#backend-environment-derivation)
 - [Traceability](#traceability)
 
 ## Document Overview
@@ -34,6 +38,17 @@ Same capability report and policy MUST yield the same `inference_backend` result
 
 - **In scope:** The logic the orchestrator uses when building `node_configuration_payload_v1` for a given node to set or omit `inference_backend`.
 - **Goals:** Determinism (same inputs => same output), alignment with [REQ-ORCHES-0149](../requirements/orches.md#req-orches-0149) and [Configuration Delivery](worker_node.md#spec-cynai-worker-configurationdelivery), and a single place to define the decision so implementers and tests can verify behavior.
+
+### Vendor Support (MVP vs Post-MVP)
+
+- Spec ID: `CYNAI.ORCHES.InferenceVendorSupportMvp` <a id="spec-cynai-orches-inferencevendorsupportmvp"></a>
+
+- **MVP:** Supported GPU vendors for variant selection are **AMD** (variant `rocm`) and **NVIDIA** (variant `cuda`).
+  The orchestrator sums total VRAM per vendor across these two only and selects the variant for the vendor with the greatest total VRAM.
+- **Intel (deferred until post-MVP):** Intel discrete GPUs (e.g. Arc) are capable of LLM inference (e.g. via SYCL/oneAPI or OpenVINO), but **Intel GPU support is deferred until post-MVP**.
+  When implemented post-MVP: the node MAY report Intel devices (vendor `Intel`, `vram_mb`, and appropriate features); the orchestrator will include Intel in the total-VRAM-per-vendor comparison and MAY emit variant `intel` (or `sycl`) when Intel has the greatest total VRAM; policy and image selection will support an Intel backend image.
+  Until then, nodes MUST NOT report Intel as a selected variant for inference backend; if only Intel GPUs are present, the orchestrator SHALL treat the node as CPU for inference (or "do not start" per policy).
+  See [REQ-ORCHES-0175](../requirements/orches.md#req-orches-0175) and [Vendor Support (MVP vs Post-MVP)](#spec-cynai-orches-inferencevendorsupportmvp).
 
 ## Decision Contract
 
@@ -66,7 +81,8 @@ The orchestrator MUST use the following fields from the node capability report (
 - `inference.supported` (boolean, optional): Factual: the node has the hardware and runtime capability to run inference (e.g. GPU or CPU, container runtime).
   Derived by the node from local detection, not from user preference.
 - `gpu.present` (boolean, optional).
-- `gpu.devices` (array, optional): Each device MAY include `vendor`, `model`, `device_id`, `vram_mb`, `available_vram_mb` (when reported), `features` (e.g. `cuda_capability`, `rocm_version`).
+- `gpu.devices` (array, optional): When multiple GPU types (e.g. AMD and NVIDIA) exist, the node MUST report **all** devices from all supported vendors, each with `vendor`, `vram_mb`, and `features` (e.g. `cuda_capability`, `rocm_version`) so the orchestrator can compute total VRAM per vendor for variant selection.
+  Each device MAY include `model`, `device_id`, `available_vram_mb` (when reported).
 - `gpu.total_vram_mb` (int, optional): Total VRAM across all devices; tracked separately from per-device values.
 - `gpu.total_available_vram_mb` (int, optional): Total available (free) VRAM; tracked separately from per-device available VRAM and from total capacity.
 - `compute` (object): CPU and system memory; see [Compute considerations](#compute-considerations).
@@ -143,24 +159,45 @@ The first condition that matches determines the outcome; no later steps are appl
 
 - Spec ID: `CYNAI.ORCHES.InferenceVariantSelection` <a id="spec-cynai-orches-inferencevariantselection"></a>
 
-Variant MUST be chosen deterministically from the capability report and policy:
+Variant MUST be chosen deterministically from the capability report and policy.
+GPU preference MUST be driven by **model and/or VRAM**, not vendor alone.
 
-1. **GPU present with ROCm:** If `gpu.present === true` and any entry in `gpu.devices` has `features.rocm_version` set (or vendor/model heuristics indicate AMD), use variant `rocm` if allowed by policy; otherwise fall back to next rule.
-2. **GPU present with CUDA:** If `gpu.present === true` and any entry in `gpu.devices` has `features.cuda_capability` set (or vendor/model heuristics indicate Nvidia), use variant `cuda` if allowed by policy; otherwise fall back to next rule.
-3. **CPU:** Use variant `cpu` for all other cases (no GPU, or GPU not matching a supported variant, or policy only allows `cpu`).
+### When Multiple GPU Types (Mixed Vendors) Are Reported
 
-When multiple GPUs of different types are reported, the orchestrator MAY define a deterministic tie-break (e.g. prefer first device, or prefer CUDA over ROCm over CPU by fixed priority).
-This spec recommends: prefer ROCm if any AMD device is present and policy allows; else prefer CUDA if any Nvidia device is present and policy allows; else `cpu`.
+1. **Total VRAM per vendor:** For each **MVP-supported** vendor (AMD, NVIDIA), sum `vram_mb` across all devices of that vendor in `gpu.devices` (use 0 when `vram_mb` is missing for a device).
+  Intel is not included in MVP; see [Vendor Support (MVP vs Post-MVP)](#spec-cynai-orches-inferencevendorsupportmvp).
+2. **Choose variant:** Select the variant (rocm or cuda) that corresponds to the **vendor with the greatest total VRAM** (among AMD and NVIDIA only for MVP).
+   If only one vendor has devices, use that variant.
+   If both vendors have the same total VRAM, use a deterministic tie-break (e.g. policy: prefer cuda over rocm, or prefer rocm over cuda; same report and policy MUST always yield the same result).
+3. **CPU:** Use variant `cpu` when no GPU is present, no device matches a supported variant, or policy only allows `cpu`.
+
+#### Edge Cases (Informative)
+
+NVIDIA dominant:
+
+- 1 AMD device 20 GB vs 3 NVIDIA devices 12 GB each -> NVIDIA total 36 GB > 20 GB -> variant `cuda`.
+- 2 NVIDIA devices 12 GB + 6 GB vs 1 AMD device 16 GB -> NVIDIA total 18 GB > 16 GB -> variant `cuda`.
+
+AMD dominant:
+
+- 1 NVIDIA device 12 GB vs 3 AMD devices 8 GB each -> AMD total 24 GB > 12 GB -> variant `rocm`.
+- 2 AMD devices 16 GB + 12 GB vs 1 NVIDIA device 20 GB -> AMD total 28 GB > 20 GB -> variant `rocm`.
+- 1 NVIDIA device 8 GB vs 1 AMD device 16 GB -> AMD total 16 GB > 8 GB -> variant `rocm`.
+
+**When only one vendor is reported:** Use that vendor's variant (rocm for AMD, cuda for NVIDIA); otherwise `cpu`.
+If the node reports only Intel GPUs (post-MVP capability report), the orchestrator SHALL not select an Intel variant in MVP and SHALL fall back to `cpu` (or "do not start" per policy); see [Vendor Support (MVP vs Post-MVP)](#spec-cynai-orches-inferencevendorsupportmvp).
 
 ## VRAM Considerations
 
 - Spec ID: `CYNAI.ORCHES.InferenceVramConsiderations` <a id="spec-cynai-orches-inferencevramconsiderations"></a>
 
-Available VRAM MUST be a consideration when the capability report provides it.
-Per-GPU and total values are tracked separately so the orchestrator can apply policy to each.
+Variant selection MUST use VRAM when the capability report provides it and multiple vendors are present.
+Per-GPU and total values are tracked separately so the orchestrator can apply policy.
 
+- **Total VRAM per vendor:** When `gpu.devices` contains devices from more than one vendor (e.g. AMD and NVIDIA), the orchestrator MUST sum `vram_mb` per vendor and select the variant for the vendor with the **greatest total VRAM** per [Variant Selection Rules](#variant-selection-rules).
+  The node capability report MUST include **all** GPUs (all vendors) with per-device `vram_mb` so this sum is correct.
 - **Per GPU:** Each entry in `gpu.devices` MAY include `vram_mb` (capacity) and `available_vram_mb` (free at report time).
-  When present, the orchestrator MAY use per-device available VRAM for variant selection (e.g. prefer a device with sufficient available VRAM) or to exclude devices below a policy threshold.
+  When present, the orchestrator MAY use per-device available VRAM for policy (e.g. exclude devices below a threshold) or for tie-breaking.
 - **Total:** `gpu.total_vram_mb` and `gpu.total_available_vram_mb` are tracked separately from per-device values.
   When present, the orchestrator MAY use total available VRAM for policy (e.g. minimum total available VRAM to enable GPU inference, or to choose a lighter image when below a threshold).
 
@@ -189,6 +226,7 @@ Policy MAY define minimum cores, minimum base or boost clock, or minimum (total 
 
 The orchestrator MUST select the container image from policy keyed by the chosen `variant` (e.g. default image for `cpu`, `cuda`, `rocm`).
 When policy does not specify an image for the variant, the orchestrator MAY omit `inference_backend.image`; the node MUST then derive the image from the supplied variant per [worker_node_payloads](worker_node_payloads.md) `inference_backend` (and MUST NOT use a node-local default that ignores or overrides the variant).
+For **Ollama**, when the node derives the image: variant `rocm` -> `ollama/ollama:rocm`; variant `cuda` or `cpu` -> `ollama/ollama` or `ollama/ollama:latest` (Ollama publishes no separate cuda tag).
 
 Image selection MUST be deterministic for the same (variant, policy) pair.
 
@@ -209,6 +247,8 @@ The orchestrator MUST determine the effective runtime configuration for node-loc
 - **REQ-ORCHES-0149:** [orches.md](../requirements/orches.md#req-orches-0149).
   Orchestrator returns node config that instructs whether and how to start the local inference backend.
   Inference backend instructions are derived from the node capability report.
+- **REQ-ORCHES-0175:** [orches.md](../requirements/orches.md#req-orches-0175).
+  Intel GPU support (variant selection, inference backend image) is deferred until post-MVP; MVP supports AMD and NVIDIA only.
 - **Configuration Delivery:** [worker_node.md#spec-cynai-worker-configurationdelivery](worker_node.md#spec-cynai-worker-configurationdelivery).
   Orchestrator derives inference backend instruction from capability report and policy.
   It includes it when the node is inference-capable and inference is enabled.

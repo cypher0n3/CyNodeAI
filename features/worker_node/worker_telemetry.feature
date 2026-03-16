@@ -5,7 +5,8 @@ Feature: Worker Telemetry API
   I want to query node info and stats from the Worker API
   So that I can pull operational telemetry for debugging and operations
 
-Background:
+## Background
+
   Given a Worker API is running with bearer token "test-bearer-token"
 
 @req_worker_0200

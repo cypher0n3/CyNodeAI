@@ -52,7 +52,7 @@ Scenario: Dispatcher uses per-node worker URL and token
 @spec_cynai_client_clitaskcreateprompt
 Scenario: Task with natural-language prompt (default) completes with model output
   When I create a task with prompt "What is 2+2?"
-    and the task completes and I get the task result
+  And the task completes and I get the task result
   Then the task result contains model output
 
 @req_orches_0125

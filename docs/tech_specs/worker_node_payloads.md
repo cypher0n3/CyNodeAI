@@ -4,13 +4,16 @@
 - [Goals](#goals)
 - [Conventions](#conventions)
 - [Security Notes](#security-notes)
+  - [Traces to Requirements](#traces-to-requirements)
 - [Node Capability Report Payload](#node-capability-report-payload)
   - [Capability Report Schema `node_capability_report_v1`](#capability-report-schema-node_capability_report_v1)
 - [Node Bootstrap Payload](#node-bootstrap-payload)
   - [Bootstrap Payload Schema `node_bootstrap_payload_v1`](#bootstrap-payload-schema-node_bootstrap_payload_v1)
 - [Node Configuration Payload](#node-configuration-payload)
+  - [Node Configuration Payload Requirements Traces](#node-configuration-payload-requirements-traces)
   - [Node Config Schema `node_configuration_payload_v1`](#node-config-schema-node_configuration_payload_v1)
 - [Node Configuration Acknowledgement](#node-configuration-acknowledgement)
+  - [Node Configuration Acknowledgement Requirements Traces](#node-configuration-acknowledgement-requirements-traces)
   - [Config Ack Schema `node_config_ack_v1`](#config-ack-schema-node_config_ack_v1)
 - [Compatibility and Versioning](#compatibility-and-versioning)
 
@@ -91,11 +94,13 @@ Source requirements: [`docs/tech_specs/worker_node.md`](worker_node.md#spec-cyna
 - `gpu` (object, optional)
   - `present` (boolean)
   - `devices` (array, optional)
+    - When multiple GPU types (e.g. AMD and NVIDIA) exist on the node, the node MUST report **all** devices from all supported vendors so the orchestrator can compute **total VRAM per vendor** and select the inference backend variant (rocm vs cuda) for the vendor with the greatest total VRAM.
     - each device:
-      - `vendor` (string, optional)
+      - `vendor` (string, optional): e.g. `AMD`, `NVIDIA`; required when reporting for variant selection.
+        MAY include `Intel` for future use; **Intel support (variant and inference backend image) is deferred until post-MVP** ([REQ-ORCHES-0175](../requirements/orches.md#req-orches-0175)).
       - `model` (string, optional)
       - `device_id` (string, optional)
-      - `vram_mb` (int, optional)
+      - `vram_mb` (int, optional): Capacity in MiB; required when multiple vendors are present so the orchestrator can sum per vendor.
       - `features` (object, optional)
         - examples: `cuda_capability`, `rocm_version`
 - `sandbox` (object, optional)
@@ -327,11 +332,13 @@ Source requirements: [`docs/tech_specs/worker_node.md`](worker_node.md#spec-cyna
   - When absent or when `inference_backend.enabled` is false, the node MUST NOT start an inference container (sandbox-only or inference-disabled node).
   - `enabled` (boolean, optional): When true or when the object is present and the node is inference-capable per capability report, the node MUST start the backend container.
     When false, the node MUST NOT start it.
-  - `image` (string, optional): OCI image reference for the inference backend container (e.g. `ollama/ollama`, or a ROCm/CUDA variant image).
-    When absent, the node MUST derive the image from the orchestrator-supplied `variant` (e.g. base image with variant as tag: `ollama/ollama:cuda` when variant is `cuda`).
+  - `image` (string, optional): OCI image reference for the inference backend container (e.g. `ollama/ollama`, or a variant-specific image such as `ollama/ollama:rocm`).
+    When absent, the node MUST derive the image from the orchestrator-supplied `variant`.
+    For **Ollama**: variant `rocm` -> `ollama/ollama:rocm`; variant `cuda` or `cpu` -> `ollama/ollama` or `ollama/ollama:latest` (Ollama publishes no separate cuda tag; the default image is CUDA-capable).
     The node MUST NOT use a node-local default (e.g. a single `OLLAMA_IMAGE` env) that ignores or overrides the orchestrator-supplied variant.
   - `variant` (string, optional): Backend variant derived by the orchestrator from the node capability report (e.g. `cuda`, `rocm`, `cpu`).
-    The node MUST use this to select or configure the correct image or runtime (ROCM for AMD GPUs, CUDA for Nvidia GPUs when reported in capabilities).
+    The orchestrator derives variant from **total VRAM per vendor** when multiple GPU types are reported (vendor with greatest total VRAM wins); see [orchestrator_inference_container_decision.md](orchestrator_inference_container_decision.md).
+    The node MUST use this to select or configure the correct image or runtime (ROCM for AMD, CUDA for Nvidia).
     When `image` is absent, the node MUST derive the backend container image from this variant (see `image` above).
   - `port` (int, optional): listen port for the inference API (default 11434 for Ollama).
   - `env` (object, optional): orchestrator-directed environment values for the backend container.

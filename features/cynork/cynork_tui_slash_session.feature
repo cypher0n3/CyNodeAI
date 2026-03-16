@@ -5,7 +5,8 @@ Feature: cynork TUI slash commands for session and display
   I want to clear the view, see version, and exit via slash commands
   So that I can control the session display and end the session cleanly
 
-Background:
+## Background
+
   Given a mock gateway is running
   And cynork is built
   And I am logged in with username "alice" and password "secret"

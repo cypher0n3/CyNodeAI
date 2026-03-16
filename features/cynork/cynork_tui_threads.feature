@@ -5,7 +5,8 @@ Feature: cynork TUI thread management and connection recovery
   I want reliable thread management and automatic connection recovery
   So that my chat session persists across reconnections and I can navigate threads
 
-Background:
+## Background
+
   Given a mock gateway is running
   And cynork is built
   And I am logged in with username "alice" and password "secret"

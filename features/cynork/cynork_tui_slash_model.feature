@@ -5,7 +5,8 @@ Feature: cynork TUI /model and /models slash commands
   I want to list and select the chat model via slash commands
   So that I can switch models without leaving the chat surface
 
-Background:
+## Background
+
   Given a mock gateway is running
   And cynork is built
   And I am logged in with username "alice" and password "secret"
