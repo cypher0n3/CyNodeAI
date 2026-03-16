@@ -420,8 +420,16 @@ func maybeStartOllama(ctx context.Context, logger *slog.Logger, nodeConfig *node
 		return nil
 	}
 	image := nodeConfig.InferenceBackend.Image
-	variant := nodeConfig.InferenceBackend.Variant
-	if image == "" {
+	variant := strings.TrimSpace(nodeConfig.InferenceBackend.Variant)
+	if image == "" && variant != "" {
+		// Ollama has rocm tag; cuda/cpu use default image (no separate tag).
+		switch variant {
+		case "rocm":
+			image = "ollama/ollama:rocm"
+		default:
+			image = "ollama/ollama"
+		}
+	} else if image == "" {
 		image = getEnv("OLLAMA_IMAGE", "ollama/ollama")
 	}
 	if err := opts.StartOllama(image, variant, nodeConfig.InferenceBackend.Env); err != nil {

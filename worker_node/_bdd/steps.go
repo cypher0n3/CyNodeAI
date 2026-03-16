@@ -66,6 +66,11 @@ type workerTestState struct {
 	// Phase 7 desired-state: mock config may include managed_services; record StartManagedServices call
 	mockConfigWithManagedServices bool
 	managedServicesStarted        []nodepayloads.ConfigManagedService
+	// Inference backend variant/image for config (REQ-WORKER-0253)
+	mockInferenceBackendVariant string
+	mockInferenceBackendImage   string
+	startOllamaImage            string
+	startOllamaVariant          string
 	// Phase 1 inference proxy BDD
 	inferenceProxyServer *httptest.Server
 	// Telemetry store for Worker Telemetry API BDD (containers, logs with data)
@@ -352,6 +357,10 @@ func InitializeWorkerNodeSuite(sc *godog.ScenarioContext, state *workerTestState
 		state.secureStoreOpenErr = nil
 		state.mockConfigWithManagedServices = false
 		state.managedServicesStarted = nil
+		state.mockInferenceBackendVariant = ""
+		state.mockInferenceBackendImage = ""
+		state.startOllamaImage = ""
+		state.startOllamaVariant = ""
 		if state.inferenceProxyServer != nil {
 			state.inferenceProxyServer.Close()
 			state.inferenceProxyServer = nil
@@ -1170,14 +1179,21 @@ func RegisterNodeManagerConfigSteps(sc *godog.ScenarioContext, state *workerTest
 					state.mu.Lock()
 					state.getConfigCalled = true
 					withManaged := state.mockConfigWithManagedServices
+					infVariant := state.mockInferenceBackendVariant
+					infImage := state.mockInferenceBackendImage
 					state.mu.Unlock()
+					infBackend := &nodepayloads.ConfigInferenceBackend{Enabled: true}
+					if infVariant != "" || infImage != "" {
+						infBackend.Variant = infVariant
+						infBackend.Image = infImage
+					}
 					payload := nodepayloads.NodeConfigurationPayload{
 						Version:          1,
 						ConfigVersion:    "1",
 						IssuedAt:         time.Now().UTC().Format(time.RFC3339),
 						NodeSlug:         "bdd-node",
 						WorkerAPI:        &nodepayloads.ConfigWorkerAPI{OrchestratorBearerToken: "delivered-token"},
-						InferenceBackend: &nodepayloads.ConfigInferenceBackend{Enabled: true},
+						InferenceBackend: infBackend,
 					}
 					if withManaged {
 						payload.ManagedServices = &nodepayloads.ConfigManagedServices{
@@ -1213,6 +1229,40 @@ func RegisterNodeManagerConfigSteps(sc *godog.ScenarioContext, state *workerTest
 		state.mu.Lock()
 		state.mockConfigWithManagedServices = true
 		state.mu.Unlock()
+		return nil
+	})
+	sc.Step(`^the mock returns node config with inference_backend enabled and variant "([^"]*)" and no image$`, func(ctx context.Context, variant string) error {
+		state.mu.Lock()
+		state.mockInferenceBackendVariant = variant
+		state.mockInferenceBackendImage = ""
+		state.mu.Unlock()
+		return nil
+	})
+	sc.Step(`^the node manager started the local inference backend with variant "([^"]*)"$`, func(ctx context.Context, wantVariant string) error {
+		st := getWorkerState(ctx)
+		if st == nil {
+			return fmt.Errorf("no state")
+		}
+		if st.nodeManagerErr != nil {
+			return fmt.Errorf("node manager failed: %w", st.nodeManagerErr)
+		}
+		st.mu.Lock()
+		img := st.startOllamaImage
+		variant := st.startOllamaVariant
+		st.mu.Unlock()
+		// Ollama: rocm has :rocm tag; cuda/cpu use default image (no separate tag).
+		var wantImage string
+		if wantVariant == "rocm" {
+			wantImage = "ollama/ollama:rocm"
+		} else {
+			wantImage = "ollama/ollama"
+		}
+		if img != wantImage {
+			return fmt.Errorf("StartOllama image = %q, want %q (derived from variant)", img, wantImage)
+		}
+		if variant != wantVariant {
+			return fmt.Errorf("StartOllama variant = %q, want %q", variant, wantVariant)
+		}
 		return nil
 	})
 	sc.Step(`^the node manager runs the startup sequence against the mock orchestrator$`, func(ctx context.Context) error {
@@ -1277,9 +1327,15 @@ func RegisterNodeManagerConfigSteps(sc *godog.ScenarioContext, state *workerTest
 				st.mu.Unlock()
 				return nil
 			},
-			StartOllama: func(_, _ string, _ map[string]string) error {
-				if st != nil && st.failInferenceStartup {
-					return errors.New("inference startup failed")
+			StartOllama: func(image, variant string, _ map[string]string) error {
+				if st != nil {
+					st.mu.Lock()
+					st.startOllamaImage = image
+					st.startOllamaVariant = variant
+					st.mu.Unlock()
+					if st.failInferenceStartup {
+						return errors.New("inference startup failed")
+					}
 				}
 				return nil
 			},

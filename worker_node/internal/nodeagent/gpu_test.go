@@ -3,8 +3,11 @@ package nodeagent
 import (
 	"context"
 	"os"
+	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/cypher0n3/cynodeai/go_shared_libs/contracts/nodepayloads"
 )
 
 func TestDetectGPU_NoToolsReturnsNil(t *testing.T) {
@@ -136,6 +139,79 @@ func TestParseNvidiaSMIOutput_Empty(t *testing.T) {
 	got := parseNvidiaSMIOutput([]byte(""))
 	if got != nil {
 		t.Errorf("expected nil for empty input, got %+v", got)
+	}
+}
+
+func TestDetectGPU_ReportsAllDevicesWhenBothVendorsPresent(t *testing.T) {
+	// Worker reports all GPUs from all vendors so orchestrator can sum VRAM per vendor.
+	binDir := t.TempDir()
+	nvidiaOut := "NVIDIA GeForce RTX 3080, 10240\n"
+	rocmOut := `{"card0":{"Card series":"Radeon Vega","VRAM Total Memory (B)":"8589934592"}}`
+	if err := os.WriteFile(filepath.Join(binDir, "nvidia-smi"), []byte("#!/bin/sh\necho '"+nvidiaOut+"'"), 0o755); err != nil {
+		t.Fatalf("write nvidia-smi: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(binDir, "rocm-smi"), []byte("#!/bin/sh\necho '"+rocmOut+"'"), 0o755); err != nil {
+		t.Fatalf("write rocm-smi: %v", err)
+	}
+	t.Setenv("PATH", binDir+string(filepath.ListSeparator)+os.Getenv("PATH"))
+	gpuCacheMu.Lock()
+	gpuCacheExpiry = time.Time{}
+	gpuCacheResult = nil
+	gpuCacheMu.Unlock()
+	got := detectGPU(context.Background())
+	if got == nil {
+		t.Fatal("expected non-nil GPUInfo when both tools present")
+	}
+	if len(got.Devices) != 2 {
+		t.Fatalf("expected 2 devices (1 NVIDIA + 1 AMD), got %d", len(got.Devices))
+	}
+	var nvidia, amd int
+	for _, d := range got.Devices {
+		switch d.Vendor {
+		case "NVIDIA":
+			nvidia++
+		case "AMD":
+			amd++
+		}
+	}
+	if nvidia != 1 || amd != 1 {
+		t.Errorf("expected 1 NVIDIA and 1 AMD device, got %d NVIDIA and %d AMD", nvidia, amd)
+	}
+}
+
+func TestDetectGPU_SingleVendorReturnsAllDevices(t *testing.T) {
+	// Multiple GPUs of same vendor are all reported.
+	binDir := t.TempDir()
+	nvidiaOut := "Tesla A100, 81920\nTesla A100, 81920\n"
+	if err := os.WriteFile(filepath.Join(binDir, "nvidia-smi"), []byte("#!/bin/sh\necho '"+nvidiaOut+"'"), 0o755); err != nil {
+		t.Fatalf("write nvidia-smi: %v", err)
+	}
+	t.Setenv("PATH", binDir+string(filepath.ListSeparator)+os.Getenv("PATH"))
+	gpuCacheMu.Lock()
+	gpuCacheExpiry = time.Time{}
+	gpuCacheResult = nil
+	gpuCacheMu.Unlock()
+	got := detectGPU(context.Background())
+	if got == nil {
+		t.Fatal("expected non-nil GPUInfo")
+	}
+	if len(got.Devices) != 2 {
+		t.Fatalf("expected 2 NVIDIA devices, got %d", len(got.Devices))
+	}
+	if totalVRAM(got) != 163840 {
+		t.Errorf("totalVRAM = %d, want 163840 (2x 81920)", totalVRAM(got))
+	}
+}
+
+func TestTotalVRAM(t *testing.T) {
+	if totalVRAM(nil) != 0 {
+		t.Error("totalVRAM(nil) should be 0")
+	}
+	info := &nodepayloads.GPUInfo{
+		Devices: []nodepayloads.GPUDevice{{VRAMMB: 8192}, {VRAMMB: 8192}},
+	}
+	if got := totalVRAM(info); got != 16384 {
+		t.Errorf("totalVRAM = %d, want 16384", got)
 	}
 }
 

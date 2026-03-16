@@ -91,6 +91,8 @@ services:
     networks:
       - orchestrator_net
 
+  # Profile "ollama": enabled by --ollama-in-stack or SETUP_DEV_OLLAMA_IN_STACK=1.
+  # AI agents must NOT use this bypass; node-manager must start Ollama for GPU variant validation.
   ollama:
     profiles: ["ollama"]
     image: ${OLLAMA_IMAGE:-ollama/ollama}

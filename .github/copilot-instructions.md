@@ -34,3 +34,8 @@ The repository provides a [`justfile`](../justfile) for developer tooling.
 Key targets:
 
 - **`just ci`** - Run all CI checks locally (use before every commit)
+
+## Setup-Dev Bypass (Do Not Use)
+
+When starting the dev stack (`just setup-dev start`, `full-demo`, `restart`), **do NOT** use `--ollama-in-stack` or `SETUP_DEV_OLLAMA_IN_STACK=1`.
+These bypass the node-manager path (Ollama runs in compose instead) and invalidate GPU variant validation (e2e_205, Bug 1 fix).

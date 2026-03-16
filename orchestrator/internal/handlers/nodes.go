@@ -549,23 +549,74 @@ func (h *NodeHandler) deriveInferenceBackend(ctx context.Context, nodeID uuid.UU
 	}
 }
 
-// variantAndVRAM extracts the Ollama variant string and primary GPU VRAM (MB) from a
-// capability report. Returns "cpu" and 0 when no GPU is detected.
+// variantAndVRAM extracts the Ollama variant and total VRAM (MB) for the chosen vendor
+// from a capability report. Sums vram_mb per vendor and selects the variant for the
+// vendor with the greatest total VRAM (orchestrator_inference_container_decision.md).
+// Tie-break: prefer cuda over rocm. When VRAM is missing/zero for all devices, uses
+// first device with recognizable features. Returns "cpu" and 0 when no GPU is detected.
 func variantAndVRAM(report *nodepayloads.CapabilityReport) (variant string, vramMB int) {
 	variant = ollamaVariantCPU
 	if report.GPU == nil || !report.GPU.Present || len(report.GPU.Devices) == 0 {
 		return
 	}
-	d := report.GPU.Devices[0]
-	vramMB = d.VRAMMB
-	if d.Features != nil {
-		if _, hasROCm := d.Features["rocm_version"]; hasROCm {
-			variant = ollamaVariantROCm
-		} else if _, hasCUDA := d.Features["cuda_capability"]; hasCUDA {
-			variant = ollamaVariantCUDA
-		}
+	nvidiaTotal, amdTotal := sumVRAMByVendor(report.GPU.Devices)
+	switch {
+	case nvidiaTotal > amdTotal:
+		variant = ollamaVariantCUDA
+		vramMB = nvidiaTotal
+	case amdTotal > nvidiaTotal:
+		variant = ollamaVariantROCm
+		vramMB = amdTotal
+	case nvidiaTotal > 0:
+		variant = ollamaVariantCUDA
+		vramMB = nvidiaTotal
+	case amdTotal > 0:
+		variant = ollamaVariantROCm
+		vramMB = amdTotal
+	default:
+		variant = variantFromFirstRecognizableDevice(report.GPU.Devices)
 	}
 	return
+}
+
+func sumVRAMByVendor(devices []nodepayloads.GPUDevice) (nvidiaTotal, amdTotal int) {
+	for _, d := range devices {
+		vram := d.VRAMMB
+		if d.VRAMMB < 0 {
+			vram = 0
+		}
+		switch {
+		case d.Features != nil && d.Features["rocm_version"] != nil:
+			amdTotal += vram
+		case d.Features != nil && d.Features["cuda_capability"] != nil:
+			nvidiaTotal += vram
+		case d.Vendor == "AMD":
+			amdTotal += vram
+		case d.Vendor == "NVIDIA":
+			nvidiaTotal += vram
+		}
+	}
+	return nvidiaTotal, amdTotal
+}
+
+func variantFromFirstRecognizableDevice(devices []nodepayloads.GPUDevice) string {
+	for _, d := range devices {
+		if d.Features != nil {
+			if d.Features["rocm_version"] != nil {
+				return ollamaVariantROCm
+			}
+			if d.Features["cuda_capability"] != nil {
+				return ollamaVariantCUDA
+			}
+		}
+		switch d.Vendor {
+		case "AMD":
+			return ollamaVariantROCm
+		case "NVIDIA":
+			return ollamaVariantCUDA
+		}
+	}
+	return ollamaVariantCPU
 }
 
 // inferenceEnvFromHardware derives Ollama environment variables based on reported

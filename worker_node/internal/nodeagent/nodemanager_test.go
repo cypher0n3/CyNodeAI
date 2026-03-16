@@ -1618,6 +1618,45 @@ func TestMaybeStartOllama_NoOpPaths(t *testing.T) {
 	}
 }
 
+func TestMaybeStartOllama_DerivesImageFromVariantWhenImageAbsent(t *testing.T) {
+	// When orchestrator sends variant but omits image, node MUST derive image from variant
+	// per worker_node_payloads and REQ-WORKER-0253. Ollama has :rocm tag; cuda uses default image.
+	t.Setenv("OLLAMA_IMAGE", "ollama/ollama:rocm")
+	defer func() { _ = os.Unsetenv("OLLAMA_IMAGE") }()
+	var capturedImage, capturedVariant string
+	opts := &RunOptions{
+		StartOllama: func(image, variant string, _ map[string]string) error {
+			capturedImage = image
+			capturedVariant = variant
+			return nil
+		},
+	}
+	cfg := &nodepayloads.NodeConfigurationPayload{
+		InferenceBackend: &nodepayloads.ConfigInferenceBackend{
+			Enabled: true,
+			Image:   "",
+			Variant: "cuda",
+		},
+	}
+	if err := maybeStartOllama(context.Background(), nil, cfg, opts, false); err != nil {
+		t.Fatalf("maybeStartOllama: %v", err)
+	}
+	if capturedImage != "ollama/ollama" {
+		t.Errorf("image = %q, want ollama/ollama (cuda uses default; derived from variant, not OLLAMA_IMAGE)", capturedImage)
+	}
+	if capturedVariant != "cuda" {
+		t.Errorf("variant = %q, want cuda", capturedVariant)
+	}
+	// rocm variant uses explicit :rocm tag
+	cfg.InferenceBackend.Variant = "rocm"
+	if err := maybeStartOllama(context.Background(), nil, cfg, opts, false); err != nil {
+		t.Fatalf("maybeStartOllama rocm: %v", err)
+	}
+	if capturedImage != "ollama/ollama:rocm" {
+		t.Errorf("image = %q, want ollama/ollama:rocm for rocm variant", capturedImage)
+	}
+}
+
 func TestMaybeStartManagedServices_NoOpPaths(t *testing.T) {
 	if err := maybeStartManagedServices(context.Background(), nil, nil, nil); err != nil {
 		t.Fatalf("expected nil opts no-op, got %v", err)

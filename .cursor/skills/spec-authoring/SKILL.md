@@ -1,6 +1,6 @@
 ---
 name: spec-authoring
-description: Applies project tech-spec standards when writing or editing docs in docs/tech_specs or docs/draft_specs. Use when creating or editing technical specifications, spec items, or when the user asks to write or fix a tech spec.
+description: Applies project tech-spec standards when writing or editing docs in docs/tech_specs or docs/draft_specs. Use when creating or editing technical specifications, spec items, or when the user asks to draft, write, or fix a tech spec.
 ---
 
 # Spec Authoring

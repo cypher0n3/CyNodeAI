@@ -45,15 +45,38 @@ func cachedGPUInfo(ctx context.Context) *nodepayloads.GPUInfo {
 
 // detectGPU probes available GPU hardware and returns a populated GPUInfo, or nil
 // if no GPU is detected or the required tools are unavailable.
-// Detection order: AMD ROCm (rocm-smi) → NVIDIA (nvidia-smi).
+// Reports all GPUs from all supported vendors (AMD and NVIDIA) so the orchestrator
+// can sum VRAM per vendor and select the variant for the vendor with greatest total
+// (REQ-WORKER-0265, orchestrator_inference_container_decision.md).
 func detectGPU(ctx context.Context) *nodepayloads.GPUInfo {
-	if info := detectROCmGPU(ctx); info != nil {
-		return info
+	nvidia := detectNVIDIAGPU(ctx)
+	rocm := detectROCmGPU(ctx)
+	if nvidia == nil && rocm == nil {
+		return nil
 	}
-	if info := detectNVIDIAGPU(ctx); info != nil {
-		return info
+	var devices []nodepayloads.GPUDevice
+	if nvidia != nil {
+		devices = append(devices, nvidia.Devices...)
 	}
-	return nil
+	if rocm != nil {
+		devices = append(devices, rocm.Devices...)
+	}
+	if len(devices) == 0 {
+		return nil
+	}
+	return &nodepayloads.GPUInfo{Present: true, Devices: devices}
+}
+
+// totalVRAM returns the sum of VRAMMB across all devices (used for GPU preference).
+func totalVRAM(info *nodepayloads.GPUInfo) int {
+	if info == nil {
+		return 0
+	}
+	var sum int
+	for _, d := range info.Devices {
+		sum += d.VRAMMB
+	}
+	return sum
 }
 
 // detectROCmGPU queries rocm-smi for AMD GPU information.

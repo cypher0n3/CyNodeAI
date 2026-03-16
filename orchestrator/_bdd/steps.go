@@ -68,6 +68,8 @@ type testState struct {
 	egressBearer     string
 	egressAllowlist  string
 	lastResponseBody []byte
+	// GPU devices for registration (when set, registration includes gpu in capability)
+	registrationGPU *nodepayloads.GPUInfo
 }
 
 func getState(ctx context.Context) *testState {
@@ -264,6 +266,7 @@ func InitializeOrchestratorSuite(sc *godog.ScenarioContext, state *testState) {
 		state.workflowStartBody = nil
 		state.storedLeaseID = ""
 		state.lastResponseBody = nil
+		state.registrationGPU = nil
 		return ctx, nil
 	})
 
@@ -642,6 +645,62 @@ func RegisterOrchestratorSteps(sc *godog.ScenarioContext, state *testState) {
 	sc.Step(`^the node registers with capability inference supported and not existing_service$`, func(ctx context.Context) error {
 		return nodeRegisterStepWithInference(ctx, false)
 	})
+	sc.Step(`^the node registers with capability inference supported and GPU NVIDIA reported$`, func(ctx context.Context) error {
+		st := getState(ctx)
+		if st != nil {
+			st.registrationGPU = &nodepayloads.GPUInfo{
+				Present: true,
+				Devices: []nodepayloads.GPUDevice{
+					{Vendor: "NVIDIA", VRAMMB: 12288, Features: map[string]interface{}{"cuda_capability": "8.6"}},
+				},
+			}
+		}
+		return nodeRegisterStepWithInferenceAndGPU(ctx, false)
+	})
+	sc.Step(`^the node registers with capability inference supported and GPUs reported with 1 AMD device 20480 vram_mb and 3 NVIDIA devices each 12288 vram_mb$`, func(ctx context.Context) error {
+		st := getState(ctx)
+		if st != nil {
+			st.registrationGPU = &nodepayloads.GPUInfo{
+				Present: true,
+				Devices: []nodepayloads.GPUDevice{
+					{Vendor: "AMD", VRAMMB: 20480, Features: map[string]interface{}{"rocm_version": "6.0"}},
+					{Vendor: "NVIDIA", VRAMMB: 12288, Features: map[string]interface{}{"cuda_capability": "8.6"}},
+					{Vendor: "NVIDIA", VRAMMB: 12288, Features: map[string]interface{}{"cuda_capability": "8.6"}},
+					{Vendor: "NVIDIA", VRAMMB: 12288, Features: map[string]interface{}{"cuda_capability": "8.6"}},
+				},
+			}
+		}
+		return nodeRegisterStepWithInferenceAndGPU(ctx, false)
+	})
+	sc.Step(`^the node registers with capability inference supported and GPUs reported with 3 NVIDIA devices each 12288 vram_mb$`, func(ctx context.Context) error {
+		st := getState(ctx)
+		if st != nil {
+			st.registrationGPU = &nodepayloads.GPUInfo{
+				Present: true,
+				Devices: []nodepayloads.GPUDevice{
+					{Vendor: "NVIDIA", VRAMMB: 12288, Features: map[string]interface{}{"cuda_capability": "8.6"}},
+					{Vendor: "NVIDIA", VRAMMB: 12288, Features: map[string]interface{}{"cuda_capability": "8.6"}},
+					{Vendor: "NVIDIA", VRAMMB: 12288, Features: map[string]interface{}{"cuda_capability": "8.6"}},
+				},
+			}
+		}
+		return nodeRegisterStepWithInferenceAndGPU(ctx, false)
+	})
+	sc.Step(`^the node registers with capability inference supported and GPUs reported with 1 NVIDIA device 12288 vram_mb and 3 AMD devices each 8192 vram_mb$`, func(ctx context.Context) error {
+		st := getState(ctx)
+		if st != nil {
+			st.registrationGPU = &nodepayloads.GPUInfo{
+				Present: true,
+				Devices: []nodepayloads.GPUDevice{
+					{Vendor: "NVIDIA", VRAMMB: 12288, Features: map[string]interface{}{"cuda_capability": "8.6"}},
+					{Vendor: "AMD", VRAMMB: 8192, Features: map[string]interface{}{"rocm_version": "6.0"}},
+					{Vendor: "AMD", VRAMMB: 8192, Features: map[string]interface{}{"rocm_version": "6.0"}},
+					{Vendor: "AMD", VRAMMB: 8192, Features: map[string]interface{}{"rocm_version": "6.0"}},
+				},
+			}
+		}
+		return nodeRegisterStepWithInferenceAndGPU(ctx, false)
+	})
 	sc.Step(`^the payload includes inference_backend with enabled true$`, func(ctx context.Context) error {
 		st := getState(ctx)
 		if st == nil || len(st.lastConfigBody) == 0 {
@@ -656,6 +715,26 @@ func RegisterOrchestratorSteps(sc *godog.ScenarioContext, state *testState) {
 		}
 		if !payload.InferenceBackend.Enabled {
 			return fmt.Errorf("inference_backend.enabled should be true")
+		}
+		return nil
+	})
+	sc.Step(`^the payload includes inference_backend with enabled true and variant "([^"]*)"$`, func(ctx context.Context, wantVariant string) error {
+		st := getState(ctx)
+		if st == nil || len(st.lastConfigBody) == 0 {
+			return fmt.Errorf("no config payload in state")
+		}
+		var payload nodepayloads.NodeConfigurationPayload
+		if err := json.Unmarshal(st.lastConfigBody, &payload); err != nil {
+			return err
+		}
+		if payload.InferenceBackend == nil {
+			return fmt.Errorf("config payload missing inference_backend")
+		}
+		if !payload.InferenceBackend.Enabled {
+			return fmt.Errorf("inference_backend.enabled should be true")
+		}
+		if payload.InferenceBackend.Variant != wantVariant {
+			return fmt.Errorf("inference_backend.variant = %q, want %q", payload.InferenceBackend.Variant, wantVariant)
 		}
 		return nil
 	})
@@ -2516,6 +2595,11 @@ func nodeRegisterStep(ctx context.Context, slug, advertisedWorkerAPIURL string) 
 
 // nodeRegisterStepWithInference registers the node with capability that includes inference (supported, existing_service).
 func nodeRegisterStepWithInference(ctx context.Context, existingService bool) error {
+	return nodeRegisterStepWithInferenceAndGPU(ctx, existingService)
+}
+
+// nodeRegisterStepWithInferenceAndGPU registers the node with capability that includes inference and optional GPU.
+func nodeRegisterStepWithInferenceAndGPU(ctx context.Context, existingService bool) error {
 	st := getState(ctx)
 	if st == nil || st.server == nil || st.nodeSlug == "" {
 		return godog.ErrSkip
@@ -2535,6 +2619,12 @@ func nodeRegisterStepWithInference(ctx context.Context, existingService bool) er
 	}
 	if strings.TrimSpace(st.advertisedWorkerAPIURL) != "" {
 		capability["worker_api"] = map[string]interface{}{"base_url": strings.TrimSpace(st.advertisedWorkerAPIURL)}
+	}
+	if st.registrationGPU != nil {
+		gpuJSON, _ := json.Marshal(st.registrationGPU)
+		var gpuMap map[string]interface{}
+		_ = json.Unmarshal(gpuJSON, &gpuMap)
+		capability["gpu"] = gpuMap
 	}
 	body, _ := json.Marshal(map[string]interface{}{
 		"psk":        cfg.NodeRegistrationPSK,
