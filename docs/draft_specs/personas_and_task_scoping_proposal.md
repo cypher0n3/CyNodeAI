@@ -10,6 +10,7 @@
   - [User-Defined Personas and Copy-On-Edit](#user-defined-personas-and-copy-on-edit)
   - [Single Persona per Task and Task Granularity](#single-persona-per-task-and-task-granularity)
   - [Task-Scoped Persona](#task-scoped-persona)
+  - [Orchestrator Model and Node Selection](#orchestrator-model-and-node-selection)
   - [Task Bundle and SBA Execution in Series](#task-bundle-and-sba-execution-in-series)
   - [Recommended Skills for a Task](#recommended-skills-for-a-task)
   - [PMA Use When Creating Tasks](#pma-use-when-creating-tasks)
@@ -20,8 +21,10 @@
 
 ## Overview
 
-This draft proposes formalizing the **Agent persona catalog** (including role-based personas such as developer-go and test-engineer alongside the existing PMA and PAA identities), treating **personas as a skills abstraction** (identity plus optional default skills to load), and supporting **user-defined and user-edited personas** via **copy-on-edit** (editing a system default creates a scoped copy; the system uses that copy instead of the default).
+This draft proposes formalizing the **Agent persona catalog** (including role-based personas such as `developer-go` and `test-engineer` alongside the existing PMA and PAA identities), treating **personas as a skills abstraction** (identity plus optional default skills and optional recommended models to load), and supporting **user-defined and user-edited personas** via **copy-on-edit** (editing a system default creates a scoped copy; the system uses that copy instead of the default).
 Tasks are scoped to a **single** persona only, with optional recommended skills; work may need to be broken into smaller task chunks so each task has one persona.
+**Allowed models** at system, project, and user scope restrict which models may be used; the job is only sent with a model that is in the effective allowed set (intersection of applicable allowlists).
+The orchestrator **selects one model** per job from the persona's recommended **cloud** models (by provider, available API keys, best option) or **local** models (available on workers), within the allowed set; when multiple worker nodes exist, the orchestrator **selects the best node** based on workload (assigned jobs, available resources, etc.).
 The PMA can hand off a **bundle of 1-3 tasks** to the SBA for execution in series when dependency chains allow, so the same SBA run can execute multiple tasks in sequence.
 
 Status: **Draft** (not accepted; not normative).
@@ -37,6 +40,14 @@ Status: **Draft** (not accepted; not normative).
 - Enforce **one persona per task**: each task is scoped to at most one persona; break work into smaller defined chunks so that each chunk is one task with one persona (when work spans multiple roles, create multiple tasks).
 - Allow **tasks** to reference a **persona** and **recommended skills** so that the PMA can assign the right "who" and "what guidance" at task creation time and the job builder can resolve and pass them to the SBA.
 - Support **task bundles**: the same SBA run MAY execute **1-3 tasks in series** when the PMA hands off a bundle and dependency chains allow; the job is **self-contained** (task_ids keyed by numeric order plus embedded full task context) so the SBA runs them in order without calling back to the orchestrator.
+- **Persona recommended models:** Store and maintain **two** recommended-model lists per persona: **cloud models** (grouped by provider for selection by available API keys and best option) and **local models** (for worker-node inference); the orchestrator uses these when selecting a model for the job.
+- **Allowed models (system / project / user):** The system MUST support **allowed model** allowlists at **system**, **project**, and **user** scope.
+  Only models in the **effective allowed set** for the job may be used when the job is sent; the orchestrator MUST NOT dispatch a job with a model outside that set.
+  The allowed set is determined **only** by these allowlists; what models are on worker nodes does **not** affect what is allowed (worker model inventory is used for workload placement and availability only).
+- **Single model per job:** The orchestrator MUST select **exactly one model** for each job from persona **recommended cloud models** (by provider; only providers with available API keys; best option) or **recommended local models** (available on worker nodes), within the effective allowed set; the SBA receives that one model for the task(s).
+- **User preference and API quota:** Model selection (cloud vs local, and within cloud which provider) MUST take into account **user preference** (e.g. prefer cloud vs local, or a provider); for cloud, the orchestrator MUST consider **available API quota** (rate limits, usage caps, remaining quota) and MUST NOT select a cloud option with insufficient quota.
+- **Node selection when multiple workers:** When more than one worker node exists, the orchestrator MUST choose the target node based on **workload** (assigned jobs, available resources, allocated jobs, **model size** vs node capacity, etc.) and which nodes can run the chosen allowed model; worker model inventory is used for **placement**, not for defining what is allowed.
+- **Review and revise model selection:** For worker-based execution, the orchestrator MUST check worker availability after selecting a model; if capable workers are overloaded, it SHOULD try a smaller model (up to 2 iterations) and re-place; if still no suitable worker, it MUST fall back to the originally selected model and place on the capable worker with the least assigned jobs.
 - Keep a single source of truth for persona semantics (this proposal, then promoted to tech_specs/requirements as appropriate); avoid duplicating persona definitions across docs.
 
 ## Existing Behavior (Summary)
@@ -86,8 +97,15 @@ It is a **skills abstraction** in the sense that it bundles a role/identity (who
   When present, the job builder (or SBA context builder) MUST resolve these skill IDs and include them in the context supplied to the SBA when this persona is used, unless overridden or extended by task-level `recommended_skill_ids`.
   Order in the array is significant (first = highest priority).
 - **Semantics at job build:** When resolving skills for a job, the system merges the persona's `default_skill_ids` with the task's optional `recommended_skill_ids` (e.g. task skills take precedence or are appended; exact merge rule TBD, e.g. task skills first, then persona defaults, or union with task overriding duplicates).
+- **Recommended cloud models:** Optional **`recommended_cloud_models`** (jsonb, nullable): a **map keyed by provider** (e.g. provider stable identifier such as `openai`, `anthropic`).
+  Each value is an array of model stable identifiers for that provider.
+  The orchestrator uses this to select a **cloud** model for the job: it MUST consider only **providers that have an available API key** (or equivalent credential) configured, then choose the **best option** (e.g. by provider preference order, cost, latency, or deployment policy).
+  The system MUST use a **deterministic** "best option" algorithm (e.g. provider preference order, cost, latency, or deployment policy) so that the same persona and available credentials always yield the same chosen provider and model; the exact algorithm is **TBD** and MUST be specified in a tech spec before implementation.
+- **Recommended local models:** Optional **`recommended_local_model_ids`** (jsonb, array of model stable identifiers, nullable) for inference on **worker nodes** (local).
+  When present, the orchestrator uses this list together with models available on worker nodes to select a local model; order in the array MAY indicate preference (first = highest preference).
+  For local selection, the orchestrator MUST choose only a model that **at least one available node** can run **with a good context window size**; it MUST NOT select a model that is too large to run on any node or that would allow only a **very small context window** (e.g. model fits but leaves insufficient headroom for task context).
 
-Schema: add **`default_skill_ids`** (jsonb, nullable) to the **personas** table for this proposal; existing persona rows have null (no default skills).
+Schema: add **`default_skill_ids`** (jsonb, nullable), **`recommended_cloud_models`** (jsonb, nullable; map keyed by provider, value = array of model ids), and **`recommended_local_model_ids`** (jsonb, nullable; array of model ids) to the **personas** table; existing persona rows have null for these (no default skills, no recommended models).
 
 ### Agent Persona Catalog
 
@@ -107,15 +125,15 @@ Define a **system default set** of Agent personas, seeded at bootstrap, that the
   - **Backend Developer (generic):** Generic backend developer (already in cynode_sba example).
 
 Personas are stored in the `personas` table with `scope_type` = system and `scope_id` = null for these defaults.
-Each has a stable **title** (e.g. `developer-go`, `test-engineer`, `PMA`, `PAA`), a short **description**, and optionally **default_skill_ids** (array of skill stable IDs to load when using this persona).
+Each has a stable **title** (e.g. `developer-go`, `test-engineer`, `PMA`, `PAA`), a short **description**, and optionally **default_skill_ids**, **recommended_cloud_models** (by provider), and **recommended_local_model_ids**; see Persona as Skills Abstraction and Orchestrator Model and Node Selection.
 **System defaults are stored in a user non-immutable way:** they are normal rows in the DB (system scope); they are readable and copyable by users.
 They are **not** locked or immutable: the system does not prevent users from creating a **copy** in their own scope and using that instead (see copy-on-edit below).
 
-- **Updating default personas on release:** The system MUST be able to **update** system default (orchestrator-seeded) personas when a new version of the orchestrator is released (e.g. updated description or default_skill_ids).
+- **Updating default personas on release:** The system MUST be able to **update** system default (orchestrator-seeded) personas when a new version of the orchestrator is released (e.g. updated description, default_skill_ids, recommended_cloud_models, or recommended_local_model_ids).
   On release or upgrade, the orchestrator MUST apply the latest default persona definitions to the deployment so that new users and contexts receive the current defaults.
   Only **orchestrator-seeded** system persona rows MAY be updated by this process; **admin-created** system personas and all user-, project-, and group-scoped personas MUST NOT be modified.
   The implementation MUST distinguish orchestrator-seeded system personas from admin-created system personas (e.g. by a flag, by a well-known set of titles or ids, or by created_by) so that release updates target only the seeded defaults and never overwrite admin-created system personas.
-  The update mechanism (e.g. bootstrap migration, startup seed when orchestrator version changes, or admin-triggered sync) is implementation-defined; updates MUST match seeded system personas by a stable key (e.g. title) and MUST update existing rows (description, default_skill_ids) or insert new defaults that were added in the release.
+  The update mechanism (e.g. bootstrap migration, startup seed when orchestrator version changes, or admin-triggered sync) is implementation-defined; updates MUST match seeded system personas by a stable key (e.g. title) and MUST update existing rows (description, default_skill_ids, recommended_cloud_models, recommended_local_model_ids) or insert new defaults that were added in the release.
   Users who have already created a copy of a default retain their copy; resolution continues to prefer user/project/group scope over system, so only contexts that still resolve to the system default see the updated content.
 
 - **Admin-created system-scoped personas:** Admins MUST be able to **create** system-scoped personas (scope_type = system, scope_id = null) in addition to the orchestrator-seeded defaults.
@@ -164,6 +182,49 @@ They are **not** locked or immutable: the system does not prevent users from cre
 - When `persona_id` is null on the task, the job builder MAY choose a default persona (e.g. generic Backend Developer) or leave the job without a persona; existing behavior (persona on job only) remains valid for jobs created without a task-level persona.
 
 This makes the **task** the place where "which persona runs this work" is decided; the job carries that decision through to the SBA.
+
+### Orchestrator Model and Node Selection
+
+- **Spec ID (draft):** `CYNAI.DRAFT.OrchestratorModelAndNodeSelection`
+
+- **Allowed models (system, project, user):** The system MUST maintain **allowed model** allowlists at three scopes: **system** (deployment-wide), **project** (per project, when the task or job is scoped to a project), and **user** (per user, e.g. the task owner or the identity requesting the job).
+  Each scope may define a list of model stable identifiers (or equivalent) that are **allowed** for inference; null or absent list at a scope means **no restriction** at that scope.
+  The **effective allowed set** for a job is the **intersection** of the applicable lists: system allowed, project allowed (if the task has a project_id), and user allowed (for the relevant user).
+  **Worker node model inventory is not part of the allowed set.**
+  What models are on which workers is used only for workload placement optimization and for determining which allowed model is available on a given node; it does not define or restrict what is allowed.
+  The orchestrator MUST only select a model that is in the effective allowed set; the job MUST NOT be sent with a model outside that set.
+  Storage: system allowed models may be config or a system-level table; project allowed models may be a column on the projects table (e.g. `allowed_model_ids` jsonb, nullable); user allowed models may be user preferences or a user-scoped table (e.g. `allowed_model_ids`).
+
+- **Single model per job:** When building a job, the **orchestrator** MUST resolve the job's persona (from the task or bundle) and select **exactly one model** for that job.
+  Selection is from the intersection of (1) **effective allowed models** (system/project/user above), (2) persona recommended models (**cloud** or **local**, see below), and (3) models **available** (on target worker for local, or via external APIs with valid credentials for cloud).
+  **Cloud path:** When using the persona's **recommended_cloud_models**, the orchestrator MUST consider only **providers that have an available API key** (or equivalent) configured; it MUST also consider **available API quota** (e.g. rate limits, usage caps, remaining quota per provider or per key) and MUST NOT select a cloud model/provider that has insufficient quota for the job.
+  Among providers with keys and sufficient quota, it MUST select the **best option** (e.g. by provider preference order, cost, latency, or deployment policy; implementation-defined).
+  Cloud models are grouped by provider in the persona so the orchestrator can match provider to configured keys and then choose one model from the best provider's list (subject to allowed set and model size).
+  **Local path:** When using the persona's **recommended_local_model_ids**, the orchestrator selects from models available on worker node(s), subject to allowed set and model size vs node capacity.
+  For local, the orchestrator MUST select only a model that **at least one available node** can run **with a good context window size**; it MUST NOT select a model that is too large to run on any node or that would allow only a **very small context window** (e.g. model fits but leaves insufficient headroom for task context).
+  **User preference and cloud vs local:** Model selection (cloud vs local, and within cloud which provider/model) MUST take into account **user preference** (e.g. user-scoped preference for cloud vs local, or for a provider); where stored (user preferences, project default) is implementation-defined.
+  The orchestrator MAY prefer cloud over local or vice versa (or try one then fall back) in line with user preference and constraints; the selected model MUST be from allowed set and from either persona cloud recommendations (with available API key and sufficient quota) or persona local recommendations (with node availability and sufficient context window).
+  **Model size** MUST be a factor in selection when multiple models satisfy the above; for local, the model must fit target node capacity and yield an acceptable context window.
+  When no model satisfies (allowed and (cloud with key and sufficient quota or local-available)), the job MUST NOT be dispatched until configuration or availability changes; the orchestrator MAY report a defined error.
+  The **job payload** (consumed by the SBA) MUST include that **one resolved model** (e.g. a single model identifier or endpoint) so the SBA uses only that model for the task(s) for that persona.
+
+- **Node selection when multiple workers:** When the deployment has **more than one** worker node, the orchestrator MUST select the **target node** for the job based on **workload and resources** (and, for optimization, which nodes have the selected model available).
+  The orchestrator MUST consider at least: workload currently assigned to each node (e.g. number or aggregate size of jobs already running or queued), available resources (e.g. capacity, memory, GPU), **model size** (e.g. memory or GPU footprint of the chosen model so the node can fit it), and allocated jobs per node.
+  **Model size** MUST be a factor in placement: the target node MUST have sufficient capacity for the selected model's size (e.g. GPU memory, RAM); when choosing among nodes, the orchestrator MUST use model size together with node capacity and current workload to place the job.
+  Which models are on which nodes is used for **workload placement optimization** (e.g. route to a node that can run the chosen allowed model), not for defining the allowed set.
+  The exact algorithm (e.g. least-loaded, round-robin, capability match) is implementation-defined; the requirement is that the orchestrator chooses the best node for the job given available information rather than dispatching arbitrarily.
+
+- **Review and revise model selection based on worker workload:** After selecting an initial model, the orchestrator MUST **check worker availability** for that model.
+  If the selected model would need to run on workers that are **overloaded** (e.g. already have multiple jobs assigned), the orchestrator SHOULD **revise** the selection: choose a **smaller model** (if possible) from the allowed or preferred list and **re-place** the job (attempt to find a suitable worker for the smaller model).
+  The orchestrator MAY perform up to **2 iterations** of this reselection (select smaller model, attempt to place; if no suitable worker, try again with another smaller model).
+  If after 2 iterations of reselecting the orchestrator **cannot find a suitable worker**, it MUST **fall back** to the **originally selected model** and place the job on a **capable worker that has the least assigned jobs** (best effort among overloaded workers).
+  This provision applies when the job is to run on workers (e.g. local models); cloud model selection is not revised by worker workload (quota and user preference already apply).
+
+- **Order of operations:** The orchestrator (or job builder) resolves persona, resolves the **effective allowed model set** (system, project, user), applies **user preference** (cloud vs local, provider) and checks **available API quota** for cloud.
+  It then resolves one model from persona **recommended_cloud_models** (by provider, keys, quota, best option) or **recommended_local_model_ids** (by node availability and model size).
+  For worker-based (local) execution, it **reviews** worker availability; if capable workers are overloaded, it may **revise** model selection (up to 2 iterations: smaller model, re-place) and then **fall back** to the original model on the least-loaded capable worker if still no suitable worker.
+  It selects the target node, then builds and dispatches the job with the single model and embedded context.
+  The job is only sent if the selected model is in the effective allowed set.
 
 ### Task Bundle and SBA Execution in Series
 
@@ -219,6 +280,8 @@ This makes the **task** the place where "which persona runs this work" is decide
 
   - **Persona:** Unchanged for bundles: one top-level **`persona`** object (title, description; optional persona_id for auditing).
     All tasks in the bundle share this persona; the job builder sets it from the (common) task persona_id.
+  - **Model:** The job spec MUST include **exactly one** resolved model (e.g. `model_id` or `inference.model`) chosen by the orchestrator from the persona's recommended_cloud_models (by provider, available API keys, best option) or recommended_local_model_ids (available on target node).
+    The SBA uses this single model for all task(s) in the job; the orchestrator MUST set it at job build time per [Orchestrator Model and Node Selection](#orchestrator-model-and-node-selection).
 
   - **Per-task context for bundles (required, self-contained):** When the job has **`task_ids`** with more than one key (bundle), the job spec MUST **embed full task information** for every task in the bundle.
     Top-level **`context.task_contexts`** (or equivalent): a **map keyed by the same numeric keys** as task_ids (10, 20, 30).
@@ -294,23 +357,32 @@ When this proposal is accepted, the following updates are recommended:
 
 - **Area:** Schema
   - document: postgres_schema.md
-  - change: Personas table: add `default_skill_ids` (jsonb, nullable), array of skill stable identifiers.
+  - change: Personas table: add `default_skill_ids` (jsonb, nullable); add `recommended_cloud_models` (jsonb, nullable), map keyed by provider id, value = array of model stable ids; add `recommended_local_model_ids` (jsonb, nullable), array of model stable identifiers.
     Tasks table: add `persona_id` (uuid, FK personas.id, nullable); add `recommended_skill_ids` (jsonb, nullable) or add task_recommended_skills table; enforce one persona per task.
     Jobs table (or job payload): use **task_ids** (jsonb, map keyed by numeric order 10/20/30, value = task uuid); one key = single-task job, two or three keys = bundle (tasks run in series; sort keys ascending for order).
+  - change: **Allowed models:** Define storage for system-, project-, and user-scoped allowed model allowlists (e.g. system config or table; projects table add `allowed_model_ids` (jsonb, nullable); user preferences or users table add `allowed_model_ids` (jsonb, nullable)); null/absent means no restriction at that scope; effective allowed set = intersection of applicable lists only (worker node model inventory does not define allowed set; used for placement and availability only).
 - **Area:** API
   - document: data_rest_api.md
-  - change: Persona resource: accept and return optional `default_skill_ids`.
+  - change: Persona resource: accept and return optional `default_skill_ids`, `recommended_cloud_models` (map by provider), and `recommended_local_model_ids`.
     Define "edit" semantics: when editing a system-scoped or non-owned persona, create a copy that is user-, group-, or project-scoped (never system-scoped) and return the new persona_id.
     Task resource: accept and return optional `persona_id`, `recommended_skill_ids` in create/update/get.
+  - change: Project resource: accept and return optional `allowed_model_ids` (array of model stable IDs; null = no restriction).
+    User preferences (or user resource): accept and return optional `allowed_model_ids` for user-scoped allowed models; system allowed models via admin or config API as defined.
 - **Area:** Job build and bundles
   - document: cynode_sba.md / project_manager_agent.md / orchestrator.md
   - change: State that job builder uses task.persona_id (resolve persona, embed title/description and persona.default_skill_ids) and task.recommended_skill_ids; merge persona default skills with task recommended skills when building job context.
+  - change: **Allowed models:** Orchestrator MUST resolve effective allowed model set (intersection of system, project, user allowlists); job MUST NOT be sent with a model outside that set.
+  - change: **Model selection:** Orchestrator MUST select exactly one model per job: use persona **recommended_cloud_models** (by provider; only providers with available API keys and **sufficient API quota**; select best option) or **recommended_local_model_ids** (models available on worker nodes); **user preference** (cloud vs local, provider) and **API quota** MUST be taken into account.
+  - change: For **local**, only select a model that at least one node can run **with a good context window size**; selection must be in effective allowed set; **model size** MUST be a factor; job spec MUST carry that single model; do not dispatch if no allowed model is available (cloud with key and quota or local on node with sufficient context window).
+  - change: **Node selection:** When multiple worker nodes exist, orchestrator MUST select target node based on workload (assigned jobs, available resources, allocated jobs, **model size** vs node capacity, etc.); target node MUST have capacity for the selected model's size; worker model inventory used for placement optimization only, not for defining allowed models; algorithm implementation-defined.
+  - change: **Review and revise model selection (worker workload):** For worker-based (local) execution, orchestrator MUST check worker availability after initial model selection; if capable workers are overloaded, SHOULD revise selection (smaller model from allowed/preferred list, re-place) up to 2 iterations; if after 2 iterations no suitable worker, MUST fall back to originally selected model and place on capable worker with least assigned jobs.
   - change: Support job as bundle of 1-3 task_ids in **explicit order** (map keyed by numeric order 10, 20, 30; sort keys ascending = execution order); SBA runs tasks in series in that order; all tasks in bundle share same persona.
   - change: Job bundle MUST be **self-contained**: job spec MUST embed full per-task context (map keyed by same numeric keys as task_ids); SBA MUST NOT call back to orchestrator for task details.
   - change: Payload kept relatively small (essential task fields; project/baseline context MAY be shared once).
   - change: Jobs table or payload: use **task_ids** (map keyed by numeric order, value = task uuid); one key = single-task, two or three keys = bundle.
 - **Area:** Job spec for task bundles (cynode_sba.md Job Specification)
   - document: cynode_sba.md (Job Specification section)
+  - change: **Job spec model:** Job payload MUST include exactly one resolved model set by orchestrator (from persona recommended_cloud_models with available API key or recommended_local_model_ids on node); model MUST be in effective allowed set; SBA uses that single model for the task(s).
   - change: **Define the job spec for task bundles:** Use **task_ids** (required, map keyed by numeric order 10, 20, 30; value = task uuid); execution order = sort keys ascending; one key = single-task, two or three keys = bundle.
     Same pattern as task steps ([postgres_schema.md](../tech_specs/postgres_schema.md)).
     Update minimum required fields to **task_ids** (replace task_id).
@@ -334,7 +406,10 @@ When this proposal is accepted, the following updates are recommended:
   - change: State that SBA MUST be able to get a persona for the correct scope via MCP through the worker gateway; add persona.get (and optionally persona.list) to the Worker Agent (sandbox) allowlist so SBA can fetch persona when loading per-task context.
 - **Area:** Requirements
   - document: docs/requirements (e.g. AGENTS, PROJCT, SCHEMA, DATAPI, ORCHES, MCPTOO, MCPGAT)
-  - change: Add REQ-* for: task-scoped persona (one per task); task recommended skills; persona default_skill_ids; persona copy-on-edit; orchestrator update of system default personas on release (orchestrator-seeded only); admin create system-scoped personas (additive); PMA/PAA MCP persona list/get for task assignment; SBA persona get via worker gateway for correct scope; task bundle (1-3 tasks in series, same persona); SBA execution of task bundle in one job.
+  - change: Add REQ-* for: task-scoped persona (one per task); task recommended skills; persona default_skill_ids, recommended_cloud_models (by provider), and recommended_local_model_ids; persona copy-on-edit; orchestrator update of system default personas on release (orchestrator-seeded only); admin create system-scoped personas (additive).
+  - change: Add REQ-* for: system/project/user allowed model allowlists; job only sent with model in effective allowed set; orchestrator select one model per job from persona cloud (by provider, available API keys, **available API quota**, best option) or local recommendations (local: at least one node able to run with good context window size); **user preference** (cloud vs local, provider) and **API quota** MUST be taken into account; in allowed set, considering model size.
+  - change: Add REQ-* for: orchestrator select target node by workload and model size vs node capacity when multiple workers; orchestrator review and revise model selection based on worker workload (check availability; if overloaded, up to 2 iterations smaller model and re-place; then fall back to original model on least-loaded capable worker).
+  - change: Add REQ-* for: PMA/PAA MCP persona list/get; SBA persona get via worker gateway; task bundle (1-3 tasks in series, same persona); SBA execution of task bundle in one job.
 
 ## Related Draft Specs
 

@@ -289,6 +289,7 @@ Recommended node behavior:
 - When a sandbox network policy allows allowlisted egress, the node should:
   - allow connectivity only to the node-local proxy endpoint, and
   - deny direct connections to external destinations from sandbox network namespaces.
+- Per [Unified UDS Path](worker_node.md#spec-cynai-worker-unifiedudspath), the node MUST expose the node-local web egress proxy to the sandbox **only via UDS** (e.g. `http+unix://` or socket path); the sandbox MUST NOT receive a TCP host:port for the proxy.
 
 Node configuration integration:
 

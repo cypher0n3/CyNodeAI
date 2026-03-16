@@ -104,7 +104,8 @@ See [Worker Proxies (Inference and Web Egress)](#worker-proxies-inference-and-we
 ### Outbound Channels (Worker Proxies Only)
 
 The SBA has **no direct internet or host access**.
-All outbound use is via:
+All outbound use is via worker proxies; the Node Manager exposes those proxy endpoints to the sandbox **only via UDS** (`http+unix://` URLs or socket paths), and the SBA MUST NOT receive TCP host:port for any proxy or inference (see [Unified UDS Path](worker_node.md#spec-cynai-worker-unifiedudspath)).
+Outbound channels:
 
 - **Lifecycle / status** - Report job in-progress, completion, result, timeout extension.
   SBA calls a **worker-local proxy URL** (injected by the node, e.g. env or job payload); the worker proxy forwards the request to the orchestrator's job-status or callback endpoint.

@@ -174,6 +174,8 @@ When a sandbox job is scheduled on a node that also provides Ollama inference, t
 
 ### Unified UDS Approach (Required)
 
+All proxy and inference endpoints that the Node Manager presents to the sandbox MUST be UDS-only (no TCP); see [Unified UDS Path](worker_node.md#spec-cynai-worker-unifiedudspath) for the normative rule that all local agents run by the Node Manager use only UDS proxy endpoints.
+
 - Per [REQ-SANDBX-0131](../requirements/sandbx.md#req-sandbx-0131) and [Unified UDS Path](worker_node.md#spec-cynai-worker-unifiedudspath), the sandbox MUST reach inference only via a Unix domain socket.
 - The Node Manager (or inference proxy sidecar) exposes an inference proxy endpoint to the sandbox only via UDS; the worker injects an inference proxy URL (e.g. `INFERENCE_PROXY_URL=http+unix://<path>/` or equivalent) into the sandbox environment.
 - The sandbox MUST NOT be given `OLLAMA_BASE_URL=http://localhost:11434` or any TCP endpoint for inference.

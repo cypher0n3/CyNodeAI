@@ -288,7 +288,7 @@ This section defines how the orchestrator manages and tracks worker-managed long
 - The orchestrator MUST track observed state from worker capability reports and MUST treat service endpoints as dynamic.
   See [`docs/tech_specs/worker_node_payloads.md`](worker_node_payloads.md) `node_capability_report_v1` `managed_services_status`.
 - When a worker reports `managed_services_status.services[].agent_to_orchestrator_proxy`, the orchestrator SHOULD ingest and store the worker-generated identity-bound agent-to-orchestrator proxy endpoints.
-  These endpoints are used by the managed agent runtime to call worker internal proxy operations without holding credentials.
+  Those endpoints are UDS-only (see [Unified UDS Path](worker_node.md#spec-cynai-worker-unifiedudspath)); the managed agent runtime uses them to call worker internal proxy operations without holding credentials.
   The orchestrator MAY use these fields for diagnostics and reconciliation when directing managed services.
 - The orchestrator MUST route traffic to managed services using the worker-mediated endpoint(s) reported by the worker.
   The orchestrator MUST NOT rely on compose DNS or direct host-port addressing for managed services.

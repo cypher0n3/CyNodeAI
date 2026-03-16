@@ -77,7 +77,8 @@ It delegates execution to worker nodes and sandbox containers through orchestrat
 
 - `cynode-pma` MUST NOT connect directly to orchestrator hostnames or ports.
   Agent-to-orchestrator communication (MCP tool calls and callbacks) MUST flow through the worker proxy.
-  See [`docs/tech_specs/worker_api.md`](worker_api.md#spec-cynai-worker-managedagentproxy).
+  The worker exposes those proxy endpoints to PMA **only via UDS** (`http+unix://` or socket path); PMA MUST NOT receive TCP host:port for proxy or inference.
+  See [Unified UDS Path](worker_node.md#spec-cynai-worker-unifiedudspath) and [`docs/tech_specs/worker_api.md`](worker_api.md#spec-cynai-worker-managedagentproxy).
 
 ## Request Source and Orchestrator Handoff
 
@@ -546,7 +547,7 @@ In particular:
 - Spec ID: `CYNAI.PMAGNT.McpToolAccess` <a id="spec-cynai-pmagnt-mcptoolaccess"></a>
 
 `cynode-pma` MUST invoke all tool operations through the orchestrator MCP gateway.
-In this model, it does so via a worker-proxy URL that forwards to the orchestrator MCP gateway.
+In this model, it does so via a worker-proxy URL (UDS-only, per [Unified UDS Path](worker_node.md#spec-cynai-worker-unifiedudspath)) that forwards to the orchestrator MCP gateway.
 `cynode-pma` MUST NOT call orchestrator endpoints directly; the worker proxy is the single egress from the agent container.
 The gateway remains the single enforcement and audit point at the orchestrator.
 When making MCP requests, `cynode-pma` calls the **worker proxy** (e.g. the URL in `mcp_gateway_proxy_url`); `cynode-pma` MUST NOT receive or present an agent token.
@@ -628,7 +629,7 @@ This section defines the minimum configuration surface for `cynode-pma`.
 - Role mode selection (command-line flag; override via config file or environment when supported).
 - Instructions bundle root and role-specific bundle paths (configurable; defaults as in [Instructions Loading and Routing](#instructions-loading-and-routing)).
 - Inference connectivity configuration (how PMA obtains inference and connection details), supplied by the orchestrator in the PMA managed service start bundle.
-- Worker-proxy endpoints for agent-to-orchestrator communication:
+- Worker-proxy endpoints for agent-to-orchestrator communication (UDS-only; see [Unified UDS Path](worker_node.md#spec-cynai-worker-unifiedudspath)):
   - Worker-proxy URL for MCP gateway calls.
   - Worker-proxy URL for any required callback/ready signaling.
 

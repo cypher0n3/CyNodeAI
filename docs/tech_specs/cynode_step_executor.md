@@ -49,7 +49,7 @@ It is intended for simple, deterministic jobs (e.g. run these commands, write th
 - Small attack surface: no inference stack, no MCP in the execution loop.
 - Strict schema adherence: unknown job fields rejected; validation before any step runs.
 - Sequential execution only: no branching except optional per-step `on_failure` (stop vs continue).
-- Same filesystem and security baseline as the sandbox container spec: non-root, `/workspace`, `/job/`, `/tmp`; egress only via worker proxies when policy allows.
+- Same filesystem and security baseline as the sandbox container spec: non-root, `/workspace`, `/job/`, `/tmp`; egress only via worker proxies when policy allows (all proxy endpoints are UDS-only per [Unified UDS Path](worker_node.md#spec-cynai-worker-unifiedudspath)).
 - Structured, machine-parseable results compatible with orchestrator storage (e.g. `jobs.result`).
 
 ## Relation to SBA

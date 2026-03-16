@@ -6,6 +6,7 @@
   - [Orchestrator Shutdown Notification](#orchestrator-shutdown-notification)
 - [Managed Service Containers](#managed-service-containers)
 - [Worker Proxy Bidirectional (Managed Agents)](#worker-proxy-bidirectional-managed-agents)
+  - [Agent Network Restriction (Security Boundary)](#agent-network-restriction-security-boundary)
   - [Worker Proxy Normative Behavior](#worker-proxy-normative-behavior)
 - [Token and Credential Handling](#token-and-credential-handling)
   - [Token Authentication and Auditing](#token-authentication-and-auditing)
@@ -15,6 +16,7 @@
   - [Sandbox Rootless Execution](#sandbox-rootless-execution)
   - [Sandbox Control Plane Applicable Requirements](#sandbox-control-plane-applicable-requirements)
 - [Unified UDS Path (Agent and Sandbox Containers)](#unified-uds-path-agent-and-sandbox-containers)
+  - [Unified UDS Path (Agent and Sandbox Containers) Requirements Traces](#unified-uds-path-agent-and-sandbox-containers-requirements-traces)
 - [Node-Local Inference and Sandbox Workflow](#node-local-inference-and-sandbox-workflow)
   - [Node-Local Inference Applicable Requirements](#node-local-inference-applicable-requirements)
 - [Node Sandbox MCP Exposure](#node-sandbox-mcp-exposure)
@@ -24,17 +26,32 @@
   - [Node Startup YAML Applicable Requirements](#node-startup-yaml-applicable-requirements)
   - [User-Configurable Properties](#user-configurable-properties)
 - [Node Startup Procedure](#node-startup-procedure)
+  - [Node Startup Procedure Requirements Traces](#node-startup-procedure-requirements-traces)
 - [Node Startup Checks and Readiness](#node-startup-checks-and-readiness)
+  - [Node Startup Checks and Readiness Requirements Traces](#node-startup-checks-and-readiness-requirements-traces)
 - [Deployment and Auto-Start](#deployment-and-auto-start)
+  - [Deployment and Auto-Start Requirements Traces](#deployment-and-auto-start-requirements-traces)
 - [Deployment Topologies](#deployment-topologies)
+  - [Deployment Topologies Requirements Traces](#deployment-topologies-requirements-traces)
 - [Single-Process Host Binary](#single-process-host-binary)
+  - [Single-Process Host Binary Requirements Traces](#single-process-host-binary-requirements-traces)
+  - [Single-Process Host Binary Scope](#single-process-host-binary-scope)
+  - [Single-Process Host Binary Preconditions](#single-process-host-binary-preconditions)
+  - [Single-Process Host Binary Outcomes](#single-process-host-binary-outcomes)
+  - [`SingleProcessHostBinary` Algorithm](#singleprocesshostbinary-algorithm)
+  - [Single-Process Host Binary Error Conditions](#single-process-host-binary-error-conditions)
+  - [Single-Process Host Binary Observability](#single-process-host-binary-observability)
+  - [Binary Name and Invocation (Informational)](#binary-name-and-invocation-informational)
 - [Existing Inference Service on Host](#existing-inference-service-on-host)
+  - [Existing Inference Service on Host Requirements Traces](#existing-inference-service-on-host-requirements-traces)
 - [Ollama Container Policy](#ollama-container-policy)
 - [Sandbox-Only Nodes](#sandbox-only-nodes)
   - [Sandbox-Only Nodes Applicable Requirements](#sandbox-only-nodes-applicable-requirements)
 - [Registration and Bootstrap](#registration-and-bootstrap)
 - [Capability Reporting](#capability-reporting)
+  - [Capability Reporting Requirements Traces](#capability-reporting-requirements-traces)
 - [Configuration Delivery](#configuration-delivery)
+  - [Configuration Delivery Requirements Traces](#configuration-delivery-requirements-traces)
 - [Dynamic Configuration Updates](#dynamic-configuration-updates)
 - [Credential Handling](#credential-handling)
   - [Credential Handling Applicable Requirements](#credential-handling-applicable-requirements)
@@ -116,7 +133,7 @@ Normative behavior:
   See [`docs/tech_specs/worker_node_payloads.md`](worker_node_payloads.md) `node_capability_report_v1` `managed_services_status`.
 - The worker MUST NOT treat managed service containers as sandbox containers.
   Managed services may be privileged relative to sandbox workloads, but must still comply with system security boundaries.
-- The worker MUST start managed service containers (agent runtimes) with network restriction so that all inbound and outbound traffic routes through worker proxies; see [Worker Proxy Bidirectional (Managed Agents)](#worker-proxy-bidirectional-managed-agents) and [REQ-WORKER-0174](../requirements/worker.md#req-worker-0174).
+- The worker MUST start managed service containers (agent runtimes) with network restriction so that all inbound and outbound traffic routes through worker proxies via **UDS-only** proxy endpoints (no TCP to agents); see [Worker Proxy Bidirectional (Managed Agents)](#worker-proxy-bidirectional-managed-agents), [Unified UDS Path](#unified-uds-path-agent-and-sandbox-containers), and [REQ-WORKER-0174](../requirements/worker.md#req-worker-0174).
 - When a managed service declares `inference.mode=node_local` and the configuration includes `inference.backend_env`, the worker MUST pass those backend environment values into the managed service container.
 - When the same node configuration also includes `inference_backend.env` for the local inference backend, the worker MUST keep the effective backend-derived values aligned between the backend container and managed services that depend on that backend so they use the same orchestrator-derived context-window and runner settings.
 
@@ -142,16 +159,20 @@ Traces To: [REQ-WORKER-0174](../requirements/worker.md#req-worker-0174).
 All agent runtimes on a worker (whether running as a managed service or not, including PMA, PAA, SBA, and any other agent) MUST be network restricted.
 All inbound and outbound traffic to or from those agents MUST route through worker proxies; there MUST be no direct network path that bypasses the worker proxy.
 Violating this violates a security boundary and is not acceptable.
-Managed service containers (e.g. PMA, PAA) MUST be started with network restriction so that they have no network path except to the worker proxy (e.g. loopback or UDS to proxy endpoints); the worker MUST NOT start agent containers with unrestricted network access.
+Managed service containers (e.g. PMA, PAA) MUST be started with network restriction so that they have no network path except to the worker proxy, and that path MUST be via UDS only (no TCP, including no loopback TCP, to proxy endpoints).
+The worker MUST NOT start agent containers with unrestricted network access.
 
 ### Worker Proxy Normative Behavior
+
+All proxy endpoints that the worker exposes to any local agent (managed service or sandbox) MUST be UDS-only: containers receive `http+unix://` URLs or socket paths, never TCP host:port.
 
 - **Orchestrator to agent:** The worker MUST expose a worker-mediated endpoint (via Worker API reverse proxy) that the orchestrator
   (and user-gateway, when applicable) can call to reach the managed agent container (e.g. PMA chat handoff and health).
 - **Agent to orchestrator:** The worker MUST expose worker-local proxy endpoints that the managed agent uses to call:
   - the orchestrator MCP gateway (for tool calls), and
   - any orchestrator callback/ready endpoints.
-  The worker proxy forwards those requests to the orchestrator.
+- The worker proxy forwards those requests to the orchestrator.
+- The agent container MUST reach these proxy endpoints only via UDS (e.g. per [Agent-To-Orchestrator UDS Binding](#agent-to-orchestrator-uds-binding-required)); the worker MUST NOT inject TCP URLs.
 - The managed agent container MUST NOT be configured to call orchestrator hostnames or ports directly.
   All agent-to-orchestrator traffic flows through the worker proxy.
 
@@ -379,6 +400,9 @@ See [`docs/tech_specs/mcp_tooling.md`](mcp_tooling.md) for the MCP tool layer th
 ### Unified UDS Path (Agent and Sandbox Containers) Requirements Traces
 
 - [REQ-WORKER-0260](../requirements/worker.md#req-worker-0260)
+
+**All local agents run by the Node Manager** (managed service containers such as PMA and PAA, and sandbox containers including SBA) MUST use **only** UDS proxy endpoints.
+There are no exceptions: the worker MUST NOT expose TCP (including loopback TCP) to any agent or sandbox for proxy or inference access.
 
 All traffic to and from **agent containers** (managed services such as PMA) and **sandbox containers** MUST use **Unix domain sockets (UDS)** at the container boundary.
 The worker MUST expose every proxy endpoint that a container uses (orchestrator-to-agent, agent-to-orchestrator, inference proxy for sandbox) only via UDS; containers MUST receive `http+unix://` URLs or socket paths, not TCP endpoints.

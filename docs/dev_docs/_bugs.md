@@ -33,7 +33,8 @@ Likely causes of the bug.
 
 #### Worker GPU Detection and Reporting
 
-- **Fixed:** In `worker_node/internal/nodeagent/gpu.go`, `detectGPU` merges devices from both `detectNVIDIAGPU` and `detectROCmGPU` into a single `GPUInfo`. Reports all GPUs from all supported vendors (REQ-WORKER-0265).
+- **Fixed:** In `worker_node/internal/nodeagent/gpu.go`, `detectGPU` merges devices from both `detectNVIDIAGPU` and `detectROCmGPU` into a single `GPUInfo`.
+  Reports all GPUs from all supported vendors (REQ-WORKER-0265).
 
 #### Multiple GPUs and Total VRAM per Vendor
 
@@ -89,9 +90,12 @@ The intended behavior is: the **orchestrator** directs whether and how to start 
     Falls back to `OLLAMA_IMAGE` only when both are empty.
 - **Justfile** (`scripts/justfile`): Setting `OLLAMA_IMAGE="${OLLAMA_IMAGE:-ollama/ollama:rocm}"` before starting the node-manager makes the node-manager's fallback a single-variant default that overrides the orchestrator's variant when the orchestrator omits `image`.
   The justfile should not set a default that contradicts orchestrator-directed behavior; ideally the node would never need this env when the orchestrator supplies variant (and the node derives image from variant when image is absent).
-- **Orchestrator** (`orchestrator/internal/handlers/nodes.go`): `variantAndVRAM` sums VRAM per vendor and selects variant for vendor with greatest total. Worker reports all devices; orchestrator computes correctly.
+- **Orchestrator** (`orchestrator/internal/handlers/nodes.go`): `variantAndVRAM` sums VRAM per vendor and selects variant for vendor with greatest total.
+  Worker reports all devices; orchestrator computes correctly.
 
-- **Variant selection by total VRAM:** Orchestrator `variantAndVRAM` sums `vram_mb` per vendor and selects variant for vendor with greatest total. Tie-break: prefer cuda over rocm. Uses total VRAM of chosen vendor for inference env (orchestrator_inference_container_decision.md).
+- **Variant selection by total VRAM:** Orchestrator `variantAndVRAM` sums `vram_mb` per vendor and selects variant for vendor with greatest total.
+  Tie-break: prefer cuda over rocm.
+  Uses total VRAM of chosen vendor for inference env (orchestrator_inference_container_decision.md).
 
 ### Bug 1 Desired Behavior (Design - Docs Only)
 
@@ -183,10 +187,20 @@ See [REQ-ORCHES-0175](../requirements/orches.md#req-orches-0175) and [orchestrat
 
 ### Bug 1 Implementation Status (Fully Spec-Compliant)
 
-- **Worker GPU detection** (`gpu.go`): Reports **all** GPUs from all supported vendors (AMD and NVIDIA) in a single capability report. Each device includes `vendor`, `vram_mb`, and `features`. Compliant with REQ-WORKER-0265 and orchestrator_inference_container_decision.md line 195.
-- **Orchestrator variantAndVRAM** (`nodes.go`): Sums `vram_mb` per vendor and selects variant for the vendor with greatest total VRAM. Tie-break: prefer cuda over rocm. Uses total VRAM of chosen vendor for inference env (OLLAMA_NUM_CTX). Handles multiple GPUs of same vendor. Compliant with orchestrator_inference_container_decision.md lines 164-165.
-- **Node-manager image derivation** (`nodemanager.go`): When `inference_backend.image` is absent and `variant` is set, derives image: `rocm` -> `ollama/ollama:rocm`; `cuda`/`cpu` -> `ollama/ollama` (Ollama has no cuda tag). Compliant with worker_node_payloads and REQ-WORKER-0253.
-- **Ollama container GPU access** (`main.go`): Uses `--gpus all` for CUDA. Compliant with "Ollama gets all GPUs of the chosen variant."
-- **E2E validation** (`e2e_205_gpu_variant_ollama.py`): Independently detects GPU, sums VRAM per vendor, asserts Ollama image tag. Stack must NOT use `SETUP_DEV_OLLAMA_IN_STACK`.
-- **Unit tests:** Worker: `TestDetectGPU_ReportsAllDevicesWhenBothVendorsPresent`, `TestDetectGPU_SingleVendorReturnsAllDevices`. Orchestrator: `TestVariantAndVRAM_SumVRAMPerVendorMixedGPUs`, `TestVariantAndVRAM_MultiGPUSameVendorSumsTotal`, `TestVariantAndVRAM_MixedVendorsNVIDIADominant`, `TestVariantAndVRAM_TieBreakPrefersCuda`.
+- **Worker GPU detection** (`gpu.go`): Reports **all** GPUs from all supported vendors (AMD and NVIDIA) in a single capability report.
+  Each device includes `vendor`, `vram_mb`, and `features`.
+  Compliant with REQ-WORKER-0265 and orchestrator_inference_container_decision.md line 195.
+- **Orchestrator variantAndVRAM** (`nodes.go`): Sums `vram_mb` per vendor and selects variant for the vendor with greatest total VRAM.
+  Tie-break: prefer cuda over rocm.
+  Uses total VRAM of chosen vendor for inference env (OLLAMA_NUM_CTX).
+  Handles multiple GPUs of same vendor.
+  Compliant with orchestrator_inference_container_decision.md lines 164-165.
+- **Node-manager image derivation** (`nodemanager.go`): When `inference_backend.image` is absent and `variant` is set, derives image: `rocm` -> `ollama/ollama:rocm`; `cuda`/`cpu` -> `ollama/ollama` (Ollama has no cuda tag).
+  Compliant with worker_node_payloads and REQ-WORKER-0253.
+- **Ollama container GPU access** (`main.go`): Uses `--gpus all` for CUDA.
+  Compliant with "Ollama gets all GPUs of the chosen variant."
+- **E2E validation** (`e2e_205_gpu_variant_ollama.py`): Independently detects GPU, sums VRAM per vendor, asserts Ollama image tag.
+  Stack must NOT use `SETUP_DEV_OLLAMA_IN_STACK`.
+- **Unit tests:** Worker: `TestDetectGPU_ReportsAllDevicesWhenBothVendorsPresent`, `TestDetectGPU_SingleVendorReturnsAllDevices`.
+  Orchestrator: `TestVariantAndVRAM_SumVRAMPerVendorMixedGPUs`, `TestVariantAndVRAM_MultiGPUSameVendorSumsTotal`, `TestVariantAndVRAM_MixedVendorsNVIDIADominant`, `TestVariantAndVRAM_TieBreakPrefersCuda`.
 - **BDD:** Worker node scenario "Node manager starts inference backend with orchestrator-supplied variant when image is absent" passes.
