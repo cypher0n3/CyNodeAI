@@ -107,7 +107,7 @@ The output is the `inference_backend` object (or its absence) for `node_configur
 - When the decision is "start": set `inference_backend` with:
   - `enabled: true`
   - `variant` (string): One of `cpu`, `cuda`, `rocm`, or another orchestrator-defined variant consistent with node capabilities.
-  - `image` (string, optional): OCI image reference; when absent the node MAY use a node-local default.
+  - `image` (string, optional): OCI image reference; when absent the node MUST derive the image from the supplied variant per [worker_node_payloads](worker_node_payloads.md) `inference_backend` (MUST NOT use a node-local default that ignores or overrides variant).
   - `port` (int, optional): e.g. 11434 for Ollama.
   - `env` (object, optional): deterministic orchestrator-derived environment values required for the selected backend behavior.
 
@@ -188,7 +188,7 @@ Policy MAY define minimum cores, minimum base or boost clock, or minimum (total 
 - Spec ID: `CYNAI.ORCHES.InferenceImageSelection` <a id="spec-cynai-orches-inferenceimageselection"></a>
 
 The orchestrator MUST select the container image from policy keyed by the chosen `variant` (e.g. default image for `cpu`, `cuda`, `rocm`).
-When policy does not specify an image for the variant, the orchestrator MAY omit `inference_backend.image` so the node uses its node-local default (e.g. from node startup YAML or environment).
+When policy does not specify an image for the variant, the orchestrator MAY omit `inference_backend.image`; the node MUST then derive the image from the supplied variant per [worker_node_payloads](worker_node_payloads.md) `inference_backend` (and MUST NOT use a node-local default that ignores or overrides the variant).
 
 Image selection MUST be deterministic for the same (variant, policy) pair.
 

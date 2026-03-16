@@ -1,7 +1,6 @@
 # CLI Management App - Task Commands
 
 - [Task Commands](#task-commands)
-- [Task Creation (Task Input and Attachments)](#task-creation-task-input-and-attachments)
 
 ## Document Overview
 
@@ -34,7 +33,16 @@ The task result `status` field (from gateway or CLI output) MUST be exactly one 
 
 ### `cynork task create`
 
-Invocation
+- Spec ID: `CYNAI.CLIENT.CliTaskCreatePrompt` <a id="spec-cynai-client-clitaskcreateprompt"></a>
+
+Task create MUST accept the task as **inline text** (e.g. `--prompt "..."` or `--task "..."`) or from a **file** (e.g. `--task-file <path>`) containing plain text or Markdown.
+Exactly one task input mode MUST be supplied per invocation.
+The CLI MUST support attachments via repeatable `--attach <path>`, running a script via `--script <path>`, and running commands via `--command <string>` or `--commands-file <path>`.
+The user task text MUST NOT be executed as a literal shell command unless the user explicitly selects `--script`, `--command`, or `--commands-file`.
+
+`POST /v1/tasks` (and thus `cynork task create`) returns the task identifier in the response **without waiting for task completion**; clients poll task get or task result for status and outcome.
+
+#### `cynork task create` Invocation
 
 - `cynork task create` followed by exactly one task input mode.
 
@@ -46,11 +54,11 @@ Task input modes (exactly one MUST be provided)
 - `--command <string>` repeated one or more times.
 - `--commands-file <path>`.
 
-Attachment flags (optional)
+#### `cynork task create` Attachment Flags (Optional)
 
 - `-a, --attach <path>` repeated zero or more times.
 
-Optional flags
+#### `cynork task create` Optional Flags
 
 - `--name <string>`.
   Suggested human-readable name for the task.
@@ -66,7 +74,7 @@ Optional flags
   When set, after creating the task the CLI MUST poll the gateway for the task result until the task reaches a closed (terminal) status (`completed`, `failed`, `canceled`, or `superseded`), then MUST print the result in the same format as `cynork task result`.
   If the user interrupts (e.g. Ctrl+C) before the task reaches a terminal status, the CLI MUST exit without printing the result.
 
-Behavior
+#### `cynork task create` Behavior
 
 - The CLI MUST reject invocations that provide zero or more than one task input mode.
   This is a usage error and MUST return exit code 2.
@@ -82,14 +90,14 @@ Behavior
   Remaining lines are commands and MUST be run in file order.
 - If any `--attach` paths are provided, the CLI MUST include them as attachments in the task create request.
 
-Path and file validation
+#### `cynork task create` Path and File Validation
 
 - For `--task-file`, `--script`, `--commands-file`, and each `--attach`, the CLI MUST validate that the path exists, is a regular file, and is readable by the current user.
   If any path fails validation, the CLI MUST exit with code 2 before making a gateway request.
 - The CLI MUST reject directories and symlinks for these file inputs.
   This is a usage error and MUST return exit code 2.
 
-Size limits
+#### `cynork task create` Size Limits
 
 - `--task-file` contents MUST be <= 1 MiB.
 - `--script` contents MUST be <= 256 KiB.
@@ -98,18 +106,32 @@ Size limits
 - The number of `--attach` occurrences MUST be <= 16.
 - If a limit is exceeded, the CLI MUST exit with code 2 before making a gateway request.
 
-Output
+#### `cynork task create` Output
 
 - When `--result` is not set: table mode MUST print a single line containing `task_id=<id>` and when the system provides a task name, `task_name=<name>`; JSON mode MUST print at least `task_id`, and when provided, `task_name`.
 - When `--result` is set: after the task reaches a terminal status, the CLI MUST print the result in the same format as `cynork task result` (task_id, task_name when provided, status, jobs and their results).
 
+#### `cynork task create` Traces To
+
+- [REQ-ORCHES-0122](../requirements/orches.md#req-orches-0122)
+- [REQ-ORCHES-0126](../requirements/orches.md#req-orches-0126)
+- [REQ-ORCHES-0127](../requirements/orches.md#req-orches-0127)
+- [REQ-ORCHES-0128](../requirements/orches.md#req-orches-0128)
+- [REQ-CLIENT-0151](../requirements/client.md#req-client-0151)
+- [REQ-CLIENT-0153](../requirements/client.md#req-client-0153)
+- [REQ-CLIENT-0157](../requirements/client.md#req-client-0157)
+
 ### `cynork task list`
 
-Invocation
+- Spec ID: `CYNAI.CLIENT.CliTaskList` <a id="spec-cynai-client-clitasklist"></a>
+
+List tasks with optional status filter and pagination.
+
+#### `cynork task list` Invocation
 
 - `cynork task list`.
 
-Optional flags
+#### `cynork task list` Optional Flags
 
 - `--status <status>`.
   Allowed values include `queued`, `running`, `completed`, `failed`, `canceled`, and `superseded`.
@@ -119,7 +141,7 @@ Optional flags
 - `--cursor <opaque>`.
   Default is empty.
 
-Output
+#### `cynork task list` Output
 
 - Table mode MUST print one task per line.
   Table mode MUST include at least `task_id=<id>`, `status=<status>`, and when the system provides a task name, `task_name=<name>`.
@@ -127,6 +149,8 @@ Output
   Each task object MUST include at least `task_id`, `status`, and when provided, `task_name`.
 
 ### `cynork task get <task_selector>`
+
+- Spec ID: `CYNAI.CLIENT.CliTaskGet` <a id="spec-cynai-client-clitaskget"></a>
 
 Invocation
 
@@ -140,15 +164,19 @@ Output
 
 ### `cynork task cancel <task_selector>`
 
-Invocation
+- Spec ID: `CYNAI.CLIENT.CliTaskCancel` <a id="spec-cynai-client-clitaskcancel"></a>
+
+Cancel a task by ID or name; optionally skip confirmation with `--yes`.
+
+#### `cynork task cancel` Invocation
 
 - `cynork task cancel <task_selector>`, where `<task_selector>` is the task UUID or the human-readable task name.
 
-Optional flags
+#### `cynork task cancel` Optional Flags
 
 - `-y, --yes`.
 
-Behavior
+#### `cynork task cancel` Behavior
 
 - If `--yes` is not provided, the CLI MUST prompt for confirmation.
 - The confirmation prompt MUST be `Cancel task <task_selector>? [y/N]`.
@@ -158,16 +186,20 @@ Behavior
 
 ### `cynork task result <task_selector>`
 
-Invocation
+- Spec ID: `CYNAI.CLIENT.CliTaskResult` <a id="spec-cynai-client-clitaskresult"></a>
+
+Fetch task result; optionally wait until the task reaches a terminal status.
+
+#### `cynork task result` Invocation
 
 - `cynork task result <task_selector>`, where `<task_selector>` is the task UUID or the human-readable task name.
 
-Optional flags
+#### `cynork task result` Optional Flags
 
 - `-w, --wait`.
   Default is false.
 
-Output
+#### `cynork task result` Output
 
 - If `--wait` is set, the CLI MUST poll the gateway until the task reaches a terminal status.
   Closed (terminal) statuses are `completed`, `failed`, `canceled`, and `superseded`; see [Task status and closed state](../tech_specs/postgres_schema.md#spec-cynai-schema-taskstatusandclosed).
@@ -177,18 +209,22 @@ Output
 
 ### `cynork task watch <task_selector>`
 
-Invocation
+- Spec ID: `CYNAI.CLIENT.CliTaskWatch` <a id="spec-cynai-client-clitaskwatch"></a>
+
+Poll task result at an interval and redraw output until the task reaches a terminal status.
+
+#### `cynork task watch` Invocation
 
 - `cynork task watch <task_selector>`, where `<task_selector>` is the task UUID or the human-readable task name.
 
-Behavior
+#### `cynork task watch` Behavior
 
 - The CLI MUST poll the gateway for the task result at a fixed interval and redraw the output, similar to the Linux `watch(1)` command.
 - The CLI MUST use the same output format as `cynork task result` (task_id, task_name when provided, status, jobs and results).
 - When stdout is a terminal and `--no-clear` is not set, the CLI MUST clear the screen before each redraw so the display updates in place.
 - The CLI MUST exit with code 0 when the task reaches a closed (terminal) status (`completed`, `failed`, `canceled`, or `superseded`), or when the user interrupts (e.g. Ctrl+C).
 
-Optional flags
+#### `cynork task watch` Optional Flags
 
 - `-n, --interval <duration>`.
   Poll interval (e.g. `2s`, `500ms`).
@@ -200,11 +236,15 @@ Optional flags
 
 ### `cynork task logs <task_selector>`
 
-Invocation
+- Spec ID: `CYNAI.CLIENT.CliTaskLogs` <a id="spec-cynai-client-clitasklogs"></a>
+
+Stream or fetch task log lines (stdout, stderr, or both).
+
+#### `cynork task logs` Invocation
 
 - `cynork task logs <task_selector>`, where `<task_selector>` is the task UUID or the human-readable task name.
 
-Optional flags
+#### `cynork task logs` Optional Flags
 
 - `--stream <stream>`.
   Allowed values are `stdout`, `stderr`, and `all`.
@@ -212,18 +252,22 @@ Optional flags
 - `-F, --follow`.
   Default is false.
 
-Output
+#### `cynork task logs` Output
 
 - Table mode MUST print raw log lines to stdout.
 - JSON mode MUST print an object with at least `task_id`, `stream`, `lines`; and when the system provides a task name, `task_name`.
 
 ### `cynork task artifacts list <task_selector>`
 
-Invocation
+- Spec ID: `CYNAI.CLIENT.CliTaskArtifactsList` <a id="spec-cynai-client-clitaskartifactslist"></a>
+
+List artifacts produced by a task.
+
+#### `cynork task artifacts list` Invocation
 
 - `cynork task artifacts list <task_selector>`, where `<task_selector>` is the task UUID or the human-readable task name.
 
-Output
+#### `cynork task artifacts list` Output
 
 - Table mode MUST print a header line with these tab-separated columns in this exact order.
   `artifact_id`, `name`, `content_type`, `size_bytes`.
@@ -233,46 +277,29 @@ Output
 
 ### `cynork task artifacts get <task_selector> <artifact_id> --out <path>`
 
-Invocation
+- Spec ID: `CYNAI.CLIENT.CliTaskArtifactsGet` <a id="spec-cynai-client-clitaskartifactsget"></a>
+
+Download a single task artifact to a local path.
+
+#### `cynork task artifacts get` Invocation
 
 - `cynork task artifacts get <task_selector> <artifact_id> --out <path>`, where `<task_selector>` is the task UUID or the human-readable task name.
 
-Required flags
+#### `cynork task artifacts get` Required Flags
 
 - `--out <path>`.
 
-Behavior
+#### `cynork task artifacts get` Behavior
 
 - The CLI MUST write the artifact bytes to the `--out` path.
 - The CLI MUST create parent directories if needed.
 - If the output file already exists, the CLI MUST refuse to overwrite it unless `--force` is provided.
 
-Optional flags
+#### `cynork task artifacts get` Optional Flags
 
 - `--force`.
 
-Output
+#### `cynork task artifacts get` Output
 
 - Table mode MUST print exactly one line containing `saved=true` and `path=<path>`.
 - JSON mode MUST print `{"saved":true,"path":"<path>"}`.
-
-## Task Creation (Task Input and Attachments)
-
-- Spec ID: `CYNAI.CLIENT.CliTaskCreatePrompt` <a id="spec-cynai-client-clitaskcreateprompt"></a>
-
-Task create MUST accept the task as **inline text** (e.g. `--prompt "..."` or `--task "..."`) or from a **file** (e.g. `--task-file <path>`) containing plain text or Markdown.
-Exactly one task input mode MUST be supplied per `cynork task create` invocation.
-The CLI MUST support attachments via repeatable `--attach <path>`.
-The CLI MUST support running a script via `--script <path>`.
-The CLI MUST support running a short series of commands via repeatable `--command <string>` or via `--commands-file <path>`.
-The user task text MUST NOT be executed as a literal shell command unless the user explicitly selects `--script`, `--command`, or `--commands-file`.
-
-### Traces To
-
-- [REQ-ORCHES-0122](../requirements/orches.md#req-orches-0122)
-- [REQ-ORCHES-0126](../requirements/orches.md#req-orches-0126)
-- [REQ-ORCHES-0127](../requirements/orches.md#req-orches-0127)
-- [REQ-ORCHES-0128](../requirements/orches.md#req-orches-0128)
-- [REQ-CLIENT-0151](../requirements/client.md#req-client-0151)
-- [REQ-CLIENT-0153](../requirements/client.md#req-client-0153)
-- [REQ-CLIENT-0157](../requirements/client.md#req-client-0157)

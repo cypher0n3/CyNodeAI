@@ -42,8 +42,9 @@ The gateway SHOULD support:
 
 - Task submission and management
   - Create tasks with task input as **plain text or Markdown** (inline or from file), optional **attachments**, **script** (path/file), or **short series of commands**; for script/commands the system runs them in the sandbox; otherwise it interprets the task and may call an AI model and/or dispatch sandbox work.
-  Interpretation and inference are the **default** for task text; there is no user-facing "use inference" flag (see REQ-ORCHES-0126, REQ-ORCHES-0127, REQ-ORCHES-0128).
-  The create request MAY include an optional **task name**; the orchestrator MUST accept it, normalize it per [Task Naming](project_manager_agent.md#spec-cynai-agents-pmtasknaming), and ensure uniqueness (e.g. append numbers) when needed.
+    - `POST /v1/tasks` returns the task identifier in the response **without waiting for task completion**; clients poll task get or task result for status and outcome.
+    - Interpretation and inference are the **default** for task text; there is no user-facing "use inference" flag (see REQ-ORCHES-0126, REQ-ORCHES-0127, REQ-ORCHES-0128).
+    - The create request MAY include an optional **task name**; the orchestrator MUST accept it, normalize it per [Task Naming](project_manager_agent.md#spec-cynai-agents-pmtasknaming), and ensure uniqueness (e.g. append numbers) when needed.
   - Set acceptance criteria and attach artifacts.
   - List tasks, read status, and retrieve results.
 - Scheduler and cron

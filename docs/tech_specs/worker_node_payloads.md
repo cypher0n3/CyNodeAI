@@ -328,9 +328,11 @@ Source requirements: [`docs/tech_specs/worker_node.md`](worker_node.md#spec-cyna
   - `enabled` (boolean, optional): When true or when the object is present and the node is inference-capable per capability report, the node MUST start the backend container.
     When false, the node MUST NOT start it.
   - `image` (string, optional): OCI image reference for the inference backend container (e.g. `ollama/ollama`, or a ROCm/CUDA variant image).
-    When absent, the node MAY use a node-local default (e.g. from node startup YAML or env).
+    When absent, the node MUST derive the image from the orchestrator-supplied `variant` (e.g. base image with variant as tag: `ollama/ollama:cuda` when variant is `cuda`).
+    The node MUST NOT use a node-local default (e.g. a single `OLLAMA_IMAGE` env) that ignores or overrides the orchestrator-supplied variant.
   - `variant` (string, optional): Backend variant derived by the orchestrator from the node capability report (e.g. `cuda`, `rocm`, `cpu`).
     The node MUST use this to select or configure the correct image or runtime (ROCM for AMD GPUs, CUDA for Nvidia GPUs when reported in capabilities).
+    When `image` is absent, the node MUST derive the backend container image from this variant (see `image` above).
   - `port` (int, optional): listen port for the inference API (default 11434 for Ollama).
   - `env` (object, optional): orchestrator-directed environment values for the backend container.
     - Keys and values MUST be strings.

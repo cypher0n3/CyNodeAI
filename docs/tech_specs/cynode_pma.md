@@ -8,6 +8,7 @@
   - [What is Handed off to `cynode-pma`](#what-is-handed-off-to-cynode-pma)
   - [What is Not Handed off to `cynode-pma`](#what-is-not-handed-off-to-cynode-pma)
   - [Process Boundaries and Workflow Runner](#process-boundaries-and-workflow-runner)
+  - [Task Execution Handoff](#task-execution-handoff)
 - [Role Modes](#role-modes)
 - [Instructions Loading and Routing](#instructions-loading-and-routing)
   - [Role Separation Requirement](#role-separation-requirement)
@@ -128,6 +129,20 @@ See [`docs/tech_specs/openai_compatible_chat_api.md`](openai_compatible_chat_api
 They share the MCP gateway and DB.
 The orchestrator starts the workflow runner for a given task; chat and planning go to PMA; the workflow runner executes the graph and does not serve chat.
 See [orchestrator.md](orchestrator.md) Workflow Engine section.
+
+### Task Execution Handoff
+
+- Spec ID: `CYNAI.PMAGNT.TaskExecutionHandoff` <a id="spec-cynai-pmagnt-taskexecutionhandoff"></a>
+
+When the orchestrator sends a task for execution, PMA MUST accept it, kick off SBA to execute the task, and report back to the orchestrator that the task has been **started** (ack) before the orchestrator returns 201.
+
+PMA MUST report task **completion** (and results) back to the orchestrator via MCP (or specified callback) after SBA has finished and PMA has aggregated the outcome.
+
+Sequence: orchestrator sends task -> PMA -> SBA (execute) -> PMA receives SBA result -> PMA reports completion to orchestrator via MCP.
+
+#### Task Execution Handoff Traces To
+
+- [REQ-ORCHES-0122](../requirements/orches.md#req-orches-0122)
 
 ## Role Modes
 

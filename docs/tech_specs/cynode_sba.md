@@ -88,7 +88,8 @@ Within the job, the SBA MUST be able to build and manage its own todo list (deri
 - [REQ-SBAGNT-0112](../requirements/sbagnt.md#req-sbagnt-0112)
 
 This section summarizes what the SBA can invoke and the mechanisms used.
-All outbound traffic from the sandbox goes through worker proxies or orchestrator-mediated endpoints.
+All outbound traffic from the sandbox goes through **worker proxies**; the SBA MUST NOT be given direct orchestrator hostnames or ports (see [Worker Proxy Bidirectional (Managed Agents)](worker_node.md#spec-cynai-worker-proxybidirectional) and [Agent Network Restriction](worker_node.md#spec-cynai-worker-agentnetworkrestriction)).
+The node injects **worker-local proxy URLs** (e.g. for MCP, job status, callback); the worker proxy forwards those requests to the orchestrator and attaches credentials; the SBA never holds agent tokens.
 See [Worker Proxies (Inference and Web Egress)](#worker-proxies-inference-and-web-egress) and [Sandbox Boundary and Security](#sandbox-boundary-and-security).
 
 ### Local Execution (Inside the Container)
@@ -106,13 +107,13 @@ The SBA has **no direct internet or host access**.
 All outbound use is via:
 
 - **Lifecycle / status** - Report job in-progress, completion, result, timeout extension.
-  Outbound HTTP to orchestrator job callback URL or job-status endpoint; URLs injected by node (e.g. env or job payload).
+  SBA calls a **worker-local proxy URL** (injected by the node, e.g. env or job payload); the worker proxy forwards the request to the orchestrator's job-status or callback endpoint.
+  The SBA does not receive the orchestrator URL or credentials; the worker proxy holds and attaches them.
   See [Job Lifecycle and Status Reporting](#job-lifecycle-and-status-reporting).
 - **Inference** - LLM calls for planning, tool use, refinement.
-  Node-local inference proxy (UDS, e.g. `INFERENCE_PROXY_URL`) or orchestrator-mediated API Egress endpoint; only models in job `inference.allowed_models`.
+  Node-local inference proxy (UDS, e.g. `INFERENCE_PROXY_URL`) or orchestrator-mediated API Egress endpoint (reached via worker proxy when used); only models in job `inference.allowed_models`.
 - **MCP gateway** - Tools: artifacts, memory, skills, web, API egress.
-  SBA calls orchestrator MCP gateway with agent-scoped token; only [sandbox allowlist](#mcp-tool-access-sandbox-allowlist) tools.
-  Traffic goes through worker proxy.
+  SBA calls the **worker proxy** at a worker-mediated MCP URL; the worker proxy forwards to the orchestrator MCP gateway and attaches the sandbox agent token (SBA does not hold the token); only [sandbox allowlist](#mcp-tool-access-sandbox-allowlist) tools.
 - **Web egress** - Outbound HTTP/HTTPS (e.g. package installs, fetches).
   When `constraints.ext_net_allowed` is true, node sets `HTTP_PROXY`/`HTTPS_PROXY` to node-local web egress proxy; proxy forwards to orchestrator Web Egress Proxy (allowlisted destinations only).
 - **API Egress** - External APIs (e.g. GitHub, Slack) without credentials in sandbox.
@@ -122,8 +123,10 @@ All outbound use is via:
 
 ### Job Lifecycle Reporting (What the SBA Must Call)
 
-- **In progress:** After validating the job spec, the SBA MUST signal in progress via outbound call through the worker proxy (e.g. to orchestrator job-status endpoint or callback URL).
-- **Completion:** On success, failure, or timeout, the SBA MUST report completion via outbound call to deliver the [Result contract](#result-contract) (and optionally artifact references or inline data).
+SBA is invoked by PMA for task execution and reports execution results back to PMA per the job lifecycle; PMA then reports completion to the orchestrator (see [Task Execution Handoff](cynode_pma.md#spec-cynai-pmagnt-taskexecutionhandoff)).
+
+- **In progress:** After validating the job spec, the SBA MUST signal in progress via outbound call to the worker proxy (at the worker-injected job-status or callback URL); the worker proxy forwards to the orchestrator.
+- **Completion:** On success, failure, or timeout, the SBA MUST report completion (or failure as appropriate) via outbound call to the worker proxy to deliver the [Result contract](#result-contract) (and optionally artifact references or inline data); the worker proxy forwards to the orchestrator.
 - **Artifacts:** The SBA MAY upload attachments via MCP `artifact.put` (task-scoped) or stage files under `/job/artifacts/` for node-mediated delivery.
 - **Timeout extension:** The SBA MUST be able to request a time extension (e.g. via job-status callback or dedicated endpoint) up to the node maximum; remaining time or deadline MUST be available to the SBA for LLM context.
   The exact mechanism (callback payload, MCP tool, or status API) is defined in the [Worker API](worker_api.md) and/or MCP tool catalog.
@@ -203,13 +206,22 @@ Sandbox orchestration from the PM agent uses MCP tools (`sandbox.create`, `sandb
 The SBA MUST participate in a clear job lifecycle so the orchestrator can mark the job as in-progress and, when done, persist the result.
 Connections are NOT required to stay open for the full duration of the job; the node is responsible for conveying status and result to the orchestrator (e.g. by callback, polling, or a single long-lived response with streaming).
 
+When the SBA errors out, crashes, or does not report completion (e.g. container exit without a valid result, OOM kill, or job timeout), the **worker node** MUST report the job as **failed** or **timeout** to the orchestrator so the orchestrator can persist the failure and re-issue or retry the job as policy allows.
+See [Worker API - Job lifecycle and result persistence](worker_api.md#spec-cynai-worker-joblifecycleresultpersistence) and [Node-Mediated SBA Result (Sync)](worker_api.md#spec-cynai-worker-nodemediatedsbaresult-sync).
+
+#### Job Lifecycle Traces To
+
+- [REQ-SBAGNT-0110](../requirements/sbagnt.md#req-sbagnt-0110)
+
 #### Result and Artifact Delivery (Outbound via Proxies)
 
 - Spec ID: `CYNAI.SBAGNT.ResultAndArtifactDelivery` <a id="spec-cynai-sbagnt-resultandartifactdelivery"></a>
 
-Result, status, and artifacts move from the SBA to the orchestrator by the SBA making **outbound calls through worker proxies**.
-The SBA reports job status (in-progress, completion) and uploads artifacts by calling orchestrator-mediated endpoints (e.g. job callback URL, status API) or MCP tools (e.g. `artifact.put`) over the network; all traffic goes through the worker proxies so the sandbox never has direct internet access.
-The runtime (node and/or orchestrator) MUST provide the SBA with the means to reach these endpoints (e.g. job callback URL, MCP gateway URL) via the proxy path; the node injects the necessary URLs or configuration (e.g. env vars, job payload) so the SBA can report and upload without handling credentials.
+Result, status, and artifacts move from the SBA to the orchestrator by the SBA making **outbound calls through the worker proxy** (agent-to-orchestrator path per [Worker Proxy Normative Behavior](worker_node.md#spec-cynai-worker-proxybidirectional)).
+The SBA reports job status (in-progress, completion) and uploads artifacts by calling **worker-local proxy URLs** (injected by the node); the worker proxy forwards those requests to the orchestrator (job-status/callback or MCP gateway).
+The SBA may also use MCP tools (e.g. `artifact.put`) which are invoked via the same worker proxy (worker-mediated MCP URL).
+The node MUST inject the necessary worker-local URLs or configuration (e.g. env vars, job payload); the SBA MUST NOT receive orchestrator hostnames, orchestrator URLs, or credentials; the worker proxy holds and attaches them.
+
 The SBA MAY also write the [Result contract](#result-contract) and artifact files under `/job/` for staging or for node-mediated delivery (the node then reads and forwards after the container exits); the implementation MAY use that path as a fallback or in addition to outbound reporting.
 For synchronous Worker API implementations, node-mediated delivery typically means the node reads `/job/result.json` and `/job/artifacts/` after the container exits and returns their contents in the same HTTP response to the orchestrator; the orchestrator then persists the result and artifacts (see [Worker API - Node-Mediated SBA Result (Sync)](worker_api.md#spec-cynai-worker-nodemediatedsbaresult-sync)).
 A container-internal proxy (e.g. a sidecar that SBA POSTs to, which then forwards to the node or orchestrator) is not currently specified and is not required for MVP.
@@ -217,14 +229,15 @@ A container-internal proxy (e.g. a sidecar that SBA POSTs to, which then forward
 #### In-Progress State
 
 After the SBA has read and validated the job spec (and before or as it begins work), the SBA MUST confirm acceptance and signal that the job is **in progress**.
-The SBA MUST do so via outbound call through the worker proxy (e.g. to an orchestrator job-status endpoint) and MAY additionally write a status file under `/job/` or use another implementation-defined signal.
+The SBA MUST do so via outbound call to the worker proxy (at the worker-injected job-status or callback URL); the worker proxy forwards to the orchestrator.
+The SBA MAY additionally write a status file under `/job/` or use another implementation-defined signal.
 The node MAY also infer in-progress when the SBA has read the job and not yet exited; the orchestrator MUST be able to update job state to in-progress.
 
 #### Completion State
 
-When the job finishes (success, failure, or timeout), the SBA MUST report completion by making an outbound call through the worker proxy to deliver the [Result contract](#result-contract) (and optionally artifact references or inline artifact data) to the orchestrator.
+When the job finishes (success, failure, or timeout), the SBA MUST report completion by making an outbound call to the worker proxy to deliver the [Result contract](#result-contract) (and optionally artifact references or inline artifact data); the worker proxy forwards to the orchestrator.
 The SBA MAY also write the result to the agreed location (e.g. `/job/result.json`) for staging or node-mediated delivery; if so, the node MUST NOT clear or delete the job result until the result has been successfully persisted to the orchestrator (e.g. the node uploads from `/job/` or the SBA has already reported via proxy).
-The orchestrator MUST pass job completion (status and result) to the Project Manager Agent and/or Project Analyst Agent for additional work (e.g. verification, remediation); see [Orchestrator - Task Scheduler](orchestrator.md#spec-cynai-orches-scheduledrunrouting).
+The orchestrator MUST pass job completion (status and result) to the Project Manager Agent and/or Project Analyst Agent for additional work (e.g. verification, remediation); see [Orchestrator - Task Scheduler](orchestrator.md#task-scheduler).
 
 See [Worker API - Job lifecycle and result persistence](worker_api.md#spec-cynai-worker-joblifecycleresultpersistence).
 
@@ -235,7 +248,13 @@ See [Worker API - Job lifecycle and result persistence](worker_api.md#spec-cynai
 The SBA MUST be able to **request a time extension** for the current job (e.g. via job-status callback or a dedicated extension endpoint), up to the **node maximum** job timeout.
 The orchestrator or node MAY grant or deny the request.
 When granted, the job's effective deadline is extended; the node (or orchestrator) MUST enforce the new deadline.
-The mechanism (e.g. MCP tool or field on the job-status callback) is defined in the Worker API and/or MCP tool catalog.
+When an extension is granted, the **orchestrator** MUST be informed of the new effective deadline so it can update its [job timeout tracking](orchestrator.md#task-scheduler) and scheduled timeout check; otherwise the orchestrator may incorrectly mark the job as timed out.
+The mechanism (e.g. MCP tool or field on the job-status callback, or node status update to orchestrator) is defined in the Worker API and/or MCP tool catalog.
+
+#### Timeout Extension Traces To
+
+- [REQ-ORCHES-0174](../requirements/orches.md#req-orches-0174)
+- See also: [CYNAI.ORCHES.Rule.JobTimeoutTracking](orchestrator.md#spec-cynai-orches-rule-jobtimeouttracking) for the orchestrator side of deadline tracking and timeout checks.
 
 #### Time Remaining and LLM Context
 
@@ -282,14 +301,17 @@ The SBA does not configure or discover these endpoints itself; it relies on the 
 
 ### Worker Proxies Summary
 
-- Outbound traffic from the sandbox is permitted **only** through these worker proxies (and any orchestrator-mediated API Egress); there is no direct internet or other egress from the container.
-  Sandboxes are not airgapped but have strict controls on what is allowed in and out.
+- Outbound traffic from the sandbox is permitted **only** through worker proxies; there is no direct internet or other egress from the container.
+  The worker provides: (1) **agent-to-orchestrator proxy** (for job lifecycle/status, MCP gateway, and when used, API Egress)-SBA calls worker-local URLs, proxy forwards to orchestrator; (2) **inference proxy** (UDS, node-local); (3) **node-local web egress proxy** (when policy allows).
+  See [Worker Proxy Bidirectional (Managed Agents)](worker_node.md#spec-cynai-worker-proxybidirectional).
 - The SBA runner and job spec do not define proxy URLs or inference base URLs.
-  The worker node (and orchestrator, when API Egress is used) are responsible for injecting the inference endpoint and for configuring proxy env vars when web egress is allowed, per the sandbox contract.
+  The worker node (and orchestrator, when API Egress is used) inject worker-local proxy URLs and configuration; the SBA MUST NOT be given direct orchestrator URLs or credentials.
 
 ### Additional References
 
-- [`docs/tech_specs/worker_node.md`](worker_node.md#spec-cynai-worker-unifiedudspath) (unified UDS path) and [Node-Local Inference](worker_node.md#spec-cynai-worker-nodelocalinference) (inference proxy via UDS)
+- [`docs/tech_specs/worker_node.md`](worker_node.md) (worker proxy bidirectional, agent-to-orchestrator, token handling; unified UDS path; node-local inference)
+- [Worker Proxy Bidirectional (Managed Agents)](worker_node.md#spec-cynai-worker-proxybidirectional) and [Worker Proxy Normative Behavior](worker_node.md#spec-cynai-worker-proxybidirectional) (SBA uses worker-local proxy URLs only; proxy forwards to orchestrator)
+- [Unified UDS Path](worker_node.md#spec-cynai-worker-unifiedudspath) and [Node-Local Inference](worker_node.md#spec-cynai-worker-nodelocalinference) (inference proxy via UDS)
 - [`docs/tech_specs/sandbox_container.md`](sandbox_container.md#spec-cynai-sandbx-nodelocalinf) (sandbox inference contract)
 - [`docs/tech_specs/web_egress_proxy.md`](web_egress_proxy.md#spec-cynai-sandbx-integration-webegressproxy) (node-local proxy, proxy env vars)
 - [`docs/tech_specs/ports_and_endpoints.md`](ports_and_endpoints.md#spec-cynai-stands-inferenceollamaandproxy) (inference proxy port and behavior)

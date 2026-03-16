@@ -202,6 +202,10 @@ It covers worker-node behavior and the worker API contract for job execution and
 - **REQ-WORKER-0156:** The node MUST audit direct sandbox tool calls made through the low-latency control path and MUST make audit records available to the orchestrator for centralized retention and inspection.
   [CYNAI.WORKER.NodeLocalAgentSandboxControl](../tech_specs/worker_node.md#spec-cynai-worker-nodelocalagentsandboxcontrol)
   <a id="req-worker-0156"></a>
+- **REQ-WORKER-0157:** The node MUST report the job as failed or timeout to the orchestrator when the sandbox process errors out, crashes, or does not report completion (e.g. container exit without valid result, job timeout), so the orchestrator can persist the failure and re-issue or retry the job as policy allows.
+  [CYNAI.WORKER.JobLifecycleResultPersistence](../tech_specs/worker_api.md#spec-cynai-worker-joblifecycleresultpersistence)
+  [CYNAI.WORKER.NodeMediatedSbaResultSync](../tech_specs/worker_api.md#spec-cynai-worker-nodemediatedsbaresult-sync)
+  <a id="req-worker-0157"></a>
 - **REQ-WORKER-0160:** The worker node MUST support orchestrator-directed managed service containers (long-lived service containers distinct from per-job sandboxes) and MUST reconcile desired state delivered via node configuration.
   [CYNAI.WORKER.ManagedServiceContainers](../tech_specs/worker_node.md#spec-cynai-worker-managedservicecontainers)
   [CYNAI.WORKER.Payload.ConfigurationV1](../tech_specs/worker_node_payloads.md#spec-cynai-worker-payload-configuration-v1)
@@ -332,8 +336,10 @@ It covers worker-node behavior and the worker API contract for job execution and
   <a id="req-worker-0252"></a>
 - **REQ-WORKER-0253:** The node MUST start the Worker API and contact the orchestrator with its capabilities bundle (registration and capability report) before starting any local inference (OLLAMA) container.
   The node MUST NOT start the OLLAMA (or equivalent) container until the orchestrator has acknowledged registration and returned node configuration that instructs the node to start the local inference backend (including backend variant, e.g. ROCm for AMD or CUDA for Nvidia, when applicable).
+  When starting the backend container, the node MUST use the orchestrator-supplied variant and, when `inference_backend.image` is omitted, MUST derive the container image from that variant (e.g. base image + variant tag); the node MUST NOT use a single node-local env default (e.g. `OLLAMA_IMAGE`) that could contradict the orchestrator-supplied variant.
   [CYNAI.WORKER.NodeStartupProcedure](../tech_specs/worker_node.md#spec-cynai-worker-nodestartupprocedure)
   [CYNAI.WORKER.RegistrationAndBootstrap](../tech_specs/worker_node.md#spec-cynai-worker-registrationandbootstrap)
+  [CYNAI.WORKER.Payload.ConfigurationV1](../tech_specs/worker_node_payloads.md#spec-cynai-worker-payload-configuration-v1)
   <a id="req-worker-0253"></a>
 - **REQ-WORKER-0254:** The node MUST report to the orchestrator when it has become ready (e.g. after applying config and starting Worker API and, when instructed, the local inference container) so that the orchestrator can consider the node as an inference path and start the Project Manager Agent when appropriate.
   This report MAY be the config ack with status applied or a dedicated readiness notification as defined in the tech specs.

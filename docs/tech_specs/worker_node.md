@@ -762,6 +762,7 @@ On startup, the Node Manager MUST contact the orchestrator and receive configura
 The Worker API MUST be started and the node MUST register with the orchestrator (sending its capabilities bundle) before the node starts any local inference container.
 The orchestrator acknowledges registration and returns a node configuration payload that **instructs** the node whether and how to start the local inference backend (e.g. container image and backend variant such as ROCm for AMD or CUDA for Nvidia).
 The node MUST NOT start the Ollama container until it has received this instruction in the node configuration payload (see [`worker_node_payloads.md`](worker_node_payloads.md) `node_configuration_payload_v1` `inference_backend`).
+When the orchestrator omits `inference_backend.image`, the node MUST derive the backend container image from `inference_backend.variant` (e.g. base image + variant tag) and MUST NOT use a node-local env default (e.g. a single `OLLAMA_IMAGE`) that ignores or overrides the orchestrator-supplied variant.
 When the instruction includes `inference_backend.env`, the node MUST pass those orchestrator-directed backend environment values into the launched backend container.
 Those values represent the orchestrator's effective runtime configuration for maximizing the safe usable context window for the expected local model workload on that node.
 

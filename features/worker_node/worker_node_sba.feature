@@ -52,6 +52,9 @@ Scenario: SBA result contract has required shape for orchestrator storage
 
 @req_sbagnt_0103
 @spec_cynai_sbagnt_resultcontract
+@req_worker_0149
+@req_worker_0157
+@spec_cynai_worker_joblifecycleresultpersistence
 @spec_cynai_worker_nodemediatedsbaresultsync
 Scenario: SBA result contract from task result is validated only when task is completed
   Given I have a completed task that used the SBA runner

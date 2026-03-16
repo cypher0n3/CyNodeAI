@@ -102,7 +102,10 @@ It covers orchestrator control-plane behavior, task lifecycle, dispatch, and sta
   [orchestrator.md](../tech_specs/orchestrator.md)
   <a id="req-orches-0121"></a>
 - **REQ-ORCHES-0122:** Authenticated user clients MUST be able to create tasks through the User API Gateway.
+  The create operation MUST return a task identifier in the response **within a bounded time** (without waiting for task execution to complete), so that clients can poll for status and result.
   [orchestrator.md](../tech_specs/orchestrator.md)
+  [CYNAI.ORCHES.Rule.TaskCreateHandoff](../tech_specs/orchestrator.md#spec-cynai-orches-rule-taskcreatehandoff)
+  [CYNAI.CLIENT.CliTaskCreatePrompt](../tech_specs/cli_management_app_commands_tasks.md#spec-cynai-client-clitaskcreateprompt)
   [data_rest_api.md](../tech_specs/data_rest_api.md)
   <a id="req-orches-0122"></a>
 - **REQ-ORCHES-0123:** The orchestrator MUST dispatch work to worker nodes via the Worker API and update task/job state based on results.
@@ -112,10 +115,15 @@ It covers orchestrator control-plane behavior, task lifecycle, dispatch, and sta
 - **REQ-ORCHES-0124:** The orchestrator MUST persist job results (including stdout/stderr and exit code) and make them retrievable to authorized clients.
   [orchestrator.md](../tech_specs/orchestrator.md)
   [worker_api.md](../tech_specs/worker_api.md)
+  [CYNAI.CLIENT.CliTaskResult](../tech_specs/cli_management_app_commands_tasks.md#spec-cynai-client-clitaskresult)
+  [CYNAI.CLIENT.CliTaskLogs](../tech_specs/cli_management_app_commands_tasks.md#spec-cynai-client-clitasklogs)
   <a id="req-orches-0124"></a>
 - **REQ-ORCHES-0125:** Authorized clients MUST be able to read task state (including status) through the User API Gateway.
   [orchestrator.md](../tech_specs/orchestrator.md)
   [data_rest_api.md](../tech_specs/data_rest_api.md)
+  [CYNAI.CLIENT.CliTaskList](../tech_specs/cli_management_app_commands_tasks.md#spec-cynai-client-clitasklist)
+  [CYNAI.CLIENT.CliTaskGet](../tech_specs/cli_management_app_commands_tasks.md#spec-cynai-client-clitaskget)
+  [CYNAI.CLIENT.CliTaskResult](../tech_specs/cli_management_app_commands_tasks.md#spec-cynai-client-clitaskresult)
   <a id="req-orches-0125"></a>
 - **REQ-ORCHES-0126:** Task creation MUST accept a natural-language user prompt and MUST accept task input as plain text or Markdown.
   The system MUST interpret the prompt or task text to decide whether to call an AI model and/or execute sandbox jobs.
@@ -286,3 +294,11 @@ It covers orchestrator control-plane behavior, task lifecycle, dispatch, and sta
   [CYNAI.ORCHES.OpenAIInteractiveChatRouting](../tech_specs/orchestrator.md#spec-cynai-orches-openaiinteractivechatrouting)
   [CYNAI.USRGWY.OpenAIChatApi.StreamingHeartbeatFallback](../tech_specs/openai_compatible_chat_api.md#spec-cynai-usrgwy-openaichatapi-streamingheartbeatfallback)
   <a id="req-orches-0172"></a>
+- **REQ-ORCHES-0173:** The orchestrator MUST track the effective deadline for each dispatched job (updated when a timeout extension is granted and the orchestrator is informed) and MUST run a scheduled task (e.g. periodic cron or timer) that finds jobs in progress that have exceeded their effective deadline without a reported completion or granted extension, and MUST mark those jobs as failed (timeout) so the orchestrator can re-issue or retry as policy allows.
+  [CYNAI.ORCHES.Rule.JobTimeoutTracking](../tech_specs/orchestrator.md#spec-cynai-orches-rule-jobtimeouttracking)
+  <a id="req-orches-0173"></a>
+- **REQ-ORCHES-0174:** When a job timeout extension is granted (by the node or by the orchestrator), the orchestrator MUST be informed of the new effective deadline and MUST update its job timeout tracking so the scheduled timeout check does not mark the job as timed out while the job is within the extended deadline.
+  [CYNAI.ORCHES.Rule.JobTimeoutTracking](../tech_specs/orchestrator.md#spec-cynai-orches-rule-jobtimeouttracking)
+  [worker_api.md - Job lifecycle and result persistence](../tech_specs/worker_api.md#spec-cynai-worker-joblifecycleresultpersistence)
+  [cynode_sba.md - Timeout Extension](../tech_specs/cynode_sba.md#spec-cynai-sbagnt-timeoutextension)
+  <a id="req-orches-0174"></a>

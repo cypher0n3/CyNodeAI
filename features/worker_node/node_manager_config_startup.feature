@@ -5,7 +5,8 @@ Feature: Node Manager Config Fetch and Startup
   I want to fetch configuration from the orchestrator and apply it before starting services
   So that Worker API bearer token and startup order follow the spec
 
-Background:
+## Background
+
   Given a mock orchestrator that returns bootstrap with node_config_url
   And the mock returns node config with worker_api bearer token
 
@@ -44,6 +45,16 @@ Scenario: Node manager passes through orchestrator-directed backend env values
   When the node manager runs the startup sequence against the mock orchestrator
   Then the node manager launches the local inference backend with the derived "OLLAMA_NUM_CTX" value
   And the node manager launches the managed service with the same derived "OLLAMA_NUM_CTX" value
+
+@req_worker_0253
+@spec_cynai_worker_nodestartupprocedure
+@spec_cynai_worker_payload_configurationv1
+Scenario: Node manager starts inference backend with orchestrator-supplied variant when image is absent
+  Given a mock orchestrator that returns bootstrap with node_config_url
+  And the mock returns node config with worker_api bearer token
+  And the mock returns node config with inference_backend enabled and variant "cuda" and no image
+  When the node manager runs the startup sequence against the mock orchestrator
+  Then the node manager started the local inference backend with variant "cuda"
 
 @req_worker_0002
 @spec_cynai_worker_failfast

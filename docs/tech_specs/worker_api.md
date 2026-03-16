@@ -273,36 +273,45 @@ Timeout rules (required)
 
 - Spec ID: `CYNAI.WORKER.JobLifecycleResultPersistence` <a id="spec-cynai-worker-joblifecycleresultpersistence"></a>
 
-#### Job Lifecycle and Result Persistence Requirements Traces
-
-- [REQ-WORKER-0149](../requirements/worker.md#req-worker-0149)
-
 Jobs follow a defined lifecycle so the orchestrator can record in-progress state and persist results without relying on a single long-lived connection.
 The implementation MAY keep the orchestrator's request open for the full job (e.g. chunked or streaming response with an early in-progress event and a final result), or MAY use an async pattern (e.g. 202 Accepted and node reports status and result via callback or orchestrator polling).
 
-Job states
+#### Job States
 
 - **accepted**: orchestrator has dispatched the job to the node; node has received it.
 - **in_progress**: the sandbox process (e.g. SBA) has accepted the job (read and validated the job spec) and is executing.
 - **completed**, **failed**, **timeout**: terminal states; the node has the final result (and, for SBA, the result contract).
 
-In-progress reporting (required)
+#### In-Progress Reporting (Required)
 
-- The node MUST report to the orchestrator that the job is **in progress** once the sandbox process has accepted the job (e.g. SBA has read and validated the job spec and signalled in-progress per [cynode_sba.md](cynode_sba.md#spec-cynai-sbagnt-joblifecycle)).
-  The exact mechanism is implementation-defined: e.g. the node sends an early chunk or event on the same HTTP response, or the node calls an orchestrator endpoint to update job status, or the orchestrator polls the node for status.
-  The orchestrator MUST be able to mark the job as in progress without holding the request open for the full job duration unless the implementation uses a single streaming response.
+The node MUST report to the orchestrator that the job is **in progress** once the sandbox process has accepted the job (e.g. SBA has read and validated the job spec and signalled in-progress per [cynode_sba.md](cynode_sba.md#spec-cynai-sbagnt-joblifecycle)).
+The exact mechanism is implementation-defined: e.g. the node sends an early chunk or event on the same HTTP response, or the node calls an orchestrator endpoint to update job status, or the orchestrator polls the node for status.
+The orchestrator MUST be able to mark the job as in progress without holding the request open for the full job duration unless the implementation uses a single streaming response.
 
-Completion and result reporting
+#### Completion and Result Reporting
 
 - When the job reaches a terminal state, the node MUST report completion (and the result payload) to the orchestrator.
   The result MUST be suitable for storing in the orchestrator database (e.g. `jobs.result`).
+- The node MUST report the job as **failed** or **timeout** to the orchestrator when the sandbox process errors out, crashes, does not report completion, or exceeds the job timeout-so the orchestrator can persist the failure and re-issue or retry the job as policy allows.
+  The node MUST NOT leave the job in an unreported or ambiguous state; the orchestrator depends on a terminal state (completed, failed, or timeout) to update task/job state and to decide retries or re-dispatch.
 
-Result retention (required)
+#### Timeout Extension (Required When Extensions Are Supported)
 
-- The node MUST retain the job result (e.g. in node-local SQLite or equivalent) until the result has been **successfully persisted** by the orchestrator (e.g. uploaded to the orchestrator and written to the database, or accepted by an orchestrator endpoint that performs persistence).
-  The node MUST NOT clear or delete the job result until persistence is confirmed.
-  This ensures no result loss if the connection drops after the job completes but before the orchestrator has stored the result.
-  Retained results SHOULD be subject to node-local retention and disk limits; the implementation SHOULD define cleanup for results that could not be delivered after a timeout or retry limit.
+When the SBA (or job) requests a [timeout extension](cynode_sba.md#spec-cynai-sbagnt-timeoutextension) and the node or orchestrator grants it, the **orchestrator** MUST be informed of the new effective deadline (e.g. via job-status update, callback payload, or orchestrator-owned extension grant).
+This allows the orchestrator to update its [job timeout tracking](orchestrator.md#spec-cynai-orches-rule-jobtimeouttracking) and scheduled timeout check so it does not mark the job as timed out while the job is within the extended deadline.
+The exact mechanism (field on job-status callback, MCP tool response, or orchestrator endpoint) is defined in the Worker API or MCP tool catalog.
+
+#### Result Retention (Required)
+
+The node MUST retain the job result (e.g. in node-local SQLite or equivalent) until the result has been **successfully persisted** by the orchestrator (e.g. uploaded to the orchestrator and written to the database, or accepted by an orchestrator endpoint that performs persistence).
+The node MUST NOT clear or delete the job result until persistence is confirmed.
+This ensures no result loss if the connection drops after the job completes but before the orchestrator has stored the result.
+Retained results SHOULD be subject to node-local retention and disk limits; the implementation SHOULD define cleanup for results that could not be delivered after a timeout or retry limit.
+
+#### Job Lifecycle and Result Persistence Requirements Traces
+
+- [REQ-WORKER-0149](../requirements/worker.md#req-worker-0149)
+- [REQ-WORKER-0157](../requirements/worker.md#req-worker-0157)
 
 ### Node-Mediated SBA Result (Sync)
 
@@ -316,9 +325,11 @@ Result retention (required)
   - **Long-running jobs:** Holding the connection open for long-running jobs (e.g. 1-3 hours) is not recommended.
     For long-running work, implementations SHOULD use an **async** pattern where the SBA reports status and completion via outbound call (e.g. job callback or status API) so the node does not block the Run Job request for the full duration.
     The node may respond with 202 Accepted and deliver the result when the SBA reports completion.
+    If the SBA never reports completion (e.g. crash, hang), the node MUST still report the job as failed or timeout to the orchestrator once the job timeout is reached or the container has exited, so the orchestrator can persist the failure and re-issue or retry as policy allows.
     See [cynode_sba.md - Job lifecycle and status reporting](cynode_sba.md#spec-cynai-sbagnt-joblifecycle).
   - **Read job results after exit:** After the container has exited (or been stopped), the node MUST read `/job/result.json` from the host bind-mount (and optionally `/job/artifacts/`) and MUST derive job status from the container exit code and/or from the SBA result contract when present.
-  - **Build and return response:** The node MUST build the response body including `sba_result` and `artifacts` as defined in the Run Job response fields and return them in the same HTTP response to the orchestrator.
+    When the container exits without a valid result (e.g. crash, OOM kill, non-zero exit with missing or invalid `/job/result.json`), the node MUST still report a terminal state (e.g. `status=failed`) to the orchestrator with a result payload that allows the orchestrator to persist the failure (and re-issue or retry the job if policy allows).
+  - **Build and return response:** The node MUST build the response body including `sba_result` (when present) and `artifacts` as defined in the Run Job response fields and return them in the same HTTP response to the orchestrator.
   - **Retention:** The node MUST NOT clear or delete the job directory until the response has been sent.
   The node SHOULD retain the job directory until orchestrator persistence is confirmed when the protocol supports it.
   This aligns with [cynode_sba.md - Result and Artifact Delivery](cynode_sba.md#spec-cynai-sbagnt-resultandartifactdelivery) (node-mediated delivery path).

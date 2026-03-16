@@ -5,7 +5,8 @@ Feature: Orchestrator Task Lifecycle
   I want to create tasks and retrieve their status and results
   So that I can use the orchestrator to schedule and observe work execution
 
-Background:
+## Background
+
   Given a running PostgreSQL database
   And the orchestrator API is running
   And an admin user exists with handle "admin"
@@ -14,7 +15,9 @@ Background:
   And the node "test-node-01" has worker_api_target_url and bearer token in config
 
 @req_orches_0121
+@req_orches_0122
 @spec_cynai_orches_doc_orchestrator
+@spec_cynai_orches_rule_taskcreatehandoff
 Scenario: Create task as authenticated user
   When I create a task with prompt "echo hello world"
   Then I receive a task ID
@@ -38,6 +41,7 @@ Scenario: Retrieve task result
 @req_orches_0122
 @spec_cynai_worker_workerauth
 @spec_cynai_orches_doc_orchestrator
+@spec_cynai_orches_rule_taskcreatehandoff
 Scenario: Dispatcher uses per-node worker URL and token
   When I create a task with command "echo hello" and the orchestrator selects the node for dispatch
   Then the orchestrator calls the node Worker API at its configured target URL
@@ -47,7 +51,8 @@ Scenario: Dispatcher uses per-node worker URL and token
 @req_orches_0127
 @spec_cynai_client_clitaskcreateprompt
 Scenario: Task with natural-language prompt (default) completes with model output
-  When I create a task with prompt "What is 2+2?" and the task completes and I get the task result
+  When I create a task with prompt "What is 2+2?"
+    and the task completes and I get the task result
   Then the task result contains model output
 
 @req_orches_0125

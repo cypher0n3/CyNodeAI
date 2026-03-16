@@ -6,6 +6,7 @@
 - [Health Checks](#health-checks)
   - [`Orchestrator.HealthEndpoints` Rule](#orchestratorhealthendpoints-rule)
 - [Task Scheduler](#task-scheduler)
+  - [`Orchestrator.JobTimeoutTracking` Rule](#orchestratorjobtimeouttracking-rule)
   - [Scheduled Run Routing to Project Manager Agent](#scheduled-run-routing-to-project-manager-agent)
 - [Project Manager Agent](#project-manager-agent)
 - [OpenAI-Compatible Interactive Chat Routing](#openai-compatible-interactive-chat-routing)
@@ -26,6 +27,7 @@
 - [External Model Routing](#external-model-routing)
 - [Model Management](#model-management)
 - [User API Gateway](#user-api-gateway)
+  - [Task Create Handoff](#task-create-handoff)
 - [Sandbox Image Registry](#sandbox-image-registry)
 - [Node Bootstrap and Configuration](#node-bootstrap-and-configuration)
   - [Job Dispatch](#job-dispatch)
@@ -101,6 +103,33 @@ Responsibilities
 The scheduler MAY be implemented as a background process, a worker that consumes the queue, or integrated into the workflow engine; it MUST use the same node selection and job-dispatch contracts as the rest of the orchestrator.
 Agents (e.g. Project Manager) and the cron facility enqueue work; the scheduler is responsible for dequeueing and dispatching to nodes.
 The scheduler MUST be available via the User API Gateway so users can create and manage scheduled jobs, query queue and schedule state, and trigger wakeups or automation.
+
+### `Orchestrator.JobTimeoutTracking` Rule
+
+- Spec ID: `CYNAI.ORCHES.Rule.JobTimeoutTracking` <a id="spec-cynai-orches-rule-jobtimeouttracking"></a>
+
+Traces To: [REQ-ORCHES-0173](../requirements/orches.md#req-orches-0173), [REQ-ORCHES-0174](../requirements/orches.md#req-orches-0174)
+
+The orchestrator implements job timeout tracking so that jobs are not left in an ambiguous state when a node does not report back (e.g. node crash, network partition).
+
+#### `Orchestrator.JobTimeoutTracking` Scope
+
+- Applies to every job dispatched by the orchestrator to a worker node.
+- Effective deadline is derived at dispatch time from `sandbox.timeout_seconds` and is updated when a [timeout extension](cynode_sba.md#spec-cynai-sbagnt-timeoutextension) is granted and the orchestrator is informed of the new deadline.
+
+#### `Orchestrator.JobTimeoutTracking` Preconditions
+
+- Job is in progress (dispatched, no completion or failure reported).
+- Effective deadline has been set (at dispatch or via extension).
+
+#### `Orchestrator.JobTimeoutTracking` Outcomes
+
+- The orchestrator runs a scheduled task (e.g. periodic cron or timer) that finds jobs in progress whose effective deadline has been exceeded without a reported completion or granted extension.
+- Those jobs are marked as **failed** (timeout) so the orchestrator can re-issue or retry as policy allows.
+
+#### `Orchestrator.JobTimeoutTracking` Observability
+
+- Timeout-failed jobs are distinguishable in task/job state (e.g. failure reason or status code) for auditing and retry policy.
 
 ### Scheduled Run Routing to Project Manager Agent
 
@@ -508,6 +537,20 @@ OpenAI-compliant chat completions are processed by the orchestrator first: the o
 See [`docs/tech_specs/openai_compatible_chat_api.md`](openai_compatible_chat_api.md#spec-cynai-usrgwy-openaichatapi-routingpath).
 
 See [`docs/tech_specs/user_api_gateway.md`](user_api_gateway.md) and [`docs/tech_specs/data_rest_api.md`](data_rest_api.md).
+
+### Task Create Handoff
+
+- Spec ID: `CYNAI.ORCHES.Rule.TaskCreateHandoff` <a id="spec-cynai-orches-rule-taskcreatehandoff"></a>
+
+For prompt-mode task create, the orchestrator MUST (1) create the task record; (2) send the task to PMA with instructions to execute; (3) wait only for PMA to acknowledge that the task has been **started** (handed off to SBA); (4) return `201 Created` with the task response (including `task_id`) immediately.
+
+The create HTTP handler MUST NOT block on task completion, inference, or sandbox job completion.
+Completion is reported asynchronously (e.g. via MCP or worker callback).
+See [Request Source and Orchestrator Handoff](cynode_pma.md#spec-cynai-pmagnt-requestsource) and [Task Execution Handoff](cynode_pma.md#spec-cynai-pmagnt-taskexecutionhandoff).
+
+#### Task Create Handoff Traces To
+
+- [REQ-ORCHES-0122](../requirements/orches.md#req-orches-0122)
 
 ## Sandbox Image Registry
 

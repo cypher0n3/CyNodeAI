@@ -5,7 +5,8 @@ Feature: Node Registration and Configuration
   I want worker nodes to register with the orchestrator and receive configuration
   So that the orchestrator can dispatch work to nodes using the correct URL and credentials
 
-Background:
+## Background
+
   Given a running PostgreSQL database
   And the orchestrator API is running
 
@@ -75,3 +76,13 @@ Scenario: GET config returns inference_backend when node is inference-capable an
   When the node requests its configuration
   Then the orchestrator returns a configuration payload for "inference-node-01"
   And the payload includes inference_backend with enabled true
+
+@req_orches_0149
+@spec_cynai_orches_inferencecontainerdecision
+@spec_cynai_worker_payload_configurationv1
+Scenario: GET config returns inference_backend with variant consistent with node GPU capability
+  Given a node with slug "gpu-node-01" and valid PSK
+  And the node registers with capability inference supported and GPU NVIDIA reported
+  When the node requests its configuration
+  Then the orchestrator returns a configuration payload for "gpu-node-01"
+  And the payload includes inference_backend with enabled true and variant "cuda"
