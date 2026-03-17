@@ -70,6 +70,7 @@ class TestProxyPayloadEncoding(unittest.TestCase):
     """Unit tests: proxy request/response encoding and decoding."""
 
     tags = ["suite_proxy_pma", "suite_worker_node", "full_demo", "pma", "no_inference"]
+    prereqs = []
 
     def test_build_proxy_request_shape(self):
         """Proxy request has version, method, path, headers, body_b64."""
@@ -107,6 +108,7 @@ class TestProxyPmaFunctional(unittest.TestCase):
     """
 
     tags = ["suite_proxy_pma", "suite_worker_node", "pma", "no_inference"]
+    prereqs = []
 
     _pma_proc = None
     _worker_proc = None
@@ -310,6 +312,7 @@ class TestProxyPmaWithInference(unittest.TestCase):
     """
 
     tags = ["suite_proxy_pma", "suite_worker_node", "inference", "pma_inference", "pma"]
+    prereqs = []
 
     _mock_server = None
     _mock_thread = None
@@ -541,6 +544,7 @@ class TestProxyPmaWithRealOllama(unittest.TestCase):
     """
 
     tags = ["suite_proxy_pma", "suite_worker_node", "inference", "pma_inference", "pma"]
+    prereqs = []
 
     _runtime = None
     _ollama_container = None
@@ -751,6 +755,7 @@ class TestManagedAgentInternalProxyUDS(unittest.TestCase):
     """Acceptance tests for agent->orchestrator internal proxy over per-service UDS."""
 
     tags = ["suite_proxy_pma", "suite_worker_node", "pma", "no_inference"]
+    prereqs = []
 
     def test_internal_proxy_requires_identity_binding_over_tcp(self):
         """Internal proxy endpoint rejects loopback TCP calls without service-bound identity."""

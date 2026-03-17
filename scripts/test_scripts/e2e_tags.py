@@ -1,14 +1,17 @@
 """E2E test tags (aligned with features/README.md suite tags).
 
-Test classes may set a class attribute: tags = ["suite_orchestrator", ...].
-Multiple tags are allowed; run_e2e.py --tags X runs any test that has at least one matching tag.
-When include_tags is used, prereq modules (config, login, task create) are run first so
-dependencies and setup steps are satisfied in the correct sequence.
+Test classes may set:
+- tags = ["suite_orchestrator", ...] for filtering (run_e2e.py --tags X).
+- prereqs = ["gateway", "config", "auth"] for setup; only whitelisted names are run.
+Prereqs are defined in the test class; the runner runs only those setup steps
+(no global prereq list).
 
 Targeted tags for subsets:
-- full_demo: run during `just setup-dev full-demo` (excludes tests that use a subset of the stack).
+- full_demo: run during `just setup-dev full-demo`
+  (excludes tests that use a subset of the stack).
 - inference: any test that exercises the inference path (Ollama/LLM).
-- no_inference: test does not require a running LLM/Ollama; use for fast or CI runs without inference.
+- no_inference: test does not require a running LLM/Ollama; use for fast or CI runs
+  without inference.
 - pma_inference: inference via PMA (gateway chat, worker PMA proxy with inference).
 - sba_inference: SBA tasks that use inference.
 - auth, task, chat, worker: smaller subsets for focused runs.
@@ -54,13 +57,40 @@ TAG_SBA = "sba"
 TAG_GATEWAY = "gateway"
 TAG_UDS_ROUTING = "uds_routing"
 
-# Modules that provide shared state for other E2E tests. When filtering by include_tags,
-# these are always included (in discovery order) so dependencies run before tag-matched tests.
-PREREQ_MODULES = (
-    "scripts.test_scripts.e2e_0010_cli_version_and_status",  # config dir
-    "scripts.test_scripts.e2e_0030_auth_login",              # auth token
-    "scripts.test_scripts.e2e_0420_task_create",             # TASK_ID for workflow/task list/etc
-)
+# Prereq names (whitelist). Tests declare prereqs = ["gateway", "config", ...];
+# runner runs only these.
+PREREQ_GATEWAY = "gateway"
+PREREQ_CONFIG = "config"
+PREREQ_AUTH = "auth"
+PREREQ_TASK_ID = "task_id"
+PREREQ_OLLAMA = "ollama"
+
+PREREQ_WHITELIST = frozenset[str]({
+    PREREQ_GATEWAY,
+    PREREQ_CONFIG,
+    PREREQ_AUTH,
+    PREREQ_TASK_ID,
+    PREREQ_OLLAMA,
+})
+
+# Order in which runner runs prereq setup (config before auth before task_id, etc.).
+PREREQ_ORDER = (PREREQ_GATEWAY, PREREQ_CONFIG, PREREQ_AUTH, PREREQ_TASK_ID, PREREQ_OLLAMA)
+
+# Prereqs that must be re-run before every test that needs them (e.g. login token state).
+PREREQ_ALWAYS_RERUN = frozenset({PREREQ_AUTH})
+
+
+def get_prereqs_for_test(test):
+    """Return the set of whitelisted prereq names for this test (from its class.prereqs)."""
+    if not hasattr(test, "__class__"):
+        return set()
+    cls = test.__class__
+    if not hasattr(cls, "prereqs"):
+        return set()
+    p = cls.prereqs
+    if isinstance(p, (list, tuple)):
+        return PREREQ_WHITELIST & set(str(x).strip() for x in p if x)
+    return set()
 
 
 def get_tags_for_test(test):
@@ -87,10 +117,8 @@ def filter_suite_by_tags(suite, include_tags=None, exclude_tags=None):
     """Return a new suite containing only tests that pass include/exclude tag filters.
 
     - include_tags: if non-empty, test must have at least one of these tags (class.tags).
-      Tests from PREREQ_MODULES are always included when include_tags is set, so setup
-      and dependencies run in the correct sequence before tag-matched tests.
     - exclude_tags: if non-empty, test must have none of these tags.
-    - Multiple tags on a test: if any of the test's tags are in include_tags, the test runs.
+    - No prereq injection; runner provides config/auth/TASK_ID via helpers.
     """
     if not include_tags and not exclude_tags:
         return suite
@@ -100,11 +128,6 @@ def filter_suite_by_tags(suite, include_tags=None, exclude_tags=None):
     def should_include(test):
         if not isinstance(test, unittest.TestCase):
             return False
-        # When filtering by include_tags, always include prereq modules first (order preserved).
-        if include_set and _test_module(test) in PREREQ_MODULES:
-            if exclude_set and (get_tags_for_test(test) & exclude_set):
-                return False
-            return True
         tags = get_tags_for_test(test)
         if include_set and not tags & include_set:
             return False

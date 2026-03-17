@@ -13,6 +13,7 @@ class TestWorkerApiManagedService(unittest.TestCase):
     """E2E: Worker API as managed service; healthz and node:info when worker-api is up."""
 
     tags = ["suite_worker_node", "full_demo", "worker", "no_inference"]
+    prereqs = []
 
     def test_worker_api_healthz_when_running(self):
         """Worker API (binary or container) healthz returns 200."""

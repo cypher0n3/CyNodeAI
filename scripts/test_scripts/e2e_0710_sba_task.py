@@ -12,6 +12,7 @@ class TestSbaTask(unittest.TestCase):
     """E2E: task create --use-sba --use-inference; poll result; assert job result has sba_result."""
 
     tags = ["suite_agents", "full_demo", "inference", "sba_inference", "sba"]
+    prereqs = ["gateway", "config", "auth", "ollama"]
 
     def setUp(self):
         if not state.CONFIG_PATH or not os.path.isfile(state.CONFIG_PATH):

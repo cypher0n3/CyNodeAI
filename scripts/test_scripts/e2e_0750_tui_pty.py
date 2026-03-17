@@ -27,6 +27,7 @@ class TestTuiPty(unittest.TestCase):
     """E2E: fullscreen TUI driven via PTY; assert on landmarks and thread commands."""
 
     tags = ["suite_cynork", "full_demo", "tui_pty", "tui", "no_inference"]
+    prereqs = ["gateway", "config", "auth"]
 
     def setUp(self):
         state.init_config()

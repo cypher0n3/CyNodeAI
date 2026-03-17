@@ -11,6 +11,7 @@ class TestNodeManagerTelemetry(unittest.TestCase):
     """E2E: Telemetry logs for source_name=node_manager (node-manager lifecycle)."""
 
     tags = ["suite_worker_node", "full_demo", "worker", "no_inference"]
+    prereqs = []
 
     def test_logs_node_manager_source_returns_200(self):
         """GET logs?source_kind=service&source_name=node_manager returns 200 and events list."""

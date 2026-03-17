@@ -12,6 +12,7 @@ class TestTaskListStatusFilter(unittest.TestCase):
     """E2E: task list status filter; assert canonical response shape and filtering."""
 
     tags = ["suite_cynork", "full_demo", "task", "no_inference"]
+    prereqs = ["gateway", "config", "auth", "task_id"]
 
     def test_task_list_status_completed(self):
         """Completed filter returns canonical JSON shape and only completed tasks."""

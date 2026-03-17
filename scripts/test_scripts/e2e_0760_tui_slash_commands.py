@@ -35,6 +35,7 @@ class TestTuiSlashCommands(unittest.TestCase):
     and shell-escape (!) via PTY harness."""
 
     tags = ["suite_cynork", "full_demo", "tui_pty", "tui", "no_inference"]
+    prereqs = ["gateway", "config"]
 
     def setUp(self):
         state.init_config()
@@ -517,6 +518,7 @@ class TestChatModeFlags(unittest.TestCase):
     Asserts: CYNAI.CLIENT.CliChat.ModelFlag, CYNAI.CLIENT.CliChat.ResumeThreadFlag."""
 
     tags = ["suite_cynork", "full_demo", "chat", "tui"]
+    prereqs = ["gateway", "config", "auth"]
 
     def setUp(self):
         state.init_config()

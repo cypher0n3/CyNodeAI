@@ -13,6 +13,7 @@ class TestSkillsGateway(unittest.TestCase):
     """E2E: cynork skills list, load, get, delete against user-gateway."""
 
     tags = ["suite_orchestrator", "full_demo", "no_inference"]
+    prereqs = ["gateway", "config", "auth"]
 
     def test_skills_list_load_get_delete(self):
         """Assert skills list returns JSON; load a skill; get by id; delete."""

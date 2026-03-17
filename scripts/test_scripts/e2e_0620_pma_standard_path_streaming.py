@@ -25,6 +25,7 @@ class TestPMAStandardPathStreaming(unittest.TestCase):
     """E2E: PMA standard path via gateway SSE (iteration_start, thinking, tool_progress)."""
 
     tags = ["suite_orchestrator", "pma_inference", "inference", "streaming"]
+    prereqs = ["gateway", "config", "auth", "ollama"]
 
     def setUp(self):
         if not state.CONFIG_PATH or not os.path.isfile(state.CONFIG_PATH):

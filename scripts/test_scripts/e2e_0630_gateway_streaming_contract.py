@@ -29,6 +29,7 @@ class TestGatewayStreamingContract(unittest.TestCase):
     """
 
     tags = ["suite_orchestrator", "chat", "gateway", "streaming"]
+    prereqs = ["gateway", "config", "auth", "ollama"]
 
     def setUp(self):
         if not state.CONFIG_PATH or not os.path.isfile(state.CONFIG_PATH):

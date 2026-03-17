@@ -39,6 +39,7 @@ class TestChatSequentialMessages(unittest.TestCase):
     """E2E: Send two turns (user, then user again with context); assert both replies."""
 
     tags = ["suite_orchestrator", "full_demo", "inference", "chat"]
+    prereqs = ["gateway", "config", "auth", "ollama"]
 
     def test_chat_sequential_two_turns(self):
         """Two turns: first 'Say one word: first', then 'What word?'; assert both replies."""

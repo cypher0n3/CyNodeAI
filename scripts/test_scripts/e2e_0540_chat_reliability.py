@@ -39,6 +39,7 @@ class TestChatReliability(unittest.TestCase):
     """E2E: One-shot chat returns in time or yields clear timeout/error; retries with backoff."""
 
     tags = ["suite_orchestrator", "full_demo", "inference", "chat"]
+    prereqs = ["gateway", "config", "auth", "ollama"]
 
     def test_chat_completes_or_clear_error(self):
         """Run one-shot chat with extended timeout and retries; assert reply or structured error."""

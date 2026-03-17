@@ -11,6 +11,7 @@ class TestWhoami(unittest.TestCase):
     """E2E: auth whoami after login; expects user=admin."""
 
     tags = ["suite_cynork", "full_demo", "auth", "no_inference"]
+    prereqs = ["gateway", "config", "auth"]
 
     def test_whoami(self):
         """Assert whoami succeeds and output contains handle=admin."""

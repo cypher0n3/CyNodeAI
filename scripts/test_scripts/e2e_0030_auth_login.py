@@ -11,6 +11,7 @@ class TestLogin(unittest.TestCase):
     """E2E acceptance: canonical auth login writes token for dependent E2E modules."""
 
     tags = ["suite_cynork", "full_demo", "auth", "no_inference"]
+    prereqs = ["gateway", "config"]
 
     def setUp(self):
         """Create shared config dir for login output."""

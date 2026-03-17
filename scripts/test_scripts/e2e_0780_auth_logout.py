@@ -12,6 +12,7 @@ class TestLogout(unittest.TestCase):
     """E2E: auth logout clears local auth state and blocks later authenticated use."""
 
     tags = ["suite_cynork", "full_demo", "auth", "no_inference"]
+    prereqs = ["gateway", "config", "auth"]
 
     def test_logout(self):
         """Assert auth logout succeeds, clears stored tokens, and breaks whoami."""

@@ -71,6 +71,7 @@ class TestSSEStreaming(unittest.TestCase):
     """E2E: SSE streaming via /v1/chat/completions and /v1/responses with stream=true."""
 
     tags = ["suite_orchestrator", "full_demo", "inference", "pma_inference", "streaming"]
+    prereqs = ["gateway", "config", "auth", "ollama"]
 
     def setUp(self):
         if not state.CONFIG_PATH or not os.path.isfile(state.CONFIG_PATH):

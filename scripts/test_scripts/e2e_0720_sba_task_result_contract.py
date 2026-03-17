@@ -12,6 +12,7 @@ class TestSbaResultContract(unittest.TestCase):
     """E2E: SBA task result must include protocol_version, job_id, status, steps, artifacts."""
 
     tags = ["suite_agents", "full_demo", "sba_inference", "no_inference", "sba"]
+    prereqs = ["gateway", "config", "auth"]
 
     def test_sba_result_contract_shape(self):
         """Assert sba_result in job result contains all required contract keys."""

@@ -31,6 +31,7 @@ class TestGPUVariantOllama(unittest.TestCase):
     """E2E: Ollama container image tag matches expected variant for host GPU."""
 
     tags = ["suite_worker_node", "gpu_variant", "inference"]
+    prereqs = []
 
     def test_ollama_image_tag_matches_expected_gpu_variant(self):
         """Assert Ollama container image tag matches variant from independent GPU detection."""

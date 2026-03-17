@@ -14,6 +14,7 @@ class TestSbaInference(unittest.TestCase):
     """E2E: SBA task with inference prompt; skip if E2E_SKIP_INFERENCE_SMOKE; assert sba_result."""
 
     tags = ["suite_agents", "full_demo", "inference", "sba_inference", "sba"]
+    prereqs = ["gateway", "config", "auth", "ollama"]
 
     def setUp(self):
         if not state.CONFIG_PATH or not os.path.isfile(state.CONFIG_PATH):

@@ -11,6 +11,7 @@ class TestTaskGet(unittest.TestCase):
     """E2E: task get by ID; assert JSON response includes the created task."""
 
     tags = ["suite_cynork", "full_demo", "task", "no_inference"]
+    prereqs = ["gateway", "config", "auth", "task_id"]
 
     def _assert_clear_name_resolution_error(self, out, err):
         """If name lookup is not implemented yet, require a clear failure signal."""

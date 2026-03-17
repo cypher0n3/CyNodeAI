@@ -5,8 +5,8 @@
 - **Stack restart:** `just setup-dev restart --force` now succeeds.
   Readiness check was changed from control-plane `/readyz` (port 12082) to **user-gateway `/readyz`** (port 12080), with a 90s timeout.
   E2E targets the user-gateway, so this is the correct gate.
-- **Ollama prereq:** When `just e2e` runs without Ollama in the stack, the run aborted at "Ollama inference smoke failed".
-  **Change:** `_run_prereq_checks(skip_ollama=True)` now skips the Ollama smoke when `just e2e --skip-ollama` is used, so the full suite can run and tests that need inference skip themselves (e.g. "inference smoke skipped").
+- **Ollama prereq:** When `just e2e` runs without Ollama in the stack, the run could abort at "Ollama inference smoke failed".
+  **Change:** With per-test prereqs (`_run_single_prereq`), passing `just e2e --skip-ollama` skips the Ollama smoke for the **ollama** prereq step, so the full suite can run and tests that need that prereq are skipped with "Prereq(s) failed: ollama" when the step is not run or fails.
 - **Full e2e:** Run with `just e2e --no-build --skip-ollama` to execute all tests without requiring Ollama.
 
 ## Fixes Applied
@@ -20,7 +20,7 @@ The following code changes were made.
 
 ### Run E2E Script (`run_e2e.py`)
 
-- `_run_prereq_checks(skip_ollama=False)`; when `--skip-ollama` is set, Ollama inference smoke is skipped so the suite can proceed.
+- Prereqs run per-test via `_PrereqFilterSuite` and `_run_single_prereq`; when `--skip-ollama` is set, the ollama prereq step skips the inference smoke so the suite can proceed.
 
 ### Task Create Tests (`e2e_0420_task_create.py`)
 

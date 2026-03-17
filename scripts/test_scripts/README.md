@@ -9,6 +9,7 @@
   - [Numbering Convention](#numbering-convention)
   - [Test Modules (Run Order)](#test-modules-run-order)
 - [Execution Order and State](#execution-order-and-state)
+  - [Prereq setup](#prereq-setup)
 - [Environment](#environment)
 - [Adding Tests](#adding-tests)
 - [Troubleshooting](#troubleshooting)
@@ -86,7 +87,7 @@ just e2e --tags suite_proxy_pma
 
 ## Test Layout
 
-- **run_e2e.py** - Entrypoint; discovers `e2e_*.py`, waits for gateway and Ollama smoke, then runs unittest.
+- **run_e2e.py** - Entrypoint; discovers `e2e_*.py`, runs prereqs per-test (see [Prereq setup](#prereq-setup)), then runs unittest.
 - **config.py** - Ports, URLs, `CYNORK_BIN`, env flags (no non-stdlib deps).
 - **helpers.py** - `run_cynork()`, `run_curl()`, `wait_for_gateway()`, `run_ollama_inference_smoke()`, JSON/state helpers.
 - **e2e_state.py** - Shared state: `CONFIG_DIR`, `CONFIG_PATH`, `TASK_ID`, `NODE_JWT`, etc.; set by tests, cleaned by logout.
@@ -151,6 +152,16 @@ Gaps (e.g. 0011-0019 between 0010 and 0020) allow inserting new tests without re
 Discovery order is alphabetical by module name.
 Several tests depend on shared state: login (0030) creates the config and token; task create (0420) sets `state.TASK_ID`; later tests use `state.CONFIG_PATH` and task/JWT IDs set by earlier tests.
 Running a single test in isolation (e.g. `-k test_task_create`) will fail if it expects `state.TASK_ID` or `state.CONFIG_PATH` from a prior test; run the full suite or a contiguous subset.
+
+### Prereq Setup
+
+Each test class declares `prereqs = ["gateway", "config", "auth", ...]` (see `e2e_tags.py`: `PREREQ_ORDER`, `PREREQ_ALWAYS_RERUN`).
+The runner executes prereqs **per test** in order:
+
+- **Succeeded prereqs** are not re-run for later tests, except those in `PREREQ_ALWAYS_RERUN` (e.g. **auth**), which run before every test that needs them to keep login token state correct.
+- If a prereq step fails, it is recorded; any subsequent test that requires that prereq is **skipped** with a message like "Prereq(s) failed: gateway".
+
+So gateway, config, task_id, ollama run once when first needed; auth runs before each test that declares it.
 
 ## Environment
 

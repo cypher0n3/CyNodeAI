@@ -14,6 +14,7 @@ class TestInferenceTask(unittest.TestCase):
     """E2E: task create with inference; poll result for UDS proxy URL in stdout."""
 
     tags = ["suite_worker_node", "full_demo", "inference", "task"]
+    prereqs = ["gateway", "config", "auth", "task_id", "ollama"]
 
     def test_inference_task(self):
         """Create inference task; assert sandbox receives UDS inference proxy URL."""

@@ -49,6 +49,7 @@ class TestChatSimultaneousMessages(unittest.TestCase):
     """E2E: Run several one-shot chat requests in parallel; assert all complete or fail clearly."""
 
     tags = ["suite_orchestrator", "full_demo", "inference", "chat"]
+    prereqs = ["gateway", "config", "auth", "ollama"]
 
     def test_chat_simultaneous_three_requests(self):
         """Start three chat requests concurrently; each gets a reply or a clear error."""

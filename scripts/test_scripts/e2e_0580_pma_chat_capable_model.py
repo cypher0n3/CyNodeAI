@@ -30,6 +30,7 @@ class TestPMAChatCapableModel(unittest.TestCase):
     """
 
     tags = ["suite_orchestrator", "pma_inference", "chat", "chat_capable"]
+    prereqs = ["gateway", "config", "auth", "ollama"]
 
     def setUp(self):
         if not state.CONFIG_PATH or not os.path.isfile(state.CONFIG_PATH):

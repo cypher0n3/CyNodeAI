@@ -17,6 +17,7 @@ class TestPmaChatContext(unittest.TestCase):
         "suite_e2e", "suite_orchestrator", "full_demo", "inference",
         "pma_inference", "chat", "pma",
     ]
+    prereqs = ["gateway", "config", "auth", "task_id", "ollama"]
 
     def setUp(self):
         if not state.CONFIG_PATH or not os.path.isfile(state.CONFIG_PATH):

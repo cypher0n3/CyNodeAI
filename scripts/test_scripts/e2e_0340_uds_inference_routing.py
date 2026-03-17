@@ -86,6 +86,7 @@ class TestInferenceProxyUDSListen(unittest.TestCase):
     """
 
     tags = ["suite_worker_node", "uds_routing", "no_inference"]
+    prereqs = []
 
     def setUp(self):
         if not os.path.isfile(config.INFERENCE_PROXY_BIN):
@@ -162,6 +163,7 @@ class TestManagedServiceRunArgsUDS(unittest.TestCase):
     """
 
     tags = ["suite_worker_node", "uds_routing", "no_inference"]
+    prereqs = []
 
     def setUp(self):
         if not os.path.isfile(config.WORKER_API_BIN):
@@ -235,6 +237,7 @@ class TestSBAPodRunArgsUDS(unittest.TestCase):
     """
 
     tags = ["suite_worker_node", "uds_routing", "no_inference"]
+    prereqs = []
 
     def setUp(self):
         if not os.path.isfile(config.WORKER_API_BIN):
@@ -309,6 +312,7 @@ class TestSBADirectRunArgsUDS(unittest.TestCase):
     """
 
     tags = ["suite_worker_node", "uds_routing", "no_inference"]
+    prereqs = []
 
     def setUp(self):
         if not os.path.isfile(config.NODE_MANAGER_BIN):

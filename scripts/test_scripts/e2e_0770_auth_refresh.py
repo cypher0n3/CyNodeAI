@@ -12,6 +12,7 @@ class TestRefresh(unittest.TestCase):
     """E2E: auth refresh then whoami; expect user=admin."""
 
     tags = ["suite_cynork", "full_demo", "auth", "no_inference"]
+    prereqs = ["gateway", "config", "auth"]
 
     def test_refresh(self):
         """Assert refresh rotates tokens, invalidates stale refresh token, and preserves session."""

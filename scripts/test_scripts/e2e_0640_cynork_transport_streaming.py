@@ -29,6 +29,7 @@ class TestCynorkTransportStreaming(unittest.TestCase):
     """
 
     tags = ["suite_orchestrator", "chat", "no_inference", "streaming"]
+    prereqs = ["gateway", "config", "auth"]
 
     def setUp(self):
         if not state.CONFIG_PATH or not os.path.isfile(state.CONFIG_PATH):

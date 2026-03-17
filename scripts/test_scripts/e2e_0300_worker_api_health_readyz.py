@@ -10,6 +10,7 @@ class TestWorkerApiHealthReadyz(unittest.TestCase):
     """E2E: GET worker API /healthz and /readyz; assert expected status."""
 
     tags = ["suite_worker_node", "full_demo", "worker", "no_inference"]
+    prereqs = []
 
     def test_worker_healthz_returns_200(self):
         """Worker API healthz returns 200 when process is up."""

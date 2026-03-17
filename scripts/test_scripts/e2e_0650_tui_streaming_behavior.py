@@ -29,6 +29,7 @@ class TestTUIStreamingBehavior(unittest.TestCase):
     """
 
     tags = ["suite_cynork", "tui_pty", "tui", "pma_inference", "streaming"]
+    prereqs = ["gateway", "config", "auth", "ollama"]
 
     def setUp(self):
         if not state.CONFIG_PATH or not os.path.isfile(state.CONFIG_PATH):

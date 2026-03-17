@@ -3,6 +3,9 @@
 
 Use from repo root: PYTHONPATH=. python scripts/test_scripts/run_e2e.py [OPTIONS]
 Services must be up (e.g. just setup-dev start, or full-demo).
+
+Use --single TEST_ID to run only that test or module (no prereqs).
+E.g. just e2e --single e2e_0020_gateway_health_readyz.
 """
 
 import argparse
@@ -24,7 +27,7 @@ def parse_args():
     p = argparse.ArgumentParser(
         description="Run E2E tests (discovers e2e_*.py in scripts/test_scripts).",
         epilog=(
-            "Pass -k PATTERN, -v, -f to filter/verbosity/failfast (unittest). "
+            "Use --single TEST_ID to run one test or module only; stack must be up. "
             "Tags: suite_* (suite_orchestrator, suite_worker_node, ...), full_demo, "
             "inference, pma_inference, sba_inference, auth, task, chat, worker, pma."
         ),
@@ -55,6 +58,17 @@ def parse_args():
         type=str,
         default="",
         help="Comma-separated tags to exclude (e.g. wip)",
+    )
+    p.add_argument(
+        "--single",
+        type=str,
+        metavar="TEST_ID",
+        default="",
+        help=(
+            "Run only this test or module; no prereq modules. E.g. e2e_0010_cli_version_and_status "
+            "or e2e_0020_gateway_health_readyz. Stack must be up. "
+            "Tests that need auth/task state may fail."
+        ),
     )
     return p.parse_known_args()
 
@@ -88,9 +102,32 @@ def ensure_cynork_dev():
     return True
 
 
+def _normalize_single_test_id(test_id):
+    """Return unittest-style test name; prefix scripts.test_scripts. if needed."""
+    id_str = (test_id or "").strip()
+    if not id_str:
+        return ""
+    if id_str.startswith("scripts."):
+        return id_str
+    return "scripts.test_scripts." + id_str
+
+
+def _suite_for_single_test(loader, single_id):
+    """Build suite: only the requested test or module. No prereqs. Raise on load error."""
+    suite = unittest.suite.TestSuite()
+    try:
+        suite.addTests(loader.loadTestsFromName(single_id))
+    except (AttributeError, ModuleNotFoundError, ValueError) as e:
+        raise SystemExit(f"Error loading test {single_id}: {e}") from e
+    return suite
+
+
 def _discover_suite(opts):
-    """Discover E2E tests and apply tag filter. Return TestSuite."""
+    """Discover E2E tests and apply tag filter (or single-test + prereqs). Return TestSuite."""
     loader = unittest.TestLoader()
+    single_id = _normalize_single_test_id(getattr(opts, "single", "") or "")
+    if single_id:
+        return _suite_for_single_test(loader, single_id)
     start_dir = os.path.join(_ROOT, "scripts", "test_scripts")
     suite = loader.discover(start_dir, pattern="e2e_*.py")
     include_tags = [t.strip() for t in (opts.tags or "").split(",") if t.strip()]
@@ -111,6 +148,60 @@ def _iter_tests(suite_or_case):
         yield suite_or_case
 
 
+def _collect_suite_prereqs(suite):
+    """Return union of whitelisted prereqs from all tests in the suite."""
+    required = set()
+    for test in _iter_tests(suite):
+        if isinstance(test, unittest.TestCase):
+            required |= e2e_tags.get_prereqs_for_test(test)
+    return required
+
+
+def _run_single_prereq(name, opts):
+    """Run one prereq step. Return True on success, False on failure."""
+    if name == e2e_tags.PREREQ_GATEWAY:
+        if not helpers.wait_for_gateway():
+            print("Error: user-gateway not ready (healthz) after 30s", file=sys.stderr)
+            return False
+        if not helpers.wait_for_gateway_readyz(timeout_sec=30):
+            print("Error: user-gateway readyz not 200 after 30s", file=sys.stderr)
+            return False
+    elif name == e2e_tags.PREREQ_CONFIG:
+        state.init_config()
+    elif name == e2e_tags.PREREQ_AUTH:
+        if not _ensure_shared_auth_config():
+            return False
+    elif name == e2e_tags.PREREQ_TASK_ID:
+        if not helpers.ensure_e2e_task(state.CONFIG_PATH):
+            print(
+                "Warning: ensure_e2e_task failed; tests requiring state.TASK_ID "
+                "may skip or fail.",
+                file=sys.stderr,
+            )
+            return False
+    elif name == e2e_tags.PREREQ_OLLAMA:
+        if opts.skip_ollama:
+            os.environ["E2E_SKIP_INFERENCE_SMOKE"] = "1"
+        else:
+            if not helpers.run_ollama_inference_smoke():
+                print("Error: Ollama inference smoke failed", file=sys.stderr)
+                return False
+            include_tags = [t.strip() for t in (opts.tags or "").split(",") if t.strip()]
+            if "pma_inference" in include_tags:
+                if not helpers.ollama_container_running():
+                    print(
+                        "Error: pma_inference needs stack started with Ollama.",
+                        file=sys.stderr,
+                    )
+                    return False
+                if not helpers.wait_for_pma_chat_ready(
+                    timeout_sec=180, poll_interval=5
+                ):
+                    print("Error: PMA chat not ready within 180s", file=sys.stderr)
+                    return False
+    return True
+
+
 def _ensure_cynork_ready(opts):
     """Build or verify cynork-dev; exit 1 on failure."""
     if not opts.no_build and not ensure_cynork_dev():
@@ -125,21 +216,11 @@ def _ensure_cynork_ready(opts):
             sys.exit(1)
 
 
-def _run_prereq_checks(skip_ollama=False):
-    """Wait for gateway and run Ollama smoke; exit 1 on failure."""
-    if not helpers.wait_for_gateway():
-        print("Error: user-gateway not ready (healthz) after 30s", file=sys.stderr)
-        sys.exit(1)
-    if not helpers.wait_for_gateway_readyz(timeout_sec=30):
-        print("Error: user-gateway readyz not 200 after 30s", file=sys.stderr)
-        sys.exit(1)
-    if not skip_ollama and not helpers.run_ollama_inference_smoke():
-        print("Error: Ollama inference smoke failed", file=sys.stderr)
-        sys.exit(1)
-
-
 def _ensure_shared_auth_config():
-    """Ensure shared E2E auth config exists with a valid token for dependent tests."""
+    """Ensure shared E2E auth config exists with a valid token for dependent tests.
+
+    Returns True on success, False on failure (caller records prereq failure).
+    """
     def _login():
         ok, out, err = helpers.run_cynork(
             ["auth", "login", "-u", "admin", "--password-stdin"],
@@ -152,30 +233,78 @@ def _ensure_shared_auth_config():
                 print(out, file=sys.stderr)
             if err:
                 print(err, file=sys.stderr)
-            sys.exit(1)
+            return False
+        return True
 
     state.init_config()
     token = helpers.read_token_from_config(state.CONFIG_PATH)
     if not token:
-        _login()
-        return
+        return _login()
     ok, out, err = helpers.run_cynork(["auth", "whoami"], state.CONFIG_PATH, timeout=30)
     if ok:
-        return
+        return True
     merged = f"{out}\n{err}".lower()
     if "invalid or expired token" in merged:
         refreshed, _, _ = helpers.run_cynork(["auth", "refresh"], state.CONFIG_PATH, timeout=30)
         if refreshed:
-            recheck_ok, _, _ = helpers.run_cynork(["auth", "whoami"], state.CONFIG_PATH, timeout=30)
+            recheck_ok, _, _ = helpers.run_cynork(
+                ["auth", "whoami"], state.CONFIG_PATH, timeout=30
+            )
             if recheck_ok:
-                return
-    _login()
+                return True
+    return _login()
 
 
 def _proxy_pma_only(opts):
     """True when only suite_proxy_pma is requested (minimal services; no gateway/cynork)."""
     include = [t.strip() for t in (opts.tags or "").split(",") if t.strip()]
     return include == ["suite_proxy_pma"]
+
+
+class _PrereqFilterSuite(unittest.TestSuite):
+    """Run prereqs per-test; skip if a required prereq previously failed.
+
+    Prereqs that already succeeded are not re-run, except those in
+    PREREQ_ALWAYS_RERUN (e.g. auth) which run before every test that needs them.
+    """
+
+    def __init__(self, suite, failed_prereqs, succeeded_prereqs, opts):
+        super().__init__()
+        self._suite = suite
+        self._failed_prereqs = failed_prereqs
+        self._succeeded_prereqs = succeeded_prereqs
+        self._opts = opts
+
+    def run(self, result, *_):
+        for case in _iter_tests(self._suite):
+            if not isinstance(case, unittest.TestCase):
+                continue
+            prereqs = e2e_tags.get_prereqs_for_test(case)
+            if prereqs & self._failed_prereqs:
+                result.startTest(case)
+                reason = "Prereq(s) failed: " + ", ".join(
+                    sorted(prereqs & self._failed_prereqs)
+                )
+                result.addSkip(case, reason)
+                result.stopTest(case)
+                continue
+            # Run only prereqs this test needs that haven't succeeded (or are always rerun).
+            skip = False
+            for name in e2e_tags.PREREQ_ORDER:
+                if name not in prereqs:
+                    continue
+                if name in self._succeeded_prereqs and name not in e2e_tags.PREREQ_ALWAYS_RERUN:
+                    continue
+                if not _run_single_prereq(name, self._opts):
+                    self._failed_prereqs.add(name)
+                    result.startTest(case)
+                    result.addSkip(case, f"Prereq(s) failed: {name}")
+                    result.stopTest(case)
+                    skip = True
+                    break
+                self._succeeded_prereqs.add(name)
+            if not skip:
+                case.run(result)
 
 
 def main():
@@ -189,47 +318,18 @@ def main():
             print(t.id())
         sys.exit(0)
 
+    failed_prereqs = set()
+    succeeded_prereqs = set()
     if _proxy_pma_only(opts):
         # Proxy + PMA tests start their own minimal services; no gateway or cynork.
         pass
     else:
         _ensure_cynork_ready(opts)
-        if opts.skip_ollama:
-            os.environ["E2E_SKIP_INFERENCE_SMOKE"] = "1"
-        else:
-            include_tags = [t.strip() for t in (opts.tags or "").split(",") if t.strip()]
-            if "pma_inference" in include_tags and not opts.skip_ollama:
-                if not helpers.ollama_container_running():
-                    print(
-                        "Error: pma_inference needs stack started with Ollama (node starts PMA).",
-                        file=sys.stderr,
-                    )
-                    print(
-                        "Start the stack with: SETUP_DEV_OLLAMA_IN_STACK=1 just setup-dev start",
-                        file=sys.stderr,
-                    )
-                    print(
-                        "Then run: just e2e --tags pma_inference",
-                        file=sys.stderr,
-                    )
-                    sys.exit(1)
-        _run_prereq_checks(skip_ollama=opts.skip_ollama)
-        _ensure_shared_auth_config()
-        include_tags = [t.strip() for t in (opts.tags or "").split(",") if t.strip()]
-        if "pma_inference" in include_tags and not opts.skip_ollama:
-            if not helpers.wait_for_pma_chat_ready(timeout_sec=180, poll_interval=5):
-                print(
-                    "Error: PMA chat not ready within 180s (node may not have reported PMA).",
-                    file=sys.stderr,
-                )
-                print(
-                    "Use: SETUP_DEV_OLLAMA_IN_STACK=1 just setup-dev start",
-                    file=sys.stderr,
-                )
-                sys.exit(1)
 
-    result = unittest.runner.TextTestRunner(verbosity=2).run(suite)
-    sys.exit(0 if result.wasSuccessful() else 1)
+    runnable = _PrereqFilterSuite(suite, failed_prereqs, succeeded_prereqs, opts)
+    result = unittest.runner.TextTestRunner(verbosity=2).run(runnable)
+    ok = result.wasSuccessful() and not failed_prereqs
+    sys.exit(0 if ok else 1)
 
 
 if __name__ == "__main__":

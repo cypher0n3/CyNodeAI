@@ -52,6 +52,7 @@ class TestSbaInferenceReply(unittest.TestCase):
     """E2E: SBA + inference prompt produces user-facing reply (not empty / sba-run only)."""
 
     tags = ["suite_agents", "full_demo", "inference", "sba_inference", "sba"]
+    prereqs = ["gateway", "config", "auth", "ollama"]
 
     def test_sba_inference_reply_current_time(self):
         """Create SBA inference task and assert user-facing reply."""

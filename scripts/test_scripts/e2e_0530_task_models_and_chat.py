@@ -13,6 +13,7 @@ class TestModelsAndChat(unittest.TestCase):
     """E2E: models list -o json; optional one-shot chat (skipped if E2E_SKIP_INFERENCE_SMOKE)."""
 
     tags = ["suite_orchestrator", "full_demo", "inference", "pma_inference", "chat"]
+    prereqs = ["gateway", "config", "auth", "ollama"]
 
     def setUp(self):
         if not state.CONFIG_PATH or not os.path.isfile(state.CONFIG_PATH):

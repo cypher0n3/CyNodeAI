@@ -11,6 +11,7 @@ class TestTaskResult(unittest.TestCase):
     """E2E: task result by ID; assert canonical task-result JSON contract."""
 
     tags = ["suite_cynork", "full_demo", "task", "no_inference"]
+    prereqs = ["gateway", "config", "auth", "task_id"]
 
     def _assert_clear_name_resolution_error(self, out, err):
         detail = f"{out}\n{err}".lower()

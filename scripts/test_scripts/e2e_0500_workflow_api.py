@@ -12,6 +12,7 @@ class TestWorkflowAPI(unittest.TestCase):
     """E2E: POST /v1/workflow/start, resume, checkpoint, release on control-plane."""
 
     tags = ["suite_orchestrator", "full_demo", "no_inference", "control_plane"]
+    prereqs = ["gateway", "config", "auth", "task_id"]
 
     def test_workflow_start_returns_run_id(self):
         """Start workflow for task; 200 with run_id, or 409 if lease already held."""

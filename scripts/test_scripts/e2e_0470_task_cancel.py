@@ -12,6 +12,7 @@ class TestTaskCancel(unittest.TestCase):
     """E2E: create long-running command task, cancel with -y; assert canceled status."""
 
     tags = ["suite_cynork", "full_demo", "task", "no_inference"]
+    prereqs = ["gateway", "config", "auth", "task_id"]
 
     def _assert_clear_name_resolution_error(self, out, err):
         detail = f"{out}\n{err}".lower()

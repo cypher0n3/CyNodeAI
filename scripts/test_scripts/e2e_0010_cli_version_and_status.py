@@ -11,6 +11,7 @@ class TestStatusVersion(unittest.TestCase):
     """E2E: cynork version and status (gateway health), no auth required."""
 
     tags = ["suite_cynork", "full_demo", "no_inference"]
+    prereqs = ["gateway", "config"]
 
     def setUp(self):
         """Create shared config dir for cynork invocations."""

@@ -12,6 +12,7 @@ import urllib.error
 import urllib.request
 
 from scripts.test_scripts import config
+import scripts.test_scripts.e2e_state as state
 
 
 def run_cynork(args, config_path, env_extra=None, timeout=120, input_text=None):
@@ -127,6 +128,39 @@ def ensure_valid_auth_session(config_path):
             ),
         )
     return False, f"whoami failed: stdout={out!r} stderr={err!r}"
+
+
+def ensure_e2e_task(config_path, max_attempts=3):
+    """Create one prompt task and set state.TASK_ID for tests that need it.
+
+    Idempotent if already set. Return True if state.TASK_ID is set, False on failure.
+    Requires valid auth (ensure_valid_auth_session first).
+    """
+    if getattr(state, "TASK_ID", None):
+        return True
+    if not config_path or not os.path.isfile(config_path):
+        return False
+    for attempt in range(1, max_attempts + 1):
+        if attempt > 1:
+            time.sleep(5)
+        _, out, _ = run_cynork(
+            [
+                "task",
+                "create",
+                "-p",
+                "E2E setup: please reply ok.",
+                "-o",
+                "json",
+            ],
+            config_path,
+            timeout=120,
+        )
+        data = parse_json_safe(out)
+        task_id = (data or {}).get("task_id") or ""
+        if task_id:
+            state.TASK_ID = task_id
+            return True
+    return False
 
 
 def read_config_value(config_path, key):
@@ -474,35 +508,37 @@ def _ollama_chat_one_request(ollama_url, payload):
         return False
 
 
+def _ollama_named_container_running(runtime):
+    """Return True if a container named OLLAMA_CONTAINER_NAME appears in ps (running)."""
+    try:
+        r = subprocess.run(
+            [runtime, "ps", "--format", "{{.Names}}"],
+            capture_output=True, text=True, timeout=10, check=False
+        )
+        return config.OLLAMA_CONTAINER_NAME in (r.stdout or "").strip().splitlines()
+    except (subprocess.TimeoutExpired, FileNotFoundError):
+        return False
+
+
 def run_ollama_inference_smoke():
-    """Run inference smoke: wait for Ollama container, pull model if needed, run one prompt.
-    Skip if E2E_SKIP_INFERENCE_SMOKE set or container not present. Return True on success.
+    """Run inference smoke: ensure Ollama at OLLAMA_BASE_URL responds to a chat request.
+    Skip if E2E_SKIP_INFERENCE_SMOKE set. Optional: if a container named OLLAMA_CONTAINER_NAME
+    is running, wait for it and pull OLLAMA_E2E_MODEL there; then try chat. Pass/fail is based
+    only on whether the chat request succeeds, not on container name or pull. Return True on
+    success.
     """
     if os.environ.get("E2E_SKIP_INFERENCE_SMOKE", "") or config.E2E_SKIP_INFERENCE_SMOKE:
         return True
-    runtime = _container_runtime()
-    if not runtime:
-        return True
-    try:
-        r = subprocess.run(
-            [runtime, "ps", "-a", "--format", "{{.Names}}"],
-            capture_output=True, text=True, timeout=10, check=False
-        )
-        names = (r.stdout or "").strip().splitlines()
-        if config.OLLAMA_CONTAINER_NAME not in names:
-            return True
-    except (subprocess.TimeoutExpired, FileNotFoundError):
-        return True
-    if not _ollama_wait_container_ready(runtime):
-        return False
-    if not _ollama_ensure_model(runtime):
-        return False
+    ollama_url = os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434")
     payload = json.dumps({
         "model": config.OLLAMA_E2E_MODEL,
         "messages": [{"role": "user", "content": "Say one word: hello"}],
         "stream": False,
     }).encode()
-    ollama_url = os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434")
+    runtime = _container_runtime()
+    if runtime and _ollama_named_container_running(runtime):
+        _ollama_wait_container_ready(runtime)
+        _ollama_ensure_model(runtime)
     for _ in range(3):
         if _ollama_chat_one_request(ollama_url, payload):
             return True

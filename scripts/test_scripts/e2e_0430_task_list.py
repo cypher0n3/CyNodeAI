@@ -11,6 +11,7 @@ class TestTaskList(unittest.TestCase):
     """E2E: task list -o json; assert created task appears in list."""
 
     tags = ["suite_cynork", "full_demo", "task", "no_inference"]
+    prereqs = ["gateway", "config", "auth", "task_id"]
 
     def test_task_list(self):
         """Assert task list returns JSON with tasks list containing state.TASK_ID."""

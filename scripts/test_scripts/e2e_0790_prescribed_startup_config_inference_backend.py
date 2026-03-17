@@ -13,6 +13,7 @@ class TestPrescribedStartupConfigInferenceBackend(unittest.TestCase):
     """E2E: register inference-capable node; GET config must include inference_backend."""
 
     tags = ["suite_orchestrator", "full_demo", "inference"]
+    prereqs = ["gateway", "config", "auth"]
 
     def test_config_includes_inference_backend_when_node_inference_capable_not_existing(self):
         """Register inference-capable node, GET nodes/config; assert inference_backend.enabled."""
