@@ -1,8 +1,8 @@
-# Failed E2E Report: e2e_127_sse_streaming.test_chat_completions_stream_relays_thinking_tool_and_iteration_events
+# Failed E2E Report: e2e_0610_sse_streaming.test_chat_completions_stream_relays_thinking_tool_and_iteration_events
 
 ## 1 Summary
 
-Test `e2e_127_sse_streaming.TestSSEStreaming.test_chat_completions_stream_relays_thinking_tool_and_iteration_events` failed because the stream had zero events named `cynodeai.iteration_start`.
+Test `e2e_0610_sse_streaming.TestSSEStreaming.test_chat_completions_stream_relays_thinking_tool_and_iteration_events` failed because the stream had zero events named `cynodeai.iteration_start`.
 The test parses the SSE stream for event names and asserts at least one event is `cynodeai.iteration_start`; it got an empty list for iteration_starts.
 
 ## 2 Why the Failure Occurred
@@ -17,7 +17,7 @@ Relevant code paths:
 
 ### 3.1 Python Test Path
 
-- [e2e_127_sse_streaming.py](../../../scripts/test_scripts/e2e_127_sse_streaming.py) lines 305-334: POST `/v1/chat/completions` stream=true, parse_sse_stream_typed, build event_names, filter for `cynodeai.iteration_start`, assert len(iteration_starts) > 0.
+- [e2e_0610_sse_streaming.py](../../../scripts/test_scripts/e2e_0610_sse_streaming.py) lines 305-334: POST `/v1/chat/completions` stream=true, parse_sse_stream_typed, build event_names, filter for `cynodeai.iteration_start`, assert len(iteration_starts) > 0.
 
 ### 3.2 Gateway and PMA Relay
 
@@ -43,7 +43,7 @@ Traceability for this test:
 
 ### 4.3 Feature Files
 
-- Streaming E2E in e2e_127.
+- Streaming E2E in e2e_0610.
 
 ## 5 Implementation Deviation
 

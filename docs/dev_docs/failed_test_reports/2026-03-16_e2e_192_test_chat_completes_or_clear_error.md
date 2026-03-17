@@ -1,8 +1,8 @@
-# Failed E2E Report: e2e_192_chat_reliability.test_chat_completes_or_clear_error
+# Failed E2E Report: e2e_0540_chat_reliability.test_chat_completes_or_clear_error
 
 ## 1 Summary
 
-Test `e2e_192_chat_reliability.TestChatReliability.test_chat_completes_or_clear_error` failed because the one-shot chat command did not return a timely reply or a clear structured error within 3 attempts (each with a 150-second timeout).
+Test `e2e_0540_chat_reliability.TestChatReliability.test_chat_completes_or_clear_error` failed because the one-shot chat command did not return a timely reply or a clear structured error within 3 attempts (each with a 150-second timeout).
 The test runs `cynork chat --message ping --plain` with timeout=150s; the last attempt's last_err showed the command timed out after 150 seconds.
 
 ## 2 Why the Failure Occurred
@@ -17,7 +17,7 @@ Relevant code paths:
 
 ### 3.1 Python Test Path
 
-- [e2e_192_chat_reliability.py](../../../scripts/test_scripts/e2e_192_chat_reliability.py) lines 42-69: Up to 3 attempts of `run_cynork(["chat", "--message", "ping", "--plain"], ..., timeout=150)`; success when _chat_reply_is_clean(out, err); otherwise fail with last_err.
+- [e2e_0540_chat_reliability.py](../../../scripts/test_scripts/e2e_0540_chat_reliability.py) lines 42-69: Up to 3 attempts of `run_cynork(["chat", "--message", "ping", "--plain"], ..., timeout=150)`; success when _chat_reply_is_clean(out, err); otherwise fail with last_err.
 
 ### 3.2 Gateway and Chat
 

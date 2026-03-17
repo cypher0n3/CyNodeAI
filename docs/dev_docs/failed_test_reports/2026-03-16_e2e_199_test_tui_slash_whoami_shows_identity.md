@@ -1,14 +1,14 @@
-# Failed E2E Report: e2e_199_tui_slash_commands.test_tui_slash_whoami_shows_identity
+# Failed E2E Report: e2e_0760_tui_slash_commands.test_tui_slash_whoami_shows_identity
 
 ## 1 Summary
 
-Test `e2e_199_tui_slash_commands.TestTuiSlashCommands.test_tui_slash_whoami_shows_identity` failed because the TUI did not show the prompt-ready landmark within the allowed timeout (12 seconds).
+Test `e2e_0760_tui_slash_commands.TestTuiSlashCommands.test_tui_slash_whoami_shows_identity` failed because the TUI did not show the prompt-ready landmark within the allowed timeout (12 seconds).
 The test would send `/whoami` and assert current user identity or gateway error (Task 4D); it failed at _wait_ready(session) before reaching the slash command step.
 
 ## 2 Why the Failure Occurred
 
 - **Observed:** `AssertionError: False is not true : TUI did not show prompt-ready landmark within timeout`
-- **Root cause:** Same as other e2e_199 TUI tests: `wait_for_prompt_ready(timeout_sec=12)` returned False; prompt-ready landmark not present in PTY output within timeout.
+- **Root cause:** Same as other e2e_0760 TUI tests: `wait_for_prompt_ready(timeout_sec=12)` returned False; prompt-ready landmark not present in PTY output within timeout.
 - **Effect:** Test failed at _wait_ready before sending `/whoami` or asserting on identity output.
 
 ## 3 Specific Code Paths Involved
@@ -17,7 +17,7 @@ Relevant code paths:
 
 ### 3.1 Python Test Path
 
-- [e2e_199_tui_slash_commands.py](../../../scripts/test_scripts/e2e_199_tui_slash_commands.py) lines 452-462 (approx): TuiPtySession, _wait_ready(session) at line 457, then /whoami and assert identity or error in scrollback.
+- [e2e_0760_tui_slash_commands.py](../../../scripts/test_scripts/e2e_0760_tui_slash_commands.py) lines 452-462 (approx): TuiPtySession, _wait_ready(session) at line 457, then /whoami and assert identity or error in scrollback.
 - [tui_pty_harness.py](../../../scripts/test_scripts/tui_pty_harness.py): wait_for_prompt_ready and landmarks.
 
 ### 3.2 TUI and Specs
@@ -49,7 +49,7 @@ Traceability for this test:
 
 - **Spec/requirement intent:** TUI MUST become prompt-ready; /whoami MUST show current user identity or gateway error in scrollback.
 - **Observed behavior:** TUI did not reach prompt-ready within timeout; test could not validate /whoami.
-- **Deviation:** Same as other e2e_199 failures: prompt-ready landmark not seen within 12s.
+- **Deviation:** Same as other e2e_0760 failures: prompt-ready landmark not seen within 12s.
 
 ## 6 What Needs to Be Fixed in the Implementation
 

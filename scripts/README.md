@@ -45,7 +45,7 @@ When you run `just setup-dev start`, `full-demo`, or `restart`, the following ru
 2. **Compose up (orchestrator stack)** - Uses `orchestrator/docker-compose.yml`.
    Base stack: postgres, control-plane, user-gateway, mcp-gateway, api-egress.
    **ollama** is the only profile (use `--ollama-in-stack` or `SETUP_DEV_OLLAMA_IN_STACK=1`).
-   **AI agents must NOT use** these flags; they bypass the node-manager path and invalidate GPU variant E2E (e2e_205).
+   **AI agents must NOT use** these flags; they bypass the node-manager path and invalidate GPU variant E2E (e2e_0800).
    PMA is started by the node-manager, not by compose.
 3. **Start node** - Script runs the node-manager binary (`worker_node/bin/cynodeai-wnm-dev`), which starts worker-api as a subprocess.
    The node-manager polls the control-plane `/readyz` before registering; the script then waits for worker-api `/healthz` (up to 30s).

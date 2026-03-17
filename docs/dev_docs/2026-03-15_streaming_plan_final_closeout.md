@@ -13,7 +13,7 @@
 
 - **Task:** Task 1: Lock the Streaming Contract
   - status: Done
-  - notes: Contract types, e2e_127 contract tests; e2e requires stack with PMA.
+  - notes: Contract types, e2e_0610 contract tests; e2e requires stack with PMA.
 - **Task:** Task 2: PMA Standard-Path Streaming
   - status: Done
   - notes: streamingLLM, iteration_start/delta/done NDJSON, handler branch.
@@ -29,7 +29,7 @@
     Canonical transcript model, overwrite/heartbeat deferred (task5_tui_streaming_deferred.md).
 - **Task:** Task 6: BDD and E2E Coverage
   - status: Done
-  - notes: e2e_201-e2e_204 files in place; test-bdd passes.
+  - notes: e2e_0620-e2e_0650 files in place; test-bdd passes.
 - **Task:** Task 7: Documentation and Closeout
   - status: Done
   - notes: This report; plan steps marked.
@@ -46,6 +46,6 @@
 
 - Raise agents/internal/pma test coverage to >=90% (e.g. streaming.Call, remaining branches).
 - Implement Task 5 TUI canonical transcript model and overwrite/heartbeat UX when prioritized.
-- Run `just e2e --tags pma_inference` and `just e2e --tags chat` with stack + PMA ready to confirm e2e_127 and e2e_201 pass.
+- Run `just e2e --tags pma_inference` and `just e2e --tags chat` with stack + PMA ready to confirm e2e_0610 and e2e_201 pass.
 - ~~Implement e2e_202-e2e_204 harnesses and remove skipTest where appropriate.~~ Done (e2e_202-e2e_204 use real stack; Task 6 Refactor: parse_sse_stream_typed in helpers).
-- ~~Fix Python E501 (line length) in e2e_201-e2e_204, e2e_127, e2e_070, e2e_080 for `just ci` to pass.~~ Done.
+- ~~Fix Python E501 (line length) in e2e_0620-e2e_0650, e2e_0610, e2e_0440, e2e_0450 for `just ci` to pass.~~ Done.

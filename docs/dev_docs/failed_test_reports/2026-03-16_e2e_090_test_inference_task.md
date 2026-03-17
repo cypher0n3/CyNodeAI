@@ -1,8 +1,8 @@
-# Failed E2E Report: e2e_090_task_inference.test_inference_task
+# Failed E2E Report: e2e_0510_task_inference.test_inference_task
 
 ## 1 Summary
 
-Test `e2e_090_task_inference.TestInferenceTask.test_inference_task` failed because the sandbox job result's `stdout` was None when the test asserted it should contain the UDS inference proxy URL (`http+unix://`).
+Test `e2e_0510_task_inference.TestInferenceTask.test_inference_task` failed because the sandbox job result's `stdout` was None when the test asserted it should contain the UDS inference proxy URL (`http+unix://`).
 The test creates a task with `--use-inference` and a command that echoes `$INFERENCE_PROXY_URL`, polls for task result, then asserts that the first job's result stdout contains `http+unix://`.
 
 ## 2 Why the Failure Occurred
@@ -19,7 +19,7 @@ Relevant code paths:
 
 ### 3.1 Python Test Path
 
-- [e2e_090_task_inference.py](../../../scripts/test_scripts/e2e_090_task_inference.py) lines 18-62: Creates task with `task create --command "sh -c 'echo $INFERENCE_PROXY_URL'" --use-inference -o json`, parses `task_id`, polls `task result` up to 18 times (5s apart), then reads `jobs[0].result` and asserts `stdout` contains `http+unix://`.
+- [e2e_0510_task_inference.py](../../../scripts/test_scripts/e2e_0510_task_inference.py) lines 18-62: Creates task with `task create --command "sh -c 'echo $INFERENCE_PROXY_URL'" --use-inference -o json`, parses `task_id`, polls `task result` up to 18 times (5s apart), then reads `jobs[0].result` and asserts `stdout` contains `http+unix://`.
 
 ### 3.2 CLI and Gateway
 
@@ -68,7 +68,7 @@ The following describes the two failure modes and required changes.
 
 ### 6.1 Root Cause (Two Possible Failure Modes)
 
-- **Create timeout (same as e2e_050):** If the test fails before obtaining a task_id or result, the same blocking path applies: [orchestrator/internal/handlers/tasks.go](../../../orchestrator/internal/handlers/tasks.go) blocks on orchestrator inference when `inputMode == InputModePrompt` and `h.inferenceURL != ""`.
+- **Create timeout (same as e2e_0420):** If the test fails before obtaining a task_id or result, the same blocking path applies: [orchestrator/internal/handlers/tasks.go](../../../orchestrator/internal/handlers/tasks.go) blocks on orchestrator inference when `inputMode == InputModePrompt` and `h.inferenceURL != ""`.
   For `--use-inference` the task may still be created as prompt mode and block.
   Fix: same as [2026-03-16_e2e_050_test_task_create.md](2026-03-16_e2e_050_test_task_create.md) (return 201 promptly or unset inference URL in E2E).
 - **Result structure / INFERENCE_PROXY_URL:** If create returns and the task completes but the test fails on stdout/INFERENCE_PROXY_URL: (1) Worker payload must pass `INFERENCE_PROXY_URL` (or equivalent) into the sandbox env (see [worker_node_payloads.md](../../tech_specs/worker_node_payloads.md)); (2) Job result returned by the worker and exposed via GET /v1/tasks/{id}/result must include stdout in the path the test expects (e.g. `result.job_result.stdout` or the structure in [worker_node.md](../../tech_specs/worker_node.md)).

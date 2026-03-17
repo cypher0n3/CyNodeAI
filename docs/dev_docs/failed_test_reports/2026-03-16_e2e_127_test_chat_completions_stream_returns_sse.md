@@ -1,8 +1,8 @@
-# Failed E2E Report: e2e_127_sse_streaming.test_chat_completions_stream_returns_sse
+# Failed E2E Report: e2e_0610_sse_streaming.test_chat_completions_stream_returns_sse
 
 ## 1 Summary
 
-Test `e2e_127_sse_streaming.TestSSEStreaming.test_chat_completions_stream_returns_sse` failed because the first SSE event data parsed as a JSON object had `object` not equal to `chat.completion.chunk`; it was an error object: `stream_error` with message "context deadline exceeded (Client.Timeout or context cancellation while reading body)".
+Test `e2e_0610_sse_streaming.TestSSEStreaming.test_chat_completions_stream_returns_sse` failed because the first SSE event data parsed as a JSON object had `object` not equal to `chat.completion.chunk`; it was an error object: `stream_error` with message "context deadline exceeded (Client.Timeout or context cancellation while reading body)".
 The test expects a 200 response, SSE stream ending with [DONE], and each event to be a `chat.completion.chunk`; the stream included an error chunk instead.
 
 ## 2 Why the Failure Occurred
@@ -17,7 +17,7 @@ Relevant code paths:
 
 ### 3.1 Python Test Path
 
-- [e2e_127_sse_streaming.py](../../../scripts/test_scripts/e2e_127_sse_streaming.py) lines 88-154: POST `/v1/chat/completions` with stream=true, parse SSE, assert chunk.object is `chat.completion.chunk` (line 136), accumulate content, assert non-empty and no think blocks.
+- [e2e_0610_sse_streaming.py](../../../scripts/test_scripts/e2e_0610_sse_streaming.py) lines 88-154: POST `/v1/chat/completions` with stream=true, parse SSE, assert chunk.object is `chat.completion.chunk` (line 136), accumulate content, assert non-empty and no think blocks.
 
 ### 3.2 Gateway and Streaming
 
@@ -45,7 +45,7 @@ Traceability for this test:
 
 ### 4.3 Feature Files
 
-- E2E and feature coverage for chat completions streaming (e2e_127, streaming tags).
+- E2E and feature coverage for chat completions streaming (e2e_0610, streaming tags).
 
 ## 5 Implementation Deviation
 

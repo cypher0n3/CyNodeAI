@@ -43,17 +43,17 @@ Final task (Task 7 closeout): run the **full** E2E suite (`just e2e`) with all t
 
 Scripts live in `scripts/test_scripts/`.
 
-- **Task 1 Streaming** - Scripts: **e2e_127_sse_streaming.py**, **e2e_198_tui_pty.py**.
+- **Task 1 Streaming** - Scripts: **e2e_0610_sse_streaming.py**, **e2e_0750_tui_pty.py**.
   Assert: e2e_127: `stream=true` on both `/v1/chat/completions` and `/v1/responses`; SSE events and `[DONE]`; no `<think>` in visible content; client disconnect or Ctrl+C causes gateway to treat request as canceled (REQ-USRGWY-0150).
   e2e_198: progressive visible-text updates in TUI; Ctrl+C cancels stream, in-flight landmark then prompt-ready; final turn reconciled in scrollback.
   Run: `just e2e --tags chat`, `--tags pma_inference`, `--tags tui_pty`.
-- **Task 2 MCP** - Scripts: **e2e_124_worker_pma_proxy.py**, **e2e_115_pma_chat_context.py**, **e2e_118_pma_chat_capable_model.py** or new.
+- **Task 2 MCP** - Scripts: **e2e_0660_worker_pma_proxy.py**, **e2e_0570_pma_chat_context.py**, **e2e_0580_pma_chat_capable_model.py** or new.
   Assert: PMA chat uses real MCP tool results (db.task.get, db.project.get/list, etc.); tool success, rejection, and ambiguity surface as real outcomes (no simulated content); gateway allow-list permits the minimum tool set.
   Run: `just e2e --tags pma`, `--tags chat`.
-- **Task 3 Auth and PTY** - Scripts: **e2e_020_auth_login.py**, **e2e_198_tui_pty.py**, **e2e_199_tui_slash_commands.py** or new.
+- **Task 3 Auth and PTY** - Scripts: **e2e_0030_auth_login.py**, **e2e_0750_tui_pty.py**, **e2e_0760_tui_slash_commands.py** or new.
   Assert: Startup login recovery when token missing; in-session auth recovery when gateway returns 401; password/token never in scrollback; `/thread new`/`switch`/`rename` in PTY; `/show-thinking`/`/hide-thinking` toggle and persist (YAML reload).
   Run: `just e2e --tags auth`, `--tags tui_pty`.
-- **Task 4 Phase 6 coverage** - Scripts: **e2e_198_tui_pty.py**, **e2e_199_tui_slash_commands.py**, **e2e_127_sse_streaming.py**, **e2e_192_chat_reliability.py** through **e2e_194_chat_simultaneous_messages.py**.
+- **Task 4 Phase 6 coverage** - Scripts: **e2e_0750_tui_pty.py**, **e2e_0760_tui_slash_commands.py**, **e2e_0610_sse_streaming.py**, **e2e_0540_chat_reliability.py** through **e2e_0560_chat_simultaneous_messages.py**.
   Assert: All Phase 6 behaviors (auth recovery, both chat surfaces, streaming and cancellation, thinking visibility and persist, collapsed-thinking placeholder); BDD scenarios have matching E2E or PTY assertions.
   Run: `just e2e --tags tui_pty`, `--tags chat`, `--tags auth`.
 - **Task 6 Phase 7** - Scripts: per-slice (MCP, LangGraph, chat reliability).
@@ -117,7 +117,7 @@ Deliver `stream=true` on both interactive chat surfaces, client-driven cancellat
 
 #### Testing (Task 1)
 
-- [ ] Add or update **e2e_127_sse_streaming.py** and **e2e_198_tui_pty.py** per [E2E Test Inventory](#e2e-test-inventory-and-what-to-test): assert `stream=true` on both surfaces, SSE and `[DONE]`, no `<think>` in content, client cancel (REQ-USRGWY-0150); assert TUI progressive updates, Ctrl+C cancel, in-flight landmark, reconciled turn.
+- [ ] Add or update **e2e_0610_sse_streaming.py** and **e2e_0750_tui_pty.py** per [E2E Test Inventory](#e2e-test-inventory-and-what-to-test): assert `stream=true` on both surfaces, SSE and `[DONE]`, no `<think>` in content, client cancel (REQ-USRGWY-0150); assert TUI progressive updates, Ctrl+C cancel, in-flight landmark, reconciled turn.
 - [ ] Run `just setup-dev restart --force` (or `just setup-dev start --force` if the stack is not running); then run `just e2e --tags chat` and `just e2e --tags tui_pty`; fix any failing E2E tests.
 - [ ] Run `just ci` and `just e2e` for the streaming and cancellation scope.
 - [ ] Confirm gateway, transport, TUI, and PTY behavior match the specs listed in Task 1.
@@ -169,7 +169,7 @@ Pull forward the minimum MCP gateway allow-path and PMA chat tool set so PMA cha
 
 #### Testing (Task 2)
 
-- [ ] Add or update **e2e_124_worker_pma_proxy.py**, **e2e_115_pma_chat_context.py**, **e2e_118_pma_chat_capable_model.py** (or new script) per [E2E Test Inventory](#e2e-test-inventory-and-what-to-test): assert PMA chat uses real MCP tool results (db.task.get, db.project.get/list, etc.), tool success/rejection/ambiguity are real outcomes (no simulated content).
+- [ ] Add or update **e2e_0660_worker_pma_proxy.py**, **e2e_0570_pma_chat_context.py**, **e2e_0580_pma_chat_capable_model.py** (or new script) per [E2E Test Inventory](#e2e-test-inventory-and-what-to-test): assert PMA chat uses real MCP tool results (db.task.get, db.project.get/list, etc.), tool success/rejection/ambiguity are real outcomes (no simulated content).
 - [ ] Run `just setup-dev restart --force` (or `just setup-dev start --force` if the stack is not running); then run `just e2e --tags pma` and `just e2e --tags chat`; fix any failing E2E tests.
 - [ ] Run `just ci` and any targeted E2E for PMA chat with MCP tools.
 - [ ] Confirm MCP tool success, rejection, and ambiguity are real outcomes per [REQ-AGENTS-0137](../requirements/agents.md) and [CYNAI.AGENTS.NoSimulatedOutput](../tech_specs/project_manager_agent.md).
@@ -229,7 +229,7 @@ Optionally align interactive `cynork chat` with the fullscreen TUI entry flow wh
 
 #### Testing (Task 3)
 
-- [ ] Add or update **e2e_020_auth_login.py**, **e2e_198_tui_pty.py**, **e2e_199_tui_slash_commands.py** (or new) per [E2E Test Inventory](#e2e-test-inventory-and-what-to-test): assert startup login when token missing, in-session auth recovery on 401, password/token never in scrollback; assert `/thread new`/`switch`/`rename` in PTY; assert `/show-thinking`/`/hide-thinking` toggle and YAML persist.
+- [ ] Add or update **e2e_0030_auth_login.py**, **e2e_0750_tui_pty.py**, **e2e_0760_tui_slash_commands.py** (or new) per [E2E Test Inventory](#e2e-test-inventory-and-what-to-test): assert startup login when token missing, in-session auth recovery on 401, password/token never in scrollback; assert `/thread new`/`switch`/`rename` in PTY; assert `/show-thinking`/`/hide-thinking` toggle and YAML persist.
 - [ ] Run `just setup-dev restart --force` (or `just setup-dev start --force` if the stack is not running); then run `just e2e --tags auth` and `just e2e --tags tui_pty`; fix any failing E2E tests.
 - [ ] Run `just ci` and `just e2e` for the auth, in-session, and PTY scope.
 - [ ] Confirm TUI chat-complete exit: user can send, receive, see thread state, project/model context, continue conversation; user can start a fresh thread and continue in the new thread; TUI remains coherent for both chat-completions and responses paths.

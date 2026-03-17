@@ -174,7 +174,7 @@ See [REQ-ORCHES-0175](../requirements/orches.md#req-orches-0175) and [orchestrat
   - **Orchestrator**: Scenarios for mixed GPUs: (1) 1 AMD 20 GB + 3 NVIDIA 12 GB each -> variant `cuda`; (2) 1 NVIDIA 12 GB + 3 AMD 8 GB each -> variant `rocm`; (3) 2 AMD 16+12 GB + 1 NVIDIA 20 GB -> variant `rocm`.
 
 - **E2E** (implemented)
-  - **`e2e_205_gpu_variant_ollama.py`**: Asserts the running Ollama container image tag matches the expected variant for the host GPU.
+  - **`e2e_0800_gpu_variant_ollama.py`**: Asserts the running Ollama container image tag matches the expected variant for the host GPU.
   - The Python script **independently** detects GPU via `nvidia-smi` and `rocm-smi`, sums VRAM per vendor, and selects the expected variant (cuda vs rocm) by the same logic as the worker (vendor with greater total VRAM).
   - Run with `E2E_GPU_VARIANT_CHECK=1 just e2e --tags gpu_variant`; skips when env unset, no GPU, or Ollama container not running.
   - **Stack must NOT use** `SETUP_DEV_OLLAMA_IN_STACK` or `--ollama-in-stack` (node-manager must start Ollama, not compose).
@@ -199,7 +199,7 @@ See [REQ-ORCHES-0175](../requirements/orches.md#req-orches-0175) and [orchestrat
   Compliant with worker_node_payloads and REQ-WORKER-0253.
 - **Ollama container GPU access** (`main.go`): Uses `--gpus all` for CUDA.
   Compliant with "Ollama gets all GPUs of the chosen variant."
-- **E2E validation** (`e2e_205_gpu_variant_ollama.py`): Independently detects GPU, sums VRAM per vendor, asserts Ollama image tag.
+- **E2E validation** (`e2e_0800_gpu_variant_ollama.py`): Independently detects GPU, sums VRAM per vendor, asserts Ollama image tag.
   Stack must NOT use `SETUP_DEV_OLLAMA_IN_STACK`.
 - **Unit tests:** Worker: `TestDetectGPU_ReportsAllDevicesWhenBothVendorsPresent`, `TestDetectGPU_SingleVendorReturnsAllDevices`.
   Orchestrator: `TestVariantAndVRAM_SumVRAMPerVendorMixedGPUs`, `TestVariantAndVRAM_MultiGPUSameVendorSumsTotal`, `TestVariantAndVRAM_MixedVendorsNVIDIADominant`, `TestVariantAndVRAM_TieBreakPrefersCuda`.

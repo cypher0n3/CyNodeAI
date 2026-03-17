@@ -1,8 +1,8 @@
-# Failed E2E Report: e2e_140_sba_task_inference.test_sba_task_with_inference_prompt
+# Failed E2E Report: e2e_0730_sba_task_inference.test_sba_task_with_inference_prompt
 
 ## 1 Summary
 
-Test `e2e_140_sba_task_inference.TestSbaInference.test_sba_task_with_inference_prompt` failed because the SBA task did not reach a terminal status within the polling window; the test reported "status=None result=None".
+Test `e2e_0730_sba_task_inference.TestSbaInference.test_sba_task_with_inference_prompt` failed because the SBA task did not reach a terminal status within the polling window; the test reported "status=None result=None".
 The test creates an SBA task with an LLM prompt, then calls `helpers.create_and_poll_sba_task()`; it asserted task_id at line 39 (so create may have returned a task_id), then failed at the "did not finish" assertion (lines 38-41) because status was not in ("completed", "failed").
 
 ## 2 Why the Failure Occurred
@@ -18,7 +18,7 @@ Relevant code paths:
 
 ### 3.1 Python Test Path
 
-- [e2e_140_sba_task_inference.py](../../../scripts/test_scripts/e2e_140_sba_task_inference.py) lines 25-41: Calls `create_and_poll_sba_task` with SBA + prompt args; asserts task_id not None, then asserts status in ("completed", "failed"); failure at "did not finish" with status=None, result=None.
+- [e2e_0730_sba_task_inference.py](../../../scripts/test_scripts/e2e_0730_sba_task_inference.py) lines 25-41: Calls `create_and_poll_sba_task` with SBA + prompt args; asserts task_id not None, then asserts status in ("completed", "failed"); failure at "did not finish" with status=None, result=None.
 - [helpers.py](../../../scripts/test_scripts/helpers.py): `create_and_poll_sba_task` creates task, parses task_id, polls task result until terminal status or max iterations; returns (task_id, status, result_data).
 
 ### 3.2 Backend Path
@@ -54,7 +54,7 @@ The following describes the two failure modes and required changes.
 
 ### 6.1 Root Cause (Cascade vs. Result Shape)
 
-- **Create timeout (primary):** If status/result are None because the test never gets a task_id or create times out, the same blocking create path as e2e_050 applies.
+- **Create timeout (primary):** If status/result are None because the test never gets a task_id or create times out, the same blocking create path as e2e_0420 applies.
   Fix task create per [2026-03-16_e2e_050_test_task_create.md](2026-03-16_e2e_050_test_task_create.md) section 6.
 - **Poll/result shape:** If task_id is set but status or result stay None: (1) Ensure GET /v1/tasks/{id} and GET /v1/tasks/{id}/result return status and result in the structure the test expects (e.g. `result.job_result.sba_result` or equivalent per [worker_node.md](../../tech_specs/worker_node.md)). (2) Ensure the SBA task reaches a terminal status within the test's poll window; if the task runs inference and blocks server-side, it may never complete in time.
 

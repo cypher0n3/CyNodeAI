@@ -56,17 +56,17 @@ Final task (Task 8): run the **full** E2E suite (`just e2e`) with all tests pass
 
 Scripts live in `scripts/test_scripts/`.
 
-- **e2e_199_tui_slash_commands.py** - What to test: TUI slash commands via PTY (`/help`, `/clear`, `/version`, `/exit`, `/model`, `/project` list/set/get/bare-id, unknown command hint, shell-escape `!`; scrollback and session stay active).
+- **e2e_0760_tui_slash_commands.py** - What to test: TUI slash commands via PTY (`/help`, `/clear`, `/version`, `/exit`, `/model`, `/project` list/set/get/bare-id, unknown command hint, shell-escape `!`; scrollback and session stay active).
   Run with: `just e2e --tags tui_pty`.
-- **e2e_198_tui_pty.py** - What to test: TUI via PTY (prompt-ready landmark, exit via Ctrl+C, `/thread list` shows header or error, send/receive round-trip, in-flight landmark REQ-CLIENT-0209, Ctrl+C cancels stream then second Ctrl+C exits).
+- **e2e_0750_tui_pty.py** - What to test: TUI via PTY (prompt-ready landmark, exit via Ctrl+C, `/thread list` shows header or error, send/receive round-trip, in-flight landmark REQ-CLIENT-0209, Ctrl+C cancels stream then second Ctrl+C exits).
   Run with: `just e2e --tags tui_pty`.
-- **e2e_127_sse_streaming.py** - What to test: Gateway SSE (`POST /v1/chat/completions` and `POST /v1/responses` with `stream=true`, SSE events, `[DONE]` sentinel, no `<think>` in visible content, non-empty content; REQ-USRGWY-0149).
+- **e2e_0610_sse_streaming.py** - What to test: Gateway SSE (`POST /v1/chat/completions` and `POST /v1/responses` with `stream=true`, SSE events, `[DONE]` sentinel, no `<think>` in visible content, non-empty content; REQ-USRGWY-0149).
   Run with: `just e2e --tags chat` or `--tags pma_inference`.
-- **e2e_192_chat_reliability.py**, **e2e_193_chat_sequential_messages.py**, **e2e_194_chat_simultaneous_messages.py** - What to test: Chat reliability, sequential and simultaneous messages, gateway chat behavior.
+- **e2e_0540_chat_reliability.py**, **e2e_0550_chat_sequential_messages.py**, **e2e_0560_chat_simultaneous_messages.py** - What to test: Chat reliability, sequential and simultaneous messages, gateway chat behavior.
   Run with: `just e2e --tags chat`.
-- **e2e_020_auth_login.py**, **e2e_030_auth_negative_whoami.py**, **e2e_040_auth_whoami.py**, **e2e_190_auth_refresh.py**, **e2e_200_auth_logout.py** - What to test: Auth (login, whoami, negative whoami, refresh, logout).
+- **e2e_0030_auth_login.py**, **e2e_0040_auth_negative_whoami.py**, **e2e_0050_auth_whoami.py**, **e2e_0770_auth_refresh.py**, **e2e_0780_auth_logout.py** - What to test: Auth (login, whoami, negative whoami, refresh, logout).
   Run with: `just e2e --tags auth`.
-- **e2e_050_task_create.py** through **e2e_196_task_list_status_filter.py** - What to test: Task CRUD, list, get, result, prompt, cancel, status filter.
+- **e2e_0420_task_create.py** through **e2e_0480_task_list_status_filter.py** - What to test: Task CRUD, list, get, result, prompt, cancel, status filter.
   Run with: `just e2e --tags task`.
 - **Gaps to add or extend:** (1) Thread: PTY test for `/thread new`, `/thread switch <id>`, `/thread rename <title>` (scrollback shows result or error).
   (2) Project: PTY or chat test for `/project list`, `/project get <id>` or bare-id returning gateway output or stub.
@@ -126,7 +126,7 @@ Fix the two BDD scenarios that currently fail so the BDD suite has zero failures
 
 - [x] Run `just test-bdd` and confirm 0 failed scenarios for cynork.
 - [x] Run `just test-go-cover` and confirm `cynork/cmd` is not in the failure list (if it was below 90%).
-- [x] If this task affects E2E-covered behavior: add or update **e2e_199_tui_slash_commands.py** so that (1) a scenario equivalent to "TUI running with model X" runs `cynork chat --model <id>` and session uses that model, and (2) `/project <bare_id>` updates session project and scrollback shows confirmation or current project.
+- [x] If this task affects E2E-covered behavior: add or update **e2e_0760_tui_slash_commands.py** so that (1) a scenario equivalent to "TUI running with model X" runs `cynork chat --model <id>` and session uses that model, and (2) `/project <bare_id>` updates session project and scrollback shows confirmation or current project.
 - [x] Before running E2E for this task: run `just setup-dev restart --force` (or `just setup-dev start --force` if the stack is not running).
 - [x] Run `just e2e --tags tui_pty`; fix any failing E2E tests.
 - [x] Validation gate: do not start Task 2 until all checks for this task pass.
@@ -139,7 +139,7 @@ Fixed `runSlashProjectDelegated` in
 > `cynork/cmd/chat_slash.go` to route bare ids (not `set`/`list`/`get`) through
 > `setChatSessionProject`.
 Both previously-failing BDD scenarios now pass. `cynork/cmd` coverage = 90%.
-E2E tests added to `e2e_199_tui_slash_commands.py`: `TestChatModeFlags.test_chat_model_flag_is_accepted`
+E2E tests added to `e2e_0760_tui_slash_commands.py`: `TestChatModeFlags.test_chat_model_flag_is_accepted`
 > and `test_tui_slash_project_bare_id_sets_project`.
 E2E gate validated: `just e2e --tags tui_pty` passes
 > (31/31 tests); see Task 2 and Task 4 E2E closeout notes for root-cause fixes applied during
@@ -330,7 +330,7 @@ Add the slash commands required by the spec to the TUI `slash.go` dispatcher (an
 #### Testing (Task 4)
 
 - [x] Run `just test-bdd` and lint for changed code.
-- [x] Add or update **e2e_199_tui_slash_commands.py** so that `/connect`, `/show-thinking`, `/hide-thinking`, `/status`, and `/whoami` are tested: assert scrollback shows expected output (current gateway URL, status output, whoami identity or error) and that thinking visibility toggle persists or is reflected in session.
+- [x] Add or update **e2e_0760_tui_slash_commands.py** so that `/connect`, `/show-thinking`, `/hide-thinking`, `/status`, and `/whoami` are tested: assert scrollback shows expected output (current gateway URL, status output, whoami identity or error) and that thinking visibility toggle persists or is reflected in session.
 - [x] Run `just setup-dev restart --force` (or `just setup-dev start --force` if the stack is not running); then run `just e2e --tags tui_pty`; fix any failing E2E tests.
 - [x] Validation gate: do not start Task 5 until all checks for this task pass (4A-4D).
 
@@ -350,7 +350,7 @@ Added `newHealthzServer` helper
 All BDD scenarios: 0 failures. `just lint` passes.
 All packages >= 90%.
 > E2E tests added: `/connect`, `/show-thinking`, `/hide-thinking`, `/status`, `/whoami` TUI PTY
-> assertions in `e2e_199_tui_slash_commands.py`.
+> assertions in `e2e_0760_tui_slash_commands.py`.
 E2E gate validated: `just e2e --tags tui_pty`
 > (31/31) passes after CR/LF harness fix (see Task 2 closeout).
 4E (task/nodes/prefs/skills)
@@ -403,7 +403,7 @@ Close implementation gaps where the code does not match the spec (thread command
 #### Testing (Task 5)
 
 - [x] Run `just test-bdd` and `just test-go-cover` for affected packages.
-- [x] Add or update **e2e_198_tui_pty.py** and **e2e_199_tui_slash_commands.py** so that `/thread list`, `/thread switch <id>`, `/thread rename <title>` are asserted in scrollback; `--resume-thread` accepted without unknown-flag error.
+- [x] Add or update **e2e_0750_tui_pty.py** and **e2e_0760_tui_slash_commands.py** so that `/thread list`, `/thread switch <id>`, `/thread rename <title>` are asserted in scrollback; `--resume-thread` accepted without unknown-flag error.
 - [ ] Add E2E tests for: in-flight generation state (5E), connection recovery (5F), responseID in SSE (5C) when those tasks complete.
 - [x] Run `just setup-dev restart --force` (or `just setup-dev start --force` if the stack is not running); then run `just e2e --tags tui_pty` and `just e2e --tags chat`; fix any failing E2E tests.
 - [x] Validation gate: 5A-5B checks pass.
@@ -425,14 +425,14 @@ BDD step definitions added for thread creation/resumption/switching in
 > `cynork/_bdd/steps.go`. `cynork/cmd` coverage: 90.7%.
 All BDD: 0 failures. `just lint` passes.
 > E2E: `test_tui_slash_thread_switch_shows_result`, `test_tui_slash_thread_rename_shows_result`,
-> and `test_chat_resume_thread_flag_is_accepted` added to `e2e_199_tui_slash_commands.py`.
+> and `test_chat_resume_thread_flag_is_accepted` added to `e2e_0760_tui_slash_commands.py`.
 > E2E gate validated: `just e2e --tags tui_pty` (31/31) and `just e2e --tags chat` (9/9) pass.
 > Chat E2E fixes applied during validation:
 > (1) `test_capable_model_chat_multi_turn` - rewrote to send two real sequential requests (handler
 > stores only `lastUserContent` per request; fake message-array history is ignored in favour of
 > thread-DB history); added `OpenAI-Project` UUID header per request to isolate thread scope and
 > prevent history pollution across tests.
-> (2) One-shot smoke tests (`e2e_110`, `e2e_118`, `e2e_192`) - the `qwen3.5:9b` PM-agent model
+> (2) One-shot smoke tests (`e2e_0530`, `e2e_0580`, `e2e_0540`) - the `qwen3.5:9b` PM-agent model
 > interprets simple echo instructions as ping/health-checks and responds "pong"; changed all three
 > tests to send `"ping"` and assert only that a non-empty, non-error reply is received (the actual
 > smoke-test intent).
@@ -479,7 +479,7 @@ Replace stub strings for `/project list` and `/project get` with gateway API cal
 #### Testing (Task 6)
 
 - [x] Run `just test-bdd` and lint for changed code.
-- [ ] Add or update **e2e_199_tui_slash_commands.py** so that `/project list` and `/project get <id>` are tested (deferred - gateway does not yet implement /v1/projects; E2E would need mock or stub endpoint).
+- [ ] Add or update **e2e_0760_tui_slash_commands.py** so that `/project list` and `/project get <id>` are tested (deferred - gateway does not yet implement /v1/projects; E2E would need mock or stub endpoint).
 - [x] Validation gate: do not start Task 7 until all checks for this task pass.
 
 #### Closeout (Task 6)

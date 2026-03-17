@@ -584,7 +584,7 @@ They must be developed in tandem so each validates the other as behavior lands, 
   (read_until_landmark, wait_for_prompt_ready, capture_screen; landmarks match cynork/internal/chat/landmarks.go.)
 
 - [x] Add stable Python assertions around semantic UI landmarks instead of exact model wording or brittle full-frame diffs.
-  (E2E tests assert on LANDMARK_* and "Threads" header; e2e_198_tui_pty.py.)
+  (E2E tests assert on LANDMARK_* and "Threads" header; e2e_0750_tui_pty.py.)
 
 ### Tandem TUI and Harness Validation
 
@@ -675,7 +675,7 @@ This phase turns the promoted chat and TUI contract into executable behavior che
   ([chat_thread_management.feature](../../features/orchestrator/chat_thread_management.feature), [pma_chat_file_context.feature](../../features/agents/pma_chat_file_context.feature), [pma_chat_and_context.feature](../../features/agents/pma_chat_and_context.feature), and [node_manager_config_startup.feature](../../features/worker_node/node_manager_config_startup.feature).)
 
 - [x] Add Python E2E coverage for the fullscreen TUI flows that are now required for the primary milestone.
-  (e2e_198_tui_pty.py: prompt-ready, exit via ctrl+c, thread list, and send/receive round-trip; skip when pexpect not installed.)
+  (e2e_0750_tui_pty.py: prompt-ready, exit via ctrl+c, thread list, and send/receive round-trip; skip when pexpect not installed.)
 
 - [ ] Use the Python PTY harness continuously during TUI development; each TUI slice must add or update its PTY coverage before the slice is considered done.
 
@@ -823,7 +823,7 @@ This phase keeps the worker-deployment follow-on docs aligned without mixing the
   `just ci` passes.
 
 - **2026-03-12:** Phase 5 Python PTY harness: Replaced custom PTY code with pexpect.
-  Added scripts/requirements-e2e.txt (pexpect>=4.8), scripts/test_scripts/tui_pty_harness.py (TuiPtySession, landmarks, send_keys, read_until_landmark, wait_for_prompt_ready, capture_screen), and scripts/test_scripts/e2e_198_tui_pty.py (prompt-ready, exit via ctrl+c, thread list, send/receive round-trip; skip when pexpect not installed).
+  Added scripts/requirements-e2e.txt (pexpect>=4.8), scripts/test_scripts/tui_pty_harness.py (TuiPtySession, landmarks, send_keys, read_until_landmark, wait_for_prompt_ready, capture_screen), and scripts/test_scripts/e2e_0750_tui_pty.py (prompt-ready, exit via ctrl+c, thread list, send/receive round-trip; skip when pexpect not installed).
   Tag tui_pty added to check_e2e_tags.
   Harness asserts on semantic landmarks; E2E tests run with `just e2e` and skip gracefully without pexpect.
   Doc/justfile follow-up: root `just venv` now installs both scripts/requirements-lint.txt and scripts/requirements-e2e.txt so one .venv supports lint and E2E (including TUI PTY); development_setup and scripts/README updated.

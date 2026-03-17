@@ -1,8 +1,8 @@
-# Failed E2E Report: e2e_127_sse_streaming.test_responses_stream_uses_native_responses_events_and_exposes_streamed_response_id
+# Failed E2E Report: e2e_0610_sse_streaming.test_responses_stream_uses_native_responses_events_and_exposes_streamed_response_id
 
 ## 1 Summary
 
-Test `e2e_127_sse_streaming.TestSSEStreaming.test_responses_stream_uses_native_responses_events_and_exposes_streamed_response_id` failed with a ReadTimeout (ERROR in the test run): the POST to `/v1/responses` with stream=true did not complete within 120 seconds.
+Test `e2e_0610_sse_streaming.TestSSEStreaming.test_responses_stream_uses_native_responses_events_and_exposes_streamed_response_id` failed with a ReadTimeout (ERROR in the test run): the POST to `/v1/responses` with stream=true did not complete within 120 seconds.
 The test expects 200, typed SSE events, [DONE], and at least one response_id in the stream; the HTTP connection read timed out before the test could finish parsing.
 
 ## 2 Why the Failure Occurred
@@ -17,7 +17,7 @@ Relevant code paths:
 
 ### 3.1 Python Test Path
 
-- [e2e_127_sse_streaming.py](../../../scripts/test_scripts/e2e_127_sse_streaming.py) lines 336-363 (approx): POST `/v1/responses` stream=true, timeout=120; parse_sse_stream_typed(resp); assert found_done, collect response_ids from events, assert at least one response_id.
+- [e2e_0610_sse_streaming.py](../../../scripts/test_scripts/e2e_0610_sse_streaming.py) lines 336-363 (approx): POST `/v1/responses` stream=true, timeout=120; parse_sse_stream_typed(resp); assert found_done, collect response_ids from events, assert at least one response_id.
   The request itself timed out before response was fully read.
 
 ### 3.2 Gateway and Responses Stream
@@ -65,4 +65,4 @@ The following describes the /v1/responses stream path and timeout.
 ### 6.3 Exact Code or Config Changes
 
 - Increase the PMA client timeout when used for /v1/responses streaming (e.g. to 200s) so the stream can complete and the test can assert on response_id and [DONE].
-  Same fix as other e2e_127 streaming reports.
+  Same fix as other e2e_0610 streaming reports.

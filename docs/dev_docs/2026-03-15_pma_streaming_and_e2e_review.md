@@ -135,12 +135,12 @@ This section calls out test design and streaming-path issues.
   The justfile now waits for user-gateway readyz for 90s.
   Align the README with actual behavior and with the recommendation above (control-plane + user-gateway readiness).
 - **E2E report:** Update as above so that future readers do not assume "wait for user-gateway instead of control-plane" is the correct long-term design; document timeout and optional dual-port readiness.
-- **Streaming closeouts:** Task 5 deferral is documented; follow-up items (emitContentAsSSE removal, coverage to >=90%, e2e_202-e2e_204 harness completion) should remain in a single follow-up or backlog list.
+- **Streaming closeouts:** Task 5 deferral is documented; follow-up items (emitContentAsSSE removal, coverage to >=90%, e2e_0630-e2e_0650 harness completion) should remain in a single follow-up or backlog list.
 
 ## Recommended Refactor Strategy
 
 1. **E2E report:** Revise the Justfile and Run E2E sections to correct the readiness-gate attribution, document `--skip-ollama` usage, and note the intended fixes for attachments and get/result-by-name tests (tmpdir, atomicity).
 2. **Justfile/scripts:** If the gate is to remain user-gateway-only, add a comment that control-plane is a dependency and that the 90s timeout allows it to become ready before user-gateway in typical startup order; or add an explicit wait for control-plane readyz (12082) before or in parallel with user-gateway.
 3. **E2E tests:** Implement tmpdir for `test_task_create_with_attachments` and make `test_task_get_by_name` and `test_task_result_by_name` atomic (create named task in-test or in setUp).
-4. **Streaming:** Proceed with removal of `emitContentAsSSE` and heartbeat fallback (DP-5); complete gateway relay of named events and overwrites; raise agents/internal/pma coverage to >=90%; complete e2e_202-e2e_204 as planned.
+4. **Streaming:** Proceed with removal of `emitContentAsSSE` and heartbeat fallback (DP-5); complete gateway relay of named events and overwrites; raise agents/internal/pma coverage to >=90%; complete e2e_0630-e2e_0650 as planned.
 5. **Docs:** Sync scripts/README.md with justfile readiness behavior and keep a single follow-up list for streaming and E2E test improvements.

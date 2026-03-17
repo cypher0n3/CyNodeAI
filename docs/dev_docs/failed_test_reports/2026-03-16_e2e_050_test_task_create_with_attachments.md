@@ -1,8 +1,8 @@
-# Failed E2E Report: e2e_050_task_create.test_task_create_with_attachments
+# Failed E2E Report: e2e_0420_task_create.test_task_create_with_attachments
 
 ## 1 Summary
 
-Test `e2e_050_task_create.TestTaskCreate.test_task_create_with_attachments` failed because the `cynork task create` command with `--attach` flags did not complete within the 120-second timeout.
+Test `e2e_0420_task_create.TestTaskCreate.test_task_create_with_attachments` failed because the `cynork task create` command with `--attach` flags did not complete within the 120-second timeout.
 The test never received a successful response (ok False on all attempts), so it failed with an assertion that task create with attachments failed.
 
 ## 2 Why the Failure Occurred
@@ -18,7 +18,7 @@ Relevant code paths from test to backend:
 
 ### 3.1 Python Test Path
 
-- [e2e_050_task_create.py](../../../scripts/test_scripts/e2e_050_task_create.py) lines 93-124: `test_task_create_with_attachments` creates tmp files, then loops up to 3 times calling `helpers.run_cynork(["task", "create", "-p", "...", "--attach", "tmp/att1.txt", "--attach", "tmp/att2.txt", "-o", "json"], ...)`.
+- [e2e_0420_task_create.py](../../../scripts/test_scripts/e2e_0420_task_create.py) lines 93-124: `test_task_create_with_attachments` creates tmp files, then loops up to 3 times calling `helpers.run_cynork(["task", "create", "-p", "...", "--attach", "tmp/att1.txt", "--attach", "tmp/att2.txt", "-o", "json"], ...)`.
   It fails when `ok` is False on the third attempt (line 124).
 
 ### 3.2 Helper Layer

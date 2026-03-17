@@ -1,8 +1,8 @@
-# Failed E2E Report: e2e_127_sse_streaming.test_responses_stream_returns_sse
+# Failed E2E Report: e2e_0610_sse_streaming.test_responses_stream_returns_sse
 
 ## 1 Summary
 
-Test `e2e_127_sse_streaming.TestSSEStreaming.test_responses_stream_returns_sse` failed because the accumulated content from the `/v1/responses` SSE stream was empty, and one of the events was an error object: `stream_error` with message "context deadline exceeded (Client.Timeout or context cancellation while reading body)".
+Test `e2e_0610_sse_streaming.TestSSEStreaming.test_responses_stream_returns_sse` failed because the accumulated content from the `/v1/responses` SSE stream was empty, and one of the events was an error object: `stream_error` with message "context deadline exceeded (Client.Timeout or context cancellation while reading body)".
 The test parses events, extracts content from choices[0].delta.content, and asserts full_content.strip() is non-empty; it also asserts no think blocks.
 The events list included a valid initial response_id and a chunk, then the error event; content accumulated was empty.
 
@@ -19,7 +19,7 @@ Relevant code paths:
 
 ### 3.1 Python Test Path
 
-- [e2e_127_sse_streaming.py](../../../scripts/test_scripts/e2e_127_sse_streaming.py) lines 156-217: POST `/v1/responses` stream=true, parse SSE, assert found_done and events length, loop events and add choices[0].delta.content to full_content, assert full_content.strip() and no think blocks.
+- [e2e_0610_sse_streaming.py](../../../scripts/test_scripts/e2e_0610_sse_streaming.py) lines 156-217: POST `/v1/responses` stream=true, parse SSE, assert found_done and events length, loop events and add choices[0].delta.content to full_content, assert full_content.strip() and no think blocks.
 
 ### 3.2 Gateway and Responses API
 

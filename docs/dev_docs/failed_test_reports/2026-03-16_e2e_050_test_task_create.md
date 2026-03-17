@@ -1,8 +1,10 @@
-# Failed E2E Report: e2e_050_task_create.test_task_create
+# Failed E2E Report: e2e_0420_task_create.test_task_create
 
 ## 1 Summary
 
-Test `e2e_050_task_create.TestTaskCreate.test_task_create` failed because the `cynork task create` command did not complete within the 120-second timeout.
+E2E tests were renumbered; script: `e2e_0420_task_create.py`.
+
+Test `e2e_0420_task_create.TestTaskCreate.test_task_create` failed because the `cynork task create` command did not complete within the 120-second timeout.
 The test never received a `task_id` in stdout, so it failed on the third attempt with an assertion that task create failed after 3 attempts.
 
 ## 2 Why the Failure Occurred
@@ -21,7 +23,7 @@ Relevant code paths from test to backend:
 
 ### 3.1 Python Test Path
 
-- [scripts/test_scripts/e2e_050_task_create.py](../../../scripts/test_scripts/e2e_050_task_create.py) lines 19-41: `test_task_create` loops up to 3 times, calls `helpers.run_cynork(["task", "create", "-p", "...", "-o", "json"], state.CONFIG_PATH)` (no explicit timeout, so 120s default), then parses stdout for `task_id` and fails if missing on attempt 3.
+- [scripts/test_scripts/e2e_0420_task_create.py](../../../scripts/test_scripts/e2e_0420_task_create.py) lines 19-41: `test_task_create` loops up to 3 times, calls `helpers.run_cynork(["task", "create", "-p", "...", "-o", "json"], state.CONFIG_PATH)` (no explicit timeout, so 120s default), then parses stdout for `task_id` and fails if missing on attempt 3.
 
 ### 3.2 Helper Layer
 

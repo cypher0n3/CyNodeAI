@@ -8,9 +8,19 @@ dependencies and setup steps are satisfied in the correct sequence.
 Targeted tags for subsets:
 - full_demo: run during `just setup-dev full-demo` (excludes tests that use a subset of the stack).
 - inference: any test that exercises the inference path (Ollama/LLM).
+- no_inference: test does not require a running LLM/Ollama; use for fast or CI runs without inference.
 - pma_inference: inference via PMA (gateway chat, worker PMA proxy with inference).
 - sba_inference: SBA tasks that use inference.
 - auth, task, chat, worker: smaller subsets for focused runs.
+
+Logical group tags (run related tests together):
+- tui: all TUI/PTY tests (slash commands, PTY harness, TUI streaming).
+- streaming: SSE, gateway streaming contract, cynork transport, PMA path, TUI streaming.
+- control_plane: node register, capability, workflow API.
+- sba: all SBA (sandbox agent) tests.
+- gateway: user gateway health and streaming contract.
+- uds_routing: inference proxy UDS and run-args contract tests (worker_node).
+- worker_node: use suite_worker_node for all worker/node tests.
 """
 
 import unittest
@@ -35,13 +45,21 @@ TAG_CHAT = "chat"
 TAG_WORKER = "worker"
 TAG_PMA = "pma"
 TAG_GPU_VARIANT = "gpu_variant"
+TAG_NO_INFERENCE = "no_inference"
+# Logical group tags
+TAG_TUI = "tui"
+TAG_STREAMING = "streaming"
+TAG_CONTROL_PLANE = "control_plane"
+TAG_SBA = "sba"
+TAG_GATEWAY = "gateway"
+TAG_UDS_ROUTING = "uds_routing"
 
 # Modules that provide shared state for other E2E tests. When filtering by include_tags,
 # these are always included (in discovery order) so dependencies run before tag-matched tests.
 PREREQ_MODULES = (
-    "scripts.test_scripts.e2e_010_cli_version_and_status",  # config dir
-    "scripts.test_scripts.e2e_020_auth_login",              # auth token
-    "scripts.test_scripts.e2e_050_task_create",             # TASK_ID for workflow/task list/etc
+    "scripts.test_scripts.e2e_0010_cli_version_and_status",  # config dir
+    "scripts.test_scripts.e2e_0030_auth_login",              # auth token
+    "scripts.test_scripts.e2e_0420_task_create",             # TASK_ID for workflow/task list/etc
 )
 
 

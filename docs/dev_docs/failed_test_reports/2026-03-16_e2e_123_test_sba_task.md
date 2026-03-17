@@ -1,8 +1,8 @@
-# Failed E2E Report: e2e_123_sba_task.test_sba_task
+# Failed E2E Report: e2e_0710_sba_task.test_sba_task
 
 ## 1 Summary
 
-Test `e2e_123_sba_task.TestSbaTask.test_sba_task` failed because no `task_id` was returned from SBA task create.
+Test `e2e_0710_sba_task.TestSbaTask.test_sba_task` failed because no `task_id` was returned from SBA task create.
 The test calls `helpers.create_and_poll_sba_task()` with args for `task create -p "echo from SBA" --use-sba --use-inference -o json`; at line 34 it asserts task_id is not None with "SBA task create failed".
 
 ## 2 Why the Failure Occurred
@@ -17,7 +17,7 @@ Relevant code paths:
 
 ### 3.1 Python Test Path
 
-- [e2e_123_sba_task.py](../../../scripts/test_scripts/e2e_123_sba_task.py) lines 24-34: Calls `helpers.create_and_poll_sba_task(create_args, state.CONFIG_PATH)`, then asserts task_id is not None.
+- [e2e_0710_sba_task.py](../../../scripts/test_scripts/e2e_0710_sba_task.py) lines 24-34: Calls `helpers.create_and_poll_sba_task(create_args, state.CONFIG_PATH)`, then asserts task_id is not None.
 - [helpers.py](../../../scripts/test_scripts/helpers.py): `create_and_poll_sba_task` runs cynork task create, parses task_id, then polls task result; returns (task_id, status, result_data).
 
 ### 3.2 CLI and Gateway

@@ -18,7 +18,7 @@
 
 **As of 2026-03-15:** Tasks 1-4 complete.
 Task 5 (TUI) discovery done, implementation deferred per [task5_tui_streaming_deferred.md](2026-03-15_task5_tui_streaming_deferred.md).
-Task 6 BDD/E2E: e2e_201-e2e_204 in place; Refactor Phase done (parse_sse_stream_typed in helpers); test-bdd passes.
+Task 6 BDD/E2E: e2e_0620-e2e_0650 in place; Refactor Phase done (parse_sse_stream_typed in helpers); test-bdd passes.
 Task 7 closeout done.
 See [streaming_plan_final_closeout.md](2026-03-15_streaming_plan_final_closeout.md).
 
@@ -75,7 +75,7 @@ The target outcome is spec-compliant streaming across PMA, the user gateway, `cy
   The recurring gates for this work are `just test-bdd`, `just lint`, `just test-go-cover`, `just e2e --tags chat`, `just e2e --tags tui_pty`, `just docs-check`, and final `just ci`.
 - Rebuild or restart the local stack with `just setup-dev restart --force` before any streaming E2E run that depends on the gateway, PMA, or TUI PTY harness.
 - Every task below must include explicit Python functional test work in `scripts/test_scripts/`.
-  Extend the current streaming files first (`e2e_127_sse_streaming.py`, `e2e_198_tui_pty.py`, and `e2e_199_tui_slash_commands.py`) and reserve `e2e_201_pma_standard_path_streaming.py`, `e2e_202_gateway_streaming_contract.py`, `e2e_203_cynork_transport_streaming.py`, and `e2e_204_tui_streaming_behavior.py` for the new streaming coverage that does not fit cleanly into the existing files.
+  Extend the current streaming files first (`e2e_0610_sse_streaming.py`, `e2e_0750_tui_pty.py`, and `e2e_0760_tui_slash_commands.py`) and reserve `e2e_0620_pma_standard_path_streaming.py`, `e2e_0630_gateway_streaming_contract.py`, `e2e_0640_cynork_transport_streaming.py`, and `e2e_0650_tui_streaming_behavior.py` for the new streaming coverage that does not fit cleanly into the existing files.
 - Treat secret-bearing streaming buffers as sensitive code paths.
   All PMA, gateway, and TUI append or replace operations that can temporarily hold unredacted content must use the `runtime/secret` helper strategy required by `REQ-STANDS-0133`.
 - Treat tool-output controls as the tool-output analogue of thinking visibility for this workstream.
@@ -120,7 +120,7 @@ Lock the updated event taxonomy, secure-buffer helper strategy, and test fixture
   - [x] persisted local config key `tui.show_tool_output_by_default`
 - [x] Identify the reusable secure-buffer helper that should be shared across PMA, gateway, and TUI.
   - [x] Prefer extracting the existing build-tagged secret wrapper pattern instead of inventing module-local copies.
-- [x] Review the current Python functional streaming coverage in `scripts/test_scripts/e2e_127_sse_streaming.py`, `scripts/test_scripts/e2e_198_tui_pty.py`, and `scripts/test_scripts/e2e_199_tui_slash_commands.py` and map each existing test to the updated contract so Task 1 can name exactly what must be extended instead of creating duplicate API coverage.
+- [x] Review the current Python functional streaming coverage in `scripts/test_scripts/e2e_0610_sse_streaming.py`, `scripts/test_scripts/e2e_0750_tui_pty.py`, and `scripts/test_scripts/e2e_0760_tui_slash_commands.py` and map each existing test to the updated contract so Task 1 can name exactly what must be extended instead of creating duplicate API coverage.
 
 #### Red Phase (Task 1)
 
@@ -129,13 +129,13 @@ Lock the updated event taxonomy, secure-buffer helper strategy, and test fixture
   - [x] Responses SSE native text-event format and streamed response id.
   - [x] `cynodeai.thinking_delta`, `cynodeai.tool_call`, `cynodeai.tool_progress`, `cynodeai.iteration_start`, `cynodeai.amendment`, and `cynodeai.heartbeat` event expectations.
   - [x] Overwrite metadata for `scope` and `iteration`.
-- [x] Update `scripts/test_scripts/e2e_127_sse_streaming.py` so its SSE parsing helper captures named `event:` lines, preserves event order, and can assert chat-completions versus responses native event shapes instead of treating every stream payload as anonymous `data:`.
-- [x] Add failing Python functional tests in `scripts/test_scripts/e2e_127_sse_streaming.py`:
+- [x] Update `scripts/test_scripts/e2e_0610_sse_streaming.py` so its SSE parsing helper captures named `event:` lines, preserves event order, and can assert chat-completions versus responses native event shapes instead of treating every stream payload as anonymous `data:`.
+- [x] Add failing Python functional tests in `scripts/test_scripts/e2e_0610_sse_streaming.py`:
   - [x] `test_chat_completions_stream_exposes_named_cynodeai_extension_events`
   - [x] `test_responses_stream_uses_native_responses_events_and_exposes_streamed_response_id`
 - [x] Add or update shared mock PMA and mock gateway fixtures so later tasks use one contract source instead of duplicating test event shapes in each module.
 - [x] Run `just setup-dev restart --force`.
-- [x] Run `just e2e --tags pma_inference` and confirm the updated `e2e_127_sse_streaming.py` contract tests fail for the expected pre-implementation reasons.
+- [x] Run `just e2e --tags pma_inference` and confirm the updated `e2e_0610_sse_streaming.py` contract tests fail for the expected pre-implementation reasons.
 - [x] Run the targeted contract and parser tests and confirm they fail for the expected missing or incorrect behaviors.
 - [x] Validation gate: do not proceed until the failing tests prove the shared contract gap.
 
@@ -161,7 +161,7 @@ Lock the updated event taxonomy, secure-buffer helper strategy, and test fixture
 
 - [x] Run the targeted contract and parser tests in the affected modules.
 - [x] Run `just setup-dev restart --force`.
-- [x] Run `just e2e --tags pma_inference` and confirm the updated `e2e_127_sse_streaming.py` contract tests now pass. (Implementation in place: gateway relays `cynodeai.iteration_start`; `/v1/responses` stream emits `response_id` in first event. E2E requires stack with PMA ready: `SETUP_DEV_OLLAMA_IN_STACK=1 just setup-dev start` then `just e2e --tags pma_inference`.)
+- [x] Run `just e2e --tags pma_inference` and confirm the updated `e2e_0610_sse_streaming.py` contract tests now pass. (Implementation in place: gateway relays `cynodeai.iteration_start`; `/v1/responses` stream emits `response_id` in first event. E2E requires stack with PMA ready: `SETUP_DEV_OLLAMA_IN_STACK=1 just setup-dev start` then `just e2e --tags pma_inference`.)
 - [x] Run `just lint-go` for any changed shared packages.
 - [x] Confirm that the locked contract now matches the updated requirement, spec, and feature set.
 - [x] Validation gate: do not start Task 2 until all Task 1 checks pass.
@@ -195,7 +195,7 @@ Make PMA produce real incremental output on the standard capable-model plus MCP 
 - [x] Inspect the current standard path in `agents/internal/pma/chat.go`, `agents/internal/pma/langchain.go`, and the current direct-stream helpers that can be reused.
 - [x] Identify exactly where the current standard path blocks, where tool-call fallback rewrites happen, and where `runtime/secret` wrapping must be introduced.
 - [x] Confirm the current tests that already cover direct streaming and the gaps that still exist for the standard path.
-- [x] Keep PMA-path Python functional coverage in dedicated file `scripts/test_scripts/e2e_201_pma_standard_path_streaming.py` so the standard-path NDJSON behavior has one authoritative functional suite.
+- [x] Keep PMA-path Python functional coverage in dedicated file `scripts/test_scripts/e2e_0620_pma_standard_path_streaming.py` so the standard-path NDJSON behavior has one authoritative functional suite.
 
 #### Red Phase (Task 2)
 
@@ -207,12 +207,12 @@ Make PMA produce real incremental output on the standard capable-model plus MCP 
   - [ ] Per-iteration and per-turn overwrite events (deferred).
   - [ ] Opportunistic secret scanning across visible, thinking, and tool-call buffers (deferred).
 - [x] Extend the PMA BDD coverage so the updated feature scenarios fail on the current implementation instead of passing through an older direct-stream-only path.
-- [x] Create `scripts/test_scripts/e2e_201_pma_standard_path_streaming.py` as the authoritative Python functional suite for PMA standard-path NDJSON streaming.
+- [x] Create `scripts/test_scripts/e2e_0620_pma_standard_path_streaming.py` as the authoritative Python functional suite for PMA standard-path NDJSON streaming.
 - [x] Add failing Python functional tests for the standard PMA path:
   - [x] `test_pma_standard_path_ndjson_stream_contains_iteration_and_thinking_events`
   - [x] `test_pma_standard_path_ndjson_stream_contains_tool_activity_before_done`
   - [x] `test_pma_standard_path_ndjson_stream_emits_scoped_overwrite_for_controlled_fixture_output`
-- [x] Run the PMA-targeted tests and confirm they fail for the correct reasons. (Validated: e2e_201 failed before gateway relay of iteration_start; Go PMA tests pass.)
+- [x] Run the PMA-targeted tests and confirm they fail for the correct reasons. (Validated: e2e_0620 failed before gateway relay of iteration_start; Go PMA tests pass.)
 - [x] Validation gate: do not proceed until the standard-path streaming gap is proven.
 
 #### Green Phase (Task 2)
@@ -244,10 +244,10 @@ Make PMA produce real incremental output on the standard capable-model plus MCP 
 
 - [x] Run the targeted PMA unit and behavior tests that cover streaming output, overwrite events, and opportunistic secret handling.
 - [x] Run `just setup-dev restart --force`.
-- [x] Run `just e2e --tags pma_inference` and confirm the new `e2e_201_pma_standard_path_streaming.py` coverage passes against the standard capable-model plus MCP path (gateway relays iteration_start per Task 3; passes when stack has PMA ready).
+- [x] Run `just e2e --tags pma_inference` and confirm the new `e2e_0620_pma_standard_path_streaming.py` coverage passes against the standard capable-model plus MCP path (gateway relays iteration_start per Task 3; passes when stack has PMA ready).
 - [x] Run `just test-bdd` to ensure the PMA feature coverage remains green where step definitions already exist.
 - [x] Run `just lint-go` and `just lint-go-ci` for the changed PMA packages.
-- [x] Validation gate: do not start Task 3 until all Task 2 checks pass (PMA emits NDJSON; e2e_201 passes after Task 3 relay).
+- [x] Validation gate: do not start Task 3 until all Task 2 checks pass (PMA emits NDJSON; e2e_0620 passes after Task 3 relay).
 
 #### Closeout (Task 2)
 
@@ -285,7 +285,7 @@ Make the user gateway consume the updated PMA stream, emit the correct per-endpo
   - [x] The post-stream relay does not yet maintain separate visible, thinking, and tool-call accumulators.
   - [x] `emitContentAsSSE` still exists as a fake-streaming fallback for degraded (non-streaming) path.
 - [x] Confirm how streamed `response_id` and `metadata.parts` should be persisted so `previous_response_id` continuation and structured history both remain correct.
-- [x] Map the current API-level Python streaming coverage to the gateway relay gaps so Task 3 updates the right files instead of duplicating basic API smoke coverage that already exists in `e2e_127_sse_streaming.py`.
+- [x] Map the current API-level Python streaming coverage to the gateway relay gaps so Task 3 updates the right files instead of duplicating basic API smoke coverage that already exists in `e2e_0610_sse_streaming.py`.
 
 #### Red Phase (Task 3)
 
@@ -297,12 +297,12 @@ Make the user gateway consume the updated PMA stream, emit the correct per-endpo
   - [ ] Post-stream amendment ordering before terminal completion (deferred).
   - [ ] Persistence of structured assistant-turn parts and redacted content only (deferred).
 - [ ] Extend database or integration tests so persisted `thinking` and `tool_call` content are validated as structured parts, not flattened into plain-text `content`.
-- [x] Extend `scripts/test_scripts/e2e_127_sse_streaming.py` with failing gateway-level functional coverage:
+- [x] Extend `scripts/test_scripts/e2e_0610_sse_streaming.py` with failing gateway-level functional coverage:
   - [x] `test_chat_completions_stream_relays_thinking_tool_and_iteration_events` (fails on thinking_delta/tool_* relay until Task 3 Green).
   - [ ] `test_responses_stream_relays_native_response_output_text_and_completed_events`
   - [ ] `test_streamed_responses_id_can_be_reused_as_previous_response_id`
-- [ ] Create `scripts/test_scripts/e2e_202_gateway_streaming_contract.py` for the gateway behaviors that are too large or too stateful for `e2e_127_sse_streaming.py`.
-- [ ] Add failing Python functional tests in `scripts/test_scripts/e2e_202_gateway_streaming_contract.py`:
+- [ ] Create `scripts/test_scripts/e2e_0630_gateway_streaming_contract.py` for the gateway behaviors that are too large or too stateful for `e2e_0610_sse_streaming.py`.
+- [ ] Add failing Python functional tests in `scripts/test_scripts/e2e_0630_gateway_streaming_contract.py`:
   - [ ] `test_stream_amendment_arrives_before_terminal_completion`
   - [ ] `test_stream_heartbeat_fallback_emits_progress_then_final_visible_text`
   - [ ] `test_client_disconnect_is_treated_as_stream_cancellation`
@@ -337,11 +337,11 @@ Make the user gateway consume the updated PMA stream, emit the correct per-endpo
 
 - [x] Run the targeted gateway handler, integration, and persistence tests.
 - [x] Run `just setup-dev restart --force`.
-- [x] Run `just e2e --tags pma_inference` for the API stream-shape assertions in `e2e_127_sse_streaming.py` (when stack has PMA ready).
-- [ ] Run `just e2e --tags chat` for the continuation, heartbeat, cancellation, and persistence assertions in `e2e_202_gateway_streaming_contract.py`.
+- [x] Run `just e2e --tags pma_inference` for the API stream-shape assertions in `e2e_0610_sse_streaming.py` (when stack has PMA ready).
+- [ ] Run `just e2e --tags chat` for the continuation, heartbeat, cancellation, and persistence assertions in `e2e_0630_gateway_streaming_contract.py`.
 - [x] Run `just test-bdd` for the orchestrator feature coverage that validates the updated SSE contract.
 - [x] Run `just lint-go` and `just lint-go-ci` for the changed gateway and database packages.
-- [x] Validation gate: do not start Task 4 until all Task 3 checks pass (minimal relay done; e2e_202 deferred).
+- [x] Validation gate: do not start Task 4 until all Task 3 checks pass (minimal relay done; e2e_0630 deferred).
 
 #### Closeout (Task 3)
 
@@ -376,7 +376,7 @@ Teach `cynork` to understand the new per-endpoint streaming surface instead of a
   - [x] `/v1/responses` streaming parsed through same readChatSSEStream; response_id captured via callback.
   - [ ] No transport event surface yet for `thinking`, `tool_call`, `tool_progress`, `iteration_start`, or heartbeat (deferred).
 - [x] Identify every downstream caller that must be updated once the richer event model is introduced.
-- [x] Use `scripts/test_scripts/e2e_203_cynork_transport_streaming.py` as the deterministic mock-gateway functional harness for `cynork` transport parsing and event propagation.
+- [x] Use `scripts/test_scripts/e2e_0640_cynork_transport_streaming.py` as the deterministic mock-gateway functional harness for `cynork` transport parsing and event propagation.
 
 #### Red Phase (Task 4)
 
@@ -385,8 +385,8 @@ Teach `cynork` to understand the new per-endpoint streaming surface instead of a
   - [x] Responses SSE native event parsing, including streamed response id and completion events.
   - [ ] Transport propagation of thinking, tool-call, tool-progress, iteration-start, overwrite, and heartbeat metadata (deferred).
   - [x] Error and cancellation behavior for both endpoints (unchanged).
-- [x] Create `scripts/test_scripts/e2e_203_cynork_transport_streaming.py` with a controlled mock-gateway fixture that drives `cynork` through both transport surfaces without depending on live upstream randomness.
-- [x] Add failing Python functional tests in `scripts/test_scripts/e2e_203_cynork_transport_streaming.py`:
+- [x] Create `scripts/test_scripts/e2e_0640_cynork_transport_streaming.py` with a controlled mock-gateway fixture that drives `cynork` through both transport surfaces without depending on live upstream randomness.
+- [x] Add failing Python functional tests in `scripts/test_scripts/e2e_0640_cynork_transport_streaming.py`:
   - [x] `test_cynork_completions_transport_handles_named_extension_events`
   - [x] `test_cynork_responses_transport_handles_native_responses_events_and_response_id`
   - [x] `test_cynork_transport_surfaces_heartbeat_and_turn_scoped_amendment_without_parse_errors`
@@ -415,7 +415,7 @@ Teach `cynork` to understand the new per-endpoint streaming surface instead of a
 
 - [x] Run the targeted `cynork` gateway-client and transport tests.
 - [x] Run `just setup-dev restart --force` when the mock-gateway transport tests depend on a rebuilt `cynork` binary or updated default config paths.
-- [x] Run `just e2e --tags chat` and confirm the new `e2e_203_cynork_transport_streaming.py` scenarios pass (placeholders skip until harness implemented).
+- [x] Run `just e2e --tags chat` and confirm the new `e2e_0640_cynork_transport_streaming.py` scenarios pass (placeholders skip until harness implemented).
 - [x] Run `just lint-go` for the changed `cynork` packages.
 - [x] Run `just test-go-cover` once the transport and parser changes settle so coverage remains above the project floor.
 - [x] Validation gate: do not start Task 5 until all Task 4 checks pass.
@@ -458,7 +458,7 @@ Use the richer event model to make the TUI render one logical in-flight assistan
   - [x] There is no heartbeat-rendering or reconnect-state flow.
   - [x] Thinking persistence exists only as a user preference toggle, not as stored per-turn streaming content.
 - [x] Confirm the exact current behavior that must be preserved, including `show thinking` persistence, session commands, thread continuity, and existing login recovery behavior.
-- [x] Keep cancel and reconnect PTY assertions in `scripts/test_scripts/e2e_198_tui_pty.py`, keep slash-toggle assertions in `scripts/test_scripts/e2e_199_tui_slash_commands.py`, and place structured in-flight transcript assertions in `scripts/test_scripts/e2e_204_tui_streaming_behavior.py`.
+- [x] Keep cancel and reconnect PTY assertions in `scripts/test_scripts/e2e_0750_tui_pty.py`, keep slash-toggle assertions in `scripts/test_scripts/e2e_0760_tui_slash_commands.py`, and place structured in-flight transcript assertions in `scripts/test_scripts/e2e_0650_tui_streaming_behavior.py`.
 
 #### Red Phase (Task 5)
 
@@ -471,14 +471,14 @@ Use the richer event model to make the TUI render one logical in-flight assistan
   - [ ] Heartbeat events render a progress indicator and do not pollute transcript content.
   - [ ] Cancellation and reconnect retain already-received content and reconcile the active turn deterministically.
 - [ ] Add or update failing TUI history-loading tests so persisted structured parts rehydrate correctly after reload.
-- [ ] Update `scripts/test_scripts/e2e_198_tui_pty.py` with failing PTY functional tests:
+- [ ] Update `scripts/test_scripts/e2e_0750_tui_pty.py` with failing PTY functional tests:
   - [ ] `test_tui_ctrl_c_cancels_stream_and_retains_partial_text`
   - [ ] `test_tui_reconnect_preserves_partial_text_and_marks_turn_interrupted`
-- [ ] Update `scripts/test_scripts/e2e_199_tui_slash_commands.py` with failing toggle tests:
+- [ ] Update `scripts/test_scripts/e2e_0760_tui_slash_commands.py` with failing toggle tests:
   - [ ] `test_tui_slash_show_thinking_reveals_stored_reasoning_without_refetch`
   - [ ] `test_tui_slash_show_tool_output_reveals_stored_tool_content_without_refetch`
   - [ ] `test_tui_slash_hide_tool_output_recovers_collapsed_tool_placeholders`
-- [ ] Create `scripts/test_scripts/e2e_204_tui_streaming_behavior.py` for the larger structured-streaming transcript assertions:
+- [ ] Create `scripts/test_scripts/e2e_0650_tui_streaming_behavior.py` for the larger structured-streaming transcript assertions:
   - [ ] `test_tui_updates_single_inflight_turn_progressively`
   - [ ] `test_tui_iteration_scoped_overwrite_only_replaces_target_segment`
   - [ ] `test_tui_turn_scoped_amendment_replaces_visible_text_without_duplication`
@@ -515,7 +515,7 @@ Use the richer event model to make the TUI render one logical in-flight assistan
 
 - [ ] Run the targeted TUI unit tests for streaming, transcript rendering, and reconnect behavior.
 - [ ] Run `just setup-dev restart --force`.
-- [ ] Run `just e2e --tags tui_pty` and confirm the updated `e2e_198_tui_pty.py`, `e2e_199_tui_slash_commands.py`, and `e2e_204_tui_streaming_behavior.py` scenarios pass.
+- [ ] Run `just e2e --tags tui_pty` and confirm the updated `e2e_0750_tui_pty.py`, `e2e_0760_tui_slash_commands.py`, and `e2e_0650_tui_streaming_behavior.py` scenarios pass.
 - [ ] Run `just lint-go` for the changed `cynork/internal/tui` and adjacent packages.
 - [ ] Run `just test-go-cover` once the TUI changes settle so coverage remains above the floor.
 - [ ] Run `just test-bdd` to confirm no existing TUI scenarios regressed before the dedicated streaming steps are finished in Task 6.
@@ -549,9 +549,9 @@ Remove the remaining pending streaming steps and make the streaming behavior exe
 #### Discovery Steps (Task 6)
 
 - [x] Re-read the full streaming feature set and map every scenario to the concrete code and test harness surface that now exists after Tasks 1 through 5.
-- [x] Inspect the current pending steps in `cynork/_bdd/steps2.go` and the current streaming E2E coverage in `scripts/test_scripts/e2e_127_sse_streaming.py` and `scripts/test_scripts/e2e_198_tui_pty.py`.
+- [x] Inspect the current pending steps in `cynork/_bdd/steps2.go` and the current streaming E2E coverage in `scripts/test_scripts/e2e_0610_sse_streaming.py` and `scripts/test_scripts/e2e_0750_tui_pty.py`.
 - [x] Confirm which scenarios need mock-gateway support, which need PTY orchestration, and which need live-stack E2E coverage.
-- [x] Review the complete Python streaming test inventory (`e2e_127`, `e2e_198`, `e2e_199`, `e2e_201`, `e2e_202`, `e2e_203`, and `e2e_204`) and remove any overlap that no longer adds distinct requirement coverage.
+- [x] Review the complete Python streaming test inventory (`e2e_0610`, `e2e_0750`, `e2e_0760`, `e2e_0620`, `e2e_0630`, `e2e_0640`, and `e2e_0650`) and remove any overlap that no longer adds distinct requirement coverage.
 
 #### Red Phase (Task 6)
 
@@ -566,19 +566,19 @@ Remove the remaining pending streaming steps and make the streaming behavior exe
   - [ ] Stored thinking and stored tool-output toggle behavior.
   - [ ] Reconnect and interrupted-turn reconciliation.
 - [ ] Finish the Python functional test matrix with specific file ownership:
-  - [ ] `scripts/test_scripts/e2e_127_sse_streaming.py` owns chat-completions and responses API event-shape assertions.
-  - [ ] `scripts/test_scripts/e2e_201_pma_standard_path_streaming.py` owns direct PMA standard-path NDJSON assertions.
-  - [ ] `scripts/test_scripts/e2e_202_gateway_streaming_contract.py` owns gateway amendment, heartbeat, cancellation, persistence, and continuation assertions.
-  - [ ] `scripts/test_scripts/e2e_203_cynork_transport_streaming.py` owns `cynork` transport parsing assertions against controlled mock streams.
-  - [ ] `scripts/test_scripts/e2e_204_tui_streaming_behavior.py` owns structured TUI transcript behavior assertions.
-  - [ ] `scripts/test_scripts/e2e_198_tui_pty.py` and `scripts/test_scripts/e2e_199_tui_slash_commands.py` keep the PTY cancel, reconnect, and toggle assertions that belong with the long-lived TUI harness.
+  - [ ] `scripts/test_scripts/e2e_0610_sse_streaming.py` owns chat-completions and responses API event-shape assertions.
+  - [ ] `scripts/test_scripts/e2e_0620_pma_standard_path_streaming.py` owns direct PMA standard-path NDJSON assertions.
+  - [ ] `scripts/test_scripts/e2e_0630_gateway_streaming_contract.py` owns gateway amendment, heartbeat, cancellation, persistence, and continuation assertions.
+  - [ ] `scripts/test_scripts/e2e_0640_cynork_transport_streaming.py` owns `cynork` transport parsing assertions against controlled mock streams.
+  - [ ] `scripts/test_scripts/e2e_0650_tui_streaming_behavior.py` owns structured TUI transcript behavior assertions.
+  - [ ] `scripts/test_scripts/e2e_0750_tui_pty.py` and `scripts/test_scripts/e2e_0760_tui_slash_commands.py` keep the PTY cancel, reconnect, and toggle assertions that belong with the long-lived TUI harness.
 - [ ] Run the targeted BDD and E2E tests and confirm they fail for the correct reasons.
 - [ ] Validation gate: do not proceed until the executable streaming coverage gap is proven.
 
 #### Green Phase (Task 6)
 
-- [x] Implement the missing Godog step definitions and mock-gateway support so the updated streaming feature files execute instead of remaining pending (e2e_201-e2e_204 files created; BDD steps remain where existing).
-- [x] Extend the designated existing E2E scripts and create the dedicated `e2e_201` through `e2e_204` streaming files defined in this plan.
+- [x] Implement the missing Godog step definitions and mock-gateway support so the updated streaming feature files execute instead of remaining pending (e2e_0620-e2e_0650 files created; BDD steps remain where existing).
+- [x] Extend the designated existing E2E scripts and create the dedicated `e2e_0620` through `e2e_0650` streaming files defined in this plan.
 - [x] Keep the BDD and E2E assertions aligned with the actual updated canonical docs instead of the older deferred streaming behavior.
 - [x] Re-run the targeted BDD and E2E suites until they pass (test-bdd passes; e2e placeholders skip until harness/stack).
 - [x] Validation gate: do not proceed until the streaming behavior is executable across BDD and E2E.
@@ -603,7 +603,7 @@ Remove the remaining pending streaming steps and make the streaming behavior exe
 #### Closeout (Task 6)
 
 - [x] Generate a task completion report for Task 6:
-  - [x] Which streaming scenarios are now executable (e2e_127, e2e_201; e2e_202-e2e_204 stubs in place).
+  - [x] Which streaming scenarios are now executable (e2e_0610, e2e_0620; e2e_0630-e2e_0650 stubs in place).
   - [x] Which BDD and E2E suites passed (just test-bdd; e2e with tags when stack ready).
   - [x] Any environment-specific skips or known infrastructure limits that must be documented.
 - [x] Do not start Task 7 until this closeout is done.
@@ -644,13 +644,13 @@ Close the work with validation, user-facing help updates, and any approved doc f
 - [x] Update implementation-level help or examples if new streaming controls or toggle behavior were introduced.
 - [x] Add a final implementation note that records any intentionally preserved fallback behavior or explicit non-goals.
 - [x] Update the streaming Python functional test files so their class docstrings, test docstrings, trace comments, and tag sets are final and non-stale:
-  - [x] `scripts/test_scripts/e2e_127_sse_streaming.py`
-  - [x] `scripts/test_scripts/e2e_201_pma_standard_path_streaming.py`
-  - [x] `scripts/test_scripts/e2e_202_gateway_streaming_contract.py`
-  - [x] `scripts/test_scripts/e2e_203_cynork_transport_streaming.py`
-  - [x] `scripts/test_scripts/e2e_204_tui_streaming_behavior.py`
-  - [x] `scripts/test_scripts/e2e_198_tui_pty.py`
-  - [x] `scripts/test_scripts/e2e_199_tui_slash_commands.py`
+  - [x] `scripts/test_scripts/e2e_0610_sse_streaming.py`
+  - [x] `scripts/test_scripts/e2e_0620_pma_standard_path_streaming.py`
+  - [x] `scripts/test_scripts/e2e_0630_gateway_streaming_contract.py`
+  - [x] `scripts/test_scripts/e2e_0640_cynork_transport_streaming.py`
+  - [x] `scripts/test_scripts/e2e_0650_tui_streaming_behavior.py`
+  - [x] `scripts/test_scripts/e2e_0750_tui_pty.py`
+  - [x] `scripts/test_scripts/e2e_0760_tui_slash_commands.py`
 
 #### Refactor Phase (Task 7)
 

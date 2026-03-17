@@ -1,8 +1,8 @@
-# Failed E2E Report: e2e_127_sse_streaming.test_chat_completions_non_stream_still_works
+# Failed E2E Report: e2e_0610_sse_streaming.test_chat_completions_non_stream_still_works
 
 ## 1 Summary
 
-Test `e2e_127_sse_streaming.TestSSEStreaming.test_chat_completions_non_stream_still_works` failed because the non-streaming POST to `/v1/chat/completions` (stream=false) did not complete within the 120-second read timeout.
+Test `e2e_0610_sse_streaming.TestSSEStreaming.test_chat_completions_non_stream_still_works` failed because the non-streaming POST to `/v1/chat/completions` (stream=false) did not complete within the 120-second read timeout.
 The test retries up to 3 times; after retries it failed with "Non-stream request failed after retries: ...
 Read timed out. (read timeout=120)".
 
@@ -18,7 +18,7 @@ Relevant code paths:
 
 ### 3.1 Python Test Path
 
-- [e2e_127_sse_streaming.py](../../../scripts/test_scripts/e2e_127_sse_streaming.py) lines 219-242: POST `/v1/chat/completions` with stream=false (no stream key or stream=False), timeout=120; on RequestException retry; after 3 attempts fail with last_exc.
+- [e2e_0610_sse_streaming.py](../../../scripts/test_scripts/e2e_0610_sse_streaming.py) lines 219-242: POST `/v1/chat/completions` with stream=false (no stream key or stream=False), timeout=120; on RequestException retry; after 3 attempts fail with last_exc.
 
 ### 3.2 Gateway and Completion
 

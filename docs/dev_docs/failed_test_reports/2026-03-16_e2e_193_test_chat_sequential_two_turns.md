@@ -1,8 +1,8 @@
-# Failed E2E Report: e2e_193_chat_sequential_messages.test_chat_sequential_two_turns
+# Failed E2E Report: e2e_0550_chat_sequential_messages.test_chat_sequential_two_turns
 
 ## 1 Summary
 
-Test `e2e_193_chat_sequential_messages.TestChatSequentialMessages.test_chat_sequential_two_turns` failed because the first POST to `/v1/chat/completions` (two-turn chat: first message "Say one word: first") did not return success; the response body contained an error with code `cynodeai_completion_timeout` and message "Completion did not finish before the maximum wait duration".
+Test `e2e_0550_chat_sequential_messages.TestChatSequentialMessages.test_chat_sequential_two_turns` failed because the first POST to `/v1/chat/completions` (two-turn chat: first message "Say one word: first") did not return success; the response body contained an error with code `cynodeai_completion_timeout` and message "Completion did not finish before the maximum wait duration".
 The test asserts ok (2xx) at line 68; ok was False and body contained the structured error.
 
 ## 2 Why the Failure Occurred
@@ -17,7 +17,7 @@ Relevant code paths:
 
 ### 3.1 Python Test Path
 
-- [e2e_193_chat_sequential_messages.py](../../../scripts/test_scripts/e2e_193_chat_sequential_messages.py) lines 42-68: First _chat_request with messages [{"role":"user","content":"Say one word: first"}]; asserts ok at line 68, then extracts first_content and asserts non-empty.
+- [e2e_0550_chat_sequential_messages.py](../../../scripts/test_scripts/e2e_0550_chat_sequential_messages.py) lines 42-68: First _chat_request with messages [{"role":"user","content":"Say one word: first"}]; asserts ok at line 68, then extracts first_content and asserts non-empty.
 
 ### 3.2 Gateway and Completion
 
@@ -65,5 +65,5 @@ The following describes why the first turn times out and what to change.
 
 ### 6.3 Exact Code or Config Changes
 
-- Same as e2e_110: use a longer HTTP timeout for pmaclient when called from the gateway.
+- Same as e2e_0530: use a longer HTTP timeout for pmaclient when called from the gateway.
 - Optionally extend the test's skip list to include cynodeai_completion_timeout so sequential test is resilient to slow environments.

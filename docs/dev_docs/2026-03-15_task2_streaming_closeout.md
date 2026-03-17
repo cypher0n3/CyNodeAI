@@ -6,7 +6,7 @@
 
 ## What Changed
 
-**Date:** 2026-03-15  
+**Date:** 2026-03-15
 **Plan:** [2026-03-15_streaming_specs_implementation_plan.md](2026-03-15_streaming_specs_implementation_plan.md) Task 2.
 
 ### Summary
@@ -25,9 +25,9 @@
 
 - **Go:** `go test ./agents/internal/pma/... -count=1` passes (all existing tests; no new streaming-specific unit tests added).
 - **Lint:** `just lint-go` passes.
-- **E2E:** `e2e_201_pma_standard_path_streaming.py` asserts on **gateway** SSE (e.g. `cynodeai.iteration_start`).
+- **E2E:** `e2e_0620_pma_standard_path_streaming.py` asserts on **gateway** SSE (e.g. `cynodeai.iteration_start`).
   The gateway currently only forwards `delta` from PMA NDJSON (`processNDJSONLine` ignores other keys).
-  So e2e_201 will remain red until Task 3 (gateway relay) emits named events.
+  So e2e_0620 will remain red until Task 3 (gateway relay) emits named events.
 
 ## Fallbacks Preserved
 

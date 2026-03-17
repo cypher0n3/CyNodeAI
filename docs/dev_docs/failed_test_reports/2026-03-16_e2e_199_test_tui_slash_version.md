@@ -1,8 +1,8 @@
-# Failed E2E Report: e2e_199_tui_slash_commands.test_tui_slash_version
+# Failed E2E Report: e2e_0760_tui_slash_commands.test_tui_slash_version
 
 ## 1 Summary
 
-Test `e2e_199_tui_slash_commands.TestTuiSlashCommands.test_tui_slash_version` failed because the TUI did not show the prompt-ready landmark within the allowed timeout (12 seconds after startup delay).
+Test `e2e_0760_tui_slash_commands.TestTuiSlashCommands.test_tui_slash_version` failed because the TUI did not show the prompt-ready landmark within the allowed timeout (12 seconds after startup delay).
 The test starts a TuiPtySession, calls `_wait_ready(session)` (which waits for `[CYNRK_PROMPT_READY]` or `[CYNRK_READY]` in PTY output), then would run `/version` and assert version string in scrollback; it failed at _wait_ready.
 
 ## 2 Why the Failure Occurred
@@ -17,7 +17,7 @@ Relevant code paths:
 
 ### 3.1 Python Test Path
 
-- [e2e_199_tui_slash_commands.py](../../../scripts/test_scripts/e2e_199_tui_slash_commands.py) lines 91-98: TuiPtySession(context, timeout=25), then _wait_ready(session) at line 97; _wait_ready (lines 43-50) sleeps _TUI_STARTUP_DELAY_SEC, then session.wait_for_prompt_ready(timeout_sec=12).
+- [e2e_0760_tui_slash_commands.py](../../../scripts/test_scripts/e2e_0760_tui_slash_commands.py) lines 91-98: TuiPtySession(context, timeout=25), then _wait_ready(session) at line 97; _wait_ready (lines 43-50) sleeps _TUI_STARTUP_DELAY_SEC, then session.wait_for_prompt_ready(timeout_sec=12).
 - [tui_pty_harness.py](../../../scripts/test_scripts/tui_pty_harness.py): TuiPtySession spawns cynork TUI; wait_for_prompt_ready calls read_until_landmark([LANDMARK_PROMPT_READY, LANDMARK_PROMPT_READY_SHORT], timeout_sec); landmarks are `[CYNRK_PROMPT_READY]` and `[CYNRK_READY]`.
 
 ### 3.2 TUI Implementation

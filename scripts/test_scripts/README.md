@@ -27,7 +27,7 @@ Standard library only plus subprocess (cynork, curl); no extra Python deps.
   Start with `just setup-dev start` or `just setup-dev full-demo` (which runs the suite after start).
   Default startup uses the **prescribed sequence** (orchestrator without OLLAMA in stack; PMA via orchestrator/worker).
   If the stack does not reach ready, use `--ollama-in-stack` or `SETUP_DEV_OLLAMA_IN_STACK=1` when OLLAMA in compose is needed.
-  **AI agents must NOT use** these bypasses; they invalidate GPU variant E2E (e2e_205).
+  **AI agents must NOT use** these bypasses; they invalidate GPU variant E2E (e2e_0800).
 - **Cynork:** `just build-cynork-dev` (or let `run_e2e.py` build it unless you pass `--no-build`).
 - **Python 3:** run from repo root with `PYTHONPATH=.` so `scripts.test_scripts` resolves.
 
@@ -55,7 +55,8 @@ PYTHONPATH=. python scripts/test_scripts/run_e2e.py
 - `--exclude-tags TAG1,TAG2` - exclude tests that have any of these tags
 - Unittest pass-through: `-k PATTERN` (filter tests), `-v` (verbosity), `-f` (failfast)
 
-Tags: `suite_*` (suite_orchestrator, suite_worker_node, suite_agents, suite_cynork, suite_proxy_pma), `full_demo` (run during `just setup-dev full-demo`; excludes subset-only tests), `inference`, `pma_inference`, `sba_inference`, `auth`, `task`, `chat`, `worker`, `pma`.
+Tags: `suite_*` (suite_orchestrator, suite_worker_node, suite_agents, suite_cynork, suite_proxy_pma), `full_demo`, `inference`, `no_inference`, `pma_inference`, `sba_inference`, `auth`, `task`, `chat`, `worker`, `pma`.
+Logical groups: `tui` (all TUI/PTY tests), `streaming` (SSE, gateway, transport, TUI streaming), `control_plane` (node register, capability, workflow), `sba` (all SBA tests), `gateway` (gateway health and streaming contract), `uds_routing` (inference proxy UDS), `suite_worker_node` (all worker/node tests).
 
 #### E2E Invocation Examples
 
@@ -65,7 +66,12 @@ just e2e --list
 just e2e -k test_login
 just e2e -k test_05 -v
 just e2e --tags full_demo
+just e2e --tags no_inference
 just e2e --tags inference
+just e2e --tags tui
+just e2e --tags streaming
+just e2e --tags sba
+just e2e --tags suite_worker_node
 just e2e --tags suite_proxy_pma
 ```
 
@@ -87,55 +93,63 @@ just e2e --tags suite_proxy_pma
 
 ### Numbering Convention
 
-Modules are named `e2e_NNN_descriptive_name.py` with **zero-padded NNN in steps of 10** (010, 020, 030, ...).
-Alphabetical order of module names is the run order.
-Gaps (e.g. 011-019 between 010 and 020) allow inserting new tests without renumbering.
+Modules are named `e2e_NNNN_descriptive_name.py` with **4-digit zero-padded NNNN in steps of 10** (0010, 0020, 0030, ...).
+Alphabetical order of module names is the run order (fast/simple first, then task lifecycle, inference, streaming, SBA, TUI, teardown).
+Gaps (e.g. 0011-0019 between 0010 and 0020) allow inserting new tests without renumbering.
 
 ### Test Modules (Run Order)
 
-- **e2e_010_cli_version_and_status** - Cynork version and status (gateway health); no auth.
-- **e2e_020_auth_login** - Auth login acceptance coverage (`-u`/`--user` + `--password-stdin`); creates temp config dir and writes token to `state.CONFIG_PATH`.
-- **e2e_030_auth_negative_whoami** - Whoami without login fails (negative test).
-- **e2e_040_auth_whoami** - Auth whoami; asserts user=admin.
-- **e2e_050_task_create** - Task create acceptance coverage for prompt mode plus canonical `--name` and `--attach`; sets `state.TASK_ID`.
-- **e2e_060_task_list** - Task list JSON; asserts tasks array and created task present.
-- **e2e_070_task_get** - Get task by ID.
-- **e2e_080_task_result** - Get task result; asserts status present.
-- **e2e_090_task_inference** - Create task with `--use-inference` (skipped if `INFERENCE_PROXY_IMAGE` unset).
-- **e2e_100_task_prompt** - Prompt (LLM) task; asserts non-empty stdout.
-- **e2e_110_task_models_and_chat** - Models list; one-shot chat (skipped if `E2E_SKIP_INFERENCE_SMOKE`).
-- **e2e_115_pma_chat_context** - One-shot chat with `--project-id` (OpenAI-Project header); PMA handoff path (skipped if `E2E_SKIP_INFERENCE_SMOKE`).
-- **e2e_116_skills_gateway** - Skills list, load (from file), get by id, delete via cynork against user-gateway; requires auth (e2e_020).
-- **e2e_117_workflow_api** - Control-plane workflow start/resume/checkpoint/release; uses `state.TASK_ID`.
-- **e2e_118_pma_chat_capable_model** - Verifies the PMA chat path selects a chat-capable model when inference is enabled.
-- **e2e_119_worker_telemetry** - Worker API telemetry node:info and node:stats; requires WORKER_API and bearer.
-- **e2e_120_worker_api_health_readyz** - Worker API healthz and readyz (process alive vs ready for jobs).
-- **e2e_121_worker_api_managed_service** - Worker API as managed service (container started by node-manager).
-- **e2e_122_node_manager_telemetry** - Telemetry logs for source_name=node_manager (node-manager lifecycle).
-- **e2e_123_sba_task** - SBA task; asserts job result contains `sba_result`; sets `state.SBA_TASK_ID`.
-- **e2e_124_worker_pma_proxy** - Worker managed-service proxy and PMA handoff (suite_proxy_pma).
-- **e2e_126_uds_inference_routing** - UDS inference proxy routing coverage for worker-managed services and sandbox inference paths.
-- **e2e_130_sba_task_result_contract** - SBA result shape (protocol_version, job_id, status, steps, artifacts).
-  Requires state.SBA_TASK_ID from e2e_123.
-- **e2e_140_sba_task_inference** - SBA task with inference prompt (skipped if `E2E_SKIP_INFERENCE_SMOKE`).
-- **e2e_145_sba_inference_reply** - SBA + inference prompt "Reply back with the current time."; asserts user-facing reply (not empty stdout / sba-run only); skipped if `E2E_SKIP_INFERENCE_SMOKE`.
-- **e2e_150_task_logs** - Task logs for `state.TASK_ID`; asserts `task_id`, `stdout`, and `stderr` in JSON output.
-- **e2e_160_task_cancel** - Create command-mode task (`--command`), cancel with `-y`, assert terminal status canceled.
-- **e2e_170_control_plane_node_register** - POST `/v1/nodes/register`; sets `state.NODE_JWT`.
-- **e2e_175_prescribed_startup_config_inference_backend** - Node config includes inference_backend when inference-capable.
-- **e2e_180_control_plane_capability** - POST `/v1/nodes/capability` with node JWT.
-- **e2e_190_auth_refresh** - Auth refresh and whoami.
-- **e2e_192_chat_reliability** - One-shot chat with extended timeout and retries; assert timely reply or clear error (skipped if `E2E_SKIP_INFERENCE_SMOKE`).
-- **e2e_193_chat_sequential_messages** - Two-turn chat via POST /v1/chat/completions; assert both replies (skipped if `E2E_SKIP_INFERENCE_SMOKE`).
-- **e2e_194_chat_simultaneous_messages** - Three concurrent chat requests; assert at least one succeeds with non-empty reply (skipped if `E2E_SKIP_INFERENCE_SMOKE`).
-- **e2e_195_gateway_health_readyz** - GET /healthz and /readyz; assert 200 or 503 per spec.
-- **e2e_196_task_list_status_filter** - Task list with --status completed/queued; assert JSON shape and status enum.
-- **e2e_200_auth_logout** - Auth logout; asserts tokens are cleared locally and authenticated access fails afterward.
+- **e2e_0010_cli_version_and_status** - Cynork version and status; no auth.
+- **e2e_0020_gateway_health_readyz** - GET /healthz and /readyz; assert 200 or 503 per spec.
+- **e2e_0030_auth_login** - Auth login acceptance coverage (`-u`/`--user` + `--password-stdin`); creates temp config dir and writes token to `state.CONFIG_PATH`.
+- **e2e_0040_auth_negative_whoami** - Whoami without login fails (negative test).
+- **e2e_0050_auth_whoami** - Auth whoami; asserts user=admin.
+- **e2e_0300_worker_api_health_readyz** - Worker API healthz and readyz (process alive vs ready for jobs).
+- **e2e_0310_worker_telemetry** - Worker API telemetry node:info and node:stats; requires WORKER_API and bearer.
+- **e2e_0320_worker_api_managed_service** - Worker API as managed service (container started by node-manager).
+- **e2e_0330_node_manager_telemetry** - Telemetry logs for source_name=node_manager (node-manager lifecycle).
+- **e2e_0340_uds_inference_routing** - UDS inference proxy routing coverage for worker-managed services and sandbox inference paths.
+- **e2e_0380_control_plane_node_register** - POST `/v1/nodes/register`; sets `state.NODE_JWT`.
+- **e2e_0390_control_plane_capability** - POST `/v1/nodes/capability` with node JWT.
+- **e2e_0420_task_create** - Task create acceptance coverage for prompt mode plus canonical `--name` and `--attach`; sets `state.TASK_ID`.
+- **e2e_0430_task_list** - Task list JSON; asserts tasks array and created task present.
+- **e2e_0440_task_get** - Get task by ID.
+- **e2e_0450_task_result** - Get task result; asserts status present.
+- **e2e_0460_task_logs** - Task logs for `state.TASK_ID`; asserts `task_id`, `stdout`, and `stderr` in JSON output.
+- **e2e_0470_task_cancel** - Create command-mode task (`--command`), cancel with `-y`, assert terminal status canceled.
+- **e2e_0480_task_list_status_filter** - Task list with --status completed/queued; assert JSON shape and status enum.
+- **e2e_0490_skills_gateway** - Skills list, load (from file), get by id, delete via cynork against user-gateway; requires auth (e2e_0030).
+- **e2e_0500_workflow_api** - Control-plane workflow start/resume/checkpoint/release; uses `state.TASK_ID`.
+- **e2e_0510_task_inference** - Create task with `--use-inference` (skipped if `INFERENCE_PROXY_IMAGE` unset).
+- **e2e_0520_task_prompt** - Prompt (LLM) task; asserts non-empty stdout.
+- **e2e_0530_task_models_and_chat** - Models list; one-shot chat (skipped if `E2E_SKIP_INFERENCE_SMOKE`).
+- **e2e_0540_chat_reliability** - One-shot chat with extended timeout and retries; assert timely reply or clear error (skipped if `E2E_SKIP_INFERENCE_SMOKE`).
+- **e2e_0550_chat_sequential_messages** - Two-turn chat via POST /v1/chat/completions; assert both replies (skipped if `E2E_SKIP_INFERENCE_SMOKE`).
+- **e2e_0560_chat_simultaneous_messages** - Three concurrent chat requests; assert at least one succeeds with non-empty reply (skipped if `E2E_SKIP_INFERENCE_SMOKE`).
+- **e2e_0570_pma_chat_context** - One-shot chat with `--project-id` (OpenAI-Project header); PMA handoff path (skipped if `E2E_SKIP_INFERENCE_SMOKE`).
+- **e2e_0580_pma_chat_capable_model** - Verifies the PMA chat path selects a chat-capable model when inference is enabled.
+- **e2e_0610_sse_streaming** - SSE streaming for /v1/chat/completions and /v1/responses (skipped if `E2E_SKIP_INFERENCE_SMOKE`).
+- **e2e_0620_pma_standard_path_streaming** - PMA standard-path NDJSON streaming (skipped if `E2E_SKIP_INFERENCE_SMOKE`).
+- **e2e_0630_gateway_streaming_contract** - Gateway amendment, heartbeat, cancellation, persistence (skipped if events not produced).
+- **e2e_0640_cynork_transport_streaming** - Cynork transport parsing and event propagation (suite_orchestrator, chat).
+- **e2e_0650_tui_streaming_behavior** - TUI streaming behavior (skipped if `E2E_SKIP_INFERENCE_SMOKE`).
+- **e2e_0660_worker_pma_proxy** - Worker managed-service proxy and PMA handoff (suite_proxy_pma).
+- **e2e_0710_sba_task** - SBA task; asserts job result contains `sba_result`; sets `state.SBA_TASK_ID`.
+- **e2e_0720_sba_task_result_contract** - SBA result shape (protocol_version, job_id, status, steps, artifacts).
+  Requires state.SBA_TASK_ID from e2e_0710.
+- **e2e_0730_sba_task_inference** - SBA task with inference prompt (skipped if `E2E_SKIP_INFERENCE_SMOKE`).
+- **e2e_0740_sba_inference_reply** - SBA + inference prompt "Reply back with the current time."; asserts user-facing reply; skipped if `E2E_SKIP_INFERENCE_SMOKE`.
+- **e2e_0750_tui_pty** - TUI PTY harness; progressive visible-text updates, Ctrl+C cancel.
+- **e2e_0760_tui_slash_commands** - TUI slash commands (/thread, /whoami, etc.).
+- **e2e_0770_auth_refresh** - Auth refresh and whoami.
+- **e2e_0780_auth_logout** - Auth logout; asserts tokens are cleared locally and authenticated access fails afterward.
+- **e2e_0790_prescribed_startup_config_inference_backend** - Node config includes inference_backend when inference-capable.
+- **e2e_0800_gpu_variant_ollama** - Ollama container image tag matches expected GPU variant (suite_worker_node, gpu_variant).
 
 ## Execution Order and State
 
 Discovery order is alphabetical by module name.
-Several tests depend on shared state: login (020) creates the config and token; later tests use `state.CONFIG_PATH` and task/JWT IDs set by earlier tests.
+Several tests depend on shared state: login (0030) creates the config and token; task create (0420) sets `state.TASK_ID`; later tests use `state.CONFIG_PATH` and task/JWT IDs set by earlier tests.
 Running a single test in isolation (e.g. `-k test_task_create`) will fail if it expects `state.TASK_ID` or `state.CONFIG_PATH` from a prior test; run the full suite or a contiguous subset.
 
 ## Environment
@@ -151,9 +165,9 @@ Same as `just setup-dev` (scripts/justfile); see also `docs/tech_specs/ports_and
 
 ## Adding Tests
 
-1. Add a new module `e2e_NNN_descriptive_name.py` in `scripts/test_scripts/` with unittest `TestCase` classes.
-   Use a number between two existing tests for the desired run position (e.g. 015 between 010 and 020).
-   If adding at the end, use at least 10 above the current last test (e.g. 210 when the last is 200).
+1. Add a new module `e2e_NNNN_descriptive_name.py` in `scripts/test_scripts/` with unittest `TestCase` classes.
+   Use a number between two existing tests for the desired run position (e.g. 0015 between 0010 and 0020).
+   If adding at the end, use at least 10 above the current last test (e.g. 0790 when the last is 0780 (auth_logout)).
    No need to renumber existing files.
 2. The runner discovers all `e2e_*.py`; no registration needed.
 3. Use `from scripts.test_scripts import config, helpers` and `import scripts.test_scripts.e2e_state as state`.
@@ -167,8 +181,8 @@ Same as `just setup-dev` (scripts/justfile); see also `docs/tech_specs/ports_and
   Use `--ollama-in-stack` when OLLAMA in compose is needed.
 - **"cynork-dev not found"** - Run `just build-cynork-dev` or omit `--no-build` so the runner builds it.
 - **"Ollama inference smoke failed"** - Ollama must be running (e.g. start with `--ollama-in-stack` or set `SETUP_DEV_OLLAMA_IN_STACK=1`); or set `E2E_SKIP_INFERENCE_SMOKE=1` or pass `--skip-ollama`.
-- **Test 090 (task_inference) skipped** - Set `INFERENCE_PROXY_IMAGE` (e.g. `cynodeai-inference-proxy:dev`) when starting the node so inference-in-sandbox is available.
-- **Single test fails with missing state** - Run the full suite or include earlier tests (e.g. login, task-create) so shared state is set.
+- **Test 0510 (task_inference) skipped** - Set `INFERENCE_PROXY_IMAGE` (e.g. `cynodeai-inference-proxy:dev`) when starting the node so inference-in-sandbox is available.
+- **Single test fails with missing state** - Run the full suite or include earlier tests (e.g. e2e_0030 login, e2e_0420 task-create) so shared state is set.
 
 ## Lint
 

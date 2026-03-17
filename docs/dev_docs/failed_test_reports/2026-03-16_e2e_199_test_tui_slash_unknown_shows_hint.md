@@ -1,8 +1,8 @@
-# Failed E2E Report: e2e_199_tui_slash_commands.test_tui_slash_unknown_shows_hint
+# Failed E2E Report: e2e_0760_tui_slash_commands.test_tui_slash_unknown_shows_hint
 
 ## 1 Summary
 
-Test `e2e_199_tui_slash_commands.TestTuiSlashCommands.test_tui_slash_unknown_shows_hint` failed because the TUI did not show the prompt-ready landmark within the allowed timeout (12 seconds).
+Test `e2e_0760_tui_slash_commands.TestTuiSlashCommands.test_tui_slash_unknown_shows_hint` failed because the TUI did not show the prompt-ready landmark within the allowed timeout (12 seconds).
 The test would send `/notacommand` and assert a hint (Unknown/unknown/help) appears without exiting; it failed at _wait_ready(session) before reaching the slash command step.
 
 ## 2 Why the Failure Occurred
@@ -17,7 +17,7 @@ Relevant code paths:
 
 ### 3.1 Python Test Path
 
-- [e2e_199_tui_slash_commands.py](../../../scripts/test_scripts/e2e_199_tui_slash_commands.py) lines 108-118: TuiPtySession, _wait_ready(session) at line 114, then send_keys "/notacommand", read_until_landmark for hint.
+- [e2e_0760_tui_slash_commands.py](../../../scripts/test_scripts/e2e_0760_tui_slash_commands.py) lines 108-118: TuiPtySession, _wait_ready(session) at line 114, then send_keys "/notacommand", read_until_landmark for hint.
 - [tui_pty_harness.py](../../../scripts/test_scripts/tui_pty_harness.py): wait_for_prompt_ready, landmarks as in version report.
 
 ### 3.2 TUI and Specs
@@ -49,11 +49,11 @@ Traceability for this test:
 
 - **Spec/requirement intent:** TUI MUST become prompt-ready and emit landmark; unknown slash command MUST show a hint without exiting.
 - **Observed behavior:** TUI did not reach prompt-ready within timeout; test could not validate unknown-command hint.
-- **Deviation:** Same root cause as other e2e_199 failures: prompt-ready landmark not seen within 12s (TUI startup/landmark emission or environment).
+- **Deviation:** Same root cause as other e2e_0760 failures: prompt-ready landmark not seen within 12s (TUI startup/landmark emission or environment).
 
 ## 6 What Needs to Be Fixed in the Implementation
 
 - **Same root cause as [2026-03-16_e2e_199_test_tui_slash_version.md](2026-03-16_e2e_199_test_tui_slash_version.md).**
   The test fails at `_wait_ready` before sending `/unknown` or asserting on the hint.
   The landmark is implemented in [cynork/internal/tui/model.go](../../../cynork/internal/tui/model.go) View(); failure is due to TUI not reaching first paint within 12s (e.g. [cynork/cmd/tui.go](../../../cynork/cmd/tui.go) `EnsureThread` blocking when token is set, or PTY/timeout).
-  Apply the same fixes as in the e2e_199 test_tui_slash_version report section 6: ensure EnsureThread is fast or E2E runs without token, consider increasing the ready timeout, and verify PTY captures the view output.
+  Apply the same fixes as in the e2e_0760 test_tui_slash_version report section 6: ensure EnsureThread is fast or E2E runs without token, consider increasing the ready timeout, and verify PTY captures the view output.

@@ -1,8 +1,8 @@
-# Failed E2E Report: e2e_127_sse_streaming.test_chat_completions_stream_exposes_named_cynodeai_extension_events
+# Failed E2E Report: e2e_0610_sse_streaming.test_chat_completions_stream_exposes_named_cynodeai_extension_events
 
 ## 1 Summary
 
-Test `e2e_127_sse_streaming.TestSSEStreaming.test_chat_completions_stream_exposes_named_cynodeai_extension_events` failed because the parsed SSE stream had no events with a named `cynodeai.*` event type (e.g. cynodeai.heartbeat, cynodeai.thinking_delta); the event list was `[None, None]`.
+Test `e2e_0610_sse_streaming.TestSSEStreaming.test_chat_completions_stream_exposes_named_cynodeai_extension_events` failed because the parsed SSE stream had no events with a named `cynodeai.*` event type (e.g. cynodeai.heartbeat, cynodeai.thinking_delta); the event list was `[None, None]`.
 The test uses `helpers.parse_sse_stream_typed()` to get event names and filters for those starting with `cynodeai.`; it asserts at least one such event exists.
 
 ## 2 Why the Failure Occurred
@@ -18,7 +18,7 @@ Relevant code paths:
 
 ### 3.1 Python Test Path
 
-- [e2e_127_sse_streaming.py](../../../scripts/test_scripts/e2e_127_sse_streaming.py) lines 269-304: POST `/v1/chat/completions` stream=true, calls `helpers.parse_sse_stream_typed(resp)`, filters typed_events for `event.startswith("cynodeai.")`, asserts len(cynodeai_events) > 0.
+- [e2e_0610_sse_streaming.py](../../../scripts/test_scripts/e2e_0610_sse_streaming.py) lines 269-304: POST `/v1/chat/completions` stream=true, calls `helpers.parse_sse_stream_typed(resp)`, filters typed_events for `event.startswith("cynodeai.")`, asserts len(cynodeai_events) > 0.
 - [helpers.py](../../../scripts/test_scripts/helpers.py): `parse_sse_stream_typed` returns list of dicts with "event" and "data"; if event lines are missing or not parsed, event will be None.
 
 ### 3.2 Gateway and Streaming
@@ -47,7 +47,7 @@ Traceability for this test:
 
 ### 4.3 Feature Files
 
-- Streaming E2E coverage in e2e_127 and related tags.
+- Streaming E2E coverage in e2e_0610 and related tags.
 
 ## 5 Implementation Deviation
 

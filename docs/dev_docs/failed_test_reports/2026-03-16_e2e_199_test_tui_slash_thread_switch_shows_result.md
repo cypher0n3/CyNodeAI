@@ -1,14 +1,14 @@
-# Failed E2E Report: e2e_199_tui_slash_commands.test_tui_slash_thread_switch_shows_result
+# Failed E2E Report: e2e_0760_tui_slash_commands.test_tui_slash_thread_switch_shows_result
 
 ## 1 Summary
 
-Test `e2e_199_tui_slash_commands.TestTuiSlashCommands.test_tui_slash_thread_switch_shows_result` failed because the TUI did not show the prompt-ready landmark within the allowed timeout (12 seconds).
+Test `e2e_0760_tui_slash_commands.TestTuiSlashCommands.test_tui_slash_thread_switch_shows_result` failed because the TUI did not show the prompt-ready landmark within the allowed timeout (12 seconds).
 The test would exercise /thread switch and assert 'switched' confirmation or error in scrollback (Task 5A); it failed at _wait_ready(session) before reaching the thread switch step.
 
 ## 2 Why the Failure Occurred
 
 - **Observed:** `AssertionError: False is not true : TUI did not show prompt-ready landmark within timeout`
-- **Root cause:** Same as other e2e_199 TUI tests: `wait_for_prompt_ready(timeout_sec=12)` returned False; prompt-ready landmark not present in PTY output within timeout.
+- **Root cause:** Same as other e2e_0760 TUI tests: `wait_for_prompt_ready(timeout_sec=12)` returned False; prompt-ready landmark not present in PTY output within timeout.
 - **Effect:** Test failed at _wait_ready before sending /thread switch or asserting on result.
 
 ## 3 Specific Code Paths Involved
@@ -17,7 +17,7 @@ Relevant code paths:
 
 ### 3.1 Python Test Path
 
-- [e2e_199_tui_slash_commands.py](../../../scripts/test_scripts/e2e_199_tui_slash_commands.py) lines 476-481 (approx): TuiPtySession, _wait_ready(session) at line 481, then /thread switch and assert switched/error in scrollback.
+- [e2e_0760_tui_slash_commands.py](../../../scripts/test_scripts/e2e_0760_tui_slash_commands.py) lines 476-481 (approx): TuiPtySession, _wait_ready(session) at line 481, then /thread switch and assert switched/error in scrollback.
 - [tui_pty_harness.py](../../../scripts/test_scripts/tui_pty_harness.py): wait_for_prompt_ready and landmarks.
 
 ### 3.2 TUI and Specs
@@ -49,7 +49,7 @@ Traceability for this test:
 
 - **Spec/requirement intent:** TUI MUST become prompt-ready; /thread switch MUST show 'switched' confirmation or error in scrollback.
 - **Observed behavior:** TUI did not reach prompt-ready within timeout; test could not validate /thread switch.
-- **Deviation:** Same as other e2e_199 failures: prompt-ready landmark not seen within 12s.
+- **Deviation:** Same as other e2e_0760 failures: prompt-ready landmark not seen within 12s.
 
 ## 6 What Needs to Be Fixed in the Implementation
 

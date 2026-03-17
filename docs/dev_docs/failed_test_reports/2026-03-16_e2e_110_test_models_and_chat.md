@@ -1,8 +1,8 @@
-# Failed E2E Report: e2e_110_task_models_and_chat.test_models_and_chat
+# Failed E2E Report: e2e_0530_task_models_and_chat.test_models_and_chat
 
 ## 1 Summary
 
-Test `e2e_110_task_models_and_chat.TestModelsAndChat.test_models_and_chat` failed because the one-shot chat command (`cynork chat --message ping --plain`) did not complete successfully within the test's retries.
+Test `e2e_0530_task_models_and_chat.TestModelsAndChat.test_models_and_chat` failed because the one-shot chat command (`cynork chat --message ping --plain`) did not complete successfully within the test's retries.
 The test first asserts models list returns a list, then (unless inference smoke is skipped) runs chat up to 3 times; the final assertion at line 68 failed with "one-shot chat failed after retries" and stderr showing the chat command timed out after 120 seconds.
 
 ## 2 Why the Failure Occurred
@@ -17,7 +17,7 @@ Relevant code paths:
 
 ### 3.1 Python Test Path
 
-- [e2e_110_task_models_and_chat.py](../../../scripts/test_scripts/e2e_110_task_models_and_chat.py) lines 23-68: Runs `models list -o json` (asserts ok and list), then up to 3 attempts of `chat --message ping --plain`; asserts chat_ok (non-empty stdout, no error) at line 68.
+- [e2e_0530_task_models_and_chat.py](../../../scripts/test_scripts/e2e_0530_task_models_and_chat.py) lines 23-68: Runs `models list -o json` (asserts ok and list), then up to 3 attempts of `chat --message ping --plain`; asserts chat_ok (non-empty stdout, no error) at line 68.
 
 ### 3.2 Helper and CLI
 

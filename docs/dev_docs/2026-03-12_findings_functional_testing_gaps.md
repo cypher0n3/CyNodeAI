@@ -135,43 +135,46 @@ Functional testing of client parity is therefore **CLI-only**; Web Console behav
 Each E2E module and the REQ ids traced in its `# Traces:` block (or Validates line).
 Use this to see which tests cover which requirements and to add new traces when extending E2E.
 
-- **e2e_010_cli_version_and_status:** REQ-ORCHES-0120 (healthz); CYNAI.STANDS.CliCynork
-- **e2e_020_auth_login:** REQ-IDENTY-0103, 0104
-- **e2e_030_auth_negative_whoami:** REQ-IDENTY-0122, 0103, 0104
-- **e2e_040_auth_whoami:** REQ-IDENTY-0103, 0104
-- **e2e_050_task_create:** REQ-ORCHES-0122, 0126
-- **e2e_060_task_list:** REQ-ORCHES-0125
-- **e2e_070_task_get:** REQ-ORCHES-0125
-- **e2e_080_task_result:** REQ-ORCHES-0124, 0125
-- **e2e_090_task_inference:** REQ-WORKER-0114, 0270; REQ-ORCHES-0123
-- **e2e_100_task_prompt:** REQ-ORCHES-0122, 0126
-- **e2e_110_task_models_and_chat:** REQ-USRGWY-0121, 0127; REQ-CLIENT-0161
-- **e2e_115_pma_chat_context:** REQ-USRGWY-0131; REQ-CLIENT-0173
-- **e2e_116_skills_gateway:** REQ-CLIENT-0146; REQ-SKILLS-0106, 0115
-- **e2e_117_workflow_api:** REQ-ORCHES-0144, 0145, 0146
-- **e2e_118_pma_chat_capable_model:** REQ-MODELS-0008; REQ-PMAGNT-0100, 0101
-- **e2e_119_worker_telemetry:** REQ-WORKER-0200, 0230, 0231, 0232, 0234
-- **e2e_120_worker_api_health_readyz:** REQ-WORKER-0140, 0142
-- **e2e_121_worker_api_managed_service:** REQ-WORKER-0160, 0161
-- **e2e_122_node_manager_telemetry:** REQ-WORKER-0200, 0230
-- **e2e_123_sba_task:** REQ-SBAGNT-0001, 0106
-- **e2e_124_worker_pma_proxy:** REQ-ORCHES-0162 (PMA routing via worker)
-- **e2e_126_uds_inference_routing:** REQ-WORKER-0270, REQ-SANDBX-0131, REQ-WORKER-0174
-- **e2e_130_sba_task_result_contract:** REQ-SBAGNT-0103
-- **e2e_140_sba_task_inference:** REQ-SBAGNT-0106, 0109
-- **e2e_145_sba_inference_reply:** REQ-SBAGNT-0103, 0109
-- **e2e_150_task_logs:** REQ-ORCHES-0124
-- **e2e_160_task_cancel:** REQ-ORCHES-0125
-- **e2e_170_control_plane_node_register:** REQ-ORCHES-0113, 0114
-- **e2e_175_prescribed_startup_config_inference_backend:** REQ-ORCHES-0149, 0113, 0114
-- **e2e_180_control_plane_capability:** REQ-ORCHES-0114
-- **e2e_190_auth_refresh:** REQ-IDENTY-0104, 0105
-- **e2e_192_chat_reliability:** REQ-ORCHES-0131, 0132
-- **e2e_193_chat_sequential_messages:** REQ-USRGWY-0130
-- **e2e_194_chat_simultaneous_messages:** REQ-ORCHES-0131, 0132
-- **e2e_195_gateway_health_readyz:** REQ-ORCHES-0120
-- **e2e_196_task_list_status_filter:** REQ-ORCHES-0125
-- **e2e_200_auth_logout:** REQ-IDENTY-0106; REQ-CLIENT-0150
+- **e2e_0010_cli_version_and_status:** REQ-ORCHES-0120 (healthz); CYNAI.STANDS.CliCynork
+- **e2e_0020_gateway_health_readyz:** REQ-ORCHES-0120
+- **e2e_0030_auth_login:** REQ-IDENTY-0103, 0104
+- **e2e_0040_auth_negative_whoami:** REQ-IDENTY-0122, 0103, 0104
+- **e2e_0050_auth_whoami:** REQ-IDENTY-0103, 0104
+- **e2e_0300_worker_api_health_readyz:** REQ-WORKER-0140, 0142
+- **e2e_0310_worker_telemetry:** REQ-WORKER-0200, 0230, 0231, 0232, 0234
+- **e2e_0320_worker_api_managed_service:** REQ-WORKER-0160, 0161
+- **e2e_0330_node_manager_telemetry:** REQ-WORKER-0200, 0230
+- **e2e_0340_uds_inference_routing:** REQ-WORKER-0270, REQ-SANDBX-0131, REQ-WORKER-0174
+- **e2e_0380_control_plane_node_register:** REQ-ORCHES-0113, 0114
+- **e2e_0390_control_plane_capability:** REQ-ORCHES-0114
+- **e2e_0420_task_create:** REQ-ORCHES-0122, 0126
+- **e2e_0430_task_list:** REQ-ORCHES-0125
+- **e2e_0440_task_get:** REQ-ORCHES-0125
+- **e2e_0450_task_result:** REQ-ORCHES-0124, 0125
+- **e2e_0460_task_logs:** REQ-ORCHES-0124
+- **e2e_0470_task_cancel:** REQ-ORCHES-0125
+- **e2e_0480_task_list_status_filter:** REQ-ORCHES-0125
+- **e2e_0490_skills_gateway:** REQ-CLIENT-0146; REQ-SKILLS-0106, 0115
+- **e2e_0500_workflow_api:** REQ-ORCHES-0144, 0145, 0146
+- **e2e_0510_task_inference:** REQ-WORKER-0114, 0270; REQ-ORCHES-0123
+- **e2e_0520_task_prompt:** REQ-ORCHES-0122, 0126
+- **e2e_0530_task_models_and_chat:** REQ-USRGWY-0121, 0127; REQ-CLIENT-0161
+- **e2e_0540_chat_reliability:** REQ-ORCHES-0131, 0132
+- **e2e_0550_chat_sequential_messages:** REQ-USRGWY-0130
+- **e2e_0560_chat_simultaneous_messages:** REQ-ORCHES-0131, 0132
+- **e2e_0570_pma_chat_context:** REQ-USRGWY-0131; REQ-CLIENT-0173
+- **e2e_0580_pma_chat_capable_model:** REQ-MODELS-0008; REQ-PMAGNT-0100, 0101
+- **e2e_0610_sse_streaming:** (streaming; see tech_specs openai_compatible_chat_api, chat_threads_and_messages)
+- **e2e_0660_worker_pma_proxy:** REQ-ORCHES-0162 (PMA routing via worker)
+- **e2e_0710_sba_task:** REQ-SBAGNT-0001, 0106
+- **e2e_0720_sba_task_result_contract:** REQ-SBAGNT-0103
+- **e2e_0730_sba_task_inference:** REQ-SBAGNT-0106, 0109
+- **e2e_0740_sba_inference_reply:** REQ-SBAGNT-0103, 0109
+- **e2e_0750_tui_pty:** (TUI PTY harness)
+- **e2e_0760_tui_slash_commands:** (TUI slash commands)
+- **e2e_0770_auth_refresh:** REQ-IDENTY-0104, 0105
+- **e2e_0780_auth_logout:** REQ-IDENTY-0106; REQ-CLIENT-0150
+- **e2e_0790_prescribed_startup_config_inference_backend:** REQ-ORCHES-0149, 0113, 0114
 
 ## Uncovered Domains: Specific REQ Ids
 
@@ -306,37 +309,37 @@ So all seven orchestrator feature files either use the DB in Background or in sc
 Which behaviors are covered only by E2E, only by BDD, or by both.
 This helps prioritize where to add E2E traces or BDD steps.
 
-**Auth (login, whoami, refresh, logout, token validation):** E2E (e2e_020, 030, 040, 190, 200); BDD (initial_auth.feature).
+**Auth (login, whoami, refresh, logout, token validation):** E2E (e2e_0030, 0040, 0050, 0770, 0780); BDD (initial_auth.feature).
 Both layers cover auth; E2E traces REQ-IDENTY-0103, 0104, 0105, 0106, 0122.
 
-**Task create/list/get/result/logs/cancel/status filter:** E2E (e2e_050, 060, 070, 080, 150, 160, 196); BDD (orchestrator_task_lifecycle.feature, cynork_tasks.feature).
+**Task create/list/get/result/logs/cancel/status filter:** E2E (e2e_0420, 0430, 0440, 0450, 0460, 0470, 0480); BDD (orchestrator_task_lifecycle.feature, cynork_tasks.feature).
 Both cover task lifecycle; E2E traces REQ-ORCHES-0122, 0124, 0125, 0126.
 
-**Workflow start/resume/lease:** E2E (e2e_117); BDD (workflow_start_resume_lease.feature).
+**Workflow start/resume/lease:** E2E (e2e_0500); BDD (workflow_start_resume_lease.feature).
 Both; E2E traces REQ-ORCHES-0144, 0145, 0146.
 
-**Node registration and config:** E2E (e2e_170, 175, 180); BDD (node_registration_and_config.feature).
+**Node registration and config:** E2E (e2e_0380, 0790, 0390); BDD (node_registration_and_config.feature).
 Both; E2E traces REQ-ORCHES-0113, 0114, 0149.
 
-**Chat completion (one-shot, multi-turn, reliability):** E2E (e2e_110, 115, 118, 192, 193, 194); BDD (chat_completion_reliability.feature, chat_openai_compatible.feature).
+**Chat completion (one-shot, multi-turn, reliability):** E2E (e2e_0530, 0570, 0580, 0540, 0550, 0560); BDD (chat_completion_reliability.feature, chat_openai_compatible.feature).
 Both; E2E traces REQ-ORCHES-0131, 0132, REQ-USRGWY-0121, 0130, 0131, REQ-CLIENT-0161, 0173.
 
 **API Egress call (POST /v1/call, allow/deny, bearer):** BDD only ([api_egress_call.feature](../../features/orchestrator/api_egress_call.feature)); no E2E module.
 E2E gap: add an e2e_* module that calls the API Egress endpoint and traces REQ-APIEGR-0110, 0119.
 
-**Skills CRUD via gateway:** E2E (e2e_116); BDD (cynork_skills.feature).
+**Skills CRUD via gateway:** E2E (e2e_0490); BDD (cynork_skills.feature).
 Both; E2E traces REQ-SKILLS-0106, 0115, REQ-CLIENT-0146.
 
-**Worker telemetry, node-manager telemetry, worker API health/readyz:** E2E (e2e_119, 120, 121, 122); BDD (worker_telemetry.feature, worker_api_managed_service.feature, etc.).
+**Worker telemetry, node-manager telemetry, worker API health/readyz:** E2E (e2e_0310, 0300, 0320, 0330); BDD (worker_telemetry.feature, worker_api_managed_service.feature, etc.).
 Both.
 
-**SBA task and result contract:** E2E (e2e_123, 130, 140, 145); BDD (sba_contract.feature, sba_inference.feature, worker_node_sba.feature).
+**SBA task and result contract:** E2E (e2e_0710, 0720, 0730, 0740); BDD (sba_contract.feature, sba_inference.feature, worker_node_sba.feature).
 Both; SBA inference scenarios in BDD have undefined steps (see [Undefined BDD Steps](#undefined-bdd-steps-exact-step-text)).
 
-**PMA chat and proxy:** E2E (e2e_115, 118, 124); BDD (pma_chat_and_context.feature, worker_pma_proxy coverage in worker_node).
+**PMA chat and proxy:** E2E (e2e_0570, 0580, 0660); BDD (pma_chat_and_context.feature, worker_pma_proxy coverage in worker_node).
 Both.
 
-**UDS inference routing (REQ-WORKER-0270, REQ-SANDBX-0131):** E2E (e2e_126); BDD (worker_inference_proxy.feature, worker_node_sandbox_execution.feature).
+**UDS inference routing (REQ-WORKER-0270, REQ-SANDBX-0131):** E2E (e2e_0340); BDD (worker_inference_proxy.feature, worker_node_sandbox_execution.feature).
 Both.
 
 **Connector catalog/instances (REQ-CONNEC-*):** Neither E2E nor BDD.
@@ -354,7 +357,7 @@ How E2E Traces and BDD tags align with requirements.
 
 - **E2E:** Every E2E module has a `# Traces:` block containing at least one REQ id; format is validated by [.ci_scripts/check_e2e_requirements_traces.py](../../.ci_scripts/check_e2e_requirements_traces.py) (invoked via `just check-e2e-requirements-traces`).
 - **BDD:** Feature scenarios use `@req_<domain>_<nnnn>` tags that map to REQ ids; these are not automatically validated against a central REQ list.
-  Consistency between E2E Traces and BDD tags is manual: e.g. REQ-IDENTY-0104 is traced in E2E (e2e_020, e2e_040, e2e_190) and tagged in features (initial_auth, single_node_happy_path).
+  Consistency between E2E Traces and BDD tags is manual: e.g. REQ-IDENTY-0104 is traced in E2E (e2e_0030, e2e_0050, e2e_0770) and tagged in features (initial_auth, single_node_happy_path).
 - **Missing traces:** No E2E module traces REQ-APIEGR, REQ-CONNEC, REQ-WEBCON, REQ-MCPGAT, or the other uncovered domains listed above; adding E2E tests for those areas would require new `# Traces:` lines and possibly new e2e_* modules.
 
 ## Recommendations

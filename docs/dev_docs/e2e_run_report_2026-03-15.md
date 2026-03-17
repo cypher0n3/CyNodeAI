@@ -15,23 +15,23 @@ The following code changes were made.
 
 ### Justfile (Scripts/justfile)
 
-- Wait for user-gateway readyz (port 12080) instead of control-plane (12082).  
+- Wait for user-gateway readyz (port 12080) instead of control-plane (12082).
 - Timeout increased to 90s.
 
 ### Run E2E Script (`run_e2e.py`)
 
 - `_run_prereq_checks(skip_ollama=False)`; when `--skip-ollama` is set, Ollama inference smoke is skipped so the suite can proceed.
 
-### Task Create Tests (`e2e_050_task_create.py`)
+### Task Create Tests (`e2e_0420_task_create.py`)
 
 - `test_task_create_with_attachments`: skip with message when `state.CONFIG_PATH` is None (e.g. when run in isolation).
 
 ### Task Get Tests (`e2e_070_task_get.py`)
 
-- `test_task_get_by_name`: skip when `state.TASK_NAME` is None (run full suite or `test_task_create_named` first).  
+- `test_task_get_by_name`: skip when `state.TASK_NAME` is None (run full suite or `test_task_create_named` first).
 - When get-by-name returns non-ok, call `_assert_clear_name_resolution_error` before failing so stderr/stdout are checked for a clear error.
 
-### Task Result Tests (`e2e_080_task_result.py`)
+### Task Result Tests (`e2e_0450_task_result.py`)
 
 - `test_task_result_by_name`: same as above (skip when `TASK_NAME` is None; assert clear error when not ok).
 

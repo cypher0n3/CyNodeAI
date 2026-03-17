@@ -377,9 +377,9 @@ All paths are repository-relative and linked from this draft.
 
 - Update E2E task-create and task-result flow scripts under [scripts/test_scripts/](../../scripts/test_scripts/) to mark tasks ready or to wait for PMA to do so before asserting execution results.
 
-- Update [scripts/test_scripts/e2e_050_task_create.py](../../scripts/test_scripts/e2e_050_task_create.py) to assert `planning_state=draft` on create.
+- Update [scripts/test_scripts/e2e_0420_task_create.py](../../scripts/test_scripts/e2e_0420_task_create.py) to assert `planning_state=draft` on create.
 
-- Update [scripts/test_scripts/e2e_080_task_result.py](../../scripts/test_scripts/e2e_080_task_result.py) and [scripts/test_scripts/e2e_100_task_prompt.py](../../scripts/test_scripts/e2e_100_task_prompt.py) to transition to ready before polling for completion.
+- Update [scripts/test_scripts/e2e_0450_task_result.py](../../scripts/test_scripts/e2e_0450_task_result.py) and [scripts/test_scripts/e2e_0520_task_prompt.py](../../scripts/test_scripts/e2e_0520_task_prompt.py) to transition to ready before polling for completion.
 
 - Update SBA-related scripts under [scripts/test_scripts/](../../scripts/test_scripts/) only after the new planning flow is stable.
 
