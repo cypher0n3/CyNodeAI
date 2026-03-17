@@ -85,10 +85,10 @@ def detect_expected_ollama_variant() -> str | None:
     """
     nvidia_vram = _detect_nvidia_vram_mb()
     rocm_vram = _detect_rocm_vram_mb()
-    if nvidia_vram == 0 and rocm_vram == 0:
+    if not nvidia_vram and not rocm_vram:
         return None
-    if nvidia_vram == 0:
+    if not nvidia_vram:
         return "rocm"
-    if rocm_vram == 0:
+    if not rocm_vram:
         return "cuda"
     return "cuda" if nvidia_vram >= rocm_vram else "rocm"

@@ -487,7 +487,7 @@ See [Orchestrator Shutdown](orchestrator.md#spec-cynai-orches-orchestratorshutdo
 #### Stop All Orchestrator-Directed (Orchestrator Shutdown) Requirements Traces
 
 - [REQ-ORCHES-0164](../requirements/orches.md#req-orches-0164)
-- [REQ-WORKER-0261](../requirements/worker.md#req-worker-0261)
+- [REQ-WORKER-0271](../requirements/worker.md#req-worker-0271)
 
 ### Session Sandbox PTY (Interactive Terminal Stream)
 

@@ -184,7 +184,7 @@ func TestRunEmbedded_SBAInferenceProxySocketIsSet(t *testing.T) {
 		}
 		time.Sleep(25 * time.Millisecond)
 	}
-	t.Errorf("SBA inference proxy socket %q did not appear within 5s (REQ-WORKER-0260 non-pod path)", sockPath)
+	t.Errorf("SBA inference proxy socket %q did not appear within 5s (REQ-WORKER-0270 non-pod path)", sockPath)
 }
 
 func TestRunEmbedded_WithStateDirAsFile_MkdirAllFailsInProxyStart(t *testing.T) {

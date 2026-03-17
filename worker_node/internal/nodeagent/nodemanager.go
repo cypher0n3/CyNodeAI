@@ -398,7 +398,7 @@ func buildManagedServiceTargetsFromConfig(nodeConfig *nodepayloads.NodeConfigura
 		baseURL := ""
 		switch serviceType {
 		case serviceTypePMA:
-			// REQ-WORKER-0174 / REQ-WORKER-0260: PMA runs with --network=none; reach it over UDS.
+			// REQ-WORKER-0174 / REQ-WORKER-0270: PMA runs with --network=none; reach it over UDS.
 			// The per-service socket dir is mounted inside the container and the PMA writes
 			// service.sock there. Use http+unix:// so the worker-api proxy uses a unix transport.
 			sockPath := filepath.Join(stateDir, ManagedAgentProxySocketBaseDir, serviceID, "service.sock")

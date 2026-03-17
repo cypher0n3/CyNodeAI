@@ -256,7 +256,7 @@ func TestBuildSandboxRunArgsForPod(t *testing.T) {
 		t.Errorf("args should contain INFERENCE_PROXY_URL=http+unix://... (REQ-SANDBX-0131), got %v", args)
 	}
 	if !hasSockMount {
-		t.Errorf("args should mount sock-dir at /run/cynode (REQ-WORKER-0260), got %v", args)
+		t.Errorf("args should mount sock-dir at /run/cynode (REQ-WORKER-0270), got %v", args)
 	}
 	if args[len(args)-2] != "echo" || args[len(args)-1] != "hi" {
 		t.Errorf("command should be at end, got %v", args)
@@ -1470,7 +1470,7 @@ func TestSetSBAError(t *testing.T) {
 	}
 }
 
-// REQ-SANDBX-0131 / REQ-WORKER-0260: proxy sidecar in pod MUST set INFERENCE_PROXY_SOCKET
+// REQ-SANDBX-0131 / REQ-WORKER-0270: proxy sidecar in pod MUST set INFERENCE_PROXY_SOCKET
 // so it listens on the UDS path shared with the SBA container.
 func TestBuildProxyRunArgs_SetsInferenceProxySocket(t *testing.T) {
 	args := buildProxyRunArgs("pod-1", "http://host.containers.internal:11434", "inference-proxy:dev", nil, "/tmp/sock-dir")
@@ -1488,7 +1488,7 @@ func TestBuildProxyRunArgs_SetsInferenceProxySocket(t *testing.T) {
 		t.Errorf("proxy run args must include --pod: %s", argStr)
 	}
 	if !strings.Contains(argStr, "/tmp/sock-dir:/run/cynode") {
-		t.Errorf("proxy run args must mount sock-dir at /run/cynode (REQ-WORKER-0260): %s", argStr)
+		t.Errorf("proxy run args must mount sock-dir at /run/cynode (REQ-WORKER-0270): %s", argStr)
 	}
 }
 
@@ -1675,7 +1675,7 @@ func TestBuildSBARunArgsForPod_AgentInferenceUsesUDS(t *testing.T) {
 	}
 	// MUST mount shared sock dir at /run/cynode.
 	if !strings.Contains(argStr, "/tmp/sock-dir:/run/cynode") {
-		t.Fatalf("expected sock-dir mount at /run/cynode (REQ-WORKER-0260), got: %s", argStr)
+		t.Fatalf("expected sock-dir mount at /run/cynode (REQ-WORKER-0270), got: %s", argStr)
 	}
 	// MUST NOT inject any TCP OLLAMA_BASE_URL.
 	if strings.Contains(argStr, "OLLAMA_BASE_URL=http://localhost:") {

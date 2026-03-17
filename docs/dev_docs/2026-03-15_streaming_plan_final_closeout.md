@@ -6,7 +6,7 @@
 
 ## Tasks Completed
 
-**Date:** 2026-03-15  
+**Date:** 2026-03-15
 **Plan:** [2026-03-15_streaming_specs_implementation_plan.md](2026-03-15_streaming_specs_implementation_plan.md).
 
 ### Task Status
@@ -48,4 +48,4 @@
 - Implement Task 5 TUI canonical transcript model and overwrite/heartbeat UX when prioritized.
 - Run `just e2e --tags pma_inference` and `just e2e --tags chat` with stack + PMA ready to confirm e2e_127 and e2e_201 pass.
 - ~~Implement e2e_202-e2e_204 harnesses and remove skipTest where appropriate.~~ Done (e2e_202-e2e_204 use real stack; Task 6 Refactor: parse_sse_stream_typed in helpers).
-- ~~Fix Python E501 (line length) in e2e_201-e2e_204, mock_sse_gateway, e2e_127, e2e_070, e2e_080 for `just ci` to pass.~~ Done.
+- ~~Fix Python E501 (line length) in e2e_201-e2e_204, e2e_127, e2e_070, e2e_080 for `just ci` to pass.~~ Done.

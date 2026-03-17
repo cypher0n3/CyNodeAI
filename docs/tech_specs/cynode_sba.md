@@ -47,10 +47,6 @@
 This document defines `cynode-sba`, the sandbox agent runner binary.
 It is a full AI agent that runs inside a sandbox container, uses inference (LLM) to decide what to do, and invokes local and MCP tools; see [Sandbox Boundary and Security](#sandbox-boundary-and-security) for container shape and the network model (egress only via worker proxies, not airgapped).
 
-This spec is derived from the draft runner design in:
-
-- Draft runner design: `docs/draft_specs/cynode-agent_rough_spec.md` (not in repo)
-
 This spec aligns with:
 
 - [`docs/tech_specs/sandbox_container.md`](sandbox_container.md)
@@ -238,7 +234,7 @@ The node MAY also infer in-progress when the SBA has read the job and not yet ex
 
 When the job finishes (success, failure, or timeout), the SBA MUST report completion by making an outbound call to the worker proxy to deliver the [Result contract](#result-contract) (and optionally artifact references or inline artifact data); the worker proxy forwards to the orchestrator.
 The SBA MAY also write the result to the agreed location (e.g. `/job/result.json`) for staging or node-mediated delivery; if so, the node MUST NOT clear or delete the job result until the result has been successfully persisted to the orchestrator (e.g. the node uploads from `/job/` or the SBA has already reported via proxy).
-The orchestrator MUST pass job completion (status and result) to the Project Manager Agent and/or Project Analyst Agent for additional work (e.g. verification, remediation); see [Orchestrator - Task Scheduler](orchestrator.md#task-scheduler).
+The orchestrator MUST pass job completion (status and result) to the Project Manager Agent and/or Project Analyst Agent for additional work (e.g. verification, remediation); see [Orchestrator - Task Scheduler](orchestrator.md#spec-cynai-orches-taskscheduler).
 
 See [Worker API - Job lifecycle and result persistence](worker_api.md#spec-cynai-worker-joblifecycleresultpersistence).
 
@@ -249,7 +245,7 @@ See [Worker API - Job lifecycle and result persistence](worker_api.md#spec-cynai
 The SBA MUST be able to **request a time extension** for the current job (e.g. via job-status callback or a dedicated extension endpoint), up to the **node maximum** job timeout.
 The orchestrator or node MAY grant or deny the request.
 When granted, the job's effective deadline is extended; the node (or orchestrator) MUST enforce the new deadline.
-When an extension is granted, the **orchestrator** MUST be informed of the new effective deadline so it can update its [job timeout tracking](orchestrator.md#task-scheduler) and scheduled timeout check; otherwise the orchestrator may incorrectly mark the job as timed out.
+When an extension is granted, the **orchestrator** MUST be informed of the new effective deadline so it can update its [job timeout tracking](orchestrator.md#spec-cynai-orches-taskscheduler) and scheduled timeout check; otherwise the orchestrator may incorrectly mark the job as timed out.
 The mechanism (e.g. MCP tool or field on the job-status callback, or node status update to orchestrator) is defined in the Worker API and/or MCP tool catalog.
 
 #### Timeout Extension Traces To

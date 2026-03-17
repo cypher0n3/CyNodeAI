@@ -6,7 +6,7 @@
 - [Routing Policy](#routing-policy)
 - [External Provider Integration](#external-provider-integration)
 - [External Inference With Node Sandboxes](#external-inference-with-node-sandboxes)
-- [Settings and Constraints](#settings-and-constraints)
+- [Settings and Constraints](#spec-cynai-orches-externalmodelrouting-settingsandconstraints)
   - [Suggested Setting Keys](#suggested-setting-keys)
   - [Suggested Orchestrator-Side Agent Setting Keys](#suggested-orchestrator-side-agent-setting-keys)
 - [Auditing and Safety](#auditing-and-safety)
@@ -97,6 +97,8 @@ Example flow
 - The sandbox job uses MCP tools for artifacts and controlled services.
 
 ## Settings and Constraints
+
+- Spec ID: `CYNAI.ORCHES.ExternalModelRouting.SettingsAndConstraints` <a id="spec-cynai-orches-externalmodelrouting-settingsandconstraints"></a>
 
 Routing behavior SHOULD be configurable via PostgreSQL settings.
 

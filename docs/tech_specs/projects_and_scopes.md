@@ -303,7 +303,7 @@ Search semantics (MVP)
 - **Get by id or slug**: Return a single project if it is in the user's authorized set; otherwise not-found or access-denied.
 - **Vector search**: Not required for MVP.
   Project metadata (slug, title, description) is small and keyword/list + get-by-id-or-slug is sufficient for "resolve by name or id" and "list my projects."
-  Vector similarity search MAY be considered later if rich project descriptions and natural-language search ("projects about X") become a requirement; see `dev_docs/projects_mcp_search_and_vector.md`.
+  Vector similarity search MAY be considered later if rich project descriptions and natural-language search ("projects about X") become a requirement.
 
 ## MVP Notes
 

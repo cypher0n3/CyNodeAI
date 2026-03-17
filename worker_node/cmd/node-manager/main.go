@@ -235,7 +235,7 @@ func runMain(ctx context.Context) int {
 		}
 		stopNodeManagedContainers(logger)
 	}()
-	// Telemetry: node-manager owns DB lifecycle (REQ-WORKER-0210, 0220–0222, 0258).
+	// Telemetry: node-manager owns DB lifecycle (REQ-WORKER-0210, 0220–0222, 0268).
 	stateDir := effectiveStateDir()
 	telemetryStore, err := telemetry.Open(runCtx, stateDir)
 	if err != nil {
@@ -334,7 +334,7 @@ func runTelemetryRetentionAndVacuum(ctx context.Context, store *telemetry.Store,
 	}
 }
 
-// recordNodeManagerShutdown writes a service log event before exit (REQ-WORKER-0258, worker_telemetry_api.md).
+// recordNodeManagerShutdown writes a service log event before exit (REQ-WORKER-0268, worker_telemetry_api.md).
 func recordNodeManagerShutdown(ctx context.Context, store *telemetry.Store, logger *slog.Logger) {
 	err := store.InsertLogEvent(ctx, &telemetry.LogEventInput{
 		LogID:      uuid.New().String(),
@@ -490,7 +490,7 @@ func sanitizeContainerName(serviceID string) string {
 
 // waitForPMAReadyUDS polls GET /healthz over the PMA Unix domain socket until 200 or timeout.
 // socketPath is the host path to the PMA service.sock (e.g. stateDir/run/managed_agent_proxy/<serviceID>/service.sock).
-// REQ-WORKER-0174 / REQ-WORKER-0260: PMA uses UDS only; no TCP health check.
+// REQ-WORKER-0174 / REQ-WORKER-0270: PMA uses UDS only; no TCP health check.
 func waitForPMAReadyUDS(socketPath string, timeout time.Duration) {
 	path := strings.TrimSpace(socketPath)
 	if path == "" {

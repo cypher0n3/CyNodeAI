@@ -1,5 +1,5 @@
 # E2E parity: inference-in-sandbox task. Requires auth config from e2e_020.
-# Traces: REQ-WORKER-0114 (node inference path); REQ-WORKER-0260 (UDS boundary);
+# Traces: REQ-WORKER-0114 (node inference path); REQ-WORKER-0270 (UDS boundary);
 # REQ-ORCHES-0123 (dispatch to worker).
 
 import os

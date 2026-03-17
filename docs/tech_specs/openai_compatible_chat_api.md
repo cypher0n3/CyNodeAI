@@ -265,7 +265,7 @@ The OpenAI-compatible interactive chat surface MUST support streaming mode for b
 - The stream MUST preserve event order for one logical assistant turn.
 - The stream MUST distinguish visible assistant text updates from hidden thinking or reasoning updates.
 - Hidden thinking or reasoning MUST NOT be emitted as canonical visible-text deltas.
-- Full thinking content MUST be relayed to the client as typed SSE events so that the client can store and optionally display it; see [DP-3 in the streaming assessment](../dev_docs/2026-03-14_pma_streaming_to_tui_assessment.md).
+- Full thinking content MUST be relayed to the client as typed SSE events so that the client can store and optionally display it (see [Streaming Per-Endpoint SSE Format Rule](#streaming-per-endpoint-sse-format-rule) in this spec).
 - Tool-call content detected by PMA's state machine MUST be relayed as typed SSE events, separate from visible-text deltas.
 - Tool-progress updates SHOULD be emitted as explicit non-prose progress events when available.
 - Iteration boundary events (`iteration_start`) MUST be relayed so clients can track per-iteration overwrite scope boundaries.
@@ -741,7 +741,7 @@ Chat can take 30-120 seconds or more when the model is cold or under load.
 The gateway MUST support a `WriteTimeout` (and optionally `ReadTimeout`) long enough for chat to complete.
 The gateway MUST support configuring these timeouts for deployments that use chat.
 
-Documentation (dev_docs or operator docs) MUST describe the expected duration and required timeout tuning.
+Operator documentation or the relevant tech specs MUST describe the expected duration and required timeout tuning.
 
 ### Gateway Timeouts and Long-Running Behavior Requirements Traces
 

@@ -34,7 +34,7 @@ Spec Items below define types, an operation, and a rule for cloud LLM API quota 
 
 - Spec ID: `CYNAI.MODELS.CloudLLMQuotaConfig` <a id="spec-cynai-models-cloudllmquotaconfig"></a>
 - Status: proposed
-- See also: [External Model Routing - Settings](../tech_specs/external_model_routing.md#settings-and-constraints)
+- See also: [External Model Routing - Settings](../tech_specs/external_model_routing.md#spec-cynai-orches-externalmodelrouting-settingsandconstraints)
 
 #### 4.1.1 `CloudLLMQuotaConfig` Scope
 

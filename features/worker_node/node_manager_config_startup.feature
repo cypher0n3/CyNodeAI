@@ -34,7 +34,7 @@ Scenario: Node manager starts managed services from config desired state
   And the node manager sent a config acknowledgement with status "applied"
 
 @req_orches_0169
-@req_worker_0264
+@req_worker_0274
 @spec_cynai_worker_nodestartupprocedure
 @spec_cynai_worker_payload_configurationv1
 Scenario: Node manager passes through orchestrator-directed backend env values

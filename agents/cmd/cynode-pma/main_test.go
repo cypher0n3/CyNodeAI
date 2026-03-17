@@ -215,7 +215,7 @@ func TestServeHTTP_UnixPath(t *testing.T) {
 	<-done
 }
 
-// TestRun_ListensOnUnixSocket asserts REQ-WORKER-0174 / REQ-WORKER-0260: when PMA_LISTEN_ADDR
+// TestRun_ListensOnUnixSocket asserts REQ-WORKER-0174 / REQ-WORKER-0270: when PMA_LISTEN_ADDR
 // starts with "unix:", PMA MUST bind a Unix domain socket and serve /healthz over it.
 // This is required for --network=none containers where TCP is not reachable from the host.
 func TestRun_ListensOnUnixSocket(t *testing.T) {

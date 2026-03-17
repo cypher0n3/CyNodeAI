@@ -32,7 +32,7 @@ const (
 	runtimePodman        = "podman"
 	// inferenceProxySockInContainer is the UDS socket path inside the sandbox container
 	// (pod shared namespace or direct bind-mount) where the inference proxy listens.
-	// REQ-SANDBX-0131 / REQ-WORKER-0260.
+	// REQ-SANDBX-0131 / REQ-WORKER-0270.
 	inferenceProxySockInContainer = "/run/cynode/inference-proxy.sock"
 )
 
@@ -195,7 +195,7 @@ func (e *Executor) runJobWithPodInference(ctx context.Context, req *workerapi.Ru
 	cleanupCtx := context.WithoutCancel(ctx)
 	defer func() { _ = exec.CommandContext(cleanupCtx, e.runtime, "pod", "rm", "-f", podName).Run() }()
 
-	// REQ-WORKER-0260: shared host dir for UDS socket (see runJobSBAWithPodInference).
+	// REQ-WORKER-0270: shared host dir for UDS socket (see runJobSBAWithPodInference).
 	sockHostDir, err := os.MkdirTemp("", "cynodeai-proxy-sock-")
 	if err != nil {
 		setPodInferenceError(resp, "proxy sock dir", []byte(err.Error()))
@@ -291,7 +291,7 @@ func waitForProxyReadyWithSock(ctx context.Context, runtime, proxyContainerID, s
 		var err error
 		switch {
 		case sockHostPath != "":
-			// REQ-WORKER-0260: check host socket path directly — faster and avoids exec overhead.
+			// REQ-WORKER-0270: check host socket path directly — faster and avoids exec overhead.
 			err = probeProxySocketExistsFunc(sockHostPath)
 		case useHealthProbe:
 			err = probeProxyHealthFunc(deadlineCtx, runtime, proxyContainerID)
@@ -321,7 +321,7 @@ func probeProxySocketExists(sockHostPath string) error {
 }
 
 func probeProxyHealthOnce(ctx context.Context, runtime, proxyContainerID string) error {
-	// REQ-WORKER-0260: proxy runs in UDS mode (INFERENCE_PROXY_SOCKET set); health check via UDS.
+	// REQ-WORKER-0270: proxy runs in UDS mode (INFERENCE_PROXY_SOCKET set); health check via UDS.
 	healthURL := inferenceProxyUDSURL(inferenceProxySockInContainer) + "/healthz"
 	probeCmd := exec.CommandContext(
 		ctx,
@@ -487,7 +487,7 @@ func (e *Executor) runJobSBAWithPodInference(
 	cleanupCtx := context.WithoutCancel(ctx)
 	defer func() { _ = exec.CommandContext(cleanupCtx, e.runtime, "pod", "rm", "-f", podName).Run() }()
 
-	// REQ-WORKER-0260: UDS sockets are filesystem objects; containers in a pod share the network
+	// REQ-WORKER-0270: UDS sockets are filesystem objects; containers in a pod share the network
 	// namespace but NOT the filesystem. Use a shared host tmpdir mounted into both the proxy and
 	// SBA containers so the socket is accessible from both.
 	sockHostDir, err := os.MkdirTemp("", "cynodeai-proxy-sock-")
@@ -590,7 +590,7 @@ func setSBAError(resp *workerapi.RunJobResponse, msg string) {
 }
 
 // inferenceProxyUDSURL returns the http+unix:// URL for the inference proxy socket at sockPath.
-// REQ-SANDBX-0131 / REQ-WORKER-0260: sandbox containers access inference via UDS only.
+// REQ-SANDBX-0131 / REQ-WORKER-0270: sandbox containers access inference via UDS only.
 func inferenceProxyUDSURL(sockPath string) string {
 	return "http+unix://" + url.PathEscape(sockPath)
 }
@@ -675,7 +675,7 @@ func buildSBARunArgsForPod(req *workerapi.RunJobRequest, podName, jobDir, worksp
 		}
 		args = append(args, "-v", wsMountOpt, "-w", workspaceMount)
 	}
-	// REQ-WORKER-0260: mount the shared host socket dir so the SBA container can reach the proxy UDS socket.
+	// REQ-WORKER-0270: mount the shared host socket dir so the SBA container can reach the proxy UDS socket.
 	if sockHostDir != "" {
 		sockMountOpt := sockHostDir + ":/run/cynode"
 		if e.runtime == runtimePodman {
@@ -733,7 +733,7 @@ func applySbaResultFromDir(jobDir string, resp *workerapi.RunJobResponse) {
 }
 
 // buildProxyRunArgs returns the argv for running the inference proxy container in the pod.
-// REQ-SANDBX-0131 / REQ-WORKER-0260: the proxy listens on a UDS socket in sockHostDir (host path),
+// REQ-SANDBX-0131 / REQ-WORKER-0270: the proxy listens on a UDS socket in sockHostDir (host path),
 // which is bind-mounted into the container at /run/cynode so the SBA container can also mount it.
 func buildProxyRunArgs(podName, ollamaUpstreamURL, image string, command []string, sockHostDir string) []string {
 	mountOpt := sockHostDir + ":/run/cynode:z"
@@ -755,7 +755,7 @@ func buildSandboxRunArgsForPod(req *workerapi.RunJobRequest, podName, workspaceD
 	if workspaceDir != "" {
 		args = append(args, "-v", fmt.Sprintf("%s:%s", workspaceDir, workspaceMount), "-w", workspaceMount)
 	}
-	// REQ-WORKER-0260: mount shared host socket dir so the sandbox can reach the proxy UDS socket.
+	// REQ-WORKER-0270: mount shared host socket dir so the sandbox can reach the proxy UDS socket.
 	if sockHostDir != "" {
 		args = append(args, "-v", sockHostDir+":/run/cynode:z")
 	}

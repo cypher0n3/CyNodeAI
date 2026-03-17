@@ -14,7 +14,7 @@ Scenario: Inference proxy rejects request body exceeding size limit
   When I send a request to the inference proxy with body size exceeding 10 MiB
   Then the inference proxy responds with status 413
 
-@req_worker_0260
+@req_worker_0270
 @spec_cynai_worker_unifiedudspath
 Scenario: Inference proxy listens on Unix domain socket when INFERENCE_PROXY_SOCKET is set
   Given the inference proxy is configured with an upstream

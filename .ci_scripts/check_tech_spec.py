@@ -1,13 +1,17 @@
 #!/usr/bin/env python3
 """
-Check docs/tech_specs for duplicated or conflicting spec text (CPD-style).
+Check docs/tech_specs for duplicated or conflicting spec text (CPD-style),
+and for forbidden references to draft_specs or dev_docs (canonical specs must
+not link to non-canonical docs). tech_specs/README.md is excluded from the
+ref check.
 
 Fingerprints contiguous blocks of normalized lines across tech_spec .md files.
 Reports blocks that appear in more than one file or in multiple places in the
 same file, so they can be deduplicated or consolidated.
 
-Exit code: 0 if no duplicates above threshold, 1 if duplicates found.
+Exit code: 0 if no duplicates and no forbidden refs, 1 otherwise.
 Output to stdout only unless --report PATH is given; temp files (if any) to tmp/.
+Forbidden ref violations are logged to stderr.
 """
 
 from __future__ import annotations
@@ -30,6 +34,34 @@ def _collect_spec_files(specs_dir: Path) -> list[Path]:
     if not specs_dir.is_dir():
         return []
     return sorted(specs_dir.rglob("*.md"))
+
+
+# Filename excluded from forbidden-ref check (README may mention draft_specs/dev_docs).
+_FORBIDDEN_REF_EXCLUDE = "README.md"
+
+_FORBIDDEN_REF_PATTERNS = ("draft_specs", "dev_docs")
+
+
+def _find_forbidden_refs(
+    specs_dir: Path,
+    exclude_basename: str = _FORBIDDEN_REF_EXCLUDE,
+) -> list[tuple[Path, int, str]]:
+    """
+    Return (path, line_number_1based, line_content) for lines in specs_dir/*.md
+    that contain draft_specs or dev_docs. Files named exclude_basename are skipped.
+    """
+    results: list[tuple[Path, int, str]] = []
+    for path in _collect_spec_files(specs_dir):
+        if path.name == exclude_basename:
+            continue
+        try:
+            text = path.read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            continue
+        for line_no, line in enumerate(text.splitlines(), start=1):
+            if any(pat in line for pat in _FORBIDDEN_REF_PATTERNS):
+                results.append((path, line_no, line))
+    return results
 
 
 def _normalize_line(line: str) -> str:
@@ -189,7 +221,12 @@ def main() -> int:
     parser.add_argument(
         "--no-fail",
         action="store_true",
-        help="Exit 0 even when duplicates are found",
+        help="Exit 0 even when duplicates or forbidden refs are found",
+    )
+    parser.add_argument(
+        "--no-duplicate-check",
+        action="store_true",
+        help="Skip duplicate-block check; only run forbidden-ref check (e.g. for docs-check)",
     )
     args = parser.parse_args()
 
@@ -198,11 +235,25 @@ def main() -> int:
         print(f"Specs directory not found: {specs_dir}", file=sys.stderr)
         return 2
 
-    duplicates = _find_duplicates(
-        specs_dir,
-        min_lines=args.min_lines,
-        min_line_len=args.min_line_length,
-    )
+    forbidden_refs = _find_forbidden_refs(specs_dir)
+    for path, line_no, content in forbidden_refs:
+        try:
+            rel = path.relative_to(root)
+        except ValueError:
+            rel = path
+        msg = f"ERROR {rel}:{line_no}: tech_spec must not reference draft_specs or dev_docs"
+        print(msg, file=sys.stderr)
+        snippet = content.strip()[:100] + ("..." if len(content.strip()) > 100 else "")
+        print(f"  {snippet}", file=sys.stderr)
+
+    if args.no_duplicate_check:
+        duplicates = []
+    else:
+        duplicates = _find_duplicates(
+            specs_dir,
+            min_lines=args.min_lines,
+            min_line_len=args.min_line_length,
+        )
     report_lines = _format_report(duplicates, specs_dir)
 
     for line in report_lines:
@@ -213,7 +264,9 @@ def main() -> int:
         report_path.parent.mkdir(parents=True, exist_ok=True)
         report_path.write_text("\n".join(report_lines) + "\n", encoding="utf-8")
 
-    if duplicates and not args.no_fail:
+    has_duplicates = len(duplicates) > 0 and not args.no_fail
+    has_forbidden_refs = len(forbidden_refs) > 0 and not args.no_fail
+    if has_duplicates or has_forbidden_refs:
         return 1
     return 0
 

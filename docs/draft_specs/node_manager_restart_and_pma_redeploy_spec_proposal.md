@@ -119,7 +119,7 @@ Python setup-dev must support stop-node, start-node, and restart-node using curr
 
 ## Traceability
 
-- **REQ-WORKER-0257:** Node Manager shutdown (unchanged).
+- **REQ-WORKER-0267:** Node Manager shutdown (unchanged).
 - **REQ-WORKER-0XXX (new):** Node-manager restartable independent of stack.
 - **REQ-ORCHES-0XXX (new):** Orchestrator can trigger PMA restart/redeploy.
 - **CYNAI.WORKER.NodeManagerShutdown:** Unchanged.

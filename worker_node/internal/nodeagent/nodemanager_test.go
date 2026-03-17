@@ -1358,7 +1358,7 @@ func TestBuildManagedServiceTargetsFromConfig(t *testing.T) {
 	}
 }
 
-// TestBuildManagedServiceTargetsFromConfig_PMAUsesUDS asserts REQ-WORKER-0174 / REQ-WORKER-0260:
+// TestBuildManagedServiceTargetsFromConfig_PMAUsesUDS asserts REQ-WORKER-0174 / REQ-WORKER-0270:
 // the PMA target base_url MUST be a http+unix:// URL pointing at the per-service UDS socket,
 // not a TCP URL. PMA_BASE_URL (TCP) must not be used when a stateDir is available.
 func TestBuildManagedServiceTargetsFromConfig_PMAUsesUDS(t *testing.T) {

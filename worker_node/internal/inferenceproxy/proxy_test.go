@@ -83,7 +83,7 @@ func TestNewProxy_read_error_returns_500(t *testing.T) {
 	}
 }
 
-// REQ-WORKER-0260: RunUDS starts a UDS listener; healthz is reachable and returns 200.
+// REQ-WORKER-0270: RunUDS starts a UDS listener; healthz is reachable and returns 200.
 func TestRunUDS_HealthzReachableOverSocket(t *testing.T) {
 	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)

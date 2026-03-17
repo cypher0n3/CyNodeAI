@@ -46,7 +46,7 @@ A full module-to-REQ mapping appears in [E2E Module to REQ Mapping](#e2e-module-
 - SBAGNT (0001, 0103, 0106, 0109)
 - SKILLS (0106, 0115)
 - USRGWY (0121, 0130, 0131)
-- WORKER (0114, 0140, 0142, 0160, 0174, 0200, 0260)
+- WORKER (0114, 0140, 0142, 0160, 0174, 0200, 0270)
 
 E2E test count: 72 tests discovered via `just e2e --list` (unittest discovery from all `e2e_*.py` modules).
 
@@ -143,7 +143,7 @@ Use this to see which tests cover which requirements and to add new traces when 
 - **e2e_060_task_list:** REQ-ORCHES-0125
 - **e2e_070_task_get:** REQ-ORCHES-0125
 - **e2e_080_task_result:** REQ-ORCHES-0124, 0125
-- **e2e_090_task_inference:** REQ-WORKER-0114, 0260; REQ-ORCHES-0123
+- **e2e_090_task_inference:** REQ-WORKER-0114, 0270; REQ-ORCHES-0123
 - **e2e_100_task_prompt:** REQ-ORCHES-0122, 0126
 - **e2e_110_task_models_and_chat:** REQ-USRGWY-0121, 0127; REQ-CLIENT-0161
 - **e2e_115_pma_chat_context:** REQ-USRGWY-0131; REQ-CLIENT-0173
@@ -156,7 +156,7 @@ Use this to see which tests cover which requirements and to add new traces when 
 - **e2e_122_node_manager_telemetry:** REQ-WORKER-0200, 0230
 - **e2e_123_sba_task:** REQ-SBAGNT-0001, 0106
 - **e2e_124_worker_pma_proxy:** REQ-ORCHES-0162 (PMA routing via worker)
-- **e2e_126_uds_inference_routing:** REQ-WORKER-0260, REQ-SANDBX-0131, REQ-WORKER-0174
+- **e2e_126_uds_inference_routing:** REQ-WORKER-0270, REQ-SANDBX-0131, REQ-WORKER-0174
 - **e2e_130_sba_task_result_contract:** REQ-SBAGNT-0103
 - **e2e_140_sba_task_inference:** REQ-SBAGNT-0106, 0109
 - **e2e_145_sba_inference_reply:** REQ-SBAGNT-0103, 0109
@@ -336,7 +336,7 @@ Both; SBA inference scenarios in BDD have undefined steps (see [Undefined BDD St
 **PMA chat and proxy:** E2E (e2e_115, 118, 124); BDD (pma_chat_and_context.feature, worker_pma_proxy coverage in worker_node).
 Both.
 
-**UDS inference routing (REQ-WORKER-0260, REQ-SANDBX-0131):** E2E (e2e_126); BDD (worker_inference_proxy.feature, worker_node_sandbox_execution.feature).
+**UDS inference routing (REQ-WORKER-0270, REQ-SANDBX-0131):** E2E (e2e_126); BDD (worker_inference_proxy.feature, worker_node_sandbox_execution.feature).
 Both.
 
 **Connector catalog/instances (REQ-CONNEC-*):** Neither E2E nor BDD.

@@ -1,6 +1,6 @@
 # E2E: UDS inference routing contract tests.
-# Validates REQ-WORKER-0260, REQ-SANDBX-0131, REQ-WORKER-0174.
-# Traces: REQ-WORKER-0260, REQ-SANDBX-0131, REQ-WORKER-0174
+# Validates REQ-WORKER-0270, REQ-SANDBX-0131, REQ-WORKER-0174.
+# Traces: REQ-WORKER-0270, REQ-SANDBX-0131, REQ-WORKER-0174
 #
 # Gap 1: inference-proxy binds a Unix domain socket (INFERENCE_PROXY_SOCKET).
 #         Connects over the socket and asserts healthz returns 200.
@@ -78,7 +78,7 @@ def _popen(*args, **kwargs):
 
 
 class TestInferenceProxyUDSListen(unittest.TestCase):
-    """REQ-WORKER-0260: inference-proxy MUST listen on a Unix domain socket
+    """REQ-WORKER-0270: inference-proxy MUST listen on a Unix domain socket
     when INFERENCE_PROXY_SOCKET is set.
 
     Starts the real inference-proxy binary, points it at a stub upstream,
@@ -113,12 +113,12 @@ class TestInferenceProxyUDSListen(unittest.TestCase):
                     stderr_out = proc.stderr.read().decode(errors="replace") if proc.stderr else ""
                     self.fail(
                         f"inference-proxy did not create UDS socket at {sock_path!r} "
-                        f"within 10s (REQ-WORKER-0260). stderr:\n{stderr_out}"
+                        f"within 10s (REQ-WORKER-0270). stderr:\n{stderr_out}"
                     )
                 status = _get_over_uds(sock_path, "/healthz")
                 self.assertEqual(
                     status, 200,
-                    f"GET /healthz over UDS returned {status}, want 200 (REQ-WORKER-0260)",
+                    f"GET /healthz over UDS returned {status}, want 200 (REQ-WORKER-0270)",
                 )
 
     def test_proxy_does_not_bind_tcp_11434_when_uds_set(self):
@@ -156,7 +156,7 @@ class TestInferenceProxyUDSListen(unittest.TestCase):
 
 
 class TestManagedServiceRunArgsUDS(unittest.TestCase):
-    """REQ-WORKER-0260 / REQ-WORKER-0174: worker-api --print-managed-service-run-args
+    """REQ-WORKER-0270 / REQ-WORKER-0174: worker-api --print-managed-service-run-args
     diagnostic prints the container run args for a PMA managed service.
     Asserts UDS OLLAMA_BASE_URL, --network=none, and no port 8090 publish.
     """
@@ -197,13 +197,13 @@ class TestManagedServiceRunArgsUDS(unittest.TestCase):
             self.assertIn(
                 "http+unix://", out,
                 f"Managed-service run args must inject http+unix:// OLLAMA_BASE_URL "
-                f"(REQ-WORKER-0260). Got:\n{out}",
+                f"(REQ-WORKER-0270). Got:\n{out}",
             )
             self.assertNotIn(
                 "OLLAMA_BASE_URL=http://",
                 out,
                 f"Managed-service run args must NOT inject TCP OLLAMA_BASE_URL "
-                f"(REQ-WORKER-0260). Got:\n{out}",
+                f"(REQ-WORKER-0270). Got:\n{out}",
             )
 
     def test_managed_service_run_args_network_none(self):
@@ -224,7 +224,7 @@ class TestManagedServiceRunArgsUDS(unittest.TestCase):
                 "8090",
                 out,
                 f"Managed-service run args must NOT publish port 8090 "
-                f"(REQ-WORKER-0174/0260). Got:\n{out}",
+                f"(REQ-WORKER-0174/0270). Got:\n{out}",
             )
 
 
@@ -291,7 +291,7 @@ class TestSBAPodRunArgsUDS(unittest.TestCase):
             "/run/cynode",
             out,
             f"SBA pod run args must mount shared socket dir at /run/cynode "
-            f"(REQ-WORKER-0260). Got:\n{out}",
+            f"(REQ-WORKER-0270). Got:\n{out}",
         )
 
 

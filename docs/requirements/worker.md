@@ -364,41 +364,41 @@ It covers worker-node behavior and the worker API contract for job execution and
   [REQ-ORCHES-0175](../requirements/orches.md#req-orches-0175)
   [worker_node_payloads.md - gpu.devices](../tech_specs/worker_node_payloads.md#spec-cynai-worker-payload-capabilityreport-v1)
   <a id="req-worker-0266"></a>
-- **REQ-WORKER-0257:** When the Node Manager receives a shutdown command (e.g. SIGTERM or stop request), it MUST send shutdown commands to any containers it is running (managed services and sandbox containers).
+- **REQ-WORKER-0267:** When the Node Manager receives a shutdown command (e.g. SIGTERM or stop request), it MUST send shutdown commands to any containers it is running (managed services and sandbox containers).
   The Node Manager MUST still exit if dependent containers fail to shut down (e.g. after a configured timeout or kill); in that case it MUST exit with a non-zero exit code.
   [CYNAI.WORKER.NodeManagerShutdown](../tech_specs/worker_node.md#spec-cynai-worker-nodemanagershutdown)
-  <a id="req-worker-0257"></a>
-- **REQ-WORKER-0258:** The node MUST log to the telemetry database: Node Manager and Worker API startup and shutdown; container start and stop (managed and sandbox); and job run lifecycle (e.g. sandbox run start and completion).
+  <a id="req-worker-0267"></a>
+- **REQ-WORKER-0268:** The node MUST log to the telemetry database: Node Manager and Worker API startup and shutdown; container start and stop (managed and sandbox); and job run lifecycle (e.g. sandbox run start and completion).
   [CYNAI.WORKER.TelemetryLifecycleEvents](../tech_specs/worker_telemetry_api.md#spec-cynai-worker-telemetrylifecycleevents)
-  <a id="req-worker-0258"></a>
-- **REQ-WORKER-0259:** When starting a managed service container and the orchestrator config includes a `healthcheck` (path and expected_status), the node SHOULD configure the container runtime with health checks where supported (e.g. Podman `--health-cmd`) so the container reports healthy in runtime listing (e.g. `podman ps`).
+  <a id="req-worker-0268"></a>
+- **REQ-WORKER-0269:** When starting a managed service container and the orchestrator config includes a `healthcheck` (path and expected_status), the node SHOULD configure the container runtime with health checks where supported (e.g. Podman `--health-cmd`) so the container reports healthy in runtime listing (e.g. `podman ps`).
   Docker run does not support inline health checks.
   [worker_node_payloads.md managed_services healthcheck](../tech_specs/worker_node_payloads.md)
-  <a id="req-worker-0259"></a>
-- **REQ-WORKER-0260:** All traffic to and from agent containers (managed services) and sandbox containers MUST use a unified path: **Unix domain sockets (UDS)** at the container boundary.
+  <a id="req-worker-0269"></a>
+- **REQ-WORKER-0270:** All traffic to and from agent containers (managed services) and sandbox containers MUST use a unified path: **Unix domain sockets (UDS)** at the container boundary.
   The worker MUST expose proxy endpoints (orchestrator-to-agent, agent-to-orchestrator, inference proxy for sandbox) to containers only via UDS (or `http+unix` URLs to UDS).
   The worker MUST NOT inject TCP endpoints (e.g. `OLLAMA_BASE_URL=http://localhost:11434`) into agent or sandbox containers for proxy or inference; containers MUST reach the worker proxy and inference only via UDS.
   This ensures a single, clear contract: everything to/from agent or sandbox goes over UDS to the worker; the worker forwards to Ollama, orchestrator, or other backends as needed.
   [CYNAI.WORKER.UnifiedUdsPath](../tech_specs/worker_node.md#spec-cynai-worker-unifiedudspath)
   [CYNAI.WORKER.NodeLocalInference](../tech_specs/worker_node.md#spec-cynai-worker-nodelocalinference)
-  <a id="req-worker-0260"></a>
-- **REQ-WORKER-0261:** When the worker receives an orchestrator-initiated notification to stop all orchestrator-directed agents and jobs (e.g. due to orchestrator shutdown), the worker MUST stop all orchestrator-directed managed services (including PMA) and all jobs that were dispatched by the orchestrator.
+  <a id="req-worker-0270"></a>
+- **REQ-WORKER-0271:** When the worker receives an orchestrator-initiated notification to stop all orchestrator-directed agents and jobs (e.g. due to orchestrator shutdown), the worker MUST stop all orchestrator-directed managed services (including PMA) and all jobs that were dispatched by the orchestrator.
   [CYNAI.WORKER.OrchestratorShutdownNotification](../tech_specs/worker_node.md#spec-cynai-worker-orchestratorshutdownnotification)
   [REQ-ORCHES-0164](../requirements/orches.md#req-orches-0164)
-  <a id="req-worker-0261"></a>
-- **REQ-WORKER-0262:** The worker node MUST run the Node Manager and Worker API in a single process; one binary (cynodeai-wnm), one system service.
+  <a id="req-worker-0271"></a>
+- **REQ-WORKER-0272:** The worker node MUST run the Node Manager and Worker API in a single process; one binary (cynodeai-wnm), one system service.
   No separate Worker API process and no Worker API as a managed container.
   [CYNAI.WORKER.SingleProcessHostBinary](../tech_specs/worker_node.md#spec-cynai-worker-singleprocesshostbinary)
   [CYNAI.WORKER.DeploymentTopologies](../tech_specs/worker_node.md#spec-cynai-worker-deploymenttopologies)
-  <a id="req-worker-0262"></a>
-- **REQ-WORKER-0263:** Node Manager and Worker API MUST share one process boundary; secure store and telemetry lifecycle MUST follow the same-process behavior in
+  <a id="req-worker-0272"></a>
+- **REQ-WORKER-0273:** Node Manager and Worker API MUST share one process boundary; secure store and telemetry lifecycle MUST follow the same-process behavior in
   [CYNAI.WORKER.SecureStoreProcessBoundary](../tech_specs/worker_node.md#spec-cynai-worker-securestoreprocessboundary) and node-manager-owned telemetry (node_boot, retention, vacuum, shutdown).
   Orchestrator-facing behavior (registration, config, capability reporting, Worker API contract) MUST be unchanged.
   [CYNAI.WORKER.SingleProcessHostBinary](../tech_specs/worker_node.md#spec-cynai-worker-singleprocesshostbinary)
-  <a id="req-worker-0263"></a>
-- **REQ-WORKER-0264:** In normal operation, when node configuration directs local inference through `inference_backend`, the Node Manager MUST start and supervise that backend using the orchestrator-delivered configuration, including any orchestrator-directed backend environment values derived to maximize the safe usable context window for the expected local model workload.
+  <a id="req-worker-0273"></a>
+- **REQ-WORKER-0274:** In normal operation, when node configuration directs local inference through `inference_backend`, the Node Manager MUST start and supervise that backend using the orchestrator-delivered configuration, including any orchestrator-directed backend environment values derived to maximize the safe usable context window for the expected local model workload.
   When a managed service depends on the same node-local inference backend, the Node Manager MUST pass through the corresponding orchestrator-directed backend environment values to that managed service when the configuration contract requires it so that the backend and dependent services use the same effective context-window settings.
   [CYNAI.WORKER.NodeStartupProcedure](../tech_specs/worker_node.md#spec-cynai-worker-nodestartupprocedure)
   [CYNAI.WORKER.ManagedServiceContainers](../tech_specs/worker_node.md#spec-cynai-worker-managedservicecontainers)
   [CYNAI.WORKER.Payload.ConfigurationV1](../tech_specs/worker_node_payloads.md#spec-cynai-worker-payload-configuration-v1)
-  <a id="req-worker-0264"></a>
+  <a id="req-worker-0274"></a>

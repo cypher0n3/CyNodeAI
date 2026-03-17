@@ -27,7 +27,7 @@ const PerRequestTimeout = 300 * time.Second
 const DefaultUpstream = "http://host.containers.internal:11434"
 
 // RunUDS starts the inference proxy on a Unix domain socket at sockPath.
-// REQ-WORKER-0260: UDS mode — TCP port 11434 is NOT bound.
+// REQ-WORKER-0270: UDS mode — TCP port 11434 is NOT bound.
 // Returns 0 on clean shutdown, 1 on error.
 func RunUDS(ctx context.Context, sockPath string) int {
 	upstream := os.Getenv("OLLAMA_UPSTREAM_URL")
@@ -53,7 +53,7 @@ func RunUDSWithUpstream(ctx context.Context, sockPath, upstream string) int {
 		slog.Error("UDS listen failed", "path", sockPath, "error", err)
 		return 1
 	}
-	// REQ-WORKER-0260: allow other containers (SBA) to connect to this socket.
+	// REQ-WORKER-0270: allow other containers (SBA) to connect to this socket.
 	// The directory is mounted as a shared volume; chmod the socket to 0o666 so
 	// any container user can connect without privilege.
 	_ = os.Chmod(sockPath, 0o666)

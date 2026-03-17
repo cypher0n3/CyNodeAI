@@ -227,7 +227,7 @@ Event sourcing requirements
 
 ##### Lifecycle Event Coverage Requirements Traces
 
-- [REQ-WORKER-0258](../requirements/worker.md#req-worker-0258)
+- [REQ-WORKER-0268](../requirements/worker.md#req-worker-0268)
 
 The node MUST log the following to the telemetry database (using `log_event`, `container_event`, and `container_inventory` as appropriate):
 

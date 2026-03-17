@@ -84,7 +84,7 @@ type workerTestState struct {
 	workerAPIStarted            bool
 	workerAPIStartedAsContainer bool
 	workerAPIAsContainerImage   string
-	// UDS inference proxy (REQ-WORKER-0260 / REQ-SANDBX-0131) scenario state
+	// UDS inference proxy (REQ-WORKER-0270 / REQ-SANDBX-0131) scenario state
 	inferenceProxySocketPath string
 	inferenceProxyUDSCancel  context.CancelFunc
 	inferenceProxyUDSDone    chan int
@@ -1846,7 +1846,7 @@ func RegisterSecureStoreSteps(sc *godog.ScenarioContext, state *workerTestState)
 		return fmt.Errorf("process boundary document not found at %s", docPath)
 	})
 
-	// REQ-WORKER-0260 / REQ-SANDBX-0131: UDS inference routing (worker_inference_proxy.feature + worker_secure_store.feature)
+	// REQ-WORKER-0270 / REQ-SANDBX-0131: UDS inference routing (worker_inference_proxy.feature + worker_secure_store.feature)
 
 	sc.Step(`^the inference proxy is started with INFERENCE_PROXY_SOCKET set to a temp path$`, func(ctx context.Context) error {
 		state := getWorkerState(ctx)
@@ -1870,7 +1870,7 @@ func RegisterSecureStoreSteps(sc *godog.ScenarioContext, state *workerTestState)
 		if state.inferenceProxyUDSCancel != nil {
 			state.inferenceProxyUDSCancel()
 		}
-		return fmt.Errorf("UDS socket %q did not appear (REQ-WORKER-0260)", state.inferenceProxySocketPath)
+		return fmt.Errorf("UDS socket %q did not appear (REQ-WORKER-0270)", state.inferenceProxySocketPath)
 	})
 	sc.Step(`^a healthz request over the Unix domain socket returns 200$`, func(ctx context.Context) error {
 		state := getWorkerState(ctx)
@@ -1891,7 +1891,7 @@ func RegisterSecureStoreSteps(sc *godog.ScenarioContext, state *workerTestState)
 		}
 		_ = resp.Body.Close()
 		if resp.StatusCode != http.StatusOK {
-			return fmt.Errorf("healthz status=%d, want 200 (REQ-WORKER-0260)", resp.StatusCode)
+			return fmt.Errorf("healthz status=%d, want 200 (REQ-WORKER-0270)", resp.StatusCode)
 		}
 		return nil
 	})
@@ -2004,7 +2004,7 @@ func RegisterSecureStoreSteps(sc *godog.ScenarioContext, state *workerTestState)
 		}
 		argv := strings.Join(state.managedServiceRunArgs, " ")
 		if !strings.Contains(argv, "OLLAMA_BASE_URL=http+unix://") {
-			return fmt.Errorf("managed-service run args must contain OLLAMA_BASE_URL=http+unix://... (REQ-WORKER-0260), got: %s", argv)
+			return fmt.Errorf("managed-service run args must contain OLLAMA_BASE_URL=http+unix://... (REQ-WORKER-0270), got: %s", argv)
 		}
 		return nil
 	})
@@ -2014,7 +2014,7 @@ func RegisterSecureStoreSteps(sc *godog.ScenarioContext, state *workerTestState)
 		}
 		argv := strings.Join(state.managedServiceRunArgs, " ")
 		if strings.Contains(argv, "OLLAMA_BASE_URL=http://") {
-			return fmt.Errorf("managed-service run args must not contain TCP OLLAMA_BASE_URL (REQ-WORKER-0260), got: %s", argv)
+			return fmt.Errorf("managed-service run args must not contain TCP OLLAMA_BASE_URL (REQ-WORKER-0270), got: %s", argv)
 		}
 		return nil
 	})

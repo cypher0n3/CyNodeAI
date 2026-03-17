@@ -38,7 +38,7 @@ Scenario: Managed-service container run args do not mount secure store
   When the node manager builds run args for the managed-service container
   Then the run args do not contain any mount of the secure store or secrets path
 
-@req_worker_0259
+@req_worker_0269
 @spec_cynai_worker_payload_configurationv1
 Scenario: Managed-service container run args include health-check when config has healthcheck and runtime is podman
   When the node manager builds run args for the managed-service container with healthcheck and runtime podman
@@ -64,7 +64,7 @@ Scenario: Process boundary for secure store is documented
   Given the worker node codebase
   Then the secure store process boundary document exists and states writer and reader components
 
-@req_worker_0260
+@req_worker_0270
 @req_worker_0174
 @spec_cynai_worker_unifiedudspath
 Scenario: Managed-service container run args inject UDS OLLAMA_BASE_URL not TCP
@@ -80,7 +80,7 @@ Scenario: Managed-service container run args include network=none
   When the node manager builds run args for the managed-service container
   Then the run args include --network=none
 
-@req_worker_0260
+@req_worker_0270
 @req_worker_0174
 @spec_cynai_worker_unifiedudspath
 Scenario: Managed-service container run args do not publish TCP port 8090

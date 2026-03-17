@@ -29,7 +29,7 @@ Relevant code paths:
 ### 3.3 Backend Path
 
 - User API Gateway and orchestrator: task create with inference, dispatch to worker (REQ-ORCHES-0123).
-- Worker node: sandbox execution with inference proxy; REQ-WORKER-0114 (node inference path), REQ-WORKER-0260 (UDS boundary).
+- Worker node: sandbox execution with inference proxy; REQ-WORKER-0114 (node inference path), REQ-WORKER-0270 (UDS boundary).
   The sandbox must receive `INFERENCE_PROXY_URL` (UDS) and the job result must expose stdout to the task result API.
 
 ### 3.4 Worker and Sandbox
@@ -43,7 +43,7 @@ Traceability for this test:
 ### 4.1 Requirements References
 
 - [REQ-WORKER-0114](../../requirements/worker.md): Node inference path.
-- [REQ-WORKER-0260](../../requirements/worker.md): UDS boundary for inference proxy.
+- [REQ-WORKER-0270](../../requirements/worker.md): UDS boundary for inference proxy.
 - [REQ-ORCHES-0123](../../requirements/orches.md): Dispatch to worker.
 
 ### 4.2 Tech Specs

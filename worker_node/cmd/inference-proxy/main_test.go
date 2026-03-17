@@ -198,7 +198,7 @@ func TestRun_ListenAddrOverride(t *testing.T) {
 	}
 }
 
-// REQ-WORKER-0260: inference-proxy MUST listen on a Unix domain socket when
+// REQ-WORKER-0270: inference-proxy MUST listen on a Unix domain socket when
 // INFERENCE_PROXY_SOCKET is set, so that the sandbox can reach it via http+unix://.
 func TestRunUDS_HealthzReachableOverSocket(t *testing.T) {
 	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -250,7 +250,7 @@ func TestRunUDS_HealthzReachableOverSocket(t *testing.T) {
 	}
 }
 
-// REQ-WORKER-0260: runMain selects UDS mode when INFERENCE_PROXY_SOCKET is set.
+// REQ-WORKER-0270: runMain selects UDS mode when INFERENCE_PROXY_SOCKET is set.
 func TestRunMain_SocketEnv_UsesUDSPath(t *testing.T) {
 	sockPath := filepath.Join(t.TempDir(), "inference.sock")
 	_ = os.Setenv("INFERENCE_PROXY_SOCKET", sockPath)
@@ -295,7 +295,7 @@ func TestRunMain_HealthcheckArg_FailReturnsOne(t *testing.T) {
 	}
 }
 
-// REQ-WORKER-0260: runHealthcheck MUST support http+unix:// so the executor can
+// REQ-WORKER-0270: runHealthcheck MUST support http+unix:// so the executor can
 // health-check the proxy sidecar when it runs in UDS mode.
 func TestRunHealthcheck_UDS(t *testing.T) {
 	sockPath := filepath.Join(t.TempDir(), "proxy.sock")

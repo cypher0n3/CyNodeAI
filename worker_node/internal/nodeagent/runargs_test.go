@@ -137,7 +137,7 @@ func TestBuildManagedServiceRunArgs_HealthcheckWhenPodman(t *testing.T) {
 	for i := 0; i < len(args)-1; i++ {
 		if args[i] == "--health-cmd" {
 			hasHealthCmd = true
-			// PMA uses UDS only; health check must use curl --unix-socket (REQ-WORKER-0174 / REQ-WORKER-0260).
+			// PMA uses UDS only; health check must use curl --unix-socket (REQ-WORKER-0174 / REQ-WORKER-0270).
 			if !strings.Contains(args[i+1], "curl") || !strings.Contains(args[i+1], "service.sock") || !strings.Contains(args[i+1], "/healthz") {
 				t.Errorf("health-cmd for PMA should use curl over UDS (service.sock), got %q", args[i+1])
 			}
@@ -165,7 +165,7 @@ func TestBuildManagedServiceRunArgs_NoHealthcheckWhenDocker(t *testing.T) {
 	}
 }
 
-// REQ-WORKER-0260: node_local inference for managed services MUST inject UDS OLLAMA_BASE_URL,
+// REQ-WORKER-0270: node_local inference for managed services MUST inject UDS OLLAMA_BASE_URL,
 // not a TCP URL. The worker exposes an inference UDS socket per service at
 // <state_dir>/run/managed_agent_proxy/<service_id>/inference.sock.
 func TestBuildManagedServiceRunArgs_InferenceEnvNodeLocalIsUDS(t *testing.T) {
@@ -183,11 +183,11 @@ func TestBuildManagedServiceRunArgs_InferenceEnvNodeLocalIsUDS(t *testing.T) {
 	argv := strings.Join(args, " ")
 	// MUST inject http+unix:// URL, not TCP.
 	if !strings.Contains(argv, "OLLAMA_BASE_URL=http+unix://") {
-		t.Fatalf("node_local inference must inject http+unix:// OLLAMA_BASE_URL (REQ-WORKER-0260), got args=%q", argv)
+		t.Fatalf("node_local inference must inject http+unix:// OLLAMA_BASE_URL (REQ-WORKER-0270), got args=%q", argv)
 	}
 	// MUST NOT inject TCP endpoints.
 	if strings.Contains(argv, "OLLAMA_BASE_URL=http://") {
-		t.Fatalf("node_local inference must not inject TCP OLLAMA_BASE_URL (REQ-WORKER-0260), got args=%q", argv)
+		t.Fatalf("node_local inference must not inject TCP OLLAMA_BASE_URL (REQ-WORKER-0270), got args=%q", argv)
 	}
 	// Socket path must reference the per-service inference socket.
 	expectedSockDir := filepath.Join(stateDir, ManagedAgentProxySocketBaseDir, "pma-main")
@@ -199,7 +199,7 @@ func TestBuildManagedServiceRunArgs_InferenceEnvNodeLocalIsUDS(t *testing.T) {
 	}
 }
 
-// REQ-WORKER-0260: when inference.base_url is set (explicit override), it must still be UDS —
+// REQ-WORKER-0270: when inference.base_url is set (explicit override), it must still be UDS —
 // a literal TCP URL is not accepted as a managed-service inference override.
 func TestBuildManagedServiceRunArgs_InferenceEnvNodeLocalExplicitURLMustBeUDS(t *testing.T) {
 	stateDir := t.TempDir()
@@ -216,10 +216,10 @@ func TestBuildManagedServiceRunArgs_InferenceEnvNodeLocalExplicitURLMustBeUDS(t 
 	argv := strings.Join(args, " ")
 	// Even with explicit base_url, the output MUST be UDS (TCP override not honoured per spec).
 	if strings.Contains(argv, "OLLAMA_BASE_URL=http://inference.internal:11434") {
-		t.Fatalf("node_local inference must not inject TCP OLLAMA_BASE_URL even with explicit base_url (REQ-WORKER-0260), got args=%q", argv)
+		t.Fatalf("node_local inference must not inject TCP OLLAMA_BASE_URL even with explicit base_url (REQ-WORKER-0270), got args=%q", argv)
 	}
 	if !strings.Contains(argv, "OLLAMA_BASE_URL=http+unix://") {
-		t.Fatalf("node_local inference must inject http+unix:// OLLAMA_BASE_URL (REQ-WORKER-0260), got args=%q", argv)
+		t.Fatalf("node_local inference must inject http+unix:// OLLAMA_BASE_URL (REQ-WORKER-0270), got args=%q", argv)
 	}
 }
 
@@ -245,7 +245,7 @@ func TestBuildManagedServiceRunArgs_NetworkNone(t *testing.T) {
 	}
 }
 
-// REQ-WORKER-0260 / REQ-WORKER-0174: PMA must NOT publish TCP port 8090.
+// REQ-WORKER-0270 / REQ-WORKER-0174: PMA must NOT publish TCP port 8090.
 // Orchestrator-to-agent traffic routes through worker proxy, not direct TCP.
 func TestBuildManagedServiceRunArgs_NoPMAPortPublish(t *testing.T) {
 	stateDir := t.TempDir()
@@ -258,12 +258,12 @@ func TestBuildManagedServiceRunArgs_NoPMAPortPublish(t *testing.T) {
 	args := BuildManagedServiceRunArgs(stateDir, svc, "pma-main", "pma", "pma:latest", "name", "podman")
 	for i := 0; i < len(args)-1; i++ {
 		if args[i] == "-p" && strings.Contains(args[i+1], "8090") {
-			t.Errorf("managed-service run args must not publish TCP port 8090 (REQ-WORKER-0174/0260), got -p %s", args[i+1])
+			t.Errorf("managed-service run args must not publish TCP port 8090 (REQ-WORKER-0174/0270), got -p %s", args[i+1])
 		}
 	}
 }
 
-// REQ-WORKER-0260: per-service inference socket directory is mounted into the container
+// REQ-WORKER-0270: per-service inference socket directory is mounted into the container
 // (the directory contains both proxy.sock and inference.sock).
 func TestBuildManagedServiceRunArgs_InferenceSocketMountedWithProxySocket(t *testing.T) {
 	stateDir := t.TempDir()

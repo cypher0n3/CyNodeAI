@@ -10,7 +10,7 @@ Feature: Node Manager Telemetry Ownership
     Worker-api skips node_boot
   when NODE_SKIP_NODE_BOOT_RECORD is set (e.g. when started by node-manager).
 
-@req_worker_0258
+@req_worker_0268
 @spec_cynai_worker_telemetry_lifecycle
 Scenario: Node manager shutdown event is visible in telemetry logs
   Given a Worker API is running with bearer token "test-bearer-token"

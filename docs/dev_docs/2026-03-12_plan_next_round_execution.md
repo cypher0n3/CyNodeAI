@@ -19,6 +19,7 @@
   - [Phase 3 Testing Gate](#phase-3-testing-gate)
   - [Minimum Backend Surface](#minimum-backend-surface)
   - [Required Backend Validation Before TUI Wiring](#required-backend-validation-before-tui-wiring)
+  - [Minimum MCP Slice for PMA Thinking Models](#minimum-mcp-slice-for-pma-thinking-models)
   - [Deferred Backend Work This Round](#deferred-backend-work-this-round)
 - [Phase 4 Shared Chat Controller and Testable Seams](#phase-4-shared-chat-controller-and-testable-seams)
   - [Phase 4 Testing Gate](#phase-4-testing-gate)
@@ -96,7 +97,7 @@ The single-binary worker track is in [worker requirements](../requirements/worke
 
 - [x] Promote the chat, thread, TUI, and backend file-context contracts needed for a stable TUI-first source of truth.
   (Stable coverage now includes [REQ-USRGWY-0135](../requirements/usrgwy.md#req-usrgwy-0135) through [REQ-USRGWY-0147](../requirements/usrgwy.md#req-usrgwy-0147), [REQ-CLIENT-0181](../requirements/client.md#req-client-0181) through [REQ-CLIENT-0207](../requirements/client.md#req-client-0207), and [REQ-ORCHES-0167](../requirements/orches.md#req-orches-0167) through [REQ-ORCHES-0169](../requirements/orches.md#req-orches-0169).)
-  (It also includes [REQ-SCHEMA-0114](../requirements/schema.md#req-schema-0114), [REQ-PMAGNT-0115](../requirements/pmagnt.md#req-pmagnt-0115), [REQ-PMAGNT-0116](../requirements/pmagnt.md#req-pmagnt-0116), and [REQ-WORKER-0264](../requirements/worker.md#req-worker-0264).)
+  (It also includes [REQ-SCHEMA-0114](../requirements/schema.md#req-schema-0114), [REQ-PMAGNT-0115](../requirements/pmagnt.md#req-pmagnt-0115), [REQ-PMAGNT-0116](../requirements/pmagnt.md#req-pmagnt-0116), and [REQ-WORKER-0274](../requirements/worker.md#req-worker-0274).)
 
 - [x] Extend the OpenAI-compatible chat contract and TUI work scope to support both `POST /v1/chat/completions` and `POST /v1/responses`.
   (Gateway, orchestrator, PMA, thread storage, and client-side spec anchors now cover both surfaces.)
@@ -440,7 +441,7 @@ The order inside this phase matters because later TUI work depends on these back
   (See [REQ-USRGWY-0146](../requirements/usrgwy.md#req-usrgwy-0146), [REQ-USRGWY-0147](../requirements/usrgwy.md#req-usrgwy-0147), [CYNAI.USRGWY.ChatThreadsMessages.ContextSizeTracking](../tech_specs/chat_threads_and_messages.md#spec-cynai-usrgwy-chatthreadsmessages-contextsizetracking), and [CYNAI.USRGWY.OpenAIChatApi.ContextCompaction](../tech_specs/openai_compatible_chat_api.md#spec-cynai-usrgwy-openaichatapi-contextcompaction).)
 
 - [x] Keep orchestrator-directed node-local inference context sizing and backend-env propagation as stable follow-on backend or deployment work unless the active TUI slice explicitly depends on it.
-  (See [REQ-ORCHES-0169](../requirements/orches.md#req-orches-0169), [REQ-WORKER-0264](../requirements/worker.md#req-worker-0264), [REQ-PMAGNT-0116](../requirements/pmagnt.md#req-pmagnt-0116), and [CYNAI.ORCHES.InferenceBackendEnv](../tech_specs/orchestrator_inference_container_decision.md#spec-cynai-orches-inferencebackendenv).)
+  (See [REQ-ORCHES-0169](../requirements/orches.md#req-orches-0169), [REQ-WORKER-0274](../requirements/worker.md#req-worker-0274), [REQ-PMAGNT-0116](../requirements/pmagnt.md#req-pmagnt-0116), and [CYNAI.ORCHES.InferenceBackendEnv](../tech_specs/orchestrator_inference_container_decision.md#spec-cynai-orches-inferencebackendenv).)
 
 ## Phase 4 Shared Chat Controller and Testable Seams
 
@@ -843,7 +844,7 @@ This phase keeps the worker-deployment follow-on docs aligned without mixing the
 - **2026-03-13:** The stable source-of-truth docs and behavior specs were expanded beyond the original TUI-first MVP cut.
   Stable requirements now include:
   [REQ-USRGWY-0139](../requirements/usrgwy.md#req-usrgwy-0139) through [REQ-USRGWY-0147](../requirements/usrgwy.md#req-usrgwy-0147), [REQ-CLIENT-0187](../requirements/client.md#req-client-0187) through [REQ-CLIENT-0207](../requirements/client.md#req-client-0207), and [REQ-ORCHES-0167](../requirements/orches.md#req-orches-0167) through [REQ-ORCHES-0169](../requirements/orches.md#req-orches-0169).
-  It also includes [REQ-SCHEMA-0114](../requirements/schema.md#req-schema-0114), [REQ-PMAGNT-0115](../requirements/pmagnt.md#req-pmagnt-0115), [REQ-PMAGNT-0116](../requirements/pmagnt.md#req-pmagnt-0116), and [REQ-WORKER-0264](../requirements/worker.md#req-worker-0264).
+  It also includes [REQ-SCHEMA-0114](../requirements/schema.md#req-schema-0114), [REQ-PMAGNT-0115](../requirements/pmagnt.md#req-pmagnt-0115), [REQ-PMAGNT-0116](../requirements/pmagnt.md#req-pmagnt-0116), and [REQ-WORKER-0274](../requirements/worker.md#req-worker-0274).
   Stable tech-spec anchors now cover the same scope in [cynork_tui.md](../tech_specs/cynork_tui.md), [chat_threads_and_messages.md](../tech_specs/chat_threads_and_messages.md), [openai_compatible_chat_api.md](../tech_specs/openai_compatible_chat_api.md), [orchestrator.md](../tech_specs/orchestrator.md), and [orchestrator_inference_container_decision.md](../tech_specs/orchestrator_inference_container_decision.md).
   They also cover [postgres_schema.md](../tech_specs/postgres_schema.md), [cynode_pma.md](../tech_specs/cynode_pma.md), [worker_node.md](../tech_specs/worker_node.md), and [worker_node_payloads.md](../tech_specs/worker_node_payloads.md).
   Feature coverage was also expanded in [chat_openai_compatible.feature](../../features/e2e/chat_openai_compatible.feature), [cynork_chat.feature](../../features/cynork/cynork_chat.feature), [cynork_shell.feature](../../features/cynork/cynork_shell.feature), and [cynork_tui.feature](../../features/cynork/cynork_tui.feature).

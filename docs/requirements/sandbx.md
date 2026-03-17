@@ -111,7 +111,7 @@ When outbound egress is permitted by policy, it is only via worker proxies (infe
 - **REQ-SANDBX-0130:** When sandbox web egress is permitted by policy for dependency downloads, sandboxes MUST be configured to use the Web Egress Proxy and MUST NOT have direct outbound internet access that bypasses it.
   [CYNAI.SANDBX.Integration.WebEgressProxy](../tech_specs/web_egress_proxy.md#spec-cynai-sandbx-integration-webegressproxy)
   <a id="req-sandbx-0130"></a>
-- **REQ-SANDBX-0131:** Sandboxes MUST reach the node-local inference proxy and all other worker proxy endpoints only via Unix domain sockets (UDS), as provided by the worker per [REQ-WORKER-0260](../requirements/worker.md#req-worker-0260).
+- **REQ-SANDBX-0131:** Sandboxes MUST reach the node-local inference proxy and all other worker proxy endpoints only via Unix domain sockets (UDS), as provided by the worker per [REQ-WORKER-0270](../requirements/worker.md#req-worker-0270).
   The worker injects an inference proxy URL (e.g. `http+unix://` or equivalent) into the sandbox environment; the sandbox MUST NOT be given a TCP endpoint (e.g. `OLLAMA_BASE_URL=http://localhost:11434`) for inference.
   [CYNAI.SANDBX.NodeLocalInference](../tech_specs/sandbox_container.md#spec-cynai-sandbx-nodelocalinf)
   [CYNAI.WORKER.UnifiedUdsPath](../tech_specs/worker_node.md#spec-cynai-worker-unifiedudspath)

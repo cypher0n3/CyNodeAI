@@ -22,7 +22,7 @@
   - [Sanity Checker Security](#sanity-checker-security)
   - [Sanity Checker Audit](#sanity-checker-audit)
   - [Sanity Checker Configuration](#sanity-checker-configuration)
-  - [Sanity Checker Model Configuration](#sanity-checker-model-configuration)
+  - [Sanity Checker Model Configuration](#spec-cynai-apiegr-sanitycheckermodelconfig)
   - [Sanity Checker Req Traces](#sanity-checker-req-traces)
 - [Admin API (Gateway Endpoints)](#admin-api-gateway-endpoints)
   - [Get Credential (Metadata Only)](#get-credential-metadata-only)
@@ -195,8 +195,7 @@ When the sanity checker returns **escalate**, the requested outbound call is not
 The agent receives a structured error indicating that the call was escalated for human review.
 
 Delivery of escalation (and other system-to-user updates) to the user is not yet fully specified.
-A draft proposal for default notification connectors (Signal, Discord) that can be enabled and configured to deliver such updates is in [Default notification connectors (draft)](../draft_specs/default_messaging_connectors_proposal.md).
-Until that or an equivalent mechanism is adopted, escalation is visible only via audit logs and any review UI the deployment provides; the system does not push notifications to messaging apps or other channels by default.
+Until a notification mechanism (e.g. configurable connectors for Signal, Discord, or other channels) is adopted in a future tech spec or operator docs, escalation is visible only via audit logs and any review UI the deployment provides; the system does not push notifications to messaging apps or other channels by default.
 
 ### Sanity Checker Detection Categories
 
@@ -219,6 +218,8 @@ Allowlist-based or rule-based shortcuts for known-safe operations are permitted 
 - Optional allowlist of (provider, operation) pairs that skip the check (e.g. read-only or pre-approved safe operations) to reduce latency and cost.
 
 ### Sanity Checker Model Configuration
+
+- Spec ID: `CYNAI.APIEGR.SanityCheckerModelConfig` <a id="spec-cynai-apiegr-sanitycheckermodelconfig"></a>
 
 - The sanity check SHALL use local (worker-hosted) inference by default ([REQ-APIEGR-0125](../requirements/apiegr.md#req-apiegr-0125)).
   It MAY use a configurable external model via API only when the user explicitly configures an external LLM API (OpenAI-compatible or provider-specific endpoint).

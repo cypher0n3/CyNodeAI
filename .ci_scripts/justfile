@@ -75,26 +75,7 @@ install-markdownlint:
     REPO_URL="https://github.com/cypher0n3/docs-as-code-tools.git"
     if [ ! -f "$CONFIG" ]; then
         echo "Creating $CONFIG with customRules in $RULES_DIR/ ..."
-        cat > "$CONFIG" << 'ENDOFFILE'
-    {
-      "config": { "default": true, "extends": ".markdownlint.yml" },
-      "customRules": [
-        ".markdownlint-rules/allow-custom-anchors.js",
-        ".markdownlint-rules/ascii-only.js",
-        ".markdownlint-rules/document-length.js",
-        ".markdownlint-rules/fenced-code-under-heading.js",
-        ".markdownlint-rules/heading-min-words.js",
-        ".markdownlint-rules/heading-numbering.js",
-        ".markdownlint-rules/heading-title-case.js",
-        ".markdownlint-rules/no-duplicate-headings-normalized.js",
-        ".markdownlint-rules/no-empty-heading.js",
-        ".markdownlint-rules/no-h1-content.js",
-        ".markdownlint-rules/no-heading-like-lines.js",
-        ".markdownlint-rules/one-sentence-per-line.js"
-      ],
-      "ignores": [".github/**", ".pytest_cache/**", ".venv/**", "**/node_modules/**", "tmp/**", "**/tmp/**", "**/*.plan.md", "*.cursor/**", ".markdownlint-repo/", ".markdownlint-rules/"]
-    }
-    ENDOFFILE
+        cat "$root/.ci_scripts/markdownlint-cli2.jsonc.in" > "$CONFIG"
     fi
     if ! grep -q '"\.markdownlint-rules/' "$CONFIG" 2>/dev/null && ! grep -q '"./\.markdownlint-rules/' "$CONFIG" 2>/dev/null; then
         echo "Config does not point to $RULES_DIR; skipping rules download."
@@ -166,13 +147,13 @@ lint-gherkin: install-gherkin-lint
     trap 'popd >/dev/null 2>/dev/null || true' EXIT
     gherkin-lint features/
 
-check-tech-spec-duplication *ARGS:
+check-tech-specs *ARGS:
     #!/usr/bin/env bash
     set -e
     root="$(cd "{{ root_dir }}" && pwd)"
     pushd "$root" >/dev/null
     trap 'popd >/dev/null 2>/dev/null || true' EXIT
-    python3 .ci_scripts/check_tech_spec_duplication.py --no-fail {{ ARGS }}
+    python3 .ci_scripts/check_tech_spec.py {{ ARGS }}
 
 lint-containerfiles:
     #!/usr/bin/env bash
@@ -226,7 +207,9 @@ lint-python paths="scripts,.ci_scripts":
     root="$(cd "{{ root_dir }}" && pwd)"
     pushd "$root" >/dev/null
     trap 'popd >/dev/null 2>/dev/null || true' EXIT
-    LINT_PATHS=$(echo "{{ paths }}" | tr ',' ' ')
+    _raw="{{ paths }}"
+    case "$_raw" in *,*) ;; *) _raw="scripts,.ci_scripts";; esac
+    LINT_PATHS="scripts .ci_scripts"
     command -v python3 >/dev/null 2>&1 || { echo "Error: python3 not found."; exit 1; }
     need() { command -v "$1" >/dev/null 2>&1 || [ -x .venv/bin/"$1" ] || { echo "Error: $1 not found. Run 'just venv'"; exit 1; }; }
     need flake8; need pylint; need radon; need xenon; need vulture; need bandit

@@ -84,6 +84,8 @@ docs-check *PATHS:
     @just fix-cynode {{ PATHS }}
     @just .ci_scripts/lint-md {{ PATHS }}
     @just .ci_scripts/validate-doc-links
+    # TODO: remove --no-duplicate-check once tech_spec duplicates are cleaned up
+    @just .ci_scripts/check-tech-specs --no-duplicate-check
     @just .ci_scripts/validate-requirements
     @just .ci_scripts/validate-feature-files
 
@@ -542,4 +544,3 @@ venv:
     .venv/bin/pip install -q -r scripts/requirements-lint.txt
     .venv/bin/pip install -q -r scripts/requirements-e2e.txt
     echo "Created .venv with lint and E2E tooling. Use 'just lint-python' and 'just e2e' (they use .venv when present)."
-

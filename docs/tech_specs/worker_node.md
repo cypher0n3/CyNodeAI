@@ -83,7 +83,7 @@ The Node Manager is a host-level system service responsible for:
 
 #### Traces to Requirements
 
-- [REQ-WORKER-0257](../requirements/worker.md#req-worker-0257)
+- [REQ-WORKER-0267](../requirements/worker.md#req-worker-0267)
 
 When the Node Manager receives a shutdown command (e.g. SIGTERM, SIGINT, or systemd stop), it MUST:
 
@@ -102,7 +102,7 @@ Shutdown and its outcome (success or failure, including which containers failed)
 
 #### Orchestrator Shutdown Notification Requirements Traces
 
-- [REQ-WORKER-0261](../requirements/worker.md#req-worker-0261)
+- [REQ-WORKER-0271](../requirements/worker.md#req-worker-0271)
 - [REQ-ORCHES-0164](../requirements/orches.md#req-orches-0164)
 
 When the worker receives an orchestrator-initiated notification to stop all orchestrator-directed agents and jobs (e.g. via the Worker API contract defined in [CYNAI.WORKER.StopAllOrchestratorDirected](worker_api.md#spec-cynai-worker-stopallorchestratordirected)), the worker MUST:
@@ -399,7 +399,7 @@ See [`docs/tech_specs/mcp_tooling.md`](mcp_tooling.md) for the MCP tool layer th
 
 ### Unified UDS Path (Agent and Sandbox Containers) Requirements Traces
 
-- [REQ-WORKER-0260](../requirements/worker.md#req-worker-0260)
+- [REQ-WORKER-0270](../requirements/worker.md#req-worker-0270)
 
 **All local agents run by the Node Manager** (managed service containers such as PMA and PAA, and sandbox containers including SBA) MUST use **only** UDS proxy endpoints.
 There are no exceptions: the worker MUST NOT expose TCP (including loopback TCP) to any agent or sandbox for proxy or inference access.
@@ -429,7 +429,7 @@ All container-facing endpoints MUST use UDS per [Unified UDS Path](#unified-uds-
 
 - [REQ-WORKER-0114](../requirements/worker.md#req-worker-0114)
 - [REQ-WORKER-0115](../requirements/worker.md#req-worker-0115)
-- [REQ-WORKER-0260](../requirements/worker.md#req-worker-0260)
+- [REQ-WORKER-0270](../requirements/worker.md#req-worker-0270)
 - [REQ-SANDBX-0131](../requirements/sandbx.md#req-sandbx-0131)
 
 Unified UDS approach (required)
@@ -853,7 +853,7 @@ Worker node deployments MUST support auto-start on the host so that Node Manager
 
 ### Deployment Topologies Requirements Traces
 
-- [REQ-WORKER-0262](../requirements/worker.md#req-worker-0262)
+- [REQ-WORKER-0272](../requirements/worker.md#req-worker-0272)
 
 The implementation supports **single-process (host binary) only**.
 Node Manager and Worker API run in one process; one binary (`cynodeai-wnm`), one system service.
@@ -869,8 +869,8 @@ Error conditions:
 
 ### Single-Process Host Binary Requirements Traces
 
-- [REQ-WORKER-0262](../requirements/worker.md#req-worker-0262)
-- [REQ-WORKER-0263](../requirements/worker.md#req-worker-0263)
+- [REQ-WORKER-0272](../requirements/worker.md#req-worker-0272)
+- [REQ-WORKER-0273](../requirements/worker.md#req-worker-0273)
 - [REQ-WORKER-0172](../requirements/worker.md#req-worker-0172) (secure store boundary when separate processes)
 - [CYNAI.WORKER.NodeStartupProcedure](#spec-cynai-worker-nodestartupprocedure)
 - [CYNAI.WORKER.NodeManagerShutdown](#spec-cynai-worker-nodemanagershutdown)

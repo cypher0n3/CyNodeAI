@@ -24,7 +24,7 @@ const ManagedAgentProxySocketBaseDir = "run/managed_agent_proxy"
 //
 // REQ-WORKER-0174: managed-service containers MUST run with --network=none; inference and proxy
 // traffic routes exclusively through UDS sockets mounted into the container.
-// REQ-WORKER-0260: node_local inference is injected as OLLAMA_BASE_URL=http+unix://... pointing at
+// REQ-WORKER-0270: node_local inference is injected as OLLAMA_BASE_URL=http+unix://... pointing at
 // the per-service inference socket (not a TCP URL).
 func BuildManagedServiceRunArgs(stateDir string, svc *nodepayloads.ConfigManagedService, serviceID, serviceType, image, name, runtime string) []string {
 	args := []string{"run", "-d", "--name", name}
@@ -39,7 +39,7 @@ func BuildManagedServiceRunArgs(stateDir string, svc *nodepayloads.ConfigManaged
 	if strings.TrimSpace(svc.RestartPolicy) == "always" {
 		args = append(args, "--restart", "always")
 	}
-	// NOTE: port publish intentionally removed (REQ-WORKER-0174 / REQ-WORKER-0260):
+	// NOTE: port publish intentionally removed (REQ-WORKER-0174 / REQ-WORKER-0270):
 	// orchestrator-to-agent traffic routes through the worker proxy via UDS, not direct TCP.
 	if hc := podmanHealthcheckArgs(svc, serviceType, runtime); len(hc) > 0 {
 		args = append(args, hc...)
@@ -87,7 +87,7 @@ func serviceIDPathSafe(serviceID string) bool {
 }
 
 // DefaultPortForServiceType previously returned the TCP port for a service type.
-// REQ-WORKER-0174 / REQ-WORKER-0260: TCP port publishing is removed; all inter-service
+// REQ-WORKER-0174 / REQ-WORKER-0270: TCP port publishing is removed; all inter-service
 // communication uses UDS sockets. Retained for reference and tests; always returns "".
 func DefaultPortForServiceType(_ string) string {
 	return ""
@@ -109,7 +109,7 @@ func internalPortForServiceType(serviceType string) string {
 const pmaServiceSockPath = inferenceSocketContainerPath + "/service.sock"
 
 // podmanHealthcheckArgs returns podman --health-* args when runtime is podman and svc has a healthcheck; otherwise nil.
-// For PMA (REQ-WORKER-0174 / REQ-WORKER-0260) the container has no TCP; health check uses curl over UDS.
+// For PMA (REQ-WORKER-0174 / REQ-WORKER-0270) the container has no TCP; health check uses curl over UDS.
 // For other service types with a healthcheck, no UDS path is defined so we skip (caller can add later if needed).
 func podmanHealthcheckArgs(svc *nodepayloads.ConfigManagedService, serviceType, runtime string) []string {
 	if strings.TrimSpace(runtime) != "podman" || svc.Healthcheck == nil {
@@ -179,7 +179,7 @@ func applyAutoProxyURLs(stateDir, serviceID, mcpURL, readyURL string) (resolvedM
 const inferenceSocketContainerPath = "/run/cynode/managed_agent_proxy"
 
 // applyManagedServiceInferenceEnv injects inference-related env vars into the run args.
-// REQ-WORKER-0260: node_local mode injects OLLAMA_BASE_URL as a http+unix:// URL pointing at
+// REQ-WORKER-0270: node_local mode injects OLLAMA_BASE_URL as a http+unix:// URL pointing at
 // the per-service inference socket mounted at inferenceSocketContainerPath/inference.sock.
 // TCP URLs are never injected for node_local mode.
 // sortedKeys returns the keys of m in sorted order for deterministic output.
@@ -203,7 +203,7 @@ func applyManagedServiceInferenceEnv(args []string, stateDir, serviceID string, 
 	}
 	switch mode {
 	case "node_local", "remote_node":
-		// REQ-WORKER-0260: UDS only. The inference proxy sidecar (managed by worker-api) listens
+		// REQ-WORKER-0270: UDS only. The inference proxy sidecar (managed by worker-api) listens
 		// on <stateDir>/run/managed_agent_proxy/<serviceID>/inference.sock (host path) which is
 		// mounted inside the container at inferenceSocketContainerPath/inference.sock.
 		inferenceSock := inferenceSocketContainerPath + "/inference.sock"

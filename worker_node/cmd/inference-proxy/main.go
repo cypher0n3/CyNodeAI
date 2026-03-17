@@ -1,5 +1,5 @@
 // inference-proxy is a minimal HTTP reverse proxy that forwards requests to Ollama.
-// REQ-WORKER-0260: when INFERENCE_PROXY_SOCKET is set, the proxy listens on a Unix domain
+// REQ-WORKER-0270: when INFERENCE_PROXY_SOCKET is set, the proxy listens on a Unix domain
 // socket instead of TCP 127.0.0.1:11434, so that sandboxes receive inference via UDS.
 // Per docs/tech_specs/worker_node.md: enforces request size (10 MiB) and per-request timeout;
 // MUST NOT expose credentials.
@@ -34,7 +34,7 @@ func runMain(ctx context.Context, args []string) int {
 	if healthURL := parseHealthcheckURL(args); healthURL != "" {
 		return runHealthcheck(ctx, healthURL)
 	}
-	// REQ-WORKER-0260: prefer UDS when INFERENCE_PROXY_SOCKET is set.
+	// REQ-WORKER-0270: prefer UDS when INFERENCE_PROXY_SOCKET is set.
 	if sockPath := os.Getenv("INFERENCE_PROXY_SOCKET"); sockPath != "" {
 		return runUDS(ctx, sockPath)
 	}
@@ -42,13 +42,13 @@ func runMain(ctx context.Context, args []string) int {
 }
 
 // runUDS delegates to inferenceproxy.RunUDS.
-// REQ-WORKER-0260: UDS mode; TCP port 11434 is NOT bound.
+// REQ-WORKER-0270: UDS mode; TCP port 11434 is NOT bound.
 func runUDS(ctx context.Context, sockPath string) int {
 	return inferenceproxy.RunUDS(ctx, sockPath)
 }
 
 // run starts the proxy server. If INFERENCE_PROXY_SOCKET is set and listener is nil, delegates to
-// UDS mode (REQ-WORKER-0260). Otherwise uses TCP. If listener is non-nil it is used as-is (tests).
+// UDS mode (REQ-WORKER-0270). Otherwise uses TCP. If listener is non-nil it is used as-is (tests).
 func run(ctx context.Context, listener net.Listener, listenAddrOverride string) int {
 	if sockPath := os.Getenv("INFERENCE_PROXY_SOCKET"); sockPath != "" && listener == nil {
 		return runUDS(ctx, sockPath)
@@ -125,7 +125,7 @@ func runHealthcheck(ctx context.Context, rawURL string) int {
 	reqCtx, cancel := context.WithTimeout(ctx, 2*time.Second)
 	defer cancel()
 
-	// Support http+unix:// for UDS health checks (REQ-WORKER-0260).
+	// Support http+unix:// for UDS health checks (REQ-WORKER-0270).
 	httpClient := http.DefaultClient
 	effectiveURL := rawURL
 	if strings.HasPrefix(rawURL, "http+unix://") {

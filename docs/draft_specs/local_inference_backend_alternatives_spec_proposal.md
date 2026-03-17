@@ -35,7 +35,7 @@ Propose how they could be integrated under a single abstraction so the system is
 - **Worker node:** Node Manager starts a single "Ollama" container (image from orchestrator/env).
   Inference proxy sidecar in sandbox pods forwards to it; sandbox receives `OLLAMA_BASE_URL=http://localhost:11434`.
 - **Orchestrator / PMA:** PMA and chat routing call node-local or external inference.
-  Requirements and specs refer to "Ollama or similar" (e.g. REQ-MODELS-0004, REQ-WORKER-0115, api_egress_sanity_checker_spec_proposal).
+  Requirements and specs refer to "Ollama or similar" (e.g. REQ-MODELS-0004, REQ-WORKER-0115, [API Egress sanity check model config](../tech_specs/api_egress_server.md#spec-cynai-apiegr-sanitycheckermodelconfig)).
 - **Ports:** Ollama fixed at 11434 (orchestrator dev stack and node).
   Inference proxy listens 11434 inside the pod and forwards to node Ollama.
 - **Requirements:** REQ-WORKER-0114 (node-local inference), REQ-WORKER-0115 (keep Ollama private), REQ-WORKER-0123 (node MAY run no Ollama), REQ-MODELS-0004 (orchestrator requests node load model for PM).
@@ -142,7 +142,7 @@ This section describes integration points for alternative backends across the no
 
 ### 4.3 API Egress / Sanity Checker
 
-- The [API Egress sanity checker proposal](api_egress_sanity_checker_spec_proposal.md) already allows "Ollama or similar" and configurable external API.
+- The [API Egress sanity checker](../tech_specs/api_egress_server.md#spec-cynai-apiegr-sanitycheck) already allows "Ollama or similar" and configurable external API.
   That would map to "local inference backend (e.g. Ollama, LocalAI, vLLM) or external API," with the same sanity-check contract (allow/deny/escalate) and no credentials in sandbox.
 
 ### 4.4 Ports and Endpoints
@@ -272,5 +272,5 @@ Exact section names and replacement text for tech specs.
 - [requirements/worker.md](../requirements/worker.md) (REQ-WORKER-0114, 0115, 0123)
 - [requirements/models.md](../requirements/models.md) (REQ-MODELS-0004)
 - [external_model_routing.md](../tech_specs/external_model_routing.md)
-- [api_egress_sanity_checker_spec_proposal.md](api_egress_sanity_checker_spec_proposal.md)
+- [API Egress Server (sanity check)](../tech_specs/api_egress_server.md#spec-cynai-apiegr-sanitycheck)
 - [Spec authoring and validation](../docs_standards/spec_authoring_writing_and_validation.md)

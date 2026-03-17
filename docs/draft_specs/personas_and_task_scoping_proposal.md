@@ -270,7 +270,7 @@ This makes the **task** the place where "which persona runs this work" is decide
   Consumers MUST sort by numeric key ascending to obtain execution order (same pattern as task steps in [postgres_schema.md](../tech_specs/postgres_schema.md)).
 
 - **Job spec definition for task bundles:** The job payload (JSON) consumed by the SBA MUST support the following when the job is a task bundle.
-  Existing job spec (e.g. [cynode_sba.md - Job Specification](../tech_specs/cynode_sba.md#job-specification)) defines minimum fields: `protocol_version`, `job_id`, `task_id`, `constraints`.
+  Existing job spec (e.g. [cynode_sba.md - Job Specification](../tech_specs/cynode_sba.md#spec-cynai-sbagnt-schemavalidation)) defines minimum fields: `protocol_version`, `job_id`, `task_id`, `constraints`.
     The canonical job spec (cynode_sba.md) MUST be updated to use **`task_ids`** only, as follows.
 
   - **Task reference:** **`task_ids`** (required): **map/object** keyed by numeric order (e.g. 10, 20, 30); each value = task uuid (string).

@@ -50,7 +50,7 @@ Each can be run from the repo root; some are wired to justfile targets.
 
 ### Tech Spec Duplication Checker
 
-[check_tech_spec_duplication.py](check_tech_spec_duplication.py) checks [docs/tech_specs/](../docs/tech_specs/) for duplicated or conflicting spec text in a CPD-style way.
+[check_tech_spec.py](check_tech_spec.py) checks [docs/tech_specs/](../docs/tech_specs/) for duplicated or conflicting spec text in a CPD-style way.
 
 The script fingerprints contiguous blocks of normalized lines across tech_spec markdown files.
 Any block that appears in more than one file (or in multiple places in the same file) is reported so it can be deduplicated or consolidated.
@@ -72,13 +72,13 @@ To write a report file, pass script args: `just check-tech-spec-duplication --re
 Or run the script directly:
 
 ```bash
-python3 .ci_scripts/check_tech_spec_duplication.py
+python3 .ci_scripts/check_tech_spec.py
 ```
 
 Optional report path:
 
 ```bash
-python3 .ci_scripts/check_tech_spec_duplication.py --report tmp/tech_spec_duplication_report.txt
+python3 .ci_scripts/check_tech_spec.py --report tmp/tech_spec_duplication_report.txt
 ```
 
 #### Checker Options

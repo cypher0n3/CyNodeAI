@@ -6,6 +6,7 @@
 - [Health Checks](#health-checks)
   - [`Orchestrator.HealthEndpoints` Rule](#orchestratorhealthendpoints-rule)
 - [Task Scheduler](#task-scheduler)
+  - [Task Scheduler Responsibilities](#task-scheduler-responsibilities)
   - [`Orchestrator.JobTimeoutTracking` Rule](#orchestratorjobtimeouttracking-rule)
   - [Scheduled Run Routing to Project Manager Agent](#scheduled-run-routing-to-project-manager-agent)
 - [Project Manager Agent](#project-manager-agent)
@@ -84,21 +85,23 @@ Endpoints
 
 ## Task Scheduler
 
+- Spec ID: `CYNAI.ORCHES.TaskScheduler` <a id="spec-cynai-orches-taskscheduler"></a>
+
 The orchestrator MUST include a task scheduler that decides when and where to run work.
 
-Responsibilities
+### Task Scheduler Responsibilities
 
 - **Queue**: Maintain a queue of pending work (tasks and jobs) backed by PostgreSQL so state survives restarts.
 - **Dispatch**: Select eligible nodes based on capability, load, data locality, and model availability; dispatch jobs to the worker API; collect results and update task state.
   When the orchestrator receives job completion (success, failure, or timeout), it MUST pass that reporting to the Project Manager Agent and/or Project Analyst Agent for additional work (e.g. verification, remediation, follow-up tasks).
 - **Retries and leases**: Support job leases, retries on failure, and idempotency so work is not lost or duplicated when nodes fail or restart.
 - **Cron tool**: MUST support a cron (or equivalent) facility for scheduled jobs, wakeups, and automation.
-  Users and agents MUST be able to enqueue work at a future time or on a recurrence (cron expression or calendar-like).
-  The scheduler is responsible for firing at the scheduled time and enqueueing the corresponding tasks or jobs.
-  Schedule evaluation MUST be time-zone aware (schedules specify or inherit a time zone; next-run and history use that zone).
-  Schedules MUST support create, update, disable (temporarily stop firing without deleting), and cancellation (cancel the schedule or the next run).
-  The system MUST retain run history per schedule (past execution times and outcomes) for visibility and debugging.
-  The cron facility SHOULD be exposed to agents (e.g. via MCP tools) so they can create and manage scheduled jobs.
+  - Users and agents MUST be able to enqueue work at a future time or on a recurrence (cron expression or calendar-like).
+  - The scheduler is responsible for firing at the scheduled time and enqueueing the corresponding tasks or jobs.
+  - Schedule evaluation MUST be time-zone aware (schedules specify or inherit a time zone; next-run and history use that zone).
+  - Schedules MUST support create, update, disable (temporarily stop firing without deleting), and cancellation (cancel the schedule or the next run).
+  - The system MUST retain run history per schedule (past execution times and outcomes) for visibility and debugging.
+  - The cron facility SHOULD be exposed to agents (e.g. via MCP tools) so they can create and manage scheduled jobs.
 
 The scheduler MAY be implemented as a background process, a worker that consumes the queue, or integrated into the workflow engine; it MUST use the same node selection and job-dispatch contracts as the rest of the orchestrator.
 Agents (e.g. Project Manager) and the cron facility enqueue work; the scheduler is responsible for dequeueing and dispatching to nodes.

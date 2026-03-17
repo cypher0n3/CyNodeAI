@@ -5,8 +5,8 @@ Feature: Worker API Embedded (Single-Process)
   I want to start the Worker API in-process (single binary)
   So that the worker node runs as one process (cynodeai-wnm) with Node Manager and Worker API
 
-@req_worker_0262
-@req_worker_0263
+@req_worker_0272
+@req_worker_0273
 @spec_cynai_worker_payload_configurationv1
 Scenario: Node manager starts worker API during startup sequence
   Given a mock orchestrator that returns bootstrap with node_config_url
