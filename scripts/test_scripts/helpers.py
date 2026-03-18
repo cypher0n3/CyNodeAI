@@ -5,6 +5,7 @@ No extra deps (stdlib + subprocess). Run from repo root with PYTHONPATH=.
 
 import json
 import os
+from datetime import datetime, timezone
 import subprocess
 import tempfile
 import time
@@ -160,6 +161,61 @@ def ensure_e2e_task(config_path, max_attempts=3):
         if task_id:
             state.TASK_ID = task_id
             return True
+    return False
+
+
+def ensure_node_registered():
+    """Register node with control-plane and set state.NODE_JWT for capability/tests.
+
+    Idempotent if state.NODE_JWT already set. Return True if set, False on failure.
+    """
+    if getattr(state, "NODE_JWT", None):
+        return True
+    payload = {
+        "psk": config.NODE_PSK,
+        "capability": {
+            "version": 1,
+            "reported_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "node": {"node_slug": "test-e2e-node"},
+            "platform": {"os": "linux", "arch": "amd64"},
+            "compute": {"cpu_cores": 4, "ram_mb": 8192},
+            "worker_api": {"base_url": config.WORKER_API},
+        },
+    }
+    ok, body = run_curl(
+        "POST", config.CONTROL_PLANE_API + "/v1/nodes/register",
+        data=json.dumps(payload),
+    )
+    if not ok:
+        return False
+    data = parse_json_safe(body)
+    jwt = (data or {}).get("auth", {}).get("node_jwt")
+    if not jwt:
+        return False
+    state.NODE_JWT = jwt
+    return True
+
+
+def ensure_e2e_sba_task(config_path):
+    """Create one SBA task and set state.SBA_TASK_ID when completed.
+
+    Return True if state.SBA_TASK_ID is set, False on failure or non-completed.
+    Requires auth and inference (ollama). For use in tests that need SBA result contract.
+    """
+    if getattr(state, "SBA_TASK_ID", None):
+        return True
+    if not config_path or not os.path.isfile(config_path):
+        return False
+    create_args = [
+        "task", "create", "-p", "echo from SBA",
+        "--use-sba", "--use-inference", "-o", "json",
+    ]
+    task_id, status, _ = create_and_poll_sba_task(
+        create_args, config_path
+    )
+    if task_id and status == "completed":
+        state.SBA_TASK_ID = task_id
+        return True
     return False
 
 

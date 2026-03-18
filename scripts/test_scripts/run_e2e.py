@@ -70,6 +70,13 @@ def parse_args():
             "Tests that need auth/task state may fail."
         ),
     )
+    p.add_argument(
+        "--timeout",
+        type=int,
+        default=300,
+        metavar="SECS",
+        help="When --single: max seconds for the run (default 300). 0 = no limit.",
+    )
     return p.parse_known_args()
 
 
@@ -170,6 +177,13 @@ def _run_single_prereq(name, opts):
         state.init_config()
     elif name == e2e_tags.PREREQ_AUTH:
         if not _ensure_shared_auth_config():
+            return False
+    elif name == e2e_tags.PREREQ_NODE_REGISTER:
+        if not helpers.ensure_node_registered():
+            print(
+                "Error: node register prereq failed (control-plane /v1/nodes/register)",
+                file=sys.stderr,
+            )
             return False
     elif name == e2e_tags.PREREQ_TASK_ID:
         if not helpers.ensure_e2e_task(state.CONFIG_PATH):
@@ -311,6 +325,28 @@ def main():
     """Discover and run E2E tests; exit 0 on success, 1 on failure or setup error."""
     opts, unknown = parse_args()
     sys.argv = [sys.argv[0]] + unknown
+
+    # When --single and timeout > 0, run in subprocess so we can enforce a hard cap (avoids hung runs).
+    single_id = _normalize_single_test_id(getattr(opts, "single", "") or "")
+    timeout_sec = getattr(opts, "timeout", 300) or 0
+    if single_id and timeout_sec > 0 and os.environ.get("E2E_NO_TIMEOUT_WRAP") != "1":
+        env = os.environ.copy()
+        env["E2E_NO_TIMEOUT_WRAP"] = "1"
+        argv = [sys.executable, os.path.abspath(__file__)] + sys.argv[1:]
+        try:
+            proc = subprocess.run(
+                argv,
+                cwd=_ROOT,
+                env=env,
+                timeout=timeout_sec,
+            )
+            sys.exit(proc.returncode)
+        except subprocess.TimeoutExpired:
+            print(
+                f"Error: run exceeded {timeout_sec}s (--timeout); terminated.",
+                file=sys.stderr,
+            )
+            sys.exit(1)
 
     suite = _discover_suite(opts)
     if opts.list:

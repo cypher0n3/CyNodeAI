@@ -1,6 +1,6 @@
 # E2E: Task list with --status filter; assert status enum and list shape.
 # Traces: REQ-ORCHES-0125; cli_management_app_commands_tasks (task list, status enum).
-# Requires auth and state.TASK_ID from e2e_0420 (to ensure at least one task exists).
+# Requires task_id prereq (state.TASK_ID). Atomic: works with --single.
 
 import unittest
 

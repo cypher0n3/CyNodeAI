@@ -9,7 +9,8 @@
   - [Numbering Convention](#numbering-convention)
   - [Test Modules (Run Order)](#test-modules-run-order)
 - [Execution Order and State](#execution-order-and-state)
-  - [Prereq setup](#prereq-setup)
+  - [Prereq Setup](#prereq-setup)
+- [Testing Standards](#testing-standards)
 - [Environment](#environment)
 - [Adding Tests](#adding-tests)
 - [Troubleshooting](#troubleshooting)
@@ -107,7 +108,7 @@ Gaps (e.g. 0011-0019 between 0010 and 0020) allow inserting new tests without re
 - **e2e_0050_auth_whoami** - Auth whoami; asserts user=admin.
 - **e2e_0300_worker_api_health_readyz** - Worker API healthz and readyz (process alive vs ready for jobs).
 - **e2e_0310_worker_telemetry** - Worker API telemetry node:info and node:stats; requires WORKER_API and bearer.
-- **e2e_0320_worker_api_managed_service** - Worker API as managed service (container started by node-manager).
+- **e2e_0320_worker_api_managed_service** - Worker API (node-manager) healthz and node:info.
 - **e2e_0330_node_manager_telemetry** - Telemetry logs for source_name=node_manager (node-manager lifecycle).
 - **e2e_0340_uds_inference_routing** - UDS inference proxy routing coverage for worker-managed services and sandbox inference paths.
 - **e2e_0380_control_plane_node_register** - POST `/v1/nodes/register`; sets `state.NODE_JWT`.
@@ -150,8 +151,8 @@ Gaps (e.g. 0011-0019 between 0010 and 0020) allow inserting new tests without re
 ## Execution Order and State
 
 Discovery order is alphabetical by module name.
-Several tests depend on shared state: login (0030) creates the config and token; task create (0420) sets `state.TASK_ID`; later tests use `state.CONFIG_PATH` and task/JWT IDs set by earlier tests.
-Running a single test in isolation (e.g. `-k test_task_create`) will fail if it expects `state.TASK_ID` or `state.CONFIG_PATH` from a prior test; run the full suite or a contiguous subset.
+Shared state (`state.CONFIG_PATH`, `state.TASK_ID`, `state.NODE_JWT`, `state.SBA_TASK_ID`) is established by **prereqs** or by **setUp/helpers** in the test, not by assuming a prior test ran.
+Each test must be **atomic**: it may declare prereqs (run by the runner) or call helpers in setUp, but must not rely on the execution of other tests in the same run.
 
 ### Prereq Setup
 
@@ -162,6 +163,17 @@ The runner executes prereqs **per test** in order:
 - If a prereq step fails, it is recorded; any subsequent test that requires that prereq is **skipped** with a message like "Prereq(s) failed: gateway".
 
 So gateway, config, task_id, ollama run once when first needed; auth runs before each test that declares it.
+The **node_register** prereq runs control-plane node registration and sets `state.NODE_JWT` for capability/workflow tests.
+
+## Testing Standards
+
+- **Atomic tests:** Every test must be runnable in isolation (e.g. `just e2e --single e2e_0430_task_list`).
+  Each run is a new process; shared state is empty and no earlier tests have run in that run.
+- **No prior-test dependency:** Tests must not assume that another test (e.g. e2e_0420, e2e_0380, e2e_0710) has already run.
+  Required state (e.g. `state.TASK_ID`, `state.NODE_JWT`, `state.SBA_TASK_ID`) must be established by:
+  - **Prereqs** declared on the test class (e.g. `task_id`, `node_register`), which the runner runs before the test, or
+  - **Helpers in setup** (e.g. `helpers.ensure_e2e_sba_task()` in e2e_0720).
+- **Prereqs are the contract:** Use the whitelisted prereq names in `e2e_tags.py` (gateway, config, auth, node_register, task_id, ollama) so the runner can set up state once and skip tests when a prereq fails.
 
 ## Environment
 
@@ -182,7 +194,7 @@ Same as `just setup-dev` (scripts/justfile); see also `docs/tech_specs/ports_and
    No need to renumber existing files.
 2. The runner discovers all `e2e_*.py`; no registration needed.
 3. Use `from scripts.test_scripts import config, helpers` and `import scripts.test_scripts.e2e_state as state`.
-4. If the test needs auth or task state, run after the test that sets that state (or document the required order).
+4. If the test needs auth, task, node, or SBA state, declare the appropriate prereqs (see [Testing standards](#testing-standards)) or ensure state in setUp via helpers.
 5. Use `helpers.run_cynork(...)` for cynork CLI and `helpers.run_curl(...)` for control-plane HTTP; use `state.CONFIG_PATH` for cynork config when auth is required.
 
 ## Troubleshooting

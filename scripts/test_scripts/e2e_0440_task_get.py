@@ -1,4 +1,4 @@
-# E2E parity: task get. Requires e2e_0420 (state.TASK_ID).
+# E2E parity: task get. Requires task_id prereq (state.TASK_ID). Atomic: works with --single.
 # Traces: REQ-ORCHES-0125; cli_management_app_commands_tasks (task get).
 
 import unittest
@@ -26,7 +26,10 @@ class TestTaskGet(unittest.TestCase):
 
     def test_task_get(self):
         """Assert task get returns the created task ID and a valid status."""
-        self.assertIsNotNone(state.TASK_ID)
+        self.assertIsNotNone(
+            state.TASK_ID,
+            "state.TASK_ID not set (task_id prereq failed or not declared)",
+        )
         ok, out, err = helpers.run_cynork(
             ["task", "get", state.TASK_ID, "-o", "json"],
             state.CONFIG_PATH,
@@ -50,7 +53,7 @@ class TestTaskGet(unittest.TestCase):
         """task get by human-readable task name must succeed and return the task."""
         if state.TASK_NAME is None:
             self.skipTest(
-                "state.TASK_NAME not set (run full suite or e2e_0420.test_task_create_named first)"
+                "state.TASK_NAME not set (run test_task_create_named or suite)"
             )
         ok, out, err = helpers.run_cynork(
             ["task", "get", state.TASK_NAME, "-o", "json"],

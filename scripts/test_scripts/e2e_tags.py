@@ -64,6 +64,7 @@ PREREQ_CONFIG = "config"
 PREREQ_AUTH = "auth"
 PREREQ_TASK_ID = "task_id"
 PREREQ_OLLAMA = "ollama"
+PREREQ_NODE_REGISTER = "node_register"
 
 PREREQ_WHITELIST = frozenset[str]({
     PREREQ_GATEWAY,
@@ -71,10 +72,18 @@ PREREQ_WHITELIST = frozenset[str]({
     PREREQ_AUTH,
     PREREQ_TASK_ID,
     PREREQ_OLLAMA,
+    PREREQ_NODE_REGISTER,
 })
 
 # Order in which runner runs prereq setup (config before auth before task_id, etc.).
-PREREQ_ORDER = (PREREQ_GATEWAY, PREREQ_CONFIG, PREREQ_AUTH, PREREQ_TASK_ID, PREREQ_OLLAMA)
+PREREQ_ORDER = (
+    PREREQ_GATEWAY,
+    PREREQ_CONFIG,
+    PREREQ_AUTH,
+    PREREQ_NODE_REGISTER,
+    PREREQ_TASK_ID,
+    PREREQ_OLLAMA,
+)
 
 # Prereqs that must be re-run before every test that needs them (e.g. login token state).
 PREREQ_ALWAYS_RERUN = frozenset({PREREQ_AUTH})

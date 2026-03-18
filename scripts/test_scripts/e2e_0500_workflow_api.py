@@ -1,4 +1,4 @@
-# E2E: control-plane workflow start/resume/checkpoint/release. Uses state.TASK_ID.
+# E2E: control-plane workflow start/resume/checkpoint/release. Requires task_id prereq.
 # Traces: REQ-ORCHES-0144, 0145, 0146; workflow start/resume/lease API.
 
 import json
@@ -17,7 +17,7 @@ class TestWorkflowAPI(unittest.TestCase):
     def test_workflow_start_returns_run_id(self):
         """Start workflow for task; 200 with run_id, or 409 if lease already held."""
         if not getattr(state, "TASK_ID", None):
-            self.skipTest("TASK_ID not set (run after task create)")
+            self.skipTest("TASK_ID not set (task_id prereq failed or not declared)")
         headers = {}
         if getattr(config, "WORKFLOW_RUNNER_BEARER_TOKEN", ""):
             headers["Authorization"] = f"Bearer {config.WORKFLOW_RUNNER_BEARER_TOKEN}"
@@ -36,7 +36,7 @@ class TestWorkflowAPI(unittest.TestCase):
     def test_workflow_start_duplicate_returns_409(self):
         """Start workflow twice for same task; second returns 409."""
         if not getattr(state, "TASK_ID", None):
-            self.skipTest("TASK_ID not set")
+            self.skipTest("TASK_ID not set (task_id prereq failed or not declared)")
         headers = {}
         if getattr(config, "WORKFLOW_RUNNER_BEARER_TOKEN", ""):
             headers["Authorization"] = f"Bearer {config.WORKFLOW_RUNNER_BEARER_TOKEN}"

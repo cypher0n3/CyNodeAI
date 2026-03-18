@@ -15,7 +15,7 @@ class TestTaskCreate(unittest.TestCase):
     """E2E: prompt-mode task create and named/attachment variants; sets state.TASK_ID."""
 
     tags = ["suite_cynork", "full_demo", "task", "no_inference"]
-    prereqs = ["gateway", "config", "auth"]
+    prereqs = ["gateway", "config", "auth", "node_register"]
 
     def test_task_create(self):
         """Create prompt task, retry up to 3 times; store task_id in state."""

@@ -1,4 +1,4 @@
-# E2E: task list. Requires login and at least one task (e2e_0420 sets state.TASK_ID).
+# E2E: task list. Requires task_id prereq (sets state.TASK_ID). Atomic: works with --single.
 # Traces: REQ-ORCHES-0125; cli_management_app_commands_tasks (task list).
 
 import unittest
@@ -17,7 +17,7 @@ class TestTaskList(unittest.TestCase):
         """Assert task list returns JSON with tasks list containing state.TASK_ID."""
         self.assertIsNotNone(
             state.TASK_ID,
-            "state.TASK_ID must be set by e2e_0420 (task create); run tests in order",
+            "state.TASK_ID not set (task_id prereq failed or not declared)",
         )
         ok, out, err = helpers.run_cynork(
             ["task", "list", "-o", "json", "-l", "10"],
@@ -30,7 +30,7 @@ class TestTaskList(unittest.TestCase):
         self.assertIsInstance(tasks, list, "tasks should be a list")
         self.assertGreaterEqual(
             len(tasks), 1,
-            "at least one task from e2e_0420 create",
+            "at least one task (task_id prereq creates one)",
         )
         ids = [t.get("task_id") or t.get("id") for t in tasks if isinstance(t, dict)]
         self.assertIn(

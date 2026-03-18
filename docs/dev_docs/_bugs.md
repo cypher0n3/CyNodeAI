@@ -176,7 +176,7 @@ See [REQ-ORCHES-0175](../requirements/orches.md#req-orches-0175) and [orchestrat
 - **E2E** (implemented)
   - **`e2e_0800_gpu_variant_ollama.py`**: Asserts the running Ollama container image tag matches the expected variant for the host GPU.
   - The Python script **independently** detects GPU via `nvidia-smi` and `rocm-smi`, sums VRAM per vendor, and selects the expected variant (cuda vs rocm) by the same logic as the worker (vendor with greater total VRAM).
-  - Run with `E2E_GPU_VARIANT_CHECK=1 just e2e --tags gpu_variant`; skips when env unset, no GPU, or Ollama container not running.
+  - Runs by default; skips when no GPU detected or Ollama container not running (e.g. `just e2e --tags gpu_variant` or full suite).
   - **Stack must NOT use** `SETUP_DEV_OLLAMA_IN_STACK` or `--ollama-in-stack` (node-manager must start Ollama, not compose).
   - Ollama image mapping: variant `rocm` -> `ollama/ollama:rocm`; variant `cuda` -> `ollama/ollama` (no separate cuda tag).
   - Traces: REQ-WORKER-0253, REQ-ORCHES-0149.

@@ -1,4 +1,4 @@
-# E2E: task logs by ID. Requires state.TASK_ID from e2e_0420.
+# E2E: task logs by ID. Requires task_id prereq (state.TASK_ID). Atomic: works with --single.
 # Traces: REQ-ORCHES-0124; cli_management_app_commands_tasks (task logs).
 
 import unittest
@@ -27,7 +27,7 @@ class TestTaskLogs(unittest.TestCase):
         """Assert task logs returns JSON with task_id, stdout, and stderr fields."""
         self.assertIsNotNone(
             state.TASK_ID,
-            "state.TASK_ID must be set by e2e_0420 (task create); run tests in order",
+            "state.TASK_ID not set (task_id prereq failed or not declared)",
         )
         ok, out, err = helpers.run_cynork(
             ["task", "logs", state.TASK_ID, "-o", "json"],
@@ -48,7 +48,10 @@ class TestTaskLogs(unittest.TestCase):
 
     def test_task_logs_by_name(self):
         """task logs by human-readable task name must succeed and return log fields."""
-        self.assertIsNotNone(state.TASK_NAME, "state.TASK_NAME must be set by e2e_0420")
+        self.assertIsNotNone(
+            state.TASK_NAME,
+            "state.TASK_NAME not set (run test_task_create_named or suite)",
+        )
         ok, out, err = helpers.run_cynork(
             ["task", "logs", state.TASK_NAME, "-o", "json"],
             state.CONFIG_PATH,

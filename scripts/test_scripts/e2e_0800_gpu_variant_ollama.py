@@ -4,7 +4,6 @@
 # rocm-smi), sums VRAM per vendor, and asserts the running Ollama image tag matches.
 # Traces: REQ-WORKER-0253 (orchestrator-directed variant); REQ-ORCHES-0149.
 
-import os
 import unittest
 
 from scripts.test_scripts import config, helpers
@@ -35,10 +34,6 @@ class TestGPUVariantOllama(unittest.TestCase):
 
     def test_ollama_image_tag_matches_expected_gpu_variant(self):
         """Assert Ollama container image tag matches variant from independent GPU detection."""
-        if not os.environ.get("E2E_GPU_VARIANT_CHECK"):
-            self.skipTest(
-                "E2E_GPU_VARIANT_CHECK not set; run with E2E_GPU_VARIANT_CHECK=1 to validate"
-            )
         expected = gpu_variant.detect_expected_ollama_variant()
         if expected is None:
             self.skipTest("No GPU detected (nvidia-smi and rocm-smi both absent or empty)")
