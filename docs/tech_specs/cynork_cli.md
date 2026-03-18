@@ -343,7 +343,8 @@ All subcommands that call the gateway MUST use the resolved gateway URL and reso
 - `cynork auth login`: interactive or flag-based login; POST to gateway login endpoint; MUST support writing token to config and/or credential helper; MUST NOT echo password.
 - `cynork auth logout`: clear token from config file and optionally from credential helper; MUST NOT require gateway call.
 - `cynork auth whoami`: call gateway with current token; MUST require auth.
-- `cynork task ...`: create tasks, list tasks, get task status, watch task status, cancel tasks, and retrieve task results and artifacts; see [Task commands](cli_management_app_commands_tasks.md).
+- `cynork task ...`: full CRUD (create, list, get, update, delete/archive), cancel, result, watch, logs, and artifacts; see [Task commands](cli_management_app_commands_tasks.md).
+  Task delete is archive (soft delete).
 - `cynork tui`: start the full-screen TUI (first interactive entrypoint for chat and thread management); MUST NOT require auth to start; token validation is deferred to the initial gateway connection after the TUI renders; see [TUI first rollout](cynork_tui.md).
 - `cynork chat`: start an interactive chat session with the Project Manager (PM) model; available as a compatibility path during TUI rollout; see [Chat command](cli_management_app_commands_chat.md).
 - `cynork creds ...`: see [Credential Management](cli_management_app_commands_admin.md#spec-cynai-client-clicredential); MUST use gateway credential endpoints.

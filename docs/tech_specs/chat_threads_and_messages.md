@@ -14,6 +14,8 @@
   - [Thread Title Traces To](#thread-title-traces-to)
 - [Thread Summary](#thread-summary)
   - [Thread Summary Traces To](#thread-summary-traces-to)
+  - [`ThreadSummary` Constants](#threadsummary-constants)
+  - [`ThreadSummary` Deferred Implementation](#threadsummary-deferred-implementation)
 - [Chat Messages](#chat-messages)
   - [Secret Handling](#secret-handling)
   - [Canonical Persisted Message Fields](#canonical-persisted-message-fields)
@@ -23,6 +25,7 @@
   - [History List Traces To](#history-list-traces-to)
 - [Archive and Soft Delete](#archive-and-soft-delete)
   - [Archive Traces To](#archive-traces-to)
+  - [`Archive` Deferred Implementation](#archive-deferred-implementation)
 - [Structured Turns](#structured-turns)
   - [Canonical Projection](#canonical-projection)
   - [Structured Representation](#structured-representation)
@@ -30,9 +33,11 @@
   - [Thinking and Reasoning](#thinking-and-reasoning)
   - [Tool and File Metadata](#tool-and-file-metadata)
 - [Download References](#download-references)
+  - [Download References implementation](#download-references-implementation)
   - [Download References Traces To](#download-references-traces-to)
 - [Chat File Upload Storage](#chat-file-upload-storage)
   - [Chat File Upload Storage Traces To](#chat-file-upload-storage-traces-to)
+  - [Chat File Upload Storage implementation](#chat-file-upload-storage-implementation)
 - [Context Size Tracking](#context-size-tracking)
   - [Context Size Tracking Traces To](#context-size-tracking-traces-to)
 - [Retention and Transcripts](#retention-and-transcripts)
@@ -173,10 +178,22 @@ The gateway MUST allow the authenticated thread owner to update a thread title w
 
 The system MAY maintain an optional short thread summary for list and sidebar display.
 
-- `summary` is plaintext, optional, and intended only for short preview use.
-- Any server-derived summary MUST be generated from redacted content only.
-- `GET /v1/chat/threads` and `GET /v1/chat/threads/{thread_id}` SHOULD include `summary` when present.
-- `PATCH /v1/chat/threads/{thread_id}` MAY support clearing or setting `summary` if the implementation chooses to expose client-managed summaries.
+- Persisted field: `summary` (text, nullable) on `chat_threads`; max length when present is the value of the `ThreadSummary.MaxLength` constant (see below).
+- Any server-derived summary MUST be generated from redacted content only and MUST NOT contain plaintext secrets.
+  Client MAY set or clear `summary` on create or via PATCH when the implementation supports it; server MAY generate or update summary asynchronously from redacted message content.
+- `GET /v1/chat/threads` and `GET /v1/chat/threads/{thread_id}` responses MUST include a `summary` field when the thread has a non-null summary; the field MAY be null or omitted when the thread has no summary.
+- `PATCH /v1/chat/threads/{thread_id}` request body MAY include `"summary": <string | null>` to set or clear the thread summary; the gateway MUST reject PATCH if the string length exceeds `ThreadSummary.MaxLength` with 400 and an error body.
+
+### `ThreadSummary` Constants
+
+- **MaxLength:** 500 (characters).
+  Implementations MUST truncate or reject summary values longer than 500 characters.
+  When server-generated summaries are produced, they MUST be truncated to at most 500 characters.
+
+### `ThreadSummary` Deferred Implementation
+
+- Server-side async generation of summary from redacted thread content: trigger (e.g. after first message or on thread update), job queue or inline, and update of `chat_threads.summary`.
+  When implemented, the generator MUST use only redacted message content and MUST NOT persist plaintext secrets.
 
 ## Chat Messages
 
@@ -245,11 +262,18 @@ Messages are append-only.
 
 Archive support is optional but, when implemented, it MUST be represented as reversible hidden-from-default state rather than destructive deletion.
 
-- `archived_at` is the recommended persisted field; non-null means archived.
-- `GET /v1/chat/threads` SHOULD exclude archived threads by default when archive support is enabled.
-- The list endpoint SHOULD support filtering active versus archived visibility.
-- `PATCH /v1/chat/threads/{thread_id}` MAY expose archive and unarchive operations by toggling archive state.
-- Archive state does not bypass normal retention or purge policy.
+- Persisted field: `archived_at` (timestamptz, nullable) on `chat_threads`; when non-null, the thread is archived and excluded from the default list.
+- `PATCH /v1/chat/threads/{thread_id}` request body MAY include `"archived": true | false`.
+  When `archived: true`, the gateway sets `archived_at` to the current server time (UTC); when `archived: false`, the gateway sets `archived_at` to null.
+  Ownership and authorization are the same as for other PATCH operations on the thread.
+- `GET /v1/chat/threads` query parameters MUST include optional `archived` (boolean) when archive is implemented.
+  Semantics: when `archived` is absent or `false`, the response MUST exclude threads with non-null `archived_at`; when `archived` is `true`, the response MUST include only threads with non-null `archived_at`.
+  Pagination and ordering apply independently of the `archived` filter.
+- Retention and purge rules apply to archived threads the same as active threads unless a separate policy is defined.
+
+### `Archive` Deferred Implementation
+
+- Add `archived_at` column to `chat_threads` if not present; implement list filtering and PATCH handling for `archived` as specified above.
 
 ## Structured Turns
 
@@ -304,17 +328,29 @@ This spec uses the same general UX pattern seen in tools such as Open WebUI and 
 
 - Spec ID: `CYNAI.USRGWY.ChatThreadsMessages.DownloadRefs` <a id="spec-cynai-usrgwy-chatthreadsmessages-downloadrefs"></a>
 
+When a completion or tool execution produces an assistant-visible file, the gateway SHOULD surface that file as structured `download_ref` metadata rather than only mentioning it in prose.
+The PMA (and other assistant responses) MAY provide users with **download links** for such artifacts (e.g. a URL to `GET /v1/artifacts/{artifact_id}`); access to those links MUST be gated by RBAC so that only users authorized to read the artifact can retrieve it (see [Orchestrator Artifacts Storage - RBAC](orchestrator_artifacts_storage.md#spec-cynai-orches-artifactsrbac)).
+
+- **Metadata shape (in `metadata.parts` or equivalent):** Each `download_ref` part MUST include `download_id` (string), `filename` (string), and SHOULD include `media_type` (string) and `size_bytes` (integer) when known.
+  The part MAY include a user-facing `url` (string) that points to the artifact retrieval endpoint (e.g. `{gateway_base}/v1/artifacts/{download_id}`) so clients can render a clickable download link; when present, the same RBAC applies when the user follows the link.
+  Optional fields: `sha256` (string), `source_task_id` (string), `expires_at` (ISO 8601 timestamp string), `description` (string).
+- **Retrieval contract:** The gateway MUST expose retrieval via the unified artifacts endpoint **`GET /v1/artifacts/{artifact_id}`** with RBAC as defined in [Orchestrator Artifacts Storage](orchestrator_artifacts_storage.md#spec-cynai-orches-artifactsapicrud).
+  The `download_id` in `download_ref` MUST be the same identifier used as `artifact_id` for that endpoint.
+  Authorization MUST match the originating user, thread, and project visibility; 403 MUST be returned when the caller is not authorized.
+- **Response codes for artifact retrieval:** 200 OK with body; 404 Not Found when the artifact is unknown or removed; 410 Gone when the download has expired (if `expires_at` is used); 403 Forbidden when the caller is not authorized.
+  A 404 or 410 MUST NOT break transcript or thread retrieval; clients MUST treat failed download as a non-fatal error for the transcript view.
+- Clients MUST require explicit user action to download; the system MUST NOT auto-download assistant files as part of transcript rendering.
+
+### Download References Implementation
+
+- Retrieval, storage, and RBAC for assistant-produced files are specified in [Orchestrator Artifacts Storage](orchestrator_artifacts_storage.md): [Artifacts API (CRUD)](orchestrator_artifacts_storage.md#spec-cynai-orches-artifactsapicrud) (Read), [RBAC for Artifacts](orchestrator_artifacts_storage.md#spec-cynai-orches-artifactsrbac), and [Algorithm: Database and Blob Storage](orchestrator_artifacts_storage.md#spec-cynai-orches-artifactsdbblobalgo).
+- The gateway MUST serve retrieval via `GET /v1/artifacts/{artifact_id}` per that spec; `download_id` in `download_ref` is the `artifact_id`.
+- Remaining implementation: emit `download_ref` parts in completion and tool-result paths when the assistant produces file output; persist or stage those files in the orchestrator artifacts backend (S3 + DB metadata) with the scope and expiry semantics above.
+
 ### Download References Traces To
 
 - [REQ-USRGWY-0141](../requirements/usrgwy.md#req-usrgwy-0141)
 - [REQ-CLIENT-0194](../requirements/client.md#req-client-0194)
-
-When a completion or tool execution produces an assistant-visible file, the gateway SHOULD surface that file as structured `download_ref` metadata rather than only mentioning it in prose.
-
-- Minimum metadata SHOULD include `download_id`, `filename`, `media_type`, and `size_bytes` when known.
-- Retrieval SHOULD use an authenticated gateway-owned contract such as `GET /v1/chat/downloads/{download_id}` or a gateway-issued signed URL.
-- Authorization for a download reference MUST match the originating user, thread, and project visibility.
-- Expired or missing downloads SHOULD fail cleanly without breaking transcript retrieval.
 
 ## Chat File Upload Storage
 
@@ -327,10 +363,19 @@ When a completion or tool execution produces an assistant-visible file, the gate
 When the gateway accepts file uploads or inline file payloads for chat input under the documented `@` workflow, the resulting stored representation MUST remain scoped to the authenticated user and associated thread or message.
 When the originating thread is project-scoped, the uploaded file MUST inherit the same project-scoped visibility and authorization as that thread and message.
 
-- Stored chat-file metadata MUST support later retrieval by the gateway or orchestrator during request construction and history replay.
-- Authorization for stored chat-file content MUST match the associated chat thread and message visibility, including shared-project permissions when applicable.
-- The stored form MAY use database rows, object-storage metadata, or another stable internal representation, but it MUST preserve filename, media type, size, and the association to the originating chat message.
-- Secret redaction, file-size limits, and file-type policy MUST be applied before persistence.
+- **Backend:** Uploads MUST use the orchestrator's [S3-like artifacts storage](orchestrator_artifacts_storage.md#spec-cynai-orches-artifactss3backend): blob content is stored in the S3-compatible backend; metadata is stored in the database.
+- **Upload contract:** The gateway MUST accept uploads via a dedicated endpoint (e.g. `POST /v1/chat/uploads`) and/or inline in the OpenAI-compatible completion request (e.g. content parts with type `file` or `image`).
+  It MUST return a stable `file_id` (or equivalent) for each stored file that the client uses in the subsequent chat completion request.
+  The implementation MUST write the blob to the orchestrator artifacts backend and record metadata (including `storage_ref`) in the [chat_message_attachments](postgres_schema.md#spec-cynai-schema-chatmessageattachmentstable) table (or equivalent with the same columns and constraints), associating the attachment with the authenticated user and the thread or message when the completion is processed.
+- **Retrieval:** Stored chat files MUST be retrievable via the unified [artifacts endpoint](orchestrator_artifacts_storage.md#spec-cynai-orches-artifactsapicrud) `GET /v1/artifacts/{artifact_id}` with RBAC; `file_id` (or the attachment's stable id) serves as `artifact_id`.
+- **Secret redaction:** Secret redaction MUST be applied to file content before persistence; files that fail redaction MUST be rejected with 400.
+- **Size and type:** This spec does not define file size or media-type limits; they MAY be added in a later revision.
+
+### Chat File Upload Storage Implementation
+
+- Backend, upload contract, retrieval, and RBAC are specified in [Orchestrator Artifacts Storage](orchestrator_artifacts_storage.md): [S3-Like Block Storage](orchestrator_artifacts_storage.md#spec-cynai-orches-artifactss3backend), [Artifacts API (CRUD)](orchestrator_artifacts_storage.md#spec-cynai-orches-artifactsapicrud) (Create, Read), [RBAC for Artifacts](orchestrator_artifacts_storage.md#spec-cynai-orches-artifactsrbac), and [Algorithm: Database and Blob Storage](orchestrator_artifacts_storage.md#spec-cynai-orches-artifactsdbblobalgo).
+- The gateway MAY expose `POST /v1/chat/uploads` that delegates to `POST /v1/artifacts` with thread scope, or accept inline content in the completion request; in both cases blobs MUST be stored in the artifacts store and metadata in [chat_message_attachments](postgres_schema.md#spec-cynai-schema-chatmessageattachmentstable).
+- Remaining implementation: wire the gateway upload path (dedicated and/or inline) to the artifacts API and chat_message_attachments; ensure orchestrator/PMA resolution uses the same store so file content is available in the completion path and thread history replay.
 
 ## Context Size Tracking
 
@@ -433,5 +478,6 @@ Clients that do not need this (for example Open WebUI) MAY use only the OpenAI-c
 ## Related Documents
 
 - [OpenAI-Compatible Chat API](openai_compatible_chat_api.md)
+- [Orchestrator Artifacts Storage](orchestrator_artifacts_storage.md) (chat file uploads, download_ref retrieval, RBAC)
 - [Runs and Sessions API](runs_and_sessions_api.md)
 - [User API Gateway](user_api_gateway.md)

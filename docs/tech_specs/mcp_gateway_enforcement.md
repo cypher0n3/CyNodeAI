@@ -109,6 +109,7 @@ Traces To: [REQ-WORKER-0164](../requirements/worker.md#req-worker-0164).
   The token MUST be associated with at least: agent type (sandbox), and task/job context (task_id, job_id, and **user** or project when available).
   The orchestrator MUST associate the token with the user (e.g. task creator) so the gateway can resolve user context for preferences, access control, and audit attribution.
   The token MUST also be bound to task_id, project_id, and session scope.
+  The orchestrator MUST invalidate the token when the job is stopped or canceled; see [Task Cancel and Stop Job](orchestrator.md#spec-cynai-orches-taskcancelandstopjob).
 
 #### Token Use at the Gateway
 
@@ -116,6 +117,8 @@ Traces To: [REQ-WORKER-0164](../requirements/worker.md#req-worker-0164).
   The gateway MUST **authenticate** the request using that credential (e.g. validate signature or lookup in a credential store) and MUST resolve from it: **agent type** (PM, PA, or sandbox) and **user/task context** as stored at issuance (if any).
   For **PA and sandbox** tokens, the gateway MUST use the resolved user context for preference resolution, access control to user- and project-scoped resources, and audit attribution.
   For **PM** tokens, no user is bound to the token; user context for the request (when needed) comes from other request or session context.
+- The gateway MUST **reject** requests that present a token the orchestrator has **invalidated** (e.g. for a stopped or canceled job).
+  See [Task Cancel and Stop Job](orchestrator.md#spec-cynai-orches-taskcancelandstopjob).
 - The gateway MUST then restrict tool access to the **allowlist and per-tool scope for that agent type**.
   For example: a token issued for a PM agent allows only tools on the Project Manager allowlist with scope PM or both; a token issued for a sandbox agent allows only tools on the Worker allowlist with scope sandbox or both.
   No separate RBAC evaluation is required for agent-type restriction; the token itself conveys agent type.
@@ -176,6 +179,7 @@ Recommended allowlist
 - `artifact.*` (scoped to current task)
 - `memory.*` (job-scoped temporary memory: `memory.add`, `memory.list`, `memory.retrieve`, `memory.delete`; see [MCP tool catalog - Memory tools](mcp_tool_catalog.md#spec-cynai-mcptoo-memorytoolsjobscoped))
 - `skills.list`, `skills.get` (read-only; when allowed by policy, so the SBA can fetch relevant skills via the gateway)
+- `persona.get` (and optionally `persona.list`; when allowed by policy, so the SBA can resolve persona via worker proxy when needed)
 - `web.fetch` (sanitized, when allowed by policy)
 - `web.search` (secure web search, when allowed by policy)
 - `api.call` (through API Egress, when explicitly allowed for the task)
@@ -193,12 +197,15 @@ Explicitly disallowed
 
 Recommended allowlist
 
-- `db.*` (tasks, jobs, preferences, routing metadata)
+- `db.*` (tasks, jobs, preferences, routing metadata, and when the specifications table is adopted: specifications CRUD and db.plan.specifications.set, db.task.specifications.set)
+- `specification.help` (read-only schema guidance for building specification payloads; see [mcp_tool_catalog.md - Specification Help](mcp_tool_catalog.md#spec-cynai-mcptoo-specificationhelp))
+- `persona.list`, `persona.get` (so PMA can resolve persona_id when creating/updating tasks and building job specs)
 - `node.*` (capabilities, status, config refresh)
 - `sandbox.*` (create, exec, file transfer, logs, destroy; and when enabled by system setting, `sandbox.allowed_images.list`, `sandbox.allowed_images.add`)
   - For `sandbox.allowed_images.add`, the gateway MUST allow the call only when the system setting `agents.project_manager.sandbox.allow_add_to_allowed_images` is `true`; when `false` (default), the gateway MUST reject the call.
   - `sandbox.allowed_images.list` is allowed for the PM agent regardless of that setting.
-- `artifact.*`
+- `artifact.*` (task-scoped put/get/list)
+- `artifacts.*` (unified artifacts API: create, get, update, delete; see [Orchestrator Artifacts Storage - MCP tooling](orchestrator_artifacts_storage.md#spec-cynai-orches-artifactsmcpforpmapaa))
 - `model.*` (registry and availability)
 - `connector.*` (management and invocation, subject to policy)
 - `web.fetch` (sanitized, subject to policy)
@@ -214,7 +221,9 @@ Recommended allowlist
 Recommended allowlist
 
 - `db.read` and limited `db.write` (verification findings only)
-- `artifact.*` (read for produced outputs)
+- `persona.list`, `persona.get` (for job building and persona resolution when PAA is involved)
+- `artifact.*` (task-scoped; read for produced outputs)
+- `artifacts.*` (unified artifacts API for create/get/update/delete when PAA needs to store or retrieve artifacts; see [Orchestrator Artifacts Storage - MCP tooling](orchestrator_artifacts_storage.md#spec-cynai-orches-artifactsmcpforpmapaa))
 - `web.fetch` (sanitized, when allowed for verification)
 - `web.search` (secure web search, when allowed for verification)
 - `api.call` (through API Egress, when allowed for verification)

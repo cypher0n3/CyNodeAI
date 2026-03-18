@@ -13,6 +13,7 @@
   - [Projects Table](#projects-table)
   - [Project Plans Table](#project-plans-table)
   - [Project Plan Revisions Table](#project-plan-revisions-table)
+  - [Specifications and Plan/task References](#specifications-and-plantask-references)
   - [Project Git Repositories Table](#project-git-repositories-table)
 - [Groups and RBAC](#groups-and-rbac)
   - [Groups Table](#groups-table)
@@ -33,6 +34,7 @@
 - [Personas](#personas)
   - [Personas Table](#personas-table)
 - [Tasks, Jobs, and Nodes](#tasks-jobs-and-nodes)
+  - [Task vs Job (Terminology)](#task-vs-job-terminology)
   - [Tasks Table](#tasks-table)
   - [Jobs Table](#jobs-table)
   - [Nodes Table](#nodes-table)
@@ -227,6 +229,8 @@ Source: [`docs/tech_specs/projects_and_scopes.md`](projects_and_scopes.md).
   - user-friendly title for lists and detail views
 - `description` (text, nullable)
   - optional text description for the project
+- `allowed_model_ids` (jsonb, nullable)
+  - optional array of model stable identifiers allowed for inference when the task or job is scoped to this project; null = no restriction at project scope; effective allowed set = intersection of system, project, and user allowlists
 - `is_active` (boolean)
 - `created_at` (timestamptz)
 - `updated_at` (timestamptz)
@@ -236,6 +240,9 @@ Constraints
 
 - Index: (`slug`)
 - Index: (`is_active`)
+
+**Allowed model allowlists:** System-scoped allowed models may be stored in system config or a system-level table; user-scoped allowed models may be stored in preference entries (e.g. key `allowed_model_ids`) or a user-scoped column.
+The effective allowed set for a job is the intersection of applicable lists; worker node model inventory is not part of the allowed set (used for placement only).
 
 ### Project Plans Table
 
@@ -323,6 +330,114 @@ Behavior
 - The orchestrator or gateway MUST insert a new row into `project_plan_revisions` whenever that plan's `plan_name`, `plan_body`, the set of tasks with that `plan_id`, or the set of task_dependencies for tasks in that plan changes.
 - Version MUST be computed as the next integer per plan (e.g. MAX(version)+1 for that plan_id).
 - Retention: implementation MAY support configurable retention (e.g. keep last N revisions per plan); minimum is to retain all revisions unless explicitly purged.
+
+### Specifications and Plan/task References
+
+Project-scoped specification references; plans and tasks reference specifications via join tables (they do not own them).
+Implementations use Go and GORM per [Go SQL database standards](go_sql_database_standards.md).
+
+#### Specifications Table
+
+- Spec ID: `CYNAI.SCHEMA.SpecificationsTable` <a id="spec-cynai-schema-specificationstable"></a>
+
+One row per specification reference; each row is tied to a **project**.
+At least one of `spec_id`, `ref`, or `description` MUST be non-null and non-empty (application or check constraint).
+
+- `id` (uuid, pk)
+- `project_id` (uuid, fk to `projects.id`, NOT NULL)
+- `spec_id` (text, nullable) - stable identifier; format host-defined
+- `ref` (text, nullable) - alternative identifier (e.g. doc path, external id)
+- `description` (text, nullable) - prose summary or spec description; Markdown when host uses Markdown
+- `symbol` (text, nullable) - short name or symbol for the spec item
+- `kind` (text, nullable) - category (e.g. Type, Operation, Rule); host-defined
+- `heading` (text, nullable) - display heading or title
+- `status` (text, nullable) - lifecycle or maturity (e.g. draft, stable, deprecated); host-defined
+- `since` (text, nullable) - version or date introduced; format host-defined
+- `document_path` (text, nullable) - path to the containing document (repo-relative or URI)
+- `anchor` (text, nullable) - fragment or anchor id for direct linking
+- `source` (text, nullable) - provenance, URL, or path to the spec content
+- `section` (text, nullable) - section or anchor within the document
+- `spec_type` (text, nullable) - categorization (e.g. tech_spec, api_spec); host-defined (column name `spec_type` avoids Go reserved word `type`)
+- `sort_order` (integer, nullable) - explicit order for display within the project
+- `meta` (jsonb, nullable) - variable or nested data: traces_to, see_also, contract_subsections, and any additional host-defined keys (see [Specification meta (jsonb)](#specification-meta-jsonb))
+- `created_at` (timestamptz)
+- `updated_at` (timestamptz)
+- `created_by` (uuid, fk to `users.id`, nullable)
+
+Constraints
+
+- Check or application: at least one of `spec_id`, `ref`, or `description` is non-null and non-empty.
+- Index: (`project_id`)
+- Unique: (`project_id`, `spec_id`) WHERE `spec_id` IS NOT NULL AND `spec_id` != '' (optional; one row per spec_id per project)
+- Index: (`project_id`, `sort_order`) for ordered listing (optional)
+- GIN index on `meta` (optional) for containment or key existence queries
+
+Behavior
+
+- The orchestrator or gateway MUST enforce that only authorized callers can create, update, or delete specification rows; scope to the project the context is authorized to access.
+- When a project is deleted, specification rows for that project_id SHOULD be deleted (cascade) or retained for audit per host policy.
+- Plans and tasks reference specifications via join tables; deleting a specification row MAY remove or retain references in those join tables per host policy.
+
+##### Specification Meta (Jsonb)
+
+The `meta` column holds a single JSON object for data that is variable, repeated, or nested.
+Recommended keys (all optional; host-defined semantics): `traces_to` (array of strings), `see_also` (array of strings), `contract_subsections` (array of objects with e.g. heading, anchor, kind).
+Implementations use a Go struct with `json` tags (or `datatypes.JSON`) for `meta`.
+
+#### Plan Specifications Join Table
+
+- Spec ID: `CYNAI.SCHEMA.PlanSpecificationsTable` <a id="spec-cynai-schema-planspecificationstable"></a>
+
+- `plan_id` (uuid, fk to `project_plans.id`, NOT NULL)
+- `specification_id` (uuid, fk to `specifications.id`, NOT NULL)
+
+Constraints
+
+- Unique: (`plan_id`, `specification_id`)
+- Index: (`plan_id`), (`specification_id`)
+
+When a plan is deleted, join rows for that plan_id MAY be cascade-deleted; when a specification is deleted, join rows MAY be cascade-deleted per host policy.
+
+#### Task Specifications Join Table
+
+- Spec ID: `CYNAI.SCHEMA.TaskSpecificationsTable` <a id="spec-cynai-schema-taskspecificationstable"></a>
+
+- `task_id` (uuid, fk to `tasks.id`, NOT NULL)
+- `specification_id` (uuid, fk to `specifications.id`, NOT NULL)
+
+Constraints
+
+- Unique: (`task_id`, `specification_id`)
+- Index: (`task_id`), (`specification_id`)
+
+Application MUST ensure the task's project (via task.project_id or task.plan_id -> project_plans.project_id) matches the specification's project_id when adding a reference.
+When a task is deleted, join rows for that task_id MAY be cascade-deleted; when a specification is deleted, join rows MAY be cascade-deleted per host policy.
+
+#### ResolveSpecificationsForPlanOrTask Operation
+
+- Spec ID: `CYNAI.SCHEMA.ResolveSpecificationsForPlanOrTask` <a id="spec-cynai-schema-resolvespecificationsforplanortask"></a>
+
+Resolves the set of specifications referenced by a plan or a task (for display, MCP responses, or downstream logic).
+
+##### `ResolveSpecificationsForPlanOrTask` Algorithm
+
+<a id="algo-cynai-schema-resolvespecificationsforplanortask"></a>
+
+1. Given `plan_id` or `task_id`. <a id="algo-cynai-schema-resolvespecificationsforplanortask-step-1"></a>
+2. If plan_id: select `specification_id` from `plan_specifications` where `plan_id` = ?; if task_id: select `specification_id` from `task_specifications` where `task_id` = ?. <a id="algo-cynai-schema-resolvespecificationsforplanortask-step-2"></a>
+3. Load specification rows from `specifications` for those ids (join or IN clause); ensure only rows for the same project as the plan/task are returned (authorization). <a id="algo-cynai-schema-resolvespecificationsforplanortask-step-3"></a>
+4. Return ordered list: sort by `sort_order` (nulls last), then by `ref`, then by `created_at`. <a id="algo-cynai-schema-resolvespecificationsforplanortask-step-4"></a>
+
+#### SpecificationObject Contract (API and MCP)
+
+- Spec ID: `CYNAI.SCHEMA.SpecificationObjectContract` <a id="spec-cynai-schema-specificationobjectcontract"></a>
+
+**Inputs (create/update row):** Required: `project_id` (uuid); at least one of `spec_id`, `ref`, or `description`.
+Optional: `symbol`, `kind`, `heading`, `status`, `since`, `document_path`, `anchor`, `source`, `section`, `spec_type`, `sort_order`, and `meta` (traces_to, see_also, contract_subsections).
+
+**Outputs (get/list):** Same keys as the object structure, plus `id`, `project_id`, `created_at`, `updated_at` when included.
+
+**Attach to plan or task:** Client sends `specification_id` (or list of specification_ids); the join table is updated; the specification row is not modified.
 
 ### Project Git Repositories Table
 
@@ -652,11 +767,19 @@ Source: [cynode_sba.md - Persona on the Job](cynode_sba.md#spec-cynai-sbagnt-job
   - e.g. `system`, `project`, `user`; determines visibility and which scope_id applies
 - `scope_id` (uuid, nullable)
   - e.g. project_id or user_id when scope_type is project or user
+- `default_skill_ids` (jsonb, nullable)
+  - optional array of skill stable identifiers; when present, the job builder resolves and includes them in context supplied to the SBA (merged with task recommended_skill_ids; union, task overrides duplicates)
+- `recommended_cloud_models` (jsonb, nullable)
+  - optional map keyed by provider (e.g. openai, anthropic), value = array of model stable identifiers; orchestrator uses this to select a cloud model when the job uses this persona
+- `recommended_local_model_ids` (jsonb, nullable)
+  - optional array of model stable identifiers for worker-node inference; orchestrator uses this together with node availability to select a local model
 - `created_at` (timestamptz)
 - `updated_at` (timestamptz)
 - `created_by` (uuid, fk to `users.id`, nullable)
 
-Constraints
+Orchestrator-seeded system personas (e.g. PMA, PAA, developer-go, test-engineer) MAY be updated on release; admin-created system personas and user/project/group-scoped personas MUST NOT be modified by release updates (implementation MUST distinguish seeded vs admin-created, e.g. by flag or convention).
+
+#### Personas Table Constraints
 
 - Index: (`scope_type`, `scope_id`)
 - Index: (`created_at`)
@@ -667,6 +790,25 @@ The orchestrator owns task state and a queue of jobs backed by PostgreSQL.
 Nodes register with the orchestrator and report capabilities; the orchestrator stores node registry and optional capability snapshot.
 
 Sources: [`docs/tech_specs/orchestrator.md`](orchestrator.md), [`docs/tech_specs/worker_node.md`](worker_node.md), [`docs/tech_specs/langgraph_mvp.md`](langgraph_mvp.md).
+
+### Task vs Job (Terminology)
+
+- Spec ID: `CYNAI.SCHEMA.TaskVsJob` <a id="spec-cynai-schema-taskvsjob"></a>
+
+Canonical definitions so specs and implementations use consistent language.
+
+- **Task:** A **durable work item** owned by the orchestrator and stored in the `tasks` table.
+  A task is the unit of work that users and the PMA create, assign to a plan, give a persona and optional recommended skills, and order with dependencies.
+  It describes *what* to do and *who* does it (one persona per task).
+  A task outlives any single execution; it can be run, retried, or reassigned.
+- **Job:** A **single execution unit** dispatched to a worker, stored in the `jobs` table.
+  A job is the runtime instance: "run this work on this node (and in this sandbox)."
+  The job payload is what the worker and SBA actually execute (e.g. job spec with persona embedded inline, context, and for bundles task_ids plus embedded full task context so the job is self-contained).
+  A job is created when work is dispatched and completes (or fails); the task record is the durable authority.
+- **Relationship:** The **job builder** (orchestrator or PMA) turns one or more **tasks** into a **job spec** (resolve persona, merge skills, supply per-task context).
+  One **task** may result in zero or more **jobs** over time (e.g. retries, reassignment).
+  One **job** may reference one task (single-task job) or 1-3 tasks in order (bundle job); the SBA runs the job and executes each referenced task in sequence when it is a bundle.
+  So: **task** = durable, persona-scoped work definition; **job** = one dispatched run of that work on a worker, carrying the resolved persona and context.
 
 ### Tasks Table
 
@@ -679,6 +821,15 @@ Sources: [`docs/tech_specs/orchestrator.md`](orchestrator.md), [`docs/tech_specs
   - optional project association for RBAC, preferences, and grouping; null unless explicitly set by client or PM/PA
 - `plan_id` (uuid, fk to `project_plans.id`, nullable)
   - when set, task belongs to this plan; workflow for this task is gated on plan state active and on task dependencies (see [Task dependencies](#task-dependencies-table)).
+- `planning_state` (text, NOT NULL)
+  - Planning phase state; distinct from `status` (execution lifecycle).
+  - Allowed values: `draft`, `ready`.
+  - Initial value on create: `draft`.
+  - Only tasks in `planning_state=ready` are eligible for workflow execution; see [REQ-ORCHES-0178](../requirements/orches.md#req-orches-0178).
+- `persona_id` (uuid, fk to `personas.id`, nullable)
+  - optional; when set, the job builder resolves this persona and embeds it in the job; at most one persona per task
+- `recommended_skill_ids` (jsonb, nullable)
+  - optional array of skill stable identifiers; job builder merges with persona default_skill_ids (union, task overrides duplicates) and resolves into context for the SBA
 - `status` (text)
   - Task lifecycle status; stored separately from open/closed.
   - Values include: pending, running, completed, failed, canceled, superseded (see [Task status and closed state](#task-status-and-closed-state)).
@@ -705,6 +856,8 @@ Sources: [`docs/tech_specs/orchestrator.md`](orchestrator.md), [`docs/tech_specs
 - `comments` (jsonb, nullable)
   - same structure as plan comments; see [Comments structure (plans and tasks)](#spec-cynai-schema-commentsstructure); may be updated by agents or users when plan is locked (per lock rules)
 - `metadata` (jsonb, nullable)
+- `archived_at` (timestamptz, nullable)
+  - when non-null, the task is archived (soft-deleted); API/CLI "delete" sets this; archived tasks are excluded from default list views; retained for audit and history
 - `created_at` (timestamptz)
 - `updated_at` (timestamptz)
 
@@ -714,9 +867,19 @@ Constraints
 - Index: (`project_id`)
 - Index: (`plan_id`)
 - Index: (`plan_id`)
+- Index: (`persona_id`) where not null
+- Index: (`planning_state`)
 - Index: (`status`)
 - Index: (`closed`)
+- Index: (`archived_at`) where not null (for list filter by archived)
 - Index: (`created_at`)
+
+#### Task `planning_state` Migration
+
+When adding `planning_state` to an existing deployment, existing tasks MUST be assigned a value:
+
+- If `tasks.status` is `running`, `completed`, `failed`, `canceled`, or `superseded`, set `planning_state=ready`.
+- If `tasks.status` is `pending`, set `planning_state=draft` or `ready` per deployment choice (e.g. treat existing pending tasks as already reviewed).
 
 #### Requirement Object Structure
 
@@ -777,8 +940,13 @@ Plan completion (set plan to completed) requires the plan to have at least one t
 
 ### Jobs Table
 
+- Spec ID: `CYNAI.SCHEMA.JobsTable` <a id="spec-cynai-schema-jobstable"></a>
+
 - `id` (uuid, pk)
-- `task_id` (uuid, fk to `tasks.id`)
+- `task_ids` (jsonb, NOT NULL)
+  - map keyed by numeric order (e.g. 10, 20, 30), value = task uuid (string); single-task job = one key; bundle = 2-3 keys; execution order = sort keys ascending; same pattern as task steps
+- `task_id` (uuid, fk to `tasks.id`, nullable)
+  - deprecated or derived: when task_ids has a single key, may duplicate that task id for backward compatibility; prefer task_ids for new code
 - `persona_id` (uuid, fk to `personas.id`, nullable)
   - optional; for indexing, reporting, and provenance; job payload carries inline `persona: { title, description }` for SBA consumption
 - `node_id` (uuid, fk to `nodes.id`, nullable)
@@ -799,6 +967,7 @@ Plan completion (set plan to completed) requires the plan to have at least one t
 
 Constraints
 
+- Index: (`task_ids`) (GIN or application-level by first task id when single-task)
 - Index: (`task_id`)
 - Index: (`persona_id`) where not null
 - Index: (`node_id`)
@@ -806,6 +975,8 @@ Constraints
 - Index: (`lease_id`) where not null
 - Index: (`lease_expires_at`) where not null
 - Index: (`created_at`)
+
+For bundle jobs, the payload MUST embed full per-task context (context.task_contexts keyed by same numeric keys as task_ids) so the job is self-contained; see [cynode_sba.md](cynode_sba.md).
 
 ### Nodes Table
 
@@ -1097,6 +1268,8 @@ When the originating chat thread is project-scoped, rows in this table inherit t
 - Access to attachment rows and referenced storage MUST be enforced through the parent chat thread and message authorization, including shared-project permissions when the thread belongs to a shared project.
 
 ## Task Artifacts
+
+- Spec ID: `CYNAI.SCHEMA.TaskArtifacts` <a id="spec-cynai-schema-taskartifacts"></a>
 
 Artifacts are files or blobs produced or attached to a task (e.g. uploads, job outputs).
 Metadata is stored in PostgreSQL; large content may be stored in object storage or node-local staging with a reference.

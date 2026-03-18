@@ -32,6 +32,7 @@ See [`docs/docs_standards/spec_authoring_writing_and_validation.md`](../docs_sta
 
 - **5432** - PostgreSQL - Database (orchestrator)
 - **8080** - Web Console - Nuxt/Vue web UI (orchestrator; own container)
+- **9000** - Artifacts storage (S3 API) - MinIO in dev stack; see [Orchestrator Artifacts Storage](orchestrator_artifacts_storage.md#spec-cynai-orches-artifactsdevstack)
 - **12080** - User API Gateway - Auth, users, tasks, results (orchestrator)
 - **12082** - Control-plane - Node registration, dispatch, migrations (orchestrator)
 - **12083** - MCP Gateway - MCP tool routing (orchestrator; optional profile)
@@ -49,6 +50,9 @@ It connects to the User API Gateway (default `http://localhost:12080`).
 
 - **PostgreSQL:** `5432` (container internal and host mapping).
   Override: `POSTGRES_PORT`.
+- **Artifacts (MinIO, dev stack):** S3 API on `9000` (container and host mapping).
+  Override: `ARTIFACTS_S3_PORT`.
+  See [Orchestrator Artifacts Storage](orchestrator_artifacts_storage.md#spec-cynai-orches-artifactsdevstack).
 - **Web Console:** listens `:8080` in its own container.
   Override: `WEBCON_PORT` or `NITRO_PORT` (Nuxt); host mapping `WEBCON_PORT`.
   The console is a separate service in the orchestrator stack; it calls the User API Gateway (e.g. `http://user-gateway:12080`) for all operations.

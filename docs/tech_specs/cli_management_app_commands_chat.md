@@ -204,6 +204,7 @@ Implementations MUST honor `--no-color` for the suggestion list (e.g. no colors 
 
 All slash commands start with `/` and are case-insensitive for the command name (e.g. `/help`, `/Help`, and `/HELP` are equivalent).
 Input that does not start with `/` or `!` is sent to the PM model as a chat message.
+When the message contains `@` file references, the CLI MUST resolve and upload them per the gateway contract; uploads are stored in the [orchestrator artifacts store](orchestrator_artifacts_storage.md) (see [OpenAI Chat API - At-Reference Workflow](openai_compatible_chat_api.md#spec-cynai-usrgwy-openaichatapi-atreferenceworkflow)).
 Input that starts with `/` but does not match a known command SHOULD be treated as an unknown command.
 The CLI MUST print a brief error or hint (e.g. "Unknown command. Type /help for available commands.") and MUST NOT send the line to the PM model.
 Exact command semantics and execution algorithms are defined in [cynork_tui_slash_commands.md](cynork_tui_slash_commands.md).

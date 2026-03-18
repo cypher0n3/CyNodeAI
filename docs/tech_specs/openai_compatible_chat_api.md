@@ -184,13 +184,34 @@ User-authored chat input is text-first.
 
 ### At-Reference Workflow
 
+- Spec ID: `CYNAI.USRGWY.OpenAIChatApi.AtReferenceWorkflow` <a id="spec-cynai-usrgwy-openaichatapi-atreferenceworkflow"></a>
+
 `@` file references are the only supported client-side shorthand for attaching local files to a user chat message.
 
-- The client resolves `@` references locally before submission.
-- The gateway MUST accept the resulting uploaded or inline file representation according to one documented contract.
-- That contract MAY use a gateway-owned upload endpoint that returns stable file identifiers, or MAY use an inline representation accepted by the OpenAI-compatible surface.
-- When the gateway accepts such a file reference, it MUST associate the uploaded file with the originating user message so that downstream components can reconstruct the same context.
-- Validation for file size, file type, or malformed attachment payloads MUST return a normal OpenAI-style error object for the relevant endpoint.
+#### `AtReferenceWorkflow` Client Behavior
+
+- At message send time, the client MUST resolve every `@` reference in the composer text to a local filesystem path.
+  Resolution order: for each `@<token>`, the client MUST resolve `<token>` to an absolute or relative path using a configured search path (see constants below); if the path does not exist or is not readable, the client MUST NOT send the message and MUST surface an error to the user.
+- The client MUST then upload each resolved file (or include it inline per the gateway contract) before or as part of sending the completion request.
+  Upload and storage use the [orchestrator artifacts store](orchestrator_artifacts_storage.md): the gateway MAY expose a dedicated upload endpoint (e.g. `POST /v1/chat/uploads`) that stores blobs via the artifacts API and returns a `file_id`, or accept inline content parts (e.g. type `file` or `image`) in the completion request.
+  The client MUST obtain a stable `file_id` (or equivalent) per file and include those identifiers in the message payload as defined by the gateway; `file_id` is the same as or maps to the artifact's `artifact_id` for retrieval via `GET /v1/artifacts/{artifact_id}`.
+- Multiple `@` references in one message are allowed; each MUST be resolved and uploaded (or inlined) independently.
+- Syntax: the composer SHOULD support `@` followed by a path or filename; the exact trigger (e.g. `@` alone vs `@path`) is implementation-defined.
+  The client config key for the filesystem search path is `tui.at_search_path` (or equivalent); when unset, the default is the current working directory only.
+
+#### `AtReferenceWorkflow` Gateway Contract
+
+- The gateway MUST accept uploads and store them per [Chat File Upload Storage](chat_threads_and_messages.md#spec-cynai-usrgwy-chatthreadsmessages-fileuploadstorage), which uses the [orchestrator artifacts store](orchestrator_artifacts_storage.md) (S3-backed blobs and DB metadata).
+  The gateway MAY expose a dedicated upload endpoint (e.g. `POST /v1/chat/uploads`) that delegates to the artifacts API (`POST /v1/artifacts` with thread scope), or accept inline content parts in the completion request; in both cases the implementation MUST write blobs to the artifacts store, record metadata in the database, and return a stable `file_id` that the client includes in the message.
+  Stored files are retrievable via `GET /v1/artifacts/{artifact_id}` with `file_id` as `artifact_id`.
+- Validation: requests that include a malformed or unsupported content part MUST be rejected with a normal OpenAI-style error object (same shape as other chat errors); the HTTP status SHOULD be 400 for validation errors.
+  When the gateway enforces file size or media-type limits (see [Chat File Upload Storage](chat_threads_and_messages.md#spec-cynai-usrgwy-chatthreadsmessages-fileuploadstorage)), requests that violate them MUST be rejected with 400 or 413.
+  Unsupported or disallowed content-part types MUST NOT be silently dropped; the gateway MUST return an error.
+
+#### `AtReferenceWorkflow` Constants (Client)
+
+- **Default search path:** current working directory only (single directory).
+  Implementations MAY allow a configurable list of directories (e.g. `tui.at_search_path` as a list or colon-separated string); resolution order is then the order of the list, then the first match is used.
 
 ## Chat Model Warm-Up
 

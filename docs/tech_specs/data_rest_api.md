@@ -71,6 +71,9 @@ The Data REST API SHOULD expose resource-oriented endpoints for:
 
 - Users
 - Tasks, task state, and task history
+  - Full CRUD: create, read (list/get/result), update, delete.
+    Task delete is implemented as **archive** (soft delete); archived tasks are excluded from default list and retained for audit.
+  - Task resource MUST accept and return optional `persona_id` and `recommended_skill_ids` (array of skill stable identifiers) in create, update, and get.
 - Jobs and job results
 - Runs and sessions (execution traces, sub-runs, logs, transcripts, and background process attribution)
   - See [`docs/tech_specs/runs_and_sessions_api.md`](runs_and_sessions_api.md).
@@ -86,8 +89,11 @@ The Data REST API SHOULD expose resource-oriented endpoints for:
   - See [`docs/tech_specs/rbac_and_groups.md`](rbac_and_groups.md).
 - Projects (create, list, get, update, delete/disable), when allowed
   - User-friendly title (`display_name`) and optional text description; see [`docs/tech_specs/projects_and_scopes.md`](projects_and_scopes.md).
+  - Project resource MAY accept and return optional `allowed_model_ids` (array of model stable IDs; null = no restriction at project scope).
 - Agent personas (create, list, get, update, delete), when allowed
   - Reusable SBA role/identity descriptions (Agent personas, not customer or end-user personas); scope_type and scope_id for visibility; see [cynode_sba.md - Persona on the Job](cynode_sba.md#spec-cynai-sbagnt-jobpersona) and [postgres_schema.md - Personas Table](postgres_schema.md#spec-cynai-schema-personastable).
+  - Persona resource MUST accept and return optional `default_skill_ids`, `recommended_cloud_models` (map by provider), and `recommended_local_model_ids`.
+  - **Edit semantics:** When editing a system-scoped or non-owned persona, the API MUST create a scoped copy (user, group, or project) with the user's edits and return the new persona_id; the original is unchanged.
   - **RBAC:** Create, update, and delete MUST be restricted by scope and role: only users with admin (or equivalent system) role MAY create, update, or delete system-scoped (global) Agent personas; users MAY manage user-scoped Agent personas for their own scope_id; project- or group-scoped Agent personas require appropriate role for that scope (e.g. project member or group admin).
     List and get return only Agent personas the caller is entitled to see per scope visibility.
 - Model registry and model availability, when allowed

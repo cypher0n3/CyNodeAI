@@ -76,12 +76,33 @@ Optional arguments MAY be added later as optional fields.
 
 ### Artifact Tools
 
+- Spec ID: `CYNAI.MCPTOO.ArtifactTools` <a id="spec-cynai-mcptoo-artifacttools"></a>
+
+PMA and PAA MUST use MCP tools to access the [unified artifacts API](orchestrator_artifacts_storage.md#spec-cynai-orches-artifactsapicrud); the gateway implements these tools by calling the artifacts API with scope and RBAC.
+Task-scoped tools (below) MAY be implemented on top of the same backend; artifact_id-based tools MUST be provided so PMA and PAA have full CRUD via MCP (see [Orchestrator Artifacts Storage - MCP tooling](orchestrator_artifacts_storage.md#spec-cynai-orches-artifactsmcpforpmapaa)).
+
+Task-scoped (path-based)
+
 - `artifact.put`
   - required args: `task_id`, `path`, `content_bytes_base64`
 - `artifact.get`
   - required args: `task_id`, `path`
 - `artifact.list`
   - required args: `task_id`
+
+Unified API (artifact_id-based) for PMA and PAA
+
+- `artifacts.create` - create artifact; gateway stores blob and returns `artifact_id`.
+  Required args: scope (e.g. `task_id`, `thread_id`, or `project_id`), content (e.g. base64 or URL).
+  Optional: filename, content_type.
+- `artifacts.get` - read artifact by id.
+  Required args: `artifact_id`.
+- `artifacts.update` - replace blob.
+  Required args: `artifact_id`, content.
+- `artifacts.delete` - remove artifact.
+  Required args: `artifact_id`.
+
+Allowlist: PMA and PAA (see [Project Manager Agent allowlist](mcp_gateway_enforcement.md#spec-cynai-mcpgat-pmagentallowlist), [Project Analyst Agent allowlist](mcp_gateway_enforcement.md#spec-cynai-mcpgat-paagentallowlist)); gateway MUST allow `artifact.*` and `artifacts.*` for these agents.
 
 ### Memory Tools (Job-Scoped)
 
@@ -229,9 +250,10 @@ CRUD for Agent personas is exposed to user clients via the User API Gateway (Dat
   - Returns Agent personas visible to the caller (per scope); paginated.
 - `persona.get`
   - required args: `persona_id` (uuid)
-  - Returns the full Agent persona (id, title, description, scope_type, scope_id, created_at, updated_at) for embedding into the job spec.
+  - Returns the full Agent persona (id, title, description, scope_type, scope_id, default_skill_ids, recommended_cloud_models, recommended_local_model_ids when present, created_at, updated_at) for embedding into the job spec.
 
 Gateway: allow for PM agent (and PAA, orchestrator job builder) so they can resolve persona_id when invoking `sandbox.create` or building job spec JSON.
+SBA (sandbox agent) receives `persona.get` via the **worker proxy**: worker-hosted agents (including the SBA) use the worker proxy to reach the orchestrator MCP gateway; the worker allowlist MUST include `persona.get` (and optionally `persona.list`) for the sandbox agent when persona resolution is needed in the sandbox context.
 
 ### Skills Tools
 
@@ -259,6 +281,15 @@ See [Help MCP Server](mcp_tooling.md#spec-cynai-mcptoo-helpmcpserver).
   - optional args: `topic` (string; e.g. tool name or doc path) or `path` (string; logical path into help content).
   - Returns documentation content (e.g. markdown or plain text) for the requested topic or a default/overview when omitted.
   - Response MUST be size-limited; content MUST NOT include secrets.
+- `specification.help`: read-only schema guidance; see [Specification Help](#spec-cynai-mcptoo-specificationhelp) and [SpecificationObject contract](postgres_schema.md#spec-cynai-schema-specificationobjectcontract).
+
+#### Specification Help
+
+- Spec ID: `CYNAI.MCPTOO.SpecificationHelp` <a id="spec-cynai-mcptoo-specificationhelp"></a>
+
+Read-only schema guidance for building specification payloads (required/optional fields, `spec_type` values, examples).
+Allowlist: project_manager (PMA); when exposed to PAA or SBA, read-only.
+Implementation MUST derive the response from the actual schema (orchestrator or API).
 
 ### Database Tools
 
@@ -343,6 +374,28 @@ Intentional exceptions (MVP)
 - `db.project.list`
   - optional args: `q` (text; filter on slug, display_name, or description), `limit`, `cursor`
   - notes: list responses MUST be size-limited and support pagination; only authorized projects are returned
+- **Specification tools (project-scoped)**
+  When the host has a `specifications` table, the following tools SHOULD be added; allowlist and scope rules match task write tools (PMA may write; SBA read-only; PAA per catalog).
+  See [Specifications Table](postgres_schema.md#spec-cynai-schema-specificationstable) and [SpecificationObject contract](postgres_schema.md#spec-cynai-schema-specificationobjectcontract).
+- `db.specification.create`
+  - required args: `project_id`, and at least one of `spec_id`, `ref`, or `description`
+  - optional args: `symbol`, `kind`, `heading`, `status`, `since`, `document_path`, `anchor`, `source`, `section`, `spec_type`, `sort_order`, `meta` (object with e.g. traces_to, see_also, contract_subsections)
+- `db.specification.list`
+  - required args: `project_id`
+  - optional args: `limit`, `cursor`
+- `db.specification.get`
+  - required args: `specification_id`
+- `db.specification.update`
+  - required args: `specification_id`
+  - optional args: scalar fields and `meta` as in create
+- `db.specification.delete`
+  - required args: `specification_id`
+- `db.plan.specifications.set`
+  - required args: `plan_id`, `specification_ids` (array of uuid)
+  - notes: replaces the set of specifications referenced by the plan; join table updated
+- `db.task.specifications.set`
+  - required args: `task_id`, `specification_ids` (array of uuid)
+  - notes: replaces the set of specifications referenced by the task; application MUST ensure task's project matches each specification's project_id
 
 ## Response and Error Model
 

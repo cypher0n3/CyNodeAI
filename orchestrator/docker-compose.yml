@@ -1,5 +1,5 @@
-# Full orchestrator stack: Postgres + control-plane + user-gateway + mcp-gateway + api-egress. Ollama is profile-based (profile "ollama").
-# Ports: postgres 5432, control-plane 12082, user-gateway 12080, mcp-gateway 12083, api-egress 12084, ollama 11434 (profile "ollama").
+# Full orchestrator stack: Postgres + control-plane + user-gateway + mcp-gateway + api-egress + artifacts (MinIO). Ollama is profile-based (profile "ollama").
+# Ports: postgres 5432, control-plane 12082, user-gateway 12080, mcp-gateway 12083, api-egress 12084, minio 9000 (S3 API), ollama 11434 (profile "ollama").
 # Run from repo root: docker compose -f orchestrator/docker-compose.yml up -d
 # Explicit network for stable DNS and connectivity across restarts (mitigates recurring EOF/flaky host-gateway issues).
 networks:
@@ -8,6 +8,20 @@ networks:
     driver: bridge
 
 services:
+  minio:
+    image: minio/minio:latest
+    container_name: cynodeai-minio
+    command: server /data
+    environment:
+      MINIO_ROOT_USER: ${ARTIFACTS_S3_ACCESS_KEY:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${ARTIFACTS_S3_SECRET_KEY:-minioadmin}
+    ports:
+      - "${ARTIFACTS_S3_PORT:-9000}:9000"
+    volumes:
+      - cynodeai-minio-data:/data
+    networks:
+      - orchestrator_net
+
   postgres:
     image: pgvector/pgvector:pg16
     container_name: cynodeai-postgres
@@ -35,6 +49,10 @@ services:
     container_name: cynodeai-control-plane
     environment:
       DATABASE_URL: postgres://${POSTGRES_USER:-cynodeai}:${POSTGRES_PASSWORD:-cynodeai-dev-password}@postgres:5432/${POSTGRES_DB:-cynodeai}?sslmode=disable
+      ARTIFACTS_S3_ENDPOINT: ${ARTIFACTS_S3_ENDPOINT:-http://minio:9000}
+      ARTIFACTS_S3_ACCESS_KEY: ${ARTIFACTS_S3_ACCESS_KEY:-minioadmin}
+      ARTIFACTS_S3_SECRET_KEY: ${ARTIFACTS_S3_SECRET_KEY:-minioadmin}
+      ARTIFACTS_S3_BUCKET: ${ARTIFACTS_S3_BUCKET:-cynodeai-artifacts}
       CONTROL_PLANE_LISTEN_ADDR: ":12082"
       JWT_SECRET: ${JWT_SECRET:-dev-jwt-secret-change-in-production}
       NODE_REGISTRATION_PSK: ${NODE_REGISTRATION_PSK:-dev-node-psk-secret}
@@ -68,6 +86,10 @@ services:
     container_name: cynodeai-user-gateway
     environment:
       DATABASE_URL: postgres://${POSTGRES_USER:-cynodeai}:${POSTGRES_PASSWORD:-cynodeai-dev-password}@postgres:5432/${POSTGRES_DB:-cynodeai}?sslmode=disable
+      ARTIFACTS_S3_ENDPOINT: ${ARTIFACTS_S3_ENDPOINT:-http://minio:9000}
+      ARTIFACTS_S3_ACCESS_KEY: ${ARTIFACTS_S3_ACCESS_KEY:-minioadmin}
+      ARTIFACTS_S3_SECRET_KEY: ${ARTIFACTS_S3_SECRET_KEY:-minioadmin}
+      ARTIFACTS_S3_BUCKET: ${ARTIFACTS_S3_BUCKET:-cynodeai-artifacts}
       USER_GATEWAY_LISTEN_ADDR: ":12080"
       WRITE_TIMEOUT: 300s
       JWT_SECRET: ${JWT_SECRET:-dev-jwt-secret-change-in-production}
@@ -160,4 +182,5 @@ services:
 
 volumes:
   cynodeai-postgres-data: {}
+  cynodeai-minio-data: {}
   ollama-data: {}

@@ -62,3 +62,20 @@ It covers data persistence requirements, schema-level invariants, and database c
   The stored representation MUST enforce the same authorization scope as chat thread and message access, including the same project-scoped permissions when the originating chat thread belongs to a shared project, and MUST remain subject to secret-redaction and size or type limits defined by the gateway.
   [CYNAI.SCHEMA.ChatMessageAttachmentsTable](../tech_specs/postgres_schema.md#spec-cynai-schema-chatmessageattachmentstable)
   <a id="req-schema-0114"></a>
+- **REQ-SCHEMA-0115:** The schema MUST include a project-scoped specifications table and join tables (plan_specifications, task_specifications) so that plans and tasks can reference specifications; resolution MUST return specifications ordered by sort_order (nulls last), ref, created_at.
+  [CYNAI.SCHEMA.SpecificationsTable](../tech_specs/postgres_schema.md#spec-cynai-schema-specificationstable)
+  [CYNAI.SCHEMA.ResolveSpecificationsForPlanOrTask](../tech_specs/postgres_schema.md#spec-cynai-schema-resolvespecificationsforplanortask)
+  <a id="req-schema-0115"></a>
+- **REQ-SCHEMA-0116:** When specification MCP tools are adopted (db.specification.*, db.plan.specifications.set, db.task.specifications.set, specification.help), the gateway MUST allow them on the PM agent allowlist and enforce the same scope and access rules as other db tools (PMA write; SBA read-only when exposed).
+  [CYNAI.MCPTOO.SpecificationHelp](../tech_specs/mcp_tool_catalog.md#spec-cynai-mcptoo-specificationhelp)
+  [CYNAI.MCPGAT.PmAgentAllowlist](../tech_specs/mcp_gateway_enforcement.md#spec-cynai-mcpgat-pmagentallowlist)
+  <a id="req-schema-0116"></a>
+- **REQ-SCHEMA-0117:** The personas table MUST support optional default_skill_ids (jsonb), recommended_cloud_models (jsonb; map by provider to model ids), and recommended_local_model_ids (jsonb); identity remains title and description.
+  [CYNAI.SCHEMA.PersonasTable](../tech_specs/postgres_schema.md#spec-cynai-schema-personastable)
+  <a id="req-schema-0117"></a>
+- **REQ-SCHEMA-0118:** The tasks table MUST support optional persona_id (FK to personas) and recommended_skill_ids (jsonb array); at most one persona per task.
+  [CYNAI.SCHEMA.TasksTable](../tech_specs/postgres_schema.md#spec-cynai-schema-taskstable)
+  <a id="req-schema-0118"></a>
+- **REQ-SCHEMA-0119:** The jobs table (or job payload) MUST use task_ids as a map keyed by numeric order (e.g. 10, 20, 30) with value task uuid; single-task job = one key; bundle = 1-3 keys; execution order = sort keys ascending.
+  [CYNAI.SCHEMA.JobsTable](../tech_specs/postgres_schema.md#spec-cynai-schema-jobstable)
+  <a id="req-schema-0119"></a>

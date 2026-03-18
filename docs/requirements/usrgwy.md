@@ -248,3 +248,7 @@ It covers user-facing REST API gateway behavior and related API contracts.
 - **REQ-USRGWY-0157:** The gateway MUST wrap secret-bearing accumulator code paths inside `runtime/secret` (`secret.Do`) when available, per REQ-STANDS-0133.
   [CYNAI.USRGWY.OpenAIChatApi.StreamingRedactionPipeline](../tech_specs/openai_compatible_chat_api.md#spec-cynai-usrgwy-openaichatapi-streamingredactionpipeline)
   <a id="req-usrgwy-0157"></a>
+- **REQ-USRGWY-0158:** Task create via the User API Gateway MUST persist the task with `planning_state=draft` and MUST return `planning_state` in the response; task create MUST NOT start workflow execution.
+  [user_api_gateway.md](../tech_specs/user_api_gateway.md)
+  [CYNAI.SCHEMA.TasksTable](../tech_specs/postgres_schema.md#spec-cynai-schema-taskstable)
+  <a id="req-usrgwy-0158"></a>

@@ -11,16 +11,17 @@ It is part of the [cynork CLI](cynork_cli.md) specification.
 
 - Spec ID: `CYNAI.CLIENT.CliCommandSurface` (task subset) <a id="spec-cynai-client-clicommandsurface"></a>
 
-The CLI MUST implement the following `task` subcommands.
+The CLI MUST implement the following `task` subcommands and support full task CRUD (create, list, get, update, delete).
+Task delete is implemented as **archive** (soft delete): the task is marked archived and excluded from default `task list`; use an optional flag (e.g. `--archived`) to include or list only archived tasks.
 All `task` subcommands MUST require auth.
 
-Task identifier
+### Task Identifier
 
-- Where a task is referenced (e.g. `task get`, `task result`, `task cancel`, `task logs`, `task artifacts list`, `task artifacts get`), the CLI MUST accept either the task UUID or the human-readable task name (see [Project Manager Agent - Task Naming](project_manager_agent.md#spec-cynai-agents-pmtasknaming)).
+- Where a task is referenced (e.g. `task get`, `task update`, `task delete`, `task cancel`, `task result`, `task logs`, `task artifacts list`, `task artifacts get`), the CLI MUST accept either the task UUID or the human-readable task name (see [Project Manager Agent - Task Naming](project_manager_agent.md#spec-cynai-agents-pmtasknaming)).
 - Task list and task get output MUST include the task name when the system provides one (e.g. in table mode as `task_name=<name>` and in JSON as `task_name`).
   For task name format and semantics, see [Project Manager Agent - Task Naming](project_manager_agent.md#spec-cynai-agents-pmtasknaming).
 
-Task status enum
+### Task Status Enum
 
 - `queued`
 - `running`
@@ -30,6 +31,12 @@ Task status enum
 - `superseded`
 
 The task result `status` field (from gateway or CLI output) MUST be exactly one of these values when returning task state to the client.
+
+### Task `planning_state`
+
+- Task create returns `planning_state=draft`; workflow execution is gated on `planning_state=ready` (see [postgres_schema.md - Tasks Table](postgres_schema.md#spec-cynai-schema-taskstable)).
+- Task list, get, and result output MUST include `planning_state` when the gateway provides it.
+- A task MAY be transitioned to `ready` by the Project Manager Agent after review, or by an explicit ready operation (e.g. `POST /v1/tasks/{id}/ready` or `cynork task ready <task_id>` when exposed).
 
 ### `cynork task create`
 
@@ -108,7 +115,7 @@ Task input modes (exactly one MUST be provided)
 
 #### `cynork task create` Output
 
-- When `--result` is not set: table mode MUST print a single line containing `task_id=<id>` and when the system provides a task name, `task_name=<name>`; JSON mode MUST print at least `task_id`, and when provided, `task_name`.
+- When `--result` is not set: table mode MUST print a single line containing `task_id=<id>`, `planning_state=<draft|ready>` when the gateway provides it, and when the system provides a task name, `task_name=<name>`; JSON mode MUST print at least `task_id`, and when provided, `planning_state` and `task_name`.
 - When `--result` is set: after the task reaches a terminal status, the CLI MUST print the result in the same format as `cynork task result` (task_id, task_name when provided, status, jobs and their results).
 
 #### `cynork task create` Traces To
@@ -135,6 +142,8 @@ List tasks with optional status filter and pagination.
 
 - `--status <status>`.
   Allowed values include `queued`, `running`, `completed`, `failed`, `canceled`, and `superseded`.
+- `--archived`.
+  When set, include archived tasks in the list (or show only archived, per gateway API); when absent, default list excludes archived tasks.
 - `-l, --limit <n>`.
   Default is `50`.
   Allowed range is `1` to `200`.
@@ -144,9 +153,9 @@ List tasks with optional status filter and pagination.
 #### `cynork task list` Output
 
 - Table mode MUST print one task per line.
-  Table mode MUST include at least `task_id=<id>`, `status=<status>`, and when the system provides a task name, `task_name=<name>`.
+  Table mode MUST include at least `task_id=<id>`, `status=<status>`, and when the system provides a task name, `task_name=<name>`; when the gateway provides `planning_state`, table mode MUST include `planning_state=<draft|ready>`.
 - JSON mode MUST print `{"tasks":[...],"next_cursor":"<opaque>"}`.
-  Each task object MUST include at least `task_id`, `status`, and when provided, `task_name`.
+  Each task object MUST include at least `task_id`, `status`, and when provided, `task_name` and `planning_state`.
 
 ### `cynork task get <task_selector>`
 
@@ -158,9 +167,48 @@ Invocation
 
 Output
 
-- Table mode MUST print exactly one line and MUST include at least `task_id=<id>`, `status=<status>`, and when provided, `task_name=<name>`.
-- JSON mode MUST print a single JSON object representing the task.
+- Table mode MUST print exactly one line and MUST include at least `task_id=<id>`, `status=<status>`, and when provided, `task_name=<name>` and `planning_state=<draft|ready>`.
+- JSON mode MUST print a single JSON object representing the task; when the gateway provides `planning_state`, it MUST be included.
   The JSON object MUST include at least `task_id`, `status`, and when provided, `task_name`.
+
+### `cynork task update <task_selector>`
+
+- Spec ID: `CYNAI.CLIENT.CliTaskUpdate` <a id="spec-cynai-client-clitaskupdate"></a>
+
+Update mutable task fields (e.g. name, description, acceptance_criteria, persona_id, recommended_skill_ids) via the gateway PATCH (or PUT) API.
+Allowed updates MAY be restricted when the task is closed or when the plan is locked (e.g. comments only).
+
+#### `cynork task update` Invocation
+
+- `cynork task update <task_selector> [options]`, where `<task_selector>` is the task UUID or the human-readable task name.
+
+#### `cynork task update` Optional Flags
+
+- Flags or arguments for fields to update (e.g. `--name`, `--description`, `--description-file`), per gateway contract.
+
+#### `cynork task update` Behavior
+
+- The CLI MUST send the update request to the gateway and print the updated task (e.g. same format as `task get`) on success.
+
+### `cynork task delete <task_selector>`
+
+- Spec ID: `CYNAI.CLIENT.CliTaskDelete` <a id="spec-cynai-client-clitaskdelete"></a>
+
+Delete is implemented as **archive** (soft delete): the task is marked archived and excluded from default list views; the task row is retained for audit and history.
+
+#### `cynork task delete` Invocation
+
+- `cynork task delete <task_selector>`, where `<task_selector>` is the task UUID or the human-readable task name.
+
+#### `cynork task delete` Optional Flags
+
+- `-y, --yes`.
+  Skip confirmation.
+
+#### `cynork task delete` Behavior
+
+- If `--yes` is not provided, the CLI MUST prompt for confirmation (e.g. `Archive task <task_selector>? [y/N]`).
+- On success, the CLI MUST print confirmation (e.g. `task_id=<id>`, `archived=true`).
 
 ### `cynork task cancel <task_selector>`
 
@@ -203,7 +251,7 @@ Fetch task result; optionally wait until the task reaches a terminal status.
 
 - If `--wait` is set, the CLI MUST poll the gateway until the task reaches a terminal status.
   Closed (terminal) statuses are `completed`, `failed`, `canceled`, and `superseded`; see [Task status and closed state](../tech_specs/postgres_schema.md#spec-cynai-schema-taskstatusandclosed).
-- Table mode MUST print exactly one line and MUST include at least `task_id=<id>`, `status=<status>`, and when the system provides a task name, `task_name=<name>`.
+- Table mode MUST print exactly one line and MUST include at least `task_id=<id>`, `status=<status>`, and when the system provides a task name, `task_name=<name>`; when the gateway provides `planning_state`, table mode MUST include it.
 - If the task is in a terminal status, table mode MUST also include `stdout=<...>` and `stderr=<...>`.
 - JSON mode MUST print a single JSON object with at least `task_id`, `status`, and when provided, `task_name`; and when terminal, `stdout` and `stderr`.
 

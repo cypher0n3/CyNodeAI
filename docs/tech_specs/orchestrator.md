@@ -7,6 +7,8 @@
   - [`Orchestrator.HealthEndpoints` Rule](#orchestratorhealthendpoints-rule)
 - [Task Scheduler](#task-scheduler)
   - [Task Scheduler Responsibilities](#task-scheduler-responsibilities)
+  - [Job Builder (Task-To-Job)](#job-builder-task-to-job)
+  - [Task Cancel and Stop Job](#task-cancel-and-stop-job)
   - [`Orchestrator.JobTimeoutTracking` Rule](#orchestratorjobtimeouttracking-rule)
   - [Scheduled Run Routing to Project Manager Agent](#scheduled-run-routing-to-project-manager-agent)
 - [Project Manager Agent](#project-manager-agent)
@@ -50,6 +52,7 @@ This document describes the orchestrator responsibilities and its relationship t
 ## Core Responsibilities
 
 - Acts as the control plane for nodes, jobs, tasks, and agent workflows.
+  For the distinction between **task** (durable work item in the `tasks` table) and **job** (single execution unit dispatched to a worker), see [Task vs Job (Terminology)](postgres_schema.md#spec-cynai-schema-taskvsjob).
 - Owns the source of truth for task state, results, logs, and user task-execution preferences in PostgreSQL.
 - Dispatches sandboxed execution to worker nodes (via the worker API).
 - Routes model inference to local nodes or to external providers when allowed.
@@ -106,6 +109,46 @@ The orchestrator MUST include a task scheduler that decides when and where to ru
 The scheduler MAY be implemented as a background process, a worker that consumes the queue, or integrated into the workflow engine; it MUST use the same node selection and job-dispatch contracts as the rest of the orchestrator.
 Agents (e.g. Project Manager) and the cron facility enqueue work; the scheduler is responsible for dequeueing and dispatching to nodes.
 The scheduler MUST be available via the User API Gateway so users can create and manage scheduled jobs, query queue and schedule state, and trigger wakeups or automation.
+
+### Job Builder (Task-To-Job)
+
+- Spec ID: `CYNAI.ORCHES.JobBuilder` <a id="spec-cynai-orches-jobbuilder"></a>
+
+The orchestrator builds a job spec from one or more tasks before dispatch.
+Only tasks with `planning_state=ready` are eligible for execution; see [Task Create Handoff](#task-create-handoff) and [Workflow Start Gate](langgraph_mvp.md#spec-cynai-orches-workflowstartgateplanapproved).
+The job builder MUST:
+
+1. **Eligibility:** Consider only tasks whose `planning_state=ready` (and other gates such as plan state, dependencies, lease) when selecting work to run.
+2. **Task bundle:** Form a job from 1-3 tasks that share the same `persona_id`, the same `project_id`, and when associated with a plan the same `plan_id`, and are in dependency order; represent them as `task_ids` map keyed by numeric order (e.g. 10, 20, 30).
+   Single-task job = one key; bundle = 2-3 keys.
+3. **Persona:** Resolve the shared persona from `task.persona_id` (from the first task or from the bundle); load persona record for inline embedding (title, description) and for `default_skill_ids`, `recommended_cloud_models`, `recommended_local_model_ids`.
+4. **Allowed models:** Compute the effective allowed model set as the **intersection** of system, project, and user allowlists (null at a scope = no restriction at that scope).
+   Worker node model inventory is not part of the allowed set; it is used only for placement.
+5. **Model selection:** Select **exactly one** model for the job: from persona's recommended cloud models (by provider, keys, quota) or recommended local model ids (by node availability and context window).
+   Consider user preference and API quota.
+   The selected model MUST be in the effective allowed set.
+6. **Node selection:** Choose a node by workload and model size (e.g. least-loaded node that can run the selected model).
+   For local inference, if the chosen node is overloaded, the implementation MAY revise selection up to 2 iterations (e.g. try next node); after that it MAY fall back to the original least-loaded node.
+7. **Build payload:** Build the job spec with `task_ids` (map), one inline `persona` object, one resolved `inference.model_id` (or equivalent), and for bundles embed full per-task context in `context.task_contexts` keyed by the same numeric keys so the job is self-contained (see [cynode_sba.md](cynode_sba.md)).
+   Merge persona `default_skill_ids` with each task's `recommended_skill_ids` (union; task overrides duplicates) and resolve skills into context.
+8. **Dispatch:** Dispatch only when the selected model is in the allowed set and all tasks in the bundle have `planning_state=ready`.
+
+Traces To: [REQ-ORCHES-0178](../requirements/orches.md#req-orches-0178), [REQ-ORCHES-0180](../requirements/orches.md#req-orches-0180), [REQ-ORCHES-0181](../requirements/orches.md#req-orches-0181), [REQ-ORCHES-0182](../requirements/orches.md#req-orches-0182), [REQ-ORCHES-0183](../requirements/orches.md#req-orches-0183).
+
+### Task Cancel and Stop Job
+
+- Spec ID: `CYNAI.ORCHES.TaskCancelAndStopJob` <a id="spec-cynai-orches-taskcancelandstopjob"></a>
+
+On a **task cancel** request (from User API Gateway, PMA, or slash command), the orchestrator MUST (1) mark the task as canceled (or transitioning to canceled) in task state and persist; (2) if the task has an **active job** (dispatched to a worker node and not yet in a terminal state), send a **stop job** request to that worker node for the corresponding `job_id` (and `task_id`) using the node's Worker API (e.g. `POST /v1/worker/jobs:stop`).
+The orchestrator MUST use the same node credentials and base URL as for job dispatch.
+If the job has already completed, failed, or been stopped, the stop request is a no-op; the node MAY return success or "not running" so the orchestrator can treat the request as satisfied.
+See [worker_api.md - Stop Job](worker_api.md#spec-cynai-worker-stopjob) and [REQ-ORCHES-0184](../requirements/orches.md#req-orches-0184).
+
+The orchestrator MUST reject artifacts, results, and any other output from stopped or canceled jobs for API access, storage, and persistence; such data MUST NOT be exposed to clients or written to durable storage as task/job results.
+SBA (agent) tool calls that originate from a stopped or canceled job MUST be rejected by the orchestrator and by any gateway that authorizes tool access (e.g. MCP gateway).
+The orchestrator MUST invalidate the job's token (or equivalent credential) when the job is stopped or canceled so that in-flight or late-arriving tool calls for that job are rejected.
+
+Traces To: [REQ-ORCHES-0184](../requirements/orches.md#req-orches-0184).
 
 ### `Orchestrator.JobTimeoutTracking` Rule
 
@@ -545,15 +588,16 @@ See [`docs/tech_specs/user_api_gateway.md`](user_api_gateway.md) and [`docs/tech
 
 - Spec ID: `CYNAI.ORCHES.Rule.TaskCreateHandoff` <a id="spec-cynai-orches-rule-taskcreatehandoff"></a>
 
-For prompt-mode task create, the orchestrator MUST (1) create the task record; (2) send the task to PMA with instructions to execute; (3) wait only for PMA to acknowledge that the task has been **started** (handed off to SBA); (4) return `201 Created` with the task response (including `task_id`) immediately.
+For task create via the User API Gateway, the orchestrator MUST (1) create the task record with `planning_state=draft`; (2) route the task to the Project Manager Agent for **review** (not for immediate execution); (3) return `201 Created` with the task response (including `task_id` and `planning_state=draft`) immediately.
 
-The create HTTP handler MUST NOT block on task completion, inference, or sandbox job completion.
-Completion is reported asynchronously (e.g. via MCP or worker callback).
-See [Request Source and Orchestrator Handoff](cynode_pma.md#spec-cynai-pmagnt-requestsource) and [Task Execution Handoff](cynode_pma.md#spec-cynai-pmagnt-taskexecutionhandoff).
+The create HTTP handler MUST NOT start workflow execution; workflow execution starts only after the task is transitioned to `planning_state=ready` (e.g. by PMA after review and enrichment, or via an explicit ready transition).
+See [REQ-ORCHES-0176](../requirements/orches.md#req-orches-0176), [REQ-ORCHES-0177](../requirements/orches.md#req-orches-0177), [Request Source and Orchestrator Handoff](cynode_pma.md#spec-cynai-pmagnt-requestsource), and [Task review and ready transition](project_manager_agent.md#spec-cynai-agents-taskreviewandreadytransition).
 
 #### Task Create Handoff Traces To
 
 - [REQ-ORCHES-0122](../requirements/orches.md#req-orches-0122)
+- [REQ-ORCHES-0176](../requirements/orches.md#req-orches-0176)
+- [REQ-ORCHES-0177](../requirements/orches.md#req-orches-0177)
 
 ## Sandbox Image Registry
 

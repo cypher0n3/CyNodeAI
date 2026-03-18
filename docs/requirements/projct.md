@@ -125,3 +125,7 @@ Technical specifications: [`docs/tech_specs/projects_and_scopes.md`](../tech_spe
   [CYNAI.ACCESS.ProjectPlanState](../tech_specs/projects_and_scopes.md#spec-cynai-access-projectplanstate)
   [CYNAI.SCHEMA.ProjectPlansTable](../tech_specs/postgres_schema.md#spec-cynai-schema-projectplanstable)
   <a id="req-projct-0124"></a>
+- **REQ-PROJCT-0125:** Plans and tasks MAY reference project-scoped specifications via the specifications table and join tables (plan_specifications, task_specifications); resolution and attach/detach MUST follow the SpecificationObject contract and ResolveSpecificationsForPlanOrTask algorithm.
+  [CYNAI.SCHEMA.SpecificationObjectContract](../tech_specs/postgres_schema.md#spec-cynai-schema-specificationobjectcontract)
+  [CYNAI.SCHEMA.ResolveSpecificationsForPlanOrTask](../tech_specs/postgres_schema.md#spec-cynai-schema-resolvespecificationsforplanortask)
+  <a id="req-projct-0125"></a>

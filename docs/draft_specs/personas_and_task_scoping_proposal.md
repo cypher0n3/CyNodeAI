@@ -21,6 +21,10 @@
 
 ## Overview
 
+**Incorporated into canonical specs as of 2026-03-18.**
+Single source of truth: [tech_specs/](../tech_specs/) and [requirements/](../requirements/).
+See [_draft_specs_incorporation_and_conflicts_report.md](../dev_docs/_draft_specs_incorporation_and_conflicts_report.md) Section 4.3 and 8.
+
 This draft proposes formalizing the **Agent persona catalog** (including role-based personas such as `developer-go` and `test-engineer` alongside the existing PMA and PAA identities), treating **personas as a skills abstraction** (identity plus optional default skills and optional recommended models to load), and supporting **user-defined and user-edited personas** via **copy-on-edit** (editing a system default creates a scoped copy; the system uses that copy instead of the default).
 Tasks are scoped to a **single** persona only, with optional recommended skills; work may need to be broken into smaller task chunks so each task has one persona.
 **Allowed models** at system, project, and user scope restrict which models may be used; the job is only sent with a model that is in the effective allowed set (intersection of applicable allowlists).

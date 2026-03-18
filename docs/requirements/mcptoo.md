@@ -86,3 +86,6 @@ It covers MCP tooling conventions, tool catalog expectations, and SDK installati
 - **REQ-MCPTOO-0119:** The system MUST provide a secure web search MCP tool (`web.search`) that is policy-controlled and does not expose raw internet access; search MUST be routed through a secure path (e.g. Secure Browser Service or a dedicated search proxy) so only sanitized or allowlisted search results are returned to agents.
   [CYNAI.MCPTOO.SecureWebSearch](../tech_specs/mcp_tool_catalog.md#spec-cynai-mcptoo-securewebsearch)
   <a id="req-mcptoo-0119"></a>
+- **REQ-MCPTOO-0120:** The PMA and PAA MUST be able to use MCP tools to list and get personas (persona.list, persona.get) for selection when assigning or creating tasks; the SBA MUST be able to get a persona for the correct scope via MCP (persona.get) when needed; when agents run on worker nodes, persona access MUST go through the worker proxy to the orchestrator MCP gateway.
+  [CYNAI.MCPTOO.PersonaTools](../tech_specs/mcp_tool_catalog.md#spec-cynai-mcptoo-personatools)
+  <a id="req-mcptoo-0120"></a>

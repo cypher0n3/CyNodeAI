@@ -212,6 +212,8 @@ Required behavior:
 - The worker MUST key agent tokens by the managed-service identity (e.g. `service_id`) so the worker proxy can deterministically select the correct token for the calling agent runtime.
 - The worker proxy MUST attach the correct agent token to agent-originated requests when forwarding to the orchestrator.
 - The worker MUST NOT expose agent tokens to sandboxes or agents via env vars, files, mounts, or logs.
+- For **job-scoped (SBA) tokens**, the orchestrator invalidates the token when the job is stopped or canceled; the worker MUST NOT use an invalidated token to forward requests.
+  See [Task Cancel and Stop Job](orchestrator.md#spec-cynai-orches-taskcancelandstopjob).
 
 #### Agent Token Observability
 

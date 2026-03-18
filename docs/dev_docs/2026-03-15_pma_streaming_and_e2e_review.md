@@ -20,7 +20,7 @@
 
 ## Purpose
 
-This document reviews the work reported against [2026-03-14_pma_streaming_to_tui_assessment.md](2026-03-14_pma_streaming_to_tui_assessment.md) and the [e2e_run_report_2026-03-15.md](e2e_run_report_2026-03-15.md).
+This document reviews the work reported against [2026-03-14_pma_streaming_to_tui_assessment.md](2026-03-14_pma_streaming_to_tui_assessment.md) and the e2e run report from 2026-03-15 (file since removed).
 It applies a senior Go developer reviewer lens and captures all issues and discrepancies for follow-up.
 No code changes are prescribed here unless explicitly directed.
 

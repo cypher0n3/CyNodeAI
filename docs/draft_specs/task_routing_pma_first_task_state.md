@@ -15,6 +15,10 @@
 
 ## 1 Document Overview
 
+**Incorporated into canonical specs as of 2026-03-18.**
+Single source of truth: [tech_specs/](../tech_specs/) and [requirements/](../requirements/).
+See [_draft_specs_incorporation_and_conflicts_report.md](../dev_docs/_draft_specs_incorporation_and_conflicts_report.md) Section 4.3 and 8.
+
 This draft proposes a change to task routing so newly created tasks are reviewed by PMA before execution.
 
 It introduces a task planning state machine similar to project plan state.

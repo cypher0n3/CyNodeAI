@@ -5,7 +5,11 @@
   - [Related Documents](#related-documents)
 - [Entrypoint and Compatibility](#entrypoint-and-compatibility)
   - [Entrypoint and Compatibility Traces To](#entrypoint-and-compatibility-traces-to)
+  - [Default Entry Point (Bare `cynork`)](#default-entry-point-bare-cynork)
+  - [`DefaultEntryPoint` Deferred Implementation](#defaultentrypoint-deferred-implementation)
 - [Layout and Interaction](#layout-and-interaction)
+  - [Queued Drafts and Deferred Send](#queued-drafts-and-deferred-send)
+  - [`QueuedDrafts` Deferred Implementation](#queueddrafts-deferred-implementation)
   - [Layout and Interaction Traces To](#layout-and-interaction-traces-to)
 - [Visual Mockup](#visual-mockup)
 - [Thread History](#thread-history)
@@ -30,8 +34,11 @@
   - [Local Cache Traces To](#local-cache-traces-to)
 - [Auth Recovery](#auth-recovery)
   - [Auth Recovery Traces To](#auth-recovery-traces-to)
+  - [`AuthRecovery` Constants](#authrecovery-constants)
 - [Web Login](#web-login)
   - [Web Login Traces To](#web-login-traces-to)
+  - [`WebLogin` Constants](#weblogin-constants)
+  - [`WebLogin` Deferred Implementation](#weblogin-deferred-implementation)
 
 ## Document Overview
 
@@ -103,6 +110,21 @@ The TUI expectation is real token-by-token streaming from the gateway: visible a
 - `cynork shell` is deprecated as the primary interactive experience.
   Interactive chat behavior belongs to the TUI and chat-command specs.
 
+### Default Entry Point (Bare `cynork`)
+
+Once the TUI is feature-complete for the intended initial scope, invoking `cynork` with no subcommand SHOULD launch the same full-screen TUI by default instead of printing top-level help.
+
+- **Code path:** When the default-TUI rollout is enabled, the main entry for the cynork binary MUST treat "no subcommand" and "tui" identically: both MUST invoke the same TUI entrypoint (the same code path as `cynork tui` today).
+- **Help preservation:** `cynork --help` and `cynork help` MUST always show top-level command help and MUST NOT enter the TUI.
+  The implementation MUST check for the exact flags `--help` and `-h` and the subcommand `help` before dispatching to the default action.
+- **Compatibility:** `cynork chat` MUST remain available as a separate subcommand that resolves to the same TUI (or a compatibility alias) during and after the default-TUI rollout.
+  Obsoleting or removing `cynork chat` is out of scope for the default-TUI change and SHOULD be deferred to a later compatibility review.
+- **Current behavior:** Until the rollout is explicitly enabled, bare `cynork` MUST remain help-first (print usage and exit); no implementation change is required until the project enables the default-TUI rollout.
+
+### `DefaultEntryPoint` Deferred Implementation
+
+- When the project decides to enable the default-TUI rollout, change the main entry so that a missing subcommand invokes the TUI entrypoint; keep `--help`/`help` handling as above.
+
 ## Layout and Interaction
 
 - Spec ID: `CYNAI.CLIENT.CynorkChat.TUILayout` <a id="spec-cynai-client-cynorkchat-tuilayout"></a>
@@ -134,6 +156,36 @@ The TUI is a full-screen chat surface composed of scrollback, composer, status b
 - When queued drafts are supported, the TUI SHOULD provide a dedicated queued-draft list, pane view, or overlay with clear queued labeling.
 - Queued drafts SHOULD support reorder, explicit send-one, and explicit send-all operations.
 - If the TUI supports send-all for queued drafts, it SHOULD indicate whether drafts are sent sequentially and whether the client waits for each response before sending the next queued draft.
+
+### Queued Drafts and Deferred Send
+
+The TUI SHOULD support an explicit outbox-like draft queue for messages the user wants to send later.
+
+- **State model:** A queued draft is local client state only; it is not part of the server-side transcript and MUST NOT be shown as a sent user message.
+  Queued drafts are session-scoped: they are NOT persisted across TUI restarts unless a future implementation explicitly adds persistence (e.g. local file under config directory).
+  **Auto-send vs explicit:** Drafts added by Enter while streaming (auto-queue) MUST be sent automatically when the agent finishes streaming.
+  Drafts added by Ctrl+Q (explicit queue) MUST NOT auto-send; they require an explicit send (send-one, Ctrl+Enter when composer is empty, or send-all).
+- **Send vs queue (streaming-aware):** When the agent is streaming a response, Enter MUST add the current composer content to the queue (auto-queue) and clear the composer; it MUST NOT send.
+  When the agent is not streaming, Enter MUST send the current composer message.
+  Ctrl+Enter MUST always "send now": send the current composer content as the next message (interrupting streaming and replacing with the new prompt if the agent is streaming), or if the composer is empty and a draft is queued, send the next queued draft immediately and interrupt streaming if active.
+- **Add to queue (explicit):** The canonical keybinding for "add current composer content to queue without sending" (e.g. when not streaming) is Ctrl+Q.
+  The implementation MAY also expose this action via the command palette (e.g. "Queue draft" or "Add to queue").
+  After the action, the composer MUST be cleared and the draft MUST appear in the queued-draft list.
+- **Display:** Queued drafts MUST appear in a dedicated list, context-pane view, or overlay with clear "queued" or equivalent labeling so they are not confused with sent messages.
+- **Editable:** Queued drafts MUST be editable.
+  The canonical keybinding to move the most recent draft back into the composer (for editing) is Up arrow when the composer is empty and focus is in the composer or when focus is on the queued-draft list.
+  The implementation MAY also support edit-in-place and reorder (e.g. drag or move-up/move-down).
+- **Operations:** The user MUST be able to remove a queued draft and send one queued draft (send-one).
+  The user SHOULD be able to reorder queued drafts (e.g. drag or move-up/move-down).
+  Send-all: when the user triggers "send all queued drafts", the implementation MUST send drafts sequentially: send the first draft, wait for the completion response to finish, then send the next, until all are sent or an error stops the sequence.
+  The UI MUST indicate that send-all is sequential and that the client waits for each response before sending the next (e.g. status text or progress).
+- **Send semantics:** Sending a queued draft (send-one or as part of send-all) turns it into a normal user message at the time of send; the same validation and upload rules as for direct composer send apply.
+- **`@` in drafts:** Queued drafts MAY contain `@` references; resolution and upload occur at send time, not at queue time.
+  If resolution or upload fails when sending a queued draft, the UI MUST surface the error and MUST NOT remove the draft from the queue until the user removes it or fixes the issue.
+
+### `QueuedDrafts` Deferred Implementation
+
+- Implement the queued-draft list, streaming-aware Enter (auto-queue when streaming; auto-send when agent finishes) and Ctrl+Enter (send now / send next queued, interrupt if streaming), Ctrl+Q (explicit queue; no auto-send), Up arrow to move most recent draft back to composer, reorder/remove/send-one, and send-all (sequential with wait-for-response) when this feature is enabled.
 
 ### Layout and Interaction Traces To
 
@@ -344,7 +396,7 @@ The TUI SHOULD provide completion and fuzzy discovery for interactive chat actio
 
 The composer MAY support `@` references to local files.
 
-- `@` references are resolved locally at send time.
+- `@` references are resolved locally at send time and uploaded per the gateway contract; files are stored in the [orchestrator artifacts store](orchestrator_artifacts_storage.md) and retrievable via the unified artifacts API (see [Chat File Upload Storage](chat_threads_and_messages.md#spec-cynai-usrgwy-chatthreadsmessages-fileuploadstorage), [OpenAI Chat API - At-Reference Workflow](openai_compatible_chat_api.md#spec-cynai-usrgwy-openaichatapi-atreferenceworkflow)).
 - If the user references a missing, unreadable, oversized, or disallowed file, the client MUST surface an error and MUST NOT send the message until the user resolves the issue.
 - The TUI MAY provide autocomplete or browser-like lookup when the user types `@`.
 - After a successful send, the transcript MAY show compact attachment metadata instead of replaying raw local paths.
@@ -409,7 +461,14 @@ The TUI MUST start unconditionally without requiring a valid login token at laun
 - When startup login is cancelled or fails, the TUI MUST exit with the normal auth failure outcome rather than entering a degraded chat session.
 - When a gateway request fails with an auth error during the session, the TUI MUST allow re-authentication and SHOULD offer to retry the interrupted action once.
 - After successful in-session re-authentication, the TUI SHOULD resume the same session state and return focus to the interrupted chat flow rather than forcing a full restart.
+- **Consecutive failure cap:** The TUI MUST NOT prompt for login indefinitely.
+  After `AuthRecovery.MaxConsecutiveFailures` (see constants) consecutive auth failures (startup or in-session), the TUI MUST return to the composer (or exit at startup) and MUST display a clear error message instructing the user to run `/auth login` or exit; the TUI MUST NOT automatically show the login prompt again for that session until the user explicitly invokes `/auth login` or restarts.
 - Secret input MUST use secure input behavior and MUST NOT be echoed or persisted in transcript history.
+
+### `AuthRecovery` Constants
+
+- **MaxConsecutiveFailures:** 2.
+  After 2 consecutive login failures, the TUI MUST stop offering the login prompt and MUST show the error state described above.
 
 ## Web Login
 
@@ -421,8 +480,19 @@ The TUI MUST start unconditionally without requiring a valid login token at laun
 
 The CLI SHOULD support a web-based login flow suitable for SSO-capable deployments.
 
-- Acceptable patterns include browser-based authorization and device-code style login.
-- Browser-based login SHOULD either open the system browser automatically or print a copyable authorization URL and bounded-lifetime code when automatic browser launch is unavailable.
-- Device-code style login SHOULD show the verification URL, user code, and expiry or timeout information needed to complete the flow.
-- The flow MUST not print tokens to stdout in normal operation.
-- Resulting tokens MUST be stored using the same cynork token-storage model and file-permission rules as other auth flows.
+- **Accepted patterns:** The implementation MAY support one or both of: (1) browser-based authorization: CLI opens the system browser to an auth URL, receives a callback on localhost (or a configured redirect URI), and exchanges the callback for a token; (2) device-code style: CLI prints a user code and verification URL, user completes login in the browser, CLI polls the token endpoint until success or expiry.
+  When the system browser cannot be opened, the CLI SHOULD print a copyable authorization URL and a bounded-lifetime code instead of failing.
+- **Token handling:** The flow MUST NOT print tokens to stdout in normal operation.
+  Resulting tokens MUST be stored using the same cynork token-storage model and file-permission rules as [CliConfigFileLocation](cynork_cli.md#spec-cynai-client-cliconfigfilelocation) (and credential helper if configured).
+- **Timeout:** The CLI MUST enforce a timeout for the web flow.
+  If the user does not complete the flow within `WebLogin.TimeoutSeconds` (see constants), the CLI MUST abort the flow, MUST NOT store a token, and MUST surface a clear error (e.g. "Login timed out").
+  Polling (device-code) or callback wait (browser) MUST be bounded by this timeout.
+
+### `WebLogin` Constants
+
+- **TimeoutSeconds:** 300 (5 minutes).
+  The web login flow (device-code or browser) MUST complete within 300 seconds from the start of the flow; otherwise the implementation MUST treat the flow as failed and exit or return to the previous auth state.
+
+### `WebLogin` Deferred Implementation
+
+- Implement device-code and/or browser-based web login when SSO-capable auth is enabled; ensure token storage and timeout behavior match the contract above.

@@ -56,7 +56,7 @@ Abbreviation note: This doc may abbreviate "SandBox Agent" to "SBA" throughout.
 
 ## Purpose
 
-`cynode-sba` is a full AI agent that performs work according to a job specification.
+`cynode-sba` is a full AI agent that performs work according to a **job** specification (a job is a single execution unit built from one or more **tasks**; see [Task vs Job (Terminology)](postgres_schema.md#spec-cynai-schema-taskvsjob)).
 It is not an LLM itself; it MUST have access to at least one model (via worker proxy or API Egress) and uses inference (using only models the job allows) to plan and decide which tools to call.
 It does not decide policy or scheduling; the orchestrator and worker-node components are responsible for policy and sandbox lifecycle.
 Within the job, the SBA MUST be able to build and manage its own todo list (derived from requirements, acceptance criteria, and any suggested steps in the job) to track and drive progress.
@@ -185,8 +185,8 @@ When the job uses an image that runs `cynode-sba` as the main process (the SBA r
 
 Contract alignment
 
-- The Worker API request carries `task_id`, `job_id`, and sandbox config (image, command, env, timeout).
-- For SBA-runner jobs, the job spec consumed by `cynode-sba` (e.g. `job.json`) MUST include `job_id` and `task_id` and MUST be produced or validated by the orchestrator/PM so that result storage and auditing can correlate with the Worker API response.
+- The Worker API request carries `job_id`, task reference(s) (e.g. `task_id` or `task_ids`), and sandbox config (image, command, env, timeout).
+- For SBA-runner jobs, the job spec consumed by `cynode-sba` (e.g. `job.json`) MUST include `job_id` and `task_ids` and MUST be produced or validated by the orchestrator/PM so that result storage and auditing can correlate with the Worker API response.
 - The node MAY build the Worker API response (status, stdout/stderr, timing) from the container exit code and/or from the SBA result object so that the orchestrator receives a single, consistent result for the job.
 
 Sandbox orchestration from the PM agent uses MCP tools (`sandbox.create`, `sandbox.exec`, etc.) per [mcp_tool_catalog.md](mcp_tool_catalog.md#spec-cynai-mcptoo-sandboxtools); the **content** of a sandbox run may be a `cynode-sba` job when the image is the SBA runner and the command/entrypoint invokes `cynode-sba`.
@@ -325,7 +325,12 @@ Validation MUST occur before the agent is started.
 
 Minimum required fields
 
-- `protocol_version`, `job_id`, `task_id`, `constraints`.
+- `protocol_version`, `job_id`, `task_ids`, `constraints`.
+- **task_ids** (required): map/object keyed by numeric order (e.g. 10, 20, 30); each value = task uuid (string).
+  Execution order = sort keys ascending.
+  Single-task job = one key (e.g. "10"); bundle = 2-3 keys.
+  Same pattern as task steps in [postgres_schema.md](postgres_schema.md).
+  Legacy `task_id` MAY be present for single-task jobs (duplicate of the single task in task_ids).
 - `steps` is **optional**.
   When present, it is used as **recommended to-dos** for the agent (e.g. merged into the todo list or shown as suggested steps); the SBA uses inference to decide what to do and is not required to execute these steps in order or at all.
   When absent or empty, the SBA has no suggested steps and plans entirely from context (requirements, acceptance criteria, etc.).
@@ -339,14 +344,15 @@ Minimum required fields
 
 - Spec ID: `CYNAI.SBAGNT.JobInferenceModel` <a id="spec-cynai-sbagnt-jobinferencemodel"></a>
 
-The job MUST dictate **which models the SBA is allowed to use** for inference (e.g. for planning, refinement, or tool use).
-The SBA MUST have access to at least one of the allowed models; the orchestrator and node MUST ensure at least one allowed model is available (via worker proxy or orchestrator-mediated API Egress) and MUST inject the appropriate inference endpoint(s) into the sandbox.
+The job MUST dictate **which model the SBA uses** for inference.
+The orchestrator selects **exactly one model** per job (from the persona's recommended cloud or local models, within the effective allowed set) and sets it in the job spec (e.g. `inference.model_id` or `inference.model`); the SBA MUST use only that model for the task(s) in this job.
 
-The job MAY include an `inference` object with:
+The job MUST include an `inference` object with:
 
-- `allowed_models` (array of strings, required when inference is used): allowlist of model identifiers the SBA may use (e.g. `llama3.2` for node-local Ollama, or provider-specific ids for API Egress).
-- `source` (string, optional): `worker`, `api_egress`, or unset; when unset, the runtime MAY infer which path(s) to enable per model id or policy.
-The SBA MUST use only models listed in `allowed_models`; the runtime makes at least one of them reachable.
+- `model_id` or `model` (string, required): the single model identifier selected by the orchestrator for this job.
+- `source` (string, optional): `worker`, `api_egress`, or unset; when unset, the runtime MAY infer which path to enable per model id or policy.
+The SBA MUST use only this model; the runtime MUST make it reachable (via worker proxy or API Egress).
+Legacy `allowed_models` (array) MAY be present for backward compatibility; when present with a single element, it is equivalent to the one resolved model.
 
 ### Persona on the Job
 
@@ -376,7 +382,7 @@ Agent persona model (stored in DB, embedded at job-build time):
   This set MUST include dedicated Agent personas for the Project Manager Agent (PMA) and the Project Analyst Agent (PAA), which PMA and PAA MUST always use for their own identity/role when running; see [project_manager_agent.md](project_manager_agent.md).
   Other global defaults (e.g. "Backend Developer", "Security Reviewer", "Code Reviewer") MAY be included so SBAs can be assigned common roles without per-user configuration.
 - **Agent personas vs skills:** Persona defines *who* the agent is and is the first context block; skill is procedural guidance supplied separately (e.g. `context.skills` or MCP) and appears later in the prompt.
-  An Agent persona MAY hint at or recommend which skills to use; the actual skill content is supplied via job context or MCP, not embedded in the persona.
+  The job builder MUST merge the persona's `default_skill_ids` with the task's `recommended_skill_ids` (union; task overrides duplicates) and resolve them into the job context (e.g. `context.skill_ids` or resolved `context.skills`).
 
 ### Context Supplied to SBA (Requirements, Acceptance Criteria, Preferences, Skills)
 
@@ -394,6 +400,9 @@ The SBA MUST receive at least:
   MUST be included in every LLM prompt used by the SBA when present in the job.
 - **Task-level context** - The job is task-scoped; the job MUST include task-level context: task identity (id, name), acceptance criteria summary, status, and relevant task metadata.
   MUST be included in every LLM prompt used by the SBA.
+  When the job is a **bundle** (task_ids has more than one key), the job MUST include **context.task_contexts**: a map keyed by the same numeric keys as task_ids (10, 20, 30), each value = full context object for that task (id, name, description, acceptance_criteria, requirements, steps, skill_ids).
+    The bundle is self-contained; the SBA MUST NOT call back to the orchestrator to fetch task details when advancing to the next task.
+    The SBA MUST execute tasks in order (sort task_ids keys ascending) and MUST switch to the next task's context from the embedded payload when advancing.
 - **Requirements** - Task or project requirements that the work must satisfy (e.g. textual or structured requirements relevant to the job).
 - **Acceptance criteria** - Criteria against which outputs or steps will be verified (e.g. completion conditions, quality gates).
 - **Relevant preferences** - User or task-scoped preferences that affect how work is done (e.g. style, tooling, security or policy preferences).
@@ -413,14 +422,14 @@ Example shape (with optional context)
 {
   "protocol_version": "1.0",
   "job_id": "uuid",
-  "task_id": "uuid",
+  "task_ids": { "10": "task-uuid" },
   "constraints": {
     "max_runtime_seconds": 300,
     "max_output_bytes": 1048576,
     "ext_net_allowed": false
   },
   "inference": {
-    "allowed_models": ["llama3.2"],
+    "model_id": "llama3.2",
     "source": "worker"
   },
   "persona": {
@@ -590,6 +599,10 @@ Minimum result shape
 }
 ```
 
+**Bundle jobs:** When the job has more than one task (task_ids with 2-3 keys), the result MUST include **task_results**: an array (or map keyed by task_id) of per-task entries, each with `task_id` (uuid), `status` (e.g. completed, failed), and a result snippet or reference (e.g. summary, artifact refs) so the orchestrator can update each task's status and result.
+Order MUST match task execution order (sort of task_ids keys).
+Single-task jobs MAY omit task_results; the top-level result applies to the single task.
+
 On failure, the SBA MUST set `failure_code` and `failure_message` so the orchestrator and user can understand why the job failed.
 The SBA MUST use one of the defined failure codes when applicable; for other cases it MAY use an implementation-defined code (documented and stable).
 
@@ -659,6 +672,8 @@ Sandbox agents (including `cynode-sba` when operating as an agent that can call 
 When making MCP requests, the sandbox agent calls the **worker proxy** (e.g. worker-mediated MCP URL); the agent MUST NOT receive or present an agent token.
 The **worker proxy** holds the sandbox agent token (issued by the orchestrator for that sandbox context, delivered to the worker) and attaches it when forwarding requests to the orchestrator MCP gateway; the token MUST be bound to task_id, project_id, and session scope, and MUST be associated with the user (e.g. task creator).
 See [Agent-Scoped Tokens or API Keys](mcp_gateway_enforcement.md#spec-cynai-mcpgat-agentscopedtokens).
+When a job is stopped or canceled, the orchestrator invalidates that job's token; SBA tool calls from that job MUST be rejected by the gateway.
+See [Task Cancel and Stop Job](orchestrator.md#spec-cynai-orches-taskcancelandstopjob).
 The gateway authenticates the token and restricts tool access to the sandbox allowlist and sandbox-scoped tools.
 
 Sandbox allowlist (built-in)

@@ -12,6 +12,7 @@
   - [Checkpoint Persistence Contract](#checkpoint-persistence-contract)
   - [Graph Nodes to Orchestrator Capabilities](#graph-nodes-to-orchestrator-capabilities)
   - [Sub-Agent Invocation](#sub-agent-invocation)
+  - [Plan Completion Validation (Sign-Off)](#plan-completion-validation-sign-off)
 - [Graph Topology](#graph-topology)
 - [State Model](#state-model)
 - [Node Behaviors](#node-behaviors)
@@ -23,8 +24,9 @@
   - [Finalize Summary](#finalize-summary)
   - [Mark Failed](#mark-failed)
 - [Checkpointing and Resumability](#checkpointing-and-resumability)
-  - [Checkpoint schema (prescriptive)](#checkpoint-schema-prescriptive)
-  - [Workflow flow summary](#workflow-flow-summary)
+  - [Applicable Requirements](#applicable-requirements)
+  - [Checkpoint Schema (Prescriptive)](#checkpoint-schema-prescriptive)
+- [Workflow Flow Summary](#workflow-flow-summary)
 - [Tooling and Security Notes](#tooling-and-security-notes)
 
 ## Document Overview
@@ -58,7 +60,7 @@ This section defines how the LangGraph workflow is integrated with the orchestra
 
 ### Invocation Model
 
-- One workflow instance is scoped to one task (one `task_id`).
+- One workflow instance is scoped to one **task** (one `task_id`); for task vs **job** terminology, see [Task vs Job (Terminology)](postgres_schema.md#spec-cynai-schema-taskvsjob).
 - The orchestrator starts a workflow when a task is ready to be driven (e.g. after task creation via User API or when a task is unblocked).
 - The following MUST hold:
   - The workflow receives the task identifier and MUST load task context in the first node (Load Task Context).
@@ -105,9 +107,9 @@ The conditions under which the orchestrator starts a workflow for a task are:
 
 #### Task Created via User API
 
-When a task is created via the User API Gateway (e.g. POST that creates a task), the orchestrator treats the task as ready to be driven once creation succeeds (and any optional eligibility checks pass).
-The orchestrator invokes the workflow start contract (start workflow for that `task_id`) as defined in [Workflow Start/Resume API Contract](#workflow-startresume-api-contract).
-No separate "run task" step is required unless the API design explicitly separates create and run.
+When a task is created via the User API Gateway (e.g. POST that creates a task), the task is persisted with `planning_state=draft` and is routed to the Project Manager Agent for review first; the orchestrator MUST NOT start a workflow for that task until `planning_state=ready` (see [REQ-ORCHES-0176](../requirements/orches.md#req-orches-0176), [REQ-ORCHES-0177](../requirements/orches.md#req-orches-0177), [REQ-ORCHES-0178](../requirements/orches.md#req-orches-0178)).
+Workflow execution starts only after the PMA (or an authorized path) transitions the task to `planning_state=ready`; then the orchestrator invokes the workflow start contract for that `task_id` as defined in [Workflow Start/Resume API Contract](#workflow-startresume-api-contract).
+The planning state gate is applied before other workflow start gates (plan state, dependencies, lease).
 
 #### Task Created via Chat (PMA/MCP)
 
@@ -129,8 +131,8 @@ See [orchestrator.md](orchestrator.md) Scheduled Run Routing to Project Manager 
 
 When a task is associated with a plan (`task.plan_id` set; see [Project plan](projects_and_scopes.md#spec-cynai-access-projectplan)), execution order and runnability are determined solely by **task dependencies** ([`task_dependencies`](postgres_schema.md#spec-cynai-schema-taskdependenciestable) table).
 
-**Runnable:** A task in a plan is **runnable** when: (1) the plan's state is `active`, (2) the task is not closed, and (3) every task it depends on (each `depends_on_task_id` in `task_dependencies` for this `task_id`) has `status = 'completed'`.
-A task with no dependencies in `task_dependencies` is runnable once the plan is active and the task is not closed (subject to the workflow start gate).
+**Runnable:** A task in a plan is **runnable** when: (0) the task's `planning_state` is `ready`, (1) the plan's state is `active`, (2) the task is not closed, and (3) every task it depends on (each `depends_on_task_id` in `task_dependencies` for this `task_id`) has `status = 'completed'`.
+A task with no dependencies in `task_dependencies` is runnable once `planning_state=ready`, the plan is active, and the task is not closed (subject to the workflow start gate).
 
 **Blocking on failed dependencies:** Tasks that depend on a task with status `failed`, `canceled`, or `superseded` MUST NOT have their workflow started until that dependency is retried and reaches `status = 'completed'`.
 The orchestrator MUST enforce this in the workflow start gate (see [Workflow start gate: dependency check](#workflow-start-gate-plan-approved)).
@@ -161,6 +163,8 @@ The gateway and orchestrator MUST enforce this when processing a cancel request 
 
 - [REQ-ORCHES-0152](../requirements/orches.md#req-orches-0152)
 - [REQ-ORCHES-0153](../requirements/orches.md#req-orches-0153)
+- [REQ-ORCHES-0178](../requirements/orches.md#req-orches-0178)
+- [REQ-ORCHES-0180](../requirements/orches.md#req-orches-0180)
 - [REQ-PROJCT-0124](../requirements/projct.md#req-projct-0124)
 
 Before the orchestrator starts a workflow for a task, it MUST apply the following gate.
@@ -174,16 +178,17 @@ Before the orchestrator starts a workflow for a task, it MUST apply the followin
 
 <a id="algo-cynai-orches-workflowstartgateplanapproved"></a>
 
-1. Resolve the task's plan: `plan_id` from the task row. <a id="algo-cynai-orches-workflowstartgateplanapproved-step-1"></a>
-2. If `plan_id` is null, allow workflow start (no plan gate). <a id="algo-cynai-orches-workflowstartgateplanapproved-step-2"></a>
-3. Load the plan row (`project_plans`).
+1. **Planning state check:** If the task's `planning_state` is not `ready`, deny workflow start and return a defined error (e.g. 409 with reason "task not ready"). <a id="algo-cynai-orches-workflowstartgateplanapproved-step-1"></a>
+2. Resolve the task's plan: `plan_id` from the task row. <a id="algo-cynai-orches-workflowstartgateplanapproved-step-2"></a>
+3. If `plan_id` is null, allow workflow start (no plan gate). <a id="algo-cynai-orches-workflowstartgateplanapproved-step-3"></a>
+4. Load the plan row (`project_plans`).
    If the plan's `archived` flag is true, deny workflow start and return a defined error (e.g. 409 or 403 with reason "plan is archived").
-   If the plan's `state` is not `active` (e.g. `draft`, `ready`, `suspended`, `completed`, `canceled`): if the workflow start was requested explicitly by the PMA (e.g. MCP tool or internal "start workflow for task_id" from PMA), continue to step 5 (PMA handoff); otherwise deny workflow start and return a defined error (e.g. 409 or 403 with reason "plan not active"). <a id="algo-cynai-orches-workflowstartgateplanapproved-step-3"></a>
-4. If the plan's `state` is `active`, continue to step 5. <a id="algo-cynai-orches-workflowstartgateplanapproved-step-4"></a>
-5. **Dependency check** (whenever `plan_id` is set): Load all rows from `task_dependencies` where `task_id` = this task.
+   If the plan's `state` is not `active` (e.g. `draft`, `ready`, `suspended`, `completed`, `canceled`): if the workflow start was requested explicitly by the PMA (e.g. MCP tool or internal "start workflow for task_id" from PMA), continue to step 6 (PMA handoff); otherwise deny workflow start and return a defined error (e.g. 409 or 403 with reason "plan not active"). <a id="algo-cynai-orches-workflowstartgateplanapproved-step-4"></a>
+5. If the plan's `state` is `active`, continue to step 6. <a id="algo-cynai-orches-workflowstartgateplanapproved-step-5"></a>
+6. **Dependency check** (whenever `plan_id` is set): Load all rows from `task_dependencies` where `task_id` = this task.
    For each such row, load the dependency task (`depends_on_task_id`).
    If any dependency task has `status != 'completed'`, deny workflow start and return a defined error (e.g. 409 with reason "dependencies not satisfied" or "dependency not completed").
-   If there are no dependency rows, or every dependency has `status = 'completed'`, allow workflow start. <a id="algo-cynai-orches-workflowstartgateplanapproved-step-5"></a>
+   If there are no dependency rows, or every dependency has `status = 'completed'`, allow workflow start. <a id="algo-cynai-orches-workflowstartgateplanapproved-step-6"></a>
 
 Implementations MUST set the plan's state to `draft` whenever that plan's document, task list, or task dependencies are updated while the plan is active (see [Project plan auto un-approve on edit](projects_and_scopes.md#spec-cynai-access-projectplanautounapprove)).
 
@@ -226,6 +231,39 @@ The following mapping is the MVP reference mapping.
   Findings are written back into the main workflow state (or checkpoint) so that **Verify Step Result** can decide pass/fail and recommended actions.
 - The Project Analyst MUST NOT bypass MCP or direct DB access rules.
   See [project_analyst_agent.md](project_analyst_agent.md) Handoff Model.
+
+### Plan Completion Validation (Sign-Off)
+
+- Spec ID: `CYNAI.ORCHES.PlanCompletionValidation` <a id="spec-cynai-orches-plancompletionvalidation"></a>
+
+Before the system signs off on plan completion (sets the plan to state `completed`), a **second round of checks** MUST be supported: validate that all tasks in the plan were not only closed but **completed to standard** (meet the acceptance criteria and requirements laid out in each task), and issue **re-work** for any task that does not meet standard.
+
+#### Validation Purpose
+
+- The gateway today allows setting a plan to `completed` when all tasks are closed (per [REQ-PROJCT-0121](../requirements/projct.md#req-projct-0121)).
+- This validation adds a quality gate: each task must be verified against its own acceptance criteria and requirements before the plan is considered done.
+- Tasks that fail this check receive re-work (see below); the plan is not set to `completed` until validation passes or re-work is completed and re-validated.
+
+#### Validation Workflow (Capability)
+
+- The system MUST support a **plan completion validation** workflow (or equivalent phase) that:
+  1. Runs when sign-off is requested (e.g. user or PMA requests "set plan to completed") or when all tasks in the plan have become closed.
+  2. For each task in the plan with `closed = true`, validates that the task's outcome meets the standards laid out in that task (acceptance criteria, requirements, and any verification evidence from the task workflow).
+  3. For any task that does not meet standard: **issue re-work** - e.g. re-open the task with feedback and remediation details, or create a follow-up task that depends on it; the re-work MUST be driven so the task (or its follow-up) can be re-executed and re-validated.
+  4. Does not set the plan to `completed` until every task in the plan has passed this validation (or the validation is explicitly skipped per policy, e.g. override for operators).
+- Validation MAY be implemented as a **plan-scoped workflow** (separate from the per-task LangGraph) or as a dedicated phase invoked by the gateway or PMA before allowing the "set plan to completed" operation.
+- The Project Analyst Agent (PAA) MAY be invoked to perform or assist the validation (e.g. per-task verification against acceptance criteria); findings feed into the re-work decision.
+
+#### Re-Work Handling
+
+- **Re-work** means: ensure the task (or a follow-up) is executed again with clear remediation input.
+  - Option A: Re-open the same task (reset status to pending, add feedback to description or post_execution_notes, and re-run its workflow).
+  - Option B: Create a new follow-up task that depends on the failed task, with acceptance criteria that reflect the gap; the original task remains closed; the follow-up is run and validated.
+- The system MUST record why re-work was issued (e.g. verification findings, failed acceptance criteria) so that the next run or follow-up task has the necessary context.
+
+#### Traces To
+
+- [REQ-PROJCT-0121](../requirements/projct.md#req-projct-0121) (plan completed only when all tasks closed; this spec adds that validation-to-standard and re-work MUST be supported before sign-off).
 
 ## Graph Topology
 

@@ -253,6 +253,7 @@ At minimum, the startup context MUST include:
   - Job dispatch requests to worker APIs.
   - Task state transitions and verification records in PostgreSQL.
   - Final task summaries and artifacts (including links to uploaded files).
+  - **Artifact download links for users:** The PMA MAY provide users with download links for artifacts (e.g. in chat or task results) that point to the unified artifacts endpoint (`GET /v1/artifacts/{artifact_id}`); access MUST be gated by RBAC so only authorized users can retrieve the file (see [Orchestrator Artifacts Storage](orchestrator_artifacts_storage.md#spec-cynai-orches-artifactsrbac), [Chat Threads and Messages - Download References](chat_threads_and_messages.md#spec-cynai-usrgwy-chatthreadsmessages-downloadrefs)).
 
 ## LLM Context (Baseline and User-Configurable)
 
@@ -315,6 +316,10 @@ The MCP contract for sandbox job creation (e.g. `sandbox.create`) MUST allow pas
 **PMA and PAA built-in Agent personas:** PMA and PAA MUST always use their own dedicated system-scoped (global) Agent personas for their identity/role when running; these are part of the global default Agent personas (see [cynode_sba.md - Persona on the Job](cynode_sba.md#spec-cynai-sbagnt-jobpersona)).
 See [cynode_sba.md - Persona on the Job](cynode_sba.md#spec-cynai-sbagnt-jobpersona) and [mcp_tool_catalog.md - Sandbox Tools](mcp_tool_catalog.md#spec-cynai-mcptoo-sandboxtools).
 
+**Task-level persona and skills:** When creating or updating tasks (e.g. via MCP task create/update), the PMA SHOULD set `persona_id` and optional `recommended_skill_ids` (array of skill stable identifiers) so the orchestrator job builder can resolve the persona and merge skills (persona default_skill_ids union task recommended_skill_ids) when building the job.
+Execution-ready tasks SHOULD have a `persona_id`; one persona per task.
+**Task bundles:** The PMA MAY hand off a bundle of 1-3 tasks (same persona, in dependency order) for SBA execution in series; the orchestrator job builder builds a single job with `task_ids` (map keyed 10, 20, 30) and embedded per-task context (see [Job builder (task-to-job)](orchestrator.md#spec-cynai-orches-jobbuilder)).
+
 ## Task Naming
 
 The Project Manager MUST assign each task a human-readable name in addition to its UUID so users can refer to tasks by name in the CLI and API (e.g. for `task get`, `task result`, `task cancel`).
@@ -367,6 +372,47 @@ The PMA is responsible for **building** the project plan (tasks and execution or
 When the user describes a goal that implies multiple steps or a project, the PMA SHOULD first produce a plan (e.g. list of tasks with order and acceptance criteria), persist it or associate tasks with the plan, and only then create tasks and hand off for execution.
 The PMA SHOULD refine project plans as needed based on updated information from the user (e.g. after clarification or change requests).
 
+## Task Review and Ready Transition
+
+- Spec ID: `CYNAI.AGENTS.TaskReviewAndReadyTransition` <a id="spec-cynai-agents-taskreviewandreadytransition"></a>
+
+When a task is created via the User API Gateway (or CLI), it is persisted with `planning_state=draft` and routed to the PMA for review before workflow execution.
+The PMA receives the task with full context and MAY enrich it (e.g. confirm or set `project_id`, normalize task name, add or refine description and acceptance criteria, attach artifacts, create dependency edges when the task is part of a plan).
+The PMA **MUST attempt to clarify ambiguous tasks with the user** before marking the task as ready (part of its task creation/management skill; see [REQ-PMAGNT-0128](../requirements/pmagnt.md#req-pmagnt-0128)).
+Clarification MUST occur **in the thread where the user directed task creation**, or **via notification to the user** (Notification spec TBD).
+When the PMA determines the task is sufficiently specified for execution (after clarification when needed), the PMA transitions the task to `planning_state=ready`; that transition is the path that enables workflow execution (see [REQ-ORCHES-0179](../requirements/orches.md#req-orches-0179)).
+The PMA MAY use `persona.list` and `persona.get` (MCP) to resolve and set `persona_id` and `recommended_skill_ids` during review or when creating tasks.
+
+**PMA review request contract:** The orchestrator MUST supply the PMA with at least: `task_id` for the newly created task; `project_id` when known (or omit when unknown and allow PMA to resolve or request clarification); `user_id` for audit attribution and preference resolution; and `messages` containing the task prompt and a task-review instruction wrapper.
+The request body type and endpoint (e.g. `POST /internal/chat/completion` with `InternalChatCompletionRequest`) are implementation-defined; the PMA response MUST be parseable so the orchestrator can extract enrichment outputs and the ready transition deterministically.
+
+### Task Review and Ready Transition Traces To
+
+- [REQ-ORCHES-0177](../requirements/orches.md#req-orches-0177)
+- [REQ-ORCHES-0179](../requirements/orches.md#req-orches-0179)
+- [REQ-PMAGNT-0128](../requirements/pmagnt.md#req-pmagnt-0128)
+
+#### Ready to Draft Transition
+
+- A task in `planning_state=ready` MAY be transitioned back to `draft` as long as the task was **not executed** (see [REQ-ORCHES-0185](../requirements/orches.md#req-orches-0185)).
+- **Aborted executions do not count:** User-initiated cancel, job killed, or timeout before completion do NOT count as executed; only a job that reached `completed` or `failed` (non-abort) counts.
+- The PMA and gateway MUST allow ready->draft when no job for the task has ever reached such a terminal state.
+
+## User-Directed Task Cancel and Job Kill
+
+- Spec ID: `CYNAI.AGENTS.UserDirectedTaskCancelAndJobKill` <a id="spec-cynai-agents-userdirectedtaskcancelandjobkill"></a>
+
+The PMA MUST be able to **cancel a currently running task at user direction** and ensure **kill signals** are sent to the worker so that long-running or stuck work can be stopped without waiting for timeout.
+
+- When the user tells the PMA in natural language to **kill a job**, **cancel a task**, or **stop a running job**, the PMA MUST interpret the intent, resolve the task (by task_id, task name, or conversation context), and invoke the same path as task cancel (gateway task-cancel API or MCP equivalent).
+- The orchestrator, on receiving the cancel request, MUST mark the task as canceled and MUST send a **stop job** request to the worker node when the task has an active job (see [REQ-ORCHES-0184](../requirements/orches.md#req-orches-0184)); the node then stops the SBA gracefully (e.g. SIGTERM) with a container-kill fallback if the agent does not exit in time.
+- Slash commands (e.g. `/task cancel <task_id>` or `/kill job <task_id>`) delivered via messaging connectors are handled by PMA the same way: PMA parses the command and invokes task cancel.
+- See [worker_api.md - Stop Job](worker_api.md#spec-cynai-worker-stopjob) for the Stop Job contract; user-directed job kill is proposed in a draft spec (not yet canonical).
+
+### User-Directed Task Cancel and Job Kill Traces To
+
+- [REQ-ORCHES-0184](../requirements/orches.md#req-orches-0184)
+
 ## Clarification Before Execution
 
 - Spec ID: `CYNAI.AGENTS.ClarificationBeforeExecution` <a id="spec-cynai-agents-clarificationbeforeexecution"></a>
@@ -374,10 +420,12 @@ The PMA SHOULD refine project plans as needed based on updated information from 
 ### Clarification Before Execution Requirements Traces
 
 - [REQ-PMAGNT-0112](../requirements/pmagnt.md#req-pmagnt-0112)
+- [REQ-PMAGNT-0128](../requirements/pmagnt.md#req-pmagnt-0128)
 - [REQ-AGENTS-0135](../requirements/agents.md#req-agents-0135)
 
-The PMA SHOULD ask clarifying questions when scope, acceptance criteria, priorities, or execution order are ambiguous.
-The PMA SHOULD prefer multi-turn clarification over inferring and creating tasks immediately.
+The PMA MUST attempt to clarify ambiguous tasks with the user **before marking a task as ready** (see [REQ-PMAGNT-0128](../requirements/pmagnt.md#req-pmagnt-0128)); this is part of its task creation/management skill.
+Clarification MUST occur **in the thread where the user directed task creation**, or **via notification to the user** (Notification spec TBD).
+The PMA SHOULD ask clarifying questions when scope, acceptance criteria, priorities, or execution order are ambiguous, and SHOULD prefer multi-turn clarification over inferring and creating tasks immediately.
 Multi-message conversation is the intended way to clarify and lay out the task before or as it is executed; building up a task properly may take multiple messages.
 See [`chat_threads_and_messages.md`](chat_threads_and_messages.md) and [`openai_compatible_chat_api.md`](openai_compatible_chat_api.md).
 

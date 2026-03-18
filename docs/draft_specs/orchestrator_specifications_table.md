@@ -24,6 +24,10 @@
 
 ## Document Overview
 
+**Incorporated into canonical specs as of 2026-03-18.**
+Single source of truth: [postgres_schema.md](../tech_specs/postgres_schema.md), [mcp_tool_catalog.md](../tech_specs/mcp_tool_catalog.md), [mcp_gateway_enforcement.md](../tech_specs/mcp_gateway_enforcement.md), [requirements/](../requirements/).
+See [_draft_specs_incorporation_and_conflicts_report.md](../dev_docs/_draft_specs_incorporation_and_conflicts_report.md) Section 4.3 and 8.
+
 This draft specifies a **`specifications`** table in the orchestrator PostgreSQL database for storing technical specification references scoped to **projects**.
 Plans and tasks **reference** specifications via join tables (they do not own them).
 It defines the table schema (scalar columns plus a jsonb `meta` column per Go/GORM conventions), join tables, the specification row and object contract, processing for resolving specifications for a plan or task, MCP help tools, and the related PMA skill in `default_skills`.

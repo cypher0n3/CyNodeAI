@@ -41,10 +41,20 @@ It provides a stable interface for user clients to submit work, query status, an
 The gateway SHOULD support:
 
 - Task submission and management
+  - **Full task CRUD:** The gateway MUST support Create, Read (list/get/result), Update, and Delete for tasks.
   - Create tasks with task input as **plain text or Markdown** (inline or from file), optional **attachments**, **script** (path/file), or **short series of commands**; for script/commands the system runs them in the sandbox; otherwise it interprets the task and may call an AI model and/or dispatch sandbox work.
-    - `POST /v1/tasks` returns the task identifier in the response **without waiting for task completion**; clients poll task get or task result for status and outcome.
+    - `POST /v1/tasks` persists the task with `planning_state=draft`, returns the task identifier and `planning_state` in the response **without starting workflow execution**; the orchestrator routes the task to the Project Manager Agent for review first (see [REQ-ORCHES-0176](../requirements/orches.md#req-orches-0176), [REQ-ORCHES-0177](../requirements/orches.md#req-orches-0177), [REQ-USRGWY-0158](../requirements/usrgwy.md#req-usrgwy-0158)).
+    - Task get, list, and result responses MUST include `planning_state`; workflow execution starts only after the task is transitioned to `planning_state=ready` (e.g. by PMA after review or via a dedicated ready transition such as `POST /v1/tasks/{task_id}/ready`).
+    - A task in `planning_state=ready` MAY be transitioned back to `draft` as long as the task was **not executed** (see [REQ-ORCHES-0185](../requirements/orches.md#req-orches-0185)).
+    Aborted executions (user cancel, job killed, timeout) do not count.
+    The gateway MUST allow ready->draft when no job for the task has reached a terminal state that counts as execution.
+    - Shared API contracts (e.g. task response shapes exposed by the gateway) MUST include a `planning_state` field so clients receive it on create, get, list, and result.
     - Interpretation and inference are the **default** for task text; there is no user-facing "use inference" flag (see REQ-ORCHES-0126, REQ-ORCHES-0127, REQ-ORCHES-0128).
     - The create request MAY include an optional **task name**; the orchestrator MUST accept it, normalize it per [Task Naming](project_manager_agent.md#spec-cynai-agents-pmtasknaming), and ensure uniqueness (e.g. append numbers) when needed.
+  - **Update:** PATCH (or PUT) on a task MUST allow updating mutable fields (e.g. name, description, acceptance_criteria, persona_id, recommended_skill_ids) when the task is not closed or when lock rules allow (e.g. comments only when plan is locked).
+  - **Delete:** Task delete is implemented as **archive** (soft delete).
+    The gateway MUST set the task's archived state (e.g. `archived_at`) so the task is excluded from default list views; the task row is retained for audit and history.
+    List MAY support an `archived` filter (e.g. exclude archived by default; include only archived when requested).
   - Set acceptance criteria and attach artifacts.
   - List tasks, read status, and retrieve results.
 - Scheduler and cron
@@ -300,8 +310,9 @@ The CLI executes slash commands by calling the same gateway APIs as the non-inte
 ### Required Operation Coverage
 
 - **Status and identity:** Gateway reachability (status) and current identity (whoami) endpoints used by `/status` and `/whoami`.
-- **Tasks:** Task list, get, create, cancel, result, logs, artifacts list, and artifacts get (as used by `/task list`, `/task get`, `/task create`, `/task cancel`, `/task result`, `/task logs`, `/task artifacts list`, `/task artifacts get`).
+- **Tasks:** Full CRUD: task list, get, create, update, delete (archive), cancel, result, logs, artifacts list, and artifacts get (as used by `/task list`, `/task get`, `/task create`, `/task update`, `/task delete`, `/task cancel`, `/task result`, `/task logs`, `/task artifacts list`, `/task artifacts get`).
   Task create MUST accept prompt/task text, optional name, and optional attachments per the task-create API.
+  Task delete is implemented as archive (soft delete); archived tasks are excluded from default list unless an archived filter is used.
 - **Nodes:** Node list and node get (as used by `/nodes list`, `/nodes get <node_id>`).
 - **Preferences:** List, get, set, delete, and effective-preferences (as used by `/prefs list`, `/prefs get`, `/prefs set`, `/prefs delete`, `/prefs effective`).
   Scope-type, scope-id, and key semantics MUST match the preferences API.

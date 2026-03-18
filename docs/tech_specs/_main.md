@@ -89,6 +89,7 @@ It uses a central orchestrator to coordinate node-local workers, sandboxed execu
 - Access control: [`docs/tech_specs/access_control.md`](access_control.md)
 - User preferences: [`docs/tech_specs/user_preferences.md`](user_preferences.md)
 - Postgres schema: [`docs/tech_specs/postgres_schema.md`](postgres_schema.md)
+  - Task vs Job (terminology): [postgres_schema.md#spec-cynai-schema-taskvsjob](postgres_schema.md#spec-cynai-schema-taskvsjob)
 
 ### Protocols and Standards
 
@@ -103,6 +104,7 @@ It uses a central orchestrator to coordinate node-local workers, sandboxed execu
 
 ### Execution and Artifacts
 
+- Orchestrator artifacts storage: [`docs/tech_specs/orchestrator_artifacts_storage.md`](orchestrator_artifacts_storage.md)
 - Sandbox container: [`docs/tech_specs/sandbox_container.md`](sandbox_container.md)
 - Sandbox image registry: [`docs/tech_specs/sandbox_image_registry.md`](sandbox_image_registry.md)
 - Sandbox web browsing: [`docs/tech_specs/secure_browser_service.md`](secure_browser_service.md)

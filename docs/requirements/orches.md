@@ -309,3 +309,41 @@ It covers orchestrator control-plane behavior, task lifecycle, dispatch, and sta
   [orchestrator_inference_container_decision.md - Vendor Support](../tech_specs/orchestrator_inference_container_decision.md#spec-cynai-orches-inferencevendorsupportmvp)
   [worker_node_payloads.md - Capability Report gpu.devices](../tech_specs/worker_node_payloads.md#spec-cynai-worker-payload-capabilityreport-v1)
   <a id="req-orches-0175"></a>
+- **REQ-ORCHES-0176:** Newly created tasks MUST start in a non-executable planning state (`draft`).
+  [CYNAI.SCHEMA.TasksTable](../tech_specs/postgres_schema.md#spec-cynai-schema-taskstable)
+  <a id="req-orches-0176"></a>
+- **REQ-ORCHES-0177:** Task create MUST NOT start workflow execution; the system MUST route the task to the Project Manager Agent for review first.
+  [CYNAI.ORCHES.Rule.TaskCreateHandoff](../tech_specs/orchestrator.md#spec-cynai-orches-rule-taskcreatehandoff)
+  [project_manager_agent.md](../tech_specs/project_manager_agent.md)
+  <a id="req-orches-0177"></a>
+- **REQ-ORCHES-0178:** Only tasks in `planning_state=ready` MAY start workflow execution; all other workflow start gates (plan state, dependencies, lease) apply after this gate.
+  [langgraph_mvp.md - Workflow Start Triggers](../tech_specs/langgraph_mvp.md#spec-cynai-orches-workflowstarttriggers)
+  [CYNAI.SCHEMA.TasksTable](../tech_specs/postgres_schema.md#spec-cynai-schema-taskstable)
+  <a id="req-orches-0178"></a>
+- **REQ-ORCHES-0179:** The Project Manager Agent (or an authorized path) MAY transition a task from `draft` to `ready` after review and enrichment; that transition is the path that enables workflow execution for the task.
+  [project_manager_agent.md](../tech_specs/project_manager_agent.md)
+  <a id="req-orches-0179"></a>
+- **REQ-ORCHES-0180:** The system MUST deny workflow start for a task in `planning_state=draft` and MUST return a defined error (e.g. HTTP 409 with a reason such as "task not ready").
+  [langgraph_mvp.md - Workflow Start Gate](../tech_specs/langgraph_mvp.md#spec-cynai-orches-workflowstartgateplanapproved)
+  <a id="req-orches-0180"></a>
+- **REQ-ORCHES-0181:** The orchestrator MUST resolve an effective allowed model set (intersection of system, project, and user allowlists) and MUST NOT dispatch a job with a model outside that set.
+  [orchestrator.md](../tech_specs/orchestrator.md)
+  <a id="req-orches-0181"></a>
+- **REQ-ORCHES-0182:** The orchestrator MUST select exactly one model per job from the persona's recommended cloud models (by provider, available API keys and quota) or recommended local models (available on worker nodes); user preference and API quota MUST be considered.
+  [orchestrator.md](../tech_specs/orchestrator.md)
+  <a id="req-orches-0182"></a>
+- **REQ-ORCHES-0183:** A job MAY reference 1-3 tasks in explicit order (task_ids map keyed by numeric order); the SBA runs them in series; the job payload MUST be self-contained (embedded per-task context for bundles).
+  [cynode_sba.md](../tech_specs/cynode_sba.md)
+  [postgres_schema.md - Task vs Job](../tech_specs/postgres_schema.md#spec-cynai-schema-taskvsjob)
+  <a id="req-orches-0183"></a>
+- **REQ-ORCHES-0184:** On a task cancel request (from User API Gateway, PMA, or slash command), the orchestrator MUST mark the task as canceled and MUST send a **stop job** request to the worker node when the task has an **active job** (dispatched and not yet in a terminal state).
+  The worker node MUST stop the job (graceful SBA stop then container kill fallback per Worker API spec).
+  See [user_directed_job_kill_proposal.md](../draft_specs/user_directed_job_kill_proposal.md) and [worker_api.md - Stop Job](../tech_specs/worker_api.md#spec-cynai-worker-stopjob).
+  [orchestrator.md](../tech_specs/orchestrator.md)
+  <a id="req-orches-0184"></a>
+- **REQ-ORCHES-0185:** A task in `planning_state=ready` MAY be transitioned back to `draft` as long as the task was **not executed**.
+  Aborted executions (user-initiated cancel, job killed, timeout before completion) do NOT count as executed; only a job that reached `completed` or `failed` (non-abort) counts.
+  The gateway and PMA MUST allow ready->draft when no job for the task has ever reached a terminal state that counts as execution.
+  [project_manager_agent.md](../tech_specs/project_manager_agent.md)
+  [user_api_gateway.md](../tech_specs/user_api_gateway.md)
+  <a id="req-orches-0185"></a>

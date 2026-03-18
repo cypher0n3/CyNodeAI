@@ -14,6 +14,7 @@
 - [Worker API Surface (Initial Implementation)](#worker-api-surface-initial-implementation)
   - [Run Job (Synchronous)](#run-job-synchronous)
   - [Job Lifecycle and Result Persistence](#job-lifecycle-and-result-persistence)
+  - [Stop Job (User-Directed)](#stop-job-user-directed)
   - [Node-Mediated SBA Result (Sync)](#node-mediated-sba-result-sync)
   - [Node-Mediated Step-Executor Result (Sync)](#node-mediated-step-executor-result-sync)
   - [Session Sandbox (Long-Running)](#session-sandbox-long-running)
@@ -312,6 +313,23 @@ Retained results SHOULD be subject to node-local retention and disk limits; the 
 
 - [REQ-WORKER-0149](../requirements/worker.md#req-worker-0149)
 - [REQ-WORKER-0157](../requirements/worker.md#req-worker-0157)
+
+### Stop Job (User-Directed)
+
+- Spec ID: `CYNAI.WORKER.StopJob` <a id="spec-cynai-worker-stopjob"></a>
+
+The Worker API MUST support a **stop job** (cancel job) operation so the orchestrator can request that a running job be stopped at user direction (e.g. task cancel from gateway, PMA, or slash command).
+
+- **Endpoint:** `POST /v1/worker/jobs:stop` (or equivalent; request body includes `task_id` and `job_id`).
+  Authentication: same as Run Job (orchestrator bearer token).
+- **Behavior:** The node MUST look up the running job (container or process) for the given `task_id` and `job_id`.
+  If no such job is running, the node MUST return success (e.g. 200) with a payload indicating "not running" or "already stopped".
+  If the job is running, the node MUST initiate the stop sequence: **Stage 1 (graceful):** send a signal to the SBA process (e.g. SIGTERM) or call an in-band stop hook and allow a grace period (e.g. 30 seconds) for the process to exit.
+  **Stage 2 (fallback):** if the process does not exit within the grace period, the node MUST kill the SBA container (e.g. container stop then kill).
+  The node MUST then report the job as stopped (e.g. status `canceled`) to the orchestrator and MUST NOT leave the job in a permanent "running" state.
+- For jobs that do not use an SBA runner, the node MAY skip the graceful SBA step and proceed to stop the container (SIGTERM then kill after timeout).
+- See [REQ-ORCHES-0184](../requirements/orches.md#req-orches-0184) for the requirement; full semantics for user-directed job kill are proposed in a draft spec (not yet canonical).
+  The orchestrator invalidates the job's token when the job is stopped so that subsequent SBA tool calls for that job are rejected; see [Task Cancel and Stop Job](orchestrator.md#spec-cynai-orches-taskcancelandstopjob).
 
 ### Node-Mediated SBA Result (Sync)
 
