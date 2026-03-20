@@ -128,7 +128,7 @@ Behavioral and workflow requirements still live in `AGENTS` and `ORCHES`.
   <a id="req-pmagnt-0126"></a>
 - **REQ-PMAGNT-0127:** When creating or updating tasks, the PMA SHOULD set persona_id and recommended_skill_ids when the work is best performed by a specific execution-role persona; the PMA MAY hand off a bundle of 1-3 tasks (same persona, dependency order) for SBA execution in series in one job.
   [CYNAI.AGENTS.PersonaAssignment](../tech_specs/project_manager_agent.md#spec-cynai-agents-personaassignment)
-  [mcp_tool_catalog.md - Persona Tools](../tech_specs/mcp_tool_catalog.md#spec-cynai-mcptoo-personatools)
+  [Persona tools](../tech_specs/mcp_tools/persona_tools.md#spec-cynai-mcptoo-personatools)
   <a id="req-pmagnt-0127"></a>
 - **REQ-PMAGNT-0128:** The PMA MUST attempt to clarify ambiguous tasks with the user before marking a task as `planning_state=ready` (part of its task creation/management skill).
   Clarification MUST occur in the thread where the user directed task creation, or via notification to the user (Notification spec TBD).

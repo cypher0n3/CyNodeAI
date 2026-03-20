@@ -25,14 +25,14 @@
 ## Document Overview
 
 **Incorporated into canonical specs as of 2026-03-18.**
-Single source of truth: [postgres_schema.md](../tech_specs/postgres_schema.md), [mcp_tool_catalog.md](../tech_specs/mcp_tool_catalog.md), [mcp_gateway_enforcement.md](../tech_specs/mcp_gateway_enforcement.md), [requirements/](../requirements/).
+Single source of truth: [postgres_schema.md](../tech_specs/postgres_schema.md), [mcp_tools/](../tech_specs/mcp_tools/README.md), [mcp_gateway_enforcement.md](../tech_specs/mcp_gateway_enforcement.md), [requirements/](../requirements/).
 See [_draft_specs_incorporation_and_conflicts_report.md](../dev_docs/_draft_specs_incorporation_and_conflicts_report.md) Section 4.3 and 8.
 
 This draft specifies a **`specifications`** table in the orchestrator PostgreSQL database for storing technical specification references scoped to **projects**.
 Plans and tasks **reference** specifications via join tables (they do not own them).
 It defines the table schema (scalar columns plus a jsonb `meta` column per Go/GORM conventions), join tables, the specification row and object contract, processing for resolving specifications for a plan or task, MCP help tools, and the related PMA skill in `default_skills`.
 
-When promoted, the table definition and object structure belong in [postgres_schema.md](../tech_specs/postgres_schema.md); MCP tool additions in [mcp_tool_catalog.md](../tech_specs/mcp_tool_catalog.md); skills are already in [default_skills](../../default_skills/).
+When promoted, the table definition and object structure belong in [postgres_schema.md](../tech_specs/postgres_schema.md); MCP tool additions in [mcp_tools/](../tech_specs/mcp_tools/README.md); skills are already in [default_skills](../../default_skills/).
 
 ## Goals and Scope
 
@@ -237,7 +237,7 @@ Required procedure is defined by the [ResolveSpecificationsForPlanOrTask Algorit
 
 - **Specification CRUD tools:** When the host adds a `specifications` table, MCP tools for create/update/delete of specification rows (e.g. `db.specification.create` with `project_id` and scalar fields plus optional `meta` object, `db.specification.list` by `project_id`, `db.specification.get`, `db.specification.update`, `db.specification.delete`) SHOULD be added and gated by the same allowlist and scope rules as task write tools (PMA may write; SBA read-only; PAA per catalog).
   Tools to attach or detach specifications to/from plans and tasks (e.g. `db.plan.specifications.set` or `db.task.specifications.set` with specification_id list) SHOULD be added so PMA can reference project-scoped specifications from plans and tasks.
-  Tool names and argument schemas MUST be documented in [mcp_tool_catalog.md](../tech_specs/mcp_tool_catalog.md) when adopted.
+  Tool names and argument schemas MUST be documented in [mcp_tools/](../tech_specs/mcp_tools/README.md) when adopted.
 
 ## Related Skills (`default_skills`)
 
@@ -257,6 +257,6 @@ Skills MUST NOT link to `docs/draft_specs` or `dev_docs`; they link only to cano
 - Schema (canonical): [postgres_schema.md](../tech_specs/postgres_schema.md).
 - Go SQL (GORM): [go_sql_database_standards.md](../tech_specs/go_sql_database_standards.md).
 - Default skills: [default_skills/README.md](../../default_skills/README.md), [pma_specification_object_skill.md](../../default_skills/pma_specification_object_skill.md).
-- MCP catalog: [mcp_tool_catalog.md](../tech_specs/mcp_tool_catalog.md).
+- MCP catalog: [mcp_tools/](../tech_specs/mcp_tools/README.md).
 - Spec authoring (example of good practice in this project): [spec_authoring_writing_and_validation.md](../docs_standards/spec_authoring_writing_and_validation.md).
 - Requirement object (parallel concept): [Requirement object structure](../tech_specs/postgres_schema.md#spec-cynai-schema-requirementobject).

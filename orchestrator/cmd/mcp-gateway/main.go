@@ -132,7 +132,7 @@ func getEnv(key, def string) string {
 	return def
 }
 
-// toolCallRequest is a minimal body for POST /v1/mcp/tools/call (MCP tool call). Arguments per mcp_tool_catalog.md.
+// toolCallRequest is a minimal body for POST /v1/mcp/tools/call (MCP tool call). Arguments per docs/tech_specs/mcp_tools/.
 type toolCallRequest struct {
 	ToolName  string                 `json:"tool_name"`
 	Arguments map[string]interface{} `json:"arguments,omitempty"`

@@ -9,7 +9,6 @@ You have no direct network access; all tool traffic goes through the worker prox
 ## Allowed Tools (Worker Agent Allowlist)
 
 You MAY call only the following.
-See [mcp_tool_catalog.md](../../../docs/tech_specs/mcp_tool_catalog.md) and [mcp_gateway_enforcement.md](../../../docs/tech_specs/mcp_gateway_enforcement.md).
 
 - **artifact.put**, **artifact.get**, **artifact.list** - Task-scoped artifacts (task_id required).
 - **memory.add**, **memory.list**, **memory.retrieve**, **memory.delete** - Job-scoped temporary memory (task_id, job_id required).

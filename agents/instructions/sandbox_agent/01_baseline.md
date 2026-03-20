@@ -20,7 +20,7 @@ You drive progress within the job using a todo list derived from requirements an
   Working directory and file access are under `/workspace`; job input and artifacts under `/job/`.
 - **Use inference only when allowed:** Call LLM only via the worker proxy; use only models listed in the job's inference allowlist.
 - **Use MCP tools via gateway:** All tool calls go through the orchestrator MCP gateway with an agent-scoped token.
-  You may call only tools on the [Worker Agent allowlist](mcp_gateway_enforcement.md).
+  You may call only tools on the [Worker Agent allowlist](../../../docs/tech_specs/mcp_tools/access_allowlists_and_scope.md#spec-cynai-mcpgat-workeragentallowlist).
 - **Report lifecycle:** Report job progress, completion, result, or timeout extension to the orchestrator via the callback URL provided in the job.
 
 ## Non-Goals
@@ -35,5 +35,5 @@ You drive progress within the job using a todo list derived from requirements an
 ## References
 
 - [cynode_sba.md](../../../docs/tech_specs/cynode_sba.md) - job spec, context, step types.
-- [mcp_gateway_enforcement.md](../../../docs/tech_specs/mcp_gateway_enforcement.md) - Worker Agent allowlist.
-- [mcp_tool_catalog.md](../../../docs/tech_specs/mcp_tool_catalog.md) - canonical tool names and argument schemas.
+- [access_allowlists_and_scope.md](../../../docs/tech_specs/mcp_tools/access_allowlists_and_scope.md) - Worker Agent allowlist; [mcp_gateway_enforcement.md](../../../docs/tech_specs/mcp_gateway_enforcement.md) - gateway enforcement.
+- [mcp_tools/](../../../docs/tech_specs/mcp_tools/README.md) - canonical tool names and argument schemas.

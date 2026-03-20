@@ -1,4 +1,4 @@
-// Package database provides task artifact storage per docs/tech_specs/postgres_schema.md (Task Artifacts) and mcp_tool_catalog.md (artifact.get).
+// Package database provides task artifact storage per docs/tech_specs/postgres_schema.md (Task Artifacts) and docs/tech_specs/mcp_tools/artifact_tools.md (artifact.get).
 // REQ-ORCHES-0127: task create persists attachment references; ListArtifactPathsByTaskID supports API/CLI retrieval.
 package database
 

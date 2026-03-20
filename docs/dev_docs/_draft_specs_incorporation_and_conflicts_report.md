@@ -12,7 +12,7 @@
 ## 1. Document Metadata and Scope
 
 - **Date:** 2026-03-16
-- **Last updated:** 2026-03-18 (New draft: workspace provisioning and project repos; 5.11, 6.11)
+- **Last updated:** 2026-03-19 (Report review; docs-check link fixes.)
 - **Scope:** All documents in `docs/draft_specs/` (excluding README)
 - **Purpose:** Identify drafts already incorporated but not marked; identify conflicts between draft specs.
 - **Output:** Report only; no code or normative doc changes.
@@ -136,7 +136,7 @@ Open design choices (direction needed):
 #### 4.3.2 Orchestrator Specifications Table
 
 - **Requirements:** REQ-SCHEMA-0115, 0116 (schema.md), REQ-PROJCT-0125 (projct.md).
-- **Tech specs:** postgres_schema (specifications table, plan_specifications, task_specifications, meta/jsonb, ResolveSpecificationsForPlanOrTask algorithm, SpecificationObject contract), mcp_tool_catalog (specification.help, db.specification.*, db.plan.specifications.set, db.task.specifications.set), mcp_gateway_enforcement (PMA allowlist for specification tools).
+- **Tech specs:** postgres_schema (specifications table, plan_specifications, task_specifications, meta/jsonb, ResolveSpecificationsForPlanOrTask algorithm, SpecificationObject contract), mcp_tools (specification.help, specification.*, plan.specifications.set, task.specifications.set; PMA allowlist for specification tools in access_allowlists_and_scope).
 
 #### 4.3.3 Personas and Task Scoping
 
@@ -147,8 +147,8 @@ Open design choices (direction needed):
   - cynode_sba (task_ids, task_contexts for bundles, single model per job, skill merge, bundle result contract)
   - orchestrator (Job builder: persona resolution, allowed set, model/node selection, task bundle, planning_state ref)
   - project_manager_agent (task-level persona and skills, task bundles, persona list/get)
-  - mcp_tool_catalog (persona.get returns new fields, SBA via worker proxy)
-  - mcp_gateway_enforcement (persona.list, persona.get on PM/PAA/worker allowlists)
+  - mcp_tools/persona_tools (persona.get returns new fields, SBA via worker proxy)
+  - mcp_tools/access_allowlists_and_scope (persona.list, persona.get on PM/PAA/worker allowlists)
   - default_skills/pma_task_creation_skill (persona_id, recommended_skill_ids, bundles)
 
 ### 4.4 Pgvector Proposal vs Canonical Schema
@@ -319,3 +319,8 @@ Re-review performed 2026-03-17.
 - **New draft:** `workspace_provisioning_and_project_repos_spec_proposal.md` added to `docs/draft_specs/`.
 - **Inventory:** Added to Section 2.
 - **Section 5.11 and 6 (item 11):** Added relationship note (additive to canonical) and recommendation for promotion: fold into project_git_repos, git_egress_mcp, cynode_sba, worker_node, worker_api, sandbox_container; add/extend REQ as in draft.
+
+**2026-03-19: Report review and docs-check.**
+
+- Report reviewed; metadata "Last updated" set to 2026-03-19.
+- Broken doc links to removed dev_docs files fixed in dev_docs and draft_specs so `just docs-check` passes (links replaced with plain-text references).

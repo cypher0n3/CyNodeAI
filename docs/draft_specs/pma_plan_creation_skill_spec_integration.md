@@ -21,7 +21,7 @@ This document is the integration plan for moving the skill into canonical docs a
 
 - **Skill definition:** [pma_plan_creation_skill.md](../../default_skills/pma_plan_creation_skill.md) in [default_skills/](../../default_skills/README.md) (draft until promoted).
 - **Plan/task behavior:** Already specified in [project_manager_agent.md](../tech_specs/project_manager_agent.md) (Project Plan Building, Clarification, When Plan is Locked, Plan Approval, Plan Approved PMA Tasked), [projects_and_scopes.md](../tech_specs/projects_and_scopes.md) (plan state, revisions), [postgres_schema.md](../tech_specs/postgres_schema.md) (project_plans, tasks, task_dependencies, project_plan_revisions).
-- **MCP tools:** [mcp_tool_catalog.md](../tech_specs/mcp_tool_catalog.md) defines `db.task.get`, `db.task.update_status`, `db.project.get`, `db.project.list`.
+- **MCP tools:** [mcp_tools/](../tech_specs/mcp_tools/README.md) (Task tools and Project tools) defines `task.get`, `task.update_status`, `project.get`, `project.list`.
   There are **no** `db.plan.*` tools and no full task CRUD for agents in the catalog today; task creation is described as User API Gateway surface.
 - **PMA instructions:** Agent instructions live in `agents/instructions/project_manager/` and `agents/instructions/project_analyst/`; they reference tools and behavior but do not yet encode the full plan-creation workflow from the skill.
 - **Skills system:** [skills_storage_and_inference.md](../tech_specs/skills_storage_and_inference.md) defines the default CyNodeAI interaction skill and MCP skills tools; there is no second system skill for plan creation yet.
@@ -66,12 +66,12 @@ Proposed tech spec edits:
 - In [Skills and Default Skill](../tech_specs/cynode_pma.md#spec-cynai-pmagnt-skillsanddefaultskill), state that when the inference backend supports skills, the system MAY supply an additional **plan creation skill** to PMA (project_manager mode) so that plan-building behavior is consistent and spec-aligned.
 - Link to the skill definition (once promoted) or to the tech spec that defines the procedure.
 
-#### Updates to `mcp_tool_catalog.md`
+#### Updates to MCP Tool Specs (`mcp_tools/`)
 
 - Add MCP tools required for the plan creation skill to retrieve and update plans and tasks from PMA (see [MCP Tool Catalog Additions](#mcp-tool-catalog-additions)).
 - Document **help tools** `plan.help`, `task.help`, and `requirement.help` (see [Help tools (plan.help, task.help, requirement.help)](#help-tools-planhelp-taskhelp-requirementhelp)) so the PMA can obtain schema guidance before building payloads.
 - Document any new tools (e.g. `db.plan.get`, `db.plan.list`, `db.plan.create`, `db.plan.update`, and task create/update/dependency tools for PM scope) with required/optional args and notes.
-- Ensure PM allowlist in [mcp_gateway_enforcement.md](../tech_specs/mcp_gateway_enforcement.md) is updated to include the new plan (and task) tools and the help tools for project_manager.
+- Ensure PM allowlist in [access_allowlists_and_scope.md](../tech_specs/mcp_tools/access_allowlists_and_scope.md) is updated to include the new plan (and task) tools and the help tools for project_manager.
 
 #### Updates to `skills_storage_and_inference.md` (Optional)
 
@@ -94,7 +94,7 @@ The response MUST reflect the actual schema the Orchestrator enforces so the age
   - **Returns:** Schema and guidance for building a plan payload: required and optional fields (e.g. `plan_name`, `plan_body`, `state`, `comments`), plan state machine (draft, ready, active, suspended, completed, canceled), lock and approval rules, and any host-specific constraints.
     MAY include example JSON or YAML.
   - **Allowlist:** project_manager (PMA).
-  - **Purpose:** Agent calls this before creating or updating plans so payloads conform to the project plans schema (e.g. [Project Plans Table](../tech_specs/postgres_schema.md#spec-cynai-schema-projectplanstable)) and related specs.
+  - **Purpose:** Agent calls this before creating or updating plans so payloads conform to the project plans schema (e.g. [Project Plans Table](../tech_specs/projects_and_scopes.md#spec-cynai-schema-projectplanstable)) and related specs.
 
 - **`task.help`** (read-only, no side effects)
   - **Args:** None (or optional `format`: `text` | `json`).
@@ -119,7 +119,7 @@ If the host does not implement these tools, the agent MUST rely on the canonical
 - **Plan write (when plan not locked)**
   - `db.plan.create` - required args: `project_id`; optional: `plan_name`, `plan_body`; creates plan in `draft` state.
     The agent MUST NOT supply plan `id`; the orchestrator/database assigns it and returns it in the create response.
-  - `db.plan.update` - required args: `plan_id`; optional: `plan_name`, `plan_body`, `state`, `comments` (JSON; same structure as task comments per [Comments structure](../tech_specs/postgres_schema.md#spec-cynai-schema-commentsstructure)); MUST fail if `is_plan_locked` is true and the update would change plan_name or plan_body (comments may still be updated when locked).
+  - `db.plan.update` - required args: `plan_id`; optional: `plan_name`, `plan_body`, `state`, `comments` (JSON; same structure as task comments per [Comments Structure (Plans and Tasks)](../tech_specs/projects_and_scopes.md#spec-cynai-schema-commentsstructure)); MUST fail if `is_plan_locked` is true and the update would change plan_name or plan_body (comments may still be updated when locked).
   - Plan approve MUST be a separate operation or a constrained update (e.g. only state transition to `ready` when explicit user approval has been recorded); tool description MUST state that the agent must obtain explicit user approval before marking the plan approved.
 
 - **Task read**
@@ -153,7 +153,7 @@ If full CRUD for plans and tasks via MCP is out of scope for MVP, the integratio
 
 1. **Review:** Review [pma_plan_creation_skill.md](../../default_skills/pma_plan_creation_skill.md) and this integration draft with stakeholders; align on MCP tool set (minimal vs full CRUD) and whether the skill is requirements-mandatory (MUST) or advisory (SHOULD).
 2. **Requirements:** Add or update requirements in `docs/requirements/` as above; add traceability from requirements to tech specs.
-3. **Tech specs:** Update `project_manager_agent.md`, `cynode_pma.md`, `mcp_tool_catalog.md`, and optionally `skills_storage_and_inference.md` and `mcp_gateway_enforcement.md` per sections above.
+3. **Tech specs:** Update `project_manager_agent.md`, `cynode_pma.md`, `mcp_tools/` (task_tools.md, project_tools.md, and help_tools.md as needed), and optionally `skills_storage_and_inference.md` and `mcp_gateway_enforcement.md` per sections above.
 4. **Skill content:** Move the skill content to its canonical location: either (a) a new tech spec section or addendum that is the "plan creation procedure," or (b) the agent instructions bundle plus (if used) a system skill file in the skill store.
    Remove or archive the draft from `docs/draft_specs/` once the single source of truth is in place.
 5. **Validation:** Ensure `just docs-check` and any link/spec validators pass; add or update feature files or E2E coverage for "PMA creates plan via MCP" and "PMA refines plan respecting lock" if not already covered.
@@ -162,6 +162,6 @@ If full CRUD for plans and tasks via MCP is out of scope for MVP, the integratio
 
 - Skill draft: [pma_plan_creation_skill.md](../../default_skills/pma_plan_creation_skill.md).
 - Requirements: [pmagnt.md](../requirements/pmagnt.md), [projct.md](../requirements/projct.md), [agents.md](../requirements/agents.md).
-- Tech specs: [project_manager_agent.md](../tech_specs/project_manager_agent.md), [cynode_pma.md](../tech_specs/cynode_pma.md), [mcp_tool_catalog.md](../tech_specs/mcp_tool_catalog.md), [mcp_gateway_enforcement.md](../tech_specs/mcp_gateway_enforcement.md), [skills_storage_and_inference.md](../tech_specs/skills_storage_and_inference.md), [projects_and_scopes.md](../tech_specs/projects_and_scopes.md), [postgres_schema.md](../tech_specs/postgres_schema.md).
-- Drafts: [2026-03-13_pma_plan_drafting_improvements_proposal.md](../dev_docs/2026-03-13_pma_plan_drafting_improvements_proposal.md) (dependency-only execution, task refs by name, optional YAML frontmatter, runnability/parallelism), [task_routing_pma_first_task_state.md](task_routing_pma_first_task_state.md).
+- Tech specs: [project_manager_agent.md](../tech_specs/project_manager_agent.md), [cynode_pma.md](../tech_specs/cynode_pma.md), [mcp_tools/](../tech_specs/mcp_tools/README.md), [mcp_gateway_enforcement.md](../tech_specs/mcp_gateway_enforcement.md), [skills_storage_and_inference.md](../tech_specs/skills_storage_and_inference.md), [projects_and_scopes.md](../tech_specs/projects_and_scopes.md), [postgres_schema.md](../tech_specs/postgres_schema.md).
+- Drafts: `2026-03-13_pma_plan_drafting_improvements_proposal.md` (doc removed; dependency-only execution, task refs by name, optional YAML frontmatter, runnability/parallelism), [task_routing_pma_first_task_state.md](task_routing_pma_first_task_state.md).
 - Spec authoring: [spec_authoring_writing_and_validation.md](../docs_standards/spec_authoring_writing_and_validation.md).

@@ -26,6 +26,7 @@ It coordinates sandboxed worker execution across local nodes and optional cloud 
 - **Worker nodes**: register with the orchestrator, receive jobs, run inference and tools in sandboxed containers, and report results.
 - **Sandboxed execution**: per-job or per-agent containers with restricted network access and orchestrator-controlled ingress/egress.
 - **MCP-first tools**: agents use MCP as the standard tool interface for privileged operations and data access.
+  Canonical tool names, per-tool specs, and allowlists: [`docs/tech_specs/mcp_tools/README.md`](docs/tech_specs/mcp_tools/README.md); cross-cutting conventions: [`docs/tech_specs/mcp_tooling.md`](docs/tech_specs/mcp_tooling.md); enforcement: [`docs/tech_specs/mcp_gateway_enforcement.md`](docs/tech_specs/mcp_gateway_enforcement.md).
 - **Controlled egress**: outbound web and API access are mediated by dedicated services and policy, not direct sandbox access.
 - **REST APIs**: all REST APIs in this system MUST be implemented in Go (see `docs/tech_specs/go_rest_api_standards.md`).
 - **Admin clients parity**: the Web Console and the CLI management app (`cynork`) MUST offer the same administrative capabilities.

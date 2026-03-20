@@ -335,7 +335,7 @@ Promotion of this behavior into the canonical **pma_task_creation_skill** and **
 
 - **PMA and PAA:** The PMA and PAA MUST be able to use MCP tools to **list** personas for selection when assigning or creating tasks (e.g. `persona.list` with optional scope filter) and to **get** a persona by id (e.g. `persona.get`) so they can resolve and embed the chosen persona when building tasks and job specs.
   When running on a worker node, they MUST go through the **worker proxy** to reach the orchestrator MCP gateway.
-  The gateway MUST allow persona.list and persona.get on the PM and PA agent allowlists (per [mcp_tool_catalog.md - Persona Tools](../tech_specs/mcp_tool_catalog.md#spec-cynai-mcptoo-personatools) and [mcp_gateway_enforcement.md](../tech_specs/mcp_gateway_enforcement.md)).
+  The gateway MUST allow persona.list and persona.get on the PM and PA agent allowlists (per [Persona tools](../tech_specs/mcp_tools/persona_tools.md#spec-cynai-mcptoo-personatools) and [access_allowlists_and_scope.md](../tech_specs/mcp_tools/access_allowlists_and_scope.md)).
 
 - **SBA:** The SBA MUST be able to **get** a persona for the correct scope via MCP (e.g. `persona.get` by persona_id) when needed (e.g. when validating or resolving job context).
   For bundles, per-task context is embedded in the job payload; the SBA does not fetch task details from the orchestrator when advancing to the next task.
@@ -351,7 +351,7 @@ Promotion of this behavior into the canonical **pma_task_creation_skill** and **
 When this proposal is accepted, the following updates are recommended:
 
 - **Area:** Task vs job terminology (existing specs)
-  - document: orchestrator.md, cynode_sba.md, postgres_schema.md, langgraph_mvp.md, worker_api.md, mcp_tool_catalog.md (sandbox/job tools)
+  - document: orchestrator.md, cynode_sba.md, postgres_schema.md, langgraph_mvp.md, worker_api.md, mcp_tools/ (sandbox/job tools)
   - change: Ensure the **task** (durable work item, tasks table, one persona, plan/dependencies) vs **job** (execution unit dispatched to a worker, jobs table, job payload consumed by SBA) distinction is explicit where these concepts are introduced or used.
     Add a short "Task vs job" subsection or reference in the spec index (_main.md) if no single canonical definition exists.
     In orchestrator.md: clarify that tasks are created and managed; jobs are created when dispatching to a node and carry the resolved task context.
@@ -404,7 +404,7 @@ When this proposal is accepted, the following updates are recommended:
   - change: Document that the orchestrator MUST be able to update system default personas on release (only orchestrator-seeded system rows; never admin-created system personas; match by stable key; update or insert); mechanism (bootstrap/startup/version-triggered) implementation-defined.
   - change: Document that admins MUST be able to create system-scoped personas (additive; do not overwrite defaults); admin-created system personas are used when there is no more specifically defined scope; implementation must distinguish seeded vs admin-created so release updates do not touch admin-created.
 - **Area:** MCP persona tools and gateways
-  - document: mcp_tool_catalog.md / mcp_gateway_enforcement.md
+  - document: mcp_tools/README.md / mcp_gateway_enforcement.md
   - change: State that PMA and PAA MUST be able to use persona.list and persona.get for listing personas for selection when assigning/creating tasks and for resolving persona by id; when they run on a worker they MUST go through the worker proxy.
   - change: State that all agents running on worker nodes (including PMA/PAA when co-located with a worker, SBA) MUST use the worker proxy to reach the orchestrator MCP gateway.
   - change: State that SBA MUST be able to get a persona for the correct scope via MCP through the worker gateway; add persona.get (and optionally persona.list) to the Worker Agent (sandbox) allowlist so SBA can fetch persona when loading per-task context.
@@ -433,4 +433,4 @@ The following draft specs in `docs/draft_specs/` are related; this proposal alig
 ## Traceability Placeholders
 
 - Requirements: To be added in docs/requirements (AGENTS, PROJCT, and/or SCHEMA) after acceptance.
-- Existing specs: [cynode_sba.md](../tech_specs/cynode_sba.md), [project_manager_agent.md](../tech_specs/project_manager_agent.md), [postgres_schema.md](../tech_specs/postgres_schema.md), [skills_storage_and_inference.md](../tech_specs/skills_storage_and_inference.md), [mcp_tool_catalog.md](../tech_specs/mcp_tool_catalog.md), [mcp_gateway_enforcement.md](../tech_specs/mcp_gateway_enforcement.md), [pma_task_creation_skill](../../default_skills/pma_task_creation_skill.md).
+- Existing specs: [cynode_sba.md](../tech_specs/cynode_sba.md), [project_manager_agent.md](../tech_specs/project_manager_agent.md), [postgres_schema.md](../tech_specs/postgres_schema.md), [skills_storage_and_inference.md](../tech_specs/skills_storage_and_inference.md), [mcp_tools/](../tech_specs/mcp_tools/README.md), [mcp_gateway_enforcement.md](../tech_specs/mcp_gateway_enforcement.md), [pma_task_creation_skill](../../default_skills/pma_task_creation_skill.md).

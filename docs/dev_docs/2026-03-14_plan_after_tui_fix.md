@@ -10,18 +10,18 @@
 
 ## Goal
 
-This plan runs **after** [2026-03-14_cynork_tui_fix_plan.md](2026-03-14_cynork_tui_fix_plan.md) is complete.
-It addresses the outstanding work from [2026-03-12_plan_next_round_execution.md](2026-03-12_plan_next_round_execution.md) that remains once the TUI fix plan has closed BDD failures, coverage gaps, undefined steps, missing slash commands, spec-compliance gaps, project stubs, and lint suppressions.
+This plan runs **after** `2026-03-14_cynork_tui_fix_plan.md` (doc removed) is complete.
+It addresses the outstanding work from `2026-03-12_plan_next_round_execution.md` (doc removed) that remains once the TUI fix plan has closed BDD failures, coverage gaps, undefined steps, missing slash commands, spec-compliance gaps, project stubs, and lint suppressions.
 Outcome: end-to-end interactive streaming, minimum MCP-in-the-loop for PMA chat, TUI auth recovery and UX completion, full BDD and PTY validation, then worker docs and remaining MVP Phase 2 work.
 
 ## Prerequisite
 
-- [ ] [2026-03-14_cynork_tui_fix_plan.md](2026-03-14_cynork_tui_fix_plan.md) is complete: `just ci` passes, 0 BDD failures, all packages at or above 90% coverage, only one allowed `//nolint` remains.
+- [ ] `2026-03-14_cynork_tui_fix_plan.md` (doc removed) is complete: `just ci` passes, 0 BDD failures, all packages at or above 90% coverage, only one allowed `//nolint` remains.
 - [ ] Do not start this plan until the prerequisite is verified.
 
 ## References
 
-- [2026-03-12_plan_next_round_execution.md](2026-03-12_plan_next_round_execution.md) (source of outstanding work; Phases 3-8 unchecked items).
+- `2026-03-12_plan_next_round_execution.md` (doc removed; source of outstanding work; Phases 3-8 unchecked items).
 - [docs/requirements/client.md](../requirements/client.md), [docs/requirements/usrgwy.md](../requirements/usrgwy.md), [docs/requirements/pmagnt.md](../requirements/pmagnt.md), [docs/requirements/orches.md](../requirements/orches.md).
 - [docs/tech_specs/openai_compatible_chat_api.md](../tech_specs/openai_compatible_chat_api.md) (streaming), [docs/tech_specs/chat_threads_and_messages.md](../tech_specs/chat_threads_and_messages.md) (thinking persistence), [docs/tech_specs/cynode_pma.md](../tech_specs/cynode_pma.md) (streaming, MCP), [docs/tech_specs/cynork_tui.md](../tech_specs/cynork_tui.md), [docs/tech_specs/mcp_gateway_enforcement.md](../tech_specs/mcp_gateway_enforcement.md).
 - Implementation: gateway, orchestrator handlers, cynork/internal/chat (transport), cynork/internal/tui, agents/internal/pma, scripts/test_scripts (PTY harness).
@@ -78,7 +78,7 @@ Deliver `stream=true` on both interactive chat surfaces, client-driven cancellat
 
 - [REQ-USRGWY-0149](../requirements/usrgwy.md), [REQ-USRGWY-0150](../requirements/usrgwy.md), [REQ-PMAGNT-0118](../requirements/pmagnt.md), [REQ-CLIENT-0209](../requirements/client.md).
 - [CYNAI.USRGWY.OpenAIChatApi.Streaming](../tech_specs/openai_compatible_chat_api.md), [CYNAI.PMAGNT.StreamingAssistantOutput](../tech_specs/cynode_pma.md), [CYNAI.CLIENT.CynorkTui.GenerationState](../tech_specs/cynork_tui.md).
-- [2026-03-12](2026-03-12_plan_next_round_execution.md) Phase 3 "Required Backend Validation Before TUI Wiring" and Phase 4 "Transport and Rendering Seams" (streaming and cancellation bullets); Phase 5 "Core TUI Experience" (streaming slice); Phase 6 streaming and cancellation coverage.
+- 2026-03-12 plan (doc removed) Phase 3 "Required Backend Validation Before TUI Wiring" and Phase 4 "Transport and Rendering Seams" (streaming and cancellation bullets); Phase 5 "Core TUI Experience" (streaming slice); Phase 6 streaming and cancellation coverage.
 
 #### Discovery (Task 1) Steps
 
@@ -139,7 +139,7 @@ Pull forward the minimum MCP gateway allow-path and PMA chat tool set so PMA cha
 
 - [REQ-PMAGNT-0106](../requirements/pmagnt.md), [REQ-PMAGNT-0107](../requirements/pmagnt.md).
 - [CYNAI.MCPGAT.PmAgentAllowlist](../tech_specs/mcp_gateway_enforcement.md), [CYNAI.PMAGNT.McpToolAccess](../tech_specs/cynode_pma.md), [CYNAI.AGENTS.PMLlmToolImplementation](../tech_specs/project_manager_agent.md).
-- [2026-03-12](2026-03-12_plan_next_round_execution.md) Phase 3 "Minimum MCP Slice for PMA Thinking Models".
+- 2026-03-12 plan (doc removed) Phase 3 "Minimum MCP Slice for PMA Thinking Models".
 
 #### Discovery (Task 2) Steps
 
@@ -192,7 +192,7 @@ Optionally align interactive `cynork chat` with the fullscreen TUI entry flow wh
 
 - [docs/requirements/client.md](../requirements/client.md) (auth recovery, in-session model/project).
 - [docs/tech_specs/cynork_tui.md](../tech_specs/cynork_tui.md) (auth recovery, status bar, in-session switches).
-- [2026-03-12](2026-03-12_plan_next_round_execution.md) Phase 5 "Auth Recovery", "Thread and Session UX" (project/model in-session), "Tandem TUI and Harness Validation", "TUI Chat-Complete Exit".
+- 2026-03-12 plan (doc removed) Phase 5 "Auth Recovery", "Thread and Session UX" (project/model in-session), "Tandem TUI and Harness Validation", "TUI Chat-Complete Exit".
 
 #### Discovery (Task 3) Steps
 
@@ -251,7 +251,7 @@ Add or complete BDD and PTY coverage for auth recovery, both chat surfaces, inte
 
 - [docs/requirements/client.md](../requirements/client.md), [docs/requirements/usrgwy.md](../requirements/usrgwy.md).
 - [docs/tech_specs/cynork_tui.md](../tech_specs/cynork_tui.md).
-- [2026-03-12](2026-03-12_plan_next_round_execution.md) Phase 6 TUI Validation and BDD (unchecked items).
+- 2026-03-12 plan (doc removed) Phase 6 TUI Validation and BDD (unchecked items).
 
 #### Discovery (Task 4) Steps
 
@@ -301,7 +301,7 @@ Ensure the promoted worker deployment docs clearly distinguish normative deploym
 #### Task 5 Requirements and Specifications
 
 - [docs/requirements/worker.md](../requirements/worker.md), [docs/tech_specs/worker_node.md](../tech_specs/worker_node.md).
-- [2026-03-12](2026-03-12_plan_next_round_execution.md) Phase 8 Worker Deployment Simplification Docs.
+- 2026-03-12 plan (doc removed) Phase 8 Worker Deployment Simplification Docs.
 
 #### Discovery (Task 5) Steps
 
@@ -342,7 +342,7 @@ Resume non-TUI MVP Phase 2 implementation only after the first usable TUI path i
 #### Task 6 Requirements and Specifications
 
 - [docs/mvp_plan.md](../mvp_plan.md), [docs/requirements/pmagnt.md](../requirements/pmagnt.md), [docs/requirements/orches.md](../requirements/orches.md).
-- [2026-03-12](2026-03-12_plan_next_round_execution.md) Phase 7 Remaining MVP Phase 2 Work.
+- 2026-03-12 plan (doc removed) Phase 7 Remaining MVP Phase 2 Work.
 
 #### Discovery (Task 6) Steps
 
@@ -392,7 +392,7 @@ Update cross-cutting docs and confirm no required follow-up work was left undocu
 
 #### Task 7 Requirements and Specifications
 
-- This plan and [2026-03-12_plan_next_round_execution.md](2026-03-12_plan_next_round_execution.md).
+- This plan and `2026-03-12_plan_next_round_execution.md` (doc removed).
 
 #### Discovery (Task 7) Steps
 

@@ -60,8 +60,11 @@ Bootstrap YAML SHOULD support seeding:
 - External model routing defaults (allowed providers and fallback order)
 - Project Manager model selection defaults (automatic policy parameters and optional explicit override)
 - Orchestrator-side agent external provider defaults (Project Manager and Project Analyst routing preferences)
+- **Default API endpoints:** A default set of MCP (or other API) endpoints that are loaded into the endpoint registry at bootstrap.
+  Each entry has a stable slug (e.g. `builtin-git`, `builtin-filesystem`), `owner_type=system`, `scope=shared`; credentials come from environment or secrets manager, not from YAML.
+  The endpoint registry and default-endpoint behavior are specified in the MCP Endpoint Registry spec (when adopted).
 
-Preference entry shape (recommended)
+### Preference Entry Shape
 
 - `preferences` is an array of objects.
 - Each object SHOULD include:
@@ -69,7 +72,7 @@ Preference entry shape (recommended)
   - `value` (YAML value; written as jsonb)
   - `value_type` (string; one of: string|number|boolean|object|array)
 
-System settings entry shape (recommended)
+### System Settings Entry Shape
 
 - `system_settings` is an array of objects.
 - Each object SHOULD include:
@@ -77,12 +80,12 @@ System settings entry shape (recommended)
   - `value` (YAML value)
   - `value_type` (string; one of: string|number|boolean|object|array)
 
-Storage
+### System Settings Storage
 
 - Imported system settings SHOULD be written to the `system_settings` table in PostgreSQL.
   See [`docs/tech_specs/postgres_schema.md`](postgres_schema.md).
 
-Project Manager model selection system setting keys (MVP)
+### Project Manager Model Selection System Setting Keys
 
 Semantics and the selection/warmup algorithm are defined in [Project Manager Model (Startup Selection and Warmup)](orchestrator.md#spec-cynai-orches-projectmanagermodelstartup); only key names and recommended values are listed here.
 
@@ -91,14 +94,14 @@ Semantics and the selection/warmup algorithm are defined in [Project Manager Mod
 - `agents.project_manager.model.selection.prefer_orchestrator_host` (boolean); default true
 - `agents.project_manager.model.local_default_ollama_model` (string); when set, pins the local PM model name; when unset, selection is automatic (see orchestrator spec)
 
-Project Manager sandbox (allowed images)
+### Project Manager Sandbox Allowed Images
 
 - `agents.project_manager.sandbox.allow_add_to_allowed_images` (boolean); default `false`
   - When `true`, the Project Manager agent MAY add container images to the allowed-images list via MCP tools (`sandbox.allowed_images.add`).
   - When `false` (default), the PM agent MUST NOT add images; the MCP gateway MUST reject `sandbox.allowed_images.add` calls from the PM agent.
-  - See [`docs/tech_specs/sandbox_image_registry.md`](sandbox_image_registry.md) and [`docs/tech_specs/mcp_tool_catalog.md`](mcp_tool_catalog.md).
+  - See [sandbox_image_registry.md](sandbox_image_registry.md) and [mcp_tools/](mcp_tools/README.md).
 
-Secrets
+### Secrets Management
 
 - Secrets SHOULD NOT be stored directly in YAML.
 - If secrets must be provisioned at bootstrap time, they SHOULD be provided via environment variables or an external secrets manager and written to PostgreSQL encrypted.

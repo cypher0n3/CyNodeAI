@@ -97,7 +97,7 @@ It uses a central orchestrator to coordinate node-local workers, sandboxed execu
 - MCP tooling: [`docs/tech_specs/mcp_tooling.md`](mcp_tooling.md)
 - MCP gateway enforcement: [`docs/tech_specs/mcp_gateway_enforcement.md`](mcp_gateway_enforcement.md)
 - User-installable MCP tools: [`docs/tech_specs/user_installable_mcp_tools.md`](user_installable_mcp_tools.md)
-- MCP tool catalog: [`docs/tech_specs/mcp_tool_catalog.md`](mcp_tool_catalog.md)
+- MCP tool specifications: [`docs/tech_specs/mcp_tools/`](mcp_tools/README.md)
 - MCP tool call auditing: [`docs/tech_specs/mcp_tool_call_auditing.md`](mcp_tool_call_auditing.md)
 - MCP SDK installation: [`docs/tech_specs/mcp_sdk_installation.md`](mcp_sdk_installation.md)
 - Go REST API standards: [`docs/tech_specs/go_rest_api_standards.md`](go_rest_api_standards.md)

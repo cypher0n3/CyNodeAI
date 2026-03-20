@@ -96,7 +96,7 @@ Technical specifications: [`docs/tech_specs/projects_and_scopes.md`](../tech_spe
 - **REQ-PROJCT-0119:** The system MUST store plan revisions so users can view plan change history (e.g. per-revision snapshot or delta).
   Revisions MUST be created when the plan document, task list, or task dependencies change; storage format and retention are prescribed in tech specs.
   [CYNAI.ACCESS.ProjectPlanRevisions](../tech_specs/projects_and_scopes.md#spec-cynai-access-projectplanrevisions)
-  [CYNAI.SCHEMA.ProjectPlanRevisionsTable](../tech_specs/postgres_schema.md#spec-cynai-schema-projectplanrevisionstable)
+  [CYNAI.SCHEMA.ProjectPlanRevisionsTable](../tech_specs/projects_and_scopes.md#spec-cynai-schema-projectplanrevisionstable)
   <a id="req-projct-0119"></a>
 - **REQ-PROJCT-0120:** Users MUST be able to review project plans and approve (or re-approve) plans via client tools (Web Console, CLI, or API).
   Review includes viewing the plan document and task list and viewing plan revision history.
@@ -123,9 +123,9 @@ Technical specifications: [`docs/tech_specs/projects_and_scopes.md`](../tech_spe
   Archived plans MUST NOT run workflow (the workflow start gate MUST deny workflow start for tasks in an archived plan).
   Archived plans MUST NOT be the active plan (the API MUST reject setting a plan to active when archived = true, and MUST reject setting archived = true while the plan is active; the plan must be suspended or canceled first).
   [CYNAI.ACCESS.ProjectPlanState](../tech_specs/projects_and_scopes.md#spec-cynai-access-projectplanstate)
-  [CYNAI.SCHEMA.ProjectPlansTable](../tech_specs/postgres_schema.md#spec-cynai-schema-projectplanstable)
+  [CYNAI.SCHEMA.ProjectPlansTable](../tech_specs/projects_and_scopes.md#spec-cynai-schema-projectplanstable)
   <a id="req-projct-0124"></a>
 - **REQ-PROJCT-0125:** Plans and tasks MAY reference project-scoped specifications via the specifications table and join tables (plan_specifications, task_specifications); resolution and attach/detach MUST follow the SpecificationObject contract and ResolveSpecificationsForPlanOrTask algorithm.
-  [CYNAI.SCHEMA.SpecificationObjectContract](../tech_specs/postgres_schema.md#spec-cynai-schema-specificationobjectcontract)
-  [CYNAI.SCHEMA.ResolveSpecificationsForPlanOrTask](../tech_specs/postgres_schema.md#spec-cynai-schema-resolvespecificationsforplanortask)
+  [CYNAI.SCHEMA.SpecificationObjectContract](../tech_specs/projects_and_scopes.md#spec-cynai-schema-specificationobjectcontract)
+  [CYNAI.SCHEMA.ResolveSpecificationsForPlanOrTask](../tech_specs/projects_and_scopes.md#spec-cynai-schema-resolvespecificationsforplanortask)
   <a id="req-projct-0125"></a>

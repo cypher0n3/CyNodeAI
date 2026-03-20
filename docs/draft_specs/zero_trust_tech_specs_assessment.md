@@ -159,13 +159,15 @@ Access control and RBAC specify policy evaluation and default-deny, but do not e
 MCP gateway and edge enforcement use allowlists and capability leases.
 The **principle of least privilege** is not explicitly stated in the access control or MCP gateway specs (e.g. grants should be minimal in scope and time).
 
-- [`docs/tech_specs/mcp_gateway_enforcement.md`](../tech_specs/mcp_gateway_enforcement.md): capability leases are short-lived and least-privilege; role allowlists are coarse; no overarching "least privilege" requirement in access_control or rbac_and_groups.
+- [`docs/tech_specs/mcp_gateway_enforcement.md`](../tech_specs/mcp_gateway_enforcement.md): capability leases are short-lived and least-privilege; no overarching "least privilege" requirement in access_control or rbac_and_groups.
+- [`docs/tech_specs/mcp_tools/access_allowlists_and_scope.md`](../tech_specs/mcp_tools/access_allowlists_and_scope.md): role allowlists are coarse.
 
 #### 5.2.1 Remediation - Least Privilege
 
 - In [`access_control.md`](../tech_specs/access_control.md) (Core Concepts or Policy Evaluation):
   - Add: **Access MUST be granted with minimum necessary scope** (subject, action, resource, and time); default-deny is the baseline; allow rules SHOULD be as specific as possible (e.g. by resource pattern, task, or time window).
-- In [`mcp_gateway_enforcement.md`](../tech_specs/mcp_gateway_enforcement.md): retain and emphasize that capability leases MUST be short-lived and least-privilege; add that tool allowlists SHOULD expose only the minimal set of tools required for the agent role.
+- In [`mcp_gateway_enforcement.md`](../tech_specs/mcp_gateway_enforcement.md): retain and emphasize that capability leases MUST be short-lived and least-privilege.
+- In [`access_allowlists_and_scope.md`](../tech_specs/mcp_tools/access_allowlists_and_scope.md): emphasize that tool allowlists SHOULD expose only the minimal set of tools required for the agent role.
 
 ### 5.3 Service-To-Service Authorization
 

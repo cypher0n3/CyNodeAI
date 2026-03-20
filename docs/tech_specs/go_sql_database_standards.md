@@ -7,6 +7,9 @@
   - [`GoSqlGorm` Preconditions](#gosqlgorm-preconditions)
   - [`GoSqlGorm` Outcomes](#gosqlgorm-outcomes)
   - [`GoSqlGorm` Error Conditions](#gosqlgorm-error-conditions)
+- [GORM Model Structure](#gorm-model-structure)
+  - [`GormModelStructure` Rule](#gormmodelstructure-rule)
+  - [Placement Rules](#placement-rules)
 - [Drivers and Backends](#drivers-and-backends)
 - [Relationship to Other Specs](#relationship-to-other-specs)
 
@@ -53,6 +56,38 @@ Raw `database/sql` or other ORMs MUST NOT be used for SQL persistence in this co
 
 - Use GORM's error handling; check `result.Error` and treat `gorm.ErrRecordNotFound` where appropriate.
 - Do not bypass GORM to run arbitrary raw SQL for normal CRUD; raw SQL is allowed only for DB-specific features (e.g. pgvector similarity) and MUST be isolated behind repository or query helpers.
+
+## GORM Model Structure
+
+Implementations MUST define persistent table models using a two-part structure: a **domain base struct** (the logical entity) and a **GORM record struct** (the type used for persistence and AutoMigrate) that embeds a shared UUID primary-key base and the domain struct.
+This keeps domain types reusable outside the database layer and ensures a single definition for identity and timestamps across tables.
+
+### `GormModelStructure` Rule
+
+- Spec ID: `CYNAI.STANDS.GormModelStructure` <a id="spec-cynai-stands-gormmodelstructure"></a>
+
+1. **Shared UUID base (e.g. GormModelUUID):** Define in `go_shared_libs`.
+   Fields: `ID uuid.UUID`, `CreatedAt time.Time`, `UpdatedAt time.Time`, `DeletedAt gorm.DeletedAt` with appropriate GORM and JSON tags.
+   GORM excludes rows where `DeletedAt` is set from default queries; use `db.Unscoped()` when including soft-deleted rows.
+2. **Domain base struct:** The logical entity (e.g. `MCPTool`, `User` fields without identity/timestamps).
+   It MAY carry GORM column tags and JSON tags so the same struct can be used for config (YAML/JSON) and for embedding in the record.
+   If the type is consumed only within the orchestrator, it MAY live in the orchestrator models package; if consumed by worker_node or shared contracts, it MUST live in `go_shared_libs` (see [Placement rules](#placement-rules)).
+3. **GORM record struct:** Embeds the shared UUID base and the domain base struct; implements `TableName()` when the table name is not the default.
+   Used for GORM `Create`, `Find`, `Updates`, and AutoMigrate.
+   MUST live only in the **database package** of the component that owns the table (e.g. `orchestrator/internal/database`).
+
+Example (conceptual): a record `MCPToolDefinitionRecord` embeds `GormModelUUID` and `MCPTool`; for runtime use the embedded domain struct (e.g. `r.MCPTool` or `r.Tools.Invocations`).
+
+### Placement Rules
+
+- **GormModelUUID (or equivalent):** Define in `go_shared_libs` and reuse across all UUID-keyed tables in all components (orchestrator, worker_node, etc.).
+- **Domain base struct:** In `go_shared_libs` when the type is used by more than the orchestrator (e.g. worker_node, shared API contracts); otherwise in the component's models package (e.g. `orchestrator/internal/models`).
+- **GORM record struct:** Only in the component's database package (e.g. `orchestrator/internal/database`).
+  Do not put record structs in `go_shared_libs` or in the models package; the database package is the single place that registers types with GORM and performs migrations.
+
+#### Traces to Requirements
+
+- [REQ-SCHEMA-0120](../requirements/schema.md#req-schema-0120)
 
 ## Drivers and Backends
 

@@ -1,5 +1,5 @@
 // Package pma provides langchaingo tools that call the orchestrator MCP gateway (PM allowlist).
-// See docs/tech_specs/mcp_tool_catalog.md and mcp_gateway_enforcement.md (PM agent allowlist).
+// See docs/tech_specs/mcp_tools/ and access_allowlists_and_scope.md (PM agent allowlist).
 package pma
 
 import (
@@ -28,7 +28,7 @@ func (m *MCPTool) Name() string { return "mcp_call" }
 // Description describes the PM allowlist tools (db., node., sandbox., artifact., etc.).
 func (m *MCPTool) Description() string {
 	return `Call the orchestrator MCP gateway (PM allowlist). Input JSON: {"tool_name": "NAME", "arguments": {...}}.
-Allowed tool_name: db.preference.get, db.preference.list, db.preference.effective, db.preference.create, db.preference.update, db.preference.delete, db.task.get, db.job.get, artifact.get, and others per mcp_tool_catalog.md.`
+Allowed tool_name: preference.get, preference.list, preference.effective, preference.create, preference.update, preference.delete, task.get, job.get, artifact.get, and others per mcp_tools/.`
 }
 
 // MsgMCPGatewayNotConfigured is returned when MCP gateway URL is not set.

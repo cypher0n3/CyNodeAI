@@ -126,11 +126,11 @@ SBA is invoked by PMA for task execution and reports execution results back to P
 - **Completion:** On success, failure, or timeout, the SBA MUST report completion (or failure as appropriate) via outbound call to the worker proxy to deliver the [Result contract](#result-contract) (and optionally artifact references or inline data); the worker proxy forwards to the orchestrator.
 - **Artifacts:** The SBA MAY upload attachments via MCP `artifact.put` (task-scoped) or stage files under `/job/artifacts/` for node-mediated delivery.
 - **Timeout extension:** The SBA MUST be able to request a time extension (e.g. via job-status callback or dedicated endpoint) up to the node maximum; remaining time or deadline MUST be available to the SBA for LLM context.
-  The exact mechanism (callback payload, MCP tool, or status API) is defined in the [Worker API](worker_api.md) and/or MCP tool catalog.
+  The exact mechanism (callback payload, MCP tool, or status API) is defined in the [Worker API](worker_api.md) and/or [MCP tool specifications](mcp_tools/README.md).
 
 ### MCP Tools Available to the SBA
 
-The SBA MAY invoke only tools on the [Worker Agent allowlist](mcp_gateway_enforcement.md#spec-cynai-mcpgat-workeragentallowlist) with sandbox (or both) scope:
+The SBA MAY invoke only tools on the [Worker Agent allowlist](mcp_tools/access_allowlists_and_scope.md#spec-cynai-mcpgat-workeragentallowlist) with sandbox (or both) scope:
 
 - **artifact.*** - `artifact.put`, `artifact.get`, `artifact.list` (task-scoped).
 - **memory.*** - `memory.add`, `memory.list`, `memory.retrieve`, `memory.delete` (job-scoped; see [Temporary Memory](#spec-cynai-sbagnt-temporarymemory)).
@@ -143,7 +143,7 @@ The SBA MAY invoke only tools on the [Worker Agent allowlist](mcp_gateway_enforc
 Explicitly disallowed: `db.*`, `node.*`, `sandbox.*`.
 User-installed tools with sandbox scope MAY be added per [MCP Tool Access](#mcp-tool-access-sandbox-allowlist).
 
-See [mcp_tool_catalog.md](mcp_tool_catalog.md) and [mcp_gateway_enforcement.md](mcp_gateway_enforcement.md).
+See [mcp_tools/](mcp_tools/README.md) and [mcp_gateway_enforcement.md](mcp_gateway_enforcement.md).
 
 ## Execution Model
 
@@ -189,12 +189,12 @@ Contract alignment
 - For SBA-runner jobs, the job spec consumed by `cynode-sba` (e.g. `job.json`) MUST include `job_id` and `task_ids` and MUST be produced or validated by the orchestrator/PM so that result storage and auditing can correlate with the Worker API response.
 - The node MAY build the Worker API response (status, stdout/stderr, timing) from the container exit code and/or from the SBA result object so that the orchestrator receives a single, consistent result for the job.
 
-Sandbox orchestration from the PM agent uses MCP tools (`sandbox.create`, `sandbox.exec`, etc.) per [mcp_tool_catalog.md](mcp_tool_catalog.md#spec-cynai-mcptoo-sandboxtools); the **content** of a sandbox run may be a `cynode-sba` job when the image is the SBA runner and the command/entrypoint invokes `cynode-sba`.
+Sandbox orchestration from the PM agent uses MCP tools (`sandbox.create`, `sandbox.exec`, etc.) per [Sandbox tools](mcp_tools/sandbox_tools.md); the **content** of a sandbox run may be a `cynode-sba` job when the image is the SBA runner and the command/entrypoint invokes `cynode-sba`.
 
 ### See Also (SBA Overview)
 
 - [`docs/tech_specs/worker_api.md`](worker_api.md)
-- [`docs/tech_specs/mcp_tool_catalog.md`](mcp_tool_catalog.md#spec-cynai-mcptoo-sandboxtools)
+- [Sandbox tools](mcp_tools/sandbox_tools.md)
 
 ### Job Lifecycle and Status Reporting
 
@@ -246,7 +246,7 @@ The SBA MUST be able to **request a time extension** for the current job (e.g. v
 The orchestrator or node MAY grant or deny the request.
 When granted, the job's effective deadline is extended; the node (or orchestrator) MUST enforce the new deadline.
 When an extension is granted, the **orchestrator** MUST be informed of the new effective deadline so it can update its [job timeout tracking](orchestrator.md#spec-cynai-orches-taskscheduler) and scheduled timeout check; otherwise the orchestrator may incorrectly mark the job as timed out.
-The mechanism (e.g. MCP tool or field on the job-status callback, or node status update to orchestrator) is defined in the Worker API and/or MCP tool catalog.
+The mechanism (e.g. MCP tool or field on the job-status callback, or node status update to orchestrator) is defined in the Worker API and/or [MCP tool specifications](mcp_tools/README.md).
 
 #### Timeout Extension Traces To
 
@@ -265,10 +265,10 @@ The job spec or runtime-injected context SHOULD include `deadline` or `remaining
 
 - Spec ID: `CYNAI.SBAGNT.TemporaryMemory` <a id="spec-cynai-sbagnt-temporarymemory"></a>
 
-The SBA MUST have a method to **store and retrieve temporary memories** during job processing, scoped to the task/job (e.g. MCP tools `memory.add`, `memory.list`, `memory.retrieve`, and `memory.delete` per [MCP tool catalog - Memory tools](mcp_tool_catalog.md#spec-cynai-mcptoo-memorytoolsjobscoped)), so it can persist working state across steps and LLM calls.
+The SBA MUST have a method to **store and retrieve temporary memories** during job processing, scoped to the task/job (e.g. MCP tools `memory.add`, `memory.list`, `memory.retrieve`, and `memory.delete` per [Memory tools](mcp_tools/memory_tools.md)), so it can persist working state across steps and LLM calls.
 These memories are **job-scoped** (or task-scoped) and MUST NOT persist beyond the job (or task) unless explicitly promoted to artifacts or long-term storage.
-Size limits and retention (e.g. max entries, max size per entry, TTL = job lifetime) are defined in the MCP tool catalog and enforced by the gateway.
-The [Worker Agent allowlist](mcp_gateway_enforcement.md#spec-cynai-mcpgat-workeragentallowlist) MUST include these memory tools for sandbox-scoped use.
+Size limits and retention (e.g. max entries, max size per entry, TTL = job lifetime) are defined in [Memory tools](mcp_tools/memory_tools.md) (see [MCP tool specifications](mcp_tools/README.md)) and enforced by the gateway.
+The [Worker Agent allowlist](mcp_tools/access_allowlists_and_scope.md#spec-cynai-mcpgat-workeragentallowlist) MUST include these memory tools for sandbox-scoped use.
 
 ### Worker Proxies (Inference and Web Egress)
 
@@ -668,7 +668,7 @@ Sandboxed containers that run `cynode-sba` have a well-defined shape:
 
 - Spec ID: `CYNAI.SBAGNT.McpToolAccess` <a id="spec-cynai-sbagnt-mcptoolaccess"></a>
 
-Sandbox agents (including `cynode-sba` when operating as an agent that can call tools) MUST use MCP tools only through the **orchestrator MCP gateway** and MUST invoke only tools that are on the **sandbox (worker) allowlist** and designated as available to sandbox agents in the orchestrator's per-tool scope (see [Per-tool scope: Sandbox vs PM](mcp_gateway_enforcement.md#spec-cynai-mcpgat-pertoolscope)).
+Sandbox agents (including `cynode-sba` when operating as an agent that can call tools) MUST use MCP tools only through the **orchestrator MCP gateway** and MUST invoke only tools that are on the **sandbox (worker) allowlist** and designated as available to sandbox agents in the orchestrator's per-tool scope (see [Per-tool scope: Sandbox vs PM](mcp_tools/access_allowlists_and_scope.md#spec-cynai-mcpgat-pertoolscope)).
 When making MCP requests, the sandbox agent calls the **worker proxy** (e.g. worker-mediated MCP URL); the agent MUST NOT receive or present an agent token.
 The **worker proxy** holds the sandbox agent token (issued by the orchestrator for that sandbox context, delivered to the worker) and attaches it when forwarding requests to the orchestrator MCP gateway; the token MUST be bound to task_id, project_id, and session scope, and MUST be associated with the user (e.g. task creator).
 See [Agent-Scoped Tokens or API Keys](mcp_gateway_enforcement.md#spec-cynai-mcpgat-agentscopedtokens).
@@ -678,7 +678,7 @@ The gateway authenticates the token and restricts tool access to the sandbox all
 
 Sandbox allowlist (built-in)
 
-- The gateway MUST allow sandbox agents to invoke only tools in the [Worker Agent allowlist](mcp_gateway_enforcement.md#spec-cynai-mcpgat-workeragentallowlist): at least `artifact.*` (scoped to current task), including `artifact.put` for uploading attachments, and `artifact.get`, `artifact.list`; `skills.list` and `skills.get` (read-only skill fetch when allowed by policy); `web.fetch`, `web.search`, `api.call` (via API Egress when allowed for the task); and `help.*`.
+- The gateway MUST allow sandbox agents to invoke only tools in the [Worker Agent allowlist](mcp_tools/access_allowlists_and_scope.md#spec-cynai-mcpgat-workeragentallowlist): at least `artifact.*` (scoped to current task), including `artifact.put` for uploading attachments, and `artifact.get`, `artifact.list`; `skills.list` and `skills.get` (read-only skill fetch when allowed by policy); `web.fetch`, `web.search`, `api.call` (via API Egress when allowed for the task); and `help.*`.
   The gateway MUST NOT allow sandbox agents to invoke `db.*`, `node.*`, or `sandbox.*`.
   Sandbox agents MUST NOT invoke `skills.create`, `skills.update`, or `skills.delete`; only read tools are on the worker allowlist.
 
@@ -690,7 +690,7 @@ User-installed tools
 ### See Also (Tool Scope)
 
 - [`docs/tech_specs/mcp_gateway_enforcement.md`](mcp_gateway_enforcement.md)
-- [`docs/tech_specs/mcp_tool_catalog.md`](mcp_tool_catalog.md)
+- [`docs/tech_specs/mcp_tools/`](mcp_tools/README.md)
 
 ## SBA Container Image (Containerfile)
 

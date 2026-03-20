@@ -46,7 +46,7 @@ This document defines how the system stores and tracks AI skills files and makes
 Skills are persisted in a versioned store, registered with metadata for discovery, and exposed to inference via stable identifiers or resolved content.
 
 This document is the **single source of truth** for skills behavior and contracts (store, registry, CRUD, MCP tool `skills.create`, auditing).
-Other docs (requirements, CLI, admin console, MCP tool catalog) reference this spec and MUST NOT duplicate argument schemas, behavior, or control rules.
+Other docs (requirements, CLI, admin console, [MCP tool specifications](mcp_tools/README.md)) reference this spec and MUST NOT duplicate argument schemas, behavior, or control rules.
 
 ### Traces to Requirements
 
@@ -264,7 +264,7 @@ Related specs
 - [REQ-SKILLS-0114](../requirements/skills.md#req-skills-0114)
 
 Models (agents) can perform full CRUD on skills for the user when directed.
-All skill tools are routed through the orchestrator MCP gateway; identity, role-based allowlists, and access control apply (see [MCP Gateway Enforcement](mcp_gateway_enforcement.md)).
+All skill tools are routed through the orchestrator MCP gateway; identity, role-based allowlists, and access control apply (see [Access, allowlists, and per-tool scope](mcp_tools/access_allowlists_and_scope.md) and [MCP Gateway Enforcement](mcp_gateway_enforcement.md)).
 Same controls as web and CLI: auditing on write, default user scope, scope elevation only with permission; list/get return only skills the caller is entitled to see; update/delete require authorization (owner or admin).
 All invocations MUST be audited per [MCP tool call auditing](mcp_tool_call_auditing.md).
 
@@ -306,7 +306,7 @@ All invocations MUST be audited per [MCP tool call auditing](mcp_tool_call_audit
 Related specs
 
 - MCP gateway: [`docs/tech_specs/mcp_gateway_enforcement.md`](mcp_gateway_enforcement.md)
-- MCP tool catalog: lists all skills tool names for allowlist/discovery; [catalog Skills Tools section](mcp_tool_catalog.md#spec-cynai-mcptoo-skillstools) references this spec as the source of truth for contract and behavior.
+- [MCP tool specifications](mcp_tools/README.md): index of tool specs; [Skills tools](mcp_tools/skills_tools.md) lists skills tool names for allowlist/discovery and references this spec as the source of truth for contract and behavior.
 - Skill auditing: [Skill Auditing (Malicious Pattern Scanning)](#skill-auditing-malicious-pattern-scanning)
 
 ## Skill Auditing (Malicious Pattern Scanning)

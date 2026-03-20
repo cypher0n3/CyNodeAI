@@ -4,6 +4,10 @@
 - [Goals](#goals)
 - [Threat Model](#threat-model)
 - [Identity and Account Model](#identity-and-account-model)
+- [Postgres Schema](#postgres-schema)
+  - [Users Table](#users-table)
+  - [Password Credentials Table](#password-credentials-table)
+  - [Refresh Sessions Table](#refresh-sessions-table)
 - [Authentication Model](#authentication-model)
   - [Per-Request Token Validation](#per-request-token-validation)
 - [Authorization and RBAC Integration](#authorization-and-rbac-integration)
@@ -17,8 +21,6 @@
 
 This document defines secure handling of local user accounts for CyNodeAI.
 Local user accounts are the MVP default authentication mechanism for self-hosted deployments.
-The Postgres schema is defined in [`docs/tech_specs/postgres_schema.md`](postgres_schema.md).
-See [Identity and Authentication](postgres_schema.md#spec-cynai-schema-identityauth) and [Audit Logging](postgres_schema.md#spec-cynai-schema-auditlogging).
 
 ## Goals
 
@@ -54,7 +56,16 @@ The following requirements apply.
 - [REQ-IDENTY-0101](../requirements/identy.md#req-identy-0101)
 - [REQ-IDENTY-0102](../requirements/identy.md#req-identy-0102)
 
-Recommended users table
+## Postgres Schema
+
+- Spec ID: `CYNAI.SCHEMA.IdentityAuth` <a id="spec-cynai-schema-identityauth"></a>
+
+The orchestrator stores users and local auth state in PostgreSQL.
+Credentials and refresh tokens are stored as hashes.
+
+### Users Table
+
+- Spec ID: `CYNAI.SCHEMA.UsersTable` <a id="spec-cynai-schema-userstable"></a>
 
 - `id` (uuid, pk)
 - `handle` (text, unique)
@@ -64,6 +75,54 @@ Recommended users table
 - `external_id` (text, nullable)
 - `created_at` (timestamptz)
 - `updated_at` (timestamptz)
+
+#### Users Table Constraints
+
+- Index: (`handle`)
+- Index: (`email`) where not null
+- Index: (`is_active`)
+
+#### Reserved Identities
+
+- The handle `system` is reserved.
+  The orchestrator ensures a corresponding `users` row exists (the "system user") and uses that user id for attribution when an action is performed by the system and no human actor applies (for example `tasks.created_by` for system-created tasks).
+  User creation rejects attempts to create or rename a user to `handle=system`.
+
+### Password Credentials Table
+
+- Spec ID: `CYNAI.SCHEMA.PasswordCredentialsTable` <a id="spec-cynai-schema-passwordcredentialstable"></a>
+
+- `id` (uuid, pk)
+- `user_id` (uuid, fk to `users.id`)
+- `password_hash` (bytea)
+- `hash_alg` (text)
+  - examples: argon2id, bcrypt
+- `created_at` (timestamptz)
+- `updated_at` (timestamptz)
+
+#### Password Credentials Table Constraints
+
+- Unique: (`user_id`) (one password credential per user in MVP)
+- Index: (`user_id`)
+
+### Refresh Sessions Table
+
+- Spec ID: `CYNAI.SCHEMA.RefreshSessionsTable` <a id="spec-cynai-schema-refreshsessionstable"></a>
+
+- `id` (uuid, pk)
+- `user_id` (uuid, fk to `users.id`)
+- `refresh_token_hash` (bytea)
+- `refresh_token_kid` (text, nullable)
+- `is_active` (boolean)
+- `expires_at` (timestamptz)
+- `last_used_at` (timestamptz, nullable)
+- `created_at` (timestamptz)
+- `updated_at` (timestamptz)
+
+#### Refresh Sessions Table Constraints
+
+- Index: (`user_id`)
+- Index: (`is_active`, `expires_at`)
 
 ## Authentication Model
 
@@ -138,39 +197,12 @@ The following requirements apply.
 - [REQ-IDENTY-0111](../requirements/identy.md#req-identy-0111)
 - [REQ-IDENTY-0112](../requirements/identy.md#req-identy-0112)
 
-Recommended password hashing
+### Password Hashing
 
 - Use Argon2id with per-password salt and calibrated parameters.
 - Alternatively, use bcrypt with a cost appropriate for the deployment.
 
-Recommended credential tables
-
-### Password Credentials Table
-
-- `id` (uuid, pk)
-- `user_id` (uuid)
-  - foreign key to `users.id`
-- `password_hash` (bytea)
-- `hash_alg` (text)
-  - examples: argon2id, bcrypt
-- `created_at` (timestamptz)
-- `updated_at` (timestamptz)
-
-### Refresh Sessions Table
-
-- `id` (uuid, pk)
-- `user_id` (uuid)
-  - foreign key to `users.id`
-- `refresh_token_hash` (bytea)
-- `refresh_token_kid` (text, nullable)
-  - optional key id if using a pepper or envelope scheme
-- `is_active` (boolean)
-- `expires_at` (timestamptz)
-- `last_used_at` (timestamptz, nullable)
-- `created_at` (timestamptz)
-- `updated_at` (timestamptz)
-
-Notes
+### Credential Storage Notes
 
 - Refresh tokens SHOULD be stored as hashes so database exfiltration does not yield usable tokens.
 - Access tokens SHOULD be short-lived so revocation lag is bounded.

@@ -49,7 +49,7 @@ func NewMCPClient() *MCPClient {
 	}
 }
 
-// MCPCallRequest is the JSON body for POST /v1/mcp/tools/call (per mcp_tool_catalog.md).
+// MCPCallRequest is the JSON body for POST /v1/mcp/tools/call (per docs/tech_specs/mcp_tools/).
 type MCPCallRequest struct {
 	ToolName  string                 `json:"tool_name"`
 	Arguments map[string]interface{} `json:"arguments,omitempty"`

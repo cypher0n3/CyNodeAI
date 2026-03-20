@@ -5,6 +5,11 @@
 - [Goals](#goals)
 - [Core Concepts](#core-concepts)
 - [Group Membership Model](#group-membership-model)
+- [Postgres Schema](#postgres-schema)
+  - [Groups Table](#groups-table)
+  - [Group Memberships Table](#group-memberships-table)
+  - [Roles Table](#roles-table)
+  - [Role Bindings Table](#role-bindings-table)
 - [RBAC Model](#rbac-model)
 - [Policy Evaluation Integration](#policy-evaluation-integration)
 - [User API and Data REST Resources](#user-api-and-data-rest-resources)
@@ -20,8 +25,6 @@ This section defines stable Spec ID anchors for referencing this document.
 
 This document defines CyNodeAI role-based access control (RBAC) and how group membership is tracked for users.
 It complements the policy model in [`docs/tech_specs/access_control.md`](access_control.md) by defining subjects, roles, and membership resolution.
-The Postgres schema is defined in [`docs/tech_specs/postgres_schema.md`](postgres_schema.md).
-See [Groups and RBAC](postgres_schema.md#spec-cynai-schema-groupsrbac).
 
 ## Goals
 
@@ -61,43 +64,51 @@ The following requirements apply.
 - [REQ-ACCESS-0103](../requirements/access.md#req-access-0103)
 - [REQ-ACCESS-0104](../requirements/access.md#req-access-0104)
 
-Recommended tables
+## Postgres Schema
+
+- Spec ID: `CYNAI.SCHEMA.GroupsRbac` <a id="spec-cynai-schema-groupsrbac"></a>
+
+The orchestrator tracks groups, group membership, roles, and role bindings in PostgreSQL.
+Policy evaluation and auditing depend on these tables.
 
 ### Groups Table
+
+- Spec ID: `CYNAI.SCHEMA.GroupsTable` <a id="spec-cynai-schema-groupstable"></a>
 
 - `id` (uuid, pk)
 - `slug` (text, unique)
 - `display_name` (text)
 - `is_active` (boolean)
 - `external_source` (text, nullable)
-  - examples: entra_id, google_workspace, scim
 - `external_id` (text, nullable)
-  - stable identifier from the external system
-- `managed_by` (text, optional)
-  - examples: local, external_sync
+- `managed_by` (text, nullable)
 - `last_synced_at` (timestamptz, nullable)
 - `created_at` (timestamptz)
 - `updated_at` (timestamptz)
 - `updated_by` (text)
+
+#### Groups Table Constraints
+
+- Index: (`slug`)
+- Index: (`is_active`)
 
 ### Group Memberships Table
 
+- Spec ID: `CYNAI.SCHEMA.GroupMembershipsTable` <a id="spec-cynai-schema-groupmembershipstable"></a>
+
 - `id` (uuid, pk)
-- `group_id` (uuid)
-  - foreign key to `groups.id`
-- `user_id` (uuid)
-  - foreign key to `users.id`
+- `group_id` (uuid, fk to `groups.id`)
+- `user_id` (uuid, fk to `users.id`)
 - `is_active` (boolean)
 - `external_source` (text, nullable)
 - `external_id` (text, nullable)
-- `managed_by` (text, optional)
-  - examples: local, external_sync
+- `managed_by` (text, nullable)
 - `last_synced_at` (timestamptz, nullable)
 - `created_at` (timestamptz)
 - `updated_at` (timestamptz)
 - `updated_by` (text)
 
-Constraints
+#### Group Memberships Table Constraints
 
 - Unique: (`group_id`, `user_id`)
 - Index: (`group_id`)
@@ -119,9 +130,9 @@ The following requirements apply.
 - [REQ-ACCESS-0107](../requirements/access.md#req-access-0107)
 - [REQ-ACCESS-0108](../requirements/access.md#req-access-0108)
 
-Recommended role structure
-
 ### Roles Table
+
+- Spec ID: `CYNAI.SCHEMA.RolesTable` <a id="spec-cynai-schema-rolestable"></a>
 
 - `id` (uuid, pk)
 - `name` (text, unique)
@@ -130,27 +141,31 @@ Recommended role structure
 - `created_at` (timestamptz)
 - `updated_at` (timestamptz)
 
+#### Roles Table Constraints
+
+- Index: (`name`)
+
 ### Role Bindings Table
+
+- Spec ID: `CYNAI.SCHEMA.RoleBindingsTable` <a id="spec-cynai-schema-rolebindingstable"></a>
 
 - `id` (uuid, pk)
 - `subject_type` (text)
-  - one of: user|group
+  - one of: user, group
 - `subject_id` (uuid)
-- `role_id` (uuid)
-  - foreign key to `roles.id`
+- `role_id` (uuid, fk to `roles.id`)
 - `scope_type` (text)
-  - one of: system|project
+  - one of: system, project
 - `scope_id` (uuid, nullable)
   - null allowed only for system scope
 - `is_active` (boolean)
-- `managed_by` (text, optional)
-  - examples: local, external_sync
+- `managed_by` (text, nullable)
 - `last_synced_at` (timestamptz, nullable)
 - `created_at` (timestamptz)
 - `updated_at` (timestamptz)
 - `updated_by` (text)
 
-Constraints
+#### Role Bindings Table Constraints
 
 - Index: (`subject_type`, `subject_id`)
 - Index: (`role_id`)

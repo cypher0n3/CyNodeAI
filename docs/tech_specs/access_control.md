@@ -8,7 +8,7 @@
   - [`ProjectPlanActions` Contract](#projectplanactions-contract)
 - [Policy Evaluation](#policy-evaluation)
   - [Recommended Evaluation Order](#recommended-evaluation-order)
-- [Proposed Tables](#proposed-tables)
+- [Postgres Schema](#postgres-schema)
   - [Access Control Rules Table](#access-control-rules-table)
   - [Access Control Audit Log Table](#access-control-audit-log-table)
 - [Service Integration](#service-integration)
@@ -25,8 +25,6 @@ This section defines stable Spec ID anchors for referencing this document.
 This document defines access control policy for services that provide controlled capabilities to agents.
 It is intended to cover both the API Egress Server and the Secure Browser Service.
 For how users, groups, roles, and membership feed into subject resolution for policy evaluation, see [`docs/tech_specs/rbac_and_groups.md`](rbac_and_groups.md).
-The Postgres schema is defined in [`docs/tech_specs/postgres_schema.md`](postgres_schema.md).
-See [Access Control](postgres_schema.md#spec-cynai-schema-accesscontrol) and [Audit Logging](postgres_schema.md#spec-cynai-schema-auditlogging).
 
 ## Core Concepts
 
@@ -113,12 +111,16 @@ The orchestrator acts as the first gate, while the service acts as the final gat
 - If at least one allow rule matches and no deny rule matches, allow the request.
 - Otherwise, deny the request.
 
-## Proposed Tables
+## Postgres Schema
 
-These tables provide a simple, auditable policy model.
-They are a starting point and can be extended later.
+- Spec ID: `CYNAI.SCHEMA.AccessControl` <a id="spec-cynai-schema-accesscontrol"></a>
+
+Policy rules and access control audit log.
+Used by API Egress, Secure Browser, and other policy-enforcing services.
 
 ### Access Control Rules Table
+
+- Spec ID: `CYNAI.SCHEMA.AccessControlRulesTable` <a id="spec-cynai-schema-accesscontrolrulestable"></a>
 
 - `id` (uuid, pk)
 - `subject_type` (text)
@@ -132,7 +134,7 @@ They are a starting point and can be extended later.
 - `resource_pattern` (text)
   - exact match or pattern, depending on resource_type
 - `effect` (text)
-  - allow|deny
+  - allow or deny
 - `priority` (int)
   - higher wins when multiple rules match
 - `conditions` (jsonb, nullable)
@@ -141,7 +143,7 @@ They are a starting point and can be extended later.
 - `updated_at` (timestamptz)
 - `updated_by` (text)
 
-Constraints
+#### Access Control Rules Table Constraints
 
 - Index: (`subject_type`, `subject_id`)
 - Index: (`action`)
@@ -149,6 +151,8 @@ Constraints
 - Index: (`priority`)
 
 ### Access Control Audit Log Table
+
+- Spec ID: `CYNAI.SCHEMA.AccessControlAuditLogTable` <a id="spec-cynai-schema-accesscontrolauditlogtable"></a>
 
 - `id` (uuid, pk)
 - `subject_type` (text)
@@ -158,12 +162,12 @@ Constraints
 - `resource` (text)
   - normalized resolved resource, not the original pattern
 - `decision` (text)
-  - allow|deny
-- `reason` (text)
+  - allow or deny
+- `reason` (text, nullable)
 - `task_id` (uuid, nullable)
 - `created_at` (timestamptz)
 
-Constraints
+#### Access Control Audit Log Table Constraints
 
 - Index: (`created_at`)
 - Index: (`task_id`)

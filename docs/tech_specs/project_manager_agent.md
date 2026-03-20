@@ -314,7 +314,7 @@ Example: if both a global Agent persona and a user-scoped Agent persona exist wi
 The MCP contract for sandbox job creation (e.g. `sandbox.create`) MUST allow passing a persona by id or inline so the final job spec contains the inline persona.
 
 **PMA and PAA built-in Agent personas:** PMA and PAA MUST always use their own dedicated system-scoped (global) Agent personas for their identity/role when running; these are part of the global default Agent personas (see [cynode_sba.md - Persona on the Job](cynode_sba.md#spec-cynai-sbagnt-jobpersona)).
-See [cynode_sba.md - Persona on the Job](cynode_sba.md#spec-cynai-sbagnt-jobpersona) and [mcp_tool_catalog.md - Sandbox Tools](mcp_tool_catalog.md#spec-cynai-mcptoo-sandboxtools).
+See [cynode_sba.md - Persona on the Job](cynode_sba.md#spec-cynai-sbagnt-jobpersona) and [Sandbox tools](mcp_tools/sandbox_tools.md).
 
 **Task-level persona and skills:** When creating or updating tasks (e.g. via MCP task create/update), the PMA SHOULD set `persona_id` and optional `recommended_skill_ids` (array of skill stable identifiers) so the orchestrator job builder can resolve the persona and merge skills (persona default_skill_ids union task recommended_skill_ids) when building the job.
 Execution-ready tasks SHOULD have a `persona_id`; one persona per task.

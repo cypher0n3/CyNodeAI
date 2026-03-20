@@ -239,7 +239,7 @@ An orchestrator-level system setting controls whether the Project Manager agent 
   - Default: `false` (disabled).
   - When `true`, the PM agent MAY call the MCP tool `sandbox.allowed_images.add` to add an image reference to the allowed list; the orchestrator records it in the sandbox image registry and policy so nodes can pull and run it subject to existing policy.
   - When `false`, the MCP gateway MUST reject `sandbox.allowed_images.add` from the PM agent.
-- MCP capabilities for the PM agent are defined in [`docs/tech_specs/mcp_tool_catalog.md`](mcp_tool_catalog.md#spec-cynai-mcptoo-sandboxallowedimagespmagent).
+- MCP capabilities for the PM agent are defined in [Sandbox allowed images](mcp_tools/sandbox_allowed_images.md).
 - The setting is stored in `system_settings` (see [`docs/tech_specs/orchestrator_bootstrap.md`](orchestrator_bootstrap.md)).
 
 ## Future Work

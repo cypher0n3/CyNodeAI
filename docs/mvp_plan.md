@@ -305,13 +305,13 @@ There is no Phase 5 in [`docs/tech_specs/_main.md`](../docs/tech_specs/_main.md)
     - [`openai_compatible_chat_api.md`](../docs/tech_specs/openai_compatible_chat_api.md)
 
 - **P1.7-05 (4-8h): PMA/SBA instructions and context buildout (follow-on).**
-  - **Deliverable (a):** Shared Go package (or generated source) for MCP tool names/descriptions so PMA instructions and SBA baseline stay in sync with [`mcp_tool_catalog.md`](../docs/tech_specs/mcp_tool_catalog.md).
+  - **Deliverable (a):** Shared Go package (or generated source) for MCP tool names/descriptions so PMA instructions and SBA baseline stay in sync with [`mcp_tools/`](../docs/tech_specs/mcp_tools/README.md).
   - **Deliverable (b):** SBA loads baseline instructions from path (e.g. `agents/instructions/sandbox_agent/`) via shared LoadInstructions when job supplies path or for image-baked baseline.
   - **Deliverable (c):** Orchestrator chat call sites pass `project_id`, `task_id` (and `user_id`, additional_context as needed) in InternalChatCompletionRequest so PMA context composition can include project/task blocks.
   - **Specs**:
     - [`project_manager_agent.md`](../docs/tech_specs/project_manager_agent.md)
     - [`cynode_sba.md`](../docs/tech_specs/cynode_sba.md)
-    - [`mcp_tool_catalog.md`](../docs/tech_specs/mcp_tool_catalog.md)
+    - [`mcp_tools/`](../docs/tech_specs/mcp_tools/README.md)
 
 ### Phase 2 MCP in the Loop (Tool Enforcement and Auditing)
 
@@ -335,14 +335,14 @@ There is no Phase 5 in [`docs/tech_specs/_main.md`](../docs/tech_specs/_main.md)
   - **Specs**:
     - [`mcp_tool_call_auditing.md`](../docs/tech_specs/mcp_tool_call_auditing.md)
 
-- **P2-03 (4-8h): Implement the minimal MCP tool catalog slice for preferences (get, list, effective).**
+- **P2-03 (4-8h): Implement the minimal MCP tool specifications slice for preferences (get, list, effective).** (See [`mcp_tools/README.md`](tech_specs/mcp_tools/README.md).)
   - **Deliverable**: Tools `db.preference.get`, `db.preference.list`, and `db.preference.effective` exist with typed schemas and size-limited responses.
   - **Reqs**:
     - [`REQ-MCPTOO-0117`](../docs/requirements/mcptoo.md#req-mcptoo-0117)
     - [`REQ-MCPTOO-0109`](../docs/requirements/mcptoo.md#req-mcptoo-0109)
     - [`REQ-MCPTOO-0110`](../docs/requirements/mcptoo.md#req-mcptoo-0110)
   - **Specs**:
-    - [`mcp_tool_catalog.md`](../docs/tech_specs/mcp_tool_catalog.md)
+    - [`mcp_tools/`](../docs/tech_specs/mcp_tools/README.md)
     - [`user_preferences.md`](../docs/tech_specs/user_preferences.md)
 
 - **P2-09 (8-16h): Implement cynode-sba binary and SBA runner image.**

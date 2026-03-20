@@ -2,13 +2,23 @@
 
 - [Document Overview](#document-overview)
 - [MCP Role in CyNodeAI](#mcp-role-in-cynodeai)
+  - [MCP Role Applicable Requirements](#mcp-role-applicable-requirements)
+- [Goals (MVP Tool Surface)](#goals-mvp-tool-surface)
+- [Naming and Conventions](#naming-and-conventions)
+  - [Naming and Conventions Applicable Requirements](#naming-and-conventions-applicable-requirements)
+- [Common Argument Requirements](#common-argument-requirements)
+- [Response and Error Model](#response-and-error-model)
+  - [Recommended Fields](#recommended-fields)
+  - [Traces to Requirements (Response and Error)](#traces-to-requirements-response-and-error)
 - [Tool Categories](#tool-categories)
 - [Help MCP Server](#help-mcp-server)
+  - [Help MCP Server Requirements Traces](#help-mcp-server-requirements-traces)
 - [Role-Based Tool Access](#role-based-tool-access)
   - [Worker Agent Tool Access](#worker-agent-tool-access)
   - [Project Manager Agent Tool Access](#project-manager-agent-tool-access)
   - [Project Analyst Agent Tool Access](#project-analyst-agent-tool-access)
 - [Database Access Rules](#database-access-rules)
+  - [Database Access Rules Applicable Requirements](#database-access-rules-applicable-requirements)
 - [Access Control and Auditing](#access-control-and-auditing)
 - [Sandbox Connectivity Model](#sandbox-connectivity-model)
 
@@ -16,9 +26,10 @@
 
 This document defines how CyNodeAI uses MCP as the standard interface for agent tools.
 It covers tool categories, role-based access, and database access restrictions.
-Gateway enforcement, role allowlists, and **per-tool scope (sandbox vs PM)** are defined in [`docs/tech_specs/mcp_gateway_enforcement.md`](mcp_gateway_enforcement.md).
+Role allowlists and **per-tool scope (sandbox vs PM)** are defined in [`docs/tech_specs/mcp_tools/access_allowlists_and_scope.md`](mcp_tools/access_allowlists_and_scope.md).
+Gateway enforcement mechanics, tokens, edge mode, and auditing are in [`docs/tech_specs/mcp_gateway_enforcement.md`](mcp_gateway_enforcement.md).
 The orchestrator tracks for each tool whether it is available to sandbox agents, PM agents, or both; users can install custom MCP tools and set this per tool.
-The tool catalog is defined in [`docs/tech_specs/mcp_tool_catalog.md`](mcp_tool_catalog.md).
+The canonical MCP tool specifications (index and per-tool specs) are in [`docs/tech_specs/mcp_tools/`](mcp_tools/README.md).
 Tool call audit storage is defined in [`docs/tech_specs/mcp_tool_call_auditing.md`](mcp_tool_call_auditing.md).
 Practical SDK installation guidance is in [`docs/tech_specs/mcp_sdk_installation.md`](mcp_sdk_installation.md).
 
@@ -35,11 +46,70 @@ The orchestrator is the policy and routing point for tools.
 - The User API Gateway is intended for external user clients and integrations, not for internal agent operations.
 - Direct access to internal services and databases should be avoided and restricted by policy.
 
-#### Traces to Requirements
+#### Traces to Requirements (MCP Role)
 
 - [REQ-MCPTOO-0100](../requirements/mcptoo.md#req-mcptoo-0100)
 - [REQ-MCPTOO-0101](../requirements/mcptoo.md#req-mcptoo-0101)
 - [REQ-MCPTOO-0102](../requirements/mcptoo.md#req-mcptoo-0102)
+
+## Goals (MVP Tool Surface)
+
+- Publish a stable MVP tool surface with explicit names.
+- Require explicit task scoping via tool arguments for task-scoped tools.
+- Enable deterministic policy enforcement and auditing at the gateway.
+
+## Naming and Conventions
+
+The following requirements apply.
+
+### Naming and Conventions Applicable Requirements
+
+- Spec ID: `CYNAI.MCPTOO.ToolCatalogNaming` <a id="spec-cynai-mcptoo-toolnaming"></a>
+
+#### Traces to Requirements (Naming)
+
+- [REQ-MCPTOO-0106](../requirements/mcptoo.md#req-mcptoo-0106)
+- [REQ-MCPTOO-0107](../requirements/mcptoo.md#req-mcptoo-0107)
+- [REQ-MCPTOO-0108](../requirements/mcptoo.md#req-mcptoo-0108)
+
+#### Agent-Facing Tool Names
+
+- Spec ID: `CYNAI.MCPTOO.AgentFacingToolNames` <a id="spec-cynai-mcptoo-agentfacingtoolnames"></a>
+
+Tool names exposed to agents MUST be resource-oriented (e.g. `project.get`, `task.get`, `preference.list`).
+Tool names MUST NOT include implementation-layer prefixes such as `db.`; agents need not be aware of database or other backend abstractions.
+The gateway and MCP server use these same names for routing and allowlists.
+
+## Common Argument Requirements
+
+- Spec ID: `CYNAI.MCPTOO.CommonArgumentRequirements` <a id="spec-cynai-mcptoo-commonargumentrequirements"></a>
+
+Task scoping
+
+- Any task-scoped tool MUST accept `task_id` (uuid) as an argument.
+- Any run-scoped tool SHOULD accept `run_id` (uuid) as an argument.
+- Any job-scoped tool SHOULD accept `job_id` (uuid) as an argument.
+
+Size limits
+
+- Tools that accept user-provided text MUST enforce size limits.
+- Tools MUST reject requests that exceed configured limits.
+
+## Response and Error Model
+
+- Spec ID: `CYNAI.MCPTOO.ToolCatalogResponseError` <a id="spec-cynai-mcptoo-toolresponse"></a>
+
+### Recommended Fields
+
+- `status`: success or error
+- `result`: object on success
+- `error`: object on error
+  - `type`, `message`, `details` (optional)
+
+### Traces to Requirements (Response and Error)
+
+- [REQ-MCPTOO-0109](../requirements/mcptoo.md#req-mcptoo-0109)
+- [REQ-MCPTOO-0110](../requirements/mcptoo.md#req-mcptoo-0110)
 
 ## Tool Categories
 
@@ -69,7 +139,7 @@ Tools exposed to agents SHOULD be grouped into categories.
 - Database query tools
   - read task state, preferences, and audit records
   - write task updates, verification results, and summaries
-  - preference retrieval is performed via `db.preference.get`, `db.preference.list`, and `db.preference.effective` as defined in [`docs/tech_specs/mcp_tool_catalog.md`](mcp_tool_catalog.md)
+  - preference retrieval is performed via `preference.get`, `preference.list`, and `preference.effective` as defined in [Preference tools](mcp_tools/preference_tools.md)
 
 ## Help MCP Server
 
@@ -87,8 +157,10 @@ Scope
 - **Purpose**: Help tools return documentation content about CyNodeAI: how to use MCP tools, gateway usage, task and project context, conventions, and references to authoritative docs.
   Content SHOULD be aligned with (and MAY be derived from) the default CyNodeAI interaction skill and updated on the same cadence.
 - **Read-only**: Help tools MUST NOT modify state; they only return documentation or not-found.
+- **Content source (MVP)**: For MVP, help content is sourced from embedded strings or an in-process map in the MCP gateway only; no file system or external docs at runtime.
+  When `topic` or `path` is omitted, the gateway returns a default overview; when provided, it may return a predefined snippet for that key if present.
 - **Allowlists**: Help tools are allowlisted for orchestrator-side agents (Project Manager, Project Analyst) and MAY be allowlisted for Worker agents so sandboxed agents can look up usage when needed.
-- **Catalog**: Tool names and argument schemas are defined in the [MCP tool catalog](mcp_tool_catalog.md#spec-cynai-mcptoo-helptools).
+- **Catalog**: Tool names and argument schemas are defined in [Help tools](mcp_tools/help_tools.md).
 
 ## Role-Based Tool Access
 
@@ -112,7 +184,7 @@ The Project Manager Agent is orchestrator-side and requires additional tools for
 Recommended tool access
 
 - Database read and write tools for tasks, preferences, and routing metadata
-- Project search and resolve tools (e.g. `db.project.get`, `db.project.list`) scoped to the authenticated user for resolving project context from chat
+- Project search and resolve tools (e.g. `project.get`, `project.list`) scoped to the authenticated user for resolving project context from chat
 - Model registry and node capability tools
 - Node configuration and sandbox orchestration tools
 - Connector management and invocation tools, subject to policy

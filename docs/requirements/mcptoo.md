@@ -15,8 +15,8 @@ It covers MCP tooling conventions, tool catalog expectations, and SDK installati
   [CYNAI.MCPTOO.DatabaseAccessRules](../tech_specs/mcp_tooling.md#spec-cynai-mcptoo-dbaccess)
   <a id="req-mcptoo-0001"></a>
 - **REQ-MCPTOO-0002:** Tool names `namespace.operation`, stable ids; schema-validated, size-limited responses; no secrets in errors.
-  [CYNAI.MCPTOO.ToolCatalogNaming](../tech_specs/mcp_tool_catalog.md#spec-cynai-mcptoo-toolnaming)
-  [CYNAI.MCPTOO.ToolCatalogResponseError](../tech_specs/mcp_tool_catalog.md#spec-cynai-mcptoo-toolresponse)
+  [CYNAI.MCPTOO.ToolCatalogNaming](../tech_specs/mcp_tooling.md#spec-cynai-mcptoo-toolnaming)
+  [CYNAI.MCPTOO.ToolCatalogResponseError](../tech_specs/mcp_tooling.md#spec-cynai-mcptoo-toolresponse)
   <a id="req-mcptoo-0002"></a>
 - **REQ-MCPTOO-0003:** MCP SDK installation and integration constraints.
   [CYNAI.MCPTOO.Doc.McpSdkInstallation](../tech_specs/mcp_sdk_installation.md#spec-cynai-mcptoo-doc-mcpsdkinstallation)
@@ -40,19 +40,19 @@ It covers MCP tooling conventions, tool catalog expectations, and SDK installati
   [CYNAI.MCPTOO.DatabaseAccessRules](../tech_specs/mcp_tooling.md#spec-cynai-mcptoo-dbaccess)
   <a id="req-mcptoo-0105"></a>
 - **REQ-MCPTOO-0106:** Tool names MUST use `namespace.operation` format.
-  [CYNAI.MCPTOO.ToolCatalogNaming](../tech_specs/mcp_tool_catalog.md#spec-cynai-mcptoo-toolnaming)
+  [CYNAI.MCPTOO.ToolCatalogNaming](../tech_specs/mcp_tooling.md#spec-cynai-mcptoo-toolnaming)
   <a id="req-mcptoo-0106"></a>
 - **REQ-MCPTOO-0107:** Tool names MUST be stable identifiers.
-  [CYNAI.MCPTOO.ToolCatalogNaming](../tech_specs/mcp_tool_catalog.md#spec-cynai-mcptoo-toolnaming)
+  [CYNAI.MCPTOO.ToolCatalogNaming](../tech_specs/mcp_tooling.md#spec-cynai-mcptoo-toolnaming)
   <a id="req-mcptoo-0107"></a>
 - **REQ-MCPTOO-0108:** Namespaces MUST be short and descriptive.
-  [CYNAI.MCPTOO.ToolCatalogNaming](../tech_specs/mcp_tool_catalog.md#spec-cynai-mcptoo-toolnaming)
+  [CYNAI.MCPTOO.ToolCatalogNaming](../tech_specs/mcp_tooling.md#spec-cynai-mcptoo-toolnaming)
   <a id="req-mcptoo-0108"></a>
 - **REQ-MCPTOO-0109:** Tool responses MUST be schema-validated and size-limited.
-  [CYNAI.MCPTOO.ToolCatalogResponseError](../tech_specs/mcp_tool_catalog.md#spec-cynai-mcptoo-toolresponse)
+  [CYNAI.MCPTOO.ToolCatalogResponseError](../tech_specs/mcp_tooling.md#spec-cynai-mcptoo-toolresponse)
   <a id="req-mcptoo-0109"></a>
 - **REQ-MCPTOO-0110:** Errors MUST be structured and MUST NOT leak secrets.
-  [CYNAI.MCPTOO.ToolCatalogResponseError](../tech_specs/mcp_tool_catalog.md#spec-cynai-mcptoo-toolresponse)
+  [CYNAI.MCPTOO.ToolCatalogResponseError](../tech_specs/mcp_tooling.md#spec-cynai-mcptoo-toolresponse)
   <a id="req-mcptoo-0110"></a>
 
 - **REQ-MCPTOO-0111:** MCP SDK versions MUST be pinned in each service `go.mod`.
@@ -74,18 +74,18 @@ It covers MCP tooling conventions, tool catalog expectations, and SDK installati
   Help content SHOULD be aligned with and updated on the same cadence as the default CyNodeAI interaction skill.
   [CYNAI.MCPTOO.HelpMcpServer](../tech_specs/mcp_tooling.md#spec-cynai-mcptoo-helpmcpserver)
   <a id="req-mcptoo-0116"></a>
-- **REQ-MCPTOO-0117:** The MCP tool catalog MUST include typed preference read tools that allow agents to get, list, and resolve effective preferences.
-  At minimum, the catalog MUST include `db.preference.get`, `db.preference.list`, and `db.preference.effective`.
-  [mcp_tool_catalog.md](../tech_specs/mcp_tool_catalog.md)
+- **REQ-MCPTOO-0117:** The MCP tool specifications MUST include typed preference read tools that allow agents to get, list, and resolve effective preferences.
+  At minimum, the specifications MUST include `preference.get`, `preference.list`, and `preference.effective`.
+  [mcp_tools/README.md](../tech_specs/mcp_tools/README.md)
   [user_preferences.md](../tech_specs/user_preferences.md)
   <a id="req-mcptoo-0117"></a>
 - **REQ-MCPTOO-0118:** MCP tool families SHOULD support full CRUD by default.
-  If full CRUD is not appropriate, the tool catalog MUST document an intentional exception and the allowed operations.
-  [mcp_tool_catalog.md](../tech_specs/mcp_tool_catalog.md)
+  If full CRUD is not appropriate, the MCP tool specifications MUST document an intentional exception and the allowed operations.
+  [mcp_tools/README.md](../tech_specs/mcp_tools/README.md)
   <a id="req-mcptoo-0118"></a>
 - **REQ-MCPTOO-0119:** The system MUST provide a secure web search MCP tool (`web.search`) that is policy-controlled and does not expose raw internet access; search MUST be routed through a secure path (e.g. Secure Browser Service or a dedicated search proxy) so only sanitized or allowlisted search results are returned to agents.
-  [CYNAI.MCPTOO.SecureWebSearch](../tech_specs/mcp_tool_catalog.md#spec-cynai-mcptoo-securewebsearch)
+  [CYNAI.MCPTOO.SecureWebSearch](../tech_specs/mcp_tools/secure_web_search.md#spec-cynai-mcptoo-securewebsearch)
   <a id="req-mcptoo-0119"></a>
 - **REQ-MCPTOO-0120:** The PMA and PAA MUST be able to use MCP tools to list and get personas (persona.list, persona.get) for selection when assigning or creating tasks; the SBA MUST be able to get a persona for the correct scope via MCP (persona.get) when needed; when agents run on worker nodes, persona access MUST go through the worker proxy to the orchestrator MCP gateway.
-  [CYNAI.MCPTOO.PersonaTools](../tech_specs/mcp_tool_catalog.md#spec-cynai-mcptoo-personatools)
+  [CYNAI.MCPTOO.PersonaTools](../tech_specs/mcp_tools/persona_tools.md#spec-cynai-mcptoo-personatools)
   <a id="req-mcptoo-0120"></a>

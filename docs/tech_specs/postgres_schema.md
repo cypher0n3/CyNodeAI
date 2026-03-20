@@ -6,28 +6,11 @@
   - [Storing This Schema in Code Applicable Requirements](#storing-this-schema-in-code-applicable-requirements)
 - [Schema Overview](#schema-overview)
 - [Identity and Authentication](#identity-and-authentication)
-  - [Users Table](#users-table)
-  - [Password Credentials Table](#password-credentials-table)
-  - [Refresh Sessions Table](#refresh-sessions-table)
 - [Projects](#projects)
-  - [Projects Table](#projects-table)
-  - [Project Plans Table](#project-plans-table)
-  - [Project Plan Revisions Table](#project-plan-revisions-table)
-  - [Specifications and Plan/task References](#specifications-and-plantask-references)
-  - [Project Git Repositories Table](#project-git-repositories-table)
 - [Groups and RBAC](#groups-and-rbac)
-  - [Groups Table](#groups-table)
-  - [Group Memberships Table](#group-memberships-table)
-  - [Roles Table](#roles-table)
-  - [Role Bindings Table](#role-bindings-table)
 - [Access Control](#access-control)
-  - [Access Control Rules Table](#access-control-rules-table)
-  - [Access Control Audit Log Table](#access-control-audit-log-table)
 - [API Egress Credentials](#api-egress-credentials)
-  - [API Credentials Table](#api-credentials-table)
 - [Preferences](#preferences)
-  - [Preference Entries Table](#preference-entries-table)
-  - [Preference Audit Log Table](#preference-audit-log-table)
 - [System Settings](#system-settings)
   - [System Settings Table](#system-settings-table)
   - [System Settings Audit Log Table](#system-settings-audit-log-table)
@@ -77,7 +60,7 @@
 This document is the single canonical specification for the CyNodeAI orchestrator PostgreSQL schema.
 It consolidates and extends table definitions referenced across the tech specs so that the MVP (and later milestones) can implement the schema without ambiguity.
 
-Source of truth
+### Source of Truth
 
 - This document is authoritative for table names, column names, types, and constraints.
 - Where another spec defines "recommended" tables (e.g. local user accounts, RBAC), this document adopts those definitions and adds any missing tables (tasks, jobs, nodes, task artifacts, auth audit).
@@ -102,6 +85,7 @@ Implementations MUST keep the Go database models and schema bootstrap logic in s
 - Spec ID: `CYNAI.SCHEMA.StoringInCode` <a id="spec-cynai-schema-storingcode"></a>
 
 All orchestrator PostgreSQL access MUST use GORM per [Go SQL database standards](go_sql_database_standards.md#spec-cynai-stands-gosqlgorm).
+GORM table models MUST follow the [GORM model structure](go_sql_database_standards.md#spec-cynai-stands-gormmodelstructure): domain base struct plus a GORM record struct that embeds GormModelUUID (or equivalent) and the domain struct; record structs live only in the database package.
 
 #### Traces to Requirements
 
@@ -111,27 +95,30 @@ All orchestrator PostgreSQL access MUST use GORM per [Go SQL database standards]
 - [REQ-SCHEMA-0103](../requirements/schema.md#req-schema-0103)
 - [REQ-SCHEMA-0104](../requirements/schema.md#req-schema-0104)
 - [REQ-SCHEMA-0105](../requirements/schema.md#req-schema-0105)
+- [REQ-SCHEMA-0120](../requirements/schema.md#req-schema-0120)
 
-Recommended repository layout
+### Recommended Repository Layout
 
-- `db/`
-  - `models/` (GORM models)
-  - `ddl/` (idempotent SQL for extensions and advanced indexes/constraints)
+- Domain base structs: `internal/models/` (or `go_shared_libs` when the type is shared with worker_node or other modules).
+- GORM record structs and migrations: `internal/database/` (record types used for AutoMigrate and persistence only).
+- Idempotent DDL (extensions, advanced indexes): `internal/database/ddl/` or equivalent.
 
-Implementation notes
+### Implementation Notes
 
 - AutoMigrate is convenient for MVP, but it can drift across versions.
   Prefer explicit version pinning and CI checks that validate the expected schema exists.
 - A migration tool/library MAY be used for the DDL bootstrap step, but SQL files should remain committed to the repo.
 
-Out of scope for this document
+### Out of Scope
 
 - Node capability report and node configuration payload wire formats (see [`docs/tech_specs/worker_node.md`](worker_node.md)).
-- MCP gateway enforcement and tool allowlists (see [`docs/tech_specs/mcp_gateway_enforcement.md`](mcp_gateway_enforcement.md)).
+- MCP tool allowlists and per-tool scope (see [`docs/tech_specs/mcp_tools/access_allowlists_and_scope.md`](mcp_tools/access_allowlists_and_scope.md)); gateway enforcement (see [`docs/tech_specs/mcp_gateway_enforcement.md`](mcp_gateway_enforcement.md)).
 
 ## Schema Overview
 
-Logical groups
+The schema is organized into logical groups of related tables.
+
+### Logical Groups
 
 1. **Identity and authentication:** `users`, `password_credentials`, `refresh_sessions`
 2. **Projects:** `projects`, `project_plans`, `project_plan_revisions`, `project_git_repos`
@@ -153,419 +140,50 @@ Logical groups
 
 - Spec ID: `CYNAI.SCHEMA.IdentityAuth` <a id="spec-cynai-schema-identityauth"></a>
 
-The orchestrator MUST store users and local auth state in PostgreSQL.
-Credentials and refresh tokens MUST be stored as hashes.
+The orchestrator stores users and local auth state in PostgreSQL.
+Credentials and refresh tokens are stored as hashes.
 
-Source: [`docs/tech_specs/local_user_accounts.md`](local_user_accounts.md).
+**Schema definitions:** See [Postgres Schema](local_user_accounts.md#spec-cynai-schema-identityauth) in [`local_user_accounts.md`](local_user_accounts.md).
 
-### Users Table
+### Identity Tables
 
-- Spec ID: `CYNAI.SCHEMA.UsersTable` <a id="spec-cynai-schema-userstable"></a>
-
-- `id` (uuid, pk)
-- `handle` (text, unique)
-- `email` (text, unique, nullable)
-- `is_active` (boolean)
-- `external_source` (text, nullable)
-- `external_id` (text, nullable)
-- `created_at` (timestamptz)
-- `updated_at` (timestamptz)
-
-Constraints
-
-- Index: (`handle`)
-- Index: (`email`) where not null
-- Index: (`is_active`)
-
-Reserved identities
-
-- The handle `system` is reserved.
-  The orchestrator MUST ensure a corresponding `users` row exists (the "system user") and MUST use that user id for attribution when an action is performed by the system and no human actor applies (for example `tasks.created_by` for system-created tasks).
-  User creation MUST reject attempts to create or rename a user to `handle=system`.
-
-### Password Credentials Table
-
-- `id` (uuid, pk)
-- `user_id` (uuid, fk to `users.id`)
-- `password_hash` (bytea)
-- `hash_alg` (text)
-  - examples: argon2id, bcrypt
-- `created_at` (timestamptz)
-- `updated_at` (timestamptz)
-
-Constraints
-
-- Unique: (`user_id`) (one password credential per user in MVP)
-- Index: (`user_id`)
-
-### Refresh Sessions Table
-
-- `id` (uuid, pk)
-- `user_id` (uuid, fk to `users.id`)
-- `refresh_token_hash` (bytea)
-- `refresh_token_kid` (text, nullable)
-- `is_active` (boolean)
-- `expires_at` (timestamptz)
-- `last_used_at` (timestamptz, nullable)
-- `created_at` (timestamptz)
-- `updated_at` (timestamptz)
-
-Constraints
-
-- Index: (`user_id`)
-- Index: (`is_active`, `expires_at`)
+- `users` - See [Users Table](local_user_accounts.md#spec-cynai-schema-userstable)
+- `password_credentials` - See [Password Credentials Table](local_user_accounts.md#spec-cynai-schema-passwordcredentialstable)
+- `refresh_sessions` - See [Refresh Sessions Table](local_user_accounts.md#spec-cynai-schema-refreshsessionstable)
 
 ## Projects
 
+- Spec ID: `CYNAI.SCHEMA.Projects` <a id="spec-cynai-schema-projects"></a>
+
 Projects are workspace boundaries used for authorization scope and preference resolution.
 
-Source: [`docs/tech_specs/projects_and_scopes.md`](projects_and_scopes.md).
-
-### Projects Table
-
-- `id` (uuid, pk)
-- `slug` (text, unique)
-- `display_name` (text)
-  - user-friendly title for lists and detail views
-- `description` (text, nullable)
-  - optional text description for the project
-- `allowed_model_ids` (jsonb, nullable)
-  - optional array of model stable identifiers allowed for inference when the task or job is scoped to this project; null = no restriction at project scope; effective allowed set = intersection of system, project, and user allowlists
-- `is_active` (boolean)
-- `created_at` (timestamptz)
-- `updated_at` (timestamptz)
-- `updated_by` (text)
-
-Constraints
-
-- Index: (`slug`)
-- Index: (`is_active`)
-
-**Allowed model allowlists:** System-scoped allowed models may be stored in system config or a system-level table; user-scoped allowed models may be stored in preference entries (e.g. key `allowed_model_ids`) or a user-scoped column.
-The effective allowed set for a job is the intersection of applicable lists; worker node model inventory is not part of the allowed set (used for placement only).
-
-### Project Plans Table
-
-- Spec ID: `CYNAI.SCHEMA.ProjectPlansTable` <a id="spec-cynai-schema-projectplanstable"></a>
-
-A project MAY have multiple plans; at most one plan per project may be active at a time.
-Plan state values: `draft`, `ready`, `active`, `suspended`, `completed`, `canceled` (see [Project plan state](projects_and_scopes.md#spec-cynai-access-projectplanstate)).
-**Archived** is a separate boolean flag for UI/API views; archived plans MUST NOT run workflow and MUST NOT be the active plan (enforced by API).
-
-Source: [REQ-PROJCT-0110](../requirements/projct.md#req-projct-0110), [Project plan state](projects_and_scopes.md#spec-cynai-access-projectplanstate), [REQ-PROJCT-0124](../requirements/projct.md#req-projct-0124).
-
-- `id` (uuid, pk)
-- `project_id` (uuid, fk to `projects.id`, NOT NULL)
-- `plan_name` (text, nullable)
-  - optional name for this plan
-- `plan_body` (text, nullable)
-  - plan document body; MUST be stored as Markdown (see [REQ-PROJCT-0114](../requirements/projct.md#req-projct-0114))
-- `state` (text, NOT NULL)
-  - one of: `draft`, `ready`, `active`, `suspended`, `completed`, `canceled`
-  - only one row per project may have `state = 'active'` (enforced by partial unique index); archived plans MUST NOT have state `active` (API enforces)
-- `archived` (boolean, NOT NULL, default false)
-  - when true, plan is archived for history/views; workflow MUST NOT run for this plan and this plan MUST NOT be set to active; used by UIs/APIs for filtering and display
-- `is_plan_locked` (boolean, default false)
-  - when true, plan document (plan_name, plan_body) is read-only until unlocked; API enforces
-- `plan_locked_at` (timestamptz, nullable)
-- `plan_locked_by` (uuid, fk to `users.id`, nullable)
-- `plan_approved_at` (timestamptz, nullable)
-  - set when plan is approved (transition to ready or active); who approved and when
-- `plan_approved_by` (uuid, fk to `users.id`, nullable)
-- `comments` (jsonb, nullable)
-  - same structure as task comments; see [Comments structure (plans and tasks)](#spec-cynai-schema-commentsstructure)
-- `created_at` (timestamptz)
-- `updated_at` (timestamptz)
-- `created_by` (uuid, fk to `users.id`, nullable)
-
-Constraints
-
-- Unique partial: (`project_id`) WHERE `state` = 'active' (at most one active plan per project)
-- Index: (`project_id`)
-- Index: (`project_id`, `state`)
-- Index: (`state`)
-- Index: (`archived`) for list/filter by archived
-
-#### Comments Structure (Plans and Tasks)
-
-- Spec ID: `CYNAI.SCHEMA.CommentsStructure` <a id="spec-cynai-schema-commentsstructure"></a>
-
-Plans and tasks both use the same JSON structure for **comments** (e.g. array of comment entries).
-Each entry typically has: author (or user id), timestamp, and body (text or Markdown).
-Host may define the exact shape (e.g. `{ "author_id": "<uuid>", "created_at": "<timestamptz>", "body": "<text>" }`).
-When plan is locked, agents MAY update only completion status and comments (plan or task) per lock rules.
-
-### Project Plan Revisions Table
-
-- Spec ID: `CYNAI.SCHEMA.ProjectPlanRevisionsTable` <a id="spec-cynai-schema-projectplanrevisionstable"></a>
-
-Stores a snapshot of a project plan (document, task list, and task dependencies) each time the plan or its task list or dependencies change so users can view revision history.
-One row per revision; version increments per plan.
-
-Source: [REQ-PROJCT-0119](../requirements/projct.md#req-projct-0119), [Plan revisions](projects_and_scopes.md#spec-cynai-access-projectplanrevisions).
-
-- `id` (uuid, pk)
-- `plan_id` (uuid, fk to `project_plans.id`, NOT NULL)
-- `version` (integer, NOT NULL)
-  - monotonically increasing per plan (1, 2, 3, ...)
-- `plan_name` (text, nullable)
-  - snapshot of project_plans.plan_name at revision time
-- `plan_body` (text, nullable)
-  - snapshot of project_plans.plan_body at revision time (Markdown)
-- `task_ids` (jsonb, nullable)
-  - array of task UUIDs in this plan at revision time
-- `task_dependencies` (jsonb, nullable)
-  - array of objects: `{ "task_id": "<uuid>", "depends_on_task_id": "<uuid>" }` capturing the dependency graph at revision time
-- `created_at` (timestamptz)
-- `created_by` (uuid, fk to `users.id`, nullable)
-
-Constraints
-
-- Unique: (`plan_id`, `version`)
-- Index: (`plan_id`, `created_at`)
-- Index: (`plan_id`)
-
-Behavior
-
-- The orchestrator or gateway MUST insert a new row into `project_plan_revisions` whenever that plan's `plan_name`, `plan_body`, the set of tasks with that `plan_id`, or the set of task_dependencies for tasks in that plan changes.
-- Version MUST be computed as the next integer per plan (e.g. MAX(version)+1 for that plan_id).
-- Retention: implementation MAY support configurable retention (e.g. keep last N revisions per plan); minimum is to retain all revisions unless explicitly purged.
-
-### Specifications and Plan/task References
-
-Project-scoped specification references; plans and tasks reference specifications via join tables (they do not own them).
-Implementations use Go and GORM per [Go SQL database standards](go_sql_database_standards.md).
-
-#### Specifications Table
-
-- Spec ID: `CYNAI.SCHEMA.SpecificationsTable` <a id="spec-cynai-schema-specificationstable"></a>
-
-One row per specification reference; each row is tied to a **project**.
-At least one of `spec_id`, `ref`, or `description` MUST be non-null and non-empty (application or check constraint).
-
-- `id` (uuid, pk)
-- `project_id` (uuid, fk to `projects.id`, NOT NULL)
-- `spec_id` (text, nullable) - stable identifier; format host-defined
-- `ref` (text, nullable) - alternative identifier (e.g. doc path, external id)
-- `description` (text, nullable) - prose summary or spec description; Markdown when host uses Markdown
-- `symbol` (text, nullable) - short name or symbol for the spec item
-- `kind` (text, nullable) - category (e.g. Type, Operation, Rule); host-defined
-- `heading` (text, nullable) - display heading or title
-- `status` (text, nullable) - lifecycle or maturity (e.g. draft, stable, deprecated); host-defined
-- `since` (text, nullable) - version or date introduced; format host-defined
-- `document_path` (text, nullable) - path to the containing document (repo-relative or URI)
-- `anchor` (text, nullable) - fragment or anchor id for direct linking
-- `source` (text, nullable) - provenance, URL, or path to the spec content
-- `section` (text, nullable) - section or anchor within the document
-- `spec_type` (text, nullable) - categorization (e.g. tech_spec, api_spec); host-defined (column name `spec_type` avoids Go reserved word `type`)
-- `sort_order` (integer, nullable) - explicit order for display within the project
-- `meta` (jsonb, nullable) - variable or nested data: traces_to, see_also, contract_subsections, and any additional host-defined keys (see [Specification meta (jsonb)](#specification-meta-jsonb))
-- `created_at` (timestamptz)
-- `updated_at` (timestamptz)
-- `created_by` (uuid, fk to `users.id`, nullable)
-
-Constraints
-
-- Check or application: at least one of `spec_id`, `ref`, or `description` is non-null and non-empty.
-- Index: (`project_id`)
-- Unique: (`project_id`, `spec_id`) WHERE `spec_id` IS NOT NULL AND `spec_id` != '' (optional; one row per spec_id per project)
-- Index: (`project_id`, `sort_order`) for ordered listing (optional)
-- GIN index on `meta` (optional) for containment or key existence queries
-
-Behavior
-
-- The orchestrator or gateway MUST enforce that only authorized callers can create, update, or delete specification rows; scope to the project the context is authorized to access.
-- When a project is deleted, specification rows for that project_id SHOULD be deleted (cascade) or retained for audit per host policy.
-- Plans and tasks reference specifications via join tables; deleting a specification row MAY remove or retain references in those join tables per host policy.
-
-##### Specification Meta (Jsonb)
-
-The `meta` column holds a single JSON object for data that is variable, repeated, or nested.
-Recommended keys (all optional; host-defined semantics): `traces_to` (array of strings), `see_also` (array of strings), `contract_subsections` (array of objects with e.g. heading, anchor, kind).
-Implementations use a Go struct with `json` tags (or `datatypes.JSON`) for `meta`.
-
-#### Plan Specifications Join Table
-
-- Spec ID: `CYNAI.SCHEMA.PlanSpecificationsTable` <a id="spec-cynai-schema-planspecificationstable"></a>
-
-- `plan_id` (uuid, fk to `project_plans.id`, NOT NULL)
-- `specification_id` (uuid, fk to `specifications.id`, NOT NULL)
-
-Constraints
-
-- Unique: (`plan_id`, `specification_id`)
-- Index: (`plan_id`), (`specification_id`)
-
-When a plan is deleted, join rows for that plan_id MAY be cascade-deleted; when a specification is deleted, join rows MAY be cascade-deleted per host policy.
-
-#### Task Specifications Join Table
-
-- Spec ID: `CYNAI.SCHEMA.TaskSpecificationsTable` <a id="spec-cynai-schema-taskspecificationstable"></a>
-
-- `task_id` (uuid, fk to `tasks.id`, NOT NULL)
-- `specification_id` (uuid, fk to `specifications.id`, NOT NULL)
-
-Constraints
-
-- Unique: (`task_id`, `specification_id`)
-- Index: (`task_id`), (`specification_id`)
-
-Application MUST ensure the task's project (via task.project_id or task.plan_id -> project_plans.project_id) matches the specification's project_id when adding a reference.
-When a task is deleted, join rows for that task_id MAY be cascade-deleted; when a specification is deleted, join rows MAY be cascade-deleted per host policy.
-
-#### ResolveSpecificationsForPlanOrTask Operation
-
-- Spec ID: `CYNAI.SCHEMA.ResolveSpecificationsForPlanOrTask` <a id="spec-cynai-schema-resolvespecificationsforplanortask"></a>
-
-Resolves the set of specifications referenced by a plan or a task (for display, MCP responses, or downstream logic).
-
-##### `ResolveSpecificationsForPlanOrTask` Algorithm
-
-<a id="algo-cynai-schema-resolvespecificationsforplanortask"></a>
-
-1. Given `plan_id` or `task_id`. <a id="algo-cynai-schema-resolvespecificationsforplanortask-step-1"></a>
-2. If plan_id: select `specification_id` from `plan_specifications` where `plan_id` = ?; if task_id: select `specification_id` from `task_specifications` where `task_id` = ?. <a id="algo-cynai-schema-resolvespecificationsforplanortask-step-2"></a>
-3. Load specification rows from `specifications` for those ids (join or IN clause); ensure only rows for the same project as the plan/task are returned (authorization). <a id="algo-cynai-schema-resolvespecificationsforplanortask-step-3"></a>
-4. Return ordered list: sort by `sort_order` (nulls last), then by `ref`, then by `created_at`. <a id="algo-cynai-schema-resolvespecificationsforplanortask-step-4"></a>
-
-#### SpecificationObject Contract (API and MCP)
-
-- Spec ID: `CYNAI.SCHEMA.SpecificationObjectContract` <a id="spec-cynai-schema-specificationobjectcontract"></a>
-
-**Inputs (create/update row):** Required: `project_id` (uuid); at least one of `spec_id`, `ref`, or `description`.
-Optional: `symbol`, `kind`, `heading`, `status`, `since`, `document_path`, `anchor`, `source`, `section`, `spec_type`, `sort_order`, and `meta` (traces_to, see_also, contract_subsections).
-
-**Outputs (get/list):** Same keys as the object structure, plus `id`, `project_id`, `created_at`, `updated_at` when included.
-
-**Attach to plan or task:** Client sends `specification_id` (or list of specification_ids); the join table is updated; the specification row is not modified.
-
-### Project Git Repositories Table
-
-- Spec ID: `CYNAI.SCHEMA.ProjectGitReposTable` <a id="spec-cynai-schema-projectgitrepostable"></a>
-
-Stores Git repository associations for projects so that tasks and Git egress can use project-scoped allowlists.
-
-Source: [`docs/tech_specs/project_git_repos.md`](project_git_repos.md).
-
-#### Git Repos Table Columns (Identity and Provider)
-
-- `id` (uuid, pk)
-- `project_id` (uuid, fk to `projects.id`, NOT NULL)
-- `provider` (text, NOT NULL)
-  - identifier for the Git host or service; any provider for which the system has support (e.g. github, gitlab, gitea); additional providers MAY be added without schema change
-- `repo_identifier` (text, NOT NULL)
-  - provider-specific identifier: for GitHub and Gitea use owner/repo; for GitLab use namespace/project (may include subgroups); semantics defined per provider in the project git repos spec
-- `base_url` (text, nullable)
-  - optional override for self-hosted instances (e.g. <https://gitea.example.com>, <https://gitlab.company.com>)
-
-#### Git Repos Table Columns (Additional Information)
-
-- `display_name` (text, nullable)
-  - optional user-facing label for the repo in this project
-- `description` (text, nullable)
-  - optional longer description of the repo's role or purpose in this project
-- `tags` (jsonb, nullable)
-  - optional array of string tags for filtering or grouping (e.g. `["backend", "main"]`); structure is application-defined
-- `metadata` (jsonb, nullable)
-  - optional key-value data for future extension; no canonical keys required for MVP
-
-#### Git Repos Table Columns (Timestamps)
-
-- `created_at` (timestamptz)
-- `updated_at` (timestamptz)
-
-Constraints
-
-- Unique: (`project_id`, `provider`, `repo_identifier`)
-- Index: (`project_id`)
-- Index: (`provider`, `repo_identifier`) for egress lookups
+**Schema definitions:** See [Postgres Schema](projects_and_scopes.md#spec-cynai-schema-projects) in [`projects_and_scopes.md`](projects_and_scopes.md).
+
+### Projects Tables
+
+- `projects` - See [Projects Table](projects_and_scopes.md#spec-cynai-schema-projectstable)
+- `project_plans` - See [Project Plans Table](projects_and_scopes.md#spec-cynai-schema-projectplanstable)
+- `project_plan_revisions` - See [Project Plan Revisions Table](projects_and_scopes.md#spec-cynai-schema-projectplanrevisionstable)
+- `specifications` - See [Specifications Table](projects_and_scopes.md#spec-cynai-schema-specificationstable)
+- `plan_specifications` - See [Plan Specifications Join Table](projects_and_scopes.md#spec-cynai-schema-planspecificationstable)
+- `task_specifications` - See [Task Specifications Join Table](projects_and_scopes.md#spec-cynai-schema-taskspecificationstable)
+- `project_git_repos` - See [Project Git Repositories Table](projects_and_scopes.md#spec-cynai-schema-projectgitrepostable)
 
 ## Groups and RBAC
 
 - Spec ID: `CYNAI.SCHEMA.GroupsRbac` <a id="spec-cynai-schema-groupsrbac"></a>
 
-The orchestrator MUST track groups, group membership, roles, and role bindings in PostgreSQL.
+The orchestrator tracks groups, group membership, roles, and role bindings in PostgreSQL.
 Policy evaluation and auditing depend on these tables.
 
-Source: [`docs/tech_specs/rbac_and_groups.md`](rbac_and_groups.md).
+**Schema definitions:** See [Postgres Schema](rbac_and_groups.md#spec-cynai-schema-groupsrbac) in [`rbac_and_groups.md`](rbac_and_groups.md).
 
-### Groups Table
+### Groups and RBAC Tables
 
-- `id` (uuid, pk)
-- `slug` (text, unique)
-- `display_name` (text)
-- `is_active` (boolean)
-- `external_source` (text, nullable)
-- `external_id` (text, nullable)
-- `managed_by` (text, nullable)
-- `last_synced_at` (timestamptz, nullable)
-- `created_at` (timestamptz)
-- `updated_at` (timestamptz)
-- `updated_by` (text)
-
-Constraints
-
-- Index: (`slug`)
-- Index: (`is_active`)
-
-### Group Memberships Table
-
-- `id` (uuid, pk)
-- `group_id` (uuid, fk to `groups.id`)
-- `user_id` (uuid, fk to `users.id`)
-- `is_active` (boolean)
-- `external_source` (text, nullable)
-- `external_id` (text, nullable)
-- `managed_by` (text, nullable)
-- `last_synced_at` (timestamptz, nullable)
-- `created_at` (timestamptz)
-- `updated_at` (timestamptz)
-- `updated_by` (text)
-
-Constraints
-
-- Unique: (`group_id`, `user_id`)
-- Index: (`group_id`)
-- Index: (`user_id`)
-- Index: (`is_active`)
-
-### Roles Table
-
-- `id` (uuid, pk)
-- `name` (text, unique)
-  - examples: owner, admin, operator, member, viewer
-- `description` (text, nullable)
-- `created_at` (timestamptz)
-- `updated_at` (timestamptz)
-
-Constraints
-
-- Index: (`name`)
-
-### Role Bindings Table
-
-- `id` (uuid, pk)
-- `subject_type` (text)
-  - one of: user, group
-- `subject_id` (uuid)
-- `role_id` (uuid, fk to `roles.id`)
-- `scope_type` (text)
-  - one of: system, project
-- `scope_id` (uuid, nullable)
-  - null allowed only for system scope
-- `is_active` (boolean)
-- `managed_by` (text, nullable)
-- `last_synced_at` (timestamptz, nullable)
-- `created_at` (timestamptz)
-- `updated_at` (timestamptz)
-- `updated_by` (text)
-
-Constraints
-
-- Index: (`subject_type`, `subject_id`)
-- Index: (`role_id`)
-- Index: (`scope_type`, `scope_id`)
-- Index: (`is_active`)
+- `groups` - See [Groups Table](rbac_and_groups.md#spec-cynai-schema-groupstable)
+- `group_memberships` - See [Group Memberships Table](rbac_and_groups.md#spec-cynai-schema-groupmembershipstable)
+- `roles` - See [Roles Table](rbac_and_groups.md#spec-cynai-schema-rolestable)
+- `role_bindings` - See [Role Bindings Table](rbac_and_groups.md#spec-cynai-schema-rolebindingstable)
 
 ## Access Control
 
@@ -574,89 +192,25 @@ Constraints
 Policy rules and access control audit log.
 Used by API Egress, Secure Browser, and other policy-enforcing services.
 
-Source: [`docs/tech_specs/access_control.md`](access_control.md).
+**Schema definitions:** See [Postgres Schema](access_control.md#spec-cynai-schema-accesscontrol) in [`access_control.md`](access_control.md).
 
-### Access Control Rules Table
+### Access Control Tables
 
-- `id` (uuid, pk)
-- `subject_type` (text)
-- `subject_id` (uuid, nullable)
-  - null allowed only for subject_type system
-- `action` (text)
-- `resource_type` (text)
-- `resource_pattern` (text)
-- `effect` (text)
-  - allow or deny
-- `priority` (int)
-- `conditions` (jsonb, nullable)
-- `created_at` (timestamptz)
-- `updated_at` (timestamptz)
-- `updated_by` (text)
-
-Constraints
-
-- Index: (`subject_type`, `subject_id`)
-- Index: (`action`)
-- Index: (`resource_type`)
-- Index: (`priority`)
-
-### Access Control Audit Log Table
-
-- `id` (uuid, pk)
-- `subject_type` (text)
-- `subject_id` (uuid, nullable)
-- `action` (text)
-- `resource_type` (text)
-- `resource` (text)
-- `decision` (text)
-  - allow or deny
-- `reason` (text, nullable)
-- `task_id` (uuid, nullable)
-- `created_at` (timestamptz)
-
-Constraints
-
-- Index: (`created_at`)
-- Index: (`task_id`)
+- `access_control_rules` - See [Access Control Rules Table](access_control.md#spec-cynai-schema-accesscontrolrulestable)
+- `access_control_audit_log` - See [Access Control Audit Log Table](access_control.md#spec-cynai-schema-accesscontrolauditlogtable)
 
 ## API Egress Credentials
 
 - Spec ID: `CYNAI.SCHEMA.ApiEgressCredentials` <a id="spec-cynai-schema-apiegresscredentials"></a>
 
 Credentials for outbound API calls are stored in PostgreSQL and are only retrievable by the API Egress Server.
-Agents MUST never receive credentials in responses.
+Agents never receive credentials in responses.
 
-Source: [`docs/tech_specs/api_egress_server.md`](api_egress_server.md).
+**Schema definitions:** See [Postgres Schema](api_egress_server.md#spec-cynai-schema-apiegresscredentials) in [`api_egress_server.md`](api_egress_server.md).
 
-### API Credentials Table
+### API Egress Tables
 
-Table name: `api_credentials`.
-
-- `id` (uuid, pk)
-- `owner_type` (text)
-  - one of: user, group
-- `owner_id` (uuid)
-  - user id or group id, depending on owner_type
-- `provider` (text)
-- `credential_type` (text)
-  - examples: api_key, oauth_token, bearer_token
-- `credential_name` (text)
-  - human-friendly label to support multiple keys per user and provider
-- `credential_ciphertext` (bytea)
-- `credential_kid` (text)
-  - key identifier for envelope encryption rotation
-- `is_active` (boolean)
-- `expires_at` (timestamptz, nullable)
-- `created_at` (timestamptz)
-- `updated_at` (timestamptz)
-- `updated_by` (text)
-
-Constraints
-
-- Unique: (`owner_type`, `owner_id`, `provider`, `credential_name`)
-- Index: (`owner_type`, `owner_id`, `provider`)
-- Index: (`provider`)
-- Index: (`is_active`)
+- `api_credentials` - See [API Credentials Table](api_egress_server.md#spec-cynai-schema-apicredentialstable)
 
 ## Preferences
 
@@ -664,46 +218,16 @@ Constraints
 
 Preference entries store user task-execution preferences and constraints.
 Preference entries are scoped (system, user, group, project, task) with precedence.
-Deployment and service configuration (ports, hostnames, database DSNs, and secrets) MUST NOT be stored as preferences.
+Deployment and service configuration (ports, hostnames, database DSNs, and secrets) are not stored as preferences.
 The distinction between preferences and system settings is defined in [User preferences (Terminology)](user_preferences.md#spec-cynai-stands-preferenceterminology).
 The `users` table is shared with identity and RBAC.
 
-Source: [`docs/tech_specs/user_preferences.md`](user_preferences.md).
+**Schema definitions:** See [Postgres Schema](user_preferences.md#spec-cynai-schema-preferences) in [`user_preferences.md`](user_preferences.md).
 
-### Preference Entries Table
+### Preferences Tables
 
-- `id` (uuid, pk)
-- `scope_type` (text)
-  - one of: system, user, group, project, task
-- `scope_id` (uuid, nullable)
-  - null allowed only for system scope
-- `key` (text)
-- `value` (jsonb)
-- `value_type` (text)
-- `version` (int)
-- `updated_at` (timestamptz)
-- `updated_by` (text)
-
-Constraints
-
-- Unique: (`scope_type`, `scope_id`, `key`)
-- Index: (`scope_type`, `scope_id`)
-- Index: (`key`)
-
-### Preference Audit Log Table
-
-- `id` (uuid, pk)
-- `entry_id` (uuid, fk to `preference_entries.id`)
-- `old_value` (jsonb)
-- `new_value` (jsonb)
-- `changed_at` (timestamptz)
-- `changed_by` (text)
-- `reason` (text, nullable)
-
-Constraints
-
-- Index: (`entry_id`)
-- Index: (`changed_at`)
+- `preference_entries` - See [Preference Entries Table](user_preferences.md#spec-cynai-schema-preferenceentriestable)
+- `preference_audit_log` - See [Preference Audit Log Table](user_preferences.md#spec-cynai-schema-preferenceauditlogtable)
 
 ## System Settings
 
@@ -854,7 +378,7 @@ Canonical definitions so specs and implementations use consistent language.
 - `post_execution_notes` (text, nullable)
   - Markdown notes added after task execution (e.g. by PMA, PAA, or user); for verification, handoff, or retrospective
 - `comments` (jsonb, nullable)
-  - same structure as plan comments; see [Comments structure (plans and tasks)](#spec-cynai-schema-commentsstructure); may be updated by agents or users when plan is locked (per lock rules)
+  - same structure as plan comments; see [Comments Structure (Plans and Tasks)](projects_and_scopes.md#spec-cynai-schema-commentsstructure); may be updated by agents or users when plan is locked (per lock rules)
 - `metadata` (jsonb, nullable)
 - `archived_at` (timestamptz, nullable)
   - when non-null, the task is archived (soft-deleted); API/CLI "delete" sets this; archived tasks are excluded from default list views; retained for audit and history
@@ -1595,7 +1119,11 @@ Constraints
 
 ## Table Summary and Dependencies
 
-Creation order (respecting foreign keys)
+This section summarizes table creation order and naming conventions.
+
+### Creation Order
+
+Creation order (respecting foreign keys):
 
 1. `users`
 2. `projects`, `project_plans`, `project_plan_revisions`, `project_git_repos`, `groups`, `roles`
@@ -1610,7 +1138,7 @@ Creation order (respecting foreign keys)
 11. `auth_audit_log`, `mcp_tool_call_audit_log`, `access_control_audit_log`, `preference_audit_log`
 12. Model registry (if used): `models`, `model_versions`, `model_artifacts`, `node_model_availability`
 
-Naming conventions
+### Naming Conventions
 
 - Table names: `snake_case`, plural (e.g. `refresh_sessions`, `task_artifacts`).
 - Primary key: `id` (uuid).

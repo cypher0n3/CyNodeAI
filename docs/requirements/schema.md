@@ -56,19 +56,19 @@ It covers data persistence requirements, schema-level invariants, and database c
   [CYNAI.SCHEMA.VectorRetrievalRbac](../tech_specs/postgres_schema.md#spec-cynai-schema-vectorretrievalrbac)
   <a id="req-schema-0112"></a>
 - **REQ-SCHEMA-0113:** The schema MUST include a project git repositories table that stores per-project Git repo associations (project_id, provider, repo_identifier, optional base_url override) with a foreign key to projects.id.
-  [CYNAI.SCHEMA.ProjectGitReposTable](../tech_specs/postgres_schema.md#spec-cynai-schema-projectgitrepostable)
+  [CYNAI.SCHEMA.ProjectGitReposTable](../tech_specs/projects_and_scopes.md#spec-cynai-schema-projectgitrepostable)
   <a id="req-schema-0113"></a>
 - **REQ-SCHEMA-0114:** When the gateway accepts user file uploads for chat, the system MUST persist uploaded file content or a stable reference in a way that is scoped to the authenticated user and associated thread or message and is retrievable for the duration required by the chat contract and retention policy.
   The stored representation MUST enforce the same authorization scope as chat thread and message access, including the same project-scoped permissions when the originating chat thread belongs to a shared project, and MUST remain subject to secret-redaction and size or type limits defined by the gateway.
   [CYNAI.SCHEMA.ChatMessageAttachmentsTable](../tech_specs/postgres_schema.md#spec-cynai-schema-chatmessageattachmentstable)
   <a id="req-schema-0114"></a>
 - **REQ-SCHEMA-0115:** The schema MUST include a project-scoped specifications table and join tables (plan_specifications, task_specifications) so that plans and tasks can reference specifications; resolution MUST return specifications ordered by sort_order (nulls last), ref, created_at.
-  [CYNAI.SCHEMA.SpecificationsTable](../tech_specs/postgres_schema.md#spec-cynai-schema-specificationstable)
-  [CYNAI.SCHEMA.ResolveSpecificationsForPlanOrTask](../tech_specs/postgres_schema.md#spec-cynai-schema-resolvespecificationsforplanortask)
+  [CYNAI.SCHEMA.SpecificationsTable](../tech_specs/projects_and_scopes.md#spec-cynai-schema-specificationstable)
+  [CYNAI.SCHEMA.ResolveSpecificationsForPlanOrTask](../tech_specs/projects_and_scopes.md#spec-cynai-schema-resolvespecificationsforplanortask)
   <a id="req-schema-0115"></a>
-- **REQ-SCHEMA-0116:** When specification MCP tools are adopted (db.specification.*, db.plan.specifications.set, db.task.specifications.set, specification.help), the gateway MUST allow them on the PM agent allowlist and enforce the same scope and access rules as other db tools (PMA write; SBA read-only when exposed).
-  [CYNAI.MCPTOO.SpecificationHelp](../tech_specs/mcp_tool_catalog.md#spec-cynai-mcptoo-specificationhelp)
-  [CYNAI.MCPGAT.PmAgentAllowlist](../tech_specs/mcp_gateway_enforcement.md#spec-cynai-mcpgat-pmagentallowlist)
+- **REQ-SCHEMA-0116:** When specification MCP tools are adopted (specification.*, plan.specifications.set, task.specifications.set, specification.help), the gateway MUST allow them on the PM agent allowlist and enforce the same scope and access rules as other orchestrator-side tools (PMA write; SBA read-only when exposed).
+  [CYNAI.MCPTOO.SpecificationHelp](../tech_specs/mcp_tools/help_tools.md#spec-cynai-mcptoo-specificationhelp)
+  [CYNAI.MCPGAT.PmAgentAllowlist](../tech_specs/mcp_tools/access_allowlists_and_scope.md#spec-cynai-mcpgat-pmagentallowlist)
   <a id="req-schema-0116"></a>
 - **REQ-SCHEMA-0117:** The personas table MUST support optional default_skill_ids (jsonb), recommended_cloud_models (jsonb; map by provider to model ids), and recommended_local_model_ids (jsonb); identity remains title and description.
   [CYNAI.SCHEMA.PersonasTable](../tech_specs/postgres_schema.md#spec-cynai-schema-personastable)
@@ -79,3 +79,8 @@ It covers data persistence requirements, schema-level invariants, and database c
 - **REQ-SCHEMA-0119:** The jobs table (or job payload) MUST use task_ids as a map keyed by numeric order (e.g. 10, 20, 30) with value task uuid; single-task job = one key; bundle = 1-3 keys; execution order = sort keys ascending.
   [CYNAI.SCHEMA.JobsTable](../tech_specs/postgres_schema.md#spec-cynai-schema-jobstable)
   <a id="req-schema-0119"></a>
+- **REQ-SCHEMA-0120:** GORM table models MUST be defined using the standard structure: a domain base struct (the logical entity) and a GORM record struct that embeds a shared UUID primary-key base (e.g. GormModelUUID: ID, CreatedAt, UpdatedAt, DeletedAt) and the domain struct.
+  Domain base structs used by more than the orchestrator (e.g. by worker_node or shared contracts) MUST live in `go_shared_libs`; orchestrator-only base structs MAY live in the orchestrator models package.
+  GORM record structs (the types used for persistence and AutoMigrate) MUST live only in the database package of the component that owns the table (e.g. orchestrator `internal/database`).
+  [CYNAI.STANDS.GormModelStructure](../tech_specs/go_sql_database_standards.md#spec-cynai-stands-gormmodelstructure)
+  <a id="req-schema-0120"></a>

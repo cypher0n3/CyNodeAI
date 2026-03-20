@@ -230,7 +230,7 @@ The implementation MUST use the same subject and scope model as [RBAC and groups
 
 - The Project Manager Agent (PMA) and Project Analyst Agent (PAA) MUST use **MCP tools** to perform artifact create, read, update, and delete operations; they MUST NOT call the artifacts REST API directly.
 - The gateway MUST expose the artifacts API to PMA and PAA via MCP tools that invoke the same backend and RBAC as the REST endpoints (e.g. scope derived from task, thread, or project context).
-- Tool names, argument schemas, and allowlist placement (PMA, PAA) are defined in the [MCP tool catalog](mcp_tool_catalog.md#spec-cynai-mcptoo-artifacttools) and [MCP gateway enforcement](mcp_gateway_enforcement.md#spec-cynai-mcpgat-pmagentallowlist).
+- Tool names, argument schemas, and allowlist placement (PMA, PAA) are defined in [Artifact tools](mcp_tools/artifact_tools.md) and [Project Manager Agent allowlist](mcp_tools/access_allowlists_and_scope.md#spec-cynai-mcpgat-pmagentallowlist).
 - The existing task-scoped artifact tools (`artifact.put`, `artifact.get`, `artifact.list`) MAY be implemented on top of the same S3-backed artifacts store; additional or updated MCP tools MUST provide PMA and PAA with full CRUD access to the unified artifacts API (create by scope, read/update/delete by `artifact_id`).
 
 ## Vector Ingestion Source

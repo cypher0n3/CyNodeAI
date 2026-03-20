@@ -36,7 +36,7 @@ This document proposes requirements and spec extensions so that:
 
 ### 2.1 Integration Plan and Refinements
 
-Execution followed the **TUI-first** plan in [2026-03-12_plan_next_round_execution.md](../dev_docs/2026-03-12_plan_next_round_execution.md).
+Execution followed the **TUI-first** plan in `2026-03-12_plan_next_round_execution.md` (doc removed).
 The plan cut this proposal down to a minimal first rollout; the refinements below differ from the original draft.
 
 #### 2.1.1 Promoted to Stable (First Rollout)
@@ -766,7 +766,7 @@ Doc changes (no new Spec ID; alignment of existing specs and requirements):
 Assumes approval of the proposed requirements and spec changes above.
 
 **Actual execution (TUI-first):** The repository executed a **TUI-first MVP** rather than the full plan below.
-  See [2026-03-12_plan_next_round_execution.md](../dev_docs/2026-03-12_plan_next_round_execution.md) for phases 0--8, locked scope (Phase 0/2), backend prerequisites (Phase 3), shared controller and PTY harness (Phase 4--5), and validation (Phase 6).
+  See `2026-03-12_plan_next_round_execution.md` (doc removed) for phases 0--8, locked scope (Phase 0/2), backend prerequisites (Phase 3), shared controller and PTY harness (Phase 4--5), and validation (Phase 6).
   Phases 0--2 and the minimum TUI spec cut are done; implementation (Phase 5) and validation (Phase 6) are in progress.
   The refinements in [Integration Plan and Refinements](#21-integration-plan-and-refinements) summarize how the executed plan differs from this draft (entry point, deferred features, REQ ID repurposing).
 
@@ -877,7 +877,7 @@ Canonical links to requirement anchors and Spec Item anchors in this document:
 
 ## 10 Related Documents
 
-- [2026-03-12_plan_next_round_execution.md](../dev_docs/2026-03-12_plan_next_round_execution.md) (TUI-first integration plan; source of refinements and deferred scope)
+- `2026-03-12_plan_next_round_execution.md` (doc removed; TUI-first integration plan; source of refinements and deferred scope)
 - [cynork_tui.md](../tech_specs/cynork_tui.md) (stable TUI spec for first rollout)
 - [Chat Threads and Messages](../tech_specs/chat_threads_and_messages.md)
 - [OpenAI-Compatible Chat API](../tech_specs/openai_compatible_chat_api.md)

@@ -52,7 +52,7 @@ Uniqueness is enforced per project: (`project_id`, `provider`, `repo_identifier`
 
 #### `ProjectGitRepos` Storage
 
-- Canonical table: `project_git_repos` per [`docs/tech_specs/postgres_schema.md`](postgres_schema.md#spec-cynai-schema-projectgitrepostable).
+- Canonical table: `project_git_repos` per [`docs/tech_specs/projects_and_scopes.md`](projects_and_scopes.md#spec-cynai-schema-projectgitrepostable).
 - Foreign key: `project_id` references `projects.id`; referential integrity MUST be enforced (e.g. on delete cascade or restrict per deployment policy).
 - Additional information: `display_name` (user-facing label), `description` (role or purpose in this project), `tags` (jsonb array of strings for filtering/grouping), `metadata` (jsonb for future extension).
 
@@ -133,7 +133,7 @@ Project git repo associations are managed via MCP tools and admin clients with p
 - Spec ID: `CYNAI.PROJCT.ProjectGitReposMcp` <a id="spec-cynai-projct-projectgitreposmcp"></a>
 
 Project git repo associations MUST be manageable via MCP tools and admin clients (Web Console and CLI) with the same authorization model as project list/get: the subject MAY only list, add, update, or remove repo associations for projects they are authorized to access (default project plus projects for which they or their groups have a role binding).
-Tool names and argument schemas (e.g. list repos for a project, add repo, remove repo) are defined in the MCP tool catalog; implementations MUST enforce project-scoped access and MUST NOT return or modify repos for projects outside the subject's authorized set.
+Tool names and argument schemas (e.g. list repos for a project, add repo, remove repo) are defined in [MCP tool specifications](mcp_tools/README.md) (per-tool docs under `mcp_tools/`); implementations MUST enforce project-scoped access and MUST NOT return or modify repos for projects outside the subject's authorized set.
 
 #### ProjectGitRepos MCP Requirements Traces
 

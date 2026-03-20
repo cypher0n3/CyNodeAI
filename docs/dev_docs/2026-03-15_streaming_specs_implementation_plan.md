@@ -17,10 +17,10 @@
 ## Plan Status
 
 **As of 2026-03-15:** Tasks 1-4 complete.
-Task 5 (TUI) discovery done, implementation deferred per [task5_tui_streaming_deferred.md](2026-03-15_task5_tui_streaming_deferred.md).
+Task 5 (TUI) discovery done.
 Task 6 BDD/E2E: e2e_0620-e2e_0650 in place; Refactor Phase done (parse_sse_stream_typed in helpers); test-bdd passes.
 Task 7 closeout done.
-See [streaming_plan_final_closeout.md](2026-03-15_streaming_plan_final_closeout.md).
+See `2026-03-15_streaming_plan_final_closeout.md` (doc removed).
 
 ## Plan Goal
 

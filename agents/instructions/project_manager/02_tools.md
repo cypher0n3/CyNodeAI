@@ -12,7 +12,6 @@ Tools with sandbox-only scope are NOT available to you.
 ## Allowed Tools (Project Manager Allowlist)
 
 You MAY call only the following.
-See [mcp_tool_catalog.md](../../../docs/tech_specs/mcp_tool_catalog.md) for argument schemas and [mcp_gateway_enforcement.md](../../../docs/tech_specs/mcp_gateway_enforcement.md) for policy.
 
 - **db.*** - Tasks, jobs, preferences, routing metadata (PostgreSQL via MCP only).
 - **node.list**, **node.get**, **node.refresh_config** - Node capabilities, status, config.

@@ -4,7 +4,7 @@
 - [Terminology](#terminology)
   - [Settings vs Preferences](#settings-vs-preferences)
 - [Data Model](#data-model)
-  - [Preferences Tables](#preferences-tables)
+  - [Postgres Schema](#postgres-schema)
 - [Key Semantics](#key-semantics)
   - [Key Examples](#key-examples)
 - [Value Semantics](#value-semantics)
@@ -39,16 +39,18 @@ They are stored in `preference_entries`, scoped (system, user, group, project, t
 ### Settings vs Preferences
 
 - **System settings** are operator- and deployment-level configuration (e.g. orchestrator operational knobs, model selection keys, cache limits, deployment config such as ports, hostnames, database DSNs, service endpoints).
-  They are stored in `system_settings`, managed via system settings surfaces (e.g. Web Console system settings UI, `cynork settings`), and MUST NOT be described as preferences.
+  They are stored in `system_settings`, managed via system settings surfaces (e.g. Web Console system settings UI, `cynork settings`), and are distinct from preferences.
 - Preferences and system settings are distinct; do not conflate them in specs or UI.
 
 See [`docs/tech_specs/orchestrator_bootstrap.md`](orchestrator_bootstrap.md) for bootstrap-time seeding of preferences versus system settings.
 
 ## Data Model
 
+- Spec ID: `CYNAI.STANDS.PreferencesDataModel` <a id="spec-cynai-stands-preferencesdatamodel"></a>
+
 Preferences are stored as key-value entries with scope and precedence.
 
-Scope types:
+### Scope Types
 
 - `system`: deployment-wide preference defaults (operator-managed).
 - `user`: defaults for a user.
@@ -56,39 +58,48 @@ Scope types:
 - `project`: overrides for a named project or workspace.
 - `task`: overrides for a specific task.
 
-Precedence order (highest wins):
+### Precedence Order
 
-- task => project => user => group => system
+Highest wins: task => project => user => group => system
 
 The Postgres schema is defined in [`docs/tech_specs/postgres_schema.md`](postgres_schema.md).
 See [Preferences](postgres_schema.md#spec-cynai-schema-preferences).
 
-### Preferences Tables
+### Postgres Schema
 
-The users table is shared by local authentication and RBAC.
-See [`docs/tech_specs/local_user_accounts.md`](local_user_accounts.md) and [`docs/tech_specs/rbac_and_groups.md`](rbac_and_groups.md).
+- Spec ID: `CYNAI.SCHEMA.Preferences` <a id="spec-cynai-schema-preferences"></a>
 
-Preference entries are stored in `preference_entries`.
+Preference entries store user task-execution preferences and constraints.
+Preference entries are scoped (system, user, group, project, task) with precedence.
+Deployment and service configuration (ports, hostnames, database DSNs, and secrets) are not stored as preferences.
+The distinction between preferences and system settings is defined in [User preferences (Terminology)](#terminology).
+The `users` table is shared with identity and RBAC.
+
+#### Preference Entries Table
+
+- Spec ID: `CYNAI.SCHEMA.PreferenceEntriesTable` <a id="spec-cynai-schema-preferenceentriestable"></a>
 
 - `id` (uuid, pk)
-- `scope_type` (text, one of: system|user|group|project|task)
+- `scope_type` (text)
+  - one of: system, user, group, project, task
 - `scope_id` (uuid, nullable)
-  - null is allowed only for `system` scope
+  - null allowed only for system scope
 - `key` (text)
 - `value` (jsonb)
 - `value_type` (text)
-  - examples: string|number|boolean|object|array
 - `version` (int)
 - `updated_at` (timestamptz)
 - `updated_by` (text)
 
-#### Schema Constraints
+##### Preference Entries Table Constraints
 
 - Unique: (`scope_type`, `scope_id`, `key`)
 - Index: (`scope_type`, `scope_id`)
 - Index: (`key`)
 
-Preference change history is stored in `preference_audit_log`.
+#### Preference Audit Log Table
+
+- Spec ID: `CYNAI.SCHEMA.PreferenceAuditLogTable` <a id="spec-cynai-schema-preferenceauditlogtable"></a>
 
 - `id` (uuid, pk)
 - `entry_id` (uuid, fk to `preference_entries.id`)
@@ -96,19 +107,21 @@ Preference change history is stored in `preference_audit_log`.
 - `new_value` (jsonb)
 - `changed_at` (timestamptz)
 - `changed_by` (text)
-- `reason` (text)
+- `reason` (text, nullable)
 
-Constraints
+##### Preference Audit Log Table Constraints
 
 - Index: (`entry_id`)
 - Index: (`changed_at`)
 
 ## Key Semantics
 
-Preference keys are opaque strings.
-Preference keys SHOULD be treated as case-sensitive.
+- Spec ID: `CYNAI.STANDS.PreferencesKeySemantics` <a id="spec-cynai-stands-preferencekeysemantics"></a>
 
-Recommended key format:
+Preference keys are opaque strings.
+Preference keys are treated as case-sensitive.
+
+### Recommended Key Format
 
 - Use lowercase dot-separated namespaces.
 - Use digits where meaningful.
@@ -121,49 +134,53 @@ Recommended key format:
 - `standards.markdown.line_length`
 - `security.web_browse.allowed_domains`
 
-Reserved namespaces:
+### Reserved Namespaces
 
 - Namespaces used by built-in behavior (for example `standards.`, `security.`, `model_routing.`, and `agents.`) are reserved for future built-in keys.
-- User-defined keys SHOULD avoid reserved namespaces to reduce collision risk.
+- User-defined keys should avoid reserved namespaces to reduce collision risk.
 
 ## Value Semantics
+
+- Spec ID: `CYNAI.STANDS.PreferencesValueSemantics` <a id="spec-cynai-stands-preferencevaluesemantics"></a>
 
 The canonical stored value is `value` as jsonb.
 The `value_type` field exists to support stable user-facing display and to support validation and safe consumption.
 
-Value type rules:
+### Value Type Rules
 
-- When `value_type=string`, `value` MUST be a JSON string.
-- When `value_type=number`, `value` MUST be a JSON number.
-- When `value_type=boolean`, `value` MUST be a JSON boolean.
-- When `value_type=object`, `value` MUST be a JSON object.
-- When `value_type=array`, `value` MUST be a JSON array.
+- When `value_type=string`, `value` is a JSON string.
+- When `value_type=number`, `value` is a JSON number.
+- When `value_type=boolean`, `value` is a JSON boolean.
+- When `value_type=object`, `value` is a JSON object.
+- When `value_type=array`, `value` is a JSON array.
 
-Additional rules:
+### Additional Rules
 
 - `null` is a valid JSON value.
 - If a higher-precedence scope sets a key to `null`, lower-precedence values are masked for that key.
-- Consumers MAY treat `null` as equivalent to "unset" for specific known keys, but unknown keys MUST be passed through unchanged.
+- Consumers may treat `null` as equivalent to "unset" for specific known keys, but unknown keys are passed through unchanged.
 
 ## Known Keys and User-Defined Keys
 
+- Spec ID: `CYNAI.STANDS.PreferencesKnownAndUserDefinedKeys` <a id="spec-cynai-stands-preferenceknownanduserdefinedkeys"></a>
+
 Preferences support both known keys (with documented semantics) and user-defined keys (opaque).
 
-Known keys:
+### Known Keys
 
 - Known keys are keys whose semantics are defined by one or more tech specs.
-- Known keys MAY be validated for type and shape by clients and gateways.
+- Known keys may be validated for type and shape by clients and gateways.
 
-User-defined keys:
+### User-Defined Keys
 
 - User-defined keys are keys whose semantics are defined by operators, projects, or users, not by CyNodeAI specs.
-- User-defined keys MUST be stored and retrieved without the system attempting to interpret them.
-- User-defined keys SHOULD use a collision-resistant namespace, such as:
+- User-defined keys are stored and retrieved without the system attempting to interpret them.
+- User-defined keys should use a collision-resistant namespace, such as:
   - `custom.<org_or_team>.<name>`
   - `user.<handle>.<name>`
   - `project.<slug>.custom.<name>`
 
-User-defined key examples:
+### User-Defined Key Examples
 
 - `custom.acme.writing.tone`
 - `user.alice.acceptance.extra_checks`
@@ -173,10 +190,12 @@ User-defined key examples:
 
 - Spec ID: `CYNAI.STANDS.AgentAdditionalContext` <a id="spec-cynai-stands-agentadditionalcontext"></a>
 
-Agents that leverage LLMs MUST support user-configurable additional context included with LLM prompts.
+Agents that leverage LLMs support user-configurable additional context included with LLM prompts.
 See [REQ-AGENTS-0133](../requirements/agents.md#req-agents-0133) and [LLM Context (Baseline and User-Configurable)](project_manager_agent.md#spec-cynai-agents-llmcontext).
 
-Recommended known keys (reserved namespace `agents.<agent_id>.additional_context` or role-based):
+### Agent Additional Context Known Keys
+
+Reserved namespace `agents.<agent_id>.additional_context` or role-based:
 
 - `agents.project_manager.additional_context` (string or array of strings)
   - User-supplied text merged into the context passed to the Project Manager Agent's LLM (after baseline context and role instructions).
@@ -187,47 +206,49 @@ Recommended known keys (reserved namespace `agents.<agent_id>.additional_context
 
 #### Agent Additional Context Value Semantics
 
-- Value MAY be a string (single block of text) or an array of strings (concatenated in order).
+- Value may be a string (single block of text) or an array of strings (concatenated in order).
 - Resolution uses the same scope precedence as other preferences (task > project > user > group > system).
-- Invalid or unknown keys MUST be skipped during resolution; valid entries MUST be included in the effective context supplied to the agent runtime.
+- Invalid or unknown keys are skipped during resolution; valid entries are included in the effective context supplied to the agent runtime.
 
 ## Code Language Preferences
 
-Code language preferences MUST support ranked choices and context.
-Code language preferences MUST also support explicit deny lists (global and context-specific) so operators can prohibit specific languages entirely or prohibit them for specific classes of work.
+- Spec ID: `CYNAI.STANDS.CodeLanguagePreferences` <a id="spec-cynai-stands-codelanguagepreferences"></a>
 
-Recommended known keys:
+Code language preferences support ranked choices and context.
+Code language preferences also support explicit deny lists (global and context-specific) so operators can prohibit specific languages entirely or prohibit them for specific classes of work.
+
+### Recommended Known Keys
 
 - `code.language.rank_ordered` (array)
   - Ordered list of preferred code languages (first is most preferred).
-  - Each array item MUST be an object with:
+  - Each array item is an object with:
     - `language` (string, required)
     - `preferred_for` (object, optional)
       - `project_kinds` (array of string, optional)
       - `task_kinds` (array of string, optional)
     - `notes` (string, optional)
 - `code.language.disallowed` (array of string)
-  - Languages that MUST NOT be used for any generated or modified code.
+  - Languages that are not used for any generated or modified code.
 - `code.language.disallowed_by_project_kind` (object)
   - Map of `project_kind` => array of disallowed languages for that project kind.
 - `code.language.disallowed_by_task_kind` (object)
   - Map of `task_kind` => array of disallowed languages for that task kind.
 
-Recommended enumerations:
+### Recommended Enumerations
 
 - `project_kinds` examples: backend, frontend, cli, infra, data, security, docs, mobile
 - `task_kinds` examples: feature, bugfix, refactor, tests, docs, tooling
 
-Resolution rules:
+### Resolution Rules
 
-- If a language is present in `code.language.disallowed`, it MUST be treated as disallowed regardless of rank.
-- If a language is present in the relevant context-specific disallow map, it MUST be treated as disallowed for that context regardless of rank.
-- If all ranked languages are disallowed for the context, the system MUST fail closed with an actionable error (do not silently pick a disallowed language).
+- If a language is present in `code.language.disallowed`, it is treated as disallowed regardless of rank.
+- If a language is present in the relevant context-specific disallow map, it is treated as disallowed for that context regardless of rank.
+- If all ranked languages are disallowed for the context, the system fails closed with an actionable error (do not silently pick a disallowed language).
 
-Backward-compatible simple key:
+### Backward-Compatible Simple Key
 
-- `code.language.preferred` (string) MAY be used as a simple default, but it does not support ranking or context.
-  Implementations SHOULD prefer `code.language.rank_ordered` when present.
+- `code.language.preferred` (string) may be used as a simple default, but it does not support ranking or context.
+  Implementations prefer `code.language.rank_ordered` when present.
 
 ## Effective Preference Resolution
 
@@ -258,7 +279,9 @@ Effective preference resolution requires:
 
 ### Resolution Algorithm
 
-The effective preferences map MUST be computed as follows.
+- Spec ID: `CYNAI.STANDS.PreferencesResolutionAlgorithm` <a id="spec-cynai-stands-preferenceresolutionalgorithm"></a>
+
+The effective preferences map is computed as follows.
 
 1. Collect all preference entries in scope types applicable to the task context:
    - system scope (always).
@@ -272,27 +295,29 @@ The effective preferences map MUST be computed as follows.
    - secondary: `updated_at` ascending (older first).
    - tertiary: `id` ascending (stable tie-breaker).
 4. Fold the sorted tuples into a map `effective[key] = value` by applying later tuples over earlier tuples.
-5. The system MUST NOT drop unknown keys during resolution.
+5. The system does not drop unknown keys during resolution.
 
-Group scope determinism:
+#### Group Scope Determinism
 
-- If the user is a member of multiple groups, group-scoped preference entries MUST be applied in a deterministic order.
+- If the user is a member of multiple groups, group-scoped preference entries are applied in a deterministic order.
 - Recommended deterministic order is ascending by `group_id`.
 - If multiple groups specify different values for the same key, the later-applied group wins.
 
-Error handling during resolution:
+#### Error Handling During Resolution
 
-- If an entry has an invalid `value_type` for the stored JSON value, the entry MUST be treated as invalid.
-- Invalid entries MUST NOT override lower-precedence valid entries.
-- Invalid entries SHOULD be surfaced in diagnostics (for example, in an "effective preferences preview" response), but must not block task execution by default.
+- If an entry has an invalid `value_type` for the stored JSON value, the entry is treated as invalid.
+- Invalid entries do not override lower-precedence valid entries.
+- Invalid entries may be surfaced in diagnostics (for example, in an "effective preferences preview" response), but do not block task execution by default.
 
 ### Output Shape
 
-The effective preference result SHOULD be representable as:
+- Spec ID: `CYNAI.STANDS.PreferencesOutputShape` <a id="spec-cynai-stands-preferenceoutputshape"></a>
+
+The effective preference result is representable as:
 
 - A JSON object mapping `key` to `value`, where `value` is JSON.
 
-The effective preference result MAY also include metadata fields for UI and auditing:
+The effective preference result may also include metadata fields for UI and auditing:
 
 - The source scope for each key.
 - The applied entry version for each key.
@@ -300,51 +325,46 @@ The effective preference result MAY also include metadata fields for UI and audi
 
 ### MCP Preference Tools
 
-Agents and the models they run MUST be able to retrieve preferences and effective preferences via MCP database tools.
-This is required so preference access remains policy-controlled, audited, and consistent across workflows.
+- Spec ID: `CYNAI.STANDS.McpPreferenceTools` <a id="spec-cynai-stands-mcppreferencetools"></a>
 
-The MCP tool catalog defines the typed database tool names.
-See [`docs/tech_specs/mcp_tool_catalog.md`](mcp_tool_catalog.md) and [`docs/tech_specs/mcp_tooling.md`](mcp_tooling.md).
+Agents retrieve preferences and effective preferences via MCP database tools so preference access remains policy-controlled, audited, and consistent across workflows.
+See [REQ-MCPTOO-0117](../requirements/mcptoo.md#req-mcptoo-0117).
 
-Minimum preference tools (recommended):
-
-- `db.preference.get`
-  - Read one preference entry in a specific scope by key.
-- `db.preference.list`
-  - List preference entries in a specific scope, with optional filtering and pagination.
-- `db.preference.effective`
-  - Compute and return effective preferences for a task (task => project => user => group => system).
-
-Tool behavior notes:
-
-- These tools MUST be typed operations and MUST NOT accept raw SQL.
-- These tools MUST support user-defined keys (unknown keys) without interpretation.
-- Listing tools MUST support pagination and MUST be size-limited.
+Tool names, argument schemas, behavior, and allowlists are defined in [Preference tools](mcp_tools/preference_tools.md); see [MCP tool specifications](mcp_tools/README.md) for the full index and [MCP Tooling](mcp_tooling.md) for common arguments and response model.
 
 ## Caching and Invalidation
 
-Effective preference resolution is deterministic.
-Clients and agents SHOULD cache effective preferences to avoid repeated database reads.
+- Spec ID: `CYNAI.STANDS.PreferencesCaching` <a id="spec-cynai-stands-preferencecaching"></a>
 
-Minimum cache key:
+Effective preference resolution is deterministic.
+Clients and agents cache effective preferences to avoid repeated database reads.
+See [REQ-CLIENT-0115](../requirements/client.md#req-client-0115).
+
+### Minimum Cache Key
 
 - `task_id` and the task revision identifier (or equivalent monotonically increasing task version).
 
-Cache invalidation MUST occur when:
+### Cache Invalidation Triggers
+
+Cache invalidation occurs when:
 
 - Any preference entry relevant to the task context changes.
 - The task's `project_id` changes.
 - The task revision changes.
 
-Cache invalidation SHOULD be implementable by using:
+### Cache Invalidation Implementation
+
+Cache invalidation is implementable by using:
 
 - Version checks on relevant preference entries, and
 - Event-driven invalidation (for example, gateway events), when available.
 
 ## Write Semantics and Concurrency
 
-Preference writes MUST be scoped.
-Preference writes MUST be versioned.
+- Spec ID: `CYNAI.STANDS.PreferencesWriteSemantics` <a id="spec-cynai-stands-preferencewritesemantics"></a>
+
+Preference writes are scoped.
+Preference writes are versioned.
 
 Create semantics:
 
@@ -352,30 +372,32 @@ Create semantics:
 
 Update semantics:
 
-- Updating an existing preference entry MUST increment `version` by 1.
-- Updates SHOULD require an expected version to prevent lost updates.
-- If an expected version is provided and does not match the current entry version, the update MUST fail with a conflict error.
+- Updating an existing preference entry increments `version` by 1.
+- Updates require an expected version to prevent lost updates.
+- If an expected version is provided and does not match the current entry version, the update fails with a conflict error.
 
 Delete semantics:
 
-- Deletion MAY be modeled as removal of the entry or as a tombstone.
+- Deletion may be modeled as removal of the entry or as a tombstone.
 - If deletion is modeled as removal, lower-precedence values become effective again.
-- If deletion is modeled as a tombstone, the tombstone SHOULD be represented as a `null` value at the higher-precedence scope.
+- If deletion is modeled as a tombstone, the tombstone is represented as a `null` value at the higher-precedence scope.
 
 Validation semantics:
 
-- Known keys SHOULD be validated by type and, when feasible, by schema.
-- User-defined keys MUST be accepted as long as they satisfy storage invariants (key constraints and JSON validity).
+- Known keys are validated by type and, when feasible, by schema.
+- User-defined keys are accepted as long as they satisfy storage invariants (key constraints and JSON validity).
 
 ## Auditing
 
-Preference writes SHOULD be auditable.
+- Spec ID: `CYNAI.STANDS.PreferencesAuditing` <a id="spec-cynai-stands-preferenceauditing"></a>
 
-Audit requirements:
+Preference writes are auditable.
 
-- Each successful create, update, or delete MUST create an audit log entry.
-- Audit entries MUST include `changed_by` and SHOULD include a human-entered `reason`.
-- Audit entries MUST capture the old value and new value as jsonb.
+### Audit Requirements
+
+- Each successful create, update, or delete creates an audit log entry.
+- Audit entries include `changed_by` and may include a human-entered `reason`.
+- Audit entries capture the old value and new value as jsonb.
 
 ## Standard Use Cases
 
@@ -401,27 +423,29 @@ User-defined coordination key:
 
 ## Edge Cases
 
-Missing scope identifiers:
+This section describes edge cases and special handling for preference resolution and storage.
+
+### Missing Scope Identifiers
 
 - If `project_id` is null, project-scoped entries are not considered.
 - If `user_id` is null, user-scoped entries are not considered.
 
-Unknown keys:
+### Unknown Keys
 
-- Unknown keys MUST not cause failures.
-- Unknown keys MUST be passed through unchanged in effective preference results.
+- Unknown keys do not cause failures.
+- Unknown keys are passed through unchanged in effective preference results.
 
-Conflicting types across scopes:
+### Conflicting Types Across Scopes
 
 - If the same key is set to different JSON types at different scopes, the highest-precedence valid entry wins.
-- Consumers of known keys SHOULD reject invalid types for those known keys and treat them as absent.
+- Consumers of known keys reject invalid types for those known keys and treat them as absent.
 
-Large values:
+### Large Values
 
-- Preferences SHOULD be used for small configuration values, not for large documents.
-- Implementations SHOULD enforce reasonable size limits per entry.
+- Preferences are used for small configuration values, not for large documents.
+- Implementations enforce reasonable size limits per entry.
 
-High-churn updates:
+### High-Churn Updates
 
-- Caches MUST be invalidated when relevant entries change.
-- Systems SHOULD avoid tight loops that repeatedly rewrite preferences during task execution.
+- Caches are invalidated when relevant entries change.
+- Systems avoid tight loops that repeatedly rewrite preferences during task execution.

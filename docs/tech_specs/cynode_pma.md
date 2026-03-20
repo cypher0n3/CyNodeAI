@@ -554,14 +554,14 @@ When making MCP requests, `cynode-pma` calls the **worker proxy** (e.g. the URL 
 The **worker proxy** holds the PM agent token (issued by the orchestrator, delivered to the worker in node config) and attaches it when forwarding requests to the orchestrator MCP gateway; see [Agent-Scoped Tokens or API Keys](mcp_gateway_enforcement.md#spec-cynai-mcpgat-agentscopedtokens).
 The PM token is system-level (not bound to a specific user); user context for a given request comes from the conversation or task when applicable.
 The gateway authenticates the token and restricts tool access to the allowlist and per-tool scope for the resolved agent type.
-The gateway restricts PM/PA to tools that have **PM scope** (or **both**) in the orchestrator's per-tool scope; see [Per-tool scope: Sandbox vs PM](mcp_gateway_enforcement.md#spec-cynai-mcpgat-pertoolscope).
+The gateway restricts PM/PA to tools that have **PM scope** (or **both**) in the orchestrator's per-tool scope; see [Per-tool scope: Sandbox vs PM](mcp_tools/access_allowlists_and_scope.md#spec-cynai-mcpgat-pertoolscope).
 Tools that are sandbox-only MUST NOT be invokable by `cynode-pma`.
 
 ### Role-Based Allowlists
 
-- When running as **project_manager**, `cynode-pma` MUST invoke only tools permitted by the [Project Manager Agent allowlist](mcp_gateway_enforcement.md#spec-cynai-mcpgat-pmagentallowlist).
+- When running as **project_manager**, `cynode-pma` MUST invoke only tools permitted by the [Project Manager Agent allowlist](mcp_tools/access_allowlists_and_scope.md#spec-cynai-mcpgat-pmagentallowlist).
   That allowlist includes `db.*`, `node.*`, `sandbox.*`, `artifact.*`, `model.*`, `connector.*`, `web.fetch`, `web.search`, `api.call`, `git.*`, `help.*`, and when the system setting permits, `sandbox.allowed_images.list` and `sandbox.allowed_images.add`.
-- When running as **project_analyst**, `cynode-pma` MUST invoke only tools permitted by the [Project Analyst Agent allowlist](mcp_gateway_enforcement.md#spec-cynai-mcpgat-paagentallowlist).
+- When running as **project_analyst**, `cynode-pma` MUST invoke only tools permitted by the [Project Analyst Agent allowlist](mcp_tools/access_allowlists_and_scope.md#spec-cynai-mcpgat-paagentallowlist).
   That allowlist includes limited `db.*`, `artifact.*`, `web.fetch`, `web.search`, `api.call`, and `help.*`.
 
 Admin-configurable per-tool enable/disable and access control rules further restrict which tools succeed; the agent MUST treat gateway rejections as hard failures.
@@ -569,7 +569,7 @@ Admin-configurable per-tool enable/disable and access control rules further rest
 #### See Also
 
 - [`docs/tech_specs/mcp_gateway_enforcement.md`](mcp_gateway_enforcement.md)
-- [`docs/tech_specs/mcp_tool_catalog.md`](mcp_tool_catalog.md)
+- [`docs/tech_specs/mcp_tools/`](mcp_tools/README.md)
 
 ## LLM via API Egress
 
@@ -612,13 +612,13 @@ See [Default CyNodeAI Interaction Skill](skills_storage_and_inference.md#spec-cy
 ### Skills MCP Tools
 
 - When the gateway allowlist and access control permit, `cynode-pma` MAY use the MCP skills tools `skills.create`, `skills.list`, `skills.get`, `skills.update`, and `skills.delete`.
-  Permission is determined by the role allowlist in [mcp_gateway_enforcement.md](mcp_gateway_enforcement.md) and per-tool access control; the implementation MUST NOT invoke a skills tool if the gateway rejects the call.
+  Permission is determined by the role allowlist in [access_allowlists_and_scope.md](mcp_tools/access_allowlists_and_scope.md) and per-tool access control; the implementation MUST NOT invoke a skills tool if the gateway rejects the call.
 - All skill tool invocations are audited and subject to the same scope and malicious-pattern checks as web and CLI.
 
 #### See Also (Skills Tools)
 
 - [`docs/tech_specs/skills_storage_and_inference.md`](skills_storage_and_inference.md)
-- [`docs/tech_specs/mcp_tool_catalog.md`](mcp_tool_catalog.md#spec-cynai-mcptoo-skillstools)
+- [Skills tools](mcp_tools/skills_tools.md)
 
 ## Configuration Surface
 

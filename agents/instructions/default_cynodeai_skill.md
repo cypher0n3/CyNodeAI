@@ -16,7 +16,7 @@ Do not modify or delete it via user-facing skill tools.
   Job-scoped tools may require `job_id`; run-scoped may use `run_id`.
 - The gateway returns structured errors (e.g. 403, 404, 422).
   Treat rejections as hard failures; do not retry without correcting the request or checking policy.
-- Canonical tool names and argument schemas are in the MCP tool catalog; your role allowlist determines which tools you may call.
+- Canonical tool names and argument schemas are in [MCP tool specifications](../../docs/tech_specs/mcp_tools/README.md); your role allowlist determines which tools you may call.
 
 ## Task and Project Context
 

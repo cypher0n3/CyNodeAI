@@ -48,7 +48,7 @@ Sandbox image and isolation requirements remain in the `SANDBX` domain.
 - **REQ-SBAGNT-0105:** Sandbox agents (including `cynode-sba` when operating as an agent) MUST use only MCP tools permitted for the sandbox/worker role (sandbox allowlist).
   They MUST invoke tools through the orchestrator MCP gateway and MUST NOT invoke tools designated PM-only (orchestrator-side only).
   [CYNAI.SBAGNT.McpToolAccess](../tech_specs/cynode_sba.md#spec-cynai-sbagnt-mcptoolaccess)
-  [CYNAI.MCPGAT.PerToolScope](../tech_specs/mcp_gateway_enforcement.md#spec-cynai-mcpgat-pertoolscope)
+  [CYNAI.MCPGAT.PerToolScope](../tech_specs/mcp_tools/access_allowlists_and_scope.md#spec-cynai-mcpgat-pertoolscope)
   <a id="req-sbagnt-0105"></a>
 
 - **REQ-SBAGNT-0106:** When a worker node runs a sandbox container that uses the SBA runner image, the job payload or container entrypoint MUST be such that `cynode-sba` reads the job spec from the agreed location and writes the result per the result contract; the Worker API response MUST be derivable from the SBA result and container lifecycle.

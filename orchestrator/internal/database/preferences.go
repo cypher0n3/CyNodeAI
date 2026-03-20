@@ -1,4 +1,4 @@
-// Package database provides preference storage per docs/tech_specs/user_preferences.md and mcp_tool_catalog.md (P2-03).
+// Package database provides preference storage per docs/tech_specs/user_preferences.md and docs/tech_specs/mcp_tools/preference_tools.md (P2-03).
 package database
 
 import (
@@ -15,7 +15,7 @@ import (
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/models"
 )
 
-// MaxPreferenceListLimit caps list results (mcp_tool_catalog: size-limited).
+// MaxPreferenceListLimit caps list results (mcp_tools/preference_tools: size-limited).
 const MaxPreferenceListLimit = 100
 
 // GetPreference returns the preference entry for the given scope and key, or ErrNotFound.
@@ -122,7 +122,7 @@ func (db *DB) GetEffectivePreferencesForTask(ctx context.Context, taskID uuid.UU
 }
 
 // CreatePreference creates a preference entry. Returns ErrExists if (scope_type, scope_id, key) already exists.
-// value should be JSON-encoded; valueType is e.g. string, number, boolean, object, array. Per mcp_tool_catalog.md.
+// value should be JSON-encoded; valueType is e.g. string, number, boolean, object, array. Per mcp_tools/preference_tools.md.
 func (db *DB) CreatePreference(ctx context.Context, scopeType string, scopeID *uuid.UUID, key, value, valueType string, reason, updatedBy *string) (*models.PreferenceEntry, error) {
 	existing, err := db.GetPreference(ctx, scopeType, scopeID, key)
 	if err != nil && !errors.Is(err, ErrNotFound) {

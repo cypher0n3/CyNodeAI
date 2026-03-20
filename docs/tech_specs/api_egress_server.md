@@ -4,7 +4,7 @@
 - [Service Purpose](#service-purpose)
 - [Agent Interaction Model](#agent-interaction-model)
 - [Credential Storage](#credential-storage)
-  - [Database Schema](#database-schema)
+  - [Postgres Schema](#postgres-schema)
   - [Credential Storage Requirements Traces](#credential-storage-requirements-traces)
   - [API Credentials Table](#api-credentials-table)
 - [Access Control](#access-control)
@@ -70,11 +70,6 @@ Minimum response fields
 Credentials are stored in PostgreSQL and are only retrievable by the API Egress Server.
 Agents MUST never receive credentials in responses.
 
-### Database Schema
-
-- The Postgres schema is defined in [`docs/tech_specs/postgres_schema.md`](postgres_schema.md).
-- The API Egress credentials table is specified in the [API Egress Credentials](postgres_schema.md#spec-cynai-schema-apiegresscredentials) section.
-
 ### Credential Storage Requirements Traces
 
 - [REQ-APIEGR-0106](../requirements/apiegr.md#req-apiegr-0106)
@@ -82,11 +77,22 @@ Agents MUST never receive credentials in responses.
 - [REQ-APIEGR-0108](../requirements/apiegr.md#req-apiegr-0108)
 - [REQ-APIEGR-0109](../requirements/apiegr.md#req-apiegr-0109)
 
-### API Credentials Table
+### Postgres Schema
+
+- Spec ID: `CYNAI.SCHEMA.ApiEgressCredentials` <a id="spec-cynai-schema-apiegresscredentials"></a>
+
+Credentials for outbound API calls are stored in PostgreSQL and are only retrievable by the API Egress Server.
+Agents never receive credentials in responses.
+
+#### API Credentials Table
+
+- Spec ID: `CYNAI.SCHEMA.ApiCredentialsTable` <a id="spec-cynai-schema-apicredentialstable"></a>
+
+Table name: `api_credentials`.
 
 - `id` (uuid, pk)
 - `owner_type` (text)
-  - one of: user|group
+  - one of: user, group
 - `owner_id` (uuid)
   - user id or group id, depending on owner_type
 - `provider` (text)
@@ -103,13 +109,14 @@ Agents MUST never receive credentials in responses.
 - `updated_at` (timestamptz)
 - `updated_by` (text)
 
-Constraints
+##### API Credentials Table Constraints
 
 - Unique: (`owner_type`, `owner_id`, `provider`, `credential_name`)
 - Index: (`owner_type`, `owner_id`, `provider`)
 - Index: (`provider`)
+- Index: (`is_active`)
 
-Security notes
+#### Security Notes
 
 - Encryption SHOULD be envelope encryption with a master key that is not stored in PostgreSQL.
 - The API Egress Server SHOULD be the only service with permission to decrypt credentials.

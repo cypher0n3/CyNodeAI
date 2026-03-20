@@ -300,7 +300,7 @@ The orchestrator MUST be able to mark the job as in progress without holding the
 
 When the SBA (or job) requests a [timeout extension](cynode_sba.md#spec-cynai-sbagnt-timeoutextension) and the node or orchestrator grants it, the **orchestrator** MUST be informed of the new effective deadline (e.g. via job-status update, callback payload, or orchestrator-owned extension grant).
 This allows the orchestrator to update its [job timeout tracking](orchestrator.md#spec-cynai-orches-rule-jobtimeouttracking) and scheduled timeout check so it does not mark the job as timed out while the job is within the extended deadline.
-The exact mechanism (field on job-status callback, MCP tool response, or orchestrator endpoint) is defined in the Worker API or MCP tool catalog.
+The exact mechanism (field on job-status callback, MCP tool response, or orchestrator endpoint) is defined in the Worker API or [MCP tool specifications](mcp_tools/README.md).
 
 #### Result Retention (Required)
 
