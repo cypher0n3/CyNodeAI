@@ -7,8 +7,6 @@ import (
 	"log/slog"
 	"sort"
 	"strings"
-
-	"github.com/cypher0n3/cynodeai/orchestrator/internal/models"
 )
 
 //go:embed ddl/*.sql
@@ -27,34 +25,34 @@ func (db *DB) RunSchema(ctx context.Context, logger *slog.Logger) error {
 func (db *DB) runAutoMigrate(ctx context.Context, logger *slog.Logger) error {
 	logger.Info("running GORM AutoMigrate")
 	err := db.db.WithContext(ctx).AutoMigrate(
-		&models.User{},
-		&models.PasswordCredential{},
-		&models.RefreshSession{},
-		&models.AuthAuditLog{},
-		&models.Task{},
-		&models.Job{},
-		&models.Node{},
-		&models.NodeCapability{},
-		&models.McpToolCallAuditLog{},
-		&models.PreferenceEntry{},
-		&models.PreferenceAuditLog{},
-		&models.Project{},
-		&models.ProjectPlan{},
-		&models.TaskDependency{},
-		&models.Session{},
-		&models.ChatThread{},
-		&models.ChatMessage{},
-		&models.ChatAuditLog{},
-		&models.WorkflowCheckpoint{},
-		&models.TaskWorkflowLease{},
-		&models.SandboxImage{},
-		&models.SandboxImageVersion{},
-		&models.NodeSandboxImageAvailability{},
-		&models.TaskArtifact{},
-		&models.Skill{},
-		&models.AccessControlRule{},
-		&models.AccessControlAuditLog{},
-		&models.ApiCredential{},
+		&UserRecord{},
+		&PasswordCredentialRecord{},
+		&RefreshSessionRecord{},
+		&AuthAuditLogRecord{},
+		&TaskRecord{},
+		&JobRecord{},
+		&NodeRecord{},
+		&NodeCapabilityRecord{},
+		&TaskDependencyRecord{},
+		&McpToolCallAuditLogRecord{},
+		&PreferenceEntryRecord{},
+		&PreferenceAuditLogRecord{},
+		&ProjectRecord{},
+		&ProjectPlanRecord{},
+		&SessionRecord{},
+		&ChatThreadRecord{},
+		&ChatMessageRecord{},
+		&ChatAuditLogRecord{},
+		&WorkflowCheckpointRecord{},
+		&TaskWorkflowLeaseRecord{},
+		&SandboxImageRecord{},
+		&SandboxImageVersionRecord{},
+		&NodeSandboxImageAvailabilityRecord{},
+		&TaskArtifactRecord{},
+		&SkillRecord{},
+		&AccessControlRuleRecord{},
+		&AccessControlAuditLogRecord{},
+		&ApiCredentialRecord{},
 	)
 	if err != nil {
 		return fmt.Errorf("auto migrate: %w", err)

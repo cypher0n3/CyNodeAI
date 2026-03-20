@@ -12,8 +12,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/cypher0n3/cynodeai/orchestrator/internal/models"
 	"github.com/google/uuid"
+
+	"github.com/cypher0n3/cynodeai/go_shared_libs/gormmodel"
+	"github.com/cypher0n3/cynodeai/orchestrator/internal/models"
 )
 
 const integrationEnv = "POSTGRES_TEST_DSN"
@@ -173,9 +175,11 @@ func TestIntegration_AuthAuditLog(t *testing.T) {
 func TestIntegration_McpToolCallAuditLog(t *testing.T) {
 	db, ctx := integrationDB(t)
 	rec := &models.McpToolCallAuditLog{
-		ToolName: "db.preference.get",
-		Decision: "allow",
-		Status:   "success",
+		McpToolCallAuditLogBase: models.McpToolCallAuditLogBase{
+			ToolName: "db.preference.get",
+			Decision: "allow",
+			Status:   "success",
+		},
 	}
 	if err := db.CreateMcpToolCallAuditLog(ctx, rec); err != nil {
 		t.Fatalf("CreateMcpToolCallAuditLog: %v", err)
@@ -192,13 +196,15 @@ func TestIntegration_Preferences_GetAndList(t *testing.T) {
 	db, ctx := integrationDB(t)
 	val := integrationTestPreferenceValue
 	ent := &models.PreferenceEntry{
+		PreferenceEntryBase: models.PreferenceEntryBase{
+			ScopeType: "system",
+			ScopeID:   nil,
+			Key:       "test.key",
+			Value:     &val,
+			ValueType: "string",
+			Version:   1,
+		},
 		ID:        uuid.New(),
-		ScopeType: "system",
-		ScopeID:   nil,
-		Key:       "test.key",
-		Value:     &val,
-		ValueType: "string",
-		Version:   1,
 		UpdatedAt: time.Now().UTC(),
 	}
 	if err := db.GORM().WithContext(ctx).Create(ent).Error; err != nil {
@@ -228,12 +234,14 @@ func TestIntegration_Preferences_EffectiveAndCursor(t *testing.T) {
 	db, ctx := integrationDB(t)
 	val := integrationTestPreferenceValue
 	ent := &models.PreferenceEntry{
+		PreferenceEntryBase: models.PreferenceEntryBase{
+			ScopeType: "system",
+			Key:       "test.key",
+			Value:     &val,
+			ValueType: "string",
+			Version:   1,
+		},
 		ID:        uuid.New(),
-		ScopeType: "system",
-		Key:       "test.key",
-		Value:     &val,
-		ValueType: "string",
-		Version:   1,
 		UpdatedAt: time.Now().UTC(),
 	}
 	if err := db.GORM().WithContext(ctx).Create(ent).Error; err != nil {
@@ -273,13 +281,15 @@ func TestIntegration_Preferences_UserScope(t *testing.T) {
 	}
 	uv := `"user-val"`
 	uent := &models.PreferenceEntry{
+		PreferenceEntryBase: models.PreferenceEntryBase{
+			ScopeType: "user",
+			ScopeID:   &user.ID,
+			Key:       "user.key",
+			Value:     &uv,
+			ValueType: "string",
+			Version:   1,
+		},
 		ID:        uuid.New(),
-		ScopeType: "user",
-		ScopeID:   &user.ID,
-		Key:       "user.key",
-		Value:     &uv,
-		ValueType: "string",
-		Version:   1,
 		UpdatedAt: time.Now().UTC(),
 	}
 	if err := db.GORM().WithContext(ctx).Create(uent).Error; err != nil {
@@ -315,16 +325,19 @@ func TestIntegration_Preferences_EffectiveWithProject(t *testing.T) {
 	if err != nil {
 		pid := uuid.New()
 		now := time.Now().UTC()
-		_ = db.GORM().WithContext(ctx).Create(&models.Project{ID: pid, Slug: "default", DisplayName: "Default", IsActive: true, CreatedAt: now, UpdatedAt: now}).Error
+		_ = db.GORM().WithContext(ctx).Create(&ProjectRecord{
+			GormModelUUID: gormmodel.GormModelUUID{ID: pid, CreatedAt: now, UpdatedAt: now},
+			ProjectBase:    models.ProjectBase{Slug: "default", DisplayName: "Default", IsActive: true},
+		}).Error
 		task2, _ := db.CreateTask(ctx, &user.ID, "eff2", nil, nil)
 		if task2 != nil {
-			_ = db.GORM().WithContext(ctx).Model(&models.Task{}).Where("id = ?", task2.ID).Update("project_id", pid).Error
+			_ = db.GORM().WithContext(ctx).Model(&TaskRecord{}).Where("id = ?", task2.ID).Update("project_id", pid).Error
 			_, _ = db.GetEffectivePreferencesForTask(ctx, task2.ID)
 		}
 	} else {
 		task2, _ := db.CreateTask(ctx, &user.ID, "eff2", nil, nil)
 		if task2 != nil {
-			_ = db.GORM().WithContext(ctx).Model(&models.Task{}).Where("id = ?", task2.ID).Update("project_id", proj.ID).Error
+			_ = db.GORM().WithContext(ctx).Model(&TaskRecord{}).Where("id = ?", task2.ID).Update("project_id", proj.ID).Error
 			_, _ = db.GetEffectivePreferencesForTask(ctx, task2.ID)
 		}
 	}
@@ -336,13 +349,15 @@ func TestIntegration_Preferences_ListLimitAndCursor(t *testing.T) {
 	val := integrationTestPreferenceValue
 	for i := 0; i < 3; i++ {
 		ent := &models.PreferenceEntry{
+			PreferenceEntryBase: models.PreferenceEntryBase{
+				ScopeType: "system",
+				ScopeID:   nil,
+				Key:       fmt.Sprintf("cap.key.%d", i),
+				Value:     &val,
+				ValueType: "string",
+				Version:   1,
+			},
 			ID:        uuid.New(),
-			ScopeType: "system",
-			ScopeID:   nil,
-			Key:       fmt.Sprintf("cap.key.%d", i),
-			Value:     &val,
-			ValueType: "string",
-			Version:   1,
 			UpdatedAt: time.Now().UTC(),
 		}
 		if err := db.GORM().WithContext(ctx).Create(ent).Error; err != nil {
@@ -389,13 +404,15 @@ func TestIntegration_Preferences_ListLimitAndCursor(t *testing.T) {
 func TestIntegration_Preferences_EffectiveWithNilValue(t *testing.T) {
 	db, ctx := integrationDB(t)
 	ent := &models.PreferenceEntry{
+		PreferenceEntryBase: models.PreferenceEntryBase{
+			ScopeType: "system",
+			ScopeID:   nil,
+			Key:       "nil.val.key",
+			Value:     nil, // nil value: effective still gets the key with nil
+			ValueType: "string",
+			Version:   1,
+		},
 		ID:        uuid.New(),
-		ScopeType: "system",
-		ScopeID:   nil,
-		Key:       "nil.val.key",
-		Value:     nil, // nil value: effective still gets the key with nil
-		ValueType: "string",
-		Version:   1,
 		UpdatedAt: time.Now().UTC(),
 	}
 	if err := db.GORM().WithContext(ctx).Create(ent).Error; err != nil {
@@ -602,12 +619,14 @@ func TestIntegration_GetArtifactByTaskIDAndPath(t *testing.T) {
 		t.Fatalf("CreateTask: %v", err)
 	}
 	art := &models.TaskArtifact{
-		ID:         uuid.New(),
-		TaskID:     task.ID,
-		Path:       "out/report.md",
-		StorageRef: "ref:abc",
-		CreatedAt:  time.Now().UTC(),
-		UpdatedAt:  time.Now().UTC(),
+		TaskArtifactBase: models.TaskArtifactBase{
+			TaskID:     task.ID,
+			Path:       "out/report.md",
+			StorageRef: "ref:abc",
+		},
+		ID:        uuid.New(),
+		CreatedAt: time.Now().UTC(),
+		UpdatedAt: time.Now().UTC(),
 	}
 	if err := db.GORM().WithContext(ctx).Create(art).Error; err != nil {
 		t.Fatalf("create task artifact: %v", err)
@@ -674,7 +693,13 @@ func TestIntegration_WorkflowLeaseAndCheckpoint(t *testing.T) {
 		t.Fatalf("ReleaseTaskWorkflowLease: %v", err)
 	}
 	state := `{"task_id":"` + task.ID.String() + `"}`
-	cp := &models.WorkflowCheckpoint{TaskID: task.ID, State: &state, LastNodeID: "plan_steps"}
+	cp := &models.WorkflowCheckpoint{
+		WorkflowCheckpointBase: models.WorkflowCheckpointBase{
+			TaskID:     task.ID,
+			State:      &state,
+			LastNodeID: "plan_steps",
+		},
+	}
 	if err := db.UpsertWorkflowCheckpoint(ctx, cp); err != nil {
 		t.Fatalf("UpsertWorkflowCheckpoint: %v", err)
 	}
@@ -686,7 +711,13 @@ func TestIntegration_WorkflowLeaseAndCheckpoint(t *testing.T) {
 		t.Errorf("GetWorkflowCheckpoint: last_node_id %q", got.LastNodeID)
 	}
 	// Update path: upsert again with new last_node_id.
-	cp2 := &models.WorkflowCheckpoint{TaskID: task.ID, State: &state, LastNodeID: "dispatch_step"}
+	cp2 := &models.WorkflowCheckpoint{
+		WorkflowCheckpointBase: models.WorkflowCheckpointBase{
+			TaskID:     task.ID,
+			State:      &state,
+			LastNodeID: "dispatch_step",
+		},
+	}
 	if err := db.UpsertWorkflowCheckpoint(ctx, cp2); err != nil {
 		t.Fatalf("UpsertWorkflowCheckpoint update: %v", err)
 	}
@@ -709,7 +740,7 @@ func TestIntegration_WorkflowLease_ExpiredReacquire(t *testing.T) {
 	}
 	// Expire the lease in DB so a different holder can re-acquire.
 	past := time.Now().UTC().Add(-time.Minute)
-	if err := db.GORM().WithContext(ctx).Model(&models.TaskWorkflowLease{}).Where("task_id = ?", task.ID).Update("expires_at", past).Error; err != nil {
+	if err := db.GORM().WithContext(ctx).Model(&TaskWorkflowLeaseRecord{}).Where("task_id = ?", task.ID).Update("expires_at", past).Error; err != nil {
 		t.Fatalf("update expires_at: %v", err)
 	}
 	leaseID2 := uuid.New()
@@ -791,10 +822,12 @@ func TestIntegration_UpsertWorkflowCheckpoint_WithPreSetID(t *testing.T) {
 	}
 	state := integrationTestPayloadX1
 	cp := &models.WorkflowCheckpoint{
-		ID:         uuid.New(),
-		TaskID:     task.ID,
-		State:      &state,
-		LastNodeID: "step1",
+		WorkflowCheckpointBase: models.WorkflowCheckpointBase{
+			TaskID:     task.ID,
+			State:      &state,
+			LastNodeID: "step1",
+		},
+		ID: uuid.New(),
 	}
 	if err := db.UpsertWorkflowCheckpoint(ctx, cp); err != nil {
 		t.Fatalf("UpsertWorkflowCheckpoint: %v", err)
@@ -1117,9 +1150,11 @@ func TestIntegration_ChatThreadsAndMessages(t *testing.T) {
 	}
 	assertListChatMessages(t, db, ctx, thread.ID)
 	rec := &models.ChatAuditLog{
-		UserID:           &user.ID,
-		Outcome:          "success",
-		RedactionApplied: false,
+		ChatAuditLogBase: models.ChatAuditLogBase{
+			UserID:           &user.ID,
+			Outcome:          "success",
+			RedactionApplied: false,
+		},
 	}
 	if err := db.CreateChatAuditLog(ctx, rec); err != nil {
 		t.Fatalf("CreateChatAuditLog: %v", err)
@@ -1137,12 +1172,14 @@ func TestIntegration_ChatThread_WithProjectID(t *testing.T) {
 	}
 	now := time.Now().UTC()
 	proj := &models.Project{
-		ID:          uuid.New(),
-		Slug:        "chat-proj-" + uuid.New().String()[:8],
-		DisplayName: "Chat Project",
-		IsActive:    true,
-		CreatedAt:   now,
-		UpdatedAt:   now,
+		ProjectBase: models.ProjectBase{
+			Slug:        "chat-proj-" + uuid.New().String()[:8],
+			DisplayName: "Chat Project",
+			IsActive:    true,
+		},
+		ID:        uuid.New(),
+		CreatedAt: now,
+		UpdatedAt: now,
 	}
 	if err := db.GORM().WithContext(ctx).Create(proj).Error; err != nil {
 		t.Fatalf("create project: %v", err)
@@ -1189,22 +1226,26 @@ func TestIntegration_CreateRefreshSession_ReturnsSession(t *testing.T) {
 func workflowGateCreateProjectAndPlan(t *testing.T, db *DB, ctx context.Context, now time.Time, state string, archived bool) (*models.Project, uuid.UUID) {
 	t.Helper()
 	proj := &models.Project{
-		ID:          uuid.New(),
-		Slug:        "gate-proj-" + uuid.New().String()[:8],
-		DisplayName: "Gate Project",
-		IsActive:    true,
-		CreatedAt:   now,
-		UpdatedAt:   now,
+		ProjectBase: models.ProjectBase{
+			Slug:        "gate-proj-" + uuid.New().String()[:8],
+			DisplayName: "Gate Project",
+			IsActive:    true,
+		},
+		ID:        uuid.New(),
+		CreatedAt: now,
+		UpdatedAt: now,
 	}
 	if err := db.GORM().WithContext(ctx).Create(proj).Error; err != nil {
 		t.Fatalf("create project: %v", err)
 	}
 	planID := uuid.New()
 	plan := &models.ProjectPlan{
+		ProjectPlanBase: models.ProjectPlanBase{
+			ProjectID: proj.ID,
+			State:     state,
+			Archived:  archived,
+		},
 		ID:        planID,
-		ProjectID: proj.ID,
-		State:     state,
-		Archived:  archived,
 		CreatedAt: now,
 		UpdatedAt: now,
 	}
@@ -1221,7 +1262,7 @@ func workflowGateCreateTaskWithPlan(t *testing.T, db *DB, ctx context.Context, p
 	if err != nil {
 		t.Fatalf("CreateTask: %v", err)
 	}
-	if err := db.GORM().WithContext(ctx).Model(&models.Task{}).Where("id = ?", task.ID).Update("plan_id", planID).Error; err != nil {
+	if err := db.GORM().WithContext(ctx).Model(&TaskRecord{}).Where("id = ?", task.ID).Update("plan_id", planID).Error; err != nil {
 		t.Fatalf("update task plan_id: %v", err)
 	}
 	task, err = db.GetTaskByID(ctx, task.ID)
@@ -1253,7 +1294,7 @@ func TestIntegration_WorkflowStartGate_PlanNotFound(t *testing.T) {
 		t.Fatalf("CreateTask: %v", err)
 	}
 	nonexistentPlanID := uuid.New()
-	if err := db.GORM().WithContext(ctx).Model(&models.Task{}).Where("id = ?", task.ID).Update("plan_id", nonexistentPlanID).Error; err != nil {
+	if err := db.GORM().WithContext(ctx).Model(&TaskRecord{}).Where("id = ?", task.ID).Update("plan_id", nonexistentPlanID).Error; err != nil {
 		t.Fatalf("update: %v", err)
 	}
 	task, err = db.GetTaskByID(ctx, task.ID)
@@ -1309,10 +1350,16 @@ func TestIntegration_WorkflowStartGate_DepsNotSatisfied(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateTask dep: %v", err)
 	}
-	if err := db.GORM().WithContext(ctx).Model(&models.Task{}).Where("id = ?", depTask.ID).Update("plan_id", planID).Error; err != nil {
+	if err := db.GORM().WithContext(ctx).Model(&TaskRecord{}).Where("id = ?", depTask.ID).Update("plan_id", planID).Error; err != nil {
 		t.Fatalf("update dep plan_id: %v", err)
 	}
-	depRow := &models.TaskDependency{ID: uuid.New(), TaskID: task.ID, DependsOnTaskID: depTask.ID}
+		depRow := &models.TaskDependency{
+			TaskDependencyBase: models.TaskDependencyBase{
+				TaskID:          task.ID,
+				DependsOnTaskID: depTask.ID,
+			},
+			ID: uuid.New(),
+		}
 	if err := db.GORM().WithContext(ctx).Create(depRow).Error; err != nil {
 		t.Fatalf("create task_dependency: %v", err)
 	}
@@ -1335,7 +1382,13 @@ func TestIntegration_WorkflowStartGate_DepTaskNotFound(t *testing.T) {
 	_, planID := workflowGateCreateProjectAndPlan(t, db, ctx, now, "active", false)
 	task := workflowGateCreateTaskWithPlan(t, db, ctx, planID, "workflow-gate-dep-missing")
 	missingDepID := uuid.New()
-	depRow := &models.TaskDependency{ID: uuid.New(), TaskID: task.ID, DependsOnTaskID: missingDepID}
+	depRow := &models.TaskDependency{
+		TaskDependencyBase: models.TaskDependencyBase{
+			TaskID:          task.ID,
+			DependsOnTaskID: missingDepID,
+		},
+		ID: uuid.New(),
+	}
 	if err := db.GORM().WithContext(ctx).Create(depRow).Error; err != nil {
 		t.Fatalf("create task_dependency: %v", err)
 	}
@@ -1478,16 +1531,18 @@ func TestIntegration_ListAccessControlRulesForApiCall(t *testing.T) {
 	db, ctx := integrationDB(t)
 	now := time.Now().UTC()
 	rule := &models.AccessControlRule{
-		ID:              uuid.New(),
-		SubjectType:     "user",
-		SubjectID:       nil,
-		Action:          ActionApiCall,
-		ResourceType:    ResourceTypeProviderOperation,
-		ResourcePattern: "*",
-		Effect:          "allow",
-		Priority:        10,
-		CreatedAt:       now,
-		UpdatedAt:       now,
+		AccessControlRuleBase: models.AccessControlRuleBase{
+			SubjectType:     "user",
+			SubjectID:       nil,
+			Action:          ActionApiCall,
+			ResourceType:    ResourceTypeProviderOperation,
+			ResourcePattern: "*",
+			Effect:          "allow",
+			Priority:        10,
+		},
+		ID:        uuid.New(),
+		CreatedAt: now,
+		UpdatedAt: now,
 	}
 	if err := db.GORM().WithContext(ctx).Create(rule).Error; err != nil {
 		t.Fatalf("create access control rule: %v", err)
@@ -1501,16 +1556,18 @@ func TestIntegration_ListAccessControlRulesForApiCall(t *testing.T) {
 	}
 	user, _ := db.CreateUser(ctx, "acr-user-"+uuid.New().String(), nil)
 	rule2 := &models.AccessControlRule{
-		ID:              uuid.New(),
-		SubjectType:     "user",
-		SubjectID:       &user.ID,
-		Action:          ActionApiCall,
-		ResourceType:    ResourceTypeProviderOperation,
-		ResourcePattern: "*",
-		Effect:          "allow",
-		Priority:        5,
-		CreatedAt:       now,
-		UpdatedAt:       now,
+		AccessControlRuleBase: models.AccessControlRuleBase{
+			SubjectType:     "user",
+			SubjectID:       &user.ID,
+			Action:          ActionApiCall,
+			ResourceType:    ResourceTypeProviderOperation,
+			ResourcePattern: "*",
+			Effect:          "allow",
+			Priority: 5,
+		},
+		ID:        uuid.New(),
+		CreatedAt: now,
+		UpdatedAt: now,
 	}
 	if err := db.GORM().WithContext(ctx).Create(rule2).Error; err != nil {
 		t.Fatalf("create rule with subject_id: %v", err)
@@ -1576,12 +1633,14 @@ func TestIntegration_ListChatThreads_WithProjectAndOffset(t *testing.T) {
 	}
 	now := time.Now().UTC()
 	proj := &models.Project{
-		ID:          uuid.New(),
-		Slug:        "lct-proj-" + uuid.New().String()[:8],
-		DisplayName: "List Threads Project",
-		IsActive:    true,
-		CreatedAt:   now,
-		UpdatedAt:   now,
+		ProjectBase: models.ProjectBase{
+			Slug:        "lct-proj-" + uuid.New().String()[:8],
+			DisplayName: "List Threads Project",
+			IsActive:    true,
+		},
+		ID:        uuid.New(),
+		CreatedAt: now,
+		UpdatedAt: now,
 	}
 	if err := db.GORM().WithContext(ctx).Create(proj).Error; err != nil {
 		t.Fatalf("create project: %v", err)

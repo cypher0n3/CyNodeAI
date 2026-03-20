@@ -68,7 +68,7 @@ func (db *DB) getPlanByID(ctx context.Context, planID uuid.UUID) (*models.Projec
 
 func (db *DB) listTaskDependencyIDs(ctx context.Context, taskID uuid.UUID) ([]uuid.UUID, error) {
 	var ids []uuid.UUID
-	err := db.db.WithContext(ctx).Model(&models.TaskDependency{}).
+	err := db.db.WithContext(ctx).Model(&TaskDependencyRecord{}).
 		Where("task_id = ?", taskID).
 		Pluck("depends_on_task_id", &ids).Error
 	if err != nil {

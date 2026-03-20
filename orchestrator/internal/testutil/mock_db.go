@@ -195,10 +195,12 @@ func (m *MockDB) setStatusAndUpdatedAt(id uuid.UUID, status string, forTask bool
 func (m *MockDB) CreateUser(_ context.Context, handle string, email *string) (*models.User, error) {
 	return runWithLock(m, true, func() (*models.User, error) {
 		user := &models.User{
+			UserBase: models.UserBase{
+				Handle:   handle,
+				Email:    email,
+				IsActive: true,
+			},
 			ID:        uuid.New(),
-			Handle:    handle,
-			Email:     email,
-			IsActive:  true,
 			CreatedAt: time.Now().UTC(),
 			UpdatedAt: time.Now().UTC(),
 		}
@@ -222,12 +224,14 @@ func (m *MockDB) GetUserByID(_ context.Context, id uuid.UUID) (*models.User, err
 func (m *MockDB) CreatePasswordCredential(_ context.Context, userID uuid.UUID, passwordHash []byte, hashAlg string) (*models.PasswordCredential, error) {
 	return runWithLock(m, true, func() (*models.PasswordCredential, error) {
 		cred := &models.PasswordCredential{
-			ID:           uuid.New(),
-			UserID:       userID,
-			PasswordHash: passwordHash,
-			HashAlg:      hashAlg,
-			CreatedAt:    time.Now().UTC(),
-			UpdatedAt:    time.Now().UTC(),
+			PasswordCredentialBase: models.PasswordCredentialBase{
+				UserID:       userID,
+				PasswordHash: passwordHash,
+				HashAlg:      hashAlg,
+			},
+			ID:        uuid.New(),
+			CreatedAt: time.Now().UTC(),
+			UpdatedAt: time.Now().UTC(),
 		}
 		m.PasswordCreds[userID] = cred
 		return cred, nil
@@ -243,13 +247,15 @@ func (m *MockDB) GetPasswordCredentialByUserID(_ context.Context, userID uuid.UU
 func (m *MockDB) CreateRefreshSession(_ context.Context, userID uuid.UUID, tokenHash []byte, expiresAt time.Time) (*models.RefreshSession, error) {
 	return runWithLock(m, true, func() (*models.RefreshSession, error) {
 		session := &models.RefreshSession{
-			ID:               uuid.New(),
-			UserID:           userID,
-			RefreshTokenHash: tokenHash,
-			IsActive:         true,
-			ExpiresAt:        expiresAt,
-			CreatedAt:        time.Now().UTC(),
-			UpdatedAt:        time.Now().UTC(),
+			RefreshSessionBase: models.RefreshSessionBase{
+				UserID:           userID,
+				RefreshTokenHash: tokenHash,
+				IsActive:         true,
+				ExpiresAt:        expiresAt,
+			},
+			ID:        uuid.New(),
+			CreatedAt: time.Now().UTC(),
+			UpdatedAt: time.Now().UTC(),
 		}
 		m.RefreshSessions[session.ID] = session
 		m.SessionsByHash[string(tokenHash)] = session
@@ -376,12 +382,14 @@ func (m *MockDB) CreateTask(_ context.Context, createdBy *uuid.UUID, prompt stri
 			summary = fmt.Sprintf("task_name_%03d", len(m.Tasks)+1)
 		}
 		task := &models.Task{
+			TaskBase: models.TaskBase{
+				CreatedBy: createdBy,
+				ProjectID: effectiveProjectID,
+				Status:    models.TaskStatusPending,
+				Prompt:    &prompt,
+				Summary:   &summary,
+			},
 			ID:        uuid.New(),
-			CreatedBy: createdBy,
-			ProjectID: effectiveProjectID,
-			Status:    models.TaskStatusPending,
-			Prompt:    &prompt,
-			Summary:   &summary,
 			CreatedAt: time.Now().UTC(),
 			UpdatedAt: time.Now().UTC(),
 		}
@@ -398,11 +406,13 @@ func (m *MockDB) GetOrCreateDefaultProjectForUser(_ context.Context, userID uuid
 		}
 		now := time.Now().UTC()
 		p := &models.Project{
-			ID:          uuid.New(),
-			Slug:        "default-" + userID.String(),
-			DisplayName: "Default Project",
-			IsActive:    true,
-			CreatedAt:   now,
+			ProjectBase: models.ProjectBase{
+				Slug:        "default-" + userID.String(),
+				DisplayName: "Default Project",
+				IsActive:    true,
+			},
+			ID:        uuid.New(),
+			CreatedAt: now,
 			UpdatedAt:   now,
 		}
 		m.Projects[p.ID] = p
@@ -500,10 +510,12 @@ func (m *MockDB) GetJobsByTaskID(_ context.Context, taskID uuid.UUID) ([]*models
 func (m *MockDB) CreateJob(_ context.Context, taskID uuid.UUID, payload string) (*models.Job, error) {
 	return runWithLock(m, true, func() (*models.Job, error) {
 		job := &models.Job{
+			JobBase: models.JobBase{
+				TaskID:  taskID,
+				Status:  models.JobStatusQueued,
+				Payload: models.NewJSONBString(&payload),
+			},
 			ID:        uuid.New(),
-			TaskID:    taskID,
-			Status:    models.JobStatusQueued,
-			Payload:   models.NewJSONBString(&payload),
 			CreatedAt: time.Now().UTC(),
 			UpdatedAt: time.Now().UTC(),
 		}
@@ -517,10 +529,12 @@ func (m *MockDB) CreateJob(_ context.Context, taskID uuid.UUID, payload string) 
 func (m *MockDB) CreateJobWithID(_ context.Context, taskID, jobID uuid.UUID, payload string) (*models.Job, error) {
 	return runWithLock(m, true, func() (*models.Job, error) {
 		job := &models.Job{
+			JobBase: models.JobBase{
+				TaskID:  taskID,
+				Status:  models.JobStatusQueued,
+				Payload: models.NewJSONBString(&payload),
+			},
 			ID:        jobID,
-			TaskID:    taskID,
-			Status:    models.JobStatusQueued,
-			Payload:   models.NewJSONBString(&payload),
 			CreatedAt: time.Now().UTC(),
 			UpdatedAt: time.Now().UTC(),
 		}
@@ -536,12 +550,14 @@ func (m *MockDB) CreateJobCompleted(_ context.Context, taskID, jobID uuid.UUID, 
 		now := time.Now().UTC()
 		emptyPayload := "{}"
 		job := &models.Job{
+			JobBase: models.JobBase{
+				TaskID:  taskID,
+				Status:  models.JobStatusCompleted,
+				Payload: models.NewJSONBString(&emptyPayload),
+				Result:  models.NewJSONBString(&result),
+				EndedAt: &now,
+			},
 			ID:        jobID,
-			TaskID:    taskID,
-			Status:    models.JobStatusCompleted,
-			Payload:   models.NewJSONBString(&emptyPayload),
-			Result:    models.NewJSONBString(&result),
-			EndedAt:   &now,
 			CreatedAt: now,
 			UpdatedAt: now,
 		}
@@ -608,9 +624,11 @@ func (m *MockDB) GetNextQueuedJob(_ context.Context) (*models.Job, error) {
 func (m *MockDB) CreateNode(_ context.Context, nodeSlug string) (*models.Node, error) {
 	return runWithLock(m, true, func() (*models.Node, error) {
 		node := &models.Node{
+			NodeBase: models.NodeBase{
+				NodeSlug: nodeSlug,
+				Status:   models.NodeStatusRegistered,
+			},
 			ID:        uuid.New(),
-			NodeSlug:  nodeSlug,
-			Status:    models.NodeStatusRegistered,
 			CreatedAt: time.Now().UTC(),
 			UpdatedAt: time.Now().UTC(),
 		}
@@ -883,15 +901,17 @@ func (m *MockDB) CreatePreference(_ context.Context, scopeType string, scopeID *
 			valPtr = &value
 		}
 		ent := &models.PreferenceEntry{
+			PreferenceEntryBase: models.PreferenceEntryBase{
+				ScopeType: scopeType,
+				ScopeID:   scopeID,
+				Key:       key,
+				Value:     valPtr,
+				ValueType: valueType,
+				Version:   1,
+				UpdatedBy: updatedBy,
+			},
 			ID:        uuid.New(),
-			ScopeType: scopeType,
-			ScopeID:   scopeID,
-			Key:       key,
-			Value:     valPtr,
-			ValueType: valueType,
-			Version:   1,
 			UpdatedAt: time.Now().UTC(),
-			UpdatedBy: updatedBy,
 		}
 		m.PreferenceEntries = append(m.PreferenceEntries, ent)
 		return ent, nil
@@ -967,13 +987,15 @@ func (m *MockDB) CreateTaskArtifact(_ context.Context, taskID uuid.UUID, path, s
 	return runWithLock(m, true, func() (*models.TaskArtifact, error) {
 		now := time.Now().UTC()
 		ent := &models.TaskArtifact{
-			ID:         uuid.New(),
-			TaskID:     taskID,
-			Path:       path,
-			StorageRef: storageRef,
-			SizeBytes:  sizeBytes,
-			CreatedAt:  now,
-			UpdatedAt:  now,
+			TaskArtifactBase: models.TaskArtifactBase{
+				TaskID:     taskID,
+				Path:       path,
+				StorageRef: storageRef,
+				SizeBytes:  sizeBytes,
+			},
+			ID:        uuid.New(),
+			CreatedAt: now,
+			UpdatedAt: now,
 		}
 		m.TaskArtifacts = append(m.TaskArtifacts, ent)
 		return ent, nil
@@ -1028,9 +1050,11 @@ func (m *MockDB) GetOrCreateActiveChatThread(_ context.Context, userID uuid.UUID
 		}
 		now := time.Now().UTC()
 		thread := &models.ChatThread{
+			ChatThreadBase: models.ChatThreadBase{
+				UserID:    userID,
+				ProjectID: projectID,
+			},
 			ID:        uuid.New(),
-			UserID:    userID,
-			ProjectID: projectID,
 			CreatedAt: now,
 			UpdatedAt: now,
 		}
@@ -1045,10 +1069,12 @@ func (m *MockDB) CreateChatThread(_ context.Context, userID uuid.UUID, projectID
 	return runWithLock(m, true, func() (*models.ChatThread, error) {
 		now := time.Now().UTC()
 		thread := &models.ChatThread{
+			ChatThreadBase: models.ChatThreadBase{
+				UserID:    userID,
+				ProjectID: projectID,
+				Title:     title,
+			},
 			ID:        uuid.New(),
-			UserID:    userID,
-			ProjectID: projectID,
-			Title:     title,
 			CreatedAt: now,
 			UpdatedAt: now,
 		}
@@ -1062,11 +1088,13 @@ func (m *MockDB) CreateChatThread(_ context.Context, userID uuid.UUID, projectID
 func (m *MockDB) AppendChatMessage(_ context.Context, threadID uuid.UUID, role, content string, metadata *string) (*models.ChatMessage, error) {
 	return runWithLock(m, true, func() (*models.ChatMessage, error) {
 		msg := &models.ChatMessage{
+			ChatMessageBase: models.ChatMessageBase{
+				ThreadID: threadID,
+				Role:     role,
+				Content:  content,
+				Metadata: metadata,
+			},
 			ID:        uuid.New(),
-			ThreadID:  threadID,
-			Role:      role,
-			Content:   content,
-			Metadata:  metadata,
 			CreatedAt: time.Now().UTC(),
 		}
 		m.ChatMessages[threadID] = append(m.ChatMessages[threadID], msg)
@@ -1185,7 +1213,18 @@ func (m *MockDB) CreateSkill(_ context.Context, name, content, scope string, own
 	return runWithLock(m, true, func() (*models.Skill, error) {
 		id := uuid.New()
 		now := time.Now().UTC()
-		s := &models.Skill{ID: id, Name: name, Content: content, Scope: scope, OwnerID: ownerID, IsSystem: isSystem, CreatedAt: now, UpdatedAt: now}
+		s := &models.Skill{
+			SkillBase: models.SkillBase{
+				Name:     name,
+				Content:  content,
+				Scope:    scope,
+				OwnerID:  ownerID,
+				IsSystem: isSystem,
+			},
+			ID:        id,
+			CreatedAt: now,
+			UpdatedAt: now,
+		}
 		m.Skills[id] = s
 		return s, nil
 	})
@@ -1274,7 +1313,17 @@ func (m *MockDB) EnsureDefaultSkill(_ context.Context, content string) error {
 			return nil
 		}
 		now := time.Now().UTC()
-		m.Skills[id] = &models.Skill{ID: id, Name: "CyNodeAI interaction", Content: content, Scope: "global", IsSystem: true, CreatedAt: now, UpdatedAt: now}
+		m.Skills[id] = &models.Skill{
+			SkillBase: models.SkillBase{
+				Name:     "CyNodeAI interaction",
+				Content:  content,
+				Scope:    "global",
+				IsSystem: true,
+			},
+			ID:        id,
+			CreatedAt: now,
+			UpdatedAt: now,
+		}
 		return nil
 	})
 }
@@ -1305,11 +1354,13 @@ func (m *MockDB) AcquireTaskWorkflowLease(_ context.Context, taskID, leaseID uui
 			return nil, database.ErrLeaseHeld
 		}
 		row := &models.TaskWorkflowLease{
-			ID:        uuid.New(),
-			TaskID:    taskID,
-			LeaseID:   leaseID,
-			HolderID:  &holderID,
-			ExpiresAt: &expiresAt,
+			TaskWorkflowLeaseBase: models.TaskWorkflowLeaseBase{
+				TaskID:    taskID,
+				LeaseID:   leaseID,
+				HolderID:  &holderID,
+				ExpiresAt: &expiresAt,
+			},
+			ID: uuid.New(),
 			CreatedAt: now,
 			UpdatedAt: now,
 		}

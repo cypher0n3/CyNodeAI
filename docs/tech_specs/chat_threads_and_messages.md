@@ -2,6 +2,10 @@
 
 - [Document Overview](#document-overview)
   - [Requirement Traces](#requirement-traces)
+- [Postgres Schema](#postgres-schema)
+  - [Chat Threads Table](#chat-threads-table)
+  - [Chat Messages Table](#chat-messages-table)
+  - [Chat Message Attachments Table](#chat-message-attachments-table)
 - [Scope and Goals](#scope-and-goals)
   - [Scope Goals](#scope-goals)
   - [Scope Non-Goals](#scope-non-goals)
@@ -74,6 +78,80 @@ It introduces first-class chat threads and chat messages.
 - [REQ-CLIENT-0200](../requirements/client.md#req-client-0200)
 - [REQ-CLIENT-0201](../requirements/client.md#req-client-0201)
 - [REQ-CLIENT-0194](../requirements/client.md#req-client-0194)
+
+## Postgres Schema
+
+- Spec ID: `CYNAI.SCHEMA.ChatThreadsMessages` <a id="spec-cynai-schema-chatthreadsmessages"></a>
+
+Chat threads and chat messages store chat history separately from task lifecycle state.
+Chat message content is the amended (redacted) content.
+Plaintext secrets are not persisted in chat message content.
+
+**Schema definitions (index):** See [Chat Threads and Messages](postgres_schema.md#spec-cynai-schema-chatthreadsmessages) in [`postgres_schema.md`](postgres_schema.md).
+
+### Chat Threads Table
+
+- `id` (uuid, pk)
+- `user_id` (uuid, fk to `users.id`)
+- `project_id` (uuid, fk to `projects.id`, nullable)
+- `session_id` (uuid, fk to `sessions.id`, nullable)
+- `title` (text, nullable)
+- `summary` (text, nullable)
+- `archived_at` (timestamptz, nullable)
+- `created_at` (timestamptz)
+- `updated_at` (timestamptz)
+
+#### Chat Threads Table Constraints
+
+- Index: (`user_id`, `updated_at`)
+- Index: (`project_id`, `updated_at`)
+
+### Chat Messages Table
+
+- `id` (uuid, pk)
+- `thread_id` (uuid, fk to `chat_threads.id`)
+- `role` (text)
+  - examples: user, assistant, system
+- `content` (text)
+- `metadata` (jsonb, nullable)
+- `created_at` (timestamptz)
+
+#### Chat Messages Table Constraints
+
+- Index: (`thread_id`, `created_at`)
+
+### Chat Message Attachments Table
+
+- Spec ID: `CYNAI.SCHEMA.ChatMessageAttachmentsTable` <a id="spec-cynai-schema-chatmessageattachmentstable"></a>
+
+#### Chat Message Attachments Table Requirements Traces
+
+- [REQ-SCHEMA-0114](../requirements/schema.md#req-schema-0114)
+
+This table stores user-message file uploads or stable file references accepted through the chat `@`-reference workflow.
+When the originating chat thread is project-scoped, rows in this table inherit the same project authorization boundary as the thread and message they attach to.
+
+- `id` (uuid, pk)
+- `message_id` (uuid, fk to `chat_messages.id`)
+- `thread_id` (uuid, fk to `chat_threads.id`)
+- `user_id` (uuid, fk to `users.id`)
+- `file_id` (text)
+  - stable internal identifier returned by the upload layer
+- `filename` (text)
+- `media_type` (text, nullable)
+- `size_bytes` (bigint, nullable)
+- `storage_ref` (text)
+  - internal blob or object-storage reference
+- `checksum_sha256` (text, nullable)
+- `created_at` (timestamptz)
+
+#### Chat Message Attachments Table Constraints
+
+- Index: (`message_id`)
+- Index: (`thread_id`, `created_at`)
+- Index: (`user_id`, `created_at`)
+- Unique: (`message_id`, `file_id`)
+- Access to attachment rows and referenced storage is enforced through the parent chat thread and message authorization, including shared-project permissions when the thread belongs to a shared project.
 
 ## Scope and Goals
 
@@ -366,7 +444,7 @@ When the originating thread is project-scoped, the uploaded file MUST inherit th
 - **Backend:** Uploads MUST use the orchestrator's [S3-like artifacts storage](orchestrator_artifacts_storage.md#spec-cynai-orches-artifactss3backend): blob content is stored in the S3-compatible backend; metadata is stored in the database.
 - **Upload contract:** The gateway MUST accept uploads via a dedicated endpoint (e.g. `POST /v1/chat/uploads`) and/or inline in the OpenAI-compatible completion request (e.g. content parts with type `file` or `image`).
   It MUST return a stable `file_id` (or equivalent) for each stored file that the client uses in the subsequent chat completion request.
-  The implementation MUST write the blob to the orchestrator artifacts backend and record metadata (including `storage_ref`) in the [chat_message_attachments](postgres_schema.md#spec-cynai-schema-chatmessageattachmentstable) table (or equivalent with the same columns and constraints), associating the attachment with the authenticated user and the thread or message when the completion is processed.
+  The implementation MUST write the blob to the orchestrator artifacts backend and record metadata (including `storage_ref`) in the [chat_message_attachments](chat_threads_and_messages.md#spec-cynai-schema-chatmessageattachmentstable) table (or equivalent with the same columns and constraints), associating the attachment with the authenticated user and the thread or message when the completion is processed.
 - **Retrieval:** Stored chat files MUST be retrievable via the unified [artifacts endpoint](orchestrator_artifacts_storage.md#spec-cynai-orches-artifactsapicrud) `GET /v1/artifacts/{artifact_id}` with RBAC; `file_id` (or the attachment's stable id) serves as `artifact_id`.
 - **Secret redaction:** Secret redaction MUST be applied to file content before persistence; files that fail redaction MUST be rejected with 400.
 - **Size and type:** This spec does not define file size or media-type limits; they MAY be added in a later revision.
@@ -374,7 +452,7 @@ When the originating thread is project-scoped, the uploaded file MUST inherit th
 ### Chat File Upload Storage Implementation
 
 - Backend, upload contract, retrieval, and RBAC are specified in [Orchestrator Artifacts Storage](orchestrator_artifacts_storage.md): [S3-Like Block Storage](orchestrator_artifacts_storage.md#spec-cynai-orches-artifactss3backend), [Artifacts API (CRUD)](orchestrator_artifacts_storage.md#spec-cynai-orches-artifactsapicrud) (Create, Read), [RBAC for Artifacts](orchestrator_artifacts_storage.md#spec-cynai-orches-artifactsrbac), and [Algorithm: Database and Blob Storage](orchestrator_artifacts_storage.md#spec-cynai-orches-artifactsdbblobalgo).
-- The gateway MAY expose `POST /v1/chat/uploads` that delegates to `POST /v1/artifacts` with thread scope, or accept inline content in the completion request; in both cases blobs MUST be stored in the artifacts store and metadata in [chat_message_attachments](postgres_schema.md#spec-cynai-schema-chatmessageattachmentstable).
+- The gateway MAY expose `POST /v1/chat/uploads` that delegates to `POST /v1/artifacts` with thread scope, or accept inline content in the completion request; in both cases blobs MUST be stored in the artifacts store and metadata in [chat_message_attachments](chat_threads_and_messages.md#spec-cynai-schema-chatmessageattachmentstable).
 - Remaining implementation: wire the gateway upload path (dedicated and/or inline) to the artifacts API and chat_message_attachments; ensure orchestrator/PMA resolution uses the same store so file content is available in the completion path and thread history replay.
 
 ## Context Size Tracking

@@ -19,7 +19,10 @@ import (
 func TestWorkflowHandler_Start_Success(t *testing.T) {
 	mock := testutil.NewMockDB()
 	taskID := uuid.New()
-	mock.AddTask(&models.Task{ID: taskID, Status: models.TaskStatusPending})
+	mock.AddTask(&models.Task{
+		TaskBase: models.TaskBase{Status: models.TaskStatusPending},
+		ID:       taskID,
+	})
 	h := NewWorkflowHandler(mock, slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelError})))
 
 	body := map[string]interface{}{"task_id": taskID.String(), "holder_id": "runner-1"}
@@ -42,7 +45,10 @@ func TestWorkflowHandler_Start_Success(t *testing.T) {
 func TestWorkflowHandler_Start_WithExpiresInAndIdempotencyKey(t *testing.T) {
 	mock := testutil.NewMockDB()
 	taskID := uuid.New()
-	mock.AddTask(&models.Task{ID: taskID, Status: models.TaskStatusPending})
+	mock.AddTask(&models.Task{
+		TaskBase: models.TaskBase{Status: models.TaskStatusPending},
+		ID:       taskID,
+	})
 	h := NewWorkflowHandler(mock, slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelError})))
 	exp := 120
 	body := map[string]interface{}{
@@ -95,7 +101,10 @@ func TestWorkflowHandler_Start_GateDenied(t *testing.T) {
 	mock := testutil.NewMockDB()
 	taskID := uuid.New()
 	planID := uuid.New()
-	mock.AddTask(&models.Task{ID: taskID, Status: models.TaskStatusPending, PlanID: &planID})
+	mock.AddTask(&models.Task{
+		TaskBase: models.TaskBase{Status: models.TaskStatusPending, PlanID: &planID},
+		ID:       taskID,
+	})
 	mock.EvaluateWorkflowStartGateDenyReason = "plan not active"
 	h := NewWorkflowHandler(mock, slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelError})))
 
@@ -112,7 +121,10 @@ func TestWorkflowHandler_Start_GateDenied(t *testing.T) {
 func TestWorkflowHandler_Start_GateError(t *testing.T) {
 	mock := testutil.NewMockDB()
 	taskID := uuid.New()
-	mock.AddTask(&models.Task{ID: taskID, Status: models.TaskStatusPending})
+	mock.AddTask(&models.Task{
+		TaskBase: models.TaskBase{Status: models.TaskStatusPending},
+		ID:       taskID,
+	})
 	mock.EvaluateWorkflowStartGateErr = errors.New("db unavailable")
 	h := NewWorkflowHandler(mock, slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelError})))
 
@@ -129,7 +141,10 @@ func TestWorkflowHandler_Start_GateError(t *testing.T) {
 func TestWorkflowHandler_Start_DuplicateDifferentHolder_Conflict(t *testing.T) {
 	mock := testutil.NewMockDB()
 	taskID := uuid.New()
-	mock.AddTask(&models.Task{ID: taskID, Status: models.TaskStatusPending})
+	mock.AddTask(&models.Task{
+		TaskBase: models.TaskBase{Status: models.TaskStatusPending},
+		ID:       taskID,
+	})
 	h := NewWorkflowHandler(mock, slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelError})))
 
 	body1 := map[string]interface{}{"task_id": taskID.String(), "holder_id": "runner-1"}
@@ -165,7 +180,10 @@ func TestWorkflowHandler_Resume_NotFound(t *testing.T) {
 func TestWorkflowHandler_SaveCheckpoint_Release(t *testing.T) {
 	mock := testutil.NewMockDB()
 	taskID := uuid.New()
-	mock.AddTask(&models.Task{ID: taskID, Status: models.TaskStatusPending})
+	mock.AddTask(&models.Task{
+		TaskBase: models.TaskBase{Status: models.TaskStatusPending},
+		ID:       taskID,
+	})
 	h := NewWorkflowHandler(mock, slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelError})))
 
 	cpBody := map[string]interface{}{"task_id": taskID.String(), "last_node_id": "plan_steps", "state": "{}"}
@@ -239,7 +257,10 @@ func TestWorkflowHandler_Resume_GetCheckpointError_InternalError(t *testing.T) {
 func TestWorkflowHandler_SaveCheckpoint_StoreError_InternalError(t *testing.T) {
 	mock := testutil.NewMockDB()
 	taskID := uuid.New()
-	mock.AddTask(&models.Task{ID: taskID, Status: models.TaskStatusPending})
+	mock.AddTask(&models.Task{
+		TaskBase: models.TaskBase{Status: models.TaskStatusPending},
+		ID:       taskID,
+	})
 	mock.ForceError = errors.New("db error")
 	h := NewWorkflowHandler(mock, slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelError})))
 	body := map[string]interface{}{"task_id": taskID.String(), "last_node_id": "x"}

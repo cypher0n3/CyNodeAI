@@ -8,6 +8,7 @@ import (
 	"github.com/google/uuid"
 	"gorm.io/gorm"
 
+	"github.com/cypher0n3/cynodeai/go_shared_libs/gormmodel"
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/models"
 )
 
@@ -18,42 +19,46 @@ import (
 // Per REQ-ORCHES-0145, REQ-ORCHES-0146 and CYNAI.ORCHES.TaskWorkflowLeaseLifecycle.
 func (db *DB) AcquireTaskWorkflowLease(ctx context.Context, taskID, leaseID uuid.UUID, holderID string, expiresAt time.Time) (*models.TaskWorkflowLease, error) {
 	now := time.Now().UTC()
-	var row models.TaskWorkflowLease
-	err := db.db.WithContext(ctx).Where("task_id = ?", taskID).First(&row).Error
+	var record TaskWorkflowLeaseRecord
+	err := db.db.WithContext(ctx).Where("task_id = ?", taskID).First(&record).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
 			// No existing lease: create.
-			row = models.TaskWorkflowLease{
-				ID:        uuid.New(),
-				TaskID:    taskID,
-				LeaseID:   leaseID,
-				HolderID:  &holderID,
-				ExpiresAt: &expiresAt,
-				CreatedAt: now,
-				UpdatedAt: now,
+			record = TaskWorkflowLeaseRecord{
+				GormModelUUID: gormmodel.GormModelUUID{
+					ID:        uuid.New(),
+					CreatedAt: now,
+					UpdatedAt: now,
+				},
+				TaskWorkflowLeaseBase: models.TaskWorkflowLeaseBase{
+					TaskID:    taskID,
+					LeaseID:   leaseID,
+					HolderID:  &holderID,
+					ExpiresAt: &expiresAt,
+				},
 			}
-			if err := db.db.WithContext(ctx).Create(&row).Error; err != nil {
+			if err := db.db.WithContext(ctx).Create(&record).Error; err != nil {
 				return nil, wrapErr(err, "acquire task workflow lease create")
 			}
-			return &row, nil
+			return record.ToTaskWorkflowLease(), nil
 		}
 		return nil, wrapErr(err, "acquire task workflow lease get")
 	}
 	// Existing row: treat as released if holder_id is nil (explicit release) or expired.
-	if row.HolderID == nil || (row.ExpiresAt != nil && row.ExpiresAt.Before(now)) {
-		row.LeaseID = leaseID
+	if record.HolderID == nil || (record.ExpiresAt != nil && record.ExpiresAt.Before(now)) {
+		record.LeaseID = leaseID
 		h := holderID
-		row.HolderID = &h
-		row.ExpiresAt = &expiresAt
-		row.UpdatedAt = now
-		if err := db.db.WithContext(ctx).Save(&row).Error; err != nil {
+		record.HolderID = &h
+		record.ExpiresAt = &expiresAt
+		record.UpdatedAt = now
+		if err := db.db.WithContext(ctx).Save(&record).Error; err != nil {
 			return nil, wrapErr(err, "acquire task workflow lease renew")
 		}
-		return &row, nil
+		return record.ToTaskWorkflowLease(), nil
 	}
 	// Non-expired and held: same holder + same lease_id -> idempotent success.
-	if *row.HolderID == holderID && row.LeaseID == leaseID {
-		return &row, nil
+	if *record.HolderID == holderID && record.LeaseID == leaseID {
+		return record.ToTaskWorkflowLease(), nil
 	}
 	// Different holder or different lease_id: conflict.
 	return nil, ErrLeaseHeld
@@ -61,7 +66,7 @@ func (db *DB) AcquireTaskWorkflowLease(ctx context.Context, taskID, leaseID uuid
 
 // ReleaseTaskWorkflowLease releases the lease for the task when lease_id matches. Idempotent when already released.
 func (db *DB) ReleaseTaskWorkflowLease(ctx context.Context, taskID, leaseID uuid.UUID) error {
-	res := db.db.WithContext(ctx).Model(&models.TaskWorkflowLease{}).
+	res := db.db.WithContext(ctx).Model(&TaskWorkflowLeaseRecord{}).
 		Where("task_id = ? AND lease_id = ?", taskID, leaseID).
 		Updates(map[string]interface{}{
 			"holder_id":  nil,
@@ -76,32 +81,60 @@ func (db *DB) ReleaseTaskWorkflowLease(ctx context.Context, taskID, leaseID uuid
 
 // GetTaskWorkflowLease returns the task workflow lease row if any, or ErrNotFound.
 func (db *DB) GetTaskWorkflowLease(ctx context.Context, taskID uuid.UUID) (*models.TaskWorkflowLease, error) {
-	return getWhere[models.TaskWorkflowLease](db, ctx, "task_id", taskID, "get task workflow lease")
+	record, err := getWhere[TaskWorkflowLeaseRecord](db, ctx, "task_id", taskID, "get task workflow lease")
+	if err != nil {
+		return nil, err
+	}
+	return record.ToTaskWorkflowLease(), nil
 }
 
 // GetWorkflowCheckpoint returns the current checkpoint for the task, or ErrNotFound.
 func (db *DB) GetWorkflowCheckpoint(ctx context.Context, taskID uuid.UUID) (*models.WorkflowCheckpoint, error) {
-	return getWhere[models.WorkflowCheckpoint](db, ctx, "task_id", taskID, "get workflow checkpoint")
+	record, err := getWhere[WorkflowCheckpointRecord](db, ctx, "task_id", taskID, "get workflow checkpoint")
+	if err != nil {
+		return nil, err
+	}
+	return record.ToWorkflowCheckpoint(), nil
 }
 
 // UpsertWorkflowCheckpoint inserts or updates the single checkpoint row for the task (unique on task_id).
 func (db *DB) UpsertWorkflowCheckpoint(ctx context.Context, cp *models.WorkflowCheckpoint) error {
 	now := time.Now().UTC()
-	cp.UpdatedAt = now
-	var existing models.WorkflowCheckpoint
+	var existing WorkflowCheckpointRecord
 	err := db.db.WithContext(ctx).Where("task_id = ?", cp.TaskID).First(&existing).Error
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			if cp.ID == uuid.Nil {
-				cp.ID = uuid.New()
+			record := &WorkflowCheckpointRecord{
+				GormModelUUID: gormmodel.GormModelUUID{
+					ID:        cp.ID,
+					UpdatedAt: now,
+				},
+				WorkflowCheckpointBase: models.WorkflowCheckpointBase{
+					TaskID:     cp.TaskID,
+					State:      cp.State,
+					LastNodeID: cp.LastNodeID,
+				},
 			}
-			return wrapErr(db.db.WithContext(ctx).Create(cp).Error, "upsert workflow checkpoint create")
+			if record.ID == uuid.Nil {
+				record.ID = uuid.New()
+			}
+			if err := db.db.WithContext(ctx).Create(record).Error; err != nil {
+				return wrapErr(err, "upsert workflow checkpoint create")
+			}
+			cp.ID = record.ID
+			cp.UpdatedAt = record.UpdatedAt
+			return nil
 		}
 		return wrapErr(err, "upsert workflow checkpoint get")
 	}
-	return wrapErr(db.db.WithContext(ctx).Model(&existing).Updates(map[string]interface{}{
+	if err := db.db.WithContext(ctx).Model(&existing).Updates(map[string]interface{}{
 		"state":        cp.State,
 		"last_node_id": cp.LastNodeID,
 		"updated_at":   now,
-	}).Error, "upsert workflow checkpoint update")
+	}).Error; err != nil {
+		return wrapErr(err, "upsert workflow checkpoint update")
+	}
+	cp.ID = existing.ID
+	cp.UpdatedAt = now
+	return nil
 }

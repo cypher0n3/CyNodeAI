@@ -40,9 +40,11 @@ func TestResolvePMAEndpoint_FromManagedServicesStatus(t *testing.T) {
 	db := testutil.NewMockDB()
 	nodeID := uuid.New()
 	node := &models.Node{
+		NodeBase: models.NodeBase{
+			NodeSlug: "node-01",
+			Status:   models.NodeStatusActive,
+		},
 		ID:        nodeID,
-		NodeSlug:  "node-01",
-		Status:    models.NodeStatusActive,
 		CreatedAt: time.Now().UTC(),
 		UpdatedAt: time.Now().UTC(),
 	}
@@ -67,9 +69,11 @@ func TestResolvePMAEndpoint_RequiresReadyService(t *testing.T) {
 	db := testutil.NewMockDB()
 	nodeID := uuid.New()
 	db.AddNode(&models.Node{
+		NodeBase: models.NodeBase{
+			NodeSlug: "node-02",
+			Status:   models.NodeStatusActive,
+		},
 		ID:        nodeID,
-		NodeSlug:  "node-02",
-		Status:    models.NodeStatusActive,
 		CreatedAt: time.Now().UTC(),
 		UpdatedAt: time.Now().UTC(),
 	})
@@ -99,9 +103,11 @@ func TestResolvePMAEndpoint_PicksMostRecentReadyAt(t *testing.T) {
 	addNodeWithReady := func(slug, endpoint string, readyAt time.Time) {
 		nodeID := uuid.New()
 		db.AddNode(&models.Node{
+			NodeBase: models.NodeBase{
+				NodeSlug: slug,
+				Status:   models.NodeStatusActive,
+			},
 			ID:        nodeID,
-			NodeSlug:  slug,
-			Status:    models.NodeStatusActive,
 			CreatedAt: now,
 			UpdatedAt: now,
 		})
@@ -139,12 +145,14 @@ func TestResolvePMAEndpointCandidate_UsesNodeWorkerBearerToken(t *testing.T) {
 	nodeID := uuid.New()
 	workerToken := "rotated-worker-token"
 	db.AddNode(&models.Node{
-		ID:                   nodeID,
-		NodeSlug:             "node-token",
-		Status:               models.NodeStatusActive,
-		WorkerAPIBearerToken: &workerToken,
-		CreatedAt:            time.Now().UTC(),
-		UpdatedAt:            time.Now().UTC(),
+		NodeBase: models.NodeBase{
+			NodeSlug:             "node-token",
+			Status:               models.NodeStatusActive,
+			WorkerAPIBearerToken: &workerToken,
+		},
+		ID:        nodeID,
+		CreatedAt: time.Now().UTC(),
+		UpdatedAt: time.Now().UTC(),
 	})
 	report := makeCapabilityReportWithPMAReady("node-token")
 	raw, err := json.Marshal(report)

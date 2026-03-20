@@ -5,6 +5,10 @@
 - [Image Publishing Workflow](#image-publishing-workflow)
 - [Node Pull Workflow](#node-pull-workflow)
 - [Allowed Images and Capabilities](#allowed-images-and-capabilities)
+- [Postgres Schema](#postgres-schema)
+  - [Sandbox Images Table](#sandbox-images-table)
+  - [Sandbox Image Versions Table](#sandbox-image-versions-table)
+  - [Node Sandbox Image Availability Table](#node-sandbox-image-availability-table)
 - [Image Compatibility Marking and Task Type](#image-compatibility-marking-and-task-type)
 - [Preferences and Constraints](#preferences-and-constraints)
 - [Access Control and Auditing](#access-control-and-auditing)
@@ -90,13 +94,20 @@ This enables the Project Manager Agent to choose a sandbox environment appropria
 
 - [REQ-SANDBX-0118](../requirements/sandbx.md#req-sandbx-0118)
 
-Database schema
+Database table definitions: [Postgres Schema](#postgres-schema).
 
-- The Postgres schema is defined in [`docs/tech_specs/postgres_schema.md`](postgres_schema.md).
-- Sandbox image registry tables are specified in the [Sandbox Image Registry](postgres_schema.md#spec-cynai-schema-sandboximageregistry) section.
-- Canonical table names are `sandbox_images`, `sandbox_image_versions`, and `node_sandbox_image_availability`.
+## Postgres Schema
+
+- Spec ID: `CYNAI.SCHEMA.SandboxImageRegistry` <a id="spec-cynai-schema-sandboximageregistry"></a>
+
+Allowed sandbox images and their capabilities are stored in PostgreSQL.
+This enables agents and schedulers to pick safe, policy-approved execution environments.
+
+**Schema definitions (index):** See [Sandbox Image Registry](postgres_schema.md#spec-cynai-schema-sandboximageregistry) in [`postgres_schema.md`](postgres_schema.md).
 
 ### Sandbox Images Table
+
+Table name: `sandbox_images`.
 
 - `id` (uuid, pk)
 - `name` (text)
@@ -106,16 +117,17 @@ Database schema
 - `updated_at` (timestamptz)
 - `updated_by` (text)
 
-Constraints
+#### Sandbox Images Table Constraints
 
 - Unique: (`name`)
 - Index: (`name`)
 
 ### Sandbox Image Versions Table
 
+Table name: `sandbox_image_versions`.
+
 - `id` (uuid, pk)
-- `sandbox_image_id` (uuid)
-  - foreign key to `sandbox_images.id`
+- `sandbox_image_id` (uuid, fk to `sandbox_images.id`)
 - `version` (text)
   - tag or semantic version
 - `image_ref` (text)
@@ -123,28 +135,30 @@ Constraints
 - `image_digest` (text, nullable)
   - digest for pinning (recommended)
 - `capabilities` (jsonb)
-  - examples: runtimes, tools, network_requirements, filesystem_requirements; SHOULD include `agent_compatible` (boolean) when known, derived from image label at ingest
+  - examples: runtimes, tools, network_requirements, filesystem_requirements; includes `agent_compatible` (boolean) when known, from OCI label `io.cynodeai.sandbox.agent-compatible` at ingest
 - `is_allowed` (boolean)
 - `created_at` (timestamptz)
 - `updated_at` (timestamptz)
 
-Constraints
+#### Sandbox Image Versions Table Constraints
 
 - Unique: (`sandbox_image_id`, `version`)
 - Index: (`sandbox_image_id`)
 - Index: (`is_allowed`)
 
-### Node Image Availability Table
+### Node Sandbox Image Availability Table
+
+Table name: `node_sandbox_image_availability`.
 
 - `id` (uuid, pk)
-- `node_id` (uuid)
-- `sandbox_image_version_id` (uuid)
+- `node_id` (uuid, fk to `nodes.id`)
+- `sandbox_image_version_id` (uuid, fk to `sandbox_image_versions.id`)
 - `status` (text)
   - examples: available, pulling, failed, evicted
 - `last_checked_at` (timestamptz)
 - `details` (jsonb, nullable)
 
-Constraints
+#### Node Sandbox Image Availability Table Constraints
 
 - Unique: (`node_id`, `sandbox_image_version_id`)
 - Index: (`node_id`)

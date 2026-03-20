@@ -357,9 +357,11 @@ func TestNodeHandlerLoggerMethods(t *testing.T) {
 // TestValidateLoginCredentialsStructure tests the loginResult structure
 func TestValidateLoginCredentialsStructure(t *testing.T) {
 	user := &models.User{
-		ID:       uuid.New(),
-		Handle:   "testuser",
-		IsActive: true,
+		UserBase: models.UserBase{
+			Handle:   "testuser",
+			IsActive: true,
+		},
+		ID: uuid.New(),
 	}
 
 	result := &loginResult{

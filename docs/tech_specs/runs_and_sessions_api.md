@@ -2,6 +2,9 @@
 
 - [Document Overview](#document-overview)
 - [Purpose](#purpose)
+- [Postgres Schema](#postgres-schema)
+  - [Runs Table](#runs-table)
+  - [Sessions Table](#sessions-table)
 - [Runs](#runs)
 - [Sessions](#sessions)
 - [Logs and Transcripts](#logs-and-transcripts)
@@ -14,8 +17,8 @@
 
 This document defines a first-class runs and sessions API exposed by the User API Gateway.
 It provides parity with session-based workflows: execution traces (runs), user-facing sessions, sub-runs, attached logs, streaming status, stored transcripts with retention, and background job process management within sandbox constraints.
-The Postgres schema is defined in [`docs/tech_specs/postgres_schema.md`](postgres_schema.md).
-See [Runs and Sessions](postgres_schema.md#spec-cynai-schema-runssessions).
+
+Table definitions: [Postgres Schema](#postgres-schema).
 
 ## Purpose
 
@@ -25,6 +28,54 @@ See [Runs and Sessions](postgres_schema.md#spec-cynai-schema-runssessions).
 - Expose background process lifecycle within sandboxes so long-running work can be managed and attributed to runs.
 
 See [`docs/tech_specs/user_api_gateway.md`](user_api_gateway.md) and [`docs/tech_specs/data_rest_api.md`](data_rest_api.md).
+
+## Postgres Schema
+
+- Spec ID: `CYNAI.SCHEMA.RunsSessions` <a id="spec-cynai-schema-runssessions"></a>
+
+Runs are execution traces (workflow instance, dispatched job, or agent turn).
+Sessions are user-facing containers that group runs and hold transcripts.
+
+**Schema definitions (index):** See [Runs and Sessions](postgres_schema.md#spec-cynai-schema-runssessions) in [`postgres_schema.md`](postgres_schema.md).
+
+### Runs Table
+
+- `id` (uuid, pk)
+- `task_id` (uuid, fk to `tasks.id`)
+- `job_id` (uuid, fk to `jobs.id`, nullable)
+- `session_id` (uuid, fk to `sessions.id`, nullable)
+- `parent_run_id` (uuid, fk to `runs.id`, nullable)
+- `status` (text)
+  - examples: pending, running, completed, failed, canceled
+- `started_at` (timestamptz, nullable)
+- `ended_at` (timestamptz, nullable)
+- `metadata` (jsonb, nullable)
+- `created_at` (timestamptz)
+- `updated_at` (timestamptz)
+
+#### Runs Table Constraints
+
+- Index: (`task_id`)
+- Index: (`job_id`)
+- Index: (`session_id`)
+- Index: (`parent_run_id`)
+- Index: (`status`)
+- Index: (`created_at`)
+
+### Sessions Table
+
+- `id` (uuid, pk)
+- `parent_session_id` (uuid, fk to `sessions.id`, nullable)
+- `user_id` (uuid, fk to `users.id`)
+- `title` (text, nullable)
+- `created_at` (timestamptz)
+- `updated_at` (timestamptz)
+
+#### Sessions Table Constraints
+
+- Index: (`user_id`)
+- Index: (`parent_session_id`)
+- Index: (`created_at`)
 
 ## Runs
 
@@ -42,16 +93,7 @@ Runs are first-class resources with stable identifiers.
 - [REQ-USRGWY-0102](../requirements/usrgwy.md#req-usrgwy-0102)
 - [REQ-USRGWY-0103](../requirements/usrgwy.md#req-usrgwy-0103)
 
-Recommended run fields
-
-- `id` (uuid, pk)
-- `task_id` (uuid)
-- `job_id` (uuid, optional)
-- `session_id` (uuid, optional)
-- `parent_run_id` (uuid, optional)
-- `status` (e.g. pending, running, completed, failed, canceled)
-- `started_at`, `ended_at` (timestamptz, optional)
-- `metadata` (jsonb, optional)
+Persisted columns for runs are defined in [Runs Table](#runs-table).
 
 ## Sessions
 
@@ -70,13 +112,7 @@ See [`docs/tech_specs/chat_threads_and_messages.md`](chat_threads_and_messages.m
 - [REQ-USRGWY-0106](../requirements/usrgwy.md#req-usrgwy-0106)
 - [REQ-USRGWY-0107](../requirements/usrgwy.md#req-usrgwy-0107)
 
-Recommended session fields
-
-- `id` (uuid, pk)
-- `parent_session_id` (uuid, optional)
-- `user_id` (uuid)
-- `title` or `label` (text, optional)
-- `created_at`, `updated_at` (timestamptz)
+Persisted columns for sessions are defined in [Sessions Table](#sessions-table).
 
 ## Logs and Transcripts
 

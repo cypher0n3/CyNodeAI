@@ -2,6 +2,8 @@
 
 - [Document Overview](#document-overview)
   - [Traces To](#traces-to)
+- [Postgres Schema](#postgres-schema)
+  - [Task Artifacts Table](#task-artifacts-table)
 - [S3-Like Block Storage](#s3-like-block-storage)
 - [Dev Stack: Containerized S3](#dev-stack-containerized-s3)
 - [Artifacts API (CRUD)](#artifacts-api-crud)
@@ -43,6 +45,39 @@ All artifact access is exposed through a single, RBAC-protected REST API with fu
 - [REQ-SCHEMA-0114](../requirements/schema.md#req-schema-0114)
 - [REQ-ORCHES-0127](../requirements/orches.md#req-orches-0127)
 - [REQ-ORCHES-0167](../requirements/orches.md#req-orches-0167)
+
+## Postgres Schema
+
+- Spec ID: `CYNAI.SCHEMA.TaskArtifacts` <a id="spec-cynai-schema-taskartifacts"></a>
+
+Artifacts are files or blobs produced or attached to a task (e.g. uploads, job outputs).
+Metadata is stored in PostgreSQL; large content may be stored in object storage or node-local staging with a reference.
+
+**Schema definitions (index):** See [Task Artifacts](postgres_schema.md#spec-cynai-schema-taskartifacts) in [`postgres_schema.md`](postgres_schema.md).
+
+### Task Artifacts Table
+
+Table name: `task_artifacts`.
+
+- `id` (uuid, pk)
+- `task_id` (uuid, fk to `tasks.id`)
+- `run_id` (uuid, fk to `runs.id`, nullable)
+- `path` (text)
+  - logical path or key within the task (e.g. `output/report.md`, `upload/input.csv`)
+- `storage_ref` (text)
+  - reference to blob or file (e.g. object key, node path, or inline small content indicator)
+- `size_bytes` (bigint, nullable)
+- `content_type` (text, nullable)
+- `checksum_sha256` (text, nullable)
+- `created_at` (timestamptz)
+- `updated_at` (timestamptz)
+
+#### Task Artifacts Table Constraints
+
+- Unique: (`task_id`, `path`)
+- Index: (`task_id`)
+- Index: (`run_id`)
+- Index: (`created_at`)
 
 ## S3-Like Block Storage
 
@@ -98,7 +133,7 @@ All operations require authentication (session or bearer token) and MUST enforce
 - **Request:** Path parameter `artifact_id`.
 - **Response:** 204 No Content on success; 404 when `artifact_id` is unknown; 403 when the caller is not authorized to delete the artifact.
   The implementation MUST remove or invalidate the blob in the S3-like backend and MUST remove or soft-delete the corresponding metadata so the artifact is no longer accessible via Read.
-  The implementation MUST also remove or invalidate any [vector_items](postgres_schema.md#spec-cynai-schema-vectorstorage) rows that reference this artifact (`source_type` and `source_ref`), so that vector search no longer returns chunks derived from the deleted artifact.
+  The implementation MUST also remove or invalidate any [vector_items](vector_storage.md#spec-cynai-schema-vectoritemstable) rows that reference this artifact (`source_type` and `source_ref`), so that vector search no longer returns chunks derived from the deleted artifact.
 
 ### Find (List)
 
@@ -115,7 +150,7 @@ All operations require authentication (session or bearer token) and MUST enforce
 
 The implementation MUST support artifact find (list) by scope using the database; it MUST NOT require a custom search stack.
 
-- **Scope-based listing:** List/find by `thread_id`, `task_id`, `project_id`, or `user_id` is implemented with standard SQL queries over the artifact metadata tables (e.g. [chat_message_attachments](postgres_schema.md#spec-cynai-schema-chatmessageattachmentstable), [task_artifacts](postgres_schema.md#spec-cynai-schema-taskartifacts)), with RBAC applied (filter by subject's allowed scopes).
+- **Scope-based listing:** List/find by `thread_id`, `task_id`, `project_id`, or `user_id` is implemented with standard SQL queries over the artifact metadata tables (e.g. [chat_message_attachments](chat_threads_and_messages.md#spec-cynai-schema-chatmessageattachmentstable), [task_artifacts](#spec-cynai-schema-taskartifacts)), with RBAC applied (filter by subject's allowed scopes).
   The existing Go ORM (e.g. GORM) and PostgreSQL are sufficient; no additional lookup library is required for scope-only find.
 
 - **Full-text or rich search (optional):** When the implementation needs full-text or richer search over artifact metadata (e.g. filename, content_type) or over indexed blob content, it MUST use an existing, MIT- or Apache-2.0-licensed (or compatible) library or feature.
@@ -136,7 +171,7 @@ Blob content lives only in the S3-like store; the database holds metadata and th
 ### Resolve `artifact_id` to Metadata and `storage_ref`
 
 - Before any Read, Update, or Delete, the implementation MUST resolve `artifact_id` to a row that carries scope and `storage_ref`.
-- **Resolution:** The implementation MUST look up `artifact_id` in one or more tables that reference artifacts (e.g. [chat_message_attachments](postgres_schema.md#spec-cynai-schema-chatmessageattachmentstable) using `file_id` or `id`; [task_artifacts](postgres_schema.md#spec-cynai-schema-taskartifacts) using `id` or a stable composite; or a dedicated `artifacts` table if the implementation unifies all artifact metadata).
+- **Resolution:** The implementation MUST look up `artifact_id` in one or more tables that reference artifacts (e.g. [chat_message_attachments](chat_threads_and_messages.md#spec-cynai-schema-chatmessageattachmentstable) using `file_id` or `id`; [task_artifacts](#spec-cynai-schema-taskartifacts) using `id` or a stable composite; or a dedicated `artifacts` table if the implementation unifies all artifact metadata).
 - From the resolved row the implementation MUST obtain: `storage_ref` (S3 object key or equivalent), and scope fields used for [RBAC](#rbac-for-artifacts) (e.g. `user_id`, and when applicable `thread_id` / `project_id` from the row or from the parent thread/task).
 - If no row is found, or the row is marked deleted, the implementation MUST return 404.
 
@@ -237,17 +272,17 @@ The implementation MUST use the same subject and scope model as [RBAC and groups
 
 - Spec ID: `CYNAI.ORCHES.ArtifactsVectorIngestSource` <a id="spec-cynai-orches-artifactsvectoringestsource"></a>
 
-- When ingesting artifact content into the vector store (e.g. [pgvector `vector_items`](postgres_schema.md#spec-cynai-schema-vectorstorage)), the implementation MAY use the **same orchestrator artifacts store** (S3-backed blobs) as the source of content.
+- When ingesting artifact content into the vector store (e.g. [pgvector `vector_items`](vector_storage.md#spec-cynai-schema-vectoritemstable)), the implementation MAY use the **same orchestrator artifacts store** (S3-backed blobs) as the source of content.
 - The ingestion pipeline MUST resolve the artifact's `storage_ref` from the database (per [Resolve artifact_id to metadata and storage_ref](#resolve-artifact_id-to-metadata-and-storage_ref)), fetch the blob from the S3-like backend, then chunk and embed the content and write rows to `vector_items` with `source_type` (e.g. `task_artifact`) and `source_ref` set to the artifact identifier or path.
   Vector retrieval MUST remain tied back to the artifact so that [RBAC](#rbac-for-artifacts) and scope are preserved.
-- Vector storage RBAC and scope (project, namespace, sensitivity) MUST be applied as defined in [Vector retrieval and RBAC](postgres_schema.md#spec-cynai-schema-vectorretrievalrbac); the artifact's owning scope (user, project, task) MUST be used when setting `project_id`, `task_id`, and namespace on the vector rows.
+- Vector storage RBAC and scope (project, namespace, sensitivity) MUST be applied as defined in [Vector retrieval and RBAC](vector_storage.md#spec-cynai-schema-vectorretrievalrbac); the artifact's owning scope (user, project, task) MUST be used when setting `project_id`, `task_id`, and namespace on the vector rows.
 
 ## Database Metadata
 
 - Spec ID: `CYNAI.ORCHES.ArtifactsDbMetadata` <a id="spec-cynai-orches-artifactsdbmetadata"></a>
 
 - Artifact metadata and the mapping from logical identifier to blob MUST be stored in the database.
-- Existing tables that reference artifact blobs (e.g. [chat_message_attachments](postgres_schema.md#spec-cynai-schema-chatmessageattachmentstable), [task_artifacts](postgres_schema.md#spec-cynai-schema-taskartifacts)) use a `storage_ref` (or equivalent) column to hold the S3 object key or equivalent reference.
+- Existing tables that reference artifact blobs (e.g. [chat_message_attachments](chat_threads_and_messages.md#spec-cynai-schema-chatmessageattachmentstable), [task_artifacts](#spec-cynai-schema-taskartifacts)) use a `storage_ref` (or equivalent) column to hold the S3 object key or equivalent reference.
 - The implementation MUST ensure that any row referencing an artifact can be used to resolve `artifact_id` (or the table's primary key / stable id) to `storage_ref` and scope (user, thread, project, task) for RBAC and for fetching the blob from the S3-like backend.
 
 ## Stale Artifact Cleanup
@@ -259,13 +294,13 @@ The implementation MUST use the same subject and scope model as [RBAC and groups
   When enabled, configuration MUST include at least: enable/disable flag, schedule (e.g. cron or interval), and policy (e.g. max age, or "prune only when owning resource is deleted/archived").
 - The cleanup job MUST respect [RBAC](#rbac-for-artifacts) and MUST NOT remove artifacts that are still referenced by an active scope unless the policy explicitly allows it (e.g. age-based purge).
 - Pruning MUST remove or invalidate the blob in the S3-like backend and MUST remove or soft-delete the corresponding metadata row so the artifact is no longer accessible.
-- When an artifact is pruned, the orchestrator MUST also **clean up the vector store**: any [vector_items](postgres_schema.md#spec-cynai-schema-vectorstorage) rows whose `source_type` and `source_ref` reference that artifact (e.g. `source_type=task_artifact`, `source_ref` = artifact id or path) MUST be removed or invalidated so that vector search no longer returns chunks derived from the pruned artifact.
+- When an artifact is pruned, the orchestrator MUST also **clean up the vector store**: any [vector_items](vector_storage.md#spec-cynai-schema-vectoritemstable) rows whose `source_type` and `source_ref` reference that artifact (e.g. `source_type=task_artifact`, `source_ref` = artifact id or path) MUST be removed or invalidated so that vector search no longer returns chunks derived from the pruned artifact.
 
 ## Artifact Hashing
 
 - Spec ID: `CYNAI.ORCHES.ArtifactsHashing` <a id="spec-cynai-orches-artifactshashing"></a>
 
-- The orchestrator MUST compute and store a content hash (e.g. SHA-256) for artifacts for integrity and deduplication; the database column is `checksum_sha256` (or equivalent) per [chat_message_attachments](postgres_schema.md#spec-cynai-schema-chatmessageattachmentstable) and [task_artifacts](postgres_schema.md#spec-cynai-schema-taskartifacts).
+- The orchestrator MUST compute and store a content hash (e.g. SHA-256) for artifacts for integrity and deduplication; the database column is `checksum_sha256` (or equivalent) per [chat_message_attachments](chat_threads_and_messages.md#spec-cynai-schema-chatmessageattachmentstable) and [task_artifacts](#spec-cynai-schema-taskartifacts).
 - **Small artifacts:** For artifacts below an implementation-defined or configurable size threshold, the implementation MUST compute the hash **on upload** (during Create or Update) and persist it in the artifact row before responding.
 - **Large artifacts:** For artifacts at or above that threshold, the implementation MAY omit hashing on upload and MUST defer hashing to a **non-busy background job** that runs during low-load periods.
 - The orchestrator MUST run a **background hash update** during non-busy times to compute and store the hash for any artifact that does not yet have one (e.g. rows where `checksum_sha256` is null).

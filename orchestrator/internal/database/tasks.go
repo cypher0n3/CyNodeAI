@@ -9,6 +9,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/cypher0n3/cynodeai/go_shared_libs/gormmodel"
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/models"
 )
 
@@ -42,7 +43,7 @@ func (db *DB) CreateTask(ctx context.Context, createdBy *uuid.UUID, prompt strin
 	if summary == "" {
 		var count int64
 		if createdBy != nil {
-			_ = db.db.WithContext(ctx).Model(&models.Task{}).Where("created_by = ?", createdBy).Count(&count).Error
+			_ = db.db.WithContext(ctx).Model(&TaskRecord{}).Where("created_by = ?", createdBy).Count(&count).Error
 		}
 		summary = fmt.Sprintf("task_name_%03d", count+1)
 	} else if createdBy != nil {
@@ -50,68 +51,80 @@ func (db *DB) CreateTask(ctx context.Context, createdBy *uuid.UUID, prompt strin
 		base := summary
 		for n := 2; ; n++ {
 			var exists int64
-			_ = db.db.WithContext(ctx).Model(&models.Task{}).Where("created_by = ? AND summary = ?", createdBy, summary).Limit(1).Count(&exists).Error
+			_ = db.db.WithContext(ctx).Model(&TaskRecord{}).Where("created_by = ? AND summary = ?", createdBy, summary).Limit(1).Count(&exists).Error
 			if exists == 0 {
 				break
 			}
 			summary = fmt.Sprintf("%s-%d", base, n)
 		}
 	}
-	task := &models.Task{
-		ID:        uuid.New(),
-		CreatedBy: createdBy,
-		ProjectID: effectiveProjectID,
-		Status:    models.TaskStatusPending,
-		Prompt:    &prompt,
-		Summary:   &summary,
-		CreatedAt: time.Now().UTC(),
-		UpdatedAt: time.Now().UTC(),
+	record := &TaskRecord{
+		GormModelUUID: gormmodel.GormModelUUID{
+			ID:        uuid.New(),
+			CreatedAt: time.Now().UTC(),
+			UpdatedAt: time.Now().UTC(),
+		},
+		TaskBase: models.TaskBase{
+			CreatedBy: createdBy,
+			ProjectID: effectiveProjectID,
+			Status:    models.TaskStatusPending,
+			Prompt:    &prompt,
+			Summary:   &summary,
+		},
 	}
-	if err := db.createRecord(ctx, task, "create task"); err != nil {
+	if err := db.createRecord(ctx, record, "create task"); err != nil {
 		return nil, err
 	}
-	return task, nil
+	return record.ToTask(), nil
 }
 
 // GetOrCreateDefaultProjectForUser gets the deterministic default project for the user, creating it when missing.
 func (db *DB) GetOrCreateDefaultProjectForUser(ctx context.Context, userID uuid.UUID) (*models.Project, error) {
 	slug := "default-" + userID.String()
 	now := time.Now().UTC()
-	proj := models.Project{Slug: slug}
+	var record ProjectRecord
 	err := db.db.WithContext(ctx).
-		Where(&models.Project{Slug: slug}).
-		Attrs(models.Project{
-			ID:          uuid.New(),
-			DisplayName: "Default Project",
-			IsActive:    true,
-			CreatedAt:   now,
-			UpdatedAt:   now,
+		Where(&ProjectRecord{ProjectBase: models.ProjectBase{Slug: slug}}).
+		Attrs(ProjectRecord{
+			GormModelUUID: gormmodel.GormModelUUID{
+				ID:        uuid.New(),
+				CreatedAt: now,
+				UpdatedAt: now,
+			},
+			ProjectBase: models.ProjectBase{
+				DisplayName: "Default Project",
+				IsActive:    true,
+			},
 		}).
-		FirstOrCreate(&proj).Error
+		FirstOrCreate(&record).Error
 	if err != nil {
 		return nil, wrapErr(err, "get or create default project")
 	}
-	return &proj, nil
+	return record.ToProject(), nil
 }
 
 // GetTaskByID retrieves a task by ID.
 func (db *DB) GetTaskByID(ctx context.Context, id uuid.UUID) (*models.Task, error) {
-	return getByID[models.Task](db, ctx, id, "get task by id")
+	record, err := getByID[TaskRecord](db, ctx, id, "get task by id")
+	if err != nil {
+		return nil, err
+	}
+	return record.ToTask(), nil
 }
 
 // GetTaskBySummary retrieves the most recently created task matching summary for the given user.
 // Returns ErrNotFound when no match exists.
 func (db *DB) GetTaskBySummary(ctx context.Context, userID uuid.UUID, summary string) (*models.Task, error) {
-	var task models.Task
+	var record TaskRecord
 	err := db.db.WithContext(ctx).
 		Where("created_by = ? AND summary = ?", userID, summary).
 		Order("created_at DESC").
 		Limit(1).
-		First(&task).Error
+		First(&record).Error
 	if err != nil {
 		return nil, wrapErr(err, "get task by summary")
 	}
-	return &task, nil
+	return record.ToTask(), nil
 }
 
 // UpdateTaskStatus updates a task's status. Terminal statuses (completed, failed, canceled,
@@ -128,7 +141,7 @@ func (db *DB) UpdateTaskStatus(ctx context.Context, taskID uuid.UUID, status str
 		models.TaskStatusSuperseded,
 	}
 	return wrapErr(
-		db.db.WithContext(ctx).Model(&models.Task{}).
+		db.db.WithContext(ctx).Model(&TaskRecord{}).
 			Where("id = ? AND status NOT IN ?", taskID, terminalStatuses).
 			Updates(map[string]interface{}{
 				"status":     status,
@@ -150,54 +163,66 @@ func isTerminalTaskStatus(status string) bool {
 
 // UpdateTaskSummary updates a task's summary.
 func (db *DB) UpdateTaskSummary(ctx context.Context, taskID uuid.UUID, summary string) error {
-	return db.updateWhere(ctx, &models.Task{}, "id", taskID,
+	return db.updateWhere(ctx, &TaskRecord{}, "id", taskID,
 		map[string]interface{}{"summary": summary}, "update task summary")
 }
 
 // ListTasksByUser lists tasks created by a user.
 func (db *DB) ListTasksByUser(ctx context.Context, userID uuid.UUID, limit, offset int) ([]*models.Task, error) {
-	var tasks []*models.Task
+	var records []*TaskRecord
 	err := db.db.WithContext(ctx).
 		Where("created_by = ?", userID).
 		Order("created_at DESC").
 		Limit(limit).Offset(offset).
-		Find(&tasks).Error
+		Find(&records).Error
 	if err != nil {
 		return nil, wrapErr(err, "list tasks by user")
+	}
+	tasks := make([]*models.Task, len(records))
+	for i, r := range records {
+		tasks[i] = r.ToTask()
 	}
 	return tasks, nil
 }
 
 // CreateJob creates a new job for a task.
 func (db *DB) CreateJob(ctx context.Context, taskID uuid.UUID, payload string) (*models.Job, error) {
-	job := &models.Job{
-		ID:        uuid.New(),
-		TaskID:    taskID,
-		Status:    models.JobStatusQueued,
-		Payload:   models.NewJSONBString(&payload),
-		CreatedAt: time.Now().UTC(),
-		UpdatedAt: time.Now().UTC(),
+	record := &JobRecord{
+		GormModelUUID: gormmodel.GormModelUUID{
+			ID:        uuid.New(),
+			CreatedAt: time.Now().UTC(),
+			UpdatedAt: time.Now().UTC(),
+		},
+		JobBase: models.JobBase{
+			TaskID:  taskID,
+			Status:  models.JobStatusQueued,
+			Payload: models.NewJSONBString(&payload),
+		},
 	}
-	if err := db.createRecord(ctx, job, "create job"); err != nil {
+	if err := db.createRecord(ctx, record, "create job"); err != nil {
 		return nil, err
 	}
-	return job, nil
+	return record.ToJob(), nil
 }
 
 // CreateJobWithID creates a new job with the given ID (used when payload must reference job_id, e.g. SBA job spec).
 func (db *DB) CreateJobWithID(ctx context.Context, taskID, jobID uuid.UUID, payload string) (*models.Job, error) {
-	job := &models.Job{
-		ID:        jobID,
-		TaskID:    taskID,
-		Status:    models.JobStatusQueued,
-		Payload:   models.NewJSONBString(&payload),
-		CreatedAt: time.Now().UTC(),
-		UpdatedAt: time.Now().UTC(),
+	record := &JobRecord{
+		GormModelUUID: gormmodel.GormModelUUID{
+			ID:        jobID,
+			CreatedAt: time.Now().UTC(),
+			UpdatedAt: time.Now().UTC(),
+		},
+		JobBase: models.JobBase{
+			TaskID:  taskID,
+			Status:  models.JobStatusQueued,
+			Payload: models.NewJSONBString(&payload),
+		},
 	}
-	if err := db.createRecord(ctx, job, "create job with id"); err != nil {
+	if err := db.createRecord(ctx, record, "create job with id"); err != nil {
 		return nil, err
 	}
-	return job, nil
+	return record.ToJob(), nil
 }
 
 // CreateJobCompleted creates a job that is already completed (orchestrator-side inference).
@@ -205,50 +230,62 @@ func (db *DB) CreateJobWithID(ctx context.Context, taskID, jobID uuid.UUID, payl
 func (db *DB) CreateJobCompleted(ctx context.Context, taskID, jobID uuid.UUID, result string) (*models.Job, error) {
 	now := time.Now().UTC()
 	emptyPayload := "{}"
-	job := &models.Job{
-		ID:        jobID,
-		TaskID:    taskID,
-		Status:    models.JobStatusCompleted,
-		Payload:   models.NewJSONBString(&emptyPayload),
-		Result:    models.NewJSONBString(&result),
-		EndedAt:   &now,
-		CreatedAt: now,
-		UpdatedAt: now,
+	record := &JobRecord{
+		GormModelUUID: gormmodel.GormModelUUID{
+			ID:        jobID,
+			CreatedAt: now,
+			UpdatedAt: now,
+		},
+		JobBase: models.JobBase{
+			TaskID:  taskID,
+			Status:  models.JobStatusCompleted,
+			Payload: models.NewJSONBString(&emptyPayload),
+			Result:  models.NewJSONBString(&result),
+			EndedAt: &now,
+		},
 	}
-	if err := db.createRecord(ctx, job, "create job completed"); err != nil {
+	if err := db.createRecord(ctx, record, "create job completed"); err != nil {
 		return nil, err
 	}
-	return job, nil
+	return record.ToJob(), nil
 }
 
 // GetJobByID retrieves a job by ID.
 func (db *DB) GetJobByID(ctx context.Context, id uuid.UUID) (*models.Job, error) {
-	return getByID[models.Job](db, ctx, id, "get job by id")
+	record, err := getByID[JobRecord](db, ctx, id, "get job by id")
+	if err != nil {
+		return nil, err
+	}
+	return record.ToJob(), nil
 }
 
 // GetJobsByTaskID retrieves all jobs for a task.
 func (db *DB) GetJobsByTaskID(ctx context.Context, taskID uuid.UUID) ([]*models.Job, error) {
-	var jobs []*models.Job
+	var records []*JobRecord
 	err := db.db.WithContext(ctx).
 		Where("task_id = ?", taskID).
 		Order("created_at ASC").
-		Find(&jobs).Error
+		Find(&records).Error
 	if err != nil {
 		return nil, wrapErr(err, "get jobs by task id")
+	}
+	jobs := make([]*models.Job, len(records))
+	for i, r := range records {
+		jobs[i] = r.ToJob()
 	}
 	return jobs, nil
 }
 
 // UpdateJobStatus updates a job's status.
 func (db *DB) UpdateJobStatus(ctx context.Context, jobID uuid.UUID, status string) error {
-	return db.updateWhere(ctx, &models.Job{}, "id", jobID,
+	return db.updateWhere(ctx, &JobRecord{}, "id", jobID,
 		map[string]interface{}{"status": status}, "update job status")
 }
 
 // AssignJobToNode assigns a job to a node.
 func (db *DB) AssignJobToNode(ctx context.Context, jobID, nodeID uuid.UUID) error {
 	now := time.Now().UTC()
-	err := db.db.WithContext(ctx).Model(&models.Job{}).
+	err := db.db.WithContext(ctx).Model(&JobRecord{}).
 		Where("id = ?", jobID).
 		Updates(map[string]interface{}{
 			"node_id":    nodeID,
@@ -262,7 +299,7 @@ func (db *DB) AssignJobToNode(ctx context.Context, jobID, nodeID uuid.UUID) erro
 // CompleteJob marks a job as completed with a result.
 func (db *DB) CompleteJob(ctx context.Context, jobID uuid.UUID, result, status string) error {
 	now := time.Now().UTC()
-	err := db.db.WithContext(ctx).Model(&models.Job{}).
+	err := db.db.WithContext(ctx).Model(&JobRecord{}).
 		Where("id = ?", jobID).
 		Updates(map[string]interface{}{
 			"result":     models.NewJSONBString(&result),
@@ -275,14 +312,14 @@ func (db *DB) CompleteJob(ctx context.Context, jobID uuid.UUID, result, status s
 
 // GetNextQueuedJob retrieves the next queued job.
 func (db *DB) GetNextQueuedJob(ctx context.Context) (*models.Job, error) {
-	var job models.Job
+	var record JobRecord
 	err := db.db.WithContext(ctx).
 		Where("status = ?", models.JobStatusQueued).
 		Order("created_at ASC").
 		Limit(1).
-		First(&job).Error
+		First(&record).Error
 	if err != nil {
 		return nil, wrapErr(err, "get next queued job")
 	}
-	return &job, nil
+	return record.ToJob(), nil
 }

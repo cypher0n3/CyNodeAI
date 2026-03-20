@@ -4,7 +4,8 @@
 - [Goals](#goals)
 - [Audit Point](#audit-point)
 - [Required Audit Fields](#required-audit-fields)
-- [Storage in PostgreSQL](#storage-in-postgresql)
+- [Postgres Schema](#postgres-schema)
+  - [MCP Tool Call Audit Log Table](#mcp-tool-call-audit-log-table)
 - [Retention](#retention)
 
 ## Document Overview
@@ -18,6 +19,7 @@ Related documents
 - MCP gateway enforcement: [`docs/tech_specs/mcp/mcp_gateway_enforcement.md`](mcp_gateway_enforcement.md)
 - Access control: [`docs/tech_specs/access_control.md`](../access_control.md)
 - Postgres schema: [`docs/tech_specs/postgres_schema.md`](../postgres_schema.md)
+- [Audit logging overview](../audit_logging.md)
 
 ## Goals
 
@@ -79,9 +81,46 @@ Payload storage
 - For MVP, tool argument payloads and tool result payloads are not stored in PostgreSQL audit tables.
 - Tool payloads can be stored in structured logs when needed for debugging, subject to redaction.
 
-## Storage in PostgreSQL
+## Postgres Schema
 
-The canonical table definition is in [`docs/tech_specs/postgres_schema.md`](../postgres_schema.md#spec-cynai-schema-mcptoolcallauditlog).
+Canonical column definitions for the MCP tool call audit log live in this section.
+
+### MCP Tool Call Audit Log Table
+
+- Spec ID: `CYNAI.SCHEMA.McpToolCallAuditLog` <a id="spec-cynai-schema-mcptoolcallauditlog"></a>
+
+This table stores append-only metadata for MCP tool calls routed by the orchestrator gateway.
+Tool arguments and tool results are not stored in this table for MVP.
+
+Index entry in [`postgres_schema.md`](../postgres_schema.md#spec-cynai-schema-auditlogging).
+
+- `id` (uuid, pk)
+- `created_at` (timestamptz)
+- `task_id` (uuid, fk to `tasks.id`, nullable)
+- `project_id` (uuid, fk to `projects.id`, nullable)
+- `run_id` (uuid, fk to `runs.id`, nullable)
+- `job_id` (uuid, fk to `jobs.id`, nullable)
+- `subject_type` (text, nullable)
+- `subject_id` (uuid, nullable)
+- `user_id` (uuid, fk to `users.id`, nullable)
+- `group_ids` (jsonb, nullable)
+  - array of uuid
+- `role_names` (jsonb, nullable)
+  - array of string
+- `tool_name` (text)
+- `decision` (text)
+  - allow or deny
+- `status` (text)
+  - success or error
+- `duration_ms` (int, nullable)
+- `error_type` (text, nullable)
+
+#### MCP Tool Call Audit Log Table Constraints
+
+- Index: (`created_at`)
+- Index: (`task_id`)
+- Index: (`project_id`)
+- Index: (`tool_name`)
 
 ## Retention
 

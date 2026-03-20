@@ -48,6 +48,7 @@
   - [Tasks Versus Chat (Non-Goals) Requirements Traces](#tasks-versus-chat-non-goals-requirements-traces)
 - [Authentication, Policy, and Auditing](#authentication-policy-and-auditing)
   - [Authentication Policy and Auditing Requirements Traces](#authentication-policy-and-auditing-requirements-traces)
+  - [Chat Audit Log Table](#chat-audit-log-table)
 - [Gateway Timeouts and Long-Running Behavior](#gateway-timeouts-and-long-running-behavior)
   - [Gateway Timeouts and Long-Running Behavior Requirements Traces](#gateway-timeouts-and-long-running-behavior-requirements-traces)
 - [Reliability Requirements](#reliability-requirements)
@@ -753,6 +754,37 @@ The external contract remains an interactive chat request and response.
 - [REQ-USRGWY-0121](../requirements/usrgwy.md#req-usrgwy-0121)
 - [REQ-USRGWY-0124](../requirements/usrgwy.md#req-usrgwy-0124)
 - [REQ-USRGWY-0125](../requirements/usrgwy.md#req-usrgwy-0125)
+
+### Chat Audit Log Table
+
+- Spec ID: `CYNAI.SCHEMA.ChatAuditLogTable` <a id="spec-cynai-schema-chatauditlogtable"></a>
+
+Table name: `chat_audit_log`.
+
+This table stores audit records for OpenAI-compatible interactive chat requests.
+It does not store full message content.
+
+**Schema definitions (index):** See [Audit Logging](postgres_schema.md#spec-cynai-schema-auditlogging) in [`postgres_schema.md`](postgres_schema.md).
+
+- `id` (uuid, pk)
+- `created_at` (timestamptz)
+- `user_id` (uuid, fk to `users.id`, nullable)
+- `project_id` (uuid, fk to `projects.id`, nullable)
+- `outcome` (text)
+  - examples: success, error, canceled, timeout
+- `error_code` (text, nullable)
+- `redaction_applied` (boolean)
+- `redaction_kinds` (jsonb, nullable)
+  - array of string
+  - examples: api_key, token, password
+- `duration_ms` (int, nullable)
+- `request_id` (text, nullable)
+
+#### Chat Audit Log Table Constraints
+
+- Index: (`created_at`)
+- Index: (`user_id`)
+- Index: (`project_id`)
 
 ## Gateway Timeouts and Long-Running Behavior
 

@@ -59,11 +59,13 @@ func TestInferencePathAvailable_WithDispatchableNode(t *testing.T) {
 	mock := testutil.NewMockDB()
 	nodeID := uuid.New()
 	mock.Nodes[nodeID] = &models.Node{
-		ID:                   nodeID,
-		Status:               models.NodeStatusActive,
-		ConfigAckStatus:      ptr(testConfigAckApplied),
-		WorkerAPITargetURL:   ptr(testWorkerURL),
-		WorkerAPIBearerToken: ptr(testBearerToken),
+		NodeBase: models.NodeBase{
+			Status:               models.NodeStatusActive,
+			ConfigAckStatus:      ptr(testConfigAckApplied),
+			WorkerAPITargetURL:   ptr(testWorkerURL),
+			WorkerAPIBearerToken: ptr(testBearerToken),
+		},
+		ID: nodeID,
 	}
 	ctx := context.Background()
 	ok, err := InferencePathAvailable(ctx, mock)
@@ -124,11 +126,13 @@ func TestHasWorkerReportedPMAReady_WithPMAReady(t *testing.T) {
 	mock := testutil.NewMockDB()
 	nodeID := uuid.New()
 	mock.Nodes[nodeID] = &models.Node{
-		ID:                   nodeID,
-		Status:               models.NodeStatusActive,
-		ConfigAckStatus:      ptr(testConfigAckApplied),
-		WorkerAPITargetURL:   ptr(testWorkerURL),
-		WorkerAPIBearerToken: ptr(testBearerToken),
+		NodeBase: models.NodeBase{
+			Status:               models.NodeStatusActive,
+			ConfigAckStatus:      ptr(testConfigAckApplied),
+			WorkerAPITargetURL:   ptr(testWorkerURL),
+			WorkerAPIBearerToken: ptr(testBearerToken),
+		},
+		ID: nodeID,
 	}
 	report := nodepayloads.CapabilityReport{
 		ManagedServicesStatus: &nodepayloads.ManagedServicesStatus{
@@ -149,11 +153,13 @@ func TestHasWorkerReportedPMAReady_NoPMAInSnapshot(t *testing.T) {
 	mock := testutil.NewMockDB()
 	nodeID := uuid.New()
 	mock.Nodes[nodeID] = &models.Node{
-		ID:                   nodeID,
-		Status:               models.NodeStatusActive,
-		ConfigAckStatus:      ptr(testConfigAckApplied),
-		WorkerAPITargetURL:   ptr(testWorkerURL),
-		WorkerAPIBearerToken: ptr(testBearerToken),
+		NodeBase: models.NodeBase{
+			Status:               models.NodeStatusActive,
+			ConfigAckStatus:      ptr(testConfigAckApplied),
+			WorkerAPITargetURL:   ptr(testWorkerURL),
+			WorkerAPIBearerToken: ptr(testBearerToken),
+		},
+		ID: nodeID,
 	}
 	report := nodepayloads.CapabilityReport{
 		ManagedServicesStatus: &nodepayloads.ManagedServicesStatus{
@@ -213,11 +219,13 @@ func TestHasWorkerReportedPMAReady_InvalidSnapshotJSON(t *testing.T) {
 	mock := testutil.NewMockDB()
 	nodeID := uuid.New()
 	mock.Nodes[nodeID] = &models.Node{
-		ID:                   nodeID,
-		Status:               models.NodeStatusActive,
-		ConfigAckStatus:      ptr(testConfigAckApplied),
-		WorkerAPITargetURL:   ptr(testWorkerURL),
-		WorkerAPIBearerToken: ptr(testBearerToken),
+		NodeBase: models.NodeBase{
+			Status:               models.NodeStatusActive,
+			ConfigAckStatus:      ptr(testConfigAckApplied),
+			WorkerAPITargetURL:   ptr(testWorkerURL),
+			WorkerAPIBearerToken: ptr(testBearerToken),
+		},
+		ID: nodeID,
 	}
 	_ = mock.SaveNodeCapabilitySnapshot(context.Background(), nodeID, `{invalid json}`)
 	ctx := context.Background()
@@ -230,11 +238,13 @@ func TestHasWorkerReportedPMAReady_NilManagedServicesStatus(t *testing.T) {
 	mock := testutil.NewMockDB()
 	nodeID := uuid.New()
 	mock.Nodes[nodeID] = &models.Node{
-		ID:                   nodeID,
-		Status:               models.NodeStatusActive,
-		ConfigAckStatus:      ptr(testConfigAckApplied),
-		WorkerAPITargetURL:   ptr(testWorkerURL),
-		WorkerAPIBearerToken: ptr(testBearerToken),
+		NodeBase: models.NodeBase{
+			Status:               models.NodeStatusActive,
+			ConfigAckStatus:      ptr(testConfigAckApplied),
+			WorkerAPITargetURL:   ptr(testWorkerURL),
+			WorkerAPIBearerToken: ptr(testBearerToken),
+		},
+		ID: nodeID,
 	}
 	report := nodepayloads.CapabilityReport{ManagedServicesStatus: nil}
 	capJSON, _ := json.Marshal(report)

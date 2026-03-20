@@ -357,3 +357,10 @@ RBAC remains authoritative.
 Similarity operates strictly inside authorized boundaries.
 
 This preserves CyNodeAI's core security model while enabling efficient contextual retrieval.
+
+## 19. Postgres Schema (Orchestrator Tables)
+
+**Schema definitions:** See [Vector Storage](../tech_specs/vector_storage.md#spec-cynai-schema-vectorstorage-schema) in [`vector_storage.md`](../tech_specs/vector_storage.md) for the canonical PostgreSQL schema definition.
+
+This proposal document describes the design rationale and RBAC model for vector storage.
+The authoritative table definitions, constraints, and indexing guidance are in the tech spec.

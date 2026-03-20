@@ -512,9 +512,11 @@ func TestBuildNodeConfigPayload_IncludesManagedServicesWhenSelected(t *testing.T
 	defer func() { _ = os.Unsetenv("PMA_HOST_NODE_SLUG") }()
 	mockDB := testutil.NewMockDB()
 	node := &models.Node{
+		NodeBase: models.NodeBase{
+			NodeSlug: "node-01",
+			Status:   models.NodeStatusActive,
+		},
 		ID:        uuid.New(),
-		NodeSlug:  "node-01",
-		Status:    models.NodeStatusActive,
 		CreatedAt: time.Now().UTC(),
 		UpdatedAt: time.Now().UTC(),
 	}
@@ -544,9 +546,11 @@ func TestBuildNodeConfigPayload_ManagedServicesIncludeAgentTokenWhenSet(t *testi
 	defer func() { _ = os.Unsetenv("PMA_HOST_NODE_SLUG") }()
 	mockDB := testutil.NewMockDB()
 	node := &models.Node{
+		NodeBase: models.NodeBase{
+			NodeSlug: "node-01",
+			Status:   models.NodeStatusActive,
+		},
 		ID:        uuid.New(),
-		NodeSlug:  "node-01",
-		Status:    models.NodeStatusActive,
 		CreatedAt: time.Now().UTC(),
 		UpdatedAt: time.Now().UTC(),
 	}
@@ -571,9 +575,11 @@ func TestBuildNodeConfigPayload_OmitsManagedServicesWhenNotSelected(t *testing.T
 	defer func() { _ = os.Unsetenv("PMA_HOST_NODE_SLUG") }()
 	mockDB := testutil.NewMockDB()
 	node := &models.Node{
+		NodeBase: models.NodeBase{
+			NodeSlug: "node-01",
+			Status:   models.NodeStatusActive,
+		},
 		ID:        uuid.New(),
-		NodeSlug:  "node-01",
-		Status:    models.NodeStatusActive,
 		CreatedAt: time.Now().UTC(),
 		UpdatedAt: time.Now().UTC(),
 	}
@@ -591,16 +597,20 @@ func TestSelectPMAHostNodeSlug_PrefersLabeledNode(t *testing.T) {
 	defer func() { _ = os.Unsetenv("PMA_PREFER_HOST_LABEL") }()
 	mockDB := testutil.NewMockDB()
 	node1 := &models.Node{
+		NodeBase: models.NodeBase{
+			NodeSlug: "node-a",
+			Status:   models.NodeStatusActive,
+		},
 		ID:        uuid.New(),
-		NodeSlug:  "node-a",
-		Status:    models.NodeStatusActive,
 		CreatedAt: time.Now().UTC(),
 		UpdatedAt: time.Now().UTC(),
 	}
 	node2 := &models.Node{
+		NodeBase: models.NodeBase{
+			NodeSlug: "node-b",
+			Status:   models.NodeStatusActive,
+		},
 		ID:        uuid.New(),
-		NodeSlug:  "node-b",
-		Status:    models.NodeStatusActive,
 		CreatedAt: time.Now().UTC(),
 		UpdatedAt: time.Now().UTC(),
 	}
@@ -731,7 +741,13 @@ func TestSelectPMAModel_PicksTopTierCandidate(t *testing.T) {
 	// Orchestrator always picks the best VRAM-tier candidate regardless of what is available.
 	_ = os.Unsetenv("INFERENCE_MODEL")
 	mockDB := testutil.NewMockDB()
-	node := &models.Node{ID: uuid.New(), NodeSlug: "test-node", Status: models.NodeStatusActive}
+	node := &models.Node{
+		NodeBase: models.NodeBase{
+			NodeSlug: "test-node",
+			Status:   models.NodeStatusActive,
+		},
+		ID: uuid.New(),
+	}
 	mockDB.AddNode(node)
 	report := nodepayloads.CapabilityReport{
 		Version:    1,
@@ -760,7 +776,13 @@ func TestSelectPMAModel_PicksTopTierCandidate(t *testing.T) {
 func TestSelectPMAModel_FallsBackToTopCandidate(t *testing.T) {
 	_ = os.Unsetenv("INFERENCE_MODEL")
 	mockDB := testutil.NewMockDB()
-	node := &models.Node{ID: uuid.New(), NodeSlug: "test-node", Status: models.NodeStatusActive}
+	node := &models.Node{
+		NodeBase: models.NodeBase{
+			NodeSlug: "test-node",
+			Status:   models.NodeStatusActive,
+		},
+		ID: uuid.New(),
+	}
 	mockDB.AddNode(node)
 	// No GPU reported → default tier.
 	report := nodepayloads.CapabilityReport{
@@ -1108,7 +1130,10 @@ func TestBuildManagedServicesDesiredState_BackendEnvPropagated(t *testing.T) {
 	t.Setenv("PMA_NODE_SLUG", "test-node")
 	db := testutil.NewMockDB()
 	h := NewNodeHandler(db, nil, "psk", testOrchestratorURL, "", "", "", nil)
-	node := &models.Node{ID: uuid.New(), NodeSlug: "test-node"}
+	node := &models.Node{
+		NodeBase: models.NodeBase{NodeSlug: "test-node"},
+		ID:       uuid.New(),
+	}
 	backendEnv := map[string]string{"OLLAMA_NUM_CTX": "32768"}
 	result := h.buildManagedServicesDesiredState(t.Context(), node, "http://10.0.0.1:12090", backendEnv)
 	if result == nil || len(result.Services) == 0 {

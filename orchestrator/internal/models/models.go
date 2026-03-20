@@ -74,51 +74,79 @@ func (j *JSONBString) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-// User represents a system user.
-type User struct {
-	ID             uuid.UUID `gorm:"type:uuid;primaryKey" json:"id"`
-	Handle         string    `gorm:"column:handle;uniqueIndex" json:"handle"`
-	Email          *string   `gorm:"column:email;uniqueIndex" json:"email,omitempty"`
-	IsActive       bool      `gorm:"column:is_active;index" json:"is_active"`
-	ExternalSource *string   `gorm:"column:external_source" json:"external_source,omitempty"`
-	ExternalID     *string   `gorm:"column:external_id" json:"external_id,omitempty"`
-	CreatedAt      time.Time `gorm:"column:created_at" json:"created_at"`
-	UpdatedAt      time.Time `gorm:"column:updated_at" json:"updated_at"`
+// UserBase is the domain base struct for User (fields without ID, CreatedAt, UpdatedAt, DeletedAt).
+// This is embedded in UserRecord along with GormModelUUID.
+// For API/handler consumption, use User (which includes ID, CreatedAt, UpdatedAt).
+type UserBase struct {
+	Handle         string  `gorm:"column:handle;uniqueIndex" json:"handle"`
+	Email          *string `gorm:"column:email;uniqueIndex" json:"email,omitempty"`
+	IsActive       bool    `gorm:"column:is_active;index" json:"is_active"`
+	ExternalSource *string `gorm:"column:external_source" json:"external_source,omitempty"`
+	ExternalID     *string `gorm:"column:external_id" json:"external_id,omitempty"`
 }
 
-func (User) TableName() string { return "users" }
+// User represents a system user (domain type for API/handler consumption).
+// This is the type returned from Store methods.
+// For GORM persistence, use UserRecord in the database package.
+// ID, CreatedAt, UpdatedAt are populated by UserRecord.ToUser() from GormModelUUID.
+type User struct {
+	UserBase
+	// Identity/timestamps (populated from GormModelUUID by ToUser())
+	ID        uuid.UUID `json:"id"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+}
 
-// PasswordCredential stores hashed password for a user.
-type PasswordCredential struct {
-	ID           uuid.UUID `gorm:"type:uuid;primaryKey" json:"id"`
+// PasswordCredentialBase is the domain base struct for PasswordCredential (fields without ID, CreatedAt, UpdatedAt, DeletedAt).
+// This is embedded in PasswordCredentialRecord along with GormModelUUID.
+// For API/handler consumption, use PasswordCredential (which includes ID, CreatedAt, UpdatedAt).
+type PasswordCredentialBase struct {
 	UserID       uuid.UUID `gorm:"column:user_id;uniqueIndex" json:"user_id"`
 	PasswordHash []byte    `gorm:"column:password_hash;type:bytea" json:"-"`
 	HashAlg      string    `gorm:"column:hash_alg" json:"hash_alg"`
-	CreatedAt    time.Time `gorm:"column:created_at" json:"created_at"`
-	UpdatedAt    time.Time `gorm:"column:updated_at" json:"updated_at"`
 }
 
-func (PasswordCredential) TableName() string { return "password_credentials" }
+// PasswordCredential represents a password credential (domain type for API/handler consumption).
+// This is the type returned from Store methods.
+// For GORM persistence, use PasswordCredentialRecord in the database package.
+// ID, CreatedAt, UpdatedAt are populated by PasswordCredentialRecord.ToPasswordCredential() from GormModelUUID.
+type PasswordCredential struct {
+	PasswordCredentialBase
+	// Identity/timestamps (populated from GormModelUUID by ToPasswordCredential())
+	ID        uuid.UUID `json:"id"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+}
 
-// RefreshSession represents an active refresh token session.
-type RefreshSession struct {
-	ID               uuid.UUID  `gorm:"type:uuid;primaryKey" json:"id"`
+// RefreshSessionBase is the domain base struct for RefreshSession (fields without ID, CreatedAt, UpdatedAt, DeletedAt).
+// This is embedded in RefreshSessionRecord along with GormModelUUID.
+// For API/handler consumption, use RefreshSession (which includes ID, CreatedAt, UpdatedAt).
+type RefreshSessionBase struct {
 	UserID           uuid.UUID  `gorm:"column:user_id;index" json:"user_id"`
 	RefreshTokenHash []byte     `gorm:"column:refresh_token_hash;type:bytea" json:"-"`
 	RefreshTokenKID  *string    `gorm:"column:refresh_token_kid" json:"-"`
 	IsActive         bool       `gorm:"column:is_active" json:"is_active"`
 	ExpiresAt        time.Time  `gorm:"column:expires_at" json:"expires_at"`
 	LastUsedAt       *time.Time `gorm:"column:last_used_at" json:"last_used_at,omitempty"`
-	CreatedAt        time.Time  `gorm:"column:created_at" json:"created_at"`
-	UpdatedAt        time.Time  `gorm:"column:updated_at" json:"updated_at"`
 }
 
-func (RefreshSession) TableName() string { return "refresh_sessions" }
+// RefreshSession represents an active refresh token session (domain type for API/handler consumption).
+// This is the type returned from Store methods.
+// For GORM persistence, use RefreshSessionRecord in the database package.
+// ID, CreatedAt, UpdatedAt are populated by RefreshSessionRecord.ToRefreshSession() from GormModelUUID.
+type RefreshSession struct {
+	RefreshSessionBase
+	// Identity/timestamps (populated from GormModelUUID by ToRefreshSession())
+	ID        uuid.UUID `json:"id"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+}
 
-// AuthAuditLog records authentication events.
-// Schema: subject_handle, reason, ip_address (inet); no details column.
-type AuthAuditLog struct {
-	ID            uuid.UUID  `gorm:"type:uuid;primaryKey" json:"id"`
+// AuthAuditLogBase is the domain base struct for AuthAuditLog (fields without ID, CreatedAt, UpdatedAt, DeletedAt).
+// This is embedded in AuthAuditLogRecord along with GormModelUUID.
+// For API/handler consumption, use AuthAuditLog (which includes ID, CreatedAt).
+// Note: AuthAuditLog only uses CreatedAt (not UpdatedAt), but GormModelUUID includes UpdatedAt for consistency.
+type AuthAuditLogBase struct {
 	UserID        *uuid.UUID `gorm:"column:user_id;index" json:"user_id,omitempty"`
 	EventType     string     `gorm:"column:event_type;index" json:"event_type"`
 	Success       bool       `gorm:"column:success" json:"success"`
@@ -126,14 +154,24 @@ type AuthAuditLog struct {
 	IPAddress     *string    `gorm:"column:ip_address" json:"ip_address,omitempty"`
 	UserAgent     *string    `gorm:"column:user_agent" json:"user_agent,omitempty"`
 	Reason        *string    `gorm:"column:reason" json:"reason,omitempty"`
-	CreatedAt     time.Time  `gorm:"column:created_at" json:"created_at"`
 }
 
-func (AuthAuditLog) TableName() string { return "auth_audit_log" }
+// AuthAuditLog records authentication events (domain type for API/handler consumption).
+// Schema: subject_handle, reason, ip_address (inet); no details column.
+// This is the type returned from Store methods.
+// For GORM persistence, use AuthAuditLogRecord in the database package.
+// ID, CreatedAt are populated by AuthAuditLogRecord.ToAuthAuditLog() from GormModelUUID.
+type AuthAuditLog struct {
+	AuthAuditLogBase
+	// Identity/timestamps (populated from GormModelUUID by ToAuthAuditLog())
+	ID        uuid.UUID `json:"id"`
+	CreatedAt time.Time `json:"created_at"`
+}
 
-// Node represents a registered worker node.
-type Node struct {
-	ID                   uuid.UUID  `gorm:"type:uuid;primaryKey" json:"id"`
+// NodeBase is the domain base struct for Node (fields without ID, CreatedAt, UpdatedAt, DeletedAt).
+// This is embedded in NodeRecord along with GormModelUUID.
+// For API/handler consumption, use Node (which includes ID, CreatedAt, UpdatedAt).
+type NodeBase struct {
 	NodeSlug             string     `gorm:"column:node_slug;uniqueIndex" json:"node_slug"`
 	Status               string     `gorm:"column:status;index" json:"status"`
 	CapabilityHash       *string    `gorm:"column:capability_hash" json:"capability_hash,omitempty"`
@@ -146,25 +184,46 @@ type Node struct {
 	LastSeenAt           *time.Time `gorm:"column:last_seen_at" json:"last_seen_at,omitempty"`
 	LastCapabilityAt     *time.Time `gorm:"column:last_capability_at" json:"last_capability_at,omitempty"`
 	Metadata             *string    `gorm:"column:metadata;type:jsonb" json:"metadata,omitempty"`
-	CreatedAt            time.Time  `gorm:"column:created_at" json:"created_at"`
-	UpdatedAt            time.Time  `gorm:"column:updated_at" json:"updated_at"`
 }
 
-func (Node) TableName() string { return "nodes" }
+// Node represents a registered worker node (domain type for API/handler consumption).
+// This is the type returned from Store methods.
+// For GORM persistence, use NodeRecord in the database package.
+// ID, CreatedAt, UpdatedAt are populated by NodeRecord.ToNode() from GormModelUUID.
+type Node struct {
+	NodeBase
+	// Identity/timestamps (populated from GormModelUUID by ToNode())
+	ID        uuid.UUID `json:"id"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+}
 
-// NodeCapability stores a snapshot of node capabilities.
-type NodeCapability struct {
-	ID                 uuid.UUID `gorm:"type:uuid;primaryKey" json:"id"`
+// NodeCapabilityBase is the domain base struct for NodeCapability (fields without ID, CreatedAt, UpdatedAt, DeletedAt).
+// This is embedded in NodeCapabilityRecord along with GormModelUUID.
+// For API/handler consumption, use NodeCapability (which includes ID, CreatedAt, UpdatedAt).
+// Note: NodeCapability has ReportedAt which is a domain field, not a timestamp from GormModelUUID.
+type NodeCapabilityBase struct {
 	NodeID             uuid.UUID `gorm:"column:node_id;index" json:"node_id"`
 	ReportedAt         time.Time `gorm:"column:reported_at" json:"reported_at"`
 	CapabilitySnapshot string    `gorm:"column:capability_snapshot;type:jsonb" json:"capability_snapshot"`
 }
 
-func (NodeCapability) TableName() string { return "node_capabilities" }
+// NodeCapability stores a snapshot of node capabilities (domain type for API/handler consumption).
+// This is the type returned from Store methods.
+// For GORM persistence, use NodeCapabilityRecord in the database package.
+// ID, CreatedAt, UpdatedAt are populated by NodeCapabilityRecord.ToNodeCapability() from GormModelUUID.
+type NodeCapability struct {
+	NodeCapabilityBase
+	// Identity/timestamps (populated from GormModelUUID by ToNodeCapability())
+	ID        uuid.UUID `json:"id"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+}
 
-// Task represents a user-submitted task.
-type Task struct {
-	ID                 uuid.UUID  `gorm:"type:uuid;primaryKey" json:"id"`
+// TaskBase is the domain base struct for Task (fields without ID, CreatedAt, UpdatedAt, DeletedAt).
+// This is embedded in TaskRecord along with GormModelUUID.
+// For API/handler consumption, use Task (which includes ID, CreatedAt, UpdatedAt).
+type TaskBase struct {
 	CreatedBy          *uuid.UUID `gorm:"column:created_by;index" json:"created_by,omitempty"`
 	ProjectID          *uuid.UUID `gorm:"column:project_id;index" json:"project_id,omitempty"`
 	PlanID             *uuid.UUID `gorm:"column:plan_id;index" json:"plan_id,omitempty"`
@@ -174,37 +233,68 @@ type Task struct {
 	AcceptanceCriteria *string    `gorm:"column:acceptance_criteria;type:jsonb" json:"acceptance_criteria,omitempty"`
 	Summary            *string    `gorm:"column:summary" json:"summary,omitempty"`
 	Metadata           *string    `gorm:"column:metadata;type:jsonb" json:"metadata,omitempty"`
-	CreatedAt          time.Time  `gorm:"column:created_at" json:"created_at"`
-	UpdatedAt          time.Time  `gorm:"column:updated_at" json:"updated_at"`
 }
 
-func (Task) TableName() string { return "tasks" }
+// Task represents a user-submitted task (domain type for API/handler consumption).
+// This is the type returned from Store methods.
+// For GORM persistence, use TaskRecord in the database package.
+// ID, CreatedAt, UpdatedAt are populated by TaskRecord.ToTask() from GormModelUUID.
+type Task struct {
+	TaskBase
+	// Identity/timestamps (populated from GormModelUUID by ToTask())
+	ID        uuid.UUID `json:"id"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+}
 
 // ProjectPlan represents a project plan (postgres_schema.md project_plans). Used by workflow start gate.
-type ProjectPlan struct {
-	ID        uuid.UUID `gorm:"type:uuid;primaryKey" json:"id"`
+// ProjectPlanBase is the domain base struct for project plans (fields without ID, CreatedAt, UpdatedAt, DeletedAt).
+// This is embedded in ProjectPlanRecord along with GormModelUUID.
+// For API/handler consumption, use ProjectPlan (which includes ID, CreatedAt, UpdatedAt).
+type ProjectPlanBase struct {
 	ProjectID uuid.UUID `gorm:"column:project_id;index" json:"project_id"`
 	State     string    `gorm:"column:state;index" json:"state"`
 	Archived  bool      `gorm:"column:archived;index" json:"archived"`
-	CreatedAt time.Time `gorm:"column:created_at" json:"created_at"`
-	UpdatedAt time.Time `gorm:"column:updated_at" json:"updated_at"`
 }
 
-func (ProjectPlan) TableName() string { return "project_plans" }
+// ProjectPlan represents a project plan (domain type for API/handler consumption).
+// This is the type returned from Store methods.
+// For GORM persistence, use ProjectPlanRecord in the database package.
+// ID, CreatedAt, UpdatedAt are populated by ProjectPlanRecord.ToProjectPlan() from GormModelUUID.
+type ProjectPlan struct {
+	ProjectPlanBase
+	// Identity/timestamps (populated from GormModelUUID by ToProjectPlan())
+	ID        uuid.UUID `json:"id"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+}
 
-// TaskDependency represents task_dependencies (task_id depends on depends_on_task_id).
-type TaskDependency struct {
-	ID              uuid.UUID `gorm:"type:uuid;primaryKey" json:"id"`
+// TaskDependencyBase is the domain base struct for TaskDependency (fields without ID, CreatedAt, UpdatedAt, DeletedAt).
+// This is embedded in TaskDependencyRecord along with GormModelUUID.
+// For API/handler consumption, use TaskDependency (which includes ID, CreatedAt, UpdatedAt).
+// Note: TaskDependency currently doesn't use CreatedAt/UpdatedAt in business logic, but GormModelUUID includes them for consistency.
+type TaskDependencyBase struct {
 	TaskID          uuid.UUID `gorm:"column:task_id;index" json:"task_id"`
 	DependsOnTaskID uuid.UUID `gorm:"column:depends_on_task_id;index" json:"depends_on_task_id"`
 }
 
-func (TaskDependency) TableName() string { return "task_dependencies" }
+// TaskDependency represents task_dependencies (task_id depends on depends_on_task_id) (domain type for API/handler consumption).
+// This is the type returned from Store methods.
+// For GORM persistence, use TaskDependencyRecord in the database package.
+// ID, CreatedAt, UpdatedAt are populated by TaskDependencyRecord.ToTaskDependency() from GormModelUUID.
+type TaskDependency struct {
+	TaskDependencyBase
+	// Identity/timestamps (populated from GormModelUUID by ToTaskDependency())
+	ID        uuid.UUID `json:"id"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+}
 
-// Job represents a unit of work dispatched to a node.
+// JobBase is the domain base struct for Job (fields without ID, CreatedAt, UpdatedAt, DeletedAt).
+// This is embedded in JobRecord along with GormModelUUID.
+// For API/handler consumption, use Job (which includes ID, CreatedAt, UpdatedAt).
 // Payload and Result are stored as jsonb via JSONBString.
-type Job struct {
-	ID             uuid.UUID   `gorm:"type:uuid;primaryKey" json:"id"`
+type JobBase struct {
 	TaskID         uuid.UUID   `gorm:"column:task_id;index" json:"task_id"`
 	NodeID         *uuid.UUID  `gorm:"column:node_id;index" json:"node_id,omitempty"`
 	Status         string      `gorm:"column:status;index" json:"status"`
@@ -214,11 +304,20 @@ type Job struct {
 	LeaseExpiresAt *time.Time  `gorm:"column:lease_expires_at" json:"lease_expires_at,omitempty"`
 	StartedAt      *time.Time  `gorm:"column:started_at" json:"started_at,omitempty"`
 	EndedAt        *time.Time  `gorm:"column:ended_at" json:"ended_at,omitempty"`
-	CreatedAt      time.Time   `gorm:"column:created_at" json:"created_at"`
-	UpdatedAt      time.Time   `gorm:"column:updated_at" json:"updated_at"`
 }
 
-func (Job) TableName() string { return "jobs" }
+// Job represents a unit of work dispatched to a node (domain type for API/handler consumption).
+// Payload and Result are stored as jsonb via JSONBString.
+// This is the type returned from Store methods.
+// For GORM persistence, use JobRecord in the database package.
+// ID, CreatedAt, UpdatedAt are populated by JobRecord.ToJob() from GormModelUUID.
+type Job struct {
+	JobBase
+	// Identity/timestamps (populated from GormModelUUID by ToJob())
+	ID        uuid.UUID `json:"id"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+}
 
 // TaskStatus constants.
 const (
@@ -250,9 +349,10 @@ const (
 
 // McpToolCallAuditLog stores metadata for each MCP tool call routed by the gateway.
 // Per docs/tech_specs/mcp_tool_call_auditing.md and postgres_schema.md; tool args/results not stored for MVP.
-type McpToolCallAuditLog struct {
-	ID          uuid.UUID  `gorm:"type:uuid;primaryKey" json:"id"`
-	CreatedAt   time.Time  `gorm:"column:created_at;index" json:"created_at"`
+// McpToolCallAuditLogBase is the domain base struct for MCP tool call audit logs (fields without ID, CreatedAt, UpdatedAt, DeletedAt).
+// This is embedded in McpToolCallAuditLogRecord along with GormModelUUID.
+// For API/handler consumption, use McpToolCallAuditLog (which includes ID, CreatedAt).
+type McpToolCallAuditLogBase struct {
 	TaskID      *uuid.UUID `gorm:"column:task_id;index" json:"task_id,omitempty"`
 	ProjectID   *uuid.UUID `gorm:"column:project_id;index" json:"project_id,omitempty"`
 	RunID       *uuid.UUID `gorm:"column:run_id" json:"run_id,omitempty"`
@@ -269,28 +369,49 @@ type McpToolCallAuditLog struct {
 	ErrorType   *string    `gorm:"column:error_type" json:"error_type,omitempty"`
 }
 
-func (McpToolCallAuditLog) TableName() string { return "mcp_tool_call_audit_log" }
+// McpToolCallAuditLog represents an MCP tool call audit log entry (domain type for API/handler consumption).
+// This is the type returned from Store methods.
+// For GORM persistence, use McpToolCallAuditLogRecord in the database package.
+// ID, CreatedAt are populated by McpToolCallAuditLogRecord.ToMcpToolCallAuditLog() from GormModelUUID.
+type McpToolCallAuditLog struct {
+	McpToolCallAuditLogBase
+	// Identity/timestamps (populated from GormModelUUID by ToMcpToolCallAuditLog())
+	ID        uuid.UUID `json:"id"`
+	CreatedAt time.Time `json:"created_at"`
+}
 
-// PreferenceEntry stores a single preference in a scope (system, user, group, project, task).
-// Per docs/tech_specs/postgres_schema.md and user_preferences.md.
-// Unique on (scope_type, scope_id, key).
-type PreferenceEntry struct {
-	ID        uuid.UUID  `gorm:"type:uuid;primaryKey" json:"id"`
+// PreferenceEntryBase is the domain base struct for preference entries (fields without ID, CreatedAt, UpdatedAt, DeletedAt).
+// Note: PreferenceEntry uses UpdatedAt but not CreatedAt in the domain type (though GormModelUUID provides CreatedAt).
+// This is embedded in PreferenceEntryRecord along with GormModelUUID.
+// For API/handler consumption, use PreferenceEntry (which includes ID, UpdatedAt).
+type PreferenceEntryBase struct {
 	ScopeType string     `gorm:"column:scope_type;uniqueIndex:uix_pref_scope_key,priority:1" json:"scope_type"`
 	ScopeID   *uuid.UUID `gorm:"column:scope_id;uniqueIndex:uix_pref_scope_key,priority:2" json:"scope_id,omitempty"`
 	Key       string     `gorm:"column:key;uniqueIndex:uix_pref_scope_key,priority:3;index" json:"key"`
 	Value     *string    `gorm:"column:value;type:jsonb" json:"value,omitempty"`
 	ValueType string     `gorm:"column:value_type" json:"value_type"`
 	Version   int        `gorm:"column:version" json:"version"`
-	UpdatedAt time.Time  `gorm:"column:updated_at;index" json:"updated_at"`
 	UpdatedBy *string    `gorm:"column:updated_by" json:"updated_by,omitempty"`
 }
 
-func (PreferenceEntry) TableName() string { return "preference_entries" }
+// PreferenceEntry stores a single preference in a scope (system, user, group, project, task).
+// Per docs/tech_specs/postgres_schema.md and user_preferences.md (domain type for API/handler consumption).
+// Unique on (scope_type, scope_id, key).
+// This is the type returned from Store methods.
+// For GORM persistence, use PreferenceEntryRecord in the database package.
+// ID, UpdatedAt are populated by PreferenceEntryRecord.ToPreferenceEntry() from GormModelUUID.
+type PreferenceEntry struct {
+	PreferenceEntryBase
+	// Identity/timestamps (populated from GormModelUUID by ToPreferenceEntry())
+	ID        uuid.UUID `json:"id"`
+	UpdatedAt time.Time `json:"updated_at"`
+}
 
-// PreferenceAuditLog records preference entry change history per postgres_schema.md.
-type PreferenceAuditLog struct {
-	ID        uuid.UUID `gorm:"type:uuid;primaryKey" json:"id"`
+// PreferenceAuditLogBase is the domain base struct for preference audit logs (fields without ID, ChangedAt).
+// Note: PreferenceAuditLog uses ChangedAt instead of CreatedAt/UpdatedAt.
+// This is embedded in PreferenceAuditLogRecord along with GormModelUUID (but ChangedAt is in the base).
+// For API/handler consumption, use PreferenceAuditLog (which includes ID, ChangedAt).
+type PreferenceAuditLogBase struct {
 	EntryID   uuid.UUID `gorm:"column:entry_id;index" json:"entry_id"`
 	OldValue  *string   `gorm:"column:old_value;type:jsonb" json:"old_value,omitempty"`
 	NewValue  *string   `gorm:"column:new_value;type:jsonb" json:"new_value,omitempty"`
@@ -299,63 +420,107 @@ type PreferenceAuditLog struct {
 	Reason    *string   `gorm:"column:reason" json:"reason,omitempty"`
 }
 
-func (PreferenceAuditLog) TableName() string { return "preference_audit_log" }
-
-// Project represents a workspace boundary (see postgres_schema.md Projects).
-type Project struct {
-	ID          uuid.UUID `gorm:"type:uuid;primaryKey" json:"id"`
-	Slug        string    `gorm:"column:slug;uniqueIndex" json:"slug"`
-	DisplayName string    `gorm:"column:display_name" json:"display_name"`
-	Description *string   `gorm:"column:description" json:"description,omitempty"`
-	IsActive    bool      `gorm:"column:is_active;index" json:"is_active"`
-	CreatedAt   time.Time `gorm:"column:created_at" json:"created_at"`
-	UpdatedAt   time.Time `gorm:"column:updated_at" json:"updated_at"`
-	UpdatedBy   *string   `gorm:"column:updated_by" json:"updated_by,omitempty"`
+// PreferenceAuditLog records preference entry change history per postgres_schema.md (domain type for API/handler consumption).
+// This is the type returned from Store methods.
+// For GORM persistence, use PreferenceAuditLogRecord in the database package.
+// ID is populated by PreferenceAuditLogRecord.ToPreferenceAuditLog() from GormModelUUID.
+type PreferenceAuditLog struct {
+	PreferenceAuditLogBase
+	// Identity (populated from GormModelUUID by ToPreferenceAuditLog())
+	ID uuid.UUID `json:"id"`
 }
 
-func (Project) TableName() string { return "projects" }
+// ProjectBase is the domain base struct for projects (fields without ID, CreatedAt, UpdatedAt, DeletedAt).
+// This is embedded in ProjectRecord along with GormModelUUID.
+// For API/handler consumption, use Project (which includes ID, CreatedAt, UpdatedAt).
+type ProjectBase struct {
+	Slug        string  `gorm:"column:slug;uniqueIndex" json:"slug"`
+	DisplayName string  `gorm:"column:display_name" json:"display_name"`
+	Description *string `gorm:"column:description" json:"description,omitempty"`
+	IsActive    bool    `gorm:"column:is_active;index" json:"is_active"`
+	UpdatedBy   *string `gorm:"column:updated_by" json:"updated_by,omitempty"`
+}
 
-// Session represents a user session (see postgres_schema.md Sessions).
-type Session struct {
-	ID              uuid.UUID  `gorm:"type:uuid;primaryKey" json:"id"`
+// Project represents a workspace boundary (see postgres_schema.md Projects) (domain type for API/handler consumption).
+// This is the type returned from Store methods.
+// For GORM persistence, use ProjectRecord in the database package.
+// ID, CreatedAt, UpdatedAt are populated by ProjectRecord.ToProject() from GormModelUUID.
+type Project struct {
+	ProjectBase
+	// Identity/timestamps (populated from GormModelUUID by ToProject())
+	ID        uuid.UUID `json:"id"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+}
+
+// SessionBase is the domain base struct for sessions (fields without ID, CreatedAt, UpdatedAt, DeletedAt).
+// This is embedded in SessionRecord along with GormModelUUID.
+// For API/handler consumption, use Session (which includes ID, CreatedAt, UpdatedAt).
+type SessionBase struct {
 	ParentSessionID *uuid.UUID `gorm:"column:parent_session_id;index" json:"parent_session_id,omitempty"`
 	UserID          uuid.UUID  `gorm:"column:user_id;index" json:"user_id"`
 	Title           *string    `gorm:"column:title" json:"title,omitempty"`
-	CreatedAt       time.Time  `gorm:"column:created_at" json:"created_at"`
-	UpdatedAt       time.Time  `gorm:"column:updated_at" json:"updated_at"`
 }
 
-func (Session) TableName() string { return "sessions" }
+// Session represents a user session (see postgres_schema.md Sessions) (domain type for API/handler consumption).
+// This is the type returned from Store methods.
+// For GORM persistence, use SessionRecord in the database package.
+// ID, CreatedAt, UpdatedAt are populated by SessionRecord.ToSession() from GormModelUUID.
+type Session struct {
+	SessionBase
+	// Identity/timestamps (populated from GormModelUUID by ToSession())
+	ID        uuid.UUID `json:"id"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+}
 
-// ChatThread represents a chat conversation container (see postgres_schema.md Chat Threads).
-type ChatThread struct {
-	ID        uuid.UUID  `gorm:"type:uuid;primaryKey" json:"id"`
+// ChatThreadBase is the domain base struct for chat threads (fields without ID, CreatedAt, UpdatedAt, DeletedAt).
+// This is embedded in ChatThreadRecord along with GormModelUUID.
+// For API/handler consumption, use ChatThread (which includes ID, CreatedAt, UpdatedAt).
+type ChatThreadBase struct {
 	UserID    uuid.UUID  `gorm:"column:user_id;index" json:"user_id"`
 	ProjectID *uuid.UUID `gorm:"column:project_id;index" json:"project_id,omitempty"`
 	SessionID *uuid.UUID `gorm:"column:session_id;index" json:"session_id,omitempty"`
 	Title     *string    `gorm:"column:title" json:"title,omitempty"`
-	CreatedAt time.Time  `gorm:"column:created_at" json:"created_at"`
-	UpdatedAt time.Time  `gorm:"column:updated_at" json:"updated_at"`
 }
 
-func (ChatThread) TableName() string { return "chat_threads" }
+// ChatThread represents a chat conversation container (see postgres_schema.md Chat Threads) (domain type for API/handler consumption).
+// This is the type returned from Store methods.
+// For GORM persistence, use ChatThreadRecord in the database package.
+// ID, CreatedAt, UpdatedAt are populated by ChatThreadRecord.ToChatThread() from GormModelUUID.
+type ChatThread struct {
+	ChatThreadBase
+	// Identity/timestamps (populated from GormModelUUID by ToChatThread())
+	ID        uuid.UUID `json:"id"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+}
 
-// ChatMessage represents one message in a thread (see postgres_schema.md Chat Messages).
+// ChatMessageBase is the domain base struct for chat messages (fields without ID, CreatedAt, UpdatedAt, DeletedAt).
+// This is embedded in ChatMessageRecord along with GormModelUUID.
+// For API/handler consumption, use ChatMessage (which includes ID, CreatedAt).
+type ChatMessageBase struct {
+	ThreadID uuid.UUID `gorm:"column:thread_id;index" json:"thread_id"`
+	Role     string    `gorm:"column:role" json:"role"`
+	Content  string    `gorm:"column:content" json:"content"`
+	Metadata *string   `gorm:"column:metadata;type:jsonb" json:"metadata,omitempty"`
+}
+
+// ChatMessage represents one message in a thread (see postgres_schema.md Chat Messages) (domain type for API/handler consumption).
+// This is the type returned from Store methods.
+// For GORM persistence, use ChatMessageRecord in the database package.
+// ID, CreatedAt are populated by ChatMessageRecord.ToChatMessage() from GormModelUUID.
 type ChatMessage struct {
-	ID        uuid.UUID `gorm:"type:uuid;primaryKey" json:"id"`
-	ThreadID  uuid.UUID `gorm:"column:thread_id;index" json:"thread_id"`
-	Role      string    `gorm:"column:role" json:"role"`
-	Content   string    `gorm:"column:content" json:"content"`
-	Metadata  *string   `gorm:"column:metadata;type:jsonb" json:"metadata,omitempty"`
-	CreatedAt time.Time `gorm:"column:created_at" json:"created_at"`
+	ChatMessageBase
+	// Identity/timestamps (populated from GormModelUUID by ToChatMessage())
+	ID        uuid.UUID `json:"id"`
+	CreatedAt time.Time `json:"created_at"`
 }
 
-func (ChatMessage) TableName() string { return "chat_messages" }
-
-// ChatAuditLog records chat completion request audit (redaction, outcome) per openai_compatible_chat_api.md.
-type ChatAuditLog struct {
-	ID               uuid.UUID  `gorm:"type:uuid;primaryKey" json:"id"`
-	CreatedAt        time.Time  `gorm:"column:created_at;index" json:"created_at"`
+// ChatAuditLogBase is the domain base struct for chat audit logs (fields without ID, CreatedAt, UpdatedAt, DeletedAt).
+// This is embedded in ChatAuditLogRecord along with GormModelUUID.
+// For API/handler consumption, use ChatAuditLog (which includes ID, CreatedAt).
+type ChatAuditLogBase struct {
 	UserID           *uuid.UUID `gorm:"column:user_id;index" json:"user_id,omitempty"`
 	ProjectID        *uuid.UUID `gorm:"column:project_id;index" json:"project_id,omitempty"`
 	Outcome          string     `gorm:"column:outcome" json:"outcome"`
@@ -366,77 +531,134 @@ type ChatAuditLog struct {
 	RequestID        *string    `gorm:"column:request_id" json:"request_id,omitempty"`
 }
 
-func (ChatAuditLog) TableName() string { return "chat_audit_log" }
+// ChatAuditLog records chat completion request audit (redaction, outcome) per openai_compatible_chat_api.md (domain type for API/handler consumption).
+// This is the type returned from Store methods.
+// For GORM persistence, use ChatAuditLogRecord in the database package.
+// ID, CreatedAt are populated by ChatAuditLogRecord.ToChatAuditLog() from GormModelUUID.
+type ChatAuditLog struct {
+	ChatAuditLogBase
+	// Identity/timestamps (populated from GormModelUUID by ToChatAuditLog())
+	ID        uuid.UUID `json:"id"`
+	CreatedAt time.Time `json:"created_at"`
+}
 
-// WorkflowCheckpoint stores the current LangGraph checkpoint state per task.
-// Per docs/tech_specs/postgres_schema.md and langgraph_mvp.md; one row per task (upsert by task_id).
-type WorkflowCheckpoint struct {
-	ID         uuid.UUID `gorm:"type:uuid;primaryKey" json:"id"`
+// WorkflowCheckpointBase is the domain base struct for workflow checkpoints (fields without ID, UpdatedAt).
+// Note: WorkflowCheckpoint uses UpdatedAt but not CreatedAt in the domain type (though GormModelUUID provides CreatedAt).
+// This is embedded in WorkflowCheckpointRecord along with GormModelUUID.
+// For API/handler consumption, use WorkflowCheckpoint (which includes ID, UpdatedAt).
+type WorkflowCheckpointBase struct {
 	TaskID     uuid.UUID `gorm:"column:task_id;uniqueIndex;not null" json:"task_id"`
 	State      *string   `gorm:"column:state;type:jsonb" json:"state,omitempty"`
 	LastNodeID string    `gorm:"column:last_node_id" json:"last_node_id,omitempty"`
-	UpdatedAt  time.Time `gorm:"column:updated_at;index" json:"updated_at"`
 }
 
-func (WorkflowCheckpoint) TableName() string { return "workflow_checkpoints" }
+// WorkflowCheckpoint stores the current LangGraph checkpoint state per task.
+// Per docs/tech_specs/postgres_schema.md and langgraph_mvp.md; one row per task (upsert by task_id) (domain type for API/handler consumption).
+// This is the type returned from Store methods.
+// For GORM persistence, use WorkflowCheckpointRecord in the database package.
+// ID, UpdatedAt are populated by WorkflowCheckpointRecord.ToWorkflowCheckpoint() from GormModelUUID.
+type WorkflowCheckpoint struct {
+	WorkflowCheckpointBase
+	// Identity/timestamps (populated from GormModelUUID by ToWorkflowCheckpoint())
+	ID        uuid.UUID `json:"id"`
+	UpdatedAt time.Time `json:"updated_at"`
+}
 
-// TaskWorkflowLease enforces one active workflow per task; held by workflow runner.
-// Per docs/tech_specs/postgres_schema.md and langgraph_mvp.md.
-type TaskWorkflowLease struct {
-	ID        uuid.UUID  `gorm:"type:uuid;primaryKey" json:"id"`
+// TaskWorkflowLeaseBase is the domain base struct for task workflow leases (fields without ID, CreatedAt, UpdatedAt, DeletedAt).
+// This is embedded in TaskWorkflowLeaseRecord along with GormModelUUID.
+// For API/handler consumption, use TaskWorkflowLease (which includes ID, CreatedAt, UpdatedAt).
+type TaskWorkflowLeaseBase struct {
 	TaskID    uuid.UUID  `gorm:"column:task_id;uniqueIndex;not null" json:"task_id"`
 	LeaseID   uuid.UUID  `gorm:"column:lease_id;not null" json:"lease_id"`
 	HolderID  *string    `gorm:"column:holder_id" json:"holder_id,omitempty"`
 	ExpiresAt *time.Time `gorm:"column:expires_at;index" json:"expires_at,omitempty"`
-	CreatedAt time.Time  `gorm:"column:created_at" json:"created_at"`
-	UpdatedAt time.Time  `gorm:"column:updated_at" json:"updated_at"`
 }
 
-func (TaskWorkflowLease) TableName() string { return "task_workflow_leases" }
+// TaskWorkflowLease enforces one active workflow per task; held by workflow runner.
+// Per docs/tech_specs/postgres_schema.md and langgraph_mvp.md (domain type for API/handler consumption).
+// This is the type returned from Store methods.
+// For GORM persistence, use TaskWorkflowLeaseRecord in the database package.
+// ID, CreatedAt, UpdatedAt are populated by TaskWorkflowLeaseRecord.ToTaskWorkflowLease() from GormModelUUID.
+type TaskWorkflowLease struct {
+	TaskWorkflowLeaseBase
+	// Identity/timestamps (populated from GormModelUUID by ToTaskWorkflowLease())
+	ID        uuid.UUID `json:"id"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+}
 
-// SandboxImage is a logical sandbox image (e.g. python-tools, node-build). Per postgres_schema.md Sandbox Image Registry.
+// SandboxImageBase is the domain base struct for sandbox images (fields without ID, CreatedAt, UpdatedAt, DeletedAt).
+// This is embedded in SandboxImageRecord along with GormModelUUID.
+// For API/handler consumption, use SandboxImage (which includes ID, CreatedAt, UpdatedAt).
+type SandboxImageBase struct {
+	Name        string  `gorm:"column:name;uniqueIndex" json:"name"`
+	Description *string `gorm:"column:description" json:"description,omitempty"`
+	UpdatedBy   *string `gorm:"column:updated_by" json:"updated_by,omitempty"`
+}
+
+// SandboxImage is a logical sandbox image (e.g. python-tools, node-build). Per postgres_schema.md Sandbox Image Registry (domain type for API/handler consumption).
+// This is the type returned from Store methods.
+// For GORM persistence, use SandboxImageRecord in the database package.
+// ID, CreatedAt, UpdatedAt are populated by SandboxImageRecord.ToSandboxImage() from GormModelUUID.
 type SandboxImage struct {
-	ID          uuid.UUID `gorm:"type:uuid;primaryKey" json:"id"`
-	Name        string    `gorm:"column:name;uniqueIndex" json:"name"`
-	Description *string   `gorm:"column:description" json:"description,omitempty"`
-	CreatedAt   time.Time `gorm:"column:created_at" json:"created_at"`
-	UpdatedAt   time.Time `gorm:"column:updated_at" json:"updated_at"`
-	UpdatedBy   *string   `gorm:"column:updated_by" json:"updated_by,omitempty"`
+	SandboxImageBase
+	// Identity/timestamps (populated from GormModelUUID by ToSandboxImage())
+	ID        uuid.UUID `json:"id"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
 }
 
-func (SandboxImage) TableName() string { return "sandbox_images" }
-
-// SandboxImageVersion is a version/tag of a sandbox image with OCI reference. Per postgres_schema.md.
-type SandboxImageVersion struct {
-	ID             uuid.UUID `gorm:"type:uuid;primaryKey" json:"id"`
+// SandboxImageVersionBase is the domain base struct for sandbox image versions (fields without ID, CreatedAt, UpdatedAt, DeletedAt).
+// This is embedded in SandboxImageVersionRecord along with GormModelUUID.
+// For API/handler consumption, use SandboxImageVersion (which includes ID, CreatedAt, UpdatedAt).
+type SandboxImageVersionBase struct {
 	SandboxImageID uuid.UUID `gorm:"column:sandbox_image_id;uniqueIndex:uix_sandbox_image_version,priority:1;not null" json:"sandbox_image_id"`
 	Version        string    `gorm:"column:version;uniqueIndex:uix_sandbox_image_version,priority:2" json:"version"`
 	ImageRef       string    `gorm:"column:image_ref" json:"image_ref"`
 	ImageDigest    *string   `gorm:"column:image_digest" json:"image_digest,omitempty"`
 	Capabilities   *string   `gorm:"column:capabilities;type:jsonb" json:"capabilities,omitempty"`
 	IsAllowed      bool      `gorm:"column:is_allowed;index" json:"is_allowed"`
-	CreatedAt      time.Time `gorm:"column:created_at" json:"created_at"`
-	UpdatedAt      time.Time `gorm:"column:updated_at" json:"updated_at"`
 }
 
-func (SandboxImageVersion) TableName() string { return "sandbox_image_versions" }
+// SandboxImageVersion is a version/tag of a sandbox image with OCI reference. Per postgres_schema.md (domain type for API/handler consumption).
+// This is the type returned from Store methods.
+// For GORM persistence, use SandboxImageVersionRecord in the database package.
+// ID, CreatedAt, UpdatedAt are populated by SandboxImageVersionRecord.ToSandboxImageVersion() from GormModelUUID.
+type SandboxImageVersion struct {
+	SandboxImageVersionBase
+	// Identity/timestamps (populated from GormModelUUID by ToSandboxImageVersion())
+	ID        uuid.UUID `json:"id"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+}
 
-// NodeSandboxImageAvailability records whether a node has a sandbox image version available. Per postgres_schema.md.
-type NodeSandboxImageAvailability struct {
-	ID                    uuid.UUID `gorm:"type:uuid;primaryKey" json:"id"`
+// NodeSandboxImageAvailabilityBase is the domain base struct for node sandbox image availability (fields without ID, CreatedAt, UpdatedAt, DeletedAt).
+// Note: NodeSandboxImageAvailability uses LastCheckedAt but not CreatedAt/UpdatedAt in the domain type (though GormModelUUID provides CreatedAt/UpdatedAt).
+// This is embedded in NodeSandboxImageAvailabilityRecord along with GormModelUUID.
+// For API/handler consumption, use NodeSandboxImageAvailability (which includes ID, LastCheckedAt).
+type NodeSandboxImageAvailabilityBase struct {
 	NodeID                uuid.UUID `gorm:"column:node_id;uniqueIndex:uix_node_sandbox_avail,priority:1;not null" json:"node_id"`
 	SandboxImageVersionID uuid.UUID `gorm:"column:sandbox_image_version_id;uniqueIndex:uix_node_sandbox_avail,priority:2;not null" json:"sandbox_image_version_id"`
 	Status                string    `gorm:"column:status" json:"status"`
-	LastCheckedAt         time.Time `gorm:"column:last_checked_at" json:"last_checked_at"`
 	Details               *string   `gorm:"column:details;type:jsonb" json:"details,omitempty"`
 }
 
-func (NodeSandboxImageAvailability) TableName() string { return "node_sandbox_image_availability" }
+// NodeSandboxImageAvailability records whether a node has a sandbox image version available. Per postgres_schema.md (domain type for API/handler consumption).
+// This is the type returned from Store methods.
+// For GORM persistence, use NodeSandboxImageAvailabilityRecord in the database package.
+// ID is populated by NodeSandboxImageAvailabilityRecord.ToNodeSandboxImageAvailability() from GormModelUUID.
+// LastCheckedAt is a separate field in the domain type (not from GormModelUUID).
+type NodeSandboxImageAvailability struct {
+	NodeSandboxImageAvailabilityBase
+	// Identity (populated from GormModelUUID by ToNodeSandboxImageAvailability())
+	ID            uuid.UUID `json:"id"`
+	LastCheckedAt time.Time `gorm:"column:last_checked_at" json:"last_checked_at"`
+}
 
-// TaskArtifact stores artifact metadata for a task (path, storage ref, size). Per postgres_schema.md Task Artifacts.
-// Unique on (task_id, path). Content may be inline in storage_ref or in object storage.
-type TaskArtifact struct {
-	ID             uuid.UUID  `gorm:"type:uuid;primaryKey" json:"id"`
+// TaskArtifactBase is the domain base struct for task artifacts (fields without ID, CreatedAt, UpdatedAt, DeletedAt).
+// This is embedded in TaskArtifactRecord along with GormModelUUID.
+// For API/handler consumption, use TaskArtifact (which includes ID, CreatedAt, UpdatedAt).
+type TaskArtifactBase struct {
 	TaskID         uuid.UUID  `gorm:"column:task_id;uniqueIndex:uix_task_artifact_path,priority:1;not null" json:"task_id"`
 	RunID          *uuid.UUID `gorm:"column:run_id;index" json:"run_id,omitempty"`
 	Path           string     `gorm:"column:path;uniqueIndex:uix_task_artifact_path,priority:2" json:"path"`
@@ -444,30 +666,49 @@ type TaskArtifact struct {
 	SizeBytes      *int64     `gorm:"column:size_bytes" json:"size_bytes,omitempty"`
 	ContentType    *string    `gorm:"column:content_type" json:"content_type,omitempty"`
 	ChecksumSHA256 *string    `gorm:"column:checksum_sha256" json:"checksum_sha256,omitempty"`
-	CreatedAt      time.Time  `gorm:"column:created_at" json:"created_at"`
-	UpdatedAt      time.Time  `gorm:"column:updated_at" json:"updated_at"`
 }
 
-func (TaskArtifact) TableName() string { return "task_artifacts" }
+// TaskArtifact stores artifact metadata for a task (path, storage ref, size). Per postgres_schema.md Task Artifacts.
+// Unique on (task_id, path). Content may be inline in storage_ref or in object storage (domain type for API/handler consumption).
+// This is the type returned from Store methods.
+// For GORM persistence, use TaskArtifactRecord in the database package.
+// ID, CreatedAt, UpdatedAt are populated by TaskArtifactRecord.ToTaskArtifact() from GormModelUUID.
+type TaskArtifact struct {
+	TaskArtifactBase
+	// Identity/timestamps (populated from GormModelUUID by ToTaskArtifact())
+	ID        uuid.UUID `json:"id"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+}
+
+// SkillBase is the domain base struct for skills (fields without ID, CreatedAt, UpdatedAt, DeletedAt).
+// This is embedded in SkillRecord along with GormModelUUID.
+// For API/handler consumption, use Skill (which includes ID, CreatedAt, UpdatedAt).
+type SkillBase struct {
+	Name     string     `gorm:"column:name;index" json:"name"`
+	Content  string     `gorm:"column:content;type:text" json:"content"`
+	Scope    string     `gorm:"column:scope;index" json:"scope"` // user, group, project, global
+	OwnerID  *uuid.UUID `gorm:"column:owner_id;index" json:"owner_id,omitempty"`
+	IsSystem bool       `gorm:"column:is_system;index" json:"is_system"`
+}
 
 // Skill stores AI skill content and metadata. Per docs/tech_specs/skills_storage_and_inference.md.
-// Stable id for retrieval; scope: user | group | project | global; default user. is_system true for default CyNodeAI skill.
+// Stable id for retrieval; scope: user | group | project | global; default user. is_system true for default CyNodeAI skill (domain type for API/handler consumption).
+// This is the type returned from Store methods.
+// For GORM persistence, use SkillRecord in the database package.
+// ID, CreatedAt, UpdatedAt are populated by SkillRecord.ToSkill() from GormModelUUID.
 type Skill struct {
-	ID        uuid.UUID  `gorm:"type:uuid;primaryKey" json:"id"`
-	Name      string     `gorm:"column:name;index" json:"name"`
-	Content   string     `gorm:"column:content;type:text" json:"content"`
-	Scope     string     `gorm:"column:scope;index" json:"scope"` // user, group, project, global
-	OwnerID   *uuid.UUID `gorm:"column:owner_id;index" json:"owner_id,omitempty"`
-	IsSystem  bool       `gorm:"column:is_system;index" json:"is_system"`
-	CreatedAt time.Time  `gorm:"column:created_at;index" json:"created_at"`
-	UpdatedAt time.Time  `gorm:"column:updated_at;index" json:"updated_at"`
+	SkillBase
+	// Identity/timestamps (populated from GormModelUUID by ToSkill())
+	ID        uuid.UUID `json:"id"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
 }
 
-func (Skill) TableName() string { return "skills" }
-
-// AccessControlRule defines an allow/deny rule for a subject, action, and resource. Per docs/tech_specs/access_control.md.
-type AccessControlRule struct {
-	ID              uuid.UUID  `gorm:"type:uuid;primaryKey" json:"id"`
+// AccessControlRuleBase is the domain base struct for access control rules (fields without ID, CreatedAt, UpdatedAt, DeletedAt).
+// This is embedded in AccessControlRuleRecord along with GormModelUUID.
+// For API/handler consumption, use AccessControlRule (which includes ID, CreatedAt, UpdatedAt).
+type AccessControlRuleBase struct {
 	SubjectType     string     `gorm:"column:subject_type;index:idx_ac_rules_subject" json:"subject_type"`
 	SubjectID       *uuid.UUID `gorm:"column:subject_id;index:idx_ac_rules_subject" json:"subject_id,omitempty"`
 	Action          string     `gorm:"column:action;index" json:"action"`
@@ -476,16 +717,25 @@ type AccessControlRule struct {
 	Effect          string     `gorm:"column:effect" json:"effect"` // allow | deny
 	Priority        int        `gorm:"column:priority;index" json:"priority"`
 	Conditions      *string    `gorm:"column:conditions;type:jsonb" json:"conditions,omitempty"`
-	CreatedAt       time.Time  `gorm:"column:created_at" json:"created_at"`
-	UpdatedAt       time.Time  `gorm:"column:updated_at" json:"updated_at"`
 	UpdatedBy       *string    `gorm:"column:updated_by" json:"updated_by,omitempty"`
 }
 
-func (AccessControlRule) TableName() string { return "access_control_rules" }
+// AccessControlRule defines an allow/deny rule for a subject, action, and resource. Per docs/tech_specs/access_control.md (domain type for API/handler consumption).
+// This is the type returned from Store methods.
+// For GORM persistence, use AccessControlRuleRecord in the database package.
+// ID, CreatedAt, UpdatedAt are populated by AccessControlRuleRecord.ToAccessControlRule() from GormModelUUID.
+type AccessControlRule struct {
+	AccessControlRuleBase
+	// Identity/timestamps (populated from GormModelUUID by ToAccessControlRule())
+	ID        uuid.UUID `json:"id"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+}
 
-// AccessControlAuditLog records an access control decision. Per docs/tech_specs/access_control.md.
-type AccessControlAuditLog struct {
-	ID           uuid.UUID  `gorm:"type:uuid;primaryKey" json:"id"`
+// AccessControlAuditLogBase is the domain base struct for access control audit logs (fields without ID, CreatedAt, UpdatedAt, DeletedAt).
+// This is embedded in AccessControlAuditLogRecord along with GormModelUUID.
+// For API/handler consumption, use AccessControlAuditLog (which includes ID, CreatedAt).
+type AccessControlAuditLogBase struct {
 	SubjectType  string     `gorm:"column:subject_type" json:"subject_type"`
 	SubjectID    *uuid.UUID `gorm:"column:subject_id" json:"subject_id,omitempty"`
 	Action       string     `gorm:"column:action" json:"action"`
@@ -494,14 +744,23 @@ type AccessControlAuditLog struct {
 	Decision     string     `gorm:"column:decision" json:"decision"` // allow | deny
 	Reason       *string    `gorm:"column:reason" json:"reason,omitempty"`
 	TaskID       *uuid.UUID `gorm:"column:task_id;index" json:"task_id,omitempty"`
-	CreatedAt    time.Time  `gorm:"column:created_at;index" json:"created_at"`
 }
 
-func (AccessControlAuditLog) TableName() string { return "access_control_audit_log" }
+// AccessControlAuditLog records an access control decision. Per docs/tech_specs/access_control.md (domain type for API/handler consumption).
+// This is the type returned from Store methods.
+// For GORM persistence, use AccessControlAuditLogRecord in the database package.
+// ID, CreatedAt are populated by AccessControlAuditLogRecord.ToAccessControlAuditLog() from GormModelUUID.
+type AccessControlAuditLog struct {
+	AccessControlAuditLogBase
+	// Identity/timestamps (populated from GormModelUUID by ToAccessControlAuditLog())
+	ID        uuid.UUID `json:"id"`
+	CreatedAt time.Time `json:"created_at"`
+}
 
-// ApiCredential stores an encrypted API credential for egress. Per docs/tech_specs/postgres_schema.md (API Credentials Table).
-type ApiCredential struct {
-	ID                   uuid.UUID  `gorm:"type:uuid;primaryKey" json:"id"`
+// ApiCredentialBase is the domain base struct for API credentials (fields without ID, CreatedAt, UpdatedAt, DeletedAt).
+// This is embedded in ApiCredentialRecord along with GormModelUUID.
+// For API/handler consumption, use ApiCredential (which includes ID, CreatedAt, UpdatedAt).
+type ApiCredentialBase struct {
 	OwnerType            string     `gorm:"column:owner_type;uniqueIndex:idx_api_cred_owner_provider_name" json:"owner_type"` // user | group
 	OwnerID              uuid.UUID  `gorm:"column:owner_id;uniqueIndex:idx_api_cred_owner_provider_name" json:"owner_id"`
 	Provider             string     `gorm:"column:provider;uniqueIndex:idx_api_cred_owner_provider_name;index" json:"provider"`
@@ -511,9 +770,17 @@ type ApiCredential struct {
 	CredentialKID        *string    `gorm:"column:credential_kid" json:"credential_kid,omitempty"`
 	IsActive             bool       `gorm:"column:is_active;index" json:"is_active"`
 	ExpiresAt            *time.Time `gorm:"column:expires_at" json:"expires_at,omitempty"`
-	CreatedAt            time.Time  `gorm:"column:created_at" json:"created_at"`
-	UpdatedAt            time.Time  `gorm:"column:updated_at" json:"updated_at"`
 	UpdatedBy            *string    `gorm:"column:updated_by" json:"updated_by,omitempty"`
 }
 
-func (ApiCredential) TableName() string { return "api_credentials" }
+// ApiCredential stores an encrypted API credential for egress. Per docs/tech_specs/postgres_schema.md (API Credentials Table) (domain type for API/handler consumption).
+// This is the type returned from Store methods.
+// For GORM persistence, use ApiCredentialRecord in the database package.
+// ID, CreatedAt, UpdatedAt are populated by ApiCredentialRecord.ToApiCredential() from GormModelUUID.
+type ApiCredential struct {
+	ApiCredentialBase
+	// Identity/timestamps (populated from GormModelUUID by ToApiCredential())
+	ID        uuid.UUID `json:"id"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+}

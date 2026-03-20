@@ -34,6 +34,14 @@
 - [Sandbox Image Registry](#sandbox-image-registry)
 - [Node Bootstrap and Configuration](#node-bootstrap-and-configuration)
   - [Job Dispatch](#job-dispatch)
+- [Postgres Schema](#postgres-schema)
+  - [Task vs Job (Terminology)](#task-vs-job-terminology)
+  - [Tasks Table](#tasks-table)
+  - [Task Dependencies Table](#task-dependencies-table)
+  - [Task Status and Closed State](#task-status-and-closed-state)
+  - [Jobs Table](#jobs-table)
+  - [Nodes Table](#nodes-table)
+  - [Node Capabilities Table](#node-capabilities-table)
 - [MCP Tool Interface](#mcp-tool-interface)
 - [Workflow Engine](#workflow-engine)
   - [Task Workflow Lease Lifecycle](#task-workflow-lease-lifecycle)
@@ -52,7 +60,7 @@ This document describes the orchestrator responsibilities and its relationship t
 ## Core Responsibilities
 
 - Acts as the control plane for nodes, jobs, tasks, and agent workflows.
-  For the distinction between **task** (durable work item in the `tasks` table) and **job** (single execution unit dispatched to a worker), see [Task vs Job (Terminology)](postgres_schema.md#spec-cynai-schema-taskvsjob).
+  For the distinction between **task** (durable work item in the `tasks` table) and **job** (single execution unit dispatched to a worker), see [Task vs Job (Terminology)](#task-vs-job-terminology).
 - Owns the source of truth for task state, results, logs, and user task-execution preferences in PostgreSQL.
 - Dispatches sandboxed execution to worker nodes (via the worker API).
 - Routes model inference to local nodes or to external providers when allowed.
@@ -616,16 +624,263 @@ Config delivery
 
 - The orchestrator exposes the node config URL in the bootstrap payload (`node_config_url` in `node_bootstrap_payload_v1`).
 - GET on that URL returns `node_configuration_payload_v1` for the authenticated node.
-- POST on that URL accepts `node_config_ack_v1` and persists the acknowledgement; see [`docs/tech_specs/postgres_schema.md`](postgres_schema.md) Nodes table columns `config_ack_at`, `config_ack_status`, `config_ack_error`.
+- POST on that URL accepts `node_config_ack_v1` and persists the acknowledgement; see [Nodes Table](#spec-cynai-schema-nodestable) columns `config_ack_at`, `config_ack_status`, `config_ack_error`.
 - Endpoint paths are not mandated here; the bootstrap payload carries the concrete URLs so nodes do not rely on hard-coded paths.
 
 ### Job Dispatch
 
 - For the initial single-node implementation, the orchestrator dispatches jobs to the Worker API via direct HTTP.
-- The dispatcher uses the per-node `worker_api_target_url` and per-node bearer token; the URL is normally set from the node-reported `worker_api.base_url` at registration and when processing capability reports, and may be overridden by operator config (e.g. same-host: `WORKER_API_TARGET_URL`); see [`docs/tech_specs/postgres_schema.md`](postgres_schema.md) Nodes table and [`worker_node_payloads.md`](worker_node_payloads.md).
+- The dispatcher uses the per-node `worker_api_target_url` and per-node bearer token; the URL is normally set from the node-reported `worker_api.base_url` at registration and when processing capability reports, and may be overridden by operator config (e.g. same-host: `WORKER_API_TARGET_URL`); see [Nodes Table](#spec-cynai-schema-nodestable) and [`worker_node_payloads.md`](worker_node_payloads.md).
 - The MCP gateway is not in the loop for this job-dispatch path.
 
 See [`docs/tech_specs/worker_node.md`](worker_node.md) and [`docs/tech_specs/worker_node_payloads.md`](worker_node_payloads.md).
+
+## Postgres Schema
+
+- Spec ID: `CYNAI.SCHEMA.TasksJobsNodes` <a id="spec-cynai-schema-tasksjobsnodes"></a>
+
+The orchestrator owns task state, job execution records, the node registry, and capability snapshots in PostgreSQL.
+
+**Schema definitions (index):** See [Tasks, Jobs, and Nodes](postgres_schema.md#spec-cynai-schema-tasksjobsnodes) in [`postgres_schema.md`](postgres_schema.md).
+
+### Task vs Job (Terminology)
+
+- Spec ID: `CYNAI.SCHEMA.TaskVsJob` <a id="spec-cynai-schema-taskvsjob"></a>
+
+Canonical definitions so specs and implementations use consistent language.
+
+- **Task:** A **durable work item** owned by the orchestrator and stored in the `tasks` table.
+  A task is the unit of work that users and the PMA create, assign to a plan, give a persona and optional recommended skills, and order with dependencies.
+  It describes *what* to do and *who* does it (one persona per task).
+  A task outlives any single execution; it can be run, retried, or reassigned.
+- **Job:** A **single execution unit** dispatched to a worker, stored in the `jobs` table.
+  A job is the runtime instance: "run this work on this node (and in this sandbox)."
+  The job payload is what the worker and SBA actually execute (e.g. job spec with persona embedded inline, context, and for bundles task_ids plus embedded full task context so the job is self-contained).
+  A job is created when work is dispatched and completes (or fails); the task record is the durable authority.
+- **Relationship:** The **job builder** (orchestrator or PMA) turns one or more **tasks** into a **job spec** (resolve persona, merge skills, supply per-task context).
+  One **task** may result in zero or more **jobs** over time (e.g. retries, reassignment).
+  One **job** may reference one task (single-task job) or 1-3 tasks in order (bundle job); the SBA runs the job and executes each referenced task in sequence when it is a bundle.
+  So: **task** = durable, persona-scoped work definition; **job** = one dispatched run of that work on a worker, carrying the resolved persona and context.
+
+### Tasks Table
+
+- Spec ID: `CYNAI.SCHEMA.TasksTable` <a id="spec-cynai-schema-taskstable"></a>
+
+- `id` (uuid, pk)
+- `created_by` (uuid, fk to `users.id`)
+  - creating user; set from authenticated request context when created via the gateway; for system-created and bootstrap tasks, use the reserved system user
+- `project_id` (uuid, fk to `projects.id`, nullable)
+  - optional project association for RBAC, preferences, and grouping; null unless explicitly set by client or PM/PA
+- `plan_id` (uuid, fk to `project_plans.id`, nullable)
+  - when set, task belongs to this plan; workflow for this task is gated on plan state active and on task dependencies (see [Task Dependencies Table](#task-dependencies-table)).
+- `planning_state` (text, NOT NULL)
+  - Planning phase state; distinct from `status` (execution lifecycle).
+  - Allowed values: `draft`, `ready`.
+  - Initial value on create: `draft`.
+  - Only tasks in `planning_state=ready` are eligible for workflow execution; see [REQ-ORCHES-0178](../requirements/orches.md#req-orches-0178).
+- `persona_id` (uuid, fk to `personas.id`, nullable)
+  - optional; when set, the job builder resolves this persona and embeds it in the job; at most one persona per task
+- `recommended_skill_ids` (jsonb, nullable)
+  - optional array of skill stable identifiers; job builder merges with persona default_skill_ids (union, task overrides duplicates) and resolves into context for the SBA
+- `status` (text)
+  - Task lifecycle status; stored separately from open/closed.
+  - Values include: pending, running, completed, failed, canceled, superseded (see [Task status and closed state](#task-status-and-closed-state)).
+- `closed` (boolean, not null)
+  - Binary open/closed state; when true, the task is closed (no further work).
+    Set consistently when status changes (for example `true` when status is completed, failed, canceled, superseded).
+- `description` (text, nullable)
+  - task description for user-facing display and editing; stored as Markdown (see [REQ-PROJCT-0114](../requirements/projct.md#req-projct-0114))
+- `acceptance_criteria` (jsonb, nullable)
+  - structured criteria used by Project Manager for verification; any text fields used for editable criteria are stored as Markdown
+- `requirements` (jsonb, nullable)
+  - optional array of **requirement** objects; see [Requirement object structure](#requirement-object-structure)
+- `steps` (jsonb, NOT NULL)
+  - required **map** of step objects keyed by numeric step ID (integer, stored as JSON number or string that parses to integer); non-empty.
+    Keys define order: when read, steps are sorted by numeric key ascending to obtain deterministic order.
+    When creating steps, assign IDs in increments of 10 (e.g. 10, 20, 30) so additional steps can be inserted between (e.g. 15) without renumbering.
+    Each value is a **step** object: `complete` (boolean), `description` (string).
+    Job builders or agents use the sorted sequence for job context or to-dos; executors set `complete: true` as steps finish.
+    Structure may otherwise align with step-executor or SBA job step types (see [cynode_step_executor.md](cynode_step_executor.md), [cynode_sba.md](cynode_sba.md)).
+- `summary` (text, nullable)
+  - final summary written by workflow
+- `post_execution_notes` (text, nullable)
+  - Markdown notes added after task execution (e.g. by PMA, PAA, or user); for verification, handoff, or retrospective
+- `comments` (jsonb, nullable)
+  - same structure as plan comments; see [Comments Structure (Plans and Tasks)](projects_and_scopes.md#spec-cynai-schema-commentsstructure); may be updated by agents or users when plan is locked (per lock rules)
+- `metadata` (jsonb, nullable)
+- `archived_at` (timestamptz, nullable)
+  - when non-null, the task is archived (soft-deleted); API/CLI "delete" sets this; archived tasks are excluded from default list views; retained for audit and history
+- `created_at` (timestamptz)
+- `updated_at` (timestamptz)
+
+#### Tasks Table Constraints
+
+- Index: (`created_by`)
+- Index: (`project_id`)
+- Index: (`plan_id`)
+- Index: (`persona_id`) where not null
+- Index: (`planning_state`)
+- Index: (`status`)
+- Index: (`closed`)
+- Index: (`archived_at`) where not null (for list filter by archived)
+- Index: (`created_at`)
+
+#### Task `planning_state` Migration
+
+When adding `planning_state` to an existing deployment, assign a value to existing tasks:
+
+- If `tasks.status` is `running`, `completed`, `failed`, `canceled`, or `superseded`, set `planning_state=ready`.
+- If `tasks.status` is `pending`, set `planning_state=draft` or `ready` per deployment choice (for example treat existing pending tasks as already reviewed).
+
+#### Requirement Object Structure
+
+- Spec ID: `CYNAI.SCHEMA.RequirementObject` <a id="spec-cynai-schema-requirementobject"></a>
+
+The `tasks.requirements` column holds a JSON array of **requirement** objects (or null).
+Each object has:
+
+- `ref` (string, optional): stable content reference for the requirement (e.g. `REQ-PROJCT-0122` or a task-local tag); used for display and sorting, not a database entity id
+- `description` (string, required): the requirement statement; stored as Markdown
+- `source` (string, optional): provenance (e.g. requirement document path, spec section, or external ref)
+- `type` (string, optional): e.g. `functional`, `non_functional`, `constraint`, or host-defined
+- `priority` (string or number, optional): e.g. `must` | `should` | `could`, or numeric 1-5; host-defined semantics
+
+Order in the array is significant unless otherwise specified; consumers preserve order or sort by `ref` for display.
+
+### Task Dependencies Table
+
+- Spec ID: `CYNAI.SCHEMA.TaskDependenciesTable` <a id="spec-cynai-schema-taskdependenciestable"></a>
+
+Stores explicit task-within-plan dependencies; execution order and runnability are determined solely by the dependency graph (prerequisite and dependent tasks).
+**Multiple prerequisites:** A task may depend on **multiple** other tasks; the table stores one row per (dependent task, prerequisite task).
+Thus `task_id` may appear in many rows with different `depends_on_task_id` values.
+The orchestrator and PMA use this structure to resolve all prerequisites for a task and to surface runnable tasks (see below).
+When a task is set to `canceled`, all tasks that depend on it (directly or transitively) are set to `canceled` automatically; see [REQ-ORCHES-0154](../requirements/orches.md#req-orches-0154) and [Cancel cascades to dependents](langgraph_mvp.md#spec-cynai-orches-cancelcascadestodependents).
+A task is **runnable** when all tasks it depends on have `status = 'completed'`; see [Project plan and task dependencies](langgraph_mvp.md#spec-cynai-orches-workflowplanorder) and [REQ-ORCHES-0153](../requirements/orches.md#req-orches-0153).
+
+- `id` (uuid, pk)
+- `task_id` (uuid, fk to `tasks.id`, NOT NULL)
+  - the dependent task (this task runs after its dependencies)
+- `depends_on_task_id` (uuid, fk to `tasks.id`, NOT NULL)
+  - one prerequisite that must reach status `completed` before `task_id` may run; multiple prerequisites for the same task are represented by multiple rows with the same `task_id`
+
+#### Task Dependencies Table Constraints
+
+- Unique: (`task_id`, `depends_on_task_id`)
+- Check: `task_id != depends_on_task_id` (no self-deps)
+- When `plan_id` is set for both tasks, the implementation ensures both tasks belong to the same plan (`tasks.plan_id` equal for both); optionally enforce via trigger or constraint.
+
+#### Task Dependencies Indexes
+
+- Index: (`task_id`) for "list all prerequisites of this task" (needed to decide if task is runnable)
+- Index: (`depends_on_task_id`) for "list all tasks that depend on this one" (e.g. cascade cancel, or "what becomes runnable when this completes")
+
+**Surfacing runnable tasks:** The orchestrator and PMA query tasks that can be executed (runnable) for a given plan.
+A task is runnable when: (1) its plan's state is `active`, (2) the task is not closed, and (3) either the task has **no** rows in `task_dependencies` for this `task_id`, or **every** row for this `task_id` has `depends_on_task_id` pointing to a task with `status = 'completed'`.
+Implementations support an efficient query (for example tasks in plan where not closed and either no dependency rows exist for that task_id, or the set of depends_on_task_id for that task_id is a subset of completed task ids).
+The indexes above support "load dependencies of task" and "check all completed"; additional indexing (for example on `tasks.plan_id`, `tasks.closed`) supports "all runnable tasks for plan" patterns.
+
+### Task Status and Closed State
+
+- Spec ID: `CYNAI.SCHEMA.TaskStatusAndClosed` <a id="spec-cynai-schema-taskstatusandclosed"></a>
+
+Task **status** is stored in `tasks.status` and represents the lifecycle state (e.g. pending, running, completed, failed, canceled, superseded).
+Task **closed** is stored in `tasks.closed` (boolean): when true, the task is closed (no further work); when false, the task is open.
+The system keeps `closed` consistent with `status` (for example set `closed = true` when status becomes completed, failed, canceled, or superseded).
+Plan completion (set plan to completed) requires the plan to have at least one task and **all such tasks to have `closed = true`**; see [REQ-PROJCT-0121](../requirements/projct.md#req-projct-0121) and [Project plan state](projects_and_scopes.md#spec-cynai-access-projectplanstate).
+
+### Jobs Table
+
+- Spec ID: `CYNAI.SCHEMA.JobsTable` <a id="spec-cynai-schema-jobstable"></a>
+
+- `id` (uuid, pk)
+- `task_ids` (jsonb, NOT NULL)
+  - map keyed by numeric order (e.g. 10, 20, 30), value = task uuid (string); single-task job = one key; bundle = 2-3 keys; execution order = sort keys ascending; same pattern as task steps
+- `task_id` (uuid, fk to `tasks.id`, nullable)
+  - deprecated or derived: when task_ids has a single key, may duplicate that task id for backward compatibility; prefer task_ids for new code
+- `persona_id` (uuid, fk to `personas.id`, nullable)
+  - optional; for indexing, reporting, and provenance; job payload carries inline `persona: { title, description }` for SBA consumption
+- `node_id` (uuid, fk to `nodes.id`, nullable)
+  - set when job is dispatched to a node
+- `status` (text)
+  - examples: queued, running, completed, failed, canceled, lease_expired
+- `payload` (jsonb, nullable)
+  - job input (e.g. command, image, env)
+- `result` (jsonb, nullable)
+  - job output and exit info
+- `lease_id` (uuid, nullable)
+  - idempotency / lease for retries and heartbeats
+- `lease_expires_at` (timestamptz, nullable)
+- `started_at` (timestamptz, nullable)
+- `ended_at` (timestamptz, nullable)
+- `created_at` (timestamptz)
+- `updated_at` (timestamptz)
+
+#### Jobs Table Constraints
+
+- Index: (`task_ids`) (GIN or application-level by first task id when single-task)
+- Index: (`task_id`)
+- Index: (`persona_id`) where not null
+- Index: (`node_id`)
+- Index: (`status`)
+- Index: (`lease_id`) where not null
+- Index: (`lease_expires_at`) where not null
+- Index: (`created_at`)
+
+For bundle jobs, the payload embeds full per-task context (`context.task_contexts` keyed by same numeric keys as `task_ids`) so the job is self-contained; see [cynode_sba.md](cynode_sba.md).
+
+### Nodes Table
+
+- Spec ID: `CYNAI.SCHEMA.NodesTable` <a id="spec-cynai-schema-nodestable"></a>
+
+- `id` (uuid, pk)
+- `node_slug` (text, unique)
+  - stable identifier used in registration and scheduling (e.g. from node startup YAML)
+- `status` (text)
+  - examples: registered, active, inactive, drained
+- `config_version` (text, nullable)
+  - version of last applied node configuration payload
+- `worker_api_target_url` (text, nullable)
+  - URL of the node Worker API for job dispatch; normally set from the node-reported `worker_api.base_url` at registration and when processing capability reports; may be overridden by operator config (e.g. same-host override); see [`worker_node_payloads.md`](worker_node_payloads.md) and [`worker_node.md`](worker_node.md)
+- `worker_api_bearer_token` (text, nullable)
+  - bearer token for orchestrator-to-node Worker API auth; stored encrypted at rest or in a secrets backend; populated from config delivery
+- `config_ack_at` (timestamptz, nullable)
+  - time of last config acknowledgement from the node
+- `config_ack_status` (text, nullable)
+  - status of last config ack: e.g. applied, failed
+- `config_ack_error` (text, nullable)
+  - error message when config_ack_status is failed
+- `last_seen_at` (timestamptz, nullable)
+- `last_capability_at` (timestamptz, nullable)
+- `metadata` (jsonb, nullable)
+- `created_at` (timestamptz)
+- `updated_at` (timestamptz)
+
+#### Nodes Table Constraints
+
+- Index: (`node_slug`)
+- Index: (`status`)
+- Index: (`last_seen_at`)
+
+### Node Capabilities Table
+
+- Spec ID: `CYNAI.SCHEMA.NodeCapabilitiesTable` <a id="spec-cynai-schema-nodecapabilitiestable"></a>
+
+Stores the last reported capability payload (full JSON of actual capabilities) for scheduling and display.
+The orchestrator stores the capability report JSON here (or a normalized snapshot that preserves the actual capabilities per worker_node.md).
+
+- `id` (uuid, pk)
+- `node_id` (uuid, fk to `nodes.id`)
+- `reported_at` (timestamptz)
+- `capability_snapshot` (jsonb)
+  - full capability report JSON (identity, platform, compute, gpu, sandbox, network, inference, tls, etc. per worker_node_payloads.md)
+
+#### Node Capabilities Table Constraints
+
+- Unique: (`node_id`) (one row per node; overwrite on new report) or allow history (then index by `node_id`, `reported_at`)
+- Index: (`node_id`)
+
+Recommendation: one row per node, updated in place when capability report is received; alternatively, append-only with retention policy.
 
 ## MCP Tool Interface
 
@@ -648,7 +903,7 @@ Lease lifecycle is defined in [Task Workflow Lease Lifecycle](#task-workflow-lea
 They share the MCP gateway and DB.
 The orchestrator starts the workflow runner for a given task; chat and planning requests go to PMA; the workflow runner executes the graph and does not serve chat.
 
-**Single-active-workflow-per-task:** The lease that enforces only one active workflow per task is **held in the orchestrator DB** (table or row semantics defined in [postgres_schema.md](postgres_schema.md)).
+**Single-active-workflow-per-task:** The lease that enforces only one active workflow per task is **held in the orchestrator DB** (table or row semantics defined in [langgraph_mvp.md - Task Workflow Leases Table](langgraph_mvp.md#spec-cynai-schema-taskworkflowleasestable)).
 The workflow runner acquires or checks the lease via the orchestrator before running.
 
 See [langgraph_mvp.md](langgraph_mvp.md) for the graph topology, state model, node behaviors, checkpoint schema, and wiring to orchestrator capabilities (MCP, Worker API, model routing).
@@ -662,7 +917,7 @@ See [langgraph_mvp.md](langgraph_mvp.md) for the graph topology, state model, no
 - [REQ-ORCHES-0146](../requirements/orches.md#req-orches-0146)
 
 The orchestrator grants and releases the task workflow lease; the workflow runner acquires or checks it via the orchestrator API (see [langgraph_mvp.md](langgraph_mvp.md#spec-cynai-orches-workflowstartresumeapi)).
-The lease table and columns are defined in [postgres_schema.md](postgres_schema.md) Task Workflow Leases Table.
+The lease table and columns are defined in [langgraph_mvp.md - Task Workflow Leases Table](langgraph_mvp.md#spec-cynai-schema-taskworkflowleasestable).
 
 **Acquire.**
 The workflow runner calls the orchestrator (as part of the workflow start API or a dedicated lease endpoint) to acquire the lease for a `task_id`.

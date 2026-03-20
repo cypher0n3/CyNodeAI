@@ -177,13 +177,15 @@ func validateRequiredScopedIds(toolName string, args map[string]interface{}) str
 // writeDenyAuditAndRespond writes a deny audit record and sends a 400 response. Returns true if caller should return.
 func writeDenyAuditAndRespond(ctx context.Context, w http.ResponseWriter, store database.Store, logger *slog.Logger, toolName string, args map[string]interface{}, errMsg string) bool {
 	rec := &models.McpToolCallAuditLog{
-		ToolName:  toolName,
-		Decision:  auditDecisionDeny,
-		Status:    auditStatusError,
-		ErrorType: strPtr("invalid_arguments"),
-		TaskID:    uuidArg(args, "task_id"),
-		RunID:     uuidArg(args, "run_id"),
-		JobID:     uuidArg(args, "job_id"),
+		McpToolCallAuditLogBase: models.McpToolCallAuditLogBase{
+			ToolName:  toolName,
+			Decision:  auditDecisionDeny,
+			Status:    auditStatusError,
+			ErrorType: strPtr("invalid_arguments"),
+			TaskID:    uuidArg(args, "task_id"),
+			RunID:     uuidArg(args, "run_id"),
+				JobID: uuidArg(args, "job_id"),
+		},
 	}
 	if err := store.CreateMcpToolCallAuditLog(ctx, rec); err != nil {
 		logger.Error("create mcp tool call audit log", "error", err)
@@ -266,7 +268,13 @@ const (
 
 // routeToolCall dispatches to preference and db tools when applicable; returns status code, response body, and audit record.
 func routeToolCall(ctx context.Context, store database.Store, toolName string, args map[string]interface{}) (code int, body []byte, rec *models.McpToolCallAuditLog) {
-	rec = &models.McpToolCallAuditLog{Decision: auditDecisionDeny, Status: auditStatusError, ErrorType: strPtr("not_implemented")}
+	rec = &models.McpToolCallAuditLog{
+		McpToolCallAuditLogBase: models.McpToolCallAuditLogBase{
+			Decision:  auditDecisionDeny,
+			Status:    auditStatusError,
+			ErrorType: strPtr("not_implemented"),
+		},
+	}
 	switch toolName {
 	case "db.preference.get":
 		code, body, rec = handlePreferenceGet(ctx, store, args, rec)

@@ -207,7 +207,13 @@ func (h *WorkflowHandler) SaveCheckpoint(w http.ResponseWriter, r *http.Request)
 		WriteBadRequest(w, "task_id required")
 		return
 	}
-	cp := &models.WorkflowCheckpoint{TaskID: taskID, State: req.State, LastNodeID: req.LastNodeID}
+	cp := &models.WorkflowCheckpoint{
+		WorkflowCheckpointBase: models.WorkflowCheckpointBase{
+			TaskID:     taskID,
+			State:      req.State,
+			LastNodeID: req.LastNodeID,
+		},
+	}
 	if err := h.db.UpsertWorkflowCheckpoint(r.Context(), cp); err != nil {
 		h.logger.Error("upsert checkpoint failed", "error", err, "task_id", taskID)
 		WriteInternalError(w, "failed to save checkpoint")

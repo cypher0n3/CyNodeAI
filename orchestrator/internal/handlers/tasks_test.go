@@ -256,8 +256,10 @@ func TestCreateTaskSBA_InferenceReadinessFailureReturnsBadRequest(t *testing.T) 
 		inferenceModel: "",
 	}
 	task := &models.Task{
-		ID:     uuid.New(),
-		Status: models.TaskStatusPending,
+		TaskBase: models.TaskBase{
+			Status: models.TaskStatusPending,
+		},
+		ID: uuid.New(),
 	}
 	rec := httptest.NewRecorder()
 	handled := handler.createTaskSBA(context.Background(), rec, task, "prompt", nil)

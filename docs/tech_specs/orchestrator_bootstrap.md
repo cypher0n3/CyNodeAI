@@ -6,6 +6,9 @@
   - [Applicable Requirements](#applicable-requirements)
 - [Example](#example)
 - [Bootstrap Contents](#bootstrap-contents)
+- [Postgres Schema](#postgres-schema)
+  - [System Settings Table](#system-settings-table)
+  - [System Settings Audit Log Table](#system-settings-audit-log-table)
 - [Orchestrator Independent Startup](#orchestrator-independent-startup)
 - [Worker Node Requirement](#worker-node-requirement)
 - [Deployment and Auto-Start](#deployment-and-auto-start)
@@ -82,8 +85,54 @@ Bootstrap YAML SHOULD support seeding:
 
 ### System Settings Storage
 
-- Imported system settings SHOULD be written to the `system_settings` table in PostgreSQL.
-  See [`docs/tech_specs/postgres_schema.md`](postgres_schema.md).
+- Imported system settings are written to the `system_settings` table in PostgreSQL.
+  See [Postgres Schema](#postgres-schema) below.
+
+## Postgres Schema
+
+- Spec ID: `CYNAI.SCHEMA.SystemSettings` <a id="spec-cynai-schema-systemsettings"></a>
+
+System settings store operator-managed operational configuration and policy parameters.
+System settings are not user task-execution preferences; for the distinction, see [User preferences (Terminology)](user_preferences.md#spec-cynai-stands-preferenceterminology).
+System settings do not store secrets in plaintext.
+
+### System Settings Table
+
+- Spec ID: `CYNAI.SCHEMA.SystemSettingsTable` <a id="spec-cynai-schema-systemsettingstable"></a>
+
+Table name: `system_settings`.
+
+- `key` (text, pk)
+- `value` (jsonb)
+- `value_type` (text)
+  - examples: string|number|boolean|object|array
+- `version` (int)
+- `updated_at` (timestamptz)
+- `updated_by` (text)
+
+#### System Settings Table Constraints
+
+- Unique: (`key`)
+- Index: (`updated_at`)
+
+### System Settings Audit Log Table
+
+- Spec ID: `CYNAI.SCHEMA.SystemSettingsAuditLogTable` <a id="spec-cynai-schema-systemsettingsauditlogtable"></a>
+
+Table name: `system_settings_audit_log`.
+
+- `id` (uuid, pk)
+- `key` (text)
+- `old_value` (jsonb)
+- `new_value` (jsonb)
+- `changed_at` (timestamptz)
+- `changed_by` (text)
+- `reason` (text, nullable)
+
+#### System Settings Audit Log Table Constraints
+
+- Index: (`key`)
+- Index: (`changed_at`)
 
 ### Project Manager Model Selection System Setting Keys
 

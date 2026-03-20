@@ -57,8 +57,10 @@ func TestNodeStatusConstants(t *testing.T) {
 
 func TestUser_Fields(t *testing.T) {
 	user := User{
-		Handle:   "testuser",
-		IsActive: true,
+		UserBase: UserBase{
+			Handle:   "testuser",
+			IsActive: true,
+		},
 	}
 
 	if user.Handle != "testuser" {
@@ -73,8 +75,10 @@ func TestUser_Fields(t *testing.T) {
 func TestTask_Fields(t *testing.T) {
 	prompt := "test prompt"
 	task := Task{
-		Status: TaskStatusPending,
-		Prompt: &prompt,
+		TaskBase: TaskBase{
+			Status: TaskStatusPending,
+			Prompt: &prompt,
+		},
 	}
 
 	if task.Status != TaskStatusPending {
@@ -88,7 +92,9 @@ func TestTask_Fields(t *testing.T) {
 
 func TestJob_Fields(t *testing.T) {
 	job := Job{
-		Status: JobStatusQueued,
+		JobBase: JobBase{
+			Status: JobStatusQueued,
+		},
 	}
 
 	if job.Status != JobStatusQueued {
@@ -98,8 +104,10 @@ func TestJob_Fields(t *testing.T) {
 
 func TestNode_Fields(t *testing.T) {
 	node := Node{
-		NodeSlug: "test-node",
-		Status:   NodeStatusRegistered,
+		NodeBase: NodeBase{
+			NodeSlug: "test-node",
+			Status:   NodeStatusRegistered,
+		},
 	}
 
 	if node.NodeSlug != "test-node" {
@@ -216,31 +224,38 @@ func TestTableNames(t *testing.T) {
 		got  string
 		want string
 	}{
-		{"User", (User{}).TableName(), "users"},
-		{"PasswordCredential", (PasswordCredential{}).TableName(), "password_credentials"},
-		{"RefreshSession", (RefreshSession{}).TableName(), "refresh_sessions"},
-		{"AuthAuditLog", (AuthAuditLog{}).TableName(), "auth_audit_log"},
-		{"Node", (Node{}).TableName(), "nodes"},
-		{"NodeCapability", (NodeCapability{}).TableName(), "node_capabilities"},
-		{"Task", (Task{}).TableName(), "tasks"},
-		{"Job", (Job{}).TableName(), "jobs"},
-		{"Project", (Project{}).TableName(), "projects"},
-		{"Session", (Session{}).TableName(), "sessions"},
-		{"ChatThread", (ChatThread{}).TableName(), "chat_threads"},
-		{"ChatMessage", (ChatMessage{}).TableName(), "chat_messages"},
-		{"ChatAuditLog", (ChatAuditLog{}).TableName(), "chat_audit_log"},
-		{"McpToolCallAuditLog", (McpToolCallAuditLog{}).TableName(), "mcp_tool_call_audit_log"},
-		{"PreferenceEntry", (PreferenceEntry{}).TableName(), "preference_entries"},
-		{"PreferenceAuditLog", (PreferenceAuditLog{}).TableName(), "preference_audit_log"},
-		{"WorkflowCheckpoint", (WorkflowCheckpoint{}).TableName(), "workflow_checkpoints"},
-		{"TaskWorkflowLease", (TaskWorkflowLease{}).TableName(), "task_workflow_leases"},
-		{"SandboxImage", (SandboxImage{}).TableName(), "sandbox_images"},
-		{"SandboxImageVersion", (SandboxImageVersion{}).TableName(), "sandbox_image_versions"},
-		{"NodeSandboxImageAvailability", (NodeSandboxImageAvailability{}).TableName(), "node_sandbox_image_availability"},
-		{"Skill", (Skill{}).TableName(), "skills"},
-		{"AccessControlRule", (AccessControlRule{}).TableName(), "access_control_rules"},
-		{"AccessControlAuditLog", (AccessControlAuditLog{}).TableName(), "access_control_audit_log"},
-		{"ApiCredential", (ApiCredential{}).TableName(), "api_credentials"},
+		// User no longer has TableName() - it's a domain base struct; TableName() is on UserRecord in database package
+		// {"User", (User{}).TableName(), "users"},
+		// PasswordCredential, RefreshSession, AuthAuditLog no longer have TableName() - they're domain types; TableName() is on record types in database package
+		// {"PasswordCredential", (PasswordCredential{}).TableName(), "password_credentials"},
+		// {"RefreshSession", (RefreshSession{}).TableName(), "refresh_sessions"},
+		// {"AuthAuditLog", (AuthAuditLog{}).TableName(), "auth_audit_log"},
+		// Node, NodeCapability, Task, Job no longer have TableName() - they're domain types; TableName() is on record types in database package
+		// {"Node", (Node{}).TableName(), "nodes"},
+		// {"NodeCapability", (NodeCapability{}).TableName(), "node_capabilities"},
+		// {"Task", (Task{}).TableName(), "tasks"},
+		// {"Job", (Job{}).TableName(), "jobs"},
+		// TableName() methods are now on record structs in database package
+		// {"Project", (Project{}).TableName(), "projects"},
+		// {"Session", (Session{}).TableName(), "sessions"},
+		// {"ChatThread", (ChatThread{}).TableName(), "chat_threads"},
+		// {"ChatMessage", (ChatMessage{}).TableName(), "chat_messages"},
+		// TableName() methods are now on record structs in database package
+		// {"ChatAuditLog", (ChatAuditLog{}).TableName(), "chat_audit_log"},
+		// {"McpToolCallAuditLog", (McpToolCallAuditLog{}).TableName(), "mcp_tool_call_audit_log"},
+		// {"PreferenceEntry", (PreferenceEntry{}).TableName(), "preference_entries"},
+		// {"PreferenceAuditLog", (PreferenceAuditLog{}).TableName(), "preference_audit_log"},
+		// {"WorkflowCheckpoint", (WorkflowCheckpoint{}).TableName(), "workflow_checkpoints"},
+		// {"TaskWorkflowLease", (TaskWorkflowLease{}).TableName(), "task_workflow_leases"},
+		// TableName() methods are now on record structs in database package
+		// {"SandboxImage", (SandboxImage{}).TableName(), "sandbox_images"},
+		// {"SandboxImageVersion", (SandboxImageVersion{}).TableName(), "sandbox_image_versions"},
+		// {"NodeSandboxImageAvailability", (NodeSandboxImageAvailability{}).TableName(), "node_sandbox_image_availability"},
+		// TableName() methods are now on record structs in database package
+		// {"Skill", (Skill{}).TableName(), "skills"},
+		// {"AccessControlRule", (AccessControlRule{}).TableName(), "access_control_rules"},
+		// {"AccessControlAuditLog", (AccessControlAuditLog{}).TableName(), "access_control_audit_log"},
+		// {"ApiCredential", (ApiCredential{}).TableName(), "api_credentials"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

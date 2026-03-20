@@ -512,13 +512,15 @@ func TestWithTestcontainers_Preferences(t *testing.T) {
 	}
 	val := integrationTestPreferenceValue
 	ent := &models.PreferenceEntry{
+		PreferenceEntryBase: models.PreferenceEntryBase{
+			ScopeType: "system",
+			ScopeID:   nil,
+			Key:       "tc.pref.key",
+			Value:     &val,
+			ValueType: "string",
+			Version:   1,
+		},
 		ID:        uuid.New(),
-		ScopeType: "system",
-		ScopeID:   nil,
-		Key:       "tc.pref.key",
-		Value:     &val,
-		ValueType: "string",
-		Version:   1,
 		UpdatedAt: time.Now().UTC(),
 	}
 	if err := db.GORM().WithContext(ctx).Create(ent).Error; err != nil {
@@ -600,12 +602,14 @@ func tcAssertTaskArtifacts(t *testing.T, store Store, ctx context.Context, task 
 	t.Helper()
 	db := store.(*DB)
 	art := &models.TaskArtifact{
-		ID:         uuid.New(),
-		TaskID:     task.ID,
-		Path:       "tc/out.txt",
-		StorageRef: "ref:xyz",
-		CreatedAt:  time.Now().UTC(),
-		UpdatedAt:  time.Now().UTC(),
+		TaskArtifactBase: models.TaskArtifactBase{
+			TaskID:     task.ID,
+			Path:       "tc/out.txt",
+			StorageRef: "ref:xyz",
+		},
+		ID:        uuid.New(),
+		CreatedAt: time.Now().UTC(),
+		UpdatedAt: time.Now().UTC(),
 	}
 	if err := db.GORM().WithContext(ctx).Create(art).Error; err != nil {
 		t.Fatalf("create task artifact: %v", err)
@@ -674,14 +678,16 @@ func TestWithTestcontainers_AccessControlAndApiCredential(t *testing.T) {
 	db := store.(*DB)
 	now := time.Now().UTC()
 	rule := &models.AccessControlRule{
-		ID:              uuid.New(),
-		SubjectType:     "user",
-		SubjectID:       &user.ID,
-		Action:          ActionApiCall,
-		ResourceType:    ResourceTypeProviderOperation,
-		ResourcePattern: "openai/chat",
-		Effect:          "allow",
-		Priority:        10,
+		AccessControlRuleBase: models.AccessControlRuleBase{
+			SubjectType:     "user",
+			SubjectID:       &user.ID,
+			Action:          ActionApiCall,
+			ResourceType:    ResourceTypeProviderOperation,
+			ResourcePattern: "openai/chat",
+			Effect:          "allow",
+			Priority:        10,
+		},
+		ID: uuid.New(),
 		CreatedAt:       now,
 		UpdatedAt:       now,
 	}
@@ -689,15 +695,17 @@ func TestWithTestcontainers_AccessControlAndApiCredential(t *testing.T) {
 		t.Fatalf("create access_control_rule: %v", err)
 	}
 	cred := &models.ApiCredential{
-		ID:             uuid.New(),
-		OwnerType:      "user",
-		OwnerID:        user.ID,
-		Provider:       "openai",
-		CredentialType: "api_key",
-		CredentialName: "default",
-		IsActive:       true,
-		CreatedAt:      now,
-		UpdatedAt:      now,
+		ApiCredentialBase: models.ApiCredentialBase{
+			OwnerType:      "user",
+			OwnerID:        user.ID,
+			Provider:       "openai",
+			CredentialType: "api_key",
+			CredentialName: "default",
+			IsActive:       true,
+		},
+		ID:        uuid.New(),
+		CreatedAt: now,
+		UpdatedAt: now,
 	}
 	if err := db.GORM().WithContext(ctx).Create(cred).Error; err != nil {
 		t.Fatalf("create api_credential: %v", err)
@@ -723,13 +731,15 @@ func TestWithTestcontainers_AccessControlAndApiCredential(t *testing.T) {
 		t.Error("HasAnyActiveApiCredential with canceled context: expected error")
 	}
 	auditRec := &models.AccessControlAuditLog{
-		SubjectType:  "user",
-		SubjectID:    &user.ID,
-		Action:       ActionApiCall,
-		ResourceType: ResourceTypeProviderOperation,
-		Resource:     "openai/chat",
-		Decision:     "allow",
-		TaskID:       &task.ID,
+		AccessControlAuditLogBase: models.AccessControlAuditLogBase{
+			SubjectType:  "user",
+			SubjectID:    &user.ID,
+			Action:       ActionApiCall,
+			ResourceType: ResourceTypeProviderOperation,
+			Resource:     "openai/chat",
+			Decision:     "allow",
+			TaskID: &task.ID,
+		},
 	}
 	if err := store.CreateAccessControlAuditLog(ctx, auditRec); err != nil {
 		t.Fatalf("CreateAccessControlAuditLog: %v", err)

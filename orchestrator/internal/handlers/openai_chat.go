@@ -195,12 +195,14 @@ func (h *OpenAIChatHandler) ChatCompletions(w http.ResponseWriter, r *http.Reque
 	}
 	durationMs := int(time.Since(start).Milliseconds())
 	_ = h.db.CreateChatAuditLog(ctx, &models.ChatAuditLog{
-		UserID:           userID,
-		ProjectID:        projectID,
-		Outcome:          "success",
-		RedactionApplied: len(kinds) > 0,
-		RedactionKinds:   kindsJSON(kinds),
-		DurationMs:       &durationMs,
+		ChatAuditLogBase: models.ChatAuditLogBase{
+			UserID:           userID,
+			ProjectID:        projectID,
+			Outcome:          "success",
+			RedactionApplied: len(kinds) > 0,
+			RedactionKinds:   kindsJSON(kinds),
+			DurationMs:       &durationMs,
+		},
 	})
 	if req.Stream {
 		// Degraded-mode SSE: upstream can't provide true token deltas; emit full turn in one event.
@@ -379,11 +381,13 @@ func (h *OpenAIChatHandler) completeViaPMAStream(ctx context.Context, w http.Res
 	}
 	durationMs := int(time.Since(start).Milliseconds())
 	_ = h.db.CreateChatAuditLog(ctx, &models.ChatAuditLog{
-		UserID:           userID,
-		ProjectID:        projectID,
-		Outcome:          "success",
-		RedactionApplied: false,
-		DurationMs:       &durationMs,
+		ChatAuditLogBase: models.ChatAuditLogBase{
+			UserID:           userID,
+			ProjectID:        projectID,
+			Outcome:          "success",
+			RedactionApplied: false,
+			DurationMs:       &durationMs,
+		},
 	})
 	final := buildChatCompletionChunk(chunkID, effectiveModel, "", &stop)
 	if b, err := json.Marshal(final); err == nil {
@@ -827,12 +831,14 @@ func (h *OpenAIChatHandler) Responses(w http.ResponseWriter, r *http.Request) {
 	}
 	durationMs := int(time.Since(start).Milliseconds())
 	_ = h.db.CreateChatAuditLog(ctx, &models.ChatAuditLog{
-		UserID:           userID,
-		ProjectID:        projectID,
-		Outcome:          "success",
-		RedactionApplied: len(kinds) > 0,
-		RedactionKinds:   kindsJSON(kinds),
-		DurationMs:       &durationMs,
+		ChatAuditLogBase: models.ChatAuditLogBase{
+			UserID:           userID,
+			ProjectID:        projectID,
+			Outcome:          "success",
+			RedactionApplied: len(kinds) > 0,
+			RedactionKinds:   kindsJSON(kinds),
+			DurationMs:       &durationMs,
+		},
 	})
 	if req.Stream {
 		// Degraded-mode SSE stream for /v1/responses when upstream is blocking.

@@ -280,14 +280,16 @@ func (h *callHandler) auditLog(ctx context.Context, subjectID *uuid.UUID, decisi
 		reasonPtr = &reason
 	}
 	rec := &models.AccessControlAuditLog{
-		SubjectType:  "user",
-		SubjectID:    subjectID,
-		Action:       database.ActionApiCall,
-		ResourceType: database.ResourceTypeProviderOperation,
-		Resource:     resource,
-		Decision:     decision,
-		Reason:       reasonPtr,
-		TaskID:       taskID,
+		AccessControlAuditLogBase: models.AccessControlAuditLogBase{
+			SubjectType:  "user",
+			SubjectID:    subjectID,
+			Action:       database.ActionApiCall,
+			ResourceType: database.ResourceTypeProviderOperation,
+			Resource:     resource,
+			Decision:     decision,
+			Reason:       reasonPtr,
+			TaskID: taskID,
+		},
 	}
 	if err := h.store.CreateAccessControlAuditLog(ctx, rec); err != nil {
 		h.logger.Warn("access_control_audit_log failed", "error", err)

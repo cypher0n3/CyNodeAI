@@ -14,6 +14,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/cypher0n3/cynodeai/go_shared_libs/gormmodel"
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/models"
 )
 
@@ -203,11 +204,6 @@ func (db *DB) createRecord(ctx context.Context, record interface{}, op string) e
 	return wrapErr(db.db.WithContext(ctx).Create(record).Error, op)
 }
 
-// createReturning creates record and returns it or an error.
-func createReturning[T any](db *DB, ctx context.Context, record *T, op string) (*T, error) {
-	return record, db.createRecord(ctx, record, op)
-}
-
 // ensureAuditIDAndTime sets id and createdAt to new values if they are zero. Used by audit log creators.
 func ensureAuditIDAndTime(id *uuid.UUID, createdAt *time.Time) {
 	if *id == uuid.Nil {
@@ -270,87 +266,117 @@ func (db *DB) GORM() *gorm.DB {
 
 // CreateUser creates a new user.
 func (db *DB) CreateUser(ctx context.Context, handle string, email *string) (*models.User, error) {
-	user := &models.User{
-		ID:        uuid.New(),
-		Handle:    handle,
-		Email:     email,
-		IsActive:  true,
-		CreatedAt: time.Now().UTC(),
-		UpdatedAt: time.Now().UTC(),
+	record := &UserRecord{
+		GormModelUUID: gormmodel.GormModelUUID{
+			ID:        uuid.New(),
+			CreatedAt: time.Now().UTC(),
+			UpdatedAt: time.Now().UTC(),
+		},
+		UserBase: models.UserBase{
+			Handle:    handle,
+			Email:     email,
+			IsActive:  true,
+		},
 	}
-	return createReturning(db, ctx, user, "create user")
+	if err := db.createRecord(ctx, record, "create user"); err != nil {
+		return nil, err
+	}
+	return record.ToUser(), nil
 }
 
 // GetUserByHandle retrieves a user by handle.
 func (db *DB) GetUserByHandle(ctx context.Context, handle string) (*models.User, error) {
-	return getWhere[models.User](db, ctx, "handle", handle, "get user by handle")
+	record, err := getWhere[UserRecord](db, ctx, "handle", handle, "get user by handle")
+	if err != nil {
+		return nil, err
+	}
+	return record.ToUser(), nil
 }
 
 // GetUserByID retrieves a user by ID.
 func (db *DB) GetUserByID(ctx context.Context, id uuid.UUID) (*models.User, error) {
-	return getByID[models.User](db, ctx, id, "get user by id")
+	record, err := getByID[UserRecord](db, ctx, id, "get user by id")
+	if err != nil {
+		return nil, err
+	}
+	return record.ToUser(), nil
 }
 
 // --- Password credential operations ---
 
 // CreatePasswordCredential creates a password credential for a user.
 func (db *DB) CreatePasswordCredential(ctx context.Context, userID uuid.UUID, passwordHash []byte, hashAlg string) (*models.PasswordCredential, error) {
-	cred := &models.PasswordCredential{
-		ID:           uuid.New(),
-		UserID:       userID,
-		PasswordHash: passwordHash,
-		HashAlg:      hashAlg,
-		CreatedAt:    time.Now().UTC(),
-		UpdatedAt:    time.Now().UTC(),
+	record := &PasswordCredentialRecord{
+		GormModelUUID: gormmodel.GormModelUUID{
+			ID:        uuid.New(),
+			CreatedAt: time.Now().UTC(),
+			UpdatedAt: time.Now().UTC(),
+		},
+		PasswordCredentialBase: models.PasswordCredentialBase{
+			UserID:       userID,
+			PasswordHash: passwordHash,
+			HashAlg:      hashAlg,
+		},
 	}
-	return createReturning(db, ctx, cred, "create password credential")
+	if err := db.createRecord(ctx, record, "create password credential"); err != nil {
+		return nil, err
+	}
+	return record.ToPasswordCredential(), nil
 }
 
 // GetPasswordCredentialByUserID retrieves password credential for a user.
 func (db *DB) GetPasswordCredentialByUserID(ctx context.Context, userID uuid.UUID) (*models.PasswordCredential, error) {
-	return getWhere[models.PasswordCredential](db, ctx, "user_id", userID, "get password credential")
+	record, err := getWhere[PasswordCredentialRecord](db, ctx, "user_id", userID, "get password credential")
+	if err != nil {
+		return nil, err
+	}
+	return record.ToPasswordCredential(), nil
 }
 
 // --- Refresh session operations ---
 
 // CreateRefreshSession creates a new refresh session.
 func (db *DB) CreateRefreshSession(ctx context.Context, userID uuid.UUID, tokenHash []byte, expiresAt time.Time) (*models.RefreshSession, error) {
-	session := &models.RefreshSession{
-		ID:               uuid.New(),
-		UserID:           userID,
-		RefreshTokenHash: tokenHash,
-		IsActive:         true,
-		ExpiresAt:        expiresAt,
-		CreatedAt:        time.Now().UTC(),
-		UpdatedAt:        time.Now().UTC(),
+	record := &RefreshSessionRecord{
+		GormModelUUID: gormmodel.GormModelUUID{
+			ID:        uuid.New(),
+			CreatedAt: time.Now().UTC(),
+			UpdatedAt: time.Now().UTC(),
+		},
+		RefreshSessionBase: models.RefreshSessionBase{
+			UserID:           userID,
+			RefreshTokenHash: tokenHash,
+			IsActive:         true,
+			ExpiresAt:        expiresAt,
+		},
 	}
-	if err := db.createRecord(ctx, session, "create refresh session"); err != nil {
+	if err := db.createRecord(ctx, record, "create refresh session"); err != nil {
 		return nil, err
 	}
-	return session, nil
+	return record.ToRefreshSession(), nil
 }
 
 // GetActiveRefreshSession retrieves an active refresh session by token hash.
 func (db *DB) GetActiveRefreshSession(ctx context.Context, tokenHash []byte) (*models.RefreshSession, error) {
-	var session models.RefreshSession
+	var record RefreshSessionRecord
 	err := db.db.WithContext(ctx).
 		Where("refresh_token_hash = ? AND is_active = ? AND expires_at > ?", tokenHash, true, time.Now().UTC()).
-		First(&session).Error
+		First(&record).Error
 	if err != nil {
 		return nil, wrapErr(err, "get refresh session")
 	}
-	return &session, nil
+	return record.ToRefreshSession(), nil
 }
 
 // InvalidateRefreshSession invalidates a refresh session.
 func (db *DB) InvalidateRefreshSession(ctx context.Context, sessionID uuid.UUID) error {
-	return db.updateWhere(ctx, &models.RefreshSession{}, "id", sessionID,
+	return db.updateWhere(ctx, &RefreshSessionRecord{}, "id", sessionID,
 		map[string]interface{}{"is_active": false}, "invalidate refresh session")
 }
 
 // InvalidateAllUserSessions invalidates all sessions for a user.
 func (db *DB) InvalidateAllUserSessions(ctx context.Context, userID uuid.UUID) error {
-	return db.updateWhere(ctx, &models.RefreshSession{}, "user_id", userID,
+	return db.updateWhere(ctx, &RefreshSessionRecord{}, "user_id", userID,
 		map[string]interface{}{"is_active": false}, "invalidate all user sessions")
 }
 
@@ -358,16 +384,21 @@ func (db *DB) InvalidateAllUserSessions(ctx context.Context, userID uuid.UUID) e
 
 // CreateAuthAuditLog creates an auth audit log entry (subject_handle, reason per postgres_schema.md).
 func (db *DB) CreateAuthAuditLog(ctx context.Context, userID *uuid.UUID, eventType string, success bool, ipAddress, userAgent, subjectHandle, reason *string) error {
-	entry := &models.AuthAuditLog{
-		ID:            uuid.New(),
-		UserID:        userID,
-		EventType:     eventType,
-		Success:       success,
-		IPAddress:     ipAddress,
-		UserAgent:     userAgent,
-		SubjectHandle: subjectHandle,
-		Reason:        reason,
-		CreatedAt:     time.Now().UTC(),
+	record := &AuthAuditLogRecord{
+		GormModelUUID: gormmodel.GormModelUUID{
+			ID:        uuid.New(),
+			CreatedAt: time.Now().UTC(),
+			UpdatedAt: time.Now().UTC(), // Not used by AuthAuditLog but included for consistency
+		},
+		AuthAuditLogBase: models.AuthAuditLogBase{
+			UserID:        userID,
+			EventType:     eventType,
+			Success:       success,
+			IPAddress:     ipAddress,
+			UserAgent:     userAgent,
+			SubjectHandle: subjectHandle,
+			Reason:        reason,
+		},
 	}
-	return db.createRecord(ctx, entry, "create auth audit log")
+	return db.createRecord(ctx, record, "create auth audit log")
 }

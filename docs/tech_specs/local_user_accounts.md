@@ -8,6 +8,7 @@
   - [Users Table](#users-table)
   - [Password Credentials Table](#password-credentials-table)
   - [Refresh Sessions Table](#refresh-sessions-table)
+  - [Auth Audit Log Table](#auth-audit-log-table)
 - [Authentication Model](#authentication-model)
   - [Per-Request Token Validation](#per-request-token-validation)
 - [Authorization and RBAC Integration](#authorization-and-rbac-integration)
@@ -123,6 +124,35 @@ Credentials and refresh tokens are stored as hashes.
 
 - Index: (`user_id`)
 - Index: (`is_active`, `expires_at`)
+
+### Auth Audit Log Table
+
+- Spec ID: `CYNAI.SCHEMA.AuthAuditLogTable` <a id="spec-cynai-schema-authauditlogtable"></a>
+
+Table name: `auth_audit_log`.
+
+Authentication events are audit logged.
+
+Source context: [Audit logging](audit_logging.md#spec-cynai-schema-auditlogging).
+
+- `id` (uuid, pk)
+- `event_type` (text)
+  - examples: login_success, login_failure, refresh_success, refresh_failure, logout, session_revoked, user_created, user_disabled, user_reenabled, password_changed, password_reset
+- `user_id` (uuid, nullable)
+  - null for pre-auth failures
+- `subject_handle` (text, nullable)
+  - redacted or hashed for failure events if needed
+- `success` (boolean)
+- `ip_address` (inet, nullable)
+- `user_agent` (text, nullable)
+- `reason` (text, nullable)
+- `created_at` (timestamptz)
+
+#### Auth Audit Log Table Constraints
+
+- Index: (`created_at`)
+- Index: (`user_id`)
+- Index: (`event_type`)
 
 ## Authentication Model
 

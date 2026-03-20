@@ -3,6 +3,7 @@
 - [Document Overview](#document-overview)
 - [Model Cache](#model-cache)
 - [Model Registry](#model-registry)
+- [Postgres Schema](#postgres-schema)
   - [Models Table](#models-table)
   - [Model Versions Table](#model-versions-table)
   - [Model Artifacts Table](#model-artifacts-table)
@@ -43,8 +44,17 @@ Cache properties
 
 The model registry stores model metadata used for routing and verification.
 It allows the Project Manager Agent to select appropriate models for tasks based on capabilities and availability.
-The Postgres schema is defined in [`docs/tech_specs/postgres_schema.md`](postgres_schema.md).
-See [Model Registry](postgres_schema.md#spec-cynai-schema-modelregistry).
+
+Table definitions: [Postgres Schema](#postgres-schema).
+
+## Postgres Schema
+
+- Spec ID: `CYNAI.SCHEMA.ModelRegistry` <a id="spec-cynai-schema-modelregistry"></a>
+
+Model metadata and node-model availability.
+Optional for MVP; required when model management and node load workflow are implemented.
+
+**Schema definitions (index):** See [Model Registry](postgres_schema.md#spec-cynai-schema-modelregistry) in [`postgres_schema.md`](postgres_schema.md).
 
 ### Models Table
 

@@ -17,24 +17,46 @@ const ResourceTypeProviderOperation = "api.provider_operation"
 // ListAccessControlRulesForApiCall returns rules for the given subject and action/resource type, ordered by priority desc.
 // Used by API Egress to evaluate provider+operation allow/deny. Caller matches resource_pattern to provider/operation.
 func (db *DB) ListAccessControlRulesForApiCall(ctx context.Context, subjectType string, subjectID *uuid.UUID, action, resourceType string) ([]*models.AccessControlRule, error) {
-	q := db.db.WithContext(ctx).Where("action = ? AND resource_type = ?", action, resourceType).
+	q := db.db.WithContext(ctx).Model(&AccessControlRuleRecord{}).Where("action = ? AND resource_type = ?", action, resourceType).
 		Where("subject_type = ?", subjectType)
 	if subjectID == nil {
 		q = q.Where("subject_id IS NULL")
 	} else {
 		q = q.Where("subject_id = ?", *subjectID)
 	}
-	var rules []*models.AccessControlRule
-	if err := q.Order("priority DESC").Find(&rules).Error; err != nil {
+	var records []AccessControlRuleRecord
+	if err := q.Order("priority DESC").Find(&records).Error; err != nil {
 		return nil, wrapErr(err, "list access control rules")
+	}
+	rules := make([]*models.AccessControlRule, len(records))
+	for i := range records {
+		rules[i] = records[i].ToAccessControlRule()
 	}
 	return rules, nil
 }
 
 // CreateAccessControlAuditLog writes one audit record. REQ-APIEGR-0119.
 func (db *DB) CreateAccessControlAuditLog(ctx context.Context, rec *models.AccessControlAuditLog) error {
-	ensureAuditIDAndTime(&rec.ID, &rec.CreatedAt)
-	return db.createRecord(ctx, rec, "create access control audit log")
+	record := &AccessControlAuditLogRecord{
+		AccessControlAuditLogBase: models.AccessControlAuditLogBase{
+			SubjectType:  rec.SubjectType,
+			SubjectID:    rec.SubjectID,
+			Action:       rec.Action,
+			ResourceType: rec.ResourceType,
+			Resource:     rec.Resource,
+			Decision:     rec.Decision,
+			Reason:       rec.Reason,
+			TaskID:       rec.TaskID,
+		},
+	}
+	ensureAuditIDAndTime(&record.ID, &record.CreatedAt)
+	if err := db.createRecord(ctx, record, "create access control audit log"); err != nil {
+		return err
+	}
+	// Populate the input struct with the generated ID and CreatedAt
+	rec.ID = record.ID
+	rec.CreatedAt = record.CreatedAt
+	return nil
 }
 
 // HasActiveApiCredentialForUserAndProvider returns true if the user has at least one active credential for the provider.
@@ -42,7 +64,7 @@ func (db *DB) CreateAccessControlAuditLog(ctx context.Context, rec *models.Acces
 func (db *DB) HasActiveApiCredentialForUserAndProvider(ctx context.Context, userID uuid.UUID, provider string) (bool, error) {
 	var n int64
 	now := time.Now().UTC()
-	err := db.db.WithContext(ctx).Model(&models.ApiCredential{}).
+	err := db.db.WithContext(ctx).Model(&ApiCredentialRecord{}).
 		Where("owner_type = ? AND owner_id = ? AND provider = ? AND is_active = ?", "user", userID, provider, true).
 		Where("expires_at IS NULL OR expires_at > ?", now).
 		Count(&n).Error
@@ -57,7 +79,7 @@ func (db *DB) HasActiveApiCredentialForUserAndProvider(ctx context.Context, user
 func (db *DB) HasAnyActiveApiCredential(ctx context.Context) (bool, error) {
 	var n int64
 	now := time.Now().UTC()
-	err := db.db.WithContext(ctx).Model(&models.ApiCredential{}).
+	err := db.db.WithContext(ctx).Model(&ApiCredentialRecord{}).
 		Where("is_active = ?", true).
 		Where("expires_at IS NULL OR expires_at > ?", now).
 		Count(&n).Error

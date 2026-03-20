@@ -200,7 +200,15 @@ func mockWithSystemPreference(t *testing.T, key string) *testutil.MockDB {
 	mock := testutil.NewMockDB()
 	v := testPreferenceVal
 	mock.PreferenceEntries = append(mock.PreferenceEntries, &models.PreferenceEntry{
-		ID: uuid.New(), ScopeType: "system", Key: key, Value: &v, ValueType: "string", Version: 1, UpdatedAt: time.Now().UTC(),
+		PreferenceEntryBase: models.PreferenceEntryBase{
+			ScopeType: "system",
+			Key:       key,
+			Value:     &v,
+			ValueType: "string",
+			Version:   1,
+		},
+		ID:        uuid.New(),
+		UpdatedAt: time.Now().UTC(),
 	})
 	return mock
 }
@@ -341,7 +349,16 @@ func TestToolCallHandler_PreferenceList_UserScope(t *testing.T) {
 	uid := uuid.New()
 	val := testPreferenceVal
 	mock.PreferenceEntries = append(mock.PreferenceEntries, &models.PreferenceEntry{
-		ID: uuid.New(), ScopeType: "user", ScopeID: &uid, Key: "k", Value: &val, ValueType: "string", Version: 1, UpdatedAt: time.Now().UTC(),
+		PreferenceEntryBase: models.PreferenceEntryBase{
+			ScopeType: "user",
+			ScopeID:   &uid,
+			Key:       "k",
+			Value:     &val,
+			ValueType: "string",
+			Version:   1,
+		},
+		ID:        uuid.New(),
+		UpdatedAt: time.Now().UTC(),
 	})
 	handler := toolCallHandler(mock, slog.Default())
 	body := `{"tool_name":"db.preference.list","arguments":{"scope_type":"user","scope_id":"` + uid.String() + `"}}`
@@ -358,13 +375,15 @@ func TestToolCallHandler_PreferenceGet_Found(t *testing.T) {
 	mock := testutil.NewMockDB()
 	v := `"val"`
 	mock.PreferenceEntries = append(mock.PreferenceEntries, &models.PreferenceEntry{
+		PreferenceEntryBase: models.PreferenceEntryBase{
+			ScopeType: "system",
+			ScopeID:   nil,
+			Key:       "a.key",
+			Value:     &v,
+			ValueType: "string",
+			Version:   1,
+		},
 		ID:        uuid.New(),
-		ScopeType: "system",
-		ScopeID:   nil,
-		Key:       "a.key",
-		Value:     &v,
-		ValueType: "string",
-		Version:   1,
 		UpdatedAt: time.Now().UTC(),
 	})
 	code, respBody := callToolHandlerWithStoreAndBody(t, mock, `{"tool_name":"db.preference.get","arguments":{"scope_type":"system","key":"a.key"}}`)
@@ -389,12 +408,14 @@ func TestToolCallHandler_PreferenceEffective_Success(t *testing.T) {
 	task, _ := mock.CreateTask(context.Background(), nil, "p", nil)
 	val := testPreferenceVal
 	mock.PreferenceEntries = append(mock.PreferenceEntries, &models.PreferenceEntry{
+		PreferenceEntryBase: models.PreferenceEntryBase{
+			ScopeType: "system",
+			Key:       "x",
+			Value:     &val,
+			ValueType: "string",
+			Version:   1,
+		},
 		ID:        uuid.New(),
-		ScopeType: "system",
-		Key:       "x",
-		Value:     &val,
-		ValueType: "string",
-		Version:   1,
 		UpdatedAt: time.Now().UTC(),
 	})
 	code, respBody := callToolHandlerWithStoreAndBody(t, mock, `{"tool_name":"db.preference.effective","arguments":{"task_id":"`+task.ID.String()+`"}}`)
@@ -634,7 +655,14 @@ func TestToolCallHandler_ArtifactGet_Success(t *testing.T) {
 	task, _ := mock.CreateTask(context.Background(), nil, "p", nil)
 	ref := "inline:base64abc"
 	mock.TaskArtifacts = append(mock.TaskArtifacts, &models.TaskArtifact{
-		ID: uuid.New(), TaskID: task.ID, Path: "out/file.txt", StorageRef: ref, CreatedAt: time.Now().UTC(), UpdatedAt: time.Now().UTC(),
+		TaskArtifactBase: models.TaskArtifactBase{
+			TaskID:     task.ID,
+			Path:       "out/file.txt",
+			StorageRef: ref,
+		},
+		ID:        uuid.New(),
+		CreatedAt: time.Now().UTC(),
+		UpdatedAt: time.Now().UTC(),
 	})
 	body := `{"tool_name":"artifact.get","arguments":{"task_id":"` + task.ID.String() + `","path":"out/file.txt"}}`
 	code, respBody := callToolHandlerWithStoreAndBody(t, mock, body)

@@ -26,6 +26,9 @@
 - [Checkpointing and Resumability](#checkpointing-and-resumability)
   - [Applicable Requirements](#applicable-requirements)
   - [Checkpoint Schema (Prescriptive)](#checkpoint-schema-prescriptive)
+- [Postgres Schema](#postgres-schema)
+  - [Workflow Checkpoints Table](#workflow-checkpoints-table)
+  - [Task Workflow Leases Table](#task-workflow-leases-table)
 - [Workflow Flow Summary](#workflow-flow-summary)
 - [Tooling and Security Notes](#tooling-and-security-notes)
 
@@ -60,12 +63,12 @@ This section defines how the LangGraph workflow is integrated with the orchestra
 
 ### Invocation Model
 
-- One workflow instance is scoped to one **task** (one `task_id`); for task vs **job** terminology, see [Task vs Job (Terminology)](postgres_schema.md#spec-cynai-schema-taskvsjob).
+- One workflow instance is scoped to one **task** (one `task_id`); for task vs **job** terminology, see [Task vs Job (Terminology)](orchestrator.md#spec-cynai-schema-taskvsjob).
 - The orchestrator starts a workflow when a task is ready to be driven (e.g. after task creation via User API or when a task is unblocked).
 - The following MUST hold:
   - The workflow receives the task identifier and MUST load task context in the first node (Load Task Context).
   - Only one active workflow instance per task at a time.
-  - The **single-active-workflow-per-task** guarantee is enforced by a **lease held in the orchestrator DB** (see [orchestrator.md](orchestrator.md) and [postgres_schema.md](postgres_schema.md)).
+  - The **single-active-workflow-per-task** guarantee is enforced by a **lease held in the orchestrator DB** (see [orchestrator.md](orchestrator.md) and [Task Workflow Leases Table](#task-workflow-leases-table)).
   - The workflow runner MUST acquire or check the lease via the orchestrator before running; the orchestrator is the source of truth.
 - The orchestrator MAY run multiple workflow instances concurrently for different tasks.
 - When and how the orchestrator starts a workflow for a task is defined in [Workflow Start Triggers](#workflow-start-triggers) below.
@@ -129,7 +132,7 @@ See [orchestrator.md](orchestrator.md) Scheduled Run Routing to Project Manager 
 
 - [REQ-ORCHES-0153](../requirements/orches.md#req-orches-0153)
 
-When a task is associated with a plan (`task.plan_id` set; see [Project plan](projects_and_scopes.md#spec-cynai-access-projectplan)), execution order and runnability are determined solely by **task dependencies** ([`task_dependencies`](postgres_schema.md#spec-cynai-schema-taskdependenciestable) table).
+When a task is associated with a plan (`task.plan_id` set; see [Project plan](projects_and_scopes.md#spec-cynai-access-projectplan)), execution order and runnability are determined solely by **task dependencies** ([`task_dependencies`](orchestrator.md#spec-cynai-schema-taskdependenciestable) table).
 
 **Runnable:** A task in a plan is **runnable** when: (0) the task's `planning_state` is `ready`, (1) the plan's state is `active`, (2) the task is not closed, and (3) every task it depends on (each `depends_on_task_id` in `task_dependencies` for this `task_id`) has `status = 'completed'`.
 A task with no dependencies in `task_dependencies` is runnable once `planning_state=ready`, the plan is active, and the task is not closed (subject to the workflow start gate).
@@ -371,19 +374,68 @@ Recommended checkpoint points
 
 ### Checkpoint Schema (Prescriptive)
 
-The checkpoint store uses a single PostgreSQL table so that implementations are unambiguous.
+The checkpoint store uses a single PostgreSQL table (`workflow_checkpoints`) so that implementations are unambiguous.
+The workflow engine saves and loads by `task_id`; the orchestrator does not run workflow steps without going through this checkpoint layer.
 
-- **Table name:** `workflow_checkpoints`.
-- **Columns (minimum):**
-  - `id` (uuid, primary key)
-  - `task_id` (uuid, foreign key to `tasks.id`; one row per task for the "current" checkpoint; see constraints below)
-  - `state` (jsonb) holding the full [State Model](#state-model) (task_id, acceptance_criteria, preferences_effective, plan, current_step_index, attempts_by_step, last_result, verification)
-  - `last_node_id` (text) identity of the last completed graph node
-  - `updated_at` (timestamptz)
-- **Constraints:** Unique on `task_id` so that the latest checkpoint for a task is the single row for that task (upsert by task_id on each persist).
-- The workflow engine MUST save and load by `task_id`; the orchestrator MUST NOT run workflow steps without going through this checkpoint layer.
+Full column list, constraints, and the companion `task_workflow_leases` table are defined in [Postgres Schema](#postgres-schema).
 
-See [postgres_schema.md](postgres_schema.md) for the full table definition and creation order.
+## Postgres Schema
+
+- Spec ID: `CYNAI.SCHEMA.WorkflowCheckpoints` <a id="spec-cynai-schema-workflowcheckpoints"></a>
+
+The LangGraph workflow engine persists checkpoint state and per-task workflow leases in PostgreSQL so workflows can resume after restarts and only one active workflow runs per task.
+
+**Schema definitions (index):** See [Workflow Checkpoints](postgres_schema.md#spec-cynai-schema-workflowcheckpoints) in [`postgres_schema.md`](postgres_schema.md).
+
+### Workflow Checkpoints Table
+
+- Spec ID: `CYNAI.SCHEMA.WorkflowCheckpointsTable` <a id="spec-cynai-schema-workflowcheckpointstable"></a>
+
+Table name: `workflow_checkpoints`.
+
+The LangGraph workflow engine persists checkpoint state to PostgreSQL so that workflows can resume after restarts.
+The orchestrator does not run workflow steps without going through this checkpoint layer.
+
+- `id` (uuid, pk)
+- `task_id` (uuid, fk to `tasks.id`, unique)
+  - one row per task for the current checkpoint; upsert by task_id on each persist
+- `state` (jsonb)
+  - full state model: task_id, acceptance_criteria, preferences_effective, plan, current_step_index, attempts_by_step, last_result, verification (see [State Model](#state-model))
+- `last_node_id` (text)
+  - identity of the last completed graph node
+- `updated_at` (timestamptz)
+
+#### Workflow Checkpoints Table Constraints
+
+- Unique: (`task_id`)
+- Index: (`task_id`)
+- Index: (`updated_at`)
+
+### Task Workflow Leases Table
+
+- Spec ID: `CYNAI.SCHEMA.TaskWorkflowLeasesTable` <a id="spec-cynai-schema-taskworkflowleasestable"></a>
+
+Table name: `task_workflow_leases`.
+
+The orchestrator grants and releases this lease; the workflow runner acquires or checks it via the orchestrator API.
+Only one active workflow per task is allowed; the lease enforces that.
+
+- `id` (uuid, pk)
+- `task_id` (uuid, fk to `tasks.id`, unique)
+  - one lease row per task
+- `lease_id` (uuid)
+  - idempotency/identity for the lease
+- `holder_id` (text, nullable)
+  - workflow runner instance identifier holding the lease
+- `expires_at` (timestamptz, nullable)
+- `created_at` (timestamptz)
+- `updated_at` (timestamptz)
+
+#### Task Workflow Leases Table Constraints
+
+- Unique: (`task_id`)
+- Index: (`task_id`)
+- Index: (`expires_at`) where not null
 
 ## Workflow Flow Summary
 

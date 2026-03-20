@@ -56,8 +56,10 @@ func TestMockDB_CreateChatAuditLog(t *testing.T) {
 	m := NewMockDB()
 	ctx := context.Background()
 	rec := &models.ChatAuditLog{
-		Outcome:          "success",
-		RedactionApplied: true,
+		ChatAuditLogBase: models.ChatAuditLogBase{
+			Outcome:          "success",
+			RedactionApplied: true,
+		},
 	}
 	if err := m.CreateChatAuditLog(ctx, rec); err != nil {
 		t.Fatalf("CreateChatAuditLog: %v", err)

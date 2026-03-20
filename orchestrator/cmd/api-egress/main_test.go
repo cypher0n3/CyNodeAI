@@ -187,12 +187,28 @@ func TestCallHandler_AllowedReturns501(t *testing.T) {
 
 func TestCallHandler_WithStore_AllowReturns501(t *testing.T) {
 	mock := testutil.NewMockDB()
-	user := &models.User{ID: uuid.New(), Handle: "ae-user", IsActive: true}
+	user := &models.User{
+		UserBase: models.UserBase{Handle: "ae-user", IsActive: true},
+		ID:       uuid.New(),
+	}
 	mock.AddUser(user)
-	task := &models.Task{ID: uuid.New(), CreatedBy: &user.ID, Status: "running"}
+	task := &models.Task{
+		TaskBase: models.TaskBase{
+			CreatedBy: &user.ID,
+			Status:    "running",
+		},
+		ID: uuid.New(),
+	}
 	mock.AddTask(task)
 	mock.AccessControlRules = []*models.AccessControlRule{
-		{Effect: "allow", ResourcePattern: "openai/chat", Action: database.ActionApiCall, ResourceType: database.ResourceTypeProviderOperation},
+		{
+			AccessControlRuleBase: models.AccessControlRuleBase{
+				Effect:          "allow",
+				ResourcePattern: "openai/chat",
+				Action:          database.ActionApiCall,
+				ResourceType:    database.ResourceTypeProviderOperation,
+			},
+		},
 	}
 	mock.HasActiveApiCredential = true
 	h := newCallHandlerWithStore(slog.Default(), "secret", "openai,github", mock)
@@ -246,9 +262,18 @@ func TestCallHandler_WithStore_InvalidTaskID_403(t *testing.T) {
 }
 
 func setupMockWithUserAndTask(mock *testutil.MockDB, handle string) *models.Task {
-	user := &models.User{ID: uuid.New(), Handle: handle, IsActive: true}
+	user := &models.User{
+		UserBase: models.UserBase{Handle: handle, IsActive: true},
+		ID:       uuid.New(),
+	}
 	mock.AddUser(user)
-	task := &models.Task{ID: uuid.New(), CreatedBy: &user.ID, Status: "running"}
+	task := &models.Task{
+		TaskBase: models.TaskBase{
+			CreatedBy: &user.ID,
+			Status:    "running",
+		},
+		ID: uuid.New(),
+	}
 	mock.AddTask(task)
 	return task
 }
@@ -266,7 +291,14 @@ func TestCallHandler_WithStore_PolicyOrCredentialDeny_403(t *testing.T) {
 			mock := testutil.NewMockDB()
 			task := setupMockWithUserAndTask(mock, "ae-user-"+name)
 			mock.AccessControlRules = []*models.AccessControlRule{
-				{Effect: tc.effect, ResourcePattern: "openai/chat", Action: database.ActionApiCall, ResourceType: database.ResourceTypeProviderOperation},
+				{
+					AccessControlRuleBase: models.AccessControlRuleBase{
+						Effect:          tc.effect,
+						ResourcePattern: "openai/chat",
+						Action:          database.ActionApiCall,
+						ResourceType:    database.ResourceTypeProviderOperation,
+					},
+				},
 			}
 			mock.HasActiveApiCredential = tc.hasCred
 			code, detail := callWithStoreAndAssert403(t, mock, task.ID.String())
@@ -315,7 +347,13 @@ func callWithStoreAndAssert403(t *testing.T, mock *testutil.MockDB, taskID strin
 
 func TestCallHandler_WithStore_NoUserContext_403(t *testing.T) {
 	mock := testutil.NewMockDB()
-	task := &models.Task{ID: uuid.New(), CreatedBy: nil, Status: "running"}
+	task := &models.Task{
+		TaskBase: models.TaskBase{
+			CreatedBy: nil,
+			Status:    "running",
+		},
+		ID: uuid.New(),
+	}
 	mock.AddTask(task)
 	h := newCallHandlerWithStore(slog.Default(), "secret", "openai,github", mock)
 	body := map[string]string{"provider": "openai", "operation": "chat", "task_id": task.ID.String()}

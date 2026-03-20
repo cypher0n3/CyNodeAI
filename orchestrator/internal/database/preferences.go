@@ -12,6 +12,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/cypher0n3/cynodeai/go_shared_libs/gormmodel"
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/models"
 )
 
@@ -20,18 +21,18 @@ const MaxPreferenceListLimit = 100
 
 // GetPreference returns the preference entry for the given scope and key, or ErrNotFound.
 func (db *DB) GetPreference(ctx context.Context, scopeType string, scopeID *uuid.UUID, key string) (*models.PreferenceEntry, error) {
-	var ent models.PreferenceEntry
+	var record PreferenceEntryRecord
 	q := db.db.WithContext(ctx).Where("scope_type = ? AND key = ?", scopeType, key)
 	if scopeID == nil {
 		q = q.Where("scope_id IS NULL")
 	} else {
 		q = q.Where("scope_id = ?", *scopeID)
 	}
-	err := q.First(&ent).Error
+	err := q.First(&record).Error
 	if err != nil {
 		return nil, wrapErr(err, "get preference")
 	}
-	return &ent, nil
+	return record.ToPreferenceEntry(), nil
 }
 
 // ListPreferences returns preference entries for the scope, optionally filtered by key prefix, with pagination.
@@ -46,7 +47,7 @@ func (db *DB) ListPreferences(ctx context.Context, scopeType string, scopeID *uu
 			offset = n
 		}
 	}
-	q := db.db.WithContext(ctx).Model(&models.PreferenceEntry{}).Where("scope_type = ?", scopeType)
+	q := db.db.WithContext(ctx).Model(&PreferenceEntryRecord{}).Where("scope_type = ?", scopeType)
 	if scopeID == nil {
 		q = q.Where("scope_id IS NULL")
 	} else {
@@ -59,10 +60,14 @@ func (db *DB) ListPreferences(ctx context.Context, scopeType string, scopeID *uu
 	if err := q.Count(&total).Error; err != nil {
 		return nil, "", wrapErr(err, "count preferences")
 	}
-	var entries []*models.PreferenceEntry
-	err := q.Order("key ASC").Offset(offset).Limit(limit + 1).Find(&entries).Error
+	var records []PreferenceEntryRecord
+	err := q.Order("key ASC").Offset(offset).Limit(limit + 1).Find(&records).Error
 	if err != nil {
 		return nil, "", wrapErr(err, "list preferences")
+	}
+	entries := make([]*models.PreferenceEntry, len(records))
+	for i := range records {
+		entries[i] = records[i].ToPreferenceEntry()
 	}
 	nextCursor := ""
 	if len(entries) > limit {
@@ -136,23 +141,27 @@ func (db *DB) CreatePreference(ctx context.Context, scopeType string, scopeID *u
 	if value != "" {
 		valPtr = &value
 	}
-	ent := &models.PreferenceEntry{
-		ID:        uuid.New(),
-		ScopeType: scopeType,
-		ScopeID:   scopeID,
-		Key:       key,
-		Value:     valPtr,
-		ValueType: valueType,
-		Version:   1,
-		UpdatedAt: now,
-		UpdatedBy: updatedBy,
+	record := &PreferenceEntryRecord{
+		GormModelUUID: gormmodel.GormModelUUID{
+			ID:        uuid.New(),
+			UpdatedAt: now,
+		},
+		PreferenceEntryBase: models.PreferenceEntryBase{
+			ScopeType: scopeType,
+			ScopeID:   scopeID,
+			Key:       key,
+			Value:     valPtr,
+			ValueType: valueType,
+			Version:   1,
+			UpdatedBy: updatedBy,
+		},
 	}
-	if err := db.db.WithContext(ctx).Create(ent).Error; err != nil {
+	if err := db.db.WithContext(ctx).Create(record).Error; err != nil {
 		return nil, wrapErr(err, "create preference")
 	}
 	// Optionally write to preference_audit_log (reason/updatedBy); schema supports it; minimal MVP we skip for now.
 	_ = reason
-	return ent, nil
+	return record.ToPreferenceEntry(), nil
 }
 
 // UpdatePreference updates a preference entry. Returns ErrNotFound if not found, ErrConflict if expected_version is set and does not match.
@@ -169,23 +178,26 @@ func (db *DB) UpdatePreference(ctx context.Context, scopeType string, scopeID *u
 	if value != "" {
 		valPtr = &value
 	}
+	var record PreferenceEntryRecord
+	if err := db.db.WithContext(ctx).Where("id = ?", ent.ID).First(&record).Error; err != nil {
+		return nil, wrapErr(err, "get preference record for update")
+	}
 	updates := map[string]interface{}{
 		"value":      valPtr,
 		"value_type": valueType,
-		"version":    ent.Version + 1,
+		"version":    record.Version + 1,
 		"updated_at": now,
 		"updated_by": updatedBy,
 	}
-	if err := db.db.WithContext(ctx).Model(ent).Updates(updates).Error; err != nil {
+	if err := db.db.WithContext(ctx).Model(&record).Updates(updates).Error; err != nil {
 		return nil, wrapErr(err, "update preference")
 	}
 	_ = reason
-	ent.Value = valPtr
-	ent.ValueType = valueType
-	ent.Version++
-	ent.UpdatedAt = now
-	ent.UpdatedBy = updatedBy
-	return ent, nil
+	// Reload to get updated fields
+	if err := db.db.WithContext(ctx).Where("id = ?", ent.ID).First(&record).Error; err != nil {
+		return nil, wrapErr(err, "reload preference after update")
+	}
+	return record.ToPreferenceEntry(), nil
 }
 
 // DeletePreference deletes a preference entry. Returns ErrNotFound if not found, ErrConflict if expected_version is set and does not match.
@@ -197,7 +209,11 @@ func (db *DB) DeletePreference(ctx context.Context, scopeType string, scopeID *u
 	if expectedVersion != nil && ent.Version != *expectedVersion {
 		return ErrConflict
 	}
-	if err := db.db.WithContext(ctx).Delete(ent).Error; err != nil {
+	var record PreferenceEntryRecord
+	if err := db.db.WithContext(ctx).Where("id = ?", ent.ID).First(&record).Error; err != nil {
+		return wrapErr(err, "get preference record for delete")
+	}
+	if err := db.db.WithContext(ctx).Delete(&record).Error; err != nil {
 		return wrapErr(err, "delete preference")
 	}
 	_ = reason
