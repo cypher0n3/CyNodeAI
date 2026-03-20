@@ -17,12 +17,12 @@ Gateway enforcement of that scope is defined in [`mcp_gateway_enforcement.md`](m
 
 ### Traces To
 
-- [REQ-MCPGAT-0115](../requirements/mcpgat.md#req-mcpgat-0115)
+- [REQ-MCPGAT-0115](../../requirements/mcpgat.md#req-mcpgat-0115)
 
 ## Scope
 
 - **In scope:** User-installable (custom) MCP tool registration with the orchestrator; per-tool configuration (including sandbox vs PM scope); persistence of tool metadata and scope; exposure of view and change via Web Console and CLI; use of that data by the MCP gateway when enforcing tool calls.
-- **Out of scope:** Built-in tool definitions (see [MCP tool specs](mcp_tools/README.md)); role allowlists and per-tool scope (see [Access, allowlists, and per-tool scope](mcp_tools/access_allowlists_and_scope.md)); gateway enforcement mechanics (see [MCP gateway enforcement](mcp_gateway_enforcement.md)); MCP wire protocol and SDK details (see [MCP tooling](mcp_tooling.md) and [MCP SDK installation](mcp_sdk_installation.md)).
+- **Out of scope:** Built-in tool definitions (see [MCP tool specs](../mcp_tools/README.md)); role allowlists and per-tool scope (see [Access, allowlists, and per-tool scope](../mcp_tools/access_allowlists_and_scope.md)); gateway enforcement mechanics (see [MCP gateway enforcement](mcp_gateway_enforcement.md)); MCP wire protocol and SDK details (see [MCP tooling](mcp_tooling.md) and [MCP SDK installation](mcp_sdk_installation.md)).
 
 ## Registration and Persistence
 
@@ -35,7 +35,7 @@ Gateway enforcement of that scope is defined in [`mcp_gateway_enforcement.md`](m
 
 - For each user-installed tool, the user MUST be able to **configure the per-tool scope**: sandbox only, PM only, or both.
   This determines which agent types (sandbox agents vs PM/PA agents) are allowed to invoke the tool at the gateway.
-- The orchestrator MUST persist this setting and MUST expose it to the MCP gateway so that the gateway can enforce the rules in [Per-tool scope: Sandbox vs PM](mcp_tools/access_allowlists_and_scope.md#spec-cynai-mcpgat-pertoolscope).
+- The orchestrator MUST persist this setting and MUST expose it to the MCP gateway so that the gateway can enforce the rules in [Per-tool scope: Sandbox vs PM](../mcp_tools/access_allowlists_and_scope.md#spec-cynai-mcpgat-pertoolscope).
   The gateway does not define how scope is stored; it consumes the resolved scope when evaluating each tool call.
 
 ## Discovery and Lifecycle
@@ -48,12 +48,14 @@ Gateway enforcement of that scope is defined in [`mcp_gateway_enforcement.md`](m
 
 - The MCP gateway enforces tool access using the per-tool scope stored for both built-in and user-installed tools.
   When a tool is user-installed, its scope is the value configured by the user (sandbox only, PM only, or both).
-  The gateway MUST allow or reject the call according to [Per-tool scope: Sandbox vs PM](mcp_tools/access_allowlists_and_scope.md#spec-cynai-mcpgat-pertoolscope).
+  The gateway MUST allow or reject the call according to [Per-tool scope: Sandbox vs PM](../mcp_tools/access_allowlists_and_scope.md#spec-cynai-mcpgat-pertoolscope).
   No separate enforcement logic is required in this spec; the contract is that the orchestrator persists scope and the gateway uses it.
 
 ## Related Documents
 
-- MCP access (allowlists, per-tool scope): [`mcp_tools/access_allowlists_and_scope.md`](mcp_tools/access_allowlists_and_scope.md)
+- MCP access (allowlists, per-tool scope): [`../mcp_tools/access_allowlists_and_scope.md`](../mcp_tools/access_allowlists_and_scope.md)
 - MCP gateway enforcement (tokens, edge mode, request handling): [`mcp_gateway_enforcement.md`](mcp_gateway_enforcement.md)
-- MCP tool specifications (built-in tool names and schemas): [mcp_tools/](mcp_tools/README.md)
+- MCP tool specifications (built-in tool names and schemas): [`../mcp_tools/`](../mcp_tools/README.md)
 - MCP tooling (concepts, role-based access): [`mcp_tooling.md`](mcp_tooling.md)
+- MCP tool definitions (definition format, types, scope): [`mcp_tool_definitions.md`](mcp_tool_definitions.md)
+- MCP endpoint registry (endpoint registration and resolution): [`mcp_endpoint_registry.md`](mcp_endpoint_registry.md)

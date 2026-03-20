@@ -137,7 +137,7 @@ Recommended MCP tools
 - `connector.credential.revoke`
 - `connector.op.invoke`
 
-See [`docs/tech_specs/mcp_tooling.md`](mcp_tooling.md).
+See [`docs/tech_specs/mcp/mcp_tooling.md`](mcp/mcp_tooling.md).
 
 ## User API Gateway Surface
 
@@ -219,4 +219,4 @@ Response handling guidance
 Connectors MAY be implemented as internal services or as MCP servers.
 Connector MCP servers MUST follow governance requirements: allowlists, sandbox expectations, response validation, and per-project enablement.
 
-See [`docs/tech_specs/mcp_tooling.md`](mcp_tooling.md).
+See [`docs/tech_specs/mcp/mcp_tooling.md`](mcp/mcp_tooling.md).

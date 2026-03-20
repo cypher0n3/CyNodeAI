@@ -20,7 +20,7 @@ Full job CRUD is exposed to user clients via the User API Gateway.
 
 Related documents
 
-- [MCP Gateway Enforcement](../mcp_gateway_enforcement.md)
+- [MCP Gateway Enforcement](../mcp/mcp_gateway_enforcement.md)
 - [Access, allowlists, and per-tool scope](access_allowlists_and_scope.md)
 
 ## Definition Compliance

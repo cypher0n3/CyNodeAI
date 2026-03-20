@@ -62,7 +62,7 @@ Bootstrap YAML SHOULD support seeding:
 - Orchestrator-side agent external provider defaults (Project Manager and Project Analyst routing preferences)
 - **Default API endpoints:** A default set of MCP (or other API) endpoints that are loaded into the endpoint registry at bootstrap.
   Each entry has a stable slug (e.g. `builtin-git`, `builtin-filesystem`), `owner_type=system`, `scope=shared`; credentials come from environment or secrets manager, not from YAML.
-  The endpoint registry and default-endpoint behavior are specified in the MCP Endpoint Registry spec (when adopted).
+  See [MCP Endpoint Registry](mcp/mcp_endpoint_registry.md#spec-cynai-mcptoo-defaultendpointsbootstrap) for the complete specification.
 
 ### Preference Entry Shape
 

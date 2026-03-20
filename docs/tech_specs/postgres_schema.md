@@ -112,7 +112,7 @@ GORM table models MUST follow the [GORM model structure](go_sql_database_standar
 ### Out of Scope
 
 - Node capability report and node configuration payload wire formats (see [`docs/tech_specs/worker_node.md`](worker_node.md)).
-- MCP tool allowlists and per-tool scope (see [`docs/tech_specs/mcp_tools/access_allowlists_and_scope.md`](mcp_tools/access_allowlists_and_scope.md)); gateway enforcement (see [`docs/tech_specs/mcp_gateway_enforcement.md`](mcp_gateway_enforcement.md)).
+- MCP tool allowlists and per-tool scope (see [`docs/tech_specs/mcp_tools/access_allowlists_and_scope.md`](mcp_tools/access_allowlists_and_scope.md)); gateway enforcement (see [`docs/tech_specs/mcp/mcp_gateway_enforcement.md`](mcp/mcp_gateway_enforcement.md)).
 
 ## Schema Overview
 
@@ -984,7 +984,7 @@ Constraints
 This table stores append-only metadata for MCP tool calls routed by the orchestrator gateway.
 Tool arguments and tool results are not stored in this table for MVP.
 
-Source: [`docs/tech_specs/mcp_tool_call_auditing.md`](mcp_tool_call_auditing.md).
+Source: [`docs/tech_specs/mcp/mcp_tool_call_auditing.md`](mcp/mcp_tool_call_auditing.md).
 
 - `id` (uuid, pk)
 - `created_at` (timestamptz)

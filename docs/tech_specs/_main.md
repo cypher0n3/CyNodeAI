@@ -94,12 +94,12 @@ It uses a central orchestrator to coordinate node-local workers, sandboxed execu
 ### Protocols and Standards
 
 - Go SQL database standards (GORM): [`docs/tech_specs/go_sql_database_standards.md`](go_sql_database_standards.md)
-- MCP tooling: [`docs/tech_specs/mcp_tooling.md`](mcp_tooling.md)
-- MCP gateway enforcement: [`docs/tech_specs/mcp_gateway_enforcement.md`](mcp_gateway_enforcement.md)
-- User-installable MCP tools: [`docs/tech_specs/user_installable_mcp_tools.md`](user_installable_mcp_tools.md)
+- MCP tooling: [`docs/tech_specs/mcp/mcp_tooling.md`](mcp/mcp_tooling.md)
+- MCP gateway enforcement: [`docs/tech_specs/mcp/mcp_gateway_enforcement.md`](mcp/mcp_gateway_enforcement.md)
+- User-installable MCP tools: [`docs/tech_specs/mcp/user_installable_mcp_tools.md`](mcp/user_installable_mcp_tools.md)
 - MCP tool specifications: [`docs/tech_specs/mcp_tools/`](mcp_tools/README.md)
-- MCP tool call auditing: [`docs/tech_specs/mcp_tool_call_auditing.md`](mcp_tool_call_auditing.md)
-- MCP SDK installation: [`docs/tech_specs/mcp_sdk_installation.md`](mcp_sdk_installation.md)
+- MCP tool call auditing: [`docs/tech_specs/mcp/mcp_tool_call_auditing.md`](mcp/mcp_tool_call_auditing.md)
+- MCP SDK installation: [`docs/tech_specs/mcp/mcp_sdk_installation.md`](mcp/mcp_sdk_installation.md)
 - Go REST API standards: [`docs/tech_specs/go_rest_api_standards.md`](go_rest_api_standards.md)
 
 ### Execution and Artifacts
@@ -113,7 +113,7 @@ It uses a central orchestrator to coordinate node-local workers, sandboxed execu
 
 - API egress server: [`docs/tech_specs/api_egress_server.md`](api_egress_server.md)
 - Web egress proxy: [`docs/tech_specs/web_egress_proxy.md`](web_egress_proxy.md)
-- Git egress MCP: [`docs/tech_specs/git_egress_mcp.md`](git_egress_mcp.md)
+- Git egress MCP: [`docs/tech_specs/mcp_tools/git_egress.md`](mcp_tools/git_egress.md)
 - External model routing: [`docs/tech_specs/external_model_routing.md`](external_model_routing.md)
 
 ### Model Lifecycle

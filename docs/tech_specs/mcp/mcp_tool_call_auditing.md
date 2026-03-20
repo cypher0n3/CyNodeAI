@@ -15,9 +15,9 @@ When edge enforcement mode is used for node-local agent runtimes, tool call audi
 
 Related documents
 
-- MCP gateway enforcement: [`docs/tech_specs/mcp_gateway_enforcement.md`](mcp_gateway_enforcement.md)
-- Access control: [`docs/tech_specs/access_control.md`](access_control.md)
-- Postgres schema: [`docs/tech_specs/postgres_schema.md`](postgres_schema.md)
+- MCP gateway enforcement: [`docs/tech_specs/mcp/mcp_gateway_enforcement.md`](mcp_gateway_enforcement.md)
+- Access control: [`docs/tech_specs/access_control.md`](../access_control.md)
+- Postgres schema: [`docs/tech_specs/postgres_schema.md`](../postgres_schema.md)
 
 ## Goals
 
@@ -35,9 +35,9 @@ This section identifies the point in the system where tool call auditing is perf
 
 #### Traces to Requirements
 
-- [REQ-MCPGAT-0107](../requirements/mcpgat.md#req-mcpgat-0107)
-- [REQ-MCPGAT-0108](../requirements/mcpgat.md#req-mcpgat-0108)
-- [REQ-MCPGAT-0109](../requirements/mcpgat.md#req-mcpgat-0109)
+- [REQ-MCPGAT-0107](../../requirements/mcpgat.md#req-mcpgat-0107)
+- [REQ-MCPGAT-0108](../../requirements/mcpgat.md#req-mcpgat-0108)
+- [REQ-MCPGAT-0109](../../requirements/mcpgat.md#req-mcpgat-0109)
 
 ### Edge Tool Call Auditing
 
@@ -45,7 +45,7 @@ This section identifies the point in the system where tool call auditing is perf
 
 #### Edge Tool Call Auditing Requirements Traces
 
-- [REQ-MCPGAT-0112](../requirements/mcpgat.md#req-mcpgat-0112)
+- [REQ-MCPGAT-0112](../../requirements/mcpgat.md#req-mcpgat-0112)
 
 In edge enforcement mode, tool calls may be invoked directly against a node-local MCP server by a node-local agent runtime.
 In that case:
@@ -81,7 +81,7 @@ Payload storage
 
 ## Storage in PostgreSQL
 
-The canonical table definition is in [`docs/tech_specs/postgres_schema.md`](postgres_schema.md#spec-cynai-schema-mcptoolcallauditlog).
+The canonical table definition is in [`docs/tech_specs/postgres_schema.md`](../postgres_schema.md#spec-cynai-schema-mcptoolcallauditlog).
 
 ## Retention
 

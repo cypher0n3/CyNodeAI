@@ -4,14 +4,16 @@
 
 This directory is the **canonical reference** for MCP tool names, argument schemas, behavior, algorithms, role allowlists, and per-tool scope.
 Each document provides full specs, argument contracts, behavior, and requirement traceability.
-Naming conventions, common argument requirements (task/job scoping, size limits), and the response/error model are in [MCP Tooling](../mcp_tooling.md).
+Naming conventions, common argument requirements (task/job scoping, size limits), and the response/error model are in [MCP Tooling](../mcp/mcp_tooling.md).
 
 ## Canonical Definition Format
 
 All tool definitions in these specs comply with the project's canonical MCP tool definition format and endpoint resolution:
 
 - **Definition format**: `MCPTool`, `ToolInvocation`, `ToolAgentScope`; `Server` (default or endpoint key), `Name`, `Help`, `Scope`, `Tools`.
-- **Endpoint resolution**: When `Server` is not `default`, the gateway resolves the endpoint slug to base URL and credentials in request context (per the project's endpoint registry spec once adopted).
+  See [MCP Tool Definitions](../mcp/mcp_tool_definitions.md) for the complete specification.
+- **Endpoint resolution**: When `Server` is not `default`, the gateway resolves the endpoint slug to base URL and credentials in request context.
+  See [MCP Endpoint Registry](../mcp/mcp_endpoint_registry.md) for the complete specification.
 
 Built-in catalog tools use `Server: default` and are implemented by the orchestrator MCP gateway.
 
@@ -43,5 +45,5 @@ Built-in catalog tools use `Server: default` and are implemented by the orchestr
 
 ## Related Documents
 
-- [MCP Tooling](../mcp_tooling.md): goals, naming conventions, common argument requirements, response/error model, MCP role, categories, help server.
-- [MCP Gateway Enforcement](../mcp_gateway_enforcement.md): gateway enforcement mechanics, tokens, edge mode, auditing (allowlist and scope definitions are in this directory).
+- [MCP Tooling](../mcp/mcp_tooling.md): goals, naming conventions, common argument requirements, response/error model, MCP role, categories, help server.
+- [MCP Gateway Enforcement](../mcp/mcp_gateway_enforcement.md): gateway enforcement mechanics, tokens, edge mode, auditing (allowlist and scope definitions are in this directory).

@@ -21,7 +21,7 @@ Full CRUD for system settings; list responses MUST be size-limited and support p
 Related documents
 
 - [User Preferences](../user_preferences.md): distinction between preferences and system settings
-- [MCP Gateway Enforcement](../mcp_gateway_enforcement.md): gateway enforcement mechanics
+- [MCP Gateway Enforcement](../mcp/mcp_gateway_enforcement.md): gateway enforcement mechanics
 - [Access, allowlists, and per-tool scope](access_allowlists_and_scope.md): role allowlists and scope
 
 ## Definition Compliance

@@ -72,6 +72,10 @@ The gateway SHOULD support:
   - Manage connector credentials (create, rotate, revoke, disable) and view connector audit and operation history.
   - Enforce per-operation policy (read, send, admin) for connector invocations and administration.
   - See [`docs/tech_specs/connector_framework.md`](connector_framework.md).
+- MCP endpoint registry
+  - Register, list, update, and delete external MCP server endpoints (per-user or shared).
+  - Manage endpoint credentials and scope (user-scoped vs shared).
+  - See [`docs/tech_specs/mcp/mcp_endpoint_registry.md`](mcp/mcp_endpoint_registry.md) for the complete specification.
 - Interactive sessions
   - Chat-like interaction that creates or updates tasks and threads.
 - Capability discovery
@@ -110,7 +114,7 @@ Compatibility layers MUST preserve orchestrator policy constraints and MUST not 
 ## MCP Tool Interface
 
 The User API Gateway MAY expose MCP-facing capability discovery and tool routing for user clients.
-Agents use MCP tools as the standard tool interface, as defined in [`docs/tech_specs/mcp_tooling.md`](mcp_tooling.md).
+Agents use MCP tools as the standard tool interface, as defined in [`docs/tech_specs/mcp/mcp_tooling.md`](mcp/mcp_tooling.md).
 
 ## Data REST API
 

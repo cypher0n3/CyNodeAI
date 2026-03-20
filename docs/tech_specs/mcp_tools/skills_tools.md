@@ -31,7 +31,7 @@ Skills (full CRUD) tool names:
 - `skills.update`
 - `skills.delete`
 
-Allowlist and scope are defined in [Skills Storage and Inference](../skills_storage_and_inference.md) and [MCP Gateway Enforcement](../mcp_gateway_enforcement.md).
+Allowlist and scope are defined in [Skills Storage and Inference](../skills_storage_and_inference.md) and [MCP Gateway Enforcement](../mcp/mcp_gateway_enforcement.md).
 
 ### Traces To
 

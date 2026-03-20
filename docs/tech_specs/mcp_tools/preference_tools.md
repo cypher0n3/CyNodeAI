@@ -19,7 +19,7 @@ Full CRUD for preferences; scope_type and scope_id define the scope; list respon
 Related documents
 
 - [User Preferences](../user_preferences.md): preference data model, scope semantics, effective resolution algorithm
-- [MCP Gateway Enforcement](../mcp_gateway_enforcement.md): gateway enforcement mechanics
+- [MCP Gateway Enforcement](../mcp/mcp_gateway_enforcement.md): gateway enforcement mechanics
 - [Access, allowlists, and per-tool scope](access_allowlists_and_scope.md): role allowlists and scope
 
 ## Definition Compliance

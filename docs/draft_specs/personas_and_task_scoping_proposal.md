@@ -433,4 +433,4 @@ The following draft specs in `docs/draft_specs/` are related; this proposal alig
 ## Traceability Placeholders
 
 - Requirements: To be added in docs/requirements (AGENTS, PROJCT, and/or SCHEMA) after acceptance.
-- Existing specs: [cynode_sba.md](../tech_specs/cynode_sba.md), [project_manager_agent.md](../tech_specs/project_manager_agent.md), [postgres_schema.md](../tech_specs/postgres_schema.md), [skills_storage_and_inference.md](../tech_specs/skills_storage_and_inference.md), [mcp_tools/](../tech_specs/mcp_tools/README.md), [mcp_gateway_enforcement.md](../tech_specs/mcp_gateway_enforcement.md), [pma_task_creation_skill](../../default_skills/pma_task_creation_skill.md).
+- Existing specs: [cynode_sba.md](../tech_specs/cynode_sba.md), [project_manager_agent.md](../tech_specs/project_manager_agent.md), [postgres_schema.md](../tech_specs/postgres_schema.md), [skills_storage_and_inference.md](../tech_specs/skills_storage_and_inference.md), [mcp_tools/](../tech_specs/mcp_tools/README.md), [mcp_gateway_enforcement.md](../tech_specs/mcp/mcp_gateway_enforcement.md), [pma_task_creation_skill](../../default_skills/pma_task_creation_skill.md).

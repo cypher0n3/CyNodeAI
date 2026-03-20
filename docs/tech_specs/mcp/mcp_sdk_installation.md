@@ -14,7 +14,7 @@ This document defines practical conventions for installing and using MCP SDKs in
 It focuses on making MCP integration easy to adopt while keeping versions pinned and reproducible.
 
 This document does not define CyNodeAI tool policy.
-Tool policy is defined in [`docs/tech_specs/mcp_tooling.md`](mcp_tooling.md) and [`docs/tech_specs/mcp_gateway_enforcement.md`](mcp_gateway_enforcement.md).
+Tool policy is defined in [`docs/tech_specs/mcp/mcp_tooling.md`](mcp_tooling.md) and [`docs/tech_specs/mcp/mcp_gateway_enforcement.md`](mcp_gateway_enforcement.md).
 
 ## Goals
 
@@ -41,7 +41,7 @@ SDK
 
 #### Traces to Requirements
 
-- [REQ-MCPTOO-0111](../requirements/mcptoo.md#req-mcptoo-0111)
+- [REQ-MCPTOO-0111](../../requirements/mcptoo.md#req-mcptoo-0111)
 
 ### Go Service Module Layout
 
@@ -52,8 +52,8 @@ SDK
 
 #### Go Service Module Layout Requirements Traces
 
-- [REQ-MCPTOO-0112](../requirements/mcptoo.md#req-mcptoo-0112)
-- [REQ-MCPTOO-0113](../requirements/mcptoo.md#req-mcptoo-0113)
+- [REQ-MCPTOO-0112](../../requirements/mcptoo.md#req-mcptoo-0112)
+- [REQ-MCPTOO-0113](../../requirements/mcptoo.md#req-mcptoo-0113)
 
 Install and import (example)
 
@@ -67,7 +67,7 @@ import "github.com/modelcontextprotocol/go-sdk/mcp"
 
 Toolchain
 
-- Follow [`docs/tech_specs/go_rest_api_standards.md`](go_rest_api_standards.md) for toolchain pinning guidance.
+- Follow [`docs/tech_specs/go_rest_api_standards.md`](../go_rest_api_standards.md) for toolchain pinning guidance.
 
 ## Python SDK (When a Python Workflow Runtime is Used)
 
@@ -80,7 +80,7 @@ If the workflow runtime needs MCP protocol support directly, it SHOULD use the o
 
 #### Python SDK Usage Requirements Traces
 
-- [REQ-MCPTOO-0114](../requirements/mcptoo.md#req-mcptoo-0114)
+- [REQ-MCPTOO-0114](../../requirements/mcptoo.md#req-mcptoo-0114)
 
 ### Workflow Runtime Database Access
 
@@ -92,7 +92,7 @@ If the workflow runtime needs MCP protocol support directly, it SHOULD use the o
 
 #### Workflow Runtime Database Access Requirements Traces
 
-- [REQ-MCPTOO-0115](../requirements/mcptoo.md#req-mcptoo-0115)
+- [REQ-MCPTOO-0115](../../requirements/mcptoo.md#req-mcptoo-0115)
 
 ## Reference Servers for Local Development
 

@@ -221,7 +221,7 @@ It covers worker-node behavior and the worker API contract for job execution and
   <a id="req-worker-0162"></a>
 - **REQ-WORKER-0163:** Agent-to-orchestrator proxy endpoints exposed by the Worker API MUST be bound only to loopback or a Unix domain socket, MUST authenticate using orchestrator-issued agent credentials or capability leases, and MUST emit audit records sufficient to attribute actions to agent identity and task context.
   [CYNAI.WORKER.ManagedAgentProxyBidirectional](../tech_specs/worker_api.md#spec-cynai-worker-managedagentproxy)
-  [CYNAI.MCPGAT.EdgeEnforcementMode](../tech_specs/mcp_gateway_enforcement.md#spec-cynai-mcpgat-edgeenforcement)
+  [CYNAI.MCPGAT.EdgeEnforcementMode](../tech_specs/mcp/mcp_gateway_enforcement.md#spec-cynai-mcpgat-edgeenforcement)
   <a id="req-worker-0163"></a>
 - **REQ-WORKER-0164:** The worker MUST hold orchestrator-issued agent tokens (and capability leases when used) and MUST attach the appropriate credential when forwarding agent-originated requests to the orchestrator.
   The worker MUST NOT pass agent tokens or other orchestrator-issued secrets to agent containers or to agents; agents MUST NOT be given tokens or secrets directly.
@@ -229,8 +229,8 @@ It covers worker-node behavior and the worker API contract for job execution and
   [CYNAI.WORKER.AgentTokensWorkerHeldOnly](../tech_specs/worker_node.md#spec-cynai-worker-agenttokensworkerheldonly)
   [CYNAI.WORKER.AgentTokenStorageAndLifecycle](../tech_specs/worker_node.md#spec-cynai-worker-agenttokenstorageandlifecycle)
   [CYNAI.WORKER.Payload.ConfigurationV1](../tech_specs/worker_node_payloads.md#spec-cynai-worker-payload-configuration-v1)
-  [CYNAI.MCPGAT.AgentScopedTokens](../tech_specs/mcp_gateway_enforcement.md#spec-cynai-mcpgat-agentscopedtokens)
-  [CYNAI.MCPGAT.AgentTokensWorkerProxyOnly](../tech_specs/mcp_gateway_enforcement.md#spec-cynai-mcpgat-agenttokensworkerproxyonly)
+  [CYNAI.MCPGAT.AgentScopedTokens](../tech_specs/mcp/mcp_gateway_enforcement.md#spec-cynai-mcpgat-agentscopedtokens)
+  [CYNAI.MCPGAT.AgentTokensWorkerProxyOnly](../tech_specs/mcp/mcp_gateway_enforcement.md#spec-cynai-mcpgat-agenttokensworkerproxyonly)
   <a id="req-worker-0164"></a>
 - **REQ-WORKER-0165:** Nodes MUST store orchestrator-issued secrets in a node-local secure store and MUST encrypt those secrets at rest when persisted to disk.
   [CYNAI.WORKER.NodeLocalSecureStore](../tech_specs/worker_node.md#spec-cynai-worker-nodelocalsecurestore)

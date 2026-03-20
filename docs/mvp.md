@@ -30,7 +30,7 @@ The current implementation-oriented breakdown (4-8 hour chunks) is maintained in
   - Canonical node payloads (capability report, bootstrap, config delivery, config ack).
     See [`docs/tech_specs/worker_node_payloads.md`](tech_specs/worker_node_payloads.md).
   - MCP gateway enforcement rules and initial allowlists (spec definition, with runtime integration in Phase 2).
-    See [`docs/tech_specs/mcp_gateway_enforcement.md`](tech_specs/mcp_gateway_enforcement.md).
+    See [`docs/tech_specs/mcp/mcp_gateway_enforcement.md`](tech_specs/mcp/mcp_gateway_enforcement.md).
   - LangGraph MVP workflow contract (spec definition, with runtime integration in Phase 2).
     See [`docs/tech_specs/langgraph_mvp.md`](tech_specs/langgraph_mvp.md).
 
@@ -62,9 +62,9 @@ The current implementation-oriented breakdown (4-8 hour chunks) is maintained in
 
 - **MCP in the loop (Phase 2)**.
   - Orchestrator MCP tool gateway enforces allowlists, scoping, and auditing for tool calls in the runtime loop.
-    See [`docs/tech_specs/mcp_gateway_enforcement.md`](tech_specs/mcp_gateway_enforcement.md) and [`docs/tech_specs/mcp_tool_call_auditing.md`](tech_specs/mcp_tool_call_auditing.md).
+    See [`docs/tech_specs/mcp/mcp_gateway_enforcement.md`](tech_specs/mcp/mcp_gateway_enforcement.md) and [`docs/tech_specs/mcp/mcp_tool_call_auditing.md`](tech_specs/mcp/mcp_tool_call_auditing.md).
   - Orchestrator-side agents use MCP database tools (no direct PostgreSQL access).
-    See [`docs/tech_specs/mcp_tooling.md`](tech_specs/mcp_tooling.md).
+    See [`docs/tech_specs/mcp/mcp_tooling.md`](tech_specs/mcp/mcp_tooling.md).
   - LangGraph MVP workflow drives tasks with persisted checkpoints and resumability.
     See [`docs/tech_specs/langgraph_mvp.md`](tech_specs/langgraph_mvp.md).
 
@@ -98,7 +98,7 @@ Deferred capabilities (explicit)
 - **Web egress proxy**.
   See [`docs/tech_specs/web_egress_proxy.md`](tech_specs/web_egress_proxy.md).
 - **Git egress MCP**.
-  See [`docs/tech_specs/git_egress_mcp.md`](tech_specs/git_egress_mcp.md).
+  See [`docs/tech_specs/mcp_tools/git_egress.md`](tech_specs/mcp_tools/git_egress.md).
 - **Connector framework**.
   See [`docs/tech_specs/connector_framework.md`](tech_specs/connector_framework.md).
 - **Runs and sessions API, streaming status, logs, and transcript retention**.
@@ -121,7 +121,7 @@ For the full task breakdown with requirement and spec references, see [`docs/mvp
   - Specify capability report fields, hashing, and change reporting behavior.
   - Specify configuration refresh, acknowledgement payload, and rollback reporting.
 - Define MCP gateway enforcement and initial tool allowlists by role.
-  See [`docs/tech_specs/mcp_gateway_enforcement.md`](tech_specs/mcp_gateway_enforcement.md).
+  See [`docs/tech_specs/mcp/mcp_gateway_enforcement.md`](tech_specs/mcp/mcp_gateway_enforcement.md).
 - Define the LangGraph MVP workflow contract and checkpointing requirements.
   See [`docs/tech_specs/langgraph_mvp.md`](tech_specs/langgraph_mvp.md).
 

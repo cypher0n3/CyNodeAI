@@ -60,7 +60,7 @@ This section lists concrete spec edits by document.
   The set of repos associated with a project (`project_git_repos` for that `project_id`) is used for:
   1. **Git egress:** Push/PR allowlist when a task has `project_id` (existing; see [Git Egress Project-Scoped Allowlist](../tech_specs/project_git_repos.md#spec-cynai-apiegr-gitegressprojectscope)).
   2. **Workspace provisioning:** The only repos that MAY be cloned to populate a job's `/workspace` when the task has `project_id`.
-- Enforcement for (1) is in [git_egress_mcp.md](../tech_specs/git_egress_mcp.md); for (2) in the new "Workspace Provisioning" subsection below.
+- Enforcement for (1) is in [git_egress.md](../tech_specs/mcp_tools/git_egress.md); for (2) in the new "Workspace Provisioning" subsection below.
 - **Add: Subsection "Workspace Provisioning (Repo to Sandbox)".**
   Spec ID (proposed): `CYNAI.PROJCT.WorkspaceProvisioning`
 - **Responsibility:** Clone or fetch for workspace provisioning MUST be performed by a component that holds Git credentials (e.g. the same service that implements Git egress, or a dedicated Git workspace provisioner).
@@ -82,7 +82,7 @@ This section lists concrete spec edits by document.
 
 ### 2. Credential Boundary and Clone Responsibility
 
-- **Location:** [git_egress_mcp.md](../tech_specs/git_egress_mcp.md) or [project_git_repos.md](../tech_specs/project_git_repos.md).
+- **Location:** [git_egress.md](../tech_specs/mcp_tools/git_egress.md) or [project_git_repos.md](../tech_specs/project_git_repos.md).
 - **Add: Short subsection "Git Credential Boundary" (or extend Credential Storage).**
   Git credentials (tokens, deploy keys) MUST be stored and used only by the component(s) that implement Git egress and/or workspace provisioning (e.g. orchestrator-side Git egress service, API Egress Server, or a dedicated Git provisioner).
   They MUST NOT be passed to worker nodes, Node Manager, or sandbox containers.
@@ -144,7 +144,7 @@ Exact REQ IDs and domain (APIEGR vs PROJCT vs new domain) to be assigned when pr
 ## References
 
 - [project_git_repos.md](../tech_specs/project_git_repos.md)
-- [git_egress_mcp.md](../tech_specs/git_egress_mcp.md)
+- [git_egress.md](../tech_specs/mcp_tools/git_egress.md)
 - [cynode_sba.md](../tech_specs/cynode_sba.md)
 - [worker_node.md](../tech_specs/worker_node.md)
 - [worker_api.md](../tech_specs/worker_api.md)

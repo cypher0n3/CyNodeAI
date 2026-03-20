@@ -72,7 +72,7 @@ Recent tech spec updates incorporated into this plan:
   - Schema tables (`sandbox_images`, `sandbox_image_versions`, `node_sandbox_image_availability`) are in scope for MVP so the schema can be created and upgraded.
   - Full registry behavior (rank-ordered registries, allowed images, node pull workflow, publish workflow) is **deferred until after MVP**; implementation of registry flows is out of scope for Phase 0 through Phase 4.
 
-- **User-installable MCP tools** ([user_installable_mcp_tools.md](../docs/tech_specs/user_installable_mcp_tools.md)):
+- **User-installable MCP tools** ([user_installable_mcp_tools.md](../docs/tech_specs/mcp/user_installable_mcp_tools.md)):
   - Not in current MVP scope per [mvp.md](mvp.md).
   - Deferred; if product adds them later, this plan can be updated.
 
@@ -323,7 +323,7 @@ There is no Phase 5 in [`docs/tech_specs/_main.md`](../docs/tech_specs/_main.md)
     - [`REQ-MCPGAT-0103`](../docs/requirements/mcpgat.md#req-mcpgat-0103)
     - [`REQ-MCPGAT-0106`](../docs/requirements/mcpgat.md#req-mcpgat-0106)
   - **Specs**:
-    - [`mcp_gateway_enforcement.md`](../docs/tech_specs/mcp_gateway_enforcement.md)
+    - [`mcp_gateway_enforcement.md`](../docs/tech_specs/mcp/mcp_gateway_enforcement.md)
 
 - **P2-02 (4-8h): Emit an audit record for every routed MCP tool call (allow/deny and success/failure).**
   - **Deliverable**: Audit records are always written, regardless of allow/deny and success/failure.
@@ -333,7 +333,7 @@ There is no Phase 5 in [`docs/tech_specs/_main.md`](../docs/tech_specs/_main.md)
     - [`REQ-MCPGAT-0107`](../docs/requirements/mcpgat.md#req-mcpgat-0107)
     - [`REQ-MCPGAT-0110`](../docs/requirements/mcpgat.md#req-mcpgat-0110)
   - **Specs**:
-    - [`mcp_tool_call_auditing.md`](../docs/tech_specs/mcp_tool_call_auditing.md)
+    - [`mcp_tool_call_auditing.md`](../docs/tech_specs/mcp/mcp_tool_call_auditing.md)
 
 - **P2-03 (4-8h): Implement the minimal MCP tool specifications slice for preferences (get, list, effective).** (See [`mcp_tools/README.md`](tech_specs/mcp_tools/README.md).)
   - **Deliverable**: Tools `db.preference.get`, `db.preference.list`, and `db.preference.effective` exist with typed schemas and size-limited responses.
@@ -691,5 +691,5 @@ The basic E2E path for SBA job results is also in place.
 - [docs/tech_specs/cynork_cli.md](../docs/tech_specs/cynork_cli.md) - CLI goals, commands, MVP scope.
 - [docs/tech_specs/ports_and_endpoints.md](../docs/tech_specs/ports_and_endpoints.md) - Default ports and E2E/BDD port usage.
 - [docs/tech_specs/sandbox_image_registry.md](../docs/tech_specs/sandbox_image_registry.md) - Registry behavior deferred; schema tables in scope for MVP (see Tech Spec Alignment).
-- [docs/tech_specs/user_installable_mcp_tools.md](../docs/tech_specs/user_installable_mcp_tools.md) - Out of MVP scope; deferred.
+- [docs/tech_specs/mcp/user_installable_mcp_tools.md](../docs/tech_specs/mcp/user_installable_mcp_tools.md) - Out of MVP scope; deferred.
 - [docs/development_setup.md](../docs/development_setup.md) - Local setup, scripts, E2E, troubleshooting.

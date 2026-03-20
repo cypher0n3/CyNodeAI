@@ -12,13 +12,13 @@
 
 This document is the **canonical** specification for which built-in MCP tools each agent role may invoke (role-based allowlists), how **per-tool scope** (sandbox vs PM vs both) interacts with those allowlists, and **admin-configurable** per-tool enable or disable.
 
-The orchestrator MCP gateway **enforces** these rules at request time; mechanics, tokens, edge mode, and auditing are in [MCP Gateway Enforcement](../mcp_gateway_enforcement.md).
+The orchestrator MCP gateway **enforces** these rules at request time; mechanics, tokens, edge mode, and auditing are in [MCP Gateway Enforcement](../mcp/mcp_gateway_enforcement.md).
 
 Related documents
 
 - Per-tool contracts and algorithms: [MCP tool specs](README.md)
-- Naming, common arguments, response model: [MCP Tooling](../mcp_tooling.md)
-- User-installed tools and configurable scope: [User-Installable MCP Tools](../user_installable_mcp_tools.md)
+- Naming, common arguments, response model: [MCP Tooling](../mcp/mcp_tooling.md)
+- User-installed tools and configurable scope: [User-Installable MCP Tools](../mcp/user_installable_mcp_tools.md)
 
 ## Role-Based Tool Allowlists
 
@@ -114,7 +114,7 @@ User-installed (custom) MCP tools
 
 - User-installable MCP tools (registration, per-tool scope configuration, persistence, Web Console and CLI exposure) are defined in a dedicated spec.
   Users MUST be able to install their own MCP tools and configure per-tool scope (sandbox only, PM only, or both); the orchestrator MUST persist that scope and the gateway MUST use it when enforcing the rules above.
-  See [User-Installable MCP Tools](../user_installable_mcp_tools.md).
+  See [User-Installable MCP Tools](../mcp/user_installable_mcp_tools.md).
 
 ### Per-Tool Scope Requirements Traces
 

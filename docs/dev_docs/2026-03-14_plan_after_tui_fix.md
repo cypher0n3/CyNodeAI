@@ -23,7 +23,7 @@ Outcome: end-to-end interactive streaming, minimum MCP-in-the-loop for PMA chat,
 
 - `2026-03-12_plan_next_round_execution.md` (doc removed; source of outstanding work; Phases 3-8 unchecked items).
 - [docs/requirements/client.md](../requirements/client.md), [docs/requirements/usrgwy.md](../requirements/usrgwy.md), [docs/requirements/pmagnt.md](../requirements/pmagnt.md), [docs/requirements/orches.md](../requirements/orches.md).
-- [docs/tech_specs/openai_compatible_chat_api.md](../tech_specs/openai_compatible_chat_api.md) (streaming), [docs/tech_specs/chat_threads_and_messages.md](../tech_specs/chat_threads_and_messages.md) (thinking persistence), [docs/tech_specs/cynode_pma.md](../tech_specs/cynode_pma.md) (streaming, MCP), [docs/tech_specs/cynork_tui.md](../tech_specs/cynork_tui.md), [docs/tech_specs/mcp_gateway_enforcement.md](../tech_specs/mcp_gateway_enforcement.md).
+- [docs/tech_specs/openai_compatible_chat_api.md](../tech_specs/openai_compatible_chat_api.md) (streaming), [docs/tech_specs/chat_threads_and_messages.md](../tech_specs/chat_threads_and_messages.md) (thinking persistence), [docs/tech_specs/cynode_pma.md](../tech_specs/cynode_pma.md) (streaming, MCP), [docs/tech_specs/cynork_tui.md](../tech_specs/cynork_tui.md), [docs/tech_specs/mcp/mcp_gateway_enforcement.md](../tech_specs/mcp/mcp_gateway_enforcement.md).
 - Implementation: gateway, orchestrator handlers, cynork/internal/chat (transport), cynork/internal/tui, agents/internal/pma, scripts/test_scripts (PTY harness).
 
 ## Constraints
@@ -138,7 +138,7 @@ Pull forward the minimum MCP gateway allow-path and PMA chat tool set so PMA cha
 #### Task 2 Requirements and Specifications
 
 - [REQ-PMAGNT-0106](../requirements/pmagnt.md), [REQ-PMAGNT-0107](../requirements/pmagnt.md).
-- [CYNAI.MCPGAT.PmAgentAllowlist](../tech_specs/mcp_gateway_enforcement.md), [CYNAI.PMAGNT.McpToolAccess](../tech_specs/cynode_pma.md), [CYNAI.AGENTS.PMLlmToolImplementation](../tech_specs/project_manager_agent.md).
+- [CYNAI.MCPGAT.PmAgentAllowlist](../tech_specs/mcp/mcp_gateway_enforcement.md), [CYNAI.PMAGNT.McpToolAccess](../tech_specs/cynode_pma.md), [CYNAI.AGENTS.PMLlmToolImplementation](../tech_specs/project_manager_agent.md).
 - 2026-03-12 plan (doc removed) Phase 3 "Minimum MCP Slice for PMA Thinking Models".
 
 #### Discovery (Task 2) Steps

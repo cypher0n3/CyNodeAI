@@ -190,7 +190,7 @@ Recommended starting set:
 
 - Direct VCS fetches (for example Go fetching from arbitrary Git hosts) should be avoided in favor of registry or proxy patterns.
 - Git remote operations remain governed by Git egress.
-  See [`docs/tech_specs/git_egress_mcp.md`](git_egress_mcp.md).
+  See [`docs/tech_specs/mcp_tools/git_egress.md`](mcp_tools/git_egress.md).
 
 ### DNS and Private Network Protections
 

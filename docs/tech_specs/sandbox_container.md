@@ -157,7 +157,7 @@ Sandbox control is performed by the Node Manager using container runtime operati
 - [REQ-SANDBX-0104](../requirements/sandbx.md#req-sandbx-0104)
 - [REQ-SANDBX-0105](../requirements/sandbx.md#req-sandbx-0105)
 
-See [`docs/tech_specs/worker_node.md`](worker_node.md) and [`docs/tech_specs/mcp_tooling.md`](mcp_tooling.md).
+See [`docs/tech_specs/worker_node.md`](worker_node.md) and [`docs/tech_specs/mcp/mcp_tooling.md`](mcp/mcp_tooling.md).
 
 ## Node-Local Inference Access
 
@@ -243,7 +243,7 @@ Disallowed (remote-affecting)
 - Sandboxes MUST NOT contact Git remotes directly.
   This includes `git clone`, `git fetch`, `git pull`, `git push`, submodule fetch/update, Git LFS operations, and any Git remote helper that performs network access.
 - Remote Git operations MUST be performed by Git egress, using task-scoped changeset artifacts.
-  See `docs/tech_specs/git_egress_mcp.md`.
+  See `docs/tech_specs/mcp_tools/git_egress.md`.
 
 ## Recommended Optional Tooling Profiles
 
@@ -392,7 +392,7 @@ Relevant controlled services
 - API Egress Server: [`docs/tech_specs/api_egress_server.md`](api_egress_server.md)
 - Web Egress Proxy: [`docs/tech_specs/web_egress_proxy.md`](web_egress_proxy.md)
 - Secure Browser Service: [`docs/tech_specs/secure_browser_service.md`](secure_browser_service.md)
-- Git Egress MCP: [`docs/tech_specs/git_egress_mcp.md`](git_egress_mcp.md)
+- Git Egress MCP: [`docs/tech_specs/mcp_tools/git_egress.md`](mcp_tools/git_egress.md)
 
 ## Artifacts and Data Exchange
 
@@ -407,7 +407,7 @@ Sandboxes exchange data with the orchestrator through artifacts and orchestrator
 - [REQ-SANDBX-0113](../requirements/sandbx.md#req-sandbx-0113)
 - [REQ-SANDBX-0114](../requirements/sandbx.md#req-sandbx-0114)
 
-See [`docs/tech_specs/user_api_gateway.md`](user_api_gateway.md) and [`docs/tech_specs/mcp_tooling.md`](mcp_tooling.md).
+See [`docs/tech_specs/user_api_gateway.md`](user_api_gateway.md) and [`docs/tech_specs/mcp/mcp_tooling.md`](mcp/mcp_tooling.md).
 
 ## Long-Running Session Sandboxes
 

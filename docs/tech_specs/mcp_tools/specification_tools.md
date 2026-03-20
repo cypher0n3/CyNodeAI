@@ -21,7 +21,7 @@ Related documents
 
 - [Postgres Schema - Specifications Table](../projects_and_scopes.md#spec-cynai-schema-specificationstable)
 - [Postgres Schema - SpecificationObject contract](../projects_and_scopes.md#spec-cynai-schema-specificationobjectcontract)
-- [MCP Gateway Enforcement](../mcp_gateway_enforcement.md)
+- [MCP Gateway Enforcement](../mcp/mcp_gateway_enforcement.md)
 - [Access, allowlists, and per-tool scope](access_allowlists_and_scope.md)
 
 ## Definition Compliance

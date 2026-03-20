@@ -153,7 +153,7 @@ If full CRUD for plans and tasks via MCP is out of scope for MVP, the integratio
 
 1. **Review:** Review [pma_plan_creation_skill.md](../../default_skills/pma_plan_creation_skill.md) and this integration draft with stakeholders; align on MCP tool set (minimal vs full CRUD) and whether the skill is requirements-mandatory (MUST) or advisory (SHOULD).
 2. **Requirements:** Add or update requirements in `docs/requirements/` as above; add traceability from requirements to tech specs.
-3. **Tech specs:** Update `project_manager_agent.md`, `cynode_pma.md`, `mcp_tools/` (task_tools.md, project_tools.md, and help_tools.md as needed), and optionally `skills_storage_and_inference.md` and `mcp_gateway_enforcement.md` per sections above.
+3. **Tech specs:** Update `project_manager_agent.md`, `cynode_pma.md`, `mcp_tools/` (task_tools.md, project_tools.md, and help_tools.md as needed), and optionally `skills_storage_and_inference.md` and `mcp/mcp_gateway_enforcement.md` per sections above.
 4. **Skill content:** Move the skill content to its canonical location: either (a) a new tech spec section or addendum that is the "plan creation procedure," or (b) the agent instructions bundle plus (if used) a system skill file in the skill store.
    Remove or archive the draft from `docs/draft_specs/` once the single source of truth is in place.
 5. **Validation:** Ensure `just docs-check` and any link/spec validators pass; add or update feature files or E2E coverage for "PMA creates plan via MCP" and "PMA refines plan respecting lock" if not already covered.
@@ -162,6 +162,6 @@ If full CRUD for plans and tasks via MCP is out of scope for MVP, the integratio
 
 - Skill draft: [pma_plan_creation_skill.md](../../default_skills/pma_plan_creation_skill.md).
 - Requirements: [pmagnt.md](../requirements/pmagnt.md), [projct.md](../requirements/projct.md), [agents.md](../requirements/agents.md).
-- Tech specs: [project_manager_agent.md](../tech_specs/project_manager_agent.md), [cynode_pma.md](../tech_specs/cynode_pma.md), [mcp_tools/](../tech_specs/mcp_tools/README.md), [mcp_gateway_enforcement.md](../tech_specs/mcp_gateway_enforcement.md), [skills_storage_and_inference.md](../tech_specs/skills_storage_and_inference.md), [projects_and_scopes.md](../tech_specs/projects_and_scopes.md), [postgres_schema.md](../tech_specs/postgres_schema.md).
+- Tech specs: [project_manager_agent.md](../tech_specs/project_manager_agent.md), [cynode_pma.md](../tech_specs/cynode_pma.md), [mcp_tools/](../tech_specs/mcp_tools/README.md), [mcp_gateway_enforcement.md](../tech_specs/mcp/mcp_gateway_enforcement.md), [skills_storage_and_inference.md](../tech_specs/skills_storage_and_inference.md), [projects_and_scopes.md](../tech_specs/projects_and_scopes.md), [postgres_schema.md](../tech_specs/postgres_schema.md).
 - Drafts: `2026-03-13_pma_plan_drafting_improvements_proposal.md` (doc removed; dependency-only execution, task refs by name, optional YAML frontmatter, runnability/parallelism), [task_routing_pma_first_task_state.md](task_routing_pma_first_task_state.md).
 - Spec authoring: [spec_authoring_writing_and_validation.md](../docs_standards/spec_authoring_writing_and_validation.md).

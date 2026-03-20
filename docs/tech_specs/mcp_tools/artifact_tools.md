@@ -32,7 +32,7 @@ Endpoint resolution applies only when defining external tools (Server not `defau
 - Spec ID: `CYNAI.MCPTOO.ArtifactTools` <a id="spec-cynai-mcptoo-artifacttools"></a>
 
 PMA and PAA MUST use these MCP tools to access task-scoped artifacts by path.
-Each tool is a single direct invocation; required arguments conform to [Common Argument Requirements](../mcp_tooling.md#spec-cynai-mcptoo-commonargumentrequirements) (task scoping, size limits).
+Each tool is a single direct invocation; required arguments conform to [Common Argument Requirements](../mcp/mcp_tooling.md#spec-cynai-mcptoo-commonargumentrequirements) (task scoping, size limits).
 
 ### `artifact.put` Operation
 
@@ -45,7 +45,7 @@ Each tool is a single direct invocation; required arguments conform to [Common A
 
 #### `artifact.put` Outputs
 
-- On success: structured result with `status: success` and confirmation (e.g. path or artifact_id); response MUST be size-limited per [Response and Error Model](../mcp_tooling.md#spec-cynai-mcptoo-toolresponse).
+- On success: structured result with `status: success` and confirmation (e.g. path or artifact_id); response MUST be size-limited per [Response and Error Model](../mcp/mcp_tooling.md#spec-cynai-mcptoo-toolresponse).
 - On error: `status: error`, `error` object with `type`, `message`, optional `details`; MUST NOT leak secrets.
 
 #### `artifact.put` Behavior

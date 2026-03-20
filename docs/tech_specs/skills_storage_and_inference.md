@@ -264,9 +264,9 @@ Related specs
 - [REQ-SKILLS-0114](../requirements/skills.md#req-skills-0114)
 
 Models (agents) can perform full CRUD on skills for the user when directed.
-All skill tools are routed through the orchestrator MCP gateway; identity, role-based allowlists, and access control apply (see [Access, allowlists, and per-tool scope](mcp_tools/access_allowlists_and_scope.md) and [MCP Gateway Enforcement](mcp_gateway_enforcement.md)).
+All skill tools are routed through the orchestrator MCP gateway; identity, role-based allowlists, and access control apply (see [Access, allowlists, and per-tool scope](mcp_tools/access_allowlists_and_scope.md) and [MCP Gateway Enforcement](mcp/mcp_gateway_enforcement.md)).
 Same controls as web and CLI: auditing on write, default user scope, scope elevation only with permission; list/get return only skills the caller is entitled to see; update/delete require authorization (owner or admin).
-All invocations MUST be audited per [MCP tool call auditing](mcp_tool_call_auditing.md).
+All invocations MUST be audited per [MCP tool call auditing](mcp/mcp_tool_call_auditing.md).
 
 **Note:** Canonical tool contracts (single source of truth; do not duplicate in the catalog).
 
@@ -305,7 +305,7 @@ All invocations MUST be audited per [MCP tool call auditing](mcp_tool_call_audit
 
 Related specs
 
-- MCP gateway: [`docs/tech_specs/mcp_gateway_enforcement.md`](mcp_gateway_enforcement.md)
+- MCP gateway: [`docs/tech_specs/mcp/mcp_gateway_enforcement.md`](mcp/mcp_gateway_enforcement.md)
 - [MCP tool specifications](mcp_tools/README.md): index of tool specs; [Skills tools](mcp_tools/skills_tools.md) lists skills tool names for allowlist/discovery and references this spec as the source of truth for contract and behavior.
 - Skill auditing: [Skill Auditing (Malicious Pattern Scanning)](#skill-auditing-malicious-pattern-scanning)
 

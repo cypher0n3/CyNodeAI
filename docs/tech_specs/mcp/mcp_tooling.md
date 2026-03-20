@@ -26,12 +26,14 @@
 
 This document defines how CyNodeAI uses MCP as the standard interface for agent tools.
 It covers tool categories, role-based access, and database access restrictions.
-Role allowlists and **per-tool scope (sandbox vs PM)** are defined in [`docs/tech_specs/mcp_tools/access_allowlists_and_scope.md`](mcp_tools/access_allowlists_and_scope.md).
-Gateway enforcement mechanics, tokens, edge mode, and auditing are in [`docs/tech_specs/mcp_gateway_enforcement.md`](mcp_gateway_enforcement.md).
+Role allowlists and **per-tool scope (sandbox vs PM)** are defined in [`docs/tech_specs/mcp_tools/access_allowlists_and_scope.md`](../mcp_tools/access_allowlists_and_scope.md).
+Gateway enforcement mechanics, tokens, edge mode, and auditing are in [`docs/tech_specs/mcp/mcp_gateway_enforcement.md`](mcp_gateway_enforcement.md).
 The orchestrator tracks for each tool whether it is available to sandbox agents, PM agents, or both; users can install custom MCP tools and set this per tool.
-The canonical MCP tool specifications (index and per-tool specs) are in [`docs/tech_specs/mcp_tools/`](mcp_tools/README.md).
-Tool call audit storage is defined in [`docs/tech_specs/mcp_tool_call_auditing.md`](mcp_tool_call_auditing.md).
-Practical SDK installation guidance is in [`docs/tech_specs/mcp_sdk_installation.md`](mcp_sdk_installation.md).
+The canonical MCP tool specifications (index and per-tool specs) are in [`docs/tech_specs/mcp_tools/`](../mcp_tools/README.md).
+Tool definition format (MCPTool, ToolInvocation, scope) is defined in [`docs/tech_specs/mcp/mcp_tool_definitions.md`](mcp_tool_definitions.md).
+External endpoint registry and resolution are defined in [`docs/tech_specs/mcp/mcp_endpoint_registry.md`](mcp_endpoint_registry.md).
+Tool call audit storage is defined in [`docs/tech_specs/mcp/mcp_tool_call_auditing.md`](mcp_tool_call_auditing.md).
+Practical SDK installation guidance is in [`docs/tech_specs/mcp/mcp_sdk_installation.md`](mcp_sdk_installation.md).
 
 ## MCP Role in CyNodeAI
 
@@ -48,9 +50,9 @@ The orchestrator is the policy and routing point for tools.
 
 #### Traces to Requirements (MCP Role)
 
-- [REQ-MCPTOO-0100](../requirements/mcptoo.md#req-mcptoo-0100)
-- [REQ-MCPTOO-0101](../requirements/mcptoo.md#req-mcptoo-0101)
-- [REQ-MCPTOO-0102](../requirements/mcptoo.md#req-mcptoo-0102)
+- [REQ-MCPTOO-0100](../../requirements/mcptoo.md#req-mcptoo-0100)
+- [REQ-MCPTOO-0101](../../requirements/mcptoo.md#req-mcptoo-0101)
+- [REQ-MCPTOO-0102](../../requirements/mcptoo.md#req-mcptoo-0102)
 
 ## Goals (MVP Tool Surface)
 
@@ -68,9 +70,9 @@ The following requirements apply.
 
 #### Traces to Requirements (Naming)
 
-- [REQ-MCPTOO-0106](../requirements/mcptoo.md#req-mcptoo-0106)
-- [REQ-MCPTOO-0107](../requirements/mcptoo.md#req-mcptoo-0107)
-- [REQ-MCPTOO-0108](../requirements/mcptoo.md#req-mcptoo-0108)
+- [REQ-MCPTOO-0106](../../requirements/mcptoo.md#req-mcptoo-0106)
+- [REQ-MCPTOO-0107](../../requirements/mcptoo.md#req-mcptoo-0107)
+- [REQ-MCPTOO-0108](../../requirements/mcptoo.md#req-mcptoo-0108)
 
 #### Agent-Facing Tool Names
 
@@ -108,8 +110,8 @@ Size limits
 
 ### Traces to Requirements (Response and Error)
 
-- [REQ-MCPTOO-0109](../requirements/mcptoo.md#req-mcptoo-0109)
-- [REQ-MCPTOO-0110](../requirements/mcptoo.md#req-mcptoo-0110)
+- [REQ-MCPTOO-0109](../../requirements/mcptoo.md#req-mcptoo-0109)
+- [REQ-MCPTOO-0110](../../requirements/mcptoo.md#req-mcptoo-0110)
 
 ## Tool Categories
 
@@ -133,13 +135,13 @@ Tools exposed to agents SHOULD be grouped into categories.
   - request model load on a node
   - list available models and capabilities
 - Skills tools
-  - See [Skills Storage and Inference Exposure](skills_storage_and_inference.md) for tool contract and controls; catalog lists tool names only.
+  - See [Skills Storage and Inference Exposure](../skills_storage_and_inference.md) for tool contract and controls; catalog lists tool names only.
 - Help tools
   - on-demand documentation for how to interact with CyNodeAI; see [Help MCP Server](#help-mcp-server).
 - Database query tools
   - read task state, preferences, and audit records
   - write task updates, verification results, and summaries
-  - preference retrieval is performed via `preference.get`, `preference.list`, and `preference.effective` as defined in [Preference tools](mcp_tools/preference_tools.md)
+  - preference retrieval is performed via `preference.get`, `preference.list`, and `preference.effective` as defined in [Preference tools](../mcp_tools/preference_tools.md)
 
 ## Help MCP Server
 
@@ -147,10 +149,10 @@ Tools exposed to agents SHOULD be grouped into categories.
 
 ### Help MCP Server Requirements Traces
 
-- [REQ-MCPTOO-0116](../requirements/mcptoo.md#req-mcptoo-0116)
+- [REQ-MCPTOO-0116](../../requirements/mcptoo.md#req-mcptoo-0116)
 
 The system MAY expose a help MCP server (or a set of help tools) so that agents can request documentation on demand during a run.
-This complements the [default CyNodeAI interaction skill](skills_storage_and_inference.md#spec-cynai-skills-defaultcynodeaiskill): the skill is always included in inference context for baseline guidance; the help server provides deeper or targeted documentation when the agent explicitly calls a help tool (e.g. to look up a specific tool schema or convention).
+This complements the [default CyNodeAI interaction skill](../skills_storage_and_inference.md#spec-cynai-skills-defaultcynodeaiskill): the skill is always included in inference context for baseline guidance; the help server provides deeper or targeted documentation when the agent explicitly calls a help tool (e.g. to look up a specific tool schema or convention).
 
 Scope
 
@@ -160,7 +162,7 @@ Scope
 - **Content source (MVP)**: For MVP, help content is sourced from embedded strings or an in-process map in the MCP gateway only; no file system or external docs at runtime.
   When `topic` or `path` is omitted, the gateway returns a default overview; when provided, it may return a predefined snippet for that key if present.
 - **Allowlists**: Help tools are allowlisted for orchestrator-side agents (Project Manager, Project Analyst) and MAY be allowlisted for Worker agents so sandboxed agents can look up usage when needed.
-- **Catalog**: Tool names and argument schemas are defined in [Help tools](mcp_tools/help_tools.md).
+- **Catalog**: Tool names and argument schemas are defined in [Help tools](../mcp_tools/help_tools.md).
 
 ## Role-Based Tool Access
 
@@ -216,14 +218,14 @@ User clients MAY access database-backed information through the User API Gateway
 
 #### Database Access Rules Applicable Requirements Requirements Traces
 
-- [REQ-MCPTOO-0103](../requirements/mcptoo.md#req-mcptoo-0103)
-- [REQ-MCPTOO-0104](../requirements/mcptoo.md#req-mcptoo-0104)
-- [REQ-MCPTOO-0105](../requirements/mcptoo.md#req-mcptoo-0105)
+- [REQ-MCPTOO-0103](../../requirements/mcptoo.md#req-mcptoo-0103)
+- [REQ-MCPTOO-0104](../../requirements/mcptoo.md#req-mcptoo-0104)
+- [REQ-MCPTOO-0105](../../requirements/mcptoo.md#req-mcptoo-0105)
 
 ## Access Control and Auditing
 
 All MCP tool calls MUST be audited with task context.
-Access control SHOULD be defined via [`docs/tech_specs/access_control.md`](access_control.md).
+Access control SHOULD be defined via [`docs/tech_specs/access_control.md`](../access_control.md).
 
 Recommended auditing fields
 

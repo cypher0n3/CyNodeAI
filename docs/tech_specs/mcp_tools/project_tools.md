@@ -19,7 +19,7 @@ All project tools MUST return only projects the authenticated user is authorized
 Related documents
 
 - [Projects and Scopes - Project Search via MCP](../projects_and_scopes.md#spec-cynai-access-projectsmcpsearch)
-- [MCP Gateway Enforcement](../mcp_gateway_enforcement.md)
+- [MCP Gateway Enforcement](../mcp/mcp_gateway_enforcement.md)
 - [Access, allowlists, and per-tool scope](access_allowlists_and_scope.md)
 
 ## Definition Compliance

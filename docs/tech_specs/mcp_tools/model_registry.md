@@ -65,5 +65,5 @@ Tool definitions MUST conform to the project's MCP tool definition format: `Serv
 
 ## Allowlist and Scope
 
-- **Allowlist**: PMA and PAA per [MCP Gateway Enforcement](../mcp_gateway_enforcement.md); Worker agent may be allowed for read-only model list/get when building inference requests.
+- **Allowlist**: PMA and PAA per [MCP Gateway Enforcement](../mcp/mcp_gateway_enforcement.md); Worker agent may be allowed for read-only model list/get when building inference requests.
 - **Scope**: Default `pm` or `both` per catalog.

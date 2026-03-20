@@ -54,4 +54,4 @@ Tool definitions MUST conform to the project's MCP tool definition format: `Serv
 
 ## Allowlist and Scope
 
-- **Allowlist**: PMA, PAA, and optionally Worker agent per [MCP Gateway Enforcement](../mcp_gateway_enforcement.md); subject to access control rules for `web.search`.
+- **Allowlist**: PMA, PAA, and optionally Worker agent per [MCP Gateway Enforcement](../mcp/mcp_gateway_enforcement.md); subject to access control rules for `web.search`.

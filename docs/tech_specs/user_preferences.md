@@ -330,7 +330,7 @@ The effective preference result may also include metadata fields for UI and audi
 Agents retrieve preferences and effective preferences via MCP database tools so preference access remains policy-controlled, audited, and consistent across workflows.
 See [REQ-MCPTOO-0117](../requirements/mcptoo.md#req-mcptoo-0117).
 
-Tool names, argument schemas, behavior, and allowlists are defined in [Preference tools](mcp_tools/preference_tools.md); see [MCP tool specifications](mcp_tools/README.md) for the full index and [MCP Tooling](mcp_tooling.md) for common arguments and response model.
+Tool names, argument schemas, behavior, and allowlists are defined in [Preference tools](mcp_tools/preference_tools.md); see [MCP tool specifications](mcp_tools/README.md) for the full index and [MCP Tooling](mcp/mcp_tooling.md) for common arguments and response model.
 
 ## Caching and Invalidation
 

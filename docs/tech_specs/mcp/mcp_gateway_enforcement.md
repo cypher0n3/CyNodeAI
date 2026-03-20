@@ -31,11 +31,11 @@ The orchestrator MCP gateway is the enforcement and audit point.
 
 Related documents
 
-- MCP concepts: [`docs/tech_specs/mcp_tooling.md`](mcp_tooling.md)
-- Canonical tool specs, allowlists, and per-tool scope: [`docs/tech_specs/mcp_tools/`](mcp_tools/README.md) (see [Access, allowlists, and per-tool scope](mcp_tools/access_allowlists_and_scope.md))
-- Access control and auditing: [`docs/tech_specs/access_control.md`](access_control.md)
-- Tool call audit storage: [`docs/tech_specs/mcp_tool_call_auditing.md`](mcp_tool_call_auditing.md)
-- Git egress tool patterns: [`docs/tech_specs/git_egress_mcp.md`](git_egress_mcp.md)
+- MCP concepts: [`docs/tech_specs/mcp/mcp_tooling.md`](mcp_tooling.md)
+- Canonical tool specs, allowlists, and per-tool scope: [`docs/tech_specs/mcp_tools/`](../mcp_tools/README.md) (see [Access, allowlists, and per-tool scope](../mcp_tools/access_allowlists_and_scope.md))
+- Access control and auditing: [`docs/tech_specs/access_control.md`](../access_control.md)
+- Tool call audit storage: [`docs/tech_specs/mcp/mcp_tool_call_auditing.md`](mcp_tool_call_auditing.md)
+- Git egress tool patterns: [`docs/tech_specs/mcp_tools/git_egress.md`](../mcp_tools/git_egress.md)
 
 ## Goals
 
@@ -53,9 +53,9 @@ This section describes how CyNodeAI uses MCP without extending MCP wire messages
 
 #### Traces to Requirements
 
-- [REQ-MCPGAT-0100](../requirements/mcpgat.md#req-mcpgat-0100)
-- [REQ-MCPGAT-0101](../requirements/mcpgat.md#req-mcpgat-0101)
-- [REQ-MCPGAT-0102](../requirements/mcpgat.md#req-mcpgat-0102)
+- [REQ-MCPGAT-0100](../../requirements/mcpgat.md#req-mcpgat-0100)
+- [REQ-MCPGAT-0101](../../requirements/mcpgat.md#req-mcpgat-0101)
+- [REQ-MCPGAT-0102](../../requirements/mcpgat.md#req-mcpgat-0102)
 
 ## Gateway Enforcement Responsibilities
 
@@ -88,7 +88,7 @@ Agents MUST NOT be given tokens or secrets directly.
 The orchestrator delivers agent tokens to the **worker** (e.g. in node configuration); the **worker proxy** holds them and attaches the appropriate token when forwarding agent-originated requests to the MCP gateway.
 The agent never sees or presents the token; the gateway receives requests from the worker proxy with the token already attached.
 
-Traces To: [REQ-WORKER-0164](../requirements/worker.md#req-worker-0164).
+Traces To: [REQ-WORKER-0164](../../requirements/worker.md#req-worker-0164).
 
 #### Token Issuance
 
@@ -105,7 +105,7 @@ Traces To: [REQ-WORKER-0164](../requirements/worker.md#req-worker-0164).
   The token MUST be associated with at least: agent type (sandbox), and task/job context (task_id, job_id, and **user** or project when available).
   The orchestrator MUST associate the token with the user (e.g. task creator) so the gateway can resolve user context for preferences, access control, and audit attribution.
   The token MUST also be bound to task_id, project_id, and session scope.
-  The orchestrator MUST invalidate the token when the job is stopped or canceled; see [Task Cancel and Stop Job](orchestrator.md#spec-cynai-orches-taskcancelandstopjob).
+  The orchestrator MUST invalidate the token when the job is stopped or canceled; see [Task Cancel and Stop Job](../orchestrator.md#spec-cynai-orches-taskcancelandstopjob).
 
 #### Token Use at the Gateway
 
@@ -114,7 +114,7 @@ Traces To: [REQ-WORKER-0164](../requirements/worker.md#req-worker-0164).
   For **PA and sandbox** tokens, the gateway MUST use the resolved user context for preference resolution, access control to user- and project-scoped resources, and audit attribution.
   For **PM** tokens, no user is bound to the token; user context for the request (when needed) comes from other request or session context.
 - The gateway MUST **reject** requests that present a token the orchestrator has **invalidated** (e.g. for a stopped or canceled job).
-  See [Task Cancel and Stop Job](orchestrator.md#spec-cynai-orches-taskcancelandstopjob).
+  See [Task Cancel and Stop Job](../orchestrator.md#spec-cynai-orches-taskcancelandstopjob).
 - The gateway MUST then restrict tool access to the **allowlist and per-tool scope for that agent type**.
   For example: a token issued for a PM agent allows only tools on the Project Manager allowlist with scope PM or both; a token issued for a sandbox agent allows only tools on the Worker allowlist with scope sandbox or both.
   No separate RBAC evaluation is required for agent-type restriction; the token itself conveys agent type.
@@ -126,8 +126,8 @@ Audit
 
 ##### Token Use at the Gateway Requirements Traces
 
-- [REQ-MCPGAT-0116](../requirements/mcpgat.md#req-mcpgat-0116)
-- [REQ-WORKER-0164](../requirements/worker.md#req-worker-0164)
+- [REQ-MCPGAT-0116](../../requirements/mcpgat.md#req-mcpgat-0116)
+- [REQ-WORKER-0164](../../requirements/worker.md#req-worker-0164)
 
 ## Edge Enforcement Mode (Node-Local Agent Runtimes)
 
@@ -135,7 +135,7 @@ Audit
 
 ### Edge Enforcement Mode (Node-Local Agent Runtimes) Requirements Traces
 
-- [REQ-MCPGAT-0112](../requirements/mcpgat.md#req-mcpgat-0112)
+- [REQ-MCPGAT-0112](../../requirements/mcpgat.md#req-mcpgat-0112)
 
 This section defines an edge enforcement mode for tool calls that are not routed by the orchestrator MCP gateway.
 The primary use case is a node-local agent runtime interacting directly with a node-local MCP server on the same host for low-latency sandbox operations.
@@ -152,13 +152,13 @@ Requirements
   Task scoping MUST still be expressed in tool arguments, consistent with `Tool Argument Schema Requirements`.
 - Edge enforcement MUST be authorized using orchestrator-issued capability leases.
   Leases MUST be short-lived, least-privilege, and MUST scope allowed tool identities and required context (for example `task_id`).
-- The node-local MCP server (or an edge enforcement proxy colocated with it) MUST validate leases, enforce tool allowlists per [Access, allowlists, and per-tool scope](mcp_tools/access_allowlists_and_scope.md), and MUST fail closed.
+- The node-local MCP server (or an edge enforcement proxy colocated with it) MUST validate leases, enforce tool allowlists per [Access, allowlists, and per-tool scope](../mcp_tools/access_allowlists_and_scope.md), and MUST fail closed.
 - The node-local MCP server MUST emit audit records for edge-routed tool calls with the same minimum audit fields used by the orchestrator gateway.
-  See `docs/tech_specs/mcp_tool_call_auditing.md`.
+  See `docs/tech_specs/mcp/mcp_tool_call_auditing.md`.
 
 ## Role Allowlists, Per-Tool Scope, and Admin Enable or Disable
 
-Normative definitions for role-based tool allowlists (worker, PM, PA), per-tool scope (sandbox vs PM vs both), and admin-configurable per-tool enable or disable are canonical in [Access, allowlists, and per-tool scope](mcp_tools/access_allowlists_and_scope.md).
+Normative definitions for role-based tool allowlists (worker, PM, PA), per-tool scope (sandbox vs PM vs both), and admin-configurable per-tool enable or disable are canonical in [Access, allowlists, and per-tool scope](../mcp_tools/access_allowlists_and_scope.md).
 The gateway MUST enforce those definitions together with access control and auditing as described in [Gateway Enforcement Responsibilities](#gateway-enforcement-responsibilities).
 
 ## Tool Argument Schema Requirements
@@ -171,10 +171,10 @@ Because CyNodeAI does not extend MCP wire messages, task scoping MUST be express
 
 #### Applicable Requirements (Tool Argument Schemas) Requirements Traces
 
-- [REQ-MCPGAT-0103](../requirements/mcpgat.md#req-mcpgat-0103)
-- [REQ-MCPGAT-0104](../requirements/mcpgat.md#req-mcpgat-0104)
-- [REQ-MCPGAT-0105](../requirements/mcpgat.md#req-mcpgat-0105)
-- [REQ-MCPGAT-0106](../requirements/mcpgat.md#req-mcpgat-0106)
+- [REQ-MCPGAT-0103](../../requirements/mcpgat.md#req-mcpgat-0103)
+- [REQ-MCPGAT-0104](../../requirements/mcpgat.md#req-mcpgat-0104)
+- [REQ-MCPGAT-0105](../../requirements/mcpgat.md#req-mcpgat-0105)
+- [REQ-MCPGAT-0106](../../requirements/mcpgat.md#req-mcpgat-0106)
 
 Recommended guidance
 
@@ -183,7 +183,7 @@ Recommended guidance
 
 ## Access Control Mapping
 
-Access control SHOULD be defined via [`docs/tech_specs/access_control.md`](access_control.md).
+Access control SHOULD be defined via [`docs/tech_specs/access_control.md`](../access_control.md).
 
 Recommended mapping for tool calls
 

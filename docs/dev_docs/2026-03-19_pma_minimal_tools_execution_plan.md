@@ -33,8 +33,8 @@ Implementation must live in the right places: MCP tool handlers in the orchestra
 - Tech specs: [docs/tech_specs/project_manager_agent.md](../tech_specs/project_manager_agent.md),
   [docs/tech_specs/mcp_tools/](../tech_specs/mcp_tools/README.md),
   [docs/tech_specs/mcp_tools/access_allowlists_and_scope.md](../tech_specs/mcp_tools/access_allowlists_and_scope.md),
-  [docs/tech_specs/mcp_gateway_enforcement.md](../tech_specs/mcp_gateway_enforcement.md),
-  [docs/tech_specs/mcp_tooling.md](../tech_specs/mcp_tooling.md),
+  [docs/tech_specs/mcp/mcp_gateway_enforcement.md](../tech_specs/mcp/mcp_gateway_enforcement.md),
+  [docs/tech_specs/mcp/mcp_tooling.md](../tech_specs/mcp/mcp_tooling.md),
   [docs/tech_specs/user_api_gateway.md](../tech_specs/user_api_gateway.md),
   [docs/tech_specs/cli_management_app_commands_tasks.md](../tech_specs/cli_management_app_commands_tasks.md).
 - Implementation: `orchestrator/cmd/mcp-gateway/main.go`, `orchestrator/internal/handlers/tasks.go`,
@@ -69,7 +69,7 @@ The following are fixed for this plan so there is no ambiguity:
   It does **not** include: `system_setting.get`/`list`, `task.create`/`task.update`, or other catalog tools beyond the minimal set.
   Those can be follow-up work.
 - **Existing `task.get`:** Already implemented in the MCP gateway; no change in this plan except to ensure it remains on the PM allowlist and is covered by tests.
-- **Naming:** Tool names are agent-facing and resource-oriented (e.g. `project.get`, `task.get`); no `db.` or other implementation-layer prefix (see [MCP Tooling - Agent-facing tool names](../tech_specs/mcp_tooling.md#spec-cynai-mcptoo-agentfacingtoolnames)).
+- **Naming:** Tool names are agent-facing and resource-oriented (e.g. `project.get`, `task.get`); no `db.` or other implementation-layer prefix (see [MCP Tooling - Agent-facing tool names](../tech_specs/mcp/mcp_tooling.md#spec-cynai-mcptoo-agentfacingtoolnames)).
   New tools in this plan: `task.list`, `task.result`, `task.cancel`, `task.logs`, `help.get`, `project.get`, `project.list`.
   Catalog documents the full minimal set with argument schemas.
 
@@ -92,7 +92,7 @@ Read-only; no state changes.
 #### Task 1 Requirements and Specifications
 
 - [docs/tech_specs/mcp_tools/](../tech_specs/mcp_tools/README.md) (CYNAI.MCPTOO.HelpTools): `help.get` with required `task_id`, optional `topic`, `path`.
-- [docs/tech_specs/mcp_tooling.md](../tech_specs/mcp_tooling.md) (Help MCP Server): purpose, read-only, allowlists, size-limited, no secrets.
+- [docs/tech_specs/mcp/mcp_tooling.md](../tech_specs/mcp/mcp_tooling.md) (Help MCP Server): purpose, read-only, allowlists, size-limited, no secrets.
 - [docs/requirements/mcptoo.md](../requirements/mcptoo.md) REQ-MCPTOO-0116.
 - [docs/tech_specs/mcp_tools/access_allowlists_and_scope.md](../tech_specs/mcp_tools/access_allowlists_and_scope.md) (PM Agent allowlist includes `help.*`).
 
@@ -102,7 +102,7 @@ Read-only; no state changes.
 - [ ] Inspect `orchestrator/cmd/mcp-gateway/main.go`: `requiredScopedIds`, `routeToolCall` switch, audit record handling.
 - [ ] Confirm `help.get` is not yet implemented (returns 501 Not Implemented or equivalent).
 - [ ] Confirm help content source per plan: embedded strings or in-process map in the mcp-gateway binary only; default overview when topic/path omitted; optional topic key for predefined snippets.
-  If [mcp_tooling.md](../tech_specs/mcp_tooling.md) or [mcp_tools/](../tech_specs/mcp_tools/README.md) does not state this, add a spec update step in Green to document it.
+  If [mcp_tooling.md](../tech_specs/mcp/mcp_tooling.md) or [mcp_tools/](../tech_specs/mcp_tools/README.md) does not state this, add a spec update step in Green to document it.
 
 #### Red (Task 1)
 
@@ -119,7 +119,7 @@ Read-only; no state changes.
 - [ ] Add case `"help.get"` in `routeToolCall`; implement `handleHelpGet(ctx, store, args, rec)` that returns documentation content from **embedded strings or a small in-process map only** (no file system or external docs).
   Default overview when topic/path omitted; when `topic` is provided, return predefined snippet for that key if present, else default.
   Enforce response size limit (e.g. 32 KiB) and no secrets.
-- [ ] If the tech spec does not already state the help content source (embedded/in-process only for MVP), update [mcp_tooling.md](../tech_specs/mcp_tooling.md) or [mcp_tools/](../tech_specs/mcp_tools/README.md) to add one sentence: e.g. "For MVP, help content is sourced from embedded strings or an in-process map in the MCP gateway; no file system or external docs at runtime."
+- [ ] If the tech spec does not already state the help content source (embedded/in-process only for MVP), update [mcp_tooling.md](../tech_specs/mcp/mcp_tooling.md) or [mcp_tools/](../tech_specs/mcp_tools/README.md) to add one sentence: e.g. "For MVP, help content is sourced from embedded strings or an in-process map in the MCP gateway; no file system or external docs at runtime."
 - [ ] Run the targeted tests until they pass.
 - [ ] Validation gate: do not proceed until tests are green.
 
@@ -274,7 +274,7 @@ This avoids duplication and ensures consistent behavior (URL, path, request/resp
 
 #### Task 4 Requirements and Specifications
 
-- [docs/tech_specs/mcp_gateway_enforcement.md](../tech_specs/mcp_gateway_enforcement.md) (gateway is the enforcement point; agents call via client).
+- [docs/tech_specs/mcp/mcp_gateway_enforcement.md](../tech_specs/mcp/mcp_gateway_enforcement.md) (gateway is the enforcement point; agents call via client).
 - [docs/tech_specs/project_manager_agent.md](../tech_specs/project_manager_agent.md) (PMA uses MCP tools via gateway).
 - [docs/tech_specs/cynode_sba.md](../tech_specs/cynode_sba.md) (SBA uses MCP tools via worker proxy to gateway).
 - Implementation: `agents/internal/pma/mcp_client.go`, `agents/internal/pma/mcp_tools.go`, `agents/internal/sba/mcp_client.go`, `agents/internal/sba/mcp_tools.go`.

@@ -25,7 +25,7 @@
 ## Document Overview
 
 **Incorporated into canonical specs as of 2026-03-18.**
-Single source of truth: [postgres_schema.md](../tech_specs/postgres_schema.md), [mcp_tools/](../tech_specs/mcp_tools/README.md), [mcp_gateway_enforcement.md](../tech_specs/mcp_gateway_enforcement.md), [requirements/](../requirements/).
+Single source of truth: [postgres_schema.md](../tech_specs/postgres_schema.md), [mcp_tools/](../tech_specs/mcp_tools/README.md), [mcp_gateway_enforcement.md](../tech_specs/mcp/mcp_gateway_enforcement.md), [requirements/](../requirements/).
 See [_draft_specs_incorporation_and_conflicts_report.md](../dev_docs/_draft_specs_incorporation_and_conflicts_report.md) Section 4.3 and 8.
 
 This draft specifies a **`specifications`** table in the orchestrator PostgreSQL database for storing technical specification references scoped to **projects**.

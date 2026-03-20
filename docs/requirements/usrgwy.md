@@ -252,3 +252,7 @@ It covers user-facing REST API gateway behavior and related API contracts.
   [user_api_gateway.md](../tech_specs/user_api_gateway.md)
   [CYNAI.SCHEMA.TasksTable](../tech_specs/postgres_schema.md#spec-cynai-schema-taskstable)
   <a id="req-usrgwy-0158"></a>
+- **REQ-USRGWY-0159:** The User API Gateway MUST expose a REST API for MCP endpoint lifecycle: POST /v1/mcp/endpoints (create), GET /v1/mcp/endpoints (list), GET /v1/mcp/endpoints/{id_or_slug} (get), PATCH /v1/mcp/endpoints/{id_or_slug} (update), DELETE /v1/mcp/endpoints/{id_or_slug} (soft-delete).
+  All operations MUST enforce RBAC (mcp.endpoint.create/read/update/delete).
+  [CYNAI.MCPTOO.EndpointRegistrationAPI](../tech_specs/mcp/mcp_endpoint_registry.md#spec-cynai-mcptoo-endpointregistrationapi)
+  <a id="req-usrgwy-0159"></a>

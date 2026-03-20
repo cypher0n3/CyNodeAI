@@ -373,7 +373,7 @@ Each requirement is a list item with continuation lines for spec references and 
 #### Example (Requirements Entry)
 
 - REQ-MCPGAT-0001: The MCP gateway MUST enforce gateway policy for all MCP tool calls.
-  [CYNAI.MCPGAT.Doc.GatewayEnforcement](../tech_specs/mcp_gateway_enforcement.md#spec-cynai-mcpgat-doc-gatewayenforcement)
+  [CYNAI.MCPGAT.Doc.GatewayEnforcement](../tech_specs/mcp/mcp_gateway_enforcement.md#spec-cynai-mcpgat-doc-gatewayenforcement)
   <a id="req-mcpgat-0001"></a>
 
 #### Rules for Requirements List Format

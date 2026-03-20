@@ -565,7 +565,7 @@ Orchestrator-side agents (e.g. Project Manager) MUST be able to search and resol
 All project list and search operations MUST be scoped to the authenticated user: only projects the user is authorized to access (default project plus projects for which the user or their groups have a role binding) MAY be returned.
 The MCP gateway MUST enforce this scope; tool implementations MUST filter by the request subject's authorized project set before returning results.
 Tool names and argument schemas are defined in [Project tools](mcp_tools/project_tools.md) (e.g. `project.get`, `project.list`).
-Auditing MUST follow [MCP tool call auditing](mcp_tool_call_auditing.md).
+Auditing MUST follow [MCP tool call auditing](mcp/mcp_tool_call_auditing.md).
 
 Search semantics (MVP)
 

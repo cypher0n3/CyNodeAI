@@ -393,7 +393,7 @@ The Worker API surface is intentionally minimal and MUST implement only:
 Future revisions MAY add endpoints for file transfer, async job polling, and log streaming, but those MUST be defined in
 [`docs/tech_specs/worker_api.md`](worker_api.md) before implementation.
 
-See [`docs/tech_specs/mcp_tooling.md`](mcp_tooling.md) for the MCP tool layer that orchestrator-side agents use.
+See [`docs/tech_specs/mcp/mcp_tooling.md`](mcp/mcp_tooling.md) for the MCP tool layer that orchestrator-side agents use.
 
 ## Unified UDS Path (Agent and Sandbox Containers)
 

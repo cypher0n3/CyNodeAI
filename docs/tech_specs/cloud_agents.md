@@ -175,7 +175,7 @@ Tool access is mediated through the orchestrator and MCP.
 
 Relevant specs
 
-- MCP tooling: [`docs/tech_specs/mcp_tooling.md`](mcp_tooling.md)
+- MCP tooling: [`docs/tech_specs/mcp/mcp_tooling.md`](mcp/mcp_tooling.md)
 - API Egress: [`docs/tech_specs/api_egress_server.md`](api_egress_server.md)
 - Secure Browser: [`docs/tech_specs/secure_browser_service.md`](secure_browser_service.md)
 

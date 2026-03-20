@@ -21,7 +21,7 @@ Related documents
 
 - Projects and scope: [`docs/tech_specs/projects_and_scopes.md`](projects_and_scopes.md)
 - Postgres schema: [`docs/tech_specs/postgres_schema.md`](postgres_schema.md) (Project Git Repositories table)
-- Git egress: [`docs/tech_specs/git_egress_mcp.md`](git_egress_mcp.md)
+- Git egress: [`docs/tech_specs/mcp_tools/git_egress.md`](mcp_tools/git_egress.md)
 
 ## Goals and Non-Goals
 
@@ -118,7 +118,7 @@ When a Git egress request includes a task that has a non-null `project_id`, the 
 If the requested provider/repo (and base_url when applicable) is not in the project's associated repos, the request MUST be denied with a structured error indicating project-scoped allowlist violation.
 When the task has no project_id, existing global or user/group allowlist policy applies; this spec does not change that behavior.
 
-See [`docs/tech_specs/git_egress_mcp.md`](git_egress_mcp.md) for the Git egress tool interface and access control.
+See [`docs/tech_specs/mcp_tools/git_egress.md`](mcp_tools/git_egress.md) for the Git egress tool interface and access control.
 
 #### Git Egress Project-Scoped Allowlist Requirements Traces
 

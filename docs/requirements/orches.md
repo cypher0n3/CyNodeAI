@@ -250,7 +250,7 @@ It covers orchestrator control-plane behavior, task lifecycle, dispatch, and sta
   Agent tokens are delivered to the worker for the worker proxy to hold; agents MUST NOT be given tokens or secrets directly.
   For **SBA**, the token MUST also be bound to task_id, project_id, and session scope.
   For **system-level** agents (PMA), the agent token is not user-associated.
-  [CYNAI.MCPGAT.AgentScopedTokens](../tech_specs/mcp_gateway_enforcement.md#spec-cynai-mcpgat-agentscopedtokens)
+  [CYNAI.MCPGAT.AgentScopedTokens](../tech_specs/mcp/mcp_gateway_enforcement.md#spec-cynai-mcpgat-agentscopedtokens)
   [CYNAI.WORKER.Payload.ConfigurationV1](../tech_specs/worker_node_payloads.md#spec-cynai-worker-payload-configuration-v1) (managed_services orchestrator.agent_token)
   [CYNAI.WORKER.AgentTokensWorkerHeldOnly](../tech_specs/worker_node.md#spec-cynai-worker-agenttokensworkerheldonly)
   <a id="req-orches-0163"></a>

@@ -159,14 +159,14 @@ Access control and RBAC specify policy evaluation and default-deny, but do not e
 MCP gateway and edge enforcement use allowlists and capability leases.
 The **principle of least privilege** is not explicitly stated in the access control or MCP gateway specs (e.g. grants should be minimal in scope and time).
 
-- [`docs/tech_specs/mcp_gateway_enforcement.md`](../tech_specs/mcp_gateway_enforcement.md): capability leases are short-lived and least-privilege; no overarching "least privilege" requirement in access_control or rbac_and_groups.
+- [`docs/tech_specs/mcp/mcp_gateway_enforcement.md`](../tech_specs/mcp/mcp_gateway_enforcement.md): capability leases are short-lived and least-privilege; no overarching "least privilege" requirement in access_control or rbac_and_groups.
 - [`docs/tech_specs/mcp_tools/access_allowlists_and_scope.md`](../tech_specs/mcp_tools/access_allowlists_and_scope.md): role allowlists are coarse.
 
 #### 5.2.1 Remediation - Least Privilege
 
 - In [`access_control.md`](../tech_specs/access_control.md) (Core Concepts or Policy Evaluation):
   - Add: **Access MUST be granted with minimum necessary scope** (subject, action, resource, and time); default-deny is the baseline; allow rules SHOULD be as specific as possible (e.g. by resource pattern, task, or time window).
-- In [`mcp_gateway_enforcement.md`](../tech_specs/mcp_gateway_enforcement.md): retain and emphasize that capability leases MUST be short-lived and least-privilege.
+- In [`mcp_gateway_enforcement.md`](../tech_specs/mcp/mcp_gateway_enforcement.md): retain and emphasize that capability leases MUST be short-lived and least-privilege.
 - In [`access_allowlists_and_scope.md`](../tech_specs/mcp_tools/access_allowlists_and_scope.md): emphasize that tool allowlists SHOULD expose only the minimal set of tools required for the agent role.
 
 ### 5.3 Service-To-Service Authorization
@@ -231,7 +231,7 @@ Auth, MCP tool calls, and access control decisions are audited.
 - In [`postgres_schema.md`](../tech_specs/postgres_schema.md) (Audit Logging):
   - Add: Audit tables SHOULD be treated as **append-only** for compliance and assume-breach; implementations SHOULD avoid updates/deletes of audit rows.
   - Recommend a **request or trace ID** that is propagated from gateway through MCP, API Egress, and Worker API so that all audit entries for a single user request can be correlated (reference from auth_audit_log, mcp_tool_call_audit_log, access_control_audit_log).
-- In [`mcp_tool_call_auditing.md`](../tech_specs/mcp_tool_call_auditing.md) (if it exists) or in [`mcp_gateway_enforcement.md`](../tech_specs/mcp_gateway_enforcement.md): require that audit records include a stable request/trace identifier when available.
+- In [`mcp_tool_call_auditing.md`](../tech_specs/mcp/mcp_tool_call_auditing.md) (if it exists) or in [`mcp_gateway_enforcement.md`](../tech_specs/mcp/mcp_gateway_enforcement.md): require that audit records include a stable request/trace identifier when available.
 
 ### 7.2 Blast Radius and Segment Boundaries
 
@@ -315,7 +315,7 @@ Remaining gaps from Section 4 for worker/orchestrator transport:
 - Worker node: [`docs/tech_specs/worker_node.md`](../tech_specs/worker_node.md).
 - Ports and endpoints: [`docs/tech_specs/ports_and_endpoints.md`](../tech_specs/ports_and_endpoints.md).
 - Orchestrator: [`docs/tech_specs/orchestrator.md`](../tech_specs/orchestrator.md).
-- MCP gateway enforcement: [`docs/tech_specs/mcp_gateway_enforcement.md`](../tech_specs/mcp_gateway_enforcement.md).
+- MCP gateway enforcement: [`docs/tech_specs/mcp/mcp_gateway_enforcement.md`](../tech_specs/mcp/mcp_gateway_enforcement.md).
 - Postgres schema: [`docs/tech_specs/postgres_schema.md`](../tech_specs/postgres_schema.md).
 - API Egress: [`docs/tech_specs/api_egress_server.md`](../tech_specs/api_egress_server.md).
 - Sandbox: [`docs/tech_specs/sandbox_container.md`](../tech_specs/sandbox_container.md).

@@ -143,7 +143,7 @@ The SBA MAY invoke only tools on the [Worker Agent allowlist](mcp_tools/access_a
 Explicitly disallowed: `db.*`, `node.*`, `sandbox.*`.
 User-installed tools with sandbox scope MAY be added per [MCP Tool Access](#mcp-tool-access-sandbox-allowlist).
 
-See [mcp_tools/](mcp_tools/README.md) and [mcp_gateway_enforcement.md](mcp_gateway_enforcement.md).
+See [mcp_tools/](mcp_tools/README.md) and [mcp_gateway_enforcement.md](mcp/mcp_gateway_enforcement.md).
 
 ## Execution Model
 
@@ -671,7 +671,7 @@ Sandboxed containers that run `cynode-sba` have a well-defined shape:
 Sandbox agents (including `cynode-sba` when operating as an agent that can call tools) MUST use MCP tools only through the **orchestrator MCP gateway** and MUST invoke only tools that are on the **sandbox (worker) allowlist** and designated as available to sandbox agents in the orchestrator's per-tool scope (see [Per-tool scope: Sandbox vs PM](mcp_tools/access_allowlists_and_scope.md#spec-cynai-mcpgat-pertoolscope)).
 When making MCP requests, the sandbox agent calls the **worker proxy** (e.g. worker-mediated MCP URL); the agent MUST NOT receive or present an agent token.
 The **worker proxy** holds the sandbox agent token (issued by the orchestrator for that sandbox context, delivered to the worker) and attaches it when forwarding requests to the orchestrator MCP gateway; the token MUST be bound to task_id, project_id, and session scope, and MUST be associated with the user (e.g. task creator).
-See [Agent-Scoped Tokens or API Keys](mcp_gateway_enforcement.md#spec-cynai-mcpgat-agentscopedtokens).
+See [Agent-Scoped Tokens or API Keys](mcp/mcp_gateway_enforcement.md#spec-cynai-mcpgat-agentscopedtokens).
 When a job is stopped or canceled, the orchestrator invalidates that job's token; SBA tool calls from that job MUST be rejected by the gateway.
 See [Task Cancel and Stop Job](orchestrator.md#spec-cynai-orches-taskcancelandstopjob).
 The gateway authenticates the token and restricts tool access to the sandbox allowlist and sandbox-scoped tools.
@@ -689,7 +689,7 @@ User-installed tools
 
 ### See Also (Tool Scope)
 
-- [`docs/tech_specs/mcp_gateway_enforcement.md`](mcp_gateway_enforcement.md)
+- [`docs/tech_specs/mcp/mcp_gateway_enforcement.md`](mcp/mcp_gateway_enforcement.md)
 - [`docs/tech_specs/mcp_tools/`](mcp_tools/README.md)
 
 ## SBA Container Image (Containerfile)

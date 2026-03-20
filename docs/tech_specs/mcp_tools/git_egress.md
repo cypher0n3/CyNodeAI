@@ -1,6 +1,9 @@
 # Git Egress MCP Tools
 
 - [Document Overview](#document-overview)
+- [Problem Statement](#problem-statement)
+- [Goals and Non-Goals](#goals-and-non-goals)
+- [Architecture and Trust Boundaries](#architecture-and-trust-boundaries)
 - [Definition Compliance](#definition-compliance)
 - [Tool Contracts](#tool-contracts)
   - [`git.repo.validate` Operation](#gitrepovalidate-operation)
@@ -9,16 +12,68 @@
   - [`git.branch.create` Operation](#gitbranchcreate-operation)
   - [`git.push` Operation](#gitpush-operation)
   - [`git.pr.create` Operation](#gitprcreate-operation)
+- [Credential Storage](#credential-storage)
+- [Access Control](#access-control)
+- [Auditing](#auditing)
+- [Sandbox Output Formats](#sandbox-output-formats)
+- [Recommended Workflows](#recommended-workflows)
+- [Failure Modes and Safety](#failure-modes-and-safety)
 - [Allowlist and Scope](#allowlist-and-scope)
 
 ## Document Overview
 
-Git egress tools enable validated, policy-controlled Git operations (validate repo, apply changeset, create commit, create branch, push, create PR) without placing Git credentials or unrestricted network access inside sandboxes.
-Canonical tool names and behavior are defined in the Git Egress MCP spec; this document provides the per-tool spec and alignment with the definition format.
+- Spec ID: `CYNAI.MCPTOO.GitEgressTools` <a id="spec-cynai-mcptoo-gitegresstools"></a>
 
-Related documents
+This document defines Git egress tools that enable validated, policy-controlled Git operations (validate repo, apply changeset, create commit, create branch, push, create PR) without placing Git credentials or unrestricted network access inside sandboxes.
 
-- [Git Egress MCP](../git_egress_mcp.md)
+Git egress enables creating commits and pull requests from sandbox-produced changes without placing Git credentials or unrestricted network access inside sandboxes.
+
+## Problem Statement
+
+Sandboxes should be treated as untrusted and network-restricted by default.
+Direct Git host access from sandboxes risks credential leakage and data exfiltration.
+
+Clean split model
+
+- Sandboxes MAY run local-only Git commands against the mounted workspace.
+- Sandboxes MUST NOT perform remote-affecting Git operations (for example `git clone`, `git fetch`, `git pull`, `git push`, submodule fetch/update, or Git LFS downloads).
+- All Git operations that require remote access MUST be performed via Git egress using task-scoped changeset artifacts.
+
+## Goals and Non-Goals
+
+Goals
+
+- Keep Git credentials out of sandboxes and out of agent processes.
+- Provide a policy-controlled and auditable path to push changes to Git remotes.
+- Support user-scoped and group-scoped Git credentials for enterprise workflows.
+- Support patch-based and bundle-based promotion of changes from sandboxes.
+
+Non-goals
+
+- This document does not define a full CI system.
+- This document does not define a full code review workflow beyond PR creation.
+
+## Architecture and Trust Boundaries
+
+This section describes how Git operations are performed outside sandboxes and within policy-controlled boundaries.
+
+### Applicable Requirements
+
+- Spec ID: `CYNAI.APIEGR.GitEgressArchitecture` <a id="spec-cynai-apiegr-gitegressarch"></a>
+
+#### Traces to Requirements
+
+- [REQ-APIEGR-0100](../../requirements/apiegr.md#req-apiegr-0100)
+- [REQ-APIEGR-0101](../../requirements/apiegr.md#req-apiegr-0101)
+- [REQ-APIEGR-0102](../../requirements/apiegr.md#req-apiegr-0102)
+- [REQ-APIEGR-0103](../../requirements/apiegr.md#req-apiegr-0103)
+
+High-level flow
+
+- A sandbox produces a changeset artifact (patch, bundle, or file set).
+- The orchestrator validates policy and dispatch intent.
+- Git egress applies the changeset to a controlled checkout and performs git operations.
+- Results (commit SHA, branch name, PR URL, errors) are returned to the orchestrator and recorded for the task.
 
 ## Definition Compliance
 
@@ -27,9 +82,16 @@ All tool calls MUST include task context for auditing and access control.
 
 ## Tool Contracts
 
-- Spec ID: `CYNAI.MCPTOO.GitEgressTools` <a id="spec-cynai-mcptoo-gitegresstools"></a>
+Git egress is exposed as MCP tools.
+All tool calls MUST include task context for auditing and access control.
 
 Minimum request fields for all tools: `task_id` (uuid), `provider` (text, e.g. github, gitlab, gitea), `repo` (provider-specific repo identifier), `params` (object) where applicable.
+
+Minimum response fields
+
+- `status` (success|error)
+- `result` (object)
+- `error` (object, optional)
 
 ### `git.repo.validate` Operation
 
@@ -137,9 +199,123 @@ Minimum request fields for all tools: `task_id` (uuid), `provider` (text, e.g. g
 #### Traces To
 
 - [REQ-MCPTOO-0106](../../requirements/mcptoo.md#req-mcptoo-0106)
-- [REQ-APIEGR-0100](../../requirements/apiegr.md#req-apiegr-0100) (via [Git Egress MCP](../git_egress_mcp.md))
+- [REQ-APIEGR-0100](../../requirements/apiegr.md#req-apiegr-0100)
+
+## Credential Storage
+
+Git credentials MUST be stored in PostgreSQL and MUST be retrievable only by Git egress.
+Credentials SHOULD support both user-scoped and group-scoped ownership.
+
+Recommended model
+
+- Use the same ownership pattern as API egress credentials.
+- Store provider tokens or SSH deploy keys encrypted.
+- Support multiple credentials per owner and provider using a human-friendly `credential_name`.
+
+See [`docs/tech_specs/api_egress_server.md`](../api_egress_server.md) for credential handling patterns.
+
+Go code that retrieves or decrypts Git credentials MUST use `runtime/secret` when available per [REQ-STANDS-0133](../../requirements/stands.md#req-stands-0133); when not available, MUST use best-effort secure erasure before returning.
+
+## Access Control
+
+Git egress MUST be default-deny.
+Access control SHOULD be enforced by the orchestrator and by the Git egress service.
+
+Project-scoped repo allowlist
+
+- When a task has a non-null `project_id`, Git egress MUST validate that the requested provider and repo are associated with that project.
+  See [CYNAI.APIEGR.GitEgressProjectScope](../project_git_repos.md#spec-cynai-apiegr-gitegressprojectscope) and [REQ-APIEGR-0127](../../requirements/apiegr.md#req-apiegr-0127).
+  The project-repo association model is defined in [`docs/tech_specs/project_git_repos.md`](../project_git_repos.md).
+
+Recommended access control dimensions
+
+- Subject identity (user and agent identity).
+- Action (git operation, such as `git.push` or `git.pr.create`).
+- Resource (repo and branch targets).
+- Credential owner (user-scoped vs group-scoped).
+- Context (task_id, project_id, environment labels).
+
+Example policies
+
+- Allow PR creation only for repos in an allowlist.
+- Deny pushes to protected branches.
+- Restrict group-scoped credentials to tasks with an explicit group context.
+- Require that sandbox changesets are created by jobs for the same task_id.
+
+See [`docs/tech_specs/access_control.md`](../access_control.md).
+
+## Auditing
+
+All Git egress calls MUST be audited with task context.
+
+Minimum audit fields
+
+- `task_id`
+- `subject_type` and `subject_id`
+- `provider` and `repo`
+- `operation`
+- `branch` and `base_ref` when applicable
+- `changeset_hash` (hash of patch or bundle bytes)
+- `decision` (allow|deny)
+- `result` (commit SHA or PR id, when successful)
+
+## Sandbox Output Formats
+
+Sandboxes SHOULD export changes in formats that do not require network access.
+
+Recommended formats
+
+- Patch-based
+  - Unified diff artifact (example: `diff.patch`).
+- Bundle-based
+  - Git bundle artifact (example: `changes.bundle`).
+- File-set based
+  - Explicit list of files and content, stored as artifacts.
+
+### Sandbox Output Formats Applicable Requirements
+
+- Spec ID: `CYNAI.APIEGR.GitEgressSandboxOutput` <a id="spec-cynai-apiegr-gitegressout"></a>
+
+#### Sandbox Output Formats Applicable Requirements Requirements Traces
+
+- [REQ-APIEGR-0104](../../requirements/apiegr.md#req-apiegr-0104)
+- [REQ-APIEGR-0105](../../requirements/apiegr.md#req-apiegr-0105)
+
+## Recommended Workflows
+
+This section lists safe, common end-to-end flows for promoting sandbox-produced changes into Git.
+
+### Patch-Based Promotion
+
+- Sandbox runs tool steps and produces `diff.patch` as an artifact.
+- Git egress checks out the target repo at `base_ref`.
+- Git egress applies the patch, runs optional safety checks, commits, pushes, and opens a PR.
+
+### Bundle-Based Promotion
+
+- Sandbox produces a git bundle artifact.
+- Git egress imports the bundle into a controlled checkout and pushes the resulting refs.
+
+### Direct PR Creation
+
+- Git egress creates a branch, applies changes, pushes, and creates a PR.
+- The orchestrator records PR metadata on the task.
+
+## Failure Modes and Safety
+
+Recommended safety checks
+
+- Reject patches that modify files outside an allowed path set, when configured.
+- Enforce maximum diff size limits.
+- Enforce branch naming rules (task-scoped branch prefixes).
+- Require successful sandbox test artifacts before allowing a push, when policy requires it.
+
+Error handling
+
+- Git egress SHOULD return structured error types for auth failures, policy denials, merge conflicts, and patch apply failures.
+- The orchestrator SHOULD surface these errors to the Project Manager Agent for remediation planning.
 
 ## Allowlist and Scope
 
-- **Allowlist**: PMA, PAA, and optionally Worker agent per [MCP Gateway Enforcement](../mcp_gateway_enforcement.md) and [Git Egress MCP](../git_egress_mcp.md).
+- **Allowlist**: PMA, PAA, and optionally Worker agent per [MCP Gateway Enforcement](../mcp/mcp_gateway_enforcement.md).
 - **Scope**: Typically `pm` for create/push/PR; sandbox may be allowed for validate/apply when policy permits.

@@ -246,7 +246,7 @@ Cross-draft dependencies and tensions that should be resolved or documented when
 ### 5.11 Workspace Provisioning and Project Repos vs Canonical
 
 - **Draft:** `workspace_provisioning_and_project_repos_spec_proposal.md`
-- **Canonical:** [`project_git_repos.md`](../tech_specs/project_git_repos.md), [`git_egress_mcp.md`](../tech_specs/git_egress_mcp.md), [`cynode_sba.md`](../tech_specs/cynode_sba.md), [`worker_node.md`](../tech_specs/worker_node.md), [`worker_api.md`](../tech_specs/worker_api.md), [`sandbox_container.md`](../tech_specs/sandbox_container.md) define project-repo association, egress allowlist, job spec, and sandbox mounts; they do not specify how repo content reaches `/workspace` or who performs clone.
+- **Canonical:** [`project_git_repos.md`](../tech_specs/project_git_repos.md), [`git_egress.md`](../tech_specs/mcp_tools/git_egress.md), [`cynode_sba.md`](../tech_specs/cynode_sba.md), [`worker_node.md`](../tech_specs/worker_node.md), [`worker_api.md`](../tech_specs/worker_api.md), [`sandbox_container.md`](../tech_specs/sandbox_container.md) define project-repo association, egress allowlist, job spec, and sandbox mounts; they do not specify how repo content reaches `/workspace` or who performs clone.
 - **Conflict type:** Additive.
   The draft adds implementation "how" (workspace provisioning flow, credential boundary, job workspace source, node population contract) without contradicting existing specs.
 - **Recommendation:** When promoting, fold the new subsections into the listed canonical docs so workspace provisioning and the single allowlist (project_git_repos) for both egress and provisioning are in one place; add or extend REQ-APIEGR, REQ-WORKER, REQ-SANDBX (or REQ-PROJCT) as proposed in the draft.
@@ -265,7 +265,7 @@ Cross-draft dependencies and tensions that should be resolved or documented when
 8. **Cloud LLM API quotas:** When promoting `cloud_llm_api_quotas_spec_proposal.md`, use the placement recommended in [2026-03-16_cloud_llm_api_quotas_spec_placement.md](2026-03-16_cloud_llm_api_quotas_spec_placement.md) (standalone tech spec under External Integration and Routing).
 9. **Worker LLM proxy SBA capture:** When promoting `worker_llm_proxy_sba_inference_capture_proposal.md`, integrate into worker_node (and related specs) so SBA inference capture and reporting are canonical in one place.
 10. **Orchestrator self-metadata and logging:** When promoting `orchestrator_self_metadata_and_logging_spec_proposal.md`, integrate into orchestrator.md (and optionally orchestrator_artifacts_storage.md) so self-metadata and logging are canonical in one place.
-11. **Workspace provisioning and project repos:** When promoting `workspace_provisioning_and_project_repos_spec_proposal.md`, fold new subsections into project_git_repos.md, git_egress_mcp.md, cynode_sba.md, worker_node.md, worker_api.md, and sandbox_container.md; add or extend requirements per the draft so workspace provisioning and credential boundary are canonical.
+11. **Workspace provisioning and project repos:** When promoting `workspace_provisioning_and_project_repos_spec_proposal.md`, fold new subsections into project_git_repos.md, git_egress.md, cynode_sba.md, worker_node.md, worker_api.md, and sandbox_container.md; add or extend requirements per the draft so workspace provisioning and credential boundary are canonical.
 
 ## 7. References
 

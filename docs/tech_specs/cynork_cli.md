@@ -57,7 +57,7 @@ The CLI is intended to support the same administrative capabilities as the Web C
 - Skills storage and CRUD: [`docs/tech_specs/skills_storage_and_inference.md`](skills_storage_and_inference.md)
 - Data REST API: [`docs/tech_specs/data_rest_api.md`](data_rest_api.md)
 - API Egress (credentials): [`docs/tech_specs/api_egress_server.md`](api_egress_server.md)
-- Git Egress (credentials): [`docs/tech_specs/git_egress_mcp.md`](git_egress_mcp.md)
+- Git Egress (credentials): [`docs/tech_specs/mcp_tools/git_egress.md`](mcp_tools/git_egress.md)
 
 ## Capability Parity With Web Console
 

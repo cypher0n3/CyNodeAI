@@ -632,7 +632,7 @@ See [`docs/tech_specs/worker_node.md`](worker_node.md) and [`docs/tech_specs/wor
 The orchestrator adopts MCP as the standard tool interface for agents.
 This enables a consistent tool protocol and role-based tool access.
 
-See [`docs/tech_specs/mcp_tooling.md`](mcp_tooling.md).
+See [`docs/tech_specs/mcp/mcp_tooling.md`](mcp/mcp_tooling.md).
 
 ## Workflow Engine
 

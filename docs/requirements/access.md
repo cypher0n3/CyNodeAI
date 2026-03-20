@@ -12,7 +12,7 @@ It covers authorization, policy evaluation, RBAC, groups, and scope enforcement.
 
 - **REQ-ACCESS-0001:** Default-deny policy; enforcement at gateway and MCP; auditable decisions.
   [CYNAI.ACCESS.Doc.AccessControl](../tech_specs/access_control.md#spec-cynai-access-doc-accesscontrol)
-  [CYNAI.MCPGAT.Doc.GatewayEnforcement](../tech_specs/mcp_gateway_enforcement.md#spec-cynai-mcpgat-doc-gatewayenforcement)
+  [CYNAI.MCPGAT.Doc.GatewayEnforcement](../tech_specs/mcp/mcp_gateway_enforcement.md#spec-cynai-mcpgat-doc-gatewayenforcement)
   <a id="req-access-0001"></a>
 - **REQ-ACCESS-0002:** Groups and membership in PostgreSQL; auditable; role bindings scope-aware; policy uses user and group context.
   [CYNAI.ACCESS.Doc.RBACAndGroups](../tech_specs/rbac_and_groups.md#spec-cynai-access-doc-rbacandgroups)

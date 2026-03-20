@@ -38,7 +38,7 @@ Technical specifications: [`docs/tech_specs/projects_and_scopes.md`](../tech_spe
 - **REQ-PROJCT-0105:** The system MUST expose MCP tools so that orchestrator-side agents (e.g. Project Manager) can search and resolve projects for the authenticated user.
   All project list and search operations MUST be scoped to projects the authenticated user is authorized to access (e.g. via RBAC and default project); the gateway MUST enforce this scope and MUST NOT return projects the user cannot access.
   [CYNAI.ACCESS.ProjectsMcpSearch](../tech_specs/projects_and_scopes.md#spec-cynai-access-projectsmcpsearch)
-  [CYNAI.MCPGAT.Doc.GatewayEnforcement](../tech_specs/mcp_gateway_enforcement.md#spec-cynai-mcpgat-doc-gatewayenforcement)
+  [CYNAI.MCPGAT.Doc.GatewayEnforcement](../tech_specs/mcp/mcp_gateway_enforcement.md#spec-cynai-mcpgat-doc-gatewayenforcement)
   <a id="req-projct-0105"></a>
 
 - **REQ-PROJCT-0106:** The system MUST allow multiple Git repository associations per project so that tasks and Git egress operations can use project-scoped repo allowlists.

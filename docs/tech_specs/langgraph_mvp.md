@@ -413,4 +413,4 @@ flowchart LR
 - Orchestrator-side agents MUST use MCP database tools for state reads and writes.
 - Worker agents run in sandbox containers and MUST use MCP tools for controlled operations.
 
-See [`docs/tech_specs/mcp_tooling.md`](mcp_tooling.md), [`docs/tech_specs/project_manager_agent.md`](project_manager_agent.md), and [`docs/tech_specs/user_preferences.md`](user_preferences.md).
+See [`docs/tech_specs/mcp/mcp_tooling.md`](mcp/mcp_tooling.md), [`docs/tech_specs/project_manager_agent.md`](project_manager_agent.md), and [`docs/tech_specs/user_preferences.md`](user_preferences.md).

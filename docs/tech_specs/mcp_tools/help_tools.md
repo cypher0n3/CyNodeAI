@@ -15,7 +15,7 @@ Help content is derived from tool definitions (MCPTool and ToolInvocation Help f
 
 Related documents
 
-- [MCP Tooling - Help MCP Server](../mcp_tooling.md#spec-cynai-mcptoo-helpmcpserver)
+- [MCP Tooling - Help MCP Server](../mcp/mcp_tooling.md#spec-cynai-mcptoo-helpmcpserver)
 
 ## Definition Compliance
 
@@ -84,5 +84,5 @@ The Help MCP contract defines how the gateway returns tool and invocation help t
 
 ## Allowlist and Scope
 
-- **Allowlist**: Help tools are allowlisted for orchestrator-side agents (PMA, PAA) and MAY be allowlisted for Worker agents per [MCP Tooling - Help MCP Server](../mcp_tooling.md#spec-cynai-mcptoo-helpmcpserver).
+- **Allowlist**: Help tools are allowlisted for orchestrator-side agents (PMA, PAA) and MAY be allowlisted for Worker agents per [MCP Tooling - Help MCP Server](../mcp/mcp_tooling.md#spec-cynai-mcptoo-helpmcpserver).
 - **Scope**: `help.get` typically `both`; `specification.help` typically `pm`.

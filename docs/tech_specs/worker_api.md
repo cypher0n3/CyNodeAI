@@ -482,7 +482,7 @@ Minimum proxy operations:
 
 See also:
 
-- [`docs/tech_specs/mcp_gateway_enforcement.md`](mcp_gateway_enforcement.md#spec-cynai-mcpgat-agenttokensworkerproxyonly) (`CYNAI.MCPGAT.AgentTokensWorkerProxyOnly`)
+- [`docs/tech_specs/mcp/mcp_gateway_enforcement.md`](mcp/mcp_gateway_enforcement.md#spec-cynai-mcpgat-agenttokensworkerproxyonly) (`CYNAI.MCPGAT.AgentTokensWorkerProxyOnly`)
 - [`docs/tech_specs/worker_node.md`](worker_node.md#spec-cynai-worker-agenttokensworkerheldonly) (`CYNAI.WORKER.AgentTokensWorkerHeldOnly`)
 - [`docs/tech_specs/worker_node.md`](worker_node.md#spec-cynai-worker-agenttokenstorageandlifecycle) (`CYNAI.WORKER.AgentTokenStorageAndLifecycle`)
 

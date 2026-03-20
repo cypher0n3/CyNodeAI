@@ -71,7 +71,7 @@ This plan proposes breaking it up so that each table definition lives in the app
   - target document: `pgvector_proposal_draft.md` or vector storage spec
   - status: Pending
 - **Tables:** `auth_audit_log`, `mcp_tool_call_audit_log`, `chat_audit_log`
-  - target document: `mcp_tool_call_auditing.md` or audit docs
+  - target document: `mcp/mcp_tool_call_auditing.md` or audit docs
   - status: Pending
 - **Tables:** `models`, `model_versions`, `model_artifacts`, `node_model_availability`
   - target document: `model_management.md`

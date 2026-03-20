@@ -14,29 +14,29 @@ It covers controlled egress services and their policy and auditing constraints.
   [CYNAI.APIEGR.Doc.ApiEgressServer](../tech_specs/api_egress_server.md#spec-cynai-apiegr-doc-apiegressserver)
   <a id="req-apiegr-0001"></a>
 - **REQ-APIEGR-0002:** No Git credentials in sandboxes; Git ops via egress service; orchestrator as policy point; changeset artifacts tied to task_id and credential-free.
-  [CYNAI.APIEGR.GitEgressArchitecture](../tech_specs/git_egress_mcp.md#spec-cynai-apiegr-gitegressarch)
-  [CYNAI.APIEGR.GitEgressSandboxOutput](../tech_specs/git_egress_mcp.md#spec-cynai-apiegr-gitegressout)
+  [CYNAI.APIEGR.GitEgressArchitecture](../tech_specs/mcp_tools/git_egress.md#spec-cynai-apiegr-gitegressarch)
+  [CYNAI.APIEGR.GitEgressSandboxOutput](../tech_specs/mcp_tools/git_egress.md#spec-cynai-apiegr-gitegressout)
   <a id="req-apiegr-0002"></a>
 
 - **REQ-APIEGR-0100:** Sandboxes MUST NOT store Git credentials.
-  [CYNAI.APIEGR.GitEgressArchitecture](../tech_specs/git_egress_mcp.md#spec-cynai-apiegr-gitegressarch)
+  [CYNAI.APIEGR.GitEgressArchitecture](../tech_specs/mcp_tools/git_egress.md#spec-cynai-apiegr-gitegressarch)
   <a id="req-apiegr-0100"></a>
 - **REQ-APIEGR-0101:** Sandboxes MUST NOT make arbitrary outbound network calls to Git hosts.
   This includes remote-affecting Git operations such as `git clone`, `git fetch`, `git pull`, `git push`, submodule fetch/update, and Git LFS downloads.
-  [CYNAI.APIEGR.GitEgressArchitecture](../tech_specs/git_egress_mcp.md#spec-cynai-apiegr-gitegressarch)
+  [CYNAI.APIEGR.GitEgressArchitecture](../tech_specs/mcp_tools/git_egress.md#spec-cynai-apiegr-gitegressarch)
   <a id="req-apiegr-0101"></a>
 - **REQ-APIEGR-0102:** Git operations that require remote access MUST be performed by the Git egress service.
   Sandboxes MAY run local-only Git commands (for example `git status`, `git diff`, `git commit`) on the mounted workspace, but they MUST NOT contact Git remotes directly.
-  [CYNAI.APIEGR.GitEgressArchitecture](../tech_specs/git_egress_mcp.md#spec-cynai-apiegr-gitegressarch)
+  [CYNAI.APIEGR.GitEgressArchitecture](../tech_specs/mcp_tools/git_egress.md#spec-cynai-apiegr-gitegressarch)
   <a id="req-apiegr-0102"></a>
 - **REQ-APIEGR-0103:** The orchestrator SHOULD act as the policy and routing point for Git egress operations.
-  [CYNAI.APIEGR.GitEgressArchitecture](../tech_specs/git_egress_mcp.md#spec-cynai-apiegr-gitegressarch)
+  [CYNAI.APIEGR.GitEgressArchitecture](../tech_specs/mcp_tools/git_egress.md#spec-cynai-apiegr-gitegressarch)
   <a id="req-apiegr-0103"></a>
 - **REQ-APIEGR-0104:** A changeset artifact MUST be associated with a single `task_id`.
-  [CYNAI.APIEGR.GitEgressSandboxOutput](../tech_specs/git_egress_mcp.md#spec-cynai-apiegr-gitegressout)
+  [CYNAI.APIEGR.GitEgressSandboxOutput](../tech_specs/mcp_tools/git_egress.md#spec-cynai-apiegr-gitegressout)
   <a id="req-apiegr-0104"></a>
 - **REQ-APIEGR-0105:** A changeset artifact MUST NOT include credentials.
-  [CYNAI.APIEGR.GitEgressSandboxOutput](../tech_specs/git_egress_mcp.md#spec-cynai-apiegr-gitegressout)
+  [CYNAI.APIEGR.GitEgressSandboxOutput](../tech_specs/mcp_tools/git_egress.md#spec-cynai-apiegr-gitegressout)
   <a id="req-apiegr-0105"></a>
 
 - **REQ-APIEGR-0106:** Agents MUST never receive credentials in responses.
