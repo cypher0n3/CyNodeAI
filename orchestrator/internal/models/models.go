@@ -542,6 +542,12 @@ type ChatAuditLog struct {
 	CreatedAt time.Time `json:"created_at"`
 }
 
+// SetGeneratedAuditIDs sets DB-assigned id and created_at after insert.
+func (m *ChatAuditLog) SetGeneratedAuditIDs(id uuid.UUID, createdAt time.Time) {
+	m.ID = id
+	m.CreatedAt = createdAt
+}
+
 // WorkflowCheckpointBase is the domain base struct for workflow checkpoints (fields without ID, UpdatedAt).
 // Note: WorkflowCheckpoint uses UpdatedAt but not CreatedAt in the domain type (though GormModelUUID provides CreatedAt).
 // This is embedded in WorkflowCheckpointRecord along with GormModelUUID.
@@ -755,6 +761,12 @@ type AccessControlAuditLog struct {
 	// Identity/timestamps (populated from GormModelUUID by ToAccessControlAuditLog())
 	ID        uuid.UUID `json:"id"`
 	CreatedAt time.Time `json:"created_at"`
+}
+
+// SetGeneratedAuditIDs sets DB-assigned id and created_at after insert.
+func (m *AccessControlAuditLog) SetGeneratedAuditIDs(id uuid.UUID, createdAt time.Time) {
+	m.ID = id
+	m.CreatedAt = createdAt
 }
 
 // ApiCredentialBase is the domain base struct for API credentials (fields without ID, CreatedAt, UpdatedAt, DeletedAt).

@@ -48,7 +48,7 @@ Scripts live in `scripts/test_scripts/`.
   e2e_198: progressive visible-text updates in TUI; Ctrl+C cancels stream, in-flight landmark then prompt-ready; final turn reconciled in scrollback.
   Run: `just e2e --tags chat`, `--tags pma_inference`, `--tags tui_pty`.
 - **Task 2 MCP** - Scripts: **e2e_0660_worker_pma_proxy.py**, **e2e_0570_pma_chat_context.py**, **e2e_0580_pma_chat_capable_model.py** or new.
-  Assert: PMA chat uses real MCP tool results (db.task.get, db.project.get/list, etc.); tool success, rejection, and ambiguity surface as real outcomes (no simulated content); gateway allow-list permits the minimum tool set.
+  Assert: PMA chat uses real MCP tool results (task.*, project.get/list, db.task.get, etc.); tool success, rejection, and ambiguity surface as real outcomes (no simulated content); gateway allow-list permits the minimum tool set.
   Run: `just e2e --tags pma`, `--tags chat`.
 - **Task 3 Auth and PTY** - Scripts: **e2e_0030_auth_login.py**, **e2e_0750_tui_pty.py**, **e2e_0760_tui_slash_commands.py** or new.
   Assert: Startup login recovery when token missing; in-session auth recovery when gateway returns 401; password/token never in scrollback; `/thread new`/`switch`/`rename` in PTY; `/show-thinking`/`/hide-thinking` toggle and persist (YAML reload).
@@ -146,7 +146,7 @@ Pull forward the minimum MCP gateway allow-path and PMA chat tool set so PMA cha
 - [ ] Read the requirements and specs listed in Task 2 Requirements and Specifications.
 - [ ] Inspect current MCP gateway allow path (e.g. `db.preference.*` only); identify expansion points.
 - [ ] Inspect PMA chat execution path and langchaingo tool use; identify where worker proxy and orchestrator MCP gateway must be wired.
-- [ ] List the minimum PMA chat tool set from the stable catalog (e.g. db.task.get, db.project.get/list, db.system_setting.get/list, artifact.*, help.get) and confirm gateway allow-list and tool registration.
+- [ ] List the minimum PMA chat tool set from the stable catalog (e.g. task.get/list/result/cancel/logs, project.get/list, db.preference.*, db.task.get, db.job.get, artifact.*, help.get) and confirm gateway allow-list and tool registration.
 
 #### Red (Task 2)
 
@@ -157,7 +157,7 @@ Pull forward the minimum MCP gateway allow-path and PMA chat tool set so PMA cha
 #### Green (Task 2)
 
 - [ ] Expand the MCP allow path beyond `db.preference.*` for the minimum PMA-safe tool slice aligned with the specs.
-- [ ] Land the minimum PMA chat tool set (smallest viable subset: db.task.get, db.project.get/list, db.system_setting.get/list, artifact.* where needed, help.get).
+- [ ] Land the minimum PMA chat tool set (smallest viable subset: task.*and project.* tools above, db.preference.*, db.task.get, artifact.* where needed, help.get; system_setting and other catalog tools as follow-up).
 - [ ] Wire PMA chat execution so langchaingo tool use goes through the worker proxy and orchestrator MCP gateway on the active chat path.
 - [ ] Run targeted tests until they pass.
 - [ ] Validation gate: do not proceed until targeted tests are green.

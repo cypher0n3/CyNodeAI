@@ -23,16 +23,8 @@ func (PreferenceEntryRecord) TableName() string {
 // ToPreferenceEntry converts a PreferenceEntryRecord to a domain PreferenceEntry with all fields populated.
 func (r *PreferenceEntryRecord) ToPreferenceEntry() *models.PreferenceEntry {
 	return &models.PreferenceEntry{
-		PreferenceEntryBase: models.PreferenceEntryBase{
-			ScopeType: r.PreferenceEntryBase.ScopeType,
-			ScopeID:   r.PreferenceEntryBase.ScopeID,
-			Key:       r.PreferenceEntryBase.Key,
-			Value:     r.PreferenceEntryBase.Value,
-			ValueType: r.PreferenceEntryBase.ValueType,
-			Version:   r.PreferenceEntryBase.Version,
-			UpdatedBy: r.PreferenceEntryBase.UpdatedBy,
-		},
-		ID:        r.GormModelUUID.ID,
-		UpdatedAt: r.GormModelUUID.UpdatedAt,
+		PreferenceEntryBase: r.PreferenceEntryBase,
+		ID:                  r.ID,
+		UpdatedAt:           r.UpdatedAt,
 	}
 }

@@ -5,7 +5,7 @@ Feature: cynork status and auth
   I want to check gateway status and authenticate
   So that I can call protected APIs and manage my session
 
-## Background
+Background:
 
   Given a mock gateway is running
   And cynork is built

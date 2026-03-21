@@ -138,8 +138,8 @@ type toolCallRequest struct {
 	Arguments map[string]interface{} `json:"arguments,omitempty"`
 }
 
-// requiredScopedIds defines which of task_id, run_id, job_id are required for a tool (REQ-MCPGAT-0103--0106, mcp_gateway_enforcement.md).
-var requiredScopedIds = map[string]struct{ TaskID, RunID, JobID bool }{
+// requiredScopedIds defines which of task_id, run_id, job_id, user_id are required for a tool (REQ-MCPGAT-0103--0106, mcp_gateway_enforcement.md).
+var requiredScopedIds = map[string]struct{ TaskID, RunID, JobID, UserID bool }{
 	"db.preference.get":       {},
 	"db.preference.list":      {},
 	"db.preference.effective": {TaskID: true},
@@ -147,6 +147,7 @@ var requiredScopedIds = map[string]struct{ TaskID, RunID, JobID bool }{
 	"db.preference.update":    {},
 	"db.preference.delete":    {},
 	"db.task.get":             {TaskID: true},
+	"task.get":                {TaskID: true},
 	"db.job.get":              {JobID: true},
 	"artifact.get":            {TaskID: true},
 	"skills.create":           {TaskID: true},
@@ -154,6 +155,13 @@ var requiredScopedIds = map[string]struct{ TaskID, RunID, JobID bool }{
 	"skills.get":              {TaskID: true},
 	"skills.update":           {TaskID: true},
 	"skills.delete":           {TaskID: true},
+	"help.get":                {TaskID: true},
+	"task.list":               {UserID: true},
+	"task.result":             {TaskID: true},
+	"task.cancel":             {TaskID: true},
+	"task.logs":               {TaskID: true},
+	"project.list":            {UserID: true},
+	"project.get":             {UserID: true},
 }
 
 // validateRequiredScopedIds returns an error message if required scoped ids are missing or invalid for the tool.
@@ -171,6 +179,9 @@ func validateRequiredScopedIds(toolName string, args map[string]interface{}) str
 	if req.JobID && uuidArg(args, "job_id") == nil {
 		return "job_id required"
 	}
+	if req.UserID && uuidArg(args, "user_id") == nil {
+		return "user_id required"
+	}
 	return ""
 }
 
@@ -184,7 +195,8 @@ func writeDenyAuditAndRespond(ctx context.Context, w http.ResponseWriter, store 
 			ErrorType: strPtr("invalid_arguments"),
 			TaskID:    uuidArg(args, "task_id"),
 			RunID:     uuidArg(args, "run_id"),
-				JobID: uuidArg(args, "job_id"),
+			JobID:     uuidArg(args, "job_id"),
+			UserID:    uuidArg(args, "user_id"),
 		},
 	}
 	if err := store.CreateMcpToolCallAuditLog(ctx, rec); err != nil {
@@ -210,6 +222,9 @@ func routeAndWriteAudit(ctx context.Context, w http.ResponseWriter, store databa
 	}
 	if rec.JobID == nil {
 		rec.JobID = uuidArg(args, "job_id")
+	}
+	if rec.UserID == nil {
+		rec.UserID = uuidArg(args, "user_id")
 	}
 	if rec.DurationMs == nil {
 		ms := int(time.Since(start).Milliseconds())
@@ -266,6 +281,39 @@ const (
 	auditStatusSuccess = "success"
 )
 
+// mcpToolHandler routes one tool name to a handler (shared signature with routeToolCall).
+type mcpToolHandler func(context.Context, database.Store, map[string]interface{}, *models.McpToolCallAuditLog) (int, []byte, *models.McpToolCallAuditLog)
+
+// mcpToolRoutes maps tool_name to handler. Populated in init after handlers are linked.
+var mcpToolRoutes map[string]mcpToolHandler
+
+func init() {
+	mcpToolRoutes = map[string]mcpToolHandler{
+		"db.preference.get":       handlePreferenceGet,
+		"db.preference.list":      handlePreferenceList,
+		"db.preference.effective": handlePreferenceEffective,
+		"db.preference.create":    handlePreferenceCreate,
+		"db.preference.update":    handlePreferenceUpdate,
+		"db.preference.delete":    handlePreferenceDelete,
+		"db.task.get":             handleTaskGet,
+		"task.get":                handleTaskGet,
+		"help.get":                handleHelpGet,
+		"task.list":               handleTaskList,
+		"task.result":             handleTaskResult,
+		"task.cancel":             handleTaskCancel,
+		"task.logs":               handleTaskLogs,
+		"project.get":             handleProjectGet,
+		"project.list":            handleProjectList,
+		"db.job.get":              handleJobGet,
+		"artifact.get":            handleArtifactGet,
+		"skills.create":           handleSkillsCreate,
+		"skills.list":             handleSkillsList,
+		"skills.get":              handleSkillsGet,
+		"skills.update":           handleSkillsUpdate,
+		"skills.delete":           handleSkillsDelete,
+	}
+}
+
 // routeToolCall dispatches to preference and db tools when applicable; returns status code, response body, and audit record.
 func routeToolCall(ctx context.Context, store database.Store, toolName string, args map[string]interface{}) (code int, body []byte, rec *models.McpToolCallAuditLog) {
 	rec = &models.McpToolCallAuditLog{
@@ -275,40 +323,10 @@ func routeToolCall(ctx context.Context, store database.Store, toolName string, a
 			ErrorType: strPtr("not_implemented"),
 		},
 	}
-	switch toolName {
-	case "db.preference.get":
-		code, body, rec = handlePreferenceGet(ctx, store, args, rec)
-	case "db.preference.list":
-		code, body, rec = handlePreferenceList(ctx, store, args, rec)
-	case "db.preference.effective":
-		code, body, rec = handlePreferenceEffective(ctx, store, args, rec)
-	case "db.preference.create":
-		code, body, rec = handlePreferenceCreate(ctx, store, args, rec)
-	case "db.preference.update":
-		code, body, rec = handlePreferenceUpdate(ctx, store, args, rec)
-	case "db.preference.delete":
-		code, body, rec = handlePreferenceDelete(ctx, store, args, rec)
-	case "db.task.get":
-		code, body, rec = handleTaskGet(ctx, store, args, rec)
-	case "db.job.get":
-		code, body, rec = handleJobGet(ctx, store, args, rec)
-	case "artifact.get":
-		code, body, rec = handleArtifactGet(ctx, store, args, rec)
-	case "skills.create":
-		code, body, rec = handleSkillsCreate(ctx, store, args, rec)
-	case "skills.list":
-		code, body, rec = handleSkillsList(ctx, store, args, rec)
-	case "skills.get":
-		code, body, rec = handleSkillsGet(ctx, store, args, rec)
-	case "skills.update":
-		code, body, rec = handleSkillsUpdate(ctx, store, args, rec)
-	case "skills.delete":
-		code, body, rec = handleSkillsDelete(ctx, store, args, rec)
-	default:
-		code = http.StatusNotImplemented
-		body = []byte(`{"error":"tool routing not implemented"}`)
+	if fn, ok := mcpToolRoutes[toolName]; ok {
+		return fn(ctx, store, args, rec)
 	}
-	return code, body, rec
+	return http.StatusNotImplemented, []byte(`{"error":"tool routing not implemented"}`), rec
 }
 
 func strArg(args map[string]interface{}, key string) string {

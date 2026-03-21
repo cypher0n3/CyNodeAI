@@ -5,7 +5,7 @@ Feature: Node Manager Config Fetch and Startup
   I want to fetch configuration from the orchestrator and apply it before starting services
   So that Worker API bearer token and startup order follow the spec
 
-## Background
+Background:
 
   Given a mock orchestrator that returns bootstrap with node_config_url
   And the mock returns node config with worker_api bearer token

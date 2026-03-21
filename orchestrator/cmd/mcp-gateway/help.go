@@ -1,0 +1,83 @@
+package main
+
+import (
+	"context"
+	"encoding/json"
+	"net/http"
+	"strings"
+
+	"github.com/cypher0n3/cynodeai/orchestrator/internal/database"
+	"github.com/cypher0n3/cynodeai/orchestrator/internal/models"
+)
+
+const helpMaxBytes = 32 * 1024
+
+var helpTopicSnippets = map[string]string{
+	"tools":    "Use MCP tools via POST /v1/mcp/tools/call with tool_name and arguments. Task tools: task.get, task.list, task.result, task.cancel, task.logs. Project tools: project.get, project.list. Help: help.get.",
+	"gateway":  "The MCP gateway validates scoped ids, checks allowlists, writes an audit record per call, and routes to orchestrator store handlers.",
+	"projects": "Projects scope preferences and chat. The PM agent typically uses the default project per user unless a specific project_id is supplied in task or chat context.",
+}
+
+// helpOverviewDefault is embedded documentation when topic/path are omitted (MVP: no filesystem reads).
+const helpOverviewDefault = `# CyNodeAI MCP Gateway (help)
+
+Call POST /v1/mcp/tools/call with JSON: {"tool_name":"...","arguments":{...}}.
+Pass task_id, user_id, job_id, or other scoped ids as required by each tool (see mcp_tools/).
+
+Task tools mirror the User API: list tasks by user, fetch task details, task result (jobs), cancel, and aggregated logs from job stdout/stderr.
+
+Project tools return only projects authorized for the caller (MVP: the per-user default project).
+
+This overview is served from embedded strings in the gateway binary (no external files at runtime).
+`
+
+func helpGetMarkdown(topic, path string) string {
+	topic = strings.TrimSpace(strings.ToLower(topic))
+	path = strings.TrimSpace(path)
+	if topic != "" {
+		if s, ok := helpTopicSnippets[topic]; ok {
+			return truncateHelp(s)
+		}
+	}
+	if path != "" {
+		return truncateHelp(helpOverviewDefault + "\n\nRequested path is informational only in MVP; use topic keys such as tools, gateway, projects.")
+	}
+	return truncateHelp(helpOverviewDefault)
+}
+
+func truncateHelp(s string) string {
+	if len(s) <= helpMaxBytes {
+		return s
+	}
+	return s[:helpMaxBytes]
+}
+
+func handleHelpGet(_ context.Context, _ database.Store, args map[string]interface{}, rec *models.McpToolCallAuditLog) (code int, body []byte, auditRec *models.McpToolCallAuditLog) {
+	auditRec = rec
+	taskID := uuidArg(args, "task_id")
+	if taskID == nil {
+		rec.Decision = auditDecisionDeny
+		rec.Status = auditStatusError
+		rec.ErrorType = strPtr("invalid_arguments")
+		return http.StatusBadRequest, []byte(`{"error":"task_id required"}`), auditRec
+	}
+	rec.TaskID = taskID
+	topic := strArg(args, "topic")
+	path := strArg(args, "path")
+	content := helpGetMarkdown(topic, path)
+	rec.Decision = auditDecisionAllow
+	rec.Status = auditStatusSuccess
+	rec.ErrorType = nil
+	out := map[string]interface{}{
+		"content":   content,
+		"task_id":   taskID.String(),
+		"truncated": len(content) >= helpMaxBytes,
+	}
+	b, err := json.Marshal(out)
+	if err != nil {
+		rec.Status = auditStatusError
+		rec.ErrorType = strPtr("internal_error")
+		return http.StatusInternalServerError, []byte(`{"error":"internal error"}`), auditRec
+	}
+	return http.StatusOK, b, auditRec
+}

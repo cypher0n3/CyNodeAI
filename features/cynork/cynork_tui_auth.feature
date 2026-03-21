@@ -5,7 +5,7 @@ Feature: cynork TUI authentication and login recovery
   I want the TUI to start without requiring a valid token and prompt me to login if needed
   So that I am never blocked from launching the interactive chat surface
 
-## Background
+Background:
 
   Given a mock gateway is running
   And cynork is built

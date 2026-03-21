@@ -60,12 +60,16 @@ type MockDB struct {
 	// GetEffectivePreferencesForTaskErr, when set, makes GetEffectivePreferencesForTask return this error.
 	GetEffectivePreferencesForTaskErr error
 	// CreatePreferenceErr, UpdatePreferenceErr, DeletePreferenceErr for testing MCP handler internal-error paths.
-	CreatePreferenceErr           error
-	UpdatePreferenceErr           error
-	DeletePreferenceErr           error
-	GetTaskByIDErr                error
-	GetJobByIDErr                 error
-	GetArtifactByTaskIDAndPathErr error
+	CreatePreferenceErr error
+	UpdatePreferenceErr error
+	DeletePreferenceErr error
+	GetTaskByIDErr      error
+	UpdateTaskStatusErr error
+	// GetOrCreateDefaultProjectForUserErr, when set, makes GetOrCreateDefaultProjectForUser return this error.
+	GetOrCreateDefaultProjectForUserErr error
+	GetJobByIDErr                       error
+	GetJobsByTaskIDErr                  error
+	GetArtifactByTaskIDAndPathErr       error
 	// UpdateSkillErr, when set, makes UpdateSkill return this error (for handler tests).
 	UpdateSkillErr error
 	// DeleteSkillErr, when set, makes DeleteSkill return this error (for handler tests).
@@ -400,6 +404,9 @@ func (m *MockDB) CreateTask(_ context.Context, createdBy *uuid.UUID, prompt stri
 
 // GetOrCreateDefaultProjectForUser returns a deterministic per-user default project from the mock.
 func (m *MockDB) GetOrCreateDefaultProjectForUser(_ context.Context, userID uuid.UUID) (*models.Project, error) {
+	if m.GetOrCreateDefaultProjectForUserErr != nil {
+		return nil, m.GetOrCreateDefaultProjectForUserErr
+	}
 	return runWithLock(m, true, func() (*models.Project, error) {
 		if p, ok := m.DefaultProjectsByUser[userID]; ok {
 			return p, nil
@@ -413,12 +420,61 @@ func (m *MockDB) GetOrCreateDefaultProjectForUser(_ context.Context, userID uuid
 			},
 			ID:        uuid.New(),
 			CreatedAt: now,
-			UpdatedAt:   now,
+			UpdatedAt: now,
 		}
 		m.Projects[p.ID] = p
 		m.DefaultProjectsByUser[userID] = p
 		return p, nil
 	})
+}
+
+// GetProjectByID returns a project by id.
+func (m *MockDB) GetProjectByID(_ context.Context, id uuid.UUID) (*models.Project, error) {
+	return runWithLock(m, false, func() (*models.Project, error) {
+		p, ok := m.Projects[id]
+		if !ok {
+			return nil, database.ErrNotFound
+		}
+		cp := *p
+		return &cp, nil
+	})
+}
+
+// GetProjectBySlug returns a project by slug.
+func (m *MockDB) GetProjectBySlug(_ context.Context, slug string) (*models.Project, error) {
+	return runWithLock(m, false, func() (*models.Project, error) {
+		for _, p := range m.Projects {
+			if p.Slug == slug {
+				cp := *p
+				return &cp, nil
+			}
+		}
+		return nil, database.ErrNotFound
+	})
+}
+
+// ListAuthorizedProjectsForUser returns the default project for the user (MVP), optionally filtered by q.
+func (m *MockDB) ListAuthorizedProjectsForUser(ctx context.Context, userID uuid.UUID, q string, limit, offset int) ([]*models.Project, error) {
+	p, err := m.GetOrCreateDefaultProjectForUser(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	if offset > 0 {
+		return []*models.Project{}, nil
+	}
+	q = strings.TrimSpace(strings.ToLower(q))
+	if q != "" {
+		sl := strings.ToLower(p.Slug)
+		dn := strings.ToLower(p.DisplayName)
+		desc := ""
+		if p.Description != nil {
+			desc = strings.ToLower(*p.Description)
+		}
+		if !strings.Contains(sl, q) && !strings.Contains(dn, q) && !strings.Contains(desc, q) {
+			return []*models.Project{}, nil
+		}
+	}
+	return []*models.Project{p}, nil
 }
 
 // GetTaskByID retrieves a task by ID.
@@ -460,6 +516,9 @@ func taskMatchesUserAndSummary(t *models.Task, userID uuid.UUID, summary string)
 
 // UpdateTaskStatus updates a task's status.
 func (m *MockDB) UpdateTaskStatus(_ context.Context, taskID uuid.UUID, status string) error {
+	if m.UpdateTaskStatusErr != nil {
+		return m.UpdateTaskStatusErr
+	}
 	return m.setStatusAndUpdatedAt(taskID, status, true)
 }
 
@@ -497,6 +556,9 @@ func (m *MockDB) ListTasksByUser(_ context.Context, userID uuid.UUID, limit, off
 
 // GetJobsByTaskID retrieves jobs by task ID.
 func (m *MockDB) GetJobsByTaskID(_ context.Context, taskID uuid.UUID) ([]*models.Job, error) {
+	if m.GetJobsByTaskIDErr != nil {
+		return nil, m.GetJobsByTaskIDErr
+	}
 	return runWithLock(m, false, func() ([]*models.Job, error) {
 		jobs := m.JobsByTask[taskID]
 		if jobs == nil {
@@ -1360,7 +1422,7 @@ func (m *MockDB) AcquireTaskWorkflowLease(_ context.Context, taskID, leaseID uui
 				HolderID:  &holderID,
 				ExpiresAt: &expiresAt,
 			},
-			ID: uuid.New(),
+			ID:        uuid.New(),
 			CreatedAt: now,
 			UpdatedAt: now,
 		}

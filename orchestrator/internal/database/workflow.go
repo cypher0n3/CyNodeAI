@@ -81,20 +81,12 @@ func (db *DB) ReleaseTaskWorkflowLease(ctx context.Context, taskID, leaseID uuid
 
 // GetTaskWorkflowLease returns the task workflow lease row if any, or ErrNotFound.
 func (db *DB) GetTaskWorkflowLease(ctx context.Context, taskID uuid.UUID) (*models.TaskWorkflowLease, error) {
-	record, err := getWhere[TaskWorkflowLeaseRecord](db, ctx, "task_id", taskID, "get task workflow lease")
-	if err != nil {
-		return nil, err
-	}
-	return record.ToTaskWorkflowLease(), nil
+	return getDomainWhere(db, ctx, "task_id", taskID, "get task workflow lease", (*TaskWorkflowLeaseRecord).ToTaskWorkflowLease)
 }
 
 // GetWorkflowCheckpoint returns the current checkpoint for the task, or ErrNotFound.
 func (db *DB) GetWorkflowCheckpoint(ctx context.Context, taskID uuid.UUID) (*models.WorkflowCheckpoint, error) {
-	record, err := getWhere[WorkflowCheckpointRecord](db, ctx, "task_id", taskID, "get workflow checkpoint")
-	if err != nil {
-		return nil, err
-	}
-	return record.ToWorkflowCheckpoint(), nil
+	return getDomainWhere(db, ctx, "task_id", taskID, "get workflow checkpoint", (*WorkflowCheckpointRecord).ToWorkflowCheckpoint)
 }
 
 // UpsertWorkflowCheckpoint inserts or updates the single checkpoint row for the task (unique on task_id).

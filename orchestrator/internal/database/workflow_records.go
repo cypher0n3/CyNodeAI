@@ -24,12 +24,12 @@ func (WorkflowCheckpointRecord) TableName() string {
 func (r *WorkflowCheckpointRecord) ToWorkflowCheckpoint() *models.WorkflowCheckpoint {
 	return &models.WorkflowCheckpoint{
 		WorkflowCheckpointBase: models.WorkflowCheckpointBase{
-			TaskID:     r.WorkflowCheckpointBase.TaskID,
-			State:      r.WorkflowCheckpointBase.State,
-			LastNodeID: r.WorkflowCheckpointBase.LastNodeID,
+			TaskID:     r.TaskID,
+			State:      r.State,
+			LastNodeID: r.LastNodeID,
 		},
-		ID:        r.GormModelUUID.ID,
-		UpdatedAt: r.GormModelUUID.UpdatedAt,
+		ID:        r.ID,
+		UpdatedAt: r.UpdatedAt,
 	}
 }
 
@@ -50,13 +50,13 @@ func (TaskWorkflowLeaseRecord) TableName() string {
 func (r *TaskWorkflowLeaseRecord) ToTaskWorkflowLease() *models.TaskWorkflowLease {
 	return &models.TaskWorkflowLease{
 		TaskWorkflowLeaseBase: models.TaskWorkflowLeaseBase{
-			TaskID:    r.TaskWorkflowLeaseBase.TaskID,
-			LeaseID:   r.TaskWorkflowLeaseBase.LeaseID,
-			HolderID:  r.TaskWorkflowLeaseBase.HolderID,
-			ExpiresAt: r.TaskWorkflowLeaseBase.ExpiresAt,
+			TaskID:    r.TaskID,
+			LeaseID:   r.LeaseID,
+			HolderID:  r.HolderID,
+			ExpiresAt: r.ExpiresAt,
 		},
-		ID:        r.GormModelUUID.ID,
-		CreatedAt: r.GormModelUUID.CreatedAt,
-		UpdatedAt: r.GormModelUUID.UpdatedAt,
+		ID:        r.ID,
+		CreatedAt: r.CreatedAt,
+		UpdatedAt: r.UpdatedAt,
 	}
 }

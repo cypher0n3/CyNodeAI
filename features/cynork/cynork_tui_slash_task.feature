@@ -5,7 +5,7 @@ Feature: cynork TUI /task slash commands
   I want to list, get, create, cancel, and inspect tasks via slash commands
   So that I can manage work without leaving the chat surface
 
-## Background
+Background:
 
   Given a mock gateway is running
   And cynork is built

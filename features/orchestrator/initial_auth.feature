@@ -5,7 +5,7 @@ Feature: Initial User Authentication
   I want to sign in with local credentials (login, refresh, logout, current user)
   So that I can call protected APIs and manage my session
 
-## Background
+Background:
 
   Given a running PostgreSQL database
   And the orchestrator API is running

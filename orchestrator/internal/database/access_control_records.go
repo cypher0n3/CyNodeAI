@@ -23,18 +23,18 @@ func (AccessControlRuleRecord) TableName() string {
 func (r *AccessControlRuleRecord) ToAccessControlRule() *models.AccessControlRule {
 	return &models.AccessControlRule{
 		AccessControlRuleBase: models.AccessControlRuleBase{
-			SubjectType:     r.AccessControlRuleBase.SubjectType,
-			SubjectID:       r.AccessControlRuleBase.SubjectID,
-			Action:          r.AccessControlRuleBase.Action,
-			ResourceType:    r.AccessControlRuleBase.ResourceType,
-			ResourcePattern: r.AccessControlRuleBase.ResourcePattern,
-			Effect:          r.AccessControlRuleBase.Effect,
-			Priority:        r.AccessControlRuleBase.Priority,
-			Conditions:      r.AccessControlRuleBase.Conditions,
-			UpdatedBy:       r.AccessControlRuleBase.UpdatedBy,
+			SubjectType:     r.SubjectType,
+			SubjectID:       r.SubjectID,
+			Action:          r.Action,
+			ResourceType:    r.ResourceType,
+			ResourcePattern: r.ResourcePattern,
+			Effect:          r.Effect,
+			Priority:        r.Priority,
+			Conditions:      r.Conditions,
+			UpdatedBy:       r.UpdatedBy,
 		},
-		ID:        r.GormModelUUID.ID,
-		CreatedAt: r.GormModelUUID.CreatedAt,
-		UpdatedAt: r.GormModelUUID.UpdatedAt,
+		ID:        r.ID,
+		CreatedAt: r.CreatedAt,
+		UpdatedAt: r.UpdatedAt,
 	}
 }

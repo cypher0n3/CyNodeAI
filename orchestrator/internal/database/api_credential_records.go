@@ -23,19 +23,19 @@ func (ApiCredentialRecord) TableName() string {
 func (r *ApiCredentialRecord) ToApiCredential() *models.ApiCredential {
 	return &models.ApiCredential{
 		ApiCredentialBase: models.ApiCredentialBase{
-			OwnerType:            r.ApiCredentialBase.OwnerType,
-			OwnerID:              r.ApiCredentialBase.OwnerID,
-			Provider:             r.ApiCredentialBase.Provider,
-			CredentialType:       r.ApiCredentialBase.CredentialType,
-			CredentialName:       r.ApiCredentialBase.CredentialName,
-			CredentialCiphertext: r.ApiCredentialBase.CredentialCiphertext,
-			CredentialKID:        r.ApiCredentialBase.CredentialKID,
-			IsActive:             r.ApiCredentialBase.IsActive,
-			ExpiresAt:            r.ApiCredentialBase.ExpiresAt,
-			UpdatedBy:            r.ApiCredentialBase.UpdatedBy,
+			OwnerType:            r.OwnerType,
+			OwnerID:              r.OwnerID,
+			Provider:             r.Provider,
+			CredentialType:       r.CredentialType,
+			CredentialName:       r.CredentialName,
+			CredentialCiphertext: r.CredentialCiphertext,
+			CredentialKID:        r.CredentialKID,
+			IsActive:             r.IsActive,
+			ExpiresAt:            r.ExpiresAt,
+			UpdatedBy:            r.UpdatedBy,
 		},
-		ID:        r.GormModelUUID.ID,
-		CreatedAt: r.GormModelUUID.CreatedAt,
-		UpdatedAt: r.GormModelUUID.UpdatedAt,
+		ID:        r.ID,
+		CreatedAt: r.CreatedAt,
+		UpdatedAt: r.UpdatedAt,
 	}
 }

@@ -326,7 +326,8 @@ def main():
     opts, unknown = parse_args()
     sys.argv = [sys.argv[0]] + unknown
 
-    # When --single and timeout > 0, run in subprocess so we can enforce a hard cap (avoids hung runs).
+    # When --single and timeout > 0, run in subprocess so we can enforce a hard cap
+    # (avoids hung runs).
     single_id = _normalize_single_test_id(getattr(opts, "single", "") or "")
     timeout_sec = getattr(opts, "timeout", 300) or 0
     if single_id and timeout_sec > 0 and os.environ.get("E2E_NO_TIMEOUT_WRAP") != "1":
@@ -339,6 +340,7 @@ def main():
                 cwd=_ROOT,
                 env=env,
                 timeout=timeout_sec,
+                check=False,
             )
             sys.exit(proc.returncode)
         except subprocess.TimeoutExpired:

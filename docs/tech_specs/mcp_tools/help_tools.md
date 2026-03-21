@@ -11,7 +11,8 @@
 ## Document Overview
 
 On-demand documentation for how to interact with CyNodeAI.
-Help content is derived from tool definitions (MCPTool and ToolInvocation Help fields) and MUST be size-limited and MUST NOT include secrets.
+Help content MUST be size-limited and MUST NOT include secrets.
+For MVP, the gateway may serve `help.get` from embedded strings or an in-process map only (see [Help MCP Server](../mcp/mcp_tooling.md#spec-cynai-mcptoo-helpmcpserver)); richer resolution from live tool-definition catalogs is a later refinement.
 
 Related documents
 

@@ -34,7 +34,8 @@ Common invocation pattern for project tools: (1) Resolve caller identity and age
 
 ### `project.get` Operation
 
-- **Inputs**: Required `project_id` (uuid) or `slug` (text); exactly one MUST be provided.
+- **Inputs**: Required `user_id` (uuid) for authorized-set checks.
+  Required `project_id` (uuid) or `slug` (text); exactly one MUST be provided.
   Scope: `pm`.
 - **Outputs**: Project details if in caller's authorized set; otherwise not-found or access-denied.
 - **Behavior**: Common pattern; backend returns project only if caller has access (default project plus RBAC).
@@ -44,25 +45,26 @@ Common invocation pattern for project tools: (1) Resolve caller identity and age
 
 <a id="algo-cynai-mcptoo-projectget"></a>
 
-1. Apply common pattern; validate that exactly one of project_id or slug is provided.
-2. Call project read (by id or slug) with caller context; backend filters by authorized set.
+1. Apply common pattern; validate `user_id` and that exactly one of `project_id` or `slug` is provided.
+2. Call project read (by id or slug) with caller context; backend confirms the project is in the user's authorized set (e.g. default project for that user).
 3. Return project or not-found/access-denied; audit and return.
 
 ### `project.list` Operation
 
-- **Inputs**: Optional `q` (filter slug, display_name, description), `limit`, `cursor`.
+- **Inputs**: Required `user_id` (uuid) for authorized-set resolution.
+  Optional `q` (filter slug, display_name, description), `limit` (default 50, cap 200), `offset` (non-negative; offset-based pagination for the current gateway implementation).
   Scope: `pm`.
-- **Outputs**: List of authorized projects; size-limited and paginated.
-- **Behavior**: Common pattern; backend lists only projects in caller's authorized set, with optional q filter.
+- **Outputs**: List of authorized projects; size-limited; `next_cursor` may be empty when cursor-based pagination is not used.
+- **Behavior**: Common pattern; backend lists only projects in the caller's authorized set for that user, with optional `q` filter.
   See [project.list Algorithm](#algo-cynai-mcptoo-projectlist).
 
 #### `project.list` Algorithm
 
 <a id="algo-cynai-mcptoo-projectlist"></a>
 
-1. Apply common pattern; validate optional q, limit, cursor.
-2. Call project list with caller context (authorized set only) and optional q; apply limit and cursor.
-3. Enforce response size limit; return list and next cursor; audit and return.
+1. Apply common pattern; validate `user_id` and optional `q`, `limit`, `offset`.
+2. Call project list with caller context (authorized set only) and optional `q`; apply limit and offset.
+3. Enforce response size limit; return list and optional next cursor; audit and return.
 
 ## Allowlist and Scope
 

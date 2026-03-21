@@ -5,7 +5,7 @@ Feature: cynork TUI slash command dispatch and help
   I want slash commands to be dispatched locally and discoverable via /help
   So that I can control the session without leaving the chat surface
 
-## Background
+Background:
 
   Given a mock gateway is running
   And cynork is built

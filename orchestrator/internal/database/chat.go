@@ -123,14 +123,7 @@ func (db *DB) CreateChatAuditLog(ctx context.Context, rec *models.ChatAuditLog) 
 			RequestID:        rec.RequestID,
 		},
 	}
-	ensureAuditIDAndTime(&record.ID, &record.CreatedAt)
-	if err := db.createRecord(ctx, record, "create chat audit log"); err != nil {
-		return err
-	}
-	// Populate the input struct with the generated ID and CreatedAt
-	rec.ID = record.ID
-	rec.CreatedAt = record.CreatedAt
-	return nil
+	return insertAuditModel(db, ctx, record, record, rec, "create chat audit log")
 }
 
 // GetThreadByResponseID resolves previous_response_id to the thread that owns that response.

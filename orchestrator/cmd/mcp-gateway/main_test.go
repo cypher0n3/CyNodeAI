@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -328,6 +329,12 @@ func TestValidateRequiredScopedIds(t *testing.T) {
 		{"list no scoped ids required", "db.preference.list", map[string]interface{}{"scope_type": "system"}, ""},
 		{"task.get missing task_id", "db.task.get", map[string]interface{}{}, "task_id required"},
 		{"task.get has task_id", "db.task.get", map[string]interface{}{"task_id": uuid.New().String()}, ""},
+		{"task.get alias missing task_id", "task.get", map[string]interface{}{}, "task_id required"},
+		{"task.list missing user_id", "task.list", map[string]interface{}{}, "user_id required"},
+		{"task.list has user_id", "task.list", map[string]interface{}{"user_id": uuid.New().String()}, ""},
+		{"help.get missing task_id", "help.get", map[string]interface{}{}, "task_id required"},
+		{"project.list missing user_id", "project.list", map[string]interface{}{}, "user_id required"},
+		{"project.get missing user_id", "project.get", map[string]interface{}{"project_id": uuid.New().String()}, "user_id required"},
 		{"job.get missing job_id", "db.job.get", map[string]interface{}{}, "job_id required"},
 		{"job.get has job_id", "db.job.get", map[string]interface{}{"job_id": uuid.New().String()}, ""},
 		{"artifact.get missing task_id", "artifact.get", map[string]interface{}{"path": "p"}, "task_id required"},
@@ -607,20 +614,30 @@ func TestToolCallHandler_PreferenceDelete_NotFound(t *testing.T) {
 	callToolHandlerPOST(t, `{"tool_name":"db.preference.delete","arguments":{"scope_type":"system","key":"nonexistent"}}`, http.StatusNotFound)
 }
 
-func TestToolCallHandler_TaskGet_Success(t *testing.T) {
+func TestToolCallHandler_TaskGet_Success_DbAndAlias(t *testing.T) {
 	mock := testutil.NewMockDB()
 	task, _ := mock.CreateTask(context.Background(), nil, "prompt", nil)
-	body := `{"tool_name":"db.task.get","arguments":{"task_id":"` + task.ID.String() + `"}}`
-	code, respBody := callToolHandlerWithStoreAndBody(t, mock, body)
-	if code != http.StatusOK {
-		t.Fatalf("got status %d", code)
-	}
-	var out map[string]interface{}
-	if err := json.Unmarshal(respBody, &out); err != nil {
-		t.Fatalf("unmarshal: %v", err)
-	}
-	if out["status"] != "pending" {
-		t.Errorf("expected status pending, got %v", out["status"])
+	for _, tc := range []struct {
+		name     string
+		toolName string
+	}{
+		{"db.task.get", "db.task.get"},
+		{"task.get alias", "task.get"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			body := `{"tool_name":"` + tc.toolName + `","arguments":{"task_id":"` + task.ID.String() + `"}}`
+			code, respBody := callToolHandlerWithStoreAndBody(t, mock, body)
+			if code != http.StatusOK {
+				t.Fatalf("got status %d", code)
+			}
+			var out map[string]interface{}
+			if err := json.Unmarshal(respBody, &out); err != nil {
+				t.Fatalf("unmarshal: %v", err)
+			}
+			if out["status"] != "pending" {
+				t.Errorf("expected status pending, got %v", out["status"])
+			}
+		})
 	}
 }
 
@@ -960,6 +977,118 @@ func TestToolCallHandler_TaskGet_BadArgs(t *testing.T) {
 	callToolHandlerPOST(t, `{"tool_name":"db.task.get","arguments":{}}`, http.StatusBadRequest)
 }
 
+func TestToolCallHandler_HelpGet_Success(t *testing.T) {
+	mock := testutil.NewMockDB()
+	task, _ := mock.CreateTask(context.Background(), nil, "p", nil)
+	body := `{"tool_name":"help.get","arguments":{"task_id":"` + task.ID.String() + `"}}`
+	code, respBody := callToolHandlerWithStoreAndBody(t, mock, body)
+	if code != http.StatusOK {
+		t.Fatalf("got status %d", code)
+	}
+	var out map[string]interface{}
+	if err := json.Unmarshal(respBody, &out); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if out["content"] == nil || out["content"] == "" {
+		t.Errorf("expected non-empty content, got %v", out)
+	}
+}
+
+func TestToolCallHandler_TaskList_Success(t *testing.T) {
+	mock := testutil.NewMockDB()
+	user, _ := mock.CreateUser(context.Background(), "u", nil)
+	mock.AddUser(user)
+	_, _ = mock.CreateTask(context.Background(), &user.ID, "p", nil)
+	body := `{"tool_name":"task.list","arguments":{"user_id":"` + user.ID.String() + `"}}`
+	code, respBody := callToolHandlerWithStoreAndBody(t, mock, body)
+	if code != http.StatusOK {
+		t.Fatalf("got status %d body %s", code, respBody)
+	}
+	var out struct {
+		Tasks []map[string]interface{} `json:"tasks"`
+	}
+	if err := json.Unmarshal(respBody, &out); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if len(out.Tasks) < 1 {
+		t.Errorf("expected at least one task")
+	}
+}
+
+func TestToolCallHandler_TaskResultAndLogs_Success(t *testing.T) {
+	mock := testutil.NewMockDB()
+	task, _ := mock.CreateTask(context.Background(), nil, "p", nil)
+	for _, tc := range []struct {
+		name string
+		tool string
+	}{
+		{"task.result", "task.result"},
+		{"task.logs", "task.logs"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			body := `{"tool_name":"` + tc.tool + `","arguments":{"task_id":"` + task.ID.String() + `"}}`
+			code, _ := callToolHandlerWithStoreAndBody(t, mock, body)
+			if code != http.StatusOK {
+				t.Fatalf("got status %d", code)
+			}
+		})
+	}
+}
+
+func TestToolCallHandler_TaskCancel_Success(t *testing.T) {
+	mock := testutil.NewMockDB()
+	task, _ := mock.CreateTask(context.Background(), nil, "p", nil)
+	body := `{"tool_name":"task.cancel","arguments":{"task_id":"` + task.ID.String() + `"}}`
+	code, respBody := callToolHandlerWithStoreAndBody(t, mock, body)
+	if code != http.StatusOK {
+		t.Fatalf("got status %d", code)
+	}
+	var out map[string]interface{}
+	if err := json.Unmarshal(respBody, &out); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if out["canceled"] != true {
+		t.Errorf("expected canceled true")
+	}
+}
+
+func TestToolCallHandler_ProjectList_Success(t *testing.T) {
+	mock := testutil.NewMockDB()
+	user, _ := mock.CreateUser(context.Background(), "u", nil)
+	mock.AddUser(user)
+	body := `{"tool_name":"project.list","arguments":{"user_id":"` + user.ID.String() + `"}}`
+	code, respBody := callToolHandlerWithStoreAndBody(t, mock, body)
+	if code != http.StatusOK {
+		t.Fatalf("got status %d %s", code, respBody)
+	}
+	var out map[string]interface{}
+	if err := json.Unmarshal(respBody, &out); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if out["projects"] == nil {
+		t.Error("expected projects")
+	}
+}
+
+func TestToolCallHandler_ProjectGet_Success(t *testing.T) {
+	mock := testutil.NewMockDB()
+	user, _ := mock.CreateUser(context.Background(), "u", nil)
+	mock.AddUser(user)
+	proj, _ := mock.GetOrCreateDefaultProjectForUser(context.Background(), user.ID)
+	body := `{"tool_name":"project.get","arguments":{"user_id":"` + user.ID.String() + `","project_id":"` + proj.ID.String() + `"}}`
+	code, respBody := callToolHandlerWithStoreAndBody(t, mock, body)
+	if code != http.StatusOK {
+		t.Fatalf("got status %d %s", code, respBody)
+	}
+	var out map[string]interface{}
+	if err := json.Unmarshal(respBody, &out); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if out["slug"] == nil {
+		t.Error("expected slug")
+	}
+}
+
 func TestToolCallHandler_JobGet_BadArgs(t *testing.T) {
 	callToolHandlerPOST(t, `{"tool_name":"db.job.get","arguments":{}}`, http.StatusBadRequest)
 }
@@ -1108,6 +1237,324 @@ func TestToolCallHandler_ArtifactGet_InternalError(t *testing.T) {
 	mock, taskID := mockWithTask(t)
 	mock.GetArtifactByTaskIDAndPathErr = errors.New("db error")
 	callToolHandlerWithStore(t, mock, `{"tool_name":"artifact.get","arguments":{"task_id":"`+taskID.String()+`","path":"x"}}`, http.StatusInternalServerError)
+}
+
+func TestHandleTaskAndProjectTools_DirectValidation(t *testing.T) {
+	ctx := context.Background()
+	mock := testutil.NewMockDB()
+	rec := &models.McpToolCallAuditLog{}
+
+	code, _, _ := handleTaskList(ctx, mock, map[string]interface{}{}, rec)
+	if code != http.StatusBadRequest {
+		t.Errorf("task.list no user_id: %d", code)
+	}
+	uid := uuid.New()
+	code, _, _ = handleTaskList(ctx, mock, map[string]interface{}{"user_id": uid.String(), "cursor": "not-int"}, rec)
+	if code != http.StatusBadRequest {
+		t.Errorf("task.list bad cursor: %d", code)
+	}
+
+	code, _, _ = handleTaskResult(ctx, mock, map[string]interface{}{}, rec)
+	if code != http.StatusBadRequest {
+		t.Errorf("task.result no task_id: %d", code)
+	}
+	code, _, _ = handleTaskLogs(ctx, mock, map[string]interface{}{}, rec)
+	if code != http.StatusBadRequest {
+		t.Errorf("task.logs no task_id: %d", code)
+	}
+	code, _, _ = handleTaskCancel(ctx, mock, map[string]interface{}{}, rec)
+	if code != http.StatusBadRequest {
+		t.Errorf("task.cancel no task_id: %d", code)
+	}
+	code, _, _ = handleTaskCancel(ctx, mock, map[string]interface{}{"task_id": uuid.New().String()}, rec)
+	if code != http.StatusNotFound {
+		t.Errorf("task.cancel missing task: %d", code)
+	}
+
+	code, _, _ = handleProjectGet(ctx, mock, map[string]interface{}{"user_id": uid.String(), "project_id": uuid.New().String(), "slug": "x"}, rec)
+	if code != http.StatusBadRequest {
+		t.Errorf("project.get both id and slug: %d", code)
+	}
+	code, _, _ = handleProjectList(ctx, mock, map[string]interface{}{}, rec)
+	if code != http.StatusBadRequest {
+		t.Errorf("project.list no user_id: %d", code)
+	}
+
+	code, _, _ = handleTaskResult(ctx, mock, map[string]interface{}{"task_id": uuid.New().String()}, rec)
+	if code != http.StatusNotFound {
+		t.Errorf("task.result not found: %d", code)
+	}
+	code, _, _ = handleTaskLogs(ctx, mock, map[string]interface{}{"task_id": uuid.New().String()}, rec)
+	if code != http.StatusNotFound {
+		t.Errorf("task.logs not found: %d", code)
+	}
+	code, _, _ = handleTaskLogs(ctx, mock, map[string]interface{}{"task_id": uuid.New().String(), "stream": "stdout"}, rec)
+	if code != http.StatusNotFound {
+		t.Errorf("task.logs stream not found: %d", code)
+	}
+}
+
+func TestHandleHelpGet_DirectPaths(t *testing.T) {
+	ctx := context.Background()
+	mock := testutil.NewMockDB()
+	rec := &models.McpToolCallAuditLog{}
+	code, _, _ := handleHelpGet(ctx, mock, map[string]interface{}{}, rec)
+	if code != http.StatusBadRequest {
+		t.Errorf("help.get no task_id: %d", code)
+	}
+	tid := uuid.New()
+	code, body, _ := handleHelpGet(ctx, mock, map[string]interface{}{"task_id": tid.String(), "topic": "tools"}, rec)
+	if code != http.StatusOK {
+		t.Fatalf("help.get topic: %d", code)
+	}
+	var out map[string]interface{}
+	if err := json.Unmarshal(body, &out); err != nil {
+		t.Fatal(err)
+	}
+	if out["content"] == nil {
+		t.Error("expected content")
+	}
+	code, body, _ = handleHelpGet(ctx, mock, map[string]interface{}{"task_id": tid.String(), "path": "/docs"}, rec)
+	if code != http.StatusOK {
+		t.Fatalf("help.get path: %d", code)
+	}
+	if err := json.Unmarshal(body, &out); err != nil {
+		t.Fatal(err)
+	}
+	if out["content"] == nil {
+		t.Error("expected content for path")
+	}
+}
+
+func TestHandleProjectGet_DirectBadArgs(t *testing.T) {
+	ctx := context.Background()
+	mock := testutil.NewMockDB()
+	rec := &models.McpToolCallAuditLog{}
+	code, body, _ := handleProjectGet(ctx, mock, map[string]interface{}{"project_id": uuid.New().String()}, rec)
+	if code != http.StatusBadRequest || !bytes.Contains(body, []byte("user_id")) {
+		t.Errorf("missing user_id: %d %s", code, body)
+	}
+	uid := uuid.New()
+	code, body, _ = handleProjectGet(ctx, mock, map[string]interface{}{"user_id": uid.String()}, rec)
+	if code != http.StatusBadRequest || !bytes.Contains(body, []byte("exactly one")) {
+		t.Errorf("missing project id/slug: %d %s", code, body)
+	}
+	code, body, _ = handleProjectGet(ctx, mock, map[string]interface{}{
+		"user_id": uid.String(), "project_id": uuid.New().String(), "slug": "x",
+	}, rec)
+	if code != http.StatusBadRequest {
+		t.Errorf("both id and slug: %d %s", code, body)
+	}
+}
+
+func TestHandleProjectList_DirectLimitCap(t *testing.T) {
+	ctx := context.Background()
+	mock := testutil.NewMockDB()
+	user, _ := mock.CreateUser(ctx, "u-lim", nil)
+	mock.AddUser(user)
+	rec := &models.McpToolCallAuditLog{}
+	code, _, _ := handleProjectList(ctx, mock, map[string]interface{}{
+		"user_id": user.ID.String(),
+		"limit":   999,
+	}, rec)
+	if code != http.StatusOK {
+		t.Errorf("project.list cap: %d", code)
+	}
+}
+
+func TestHandleTaskListAndProjectList_DirectInternalError(t *testing.T) {
+	ctx := context.Background()
+	mock := testutil.NewMockDB()
+	user, _ := mock.CreateUser(ctx, "u-terr", nil)
+	mock.AddUser(user)
+	mock.ForceError = errors.New("db")
+	rec := &models.McpToolCallAuditLog{}
+	code, _, _ := handleTaskList(ctx, mock, map[string]interface{}{"user_id": user.ID.String()}, rec)
+	mock.ForceError = nil
+	if code != http.StatusInternalServerError {
+		t.Errorf("task.list internal: %d", code)
+	}
+	mock.ForceError = errors.New("db")
+	code, _, _ = handleProjectList(ctx, mock, map[string]interface{}{"user_id": user.ID.String()}, rec)
+	mock.ForceError = nil
+	if code != http.StatusInternalServerError {
+		t.Errorf("project.list internal: %d", code)
+	}
+}
+
+func TestHandleTaskCancel_DirectCancelFails(t *testing.T) {
+	ctx := context.Background()
+	mock := testutil.NewMockDB()
+	task, _ := mock.CreateTask(ctx, nil, "p", nil)
+	mock.UpdateTaskStatusErr = errors.New("db")
+	rec := &models.McpToolCallAuditLog{}
+	code, _, _ := handleTaskCancel(ctx, mock, map[string]interface{}{"task_id": task.ID.String()}, rec)
+	mock.UpdateTaskStatusErr = nil
+	if code != http.StatusInternalServerError {
+		t.Errorf("task.cancel internal: %d", code)
+	}
+}
+
+func TestHandleTaskResultAndLogs_DirectInternalError(t *testing.T) {
+	ctx := context.Background()
+	mock := testutil.NewMockDB()
+	task, _ := mock.CreateTask(ctx, nil, "p", nil)
+	mock.GetTaskByIDErr = errors.New("db")
+	rec := &models.McpToolCallAuditLog{}
+	code, _, _ := handleTaskResult(ctx, mock, map[string]interface{}{"task_id": task.ID.String()}, rec)
+	mock.GetTaskByIDErr = nil
+	if code != http.StatusInternalServerError {
+		t.Errorf("task.result internal: %d", code)
+	}
+	mock.GetTaskByIDErr = errors.New("db")
+	code, _, _ = handleTaskLogs(ctx, mock, map[string]interface{}{"task_id": task.ID.String()}, rec)
+	mock.GetTaskByIDErr = nil
+	if code != http.StatusInternalServerError {
+		t.Errorf("task.logs internal: %d", code)
+	}
+	mock.GetJobsByTaskIDErr = errors.New("db")
+	code, _, _ = handleTaskResult(ctx, mock, map[string]interface{}{"task_id": task.ID.String()}, rec)
+	mock.GetJobsByTaskIDErr = nil
+	if code != http.StatusInternalServerError {
+		t.Errorf("task.result jobs err: %d", code)
+	}
+	mock.GetJobsByTaskIDErr = errors.New("db")
+	code, _, _ = handleTaskLogs(ctx, mock, map[string]interface{}{"task_id": task.ID.String()}, rec)
+	mock.GetJobsByTaskIDErr = nil
+	if code != http.StatusInternalServerError {
+		t.Errorf("task.logs jobs err: %d", code)
+	}
+}
+
+func TestHandleProjectGet_DirectGetOrCreateFails(t *testing.T) {
+	ctx := context.Background()
+	mock := testutil.NewMockDB()
+	user, _ := mock.CreateUser(ctx, "u-goc", nil)
+	mock.AddUser(user)
+	def, err := mock.GetOrCreateDefaultProjectForUser(ctx, user.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mock.GetOrCreateDefaultProjectForUserErr = errors.New("db")
+	rec := &models.McpToolCallAuditLog{}
+	code, _, _ := handleProjectGet(ctx, mock, map[string]interface{}{
+		"user_id":    user.ID.String(),
+		"project_id": def.ID.String(),
+	}, rec)
+	mock.GetOrCreateDefaultProjectForUserErr = nil
+	if code != http.StatusInternalServerError {
+		t.Errorf("project.get GetOrCreate error: %d", code)
+	}
+}
+
+func TestHandleProjectGet_DirectNotAuthorizedAndSlug(t *testing.T) {
+	ctx := context.Background()
+	mock := testutil.NewMockDB()
+	user, _ := mock.CreateUser(ctx, "u-pg", nil)
+	mock.AddUser(user)
+	def, err := mock.GetOrCreateDefaultProjectForUser(ctx, user.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	otherID := uuid.New()
+	other := &models.Project{
+		ProjectBase: models.ProjectBase{
+			Slug:        "other-proj",
+			DisplayName: "Other",
+			IsActive:    true,
+		},
+		ID:        otherID,
+		CreatedAt: time.Now().UTC(),
+		UpdatedAt: time.Now().UTC(),
+	}
+	mock.Projects[otherID] = other
+	rec := &models.McpToolCallAuditLog{}
+	code, _, _ := handleProjectGet(ctx, mock, map[string]interface{}{
+		"user_id":    user.ID.String(),
+		"project_id": otherID.String(),
+	}, rec)
+	if code != http.StatusNotFound {
+		t.Errorf("project.get non-default project: %d", code)
+	}
+	code, body, _ := handleProjectGet(ctx, mock, map[string]interface{}{
+		"user_id": user.ID.String(),
+		"slug":    def.Slug,
+	}, rec)
+	if code != http.StatusOK {
+		t.Fatalf("project.get by slug: %d %s", code, body)
+	}
+	code, _, _ = handleProjectGet(ctx, mock, map[string]interface{}{
+		"user_id":    user.ID.String(),
+		"project_id": uuid.New().String(),
+	}, rec)
+	if code != http.StatusNotFound {
+		t.Errorf("project.get missing project id: %d", code)
+	}
+}
+
+func TestHelpGetMarkdown_TruncationAndUnknownTopic(t *testing.T) {
+	if got := helpGetMarkdown("no-such-topic", ""); got == "" {
+		t.Error("expected default overview")
+	}
+	if got := helpGetMarkdown("", "/docs"); got == "" {
+		t.Error("expected path branch")
+	}
+	long := strings.Repeat("a", helpMaxBytes+10)
+	if len(truncateHelp(long)) != helpMaxBytes {
+		t.Errorf("truncate: %d", len(truncateHelp(long)))
+	}
+}
+
+func TestProjectResponseMap_DescriptionOptional(t *testing.T) {
+	desc := "about"
+	pid := uuid.MustParse("00000000-0000-4000-8000-0000000000aa")
+	ts := time.Unix(100, 0).UTC()
+	withDesc := projectResponseMap(&models.Project{
+		ProjectBase: models.ProjectBase{
+			Slug:        "slug",
+			DisplayName: "Name",
+			IsActive:    true,
+			Description: &desc,
+		},
+		ID:        pid,
+		CreatedAt: ts,
+		UpdatedAt: ts,
+	})
+	if withDesc["description"] != "about" {
+		t.Fatalf("description: %v", withDesc["description"])
+	}
+	without := projectResponseMap(&models.Project{
+		ProjectBase: models.ProjectBase{
+			Slug:        "slug",
+			DisplayName: "Name",
+			IsActive:    true,
+		},
+		ID:        pid,
+		CreatedAt: ts,
+		UpdatedAt: ts,
+	})
+	if _, ok := without["description"]; ok {
+		t.Fatal("expected no description when nil")
+	}
+}
+
+func TestRunMain_WhenRunFails_ReturnsOne(t *testing.T) {
+	testDatabaseOpen = func(_ context.Context, _ string) (database.Store, error) {
+		return nil, errors.New("open failed")
+	}
+	defer func() { testDatabaseOpen = nil }()
+	oldDSN := os.Getenv("DATABASE_URL")
+	_ = os.Setenv("DATABASE_URL", "postgres://local/test")
+	defer func() {
+		if oldDSN == "" {
+			_ = os.Unsetenv("DATABASE_URL")
+		} else {
+			_ = os.Setenv("DATABASE_URL", oldDSN)
+		}
+	}()
+	if rc := runMain(context.Background()); rc != 1 {
+		t.Errorf("runMain: want exit 1, got %d", rc)
+	}
 }
 
 // TestRun_DatabaseOpenFails covers run() when DATABASE_URL is set but Open fails.

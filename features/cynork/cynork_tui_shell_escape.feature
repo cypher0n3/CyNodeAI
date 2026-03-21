@@ -5,7 +5,7 @@ Feature: cynork TUI shell escape
   I want to run shell-escape commands from the composer
   So that I can run shell utilities without leaving the chat surface
 
-## Background
+Background:
 
   Given a mock gateway is running
   And cynork is built
@@ -16,8 +16,7 @@ Feature: cynork TUI shell escape
 @spec_cynai_client_clichatshellescape
 Scenario: Shell escape runs a command and shows output inline
   Given the TUI is running
-  When I type "!
-    date +%Y-%m-%d" and press Enter
+  When I type "! date +%Y-%m-%d" and press Enter
   Then the scrollback contains a date-formatted string
   And the TUI session remains active
 
@@ -33,8 +32,7 @@ Scenario: Shell escape without space after bang runs the command
 @spec_cynai_client_clichatshellescape
 Scenario: Shell escape shows stderr output inline
   Given the TUI is running
-  When I type "!
-    ls /no_such_directory_xyz" and press Enter
+  When I type "! ls /no_such_directory_xyz" and press Enter
   Then the scrollback contains an error referencing the missing path
   And the TUI session remains active
 
@@ -42,8 +40,7 @@ Scenario: Shell escape shows stderr output inline
 @spec_cynai_client_clichatshellescape
 Scenario: Shell escape with empty command shows a usage hint
   Given the TUI is running
-  When I type "!"
-    and press Enter
+  When I type "!" and press Enter
   Then the scrollback contains a shell usage hint
   And the TUI session remains active
 
@@ -60,8 +57,7 @@ Scenario: Shell escape with whitespace-only command shows a usage hint
 @spec_cynai_client_clichatshellescape
 Scenario: Shell escape non-zero exit shows exit code inline
   Given the TUI is running
-  When I type "!
-    exit 42" and press Enter
+  When I type "! exit 42" and press Enter
   Then the scrollback contains the exit code
   And the TUI session remains active
 
@@ -70,8 +66,7 @@ Scenario: Shell escape non-zero exit shows exit code inline
 @spec_cynai_client_clichatshellescape
 Scenario: Shell escape command not found shows error without exiting
   Given the TUI is running
-  When I type "!
-    __no_such_cmd_xyz__" and press Enter
+  When I type "! __no_such_cmd_xyz__" and press Enter
   Then the scrollback contains an error message
   And the TUI session remains active
 
@@ -79,8 +74,7 @@ Scenario: Shell escape command not found shows error without exiting
 @spec_cynai_client_clichatsubcommanderrors
 Scenario: Shell escape failure does not show top-level Usage
   Given the TUI is running
-  When I type "!
-    exit 1" and press Enter
+  When I type "! exit 1" and press Enter
   Then the scrollback does not contain "Usage"
   And the TUI session remains active
 
@@ -88,7 +82,6 @@ Scenario: Shell escape failure does not show top-level Usage
 @spec_cynai_client_clichatshellescape
 Scenario: Shell escape with interactive subprocess restores TUI cleanly
   Given the TUI is running
-  When I type "!
-    true" and press Enter
+  When I type "! true" and press Enter
   Then the TUI session remains active
   And the composer has focus

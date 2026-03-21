@@ -5,7 +5,7 @@ Feature: cynork admin and resource commands
   I want to manage credentials, preferences, settings, nodes, skills, and audit
   So that I can configure the system and inspect resources via the gateway
 
-## Background
+Background:
 
   Given a mock gateway is running
   And cynork is built

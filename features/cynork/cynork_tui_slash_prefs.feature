@@ -5,7 +5,7 @@ Feature: cynork TUI /prefs slash commands
   I want to list, get, set, delete, and view effective preferences via slash commands
   So that I can manage preferences without leaving the chat surface
 
-## Background
+Background:
 
   Given a mock gateway is running
   And cynork is built

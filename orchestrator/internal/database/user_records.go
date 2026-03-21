@@ -25,15 +25,15 @@ func (UserRecord) TableName() string {
 func (r *UserRecord) ToUser() *models.User {
 	user := &models.User{
 		UserBase: models.UserBase{
-			Handle:         r.UserBase.Handle,
-			Email:          r.UserBase.Email,
-			IsActive:       r.UserBase.IsActive,
-			ExternalSource: r.UserBase.ExternalSource,
-			ExternalID:     r.UserBase.ExternalID,
+			Handle:         r.Handle,
+			Email:          r.Email,
+			IsActive:       r.IsActive,
+			ExternalSource: r.ExternalSource,
+			ExternalID:     r.ExternalID,
 		},
-		ID:        r.GormModelUUID.ID,
-		CreatedAt: r.GormModelUUID.CreatedAt,
-		UpdatedAt: r.GormModelUUID.UpdatedAt,
+		ID:        r.ID,
+		CreatedAt: r.CreatedAt,
+		UpdatedAt: r.UpdatedAt,
 	}
 	return user
 }
@@ -74,13 +74,13 @@ func (PasswordCredentialRecord) TableName() string {
 func (r *PasswordCredentialRecord) ToPasswordCredential() *models.PasswordCredential {
 	return &models.PasswordCredential{
 		PasswordCredentialBase: models.PasswordCredentialBase{
-			UserID:       r.PasswordCredentialBase.UserID,
-			PasswordHash: r.PasswordCredentialBase.PasswordHash,
-			HashAlg:      r.PasswordCredentialBase.HashAlg,
+			UserID:       r.UserID,
+			PasswordHash: r.PasswordHash,
+			HashAlg:      r.HashAlg,
 		},
-		ID:        r.GormModelUUID.ID,
-		CreatedAt: r.GormModelUUID.CreatedAt,
-		UpdatedAt: r.GormModelUUID.UpdatedAt,
+		ID:        r.ID,
+		CreatedAt: r.CreatedAt,
+		UpdatedAt: r.UpdatedAt,
 	}
 }
 
@@ -100,17 +100,10 @@ func (RefreshSessionRecord) TableName() string {
 // ToRefreshSession converts a RefreshSessionRecord to a domain RefreshSession with all fields populated.
 func (r *RefreshSessionRecord) ToRefreshSession() *models.RefreshSession {
 	return &models.RefreshSession{
-		RefreshSessionBase: models.RefreshSessionBase{
-			UserID:           r.RefreshSessionBase.UserID,
-			RefreshTokenHash: r.RefreshSessionBase.RefreshTokenHash,
-			RefreshTokenKID:  r.RefreshSessionBase.RefreshTokenKID,
-			IsActive:         r.RefreshSessionBase.IsActive,
-			ExpiresAt:        r.RefreshSessionBase.ExpiresAt,
-			LastUsedAt:       r.RefreshSessionBase.LastUsedAt,
-		},
-		ID:        r.GormModelUUID.ID,
-		CreatedAt: r.GormModelUUID.CreatedAt,
-		UpdatedAt: r.GormModelUUID.UpdatedAt,
+		RefreshSessionBase: r.RefreshSessionBase,
+		ID:                 r.ID,
+		CreatedAt:          r.CreatedAt,
+		UpdatedAt:          r.UpdatedAt,
 	}
 }
 
@@ -131,16 +124,8 @@ func (AuthAuditLogRecord) TableName() string {
 // ToAuthAuditLog converts an AuthAuditLogRecord to a domain AuthAuditLog with all fields populated.
 func (r *AuthAuditLogRecord) ToAuthAuditLog() *models.AuthAuditLog {
 	return &models.AuthAuditLog{
-		AuthAuditLogBase: models.AuthAuditLogBase{
-			UserID:        r.AuthAuditLogBase.UserID,
-			EventType:     r.AuthAuditLogBase.EventType,
-			Success:       r.AuthAuditLogBase.Success,
-			SubjectHandle: r.AuthAuditLogBase.SubjectHandle,
-			IPAddress:     r.AuthAuditLogBase.IPAddress,
-			UserAgent:     r.AuthAuditLogBase.UserAgent,
-			Reason:        r.AuthAuditLogBase.Reason,
-		},
-		ID:        r.GormModelUUID.ID,
-		CreatedAt: r.GormModelUUID.CreatedAt,
+		AuthAuditLogBase: r.AuthAuditLogBase,
+		ID:               r.ID,
+		CreatedAt:        r.CreatedAt,
 	}
 }

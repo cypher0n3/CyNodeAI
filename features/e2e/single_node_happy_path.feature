@@ -21,7 +21,7 @@ Feature: Single Node Happy Path
 
 # See dev_docs/single_node_e2e_testing_plan.md
 
-## Background
+Background:
 
   Given a running PostgreSQL database
   And the orchestrator API is running

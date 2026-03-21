@@ -36,8 +36,7 @@ Scenario: Chat with model cynodeai.pm uses worker-reported PMA endpoint only
   And I am logged in as "admin"
   And a mock PMA server is running
   And a node "bdd-pma" exists and has reported PMA ready at the mock PMA server
-  When I send a chat message "What is the status?"
-    with model cynodeai.pm
+  When I send a chat message "What is the status?" with model cynodeai.pm
   Then I receive a 200 response with non-empty response field
 
 @req_orches_0162
@@ -49,8 +48,7 @@ Scenario: Responses request with model cynodeai.pm uses worker-reported PMA endp
   And I am logged in as "admin"
   And a mock PMA server is running
   And a node "bdd-pma" exists and has reported PMA ready at the mock PMA server
-  When I send a responses request with input "What is the status?"
-    and model cynodeai.pm
+  When I send a responses request with input "What is the status?" and model cynodeai.pm
   Then I receive a 200 response with non-empty response field
 
 @req_orches_0165

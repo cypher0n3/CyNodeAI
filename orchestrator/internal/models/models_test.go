@@ -4,6 +4,9 @@ import (
 	"database/sql/driver"
 	"encoding/json"
 	"testing"
+	"time"
+
+	"github.com/google/uuid"
 )
 
 func TestTaskStatusConstants(t *testing.T) {
@@ -216,6 +219,27 @@ func TestJSONBString_MarshalUnmarshalJSON(t *testing.T) {
 
 func TestJSONBString_Value_implementsDriverValuer(t *testing.T) {
 	var _ driver.Valuer = (*JSONBString)(nil)
+}
+
+func assertSetGeneratedAuditIDs(t *testing.T, name string, id uuid.UUID, ts time.Time, gotID uuid.UUID, gotAt time.Time) {
+	t.Helper()
+	if gotID != id || !gotAt.Equal(ts) {
+		t.Fatalf("%s.SetGeneratedAuditIDs: id=%v createdAt=%v", name, gotID, gotAt)
+	}
+}
+
+func TestAuditLogTypes_SetGeneratedAuditIDs(t *testing.T) {
+	id1 := uuid.MustParse("00000000-0000-4000-8000-000000000001")
+	ts1 := time.Unix(1, 2).UTC()
+	var chat ChatAuditLog
+	chat.SetGeneratedAuditIDs(id1, ts1)
+	assertSetGeneratedAuditIDs(t, "ChatAuditLog", id1, ts1, chat.ID, chat.CreatedAt)
+
+	id2 := uuid.MustParse("00000000-0000-4000-8000-000000000002")
+	ts2 := time.Unix(3, 4).UTC()
+	var ac AccessControlAuditLog
+	ac.SetGeneratedAuditIDs(id2, ts2)
+	assertSetGeneratedAuditIDs(t, "AccessControlAuditLog", id2, ts2, ac.ID, ac.CreatedAt)
 }
 
 func TestTableNames(t *testing.T) {

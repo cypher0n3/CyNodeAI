@@ -22,14 +22,10 @@ func (SessionRecord) TableName() string {
 // ToSession converts a SessionRecord to a domain Session with all fields populated.
 func (r *SessionRecord) ToSession() *models.Session {
 	return &models.Session{
-		SessionBase: models.SessionBase{
-			ParentSessionID: r.SessionBase.ParentSessionID,
-			UserID:          r.SessionBase.UserID,
-			Title:           r.SessionBase.Title,
-		},
-		ID:        r.GormModelUUID.ID,
-		CreatedAt: r.GormModelUUID.CreatedAt,
-		UpdatedAt: r.GormModelUUID.UpdatedAt,
+		SessionBase: r.SessionBase,
+		ID:          r.ID,
+		CreatedAt:   r.CreatedAt,
+		UpdatedAt:   r.UpdatedAt,
 	}
 }
 
@@ -49,15 +45,10 @@ func (ChatThreadRecord) TableName() string {
 // ToChatThread converts a ChatThreadRecord to a domain ChatThread with all fields populated.
 func (r *ChatThreadRecord) ToChatThread() *models.ChatThread {
 	return &models.ChatThread{
-		ChatThreadBase: models.ChatThreadBase{
-			UserID:    r.ChatThreadBase.UserID,
-			ProjectID: r.ChatThreadBase.ProjectID,
-			SessionID: r.ChatThreadBase.SessionID,
-			Title:     r.ChatThreadBase.Title,
-		},
-		ID:        r.GormModelUUID.ID,
-		CreatedAt: r.GormModelUUID.CreatedAt,
-		UpdatedAt: r.GormModelUUID.UpdatedAt,
+		ChatThreadBase: r.ChatThreadBase,
+		ID:             r.ID,
+		CreatedAt:      r.CreatedAt,
+		UpdatedAt:      r.UpdatedAt,
 	}
 }
 
@@ -77,13 +68,8 @@ func (ChatMessageRecord) TableName() string {
 // ToChatMessage converts a ChatMessageRecord to a domain ChatMessage with all fields populated.
 func (r *ChatMessageRecord) ToChatMessage() *models.ChatMessage {
 	return &models.ChatMessage{
-		ChatMessageBase: models.ChatMessageBase{
-			ThreadID: r.ChatMessageBase.ThreadID,
-			Role:     r.ChatMessageBase.Role,
-			Content:  r.ChatMessageBase.Content,
-			Metadata: r.ChatMessageBase.Metadata,
-		},
-		ID:        r.GormModelUUID.ID,
-		CreatedAt: r.GormModelUUID.CreatedAt,
+		ChatMessageBase: r.ChatMessageBase,
+		ID:              r.ID,
+		CreatedAt:       r.CreatedAt,
 	}
 }

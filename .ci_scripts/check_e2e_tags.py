@@ -34,6 +34,7 @@ ALLOWED_TAGS = frozenset({
     "auth",
     "task",
     "inference",
+    "no_inference",
     "sba_inference",
     "pma_inference",
     "pma",
@@ -42,6 +43,12 @@ ALLOWED_TAGS = frozenset({
     "worker",
     "uds_routing",
     "tui_pty",
+    "tui",
+    "streaming",
+    "control_plane",
+    "sba",
+    "gateway",
+    "gpu_variant",
 })
 
 

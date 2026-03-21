@@ -5,7 +5,7 @@ Feature: cynork TUI /skills slash commands
   I want to list, get, load, update, and delete skills via slash commands
   So that I can manage AI skills without leaving the chat surface
 
-## Background
+Background:
 
   Given a mock gateway is running
   And cynork is built

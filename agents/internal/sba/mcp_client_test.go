@@ -11,7 +11,8 @@ func TestMCPClient_Call_NoURL_ReturnsError(t *testing.T) {
 	if err == nil {
 		t.Fatal("expected error")
 	}
-	if err.Error() != "MCP gateway URL not set (SBA_MCP_GATEWAY_URL or MCP_GATEWAY_URL)" {
+	want := "MCP gateway URL not set (PMA: PMA_MCP_GATEWAY_URL / MCP_GATEWAY_URL / MCP_GATEWAY_PROXY_URL; SBA: SBA_MCP_GATEWAY_URL / MCP_GATEWAY_URL)"
+	if err.Error() != want {
 		t.Errorf("err = %q", err.Error())
 	}
 }

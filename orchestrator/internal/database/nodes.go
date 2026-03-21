@@ -16,11 +16,7 @@ import (
 // CreateNode creates a new node.
 func (db *DB) CreateNode(ctx context.Context, nodeSlug string) (*models.Node, error) {
 	record := &NodeRecord{
-		GormModelUUID: gormmodel.GormModelUUID{
-			ID:        uuid.New(),
-			CreatedAt: time.Now().UTC(),
-			UpdatedAt: time.Now().UTC(),
-		},
+		GormModelUUID: newGormModelUUIDNow(),
 		NodeBase: models.NodeBase{
 			NodeSlug: nodeSlug,
 			Status:   models.NodeStatusRegistered,
@@ -34,20 +30,12 @@ func (db *DB) CreateNode(ctx context.Context, nodeSlug string) (*models.Node, er
 
 // GetNodeBySlug retrieves a node by slug.
 func (db *DB) GetNodeBySlug(ctx context.Context, nodeSlug string) (*models.Node, error) {
-	record, err := getWhere[NodeRecord](db, ctx, "node_slug", nodeSlug, "get node by slug")
-	if err != nil {
-		return nil, err
-	}
-	return record.ToNode(), nil
+	return getDomainWhere(db, ctx, "node_slug", nodeSlug, "get node by slug", (*NodeRecord).ToNode)
 }
 
 // GetNodeByID retrieves a node by ID.
 func (db *DB) GetNodeByID(ctx context.Context, id uuid.UUID) (*models.Node, error) {
-	record, err := getByID[NodeRecord](db, ctx, id, "get node by id")
-	if err != nil {
-		return nil, err
-	}
-	return record.ToNode(), nil
+	return getDomainByID(db, ctx, id, "get node by id", (*NodeRecord).ToNode)
 }
 
 // UpdateNodeStatus updates a node's status.

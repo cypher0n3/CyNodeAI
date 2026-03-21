@@ -84,6 +84,42 @@ func bddGetEnv(key, def string) string {
 	return def
 }
 
+// bddTruncatePublicTables removes all rows from every public table so scenarios do not
+// observe data left by earlier scenarios in the same suite (same Postgres volume).
+func bddDeleteNodeBySlug(ctx context.Context, db *database.DB, slug string) error {
+	// GORM placeholder for PostgreSQL
+	return db.GORM().WithContext(ctx).Exec(`DELETE FROM nodes WHERE node_slug = ?`, slug).Error
+}
+
+func bddTruncatePublicTables(ctx context.Context, db *database.DB) error {
+	sqlDB, err := db.GORM().DB()
+	if err != nil {
+		return err
+	}
+	rows, err := sqlDB.QueryContext(ctx, `SELECT tablename FROM pg_tables WHERE schemaname = 'public' ORDER BY tablename`)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	var quoted []string
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			return err
+		}
+		quoted = append(quoted, `"`+name+`"`)
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	if len(quoted) == 0 {
+		return nil
+	}
+	q := "TRUNCATE TABLE " + strings.Join(quoted, ", ") + " RESTART IDENTITY CASCADE"
+	_, err = sqlDB.ExecContext(ctx, q)
+	return err
+}
+
 // apiEgressStub returns a handler that mimics api-egress POST /v1/call: bearer auth, allowlist, 403/501.
 func apiEgressStub(state *testState) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -148,6 +184,23 @@ func InitializeOrchestratorSuite(sc *godog.ScenarioContext, state *testState) {
 		if err := db.RunSchema(ctx, slog.Default()); err != nil {
 			_ = db.Close()
 			return ctx, err
+		}
+		// orchestrator_startup.feature expects /readyz to be 503 when no dispatchable nodes exist.
+		// Earlier scenarios in the suite leave nodes in the shared Postgres; clear data only for this scenario.
+		if s.Name == "Orchestrator remains not ready when no inference path is available" {
+			if err := bddTruncatePublicTables(ctx, db); err != nil {
+				_ = db.Close()
+				return ctx, err
+			}
+		}
+		// orchestrator_startup.feature registers "ready-node-01" for readiness; task lifecycle
+		// expects a single dispatcher target (test-node-01). Remove the leftover node so dispatch
+		// does not hit the wrong worker mock.
+		if strings.Contains(s.Uri, "orchestrator_task_lifecycle.feature") {
+			if err := bddDeleteNodeBySlug(ctx, db, "ready-node-01"); err != nil {
+				_ = db.Close()
+				return ctx, err
+			}
 		}
 		cfg := config.LoadOrchestratorConfig()
 		jwtManager := auth.NewJWTManager(

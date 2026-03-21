@@ -59,11 +59,7 @@ func (db *DB) CreateTask(ctx context.Context, createdBy *uuid.UUID, prompt strin
 		}
 	}
 	record := &TaskRecord{
-		GormModelUUID: gormmodel.GormModelUUID{
-			ID:        uuid.New(),
-			CreatedAt: time.Now().UTC(),
-			UpdatedAt: time.Now().UTC(),
-		},
+		GormModelUUID: newGormModelUUIDNow(),
 		TaskBase: models.TaskBase{
 			CreatedBy: createdBy,
 			ProjectID: effectiveProjectID,
@@ -105,11 +101,7 @@ func (db *DB) GetOrCreateDefaultProjectForUser(ctx context.Context, userID uuid.
 
 // GetTaskByID retrieves a task by ID.
 func (db *DB) GetTaskByID(ctx context.Context, id uuid.UUID) (*models.Task, error) {
-	record, err := getByID[TaskRecord](db, ctx, id, "get task by id")
-	if err != nil {
-		return nil, err
-	}
-	return record.ToTask(), nil
+	return getDomainByID(db, ctx, id, "get task by id", (*TaskRecord).ToTask)
 }
 
 // GetTaskBySummary retrieves the most recently created task matching summary for the given user.
@@ -252,11 +244,7 @@ func (db *DB) CreateJobCompleted(ctx context.Context, taskID, jobID uuid.UUID, r
 
 // GetJobByID retrieves a job by ID.
 func (db *DB) GetJobByID(ctx context.Context, id uuid.UUID) (*models.Job, error) {
-	record, err := getByID[JobRecord](db, ctx, id, "get job by id")
-	if err != nil {
-		return nil, err
-	}
-	return record.ToJob(), nil
+	return getDomainByID(db, ctx, id, "get job by id", (*JobRecord).ToJob)
 }
 
 // GetJobsByTaskID retrieves all jobs for a task.

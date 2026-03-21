@@ -37,26 +37,8 @@ func (db *DB) ListAccessControlRulesForApiCall(ctx context.Context, subjectType 
 
 // CreateAccessControlAuditLog writes one audit record. REQ-APIEGR-0119.
 func (db *DB) CreateAccessControlAuditLog(ctx context.Context, rec *models.AccessControlAuditLog) error {
-	record := &AccessControlAuditLogRecord{
-		AccessControlAuditLogBase: models.AccessControlAuditLogBase{
-			SubjectType:  rec.SubjectType,
-			SubjectID:    rec.SubjectID,
-			Action:       rec.Action,
-			ResourceType: rec.ResourceType,
-			Resource:     rec.Resource,
-			Decision:     rec.Decision,
-			Reason:       rec.Reason,
-			TaskID:       rec.TaskID,
-		},
-	}
-	ensureAuditIDAndTime(&record.ID, &record.CreatedAt)
-	if err := db.createRecord(ctx, record, "create access control audit log"); err != nil {
-		return err
-	}
-	// Populate the input struct with the generated ID and CreatedAt
-	rec.ID = record.ID
-	rec.CreatedAt = record.CreatedAt
-	return nil
+	row := accessControlAuditRecordFrom(rec)
+	return insertAuditModel(db, ctx, row, row, rec, opCreateAccessControlAuditLog)
 }
 
 // HasActiveApiCredentialForUserAndProvider returns true if the user has at least one active credential for the provider.

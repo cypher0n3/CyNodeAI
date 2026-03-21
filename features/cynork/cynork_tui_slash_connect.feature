@@ -5,7 +5,7 @@ Feature: cynork TUI /connect slash command
   I want to view and change the session gateway via /connect
   So that I can switch backends without leaving the chat surface
 
-## Background
+Background:
 
   Given a mock gateway is running
   And cynork is built

@@ -5,7 +5,7 @@ Feature: cynork TUI streaming behavior
   I want real token-by-token streaming with correct cancellation and fallback handling
   So that in-flight responses are always coherent and never duplicate content
 
-## Background
+Background:
 
   Given a mock gateway is running
   And cynork is built

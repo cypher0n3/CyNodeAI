@@ -4,6 +4,10 @@
 - [Definition Compliance](#definition-compliance)
 - [Task Tools](#task-tools)
   - [`task.get` Operation](#taskget-operation)
+  - [`task.list` Operation](#tasklist-operation)
+  - [`task.result` Operation](#taskresult-operation)
+  - [`task.cancel` Operation](#taskcancel-operation)
+  - [`task.logs` Operation](#tasklogs-operation)
   - [`task.update_status` Operation](#taskupdate_status-operation)
 - [Allowlist and Scope](#allowlist-and-scope)
 
@@ -48,6 +52,71 @@ Common invocation pattern for task tools: (1) Resolve caller identity and agent 
 1. Apply common task tool invocation pattern (resolve caller, allowlist, scope, validate task_id).
 2. Call task read (by task_id) with caller context; RBAC determines visibility.
 3. Return task details or not-found/access-denied; audit and return.
+
+### `task.list` Operation
+
+- **Inputs**: Required `user_id` (uuid) to scope the list to that user's tasks (same scoping as the User API Gateway list-by-user).
+  Optional: `limit` (default 50, cap 200), `offset` (non-negative), `status` (filter), `cursor` (opaque; when supported, combined with limit for pagination per gateway implementation).
+  Scope: `pm`.
+- **Outputs**: List response aligned with the gateway (`tasks`, optional `next_cursor`); size-limited.
+- **Behavior**: Gateway applies the common pattern; backend lists tasks for the given `user_id` with RBAC as for HTTP list.
+  See [task.list Algorithm](#algo-cynai-mcptoo-tasklist).
+
+#### `task.list` Algorithm
+
+<a id="algo-cynai-mcptoo-tasklist"></a>
+
+1. Apply common pattern; validate `user_id` and optional list parameters.
+2. Call the same list path as the User API Gateway (`ListTasksByUser` / equivalent); enforce limit cap and filters.
+3. Return list or error; audit and return.
+
+### `task.result` Operation
+
+- **Inputs**: Required `task_id` (uuid).
+  Scope: `pm`.
+- **Outputs**: Task status and aggregated job result (stdout/stderr and related fields when terminal), consistent with gateway task-result semantics.
+- **Behavior**: Same data path as the User API Gateway task result endpoint.
+  See [task.result Algorithm](#algo-cynai-mcptoo-taskresult).
+
+#### `task.result` Algorithm
+
+<a id="algo-cynai-mcptoo-taskresult"></a>
+
+1. Apply common pattern; validate `task_id`.
+2. Load task and jobs; build result payload; not-found if task missing or inaccessible.
+3. Return payload or error; audit and return.
+
+### `task.cancel` Operation
+
+- **Inputs**: Required `task_id` (uuid).
+  Scope: `pm`.
+- **Outputs**: Success with canceled flag or structured error.
+- **Behavior**: MUST invoke the **same cancel-and-stop-job path** as the User API Gateway (`CancelTask`): update task to canceled, update non-terminal jobs, and stop active jobs on the worker when implemented-no MCP-only shortcut.
+  See [task.cancel Algorithm](#algo-cynai-mcptoo-taskcancel).
+
+#### `task.cancel` Algorithm
+
+<a id="algo-cynai-mcptoo-taskcancel"></a>
+
+1. Apply common pattern; validate `task_id`.
+2. Call shared cancel logic with the gateway (task exists -> cancel task and jobs per orchestrator rules).
+3. Return success or error; audit and return.
+
+### `task.logs` Operation
+
+- **Inputs**: Required `task_id` (uuid); optional `stream` (`stdout` / `stderr` / `all` or implementation-defined default).
+  Scope: `pm`.
+- **Outputs**: Aggregated log lines from jobs for the task; size-limited.
+- **Behavior**: Same aggregation rules as the User API Gateway task logs.
+  See [task.logs Algorithm](#algo-cynai-mcptoo-tasklogs).
+
+#### `task.logs` Algorithm
+
+<a id="algo-cynai-mcptoo-tasklogs"></a>
+
+1. Apply common pattern; validate `task_id` and optional `stream`.
+2. Resolve task and job logs; not-found if task missing.
+3. Return lines or error; audit and return.
 
 ### `task.update_status` Operation
 

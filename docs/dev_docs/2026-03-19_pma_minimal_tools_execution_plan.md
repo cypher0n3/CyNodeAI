@@ -10,6 +10,7 @@
 ## Plan Status
 
 **Created:** 2026-03-19.
+**Closed out:** 2026-03-21 (see [Implementation summary](#implementation-summary-2026-03-21)).
 **Scope:** Build minimal necessary MCP tools so the Project Manager Agent can use them: task operations that already exist via the orchestrator User API Gateway, plus the basic help tool.
 Shareable hosting in agents or go_shared_libs where it makes sense.
 
@@ -344,44 +345,44 @@ Update [MCP tool specifications](../tech_specs/mcp_tools/README.md) (e.g. [Task 
 
 #### Discovery (Task 5) Steps
 
-- [ ] Read the requirements and specs listed in Task 5 Requirements and Specifications.
-- [ ] Open [mcp_tools/task_tools.md](../tech_specs/mcp_tools/task_tools.md): Task Tools section lists task.get and task.update_status as minimum; add task.list, task.result, task.cancel, task.logs with required/optional args and behavior.
+- [x] Read the requirements and specs listed in Task 5 Requirements and Specifications.
+- [x] Open [mcp_tools/task_tools.md](../tech_specs/mcp_tools/task_tools.md): Task Tools section lists task.get and task.update_status as minimum; add task.list, task.result, task.cancel, task.logs with required/optional args and behavior.
   Open [mcp_tools/project_tools.md](../tech_specs/mcp_tools/project_tools.md): ensure project.get and project.list are documented.
   Help Tools section already describes help.get; ensure it matches implementation.
-- [ ] Confirm [access_allowlists_and_scope.md](../tech_specs/mcp_tools/access_allowlists_and_scope.md) PM allowlist already includes resource tools and `help.*`; no change needed unless a new namespace was introduced.
-- [ ] Update the PMA (or shared) tool description string so the LLM sees the full minimal set: task.get, task.list, task.result, task.cancel, task.logs, project.get, project.list, help.get, and existing preference.*, job.get, artifact.get, skills.*.
+- [x] Confirm [access_allowlists_and_scope.md](../tech_specs/mcp_tools/access_allowlists_and_scope.md) PM allowlist already includes resource tools and `help.*`; no change needed unless a new namespace was introduced.
+- [x] Update the PMA (or shared) tool description string so the LLM sees the full minimal set: task.get, task.list, task.result, task.cancel, task.logs, project.get, project.list, help.get, and existing preference.*, job.get, artifact.get, skills.*.
 
 #### Red (Task 5)
 
-- [ ] N/A for code-only changes to docs and description string.
+- [x] N/A for code-only changes to docs and description string.
   If BDD scenarios or E2E exist that assert tool names or descriptions, add or update them and run to confirm current state.
-- [ ] Validation gate: proceed to Green.
+- [x] Validation gate: proceed to Green.
 
 #### Green (Task 5)
 
-- [ ] Edit [mcp_tools/task_tools.md](../tech_specs/mcp_tools/task_tools.md): add entries for `task.list` (required user_id; optional limit, offset/cursor, status), `task.result` (required task_id), `task.cancel` (required task_id), `task.logs` (required task_id; optional stream).
+- [x] Edit [mcp_tools/task_tools.md](../tech_specs/mcp_tools/task_tools.md): add entries for `task.list` (required user_id; optional limit, offset/cursor, status), `task.result` (required task_id), `task.cancel` (required task_id), `task.logs` (required task_id; optional stream).
   Keep existing task.get and task.update_status; ensure project.get and project.list are documented per catalog.
   Align wording with "task operations that exist via User API Gateway."
-- [ ] Ensure Help Tools section for help.get matches implementation (required task_id; optional topic, path; size-limited; no secrets; content source: embedded/in-process only for MVP).
-- [ ] Update the tool description in the agents code (PMA tool or shared MCP tool constructor) to list the minimal set including task.list, task.result, task.cancel, task.logs, project.get, project.list, help.get.
-- [ ] Run `just lint-md` on changed markdown files; run `just docs-check` if applicable.
-- [ ] Validation gate: do not proceed until docs and code are consistent.
+- [x] Ensure Help Tools section for help.get matches implementation (required task_id; optional topic, path; size-limited; no secrets; content source: embedded/in-process only for MVP).
+- [x] Update the tool description in the agents code (PMA tool or shared MCP tool constructor) to list the minimal set including task.list, task.result, task.cancel, task.logs, project.get, project.list, help.get.
+- [x] Run `just lint-md` on changed markdown files; run `just docs-check` if applicable.
+- [x] Validation gate: do not proceed until docs and code are consistent.
 
 #### Refactor (Task 5)
 
-- [ ] None required unless description string is moved to a constant or generated from catalog; optional.
-- [ ] Validation gate: proceed.
+- [x] None required unless description string is moved to a constant or generated from catalog; optional.
+- [x] Validation gate: proceed.
 
 #### Testing (Task 5)
 
-- [ ] Run `just docs-check` and `just lint` for changed files.
-- [ ] Run `just ci` to ensure full pipeline passes.
-- [ ] Validation gate: do not start Task 6 until all Task 5 checks pass.
+- [x] Run `just docs-check` and `just lint` for changed files.
+- [x] Run `just ci` to ensure full pipeline passes.
+- [x] Validation gate: do not start Task 6 until all Task 5 checks pass.
 
 #### Closeout (Task 5)
 
-- [ ] Generate a **task completion report** for Task 5: what was done (catalog update, tool description update), what passed, any deviations or notes.
-- [ ] Mark every completed step in this task's section with `- [x]`.
+- [x] Generate a **task completion report** for Task 5: what was done (catalog update, tool description update), what passed, any deviations or notes.
+- [x] Mark every completed step in this task's section with `- [x]`.
   Do not start Task 6 until this closeout is done.
 
 ---
@@ -397,29 +398,33 @@ Update dev_docs and any cross-cutting documentation; produce the final plan comp
 
 #### Discovery (Task 6) Steps
 
-- [ ] Review all tasks: ensure no required step was skipped; ensure each closeout report is summarized.
-- [ ] Identify any user-facing or developer-facing docs that reference "PMA tools" or "minimum MCP set" and update them to reflect the new minimal set (e.g. development_setup.md if it lists MCP tools).
+- [x] Review all tasks: ensure no required step was skipped; ensure each closeout report is summarized.
+- [x] Identify any user-facing or developer-facing docs that reference "PMA tools" or "minimum MCP set" and update them to reflect the new minimal set (e.g. development_setup.md if it lists MCP tools).
 
 #### Red (Task 6)
 
-- [ ] N/A.
+- [x] N/A.
 
 #### Green (Task 6)
 
-- [ ] Update any docs that list "minimum PMA chat tool set" or "MCP tools for PMA" to include help.get and the new task tools (task.list, result, cancel, logs).
+- [x] Update any docs that list "minimum PMA chat tool set" or "MCP tools for PMA" to include help.get and the new task tools (task.list, result, cancel, logs).
   For example [docs/dev_docs/2026-03-14_plan_after_tui_fix.md](2026-03-14_plan_after_tui_fix.md) or [docs/development_setup.md](../development_setup.md) if they mention the tool set.
-- [ ] Add a short "Implementation summary" to this plan (or a linked dev_doc) listing: which tools were added (help.get; task.list, result, cancel, logs; project.get, project.list), where the shared MCP client lives, and how to run tests.
+- [x] Add a short "Implementation summary" to this plan (or a linked dev_doc) listing: which tools were added (help.get; task.list, result, cancel, logs; project.get, project.list), where the shared MCP client lives, and how to run tests.
 
 #### Refactor (Task 6)
 
-- [ ] None.
+- [x] None.
 
 #### Testing (Task 6)
 
-- [ ] Run `just docs-check` and `just ci` one final time.
-- [ ] Validation gate: plan complete when all tasks are closed out and ci passes.
+- [x] Run `just docs-check` and `just ci` one final time.
+- [x] Validation gate: plan complete when all tasks are closed out and ci passes.
 
 #### Closeout (Task 6)
 
-- [ ] Generate the **final plan completion report**: which tasks were completed, overall validation status, and any remaining risks or follow-up (e.g. system_setting.get/list, db.task.create/update for future work).
-- [ ] Mark every completed step in this task's section with `- [x]`.
+- [x] Generate the **final plan completion report**: which tasks were completed, overall validation status, and any remaining risks or follow-up (e.g. system_setting.get/list, db.task.create/update for future work).
+- [x] Mark every completed step in this task's section with `- [x]`.
+
+## Implementation Summary (2026-03-21)
+
+See [2026-03-21_pma_minimal_tools_plan_completion.md](2026-03-21_pma_minimal_tools_plan_completion.md) and [2026-03-21_pma_minimal_tools_task5_report.md](2026-03-21_pma_minimal_tools_task5_report.md).

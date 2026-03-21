@@ -288,7 +288,7 @@ func (h *callHandler) auditLog(ctx context.Context, subjectID *uuid.UUID, decisi
 			Resource:     resource,
 			Decision:     decision,
 			Reason:       reasonPtr,
-			TaskID: taskID,
+			TaskID:       taskID,
 		},
 	}
 	if err := h.store.CreateAccessControlAuditLog(ctx, rec); err != nil {

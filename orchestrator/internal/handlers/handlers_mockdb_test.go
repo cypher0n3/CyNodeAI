@@ -27,6 +27,52 @@ import (
 const testPrompt = "test prompt"
 const mimeSSE = "text/event-stream"
 
+func newMockTask(createdBy *uuid.UUID, status string, prompt *string) *models.Task {
+	now := time.Now().UTC()
+	return &models.Task{
+		TaskBase: models.TaskBase{
+			CreatedBy: createdBy,
+			Status:    status,
+			Prompt:    prompt,
+		},
+		ID:        uuid.New(),
+		CreatedAt: now,
+		UpdatedAt: now,
+	}
+}
+
+func newMockRefreshSession(userID uuid.UUID, tokenHash []byte, expiresAt time.Time) *models.RefreshSession {
+	now := time.Now().UTC()
+	return &models.RefreshSession{
+		RefreshSessionBase: models.RefreshSessionBase{
+			UserID:           userID,
+			RefreshTokenHash: tokenHash,
+			IsActive:         true,
+			ExpiresAt:        expiresAt,
+		},
+		ID:        uuid.New(),
+		CreatedAt: now,
+		UpdatedAt: now,
+	}
+}
+
+func newMockJobSimple(taskID uuid.UUID, status string, payload, result *string) *models.Job {
+	now := time.Now().UTC()
+	jb := models.JobBase{TaskID: taskID, Status: status}
+	if payload != nil {
+		jb.Payload = models.NewJSONBString(payload)
+	}
+	if result != nil {
+		jb.Result = models.NewJSONBString(result)
+	}
+	return &models.Job{
+		JobBase:   jb,
+		ID:        uuid.New(),
+		CreatedAt: now,
+		UpdatedAt: now,
+	}
+}
+
 func newTestLogger() *slog.Logger {
 	return slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelError}))
 }
@@ -165,8 +211,8 @@ func mockDBAddInactiveUser(db *testutil.MockDB, now time.Time) *models.User {
 
 func mockDBAddUserNoCred(db *testutil.MockDB, now time.Time) *models.User {
 	u := &models.User{
-		UserBase: models.UserBase{Handle: "nopassworduser", IsActive: true},
-		ID:       uuid.New(),
+		UserBase:  models.UserBase{Handle: "nopassworduser", IsActive: true},
+		ID:        uuid.New(),
 		CreatedAt: now,
 		UpdatedAt: now,
 	}
@@ -256,17 +302,7 @@ func TestAuthHandler_RefreshSuccess(t *testing.T) {
 	refreshToken, expiresAt, _ := jwtMgr.GenerateRefreshToken(user.ID)
 	tokenHash := auth.HashToken(refreshToken)
 
-	session := &models.RefreshSession{
-		RefreshSessionBase: models.RefreshSessionBase{
-			UserID:           user.ID,
-			RefreshTokenHash: tokenHash,
-			IsActive:         true,
-			ExpiresAt:        expiresAt,
-		},
-		ID:        uuid.New(),
-		CreatedAt: time.Now().UTC(),
-		UpdatedAt: time.Now().UTC(),
-	}
+	session := newMockRefreshSession(user.ID, tokenHash, expiresAt)
 	mockDB.AddRefreshSession(session)
 
 	body := userapi.RefreshRequest{RefreshToken: refreshToken}
@@ -339,17 +375,7 @@ func TestAuthHandler_RefreshInactiveUser(t *testing.T) {
 	refreshToken, expiresAt, _ := jwtMgr.GenerateRefreshToken(user.ID)
 	tokenHash := auth.HashToken(refreshToken)
 
-	session := &models.RefreshSession{
-		RefreshSessionBase: models.RefreshSessionBase{
-			UserID:           user.ID,
-			RefreshTokenHash: tokenHash,
-			IsActive:         true,
-			ExpiresAt:        expiresAt,
-		},
-		ID:        uuid.New(),
-		CreatedAt: time.Now().UTC(),
-		UpdatedAt: time.Now().UTC(),
-	}
+	session := newMockRefreshSession(user.ID, tokenHash, expiresAt)
 	mockDB.AddRefreshSession(session)
 
 	body := userapi.RefreshRequest{RefreshToken: refreshToken}
@@ -420,17 +446,7 @@ func TestAuthHandler_LogoutWithRefreshToken(t *testing.T) {
 	refreshToken, expiresAt, _ := jwtMgr.GenerateRefreshToken(user.ID)
 	tokenHash := auth.HashToken(refreshToken)
 
-	session := &models.RefreshSession{
-		RefreshSessionBase: models.RefreshSessionBase{
-			UserID:           user.ID,
-			RefreshTokenHash: tokenHash,
-			IsActive:         true,
-			ExpiresAt:        expiresAt,
-		},
-		ID:        uuid.New(),
-		CreatedAt: time.Now().UTC(),
-		UpdatedAt: time.Now().UTC(),
-	}
+	session := newMockRefreshSession(user.ID, tokenHash, expiresAt)
 	mockDB.AddRefreshSession(session)
 
 	ctx := context.WithValue(context.Background(), contextKeyUserID, user.ID)
@@ -987,16 +1003,7 @@ func TestTaskHandler_GetTaskSuccess(t *testing.T) {
 
 	prompt := testPrompt
 	userID := uuid.New()
-	task := &models.Task{
-		TaskBase: models.TaskBase{
-			CreatedBy: &userID,
-			Status:    models.TaskStatusPending,
-			Prompt:    &prompt,
-		},
-		ID:        uuid.New(),
-		CreatedAt: time.Now().UTC(),
-		UpdatedAt: time.Now().UTC(),
-	}
+	task := newMockTask(&userID, models.TaskStatusPending, &prompt)
 	mockDB.AddTask(task)
 
 	req := httptest.NewRequest("GET", "/v1/tasks/"+task.ID.String(), http.NoBody).WithContext(context.WithValue(context.Background(), contextKeyUserID, userID))
@@ -1055,16 +1062,7 @@ func TestTaskHandler_GetTaskResultSuccess(t *testing.T) {
 
 	prompt := testPrompt
 	userID := uuid.New()
-	task := &models.Task{
-		TaskBase: models.TaskBase{
-			CreatedBy: &userID,
-			Status:    models.TaskStatusCompleted,
-			Prompt:    &prompt,
-		},
-		ID:        uuid.New(),
-		CreatedAt: time.Now().UTC(),
-		UpdatedAt: time.Now().UTC(),
-	}
+	task := newMockTask(&userID, models.TaskStatusCompleted, &prompt)
 	mockDB.AddTask(task)
 
 	result := "job result"
@@ -1798,17 +1796,7 @@ func TestAuthHandler_RefreshDBErrorOnInvalidate(t *testing.T) {
 	refreshToken, expiresAt, _ := jwtMgr.GenerateRefreshToken(user.ID)
 	tokenHash := auth.HashToken(refreshToken)
 
-	session := &models.RefreshSession{
-		RefreshSessionBase: models.RefreshSessionBase{
-			UserID:           user.ID,
-			RefreshTokenHash: tokenHash,
-			IsActive:         true,
-			ExpiresAt:        expiresAt,
-		},
-		ID:        uuid.New(),
-		CreatedAt: time.Now().UTC(),
-		UpdatedAt: time.Now().UTC(),
-	}
+	session := newMockRefreshSession(user.ID, tokenHash, expiresAt)
 	mockDB.AddRefreshSession(session)
 
 	// Set error after getting session
@@ -1844,17 +1832,7 @@ func TestAuthHandler_RefreshUserNotFound(t *testing.T) {
 	refreshToken, expiresAt, _ := jwtMgr.GenerateRefreshToken(user.ID)
 	tokenHash := auth.HashToken(refreshToken)
 
-	session := &models.RefreshSession{
-		RefreshSessionBase: models.RefreshSessionBase{
-			UserID:           user.ID,
-			RefreshTokenHash: tokenHash,
-			IsActive:         true,
-			ExpiresAt:        expiresAt,
-		},
-		ID:        uuid.New(),
-		CreatedAt: time.Now().UTC(),
-		UpdatedAt: time.Now().UTC(),
-	}
+	session := newMockRefreshSession(user.ID, tokenHash, expiresAt)
 
 	// Create mockDB with session but no user
 	mockDB := testutil.NewMockDB()
@@ -1925,16 +1903,7 @@ func TestTaskHandler_GetTaskResultJobsDBError(t *testing.T) {
 	logger := newTestLogger()
 	userID := uuid.New()
 	prompt := testPrompt
-	task := &models.Task{
-		TaskBase: models.TaskBase{
-			CreatedBy: &userID,
-			Status:    models.TaskStatusCompleted,
-			Prompt:    &prompt,
-		},
-		ID:        uuid.New(),
-		CreatedAt: time.Now().UTC(),
-		UpdatedAt: time.Now().UTC(),
-	}
+	task := newMockTask(&userID, models.TaskStatusCompleted, &prompt)
 
 	// Create custom mock that returns error only on GetJobsByTaskID
 	mockDB := &errorOnJobsMockDB{
@@ -1971,16 +1940,7 @@ func TestTaskHandler_GetTaskForbidden(t *testing.T) {
 	ownerID := uuid.New()
 	otherID := uuid.New()
 	prompt := testPrompt
-	task := &models.Task{
-		TaskBase: models.TaskBase{
-			CreatedBy: &ownerID,
-			Status:    models.TaskStatusPending,
-			Prompt:    &prompt,
-		},
-		ID:        uuid.New(),
-		CreatedAt: time.Now().UTC(),
-		UpdatedAt: time.Now().UTC(),
-	}
+	task := newMockTask(&ownerID, models.TaskStatusPending, &prompt)
 	mockDB.AddTask(task)
 	req := httptest.NewRequest("GET", "/v1/tasks/"+task.ID.String(), http.NoBody).WithContext(context.WithValue(context.Background(), contextKeyUserID, otherID))
 	req.SetPathValue("id", task.ID.String())
@@ -2023,16 +1983,7 @@ func TestTaskHandler_GetTaskResultForbidden(t *testing.T) {
 	ownerID := uuid.New()
 	otherID := uuid.New()
 	prompt := testPrompt
-	task := &models.Task{
-		TaskBase: models.TaskBase{
-			CreatedBy: &ownerID,
-			Status:    models.TaskStatusCompleted,
-			Prompt:    &prompt,
-		},
-		ID:        uuid.New(),
-		CreatedAt: time.Now().UTC(),
-		UpdatedAt: time.Now().UTC(),
-	}
+	task := newMockTask(&ownerID, models.TaskStatusCompleted, &prompt)
 	mockDB.AddTask(task)
 	req := httptest.NewRequest("GET", "/v1/tasks/"+task.ID.String()+"/result", http.NoBody).WithContext(context.WithValue(context.Background(), contextKeyUserID, otherID))
 	req.SetPathValue("id", task.ID.String())
@@ -2049,16 +2000,7 @@ func TestTaskHandler_ListTasksSuccess(t *testing.T) {
 	handler := NewTaskHandler(mockDB, logger, "", "")
 	userID := uuid.New()
 	prompt := testPrompt
-	task := &models.Task{
-		TaskBase: models.TaskBase{
-			CreatedBy: &userID,
-			Status:    models.TaskStatusPending,
-			Prompt:    &prompt,
-		},
-		ID:        uuid.New(),
-		CreatedAt: time.Now().UTC(),
-		UpdatedAt: time.Now().UTC(),
-	}
+	task := newMockTask(&userID, models.TaskStatusPending, &prompt)
 	mockDB.AddTask(task)
 	req := httptest.NewRequest("GET", "/v1/tasks", http.NoBody).WithContext(context.WithValue(context.Background(), contextKeyUserID, userID))
 	rec := httptest.NewRecorder()
@@ -2120,16 +2062,7 @@ func TestTaskHandler_ListTasksWithNextOffset(t *testing.T) {
 	userID := uuid.New()
 	prompt := testPrompt
 	for i := 0; i < 3; i++ {
-	task := &models.Task{
-		TaskBase: models.TaskBase{
-			CreatedBy: &userID,
-			Status:    models.TaskStatusPending,
-			Prompt:    &prompt,
-		},
-		ID:        uuid.New(),
-		CreatedAt: time.Now().UTC(),
-		UpdatedAt: time.Now().UTC(),
-	}
+		task := newMockTask(&userID, models.TaskStatusPending, &prompt)
 		mockDB.AddTask(task)
 	}
 	req := httptest.NewRequest("GET", "/v1/tasks?limit=2&offset=0", http.NoBody).WithContext(context.WithValue(context.Background(), contextKeyUserID, userID))
@@ -2218,16 +2151,7 @@ func TestTaskHandler_ListTasksWithCanceledTask(t *testing.T) {
 	handler := NewTaskHandler(mockDB, newTestLogger(), "", "")
 	userID := uuid.New()
 	prompt := testPrompt
-	task := &models.Task{
-		TaskBase: models.TaskBase{
-			CreatedBy: &userID,
-			Status:    models.TaskStatusCanceled,
-			Prompt:    &prompt,
-		},
-		ID:        uuid.New(),
-		CreatedAt: time.Now().UTC(),
-		UpdatedAt: time.Now().UTC(),
-	}
+	task := newMockTask(&userID, models.TaskStatusCanceled, &prompt)
 	mockDB.AddTask(task)
 	req := httptest.NewRequest("GET", "/v1/tasks?status=canceled", http.NoBody).WithContext(context.WithValue(context.Background(), contextKeyUserID, userID))
 	rec := httptest.NewRecorder()
@@ -2249,16 +2173,7 @@ func TestTaskHandler_ListTasksStatusFilterAndOffset(t *testing.T) {
 	handler := NewTaskHandler(mockDB, newTestLogger(), "", "")
 	userID := uuid.New()
 	prompt := testPrompt
-	t1 := &models.Task{
-		TaskBase: models.TaskBase{
-			CreatedBy: &userID,
-			Status:    models.TaskStatusCompleted,
-			Prompt:    &prompt,
-		},
-		ID:        uuid.New(),
-		CreatedAt: time.Now().UTC(),
-		UpdatedAt: time.Now().UTC(),
-	}
+	t1 := newMockTask(&userID, models.TaskStatusCompleted, &prompt)
 	mockDB.AddTask(t1)
 	req := httptest.NewRequest("GET", "/v1/tasks?limit=10&offset=0&status=completed", http.NoBody).WithContext(context.WithValue(context.Background(), contextKeyUserID, userID))
 	rec := httptest.NewRecorder()
@@ -2297,16 +2212,7 @@ func TestTaskHandler_CancelTaskSuccess(t *testing.T) {
 	handler := NewTaskHandler(mockDB, logger, "", "")
 	userID := uuid.New()
 	prompt := testPrompt
-	task := &models.Task{
-		TaskBase: models.TaskBase{
-			CreatedBy: &userID,
-			Status:    models.TaskStatusPending,
-			Prompt:    &prompt,
-		},
-		ID:        uuid.New(),
-		CreatedAt: time.Now().UTC(),
-		UpdatedAt: time.Now().UTC(),
-	}
+	task := newMockTask(&userID, models.TaskStatusPending, &prompt)
 	mockDB.AddTask(task)
 	req := httptest.NewRequest("POST", "/v1/tasks/"+task.ID.String()+"/cancel", http.NoBody).WithContext(context.WithValue(context.Background(), contextKeyUserID, userID))
 	req.SetPathValue("id", task.ID.String())
@@ -2344,16 +2250,7 @@ func testTaskForbidden(t *testing.T, runHandler func(*TaskHandler, *http.Request
 	ownerID := uuid.New()
 	otherID := uuid.New()
 	prompt := testPrompt
-	task := &models.Task{
-		TaskBase: models.TaskBase{
-			CreatedBy: &ownerID,
-			Status:    models.TaskStatusPending,
-			Prompt:    &prompt,
-		},
-		ID:        uuid.New(),
-		CreatedAt: time.Now().UTC(),
-		UpdatedAt: time.Now().UTC(),
-	}
+	task := newMockTask(&ownerID, models.TaskStatusPending, &prompt)
 	mockDB.AddTask(task)
 	req := httptest.NewRequest(method, "/v1/tasks/"+task.ID.String()+pathSuffix, http.NoBody).WithContext(context.WithValue(context.Background(), contextKeyUserID, otherID))
 	req.SetPathValue("id", task.ID.String())
@@ -2373,28 +2270,10 @@ func TestTaskHandler_CancelTaskWithJobs(t *testing.T) {
 	handler := NewTaskHandler(mockDB, newTestLogger(), "", "")
 	userID := uuid.New()
 	prompt := testPrompt
-	task := &models.Task{
-		TaskBase: models.TaskBase{
-			CreatedBy: &userID,
-			Status:    models.TaskStatusPending,
-			Prompt:    &prompt,
-		},
-		ID:        uuid.New(),
-		CreatedAt: time.Now().UTC(),
-		UpdatedAt: time.Now().UTC(),
-	}
+	task := newMockTask(&userID, models.TaskStatusPending, &prompt)
 	mockDB.AddTask(task)
 	payload := "{}"
-	job := &models.Job{
-		JobBase: models.JobBase{
-			TaskID:  task.ID,
-			Status:  models.JobStatusQueued,
-			Payload: models.NewJSONBString(&payload),
-		},
-		ID:        uuid.New(),
-		CreatedAt: time.Now().UTC(),
-		UpdatedAt: time.Now().UTC(),
-	}
+	job := newMockJobSimple(task.ID, models.JobStatusQueued, &payload, nil)
 	mockDB.AddJob(job)
 	req := httptest.NewRequest("POST", "/v1/tasks/"+task.ID.String()+"/cancel", http.NoBody).WithContext(context.WithValue(context.Background(), contextKeyUserID, userID))
 	req.SetPathValue("id", task.ID.String())
@@ -2411,16 +2290,7 @@ func TestTaskHandler_CancelTaskUpdateStatusError(t *testing.T) {
 	handler := NewTaskHandler(mockDB, newTestLogger(), "", "")
 	userID := uuid.New()
 	prompt := testPrompt
-	task := &models.Task{
-		TaskBase: models.TaskBase{
-			CreatedBy: &userID,
-			Status:    models.TaskStatusPending,
-			Prompt:    &prompt,
-		},
-		ID:        uuid.New(),
-		CreatedAt: time.Now().UTC(),
-		UpdatedAt: time.Now().UTC(),
-	}
+	task := newMockTask(&userID, models.TaskStatusPending, &prompt)
 	mockDB.AddTask(task)
 	req := httptest.NewRequest("POST", "/v1/tasks/"+task.ID.String()+"/cancel", http.NoBody).WithContext(context.WithValue(context.Background(), contextKeyUserID, userID))
 	req.SetPathValue("id", task.ID.String())
@@ -2467,28 +2337,10 @@ func TestTaskHandler_GetTaskLogsSuccess(t *testing.T) {
 	handler := NewTaskHandler(mockDB, logger, "", "")
 	userID := uuid.New()
 	prompt := testPrompt
-	task := &models.Task{
-		TaskBase: models.TaskBase{
-			CreatedBy: &userID,
-			Status:    models.TaskStatusCompleted,
-			Prompt:    &prompt,
-		},
-		ID:        uuid.New(),
-		CreatedAt: time.Now().UTC(),
-		UpdatedAt: time.Now().UTC(),
-	}
+	task := newMockTask(&userID, models.TaskStatusCompleted, &prompt)
 	mockDB.AddTask(task)
 	result := `{"version":1,"task_id":"` + task.ID.String() + `","job_id":"j1","status":"completed","stdout":"hello","stderr":"","started_at":"","ended_at":"","truncated":{"stdout":false,"stderr":false}}`
-	job := &models.Job{
-		JobBase: models.JobBase{
-			TaskID: task.ID,
-			Status: models.JobStatusCompleted,
-			Result: models.NewJSONBString(&result),
-		},
-		ID:        uuid.New(),
-		CreatedAt: time.Now().UTC(),
-		UpdatedAt: time.Now().UTC(),
-	}
+	job := newMockJobSimple(task.ID, models.JobStatusCompleted, nil, &result)
 	mockDB.AddJob(job)
 	req := httptest.NewRequest("GET", "/v1/tasks/"+task.ID.String()+"/logs", http.NoBody).WithContext(context.WithValue(context.Background(), contextKeyUserID, userID))
 	req.SetPathValue("id", task.ID.String())
@@ -2526,27 +2378,9 @@ func TestTaskHandler_GetTaskLogsStreamParam(t *testing.T) {
 			handler := NewTaskHandler(mockDB, newTestLogger(), "", "")
 			userID := uuid.New()
 			prompt := testPrompt
-	task := &models.Task{
-		TaskBase: models.TaskBase{
-			CreatedBy: &userID,
-			Status:    models.TaskStatusCompleted,
-			Prompt:    &prompt,
-		},
-		ID:        uuid.New(),
-		CreatedAt: time.Now().UTC(),
-		UpdatedAt: time.Now().UTC(),
-	}
+			task := newMockTask(&userID, models.TaskStatusCompleted, &prompt)
 			mockDB.AddTask(task)
-			job := &models.Job{
-				JobBase: models.JobBase{
-					TaskID: task.ID,
-					Status: models.JobStatusCompleted,
-					Result: models.NewJSONBString(&resultJSON),
-				},
-				ID:        uuid.New(),
-				CreatedAt: time.Now().UTC(),
-				UpdatedAt: time.Now().UTC(),
-			}
+			job := newMockJobSimple(task.ID, models.JobStatusCompleted, nil, &resultJSON)
 			mockDB.AddJob(job)
 			req := httptest.NewRequest("GET", "/v1/tasks/"+task.ID.String()+"/logs?stream="+tt.stream, http.NoBody).WithContext(context.WithValue(context.Background(), contextKeyUserID, userID))
 			req.SetPathValue("id", task.ID.String())
@@ -2571,28 +2405,10 @@ func TestTaskHandler_GetTaskLogsMalformedResult(t *testing.T) {
 	handler := NewTaskHandler(mockDB, newTestLogger(), "", "")
 	userID := uuid.New()
 	prompt := testPrompt
-	task := &models.Task{
-		TaskBase: models.TaskBase{
-			CreatedBy: &userID,
-			Status:    models.TaskStatusCompleted,
-			Prompt:    &prompt,
-		},
-		ID:        uuid.New(),
-		CreatedAt: time.Now().UTC(),
-		UpdatedAt: time.Now().UTC(),
-	}
+	task := newMockTask(&userID, models.TaskStatusCompleted, &prompt)
 	mockDB.AddTask(task)
 	badResult := `not valid json`
-	job := &models.Job{
-		JobBase: models.JobBase{
-			TaskID: task.ID,
-			Status: models.JobStatusCompleted,
-			Result: models.NewJSONBString(&badResult),
-		},
-		ID:        uuid.New(),
-		CreatedAt: time.Now().UTC(),
-		UpdatedAt: time.Now().UTC(),
-	}
+	job := newMockJobSimple(task.ID, models.JobStatusCompleted, nil, &badResult)
 	mockDB.AddJob(job)
 	req := httptest.NewRequest("GET", "/v1/tasks/"+task.ID.String()+"/logs", http.NoBody).WithContext(context.WithValue(context.Background(), contextKeyUserID, userID))
 	req.SetPathValue("id", task.ID.String())
@@ -3621,25 +3437,15 @@ func refreshWithStore(t *testing.T, base *testutil.MockDB, store database.Store,
 	jwtMgr := auth.NewJWTManager("test-secret-key-1234567890123456", 15*time.Minute, 7*24*time.Hour, 24*time.Hour)
 	handler := NewAuthHandler(store, jwtMgr, auth.NewRateLimiter(100, time.Minute), newTestLogger())
 	user := &models.User{
-		UserBase: models.UserBase{Handle: "u", IsActive: true},
-		ID:       uuid.New(),
+		UserBase:  models.UserBase{Handle: "u", IsActive: true},
+		ID:        uuid.New(),
 		CreatedAt: time.Now().UTC(),
 		UpdatedAt: time.Now().UTC(),
 	}
 	base.AddUser(user)
 	refreshToken, expiresAt, _ := jwtMgr.GenerateRefreshToken(user.ID)
 	tokenHash := auth.HashToken(refreshToken)
-	session := &models.RefreshSession{
-		RefreshSessionBase: models.RefreshSessionBase{
-			UserID:           user.ID,
-			RefreshTokenHash: tokenHash,
-			IsActive:         true,
-			ExpiresAt:        expiresAt,
-		},
-		ID:        uuid.New(),
-		CreatedAt: time.Now().UTC(),
-		UpdatedAt: time.Now().UTC(),
-	}
+	session := newMockRefreshSession(user.ID, tokenHash, expiresAt)
 	base.AddRefreshSession(session)
 	req, rec := recordedRequestJSON("POST", "/v1/auth/refresh", userapi.RefreshRequest{RefreshToken: refreshToken})
 	handler.Refresh(rec, req)
@@ -3673,8 +3479,8 @@ func TestAuthHandler_Refresh_SessionNotFound(t *testing.T) {
 	handler := NewAuthHandler(mockDB, jwtMgr, auth.NewRateLimiter(100, time.Minute), newTestLogger())
 
 	user := &models.User{
-		UserBase: models.UserBase{Handle: "u", IsActive: true},
-		ID:       uuid.New(),
+		UserBase:  models.UserBase{Handle: "u", IsActive: true},
+		ID:        uuid.New(),
 		CreatedAt: time.Now().UTC(),
 		UpdatedAt: time.Now().UTC(),
 	}
@@ -3712,25 +3518,15 @@ func TestAuthHandler_Refresh_CreateSessionFails(t *testing.T) {
 	handler := NewAuthHandler(mockDB, jwtMgr, auth.NewRateLimiter(100, time.Minute), newTestLogger())
 
 	user := &models.User{
-		UserBase: models.UserBase{Handle: "u", IsActive: true},
-		ID:       uuid.New(),
+		UserBase:  models.UserBase{Handle: "u", IsActive: true},
+		ID:        uuid.New(),
 		CreatedAt: time.Now().UTC(),
 		UpdatedAt: time.Now().UTC(),
 	}
 	mockDB.AddUser(user)
 	refreshToken, expiresAt, _ := jwtMgr.GenerateRefreshToken(user.ID)
 	tokenHash := auth.HashToken(refreshToken)
-	session := &models.RefreshSession{
-		RefreshSessionBase: models.RefreshSessionBase{
-			UserID:           user.ID,
-			RefreshTokenHash: tokenHash,
-			IsActive:         true,
-			ExpiresAt:        expiresAt,
-		},
-		ID:        uuid.New(),
-		CreatedAt: time.Now().UTC(),
-		UpdatedAt: time.Now().UTC(),
-	}
+	session := newMockRefreshSession(user.ID, tokenHash, expiresAt)
 	mockDB.AddRefreshSession(session)
 
 	req, rec := recordedRequestJSON("POST", "/v1/auth/refresh", userapi.RefreshRequest{RefreshToken: refreshToken})

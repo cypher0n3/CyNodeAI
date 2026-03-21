@@ -19,6 +19,7 @@ import (
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/database"
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/dispatcher"
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/inference"
+	"github.com/cypher0n3/cynodeai/orchestrator/internal/mcptaskbridge"
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/models"
 )
 
@@ -45,8 +46,6 @@ func NewTaskHandler(db database.Store, logger *slog.Logger, inferenceURL, infere
 
 // InputModePrompt is the default: natural-language prompt goes to the PM model.
 const InputModePrompt = "prompt"
-
-const streamParamAll = "all"
 
 const maxAttachmentPathLen = 2048
 
@@ -94,37 +93,6 @@ func (h *TaskHandler) persistTaskAttachments(ctx context.Context, taskID uuid.UU
 	return stored
 }
 
-// taskStatusToSpec maps internal task status to userapi status enum (queued, running, completed, failed, canceled, superseded).
-func taskStatusToSpec(status string) string {
-	switch status {
-	case models.TaskStatusPending:
-		return userapi.StatusQueued
-	case models.TaskStatusCanceled:
-		return userapi.StatusCanceled
-	case models.TaskStatusSuperseded:
-		return userapi.StatusSuperseded
-	default:
-		return status
-	}
-}
-
-func taskToResponse(t *models.Task, status string, attachmentPaths []string) userapi.TaskResponse {
-	resp := userapi.TaskResponse{
-		ID:        t.ID.String(),
-		TaskID:    t.ID.String(),
-		Status:    status,
-		TaskName:  t.Summary,
-		Prompt:    t.Prompt,
-		Summary:   t.Summary,
-		CreatedAt: t.CreatedAt.Format(time.RFC3339),
-		UpdatedAt: t.UpdatedAt.Format(time.RFC3339),
-	}
-	if len(attachmentPaths) > 0 {
-		resp.Attachments = attachmentPaths
-	}
-	return resp
-}
-
 func decodeCreateTaskRequest(w http.ResponseWriter, r *http.Request) (userapi.CreateTaskRequest, bool) {
 	var req userapi.CreateTaskRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -159,7 +127,7 @@ func (h *TaskHandler) tryCompleteWithOrchestratorInference(
 	job, err := h.createTaskWithOrchestratorInference(ctx, task.ID, prompt)
 	if err == nil {
 		_ = job // job already completed
-		WriteJSON(w, http.StatusCreated, taskToResponse(task, taskStatusToSpec(models.TaskStatusCompleted), attachmentPaths))
+		WriteJSON(w, http.StatusCreated, mcptaskbridge.TaskToResponse(task, mcptaskbridge.TaskStatusToSpec(models.TaskStatusCompleted), attachmentPaths))
 		return true
 	}
 	h.logger.Warn("orchestrator inference failed, falling back to sandbox job", "error", err)
@@ -230,7 +198,7 @@ func (h *TaskHandler) CreateTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	WriteJSON(w, http.StatusCreated, taskToResponse(task, taskStatusToSpec(task.Status), attachmentPaths))
+	WriteJSON(w, http.StatusCreated, mcptaskbridge.TaskToResponse(task, mcptaskbridge.TaskStatusToSpec(task.Status), attachmentPaths))
 }
 
 // createTaskWithOrchestratorInference calls the PM model with the prompt and stores the result as a completed job.
@@ -312,7 +280,7 @@ func (h *TaskHandler) createTaskSBA(ctx context.Context, w http.ResponseWriter, 
 		WriteInternalError(w, "Failed to create task job")
 		return true
 	}
-	WriteJSON(w, http.StatusCreated, taskToResponse(task, taskStatusToSpec(task.Status), attachmentPaths))
+	WriteJSON(w, http.StatusCreated, mcptaskbridge.TaskToResponse(task, mcptaskbridge.TaskStatusToSpec(task.Status), attachmentPaths))
 	return true
 }
 
@@ -424,20 +392,7 @@ func (h *TaskHandler) GetTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	paths, _ := h.db.ListArtifactPathsByTaskID(ctx, task.ID)
-	WriteJSON(w, http.StatusOK, taskToResponse(task, taskStatusToSpec(task.Status), paths))
-}
-
-func jobToResponse(job *models.Job) userapi.JobResponse {
-	resp := userapi.JobResponse{ID: job.ID.String(), Status: job.Status, Result: job.Result.Ptr()}
-	if job.StartedAt != nil {
-		s := job.StartedAt.Format(time.RFC3339)
-		resp.StartedAt = &s
-	}
-	if job.EndedAt != nil {
-		s := job.EndedAt.Format(time.RFC3339)
-		resp.EndedAt = &s
-	}
-	return resp
+	WriteJSON(w, http.StatusOK, mcptaskbridge.TaskToResponse(task, mcptaskbridge.TaskStatusToSpec(task.Status), paths))
 }
 
 // GetTaskResult handles GET /v1/tasks/{id}/result.
@@ -448,21 +403,13 @@ func (h *TaskHandler) GetTaskResult(w http.ResponseWriter, r *http.Request) {
 	if task == nil {
 		return
 	}
-	jobs, err := h.db.GetJobsByTaskID(ctx, task.ID)
+	resp, err := mcptaskbridge.TaskResultForUser(ctx, h.db, task.ID)
 	if err != nil {
-		h.logger.Error("get jobs", "error", err)
+		h.logger.Error("task result", "error", err)
 		WriteInternalError(w, "Failed to get jobs")
 		return
 	}
-	jobResponses := make([]userapi.JobResponse, 0, len(jobs))
-	for _, job := range jobs {
-		jobResponses = append(jobResponses, jobToResponse(job))
-	}
-	WriteJSON(w, http.StatusOK, userapi.TaskResultResponse{
-		TaskID: task.ID.String(),
-		Status: taskStatusToSpec(task.Status),
-		Jobs:   jobResponses,
-	})
+	WriteJSON(w, http.StatusOK, resp)
 }
 
 func parseListTasksParams(r *http.Request) (limit, offset int, statusFilter, cursor string, errCode int) {
@@ -512,29 +459,11 @@ func (h *TaskHandler) ListTasks(w http.ResponseWriter, r *http.Request) {
 		}
 		effectiveOffset = n
 	}
-	tasks, err := h.db.ListTasksByUser(ctx, *userID, limit+1, effectiveOffset)
+	resp, err := mcptaskbridge.ListTasksForUser(ctx, h.db, *userID, limit, effectiveOffset, statusFilter, cursor)
 	if err != nil {
 		h.logger.Error("list tasks", "error", err)
 		WriteInternalError(w, "Failed to list tasks")
 		return
-	}
-	hasMore := len(tasks) > limit
-	if hasMore {
-		tasks = tasks[:limit]
-	}
-	out := make([]userapi.TaskResponse, 0, len(tasks))
-	for _, t := range tasks {
-		if statusFilter != "" && taskStatusToSpec(t.Status) != statusFilter {
-			continue
-		}
-		paths, _ := h.db.ListArtifactPathsByTaskID(ctx, t.ID)
-		out = append(out, taskToResponse(t, taskStatusToSpec(t.Status), paths))
-	}
-	resp := userapi.ListTasksResponse{Tasks: out}
-	if hasMore {
-		next := effectiveOffset + limit
-		resp.NextOffset = &next
-		resp.NextCursor = strconv.Itoa(next)
 	}
 	WriteJSON(w, http.StatusOK, resp)
 }
@@ -559,43 +488,12 @@ func (h *TaskHandler) CancelTask(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	taskID := task.ID
-	if err := h.db.UpdateTaskStatus(ctx, taskID, models.TaskStatusCanceled); err != nil {
-		h.logger.Error("update task status", "error", err)
+	if err := mcptaskbridge.CancelTask(ctx, h.db, taskID); err != nil {
+		h.logger.Error("cancel task", "error", err)
 		WriteInternalError(w, "Failed to cancel task")
 		return
-	}
-	jobs, err := h.db.GetJobsByTaskID(ctx, taskID)
-	if err != nil {
-		h.logger.Error("get jobs", "error", err)
-		WriteInternalError(w, "Failed to cancel task")
-		return
-	}
-	for _, j := range jobs {
-		if j.Status != models.JobStatusCompleted && j.Status != models.JobStatusFailed && j.Status != models.JobStatusCanceled {
-			_ = h.db.UpdateJobStatus(ctx, j.ID, models.JobStatusCanceled)
-		}
 	}
 	WriteJSON(w, http.StatusOK, userapi.CancelTaskResponse{TaskID: taskID.String(), Canceled: true})
-}
-
-func aggregateLogsFromJobs(jobs []*models.Job, stream string) (stdout, stderr string) {
-	var outStd, outErr strings.Builder
-	for _, job := range jobs {
-		if job.Result.Ptr() == nil {
-			continue
-		}
-		var res workerapi.RunJobResponse
-		if json.Unmarshal([]byte(*job.Result.Ptr()), &res) != nil {
-			continue
-		}
-		if stream == "stdout" || stream == streamParamAll {
-			outStd.WriteString(res.Stdout)
-		}
-		if stream == "stderr" || stream == streamParamAll {
-			outErr.WriteString(res.Stderr)
-		}
-	}
-	return outStd.String(), outErr.String()
 }
 
 // GetTaskLogs handles GET /v1/tasks/{id}/logs.
@@ -607,21 +505,13 @@ func (h *TaskHandler) GetTaskLogs(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	stream := r.URL.Query().Get("stream")
-	if stream == "" {
-		stream = streamParamAll
-	}
-	jobs, err := h.db.GetJobsByTaskID(ctx, task.ID)
+	resp, err := mcptaskbridge.TaskLogsForUser(ctx, h.db, task.ID, stream)
 	if err != nil {
 		h.logger.Error("get jobs", "error", err)
 		WriteInternalError(w, "Failed to get task logs")
 		return
 	}
-	stdout, stderr := aggregateLogsFromJobs(jobs, stream)
-	WriteJSON(w, http.StatusOK, userapi.TaskLogsResponse{
-		TaskID: task.ID.String(),
-		Stdout: stdout,
-		Stderr: stderr,
-	})
+	WriteJSON(w, http.StatusOK, resp)
 }
 
 // ChatRequest is the request body for POST /v1/chat (orchestrator-specific; not in userapi).

@@ -5,7 +5,7 @@ Feature: cynork task commands
   I want to create and manage tasks via the gateway
   So that I can run work and retrieve status and results
 
-## Background
+Background:
 
   Given a mock gateway is running
   And cynork is built

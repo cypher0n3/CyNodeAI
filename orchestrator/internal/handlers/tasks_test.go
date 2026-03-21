@@ -13,6 +13,7 @@ import (
 
 	"github.com/cypher0n3/cynodeai/go_shared_libs/contracts/sbajob"
 	"github.com/cypher0n3/cynodeai/go_shared_libs/contracts/userapi"
+	"github.com/cypher0n3/cynodeai/orchestrator/internal/mcptaskbridge"
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/models"
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/testutil"
 )
@@ -135,8 +136,8 @@ func TestTaskStatusToSpec(t *testing.T) {
 		{in: models.TaskStatusCompleted, want: models.TaskStatusCompleted},
 	}
 	for _, tt := range tests {
-		if got := taskStatusToSpec(tt.in); got != tt.want {
-			t.Errorf("taskStatusToSpec(%q) = %q, want %q", tt.in, got, tt.want)
+		if got := mcptaskbridge.TaskStatusToSpec(tt.in); got != tt.want {
+			t.Errorf("TaskStatusToSpec(%q) = %q, want %q", tt.in, got, tt.want)
 		}
 	}
 }

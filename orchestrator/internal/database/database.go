@@ -111,6 +111,9 @@ type Store interface {
 	CreateTaskArtifact(ctx context.Context, taskID uuid.UUID, path, storageRef string, sizeBytes *int64) (*models.TaskArtifact, error)
 	ListArtifactPathsByTaskID(ctx context.Context, taskID uuid.UUID) ([]string, error)
 	GetOrCreateDefaultProjectForUser(ctx context.Context, userID uuid.UUID) (*models.Project, error)
+	GetProjectByID(ctx context.Context, id uuid.UUID) (*models.Project, error)
+	GetProjectBySlug(ctx context.Context, slug string) (*models.Project, error)
+	ListAuthorizedProjectsForUser(ctx context.Context, userID uuid.UUID, q string, limit, offset int) ([]*models.Project, error)
 
 	// Chat threads and messages (OpenAI-compatible chat API).
 	GetOrCreateActiveChatThread(ctx context.Context, userID uuid.UUID, projectID *uuid.UUID) (*models.ChatThread, error)
@@ -267,15 +270,11 @@ func (db *DB) GORM() *gorm.DB {
 // CreateUser creates a new user.
 func (db *DB) CreateUser(ctx context.Context, handle string, email *string) (*models.User, error) {
 	record := &UserRecord{
-		GormModelUUID: gormmodel.GormModelUUID{
-			ID:        uuid.New(),
-			CreatedAt: time.Now().UTC(),
-			UpdatedAt: time.Now().UTC(),
-		},
+		GormModelUUID: newGormModelUUIDNow(),
 		UserBase: models.UserBase{
-			Handle:    handle,
-			Email:     email,
-			IsActive:  true,
+			Handle:   handle,
+			Email:    email,
+			IsActive: true,
 		},
 	}
 	if err := db.createRecord(ctx, record, "create user"); err != nil {
@@ -286,20 +285,12 @@ func (db *DB) CreateUser(ctx context.Context, handle string, email *string) (*mo
 
 // GetUserByHandle retrieves a user by handle.
 func (db *DB) GetUserByHandle(ctx context.Context, handle string) (*models.User, error) {
-	record, err := getWhere[UserRecord](db, ctx, "handle", handle, "get user by handle")
-	if err != nil {
-		return nil, err
-	}
-	return record.ToUser(), nil
+	return getDomainWhere(db, ctx, "handle", handle, "get user by handle", (*UserRecord).ToUser)
 }
 
 // GetUserByID retrieves a user by ID.
 func (db *DB) GetUserByID(ctx context.Context, id uuid.UUID) (*models.User, error) {
-	record, err := getByID[UserRecord](db, ctx, id, "get user by id")
-	if err != nil {
-		return nil, err
-	}
-	return record.ToUser(), nil
+	return getDomainByID(db, ctx, id, "get user by id", (*UserRecord).ToUser)
 }
 
 // --- Password credential operations ---
@@ -307,11 +298,7 @@ func (db *DB) GetUserByID(ctx context.Context, id uuid.UUID) (*models.User, erro
 // CreatePasswordCredential creates a password credential for a user.
 func (db *DB) CreatePasswordCredential(ctx context.Context, userID uuid.UUID, passwordHash []byte, hashAlg string) (*models.PasswordCredential, error) {
 	record := &PasswordCredentialRecord{
-		GormModelUUID: gormmodel.GormModelUUID{
-			ID:        uuid.New(),
-			CreatedAt: time.Now().UTC(),
-			UpdatedAt: time.Now().UTC(),
-		},
+		GormModelUUID: newGormModelUUIDNow(),
 		PasswordCredentialBase: models.PasswordCredentialBase{
 			UserID:       userID,
 			PasswordHash: passwordHash,
@@ -326,11 +313,7 @@ func (db *DB) CreatePasswordCredential(ctx context.Context, userID uuid.UUID, pa
 
 // GetPasswordCredentialByUserID retrieves password credential for a user.
 func (db *DB) GetPasswordCredentialByUserID(ctx context.Context, userID uuid.UUID) (*models.PasswordCredential, error) {
-	record, err := getWhere[PasswordCredentialRecord](db, ctx, "user_id", userID, "get password credential")
-	if err != nil {
-		return nil, err
-	}
-	return record.ToPasswordCredential(), nil
+	return getDomainWhere(db, ctx, "user_id", userID, "get password credential", (*PasswordCredentialRecord).ToPasswordCredential)
 }
 
 // --- Refresh session operations ---
@@ -338,11 +321,7 @@ func (db *DB) GetPasswordCredentialByUserID(ctx context.Context, userID uuid.UUI
 // CreateRefreshSession creates a new refresh session.
 func (db *DB) CreateRefreshSession(ctx context.Context, userID uuid.UUID, tokenHash []byte, expiresAt time.Time) (*models.RefreshSession, error) {
 	record := &RefreshSessionRecord{
-		GormModelUUID: gormmodel.GormModelUUID{
-			ID:        uuid.New(),
-			CreatedAt: time.Now().UTC(),
-			UpdatedAt: time.Now().UTC(),
-		},
+		GormModelUUID: newGormModelUUIDNow(),
 		RefreshSessionBase: models.RefreshSessionBase{
 			UserID:           userID,
 			RefreshTokenHash: tokenHash,

@@ -5,7 +5,7 @@ Feature: cynork TUI
   I want a full-screen chat TUI with thread history and structured rendering
   So that interactive chat is readable, stateful, and efficient
 
-## Background
+Background:
 
   Given a mock gateway is running
   And cynork is built
@@ -107,8 +107,7 @@ Scenario: Mouse wheel scrolls transcript history rather than composer history
 @spec_cynai_client_cynorkchat_tuilayout
 Scenario: TUI shows a composer hint for commands files and shell
   When the TUI renders an idle composer
-  Then the TUI shows "/ commands · @ files · !
-    shell" in or adjacent to the composer
+  Then the TUI shows "/ commands · @ files · ! shell" in or adjacent to the composer
 
 @req_client_0204
 @spec_cynai_client_cynorkchat_tuilayout

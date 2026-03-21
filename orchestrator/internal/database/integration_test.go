@@ -327,7 +327,7 @@ func TestIntegration_Preferences_EffectiveWithProject(t *testing.T) {
 		now := time.Now().UTC()
 		_ = db.GORM().WithContext(ctx).Create(&ProjectRecord{
 			GormModelUUID: gormmodel.GormModelUUID{ID: pid, CreatedAt: now, UpdatedAt: now},
-			ProjectBase:    models.ProjectBase{Slug: "default", DisplayName: "Default", IsActive: true},
+			ProjectBase:   models.ProjectBase{Slug: "default", DisplayName: "Default", IsActive: true},
 		}).Error
 		task2, _ := db.CreateTask(ctx, &user.ID, "eff2", nil, nil)
 		if task2 != nil {
@@ -1353,13 +1353,13 @@ func TestIntegration_WorkflowStartGate_DepsNotSatisfied(t *testing.T) {
 	if err := db.GORM().WithContext(ctx).Model(&TaskRecord{}).Where("id = ?", depTask.ID).Update("plan_id", planID).Error; err != nil {
 		t.Fatalf("update dep plan_id: %v", err)
 	}
-		depRow := &models.TaskDependency{
-			TaskDependencyBase: models.TaskDependencyBase{
-				TaskID:          task.ID,
-				DependsOnTaskID: depTask.ID,
-			},
-			ID: uuid.New(),
-		}
+	depRow := &models.TaskDependency{
+		TaskDependencyBase: models.TaskDependencyBase{
+			TaskID:          task.ID,
+			DependsOnTaskID: depTask.ID,
+		},
+		ID: uuid.New(),
+	}
 	if err := db.GORM().WithContext(ctx).Create(depRow).Error; err != nil {
 		t.Fatalf("create task_dependency: %v", err)
 	}
@@ -1563,7 +1563,7 @@ func TestIntegration_ListAccessControlRulesForApiCall(t *testing.T) {
 			ResourceType:    ResourceTypeProviderOperation,
 			ResourcePattern: "*",
 			Effect:          "allow",
-			Priority: 5,
+			Priority:        5,
 		},
 		ID:        uuid.New(),
 		CreatedAt: now,

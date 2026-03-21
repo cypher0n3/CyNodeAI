@@ -349,6 +349,98 @@ func TestWithTestcontainers_GetTaskBySummary(t *testing.T) {
 	}
 }
 
+func testcontainersProjectReadSetup(t *testing.T) (context.Context, Store, uuid.UUID, *models.Project) {
+	t.Helper()
+	ctx := context.Background()
+	db := tcOpenDB(t, ctx)
+	user, err := db.CreateUser(ctx, "tc-user-projread-"+uuid.New().String()[:8], nil)
+	if err != nil {
+		t.Fatalf("CreateUser: %v", err)
+	}
+	def, err := db.GetOrCreateDefaultProjectForUser(ctx, user.ID)
+	if err != nil {
+		t.Fatalf("GetOrCreateDefaultProjectForUser: %v", err)
+	}
+	return ctx, db, user.ID, def
+}
+
+func TestWithTestcontainers_ProjectRead_GetByIDAndSlug(t *testing.T) {
+	ctx, db, _, def := testcontainersProjectReadSetup(t)
+	byID, err := db.GetProjectByID(ctx, def.ID)
+	if err != nil || byID == nil || byID.ID != def.ID {
+		t.Fatalf("GetProjectByID: %v got=%v", err, byID)
+	}
+	bySlug, err := db.GetProjectBySlug(ctx, def.Slug)
+	if err != nil || bySlug == nil || bySlug.ID != def.ID {
+		t.Fatalf("GetProjectBySlug: %v got=%v", err, bySlug)
+	}
+}
+
+func TestWithTestcontainers_ProjectRead_ListAuthorized(t *testing.T) {
+	ctx, db, uid, def := testcontainersProjectReadSetup(t)
+	cases := []struct {
+		name    string
+		q       string
+		limit   int
+		offset  int
+		wantLen int
+		wantID  bool
+	}{
+		{"empty q", "", 50, 0, 1, true},
+		{"match slug", def.Slug, 50, 0, 1, false},
+		{"miss filter", "zzzz-not-in-project", 50, 0, 0, false},
+		{"offset past row", "", 50, 99, 0, false},
+		{"limit zero", "", 0, 0, 1, false},
+		{"limit 500 mvp", "", 500, 0, 1, false},
+		{"negative offset", "", 50, -3, 1, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			list, err := db.ListAuthorizedProjectsForUser(ctx, uid, tc.q, tc.limit, tc.offset)
+			if err != nil || len(list) != tc.wantLen {
+				t.Fatalf("len: err=%v got=%d want=%d", err, len(list), tc.wantLen)
+			}
+			if tc.wantID && tc.wantLen == 1 && list[0].ID != def.ID {
+				t.Fatalf("wrong project id")
+			}
+		})
+	}
+}
+
+func TestWithTestcontainers_ProjectRead_NotFound(t *testing.T) {
+	ctx, db, _, _ := testcontainersProjectReadSetup(t)
+	_, err := db.GetProjectByID(ctx, uuid.New())
+	if !errors.Is(err, ErrNotFound) {
+		t.Fatalf("GetProjectByID missing: %v", err)
+	}
+	_, err = db.GetProjectBySlug(ctx, "no-such-slug-"+uuid.New().String())
+	if !errors.Is(err, ErrNotFound) {
+		t.Fatalf("GetProjectBySlug missing: %v", err)
+	}
+}
+
+func TestWithTestcontainers_ListAuthorizedProjectsForUser_MatchesDescription(t *testing.T) {
+	ctx := context.Background()
+	store := tcOpenDB(t, ctx)
+	dbImpl := store.(*DB)
+	user, err := dbImpl.CreateUser(ctx, "tc-proj-desc-"+uuid.New().String()[:8], nil)
+	if err != nil {
+		t.Fatalf("CreateUser: %v", err)
+	}
+	def, err := dbImpl.GetOrCreateDefaultProjectForUser(ctx, user.ID)
+	if err != nil {
+		t.Fatalf("GetOrCreateDefaultProjectForUser: %v", err)
+	}
+	desc := "findme-in-description"
+	if err := dbImpl.db.WithContext(ctx).Model(&ProjectRecord{}).Where("id = ?", def.ID).Update("description", desc).Error; err != nil {
+		t.Fatalf("update description: %v", err)
+	}
+	list, err := dbImpl.ListAuthorizedProjectsForUser(ctx, user.ID, "findme", 50, 0)
+	if err != nil || len(list) != 1 || list[0].ID != def.ID {
+		t.Fatalf("filter by description: err=%v len=%d", err, len(list))
+	}
+}
+
 func TestWithTestcontainers_DefaultProjectAndTaskProjectID(t *testing.T) {
 	ctx := context.Background()
 	db := tcOpenDB(t, ctx)
@@ -687,9 +779,9 @@ func TestWithTestcontainers_AccessControlAndApiCredential(t *testing.T) {
 			Effect:          "allow",
 			Priority:        10,
 		},
-		ID: uuid.New(),
-		CreatedAt:       now,
-		UpdatedAt:       now,
+		ID:        uuid.New(),
+		CreatedAt: now,
+		UpdatedAt: now,
 	}
 	if err := db.GORM().WithContext(ctx).Create(rule).Error; err != nil {
 		t.Fatalf("create access_control_rule: %v", err)
@@ -738,7 +830,7 @@ func TestWithTestcontainers_AccessControlAndApiCredential(t *testing.T) {
 			ResourceType: ResourceTypeProviderOperation,
 			Resource:     "openai/chat",
 			Decision:     "allow",
-			TaskID: &task.ID,
+			TaskID:       &task.ID,
 		},
 	}
 	if err := store.CreateAccessControlAuditLog(ctx, auditRec); err != nil {
@@ -746,5 +838,58 @@ func TestWithTestcontainers_AccessControlAndApiCredential(t *testing.T) {
 	}
 	if auditRec.ID == uuid.Nil || auditRec.CreatedAt.IsZero() {
 		t.Error("CreateAccessControlAuditLog: expected ID and CreatedAt set")
+	}
+}
+
+func TestRecord_ToDomainConversions_Smoke(t *testing.T) {
+	t.Parallel()
+	const recSubjectUser = "user"
+	id := uuid.New()
+	now := time.Now().UTC()
+	uid := id
+
+	pp := &ProjectPlanRecord{}
+	pp.ID = id
+	pp.CreatedAt = now
+	pp.UpdatedAt = now
+	pp.ProjectID = id
+	pp.State = "active"
+	pp.Archived = false
+	if pp.ToProjectPlan() == nil {
+		t.Fatal("ToProjectPlan")
+	}
+
+	mcp := &McpToolCallAuditLogRecord{}
+	mcp.ID = id
+	mcp.CreatedAt = now
+	mcp.ToolName = "t"
+	if mcp.ToMcpToolCallAuditLog() == nil {
+		t.Fatal("ToMcpToolCallAuditLog")
+	}
+
+	pref := &PreferenceAuditLogRecord{}
+	pref.ID = id
+	pref.EntryID = id
+	if pref.ToPreferenceAuditLog() == nil {
+		t.Fatal("ToPreferenceAuditLog")
+	}
+
+	chat := &ChatAuditLogRecord{}
+	chat.ID = id
+	chat.CreatedAt = now
+	chat.UpdatedAt = now
+	chat.UserID = &uid
+	chat.Outcome = "ok"
+	if chat.ToChatAuditLog() == nil {
+		t.Fatal("ToChatAuditLog")
+	}
+
+	ac := &AccessControlAuditLogRecord{}
+	ac.ID = id
+	ac.CreatedAt = now
+	ac.SubjectType = recSubjectUser
+	ac.Action = ActionApiCall
+	if ac.ToAccessControlAuditLog() == nil {
+		t.Fatal("ToAccessControlAuditLog")
 	}
 }

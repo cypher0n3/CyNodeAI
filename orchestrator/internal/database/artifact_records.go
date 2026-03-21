@@ -22,17 +22,9 @@ func (TaskArtifactRecord) TableName() string {
 // ToTaskArtifact converts a TaskArtifactRecord to a domain TaskArtifact with all fields populated.
 func (r *TaskArtifactRecord) ToTaskArtifact() *models.TaskArtifact {
 	return &models.TaskArtifact{
-		TaskArtifactBase: models.TaskArtifactBase{
-			TaskID:         r.TaskArtifactBase.TaskID,
-			RunID:          r.TaskArtifactBase.RunID,
-			Path:           r.TaskArtifactBase.Path,
-			StorageRef:     r.TaskArtifactBase.StorageRef,
-			SizeBytes:      r.TaskArtifactBase.SizeBytes,
-			ContentType:    r.TaskArtifactBase.ContentType,
-			ChecksumSHA256: r.TaskArtifactBase.ChecksumSHA256,
-		},
-		ID:        r.GormModelUUID.ID,
-		CreatedAt: r.GormModelUUID.CreatedAt,
-		UpdatedAt: r.GormModelUUID.UpdatedAt,
+		TaskArtifactBase: r.TaskArtifactBase,
+		ID:               r.ID,
+		CreatedAt:        r.CreatedAt,
+		UpdatedAt:        r.UpdatedAt,
 	}
 }

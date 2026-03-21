@@ -11,10 +11,18 @@ import (
 	"path/filepath"
 	"testing"
 	"time"
+
+	"github.com/cypher0n3/cynodeai/agents/internal/mcpclient"
 )
 
 // mockMCPResponseValueOK is the JSON body returned by mock MCP success handlers (goconst).
 const mockMCPResponseValueOK = `{"value":"ok"}`
+
+const (
+	envPmaMcpGateway   = "PMA_MCP_GATEWAY_URL"
+	envMcpGateway      = "MCP_GATEWAY_URL"
+	envMcpGatewayProxy = "MCP_GATEWAY_PROXY_URL"
+)
 
 func TestNewMCPClient_EnvPrecedence(t *testing.T) {
 	const pmaURL = "http://pma-mcp"
@@ -78,11 +86,11 @@ func TestMCPClient_Call_EmptyURL(t *testing.T) {
 
 func TestMCPClient_Call_Success(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost || r.URL.Path != mcpToolsCallPath {
+		if r.Method != http.MethodPost || r.URL.Path != mcpclient.ToolsCallPath {
 			w.WriteHeader(http.StatusNotFound)
 			return
 		}
-		var req MCPCallRequest
+		var req mcpclient.CallRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			w.WriteHeader(http.StatusBadRequest)
 			return
@@ -128,16 +136,16 @@ func TestMCPClient_Call_NonOK(t *testing.T) {
 
 func TestMCPClient_Call_ViaWorkerInternalProxy(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost || r.URL.Path != mcpProxyCallPath {
+		if r.Method != http.MethodPost || r.URL.Path != mcpclient.ProxyCallPath {
 			w.WriteHeader(http.StatusNotFound)
 			return
 		}
-		var req managedServiceProxyRequest
+		var req mcpclient.ManagedServiceProxyRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
-		if req.Path != mcpToolsCallPath {
+		if req.Path != mcpclient.ToolsCallPath {
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
@@ -147,7 +155,7 @@ func TestMCPClient_Call_ViaWorkerInternalProxy(t *testing.T) {
 	defer server.Close()
 
 	c := NewMCPClient()
-	c.BaseURL = server.URL + mcpProxyCallPath
+	c.BaseURL = server.URL + mcpclient.ProxyCallPath
 	body, code, err := c.Call(context.Background(), "db.preference.get", map[string]interface{}{})
 	if err != nil {
 		t.Fatalf("Call via proxy: %v", err)
@@ -165,7 +173,7 @@ func TestMCPClient_Call_ViaWorkerInternalProxy_NonOK(t *testing.T) {
 	defer server.Close()
 
 	c := NewMCPClient()
-	c.BaseURL = server.URL + mcpProxyCallPath
+	c.BaseURL = server.URL + mcpclient.ProxyCallPath
 	body, code, err := c.Call(context.Background(), "db.preference.get", map[string]interface{}{})
 	if err != nil {
 		t.Fatalf("Call via proxy: %v", err)
@@ -198,13 +206,13 @@ func TestMCPClient_Call_ViaWorkerInternalProxy_HTTPUnixSuccess(t *testing.T) {
 	defer func() { _ = listener.Close() }()
 
 	mux := http.NewServeMux()
-	mux.HandleFunc("POST "+mcpProxyCallPath, func(w http.ResponseWriter, r *http.Request) {
-		var req managedServiceProxyRequest
+	mux.HandleFunc("POST "+mcpclient.ProxyCallPath, func(w http.ResponseWriter, r *http.Request) {
+		var req mcpclient.ManagedServiceProxyRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
-		if req.Path != mcpToolsCallPath {
+		if req.Path != mcpclient.ToolsCallPath {
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
@@ -216,7 +224,7 @@ func TestMCPClient_Call_ViaWorkerInternalProxy_HTTPUnixSuccess(t *testing.T) {
 	go func() { _ = server.Serve(listener) }()
 
 	c := NewMCPClient()
-	c.BaseURL = "http+unix://" + url.PathEscape(socketPath) + mcpProxyCallPath
+	c.BaseURL = "http+unix://" + url.PathEscape(socketPath) + mcpclient.ProxyCallPath
 	c.HTTPClient = &http.Client{Timeout: 5 * time.Second}
 	body, code, err := c.Call(context.Background(), "db.preference.get", map[string]interface{}{})
 	if err != nil {
@@ -232,24 +240,24 @@ func TestMCPClient_Call_ViaWorkerInternalProxy_HTTPUnixSuccess(t *testing.T) {
 
 func TestParseHTTPUnixEndpoint(t *testing.T) {
 	socketPath := "/tmp/cynode/proxy.sock"
-	raw := "http+unix://" + url.PathEscape(socketPath) + mcpProxyCallPath
-	gotSocket, gotPath, ok := parseHTTPUnixEndpoint(raw)
+	raw := "http+unix://" + url.PathEscape(socketPath) + mcpclient.ProxyCallPath
+	gotSocket, gotPath, ok := mcpclient.ParseHTTPUnixEndpoint(raw)
 	if !ok {
 		t.Fatal("expected parse success")
 	}
 	if gotSocket != socketPath {
 		t.Fatalf("socket = %q", gotSocket)
 	}
-	if gotPath != mcpProxyCallPath {
+	if gotPath != mcpclient.ProxyCallPath {
 		t.Fatalf("path = %q", gotPath)
 	}
-	if _, _, ok := parseHTTPUnixEndpoint("http://127.0.0.1:12090" + mcpProxyCallPath); ok {
+	if _, _, ok := mcpclient.ParseHTTPUnixEndpoint("http://127.0.0.1:12090" + mcpclient.ProxyCallPath); ok {
 		t.Fatal("expected parse failure for non-http+unix URL")
 	}
-	if _, _, ok := parseHTTPUnixEndpoint("http+unix://only-socket-no-path"); ok {
+	if _, _, ok := mcpclient.ParseHTTPUnixEndpoint("http+unix://only-socket-no-path"); ok {
 		t.Fatal("expected parse failure for missing endpoint path")
 	}
-	if _, _, ok := parseHTTPUnixEndpoint("http+unix://%zz" + mcpProxyCallPath); ok {
+	if _, _, ok := mcpclient.ParseHTTPUnixEndpoint("http+unix://%zz" + mcpclient.ProxyCallPath); ok {
 		t.Fatal("expected parse failure for invalid escaped socket path")
 	}
 }
@@ -261,7 +269,7 @@ func TestMCPClient_Call_ViaWorkerInternalProxy_InvalidProxyBody(t *testing.T) {
 	}))
 	defer server.Close()
 	c := NewMCPClient()
-	c.BaseURL = server.URL + mcpProxyCallPath
+	c.BaseURL = server.URL + mcpclient.ProxyCallPath
 	_, _, err := c.Call(context.Background(), "db.preference.get", map[string]interface{}{})
 	if err == nil {
 		t.Fatal("expected base64 decode error")
@@ -270,7 +278,7 @@ func TestMCPClient_Call_ViaWorkerInternalProxy_InvalidProxyBody(t *testing.T) {
 
 func TestMCPClient_Call_ViaWorkerInternalProxy_InvalidHTTPUnixURL(t *testing.T) {
 	c := NewMCPClient()
-	c.BaseURL = "http+unix://bad" + mcpProxyCallPath
+	c.BaseURL = "http+unix://bad" + mcpclient.ProxyCallPath
 	_, _, err := c.Call(context.Background(), "db.preference.get", map[string]interface{}{})
 	if err == nil {
 		t.Fatal("expected invalid http+unix URL error")

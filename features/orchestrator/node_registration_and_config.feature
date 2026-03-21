@@ -5,7 +5,7 @@ Feature: Node Registration and Configuration
   I want worker nodes to register with the orchestrator and receive configuration
   So that the orchestrator can dispatch work to nodes using the correct URL and credentials
 
-## Background
+Background:
 
   Given a running PostgreSQL database
   And the orchestrator API is running

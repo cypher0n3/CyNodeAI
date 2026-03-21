@@ -5,7 +5,7 @@ Feature: cynork skills commands
   I want to list, load, get, update, and delete skills via the gateway
   So that I can manage AI skills (REQ-SKILLS-0106, REQ-SKILLS-0115)
 
-## Background
+Background:
 
   Given a mock gateway is running
   And cynork is built

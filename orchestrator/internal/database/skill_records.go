@@ -23,14 +23,14 @@ func (SkillRecord) TableName() string {
 func (r *SkillRecord) ToSkill() *models.Skill {
 	return &models.Skill{
 		SkillBase: models.SkillBase{
-			Name:     r.SkillBase.Name,
-			Content:  r.SkillBase.Content,
-			Scope:    r.SkillBase.Scope,
-			OwnerID:  r.SkillBase.OwnerID,
-			IsSystem: r.SkillBase.IsSystem,
+			Name:     r.Name,
+			Content:  r.Content,
+			Scope:    r.Scope,
+			OwnerID:  r.OwnerID,
+			IsSystem: r.IsSystem,
 		},
-		ID:        r.GormModelUUID.ID,
-		CreatedAt: r.GormModelUUID.CreatedAt,
-		UpdatedAt: r.GormModelUUID.UpdatedAt,
+		ID:        r.ID,
+		CreatedAt: r.CreatedAt,
+		UpdatedAt: r.UpdatedAt,
 	}
 }

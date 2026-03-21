@@ -5,7 +5,7 @@ Feature: cynork TUI /project slash commands
   I want to view and set project context via slash commands
   So that chat requests use the correct project without leaving the chat surface
 
-## Background
+Background:
 
   Given a mock gateway is running
   And cynork is built

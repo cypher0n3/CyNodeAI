@@ -5,7 +5,7 @@ Feature: Worker Node Sandbox Execution
   I want the worker API to authenticate requests and run sandboxed jobs
   So that job execution is isolated and results are returned reliably
 
-## Background
+Background:
 
   Given the worker API is running
 

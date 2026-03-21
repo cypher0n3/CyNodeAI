@@ -5,7 +5,7 @@ Feature: OpenAI-compatible chat contract
   I want to chat through an OpenAI-compatible API surface
   So that Open WebUI and cynork can interoperate with the gateway
 
-## Background
+Background:
 
   Given a running PostgreSQL database
   And the orchestrator API is running

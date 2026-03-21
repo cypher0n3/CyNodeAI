@@ -24,14 +24,10 @@ func (SandboxImageRecord) TableName() string {
 // ToSandboxImage converts a SandboxImageRecord to a domain SandboxImage with all fields populated.
 func (r *SandboxImageRecord) ToSandboxImage() *models.SandboxImage {
 	return &models.SandboxImage{
-		SandboxImageBase: models.SandboxImageBase{
-			Name:        r.SandboxImageBase.Name,
-			Description: r.SandboxImageBase.Description,
-			UpdatedBy:   r.SandboxImageBase.UpdatedBy,
-		},
-		ID:        r.GormModelUUID.ID,
-		CreatedAt: r.GormModelUUID.CreatedAt,
-		UpdatedAt: r.GormModelUUID.UpdatedAt,
+		SandboxImageBase: r.SandboxImageBase,
+		ID:               r.ID,
+		CreatedAt:        r.CreatedAt,
+		UpdatedAt:        r.UpdatedAt,
 	}
 }
 
@@ -51,17 +47,10 @@ func (SandboxImageVersionRecord) TableName() string {
 // ToSandboxImageVersion converts a SandboxImageVersionRecord to a domain SandboxImageVersion with all fields populated.
 func (r *SandboxImageVersionRecord) ToSandboxImageVersion() *models.SandboxImageVersion {
 	return &models.SandboxImageVersion{
-		SandboxImageVersionBase: models.SandboxImageVersionBase{
-			SandboxImageID: r.SandboxImageVersionBase.SandboxImageID,
-			Version:        r.SandboxImageVersionBase.Version,
-			ImageRef:       r.SandboxImageVersionBase.ImageRef,
-			ImageDigest:    r.SandboxImageVersionBase.ImageDigest,
-			Capabilities:   r.SandboxImageVersionBase.Capabilities,
-			IsAllowed:      r.SandboxImageVersionBase.IsAllowed,
-		},
-		ID:        r.GormModelUUID.ID,
-		CreatedAt: r.GormModelUUID.CreatedAt,
-		UpdatedAt: r.GormModelUUID.UpdatedAt,
+		SandboxImageVersionBase: r.SandboxImageVersionBase,
+		ID:                      r.ID,
+		CreatedAt:               r.CreatedAt,
+		UpdatedAt:               r.UpdatedAt,
 	}
 }
 
@@ -83,13 +72,8 @@ func (NodeSandboxImageAvailabilityRecord) TableName() string {
 // ToNodeSandboxImageAvailability converts a NodeSandboxImageAvailabilityRecord to a domain NodeSandboxImageAvailability with all fields populated.
 func (r *NodeSandboxImageAvailabilityRecord) ToNodeSandboxImageAvailability() *models.NodeSandboxImageAvailability {
 	return &models.NodeSandboxImageAvailability{
-		NodeSandboxImageAvailabilityBase: models.NodeSandboxImageAvailabilityBase{
-			NodeID:                r.NodeSandboxImageAvailabilityBase.NodeID,
-			SandboxImageVersionID: r.NodeSandboxImageAvailabilityBase.SandboxImageVersionID,
-			Status:                r.NodeSandboxImageAvailabilityBase.Status,
-			Details:               r.NodeSandboxImageAvailabilityBase.Details,
-		},
-		ID:            r.GormModelUUID.ID,
-		LastCheckedAt: r.LastCheckedAt,
+		NodeSandboxImageAvailabilityBase: r.NodeSandboxImageAvailabilityBase,
+		ID:                               r.ID,
+		LastCheckedAt:                    r.LastCheckedAt,
 	}
 }

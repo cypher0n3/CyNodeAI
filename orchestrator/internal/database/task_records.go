@@ -24,20 +24,10 @@ func (TaskRecord) TableName() string {
 // ToTask converts a TaskRecord to a domain Task with all fields populated.
 func (r *TaskRecord) ToTask() *models.Task {
 	return &models.Task{
-		TaskBase: models.TaskBase{
-			CreatedBy:          r.TaskBase.CreatedBy,
-			ProjectID:          r.TaskBase.ProjectID,
-			PlanID:             r.TaskBase.PlanID,
-			Status:             r.TaskBase.Status,
-			Closed:             r.TaskBase.Closed,
-			Prompt:             r.TaskBase.Prompt,
-			AcceptanceCriteria: r.TaskBase.AcceptanceCriteria,
-			Summary:            r.TaskBase.Summary,
-			Metadata:           r.TaskBase.Metadata,
-		},
-		ID:        r.GormModelUUID.ID,
-		CreatedAt: r.GormModelUUID.CreatedAt,
-		UpdatedAt: r.GormModelUUID.UpdatedAt,
+		TaskBase:  r.TaskBase,
+		ID:        r.ID,
+		CreatedAt: r.CreatedAt,
+		UpdatedAt: r.UpdatedAt,
 	}
 }
 
@@ -57,20 +47,10 @@ func (JobRecord) TableName() string {
 // ToJob converts a JobRecord to a domain Job with all fields populated.
 func (r *JobRecord) ToJob() *models.Job {
 	return &models.Job{
-		JobBase: models.JobBase{
-			TaskID:         r.JobBase.TaskID,
-			NodeID:          r.JobBase.NodeID,
-			Status:          r.JobBase.Status,
-			Payload:         r.JobBase.Payload,
-			Result:          r.JobBase.Result,
-			LeaseID:         r.JobBase.LeaseID,
-			LeaseExpiresAt:  r.JobBase.LeaseExpiresAt,
-			StartedAt:       r.JobBase.StartedAt,
-			EndedAt:         r.JobBase.EndedAt,
-		},
-		ID:        r.GormModelUUID.ID,
-		CreatedAt: r.GormModelUUID.CreatedAt,
-		UpdatedAt: r.GormModelUUID.UpdatedAt,
+		JobBase:   r.JobBase,
+		ID:        r.ID,
+		CreatedAt: r.CreatedAt,
+		UpdatedAt: r.UpdatedAt,
 	}
 }
 
@@ -90,12 +70,9 @@ func (TaskDependencyRecord) TableName() string {
 // ToTaskDependency converts a TaskDependencyRecord to a domain TaskDependency with all fields populated.
 func (r *TaskDependencyRecord) ToTaskDependency() *models.TaskDependency {
 	return &models.TaskDependency{
-		TaskDependencyBase: models.TaskDependencyBase{
-			TaskID:          r.TaskDependencyBase.TaskID,
-			DependsOnTaskID: r.TaskDependencyBase.DependsOnTaskID,
-		},
-		ID:        r.GormModelUUID.ID,
-		CreatedAt: r.GormModelUUID.CreatedAt,
-		UpdatedAt: r.GormModelUUID.UpdatedAt,
+		TaskDependencyBase: r.TaskDependencyBase,
+		ID:                 r.ID,
+		CreatedAt:          r.CreatedAt,
+		UpdatedAt:          r.UpdatedAt,
 	}
 }
