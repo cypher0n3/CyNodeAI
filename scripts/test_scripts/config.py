@@ -11,6 +11,16 @@ PROJECT_ROOT = os.environ.get("PROJECT_ROOT") or os.path.dirname(
     os.path.dirname(_SCRIPT_DIR)
 )
 
+
+def _env_int(key: str, default: int) -> int:
+    raw = os.environ.get(key)
+    if raw is None or str(raw).strip() == "":
+        return default
+    try:
+        return int(raw)
+    except ValueError:
+        return default
+
 # Orchestrator (docs/tech_specs/ports_and_endpoints.md)
 ORCHESTRATOR_PORT = int(os.environ.get("ORCHESTRATOR_PORT", "12080"))
 CONTROL_PLANE_PORT = int(os.environ.get("CONTROL_PLANE_PORT", "12082"))
@@ -41,6 +51,14 @@ CYNORK_BIN = os.environ.get("CYNORK_BIN") or os.path.join(
     PROJECT_ROOT, "cynork", "bin", "cynork-dev"
 )
 
+# E2E timeout policy (tune per machine; avoid false negatives on slow inference / loaded stacks):
+# - E2E_CYNORK_TIMEOUT: default subprocess limit for `run_cynork` when a test omits `timeout=...`.
+# - E2E_SSE_REQUEST_TIMEOUT: `requests` read timeout for whole SSE HTTP calls (streaming chat).
+# - OLLAMA_SMOKE_CHAT_TIMEOUT: urllib deadline for one Ollama /api/chat during prereq smoke.
+# - run_e2e.py --timeout: optional outer cap for `--single` only (default 0 = no cap).
+E2E_CYNORK_TIMEOUT = _env_int("E2E_CYNORK_TIMEOUT", 300)
+E2E_SSE_REQUEST_TIMEOUT = _env_int("E2E_SSE_REQUEST_TIMEOUT", 600)
+
 # Optional: skip inference smoke and one-shot chat (e.g. CI without Ollama)
 E2E_SKIP_INFERENCE_SMOKE = os.environ.get("E2E_SKIP_INFERENCE_SMOKE", "")
 # When set, run inference-in-sandbox (5b), prompt (5c), chat (5d)
@@ -52,6 +70,8 @@ OLLAMA_CONTAINER_NAME = os.environ.get("OLLAMA_CONTAINER_NAME", "cynodeai-ollama
 # qwen3.5:0.8b is the default smoke model; it is small enough for fast startup
 # and produces more coherent output than tinyllama.
 OLLAMA_E2E_MODEL = os.environ.get("OLLAMA_E2E_MODEL", "qwen3.5:0.8b")
+# HTTP timeout (seconds) for Ollama /api/chat during inference smoke (some models exceed 120s).
+OLLAMA_SMOKE_CHAT_TIMEOUT = _env_int("OLLAMA_SMOKE_CHAT_TIMEOUT", 300)
 # Capable model for agent/tool-call tests (spec: qwen3.5:9b → Ollama Hub: qwen3:8b).
 # Tests requiring this model are skipped when it is not present in the container.
 OLLAMA_CAPABLE_MODEL = os.environ.get("OLLAMA_CAPABLE_MODEL", "qwen3:8b")

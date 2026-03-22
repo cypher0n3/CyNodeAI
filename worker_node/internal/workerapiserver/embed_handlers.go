@@ -227,7 +227,6 @@ func doManagedProxyUpstreamStream(ctx context.Context, proxyReq *managedProxyReq
 	if !strings.HasPrefix(path, "/") {
 		path = "/" + path
 	}
-	client := managedProxyHTTPClient(socketPath)
 	upstreamReq, err := buildManagedProxyUpstreamRequest(ctx, proxyReq, body, path)
 	if err != nil {
 		if logger != nil {
@@ -235,7 +234,7 @@ func doManagedProxyUpstreamStream(ctx context.Context, proxyReq *managedProxyReq
 		}
 		return http.StatusInternalServerError, fmt.Errorf("internal error")
 	}
-	resp, err := client.Do(upstreamReq)
+	resp, err := managedProxyHTTPClientStream(socketPath).Do(upstreamReq)
 	if err != nil {
 		if logger != nil {
 			logger.Error("managed-service proxy stream: upstream request", "service_id", serviceID, "error", err)
@@ -326,8 +325,8 @@ func doManagedProxyUpstream(ctx context.Context, proxyReq *managedProxyRequest, 
 	return managedProxyResponseFromHTTP(resp.StatusCode, resp.Header, respBody), 0, nil
 }
 
-func managedProxyHTTPClient(socketPath string) *http.Client {
-	transport := &http.Transport{
+func managedProxyTransport(socketPath string) *http.Transport {
+	return &http.Transport{
 		DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
 			if network == "tcp" && (addr == "proxy:80" || addr == "proxy") {
 				return net.Dial("unix", socketPath)
@@ -335,7 +334,16 @@ func managedProxyHTTPClient(socketPath string) *http.Client {
 			return nil, fmt.Errorf("managed proxy only supports unix socket, got %q %q", network, addr)
 		},
 	}
-	return &http.Client{Transport: transport, Timeout: 120 * time.Second}
+}
+
+// managedProxyHTTPClient is used for buffered upstream responses (non-streaming proxy calls).
+func managedProxyHTTPClient(socketPath string) *http.Client {
+	return &http.Client{Transport: managedProxyTransport(socketPath), Timeout: 300 * time.Second}
+}
+
+// managedProxyHTTPClientStream uses the same wall timeout as orchestrator PMA streaming (300s).
+func managedProxyHTTPClientStream(socketPath string) *http.Client {
+	return &http.Client{Transport: managedProxyTransport(socketPath), Timeout: 300 * time.Second}
 }
 
 func buildManagedProxyUpstreamRequest(ctx context.Context, proxyReq *managedProxyRequest, body []byte, path string) (*http.Request, error) {

@@ -27,11 +27,9 @@ import (
 )
 
 // Max total wait for chat completion (REQ-ORCHES-0131).
-// Spec allows 90-120 s; set to 120 s to accommodate slow local model loading.
 // chatCompletionTimeout is the maximum wall time for a single chat completion request.
-// Must be below the user-gateway WRITE_TIMEOUT (300 s).
-// Bound: 2 × pmaLangchainCompletionTimeout (2×90 s = 180 s) + proxy overhead ≈ 200 s.
-const chatCompletionTimeout = 200 * time.Second
+// Must be at or below the user-gateway WRITE_TIMEOUT (300 s) and aligned with pmaclient defaultPMAHTTPTimeout.
+const chatCompletionTimeout = 300 * time.Second
 
 // chatHistoryLimit caps the number of prior messages loaded from the thread for context.
 // Prevents unbounded context growth for long-running sessions.

@@ -13,8 +13,8 @@ import requests
 from scripts.test_scripts import config, helpers
 import scripts.test_scripts.e2e_state as state
 
-# Timeout for SSE requests (seconds); generous for local inference.
-_SSE_TIMEOUT_SEC = 120
+# Whole-request HTTP read timeout for SSE (first byte + stream); tunable via E2E_SSE_REQUEST_TIMEOUT.
+_SSE_TIMEOUT_SEC = int(config.E2E_SSE_REQUEST_TIMEOUT)
 # Prompt that yields a short deterministic response.
 _SHORT_PROMPT = "Reply with exactly: OK"
 
@@ -128,15 +128,27 @@ class TestSSEStreaming(unittest.TestCase):
         # Check for inference unavailability in the first event before validating structure.
         _skip_if_inference_error(self, events, "/v1/chat/completions")
 
-        # Validate chunk structure.
-        full_content = ""
+        # PMA may emit extension payloads on the same data: lines (e.g. iteration markers)
+        # before chat.completion.chunk; only validate OpenAI-shaped chunks.
+        chunk_payloads = []
         for ev in events:
             try:
                 chunk = json.loads(ev)
             except json.JSONDecodeError:
                 self.fail(f"Non-JSON SSE event data: {ev!r}")
-            self.assertEqual(chunk.get("object"), "chat.completion.chunk",
-                             f"chunk.object wrong: {chunk!r}")
+            if chunk.get("object") != "chat.completion.chunk":
+                continue
+            chunk_payloads.append(chunk)
+
+        self.assertGreater(
+            len(chunk_payloads),
+            0,
+            "Expected at least one chat.completion.chunk in the SSE stream; "
+            f"got only non-chunk payloads: {events!r}",
+        )
+
+        full_content = ""
+        for chunk in chunk_payloads:
             choices = chunk.get("choices", [])
             self.assertGreater(len(choices), 0, f"chunk has no choices: {chunk!r}")
             delta = choices[0].get("delta", {})

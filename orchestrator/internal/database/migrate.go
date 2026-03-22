@@ -22,9 +22,12 @@ func (db *DB) RunSchema(ctx context.Context, logger *slog.Logger) error {
 }
 
 // runAutoMigrate runs GORM AutoMigrate for all tables used by the Store.
+// Each model is migrated in its own call so PostgreSQL tables created or altered incrementally
+// still pick up columns such as soft-delete (deleted_at); a single batched AutoMigrate can
+// leave those columns missing on existing tables (observed with nodes / node_capabilities).
 func (db *DB) runAutoMigrate(ctx context.Context, logger *slog.Logger) error {
 	logger.Info("running GORM AutoMigrate")
-	err := db.db.WithContext(ctx).AutoMigrate(
+	models := []interface{}{
 		&UserRecord{},
 		&PasswordCredentialRecord{},
 		&RefreshSessionRecord{},
@@ -53,9 +56,11 @@ func (db *DB) runAutoMigrate(ctx context.Context, logger *slog.Logger) error {
 		&AccessControlRuleRecord{},
 		&AccessControlAuditLogRecord{},
 		&ApiCredentialRecord{},
-	)
-	if err != nil {
-		return fmt.Errorf("auto migrate: %w", err)
+	}
+	for _, m := range models {
+		if err := db.db.WithContext(ctx).AutoMigrate(m); err != nil {
+			return fmt.Errorf("auto migrate %T: %w", m, err)
+		}
 	}
 	logger.Info("AutoMigrate complete")
 	return nil

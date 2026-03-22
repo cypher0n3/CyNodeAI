@@ -92,7 +92,8 @@ func (t *TaskResponse) ResolveTaskID() string {
 type ListTasksResponse struct {
 	Tasks      []TaskResponse `json:"tasks"`
 	NextOffset *int           `json:"next_offset,omitempty"`
-	NextCursor string         `json:"next_cursor,omitempty"`
+	// next_cursor is always present (empty string when there is no further page).
+	NextCursor string `json:"next_cursor"`
 }
 
 // CancelTaskResponse is the body of POST /v1/tasks/{id}/cancel.

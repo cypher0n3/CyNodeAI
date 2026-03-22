@@ -104,6 +104,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      control-plane:
+        condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:12080/healthz || exit 1"]
       interval: 10s

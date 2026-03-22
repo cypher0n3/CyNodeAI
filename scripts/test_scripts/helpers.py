@@ -16,8 +16,13 @@ from scripts.test_scripts import config
 import scripts.test_scripts.e2e_state as state
 
 
-def run_cynork(args, config_path, env_extra=None, timeout=120, input_text=None):
-    """Run cynork-dev with --config; return (ok, stdout, stderr)."""
+def run_cynork(args, config_path, env_extra=None, timeout=None, input_text=None):
+    """Run cynork-dev with --config; return (ok, stdout, stderr).
+
+    If timeout is None, uses config.E2E_CYNORK_TIMEOUT (env E2E_CYNORK_TIMEOUT).
+    """
+    if timeout is None:
+        timeout = int(config.E2E_CYNORK_TIMEOUT)
     cmd = [config.CYNORK_BIN, "--config", config_path] + list(args)
     env = os.environ.copy()
     env["CYNORK_GATEWAY_URL"] = config.USER_API
@@ -404,6 +409,31 @@ def _container_runtime():
     return None
 
 
+def _ollama_container_runtime():
+    """Return 'podman' or 'docker' if OLLAMA_CONTAINER_NAME is running there, else None.
+
+    Checks both engines. _container_runtime() prefers Podman when both exist, but Ollama
+    may run under Docker only — without this, exec/pull and prereq smoke miss the container.
+    """
+    for runtime in ("podman", "docker"):
+        try:
+            r = subprocess.run(
+                [runtime, "ps", "--format", "{{.Names}}"],
+                capture_output=True,
+                text=True,
+                timeout=10,
+                check=False,
+            )
+            if r.returncode != 0:
+                continue
+            names = (r.stdout or "").strip().splitlines()
+            if config.OLLAMA_CONTAINER_NAME in names:
+                return runtime
+        except (subprocess.TimeoutExpired, FileNotFoundError):
+            continue
+    return None
+
+
 def container_runtime():
     """Public wrapper for _container_runtime (for E2E that need podman/docker)."""
     return _container_runtime()
@@ -415,6 +445,8 @@ def ensure_ollama_container_for_e2e():
     becomes running; False on failure. Call before the node is started (e.g. in full-demo);
     if the stack was already started without Ollama, the node will not have PMA.
     """
+    if _ollama_container_runtime():
+        return True
     runtime = _container_runtime()
     if not runtime:
         return False
@@ -456,22 +488,12 @@ def ensure_ollama_container_for_e2e():
 
 def ollama_container_running():
     """Return True if the E2E Ollama container is running."""
-    runtime = _container_runtime()
-    if not runtime:
-        return False
-    try:
-        r = subprocess.run(
-            [runtime, "ps", "--format", "{{.Names}}"],
-            capture_output=True, text=True, timeout=10, check=False
-        )
-        return config.OLLAMA_CONTAINER_NAME in (r.stdout or "").strip().splitlines()
-    except (subprocess.TimeoutExpired, FileNotFoundError):
-        return False
+    return _ollama_container_runtime() is not None
 
 
 def get_ollama_container_image():
     """Return the image string of the running Ollama container, or None if not found."""
-    runtime = _container_runtime()
+    runtime = _ollama_container_runtime()
     if not runtime:
         return None
     try:
@@ -493,7 +515,7 @@ def get_ollama_container_image():
 
 def is_ollama_model_available(model_name: str) -> bool:
     """Return True if *model_name* is already pulled in the Ollama container."""
-    runtime = _container_runtime()
+    runtime = _ollama_container_runtime()
     if not runtime:
         return False
     try:
@@ -555,24 +577,13 @@ def _ollama_chat_one_request(ollama_url, payload):
             headers={"Content-Type": "application/json"},
             method="POST",
         )
-        with urllib.request.urlopen(req, timeout=120) as resp:
+        timeout_sec = max(30, int(config.OLLAMA_SMOKE_CHAT_TIMEOUT))
+        with urllib.request.urlopen(req, timeout=timeout_sec) as resp:
             body = resp.read().decode("utf-8", errors="replace")
             data = json.loads(body)
             content = (data.get("message") or {}).get("content", "").strip()
             return bool(content)
     except (urllib.error.URLError, OSError, json.JSONDecodeError, TimeoutError):
-        return False
-
-
-def _ollama_named_container_running(runtime):
-    """Return True if a container named OLLAMA_CONTAINER_NAME appears in ps (running)."""
-    try:
-        r = subprocess.run(
-            [runtime, "ps", "--format", "{{.Names}}"],
-            capture_output=True, text=True, timeout=10, check=False
-        )
-        return config.OLLAMA_CONTAINER_NAME in (r.stdout or "").strip().splitlines()
-    except (subprocess.TimeoutExpired, FileNotFoundError):
         return False
 
 
@@ -591,10 +602,10 @@ def run_ollama_inference_smoke():
         "messages": [{"role": "user", "content": "Say one word: hello"}],
         "stream": False,
     }).encode()
-    runtime = _container_runtime()
-    if runtime and _ollama_named_container_running(runtime):
-        _ollama_wait_container_ready(runtime)
-        _ollama_ensure_model(runtime)
+    ollama_rt = _ollama_container_runtime()
+    if ollama_rt:
+        _ollama_wait_container_ready(ollama_rt)
+        _ollama_ensure_model(ollama_rt)
     for _ in range(3):
         if _ollama_chat_one_request(ollama_url, payload):
             return True

@@ -6,6 +6,12 @@ Services must be up (e.g. just setup-dev start, or full-demo).
 
 Use --single TEST_ID to run only that test or module (no prereqs).
 E.g. just e2e --single e2e_0020_gateway_health_readyz.
+
+Timeouts (tune via env; see scripts/test_scripts/config.py):
+  E2E_CYNORK_TIMEOUT — default limit for cynork subprocess when tests omit timeout=.
+  E2E_SSE_REQUEST_TIMEOUT — HTTP read timeout for SSE streaming requests.
+  OLLAMA_SMOKE_CHAT_TIMEOUT — Ollama /api/chat deadline for the ollama prereq smoke.
+  --timeout (only with --single) — optional outer wall clock; default 0 = unlimited.
 """
 
 import argparse
@@ -73,9 +79,13 @@ def parse_args():
     p.add_argument(
         "--timeout",
         type=int,
-        default=300,
+        default=0,
         metavar="SECS",
-        help="When --single: max seconds for the run (default 300). 0 = no limit.",
+        help=(
+            "When --single: optional max seconds for the whole run (subprocess kill). "
+            "Default 0 = no limit (long inference runs are not cut off). "
+            "Set e.g. 3600 in CI if you need a hard cap."
+        ),
     )
     return p.parse_known_args()
 

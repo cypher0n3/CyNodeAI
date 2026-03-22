@@ -113,7 +113,9 @@ func streamCompletionLangchainToWriter(ctx context.Context, w http.ResponseWrite
 	}
 }
 
-// streamCompletionToWriter runs direct inference and writes NDJSON lines {"delta":"..."} per token.
+// streamCompletionToWriter runs direct inference and writes NDJSON lines
+// iteration_start (once), then {"delta":"..."} per token — same shape as
+// streamCompletionLangchainToWriter so orchestrator can map iteration_start to SSE.
 func streamCompletionToWriter(ctx context.Context, w http.ResponseWriter, instructionsContent string, req *InternalChatCompletionRequest, logger *slog.Logger) {
 	systemContext := buildSystemContext(instructionsContent, req)
 	baseURL, model := resolveOllamaConfig()
@@ -134,6 +136,12 @@ func streamCompletionToWriter(ctx context.Context, w http.ResponseWriter, instru
 	}
 	enc := json.NewEncoder(w)
 	enc.SetEscapeHTML(false)
+	if err := enc.Encode(map[string]int{"iteration_start": 1}); err != nil {
+		return
+	}
+	if f, ok := w.(http.Flusher); ok {
+		f.Flush()
+	}
 	scanner := bufio.NewScanner(resp.Body)
 	for scanner.Scan() {
 		if ctx.Err() != nil {

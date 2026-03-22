@@ -21,6 +21,13 @@ func TestCallChatCompletion_EmptyURL(t *testing.T) {
 	}
 }
 
+func TestStreamHTTPClient_NilUsesDefaultTimeout(t *testing.T) {
+	c := streamHTTPClient(nil)
+	if c.Timeout != defaultPMAHTTPTimeout {
+		t.Errorf("streamHTTPClient(nil) Timeout = %v, want %v", c.Timeout, defaultPMAHTTPTimeout)
+	}
+}
+
 func TestCallChatCompletion_Success(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost || r.URL.Path != pathChatCompletion {

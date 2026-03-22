@@ -218,16 +218,18 @@ restart *ARGS:
     @just start {{ ARGS }}
 
 clean:
-    @just stop
     #!/usr/bin/env bash
+    # Single script: line-by-line recipes do not share shell state under strict bash (see `set shell` above).
     set -e
+    root="$(cd "{{ root_dir }}" && pwd)"
+    just -f "$root/scripts/justfile" stop
     rt=""
     podman ps >/dev/null 2>&1 && rt=podman
     [ -z "$rt" ] && docker ps >/dev/null 2>&1 && rt=docker
     case "$rt" in
     podman|docker)
     $rt volume rm orchestrator_ollama-data 2>/dev/null || true
-    just clean-db
+    just -f "$root/scripts/justfile" clean-db
     ;;
     *) ;;
     esac

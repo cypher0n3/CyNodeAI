@@ -15,7 +15,18 @@ import (
 	"time"
 )
 
-const defaultTimeout = 120 * time.Second
+// defaultPMAHTTPTimeout caps PMA HTTP client calls (stream and non-stream). Kept in sync with
+// gateway chatCompletionTimeout so the gateway context cancels before the client hard-timeout.
+const defaultPMAHTTPTimeout = 300 * time.Second
+
+// streamHTTPClient returns the client for PMA NDJSON streaming. Uses a 300s wall timeout so
+// long agent runs are allowed while still bounding hung connections; caller context may cancel earlier.
+func streamHTTPClient(client *http.Client) *http.Client {
+	if client != nil {
+		return client
+	}
+	return &http.Client{Timeout: defaultPMAHTTPTimeout}
+}
 
 // ChatMessage is a single message in the handoff request.
 type ChatMessage struct {
@@ -57,7 +68,7 @@ func CallChatCompletion(ctx context.Context, client *http.Client, baseURL string
 		return "", fmt.Errorf("PMA base URL is required")
 	}
 	if client == nil {
-		client = &http.Client{Timeout: defaultTimeout}
+		client = &http.Client{Timeout: defaultPMAHTTPTimeout}
 	}
 	baseURL = strings.TrimSpace(baseURL)
 	body := CompletionRequest{Messages: messages}
@@ -107,9 +118,7 @@ func CallChatCompletionStreamWithCallbacks(ctx context.Context, client *http.Cli
 	if baseURL == "" {
 		return fmt.Errorf("PMA base URL is required")
 	}
-	if client == nil {
-		client = &http.Client{Timeout: defaultTimeout}
-	}
+	client = streamHTTPClient(client)
 	baseURL = strings.TrimSpace(baseURL)
 	body := CompletionRequest{Messages: messages, Stream: true}
 	b, err := json.Marshal(body)
