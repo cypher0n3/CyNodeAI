@@ -266,50 +266,118 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.WindowSizeMsg:
 		m.Width = msg.Width
 		m.Height = msg.Height
-		return m, m.maybeStartGatewayHealthPollOnce()
+		cmd := m.maybeStartGatewayHealthPollOnce()
+		return m, cmd
+	default:
+		return m.dispatchAsyncMsg(msg)
+	}
+}
+
+func (m *Model) dispatchAsyncMsg(msg tea.Msg) (tea.Model, tea.Cmd) {
+	if mm, cmd, ok := m.applyStreamMsgs(msg); ok {
+		return mm, cmd
+	}
+	if mm, cmd, ok := m.applyThreadMsgs(msg); ok {
+		return mm, cmd
+	}
+	if mm, cmd, ok := m.applySlashShellLoginMsgs(msg); ok {
+		return mm, cmd
+	}
+	if mm, cmd, ok := m.applyClipboardMsgs(msg); ok {
+		return mm, cmd
+	}
+	if mm, cmd, ok := m.applyTokenAndGatewayMsgs(msg); ok {
+		return mm, cmd
+	}
+	return m, nil
+}
+
+func (m *Model) applyStreamMsgs(msg tea.Msg) (tea.Model, tea.Cmd, bool) {
+	switch msg := msg.(type) {
 	case streamStartMsg:
-		// Store the channel in the main loop (safe — no goroutine write to model fields).
 		m.streamCh = msg.ch
-		return m, scheduleNextDelta(m.streamCh)
+		return m, scheduleNextDelta(m.streamCh), true
 	case streamDeltaMsg:
-		return m.applyStreamDelta(msg)
+		mm, cmd := m.applyStreamDelta(msg)
+		return mm, cmd, true
 	case streamDoneMsg:
 		m.applyStreamDone(msg)
-		return m, nil
+		return m, nil, true
 	case sendResult:
 		m.applySendResult(msg)
-		return m, nil
-	case threadListResult:
-		return m.applyThreadListResult(msg)
-	case threadRenameResult:
-		return m.applyThreadRenameResult(msg)
-	case ensureThreadResult:
-		return m.applyEnsureThreadResult(msg)
-	case slashResultMsg:
-		return m.applySlashResult(msg)
-	case shellExecDoneMsg:
-		return m.applyShellExecDone(msg)
-	case openLoginFormMsg:
-		return m.applyOpenLoginForm()
-	case loginResultMsg:
-		return m.applyLoginResult(msg)
+		return m, nil, true
 	case streamPollMsg:
-		return m.applyStreamPoll()
+		mm, cmd := m.applyStreamPoll()
+		return mm, cmd, true
+	default:
+		return m, nil, false
+	}
+}
+
+func (m *Model) applyThreadMsgs(msg tea.Msg) (tea.Model, tea.Cmd, bool) {
+	switch msg := msg.(type) {
+	case threadListResult:
+		mm, cmd := m.applyThreadListResult(msg)
+		return mm, cmd, true
+	case threadRenameResult:
+		mm, cmd := m.applyThreadRenameResult(msg)
+		return mm, cmd, true
+	case ensureThreadResult:
+		mm, cmd := m.applyEnsureThreadResult(msg)
+		return mm, cmd, true
+	default:
+		return m, nil, false
+	}
+}
+
+func (m *Model) applySlashShellLoginMsgs(msg tea.Msg) (tea.Model, tea.Cmd, bool) {
+	switch msg := msg.(type) {
+	case slashResultMsg:
+		mm, cmd := m.applySlashResult(msg)
+		return mm, cmd, true
+	case shellExecDoneMsg:
+		mm, cmd := m.applyShellExecDone(msg)
+		return mm, cmd, true
+	case openLoginFormMsg:
+		mm, cmd := m.applyOpenLoginForm()
+		return mm, cmd, true
+	case loginResultMsg:
+		mm, cmd := m.applyLoginResult(msg)
+		return mm, cmd, true
+	default:
+		return m, nil, false
+	}
+}
+
+func (m *Model) applyClipboardMsgs(msg tea.Msg) (tea.Model, tea.Cmd, bool) {
+	switch msg := msg.(type) {
 	case copyClipboardResultMsg:
-		return m.applyCopyClipboardResult(msg)
+		mm, cmd := m.applyCopyClipboardResult(msg)
+		return mm, cmd, true
 	case clipNoteClearMsg:
 		m.ClipNote = ""
-		return m, nil
-	case proactiveTokenRefreshMsg:
-		return m.handleProactiveTokenRefresh()
-	case tokenRefreshResultMsg:
-		return m.applyTokenRefreshResult(msg)
-	case gatewayHealthPollMsg:
-		return m.handleGatewayHealthPoll()
-	case gatewayHealthResultMsg:
-		return m.applyGatewayHealthResult(msg)
+		return m, nil, true
 	default:
-		return m, nil
+		return m, nil, false
+	}
+}
+
+func (m *Model) applyTokenAndGatewayMsgs(msg tea.Msg) (tea.Model, tea.Cmd, bool) {
+	switch msg := msg.(type) {
+	case proactiveTokenRefreshMsg:
+		mm, cmd := m.handleProactiveTokenRefresh()
+		return mm, cmd, true
+	case tokenRefreshResultMsg:
+		mm, cmd := m.applyTokenRefreshResult(msg)
+		return mm, cmd, true
+	case gatewayHealthPollMsg:
+		mm, cmd := m.handleGatewayHealthPoll()
+		return mm, cmd, true
+	case gatewayHealthResultMsg:
+		mm, cmd := m.applyGatewayHealthResult(msg)
+		return mm, cmd, true
+	default:
+		return m, nil, false
 	}
 }
 
@@ -327,7 +395,8 @@ func (m *Model) applyCopyClipboardResult(msg copyClipboardResultMsg) (tea.Model,
 		m.ClipNote = line
 		m.Scrollback = append(m.Scrollback, scrollbackSystemLinePrefix+line)
 	}
-	return m, m.scheduleClipNoteClear()
+	cmd := m.scheduleClipNoteClear()
+	return m, cmd
 }
 
 func (m *Model) scheduleClipNoteClear() tea.Cmd {
@@ -370,16 +439,19 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	}
 	switch msg.String() {
 	case "ctrl+y":
-		return m, m.cmdCopyLastAssistant()
+		cmd := m.cmdCopyLastAssistant()
+		return m, cmd
 	case "ctrl+c":
 		return m.handleCtrlC()
 	case "ctrl+d":
 		return m, tea.Quit
 	}
 	m.ctrlCCount = 0
+	return m.handleComposerAfterGlobalChords(msg)
+}
+
+func (m *Model) handleComposerAfterGlobalChords(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
-	// Multiline: insert newline without sending. Most terminals send the same bytes for
-	// Shift+Enter as for Enter, so Bubble Tea reports both as "enter" — use alt+enter or ctrl+j.
 	case "shift+enter", "alt+enter", "ctrl+j":
 		m.insertAtCursor("\n")
 		m.clampSlashMenuSelection()
@@ -387,80 +459,112 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "enter":
 		return m.handleEnterKey()
 	case "up":
-		if m.slashMenuVisible() && len(m.filteredSlashCommands()) > 0 {
-			m.navSlashMenu(true)
-			return m, nil
-		}
-		m.moveInputCursorVertical(-1)
-		m.clampSlashMenuSelection()
-		return m, nil
+		return m.handleComposerUpKey()
 	case "down":
-		if m.slashMenuVisible() && len(m.filteredSlashCommands()) > 0 {
-			m.navSlashMenu(false)
-			return m, nil
-		}
-		m.moveInputCursorVertical(1)
-		m.clampSlashMenuSelection()
-		return m, nil
+		return m.handleComposerDownKey()
 	case "ctrl+up":
-		if m.slashMenuVisible() && len(m.filteredSlashCommands()) > 0 {
-			return m, nil
-		}
-		m.navigateInputHistory(true)
-		return m, nil
+		return m.handleComposerCtrlUpKey()
 	case "ctrl+down":
-		if m.slashMenuVisible() && len(m.filteredSlashCommands()) > 0 {
-			return m, nil
-		}
-		m.navigateInputHistory(false)
-		return m, nil
+		return m.handleComposerCtrlDownKey()
 	case "tab":
-		if m.slashMenuVisible() && len(m.filteredSlashCommands()) > 0 {
-			m.applySlashCompletion()
-			m.clampSlashMenuSelection()
-			return m, nil
-		}
-		return m, nil
+		return m.handleComposerTabKey()
 	case "esc":
-		if m.slashMenuVisible() {
-			m.replaceActiveComposerLine("")
-			m.slashMenuSel = 0
-			m.slashMenuScroll = 0
-			return m, nil
-		}
-		return m, nil
+		return m.handleComposerEscKey()
 	case "left":
-		m.moveInputCursorRune(-1)
-		m.clampSlashMenuSelection()
-		return m, nil
+		return m.handleComposerMoveRuneKey(-1)
 	case "right":
-		m.moveInputCursorRune(1)
-		m.clampSlashMenuSelection()
-		return m, nil
+		return m.handleComposerMoveRuneKey(1)
 	case "ctrl+left":
-		m.moveInputCursorWordLeft()
-		m.clampSlashMenuSelection()
-		return m, nil
+		return m.handleComposerWordKey(m.moveInputCursorWordLeft)
 	case "ctrl+right":
-		m.moveInputCursorWordRight()
-		m.clampSlashMenuSelection()
-		return m, nil
+		return m.handleComposerWordKey(m.moveInputCursorWordRight)
 	case "backspace":
 		m.deleteRuneBeforeCursor()
 		m.clampSlashMenuSelection()
 		return m, nil
 	default:
-		if len(msg.Runes) > 0 {
-			if len(msg.Runes) == 1 && msg.Runes[0] == '\n' {
-				m.insertAtCursor("\n")
-				m.clampSlashMenuSelection()
-				return m, nil
-			}
-			m.insertAtCursor(string(msg.Runes))
-			m.clampSlashMenuSelection()
-		}
+		return m.handleComposerRuneInsert(msg)
+	}
+}
+
+func (m *Model) handleComposerUpKey() (tea.Model, tea.Cmd) {
+	if m.slashMenuVisible() && len(m.filteredSlashCommands()) > 0 {
+		m.navSlashMenu(true)
 		return m, nil
 	}
+	m.moveInputCursorVertical(-1)
+	m.clampSlashMenuSelection()
+	return m, nil
+}
+
+func (m *Model) handleComposerDownKey() (tea.Model, tea.Cmd) {
+	if m.slashMenuVisible() && len(m.filteredSlashCommands()) > 0 {
+		m.navSlashMenu(false)
+		return m, nil
+	}
+	m.moveInputCursorVertical(1)
+	m.clampSlashMenuSelection()
+	return m, nil
+}
+
+func (m *Model) handleComposerCtrlUpKey() (tea.Model, tea.Cmd) {
+	if m.slashMenuVisible() && len(m.filteredSlashCommands()) > 0 {
+		return m, nil
+	}
+	m.navigateInputHistory(true)
+	return m, nil
+}
+
+func (m *Model) handleComposerCtrlDownKey() (tea.Model, tea.Cmd) {
+	if m.slashMenuVisible() && len(m.filteredSlashCommands()) > 0 {
+		return m, nil
+	}
+	m.navigateInputHistory(false)
+	return m, nil
+}
+
+func (m *Model) handleComposerTabKey() (tea.Model, tea.Cmd) {
+	if m.slashMenuVisible() && len(m.filteredSlashCommands()) > 0 {
+		m.applySlashCompletion()
+		m.clampSlashMenuSelection()
+		return m, nil
+	}
+	return m, nil
+}
+
+func (m *Model) handleComposerEscKey() (tea.Model, tea.Cmd) {
+	if m.slashMenuVisible() {
+		m.replaceActiveComposerLine("")
+		m.slashMenuSel = 0
+		m.slashMenuScroll = 0
+		return m, nil
+	}
+	return m, nil
+}
+
+func (m *Model) handleComposerMoveRuneKey(dir int) (tea.Model, tea.Cmd) {
+	m.moveInputCursorRune(dir)
+	m.clampSlashMenuSelection()
+	return m, nil
+}
+
+func (m *Model) handleComposerWordKey(move func()) (tea.Model, tea.Cmd) {
+	move()
+	m.clampSlashMenuSelection()
+	return m, nil
+}
+
+func (m *Model) handleComposerRuneInsert(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	if len(msg.Runes) > 0 {
+		if len(msg.Runes) == 1 && msg.Runes[0] == '\n' {
+			m.insertAtCursor("\n")
+			m.clampSlashMenuSelection()
+			return m, nil
+		}
+		m.insertAtCursor(string(msg.Runes))
+		m.clampSlashMenuSelection()
+	}
+	return m, nil
 }
 
 func (m *Model) handleEnterKey() (tea.Model, tea.Cmd) {
@@ -468,23 +572,8 @@ func (m *Model) handleEnterKey() (tea.Model, tea.Cmd) {
 	if m.Loading && line != "" {
 		return m, nil
 	}
-	if m.slashMenuVisible() {
-		filtered := m.filteredSlashCommands()
-		active := strings.TrimSpace(activeComposerLine(m.Input))
-		if len(filtered) > 0 {
-			matched := false
-			for _, e := range filtered {
-				if active == e.name || strings.HasPrefix(active, e.name+" ") {
-					matched = true
-					break
-				}
-			}
-			if !matched {
-				m.applySlashCompletion()
-				m.clampSlashMenuSelection()
-				return m, nil
-			}
-		}
+	if m.maybeApplySlashMenuEnterCompletion() {
+		return m, nil
 	}
 	m.Input = ""
 	m.inputCursor = 0
@@ -507,6 +596,27 @@ func (m *Model) handleEnterKey() (tea.Model, tea.Cmd) {
 	m.Loading = true
 	cmd := m.streamCmd(line)
 	return m, cmd
+}
+
+// maybeApplySlashMenuEnterCompletion applies completion when the menu is open and input does not
+// yet match a listed command. Returns true if Enter was consumed without sending.
+func (m *Model) maybeApplySlashMenuEnterCompletion() bool {
+	if !m.slashMenuVisible() {
+		return false
+	}
+	filtered := m.filteredSlashCommands()
+	active := strings.TrimSpace(activeComposerLine(m.Input))
+	if len(filtered) == 0 {
+		return false
+	}
+	for _, e := range filtered {
+		if active == e.name || strings.HasPrefix(active, e.name+" ") {
+			return false
+		}
+	}
+	m.applySlashCompletion()
+	m.clampSlashMenuSelection()
+	return true
 }
 
 // handleSlashLine dispatches a slash-prefixed line to the correct handler.
@@ -1132,67 +1242,79 @@ func scheduleNextDelta(ch <-chan chat.ChatStreamDelta) tea.Cmd {
 
 // View renders the TUI: scrollback, composer, status bar (with landmarks).
 func (m *Model) View() string {
-	errStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("9"))
-
-	// Composer (Enter send; Alt+Enter or Ctrl+J newline — Shift+Enter is Enter on most terminals); cap visible lines
 	const maxComposerLines = 5
 	m.clampInputCursor()
-	composerLines := m.buildComposerDisplayLines(maxComposerLines)
-	composerBox := m.renderComposerBox(composerLines)
-	composerVisualH := lipgloss.Height(composerBox)
-	if composerVisualH < 1 {
-		composerVisualH = 1
-	}
-
-	slashMenuBlock := ""
-	slashMenuH := 0
-	if m.slashMenuVisible() {
-		slashMenuBlock = m.renderSlashMenuBlock() + "\n"
-		slashMenuH = lipgloss.Height(strings.TrimSuffix(slashMenuBlock, "\n"))
-		if slashMenuH < 1 {
-			slashMenuH = 1
-		}
-	}
-
-	copyHintBlock := m.renderCopyHintLine() + "\n"
-	copyHintH := lipgloss.Height(copyHintBlock)
-	if copyHintH < 1 {
-		copyHintH = 1
-	}
-
-	errLines := 0
-	if m.Err != "" {
-		errLines = 1
-	}
-	clipNoteH := 0
-	clipNoteBlock := ""
-	if m.ClipNote != "" {
-		clipNoteBlock = lipgloss.NewStyle().Foreground(lipgloss.Color("114")).Width(m.Width).Render(m.ClipNote) + "\n"
-		clipNoteH = lipgloss.Height(clipNoteBlock)
-		if clipNoteH < 1 {
-			clipNoteH = 1
-		}
-	}
+	composerBox := m.renderComposerBox(m.buildComposerDisplayLines(maxComposerLines))
+	composerVisualH := max(1, lipgloss.Height(composerBox))
+	slashMenuBlock, slashMenuH := m.viewSlashMenuSection()
+	copyHintBlock, copyHintH := m.viewCopyHintSection()
+	errLines, clipNoteBlock, clipNoteH := m.viewErrAndClipSections()
 	const statusLines = 1
 	scrollbackH := m.Height - composerVisualH - slashMenuH - copyHintH - statusLines - errLines - clipNoteH
 	m.ensureScrollViewport(scrollbackH)
+	scrollbackView := m.renderScrollbackViewport()
+	statusBar := m.viewStatusBar()
+	errLine := m.viewErrLine()
+	mainView := scrollbackView + "\n" + composerBox + "\n" + slashMenuBlock + copyHintBlock + clipNoteBlock + statusBar + errLine
+	if m.ShowLoginForm {
+		mainView = m.renderLoginOverlay(mainView)
+	}
+	return mainView
+}
 
+func (m *Model) viewSlashMenuSection() (block string, h int) {
+	if !m.slashMenuVisible() {
+		return "", 0
+	}
+	block = m.renderSlashMenuBlock() + "\n"
+	h = lipgloss.Height(strings.TrimSuffix(block, "\n"))
+	if h < 1 {
+		h = 1
+	}
+	return block, h
+}
+
+func (m *Model) viewCopyHintSection() (block string, h int) {
+	block = m.renderCopyHintLine() + "\n"
+	h = lipgloss.Height(block)
+	if h < 1 {
+		h = 1
+	}
+	return block, h
+}
+
+func (m *Model) viewErrAndClipSections() (errLines int, clipBlock string, clipH int) {
+	if m.Err != "" {
+		errLines = 1
+	}
+	if m.ClipNote == "" {
+		return errLines, "", 0
+	}
+	clipBlock = lipgloss.NewStyle().Foreground(lipgloss.Color("114")).Width(m.Width).Render(m.ClipNote) + "\n"
+	clipH = lipgloss.Height(clipBlock)
+	if clipH < 1 {
+		clipH = 1
+	}
+	return errLines, clipBlock, clipH
+}
+
+func (m *Model) renderScrollbackViewport() string {
 	sig := m.scrollbackRenderSignature()
 	if !m.scrollbackCacheValid || m.scrollbackCacheSig != sig {
 		m.scrollbackRendered = m.renderScrollbackContent()
 		m.scrollbackCacheSig = sig
 		m.scrollbackCacheValid = true
 	}
-	scrollbackText := m.scrollbackRendered
 	prevLines := m.ScrollVP.TotalLineCount()
 	wasAtBottom := m.ScrollVP.AtBottom()
-	m.ScrollVP.SetContent(scrollbackText)
+	m.ScrollVP.SetContent(m.scrollbackRendered)
 	if wasAtBottom && m.ScrollVP.TotalLineCount() > prevLines {
 		m.ScrollVP.GotoBottom()
 	}
-	scrollbackView := m.ScrollVP.View()
+	return m.ScrollVP.View()
+}
 
-	// Status bar: gateway health (or busy) glyph, project, model, thread, composer hint.
+func (m *Model) viewStatusBar() string {
 	projectID := defaultPlaceholder
 	modelName := defaultPlaceholder
 	if m.Session != nil {
@@ -1210,25 +1332,35 @@ func (m *Model) View() string {
 		projectID, modelName, thread, composerHint)
 	tailStyled := lipgloss.NewStyle().Bold(true).Render(tail)
 	statusLine := " " + m.renderGatewayStatusIndicator() + tailStyled
-	statusBar := lipgloss.NewStyle().Width(m.Width).Render(statusLine)
-
-	var errLine string
-	if m.Err != "" {
-		errLine = errStyle.Render(" "+m.Err) + "\n"
-	}
-
-	mainView := scrollbackView + "\n" + composerBox + "\n" + slashMenuBlock + copyHintBlock + clipNoteBlock + statusBar + errLine
-	if m.ShowLoginForm {
-		mainView = m.renderLoginOverlay(mainView)
-	}
-	return mainView
+	return lipgloss.NewStyle().Width(m.Width).Render(statusLine)
 }
 
-// renderLoginOverlay draws the login box over the main view (password not echoed; REQ-CLIENT-0190).
-func (m *Model) renderLoginOverlay(mainView string) string {
-	loginErrStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("9"))
+func (m *Model) viewErrLine() string {
+	if m.Err == "" {
+		return ""
+	}
+	st := lipgloss.NewStyle().Foreground(lipgloss.Color("9"))
+	return st.Render(" "+m.Err) + "\n"
+}
 
-	// Inner width: terminal minus rounded border; cap width for a compact card.
+// loginPanelTheme holds lipgloss styles for the login overlay card.
+type loginPanelTheme struct {
+	panelBG         lipgloss.Color
+	labelStyle      lipgloss.Style
+	valueStyle      lipgloss.Style
+	focusValueStyle lipgloss.Style
+	titleStyle      lipgloss.Style
+	landmarkStyle   lipgloss.Style
+	hintKeyStyle    lipgloss.Style
+	hintDimStyle    lipgloss.Style
+	loginErrStyle   lipgloss.Style
+	boxStyle        lipgloss.Style
+	gapStr          string
+	blankRow        string
+	innerContentW   int
+}
+
+func (m *Model) loginOverlayInnerWidth() int {
 	innerW := m.Width - 2
 	if innerW < 1 {
 		innerW = 1
@@ -1239,7 +1371,11 @@ func (m *Model) renderLoginOverlay(mainView string) string {
 	if innerW < loginBoxMinInnerW && m.Width > loginBoxMinInnerW+2 {
 		innerW = loginBoxMinInnerW
 	}
+	return innerW
+}
 
+func (m *Model) newLoginPanelTheme(innerW int) *loginPanelTheme {
+	loginErrStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("9"))
 	labelStyle := lipgloss.NewStyle().Width(loginLabelColWidth).Align(lipgloss.Right)
 	valueStyle := lipgloss.NewStyle()
 	focusValueStyle := lipgloss.NewStyle().Bold(true)
@@ -1247,96 +1383,72 @@ func (m *Model) renderLoginOverlay(mainView string) string {
 	landmarkStyle := lipgloss.NewStyle()
 	hintKeyStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("250"))
 	hintDimStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("241"))
-
-	// True black (hex); ANSI "0" is often mapped to dark grey by the terminal theme.
-	loginPanelBG := lipgloss.Color("#000000")
-
+	panelBG := lipgloss.Color("#000000")
 	if !m.wantNoColor() {
-		// Black panel: set background on every segment so lines/gaps do not show scrollback through.
-		labelStyle = labelStyle.Background(loginPanelBG).Foreground(lipgloss.Color("244"))
-		valueStyle = valueStyle.Background(loginPanelBG).Foreground(lipgloss.Color("252"))
-		focusValueStyle = focusValueStyle.Background(loginPanelBG).Foreground(lipgloss.Color("86"))
-		titleStyle = titleStyle.Background(loginPanelBG).Foreground(lipgloss.Color("86"))
-		landmarkStyle = landmarkStyle.Background(loginPanelBG).Foreground(lipgloss.Color("241"))
-		hintKeyStyle = hintKeyStyle.Background(loginPanelBG)
-		hintDimStyle = hintDimStyle.Background(loginPanelBG)
-		loginErrStyle = loginErrStyle.Background(loginPanelBG)
+		labelStyle = labelStyle.Background(panelBG).Foreground(lipgloss.Color("244"))
+		valueStyle = valueStyle.Background(panelBG).Foreground(lipgloss.Color("252"))
+		focusValueStyle = focusValueStyle.Background(panelBG).Foreground(lipgloss.Color("86"))
+		titleStyle = titleStyle.Background(panelBG).Foreground(lipgloss.Color("86"))
+		landmarkStyle = landmarkStyle.Background(panelBG).Foreground(lipgloss.Color("241"))
+		hintKeyStyle = hintKeyStyle.Background(panelBG)
+		hintDimStyle = hintDimStyle.Background(panelBG)
+		loginErrStyle = loginErrStyle.Background(panelBG)
 	}
-
 	boxStyle := lipgloss.NewStyle().
 		Border(lipgloss.RoundedBorder()).
 		Padding(1, 2).
 		Width(innerW)
 	if !m.wantNoColor() {
-		boxStyle = boxStyle.
-			BorderForeground(lipgloss.Color("86")).
-			Background(loginPanelBG)
+		boxStyle = boxStyle.BorderForeground(lipgloss.Color("86")).Background(panelBG)
 	}
-
-	passStars := strings.Repeat("*", len(m.LoginPassword))
-
-	// Horizontal padding 2 each side → content width for full-width focus highlight.
 	innerContentW := innerW - 4
 	if innerContentW < 1 {
 		innerContentW = 1
 	}
-
 	gapStr := " "
 	if !m.wantNoColor() {
-		gapStr = lipgloss.NewStyle().Background(loginPanelBG).Render(" ")
+		gapStr = lipgloss.NewStyle().Background(panelBG).Render(" ")
 	}
-
-	loginFieldLine := func(label, disp string, cursorByte int, focused bool) string {
-		lbl := labelStyle.Render(label)
-		var valPart string
-		if focused {
-			valPart = renderStyledLineWithCursor(focusValueStyle, disp, cursorByte)
-		} else if disp == "" {
-			valPart = valueStyle.Render(" ")
-		} else {
-			valPart = valueStyle.Render(disp)
-		}
-		line := lbl + gapStr + valPart
-		if focused && !m.wantNoColor() {
-			return lipgloss.NewStyle().Width(innerContentW).Background(loginPanelBG).Render(line)
-		}
-		return line
-	}
-
-	// Title + landmark (landmark verbatim for PTY / E2E). Space between title and tag uses panel background.
-	titleLine := titleStyle.Render(" Sign in ") + lipgloss.NewStyle().Background(loginPanelBG).Render(" ") + landmarkStyle.Render(chat.LandmarkAuthRecoveryReady)
-	if m.wantNoColor() {
-		titleLine = titleStyle.Render(" Sign in ") + " " + landmarkStyle.Render(chat.LandmarkAuthRecoveryReady)
-	}
-	hintLine := hintDimStyle.Render(" ") +
-		hintKeyStyle.Render("[Enter]") + hintDimStyle.Render(" Login  ") +
-		hintKeyStyle.Render("[Esc]") + hintDimStyle.Render(" Cancel")
-
-	blankRow := ""
+	var blankRow string
 	if !m.wantNoColor() {
-		// Empty content lines must still paint the inner width or scrollback shows through as grey.
-		blankRow = lipgloss.NewStyle().Width(innerContentW).Background(loginPanelBG).Render(strings.Repeat(" ", innerContentW))
+		blankRow = lipgloss.NewStyle().Width(innerContentW).Background(panelBG).Render(strings.Repeat(" ", innerContentW))
 	}
+	return &loginPanelTheme{
+		panelBG:         panelBG,
+		labelStyle:      labelStyle,
+		valueStyle:      valueStyle,
+		focusValueStyle: focusValueStyle,
+		titleStyle:      titleStyle,
+		landmarkStyle:   landmarkStyle,
+		hintKeyStyle:    hintKeyStyle,
+		hintDimStyle:    hintDimStyle,
+		loginErrStyle:   loginErrStyle,
+		boxStyle:        boxStyle,
+		gapStr:          gapStr,
+		blankRow:        blankRow,
+		innerContentW:   innerContentW,
+	}
+}
 
-	lines := []string{
-		titleLine,
-		blankRow,
-		loginFieldLine("Gateway URL:", m.LoginGatewayURL, clampStringCursor(m.LoginGatewayURL, m.LoginGatewayCursor), m.LoginFocusedField == 0),
-		loginFieldLine("Username:", m.LoginUsername, clampStringCursor(m.LoginUsername, m.LoginUsernameCursor), m.LoginFocusedField == 1),
-		loginFieldLine("Password:", passStars, clampStringCursor(m.LoginPassword, m.LoginPasswordCursor), m.LoginFocusedField == 2),
-		blankRow,
-		hintLine,
+func (m *Model) renderLoginFieldLine(th *loginPanelTheme, label, disp string, cursorByte int, focused bool) string {
+	lbl := th.labelStyle.Render(label)
+	var valPart string
+	switch {
+	case focused:
+		valPart = renderStyledLineWithCursor(&th.focusValueStyle, disp, cursorByte)
+	case disp == "":
+		valPart = th.valueStyle.Render(" ")
+	default:
+		valPart = th.valueStyle.Render(disp)
 	}
-	if m.LoginErr != "" {
-		if !m.wantNoColor() {
-			lines = append(lines, blankRow)
-		} else {
-			lines = append(lines, "")
-		}
-		lines = append(lines, loginErrStyle.Render(m.LoginErr))
+	line := lbl + th.gapStr + valPart
+	if focused && !m.wantNoColor() {
+		return lipgloss.NewStyle().Width(th.innerContentW).Background(th.panelBG).Render(line)
 	}
-	content := strings.Join(lines, "\n")
-	box := boxStyle.Render(content)
+	return line
+}
+
+func (m *Model) mergeLoginBoxOntoMainView(mainView, box string, th *loginPanelTheme) string {
 	boxLines := strings.Split(box, "\n")
 	mainLines := strings.Split(mainView, "\n")
 	if len(mainLines) < len(boxLines) {
@@ -1348,8 +1460,7 @@ func (m *Model) renderLoginOverlay(mainView string) string {
 	}
 	centerStyle := lipgloss.NewStyle().Width(m.Width).AlignHorizontal(lipgloss.Center)
 	if !m.wantNoColor() {
-		// Centering pads with spaces; those pads must be black or scrollback bleeds through as grey.
-		centerStyle = centerStyle.Background(loginPanelBG)
+		centerStyle = centerStyle.Background(th.panelBG)
 	}
 	for i, line := range boxLines {
 		idx := startRow + i
@@ -1358,6 +1469,39 @@ func (m *Model) renderLoginOverlay(mainView string) string {
 		}
 	}
 	return strings.Join(mainLines, "\n")
+}
+
+// renderLoginOverlay draws the login box over the main view (password not echoed; REQ-CLIENT-0190).
+func (m *Model) renderLoginOverlay(mainView string) string {
+	innerW := m.loginOverlayInnerWidth()
+	th := m.newLoginPanelTheme(innerW)
+	passStars := strings.Repeat("*", len(m.LoginPassword))
+	titleLine := th.titleStyle.Render(" Sign in ") + lipgloss.NewStyle().Background(th.panelBG).Render(" ") + th.landmarkStyle.Render(chat.LandmarkAuthRecoveryReady)
+	if m.wantNoColor() {
+		titleLine = th.titleStyle.Render(" Sign in ") + " " + th.landmarkStyle.Render(chat.LandmarkAuthRecoveryReady)
+	}
+	hintLine := th.hintDimStyle.Render(" ") +
+		th.hintKeyStyle.Render("[Enter]") + th.hintDimStyle.Render(" Login  ") +
+		th.hintKeyStyle.Render("[Esc]") + th.hintDimStyle.Render(" Cancel")
+	lines := []string{
+		titleLine,
+		th.blankRow,
+		m.renderLoginFieldLine(th, "Gateway URL:", m.LoginGatewayURL, clampStringCursor(m.LoginGatewayURL, m.LoginGatewayCursor), m.LoginFocusedField == 0),
+		m.renderLoginFieldLine(th, "Username:", m.LoginUsername, clampStringCursor(m.LoginUsername, m.LoginUsernameCursor), m.LoginFocusedField == 1),
+		m.renderLoginFieldLine(th, "Password:", passStars, clampStringCursor(m.LoginPassword, m.LoginPasswordCursor), m.LoginFocusedField == 2),
+		th.blankRow,
+		hintLine,
+	}
+	if m.LoginErr != "" {
+		if !m.wantNoColor() {
+			lines = append(lines, th.blankRow)
+		} else {
+			lines = append(lines, "")
+		}
+		lines = append(lines, th.loginErrStyle.Render(m.LoginErr))
+	}
+	box := th.boxStyle.Render(strings.Join(lines, "\n"))
+	return m.mergeLoginBoxOntoMainView(mainView, box, th)
 }
 
 func orEmpty(s string) string {

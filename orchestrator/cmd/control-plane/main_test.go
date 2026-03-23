@@ -99,6 +99,18 @@ func TestGetEnv(t *testing.T) {
 	}
 }
 
+func TestRegisterMCPToolRoute(t *testing.T) {
+	mux := http.NewServeMux()
+	registerMCPToolRoute(mux, testutil.NewMockDB(), slog.Default())
+	req := httptest.NewRequest(http.MethodPost, "/v1/mcp/tools/call", strings.NewReader(`{"tool_name":"help.list"}`))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+	if rec.Code == http.StatusNotFound {
+		t.Fatal("expected POST /v1/mcp/tools/call to be registered on the control-plane mux")
+	}
+}
+
 func TestHealthzHandler(t *testing.T) {
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest(http.MethodGet, "/healthz", http.NoBody)

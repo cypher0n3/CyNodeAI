@@ -75,7 +75,7 @@ func (m *Model) filteredSlashCommands() []struct{ name, desc string } {
 		if !strings.HasPrefix(el, prefixLower) {
 			continue
 		}
-		if exactExists && !hasTrailingSpace && strings.HasPrefix(el, prefixLower+" ") && len(prefixLower) > 0 {
+		if exactExists && !hasTrailingSpace && prefixLower != "" && strings.HasPrefix(el, prefixLower+" ") {
 			continue
 		}
 		out = append(out, e)
@@ -175,6 +175,41 @@ func (m *Model) applySlashCompletion() {
 	m.replaceActiveComposerLine(chosen + " ")
 }
 
+func slashMenuColumnWidths(termW int) (nameW, descW int) {
+	w := termW
+	if w < 10 {
+		w = 10
+	}
+	nameW = min(36, w/3)
+	if nameW < 12 {
+		nameW = 12
+	}
+	descW = w - nameW - 4
+	if descW < 8 {
+		descW = 8
+	}
+	return nameW, descW
+}
+
+func formatSlashMenuRow(name, desc string, isSel bool, nameW, descW int) string {
+	if lipgloss.Width(name) > nameW {
+		name = truncateRunes(name, nameW-1) + "…"
+	}
+	if lipgloss.Width(desc) > descW {
+		desc = truncateRunes(desc, descW-1) + "…"
+	}
+	prefix := "  "
+	if isSel {
+		prefix = "→ "
+	}
+	nameSt := slashMenuDimStyle.Width(nameW).Render(name)
+	if isSel {
+		nameSt = slashMenuSelStyle.Width(nameW).Render(name)
+	}
+	descSt := slashMenuDescStyle.Width(descW).Render(desc)
+	return prefix + nameSt + "  " + descSt + "\n"
+}
+
 // renderSlashMenuBlock renders the hint list below the composer (empty string if hidden).
 func (m *Model) renderSlashMenuBlock() string {
 	if !m.slashMenuVisible() {
@@ -201,38 +236,11 @@ func (m *Model) renderSlashMenuBlock() string {
 	if end > len(filtered) {
 		end = len(filtered)
 	}
-	nameW := min(36, w/3)
-	if nameW < 12 {
-		nameW = 12
-	}
-	descW := w - nameW - 4
-	if descW < 8 {
-		descW = 8
-	}
+	nameW, descW := slashMenuColumnWidths(m.Width)
 
 	for i := start; i < end; i++ {
 		e := filtered[i]
-		isSel := i == m.slashMenuSel
-		name := e.name
-		desc := e.desc
-		if lipgloss.Width(name) > nameW {
-			name = truncateRunes(name, nameW-1) + "…"
-		}
-		if lipgloss.Width(desc) > descW {
-			desc = truncateRunes(desc, descW-1) + "…"
-		}
-		prefix := "  "
-		if isSel {
-			prefix = "→ "
-		}
-		nameSt := slashMenuDimStyle.Width(nameW).Render(name)
-		if isSel {
-			nameSt = slashMenuSelStyle.Width(nameW).Render(name)
-		}
-		descSt := slashMenuDescStyle.Width(descW).Render(desc)
-		line := prefix + nameSt + "  " + descSt
-		b.WriteString(line)
-		b.WriteString("\n")
+		b.WriteString(formatSlashMenuRow(e.name, e.desc, i == m.slashMenuSel, nameW, descW))
 	}
 	if len(filtered) > slashMenuMaxVisible {
 		b.WriteString(slashMenuFooterStyle.Render("↓ more below"))

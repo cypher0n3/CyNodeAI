@@ -18,6 +18,12 @@ func TestMCPTool_NameAndDescription(t *testing.T) {
 		t.Errorf("Description missing expected content")
 	}
 }
+func TestMCPTool_Description_NoDbPrefix(t *testing.T) {
+	tool := NewMCPTool(&MCPClient{BaseURL: "http://localhost"})
+	if strings.Contains(tool.Description(), "db.") {
+		t.Fatal("MCP tool description must not advertise db.* names")
+	}
+}
 
 func TestMCPTool_NoURL_ReturnsMessage(t *testing.T) {
 	tool := NewMCPTool(&MCPClient{})

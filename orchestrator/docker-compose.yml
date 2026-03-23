@@ -1,6 +1,8 @@
 # Full orchestrator stack: Postgres + control-plane + user-gateway + api-egress + artifacts (MinIO). Ollama is profile-based (profile "ollama").
-# MCP tool routes: control-plane (12082). mcp-gateway (12083) below is DEPRECATED; remove when convenient (see docs/tech_specs/ports_and_endpoints.md).
-# Ports: postgres 5432, control-plane 12082, user-gateway 12080, api-egress 12084, minio 9000 (S3 API), ollama 11434 (profile "ollama"); mcp-gateway 12083 deprecated.
+# MCP tool routes: control-plane (12082). Standalone mcp-gateway (12083) is DEPRECATED and NOT started unless profile "legacy-mcp-gateway" is enabled:
+#   docker compose -f orchestrator/docker-compose.yml --profile legacy-mcp-gateway up -d
+# See docs/tech_specs/ports_and_endpoints.md.
+# Ports: postgres 5432, control-plane 12082, user-gateway 12080, api-egress 12084, minio 9000 (S3 API), ollama 11434 (profile "ollama").
 # Run from repo root: docker compose -f orchestrator/docker-compose.yml up -d
 # Explicit network for stable DNS and connectivity across restarts (mitigates recurring EOF/flaky host-gateway issues).
 networks:
@@ -151,6 +153,7 @@ services:
       - orchestrator_net
 
   mcp-gateway:
+    profiles: ["legacy-mcp-gateway"]
     build:
       context: ..
       dockerfile: orchestrator/cmd/mcp-gateway/Containerfile

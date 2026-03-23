@@ -113,3 +113,54 @@ func TestLoadDefaultSkill_readsFile(t *testing.T) {
 		t.Errorf("LoadDefaultSkill() = %q, want %q", got, body)
 	}
 }
+
+func TestLoadInstructions_nestedSubdirMd(t *testing.T) {
+	root := t.TempDir()
+	// loadEntry only recurses into subdirectories whose names have a .md or .txt extension.
+	sub := filepath.Join(root, "bundle.md")
+	if err := os.MkdirAll(sub, 0o750); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(sub, "inner.md"), []byte("nested body"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	got, err := LoadInstructions(root)
+	if err != nil {
+		t.Fatalf("LoadInstructions: %v", err)
+	}
+	if !strings.Contains(got, "nested body") {
+		t.Errorf("LoadInstructions = %q", got)
+	}
+}
+
+func TestLoadInstructions_readFileDenied(t *testing.T) {
+	dir := t.TempDir()
+	p := filepath.Join(dir, "blocked.md")
+	if err := os.WriteFile(p, []byte("z"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(p, 0); err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = os.Chmod(p, 0o600) }()
+	_, err := LoadInstructions(dir)
+	if err == nil {
+		t.Fatal("expected error when file is not readable")
+	}
+}
+
+func TestLoadDefaultSkill_readDenied(t *testing.T) {
+	dir := t.TempDir()
+	p := filepath.Join(dir, DefaultSkillFilename)
+	if err := os.WriteFile(p, []byte("skill"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(p, 0); err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = os.Chmod(p, 0o600) }()
+	_, err := LoadDefaultSkill(dir)
+	if err == nil {
+		t.Fatal("expected error when skill file is not readable")
+	}
+}

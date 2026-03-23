@@ -161,36 +161,28 @@ func wrapSystemScrollbackLines(lines []string) []string {
 	return out
 }
 
-func (m *Model) renderUserBlock(body string) string {
-	label := userLabelStyle.Render("You")
+func (m *Model) renderRoleBlock(label string, labelSt, frameSt, plainSt *lipgloss.Style, body string) string {
+	lbl := labelSt.Render(label)
 	var bodyRendered string
 	if m.wantPlain() {
-		bodyRendered = trimMDEdges(plainUserStyle.Render(body))
+		bodyRendered = trimMDEdges(plainSt.Render(body))
 	} else {
 		bodyRendered = m.glamRender(body)
 	}
 	bodyRendered = trimMDEdges(bodyRendered)
 	if strings.TrimSpace(ansi.Strip(bodyRendered)) == "" {
-		return userFrameStyle.Render(label)
+		return frameSt.Render(lbl)
 	}
-	inner := lipgloss.JoinVertical(lipgloss.Left, label, indentLines(bodyRendered, "  "))
-	return userFrameStyle.Render(inner)
+	inner := lipgloss.JoinVertical(lipgloss.Left, lbl, indentLines(bodyRendered, "  "))
+	return frameSt.Render(inner)
+}
+
+func (m *Model) renderUserBlock(body string) string {
+	return m.renderRoleBlock("You", &userLabelStyle, &userFrameStyle, &plainUserStyle, body)
 }
 
 func (m *Model) renderAssistantBlock(body string) string {
-	label := assistantLabelStyle.Render("Assistant")
-	var bodyRendered string
-	if m.wantPlain() {
-		bodyRendered = trimMDEdges(plainUserStyle.Render(body))
-	} else {
-		bodyRendered = m.glamRender(body)
-	}
-	bodyRendered = trimMDEdges(bodyRendered)
-	if strings.TrimSpace(ansi.Strip(bodyRendered)) == "" {
-		return assistantFrameStyle.Render(label)
-	}
-	inner := lipgloss.JoinVertical(lipgloss.Left, label, indentLines(bodyRendered, "  "))
-	return assistantFrameStyle.Render(inner)
+	return m.renderRoleBlock("Assistant", &assistantLabelStyle, &assistantFrameStyle, &plainUserStyle, body)
 }
 
 func indentLines(s, prefix string) string {
@@ -204,6 +196,21 @@ func indentLines(s, prefix string) string {
 		}
 	}
 	return strings.Join(lines, "\n")
+}
+
+func appendReverseVideoCursor(b *strings.Builder, base *lipgloss.Style, after string) {
+	cursorSt := base.Reverse(true)
+	if after == "" {
+		b.WriteString(cursorSt.Render(" "))
+		return
+	}
+	r, sz := utf8.DecodeRuneInString(after)
+	if r == utf8.RuneError && sz == 0 {
+		b.WriteString(cursorSt.Render(" "))
+	} else {
+		b.WriteString(cursorSt.Render(string(after[:sz])))
+		b.WriteString(base.Render(after[sz:]))
+	}
 }
 
 // trimMDEdges removes leading/trailing blank lines from rendered markdown (glamour often emits a leading newline).
@@ -232,8 +239,8 @@ func (m *Model) mdRenderer() (*glamour.TermRenderer, error) {
 		return nil, nil
 	}
 	ww := max(40, m.Width-6)
-	key := fmt.Sprintf("%d-%t-%t", ww, m.wantNoColor(), m.wantPlain())
-	if m.mdRendererCacheKey == key && m.mdRendererCached != nil {
+	cacheKey := fmt.Sprintf("%d-%t-%t", ww, m.wantNoColor(), m.wantPlain())
+	if m.mdRendererCacheKey == cacheKey && m.mdRendererCached != nil {
 		return m.mdRendererCached, nil
 	}
 	opts := []glamour.TermRendererOption{glamour.WithWordWrap(ww)}
@@ -250,7 +257,7 @@ func (m *Model) mdRenderer() (*glamour.TermRenderer, error) {
 		return nil, err
 	}
 	m.mdRendererCached = r
-	m.mdRendererCacheKey = key
+	m.mdRendererCacheKey = cacheKey
 	return r, nil
 }
 
@@ -291,19 +298,9 @@ func (m *Model) buildComposerDisplayLines(maxLines int) []string {
 		before := line[:col]
 		after := line[col:]
 		var b strings.Builder
-		b.WriteString(base.Render(prefix + before))
-		cursorSt := base.Reverse(true)
-		if len(after) == 0 {
-			b.WriteString(cursorSt.Render(" "))
-		} else {
-			r, sz := utf8.DecodeRuneInString(after)
-			if r == utf8.RuneError && sz == 0 {
-				b.WriteString(cursorSt.Render(" "))
-			} else {
-				b.WriteString(cursorSt.Render(string(after[:sz])))
-				b.WriteString(base.Render(after[sz:]))
-			}
-		}
+		bb := base
+		b.WriteString(bb.Render(prefix + before))
+		appendReverseVideoCursor(&b, &bb, after)
 		out = append(out, b.String())
 	}
 	return out
@@ -311,24 +308,13 @@ func (m *Model) buildComposerDisplayLines(maxLines int) []string {
 
 // renderStyledLineWithCursor renders one line with the insertion caret at cursorByte, using the same
 // reverse-video rules as the composer (space or first rune of the suffix).
-func renderStyledLineWithCursor(base lipgloss.Style, line string, cursorByte int) string {
+func renderStyledLineWithCursor(base *lipgloss.Style, line string, cursorByte int) string {
 	cursorByte = clampStringCursor(line, cursorByte)
 	before := line[:cursorByte]
 	after := line[cursorByte:]
 	var b strings.Builder
 	b.WriteString(base.Render(before))
-	cursorSt := base.Reverse(true)
-	if len(after) == 0 {
-		b.WriteString(cursorSt.Render(" "))
-	} else {
-		r, sz := utf8.DecodeRuneInString(after)
-		if r == utf8.RuneError && sz == 0 {
-			b.WriteString(cursorSt.Render(" "))
-		} else {
-			b.WriteString(cursorSt.Render(string(after[:sz])))
-			b.WriteString(base.Render(after[sz:]))
-		}
-	}
+	appendReverseVideoCursor(&b, base, after)
 	return b.String()
 }
 

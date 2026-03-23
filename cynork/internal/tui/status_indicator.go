@@ -56,7 +56,8 @@ func (m *Model) handleGatewayHealthPoll() (tea.Model, tea.Cmd) {
 	if m.healthPollIntervalSec <= 0 {
 		return m, nil
 	}
-	return m, m.gatewayHealthCheckCmd()
+	cmd := m.gatewayHealthCheckCmd()
+	return m, cmd
 }
 
 func (m *Model) gatewayHealthCheckCmd() tea.Cmd {

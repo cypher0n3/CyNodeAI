@@ -64,7 +64,8 @@ It connects to the User API Gateway (default `http://localhost:12080`).
 - **User API Gateway:** listens `:12080`.
   Override: `USER_GATEWAY_LISTEN_ADDR` or `LISTEN_ADDR`; host mapping `ORCHESTRATOR_PORT`.
 - **MCP Gateway (deprecated):** historically a standalone listener on `:12083`.
-  **Do not use** for new work; remove from compose when touched.
+  **Do not use** for new work.
+    The default orchestrator compose file does **not** start this service unless you enable the **`legacy-mcp-gateway`** compose profile.
   Override: `LISTEN_ADDR`; host mapping `MCP_GATEWAY_PORT`.
 - **API Egress (optional):** listens `:12084`.
   Override: `LISTEN_ADDR`; host mapping `API_EGRESS_PORT`.

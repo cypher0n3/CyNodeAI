@@ -19,6 +19,8 @@ import (
 	"github.com/cypher0n3/cynodeai/go_shared_libs/contracts/nodepayloads"
 )
 
+const testOllamaModelQwen38 = "qwen3:8b"
+
 func TestMain(m *testing.M) {
 	// Skip container runtime startup check in tests (no podman/docker or image in test env).
 	_ = os.Setenv("NODE_MANAGER_SKIP_CONTAINER_CHECK", "1")
@@ -1882,16 +1884,16 @@ func TestManagedServicesConfigChanged(t *testing.T) {
 			},
 		}
 	}
-	if managedServicesConfigChanged(svc("qwen3:8b"), svc("qwen3:8b")) {
+	if managedServicesConfigChanged(svc(testOllamaModelQwen38), svc(testOllamaModelQwen38)) {
 		t.Error("same config should not report changed")
 	}
-	if !managedServicesConfigChanged(svc("qwen3.5:0.8b"), svc("qwen3:8b")) {
+	if !managedServicesConfigChanged(svc("qwen3.5:0.8b"), svc(testOllamaModelQwen38)) {
 		t.Error("different model should report changed")
 	}
-	if !managedServicesConfigChanged(nil, svc("qwen3:8b")) {
+	if !managedServicesConfigChanged(nil, svc(testOllamaModelQwen38)) {
 		t.Error("nil old should report changed")
 	}
-	if !managedServicesConfigChanged(svc("qwen3:8b"), nil) {
+	if !managedServicesConfigChanged(svc(testOllamaModelQwen38), nil) {
 		t.Error("nil updated should report changed")
 	}
 	if managedServicesConfigChanged(nil, nil) {
@@ -1902,7 +1904,7 @@ func TestManagedServicesConfigChanged(t *testing.T) {
 func TestQueryOllamaTags_ReturnsList(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = io.WriteString(w, `{"models":[{"name":"qwen3:8b"},{"name":"qwen3.5:0.8b"}]}`)
+		_, _ = io.WriteString(w, `{"models":[{"name":"`+testOllamaModelQwen38+`"},{"name":"qwen3.5:0.8b"}]}`)
 	}))
 	defer srv.Close()
 	u, _ := url.Parse(srv.URL)
@@ -1910,8 +1912,8 @@ func TestQueryOllamaTags_ReturnsList(t *testing.T) {
 	if !ok {
 		t.Fatal("queryOllamaTags() ok = false, want true")
 	}
-	if len(names) != 2 || names[0] != "qwen3:8b" || names[1] != "qwen3.5:0.8b" {
-		t.Errorf("queryOllamaTags() = %v, want [qwen3:8b qwen3.5:0.8b]", names)
+	if len(names) != 2 || names[0] != testOllamaModelQwen38 || names[1] != "qwen3.5:0.8b" {
+		t.Errorf("queryOllamaTags() = %v, want [%s qwen3.5:0.8b]", names, testOllamaModelQwen38)
 	}
 }
 
@@ -1933,7 +1935,7 @@ func TestDetectAvailableModels_SkipsWhenTestFlag(t *testing.T) {
 func TestBuildCapability_AvailableModels(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = io.WriteString(w, `{"models":[{"name":"qwen3:8b"}]}`)
+		_, _ = io.WriteString(w, `{"models":[{"name":"`+testOllamaModelQwen38+`"}]}`)
 	}))
 	defer srv.Close()
 	u, _ := url.Parse(srv.URL)
@@ -1957,20 +1959,20 @@ func TestBuildCapability_AvailableModels(t *testing.T) {
 	if report.Inference == nil {
 		t.Fatal("Inference is nil")
 	}
-	if len(report.Inference.AvailableModels) == 0 || report.Inference.AvailableModels[0] != "qwen3:8b" {
-		t.Errorf("AvailableModels = %v, want [qwen3:8b]", report.Inference.AvailableModels)
+	if len(report.Inference.AvailableModels) == 0 || report.Inference.AvailableModels[0] != testOllamaModelQwen38 {
+		t.Errorf("AvailableModels = %v, want [%s]", report.Inference.AvailableModels, testOllamaModelQwen38)
 	}
 }
 
 func TestMaybePullModels_NilOpts(t *testing.T) {
 	maybePullModels(context.Background(), nil, &nodepayloads.NodeConfigurationPayload{
-		InferenceBackend: &nodepayloads.ConfigInferenceBackend{SelectedModel: "qwen3:8b"},
+		InferenceBackend: &nodepayloads.ConfigInferenceBackend{SelectedModel: testOllamaModelQwen38},
 	}, nil)
 }
 
 func TestMaybePullModels_NilPullModels(t *testing.T) {
 	maybePullModels(context.Background(), nil, &nodepayloads.NodeConfigurationPayload{
-		InferenceBackend: &nodepayloads.ConfigInferenceBackend{SelectedModel: "qwen3:8b"},
+		InferenceBackend: &nodepayloads.ConfigInferenceBackend{SelectedModel: testOllamaModelQwen38},
 	}, &RunOptions{})
 }
 
@@ -1992,7 +1994,7 @@ func TestMaybePullModels_AlreadyAvailable(t *testing.T) {
 	opts := &RunOptions{PullModels: func(_ []string) error { called = true; return nil }}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = io.WriteString(w, `{"models":[{"name":"qwen3:8b"}]}`)
+		_, _ = io.WriteString(w, `{"models":[{"name":"`+testOllamaModelQwen38+`"}]}`)
 	}))
 	defer srv.Close()
 	u, _ := url.Parse(srv.URL)
@@ -2001,7 +2003,7 @@ func TestMaybePullModels_AlreadyAvailable(t *testing.T) {
 	_ = os.Setenv("OLLAMA_PORT", u.Port())
 	defer func() { _ = os.Unsetenv("OLLAMA_PORT") }()
 	maybePullModels(context.Background(), nil, &nodepayloads.NodeConfigurationPayload{
-		InferenceBackend: &nodepayloads.ConfigInferenceBackend{SelectedModel: "qwen3:8b"},
+		InferenceBackend: &nodepayloads.ConfigInferenceBackend{SelectedModel: testOllamaModelQwen38},
 	}, opts)
 	time.Sleep(20 * time.Millisecond)
 	if called {
@@ -2044,14 +2046,14 @@ func TestMaybePullModels_ModelsToEnsurePullsOnlyMissing(t *testing.T) {
 	defer func() { _ = os.Unsetenv("OLLAMA_PORT") }()
 	maybePullModels(context.Background(), nil, &nodepayloads.NodeConfigurationPayload{
 		InferenceBackend: &nodepayloads.ConfigInferenceBackend{
-			SelectedModel:  "qwen3:8b",
-			ModelsToEnsure: []string{"qwen3.5:0.8b", "qwen3:8b"},
+			SelectedModel:  testOllamaModelQwen38,
+			ModelsToEnsure: []string{"qwen3.5:0.8b", testOllamaModelQwen38},
 		},
 	}, opts)
 	select {
 	case got := <-pulled:
-		if len(got) != 1 || got[0] != "qwen3:8b" {
-			t.Errorf("expected pull of missing model only [qwen3:8b], got %v", got)
+		if len(got) != 1 || got[0] != testOllamaModelQwen38 {
+			t.Errorf("expected pull of missing model only [%s], got %v", testOllamaModelQwen38, got)
 		}
 	case <-time.After(500 * time.Millisecond):
 		t.Error("PullModels was not called within timeout")

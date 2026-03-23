@@ -27,6 +27,11 @@ import (
 	"github.com/google/uuid"
 )
 
+const (
+	ollamaGPUVariantROCm = "rocm"
+	ollamaGPUVariantCUDA = "cuda"
+)
+
 // cmdRunner is used for exec operations so tests can inject a fake. Production uses realCmdRunner.
 type cmdRunner interface {
 	LookPath(string) (string, error)
@@ -399,16 +404,16 @@ func ollamaRunGPUKind(image, variant string) string {
 	if v == "cpu" || envV == "cpu" {
 		return ""
 	}
-	if v == "rocm" || envV == "rocm" || strings.Contains(img, "rocm") {
-		return "rocm"
+	if v == ollamaGPUVariantROCm || envV == ollamaGPUVariantROCm || strings.Contains(img, ollamaGPUVariantROCm) {
+		return ollamaGPUVariantROCm
 	}
-	if envV == "cuda" || v == "cuda" || strings.Contains(img, "cuda") || strings.Contains(img, "nvidia") {
-		return "cuda"
+	if envV == ollamaGPUVariantCUDA || v == ollamaGPUVariantCUDA || strings.Contains(img, "cuda") || strings.Contains(img, "nvidia") {
+		return ollamaGPUVariantCUDA
 	}
 	// Official ollama/ollama without :rocm is CUDA-capable; apply NVIDIA passthrough when variant is unset
 	// (e.g. OLLAMA_IMAGE-only path) so the default image is not CPU-only inside the container.
-	if strings.HasPrefix(img, "ollama/ollama") && !strings.Contains(img, "rocm") {
-		return "cuda"
+	if strings.HasPrefix(img, "ollama/ollama") && !strings.Contains(img, ollamaGPUVariantROCm) {
+		return ollamaGPUVariantCUDA
 	}
 	return ""
 }

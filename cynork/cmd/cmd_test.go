@@ -473,6 +473,59 @@ func TestTuiAuthProvider_Save_AfterExplicitConnectPersistsNewGateway(t *testing.
 	}
 }
 
+func TestTuiAuthProvider_AccessorsAndSetters(t *testing.T) {
+	cfg := &config.Config{
+		GatewayURL:   "http://gw",
+		Token:        "access",
+		RefreshToken: "refresh",
+		TUI: config.TUIConfig{
+			ShowThinkingByDefault:   false,
+			ShowToolOutputByDefault: true,
+		},
+	}
+	var saved bool
+	p := &tuiAuthProvider{cfg: cfg, saveFn: func() error { saved = true; return nil }}
+	if p.Token() != "access" || p.RefreshToken() != "refresh" || p.GatewayURL() != "http://gw" {
+		t.Fatalf("getters: token=%q refresh=%q gw=%q", p.Token(), p.RefreshToken(), p.GatewayURL())
+	}
+	p.SetTokens("a", "b")
+	if cfg.Token != "a" || cfg.RefreshToken != "b" {
+		t.Fatalf("SetTokens: token=%q refresh=%q", cfg.Token, cfg.RefreshToken)
+	}
+	p.SetShowThinkingByDefault(true)
+	if !p.ShowThinkingByDefault() {
+		t.Fatal("ShowThinkingByDefault")
+	}
+	p.SetShowToolOutputByDefault(false)
+	if p.ShowToolOutputByDefault() {
+		t.Fatal("ShowToolOutputByDefault")
+	}
+	oldExplicit := cfgGatewayPersistExplicit
+	cfgGatewayPersistExplicit = false
+	defer func() { cfgGatewayPersistExplicit = oldExplicit }()
+	p.SetGatewayURL("http://new", false)
+	if cfg.GatewayURL != "http://new" {
+		t.Fatalf("SetGatewayURL: %q", cfg.GatewayURL)
+	}
+	if err := p.Save(); err != nil || !saved {
+		t.Fatalf("Save err=%v saved=%v", err, saved)
+	}
+}
+
+func TestTuiHealthPollIntervalSec(t *testing.T) {
+	if got := tuiHealthPollIntervalSec(nil); got != 5 {
+		t.Errorf("nil config: %d", got)
+	}
+	z := 0
+	if got := tuiHealthPollIntervalSec(&config.Config{TUI: config.TUIConfig{HealthPollIntervalSec: &z}}); got != 0 {
+		t.Errorf("explicit 0: %d", got)
+	}
+	seven := 7
+	if got := tuiHealthPollIntervalSec(&config.Config{TUI: config.TUIConfig{HealthPollIntervalSec: &seven}}); got != 7 {
+		t.Errorf("explicit 7: %d", got)
+	}
+}
+
 func TestSaveConfig_ExistingFilePreservesGatewayWhenMemoryDrifts(t *testing.T) {
 	path := writeTempConfig(t, "gateway_url: http://localhost:12080\n")
 	var err error

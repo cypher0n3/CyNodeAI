@@ -20,8 +20,8 @@ import (
 )
 
 const (
-	pmaDefaultOllamaURL = "http://localhost:11434"
-	pmaDefaultModel     = "qwen3.5:0.8b"
+	pmaDefaultOllamaURL      = "http://localhost:11434"
+	pmaDefaultModel          = "qwen3.5:0.8b"
 	envOllamaNumCtx          = "OLLAMA_NUM_CTX"
 	envPmaMaxAgentIterations = "PMA_MAX_AGENT_ITERATIONS"
 	// defaultPmaMaxAgentIterations caps the langchaingo OpenAIFunctionsAgent loop.
@@ -120,7 +120,7 @@ var testLLMForCompletion llms.Model
 // Small/smoke models must NOT be routed here. Use callInference for those.
 //
 // When mcpClient.BaseURL is empty the function returns an error.
-func runCompletionWithLangchain(ctx context.Context, fullPrompt string, mcpClient *MCPClient, logger *slog.Logger) (visible string, thinking string, err error) {
+func runCompletionWithLangchain(ctx context.Context, fullPrompt string, mcpClient *MCPClient, logger *slog.Logger) (visible, thinking string, err error) {
 	if mcpClient == nil || mcpClient.BaseURL == "" {
 		return "", "", fmt.Errorf("MCP gateway URL not set")
 	}
@@ -415,7 +415,7 @@ func containsToolJSON(s string) bool {
 	return strings.Contains(sub, toolKey) || strings.Contains(sub, toolNameKey)
 }
 
-func runCompletionWithLangchainWithTimeout(ctx context.Context, fullPrompt string, mcpClient *MCPClient, logger *slog.Logger, timeout time.Duration) (visible string, thinking string, err error) {
+func runCompletionWithLangchainWithTimeout(ctx context.Context, fullPrompt string, mcpClient *MCPClient, logger *slog.Logger, timeout time.Duration) (visible, thinking string, err error) {
 	if timeout <= 0 {
 		timeout = 120 * time.Second
 	}

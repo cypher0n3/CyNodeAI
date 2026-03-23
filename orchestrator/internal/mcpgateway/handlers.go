@@ -6,6 +6,7 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -25,29 +26,28 @@ type toolCallRequest struct {
 
 // requiredScopedIds defines which of task_id, run_id, job_id, user_id are required for a tool (REQ-MCPGAT-0103--0106, mcp_gateway_enforcement.md).
 var requiredScopedIds = map[string]struct{ TaskID, RunID, JobID, UserID bool }{
-	"db.preference.get":       {},
-	"db.preference.list":      {},
-	"db.preference.effective": {TaskID: true},
-	"db.preference.create":    {},
-	"db.preference.update":    {},
-	"db.preference.delete":    {},
-	"db.task.get":             {TaskID: true},
-	"task.get":                {TaskID: true},
-	"db.job.get":              {JobID: true},
-	"artifact.get":            {TaskID: true},
-	"skills.create":           {TaskID: true},
-	"skills.list":             {TaskID: true},
-	"skills.get":              {TaskID: true},
-	"skills.update":           {TaskID: true},
-	"skills.delete":           {TaskID: true},
-	"help.list":               {},
-	"help.get":                {TaskID: true},
-	"task.list":               {UserID: true},
-	"task.result":             {TaskID: true},
-	"task.cancel":             {TaskID: true},
-	"task.logs":               {TaskID: true},
-	"project.list":            {UserID: true},
-	"project.get":             {UserID: true},
+	"preference.get":       {},
+	"preference.list":      {},
+	"preference.effective": {TaskID: true},
+	"preference.create":    {},
+	"preference.update":    {},
+	"preference.delete":    {},
+	"task.get":             {TaskID: true},
+	"job.get":              {JobID: true},
+	"artifact.get":         {TaskID: true},
+	"skills.create":        {TaskID: true},
+	"skills.list":          {TaskID: true},
+	"skills.get":           {TaskID: true},
+	"skills.update":        {TaskID: true},
+	"skills.delete":        {TaskID: true},
+	"help.list":            {},
+	"help.get":             {TaskID: true},
+	"task.list":            {UserID: true},
+	"task.result":          {TaskID: true},
+	"task.cancel":          {TaskID: true},
+	"task.logs":            {TaskID: true},
+	"project.list":         {UserID: true},
+	"project.get":          {UserID: true},
 }
 
 // ValidateRequiredScopedIds returns an error message if required scoped ids are missing or invalid for the tool.
@@ -71,20 +71,44 @@ func ValidateRequiredScopedIds(toolName string, args map[string]interface{}) str
 	return ""
 }
 
-// writeDenyAuditAndRespond writes a deny audit record and sends a 400 response. Returns true if caller should return.
-func writeDenyAuditAndRespond(ctx context.Context, w http.ResponseWriter, store database.Store, logger *slog.Logger, toolName string, args map[string]interface{}, errMsg string) bool {
-	rec := &models.McpToolCallAuditLog{
+// isLegacyDbPrefixedToolName reports agent-facing legacy names that used a db.* prefix (removed; use catalog names).
+func isLegacyDbPrefixedToolName(name string) bool {
+	return strings.HasPrefix(strings.TrimSpace(name), "db.")
+}
+
+func newDenyAuditRecord(toolName, errorType string, args map[string]interface{}) *models.McpToolCallAuditLog {
+	return &models.McpToolCallAuditLog{
 		McpToolCallAuditLogBase: models.McpToolCallAuditLogBase{
 			ToolName:  toolName,
 			Decision:  auditDecisionDeny,
 			Status:    auditStatusError,
-			ErrorType: strPtr("invalid_arguments"),
+			ErrorType: strPtr(errorType),
 			TaskID:    uuidArg(args, "task_id"),
 			RunID:     uuidArg(args, "run_id"),
 			JobID:     uuidArg(args, "job_id"),
 			UserID:    uuidArg(args, "user_id"),
 		},
 	}
+}
+
+// writeLegacyDbToolRemoved writes a deny audit and 404 for deprecated db.* tool names.
+func writeLegacyDbToolRemoved(ctx context.Context, w http.ResponseWriter, store database.Store, logger *slog.Logger, toolName string, args map[string]interface{}, start time.Time) {
+	rec := newDenyAuditRecord(toolName, "legacy_tool_name_removed", args)
+	ms := int(time.Since(start).Milliseconds())
+	rec.DurationMs = &ms
+	if err := store.CreateMcpToolCallAuditLog(ctx, rec); err != nil {
+		logger.Error("create mcp tool call audit log", "error", err)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusNotFound)
+	_, _ = w.Write([]byte(`{"error":"legacy db.* tool names are not supported; use catalog names (e.g. preference.get, task.get)"}`))
+}
+
+// writeDenyAuditAndRespond writes a deny audit record and sends a 400 response. Returns true if caller should return.
+func writeDenyAuditAndRespond(ctx context.Context, w http.ResponseWriter, store database.Store, logger *slog.Logger, toolName string, args map[string]interface{}, errMsg string) bool {
+	rec := newDenyAuditRecord(toolName, "invalid_arguments", args)
 	if err := store.CreateMcpToolCallAuditLog(ctx, rec); err != nil {
 		logger.Error("create mcp tool call audit log", "error", err)
 		w.WriteHeader(http.StatusInternalServerError)
@@ -126,7 +150,7 @@ func routeAndWriteAudit(ctx context.Context, w http.ResponseWriter, store databa
 	_, _ = w.Write(body)
 }
 
-// toolCallHandler writes an audit record for every tool call (P2-02) and routes db.preference.* tools (P2-03).
+// toolCallHandler writes an audit record for every tool call (P2-02) and routes MCP tools (catalog names).
 // P2-01: enforces required scoped ids (task_id/run_id/job_id) per tool before routing; rejects with 400 when missing.
 func ToolCallHandler(store database.Store, logger *slog.Logger) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -152,11 +176,16 @@ func ToolCallHandler(store database.Store, logger *slog.Logger) http.HandlerFunc
 		if args == nil {
 			args = make(map[string]interface{})
 		}
+		start := time.Now()
+		if isLegacyDbPrefixedToolName(toolName) {
+			writeLegacyDbToolRemoved(r.Context(), w, store, logger, toolName, args, start)
+			return
+		}
 		if errMsg := ValidateRequiredScopedIds(toolName, args); errMsg != "" {
 			writeDenyAuditAndRespond(r.Context(), w, store, logger, toolName, args, errMsg)
 			return
 		}
-		routeAndWriteAudit(r.Context(), w, store, logger, toolName, args, time.Now())
+		routeAndWriteAudit(r.Context(), w, store, logger, toolName, args, start)
 	}
 }
 
@@ -175,29 +204,28 @@ var mcpToolRoutes map[string]mcpToolHandler
 
 func init() {
 	mcpToolRoutes = map[string]mcpToolHandler{
-		"db.preference.get":       handlePreferenceGet,
-		"db.preference.list":      handlePreferenceList,
-		"db.preference.effective": handlePreferenceEffective,
-		"db.preference.create":    handlePreferenceCreate,
-		"db.preference.update":    handlePreferenceUpdate,
-		"db.preference.delete":    handlePreferenceDelete,
-		"db.task.get":             handleTaskGet,
-		"task.get":                handleTaskGet,
-		"help.list":               handleHelpList,
-		"help.get":                handleHelpGet,
-		"task.list":               handleTaskList,
-		"task.result":             handleTaskResult,
-		"task.cancel":             handleTaskCancel,
-		"task.logs":               handleTaskLogs,
-		"project.get":             handleProjectGet,
-		"project.list":            handleProjectList,
-		"db.job.get":              handleJobGet,
-		"artifact.get":            handleArtifactGet,
-		"skills.create":           handleSkillsCreate,
-		"skills.list":             handleSkillsList,
-		"skills.get":              handleSkillsGet,
-		"skills.update":           handleSkillsUpdate,
-		"skills.delete":           handleSkillsDelete,
+		"preference.get":       handlePreferenceGet,
+		"preference.list":      handlePreferenceList,
+		"preference.effective": handlePreferenceEffective,
+		"preference.create":    handlePreferenceCreate,
+		"preference.update":    handlePreferenceUpdate,
+		"preference.delete":    handlePreferenceDelete,
+		"task.get":             handleTaskGet,
+		"help.list":            handleHelpList,
+		"help.get":             handleHelpGet,
+		"task.list":            handleTaskList,
+		"task.result":          handleTaskResult,
+		"task.cancel":          handleTaskCancel,
+		"task.logs":            handleTaskLogs,
+		"project.get":          handleProjectGet,
+		"project.list":         handleProjectList,
+		"job.get":              handleJobGet,
+		"artifact.get":         handleArtifactGet,
+		"skills.create":        handleSkillsCreate,
+		"skills.list":          handleSkillsList,
+		"skills.get":           handleSkillsGet,
+		"skills.update":        handleSkillsUpdate,
+		"skills.delete":        handleSkillsDelete,
 	}
 }
 

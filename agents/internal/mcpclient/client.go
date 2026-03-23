@@ -21,7 +21,12 @@ const (
 	envSbaMcpGateway   = "SBA_MCP_GATEWAY_URL"
 	envMcpGateway      = "MCP_GATEWAY_URL"
 	envMcpGatewayProxy = "MCP_GATEWAY_PROXY_URL"
-	defaultMCPTimeout  = 30 * time.Second
+	// ORCHESTRATOR_MCP_TOOLS_BASE_URL is the preferred explicit base for the control-plane MCP tool endpoint.
+	envOrchestratorMCPToolsBaseURL = "ORCHESTRATOR_MCP_TOOLS_BASE_URL"
+	// ORCHESTRATOR_MCP_GATEWAY_BASE_URL is a deprecated alias for ORCHESTRATOR_MCP_TOOLS_BASE_URL.
+	envOrchestratorMCPGatewayBaseURL = "ORCHESTRATOR_MCP_GATEWAY_BASE_URL"
+	envOrchestratorURL               = "ORCHESTRATOR_URL"
+	defaultMCPTimeout                = 30 * time.Second
 	// ToolsCallPath is POST /v1/mcp/tools/call on the MCP gateway.
 	ToolsCallPath = "/v1/mcp/tools/call"
 	// ProxyCallPath is the worker internal path that wraps MCP calls (managed service proxy).
@@ -34,14 +39,25 @@ type Client struct {
 	HTTPClient *http.Client
 }
 
-// NewPMClient creates a client from PMA_MCP_GATEWAY_URL, MCP_GATEWAY_URL, or MCP_GATEWAY_PROXY_URL.
+// NewPMClient resolves the MCP tools base URL with this precedence:
+// PMA_MCP_GATEWAY_URL, MCP_GATEWAY_URL, MCP_GATEWAY_PROXY_URL (worker-injected internal proxy),
+// ORCHESTRATOR_MCP_TOOLS_BASE_URL, deprecated ORCHESTRATOR_MCP_GATEWAY_BASE_URL, ORCHESTRATOR_URL.
 func NewPMClient() *Client {
-	baseURL := os.Getenv(envPmaMcpGateway)
+	baseURL := strings.TrimSpace(os.Getenv(envPmaMcpGateway))
 	if baseURL == "" {
-		baseURL = os.Getenv(envMcpGateway)
+		baseURL = strings.TrimSpace(os.Getenv(envMcpGateway))
 	}
 	if baseURL == "" {
-		baseURL = os.Getenv(envMcpGatewayProxy)
+		baseURL = strings.TrimSpace(os.Getenv(envMcpGatewayProxy))
+	}
+	if baseURL == "" {
+		baseURL = strings.TrimSpace(os.Getenv(envOrchestratorMCPToolsBaseURL))
+	}
+	if baseURL == "" {
+		baseURL = strings.TrimSpace(os.Getenv(envOrchestratorMCPGatewayBaseURL))
+	}
+	if baseURL == "" {
+		baseURL = strings.TrimSpace(os.Getenv(envOrchestratorURL))
 	}
 	return &Client{
 		BaseURL: baseURL,
@@ -51,11 +67,22 @@ func NewPMClient() *Client {
 	}
 }
 
-// NewSBAClient creates a client from SBA_MCP_GATEWAY_URL or MCP_GATEWAY_URL.
+// NewSBAClient resolves the MCP tools base URL with this precedence:
+// SBA_MCP_GATEWAY_URL, MCP_GATEWAY_URL, ORCHESTRATOR_MCP_TOOLS_BASE_URL,
+// deprecated ORCHESTRATOR_MCP_GATEWAY_BASE_URL, ORCHESTRATOR_URL.
 func NewSBAClient() *Client {
-	u := os.Getenv(envSbaMcpGateway)
+	u := strings.TrimSpace(os.Getenv(envSbaMcpGateway))
 	if u == "" {
-		u = os.Getenv(envMcpGateway)
+		u = strings.TrimSpace(os.Getenv(envMcpGateway))
+	}
+	if u == "" {
+		u = strings.TrimSpace(os.Getenv(envOrchestratorMCPToolsBaseURL))
+	}
+	if u == "" {
+		u = strings.TrimSpace(os.Getenv(envOrchestratorMCPGatewayBaseURL))
+	}
+	if u == "" {
+		u = strings.TrimSpace(os.Getenv(envOrchestratorURL))
 	}
 	return &Client{
 		BaseURL: u,
@@ -74,8 +101,9 @@ type CallRequest struct {
 // Call sends a tool call to the gateway and returns the response body, status code, and error.
 func (c *Client) Call(ctx context.Context, toolName string, arguments map[string]interface{}) (body []byte, statusCode int, err error) {
 	if c.BaseURL == "" {
-		return nil, 0, fmt.Errorf("MCP gateway URL not set (PMA: %s / %s / %s; SBA: %s / %s)",
-			envPmaMcpGateway, envMcpGateway, envMcpGatewayProxy, envSbaMcpGateway, envMcpGateway)
+		return nil, 0, fmt.Errorf("MCP tools base URL not set (PMA: %s / %s / %s / %s / %s / %s; SBA: %s / %s / %s / %s / %s)",
+			envPmaMcpGateway, envMcpGateway, envMcpGatewayProxy, envOrchestratorMCPToolsBaseURL, envOrchestratorMCPGatewayBaseURL, envOrchestratorURL,
+			envSbaMcpGateway, envMcpGateway, envOrchestratorMCPToolsBaseURL, envOrchestratorMCPGatewayBaseURL, envOrchestratorURL)
 	}
 	reqBody := CallRequest{ToolName: toolName, Arguments: arguments}
 	raw, err := json.Marshal(reqBody)

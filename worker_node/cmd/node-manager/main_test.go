@@ -22,6 +22,19 @@ import (
 	"github.com/cypher0n3/cynodeai/worker_node/internal/telemetry"
 )
 
+const podmanNVIDIAGPUDevice = "nvidia.com/gpu=all"
+
+func runnerCallsContainArg(calls [][]string, arg string) bool {
+	for _, c := range calls {
+		for _, a := range c {
+			if a == arg {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 func TestGetEnv(t *testing.T) {
 	_ = os.Unsetenv("NODE_MANAGER_TEST_GETENV")
 	if got := getEnv("NODE_MANAGER_TEST_GETENV", "default"); got != "default" {
@@ -452,28 +465,31 @@ func TestStartOllama(t *testing.T) {
 	}
 }
 
-func TestStartOllama_DefaultImage_VariantCUDA_PodmanNVIDIADevice(t *testing.T) {
-	var calls [][]string
-	fake := fakeRunnerFunc(func(name string, args ...string) ([]byte, error) {
-		calls = append(calls, append([]string{name}, args...))
-		return []byte(""), nil
-	})
-	withRunner(t, fake)
-	_ = os.Unsetenv("CONTAINER_RUNTIME")
-	if err := startOllama("ollama/ollama", "cuda", nil); err != nil {
-		t.Fatalf("startOllama: %v", err)
+func TestStartOllama_PodmanCUDAUsesNVIDIADevice(t *testing.T) {
+	tests := []struct {
+		name    string
+		image   string
+		variant string
+	}{
+		{"default image with cuda variant", "ollama/ollama", "cuda"},
+		{"cuda image tag", "ollama/ollama:cuda", ""},
 	}
-	var saw bool
-	for _, c := range calls {
-		for _, a := range c {
-			if a == "nvidia.com/gpu=all" {
-				saw = true
-				break
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var calls [][]string
+			fake := fakeRunnerFunc(func(name string, args ...string) ([]byte, error) {
+				calls = append(calls, append([]string{name}, args...))
+				return []byte(""), nil
+			})
+			withRunner(t, fake)
+			_ = os.Unsetenv("CONTAINER_RUNTIME")
+			if err := startOllama(tt.image, tt.variant, nil); err != nil {
+				t.Fatalf("startOllama: %v", err)
 			}
-		}
-	}
-	if !saw {
-		t.Errorf("expected nvidia.com/gpu=all for variant cuda + default image; calls=%v", calls)
+			if !runnerCallsContainArg(calls, podmanNVIDIAGPUDevice) {
+				t.Errorf("expected %s; calls=%v", podmanNVIDIAGPUDevice, calls)
+			}
+		})
 	}
 }
 
@@ -489,7 +505,7 @@ func TestStartOllama_DefaultImage_VariantCPU_NoNVIDIADevice(t *testing.T) {
 	}
 	for _, c := range calls {
 		for _, a := range c {
-			if a == "nvidia.com/gpu=all" || a == "--gpus" {
+			if a == podmanNVIDIAGPUDevice || a == "--gpus" {
 				t.Errorf("did not expect GPU passthrough for variant cpu; calls=%v", calls)
 				return
 			}
@@ -504,8 +520,8 @@ func TestStartOllama_CUDARetriesWithoutGPUWhenFirstRunFails(t *testing.T) {
 		if len(args) > 0 && args[0] == "run" {
 			runCalls++
 			for _, a := range args {
-				if a == "nvidia.com/gpu=all" {
-					return nil, fmt.Errorf("simulated: unknown device nvidia.com/gpu=all")
+				if a == podmanNVIDIAGPUDevice {
+					return nil, fmt.Errorf("simulated: unknown device %s", podmanNVIDIAGPUDevice)
 				}
 			}
 			return []byte(""), nil
@@ -568,32 +584,6 @@ func TestStartOllama_ROCm_HSAOverrideGfxVersion(t *testing.T) {
 	}
 	if !sawHSA {
 		t.Errorf("expected HSA_OVERRIDE_GFX_VERSION in args; calls=%v", calls)
-	}
-}
-
-func TestStartOllama_CUDAVariant_PodmanHasDeviceArg(t *testing.T) {
-	var calls [][]string
-	fake := fakeRunnerFunc(func(name string, args ...string) ([]byte, error) {
-		calls = append(calls, append([]string{name}, args...))
-		return []byte(""), nil
-	})
-	withRunner(t, fake)
-	// CONTAINER_RUNTIME podman (default) with CUDA image -> nvidia.com/gpu=all
-	_ = os.Unsetenv("CONTAINER_RUNTIME")
-	if err := startOllama("ollama/ollama:cuda", "", nil); err != nil {
-		t.Fatalf("startOllama cuda podman: %v", err)
-	}
-	var sawNvidia bool
-	for _, c := range calls {
-		for _, a := range c {
-			if a == "nvidia.com/gpu=all" {
-				sawNvidia = true
-				break
-			}
-		}
-	}
-	if !sawNvidia {
-		t.Errorf("expected nvidia.com/gpu=all for CUDA with podman; calls=%v", calls)
 	}
 }
 

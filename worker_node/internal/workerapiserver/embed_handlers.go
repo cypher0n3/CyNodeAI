@@ -50,12 +50,13 @@ type embedManagedServiceTarget struct {
 
 type embedInternalProxyConfig struct {
 	UpstreamBaseURL string
-	// MCPGatewayBaseURL is the orchestrator base URL for POST /v1/mcp/tools/call (served by the
-	// control plane). ORCHESTRATOR_MCP_GATEWAY_BASE_URL overrides; otherwise it defaults from the
-	// control-plane URL (same origin as UpstreamBaseURL in the standard compose layout).
-	MCPGatewayBaseURL string
-	SocketByService   map[string]string
-	SecureStore       *securestore.Store
+	// MCPToolsBaseURL is the orchestrator base URL for POST /v1/mcp/tools/call (served by the
+	// control plane). Precedence: ORCHESTRATOR_MCP_TOOLS_BASE_URL, then deprecated alias
+	// ORCHESTRATOR_MCP_GATEWAY_BASE_URL, then ORCHESTRATOR_INTERNAL_PROXY_BASE_URL / ORCHESTRATOR_URL
+	// (same origin as the control plane in the standard compose layout).
+	MCPToolsBaseURL string
+	SocketByService map[string]string
+	SecureStore     *securestore.Store
 }
 
 type embedProxyConfig struct {
@@ -81,9 +82,13 @@ func loadProxyConfigFromEnv(stateDir string, logger *slog.Logger) (embedProxyCon
 	if out.InternalProxy.UpstreamBaseURL == "" {
 		out.InternalProxy.UpstreamBaseURL = strings.TrimSpace(os.Getenv("ORCHESTRATOR_URL"))
 	}
-	out.InternalProxy.MCPGatewayBaseURL = strings.TrimSpace(os.Getenv("ORCHESTRATOR_MCP_GATEWAY_BASE_URL"))
-	if out.InternalProxy.MCPGatewayBaseURL == "" {
-		out.InternalProxy.MCPGatewayBaseURL = deriveMCPGatewayBaseURL(out.InternalProxy.UpstreamBaseURL)
+	// MCP tools base URL (orchestrator control plane): explicit env wins, then derive from orchestrator URL.
+	out.InternalProxy.MCPToolsBaseURL = strings.TrimSpace(os.Getenv("ORCHESTRATOR_MCP_TOOLS_BASE_URL"))
+	if out.InternalProxy.MCPToolsBaseURL == "" {
+		out.InternalProxy.MCPToolsBaseURL = strings.TrimSpace(os.Getenv("ORCHESTRATOR_MCP_GATEWAY_BASE_URL"))
+	}
+	if out.InternalProxy.MCPToolsBaseURL == "" {
+		out.InternalProxy.MCPToolsBaseURL = deriveMCPToolsBaseURL(out.InternalProxy.UpstreamBaseURL)
 	}
 	if store, _, err := securestore.Open(stateDir); err == nil {
 		out.InternalProxy.SecureStore = store

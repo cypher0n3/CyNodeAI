@@ -63,7 +63,7 @@ func clampStringCursor(s string, c int) int {
 }
 
 // moveStringCursorRune moves a UTF-8 byte offset by one code point (dir -1 = left, +1 = right).
-func moveStringCursorRune(s string, c int, dir int) int {
+func moveStringCursorRune(s string, c, dir int) int {
 	c = clampStringCursor(s, c)
 	if dir < 0 {
 		if c == 0 {
@@ -80,7 +80,7 @@ func moveStringCursorRune(s string, c int, dir int) int {
 }
 
 // deleteRuneBeforeCursorString removes one Unicode code point before c; returns new string and cursor.
-func deleteRuneBeforeCursorString(s string, c int) (string, int) {
+func deleteRuneBeforeCursorString(s string, c int) (out string, newC int) {
 	c = clampStringCursor(s, c)
 	if c == 0 {
 		return s, 0
@@ -90,7 +90,7 @@ func deleteRuneBeforeCursorString(s string, c int) (string, int) {
 }
 
 // insertStringAtCursor inserts ins at byte offset c (must be UTF-8 boundary).
-func insertStringAtCursor(s string, c int, ins string) (string, int) {
+func insertStringAtCursor(s string, c int, ins string) (out string, newC int) {
 	c = clampStringCursor(s, c)
 	return s[:c] + ins + s[c:], c + len(ins)
 }

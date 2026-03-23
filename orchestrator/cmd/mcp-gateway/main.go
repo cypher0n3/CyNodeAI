@@ -40,37 +40,47 @@ var testStore database.Store
 // testDatabaseOpen is set by tests to provide a store without opening a real DB (avoids needing RunSchema).
 var testDatabaseOpen func(ctx context.Context, dsn string) (database.Store, error)
 
+// openGatewayStore resolves the database handle for the standalone gateway (tests may inject mocks).
+func openGatewayStore(ctx context.Context, logger *slog.Logger) (store database.Store, closeFn func(), err error) {
+	switch {
+	case testStore != nil:
+		return testStore, nil, nil
+	case testDatabaseOpen != nil:
+		dsn := getEnv("DATABASE_URL", "")
+		store, err := testDatabaseOpen(ctx, dsn)
+		if err != nil {
+			return nil, nil, err
+		}
+		logger.Info("deprecated standalone MCP gateway: database connected")
+		return store, nil, nil
+	default:
+		dsn := getEnv("DATABASE_URL", "")
+		if dsn == "" {
+			logger.Warn("DATABASE_URL not set; POST /v1/mcp/tools/call returns 503 until a database is configured")
+			return nil, nil, nil
+		}
+		db, err := database.Open(ctx, dsn)
+		if err != nil {
+			return nil, nil, err
+		}
+		if err := db.RunSchema(ctx, logger); err != nil {
+			_ = db.Close()
+			return nil, nil, err
+		}
+		logger.Info("deprecated standalone MCP gateway: database connected")
+		return db, func() { _ = db.Close() }, nil
+	}
+}
+
 // run sets up and runs the server until ctx is canceled. Used by main and tests.
 // When DATABASE_URL is set (or testStore/testDatabaseOpen is set in tests), tool-call handler writes audit records.
 func run(ctx context.Context, logger *slog.Logger) error {
-	var store database.Store
-	switch {
-	case testStore != nil:
-		store = testStore
-	case testDatabaseOpen != nil:
-		dsn := getEnv("DATABASE_URL", "")
-		var err error
-		store, err = testDatabaseOpen(ctx, dsn)
-		if err != nil {
-			return err
-		}
-		logger.Info("mcp-gateway database connected")
-	default:
-		dsn := getEnv("DATABASE_URL", "")
-		if dsn != "" {
-			db, err := database.Open(ctx, dsn)
-			if err != nil {
-				return err
-			}
-			defer func() { _ = db.Close() }()
-			if err := db.RunSchema(ctx, logger); err != nil {
-				return err
-			}
-			store = db
-			logger.Info("mcp-gateway database connected")
-		} else {
-			logger.Warn("DATABASE_URL not set; POST /v1/mcp/tools/call returns 503 until a database is configured")
-		}
+	store, closeDB, err := openGatewayStore(ctx, logger)
+	if err != nil {
+		return err
+	}
+	if closeDB != nil {
+		defer closeDB()
 	}
 
 	mux := http.NewServeMux()
@@ -93,7 +103,7 @@ func run(ctx context.Context, logger *slog.Logger) error {
 
 	serverErr := make(chan error, 1)
 	go func() {
-		logger.Info("starting mcp-gateway", "addr", srv.Addr)
+		logger.Info("starting deprecated standalone MCP gateway (use control-plane POST /v1/mcp/tools/call instead)", "addr", srv.Addr)
 		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			logger.Error("server error", "error", err)
 			serverErr <- err
@@ -105,7 +115,7 @@ func run(ctx context.Context, logger *slog.Logger) error {
 	case err := <-serverErr:
 		return err
 	}
-	logger.Info("shutting down mcp-gateway")
+	logger.Info("shutting down deprecated standalone MCP gateway")
 	shutdownCtx, cancel := context.WithTimeout(ctx, shutdownTimeout())
 	defer cancel()
 	return srv.Shutdown(shutdownCtx)

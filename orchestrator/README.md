@@ -25,7 +25,7 @@ This directory is a standalone Go module defined by [`go.mod`](go.mod).
   - [`cmd/api-egress/`](cmd/api-egress/): Optional API egress proxy service.
 - [`internal/`](internal/): Private implementation packages (handlers, middleware, auth, database, models, config).
 - [`migrations/`](migrations/): SQL migrations applied to the orchestrator database.
-- [`docker-compose.yml`](docker-compose.yml): Development compose stack for Postgres and orchestrator services.
+- [`docker-compose.yml`](docker-compose.yml): Development compose stack for Postgres and orchestrator services (the deprecated `mcp-gateway` service is behind the `legacy-mcp-gateway` profile; default `up` does not start it).
 - [`systemd/`](systemd/): Service definitions and notes for running on a host.
 
 Notable services under [`cmd/`](cmd/) include the user-facing API gateway, the control plane (including MCP tool routes), optional API egress, and the deprecated standalone MCP gateway binary.

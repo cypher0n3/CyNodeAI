@@ -23,10 +23,9 @@ const (
 
 var internalOrchestratorHTTPClient = &http.Client{Timeout: internalOrchestratorHTTPTimeout}
 
-// deriveMCPGatewayBaseURL returns the orchestrator base URL for MCP tool calls. MCP is served by
+// deriveMCPToolsBaseURL returns the orchestrator base URL for MCP tool calls. MCP is served by
 // the control plane at POST /v1/mcp/tools/call (same process and database as node registration).
-// Override with ORCHESTRATOR_MCP_GATEWAY_BASE_URL when needed.
-func deriveMCPGatewayBaseURL(controlPlane string) string {
+func deriveMCPToolsBaseURL(controlPlane string) string {
 	return strings.TrimRight(strings.TrimSpace(controlPlane), "/")
 }
 
@@ -47,9 +46,9 @@ func handleInternalOrchestratorMCPCall(w http.ResponseWriter, r *http.Request, c
 		http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	upstreamBase := strings.TrimSpace(cfg.MCPGatewayBaseURL)
+	upstreamBase := strings.TrimSpace(cfg.MCPToolsBaseURL)
 	if upstreamBase == "" {
-		embedWriteProblem(w, http.StatusServiceUnavailable, problem.TypeInternal, "Service Unavailable", "orchestrator MCP tools URL not configured (set ORCHESTRATOR_MCP_GATEWAY_BASE_URL or ORCHESTRATOR_INTERNAL_PROXY_BASE_URL / ORCHESTRATOR_URL)")
+		embedWriteProblem(w, http.StatusServiceUnavailable, problem.TypeInternal, "Service Unavailable", "orchestrator MCP tools URL not configured (set ORCHESTRATOR_MCP_TOOLS_BASE_URL or ORCHESTRATOR_INTERNAL_PROXY_BASE_URL / ORCHESTRATOR_URL)")
 		return
 	}
 	handleInternalOrchestratorProxyForward(w, r, cfg, upstreamBase, toolsCallPath)
@@ -68,7 +67,63 @@ func handleInternalOrchestratorAgentReady(w http.ResponseWriter, r *http.Request
 	handleInternalOrchestratorProxyForward(w, r, cfg, upstreamBase, "")
 }
 
-func handleInternalOrchestratorProxyForward(w http.ResponseWriter, r *http.Request, cfg embedInternalProxyConfig, upstreamBase string, defaultPath string) {
+func decodeManagedProxyRequest(w http.ResponseWriter, r *http.Request, defaultPath string) (proxyReq managedProxyRequest, bodyBytes []byte, path string, ok bool) {
+	r.Body = http.MaxBytesReader(w, r.Body, internalOrchestratorProxyMaxBody)
+	if err := json.NewDecoder(r.Body).Decode(&proxyReq); err != nil {
+		embedWriteProblem(w, http.StatusBadRequest, problem.TypeValidation, "Bad Request", "invalid proxy request body")
+		return managedProxyRequest{}, nil, "", false
+	}
+	var err error
+	bodyBytes, err = base64.StdEncoding.DecodeString(proxyReq.BodyB64)
+	if err != nil {
+		embedWriteProblem(w, http.StatusBadRequest, problem.TypeValidation, "Bad Request", "invalid body_b64")
+		return managedProxyRequest{}, nil, "", false
+	}
+	path = strings.TrimSpace(proxyReq.Path)
+	if path == "" {
+		path = defaultPath
+	}
+	if path == "" {
+		embedWriteProblem(w, http.StatusBadRequest, problem.TypeValidation, "Bad Request", "path is required")
+		return managedProxyRequest{}, nil, "", false
+	}
+	if !strings.HasPrefix(path, "/") {
+		path = "/" + path
+	}
+	return proxyReq, bodyBytes, path, true
+}
+
+func getAgentTokenForProxy(cfg embedInternalProxyConfig, serviceID string, w http.ResponseWriter) (*securestore.AgentTokenRecord, bool) {
+	rec, err := cfg.SecureStore.GetAgentToken(serviceID)
+	if err != nil {
+		if errors.Is(err, securestore.ErrTokenExpired) {
+			embedWriteProblem(w, http.StatusServiceUnavailable, "https://cynode.ai/problems/managed-agent-token-expired", "Service Unavailable", "managed agent token expired")
+			return nil, false
+		}
+		embedWriteProblem(w, http.StatusServiceUnavailable, "https://cynode.ai/problems/managed-agent-token-unavailable", "Service Unavailable", "managed agent token not available")
+		return nil, false
+	}
+	if rec == nil || strings.TrimSpace(rec.Token) == "" {
+		embedWriteProblem(w, http.StatusServiceUnavailable, "https://cynode.ai/problems/managed-agent-token-unavailable", "Service Unavailable", "managed agent token not available")
+		return nil, false
+	}
+	return rec, true
+}
+
+func writeManagedProxyJSONFromUpstream(w http.ResponseWriter, resp *http.Response) bool {
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		embedWriteProblem(w, http.StatusBadGateway, problem.TypeInternal, "Bad Gateway", "failed to read upstream response")
+		return false
+	}
+	proxyResp := managedProxyResponseFromHTTP(resp.StatusCode, resp.Header, respBody)
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	_ = json.NewEncoder(w).Encode(proxyResp)
+	return true
+}
+
+func handleInternalOrchestratorProxyForward(w http.ResponseWriter, r *http.Request, cfg embedInternalProxyConfig, upstreamBase, defaultPath string) {
 	ctx := r.Context()
 	serviceID, _ := ctx.Value(CallerServiceIDContextKey).(string)
 	if strings.TrimSpace(serviceID) == "" {
@@ -79,43 +134,16 @@ func handleInternalOrchestratorProxyForward(w http.ResponseWriter, r *http.Reque
 		embedWriteProblem(w, http.StatusServiceUnavailable, "https://cynode.ai/problems/managed-agent-token-unavailable", "Service Unavailable", "secure store not available")
 		return
 	}
-	r.Body = http.MaxBytesReader(w, r.Body, internalOrchestratorProxyMaxBody)
-	var proxyReq managedProxyRequest
-	if err := json.NewDecoder(r.Body).Decode(&proxyReq); err != nil {
-		embedWriteProblem(w, http.StatusBadRequest, problem.TypeValidation, "Bad Request", "invalid proxy request body")
+	proxyReq, bodyBytes, path, ok := decodeManagedProxyRequest(w, r, defaultPath)
+	if !ok {
 		return
-	}
-	bodyBytes, err := base64.StdEncoding.DecodeString(proxyReq.BodyB64)
-	if err != nil {
-		embedWriteProblem(w, http.StatusBadRequest, problem.TypeValidation, "Bad Request", "invalid body_b64")
-		return
-	}
-	path := strings.TrimSpace(proxyReq.Path)
-	if path == "" {
-		path = defaultPath
-	}
-	if path == "" {
-		embedWriteProblem(w, http.StatusBadRequest, problem.TypeValidation, "Bad Request", "path is required")
-		return
-	}
-	if !strings.HasPrefix(path, "/") {
-		path = "/" + path
 	}
 	method := strings.TrimSpace(proxyReq.Method)
 	if method == "" {
 		method = http.MethodPost
 	}
-	rec, err := cfg.SecureStore.GetAgentToken(serviceID)
-	if err != nil {
-		if errors.Is(err, securestore.ErrTokenExpired) {
-			embedWriteProblem(w, http.StatusServiceUnavailable, "https://cynode.ai/problems/managed-agent-token-expired", "Service Unavailable", "managed agent token expired")
-			return
-		}
-		embedWriteProblem(w, http.StatusServiceUnavailable, "https://cynode.ai/problems/managed-agent-token-unavailable", "Service Unavailable", "managed agent token not available")
-		return
-	}
-	if rec == nil || strings.TrimSpace(rec.Token) == "" {
-		embedWriteProblem(w, http.StatusServiceUnavailable, "https://cynode.ai/problems/managed-agent-token-unavailable", "Service Unavailable", "managed agent token not available")
+	rec, ok := getAgentTokenForProxy(cfg, serviceID, w)
+	if !ok {
 		return
 	}
 	upstreamURL := strings.TrimRight(upstreamBase, "/") + path
@@ -143,13 +171,5 @@ func handleInternalOrchestratorProxyForward(w http.ResponseWriter, r *http.Reque
 		return
 	}
 	defer func() { _ = resp.Body.Close() }()
-	respBody, err := io.ReadAll(resp.Body)
-	if err != nil {
-		embedWriteProblem(w, http.StatusBadGateway, problem.TypeInternal, "Bad Gateway", "failed to read upstream response")
-		return
-	}
-	proxyResp := managedProxyResponseFromHTTP(resp.StatusCode, resp.Header, respBody)
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusOK)
-	_ = json.NewEncoder(w).Encode(proxyResp)
+	writeManagedProxyJSONFromUpstream(w, resp)
 }

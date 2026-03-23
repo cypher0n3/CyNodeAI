@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -53,40 +54,111 @@ func TestComposerHint(t *testing.T) {
 	}
 }
 
+func assertCopyClipboardOK(t *testing.T, msg any) copyClipboardResultMsg {
+	t.Helper()
+	res, ok := msg.(copyClipboardResultMsg)
+	if !ok {
+		t.Fatalf("got %T", msg)
+	}
+	if res.err != nil {
+		t.Fatalf("err = %v", res.err)
+	}
+	return res
+}
+
 // TestSlashCopyCmd_ResultMessages verifies /copy returns copyClipboardResultMsg with expected success text.
 func TestSlashCopyCmd_ResultMessages(t *testing.T) {
 	t.Parallel()
 	t.Run("all_empty_transcript", func(t *testing.T) {
 		m2 := NewModel(nil)
 		m2.Scrollback = []string{scrollbackSystemLinePrefix + "meta"}
-		msg := slashCopyCmd(m2, "all")()
-		res, ok := msg.(copyClipboardResultMsg)
-		if !ok {
-			t.Fatalf("got %T", msg)
-		}
-		if res.err != nil {
-			t.Fatalf("err = %v", res.err)
-		}
+		res := assertCopyClipboardOK(t, slashCopyCmd(m2, "all")())
 		if res.successDetail != "All text copied to clipboard." {
 			t.Errorf("successDetail = %q", res.successDetail)
 		}
 	})
-
 	t.Run("last_no_assistant", func(t *testing.T) {
 		empty := NewModel(nil)
 		empty.Scrollback = []string{"You: only user"}
-		msg := slashCopyCmd(empty, "last")()
-		res, ok := msg.(copyClipboardResultMsg)
-		if !ok {
-			t.Fatalf("got %T", msg)
-		}
-		if res.err != nil {
-			t.Fatalf("err = %v", res.err)
-		}
+		res := assertCopyClipboardOK(t, slashCopyCmd(empty, "last")())
 		if res.successDetail != "No assistant message to copy." {
 			t.Errorf("successDetail = %q", res.successDetail)
 		}
 	})
+	t.Run("last_with_assistant_sequence", func(t *testing.T) {
+		m := NewModel(nil)
+		m.Scrollback = []string{"Assistant: hello"}
+		seq := slashCopyCmd(m, "last")
+		if seq == nil {
+			t.Fatal("nil cmd")
+		}
+		if seq() == nil {
+			t.Fatal("nil first msg from sequence")
+		}
+	})
+}
+
+// TestSlashClipboardSequence_ReturnsSequenceCmd covers slashClipboardSequence (delegates to tea.Sequence).
+func TestSlashClipboardSequence_ReturnsSequenceCmd(t *testing.T) {
+	t.Parallel()
+	cmd := slashClipboardSequence("text", "Last message copied to clipboard.")
+	if cmd == nil {
+		t.Fatal("nil cmd")
+	}
+	_ = cmd()
+}
+
+func TestSlashSetThinking_PrefSaveError(t *testing.T) {
+	t.Parallel()
+	p := &mockAuthProvider{saveErr: errors.New("disk full")}
+	m := NewModel(&chat.Session{})
+	m.SetAuthProvider(p)
+	msg := m.slashSetThinkingCmd(true)()
+	res, ok := msg.(slashResultMsg)
+	if !ok {
+		t.Fatalf("got %T", msg)
+	}
+	found := false
+	for _, l := range res.lines {
+		if strings.Contains(l, "config save failed") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("lines = %v", res.lines)
+	}
+}
+
+func TestSlashProjectCmd_SetNoneClears(t *testing.T) {
+	t.Parallel()
+	client := gateway.NewClient("http://localhost")
+	session := chat.NewSession(client)
+	session.SetProjectID("proj-old")
+	m := NewModel(session)
+	msg := m.slashProjectCmd("set none")()
+	res, ok := msg.(slashResultMsg)
+	if !ok {
+		t.Fatalf("got %T", msg)
+	}
+	if session.ProjectID != "" {
+		t.Errorf("ProjectID = %q", session.ProjectID)
+	}
+	if len(res.lines) == 0 || !strings.Contains(res.lines[0], "cleared") {
+		t.Errorf("lines = %v", res.lines)
+	}
+}
+
+func TestSlashCopyCmd_InvalidArg(t *testing.T) {
+	t.Parallel()
+	msg := slashCopyCmd(NewModel(nil), "nope")()
+	res, ok := msg.(slashResultMsg)
+	if !ok {
+		t.Fatalf("got %T", msg)
+	}
+	if len(res.lines) == 0 || !strings.Contains(res.lines[0], "Usage") {
+		t.Errorf("lines = %v", res.lines)
+	}
 }
 
 // TestCaptureToLines verifies captureToLines captures os.Stdout/Stderr output.
@@ -324,7 +396,7 @@ func TestHandleSlashCmd_ThreadReturnsNilHandled(t *testing.T) {
 	}
 }
 
-// TestHandleSlashCmd_EmptySlash verifies "/" alone returns a cmd.
+// TestHandleSlashCmd_EmptySlash verifies "/" alone returns usage.
 func TestHandleSlashCmd_EmptySlash(t *testing.T) {
 	m := NewModel(&chat.Session{})
 	cmd, handled := m.handleSlashCmd("/")
@@ -333,6 +405,10 @@ func TestHandleSlashCmd_EmptySlash(t *testing.T) {
 	}
 	if cmd == nil {
 		t.Error("handleSlashCmd(/) should return non-nil cmd")
+	}
+	res, ok := cmd().(slashResultMsg)
+	if !ok || len(res.lines) == 0 || !strings.Contains(strings.ToLower(res.lines[0]), "usage") {
+		t.Errorf("usage lines = %#v ok=%v", res, ok)
 	}
 }
 

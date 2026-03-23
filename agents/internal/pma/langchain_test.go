@@ -12,6 +12,51 @@ import (
 	"github.com/tmc/langchaingo/llms"
 )
 
+func TestOllamaNumCtxFromEnv(t *testing.T) {
+	t.Setenv(envOllamaNumCtx, "")
+	if ollamaNumCtxFromEnv() != 0 {
+		t.Fatal("unset")
+	}
+	t.Setenv(envOllamaNumCtx, "bad")
+	if ollamaNumCtxFromEnv() != 0 {
+		t.Fatal("bad int")
+	}
+	t.Setenv(envOllamaNumCtx, "-3")
+	if ollamaNumCtxFromEnv() != 0 {
+		t.Fatal("negative")
+	}
+	t.Setenv(envOllamaNumCtx, "4096")
+	if ollamaNumCtxFromEnv() != 4096 {
+		t.Fatal("4096")
+	}
+}
+
+func TestLooksLikeCompleteAssistantAnswer(t *testing.T) {
+	if looksLikeCompleteAssistantAnswer("short") {
+		t.Fatal("short")
+	}
+	long79 := strings.Repeat("a", 79)
+	if looksLikeCompleteAssistantAnswer(long79) {
+		t.Fatal("under 80")
+	}
+	withHeading := strings.Repeat("x", 40) + "\n## Section\n" + strings.Repeat("y", 40)
+	if !looksLikeCompleteAssistantAnswer(withHeading) {
+		t.Fatal("heading")
+	}
+	longParas := strings.Repeat("p", 120) + "\n\n" + strings.Repeat("q", 120) + "\n\n" + strings.Repeat("r", 120)
+	if !looksLikeCompleteAssistantAnswer(longParas) {
+		t.Fatal("paragraphs")
+	}
+	withBullet := strings.Repeat("a", 200) + "\n- item\n" + strings.Repeat("b", 50)
+	if !looksLikeCompleteAssistantAnswer(withBullet) {
+		t.Fatal("bullet list")
+	}
+	withStar := strings.Repeat("a", 200) + "\n* item\n" + strings.Repeat("b", 50)
+	if !looksLikeCompleteAssistantAnswer(withStar) {
+		t.Fatal("star list")
+	}
+}
+
 func TestIsCapableModel(t *testing.T) {
 	cases := []struct {
 		model  string
@@ -203,6 +248,27 @@ func TestWriteLangchainNDJSONStream_EmitsNDJSON(t *testing.T) {
 	}
 }
 
+func TestWriteLangchainNDJSONStream_WithThinking(t *testing.T) {
+	rec := httptest.NewRecorder()
+	if err := writeLangchainNDJSONStream(rec, "visible", "inner-think"); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(rec.Body.String(), `"thinking"`) {
+		t.Errorf("expected thinking NDJSON line: %s", rec.Body.String())
+	}
+}
+
+func TestWriteLangchainNDJSONStream_MultipleDeltaChunks(t *testing.T) {
+	rec := httptest.NewRecorder()
+	long := strings.Repeat("Z", 80)
+	if err := writeLangchainNDJSONStream(rec, long, ""); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Count(rec.Body.String(), `"delta"`) < 2 {
+		t.Errorf("expected multiple delta chunks for long visible text: %s", rec.Body.String())
+	}
+}
+
 // TestStreamingLLM_Call exercises GenerateFromSinglePrompt on the streaming LLM.
 func TestStreamingLLM_Call(t *testing.T) {
 	rec := httptest.NewRecorder()
@@ -222,6 +288,22 @@ func TestStreamingLLM_Call(t *testing.T) {
 	}
 	if !strings.Contains(body, `"delta"`) {
 		t.Errorf("body missing delta: %s", body)
+	}
+}
+
+// TestStreamingLLM_CallMethodDirect exercises streamingLLM.Call (single-prompt path), not only GenerateFromSinglePrompt.
+func TestStreamingLLM_CallMethodDirect(t *testing.T) {
+	rec := httptest.NewRecorder()
+	iter := 0
+	inner := &mockLLM{responses: []string{"direct-call"}}
+	llm := newStreamingLLM(inner, rec, &iter)
+	slm := llm.(*streamingLLM)
+	s, err := slm.Call(context.Background(), "prompt")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if s != "direct-call" {
+		t.Errorf("Call = %q", s)
 	}
 }
 
@@ -331,36 +413,32 @@ func TestRunCompletionWithLangchain_WithMockLLMAndMCP_CapableModels(t *testing.T
 	}
 }
 
+func testTryRepairTextualMCPCalls(t *testing.T, raw, mcpResponse, wantSubstring string) {
+	t.Helper()
+	mcpSrv := newMockMCPServer(t, mcpResponse)
+	defer mcpSrv.Close()
+	client := &MCPClient{BaseURL: mcpSrv.URL}
+	out, ok := tryRepairTextualMCPCalls(context.Background(), raw, client)
+	if !ok {
+		t.Fatal("expected repair")
+	}
+	if !strings.Contains(out, wantSubstring) {
+		t.Fatalf("got %q", out)
+	}
+}
+
 // TestRunCompletionWithLangchain_OllamaNumCtxFromEnv verifies the agent path still runs when
 // OLLAMA_NUM_CTX is set (used by callInference / direct Ollama; tools path uses OpenAI-compatible /v1).
 // TestTryRepairTextualMCPCalls_BareArgumentsJSON covers models that omit __arg1 and send the MCP payload directly.
 func TestTryRepairTextualMCPCalls_BareArgumentsJSON(t *testing.T) {
 	raw := `[{"type":"function","function":{"name":"mcp_call","arguments":"{\"tool_name\":\"help.get\",\"arguments\":{}}"}}]`
-	mcpSrv := newMockMCPServer(t, `{"ok":true}`)
-	defer mcpSrv.Close()
-	client := &MCPClient{BaseURL: mcpSrv.URL}
-	out, ok := tryRepairTextualMCPCalls(context.Background(), raw, client)
-	if !ok {
-		t.Fatal("expected repair")
-	}
-	if !strings.Contains(out, `"ok":true`) {
-		t.Fatalf("got %q", out)
-	}
+	testTryRepairTextualMCPCalls(t, raw, `{"ok":true}`, `"ok":true`)
 }
 
 // TestTryRepairTextualMCPCalls_OllamaContentLeak covers Ollama returning tool_calls only in message.content.
 func TestTryRepairTextualMCPCalls_OllamaContentLeak(t *testing.T) {
 	raw := `[{"id":"call_r3ng0yxq","type":"function","function":{"name":"mcp_call","arguments":"{\"__arg1\":\"{\\\"tool_name\\\": \\\"help.get\\\", \\\"arguments\\\": {}}\"}"}}]`
-	mcpSrv := newMockMCPServer(t, `{"help":"documentation body"}`)
-	defer mcpSrv.Close()
-	client := &MCPClient{BaseURL: mcpSrv.URL}
-	out, ok := tryRepairTextualMCPCalls(context.Background(), raw, client)
-	if !ok {
-		t.Fatal("expected repair")
-	}
-	if !strings.Contains(out, "documentation body") {
-		t.Fatalf("got %q", out)
-	}
+	testTryRepairTextualMCPCalls(t, raw, `{"help":"documentation body"}`, "documentation body")
 }
 
 // TestRunCompletionWithLangchain_RepairsTextualToolCalls runs the full path when mock LLM returns content-only tool JSON.

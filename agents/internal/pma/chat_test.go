@@ -2,13 +2,18 @@ package pma
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"io"
 	"log/slog"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"strings"
+	"syscall"
 	"testing"
 )
 
@@ -18,7 +23,77 @@ import (
 // it emits Ollama-compatible NDJSON for streamCompletionToWriter.
 func newMockInferenceServer(t *testing.T, status int, body string) *httptest.Server {
 	t.Helper()
-	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	return httptest.NewServer(mockInferenceHandler(status, body))
+}
+
+func mockInferenceUseStream(reqBody []byte) bool {
+	var req struct {
+		Stream *bool `json:"stream"`
+	}
+	_ = json.Unmarshal(reqBody, &req)
+	return req.Stream == nil || *req.Stream
+}
+
+type mockInferenceParsed struct {
+	content   string
+	errField  string
+	badConfig bool
+}
+
+func mockInferenceParseConfigJSON(body string) mockInferenceParsed {
+	var single struct {
+		Response string `json:"response"`
+		Message  struct {
+			Content string `json:"content"`
+		} `json:"message"`
+		Error string `json:"error"`
+	}
+	if err := json.Unmarshal([]byte(body), &single); err != nil {
+		return mockInferenceParsed{badConfig: true}
+	}
+	if single.Error != "" {
+		return mockInferenceParsed{errField: single.Error}
+	}
+	content := single.Message.Content
+	if content == "" {
+		content = single.Response
+	}
+	return mockInferenceParsed{content: content}
+}
+
+func mockInferenceWriteJSONError(w http.ResponseWriter, useStream bool, msg string) {
+	if useStream {
+		_, _ = w.Write([]byte(`{"error":"` + msg + `","done":true}` + "\n"))
+		return
+	}
+	_, _ = w.Write([]byte(`{"error":"` + msg + `"}`))
+}
+
+func mockInferenceWriteNonStreamOK(w http.ResponseWriter, content string) {
+	out, _ := json.Marshal(map[string]interface{}{
+		"message": map[string]string{"role": "assistant", "content": content},
+		"done":    true,
+	})
+	_, _ = w.Write(out)
+}
+
+func mockInferenceWriteStreamOK(w http.ResponseWriter, content string) {
+	chunk, _ := json.Marshal(map[string]interface{}{
+		"message": map[string]string{"content": content},
+		"done":    false,
+	})
+	_, _ = w.Write(chunk)
+	_, _ = w.Write([]byte("\n"))
+	done, _ := json.Marshal(map[string]interface{}{
+		"message": map[string]string{"content": ""},
+		"done":    true,
+	})
+	_, _ = w.Write(done)
+	_, _ = w.Write([]byte("\n"))
+}
+
+func mockInferenceHandler(status int, body string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(status)
 		if status != http.StatusOK {
@@ -26,60 +101,22 @@ func newMockInferenceServer(t *testing.T, status int, body string) *httptest.Ser
 			return
 		}
 		reqBody, _ := io.ReadAll(r.Body)
-		var req struct {
-			Stream *bool `json:"stream"`
-		}
-		_ = json.Unmarshal(reqBody, &req)
-		useStream := req.Stream == nil || *req.Stream
-
-		var single struct {
-			Response string `json:"response"`
-			Message  struct {
-				Content string `json:"content"`
-			} `json:"message"`
-			Error string `json:"error"`
-		}
-		if err := json.Unmarshal([]byte(body), &single); err != nil {
-			if useStream {
-				_, _ = w.Write([]byte(`{"error":"mock parse error","done":true}` + "\n"))
-			} else {
-				_, _ = w.Write([]byte(`{"error":"mock parse error"}`))
-			}
+		useStream := mockInferenceUseStream(reqBody)
+		parsed := mockInferenceParseConfigJSON(body)
+		if parsed.badConfig {
+			mockInferenceWriteJSONError(w, useStream, "mock parse error")
 			return
 		}
-		if single.Error != "" {
-			if useStream {
-				_, _ = w.Write([]byte(`{"error":"` + single.Error + `","done":true}` + "\n"))
-			} else {
-				_, _ = w.Write([]byte(`{"error":"` + single.Error + `"}`))
-			}
+		if parsed.errField != "" {
+			mockInferenceWriteJSONError(w, useStream, parsed.errField)
 			return
-		}
-		content := single.Message.Content
-		if content == "" {
-			content = single.Response
 		}
 		if !useStream {
-			out, _ := json.Marshal(map[string]interface{}{
-				"message": map[string]string{"role": "assistant", "content": content},
-				"done":    true,
-			})
-			_, _ = w.Write(out)
+			mockInferenceWriteNonStreamOK(w, parsed.content)
 			return
 		}
-		chunk, _ := json.Marshal(map[string]interface{}{
-			"message": map[string]string{"content": content},
-			"done":    false,
-		})
-		_, _ = w.Write(chunk)
-		_, _ = w.Write([]byte("\n"))
-		done, _ := json.Marshal(map[string]interface{}{
-			"message": map[string]string{"content": ""},
-			"done":    true,
-		})
-		_, _ = w.Write(done)
-		_, _ = w.Write([]byte("\n"))
-	}))
+		mockInferenceWriteStreamOK(w, parsed.content)
+	}
 }
 
 func TestChatCompletionHandler_MethodNotAllowed(t *testing.T) {
@@ -333,25 +370,22 @@ func TestChatCompletionHandler_SmallModelDirectGeneration(t *testing.T) {
 	}
 }
 
-// TestChatCompletionHandler_CapableModelEmptyOutputReturns500 verifies that when a capable
-// model's agent loop returns empty output on both the original and retry attempt, a 500 is returned.
-func TestChatCompletionHandler_CapableModelEmptyOutputReturns500(t *testing.T) {
+func testChatCompletionCapableModelEmptyOutput(t *testing.T, reqBody string) {
+	t.Helper()
 	mcpSrv := newMockMCPServer(t, `{}`)
 	defer mcpSrv.Close()
 	t.Setenv("PMA_MCP_GATEWAY_URL", mcpSrv.URL)
-	// Direct inference fallback (stream:false) also returns empty body — persistent empty.
 	ollama := newMockInferenceServer(t, http.StatusOK, `{"message":{"content":""}}`)
 	defer ollama.Close()
 	t.Setenv("OLLAMA_BASE_URL", ollama.URL)
 	t.Setenv("INFERENCE_MODEL", "qwen3.5:9b")
 
 	oldHook := testLLMForCompletion
-	// Both original and retry return empty — simulates persistent context-overflow.
 	testLLMForCompletion = &mockLLM{responses: []string{"", ""}}
 	defer func() { testLLMForCompletion = oldHook }()
 
 	handler := ChatCompletionHandler("sys", slog.Default())
-	req := httptest.NewRequest(http.MethodPost, "/internal/chat/completion", bytes.NewReader([]byte(`{"messages":[{"role":"user","content":"hi"}]}`)))
+	req := httptest.NewRequest(http.MethodPost, "/internal/chat/completion", bytes.NewReader([]byte(reqBody)))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	handler(rec, req)
@@ -360,29 +394,17 @@ func TestChatCompletionHandler_CapableModelEmptyOutputReturns500(t *testing.T) {
 	}
 }
 
+// TestChatCompletionHandler_CapableModelEmptyOutputReturns500 verifies that when a capable
+// model's agent loop returns empty output on both the original and retry attempt, a 500 is returned.
+func TestChatCompletionHandler_CapableModelEmptyOutputReturns500(t *testing.T) {
+	// Direct inference fallback (stream:false) also returns empty body — persistent empty.
+	testChatCompletionCapableModelEmptyOutput(t, `{"messages":[{"role":"user","content":"hi"}]}`)
+}
+
 // TestChatCompletionHandler_CapableModelEmptyOutputStreamReturns500 verifies stream=true uses
 // resolveContent and returns 500 when completion stays empty (no silent 200 with empty body).
 func TestChatCompletionHandler_CapableModelEmptyOutputStreamReturns500(t *testing.T) {
-	mcpSrv := newMockMCPServer(t, `{}`)
-	defer mcpSrv.Close()
-	t.Setenv("PMA_MCP_GATEWAY_URL", mcpSrv.URL)
-	ollama := newMockInferenceServer(t, http.StatusOK, `{"message":{"content":""}}`)
-	defer ollama.Close()
-	t.Setenv("OLLAMA_BASE_URL", ollama.URL)
-	t.Setenv("INFERENCE_MODEL", "qwen3.5:9b")
-
-	oldHook := testLLMForCompletion
-	testLLMForCompletion = &mockLLM{responses: []string{"", ""}}
-	defer func() { testLLMForCompletion = oldHook }()
-
-	handler := ChatCompletionHandler("sys", slog.Default())
-	req := httptest.NewRequest(http.MethodPost, "/internal/chat/completion", bytes.NewReader([]byte(`{"messages":[{"role":"user","content":"hi"}],"stream":true}`)))
-	req.Header.Set("Content-Type", "application/json")
-	rec := httptest.NewRecorder()
-	handler(rec, req)
-	if rec.Code != http.StatusInternalServerError {
-		t.Errorf("got status %d, body %s", rec.Code, rec.Body.String())
-	}
+	testChatCompletionCapableModelEmptyOutput(t, `{"messages":[{"role":"user","content":"hi"}],"stream":true}`)
 }
 
 // TestChatCompletionHandler_CapableModel_UnexecutedToolCallFallback verifies that when the
@@ -546,6 +568,20 @@ func newMockMCPServer(t *testing.T, body string) *httptest.Server {
 		}
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(body))
+	}))
+}
+
+// newMockOllamaNDJSONEmptyDoneServer responds with one NDJSON line: empty assistant content and done:true.
+func newMockOllamaNDJSONEmptyDoneServer(t *testing.T) *httptest.Server {
+	t.Helper()
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/x-ndjson")
+		w.WriteHeader(http.StatusOK)
+		done, _ := json.Marshal(map[string]interface{}{
+			"message": map[string]string{"content": ""},
+			"done":    true,
+		})
+		_, _ = fmt.Fprintln(w, string(done))
 	}))
 }
 
@@ -828,6 +864,28 @@ func TestChatCompletionHandler_StreamTrue_InferenceError(t *testing.T) {
 	}
 }
 
+// TestChatCompletionHandler_StreamTrue_NoContentDeltas covers streamCompletionToWriter when Ollama
+// returns 200 but no non-empty content chunks (had=false → 500).
+func TestChatCompletionHandler_StreamTrue_NoContentDeltas(t *testing.T) {
+	mockInference := newMockOllamaNDJSONEmptyDoneServer(t)
+	defer mockInference.Close()
+	t.Setenv("OLLAMA_BASE_URL", mockInference.URL)
+	t.Setenv("PMA_MCP_GATEWAY_URL", "")
+	t.Setenv("MCP_GATEWAY_URL", "")
+	handler := ChatCompletionHandler("sys", slog.Default())
+	body, _ := json.Marshal(map[string]interface{}{
+		"messages": []map[string]string{{"role": "user", "content": "hi"}},
+		"stream":   true,
+	})
+	req := httptest.NewRequest(http.MethodPost, "/internal/chat/completion", bytes.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	handler(rec, req)
+	if rec.Code != http.StatusInternalServerError {
+		t.Errorf("expected 500 when stream has no content, got %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
 func TestStreamCompletionWriteChunk_Empty(t *testing.T) {
 	rec := httptest.NewRecorder()
 	enc := json.NewEncoder(rec)
@@ -885,5 +943,146 @@ func TestTruncate(t *testing.T) {
 	}
 	if got := truncate("longer than five", 5); got != "longe…" {
 		t.Errorf("truncate(longer...,5)=%q", got)
+	}
+}
+
+func TestIsClientDisconnect(t *testing.T) {
+	if isClientDisconnect(nil) {
+		t.Error("nil is not disconnect")
+	}
+	if !isClientDisconnect(syscall.EPIPE) {
+		t.Error("EPIPE")
+	}
+	if !isClientDisconnect(syscall.ECONNRESET) {
+		t.Error("ECONNRESET")
+	}
+	if !isClientDisconnect(&net.OpError{Err: syscall.EPIPE}) {
+		t.Error("OpError EPIPE")
+	}
+	if !isClientDisconnect(errors.New("broken pipe")) {
+		t.Error("broken pipe string")
+	}
+	if !isClientDisconnect(errors.New("connection reset by peer")) {
+		t.Error("reset string")
+	}
+	if isClientDisconnect(errors.New("other")) {
+		t.Error("other error")
+	}
+}
+
+func TestLogStreamCompletionInferenceError(t *testing.T) {
+	logStreamCompletionInferenceError(nil, errors.New("x"), false)
+	var buf bytes.Buffer
+	log := slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelDebug}))
+	logStreamCompletionInferenceError(log, errors.New("pre"), false)
+	logStreamCompletionInferenceError(log, syscall.EPIPE, true)
+	logStreamCompletionInferenceError(log, errors.New("post"), true)
+}
+
+func TestStreamOllamaChatToNDJSONOutcome_InferenceNonOK(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusBadGateway)
+	}))
+	defer srv.Close()
+	t.Setenv("OLLAMA_BASE_URL", srv.URL)
+	t.Setenv("INFERENCE_URL", "")
+	rec := httptest.NewRecorder()
+	out := streamOllamaChatToNDJSONOutcome(context.Background(), rec, "sys", &InternalChatCompletionRequest{
+		Messages: []struct {
+			Role    string `json:"role"`
+			Content string `json:"content"`
+		}{{Role: "user", Content: "hi"}},
+	}, slog.Default())
+	if out != streamNDJSONError {
+		t.Fatalf("got %v, want streamNDJSONError", out)
+	}
+}
+
+func TestStreamOllamaChatToNDJSONOutcome_EmptyStream(t *testing.T) {
+	mockInference := newMockOllamaNDJSONEmptyDoneServer(t)
+	defer mockInference.Close()
+	t.Setenv("OLLAMA_BASE_URL", mockInference.URL)
+	t.Setenv("INFERENCE_URL", "")
+	rec := httptest.NewRecorder()
+	out := streamOllamaChatToNDJSONOutcome(context.Background(), rec, "sys", &InternalChatCompletionRequest{
+		Messages: []struct {
+			Role    string `json:"role"`
+			Content string `json:"content"`
+		}{{Role: "user", Content: "hi"}},
+	}, slog.Default())
+	if out != streamNDJSONEmpty {
+		t.Fatalf("got %v, want streamNDJSONEmpty", out)
+	}
+}
+
+func TestStreamTryLangchainNDJSON_NoMCPUsesOllamaPath(t *testing.T) {
+	t.Setenv("PMA_MCP_GATEWAY_URL", "")
+	t.Setenv("MCP_GATEWAY_URL", "")
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusBadGateway)
+	}))
+	defer srv.Close()
+	t.Setenv("OLLAMA_BASE_URL", srv.URL)
+	rec := httptest.NewRecorder()
+	out := streamTryLangchainNDJSON(context.Background(), rec, "sys", &InternalChatCompletionRequest{
+		Messages: []struct {
+			Role    string `json:"role"`
+			Content string `json:"content"`
+		}{{Role: "user", Content: "hi"}},
+	}, slog.Default())
+	if out != streamNDJSONError {
+		t.Fatalf("got %v, want streamNDJSONError", out)
+	}
+}
+
+// TestChatCompletionHandler_StreamLangchain_EmptyStreamsRetries exercises streamCompletionLangchainToWriter
+// when both the langchain attempt and the Ollama NDJSON fallback emit no deltas (streamNDJSONEmpty → retry → 500).
+func TestChatCompletionHandler_LangchainHardError(t *testing.T) {
+	cases := []struct {
+		name string
+		body string
+	}{
+		{"non_stream", `{"messages":[{"role":"user","content":"hi"}]}`},
+		{"stream", `{"messages":[{"role":"user","content":"hi"}],"stream":true}`},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			mcpSrv := newMockMCPServer(t, `{}`)
+			defer mcpSrv.Close()
+			t.Setenv("PMA_MCP_GATEWAY_URL", mcpSrv.URL)
+			t.Setenv("OLLAMA_BASE_URL", "http://127.0.0.1:1")
+			t.Setenv("INFERENCE_MODEL", "qwen3.5:9b")
+			oldHook := testLLMForCompletion
+			testLLMForCompletion = &mockLLM{errs: []error{errors.New("injected llm failure")}}
+			defer func() { testLLMForCompletion = oldHook }()
+			handler := ChatCompletionHandler("sys", slog.Default())
+			req := httptest.NewRequest(http.MethodPost, "/internal/chat/completion", bytes.NewReader([]byte(tc.body)))
+			rec := httptest.NewRecorder()
+			handler(rec, req)
+			if rec.Code != http.StatusInternalServerError {
+				t.Errorf("expected 500, got %d: %s", rec.Code, rec.Body.String())
+			}
+		})
+	}
+}
+
+func TestChatCompletionHandler_StreamLangchain_EmptyStreamsRetries(t *testing.T) {
+	mcpSrv := newMockMCPServer(t, `{}`)
+	defer mcpSrv.Close()
+	ollama := newMockOllamaNDJSONEmptyDoneServer(t)
+	defer ollama.Close()
+	t.Setenv("PMA_MCP_GATEWAY_URL", mcpSrv.URL)
+	t.Setenv("OLLAMA_BASE_URL", ollama.URL)
+	t.Setenv("INFERENCE_MODEL", "qwen3.5:9b")
+	oldHook := testLLMForCompletion
+	testLLMForCompletion = &mockLLM{responses: []string{"", ""}}
+	defer func() { testLLMForCompletion = oldHook }()
+	handler := ChatCompletionHandler("sys", slog.Default())
+	body := `{"messages":[{"role":"user","content":"hi"}],"stream":true}`
+	req := httptest.NewRequest(http.MethodPost, "/internal/chat/completion", bytes.NewReader([]byte(body)))
+	rec := httptest.NewRecorder()
+	handler(rec, req)
+	if rec.Code != http.StatusInternalServerError {
+		t.Errorf("expected 500 after empty stream retry, got %d: %s", rec.Code, rec.Body.String())
 	}
 }

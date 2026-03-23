@@ -13,6 +13,8 @@ type mockLLM struct {
 	mu        sync.Mutex
 	callNum   int
 	responses []string
+	// errs, when set, makes the i-th GenerateContent call return errs[i] instead of responses[i].
+	errs []error
 }
 
 func (m *mockLLM) GenerateContent(ctx context.Context, messages []llms.MessageContent, options ...llms.CallOption) (*llms.ContentResponse, error) {
@@ -21,6 +23,12 @@ func (m *mockLLM) GenerateContent(ctx context.Context, messages []llms.MessageCo
 	}
 	m.mu.Lock()
 	i := m.callNum
+	if m.errs != nil && i < len(m.errs) && m.errs[i] != nil {
+		err := m.errs[i]
+		m.callNum++
+		m.mu.Unlock()
+		return nil, err
+	}
 	m.callNum++
 	m.mu.Unlock()
 	var text string

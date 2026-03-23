@@ -64,3 +64,12 @@ class TestProxyPayloadEncoding(unittest.TestCase):
         status, raw = parse_proxy_response(json.dumps(payload))
         self.assertEqual(status, 200)
         self.assertEqual(json.loads(raw.decode()), {"content": "hello"})
+
+    def test_mcp_tool_call_proxy_uses_control_plane_path(self):
+        """MCP tools use POST /v1/mcp/tools/call on the control plane.
+
+        Not a separate gateway service.
+        """
+        body = json.dumps({"tool_name": "help.list", "arguments": {}}).encode()
+        req = build_proxy_request("POST", "/v1/mcp/tools/call", body)
+        self.assertEqual(req["path"], "/v1/mcp/tools/call")

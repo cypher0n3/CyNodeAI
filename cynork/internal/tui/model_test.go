@@ -13,6 +13,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/cypher0n3/cynodeai/cynork/internal/chat"
 	"github.com/cypher0n3/cynodeai/cynork/internal/gateway"
+	"github.com/cypher0n3/cynodeai/go_shared_libs/contracts/userapi"
 )
 
 const threadListHeader = "--- Threads (use ordinal, id, or title with /thread switch <selector>) ---"
@@ -20,6 +21,25 @@ const inputThreadList = "/thread list"
 const pathChatThreads = "/v1/chat/threads"
 const loginTestGatewayURL = "http://gw"
 const loginTestPassword = "pass"
+const testHealthzPath = "/healthz"
+const testSlashThreadFilter = "/th"
+const testThreadNewInput = "/thread new"
+
+// amendStreamTransport emits a delta then a secret_redaction-style amendment before Done.
+type amendStreamTransport struct{}
+
+func (a *amendStreamTransport) SendMessage(context.Context, string, string, string) (*chat.AssistantTurn, error) {
+	return nil, errors.New("unused")
+}
+
+func (a *amendStreamTransport) StreamMessage(_ context.Context, _, _, _ string) (<-chan chat.ChatStreamDelta, error) {
+	ch := make(chan chat.ChatStreamDelta, 4) //nolint:mnd // order: delta, amendment, done
+	ch <- chat.ChatStreamDelta{Delta: "draft"}
+	ch <- chat.ChatStreamDelta{Amendment: "redacted"}
+	ch <- chat.ChatStreamDelta{Done: true}
+	close(ch)
+	return ch, nil
+}
 
 type mockTransport struct {
 	visible string
@@ -241,7 +261,7 @@ func TestModel_HandleKey_EnterWithText(t *testing.T) {
 	transport := &mockTransport{visible: "ok"}
 	session := &chat.Session{Transport: transport}
 	m := NewModel(session)
-	m.Input = "hello"
+	m.Input = testSampleWordHello
 	m.syncInputCursorEnd()
 	mod, cmd := m.handleKey(tea.KeyMsg{Type: tea.KeyEnter})
 	if mod != m {
@@ -443,7 +463,7 @@ func TestModel_ThreadCommand_New(t *testing.T) {
 	client.SetToken("tok")
 	session := chat.NewSession(client)
 	m := NewModel(session)
-	m.Input = "/thread new"
+	m.Input = testThreadNewInput
 	m.Scrollback = nil
 	mod, cmd := m.handleKey(tea.KeyMsg{Type: tea.KeyEnter})
 	if cmd != nil {
@@ -584,19 +604,35 @@ func TestModel_ThreadListCmd_WithItemsAndTitles(t *testing.T) {
 	}
 }
 
-func TestModel_ThreadRenameCmd_NilSession(t *testing.T) {
+func nilSessionCmdMessage(t *testing.T, gen func(*Model) tea.Cmd) any {
+	t.Helper()
 	m := NewModel(nil)
-	cmd := m.threadRenameCmd("x")
+	cmd := gen(m)
 	if cmd == nil {
-		t.Fatal("threadRenameCmd returned nil")
+		t.Fatal("nil cmd")
 	}
-	msg := cmd()
+	return cmd()
+}
+
+func TestModel_ThreadRenameCmd_NilSession(t *testing.T) {
+	msg := nilSessionCmdMessage(t, func(m *Model) tea.Cmd { return m.threadRenameCmd("x") })
 	res, ok := msg.(threadRenameResult)
 	if !ok {
 		t.Fatalf("cmd() = %T", msg)
 	}
 	if res.err == nil {
 		t.Error("threadRenameResult err = nil for nil session")
+	}
+}
+
+func TestModel_StreamCmd_NoSession(t *testing.T) {
+	msg := nilSessionCmdMessage(t, func(m *Model) tea.Cmd { return m.streamCmd(testSampleWordHello) })
+	sr, ok := msg.(sendResult)
+	if !ok {
+		t.Fatalf("got %T", msg)
+	}
+	if sr.err == nil {
+		t.Fatal("expected error")
 	}
 }
 
@@ -640,7 +676,7 @@ func TestModel_ThreadCommand_Switch(t *testing.T) {
 
 func TestModel_ThreadCommand_NilSession(t *testing.T) {
 	m := NewModel(nil) // Session is nil
-	m.Input = "/thread new"
+	m.Input = testThreadNewInput
 	_, cmd := m.handleKey(tea.KeyMsg{Type: tea.KeyEnter})
 	if cmd != nil {
 		t.Errorf("handleKey(/thread new) with nil session returned cmd")
@@ -775,12 +811,60 @@ func TestModel_View_ContainsLandmarks(t *testing.T) {
 
 // TestModel_StreamCmd verifies that streamCmd starts a streaming turn, returning the first
 // delta or done event. On success the mock transport emits a single delta "reply" then Done.
+func TestModel_StreamCmd_AmendmentReplacesBuffer(t *testing.T) {
+	session := &chat.Session{Transport: &amendStreamTransport{}}
+	m := NewModel(session)
+	cmd := m.streamCmd(testSampleWordHello)
+	if cmd == nil {
+		t.Fatal("nil cmd")
+	}
+	start, ok := cmd().(streamStartMsg)
+	if !ok {
+		t.Fatalf("got %T", start)
+	}
+	m2, next := m.Update(start)
+	m = m2.(*Model)
+	if next == nil {
+		t.Fatal("nil next")
+	}
+	// Delta
+	d1 := next()
+	if _, ok := d1.(streamDeltaMsg); !ok {
+		t.Fatalf("first delta = %T", d1)
+	}
+	m3, next2 := m.Update(d1)
+	m = m3.(*Model)
+	if next2 == nil {
+		t.Fatal("nil cmd after delta")
+	}
+	// Amendment
+	d2 := next2()
+	am, ok := d2.(streamDeltaMsg)
+	if !ok || am.amendment != "redacted" {
+		t.Fatalf("amendment msg = %#v ok=%v", d2, ok)
+	}
+	m4, next3 := m.Update(d2)
+	m = m4.(*Model)
+	if !strings.HasSuffix(m.Scrollback[len(m.Scrollback)-1], "Assistant: redacted") {
+		t.Errorf("scrollback = %v", m.Scrollback)
+	}
+	if next3 == nil {
+		t.Fatal("nil after amendment")
+	}
+	done := next3()
+	m5, _ := m.Update(done)
+	mod := m5.(*Model)
+	if mod.Loading {
+		t.Error("still loading after done")
+	}
+}
+
 func TestModel_StreamCmd(t *testing.T) {
 	transport := &mockTransport{visible: "reply"}
 	session := &chat.Session{Transport: transport}
 	m := NewModel(session)
 	// streamCmd seeds the scrollback placeholder line.
-	cmd := m.streamCmd("hello")
+	cmd := m.streamCmd(testSampleWordHello)
 	if cmd == nil {
 		t.Fatal("streamCmd returned nil")
 	}
@@ -837,7 +921,7 @@ func TestModel_StreamCmd_TransportError(t *testing.T) {
 	transport := &mockTransport{err: errors.New("network error")}
 	session := &chat.Session{Transport: transport}
 	m := NewModel(session)
-	cmd := m.streamCmd("hello")
+	cmd := m.streamCmd(testSampleWordHello)
 	msg := cmd()
 	done, ok := msg.(streamDoneMsg)
 	if !ok {
@@ -868,7 +952,7 @@ func TestModel_Update_StreamDeltaMsg(t *testing.T) {
 	m.Loading = true
 
 	// Simulate a streamCh by doing a real streamCmd call.
-	cmd := m.streamCmd("hello")
+	cmd := m.streamCmd(testSampleWordHello)
 	if cmd == nil {
 		t.Fatal("streamCmd returned nil")
 	}
@@ -1005,6 +1089,55 @@ func TestModel_ReadNextDelta_ClosedChannel(t *testing.T) {
 	_, ok := msg.(streamDoneMsg)
 	if !ok {
 		t.Errorf("readNextDelta on closed channel = %T, want streamDoneMsg", msg)
+	}
+}
+
+// TestReadNextDelta_StreamPollTimeout covers the time.After branch when no delta is ready.
+func TestReadNextDelta_StreamPollTimeout(t *testing.T) {
+	ch := make(chan chat.ChatStreamDelta)
+	msg := readNextDelta(ch)
+	if _, ok := msg.(streamPollMsg); !ok {
+		t.Fatalf("got %T want streamPollMsg", msg)
+	}
+}
+
+func TestModel_Update_ExpectNilCmd_Variants(t *testing.T) {
+	tests := []struct {
+		name string
+		prep func(*Model)
+		msg  tea.Msg
+	}{
+		{
+			name: "proactiveTokenRefreshWhenLoading",
+			prep: func(m *Model) { m.Loading = true },
+			msg:  proactiveTokenRefreshMsg{},
+		},
+		{
+			name: "streamPollNilChannel",
+			prep: func(m *Model) { m.streamCh = nil },
+			msg:  streamPollMsg{},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			m := NewModel(&chat.Session{})
+			tt.prep(m)
+			upd, cmd := m.Update(tt.msg)
+			if cmd != nil {
+				t.Errorf("cmd = %v", cmd)
+			}
+			_ = upd.(*Model)
+		})
+	}
+}
+
+func TestPushInputHistory_CapsAtMax(t *testing.T) {
+	m := NewModel(&chat.Session{})
+	for i := 0; i < maxInputHistory+10; i++ {
+		m.pushInputHistory(fmt.Sprintf("line-%d", i))
+	}
+	if len(m.InputHistory) != maxInputHistory {
+		t.Errorf("len = %d want %d", len(m.InputHistory), maxInputHistory)
 	}
 }
 
@@ -2114,8 +2247,8 @@ func TestModel_ApplySlashResult_ExitModel(t *testing.T) {
 // TestModel_PushInputHistory_Duplicate verifies duplicate last item is not pushed.
 func TestModel_PushInputHistory_Duplicate(t *testing.T) {
 	m := NewModel(&chat.Session{})
-	m.pushInputHistory("hello")
-	m.pushInputHistory("hello")
+	m.pushInputHistory(testSampleWordHello)
+	m.pushInputHistory(testSampleWordHello)
 	if len(m.InputHistory) != 1 {
 		t.Errorf("InputHistory len = %d, want 1 (no duplicate)", len(m.InputHistory))
 	}
@@ -2194,7 +2327,7 @@ func TestModel_SlashConnect_ShowURL(t *testing.T) {
 func newHealthzServer(t *testing.T) *httptest.Server {
 	t.Helper()
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/healthz" {
+		if r.URL.Path == testHealthzPath {
 			w.WriteHeader(http.StatusOK)
 			_, _ = w.Write([]byte("ok"))
 		}
@@ -2220,6 +2353,70 @@ func TestModel_SlashConnect_UpdateURL(t *testing.T) {
 	if client.BaseURL != srv.URL {
 		t.Errorf("expected BaseURL=%s, got %q", srv.URL, client.BaseURL)
 	}
+}
+
+func TestModel_SlashConnect_UpdateURL_HealthWarning(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == testHealthzPath {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	t.Cleanup(srv.Close)
+	client := gateway.NewClient("http://old:1")
+	m := NewModel(&chat.Session{Client: client})
+	m.SetAuthProvider(&mockAuthProvider{gatewayURL: "http://old:1"})
+	msg := m.slashConnectCmd(srv.URL)()
+	res, ok := msg.(slashResultMsg)
+	if !ok {
+		t.Fatalf("got %T", msg)
+	}
+	found := false
+	for _, l := range res.lines {
+		if strings.Contains(l, "Warning") || strings.Contains(l, "health") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("expected health warning in lines: %v", res.lines)
+	}
+}
+
+func TestModel_HandleEnterKey_IgnoresWhenLoadingNonEmpty(t *testing.T) {
+	m := NewModel(&chat.Session{})
+	m.Loading = true
+	m.Input = testSampleWordHello
+	_, cmd := m.handleKey(tea.KeyMsg{Type: tea.KeyEnter})
+	if cmd != nil {
+		t.Fatalf("expected nil cmd, got %v", cmd)
+	}
+	if m.Input != testSampleWordHello {
+		t.Errorf("Input cleared: %q", m.Input)
+	}
+}
+
+func TestModel_SlashMenuOpen_NavigationYieldsNilCmd(t *testing.T) {
+	setup := func() *Model {
+		m := NewModel(&chat.Session{})
+		m.Input = testSlashThreadFilter
+		m.Width = 80
+		return m
+	}
+	t.Run("handleKeyCtrlUp", func(t *testing.T) {
+		_, cmd := setup().handleKey(tea.KeyMsg{Type: tea.KeyCtrlUp})
+		if cmd != nil {
+			t.Fatalf("expected nil cmd, got %v", cmd)
+		}
+	})
+	t.Run("updateKeyUp", func(t *testing.T) {
+		m := setup()
+		_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyUp})
+		if cmd != nil {
+			t.Errorf("slash menu nav cmd = %v", cmd)
+		}
+	})
 }
 
 func TestModel_SlashSetTuiPref(t *testing.T) {
@@ -2356,5 +2553,319 @@ func TestModel_SlashWhoami_Dispatch(t *testing.T) {
 	}
 	if !found {
 		t.Errorf("/whoami expected 'alice' in lines; got %v", res.lines)
+	}
+}
+
+func TestView_MainLayoutRendersScrollbackSlashMenuClipErr(t *testing.T) {
+	m := NewModel(&chat.Session{ProjectID: "p1", Model: "m1", CurrentThreadID: "thread-12345678"})
+	m.Scrollback = []string{"You: hello", "Assistant: world", scrollbackSystemLinePrefix + "meta"}
+	m.Input = testSlashThreadFilter
+	m.slashMenuSel = 0
+	m.ClipNote = "copied"
+	m.Err = "err"
+	m.Width = 80
+	m.Height = 24
+	v := m.View()
+	if v == "" || !strings.Contains(v, "hello") {
+		t.Fatalf("unexpected view: %q", truncate(v, 200))
+	}
+}
+
+func TestView_LoginOverlay(t *testing.T) {
+	m := NewModel(&chat.Session{})
+	m.ShowLoginForm = true
+	m.Width = 80
+	m.Height = 24
+	v := m.View()
+	if v == "" {
+		t.Fatal("empty login overlay")
+	}
+}
+
+func TestNavSlashMenuAndApplyCompletion(t *testing.T) {
+	m := NewModel(&chat.Session{})
+	m.Input = testSlashThreadFilter
+	m.slashMenuSel = 0
+	m.navSlashMenu(false)
+	m.navSlashMenu(true)
+	m.applySlashCompletion()
+	if !strings.HasPrefix(strings.TrimSpace(activeComposerLine(m.Input)), "/") {
+		t.Errorf("composer after completion: %q", m.Input)
+	}
+}
+
+func TestModel_Update_MouseClipClearStreamPoll(t *testing.T) {
+	m := NewModel(&chat.Session{})
+	m.Update(tea.MouseMsg{})
+	upd, _ := m.Update(clipNoteClearMsg{})
+	mod := upd.(*Model)
+	if mod.ClipNote != "" {
+		t.Fatalf("ClipNote = %q", mod.ClipNote)
+	}
+	m.streamCh = make(chan chat.ChatStreamDelta)
+	_, cmd := m.Update(streamPollMsg{})
+	if cmd == nil {
+		t.Fatal("expected stream poll cmd")
+	}
+}
+
+func TestModel_HandleKey_CtrlY(t *testing.T) {
+	m := NewModel(&chat.Session{})
+	_, cmd := m.handleKey(tea.KeyMsg{Type: tea.KeyCtrlY})
+	if cmd == nil {
+		t.Fatal("expected ctrl+y cmd")
+	}
+	m.Scrollback = []string{"Assistant: hello"}
+	_, cmd = m.handleKey(tea.KeyMsg{Type: tea.KeyCtrlY})
+	if cmd == nil {
+		t.Fatal("expected ctrl+y cmd with assistant text")
+	}
+}
+
+func TestView_PlainNoColorAndEmptyScrollback(t *testing.T) {
+	m := NewModel(&chat.Session{Plain: true})
+	m.Width = 80
+	m.Height = 24
+	_ = m.View()
+	m.Scrollback = []string{"You: hi", "Assistant: `inline`"}
+	m.Session.Plain = false
+	_ = m.View()
+	m.Session.NoColor = true
+	_ = m.View()
+	m.Scrollback = nil
+	_ = m.View()
+}
+
+// stubAuthProvider implements AuthProvider for tests (minimal).
+type stubAuthProvider struct {
+	refresh string
+}
+
+func (s *stubAuthProvider) Token() string                     { return "t" }
+func (s *stubAuthProvider) RefreshToken() string              { return s.refresh }
+func (s *stubAuthProvider) GatewayURL() string                { return "http://localhost" }
+func (s *stubAuthProvider) SetTokens(_, _ string)             {}
+func (s *stubAuthProvider) SetGatewayURL(_ string, _ bool)    {}
+func (s *stubAuthProvider) Save() error                       { return nil }
+func (s *stubAuthProvider) ShowThinkingByDefault() bool       { return false }
+func (s *stubAuthProvider) SetShowThinkingByDefault(_ bool)   {}
+func (s *stubAuthProvider) ShowToolOutputByDefault() bool     { return false }
+func (s *stubAuthProvider) SetShowToolOutputByDefault(_ bool) {}
+
+func TestModel_HandleProactiveTokenRefreshCmd(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/v1/auth/refresh" && r.Method == http.MethodPost {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`{"access_token":"new","refresh_token":"nr","expires_in":3600}`))
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	t.Cleanup(srv.Close)
+	cl := gateway.NewClient(srv.URL)
+	cl.SetToken("old")
+	m := NewModel(&chat.Session{Client: cl})
+	m.SetAuthProvider(&stubAuthProvider{refresh: "rt"})
+	_, cmd := m.handleProactiveTokenRefresh()
+	if cmd == nil {
+		t.Fatal("expected token refresh cmd")
+	}
+	msg := cmd()
+	res, ok := msg.(tokenRefreshResultMsg)
+	if !ok {
+		t.Fatalf("got %T", msg)
+	}
+	if res.err != nil || res.resp == nil || res.resp.AccessToken != "new" {
+		t.Fatalf("refresh result: %+v err=%v", res.resp, res.err)
+	}
+}
+
+func TestLoginFieldString_DefaultBranch(t *testing.T) {
+	m := NewModel(&chat.Session{})
+	m.LoginFocusedField = 42
+	if p := m.loginFieldString(); p != &m.LoginGatewayURL {
+		t.Fatal("default field")
+	}
+	if p := m.loginFieldCursorPtr(); p != &m.LoginGatewayCursor {
+		t.Fatal("default cursor ptr")
+	}
+}
+
+func TestModel_HandleLoginFormKey_MotionTabEsc(t *testing.T) {
+	m := NewModel(&chat.Session{})
+	m.ShowLoginForm = true
+	m.LoginGatewayURL = "http://gw"
+	m.LoginUsername = "hello world"
+	m.LoginFocusedField = 1
+	m.LoginUsernameCursor = len(m.LoginUsername)
+	_, _ = m.handleKey(tea.KeyMsg{Type: tea.KeyCtrlLeft})
+	_, _ = m.handleKey(tea.KeyMsg{Type: tea.KeyCtrlRight})
+	_, _ = m.handleKey(tea.KeyMsg{Type: tea.KeyLeft})
+	_, _ = m.handleKey(tea.KeyMsg{Type: tea.KeyRight})
+	m.LoginFocusedField = 2
+	m.LoginPassword = "secret"
+	m.LoginPasswordCursor = len(m.LoginPassword)
+	_, _ = m.handleKey(tea.KeyMsg{Type: tea.KeyCtrlLeft})
+	_, _ = m.handleKey(tea.KeyMsg{Type: tea.KeyTab})
+	_, _ = m.handleKey(tea.KeyMsg{Type: tea.KeyShiftTab})
+	_, _ = m.handleKey(tea.KeyMsg{Type: tea.KeyEsc})
+	if m.ShowLoginForm {
+		t.Fatal("esc should close login")
+	}
+}
+
+func TestModel_Update_TokenRefreshResult(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) }))
+	t.Cleanup(srv.Close)
+	m := NewModel(&chat.Session{Client: gateway.NewClient(srv.URL)})
+	m.SetAuthProvider(&stubAuthProvider{refresh: "r"})
+	upd, _ := m.Update(tokenRefreshResultMsg{resp: &userapi.LoginResponse{AccessToken: "na", RefreshToken: "nr"}})
+	mod := upd.(*Model)
+	if mod.Session.Client.Token != "na" {
+		t.Fatalf("token not updated: %q", mod.Session.Client.Token)
+	}
+}
+
+func TestModel_Update_TokenRefreshErrIgnored(t *testing.T) {
+	m := NewModel(&chat.Session{})
+	upd, _ := m.Update(tokenRefreshResultMsg{err: errors.New("fail")})
+	if upd.(*Model) == nil {
+		t.Fatal("expected model")
+	}
+}
+
+func TestModel_Update_UnknownMsg(t *testing.T) {
+	m := NewModel(&chat.Session{})
+	type unknownMsg struct{}
+	upd, cmd := m.Update(unknownMsg{})
+	if cmd != nil {
+		t.Fatalf("unexpected cmd %v", cmd)
+	}
+	_ = upd.(*Model)
+}
+
+func TestModel_UpdateForKey_ViewportPageKeys(t *testing.T) {
+	m := NewModel(&chat.Session{})
+	m.Scrollback = []string{"You: hi", "Assistant: there"}
+	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyPgUp})
+	_ = cmd
+	_, cmd2 := m.Update(tea.KeyMsg{Type: tea.KeyPgDown})
+	_ = cmd2
+}
+
+func TestModel_Update_MouseIgnoredWhenLoginForm(t *testing.T) {
+	m := NewModel(&chat.Session{})
+	m.ShowLoginForm = true
+	upd, cmd := m.Update(tea.MouseMsg{})
+	if cmd != nil {
+		t.Errorf("cmd = %v", cmd)
+	}
+	_ = upd.(*Model)
+}
+
+func TestModel_Update_ComposerUp_Multiline(t *testing.T) {
+	m := NewModel(&chat.Session{})
+	m.Input = "first\nsecond"
+	m.syncInputCursorEnd()
+	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyUp})
+	if cmd != nil {
+		t.Errorf("cmd = %v", cmd)
+	}
+	if strings.Count(m.Input, "\n") != 1 {
+		t.Fatalf("unexpected input: %q", m.Input)
+	}
+}
+
+func TestModel_Update_CopyClipboardErr(t *testing.T) {
+	m := NewModel(&chat.Session{})
+	upd, _ := m.Update(copyClipboardResultMsg{err: errors.New("no clipboard"), successDetail: ""})
+	mod := upd.(*Model)
+	if !strings.Contains(mod.ClipNote, "no clipboard") {
+		t.Errorf("ClipNote = %q", mod.ClipNote)
+	}
+}
+
+func TestModel_Update_CopyClipboardDefaultSuccessDetail(t *testing.T) {
+	m := NewModel(&chat.Session{})
+	upd, _ := m.Update(copyClipboardResultMsg{err: nil, successDetail: ""})
+	mod := upd.(*Model)
+	if mod.ClipNote != "Copied to clipboard." {
+		t.Errorf("ClipNote = %q", mod.ClipNote)
+	}
+}
+
+func TestModel_ThreadCommand_New_GatewayError(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == pathChatThreads && r.Method == http.MethodPost {
+			w.WriteHeader(http.StatusInternalServerError)
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+	client := gateway.NewClient(server.URL)
+	client.SetToken("tok")
+	session := chat.NewSession(client)
+	m := NewModel(session)
+	m.Input = testThreadNewInput
+	_, cmd := m.handleKey(tea.KeyMsg{Type: tea.KeyEnter})
+	if cmd != nil {
+		t.Errorf("expected nil cmd, got %v", cmd)
+	}
+	found := false
+	for _, line := range m.Scrollback {
+		if strings.Contains(line, "Error:") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("expected error in scrollback: %v", m.Scrollback)
+	}
+}
+
+func TestModel_SlashUnknownCommand(t *testing.T) {
+	m := NewModel(&chat.Session{})
+	m.Input = "/notacommand"
+	_, cmd := m.handleKey(tea.KeyMsg{Type: tea.KeyEnter})
+	if cmd == nil {
+		t.Fatal("expected cmd")
+	}
+	msg := cmd()
+	res, ok := msg.(slashResultMsg)
+	if !ok {
+		t.Fatalf("got %T", msg)
+	}
+	if len(res.lines) == 0 || !strings.Contains(res.lines[0], "Unknown") {
+		t.Errorf("lines = %v", res.lines)
+	}
+}
+
+func TestModel_HandleComposerTextInput_MultiRune(t *testing.T) {
+	m := NewModel(&chat.Session{})
+	_, _ = m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("ab")})
+	if m.Input != "ab" {
+		t.Errorf("Input = %q", m.Input)
+	}
+}
+
+func TestModel_View_LoginOverlayNarrow(t *testing.T) {
+	m := NewModel(&chat.Session{})
+	m.ShowLoginForm = true
+	m.Width = 24
+	m.Height = 12
+	m.LoginGatewayURL = "http://gw"
+	if v := m.View(); v == "" {
+		t.Fatal("empty view")
+	}
+}
+
+func TestLastAssistantPlain(t *testing.T) {
+	if lastAssistantPlain(nil) != "" || lastAssistantPlain([]string{"You: x"}) != "" {
+		t.Fatal("expected empty")
+	}
+	if got := lastAssistantPlain([]string{"meta", "Assistant: last"}); got != "last" {
+		t.Fatalf("got %q", got)
 	}
 }

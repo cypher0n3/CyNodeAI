@@ -18,16 +18,153 @@ func TestDefaultGatewayURL_MatchesSpec(t *testing.T) {
 	}
 }
 
-func TestLoad_DefaultPathError(t *testing.T) {
+func TestDefaultConfigPathError_LoadVariants(t *testing.T) {
 	old := defaultConfigPath
 	defer func() { defaultConfigPath = old }()
 	defaultConfigPath = func() (string, error) { return "", errors.New("injected") }
-	cfg, err := Load("")
+	tests := []struct {
+		name string
+		load func() (*Config, error)
+	}{
+		{"Load", func() (*Config, error) { return Load("") }},
+		{"LoadFileWithoutEnvOverrides", func() (*Config, error) { return LoadFileWithoutEnvOverrides("") }},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cfg, err := tt.load()
+			if err != nil {
+				t.Fatalf("%s: %v", tt.name, err)
+			}
+			if cfg.GatewayURL != DefaultGatewayURL {
+				t.Errorf("GatewayURL = %q, want default", cfg.GatewayURL)
+			}
+		})
+	}
+}
+
+func TestLoadFileWithoutEnvOverrides_EmptyPathUsesDefaultConfigFile(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.yaml")
+	if err := os.WriteFile(path, []byte("gateway_url: http://from-default:1\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	old := defaultConfigPath
+	defaultConfigPath = func() (string, error) { return path, nil }
+	defer func() { defaultConfigPath = old }()
+	cfg, err := LoadFileWithoutEnvOverrides("")
 	if err != nil {
-		t.Fatalf("Load: %v", err)
+		t.Fatalf("LoadFileWithoutEnvOverrides: %v", err)
+	}
+	if cfg.GatewayURL != "http://from-default:1" {
+		t.Errorf("GatewayURL = %q", cfg.GatewayURL)
+	}
+}
+
+func TestConfigFileHasLegacyTokenKeys(t *testing.T) {
+	if !configFileHasLegacyTokenKeys([]byte("token: x\n")) {
+		t.Error("expected token key")
+	}
+	if !configFileHasLegacyTokenKeys([]byte("refresh_token: z\n")) {
+		t.Error("expected refresh_token key")
+	}
+	if configFileHasLegacyTokenKeys([]byte("gateway_url: http://x\n")) {
+		t.Error("no legacy keys")
+	}
+	if configFileHasLegacyTokenKeys([]byte("not valid yaml [[\n")) {
+		t.Error("invalid yaml should be false")
+	}
+}
+
+func TestFinalizeAfterConfigFileRead_EmptyPath(t *testing.T) {
+	_ = os.Setenv("CYNORK_GATEWAY_URL", "http://from-env")
+	defer func() { _ = os.Unsetenv("CYNORK_GATEWAY_URL") }()
+	cfg := &Config{GatewayURL: DefaultGatewayURL}
+	if err := finalizeAfterConfigFileRead("", cfg, false); err != nil {
+		t.Fatal(err)
+	}
+	if cfg.GatewayURL != DefaultGatewayURL {
+		t.Errorf("without applyEnv, file gateway must stay default; got %q", cfg.GatewayURL)
+	}
+	if err := finalizeAfterConfigFileRead("", cfg, true); err != nil {
+		t.Fatal(err)
+	}
+	if cfg.GatewayURL != "http://from-env" {
+		t.Errorf("with applyEnv, expected env gateway; got %q", cfg.GatewayURL)
+	}
+}
+
+func TestFinalizeAfterConfigFileRead_WithFileAppliesTokenEnv(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "c.yaml")
+	if err := os.WriteFile(path, []byte("gateway_url: http://file\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	_ = os.Setenv("CYNORK_TOKEN", "env-token")
+	defer func() { _ = os.Unsetenv("CYNORK_TOKEN") }()
+	cfg := &Config{GatewayURL: "http://file"}
+	if err := finalizeAfterConfigFileRead(path, cfg, true); err != nil {
+		t.Fatal(err)
+	}
+	if cfg.Token != "env-token" {
+		t.Errorf("Token = %q, want env", cfg.Token)
+	}
+}
+
+func TestLoadFileWithoutEnvOverrides_MissingFile(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "missing.yaml")
+	cfg, err := LoadFileWithoutEnvOverrides(path)
+	if err != nil {
+		t.Fatalf("LoadFileWithoutEnvOverrides: %v", err)
 	}
 	if cfg.GatewayURL != DefaultGatewayURL {
 		t.Errorf("GatewayURL = %q, want default", cfg.GatewayURL)
+	}
+}
+
+func TestLoadFileWithoutEnvOverrides_LegacyTokenKeysStripped(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.yaml")
+	if err := os.WriteFile(path, []byte("gateway_url: http://legacy:8080\ntoken: secret\nrefresh_token: r\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := LoadFileWithoutEnvOverrides(path)
+	if err != nil {
+		t.Fatalf("LoadFileWithoutEnvOverrides: %v", err)
+	}
+	if cfg.GatewayURL != "http://legacy:8080" {
+		t.Errorf("GatewayURL = %q", cfg.GatewayURL)
+	}
+	if cfg.Token != "" || cfg.RefreshToken != "" {
+		t.Errorf("tokens must be cleared: token=%q refresh=%q", cfg.Token, cfg.RefreshToken)
+	}
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(raw), "token:") {
+		t.Errorf("legacy token keys should be stripped from file: %s", raw)
+	}
+}
+
+func TestLoadFileWithoutEnvOverrides_ReadPathNotFile(t *testing.T) {
+	_, err := LoadFileWithoutEnvOverrides(t.TempDir())
+	if err == nil {
+		t.Fatal("expected error when path is a directory")
+	}
+}
+
+func TestLoad_RemovesLegacySessionFile(t *testing.T) {
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "config.yaml")
+	sessionPath := filepath.Join(dir, legacySessionFileName)
+	if err := os.WriteFile(configPath, []byte("gateway_url: http://localhost\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(sessionPath, []byte("legacy"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Load(configPath); err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if _, err := os.Stat(sessionPath); !os.IsNotExist(err) {
+		t.Fatal("legacy session file should be removed after load")
 	}
 }
 
@@ -226,14 +363,26 @@ func TestLoad_FileReadError(t *testing.T) {
 	}
 }
 
-func TestLoad_InvalidYAML(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "config.yaml")
-	if err := os.WriteFile(path, []byte("not: [[[ yaml"), 0o600); err != nil {
-		t.Fatal(err)
+func TestLoad_InvalidYAML_Variants(t *testing.T) {
+	cases := []struct {
+		name string
+		body string
+		load func(string) (*Config, error)
+	}{
+		{"LoadFileWithoutEnvOverrides", "gateway_url: [\n", LoadFileWithoutEnvOverrides},
+		{"Load", "not: [[[ yaml", Load},
 	}
-	_, err := Load(path)
-	if err == nil {
-		t.Fatal("expected error for invalid yaml")
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "config.yaml")
+			if err := os.WriteFile(path, []byte(tc.body), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			_, err := tc.load(path)
+			if err == nil {
+				t.Fatal("expected parse error")
+			}
+		})
 	}
 }
 
@@ -320,4 +469,49 @@ func TestConfigDirAndPath_UserHomeDirFails(t *testing.T) {
 	if _, err := ConfigPath(); err == nil {
 		t.Fatal("ConfigPath: expected error when ConfigDir fails")
 	}
+}
+
+func TestStripLegacyTokenKeysFromConfigFile_ReadDenied(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.yaml")
+	if err := os.WriteFile(path, []byte("token: x\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(path, 0); err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = os.Chmod(path, 0o600) }()
+	err := stripLegacyTokenKeysFromConfigFile(path, &Config{GatewayURL: "http://localhost"})
+	if err == nil {
+		t.Fatal("expected error when config file is not readable")
+	}
+}
+
+func TestSave_RenameFails(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.yaml")
+	if err := os.Mkdir(path, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	err := Save(path, &Config{GatewayURL: "http://localhost"})
+	if err == nil {
+		t.Fatal("expected error when save path is a directory")
+	}
+}
+
+func TestRemoveLegacySessionFile_Explicit(t *testing.T) {
+	dir := t.TempDir()
+	configPath := filepath.Join(dir, "config.yaml")
+	sess := filepath.Join(dir, legacySessionFileName)
+	if err := os.WriteFile(sess, []byte("legacy"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	removeLegacySessionFile(configPath)
+	if _, err := os.Stat(sess); !os.IsNotExist(err) {
+		t.Fatal("expected legacy session file removed")
+	}
+}
+
+func TestRemoveLegacySessionFile_EmptyPath(t *testing.T) {
+	removeLegacySessionFile("")
 }

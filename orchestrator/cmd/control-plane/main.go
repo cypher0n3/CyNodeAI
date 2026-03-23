@@ -132,6 +132,11 @@ func runMainWithContext(ctx context.Context, store database.Store) int {
 	return 0
 }
 
+// registerMCPToolRoute registers POST /v1/mcp/tools/call on mux. Exposed for tests that assert the route exists.
+func registerMCPToolRoute(mux *http.ServeMux, store database.Store, logger *slog.Logger) {
+	mux.HandleFunc("POST /v1/mcp/tools/call", mcpgateway.ToolCallHandler(store, logger))
+}
+
 // run bootstraps admin, starts the HTTP server and dispatcher until ctx is canceled. Used by main and tests.
 func run(ctx context.Context, store database.Store, cfg *config.OrchestratorConfig, logger *slog.Logger) error {
 	if err := bootstrapAdminUser(ctx, store, cfg.BootstrapAdminPassword, logger); err != nil {
@@ -160,7 +165,7 @@ func run(ctx context.Context, store database.Store, cfg *config.OrchestratorConf
 	mux.Handle("POST /v1/nodes/capability", authMiddleware.RequireNodeAuth(http.HandlerFunc(nodeHandler.ReportCapability)))
 
 	// MCP tool calls share the control-plane database (P2-02 audit); do not run a separate mcp-gateway with its own DSN.
-	mux.HandleFunc("POST /v1/mcp/tools/call", mcpgateway.ToolCallHandler(store, logger))
+	registerMCPToolRoute(mux, store, logger)
 
 	mux.Handle("POST /v1/workflow/start", workflowAuth(http.HandlerFunc(workflowHandler.Start)))
 	mux.Handle("POST /v1/workflow/resume", workflowAuth(http.HandlerFunc(workflowHandler.Resume)))

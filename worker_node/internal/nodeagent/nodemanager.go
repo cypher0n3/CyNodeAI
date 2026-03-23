@@ -441,6 +441,21 @@ func maybeStartOllama(ctx context.Context, logger *slog.Logger, nodeConfig *node
 	return nil
 }
 
+func modelsMissingFromAvailable(models []string, avail map[string]bool) []string {
+	var missing []string
+	for _, want := range models {
+		w := strings.TrimSpace(want)
+		if w == "" {
+			continue
+		}
+		if avail[strings.ToLower(w)] {
+			continue
+		}
+		missing = append(missing, w)
+	}
+	return missing
+}
+
 // maybePullModels launches a background goroutine to pull orchestrator-directed models that are not
 // yet available on the inference backend. Uses inference_backend.models_to_ensure when non-empty;
 // otherwise falls back to selected_model only. The goroutine is detached (not tied to ctx) so a
@@ -462,17 +477,7 @@ func maybePullModels(ctx context.Context, logger *slog.Logger, nodeConfig *nodep
 	for _, m := range available {
 		avail[strings.ToLower(strings.TrimSpace(m))] = true
 	}
-	var missing []string
-	for _, want := range models {
-		w := strings.TrimSpace(want)
-		if w == "" {
-			continue
-		}
-		if avail[strings.ToLower(w)] {
-			continue
-		}
-		missing = append(missing, w)
-	}
+	missing := modelsMissingFromAvailable(models, avail)
 	if len(missing) == 0 {
 		return
 	}

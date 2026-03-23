@@ -78,7 +78,7 @@ func TestNewMCPClient_EnvPrecedence(t *testing.T) {
 
 func TestMCPClient_Call_EmptyURL(t *testing.T) {
 	c := &MCPClient{BaseURL: ""}
-	_, _, err := c.Call(context.Background(), "db.preference.get", nil)
+	_, _, err := c.Call(context.Background(), "preference.get", nil)
 	if err == nil {
 		t.Error("expected error for empty BaseURL")
 	}
@@ -102,7 +102,7 @@ func TestMCPClient_Call_Success(t *testing.T) {
 
 	c := NewMCPClient()
 	c.BaseURL = server.URL
-	body, code, err := c.Call(context.Background(), "db.preference.get", map[string]interface{}{})
+	body, code, err := c.Call(context.Background(), "preference.get", map[string]interface{}{})
 	if err != nil {
 		t.Fatalf("Call: %v", err)
 	}
@@ -122,7 +122,7 @@ func TestMCPClient_Call_NonOK(t *testing.T) {
 	defer server.Close()
 	c := NewMCPClient()
 	c.BaseURL = server.URL
-	body, code, err := c.Call(context.Background(), "db.preference.get", nil)
+	body, code, err := c.Call(context.Background(), "preference.get", nil)
 	if err != nil {
 		t.Fatalf("Call: %v", err)
 	}
@@ -156,7 +156,7 @@ func TestMCPClient_Call_ViaWorkerInternalProxy(t *testing.T) {
 
 	c := NewMCPClient()
 	c.BaseURL = server.URL + mcpclient.ProxyCallPath
-	body, code, err := c.Call(context.Background(), "db.preference.get", map[string]interface{}{})
+	body, code, err := c.Call(context.Background(), "preference.get", map[string]interface{}{})
 	if err != nil {
 		t.Fatalf("Call via proxy: %v", err)
 	}
@@ -174,7 +174,7 @@ func TestMCPClient_Call_ViaWorkerInternalProxy_NonOK(t *testing.T) {
 
 	c := NewMCPClient()
 	c.BaseURL = server.URL + mcpclient.ProxyCallPath
-	body, code, err := c.Call(context.Background(), "db.preference.get", map[string]interface{}{})
+	body, code, err := c.Call(context.Background(), "preference.get", map[string]interface{}{})
 	if err != nil {
 		t.Fatalf("Call via proxy: %v", err)
 	}
@@ -226,7 +226,7 @@ func TestMCPClient_Call_ViaWorkerInternalProxy_HTTPUnixSuccess(t *testing.T) {
 	c := NewMCPClient()
 	c.BaseURL = "http+unix://" + url.PathEscape(socketPath) + mcpclient.ProxyCallPath
 	c.HTTPClient = &http.Client{Timeout: 5 * time.Second}
-	body, code, err := c.Call(context.Background(), "db.preference.get", map[string]interface{}{})
+	body, code, err := c.Call(context.Background(), "preference.get", map[string]interface{}{})
 	if err != nil {
 		t.Fatalf("Call via http+unix proxy: %v", err)
 	}
@@ -270,7 +270,7 @@ func TestMCPClient_Call_ViaWorkerInternalProxy_InvalidProxyBody(t *testing.T) {
 	defer server.Close()
 	c := NewMCPClient()
 	c.BaseURL = server.URL + mcpclient.ProxyCallPath
-	_, _, err := c.Call(context.Background(), "db.preference.get", map[string]interface{}{})
+	_, _, err := c.Call(context.Background(), "preference.get", map[string]interface{}{})
 	if err == nil {
 		t.Fatal("expected base64 decode error")
 	}
@@ -279,7 +279,7 @@ func TestMCPClient_Call_ViaWorkerInternalProxy_InvalidProxyBody(t *testing.T) {
 func TestMCPClient_Call_ViaWorkerInternalProxy_InvalidHTTPUnixURL(t *testing.T) {
 	c := NewMCPClient()
 	c.BaseURL = "http+unix://bad" + mcpclient.ProxyCallPath
-	_, _, err := c.Call(context.Background(), "db.preference.get", map[string]interface{}{})
+	_, _, err := c.Call(context.Background(), "preference.get", map[string]interface{}{})
 	if err == nil {
 		t.Fatal("expected invalid http+unix URL error")
 	}

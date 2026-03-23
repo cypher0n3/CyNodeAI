@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 )
 
@@ -16,10 +17,16 @@ func TestMCPTool_NameAndDescription(t *testing.T) {
 		t.Error("Description() empty")
 	}
 }
+func TestMCPTool_Description_NoDbPrefix(t *testing.T) {
+	tool := NewMCPTool(&MCPClient{BaseURL: "http://localhost"})
+	if strings.Contains(tool.Description(), "db.") {
+		t.Fatal("MCP tool description must not advertise db.* names")
+	}
+}
 
 func TestMCPTool_Call_NoClient(t *testing.T) {
 	tool := NewMCPTool(nil)
-	out, err := tool.Call(context.Background(), `{"tool_name":"db.preference.get","arguments":{}}`)
+	out, err := tool.Call(context.Background(), `{"tool_name":"preference.get","arguments":{}}`)
 	if err != nil {
 		t.Fatalf("Call: %v", err)
 	}
@@ -30,7 +37,7 @@ func TestMCPTool_Call_NoClient(t *testing.T) {
 
 func TestMCPTool_Call_EmptyBaseURL(t *testing.T) {
 	tool := NewMCPTool(&MCPClient{BaseURL: ""})
-	out, err := tool.Call(context.Background(), `{"tool_name":"db.preference.get","arguments":{}}`)
+	out, err := tool.Call(context.Background(), `{"tool_name":"preference.get","arguments":{}}`)
 	if err != nil {
 		t.Fatalf("Call: %v", err)
 	}
@@ -56,7 +63,7 @@ func TestMCPTool_Call_Non200ReturnsBody(t *testing.T) {
 	client := NewMCPClient()
 	client.BaseURL = server.URL
 	tool := NewMCPTool(client)
-	out, err := tool.Call(context.Background(), `{"tool_name":"db.task.get","arguments":{}}`)
+	out, err := tool.Call(context.Background(), `{"tool_name":"task.get","arguments":{}}`)
 	if err != nil {
 		t.Fatalf("Call: %v", err)
 	}
@@ -75,7 +82,7 @@ func TestMCPTool_Call_Success(t *testing.T) {
 	client := NewMCPClient()
 	client.BaseURL = server.URL
 	tool := NewMCPTool(client)
-	out, err := tool.Call(context.Background(), `{"tool_name":"db.preference.get","arguments":{"key":"x"}}`)
+	out, err := tool.Call(context.Background(), `{"tool_name":"preference.get","arguments":{"key":"x"}}`)
 	if err != nil {
 		t.Fatalf("Call: %v", err)
 	}

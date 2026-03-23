@@ -172,6 +172,30 @@ func readNDJSONStreamWithCallbacks(ctx context.Context, body io.Reader, contentT
 	return scanner.Err()
 }
 
+func ndjsonIntField(raw map[string]json.RawMessage, key string, fn func(int) error) error {
+	n, ok := raw[key]
+	if !ok || fn == nil {
+		return nil
+	}
+	var v int
+	if json.Unmarshal(n, &v) != nil {
+		return nil
+	}
+	return fn(v)
+}
+
+func ndjsonStringField(raw map[string]json.RawMessage, key string, fn func(string) error) error {
+	d, ok := raw[key]
+	if !ok || fn == nil {
+		return nil
+	}
+	var s string
+	if json.Unmarshal(d, &s) != nil || s == "" {
+		return nil
+	}
+	return fn(s)
+}
+
 func processNDJSONLine(line []byte, cb PMAStreamCallbacks) error {
 	line = bytes.TrimSpace(line)
 	if len(line) == 0 {
@@ -181,28 +205,28 @@ func processNDJSONLine(line []byte, cb PMAStreamCallbacks) error {
 	if json.Unmarshal(line, &raw) != nil {
 		return nil
 	}
-	if n, ok := raw["iteration_start"]; ok && cb.OnIterationStart != nil {
-		var iter int
-		if json.Unmarshal(n, &iter) == nil {
-			if err := cb.OnIterationStart(iter); err != nil {
-				return err
-			}
+	if err := ndjsonIntField(raw, "iteration_start", func(iter int) error {
+		if cb.OnIterationStart == nil {
+			return nil
 		}
+		return cb.OnIterationStart(iter)
+	}); err != nil {
+		return err
 	}
-	if d, ok := raw["delta"]; ok && cb.OnDelta != nil {
-		var s string
-		if json.Unmarshal(d, &s) == nil && s != "" {
-			return cb.OnDelta(s)
+	if err := ndjsonStringField(raw, "delta", func(s string) error {
+		if cb.OnDelta == nil {
+			return nil
 		}
+		return cb.OnDelta(s)
+	}); err != nil {
+		return err
 	}
-	if th, ok := raw["thinking"]; ok && cb.OnThinking != nil {
-		var s string
-		if json.Unmarshal(th, &s) == nil && s != "" {
-			return cb.OnThinking(s)
+	return ndjsonStringField(raw, "thinking", func(s string) error {
+		if cb.OnThinking == nil {
+			return nil
 		}
-	}
-	// "done" and other keys are ignored; stream continues until body closes
-	return nil
+		return cb.OnThinking(s)
+	})
 }
 
 func callViaManagedProxyStreamWithCallbacks(ctx context.Context, client *http.Client, proxyURL string, handoffBody []byte, workerBearerToken string, cb PMAStreamCallbacks) error {

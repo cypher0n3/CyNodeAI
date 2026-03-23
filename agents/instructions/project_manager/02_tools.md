@@ -13,7 +13,7 @@ Tools with sandbox-only scope are NOT available to you.
 
 You MAY call only the following.
 
-- **db.*** - Tasks, jobs, preferences, routing metadata (PostgreSQL via MCP only).
+- **task.**, **job.**, **project.**, **preference.**, **system_setting.** - Resource-oriented MCP tools for tasks, jobs, preferences, projects, and settings (orchestrator-mediated; no `db.*` prefixes).
 - **node.list**, **node.get**, **node.refresh_config** - Node capabilities, status, config.
 - **sandbox.*** - create, exec, put_file, get_file, stream_logs, destroy; **sandbox.allowed_images.list** (always); **sandbox.allowed_images.add** only when system setting permits.
 - **artifact.put**, **artifact.get**, **artifact.list** - Task-scoped artifacts (task_id required).

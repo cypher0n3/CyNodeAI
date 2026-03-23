@@ -14,6 +14,11 @@ import (
 	"time"
 )
 
+const (
+	testToolNameTaskGet = "task.get"
+	testJSONOKTrue      = `{"ok":true}`
+)
+
 func TestClient_Call_DirectHTTP(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != ToolsCallPath {
@@ -24,22 +29,22 @@ func TestClient_Call_DirectHTTP(t *testing.T) {
 		if err := json.Unmarshal(b, &body); err != nil {
 			t.Fatal(err)
 		}
-		if body.ToolName != "task.get" {
+		if body.ToolName != testToolNameTaskGet {
 			t.Errorf("tool %s", body.ToolName)
 		}
-		_, _ = w.Write([]byte(`{"ok":true}`))
+		_, _ = w.Write([]byte(testJSONOKTrue))
 	}))
 	defer srv.Close()
 
 	c := &Client{BaseURL: srv.URL, HTTPClient: srv.Client()}
-	body, code, err := c.Call(context.Background(), "task.get", map[string]interface{}{"task_id": "x"})
+	body, code, err := c.Call(context.Background(), testToolNameTaskGet, map[string]interface{}{"task_id": "x"})
 	if err != nil {
 		t.Fatal(err)
 	}
 	if code != 200 {
 		t.Fatalf("code %d", code)
 	}
-	if string(body) != `{"ok":true}` {
+	if string(body) != testJSONOKTrue {
 		t.Fatalf("body %s", body)
 	}
 }
@@ -70,6 +75,31 @@ func TestNewSBAClient_PrefersSBAEnv(t *testing.T) {
 	c := NewSBAClient()
 	if c.BaseURL != "http://sba" {
 		t.Errorf("want SBA first: %q", c.BaseURL)
+	}
+}
+
+func TestNewSBAClient_URLFallbacks(t *testing.T) {
+	tests := []struct {
+		name    string
+		mcpGw   string
+		orchURL string
+		want    string
+	}{
+		{"prefers MCP_GATEWAY_URL when SBA env empty", "http://gw-only", "", "http://gw-only"},
+		{"falls back to ORCHESTRATOR_URL", "", "http://orch", "http://orch"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv(envSbaMcpGateway, "")
+			t.Setenv(envMcpGateway, tt.mcpGw)
+			t.Setenv(envOrchestratorMCPToolsBaseURL, "")
+			t.Setenv(envOrchestratorMCPGatewayBaseURL, "")
+			t.Setenv(envOrchestratorURL, tt.orchURL)
+			c := NewSBAClient()
+			if c.BaseURL != tt.want {
+				t.Errorf("BaseURL = %q, want %q", c.BaseURL, tt.want)
+			}
+		})
 	}
 }
 
@@ -108,7 +138,7 @@ func TestClient_Call_ViaProxyUnixSocket(t *testing.T) {
 
 	rawURL := "http+unix://" + url.PathEscape(sockPath) + ProxyCallPath
 	c := &Client{BaseURL: rawURL, HTTPClient: http.DefaultClient}
-	body, code, err := c.Call(context.Background(), "task.get", map[string]interface{}{"task_id": "x"})
+	body, code, err := c.Call(context.Background(), testToolNameTaskGet, map[string]interface{}{"task_id": "x"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -131,7 +161,7 @@ func TestClient_Call_ViaProxyHTTP(t *testing.T) {
 		}
 		raw, _ := base64.StdEncoding.DecodeString(env.BodyB64)
 		var inner CallRequest
-		if err := json.Unmarshal(raw, &inner); err != nil || inner.ToolName != "task.get" {
+		if err := json.Unmarshal(raw, &inner); err != nil || inner.ToolName != testToolNameTaskGet {
 			t.Fatalf("inner %s err=%v", raw, err)
 		}
 		resp := struct {
@@ -145,7 +175,7 @@ func TestClient_Call_ViaProxyHTTP(t *testing.T) {
 	defer srv.Close()
 
 	c := &Client{BaseURL: srv.URL + ProxyCallPath, HTTPClient: srv.Client()}
-	body, code, err := c.Call(context.Background(), "task.get", map[string]interface{}{"task_id": "x"})
+	body, code, err := c.Call(context.Background(), testToolNameTaskGet, map[string]interface{}{"task_id": "x"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -239,8 +269,8 @@ func TestDecodeMCPCallInput_ObjectAndStringArguments(t *testing.T) {
 	if err != nil || name != "help.list" || args["x"] != float64(1) {
 		t.Fatalf("object args: name=%q args=%v err=%v", name, args, err)
 	}
-	name, args, err = DecodeMCPCallInput(`{"tool_name":"task.get","arguments":"{\"task_id\":\"abc\"}"}`)
-	if err != nil || name != "task.get" || args["task_id"] != "abc" {
+	name, args, err = DecodeMCPCallInput(`{"tool_name":"` + testToolNameTaskGet + `","arguments":"{\"task_id\":\"abc\"}"}`)
+	if err != nil || name != testToolNameTaskGet || args["task_id"] != "abc" {
 		t.Fatalf("string args: name=%q args=%v err=%v", name, args, err)
 	}
 	name, args, err = DecodeMCPCallInput(`{"tool_name":"x","arguments":""}`)
@@ -259,25 +289,25 @@ func TestLangchainTool_NameDescriptionAndSuccess(t *testing.T) {
 		if err := json.Unmarshal(b, &body); err != nil {
 			t.Fatal(err)
 		}
-		if body.ToolName != "task.get" {
+		if body.ToolName != testToolNameTaskGet {
 			t.Errorf("tool %s", body.ToolName)
 		}
 		if body.Arguments["task_id"] != "x" {
 			t.Errorf("args %+v", body.Arguments)
 		}
-		_, _ = w.Write([]byte(`{"ok":true}`))
+		_, _ = w.Write([]byte(testJSONOKTrue))
 	}))
 	defer srv.Close()
 	lt := NewLangchainTool(&Client{BaseURL: srv.URL, HTTPClient: srv.Client()}, "desc", "")
 	if lt.Name() != "mcp_call" || lt.Description() != "desc" {
 		t.Errorf("name/desc")
 	}
-	out, err := lt.Call(context.Background(), `{"tool_name":"task.get","arguments" : {"task_id":"x"}}`)
-	if err != nil || out != `{"ok":true}` {
+	out, err := lt.Call(context.Background(), `{"tool_name":"`+testToolNameTaskGet+`","arguments" : {"task_id":"x"}}`)
+	if err != nil || out != testJSONOKTrue {
 		t.Fatalf("success: out=%q err=%v", out, err)
 	}
-	out, err = lt.Call(context.Background(), `{"tool_name":"task.get","arguments":"{\"task_id\":\"x\"}"}`)
-	if err != nil || out != `{"ok":true}` {
+	out, err = lt.Call(context.Background(), `{"tool_name":"`+testToolNameTaskGet+`","arguments":"{\"task_id\":\"x\"}"}`)
+	if err != nil || out != testJSONOKTrue {
 		t.Fatalf("string args: out=%q err=%v", out, err)
 	}
 }

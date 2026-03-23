@@ -150,7 +150,17 @@ func TestMain(m *testing.M) {
 	hardTimeout := testcontainersSetupTimeout + 15*time.Second
 	resultCh := make(chan tcResult, 1)
 	go func() {
-		c, ok := runMCPGatewayTestcontainersSetup(context.Background())
+		var c *postgres.PostgresContainer
+		var ok bool
+		func() {
+			defer func() {
+				if r := recover(); r != nil {
+					_, _ = os.Stderr.WriteString("[mcp-gateway/testcontainers] setup panic: " + fmt.Sprint(r) + "\n")
+					c, ok = nil, false
+				}
+			}()
+			c, ok = runMCPGatewayTestcontainersSetup(context.Background())
+		}()
 		resultCh <- tcResult{container: c, ok: ok}
 	}()
 	var ok bool

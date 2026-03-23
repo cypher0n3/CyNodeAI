@@ -43,7 +43,8 @@ When you run `just setup-dev start`, `full-demo`, or `restart`, the following ru
 
 1. **Build binaries** - `just build-dev` (orchestrator, worker_node, cynork, agents).
 2. **Compose up (orchestrator stack)** - Uses `orchestrator/docker-compose.yml`.
-   Compose stack: postgres, control-plane, user-gateway, api-egress, and **`mcp-gateway` (deprecated; port 12083)** until removed from compose.
+   Compose stack: postgres, control-plane, user-gateway, api-egress.
+    The deprecated standalone **`mcp-gateway`** (port 12083) is available only with compose profile **`legacy-mcp-gateway`**; MCP tool calls should use the **control-plane** (12082) `POST /v1/mcp/tools/call` route.
    MCP tool routes belong on the **control-plane**; drop **`mcp-gateway`** when [`orchestrator/docker-compose.yml`](../orchestrator/docker-compose.yml) is next edited (see [`docs/tech_specs/ports_and_endpoints.md`](../docs/tech_specs/ports_and_endpoints.md)).
    **ollama** is the only profile (use `--ollama-in-stack` or `SETUP_DEV_OLLAMA_IN_STACK=1`).
    **AI agents must NOT use** these flags; they bypass the node-manager path and invalidate GPU variant E2E (e2e_0800).

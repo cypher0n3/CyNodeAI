@@ -94,10 +94,9 @@ install-markdownlint:
 install-gherkin-lint:
     #!/usr/bin/env bash
     set -e
-    if command -v gherkin-lint >/dev/null 2>&1; then echo "gherkin-lint already installed"; exit 0; fi
-    command -v npm >/dev/null 2>&1 || { echo "Error: npm not found."; exit 1; }
-    npm install -g gherkin-lint
-    echo "Installed: gherkin-lint"
+    command -v npx >/dev/null 2>&1 || { echo "Error: npx not found (install Node.js)."; exit 1; }
+    npx --yes gherkin-lint --version >/dev/null
+    echo "gherkin-lint OK (runs via npx; no global npm install)"
 
 validate-doc-links:
     #!/usr/bin/env bash
@@ -139,13 +138,14 @@ check-e2e-requirements-traces:
     trap 'popd >/dev/null 2>/dev/null || true' EXIT
     python3 .ci_scripts/check_e2e_requirements_traces.py
 
-lint-gherkin: install-gherkin-lint
+lint-gherkin:
     #!/usr/bin/env bash
     set -e
     root="$(cd "{{ root_dir }}" && pwd)"
     pushd "$root" >/dev/null
     trap 'popd >/dev/null 2>/dev/null || true' EXIT
-    gherkin-lint features/
+    command -v npx >/dev/null 2>&1 || { echo "Error: npx not found."; exit 1; }
+    npx --yes gherkin-lint features/
 
 check-tech-specs *ARGS:
     #!/usr/bin/env bash
@@ -173,9 +173,9 @@ lint-containerfiles:
         if command -v hadolint >/dev/null 2>&1; then
           hadolint "$root/$f"
         elif command -v podman >/dev/null 2>&1; then
-          podman run --rm -v "$root:/lint:ro" -w /lint hadolint/hadolint:latest-alpine hadolint "/lint/$f"
+          podman run --rm -v "$root:/lint:ro" -w /lint docker.io/hadolint/hadolint:latest-alpine hadolint "/lint/$f"
         elif command -v docker >/dev/null 2>&1; then
-          docker run --rm -v "$root:/lint:ro" -w /lint hadolint/hadolint:latest-alpine hadolint "/lint/$f"
+          docker run --rm -v "$root:/lint:ro" -w /lint docker.io/hadolint/hadolint:latest-alpine hadolint "/lint/$f"
         else
           echo "hadolint not found; install hadolint or podman/docker for container fallback" >&2
           exit 1
@@ -189,7 +189,22 @@ lint-md *PATHS:
     root="$(cd "{{ root_dir }}" && pwd)"
     pushd "$root" >/dev/null
     trap 'popd >/dev/null 2>/dev/null || true' EXIT
-    if [ -z "{{ PATHS }}" ]; then markdownlint-cli2 --fix '**/*.md'; else markdownlint-cli2 --fix {{ PATHS }}; fi
+    if [ -z "{{ PATHS }}" ]; then
+      markdownlint-cli2 --fix \
+        '**/*.md' \
+        '!.venv/**' \
+        '!.github/**' \
+        '!.pytest_cache/**' \
+        '!**/node_modules/**' \
+        '!tmp/**' \
+        '!**/tmp/**' \
+        '!**/*.plan.md' \
+        '!.cursor/**' \
+        '!.markdownlint-repo/**' \
+        '!.markdownlint-rules/**'
+    else
+      markdownlint-cli2 --fix {{ PATHS }}
+    fi
 
 go-fmt: install-go
     #!/usr/bin/env bash

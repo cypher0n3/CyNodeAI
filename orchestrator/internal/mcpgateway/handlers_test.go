@@ -53,7 +53,7 @@ func TestStrArg_NilArgs(t *testing.T) {
 }
 func TestToolCallHandler_StoreNil(t *testing.T) {
 	handler := ToolCallHandler(nil, slog.Default())
-	req := httptest.NewRequest(http.MethodPost, "/v1/mcp/tools/call", bytes.NewReader([]byte(`{"tool_name":"db.preference.get"}`)))
+	req := httptest.NewRequest(http.MethodPost, "/v1/mcp/tools/call", bytes.NewReader([]byte(`{"tool_name":"preference.get"}`)))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	handler(rec, req)
@@ -137,16 +137,6 @@ func TestToolCallHandler_EmptyToolName(t *testing.T) {
 	callToolHandlerPOST(t, `{"tool_name":""}`, http.StatusNotImplemented)
 }
 
-func TestToolCallHandler_MethodNotPost(t *testing.T) {
-	handler := ToolCallHandler(testutil.NewMockDB(), slog.Default())
-	req := httptest.NewRequest(http.MethodGet, "/v1/mcp/tools/call", http.NoBody)
-	rec := httptest.NewRecorder()
-	handler(rec, req)
-	if rec.Code != http.StatusMethodNotAllowed {
-		t.Errorf("got status %d", rec.Code)
-	}
-}
-
 func TestToolCallHandler_StoreSet_AuditWriteFails(t *testing.T) {
 	mock := testutil.NewMockDB()
 	mock.ForceError = errors.New("db error")
@@ -154,42 +144,42 @@ func TestToolCallHandler_StoreSet_AuditWriteFails(t *testing.T) {
 }
 
 func TestToolCallHandler_PreferenceGet_NotFound(t *testing.T) {
-	callToolHandlerPOST(t, `{"tool_name":"db.preference.get","arguments":{"scope_type":"system","key":"missing"}}`, http.StatusNotFound)
+	callToolHandlerPOST(t, `{"tool_name":"preference.get","arguments":{"scope_type":"system","key":"missing"}}`, http.StatusNotFound)
 }
 
 func TestToolCallHandler_PreferenceGet_BadArgs(t *testing.T) {
-	callToolHandlerPOST(t, `{"tool_name":"db.preference.get"}`, http.StatusBadRequest)
-	callToolHandlerPOST(t, `{"tool_name":"db.preference.get","arguments":{"scope_type":"system"}}`, http.StatusBadRequest)
+	callToolHandlerPOST(t, `{"tool_name":"preference.get"}`, http.StatusBadRequest)
+	callToolHandlerPOST(t, `{"tool_name":"preference.get","arguments":{"scope_type":"system"}}`, http.StatusBadRequest)
 }
 
 func TestToolCallHandler_PreferenceGet_ScopeIDRequired(t *testing.T) {
-	callToolHandlerPOST(t, `{"tool_name":"db.preference.get","arguments":{"scope_type":"user","key":"k"}}`, http.StatusBadRequest)
+	callToolHandlerPOST(t, `{"tool_name":"preference.get","arguments":{"scope_type":"user","key":"k"}}`, http.StatusBadRequest)
 }
 
 func TestToolCallHandler_PreferenceList_ScopeIDRequired(t *testing.T) {
-	callToolHandlerPOST(t, `{"tool_name":"db.preference.list","arguments":{"scope_type":"user"}}`, http.StatusBadRequest)
+	callToolHandlerPOST(t, `{"tool_name":"preference.list","arguments":{"scope_type":"user"}}`, http.StatusBadRequest)
 }
 
 func TestToolCallHandler_PreferenceList_LimitZero(t *testing.T) {
-	callToolHandlerPOST(t, `{"tool_name":"db.preference.list","arguments":{"scope_type":"system","limit":0}}`, http.StatusOK)
+	callToolHandlerPOST(t, `{"tool_name":"preference.list","arguments":{"scope_type":"system","limit":0}}`, http.StatusOK)
 }
 
 func TestToolCallHandler_PreferenceList_Empty(t *testing.T) {
-	callToolHandlerPOST(t, `{"tool_name":"db.preference.list","arguments":{"scope_type":"system"}}`, http.StatusOK)
+	callToolHandlerPOST(t, `{"tool_name":"preference.list","arguments":{"scope_type":"system"}}`, http.StatusOK)
 }
 
 func TestToolCallHandler_PreferenceList_WithLimitAndCursor(t *testing.T) {
-	callToolHandlerPOST(t, `{"tool_name":"db.preference.list","arguments":{"scope_type":"system","limit":5,"cursor":"0"}}`, http.StatusOK)
+	callToolHandlerPOST(t, `{"tool_name":"preference.list","arguments":{"scope_type":"system","limit":5,"cursor":"0"}}`, http.StatusOK)
 }
 
 func TestToolCallHandler_PreferenceEffective_BadArgs(t *testing.T) {
-	callToolHandlerPOST(t, `{"tool_name":"db.preference.effective"}`, http.StatusBadRequest)
+	callToolHandlerPOST(t, `{"tool_name":"preference.effective"}`, http.StatusBadRequest)
 }
 
 func TestToolCallHandler_DenyAuditWriteFails(t *testing.T) {
 	mock := testutil.NewMockDB()
 	mock.ForceError = errors.New("audit write failed")
-	callToolHandlerWithStore(t, mock, `{"tool_name":"db.preference.effective"}`, http.StatusInternalServerError)
+	callToolHandlerWithStore(t, mock, `{"tool_name":"preference.effective"}`, http.StatusInternalServerError)
 }
 
 func TestValidateRequiredScopedIds(t *testing.T) {
@@ -199,14 +189,14 @@ func TestValidateRequiredScopedIds(t *testing.T) {
 		args     map[string]interface{}
 		want     string
 	}{
-		{"effective missing task_id", "db.preference.effective", nil, "task_id required"},
-		{"effective empty args", "db.preference.effective", map[string]interface{}{}, "task_id required"},
-		{"effective invalid task_id", "db.preference.effective", map[string]interface{}{"task_id": "not-a-uuid"}, "task_id required"},
-		{"effective has task_id", "db.preference.effective", map[string]interface{}{"task_id": uuid.New().String()}, ""},
-		{"get no scoped ids required", "db.preference.get", map[string]interface{}{"scope_type": "system", "key": "k"}, ""},
-		{"list no scoped ids required", "db.preference.list", map[string]interface{}{"scope_type": "system"}, ""},
-		{"task.get missing task_id", "db.task.get", map[string]interface{}{}, "task_id required"},
-		{"task.get has task_id", "db.task.get", map[string]interface{}{"task_id": uuid.New().String()}, ""},
+		{"effective missing task_id", "preference.effective", nil, "task_id required"},
+		{"effective empty args", "preference.effective", map[string]interface{}{}, "task_id required"},
+		{"effective invalid task_id", "preference.effective", map[string]interface{}{"task_id": "not-a-uuid"}, "task_id required"},
+		{"effective has task_id", "preference.effective", map[string]interface{}{"task_id": uuid.New().String()}, ""},
+		{"get no scoped ids required", "preference.get", map[string]interface{}{"scope_type": "system", "key": "k"}, ""},
+		{"list no scoped ids required", "preference.list", map[string]interface{}{"scope_type": "system"}, ""},
+		{"task.get missing task_id", "task.get", map[string]interface{}{}, "task_id required"},
+		{"task.get has task_id", "task.get", map[string]interface{}{"task_id": uuid.New().String()}, ""},
 		{"task.get alias missing task_id", "task.get", map[string]interface{}{}, "task_id required"},
 		{"task.list missing user_id", "task.list", map[string]interface{}{}, "user_id required"},
 		{"task.list has user_id", "task.list", map[string]interface{}{"user_id": uuid.New().String()}, ""},
@@ -214,8 +204,8 @@ func TestValidateRequiredScopedIds(t *testing.T) {
 		{"help.get missing task_id", "help.get", map[string]interface{}{}, "task_id required"},
 		{"project.list missing user_id", "project.list", map[string]interface{}{}, "user_id required"},
 		{"project.get missing user_id", "project.get", map[string]interface{}{"project_id": uuid.New().String()}, "user_id required"},
-		{"job.get missing job_id", "db.job.get", map[string]interface{}{}, "job_id required"},
-		{"job.get has job_id", "db.job.get", map[string]interface{}{"job_id": uuid.New().String()}, ""},
+		{"job.get missing job_id", "job.get", map[string]interface{}{}, "job_id required"},
+		{"job.get has job_id", "job.get", map[string]interface{}{"job_id": uuid.New().String()}, ""},
 		{"artifact.get missing task_id", "artifact.get", map[string]interface{}{"path": "p"}, "task_id required"},
 		{"artifact.get has task_id and path", "artifact.get", map[string]interface{}{"task_id": uuid.New().String(), "path": "out/x"}, ""},
 		{"unknown tool", "other.tool", nil, ""},
@@ -247,7 +237,7 @@ func TestToolCallHandler_PreferenceList_UserScope(t *testing.T) {
 		UpdatedAt: time.Now().UTC(),
 	})
 	handler := ToolCallHandler(mock, slog.Default())
-	body := `{"tool_name":"db.preference.list","arguments":{"scope_type":"user","scope_id":"` + uid.String() + `"}}`
+	body := `{"tool_name":"preference.list","arguments":{"scope_type":"user","scope_id":"` + uid.String() + `"}}`
 	req := httptest.NewRequest(http.MethodPost, "/v1/mcp/tools/call", bytes.NewReader([]byte(body)))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
@@ -272,7 +262,7 @@ func TestToolCallHandler_PreferenceGet_Found(t *testing.T) {
 		ID:        uuid.New(),
 		UpdatedAt: time.Now().UTC(),
 	})
-	code, respBody := callToolHandlerWithStoreAndBody(t, mock, `{"tool_name":"db.preference.get","arguments":{"scope_type":"system","key":"a.key"}}`)
+	code, respBody := callToolHandlerWithStoreAndBody(t, mock, `{"tool_name":"preference.get","arguments":{"scope_type":"system","key":"a.key"}}`)
 	if code != http.StatusOK {
 		t.Fatalf("got status %d", code)
 	}
@@ -286,7 +276,7 @@ func TestToolCallHandler_PreferenceGet_Found(t *testing.T) {
 }
 
 func TestToolCallHandler_PreferenceList_ScopeTypeRequired(t *testing.T) {
-	callToolHandlerPOST(t, `{"tool_name":"db.preference.list","arguments":{}}`, http.StatusBadRequest)
+	callToolHandlerPOST(t, `{"tool_name":"preference.list","arguments":{}}`, http.StatusBadRequest)
 }
 
 func TestToolCallHandler_PreferenceEffective_Success(t *testing.T) {
@@ -304,7 +294,7 @@ func TestToolCallHandler_PreferenceEffective_Success(t *testing.T) {
 		ID:        uuid.New(),
 		UpdatedAt: time.Now().UTC(),
 	})
-	code, respBody := callToolHandlerWithStoreAndBody(t, mock, `{"tool_name":"db.preference.effective","arguments":{"task_id":"`+task.ID.String()+`"}}`)
+	code, respBody := callToolHandlerWithStoreAndBody(t, mock, `{"tool_name":"preference.effective","arguments":{"task_id":"`+task.ID.String()+`"}}`)
 	if code != http.StatusOK {
 		t.Fatalf("got status %d", code)
 	}
@@ -322,26 +312,26 @@ func TestToolCallHandler_PreferenceEffective_Success(t *testing.T) {
 func TestToolCallHandler_PreferenceGet_InternalError(t *testing.T) {
 	mock := testutil.NewMockDB()
 	mock.GetPreferenceErr = errors.New("db error")
-	callToolHandlerWithStore(t, mock, `{"tool_name":"db.preference.get","arguments":{"scope_type":"system","key":"k"}}`, http.StatusInternalServerError)
+	callToolHandlerWithStore(t, mock, `{"tool_name":"preference.get","arguments":{"scope_type":"system","key":"k"}}`, http.StatusInternalServerError)
 }
 
 func TestToolCallHandler_PreferenceList_InternalError(t *testing.T) {
 	mock := testutil.NewMockDB()
 	mock.ListPreferencesErr = errors.New("db error")
-	callToolHandlerWithStore(t, mock, `{"tool_name":"db.preference.list","arguments":{"scope_type":"system"}}`, http.StatusInternalServerError)
+	callToolHandlerWithStore(t, mock, `{"tool_name":"preference.list","arguments":{"scope_type":"system"}}`, http.StatusInternalServerError)
 }
 
 func TestToolCallHandler_PreferenceEffective_InternalError(t *testing.T) {
 	mock := testutil.NewMockDB()
 	task, _ := mock.CreateTask(context.Background(), nil, "p", nil)
 	mock.GetEffectivePreferencesForTaskErr = errors.New("db error")
-	body := `{"tool_name":"db.preference.effective","arguments":{"task_id":"` + task.ID.String() + `"}}`
+	body := `{"tool_name":"preference.effective","arguments":{"task_id":"` + task.ID.String() + `"}}`
 	callToolHandlerWithStore(t, mock, body, http.StatusInternalServerError)
 }
 
 func TestToolCallHandler_PreferenceCreate_Success(t *testing.T) {
 	mock := testutil.NewMockDB()
-	body := `{"tool_name":"db.preference.create","arguments":{"scope_type":"system","key":"new.key","value":"\"v\"","value_type":"string"}}`
+	body := `{"tool_name":"preference.create","arguments":{"scope_type":"system","key":"new.key","value":"\"v\"","value_type":"string"}}`
 	callToolHandlerWithStore(t, mock, body, http.StatusOK)
 	if len(mock.PreferenceEntries) != 1 || mock.PreferenceEntries[0].Key != "new.key" {
 		t.Errorf("expected one preference new.key, got %d entries", len(mock.PreferenceEntries))
@@ -350,20 +340,20 @@ func TestToolCallHandler_PreferenceCreate_Success(t *testing.T) {
 
 func TestToolCallHandler_PreferenceCreate_Conflict(t *testing.T) {
 	mock := mockWithSystemPreference(t, "exists")
-	body := `{"tool_name":"db.preference.create","arguments":{"scope_type":"system","key":"exists","value":"\"x\"","value_type":"string"}}`
+	body := `{"tool_name":"preference.create","arguments":{"scope_type":"system","key":"exists","value":"\"x\"","value_type":"string"}}`
 	callToolHandlerWithStore(t, mock, body, http.StatusConflict)
 }
 
 func TestToolCallHandler_PreferenceCreate_InternalError(t *testing.T) {
 	mock := testutil.NewMockDB()
 	mock.CreatePreferenceErr = errors.New("db error")
-	body := `{"tool_name":"db.preference.create","arguments":{"scope_type":"system","key":"k","value":"\"v\"","value_type":"string"}}`
+	body := `{"tool_name":"preference.create","arguments":{"scope_type":"system","key":"k","value":"\"v\"","value_type":"string"}}`
 	callToolHandlerWithStore(t, mock, body, http.StatusInternalServerError)
 }
 
 func TestToolCallHandler_PreferenceList_WithEntriesAndKeyPrefix(t *testing.T) {
 	mock := mockWithSystemPreference(t, "pref.a.key")
-	code, body := callToolHandlerWithStoreAndBody(t, mock, `{"tool_name":"db.preference.list","arguments":{"scope_type":"system","key_prefix":"pref.","limit":5}}`)
+	code, body := callToolHandlerWithStoreAndBody(t, mock, `{"tool_name":"preference.list","arguments":{"scope_type":"system","key_prefix":"pref.","limit":5}}`)
 	if code != http.StatusOK {
 		t.Fatalf("got status %d", code)
 	}
@@ -380,13 +370,13 @@ func TestToolCallHandler_PreferenceList_WithEntriesAndKeyPrefix(t *testing.T) {
 }
 
 func TestToolCallHandler_PreferenceCreate_BadArgs(t *testing.T) {
-	callToolHandlerPOST(t, `{"tool_name":"db.preference.create","arguments":{"scope_type":"system","key":"k"}}`, http.StatusBadRequest)
-	callToolHandlerPOST(t, `{"tool_name":"db.preference.create","arguments":{"scope_type":"user","key":"k","value":"\"v\"","value_type":"string"}}`, http.StatusBadRequest)
+	callToolHandlerPOST(t, `{"tool_name":"preference.create","arguments":{"scope_type":"system","key":"k"}}`, http.StatusBadRequest)
+	callToolHandlerPOST(t, `{"tool_name":"preference.create","arguments":{"scope_type":"user","key":"k","value":"\"v\"","value_type":"string"}}`, http.StatusBadRequest)
 }
 
 func TestToolCallHandler_PreferenceUpdate_Success(t *testing.T) {
 	mock := mockWithSystemPreference(t, "up.key")
-	body := `{"tool_name":"db.preference.update","arguments":{"scope_type":"system","key":"up.key","value":"\"new\"","value_type":"string"}}`
+	body := `{"tool_name":"preference.update","arguments":{"scope_type":"system","key":"up.key","value":"\"new\"","value_type":"string"}}`
 	callToolHandlerWithStore(t, mock, body, http.StatusOK)
 	if len(mock.PreferenceEntries) != 1 || *mock.PreferenceEntries[0].Value != `"new"` || mock.PreferenceEntries[0].Version != 2 {
 		t.Errorf("expected updated value and version 2, got %+v", mock.PreferenceEntries[0])
@@ -395,7 +385,7 @@ func TestToolCallHandler_PreferenceUpdate_Success(t *testing.T) {
 
 func TestToolCallHandler_PreferenceUpdate_SuccessWithExpectedVersion(t *testing.T) {
 	mock := mockWithSystemPreference(t, "ver.key")
-	body := `{"tool_name":"db.preference.update","arguments":{"scope_type":"system","key":"ver.key","value":"\"v2\"","value_type":"string","expected_version":1}}`
+	body := `{"tool_name":"preference.update","arguments":{"scope_type":"system","key":"ver.key","value":"\"v2\"","value_type":"string","expected_version":1}}`
 	code, respBody := callToolHandlerWithStoreAndBody(t, mock, body)
 	if code != http.StatusOK {
 		t.Fatalf("got status %d", code)
@@ -412,7 +402,7 @@ func TestToolCallHandler_PreferenceUpdate_SuccessWithExpectedVersion(t *testing.
 func TestToolCallHandler_PreferenceDelete_WithExpectedVersion(t *testing.T) {
 	mock := mockWithSystemPreference(t, "delver.key")
 	mock.PreferenceEntries[0].Version = 2
-	body := `{"tool_name":"db.preference.delete","arguments":{"scope_type":"system","key":"delver.key","expected_version":2}}`
+	body := `{"tool_name":"preference.delete","arguments":{"scope_type":"system","key":"delver.key","expected_version":2}}`
 	callToolHandlerWithStore(t, mock, body, http.StatusOK)
 	if len(mock.PreferenceEntries) != 0 {
 		t.Errorf("expected preference deleted, got %d entries", len(mock.PreferenceEntries))
@@ -421,7 +411,7 @@ func TestToolCallHandler_PreferenceDelete_WithExpectedVersion(t *testing.T) {
 
 func TestToolCallHandler_PreferenceUpdate_WithReasonAndUpdatedBy(t *testing.T) {
 	mock := mockWithSystemPreference(t, "reason.key")
-	body := `{"tool_name":"db.preference.update","arguments":{"scope_type":"system","key":"reason.key","value":"\"updated\"","value_type":"string","reason":"test","updated_by":"bdd"}}`
+	body := `{"tool_name":"preference.update","arguments":{"scope_type":"system","key":"reason.key","value":"\"updated\"","value_type":"string","reason":"test","updated_by":"bdd"}}`
 	code, _ := callToolHandlerWithStoreAndBody(t, mock, body)
 	if code != http.StatusOK {
 		t.Errorf("got status %d, want 200", code)
@@ -430,7 +420,7 @@ func TestToolCallHandler_PreferenceUpdate_WithReasonAndUpdatedBy(t *testing.T) {
 
 func TestToolCallHandler_PreferenceUpdate_Conflict(t *testing.T) {
 	mock := mockWithSystemPreference(t, "ver.key")
-	body := `{"tool_name":"db.preference.update","arguments":{"scope_type":"system","key":"ver.key","value":"\"x\"","value_type":"string","expected_version":2}}`
+	body := `{"tool_name":"preference.update","arguments":{"scope_type":"system","key":"ver.key","value":"\"x\"","value_type":"string","expected_version":2}}`
 	callToolHandlerWithStore(t, mock, body, http.StatusConflict)
 }
 
@@ -473,7 +463,7 @@ func TestHandlePreferenceDelete_ExpectedVersionInt(t *testing.T) {
 
 func TestToolCallHandler_PreferenceDelete_Success(t *testing.T) {
 	mock := mockWithSystemPreference(t, "del.key")
-	body := `{"tool_name":"db.preference.delete","arguments":{"scope_type":"system","key":"del.key"}}`
+	body := `{"tool_name":"preference.delete","arguments":{"scope_type":"system","key":"del.key"}}`
 	callToolHandlerWithStore(t, mock, body, http.StatusOK)
 	if len(mock.PreferenceEntries) != 0 {
 		t.Errorf("expected preference deleted, got %d entries", len(mock.PreferenceEntries))
@@ -482,7 +472,7 @@ func TestToolCallHandler_PreferenceDelete_Success(t *testing.T) {
 
 func TestToolCallHandler_PreferenceDelete_WithReason(t *testing.T) {
 	mock := mockWithSystemPreference(t, "reason.del")
-	body := `{"tool_name":"db.preference.delete","arguments":{"scope_type":"system","key":"reason.del","reason":"cleanup"}}`
+	body := `{"tool_name":"preference.delete","arguments":{"scope_type":"system","key":"reason.del","reason":"cleanup"}}`
 	callToolHandlerWithStore(t, mock, body, http.StatusOK)
 	if len(mock.PreferenceEntries) != 0 {
 		t.Errorf("expected preference deleted, got %d entries", len(mock.PreferenceEntries))
@@ -490,45 +480,72 @@ func TestToolCallHandler_PreferenceDelete_WithReason(t *testing.T) {
 }
 
 func TestToolCallHandler_PreferenceDelete_NotFound(t *testing.T) {
-	callToolHandlerPOST(t, `{"tool_name":"db.preference.delete","arguments":{"scope_type":"system","key":"nonexistent"}}`, http.StatusNotFound)
+	callToolHandlerPOST(t, `{"tool_name":"preference.delete","arguments":{"scope_type":"system","key":"nonexistent"}}`, http.StatusNotFound)
 }
 
-func TestToolCallHandler_TaskGet_Success_DbAndAlias(t *testing.T) {
+func TestToolCallHandler_LegacyDbToolName_ReturnsNotFound(t *testing.T) {
+	callToolHandlerPOST(t, `{"tool_name":"db.preference.get","arguments":{"scope_type":"system","key":"k"}}`, http.StatusNotFound)
+}
+
+func TestToolCallHandler_LegacyDbTaskTool_ReturnsNotFound(t *testing.T) {
+	callToolHandlerPOST(t, `{"tool_name":"db.task.get","arguments":{"task_id":"00000000-0000-0000-0000-000000000000"}}`, http.StatusNotFound)
+}
+
+func TestToolCallHandler_LegacyDbTool_AuditWriteFails(t *testing.T) {
+	mock := testutil.NewMockDB()
+	mock.ForceError = errors.New("audit fail")
+	handler := ToolCallHandler(mock, slog.Default())
+	req := httptest.NewRequest(http.MethodPost, "/v1/mcp/tools/call", strings.NewReader(`{"tool_name":"db.x","arguments":{}}`))
+	rec := httptest.NewRecorder()
+	handler(rec, req)
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("status = %d, body = %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestToolCallHandler_RouteAuditWriteFails(t *testing.T) {
+	mock, taskID := mockWithTask(t)
+	mock.ForceError = errors.New("audit write")
+	body := `{"tool_name":"task.get","arguments":{"task_id":"` + taskID.String() + `"}}`
+	callToolHandlerWithStore(t, mock, body, http.StatusInternalServerError)
+}
+
+func TestToolCallHandler_MethodNotAllowed(t *testing.T) {
+	handler := ToolCallHandler(testutil.NewMockDB(), slog.Default())
+	req := httptest.NewRequest(http.MethodGet, "/v1/mcp/tools/call", http.NoBody)
+	rec := httptest.NewRecorder()
+	handler(rec, req)
+	if rec.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("status = %d", rec.Code)
+	}
+}
+
+func TestToolCallHandler_TaskGet_Success(t *testing.T) {
 	mock := testutil.NewMockDB()
 	task, _ := mock.CreateTask(context.Background(), nil, "prompt", nil)
-	for _, tc := range []struct {
-		name     string
-		toolName string
-	}{
-		{"db.task.get", "db.task.get"},
-		{"task.get alias", "task.get"},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			body := `{"tool_name":"` + tc.toolName + `","arguments":{"task_id":"` + task.ID.String() + `"}}`
-			code, respBody := callToolHandlerWithStoreAndBody(t, mock, body)
-			if code != http.StatusOK {
-				t.Fatalf("got status %d", code)
-			}
-			var out map[string]interface{}
-			if err := json.Unmarshal(respBody, &out); err != nil {
-				t.Fatalf("unmarshal: %v", err)
-			}
-			if out["status"] != "pending" {
-				t.Errorf("expected status pending, got %v", out["status"])
-			}
-		})
+	body := `{"tool_name":"task.get","arguments":{"task_id":"` + task.ID.String() + `"}}`
+	code, respBody := callToolHandlerWithStoreAndBody(t, mock, body)
+	if code != http.StatusOK {
+		t.Fatalf("got status %d", code)
+	}
+	var out map[string]interface{}
+	if err := json.Unmarshal(respBody, &out); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if out["status"] != "pending" {
+		t.Errorf("expected status pending, got %v", out["status"])
 	}
 }
 
 func TestToolCallHandler_TaskGet_NotFound(t *testing.T) {
-	callToolHandlerPOST(t, `{"tool_name":"db.task.get","arguments":{"task_id":"`+uuid.New().String()+`"}}`, http.StatusNotFound)
+	callToolHandlerPOST(t, `{"tool_name":"task.get","arguments":{"task_id":"`+uuid.New().String()+`"}}`, http.StatusNotFound)
 }
 
 func TestToolCallHandler_JobGet_Success(t *testing.T) {
 	mock := testutil.NewMockDB()
 	task, _ := mock.CreateTask(context.Background(), nil, "p", nil)
 	job, _ := mock.CreateJob(context.Background(), task.ID, `{"cmd":"x"}`)
-	body := `{"tool_name":"db.job.get","arguments":{"job_id":"` + job.ID.String() + `"}}`
+	body := `{"tool_name":"job.get","arguments":{"job_id":"` + job.ID.String() + `"}}`
 	code, respBody := callToolHandlerWithStoreAndBody(t, mock, body)
 	if code != http.StatusOK {
 		t.Fatalf("got status %d", code)
@@ -543,7 +560,7 @@ func TestToolCallHandler_JobGet_Success(t *testing.T) {
 }
 
 func TestToolCallHandler_JobGet_NotFound(t *testing.T) {
-	callToolHandlerPOST(t, `{"tool_name":"db.job.get","arguments":{"job_id":"`+uuid.New().String()+`"}}`, http.StatusNotFound)
+	callToolHandlerPOST(t, `{"tool_name":"job.get","arguments":{"job_id":"`+uuid.New().String()+`"}}`, http.StatusNotFound)
 }
 
 func TestToolCallHandler_ArtifactGet_Success(t *testing.T) {
@@ -811,7 +828,7 @@ func TestToolCallHandler_SkillsDelete_InternalError(t *testing.T) {
 func TestToolCallHandler_PreferenceEffective_EmptyEffective(t *testing.T) {
 	mock := testutil.NewMockDB()
 	task, _ := mock.CreateTask(context.Background(), nil, "p", nil)
-	body := `{"tool_name":"db.preference.effective","arguments":{"task_id":"` + task.ID.String() + `"}}`
+	body := `{"tool_name":"preference.effective","arguments":{"task_id":"` + task.ID.String() + `"}}`
 	code, respBody := callToolHandlerWithStoreAndBody(t, mock, body)
 	if code != http.StatusOK {
 		t.Fatalf("got status %d %s", code, respBody)
@@ -826,26 +843,26 @@ func TestToolCallHandler_PreferenceEffective_EmptyEffective(t *testing.T) {
 }
 
 func TestToolCallHandler_PreferenceUpdate_UserScopeNoScopeID(t *testing.T) {
-	callToolHandlerPOST(t, `{"tool_name":"db.preference.update","arguments":{"scope_type":"user","key":"k","value":"\"v\"","value_type":"string"}}`, http.StatusBadRequest)
+	callToolHandlerPOST(t, `{"tool_name":"preference.update","arguments":{"scope_type":"user","key":"k","value":"\"v\"","value_type":"string"}}`, http.StatusBadRequest)
 }
 
 func TestToolCallHandler_PreferenceUpdate_BadArgs(t *testing.T) {
-	callToolHandlerPOST(t, `{"tool_name":"db.preference.update","arguments":{"scope_type":"system","key":"k"}}`, http.StatusBadRequest)
+	callToolHandlerPOST(t, `{"tool_name":"preference.update","arguments":{"scope_type":"system","key":"k"}}`, http.StatusBadRequest)
 }
 
 func TestToolCallHandler_PreferenceDelete_ScopeTypeKeyRequired(t *testing.T) {
-	callToolHandlerPOST(t, `{"tool_name":"db.preference.delete","arguments":{}}`, http.StatusBadRequest)
-	callToolHandlerPOST(t, `{"tool_name":"db.preference.delete","arguments":{"scope_type":"system"}}`, http.StatusBadRequest)
-	callToolHandlerPOST(t, `{"tool_name":"db.preference.delete","arguments":{"key":"k"}}`, http.StatusBadRequest)
+	callToolHandlerPOST(t, `{"tool_name":"preference.delete","arguments":{}}`, http.StatusBadRequest)
+	callToolHandlerPOST(t, `{"tool_name":"preference.delete","arguments":{"scope_type":"system"}}`, http.StatusBadRequest)
+	callToolHandlerPOST(t, `{"tool_name":"preference.delete","arguments":{"key":"k"}}`, http.StatusBadRequest)
 }
 
 func TestToolCallHandler_PreferenceDelete_UserScopeNoScopeID(t *testing.T) {
-	callToolHandlerPOST(t, `{"tool_name":"db.preference.delete","arguments":{"scope_type":"user","key":"k"}}`, http.StatusBadRequest)
+	callToolHandlerPOST(t, `{"tool_name":"preference.delete","arguments":{"scope_type":"user","key":"k"}}`, http.StatusBadRequest)
 }
 
 func TestToolCallHandler_PreferenceDelete_ExpectedVersionFloat(t *testing.T) {
 	mock := mockWithSystemPreference(t, "verfloat")
-	body := `{"tool_name":"db.preference.delete","arguments":{"scope_type":"system","key":"verfloat","expected_version":1.0}}`
+	body := `{"tool_name":"preference.delete","arguments":{"scope_type":"system","key":"verfloat","expected_version":1.0}}`
 	callToolHandlerWithStore(t, mock, body, http.StatusOK)
 	if len(mock.PreferenceEntries) != 0 {
 		t.Errorf("expected deleted, got %d entries", len(mock.PreferenceEntries))
@@ -853,7 +870,7 @@ func TestToolCallHandler_PreferenceDelete_ExpectedVersionFloat(t *testing.T) {
 }
 
 func TestToolCallHandler_TaskGet_BadArgs(t *testing.T) {
-	callToolHandlerPOST(t, `{"tool_name":"db.task.get","arguments":{}}`, http.StatusBadRequest)
+	callToolHandlerPOST(t, `{"tool_name":"task.get","arguments":{}}`, http.StatusBadRequest)
 }
 
 func TestToolCallHandler_HelpList_Success(t *testing.T) {
@@ -988,7 +1005,7 @@ func TestToolCallHandler_ProjectGet_Success(t *testing.T) {
 }
 
 func TestToolCallHandler_JobGet_BadArgs(t *testing.T) {
-	callToolHandlerPOST(t, `{"tool_name":"db.job.get","arguments":{}}`, http.StatusBadRequest)
+	callToolHandlerPOST(t, `{"tool_name":"job.get","arguments":{}}`, http.StatusBadRequest)
 }
 
 func TestToolCallHandler_SkillsDelete_TaskNotFound(t *testing.T) {
@@ -1093,33 +1110,33 @@ func mockDBWithUserTaskAndSkill(t *testing.T) (*testutil.MockDB, *models.Task, *
 }
 
 func TestToolCallHandler_PreferenceUpdate_NotFound(t *testing.T) {
-	callToolHandlerPOST(t, `{"tool_name":"db.preference.update","arguments":{"scope_type":"system","key":"nonexistent","value":"\"v\"","value_type":"string"}}`, http.StatusNotFound)
+	callToolHandlerPOST(t, `{"tool_name":"preference.update","arguments":{"scope_type":"system","key":"nonexistent","value":"\"v\"","value_type":"string"}}`, http.StatusNotFound)
 }
 
 func TestToolCallHandler_PreferenceUpdate_InternalError(t *testing.T) {
 	mock := testutil.NewMockDB()
 	mock.UpdatePreferenceErr = errors.New("db error")
-	body := `{"tool_name":"db.preference.update","arguments":{"scope_type":"system","key":"k","value":"\"v\"","value_type":"string"}}`
+	body := `{"tool_name":"preference.update","arguments":{"scope_type":"system","key":"k","value":"\"v\"","value_type":"string"}}`
 	callToolHandlerWithStore(t, mock, body, http.StatusInternalServerError)
 }
 
 func TestToolCallHandler_PreferenceDelete_Conflict(t *testing.T) {
 	mock := mockWithSystemPreference(t, "ver.del")
-	body := `{"tool_name":"db.preference.delete","arguments":{"scope_type":"system","key":"ver.del","expected_version":2}}`
+	body := `{"tool_name":"preference.delete","arguments":{"scope_type":"system","key":"ver.del","expected_version":2}}`
 	callToolHandlerWithStore(t, mock, body, http.StatusConflict)
 }
 
 func TestToolCallHandler_PreferenceDelete_InternalError(t *testing.T) {
 	mock := mockWithSystemPreference(t, "del.err")
 	mock.DeletePreferenceErr = errors.New("db error")
-	body := `{"tool_name":"db.preference.delete","arguments":{"scope_type":"system","key":"del.err"}}`
+	body := `{"tool_name":"preference.delete","arguments":{"scope_type":"system","key":"del.err"}}`
 	callToolHandlerWithStore(t, mock, body, http.StatusInternalServerError)
 }
 
 func TestToolCallHandler_TaskGet_InternalError(t *testing.T) {
 	mock, taskID := mockWithTask(t)
 	mock.GetTaskByIDErr = errors.New("db error")
-	callToolHandlerWithStore(t, mock, `{"tool_name":"db.task.get","arguments":{"task_id":"`+taskID.String()+`"}}`, http.StatusInternalServerError)
+	callToolHandlerWithStore(t, mock, `{"tool_name":"task.get","arguments":{"task_id":"`+taskID.String()+`"}}`, http.StatusInternalServerError)
 }
 
 func TestToolCallHandler_JobGet_InternalError(t *testing.T) {
@@ -1127,7 +1144,7 @@ func TestToolCallHandler_JobGet_InternalError(t *testing.T) {
 	task, _ := mock.CreateTask(context.Background(), nil, "p", nil)
 	job, _ := mock.CreateJob(context.Background(), task.ID, "{}")
 	mock.GetJobByIDErr = errors.New("db error")
-	body := `{"tool_name":"db.job.get","arguments":{"job_id":"` + job.ID.String() + `"}}`
+	body := `{"tool_name":"job.get","arguments":{"job_id":"` + job.ID.String() + `"}}`
 	callToolHandlerWithStore(t, mock, body, http.StatusInternalServerError)
 }
 
@@ -1192,6 +1209,126 @@ func TestHandleTaskAndProjectTools_DirectValidation(t *testing.T) {
 	}
 }
 
+func TestTruncateHelp_TruncatesLongString(t *testing.T) {
+	s := strings.Repeat("z", helpMaxBytes+100)
+	out := truncateHelp(s)
+	if len(out) != helpMaxBytes {
+		t.Fatalf("len(out)=%d want %d", len(out), helpMaxBytes)
+	}
+}
+
+func TestHelpGetMarkdown_TopicAndPathBranches(t *testing.T) {
+	if !strings.Contains(helpGetMarkdown("tools", ""), "MCP") {
+		t.Errorf("tools snippet: %s", helpGetMarkdown("tools", ""))
+	}
+	if !strings.Contains(helpGetMarkdown("", "/docs/path"), "informational") {
+		t.Errorf("path branch: %s", helpGetMarkdown("", "/docs/path"))
+	}
+	if !strings.Contains(helpGetMarkdown("unknown-topic", ""), "CyNodeAI MCP") {
+		t.Errorf("unknown topic falls back to overview: %s", helpGetMarkdown("unknown-topic", ""))
+	}
+}
+
+func TestHandlePreferenceEffective_StoreError(t *testing.T) {
+	ctx := context.Background()
+	mock := testutil.NewMockDB()
+	mock.GetEffectivePreferencesForTaskErr = errors.New("injected store error")
+	rec := &models.McpToolCallAuditLog{}
+	tid := uuid.New()
+	code, body, _ := handlePreferenceEffective(ctx, mock, map[string]interface{}{"task_id": tid.String()}, rec)
+	if code != http.StatusInternalServerError {
+		t.Fatalf("expected 500, got %d: %s", code, body)
+	}
+}
+
+func TestHandlePreferenceEffective_DirectMissingTaskID(t *testing.T) {
+	ctx := context.Background()
+	mock := testutil.NewMockDB()
+	rec := &models.McpToolCallAuditLog{}
+	code, body, _ := handlePreferenceEffective(ctx, mock, map[string]interface{}{}, rec)
+	if code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d: %s", code, body)
+	}
+	if !bytes.Contains(body, []byte("task_id")) {
+		t.Errorf("body: %s", body)
+	}
+}
+
+func TestHandleTaskGet_DirectOK(t *testing.T) {
+	ctx := context.Background()
+	mock := testutil.NewMockDB()
+	task, err := mock.CreateTask(ctx, nil, "prompt", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rec := &models.McpToolCallAuditLog{}
+	code, body, _ := handleTaskGet(ctx, mock, map[string]interface{}{"task_id": task.ID.String()}, rec)
+	if code != http.StatusOK {
+		t.Fatalf("handleTaskGet: %d %s", code, body)
+	}
+	if len(body) == 0 {
+		t.Fatal("empty body")
+	}
+}
+
+func TestHandleJobGet_DirectOK(t *testing.T) {
+	ctx := context.Background()
+	mock := testutil.NewMockDB()
+	task, err := mock.CreateTask(ctx, nil, "prompt", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	job, err := mock.CreateJob(ctx, task.ID, `{}`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rec := &models.McpToolCallAuditLog{}
+	code, body, _ := handleJobGet(ctx, mock, map[string]interface{}{"job_id": job.ID.String()}, rec)
+	if code != http.StatusOK {
+		t.Fatalf("handleJobGet: %d %s", code, body)
+	}
+	if len(body) == 0 {
+		t.Fatal("empty body")
+	}
+}
+
+func TestHandleTaskCancel_CancelTaskError(t *testing.T) {
+	ctx := context.Background()
+	mock := testutil.NewMockDB()
+	task, err := mock.CreateTask(ctx, nil, "prompt", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mock.UpdateTaskStatusErr = errors.New("injected update failure")
+	rec := &models.McpToolCallAuditLog{}
+	code, body, _ := handleTaskCancel(ctx, mock, map[string]interface{}{"task_id": task.ID.String()}, rec)
+	if code != http.StatusInternalServerError {
+		t.Fatalf("expected 500, got %d: %s", code, body)
+	}
+}
+
+func TestHandleProjectList_StoreError(t *testing.T) {
+	ctx := context.Background()
+	mock := testutil.NewMockDB()
+	mock.GetOrCreateDefaultProjectForUserErr = errors.New("injected project list failure")
+	rec := &models.McpToolCallAuditLog{}
+	code, body, _ := handleProjectList(ctx, mock, map[string]interface{}{"user_id": uuid.New().String()}, rec)
+	if code != http.StatusInternalServerError {
+		t.Fatalf("expected 500, got %d: %s", code, body)
+	}
+}
+
+func TestHandleHelpList_Direct(t *testing.T) {
+	ctx := context.Background()
+	code, body, _ := handleHelpList(ctx, testutil.NewMockDB(), nil, &models.McpToolCallAuditLog{})
+	if code != http.StatusOK {
+		t.Fatalf("handleHelpList: %d", code)
+	}
+	if !bytes.Contains(body, []byte(`"topics"`)) {
+		t.Errorf("expected topics in body: %s", body)
+	}
+}
+
 func TestHandleHelpGet_DirectPaths(t *testing.T) {
 	ctx := context.Background()
 	mock := testutil.NewMockDB()
@@ -1221,6 +1358,16 @@ func TestHandleHelpGet_DirectPaths(t *testing.T) {
 	}
 	if out["content"] == nil {
 		t.Error("expected content for path")
+	}
+	code, body, _ = handleHelpGet(ctx, mock, map[string]interface{}{"task_id": tid.String(), "topic": "not-a-known-topic"}, rec)
+	if code != http.StatusOK {
+		t.Fatalf("help.get unknown topic: %d", code)
+	}
+	if err := json.Unmarshal(body, &out); err != nil {
+		t.Fatal(err)
+	}
+	if out["content"] == nil {
+		t.Error("expected default overview for unknown topic")
 	}
 }
 

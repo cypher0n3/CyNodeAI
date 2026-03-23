@@ -9,6 +9,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 )
 
 const pathChatCompletion = "/internal/chat/completion"
@@ -25,6 +26,14 @@ func TestStreamHTTPClient_NilUsesDefaultTimeout(t *testing.T) {
 	c := streamHTTPClient(nil)
 	if c.Timeout != defaultPMAHTTPTimeout {
 		t.Errorf("streamHTTPClient(nil) Timeout = %v, want %v", c.Timeout, defaultPMAHTTPTimeout)
+	}
+}
+
+func TestStreamHTTPClient_NonNilReturnsSame(t *testing.T) {
+	custom := &http.Client{Timeout: 42 * time.Second}
+	c := streamHTTPClient(custom)
+	if c != custom {
+		t.Fatal("expected same client pointer")
 	}
 }
 
@@ -480,5 +489,75 @@ func TestProcessNDJSONLine_NoDelta(t *testing.T) {
 func TestProcessNDJSONLine_InvalidJSON(t *testing.T) {
 	if err := processNDJSONLine([]byte(`not json`), PMAStreamCallbacks{OnDelta: func(string) error { return nil }}); err != nil {
 		t.Errorf("invalid JSON should not error (skipped): %v", err)
+	}
+}
+
+func requireProcessNDJSONLineOK(t *testing.T, jsonl string, cb PMAStreamCallbacks) {
+	t.Helper()
+	if err := processNDJSONLine([]byte(jsonl), cb); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestProcessNDJSONLine_Thinking(t *testing.T) {
+	var captured string
+	requireProcessNDJSONLineOK(t, `{"thinking":"note"}`, PMAStreamCallbacks{
+		OnThinking: func(s string) error {
+			captured = s
+			return nil
+		},
+	})
+	if captured != "note" {
+		t.Fatalf("thinking = %q", captured)
+	}
+}
+
+func TestProcessNDJSONLine_CallbackErrorPaths(t *testing.T) {
+	tests := []struct {
+		name  string
+		line  string
+		setup func() (PMAStreamCallbacks, error)
+	}{
+		{
+			name: "iterationStart",
+			line: `{"iteration_start":1}`,
+			setup: func() (PMAStreamCallbacks, error) {
+				want := fmt.Errorf("stop")
+				return PMAStreamCallbacks{OnIterationStart: func(int) error { return want }}, want
+			},
+		},
+		{
+			name: "delta",
+			line: `{"delta":"x"}`,
+			setup: func() (PMAStreamCallbacks, error) {
+				want := fmt.Errorf("delta err")
+				return PMAStreamCallbacks{OnDelta: func(string) error { return want }}, want
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			cb, want := tt.setup()
+			err := processNDJSONLine([]byte(tt.line), cb)
+			if err != want {
+				t.Fatalf("err = %v, want %v", err, want)
+			}
+		})
+	}
+}
+
+func TestProcessNDJSONLine_IterationStartNonIntSkipped(t *testing.T) {
+	var sawIteration int
+	err := processNDJSONLine([]byte(`{"iteration_start":"nope"}`), PMAStreamCallbacks{
+		OnIterationStart: func(v int) error {
+			sawIteration = v
+			return nil
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if sawIteration != 0 {
+		t.Errorf("iteration_start string should not invoke callback: saw=%d", sawIteration)
 	}
 }

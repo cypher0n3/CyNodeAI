@@ -1140,6 +1140,39 @@ func TestManagedServiceProxyHTTPHandler_Stream_Success(t *testing.T) {
 	}
 }
 
+func TestManagedServiceProxyHTTPHandler_Stream_UpstreamErrorStatus(t *testing.T) {
+	dir := t.TempDir()
+	svcDir := filepath.Join(dir, "svc1")
+	_ = os.MkdirAll(svcDir, 0o700)
+	proxySock := filepath.Join(svcDir, "proxy.sock")
+	serviceSock := filepath.Join(svcDir, "service.sock")
+	ln, err := net.Listen("unix", serviceSock)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = ln.Close() }()
+	go func() {
+		_ = http.Serve(ln, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+			w.WriteHeader(http.StatusInternalServerError)
+		}))
+	}()
+	pub, _ := buildMuxesFromEmbedConfig(
+		executor.New("direct", 5*time.Second, 1024, "", "", nil),
+		"tok", t.TempDir(), nil, slog.Default(),
+		embedProxyConfig{InternalProxy: embedInternalProxyConfig{SocketByService: map[string]string{"svc1": proxySock}}},
+	)
+	streamBody := base64.StdEncoding.EncodeToString([]byte(`{"stream":true}`))
+	body := managedProxyRequest{Version: 1, Method: "POST", Path: "/chat", BodyB64: streamBody}
+	bodyBytes, _ := json.Marshal(body)
+	req := httptest.NewRequest(http.MethodPost, "/v1/worker/managed-services/svc1/proxy:http", bytes.NewReader(bodyBytes))
+	req.Header.Set("Authorization", "Bearer tok")
+	w := httptest.NewRecorder()
+	pub.ServeHTTP(w, req)
+	if w.Code != http.StatusInternalServerError {
+		t.Errorf("expected 500 from upstream, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
 func TestEmbedTelemetryHandlers_NoStore(t *testing.T) {
 	pub := buildNoStoreMux(t)
 	for _, tc := range []struct {

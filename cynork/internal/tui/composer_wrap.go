@@ -93,7 +93,7 @@ func totalVisualRows(input string, wrapAt int) int {
 
 // rowAndColForCursorInLine returns the visual row index within this logical line (0-based) and the
 // display column from the start of that wrapped row. c is the byte offset into line (cursor in line).
-func rowAndColForCursorInLine(line string, wrapAt int, c int) (row int, col int, ok bool) {
+func rowAndColForCursorInLine(line string, wrapAt, c int) (row, col int, ok bool) {
 	if c < 0 {
 		c = 0
 	}
@@ -142,7 +142,7 @@ func offsetInSegmentForDisplayCol(segment string, wantCol int) int {
 	return len(segment)
 }
 
-func (m *Model) globalComposerVisualRow() (gr int, col int, ok bool) {
+func (m *Model) globalComposerVisualRow() (gr, col int, ok bool) {
 	wrapAt := composerWrapAt(m)
 	lines := strings.Split(m.Input, "\n")
 	if len(lines) == 0 {
@@ -172,7 +172,44 @@ func (m *Model) globalComposerVisualRow() (gr int, col int, ok bool) {
 	return gr + vj, col, true
 }
 
-func (m *Model) setCursorFromGlobalComposerRow(targetGR int, wantCol int) bool {
+// composerCursorByteInRowSegment maps a display column within one wrapped row to a byte offset in line.
+func composerCursorByteInRowSegment(line string, vj, start, end int, last bool, wantCol int) int {
+	var seg string
+	if vj == 0 {
+		seg = composerPromptPrefix + line[start:end]
+	} else {
+		seg = line[start:end]
+	}
+	off := offsetInSegmentForDisplayCol(seg, wantCol)
+	var c int
+	if vj == 0 {
+		if off <= len(composerPromptPrefix) {
+			c = start
+		} else {
+			c = start + off - len(composerPromptPrefix)
+		}
+	} else {
+		c = start + off
+	}
+	if c < start {
+		c = start
+	}
+	if !last && c >= end {
+		c = end - 1
+		if c < start {
+			c = start
+		}
+	}
+	if last && c > end {
+		c = end
+	}
+	if c > len(line) {
+		c = len(line)
+	}
+	return c
+}
+
+func (m *Model) setCursorFromGlobalComposerRow(targetGR, wantCol int) bool {
 	wrapAt := composerWrapAt(m)
 	lines := strings.Split(m.Input, "\n")
 	r := 0
@@ -183,40 +220,9 @@ func (m *Model) setCursorFromGlobalComposerRow(targetGR int, wantCol int) bool {
 				r++
 				continue
 			}
-			start, end := rg[0], rg[1] // end: exclusive slice end; valid cursor c satisfies rowAndColForCursorInLine
+			start, end := rg[0], rg[1]
 			last := vj == len(ranges)-1
-			var seg string
-			if vj == 0 {
-				seg = composerPromptPrefix + line[start:end]
-			} else {
-				seg = line[start:end]
-			}
-			off := offsetInSegmentForDisplayCol(seg, wantCol)
-			var c int
-			if vj == 0 {
-				if off <= len(composerPromptPrefix) {
-					c = start
-				} else {
-					c = start + off - len(composerPromptPrefix)
-				}
-			} else {
-				c = start + off
-			}
-			if c < start {
-				c = start
-			}
-			if !last && c >= end {
-				c = end - 1
-				if c < start {
-					c = start
-				}
-			}
-			if last && c > end {
-				c = end
-			}
-			if c > len(line) {
-				c = len(line)
-			}
+			c := composerCursorByteInRowSegment(line, vj, start, end, last, wantCol)
 			m.inputCursor = m.lineStartByte(li) + c
 			m.clampInputCursor()
 			return true
