@@ -143,6 +143,7 @@ Gaps (e.g. 0011-0019 between 0010 and 0020) allow inserting new tests without re
 - **e2e_0740_sba_inference_reply** - SBA + inference prompt "Reply back with the current time."; asserts user-facing reply; skipped if `E2E_SKIP_INFERENCE_SMOKE`.
 - **e2e_0750_tui_pty** - TUI PTY harness; progressive visible-text updates, Ctrl+C cancel.
 - **e2e_0760_tui_slash_commands** - TUI slash commands (/thread, /whoami, etc.).
+- **e2e_0765_tui_composer_editor** - TUI composer footnote, multiline (Alt+Enter/Ctrl+J), Ctrl+Up history, login overlay; narrow PTY smoke.
 - **e2e_0770_auth_refresh** - Auth refresh and whoami.
 - **e2e_0780_auth_logout** - Auth logout; asserts tokens are cleared locally and authenticated access fails afterward.
 - **e2e_0790_prescribed_startup_config_inference_backend** - Node config includes inference_backend when inference-capable.

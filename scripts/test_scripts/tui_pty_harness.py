@@ -29,6 +29,27 @@ LANDMARK_AUTH_RECOVERY_READY = "[CYNRK_AUTH_RECOVERY_READY]"
 DEFAULT_COLS = 80
 DEFAULT_ROWS = 24
 
+# Named key sequences — must match github.com/charmbracelet/bubbletea key.go / key_sequences.go
+# (xterm-style CSI); used by send_keys() for composer navigation, history, multiline, etc.
+_NAMED_KEY_BYTES = {
+    "up": "\x1b[A",
+    "down": "\x1b[B",
+    "right": "\x1b[C",
+    "left": "\x1b[D",
+    "ctrl+up": "\x1b[1;5A",
+    "ctrl+down": "\x1b[1;5B",
+    "ctrl+right": "\x1b[1;5C",
+    "ctrl+left": "\x1b[1;5D",
+    "tab": "\t",
+    "shift+tab": "\x1b[Z",
+    "backspace": "\x7f",
+    # Alt+Enter: ESC + CR (bubbletea KeyEnter with Alt)
+    "alt+enter": "\x1b\r",
+    # Ctrl+J = LF → KeyCtrlJ (multiline newline in composer)
+    "ctrl+j": "\n",
+    "ctrl+y": "\x19",
+}
+
 try:
     import pexpect
     _PEXPECT_AVAILABLE = True
@@ -113,14 +134,20 @@ class TuiPtySession:
         return not self._proc.isalive()
 
     def send_keys(self, key_sequence):
-        """Send key sequence. Use 'enter' for Return, 'ctrl+c' for Control+C, 'esc' for Escape."""
+        """Send key sequence.
+
+        Special names: enter, ctrl+c, ctrl+d, esc/escape, and composer/TUI keys:
+        up, down, left, right, ctrl+up, ctrl+down, ctrl+left, ctrl+right, tab,
+        shift+tab, backspace, alt+enter, ctrl+j, ctrl+y (see _NAMED_KEY_BYTES).
+        Otherwise each part is sent as raw text (UTF-8).
+        """
         if self._proc is None:
             raise RuntimeError("session closed")
         if isinstance(key_sequence, str):
             key_sequence = [key_sequence]
         for part in key_sequence:
             if part == "enter":
-                # bubbletea v1.3+ maps CR (\r=13) to KeyEnter; LF (\n=10) maps to ctrl+j.
+                # bubbletea v1.3+ maps CR (\\r) to KeyEnter; LF (\\n) maps to ctrl+j.
                 self._proc.send("\r")
             elif part == "ctrl+c":
                 self._proc.sendcontrol("c")
@@ -128,6 +155,8 @@ class TuiPtySession:
                 self._proc.sendcontrol("d")
             elif part in ("esc", "escape"):
                 self._proc.send("\x1b")
+            elif part in _NAMED_KEY_BYTES:
+                self._proc.send(_NAMED_KEY_BYTES[part])
             else:
                 self._proc.send(part)
 
@@ -179,8 +208,12 @@ class TuiPtySession:
         )
         if LANDMARK_AUTH_RECOVERY_READY in out:
             return True
-        # Fallback: form shows "Login" and "Gateway URL" or "Username"
-        return "Login" in out and ("Gateway URL" in out or "Username" in out)
+        # Fallback: titled "Sign in" / landmark strip; fields Gateway URL / Username
+        if "Gateway URL" in out and "Username" in out:
+            return True
+        return ("Sign in" in out or "Login" in out) and (
+            "Gateway URL" in out or "Username" in out
+        )
 
     def capture_screen(self, drain_sec=0.15):
         """Drain output for drain_sec and return ANSI-stripped text content."""

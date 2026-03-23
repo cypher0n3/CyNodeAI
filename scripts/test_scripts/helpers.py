@@ -16,6 +16,35 @@ from scripts.test_scripts import config
 import scripts.test_scripts.e2e_state as state
 
 
+def fetch_gateway_access_token(timeout=30):
+    """POST /v1/auth/login; return access_token or None.
+
+    Cynork no longer persists bearer tokens in config.yaml; PTY/TUI tests pass
+    CYNORK_TOKEN in the child environment (see tui_pty_harness.TuiPtySession).
+    """
+    url = config.USER_API.rstrip("/") + "/v1/auth/login"
+    body = json.dumps(
+        {"handle": "admin", "password": config.ADMIN_PASSWORD}
+    ).encode()
+    req = urllib.request.Request(
+        url,
+        data=body,
+        method="POST",
+        headers={"Content-Type": "application/json"},
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            if resp.status != 200:
+                return None
+            data = json.loads(resp.read().decode())
+            tok = data.get("access_token")
+            if isinstance(tok, str) and tok.strip():
+                return tok
+            return None
+    except (urllib.error.URLError, OSError, json.JSONDecodeError, ValueError, TypeError):
+        return None
+
+
 def run_cynork(args, config_path, env_extra=None, timeout=None, input_text=None):
     """Run cynork-dev with --config; return (ok, stdout, stderr).
 
@@ -423,7 +452,7 @@ def _ollama_container_runtime():
                 timeout=10,
                 check=False,
             )
-            if r.returncode != 0:
+            if r.returncode:
                 continue
             names = (r.stdout or "").strip().splitlines()
             if config.OLLAMA_CONTAINER_NAME in names:

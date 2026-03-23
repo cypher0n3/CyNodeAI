@@ -13,7 +13,8 @@ import requests
 from scripts.test_scripts import config, helpers
 import scripts.test_scripts.e2e_state as state
 
-# Whole-request HTTP read timeout for SSE (first byte + stream); tunable via E2E_SSE_REQUEST_TIMEOUT.
+# Whole-request HTTP read timeout for SSE (first byte + stream); tunable via
+# E2E_SSE_REQUEST_TIMEOUT.
 _SSE_TIMEOUT_SEC = int(config.E2E_SSE_REQUEST_TIMEOUT)
 # Prompt that yields a short deterministic response.
 _SHORT_PROMPT = "Reply with exactly: OK"

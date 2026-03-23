@@ -14,7 +14,7 @@ PROJECT_ROOT = os.environ.get("PROJECT_ROOT") or os.path.dirname(
 
 def _env_int(key: str, default: int) -> int:
     raw = os.environ.get(key)
-    if raw is None or str(raw).strip() == "":
+    if raw is None or not str(raw).strip():
         return default
     try:
         return int(raw)
@@ -24,9 +24,10 @@ def _env_int(key: str, default: int) -> int:
 
 def _env_bool(key: str, default: bool) -> bool:
     raw = os.environ.get(key)
-    if raw is None or str(raw).strip() == "":
+    if raw is None or not str(raw).strip():
         return default
     return str(raw).strip().lower() not in ("0", "false", "no", "off")
+
 
 # Orchestrator (docs/tech_specs/ports_and_endpoints.md)
 ORCHESTRATOR_PORT = int(os.environ.get("ORCHESTRATOR_PORT", "12080"))
