@@ -144,7 +144,8 @@ It authenticates to the User API Gateway and is authorized by the gateway.
 - The file MUST be valid YAML.
 - Supported top-level keys:
   - `gateway_url` (string, optional): base URL of the User API Gateway (e.g. `http://localhost:12080`).
-  - `token` (string, optional): bearer token for gateway auth; MAY be omitted when using a credential helper.
+  - `token` (string, optional): **legacy**; MUST NOT be written by the CLI.
+    If present, the CLI MUST ignore it for auth, strip it from the file on load, and MUST NOT persist bearer tokens to disk as plaintext (see [REQ-CLIENT-0103](../requirements/client.md#req-client-0103), [REQ-CLIENT-0149](../requirements/client.md#req-client-0149)).
   - `credential_helper` (string, optional): command or helper name to obtain the token (see [Credential Helper Protocol](#credential-helper-protocol)).
   - `tui` (object, optional): TUI-specific local preferences.
     Supported first-pass field:
@@ -155,8 +156,9 @@ It authenticates to the User API Gateway and is authorized by the gateway.
 #### Environment Overrides
 
 - `CYNORK_GATEWAY_URL`: if set, overrides `gateway_url` from the config file after load.
-- `CYNORK_TOKEN`: if set, overrides the resolved token (see [Token Resolution (Precedence)](#token-resolution-precedence)) for the session; use for CI or ephemeral runs.
-- Overrides apply at config load time; the effective gateway URL and token used for requests MUST be the result of applying overrides to the loaded config and resolved token.
+- `CYNORK_TOKEN`: if set, supplies the bearer token for the process (see [Token Resolution (Precedence)](#token-resolution-precedence)); use for CI, scripting, or reuse across separate CLI invocations.
+- `CYNORK_REFRESH_TOKEN`: if set, supplies the refresh token for `cynork auth refresh` when not held in memory (same reuse model as `CYNORK_TOKEN`).
+- Overrides apply at config load time; the effective gateway URL and token used for requests MUST be the result of applying overrides to the loaded non-secret config and resolved token.
 
 #### Default Gateway URL
 
@@ -167,14 +169,17 @@ It authenticates to the User API Gateway and is authorized by the gateway.
 
 - Spec ID: `CYNAI.CLIENT.CliSessionPersistence` <a id="spec-cynai-client-clisessionpersistence"></a>
 - Traces To: [REQ-CLIENT-0150](../requirements/client.md#req-client-0150)
-- When writing the config file (e.g. after `auth login` or `auth logout`), the CLI MUST write atomically (e.g. write to a temp file in the same directory then rename to the final path) so that a crash or interrupt does not leave a partial or corrupt file; subsequent invocations MUST see either the previous config or a complete new one.
-- When the default config path cannot be resolved (e.g. home directory unavailable and no `--config` given), `auth login` and `auth logout` MUST fail with a clear error and MUST NOT proceed with an empty path.
+- When writing **non-secret** preferences to the config file (e.g. `gateway_url`, TUI settings), the CLI MUST write atomically (e.g. write to a temp file in the same directory then rename to the final path) so that a crash or interrupt does not leave a partial or corrupt file; subsequent invocations MUST see either the previous config or a complete new one.
+- The CLI MUST NOT persist access tokens, refresh tokens, or other session credentials to disk as plaintext.
+  Reuse across separate processes MUST be via `CYNORK_TOKEN`, `CYNORK_REFRESH_TOKEN`, or an optional credential helper.
+- When the default config path cannot be resolved (e.g. home directory unavailable and no `--config` given), commands that persist preferences MUST fail with a clear error and MUST NOT proceed with an empty path.
 
 ### Token Resolution (Precedence)
 
 - Spec ID: `CYNAI.CLIENT.CliTokenResolution` <a id="spec-cynai-client-clitokenresolution"></a>
 
 The CLI MUST resolve the bearer token used for gateway requests by following this order; the first non-empty value wins.
+The CLI MUST NOT load bearer tokens from the config file (legacy `token` keys are ignored and stripped on load per [REQ-CLIENT-0103](../requirements/client.md#req-client-0103)).
 
 #### Token Resolution Requirements Traces
 
@@ -184,11 +189,7 @@ The CLI MUST resolve the bearer token used for gateway requests by following thi
 
 #### Environment Variable
 
-If `CYNORK_TOKEN` is set and non-empty, use it and do not read config file `token` or credential helper.
-
-#### Config File
-
-If the config file was loaded and contains a non-empty `token` field, use it; skip step 3.
+If `CYNORK_TOKEN` is set and non-empty, use it and skip credential helper.
 
 #### Credential Helper
 
@@ -205,7 +206,7 @@ The CLI MUST NOT log or print the resolved token.
 
 - Spec ID: `CYNAI.CLIENT.CliCredentialHelperProtocol` <a id="spec-cynai-client-clicredentialhelperprotocol"></a>
 
-When the config contains a non-empty `credential_helper`, the CLI SHOULD use it to get and optionally store the token so the token is not stored in plaintext in the config file.
+When the config contains a non-empty `credential_helper`, the CLI SHOULD use it to obtain the token so the token is not stored in plaintext in the config file.
 
 #### Helper Invocation
 
@@ -227,8 +228,8 @@ When the config contains a non-empty `credential_helper`, the CLI SHOULD use it 
 
 #### Store on Login
 
-- When `cynork auth login` succeeds and `credential_helper` is set, the CLI SHOULD call the helper with `{"action":"store","secret":"<obtained_token>"}` so the token is persisted in the store.
-- The CLI MAY also write the token to the config file for backward compatibility, or MAY omit writing `token` to the config file when a credential helper is configured (so the config file stays free of plaintext tokens).
+- When `cynork auth login` succeeds and `credential_helper` is set, the CLI SHOULD call the helper with `{"action":"store","secret":"<obtained_token>"}` so the token is persisted in the store (encrypted or platform-protected per the helper).
+  The CLI MUST NOT write plaintext tokens to the config file.
 
 #### Credential Helper Protocol Requirements Traces
 
@@ -340,8 +341,8 @@ All subcommands that call the gateway MUST use the resolved gateway URL and reso
 
 - `cynork version`: print version string (e.g. from build); MUST NOT require auth.
 - `cynork status`: report gateway reachability and optionally auth status; MAY require auth for full status.
-- `cynork auth login`: interactive or flag-based login; POST to gateway login endpoint; MUST support writing token to config and/or credential helper; MUST NOT echo password.
-- `cynork auth logout`: clear token from config file and optionally from credential helper; MUST NOT require gateway call.
+- `cynork auth login`: interactive or flag-based login; POST to gateway login endpoint; MUST keep tokens in process memory only unless a credential helper stores them; MUST NOT echo password; MUST NOT write plaintext tokens to the config file.
+- `cynork auth logout`: clear in-memory token state and optionally invoke credential helper to clear stored credentials; MUST NOT require gateway call.
 - `cynork auth whoami`: call gateway with current token; MUST require auth.
 - `cynork task ...`: full CRUD (create, list, get, update, delete/archive), cancel, result, watch, logs, and artifacts; see [Task commands](cli_management_app_commands_tasks.md).
   Task delete is archive (soft delete).
@@ -402,7 +403,7 @@ Implementation MUST follow [Go REST API Standards](go_rest_api_standards.md) whe
 ### Required Package Layout
 
 - `cmd/`: Cobra root and subcommands; MUST NOT contain business logic beyond delegation to internal packages.
-- `internal/config/`: Config file load, XDG/default path resolution, env overrides, and token resolution (env then file then credential helper).
+- `internal/config/`: Config file load, XDG/default path resolution, env overrides, and token resolution (env then credential helper; config file MUST NOT supply bearer tokens).
   MUST expose a single load entrypoint that returns a struct with at least `GatewayURL` and resolved `Token`; token resolution MUST be implemented as specified in [Token Resolution (Precedence)](#token-resolution-precedence) and [Credential Helper Protocol](#credential-helper-protocol).
 - `internal/gateway/`: HTTP client for the User API Gateway; MUST set `Authorization: Bearer <token>` on every request when token is non-empty; MUST map 401/403/429/5xx to typed errors; MUST NOT log request or response bodies that may contain secrets.
 - `internal/output/`: Formatters for table and JSON output; MUST support `--output table` and `--output json` for list/get commands.

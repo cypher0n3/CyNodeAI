@@ -20,6 +20,9 @@ func TestNewSession(t *testing.T) {
 	if session.Client != client || session.Transport == nil {
 		t.Errorf("NewSession: %+v", session)
 	}
+	if session.Model != gateway.ModelProjectManager {
+		t.Errorf("NewSession Model = %q, want %q", session.Model, gateway.ModelProjectManager)
+	}
 }
 
 func TestNewSessionWithResponses(t *testing.T) {
@@ -314,6 +317,34 @@ func TestSession_EnsureThread_NewAndResume(t *testing.T) {
 	}
 	if session.CurrentThreadID != "resumed-tid" {
 		t.Errorf("resume CurrentThreadID = %q", session.CurrentThreadID)
+	}
+}
+
+func TestSession_EnsureThread_SkipsNewWhenThreadAlreadySet(t *testing.T) {
+	var postCount int
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == pathV1ChatThreads && r.Method == http.MethodPost {
+			postCount++
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusCreated)
+			_ = json.NewEncoder(w).Encode(map[string]string{"thread_id": "should-not-be-used"})
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+	client := gateway.NewClient(server.URL)
+	client.SetToken("tok")
+	session := NewSession(client)
+	session.CurrentThreadID = "existing-tid"
+	if err := session.EnsureThread(""); err != nil {
+		t.Fatalf("EnsureThread: %v", err)
+	}
+	if postCount != 0 {
+		t.Errorf("NewThread POST count = %d, want 0 (keep existing thread)", postCount)
+	}
+	if session.CurrentThreadID != "existing-tid" {
+		t.Errorf("CurrentThreadID = %q, want existing-tid", session.CurrentThreadID)
 	}
 }
 

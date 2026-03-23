@@ -11,6 +11,7 @@ import (
 	"github.com/cypher0n3/cynodeai/cynork/internal/exit"
 	"github.com/cypher0n3/cynodeai/cynork/internal/gateway"
 	"github.com/cypher0n3/cynodeai/go_shared_libs/contracts/userapi"
+	"github.com/cypher0n3/cynodeai/go_shared_libs/secretutil"
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
 )
@@ -28,13 +29,13 @@ var authCmd = &cobra.Command{
 
 var authLoginCmd = &cobra.Command{
 	Use:   "login",
-	Short: "Log in and store token",
+	Short: "Log in (token kept in process memory only)",
 	RunE:  runAuthLogin,
 }
 
 var authLogoutCmd = &cobra.Command{
 	Use:   "logout",
-	Short: "Clear stored token",
+	Short: "Clear in-memory token state",
 	RunE:  runAuthLogout,
 }
 
@@ -46,8 +47,8 @@ var authWhoamiCmd = &cobra.Command{
 
 var authRefreshCmd = &cobra.Command{
 	Use:   "refresh",
-	Short: "Refresh access token using stored refresh token",
-	Long:  "Calls POST /v1/auth/refresh with the refresh token saved at login and updates the stored access token.",
+	Short: "Refresh access token using CYNORK_REFRESH_TOKEN or in-memory refresh token",
+	Long:  "Calls POST /v1/auth/refresh. Use after login in the same process, or set CYNORK_REFRESH_TOKEN (tokens are not persisted to disk).",
 	RunE:  runAuthRefresh,
 }
 
@@ -69,8 +70,10 @@ func runAuthLogin(_ *cobra.Command, _ []string) error {
 	if err != nil {
 		return exitFromGatewayErr(err)
 	}
-	cfg.Token = resp.AccessToken
-	cfg.RefreshToken = resp.RefreshToken
+	secretutil.RunWithSecret(func() {
+		cfg.Token = resp.AccessToken
+		cfg.RefreshToken = resp.RefreshToken
+	})
 	if err := saveConfig(); err != nil {
 		return err
 	}
@@ -110,10 +113,39 @@ func saveConfig() error {
 			return fmt.Errorf("config path: %w", err)
 		}
 	}
-	if err := config.Save(path, cfg); err != nil {
-		return fmt.Errorf("save token: %w", err)
+	toSave := cfg
+	switch {
+	case cfgGatewayPersistExplicit:
+		// User ran /connect <url>; persist in-memory gateway_url as-is.
+	case fileExists(path):
+		// Never replace gateway_url in an existing file from in-memory drift (env,
+		// login form, etc.); only TUI prefs and other fields update.
+		base, err := config.LoadFileWithoutEnvOverrides(path)
+		if err != nil {
+			return fmt.Errorf("read file-backed config for save: %w", err)
+		}
+		merged := *toSave
+		merged.GatewayURL = base.GatewayURL
+		toSave = &merged
+	case cfgGatewayFromEnv:
+		// No file yet: do not persist CYNORK_GATEWAY_URL on first write.
+		base, err := config.LoadFileWithoutEnvOverrides(path)
+		if err != nil {
+			return fmt.Errorf("read file-backed config for save: %w", err)
+		}
+		merged := *toSave
+		merged.GatewayURL = base.GatewayURL
+		toSave = &merged
+	}
+	if err := config.Save(path, toSave); err != nil {
+		return fmt.Errorf("save config: %w", err)
 	}
 	return nil
+}
+
+func fileExists(path string) bool {
+	_, err := os.Stat(path)
+	return err == nil
 }
 
 func readPromptLine(prompt string) (string, error) {
@@ -155,18 +187,12 @@ func readPasswordFromStdin() (string, error) {
 }
 
 func runAuthLogout(_ *cobra.Command, _ []string) error {
-	cfg.Token = ""
-	cfg.RefreshToken = ""
-	path := configPath
-	if path == "" {
-		var err error
-		path, err = getDefaultConfigPath()
-		if err != nil {
-			return fmt.Errorf("config path: %w", err)
-		}
-	}
-	if err := config.Save(path, cfg); err != nil {
-		return fmt.Errorf("save config: %w", err)
+	secretutil.RunWithSecret(func() {
+		cfg.Token = ""
+		cfg.RefreshToken = ""
+	})
+	if err := saveConfig(); err != nil {
+		return err
 	}
 	if outputFmt == outputFormatJSON {
 		_ = jsonOutputEncoder().Encode(map[string]any{"logged_out": true})
@@ -178,7 +204,7 @@ func runAuthLogout(_ *cobra.Command, _ []string) error {
 
 func runAuthWhoami(_ *cobra.Command, _ []string) error {
 	if cfg.Token == "" {
-		return exit.Auth(fmt.Errorf("not logged in: run 'cynork auth login'"))
+		return exit.Auth(fmt.Errorf("not logged in: run 'cynork auth login' or set CYNORK_TOKEN"))
 	}
 	client := gateway.NewClient(cfg.GatewayURL)
 	client.SetToken(cfg.Token)
@@ -196,26 +222,17 @@ func runAuthWhoami(_ *cobra.Command, _ []string) error {
 
 func runAuthRefresh(_ *cobra.Command, _ []string) error {
 	if cfg.RefreshToken == "" {
-		return exit.Auth(fmt.Errorf("no refresh token: run 'cynork auth login' first"))
+		return exit.Auth(fmt.Errorf("no refresh token: run 'cynork auth login' in this process first, or set CYNORK_REFRESH_TOKEN"))
 	}
 	client := gateway.NewClient(cfg.GatewayURL)
 	resp, err := client.Refresh(cfg.RefreshToken)
 	if err != nil {
 		return exitFromGatewayErr(err)
 	}
-	cfg.Token = resp.AccessToken
-	cfg.RefreshToken = resp.RefreshToken
-	path := configPath
-	if path == "" {
-		var err error
-		path, err = getDefaultConfigPath()
-		if err != nil {
-			return fmt.Errorf("config path: %w", err)
-		}
-	}
-	if err := config.Save(path, cfg); err != nil {
-		return fmt.Errorf("save token: %w", err)
-	}
+	secretutil.RunWithSecret(func() {
+		cfg.Token = resp.AccessToken
+		cfg.RefreshToken = resp.RefreshToken
+	})
 	fmt.Println("Token refreshed successfully.")
 	return nil
 }

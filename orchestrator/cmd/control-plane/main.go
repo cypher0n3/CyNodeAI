@@ -19,6 +19,7 @@ import (
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/config"
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/database"
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/handlers"
+	"github.com/cypher0n3/cynodeai/orchestrator/internal/mcpgateway"
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/middleware"
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/nodetelemetry"
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/pmasubprocess"
@@ -157,6 +158,9 @@ func run(ctx context.Context, store database.Store, cfg *config.OrchestratorConf
 	mux.Handle("GET /v1/nodes/config", authMiddleware.RequireNodeAuth(http.HandlerFunc(nodeHandler.GetConfig)))
 	mux.Handle("POST /v1/nodes/config", authMiddleware.RequireNodeAuth(http.HandlerFunc(nodeHandler.ConfigAck)))
 	mux.Handle("POST /v1/nodes/capability", authMiddleware.RequireNodeAuth(http.HandlerFunc(nodeHandler.ReportCapability)))
+
+	// MCP tool calls share the control-plane database (P2-02 audit); do not run a separate mcp-gateway with its own DSN.
+	mux.HandleFunc("POST /v1/mcp/tools/call", mcpgateway.ToolCallHandler(store, logger))
 
 	mux.Handle("POST /v1/workflow/start", workflowAuth(http.HandlerFunc(workflowHandler.Start)))
 	mux.Handle("POST /v1/workflow/resume", workflowAuth(http.HandlerFunc(workflowHandler.Resume)))

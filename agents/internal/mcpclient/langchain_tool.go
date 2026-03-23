@@ -2,9 +2,7 @@ package mcpclient
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
-	"strings"
 
 	"github.com/tmc/langchaingo/tools"
 )
@@ -40,17 +38,14 @@ func (m *LangchainTool) Call(ctx context.Context, input string) (string, error) 
 	if m.client == nil || m.client.BaseURL == "" {
 		return m.notConfiguredMsg, nil
 	}
-	var req struct {
-		ToolName  string                 `json:"tool_name"`
-		Arguments map[string]interface{} `json:"arguments"`
-	}
-	if err := json.Unmarshal([]byte(strings.TrimSpace(input)), &req); err != nil {
+	toolName, args, err := DecodeMCPCallInput(input)
+	if err != nil {
 		return "", fmt.Errorf("invalid mcp_call input JSON: %w", err)
 	}
-	if req.ToolName == "" {
+	if toolName == "" {
 		return "", fmt.Errorf("tool_name required")
 	}
-	body, code, err := m.client.Call(ctx, req.ToolName, req.Arguments)
+	body, code, err := m.client.Call(ctx, toolName, args)
 	if err != nil {
 		return "", err
 	}

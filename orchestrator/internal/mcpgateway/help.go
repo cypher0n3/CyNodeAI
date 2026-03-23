@@ -1,9 +1,10 @@
-package main
+package mcpgateway
 
 import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"sort"
 	"strings"
 
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/database"
@@ -13,7 +14,7 @@ import (
 const helpMaxBytes = 32 * 1024
 
 var helpTopicSnippets = map[string]string{
-	"tools":    "Use MCP tools via POST /v1/mcp/tools/call with tool_name and arguments. Task tools: task.get, task.list, task.result, task.cancel, task.logs. Project tools: project.get, project.list. Help: help.get.",
+	"tools":    "Use MCP tools via POST /v1/mcp/tools/call with tool_name and arguments. Task tools: task.get, task.list, task.result, task.cancel, task.logs. Project tools: project.get, project.list. Help: help.list (topic index), help.get (markdown, requires task_id).",
 	"gateway":  "The MCP gateway validates scoped ids, checks allowlists, writes an audit record per call, and routes to orchestrator store handlers.",
 	"projects": "Projects scope preferences and chat. The PM agent typically uses the default project per user unless a specific project_id is supplied in task or chat context.",
 }
@@ -50,6 +51,38 @@ func truncateHelp(s string) string {
 		return s
 	}
 	return s[:helpMaxBytes]
+}
+
+// handleHelpList returns embedded help topic keys and short summaries. No scoped ids required.
+func handleHelpList(_ context.Context, _ database.Store, _ map[string]interface{}, rec *models.McpToolCallAuditLog) (code int, body []byte, auditRec *models.McpToolCallAuditLog) {
+	auditRec = rec
+	rec.Decision = auditDecisionAllow
+	rec.Status = auditStatusSuccess
+	rec.ErrorType = nil
+	keys := make([]string, 0, len(helpTopicSnippets))
+	for k := range helpTopicSnippets {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	topics := make([]map[string]interface{}, 0, len(keys))
+	for _, k := range keys {
+		topics = append(topics, map[string]interface{}{
+			"topic":   k,
+			"summary": helpTopicSnippets[k],
+		})
+	}
+	out := map[string]interface{}{
+		"topics": topics,
+		"hint":   "Call help.get with task_id and optional topic (tools, gateway, projects) or path for full markdown.",
+	}
+	b, err := json.Marshal(out)
+	if err != nil {
+		rec.Status = auditStatusError
+		rec.ErrorType = strPtr("internal_error")
+		rec.Decision = auditDecisionDeny
+		return http.StatusInternalServerError, []byte(`{"error":"internal error"}`), auditRec
+	}
+	return http.StatusOK, b, auditRec
 }
 
 func handleHelpGet(_ context.Context, _ database.Store, args map[string]interface{}, rec *models.McpToolCallAuditLog) (code int, body []byte, auditRec *models.McpToolCallAuditLog) {

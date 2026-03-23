@@ -7,7 +7,6 @@ import (
 	"strings"
 
 	"github.com/cypher0n3/cynodeai/cynork/internal/chat"
-	"github.com/cypher0n3/cynodeai/cynork/internal/config"
 	"github.com/cypher0n3/cynodeai/cynork/internal/gateway"
 )
 
@@ -27,7 +26,7 @@ func AllSlashCommands() []SlashCommand {
 		{"/help", "list slash commands"},
 		{"/hide-thinking", "collapse retained thinking parts"},
 		{"/hide-tool-output", "collapse retained tool-call and tool-result parts"},
-		{"/model", "show or set session model"},
+		{"/model", "show or set routing model (" + gateway.ModelProjectManager + " = PM + MCP)"},
 		{"/models", "list available models"},
 		{"/nodes", "nodes list, get"},
 		{"/prefs", "preferences list, get, set, delete, effective"},
@@ -216,16 +215,9 @@ func runSlashAuthDelegated(session *chat.Session, rest string) error {
 	}
 	switch sub {
 	case "login", "refresh":
-		effectivePath := configPath
-		if effectivePath == "" {
-			effectivePath, _ = getDefaultConfigPath()
-		}
-		if effectivePath != "" {
-			if c, err := config.Load(effectivePath); err == nil {
-				cfg = c
-				session.SetToken(cfg.Token)
-			}
-		}
+		// Auth subcommand updated in-memory cfg (tokens are not reloaded from disk).
+		cfgGatewayFromEnv = os.Getenv("CYNORK_GATEWAY_URL") != ""
+		session.SetToken(cfg.Token)
 	case "logout":
 		session.SetToken("")
 	}
@@ -247,6 +239,7 @@ func runSlashConnect(session *chat.Session, rest string) error {
 		session.Client.BaseURL = rest
 	}
 	cfg.GatewayURL = rest
+	cfgGatewayPersistExplicit = true
 	effectivePath := configPath
 	if effectivePath == "" {
 		effectivePath, _ = getDefaultConfigPath()
@@ -300,6 +293,12 @@ func runSlashModel(session *chat.Session, rest string) error {
 		} else {
 			fmt.Fprintln(os.Stderr, "model:", session.Model)
 		}
+		return nil
+	}
+	if rest != gateway.ModelProjectManager {
+		fmt.Fprintf(os.Stderr, "Invalid routing model %q.\n", rest)
+		fmt.Fprintf(os.Stderr, "Only %s uses the Project Manager with MCP tools; Ollama tags are chosen server-side.\n", gateway.ModelProjectManager)
+		fmt.Fprintf(os.Stderr, "Example: /model %s\n", gateway.ModelProjectManager)
 		return nil
 	}
 	session.SetModel(rest)

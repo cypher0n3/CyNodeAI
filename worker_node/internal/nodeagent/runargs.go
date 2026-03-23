@@ -55,7 +55,7 @@ func BuildManagedServiceRunArgs(stateDir string, svc *nodepayloads.ConfigManaged
 		args = append(args, "-e", "PMA_LISTEN_ADDR=unix:"+pmaListenSock)
 	}
 	if svc.Orchestrator != nil {
-		mcpURL, readyURL := applyAutoProxyURLs(stateDir, serviceID, svc.Orchestrator.MCPGatewayProxyURL, svc.Orchestrator.ReadyCallbackProxyURL)
+		mcpURL, readyURL := applyAutoProxyURLs(serviceID, svc.Orchestrator.MCPGatewayProxyURL, svc.Orchestrator.ReadyCallbackProxyURL)
 		if mcpURL != "" {
 			args = append(args, "-e", "MCP_GATEWAY_URL="+mcpURL, "-e", "PMA_MCP_GATEWAY_URL="+mcpURL, "-e", "MCP_GATEWAY_PROXY_URL="+mcpURL)
 		}
@@ -153,20 +153,24 @@ func httpUnixProxyURL(udsSocketPath, endpointPath string) string {
 	return "http+unix://" + url.PathEscape(udsSocketPath) + endpointPath
 }
 
-func applyAutoProxyURLs(stateDir, serviceID, mcpURL, readyURL string) (resolvedMCP, resolvedReady string) {
+// applyAutoProxyURLs resolves orchestrator "auto" proxy placeholders to http+unix URLs for managed
+// service containers. The socket path MUST be the in-container path (same mount as OLLAMA_BASE_URL):
+// host stateDir/.../proxy.sock is bind-mounted at inferenceSocketContainerPath/proxy.sock.
+// Using the host path in -e would make PMA dial a non-existent path inside the container.
+func applyAutoProxyURLs(serviceID, mcpURL, readyURL string) (resolvedMCP, resolvedReady string) {
 	mcpURL = strings.TrimSpace(mcpURL)
 	readyURL = strings.TrimSpace(readyURL)
 	if !serviceIDPathSafe(serviceID) {
 		return mcpURL, readyURL
 	}
-	udsSock := filepath.Join(stateDir, ManagedAgentProxySocketBaseDir, serviceID, "proxy.sock")
+	containerProxySock := filepath.Join(inferenceSocketContainerPath, "proxy.sock")
 	if mcpURL == proxyURLAuto {
-		resolvedMCP = httpUnixProxyURL(udsSock, "/v1/worker/internal/orchestrator/mcp:call")
+		resolvedMCP = httpUnixProxyURL(containerProxySock, "/v1/worker/internal/orchestrator/mcp:call")
 	} else {
 		resolvedMCP = mcpURL
 	}
 	if readyURL == proxyURLAuto {
-		resolvedReady = httpUnixProxyURL(udsSock, "/v1/worker/internal/orchestrator/agent:ready")
+		resolvedReady = httpUnixProxyURL(containerProxySock, "/v1/worker/internal/orchestrator/agent:ready")
 	} else {
 		resolvedReady = readyURL
 	}

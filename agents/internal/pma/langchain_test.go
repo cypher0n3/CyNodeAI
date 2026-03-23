@@ -46,6 +46,25 @@ func TestIsCapableModel(t *testing.T) {
 	}
 }
 
+func TestPmaMaxAgentIterationsFromEnv(t *testing.T) {
+	t.Setenv(envPmaMaxAgentIterations, "")
+	if got := pmaMaxAgentIterationsFromEnv(); got != defaultPmaMaxAgentIterations {
+		t.Errorf("default: got %d want %d", got, defaultPmaMaxAgentIterations)
+	}
+	t.Setenv(envPmaMaxAgentIterations, "5")
+	if got := pmaMaxAgentIterationsFromEnv(); got != 5 {
+		t.Errorf("5: got %d", got)
+	}
+	t.Setenv(envPmaMaxAgentIterations, "999")
+	if got := pmaMaxAgentIterationsFromEnv(); got != maxPmaMaxAgentIterations {
+		t.Errorf("cap: got %d want %d", got, maxPmaMaxAgentIterations)
+	}
+	t.Setenv(envPmaMaxAgentIterations, "0")
+	if got := pmaMaxAgentIterationsFromEnv(); got != defaultPmaMaxAgentIterations {
+		t.Errorf("invalid: got %d", got)
+	}
+}
+
 // TestRunCompletionWithLangchain_CapableModelOnly verifies that runCompletionWithLangchain
 // always uses the agent loop (small models are no longer routed here; chat.go routes
 // small models to callInference before calling runCompletionWithLangchain).
@@ -61,7 +80,7 @@ func TestRunCompletionWithLangchain_CapableModelOnly(t *testing.T) {
 
 	t.Setenv("INFERENCE_MODEL", "qwen3.5:9b") // capable → functions agent loop
 
-	content, err := runCompletionWithLangchain(context.Background(), "prompt text", client, slog.Default())
+	content, _, err := runCompletionWithLangchain(context.Background(), "prompt text", client, slog.Default())
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -71,43 +90,47 @@ func TestRunCompletionWithLangchain_CapableModelOnly(t *testing.T) {
 }
 
 func TestExtractOutput(t *testing.T) {
-	if got := extractOutput(nil); got != "" {
-		t.Errorf("extractOutput(nil) = %q", got)
+	v, th := extractOutput(nil)
+	if v != "" || th != "" {
+		t.Errorf("extractOutput(nil) = %q, %q", v, th)
 	}
-	if got := extractOutput(map[string]any{}); got != "" {
-		t.Errorf("extractOutput(empty) = %q", got)
+	v, th = extractOutput(map[string]any{})
+	if v != "" || th != "" {
+		t.Errorf("extractOutput(empty) = %q, %q", v, th)
 	}
-	if got := extractOutput(map[string]any{"output": "hello"}); got != "hello" {
-		t.Errorf("extractOutput(output=hello) = %q", got)
+	v, th = extractOutput(map[string]any{"output": "hello"})
+	if v != "hello" || th != "" {
+		t.Errorf("extractOutput(output=hello) = %q, %q", v, th)
 	}
-	if got := extractOutput(map[string]any{"output": "  spaced  "}); got != "spaced" {
-		t.Errorf("extractOutput(spaced) = %q", got)
+	v, th = extractOutput(map[string]any{"output": "  spaced  "})
+	if v != "spaced" || th != "" {
+		t.Errorf("extractOutput(spaced) = %q, %q", v, th)
 	}
-	if got := extractOutput(map[string]any{"output": 123}); got != "123" {
-		t.Errorf("extractOutput(int) = %q", got)
+	v, th = extractOutput(map[string]any{"output": 123})
+	if v != "123" || th != "" {
+		t.Errorf("extractOutput(int) = %q, %q", v, th)
 	}
-	// Think blocks are stripped by extractOutput.
-	if got := extractOutput(map[string]any{"output": "<think>internal</think>answer"}); got != "answer" {
-		t.Errorf("extractOutput(think block) = %q, want %q", got, "answer")
+	v, th = extractOutput(map[string]any{"output": "<think>internal</think>answer"})
+	if v != "answer" || th != "internal" {
+		t.Errorf("extractOutput(think block) = %q, %q want answer, internal", v, th)
 	}
 }
 
-func TestStripThinkBlocks(t *testing.T) {
+func TestExtractThinkBlocks(t *testing.T) {
 	cases := []struct {
-		input, want string
+		input, wantVis, wantThink string
 	}{
-		{"no blocks", "no blocks"},
-		{"<think>hidden</think>visible", "visible"},
-		{"before<think>mid</think>after", "beforeafter"},
-		{"<think>a</think>x<think>b</think>y", "xy"},
-		// Unterminated block — drop from opening tag.
-		{"good<think>truncated", "good"},
-		// Empty string.
-		{"", ""},
+		{"no blocks", "no blocks", ""},
+		{"<think>hidden</think>visible", "visible", "hidden"},
+		{"before<think>mid</think>after", "beforeafter", "mid"},
+		{"<think>a</think>x<think>b</think>y", "xy", "a\nb"},
+		{"good<think>truncated", "good", "truncated"},
+		{"", "", ""},
 	}
 	for _, c := range cases {
-		if got := stripThinkBlocks(c.input); got != c.want {
-			t.Errorf("stripThinkBlocks(%q) = %q, want %q", c.input, got, c.want)
+		gotVis, gotThink := extractThinkBlocks(c.input)
+		if gotVis != c.wantVis || gotThink != c.wantThink {
+			t.Errorf("extractThinkBlocks(%q) = (%q, %q), want (%q, %q)", c.input, gotVis, gotThink, c.wantVis, c.wantThink)
 		}
 	}
 }
@@ -137,6 +160,13 @@ func TestLooksLikeUnexecutedToolCall(t *testing.T) {
 		"No tasks found in the current project.",
 		"",
 		"I cannot access tasks without an MCP gateway configured.",
+		// Long structured intro with example JSON (must not look like an unexecuted stub).
+		"Hello! I'm the **Project Manager Agent** for CyNodeAI, ready to assist you with project management tasks.\n\n" +
+			"## What I Can Help With\n\n" +
+			"You can use MCP tools. For example: {\"tool_name\": \"help.list\", \"arguments\": {}}\n\n" +
+			"Let me know if you need anything else.",
+		// Tool-like JSON only inside a fenced block (documentation).
+		"Here is how to call tools:\n\n```json\n{\"tool_name\": \"mcp_call\", \"arguments\": {}}\n```\n",
 	}
 	for _, s := range negative {
 		if looksLikeUnexecutedToolCall(s) {
@@ -145,32 +175,24 @@ func TestLooksLikeUnexecutedToolCall(t *testing.T) {
 	}
 }
 
-func TestRunCompletionWithLangchainStreaming_EmitsNDJSON(t *testing.T) {
-	mcpSrv := newMockMCPServer(t, `{}`)
-	defer mcpSrv.Close()
-	client := &MCPClient{BaseURL: mcpSrv.URL}
-	oldHook := testLLMForCompletion
-	testLLMForCompletion = &mockLLM{responses: []string{"streamed"}}
-	defer func() { testLLMForCompletion = oldHook }()
-	t.Setenv("INFERENCE_MODEL", "qwen3.5:9b")
-
+func TestWriteLangchainNDJSONStream_EmitsNDJSON(t *testing.T) {
 	rec := httptest.NewRecorder()
-	err := runCompletionWithLangchainStreaming(context.Background(), "prompt", client, rec, slog.Default())
-	if err != nil {
-		t.Fatalf("runCompletionWithLangchainStreaming: %v", err)
+	if err := writeLangchainNDJSONStream(rec, "streamed", ""); err != nil {
+		t.Fatalf("writeLangchainNDJSONStream: %v", err)
 	}
 	body := rec.Body.String()
-	// Must contain iteration_start and done (mock LLM invokes StreamingFunc so delta lines present).
 	if !strings.Contains(body, `"iteration_start"`) {
 		t.Errorf("response missing iteration_start: %s", body)
+	}
+	if !strings.Contains(body, `"delta"`) || !strings.Contains(body, "streamed") {
+		t.Errorf("response missing delta with content: %s", body)
 	}
 	if !strings.Contains(body, `"done"`) {
 		t.Errorf("response missing done: %s", body)
 	}
-	// Parse first line as JSON (iteration_start).
 	lines := strings.Split(strings.TrimSpace(body), "\n")
-	if len(lines) < 1 {
-		t.Fatalf("expected at least one NDJSON line: %s", body)
+	if len(lines) < 3 {
+		t.Fatalf("expected iteration_start, delta, done lines: %s", body)
 	}
 	var first map[string]json.RawMessage
 	if err := json.Unmarshal([]byte(lines[0]), &first); err != nil {
@@ -204,11 +226,11 @@ func TestStreamingLLM_Call(t *testing.T) {
 }
 
 func TestRunCompletionWithLangchain_EmptyClient(t *testing.T) {
-	_, err := runCompletionWithLangchain(context.Background(), "prompt", nil, slog.Default())
+	_, _, err := runCompletionWithLangchain(context.Background(), "prompt", nil, slog.Default())
 	if err == nil {
 		t.Error("expected error for nil client")
 	}
-	_, err = runCompletionWithLangchain(context.Background(), "prompt", &MCPClient{BaseURL: ""}, slog.Default())
+	_, _, err = runCompletionWithLangchain(context.Background(), "prompt", &MCPClient{BaseURL: ""}, slog.Default())
 	if err == nil {
 		t.Error("expected error for empty BaseURL")
 	}
@@ -224,7 +246,7 @@ func TestRunCompletionWithLangchain_CanceledContext(t *testing.T) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
-	_, err := runCompletionWithLangchain(ctx, "p", client, slog.Default())
+	_, _, err := runCompletionWithLangchain(ctx, "p", client, slog.Default())
 	if err == nil {
 		t.Error("expected error with canceled context")
 	}
@@ -250,7 +272,7 @@ func TestRunCompletionWithLangchain_OllamaBranchUnreachable(t *testing.T) {
 	testLLMForCompletion = nil
 	defer func() { testLLMForCompletion = oldHook }()
 
-	_, err := runCompletionWithLangchain(context.Background(), "p", client, slog.Default())
+	_, _, err := runCompletionWithLangchain(context.Background(), "p", client, slog.Default())
 	if err == nil {
 		t.Error("expected error when Ollama unreachable")
 	}
@@ -266,7 +288,7 @@ func TestRunCompletionWithLangchainWithTimeout_DefaultTimeout(t *testing.T) {
 	defer func() { testLLMForCompletion = oldHook }()
 	t.Setenv("INFERENCE_MODEL", "qwen3.5:9b") // capable model → functions agent loop
 	// timeout=0 triggers the default-timeout branch.
-	content, err := runCompletionWithLangchainWithTimeout(context.Background(), "p", client, slog.Default(), 0)
+	content, _, err := runCompletionWithLangchainWithTimeout(context.Background(), "p", client, slog.Default(), 0)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
@@ -298,7 +320,7 @@ func TestRunCompletionWithLangchain_WithMockLLMAndMCP_CapableModels(t *testing.T
 
 			t.Setenv("INFERENCE_MODEL", tt.model)
 
-			content, err := runCompletionWithLangchain(context.Background(), "sys\n\nuser: hi\nassistant: ", client, slog.Default())
+			content, _, err := runCompletionWithLangchain(context.Background(), "sys\n\nuser: hi\nassistant: ", client, slog.Default())
 			if err != nil {
 				t.Fatalf("runCompletionWithLangchain: %v", err)
 			}
@@ -309,23 +331,68 @@ func TestRunCompletionWithLangchain_WithMockLLMAndMCP_CapableModels(t *testing.T
 	}
 }
 
-// TestRunCompletionWithLangchain_OllamaNumCtxFromEnv exercises ollamaNumCtxFromEnv by running
-// the real Ollama client path (testLLMForCompletion=nil) with OLLAMA_NUM_CTX set and a mock server.
+// TestRunCompletionWithLangchain_OllamaNumCtxFromEnv verifies the agent path still runs when
+// OLLAMA_NUM_CTX is set (used by callInference / direct Ollama; tools path uses OpenAI-compatible /v1).
+// TestTryRepairTextualMCPCalls_BareArgumentsJSON covers models that omit __arg1 and send the MCP payload directly.
+func TestTryRepairTextualMCPCalls_BareArgumentsJSON(t *testing.T) {
+	raw := `[{"type":"function","function":{"name":"mcp_call","arguments":"{\"tool_name\":\"help.get\",\"arguments\":{}}"}}]`
+	mcpSrv := newMockMCPServer(t, `{"ok":true}`)
+	defer mcpSrv.Close()
+	client := &MCPClient{BaseURL: mcpSrv.URL}
+	out, ok := tryRepairTextualMCPCalls(context.Background(), raw, client)
+	if !ok {
+		t.Fatal("expected repair")
+	}
+	if !strings.Contains(out, `"ok":true`) {
+		t.Fatalf("got %q", out)
+	}
+}
+
+// TestTryRepairTextualMCPCalls_OllamaContentLeak covers Ollama returning tool_calls only in message.content.
+func TestTryRepairTextualMCPCalls_OllamaContentLeak(t *testing.T) {
+	raw := `[{"id":"call_r3ng0yxq","type":"function","function":{"name":"mcp_call","arguments":"{\"__arg1\":\"{\\\"tool_name\\\": \\\"help.get\\\", \\\"arguments\\\": {}}\"}"}}]`
+	mcpSrv := newMockMCPServer(t, `{"help":"documentation body"}`)
+	defer mcpSrv.Close()
+	client := &MCPClient{BaseURL: mcpSrv.URL}
+	out, ok := tryRepairTextualMCPCalls(context.Background(), raw, client)
+	if !ok {
+		t.Fatal("expected repair")
+	}
+	if !strings.Contains(out, "documentation body") {
+		t.Fatalf("got %q", out)
+	}
+}
+
+// TestRunCompletionWithLangchain_RepairsTextualToolCalls runs the full path when mock LLM returns content-only tool JSON.
+func TestRunCompletionWithLangchain_RepairsTextualToolCalls(t *testing.T) {
+	mcpSrv := newMockMCPServer(t, `{"sections":["intro"]}`)
+	defer mcpSrv.Close()
+	client := &MCPClient{BaseURL: mcpSrv.URL}
+	oldHook := testLLMForCompletion
+	testLLMForCompletion = &mockLLM{responses: []string{`[{"id":"x","type":"function","function":{"name":"mcp_call","arguments":"{\"__arg1\":\"{\\\"tool_name\\\": \\\"help.list\\\", \\\"arguments\\\": {}}\"}"}}]`}}
+	defer func() { testLLMForCompletion = oldHook }()
+	t.Setenv("INFERENCE_MODEL", "qwen3.5:9b")
+	content, _, err := runCompletionWithLangchain(context.Background(), "list help", client, slog.Default())
+	if err != nil {
+		t.Fatalf("runCompletionWithLangchain: %v", err)
+	}
+	if !strings.Contains(content, "intro") {
+		t.Fatalf("expected MCP body in output, got %q", content)
+	}
+}
+
 func TestRunCompletionWithLangchain_OllamaNumCtxFromEnv(t *testing.T) {
-	mockOllama := newMockInferenceServer(t, 200, `{"message":{"role":"assistant","content":"numctx-ok"},"done":true}`)
-	defer mockOllama.Close()
 	mcpSrv := newMockMCPServer(t, `{}`)
 	defer mcpSrv.Close()
 
-	t.Setenv("OLLAMA_BASE_URL", mockOllama.URL)
 	t.Setenv("OLLAMA_NUM_CTX", "4096")
 	t.Setenv("INFERENCE_MODEL", "qwen3.5:9b")
 	oldHook := testLLMForCompletion
-	testLLMForCompletion = nil
+	testLLMForCompletion = &mockLLM{responses: []string{"numctx-ok"}}
 	defer func() { testLLMForCompletion = oldHook }()
 
 	client := &MCPClient{BaseURL: mcpSrv.URL}
-	content, err := runCompletionWithLangchain(context.Background(), "hi", client, slog.Default())
+	content, _, err := runCompletionWithLangchain(context.Background(), "hi", client, slog.Default())
 	if err != nil {
 		t.Fatalf("runCompletionWithLangchain: %v", err)
 	}

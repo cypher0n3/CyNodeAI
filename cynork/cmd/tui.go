@@ -2,13 +2,13 @@
 package cmd
 
 import (
-	"fmt"
+	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/charmbracelet/bubbletea"
 	"github.com/cypher0n3/cynodeai/cynork/internal/chat"
 	"github.com/cypher0n3/cynodeai/cynork/internal/config"
 	"github.com/cypher0n3/cynodeai/cynork/internal/gateway"
 	"github.com/cypher0n3/cynodeai/cynork/internal/tui"
+	"github.com/cypher0n3/cynodeai/go_shared_libs/secretutil"
 	"github.com/spf13/cobra"
 )
 
@@ -37,12 +37,8 @@ func runTUI(_ *cobra.Command, _ []string) error {
 	session.ProjectID = tuiProjectID
 	session.Plain = false
 	session.NoColor = noColor
-	// When token present, ensure thread before TUI: new (default) or resolve --resume-thread.
-	if cfg.Token != "" {
-		if err := session.EnsureThread(tuiResumeThread); err != nil {
-			return fmt.Errorf("thread: %w", err)
-		}
-	}
+	// Thread ensure (new or --resume-thread) runs in the TUI Init async path so the UI renders
+	// without network (cynork_tui.md EntryPoint; Bug 2 offline startup).
 	return runTUIWithSession(session, tuiResumeThread)
 }
 
@@ -56,9 +52,16 @@ func (p *tuiAuthProvider) Token() string        { return p.cfg.Token }
 func (p *tuiAuthProvider) RefreshToken() string { return p.cfg.RefreshToken }
 func (p *tuiAuthProvider) GatewayURL() string   { return p.cfg.GatewayURL }
 func (p *tuiAuthProvider) SetTokens(access, refresh string) {
-	p.cfg.Token, p.cfg.RefreshToken = access, refresh
+	secretutil.RunWithSecret(func() {
+		p.cfg.Token, p.cfg.RefreshToken = access, refresh
+	})
 }
-func (p *tuiAuthProvider) SetGatewayURL(url string)    { p.cfg.GatewayURL = url }
+func (p *tuiAuthProvider) SetGatewayURL(url string, userExplicit bool) {
+	p.cfg.GatewayURL = url
+	if userExplicit {
+		cfgGatewayPersistExplicit = true
+	}
+}
 func (p *tuiAuthProvider) Save() error                 { return p.saveFn() }
 func (p *tuiAuthProvider) ShowThinkingByDefault() bool { return p.cfg.TUI.ShowThinkingByDefault }
 func (p *tuiAuthProvider) SetShowThinkingByDefault(v bool) {
@@ -77,11 +80,12 @@ func runTUIWithSession(session *chat.Session, resumeThreadSelector string) error
 	m := tui.NewModel(session)
 	m.SetAuthProvider(&tuiAuthProvider{cfg: cfg, saveFn: saveConfig})
 	m.SetResumeThreadSelector(resumeThreadSelector)
+	m.SetHealthPollInterval(tuiHealthPollIntervalSec(cfg))
 	// Startup token failure: open in-session login instead of exiting (cynork_tui.md Auth Recovery).
 	if session.Client != nil && session.Client.Token == "" {
 		m.OpenLoginFormOnInit = true
 	}
-	p := tea.NewProgram(m, tea.WithAltScreen())
+	p := tea.NewProgram(m, tea.WithAltScreen(), tea.WithMouseCellMotion())
 	if _, err := tuiRunProgram(p); err != nil {
 		return err
 	}
@@ -91,4 +95,12 @@ func runTUIWithSession(session *chat.Session, resumeThreadSelector string) error
 // tuiRunProgram runs the Tea program; tests may override to avoid blocking.
 var tuiRunProgram = func(p *tea.Program) (tea.Model, error) {
 	return p.Run()
+}
+
+// tuiHealthPollIntervalSec returns seconds between GET /healthz polls for the status dot (default 5; 0 = off).
+func tuiHealthPollIntervalSec(c *config.Config) int {
+	if c == nil || c.TUI.HealthPollIntervalSec == nil {
+		return 5
+	}
+	return *c.TUI.HealthPollIntervalSec
 }

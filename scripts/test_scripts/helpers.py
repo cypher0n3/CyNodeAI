@@ -159,7 +159,6 @@ def ensure_e2e_task(config_path, max_attempts=3):
                 "json",
             ],
             config_path,
-            timeout=120,
         )
         data = parse_json_safe(out)
         task_id = (data or {}).get("task_id") or ""
@@ -541,15 +540,18 @@ def _ollama_wait_container_ready(runtime):
     return False
 
 
-def _ollama_ensure_model(runtime):
-    """Pull OLLAMA_E2E_MODEL if not already listed. Return True on success."""
+def _ollama_ensure_model(runtime, model_name: str) -> bool:
+    """Pull model_name in the Ollama container if not already listed. Return True on success."""
+    name = (model_name or "").strip()
+    if not name:
+        return True
     for _attempt in range(3):
         try:
             r = subprocess.run(
                 [runtime, "exec", config.OLLAMA_CONTAINER_NAME, "ollama", "list"],
                 capture_output=True, text=True, timeout=30, check=False
             )
-            if config.OLLAMA_E2E_MODEL in (r.stdout or ""):
+            if name in (r.stdout or ""):
                 return True
             break
         except subprocess.TimeoutExpired:
@@ -557,8 +559,7 @@ def _ollama_ensure_model(runtime):
             continue
     for attempt in range(3):
         r = subprocess.run(
-            [runtime, "exec", config.OLLAMA_CONTAINER_NAME, "ollama", "pull",
-             config.OLLAMA_E2E_MODEL],
+            [runtime, "exec", config.OLLAMA_CONTAINER_NAME, "ollama", "pull", name],
             capture_output=True, text=True, timeout=600, check=False
         )
         if not r.returncode:
@@ -590,9 +591,9 @@ def _ollama_chat_one_request(ollama_url, payload):
 def run_ollama_inference_smoke():
     """Run inference smoke: ensure Ollama at OLLAMA_BASE_URL responds to a chat request.
     Skip if E2E_SKIP_INFERENCE_SMOKE set. Optional: if a container named OLLAMA_CONTAINER_NAME
-    is running, wait for it and pull OLLAMA_E2E_MODEL there; then try chat. Pass/fail is based
-    only on whether the chat request succeeds, not on container name or pull. Return True on
-    success.
+    is running, wait for it and pull OLLAMA_E2E_MODEL (and OLLAMA_CAPABLE_MODEL when enabled)
+    there; then try chat. Pass/fail is based only on whether the chat request succeeds, not on
+    container name or pull. Return True on success.
     """
     if os.environ.get("E2E_SKIP_INFERENCE_SMOKE", "") or config.E2E_SKIP_INFERENCE_SMOKE:
         return True
@@ -605,7 +606,14 @@ def run_ollama_inference_smoke():
     ollama_rt = _ollama_container_runtime()
     if ollama_rt:
         _ollama_wait_container_ready(ollama_rt)
-        _ollama_ensure_model(ollama_rt)
+        _ollama_ensure_model(ollama_rt, config.OLLAMA_E2E_MODEL)
+        cap = (config.OLLAMA_CAPABLE_MODEL or "").strip()
+        if (
+            cap
+            and cap != config.OLLAMA_E2E_MODEL
+            and config.OLLAMA_AUTO_PULL_CAPABLE
+        ):
+            _ollama_ensure_model(ollama_rt, cap)
     for _ in range(3):
         if _ollama_chat_one_request(ollama_url, payload):
             return True

@@ -91,7 +91,11 @@ func (c *Client) Call(ctx context.Context, toolName string, arguments map[string
 		return nil, 0, err
 	}
 	req.Header.Set("Content-Type", "application/json")
-	resp, err := c.HTTPClient.Do(req)
+	httpClient := c.HTTPClient
+	if httpClient == nil {
+		httpClient = http.DefaultClient
+	}
+	resp, err := httpClient.Do(req)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -122,6 +126,9 @@ func isInternalProxyMCPURL(baseURL string) bool {
 
 func (c *Client) callViaWorkerInternalProxy(ctx context.Context, mcpBody []byte) (body []byte, statusCode int, err error) {
 	httpClient := c.HTTPClient
+	if httpClient == nil {
+		httpClient = http.DefaultClient
+	}
 	requestURL := strings.TrimSpace(c.BaseURL)
 	if strings.HasPrefix(requestURL, "http+unix://") {
 		unixSocketPath, endpointPath, ok := ParseHTTPUnixEndpoint(requestURL)

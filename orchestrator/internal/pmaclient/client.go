@@ -42,7 +42,8 @@ type CompletionRequest struct {
 
 // CompletionResponse is the response from cynode-pma.
 type CompletionResponse struct {
-	Content string `json:"content"`
+	Content  string `json:"content"`
+	Thinking string `json:"thinking,omitempty"`
 }
 
 type managedProxyRequest struct {
@@ -103,6 +104,7 @@ func CallChatCompletion(ctx context.Context, client *http.Client, baseURL string
 // PMAStreamCallbacks are invoked for each NDJSON line from PMA stream. OnDelta is required; others are optional.
 type PMAStreamCallbacks struct {
 	OnDelta          func(string) error
+	OnThinking       func(string) error
 	OnIterationStart func(iteration int) error
 }
 
@@ -191,6 +193,12 @@ func processNDJSONLine(line []byte, cb PMAStreamCallbacks) error {
 		var s string
 		if json.Unmarshal(d, &s) == nil && s != "" {
 			return cb.OnDelta(s)
+		}
+	}
+	if th, ok := raw["thinking"]; ok && cb.OnThinking != nil {
+		var s string
+		if json.Unmarshal(th, &s) == nil && s != "" {
+			return cb.OnThinking(s)
 		}
 	}
 	// "done" and other keys are ignored; stream continues until body closes

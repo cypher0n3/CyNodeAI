@@ -23,6 +23,14 @@ var (
 	outputFmt  string
 	noColor    bool
 	cfg        *config.Config
+	// cfgGatewayFromEnv is true when the current in-memory gateway URL came from
+	// CYNORK_GATEWAY_URL (session override). Used when the config file does not exist
+	// yet so the first write does not persist a session-only env URL.
+	cfgGatewayFromEnv bool
+	// cfgGatewayPersistExplicit is true after the user explicitly sets the gateway URL
+	// to persist (/connect <url>). saveConfig then writes in-memory gateway_url; otherwise
+	// an existing config file keeps its on-disk gateway_url.
+	cfgGatewayPersistExplicit bool
 	// getDefaultConfigPath resolves the default config file path when --config is not set.
 	// Tests may override to inject failures.
 	getDefaultConfigPath = config.ConfigPath
@@ -39,6 +47,7 @@ var rootCmd = &cobra.Command{
 		if err != nil {
 			return exit.Usage(fmt.Errorf("load config: %w", err))
 		}
+		cfgGatewayFromEnv = os.Getenv("CYNORK_GATEWAY_URL") != ""
 		if outputFmt != "" && outputFmt != outputFormatTable && outputFmt != outputFormatJSON {
 			return exit.Usage(fmt.Errorf("output must be table or json"))
 		}

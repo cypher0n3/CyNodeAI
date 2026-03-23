@@ -867,7 +867,7 @@ func InitializeCynorkSuite(sc *godog.ScenarioContext, state *cynorkState) {
 
 	sc.Step(`^I run cynork auth whoami using the stored config$`, func(ctx context.Context) error {
 		st := getState(ctx)
-		// No CYNORK_TOKEN: whoami must read token from config file (session persistence).
+		// No CYNORK_TOKEN: tokens are not persisted to disk; expect auth failure.
 		env := []string{"CYNORK_GATEWAY_URL=" + st.mockServer.URL}
 		args := []string{"--config", st.configPath, "auth", "whoami"}
 		st.lastExit, st.lastStdout, st.lastStderr = st.runCynork(args, env...)
@@ -877,6 +877,10 @@ func InitializeCynorkSuite(sc *godog.ScenarioContext, state *cynorkState) {
 	sc.Step(`^I run cynork auth refresh$`, func(ctx context.Context) error {
 		st := getState(ctx)
 		env := []string{"CYNORK_GATEWAY_URL=" + st.mockServer.URL}
+		if st.token != "" {
+			handle := strings.TrimPrefix(st.token, "tok-")
+			env = append(env, "CYNORK_REFRESH_TOKEN=refresh-"+handle)
+		}
 		args := []string{"--config", st.configPath, "auth", "refresh"}
 		st.lastExit, st.lastStdout, st.lastStderr = st.runCynork(args, env...)
 		return nil

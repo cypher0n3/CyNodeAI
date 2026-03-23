@@ -86,16 +86,19 @@ func TestBuildManagedServiceRunArgs_AutoProxyURLs(t *testing.T) {
 	for i := 0; i < len(args)-1; i++ {
 		if args[i] == "-e" {
 			env := args[i+1]
-			if strings.HasPrefix(env, "MCP_GATEWAY_PROXY_URL=") && strings.Contains(env, "http+unix://") {
+			// In-container UDS path (bind-mounted from host); must not use host state dir inside the container.
+			if strings.HasPrefix(env, "MCP_GATEWAY_PROXY_URL=") && strings.Contains(env, "http+unix://") &&
+				strings.Contains(env, "managed_agent_proxy") && strings.Contains(env, "proxy.sock") {
 				hasMCP = true
 			}
-			if strings.HasPrefix(env, "READY_CALLBACK_PROXY_URL=") && strings.Contains(env, "http+unix://") {
+			if strings.HasPrefix(env, "READY_CALLBACK_PROXY_URL=") && strings.Contains(env, "http+unix://") &&
+				strings.Contains(env, "managed_agent_proxy") && strings.Contains(env, "proxy.sock") {
 				hasReady = true
 			}
 		}
 	}
 	if !hasMCP || !hasReady {
-		t.Errorf("expected auto proxy URLs to be resolved to http+unix; MCP=%v Ready=%v", hasMCP, hasReady)
+		t.Errorf("expected auto proxy URLs to be resolved to http+unix under container mount; MCP=%v Ready=%v", hasMCP, hasReady)
 	}
 }
 

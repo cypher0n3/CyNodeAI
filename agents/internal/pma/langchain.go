@@ -15,24 +15,28 @@ import (
 
 	"github.com/tmc/langchaingo/agents"
 	"github.com/tmc/langchaingo/llms"
-	"github.com/tmc/langchaingo/llms/ollama"
+	"github.com/tmc/langchaingo/llms/openai"
 	"github.com/tmc/langchaingo/tools"
 )
 
 const (
 	pmaDefaultOllamaURL = "http://localhost:11434"
 	pmaDefaultModel     = "qwen3.5:0.8b"
-	envOllamaNumCtx     = "OLLAMA_NUM_CTX"
-	// pmaMaxIterations caps the langchaingo agent loop. 3 iterations is sufficient
-	// for most real PM tasks (fetch context → act → summarise) while keeping total
-	// agent time well under the gateway write timeout.
-	pmaMaxIterations = 3
+	envOllamaNumCtx          = "OLLAMA_NUM_CTX"
+	envPmaMaxAgentIterations = "PMA_MAX_AGENT_ITERATIONS"
+	// defaultPmaMaxAgentIterations caps the langchaingo OpenAIFunctionsAgent loop.
+	// Each LLM turn + tool round-trip consumes at least one iteration; 3 was too low
+	// (constant ErrNotFinished → no-tools fallback → empty or fake answers). Keep
+	// under gateway timeouts via pmaLangchainCompletionTimeout (300s), not an artificially
+	// tiny iteration cap.
+	defaultPmaMaxAgentIterations = 20
+	maxPmaMaxAgentIterations     = 80
 	// inferenceHTTPTimeout is the HTTP client and streaming read timeout for direct Ollama
 	// inference calls. Thinking models (qwen3:8b) can take up to 300 s on modest hardware.
 	// See CYNAI.PMAGNT.StreamingAssistantOutput.
 	inferenceHTTPTimeout = 300 * time.Second
 	// xmlThinkOpen and xmlThinkClose delimit Qwen3/DeepSeek-R1 internal reasoning blocks.
-	// These are stripped from final output before returning to the caller.
+	// extractThinkBlocks separates them for visible vs thinking (CYNAI.PMAGNT.ThinkingContentSeparation).
 	xmlThinkOpen  = "<think>"
 	xmlThinkClose = "</think>"
 )
@@ -85,6 +89,23 @@ func isCapableModel(name string) bool {
 	return false
 }
 
+// pmaMaxAgentIterationsFromEnv returns the agent loop cap (default defaultPmaMaxAgentIterations).
+// Override with PMA_MAX_AGENT_ITERATIONS (1–80) for slow models or very long tool chains.
+func pmaMaxAgentIterationsFromEnv() int {
+	v := strings.TrimSpace(os.Getenv(envPmaMaxAgentIterations))
+	if v == "" {
+		return defaultPmaMaxAgentIterations
+	}
+	n, err := strconv.Atoi(v)
+	if err != nil || n < 1 {
+		return defaultPmaMaxAgentIterations
+	}
+	if n > maxPmaMaxAgentIterations {
+		return maxPmaMaxAgentIterations
+	}
+	return n
+}
+
 // testLLMForCompletion is set by tests to avoid calling real Ollama. Production always leaves it nil.
 var testLLMForCompletion llms.Model
 
@@ -99,9 +120,9 @@ var testLLMForCompletion llms.Model
 // Small/smoke models must NOT be routed here. Use callInference for those.
 //
 // When mcpClient.BaseURL is empty the function returns an error.
-func runCompletionWithLangchain(ctx context.Context, fullPrompt string, mcpClient *MCPClient, logger *slog.Logger) (string, error) {
+func runCompletionWithLangchain(ctx context.Context, fullPrompt string, mcpClient *MCPClient, logger *slog.Logger) (visible string, thinking string, err error) {
 	if mcpClient == nil || mcpClient.BaseURL == "" {
-		return "", fmt.Errorf("MCP gateway URL not set")
+		return "", "", fmt.Errorf("MCP gateway URL not set")
 	}
 	baseURL := os.Getenv("OLLAMA_BASE_URL")
 	if baseURL == "" {
@@ -119,114 +140,141 @@ func runCompletionWithLangchain(ctx context.Context, fullPrompt string, mcpClien
 	if testLLMForCompletion != nil {
 		llm = testLLMForCompletion
 	} else {
-		ollamaURL, httpClient := resolveOllamaClientConfig(baseURL)
-		opts := []ollama.Option{
-			ollama.WithServerURL(ollamaURL),
-			ollama.WithModel(model),
-		}
-		if httpClient != nil {
-			opts = append(opts, ollama.WithHTTPClient(httpClient))
-		}
-		if n := ollamaNumCtxFromEnv(); n > 0 {
-			opts = append(opts, ollama.WithRunnerNumCtx(n))
-		}
 		var err error
-		llm, err = ollama.New(opts...)
+		llm, err = newToolsAgentLLM(baseURL, model)
 		if err != nil {
-			return "", fmt.Errorf("create ollama llm: %w", err)
+			return "", "", err
 		}
 	}
 
 	if logger != nil {
 		logger.Debug("using langchain functions agent path", "model", model)
 	}
+	maxIter := pmaMaxAgentIterationsFromEnv()
 	toolsList := []tools.Tool{NewMCPTool(mcpClient)}
 	// OpenAIFunctionsAgent uses the native tool-calling API (Ollama <tool_call> format)
 	// rather than text-based ReAct, which is required for Qwen3-family thinking models.
 	agent := agents.NewOpenAIFunctionsAgent(llm, toolsList,
-		agents.WithMaxIterations(pmaMaxIterations),
+		agents.WithMaxIterations(maxIter),
 	)
 	exec := agents.NewExecutor(agent,
 		agents.WithReturnIntermediateSteps(),
-		agents.WithMaxIterations(pmaMaxIterations),
+		agents.WithMaxIterations(maxIter),
 	)
 	outputs, err := exec.Call(ctx, map[string]any{"input": fullPrompt})
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
-	return extractOutput(outputs), nil
+	visible, thinking = extractOutput(outputs)
+	if repaired, ok := tryRepairTextualMCPCalls(ctx, visible, mcpClient); ok {
+		return repaired, thinking, nil
+	}
+	return visible, thinking, nil
 }
 
-// runCompletionWithLangchainStreaming runs the same agent path as runCompletionWithLangchain
-// but streams NDJSON (iteration_start, delta, done) to w. Used when req.Stream is true
-// and the capable-model + MCP path is selected. Caller must set Content-Type and status.
-func runCompletionWithLangchainStreaming(ctx context.Context, fullPrompt string, mcpClient *MCPClient, w http.ResponseWriter, logger *slog.Logger) error {
-	if mcpClient == nil || mcpClient.BaseURL == "" {
-		return fmt.Errorf("MCP gateway URL not set")
+// tryRepairTextualMCPCalls runs MCP when the model put OpenAI-style tool_calls JSON in the
+// assistant message body instead of the API's tool_calls field. Ollama's /v1/chat/completions
+// sometimes surfaces tool calls only as message.content, so the agent executor never runs tools.
+func tryRepairTextualMCPCalls(ctx context.Context, content string, mcpClient *MCPClient) (string, bool) {
+	s := strings.TrimSpace(content)
+	if !strings.HasPrefix(s, "[") || !strings.Contains(s, `"function"`) {
+		return "", false
 	}
-	baseURL := os.Getenv("OLLAMA_BASE_URL")
-	if baseURL == "" {
-		baseURL = os.Getenv("INFERENCE_URL")
+	var calls []struct {
+		Type     string `json:"type"`
+		Function struct {
+			Name      string `json:"name"`
+			Arguments string `json:"arguments"`
+		} `json:"function"`
 	}
-	if baseURL == "" {
-		baseURL = pmaDefaultOllamaURL
+	if err := json.Unmarshal([]byte(s), &calls); err != nil || len(calls) == 0 {
+		return "", false
 	}
-	model := os.Getenv("INFERENCE_MODEL")
-	if model == "" {
-		model = pmaDefaultModel
-	}
-
-	var baseLLM llms.Model
-	if testLLMForCompletion != nil {
-		baseLLM = testLLMForCompletion
-	} else {
-		ollamaURL, httpClient := resolveOllamaClientConfig(baseURL)
-		opts := []ollama.Option{
-			ollama.WithServerURL(ollamaURL),
-			ollama.WithModel(model),
+	tool := NewMCPTool(mcpClient)
+	var parts []string
+	for _, c := range calls {
+		if c.Type != "function" || c.Function.Name != "mcp_call" {
+			continue
 		}
-		if httpClient != nil {
-			opts = append(opts, ollama.WithHTTPClient(httpClient))
-		}
-		if n := ollamaNumCtxFromEnv(); n > 0 {
-			opts = append(opts, ollama.WithRunnerNumCtx(n))
-		}
-		var err error
-		baseLLM, err = ollama.New(opts...)
+		input := mcpCallInputFromOpenAIArguments(c.Function.Arguments)
+		out, err := tool.Call(ctx, input)
 		if err != nil {
-			return fmt.Errorf("create ollama llm: %w", err)
+			return "mcp_call: " + err.Error(), true
+		}
+		parts = append(parts, out)
+	}
+	if len(parts) == 0 {
+		return "", false
+	}
+	return strings.Join(parts, "\n\n"), true
+}
+
+// mcpCallInputFromOpenAIArguments mirrors agents.OpenAIFunctionsAgent: the model may send
+// either {"__arg1":"<json string>"} or a bare {"tool_name":...,"arguments":...} object.
+func mcpCallInputFromOpenAIArguments(argumentsJSON string) string {
+	s := strings.TrimSpace(argumentsJSON)
+	var m map[string]any
+	if err := json.Unmarshal([]byte(s), &m); err != nil {
+		return s
+	}
+	if v, ok := m["__arg1"]; ok {
+		if inner, ok := v.(string); ok {
+			return inner
 		}
 	}
+	return s
+}
 
-	iteration := 0
-	llm := newStreamingLLM(baseLLM, w, &iteration)
-	if logger != nil {
-		logger.Debug("using langchain streaming functions agent path", "model", model)
-	}
-	toolsList := []tools.Tool{NewMCPTool(mcpClient)}
-	agent := agents.NewOpenAIFunctionsAgent(llm, toolsList,
-		agents.WithMaxIterations(pmaMaxIterations),
-	)
-	exec := agents.NewExecutor(agent,
-		agents.WithReturnIntermediateSteps(),
-		agents.WithMaxIterations(pmaMaxIterations),
-	)
-	_, err := exec.Call(ctx, map[string]any{"input": fullPrompt})
-	if err != nil {
-		return err
-	}
+// pmaStreamDeltaRunes is the max runes per {"delta":"..."} line when emitting a completed
+// langchain turn. True per-token streaming requires the Streaming LLM wrapper (cynode_pma.md);
+// chunking progressive deltas avoids a single giant delta so cynork can render incrementally.
+const pmaStreamDeltaRunes = 24
+
+// writeLangchainNDJSONStream writes NDJSON for stream=true (orchestrator → gateway → TUI).
+// Per CYNAI.PMAGNT.PMAStreamingNDJSONFormat / REQ-PMAGNT-0122, full thinking is emitted as
+// {"thinking":"..."} before visible {"delta":"..."} chunks (canonical visible text without think tags).
+func writeLangchainNDJSONStream(w http.ResponseWriter, visible, thinking string) error {
 	enc := json.NewEncoder(w)
 	enc.SetEscapeHTML(false)
+	if err := enc.Encode(map[string]int{"iteration_start": 1}); err != nil {
+		return err
+	}
+	flushResponseWriter(w)
+	if strings.TrimSpace(thinking) != "" {
+		if err := enc.Encode(map[string]string{"thinking": thinking}); err != nil {
+			return err
+		}
+		flushResponseWriter(w)
+	}
+	visible = strings.TrimSpace(visible)
+	if visible != "" {
+		runes := []rune(visible)
+		for i := 0; i < len(runes); i += pmaStreamDeltaRunes {
+			end := i + pmaStreamDeltaRunes
+			if end > len(runes) {
+				end = len(runes)
+			}
+			chunk := string(runes[i:end])
+			if err := enc.Encode(map[string]string{"delta": chunk}); err != nil {
+				return err
+			}
+			flushResponseWriter(w)
+		}
+	}
 	if err := enc.Encode(map[string]bool{"done": true}); err != nil {
 		return err
 	}
-	if f, ok := w.(http.Flusher); ok {
-		f.Flush()
-	}
+	flushResponseWriter(w)
 	return nil
 }
 
-func extractOutput(outputs map[string]any) string {
+func flushResponseWriter(w http.ResponseWriter) {
+	if f, ok := w.(http.Flusher); ok {
+		f.Flush()
+	}
+}
+
+func extractOutput(outputs map[string]any) (visible, thinking string) {
 	if v, ok := outputs["output"]; ok && v != nil {
 		var s string
 		if sv, ok := v.(string); ok {
@@ -234,30 +282,79 @@ func extractOutput(outputs map[string]any) string {
 		} else {
 			s = fmt.Sprint(v)
 		}
-		return strings.TrimSpace(stripThinkBlocks(s))
+		return extractThinkBlocks(s)
 	}
-	return ""
+	return "", ""
 }
 
-// stripThinkBlocks removes <think>...</think> blocks emitted by reasoning models
-// (Qwen3, DeepSeek-R1) from s and returns the trimmed remainder.
-// If the opening tag is present but the closing tag is absent (truncated output),
-// everything from the opening tag onwards is dropped.
-func stripThinkBlocks(s string) string {
+// extractThinkBlocks separates model output into visible assistant text and thinking content
+// (inner text of </think>...`</think>`). Per CYNAI.PMAGNT.ThinkingContentSeparation, tags MUST NOT
+// appear in visible text; thinking is retained for upstream NDJSON (REQ-PMAGNT-0122).
+func extractThinkBlocks(s string) (visible, thinking string) {
+	var thinkParts []string
+	rest := s
 	for {
-		start := strings.Index(s, xmlThinkOpen)
+		start := strings.Index(rest, xmlThinkOpen)
 		if start == -1 {
 			break
 		}
-		end := strings.Index(s[start:], xmlThinkClose)
+		end := strings.Index(rest[start:], xmlThinkClose)
 		if end == -1 {
-			// Unterminated block — drop from opening tag to end of string.
-			s = s[:start]
+			thinkParts = append(thinkParts, rest[start+len(xmlThinkOpen):])
+			rest = rest[:start]
 			break
 		}
-		s = s[:start] + s[start+end+len(xmlThinkClose):]
+		relEnd := start + end
+		inner := rest[start+len(xmlThinkOpen) : relEnd]
+		thinkParts = append(thinkParts, inner)
+		rest = rest[:start] + rest[relEnd+len(xmlThinkClose):]
 	}
-	return strings.TrimSpace(s)
+	thinking = strings.TrimSpace(strings.Join(thinkParts, "\n"))
+	visible = strings.TrimSpace(rest)
+	return visible, thinking
+}
+
+// looksLikeCompleteAssistantAnswer reports whether s looks like a full assistant reply
+// (markdown sections, multiple paragraphs, or lists). Such text often includes example
+// JSON with "tool_name" for documentation; that must not trigger the unexecuted-tool fallback.
+func looksLikeCompleteAssistantAnswer(s string) bool {
+	s = strings.TrimSpace(s)
+	if len(s) < 80 {
+		return false
+	}
+	// Section headings almost always mean a full assistant reply, not a tool stub.
+	if strings.Contains(s, "## ") {
+		return true
+	}
+	if len(s) < 250 {
+		return false
+	}
+	if strings.Count(s, "\n\n") >= 2 {
+		return true
+	}
+	if strings.Contains(s, "\n- ") || strings.Contains(s, "\n* ") {
+		return true
+	}
+	return false
+}
+
+// stripMarkdownFencedCodeBlocks removes ``` ... ``` regions so tool-like JSON inside
+// examples does not trigger containsToolJSON.
+func stripMarkdownFencedCodeBlocks(s string) string {
+	var b strings.Builder
+	inFence := false
+	for _, line := range strings.Split(s, "\n") {
+		trim := strings.TrimSpace(line)
+		if strings.HasPrefix(trim, "```") {
+			inFence = !inFence
+			continue
+		}
+		if !inFence {
+			b.WriteString(line)
+			b.WriteByte('\n')
+		}
+	}
+	return b.String()
 }
 
 // looksLikeUnexecutedToolCall reports whether output appears to be an agent
@@ -277,8 +374,12 @@ func looksLikeUnexecutedToolCall(s string) bool {
 	if strings.Contains(lower, "<tool_call>") {
 		return true
 	}
-	// JSON block that looks like a tool invocation description.
-	if containsToolJSON(s) {
+	// Full answers with headings or structure often mention tool JSON as documentation.
+	if looksLikeCompleteAssistantAnswer(s) {
+		return false
+	}
+	// JSON block that looks like a tool invocation description (outside fenced examples).
+	if containsToolJSON(stripMarkdownFencedCodeBlocks(s)) {
 		return true
 	}
 	// Preamble patterns: model announcing intent but no result follows.
@@ -297,18 +398,24 @@ func looksLikeUnexecutedToolCall(s string) bool {
 
 // containsToolJSON reports whether s contains a JSON object with a "tool" or "tool_name" key,
 // which indicates the model described a tool call as text instead of executing it.
+// Only the segment starting at the first `{` up to maxScan bytes is considered, so stray
+// mentions later in long prose do not match.
 func containsToolJSON(s string) bool {
 	const toolKey = `"tool"`
 	const toolNameKey = `"tool_name"`
+	const maxScan = 2048
 	braceIdx := strings.Index(s, "{")
 	if braceIdx == -1 {
 		return false
 	}
 	sub := s[braceIdx:]
+	if len(sub) > maxScan {
+		sub = sub[:maxScan]
+	}
 	return strings.Contains(sub, toolKey) || strings.Contains(sub, toolNameKey)
 }
 
-func runCompletionWithLangchainWithTimeout(ctx context.Context, fullPrompt string, mcpClient *MCPClient, logger *slog.Logger, timeout time.Duration) (string, error) {
+func runCompletionWithLangchainWithTimeout(ctx context.Context, fullPrompt string, mcpClient *MCPClient, logger *slog.Logger, timeout time.Duration) (visible string, thinking string, err error) {
 	if timeout <= 0 {
 		timeout = 120 * time.Second
 	}
@@ -341,4 +448,32 @@ func resolveOllamaClientConfig(baseURL string) (serverURL string, httpClient *ht
 		return u, nil
 	}
 	return u, c
+}
+
+// newToolsAgentLLM returns an LLM for OpenAIFunctionsAgent + MCP tools.
+//
+// Langchaingo's llms/ollama GenerateContent ignores llms.WithFunctions, so tool definitions
+// never reach Ollama and the model free-texts JSON "tool calls" instead of executing tools.
+// Ollama's OpenAI-compatible HTTP API (/v1/chat/completions) honors tools; we use llms/openai
+// with BaseURL set to <ollama-host>/v1. Token is a placeholder (Ollama does not require a real key).
+func newToolsAgentLLM(baseURL, model string) (llms.Model, error) {
+	u := strings.TrimSpace(baseURL)
+	if u == "" {
+		u = pmaDefaultOllamaURL
+	}
+	srvURL, httpClient := resolveOllamaClientConfig(u)
+	openAIBase := strings.TrimSuffix(strings.TrimSpace(srvURL), "/") + "/v1"
+	opts := []openai.Option{
+		openai.WithToken("ollama"),
+		openai.WithBaseURL(openAIBase),
+		openai.WithModel(model),
+	}
+	if httpClient != nil {
+		opts = append(opts, openai.WithHTTPClient(httpClient))
+	}
+	llm, err := openai.New(opts...)
+	if err != nil {
+		return nil, fmt.Errorf("create OpenAI-compatible LLM for tools: %w", err)
+	}
+	return llm, nil
 }

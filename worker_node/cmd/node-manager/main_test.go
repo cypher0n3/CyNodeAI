@@ -403,11 +403,122 @@ func TestStartEmbeddedWorkerAPI_RunEmbeddedFails(t *testing.T) {
 	_ = cancel
 }
 
+func TestOllamaRunGPUKind(t *testing.T) {
+	prevGPU, hadGPU := os.LookupEnv("OLLAMA_GPU_VARIANT")
+	t.Cleanup(func() {
+		if hadGPU {
+			_ = os.Setenv("OLLAMA_GPU_VARIANT", prevGPU)
+		} else {
+			_ = os.Unsetenv("OLLAMA_GPU_VARIANT")
+		}
+	})
+
+	tests := []struct {
+		name    string
+		image   string
+		variant string
+		envGPU  string
+		want    string
+	}{
+		{"default image empty variant is cuda", "ollama/ollama", "", "", "cuda"},
+		{"default image latest is cuda", "ollama/ollama:latest", "", "", "cuda"},
+		{"orchestrator variant cuda", "ollama/ollama", "cuda", "", "cuda"},
+		{"orchestrator variant cpu", "ollama/ollama", "cpu", "", ""},
+		{"orchestrator variant rocm", "ollama/ollama", "rocm", "", "rocm"},
+		{"rocm tag wins", "ollama/ollama:rocm", "", "", "rocm"},
+		{"custom image no prefix", "my/ollama-custom:latest", "", "", ""},
+		{"env cpu overrides default image", "ollama/ollama", "", "cpu", ""},
+		{"env cuda on custom image", "my/ollama-custom:latest", "", "cuda", "cuda"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.envGPU != "" {
+				t.Setenv("OLLAMA_GPU_VARIANT", tt.envGPU)
+			} else {
+				_ = os.Unsetenv("OLLAMA_GPU_VARIANT")
+			}
+			if got := ollamaRunGPUKind(tt.image, tt.variant); got != tt.want {
+				t.Errorf("ollamaRunGPUKind(%q, %q) = %q, want %q", tt.image, tt.variant, got, tt.want)
+			}
+		})
+	}
+}
+
 func TestStartOllama(t *testing.T) {
 	withRunner(t, fakeRunner{})
 
 	if err := startOllama("ollama/ollama", "", nil); err != nil {
 		t.Errorf("startOllama: %v", err)
+	}
+}
+
+func TestStartOllama_DefaultImage_VariantCUDA_PodmanNVIDIADevice(t *testing.T) {
+	var calls [][]string
+	fake := fakeRunnerFunc(func(name string, args ...string) ([]byte, error) {
+		calls = append(calls, append([]string{name}, args...))
+		return []byte(""), nil
+	})
+	withRunner(t, fake)
+	_ = os.Unsetenv("CONTAINER_RUNTIME")
+	if err := startOllama("ollama/ollama", "cuda", nil); err != nil {
+		t.Fatalf("startOllama: %v", err)
+	}
+	var saw bool
+	for _, c := range calls {
+		for _, a := range c {
+			if a == "nvidia.com/gpu=all" {
+				saw = true
+				break
+			}
+		}
+	}
+	if !saw {
+		t.Errorf("expected nvidia.com/gpu=all for variant cuda + default image; calls=%v", calls)
+	}
+}
+
+func TestStartOllama_DefaultImage_VariantCPU_NoNVIDIADevice(t *testing.T) {
+	var calls [][]string
+	fake := fakeRunnerFunc(func(name string, args ...string) ([]byte, error) {
+		calls = append(calls, append([]string{name}, args...))
+		return []byte(""), nil
+	})
+	withRunner(t, fake)
+	if err := startOllama("ollama/ollama", "cpu", nil); err != nil {
+		t.Fatalf("startOllama: %v", err)
+	}
+	for _, c := range calls {
+		for _, a := range c {
+			if a == "nvidia.com/gpu=all" || a == "--gpus" {
+				t.Errorf("did not expect GPU passthrough for variant cpu; calls=%v", calls)
+				return
+			}
+		}
+	}
+}
+
+// When GPU passthrough fails (e.g. no NVIDIA CDI), node-manager must retry without devices so the stack can register a node.
+func TestStartOllama_CUDARetriesWithoutGPUWhenFirstRunFails(t *testing.T) {
+	var runCalls int
+	fake := fakeRunnerFunc(func(name string, args ...string) ([]byte, error) {
+		if len(args) > 0 && args[0] == "run" {
+			runCalls++
+			for _, a := range args {
+				if a == "nvidia.com/gpu=all" {
+					return nil, fmt.Errorf("simulated: unknown device nvidia.com/gpu=all")
+				}
+			}
+			return []byte(""), nil
+		}
+		return []byte(""), nil
+	})
+	withRunner(t, fake)
+	_ = os.Unsetenv("CONTAINER_RUNTIME")
+	if err := startOllama("ollama/ollama", "cuda", nil); err != nil {
+		t.Fatalf("startOllama: %v", err)
+	}
+	if runCalls != 2 {
+		t.Fatalf("expected 2 podman run attempts (GPU then CPU fallback), got %d", runCalls)
 	}
 }
 

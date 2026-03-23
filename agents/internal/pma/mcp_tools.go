@@ -14,6 +14,6 @@ const MsgMCPGatewayNotConfigured = "MCP gateway not configured (set PMA_MCP_GATE
 // When client.BaseURL is empty, Call returns a message that MCP is not configured.
 func NewMCPTool(client *MCPClient) tools.Tool {
 	desc := `Call the orchestrator MCP gateway (PM allowlist). Input JSON: {"tool_name": "NAME", "arguments": {...}}.
-Allowed tool_name values include task.get, task.list, task.result, task.cancel, task.logs, project.get, project.list, help.get, db.preference.*, db.task.get, db.job.get, artifact.get, skills.*, and others per docs/tech_specs/mcp_tools/.`
+Allowed tool_name values include task.get, task.list, task.result, task.cancel, task.logs, project.get, project.list, help.list, help.get, db.preference.*, db.task.get, db.job.get, artifact.get, skills.*, and others per docs/tech_specs/mcp_tools/.`
 	return mcpclient.NewLangchainTool(client, desc, MsgMCPGatewayNotConfigured)
 }

@@ -12,7 +12,7 @@ from scripts.test_scripts import config, helpers
 from scripts.test_scripts import tui_pty_harness as harness
 import scripts.test_scripts.e2e_state as state
 
-_SSE_TIMEOUT_SEC = 120
+_SSE_TIMEOUT_SEC = int(config.E2E_SSE_REQUEST_TIMEOUT)
 
 
 def _auth_headers(cfg_path):

@@ -16,4 +16,10 @@ const (
 	LandmarkThreadSwitched = "[CYNRK_THREAD_SWITCHED]"
 	// LandmarkAuthRecoveryReady indicates login/re-auth is being prompted.
 	LandmarkAuthRecoveryReady = "[CYNRK_AUTH_RECOVERY_READY]"
+
+	// TUIStatusIdle is the status-bar glyph when the composer is ready (no bracket noise).
+	// U+2B24 BLACK LARGE CIRCLE — reads larger than U+25CF in typical monospace fonts.
+	TUIStatusIdle = "⬤"
+	// TUIStatusBusy is the status-bar glyph while a request is in flight.
+	TUIStatusBusy = "◐"
 )

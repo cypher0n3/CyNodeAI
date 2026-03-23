@@ -388,6 +388,56 @@ func containerNameExact(psOutput, name string) bool {
 	return false
 }
 
+// ollamaRunGPUKind decides how to pass GPU devices into the Ollama container: "rocm", "cuda", or "" (CPU / unknown).
+// variant and image come from nodemanager.maybeStartOllama (or env fallbacks): cuda|cpu -> ollama/ollama; rocm -> ollama/ollama:rocm.
+// The upstream default image ollama/ollama is the NVIDIA/CUDA build (there is no :cuda tag).
+func ollamaRunGPUKind(image, variant string) string {
+	v := strings.ToLower(strings.TrimSpace(variant))
+	envV := strings.ToLower(strings.TrimSpace(getEnv("OLLAMA_GPU_VARIANT", "")))
+	img := strings.ToLower(strings.TrimSpace(image))
+
+	if v == "cpu" || envV == "cpu" {
+		return ""
+	}
+	if v == "rocm" || envV == "rocm" || strings.Contains(img, "rocm") {
+		return "rocm"
+	}
+	if envV == "cuda" || v == "cuda" || strings.Contains(img, "cuda") || strings.Contains(img, "nvidia") {
+		return "cuda"
+	}
+	// Official ollama/ollama without :rocm is CUDA-capable; apply NVIDIA passthrough when variant is unset
+	// (e.g. OLLAMA_IMAGE-only path) so the default image is not CPU-only inside the container.
+	if strings.HasPrefix(img, "ollama/ollama") && !strings.Contains(img, "rocm") {
+		return "cuda"
+	}
+	return ""
+}
+
+// ollamaPodmanRunArgs returns argv for `podman|docker run ...` with the given GPU device mode.
+func ollamaPodmanRunArgs(rt, name, image string, env map[string]string, gpuKind string) []string {
+	args := []string{"run", "-d", "--name", name, "-p", "11434:11434"}
+	ollamaVolume := getEnv("OLLAMA_MODELS_VOLUME", name+"-models")
+	args = append(args, "-v", ollamaVolume+":/root/.ollama")
+	switch gpuKind {
+	case "rocm":
+		args = append(args, "--device", "/dev/kfd", "--device", "/dev/dri", "--group-add", "video")
+		if gfxVer := getEnv("HSA_OVERRIDE_GFX_VERSION", ""); gfxVer != "" {
+			args = append(args, "-e", "HSA_OVERRIDE_GFX_VERSION="+gfxVer)
+		}
+	case "cuda":
+		if rt == "docker" {
+			args = append(args, "--gpus", "all")
+		} else {
+			args = append(args, "--device", "nvidia.com/gpu=all")
+		}
+	}
+	for _, k := range sortedKeys(env) {
+		args = append(args, "-e", k+"="+env[k])
+	}
+	args = append(args, image)
+	return args
+}
+
 func startOllama(image, variant string, env map[string]string) error {
 	rt := getEnv("CONTAINER_RUNTIME", "podman")
 	if image == "" {
@@ -402,43 +452,28 @@ func startOllama(image, variant string, env map[string]string) error {
 		_, _ = runner.CombinedOutput(rt, "start", name)
 		return nil
 	}
-	// Build run args; add GPU device access when the image variant suggests a GPU runtime.
-	// ROCm (AMD): expose /dev/kfd and /dev/dri; set HSA_OVERRIDE_GFX_VERSION when env provides it.
-	// NVIDIA/CUDA: add --gpus all (Docker) or --device nvidia.com/gpu=all (Podman with CDI).
-	// CPU-only: no additional flags.
-	args := []string{"run", "-d", "--name", name, "-p", "11434:11434"}
-	// Persist downloaded models across restarts using a named volume.
-	// The volume name is derived from the container name to allow multiple nodes
-	// to have separate model stores when OLLAMA_CONTAINER_NAME is overridden.
-	ollamaVolume := getEnv("OLLAMA_MODELS_VOLUME", name+"-models")
-	args = append(args, "-v", ollamaVolume+":/root/.ollama")
-	isROCm := strings.Contains(strings.ToLower(image), "rocm") ||
-		strings.ToLower(getEnv("OLLAMA_GPU_VARIANT", "")) == "rocm"
-	isCUDA := strings.Contains(strings.ToLower(image), "cuda") ||
-		strings.Contains(strings.ToLower(image), "nvidia") ||
-		strings.ToLower(getEnv("OLLAMA_GPU_VARIANT", "")) == "cuda"
-	if isROCm {
-		args = append(args, "--device", "/dev/kfd", "--device", "/dev/dri", "--group-add", "video")
-		if gfxVer := getEnv("HSA_OVERRIDE_GFX_VERSION", ""); gfxVer != "" {
-			args = append(args, "-e", "HSA_OVERRIDE_GFX_VERSION="+gfxVer)
-		}
-	} else if isCUDA {
-		if rt == "docker" {
-			args = append(args, "--gpus", "all")
-		} else {
-			args = append(args, "--device", "nvidia.com/gpu=all")
+	// Prefer GPU passthrough from orchestrator variant + image (ollamaRunGPUKind). If the runtime
+	// rejects device flags (e.g. Podman without NVIDIA CDI), retry once without GPU so dev stacks
+	// still start; inference may run CPU-only inside the container.
+	preferred := ollamaRunGPUKind(image, variant)
+	tries := []string{preferred}
+	if preferred != "" {
+		tries = append(tries, "")
+	}
+	var lastOut []byte
+	var lastErr error
+	for _, gpuKind := range tries {
+		args := ollamaPodmanRunArgs(rt, name, image, env, gpuKind)
+		lastOut, lastErr = runner.CombinedOutput(rt, args...)
+		if lastErr == nil {
+			if preferred != "" && gpuKind == "" {
+				slog.Warn("ollama container started without GPU devices; runtime rejected GPU passthrough — inference may use CPU only",
+					"preferred_gpu_kind", preferred, "image", image)
+			}
+			return nil
 		}
 	}
-	// Pass orchestrator-derived env vars (e.g. OLLAMA_NUM_CTX sized to GPU VRAM).
-	// Keys are sorted for deterministic arg ordering.
-	for _, k := range sortedKeys(env) {
-		args = append(args, "-e", k+"="+env[k])
-	}
-	args = append(args, image)
-	if out, err := runner.CombinedOutput(rt, args...); err != nil {
-		return fmt.Errorf("%w: %s", err, strings.TrimSpace(string(out)))
-	}
-	return nil
+	return fmt.Errorf("%w: %s", lastErr, strings.TrimSpace(string(lastOut)))
 }
 
 // pullModels calls `ollama pull` for each model in the list sequentially inside the

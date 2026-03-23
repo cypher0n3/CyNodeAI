@@ -201,6 +201,10 @@ type ConfigInferenceBackend struct {
 	// sets it as INFERENCE_MODEL for managed service containers. The orchestrator is the
 	// sole authority on model selection; node-manager must not substitute an alternative.
 	SelectedModel string `json:"selected_model,omitempty"`
+	// ModelsToEnsure lists Ollama model tags the orchestrator wants present on the node
+	// (e.g. default + tier pick). When non-empty, node-manager pulls any missing names in
+	// order; when empty, only SelectedModel is considered for pull (backward compatible).
+	ModelsToEnsure []string `json:"models_to_ensure,omitempty"`
 }
 
 // ConfigManagedServices is desired state for worker-managed long-lived services.

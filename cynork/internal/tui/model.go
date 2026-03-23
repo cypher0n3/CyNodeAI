@@ -7,7 +7,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/bubbles/viewport"
+	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/glamour"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/cypher0n3/cynodeai/cynork/internal/chat"
 	"github.com/cypher0n3/cynodeai/cynork/internal/gateway"
@@ -27,6 +29,9 @@ const maxInputHistory = 50
 
 // ctrlCExitThreshold is the number of successive Ctrl+C presses (when idle) required to exit the TUI.
 const ctrlCExitThreshold = 2
+
+// proactiveTokenRefreshInterval is how often we try to refresh the access token while the TUI is active.
+const proactiveTokenRefreshInterval = 8 * time.Minute
 
 // sendResult is the message returned when a SendMessage completes (non-streaming fallback).
 type sendResult struct {
@@ -83,7 +88,27 @@ type loginResultMsg struct {
 // streamPollMsg is sent when a stream read times out so we reschedule without blocking the event loop.
 type streamPollMsg struct{}
 
+// copyClipboardResultMsg is sent after CopyToClipboard finishes (Ctrl+Y or /copy).
+type copyClipboardResultMsg struct {
+	err error
+	// successDetail is shown in ClipNote and as a system scrollback line on success (required for /copy).
+	successDetail string
+}
+
+// clipNoteClearMsg clears the ephemeral clipboard status line.
+type clipNoteClearMsg struct{}
+
+// proactiveTokenRefreshMsg triggers a background token refresh when a refresh token is available.
+type proactiveTokenRefreshMsg struct{}
+
+// tokenRefreshResultMsg is sent after POST /v1/auth/refresh completes (proactive or manual).
+type tokenRefreshResultMsg struct {
+	resp *userapi.LoginResponse
+	err  error
+}
+
 const streamPollInterval = 80 * time.Millisecond
+const clipNoteDuration = 3 * time.Second
 
 // AuthProvider allows the TUI to read/write tokens and persist config (for /auth login, logout, refresh).
 // Set via SetAuthProvider when running under the CLI; may be nil in tests or when not available.
@@ -92,7 +117,11 @@ type AuthProvider interface {
 	RefreshToken() string
 	GatewayURL() string
 	SetTokens(access, refresh string)
-	SetGatewayURL(url string)
+	// SetGatewayURL updates the in-memory gateway base URL. When userExplicit is true
+	// (e.g. /connect <url>), the new URL is persisted to config and overrides
+	// CYNORK_GATEWAY_URL merge behavior; when false (e.g. in-TUI login), file-backed
+	// gateway_url is preserved when the session used an env override.
+	SetGatewayURL(url string, userExplicit bool)
 	Save() error
 	ShowThinkingByDefault() bool
 	SetShowThinkingByDefault(bool)
@@ -102,10 +131,12 @@ type AuthProvider interface {
 
 // Model holds the TUI state: session, scrollback, composer input, and dimensions.
 type Model struct {
-	Session         *chat.Session
-	AuthProvider    AuthProvider // optional; used by /auth logout, refresh
-	Scrollback      []string
-	Input           string
+	Session      *chat.Session
+	AuthProvider AuthProvider // optional; used by /auth logout, refresh
+	Scrollback   []string
+	Input        string
+	// inputCursor is the byte offset of the insertion caret in Input (UTF-8 boundary).
+	inputCursor     int
 	InputHistory    []string // newest first; Up/Down cycle through
 	InputHistoryIdx int      // -1 = not browsing; 0 = newest, 1 = older, ...
 	Width           int
@@ -135,6 +166,33 @@ type Model struct {
 	ShowThinking bool
 	// ShowToolOutput controls whether tool-call and tool-result parts are expanded (true) or collapsed (false).
 	ShowToolOutput bool
+
+	// ScrollVP is the scrollback viewport (mouse wheel, PgUp/PgDn per cynork_tui.md).
+	ScrollVP viewport.Model
+	// mdRendererCached is reused when width/color options match (glamour is expensive to construct).
+	mdRendererCached   *glamour.TermRenderer
+	mdRendererCacheKey string
+
+	// Cached ANSI scrollback from renderScrollbackContent (glamour). Invalidated when
+	// scrollbackRenderSignature changes — avoids re-running glamour on every keystroke in the composer.
+	scrollbackRendered   string
+	scrollbackCacheSig   uint64
+	scrollbackCacheValid bool
+
+	// ClipNote is a short-lived status after clipboard copy (cleared after clipNoteDuration).
+	ClipNote string
+
+	// Slash command popup (filtered catalog, Up/Down navigate, Tab completes).
+	slashMenuSel    int
+	slashMenuScroll int
+
+	// proactiveTokenRefreshStarted is true after we schedule tea.Every for token refresh.
+	proactiveTokenRefreshStarted bool
+
+	// healthPollIntervalSec is seconds between GET /healthz polls (0 = disabled). Set by CLI from config.
+	healthPollIntervalSec    int
+	gatewayHealth            gatewayHealthState
+	gatewayHealthPollStarted bool
 }
 
 // NewModel returns an initial TUI model for the given session.
@@ -147,6 +205,7 @@ func NewModel(session *chat.Session) *Model {
 		InputHistoryIdx: -1,
 		Width:           80,
 		Height:          24,
+		ScrollVP:        newTUIViewport(80, 12),
 	}
 }
 
@@ -163,10 +222,18 @@ func (m *Model) SetAuthProvider(p AuthProvider) {
 // SetResumeThreadSelector sets the thread selector for --resume-thread (used after in-session login to ensure thread).
 func (m *Model) SetResumeThreadSelector(s string) { m.ResumeThreadSelector = s }
 
+// SetHealthPollInterval sets the interval in seconds for gateway /healthz polling (0 disables). Called from the CLI.
+func (m *Model) SetHealthPollInterval(seconds int) { m.healthPollIntervalSec = seconds }
+
 // Init runs once at startup. When OpenLoginFormOnInit is true (startup token failure), opens login form.
+// When a token is already present, ensures thread (new or --resume-thread) asynchronously so the
+// TUI surface appears before gateway I/O (same as post-login ensureThreadCmd).
 func (m *Model) Init() tea.Cmd {
 	if m.OpenLoginFormOnInit {
 		return func() tea.Msg { return openLoginFormMsg{} }
+	}
+	if m.Session != nil && m.Session.Client != nil && m.Session.Client.Token != "" {
+		return m.ensureThreadCmd()
 	}
 	return nil
 }
@@ -174,12 +241,24 @@ func (m *Model) Init() tea.Cmd {
 // Update handles key events, window resize, and async send results.
 func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
+	case tea.MouseMsg:
+		if m.ShowLoginForm {
+			return m, nil
+		}
+		var cmd tea.Cmd
+		m.ScrollVP, cmd = m.ScrollVP.Update(msg)
+		return m, cmd
 	case tea.KeyMsg:
+		if !m.ShowLoginForm && m.isViewportScrollKey(msg) {
+			var cmd tea.Cmd
+			m.ScrollVP, cmd = m.ScrollVP.Update(msg)
+			return m, cmd
+		}
 		return m.handleKey(msg)
 	case tea.WindowSizeMsg:
 		m.Width = msg.Width
 		m.Height = msg.Height
-		return m, nil
+		return m, m.maybeStartGatewayHealthPollOnce()
 	case streamStartMsg:
 		// Store the channel in the main loop (safe — no goroutine write to model fields).
 		m.streamCh = msg.ch
@@ -208,9 +287,66 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.applyLoginResult(msg)
 	case streamPollMsg:
 		return m.applyStreamPoll()
+	case copyClipboardResultMsg:
+		return m.applyCopyClipboardResult(msg)
+	case clipNoteClearMsg:
+		m.ClipNote = ""
+		return m, nil
+	case proactiveTokenRefreshMsg:
+		return m.handleProactiveTokenRefresh()
+	case tokenRefreshResultMsg:
+		return m.applyTokenRefreshResult(msg)
+	case gatewayHealthPollMsg:
+		return m.handleGatewayHealthPoll()
+	case gatewayHealthResultMsg:
+		return m.applyGatewayHealthResult(msg)
 	default:
 		return m, nil
 	}
+}
+
+func (m *Model) applyCopyClipboardResult(msg copyClipboardResultMsg) (tea.Model, tea.Cmd) {
+	m.Loading = false
+	m.scrollbackCacheValid = false
+	if msg.err != nil {
+		m.ClipNote = "Copy failed: " + msg.err.Error()
+		m.Scrollback = append(m.Scrollback, scrollbackSystemLinePrefix+"Copy failed: "+msg.err.Error())
+	} else {
+		line := msg.successDetail
+		if line == "" {
+			line = "Copied to clipboard."
+		}
+		m.ClipNote = line
+		m.Scrollback = append(m.Scrollback, scrollbackSystemLinePrefix+line)
+	}
+	return m, m.scheduleClipNoteClear()
+}
+
+func (m *Model) scheduleClipNoteClear() tea.Cmd {
+	return tea.Tick(clipNoteDuration, func(time.Time) tea.Msg { return clipNoteClearMsg{} })
+}
+
+func (m *Model) cmdCopyLastAssistant() tea.Cmd {
+	text := lastAssistantPlain(m.Scrollback)
+	if strings.TrimSpace(text) == "" {
+		return func() tea.Msg {
+			return copyClipboardResultMsg{
+				err:           nil,
+				successDetail: "No assistant message to copy.",
+			}
+		}
+	}
+	return tea.Sequence(
+		func() tea.Msg {
+			return copyClipboardResultMsg{err: nil, successDetail: "Last message copied to clipboard."}
+		},
+		func() tea.Msg {
+			if err := CopyToClipboard(text); err != nil {
+				return copyClipboardResultMsg{err: err, successDetail: ""}
+			}
+			return nil
+		},
+	)
 }
 
 func (m *Model) applyStreamPoll() (tea.Model, tea.Cmd) {
@@ -225,6 +361,8 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m.handleLoginFormKey(msg)
 	}
 	switch msg.String() {
+	case "ctrl+y":
+		return m, m.cmdCopyLastAssistant()
 	case "ctrl+c":
 		return m.handleCtrlC()
 	case "ctrl+d":
@@ -232,25 +370,72 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	}
 	m.ctrlCCount = 0
 	switch msg.String() {
+	// Multiline: insert newline without sending. Most terminals send the same bytes for
+	// Shift+Enter as for Enter, so Bubble Tea reports both as "enter" — use alt+enter or ctrl+j.
+	case "shift+enter", "alt+enter", "ctrl+j":
+		m.insertAtCursor("\n")
+		m.clampSlashMenuSelection()
+		return m, nil
 	case "enter":
 		return m.handleEnterKey()
 	case "up":
+		if m.slashMenuVisible() && len(m.filteredSlashCommands()) > 0 {
+			m.navSlashMenu(true)
+			return m, nil
+		}
 		m.navigateInputHistory(true)
 		return m, nil
 	case "down":
+		if m.slashMenuVisible() && len(m.filteredSlashCommands()) > 0 {
+			m.navSlashMenu(false)
+			return m, nil
+		}
 		m.navigateInputHistory(false)
 		return m, nil
-	case "shift+enter":
-		m.Input += "\n"
+	case "tab":
+		if m.slashMenuVisible() && len(m.filteredSlashCommands()) > 0 {
+			m.applySlashCompletion()
+			m.clampSlashMenuSelection()
+			return m, nil
+		}
+		return m, nil
+	case "esc":
+		if m.slashMenuVisible() {
+			m.replaceActiveComposerLine("")
+			m.slashMenuSel = 0
+			m.slashMenuScroll = 0
+			return m, nil
+		}
+		return m, nil
+	case "left":
+		m.moveInputCursorRune(-1)
+		m.clampSlashMenuSelection()
+		return m, nil
+	case "right":
+		m.moveInputCursorRune(1)
+		m.clampSlashMenuSelection()
+		return m, nil
+	case "ctrl+left":
+		m.moveInputCursorWordLeft()
+		m.clampSlashMenuSelection()
+		return m, nil
+	case "ctrl+right":
+		m.moveInputCursorWordRight()
+		m.clampSlashMenuSelection()
 		return m, nil
 	case "backspace":
-		if m.Input != "" {
-			m.Input = m.Input[:len(m.Input)-1]
-		}
+		m.deleteRuneBeforeCursor()
+		m.clampSlashMenuSelection()
 		return m, nil
 	default:
 		if len(msg.Runes) > 0 {
-			m.Input += string(msg.Runes)
+			if len(msg.Runes) == 1 && msg.Runes[0] == '\n' {
+				m.insertAtCursor("\n")
+				m.clampSlashMenuSelection()
+				return m, nil
+			}
+			m.insertAtCursor(string(msg.Runes))
+			m.clampSlashMenuSelection()
 		}
 		return m, nil
 	}
@@ -261,7 +446,26 @@ func (m *Model) handleEnterKey() (tea.Model, tea.Cmd) {
 	if m.Loading && line != "" {
 		return m, nil
 	}
+	if m.slashMenuVisible() {
+		filtered := m.filteredSlashCommands()
+		active := strings.TrimSpace(activeComposerLine(m.Input))
+		if len(filtered) > 0 {
+			matched := false
+			for _, e := range filtered {
+				if active == e.name || strings.HasPrefix(active, e.name+" ") {
+					matched = true
+					break
+				}
+			}
+			if !matched {
+				m.applySlashCompletion()
+				m.clampSlashMenuSelection()
+				return m, nil
+			}
+		}
+	}
 	m.Input = ""
+	m.inputCursor = 0
 	if line == "" {
 		return m, nil
 	}
@@ -284,8 +488,12 @@ func (m *Model) handleEnterKey() (tea.Model, tea.Cmd) {
 }
 
 // handleSlashLine dispatches a slash-prefixed line to the correct handler.
+// Slash input is not echoed as a "You:" chat line; only command output appears (as system lines).
 func (m *Model) handleSlashLine(line string) (tea.Model, tea.Cmd) {
-	m.Scrollback = append(m.Scrollback, "You: "+line)
+	cmdName, rest := parseSlashTUI(line)
+	if cmdName == "copy" {
+		return m, slashCopyCmd(m, rest)
+	}
 	// Thread commands use the existing thread path.
 	if strings.HasPrefix(strings.ToLower(line), "/thread") {
 		if cmd := m.handleThreadCommand(line); cmd != nil {
@@ -299,7 +507,7 @@ func (m *Model) handleSlashLine(line string) (tea.Model, tea.Cmd) {
 		m.Loading = true
 		return m, tuiCmd
 	}
-	m.Scrollback = append(m.Scrollback, "Unknown command. Type /help for available commands.")
+	m.Scrollback = append(m.Scrollback, scrollbackSystemLinePrefix+"Unknown command. Type /help for available commands.")
 	return m, nil
 }
 
@@ -317,7 +525,7 @@ func (m *Model) handleCtrlC() (tea.Model, tea.Cmd) {
 	if m.ctrlCCount >= ctrlCExitThreshold {
 		return m, tea.Quit
 	}
-	m.Scrollback = append(m.Scrollback, "(Press Ctrl+C again to exit)")
+	m.Scrollback = append(m.Scrollback, scrollbackSystemLinePrefix+"(Press Ctrl+C again to exit)")
 	return m, nil
 }
 
@@ -354,38 +562,38 @@ func (m *Model) handleThreadCommand(line string) tea.Cmd {
 func (m *Model) threadCommandNew() tea.Cmd {
 	threadID, err := m.Session.NewThread()
 	if err != nil {
-		m.Scrollback = append(m.Scrollback, "Error: "+err.Error())
+		m.Scrollback = append(m.Scrollback, scrollbackSystemLinePrefix+"Error: "+err.Error())
 		return nil
 	}
-	m.Scrollback = append(m.Scrollback, chat.LandmarkThreadSwitched+" New thread: "+threadID)
+	m.Scrollback = append(m.Scrollback, scrollbackSystemLinePrefix+chat.LandmarkThreadSwitched+" New thread: "+threadID)
 	return nil
 }
 
 func (m *Model) threadCommandSwitch(parts []string, rest string) tea.Cmd {
 	if len(parts) < 2 {
-		m.Scrollback = append(m.Scrollback, "Usage: /thread switch <selector> (use ordinal, id, or title from /thread list)")
+		m.Scrollback = append(m.Scrollback, scrollbackSystemLinePrefix+"Usage: /thread switch <selector> (use ordinal, id, or title from /thread list)")
 		return nil
 	}
 	selector := strings.TrimSpace(strings.TrimPrefix(rest, "switch"))
 	id, err := m.Session.ResolveThreadSelector(selector, 50)
 	if err != nil {
-		m.Scrollback = append(m.Scrollback, "Error: "+err.Error())
+		m.Scrollback = append(m.Scrollback, scrollbackSystemLinePrefix+"Error: "+err.Error())
 		return nil
 	}
 	m.Session.SetCurrentThreadID(id)
-	m.Scrollback = append(m.Scrollback, chat.LandmarkThreadSwitched+" Switched to thread: "+id)
+	m.Scrollback = append(m.Scrollback, scrollbackSystemLinePrefix+chat.LandmarkThreadSwitched+" Switched to thread: "+id)
 	return nil
 }
 
 func (m *Model) threadCommandRename(parts []string, rest string) tea.Cmd {
 	if len(parts) < 2 {
-		m.Scrollback = append(m.Scrollback, "Usage: /thread rename <title>")
+		m.Scrollback = append(m.Scrollback, scrollbackSystemLinePrefix+"Usage: /thread rename <title>")
 		return nil
 	}
 	title := strings.TrimSpace(strings.TrimPrefix(rest, "rename"))
 	title = strings.TrimSpace(title)
 	if title == "" {
-		m.Scrollback = append(m.Scrollback, "Usage: /thread rename <title>")
+		m.Scrollback = append(m.Scrollback, scrollbackSystemLinePrefix+"Usage: /thread rename <title>")
 		return nil
 	}
 	return m.threadRenameCmd(title)
@@ -393,9 +601,9 @@ func (m *Model) threadCommandRename(parts []string, rest string) tea.Cmd {
 
 func (m *Model) threadCommandUsage(rest string) {
 	if rest != "" {
-		m.Scrollback = append(m.Scrollback, "Unknown: /thread "+rest+" (use new, list, switch, rename)")
+		m.Scrollback = append(m.Scrollback, scrollbackSystemLinePrefix+"Unknown: /thread "+rest+" (use new, list, switch, rename)")
 	} else {
-		m.Scrollback = append(m.Scrollback, "Thread: new, list, switch <id>, rename <title>")
+		m.Scrollback = append(m.Scrollback, scrollbackSystemLinePrefix+"Thread: new, list, switch <id>, rename <title>")
 	}
 }
 
@@ -463,14 +671,17 @@ func (m *Model) navigateInputHistory(up bool) {
 			return
 		}
 		m.Input = m.InputHistory[m.InputHistoryIdx]
+		m.syncInputCursorEnd()
 	default:
 		if m.InputHistoryIdx <= 0 {
 			m.InputHistoryIdx = -1
 			m.Input = ""
+			m.inputCursor = 0
 			return
 		}
 		m.InputHistoryIdx--
 		m.Input = m.InputHistory[m.InputHistoryIdx]
+		m.syncInputCursorEnd()
 	}
 }
 
@@ -495,9 +706,9 @@ func (m *Model) applyThreadListResult(msg threadListResult) (tea.Model, tea.Cmd)
 	m.Loading = false
 	if msg.err != nil {
 		m.Err = msg.err.Error()
-		m.Scrollback = append(m.Scrollback, "Error: "+msg.err.Error())
+		m.Scrollback = append(m.Scrollback, scrollbackSystemLinePrefix+"Error: "+msg.err.Error())
 	} else {
-		m.Scrollback = append(m.Scrollback, msg.lines...)
+		m.Scrollback = append(m.Scrollback, wrapSystemScrollbackLines(msg.lines)...)
 	}
 	return m, nil
 }
@@ -506,9 +717,9 @@ func (m *Model) applyThreadRenameResult(msg threadRenameResult) (tea.Model, tea.
 	m.Loading = false
 	if msg.err != nil {
 		m.Err = msg.err.Error()
-		m.Scrollback = append(m.Scrollback, "Error: "+msg.err.Error())
+		m.Scrollback = append(m.Scrollback, scrollbackSystemLinePrefix+"Error: "+msg.err.Error())
 	} else {
-		m.Scrollback = append(m.Scrollback, "Thread renamed.")
+		m.Scrollback = append(m.Scrollback, scrollbackSystemLinePrefix+"Thread renamed.")
 	}
 	return m, nil
 }
@@ -528,11 +739,68 @@ func (m *Model) ensureThreadCmd() tea.Cmd {
 
 func (m *Model) applyEnsureThreadResult(msg ensureThreadResult) (tea.Model, tea.Cmd) {
 	if msg.err != nil {
-		m.Scrollback = append(m.Scrollback, "Error: "+msg.err.Error())
+		m.Scrollback = append(m.Scrollback, scrollbackSystemLinePrefix+"Error: "+msg.err.Error())
+	} else if msg.threadID != "" {
+		m.Scrollback = append(m.Scrollback, scrollbackSystemLinePrefix+chat.LandmarkThreadSwitched+" Thread: "+msg.threadID)
+	}
+	_, tok := m.maybeStartProactiveTokenRefresh()
+	return m, combineTeaCmds(m.maybeStartGatewayHealthPollOnce(), tok)
+}
+
+func (m *Model) maybeStartProactiveTokenRefresh() (tea.Model, tea.Cmd) {
+	if m.proactiveTokenRefreshStarted {
 		return m, nil
 	}
-	if msg.threadID != "" {
-		m.Scrollback = append(m.Scrollback, chat.LandmarkThreadSwitched+" Thread: "+msg.threadID)
+	if m.AuthProvider == nil || m.AuthProvider.RefreshToken() == "" {
+		return m, nil
+	}
+	m.proactiveTokenRefreshStarted = true
+	return m, tea.Every(proactiveTokenRefreshInterval, func(time.Time) tea.Msg {
+		return proactiveTokenRefreshMsg{}
+	})
+}
+
+func (m *Model) handleProactiveTokenRefresh() (tea.Model, tea.Cmd) {
+	if m.ShowLoginForm || m.Loading {
+		return m, nil
+	}
+	cmd := m.tokenRefreshCmd()
+	if cmd == nil {
+		return m, nil
+	}
+	return m, cmd
+}
+
+func (m *Model) tokenRefreshCmd() tea.Cmd {
+	rt := ""
+	if m.AuthProvider != nil {
+		rt = m.AuthProvider.RefreshToken()
+	}
+	if rt == "" || m.Session == nil || m.Session.Client == nil {
+		return nil
+	}
+	return func() tea.Msg {
+		resp, err := m.Session.Client.Refresh(rt)
+		if err != nil {
+			return tokenRefreshResultMsg{err: err}
+		}
+		return tokenRefreshResultMsg{resp: resp}
+	}
+}
+
+func (m *Model) applyTokenRefreshResult(msg tokenRefreshResultMsg) (tea.Model, tea.Cmd) {
+	if msg.err != nil || msg.resp == nil {
+		return m, nil
+	}
+	newR := msg.resp.RefreshToken
+	if newR == "" && m.AuthProvider != nil {
+		newR = m.AuthProvider.RefreshToken()
+	}
+	if m.AuthProvider != nil {
+		m.AuthProvider.SetTokens(msg.resp.AccessToken, newR)
+	}
+	if m.Session != nil {
+		m.Session.SetToken(msg.resp.AccessToken)
 	}
 	return m, nil
 }
@@ -545,7 +813,7 @@ func (m *Model) applySlashResult(msg slashResultMsg) (tea.Model, tea.Cmd) {
 	if msg.lines == nil {
 		m.Scrollback = []string{}
 	} else {
-		m.Scrollback = append(m.Scrollback, msg.lines...)
+		m.Scrollback = append(m.Scrollback, wrapSystemScrollbackLines(msg.lines)...)
 	}
 	return m, nil
 }
@@ -553,10 +821,10 @@ func (m *Model) applySlashResult(msg slashResultMsg) (tea.Model, tea.Cmd) {
 func (m *Model) applyShellExecDone(msg shellExecDoneMsg) (tea.Model, tea.Cmd) {
 	m.Loading = false
 	if msg.output != "" {
-		m.Scrollback = append(m.Scrollback, strings.Split(strings.TrimRight(msg.output, "\n"), "\n")...)
+		m.Scrollback = append(m.Scrollback, wrapSystemScrollbackLines(strings.Split(strings.TrimRight(msg.output, "\n"), "\n"))...)
 	}
 	if msg.exitCode != 0 {
-		m.Scrollback = append(m.Scrollback, fmt.Sprintf("exit status %d", msg.exitCode))
+		m.Scrollback = append(m.Scrollback, scrollbackSystemLinePrefix+fmt.Sprintf("exit status %d", msg.exitCode))
 	}
 	return m, nil
 }
@@ -584,7 +852,7 @@ func (m *Model) applyLoginResult(msg loginResultMsg) (tea.Model, tea.Cmd) {
 	m.LoginPassword = ""
 	m.LoginErr = ""
 	if msg.Err != nil {
-		m.Scrollback = append(m.Scrollback, "Login failed: "+msg.Err.Error())
+		m.Scrollback = append(m.Scrollback, scrollbackSystemLinePrefix+"Login failed: "+msg.Err.Error())
 		return m, nil
 	}
 	client := gateway.NewClient(msg.GatewayURL)
@@ -593,17 +861,16 @@ func (m *Model) applyLoginResult(msg loginResultMsg) (tea.Model, tea.Cmd) {
 		m.Session.SetClient(client)
 	}
 	if m.AuthProvider != nil {
-		m.AuthProvider.SetGatewayURL(msg.GatewayURL)
+		m.AuthProvider.SetGatewayURL(msg.GatewayURL, false)
 		m.AuthProvider.SetTokens(msg.AccessToken, msg.RefreshToken)
 		if err := m.AuthProvider.Save(); err != nil {
-			m.Scrollback = append(m.Scrollback, "Logged in but config save failed: "+err.Error())
+			m.Scrollback = append(m.Scrollback, scrollbackSystemLinePrefix+"Logged in but config save failed: "+err.Error())
 			return m, nil
 		}
 	}
-	m.Scrollback = append(m.Scrollback, "Logged in.")
+	m.Scrollback = append(m.Scrollback, scrollbackSystemLinePrefix+"Logged in.")
 	// Ensure thread after login: new (default) or resolve --resume-thread (cynork_tui.md).
-	cmd := m.ensureThreadCmd()
-	return m, cmd
+	return m, combineTeaCmds(m.ensureThreadCmd(), m.maybeStartGatewayHealthPollOnce())
 }
 
 // handleLoginFormKey handles key events when the login overlay is visible (REQ-CLIENT-0190).
@@ -613,7 +880,7 @@ func (m *Model) handleLoginFormKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.ShowLoginForm = false
 		m.LoginPassword = ""
 		m.LoginErr = ""
-		m.Scrollback = append(m.Scrollback, "Login cancelled.")
+		m.Scrollback = append(m.Scrollback, scrollbackSystemLinePrefix+"Login cancelled.")
 		return m, nil
 	case "tab":
 		m.LoginFocusedField = (m.LoginFocusedField + 1) % 3
@@ -784,44 +1051,72 @@ func scheduleNextDelta(ch <-chan chat.ChatStreamDelta) tea.Cmd {
 
 // View renders the TUI: scrollback, composer, status bar (with landmarks).
 func (m *Model) View() string {
-	style := lipgloss.NewStyle()
-	statusStyle := lipgloss.NewStyle().Bold(true)
 	errStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("9"))
 
-	// Composer (multi-line: Enter send, Shift+Enter newline); cap visible lines so view fits height
+	// Composer (Enter send; Alt+Enter or Ctrl+J newline — Shift+Enter is Enter on most terminals); cap visible lines
 	const maxComposerLines = 5
-	composerContent := "> " + strings.ReplaceAll(m.Input, "\n", "\n  ")
-	composerLines := strings.Split(composerContent, "\n")
-	if len(composerLines) > maxComposerLines {
-		composerLines = composerLines[len(composerLines)-maxComposerLines:]
+	m.clampInputCursor()
+	composerLines := m.buildComposerDisplayLines(maxComposerLines)
+	composerBox := m.renderComposerBox(composerLines)
+	composerVisualH := lipgloss.Height(composerBox)
+	if composerVisualH < 1 {
+		composerVisualH = 1
 	}
-	composer := strings.Join(composerLines, "\n")
 
-	// Scrollback area (top). When empty, show scrollback hint and short landmark for E2E.
-	sb := strings.Join(m.Scrollback, "\n")
-	if sb == "" {
-		sb = " (scrollback) " + chat.LandmarkPromptReadyShort
-	}
-	scrollbackHeight := m.Height - len(composerLines) - 1 - 1 // composer + status
-	if scrollbackHeight < 1 {
-		scrollbackHeight = 1
-	}
-	scrollbackBox := style.Height(scrollbackHeight).Width(m.Width).Render(sb)
-
-	// Status bar: landmark when prompt ready or in-flight; gateway hint
-	landmark := chat.LandmarkPromptReady
-	if m.Loading {
-		landmark = chat.LandmarkAssistantInFlight
-	}
-	gatewayURL := "-"
-	projectID := defaultPlaceholder
-	model := defaultPlaceholder
-	if m.Session != nil {
-		if m.Session.Client != nil {
-			gatewayURL = m.Session.Client.BaseURL
+	slashMenuBlock := ""
+	slashMenuH := 0
+	if m.slashMenuVisible() {
+		slashMenuBlock = m.renderSlashMenuBlock() + "\n"
+		slashMenuH = lipgloss.Height(strings.TrimSuffix(slashMenuBlock, "\n"))
+		if slashMenuH < 1 {
+			slashMenuH = 1
 		}
+	}
+
+	copyHintBlock := m.renderCopyHintLine() + "\n"
+	copyHintH := lipgloss.Height(copyHintBlock)
+	if copyHintH < 1 {
+		copyHintH = 1
+	}
+
+	errLines := 0
+	if m.Err != "" {
+		errLines = 1
+	}
+	clipNoteH := 0
+	clipNoteBlock := ""
+	if m.ClipNote != "" {
+		clipNoteBlock = lipgloss.NewStyle().Foreground(lipgloss.Color("114")).Width(m.Width).Render(m.ClipNote) + "\n"
+		clipNoteH = lipgloss.Height(clipNoteBlock)
+		if clipNoteH < 1 {
+			clipNoteH = 1
+		}
+	}
+	const statusLines = 1
+	scrollbackH := m.Height - composerVisualH - slashMenuH - copyHintH - statusLines - errLines - clipNoteH
+	m.ensureScrollViewport(scrollbackH)
+
+	sig := m.scrollbackRenderSignature()
+	if !m.scrollbackCacheValid || m.scrollbackCacheSig != sig {
+		m.scrollbackRendered = m.renderScrollbackContent()
+		m.scrollbackCacheSig = sig
+		m.scrollbackCacheValid = true
+	}
+	scrollbackText := m.scrollbackRendered
+	prevLines := m.ScrollVP.TotalLineCount()
+	wasAtBottom := m.ScrollVP.AtBottom()
+	m.ScrollVP.SetContent(scrollbackText)
+	if wasAtBottom && m.ScrollVP.TotalLineCount() > prevLines {
+		m.ScrollVP.GotoBottom()
+	}
+	scrollbackView := m.ScrollVP.View()
+
+	// Status bar: gateway health (or busy) glyph, project, model, thread, composer hint.
+	projectID := defaultPlaceholder
+	modelName := defaultPlaceholder
+	if m.Session != nil {
 		projectID = orEmpty(m.Session.ProjectID)
-		model = orEmpty(m.Session.Model)
+		modelName = orEmpty(m.Session.Model)
 	}
 	thread := defaultPlaceholder
 	if m.Session != nil && m.Session.CurrentThreadID != "" {
@@ -830,16 +1125,18 @@ func (m *Model) View() string {
 			thread = thread[:8] + "…"
 		}
 	}
-	status := fmt.Sprintf("%s | gateway: %s | project: %s | model: %s | thread: %s | %s",
-		landmark, gatewayURL, projectID, model, thread, composerHint)
-	statusBar := statusStyle.Width(m.Width).Render(status)
+	tail := fmt.Sprintf(" | project: %s | model: %s | thread: %s | %s",
+		projectID, modelName, thread, composerHint)
+	tailStyled := lipgloss.NewStyle().Bold(true).Render(tail)
+	statusLine := " " + m.renderGatewayStatusIndicator() + tailStyled
+	statusBar := lipgloss.NewStyle().Width(m.Width).Render(statusLine)
 
 	var errLine string
 	if m.Err != "" {
-		errLine = errStyle.Render(" " + m.Err)
+		errLine = errStyle.Render(" "+m.Err) + "\n"
 	}
 
-	mainView := scrollbackBox + "\n" + composer + "\n" + statusBar + errLine
+	mainView := scrollbackView + "\n" + composerBox + "\n" + slashMenuBlock + copyHintBlock + clipNoteBlock + statusBar + errLine
 	if m.ShowLoginForm {
 		mainView = m.renderLoginOverlay(mainView)
 	}
@@ -920,4 +1217,30 @@ func orEmpty(s string) string {
 		return defaultPlaceholder
 	}
 	return s
+}
+
+// lastAssistantPlain returns the raw text of the most recent assistant scrollback line (no "Assistant: " prefix).
+func lastAssistantPlain(lines []string) string {
+	for i := len(lines) - 1; i >= 0; i-- {
+		if strings.HasPrefix(lines[i], assistantPrefix) {
+			return strings.TrimPrefix(lines[i], assistantPrefix)
+		}
+	}
+	return ""
+}
+
+// plainTranscript joins scrollback lines for /copy all (plain text).
+// Lines marked as system feedback (slash/thread/shell) are omitted so the transcript is chat turns only.
+func plainTranscript(lines []string) string {
+	var b strings.Builder
+	for _, line := range lines {
+		if strings.HasPrefix(line, scrollbackSystemLinePrefix) {
+			continue
+		}
+		if b.Len() > 0 {
+			b.WriteByte('\n')
+		}
+		b.WriteString(line)
+	}
+	return b.String()
 }

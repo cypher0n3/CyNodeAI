@@ -1,6 +1,8 @@
 # E2E: PMA chat using capable model (qwen3:8b / spec: qwen3.5:9b).
 # Requires: auth config from e2e_0030, OLLAMA_CAPABLE_MODEL available in Ollama container.
-# Skipped automatically when the capable model is not pulled (e.g. CI without the model).
+# The ollama prereq auto-pulls this model into OLLAMA_CONTAINER_NAME when missing (see
+# OLLAMA_AUTO_PULL_CAPABLE). Skipped when the model is still absent (e.g. pull failed or
+# no container runtime).
 #
 # Traces: REQ-MODELS-0008 (VRAM-based model tier), CYNAI.AGENTS.PMLlmToolImplementation,
 #         REQ-PMAGNT-0100/0101.
@@ -24,8 +26,8 @@ class TestPMAChatCapableModel(unittest.TestCase):
     """PMA chat tests using the capable model (qwen3:8b / spec qwen3.5:9b).
 
     All tests skip if the model is not available in the Ollama container so
-    that the suite remains green in environments where the model has not been
-    pulled yet. When the model IS available these tests exercise the full
+    that the suite remains green when pull is disabled or fails. When the model
+    IS available these tests exercise the full
     OneShotAgent + MCP tool-call path.
     """
 

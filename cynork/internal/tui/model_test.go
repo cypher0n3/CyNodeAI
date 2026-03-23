@@ -10,7 +10,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/charmbracelet/bubbletea"
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/cypher0n3/cynodeai/cynork/internal/chat"
 	"github.com/cypher0n3/cynodeai/cynork/internal/gateway"
 )
@@ -46,6 +46,20 @@ func (m *mockTransport) StreamMessage(_ context.Context, _, _, _ string) (<-chan
 	return ch, nil
 }
 
+func TestPlainTranscript_SkipsSystemLines(t *testing.T) {
+	t.Parallel()
+	lines := []string{
+		"You: hi",
+		scrollbackSystemLinePrefix + "Last message copied to clipboard.",
+		"Assistant: hello",
+	}
+	got := plainTranscript(lines)
+	want := "You: hi\nAssistant: hello"
+	if got != want {
+		t.Errorf("plainTranscript = %q, want %q", got, want)
+	}
+}
+
 func TestNewModel(t *testing.T) {
 	session := &chat.Session{Transport: &mockTransport{}}
 	m := NewModel(session)
@@ -71,6 +85,25 @@ func TestModel_Init(t *testing.T) {
 	cmd := m.Init()
 	if cmd != nil {
 		t.Errorf("Init() = %v, want nil", cmd)
+	}
+}
+
+func TestModel_Update_CopyClipboardResultMsg(t *testing.T) {
+	m := NewModel(&chat.Session{})
+	updated, cmd := m.Update(copyClipboardResultMsg{err: nil, successDetail: "All text copied to clipboard."})
+	if cmd == nil {
+		t.Error("Update(copyClipboardResultMsg) expected clip clear tick cmd")
+	}
+	_ = cmd
+	mod, ok := updated.(*Model)
+	if !ok {
+		t.Fatalf("Update returned %T", updated)
+	}
+	if len(mod.Scrollback) != 1 || !strings.HasSuffix(mod.Scrollback[0], "All text copied to clipboard.") {
+		t.Fatalf("Scrollback = %v", mod.Scrollback)
+	}
+	if mod.ClipNote != "All text copied to clipboard." {
+		t.Errorf("ClipNote = %q", mod.ClipNote)
 	}
 }
 
@@ -181,6 +214,7 @@ func TestModel_HandleKey_EnterEmptyAndBackspace(t *testing.T) {
 		t.Helper()
 		m := NewModel(&chat.Session{})
 		m.Input = initialInput
+		m.syncInputCursorEnd()
 		mod, cmd := m.handleKey(key)
 		if (cmd != nil) != wantCmd {
 			t.Errorf("handleKey cmd = %v, wantCmd=%v", cmd != nil, wantCmd)
@@ -208,6 +242,7 @@ func TestModel_HandleKey_EnterWithText(t *testing.T) {
 	session := &chat.Session{Transport: transport}
 	m := NewModel(session)
 	m.Input = "hello"
+	m.syncInputCursorEnd()
 	mod, cmd := m.handleKey(tea.KeyMsg{Type: tea.KeyEnter})
 	if mod != m {
 		t.Error("handleKey changed model")
@@ -314,7 +349,8 @@ func TestModel_HandleKey_DefaultRunes(t *testing.T) {
 func TestModel_View_ComposerHint(t *testing.T) {
 	m := NewModel(&chat.Session{})
 	v := m.View()
-	if !strings.Contains(v, "/ commands") || !strings.Contains(v, "@ files") || !strings.Contains(v, "! shell") {
+	nw := strings.Join(strings.Fields(v), " ")
+	if !strings.Contains(nw, "/ commands") || !strings.Contains(nw, "@ files") || !strings.Contains(nw, "! shell") {
 		t.Errorf("View() should show composer hint (/ commands · @ files · ! shell): %s", v)
 	}
 }
@@ -352,7 +388,7 @@ func TestModel_Update_ThreadListResult(t *testing.T) {
 	if mod.Loading {
 		t.Error("Loading still true")
 	}
-	if len(mod.Scrollback) != 2 || mod.Scrollback[0] != threadListHeader {
+	if len(mod.Scrollback) != 2 || mod.Scrollback[0] != scrollbackSystemLinePrefix+threadListHeader {
 		t.Errorf("Scrollback = %v", mod.Scrollback)
 	}
 }
@@ -387,7 +423,7 @@ func TestModel_Update_ThreadRenameResult(t *testing.T) {
 	if mod.Loading {
 		t.Error("Loading still true")
 	}
-	if len(mod.Scrollback) != 1 || mod.Scrollback[0] != "Thread renamed." {
+	if len(mod.Scrollback) != 1 || mod.Scrollback[0] != scrollbackSystemLinePrefix+"Thread renamed." {
 		t.Errorf("Scrollback = %v", mod.Scrollback)
 	}
 }
@@ -716,24 +752,24 @@ func TestModel_View_ShowsThreadInStatus(t *testing.T) {
 func TestModel_View_SessionNil(t *testing.T) {
 	m := &Model{Session: nil, Width: 80, Height: 24}
 	v := m.View()
-	if !strings.Contains(v, "-") {
-		t.Errorf("View with nil session should show - for gateway: %s", v)
+	if !strings.Contains(v, "(default)") {
+		t.Errorf("View with nil session should show placeholders: %s", v)
 	}
-	if !strings.Contains(v, chat.LandmarkPromptReady) {
-		t.Errorf("View with nil session should show landmark: %s", v)
+	if !strings.Contains(v, chat.TUIStatusIdle) {
+		t.Errorf("View with nil session should show idle glyph: %s", v)
 	}
 }
 
 func TestModel_View_ContainsLandmarks(t *testing.T) {
 	m := NewModel(&chat.Session{})
 	v := m.View()
-	if !strings.Contains(v, chat.LandmarkPromptReady) {
-		t.Errorf("View() missing %q: %s", chat.LandmarkPromptReady, v)
+	if !strings.Contains(v, chat.TUIStatusIdle) {
+		t.Errorf("View() missing idle status %q: %s", chat.TUIStatusIdle, v)
 	}
 	m.Loading = true
 	v2 := m.View()
-	if !strings.Contains(v2, chat.LandmarkAssistantInFlight) {
-		t.Errorf("View() when loading missing %q", chat.LandmarkAssistantInFlight)
+	if !strings.Contains(v2, chat.TUIStatusBusy) {
+		t.Errorf("View() when loading missing busy glyph %q", chat.TUIStatusBusy)
 	}
 }
 
@@ -1035,8 +1071,7 @@ func TestModel_SlashClear(t *testing.T) {
 	// Apply via Update.
 	updated, _ := m.Update(res)
 	m = updated.(*Model)
-	// Only the "You: /clear" echo should remain (added before the command ran),
-	// and then Update with nil lines clears ALL scrollback including that echo.
+	// Slash input is not echoed; Update with nil lines clears scrollback.
 	if len(m.Scrollback) != 0 {
 		t.Errorf("After /clear scrollback should be empty, got %v", m.Scrollback)
 	}
@@ -1119,7 +1154,7 @@ func TestModel_SlashUnknown(t *testing.T) {
 
 // TestModel_SlashModel_NoArg verifies /model with no arg shows current model.
 func TestModel_SlashModel_NoArg(t *testing.T) {
-	session := &chat.Session{Model: "my-model"}
+	session := &chat.Session{Model: gateway.ModelProjectManager}
 	m := NewModel(session)
 	_, _ = m.handleKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("/model")})
 	_, cmd := m.handleKey(tea.KeyMsg{Type: tea.KeyEnter})
@@ -1133,13 +1168,13 @@ func TestModel_SlashModel_NoArg(t *testing.T) {
 	}
 	found := false
 	for _, l := range res.lines {
-		if strings.Contains(l, "my-model") {
+		if strings.Contains(l, gateway.ModelProjectManager) {
 			found = true
 			break
 		}
 	}
 	if !found {
-		t.Errorf("/model with no arg should show 'my-model'; got %v", res.lines)
+		t.Errorf("/model with no arg should show routing model; got %v", res.lines)
 	}
 }
 
@@ -1152,11 +1187,11 @@ func TestModel_SlashSessionFields(t *testing.T) {
 	}{
 		{
 			name:  "model set",
-			input: "/model new-model",
+			input: "/model " + gateway.ModelProjectManager,
 			checkFunc: func(t *testing.T, session *chat.Session) {
 				t.Helper()
-				if session.Model != "new-model" {
-					t.Errorf("session.Model = %q, want %q", session.Model, "new-model")
+				if session.Model != gateway.ModelProjectManager {
+					t.Errorf("session.Model = %q, want %q", session.Model, gateway.ModelProjectManager)
 				}
 			},
 		},
@@ -1317,7 +1352,8 @@ func TestModel_ShellEscape_NonzeroExit(t *testing.T) {
 func TestModel_View_ContainsComposerHint(t *testing.T) {
 	m := NewModel(&chat.Session{})
 	v := m.View()
-	if !strings.Contains(v, composerHint) {
+	nw := strings.Join(strings.Fields(v), " ")
+	if !strings.Contains(nw, composerHint) {
 		t.Errorf("View() should contain composerHint %q; got: %s", composerHint, truncate(v, 200))
 	}
 }
@@ -1338,7 +1374,7 @@ func (m *mockAuthProvider) GatewayURL() string   { return m.gatewayURL }
 func (m *mockAuthProvider) SetTokens(access, refresh string) {
 	m.token, m.refreshToken = access, refresh
 }
-func (m *mockAuthProvider) SetGatewayURL(url string) { m.gatewayURL = url }
+func (m *mockAuthProvider) SetGatewayURL(url string, _ bool) { m.gatewayURL = url }
 func (m *mockAuthProvider) Save() error {
 	m.saved = true
 	return m.saveErr
@@ -1560,8 +1596,11 @@ func TestModel_SlashAuth_Refresh_Success(t *testing.T) {
 	if len(res.lines) == 0 || !strings.Contains(res.lines[0], "Token refreshed") {
 		t.Errorf("/auth refresh should show success; got %v", res.lines)
 	}
-	if !provider.saved || provider.token != "new-access" || provider.refreshToken != "new-refresh" {
-		t.Errorf("provider after refresh: saved=%v token=%q refresh=%q", provider.saved, provider.token, provider.refreshToken)
+	if provider.saved {
+		t.Error("AuthProvider.Save should not be called on refresh (tokens are not written to config)")
+	}
+	if provider.token != "new-access" || provider.refreshToken != "new-refresh" {
+		t.Errorf("provider after refresh: token=%q refresh=%q", provider.token, provider.refreshToken)
 	}
 }
 
@@ -1614,6 +1653,25 @@ func TestModel_Init_OpenLoginFormOnInit(t *testing.T) {
 	}
 }
 
+// TestModel_Init_EnsureThreadWhenLoggedIn verifies Init schedules EnsureThread when a token is present.
+func TestModel_Init_EnsureThreadWhenLoggedIn(t *testing.T) {
+	server := newMockThreadServer(t, "init-thread-id")
+	defer server.Close()
+	client := gateway.NewClient(server.URL)
+	client.SetToken("tok")
+	session := &chat.Session{Client: client}
+	m := NewModel(session)
+	cmd := m.Init()
+	if cmd == nil {
+		t.Fatal("Init() with token should return ensureThreadCmd")
+	}
+	msg := cmd()
+	res, ok := msg.(ensureThreadResult)
+	if !ok || res.err != nil || res.threadID != "init-thread-id" {
+		t.Errorf("expected ensureThreadResult{threadID:init-thread-id}; got %T %+v", msg, msg)
+	}
+}
+
 // TestModel_Update_EnsureThreadResult_Error verifies applyEnsureThreadResult shows error in scrollback.
 func TestModel_Update_EnsureThreadResult_Error(t *testing.T) {
 	m := NewModel(&chat.Session{})
@@ -1644,6 +1702,30 @@ func TestModel_Update_EnsureThreadResult_Success(t *testing.T) {
 	}
 	if !found {
 		t.Errorf("Scrollback = %v; expected thread ID tid-ok", mod.Scrollback)
+	}
+}
+
+// TestModel_Update_EnsureThreadResult_StartsProactiveRefresh verifies tea.Every is scheduled once when a refresh token exists.
+func TestModel_Update_EnsureThreadResult_StartsProactiveRefresh(t *testing.T) {
+	session := &chat.Session{Client: gateway.NewClient("http://localhost")}
+	m := NewModel(session)
+	m.SetAuthProvider(&mockAuthProvider{refreshToken: "rt"})
+	updated, cmd := m.Update(ensureThreadResult{threadID: "tid-ok"})
+	if cmd == nil {
+		t.Fatal("expected non-nil cmd for proactive token refresh")
+	}
+	mod := updated.(*Model)
+	if !mod.proactiveTokenRefreshStarted {
+		t.Error("proactiveTokenRefreshStarted should be true")
+	}
+	// Second ensureThreadResult must not stack another Every.
+	updated2, cmd2 := mod.Update(ensureThreadResult{})
+	mod2 := updated2.(*Model)
+	if cmd2 != nil {
+		t.Errorf("second Update(ensureThreadResult) cmd = %v, want nil", cmd2)
+	}
+	if !mod2.proactiveTokenRefreshStarted {
+		t.Error("proactiveTokenRefreshStarted should stay true")
 	}
 }
 

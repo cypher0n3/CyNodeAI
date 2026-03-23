@@ -3,6 +3,7 @@ package pma
 import (
 	"bytes"
 	"encoding/json"
+	"io"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -11,21 +12,26 @@ import (
 	"testing"
 )
 
-// newMockInferenceServer starts an httptest.Server that responds to /api/chat with
-// Ollama-compatible NDJSON streaming (stream:true) whose final visible text is derived from
-// the "response" field of the given body JSON. Non-200 status passes through as-is.
-// callInference now uses stream:true, so tests must serve NDJSON.
+// newMockInferenceServer starts an httptest.Server that responds to /api/chat.
+// When the request has "stream": false (callInference), it returns a single JSON object
+// with message.content from the mock body. When stream is true or omitted (Ollama default),
+// it emits Ollama-compatible NDJSON for streamCompletionToWriter.
 func newMockInferenceServer(t *testing.T, status int, body string) *httptest.Server {
 	t.Helper()
-	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(status)
 		if status != http.StatusOK {
 			_, _ = w.Write([]byte(body))
 			return
 		}
-		// Parse the legacy single-JSON body to extract response/error text then
-		// re-emit as NDJSON stream so callInference (stream:true) can parse it.
+		reqBody, _ := io.ReadAll(r.Body)
+		var req struct {
+			Stream *bool `json:"stream"`
+		}
+		_ = json.Unmarshal(reqBody, &req)
+		useStream := req.Stream == nil || *req.Stream
+
 		var single struct {
 			Response string `json:"response"`
 			Message  struct {
@@ -34,19 +40,33 @@ func newMockInferenceServer(t *testing.T, status int, body string) *httptest.Ser
 			Error string `json:"error"`
 		}
 		if err := json.Unmarshal([]byte(body), &single); err != nil {
-			// Unparseable: emit as error chunk.
-			_, _ = w.Write([]byte(`{"error":"mock parse error","done":true}` + "\n"))
+			if useStream {
+				_, _ = w.Write([]byte(`{"error":"mock parse error","done":true}` + "\n"))
+			} else {
+				_, _ = w.Write([]byte(`{"error":"mock parse error"}`))
+			}
 			return
 		}
 		if single.Error != "" {
-			_, _ = w.Write([]byte(`{"error":"` + single.Error + `","done":true}` + "\n"))
+			if useStream {
+				_, _ = w.Write([]byte(`{"error":"` + single.Error + `","done":true}` + "\n"))
+			} else {
+				_, _ = w.Write([]byte(`{"error":"` + single.Error + `"}`))
+			}
 			return
 		}
 		content := single.Message.Content
 		if content == "" {
 			content = single.Response
 		}
-		// Emit a content chunk then a done chunk.
+		if !useStream {
+			out, _ := json.Marshal(map[string]interface{}{
+				"message": map[string]string{"role": "assistant", "content": content},
+				"done":    true,
+			})
+			_, _ = w.Write(out)
+			return
+		}
 		chunk, _ := json.Marshal(map[string]interface{}{
 			"message": map[string]string{"content": content},
 			"done":    false,
@@ -274,6 +294,9 @@ func TestChatCompletionHandler_StreamLangchainPath(t *testing.T) {
 	if !bytes.Contains(b, []byte(`"iteration_start"`)) {
 		t.Errorf("body missing iteration_start: %s", b)
 	}
+	if !bytes.Contains(b, []byte(`"delta"`)) || !bytes.Contains(b, []byte("streamed")) {
+		t.Errorf("body missing delta with completion: %s", b)
+	}
 	if !bytes.Contains(b, []byte(`"done"`)) {
 		t.Errorf("body missing done: %s", b)
 	}
@@ -316,7 +339,10 @@ func TestChatCompletionHandler_CapableModelEmptyOutputReturns500(t *testing.T) {
 	mcpSrv := newMockMCPServer(t, `{}`)
 	defer mcpSrv.Close()
 	t.Setenv("PMA_MCP_GATEWAY_URL", mcpSrv.URL)
-	t.Setenv("OLLAMA_BASE_URL", "http://127.0.0.1:1") // unreachable; test hook is used
+	// Direct inference fallback (stream:false) also returns empty body — persistent empty.
+	ollama := newMockInferenceServer(t, http.StatusOK, `{"message":{"content":""}}`)
+	defer ollama.Close()
+	t.Setenv("OLLAMA_BASE_URL", ollama.URL)
 	t.Setenv("INFERENCE_MODEL", "qwen3.5:9b")
 
 	oldHook := testLLMForCompletion
@@ -326,6 +352,31 @@ func TestChatCompletionHandler_CapableModelEmptyOutputReturns500(t *testing.T) {
 
 	handler := ChatCompletionHandler("sys", slog.Default())
 	req := httptest.NewRequest(http.MethodPost, "/internal/chat/completion", bytes.NewReader([]byte(`{"messages":[{"role":"user","content":"hi"}]}`)))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	handler(rec, req)
+	if rec.Code != http.StatusInternalServerError {
+		t.Errorf("got status %d, body %s", rec.Code, rec.Body.String())
+	}
+}
+
+// TestChatCompletionHandler_CapableModelEmptyOutputStreamReturns500 verifies stream=true uses
+// resolveContent and returns 500 when completion stays empty (no silent 200 with empty body).
+func TestChatCompletionHandler_CapableModelEmptyOutputStreamReturns500(t *testing.T) {
+	mcpSrv := newMockMCPServer(t, `{}`)
+	defer mcpSrv.Close()
+	t.Setenv("PMA_MCP_GATEWAY_URL", mcpSrv.URL)
+	ollama := newMockInferenceServer(t, http.StatusOK, `{"message":{"content":""}}`)
+	defer ollama.Close()
+	t.Setenv("OLLAMA_BASE_URL", ollama.URL)
+	t.Setenv("INFERENCE_MODEL", "qwen3.5:9b")
+
+	oldHook := testLLMForCompletion
+	testLLMForCompletion = &mockLLM{responses: []string{"", ""}}
+	defer func() { testLLMForCompletion = oldHook }()
+
+	handler := ChatCompletionHandler("sys", slog.Default())
+	req := httptest.NewRequest(http.MethodPost, "/internal/chat/completion", bytes.NewReader([]byte(`{"messages":[{"role":"user","content":"hi"}],"stream":true}`)))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()
 	handler(rec, req)

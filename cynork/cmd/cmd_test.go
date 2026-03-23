@@ -17,7 +17,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/charmbracelet/bubbletea"
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/creack/pty"
 	"github.com/cypher0n3/cynodeai/cynork/internal/chat"
 	"github.com/cypher0n3/cynodeai/cynork/internal/config"
@@ -110,20 +110,11 @@ func TestExecute_TUI_StartsWithoutToken(t *testing.T) {
 }
 
 func TestExecute_TUI_WithToken(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == http.MethodPost && r.URL.Path == chatThreadsPath {
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusCreated)
-			_ = json.NewEncoder(w).Encode(map[string]string{"thread_id": "tid"})
-			return
-		}
-		w.WriteHeader(http.StatusOK)
-	}))
-	defer server.Close()
+	// Thread ensure runs inside tea (Init), not before Run; gateway need not be reachable here.
 	oldRun := tuiRunProgram
 	tuiRunProgram = func(_ *tea.Program) (tea.Model, error) { return nil, nil }
 	defer func() { tuiRunProgram = oldRun }()
-	path := writeTempConfig(t, "gateway_url: "+server.URL+"\ntoken: x\n")
+	path := writeTempConfig(t, "gateway_url: http://127.0.0.1:9\ntoken: x\n")
 	got := runWithArgs(t, "--config", path, "tui")
 	if got != 0 {
 		t.Errorf("Execute(tui) with token and mock run = %d, want 0", got)
@@ -131,22 +122,12 @@ func TestExecute_TUI_WithToken(t *testing.T) {
 }
 
 func TestExecute_TUI_RunReturnsError(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == http.MethodPost && r.URL.Path == chatThreadsPath {
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusCreated)
-			_ = json.NewEncoder(w).Encode(map[string]string{"thread_id": "tid"})
-			return
-		}
-		w.WriteHeader(http.StatusOK)
-	}))
-	defer server.Close()
 	oldRun := tuiRunProgram
 	tuiRunProgram = func(_ *tea.Program) (tea.Model, error) {
 		return nil, errors.New("program error")
 	}
 	defer func() { tuiRunProgram = oldRun }()
-	path := writeTempConfig(t, "gateway_url: "+server.URL+"\ntoken: x\n")
+	path := writeTempConfig(t, "gateway_url: http://127.0.0.1:9\ntoken: x\n")
 	got := runWithArgs(t, "--config", path, "tui")
 	if got != 1 {
 		t.Errorf("Execute(tui) when run returns error = %d, want 1", got)
@@ -154,21 +135,10 @@ func TestExecute_TUI_RunReturnsError(t *testing.T) {
 }
 
 func TestExecute_TUI_DefaultNewThread(t *testing.T) {
-	threadID := "thread-123"
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == http.MethodPost && r.URL.Path == chatThreadsPath {
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusCreated)
-			_ = json.NewEncoder(w).Encode(map[string]string{"thread_id": threadID})
-			return
-		}
-		w.WriteHeader(http.StatusOK)
-	}))
-	defer server.Close()
 	oldRun := tuiRunProgram
 	tuiRunProgram = func(_ *tea.Program) (tea.Model, error) { return nil, nil }
 	defer func() { tuiRunProgram = oldRun }()
-	path := writeTempConfig(t, "gateway_url: "+server.URL+"\ntoken: x\n")
+	path := writeTempConfig(t, "gateway_url: http://127.0.0.1:9\ntoken: x\n")
 	got := runWithArgs(t, "--config", path, "tui")
 	if got != 0 {
 		t.Errorf("Execute(tui) default new thread = %d, want 0", got)
@@ -435,6 +405,103 @@ func TestRunAuthRefresh_DefaultConfigPath(t *testing.T) {
 	defer func() { configPath = ""; cfg = nil; getDefaultConfigPath = oldGetDefault }()
 	if err := runAuthRefresh(nil, nil); err != nil {
 		t.Errorf("runAuthRefresh: %v", err)
+	}
+}
+
+func TestTuiAuthProvider_Save_AfterLoginPreservesFileGatewayWithEnvOverride(t *testing.T) {
+	path := writeTempConfig(t, "gateway_url: http://localhost:12080\n")
+	t.Setenv("CYNORK_GATEWAY_URL", "http://127.0.0.1:49152")
+	var err error
+	cfg, err = config.Load(path)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	cfgGatewayFromEnv = true
+	configPath = path
+	defer func() {
+		configPath = ""
+		cfg = nil
+		cfgGatewayFromEnv = false
+		cfgGatewayPersistExplicit = false
+	}()
+	p := &tuiAuthProvider{cfg: cfg, saveFn: saveConfig}
+	p.SetGatewayURL("http://127.0.0.1:49152", false)
+	if err := p.Save(); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := string(raw)
+	if !strings.Contains(s, "12080") {
+		t.Fatalf("config file should keep file gateway_url; got:\n%s", s)
+	}
+	if strings.Contains(s, "49152") {
+		t.Fatalf("config file must not persist CYNORK_GATEWAY_URL after login-style SetGatewayURL; got:\n%s", s)
+	}
+}
+
+func TestTuiAuthProvider_Save_AfterExplicitConnectPersistsNewGateway(t *testing.T) {
+	path := writeTempConfig(t, "gateway_url: http://localhost:12080\n")
+	t.Setenv("CYNORK_GATEWAY_URL", "http://127.0.0.1:49152")
+	var err error
+	cfg, err = config.Load(path)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	cfgGatewayFromEnv = true
+	configPath = path
+	defer func() {
+		configPath = ""
+		cfg = nil
+		cfgGatewayFromEnv = false
+		cfgGatewayPersistExplicit = false
+	}()
+	p := &tuiAuthProvider{cfg: cfg, saveFn: saveConfig}
+	p.SetGatewayURL("http://127.0.0.1:33333", true)
+	if err := p.Save(); err != nil {
+		t.Fatalf("Save: %v", err)
+	}
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := string(raw)
+	if !strings.Contains(s, "33333") {
+		t.Fatalf("explicit /connect gateway should be persisted; got:\n%s", s)
+	}
+}
+
+func TestSaveConfig_ExistingFilePreservesGatewayWhenMemoryDrifts(t *testing.T) {
+	path := writeTempConfig(t, "gateway_url: http://localhost:12080\n")
+	var err error
+	cfg, err = config.Load(path)
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	cfg.GatewayURL = "http://127.0.0.1:99999"
+	cfgGatewayFromEnv = false
+	cfgGatewayPersistExplicit = false
+	configPath = path
+	defer func() {
+		configPath = ""
+		cfg = nil
+		cfgGatewayPersistExplicit = false
+	}()
+	if err := saveConfig(); err != nil {
+		t.Fatalf("saveConfig: %v", err)
+	}
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	s := string(raw)
+	if !strings.Contains(s, "12080") {
+		t.Fatalf("existing file gateway_url must be preserved; got:\n%s", s)
+	}
+	if strings.Contains(s, "99999") {
+		t.Fatalf("config must not persist drifted in-memory gateway; got:\n%s", s)
 	}
 }
 
@@ -2323,12 +2390,13 @@ func TestProcessChatLine_ShellEscape(t *testing.T) {
 }
 
 func TestProcessChatLine_SlashErrorDoesNotExit(t *testing.T) {
+	t.Setenv("CYNORK_TOKEN", "tok")
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusNotFound)
 		_, _ = w.Write([]byte("Not Found"))
 	}))
 	defer server.Close()
-	path := writeTempConfig(t, "gateway_url: "+server.URL+"\ntoken: tok\n")
+	path := writeTempConfig(t, "gateway_url: "+server.URL+"\n")
 	configPath = path
 	cfg = &config.Config{GatewayURL: server.URL, Token: "tok"}
 	oldRunner := runCynorkSubcommandForSlash
@@ -2675,7 +2743,7 @@ func TestRunSlashCommand_StubEndpoints(t *testing.T) {
 		"/auth whoami", "/nodes list", "/nodes get n1", "/skills list", "/skills get s1",
 		"/prefs list", "/prefs get", "/prefs effective", "/prefs delete",
 		"/project list", "/project get p1", "/project", "/project set p2",
-		"/model", "/model m1", "/task list", "/task get t1",
+		"/model", "/model cynodeai.pm", "/task list", "/task get t1",
 		"/task create -p say hello", "/task cancel -y t1", "/task result t1", "/task logs t1", "/task artifacts list t1",
 		"/clear",
 	}
@@ -2774,10 +2842,11 @@ func TestRunSlashAuth_LoginRefreshLogoutUpdateClient(t *testing.T) {
 		AccessToken: "refreshed-tok", RefreshToken: "new-refresh", TokenType: "Bearer", ExpiresIn: 900,
 	})
 	defer refreshServer.Close()
+	t.Setenv("CYNORK_REFRESH_TOKEN", "old-refresh")
 	cfg.GatewayURL = refreshServer.URL
 	cfg.Token = "old"
 	cfg.RefreshToken = "old-refresh"
-	path2 := writeTempConfig(t, "gateway_url: "+refreshServer.URL+"\nrefresh_token: old-refresh\n")
+	path2 := writeTempConfig(t, "gateway_url: "+refreshServer.URL+"\n")
 	configPath = path2
 	session2 := chat.NewSession(gateway.NewClient(refreshServer.URL))
 	session2.SetToken("old")

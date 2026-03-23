@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -62,6 +63,18 @@ func TestLoad_EnvOverrides(t *testing.T) {
 	}
 }
 
+func TestLoad_CYNORK_REFRESH_TOKEN(t *testing.T) {
+	_ = os.Setenv("CYNORK_REFRESH_TOKEN", "r-secret")
+	defer func() { _ = os.Unsetenv("CYNORK_REFRESH_TOKEN") }()
+	cfg, err := Load(filepath.Join(t.TempDir(), "missing.yaml"))
+	if err != nil {
+		t.Fatalf("Load: %v", err)
+	}
+	if cfg.RefreshToken != "r-secret" {
+		t.Errorf("RefreshToken = %q, want r-secret", cfg.RefreshToken)
+	}
+}
+
 func TestLoad_FromFile(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.yaml")
@@ -78,6 +91,25 @@ func TestLoad_FromFile(t *testing.T) {
 	}
 }
 
+func TestLoadFileWithoutEnvOverrides_IgnoresEnv(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, "config.yaml")
+	const fileURL = "http://file:13080"
+	if err := os.WriteFile(path, []byte("gateway_url: "+fileURL+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	_ = os.Setenv("CYNORK_GATEWAY_URL", "http://localhost:12080")
+	defer func() { _ = os.Unsetenv("CYNORK_GATEWAY_URL") }()
+
+	cfg, err := LoadFileWithoutEnvOverrides(path)
+	if err != nil {
+		t.Fatalf("LoadFileWithoutEnvOverrides: %v", err)
+	}
+	if cfg.GatewayURL != fileURL {
+		t.Errorf("GatewayURL = %q, want %q (must not apply env)", cfg.GatewayURL, fileURL)
+	}
+}
+
 func TestSave(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "sub", "config.yaml")
@@ -85,12 +117,22 @@ func TestSave(t *testing.T) {
 	if err := Save(path, cfg); err != nil {
 		t.Fatalf("Save: %v", err)
 	}
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(raw), "token:") || strings.Contains(string(raw), "refresh_token:") {
+		t.Fatalf("config.yaml must not contain secrets: %s", raw)
+	}
 	loaded, err := Load(path)
 	if err != nil {
 		t.Fatalf("Load after Save: %v", err)
 	}
-	if loaded.GatewayURL != cfg.GatewayURL || loaded.Token != cfg.Token {
-		t.Errorf("loaded = %+v, want %+v", loaded, cfg)
+	if loaded.GatewayURL != cfg.GatewayURL {
+		t.Errorf("GatewayURL = %q, want %q", loaded.GatewayURL, cfg.GatewayURL)
+	}
+	if loaded.Token != "" {
+		t.Errorf("Token from file load must be empty without CYNORK_TOKEN, got %q", loaded.Token)
 	}
 }
 
@@ -164,8 +206,15 @@ func TestLoad_EmptyGatewayInFile(t *testing.T) {
 	if cfg.GatewayURL != DefaultGatewayURL {
 		t.Errorf("GatewayURL = %q, want default %q", cfg.GatewayURL, DefaultGatewayURL)
 	}
-	if cfg.Token != "t" {
-		t.Errorf("Token = %q, want t", cfg.Token)
+	if cfg.Token != "" {
+		t.Errorf("Token = %q, want empty (never loaded from YAML)", cfg.Token)
+	}
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(raw), "token:") {
+		t.Errorf("legacy token key should be stripped from config.yaml after load: %s", raw)
 	}
 }
 
@@ -204,8 +253,8 @@ func TestSave_EmptyPath(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Load after Save empty path: %v", err)
 	}
-	if loaded.Token != "x" {
-		t.Errorf("Token = %q, want x", loaded.Token)
+	if loaded.Token != "" {
+		t.Errorf("Token = %q, want empty without CYNORK_TOKEN", loaded.Token)
 	}
 }
 

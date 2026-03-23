@@ -536,6 +536,7 @@ func (h *NodeHandler) deriveInferenceBackend(ctx context.Context, nodeID uuid.UU
 		return nil
 	}
 	variant, vramMB := variantAndVRAM(&report)
+	selected := h.selectPMAModel(ctx, nodeID)
 	return &nodepayloads.ConfigInferenceBackend{
 		// When ExistingService is true the node already has Ollama running; set Enabled=false
 		// so node-manager does not try to start a second container. SelectedModel and Env are
@@ -545,8 +546,32 @@ func (h *NodeHandler) deriveInferenceBackend(ctx context.Context, nodeID uuid.UU
 		Variant:       variant,
 		Port:          11434,
 		Env:           inferenceEnvFromHardware(vramMB),
-		SelectedModel: h.selectPMAModel(ctx, nodeID),
+		SelectedModel: selected,
+		// Orchestrator-directed pull list: default first (faster availability), then tier pick.
+		ModelsToEnsure: buildModelsToEnsure(selected),
 	}
+}
+
+// buildModelsToEnsure returns the ordered list of models node-manager should pull when absent.
+// The default smoke/min model is listed before the selected tier model when they differ.
+func buildModelsToEnsure(selectedModel string) []string {
+	var out []string
+	seen := map[string]bool{}
+	add := func(s string) {
+		s = strings.TrimSpace(s)
+		if s == "" {
+			return
+		}
+		k := strings.ToLower(s)
+		if seen[k] {
+			return
+		}
+		seen[k] = true
+		out = append(out, s)
+	}
+	add(pmaModelDefault)
+	add(selectedModel)
+	return out
 }
 
 // variantAndVRAM extracts the Ollama variant and total VRAM (MB) for the chosen vendor

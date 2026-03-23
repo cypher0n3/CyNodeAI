@@ -21,6 +21,13 @@ def _env_int(key: str, default: int) -> int:
     except ValueError:
         return default
 
+
+def _env_bool(key: str, default: bool) -> bool:
+    raw = os.environ.get(key)
+    if raw is None or str(raw).strip() == "":
+        return default
+    return str(raw).strip().lower() not in ("0", "false", "no", "off")
+
 # Orchestrator (docs/tech_specs/ports_and_endpoints.md)
 ORCHESTRATOR_PORT = int(os.environ.get("ORCHESTRATOR_PORT", "12080"))
 CONTROL_PLANE_PORT = int(os.environ.get("CONTROL_PLANE_PORT", "12082"))
@@ -73,8 +80,11 @@ OLLAMA_E2E_MODEL = os.environ.get("OLLAMA_E2E_MODEL", "qwen3.5:0.8b")
 # HTTP timeout (seconds) for Ollama /api/chat during inference smoke (some models exceed 120s).
 OLLAMA_SMOKE_CHAT_TIMEOUT = _env_int("OLLAMA_SMOKE_CHAT_TIMEOUT", 300)
 # Capable model for agent/tool-call tests (spec: qwen3.5:9b → Ollama Hub: qwen3:8b).
-# Tests requiring this model are skipped when it is not present in the container.
+# When OLLAMA_CONTAINER_NAME is reachable, E2E prereq pulls this if missing (same as
+# OLLAMA_E2E_MODEL). Set OLLAMA_AUTO_PULL_CAPABLE=0 to skip that pull (e.g. CI bandwidth).
+# Tests still skip if the model is absent after prereq.
 OLLAMA_CAPABLE_MODEL = os.environ.get("OLLAMA_CAPABLE_MODEL", "qwen3:8b")
+OLLAMA_AUTO_PULL_CAPABLE = _env_bool("OLLAMA_AUTO_PULL_CAPABLE", True)
 
 # Optional: node state dir for E2E that assert on secure store (e.g. full-demo); skip tests if unset
 NODE_STATE_DIR = os.environ.get("NODE_STATE_DIR", "").strip()

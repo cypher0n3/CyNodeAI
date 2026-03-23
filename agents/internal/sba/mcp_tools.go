@@ -3,12 +3,12 @@ package sba
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
 	"strings"
 
+	"github.com/cypher0n3/cynodeai/agents/internal/mcpclient"
 	"github.com/tmc/langchaingo/tools"
 )
 
@@ -29,7 +29,7 @@ func (m *MCPTool) Name() string { return "mcp_call" }
 // Description describes allowed tools for the agent.
 func (m *MCPTool) Description() string {
 	return `Call the orchestrator MCP gateway (sandbox allowlist). Input JSON: {"tool_name": "NAME", "arguments": {...}}.
-Allowed tool_name: artifact.put, artifact.get, artifact.list, memory.add, memory.list, memory.retrieve, memory.delete, skills.list, skills.get, web.fetch, api.call, help.* (when implemented).`
+Allowed tool_name: artifact.put, artifact.get, artifact.list, memory.add, memory.list, memory.retrieve, memory.delete, skills.list, skills.get, web.fetch, api.call, help.list, help.get.`
 }
 
 // Call runs the tool.
@@ -37,17 +37,14 @@ func (m *MCPTool) Call(ctx context.Context, input string) (string, error) {
 	if m.client == nil || m.client.BaseURL == "" {
 		return "MCP gateway not configured (set SBA_MCP_GATEWAY_URL or MCP_GATEWAY_URL)", nil
 	}
-	var req struct {
-		ToolName  string                 `json:"tool_name"`
-		Arguments map[string]interface{} `json:"arguments"`
-	}
-	if err := json.Unmarshal([]byte(strings.TrimSpace(input)), &req); err != nil {
+	toolName, args, err := mcpclient.DecodeMCPCallInput(input)
+	if err != nil {
 		return "", fmt.Errorf("invalid mcp_call input JSON: %w", err)
 	}
-	if req.ToolName == "" {
+	if toolName == "" {
 		return "", fmt.Errorf("tool_name required")
 	}
-	body, code, err := m.client.Call(ctx, req.ToolName, req.Arguments)
+	body, code, err := m.client.Call(ctx, toolName, args)
 	if err != nil {
 		return "", err
 	}

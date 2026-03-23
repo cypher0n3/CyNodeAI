@@ -5,9 +5,11 @@ go 1.26
 toolchain go1.26.0
 
 require (
+	github.com/charmbracelet/bubbles v0.21.0
 	github.com/charmbracelet/bubbletea v1.3.10
 	github.com/charmbracelet/glamour v1.0.0
 	github.com/charmbracelet/lipgloss v1.1.1-0.20250404203927-76690c660834
+	github.com/charmbracelet/x/ansi v0.11.6
 	github.com/creack/pty v1.1.24
 	github.com/cucumber/godog v0.15.1
 	github.com/cypher0n3/cynodeai/go_shared_libs v0.0.0
@@ -23,7 +25,6 @@ require (
 	github.com/aymanbagabas/go-osc52/v2 v2.0.1 // indirect
 	github.com/aymerick/douceur v0.2.0 // indirect
 	github.com/charmbracelet/colorprofile v0.4.3 // indirect
-	github.com/charmbracelet/x/ansi v0.11.6 // indirect
 	github.com/charmbracelet/x/cellbuf v0.0.15 // indirect
 	github.com/charmbracelet/x/exp/slice v0.0.0-20260311145557-c83711a11ffa // indirect
 	github.com/charmbracelet/x/term v0.2.2 // indirect

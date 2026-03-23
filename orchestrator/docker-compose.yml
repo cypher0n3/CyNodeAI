@@ -69,12 +69,15 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+    # Migrations (GORM AutoMigrate + DDL) run before ListenAndServe; /healthz is unavailable until then.
+    # A short start_period lets the healthcheck fail the retry budget during long first-boot or upgraded-schema runs,
+    # leaving user-gateway blocked on depends_on: service_healthy indefinitely (podman-compose waits forever).
     healthcheck:
       test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:12082/healthz || exit 1"]
       interval: 10s
-      timeout: 3s
-      retries: 3
-      start_period: 5s
+      timeout: 5s
+      retries: 6
+      start_period: 120s
     networks:
       - orchestrator_net
 
@@ -109,9 +112,9 @@ services:
     healthcheck:
       test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:12080/healthz || exit 1"]
       interval: 10s
-      timeout: 3s
-      retries: 3
-      start_period: 5s
+      timeout: 5s
+      retries: 6
+      start_period: 30s
     networks:
       - orchestrator_net
 
@@ -153,8 +156,13 @@ services:
     container_name: cynodeai-mcp-gateway
     environment:
       LISTEN_ADDR: ":12083"
+      # Required for tool routing and P2-02 audit logging (help.list and all tools hit toolCallHandler).
+      DATABASE_URL: postgres://${POSTGRES_USER:-cynodeai}:${POSTGRES_PASSWORD:-cynodeai-dev-password}@postgres:5432/${POSTGRES_DB:-cynodeai}?sslmode=disable
     ports:
       - "${MCP_GATEWAY_PORT:-12083}:12083"
+    depends_on:
+      postgres:
+        condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "wget -q -O /dev/null http://localhost:12083/healthz || exit 1"]
       interval: 10s

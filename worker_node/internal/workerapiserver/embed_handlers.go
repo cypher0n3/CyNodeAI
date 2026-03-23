@@ -50,8 +50,12 @@ type embedManagedServiceTarget struct {
 
 type embedInternalProxyConfig struct {
 	UpstreamBaseURL string
-	SocketByService map[string]string
-	SecureStore     *securestore.Store
+	// MCPGatewayBaseURL is the orchestrator base URL for POST /v1/mcp/tools/call (served by the
+	// control plane). ORCHESTRATOR_MCP_GATEWAY_BASE_URL overrides; otherwise it defaults from the
+	// control-plane URL (same origin as UpstreamBaseURL in the standard compose layout).
+	MCPGatewayBaseURL string
+	SocketByService   map[string]string
+	SecureStore       *securestore.Store
 }
 
 type embedProxyConfig struct {
@@ -76,6 +80,10 @@ func loadProxyConfigFromEnv(stateDir string, logger *slog.Logger) (embedProxyCon
 	}
 	if out.InternalProxy.UpstreamBaseURL == "" {
 		out.InternalProxy.UpstreamBaseURL = strings.TrimSpace(os.Getenv("ORCHESTRATOR_URL"))
+	}
+	out.InternalProxy.MCPGatewayBaseURL = strings.TrimSpace(os.Getenv("ORCHESTRATOR_MCP_GATEWAY_BASE_URL"))
+	if out.InternalProxy.MCPGatewayBaseURL == "" {
+		out.InternalProxy.MCPGatewayBaseURL = deriveMCPGatewayBaseURL(out.InternalProxy.UpstreamBaseURL)
 	}
 	if store, _, err := securestore.Open(stateDir); err == nil {
 		out.InternalProxy.SecureStore = store
@@ -169,7 +177,7 @@ func buildMuxesFromEmbedConfig(
 	publicMux.HandleFunc("POST /v1/worker/managed-services/{id}/proxy:http", managedServiceProxyHTTPHandler(bearerToken, proxyCfg.InternalProxy.SocketByService, logger))
 	registerEmbedTelemetryHandlers(publicMux, bearerToken, telemetryStore, logger)
 	internalMux = http.NewServeMux()
-	// Internal proxy routes would be added when moving handleInternalOrchestratorProxy
+	registerInternalOrchestratorProxyHandlers(internalMux, proxyCfg.InternalProxy)
 	return publicMux, internalMux
 }
 

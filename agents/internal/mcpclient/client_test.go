@@ -234,10 +234,36 @@ func TestParseHTTPUnixEndpoint(t *testing.T) {
 	}
 }
 
+func TestDecodeMCPCallInput_ObjectAndStringArguments(t *testing.T) {
+	name, args, err := DecodeMCPCallInput(`{"tool_name":"help.list","arguments":{"x":1}}`)
+	if err != nil || name != "help.list" || args["x"] != float64(1) {
+		t.Fatalf("object args: name=%q args=%v err=%v", name, args, err)
+	}
+	name, args, err = DecodeMCPCallInput(`{"tool_name":"task.get","arguments":"{\"task_id\":\"abc\"}"}`)
+	if err != nil || name != "task.get" || args["task_id"] != "abc" {
+		t.Fatalf("string args: name=%q args=%v err=%v", name, args, err)
+	}
+	name, args, err = DecodeMCPCallInput(`{"tool_name":"x","arguments":""}`)
+	if err != nil || name != "x" || args != nil {
+		t.Fatalf("empty string args: name=%q args=%v err=%v", name, args, err)
+	}
+}
+
 func TestLangchainTool_NameDescriptionAndSuccess(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != ToolsCallPath {
 			t.Errorf("path %s", r.URL.Path)
+		}
+		b, _ := io.ReadAll(r.Body)
+		var body CallRequest
+		if err := json.Unmarshal(b, &body); err != nil {
+			t.Fatal(err)
+		}
+		if body.ToolName != "task.get" {
+			t.Errorf("tool %s", body.ToolName)
+		}
+		if body.Arguments["task_id"] != "x" {
+			t.Errorf("args %+v", body.Arguments)
 		}
 		_, _ = w.Write([]byte(`{"ok":true}`))
 	}))
@@ -249,6 +275,10 @@ func TestLangchainTool_NameDescriptionAndSuccess(t *testing.T) {
 	out, err := lt.Call(context.Background(), `{"tool_name":"task.get","arguments" : {"task_id":"x"}}`)
 	if err != nil || out != `{"ok":true}` {
 		t.Fatalf("success: out=%q err=%v", out, err)
+	}
+	out, err = lt.Call(context.Background(), `{"tool_name":"task.get","arguments":"{\"task_id\":\"x\"}"}`)
+	if err != nil || out != `{"ok":true}` {
+		t.Fatalf("string args: out=%q err=%v", out, err)
 	}
 }
 

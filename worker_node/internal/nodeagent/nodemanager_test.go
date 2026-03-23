@@ -1845,6 +1845,29 @@ func TestReconcileManagedServices_LogsOnError(t *testing.T) {
 	reconcileManagedServices(context.Background(), slog.Default(), nodeConfig, opts)
 }
 
+func TestInferenceBackendPullSpecChanged(t *testing.T) {
+	ib := func(selected string, ensure ...string) *nodepayloads.NodeConfigurationPayload {
+		return &nodepayloads.NodeConfigurationPayload{
+			InferenceBackend: &nodepayloads.ConfigInferenceBackend{
+				SelectedModel:  selected,
+				ModelsToEnsure: append([]string(nil), ensure...),
+			},
+		}
+	}
+	if inferenceBackendPullSpecChanged(ib("a", "x"), ib("a", "x")) {
+		t.Error("same pull spec should not report changed")
+	}
+	if !inferenceBackendPullSpecChanged(ib("a"), ib("b")) {
+		t.Error("different selected_model should report changed")
+	}
+	if !inferenceBackendPullSpecChanged(ib("a", "m1"), ib("a", "m2")) {
+		t.Error("different models_to_ensure should report changed")
+	}
+	if !inferenceBackendPullSpecChanged(nil, ib("a")) {
+		t.Error("nil old with inference should report changed")
+	}
+}
+
 func TestManagedServicesConfigChanged(t *testing.T) {
 	svc := func(model string) *nodepayloads.NodeConfigurationPayload {
 		return &nodepayloads.NodeConfigurationPayload{
@@ -1998,6 +2021,37 @@ func TestMaybePullModels_MissingModel(t *testing.T) {
 	case got := <-pulled:
 		if len(got) != 1 || got[0] != "qwen3.5:9b" {
 			t.Errorf("expected pull of [qwen3.5:9b], got %v", got)
+		}
+	case <-time.After(500 * time.Millisecond):
+		t.Error("PullModels was not called within timeout")
+	}
+}
+
+func TestMaybePullModels_ModelsToEnsurePullsOnlyMissing(t *testing.T) {
+	_ = os.Setenv("NODE_MANAGER_TEST_NO_EXISTING_INFERENCE", "1")
+	defer func() { _ = os.Setenv("NODE_MANAGER_TEST_NO_EXISTING_INFERENCE", "1") }()
+	pulled := make(chan []string, 1)
+	opts := &RunOptions{PullModels: func(m []string) error { pulled <- m; return nil }}
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = io.WriteString(w, `{"models":[{"name":"qwen3.5:0.8b"}]}`)
+	}))
+	defer srv.Close()
+	u, _ := url.Parse(srv.URL)
+	_ = os.Unsetenv("NODE_MANAGER_TEST_NO_EXISTING_INFERENCE")
+	defer func() { _ = os.Setenv("NODE_MANAGER_TEST_NO_EXISTING_INFERENCE", "1") }()
+	_ = os.Setenv("OLLAMA_PORT", u.Port())
+	defer func() { _ = os.Unsetenv("OLLAMA_PORT") }()
+	maybePullModels(context.Background(), nil, &nodepayloads.NodeConfigurationPayload{
+		InferenceBackend: &nodepayloads.ConfigInferenceBackend{
+			SelectedModel:  "qwen3:8b",
+			ModelsToEnsure: []string{"qwen3.5:0.8b", "qwen3:8b"},
+		},
+	}, opts)
+	select {
+	case got := <-pulled:
+		if len(got) != 1 || got[0] != "qwen3:8b" {
+			t.Errorf("expected pull of missing model only [qwen3:8b], got %v", got)
 		}
 	case <-time.After(500 * time.Millisecond):
 		t.Error("PullModels was not called within timeout")

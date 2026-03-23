@@ -11,7 +11,7 @@ import requests
 from scripts.test_scripts import config, helpers
 import scripts.test_scripts.e2e_state as state
 
-_SSE_TIMEOUT_SEC = 120
+_SSE_TIMEOUT_SEC = int(config.E2E_SSE_REQUEST_TIMEOUT)
 
 
 def _auth_headers(config_path):

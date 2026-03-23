@@ -1122,6 +1122,20 @@ func TestDeriveInferenceBackend_IncludesSelectedModel(t *testing.T) {
 	if backend.SelectedModel == "" {
 		t.Error("expected SelectedModel to be populated in inference backend config")
 	}
+	if len(backend.ModelsToEnsure) < 1 {
+		t.Error("expected ModelsToEnsure to list at least the selected model")
+	}
+}
+
+func TestBuildModelsToEnsure_DedupesAndOrdersDefaultFirst(t *testing.T) {
+	got := buildModelsToEnsure(pmaModelDefault)
+	if len(got) != 1 || got[0] != pmaModelDefault {
+		t.Fatalf("buildModelsToEnsure(same as default) = %v, want [%s]", got, pmaModelDefault)
+	}
+	got = buildModelsToEnsure("qwen3:8b")
+	if len(got) != 2 || got[0] != pmaModelDefault || got[1] != "qwen3:8b" {
+		t.Fatalf("buildModelsToEnsure(tier) = %v, want [%s qwen3:8b]", got, pmaModelDefault)
+	}
 }
 
 func TestBuildManagedServicesDesiredState_BackendEnvPropagated(t *testing.T) {

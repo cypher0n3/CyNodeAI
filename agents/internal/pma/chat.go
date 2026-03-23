@@ -7,28 +7,32 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"net"
 	"net/http"
 	"net/url"
 	"os"
 	"strings"
+	"syscall"
 	"time"
+
+	"github.com/tmc/langchaingo/agents"
 )
 
 const roleUser = "user"
 
-// pmaLangchainCompletionTimeout caps the langchaingo completion run.
-// qwen3:8b at 32 768-token context can take up to ~60 s for a single thinking pass.
-// With pmaMaxIterations=3 that is ~180 s worst-case, but the bound here is per-run
-// (not per-iteration); the retry uses its own fresh context.  A single run should
-// complete in well under 90 s on RX 7900 XT hardware.
-const pmaLangchainCompletionTimeout = 90 * time.Second
+// pmaLangchainCompletionTimeout caps each getCompletionContent attempt (primary and empty-output retry).
+// Align with orchestrator chatCompletionTimeout / pmaclient defaultPMAHTTPTimeout (300s): qwen3 with
+// tools can use multiple agent iterations and must not hit context deadline before the gateway does.
+const pmaLangchainCompletionTimeout = 300 * time.Second
 
 // InternalChatCompletionRequest is the body for POST /internal/chat/completion (orchestrator handoff).
 // Optional fields support full context order per CYNAI.PMAGNT.LLMContextComposition: project, task, additional context.
-// When Stream is true the response is NDJSON with one {"delta":"..."} line per token (direct inference path only).
+// When Stream is true the response is application/x-ndjson: Ollama-backed paths emit real per-chunk deltas;
+// completed langchain turns emit progressive delta chunks (see pmaStreamDeltaRunes in langchain.go).
 type InternalChatCompletionRequest struct {
 	Messages []struct {
 		Role    string `json:"role"`
@@ -42,8 +46,10 @@ type InternalChatCompletionRequest struct {
 }
 
 // InternalChatCompletionResponse is the response body.
+// Thinking holds extracted think-block reasoning (REQ-PMAGNT-0117/0122); visible text is Content.
 type InternalChatCompletionResponse struct {
-	Content string `json:"content"`
+	Content  string `json:"content"`
+	Thinking string `json:"thinking,omitempty"`
 }
 
 // ChatCompletionHandler returns an HTTP handler for POST /internal/chat/completion.
@@ -73,16 +79,18 @@ func ChatCompletionHandler(instructionsContent string, logger *slog.Logger) http
 			return
 		}
 		if req.Stream && !canStreamCompletion(&req) {
-			streamCompletionLangchainToWriter(r.Context(), w, instructionsContent, &req, logger)
+			streamCompletionLangchainToWriter(detached, w, instructionsContent, &req, logger)
 			return
 		}
-		content, httpStatus := resolveContent(r.Context(), detached, instructionsContent, &req, logger)
-		writeJSON(w, httpStatus, InternalChatCompletionResponse{Content: content})
+		content, thinking, httpStatus := resolveContent(detached, instructionsContent, &req, logger)
+		writeJSON(w, httpStatus, InternalChatCompletionResponse{Content: content, Thinking: thinking})
 	}
 }
 
-// canStreamCompletion returns true when the completion would use callInference (direct Ollama),
-// so we can stream token-by-token. Langchain/MCP path is blocking and does not support streaming.
+// canStreamCompletion returns true when the request always uses direct Ollama streaming (no MCP
+// or non-capable model). Capable+MCP still uses stream=true on this endpoint but takes the
+// streamCompletionLangchainToWriter path (real Ollama deltas on inference fallback; chunked deltas
+// after a completed langchain turn).
 func canStreamCompletion(req *InternalChatCompletionRequest) bool {
 	mcpClient := NewMCPClient()
 	model := os.Getenv("INFERENCE_MODEL")
@@ -92,72 +100,217 @@ func canStreamCompletion(req *InternalChatCompletionRequest) bool {
 	return mcpClient.BaseURL == "" || !isCapableModel(model)
 }
 
-// streamCompletionLangchainToWriter runs the capable-model + MCP path with streaming:
-// NDJSON lines iteration_start, delta, done. Used when req.Stream is true and canStreamCompletion is false.
-func streamCompletionLangchainToWriter(ctx context.Context, w http.ResponseWriter, instructionsContent string, req *InternalChatCompletionRequest, logger *slog.Logger) {
-	systemContext := buildSystemContext(instructionsContent, req)
-	systemContextWithHistory := buildSystemContextWithHistory(systemContext, req.Messages)
-	currentInput := lastUserMessage(req.Messages)
-	fullPrompt := buildAgentInput(systemContextWithHistory, currentInput)
-	mcpClient := NewMCPClient()
-	w.Header().Set("Content-Type", "application/x-ndjson")
-	w.Header().Set("X-Accel-Buffering", "no")
-	w.WriteHeader(http.StatusOK)
-	if f, ok := w.(http.Flusher); ok {
-		f.Flush()
+// streamCompletionLangchainToWriter runs the capable-model + MCP path with real Ollama NDJSON
+// streaming when falling back to direct inference; completed langchain turns emit progressive
+// delta chunks (pmaStreamDeltaRunes). Mirrors resolveContent retries on empty output.
+func streamCompletionLangchainToWriter(detachedRoot context.Context, w http.ResponseWriter, instructionsContent string, req *InternalChatCompletionRequest, logger *slog.Logger) {
+	runCtx, cancel := context.WithTimeout(detachedRoot, pmaLangchainCompletionTimeout)
+	defer cancel()
+	out := streamTryLangchainNDJSON(runCtx, w, instructionsContent, req, logger)
+	if out == streamNDJSONOK {
+		return
 	}
-	if err := runCompletionWithLangchainStreaming(ctx, fullPrompt, mcpClient, w, logger); err != nil {
-		if logger != nil {
-			logger.Error("stream completion langchain failed", "error", err)
-		}
-	}
-}
-
-// streamCompletionToWriter runs direct inference and writes NDJSON lines
-// iteration_start (once), then {"delta":"..."} per token — same shape as
-// streamCompletionLangchainToWriter so orchestrator can map iteration_start to SSE.
-func streamCompletionToWriter(ctx context.Context, w http.ResponseWriter, instructionsContent string, req *InternalChatCompletionRequest, logger *slog.Logger) {
-	systemContext := buildSystemContext(instructionsContent, req)
-	baseURL, model := resolveOllamaConfig()
-	chatMessages := buildChatMessages(systemContext, req.Messages)
-	inferenceURL, inferenceClient := resolveInferenceClient(baseURL, inferenceHTTPTimeout)
-	resp, err := doInferenceRequest(ctx, inferenceClient, inferenceURL, model, chatMessages)
-	if err != nil {
-		logger.Error("stream completion inference request failed", "error", err)
+	if out == streamNDJSONError {
 		writeJSON(w, http.StatusInternalServerError, InternalChatCompletionResponse{})
 		return
 	}
+	// Empty — retry with only the current message (same as resolveContent).
+	if logger != nil {
+		logger.Warn("stream completion produced empty output; retrying with current message only",
+			"original_msg_count", len(req.Messages))
+	}
+	retryCtx, retryCancel := context.WithTimeout(detachedRoot, pmaLangchainCompletionTimeout)
+	defer retryCancel()
+	stripped := stripToCurrentMessage(req)
+	out = streamTryLangchainNDJSON(retryCtx, w, instructionsContent, stripped, logger)
+	if out != streamNDJSONOK {
+		writeJSON(w, http.StatusInternalServerError, InternalChatCompletionResponse{})
+	}
+}
+
+type streamNDJSONOutcome int
+
+const (
+	streamNDJSONOK streamNDJSONOutcome = iota
+	streamNDJSONEmpty
+	streamNDJSONError
+)
+
+// streamTryLangchainNDJSON performs one completion attempt for the streaming capable-model path.
+func streamTryLangchainNDJSON(ctx context.Context, w http.ResponseWriter, instructionsContent string, req *InternalChatCompletionRequest, logger *slog.Logger) streamNDJSONOutcome {
+	systemContext := buildSystemContext(instructionsContent, req)
+	mcpClient := NewMCPClient()
+	model := os.Getenv("INFERENCE_MODEL")
+	if model == "" {
+		model = pmaDefaultModel
+	}
+	if mcpClient.BaseURL != "" && isCapableModel(model) {
+		systemContextWithHistory := buildSystemContextWithHistory(systemContext, req.Messages)
+		currentInput := lastUserMessage(req.Messages)
+		visible, thinkLC, err := runCompletionWithLangchainWithTimeout(
+			ctx,
+			buildAgentInput(systemContextWithHistory, currentInput),
+			mcpClient,
+			logger,
+			pmaLangchainCompletionTimeout,
+		)
+		if err != nil {
+			if errors.Is(err, agents.ErrNotFinished) || errors.Is(err, agents.ErrAgentNoReturn) {
+				if logger != nil {
+					logger.Warn("langchain agent did not complete; falling back to direct inference", "error", err)
+				}
+				return streamOllamaChatToNDJSONOutcome(ctx, w, systemContext, req, logger)
+			}
+			return streamNDJSONError
+		}
+		if looksLikeUnexecutedToolCall(visible) {
+			if logger != nil {
+				logger.Warn("agent output looks like unexecuted tool call; falling back to direct inference",
+					"model", model, "output_preview", truncate(visible, 120))
+			}
+			return streamOllamaChatToNDJSONOutcome(ctx, w, systemContext, req, logger)
+		}
+		if strings.TrimSpace(visible) == "" {
+			if logger != nil {
+				logger.Warn("langchain agent returned empty output; falling back to direct inference", "model", model)
+			}
+			return streamOllamaChatToNDJSONOutcome(ctx, w, systemContext, req, logger)
+		}
+		w.Header().Set("Content-Type", "application/x-ndjson")
+		w.Header().Set("X-Accel-Buffering", "no")
+		w.WriteHeader(http.StatusOK)
+		flushResponseWriter(w)
+		if err := writeLangchainNDJSONStream(w, visible, thinkLC); err != nil {
+			// Response status and headers are already committed; do not return streamNDJSONError
+			// (outer handler would call writeJSON and trigger a superfluous WriteHeader).
+			if logger != nil {
+				if isClientDisconnect(err) {
+					logger.Debug("client disconnected during langchain NDJSON stream", "error", err)
+				} else {
+					logger.Error("write langchain NDJSON stream", "error", err)
+				}
+			}
+			return streamNDJSONOK
+		}
+		return streamNDJSONOK
+	}
+	return streamOllamaChatToNDJSONOutcome(ctx, w, systemContext, req, logger)
+}
+
+// streamOllamaChatToNDJSONOutcome streams Ollama /api/chat (stream:true) to NDJSON deltas.
+func streamOllamaChatToNDJSONOutcome(ctx context.Context, w http.ResponseWriter, systemContext string, req *InternalChatCompletionRequest, logger *slog.Logger) streamNDJSONOutcome {
+	chatMessages := buildChatMessages(systemContext, req.Messages)
+	had, err, headersSent := streamOllamaChatToNDJSON(ctx, w, chatMessages, logger)
+	if err != nil {
+		if headersSent {
+			if logger != nil {
+				if isClientDisconnect(err) {
+					logger.Debug("client disconnected during Ollama NDJSON stream", "error", err)
+				} else {
+					logger.Error("stream Ollama NDJSON failed after response start", "error", err)
+				}
+			}
+			return streamNDJSONOK
+		}
+		if logger != nil {
+			logger.Error("stream Ollama NDJSON failed", "error", err)
+		}
+		return streamNDJSONError
+	}
+	if !had {
+		return streamNDJSONEmpty
+	}
+	return streamNDJSONOK
+}
+
+// streamOllamaChatToNDJSON writes NDJSON (iteration_start, deltas from Ollama chunks).
+// Headers and 200 are sent only when the first non-empty delta arrives so an empty model
+// stream does not commit a response (callers can retry or return 500).
+// Returns whether any non-empty delta was emitted, an error if any, and whether HTTP headers
+// were already sent (callers must not send a JSON error body if true).
+func streamOllamaChatToNDJSON(ctx context.Context, w http.ResponseWriter, chatMessages []map[string]string, logger *slog.Logger) (hadDelta bool, err error, headersSent bool) {
+	baseURL, model := resolveOllamaConfig()
+	inferenceURL, inferenceClient := resolveInferenceClient(baseURL, inferenceHTTPTimeout)
+	resp, err := doInferenceRequest(ctx, inferenceClient, inferenceURL, model, chatMessages, true)
+	if err != nil {
+		return false, err, false
+	}
 	defer func() { _ = resp.Body.Close() }()
-	w.Header().Set("Content-Type", "application/x-ndjson")
-	w.Header().Set("X-Accel-Buffering", "no")
-	w.WriteHeader(http.StatusOK)
-	if f, ok := w.(http.Flusher); ok {
-		f.Flush()
-	}
-	enc := json.NewEncoder(w)
-	enc.SetEscapeHTML(false)
-	if err := enc.Encode(map[string]int{"iteration_start": 1}); err != nil {
-		return
-	}
-	if f, ok := w.(http.Flusher); ok {
-		f.Flush()
+	if resp.StatusCode != http.StatusOK {
+		return false, fmt.Errorf("inference returned %s", resp.Status), false
 	}
 	scanner := bufio.NewScanner(resp.Body)
+	const maxScan = 1024 * 1024
+	buf := make([]byte, 0, 64*1024)
+	scanner.Buffer(buf, maxScan)
+	var enc *json.Encoder
+	started := false
 	for scanner.Scan() {
 		if ctx.Err() != nil {
-			return
+			return hadDelta, ctx.Err(), started
 		}
 		line := scanner.Bytes()
-		done, stop := streamCompletionWriteChunk(enc, w, line, logger)
-		if stop {
-			return
+		content, done, err := parseInferenceChunk(line, logger)
+		if err != nil {
+			return hadDelta, err, started
+		}
+		if content != "" {
+			if !started {
+				w.Header().Set("Content-Type", "application/x-ndjson")
+				w.Header().Set("X-Accel-Buffering", "no")
+				w.WriteHeader(http.StatusOK)
+				flushResponseWriter(w)
+				enc = json.NewEncoder(w)
+				enc.SetEscapeHTML(false)
+				if err := enc.Encode(map[string]int{"iteration_start": 1}); err != nil {
+					return false, err, true
+				}
+				flushResponseWriter(w)
+				started = true
+			}
+			hadDelta = true
+			if encErr := enc.Encode(map[string]string{"delta": content}); encErr != nil {
+				return hadDelta, encErr, true
+			}
+			flushResponseWriter(w)
 		}
 		if done {
 			break
 		}
 	}
 	if err := scanner.Err(); err != nil {
-		logger.Warn("stream completion read error", "error", err)
+		return hadDelta, fmt.Errorf("reading inference stream: %w", err), started
+	}
+	return hadDelta, nil, started
+}
+
+// streamCompletionToWriter runs direct inference and streams Ollama NDJSON (real token chunks).
+func streamCompletionToWriter(ctx context.Context, w http.ResponseWriter, instructionsContent string, req *InternalChatCompletionRequest, logger *slog.Logger) {
+	systemContext := buildSystemContext(instructionsContent, req)
+	chatMessages := buildChatMessages(systemContext, req.Messages)
+	had, err, headersSent := streamOllamaChatToNDJSON(ctx, w, chatMessages, logger)
+	if err != nil {
+		if headersSent {
+			if logger != nil {
+				if isClientDisconnect(err) {
+					logger.Debug("stream completion: client disconnected", "error", err)
+				} else {
+					logger.Error("stream completion inference failed after response start", "error", err)
+				}
+			}
+			return
+		}
+		if logger != nil {
+			logger.Error("stream completion inference request failed", "error", err)
+		}
+		writeJSON(w, http.StatusInternalServerError, InternalChatCompletionResponse{})
+		return
+	}
+	if !had {
+		if logger != nil {
+			logger.Error("stream completion: Ollama returned no content")
+		}
+		writeJSON(w, http.StatusInternalServerError, InternalChatCompletionResponse{})
 	}
 }
 
@@ -186,14 +339,21 @@ func streamCompletionWriteChunk(enc *json.Encoder, w http.ResponseWriter, line [
 // resolveContent obtains the completion content for req, retrying with just the current user
 // message if the full-history call returns empty output (context-window overflow).
 // Returns (content, httpStatusCode).
-func resolveContent(ctx, detachedRoot context.Context, instructionsContent string, req *InternalChatCompletionRequest, logger *slog.Logger) (content string, httpStatus int) {
-	content, err := getCompletionContent(ctx, instructionsContent, req, logger)
+//
+// detachedRoot must be from context.WithoutCancel(r.Context()) (see ChatCompletionHandler): the
+// primary completion uses a timeout derived from it, not the HTTP request context. Otherwise the
+// orchestrator/gateway deadline on the incoming request cancels the LLM+MCP run early and surfaces
+// as 500 on streaming proxy calls even though the gateway client timeout is much longer.
+func resolveContent(detachedRoot context.Context, instructionsContent string, req *InternalChatCompletionRequest, logger *slog.Logger) (content string, thinking string, httpStatus int) {
+	runCtx, cancel := context.WithTimeout(detachedRoot, pmaLangchainCompletionTimeout)
+	defer cancel()
+	content, thinking, err := getCompletionContent(runCtx, instructionsContent, req, logger)
 	if err != nil {
 		logger.Error("chat completion inference error", "error", err)
-		return "", http.StatusInternalServerError
+		return "", "", http.StatusInternalServerError
 	}
-	if strings.TrimSpace(content) != "" {
-		return content, http.StatusOK
+	if strings.TrimSpace(content) != "" || strings.TrimSpace(thinking) != "" {
+		return content, thinking, http.StatusOK
 	}
 	// Context may have exceeded the model's window — retry with only the current message.
 	// Use a fresh context derived from the detached root captured at entry so the
@@ -203,16 +363,16 @@ func resolveContent(ctx, detachedRoot context.Context, instructionsContent strin
 	stripped := stripToCurrentMessage(req)
 	retryCtx, retryCancel := context.WithTimeout(detachedRoot, pmaLangchainCompletionTimeout)
 	defer retryCancel()
-	content, err = getCompletionContent(retryCtx, instructionsContent, stripped, logger)
+	content, thinking, err = getCompletionContent(retryCtx, instructionsContent, stripped, logger)
 	if err != nil {
 		logger.Error("chat completion retry failed", "error", err)
-		return "", http.StatusInternalServerError
+		return "", "", http.StatusInternalServerError
 	}
-	if strings.TrimSpace(content) == "" {
+	if strings.TrimSpace(content) == "" && strings.TrimSpace(thinking) == "" {
 		logger.Error("chat completion produced empty output after retry")
-		return "", http.StatusInternalServerError
+		return "", "", http.StatusInternalServerError
 	}
-	return content, http.StatusOK
+	return content, thinking, http.StatusOK
 }
 
 // stripToCurrentMessage returns a copy of req containing only the last message.
@@ -227,7 +387,7 @@ func stripToCurrentMessage(req *InternalChatCompletionRequest) *InternalChatComp
 }
 
 // getCompletionContent runs the appropriate inference path (langchaingo for capable models, direct Ollama otherwise).
-func getCompletionContent(ctx context.Context, instructionsContent string, req *InternalChatCompletionRequest, logger *slog.Logger) (string, error) {
+func getCompletionContent(ctx context.Context, instructionsContent string, req *InternalChatCompletionRequest, logger *slog.Logger) (content string, thinking string, err error) {
 	systemContext := buildSystemContext(instructionsContent, req)
 	mcpClient := NewMCPClient()
 	model := os.Getenv("INFERENCE_MODEL")
@@ -246,7 +406,7 @@ func getCompletionContent(ctx context.Context, instructionsContent string, req *
 		// being interpreted as part of the current instruction.
 		systemContextWithHistory := buildSystemContextWithHistory(systemContext, req.Messages)
 		currentInput := lastUserMessage(req.Messages)
-		content, err := runCompletionWithLangchainWithTimeout(
+		visible, thinkLC, err := runCompletionWithLangchainWithTimeout(
 			ctx,
 			buildAgentInput(systemContextWithHistory, currentInput),
 			mcpClient,
@@ -254,26 +414,40 @@ func getCompletionContent(ctx context.Context, instructionsContent string, req *
 			pmaLangchainCompletionTimeout,
 		)
 		if err != nil {
-			return "", err
+			// Executor often returns ErrNotFinished when the model burns max iterations (e.g. tool
+			// loops) without a final assistant message. Previously the streaming handler swallowed
+			// this and returned an empty 200; with resolveContent we surface the error unless we
+			// fall back to direct Ollama like other stuck-agent cases.
+			if errors.Is(err, agents.ErrNotFinished) || errors.Is(err, agents.ErrAgentNoReturn) {
+				if logger != nil {
+					logger.Warn("langchain agent did not complete; falling back to direct inference",
+						"error", err)
+				}
+				return callInference(ctx, systemContext, req.Messages, logger)
+			}
+			return "", "", err
 		}
 		// If the agent returned a preamble describing a tool call it never executed
 		// (model emitted explanatory text instead of a proper tool_calls payload),
 		// fall back to a direct single-pass call so the user gets a meaningful answer
 		// rather than "please wait while I fetch…".
-		if looksLikeUnexecutedToolCall(content) {
+		if looksLikeUnexecutedToolCall(visible) {
 			if logger != nil {
 				logger.Warn("agent output looks like unexecuted tool call; falling back to direct inference",
-					"model", model, "output_preview", truncate(content, 120))
+					"model", model, "output_preview", truncate(visible, 120))
 			}
 			return callInference(ctx, systemContext, req.Messages, logger)
 		}
-		return content, nil
+		if strings.TrimSpace(visible) == "" {
+			if logger != nil {
+				logger.Warn("langchain agent returned empty output; falling back to direct inference", "model", model)
+			}
+			return callInference(ctx, systemContext, req.Messages, logger)
+		}
+		return visible, thinkLC, nil
 	}
-	// Small/smoke models (e.g. qwen3.5:0.8b) and no-MCP-gateway path both use
-	// callInference (direct HTTP to Ollama with stream:false). Langchaingo's
-	// ChatRequest.Stream field is omitempty so false is never sent; Ollama then
-	// defaults to streaming mode where Qwen3.5 thinking-mode chunks have empty
-	// message.content, causing GenerateFromSinglePrompt to return "".
+	// Small/smoke models (e.g. qwen3.5:0.8b) and no-MCP-gateway path use callInference
+	// (Ollama /api/chat with stream:true per CYNAI.PMAGNT.StreamingAssistantOutput).
 	return callInference(ctx, systemContext, req.Messages, logger)
 }
 
@@ -379,6 +553,25 @@ func truncate(s string, n int) string {
 	return string(runes[:n]) + "…"
 }
 
+// isClientDisconnect reports whether err is a benign disconnect (client closed the connection
+// while the server was still writing the streaming response).
+func isClientDisconnect(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, syscall.EPIPE) || errors.Is(err, syscall.ECONNRESET) {
+		return true
+	}
+	var ne *net.OpError
+	if errors.As(err, &ne) {
+		if errors.Is(ne.Err, syscall.EPIPE) || errors.Is(ne.Err, syscall.ECONNRESET) {
+			return true
+		}
+	}
+	s := err.Error()
+	return strings.Contains(s, "broken pipe") || strings.Contains(s, "connection reset by peer")
+}
+
 func writeJSON(w http.ResponseWriter, status int, v interface{}) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
@@ -411,26 +604,25 @@ func resolveInferenceClient(baseURL string, timeout time.Duration) (serverURL st
 	return trimmed, &http.Client{Timeout: timeout}
 }
 
-// callInference sends messages to Ollama /api/chat using NDJSON streaming (stream:true).
-// It accumulates the full visible text from streaming chunks, strips <think>...</think>
-// blocks per CYNAI.PMAGNT.StreamingAssistantOutput, and returns the cleaned result.
+// callInference uses Ollama /api/chat with stream:true (CYNAI.PMAGNT.StreamingAssistantOutput).
 func callInference(ctx context.Context, systemContext string, messages []struct {
 	Role    string `json:"role"`
 	Content string `json:"content"`
-}, logger *slog.Logger) (string, error) {
+}, logger *slog.Logger) (visible string, thinking string, err error) {
 	baseURL, model := resolveOllamaConfig()
 	chatMessages := buildChatMessages(systemContext, messages)
 	inferenceURL, inferenceClient := resolveInferenceClient(baseURL, inferenceHTTPTimeout)
-	resp, err := doInferenceRequest(ctx, inferenceClient, inferenceURL, model, chatMessages)
+	resp, err := doInferenceRequest(ctx, inferenceClient, inferenceURL, model, chatMessages, true)
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 	defer func() { _ = resp.Body.Close() }()
-	content, err := readInferenceStream(resp.Body, logger)
+	raw, err := readInferenceOllamaChatBody(resp.Body, logger)
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
-	return strings.TrimSpace(stripThinkBlocks(content)), nil
+	visible, thinking = extractThinkBlocks(raw)
+	return strings.TrimSpace(visible), strings.TrimSpace(thinking), nil
 }
 
 // resolveOllamaConfig returns the Ollama base URL and model from environment variables.
@@ -471,12 +663,14 @@ func buildChatMessages(systemContext string, messages []struct {
 }
 
 // doInferenceRequest builds and executes the Ollama /api/chat HTTP request.
-func doInferenceRequest(ctx context.Context, client *http.Client, inferenceURL, model string, chatMessages []map[string]string) (*http.Response, error) {
+// callInference and streamCompletionToWriter both use stream:true per CYNAI.PMAGNT.StreamingAssistantOutput;
+// readInferenceOllamaChatBody accepts a single JSON response or NDJSON.
+func doInferenceRequest(ctx context.Context, client *http.Client, inferenceURL, model string, chatMessages []map[string]string, stream bool) (*http.Response, error) {
 	chatURL := strings.TrimSuffix(inferenceURL, "/") + "/api/chat"
 	body := map[string]interface{}{
 		"model":    model,
 		"messages": chatMessages,
-		"stream":   true,
+		"stream":   stream,
 	}
 	if n := ollamaNumCtxFromEnv(); n > 0 {
 		body["options"] = map[string]interface{}{"num_ctx": n}
@@ -496,6 +690,32 @@ func doInferenceRequest(ctx context.Context, client *http.Client, inferenceURL, 
 		return nil, fmt.Errorf("inference returned %s", resp.Status)
 	}
 	return resp, nil
+}
+
+// readInferenceOllamaChatBody reads the full /api/chat response body: a single JSON object when
+// the server closes after one chunk, or NDJSON lines when stream:true (accumulated raw text).
+func readInferenceOllamaChatBody(body io.Reader, logger *slog.Logger) (string, error) {
+	b, err := io.ReadAll(body)
+	if err != nil {
+		return "", err
+	}
+	b = bytes.TrimSpace(b)
+	if len(b) == 0 {
+		return "", nil
+	}
+	var resp struct {
+		Message struct {
+			Content string `json:"content"`
+		} `json:"message"`
+		Error string `json:"error"`
+	}
+	if err := json.Unmarshal(b, &resp); err == nil {
+		if resp.Error != "" {
+			return "", fmt.Errorf("inference error: %s", resp.Error)
+		}
+		return resp.Message.Content, nil
+	}
+	return readInferenceStream(bytes.NewReader(b), logger)
 }
 
 // readInferenceStream reads Ollama NDJSON streaming response chunks and accumulates content.

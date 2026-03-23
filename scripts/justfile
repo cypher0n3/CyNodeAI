@@ -378,6 +378,9 @@ e2e *ARGS:
     pushd "$root" >/dev/null
     trap 'popd >/dev/null 2>/dev/null || true' EXIT
     export PYTHONPATH="$root"
+    # Match test-e2e / full-demo so inference E2E (e2e_0510, …) are not skipped.
+    export INFERENCE_PROXY_IMAGE="${INFERENCE_PROXY_IMAGE:-cynodeai-inference-proxy:dev}"
+    export OLLAMA_UPSTREAM_URL="${OLLAMA_UPSTREAM_URL:-http://host.containers.internal:11434}"
     py="python3"
     [ -x "$root/.venv/bin/python3" ] && py="$root/.venv/bin/python3"
     "$py" scripts/test_scripts/run_e2e.py {{ ARGS }}

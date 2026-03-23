@@ -12,6 +12,8 @@ import (
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
+
+	"github.com/cypher0n3/cynodeai/cynork/internal/gateway"
 )
 
 // slashResultMsg carries the scrollback lines produced by a slash command.
@@ -30,7 +32,12 @@ type shellExecDoneMsg struct {
 // slashHelpCatalog lists only slash commands that are actually implemented (/help shows this list per spec).
 var slashHelpCatalog = []struct{ name, desc string }{
 	{"/auth", "login, logout, whoami, refresh"},
+	{"/auth login", "open gateway login in TUI"},
+	{"/auth logout", "clear saved tokens"},
+	{"/auth refresh", "rotate access token"},
+	{"/auth whoami", "show current user"},
 	{"/clear", "clear scrollback"},
+	{"/copy", "last|all — plain text to clipboard"},
 	{"/connect", "show or set gateway URL"},
 	{"/exit", "end session"},
 	{"/help", "list slash commands"},
@@ -137,6 +144,56 @@ func (m *Model) handleSlashCmd(line string) (tea.Cmd, bool) {
 	}
 }
 
+// slashCopyCmd copies plain transcript text to the system clipboard (no Loading spinner).
+func slashCopyCmd(m *Model, rest string) tea.Cmd {
+	rest = strings.TrimSpace(strings.ToLower(rest))
+	switch rest {
+	case "", "last", "assistant":
+		text := lastAssistantPlain(m.Scrollback)
+		if strings.TrimSpace(text) == "" {
+			return func() tea.Msg {
+				return copyClipboardResultMsg{
+					err:           nil,
+					successDetail: "No assistant message to copy.",
+				}
+			}
+		}
+		return slashClipboardSequence(text, "Last message copied to clipboard.")
+	case "all", "transcript":
+		text := plainTranscript(m.Scrollback)
+		if strings.TrimSpace(text) == "" {
+			return func() tea.Msg {
+				return copyClipboardResultMsg{
+					err:           nil,
+					successDetail: "All text copied to clipboard.",
+				}
+			}
+		}
+		return slashClipboardSequence(text, "All text copied to clipboard.")
+	default:
+		return func() tea.Msg {
+			return slashResultMsg{lines: []string{"Usage: /copy [last|all]"}}
+		}
+	}
+}
+
+// slashClipboardSequence sends copy feedback immediately, then runs CopyToClipboard in a second step.
+// A single Cmd that calls CopyToClipboard before returning would delay (or indefinitely block) the
+// success message until the clipboard helper returns.
+func slashClipboardSequence(text, successDetail string) tea.Cmd {
+	return tea.Sequence(
+		func() tea.Msg {
+			return copyClipboardResultMsg{err: nil, successDetail: successDetail}
+		},
+		func() tea.Msg {
+			if err := CopyToClipboard(text); err != nil {
+				return copyClipboardResultMsg{err: err, successDetail: ""}
+			}
+			return nil
+		},
+	)
+}
+
 // handleShellEscape handles lines starting with !.
 // For non-interactive commands it captures output inline.
 // For empty ! it shows usage.
@@ -233,6 +290,14 @@ func (m *Model) slashModelCmd(rest string) tea.Cmd {
 				model = m.Session.Model
 			}
 			return slashResultMsg{lines: []string{"model: " + model}}
+		}
+		if rest != gateway.ModelProjectManager {
+			return slashResultMsg{lines: []string{
+				"Invalid routing model: " + rest,
+				"Only " + gateway.ModelProjectManager + " uses the Project Manager with MCP tools.",
+				"The Ollama checkpoint is selected on the server (PMA); do not pass an Ollama tag here.",
+				"Example: /model " + gateway.ModelProjectManager,
+			}}
 		}
 		if m.Session != nil {
 			m.Session.SetModel(rest)
@@ -346,9 +411,6 @@ func (m *Model) authRefresh() slashResultMsg {
 		newRefresh = refreshToken
 	}
 	m.AuthProvider.SetTokens(resp.AccessToken, newRefresh)
-	if err := m.AuthProvider.Save(); err != nil {
-		return slashResultMsg{lines: []string{"Error saving config: " + err.Error()}}
-	}
 	m.Session.SetToken(resp.AccessToken)
 	return slashResultMsg{lines: []string{"Token refreshed successfully."}}
 }
@@ -377,7 +439,7 @@ func (m *Model) connectSet(url string) slashResultMsg {
 		m.Session.Client.BaseURL = url
 	}
 	if m.AuthProvider != nil {
-		m.AuthProvider.SetGatewayURL(url)
+		m.AuthProvider.SetGatewayURL(url, true)
 		_ = m.AuthProvider.Save()
 	}
 	if m.Session != nil && m.Session.Client != nil {

@@ -204,3 +204,70 @@ See [REQ-ORCHES-0175](../requirements/orches.md#req-orches-0175) and [orchestrat
 - **Unit tests:** Worker: `TestDetectGPU_ReportsAllDevicesWhenBothVendorsPresent`, `TestDetectGPU_SingleVendorReturnsAllDevices`.
   Orchestrator: `TestVariantAndVRAM_SumVRAMPerVendorMixedGPUs`, `TestVariantAndVRAM_MultiGPUSameVendorSumsTotal`, `TestVariantAndVRAM_MixedVendorsNVIDIADominant`, `TestVariantAndVRAM_TieBreakPrefersCuda`.
 - **BDD:** Worker node scenario "Node manager starts inference backend with orchestrator-supplied variant when image is absent" passes.
+
+## Bug 2: Cannot Launch Cynork TUI Without Connectivity
+
+Logged-in users hit gateway APIs before the TUI renders; offline startup should show the UI first, per [cynork_tui.md](../tech_specs/cynork_tui.md) entrypoint rules.
+
+### Bug 2 Summary
+
+When the user is already logged in (access token present in config), `cynork tui` performs gateway I/O **before** the Bubble Tea UI starts.
+If the machine is offline or the gateway is unreachable, the process exits with an error and the TUI never appears.
+The product spec expects the fullscreen TUI to **render first** and defer thread creation until a gateway interaction (for example before the first completion), matching the in-session login path.
+
+### Bug 2 Observed Behavior
+
+- **Scenario:** Config has a valid-looking `token` (and optional `gateway_url`), but there is no route to the gateway (airplane mode, VPN down, wrong host, gateway stopped).
+- **Symptom:** The command fails immediately with an error such as `thread: ...` wrapping a dial failure, timeout, or HTTP error from `POST /v1/chat/threads` or `GET /v1/chat/threads`.
+- **Contrast:** With **no** token, `runTUI` skips the pre-flight thread step.
+  `runTUIWithSession` sets `OpenLoginFormOnInit` and the TUI opens (login overlay), which aligns with the "show UI first" intent.
+
+### Bug 2 Expected Behavior (Spec)
+
+[cynork_tui.md](../tech_specs/cynork_tui.md) (`CYNAI.CLIENT.CynorkTui.EntryPoint`):
+
+- `cynork tui` MUST start and render the TUI surface **unconditionally**, without requiring a valid login token at launch.
+- Token resolution and validation MUST be deferred to the initial gateway connection **after** the TUI is visible.
+- When `--resume-thread` is absent, the TUI MUST create a new thread **before the first completion request** (not necessarily before the process shows the UI).
+
+Related requirements: [REQ-CLIENT-0197](../requirements/client.md#req-client-0197), [REQ-CLIENT-0202](../requirements/client.md#req-client-0202).
+
+### Bug 2 Root Cause (Implementation)
+
+In `cynork/cmd/tui.go`, `runTUI` calls `session.EnsureThread(tuiResumeThread)` when `cfg.Token != ""` **before** `tea.NewProgram` / `Run()`:
+
+- `EnsureThread("")` -> `NewThread()` -> `POST /v1/chat/threads` (gateway required).
+- `EnsureThread("<selector>")` -> `ListThreads` + resolution -> `GET /v1/chat/threads` (gateway required).
+
+The TUI model already has an async path that runs the same work **after** the UI is up.
+`ensureThreadCmd()` is invoked from `applyLoginResult` after a successful in-session login (`cynork/internal/tui/model.go`).
+Errors are shown in scrollback via `applyEnsureThreadResult` instead of aborting the binary.
+The startup path for an existing token does not use that; it blocks in the CLI layer instead.
+
+### Bug 2 Suggested Fix
+
+- **Defer thread ensure for logged-in users:** Remove the synchronous `EnsureThread` from `runTUI` when a token is present (or replace it with a no-op at the CLI level).
+- **On TUI `Init`:** When `OpenLoginFormOnInit` is false and the session has a token, dispatch `ensureThreadCmd()` (same as post-login) so thread creation/listing happens in the Bubble Tea loop and failures surface in-scrollback.
+- **First message:** Ensure behavior matches the spec: thread must exist before the first completion.
+  If `EnsureThread` fails in the async path, the first send may need to either block on retry or show a clear error.
+  Align with [Connection Recovery](cynork_tui.md) and thread semantics already documented.
+
+### Bug 2 Files Involved
+
+- **Pre-TUI network call:** `cynork/cmd/tui.go` (`runTUI`).
+- **Thread ensure implementation:** `cynork/internal/chat/session.go` (`EnsureThread`, `NewThread`, `ResolveThreadSelector`).
+- **Async ensure after login:** `cynork/internal/tui/model.go` (`ensureThreadCmd`, `applyEnsureThreadResult`, `applyLoginResult`).
+- **Spec:** `docs/tech_specs/cynork_tui.md` (Entrypoint and Compatibility).
+
+### Bug 2 Suggested Tests
+
+- **Unit / cmd:** With a token in config and a gateway client that fails on `NewChatThread` (or transport that errors on list), `cynork tui` should still invoke `runTUIWithSession` / `tea` (tests may continue to stub `tuiRunProgram`).
+  It should **not** return from `runTUI` before the TUI starts.
+- **TUI model:** After fix, when token is present at init, `Init()` should schedule `ensureThreadCmd` (or equivalent) and offline errors appear as `ensureThreadResult` scrollback, consistent with `TestModel_Update_EnsureThreadResult_Error`.
+- **E2E / manual:** Disconnect network, run `cynork tui` with saved credentials; expect fullscreen TUI with an error banner/scrollback line instead of immediate process exit.
+
+### Bug 2 Implementation Status
+
+**Fixed:** `runTUI` no longer calls `EnsureThread` before `tea.NewProgram`.
+When a token is present, `Model.Init` schedules `ensureThreadCmd()` so thread creation/listing runs after the TUI starts.
+Failures surface in scrollback via `applyEnsureThreadResult` (same as post-login).

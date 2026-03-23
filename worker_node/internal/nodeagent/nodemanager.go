@@ -441,9 +441,9 @@ func maybeStartOllama(ctx context.Context, logger *slog.Logger, nodeConfig *node
 	return nil
 }
 
-// maybePullModels launches a background goroutine to pull the orchestrator-selected model if it is not
-// yet available on the inference backend. It is a no-op when PullModels is unset or when
-// the config carries no SelectedModel. The goroutine is detached (not tied to ctx) so a
+// maybePullModels launches a background goroutine to pull orchestrator-directed models that are not
+// yet available on the inference backend. Uses inference_backend.models_to_ensure when non-empty;
+// otherwise falls back to selected_model only. The goroutine is detached (not tied to ctx) so a
 // slow pull does not block the rest of startup; the next capability report cycle will pick
 // up newly available models and the orchestrator will update managed-service config.
 func maybePullModels(ctx context.Context, logger *slog.Logger, nodeConfig *nodepayloads.NodeConfigurationPayload, opts *RunOptions) {
@@ -453,24 +453,66 @@ func maybePullModels(ctx context.Context, logger *slog.Logger, nodeConfig *nodep
 	if nodeConfig == nil || nodeConfig.InferenceBackend == nil {
 		return
 	}
-	selected := strings.TrimSpace(nodeConfig.InferenceBackend.SelectedModel)
-	if selected == "" {
+	models := modelsToPullFromConfig(nodeConfig)
+	if len(models) == 0 {
 		return
 	}
 	available := detectAvailableModels(ctx)
+	avail := map[string]bool{}
 	for _, m := range available {
-		if strings.EqualFold(m, selected) {
-			return
+		avail[strings.ToLower(strings.TrimSpace(m))] = true
+	}
+	var missing []string
+	for _, want := range models {
+		w := strings.TrimSpace(want)
+		if w == "" {
+			continue
 		}
+		if avail[strings.ToLower(w)] {
+			continue
+		}
+		missing = append(missing, w)
+	}
+	if len(missing) == 0 {
+		return
 	}
 	if logger != nil {
-		logger.Info("pulling selected inference model in background", "model", selected)
+		logger.Info("pulling inference models in background", "models", missing)
 	}
 	go func() {
-		if err := opts.PullModels([]string{selected}); err != nil && logger != nil {
-			logger.Warn("model pull failed", "error", err, "model", selected)
+		if err := opts.PullModels(missing); err != nil && logger != nil {
+			logger.Warn("model pull failed", "error", err, "models", missing)
 		}
 	}()
+}
+
+func modelsToPullFromConfig(nodeConfig *nodepayloads.NodeConfigurationPayload) []string {
+	if nodeConfig == nil || nodeConfig.InferenceBackend == nil {
+		return nil
+	}
+	ib := nodeConfig.InferenceBackend
+	if len(ib.ModelsToEnsure) > 0 {
+		out := make([]string, 0, len(ib.ModelsToEnsure))
+		seen := map[string]bool{}
+		for _, m := range ib.ModelsToEnsure {
+			s := strings.TrimSpace(m)
+			if s == "" {
+				continue
+			}
+			k := strings.ToLower(s)
+			if seen[k] {
+				continue
+			}
+			seen[k] = true
+			out = append(out, s)
+		}
+		return out
+	}
+	s := strings.TrimSpace(ib.SelectedModel)
+	if s == "" {
+		return nil
+	}
+	return []string{s}
 }
 
 func maybeStartManagedServices(ctx context.Context, logger *slog.Logger, nodeConfig *nodepayloads.NodeConfigurationPayload, opts *RunOptions) error {
@@ -517,28 +559,64 @@ func runCapabilityLoop(ctx context.Context, logger *slog.Logger, cfg *Config, bo
 			if err := reportCapabilities(ctx, cfg, bootstrap, nodeConfig); err != nil {
 				_ = err
 			}
+			prev := nodeConfig
 			nodeConfig = refreshNodeConfig(ctx, logger, cfg, bootstrap, nodeConfig)
+			if inferenceBackendPullSpecChanged(prev, nodeConfig) {
+				maybePullModels(ctx, logger, nodeConfig, opts)
+			}
 			reconcileManagedServices(ctx, logger, nodeConfig, opts)
 		}
 	}
 }
 
 // refreshNodeConfig re-fetches the node config from the orchestrator and returns the
-// updated config when managed services settings have changed (e.g. after the orchestrator
-// selects a better model based on the newly submitted capability snapshot).
+// updated config when managed services or orchestrator-directed inference model lists change.
 // Returns the current config unchanged on error or when nothing changed.
 func refreshNodeConfig(ctx context.Context, logger *slog.Logger, cfg *Config, bootstrap *BootstrapData, current *nodepayloads.NodeConfigurationPayload) *nodepayloads.NodeConfigurationPayload {
 	updated, err := FetchConfig(ctx, cfg, bootstrap)
 	if err != nil {
 		return current
 	}
-	if !managedServicesConfigChanged(current, updated) {
+	ms := managedServicesConfigChanged(current, updated)
+	inf := inferenceBackendPullSpecChanged(current, updated)
+	if !ms && !inf {
 		return current
 	}
 	if logger != nil {
-		logger.Info("node config changed, reconciling managed services")
+		switch {
+		case ms && inf:
+			logger.Info("node config changed (managed services and inference models), reconciling")
+		case ms:
+			logger.Info("node config changed (managed services), reconciling")
+		case inf:
+			logger.Info("node config changed (inference models), reconciling pulls")
+		}
 	}
 	return updated
+}
+
+// inferenceBackendPullSpecChanged is true when orchestrator-directed model pull inputs differ.
+func inferenceBackendPullSpecChanged(oldCfg, newCfg *nodepayloads.NodeConfigurationPayload) bool {
+	return inferenceBackendPullSpecKey(oldCfg) != inferenceBackendPullSpecKey(newCfg)
+}
+
+func inferenceBackendPullSpecKey(cfg *nodepayloads.NodeConfigurationPayload) string {
+	if cfg == nil || cfg.InferenceBackend == nil {
+		return ""
+	}
+	ib := cfg.InferenceBackend
+	data := struct {
+		Selected string   `json:"selected"`
+		Ensure   []string `json:"ensure"`
+	}{
+		Selected: strings.TrimSpace(ib.SelectedModel),
+		Ensure:   append([]string(nil), ib.ModelsToEnsure...),
+	}
+	b, err := json.Marshal(data)
+	if err != nil {
+		return ""
+	}
+	return string(b)
 }
 
 // managedServicesConfigChanged returns true when the managed services section of two

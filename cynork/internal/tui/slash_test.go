@@ -53,6 +53,42 @@ func TestComposerHint(t *testing.T) {
 	}
 }
 
+// TestSlashCopyCmd_ResultMessages verifies /copy returns copyClipboardResultMsg with expected success text.
+func TestSlashCopyCmd_ResultMessages(t *testing.T) {
+	t.Parallel()
+	t.Run("all_empty_transcript", func(t *testing.T) {
+		m2 := NewModel(nil)
+		m2.Scrollback = []string{scrollbackSystemLinePrefix + "meta"}
+		msg := slashCopyCmd(m2, "all")()
+		res, ok := msg.(copyClipboardResultMsg)
+		if !ok {
+			t.Fatalf("got %T", msg)
+		}
+		if res.err != nil {
+			t.Fatalf("err = %v", res.err)
+		}
+		if res.successDetail != "All text copied to clipboard." {
+			t.Errorf("successDetail = %q", res.successDetail)
+		}
+	})
+
+	t.Run("last_no_assistant", func(t *testing.T) {
+		empty := NewModel(nil)
+		empty.Scrollback = []string{"You: only user"}
+		msg := slashCopyCmd(empty, "last")()
+		res, ok := msg.(copyClipboardResultMsg)
+		if !ok {
+			t.Fatalf("got %T", msg)
+		}
+		if res.err != nil {
+			t.Fatalf("err = %v", res.err)
+		}
+		if res.successDetail != "No assistant message to copy." {
+			t.Errorf("successDetail = %q", res.successDetail)
+		}
+	})
+}
+
 // TestCaptureToLines verifies captureToLines captures os.Stdout/Stderr output.
 func TestCaptureToLines(t *testing.T) {
 	lines := captureToLines(func() {
@@ -127,6 +163,31 @@ func TestSlashModelsCmd_Error(t *testing.T) {
 	}
 	if len(res.lines) == 0 || !strings.Contains(strings.ToLower(res.lines[0]), "error") {
 		t.Errorf("slashModelsCmd error path should start with Error:; got %v", res.lines)
+	}
+}
+
+// TestSlashModelCmd_RejectsOllamaRoutingTag verifies /model qwen… is rejected (must use cynodeai.pm for PMA+MCP).
+func TestSlashModelCmd_RejectsOllamaRoutingTag(t *testing.T) {
+	session := chat.NewSession(gateway.NewClient("http://localhost"))
+	session.SetModel(gateway.ModelProjectManager)
+	m := NewModel(session)
+	msg := m.slashModelCmd("qwen3.5:9b")()
+	res, ok := msg.(slashResultMsg)
+	if !ok {
+		t.Fatalf("slashModelCmd() = %T, want slashResultMsg", msg)
+	}
+	if session.Model != gateway.ModelProjectManager {
+		t.Errorf("session.Model changed to %q; want unchanged %q", session.Model, gateway.ModelProjectManager)
+	}
+	found := false
+	for _, l := range res.lines {
+		if strings.Contains(l, "Invalid routing model") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Errorf("expected Invalid routing model in lines; got %v", res.lines)
 	}
 }
 

@@ -158,14 +158,18 @@ Web Console-specific requirements live in [webcon.md](webcon.md) (REQ-WEBCON-*).
   [CYNAI.CLIENT.CliSkillsManagement](../tech_specs/cli_management_app_commands_admin.md#spec-cynai-client-cliskillsmanagement)
   [CYNAI.SKILLS.SkillManagementCrud](../tech_specs/skills_storage_and_inference.md#spec-cynai-skills-skillmanagementcrud)
   <a id="req-client-0146"></a>
-- **REQ-CLIENT-0149:** The CLI MUST support a local key (gateway token) stored in the user config dir (e.g. `~/.config/cynork/config.yaml`) and SHOULD support reading the token from a password store or credential helper (kubectl-style) so the token need not be stored in plaintext.
+- **REQ-CLIENT-0149:** The CLI MUST NOT persist plaintext gateway tokens or session credentials in the user config directory.
+  The CLI MUST support supplying the bearer token via the `CYNORK_TOKEN` environment variable for non-interactive and scripting use, and SHOULD support reading the token from a password store or credential helper (kubectl-style) when implemented.
+  Other local preferences (e.g. gateway URL, TUI UI settings) MAY be stored under the documented config path.
   [CYNAI.CLIENT.CliAuthConfig](../tech_specs/cynork_cli.md#spec-cynai-client-cliauth)
   [CYNAI.CLIENT.CliConfigFileLocation](../tech_specs/cynork_cli.md#spec-cynai-client-cliconfigfilelocation)
   [CYNAI.CLIENT.CliTokenResolution](../tech_specs/cynork_cli.md#spec-cynai-client-clitokenresolution)
   [CYNAI.CLIENT.CliCredentialHelperProtocol](../tech_specs/cynork_cli.md#spec-cynai-client-clicredentialhelperprotocol)
   <a id="req-client-0149"></a>
-- **REQ-CLIENT-0150:** The CLI MUST store session credentials (e.g. token after login) in a reliable way so that multiple consecutive CLI invocations can reuse the token without re-authenticating.
-  The config file path MUST be resolved consistently (e.g. honoring XDG_CONFIG_HOME); writes MUST be atomic (e.g. temp file then rename) so a crash does not leave a partial file; and if the default config path cannot be resolved (e.g. no home dir), login and logout MUST fail with a clear error.
+- **REQ-CLIENT-0150:** The CLI MUST resolve the config file path for non-secret preferences consistently (e.g. honoring XDG_CONFIG_HOME).
+  When writing non-secret preferences, the CLI MUST write atomically (e.g. temp file then rename) so a crash does not leave a partial file; subsequent invocations MUST see either the previous config or a complete new one.
+  The CLI MUST NOT persist access tokens, refresh tokens, or other session credentials to disk as plaintext; reuse across separate CLI processes MUST be via environment variables (e.g. `CYNORK_TOKEN`, `CYNORK_REFRESH_TOKEN`) or an optional credential helper.
+  When the default config path cannot be resolved (e.g. home directory unavailable and no `--config` given), commands that persist preferences MUST fail with a clear error.
   [CYNAI.CLIENT.CliConfigFileLocation](../tech_specs/cynork_cli.md#spec-cynai-client-cliconfigfilelocation)
   [CYNAI.CLIENT.CliSessionPersistence](../tech_specs/cynork_cli.md#spec-cynai-client-clisessionpersistence)
   <a id="req-client-0150"></a>
@@ -376,7 +380,7 @@ Web Console-specific requirements live in [webcon.md](webcon.md) (REQ-WEBCON-*).
   [CYNAI.CLIENT.CynorkChat.AuthRecovery](../tech_specs/cynork_tui.md#spec-cynai-client-cynorkchat-authrecovery)
   <a id="req-client-0190"></a>
 - **REQ-CLIENT-0191:** The CLI SHOULD support a web-based login flow suitable for SSO-capable deployments in addition to username/password login.
-  This flow MUST avoid printing or persisting secrets in shell history or logs, MUST support a bounded authorization lifetime or expiry, and MUST integrate with the existing cynork token-storage model.
+  This flow MUST avoid printing or persisting secrets in shell history or logs, MUST support a bounded authorization lifetime or expiry, and MUST integrate with the cynork auth model (no plaintext session tokens on disk; optional `CYNORK_TOKEN` / `CYNORK_REFRESH_TOKEN` or credential helper for reuse across processes).
   [CYNAI.CLIENT.CliWebLogin](../tech_specs/cynork_tui.md#spec-cynai-client-cliweblogin)
   <a id="req-client-0191"></a>
 - **REQ-CLIENT-0192:** Clients with a chat UI MUST NOT render model reasoning or thinking blocks as normal assistant transcript content.

@@ -1,4 +1,4 @@
-package main
+package mcpgateway
 
 import (
 	"context"

@@ -25,10 +25,13 @@ type Session struct {
 }
 
 // NewSession returns a session using the completions transport by default.
+// Model defaults to gateway.ModelProjectManager so chat routes to PMA with MCP tools;
+// only that id (or an empty model, which the gateway treats as PM) uses the PM path.
 func NewSession(client *gateway.Client) *Session {
 	return &Session{
 		Client:    client,
 		Transport: &CompletionsTransport{Client: client},
+		Model:     gateway.ModelProjectManager,
 	}
 }
 
@@ -128,6 +131,7 @@ func (s *Session) ResolveThreadSelector(selector string, limit int) (threadID st
 const defaultThreadListLimit = 50
 
 // EnsureThread ensures the session has a current thread: create new (if selector empty) or resolve and switch (if selector set).
+// If resumeSelector is empty and CurrentThreadID is already set (e.g. after in-session re-login), the existing thread is kept.
 func (s *Session) EnsureThread(resumeSelector string) error {
 	if resumeSelector != "" {
 		id, err := s.ResolveThreadSelector(resumeSelector, defaultThreadListLimit)
@@ -135,6 +139,9 @@ func (s *Session) EnsureThread(resumeSelector string) error {
 			return err
 		}
 		s.CurrentThreadID = id
+		return nil
+	}
+	if s.CurrentThreadID != "" {
 		return nil
 	}
 	_, err := s.NewThread()

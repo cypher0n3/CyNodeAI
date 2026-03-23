@@ -1418,6 +1418,9 @@ func TestNodeHandler_GetConfig_OmitsInferenceBackendWhenCapabilityExistingServic
 	if payload.InferenceBackend.SelectedModel == "" {
 		t.Error("InferenceBackend.SelectedModel must be set so node-manager can pull the chosen model")
 	}
+	if len(payload.InferenceBackend.ModelsToEnsure) == 0 {
+		t.Error("InferenceBackend.ModelsToEnsure must list orchestrator-directed models to pull")
+	}
 }
 
 func TestNodeHandler_GetConfig_ReturnsInferenceBackendWithVariantFromGPU(t *testing.T) {
