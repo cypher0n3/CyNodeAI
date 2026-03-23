@@ -250,7 +250,7 @@ The startup path for an existing token does not use that; it blocks in the CLI l
 - **On TUI `Init`:** When `OpenLoginFormOnInit` is false and the session has a token, dispatch `ensureThreadCmd()` (same as post-login) so thread creation/listing happens in the Bubble Tea loop and failures surface in-scrollback.
 - **First message:** Ensure behavior matches the spec: thread must exist before the first completion.
   If `EnsureThread` fails in the async path, the first send may need to either block on retry or show a clear error.
-  Align with [Connection Recovery](cynork_tui.md) and thread semantics already documented.
+  Align with [Connection Recovery](../tech_specs/cynork_tui.md#connection-recovery) and thread semantics already documented.
 
 ### Bug 2 Files Involved
 

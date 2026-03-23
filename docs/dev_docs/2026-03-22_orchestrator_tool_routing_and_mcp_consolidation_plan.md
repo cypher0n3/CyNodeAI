@@ -760,7 +760,7 @@ Prove PMA **langchaingo** tool invocation (catalog names such as **help** and **
 
 Promote stable outcomes from `dev_docs` into durable docs; leave this plan as historical record.
 
-**Already applied (2026-03-22):** Normative updates span [meta.md](../../meta.md), [REQ-PMAGNT-0106](../../requirements/pmagnt.md#req-pmagnt-0106), [ports_and_endpoints.md](../tech_specs/ports_and_endpoints.md), [mcp_gateway_enforcement.md](../tech_specs/mcp/mcp_gateway_enforcement.md), [mcp_tooling.md](../tech_specs/mcp/mcp_tooling.md), [cynode_pma.md](../tech_specs/cynode_pma.md), and [project_manager_agent.md](../tech_specs/project_manager_agent.md).
+**Already applied (2026-03-22):** Normative updates span [meta.md](../../meta.md), [REQ-PMAGNT-0106](../requirements/pmagnt.md#req-pmagnt-0106), [ports_and_endpoints.md](../tech_specs/ports_and_endpoints.md), [mcp_gateway_enforcement.md](../tech_specs/mcp/mcp_gateway_enforcement.md), [mcp_tooling.md](../tech_specs/mcp/mcp_tooling.md), [cynode_pma.md](../tech_specs/cynode_pma.md), and [project_manager_agent.md](../tech_specs/project_manager_agent.md).
 
 README and deployment notes: [orchestrator/README.md](../../orchestrator/README.md), [scripts/README.md](../../scripts/README.md), [orchestrator/systemd/README.md](../../orchestrator/systemd/README.md), and header comments in [orchestrator/docker-compose.yml](../../orchestrator/docker-compose.yml).
 

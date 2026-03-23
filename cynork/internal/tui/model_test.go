@@ -318,17 +318,17 @@ func TestModel_InputHistory_PushAndNavigate(t *testing.T) {
 	}
 }
 
-func TestModel_HandleKey_UpDownHistory(t *testing.T) {
+func TestModel_HandleKey_CtrlUpDownHistory(t *testing.T) {
 	m := NewModel(&chat.Session{})
 	m.InputHistory = []string{"newest", "older"}
 	m.InputHistoryIdx = -1
-	_, _ = m.handleKey(tea.KeyMsg{Type: tea.KeyUp})
+	_, _ = m.handleKey(tea.KeyMsg{Type: tea.KeyCtrlUp})
 	if m.InputHistoryIdx != 0 || m.Input != "newest" {
-		t.Errorf("Up: idx=%d input=%q", m.InputHistoryIdx, m.Input)
+		t.Errorf("Ctrl+Up: idx=%d input=%q", m.InputHistoryIdx, m.Input)
 	}
-	_, _ = m.handleKey(tea.KeyMsg{Type: tea.KeyDown})
+	_, _ = m.handleKey(tea.KeyMsg{Type: tea.KeyCtrlDown})
 	if m.InputHistoryIdx != -1 || m.Input != "" {
-		t.Errorf("Down from 0: idx=%d input=%q", m.InputHistoryIdx, m.Input)
+		t.Errorf("Ctrl+Down from 0: idx=%d input=%q", m.InputHistoryIdx, m.Input)
 	}
 }
 
@@ -2019,6 +2019,7 @@ func TestModel_LoginFormKey_Backspace(t *testing.T) {
 			m.LoginGatewayURL = loginTestGatewayURL
 			m.LoginUsername = string(RoleUser)
 			m.LoginPassword = loginTestPassword
+			m.syncLoginFormCursors()
 			m.Update(tea.KeyMsg{Type: tea.KeyBackspace})
 			tc.check(t, m)
 		})

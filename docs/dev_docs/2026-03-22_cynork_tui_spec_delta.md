@@ -4,6 +4,10 @@
 - [Scope of Latest Commit (Cynork)](#scope-of-latest-commit-cynork)
 - [Summary of Implementation Behavior](#summary-of-implementation-behavior)
 - [Differences From Current Specs](#differences-from-current-specs)
+  - [`docs/tech_specs/cynork_tui.md` (Layout and Interaction)](#docstech_specscynork_tuimd-layout-and-interaction)
+  - [`docs/requirements/client.md` (REQ-CLIENT-0206)](#docsrequirementsclientmd-req-client-0206)
+  - [Slash Commands Spec (`cynork_tui_slash_commands.md`)](#slash-commands-spec-cynork_tui_slash_commandsmd)
+  - [Draft Specification Files](#draft-specification-files)
 - [Known Limitations](#known-limitations)
 - [Recommended Spec Updates](#recommended-spec-updates)
 - [Traceability](#traceability)
@@ -16,6 +20,9 @@ It suggests spec updates so documents match what ships.
 
 It combines work from the **2026-03-22** implementation thread (composer editing, copy/clipboard UX, footnotes) and the cynork-related tree as of commit `90da858` (*feat: MCP gateway package, PMA tool routing, cynork TUI, worker orchestrator proxy*).
 That commit introduced the full TUI package and related wiring, not only the items from the thread.
+
+**Later updates (same dev-doc thread):** composer **Up/Down** vs **Ctrl+Up/Ctrl+Down**, wrap-aware vertical movement, composer **inner width** (border clipping), login overlay UX (centering, column-aligned labels, true-black panel `#000000`, UTF-8 cursors matching composer semantics, word keys disabled on password).
+Treat this file as the rolling delta until specs are merged.
 
 ## Scope of Latest Commit (Cynork)
 
@@ -32,11 +39,19 @@ It focuses on layout, composer, copy, and slash where the tech spec is explicit.
   **Left/Right** move by rune (including across lines).
   **Ctrl+Left/Right** move by whitespace-separated words.
 
+- **Composer vertical keys:** **Up/Down** move the caret along **wrapped display rows** (width budget matches the bordered composer: inner width `Width - 2` for borders, padding `(0,1)`, soft segments by display width with a **`"> "`** first-row allowance), not only at explicit `\n` boundaries.
+  **Ctrl+Up / Ctrl+Down** cycle **sent-message** input history (newest first).
+  When the slash menu is open with matches, **Up/Down** still navigate the menu; **Ctrl+Up/Ctrl+Down** do nothing in that case.
+
 - **Cursor rendering:** TUI-drawn **block** over the current rune using **reverse video** on the same background as the composer panel (base style `236` / `252`), not a separate bar glyph.
   This avoids ANSI reset stripping the panel background.
 
+- **Composer box width:** `Style.Width` is the **inner** width before the border; **NormalBorder** adds two columns.
+  The code uses **`innerW := m.Width - 2`** so the full bordered composer fits the terminal (avoids clipping the **right** border).
+
 - **Multiline window:** Composer shows up to **5** logical lines.
   If there are more, the window **scrolls** so the line containing the cursor stays visible.
+  (Scrolling is still by **logical** lines; a single logical line that **wraps** to many terminal rows can make the visible window feel tight-known UX limitation.)
 
 - **Newline without send:** **Alt+Enter** and **Ctrl+J** insert `\n`.
   **`shift+enter`** is recognized if the runtime reports it.
@@ -54,9 +69,17 @@ It focuses on layout, composer, copy, and slash where the tech spec is explicit.
 
 - **Scrollback cache:** On copy result, **`scrollbackCacheValid = false`** so glamour rebuild picks up new system lines.
 
-- **Footnote under composer:** `copySelectFootnote` includes **Alt+Enter newline** and copy shortcuts (not only status-bar `composerHint`).
+- **Footnote under composer:** `copySelectFootnote` lists **Ctrl+`↑↓` prior messages**, **Alt+Enter newline**, selection, and copy shortcuts (not only status-bar `composerHint`).
+  It does **not** repeat plain **`↑↓`** (those move within the composer / slash menu).
 
 - **Status bar hint (REQ-CLIENT-0206):** Still **`/ commands · @ files · ! shell`** in the status line.
+
+- **Login overlay (REQ-CLIENT-0190):** In-TUI login is a **rounded** card, **horizontally and vertically centered** on the main view.
+  Labels use a **fixed-width** right-aligned column; values use **true black** background **`#000000`** on text segments, gaps, blank rows, centered padding, and the bordered block so scrollback does not bleed through as grey.
+  **Per-field byte cursors** (UTF-8) match composer semantics: **Left/Right** by rune, **Backspace** deletes the previous code point, typing **inserts at the caret**.
+  **Ctrl+Left/Ctrl+Right** word motion applies to **gateway and username only**; on the **password** field those chords are **ignored** (left/right by rune still work).
+    Caret uses the same **reverse-video** pattern as the composer (no separate bar glyph).
+    Landmark **`[CYNRK_AUTH_RECOVERY_READY]`** remains verbatim for PTY/E2E.
 
 ## Differences From Current Specs
 
@@ -101,7 +124,11 @@ The following call out gaps between `docs/tech_specs` and the current cynork TUI
 
 ## Known Limitations
 
-- **Wrapped lines:** Cursor position is logical; **lipgloss-wrapped** long lines may not align the block cursor with wrapped screen rows.
+- **Wrap vs movement:** Vertical movement follows a **display-width** model (with a **`"> "`** first-line allowance) that may differ slightly from **lipgloss/cellbuf** word-wrap break positions at the edge case.
+
+- **Composer visible line window:** Still scrolls by **logical** `\n`-separated lines (up to 5); one very long wrapped line does not scroll the composer window by **wrapped** row.
+
+- **Input history:** **Ctrl+Up/Ctrl+Down** recall **sent** messages only; there is no separate ring for an unsent draft.
 
 - **Shift+Enter:** Cannot be honored as newline-only without terminal keyboard protocol support and a stack that exposes distinct chords (future Bubble Tea / terminal features).
 
@@ -118,21 +145,29 @@ The following call out gaps between `docs/tech_specs` and the current cynork TUI
 
 5. **REQ-CLIENT-0206:** Optional note that discoverability **MAY** use a second line (e.g. copy shortcuts + newline keys).
 
+6. **`cynork_tui.md` composer keys:** Document **Up/Down** (caret / slash menu) vs **Ctrl+Up/Ctrl+Down** (input history), and that **history** is sent messages only.
+
+7. **REQ-CLIENT-0190 / auth recovery:** Optional note on in-TUI login layout (centering, label alignment), **true black** panel, caret behavior, and **Ctrl+word** disabled on password.
+
 ## Traceability
 
 - **`CYNAI.CLIENT.CynorkChat.TUILayout`:** Composer cursor, newline keys - `cynork_tui.md`.
 
 - **REQ-CLIENT-0206:** Composer hints - `client.md` + `cynork_tui.md`.
 
+- **REQ-CLIENT-0190:** In-session login overlay - `client.md` (Auth Recovery) + `cynork_tui.md` where applicable.
+
 - **`CYNAI.CLIENT.CynorkTuiSlashCommands`:** `/copy` - `cynork_tui_slash_commands.md`.
 
 ## Files Reference (TUI-Focused)
 
-- `cynork/internal/tui/model.go` - Keys, Enter, `/copy` dispatch, `copyClipboardResultMsg`, scrollback cache, View layout.
+- `cynork/internal/tui/model.go` - Keys, Enter, `/copy` dispatch, `copyClipboardResultMsg`, scrollback cache, View layout, login overlay (`renderLoginOverlay`, login field cursors).
 
-- `cynork/internal/tui/composer_input.go` - Cursor math, word motion, visible line range.
+- `cynork/internal/tui/composer_input.go` - Shared UTF-8 string cursor helpers (`moveStringCursorRune`, insert/delete, word motion), composer methods, visible line range.
 
-- `cynork/internal/tui/view_render.go` - Composer lines, base style + reverse cursor, scrollback glamour cache.
+- `cynork/internal/tui/composer_wrap.go` - Composer **wrap width** and **visual-row** helpers for Up/Down.
+
+- `cynork/internal/tui/view_render.go` - Composer lines, `renderStyledLineWithCursor`, base style + reverse cursor, `copySelectFootnote`, scrollback glamour cache.
 
 - `cynork/internal/tui/slash.go` - `/copy`, `slashClipboardSequence`.
 
@@ -141,7 +176,3 @@ The following call out gaps between `docs/tech_specs` and the current cynork TUI
 - `cynork/internal/tui/slash_menu.go` - Completion; cursor sync on replace.
 
 - `cynork/cmd/tui.go` - `tea.NewProgram` options.
-
----
-
-*Generated for planning and spec maintenance; update or remove when official spec edits land.*

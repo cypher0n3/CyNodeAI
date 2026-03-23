@@ -85,6 +85,57 @@ func TestComposer_NewlineWithoutSend_AltEnterAndCtrlJ(t *testing.T) {
 	}
 }
 
+func TestComposerCursor_VerticalWrapMotion(t *testing.T) {
+	m := NewModel(&chat.Session{})
+	m.Width = 14 // lipgloss wrap matches width - padding = 12 cells
+	longLine := strings.Repeat("x", 40)
+	m.Input = longLine
+	m.syncInputCursorEnd()
+	if total := totalVisualRows(m.Input, composerWrapAt(m)); total < 2 {
+		t.Fatalf("expected wrapped rows, got total=%d", total)
+	}
+	before := m.inputCursor
+	m.moveInputCursorVertical(-1)
+	if m.inputCursor == before {
+		t.Fatalf("up from last row should move cursor: cursor=%d", m.inputCursor)
+	}
+	if m.inputCursor >= before {
+		t.Fatalf("up should move earlier in buffer: before=%d after=%d", before, m.inputCursor)
+	}
+	m.moveInputCursorVertical(1)
+	if m.inputCursor != before {
+		t.Fatalf("down should restore end: got %d want %d", m.inputCursor, before)
+	}
+}
+
+func TestComposerCursor_VerticalLineMotion(t *testing.T) {
+	m := NewModel(&chat.Session{})
+	m.Input = "aa\nbb\ncc"
+	m.syncInputCursorEnd()
+	if m.cursorLineIndex() != 2 {
+		t.Fatalf("end: line=%d", m.cursorLineIndex())
+	}
+	m.moveInputCursorVertical(-1)
+	if m.cursorLineIndex() != 1 || m.inputCursor != len("aa\nbb") {
+		t.Fatalf("up: line=%d cursor=%d", m.cursorLineIndex(), m.inputCursor)
+	}
+	m.moveInputCursorVertical(-1)
+	if m.cursorLineIndex() != 0 {
+		t.Fatalf("up2: line=%d", m.cursorLineIndex())
+	}
+	m.moveInputCursorVertical(1)
+	if m.cursorLineIndex() != 1 {
+		t.Fatalf("down: line=%d", m.cursorLineIndex())
+	}
+	// Preserve column: middle of "bb"
+	m.Input = "abc\ndefg"
+	m.inputCursor = len("abc\nde") // after "de" on line 1
+	m.moveInputCursorVertical(-1)
+	if got := m.cursorColumnRunes(0); got != 2 { // line1 had 2 runes before cursor ("de"); line0 matches at "ab|"
+		t.Fatalf("column runes on line0 want 2 for preserved col from de got %d", got)
+	}
+}
+
 func TestVisibleComposerLineRange_KeepsCursorLine(t *testing.T) {
 	m := NewModel(&chat.Session{})
 	// 6 lines: cursor on line 0 should scroll window to include line 0

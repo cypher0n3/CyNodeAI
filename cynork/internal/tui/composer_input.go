@@ -22,37 +22,19 @@ func (m *Model) syncInputCursorEnd() {
 // insertAtCursor inserts s at inputCursor (must be valid UTF-8).
 func (m *Model) insertAtCursor(s string) {
 	m.clampInputCursor()
-	m.Input = m.Input[:m.inputCursor] + s + m.Input[m.inputCursor:]
-	m.inputCursor += len(s)
+	m.Input, m.inputCursor = insertStringAtCursor(m.Input, m.inputCursor, s)
 }
 
 // deleteRuneBeforeCursor removes one Unicode code point before the cursor.
 func (m *Model) deleteRuneBeforeCursor() {
 	m.clampInputCursor()
-	if m.inputCursor == 0 {
-		return
-	}
-	_, size := utf8.DecodeLastRuneInString(m.Input[:m.inputCursor])
-	m.Input = m.Input[:m.inputCursor-size] + m.Input[m.inputCursor:]
-	m.inputCursor -= size
+	m.Input, m.inputCursor = deleteRuneBeforeCursorString(m.Input, m.inputCursor)
 }
 
 // moveInputCursorRune moves the cursor by one rune (dir -1 = left, +1 = right).
 func (m *Model) moveInputCursorRune(dir int) {
 	m.clampInputCursor()
-	if dir < 0 {
-		if m.inputCursor == 0 {
-			return
-		}
-		_, size := utf8.DecodeLastRuneInString(m.Input[:m.inputCursor])
-		m.inputCursor -= size
-		return
-	}
-	if m.inputCursor >= len(m.Input) {
-		return
-	}
-	_, size := utf8.DecodeRuneInString(m.Input[m.inputCursor:])
-	m.inputCursor += size
+	m.inputCursor = moveStringCursorRune(m.Input, m.inputCursor, dir)
 }
 
 func runeBeforeCursor(s string, cursorByte int) (r rune, size int) {
@@ -69,50 +51,100 @@ func runeAtCursor(s string, cursorByte int) (r rune, size int) {
 	return utf8.DecodeRuneInString(s[cursorByte:])
 }
 
-// moveInputCursorWordLeft moves to the start of the previous space-separated segment.
-func (m *Model) moveInputCursorWordLeft() {
-	m.clampInputCursor()
-	pos := m.inputCursor
-	// Skip spaces left
+// clampStringCursor clamps a byte offset to a valid UTF-8 boundary in s.
+func clampStringCursor(s string, c int) int {
+	if c < 0 {
+		return 0
+	}
+	if c > len(s) {
+		return len(s)
+	}
+	return c
+}
+
+// moveStringCursorRune moves a UTF-8 byte offset by one code point (dir -1 = left, +1 = right).
+func moveStringCursorRune(s string, c int, dir int) int {
+	c = clampStringCursor(s, c)
+	if dir < 0 {
+		if c == 0 {
+			return 0
+		}
+		_, size := utf8.DecodeLastRuneInString(s[:c])
+		return c - size
+	}
+	if c >= len(s) {
+		return c
+	}
+	_, size := utf8.DecodeRuneInString(s[c:])
+	return c + size
+}
+
+// deleteRuneBeforeCursorString removes one Unicode code point before c; returns new string and cursor.
+func deleteRuneBeforeCursorString(s string, c int) (string, int) {
+	c = clampStringCursor(s, c)
+	if c == 0 {
+		return s, 0
+	}
+	_, size := utf8.DecodeLastRuneInString(s[:c])
+	return s[:c-size] + s[c:], c - size
+}
+
+// insertStringAtCursor inserts ins at byte offset c (must be UTF-8 boundary).
+func insertStringAtCursor(s string, c int, ins string) (string, int) {
+	c = clampStringCursor(s, c)
+	return s[:c] + ins + s[c:], c + len(ins)
+}
+
+// moveStringCursorWordLeft moves to the start of the previous space-separated segment.
+func moveStringCursorWordLeft(s string, pos int) int {
+	pos = clampStringCursor(s, pos)
 	for pos > 0 {
-		r, sz := runeBeforeCursor(m.Input, pos)
+		r, sz := runeBeforeCursor(s, pos)
 		if sz == 0 || !unicode.IsSpace(r) {
 			break
 		}
 		pos -= sz
 	}
-	// Skip non-space (word) left
 	for pos > 0 {
-		r, sz := runeBeforeCursor(m.Input, pos)
+		r, sz := runeBeforeCursor(s, pos)
 		if sz == 0 || unicode.IsSpace(r) {
 			break
 		}
 		pos -= sz
 	}
-	m.inputCursor = pos
+	return pos
+}
+
+// moveStringCursorWordRight moves to the start of the next space-separated word.
+func moveStringCursorWordRight(s string, pos int) int {
+	pos = clampStringCursor(s, pos)
+	for pos < len(s) {
+		r, sz := runeAtCursor(s, pos)
+		if sz == 0 || unicode.IsSpace(r) {
+			break
+		}
+		pos += sz
+	}
+	for pos < len(s) {
+		r, sz := runeAtCursor(s, pos)
+		if sz == 0 || !unicode.IsSpace(r) {
+			break
+		}
+		pos += sz
+	}
+	return pos
+}
+
+// moveInputCursorWordLeft moves to the start of the previous space-separated segment.
+func (m *Model) moveInputCursorWordLeft() {
+	m.clampInputCursor()
+	m.inputCursor = moveStringCursorWordLeft(m.Input, m.inputCursor)
 }
 
 // moveInputCursorWordRight moves to the start of the next space-separated word.
 func (m *Model) moveInputCursorWordRight() {
 	m.clampInputCursor()
-	pos := m.inputCursor
-	// If inside a word, move to end of this word (after last char of run of non-space)
-	for pos < len(m.Input) {
-		r, sz := runeAtCursor(m.Input, pos)
-		if sz == 0 || unicode.IsSpace(r) {
-			break
-		}
-		pos += sz
-	}
-	// Skip spaces
-	for pos < len(m.Input) {
-		r, sz := runeAtCursor(m.Input, pos)
-		if sz == 0 || !unicode.IsSpace(r) {
-			break
-		}
-		pos += sz
-	}
-	m.inputCursor = pos
+	m.inputCursor = moveStringCursorWordRight(m.Input, m.inputCursor)
 }
 
 // cursorLineIndex returns the 0-based line index in m.Input where inputCursor lies.
@@ -126,11 +158,63 @@ func (m *Model) cursorColumnBytes(lineIdx int) int {
 	if lineIdx < 0 || lineIdx >= len(lines) {
 		return 0
 	}
-	lineStart := 0
-	for i := 0; i < lineIdx; i++ {
-		lineStart += len(lines[i]) + 1
-	}
+	lineStart := m.lineStartByte(lineIdx)
 	return m.inputCursor - lineStart
+}
+
+// lineStartByte returns the byte offset in m.Input where line lineIdx begins (0-based).
+func (m *Model) lineStartByte(lineIdx int) int {
+	lines := strings.Split(m.Input, "\n")
+	if lineIdx < 0 || lineIdx >= len(lines) {
+		return 0
+	}
+	start := 0
+	for i := 0; i < lineIdx; i++ {
+		start += len(lines[i]) + 1
+	}
+	return start
+}
+
+// cursorColumnRunes returns the rune offset from the start of line lineIdx to the cursor (clamped to that line).
+func (m *Model) cursorColumnRunes(lineIdx int) int {
+	lines := strings.Split(m.Input, "\n")
+	if lineIdx < 0 || lineIdx >= len(lines) {
+		return 0
+	}
+	line := lines[lineIdx]
+	ls := m.lineStartByte(lineIdx)
+	off := m.inputCursor - ls
+	if off < 0 {
+		return 0
+	}
+	if off > len(line) {
+		off = len(line)
+	}
+	return utf8.RuneCountInString(line[:off])
+}
+
+// moveInputCursorVertical moves the cursor up (delta -1) or down (+1) one **visual** row in the
+// composer (matching lipgloss word-wrap at composer width), including wrapped segments of a single
+// logical line. Preserves display column when possible.
+func (m *Model) moveInputCursorVertical(delta int) {
+	m.clampInputCursor()
+	if delta == 0 {
+		return
+	}
+	wrapAt := composerWrapAt(m)
+	total := totalVisualRows(m.Input, wrapAt)
+	if total <= 1 {
+		return
+	}
+	gr, col, ok := m.globalComposerVisualRow()
+	if !ok {
+		return
+	}
+	target := gr + delta
+	if target < 0 || target >= total {
+		return
+	}
+	m.setCursorFromGlobalComposerRow(target, col)
 }
 
 // visibleComposerLineRange returns [startLine, endLine) line indices into strings.Split(Input, "\n")

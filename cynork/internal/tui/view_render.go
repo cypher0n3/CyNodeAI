@@ -39,7 +39,7 @@ var (
 )
 
 // copySelectFootnote is shown under the composer (discoverability for copy/paste).
-const copySelectFootnote = "Shift+drag to select · Alt+Enter newline · Ctrl+Y or /copy last · /copy all"
+const copySelectFootnote = "Ctrl+↑↓ prior messages · Alt+Enter newline · Shift+drag select · Ctrl+Y /copy last · /copy all"
 
 func newTUIViewport(w, h int) viewport.Model {
 	km := viewport.DefaultKeyMap()
@@ -309,8 +309,37 @@ func (m *Model) buildComposerDisplayLines(maxLines int) []string {
 	return out
 }
 
+// renderStyledLineWithCursor renders one line with the insertion caret at cursorByte, using the same
+// reverse-video rules as the composer (space or first rune of the suffix).
+func renderStyledLineWithCursor(base lipgloss.Style, line string, cursorByte int) string {
+	cursorByte = clampStringCursor(line, cursorByte)
+	before := line[:cursorByte]
+	after := line[cursorByte:]
+	var b strings.Builder
+	b.WriteString(base.Render(before))
+	cursorSt := base.Reverse(true)
+	if len(after) == 0 {
+		b.WriteString(cursorSt.Render(" "))
+	} else {
+		r, sz := utf8.DecodeRuneInString(after)
+		if r == utf8.RuneError && sz == 0 {
+			b.WriteString(cursorSt.Render(" "))
+		} else {
+			b.WriteString(cursorSt.Render(string(after[:sz])))
+			b.WriteString(base.Render(after[sz:]))
+		}
+	}
+	return b.String()
+}
+
 func (m *Model) renderComposerBox(composerLines []string) string {
 	content := strings.Join(composerLines, "\n")
+	// Style.Width is the bordered block's inner width; borders add 2 cells. Without subtracting,
+	// total width exceeds the terminal and the right border is clipped.
+	innerW := m.Width - 2
+	if innerW < 1 {
+		innerW = 1
+	}
 	st := lipgloss.NewStyle().
 		Border(lipgloss.NormalBorder()).
 		BorderForeground(lipgloss.Color("240")).
@@ -318,7 +347,7 @@ func (m *Model) renderComposerBox(composerLines []string) string {
 	if !m.wantNoColor() {
 		st = st.Background(lipgloss.Color("236"))
 	}
-	return st.Width(m.Width).Render(content)
+	return st.Width(innerW).Render(content)
 }
 
 // renderCopyHintLine returns the dim footnote under the composer (selection + copy).

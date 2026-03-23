@@ -19,8 +19,12 @@ import (
 // defaultPlaceholder is shown for empty project/model in the status bar and orEmpty.
 const defaultPlaceholder = "(default)"
 
-// loginFormCursor is the cursor shown in the focused login form field.
-const loginFormCursor = "▌"
+// Login overlay: label column width (longest label is "Gateway URL:").
+const (
+	loginLabelColWidth = 14
+	loginBoxMaxInnerW  = 62
+	loginBoxMinInnerW  = 32
+)
 
 // assistantPrefix is the prefix for assistant messages in the scrollback.
 const assistantPrefix = "Assistant: "
@@ -137,7 +141,7 @@ type Model struct {
 	Input        string
 	// inputCursor is the byte offset of the insertion caret in Input (UTF-8 boundary).
 	inputCursor     int
-	InputHistory    []string // newest first; Up/Down cycle through
+	InputHistory    []string // newest first; Ctrl+Up/Ctrl+Down cycle through
 	InputHistoryIdx int      // -1 = not browsing; 0 = newest, 1 = older, ...
 	Width           int
 	Height          int
@@ -151,12 +155,16 @@ type Model struct {
 	ctrlCCount   int                         // successive Ctrl+C when idle → exit
 
 	// login form overlay (REQ-CLIENT-0190: in-session login; password not echoed)
-	ShowLoginForm     bool
-	LoginGatewayURL   string
-	LoginUsername     string
-	LoginPassword     string
-	LoginFocusedField int // 0=gateway, 1=username, 2=password
-	LoginErr          string
+	ShowLoginForm   bool
+	LoginGatewayURL string
+	LoginUsername   string
+	LoginPassword   string
+	// Login*Cursor are byte offsets (UTF-8 boundaries) in each field, like inputCursor in the composer.
+	LoginGatewayCursor  int
+	LoginUsernameCursor int
+	LoginPasswordCursor int
+	LoginFocusedField   int // 0=gateway, 1=username, 2=password
+	LoginErr            string
 
 	// Startup: when token was empty, show login on init; after login ensure thread.
 	OpenLoginFormOnInit  bool
@@ -182,7 +190,7 @@ type Model struct {
 	// ClipNote is a short-lived status after clipboard copy (cleared after clipNoteDuration).
 	ClipNote string
 
-	// Slash command popup (filtered catalog, Up/Down navigate, Tab completes).
+	// Slash command popup (filtered catalog, Up/Down navigate menu, Tab completes).
 	slashMenuSel    int
 	slashMenuScroll int
 
@@ -383,11 +391,25 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.navSlashMenu(true)
 			return m, nil
 		}
-		m.navigateInputHistory(true)
+		m.moveInputCursorVertical(-1)
+		m.clampSlashMenuSelection()
 		return m, nil
 	case "down":
 		if m.slashMenuVisible() && len(m.filteredSlashCommands()) > 0 {
 			m.navSlashMenu(false)
+			return m, nil
+		}
+		m.moveInputCursorVertical(1)
+		m.clampSlashMenuSelection()
+		return m, nil
+	case "ctrl+up":
+		if m.slashMenuVisible() && len(m.filteredSlashCommands()) > 0 {
+			return m, nil
+		}
+		m.navigateInputHistory(true)
+		return m, nil
+	case "ctrl+down":
+		if m.slashMenuVisible() && len(m.filteredSlashCommands()) > 0 {
 			return m, nil
 		}
 		m.navigateInputHistory(false)
@@ -844,7 +866,14 @@ func (m *Model) applyOpenLoginForm() (tea.Model, tea.Cmd) {
 	default:
 		m.LoginGatewayURL = ""
 	}
+	m.syncLoginFormCursors()
 	return m, nil
+}
+
+func (m *Model) syncLoginFormCursors() {
+	m.LoginGatewayCursor = len(m.LoginGatewayURL)
+	m.LoginUsernameCursor = len(m.LoginUsername)
+	m.LoginPasswordCursor = len(m.LoginPassword)
 }
 
 func (m *Model) applyLoginResult(msg loginResultMsg) (tea.Model, tea.Cmd) {
@@ -876,6 +905,26 @@ func (m *Model) applyLoginResult(msg loginResultMsg) (tea.Model, tea.Cmd) {
 // handleLoginFormKey handles key events when the login overlay is visible (REQ-CLIENT-0190).
 func (m *Model) handleLoginFormKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	switch msg.String() {
+	case "left":
+		m.loginFormMoveRune(-1)
+		m.LoginErr = ""
+		return m, nil
+	case "right":
+		m.loginFormMoveRune(1)
+		m.LoginErr = ""
+		return m, nil
+	case "ctrl+left":
+		if m.LoginFocusedField != 2 {
+			m.loginFormWordLeft()
+		}
+		m.LoginErr = ""
+		return m, nil
+	case "ctrl+right":
+		if m.LoginFocusedField != 2 {
+			m.loginFormWordRight()
+		}
+		m.LoginErr = ""
+		return m, nil
 	case "esc":
 		m.ShowLoginForm = false
 		m.LoginPassword = ""
@@ -910,32 +959,64 @@ func (m *Model) handleLoginFormKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	}
 }
 
-func (m *Model) loginFormBackspace() {
+func (m *Model) loginFieldString() *string {
 	switch m.LoginFocusedField {
 	case 0:
-		if m.LoginGatewayURL != "" {
-			m.LoginGatewayURL = m.LoginGatewayURL[:len(m.LoginGatewayURL)-1]
-		}
+		return &m.LoginGatewayURL
 	case 1:
-		if m.LoginUsername != "" {
-			m.LoginUsername = m.LoginUsername[:len(m.LoginUsername)-1]
-		}
+		return &m.LoginUsername
 	case 2:
-		if m.LoginPassword != "" {
-			m.LoginPassword = m.LoginPassword[:len(m.LoginPassword)-1]
-		}
+		return &m.LoginPassword
+	default:
+		return &m.LoginGatewayURL
 	}
 }
 
-func (m *Model) loginFormAppend(s string) {
+func (m *Model) loginFieldCursorPtr() *int {
 	switch m.LoginFocusedField {
 	case 0:
-		m.LoginGatewayURL += s
+		return &m.LoginGatewayCursor
 	case 1:
-		m.LoginUsername += s
+		return &m.LoginUsernameCursor
 	case 2:
-		m.LoginPassword += s
+		return &m.LoginPasswordCursor
+	default:
+		return &m.LoginGatewayCursor
 	}
+}
+
+func (m *Model) loginFormMoveRune(dir int) {
+	s := m.loginFieldString()
+	cur := m.loginFieldCursorPtr()
+	*cur = moveStringCursorRune(*s, *cur, dir)
+}
+
+func (m *Model) loginFormWordLeft() {
+	s := m.loginFieldString()
+	cur := m.loginFieldCursorPtr()
+	*cur = moveStringCursorWordLeft(*s, *cur)
+}
+
+func (m *Model) loginFormWordRight() {
+	s := m.loginFieldString()
+	cur := m.loginFieldCursorPtr()
+	*cur = moveStringCursorWordRight(*s, *cur)
+}
+
+func (m *Model) loginFormBackspace() {
+	s := m.loginFieldString()
+	cur := m.loginFieldCursorPtr()
+	ns, nc := deleteRuneBeforeCursorString(*s, *cur)
+	*s = ns
+	*cur = nc
+}
+
+func (m *Model) loginFormAppend(s string) {
+	f := m.loginFieldString()
+	cur := m.loginFieldCursorPtr()
+	ns, nc := insertStringAtCursor(*f, *cur, s)
+	*f = ns
+	*cur = nc
 }
 
 // runLoginCmd performs POST /v1/auth/login and returns loginResultMsg (blocks briefly).
@@ -1145,51 +1226,114 @@ func (m *Model) View() string {
 
 // renderLoginOverlay draws the login box over the main view (password not echoed; REQ-CLIENT-0190).
 func (m *Model) renderLoginOverlay(mainView string) string {
-	const loginBoxWidth = 56
-	boxStyle := lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).Padding(0, 1).Width(loginBoxWidth)
-	labelStyle := lipgloss.NewStyle().Width(12)
-	errStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("9"))
+	loginErrStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("9"))
 
-	gatewayLabel := labelStyle.Render("Gateway URL:")
-	userLabel := labelStyle.Render("Username:")
-	passLabel := labelStyle.Render("Password:")
-
-	gatewayVal := m.LoginGatewayURL
-	if gatewayVal == "" {
-		gatewayVal = " "
+	// Inner width: terminal minus rounded border; cap width for a compact card.
+	innerW := m.Width - 2
+	if innerW < 1 {
+		innerW = 1
 	}
-	userVal := m.LoginUsername
-	if userVal == "" {
-		userVal = " "
+	if innerW > loginBoxMaxInnerW {
+		innerW = loginBoxMaxInnerW
 	}
-	passVal := strings.Repeat("*", len(m.LoginPassword))
-	if passVal == "" {
-		passVal = " "
+	if innerW < loginBoxMinInnerW && m.Width > loginBoxMinInnerW+2 {
+		innerW = loginBoxMinInnerW
 	}
 
-	cur := " "
-	f0, f1, f2 := cur, cur, cur
-	switch m.LoginFocusedField {
-	case 0:
-		f0 = loginFormCursor
-	case 1:
-		f1 = loginFormCursor
-	case 2:
-		f2 = loginFormCursor
+	labelStyle := lipgloss.NewStyle().Width(loginLabelColWidth).Align(lipgloss.Right)
+	valueStyle := lipgloss.NewStyle()
+	focusValueStyle := lipgloss.NewStyle().Bold(true)
+	titleStyle := lipgloss.NewStyle().Bold(true)
+	landmarkStyle := lipgloss.NewStyle()
+	hintKeyStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("250"))
+	hintDimStyle := lipgloss.NewStyle().Foreground(lipgloss.Color("241"))
+
+	// True black (hex); ANSI "0" is often mapped to dark grey by the terminal theme.
+	loginPanelBG := lipgloss.Color("#000000")
+
+	if !m.wantNoColor() {
+		// Black panel: set background on every segment so lines/gaps do not show scrollback through.
+		labelStyle = labelStyle.Background(loginPanelBG).Foreground(lipgloss.Color("244"))
+		valueStyle = valueStyle.Background(loginPanelBG).Foreground(lipgloss.Color("252"))
+		focusValueStyle = focusValueStyle.Background(loginPanelBG).Foreground(lipgloss.Color("86"))
+		titleStyle = titleStyle.Background(loginPanelBG).Foreground(lipgloss.Color("86"))
+		landmarkStyle = landmarkStyle.Background(loginPanelBG).Foreground(lipgloss.Color("241"))
+		hintKeyStyle = hintKeyStyle.Background(loginPanelBG)
+		hintDimStyle = hintDimStyle.Background(loginPanelBG)
+		loginErrStyle = loginErrStyle.Background(loginPanelBG)
 	}
 
-	// LandmarkAuthRecoveryReady so PTY/E2E can wait for the login form (tui_pty_harness).
+	boxStyle := lipgloss.NewStyle().
+		Border(lipgloss.RoundedBorder()).
+		Padding(1, 2).
+		Width(innerW)
+	if !m.wantNoColor() {
+		boxStyle = boxStyle.
+			BorderForeground(lipgloss.Color("86")).
+			Background(loginPanelBG)
+	}
+
+	passStars := strings.Repeat("*", len(m.LoginPassword))
+
+	// Horizontal padding 2 each side → content width for full-width focus highlight.
+	innerContentW := innerW - 4
+	if innerContentW < 1 {
+		innerContentW = 1
+	}
+
+	gapStr := " "
+	if !m.wantNoColor() {
+		gapStr = lipgloss.NewStyle().Background(loginPanelBG).Render(" ")
+	}
+
+	loginFieldLine := func(label, disp string, cursorByte int, focused bool) string {
+		lbl := labelStyle.Render(label)
+		var valPart string
+		if focused {
+			valPart = renderStyledLineWithCursor(focusValueStyle, disp, cursorByte)
+		} else if disp == "" {
+			valPart = valueStyle.Render(" ")
+		} else {
+			valPart = valueStyle.Render(disp)
+		}
+		line := lbl + gapStr + valPart
+		if focused && !m.wantNoColor() {
+			return lipgloss.NewStyle().Width(innerContentW).Background(loginPanelBG).Render(line)
+		}
+		return line
+	}
+
+	// Title + landmark (landmark verbatim for PTY / E2E). Space between title and tag uses panel background.
+	titleLine := titleStyle.Render(" Sign in ") + lipgloss.NewStyle().Background(loginPanelBG).Render(" ") + landmarkStyle.Render(chat.LandmarkAuthRecoveryReady)
+	if m.wantNoColor() {
+		titleLine = titleStyle.Render(" Sign in ") + " " + landmarkStyle.Render(chat.LandmarkAuthRecoveryReady)
+	}
+	hintLine := hintDimStyle.Render(" ") +
+		hintKeyStyle.Render("[Enter]") + hintDimStyle.Render(" Login  ") +
+		hintKeyStyle.Render("[Esc]") + hintDimStyle.Render(" Cancel")
+
+	blankRow := ""
+	if !m.wantNoColor() {
+		// Empty content lines must still paint the inner width or scrollback shows through as grey.
+		blankRow = lipgloss.NewStyle().Width(innerContentW).Background(loginPanelBG).Render(strings.Repeat(" ", innerContentW))
+	}
+
 	lines := []string{
-		" Login " + chat.LandmarkAuthRecoveryReady,
-		"",
-		gatewayLabel + gatewayVal + f0,
-		userLabel + userVal + f1,
-		passLabel + passVal + f2,
-		"",
-		" [Enter] Login   [Esc] Cancel",
+		titleLine,
+		blankRow,
+		loginFieldLine("Gateway URL:", m.LoginGatewayURL, clampStringCursor(m.LoginGatewayURL, m.LoginGatewayCursor), m.LoginFocusedField == 0),
+		loginFieldLine("Username:", m.LoginUsername, clampStringCursor(m.LoginUsername, m.LoginUsernameCursor), m.LoginFocusedField == 1),
+		loginFieldLine("Password:", passStars, clampStringCursor(m.LoginPassword, m.LoginPasswordCursor), m.LoginFocusedField == 2),
+		blankRow,
+		hintLine,
 	}
 	if m.LoginErr != "" {
-		lines = append(lines, "", errStyle.Render(m.LoginErr))
+		if !m.wantNoColor() {
+			lines = append(lines, blankRow)
+		} else {
+			lines = append(lines, "")
+		}
+		lines = append(lines, loginErrStyle.Render(m.LoginErr))
 	}
 	content := strings.Join(lines, "\n")
 	box := boxStyle.Render(content)
@@ -1202,11 +1346,15 @@ func (m *Model) renderLoginOverlay(mainView string) string {
 	if startRow < 0 {
 		startRow = 0
 	}
-	padStyle := lipgloss.NewStyle().Width(m.Width)
+	centerStyle := lipgloss.NewStyle().Width(m.Width).AlignHorizontal(lipgloss.Center)
+	if !m.wantNoColor() {
+		// Centering pads with spaces; those pads must be black or scrollback bleeds through as grey.
+		centerStyle = centerStyle.Background(loginPanelBG)
+	}
 	for i, line := range boxLines {
 		idx := startRow + i
 		if idx < len(mainLines) {
-			mainLines[idx] = padStyle.Render(line)
+			mainLines[idx] = centerStyle.Render(line)
 		}
 	}
 	return strings.Join(mainLines, "\n")
