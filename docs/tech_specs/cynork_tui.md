@@ -138,7 +138,7 @@ The TUI is a full-screen chat surface composed of scrollback, composer, status b
   A canonical first-rollout hint is `/ commands · @ files · ! shell`.
 - The status bar MUST display at least gateway reachability, identity, effective project, selected model, connection state, and the current thread title (or a fallback label when the title is absent).
 - The TUI MUST update the displayed thread title whenever it changes (e.g. after auto-title from the backend or after `/thread rename`) and when the user switches to a different thread.
-- An optional context pane MAY show thread history, slash-command help, recent tasks, project context, queued drafts, or download items.
+- An optional context pane MAY show thread history, slash-command help, recent tasks, project context, queued drafts (when implemented), or download items.
 - When the optional context pane is visible, the TUI SHOULD allow the user to switch between pane views without leaving the active chat session.
 - Visible assistant text and stored user messages SHOULD be rendered with Markdown-aware formatting when `--plain` is not set.
 - User messages in the scrollback SHOULD be visually distinct from assistant output.
@@ -147,19 +147,25 @@ The TUI is a full-screen chat surface composed of scrollback, composer, status b
   It MUST NOT cycle composer-history recall and MUST NOT alter previously submitted messages.
 - When the composer has focus, the TUI MUST render a visible text cursor or caret at the current insertion point.
 - The cursor or caret MAY use the terminal's native cursor rendering or a TUI-rendered equivalent, but it MUST remain visually distinguishable from surrounding composer text.
-- `Shift+Enter` MUST insert a newline in the composer.
+- When the caret is TUI-rendered (not the terminal's native cursor), cynork MUST draw it as reverse video on the active cell using the same background as the composer panel, not a separate bar glyph.
+- **Newline without send:** `Alt+Enter` and `Ctrl+J` insert a newline in the composer without submitting the message.
+  When the runtime reports `Shift+Enter` as distinct from `Enter`, that chord MAY also insert a newline.
+  On many terminals `Shift+Enter` is indistinguishable from `Enter` (both submit); implementations MUST NOT assume `Shift+Enter` is available for newline-only.
+- **Vertical movement in the composer:** `Up` and `Down` move the insertion caret along wrapped display rows within the composer width, not only at explicit line breaks.
+  When the slash-command completion menu is open with matches, `Up` and `Down` navigate the menu instead.
+- **Sent-message history:** `Ctrl+Up` and `Ctrl+Down` recall previously **sent** composer messages (newest first).
+  When the slash-command completion menu is open with matches, `Ctrl+Up` and `Ctrl+Down` are ignored.
+  There is no separate history ring for an unsent draft.
 - The TUI SHOULD support message-history recall from the composer and SHOULD support search and copy behavior inside the scrollback.
 - `Ctrl+C` SHOULD cancel an active generation first and SHOULD require an explicit repeated user action before exiting an idle session.
 - When the user invokes `! command`, non-interactive shell output MAY render inline, but interactive subprocesses MUST receive the real TTY and the TUI MUST restore itself cleanly afterward.
 - When the gateway exposes assistant download references, the TUI SHOULD render them as explicit download items that require user action.
-- Queued drafts, when supported, MUST remain local unsent state and MUST be clearly separated from sent messages.
-- When queued drafts are supported, the TUI SHOULD provide a dedicated queued-draft list, pane view, or overlay with clear queued labeling.
-- Queued drafts SHOULD support reorder, explicit send-one, and explicit send-all operations.
-- If the TUI supports send-all for queued drafts, it SHOULD indicate whether drafts are sent sequentially and whether the client waits for each response before sending the next queued draft.
+- Queued drafts (outbox-style deferred send) are specified in [Queued Drafts and Deferred Send](#queued-drafts-and-deferred-send); cynork does **not** implement them yet.
 
 ### Queued Drafts and Deferred Send
 
 The TUI SHOULD support an explicit outbox-like draft queue for messages the user wants to send later.
+This behavior is **not implemented yet** in cynork; the following is the shape to implement against.
 
 - **State model:** A queued draft is local client state only; it is not part of the server-side transcript and MUST NOT be shown as a sent user message.
   Queued drafts are session-scoped: they are NOT persisted across TUI restarts unless a future implementation explicitly adds persistence (e.g. local file under config directory).
@@ -173,8 +179,8 @@ The TUI SHOULD support an explicit outbox-like draft queue for messages the user
   After the action, the composer MUST be cleared and the draft MUST appear in the queued-draft list.
 - **Display:** Queued drafts MUST appear in a dedicated list, context-pane view, or overlay with clear "queued" or equivalent labeling so they are not confused with sent messages.
 - **Editable:** Queued drafts MUST be editable.
-  The canonical keybinding to move the most recent draft back into the composer (for editing) is Up arrow when the composer is empty and focus is in the composer or when focus is on the queued-draft list.
-  The implementation MAY also support edit-in-place and reorder (e.g. drag or move-up/move-down).
+  **Keybinding note:** [Layout and Interaction](#layout-and-interaction) allocates **Up** and **Down** to wrapped-line caret movement in the composer (and slash-menu navigation when the menu is open).
+  Implementations MUST choose chords for "move draft into composer" and queue navigation that do not conflict; for example **Alt+arrow** keys, a dedicated draft-queue focus mode, or another explicit scheme.
 - **Operations:** The user MUST be able to remove a queued draft and send one queued draft (send-one).
   The user SHOULD be able to reorder queued drafts (e.g. drag or move-up/move-down).
   Send-all: when the user triggers "send all queued drafts", the implementation MUST send drafts sequentially: send the first draft, wait for the completion response to finish, then send the next, until all are sent or an error stops the sequence.
@@ -185,7 +191,8 @@ The TUI SHOULD support an explicit outbox-like draft queue for messages the user
 
 ### `QueuedDrafts` Deferred Implementation
 
-- Implement the queued-draft list, streaming-aware Enter (auto-queue when streaming; auto-send when agent finishes) and Ctrl+Enter (send now / send next queued, interrupt if streaming), Ctrl+Q (explicit queue; no auto-send), Up arrow to move most recent draft back to composer, reorder/remove/send-one, and send-all (sequential with wait-for-response) when this feature is enabled.
+- Implement the queued-draft list, streaming-aware Enter (auto-queue when streaming; auto-send when agent finishes) and Ctrl+Enter (send now / send next queued, interrupt if streaming), Ctrl+Q (explicit queue; no auto-send), reorder/remove/send-one, and send-all (sequential with wait-for-response).
+  Resolve draft-queue navigation and "move draft to composer" keybindings per the **Keybinding note** under **Editable** so they do not conflict with composer **Up**/**Down** caret movement.
 
 ### Layout and Interaction Traces To
 

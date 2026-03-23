@@ -436,8 +436,10 @@ Web Console-specific requirements live in [webcon.md](webcon.md) (REQ-WEBCON-*).
   [CYNAI.CLIENT.CynorkChat.TUILayout](../tech_specs/cynork_tui.md#spec-cynai-client-cynorkchat-tuilayout)
   <a id="req-client-0202"></a>
 - **REQ-CLIENT-0203:** The interactive cynork chat surface SHOULD provide a cursor-agent-like experience with a multi-line composer, scrollback, search and copy behavior, a persistent status bar, an optional context pane, message-history recall, structured-turn rendering, and completion for relevant chat actions.
+  Where the interactive surface exposes copy via local session slash commands (for example `/copy` variants), those commands MUST match the cynork TUI slash-command specification.
   [CYNAI.CLIENT.CynorkChat.TUILayout](../tech_specs/cynork_tui.md#spec-cynai-client-cynorkchat-tuilayout)
   [CYNAI.CLIENT.CynorkChat.Completion](../tech_specs/cynork_tui.md#spec-cynai-client-cynorkchat-completion)
+  [CYNAI.CLIENT.CynorkTui.LocalSlashCommands](../tech_specs/cynork_tui_slash_commands.md#spec-cynai-client-cynorktui-localslashcommands)
   <a id="req-client-0203"></a>
 - **REQ-CLIENT-0204:** The interactive cynork chat surface MUST support newline insertion, cancellation, clean exit, and loading older history while scrolling back.
   The focused composer MUST show a visible text cursor or caret at the current insertion point.
@@ -447,6 +449,7 @@ Web Console-specific requirements live in [webcon.md](webcon.md) (REQ-WEBCON-*).
   [CYNAI.CLIENT.CynorkChat.TUILayout](../tech_specs/cynork_tui.md#spec-cynai-client-cynorkchat-tuilayout)
   <a id="req-client-0205"></a>
 - **REQ-CLIENT-0206:** The interactive cynork chat surface MUST hint the availability of slash commands, `@` file lookup or attachment, and `!` shell shorthand in or adjacent to the composer.
+  Additional hints for copy shortcuts, newline keys, or related affordances MAY appear on a second line or in a footnote below the composer.
   [CYNAI.CLIENT.CynorkChat.TUILayout](../tech_specs/cynork_tui.md#spec-cynai-client-cynorkchat-tuilayout)
   <a id="req-client-0206"></a>
 - **REQ-CLIENT-0207:** Slash commands in interactive chat MUST provide parity with the previously available shell command surface for tasks, status, identity, nodes, preferences, skills, model, project, and thread controls.

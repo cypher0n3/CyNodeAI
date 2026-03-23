@@ -102,6 +102,14 @@ The TUI MUST provide these local slash commands:
 - **`/hide-tool-output`**: Collapse retained `tool_call` and `tool_result` parts back to the hidden-by-default state.
 - **`/exit`**: End the session and return control to the shell.
 - **`/quit`**: Synonym for `/exit`.
+- **`/copy`**: Copy assistant or transcript text to the system clipboard (same family as `/exit`: local chat/TUI session actions).
+  Equivalent to **`/copy last`** when no variant is given.
+- **`/copy last`**: Copy the plain text of the most recent assistant message.
+  If there is no assistant message to copy, the TUI MUST show a clear message (for example `No assistant message to copy.`) and MUST NOT treat the operation as success.
+- **`/copy all`**: Copy the plain-text transcript assembled from chat lines.
+  Lines that are system or meta lines (for example dim-prefixed status lines using a `·` lead-in) are excluded.
+  On success the TUI MUST show a clear confirmation (for example `All text copied to clipboard.`).
+  If there is no transcript content, the TUI MAY still show the same success line without invoking the OS clipboard for an empty payload.
 
 ### Local Session Slash Commands Traces To
 
@@ -109,6 +117,7 @@ The TUI MUST provide these local slash commands:
 - [REQ-CLIENT-0183](../requirements/client.md#req-client-0183)
 - [REQ-CLIENT-0193](../requirements/client.md#req-client-0193)
 - [REQ-CLIENT-0195](../requirements/client.md#req-client-0195)
+- [REQ-CLIENT-0203](../requirements/client.md#req-client-0203)
 - [REQ-CLIENT-0208](../requirements/client.md#req-client-0208)
 - [REQ-CLIENT-0211](../requirements/client.md#req-client-0211)
 - [REQ-CLIENT-0214](../requirements/client.md#req-client-0214)
@@ -178,6 +187,9 @@ They MUST NOT modify stored message content in the database, canonical plain-tex
 14. For `/hide-tool-output`, set the session tool-output-visibility mode to hidden and re-render all currently loaded assistant turns so retained `tool_call` and `tool_result` parts return to the collapsed presentation.
 15. Persist `tui.show_tool_output_by_default: false` to the local cynork YAML config using the same atomic-write rules as the main config file.
 16. For `/exit` or `/quit`, close the interactive session cleanly and return success.
+17. For `/copy`, `/copy last`, or `/copy` with no variant, resolve the last assistant plain-text message; if absent, render the empty-last message and skip clipboard write.
+18. For `/copy all`, build plain transcript text from chat lines excluding system or dim-prefixed meta lines; show scrollback feedback (system line and copy note) before calling the OS clipboard when content is non-empty; for empty content, MAY show success text without a clipboard write.
+19. Clipboard writes MUST reject only an empty payload; whitespace-only content MUST NOT be trimmed away before copy.
 
 ## Thread Slash Commands
 
