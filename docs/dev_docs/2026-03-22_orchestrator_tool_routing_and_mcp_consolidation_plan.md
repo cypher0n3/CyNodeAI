@@ -9,6 +9,14 @@
 - [Scope and Spec Alignment](#scope-and-spec-alignment)
 - [Risks and Open Questions](#risks-and-open-questions)
 - [Execution Plan](#execution-plan)
+  - [Task 1: Requirements Trace and Tool Name Inventory](#task-1-requirements-trace-and-tool-name-inventory)
+  - [Task 2: Orchestrator Consolidation (Single Surface, Optional Binary)](#task-2-orchestrator-consolidation-single-surface-optional-binary)
+  - [Task 3: Worker Proxy and Environment Variable Collapse](#task-3-worker-proxy-and-environment-variable-collapse)
+  - [Task 4: Agent Binary (PMA and SBA) Descriptions and Defaults](#task-4-agent-binary-pma-and-sba-descriptions-and-defaults)
+  - [Task 5: Orchestrator Router and Legacy `db.*` Handlers](#task-5-orchestrator-router-and-legacy-db-handlers)
+  - [Task 6: End-To-End and Regression Validation](#task-6-end-to-end-and-regression-validation)
+  - [Task 7: Documentation and Normative Closeout](#task-7-documentation-and-normative-closeout)
+- [Appendix: Suggested Env Precedence (Draft)](#appendix-suggested-env-precedence-draft)
 
 ## Plan Status
 
