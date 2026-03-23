@@ -51,7 +51,7 @@
 The Project Manager Agent is a long-lived orchestrator-side agent responsible for driving tasks to completion.
 It coordinates multi-step and multi-agent flows, enforces standards, and verifies outcomes against stored user task-execution preferences.
 It is the control-plane agent responsible for setting up task execution, handing out work to task-scoped sub-agents, and orchestrating sandbox jobs on worker nodes.
-It is also responsible for storing and retrieving task execution state and evidence in PostgreSQL through MCP database tools.
+It is also responsible for storing and retrieving task execution state and evidence in PostgreSQL through orchestrator-mediated **MCP tools** (catalog names such as `preference.*` and `task.*`, not `db.*` prefixes; see [MCP Tooling](mcp/mcp_tooling.md)).
 
 Implementation artifact
 
@@ -67,11 +67,11 @@ See [`docs/tech_specs/openai_compatible_chat_api.md`](openai_compatible_chat_api
 
 - Spec ID: `CYNAI.AGENTS.PMLlmToolImplementation` <a id="spec-cynai-agents-pmllmtoolimplementation"></a>
 
-PMA uses **langchaingo** (Go) for LLM calls and tool execution, including **multiple simultaneous tool calls** where supported by the model and MCP gateway.
+PMA uses **langchaingo** (Go) for LLM calls and tool execution, including **multiple simultaneous tool calls** where supported by the model and the orchestrator gateway.
 The [LangGraph MVP workflow](langgraph_mvp.md) remains the graph runner and checkpoint owner.
 Langchaingo implements the agentic steps within nodes (e.g. Plan Steps, Verify Step Result).
-MCP tool calls from PMA still go through the orchestrator MCP gateway.
-Langchaingo tools wrap those MCP calls.
+MCP tool calls from PMA go to the **orchestrator MCP gateway** (HTTP on the **control-plane** in default deployments; see [MCP Tool Access](cynode_pma.md#spec-cynai-pmagnt-mcptoolaccess)), typically via **`mcpclient`** from the PMA binary through the **worker internal proxy**.
+Langchaingo tools wrap those MCP calls inside the PMA process.
 
 ## No Simulated or Guessed Output
 

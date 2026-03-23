@@ -39,7 +39,7 @@ It coordinates sandboxed worker execution across local nodes and optional cloud 
 - API credentials must not be exposed to sandboxes.
   External provider calls should be routed through the API Egress Server and audited.
 - Orchestrator-side agents must not connect directly to PostgreSQL.
-  Use MCP database tools for all database access (see `docs/tech_specs/project_manager_agent.md`).
+  Use orchestrator-mediated **MCP tools** (for example `preference.*`, `task.*` per the tool catalog) for all database-backed access (see `docs/tech_specs/project_manager_agent.md` and `docs/tech_specs/mcp/mcp_tooling.md`).
 
 ## Repository Layout
 

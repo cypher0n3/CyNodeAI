@@ -52,4 +52,5 @@ sudo systemctl enable --now container-cynodeai-postgres.service
 ## Order
 
 Start postgres first, then control-plane (runs migrations), then user-gateway.
-Optional: mcp-gateway, api-egress.
+Optional: api-egress.
+The standalone **mcp-gateway** service on port 12083 is **deprecated**; use MCP tool routes on the **control-plane** instead (see `docs/tech_specs/ports_and_endpoints.md`).

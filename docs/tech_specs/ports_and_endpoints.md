@@ -34,8 +34,9 @@ See [`docs/docs_standards/spec_authoring_writing_and_validation.md`](../docs_sta
 - **8080** - Web Console - Nuxt/Vue web UI (orchestrator; own container)
 - **9000** - Artifacts storage (S3 API) - MinIO in dev stack; see [Orchestrator Artifacts Storage](orchestrator_artifacts_storage.md#spec-cynai-orches-artifactsdevstack)
 - **12080** - User API Gateway - Auth, users, tasks, results (orchestrator)
-- **12082** - Control-plane - Node registration, dispatch, migrations (orchestrator)
-- **12083** - MCP Gateway - MCP tool routing (orchestrator; optional profile)
+- **12082** - Control-plane - Node registration, dispatch, migrations, and (in default stacks) **orchestrator MCP gateway** HTTP routes for tool calls such as `POST /v1/mcp/tools/call` (orchestrator)
+- **12083** - MCP Gateway (**deprecated**) - Standalone gateway listener; **do not use** for new work.
+  Orchestrator MCP tool routes belong on the **control-plane** (12082).
 - **12084** - API Egress - External API calls with credentials (orchestrator; optional profile)
 - **12090** - Worker API - Run jobs on the node (worker node)
 - **11434** - Ollama - Inference API (orchestrator or node); also inference proxy listen port inside sandbox pods
@@ -59,9 +60,11 @@ It connects to the User API Gateway (default `http://localhost:12080`).
   See [Web Console](web_console.md#spec-cynai-webcon-runtimeanddeployment).
 - **Control-plane:** listens `:12082`.
   Override: `CONTROL_PLANE_LISTEN_ADDR` or `LISTEN_ADDR`; host mapping `CONTROL_PLANE_PORT`.
+  MCP tool invocation MUST use the control-plane base URL for orchestrator MCP gateway routes.
 - **User API Gateway:** listens `:12080`.
   Override: `USER_GATEWAY_LISTEN_ADDR` or `LISTEN_ADDR`; host mapping `ORCHESTRATOR_PORT`.
-- **MCP Gateway (optional):** listens `:12083`.
+- **MCP Gateway (deprecated):** historically a standalone listener on `:12083`.
+  **Do not use** for new work; remove from compose when touched.
   Override: `LISTEN_ADDR`; host mapping `MCP_GATEWAY_PORT`.
 - **API Egress (optional):** listens `:12084`.
   Override: `LISTEN_ADDR`; host mapping `API_EGRESS_PORT`.
@@ -114,7 +117,8 @@ See [`docs/tech_specs/cynork_cli.md`](cynork_cli.md).
 ## Conflict Avoidance
 
 - **Single-host dev:** Ports 5432, 8080, 12080, 12082, 12090, 11434 must be free for a full stack (orchestrator + Web Console + one node + Ollama).
-  Optional: 12083, 12084.
+  Optional: 12084 (API Egress).
+  Port **12083** is deprecated; do not reserve it for new stacks.
 - **Orchestrator-only (docker compose):** 5432, 8080, 12080, 12082, 11434.
   Node runs elsewhere and uses 12090 (and optionally 11434 for node-local Ollama).
 - **Multiple nodes on one host:** Each node's Worker API needs a distinct port (e.g. 12090, 12091, 12092).
@@ -135,7 +139,7 @@ E2E and BDD tests use the same default ports as production and dev.
 - **User API Gateway** - Default: :12080 - Override: `USER_GATEWAY_LISTEN_ADDR`, `LISTEN_ADDR`; `ORCHESTRATOR_PORT` (host mapping)
 - **Control-plane** - Default: :12082 - Override: `CONTROL_PLANE_LISTEN_ADDR`, `LISTEN_ADDR`; `CONTROL_PLANE_PORT` (host mapping)
 - **Worker API** - Default: :12090 - Override: `LISTEN_ADDR`; node YAML `worker_api.listen_port`
-- **MCP Gateway** - Default: :12083 - Override: `LISTEN_ADDR`; `MCP_GATEWAY_PORT` (host mapping)
+- **MCP Gateway (deprecated)** - Default: :12083 - Override: `LISTEN_ADDR`; `MCP_GATEWAY_PORT` (host mapping); use **control-plane** (12082) for MCP tool routes instead
 - **API Egress** - Default: :12084 - Override: `LISTEN_ADDR`; `API_EGRESS_PORT` (host mapping)
 - **Ollama** - Default: 11434 - Override: Change port mapping in compose or node-manager; inference proxy upstream via `OLLAMA_UPSTREAM_URL` (e.g. <http://host.containers.internal:11434>)
 - **Cynork gateway** - Default: <http://localhost:12080> - Override: `CYNORK_GATEWAY_URL` or config `gateway_url`

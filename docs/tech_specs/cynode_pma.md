@@ -533,7 +533,7 @@ When `cynode-pma` uses node-local inference through the worker-managed service c
 `cynode-pma` MUST comply with the Project Manager and Project Analyst tool access rules.
 In particular:
 
-- All PostgreSQL access MUST occur through MCP database tools.
+- All PostgreSQL access MUST occur through MCP tools (for example `preference.*` and `task.*` per the [tool catalog](mcp_tools/README.md)); agent-facing names MUST NOT use `db.*` prefixes per [MCP Tooling](mcp/mcp_tooling.md).
 - External provider calls MUST be routed through API Egress.
 - Provider credentials MUST NOT be stored in the agent runtime.
 
@@ -545,6 +545,10 @@ In particular:
 ## MCP Tool Access
 
 - Spec ID: `CYNAI.PMAGNT.McpToolAccess` <a id="spec-cynai-pmagnt-mcptoolaccess"></a>
+
+The **orchestrator MCP gateway** is the logical enforcement and audit point for tool calls.
+In default deployments, the HTTP handler for those calls is implemented on the **orchestrator control-plane** process (see [Ports and Endpoints](ports_and_endpoints.md)).
+A **standalone** gateway listener on port **12083** is **deprecated**; it is not a supported path for new work.
 
 `cynode-pma` MUST invoke all tool operations through the orchestrator MCP gateway.
 In this model, it does so via a worker-proxy URL (UDS-only, per [Unified UDS Path](worker_node.md#spec-cynai-worker-unifiedudspath)) that forwards to the orchestrator MCP gateway.
@@ -560,9 +564,9 @@ Tools that are sandbox-only MUST NOT be invokable by `cynode-pma`.
 ### Role-Based Allowlists
 
 - When running as **project_manager**, `cynode-pma` MUST invoke only tools permitted by the [Project Manager Agent allowlist](mcp_tools/access_allowlists_and_scope.md#spec-cynai-mcpgat-pmagentallowlist).
-  That allowlist includes `db.*`, `node.*`, `sandbox.*`, `artifact.*`, `model.*`, `connector.*`, `web.fetch`, `web.search`, `api.call`, `git.*`, `help.*`, and when the system setting permits, `sandbox.allowed_images.list` and `sandbox.allowed_images.add`.
+  The canonical namespace list (including `preference.*`, `task.*`, `sandbox.*`, and `help.*`) lives in that section; it MUST stay aligned with [MCP Tooling](mcp/mcp_tooling.md) agent-facing names (no `db.*` prefixes).
 - When running as **project_analyst**, `cynode-pma` MUST invoke only tools permitted by the [Project Analyst Agent allowlist](mcp_tools/access_allowlists_and_scope.md#spec-cynai-mcpgat-paagentallowlist).
-  That allowlist includes limited `db.*`, `artifact.*`, `web.fetch`, `web.search`, `api.call`, and `help.*`.
+  The canonical list lives in that section and MUST stay aligned with agent-facing tool naming.
 
 Admin-configurable per-tool enable/disable and access control rules further restrict which tools succeed; the agent MUST treat gateway rejections as hard failures.
 

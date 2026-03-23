@@ -39,6 +39,8 @@ Practical SDK installation guidance is in [`docs/tech_specs/mcp/mcp_sdk_installa
 
 MCP provides a consistent protocol for agents to request tool operations.
 The orchestrator is the policy and routing point for tools.
+The **orchestrator MCP gateway** (enforcement and audit) is implemented on the **control-plane** HTTP surface; a standalone listener on port **12083** is **deprecated** (see [Ports and Endpoints](../ports_and_endpoints.md)).
+See [MCP Gateway Enforcement](mcp_gateway_enforcement.md).
 
 ### MCP Role Applicable Requirements
 

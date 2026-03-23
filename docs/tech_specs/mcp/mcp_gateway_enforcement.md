@@ -29,6 +29,11 @@ This document defines how CyNodeAI enforces policy and auditing for MCP tool cal
 CyNodeAI uses the standard MCP protocol on the wire.
 The orchestrator MCP gateway is the enforcement and audit point.
 
+**Deployment:** Gateway enforcement is implemented as HTTP routes on the **orchestrator control-plane** process.
+A **standalone** gateway listener on dedicated port **12083** (historical `cmd/mcp-gateway`) is **deprecated**; **do not use** it for new work or new stacks.
+Remove it from compose when that file is next edited; PMA and SBA rely on the control-plane route.
+See [Ports and Endpoints](../ports_and_endpoints.md) and CYNAI.PMAGNT.McpToolAccess in [`cynode_pma.md`](../cynode_pma.md).
+
 Related documents
 
 - MCP concepts: [`docs/tech_specs/mcp/mcp_tooling.md`](mcp_tooling.md)

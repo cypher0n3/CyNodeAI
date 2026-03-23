@@ -136,7 +136,7 @@ MUST align with [Per-tool scope: Sandbox vs PM](../mcp_tools/access_allowlists_a
 
 There is no existing Go struct for **tool definitions** (server + tools + scope, internal or external) in the codebase.
 
-The existing tool-related types are **runtime** shapes: [`MCPCallRequest`](../../../agents/internal/pma/mcp_client.go) (and the equivalent in [orchestrator mcp-gateway](../../../orchestrator/cmd/mcp-gateway/main.go)) with `ToolName` and `Arguments` is the wire shape for a single MCP tool call.
+The existing tool-related types are **runtime** shapes: [`MCPCallRequest`](../../../agents/internal/pma/mcp_client.go) (and the equivalent in [orchestrator mcp-gateway](../../../orchestrator/cmd/mcp-gateway/main.go) (**deprecated** standalone listener; prefer the control-plane route)) with `ToolName` and `Arguments` is the wire shape for a single MCP tool call.
 
 When implementing this spec, the definition structs SHOULD live in a single shared package (e.g. `go_shared_libs` or orchestrator config) and match the contract below.
 

@@ -21,14 +21,14 @@ This directory is a standalone Go module defined by [`go.mod`](go.mod).
 - [`cmd/`](cmd/): Entrypoints for the orchestrator services.
   - [`cmd/user-gateway/`](cmd/user-gateway/): User-facing REST API gateway.
   - [`cmd/control-plane/`](cmd/control-plane/): Control plane API and dispatcher for node and job coordination.
-  - [`cmd/mcp-gateway/`](cmd/mcp-gateway/): Optional gateway for MCP tool access.
+  - [`cmd/mcp-gateway/`](cmd/mcp-gateway/): **Deprecated** standalone MCP listener (port 12083); MCP tool routes belong on the **control-plane** (see [`docs/tech_specs/ports_and_endpoints.md`](../docs/tech_specs/ports_and_endpoints.md)).
   - [`cmd/api-egress/`](cmd/api-egress/): Optional API egress proxy service.
 - [`internal/`](internal/): Private implementation packages (handlers, middleware, auth, database, models, config).
 - [`migrations/`](migrations/): SQL migrations applied to the orchestrator database.
 - [`docker-compose.yml`](docker-compose.yml): Development compose stack for Postgres and orchestrator services.
 - [`systemd/`](systemd/): Service definitions and notes for running on a host.
 
-Notable services under [`cmd/`](cmd/) include the user-facing API gateway, the control plane, and optional gateways for MCP and egress.
+Notable services under [`cmd/`](cmd/) include the user-facing API gateway, the control plane (including MCP tool routes), optional API egress, and the deprecated standalone MCP gateway binary.
 
 ## 3 How to Run for Development
 

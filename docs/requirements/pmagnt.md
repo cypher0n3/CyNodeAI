@@ -51,6 +51,7 @@ Behavioral and workflow requirements still live in `AGENTS` and `ORCHES`.
   <a id="req-pmagnt-0105"></a>
 
 - **REQ-PMAGNT-0106:** `cynode-pma` MUST invoke all tool operations through the orchestrator MCP gateway and MUST use only tools permitted by the gateway role-based allowlist for its current role (project_manager or project_analyst).
+  A standalone MCP gateway listener (for example on port 12083) is **deprecated**; gateway enforcement MUST be reached via the orchestrator **control-plane** HTTP surface; see CYNAI.PMAGNT.McpToolAccess.
   [CYNAI.PMAGNT.McpToolAccess](../tech_specs/cynode_pma.md#spec-cynai-pmagnt-mcptoolaccess)
   [CYNAI.MCPGAT.Doc.GatewayEnforcement](../tech_specs/mcp/mcp_gateway_enforcement.md#spec-cynai-mcpgat-doc-gatewayenforcement)
   <a id="req-pmagnt-0106"></a>

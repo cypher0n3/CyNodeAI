@@ -112,7 +112,7 @@ MUST align with [Per-tool scope: Sandbox vs PM](../tech_specs/mcp_tools/access_a
 - Spec ID: `CYNAI.MCPTOO.ExternalToolDefGo` <a id="spec-cynai-mcptoo-externaltooldefgo"></a>
 
 There is no existing Go struct for **tool definitions** (server + tools + scope, internal or external) in the codebase.
-The existing tool-related types are **runtime** shapes: [`MCPCallRequest`](../../agents/internal/pma/mcp_client.go) (and the equivalent in [orchestrator mcp-gateway](../../orchestrator/cmd/mcp-gateway/main.go)) with `ToolName` and `Arguments` is the wire shape for a single MCP tool call.
+The existing tool-related types are **runtime** shapes: [`MCPCallRequest`](../../agents/internal/pma/mcp_client.go) (and the equivalent in [orchestrator mcp-gateway](../../orchestrator/cmd/mcp-gateway/main.go) (**deprecated** standalone listener; prefer the control-plane route)) with `ToolName` and `Arguments` is the wire shape for a single MCP tool call.
 When implementing this spec, the definition structs SHOULD live in a single shared package (e.g. `go_shared_libs` or orchestrator config) and match the contract below.
 The **direct-call** form of `ToolInvocation` (Name + Args) aligns with that call shape: at runtime, a direct entry is sent as `tool_name` / `arguments` to the gateway; in config YAML/JSON we use `name` / `args` per this spec.
 
