@@ -1,4 +1,7 @@
 // Package bdd runs the cynork CLI Godog BDD suite.
+//
+// Most scenarios exercise cynork through stdin (typically `cynork chat`) so the suite runs without a TTY.
+// Full-screen TUI behavior with a real PTY is covered in Python E2E scripts (see features/cynork/README.md).
 package bdd
 
 import (

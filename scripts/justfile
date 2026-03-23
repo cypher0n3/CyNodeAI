@@ -23,6 +23,8 @@ help:
     @echo "Commands: start-db, stop-db, clean-db, migrate, build, build-e2e-images, start, stop, restart, clean, component <name> <action>, test-e2e, full-demo, e2e, help"
     @echo "Env: SKIP_UPX (default 1 for setup-dev; set to 0 to enable UPX in image builds)"
     @echo "AI agents: do NOT use --ollama-in-stack or SETUP_DEV_OLLAMA_IN_STACK (invalidates GPU variant E2E)."
+    @echo "On start failure, scripts/setup_dev_diagnostics.sh prints log paths, hints, and recent container logs."
+    @echo "If .env.dev is missing, scripts/ensure_env_dev.sh creates it with a random CYNODE_SECURE_STORE_MASTER_KEY_B64."
 
 start-db:
     #!/usr/bin/env bash
@@ -120,6 +122,7 @@ _start_impl *ARGS:
     #!/usr/bin/env bash
     set -e
     root="$(cd "{{ root_dir }}" && pwd)"
+    bash "$root/scripts/ensure_env_dev.sh" "$root"
     [ -f "$root/.env.dev" ] && set -a && . "$root/.env.dev" && set +a
     # Bypass: --ollama-in-stack / SETUP_DEV_OLLAMA_IN_STACK=1 runs Ollama in compose instead of node-manager.
     # AI agents must NOT use these; they invalidate GPU variant validation (e2e_205, Bug 1 fix).
@@ -159,8 +162,6 @@ _start_impl *ARGS:
     export OLLAMA_BASE_URL="${OLLAMA_BASE_URL:-http://${host_alias}:11434}"
     $rt compose -f "$root/orchestrator/docker-compose.yml" --profile ollama down 2>/dev/null || true
     $rt rm -f cynodeai-control-plane cynodeai-user-gateway cynodeai-cynode-pma 2>/dev/null || true
-    profiles=""; $ollama_in_stack && profiles="--profile ollama"
-    (cd "$root" && $rt compose -f orchestrator/docker-compose.yml $profiles up -d)
     export ORCHESTRATOR_URL="http://localhost:${CONTROL_PLANE_PORT}"
     export NODE_REGISTRATION_PSK="${NODE_PSK:-dev-node-psk-secret}"
     export NODE_SLUG="${NODE_SLUG:-dev-node-1}"
@@ -174,24 +175,54 @@ _start_impl *ARGS:
     export OLLAMA_UPSTREAM_URL="${OLLAMA_UPSTREAM_URL:-http://${host_alias}:11434}"
     export WORKER_API_STATE_DIR="${WORKER_API_STATE_DIR:-{{ node_state_dir }}}"
     export CYNODE_SECURE_STORE_MASTER_KEY_B64="${CYNODE_SECURE_STORE_MASTER_KEY_B64:-}"
-    mkdir -p "$(dirname {{ node_manager_pid_file }})" "$WORKER_API_STATE_DIR" "{{ logs_dir }}"
+    LOGS_DIR="${CYNODEAI_LOGS_DIR:-${TMPDIR:-/tmp}/cynodeai-setup-dev-logs}"
+    run_setup_dev_diagnostics() {
+      phase="$1"
+      last_ready="${2:-}"
+      export SETUP_DEV_ROOT="$root" SETUP_DEV_RT="$rt" SETUP_DEV_FAILURE_PHASE="$phase"
+      export SETUP_DEV_LOGS_DIR="$LOGS_DIR" SETUP_DEV_NODE_STATE_DIR="$WORKER_API_STATE_DIR"
+      export SETUP_DEV_COMPOSE_FILE="$root/orchestrator/docker-compose.yml"
+      export WORKER_PORT="${WORKER_PORT:-12090}" ORCHESTRATOR_PORT="${ORCHESTRATOR_PORT:-12080}"
+      export SETUP_DEV_LAST_READYZ_HTTP_CODE="${last_ready}"
+      bash "$root/scripts/setup_dev_diagnostics.sh" || true
+    }
+    mkdir -p "$(dirname {{ node_manager_pid_file }})" "$WORKER_API_STATE_DIR" "$LOGS_DIR"
     [ ! -f "{{ node_manager_bin }}" ] && echo "[ERROR] node-manager not found" && exit 1
+    profiles=""
+    $ollama_in_stack && profiles="--profile ollama"
+    if ! (cd "$root" && $rt compose -f orchestrator/docker-compose.yml $profiles up -d); then
+      echo "[ERROR] Compose up failed (orchestrator/docker-compose.yml)."
+      run_setup_dev_diagnostics compose_up
+      exit 1
+    fi
     (pgrep -f cynodeai-wnm || true) | xargs -r kill -TERM 2>/dev/null || true
     (pgrep -f worker-api-dev || true) | xargs -r kill -TERM 2>/dev/null || true
     sleep 2
-    nohup "{{ node_manager_bin }}" >> "{{ logs_dir }}/cynodeai-wnm.log" 2>&1 &
+    nohup "{{ node_manager_bin }}" >> "$LOGS_DIR/cynodeai-wnm.log" 2>&1 &
     echo $! > "{{ node_manager_pid_file }}"
-    for i in $(seq 1 30); do
-      curl -sf "http://localhost:${WORKER_PORT:-12090}/healthz" >/dev/null 2>&1 && break
+    worker_ok=0
+    for _i in $(seq 1 30); do
+      if curl -sf "http://127.0.0.1:${WORKER_PORT:-12090}/healthz" >/dev/null 2>&1; then
+        worker_ok=1
+        break
+      fi
       sleep 1
     done
+    if [ "$worker_ok" != 1 ]; then
+      echo "[ERROR] Worker API not ready after 30s (http://127.0.0.1:${WORKER_PORT:-12090}/healthz)."
+      run_setup_dev_diagnostics worker_healthz
+      exit 1
+    fi
     # E2E uses user-gateway (ORCHESTRATOR_PORT); wait for it so just e2e can run.
-    for i in $(seq 1 90); do
-      code=$(curl -s -o /dev/null -w "%{http_code}" "http://localhost:${ORCHESTRATOR_PORT:-12080}/readyz" 2>/dev/null)
-      [ "$code" = "200" ] && echo "[INFO] User-gateway ready (e2e target)." && exit 0
+    last_readyz=""
+    for _i in $(seq 1 90); do
+      last_readyz=$(curl -s -o /dev/null -w "%{http_code}" "http://127.0.0.1:${ORCHESTRATOR_PORT:-12080}/readyz" 2>/dev/null || printf '%s' "")
+      [ "$last_readyz" = "200" ] && echo "[INFO] User-gateway ready (e2e target)." && exit 0
       sleep 1
     done
-    echo "[ERROR] User-gateway not ready after 90s (port ${ORCHESTRATOR_PORT:-12080})"; exit 1
+    echo "[ERROR] User-gateway not ready after 90s (port ${ORCHESTRATOR_PORT:-12080}, last GET /readyz HTTP ${last_readyz:-unknown})."
+    run_setup_dev_diagnostics user_gateway_readyz "${last_readyz}"
+    exit 1
 
 stop:
     #!/usr/bin/env bash
@@ -335,6 +366,7 @@ _start_node:
     #!/usr/bin/env bash
     set -e
     root="$(cd "{{ root_dir }}" && pwd)"
+    bash "$root/scripts/ensure_env_dev.sh" "$root"
     [ -f "$root/.env.dev" ] && set -a && . "$root/.env.dev" && set +a
     rt=""
     podman ps >/dev/null 2>&1 && rt=podman

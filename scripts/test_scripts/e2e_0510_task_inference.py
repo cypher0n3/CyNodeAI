@@ -1,8 +1,7 @@
-# E2E parity: inference-in-sandbox task. Requires auth config from e2e_0030.
+# E2E parity: inference-in-sandbox task (auth via setUp login prereq).
 # Traces: REQ-WORKER-0114 (node inference path); REQ-WORKER-0270 (UDS boundary);
 # REQ-ORCHES-0123 (dispatch to worker).
 
-import os
 import time
 import unittest
 
@@ -16,15 +15,14 @@ class TestInferenceTask(unittest.TestCase):
     tags = ["suite_worker_node", "full_demo", "inference", "task"]
     prereqs = ["gateway", "config", "auth", "ollama"]
 
+    def setUp(self):
+        ok, detail = helpers.prepare_e2e_cynork_auth()
+        self.assertTrue(ok, detail)
+
     def test_inference_task(self):
         """Create inference task; assert sandbox receives UDS inference proxy URL."""
         if not config.INFERENCE_PROXY_IMAGE:
             self.skipTest("INFERENCE_PROXY_IMAGE not set")
-        if not state.CONFIG_PATH or not os.path.isfile(state.CONFIG_PATH):
-            self.skipTest("CONFIG_PATH not set (run after auth login prereq)")
-        token = helpers.read_token_from_config(state.CONFIG_PATH)
-        if not token:
-            self.skipTest("auth token missing from config (run after auth login prereq)")
         _, out, _ = helpers.run_cynork(
             [
                 "task",

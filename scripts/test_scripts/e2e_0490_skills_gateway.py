@@ -1,4 +1,4 @@
-# E2E: skills list, load, get, delete via gateway (requires auth from e2e_0030).
+# E2E: skills list, load, get, delete via gateway. Auth via prepare_e2e_cynork_auth in setUp.
 # Traces: REQ-CLIENT-0146; REQ-SKILLS-0106, 0115; skills CRUD via gateway.
 
 import os
@@ -15,10 +15,12 @@ class TestSkillsGateway(unittest.TestCase):
     tags = ["suite_orchestrator", "full_demo", "no_inference"]
     prereqs = ["gateway", "config", "auth"]
 
+    def setUp(self):
+        ok, detail = helpers.prepare_e2e_cynork_auth()
+        self.assertTrue(ok, detail)
+
     def test_skills_list_load_get_delete(self):
         """Assert skills list returns JSON; load a skill; get by id; delete."""
-        if not state.CONFIG_PATH or not os.path.isfile(state.CONFIG_PATH):
-            self.skipTest("config not set (run e2e_0030 auth login first)")
         ok, out, _ = helpers.run_cynork(
             ["skills", "list", "-o", "json"], state.CONFIG_PATH
         )

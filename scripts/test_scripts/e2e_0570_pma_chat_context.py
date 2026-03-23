@@ -1,5 +1,5 @@
 # E2E: PMA chat with project context (OpenAI-Project header).
-# Requires auth config from e2e_0030.
+# Auth via prepare_e2e_cynork_auth in setUp.
 # Traces: REQ-USRGWY-0131 (task/project association); REQ-CLIENT-0173 (project context for chat).
 
 import os
@@ -20,10 +20,8 @@ class TestPmaChatContext(unittest.TestCase):
     prereqs = ["gateway", "config", "auth", "task_id", "ollama"]
 
     def setUp(self):
-        if not state.CONFIG_PATH or not os.path.isfile(state.CONFIG_PATH):
-            self.skipTest("CONFIG_PATH not set (run after auth login prereq)")
-        ok, detail = helpers.ensure_valid_auth_session(state.CONFIG_PATH)
-        self.assertTrue(ok, f"auth session invalid before PMA chat context test: {detail}")
+        ok, detail = helpers.prepare_e2e_cynork_auth()
+        self.assertTrue(ok, detail)
 
     def _project_id_for_chat(self):
         """Resolve a non-placeholder project identifier from an existing or bootstrapped task."""

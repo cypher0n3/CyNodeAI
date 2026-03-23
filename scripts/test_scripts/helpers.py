@@ -15,13 +15,72 @@ import urllib.request
 from scripts.test_scripts import config
 import scripts.test_scripts.e2e_state as state
 
+# Cynork persists gateway_url + TUI prefs in config.yaml only (no secrets).
+# E2E stores access/refresh tokens beside the config file for subprocess env injection.
+_E2E_GATEWAY_SESSION_FILE = "e2e_gateway_session.json"
 
-def fetch_gateway_access_token(timeout=30):
-    """POST /v1/auth/login; return access_token or None.
 
-    Cynork no longer persists bearer tokens in config.yaml; PTY/TUI tests pass
-    CYNORK_TOKEN in the child environment (see tui_pty_harness.TuiPtySession).
-    """
+def _e2e_session_path(config_path):
+    if not config_path:
+        return None
+    return os.path.join(os.path.dirname(config_path), _E2E_GATEWAY_SESSION_FILE)
+
+
+def clear_e2e_gateway_session(config_path):
+    """Remove E2E token sidecar (e.g. after auth logout)."""
+    path = _e2e_session_path(config_path)
+    if path and os.path.isfile(path):
+        try:
+            os.remove(path)
+        except OSError:
+            pass
+
+
+def _read_e2e_session_tokens(config_path):
+    """Return (access_token, refresh_token) from sidecar JSON, or (None, None)."""
+    path = _e2e_session_path(config_path)
+    if not path or not os.path.isfile(path):
+        return None, None
+    try:
+        with open(path, encoding="utf-8") as f:
+            data = json.load(f)
+        acc = data.get("access_token")
+        ref = data.get("refresh_token")
+        if isinstance(acc, str) and acc.strip():
+            return acc.strip(), ref.strip() if isinstance(ref, str) else None
+    except (OSError, json.JSONDecodeError, TypeError, ValueError):
+        pass
+    return None, None
+
+
+def write_e2e_gateway_session(config_path, access_token, refresh_token):
+    """Write access/refresh tokens to sidecar JSON (0600)."""
+    path = _e2e_session_path(config_path)
+    if not path:
+        return
+    d = os.path.dirname(path)
+    if d:
+        os.makedirs(d, mode=0o700, exist_ok=True)
+    payload = {"access_token": access_token, "refresh_token": refresh_token or ""}
+    fd, tmp = tempfile.mkstemp(
+        prefix=".e2e_session.",
+        suffix=".tmp",
+        dir=d if d else None,
+    )
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            json.dump(payload, f)
+        os.chmod(tmp, 0o600)
+        os.replace(tmp, path)
+    except OSError:
+        try:
+            os.remove(tmp)
+        except OSError:
+            pass
+
+
+def fetch_gateway_login_tokens(timeout=30):
+    """POST /v1/auth/login; return (access_token, refresh_token) or (None, None)."""
     url = config.USER_API.rstrip("/") + "/v1/auth/login"
     body = json.dumps(
         {"handle": "admin", "password": config.ADMIN_PASSWORD}
@@ -35,26 +94,111 @@ def fetch_gateway_access_token(timeout=30):
     try:
         with urllib.request.urlopen(req, timeout=timeout) as resp:
             if resp.status != 200:
-                return None
+                return None, None
             data = json.loads(resp.read().decode())
-            tok = data.get("access_token")
-            if isinstance(tok, str) and tok.strip():
-                return tok
-            return None
+            acc = data.get("access_token")
+            ref = data.get("refresh_token")
+            if isinstance(acc, str) and acc.strip():
+                return acc.strip(), ref.strip() if isinstance(ref, str) else None
+            return None, None
     except (urllib.error.URLError, OSError, json.JSONDecodeError, ValueError, TypeError):
-        return None
+        return None, None
 
 
-def run_cynork(args, config_path, env_extra=None, timeout=None, input_text=None):
-    """Run cynork-dev with --config; return (ok, stdout, stderr).
+def fetch_gateway_refresh_tokens(refresh_token, timeout=30):
+    """POST /v1/auth/refresh; return (access_token, refresh_token) or (None, None)."""
+    if not refresh_token or not str(refresh_token).strip():
+        return None, None
+    url = config.USER_API.rstrip("/") + "/v1/auth/refresh"
+    body = json.dumps({"refresh_token": refresh_token}).encode()
+    req = urllib.request.Request(
+        url,
+        data=body,
+        method="POST",
+        headers={"Content-Type": "application/json"},
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            if resp.status != 200:
+                return None, None
+            data = json.loads(resp.read().decode())
+            acc = data.get("access_token")
+            ref = data.get("refresh_token")
+            if isinstance(acc, str) and acc.strip():
+                return acc.strip(), ref.strip() if isinstance(ref, str) else None
+            return None, None
+    except (urllib.error.URLError, OSError, json.JSONDecodeError, ValueError, TypeError):
+        return None, None
 
-    If timeout is None, uses config.E2E_CYNORK_TIMEOUT (env E2E_CYNORK_TIMEOUT).
+
+def fetch_gateway_access_token(timeout=30):
+    """POST /v1/auth/login; return access_token or None."""
+    acc, _ = fetch_gateway_login_tokens(timeout=timeout)
+    return acc
+
+
+def sync_e2e_gateway_session_from_login(config_path, timeout=30):
+    """Fetch tokens via POST /v1/auth/login and write E2E sidecar. Return True if written."""
+    acc, ref = fetch_gateway_login_tokens(timeout=timeout)
+    if acc:
+        write_e2e_gateway_session(config_path, acc, ref or "")
+        return True
+    return False
+
+
+def prepare_e2e_cynork_auth():
+    """Ensure temp config, minimal config.yaml, and a valid gateway login (E2E token sidecar).
+
+    Cynork does not persist bearer tokens in config.yaml (REQ-CLIENT-0103); E2E stores
+    access/refresh beside the config file. Call from test ``setUp`` so modules work under
+    ``--single`` as well as the full suite (runner ``auth`` prereq is complementary).
+
+    Returns:
+        tuple[bool, str]: ``(True, detail)`` on success, ``(False, error_message)`` on failure.
+    """
+    state.init_config()
+    path = state.CONFIG_PATH
+    if not path:
+        return False, "CONFIG_PATH unset after init_config"
+    d = os.path.dirname(path)
+    if d:
+        try:
+            os.makedirs(d, mode=0o700, exist_ok=True)
+        except OSError as exc:
+            return False, f"create config dir: {exc}"
+    if not os.path.isfile(path):
+        try:
+            with open(path, "w", encoding="utf-8") as f:
+                f.write(f"gateway_url: {config.USER_API}\n")
+        except OSError as exc:
+            return False, f"write config: {exc}"
+    return ensure_valid_auth_session(path)
+
+
+def _e2e_auth_error_text(out, err):
+    m = f"{out or ''}\n{err or ''}".lower()
+    return "401" in m and (
+        "unauthorized" in m or "invalid or expired" in m or "not logged in" in m
+    )
+
+
+def _run_cynork_subprocess(args, config_path, env_extra=None, timeout=None, input_text=None):
+    """Run cynork subprocess with sidecar hooks.
+
+    Used by ensure_valid_auth_session (no outer retry loop).
     """
     if timeout is None:
         timeout = int(config.E2E_CYNORK_TIMEOUT)
     cmd = [config.CYNORK_BIN, "--config", config_path] + list(args)
     env = os.environ.copy()
     env["CYNORK_GATEWAY_URL"] = config.USER_API
+    args_list = list(args)
+    if config_path:
+        acc, ref = _read_e2e_session_tokens(config_path)
+        if acc:
+            env["CYNORK_TOKEN"] = acc
+        if ref:
+            env["CYNORK_REFRESH_TOKEN"] = ref
     if env_extra:
         env.update(env_extra)
     kw = {
@@ -68,9 +212,50 @@ def run_cynork(args, config_path, env_extra=None, timeout=None, input_text=None)
         r = subprocess.run(cmd, check=False, **kw)
         out = r.stdout or ""
         err = r.stderr or ""
-        return not r.returncode, out, err
+        ok = not r.returncode
+        if ok and config_path and len(args_list) >= 2 and args_list[0] == "auth":
+            if args_list[1] == "login":
+                sync_e2e_gateway_session_from_login(config_path, timeout=30)
+            elif args_list[1] == "refresh":
+                sync_e2e_gateway_session_from_login(config_path, timeout=30)
+            elif args_list[1] == "logout":
+                clear_e2e_gateway_session(config_path)
+        return ok, out, err
     except (subprocess.TimeoutExpired, FileNotFoundError) as e:
         return False, "", str(e)
+
+
+def run_cynork(args, config_path, env_extra=None, timeout=None, input_text=None):
+    """Run cynork-dev with --config; return (ok, stdout, stderr).
+
+    Injects CYNORK_TOKEN / CYNORK_REFRESH_TOKEN from the E2E sidecar when present
+    (cynork does not persist tokens in config.yaml). After successful auth login,
+    refresh, or logout, updates or clears the sidecar to match the gateway session.
+    On 401/invalid token, refreshes the E2E sidecar and retries once (long suites
+    outlive JWT lifetime).
+    If timeout is None, uses config.E2E_CYNORK_TIMEOUT (env E2E_CYNORK_TIMEOUT).
+    """
+    args_list = list(args)
+    ok, out, err = _run_cynork_subprocess(
+        args, config_path, env_extra=env_extra, timeout=timeout, input_text=input_text
+    )
+    if (
+        not ok
+        and config_path
+        and args_list
+        and args_list[0] not in ("auth", "version", "status")
+        and _e2e_auth_error_text(out, err)
+    ):
+        recovered, _ = ensure_valid_auth_session(config_path)
+        if recovered:
+            ok, out, err = _run_cynork_subprocess(
+                args,
+                config_path,
+                env_extra=env_extra,
+                timeout=timeout,
+                input_text=input_text,
+            )
+    return ok, out, err
 
 
 def run_curl_with_status(method, url, data=None, headers=None, timeout=30):
@@ -105,8 +290,30 @@ def run_curl(method, url, data=None, headers=None, timeout=30):
     return 200 <= code < 300, body
 
 
+def read_refresh_token_from_config(config_path):
+    """Read refresh token from E2E sidecar or legacy YAML. Return None if missing."""
+    _, ref = _read_e2e_session_tokens(config_path)
+    if ref:
+        return ref
+    if not config_path or not os.path.isfile(config_path):
+        return None
+    try:
+        with open(config_path, encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if line.startswith("refresh_token:"):
+                    val = line.split(":", 1)[1].strip().strip('"\'')
+                    return val or None
+    except OSError:
+        pass
+    return None
+
+
 def read_token_from_config(config_path):
-    """Read Bearer token from cynork config (YAML-like token: value). Return None if missing."""
+    """Read access token: E2E sidecar first, then legacy YAML token: line."""
+    acc, _ = _read_e2e_session_tokens(config_path)
+    if acc:
+        return acc
     if not config_path or not os.path.isfile(config_path):
         return None
     try:
@@ -127,7 +334,7 @@ def ensure_valid_auth_session(config_path):
         return False, "config path missing"
     token = read_token_from_config(config_path)
     if not token:
-        ok, out, err = run_cynork(
+        ok, out, err = _run_cynork_subprocess(
             ["auth", "login", "-u", "admin", "--password-stdin"],
             config_path,
             input_text=f"{config.ADMIN_PASSWORD}\n",
@@ -136,17 +343,21 @@ def ensure_valid_auth_session(config_path):
         if not ok:
             return False, f"login failed: stdout={out!r} stderr={err!r}"
         return True, "login_ok"
-    ok, out, err = run_cynork(["auth", "whoami"], config_path, timeout=30)
+    ok, out, err = _run_cynork_subprocess(["auth", "whoami"], config_path, timeout=30)
     if ok:
         return True, "whoami_ok"
     merged = f"{out}\n{err}".lower()
     if "invalid or expired token" in merged:
-        refreshed, rout, rerr = run_cynork(["auth", "refresh"], config_path, timeout=30)
+        refreshed, rout, rerr = _run_cynork_subprocess(
+            ["auth", "refresh"], config_path, timeout=30
+        )
         if refreshed:
-            recheck, _, _ = run_cynork(["auth", "whoami"], config_path, timeout=30)
+            recheck, _, _ = _run_cynork_subprocess(
+                ["auth", "whoami"], config_path, timeout=30
+            )
             if recheck:
                 return True, "refresh_ok"
-        ok, lout, lerr = run_cynork(
+        ok, lout, lerr = _run_cynork_subprocess(
             ["auth", "login", "-u", "admin", "--password-stdin"],
             config_path,
             input_text=f"{config.ADMIN_PASSWORD}\n",
@@ -253,7 +464,11 @@ def ensure_e2e_sba_task(config_path):
 
 
 def read_config_value(config_path, key):
-    """Read a simple YAML-like scalar config value by key. Return None if missing."""
+    """Read a simple YAML-like scalar by key, or E2E session tokens for token/refresh_token."""
+    if key == "token":
+        return read_token_from_config(config_path)
+    if key == "refresh_token":
+        return read_refresh_token_from_config(config_path)
     if not config_path or not os.path.isfile(config_path):
         return None
     prefix = f"{key}:"
@@ -643,8 +858,14 @@ def run_ollama_inference_smoke():
             and config.OLLAMA_AUTO_PULL_CAPABLE
         ):
             _ollama_ensure_model(ollama_rt, cap)
-    for _ in range(3):
+    for attempt in range(5):
         if _ollama_chat_one_request(ollama_url, payload):
             return True
+        if not attempt and not _ollama_container_runtime():
+            ensure_ollama_container_for_e2e()
+            ollama_rt = _ollama_container_runtime()
+            if ollama_rt:
+                _ollama_wait_container_ready(ollama_rt)
+                _ollama_ensure_model(ollama_rt, config.OLLAMA_E2E_MODEL)
         time.sleep(5)
     return False

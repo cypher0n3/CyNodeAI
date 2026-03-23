@@ -16,8 +16,9 @@ Background:
 @spec_cynai_client_clichatthreadcontrols
 Scenario: TUI starts with a new thread by default
   Given the mock gateway supports POST "/v1/chat/threads"
-  When I run cynork tui without resume-thread
-  Then the TUI creates a new chat thread before the first completion
+  # Non-interactive BDD has no controlling TTY; `cynork chat --thread-new` shares the same thread-creation path as the TUI entrypoint.
+  When I run cynork chat without resume-thread and send a first message
+  Then cynork creates a fresh chat thread before the first completion
   And the session uses that new thread for subsequent turns
 
 @req_client_0181

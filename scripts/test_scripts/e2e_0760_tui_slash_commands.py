@@ -35,10 +35,11 @@ class TestTuiSlashCommands(unittest.TestCase):
     and shell-escape (!) via PTY harness."""
 
     tags = ["suite_cynork", "full_demo", "tui_pty", "tui", "no_inference"]
-    prereqs = ["gateway", "config"]
+    prereqs = ["gateway", "config", "auth"]
 
     def setUp(self):
-        state.init_config()
+        ok, detail = helpers.prepare_e2e_cynork_auth()
+        self.assertTrue(ok, detail)
         _ensure_config_file()
 
     def _wait_ready(self, session, timeout=12):
@@ -521,13 +522,12 @@ class TestChatModeFlags(unittest.TestCase):
     prereqs = ["gateway", "config", "auth"]
 
     def setUp(self):
-        state.init_config()
+        ok, detail = helpers.prepare_e2e_cynork_auth()
+        self.assertTrue(ok, detail)
 
     def test_chat_model_flag_is_accepted(self):
         """cynork chat --model <id> does not fail with 'unknown flag' (Task 1A).
         Asserts: REQ-CLIENT-0171; CYNAI.CLIENT.CliChat.ModelFlag."""
-        if not state.CONFIG_PATH or not os.path.isfile(state.CONFIG_PATH):
-            self.skipTest("CONFIG_PATH not set")
         _, out, err = helpers.run_cynork(
             [
                 "chat",
@@ -548,8 +548,6 @@ class TestChatModeFlags(unittest.TestCase):
     def test_chat_resume_thread_flag_is_accepted(self):
         """cynork chat --resume-thread <sel> does not fail with 'unknown flag' (Task 5B).
         Asserts: CYNAI.CLIENT.CliChat.ResumeThreadFlag."""
-        if not state.CONFIG_PATH or not os.path.isfile(state.CONFIG_PATH):
-            self.skipTest("CONFIG_PATH not set")
         _, out, err = helpers.run_cynork(
             [
                 "chat",

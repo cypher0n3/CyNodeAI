@@ -25,6 +25,8 @@ class TestLogin(unittest.TestCase):
             input_text=f"{config.ADMIN_PASSWORD}\n",
         )
         self.assertTrue(ok, f"auth login failed: {out} {err}")
-        with open(state.CONFIG_PATH, encoding="utf-8") as f:
-            content = f.read()
-        self.assertIn("token:", content, "token not in config after login")
+        tok = helpers.read_token_from_config(state.CONFIG_PATH)
+        self.assertTrue(
+            tok,
+            "E2E gateway session token missing after login (see e2e_gateway_session.json)",
+        )

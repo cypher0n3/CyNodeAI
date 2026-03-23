@@ -1,4 +1,4 @@
-# E2E parity: auth whoami. Requires login (e2e_0030) first.
+# E2E parity: auth whoami after gateway login (setUp).
 # Traces: REQ-IDENTY-0103, 0104; CYNAI.IDENTY.AuthenticationModel (whoami identity).
 
 import unittest
@@ -12,6 +12,10 @@ class TestWhoami(unittest.TestCase):
 
     tags = ["suite_cynork", "full_demo", "auth", "no_inference"]
     prereqs = ["gateway", "config", "auth"]
+
+    def setUp(self):
+        ok, detail = helpers.prepare_e2e_cynork_auth()
+        self.assertTrue(ok, detail)
 
     def test_whoami(self):
         """Assert whoami succeeds and output contains handle=admin."""

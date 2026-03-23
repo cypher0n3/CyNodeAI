@@ -27,10 +27,11 @@ class TestTuiComposerEditor(unittest.TestCase):
     """E2E: composer footnote text, multiline input, prior-message history via PTY."""
 
     tags = ["suite_cynork", "full_demo", "tui_pty", "tui", "no_inference"]
-    prereqs = ["gateway", "config"]
+    prereqs = ["gateway", "config", "auth"]
 
     def setUp(self):
-        state.init_config()
+        ok, detail = helpers.prepare_e2e_cynork_auth()
+        self.assertTrue(ok, detail)
         _ensure_config_file()
 
     def _wait_ready(self, session, timeout=12):
@@ -115,9 +116,8 @@ class TestTuiComposerEditor(unittest.TestCase):
         """After sending a chat line, Ctrl+Up restores it into the composer."""
         if not harness.pty_available():
             self.skipTest("pexpect not installed")
-        bearer = helpers.fetch_gateway_access_token(timeout=30)
-        if not bearer:
-            self.skipTest("POST /v1/auth/login did not return access_token (stack up?)")
+        bearer = helpers.read_token_from_config(state.CONFIG_PATH)
+        self.assertTrue(bearer, "no access token after E2E login prereq")
         token = f"e2e_hist_token_{int(time.time())}"
         with harness.TuiPtySession(
             state.CONFIG_PATH,

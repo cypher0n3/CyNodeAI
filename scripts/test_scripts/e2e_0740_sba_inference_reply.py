@@ -54,14 +54,14 @@ class TestSbaInferenceReply(unittest.TestCase):
     tags = ["suite_agents", "full_demo", "inference", "sba_inference", "sba"]
     prereqs = ["gateway", "config", "auth", "ollama"]
 
+    def setUp(self):
+        ok, detail = helpers.prepare_e2e_cynork_auth()
+        self.assertTrue(ok, detail)
+
     def test_sba_inference_reply_current_time(self):
         """Create SBA inference task and assert user-facing reply."""
         if os.environ.get("E2E_SKIP_INFERENCE_SMOKE", "") or config.E2E_SKIP_INFERENCE_SMOKE:
             self.skipTest("E2E_SKIP_INFERENCE_SMOKE set")
-        if not state.CONFIG_PATH or not os.path.isfile(state.CONFIG_PATH):
-            self.skipTest("CONFIG_PATH not set (run after auth login prereq)")
-        auth_ok, detail = helpers.ensure_valid_auth_session(state.CONFIG_PATH)
-        self.assertTrue(auth_ok, f"auth session invalid before SBA inference reply test: {detail}")
         _, out, _ = helpers.run_cynork(
             [
                 "task", "create", "-p", "Reply back with the current time.",

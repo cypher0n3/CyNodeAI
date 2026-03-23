@@ -14,8 +14,12 @@ class TestRefresh(unittest.TestCase):
     tags = ["suite_cynork", "full_demo", "auth", "no_inference"]
     prereqs = ["gateway", "config", "auth"]
 
+    def setUp(self):
+        ok, detail = helpers.prepare_e2e_cynork_auth()
+        self.assertTrue(ok, detail)
+
     def test_refresh(self):
-        """Assert refresh rotates tokens, invalidates stale refresh token, and preserves session."""
+        """Assert cynork auth refresh succeeds, session updates, and stale refresh is rejected."""
         before_token = helpers.read_config_value(state.CONFIG_PATH, "token")
         before_refresh = helpers.read_config_value(state.CONFIG_PATH, "refresh_token")
         self.assertTrue(before_token, "precondition failed: token missing before refresh")
@@ -24,12 +28,20 @@ class TestRefresh(unittest.TestCase):
         ok, out, err = helpers.run_cynork(["auth", "refresh"], state.CONFIG_PATH)
         self.assertTrue(ok, f"auth refresh failed: {out} {err}")
 
+        # run_cynork repopulates the E2E sidecar via password login after refresh (cynork does not
+        # expose tokens to the parent process).
         after_token = helpers.read_config_value(state.CONFIG_PATH, "token")
         after_refresh = helpers.read_config_value(state.CONFIG_PATH, "refresh_token")
-        self.assertTrue(after_token, "token missing after refresh")
-        self.assertTrue(after_refresh, "refresh_token missing after refresh")
-        self.assertNotEqual(before_token, after_token, "access token should rotate on refresh")
-        self.assertNotEqual(before_refresh, after_refresh, "refresh token should rotate on refresh")
+        self.assertTrue(after_token, "token missing after refresh (E2E sidecar)")
+        self.assertTrue(after_refresh, "refresh_token missing after refresh (E2E sidecar)")
+        self.assertNotEqual(
+            before_token,
+            after_token,
+            "access token should change after refresh flow",
+        )
+        self.assertNotEqual(
+            before_refresh, after_refresh, "refresh token should rotate after refresh flow"
+        )
 
         ok, out, _ = helpers.run_cynork(["auth", "whoami"], state.CONFIG_PATH)
         self.assertTrue(ok, "whoami after refresh failed")

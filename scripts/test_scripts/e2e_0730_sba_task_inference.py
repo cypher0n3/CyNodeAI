@@ -17,11 +17,8 @@ class TestSbaInference(unittest.TestCase):
     prereqs = ["gateway", "config", "auth", "ollama"]
 
     def setUp(self):
-        if not state.CONFIG_PATH or not os.path.isfile(state.CONFIG_PATH):
-            self.skipTest("CONFIG_PATH not set (run after auth login prereq)")
-        ok, detail = helpers.ensure_valid_auth_session(state.CONFIG_PATH)
-        if not ok:
-            self.skipTest(f"auth session not valid: {detail}")
+        ok, detail = helpers.prepare_e2e_cynork_auth()
+        self.assertTrue(ok, detail)
 
     def test_sba_task_with_inference_prompt(self):
         """Create SBA task with LLM prompt, poll until completed/failed; assert sba_result."""

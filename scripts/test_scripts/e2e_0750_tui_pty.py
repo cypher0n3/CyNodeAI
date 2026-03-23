@@ -30,7 +30,8 @@ class TestTuiPty(unittest.TestCase):
     prereqs = ["gateway", "config", "auth"]
 
     def setUp(self):
-        state.init_config()
+        ok, detail = helpers.prepare_e2e_cynork_auth()
+        self.assertTrue(ok, detail)
         _ensure_config_file()
 
     def test_tui_pty_prompt_ready(self):
@@ -83,8 +84,6 @@ class TestTuiPty(unittest.TestCase):
         """After /thread list, scrollback shows thread list header or error."""
         if not harness.pty_available():
             self.skipTest("pexpect not installed or not Unix")
-        if not state.CONFIG_PATH or not helpers.read_token_from_config(state.CONFIG_PATH):
-            self.skipTest("auth required for thread list (run after login)")
         with harness.TuiPtySession(state.CONFIG_PATH, timeout=25) as session:
             time.sleep(_TUI_STARTUP_DELAY_SEC)
             out = session.read_until_landmark(
@@ -118,8 +117,6 @@ class TestTuiPty(unittest.TestCase):
         """Send a message and assert prompt-ready again (response round-trip)."""
         if not harness.pty_available():
             self.skipTest("pexpect not installed or not Unix")
-        if not state.CONFIG_PATH or not helpers.read_token_from_config(state.CONFIG_PATH):
-            self.skipTest("auth required for send/receive (run after login)")
         with harness.TuiPtySession(state.CONFIG_PATH, timeout=90) as session:
             time.sleep(_TUI_STARTUP_DELAY_SEC)
             out = session.read_until_landmark(
@@ -153,8 +150,6 @@ class TestTuiPty(unittest.TestCase):
         status bar (REQ-CLIENT-0209: streaming state is visible to the user)."""
         if not harness.pty_available():
             self.skipTest("pexpect not installed or not Unix")
-        if not state.CONFIG_PATH or not helpers.read_token_from_config(state.CONFIG_PATH):
-            self.skipTest("auth required for in-flight test (run after login)")
         with harness.TuiPtySession(state.CONFIG_PATH, timeout=90) as session:
             time.sleep(_TUI_STARTUP_DELAY_SEC)
             ready = session.wait_for_prompt_ready(timeout_sec=12)
@@ -186,8 +181,6 @@ class TestTuiPty(unittest.TestCase):
         Asserts CYNAI.USRGWY.OpenAIChatApi.Streaming client cancellation (REQ-CLIENT-0209)."""
         if not harness.pty_available():
             self.skipTest("pexpect not installed or not Unix")
-        if not state.CONFIG_PATH or not helpers.read_token_from_config(state.CONFIG_PATH):
-            self.skipTest("auth required for cancellation test (run after login)")
         with harness.TuiPtySession(state.CONFIG_PATH, timeout=60) as session:
             time.sleep(_TUI_STARTUP_DELAY_SEC)
             ready = session.wait_for_prompt_ready(timeout_sec=12)

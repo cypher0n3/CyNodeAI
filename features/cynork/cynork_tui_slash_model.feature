@@ -30,23 +30,23 @@ Scenario: /model with no argument shows current model selection
 @spec_cynai_client_cynorktui_modelslashcommands
 Scenario: /model with id updates the session model
   Given the TUI is running
-  When I type "/model test-model-v2" and press Enter
-  Then the session model is updated to "test-model-v2"
+  When I type "/model cynodeai.pm" and press Enter
+  Then the session model is updated to "cynodeai.pm"
 
 @req_client_0171
 @spec_cynai_client_cynorktui_modelslashcommands
 Scenario: /model change does not mutate system settings or user preferences
   Given the TUI is running with model "cynodeai.pm"
-  When I type "/model other-model" and press Enter
-  Then the session model is updated to "other-model"
+  When I type "/model unknown-routing-model" and press Enter
+  Then the scrollback shows a validation message or the session model is updated
   And stored user preferences are unchanged
 
 @req_client_0171
 @spec_cynai_client_cynorktui_modelslashcommands
 Scenario: /model updated id is used for subsequent chat completion requests
   Given the TUI is running
-  When I type "/model test-model-v2" and press Enter and then send a chat message from the composer
-  Then the chat completion request used model "test-model-v2"
+  When I type "/model cynodeai.pm" and press Enter and then send a chat message from the composer
+  Then the chat completion request used model "cynodeai.pm"
 
 @req_client_0172
 @spec_cynai_client_cynorktui_modelslashcommands

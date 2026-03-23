@@ -1,7 +1,7 @@
 # E2E: Simultaneous chat requests - multiple one-shot chats in parallel.
 # Traces: REQ-ORCHES-0131, REQ-ORCHES-0132; CYNAI.USRGWY.OpenAIChatApi.Reliability;
 # gateway handles concurrent completions.
-# Skip if E2E_SKIP_INFERENCE_SMOKE. Requires auth (e2e_0030).
+# Skip if E2E_SKIP_INFERENCE_SMOKE. Auth via prepare_e2e_cynork_auth in setUp.
 
 import json
 import os
@@ -51,16 +51,16 @@ class TestChatSimultaneousMessages(unittest.TestCase):
     tags = ["suite_orchestrator", "full_demo", "inference", "chat"]
     prereqs = ["gateway", "config", "auth", "ollama"]
 
+    def setUp(self):
+        ok, detail = helpers.prepare_e2e_cynork_auth()
+        self.assertTrue(ok, detail)
+
     def test_chat_simultaneous_three_requests(self):
         """Start three chat requests concurrently; each gets a reply or a clear error."""
         if os.environ.get("E2E_SKIP_INFERENCE_SMOKE", "") or config.E2E_SKIP_INFERENCE_SMOKE:
             self.skipTest("E2E_SKIP_INFERENCE_SMOKE set")
-        if not state.CONFIG_PATH or not os.path.isfile(state.CONFIG_PATH):
-            self.skipTest("CONFIG_PATH not set (run after auth login prereq)")
-        auth_ok, detail = helpers.ensure_valid_auth_session(state.CONFIG_PATH)
-        self.assertTrue(auth_ok, f"auth session invalid before concurrent chat test: {detail}")
         token = helpers.read_token_from_config(state.CONFIG_PATH)
-        self.assertIsNotNone(token, "no token in config (run login first)")
+        self.assertTrue(token, "no access token after E2E login prereq")
         messages = [
             "Reply with the number 1 only.",
             "Reply with the number 2 only.",

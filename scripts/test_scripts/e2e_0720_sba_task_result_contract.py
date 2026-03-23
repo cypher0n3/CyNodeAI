@@ -2,7 +2,6 @@
 # Uses ensure_e2e_sba_task in setUp when state.SBA_TASK_ID not set (atomic).
 # Traces: REQ-SBAGNT-0103; CYNAI.SBAGNT.ResultContract; CYNAI.WORKER.NodeMediatedSbaResultSync.
 
-import os
 import unittest
 
 from scripts.test_scripts import helpers
@@ -19,8 +18,8 @@ class TestSbaResultContract(unittest.TestCase):
         """Ensure state.SBA_TASK_ID so test is atomic (works with --single)."""
         if state.SBA_TASK_ID:
             return
-        if not state.CONFIG_PATH or not os.path.isfile(state.CONFIG_PATH):
-            return
+        ok, detail = helpers.prepare_e2e_cynork_auth()
+        self.assertTrue(ok, detail)
         if not helpers.ensure_e2e_sba_task(state.CONFIG_PATH):
             return  # test will skip in test method if still None
 

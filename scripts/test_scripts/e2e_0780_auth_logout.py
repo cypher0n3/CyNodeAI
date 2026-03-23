@@ -14,9 +14,13 @@ class TestLogout(unittest.TestCase):
     tags = ["suite_cynork", "full_demo", "auth", "no_inference"]
     prereqs = ["gateway", "config", "auth"]
 
+    def setUp(self):
+        ok, detail = helpers.prepare_e2e_cynork_auth()
+        self.assertTrue(ok, detail)
+
     def test_logout(self):
         """Assert auth logout succeeds, clears stored tokens, and breaks whoami."""
-        self.assertTrue(state.CONFIG_PATH, "CONFIG_PATH must be set by earlier auth tests")
+        self.assertTrue(state.CONFIG_PATH, "CONFIG_PATH must be set")
         self.assertTrue(os.path.isfile(state.CONFIG_PATH), "config file must exist before logout")
         self.assertTrue(
             helpers.read_config_value(state.CONFIG_PATH, "token"),

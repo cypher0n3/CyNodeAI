@@ -1,7 +1,7 @@
 # E2E: Cynork transport streaming (completions and responses) against gateway SSE.
 # Asserts gateway emits named cynodeai.* events and streamed response_id.
 # Traces: REQ-CLIENT-0209, REQ-CLIENT-0215-0220, Task 4 transport alignment.
-# Requires real stack (CONFIG_PATH, auth, PMA).
+# Requires real stack (gateway auth via setUp, PMA).
 
 import json
 import os
@@ -32,10 +32,8 @@ class TestCynorkTransportStreaming(unittest.TestCase):
     prereqs = ["gateway", "config", "auth"]
 
     def setUp(self):
-        if not state.CONFIG_PATH or not os.path.isfile(state.CONFIG_PATH):
-            self.skipTest("CONFIG_PATH not set (run after auth login prereq)")
-        ok, detail = helpers.ensure_valid_auth_session(state.CONFIG_PATH)
-        self.assertTrue(ok, f"auth session invalid: {detail}")
+        ok, detail = helpers.prepare_e2e_cynork_auth()
+        self.assertTrue(ok, detail)
         if os.environ.get("E2E_SKIP_INFERENCE_SMOKE", "") or config.E2E_SKIP_INFERENCE_SMOKE:
             self.skipTest("E2E_SKIP_INFERENCE_SMOKE set; skipping transport streaming")
 

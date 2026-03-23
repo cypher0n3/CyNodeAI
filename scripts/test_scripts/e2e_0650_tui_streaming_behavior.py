@@ -1,6 +1,6 @@
 # E2E: TUI structured streaming behavior (in-flight turn, overwrite, heartbeat).
 # Traces: REQ-CLIENT-0213-0220, cynork_tui_streaming.feature, Task 5.
-# Use with just e2e --tags tui_pty. Requires real stack (CONFIG_PATH, auth, PMA).
+# Use with just e2e --tags tui_pty. Requires real stack (gateway auth via setUp, PMA).
 
 import os
 import time
@@ -32,10 +32,8 @@ class TestTUIStreamingBehavior(unittest.TestCase):
     prereqs = ["gateway", "config", "auth", "ollama"]
 
     def setUp(self):
-        if not state.CONFIG_PATH or not os.path.isfile(state.CONFIG_PATH):
-            self.skipTest("CONFIG_PATH not set (run after auth login prereq)")
-        ok, detail = helpers.ensure_valid_auth_session(state.CONFIG_PATH)
-        self.assertTrue(ok, f"auth session invalid: {detail}")
+        ok, detail = helpers.prepare_e2e_cynork_auth()
+        self.assertTrue(ok, detail)
         if os.environ.get("E2E_SKIP_INFERENCE_SMOKE", "") or config.E2E_SKIP_INFERENCE_SMOKE:
             self.skipTest("E2E_SKIP_INFERENCE_SMOKE set; skipping TUI streaming")
 

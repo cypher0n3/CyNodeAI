@@ -17,6 +17,10 @@ class TestTaskCreate(unittest.TestCase):
     tags = ["suite_cynork", "full_demo", "task", "no_inference"]
     prereqs = ["gateway", "config", "auth", "node_register"]
 
+    def setUp(self):
+        ok, detail = helpers.prepare_e2e_cynork_auth()
+        self.assertTrue(ok, detail)
+
     def test_task_create(self):
         """Create prompt task, retry up to 3 times; store task_id in state."""
         for attempt in range(1, 4):
@@ -94,8 +98,6 @@ class TestTaskCreate(unittest.TestCase):
 
     def test_task_create_with_attachments(self):
         """Create task with canonical --attach paths; assert attachments in create/get."""
-        if state.CONFIG_PATH is None:
-            self.skipTest("CONFIG_PATH not set (run full suite or auth first)")
         tmp_dir = os.path.join(config.PROJECT_ROOT, "tmp")
         os.makedirs(tmp_dir, exist_ok=True)
         with open(os.path.join(tmp_dir, "att1.txt"), "w", encoding="utf-8") as f:

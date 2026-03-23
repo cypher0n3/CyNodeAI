@@ -65,12 +65,16 @@ func TestCallChatCompletion_Success(t *testing.T) {
 func TestCallChatCompletion_NonOK(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
+		_, _ = w.Write([]byte(`{"detail":"upstream failed"}`))
 	}))
 	defer server.Close()
 
 	_, err := CallChatCompletion(context.Background(), nil, server.URL, []ChatMessage{{Role: "user", Content: "hi"}}, "")
 	if err == nil {
 		t.Error("expected error for 500")
+	}
+	if !strings.Contains(err.Error(), "upstream failed") {
+		t.Errorf("expected body snippet in error, got %v", err)
 	}
 }
 
@@ -349,11 +353,15 @@ func TestCallChatCompletionStreamWithCallbacks_IterationStart(t *testing.T) {
 func TestCallChatCompletionStream_NonOK(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
+		_, _ = w.Write([]byte("model unavailable"))
 	}))
 	defer server.Close()
 	err := CallChatCompletionStream(context.Background(), nil, server.URL, nil, "", func(string) error { return nil })
 	if err == nil {
 		t.Error("expected error for 500")
+	}
+	if !strings.Contains(err.Error(), "model unavailable") {
+		t.Errorf("expected body snippet in error, got %v", err)
 	}
 }
 
@@ -442,12 +450,36 @@ func TestCallChatCompletionStream_ManagedProxyStream_Success(t *testing.T) {
 func TestCallChatCompletionStream_ManagedProxyStream_NonOK(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusBadGateway)
+		_, _ = w.Write([]byte(`worker: no route to PMA`))
 	}))
 	defer server.Close()
 	url := server.URL + pathManagedProxy
 	err := CallChatCompletionStream(context.Background(), nil, url, nil, "", func(string) error { return nil })
 	if err == nil {
 		t.Error("expected error for non-200 proxy response")
+	}
+	if !strings.Contains(err.Error(), "no route to PMA") {
+		t.Errorf("expected body snippet in error, got %v", err)
+	}
+}
+
+func TestReadHTTPErrorSnippet_NewlinesAndTruncate(t *testing.T) {
+	if got := readHTTPErrorSnippet(strings.NewReader("a\nb\tc")); got != "a b c" {
+		t.Errorf("got %q", got)
+	}
+	long := strings.Repeat("x", 500)
+	got := readHTTPErrorSnippet(strings.NewReader(long))
+	if len([]rune(got)) != 401 { // 400 + ellipsis
+		t.Errorf("len = %d, want 401", len([]rune(got)))
+	}
+	if !strings.HasSuffix(got, "…") {
+		t.Errorf("expected ellipsis suffix, got %q", got)
+	}
+}
+
+func TestReadHTTPErrorSnippet_InvalidUTF8(t *testing.T) {
+	if got := readHTTPErrorSnippet(strings.NewReader(string([]byte{0xff, 0xfe}))); got != "" {
+		t.Errorf("want empty, got %q", got)
 	}
 }
 

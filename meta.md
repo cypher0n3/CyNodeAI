@@ -59,6 +59,22 @@ It coordinates sandboxed worker execution across local nodes and optional cloud 
     Use `just e2e` or `just setup-dev full-demo` from the justfile.
 - `tmp/`: scratch space (ignored by Python lint configs; avoid committing generated artifacts unless intentional).
 
+## Controlled Stack and Test Failures
+
+The project **owns** its developer and CI stack: `just` recipes, container compose, images we build
+and publish, services we start, and configuration we ship.
+Aside from **hardware limits** (disk, RAM,
+GPU, raw CPU), anything that prevents a test or E2E run from passing is a **defect** to fix:
+implementation bug, incorrect or incomplete test, missing setup automation, broken CI step, or
+docs that do not match the supported workflow.
+
+**Do not** dismiss failures as "the environment" or as if the machine were outside our control.
+That framing is wrong here and hides ownership.
+Treat reds as **bugs** or **gaps** until shown
+otherwise.
+When resource limits apply, failures should still be **explicit** (clear errors or guarded
+skips), not silent hangs without an owner.
+
 ## Style and Tooling Conventions
 
 **CRITICAL:** Do NOT modify linting rules or add linter suppression comments (e.g. `//nolint` in go files)!

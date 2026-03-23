@@ -1,6 +1,6 @@
 # E2E: Chat reliability - extended timeout, retries, and clear error handling.
 # Traces: REQ-ORCHES-0131, 0132; CYNAI.USRGWY.OpenAIChatApi.Timeouts, Reliability.
-# Skip if E2E_SKIP_INFERENCE_SMOKE. Requires auth (e2e_0030).
+# Skip if E2E_SKIP_INFERENCE_SMOKE. Auth via prepare_e2e_cynork_auth in setUp.
 
 import os
 import time
@@ -41,14 +41,14 @@ class TestChatReliability(unittest.TestCase):
     tags = ["suite_orchestrator", "full_demo", "inference", "chat"]
     prereqs = ["gateway", "config", "auth", "ollama"]
 
+    def setUp(self):
+        ok, detail = helpers.prepare_e2e_cynork_auth()
+        self.assertTrue(ok, detail)
+
     def test_chat_completes_or_clear_error(self):
         """Run one-shot chat with extended timeout and retries; assert reply or structured error."""
         if os.environ.get("E2E_SKIP_INFERENCE_SMOKE", "") or config.E2E_SKIP_INFERENCE_SMOKE:
             self.skipTest("E2E_SKIP_INFERENCE_SMOKE set")
-        if not state.CONFIG_PATH or not os.path.isfile(state.CONFIG_PATH):
-            self.skipTest("CONFIG_PATH not set (run after auth login prereq)")
-        ok, detail = helpers.ensure_valid_auth_session(state.CONFIG_PATH)
-        self.assertTrue(ok, f"auth session invalid before chat reliability test: {detail}")
         last_err = None
         for attempt in range(1, CHAT_RETRIES + 1):
             if attempt > 1:

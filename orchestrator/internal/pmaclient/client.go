@@ -13,11 +13,55 @@ import (
 	"net/http"
 	"strings"
 	"time"
+	"unicode/utf8"
 )
 
 // defaultPMAHTTPTimeout caps PMA HTTP client calls (stream and non-stream). Kept in sync with
 // gateway chatCompletionTimeout so the gateway context cancels before the client hard-timeout.
 const defaultPMAHTTPTimeout = 300 * time.Second
+
+// maxHTTPErrorBodyBytes limits how much of a non-OK response body is attached to errors (debugging).
+const maxHTTPErrorBodyBytes = 512
+
+// httpErrWithBody returns an error including status and a one-line, truncated body snippet when present.
+func httpErrWithBody(prefix, status string, body io.Reader) error {
+	snip := readHTTPErrorSnippet(body)
+	if snip == "" {
+		return fmt.Errorf("%s returned %s", prefix, status)
+	}
+	return fmt.Errorf("%s returned %s: %s", prefix, status, snip)
+}
+
+func readHTTPErrorSnippet(r io.Reader) string {
+	if r == nil {
+		return ""
+	}
+	b, err := io.ReadAll(io.LimitReader(r, maxHTTPErrorBodyBytes))
+	if err != nil || len(b) == 0 {
+		return ""
+	}
+	if !utf8.Valid(b) {
+		return ""
+	}
+	s := strings.TrimSpace(string(b))
+	s = strings.Map(func(r rune) rune {
+		switch r {
+		case '\n', '\r', '\t':
+			return ' '
+		}
+		if r < 32 {
+			return -1
+		}
+		return r
+	}, s)
+	s = strings.Join(strings.Fields(s), " ")
+	const maxRunes = 400
+	if utf8.RuneCountInString(s) <= maxRunes {
+		return s
+	}
+	rs := []rune(s)
+	return string(rs[:maxRunes]) + "…"
+}
 
 // streamHTTPClient returns the client for PMA NDJSON streaming. Uses a 300s wall timeout so
 // long agent runs are allowed while still bounding hung connections; caller context may cancel earlier.
@@ -92,7 +136,7 @@ func CallChatCompletion(ctx context.Context, client *http.Client, baseURL string
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("PMA chat completion returned %s", resp.Status)
+		return "", httpErrWithBody("PMA chat completion", resp.Status, resp.Body)
 	}
 	var out CompletionResponse
 	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
@@ -142,7 +186,7 @@ func CallChatCompletionStreamWithCallbacks(ctx context.Context, client *http.Cli
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("PMA chat completion returned %s", resp.Status)
+		return httpErrWithBody("PMA chat completion", resp.Status, resp.Body)
 	}
 	return readNDJSONStreamWithCallbacks(ctx, resp.Body, resp.Header.Get("Content-Type"), cb)
 }
@@ -257,7 +301,7 @@ func callViaManagedProxyStreamWithCallbacks(ctx context.Context, client *http.Cl
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("PMA proxy stream returned %s", resp.Status)
+		return httpErrWithBody("PMA proxy stream", resp.Status, resp.Body)
 	}
 	return readNDJSONStreamWithCallbacks(ctx, resp.Body, resp.Header.Get("Content-Type"), cb)
 }
@@ -301,7 +345,7 @@ func callViaManagedProxy(ctx context.Context, client *http.Client, proxyURL stri
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("PMA proxy call returned %s", resp.Status)
+		return "", httpErrWithBody("PMA proxy call", resp.Status, resp.Body)
 	}
 	var proxyResp managedProxyResponse
 	if err := json.NewDecoder(resp.Body).Decode(&proxyResp); err != nil {

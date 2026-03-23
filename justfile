@@ -498,8 +498,10 @@ test-go-race: install-go
 test: test-go
     @:
 
-# Run BDD tests (_bdd packages) in all modules. Optional timeout=.
-test-bdd timeout="": install-go podman-setup
+# Run BDD tests (_bdd packages) in all modules.
+# Go's default `go test` timeout is 10m per package; full Godog suites usually exceed that, so we pass
+# -timeout explicitly (default 30m per module). Override: `just test-bdd timeout=45m` or `timeout=0` (no limit).
+test-bdd timeout="30m": install-go podman-setup
     #!/usr/bin/env bash
     set -e
     # Disable Ryuk reaper: incompatible with Podman/crun (executable /bin/ryuk not found). Containers are still terminated by TestMain.
@@ -517,11 +519,9 @@ test-bdd timeout="": install-go podman-setup
     fi
     pushd "{{ root_dir }}" >/dev/null
     trap 'popd >/dev/null 2>/dev/null || true' EXIT
-    extra=()
-    [ -n "{{ timeout }}" ] && extra=(-timeout "{{ timeout }}")
     for m in {{ go_modules }}; do
       [ -d "./$m/_bdd" ] || continue
-      go test -v "${extra[@]}" "./$m/_bdd" -count=1
+      go test -v -timeout "{{ timeout }}" "./$m/_bdd" -count=1
     done
 
 # Dev setup (scripts/justfile). Usage: just setup-dev <command> [ARGS]. Run just setup-dev help.

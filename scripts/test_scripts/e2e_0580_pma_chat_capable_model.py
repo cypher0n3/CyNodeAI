@@ -1,5 +1,5 @@
 # E2E: PMA chat using capable model (qwen3:8b / spec: qwen3.5:9b).
-# Requires: auth config from e2e_0030, OLLAMA_CAPABLE_MODEL available in Ollama container.
+# Requires: gateway login (E2E sidecar), OLLAMA_CAPABLE_MODEL available in Ollama container.
 # The ollama prereq auto-pulls this model into OLLAMA_CONTAINER_NAME when missing (see
 # OLLAMA_AUTO_PULL_CAPABLE). Skipped when the model is still absent (e.g. pull failed or
 # no container runtime).
@@ -35,16 +35,14 @@ class TestPMAChatCapableModel(unittest.TestCase):
     prereqs = ["gateway", "config", "auth", "ollama"]
 
     def setUp(self):
-        if not state.CONFIG_PATH or not os.path.isfile(state.CONFIG_PATH):
-            self.skipTest("CONFIG_PATH not set (run after auth login prereq)")
+        ok, detail = helpers.prepare_e2e_cynork_auth()
+        self.assertTrue(ok, detail)
         if os.environ.get("E2E_SKIP_INFERENCE_SMOKE", "") or config.E2E_SKIP_INFERENCE_SMOKE:
             self.skipTest("inference smoke disabled (E2E_SKIP_INFERENCE_SMOKE)")
         if not helpers.is_ollama_model_available(config.OLLAMA_CAPABLE_MODEL):
             self.skipTest(
                 f"capable model {config.OLLAMA_CAPABLE_MODEL!r} not available in Ollama container"
             )
-        ok, detail = helpers.ensure_valid_auth_session(state.CONFIG_PATH)
-        self.assertTrue(ok, f"auth session invalid before capable-model tests: {detail}")
 
     def test_capable_model_chat_one_shot(self):
         """One-shot chat via capable model; asserts deterministic reply."""
@@ -91,8 +89,7 @@ class TestPMAChatCapableModel(unittest.TestCase):
         Uses a unique OpenAI-Project header to scope the thread so other tests are not polluted.
         """
         token = helpers.read_token_from_config(state.CONFIG_PATH)
-        if not token:
-            self.skipTest("no auth token")
+        self.assertTrue(token, "no access token after E2E login prereq")
         url = config.USER_API.rstrip("/") + "/v1/chat/completions"
         # Isolate thread scope so history does not bleed into other tests.
         project_header = str(uuid.uuid4())

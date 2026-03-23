@@ -11,7 +11,7 @@ import shlex
 import sys
 import time
 
-from scripts.test_scripts import config
+from scripts.test_scripts import config, helpers
 
 # Matches ANSI/VT100 escape sequences (CSI, OSC, etc.) for stripping from PTY output.
 _ANSI_RE = re.compile(r"\x1b(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])")
@@ -93,6 +93,12 @@ class TuiPtySession:
             raise RuntimeError("PTY not available on this platform")
         env = os.environ.copy()
         env["CYNORK_GATEWAY_URL"] = config.USER_API
+        acc = helpers.read_token_from_config(self.config_path)
+        if acc:
+            env["CYNORK_TOKEN"] = acc
+        ref = helpers.read_refresh_token_from_config(self.config_path)
+        if ref:
+            env["CYNORK_REFRESH_TOKEN"] = ref
         env.update(self.env_extra)
         # Run TUI under script -q so it gets a proper PTY and stays up
         cmd_str = " ".join(

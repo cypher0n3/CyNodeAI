@@ -14,6 +14,10 @@ class TestWorkflowAPI(unittest.TestCase):
     tags = ["suite_orchestrator", "full_demo", "no_inference", "control_plane"]
     prereqs = ["gateway", "config", "auth", "task_id"]
 
+    def setUp(self):
+        ok, detail = helpers.prepare_e2e_cynork_auth()
+        self.assertTrue(ok, detail)
+
     def test_workflow_start_returns_run_id(self):
         """Start workflow for task; 200 with run_id, or 409 if lease already held."""
         if not getattr(state, "TASK_ID", None):
@@ -59,12 +63,9 @@ class TestWorkflowAPI(unittest.TestCase):
 
     def test_workflow_start_same_holder_returns_200_already_running(self):
         """Same holder starts again with idempotency_key=lease_id; expect 200 already_running."""
-        config_path = getattr(state, "CONFIG_PATH", None)
-        if not config_path:
-            self.skipTest("CONFIG_PATH not set (run after login)")
         ok, out, err = helpers.run_cynork(
             ["task", "create", "-p", "e2e same-holder workflow", "-o", "json"],
-            config_path,
+            state.CONFIG_PATH,
         )
         if not ok:
             self.skipTest(f"task create failed: {out} {err}")

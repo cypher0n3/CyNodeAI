@@ -28,10 +28,8 @@ class TestPMAStandardPathStreaming(unittest.TestCase):
     prereqs = ["gateway", "config", "auth", "ollama"]
 
     def setUp(self):
-        if not state.CONFIG_PATH or not os.path.isfile(state.CONFIG_PATH):
-            self.skipTest("CONFIG_PATH not set (run after auth login prereq)")
-        ok, _ = helpers.ensure_valid_auth_session(state.CONFIG_PATH)
-        self.assertTrue(ok, "auth session invalid before PMA streaming tests")
+        ok, detail = helpers.prepare_e2e_cynork_auth()
+        self.assertTrue(ok, detail)
         if os.environ.get("E2E_SKIP_INFERENCE_SMOKE", "") or config.E2E_SKIP_INFERENCE_SMOKE:
             self.skipTest("E2E_SKIP_INFERENCE_SMOKE set; skipping PMA standard-path streaming")
 

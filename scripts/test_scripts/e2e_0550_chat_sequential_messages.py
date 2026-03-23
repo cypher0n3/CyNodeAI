@@ -1,6 +1,6 @@
 # E2E: Sequential multi-message chat via gateway POST /v1/chat/completions.
 # Traces: REQ-USRGWY-0130; CYNAI.USRGWY.OpenAIChatApi; chat_threads_and_messages.
-# Skip if E2E_SKIP_INFERENCE_SMOKE. Requires auth (e2e_0030).
+# Skip if E2E_SKIP_INFERENCE_SMOKE. Auth via prepare_e2e_cynork_auth in setUp.
 
 import json
 import os
@@ -41,16 +41,16 @@ class TestChatSequentialMessages(unittest.TestCase):
     tags = ["suite_orchestrator", "full_demo", "inference", "chat"]
     prereqs = ["gateway", "config", "auth", "ollama"]
 
+    def setUp(self):
+        ok, detail = helpers.prepare_e2e_cynork_auth()
+        self.assertTrue(ok, detail)
+
     def test_chat_sequential_two_turns(self):
         """Two turns: first 'Say one word: first', then 'What word?'; assert both replies."""
         if os.environ.get("E2E_SKIP_INFERENCE_SMOKE", "") or config.E2E_SKIP_INFERENCE_SMOKE:
             self.skipTest("E2E_SKIP_INFERENCE_SMOKE set")
-        if not state.CONFIG_PATH or not os.path.isfile(state.CONFIG_PATH):
-            self.skipTest("CONFIG_PATH not set (run after auth login prereq)")
-        auth_ok, detail = helpers.ensure_valid_auth_session(state.CONFIG_PATH)
-        self.assertTrue(auth_ok, f"auth session invalid before sequential chat test: {detail}")
         token = helpers.read_token_from_config(state.CONFIG_PATH)
-        self.assertIsNotNone(token, "no token in config (run login first)")
+        self.assertTrue(token, "no access token after E2E login prereq")
         messages = [{"role": "user", "content": "Say one word: first"}]
         ok, body = _chat_request(messages, token)
         if not ok:

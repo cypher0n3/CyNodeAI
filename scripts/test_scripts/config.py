@@ -70,7 +70,9 @@ E2E_SSE_REQUEST_TIMEOUT = _env_int("E2E_SSE_REQUEST_TIMEOUT", 600)
 # Optional: skip inference smoke and one-shot chat (e.g. CI without Ollama)
 E2E_SKIP_INFERENCE_SMOKE = os.environ.get("E2E_SKIP_INFERENCE_SMOKE", "")
 # When set, run inference-in-sandbox (5b), prompt (5c), chat (5d)
-INFERENCE_PROXY_IMAGE = os.environ.get("INFERENCE_PROXY_IMAGE", "")
+# Default matches scripts/justfile `just e2e` so bare `python run_e2e.py` runs the same suite.
+# Set INFERENCE_PROXY_IMAGE= to empty in the environment to skip inference-in-sandbox tests.
+INFERENCE_PROXY_IMAGE = os.environ.get("INFERENCE_PROXY_IMAGE", "cynodeai-inference-proxy:dev")
 
 # Ollama smoke (container name must match worker_node node-manager)
 OLLAMA_CONTAINER_NAME = os.environ.get("OLLAMA_CONTAINER_NAME", "cynodeai-ollama")
@@ -79,7 +81,8 @@ OLLAMA_CONTAINER_NAME = os.environ.get("OLLAMA_CONTAINER_NAME", "cynodeai-ollama
 # and produces more coherent output than tinyllama.
 OLLAMA_E2E_MODEL = os.environ.get("OLLAMA_E2E_MODEL", "qwen3.5:0.8b")
 # HTTP timeout (seconds) for Ollama /api/chat during inference smoke (some models exceed 120s).
-OLLAMA_SMOKE_CHAT_TIMEOUT = _env_int("OLLAMA_SMOKE_CHAT_TIMEOUT", 300)
+# Cold inference (model load) on modest hardware can exceed 5 minutes; keep E2E smoke reliable.
+OLLAMA_SMOKE_CHAT_TIMEOUT = _env_int("OLLAMA_SMOKE_CHAT_TIMEOUT", 600)
 # Capable model for agent/tool-call tests (spec: qwen3.5:9b → Ollama Hub: qwen3:8b).
 # When OLLAMA_CONTAINER_NAME is reachable, E2E prereq pulls this if missing (same as
 # OLLAMA_E2E_MODEL). Set OLLAMA_AUTO_PULL_CAPABLE=0 to skip that pull (e.g. CI bandwidth).
