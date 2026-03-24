@@ -3,8 +3,11 @@
 No extra deps (stdlib + subprocess). Run from repo root with PYTHONPATH=.
 """
 
+import base64
+import glob
 import json
 import os
+import shutil
 from datetime import datetime, timezone
 import subprocess
 import tempfile
@@ -288,6 +291,168 @@ def run_curl(method, url, data=None, headers=None, timeout=30):
         method, url, data=data, headers=headers, timeout=timeout
     )
     return 200 <= code < 300, body
+
+
+def mcp_tool_call(tool_name, arguments=None, timeout=30, bearer_token=None):
+    """POST control-plane ``/v1/mcp/tools/call``.
+
+    When ``bearer_token`` is set, sends ``Authorization: Bearer …`` (PM or sandbox agent token).
+    Return (http_status, response_body_str).
+    """
+    url = config.CONTROL_PLANE_API.rstrip("/") + "/v1/mcp/tools/call"
+    payload = {"tool_name": tool_name, "arguments": arguments or {}}
+    body = json.dumps(payload).encode("utf-8")
+    headers = {"Content-Type": "application/json"}
+    if bearer_token:
+        headers["Authorization"] = "Bearer " + str(bearer_token).strip()
+    req = urllib.request.Request(
+        url,
+        data=body,
+        method="POST",
+        headers=headers,
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            raw = resp.read().decode("utf-8", errors="replace")
+            return resp.status, raw
+    except urllib.error.HTTPError as e:
+        try:
+            raw = e.read().decode("utf-8", errors="replace") if e.fp else ""
+            return e.code, raw
+        finally:
+            e.close()
+
+    except (urllib.error.URLError, OSError, ValueError):
+        return 0, ""
+
+
+def resolve_worker_node_state_dir():
+    """Host directory where node-manager stores ``run/managed_agent_proxy`` (see scripts/dev_stack.sh).
+
+    Tries ``NODE_STATE_DIR``, ``WORKER_API_STATE_DIR``, ``SETUP_DEV_NODE_STATE_DIR``,
+    ``CYNODE_STATE_DIR``, then ``${TMPDIR:-/tmp}/cynodeai-node-state`` if that path exists.
+    """
+    for key in (
+        "NODE_STATE_DIR",
+        "WORKER_API_STATE_DIR",
+        "SETUP_DEV_NODE_STATE_DIR",
+        "CYNODE_STATE_DIR",
+    ):
+        v = os.environ.get(key, "").strip()
+        if v and os.path.isdir(v):
+            return v
+    default = os.path.join(os.environ.get("TMPDIR", "/tmp"), "cynodeai-node-state")
+    if os.path.isdir(default):
+        return default
+    return ""
+
+
+def find_managed_agent_proxy_socks(state_dir):
+    """Return sorted paths ``.../run/managed_agent_proxy/<service_id>/proxy.sock``."""
+    if not state_dir:
+        return []
+    pattern = os.path.join(state_dir, "run", "managed_agent_proxy", "*", "proxy.sock")
+    return sorted(glob.glob(pattern))
+
+
+def mcp_tool_call_via_worker_uds_internal_proxy(proxy_sock_path, tool_name, arguments=None, timeout=60):
+    """Live PMA-equivalent path: managed proxy envelope over per-service UDS (mcp:call).
+
+    Same JSON body shape as ``agents/internal/mcpclient`` ``ManagedServiceProxyRequest`` /
+    ``callViaWorkerInternalProxy``: POST ``/v1/worker/internal/orchestrator/mcp:call``.
+
+    Returns ``(curl_ok, envelope_status, mcp_body_dict_or_none, err_detail)``:
+    ``curl_ok`` when curl exits 0 and response JSON parses; ``envelope_status`` is the
+    upstream HTTP status (e.g. 200 for MCP success); ``mcp_body_dict_or_none`` is the decoded
+    MCP JSON from ``body_b64`` when present.
+    """
+    if not shutil.which("curl"):
+        return False, None, None, "curl not found in PATH"
+    inner = json.dumps(
+        {"tool_name": tool_name, "arguments": arguments or {}}
+    ).encode("utf-8")
+    envelope = {
+        "version": 1,
+        "method": "POST",
+        "path": "/v1/mcp/tools/call",
+        "headers": {"Content-Type": ["application/json"]},
+        "body_b64": base64.standard_b64encode(inner).decode("ascii"),
+    }
+    payload = json.dumps(envelope)
+    proc = subprocess.run(
+        [
+            "curl",
+            "-sS",
+            "--fail-with-body",
+            "--unix-socket",
+            proxy_sock_path,
+            "-X",
+            "POST",
+            "http://localhost/v1/worker/internal/orchestrator/mcp:call",
+            "-H",
+            "Content-Type: application/json",
+            "-d",
+            payload,
+        ],
+        capture_output=True,
+        text=True,
+        timeout=timeout,
+    )
+    detail = (proc.stderr or "") + (proc.stdout or "")
+    if proc.returncode != 0:
+        return False, None, None, detail
+    try:
+        outer = json.loads(proc.stdout)
+    except json.JSONDecodeError as e:
+        return False, None, None, f"invalid JSON: {e}: {detail}"
+    env_status = outer.get("status")
+    b64 = outer.get("body_b64") or ""
+    raw = base64.standard_b64decode(b64) if b64 else b""
+    if not raw:
+        return True, env_status, None, detail
+    try:
+        inner_obj = json.loads(raw.decode("utf-8"))
+    except json.JSONDecodeError as e:
+        return True, env_status, None, f"body_b64 decode: {e}: {raw!r}"
+    return True, env_status, inner_obj, detail
+
+
+def mcp_tool_call_worker_uds(proxy_sock_path, tool_name, arguments=None, timeout=60):
+    """Same return shape as :func:`mcp_tool_call`: ``(http_status, response_body_str)``.
+
+    Uses :func:`mcp_tool_call_via_worker_uds_internal_proxy` (live curl to per-service UDS).
+    """
+    ok, env_status, data, err = mcp_tool_call_via_worker_uds_internal_proxy(
+        proxy_sock_path, tool_name, arguments=arguments, timeout=timeout
+    )
+    if not ok:
+        return 0, err
+    status = env_status if env_status is not None else 0
+    if data is None:
+        return status, ""
+    return status, json.dumps(data)
+
+
+def gateway_request(method, path, access_token, json_body=None, timeout=30):
+    """Call user gateway ``path`` (e.g. ``/v1/tasks``) with Bearer token. Return (status, body_str)."""
+    url = config.USER_API.rstrip("/") + path
+    headers = {"Content-Type": "application/json"} if json_body is not None else {}
+    if access_token:
+        headers["Authorization"] = "Bearer " + access_token.strip()
+    data = json.dumps(json_body).encode("utf-8") if json_body is not None else None
+    req = urllib.request.Request(url, data=data, method=method, headers=headers)
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
+            return resp.status, resp.read().decode("utf-8", errors="replace")
+    except urllib.error.HTTPError as e:
+        try:
+            raw = e.read().decode("utf-8", errors="replace") if e.fp else ""
+            return e.code, raw
+        finally:
+            e.close()
+
+    except (urllib.error.URLError, OSError, ValueError):
+        return 0, ""
 
 
 def read_refresh_token_from_config(config_path):

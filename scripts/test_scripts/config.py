@@ -30,21 +30,28 @@ def _env_bool(key: str, default: bool) -> bool:
 
 
 # Orchestrator (docs/tech_specs/ports_and_endpoints.md)
+# Default loopback host is 127.0.0.1 so urllib/cynork match Docker-published ports (avoids ::1 quirks).
+_E2E_LOOPBACK = os.environ.get("E2E_LOOPBACK_HOST", "127.0.0.1").strip() or "127.0.0.1"
 ORCHESTRATOR_PORT = int(os.environ.get("ORCHESTRATOR_PORT", "12080"))
 CONTROL_PLANE_PORT = int(os.environ.get("CONTROL_PLANE_PORT", "12082"))
-USER_API = f"http://localhost:{ORCHESTRATOR_PORT}"
-CONTROL_PLANE_API = f"http://localhost:{CONTROL_PLANE_PORT}"
+USER_API = os.environ.get("USER_API") or f"http://{_E2E_LOOPBACK}:{ORCHESTRATOR_PORT}"
+CONTROL_PLANE_API = os.environ.get("CONTROL_PLANE_API") or f"http://{_E2E_LOOPBACK}:{CONTROL_PLANE_PORT}"
 
 # API egress (orchestrator/docker-compose.yml profile optional; port must match compose)
 API_EGRESS_PORT = int(os.environ.get("API_EGRESS_PORT", "12084"))
-API_EGRESS_API = os.environ.get("API_EGRESS_API") or f"http://localhost:{API_EGRESS_PORT}"
+API_EGRESS_API = os.environ.get("API_EGRESS_API") or f"http://{_E2E_LOOPBACK}:{API_EGRESS_PORT}"
 
 # Worker API (for telemetry E2E; dev stack uses same token as dev/justfile defaults)
 WORKER_PORT = int(os.environ.get("WORKER_PORT", "12090"))
-WORKER_API = os.environ.get("WORKER_API") or f"http://localhost:{WORKER_PORT}"
+WORKER_API = os.environ.get("WORKER_API") or f"http://{_E2E_LOOPBACK}:{WORKER_PORT}"
 WORKER_API_BEARER_TOKEN = os.environ.get(
     "WORKER_API_BEARER_TOKEN", "dev-worker-api-token-change-me"
 )
+
+# Control-plane MCP gateway agent bearer tokens (see orchestrator mcpgateway/allowlist.go).
+# When both are set, the gateway enforces the sandbox worker allowlist for the sandbox token.
+WORKER_INTERNAL_AGENT_TOKEN = os.environ.get("WORKER_INTERNAL_AGENT_TOKEN", "")
+MCP_SANDBOX_AGENT_BEARER_TOKEN = os.environ.get("MCP_SANDBOX_AGENT_BEARER_TOKEN", "")
 
 # Optional bearer tokens (when set, E2E sends them)
 WORKFLOW_RUNNER_BEARER_TOKEN = os.environ.get("WORKFLOW_RUNNER_BEARER_TOKEN", "")
@@ -90,7 +97,8 @@ OLLAMA_SMOKE_CHAT_TIMEOUT = _env_int("OLLAMA_SMOKE_CHAT_TIMEOUT", 600)
 OLLAMA_CAPABLE_MODEL = os.environ.get("OLLAMA_CAPABLE_MODEL", "qwen3:8b")
 OLLAMA_AUTO_PULL_CAPABLE = _env_bool("OLLAMA_AUTO_PULL_CAPABLE", True)
 
-# Optional: node state dir for E2E that assert on secure store (e.g. full-demo); skip tests if unset
+# Optional: node state dir (see also WORKER_API_STATE_DIR from scripts/dev_stack.sh).
+# E2E helpers also resolve defaults under ${TMPDIR:-/tmp}/cynodeai-node-state when unset.
 NODE_STATE_DIR = os.environ.get("NODE_STATE_DIR", "").strip()
 
 # Proxy + PMA isolated tests (minimal services: worker-api proxy + PMA; no orchestrator)
