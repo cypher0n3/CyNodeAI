@@ -27,31 +27,39 @@ Classification: **rename** (agent-facing MCP name -> catalog), **remove** (wrong
 
 ### Agents Package
 
-| Location | Action |
-| --- | --- |
-| `agents/internal/pma/mcp_tools.go` (description string) | **rename** `db.preference.*`, `db.task.get`, `db.job.get` -> `preference.*`, `task.get`, `job.get` (Task 4). |
-| `agents/internal/pma/mcp_client_test.go`, `mcp_tools_test.go` | **rename** test tool names when router accepts canonical names (Tasks 4-5). |
-| `agents/internal/pma/langchain_test.go` (synthetic LLM outputs) | **rename** or keep as negative examples only if tests document legacy emission (review in Task 4). |
-| `agents/internal/pma/langchain.go` comment | **rename** example text away from `db.list_tasks` if still misleading. |
-| `agents/instructions/project_manager/02_tools.md` | **remove/replace** `db.*` bullet with MCP catalog language (Task 4 / doc pass). |
-| `agents/instructions/sandbox_agent/*.md` | **remove** "do not invoke db.*" phrasing in favor of forbidden namespaces per spec (`task.*`, `node.*`, `sandbox.*` as already stated). |
-| `agents/instructions/project_analyst/02_tools.md` | **rename** `db.read` / `db.write` to catalog-consistent verification wording. |
+- **Location:** `agents/internal/pma/mcp_tools.go` (description string)
+  - action: **rename** `db.preference.*`, `db.task.get`, `db.job.get` -> `preference.*`, `task.get`, `job.get` (Task 4).
+- **Location:** `agents/internal/pma/mcp_client_test.go`, `mcp_tools_test.go`
+  - action: **rename** test tool names when router accepts canonical names (Tasks 4-5).
+- **Location:** `agents/internal/pma/langchain_test.go` (synthetic LLM outputs)
+  - action: **rename** or keep as negative examples only if tests document legacy emission (review in Task 4).
+- **Location:** `agents/internal/pma/langchain.go` comment
+  - action: **rename** example text away from `db.list_tasks` if still misleading.
+- **Location:** `agents/instructions/project_manager/02_tools.md`
+  - action: **remove/replace** `db.*` bullet with MCP catalog language (Task 4 / doc pass).
+- **Location:** `agents/instructions/sandbox_agent/*.md`
+  - action: **remove** "do not invoke db.*"
+    phrasing in favor of forbidden namespaces per spec (`task.*`, `node.*`, `sandbox.*` as already stated).
+- **Location:** `agents/instructions/project_analyst/02_tools.md`
+  - action: **rename** `db.read` / `db.write` to catalog-consistent verification wording.
 
 ### Orchestrator Service
 
-| Location | Action |
-| --- | --- |
-| `orchestrator/internal/mcpgateway/handlers.go` | **rename** route keys to canonical `preference.*`, `task.get`, `job.get`; keep legacy `db.*` only if compatibility layer in Task 5. |
-| `orchestrator/internal/mcpgateway/handlers_test.go` | **rename** requests/expectations to canonical names + legacy error policy tests (Task 5). |
-| `orchestrator/internal/mcptaskbridge/bridge_test.go` | **false positive** (`db` as in-memory mock struct). |
-| `orchestrator/internal/handlers/*.go` | **false positive** (`h.db` store field). |
+- **Location:** `orchestrator/internal/mcpgateway/handlers.go`
+  - action: **rename** route keys to canonical `preference.*`, `task.get`, `job.get`; keep legacy `db.*` only if compatibility layer in Task 5.
+- **Location:** `orchestrator/internal/mcpgateway/handlers_test.go`
+  - action: **rename** requests/expectations to canonical names + legacy error policy tests (Task 5).
+- **Location:** `orchestrator/internal/mcptaskbridge/bridge_test.go`
+  - action: **false positive** (`db` as in-memory mock struct).
+- **Location:** `orchestrator/internal/handlers/*.go`
+  - action: **false positive** (`h.db` store field).
 
 ### Docs (Non-Exhaustive; Focus on Agent-Visible)
 
-| Location | Action |
-| --- | --- |
-| `docs/mvp_plan.md`, `docs/draft_specs/*` | Historical / draft `db.*` names: **note** as draft or update when touching (Task 7 as needed). |
-| Normative specs citing "no `db.`" | **false positive** (forbidden prefix, not a tool route). |
+- **Location:** `docs/mvp_plan.md`, `docs/draft_specs/*`
+  - action: Historical / draft `db.*` names: **note** as draft or update when touching (Task 7 as needed).
+- **Location:** Normative specs citing "no `db.`"
+  - action: **false positive** (forbidden prefix, not a tool route).
 
 ## Files Expected to Change in Tasks 2-5 (Checklist)
 

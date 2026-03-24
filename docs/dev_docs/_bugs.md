@@ -271,3 +271,186 @@ The startup path for an existing token does not use that; it blocks in the CLI l
 **Fixed:** `runTUI` no longer calls `EnsureThread` before `tea.NewProgram`.
 When a token is present, `Model.Init` schedules `ensureThreadCmd()` so thread creation/listing runs after the TUI starts.
 Failures surface in scrollback via `applyEnsureThreadResult` (same as post-login).
+
+## Bug 3: `cynork tui` `/auth login` Always Makes New Thread
+
+In-session `/auth login` is tied to thread ensure; users often see a new thread or messaging that looks like a thread switch.
+
+### Bug 3 Summary
+
+Users report that after `/auth login` in the fullscreen TUI, a new chat thread appears (or it feels that way every time).
+
+Investigation shows two layers.
+
+First, when the gateway actually creates a thread (`POST /v1/chat/threads`) vs reusing the current one.
+
+Second, UX: successful thread ensure after login always appends a `[CYNRK_THREAD_SWITCHED]` line, which can read like a new or switched thread even when no POST ran.
+
+### Bug 3 Evidence (Code Paths)
+
+The following subsections trace the login and thread-ensure chain.
+
+#### Post-Login Always Schedules Thread Ensure
+
+After a successful in-TUI login, `applyLoginResult` always combines `ensureThreadCmd()` with optional gateway health polling (`cynork/internal/tui/model.go`).
+There is no branch that skips thread ensure on login success.
+
+#### What `ensureThreadCmd` Does
+
+`ensureThreadCmd` calls `Session.EnsureThread(m.ResumeThreadSelector)` with the selector captured at process start from `--resume-thread` (`cynork/cmd/tui.go` passes `tuiResumeThread` into `runTUIWithSession` -> `SetResumeThreadSelector`).
+
+#### When `EnsureThread` Creates a New Thread or Not
+
+`chat.Session.EnsureThread` (`cynork/internal/chat/session.go`):
+
+- If `resumeSelector` is non-empty: resolve via `ListThreads` + selector and set `CurrentThreadID` (no `NewThread` unless resolution implies switching to an existing id).
+- If `resumeSelector` is empty and `CurrentThreadID` is already set: returns without calling `NewThread()` (documented as keeping the thread after in-session re-login).
+- If `resumeSelector` is empty and `CurrentThreadID` is empty: calls `NewThread()` -> `POST /v1/chat/threads`.
+
+Unit coverage: `TestSession_EnsureThread_SkipsNewWhenThreadAlreadySet` asserts zero POSTs when `CurrentThreadID` is preset.
+
+A literal "always creates a new thread on every `/auth login`" would only hold if `CurrentThreadID` is always empty at login success.
+
+For example, a typical no-token-at-launch flow where `Init` never ran `ensureThreadCmd` (no token), so the first successful login is the first thread ensure.
+
+### Bug 3 Spec Expectations
+
+- [cynork_tui.md](../tech_specs/cynork_tui.md) Auth Recovery: after successful in-session re-authentication, the TUI SHOULD resume the same session state and return focus to the interrupted flow rather than forcing a full restart.
+- Same doc Entry / thread semantics: default is a new thread unless `--resume-thread` is supplied; thread must exist before the first completion.
+
+There is tension only if "same session state" is interpreted as always keeping the same thread after login.
+
+The implementation can keep the current thread when `CurrentThreadID` is already set, but will create one when it is not (first login in a session with no prior ensure).
+
+### Bug 3 Likely Causes (User-Visible)
+
+Several distinct mechanisms can explain the report.
+
+#### Cause 1: First Login in Session With No Prior Thread ID
+
+Launch without a saved token (`OpenLoginFormOnInit` or user invokes `/auth login` before any thread exists).
+
+`CurrentThreadID` is empty -> `EnsureThread("")` -> `NewThread()`.
+
+This matches "every time I log in I get a new thread" for users who routinely start unauthenticated or re-open the login flow before `Init` has finished ensuring a thread (edge timing).
+
+#### Cause 2: Misleading Scrollback After Every Successful Ensure
+
+`applyEnsureThreadResult` appends `[CYNRK_THREAD_SWITCHED] Thread: <id>` for any successful result with non-empty `threadID`, including when `EnsureThread` did not create a thread and only confirmed the existing `CurrentThreadID` (`cynork/internal/tui/model.go`).
+
+That reuses the same landmark family as `/thread switch` and "New thread", so users may believe a new thread was created when the id is unchanged.
+
+#### Cause 3: `--resume-thread` Only at CLI Startup
+
+`ResumeThreadSelector` is fixed for the process lifetime.
+
+In-session `/auth login` does not accept a thread selector; users who need to land in an existing thread after login must have passed `--resume-thread` at launch or switch with `/thread switch` after ensure completes.
+
+#### Cause 4: `/auth logout` Does Not Clear `CurrentThreadID`
+
+Logout clears tokens on the client/provider but leaves `Session.CurrentThreadID` as-is (`cynork/internal/tui/slash.go` `authLogout`).
+
+A subsequent login may keep the old id client-side (`EnsureThread` skip path).
+
+That is the opposite problem (stale thread id) but relevant when validating "new thread" reports.
+
+### Bug 3 Suggested Fix (Design - Docs Only)
+
+- Differentiate scrollback messages: after `ensureThreadResult` from post-login ensure, use a line that does not imply a switch when `EnsureThread` returned without creating a thread (e.g. only emit `[CYNRK_THREAD_SWITCHED]` when `NewThread` ran or selector resolution changed `CurrentThreadID`).
+
+  Alternatively, split landmarks: "Thread ready:" vs "Switched to thread:".
+
+- Optional: skip `ensureThreadCmd` after login when `CurrentThreadID` is already set and gateway already had a thread ensure from `Init` (redundant network), if product wants zero extra churn; today the skip is already logical inside `EnsureThread` without a POST.
+
+- Document that first in-session login with no thread id will create a thread; re-login with an existing `CurrentThreadID` should not POST.
+
+### Bug 3 Files Involved
+
+- `cynork/internal/tui/model.go` - `applyLoginResult`, `ensureThreadCmd`, `applyEnsureThreadResult`, `Init` (token path schedules `ensureThreadCmd`).
+- `cynork/internal/chat/session.go` - `EnsureThread`, `NewThread`.
+- `cynork/cmd/tui.go` - `runTUI`, `runTUIWithSession`, `SetResumeThreadSelector`.
+- `cynork/internal/tui/slash.go` - `/auth login` -> `openLoginFormMsg`; `authLogout`.
+- Spec: `docs/tech_specs/cynork_tui.md` (Auth Recovery, Entry / threads).
+
+### Bug 3 Suggested Tests
+
+- Session: already covered - `TestSession_EnsureThread_SkipsNewWhenThreadAlreadySet`.
+
+- Model: add/update test: successful `loginResultMsg` with `Session.CurrentThreadID` preset and mock server counting `POST /v1/chat/threads` -> expect 0 POSTs and scrollback that does not claim a "new" thread (once messaging is split).
+
+- Manual: logged-in TUI with an active thread -> `/auth login` re-auth -> confirm no second thread on server / single POST count if instrumented.
+
+### Bug 3 Investigation Status
+
+Investigated (2026-03-24): behavior traced in `cynork`; root cause is a mix of real `NewThread` when `CurrentThreadID` is empty at login success and UX conflation via a single "thread switched" style scrollback line after ensure.
+
+Not fixed (code): awaiting product decision on scrollback wording and whether to pass thread context into the in-TUI login path.
+
+## Bug 4: `cynork tui` Cannot Submit Slash or Shell Commands While Chat is Streaming
+
+Composer Enter is ignored for non-empty input while `Loading` is true, including slash and shell prefixes.
+
+### Bug 4 Summary
+
+While the assistant turn is **streaming** (`Loading` true, streaming deltas in flight), the user **cannot submit** composer input that would run a **slash command** (`/…`) or **shell escape** (`!…`).
+Pressing Enter with non-empty input is ignored.
+Typing in the composer may still work; the failure is on **Enter** to execute.
+
+This is stricter than users expect (run `/help`, `/thread list`, `!date`, etc. without waiting for the stream to finish) and may conflict with **streaming-aware composer** behavior described in [cynork_tui.md](../tech_specs/cynork_tui.md) (queued drafts, Ctrl+Enter send-now), which is not fully implemented in the current key path.
+
+### Bug 4 Observed Behavior
+
+- **Scenario:** A chat message is in progress and the model response is streaming (status busy / in-flight assistant line updating).
+- **Symptom:** User types e.g. `/help` or `!pwd` and presses Enter; nothing happens (no command runs, no scrollback from slash/shell).
+- **Contrast:** After `streamDoneMsg` clears `Loading`, the same input on Enter runs as usual.
+
+### Bug 4 Root Cause (Implementation)
+
+In `cynork/internal/tui/model.go`, `handleEnterKey` returns immediately when `m.Loading` is true and the trimmed composer line is non-empty:
+
+```go
+if m.Loading && line != "" {
+    return m, nil
+}
+```
+
+That gate runs **before** branches that detect `!` (shell) or `/` (slash) or normal chat send.
+So **all** non-empty submits are suppressed during loading, not only "send another chat message."
+
+`Ctrl+C` can cancel an active stream when `streamCancel` is set (`handleCtrlC`), but there is no path to "submit local-only commands" while streaming without waiting or canceling first.
+
+### Bug 4 Expected Behavior (Spec Cross-Check)
+
+[cynork_tui.md](../tech_specs/cynork_tui.md) (**Layout and Interaction** / streaming) describes:
+
+- While the agent is streaming, **Enter** should add composer content to a **queue** (and clear the composer), not send immediately.
+- **Ctrl+Enter** should **send now** and may interrupt streaming.
+
+The codebase today does not implement that full queue/interrupt model in `handleEnterKey`; the early return blocks even local slash/shell execution.
+A fix should either:
+
+- **Narrow the guard:** e.g. only block **plain chat** sends while streaming, and still dispatch lines starting with `/` or `!` (and optionally treat other "local" slash handlers consistently), or
+- **Align with the full spec:** implement queue + Ctrl+Enter interrupt, and define whether slash/shell bypass the queue or use dedicated keys.
+
+Product should confirm whether slash/shell during streaming must work **without** canceling the stream (parallel UX) or only after **Ctrl+C** / stream end.
+
+### Bug 4 Suggested Fix (Design - Docs Only)
+
+- Remove or refine the blanket `m.Loading && line != ""` early return so **slash** and **shell** lines are still routed through `handleSlashLine` / shell handler while streaming, **or** document that users must cancel the stream first (weaker UX).
+- If adopting the spec's queue: non-slash/non-`!` Enter queues; slash/shell may still execute immediately or be queued per product rules.
+- Ensure `Loading` / `streamCancel` state stays consistent if a slash command triggers async work that also uses `Loading`.
+
+### Bug 4 Files Involved
+
+- `cynork/internal/tui/model.go` - `handleEnterKey`, `handleSlashLine`, `streamCmd`, `applyStreamDone` / `Loading` lifecycle.
+- Spec: [cynork_tui.md](../tech_specs/cynork_tui.md) (streaming, composer keybindings); [cynork_tui_slash_commands.md](../tech_specs/cynork_tui_slash_commands.md) for slash semantics.
+
+### Bug 4 Suggested Tests
+
+- **Model:** With `m.Loading == true` and `m.streamCancel` non-nil (simulated streaming), Enter on `/help` (or a stub slash that does not need network) should either run the handler or match an explicit product decision; Enter on plain text may queue or noop per spec.
+- **Manual:** Start a long streaming reply; type `/thread list` or `!echo hi` + Enter; confirm expected behavior (command runs vs blocked).
+
+### Bug 4 Investigation Status
+
+Not fixed (code).
+Documented 2026-03-24: root cause is the `handleEnterKey` loading guard applied to all non-empty lines before slash/shell dispatch.

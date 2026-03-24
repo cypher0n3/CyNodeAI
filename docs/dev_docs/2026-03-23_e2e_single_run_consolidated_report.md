@@ -41,6 +41,13 @@ Total wall time for Batch B was large when chat and streaming paths blocked or r
 time.
 Slow runs are a **signal** (timeouts, hung dependencies), not a separate category of excuse.
 
+## Latest Update (2026-03-24)
+
+- **E2E (post inference / GPU path recovery):** A follow-up single-module pass reported **11 modules OK** and **6 failed** (narrower than the larger Batch B sweep summarized below for March 23).
+  Remaining failures still map to the symptom buckets in [Modules that failed](#modules-that-failed).
+- **PMA `node.list`:** The response `tool routing not implemented` came from the control-plane MCP gateway when `node.list` had no entry in `mcpToolRoutes` (`orchestrator/internal/mcpgateway/handlers.go`).
+  That was a **missing handler registration**, not an allowlist-only issue. **`node.list`** and **`node.get`** are now routed in `orchestrator/internal/mcpgateway/node_tools.go` against the orchestrator node registry (`ListNodes`, `GetNodeBySlug`). **`node.refresh_config`** is still not implemented at the gateway and will return **501** until added.
+
 ## Modules That Passed
 
 These completed with **OK** (no failures in the module):
