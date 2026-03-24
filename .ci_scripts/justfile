@@ -36,11 +36,35 @@ lint-go: install-go-tools
     #!/usr/bin/env bash
     set -e
     root="$(cd "{{ root_dir }}" && pwd)"
+    go_max_lines=1000
+    large_go_fail=0
+    echo "==> lint-go: checking for .go files over ${go_max_lines} lines"
+    while IFS= read -r -d '' f; do
+      read -r lines _ < <(wc -l "$f")
+      if [ "$lines" -gt "$go_max_lines" ]; then
+        rel="${f#"$root"/}"
+        echo "lint-go: error: Go file exceeds ${go_max_lines} lines (${lines}): ${rel}" >&2
+        large_go_fail=1
+      fi
+    done < <(find "$root" -type f -name '*.go' \
+      ! -path '*/.git/*' \
+      ! -path '*/vendor/*' \
+      ! -path '*/.venv/*' \
+      ! -path '*/tmp/*' \
+      ! -path '*_bdd/tmp/*' \
+      -print0 | sort -z)
     go_modules=$(grep -E '^[[:space:]]*\./' "$root/go.work" | sed 's|^[[:space:]]*\./||;s/[[:space:]].*//' | tr '\n' ' ')
+    lint_go_exit=0
     for m in $go_modules; do
-      echo "==> go vet ./... ($m)"; (pushd "$root/$m" >/dev/null && go vet ./...)
-      echo "==> staticcheck ./... ($m)"; (pushd "$root/$m" >/dev/null && staticcheck ./...)
+      echo "==> go vet ./... ($m)"
+      (pushd "$root/$m" >/dev/null && go vet ./...) || lint_go_exit=1
+      echo "==> staticcheck ./... ($m)"
+      (pushd "$root/$m" >/dev/null && staticcheck ./...) || lint_go_exit=1
     done
+    if [ "$large_go_fail" -ne 0 ]; then
+      echo "lint-go: failed: one or more Go files exceed ${go_max_lines} lines (see messages above)" >&2
+    fi
+    exit $(( lint_go_exit | large_go_fail ))
 
 lint-go-ci: install-go-tools
     #!/usr/bin/env bash
