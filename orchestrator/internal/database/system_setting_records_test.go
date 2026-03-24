@@ -18,16 +18,14 @@ func TestSystemSettingRecord_ToSystemSetting_roundTrip(t *testing.T) {
 	ts := time.Now().UTC()
 	r := &SystemSettingRecord{
 		Key:       "k",
-		Value:     ptr("v"),
+		Value:     &testSystemSettingVal,
 		ValueType: "string",
 		Version:   2,
 		UpdatedAt: ts,
-		UpdatedBy: ptr("u"),
+		UpdatedBy: &testSystemSettingUser,
 	}
 	got := r.ToSystemSetting()
 	if got.Key != "k" || got.Version != 2 || got.UpdatedAt != ts {
 		t.Fatalf("got %+v", got)
 	}
 }
-
-func ptr(s string) *string { return &s }

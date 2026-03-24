@@ -37,7 +37,7 @@ func (s *erroringStore) HasAnyActiveApiCredential(ctx context.Context) (bool, er
 	return s.MockDB.HasAnyActiveApiCredential(ctx)
 }
 
-const (
+var (
 	testConfigAckApplied = "applied"
 	testWorkerURL        = "http://worker:8080"
 	testBearerToken      = "bearer"
@@ -61,9 +61,9 @@ func TestInferencePathAvailable_WithDispatchableNode(t *testing.T) {
 	mock.Nodes[nodeID] = &models.Node{
 		NodeBase: models.NodeBase{
 			Status:               models.NodeStatusActive,
-			ConfigAckStatus:      ptr(testConfigAckApplied),
-			WorkerAPITargetURL:   ptr(testWorkerURL),
-			WorkerAPIBearerToken: ptr(testBearerToken),
+			ConfigAckStatus:      &testConfigAckApplied,
+			WorkerAPITargetURL:   &testWorkerURL,
+			WorkerAPIBearerToken: &testBearerToken,
 		},
 		ID: nodeID,
 	}
@@ -120,17 +120,15 @@ func TestHasWorkerReportedPMAReady_NoNodes(t *testing.T) {
 	}
 }
 
-func ptr(s string) *string { return &s }
-
 func TestHasWorkerReportedPMAReady_WithPMAReady(t *testing.T) {
 	mock := testutil.NewMockDB()
 	nodeID := uuid.New()
 	mock.Nodes[nodeID] = &models.Node{
 		NodeBase: models.NodeBase{
 			Status:               models.NodeStatusActive,
-			ConfigAckStatus:      ptr(testConfigAckApplied),
-			WorkerAPITargetURL:   ptr(testWorkerURL),
-			WorkerAPIBearerToken: ptr(testBearerToken),
+			ConfigAckStatus:      &testConfigAckApplied,
+			WorkerAPITargetURL:   &testWorkerURL,
+			WorkerAPIBearerToken: &testBearerToken,
 		},
 		ID: nodeID,
 	}
@@ -155,9 +153,9 @@ func TestHasWorkerReportedPMAReady_NoPMAInSnapshot(t *testing.T) {
 	mock.Nodes[nodeID] = &models.Node{
 		NodeBase: models.NodeBase{
 			Status:               models.NodeStatusActive,
-			ConfigAckStatus:      ptr(testConfigAckApplied),
-			WorkerAPITargetURL:   ptr(testWorkerURL),
-			WorkerAPIBearerToken: ptr(testBearerToken),
+			ConfigAckStatus:      &testConfigAckApplied,
+			WorkerAPITargetURL:   &testWorkerURL,
+			WorkerAPIBearerToken: &testBearerToken,
 		},
 		ID: nodeID,
 	}
@@ -221,9 +219,9 @@ func TestHasWorkerReportedPMAReady_InvalidSnapshotJSON(t *testing.T) {
 	mock.Nodes[nodeID] = &models.Node{
 		NodeBase: models.NodeBase{
 			Status:               models.NodeStatusActive,
-			ConfigAckStatus:      ptr(testConfigAckApplied),
-			WorkerAPITargetURL:   ptr(testWorkerURL),
-			WorkerAPIBearerToken: ptr(testBearerToken),
+			ConfigAckStatus:      &testConfigAckApplied,
+			WorkerAPITargetURL:   &testWorkerURL,
+			WorkerAPIBearerToken: &testBearerToken,
 		},
 		ID: nodeID,
 	}
@@ -240,9 +238,9 @@ func TestHasWorkerReportedPMAReady_NilManagedServicesStatus(t *testing.T) {
 	mock.Nodes[nodeID] = &models.Node{
 		NodeBase: models.NodeBase{
 			Status:               models.NodeStatusActive,
-			ConfigAckStatus:      ptr(testConfigAckApplied),
-			WorkerAPITargetURL:   ptr(testWorkerURL),
-			WorkerAPIBearerToken: ptr(testBearerToken),
+			ConfigAckStatus:      &testConfigAckApplied,
+			WorkerAPITargetURL:   &testWorkerURL,
+			WorkerAPIBearerToken: &testBearerToken,
 		},
 		ID: nodeID,
 	}

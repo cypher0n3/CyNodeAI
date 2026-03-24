@@ -12,35 +12,35 @@ func TestParsePreferenceValue_Nil(t *testing.T) {
 }
 
 func TestParsePreferenceValue_Empty(t *testing.T) {
-	got, err := ParsePreferenceValue(strPtr(""))
+	got, err := ParsePreferenceValue(&testPrefEmpty)
 	if err != nil || got != nil {
 		t.Errorf("got %v, err %v", got, err)
 	}
 }
 
 func TestParsePreferenceValue_Whitespace(t *testing.T) {
-	got, err := ParsePreferenceValue(strPtr("   "))
+	got, err := ParsePreferenceValue(&testPrefWhitespace)
 	if err != nil || got != nil {
 		t.Errorf("got %v, err %v", got, err)
 	}
 }
 
 func TestParsePreferenceValue_String(t *testing.T) {
-	got, err := ParsePreferenceValue(strPtr(`"hello"`))
+	got, err := ParsePreferenceValue(&testPrefJSONString)
 	if err != nil || got != "hello" {
 		t.Errorf("got %v, err %v", got, err)
 	}
 }
 
 func TestParsePreferenceValue_Number(t *testing.T) {
-	got, err := ParsePreferenceValue(strPtr("42"))
+	got, err := ParsePreferenceValue(&testPrefNumber)
 	if err != nil || got != float64(42) {
 		t.Errorf("got %v, err %v", got, err)
 	}
 }
 
 func TestParsePreferenceValue_Object(t *testing.T) {
-	got, err := ParsePreferenceValue(strPtr(`{"a":1}`))
+	got, err := ParsePreferenceValue(&testPrefJSONObject)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -50,10 +50,8 @@ func TestParsePreferenceValue_Object(t *testing.T) {
 }
 
 func TestParsePreferenceValue_InvalidJSON(t *testing.T) {
-	_, err := ParsePreferenceValue(strPtr(`{invalid`))
+	_, err := ParsePreferenceValue(&testPrefInvalidJSON)
 	if err == nil {
 		t.Error("expected error")
 	}
 }
-
-func strPtr(s string) *string { return &s }

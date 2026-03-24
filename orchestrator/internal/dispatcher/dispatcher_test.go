@@ -7,6 +7,16 @@ import (
 	"github.com/cypher0n3/cynodeai/go_shared_libs/contracts/workerapi"
 )
 
+var (
+	parseSpecEmptyStr            = ""
+	parseSpecInvalidJSONBrace    = "{"
+	parseSpecMissingCommand      = `{"image":"alpine"}`
+	parseSpecValidEcho           = `{"command":["echo","hi"],"image":"alpine"}`
+	parseSpecSBAJobSpecJSONNoCmd = `{"job_spec_json":"{\"protocol_version\":\"1.0\",\"job_id\":\"j1\",\"task_id\":\"t1\",\"constraints\":{\"max_runtime_seconds\":60,\"max_output_bytes\":1024},\"steps\":[]}"}`
+	parseSpecWithTimeout         = `{"command":["a","b"],"image":"img","timeout_seconds":30}`
+	parseSpecUseInference        = `{"command":["x"],"use_inference":true}`
+)
+
 func TestParseSandboxSpec(t *testing.T) {
 	tests := []struct {
 		name    string
@@ -14,11 +24,11 @@ func TestParseSandboxSpec(t *testing.T) {
 		wantErr bool
 	}{
 		{"nil", nil, true},
-		{"empty", strPtr(""), true},
-		{"invalid json", strPtr("{"), true},
-		{"missing command", strPtr(`{"image":"alpine"}`), true},
-		{"valid", strPtr(`{"command":["echo","hi"],"image":"alpine"}`), false},
-		{"sba job_spec_json no command", strPtr(`{"job_spec_json":"{\"protocol_version\":\"1.0\",\"job_id\":\"j1\",\"task_id\":\"t1\",\"constraints\":{\"max_runtime_seconds\":60,\"max_output_bytes\":1024},\"steps\":[]}"}`), false},
+		{"empty", &parseSpecEmptyStr, true},
+		{"invalid json", &parseSpecInvalidJSONBrace, true},
+		{"missing command", &parseSpecMissingCommand, true},
+		{"valid", &parseSpecValidEcho, false},
+		{"sba job_spec_json no command", &parseSpecSBAJobSpecJSONNoCmd, false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -29,7 +39,7 @@ func TestParseSandboxSpec(t *testing.T) {
 		})
 	}
 
-	spec, err := ParseSandboxSpec(strPtr(`{"command":["a","b"],"image":"img","timeout_seconds":30}`))
+	spec, err := ParseSandboxSpec(&parseSpecWithTimeout)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -37,7 +47,7 @@ func TestParseSandboxSpec(t *testing.T) {
 		t.Errorf("spec: %+v", spec)
 	}
 
-	spec2, err := ParseSandboxSpec(strPtr(`{"command":["x"],"use_inference":true}`))
+	spec2, err := ParseSandboxSpec(&parseSpecUseInference)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -45,7 +55,7 @@ func TestParseSandboxSpec(t *testing.T) {
 		t.Error("use_inference should be true")
 	}
 
-	spec3, err := ParseSandboxSpec(strPtr(`{"job_spec_json":"{\"protocol_version\":\"1.0\",\"job_id\":\"j1\",\"task_id\":\"t1\",\"constraints\":{\"max_runtime_seconds\":60,\"max_output_bytes\":1024},\"steps\":[]}"}`))
+	spec3, err := ParseSandboxSpec(&parseSpecSBAJobSpecJSONNoCmd)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -96,8 +106,4 @@ func TestTruncateOneLine(t *testing.T) {
 	if TruncateOneLine("ab", 10) != "ab" {
 		t.Error("short line unchanged")
 	}
-}
-
-func strPtr(s string) *string {
-	return &s
 }

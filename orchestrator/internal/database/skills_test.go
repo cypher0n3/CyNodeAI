@@ -163,7 +163,7 @@ func TestSkills_CreateSkill_ExplicitScope(t *testing.T) {
 func TestSkills_UpdateSystemSkill_ReturnsError(t *testing.T) {
 	db, ctx := integrationDB(t)
 	_ = db.EnsureDefaultSkill(ctx, "# Default")
-	_, err := db.UpdateSkill(ctx, DefaultSkillID, nil, strPtr("# Changed"), nil)
+	_, err := db.UpdateSkill(ctx, DefaultSkillID, nil, &testSkillContentUpdate, nil)
 	if err == nil {
 		t.Error("UpdateSkill on system skill: expected error")
 	}

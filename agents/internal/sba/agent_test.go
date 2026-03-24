@@ -277,7 +277,7 @@ func TestRunDirectGeneration_WithMockLLM(t *testing.T) {
 		ProtocolVersion: "1.0",
 		JobID:           "j1",
 		Status:          statusSuccess,
-		InferenceUsed:   boolPtr(true),
+		InferenceUsed:   &inferenceUsedTrue,
 	}
 	opts := &RunAgentOptions{LLM: &mockLLM{response: "hello from direct gen"}}
 	out := runDirectGeneration(context.Background(), spec, opts, t.TempDir(), result, "qwen3.5:0.8b")
@@ -295,7 +295,7 @@ func TestRunDirectGeneration_MockLLMError(t *testing.T) {
 		JobID:           "j1",
 		Constraints:     sbajob.JobConstraints{MaxRuntimeSeconds: 60, MaxOutputBytes: 1024},
 	}
-	result := &sbajob.Result{Status: statusSuccess, InferenceUsed: boolPtr(true)}
+	result := &sbajob.Result{Status: statusSuccess, InferenceUsed: &inferenceUsedTrue}
 	opts := &RunAgentOptions{LLM: &mockLLM{err: errors.New("llm failed")}}
 	out := runDirectGeneration(context.Background(), spec, opts, t.TempDir(), result, "qwen3.5:0.8b")
 	if out.Status != statusFailed {
@@ -309,7 +309,7 @@ func TestRunDirectGeneration_HTTPError(t *testing.T) {
 		JobID:           "j1",
 		Constraints:     sbajob.JobConstraints{MaxRuntimeSeconds: 60, MaxOutputBytes: 1024},
 	}
-	result := &sbajob.Result{Status: statusSuccess, InferenceUsed: boolPtr(true)}
+	result := &sbajob.Result{Status: statusSuccess, InferenceUsed: &inferenceUsedTrue}
 	t.Setenv("OLLAMA_BASE_URL", "http://127.0.0.1:19997") // unreachable
 	out := runDirectGeneration(context.Background(), spec, nil, t.TempDir(), result, "qwen3.5:0.8b")
 	if out.Status != statusFailed {
@@ -329,7 +329,7 @@ func TestRunDirectGeneration_OllamaErrorField(t *testing.T) {
 		JobID:           "j1",
 		Constraints:     sbajob.JobConstraints{MaxRuntimeSeconds: 60, MaxOutputBytes: 1024},
 	}
-	result := &sbajob.Result{Status: statusSuccess, InferenceUsed: boolPtr(true)}
+	result := &sbajob.Result{Status: statusSuccess, InferenceUsed: &inferenceUsedTrue}
 	out := runDirectGeneration(context.Background(), spec, nil, t.TempDir(), result, "qwen3.5:0.8b")
 	if out.Status != statusFailed {
 		t.Errorf("status=%q, want failed", out.Status)
@@ -352,7 +352,7 @@ func TestRunDirectGeneration_OllamaSuccess(t *testing.T) {
 		Constraints:     sbajob.JobConstraints{MaxRuntimeSeconds: 60, MaxOutputBytes: 1024},
 		Context:         &sbajob.ContextSpec{TaskContext: "echo test"},
 	}
-	result := &sbajob.Result{Status: statusSuccess, InferenceUsed: boolPtr(true)}
+	result := &sbajob.Result{Status: statusSuccess, InferenceUsed: &inferenceUsedTrue}
 	out := runDirectGeneration(context.Background(), spec, nil, t.TempDir(), result, "qwen3.5:0.8b")
 	if out.Status != statusSuccess {
 		t.Errorf("status=%q, want success", out.Status)
@@ -374,7 +374,7 @@ func TestRunDirectGeneration_BadJSONResponse(t *testing.T) {
 		JobID:           "j1",
 		Constraints:     sbajob.JobConstraints{MaxRuntimeSeconds: 60, MaxOutputBytes: 1024},
 	}
-	result := &sbajob.Result{Status: statusSuccess, InferenceUsed: boolPtr(true)}
+	result := &sbajob.Result{Status: statusSuccess, InferenceUsed: &inferenceUsedTrue}
 	out := runDirectGeneration(context.Background(), spec, nil, t.TempDir(), result, "qwen3.5:0.8b")
 	if out.Status != statusFailed {
 		t.Errorf("status=%q, want failed", out.Status)

@@ -19,6 +19,8 @@ const testTaskID = "tid-1"
 const pathV1ChatThreads = "/v1/chat/threads"
 const pathV1ChatCompletions = "/v1/chat/completions"
 
+var testJobResultHello = "hello\n"
+
 // threadsAPIHandler returns a handler that responds with status and body when path matches (for thread API tests).
 func threadsAPIHandler(path string, status int, body string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -161,7 +163,7 @@ func TestClient_GetTaskResult(t *testing.T) {
 		}
 		jsonHandler(http.StatusOK, userapi.TaskResultResponse{
 			TaskID: "tid-123", Status: "completed",
-			Jobs: []userapi.JobResponse{{ID: "j1", Status: "completed", Result: strPtr("hello\n")}},
+			Jobs: []userapi.JobResponse{{ID: "j1", Status: "completed", Result: &testJobResultHello}},
 		})(w, r)
 	}))
 	defer server.Close()
@@ -175,12 +177,10 @@ func TestClient_GetTaskResult(t *testing.T) {
 	if resp.TaskID != "tid-123" || resp.Status != "completed" {
 		t.Errorf("resp = %+v", resp)
 	}
-	if len(resp.Jobs) != 1 || resp.Jobs[0].Result == nil || *resp.Jobs[0].Result != "hello\n" {
+	if len(resp.Jobs) != 1 || resp.Jobs[0].Result == nil || *resp.Jobs[0].Result != testJobResultHello {
 		t.Errorf("Jobs = %+v", resp.Jobs)
 	}
 }
-
-func strPtr(s string) *string { return &s }
 
 func TestClient_InvalidBaseURL(t *testing.T) {
 	client := NewClient("://invalid")

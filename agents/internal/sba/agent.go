@@ -35,6 +35,11 @@ const (
 	inferenceHTTPTimeout = 300 * time.Second
 )
 
+var (
+	inferenceUsedTrue  = true
+	inferenceUsedFalse = false
+)
+
 // smallModelSuffixes lists parameter-count suffixes that indicate a model too small
 // to reliably produce ReAct-style structured output. These use direct generation
 // (single Ollama call, no agent loop) to avoid langchaingo streaming issues with
@@ -112,7 +117,7 @@ func RunAgent(ctx context.Context, spec *sbajob.JobSpec, workspace string, opts 
 		ProtocolVersion: spec.ProtocolVersion,
 		JobID:           spec.JobID,
 		Status:          statusSuccess,
-		InferenceUsed:   boolPtr(true),
+		InferenceUsed:   &inferenceUsedTrue,
 		Steps:           nil,
 		Artifacts:       nil,
 	}
@@ -196,7 +201,7 @@ func runDirectGeneration(ctx context.Context, spec *sbajob.JobSpec, opts *RunAge
 			return result
 		}
 		result.FinalAnswer = strings.TrimSpace(content)
-		result.InferenceUsed = boolPtr(true)
+		result.InferenceUsed = &inferenceUsedTrue
 		return result
 	}
 	serverURL, client := resolveInferenceURL()
@@ -249,7 +254,7 @@ func runDirectGeneration(ctx context.Context, spec *sbajob.JobSpec, opts *RunAge
 		return result
 	}
 	result.FinalAnswer = strings.TrimSpace(out.Message.Content)
-	result.InferenceUsed = boolPtr(true)
+	result.InferenceUsed = &inferenceUsedTrue
 	return result
 }
 
@@ -259,10 +264,6 @@ func buildUserPromptFromSpec(spec *sbajob.JobSpec) string {
 		return spec.Context.TaskContext
 	}
 	return ""
-}
-
-func boolPtr(v bool) *bool {
-	return &v
 }
 
 func setResultFromExecErr(result *sbajob.Result, ctx context.Context, err error) {

@@ -42,6 +42,12 @@ const inputModePrompt = "prompt"
 const inputModeCommands = "commands"
 const testPassword = "secret"
 
+var (
+	testJobResultOut        = "out"
+	testJobResultDone       = "done"
+	testJobResultStdoutJSON = `{"stdout":"s-out","stderr":""}`
+)
+
 func writeTempConfig(t *testing.T, content string) string {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "config.yaml")
@@ -907,7 +913,7 @@ func TestRunTaskResult_NoToken(t *testing.T) {
 func TestRunTaskResult_OK(t *testing.T) {
 	server := mockJSONServer(t, http.StatusOK, userapi.TaskResultResponse{
 		TaskID: "tid", Status: "completed",
-		Jobs: []userapi.JobResponse{{ID: "j1", Status: "completed", Result: strPtr("out")}},
+		Jobs: []userapi.JobResponse{{ID: "j1", Status: "completed", Result: &testJobResultOut}},
 	})
 	defer server.Close()
 	cfg = &config.Config{GatewayURL: server.URL, Token: "tok"}
@@ -928,7 +934,7 @@ func TestRunTaskWatch_NoToken(t *testing.T) {
 func TestRunTaskWatch_ExitsOnTerminalStatus(t *testing.T) {
 	server := mockJSONServer(t, http.StatusOK, userapi.TaskResultResponse{
 		TaskID: "tid", Status: "completed",
-		Jobs: []userapi.JobResponse{{ID: "j1", Status: "completed", Result: strPtr("done")}},
+		Jobs: []userapi.JobResponse{{ID: "j1", Status: "completed", Result: &testJobResultDone}},
 	})
 	defer server.Close()
 	cfg = &config.Config{GatewayURL: server.URL, Token: "tok"}
@@ -1670,7 +1676,7 @@ func TestRunTaskCreate_JSONOutput(t *testing.T) {
 func TestRunTaskResult_JSONOutput(t *testing.T) {
 	server := mockJSONServer(t, http.StatusOK, userapi.TaskResultResponse{
 		TaskID: "tid", Status: "completed",
-		Jobs: []userapi.JobResponse{{ID: "j1", Status: "completed", Result: strPtr("out")}},
+		Jobs: []userapi.JobResponse{{ID: "j1", Status: "completed", Result: &testJobResultOut}},
 	})
 	defer server.Close()
 	cfg = &config.Config{GatewayURL: server.URL, Token: "tok"}
@@ -1724,7 +1730,7 @@ func TestPrintTaskResult_JSONOutput_TerminalIncludesStderr(t *testing.T) {
 		Jobs: []userapi.JobResponse{{
 			ID:     "j1",
 			Status: "completed",
-			Result: strPtr(`{"stdout":"s-out","stderr":""}`),
+			Result: &testJobResultStdoutJSON,
 		}},
 	})
 	_ = w.Close()
@@ -1734,7 +1740,7 @@ func TestPrintTaskResult_JSONOutput_TerminalIncludesStderr(t *testing.T) {
 	if err := json.Unmarshal(out.Bytes(), &payload); err != nil {
 		t.Fatalf("expected valid JSON output, got %q (err=%v)", out.String(), err)
 	}
-	if got, _ := payload["stdout"].(string); got != `{"stdout":"s-out","stderr":""}` {
+	if got, _ := payload["stdout"].(string); got != testJobResultStdoutJSON {
 		t.Fatalf("stdout mismatch: got %q payload=%v", got, payload)
 	}
 	stderr, ok := payload["stderr"]
@@ -1815,7 +1821,7 @@ func TestRunTaskGet_Forbidden(t *testing.T) {
 func TestRunTaskResult_WaitTerminal(t *testing.T) {
 	server := mockJSONServer(t, http.StatusOK, userapi.TaskResultResponse{
 		TaskID: "tid", Status: "completed",
-		Jobs: []userapi.JobResponse{{ID: "j1", Status: "completed", Result: strPtr("done")}},
+		Jobs: []userapi.JobResponse{{ID: "j1", Status: "completed", Result: &testJobResultDone}},
 	})
 	defer server.Close()
 	cfg = &config.Config{GatewayURL: server.URL, Token: "tok"}
@@ -1863,8 +1869,6 @@ func TestExitFromGatewayErr_Validation(t *testing.T) {
 		t.Errorf("exit code = %d, want 6 (validation)", exit.CodeOf(err))
 	}
 }
-
-func strPtr(s string) *string { return &s }
 
 func TestRunStubList_NoToken(t *testing.T) {
 	cfg = &config.Config{}
@@ -2265,7 +2269,7 @@ func TestRunTaskResult_Wait(t *testing.T) {
 			}
 			_ = json.NewEncoder(w).Encode(userapi.TaskResultResponse{
 				TaskID: "tid", Status: "completed",
-				Jobs: []userapi.JobResponse{{Result: strPtr("done")}},
+				Jobs: []userapi.JobResponse{{Result: &testJobResultDone}},
 			})
 			return
 		}

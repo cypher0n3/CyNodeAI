@@ -19,6 +19,8 @@ import (
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/models"
 )
 
+var testTaskPrompt = "test prompt"
+
 // TestTaskHandler_CreateTaskSuccess tests successful task creation path
 func TestTaskHandler_CreateTaskSuccess(t *testing.T) {
 	// Test the JSON response structure
@@ -26,7 +28,7 @@ func TestTaskHandler_CreateTaskSuccess(t *testing.T) {
 	resp := userapi.TaskResponse{
 		TaskID:    uuid.New().String(),
 		Status:    userapi.StatusQueued,
-		Prompt:    ptr("test prompt"),
+		Prompt:    &testTaskPrompt,
 		CreatedAt: now,
 		UpdatedAt: now,
 	}
@@ -296,11 +298,6 @@ func TestAuditLogWithNilPointerFields(t *testing.T) {
 	handler.auditLog(context.Background(), nil, "test_event", false, "", "", "")
 }
 
-// Helper function
-func ptr(s string) *string {
-	return &s
-}
-
 // TestJobResponseWithNilFields tests JobResponse with nil optional fields
 func TestJobResponseWithNilFields(t *testing.T) {
 	resp := userapi.JobResponse{
@@ -383,7 +380,7 @@ func TestTaskResponseWithSummary(t *testing.T) {
 	resp := userapi.TaskResponse{
 		TaskID:    uuid.New().String(),
 		Status:    userapi.StatusCompleted,
-		Prompt:    ptr("test prompt"),
+		Prompt:    &testTaskPrompt,
 		Summary:   &summary,
 		CreatedAt: time.Now().Format(time.RFC3339),
 		UpdatedAt: time.Now().Format(time.RFC3339),

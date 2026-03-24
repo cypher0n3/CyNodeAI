@@ -431,7 +431,7 @@ func RunStepsDirect(ctx context.Context, spec *sbajob.JobSpec, workspace, jobDir
 		ProtocolVersion: spec.ProtocolVersion,
 		JobID:           spec.JobID,
 		Status:          statusSuccess,
-		InferenceUsed:   boolPtr(false),
+		InferenceUsed:   &inferenceUsedFalse,
 		Steps:           nil,
 		Artifacts:       nil,
 	}

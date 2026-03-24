@@ -13,6 +13,11 @@ const (
 	fieldTaskID          = "task_id"
 )
 
+var (
+	testResultFailureCodeStepFailed = "step_failed"
+	testResultFailureMsgStep0       = "step 0 failed"
+)
+
 // parseAndExpectValidationError calls ParseAndValidateJobSpec and asserts the error is a ValidationError.
 // If wantField is non-empty, asserts ve.Field == wantField. If msgSubstr is non-empty, asserts Message contains it.
 func parseAndExpectValidationError(t *testing.T, data []byte, wantField, msgSubstr string) {
@@ -213,8 +218,8 @@ func TestResult_MarshalRoundTrip(t *testing.T) {
 		Status:          "failure",
 		Steps:           []StepResult{{Index: 0, Type: "run_command", Status: "failed", ExitCode: &code}},
 		Artifacts:       nil,
-		FailureCode:     strPtr("step_failed"),
-		FailureMessage:  strPtr("step 0 failed"),
+		FailureCode:     &testResultFailureCodeStepFailed,
+		FailureMessage:  &testResultFailureMsgStep0,
 	}
 	b, err := json.Marshal(r)
 	if err != nil {
@@ -227,7 +232,7 @@ func TestResult_MarshalRoundTrip(t *testing.T) {
 	if r2.JobID != r.JobID || r2.Status != r.Status {
 		t.Errorf("round trip mismatch: %+v", r2)
 	}
-	if r2.FailureCode == nil || *r2.FailureCode != "step_failed" {
+	if r2.FailureCode == nil || *r2.FailureCode != testResultFailureCodeStepFailed {
 		t.Errorf("failure_code: %v", r2.FailureCode)
 	}
 }
@@ -321,5 +326,3 @@ func TestParseMajorVersion(t *testing.T) {
 		}
 	}
 }
-
-func strPtr(s string) *string { return &s }
