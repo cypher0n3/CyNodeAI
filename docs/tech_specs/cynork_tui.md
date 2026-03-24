@@ -32,6 +32,7 @@
   - [Local Config Traces To](#local-config-traces-to)
 - [Local Cache](#local-cache)
   - [Local Cache Traces To](#local-cache-traces-to)
+  - [TUI session cache (disk)](#tui-session-cache-disk)
 - [Auth Recovery](#auth-recovery)
   - [Auth Recovery Traces To](#auth-recovery-traces-to)
   - [`AuthRecovery` Constants](#authrecovery-constants)
@@ -85,6 +86,7 @@ The TUI expectation is real token-by-token streaming from the gateway: visible a
 
 - [Chat command](cli_management_app_commands_chat.md)
 - [TUI slash commands](cynork_tui_slash_commands.md)
+- [TUI session cache (disk layout)](cynork_tui_session_cache.md)
 - [Chat threads and messages](chat_threads_and_messages.md)
 - [OpenAI-compatible chat API](openai_compatible_chat_api.md)
 
@@ -450,6 +452,11 @@ The TUI MAY cache lightweight metadata that improves responsiveness of completio
 - Cacheable data MAY also include lightweight context-pane data and completion lists needed for slash-command or `@` lookup responsiveness.
 - The cache MUST NOT store secrets or chat transcript content.
 - Cache entries SHOULD define bounded age and SHOULD be invalidated after relevant mutating actions.
+
+### TUI Session Cache (Disk)
+
+On-disk session cache for the fullscreen TUI (per-process `session_id`, JSON files, retention of up to 10 recent sessions) is specified in [Cynork TUI session cache](cynork_tui_session_cache.md).
+That document is the single source of truth for directory layout (`tui_sessions/<session_id>.json`), JSON schema, eviction, and forbidden content.
 
 ## Auth Recovery
 

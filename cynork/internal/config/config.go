@@ -45,18 +45,23 @@ type persistedConfig struct {
 // userHomeDir is overridable in tests.
 var userHomeDir = os.UserHomeDir
 
-// ConfigDir returns the default config directory.
-// If XDG_CONFIG_HOME is set, uses $XDG_CONFIG_HOME/cynork; otherwise ~/.config/cynork.
-// See docs/tech_specs/cli_management_app.md (CliConfigFileLocation).
-func ConfigDir() (string, error) {
-	if xdg := os.Getenv("XDG_CONFIG_HOME"); xdg != "" {
+// resolveXDGOrHome returns $envKey/cynork when set, else ~/.homeSub/cynork.
+func resolveXDGOrHome(envKey, homeSub string) (string, error) {
+	if xdg := os.Getenv(envKey); xdg != "" {
 		return filepath.Join(xdg, "cynork"), nil
 	}
 	home, err := userHomeDir()
 	if err != nil {
 		return "", fmt.Errorf("home dir: %w", err)
 	}
-	return filepath.Join(home, ".config", "cynork"), nil
+	return filepath.Join(home, homeSub, "cynork"), nil
+}
+
+// ConfigDir returns the default config directory.
+// If XDG_CONFIG_HOME is set, uses $XDG_CONFIG_HOME/cynork; otherwise ~/.config/cynork.
+// See docs/tech_specs/cli_management_app.md (CliConfigFileLocation).
+func ConfigDir() (string, error) {
+	return resolveXDGOrHome("XDG_CONFIG_HOME", ".config")
 }
 
 // ConfigPath returns the default config file path (~/.config/cynork/config.yaml).

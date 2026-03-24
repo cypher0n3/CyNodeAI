@@ -37,7 +37,7 @@ var slashHelpCatalog = []struct{ name, desc string }{
 	{"/auth refresh", "rotate access token"},
 	{"/auth whoami", "show current user"},
 	{"/clear", "clear scrollback"},
-	{"/copy", "last|all — plain text to clipboard"},
+	{"/copy", "last|all - plain text to clipboard"},
 	{"/connect", "show or set gateway URL"},
 	{"/exit", "end session"},
 	{"/help", "list slash commands"},

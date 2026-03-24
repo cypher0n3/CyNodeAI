@@ -13,6 +13,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/cypher0n3/cynodeai/cynork/internal/chat"
 	"github.com/cypher0n3/cynodeai/cynork/internal/gateway"
+	"github.com/cypher0n3/cynodeai/cynork/internal/tuicache"
 	"github.com/cypher0n3/cynodeai/go_shared_libs/contracts/userapi"
 )
 
@@ -698,6 +699,7 @@ func (m *Model) threadCommandNew() tea.Cmd {
 		return nil
 	}
 	m.Scrollback = append(m.Scrollback, scrollbackSystemLinePrefix+chat.LandmarkThreadSwitched+" New thread: "+threadID)
+	m.persistLastThreadToCache()
 	return nil
 }
 
@@ -714,6 +716,7 @@ func (m *Model) threadCommandSwitch(parts []string, rest string) tea.Cmd {
 	}
 	m.Session.SetCurrentThreadID(id)
 	m.Scrollback = append(m.Scrollback, scrollbackSystemLinePrefix+chat.LandmarkThreadSwitched+" Switched to thread: "+id)
+	m.persistLastThreadToCache()
 	return nil
 }
 
@@ -858,15 +861,73 @@ func (m *Model) applyThreadRenameResult(msg threadRenameResult) (tea.Model, tea.
 
 func (m *Model) ensureThreadCmd() tea.Cmd {
 	return func() tea.Msg {
-		if m.Session == nil {
-			return ensureThreadResult{err: fmt.Errorf("no session")}
-		}
-		err := m.Session.EnsureThread(m.ResumeThreadSelector)
-		if err != nil {
-			return ensureThreadResult{err: err}
-		}
-		return ensureThreadResult{threadID: m.Session.CurrentThreadID}
+		return m.runEnsureThread()
 	}
+}
+
+func (m *Model) runEnsureThread() tea.Msg {
+	if m.Session == nil {
+		return ensureThreadResult{err: fmt.Errorf("no session")}
+	}
+	userID := m.userIDForEnsureThread()
+	m.tryResumeThreadFromCache(userID)
+	if err := m.Session.EnsureThread(m.ResumeThreadSelector); err != nil {
+		return ensureThreadResult{err: err}
+	}
+	m.persistCurrentThreadAfterEnsure(userID)
+	return ensureThreadResult{threadID: m.Session.CurrentThreadID}
+}
+
+func (m *Model) userIDForEnsureThread() string {
+	if m.Session.Client == nil || m.Session.Client.Token == "" {
+		return ""
+	}
+	u, err := m.Session.Client.GetMe()
+	if err != nil {
+		return ""
+	}
+	return u.ID
+}
+
+func (m *Model) tryResumeThreadFromCache(userID string) {
+	if m.Session.CurrentThreadID != "" || m.ResumeThreadSelector != "" || userID == "" || m.Session.Client == nil {
+		return
+	}
+	root, err := tuicache.Root()
+	if err != nil {
+		return
+	}
+	tid, ok, _ := tuicache.ReadLastThread(root, m.Session.Client.BaseURL, userID, m.Session.ProjectID)
+	if ok {
+		m.Session.SetCurrentThreadID(tid)
+	}
+}
+
+func (m *Model) persistCurrentThreadAfterEnsure(userID string) {
+	if userID == "" || m.Session.Client == nil {
+		return
+	}
+	root, err := tuicache.Root()
+	if err != nil {
+		return
+	}
+	_ = tuicache.WriteLastThread(root, m.Session.Client.BaseURL, userID, m.Session.ProjectID, m.Session.CurrentThreadID)
+}
+
+// persistLastThreadToCache writes CurrentThreadID under the XDG cache dir (keyed by gateway, user, project).
+func (m *Model) persistLastThreadToCache() {
+	if m.Session == nil || m.Session.Client == nil || m.Session.Client.Token == "" || m.Session.CurrentThreadID == "" {
+		return
+	}
+	u, err := m.Session.Client.GetMe()
+	if err != nil {
+		return
+	}
+	root, err := tuicache.Root()
+	if err != nil {
+		return
+	}
+	_ = tuicache.WriteLastThread(root, m.Session.Client.BaseURL, u.ID, m.Session.ProjectID, m.Session.CurrentThreadID)
 }
 
 func (m *Model) applyEnsureThreadResult(msg ensureThreadResult) (tea.Model, tea.Cmd) {

@@ -273,32 +273,44 @@ func TestSave(t *testing.T) {
 	}
 }
 
-func TestConfigDir(t *testing.T) {
-	dir := t.TempDir()
-	_ = os.Unsetenv("XDG_CONFIG_HOME")
-	_ = os.Setenv("HOME", dir)
-	defer func() { _, _ = os.Unsetenv("HOME"), os.Unsetenv("XDG_CONFIG_HOME") }()
-	got, err := ConfigDir()
-	if err != nil {
-		t.Fatalf("ConfigDir: %v", err)
-	}
-	want := filepath.Join(dir, ".config", "cynork")
-	if got != want {
-		t.Errorf("ConfigDir() = %q, want %q", got, want)
-	}
-}
-
-func TestConfigDir_XDGConfigHome(t *testing.T) {
+func TestConfigAndCacheDirs(t *testing.T) {
+	homeDir := t.TempDir()
 	xdgDir := t.TempDir()
-	_ = os.Setenv("XDG_CONFIG_HOME", xdgDir)
-	defer func() { _ = os.Unsetenv("XDG_CONFIG_HOME") }()
-	got, err := ConfigDir()
-	if err != nil {
-		t.Fatalf("ConfigDir: %v", err)
+	tests := []struct {
+		name    string
+		envKey  string
+		homeRel string
+		get     func() (string, error)
+	}{
+		{name: "config", envKey: "XDG_CONFIG_HOME", homeRel: ".config", get: ConfigDir},
+		{name: "cache", envKey: "XDG_CACHE_HOME", homeRel: ".cache", get: CacheDir},
 	}
-	want := filepath.Join(xdgDir, "cynork")
-	if got != want {
-		t.Errorf("ConfigDir() = %q, want %q", got, want)
+	for _, tc := range tests {
+		t.Run(tc.name+"/home_default", func(t *testing.T) {
+			_ = os.Unsetenv(tc.envKey)
+			_ = os.Setenv("HOME", homeDir)
+			defer func() { _, _ = os.Unsetenv("HOME"), os.Unsetenv(tc.envKey) }()
+			got, err := tc.get()
+			if err != nil {
+				t.Fatalf("get: %v", err)
+			}
+			want := filepath.Join(homeDir, tc.homeRel, "cynork")
+			if got != want {
+				t.Errorf("got %q, want %q", got, want)
+			}
+		})
+		t.Run(tc.name+"/xdg_override", func(t *testing.T) {
+			_ = os.Setenv(tc.envKey, xdgDir)
+			defer func() { _ = os.Unsetenv(tc.envKey) }()
+			got, err := tc.get()
+			if err != nil {
+				t.Fatalf("get: %v", err)
+			}
+			want := filepath.Join(xdgDir, "cynork")
+			if got != want {
+				t.Errorf("got %q, want %q", got, want)
+			}
+		})
 	}
 }
 
