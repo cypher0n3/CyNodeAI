@@ -2,6 +2,8 @@
 # This configuration enables the contextcheck linter to ensure that functions
 # calling other functions that require context.Context also require context.
 # This enforces proper context propagation through the call chain.
+#
+# AI Agents: You are NOT ALLOWED to modify this file.
 
 version: "2"
 
@@ -25,8 +27,6 @@ linters:
         - opinionated
         - performance
         - style
-      # disabled-checks:
-      #   - dupImport
     goconst:
       min-len: 3
     gocognit:
