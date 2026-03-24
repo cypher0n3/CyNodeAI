@@ -43,6 +43,10 @@ type OrchestratorConfig struct {
 	// so agents (e.g. PMA) can authenticate to the worker's internal orchestrator proxy. Optional; no default.
 	WorkerInternalAgentToken string
 
+	// MCPSandboxAgentBearerToken when set (with WorkerInternalAgentToken) configures a second MCP gateway
+	// bearer identity for sandbox/worker agents; restricted to the worker tool allowlist (mcpgateway/allowlist.go).
+	MCPSandboxAgentBearerToken string // MCP_SANDBOX_AGENT_BEARER_TOKEN; optional
+
 	// Bootstrap
 	BootstrapAdminPassword string
 
@@ -113,8 +117,9 @@ func LoadOrchestratorConfig() *OrchestratorConfig {
 		OrchestratorPublicURL:     getEnv("ORCHESTRATOR_PUBLIC_URL", "http://localhost:12082"),
 		WorkerAPIBearerToken:      getEnv("WORKER_API_BEARER_TOKEN", "dev-worker-api-token-change-me"),
 		WorkerAPITargetURL:        getEnv("WORKER_API_TARGET_URL", ""),
-		WorkerInternalAgentToken:  getEnv("WORKER_INTERNAL_AGENT_TOKEN", ""),
-		BootstrapAdminPassword:    getEnv("BOOTSTRAP_ADMIN_PASSWORD", "admin123"),
+		WorkerInternalAgentToken:   getEnv("WORKER_INTERNAL_AGENT_TOKEN", ""),
+		MCPSandboxAgentBearerToken: getEnv("MCP_SANDBOX_AGENT_BEARER_TOKEN", ""),
+		BootstrapAdminPassword:     getEnv("BOOTSTRAP_ADMIN_PASSWORD", "admin123"),
 		RateLimitPerMinute:        getIntEnv("RATE_LIMIT_PER_MINUTE", 60),
 		InferenceURL:              getEnv("OLLAMA_BASE_URL", getEnv("INFERENCE_URL", "")),
 		InferenceModel:            getEnv("INFERENCE_MODEL", "qwen3.5:0.8b"),

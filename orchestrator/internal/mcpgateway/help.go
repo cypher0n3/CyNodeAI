@@ -14,7 +14,7 @@ import (
 const helpMaxBytes = 32 * 1024
 
 var helpTopicSnippets = map[string]string{
-	"tools":    "Use MCP tools via POST /v1/mcp/tools/call with tool_name and arguments. Task tools: task.get, task.list, task.result, task.cancel, task.logs. Project tools: project.get, project.list. Help: help.list (topic index), help.get (markdown, requires task_id).",
+	"tools":    "Use MCP tools via POST /v1/mcp/tools/call with tool_name and arguments. Task tools: task.get, task.list, task.result, task.cancel, task.logs. Project tools: project.get, project.list. Help: help.list (topic index), help.get (markdown).",
 	"gateway":  "The MCP gateway validates scoped ids, checks allowlists, writes an audit record per call, and routes to orchestrator store handlers.",
 	"projects": "Projects scope preferences and chat. The PM agent typically uses the default project per user unless a specific project_id is supplied in task or chat context.",
 }
@@ -23,7 +23,7 @@ var helpTopicSnippets = map[string]string{
 const helpOverviewDefault = `# CyNodeAI MCP Gateway (help)
 
 Call POST /v1/mcp/tools/call with JSON: {"tool_name":"...","arguments":{...}}.
-Pass task_id, user_id, job_id, or other scoped ids as required by each tool (see mcp_tools/).
+Pass user_id, job_id, or other scoped ids as required by each tool (see mcp_tools/). Help tools do not use task_id.
 
 Task tools mirror the User API: list tasks by user, fetch task details, task result (jobs), cancel, and aggregated logs from job stdout/stderr.
 
@@ -73,7 +73,7 @@ func handleHelpList(_ context.Context, _ database.Store, _ map[string]interface{
 	}
 	out := map[string]interface{}{
 		"topics": topics,
-		"hint":   "Call help.get with task_id and optional topic (tools, gateway, projects) or path for full markdown.",
+		"hint":   "Call help.get with optional topic (tools, gateway, projects) or path for full markdown.",
 	}
 	b, err := json.Marshal(out)
 	if err != nil {
@@ -87,14 +87,6 @@ func handleHelpList(_ context.Context, _ database.Store, _ map[string]interface{
 
 func handleHelpGet(_ context.Context, _ database.Store, args map[string]interface{}, rec *models.McpToolCallAuditLog) (code int, body []byte, auditRec *models.McpToolCallAuditLog) {
 	auditRec = rec
-	taskID := uuidArg(args, "task_id")
-	if taskID == nil {
-		rec.Decision = auditDecisionDeny
-		rec.Status = auditStatusError
-		rec.ErrorType = strPtr("invalid_arguments")
-		return http.StatusBadRequest, []byte(`{"error":"task_id required"}`), auditRec
-	}
-	rec.TaskID = taskID
 	topic := strArg(args, "topic")
 	path := strArg(args, "path")
 	content := helpGetMarkdown(topic, path)
@@ -103,7 +95,6 @@ func handleHelpGet(_ context.Context, _ database.Store, args map[string]interfac
 	rec.ErrorType = nil
 	out := map[string]interface{}{
 		"content":   content,
-		"task_id":   taskID.String(),
 		"truncated": len(content) >= helpMaxBytes,
 	}
 	b, err := json.Marshal(out)

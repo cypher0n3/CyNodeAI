@@ -407,6 +407,17 @@ type PreferenceEntry struct {
 	UpdatedAt time.Time `json:"updated_at"`
 }
 
+// SystemSetting is one operator-level system setting (orchestrator_bootstrap.md system_settings table).
+// Distinct from preferences; used by system_setting.* MCP tools.
+type SystemSetting struct {
+	Key       string    `json:"key"`
+	Value     *string   `json:"value,omitempty"`
+	ValueType string    `json:"value_type"`
+	Version   int       `json:"version"`
+	UpdatedAt time.Time `json:"updated_at"`
+	UpdatedBy *string   `json:"updated_by,omitempty"`
+}
+
 // PreferenceAuditLogBase is the domain base struct for preference audit logs (fields without ID, ChangedAt).
 // Note: PreferenceAuditLog uses ChangedAt instead of CreatedAt/UpdatedAt.
 // This is embedded in PreferenceAuditLogRecord along with GormModelUUID (but ChangedAt is in the base).

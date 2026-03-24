@@ -1,13 +1,16 @@
 package workerapiserver
 
 import (
+	"bytes"
 	"context"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"io"
+	"net"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -316,5 +319,114 @@ func TestHandleInternalOrchestratorAgentReady_ForwardSuccess(t *testing.T) {
 	})
 	if rec.Code != http.StatusOK {
 		t.Fatalf("code=%d body=%s", rec.Code, rec.Body.String())
+	}
+}
+
+// TestPerServiceUDS_MCPCallRoundTrip exercises the same path PMA uses: http+unix://…/proxy.sock
+// plus POST /v1/worker/internal/orchestrator/mcp:call with the managed-service proxy JSON envelope.
+func TestPerServiceUDS_MCPCallRoundTrip(t *testing.T) {
+	store := testSecureStore(t)
+	if err := store.PutAgentToken("svc-uds", "tok-uds", ""); err != nil {
+		t.Fatal(err)
+	}
+	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != toolsCallPath {
+			t.Errorf("upstream path %s", r.URL.Path)
+		}
+		if r.Header.Get("Authorization") != "Bearer tok-uds" {
+			t.Errorf("Authorization: %q", r.Header.Get("Authorization"))
+		}
+		b, err := io.ReadAll(r.Body)
+		if err != nil {
+			t.Errorf("read body: %v", err)
+		}
+		if !bytes.Contains(b, []byte("help.list")) {
+			t.Errorf("expected help.list in upstream body, got %s", b)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"routed":true}`))
+	}))
+	defer up.Close()
+
+	oldClient := internalOrchestratorHTTPClient
+	internalOrchestratorHTTPClient = up.Client()
+	t.Cleanup(func() { internalOrchestratorHTTPClient = oldClient })
+
+	mux := http.NewServeMux()
+	registerInternalOrchestratorProxyHandlers(mux, embedInternalProxyConfig{
+		MCPToolsBaseURL: up.URL,
+		SecureStore:     store,
+	})
+
+	dir := t.TempDir()
+	udsPath := filepath.Join(dir, "run", "managed_agent_proxy", "svc-uds", "proxy.sock")
+	cfg := &RunConfig{
+		PublicHandler:      http.NewServeMux(),
+		InternalHandler:    mux,
+		ListenAddr:         "127.0.0.1:0",
+		InternalListenAddr: "",
+		SocketByService:    map[string]string{"svc-uds": udsPath},
+	}
+	srv, err := NewServer(cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	ready, err := srv.Start(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case <-ready:
+	case <-time.After(2 * time.Second):
+		t.Fatal("server not ready")
+	}
+	defer func() {
+		cancel()
+		shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer shutdownCancel()
+		_ = srv.Shutdown(shutdownCtx)
+	}()
+
+	payload := base64.StdEncoding.EncodeToString([]byte(`{"tool_name":"help.list","arguments":{}}`))
+	body := `{"version":1,"method":"POST","path":"/v1/mcp/tools/call","headers":{"Content-Type":["application/json"]},"body_b64":"` + payload + `"}`
+	req, err := http.NewRequest(http.MethodPost, "http://unix/v1/worker/internal/orchestrator/mcp:call", strings.NewReader(body))
+	if err != nil {
+		t.Fatal(err)
+	}
+	req.Header.Set("Content-Type", "application/json")
+	client := &http.Client{
+		Transport: &http.Transport{
+			DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
+				var d net.Dialer
+				return d.DialContext(ctx, "unix", udsPath)
+			},
+		},
+	}
+	resp, err := client.Do(req)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode != http.StatusOK {
+		b, _ := io.ReadAll(resp.Body)
+		t.Fatalf("proxy HTTP status: %d body=%s", resp.StatusCode, b)
+	}
+	var proxyResp struct {
+		Status  int    `json:"status"`
+		BodyB64 string `json:"body_b64"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&proxyResp); err != nil {
+		t.Fatal(err)
+	}
+	if proxyResp.Status != http.StatusOK {
+		t.Fatalf("upstream status in envelope: %d", proxyResp.Status)
+	}
+	raw, err := base64.StdEncoding.DecodeString(proxyResp.BodyB64)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Contains(raw, []byte(`"routed":true`)) {
+		t.Fatalf("decoded body: %s", raw)
 	}
 }

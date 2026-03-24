@@ -91,6 +91,46 @@ func TestIntegration_Node(t *testing.T) {
 	if len(list) < 1 {
 		t.Error("ListActiveNodes: expected at least one")
 	}
+	all, err := db.ListNodes(ctx, 50, 0)
+	if err != nil {
+		t.Fatalf("ListNodes: %v", err)
+	}
+	found := false
+	for _, n := range all {
+		if n.NodeSlug == node.NodeSlug {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Error("ListNodes: expected created node in registry")
+	}
+}
+
+func TestIntegration_SystemSettings(t *testing.T) {
+	db, ctx := integrationDB(t)
+	key := "inttest.setting." + uuid.New().String()
+	_, err := db.GetSystemSetting(ctx, key)
+	if !errors.Is(err, ErrNotFound) {
+		t.Fatalf("GetSystemSetting missing key: %v", err)
+	}
+	s, err := db.CreateSystemSetting(ctx, key, `"v"`, "string", nil, nil)
+	if err != nil {
+		t.Fatalf("CreateSystemSetting: %v", err)
+	}
+	if s.Version != 1 {
+		t.Errorf("version = %d", s.Version)
+	}
+	got, err := db.GetSystemSetting(ctx, key)
+	if err != nil {
+		t.Fatalf("GetSystemSetting: %v", err)
+	}
+	if got.Key != key {
+		t.Errorf("key = %q", got.Key)
+	}
+	if err := db.DeleteSystemSetting(ctx, key, nil, nil); err != nil {
+		t.Fatalf("DeleteSystemSetting: %v", err)
+	}
 }
 
 func TestIntegration_ListDispatchableNodesAndListTasksByUser(t *testing.T) {

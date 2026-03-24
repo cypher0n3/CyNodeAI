@@ -17,6 +17,13 @@ import (
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/middleware"
 )
 
+func mcpAuthFromEnv() *mcpgateway.ToolCallAuth {
+	return &mcpgateway.ToolCallAuth{
+		PMToken:      getEnv("WORKER_INTERNAL_AGENT_TOKEN", ""),
+		SandboxToken: getEnv("MCP_SANDBOX_AGENT_BEARER_TOKEN", ""),
+	}
+}
+
 func main() {
 	os.Exit(runMain(context.Background()))
 }
@@ -88,7 +95,7 @@ func run(ctx context.Context, logger *slog.Logger) error {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte("ok"))
 	})
-	mux.HandleFunc("POST /v1/mcp/tools/call", mcpgateway.ToolCallHandler(store, logger))
+	mux.HandleFunc("POST /v1/mcp/tools/call", mcpgateway.ToolCallHandler(store, logger, mcpAuthFromEnv()))
 
 	handler := middleware.Logging(logger)(mux)
 	srv := &http.Server{

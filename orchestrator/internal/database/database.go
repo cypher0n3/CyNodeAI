@@ -91,6 +91,8 @@ type Store interface {
 	UpdateNodeCapability(ctx context.Context, nodeID uuid.UUID, capHash string) error
 	ListActiveNodes(ctx context.Context) ([]*models.Node, error)
 	ListDispatchableNodes(ctx context.Context) ([]*models.Node, error)
+	// ListNodes lists registered worker nodes (non-deleted), ordered by node_slug, with limit/offset pagination.
+	ListNodes(ctx context.Context, limit, offset int) ([]*models.Node, error)
 	UpdateNodeConfigVersion(ctx context.Context, nodeID uuid.UUID, configVersion string) error
 	UpdateNodeConfigAck(ctx context.Context, nodeID uuid.UUID, configVersion, status string, ackAt time.Time, errMsg *string) error
 	UpdateNodeWorkerAPIConfig(ctx context.Context, nodeID uuid.UUID, targetURL, bearerToken string) error
@@ -105,6 +107,13 @@ type Store interface {
 	CreatePreference(ctx context.Context, scopeType string, scopeID *uuid.UUID, key, value, valueType string, reason, updatedBy *string) (*models.PreferenceEntry, error)
 	UpdatePreference(ctx context.Context, scopeType string, scopeID *uuid.UUID, key, value, valueType string, expectedVersion *int, reason, updatedBy *string) (*models.PreferenceEntry, error)
 	DeletePreference(ctx context.Context, scopeType string, scopeID *uuid.UUID, key string, expectedVersion *int, reason *string) error
+
+	// System settings (system_setting.* MCP tools; orchestrator_bootstrap.md).
+	GetSystemSetting(ctx context.Context, key string) (*models.SystemSetting, error)
+	ListSystemSettings(ctx context.Context, keyPrefix string, limit int, cursor string) ([]*models.SystemSetting, string, error)
+	CreateSystemSetting(ctx context.Context, key, value, valueType string, reason, updatedBy *string) (*models.SystemSetting, error)
+	UpdateSystemSetting(ctx context.Context, key, value, valueType string, expectedVersion *int, reason, updatedBy *string) (*models.SystemSetting, error)
+	DeleteSystemSetting(ctx context.Context, key string, expectedVersion *int, reason *string) error
 
 	// Task artifacts (artifact.get MCP tool; REQ-ORCHES-0127 attachment ingestion).
 	GetArtifactByTaskIDAndPath(ctx context.Context, taskID uuid.UUID, path string) (*models.TaskArtifact, error)

@@ -72,6 +72,31 @@ func (db *DB) ListActiveNodes(ctx context.Context) ([]*models.Node, error) {
 	return nodes, nil
 }
 
+// ListNodes lists registered worker nodes (non-deleted), ordered by node_slug ascending.
+// Callers should bound limit (e.g. MCP uses mcptaskbridge.ParseListLimitOffset, max 200).
+func (db *DB) ListNodes(ctx context.Context, limit, offset int) ([]*models.Node, error) {
+	if limit <= 0 {
+		limit = 50
+	}
+	if offset < 0 {
+		offset = 0
+	}
+	var records []*NodeRecord
+	err := db.db.WithContext(ctx).
+		Order("node_slug ASC").
+		Limit(limit).
+		Offset(offset).
+		Find(&records).Error
+	if err != nil {
+		return nil, wrapErr(err, "list nodes")
+	}
+	nodes := make([]*models.Node, len(records))
+	for i, r := range records {
+		nodes[i] = r.ToNode()
+	}
+	return nodes, nil
+}
+
 // ListDispatchableNodes lists active nodes that have acknowledged config and have Worker API URL and token set.
 func (db *DB) ListDispatchableNodes(ctx context.Context) ([]*models.Node, error) {
 	var records []*NodeRecord

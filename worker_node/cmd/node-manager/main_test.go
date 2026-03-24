@@ -1128,6 +1128,17 @@ func captureStdout(t *testing.T, fn func()) string {
 	return buf.String()
 }
 
+func TestRun_PrintGPUDetect(t *testing.T) {
+	var code int
+	out := captureStdout(t, func() { code = run(context.Background(), []string{"--print-gpu-detect"}) })
+	if code != 0 {
+		t.Errorf("run(--print-gpu-detect) = %d", code)
+	}
+	if !strings.Contains(out, "merged_detect_gpu") {
+		t.Errorf("expected JSON with merged_detect_gpu: %q", out[:min(200, len(out))])
+	}
+}
+
 func TestRun_PrintSBARunArgs(t *testing.T) {
 	var code int
 	out := captureStdout(t, func() { code = run(context.Background(), []string{"--print-sba-run-args"}) })

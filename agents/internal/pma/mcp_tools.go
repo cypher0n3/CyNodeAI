@@ -8,7 +8,7 @@ import (
 )
 
 // MsgMCPGatewayNotConfigured is returned when MCP gateway URL is not set.
-const MsgMCPGatewayNotConfigured = "MCP gateway not configured (set PMA_MCP_GATEWAY_URL or MCP_GATEWAY_URL)"
+const MsgMCPGatewayNotConfigured = "MCP gateway not configured (set PMA_MCP_GATEWAY_URL, MCP_GATEWAY_URL, MCP_GATEWAY_PROXY_URL, or ORCHESTRATOR_MCP_TOOLS_BASE_URL / ORCHESTRATOR_URL)"
 
 // NewMCPTool returns a langchaingo tool that forwards to the MCP gateway.
 // When client.BaseURL is empty, Call returns a message that MCP is not configured.

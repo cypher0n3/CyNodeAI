@@ -120,6 +120,80 @@ func parseROCmSMIOutput(out []byte) *nodepayloads.GPUInfo {
 	return &nodepayloads.GPUInfo{Present: true, Devices: devices}
 }
 
+// gpuDiagTruncate is the max runes retained for raw tool stdout/stderr in GPUDiagnosticReport.
+const gpuDiagTruncate = 8192
+
+func truncateGPUdiag(s string) string {
+	r := []rune(s)
+	if len(r) <= gpuDiagTruncate {
+		return s
+	}
+	return string(r[:gpuDiagTruncate]) + "\n... [truncated]"
+}
+
+// GPUDiagnosticReport captures raw rocm-smi / nvidia-smi output and parsed results.
+// Use RunGPUDiagnostic to verify the host reports what node-manager sends in capability
+// reports before debugging orchestrator or config delivery.
+type GPUDiagnosticReport struct {
+	ROCmSMI struct {
+		LookupError string `json:"lookup_error,omitempty"`
+		Path        string `json:"path,omitempty"`
+		Args        string `json:"args,omitempty"`
+		ExecError   string `json:"exec_error,omitempty"`
+		Stdout      string `json:"stdout,omitempty"`
+		Parsed      *nodepayloads.GPUInfo `json:"parsed,omitempty"`
+	} `json:"rocm_smi"`
+	NvidiaSMI struct {
+		LookupError string `json:"lookup_error,omitempty"`
+		Path        string `json:"path,omitempty"`
+		Args        string `json:"args,omitempty"`
+		ExecError   string `json:"exec_error,omitempty"`
+		Stdout      string `json:"stdout,omitempty"`
+		Parsed      *nodepayloads.GPUInfo `json:"parsed,omitempty"`
+	} `json:"nvidia_smi"`
+	// Merged matches detectGPU (capability report gpu field); same merge as cachedGPUInfo without cache.
+	Merged *nodepayloads.GPUInfo `json:"merged_detect_gpu"`
+}
+
+// RunGPUDiagnostic runs rocm-smi and nvidia-smi with the same arguments as detectROCmGPU /
+// detectNVIDIAGPU, records raw output, and sets Merged to detectGPU(ctx). It does not use the
+// GPU detection cache. NODE_MANAGER_TEST_NO_GPU_DETECT does not apply here.
+func RunGPUDiagnostic(ctx context.Context) *GPUDiagnosticReport {
+	rep := &GPUDiagnosticReport{}
+	rocmArgs := []string{"--showproductname", "--showmeminfo", "vram", "--json"}
+	rep.ROCmSMI.Args = strings.Join(append([]string{"rocm-smi"}, rocmArgs...), " ")
+	if p, err := exec.LookPath("rocm-smi"); err != nil {
+		rep.ROCmSMI.LookupError = err.Error()
+	} else {
+		rep.ROCmSMI.Path = p
+		cmd := exec.CommandContext(ctx, "rocm-smi", rocmArgs...)
+		out, err := cmd.CombinedOutput()
+		rep.ROCmSMI.Stdout = truncateGPUdiag(string(out))
+		if err != nil {
+			rep.ROCmSMI.ExecError = err.Error()
+		}
+		rep.ROCmSMI.Parsed = parseROCmSMIOutput(out)
+	}
+
+	nvArgs := []string{"--query-gpu=name,memory.total", "--format=csv,noheader,nounits"}
+	rep.NvidiaSMI.Args = strings.Join(append([]string{"nvidia-smi"}, nvArgs...), " ")
+	if p, err := exec.LookPath("nvidia-smi"); err != nil {
+		rep.NvidiaSMI.LookupError = err.Error()
+	} else {
+		rep.NvidiaSMI.Path = p
+		cmd := exec.CommandContext(ctx, "nvidia-smi", nvArgs...)
+		out, err := cmd.CombinedOutput()
+		rep.NvidiaSMI.Stdout = truncateGPUdiag(string(out))
+		if err != nil {
+			rep.NvidiaSMI.ExecError = err.Error()
+		}
+		rep.NvidiaSMI.Parsed = parseNvidiaSMIOutput(out)
+	}
+
+	rep.Merged = detectGPU(ctx)
+	return rep
+}
+
 // detectNVIDIAGPU queries nvidia-smi for NVIDIA GPU information.
 func detectNVIDIAGPU(ctx context.Context) *nodepayloads.GPUInfo {
 	out, err := exec.CommandContext(ctx,

@@ -34,20 +34,27 @@ var requiredScopedIds = map[string]struct{ TaskID, RunID, JobID, UserID bool }{
 	"preference.delete":    {},
 	"task.get":             {TaskID: true},
 	"job.get":              {JobID: true},
-	"artifact.get":         {TaskID: true},
-	"skills.create":        {TaskID: true},
-	"skills.list":          {TaskID: true},
-	"skills.get":           {TaskID: true},
-	"skills.update":        {TaskID: true},
-	"skills.delete":        {TaskID: true},
+	"artifact.get":         {},
+	"skills.create":        {UserID: true},
+	"skills.list":          {UserID: true},
+	"skills.get":           {UserID: true},
+	"skills.update":        {UserID: true},
+	"skills.delete":        {UserID: true},
 	"help.list":            {},
-	"help.get":             {TaskID: true},
+	"help.get":             {},
 	"task.list":            {UserID: true},
 	"task.result":          {TaskID: true},
 	"task.cancel":          {TaskID: true},
 	"task.logs":            {TaskID: true},
 	"project.list":         {UserID: true},
 	"project.get":          {UserID: true},
+	"node.list":            {},
+	"node.get":             {},
+	"system_setting.get":    {},
+	"system_setting.list":   {},
+	"system_setting.create": {},
+	"system_setting.update": {},
+	"system_setting.delete": {},
 }
 
 // ValidateRequiredScopedIds returns an error message if required scoped ids are missing or invalid for the tool.
@@ -152,7 +159,9 @@ func routeAndWriteAudit(ctx context.Context, w http.ResponseWriter, store databa
 
 // toolCallHandler writes an audit record for every tool call (P2-02) and routes MCP tools (catalog names).
 // P2-01: enforces required scoped ids (task_id/run_id/job_id) per tool before routing; rejects with 400 when missing.
-func ToolCallHandler(store database.Store, logger *slog.Logger) http.HandlerFunc {
+// When auth is non-nil and agent bearer tokens are configured, Authorization: Bearer is resolved to PM or sandbox
+// and sandbox agents are restricted to the worker allowlist (see allowlist.go).
+func ToolCallHandler(store database.Store, logger *slog.Logger, auth *ToolCallAuth) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			w.WriteHeader(http.StatusMethodNotAllowed)
@@ -179,6 +188,9 @@ func ToolCallHandler(store database.Store, logger *slog.Logger) http.HandlerFunc
 		start := time.Now()
 		if isLegacyDbPrefixedToolName(toolName) {
 			writeLegacyDbToolRemoved(r.Context(), w, store, logger, toolName, args, start)
+			return
+		}
+		if !tryAgentAllowlist(r.Context(), w, r, store, logger, toolName, args, auth, start) {
 			return
 		}
 		if errMsg := ValidateRequiredScopedIds(toolName, args); errMsg != "" {
@@ -226,6 +238,13 @@ func init() {
 		"skills.get":           handleSkillsGet,
 		"skills.update":        handleSkillsUpdate,
 		"skills.delete":        handleSkillsDelete,
+		"node.list":            handleNodeList,
+		"node.get":             handleNodeGet,
+		"system_setting.get":    handleSystemSettingGet,
+		"system_setting.list":   handleSystemSettingList,
+		"system_setting.create": handleSystemSettingCreate,
+		"system_setting.update": handleSystemSettingUpdate,
+		"system_setting.delete": handleSystemSettingDelete,
 	}
 }
 
@@ -655,25 +674,18 @@ func handleArtifactGet(ctx context.Context, store database.Store, args map[strin
 
 func handleSkillsCreate(ctx context.Context, store database.Store, args map[string]interface{}, rec *models.McpToolCallAuditLog) (code int, body []byte, auditRec *models.McpToolCallAuditLog) {
 	auditRec = rec
-	taskID := uuidArg(args, "task_id")
-	if taskID == nil {
+	userID := uuidArg(args, "user_id")
+	if userID == nil {
 		rec.Decision = auditDecisionDeny
 		rec.Status = auditStatusError
 		rec.ErrorType = strPtr("invalid_arguments")
-		return http.StatusBadRequest, []byte(`{"error":"task_id required"}`), auditRec
+		return http.StatusBadRequest, []byte(`{"error":"user_id required"}`), auditRec
 	}
-	rec.TaskID = taskID
-	task, err := store.GetTaskByID(ctx, *taskID)
+	rec.UserID = userID
+	u, err := store.GetUserByID(ctx, *userID)
 	if err != nil {
 		code, body := writePreferenceErrToAudit(err, rec)
 		return code, body, auditRec
-	}
-	userID := task.CreatedBy
-	if userID == nil {
-		rec.Decision = auditDecisionAllow
-		rec.Status = auditStatusError
-		rec.ErrorType = strPtr("internal_error")
-		return http.StatusInternalServerError, []byte(`{"error":"task has no owner"}`), auditRec
 	}
 	content := strArg(args, "content")
 	if content == "" {
@@ -693,7 +705,7 @@ func handleSkillsCreate(ctx context.Context, store database.Store, args map[stri
 	if scope == "" {
 		scope = "user"
 	}
-	skill, err := store.CreateSkill(ctx, name, content, scope, userID, false)
+	skill, err := store.CreateSkill(ctx, name, content, scope, &u.ID, false)
 	if err != nil {
 		rec.Decision = auditDecisionAllow
 		rec.Status = auditStatusError
@@ -710,25 +722,17 @@ func handleSkillsCreate(ctx context.Context, store database.Store, args map[stri
 
 func handleSkillsList(ctx context.Context, store database.Store, args map[string]interface{}, rec *models.McpToolCallAuditLog) (code int, body []byte, auditRec *models.McpToolCallAuditLog) {
 	auditRec = rec
-	taskID := uuidArg(args, "task_id")
-	if taskID == nil {
+	userID := uuidArg(args, "user_id")
+	if userID == nil {
 		rec.Decision = auditDecisionDeny
 		rec.Status = auditStatusError
 		rec.ErrorType = strPtr("invalid_arguments")
-		return http.StatusBadRequest, []byte(`{"error":"task_id required"}`), auditRec
+		return http.StatusBadRequest, []byte(`{"error":"user_id required"}`), auditRec
 	}
-	rec.TaskID = taskID
-	task, err := store.GetTaskByID(ctx, *taskID)
-	if err != nil {
+	rec.UserID = userID
+	if _, err := store.GetUserByID(ctx, *userID); err != nil {
 		code, body := writePreferenceErrToAudit(err, rec)
 		return code, body, auditRec
-	}
-	userID := task.CreatedBy
-	if userID == nil {
-		rec.Decision = auditDecisionAllow
-		rec.Status = auditStatusError
-		rec.ErrorType = strPtr("internal_error")
-		return http.StatusInternalServerError, []byte(`{"error":"task has no owner"}`), auditRec
 	}
 	scopeFilter := strArg(args, "scope")
 	ownerFilter := strArg(args, "owner")
@@ -758,33 +762,21 @@ func handleSkillsList(ctx context.Context, store database.Store, args map[string
 
 func handleSkillsGet(ctx context.Context, store database.Store, args map[string]interface{}, rec *models.McpToolCallAuditLog) (code int, body []byte, auditRec *models.McpToolCallAuditLog) {
 	auditRec = rec
-	taskID := uuidArg(args, "task_id")
+	userID := uuidArg(args, "user_id")
 	skillIDStr := strArg(args, "skill_id")
-	if taskID == nil || skillIDStr == "" {
+	if userID == nil || skillIDStr == "" {
 		rec.Decision = auditDecisionDeny
 		rec.Status = auditStatusError
 		rec.ErrorType = strPtr("invalid_arguments")
-		return http.StatusBadRequest, []byte(`{"error":"task_id and skill_id required"}`), auditRec
+		return http.StatusBadRequest, []byte(`{"error":"user_id and skill_id required"}`), auditRec
 	}
-	rec.TaskID = taskID
+	rec.UserID = userID
 	skillID, err := uuid.Parse(skillIDStr)
 	if err != nil {
 		rec.Decision = auditDecisionDeny
 		rec.Status = auditStatusError
 		rec.ErrorType = strPtr("invalid_arguments")
 		return http.StatusBadRequest, []byte(`{"error":"invalid skill_id"}`), auditRec
-	}
-	task, err := store.GetTaskByID(ctx, *taskID)
-	if err != nil {
-		code, body := writePreferenceErrToAudit(err, rec)
-		return code, body, auditRec
-	}
-	userID := task.CreatedBy
-	if userID == nil {
-		rec.Decision = auditDecisionAllow
-		rec.Status = auditStatusError
-		rec.ErrorType = strPtr("internal_error")
-		return http.StatusInternalServerError, []byte(`{"error":"task has no owner"}`), auditRec
 	}
 	skill, err := store.GetSkillByID(ctx, skillID)
 	if err != nil {
@@ -807,33 +799,21 @@ func handleSkillsGet(ctx context.Context, store database.Store, args map[string]
 
 func handleSkillsUpdate(ctx context.Context, store database.Store, args map[string]interface{}, rec *models.McpToolCallAuditLog) (code int, body []byte, auditRec *models.McpToolCallAuditLog) {
 	auditRec = rec
-	taskID := uuidArg(args, "task_id")
+	userID := uuidArg(args, "user_id")
 	skillIDStr := strArg(args, "skill_id")
-	if taskID == nil || skillIDStr == "" {
+	if userID == nil || skillIDStr == "" {
 		rec.Decision = auditDecisionDeny
 		rec.Status = auditStatusError
 		rec.ErrorType = strPtr("invalid_arguments")
-		return http.StatusBadRequest, []byte(`{"error":"task_id and skill_id required"}`), auditRec
+		return http.StatusBadRequest, []byte(`{"error":"user_id and skill_id required"}`), auditRec
 	}
-	rec.TaskID = taskID
+	rec.UserID = userID
 	skillID, err := uuid.Parse(skillIDStr)
 	if err != nil {
 		rec.Decision = auditDecisionDeny
 		rec.Status = auditStatusError
 		rec.ErrorType = strPtr("invalid_arguments")
 		return http.StatusBadRequest, []byte(`{"error":"invalid skill_id"}`), auditRec
-	}
-	task, err := store.GetTaskByID(ctx, *taskID)
-	if err != nil {
-		code, body := writePreferenceErrToAudit(err, rec)
-		return code, body, auditRec
-	}
-	userID := task.CreatedBy
-	if userID == nil {
-		rec.Decision = auditDecisionAllow
-		rec.Status = auditStatusError
-		rec.ErrorType = strPtr("internal_error")
-		return http.StatusInternalServerError, []byte(`{"error":"task has no owner"}`), auditRec
 	}
 	skill, err := store.GetSkillByID(ctx, skillID)
 	if err != nil {
@@ -874,33 +854,21 @@ func handleSkillsUpdate(ctx context.Context, store database.Store, args map[stri
 
 func handleSkillsDelete(ctx context.Context, store database.Store, args map[string]interface{}, rec *models.McpToolCallAuditLog) (code int, body []byte, auditRec *models.McpToolCallAuditLog) {
 	auditRec = rec
-	taskID := uuidArg(args, "task_id")
+	userID := uuidArg(args, "user_id")
 	skillIDStr := strArg(args, "skill_id")
-	if taskID == nil || skillIDStr == "" {
+	if userID == nil || skillIDStr == "" {
 		rec.Decision = auditDecisionDeny
 		rec.Status = auditStatusError
 		rec.ErrorType = strPtr("invalid_arguments")
-		return http.StatusBadRequest, []byte(`{"error":"task_id and skill_id required"}`), auditRec
+		return http.StatusBadRequest, []byte(`{"error":"user_id and skill_id required"}`), auditRec
 	}
-	rec.TaskID = taskID
+	rec.UserID = userID
 	skillID, err := uuid.Parse(skillIDStr)
 	if err != nil {
 		rec.Decision = auditDecisionDeny
 		rec.Status = auditStatusError
 		rec.ErrorType = strPtr("invalid_arguments")
 		return http.StatusBadRequest, []byte(`{"error":"invalid skill_id"}`), auditRec
-	}
-	task, err := store.GetTaskByID(ctx, *taskID)
-	if err != nil {
-		code, body := writePreferenceErrToAudit(err, rec)
-		return code, body, auditRec
-	}
-	userID := task.CreatedBy
-	if userID == nil {
-		rec.Decision = auditDecisionAllow
-		rec.Status = auditStatusError
-		rec.ErrorType = strPtr("internal_error")
-		return http.StatusInternalServerError, []byte(`{"error":"task has no owner"}`), auditRec
 	}
 	skill, err := store.GetSkillByID(ctx, skillID)
 	if err != nil {

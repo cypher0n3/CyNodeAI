@@ -43,6 +43,19 @@ This directory includes a compose file at [`docker-compose.yml`](docker-compose.
 For full node behavior (registration, config fetch, PMA, sandbox), run the **single binary** on the host via `just setup-dev start` from the repo root; it runs both the node manager and Worker API in one process and manages podman/docker for PMA and sandboxes.
 Configuration is via environment variables documented inline in the compose file.
 
+### 3.3 GPU and Ollama Image (ROCm vs CUDA)
+
+Node-manager detects GPUs only via **`rocm-smi`** (AMD) and **`nvidia-smi`** (NVIDIA) in `PATH`.
+If `rocm-smi` is missing or exits non-zero, **no AMD devices** are reported and the orchestrator cannot select the ROCm Ollama image from capability data.
+
+To see raw tool output and the merged detection result the node sends in capability reports, run the node-manager binary with:
+
+```bash
+./worker_node/bin/cynodeai-wnm-dev --print-gpu-detect
+```
+
+(Adjust the path to match your build; see `worker_node/justfile`.) Use the JSON to confirm whether the host reports AMD VRAM before debugging orchestrator payloads or `inference_backend.variant` handling.
+
 ## 4 Testing and Linting
 
 All Go modules in this repository are checked by repo-level `just` targets.

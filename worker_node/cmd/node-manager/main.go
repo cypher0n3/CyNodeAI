@@ -3,6 +3,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"net"
@@ -64,6 +65,9 @@ func (realCmdRunner) StartDetached(name string, args, env []string) error {
 // or run the main loop and return its exit code. Extracted for testability.
 func run(ctx context.Context, args []string) int {
 	for i := range args {
+		if ok, code := runPrintGPUDetect(args, i); ok {
+			return code
+		}
 		if ok, code := runPrintSBARunArgs(args, i); ok {
 			return code
 		}
@@ -75,6 +79,23 @@ func run(ctx context.Context, args []string) int {
 		}
 	}
 	return runMain(ctx)
+}
+
+// runPrintGPUDetect prints JSON from nodeagent.RunGPUDiagnostic (raw rocm-smi/nvidia-smi and merged detectGPU).
+func runPrintGPUDetect(args []string, i int) (handled bool, exitCode int) {
+	if i >= len(args) || args[i] != "--print-gpu-detect" {
+		return false, 0
+	}
+	dctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	rep := nodeagent.RunGPUDiagnostic(dctx)
+	enc := json.NewEncoder(os.Stdout)
+	enc.SetIndent("", "  ")
+	if err := enc.Encode(rep); err != nil {
+		fmt.Fprintf(os.Stderr, "encode gpu diagnostic: %v\n", err)
+		return true, 1
+	}
+	return true, 0
 }
 
 func runPrintSBARunArgs(args []string, i int) (handled bool, exitCode int) {

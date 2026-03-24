@@ -133,8 +133,12 @@ func runMainWithContext(ctx context.Context, store database.Store) int {
 }
 
 // registerMCPToolRoute registers POST /v1/mcp/tools/call on mux. Exposed for tests that assert the route exists.
-func registerMCPToolRoute(mux *http.ServeMux, store database.Store, logger *slog.Logger) {
-	mux.HandleFunc("POST /v1/mcp/tools/call", mcpgateway.ToolCallHandler(store, logger))
+func registerMCPToolRoute(mux *http.ServeMux, store database.Store, logger *slog.Logger, cfg *config.OrchestratorConfig) {
+	auth := &mcpgateway.ToolCallAuth{
+		PMToken:      cfg.WorkerInternalAgentToken,
+		SandboxToken: cfg.MCPSandboxAgentBearerToken,
+	}
+	mux.HandleFunc("POST /v1/mcp/tools/call", mcpgateway.ToolCallHandler(store, logger, auth))
 }
 
 // run bootstraps admin, starts the HTTP server and dispatcher until ctx is canceled. Used by main and tests.
@@ -165,7 +169,7 @@ func run(ctx context.Context, store database.Store, cfg *config.OrchestratorConf
 	mux.Handle("POST /v1/nodes/capability", authMiddleware.RequireNodeAuth(http.HandlerFunc(nodeHandler.ReportCapability)))
 
 	// MCP tool calls share the control-plane database (P2-02 audit); do not run a separate mcp-gateway with its own DSN.
-	registerMCPToolRoute(mux, store, logger)
+	registerMCPToolRoute(mux, store, logger, cfg)
 
 	mux.Handle("POST /v1/workflow/start", workflowAuth(http.HandlerFunc(workflowHandler.Start)))
 	mux.Handle("POST /v1/workflow/resume", workflowAuth(http.HandlerFunc(workflowHandler.Resume)))

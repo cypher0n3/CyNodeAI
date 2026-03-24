@@ -20,6 +20,18 @@ func TestDetectGPU_NoToolsReturnsNil(t *testing.T) {
 	}
 }
 
+func TestRunGPUDiagnostic_ReturnsReport(t *testing.T) {
+	ctx := context.Background()
+	rep := RunGPUDiagnostic(ctx)
+	if rep == nil {
+		t.Fatal("RunGPUDiagnostic returned nil")
+	}
+	// Merged may be nil on machines without GPUs/tools; report must still marshal.
+	if rep.Merged == nil && rep.ROCmSMI.LookupError == "" && rep.ROCmSMI.Path != "" {
+		t.Log("rocm-smi present but merged nil: check rocm_smi stdout/json parse")
+	}
+}
+
 func TestDetectROCmGPU_MissingBinaryReturnsNil(t *testing.T) {
 	t.Setenv("PATH", t.TempDir())
 	got := detectROCmGPU(context.Background())

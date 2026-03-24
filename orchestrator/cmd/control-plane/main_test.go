@@ -101,7 +101,7 @@ func TestGetEnv(t *testing.T) {
 
 func TestRegisterMCPToolRoute(t *testing.T) {
 	mux := http.NewServeMux()
-	registerMCPToolRoute(mux, testutil.NewMockDB(), slog.Default())
+	registerMCPToolRoute(mux, testutil.NewMockDB(), slog.Default(), config.LoadOrchestratorConfig())
 	req := httptest.NewRequest(http.MethodPost, "/v1/mcp/tools/call", strings.NewReader(`{"tool_name":"help.list"}`))
 	req.Header.Set("Content-Type", "application/json")
 	rec := httptest.NewRecorder()

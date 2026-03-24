@@ -40,6 +40,7 @@ type MockDB struct {
 	ChatThreads           map[uuid.UUID]*models.ChatThread
 	ChatMessages          map[uuid.UUID][]*models.ChatMessage
 	PreferenceEntries     []*models.PreferenceEntry
+	SystemSettings        map[string]*models.SystemSetting
 	TaskArtifacts         []*models.TaskArtifact
 	Skills                map[uuid.UUID]*models.Skill
 	TaskWorkflowLeases    map[uuid.UUID]*models.TaskWorkflowLease
@@ -116,6 +117,7 @@ func NewMockDB() *MockDB {
 		JobsByTask:            make(map[uuid.UUID][]*models.Job),
 		ChatThreads:           make(map[uuid.UUID]*models.ChatThread),
 		ChatMessages:          make(map[uuid.UUID][]*models.ChatMessage),
+		SystemSettings:        make(map[string]*models.SystemSetting),
 		Skills:                make(map[uuid.UUID]*models.Skill),
 		TaskWorkflowLeases:    make(map[uuid.UUID]*models.TaskWorkflowLease),
 		WorkflowCheckpoints:   make(map[uuid.UUID]*models.WorkflowCheckpoint),
@@ -340,6 +342,31 @@ func (m *MockDB) ListActiveNodes(_ context.Context) ([]*models.Node, error) {
 			}
 		}
 		return out, nil
+	})
+}
+
+// ListNodes lists registered nodes ordered by node_slug with limit/offset pagination.
+func (m *MockDB) ListNodes(_ context.Context, limit, offset int) ([]*models.Node, error) {
+	return runWithLock(m, false, func() ([]*models.Node, error) {
+		if limit <= 0 {
+			limit = 50
+		}
+		if offset < 0 {
+			offset = 0
+		}
+		var all []*models.Node
+		for _, n := range m.Nodes {
+			all = append(all, n)
+		}
+		sort.Slice(all, func(i, j int) bool { return all[i].NodeSlug < all[j].NodeSlug })
+		if offset >= len(all) {
+			return []*models.Node{}, nil
+		}
+		end := offset + limit
+		if end > len(all) {
+			end = len(all)
+		}
+		return all[offset:end], nil
 	})
 }
 
@@ -1026,6 +1053,117 @@ func (m *MockDB) DeletePreference(_ context.Context, scopeType string, scopeID *
 			}
 		}
 		return database.ErrNotFound
+	})
+}
+
+// GetSystemSetting returns a system setting by key or ErrNotFound.
+func (m *MockDB) GetSystemSetting(_ context.Context, key string) (*models.SystemSetting, error) {
+	return runWithLock(m, false, func() (*models.SystemSetting, error) {
+		s, ok := m.SystemSettings[key]
+		if !ok {
+			return nil, database.ErrNotFound
+		}
+		return s, nil
+	})
+}
+
+// ListSystemSettings lists mock system settings by key prefix with pagination.
+func (m *MockDB) ListSystemSettings(_ context.Context, keyPrefix string, limit int, cursor string) ([]*models.SystemSetting, string, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	if m.ForceError != nil {
+		return nil, "", m.ForceError
+	}
+	if limit <= 0 || limit > database.MaxSystemSettingListLimit {
+		limit = database.MaxSystemSettingListLimit
+	}
+	offset := 0
+	if cursor != "" {
+		if n, err := parseInt(cursor); err == nil && n >= 0 {
+			offset = n
+		}
+	}
+	var keys []string
+	for k := range m.SystemSettings {
+		if keyPrefix == "" || strings.HasPrefix(k, keyPrefix) {
+			keys = append(keys, k)
+		}
+	}
+	sort.Strings(keys)
+	if offset >= len(keys) {
+		return nil, "", nil
+	}
+	slice := keys[offset:]
+	nextCursor := ""
+	if len(slice) > limit {
+		slice = slice[:limit]
+		nextCursor = strconv.Itoa(offset + limit)
+	}
+	out := make([]*models.SystemSetting, 0, len(slice))
+	for _, k := range slice {
+		out = append(out, m.SystemSettings[k])
+	}
+	return out, nextCursor, nil
+}
+
+// CreateSystemSetting creates a system setting or returns ErrExists.
+func (m *MockDB) CreateSystemSetting(_ context.Context, key, value, valueType string, reason, updatedBy *string) (*models.SystemSetting, error) {
+	_ = reason
+	return runWithLock(m, true, func() (*models.SystemSetting, error) {
+		if _, ok := m.SystemSettings[key]; ok {
+			return nil, database.ErrExists
+		}
+		now := time.Now().UTC()
+		var valPtr *string
+		if value != "" {
+			valPtr = &value
+		}
+		s := &models.SystemSetting{
+			Key: key, Value: valPtr, ValueType: valueType, Version: 1,
+			UpdatedAt: now, UpdatedBy: updatedBy,
+		}
+		m.SystemSettings[key] = s
+		return s, nil
+	})
+}
+
+// UpdateSystemSetting updates a system setting in the mock.
+func (m *MockDB) UpdateSystemSetting(_ context.Context, key, value, valueType string, expectedVersion *int, reason, updatedBy *string) (*models.SystemSetting, error) {
+	_ = reason
+	return runWithLock(m, true, func() (*models.SystemSetting, error) {
+		s, ok := m.SystemSettings[key]
+		if !ok {
+			return nil, database.ErrNotFound
+		}
+		if expectedVersion != nil && s.Version != *expectedVersion {
+			return nil, database.ErrConflict
+		}
+		var valPtr *string
+		if value != "" {
+			valPtr = &value
+		}
+		s.Value = valPtr
+		s.ValueType = valueType
+		s.Version++
+		s.UpdatedAt = time.Now().UTC()
+		s.UpdatedBy = updatedBy
+		return s, nil
+	})
+}
+
+// DeleteSystemSetting deletes a system setting from the mock.
+func (m *MockDB) DeleteSystemSetting(_ context.Context, key string, expectedVersion *int, reason *string) error {
+	_ = reason
+	return runWithWLockErr(m, func() error {
+		s, ok := m.SystemSettings[key]
+		if !ok {
+			return database.ErrNotFound
+		}
+		if expectedVersion != nil && s.Version != *expectedVersion {
+			return database.ErrConflict
+		}
+		delete(m.SystemSettings, key)
+		return nil
 	})
 }
 
