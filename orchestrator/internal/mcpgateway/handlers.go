@@ -11,6 +11,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/cypher0n3/cynodeai/orchestrator/internal/artifacts"
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/database"
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/models"
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/skillscan"
@@ -24,6 +25,37 @@ type toolCallRequest struct {
 	Arguments map[string]interface{} `json:"arguments,omitempty"`
 }
 
+// auditRecCreateExistsOrInternalErr maps Create* ErrExists / other store errors to MCP HTTP responses and audit fields.
+func auditRecCreateExistsOrInternalErr(rec *models.McpToolCallAuditLog, err error, existsBody []byte) (code int, body []byte, auditRec *models.McpToolCallAuditLog) {
+	auditRec = rec
+	if errors.Is(err, database.ErrExists) {
+		rec.Decision = auditDecisionAllow
+		rec.Status = auditStatusError
+		rec.ErrorType = &auditErrConflict
+		return http.StatusConflict, existsBody, auditRec
+	}
+	rec.Decision = auditDecisionAllow
+	rec.Status = auditStatusError
+	rec.ErrorType = &auditErrInternalError
+	return http.StatusInternalServerError, []byte(`{"error":"internal error"}`), auditRec
+}
+
+func decodeToolCallRequest(r *http.Request) (toolName string, args map[string]interface{}, ok bool) {
+	var req toolCallRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		return "", nil, false
+	}
+	toolName = req.ToolName
+	if toolName == "" {
+		toolName = "unknown"
+	}
+	args = req.Arguments
+	if args == nil {
+		args = make(map[string]interface{})
+	}
+	return toolName, args, true
+}
+
 // requiredScopedIds defines which of task_id, run_id, job_id, user_id are required for a tool (REQ-MCPGAT-0103--0106, mcp_gateway_enforcement.md).
 var requiredScopedIds = map[string]struct{ TaskID, RunID, JobID, UserID bool }{
 	"preference.get":       {},
@@ -34,7 +66,9 @@ var requiredScopedIds = map[string]struct{ TaskID, RunID, JobID, UserID bool }{
 	"preference.delete":    {},
 	"task.get":             {TaskID: true},
 	"job.get":              {JobID: true},
-	"artifact.get":         {},
+	"artifact.get":         {UserID: true},
+	"artifact.put":         {UserID: true},
+	"artifact.list":        {UserID: true},
 	"skills.create":        {UserID: true},
 	"skills.list":          {UserID: true},
 	"skills.get":           {UserID: true},
@@ -89,7 +123,7 @@ func newDenyAuditRecord(toolName, errorType string, args map[string]interface{})
 			ToolName:  toolName,
 			Decision:  auditDecisionDeny,
 			Status:    auditStatusError,
-			ErrorType: strPtr(errorType),
+			ErrorType: &errorType,
 			TaskID:    uuidArg(args, "task_id"),
 			RunID:     uuidArg(args, "run_id"),
 			JobID:     uuidArg(args, "job_id"),
@@ -172,18 +206,10 @@ func ToolCallHandler(store database.Store, logger *slog.Logger, auth *ToolCallAu
 			_, _ = w.Write([]byte("database not configured"))
 			return
 		}
-		var req toolCallRequest
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		toolName, args, ok := decodeToolCallRequest(r)
+		if !ok {
 			w.WriteHeader(http.StatusBadRequest)
 			return
-		}
-		toolName := req.ToolName
-		if toolName == "" {
-			toolName = "unknown"
-		}
-		args := req.Arguments
-		if args == nil {
-			args = make(map[string]interface{})
 		}
 		start := time.Now()
 		if isLegacyDbPrefixedToolName(toolName) {
@@ -232,7 +258,9 @@ func init() {
 		"project.get":          handleProjectGet,
 		"project.list":         handleProjectList,
 		"job.get":              handleJobGet,
-		"artifact.get":         handleArtifactGet,
+		"artifact.get":         artifactToolHandler((*artifacts.Service).MCPGet),
+		"artifact.put":         artifactToolHandler((*artifacts.Service).MCPPut),
+		"artifact.list":        artifactToolHandler((*artifacts.Service).MCPList),
 		"skills.create":        handleSkillsCreate,
 		"skills.list":          handleSkillsList,
 		"skills.get":           handleSkillsGet,
@@ -254,7 +282,7 @@ func routeToolCall(ctx context.Context, store database.Store, toolName string, a
 		McpToolCallAuditLogBase: models.McpToolCallAuditLogBase{
 			Decision:  auditDecisionDeny,
 			Status:    auditStatusError,
-			ErrorType: strPtr("not_implemented"),
+			ErrorType: &auditErrNotImplemented,
 		},
 	}
 	if fn, ok := mcpToolRoutes[toolName]; ok {
@@ -304,14 +332,14 @@ func writePreferenceErrToAudit(err error, rec *models.McpToolCallAuditLog) (code
 	rec.Decision = auditDecisionAllow
 	rec.Status = auditStatusError
 	if errors.Is(err, database.ErrNotFound) {
-		rec.ErrorType = strPtr("not_found")
+		rec.ErrorType = &auditErrNotFound
 		return http.StatusNotFound, []byte(`{"error":"not found"}`)
 	}
 	if errors.Is(err, database.ErrConflict) {
-		rec.ErrorType = strPtr("conflict")
+		rec.ErrorType = &auditErrConflict
 		return http.StatusConflict, []byte(`{"error":"version conflict"}`)
 	}
-	rec.ErrorType = strPtr("internal_error")
+	rec.ErrorType = &auditErrInternalError
 	return http.StatusInternalServerError, []byte(`{"error":"internal error"}`)
 }
 
@@ -322,14 +350,14 @@ func handlePreferenceGet(ctx context.Context, store database.Store, args map[str
 	if scopeType == "" || key == "" {
 		rec.Decision = auditDecisionDeny
 		rec.Status = auditStatusError
-		rec.ErrorType = strPtr("invalid_arguments")
+		rec.ErrorType = &auditErrInvalidArguments
 		return http.StatusBadRequest, []byte(`{"error":"scope_type and key required"}`), auditRec
 	}
 	scopeID := uuidArg(args, "scope_id")
 	if scopeType != scopeTypeSystem && scopeID == nil {
 		rec.Decision = auditDecisionDeny
 		rec.Status = auditStatusError
-		rec.ErrorType = strPtr("invalid_arguments")
+		rec.ErrorType = &auditErrInvalidArguments
 		return http.StatusBadRequest, []byte(`{"error":"scope_id required when scope_type is not system"}`), auditRec
 	}
 	ent, err := store.GetPreference(ctx, scopeType, scopeID, key)
@@ -358,14 +386,14 @@ func handlePreferenceList(ctx context.Context, store database.Store, args map[st
 	if scopeType == "" {
 		rec.Decision = auditDecisionDeny
 		rec.Status = auditStatusError
-		rec.ErrorType = strPtr("invalid_arguments")
+		rec.ErrorType = &auditErrInvalidArguments
 		return http.StatusBadRequest, []byte(`{"error":"scope_type required"}`), auditRec
 	}
 	scopeID := uuidArg(args, "scope_id")
 	if scopeType != scopeTypeSystem && scopeID == nil {
 		rec.Decision = auditDecisionDeny
 		rec.Status = auditStatusError
-		rec.ErrorType = strPtr("invalid_arguments")
+		rec.ErrorType = &auditErrInvalidArguments
 		return http.StatusBadRequest, []byte(`{"error":"scope_id required when scope_type is not system"}`), auditRec
 	}
 	keyPrefix := strArg(args, "key_prefix")
@@ -378,7 +406,7 @@ func handlePreferenceList(ctx context.Context, store database.Store, args map[st
 	if err != nil {
 		rec.Decision = auditDecisionAllow
 		rec.Status = auditStatusError
-		rec.ErrorType = strPtr("internal_error")
+		rec.ErrorType = &auditErrInternalError
 		return http.StatusInternalServerError, []byte(`{"error":"internal error"}`), auditRec
 	}
 	rec.Decision = auditDecisionAllow
@@ -406,7 +434,7 @@ func handlePreferenceEffective(ctx context.Context, store database.Store, args m
 	if taskID == nil {
 		rec.Decision = auditDecisionDeny
 		rec.Status = auditStatusError
-		rec.ErrorType = strPtr("invalid_arguments")
+		rec.ErrorType = &auditErrInvalidArguments
 		return http.StatusBadRequest, []byte(`{"error":"task_id required"}`), auditRec
 	}
 	rec.TaskID = taskID
@@ -414,7 +442,7 @@ func handlePreferenceEffective(ctx context.Context, store database.Store, args m
 	if err != nil {
 		rec.Decision = auditDecisionAllow
 		rec.Status = auditStatusError
-		rec.ErrorType = strPtr("internal_error")
+		rec.ErrorType = &auditErrInternalError
 		return http.StatusInternalServerError, []byte(`{"error":"internal error"}`), auditRec
 	}
 	rec.Decision = auditDecisionAllow
@@ -433,14 +461,14 @@ func handlePreferenceCreate(ctx context.Context, store database.Store, args map[
 	if scopeType == "" || key == "" || valueType == "" {
 		rec.Decision = auditDecisionDeny
 		rec.Status = auditStatusError
-		rec.ErrorType = strPtr("invalid_arguments")
+		rec.ErrorType = &auditErrInvalidArguments
 		return http.StatusBadRequest, []byte(`{"error":"scope_type, key, and value_type required"}`), auditRec
 	}
 	scopeID := uuidArg(args, "scope_id")
 	if scopeType != scopeTypeSystem && scopeID == nil {
 		rec.Decision = auditDecisionDeny
 		rec.Status = auditStatusError
-		rec.ErrorType = strPtr("invalid_arguments")
+		rec.ErrorType = &auditErrInvalidArguments
 		return http.StatusBadRequest, []byte(`{"error":"scope_id required when scope_type is not system"}`), auditRec
 	}
 	var reason, updatedBy *string
@@ -449,16 +477,7 @@ func handlePreferenceCreate(ctx context.Context, store database.Store, args map[
 	}
 	ent, err := store.CreatePreference(ctx, scopeType, scopeID, key, value, valueType, reason, updatedBy)
 	if err != nil {
-		if errors.Is(err, database.ErrExists) {
-			rec.Decision = auditDecisionAllow
-			rec.Status = auditStatusError
-			rec.ErrorType = strPtr("conflict")
-			return http.StatusConflict, []byte(`{"error":"preference already exists for scope and key"}`), auditRec
-		}
-		rec.Decision = auditDecisionAllow
-		rec.Status = auditStatusError
-		rec.ErrorType = strPtr("internal_error")
-		return http.StatusInternalServerError, []byte(`{"error":"internal error"}`), auditRec
+		return auditRecCreateExistsOrInternalErr(rec, err, []byte(`{"error":"preference already exists for scope and key"}`))
 	}
 	rec.Decision = auditDecisionAllow
 	rec.Status = auditStatusSuccess
@@ -484,14 +503,14 @@ func handlePreferenceUpdate(ctx context.Context, store database.Store, args map[
 	if scopeType == "" || key == "" || valueType == "" {
 		rec.Decision = auditDecisionDeny
 		rec.Status = auditStatusError
-		rec.ErrorType = strPtr("invalid_arguments")
+		rec.ErrorType = &auditErrInvalidArguments
 		return http.StatusBadRequest, []byte(`{"error":"scope_type, key, and value_type required"}`), auditRec
 	}
 	scopeID := uuidArg(args, "scope_id")
 	if scopeType != scopeTypeSystem && scopeID == nil {
 		rec.Decision = auditDecisionDeny
 		rec.Status = auditStatusError
-		rec.ErrorType = strPtr("invalid_arguments")
+		rec.ErrorType = &auditErrInvalidArguments
 		return http.StatusBadRequest, []byte(`{"error":"scope_id required when scope_type is not system"}`), auditRec
 	}
 	var expectedVersion *int
@@ -535,14 +554,14 @@ func handlePreferenceDelete(ctx context.Context, store database.Store, args map[
 	if scopeType == "" || key == "" {
 		rec.Decision = auditDecisionDeny
 		rec.Status = auditStatusError
-		rec.ErrorType = strPtr("invalid_arguments")
+		rec.ErrorType = &auditErrInvalidArguments
 		return http.StatusBadRequest, []byte(`{"error":"scope_type and key required"}`), auditRec
 	}
 	scopeID := uuidArg(args, "scope_id")
 	if scopeType != scopeTypeSystem && scopeID == nil {
 		rec.Decision = auditDecisionDeny
 		rec.Status = auditStatusError
-		rec.ErrorType = strPtr("invalid_arguments")
+		rec.ErrorType = &auditErrInvalidArguments
 		return http.StatusBadRequest, []byte(`{"error":"scope_id required when scope_type is not system"}`), auditRec
 	}
 	var expectedVersion *int
@@ -576,7 +595,7 @@ func handleTaskGet(ctx context.Context, store database.Store, args map[string]in
 	if taskID == nil {
 		rec.Decision = auditDecisionDeny
 		rec.Status = auditStatusError
-		rec.ErrorType = strPtr("invalid_arguments")
+		rec.ErrorType = &auditErrInvalidArguments
 		return http.StatusBadRequest, []byte(`{"error":"task_id required"}`), auditRec
 	}
 	rec.TaskID = taskID
@@ -608,7 +627,7 @@ func handleJobGet(ctx context.Context, store database.Store, args map[string]int
 	if jobID == nil {
 		rec.Decision = auditDecisionDeny
 		rec.Status = auditStatusError
-		rec.ErrorType = strPtr("invalid_arguments")
+		rec.ErrorType = &auditErrInvalidArguments
 		return http.StatusBadRequest, []byte(`{"error":"job_id required"}`), auditRec
 	}
 	rec.JobID = jobID
@@ -634,42 +653,6 @@ func handleJobGet(ctx context.Context, store database.Store, args map[string]int
 	return http.StatusOK, body, auditRec
 }
 
-func handleArtifactGet(ctx context.Context, store database.Store, args map[string]interface{}, rec *models.McpToolCallAuditLog) (code int, body []byte, auditRec *models.McpToolCallAuditLog) {
-	auditRec = rec
-	taskID := uuidArg(args, "task_id")
-	path := strArg(args, "path")
-	if taskID == nil || path == "" {
-		rec.Decision = auditDecisionDeny
-		rec.Status = auditStatusError
-		rec.ErrorType = strPtr("invalid_arguments")
-		return http.StatusBadRequest, []byte(`{"error":"task_id and path required"}`), auditRec
-	}
-	rec.TaskID = taskID
-	art, err := store.GetArtifactByTaskIDAndPath(ctx, *taskID, path)
-	if err != nil {
-		code, body := writePreferenceErrToAudit(err, rec)
-		return code, body, auditRec
-	}
-	rec.Decision = auditDecisionAllow
-	rec.Status = auditStatusSuccess
-	rec.ErrorType = nil
-	out := map[string]interface{}{
-		"task_id":         art.TaskID,
-		"path":            art.Path,
-		"storage_ref":     art.StorageRef,
-		"size_bytes":      art.SizeBytes,
-		"content_type":    art.ContentType,
-		"checksum_sha256": art.ChecksumSHA256,
-		"created_at":      art.CreatedAt,
-		"updated_at":      art.UpdatedAt,
-	}
-	if art.RunID != nil {
-		out["run_id"] = art.RunID
-	}
-	body, _ = json.Marshal(out)
-	return http.StatusOK, body, auditRec
-}
-
 // --- Skills tools (REQ-SKILLS-0114; contract in skills_storage_and_inference.md) ---
 
 func handleSkillsCreate(ctx context.Context, store database.Store, args map[string]interface{}, rec *models.McpToolCallAuditLog) (code int, body []byte, auditRec *models.McpToolCallAuditLog) {
@@ -678,7 +661,7 @@ func handleSkillsCreate(ctx context.Context, store database.Store, args map[stri
 	if userID == nil {
 		rec.Decision = auditDecisionDeny
 		rec.Status = auditStatusError
-		rec.ErrorType = strPtr("invalid_arguments")
+		rec.ErrorType = &auditErrInvalidArguments
 		return http.StatusBadRequest, []byte(`{"error":"user_id required"}`), auditRec
 	}
 	rec.UserID = userID
@@ -691,7 +674,7 @@ func handleSkillsCreate(ctx context.Context, store database.Store, args map[stri
 	if content == "" {
 		rec.Decision = auditDecisionDeny
 		rec.Status = auditStatusError
-		rec.ErrorType = strPtr("invalid_arguments")
+		rec.ErrorType = &auditErrInvalidArguments
 		return http.StatusBadRequest, []byte(`{"error":"content required"}`), auditRec
 	}
 	if m := skillscan.ScanContent(content); m != nil {
@@ -709,7 +692,7 @@ func handleSkillsCreate(ctx context.Context, store database.Store, args map[stri
 	if err != nil {
 		rec.Decision = auditDecisionAllow
 		rec.Status = auditStatusError
-		rec.ErrorType = strPtr("internal_error")
+		rec.ErrorType = &auditErrInternalError
 		return http.StatusInternalServerError, []byte(`{"error":"internal error"}`), auditRec
 	}
 	rec.Decision = auditDecisionAllow
@@ -726,7 +709,7 @@ func handleSkillsList(ctx context.Context, store database.Store, args map[string
 	if userID == nil {
 		rec.Decision = auditDecisionDeny
 		rec.Status = auditStatusError
-		rec.ErrorType = strPtr("invalid_arguments")
+		rec.ErrorType = &auditErrInvalidArguments
 		return http.StatusBadRequest, []byte(`{"error":"user_id required"}`), auditRec
 	}
 	rec.UserID = userID
@@ -740,7 +723,7 @@ func handleSkillsList(ctx context.Context, store database.Store, args map[string
 	if err != nil {
 		rec.Decision = auditDecisionAllow
 		rec.Status = auditStatusError
-		rec.ErrorType = strPtr("internal_error")
+		rec.ErrorType = &auditErrInternalError
 		return http.StatusInternalServerError, []byte(`{"error":"internal error"}`), auditRec
 	}
 	rec.Decision = auditDecisionAllow
@@ -767,7 +750,7 @@ func handleSkillsGet(ctx context.Context, store database.Store, args map[string]
 	if userID == nil || skillIDStr == "" {
 		rec.Decision = auditDecisionDeny
 		rec.Status = auditStatusError
-		rec.ErrorType = strPtr("invalid_arguments")
+		rec.ErrorType = &auditErrInvalidArguments
 		return http.StatusBadRequest, []byte(`{"error":"user_id and skill_id required"}`), auditRec
 	}
 	rec.UserID = userID
@@ -775,7 +758,7 @@ func handleSkillsGet(ctx context.Context, store database.Store, args map[string]
 	if err != nil {
 		rec.Decision = auditDecisionDeny
 		rec.Status = auditStatusError
-		rec.ErrorType = strPtr("invalid_arguments")
+		rec.ErrorType = &auditErrInvalidArguments
 		return http.StatusBadRequest, []byte(`{"error":"invalid skill_id"}`), auditRec
 	}
 	skill, err := store.GetSkillByID(ctx, skillID)
@@ -786,7 +769,7 @@ func handleSkillsGet(ctx context.Context, store database.Store, args map[string]
 	if !skill.IsSystem && (skill.OwnerID == nil || *skill.OwnerID != *userID) {
 		rec.Decision = auditDecisionAllow
 		rec.Status = auditStatusError
-		rec.ErrorType = strPtr("not_found")
+		rec.ErrorType = &auditErrNotFound
 		return http.StatusNotFound, []byte(`{"error":"not found"}`), auditRec
 	}
 	rec.Decision = auditDecisionAllow
@@ -804,7 +787,7 @@ func handleSkillsUpdate(ctx context.Context, store database.Store, args map[stri
 	if userID == nil || skillIDStr == "" {
 		rec.Decision = auditDecisionDeny
 		rec.Status = auditStatusError
-		rec.ErrorType = strPtr("invalid_arguments")
+		rec.ErrorType = &auditErrInvalidArguments
 		return http.StatusBadRequest, []byte(`{"error":"user_id and skill_id required"}`), auditRec
 	}
 	rec.UserID = userID
@@ -812,7 +795,7 @@ func handleSkillsUpdate(ctx context.Context, store database.Store, args map[stri
 	if err != nil {
 		rec.Decision = auditDecisionDeny
 		rec.Status = auditStatusError
-		rec.ErrorType = strPtr("invalid_arguments")
+		rec.ErrorType = &auditErrInvalidArguments
 		return http.StatusBadRequest, []byte(`{"error":"invalid skill_id"}`), auditRec
 	}
 	skill, err := store.GetSkillByID(ctx, skillID)
@@ -823,7 +806,7 @@ func handleSkillsUpdate(ctx context.Context, store database.Store, args map[stri
 	if !skill.IsSystem && (skill.OwnerID == nil || *skill.OwnerID != *userID) {
 		rec.Decision = auditDecisionAllow
 		rec.Status = auditStatusError
-		rec.ErrorType = strPtr("not_found")
+		rec.ErrorType = &auditErrNotFound
 		return http.StatusNotFound, []byte(`{"error":"not found"}`), auditRec
 	}
 	var name, content, scope *string
@@ -859,7 +842,7 @@ func handleSkillsDelete(ctx context.Context, store database.Store, args map[stri
 	if userID == nil || skillIDStr == "" {
 		rec.Decision = auditDecisionDeny
 		rec.Status = auditStatusError
-		rec.ErrorType = strPtr("invalid_arguments")
+		rec.ErrorType = &auditErrInvalidArguments
 		return http.StatusBadRequest, []byte(`{"error":"user_id and skill_id required"}`), auditRec
 	}
 	rec.UserID = userID
@@ -867,7 +850,7 @@ func handleSkillsDelete(ctx context.Context, store database.Store, args map[stri
 	if err != nil {
 		rec.Decision = auditDecisionDeny
 		rec.Status = auditStatusError
-		rec.ErrorType = strPtr("invalid_arguments")
+		rec.ErrorType = &auditErrInvalidArguments
 		return http.StatusBadRequest, []byte(`{"error":"invalid skill_id"}`), auditRec
 	}
 	skill, err := store.GetSkillByID(ctx, skillID)
@@ -878,7 +861,7 @@ func handleSkillsDelete(ctx context.Context, store database.Store, args map[stri
 	if !skill.IsSystem && (skill.OwnerID == nil || *skill.OwnerID != *userID) {
 		rec.Decision = auditDecisionAllow
 		rec.Status = auditStatusError
-		rec.ErrorType = strPtr("not_found")
+		rec.ErrorType = &auditErrNotFound
 		return http.StatusNotFound, []byte(`{"error":"not found"}`), auditRec
 	}
 	if err := store.DeleteSkill(ctx, skillID); err != nil {
@@ -891,12 +874,10 @@ func handleSkillsDelete(ctx context.Context, store database.Store, args map[stri
 	return http.StatusOK, []byte(`{}`), auditRec
 }
 
-func strPtr(s string) *string { return &s }
-
 func skillsPolicyViolationResponse(rec *models.McpToolCallAuditLog, m *skillscan.Match, auditRec *models.McpToolCallAuditLog) (code int, body []byte, outRec *models.McpToolCallAuditLog) {
 	rec.Decision = auditDecisionAllow
 	rec.Status = auditStatusError
-	rec.ErrorType = strPtr("policy_violation")
+	rec.ErrorType = &auditErrPolicyViolation
 	out := map[string]interface{}{"error": "policy violation", "category": m.Category, "triggering_text": m.TriggeringText}
 	b, _ := json.Marshal(out)
 	return http.StatusBadRequest, b, auditRec

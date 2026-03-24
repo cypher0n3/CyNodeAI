@@ -32,7 +32,7 @@ func handleProjectGet(ctx context.Context, store database.Store, args map[string
 	if userID == nil {
 		rec.Decision = auditDecisionDeny
 		rec.Status = auditStatusError
-		rec.ErrorType = strPtr("invalid_arguments")
+		rec.ErrorType = &auditErrInvalidArguments
 		return http.StatusBadRequest, []byte(`{"error":"user_id required"}`), auditRec
 	}
 	rec.UserID = userID
@@ -41,7 +41,7 @@ func handleProjectGet(ctx context.Context, store database.Store, args map[string
 	if (pid == nil && slug == "") || (pid != nil && slug != "") {
 		rec.Decision = auditDecisionDeny
 		rec.Status = auditStatusError
-		rec.ErrorType = strPtr("invalid_arguments")
+		rec.ErrorType = &auditErrInvalidArguments
 		return http.StatusBadRequest, []byte(`{"error":"exactly one of project_id or slug is required"}`), auditRec
 	}
 	var proj *models.Project
@@ -59,13 +59,13 @@ func handleProjectGet(ctx context.Context, store database.Store, args map[string
 	if err != nil {
 		rec.Decision = auditDecisionAllow
 		rec.Status = auditStatusError
-		rec.ErrorType = strPtr("internal_error")
+		rec.ErrorType = &auditErrInternalError
 		return http.StatusInternalServerError, []byte(`{"error":"internal error"}`), auditRec
 	}
 	if proj.ID != def.ID {
 		rec.Decision = auditDecisionAllow
 		rec.Status = auditStatusError
-		rec.ErrorType = strPtr("not_found")
+		rec.ErrorType = &auditErrNotFound
 		return http.StatusNotFound, []byte(`{"error":"not found"}`), auditRec
 	}
 	rec.Decision = auditDecisionAllow
@@ -76,7 +76,7 @@ func handleProjectGet(ctx context.Context, store database.Store, args map[string
 	b, err := json.Marshal(out)
 	if err != nil {
 		rec.Status = auditStatusError
-		rec.ErrorType = strPtr("internal_error")
+		rec.ErrorType = &auditErrInternalError
 		return http.StatusInternalServerError, []byte(`{"error":"internal error"}`), auditRec
 	}
 	return http.StatusOK, b, auditRec
@@ -88,7 +88,7 @@ func handleProjectList(ctx context.Context, store database.Store, args map[strin
 	if userID == nil {
 		rec.Decision = auditDecisionDeny
 		rec.Status = auditStatusError
-		rec.ErrorType = strPtr("invalid_arguments")
+		rec.ErrorType = &auditErrInvalidArguments
 		return http.StatusBadRequest, []byte(`{"error":"user_id required"}`), auditRec
 	}
 	rec.UserID = userID
@@ -108,7 +108,7 @@ func handleProjectList(ctx context.Context, store database.Store, args map[strin
 	if err != nil {
 		rec.Decision = auditDecisionAllow
 		rec.Status = auditStatusError
-		rec.ErrorType = strPtr("internal_error")
+		rec.ErrorType = &auditErrInternalError
 		return http.StatusInternalServerError, []byte(`{"error":"internal error"}`), auditRec
 	}
 	rec.Decision = auditDecisionAllow
@@ -125,7 +125,7 @@ func handleProjectList(ctx context.Context, store database.Store, args map[strin
 	b, err := json.Marshal(out)
 	if err != nil {
 		rec.Status = auditStatusError
-		rec.ErrorType = strPtr("internal_error")
+		rec.ErrorType = &auditErrInternalError
 		return http.StatusInternalServerError, []byte(`{"error":"internal error"}`), auditRec
 	}
 	return http.StatusOK, b, auditRec

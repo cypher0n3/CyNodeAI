@@ -52,6 +52,8 @@ func (db *DB) runAutoMigrate(ctx context.Context, logger *slog.Logger) error {
 		&SandboxImageVersionRecord{},
 		&NodeSandboxImageAvailabilityRecord{},
 		&TaskArtifactRecord{},
+		&OrchestratorArtifactRecord{},
+		&ArtifactReadGrantRecord{},
 		&SkillRecord{},
 		&SystemSettingRecord{},
 		&AccessControlRuleRecord{},

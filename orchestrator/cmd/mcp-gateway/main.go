@@ -12,6 +12,8 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/cypher0n3/cynodeai/orchestrator/internal/artifacts"
+	"github.com/cypher0n3/cynodeai/orchestrator/internal/config"
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/database"
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/mcpgateway"
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/middleware"
@@ -46,6 +48,9 @@ var testStore database.Store
 
 // testDatabaseOpen is set by tests to provide a store without opening a real DB (avoids needing RunSchema).
 var testDatabaseOpen func(ctx context.Context, dsn string) (database.Store, error)
+
+// testShutdownHook, when set by tests, is called instead of srv.Shutdown.
+var testShutdownHook func(*http.Server, context.Context) error
 
 // openGatewayStore resolves the database handle for the standalone gateway (tests may inject mocks).
 func openGatewayStore(ctx context.Context, logger *slog.Logger) (store database.Store, closeFn func(), err error) {
@@ -95,6 +100,18 @@ func run(ctx context.Context, logger *slog.Logger) error {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte("ok"))
 	})
+	cfg := config.LoadOrchestratorConfig()
+	if db, ok := store.(*database.DB); ok {
+		artSvc, aerr := artifacts.NewServiceFromConfig(ctx, db, cfg)
+		if aerr != nil {
+			logger.Warn("artifacts backend unavailable; MCP artifact tools disabled", "error", aerr)
+			mcpgateway.SetArtifactToolService(nil)
+		} else {
+			mcpgateway.SetArtifactToolService(artSvc)
+		}
+	} else {
+		mcpgateway.SetArtifactToolService(nil)
+	}
 	mux.HandleFunc("POST /v1/mcp/tools/call", mcpgateway.ToolCallHandler(store, logger, mcpAuthFromEnv()))
 
 	handler := middleware.Logging(logger)(mux)
@@ -125,6 +142,9 @@ func run(ctx context.Context, logger *slog.Logger) error {
 	logger.Info("shutting down deprecated standalone MCP gateway")
 	shutdownCtx, cancel := context.WithTimeout(ctx, shutdownTimeout())
 	defer cancel()
+	if testShutdownHook != nil {
+		return testShutdownHook(srv, shutdownCtx)
+	}
 	return srv.Shutdown(shutdownCtx)
 }
 

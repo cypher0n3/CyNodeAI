@@ -15,6 +15,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/cypher0n3/cynodeai/orchestrator/internal/artifacts"
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/auth"
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/config"
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/database"
@@ -132,13 +133,53 @@ func runMainWithContext(ctx context.Context, store database.Store) int {
 	return 0
 }
 
+// wireArtifactsService configures the optional S3-backed artifacts service and MCP tool wiring.
+func wireArtifactsService(ctx context.Context, store database.Store, cfg *config.OrchestratorConfig, logger *slog.Logger) *artifacts.Service {
+	db, ok := store.(*database.DB)
+	if !ok {
+		mcpgateway.SetArtifactToolService(nil)
+		return nil
+	}
+	artSvc, aerr := artifacts.NewServiceFromConfig(ctx, db, cfg)
+	if aerr != nil {
+		logger.Warn("artifacts backend unavailable; MCP artifact tools disabled", "error", aerr)
+		mcpgateway.SetArtifactToolService(nil)
+		return nil
+	}
+	mcpgateway.SetArtifactToolService(artSvc)
+	return artSvc
+}
+
+// shutdownHTTPServer stops the HTTP server with the configured or test shutdown timeout.
+func shutdownHTTPServer(ctx context.Context, server *http.Server, logger *slog.Logger) error {
+	logger.Info("shutting down...")
+	shutdownTimeout := 30 * time.Second
+	if testShutdownTimeout != nil {
+		shutdownTimeout = *testShutdownTimeout
+	}
+	shutdownCtx, cancel := context.WithTimeout(ctx, shutdownTimeout)
+	defer cancel()
+	var shutdownErr error
+	if testShutdownHook != nil {
+		shutdownErr = testShutdownHook(server, shutdownCtx)
+	} else {
+		shutdownErr = server.Shutdown(shutdownCtx)
+	}
+	if shutdownErr != nil {
+		logger.Error("shutdown error", "error", shutdownErr)
+		return shutdownErr
+	}
+	logger.Info("server stopped")
+	return nil
+}
+
 // registerMCPToolRoute registers POST /v1/mcp/tools/call on mux. Exposed for tests that assert the route exists.
 func registerMCPToolRoute(mux *http.ServeMux, store database.Store, logger *slog.Logger, cfg *config.OrchestratorConfig) {
-	auth := &mcpgateway.ToolCallAuth{
+	mcpToolAuth := &mcpgateway.ToolCallAuth{
 		PMToken:      cfg.WorkerInternalAgentToken,
 		SandboxToken: cfg.MCPSandboxAgentBearerToken,
 	}
-	mux.HandleFunc("POST /v1/mcp/tools/call", mcpgateway.ToolCallHandler(store, logger, auth))
+	mux.HandleFunc("POST /v1/mcp/tools/call", mcpgateway.ToolCallHandler(store, logger, mcpToolAuth))
 }
 
 // run bootstraps admin, starts the HTTP server and dispatcher until ctx is canceled. Used by main and tests.
@@ -169,7 +210,11 @@ func run(ctx context.Context, store database.Store, cfg *config.OrchestratorConf
 	mux.Handle("POST /v1/nodes/capability", authMiddleware.RequireNodeAuth(http.HandlerFunc(nodeHandler.ReportCapability)))
 
 	// MCP tool calls share the control-plane database (P2-02 audit); do not run a separate mcp-gateway with its own DSN.
+	artSvc := wireArtifactsService(ctx, store, cfg, logger)
 	registerMCPToolRoute(mux, store, logger, cfg)
+	if artSvc != nil {
+		artifacts.StartBackgroundJobs(ctx, artSvc, cfg, logger)
+	}
 
 	mux.Handle("POST /v1/workflow/start", workflowAuth(http.HandlerFunc(workflowHandler.Start)))
 	mux.Handle("POST /v1/workflow/resume", workflowAuth(http.HandlerFunc(workflowHandler.Resume)))
@@ -228,25 +273,7 @@ func run(ctx context.Context, store database.Store, cfg *config.OrchestratorConf
 		return err
 	}
 
-	logger.Info("shutting down...")
-	shutdownTimeout := 30 * time.Second
-	if testShutdownTimeout != nil {
-		shutdownTimeout = *testShutdownTimeout
-	}
-	shutdownCtx, cancel := context.WithTimeout(ctx, shutdownTimeout)
-	defer cancel()
-	var shutdownErr error
-	if testShutdownHook != nil {
-		shutdownErr = testShutdownHook(server, shutdownCtx)
-	} else {
-		shutdownErr = server.Shutdown(shutdownCtx)
-	}
-	if shutdownErr != nil {
-		logger.Error("shutdown error", "error", shutdownErr)
-		return shutdownErr
-	}
-	logger.Info("server stopped")
-	return nil
+	return shutdownHTTPServer(ctx, server, logger)
 }
 
 // testPMAPollInterval, when set by tests, shortens the poll interval in startPMAWhenInferencePathReady.

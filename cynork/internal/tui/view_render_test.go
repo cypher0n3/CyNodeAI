@@ -25,6 +25,31 @@ func TestIndentLines_EmptyLine(t *testing.T) {
 	}
 }
 
+func TestIndentLines_EmptyString(t *testing.T) {
+	if indentLines("", "  ") != "" {
+		t.Errorf("empty input should stay empty")
+	}
+}
+
+func TestAppendReverseVideoCursor_branches(t *testing.T) {
+	base := lipgloss.NewStyle()
+	var b strings.Builder
+	appendReverseVideoCursor(&b, &base, "")
+	if b.Len() == 0 {
+		t.Fatal("expected cursor for empty after")
+	}
+	b.Reset()
+	appendReverseVideoCursor(&b, &base, "世")
+	if b.Len() == 0 {
+		t.Fatal("expected multibyte first rune")
+	}
+	b.Reset()
+	appendReverseVideoCursor(&b, &base, "a")
+	if !strings.Contains(b.String(), "a") {
+		t.Fatalf("got %q", b.String())
+	}
+}
+
 func TestIsRolePairLine(t *testing.T) {
 	if !isRolePairLine("You: hi", "Assistant: there") {
 		t.Error("expected role pair")
@@ -116,4 +141,22 @@ func TestRenderComposerBox_MinWidth(t *testing.T) {
 	m := NewModel(&chat.Session{})
 	m.Width = 2
 	_ = m.renderComposerBox([]string{"> x"})
+}
+
+func TestRenderUserBlock_whitespaceOnly(t *testing.T) {
+	m := NewModel(&chat.Session{})
+	m.Width = 40
+	s := m.renderUserBlock("   \n\t  ")
+	if s == "" {
+		t.Fatal("expected framed label-only block")
+	}
+}
+
+func TestRenderAssistantBlock_whitespaceOnly(t *testing.T) {
+	m := NewModel(&chat.Session{})
+	m.Width = 40
+	s := m.renderAssistantBlock(" \n ")
+	if s == "" {
+		t.Fatal("expected framed label-only block")
+	}
 }

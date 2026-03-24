@@ -3,7 +3,6 @@ package mcpgateway
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"net/http"
 	"time"
 
@@ -17,7 +16,7 @@ func handleSystemSettingGet(ctx context.Context, store database.Store, args map[
 	if key == "" {
 		rec.Decision = auditDecisionDeny
 		rec.Status = auditStatusError
-		rec.ErrorType = strPtr("invalid_arguments")
+		rec.ErrorType = &auditErrInvalidArguments
 		return http.StatusBadRequest, []byte(`{"error":"key required"}`), auditRec
 	}
 	ent, err := store.GetSystemSetting(ctx, key)
@@ -39,7 +38,7 @@ func handleSystemSettingGet(ctx context.Context, store database.Store, args map[
 	b, err := json.Marshal(out)
 	if err != nil {
 		rec.Status = auditStatusError
-		rec.ErrorType = strPtr("internal_error")
+		rec.ErrorType = &auditErrInternalError
 		return http.StatusInternalServerError, []byte(`{"error":"internal error"}`), auditRec
 	}
 	return http.StatusOK, b, auditRec
@@ -60,7 +59,7 @@ func handleSystemSettingList(ctx context.Context, store database.Store, args map
 	if err != nil {
 		rec.Decision = auditDecisionAllow
 		rec.Status = auditStatusError
-		rec.ErrorType = strPtr("internal_error")
+		rec.ErrorType = &auditErrInternalError
 		return http.StatusInternalServerError, []byte(`{"error":"internal error"}`), auditRec
 	}
 	rec.Decision = auditDecisionAllow
@@ -81,7 +80,7 @@ func handleSystemSettingList(ctx context.Context, store database.Store, args map
 	b, err := json.Marshal(out)
 	if err != nil {
 		rec.Status = auditStatusError
-		rec.ErrorType = strPtr("internal_error")
+		rec.ErrorType = &auditErrInternalError
 		return http.StatusInternalServerError, []byte(`{"error":"internal error"}`), auditRec
 	}
 	return http.StatusOK, b, auditRec
@@ -95,7 +94,7 @@ func handleSystemSettingCreate(ctx context.Context, store database.Store, args m
 	if key == "" || valueType == "" {
 		rec.Decision = auditDecisionDeny
 		rec.Status = auditStatusError
-		rec.ErrorType = strPtr("invalid_arguments")
+		rec.ErrorType = &auditErrInvalidArguments
 		return http.StatusBadRequest, []byte(`{"error":"key and value_type required"}`), auditRec
 	}
 	reason := strArg(args, "reason")
@@ -110,16 +109,7 @@ func handleSystemSettingCreate(ctx context.Context, store database.Store, args m
 	}
 	ent, err := store.CreateSystemSetting(ctx, key, value, valueType, reasonPtr, updatedByPtr)
 	if err != nil {
-		if errors.Is(err, database.ErrExists) {
-			rec.Decision = auditDecisionAllow
-			rec.Status = auditStatusError
-			rec.ErrorType = strPtr("conflict")
-			return http.StatusConflict, []byte(`{"error":"already exists"}`), auditRec
-		}
-		rec.Decision = auditDecisionAllow
-		rec.Status = auditStatusError
-		rec.ErrorType = strPtr("internal_error")
-		return http.StatusInternalServerError, []byte(`{"error":"internal error"}`), auditRec
+		return auditRecCreateExistsOrInternalErr(rec, err, []byte(`{"error":"already exists"}`))
 	}
 	rec.Decision = auditDecisionAllow
 	rec.Status = auditStatusSuccess
@@ -140,7 +130,7 @@ func handleSystemSettingUpdate(ctx context.Context, store database.Store, args m
 	if key == "" || valueType == "" {
 		rec.Decision = auditDecisionDeny
 		rec.Status = auditStatusError
-		rec.ErrorType = strPtr("invalid_arguments")
+		rec.ErrorType = &auditErrInvalidArguments
 		return http.StatusBadRequest, []byte(`{"error":"key and value_type required"}`), auditRec
 	}
 	var expectedVersion *int
@@ -185,7 +175,7 @@ func handleSystemSettingDelete(ctx context.Context, store database.Store, args m
 	if key == "" {
 		rec.Decision = auditDecisionDeny
 		rec.Status = auditStatusError
-		rec.ErrorType = strPtr("invalid_arguments")
+		rec.ErrorType = &auditErrInvalidArguments
 		return http.StatusBadRequest, []byte(`{"error":"key required"}`), auditRec
 	}
 	var expectedVersion *int

@@ -46,3 +46,28 @@ func TestSandboxAllowsTool(t *testing.T) {
 		t.Fatal("task.get should be denied for sandbox")
 	}
 }
+
+func TestToolCallAuth_anyTokenConfigured(t *testing.T) {
+	t.Parallel()
+	if (*ToolCallAuth)(nil).anyTokenConfigured() {
+		t.Fatal("nil auth")
+	}
+	if (&ToolCallAuth{}).anyTokenConfigured() {
+		t.Fatal("empty tokens")
+	}
+	if !(&ToolCallAuth{PMToken: "x"}).anyTokenConfigured() {
+		t.Fatal("pm token")
+	}
+	if !(&ToolCallAuth{SandboxToken: "y"}).anyTokenConfigured() {
+		t.Fatal("sandbox token")
+	}
+}
+
+func TestToolCallAuth_resolveRole_nilReceiver(t *testing.T) {
+	t.Parallel()
+	var a *ToolCallAuth
+	role, ok := a.resolveRole("x")
+	if ok || role != AgentRoleNone {
+		t.Fatalf("nil auth resolveRole: ok=%v role=%v", ok, role)
+	}
+}

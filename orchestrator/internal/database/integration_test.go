@@ -110,6 +110,13 @@ func TestIntegration_Node(t *testing.T) {
 func TestIntegration_SystemSettings(t *testing.T) {
 	db, ctx := integrationDB(t)
 	key := "inttest.setting." + uuid.New().String()
+	integrationSystemSettingsGetCreate(t, db, ctx, key)
+	keyA, keyB := integrationSystemSettingsListAndPaging(t, db, ctx)
+	integrationSystemSettingsUpdateDelete(t, db, ctx, key, keyA, keyB)
+}
+
+func integrationSystemSettingsGetCreate(t *testing.T, db *DB, ctx context.Context, key string) {
+	t.Helper()
 	_, err := db.GetSystemSetting(ctx, key)
 	if !errors.Is(err, ErrNotFound) {
 		t.Fatalf("GetSystemSetting missing key: %v", err)
@@ -128,8 +135,79 @@ func TestIntegration_SystemSettings(t *testing.T) {
 	if got.Key != key {
 		t.Errorf("key = %q", got.Key)
 	}
-	if err := db.DeleteSystemSetting(ctx, key, nil, nil); err != nil {
+}
+
+func integrationSystemSettingsListAndPaging(t *testing.T, db *DB, ctx context.Context) (keyA, keyB string) {
+	t.Helper()
+	keyA = "inttest.list.a." + uuid.New().String()
+	keyB = "inttest.list.b." + uuid.New().String()
+	if _, err := db.CreateSystemSetting(ctx, keyA, `"1"`, "string", nil, nil); err != nil {
+		t.Fatalf("CreateSystemSetting: %v", err)
+	}
+	if _, err := db.CreateSystemSetting(ctx, keyB, `"2"`, "string", nil, nil); err != nil {
+		t.Fatalf("CreateSystemSetting: %v", err)
+	}
+	listed, next, err := db.ListSystemSettings(ctx, "inttest.list.", 10, "")
+	if err != nil {
+		t.Fatalf("ListSystemSettings: %v", err)
+	}
+	if len(listed) < 2 {
+		t.Fatalf("ListSystemSettings: want >=2 rows, got %d", len(listed))
+	}
+	if next != "" {
+		t.Logf("next cursor: %q", next)
+	}
+	page1, nextCur, err := db.ListSystemSettings(ctx, "inttest.list.", 1, "")
+	if err != nil || len(page1) != 1 || nextCur == "" {
+		t.Fatalf("ListSystemSettings page1: err=%v len=%d next=%q", err, len(page1), nextCur)
+	}
+	if _, _, err := db.ListSystemSettings(ctx, "inttest.list.", 1, nextCur); err != nil {
+		t.Fatalf("ListSystemSettings page2: %v", err)
+	}
+	if _, _, err := db.ListSystemSettings(ctx, "", 10, "not-a-number"); err != nil {
+		t.Fatalf("ListSystemSettings invalid cursor: %v", err)
+	}
+	if rows, _, err := db.ListSystemSettings(ctx, "", 200, ""); err != nil {
+		t.Fatalf("ListSystemSettings high limit: %v", err)
+	} else if len(rows) > MaxSystemSettingListLimit {
+		t.Fatalf("ListSystemSettings: got %d rows, cap %d", len(rows), MaxSystemSettingListLimit)
+	}
+	return keyA, keyB
+}
+
+func integrationSystemSettingsUpdateDelete(t *testing.T, db *DB, ctx context.Context, key, keyA, keyB string) {
+	t.Helper()
+	ev := 1
+	updated, err := db.UpdateSystemSetting(ctx, key, `"w"`, "string", &ev, nil, nil)
+	if err != nil || updated.Version != 2 {
+		t.Fatalf("UpdateSystemSetting: %v %+v", err, updated)
+	}
+	if _, err := db.UpdateSystemSetting(ctx, key, `"z"`, "string", &ev, nil, nil); !errors.Is(err, ErrConflict) {
+		t.Fatalf("UpdateSystemSetting want ErrConflict, got %v", err)
+	}
+
+	if err := db.DeleteSystemSetting(ctx, key, &ev, nil); !errors.Is(err, ErrConflict) {
+		t.Fatalf("DeleteSystemSetting want ErrConflict, got %v", err)
+	}
+	if err := db.DeleteSystemSetting(ctx, key, &updated.Version, nil); err != nil {
 		t.Fatalf("DeleteSystemSetting: %v", err)
+	}
+	if err := db.DeleteSystemSetting(ctx, keyA, nil, nil); err != nil {
+		t.Fatalf("DeleteSystemSetting: %v", err)
+	}
+	if err := db.DeleteSystemSetting(ctx, keyB, nil, nil); err != nil {
+		t.Fatalf("DeleteSystemSetting: %v", err)
+	}
+}
+
+func TestIntegration_CreateSystemSetting_duplicateKey(t *testing.T) {
+	db, ctx := integrationDB(t)
+	k := "inttest.dup." + uuid.New().String()
+	if _, err := db.CreateSystemSetting(ctx, k, `"v"`, "string", nil, nil); err != nil {
+		t.Fatalf("CreateSystemSetting: %v", err)
+	}
+	if _, err := db.CreateSystemSetting(ctx, k, `"v2"`, "string", nil, nil); !errors.Is(err, ErrExists) {
+		t.Fatalf("want ErrExists, got %v", err)
 	}
 }
 

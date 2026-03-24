@@ -78,7 +78,7 @@ func handleHelpList(_ context.Context, _ database.Store, _ map[string]interface{
 	b, err := json.Marshal(out)
 	if err != nil {
 		rec.Status = auditStatusError
-		rec.ErrorType = strPtr("internal_error")
+		rec.ErrorType = &auditErrInternalError
 		rec.Decision = auditDecisionDeny
 		return http.StatusInternalServerError, []byte(`{"error":"internal error"}`), auditRec
 	}
@@ -100,7 +100,7 @@ func handleHelpGet(_ context.Context, _ database.Store, args map[string]interfac
 	b, err := json.Marshal(out)
 	if err != nil {
 		rec.Status = auditStatusError
-		rec.ErrorType = strPtr("internal_error")
+		rec.ErrorType = &auditErrInternalError
 		return http.StatusInternalServerError, []byte(`{"error":"internal error"}`), auditRec
 	}
 	return http.StatusOK, b, auditRec

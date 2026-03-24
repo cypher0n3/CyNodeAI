@@ -17,7 +17,7 @@ func handleTaskList(ctx context.Context, store database.Store, args map[string]i
 	if uid == nil {
 		rec.Decision = auditDecisionDeny
 		rec.Status = auditStatusError
-		rec.ErrorType = strPtr("invalid_arguments")
+		rec.ErrorType = &auditErrInvalidArguments
 		return http.StatusBadRequest, []byte(`{"error":"user_id required"}`), auditRec
 	}
 	rec.UserID = uid
@@ -25,14 +25,14 @@ func handleTaskList(ctx context.Context, store database.Store, args map[string]i
 	if errMsg != "" {
 		rec.Decision = auditDecisionDeny
 		rec.Status = auditStatusError
-		rec.ErrorType = strPtr("invalid_arguments")
+		rec.ErrorType = &auditErrInvalidArguments
 		return http.StatusBadRequest, []byte(`{"error":"` + errMsg + `"}`), auditRec
 	}
 	resp, err := mcptaskbridge.ListTasksForUser(ctx, store, *uid, limit, offset, statusFilter, cursor)
 	if err != nil {
 		rec.Decision = auditDecisionAllow
 		rec.Status = auditStatusError
-		rec.ErrorType = strPtr("internal_error")
+		rec.ErrorType = &auditErrInternalError
 		return http.StatusInternalServerError, []byte(`{"error":"internal error"}`), auditRec
 	}
 	rec.Decision = auditDecisionAllow
@@ -41,7 +41,7 @@ func handleTaskList(ctx context.Context, store database.Store, args map[string]i
 	b, err := json.Marshal(resp)
 	if err != nil {
 		rec.Status = auditStatusError
-		rec.ErrorType = strPtr("internal_error")
+		rec.ErrorType = &auditErrInternalError
 		return http.StatusInternalServerError, []byte(`{"error":"internal error"}`), auditRec
 	}
 	return http.StatusOK, b, auditRec
@@ -53,7 +53,7 @@ func handleTaskResult(ctx context.Context, store database.Store, args map[string
 	if taskID == nil {
 		rec.Decision = auditDecisionDeny
 		rec.Status = auditStatusError
-		rec.ErrorType = strPtr("invalid_arguments")
+		rec.ErrorType = &auditErrInvalidArguments
 		return http.StatusBadRequest, []byte(`{"error":"task_id required"}`), auditRec
 	}
 	rec.TaskID = taskID
@@ -65,7 +65,7 @@ func handleTaskResult(ctx context.Context, store database.Store, args map[string
 		}
 		rec.Decision = auditDecisionAllow
 		rec.Status = auditStatusError
-		rec.ErrorType = strPtr("internal_error")
+		rec.ErrorType = &auditErrInternalError
 		return http.StatusInternalServerError, []byte(`{"error":"internal error"}`), auditRec
 	}
 	rec.Decision = auditDecisionAllow
@@ -74,7 +74,7 @@ func handleTaskResult(ctx context.Context, store database.Store, args map[string
 	b, err := json.Marshal(resp)
 	if err != nil {
 		rec.Status = auditStatusError
-		rec.ErrorType = strPtr("internal_error")
+		rec.ErrorType = &auditErrInternalError
 		return http.StatusInternalServerError, []byte(`{"error":"internal error"}`), auditRec
 	}
 	return http.StatusOK, b, auditRec
@@ -86,7 +86,7 @@ func handleTaskCancel(ctx context.Context, store database.Store, args map[string
 	if taskID == nil {
 		rec.Decision = auditDecisionDeny
 		rec.Status = auditStatusError
-		rec.ErrorType = strPtr("invalid_arguments")
+		rec.ErrorType = &auditErrInvalidArguments
 		return http.StatusBadRequest, []byte(`{"error":"task_id required"}`), auditRec
 	}
 	rec.TaskID = taskID
@@ -97,7 +97,7 @@ func handleTaskCancel(ctx context.Context, store database.Store, args map[string
 	if err := mcptaskbridge.CancelTask(ctx, store, *taskID); err != nil {
 		rec.Decision = auditDecisionAllow
 		rec.Status = auditStatusError
-		rec.ErrorType = strPtr("internal_error")
+		rec.ErrorType = &auditErrInternalError
 		return http.StatusInternalServerError, []byte(`{"error":"internal error"}`), auditRec
 	}
 	rec.Decision = auditDecisionAllow
@@ -106,7 +106,7 @@ func handleTaskCancel(ctx context.Context, store database.Store, args map[string
 	b, err := json.Marshal(userapi.CancelTaskResponse{TaskID: taskID.String(), Canceled: true})
 	if err != nil {
 		rec.Status = auditStatusError
-		rec.ErrorType = strPtr("internal_error")
+		rec.ErrorType = &auditErrInternalError
 		return http.StatusInternalServerError, []byte(`{"error":"internal error"}`), auditRec
 	}
 	return http.StatusOK, b, auditRec
@@ -118,7 +118,7 @@ func handleTaskLogs(ctx context.Context, store database.Store, args map[string]i
 	if taskID == nil {
 		rec.Decision = auditDecisionDeny
 		rec.Status = auditStatusError
-		rec.ErrorType = strPtr("invalid_arguments")
+		rec.ErrorType = &auditErrInvalidArguments
 		return http.StatusBadRequest, []byte(`{"error":"task_id required"}`), auditRec
 	}
 	rec.TaskID = taskID
@@ -131,7 +131,7 @@ func handleTaskLogs(ctx context.Context, store database.Store, args map[string]i
 		}
 		rec.Decision = auditDecisionAllow
 		rec.Status = auditStatusError
-		rec.ErrorType = strPtr("internal_error")
+		rec.ErrorType = &auditErrInternalError
 		return http.StatusInternalServerError, []byte(`{"error":"internal error"}`), auditRec
 	}
 	rec.Decision = auditDecisionAllow
@@ -140,7 +140,7 @@ func handleTaskLogs(ctx context.Context, store database.Store, args map[string]i
 	b, err := json.Marshal(resp)
 	if err != nil {
 		rec.Status = auditStatusError
-		rec.ErrorType = strPtr("internal_error")
+		rec.ErrorType = &auditErrInternalError
 		return http.StatusInternalServerError, []byte(`{"error":"internal error"}`), auditRec
 	}
 	return http.StatusOK, b, auditRec

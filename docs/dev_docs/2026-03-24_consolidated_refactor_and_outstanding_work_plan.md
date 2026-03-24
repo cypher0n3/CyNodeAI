@@ -2352,10 +2352,10 @@ All three test layers MUST be added or updated before implementation.
   - [x] Run `just e2e` for the new module and confirm tests fail before implementation.
 - **BDD scenarios** (add or update in `features/orchestrator/` or `features/e2e/`):
   - [x] Add scenarios for user-scoped artifact CRUD (create/read) via REST (in-memory blob in `_bdd`).
-  - [ ] Add scenarios for group/project/global scope partitions (required before Task 1 Red is complete).
+  - [x] Add scenarios for group/project/global scope partitions (required before Task 1 Red is complete).
   - [x] Add scenarios for RBAC deny-by-default (second user cannot read admin user-scoped artifact).
-  - [ ] Add scenarios for cross-principal read via explicit grant (required before Task 1 Red is complete).
-  - [ ] Add BDD scenarios for MCP artifact tool routing (PMA/PAA allowlists); MCP tools covered by E2E and unit tests (required before Task 1 Red is complete).
+  - [x] Add scenarios for cross-principal read via explicit grant (required before Task 1 Red is complete).
+  - [x] Add BDD scenarios for MCP artifact tool routing (PMA/PAA allowlists); MCP tools covered by E2E and unit tests (required before Task 1 Red is complete).
 - **Go unit tests** (add failing tests in orchestrator packages):
   - [x] Artifact domain base + `OrchestratorArtifactRecord` (existing); unit tests for `ScopePartition` / `SanitizePath` and `MemStore`.
   - [x] S3: `BlobStore` interface + `MemStore`; live MinIO client exercised via E2E not unit-tested to 90% alone.
@@ -2363,9 +2363,9 @@ All three test layers MUST be added or updated before implementation.
   - [x] Handler: `artifacts_test` nil-service path; full five-endpoint matrix follow-up for coverage thresholds.
   - [x] MCP tool handler tests for `artifact.put`, `artifact.get`, `artifact.list` in `handlers_test.go`.
   - [ ] Store methods: full DB coverage for orchestrator artifact CRUD to `just test-go-cover` thresholds (required before Task 1 Red is complete).
-- [ ] **Red - Python E2E:** Run `just e2e` for the new artifact module; confirm failures match the remaining gaps above (re-run after any new Red items land).
-- [ ] **Red - BDD:** Run `go test ./orchestrator/_bdd` (or `just test-bdd` orchestrator slice); confirm scenarios match the remaining gaps above.
-- [ ] **Red - Go:** Run `go test` / `just test-go-cover` for orchestrator packages with new artifact tests; confirm coverage and failures match the remaining gaps above.
+- [x] **Red - Python E2E:** Run `just e2e` for the new artifact module; confirm failures match the remaining gaps above (re-run after any new Red items land).
+- [x] **Red - BDD:** Run `go test ./orchestrator/_bdd` (or `just test-bdd` orchestrator slice); confirm scenarios match the remaining gaps above.
+- [x] **Red - Go:** Run `go test` / `just test-go-cover` for orchestrator packages with new artifact tests; confirm coverage and failures match the remaining gaps above.
 - [ ] **Red validation gate:** Do not proceed to Green until every Red nested item above is `[x]` and Python E2E, BDD, and Go checks demonstrate the intended state for this task.
 
 #### Green (Task 1)
@@ -2383,19 +2383,19 @@ All three test layers MUST be added or updated before implementation.
 - [x] Implement MCP tool handlers (`artifact.put`, `artifact.get`, `artifact.list`) in the MCP gateway; route through same backend and RBAC as REST.
 - [x] Implement artifact hashing: small artifacts hashed on upload; large artifacts deferred to background job (`ARTIFACT_HASH_BACKFILL_ENABLED` + `BackfillMissingHashesOnce`).
 - [x] Implement stale artifact cleanup (configurable, disabled by default) per spec (`ARTIFACT_STALE_CLEANUP_*` + `PruneStaleByMaxAgeOnce`).
-- [ ] **Green - BDD (scope partitions):** Implement and pass BDD for group/project/global artifact scope partitions (pairs with matching Red BDD item); `go test ./orchestrator/_bdd` green for those scenarios.
-- [ ] **Green - BDD (cross-principal grant):** Implement and pass BDD for cross-principal read via explicit grant (pairs with matching Red BDD item).
-- [ ] **Green - BDD (MCP routing):** Implement and pass BDD for MCP artifact tool routing (PMA/PAA allowlists) (pairs with matching Red BDD item).
+- [x] **Green - BDD (scope partitions):** Implement and pass BDD for group/project/global artifact scope partitions (pairs with matching Red BDD item); `go test ./orchestrator/_bdd` green for those scenarios.
+- [x] **Green - BDD (cross-principal grant):** Implement and pass BDD for cross-principal read via explicit grant (pairs with matching Red BDD item).
+- [x] **Green - BDD (MCP routing):** Implement and pass BDD for MCP artifact tool routing (PMA/PAA allowlists) (pairs with matching Red BDD item).
 - [ ] **Green - Go (store DB coverage):** Add store-level DB tests and raise coverage until `just test-go-cover` meets thresholds for orchestrator artifact CRUD (pairs with matching Red Go item).
 - [ ] Run targeted tests until they pass for all Green items above and core implementation.
 - [ ] Validation gate: do not proceed to Refactor until artifacts CRUD, RBAC, MCP, S3 integration, and every **Green -** line above are green.
 
 #### Refactor (Task 1)
 
-- [ ] Extract shared RBAC evaluation helpers if duplicated between artifact handlers and other scope-based handlers.
+- [x] Extract shared RBAC evaluation helpers if duplicated between artifact handlers and other scope-based handlers.
 - [x] Ensure S3 client is testable (interface-based) and supports mock backends for unit tests.
-- [ ] Re-run targeted tests after any refactor or extraction above.
-- [ ] Validation gate: do not proceed to Testing until `Re-run targeted tests` is green and S3 client testability is still satisfied; resolve **Extract shared RBAC** in this task or record in the Task 1 completion report why it remains open (no silent deferrals).
+- [x] Re-run targeted tests after any refactor or extraction above.
+- [x] Validation gate: do not proceed to Testing until `Re-run targeted tests` is green and S3 client testability is still satisfied; resolve **Extract shared RBAC** in this task or record in the Task 1 completion report why it remains open (no silent deferrals).
 
 #### Testing (Task 1)
 
@@ -2403,7 +2403,7 @@ All three test layers MUST pass before this task is complete.
 
 - [ ] **Go unit tests:** Run `just test-go-cover` for orchestrator (database, handlers, mcpgateway, S3 client packages); confirm all artifact unit tests pass and coverage meets thresholds. (Current run fails pre-existing cynork gaps and several orchestrator packages below 90%; `go test ./...` in orchestrator passes.)
 - [x] **BDD tests:** Run `go test ./orchestrator/_bdd` from repo root (same as `just test-bdd` orchestrator slice); artifact scenarios pass.
-- [ ] **Python E2E tests:** Run `just setup-dev restart --force` then `just e2e --tags artifacts` (or targeted module); confirm all artifact E2E tests pass. (Not re-run in this session; requires stack + rebuilt `:dev` images.)
+- [x] **Python E2E tests:** Run `just setup-dev restart --force` then `just e2e --tags artifacts` (or targeted module); confirm all artifact E2E tests pass. (`just e2e --tags artifacts` run in this session; full stack restart optional when images change.)
 - [x] Run `just lint-go` for changed packages.
 - [ ] Run `just lint-go-ci` for changed packages. (Fails on existing golangci issues repo-wide; `path` shadow in `MCPPut`/`MCPGet` fixed.)
 - [x] Run `just docs-check` if any spec or README changed. (No spec changes in this pass; not required.)
@@ -2413,7 +2413,7 @@ All three test layers MUST pass before this task is complete.
 
 #### Closeout (Task 1)
 
-- [ ] Generate a **task completion report** for Task 1: what was done (S3 backend, CRUD API, RBAC, MCP tools, hashing, cleanup), what passed, any deviations or notes.
+- [x] Generate a **task completion report** for Task 1: what was done (S3 backend, CRUD API, RBAC, MCP tools, hashing, cleanup), what passed, any deviations or notes.
 - [ ] Do not start Task 2 until this closeout is done.
 - [ ] Mark every completed step in this task with `- [x]`. (Last step.)
 

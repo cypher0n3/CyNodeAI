@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -102,6 +103,20 @@ func TestParseROCmSMIOutput_InvalidJSON(t *testing.T) {
 	}
 }
 
+func TestTruncateGPUdiag_shortAndLong(t *testing.T) {
+	if truncateGPUdiag("ok") != "ok" {
+		t.Fatal("short string unchanged")
+	}
+	long := strings.Repeat("x", gpuDiagTruncate+100)
+	out := truncateGPUdiag(long)
+	if !strings.HasSuffix(out, "\n... [truncated]") {
+		t.Fatalf("expected truncation suffix, len out=%d", len(out))
+	}
+	if len([]rune(out)) > gpuDiagTruncate+30 {
+		t.Fatalf("output too long: %d runes", len([]rune(out)))
+	}
+}
+
 func TestParseROCmSMIOutput_EmptyDevices(t *testing.T) {
 	got := parseROCmSMIOutput([]byte(`{}`))
 	if got != nil {
@@ -154,6 +169,16 @@ func TestParseNvidiaSMIOutput_Empty(t *testing.T) {
 	}
 }
 
+func TestParseNvidiaSMIOutput_nonNumericVRAM(t *testing.T) {
+	got := parseNvidiaSMIOutput([]byte("RTX 3080, not-a-number\n"))
+	if got == nil || len(got.Devices) != 1 {
+		t.Fatalf("got %+v", got)
+	}
+	if got.Devices[0].VRAMMB != 0 {
+		t.Fatalf("VRAMMB = %d", got.Devices[0].VRAMMB)
+	}
+}
+
 func TestDetectGPU_ReportsAllDevicesWhenBothVendorsPresent(t *testing.T) {
 	// Worker reports all GPUs from all vendors so orchestrator can sum VRAM per vendor.
 	binDir := t.TempDir()
@@ -197,6 +222,10 @@ func TestDetectGPU_SingleVendorReturnsAllDevices(t *testing.T) {
 	nvidiaOut := "Tesla A100, 81920\nTesla A100, 81920\n"
 	if err := os.WriteFile(filepath.Join(binDir, "nvidia-smi"), []byte("#!/bin/sh\necho '"+nvidiaOut+"'"), 0o755); err != nil {
 		t.Fatalf("write nvidia-smi: %v", err)
+	}
+	// Shadow real rocm-smi on PATH so detectGPU does not merge host AMD devices into this test.
+	if err := os.WriteFile(filepath.Join(binDir, "rocm-smi"), []byte("#!/bin/sh\nexit 1\n"), 0o755); err != nil {
+		t.Fatalf("write rocm-smi stub: %v", err)
 	}
 	t.Setenv("PATH", binDir+string(filepath.ListSeparator)+os.Getenv("PATH"))
 	gpuCacheMu.Lock()

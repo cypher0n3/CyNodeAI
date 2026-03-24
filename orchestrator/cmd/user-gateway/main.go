@@ -12,6 +12,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/cypher0n3/cynodeai/orchestrator/internal/artifacts"
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/auth"
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/config"
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/database"
@@ -19,6 +20,9 @@ import (
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/middleware"
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/readiness"
 )
+
+// testShutdownHook, when set by tests, is called instead of server.Shutdown so tests can cover the shutdown error path.
+var testShutdownHook func(*http.Server, context.Context) error
 
 func main() {
 	os.Exit(runMain(context.Background()))
@@ -64,6 +68,17 @@ func run(ctx context.Context, cfg *config.OrchestratorConfig, store database.Sto
 	taskHandler := handlers.NewTaskHandler(store, logger, cfg.InferenceURL, cfg.InferenceModel)
 	openAIChatHandler := handlers.NewOpenAIChatHandler(store, logger, cfg.InferenceURL, cfg.InferenceModel, cfg.WorkerAPIBearerToken)
 	skillsHandler := handlers.NewSkillsHandler(store, logger)
+
+	var artSvc *artifacts.Service
+	if db, ok := store.(*database.DB); ok {
+		var aerr error
+		artSvc, aerr = artifacts.NewServiceFromConfig(ctx, db, cfg)
+		if aerr != nil {
+			logger.Warn("artifacts backend unavailable", "error", aerr)
+			artSvc = nil
+		}
+	}
+	artifactsHandler := handlers.NewArtifactsHandler(artSvc, logger)
 
 	if err := store.EnsureDefaultSkill(ctx, defaultSkillContent); err != nil {
 		logger.Warn("ensure default skill", "error", err)
@@ -114,6 +129,12 @@ func run(ctx context.Context, cfg *config.OrchestratorConfig, store database.Sto
 	mux.Handle("PUT /v1/skills/{id}", authMiddleware.RequireUserAuth(http.HandlerFunc(limitBody(maxBodyBytes, skillsHandler.Update))))
 	mux.Handle("DELETE /v1/skills/{id}", authMiddleware.RequireUserAuth(http.HandlerFunc(skillsHandler.Delete)))
 
+	mux.Handle("POST /v1/artifacts", authMiddleware.RequireUserAuth(http.HandlerFunc(limitBody(maxBodyBytes, artifactsHandler.Create))))
+	mux.Handle("GET /v1/artifacts", authMiddleware.RequireUserAuth(http.HandlerFunc(artifactsHandler.Find)))
+	mux.Handle("GET /v1/artifacts/{artifact_id}", authMiddleware.RequireUserAuth(http.HandlerFunc(artifactsHandler.Read)))
+	mux.Handle("PUT /v1/artifacts/{artifact_id}", authMiddleware.RequireUserAuth(http.HandlerFunc(limitBody(maxBodyBytes, artifactsHandler.Update))))
+	mux.Handle("DELETE /v1/artifacts/{artifact_id}", authMiddleware.RequireUserAuth(http.HandlerFunc(artifactsHandler.Delete)))
+
 	handler := middleware.Recovery(logger)(middleware.Logging(logger)(mux))
 
 	addr := getEnv("USER_GATEWAY_LISTEN_ADDR", getEnv("LISTEN_ADDR", ":8080"))
@@ -149,9 +170,15 @@ func run(ctx context.Context, cfg *config.OrchestratorConfig, store database.Sto
 	logger.Info("shutting down...")
 	shutdownCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
-	if err := server.Shutdown(shutdownCtx); err != nil {
-		logger.Error("shutdown error", "error", err)
-		return err
+	var shutdownErr error
+	if testShutdownHook != nil {
+		shutdownErr = testShutdownHook(server, shutdownCtx)
+	} else {
+		shutdownErr = server.Shutdown(shutdownCtx)
+	}
+	if shutdownErr != nil {
+		logger.Error("shutdown error", "error", shutdownErr)
+		return shutdownErr
 	}
 	logger.Info("server stopped")
 	return nil

@@ -46,6 +46,44 @@ func TestRun_CanceledContext(t *testing.T) {
 	}
 }
 
+func TestRun_ShutdownHookReturnsError(t *testing.T) {
+	testShutdownHook = func(*http.Server, context.Context) error {
+		return errors.New("shutdown failed")
+	}
+	defer func() { testShutdownHook = nil }()
+	oldDSN := os.Getenv("DATABASE_URL")
+	_ = os.Unsetenv("DATABASE_URL")
+	defer func() {
+		if oldDSN != "" {
+			_ = os.Setenv("DATABASE_URL", oldDSN)
+		} else {
+			_ = os.Unsetenv("DATABASE_URL")
+		}
+	}()
+	oldAddr := os.Getenv("LISTEN_ADDR")
+	_ = os.Setenv("LISTEN_ADDR", ":19084")
+	defer func() {
+		if oldAddr != "" {
+			_ = os.Setenv("LISTEN_ADDR", oldAddr)
+		} else {
+			_ = os.Unsetenv("LISTEN_ADDR")
+		}
+	}()
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan error, 1)
+	go func() { done <- run(ctx, slog.Default()) }()
+	time.Sleep(100 * time.Millisecond)
+	cancel()
+	select {
+	case err := <-done:
+		if err == nil {
+			t.Fatal("expected shutdown error")
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("run did not return")
+	}
+}
+
 func TestRun_ListenAndServeFails(t *testing.T) {
 	oldDSN := os.Getenv("DATABASE_URL")
 	_ = os.Unsetenv("DATABASE_URL")

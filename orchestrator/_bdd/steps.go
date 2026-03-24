@@ -5,6 +5,7 @@ package bdd
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -12,6 +13,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"os"
 	"strings"
 	"sync"
@@ -23,13 +25,16 @@ import (
 	"github.com/cypher0n3/cynodeai/go_shared_libs/contracts/nodepayloads"
 	"github.com/cypher0n3/cynodeai/go_shared_libs/contracts/userapi"
 	"github.com/cypher0n3/cynodeai/go_shared_libs/contracts/workerapi"
+	"github.com/cypher0n3/cynodeai/orchestrator/internal/artifacts"
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/auth"
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/config"
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/database"
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/dispatcher"
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/handlers"
+	"github.com/cypher0n3/cynodeai/orchestrator/internal/mcpgateway"
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/middleware"
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/models"
+	"github.com/cypher0n3/cynodeai/orchestrator/internal/s3blob"
 )
 
 type ctxKey int
@@ -70,6 +75,14 @@ type testState struct {
 	lastResponseBody []byte
 	// GPU devices for registration (when set, registration includes gpu in capability)
 	registrationGPU *nodepayloads.GPUInfo
+	// Artifacts API (user-scoped CRUD / RBAC scenarios)
+	artifactID string
+	// Scope-partition BDD anchors (group / project UUID strings)
+	bddGroupID   string
+	bddProjectID string
+	// MCP gateway test tokens (must match ToolCallAuth in test mux)
+	pmMCPAgentToken      string
+	sandboxMCPAgentToken string
 }
 
 func getState(ctx context.Context) *testState {
@@ -82,6 +95,26 @@ func bddGetEnv(key, def string) string {
 		return v
 	}
 	return def
+}
+
+func bddPostArtifact(st *testState, query, body string) error {
+	if st == nil || st.server == nil {
+		return godog.ErrSkip
+	}
+	req, err := http.NewRequest(http.MethodPost, st.server.URL+"/v1/artifacts"+query, strings.NewReader(body))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Authorization", "Bearer "+st.accessToken)
+	req.Header.Set("Content-Type", "text/plain")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	st.lastStatusCode = resp.StatusCode
+	st.lastResponseBody, _ = io.ReadAll(resp.Body)
+	return nil
 }
 
 // bddTruncatePublicTables removes all rows from every public table so scenarios do not
@@ -271,6 +304,19 @@ func InitializeOrchestratorSuite(sc *godog.ScenarioContext, state *testState) {
 		mux.Handle("POST /v1/workflow/resume", workflowAuth(http.HandlerFunc(workflowHandler.Resume)))
 		mux.Handle("POST /v1/workflow/checkpoint", workflowAuth(http.HandlerFunc(workflowHandler.SaveCheckpoint)))
 		mux.Handle("POST /v1/workflow/release", workflowAuth(http.HandlerFunc(workflowHandler.Release)))
+		blob := s3blob.NewMemStore()
+		artSvc := artifacts.NewServiceWithBlob(db, blob, 1024*1024)
+		mcpgateway.SetArtifactToolService(artSvc)
+		state.pmMCPAgentToken = bddGetEnv("BDD_MCP_PM_TOKEN", "bdd-mcp-pm-token")
+		state.sandboxMCPAgentToken = bddGetEnv("BDD_MCP_SANDBOX_TOKEN", "bdd-mcp-sandbox-token")
+		mcpAuth := &mcpgateway.ToolCallAuth{PMToken: state.pmMCPAgentToken, SandboxToken: state.sandboxMCPAgentToken}
+		mux.HandleFunc("POST /v1/mcp/tools/call", mcpgateway.ToolCallHandler(db, slog.Default(), mcpAuth))
+		artifactsHandler := handlers.NewArtifactsHandler(artSvc, slog.Default())
+		mux.Handle("POST /v1/artifacts", authMiddleware.RequireUserAuth(http.HandlerFunc(artifactsHandler.Create)))
+		mux.Handle("GET /v1/artifacts", authMiddleware.RequireUserAuth(http.HandlerFunc(artifactsHandler.Find)))
+		mux.Handle("GET /v1/artifacts/{artifact_id}", authMiddleware.RequireUserAuth(http.HandlerFunc(artifactsHandler.Read)))
+		mux.Handle("PUT /v1/artifacts/{artifact_id}", authMiddleware.RequireUserAuth(http.HandlerFunc(artifactsHandler.Update)))
+		mux.Handle("DELETE /v1/artifacts/{artifact_id}", authMiddleware.RequireUserAuth(http.HandlerFunc(artifactsHandler.Delete)))
 		state.egressBearer = bddGetEnv("API_EGRESS_BEARER_TOKEN", "egress-bearer")
 		state.egressAllowlist = bddGetEnv("API_EGRESS_ALLOWED", "openai,github")
 		mux.Handle("POST /v1/call", apiEgressStub(state))
@@ -320,6 +366,12 @@ func InitializeOrchestratorSuite(sc *godog.ScenarioContext, state *testState) {
 		state.storedLeaseID = ""
 		state.lastResponseBody = nil
 		state.registrationGPU = nil
+		state.artifactID = ""
+		state.bddGroupID = ""
+		state.bddProjectID = ""
+		state.pmMCPAgentToken = ""
+		state.sandboxMCPAgentToken = ""
+		mcpgateway.SetArtifactToolService(nil)
 		return ctx, nil
 	})
 
@@ -409,6 +461,31 @@ func RegisterOrchestratorSteps(sc *godog.ScenarioContext, state *testState) {
 		if st.refreshToken == "" {
 			return fmt.Errorf("no refresh token")
 		}
+		return nil
+	})
+	sc.Step(`^I am logged in as "([^"]*)" with password "([^"]*)"$`, func(ctx context.Context, handle, password string) error {
+		st := getState(ctx)
+		if st == nil || st.server == nil {
+			return godog.ErrSkip
+		}
+		body, _ := json.Marshal(map[string]string{"handle": handle, "password": password})
+		resp, err := http.Post(st.server.URL+"/v1/auth/login", "application/json", bytes.NewReader(body))
+		if err != nil {
+			return err
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusOK {
+			return fmt.Errorf("login as %q returned %d", handle, resp.StatusCode)
+		}
+		var out struct {
+			AccessToken  string `json:"access_token"`
+			RefreshToken string `json:"refresh_token"`
+		}
+		if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+			return err
+		}
+		st.accessToken = out.AccessToken
+		st.refreshToken = out.RefreshToken
 		return nil
 	})
 	sc.Step(`^I am logged in as "([^"]*)"$`, func(ctx context.Context, handle string) error {
@@ -1544,6 +1621,209 @@ func RegisterOrchestratorSteps(sc *godog.ScenarioContext, state *testState) {
 		if !strings.Contains(s, sub) {
 			return fmt.Errorf("response JSON %q %q does not contain %q", key, s, sub)
 		}
+		return nil
+	})
+	sc.Step(`^a user exists with handle "([^"]*)" and password "([^"]*)"$`, func(ctx context.Context, handle, password string) error {
+		st := getState(ctx)
+		if st == nil || st.db == nil {
+			return godog.ErrSkip
+		}
+		_, err := st.db.GetUserByHandle(ctx, handle)
+		if err == nil {
+			return nil
+		}
+		if !errors.Is(err, database.ErrNotFound) {
+			return err
+		}
+		user, err := st.db.CreateUser(ctx, handle, nil)
+		if err != nil {
+			return err
+		}
+		hash, err := auth.HashPassword(password, nil)
+		if err != nil {
+			return err
+		}
+		_, err = st.db.CreatePasswordCredential(ctx, user.ID, hash, "argon2id")
+		return err
+	})
+	sc.Step(`^I POST /v1/artifacts with query "([^"]*)" and body "([^"]*)"$`, func(ctx context.Context, query, body string) error {
+		st := getState(ctx)
+		if st == nil || st.server == nil {
+			return godog.ErrSkip
+		}
+		req, err := http.NewRequest(http.MethodPost, st.server.URL+"/v1/artifacts"+query, strings.NewReader(body))
+		if err != nil {
+			return err
+		}
+		req.Header.Set("Authorization", "Bearer "+st.accessToken)
+		req.Header.Set("Content-Type", "text/plain")
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			return err
+		}
+		defer resp.Body.Close()
+		st.lastStatusCode = resp.StatusCode
+		st.lastResponseBody, _ = io.ReadAll(resp.Body)
+		return nil
+	})
+	sc.Step(`^I store the artifact_id from the last JSON response$`, func(ctx context.Context) error {
+		st := getState(ctx)
+		if st == nil || st.lastResponseBody == nil {
+			return godog.ErrSkip
+		}
+		var m map[string]interface{}
+		if err := json.Unmarshal(st.lastResponseBody, &m); err != nil {
+			return err
+		}
+		v, ok := m["artifact_id"]
+		if !ok {
+			return fmt.Errorf("artifact_id missing in response")
+		}
+		s, _ := v.(string)
+		if s == "" {
+			return fmt.Errorf("empty artifact_id")
+		}
+		st.artifactID = s
+		return nil
+	})
+	sc.Step(`^I GET the stored artifact blob$`, func(ctx context.Context) error {
+		st := getState(ctx)
+		if st == nil || st.server == nil || st.artifactID == "" {
+			return godog.ErrSkip
+		}
+		req, err := http.NewRequest(http.MethodGet, st.server.URL+"/v1/artifacts/"+st.artifactID, http.NoBody)
+		if err != nil {
+			return err
+		}
+		req.Header.Set("Authorization", "Bearer "+st.accessToken)
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			return err
+		}
+		defer resp.Body.Close()
+		st.lastStatusCode = resp.StatusCode
+		st.lastResponseBody, _ = io.ReadAll(resp.Body)
+		return nil
+	})
+	sc.Step(`^the last raw response body equals "([^"]*)"$`, func(ctx context.Context, want string) error {
+		st := getState(ctx)
+		if st == nil || st.lastResponseBody == nil {
+			return godog.ErrSkip
+		}
+		if string(st.lastResponseBody) != want {
+			return fmt.Errorf("body %q want %q", string(st.lastResponseBody), want)
+		}
+		return nil
+	})
+	sc.Step(`^the BDD group id is "([^"]*)"$`, func(ctx context.Context, id string) error {
+		st := getState(ctx)
+		if st == nil {
+			return godog.ErrSkip
+		}
+		if _, err := uuid.Parse(id); err != nil {
+			return fmt.Errorf("invalid group id: %w", err)
+		}
+		st.bddGroupID = id
+		return nil
+	})
+	sc.Step(`^the default project id for handle "([^"]*)" is resolved$`, func(ctx context.Context, handle string) error {
+		st := getState(ctx)
+		if st == nil || st.db == nil {
+			return godog.ErrSkip
+		}
+		u, err := st.db.GetUserByHandle(ctx, handle)
+		if err != nil {
+			return err
+		}
+		p, err := st.db.GetOrCreateDefaultProjectForUser(ctx, u.ID)
+		if err != nil {
+			return err
+		}
+		st.bddProjectID = p.ID.String()
+		return nil
+	})
+	sc.Step(`^I POST /v1/artifacts with group scope path "([^"]*)" and body "([^"]*)"$`, func(ctx context.Context, path, body string) error {
+		st := getState(ctx)
+		if st == nil || st.server == nil || st.bddGroupID == "" {
+			return fmt.Errorf("group scope POST requires BDD group id")
+		}
+		q := fmt.Sprintf("?scope_level=group&group_id=%s&path=%s", st.bddGroupID, url.QueryEscape(path))
+		return bddPostArtifact(st, q, body)
+	})
+	sc.Step(`^I POST /v1/artifacts with project scope path "([^"]*)" and body "([^"]*)"$`, func(ctx context.Context, path, body string) error {
+		st := getState(ctx)
+		if st == nil || st.server == nil || st.bddProjectID == "" {
+			return fmt.Errorf("project scope POST requires resolved project id")
+		}
+		q := fmt.Sprintf("?scope_level=project&project_id=%s&path=%s", st.bddProjectID, url.QueryEscape(path))
+		return bddPostArtifact(st, q, body)
+	})
+	sc.Step(`^I POST /v1/artifacts with global scope path "([^"]*)" and body "([^"]*)"$`, func(ctx context.Context, path, body string) error {
+		st := getState(ctx)
+		if st == nil || st.server == nil {
+			return godog.ErrSkip
+		}
+		q := "?scope_level=global&path=" + url.QueryEscape(path)
+		return bddPostArtifact(st, q, body)
+	})
+	sc.Step(`^user "([^"]*)" has a read grant for the stored artifact$`, func(ctx context.Context, handle string) error {
+		st := getState(ctx)
+		if st == nil || st.db == nil || st.artifactID == "" {
+			return godog.ErrSkip
+		}
+		u, err := st.db.GetUserByHandle(ctx, handle)
+		if err != nil {
+			return err
+		}
+		aid, err := uuid.Parse(st.artifactID)
+		if err != nil {
+			return err
+		}
+		return st.db.GrantArtifactRead(ctx, aid, u.ID)
+	})
+	sc.Step(`^the MCP agent "([^"]*)" calls artifact.put for user "([^"]*)" path "([^"]*)" with text "([^"]*)"$`, func(ctx context.Context, agentRole, userHandle, artifactPath, text string) error {
+		st := getState(ctx)
+		if st == nil || st.server == nil || st.db == nil {
+			return godog.ErrSkip
+		}
+		u, err := st.db.GetUserByHandle(ctx, userHandle)
+		if err != nil {
+			return err
+		}
+		b64 := base64.StdEncoding.EncodeToString([]byte(text))
+		payload := map[string]interface{}{
+			"tool_name": "artifact.put",
+			"arguments": map[string]interface{}{
+				"user_id":                u.ID.String(),
+				"scope":                  "user",
+				"path":                   artifactPath,
+				"content_bytes_base64":   b64,
+			},
+		}
+		raw, err := json.Marshal(payload)
+		if err != nil {
+			return err
+		}
+		req, err := http.NewRequest(http.MethodPost, st.server.URL+"/v1/mcp/tools/call", bytes.NewReader(raw))
+		if err != nil {
+			return err
+		}
+		req.Header.Set("Content-Type", "application/json")
+		switch strings.ToLower(strings.TrimSpace(agentRole)) {
+		case "pm":
+			req.Header.Set("Authorization", "Bearer "+st.pmMCPAgentToken)
+		case "sandbox":
+			req.Header.Set("Authorization", "Bearer "+st.sandboxMCPAgentToken)
+		default:
+			return fmt.Errorf("unknown MCP agent role %q", agentRole)
+		}
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			return err
+		}
+		defer resp.Body.Close()
+		st.lastStatusCode = resp.StatusCode
+		st.lastResponseBody, _ = io.ReadAll(resp.Body)
 		return nil
 	})
 	sc.Step(`^I create a task with prompt "([^"]*)"$`, func(ctx context.Context, prompt string) error {

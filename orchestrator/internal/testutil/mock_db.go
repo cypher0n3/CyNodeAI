@@ -71,10 +71,26 @@ type MockDB struct {
 	GetJobByIDErr                       error
 	GetJobsByTaskIDErr                  error
 	GetArtifactByTaskIDAndPathErr       error
+	// GetUserByIDErr, when set, makes GetUserByID return this error.
+	GetUserByIDErr error
+	// EnsureDefaultSkillErr, when set, makes EnsureDefaultSkill return this error (user-gateway run() path).
+	EnsureDefaultSkillErr error
 	// UpdateSkillErr, when set, makes UpdateSkill return this error (for handler tests).
 	UpdateSkillErr error
 	// DeleteSkillErr, when set, makes DeleteSkill return this error (for handler tests).
 	DeleteSkillErr error
+	// CreateSkillErr, when set, makes CreateSkill return this error (for MCP handler tests).
+	CreateSkillErr error
+	// ListSkillsForUserErr, when set, makes ListSkillsForUser return this error.
+	ListSkillsForUserErr error
+	// UpdateSystemSettingErr, when set, makes UpdateSystemSetting return this error.
+	UpdateSystemSettingErr error
+	// DeleteSystemSettingErr, when set, makes DeleteSystemSetting return this error.
+	DeleteSystemSettingErr error
+	// ListTasksByUserErr, when set, makes ListTasksByUser return this error.
+	ListTasksByUserErr error
+	// ListAuthorizedProjectsForUserErr, when set, makes ListAuthorizedProjectsForUser return this error.
+	ListAuthorizedProjectsForUserErr error
 	// EvaluateWorkflowStartGateDenyReason, when set, makes EvaluateWorkflowStartGate return (this, nil).
 	EvaluateWorkflowStartGateDenyReason string
 	// EvaluateWorkflowStartGateErr, when set, makes EvaluateWorkflowStartGate return ("", this).
@@ -223,6 +239,9 @@ func (m *MockDB) GetUserByHandle(_ context.Context, handle string) (*models.User
 
 // GetUserByID retrieves a user by ID.
 func (m *MockDB) GetUserByID(_ context.Context, id uuid.UUID) (*models.User, error) {
+	if m.GetUserByIDErr != nil {
+		return nil, m.GetUserByIDErr
+	}
 	return getByKeyLocked(m, m.Users, id)
 }
 
@@ -482,6 +501,9 @@ func (m *MockDB) GetProjectBySlug(_ context.Context, slug string) (*models.Proje
 
 // ListAuthorizedProjectsForUser returns the default project for the user (MVP), optionally filtered by q.
 func (m *MockDB) ListAuthorizedProjectsForUser(ctx context.Context, userID uuid.UUID, q string, limit, offset int) ([]*models.Project, error) {
+	if m.ListAuthorizedProjectsForUserErr != nil {
+		return nil, m.ListAuthorizedProjectsForUserErr
+	}
 	p, err := m.GetOrCreateDefaultProjectForUser(ctx, userID)
 	if err != nil {
 		return nil, err
@@ -562,6 +584,9 @@ func (m *MockDB) UpdateTaskSummary(_ context.Context, taskID uuid.UUID, summary 
 
 // ListTasksByUser lists tasks created by a user.
 func (m *MockDB) ListTasksByUser(_ context.Context, userID uuid.UUID, limit, offset int) ([]*models.Task, error) {
+	if m.ListTasksByUserErr != nil {
+		return nil, m.ListTasksByUserErr
+	}
 	return runWithLock(m, false, func() ([]*models.Task, error) {
 		var out []*models.Task
 		for _, t := range m.Tasks {
@@ -1130,6 +1155,9 @@ func (m *MockDB) CreateSystemSetting(_ context.Context, key, value, valueType st
 // UpdateSystemSetting updates a system setting in the mock.
 func (m *MockDB) UpdateSystemSetting(_ context.Context, key, value, valueType string, expectedVersion *int, reason, updatedBy *string) (*models.SystemSetting, error) {
 	_ = reason
+	if m.UpdateSystemSettingErr != nil {
+		return nil, m.UpdateSystemSettingErr
+	}
 	return runWithLock(m, true, func() (*models.SystemSetting, error) {
 		s, ok := m.SystemSettings[key]
 		if !ok {
@@ -1154,6 +1182,9 @@ func (m *MockDB) UpdateSystemSetting(_ context.Context, key, value, valueType st
 // DeleteSystemSetting deletes a system setting from the mock.
 func (m *MockDB) DeleteSystemSetting(_ context.Context, key string, expectedVersion *int, reason *string) error {
 	_ = reason
+	if m.DeleteSystemSettingErr != nil {
+		return m.DeleteSystemSettingErr
+	}
 	return runWithWLockErr(m, func() error {
 		s, ok := m.SystemSettings[key]
 		if !ok {
@@ -1410,6 +1441,9 @@ func (m *MockDB) UpdateChatThreadTitle(_ context.Context, threadID, userID uuid.
 
 // CreateSkill stores a skill in the mock.
 func (m *MockDB) CreateSkill(_ context.Context, name, content, scope string, ownerID *uuid.UUID, isSystem bool) (*models.Skill, error) {
+	if m.CreateSkillErr != nil {
+		return nil, m.CreateSkillErr
+	}
 	return runWithLock(m, true, func() (*models.Skill, error) {
 		id := uuid.New()
 		now := time.Now().UTC()
@@ -1437,6 +1471,9 @@ func (m *MockDB) GetSkillByID(_ context.Context, id uuid.UUID) (*models.Skill, e
 
 // ListSkillsForUser returns skills visible to user (owner_id = userID or is_system).
 func (m *MockDB) ListSkillsForUser(_ context.Context, userID uuid.UUID, scopeFilter, ownerFilter string) ([]*models.Skill, error) {
+	if m.ListSkillsForUserErr != nil {
+		return nil, m.ListSkillsForUserErr
+	}
 	return runWithLock(m, false, func() ([]*models.Skill, error) {
 		var out []*models.Skill
 		for _, s := range m.Skills {
@@ -1505,6 +1542,9 @@ func (m *MockDB) DeleteSkill(_ context.Context, id uuid.UUID) error {
 
 // EnsureDefaultSkill creates or updates the default skill in the mock.
 func (m *MockDB) EnsureDefaultSkill(_ context.Context, content string) error {
+	if m.EnsureDefaultSkillErr != nil {
+		return m.EnsureDefaultSkillErr
+	}
 	return runWithWLockErr(m, func() error {
 		id := database.DefaultSkillID
 		if s, ok := m.Skills[id]; ok {

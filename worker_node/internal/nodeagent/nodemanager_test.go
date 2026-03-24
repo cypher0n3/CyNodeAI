@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/cypher0n3/cynodeai/go_shared_libs/contracts/nodepayloads"
+	"github.com/cypher0n3/cynodeai/worker_node/internal/securestore"
 )
 
 const testOllamaModelQwen38 = "qwen3:8b"
@@ -63,6 +64,113 @@ func TestCheckContainerRuntime_FailsWhenRuntimeUnavailable(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), "startup check") && !strings.Contains(err.Error(), "nonexistent-runtime-binary-xyz") {
 		t.Errorf("error should mention startup check or runtime: %v", err)
+	}
+}
+
+func TestInferenceBackendPullSpecKey(t *testing.T) {
+	if inferenceBackendPullSpecKey(nil) != "" {
+		t.Fatal("nil cfg")
+	}
+	cfg := &nodepayloads.NodeConfigurationPayload{
+		InferenceBackend: &nodepayloads.ConfigInferenceBackend{
+			SelectedModel:  "m1",
+			ModelsToEnsure: []string{"a", "b"},
+		},
+	}
+	if inferenceBackendPullSpecKey(cfg) == "" {
+		t.Fatal("expected non-empty key")
+	}
+}
+
+func TestReconcileAgentTokenStore_writesDesired(t *testing.T) {
+	t.Setenv("CYNODE_SECURE_STORE_MASTER_KEY_B64", testSecureStoreMasterKeyB64())
+	t.Setenv("WORKER_API_STATE_DIR", t.TempDir())
+	st, _, err := securestore.Open(effectiveStateDir())
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	desired := map[string]resolvedAgentToken{
+		"desired-svc": {token: "tok", expiresAt: ""},
+	}
+	if err := reconcileAgentTokenStore(st, desired, nil); err != nil {
+		t.Fatalf("reconcileAgentTokenStore: %v", err)
+	}
+}
+
+func TestReconcileAgentTokenStore_removesStale(t *testing.T) {
+	t.Setenv("CYNODE_SECURE_STORE_MASTER_KEY_B64", testSecureStoreMasterKeyB64())
+	t.Setenv("WORKER_API_STATE_DIR", t.TempDir())
+	st, _, err := securestore.Open(effectiveStateDir())
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	if err := st.PutAgentToken("orphan-svc", "tok", ""); err != nil {
+		t.Fatalf("PutAgentToken: %v", err)
+	}
+	if err := reconcileAgentTokenStore(st, map[string]resolvedAgentToken{}, []string{"orphan-svc"}); err != nil {
+		t.Fatalf("reconcileAgentTokenStore: %v", err)
+	}
+}
+
+func TestComputeDesiredAgentTokens_skipsEmptyServiceID(t *testing.T) {
+	ctx := context.Background()
+	cfg := &Config{}
+	nc := &nodepayloads.NodeConfigurationPayload{
+		ManagedServices: &nodepayloads.ConfigManagedServices{
+			Services: []nodepayloads.ConfigManagedService{
+				{ServiceID: "   "},
+				{
+					ServiceID: "ok",
+					Orchestrator: &nodepayloads.ConfigManagedServiceOrchestrator{
+						AgentToken: "direct-token",
+					},
+				},
+			},
+		},
+	}
+	got, err := computeDesiredAgentTokens(ctx, cfg, nc)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(got) != 1 {
+		t.Fatalf("got %d entries", len(got))
+	}
+	if _, ok := got["ok"]; !ok {
+		t.Fatal("missing ok service")
+	}
+}
+
+func TestModelsToPullFromConfig_dedupAndSelectedFallback(t *testing.T) {
+	if modelsToPullFromConfig(nil) != nil {
+		t.Fatal("nil config")
+	}
+	cfg := &nodepayloads.NodeConfigurationPayload{
+		InferenceBackend: &nodepayloads.ConfigInferenceBackend{
+			ModelsToEnsure: []string{"a", " A ", "", "a"},
+		},
+	}
+	got := modelsToPullFromConfig(cfg)
+	if len(got) != 1 || got[0] != "a" {
+		t.Fatalf("got %#v", got)
+	}
+	cfg2 := &nodepayloads.NodeConfigurationPayload{
+		InferenceBackend: &nodepayloads.ConfigInferenceBackend{
+			SelectedModel: "  pick  ",
+		},
+	}
+	got2 := modelsToPullFromConfig(cfg2)
+	if len(got2) != 1 || got2[0] != "pick" {
+		t.Fatalf("got %#v", got2)
+	}
+}
+
+func TestModelsMissingFromAvailable(t *testing.T) {
+	miss := modelsMissingFromAvailable([]string{" A ", "b", ""}, map[string]bool{"a": true})
+	if len(miss) != 1 || miss[0] != "b" {
+		t.Fatalf("got %#v", miss)
+	}
+	if len(modelsMissingFromAvailable(nil, map[string]bool{"x": true})) != 0 {
+		t.Fatal("expected empty for nil models slice")
 	}
 }
 

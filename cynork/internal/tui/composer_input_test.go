@@ -184,6 +184,15 @@ func TestMoveStringCursorRune_AtEnd(t *testing.T) {
 	}
 }
 
+func TestMoveStringCursorRune_LeftFromEndMultibyte(t *testing.T) {
+	t.Parallel()
+	s := "aβ"
+	c := moveStringCursorRune(s, len(s), -1)
+	if c <= 0 {
+		t.Fatalf("cursor = %d", c)
+	}
+}
+
 func TestDeleteRuneBeforeCursorString_EmptyCursor(t *testing.T) {
 	t.Parallel()
 	out, nc := deleteRuneBeforeCursorString("x", 0)

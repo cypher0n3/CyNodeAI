@@ -78,12 +78,12 @@ func WriteLastThread(cacheRoot, gatewayURL, userID, projectID, threadID string) 
 	}
 	doc.Threads[key] = threadID
 
-	payload, err := json.MarshalIndent(&doc, "", "  ")
+	payload, err := lastThreadMarshalIndent(&doc, "", "  ")
 	if err != nil {
 		return fmt.Errorf("marshal last threads: %w", err)
 	}
 	dir := cacheRoot
-	tmp, err := os.CreateTemp(dir, ".last_threads.*.tmp")
+	tmp, err := lastThreadCreateTemp(dir, ".last_threads.*.tmp")
 	if err != nil {
 		return fmt.Errorf("create temp: %w", err)
 	}
@@ -96,14 +96,22 @@ func WriteLastThread(cacheRoot, gatewayURL, userID, projectID, threadID string) 
 	if err := tmp.Close(); err != nil {
 		return fmt.Errorf("close temp: %w", err)
 	}
-	if err := os.Chmod(tmpPath, 0o600); err != nil {
+	if err := lastThreadOsChmod(tmpPath, 0o600); err != nil {
 		return fmt.Errorf("chmod temp: %w", err)
 	}
-	if err := os.Rename(tmpPath, path); err != nil {
+	if err := lastThreadOsRename(tmpPath, path); err != nil {
 		return fmt.Errorf("rename cache file: %w", err)
 	}
 	return nil
 }
+
+// Swapped in tests to exercise error paths (same package only).
+var (
+	lastThreadCreateTemp    = os.CreateTemp
+	lastThreadMarshalIndent = json.MarshalIndent
+	lastThreadOsChmod       = os.Chmod
+	lastThreadOsRename      = os.Rename
+)
 
 func compositeKey(gatewayURL, userID, projectID string) string {
 	s := normalizeGatewayURL(gatewayURL) + "\n" + userID + "\n" + projectID

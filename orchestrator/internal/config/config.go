@@ -72,6 +72,21 @@ type OrchestratorConfig struct {
 
 	// Workflow runner: bearer token for workflow start/resume/checkpoint/release API. When set, requests must include Authorization: Bearer <value>.
 	WorkflowRunnerBearerToken string // WORKFLOW_RUNNER_BEARER_TOKEN; optional
+
+	// Artifacts (S3/MinIO): when endpoint is empty, user-gateway and MCP artifact tools stay disabled for blob ops.
+	ArtifactsS3Endpoint          string // ARTIFACTS_S3_ENDPOINT
+	ArtifactsS3Region            string // ARTIFACTS_S3_REGION; default us-east-1
+	ArtifactsS3AccessKey         string // ARTIFACTS_S3_ACCESS_KEY
+	ArtifactsS3SecretKey         string // ARTIFACTS_S3_SECRET_KEY
+	ArtifactsS3Bucket            string // ARTIFACTS_S3_BUCKET
+	ArtifactHashInlineMaxBytes   int64  // ARTIFACT_HASH_INLINE_MAX_BYTES; default 1 MiB
+	// Background hash backfill for large uploads that omitted checksum (disabled by default).
+	ArtifactHashBackfillEnabled  bool          // ARTIFACT_HASH_BACKFILL_ENABLED; default false
+	ArtifactHashBackfillInterval time.Duration // ARTIFACT_HASH_BACKFILL_INTERVAL; default 10m
+	// Stale cleanup by max age (disabled by default; use with care).
+	ArtifactStaleCleanupEnabled     bool          // ARTIFACT_STALE_CLEANUP_ENABLED; default false
+	ArtifactStaleCleanupInterval    time.Duration // ARTIFACT_STALE_CLEANUP_INTERVAL; default 1h
+	ArtifactStaleCleanupMaxAgeHours int           // ARTIFACT_STALE_CLEANUP_MAX_AGE_HOURS; 0 disables pruning
 }
 
 // NodeConfig holds node manager configuration.
@@ -133,6 +148,17 @@ func LoadOrchestratorConfig() *OrchestratorConfig {
 		PMAHostNodeSlug:           getEnv("PMA_HOST_NODE_SLUG", ""),
 		PMAPreferHostLabel:        getEnv("PMA_PREFER_HOST_LABEL", "orchestrator_host"),
 		WorkflowRunnerBearerToken: getEnv("WORKFLOW_RUNNER_BEARER_TOKEN", ""),
+		ArtifactsS3Endpoint:        getEnv("ARTIFACTS_S3_ENDPOINT", ""),
+		ArtifactsS3Region:          getEnv("ARTIFACTS_S3_REGION", "us-east-1"),
+		ArtifactsS3AccessKey:       getEnv("ARTIFACTS_S3_ACCESS_KEY", ""),
+		ArtifactsS3SecretKey:       getEnv("ARTIFACTS_S3_SECRET_KEY", ""),
+		ArtifactsS3Bucket:               getEnv("ARTIFACTS_S3_BUCKET", "cynodeai-artifacts"),
+		ArtifactHashInlineMaxBytes:      getInt64Env("ARTIFACT_HASH_INLINE_MAX_BYTES", 1024*1024),
+		ArtifactHashBackfillEnabled:     getBoolEnv("ARTIFACT_HASH_BACKFILL_ENABLED", false),
+		ArtifactHashBackfillInterval:    getDurationEnv("ARTIFACT_HASH_BACKFILL_INTERVAL", 10*time.Minute),
+		ArtifactStaleCleanupEnabled:     getBoolEnv("ARTIFACT_STALE_CLEANUP_ENABLED", false),
+		ArtifactStaleCleanupInterval:    getDurationEnv("ARTIFACT_STALE_CLEANUP_INTERVAL", time.Hour),
+		ArtifactStaleCleanupMaxAgeHours: getIntEnv("ARTIFACT_STALE_CLEANUP_MAX_AGE_HOURS", 0),
 	}
 }
 
@@ -164,6 +190,15 @@ func getEnv(key, defaultVal string) string {
 func getIntEnv(key string, defaultVal int) int {
 	if val := os.Getenv(key); val != "" {
 		if i, err := strconv.Atoi(val); err == nil {
+			return i
+		}
+	}
+	return defaultVal
+}
+
+func getInt64Env(key string, defaultVal int64) int64 {
+	if val := os.Getenv(key); val != "" {
+		if i, err := strconv.ParseInt(val, 10, 64); err == nil {
 			return i
 		}
 	}

@@ -90,6 +90,27 @@ func TestRun_CanceledContext(t *testing.T) {
 	}
 }
 
+func TestRun_EnsureDefaultSkillErrorStillStarts(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	cfg := config.LoadOrchestratorConfig()
+	mockDB := testutil.NewMockDB()
+	mockDB.EnsureDefaultSkillErr = errors.New("skill unavailable")
+	logger := slog.Default()
+	done := make(chan error, 1)
+	go func() { done <- run(ctx, cfg, mockDB, logger) }()
+	time.Sleep(80 * time.Millisecond)
+	cancel()
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Errorf("run: %v", err)
+		}
+	case <-time.After(2 * time.Second):
+		t.Fatal("run did not exit")
+	}
+}
+
 func TestRun_StartAndShutdown(t *testing.T) {
 	oldAddr := os.Getenv("LISTEN_ADDR")
 	_ = os.Setenv("LISTEN_ADDR", ":18080")
@@ -121,12 +142,51 @@ func TestRun_StartAndShutdown(t *testing.T) {
 			t.Errorf("readyz: got %d", readyResp.StatusCode)
 		}
 	}
+	authResp, authErr := http.Get("http://127.0.0.1:18080/v1/models")
+	if authErr == nil {
+		_ = authResp.Body.Close()
+		if authResp.StatusCode != http.StatusUnauthorized {
+			t.Errorf("GET /v1/models without auth: got %d", authResp.StatusCode)
+		}
+	}
 	cancel()
 	time.Sleep(150 * time.Millisecond)
 	select {
 	case <-done:
 	default:
 		t.Log("run may still be shutting down")
+	}
+}
+
+func TestRun_ShutdownHookReturnsError(t *testing.T) {
+	testShutdownHook = func(_ *http.Server, _ context.Context) error {
+		return errors.New("shutdown failed")
+	}
+	defer func() { testShutdownHook = nil }()
+	oldAddr := os.Getenv("LISTEN_ADDR")
+	_ = os.Setenv("LISTEN_ADDR", ":18081")
+	defer func() {
+		if oldAddr != "" {
+			_ = os.Setenv("LISTEN_ADDR", oldAddr)
+		} else {
+			_ = os.Unsetenv("LISTEN_ADDR")
+		}
+	}()
+	ctx, cancel := context.WithCancel(context.Background())
+	cfg := config.LoadOrchestratorConfig()
+	mockDB := testutil.NewMockDB()
+	logger := slog.Default()
+	done := make(chan error, 1)
+	go func() { done <- run(ctx, cfg, mockDB, logger) }()
+	time.Sleep(100 * time.Millisecond)
+	cancel()
+	select {
+	case err := <-done:
+		if err == nil {
+			t.Fatal("expected shutdown error")
+		}
+	case <-time.After(3 * time.Second):
+		t.Fatal("run did not return")
 	}
 }
 

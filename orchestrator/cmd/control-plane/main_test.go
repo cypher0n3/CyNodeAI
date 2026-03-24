@@ -1464,6 +1464,46 @@ func TestPullNodeTelemetry(t *testing.T) {
 	pullNodeTelemetry(ctx, client, srv.URL, "", "node-1", logger)
 }
 
+func TestPullNodeTelemetry_infoOK_statsFail(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/v1/worker/telemetry/node:info":
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte("{}"))
+		case "/v1/worker/telemetry/node:stats":
+			w.WriteHeader(http.StatusInternalServerError)
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	ctx := context.Background()
+	client := nodetelemetry.NewClient()
+	logger := slog.Default()
+	pullNodeTelemetry(ctx, client, srv.URL, "", "node-1", logger)
+}
+
+func TestPullNodeTelemetry_infoFail_statsOK(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.URL.Path {
+		case "/v1/worker/telemetry/node:info":
+			w.WriteHeader(http.StatusInternalServerError)
+		case "/v1/worker/telemetry/node:stats":
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte("{}"))
+		default:
+			http.NotFound(w, r)
+		}
+	}))
+	defer srv.Close()
+
+	ctx := context.Background()
+	client := nodetelemetry.NewClient()
+	logger := slog.Default()
+	pullNodeTelemetry(ctx, client, srv.URL, "", "node-1", logger)
+}
+
 // telemetryListErrorStore fails ListDispatchableNodes for runTelemetryPullLoop tests.
 type telemetryListErrorStore struct {
 	*testutil.MockDB

@@ -17,14 +17,14 @@ func handleNodeList(ctx context.Context, store database.Store, args map[string]i
 	if errMsg != "" {
 		rec.Decision = auditDecisionDeny
 		rec.Status = auditStatusError
-		rec.ErrorType = strPtr("invalid_arguments")
+		rec.ErrorType = &auditErrInvalidArguments
 		return http.StatusBadRequest, []byte(`{"error":"` + errMsg + `"}`), auditRec
 	}
 	nodes, err := store.ListNodes(ctx, limit+1, offset)
 	if err != nil {
 		rec.Decision = auditDecisionAllow
 		rec.Status = auditStatusError
-		rec.ErrorType = strPtr("internal_error")
+		rec.ErrorType = &auditErrInternalError
 		return http.StatusInternalServerError, []byte(`{"error":"internal error"}`), auditRec
 	}
 	hasMore := len(nodes) > limit
@@ -42,7 +42,7 @@ func handleNodeList(ctx context.Context, store database.Store, args map[string]i
 	b, err := json.Marshal(out)
 	if err != nil {
 		rec.Status = auditStatusError
-		rec.ErrorType = strPtr("internal_error")
+		rec.ErrorType = &auditErrInternalError
 		return http.StatusInternalServerError, []byte(`{"error":"internal error"}`), auditRec
 	}
 	return http.StatusOK, b, auditRec
@@ -54,7 +54,7 @@ func handleNodeGet(ctx context.Context, store database.Store, args map[string]in
 	if slug == "" {
 		rec.Decision = auditDecisionDeny
 		rec.Status = auditStatusError
-		rec.ErrorType = strPtr("invalid_arguments")
+		rec.ErrorType = &auditErrInvalidArguments
 		return http.StatusBadRequest, []byte(`{"error":"node_slug required"}`), auditRec
 	}
 	node, err := store.GetNodeBySlug(ctx, slug)
@@ -68,7 +68,7 @@ func handleNodeGet(ctx context.Context, store database.Store, args map[string]in
 	b, err := json.Marshal(node)
 	if err != nil {
 		rec.Status = auditStatusError
-		rec.ErrorType = strPtr("internal_error")
+		rec.ErrorType = &auditErrInternalError
 		return http.StatusInternalServerError, []byte(`{"error":"internal error"}`), auditRec
 	}
 	return http.StatusOK, b, auditRec

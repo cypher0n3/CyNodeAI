@@ -2622,6 +2622,83 @@ func TestModel_HandleKey_CtrlY(t *testing.T) {
 	}
 }
 
+func TestScheduleClipNoteClear_returnsTick(t *testing.T) {
+	m := NewModel(&chat.Session{})
+	cmd := m.scheduleClipNoteClear()
+	if cmd == nil {
+		t.Fatal("expected tick cmd")
+	}
+}
+
+func TestLoginOverlayInnerWidth_edges(t *testing.T) {
+	m := NewModel(&chat.Session{})
+	m.Width = 2
+	if w := m.loginOverlayInnerWidth(); w < 1 {
+		t.Fatalf("inner width = %d", w)
+	}
+	m.Width = 200
+	if w := m.loginOverlayInnerWidth(); w > loginBoxMaxInnerW {
+		t.Fatalf("expected cap at %d, got %d", loginBoxMaxInnerW, w)
+	}
+}
+
+func TestMergeLoginBoxOntoMainView_shortMain(t *testing.T) {
+	m := NewModel(&chat.Session{})
+	m.Width = 40
+	th := m.newLoginPanelTheme(30)
+	out := m.mergeLoginBoxOntoMainView("x", "line1\nline2\nline3", th)
+	if !strings.Contains(out, "line1") {
+		t.Fatalf("unexpected overlay merge: %q", out)
+	}
+}
+
+func TestRenderLoginOverlay_smoke(t *testing.T) {
+	m := NewModel(&chat.Session{})
+	m.Width = 80
+	m.Height = 24
+	m.LoginGatewayURL = loginTestGatewayURL
+	m.LoginUsername = "u"
+	m.LoginPassword = "p"
+	_ = m.renderLoginOverlay("main view line")
+}
+
+func TestHandleComposerCtrlDown_movesWithinMultilineInput(t *testing.T) {
+	m := NewModel(&chat.Session{})
+	m.Width = 40
+	m.Input = "line1\nline2"
+	m.inputCursor = len("line1\n")
+	_, cmd := m.handleComposerAfterGlobalChords(tea.KeyMsg{Type: tea.KeyCtrlDown})
+	if cmd != nil {
+		t.Fatal("expected nil cmd")
+	}
+}
+
+func TestRenderLoginFieldLine_focusedEmpty(t *testing.T) {
+	m := NewModel(&chat.Session{})
+	th := m.newLoginPanelTheme(40)
+	s := m.renderLoginFieldLine(th, "Gateway URL:", "", 0, true)
+	if s == "" {
+		t.Fatal("expected non-empty line")
+	}
+}
+
+func TestCmdCopyLastAssistant_noAssistantMessage(t *testing.T) {
+	m := NewModel(&chat.Session{})
+	m.Scrollback = []string{"You: hi"}
+	teaCmd := m.cmdCopyLastAssistant()
+	if teaCmd == nil {
+		t.Fatal("expected cmd")
+	}
+	msg := teaCmd()
+	cm, ok := msg.(copyClipboardResultMsg)
+	if !ok {
+		t.Fatalf("got %T", msg)
+	}
+	if cm.successDetail != "No assistant message to copy." {
+		t.Fatalf("detail = %q", cm.successDetail)
+	}
+}
+
 func TestView_PlainNoColorAndEmptyScrollback(t *testing.T) {
 	m := NewModel(&chat.Session{Plain: true})
 	m.Width = 80
