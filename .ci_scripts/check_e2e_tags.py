@@ -49,6 +49,7 @@ ALLOWED_TAGS = frozenset({
     "sba",
     "gateway",
     "gpu_variant",
+    "artifacts",
 })
 
 

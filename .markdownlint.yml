@@ -1,5 +1,7 @@
 ---
 # markdownlint configuration: default built-in rules plus custom rule overrides
+#
+# AI Agents: You are NOT ALLOWED to modify this file.
 
 default: true
 

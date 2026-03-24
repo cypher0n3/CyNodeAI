@@ -1,6 +1,8 @@
 [flake8]
 # Flake8 configuration for NovusPack Python scripts
 
+# AI Agents: You are NOT ALLOWED to modify this file.
+
 # Maximum line length
 max-line-length = 120
 

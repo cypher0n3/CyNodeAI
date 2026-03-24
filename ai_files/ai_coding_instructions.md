@@ -2,12 +2,12 @@
 
 ## 1. Project Overview
 
-**Project:** CyNodeAI - Local-First Multi-Agent Orchestrator
-**Context:** Self-hosted teams and small enterprises; coordinates sandboxed worker execution across local nodes and optional cloud capacity.
-**Status:** Early prototype / design phase.
-Authoritative details live in [`docs/tech_specs/`](../docs/tech_specs/).
-[`worker_node/`](../worker_node/) and [`orchestrator/`](../orchestrator/) contain the Go implementation (see `go.work` and the justfile).
-**References:** [`meta.md`](../meta.md), [`docs/tech_specs/_main.md`](../docs/tech_specs/_main.md).
+- **Project:** CyNodeAI - Local-First Multi-Agent Orchestrator
+- **Context:** Self-hosted teams and small enterprises; coordinates sandboxed worker execution across local nodes and optional cloud capacity.
+- **Status:** Early prototype / design phase.
+  Authoritative details live in [`docs/tech_specs/`](../docs/tech_specs/).
+  [`worker_node/`](../worker_node/) and [`orchestrator/`](../orchestrator/) contain the Go implementation (see `go.work` and the justfile).
+- **References:** [`meta.md`](../meta.md), [`docs/tech_specs/_main.md`](../docs/tech_specs/_main.md).
 
 ## 2. Documentation and Style Standards
 

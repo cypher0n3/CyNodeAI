@@ -1,3 +1,5 @@
+# AI Agents: You are NOT ALLOWED to modify this file.
+
 [MASTER]
 # Python code to execute, usually for sys.path manipulation
 init-hook='import sys; sys.path.append(".")'
