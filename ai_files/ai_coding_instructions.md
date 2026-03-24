@@ -95,7 +95,17 @@ Use it for both Go (unit/BDD) and Python E2E coverage.
 - **Coverage:** Expect **>= 90% code coverage via unit tests** for new and changed code (unless a tech spec explicitly states otherwise).
 - **Links:** If adding or changing Markdown links, validate them with project tooling when available.
 
-### 5.5 Version Control
+### 5.5 Inference, GPU, and Python E2E Failures
+
+When **`just e2e`** or **`--single`** modules involving **chat, PMA, SSE streaming, or SBA** fail
+with timeouts, **502** responses, or the **wrong Ollama image** on GPU hosts, read
+[`ai_files/inference_stack_troubleshooting.md`](inference_stack_troubleshooting.md) **before**
+assuming a test or product bug.
+**AMD systems require `rocm-smi` on `PATH`** for node-manager to
+report AMD GPUs and for the orchestrator to select the ROCm variant; see also
+[`docs/system_reqs/amd.md`](../docs/system_reqs/amd.md).
+
+### 5.6 Version Control
 
 - Use conventional commit format with clear descriptions.
 - Do not commit secrets or generated artifacts in [`tmp/`](../tmp/) unless intentional.

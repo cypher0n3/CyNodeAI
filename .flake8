@@ -2,7 +2,7 @@
 # Flake8 configuration for NovusPack Python scripts
 
 # Maximum line length
-max-line-length = 100
+max-line-length = 120
 
 # Files and directories to exclude
 exclude =
