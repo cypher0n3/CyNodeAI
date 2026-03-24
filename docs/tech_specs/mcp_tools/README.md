@@ -15,16 +15,17 @@ All tool definitions in these specs comply with the project's canonical MCP tool
 - **Endpoint resolution**: When `Server` is not `default`, the gateway resolves the endpoint slug to base URL and credentials in request context.
   See [MCP Endpoint Registry](../mcp/mcp_endpoint_registry.md) for the complete specification.
 
-Built-in catalog tools use `Server: default` and are implemented by the orchestrator MCP gateway.
+Built-in catalog tools normally use `Server: default` and are implemented by the orchestrator MCP gateway, except **agent-local** tools documented as such (e.g. [Memory tools](../agent_local_tools/memory_tools.md) for the SBA: on-disk in the sandbox, no gateway hop).
 
 ## Access, Allowlists, and Per-Tool Scope
 
 - [Access, allowlists, and per-tool scope](access_allowlists_and_scope.md): worker / PM / PA allowlists, sandbox vs PM scope, admin per-tool enable or disable (Spec IDs `CYNAI.MCPGAT.*`).
+  Agent tool calls MUST NOT execute with **ADMIN**-level privileges where the relevant tool spec forbids it; see [Skills MCP Tools](skills_tools.md) and [MCP Gateway Enforcement](../mcp/mcp_gateway_enforcement.md).
 
 ## Index of Tool Specs
 
-- Artifact (task-scoped + unified): [artifact_tools.md](artifact_tools.md)
-- Memory (job-scoped): [memory_tools.md](memory_tools.md)
+- Artifact (scoped user / group / project / global + unified API): [artifact_tools.md](artifact_tools.md)
+- Memory (job-scoped, SBA agent-local on-disk): [memory_tools.md](../agent_local_tools/memory_tools.md)
 - Sandbox: [sandbox_tools.md](sandbox_tools.md)
 - Sandbox allowed images (PM): [sandbox_allowed_images.md](sandbox_allowed_images.md)
 - Web fetch: [web_fetch.md](web_fetch.md)

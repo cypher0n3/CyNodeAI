@@ -256,3 +256,14 @@ It covers user-facing REST API gateway behavior and related API contracts.
   All operations MUST enforce RBAC (mcp.endpoint.create/read/update/delete).
   [CYNAI.MCPTOO.EndpointRegistrationAPI](../tech_specs/mcp/mcp_endpoint_registry.md#spec-cynai-mcptoo-endpointregistrationapi)
   <a id="req-usrgwy-0159"></a>
+- **REQ-USRGWY-0160:** User API Gateway paths that **start or continue** interactive chat or other **PMA-backed** work for an authenticated user MUST cause the orchestrator to **issue or refresh** the PMA MCP credential for that user's session (including establishing a new session binding when a new thread or session is created).
+  **Session-establishment** flows (login on any client surface) MUST also trigger orchestrator PMA provisioning per REQ-USRGWY-0161 and REQ-ORCHES-0190, not only first chat or first PMA-backed request.
+  Credentials issued or refreshed via this path MUST use PMA invocation class **user_gateway_session** (see [CYNAI.MCPGAT.PmaInvocationClass](../tech_specs/mcp/mcp_gateway_enforcement.md#spec-cynai-mcpgat-pmainvocationclass)); orchestrator-initiated PMA work MUST use **orchestrator_initiated** credentials per REQ-ORCHES-0187 instead.
+  The system MUST NOT rely on a single node-wide PMA credential for user-scoped MCP authorization at the gateway.
+  [CYNAI.MCPGAT.PmaSessionTokens](../tech_specs/mcp/mcp_gateway_enforcement.md#spec-cynai-mcpgat-pmasessiontokens)
+  [CYNAI.USRGWY.OpenAIChatApi](../tech_specs/openai_compatible_chat_api.md#spec-cynai-usrgwy-openaichatapi)
+  <a id="req-usrgwy-0160"></a>
+- **REQ-USRGWY-0161:** For **every** authentication flow that **establishes or resumes** an interactive user session through the User API Gateway-whether via **cynork**, **Web Console**, **messaging** connectors, or other supported clients-the gateway (with the orchestrator) MUST trigger **greedy PMA provisioning** per REQ-ORCHES-0190 so that PMA startup and credential binding are not deferred until the user sends a chat message or other PMA-backed request.
+  [CYNAI.USRGWY.PmaProvisioningOnSessionEstablishment](../tech_specs/user_api_gateway.md#spec-cynai-usrgwy-pmaprovisioningonsessionestablishment)
+  [CYNAI.ORCHES.PmaGreedyProvisioningOnLogin](../tech_specs/orchestrator.md#spec-cynai-orches-pmagreedyprovisioningonlogin)
+  <a id="req-usrgwy-0161"></a>

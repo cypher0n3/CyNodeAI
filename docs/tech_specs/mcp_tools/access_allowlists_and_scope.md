@@ -14,6 +14,9 @@ This document is the **canonical** specification for which built-in MCP tools ea
 
 The orchestrator MCP gateway **enforces** these rules at request time; mechanics, tokens, edge mode, and auditing are in [MCP Gateway Enforcement](../mcp/mcp_gateway_enforcement.md).
 
+**Agent invocations:** Role allowlists and admin enable/disable configure which tools agents may call; they do not grant **ADMIN**-level privilege to agent tool execution.
+Per-tool specs that forbid **ADMIN** via MCP (e.g. [Skills MCP Tools](skills_tools.md)) are enforced at the gateway together with these rules.
+
 Related documents
 
 - Per-tool contracts and algorithms: [MCP tool specs](README.md)
@@ -36,8 +39,8 @@ Worker agents run in sandbox containers and SHOULD have the minimal tool surface
 
 Recommended allowlist
 
-- `artifact.*` (scoped to current task)
-- `memory.*` (job-scoped temporary memory: `memory.add`, `memory.list`, `memory.retrieve`, `memory.delete`; see [Memory tools](memory_tools.md))
+- `artifact.*` (scoped blobs: user / group / project / global; RBAC; optional job lineage; see [Artifact tools](artifact_tools.md))
+- `memory.*` (job-scoped temporary memory: `memory.add`, `memory.list`, `memory.retrieve`, `memory.delete`; **agent-local** on-disk in the SBA at `/job/memory.json`, not orchestrator gateway; see [Memory tools](../agent_local_tools/memory_tools.md))
 - `preference.get`, `preference.list`, `preference.effective` (read-only; SBA needs access to effective preferences for the task/context)
 - `skills.list`, `skills.get` (read-only; when allowed by policy, so the SBA can fetch relevant skills via the gateway)
 - `persona.get` (and optionally `persona.list`; when allowed by policy, so the SBA can resolve persona via worker proxy when needed)
@@ -65,7 +68,7 @@ Recommended allowlist
 - `sandbox.*` (create, exec, file transfer, logs, destroy; and when enabled by system setting, `sandbox.allowed_images.list`, `sandbox.allowed_images.add`)
   - For `sandbox.allowed_images.add`, the gateway MUST allow the call only when the system setting `agents.project_manager.sandbox.allow_add_to_allowed_images` is `true`; when `false` (default), the gateway MUST reject the call.
   - `sandbox.allowed_images.list` is allowed for the PM agent regardless of that setting.
-- `artifact.*` (task-scoped put/get/list)
+- `artifact.*` (scoped put/get/list: user / group / project / global; RBAC; see [Artifact tools](artifact_tools.md))
 - `artifacts.*` (unified artifacts API: create, get, update, delete; see [Orchestrator Artifacts Storage - MCP tooling](../orchestrator_artifacts_storage.md#spec-cynai-orches-artifactsmcpforpmapaa))
 - `model.*` (registry and availability)
 - `connector.*` (management and invocation, subject to policy)
@@ -83,7 +86,7 @@ Recommended allowlist
 
 - Resource tools: limited `task.*`, `project.*`, `preference.*`, `job.*` read and limited write (verification findings only)
 - `persona.list`, `persona.get` (for job building and persona resolution when PAA is involved)
-- `artifact.*` (task-scoped; read for produced outputs)
+- `artifact.*` (scoped artifacts; read for produced outputs; [Artifact tools](artifact_tools.md))
 - `artifacts.*` (unified artifacts API for create/get/update/delete when PAA needs to store or retrieve artifacts; see [Orchestrator Artifacts Storage - MCP tooling](../orchestrator_artifacts_storage.md#spec-cynai-orches-artifactsmcpforpmapaa))
 - `web.fetch` (sanitized, when allowed for verification)
 - `web.search` (secure web search, when allowed for verification)

@@ -136,3 +136,8 @@ Behavioral and workflow requirements still live in `AGENTS` and `ORCHES`.
   [CYNAI.AGENTS.TaskReviewAndReadyTransition](../tech_specs/project_manager_agent.md#spec-cynai-agents-taskreviewandreadytransition)
   [CYNAI.AGENTS.ClarificationBeforeExecution](../tech_specs/project_manager_agent.md#spec-cynai-agents-clarificationbeforeexecution)
   <a id="req-pmagnt-0128"></a>
+- **REQ-PMAGNT-0129:** When `cynode-pma` uses **node-local** inference (default: **Ollama** on the worker inference proxy), PMA MUST call the inference backend in a way that **loads** the effective Project Manager model into memory when the instance becomes active or when the effective model identity changes.
+  For the **lifetime** of that PMA instance, PMA MUST **periodically** call the inference backend (for example minimal generate/chat requests or the backend's native load or keep-warm API when available) so the model **stays loaded**, subject to backend eviction behavior.
+  The keep-warm **interval** MUST be configurable; the default interval MUST be documented in the tech spec.
+  [CYNAI.PMAGNT.NodeLocalModelLoadAndKeepalive](../tech_specs/cynode_pma.md#spec-cynai-pmagnt-nodelocalmodelloadandkeepalive)
+  <a id="req-pmagnt-0129"></a>

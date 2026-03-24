@@ -7,6 +7,7 @@
 - [Naming and Conventions](#naming-and-conventions)
   - [Naming and Conventions Applicable Requirements](#naming-and-conventions-applicable-requirements)
 - [Common Argument Requirements](#common-argument-requirements)
+  - [Extraneous arguments](#spec-cynai-mcptoo-extraneousarguments)
 - [Response and Error Model](#response-and-error-model)
   - [Recommended Fields](#recommended-fields)
   - [Traces to Requirements (Response and Error)](#traces-to-requirements-response-and-error)
@@ -35,6 +36,9 @@ External endpoint registry and resolution are defined in [`docs/tech_specs/mcp/m
 Tool call audit storage is defined in [`docs/tech_specs/mcp/mcp_tool_call_auditing.md`](mcp_tool_call_auditing.md).
 Practical SDK installation guidance is in [`docs/tech_specs/mcp/mcp_sdk_installation.md`](mcp_sdk_installation.md).
 
+**Agent tool calls and ADMIN:** MCP is the interface for **agents** (including worker-proxied tokens).
+Per-tool specs MAY forbid **ADMIN**-level invocation through MCP tool calls; the gateway MUST enforce that together with allowlists and access control (see [Skills MCP Tools](../mcp_tools/skills_tools.md) and [MCP Gateway Enforcement](mcp_gateway_enforcement.md)).
+
 ## MCP Role in CyNodeAI
 
 MCP provides a consistent protocol for agents to request tool operations.
@@ -46,7 +50,8 @@ See [MCP Gateway Enforcement](mcp_gateway_enforcement.md).
 
 - Spec ID: `CYNAI.MCPTOO.McpRole` <a id="spec-cynai-mcptoo-mcprole"></a>
 - Sandboxed worker agents must use MCP tools for controlled capabilities.
-- Orchestrator-side agents (Project Manager and Project Analyst) must use MCP tools for privileged operations.
+- Orchestrator-side agents (Project Manager and Project Analyst) must use MCP tools for orchestrator-side capabilities (task, project, sandbox, and related tools).
+- **ADMIN**-level invocation through MCP tool calls MUST NOT apply where the authoritative tool spec forbids it (e.g. [Skills MCP Tools](../mcp_tools/skills_tools.md)); the gateway enforces that per [MCP Gateway Enforcement](mcp_gateway_enforcement.md).
 - The User API Gateway is intended for external user clients and integrations, not for internal agent operations.
 - Direct access to internal services and databases should be avoided and restricted by policy.
 
@@ -59,7 +64,7 @@ See [MCP Gateway Enforcement](mcp_gateway_enforcement.md).
 ## Goals (MVP Tool Surface)
 
 - Publish a stable MVP tool surface with explicit names.
-- Require explicit task scoping via tool arguments for task-scoped tools.
+- Require explicit task scoping via tool arguments when the gateway cannot infer task context; see [Common Argument Requirements](#common-argument-requirements) for tools that omit `task_id` (help, skills), accept it optionally for correlation (artifacts), or use job-scoped memory (SBA local).
 - Enable deterministic policy enforcement and auditing at the gateway.
 
 ## Naming and Conventions
@@ -88,16 +93,38 @@ The gateway and MCP server use these same names for routing and allowlists.
 
 - Spec ID: `CYNAI.MCPTOO.CommonArgumentRequirements` <a id="spec-cynai-mcptoo-commonargumentrequirements"></a>
 
-Task scoping
+Task and identity scoping
 
-- Any task-scoped tool MUST accept `task_id` (uuid) as an argument.
+- Tools that operate on a **specific task row or task-scoped store** accept `task_id` (uuid) when the gateway cannot infer the task from request context; see per-tool specs (some tools allow `task_id` to be optional when context is unambiguous).
+- **Help tools** (`help.get`, `help.list`, `specification.help` where applicable) do **not** use `task_id`; auditing uses caller identity and gateway metadata only.
+- **Skills tools** (`skills.*`) take **`user_id`** (not `task_id`) for caller/subject identity and authorization.
+  `skills.list` and `skills.get` MAY take optional **`project_id`**; without it, **project**-scoped skills are **not** included in the effective set; see [Skills MCP Tools](../mcp_tools/skills_tools.md) and [Resolution context (`project_id`)](../skills_storage_and_inference.md#spec-cynai-skills-resolutioncontextprojectid).
+  Each skill record has its own **scope** (`user`, `group`, `project`, or `global`) per [Skills Storage and Inference - SkillRegistry](../skills_storage_and_inference.md#spec-cynai-skills-skillregistryscope); skills are not task resources.
+- **Artifact** path tools (`artifact.put`, `artifact.get`, `artifact.list`) address blobs by **`scope`** (user, group, project, or global) and **`path`** within that partition; **`task_id`** is optional **correlation** only, not the storage namespace.
+  Optional **`job_id`** records lineage on writes.
+  See [Artifact tools](../mcp_tools/artifact_tools.md).
+- **Memory** tools (`memory.*`) are **SBA-only**, **agent-local** implementations: on-disk storage at `/job/memory.json` (JSON format); they do **not** use the orchestrator MCP gateway or outbound network for memory I/O.
+  They accept optional `task_id` for correlation; storage remains job-scoped at minimum.
+  See [Memory tools](../agent_local_tools/memory_tools.md).
 - Any run-scoped tool SHOULD accept `run_id` (uuid) as an argument.
 - Any job-scoped tool SHOULD accept `job_id` (uuid) as an argument.
+- **Sandbox**: In-container **local** tools (file edit, shell inside the sandbox image) are **not** MCP calls and do not take `task_id` on the wire; **MCP sandbox tools** (gateway `sandbox.*` and worker-mediated calls that leave the sandbox to the orchestrator) require `task_id` and `job_id` so the control plane can authorize and audit.
+  See [Sandbox MCP tools](../mcp_tools/sandbox_tools.md#spec-cynai-mcptoo-sandboxlocalvsmcp).
 
 Size limits
 
 - Tools that accept user-provided text MUST enforce size limits.
 - Tools MUST reject requests that exceed configured limits.
+
+### Extraneous Arguments
+
+- Spec ID: `CYNAI.MCPTOO.ExtraneousArguments` <a id="spec-cynai-mcptoo-extraneousarguments"></a>
+
+Invocations MAY include **extra** keys beyond the tool's documented input schema (models often pass context such as `task_id` uniformly).
+
+- For **built-in** tools routed by the orchestrator MCP gateway, **unknown** argument keys MUST be **ignored** (stripped or not passed to validation); the call MUST **not** fail solely because extra keys are present.
+- **Invalid values** for **recognized** keys (wrong type, constraint violation, missing required fields) MUST still produce validation errors as usual.
+- Normative gateway behavior: [Tool Argument Schema Requirements](mcp_gateway_enforcement.md#spec-cynai-mcpgat-toolargschema).
 
 ## Response and Error Model
 
@@ -129,7 +156,7 @@ Tools exposed to agents SHOULD be grouped into categories.
   - manage connector instances and credentials
   - invoke connector operations (read, send) subject to policy
 - Artifact tools
-  - upload, download, and list task artifacts
+  - upload, download, and list scoped artifacts (user / group / project / global)
 - Node and sandbox tools
   - request sandbox execution
   - request node configuration refresh
@@ -164,7 +191,7 @@ Scope
 - **Content source (MVP)**: For MVP, help content is sourced from embedded strings or an in-process map in the MCP gateway only; no file system or external docs at runtime.
   When `topic` or `path` is omitted, the gateway returns a default overview; when provided, it may return a predefined snippet for that key if present.
 - **Allowlists**: Help tools are allowlisted for orchestrator-side agents (Project Manager, Project Analyst) and MAY be allowlisted for Worker agents so sandboxed agents can look up usage when needed.
-- **Catalog**: Tool names and argument schemas are defined in [Help tools](../mcp_tools/help_tools.md).
+- **Catalog**: Tool names and argument schemas are defined in [Help tools](../mcp_tools/help_tools.md) (including `help.get` and `help.list`).
 
 ## Role-Based Tool Access
 
@@ -176,7 +203,7 @@ Worker agents run in sandbox containers and SHOULD have the minimal tool surface
 
 Recommended tool access
 
-- Artifact read and write for the current task
+- Artifact read and write for the current project or scope (RBAC)
 - Sanitized web fetch when allowed
 - External API calls when explicitly allowed for the task
 - No direct database query tools
@@ -202,7 +229,7 @@ Recommended tool access
 
 - Database read tools for tasks, preferences, and evidence
 - Database write tools for verification findings and recommendations
-- Artifact read tools for produced outputs
+- Artifact read tools for produced outputs (scoped by RBAC)
 - Sanitized web fetch and external API tools, when allowed for verification
 
 ## Database Access Rules

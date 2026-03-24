@@ -1,39 +1,57 @@
 # Skills Storage and Inference Exposure
 
 - [Document Overview](#document-overview)
+  - [Traces to Requirements](#traces-to-requirements)
 - [Default CyNodeAI Interaction Skill](#default-cynodeai-interaction-skill)
+  - [Default CyNodeAI Interaction Skill Requirements Traces](#default-cynodeai-interaction-skill-requirements-traces)
+  - [Scope and Purpose](#scope-and-purpose)
+  - [Updated Regularly](#updated-regularly)
+  - [Inclusion in Inference](#inclusion-in-inference)
 - [Skill Store](#skill-store)
+  - [Skill Store Requirements Traces](#skill-store-requirements-traces)
   - [`SkillStore` Scope](#skillstore-scope)
   - [`SkillStore` Preconditions](#skillstore-preconditions)
+  - [`SkillStore` Name Uniqueness (Database-Backed Stores)](#skillstore-name-uniqueness-database-backed-stores)
   - [`SkillStore` Outcomes](#skillstore-outcomes)
 - [Skill Registry](#skill-registry)
+  - [Skill Registry Requirements Traces](#skill-registry-requirements-traces)
   - [`SkillRegistry` Scope](#skillregistry-scope)
   - [`SkillRegistry` Preconditions](#skillregistry-preconditions)
   - [`SkillRegistry` Outcomes](#skillregistry-outcomes)
 - [Skill Scope and Default](#skill-scope-and-default)
+  - [Skill Scope and Default Requirements Traces](#skill-scope-and-default-requirements-traces)
   - [`SkillScopeElevation` Scope](#skillscopeelevation-scope)
   - [`SkillScopeElevation` Outcomes](#skillscopeelevation-outcomes)
 - [Skill Loading (Web and CLI)](#skill-loading-web-and-cli)
+  - [Skill Loading (Web and CLI) Requirements Traces](#skill-loading-web-and-cli-requirements-traces)
   - [`SkillLoading` Scope](#skillloading-scope)
   - [`SkillLoading` Preconditions](#skillloading-preconditions)
   - [`SkillLoading` Outcomes](#skillloading-outcomes)
 - [Skill Management CRUD (Web and CLI)](#skill-management-crud-web-and-cli)
+  - [Skill Management CRUD (Web and CLI) Requirements Traces](#skill-management-crud-web-and-cli-requirements-traces)
   - [`SkillManagementCrud` Scope](#skillmanagementcrud-scope)
   - [`SkillManagementCrud` Preconditions](#skillmanagementcrud-preconditions)
   - [`SkillManagementCrud` Outcomes](#skillmanagementcrud-outcomes)
-- [Skill Tools via MCP (CRUD)](#skill-tools-via-mcp-crud)
-  - [`SkillToolsMcp` Preconditions](#skilltoolsmcp-preconditions)
-  - [`SkillToolsMcp` Outcomes](#skilltoolsmcp-outcomes)
+- [Effective Skill Set and Resolution (Backend Semantics)](#effective-skill-set-and-resolution-backend-semantics)
+  - [Effective Skill Set (Merge)](#effective-skill-set-merge)
+  - [Resolution by Logical Name](#resolution-by-logical-name)
+  - [Resolution Context (`project_id`)](#resolution-context-project_id)
+- [Skills MCP Tools (Reference)](#skills-mcp-tools-reference)
+  - [Related Specs](#related-specs)
+  - [Skills MCP Tools (Reference) Requirements Traces](#skills-mcp-tools-reference-requirements-traces)
 - [Skill Auditing (Malicious Pattern Scanning)](#skill-auditing-malicious-pattern-scanning)
+  - [Skill Auditing (Malicious Pattern Scanning) Requirements Traces](#skill-auditing-malicious-pattern-scanning-requirements-traces)
   - [`SkillAuditing` Scope](#skillauditing-scope)
   - [`SkillAuditing` Preconditions](#skillauditing-preconditions)
   - [`SkillAuditing` Outcomes](#skillauditing-outcomes)
 - [Skill Retrieval](#skill-retrieval)
+  - [Skill Retrieval Requirements Traces](#skill-retrieval-requirements-traces)
   - [`SkillRetrieval` Inputs](#skillretrieval-inputs)
   - [`SkillRetrieval` Outputs](#skillretrieval-outputs)
   - [`SkillRetrieval` Behavior](#skillretrieval-behavior)
   - [`SkillRetrieval` Error Conditions](#skillretrieval-error-conditions)
 - [Inference Exposure](#inference-exposure)
+  - [Inference Exposure Requirements Traces](#inference-exposure-requirements-traces)
   - [`InferenceExposure` Scope](#inferenceexposure-scope)
   - [`InferenceExposure` Preconditions](#inferenceexposure-preconditions)
   - [`InferenceExposure` Outcomes](#inferenceexposure-outcomes)
@@ -42,11 +60,12 @@
 
 - Spec ID: `CYNAI.SKILLS.Doc.SkillsStorageAndInference` <a id="spec-cynai-skills-doc-skillsstorageandinference"></a>
 
-This document defines how the system stores and tracks AI skills files and makes them available to inference models that support skills.
-Skills are persisted in a versioned store, registered with metadata for discovery, and exposed to inference via stable identifiers or resolved content.
+This document defines how the system **stores** and **tracks** AI skill files and makes them available to inference models that support skills: **durable store**, **registry**, **scope and uniqueness**, **effective skill resolution** (merge by name), **content auditing**, **retrieval**, and **inference exposure**.
 
-This document is the **single source of truth** for skills behavior and contracts (store, registry, CRUD, MCP tool `skills.create`, auditing).
-Other docs (requirements, CLI, admin console, [MCP tool specifications](mcp_tools/README.md)) reference this spec and MUST NOT duplicate argument schemas, behavior, or control rules.
+**MCP tool calling** (protocol, gateway, allowlists, tokens, per-tool enforcement) is authoritative in [MCP Tooling](mcp/mcp_tooling.md), [MCP Gateway Enforcement](mcp/mcp_gateway_enforcement.md), and [MCP tool specifications](mcp_tools/README.md).
+The **`skills.*`** tool **names, arguments, and gateway-facing contracts** are canonical in [Skills MCP Tools](mcp_tools/skills_tools.md#spec-cynai-skills-skilltoolsmcp).
+
+This document is the **single source of truth** for **backend / orchestrator / database** behavior for skills: persistence rules, merge semantics, and safety scanning-not for duplicating MCP gateway mechanics.
 
 ### Traces to Requirements
 
@@ -112,6 +131,22 @@ The skill store is the durable, versioned backing store for skill file content.
 - Before storing a skill, the system MUST validate that the content conforms to the project skill format (e.g. SKILL.md structure) if a schema is defined.
 - Duplicate content MAY be deduplicated by content hash to avoid redundant storage.
 
+### `SkillStore` Name Uniqueness (Database-Backed Stores)
+
+- Spec ID: `CYNAI.SKILLS.SkillStoreNameUniqueness` <a id="spec-cynai-skills-skillstorenameuniqueness"></a>
+
+When skills are persisted in a **database**, the schema MUST enforce **unique skill `name` within each scope partition**; not uniqueness of `name` across the whole table.
+
+- **Partitioning**: A partition is the set of rows that share the same **scope level** and the same **scope anchor** (the user, group, or project the row belongs to; global has a single deployment-wide partition).
+- **User** scope: at most **one** stored skill per **(owning user, normalized `name`)** for that user's user-scoped skills.
+- **Group** scope: at most **one** stored skill per **(group id, normalized `name`)** within that group.
+- **Project** scope: at most **one** stored skill per **(project id, normalized `name`)** within that project.
+- **Global** scope: at most **one** stored skill per **(normalized `name`)** in the global partition.
+- **Across partitions**: The **same** logical `name` MAY exist in **different** partitions (e.g. a user-scoped skill and a project-scoped skill with the same name); that is expected and resolved by [merge precedence](#effective-skill-set-merge), not by rejecting the insert.
+- **Normalization**: `name` comparison for uniqueness MUST use the **same** normalization rules as merge and list (implementation-defined but consistent).
+
+- Create and update operations that would violate a partition's uniqueness MUST fail with a deterministic error (e.g. conflict).
+
 ### `SkillStore` Outcomes
 
 - After a successful store operation, the skill is readable by its stable identifier.
@@ -130,6 +165,8 @@ The skill store is the durable, versioned backing store for skill file content.
 The skill registry holds metadata for each known skill so that callers can discover and filter skills (e.g. by scope or name).
 
 ### `SkillRegistry` Scope
+
+- Spec ID: `CYNAI.SKILLS.SkillRegistryScope` <a id="spec-cynai-skills-skillregistryscope"></a>
 
 - The registry MUST record at least: stable skill identifier, name (or label), and scope.
 - Allowed scope levels: user, group, project, global (ordered from narrowest to broadest exposure).
@@ -195,6 +232,7 @@ Both paths MUST result in the skill being stored in the skill store and register
 ### `SkillLoading` Preconditions
 
 - The user MUST be authenticated and authorized to add skills (policy-controlled).
+- A **non-empty skill name** MUST be supplied (e.g. from SKILL.md front matter, a required UI field, or CLI flag); loads without a resolvable name MUST be rejected.
 - The uploaded content MUST conform to the project skill format (e.g. SKILL.md structure) if a schema is defined; otherwise the server MAY accept markdown and assign a stable identifier.
 - If the user requests a scope broader than user (group, project, global), the gateway MUST verify the user has appropriate permissions for that scope before accepting the load or update.
 - The system MUST run skill auditing (malicious pattern scan) on the content before storing; if the audit fails, the load MUST be rejected and the skill MUST NOT be stored or registered.
@@ -226,16 +264,21 @@ All operations MUST go through the User API Gateway; the same controls (authenti
 
 - **Create**: Already defined by [Skill Loading (Web and CLI)](#skill-loading-web-and-cli) (upload/load).
 - **Read (list)**: Callers can list skills visible to them (e.g. user-scoped to the caller, plus group/project/global skills they are entitled to).
-  List MAY accept optional filters (e.g. scope, name, owner).
+  List MUST return the **effective** skill set for the caller (same merge-by-name rules as [Effective skill set (merge)](#effective-skill-set-merge)), unless a separate **non-MCP** list contract is explicitly documented for that client (e.g. a management console raw inventory-not MCP tool calls).
+  List MAY accept optional filters (e.g. scope, name, owner) that narrow the candidate pool before merging.
   List returns stable identifiers and metadata (name, scope, owner, updated_at); it need not return full content.
-- **Read (get)**: Callers can fetch one skill by stable identifier to retrieve full content and metadata.
+- **Read (get)**: Callers can fetch one skill to retrieve full content and metadata.
+  The **default** web and CLI get path MUST resolve by **`name`** (non-empty string) to the **effective** row using [name precedence](#effective-skill-set-merge) (same semantics as [MCP `skills.get`](mcp_tools/skills_tools.md#spec-cynai-mcptoo-skillsget); see [Resolution by logical name](#resolution-by-logical-name)).
+  Fetch by **stable identifier** MUST NOT be the ordinary user-facing path; it MAY exist only on **documented non-MCP** surfaces where the caller must load a **specific stored** row when entitled (no name merge), with authorization appropriate to that surface.
+  **ADMIN**-level operations MUST NOT be available via MCP tool calls (see [Skills MCP Tools](mcp_tools/skills_tools.md)).
   Access MUST be restricted to skills the caller is entitled to see (same visibility as list).
 - **Update**: Callers can update a skill's content and/or metadata (e.g. name, scope) by identifier.
-  The caller MUST be authorized to modify the skill (e.g. owner or admin).
+  The caller MUST be authorized to modify the skill (e.g. owner or delegated role per policy); **ADMIN**-level actions MUST NOT be exposed through MCP tool calls.
   Updated content MUST pass the same skill auditing (malicious pattern scan) before the update is applied; on failure, the response MUST include the same feedback (match category and exact triggering text).
   Scope elevation (e.g. from user to group) MUST be permitted only if the caller has permission for the requested scope.
 - **Delete**: Callers can delete a skill by identifier.
-  The caller MUST be authorized (e.g. owner or admin); after deletion the skill is removed from the store and registry and MUST NOT be returned by list or get or exposed to inference.
+  The caller MUST be authorized (e.g. owner or delegated role per policy); **ADMIN**-level actions MUST NOT be exposed through MCP tool calls.
+  After deletion the skill is removed from the store and registry and MUST NOT be returned by list or get or exposed to inference.
 
 ### `SkillManagementCrud` Preconditions
 
@@ -244,9 +287,9 @@ All operations MUST go through the User API Gateway; the same controls (authenti
 
 ### `SkillManagementCrud` Outcomes
 
-- Create: see Skill Loading.
-- List: returns a list of skill metadata (and optionally a truncated or full content preview if defined by the API).
-- Get: returns full content and metadata for one skill.
+- Create: see Skill Loading (including required non-empty name).
+- List: returns **effective** skill metadata (and optionally a truncated or full content preview if defined by the API).
+- Get: returns full content and metadata for one skill; the default path uses **`name`** and returns the **effective** row per [Resolution by logical name](#resolution-by-logical-name) (identifier-based get only on documented non-MCP surfaces, not via MCP tool calls).
 - Update: on success, store and registry reflect the new content/metadata; on audit failure, update is rejected with feedback.
 - Delete: skill is removed; subsequent get or list MUST NOT return it.
 
@@ -255,59 +298,85 @@ Related specs
 - Web Console: [`docs/tech_specs/web_console.md`](web_console.md)
 - CLI management app: [`docs/tech_specs/cynork_cli.md`](cynork_cli.md)
 
-## Skill Tools via MCP (CRUD)
+## Effective Skill Set and Resolution (Backend Semantics)
 
-- Spec ID: `CYNAI.SKILLS.SkillToolsMcp` <a id="spec-cynai-skills-skilltoolsmcp"></a>
+The orchestrator (and any skill service backing the User API or MCP tools) MUST implement **one** consistent model for "which skill rows apply" for a subject user and how **`name`** maps to stored rows.
 
-### Skill Tools via MCP (CRUD) Requirements Traces
+That model is used for: listing skills, resolving content by logical **`name`**, and building inference exposure from the same rules.
+
+### Effective Skill Set (Merge)
+
+- Spec ID: `CYNAI.SKILLS.EffectiveSkillSetMerge` <a id="spec-cynai-skills-effectiveskillsetmerge"></a>
+
+Operations that return a **list** of skills for a subject user (including MCP `skills.list` and equivalent User API list) MUST return **effective** skills for the **candidate pool** built in step 1 below: **user**-, **group**-, and **global**-level rows (and system defaults when policy includes them), and **project**-level rows **only** when **`project_id`** is supplied on calls that support it (see step 1 and [Resolution context (`project_id`)](#resolution-context-project_id)).
+
+1. **Candidate pool**: Build the set of skill rows the subject user is entitled to see for the operation, per RBAC and membership:
+   - **User**-scoped rows for the subject user.
+   - **Group**-scoped rows: determine the set of **groups** the user is a member of; include every group-scoped skill row whose **group** is in that set (for a single-name resolution, keep rows whose normalized **`name`** matches).
+   - **Project**-scoped rows: if **`project_id`** is supplied on the call (where the API supports it, e.g. MCP `skills.get` and `skills.list`), include only rows in the partition for that project and verify the user is entitled to that project.
+     If **`project_id`** is **omitted**, **do not** include any **project**-scoped rows in the candidate pool (project-scoped skills are skipped for that call).
+     Tool **Help** text and user-facing docs MUST state that **`project_id`** is required to surface project-scoped skills.
+   - **Global** (and system defaults when policy includes them).
+2. **Merge by `name` (cross-level precedence)**: After the candidate pool is fixed, collapse rows that share the same **`name`** (case and normalization rules are implementation-defined but MUST be consistent for merge and display):
+   - **User**-scoped skill wins over **project**-scoped and **group**-scoped skills with the same name.
+   - **Project**-scoped skill wins over **group**-scoped skill with the same name.
+   - **Global**-scoped (and system) skills participate at the lowest precedence in this ordering when the same name appears at multiple levels: **user** > **project** > **group** > **global**.
+3. **Tie-break within the same scope level**: After step 2, if **more than one** row still shares the same normalized `name` at the **same** winning scope level but with **different** scope anchors, the implementation MUST keep **exactly one** row.
+   Typical case: the user is in **multiple groups**, each defining a **group**-scoped skill with that name.
+   The same rule applies when multiple **project** partitions (or other distinct anchors at the same level) each contribute a row for that name.
+   The winning row MUST be the one with the **latest `updated_at`** (most recently updated).
+   If `updated_at` is equal, break ties by stable **`id`**.
+   This rule does **not** apply to two rows in the **same** scope partition with the same name-that case remains invalid storage (step 4).
+4. **Same partition, same name (disallowed)**: A conforming store MUST NOT contain two rows in the **same** scope partition with the same normalized `name` (see [`SkillStore` Name uniqueness (database-backed stores)](#skillstore-name-uniqueness-database-backed-stores)).
+   Steps 2-3 merge **across** scope levels and **across** distinct partitions at the same level; they do not legitimize duplicate rows inside one partition.
+   If same-partition duplicates appear (e.g. legacy import or corruption), the implementation MUST NOT silently pick one during list/get merge; it MUST surface a data error, reject the operation, or require remediation per operator policy.
+
+The merged list is the authoritative **effective** set for inference and for any API that exposes "the skills for this user" unless a separate **raw** inventory contract is explicitly documented.
+
+### Resolution by Logical Name
+
+- Spec ID: `CYNAI.SKILLS.ResolutionByLogicalName` <a id="spec-cynai-skills-resolutionbylogicalname"></a>
+
+To return **full content** for a logical skill **`name`** for a subject user (including MCP `skills.get` and the default web/CLI get path), the implementation MUST:
+
+- Build the candidate pool per step 1 in [Effective skill set (merge)](#effective-skill-set-merge) (including **group** membership and optional **`project_id`** when supplied; see [Resolution context (`project_id`)](#resolution-context-project_id)).
+- Apply the same **merge-by-`name`** rules as in steps 2-4 in [Effective skill set (merge)](#effective-skill-set-merge) (cross-level precedence, then same-level tie-break by **`updated_at`**, then **`id`**; same-partition duplicate names remain invalid).
+- Return **full content and metadata** for the **single winning** row.
+
+Call parameters are at least **`user_id`** and **`name`**; APIs that support it (e.g. MCP `skills.get`, `skills.list`) MAY take optional **`project_id`** as in [Resolution context (`project_id`)](#resolution-context-project_id).
+
+If no candidate row exists for that name, return not-found.
+
+### Resolution Context (`project_id`)
+
+- Spec ID: `CYNAI.SKILLS.ResolutionContextProjectId` <a id="spec-cynai-skills-resolutioncontextprojectid"></a>
+
+When **`project_id`** is **omitted** on a call that supports it, the candidate pool contains **no** **project**-scoped rows (see step 1 in [Effective skill set (merge)](#effective-skill-set-merge)).
+
+When **`project_id`** is **supplied**, the candidate pool MUST include **project**-scoped rows **only** for that project's partition, and the implementation MUST verify the user is entitled to that project; entitlement failure MUST fail the call (e.g. forbidden or not-found per policy).
+
+**Group**-scoped resolution does **not** use **`project_id`**: group skills are included by resolving the user's **group memberships**, then selecting group-scoped rows with the matching **`name`** for those groups, as in step 1.
+
+Direct fetch by **stable identifier** (bypassing merge) is **not** the default product path; it MAY exist only on documented non-MCP surfaces when the caller must load a **specific stored** row.
+
+**Name precedence** in this section means the ordering implied by the merge rules above (for display and conflict resolution).
+
+## Skills MCP Tools (Reference)
+
+Spec ID **`CYNAI.SKILLS.SkillToolsMcp`** is anchored in [Skills MCP Tools](mcp_tools/skills_tools.md#spec-cynai-skills-skilltoolsmcp).
+The **`skills.*`** MCP tool **contracts** (arguments, gateway preconditions, outcomes, **ADMIN** restrictions on tool calls) are canonical there, together with [MCP Tooling](mcp/mcp_tooling.md) and [MCP Gateway Enforcement](mcp/mcp_gateway_enforcement.md).
+
+Implementations MUST apply the **backend** rules in this document ([Skill Store](#skill-store), [Effective skill set (merge)](#effective-skill-set-merge), [Resolution by logical name](#resolution-by-logical-name), [Skill Auditing](#skill-auditing-malicious-pattern-scanning)) when executing those tools.
+
+### Related Specs
+
+- [Skills MCP Tools](mcp_tools/skills_tools.md#spec-cynai-skills-skilltoolsmcp) (tool catalog and contracts; spec anchor)
+- [MCP tool specifications](mcp_tools/README.md)
+- Skill auditing: [Skill Auditing (Malicious Pattern Scanning)](#skill-auditing-malicious-pattern-scanning)
+
+### Skills MCP Tools (Reference) Requirements Traces
 
 - [REQ-SKILLS-0114](../requirements/skills.md#req-skills-0114)
-
-Models (agents) can perform full CRUD on skills for the user when directed.
-All skill tools are routed through the orchestrator MCP gateway; identity, role-based allowlists, and access control apply (see [Access, allowlists, and per-tool scope](mcp_tools/access_allowlists_and_scope.md) and [MCP Gateway Enforcement](mcp/mcp_gateway_enforcement.md)).
-Same controls as web and CLI: auditing on write, default user scope, scope elevation only with permission; list/get return only skills the caller is entitled to see; update/delete require authorization (owner or admin).
-All invocations MUST be audited per [MCP tool call auditing](mcp/mcp_tool_call_auditing.md).
-
-**Note:** Canonical tool contracts (single source of truth; do not duplicate in the catalog).
-
-- **`skills.create`**
-  - Required args: `task_id` (uuid string), `content` (markdown string).
-  - Optional args: `name` (string), `scope` (string: `user` | `group` | `project` | `global`; default `user`; broader scope requires caller permission).
-  - Skill is attributed to the user from tool call context; content MUST pass auditing before store; on audit failure return rejection reason, match category, and exact triggering text.
-- **`skills.list`**
-  - Required args: `task_id` (uuid string; for user context).
-  - Optional args: `scope` (filter), `owner` (filter).
-  - Returns list of skill metadata (identifier, name, scope, owner, updated_at) for skills the caller is entitled to see; not full content.
-- **`skills.get`**
-  - Required args: `task_id`, `skill_id` (stable identifier).
-  - Returns full content and metadata for one skill; caller MUST be entitled to see it (same visibility as list).
-- **`skills.update`**
-  - Required args: `task_id`, `skill_id`.
-  - Optional args: `content` (markdown string; if provided, re-audited), `name` (string), `scope` (string; elevation requires permission).
-  - Caller MUST be authorized to modify the skill (owner or admin).
-    On content update, audit failure returns same feedback as create.
-- **`skills.delete`**
-  - Required args: `task_id`, `skill_id`.
-  - Caller MUST be authorized (owner or admin); skill is removed from store and registry.
-
-### `SkillToolsMcp` Preconditions
-
-- Caller MUST be allowed to invoke each tool under the gateway allowlist and access control rules for the task and user context.
-- Write operations (create, update, delete) require authorization; list/get only return skills visible to the caller per scope and access policy.
-
-### `SkillToolsMcp` Outcomes
-
-- Create: skill stored and registered; response includes stable skill identifier; on audit failure, error with feedback.
-- List: list of skill metadata.
-- Get: full content and metadata or not-found if not entitled or missing.
-- Update: store and registry updated, or error with audit feedback on content rejection.
-- Delete: skill removed; subsequent list/get MUST NOT return it.
-
-Related specs
-
-- MCP gateway: [`docs/tech_specs/mcp/mcp_gateway_enforcement.md`](mcp/mcp_gateway_enforcement.md)
-- [MCP tool specifications](mcp_tools/README.md): index of tool specs; [Skills tools](mcp_tools/skills_tools.md) lists skills tool names for allowlist/discovery and references this spec as the source of truth for contract and behavior.
-- Skill auditing: [Skill Auditing (Malicious Pattern Scanning)](#skill-auditing-malicious-pattern-scanning)
 
 ## Skill Auditing (Malicious Pattern Scanning)
 
@@ -364,11 +433,17 @@ Related specs
 
 - [REQ-SKILLS-0102](../requirements/skills.md#req-skills-0102)
 
-Retrieval returns full skill content by stable identifier.
+Retrieval returns full skill content from the [Skill Store](#skill-store) for callers that need the bytes (or text) of a skill.
+
+**By logical name** (subject user + **`name`**, optional **`project_id`** where the API supports it): the implementation MUST use [Resolution by logical name](#resolution-by-logical-name) and [Resolution context (`project_id`)](#resolution-context-project_id), including MCP `skills.get` per [Skills MCP Tools](mcp_tools/skills_tools.md).
+
+**By stable identifier**: load the stored row for that id when the caller is entitled (e.g. User API or internal services); MCP **`skills.get`** does not take `skill_id` (see [Skills MCP Tools](mcp_tools/skills_tools.md)).
+Tool-calling and gateway rules are not specified here; see [MCP Tooling](mcp/mcp_tooling.md), [MCP Gateway Enforcement](mcp/mcp_gateway_enforcement.md), and [Skills MCP Tools](mcp_tools/skills_tools.md).
 
 ### `SkillRetrieval` Inputs
 
-- Stable skill identifier (from registry or from caller).
+- **Logical `name`** with effective-resolution semantics, plus subject context (see [Resolution by logical name](#resolution-by-logical-name)).
+- **Stable identifier** from registry or store for direct row reads when the API contract allows it.
 - Optional: cancellation context for long-running or remote storage.
 
 ### `SkillRetrieval` Outputs
@@ -377,12 +452,14 @@ Retrieval returns full skill content by stable identifier.
 
 ### `SkillRetrieval` Behavior
 
-- Given a valid stable identifier, the system returns the stored skill content.
-- If the identifier is unknown or the skill was removed, the operation fails with a deterministic error (e.g. not found).
+- Given a valid stable identifier, the system returns the stored skill content for that row.
+- Given a logical **name** with effective-resolution semantics, the system returns content for the **single winning** row after the same merge as list (see [Effective skill set (merge)](#effective-skill-set-merge)); if no row matches, the operation fails with a deterministic error (e.g. not found).
+- If the identifier is unknown or the skill was removed, identifier-based retrieval fails with a deterministic error (e.g. not found).
 
 ### `SkillRetrieval` Error Conditions
 
 - Unknown or invalid identifier: not found error.
+- Unknown or unmatched **name** under effective-resolution semantics: not found error.
 - Store unavailable: transient error so callers can retry.
 
 ## Inference Exposure
@@ -407,4 +484,5 @@ Inference exposure defines how inference models that support skills receive skil
 
 ### `InferenceExposure` Outcomes
 
-- For a given inference request that requests skills (by identifier or scope), the system supplies the corresponding skill content or resolvable reference so the model can use the skills during inference.
+- For a given inference request that requests skills (by identifier, **name** with effective resolution, or scope), the system supplies the corresponding skill content or resolvable reference so the model can use the skills during inference.
+  **Project**-scoped skills follow the same candidate-pool rules as list/get: they appear only when **project** context is available (e.g. `project_id` on the request or equivalent), per [Resolution context (`project_id`)](#resolution-context-project_id).

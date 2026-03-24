@@ -16,7 +16,7 @@ It covers bootstrap configuration requirements for orchestrator and node startup
 - **REQ-BOOTST-0002:** Startup must ensure at least one inference-capable path is available before reporting ready.
   An inference path is either: (a) at least one worker node that has registered, been instructed to start inference, and has reported ready to the orchestrator, or (b) an LLM API key configured for the Project Manager Agent via the API Egress Server.
   If neither exists, the system MUST refuse to enter a ready state until an inference path becomes available.
-  When the Project Manager Agent (cynode-pma) is enabled (default), the system MUST also refuse to enter a ready state until the PMA is started and has informed the orchestrator that it is online (and is reachable).
+  When the Project Manager Agent (cynode-pma) is enabled (default), the system MUST also refuse to enter a ready state until at least one PMA instance is started, has informed the orchestrator that it is online (and is reachable), and the orchestrator has completed the **PMA inference capability check** for the bootstrap path (REQ-ORCHES-0189).
   [CYNAI.BOOTST.OrchestratorReadinessAndPmaStartup](../tech_specs/orchestrator_bootstrap.md#spec-cynai-bootst-orchestratorreadinessandpmastartup)
   [external_model_routing.md](../tech_specs/external_model_routing.md)
   <a id="req-bootst-0002"></a>

@@ -19,6 +19,7 @@ This directory holds the main project documentation for CyNodeAI.
 ## Other Directories
 
 - [docs_standards/](docs_standards/README.md) - Markdown and spec authoring conventions.
+- [system_reqs/](system_reqs/README.md) - host guidance by **orchestrator** vs **worker** role; [orchestrator.md](system_reqs/orchestrator.md), [worker_node.md](system_reqs/worker_node.md), [common.md](system_reqs/common.md) (containers), then vendor GPU pages.
 - [draft_specs/](draft_specs/README.md) - draft and proposal specs not yet in requirements or tech_specs; use for designs under consideration (e.g. NATS messaging) before promotion to canonical docs.
 - [examples/](examples/README.md) - example configuration files (e.g. bootstrap YAML).
 

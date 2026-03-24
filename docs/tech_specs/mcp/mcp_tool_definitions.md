@@ -97,7 +97,7 @@ Exactly one of direct call (`Name` + `Args`) or `Ref` MUST be set; the other MUS
 
 - `Name`: MCP tool name on the parent's `Server` (e.g. `artifact.get`, `project.get`); MUST match a tool offered by that server (or the [MCP tool specifications](../mcp_tools/README.md) when `Server` is `default`).
   Omitted when `Ref` is set.
-- `Args`: key-value arguments for the tool; keys and value types MUST conform to the catalog schema for that tool (e.g. `task_id`, `path`).
+- `Args`: key-value arguments for the tool; keys and value types MUST conform to the catalog schema for that tool (e.g. `scope`, `path`, optional `job_id`).
   Omitted when `Ref` is set.
 
 #### 3.2.2 `ToolInvocation` Fields (Sub-Tool Reference)
@@ -312,18 +312,25 @@ Scope is persisted and enforced by the MCP gateway per [Per-tool scope: Sandbox 
 
 - Spec ID: `CYNAI.MCPTOO.HelpMcpContract` <a id="spec-cynai-mcptoo-helpmcpcontract"></a>
 
-The **help MCP** is the canonical reference for agents while they are operating: agents call it (via the MCP gateway, e.g. `help.get`) to get documentation on how and when to use tools and invocations they have access to.
+The **help MCP** is the canonical reference for agents while they are operating: agents call it (via the MCP gateway, e.g. `help.get` or `help.list`) to get documentation on how and when to use tools and invocations they have access to.
 
 The gateway returns data derived from tool definitions: each `MCPTool` and each `ToolInvocation` MAY include **help text** (Markdown); the help MCP exposes that so models can look up usage without out-of-band docs.
+
+Help MCP tool invocations do **not** include `task_id`; auditing uses caller identity and gateway metadata only.
 
 ### 5.1 Help MCP Base Call (Overview)
 
 - When the agent calls the help MCP **without** a tool-specific topic (e.g. no `topic` or `topic=overview`), the gateway MUST return:
-  1. **How to use the help MCP**: how to request help (e.g. call `help.get` with optional `topic` or `path`), and that `topic` may be a tool name to get detailed help for that tool.
+  1. **How to use the help MCP**: how to request help (e.g. call `help.get` with optional `topic` or `path`, or call `help.list` to list topics only), and that `topic` may be a tool name to get detailed help for that tool.
   2. **Available tools**: the list of tools the **caller is allowed to use** (per allowlist and scope), each with a short **description** (the tool's `Help` field).
 - The list of available tools MUST be scoped to the caller's identity (e.g. sandbox vs PM) so the agent only sees tools it can invoke.
 
-### 5.2 Help MCP Per-Tool Call (`help.<tool_name>`)
+### 5.2 Help MCP Topic List (`help.list`)
+
+- When the agent calls `help.list`, the gateway MUST return the **available tools** list described in [5.1](#51-help-mcp-base-call-overview) (same tool names and short descriptions for the caller's allowed set).
+- The response MUST match the topic-list portion of the base `help.get` result when `topic` is omitted; `help.list` MUST NOT be required to duplicate the introductory **How to use the help MCP** narrative from that overview.
+
+### 5.3 Help MCP Per-Tool Call (`help.<tool_name>`)
 
 - When the agent requests help for a specific tool (e.g. `topic=artifact.copy` or `topic=help.artifact.copy`), the gateway MUST return:
   1. The **tool's** `Help` markdown (how and when to use this tool overall).
@@ -334,7 +341,7 @@ The gateway returns data derived from tool definitions: each `MCPTool` and each 
 - If the requested tool is not in the caller's allowed set, the gateway MAY return not-found or a restricted message; it MUST NOT return help for tools the caller cannot use.
 - Response format (Markdown or structured) is implementation-defined; content MUST be size-limited and MUST NOT include secrets.
 
-### 5.3 Help MCP Relationship to Tool Definitions
+### 5.4 Help MCP Relationship to Tool Definitions
 
 - Every tool and invocation has required help text (MCPTool.`Help`, ToolInvocation.`Help`); the help MCP returns that content for the caller's allowed set.
 - The help MCP effectively performs an API call to the MCP gateway; the gateway resolves the caller's allowed tools from the registry and returns the corresponding help content from the tool definitions.
@@ -391,17 +398,19 @@ server: default
 name: artifact.copy
 scope: both
 help: |
-  Copy an artifact from one path to another within the same task.
-  Use when you need to duplicate or move a file in the task artifact store.
+  Copy an artifact from one path to another within the same scope partition.
+  Use when you need to duplicate or move a file in the scoped artifact store.
 tools:
   - name: artifact.get
     args:
-      task_id: "{{task_id}}"
+      scope: project
+      project_id: "{{project_id}}"
       path: "src/file.txt"
     help: Fetches the source artifact content.
   - name: artifact.put
     args:
-      task_id: "{{task_id}}"
+      scope: project
+      project_id: "{{project_id}}"
       path: "dst/file.txt"
       content_bytes_base64: "{{previous_result}}"  # if executor supports substitution
     help: Writes the content to the destination path.
@@ -417,10 +426,10 @@ name: artifact.fetch.then.write
 scope: both
 tools:
   - name: artifact.get
-    args: { task_id: "{{task_id}}", path: "input.txt" }
+    args: { scope: project, project_id: "{{project_id}}", path: "input.txt" }
     # no scope: inherits "both"
-  - name: tool.write
-    args: { task_id: "{{task_id}}", path: "output.txt", content: "{{previous_result}}" }
+  - name: artifact.put
+    args: { scope: project, project_id: "{{project_id}}", path: "output.txt", content_bytes_base64: "{{previous_result}}" }
     scope: pm
 ```
 

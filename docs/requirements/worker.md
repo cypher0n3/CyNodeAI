@@ -269,6 +269,14 @@ It covers worker-node behavior and the worker API contract for job execution and
   [CYNAI.WORKER.AgentNetworkRestriction](../tech_specs/worker_node.md#spec-cynai-worker-agentnetworkrestriction)
   [CYNAI.WORKER.WorkerProxyBidirectionalManagedAgents](../tech_specs/worker_node.md#spec-cynai-worker-proxybidirectional)
   <a id="req-worker-0174"></a>
+- **REQ-WORKER-0175:** When the orchestrator delivers **PMA MCP credentials** per authenticated user session, the worker MUST store them so the worker proxy can select the credential that matches the **active session binding** and **invocation class** for each forwarded MCP request (see [CYNAI.MCPGAT.PmaSessionTokens](../tech_specs/mcp/mcp_gateway_enforcement.md#spec-cynai-mcpgat-pmasessiontokens) and [CYNAI.MCPGAT.PmaInvocationClass](../tech_specs/mcp/mcp_gateway_enforcement.md#spec-cynai-mcpgat-pmainvocationclass)).
+  The worker MUST attach exactly one valid PMA MCP credential per forwarded request and MUST fail closed when no valid credential matches the binding or when the credential is expired outside the rotation overlap window.
+  [CYNAI.WORKER.AgentTokenStorageAndLifecycle](../tech_specs/worker_node.md#spec-cynai-worker-agenttokenstorageandlifecycle)
+  <a id="req-worker-0175"></a>
+- **REQ-WORKER-0176:** The worker MUST support **multiple concurrent** Project Manager Agent (`cynode-pma`) managed service instances when the orchestrator desired state includes multiple `managed_services.services[]` entries with `service_type` (or equivalent) identifying PMA, each with a **distinct** `service_id` per [CYNAI.ORCHES.PmaInstancePerSessionBinding](../tech_specs/orchestrator_bootstrap.md#spec-cynai-orches-pmainstancepersessionbinding).
+  The worker MUST supervise each instance independently (health, restart, proxy UDS bindings) per REQ-WORKER-0160 and REQ-WORKER-0161.
+  [CYNAI.WORKER.ManagedServiceContainers](../tech_specs/worker_node.md#spec-cynai-worker-managedservicecontainers)
+  <a id="req-worker-0176"></a>
 - **REQ-WORKER-0200:** Worker Telemetry API MUST require bearer token authentication for all telemetry endpoints.
   [CYNAI.WORKER.TelemetryApiAuth](../tech_specs/worker_telemetry_api.md#spec-cynai-worker-telemetryauth)
   <a id="req-worker-0200"></a>
@@ -402,3 +410,8 @@ It covers worker-node behavior and the worker API contract for job execution and
   [CYNAI.WORKER.ManagedServiceContainers](../tech_specs/worker_node.md#spec-cynai-worker-managedservicecontainers)
   [CYNAI.WORKER.Payload.ConfigurationV1](../tech_specs/worker_node_payloads.md#spec-cynai-worker-payload-configuration-v1)
   <a id="req-worker-0274"></a>
+- **REQ-WORKER-0275:** When the orchestrator is not yet reachable (worker online before orchestrator, or transient outage), the node MUST keep attempting **registration** (or equivalent orchestrator connection required to complete bootstrap) on a defined schedule until it succeeds or the operator stops the node: **60 seconds** between attempts for the **first 5 minutes** after the first failed attempt, then **300 seconds** (5 minutes) between attempts thereafter.
+  The node MUST NOT exit solely because the orchestrator is temporarily unavailable; backoff MUST be bounded as specified (no unbounded exponential delay that stops retries).
+  [CYNAI.WORKER.OrchestratorRegistrationRetry](../tech_specs/worker_node.md#spec-cynai-worker-orchestratorregistrationretry)
+  [CYNAI.WORKER.RegistrationAndBootstrap](../tech_specs/worker_node.md#spec-cynai-worker-registrationandbootstrap)
+  <a id="req-worker-0275"></a>

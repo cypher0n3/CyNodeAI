@@ -398,14 +398,14 @@ Plaintext secrets are not persisted in chat message content.
 
 - Spec ID: `CYNAI.SCHEMA.TaskArtifacts` <a id="spec-cynai-schema-taskartifacts"></a>
 
-Artifacts are files or blobs produced or attached to a task (e.g. uploads, job outputs).
-Metadata is stored in PostgreSQL; large content may be stored in object storage or node-local staging with a reference.
+Artifacts are files or blobs stored in **scope partitions** (user, group, project, global) with optional **job** and **task** ids for lineage only.
+See [Orchestrator Artifacts Storage - Artifacts Table (Metadata)](orchestrator_artifacts_storage.md#spec-cynai-orches-artifactstablemetadata).
 
 **Schema definitions:** See [Postgres Schema](orchestrator_artifacts_storage.md#spec-cynai-schema-taskartifacts) in [`orchestrator_artifacts_storage.md`](orchestrator_artifacts_storage.md).
 
 ### Task Artifacts Tables
 
-- `task_artifacts` - See [Task Artifacts Table](orchestrator_artifacts_storage.md#spec-cynai-schema-taskartifacts)
+- `artifacts` (or legacy `task_artifacts`) - See [Artifacts Table (Metadata)](orchestrator_artifacts_storage.md#spec-cynai-orches-artifactstablemetadata)
 
 ## Vector Storage (`pgvector`)
 

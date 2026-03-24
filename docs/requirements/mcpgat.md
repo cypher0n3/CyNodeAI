@@ -75,11 +75,23 @@ It covers MCP gateway enforcement and auditing for tool invocation.
 - **REQ-MCPGAT-0116:** The system MUST support controlling MCP tool access via agent-scoped tokens or API keys.
   The orchestrator MUST be able to issue tokens (or API keys) for use when the worker proxy forwards MCP requests on behalf of PM/PA or sandbox agents; tokens are delivered to the worker and held by the worker proxy; agents MUST NOT be given tokens or secrets directly.
   The worker proxy attaches the token when forwarding agent-originated requests to the gateway; the gateway MUST authenticate using the token and restrict tool access to the allowlist and per-tool scope for the resolved agent type (PM, PA, or sandbox).
-  **PM (PMA)** tokens are system-level and are not bound to a user.
+  **PM (PMA)** MCP credentials are **per authenticated user session** (not node-wide system credentials); see REQ-MCPGAT-0117.
   **PA (PAA)** and **sandbox (SBA)** tokens MUST be associated with the user on whose behalf the agent is acting; the gateway MUST use the resolved user context for preference resolution, access control to user- and project-scoped resources, and audit attribution.
   **Sandbox (SBA)** tokens MUST also be bound to task_id, project_id, and session scope.
   This MAY be used instead of or in addition to resolving identity from orchestrator state.
-  Audit records MUST include the resolved agent type and, for user-associated tokens (PA, sandbox), the user/task context from the token.
+  Audit records MUST include the resolved agent type and, for user-associated tokens (PMA, PA, sandbox), the user/task context from the token; for PMA, audit records MUST include the **invocation class** (REQ-MCPGAT-0118).
   [CYNAI.MCPGAT.AgentScopedTokens](../tech_specs/mcp/mcp_gateway_enforcement.md#spec-cynai-mcpgat-agentscopedtokens)
   [CYNAI.MCPGAT.AgentTokensWorkerProxyOnly](../tech_specs/mcp/mcp_gateway_enforcement.md#spec-cynai-mcpgat-agenttokensworkerproxyonly)
   <a id="req-mcpgat-0116"></a>
+- **REQ-MCPGAT-0117:** The orchestrator MUST issue **PMA MCP credentials** bound to an **authenticated user** and to a **session** (for example a chat thread or orchestrator-defined session identifier) sufficient to distinguish concurrent user work on the same worker node.
+  PMA MCP credentials MUST have a defined **expiry** and MUST support **rotation** with an **overlap window** during which both the previous and successor credentials are valid at the gateway.
+  The MCP gateway MUST resolve **user identity** from a valid PMA MCP credential and MUST reject tool calls where resolved tool or resource scope implies a **different user** than the credential (fail closed).
+  [CYNAI.MCPGAT.PmaSessionTokens](../tech_specs/mcp/mcp_gateway_enforcement.md#spec-cynai-mcpgat-pmasessiontokens)
+  [CYNAI.MCPGAT.AgentTokensWorkerProxyOnly](../tech_specs/mcp/mcp_gateway_enforcement.md#spec-cynai-mcpgat-agenttokensworkerproxyonly)
+  <a id="req-mcpgat-0117"></a>
+- **REQ-MCPGAT-0118:** Each **PMA MCP credential** MUST indicate an **invocation class** that distinguishes **user-gateway interactive** work (authenticated user actively driving PMA through the User API Gateway) from **orchestrator-initiated** work (PMA acting on the user's behalf without an active interactive gateway session, for example a **scheduled run**, **task-completion handoff**, or other orchestrator-triggered automation).
+  The MCP gateway MUST resolve the invocation class from the credential and MUST include it in MCP tool call audit records.
+  The gateway MUST enforce access control and tool policy using the invocation class when product policy distinguishes interactive vs orchestrator-initiated PMA (fail closed when the credential class does not match the orchestrator-declared work item).
+  [CYNAI.MCPGAT.PmaInvocationClass](../tech_specs/mcp/mcp_gateway_enforcement.md#spec-cynai-mcpgat-pmainvocationclass)
+  [CYNAI.MCPGAT.PmaSessionTokens](../tech_specs/mcp/mcp_gateway_enforcement.md#spec-cynai-mcpgat-pmasessiontokens)
+  <a id="req-mcpgat-0118"></a>

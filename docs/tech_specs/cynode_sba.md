@@ -124,7 +124,7 @@ SBA is invoked by PMA for task execution and reports execution results back to P
 
 - **In progress:** After validating the job spec, the SBA MUST signal in progress via outbound call to the worker proxy (at the worker-injected job-status or callback URL); the worker proxy forwards to the orchestrator.
 - **Completion:** On success, failure, or timeout, the SBA MUST report completion (or failure as appropriate) via outbound call to the worker proxy to deliver the [Result contract](#result-contract) (and optionally artifact references or inline data); the worker proxy forwards to the orchestrator.
-- **Artifacts:** The SBA MAY upload attachments via MCP `artifact.put` (task-scoped) or stage files under `/job/artifacts/` for node-mediated delivery.
+- **Artifacts:** The SBA MAY upload attachments via MCP `artifact.put` (project or other **scope** per [Artifact tools](mcp_tools/artifact_tools.md), with optional **`job_id`** lineage) or stage files under `/job/artifacts/` for node-mediated delivery.
 - **Timeout extension:** The SBA MUST be able to request a time extension (e.g. via job-status callback or dedicated endpoint) up to the node maximum; remaining time or deadline MUST be available to the SBA for LLM context.
   The exact mechanism (callback payload, MCP tool, or status API) is defined in the [Worker API](worker_api.md) and/or [MCP tool specifications](mcp_tools/README.md).
 
@@ -132,8 +132,8 @@ SBA is invoked by PMA for task execution and reports execution results back to P
 
 The SBA MAY invoke only tools on the [Worker Agent allowlist](mcp_tools/access_allowlists_and_scope.md#spec-cynai-mcpgat-workeragentallowlist) with sandbox (or both) scope:
 
-- **artifact.*** - `artifact.put`, `artifact.get`, `artifact.list` (task-scoped).
-- **memory.*** - `memory.add`, `memory.list`, `memory.retrieve`, `memory.delete` (job-scoped; see [Temporary Memory](#spec-cynai-sbagnt-temporarymemory)).
+- **artifact.*** - `artifact.put`, `artifact.get`, `artifact.list` (scoped by user / group / project / global; RBAC; optional job/task metadata).
+- **memory.*** - `memory.add`, `memory.list`, `memory.retrieve`, `memory.delete` (job-scoped, **agent-local** on-disk; see [Temporary Memory](#spec-cynai-sbagnt-temporarymemory)).
 - **skills.list**, **skills.get** - Read-only skill fetch when allowed by policy.
 - **web.fetch** - Sanitized fetch when allowed by policy (e.g. Secure Browser Service).
 - **web.search** - Secure web search when allowed by policy.
@@ -265,10 +265,12 @@ The job spec or runtime-injected context SHOULD include `deadline` or `remaining
 
 - Spec ID: `CYNAI.SBAGNT.TemporaryMemory` <a id="spec-cynai-sbagnt-temporarymemory"></a>
 
-The SBA MUST have a method to **store and retrieve temporary memories** during job processing, scoped to the task/job (e.g. MCP tools `memory.add`, `memory.list`, `memory.retrieve`, and `memory.delete` per [Memory tools](mcp_tools/memory_tools.md)), so it can persist working state across steps and LLM calls.
+The SBA MUST have a method to **store and retrieve temporary memories** during job processing, scoped to the task/job (e.g. tool names `memory.add`, `memory.list`, `memory.retrieve`, and `memory.delete` per [Memory tools](agent_local_tools/memory_tools.md)), so it can persist working state across steps and LLM calls.
+Implementations MUST use **on-disk** storage at **`/job/memory.json`** (JSON format per [Memory tools - Storage Contract](agent_local_tools/memory_tools.md#spec-cynai-mcptoo-memorystoragecontract)); memory operations MUST **not** go through the **orchestrator MCP gateway** and MUST **not** use **outbound network** calls for storage or retrieval.
 These memories are **job-scoped** (or task-scoped) and MUST NOT persist beyond the job (or task) unless explicitly promoted to artifacts or long-term storage.
-Size limits and retention (e.g. max entries, max size per entry, TTL = job lifetime) are defined in [Memory tools](mcp_tools/memory_tools.md) (see [MCP tool specifications](mcp_tools/README.md)) and enforced by the gateway.
-The [Worker Agent allowlist](mcp_tools/access_allowlists_and_scope.md#spec-cynai-mcpgat-workeragentallowlist) MUST include these memory tools for sandbox-scoped use.
+Size limits and retention (e.g. max entries, max size per entry, TTL = job lifetime) are defined in [Memory tools](agent_local_tools/memory_tools.md) and enforced **locally** by the SBA (or container policy), not by the orchestrator gateway.
+The Node Manager reads `/job/memory.json` on job completion and includes it as `memory_snapshot` in the result payload for post-hoc analysis; see [Memory tools - Job Completion Snapshot](agent_local_tools/memory_tools.md#spec-cynai-mcptoo-memoryjobcompletionsnapshot).
+The [Worker Agent allowlist](mcp_tools/access_allowlists_and_scope.md#spec-cynai-mcpgat-workeragentallowlist) SHOULD list these tool names so the SBA may **expose** them to the model; that does not imply gateway routing for `memory.*` invocations.
 
 ### Worker Proxies (Inference and Web Egress)
 
@@ -640,7 +642,7 @@ For other failure categories the SBA MAY use an implementation-defined code (doc
 Sandboxed containers that run `cynode-sba` have a well-defined shape:
 
 - **Filesystem**: Writable **`/workspace`** (working directory; full access for the agent).
-  **`/job`** holds job input and output: e.g. `job.json`, `result.json`, `artifacts/`.
+  **`/job`** holds job input and output: e.g. `job.json`, `result.json`, `artifacts/`, `memory.json` (job-scoped agent memory per [Memory tools](agent_local_tools/memory_tools.md)).
   **`/tmp`** for temporary files.
   The process runs as a **non-root** user; no command or path allowlists are required inside the container.
 - **Control**: No inbound network control plane.

@@ -48,6 +48,7 @@
 - [Sandbox-Only Nodes](#sandbox-only-nodes)
   - [Sandbox-Only Nodes Applicable Requirements](#sandbox-only-nodes-applicable-requirements)
 - [Registration and Bootstrap](#registration-and-bootstrap)
+  - [Orchestrator Registration Retry](#orchestrator-registration-retry)
 - [Capability Reporting](#capability-reporting)
   - [Capability Reporting Requirements Traces](#capability-reporting-requirements-traces)
 - [Configuration Delivery](#configuration-delivery)
@@ -63,6 +64,7 @@
 
 This document defines worker node responsibilities, including node registration, configuration bootstrap, and secure credential handling.
 Nodes are configured by the orchestrator to access orchestrator-provided services such as the rank-ordered sandbox image registry list and model cache.
+When the orchestrator is not yet available at worker startup, registration retries follow [Orchestrator Registration Retry](#orchestrator-registration-retry).
 
 ## Node Manager
 
@@ -140,8 +142,8 @@ Normative behavior:
 PMA as managed service (normative):
 
 - PMA is a core system feature and is always required.
-- The orchestrator MUST instruct a worker to run PMA as a managed service container.
-- The worker MUST start and keep PMA running when configured as a managed service.
+- The orchestrator MUST instruct a worker to run **one or more** PMA managed service instances (one **per session binding** per [CYNAI.ORCHES.PmaInstancePerSessionBinding](orchestrator_bootstrap.md#spec-cynai-orches-pmainstancepersessionbinding)); each instance has a distinct `service_id`.
+- The worker MUST start, supervise, and keep each configured PMA instance running per desired state (see [REQ-WORKER-0176](../requirements/worker.md#req-worker-0176)).
 
 ## Worker Proxy Bidirectional (Managed Agents)
 
@@ -200,6 +202,8 @@ Traces To: [REQ-WORKER-0164](../requirements/worker.md#req-worker-0164).
 #### Agent Token Storage and Lifecycle Requirements Traces
 
 - [REQ-WORKER-0164](../requirements/worker.md#req-worker-0164)
+- [REQ-WORKER-0175](../requirements/worker.md#req-worker-0175)
+- [REQ-WORKER-0176](../requirements/worker.md#req-worker-0176)
 - [REQ-WORKER-0165](../requirements/worker.md#req-worker-0165)
 - [REQ-WORKER-0166](../requirements/worker.md#req-worker-0166)
 - [REQ-WORKER-0167](../requirements/worker.md#req-worker-0167)
@@ -210,6 +214,8 @@ The worker MUST store agent tokens in the node-local secure store defined by [CY
 Required behavior:
 
 - The worker MUST key agent tokens by the managed-service identity (e.g. `service_id`) so the worker proxy can deterministically select the correct token for the calling agent runtime.
+- For **PMA**, when the orchestrator delivers **per-user session** MCP credentials, the worker MUST key stored credentials so the proxy can attach the credential for the calling instance: with **one PMA instance per session binding**, the worker MAY use **`service_id` alone** (one credential binding per instance).
+  See [CYNAI.ORCHES.PmaInstancePerSessionBinding](orchestrator_bootstrap.md#spec-cynai-orches-pmainstancepersessionbinding), [CYNAI.MCPGAT.PmaSessionTokens](mcp/mcp_gateway_enforcement.md#spec-cynai-mcpgat-pmasessiontokens), and [CYNAI.MCPGAT.PmaInvocationClass](mcp/mcp_gateway_enforcement.md#spec-cynai-mcpgat-pmainvocationclass).
 - The worker proxy MUST attach the correct agent token to agent-originated requests when forwarding to the orchestrator.
 - The worker MUST NOT expose agent tokens to sandboxes or agents via env vars, files, mounts, or logs.
 - For **job-scoped (SBA) tokens**, the orchestrator invalidates the token when the job is stopped or canceled; the worker MUST NOT use an invalidated token to forward requests.
@@ -301,7 +307,7 @@ Container runtime mount options (minimum):
    If `agent_token_ref` is present, the worker MUST resolve it per [CYNAI.WORKER.AgentTokenRefResolution](#spec-cynai-worker-agenttokenrefresolution).
    Resolution failures MUST fail closed.
 2. The worker MUST NOT pass the token value to the managed-service container or agent runtime. <a id="algo-cynai-worker-agenttokenstorageandlifecycle-step-2"></a>
-3. When the worker proxy receives an agent-originated request, it determines the calling service identity, loads the corresponding token from the secure store, attaches it to the outbound request, and forwards to the orchestrator. <a id="algo-cynai-worker-agenttokenstorageandlifecycle-step-3"></a>
+3. When the worker proxy receives an agent-originated request, it determines the calling service identity, loads the corresponding token from the secure store (for PMA, selecting the **session-bound** credential when per-user session tokens are in use), attaches it to the outbound request, and forwards to the orchestrator. <a id="algo-cynai-worker-agenttokenstorageandlifecycle-step-3"></a>
    The worker MUST determine the calling service identity without relying on any secret in the agent container or request.
    The worker MUST achieve this using an identity-bound per-service internal proxy binding.
    The required mechanism is per-service Unix domain sockets:
@@ -994,6 +1000,25 @@ Required flow
   - orchestrator base URL and required service endpoints
   - trust material (e.g. CA bundle or pinned certificate), when applicable
   - pull endpoints and credentials required for orchestrator-provided services
+
+### Orchestrator Registration Retry
+
+- Spec ID: `CYNAI.WORKER.OrchestratorRegistrationRetry` <a id="spec-cynai-worker-orchestratorregistrationretry"></a>
+
+When the worker is **online before the orchestrator** (or the orchestrator is temporarily unreachable), registration or bootstrap HTTP calls to the orchestrator MAY fail (connection refused, timeout, DNS failure, TLS error, or HTTP 5xx).
+
+#### Required Behavior
+
+- The node MUST **continue** attempting registration (and any prerequisite orchestrator contact needed to obtain bootstrap configuration) until it **succeeds** or the operator stops the node process.
+- The node MUST NOT treat a transient orchestrator outage as a fatal startup error that prevents all future retries while the process remains running.
+- **Retry schedule** (wall clock from the **first failed** registration attempt):
+  - **0-5 minutes:** wait **60 seconds** between each retry attempt (including the wait before the second attempt after the first failure).
+  - **After 5 minutes:** wait **300 seconds** (5 minutes) between each subsequent retry attempt.
+- The node SHOULD log each failed attempt at **info** or **warning** with a clear reason (without leaking secrets) so operators can diagnose orchestrator-side delays.
+
+#### Orchestrator Registration Retry Requirements Traces
+
+- [REQ-WORKER-0275](../requirements/worker.md#req-worker-0275)
 
 ## Capability Reporting
 

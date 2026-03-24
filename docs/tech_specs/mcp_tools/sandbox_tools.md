@@ -21,6 +21,17 @@ Related documents
 - [Worker Node](../worker_node.md)
 - [Sandbox Container](../sandbox_container.md)
 
+## Sandbox Local Tools vs MCP Sandbox Tools
+
+- Spec ID: `CYNAI.MCPTOO.SandboxLocalVsMcp` <a id="spec-cynai-mcptoo-sandboxlocalvsmcp"></a>
+
+- **Local (in-sandbox) tools** are capabilities exposed **inside** the sandbox runtime to the agent process (e.g. editing files on the container filesystem, running a local shell).
+  They are **not** orchestrator MCP `tools/call` operations and are not routed through the MCP gateway JSON API.
+  They **do not** carry `task_id` or `job_id` as MCP arguments-the worker already bound execution to a job before the container started.
+- **MCP sandbox tools** (this document: `sandbox.create`, `sandbox.exec`, `sandbox.put_file`, `sandbox.get_file`, `sandbox.stream_logs`, `sandbox.destroy`) are invoked via **POST `/v1/mcp/tools/call`** on the control plane.
+  They **require** `task_id` and `job_id` so the gateway can validate allowlists, map to the correct job/sandbox, and write audit records.
+- Agents and specs MUST NOT conflate "edit a file in the sandbox" (local) with "call `sandbox.put_file` over MCP" (gateway); the latter is for orchestrator-mediated control and policy, not for ordinary in-container editing.
+
 ## Definition Compliance
 
 Tool definitions MUST conform to the project's MCP tool definition format: `Server: default`, `Name`, `Help`, `Scope`, `Tools` (single direct invocation per tool name).

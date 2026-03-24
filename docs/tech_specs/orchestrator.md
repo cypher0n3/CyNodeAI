@@ -22,6 +22,8 @@
 - [Managed Services (Worker-Managed)](#managed-services-worker-managed)
   - [Managed Services Definitions](#managed-services-definitions)
   - [Managed Services Behavior](#managed-services-behavior)
+  - [Greedy PMA Provisioning on User Login](#greedy-pma-provisioning-on-user-login)
+  - [Stale PMA Lifecycle and Teardown](#stale-pma-lifecycle-and-teardown)
   - [Managed Services Related Documents](#managed-services-related-documents)
   - [Project Manager Model (Startup Selection and Warmup)](#project-manager-model-startup-selection-and-warmup)
 - [API Egress Server](#api-egress-server)
@@ -66,6 +68,7 @@ This document describes the orchestrator responsibilities and its relationship t
 - Routes model inference to local nodes or to external providers when allowed.
 - Schedules sandbox execution independently of where inference occurs.
 - Tracks worker-managed long-lived services (including PMA) and their endpoints for routing and readiness.
+- **Greedy PMA provisioning:** when users authenticate through the gateway on any client surface, the orchestrator starts or ensures a PMA instance for that session **without** waiting for the first chat message (see [Greedy PMA Provisioning on User Login](#greedy-pma-provisioning-on-user-login)).
 
 ## Health Checks
 
@@ -75,11 +78,10 @@ This section defines the orchestrator health and readiness endpoints.
 
 - Spec ID: `CYNAI.ORCHES.Rule.HealthEndpoints` <a id="spec-cynai-orches-rule-healthendpoints"></a>
 
-Traces To: [REQ-ORCHES-0120](../requirements/orches.md#req-orches-0120), [REQ-ORCHES-0150](../requirements/orches.md#req-orches-0150), [REQ-ORCHES-0151](../requirements/orches.md#req-orches-0151), [REQ-BOOTST-0002](../requirements/bootst.md#req-bootst-0002)
+Traces To: [REQ-ORCHES-0120](../requirements/orches.md#req-orches-0120), [REQ-ORCHES-0150](../requirements/orches.md#req-orches-0150), [REQ-ORCHES-0151](../requirements/orches.md#req-orches-0151), [REQ-ORCHES-0189](../requirements/orches.md#req-orches-0189), [REQ-BOOTST-0002](../requirements/bootst.md#req-bootst-0002)
 
 The orchestrator exposes health endpoints that distinguish "process alive" from "ready to accept work".
-The orchestrator cannot report fully ready until at least one inference path exists (a worker that has reported ready and is inference-capable, or an LLM API key for PMA via API Egress) and until the PMA has informed the orchestrator that it is online.
-See [Orchestrator Readiness and PMA Startup](orchestrator_bootstrap.md#spec-cynai-bootst-orchestratorreadinessandpmastartup).
+The orchestrator cannot report fully ready until at least one inference path exists (a worker that has reported ready and is inference-capable, or an LLM API key for PMA via API Egress), until at least one PMA instance has informed the orchestrator that it is online, and until the **PMA inference capability check** succeeds for the bootstrap path (see [Orchestrator Readiness and PMA Startup](orchestrator_bootstrap.md#spec-cynai-bootst-orchestratorreadinessandpmastartup)).
 
 Endpoints
 
@@ -88,8 +90,8 @@ Endpoints
   - This endpoint MUST NOT require that the Project Manager model is online.
 - `GET /readyz`
   - Returns 200 only when the orchestrator is in a ready state.
-  - Returns 503 when prerequisites for readiness are not yet satisfied (no eligible inference path, PMA not started or not yet online, Project Manager model not loaded when using local inference, or required credentials/policy not present).
-  - The orchestrator MUST NOT return 200 until at least one inference path exists and until the PMA has informed the orchestrator that it is online and is reachable (e.g. responds to its health check).
+  - Returns 503 when prerequisites for readiness are not yet satisfied (no eligible inference path, no bootstrap PMA instance started or not yet online, PMA inference capability check not yet passed, Project Manager model not loaded when using local inference, or required credentials/policy not present).
+  - The orchestrator MUST NOT return 200 until at least one inference path exists, until at least one PMA instance has informed the orchestrator that it is online and is reachable (e.g. responds to its health check), and until the **PMA inference capability check** has succeeded (see [CYNAI.BOOTST.PmaInferenceCapabilityCheck](orchestrator_bootstrap.md#spec-cynai-bootst-pmainferencecapabilitycheck)).
   - PMA is a core system feature and is always required; disabling PMA is not supported.
   - The response MUST include a reason that is actionable for an operator.
   - While `GET /readyz` returns 503, the orchestrator continues to serve the management surfaces required to become ready (for example system settings and credential configuration).
@@ -206,8 +208,8 @@ See job dispatch and node selection in [`docs/tech_specs/worker_node.md`](worker
 
 ## Project Manager Agent
 
-The Project Manager Agent (PMA) is a long-lived agent runtime that continuously drives work to completion.
-In this system, PMA is hosted as a **worker-managed service container** and is always required.
+The Project Manager Agent (PMA) is an agent runtime that continuously drives work to completion for a **session binding**; the orchestrator provisions **one `cynode-pma` managed service instance per session binding** (see [CYNAI.ORCHES.PmaInstancePerSessionBinding](orchestrator_bootstrap.md#spec-cynai-orches-pmainstancepersessionbinding)).
+In this system, each PMA instance is a **worker-managed service container** and the product is always required to support PMA; disabling PMA is not supported.
 
 - Reads tasks and their acceptance criteria from the database.
 - Retrieves user preferences and standards from the database and applies them during planning and verification.
@@ -336,9 +338,9 @@ This section defines how the orchestrator manages and tracks worker-managed long
 - The orchestrator MUST express managed services as desired state in node configuration payloads.
   See [`docs/tech_specs/worker_node_payloads.md`](worker_node_payloads.md) `node_configuration_payload_v1` `managed_services`.
 - When the orchestrator includes an agent token in managed service desired state, the token is delivered to the **worker** for the worker proxy to hold and use when forwarding agent requests; the token MUST NOT be given to the agent.
-  For **user-scoped** managed services (e.g. PAA), the orchestrator MUST associate that token with the user on whose behalf the agent is acting, so the gateway can resolve user context for preferences, access control, and audit attribution.
-  For **system-level** managed services (e.g. PMA), the token is not user-associated.
-  Traces To: [REQ-ORCHES-0163](../requirements/orches.md#req-orches-0163), [REQ-WORKER-0164](../requirements/worker.md#req-worker-0164).
+  For **PMA**, MCP credentials are **per authenticated user session**; the orchestrator MUST associate each credential with **user_id**, **invocation class** (`user_gateway_session` vs `orchestrator_initiated`), and session binding metadata so the gateway can enforce user scope and policy; see [CYNAI.MCPGAT.PmaSessionTokens](mcp/mcp_gateway_enforcement.md#spec-cynai-mcpgat-pmasessiontokens) and [CYNAI.MCPGAT.PmaInvocationClass](mcp/mcp_gateway_enforcement.md#spec-cynai-mcpgat-pmainvocationclass).
+  For **user-scoped** managed services other than PMA (e.g. PAA), the orchestrator MUST associate that token with the user on whose behalf the agent is acting, so the gateway can resolve user context for preferences, access control, and audit attribution.
+  Traces To: [REQ-ORCHES-0163](../requirements/orches.md#req-orches-0163), [REQ-ORCHES-0186](../requirements/orches.md#req-orches-0186), [REQ-WORKER-0164](../requirements/worker.md#req-worker-0164).
 - The orchestrator MUST track observed state from worker capability reports and MUST treat service endpoints as dynamic.
   See [`docs/tech_specs/worker_node_payloads.md`](worker_node_payloads.md) `node_capability_report_v1` `managed_services_status`.
 - When a worker reports `managed_services_status.services[].agent_to_orchestrator_proxy`, the orchestrator SHOULD ingest and store the worker-generated identity-bound agent-to-orchestrator proxy endpoints.
@@ -352,6 +354,39 @@ This section defines how the orchestrator manages and tracks worker-managed long
 - The orchestrator MUST ensure PMA has the required bootstrap information in desired state:
   inference connectivity mode and details, and worker-proxy URLs for agent-to-orchestrator communication (MCP, callbacks).
   When supported by the worker, the orchestrator MAY set those worker-proxy URL fields to the sentinel value `auto` to require the worker to generate identity-bound endpoints and report them in `managed_services_status`.
+
+### Greedy PMA Provisioning on User Login
+
+- Spec ID: `CYNAI.ORCHES.PmaGreedyProvisioningOnLogin` <a id="spec-cynai-orches-pmagreedyprovisioningonlogin"></a>
+
+When a user **authenticates** through the User API Gateway and obtains an interactive session, the orchestrator MUST **greedily** provision PMA for that user's **session binding** (per [CYNAI.ORCHES.PmaInstancePerSessionBinding](orchestrator_bootstrap.md#spec-cynai-orches-pmainstancepersessionbinding)): start or ensure the corresponding managed service instance, push node configuration, and issue PMA MCP credentials with invocation class **user_gateway_session** per [CYNAI.MCPGAT.PmaInvocationClass](mcp/mcp_gateway_enforcement.md#spec-cynai-mcpgat-pmainvocationclass).
+
+Normative scope
+
+- Applies to **all** gateway client surfaces that establish or resume an authenticated interactive session, including **cynork**, **Web Console**, **messaging connector** sessions, and other first-party clients using the User API Gateway.
+- The orchestrator MUST NOT defer PMA instance startup until the first `model=cynodeai.pm` request or other PMA-consuming call **solely** because no chat message has been sent yet.
+
+#### Greedy PMA Provisioning on User Login Requirements Traces
+
+- [REQ-ORCHES-0190](../requirements/orches.md#req-orches-0190)
+- [REQ-USRGWY-0161](../requirements/usrgwy.md#req-usrgwy-0161)
+
+### Stale PMA Lifecycle and Teardown
+
+- Spec ID: `CYNAI.ORCHES.StalePmaTeardown` <a id="spec-cynai-orches-stalepmateardown"></a>
+
+The orchestrator provisions **one PMA instance per session binding**; it MUST also **reclaim** resources when a binding is no longer valid.
+
+Normative behavior
+
+- The orchestrator MUST identify **stale** PMA instances using policy that includes at least: **session ended**, **user logout**, **idle timeout**, **credential expiry** or **rotation supersession** with no active replacement for that binding, and **orphaned** instances when clients disconnect per product rules.
+- The orchestrator MUST update **desired state** so workers **stop** removed PMA managed services (remove `service_id` from `managed_services.services[]` or set an explicit stopped/removed directive per worker contract) and MUST **invalidate** associated PMA MCP credentials at the gateway.
+- The orchestrator SHOULD run reconciliation on a **periodic** schedule and on relevant **session lifecycle** events so teardown is timely.
+
+#### Stale PMA Lifecycle and Teardown Requirements Traces
+
+- [REQ-ORCHES-0191](../requirements/orches.md#req-orches-0191)
+- [REQ-ORCHES-0188](../requirements/orches.md#req-orches-0188)
 
 ### Managed Services Related Documents
 

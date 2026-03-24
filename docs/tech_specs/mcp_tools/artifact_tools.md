@@ -1,8 +1,9 @@
 # Artifact MCP Tools
 
 - [Document Overview](#document-overview)
+- [Artifact Scope, Ownership, and RBAC](#artifact-scope-ownership-and-rbac)
 - [Definition Compliance](#definition-compliance)
-- [Task-Scoped (Path-Based) Tools](#task-scoped-path-based-tools)
+- [Path-Based Tools](#path-based-tools)
   - [`artifact.put` Operation](#artifactput-operation)
   - [`artifact.get` Operation](#artifactget-operation)
   - [`artifact.list` Operation](#artifactlist-operation)
@@ -15,24 +16,58 @@
 
 ## Document Overview
 
-This spec defines the artifact MCP tools used by the Project Manager Agent (PMA) and Project Analyst Agent (PAA) to read and write task-scoped artifacts and to perform full CRUD on artifacts via the unified artifacts API.
+This spec defines the artifact MCP tools used by the Project Manager Agent (PMA), Project Analyst Agent (PAA), and (where allowed) the Sandbox Agent (SBA) to create, read, list, update, and delete **artifacts**.
+
+Artifacts are **not** scoped to tasks or jobs.
+Each artifact is stored in a **scope partition**: **user**, **group**, **project**, or **global**.
+The scope defines **ownership** (which partition the path lives in); **RBAC** and policy determine whether a caller may read, create, update, or delete a blob in that partition, including access by principals who are not the original owner when policy allows.
+
+**Jobs** (and optionally **tasks**) are **associated** with an artifact for **lineage and audit** (e.g. which job created or last modified the blob); they do **not** form the storage namespace.
 Implementation MUST use the [unified artifacts API](../orchestrator_artifacts_storage.md#spec-cynai-orches-artifactsapicrud) with scope and RBAC enforced by the gateway.
 
 Related documents
 
 - [Orchestrator Artifacts Storage](../orchestrator_artifacts_storage.md)
 
+## Artifact Scope, Ownership, and RBAC
+
+- Spec ID: `CYNAI.MCPTOO.ArtifactScopeRbac` <a id="spec-cynai-mcptoo-artifactscoperbac"></a>
+
+**Scope level** (`user` | `group` | `project` | `global`) selects the **owner partition** for the artifact (same idea as skill scope partitions in [`SkillRegistry` Scope](../skills_storage_and_inference.md#spec-cynai-skills-skillregistryscope), applied to blob storage).
+
+- **User**: Path is unique per owning user (subject user for the row).
+- **Group**: Path is unique within a **group**; `group_id` is required.
+- **Project**: Path is unique within a **project**; `project_id` is required.
+- **Global**: Deployment-wide partition; only principals with appropriate **global** permission may create or mutate (policy-defined).
+
+### Role-Based Access Control
+
+- The gateway MUST enforce [RBAC for artifacts](../orchestrator_artifacts_storage.md#spec-cynai-orches-artifactsrbac): the artifact's scope row determines **default** ownership; **role bindings and access policy** MAY grant **read**, **write**, or **delete** to **other users or groups** (e.g. project members editing a project-scoped artifact created by another user, or group members accessing group-scoped blobs).
+- Deny by default when no rule permits the operation for the subject.
+
+### Job and Task Association (Lineage Only)
+
+- Optional **`job_id`** on a write records which job performed the create or update (for audit and analysis).
+- Optional **`task_id`** MAY be supplied for **correlation** with task context when available; it MUST NOT be used as the primary key for artifact storage or authorization.
+
 ## Definition Compliance
 
 Tool definitions for these tools MUST conform to the project's MCP tool definition format: `Server: default`, `Name`, `Help`, `Scope`, and `Tools` (single direct `ToolInvocation` per catalog tool name).
 Endpoint resolution applies only when defining external tools (Server not `default`).
 
-## Task-Scoped (Path-Based) Tools
+## Path-Based Tools
 
 - Spec ID: `CYNAI.MCPTOO.ArtifactTools` <a id="spec-cynai-mcptoo-artifacttools"></a>
 
-PMA and PAA MUST use these MCP tools to access task-scoped artifacts by path.
-Each tool is a single direct invocation; required arguments conform to [Common Argument Requirements](../mcp/mcp_tooling.md#spec-cynai-mcptoo-commonargumentrequirements) (task scoping, size limits).
+PMA, PAA, and SBA (when on the worker allowlist) use these tools to read and write artifacts **by path** within a **declared scope**.
+
+Common arguments:
+
+- **`scope`** (string, required for put/list; required for get unless implied): `user` | `group` | `project` | `global`.
+- **Scope anchors** (required depending on `scope`): `group_id` (uuid) when `scope=group`; `project_id` (uuid) when `scope=project`; when `scope=user`, the effective user is the subject user (or explicit `user_id` when the gateway allows acting for that user).
+- **`path`** (string): Logical path within the partition (non-empty; safe path; no traversal outside the partition).
+- **`job_id`** (uuid, optional): Records lineage for create/update when the call originates from a job (e.g. SBA); gateway MAY infer from job-bound MCP context.
+- **`task_id`** (uuid, optional): Correlation only; not used for addressing or primary authorization.
 
 ### `artifact.put` Operation
 
@@ -40,39 +75,40 @@ Each tool is a single direct invocation; required arguments conform to [Common A
 
 #### `artifact.put` Inputs
 
-- **Required args**: `task_id` (uuid), `path` (string), `content_bytes_base64` (string).
-- **Scope**: Default `pm`.
+- **Required args**: `path` (string), `content_bytes_base64` (string), **`scope`** (`user` | `group` | `project` | `global`), and scope anchors as required (`group_id`, `project_id`, or neither for user/global per catalog rules).
+- **Optional args**: `job_id` (uuid; lineage), `task_id` (uuid; correlation only), `user_id` (uuid; when gateway allows acting for a subject user).
+- **Scope (MCP)**: Default `pm` for PMA/PAA; sandbox (or both) for SBA per allowlist.
 
 #### `artifact.put` Outputs
 
-- On success: structured result with `status: success` and confirmation (e.g. path or artifact_id); response MUST be size-limited per [Response and Error Model](../mcp/mcp_tooling.md#spec-cynai-mcptoo-toolresponse).
+- On success: structured result with `status: success` and confirmation (e.g. path and `artifact_id`); response MUST be size-limited per [Response and Error Model](../mcp/mcp_tooling.md#spec-cynai-mcptoo-toolresponse).
 - On error: `status: error`, `error` object with `type`, `message`, optional `details`; MUST NOT leak secrets.
 
 #### `artifact.put` Behavior
 
-Gateway resolves caller, enforces allowlist and scope, validates and size-limits input, then performs task-scoped artifact write via the artifacts backend.
+Gateway resolves caller, enforces allowlist and MCP scope, validates scope anchors and RBAC for **write**, then writes the blob via the artifacts backend.
 See [artifact.put Algorithm](#algo-cynai-mcptoo-artifactput).
 
 #### `artifact.put` Algorithm
 
 <a id="algo-cynai-mcptoo-artifactput"></a>
 
-1. Resolve caller identity and agent type from request context; reject if unauthenticated. <a id="algo-cynai-mcptoo-artifactput-step-1"></a>
-2. Check tool allowlist and per-invocation scope for this agent; deny if not allowed. <a id="algo-cynai-mcptoo-artifactput-step-2"></a>
-3. Validate `task_id` format (uuid) and that caller has access to the task (RBAC/project). <a id="algo-cynai-mcptoo-artifactput-step-3"></a>
-4. Validate `path` (non-empty, safe; reject path traversal or invalid characters). <a id="algo-cynai-mcptoo-artifactput-step-4"></a>
-5. Decode `content_bytes_base64`; enforce configured max blob size; reject if over limit. <a id="algo-cynai-mcptoo-artifactput-step-5"></a>
-6. Call artifacts API (or task-scoped backend) to write blob at task + path; apply RBAC at API layer. <a id="algo-cynai-mcptoo-artifactput-step-6"></a>
-7. Emit audit record (tool name, task_id, decision, outcome). <a id="algo-cynai-mcptoo-artifactput-step-7"></a>
-8. Return success result (path or artifact reference); ensure response is size-limited. <a id="algo-cynai-mcptoo-artifactput-step-8"></a>
+1. Resolve caller identity and agent type; reject if unauthenticated.
+2. Check tool allowlist and per-invocation MCP scope; deny if not allowed.
+3. Validate `scope`, path, and scope anchors; resolve optional `job_id` / `task_id` from arguments or job-bound context.
+4. **RBAC:** Determine whether the subject may **create or overwrite** an artifact in this scope partition (owner rules and grants per [RBAC for artifacts](../orchestrator_artifacts_storage.md#spec-cynai-orches-artifactsrbac)); if not, return 403.
+5. Decode `content_bytes_base64`; enforce max blob size; reject if over limit.
+6. Call artifacts API to write blob at **scope + path**; persist lineage (`job_id`, `task_id` metadata) per backend schema.
+7. Emit audit record (tool name, scope, path, job_id if present, decision, outcome).
+8. Return success result with `artifact_id` or reference; size-limited response.
 
 #### `artifact.put` Error Conditions
 
-- **Invalid argument**: missing or malformed `task_id`, `path`, or `content_bytes_base64`; return 400-style error.
-- **Size limit exceeded**: content exceeds configured max; return error with type and message, no secrets.
-- **Access denied**: caller not on allowlist, scope mismatch, or RBAC denies task/path; return 403-style error.
-- **Not found**: task_id does not exist or caller has no access; return 404-style error.
-- **Backend failure**: artifacts API or storage error; return 502/503-style error with safe message.
+- **Invalid argument**: missing or malformed `path`, `content_bytes_base64`, or scope fields.
+- **Size limit exceeded**: content exceeds configured max.
+- **Access denied**: allowlist, MCP scope, or RBAC denies write.
+- **Not found**: referenced `group_id` / `project_id` does not exist or caller has no access.
+- **Backend failure**: artifacts API or storage error; safe message only.
 
 #### Traces to (`artifact.put`)
 
@@ -85,37 +121,33 @@ See [artifact.put Algorithm](#algo-cynai-mcptoo-artifactput).
 
 #### `artifact.get` Inputs
 
-- **Required args**: `task_id` (uuid), `path` (string).
-- **Scope**: Default `pm`.
+- **Required args**: `path` (string), **`scope`** and scope anchors (same rules as `artifact.put`), unless the gateway resolves scope unambiguously from authenticated context (document in Help when inference is allowed).
+- **Optional args**: `task_id` (correlation only; ignored for lookup).
+- **Scope (MCP)**: Default `pm`.
 
 #### `artifact.get` Outputs
 
-- On success: result object containing artifact content (e.g. `content_bytes_base64` or inline) and optional metadata; response MUST be size-limited and schema-validated.
-- On error: `status: error`, `error` object; MUST NOT leak secrets.
+- On success: result object with content (e.g. `content_bytes_base64`) and optional metadata; size-limited and schema-validated.
+- On error: structured error; MUST NOT leak secrets.
 
 #### `artifact.get` Behavior
 
-Gateway enforces allowlist and scope, validates task_id and path, then reads from the task-scoped artifact store and returns size-limited content.
+Gateway enforces allowlist, MCP scope, **RBAC for read**, then reads from the artifact store for **scope + path**.
 See [artifact.get Algorithm](#algo-cynai-mcptoo-artifactget).
 
 #### `artifact.get` Algorithm
 
 <a id="algo-cynai-mcptoo-artifactget"></a>
 
-1. Resolve caller identity and agent type; reject if unauthenticated.
-2. Check tool allowlist and scope; deny if not allowed.
-3. Validate `task_id` and `path`; verify caller has access to the task.
-4. Call artifacts backend to read blob at task + path; enforce RBAC.
-5. If blob exceeds response size limit, truncate or return error per policy.
-6. Emit audit record.
-7. Return result with content and optional metadata (size-limited, schema-validated).
+1. Resolve caller; check allowlist and MCP scope.
+2. Validate `path`, `scope`, and anchors.
+3. **RBAC:** Allow read if policy permits (owner or grant).
+4. Fetch blob; enforce response size limit.
+5. Audit; return content.
 
 #### `artifact.get` Error Conditions
 
-- **Invalid argument**: missing or malformed `task_id` or `path`.
-- **Access denied**: allowlist/scope or RBAC denies access.
-- **Not found**: no artifact at path for task, or task not found/accessible.
-- **Backend failure**: storage or API error; return safe error.
+- Invalid args; access denied; not found; backend failure.
 
 #### Traces to (`artifact.get`)
 
@@ -127,86 +159,65 @@ See [artifact.get Algorithm](#algo-cynai-mcptoo-artifactget).
 
 #### `artifact.list` Inputs
 
-- **Required args**: `task_id` (uuid).
-- **Optional args**: `limit`, `cursor` (when pagination is supported).
-- **Scope**: Default `pm`.
+- **Required args**: **`scope`** and scope anchors (same as above) for the partition to list.
+- **Optional args**: `limit`, `cursor`, `task_id` (filter by correlation metadata only, if backend supports it).
+- **Scope (MCP)**: Default `pm`.
 
 #### `artifact.list` Outputs
 
-- On success: list of artifact paths (and optionally metadata); MUST be size-limited and paginated if needed; include `cursor` for next page when applicable.
-- On error: `status: error`, `error` object.
+- On success: list of paths (and optional metadata); size-limited; paginated when applicable.
 
 #### `artifact.list` Behavior
 
-Gateway enforces allowlist and scope, validates task_id, then lists task-scoped artifact paths from the backend with size and pagination limits.
+Gateway enforces RBAC for **list** in the given scope, then lists paths in that partition.
 See [artifact.list Algorithm](#algo-cynai-mcptoo-artifactlist).
 
 #### `artifact.list` Algorithm
 
 <a id="algo-cynai-mcptoo-artifactlist"></a>
 
-1. Resolve caller identity and agent type; reject if unauthenticated.
-2. Check tool allowlist and scope; deny if not allowed.
-3. Validate `task_id`; verify caller has access to the task.
-4. Call artifacts backend to list paths (and optional metadata) for task; apply optional limit and cursor.
-5. Enforce response size limit; truncate or paginate as configured.
-6. Emit audit record.
-7. Return list result (paths, optional cursor).
+1. Resolve caller; check allowlist and MCP scope.
+2. Validate scope and anchors.
+3. **RBAC:** Caller must be allowed to list artifacts in this partition.
+4. Call backend list; apply limit and cursor.
+5. Audit; return list.
 
 #### `artifact.list` Error Conditions
 
-- **Invalid argument**: missing or malformed `task_id`.
-- **Access denied**: allowlist/scope or RBAC denies access.
-- **Not found**: task not found or not accessible.
-- **Backend failure**: storage or API error.
+- Invalid args; access denied; backend failure.
 
 #### Traces to (`artifact.list`)
 
 - [REQ-MCPTOO-0109](../../requirements/mcptoo.md#req-mcptoo-0109)
 
-## Unified API (Artifact_id-Based) Tools
+## Unified API (Artifact\_id-Based) Tools
 
 - Spec ID: `CYNAI.MCPTOO.ArtifactsUnifiedTools` <a id="spec-cynai-mcptoo-artifactsunifiedtools"></a>
 
-These tools provide full CRUD by `artifact_id` so PMA and PAA can create, read, update, and delete artifacts via the unified artifacts API.
-Gateway stores blobs and returns `artifact_id`; scope is expressed in the request (e.g. `task_id`, `thread_id`, `project_id`).
+Full CRUD by `artifact_id`.
+Create requests MUST include **scope** and anchors (user / group / project / global), not task or job as the storage key.
+**Job** and **task** ids MAY appear only as optional **lineage** or **correlation** metadata on create or update.
 
 ### `artifacts.create` Operation
 
-- **Inputs**: Required scope (e.g. `task_id`, `thread_id`, or `project_id`), content (e.g. base64 or URL); optional `filename`, `content_type`.
-  Scope: `pm`.
-- **Outputs**: On success, result with `artifact_id`; on error, structured error.
-- **Behavior**: Gateway validates scope and content, enforces size limits, calls unified artifacts API (POST), stores blob and metadata, returns artifact_id.
-  See [Orchestrator Artifacts Storage - Create](../orchestrator_artifacts_storage.md).
-- **Algorithm**: (1) Resolve caller and check allowlist/scope. (2) Validate scope keys and content; enforce max size. (3) Call POST /v1/artifacts (or equivalent) with scope and blob; RBAC enforced by API. (4) Audit and return artifact_id or error.
-- **Error conditions**: Invalid scope or content; size exceeded; access denied; backend failure.
+- **Inputs**: Required **`scope`** and anchors, content (e.g. base64); optional `filename`, `content_type`, `job_id`, `task_id` (metadata only).
+- **Scope (MCP)**: `pm` (and sandbox when allowed for SBA).
+- **Behavior**: Gateway validates scope, RBAC for create, size limits, calls unified artifacts API; stores lineage fields when provided.
 
 ### `artifacts.get` Operation
 
 - **Inputs**: Required `artifact_id` (uuid).
-  Scope: `pm`.
-- **Outputs**: Artifact blob and metadata; size-limited.
-- **Behavior**: Gateway resolves caller, checks allowlist and RBAC for artifact, calls GET by artifact_id, returns size-limited content.
-- **Algorithm**: (1) Resolve caller; check allowlist/scope. (2) Validate artifact_id. (3) Call read on artifacts API; RBAC determines visibility. (4) Apply response size limit. (5) Audit and return result or not-found/denied.
-- **Error conditions**: Invalid artifact_id; access denied; not found; backend failure.
+- **Behavior**: Resolve row; **RBAC** for read (owner or grant); return blob.
 
 ### `artifacts.update` Operation
 
-- **Inputs**: Required `artifact_id` (uuid), content (replacement blob).
-  Scope: `pm`.
-- **Outputs**: Success confirmation or error.
-- **Behavior**: Gateway validates artifact_id and content size, enforces RBAC, calls PUT on artifacts API to replace blob.
-- **Algorithm**: (1) Resolve caller; check allowlist/scope. (2) Validate artifact_id and content; enforce size limit. (3) Call update on artifacts API; RBAC enforced. (4) Audit and return.
-- **Error conditions**: Invalid args; size exceeded; access denied; not found; backend failure.
+- **Inputs**: Required `artifact_id`, replacement content; optional `job_id` for last-modified lineage.
+- **Behavior**: **RBAC** for write; update blob and metadata.
 
 ### `artifacts.delete` Operation
 
-- **Inputs**: Required `artifact_id` (uuid).
-  Scope: `pm`.
-- **Outputs**: Success confirmation or error.
-- **Behavior**: Gateway validates artifact_id, enforces RBAC, calls DELETE on artifacts API.
-- **Algorithm**: (1) Resolve caller; check allowlist/scope. (2) Validate artifact_id. (3) Call delete on artifacts API; RBAC enforced. (4) Audit and return.
-- **Error conditions**: Invalid artifact_id; access denied; not found; backend failure.
+- **Inputs**: Required `artifact_id`; optional `job_id` for audit.
+- **Behavior**: **RBAC** for delete; remove or soft-delete per backend.
 
 #### Traces to (Artifacts CRUD)
 
@@ -216,6 +227,6 @@ Gateway stores blobs and returns `artifact_id`; scope is expressed in the reques
 
 - Spec ID: `CYNAI.MCPTOO.ArtifactToolsAllowlist` <a id="spec-cynai-mcptoo-artifacttoolsallowlist"></a>
 
-- **Allowlist**: PMA and PAA per [Project Manager Agent allowlist](access_allowlists_and_scope.md#spec-cynai-mcpgat-pmagentallowlist) and [Project Analyst Agent allowlist](access_allowlists_and_scope.md#spec-cynai-mcpgat-paagentallowlist).
-  Gateway MUST allow `artifact.*` and `artifacts.*` for these agents.
-- **Scope**: All artifact tools are PM/PA-only by default; per-tool scope MUST align with [Per-tool scope: Sandbox vs PM](access_allowlists_and_scope.md#spec-cynai-mcpgat-pertoolscope).
+- **Allowlist**: PMA and PAA per [Project Manager Agent allowlist](access_allowlists_and_scope.md#spec-cynai-mcpgat-pmagentallowlist) and [Project Analyst Agent allowlist](access_allowlists_and_scope.md#spec-cynai-mcpgat-paagentallowlist); SBA per [Worker Agent allowlist](access_allowlists_and_scope.md#spec-cynai-mcpgat-workeragentallowlist) when `artifact.*` is enabled.
+- **MCP scope**: Align with [Per-tool scope: Sandbox vs PM](access_allowlists_and_scope.md#spec-cynai-mcpgat-pertoolscope).
+- Gateway MUST enforce **artifact RBAC** on every call regardless of allowlist (allowlist is not authorization by itself).

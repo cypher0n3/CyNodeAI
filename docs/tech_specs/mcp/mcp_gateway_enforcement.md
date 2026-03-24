@@ -8,10 +8,12 @@
 - [Gateway Enforcement Responsibilities](#gateway-enforcement-responsibilities)
 - [Agent-Scoped Tokens or API Keys](#agent-scoped-tokens-or-api-keys)
   - [Token Handling (Normative)](#token-handling-normative)
+  - [PMA Per-User Session Tokens and Rotation](#pma-per-user-session-tokens-and-rotation)
+  - [PMA Invocation Class (Interactive vs Orchestrator-Initiated)](#pma-invocation-class-interactive-vs-orchestrator-initiated)
 - [Edge Enforcement Mode (Node-Local Agent Runtimes)](#edge-enforcement-mode-node-local-agent-runtimes)
   - [Edge Enforcement Mode (Node-Local Agent Runtimes) Requirements Traces](#edge-enforcement-mode-node-local-agent-runtimes-requirements-traces)
 - [Role Allowlists, Per-Tool Scope, and Admin Enable or Disable](#role-allowlists-per-tool-scope-and-admin-enable-or-disable)
-- [Tool Argument Schema Requirements](#tool-argument-schema-requirements)
+- [Tool Argument Schema Requirements](#spec-cynai-mcpgat-toolargschema)
   - [Applicable Requirements (Tool Argument Schemas)](#applicable-requirements-tool-argument-schemas)
 - [Access Control Mapping](#access-control-mapping)
 - [Auditing Requirements](#auditing-requirements)
@@ -69,11 +71,13 @@ The orchestrator MCP gateway MUST perform the following for every tool call it r
 - Resolve identity and context.
   Identity and agent type MAY be resolved from an **agent-scoped token or API key** presented with the MCP request (see [Agent-Scoped Tokens or API Keys](#agent-scoped-tokens-or-api-keys)); otherwise from orchestrator state.
   Resolved context MUST include agent type (PM, PA, or sandbox), and when available user identity, task context, and run or job context.
+  For **PMA**, resolved context MUST include the credential's **invocation class** (see [PMA Invocation Class (Interactive vs Orchestrator-Initiated)](#pma-invocation-class-interactive-vs-orchestrator-initiated)).
 - Enforce role-based tool allowlists (coarse gating) and per-tool scope using the resolved agent type.
 - Enforce access control policy (`access_control_rules`) using `mcp.tool.invoke` when applicable.
 - Enforce request and response limits.
   This includes size limits, timeouts, and schema validation for tool responses when defined.
 - Emit audit records for the decision and outcome.
+- Enforce per-tool specifications that forbid **ADMIN**-level invocation through MCP (for example [Skills MCP Tools](../mcp_tools/skills_tools.md)); the gateway MUST reject such tool calls when resolved authorization would execute them with ADMIN-level privileges for that tool surface.
 
 The orchestrator MUST fail closed.
 If required context is missing for a tool call, the call MUST be rejected.
@@ -99,9 +103,10 @@ Traces To: [REQ-WORKER-0164](../../requirements/worker.md#req-worker-0164).
 
 - The orchestrator MUST be able to **issue tokens or API keys** for use when the **worker proxy** forwards MCP requests on behalf of PM/PA or sandbox agents.
   Tokens are delivered to the worker (e.g. in managed service desired state or job payload); the worker proxy MUST hold and use them; the worker MUST NOT pass tokens or secrets to agent containers or to agents.
-- A **PM agent token** (Project Manager Agent, PMA) is issued when the orchestrator starts or hands off to the PM agent (e.g. when PMA is run as a managed service).
-  The token is **system-level**: it MUST be associated with agent type (PM) only and MUST NOT be bound to a specific user.
-  The gateway does not resolve a user from the token; user context for a given request may come from the conversation or task context instead.
+- A **PMA MCP credential** (Project Manager Agent) is issued by the orchestrator for an **authenticated user** and a **session** (for example a chat thread or orchestrator-defined session identifier) so that concurrent user work on the same node does not share the same gateway authorization context.
+  The credential MUST be associated with agent type (PM), with **user_id**, with an **invocation class** (see [PMA Invocation Class (Interactive vs Orchestrator-Initiated)](#pma-invocation-class-interactive-vs-orchestrator-initiated)), and with session binding metadata the orchestrator defines.
+  The gateway MUST resolve **user identity** from a valid PMA MCP credential and MUST reject MCP tool calls where resolved tool or resource scope implies a **different user** than the credential (fail closed).
+  Credential **expiry** and **rotation** (including an overlap window where both previous and successor credentials validate) are defined in [PMA Per-User Session Tokens and Rotation](#pma-per-user-session-tokens-and-rotation).
 - A **PA agent token** (Project Analyst Agent, PAA) is issued when the orchestrator hands off to the PA agent for a user- or task-scoped interaction.
   The token MUST be associated with agent type (PA) and with **the user on whose behalf the agent is acting**.
   The orchestrator MUST track this association so the gateway can resolve user context for preferences, access control to user- and project-scoped data, and audit attribution.
@@ -115,9 +120,8 @@ Traces To: [REQ-WORKER-0164](../../requirements/worker.md#req-worker-0164).
 #### Token Use at the Gateway
 
 - Requests that carry an agent-scoped token or API key arrive from the **worker proxy**, which attaches the token when forwarding on behalf of an agent; the agent does not present the token.
-  The gateway MUST **authenticate** the request using that credential (e.g. validate signature or lookup in a credential store) and MUST resolve from it: **agent type** (PM, PA, or sandbox) and **user/task context** as stored at issuance (if any).
-  For **PA and sandbox** tokens, the gateway MUST use the resolved user context for preference resolution, access control to user- and project-scoped resources, and audit attribution.
-  For **PM** tokens, no user is bound to the token; user context for the request (when needed) comes from other request or session context.
+  The gateway MUST **authenticate** the request using that credential (e.g. validate signature or lookup in a credential store) and MUST resolve from it: **agent type** (PM, PA, or sandbox), **user/task context** as stored at issuance (if any), and for **PMA** the **invocation class**.
+  For **PMA, PA, and sandbox** tokens, the gateway MUST use the resolved user context for preference resolution, access control to user- and project-scoped resources, and audit attribution when the token binds a user (PMA, PA, sandbox per [Token Issuance](#token-issuance)).
 - The gateway MUST **reject** requests that present a token the orchestrator has **invalidated** (e.g. for a stopped or canceled job).
   See [Task Cancel and Stop Job](../orchestrator.md#spec-cynai-orches-taskcancelandstopjob).
 - The gateway MUST then restrict tool access to the **allowlist and per-tool scope for that agent type**.
@@ -127,12 +131,77 @@ Traces To: [REQ-WORKER-0164](../../requirements/worker.md#req-worker-0164).
 
 Audit
 
-- Audit records for tool calls made with an agent-scoped token MUST include the resolved agent type and, when the token is user-associated (PA, sandbox), the user/task context derived from the token so that tool use remains attributable.
+- Audit records for tool calls made with an agent-scoped token MUST include the resolved agent type and, when the token is user-associated (PMA, PA, sandbox), the user/task context derived from the token so that tool use remains attributable.
+  For **PMA**, audit records MUST also include the resolved **invocation class**.
 
 ##### Token Use at the Gateway Requirements Traces
 
 - [REQ-MCPGAT-0116](../../requirements/mcpgat.md#req-mcpgat-0116)
+- [REQ-MCPGAT-0117](../../requirements/mcpgat.md#req-mcpgat-0117)
+- [REQ-MCPGAT-0118](../../requirements/mcpgat.md#req-mcpgat-0118)
 - [REQ-WORKER-0164](../../requirements/worker.md#req-worker-0164)
+- [REQ-WORKER-0175](../../requirements/worker.md#req-worker-0175)
+
+#### PMA Per-User Session Tokens and Rotation
+
+- Spec ID: `CYNAI.MCPGAT.PmaSessionTokens` <a id="spec-cynai-mcpgat-pmasessiontokens"></a>
+
+This section normatively defines PMA MCP credentials as **per-user session** credentials (replacing any node-wide, non-user-bound PM token model).
+
+#### PMA Invocation Class (Interactive vs Orchestrator-Initiated)
+
+- Spec ID: `CYNAI.MCPGAT.PmaInvocationClass` <a id="spec-cynai-mcpgat-pmainvocationclass"></a>
+
+Every PMA MCP credential MUST carry exactly one **invocation class** so the gateway can tell **interactive** user-driven work from **orchestrator-triggered** automation on the user's behalf.
+
+Normative values
+
+- **`user_gateway_session`:** The user is authenticated through the **User API Gateway** and is actively driving PMA (for example interactive chat or equivalent gateway-mediated PMA work).
+  Issuance for this class is triggered per [REQ-USRGWY-0160](../../requirements/usrgwy.md#req-usrgwy-0160).
+- **`orchestrator_initiated`:** PMA is invoked **without** a live interactive gateway session; the orchestrator triggers work on behalf of the user (for example **scheduled** interpretation, **task** routing or review handoff, workflow continuation, or other automation).
+  Issuance for this class MUST follow [REQ-ORCHES-0187](../../requirements/orches.md#req-orches-0187).
+
+Gateway and policy
+
+- The gateway MUST resolve the invocation class from the credential and MUST treat it as authoritative for policy that differs between classes (for example stricter tool surfaces or access control rules for orchestrator-initiated runs when configured).
+- The gateway MUST reject MCP tool calls when the credential's invocation class is inconsistent with orchestrator-attributed context for the request when such checks are defined by product policy (fail closed).
+
+##### PMA Invocation Class Requirements Traces
+
+- [REQ-MCPGAT-0118](../../requirements/mcpgat.md#req-mcpgat-0118)
+- [REQ-ORCHES-0187](../../requirements/orches.md#req-orches-0187)
+- [REQ-USRGWY-0160](../../requirements/usrgwy.md#req-usrgwy-0160)
+
+Issuance and gateway triggers
+
+- The orchestrator MUST issue PMA MCP credentials with invocation class **`user_gateway_session`** when a **User API Gateway** path establishes or continues authenticated PMA-backed work (for example interactive chat handoff to PMA); see [REQ-USRGWY-0160](../../requirements/usrgwy.md#req-usrgwy-0160).
+- The orchestrator MUST issue PMA MCP credentials with invocation class **`orchestrator_initiated`** when it triggers PMA **without** an active User API Gateway session (for example scheduled runs and task-completion handoffs); see [REQ-ORCHES-0187](../../requirements/orches.md#req-orches-0187).
+- The orchestrator MUST deliver credential material to the worker via node configuration (or an equivalent channel) so the **worker proxy** can attach credentials without exposing them to PMA; see [REQ-ORCHES-0186](../../requirements/orches.md#req-orches-0186).
+
+Rotation and long-lived sessions
+
+- Each PMA MCP credential MUST have a **not-after** (expiry) time known to the orchestrator and enforced at the gateway.
+- The orchestrator MUST **rotate** credentials before expiry for **long-lived** sessions so that user activity does not stall solely because a credential expired.
+- During rotation, the orchestrator MUST support an **overlap window** where **both** the previous and successor credentials authenticate successfully at the gateway; after that window, the orchestrator MUST invalidate the superseded credential so the gateway rejects it.
+
+Worker proxy selection
+
+- The worker proxy MUST store PMA MCP credentials keyed so it can attach the credential that matches the **active session binding** and **invocation class** for each forwarded MCP request; PMA MUST NOT receive or present the credential (see [Token Handling (Normative)](#token-handling-normative)).
+- When the deployment uses **one PMA managed service instance per session binding** ([CYNAI.ORCHES.PmaInstancePerSessionBinding](../orchestrator_bootstrap.md#spec-cynai-orches-pmainstancepersessionbinding)), the worker MAY select the credential using the calling instance's **`service_id`** alone (from the UDS binding) together with the single credential row for that instance.
+- The orchestrator MUST define any additional correlation when multiple credentials exist for the same instance (for example rotation overlap); see [CYNAI.WORKER.AgentTokenStorageAndLifecycle](../worker_node.md#spec-cynai-worker-agenttokenstorageandlifecycle).
+
+Authorization
+
+- The gateway MUST treat the resolved **user_id** from the PMA MCP credential as authoritative for user-scoped tool and resource access; tool arguments that imply a different user MUST cause rejection (fail closed), consistent with [REQ-MCPGAT-0117](../../requirements/mcpgat.md#req-mcpgat-0117).
+
+##### PMA Per-User Session Tokens and Rotation Requirements Traces
+
+- [REQ-MCPGAT-0117](../../requirements/mcpgat.md#req-mcpgat-0117)
+- [REQ-MCPGAT-0118](../../requirements/mcpgat.md#req-mcpgat-0118)
+- [REQ-ORCHES-0186](../../requirements/orches.md#req-orches-0186)
+- [REQ-ORCHES-0187](../../requirements/orches.md#req-orches-0187)
+- [REQ-USRGWY-0160](../../requirements/usrgwy.md#req-usrgwy-0160)
+- [REQ-WORKER-0175](../../requirements/worker.md#req-worker-0175)
 
 ## Edge Enforcement Mode (Node-Local Agent Runtimes)
 
@@ -185,6 +254,12 @@ Recommended guidance
 
 - Prefer stable, explicit ids (`task_id`, `run_id`, `job_id`) over implicit scoping.
 - Prefer allowlisted tool patterns over dynamic tool discovery.
+
+Normative
+
+- The gateway MUST **ignore** argument keys that are **not** part of the invoked tool's defined input schema (after catalog lookup) and MUST **not** reject the call solely for that reason.
+  This includes keys such as `task_id` on tools that do not use `task_id` (e.g. [Skills MCP Tools](../mcp_tools/skills_tools.md)).
+  See [Extraneous arguments](../mcp/mcp_tooling.md#spec-cynai-mcptoo-extraneousarguments).
 
 ## Access Control Mapping
 

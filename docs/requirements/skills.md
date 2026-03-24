@@ -56,7 +56,7 @@ It covers storage, tracking, and exposure of AI skills files so that inference m
   [CYNAI.SKILLS.SkillAuditing](../tech_specs/skills_storage_and_inference.md#spec-cynai-skills-skillauditing)
   <a id="req-skills-0113"></a>
 - **REQ-SKILLS-0114:** The system MUST expose MCP tools so that models (agents) can perform full CRUD on skills for the user when directed (create, list, get, update, delete); all operations MUST follow the same controls as web and CLI (auditing on write, default user scope, scope elevation only with permission, gateway enforcement and auditing).
-  [CYNAI.SKILLS.SkillToolsMcp](../tech_specs/skills_storage_and_inference.md#spec-cynai-skills-skilltoolsmcp)
+  [CYNAI.SKILLS.SkillToolsMcp](../tech_specs/mcp_tools/skills_tools.md#spec-cynai-skills-skilltoolsmcp); [CYNAI.MCPTOO.SkillsTools](../tech_specs/mcp_tools/skills_tools.md#spec-cynai-mcptoo-skillstools) (MCP tooling catalog ID)
   [CYNAI.MCPGAT.Doc.GatewayEnforcement](../tech_specs/mcp/mcp_gateway_enforcement.md#spec-cynai-mcpgat-doc-gatewayenforcement)
   <a id="req-skills-0114"></a>
 - **REQ-SKILLS-0115:** The web interface and CLI MUST support full CRUD for skills: create (load), list (with optional scope/owner filter), get (content and metadata by identifier), update (content and/or metadata including scope, subject to same auditing and scope permissions as load), and delete (remove from store and registry).

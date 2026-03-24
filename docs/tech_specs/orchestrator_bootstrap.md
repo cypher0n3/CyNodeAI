@@ -15,7 +15,9 @@
 - [Orchestrator Readiness and PMA Startup](#orchestrator-readiness-and-pma-startup)
   - [Inference Path](#inference-path)
   - [Worker Reports Ready](#worker-reports-ready)
+  - [PMA Instance Per Session Binding](#pma-instance-per-session-binding)
   - [PMA Startup](#pma-startup)
+  - [PMA Inference Capability Check (Readiness)](#pma-inference-capability-check-readiness)
   - [PMA Informs Orchestrator](#pma-informs-orchestrator)
 - [Recommended Behavior (Summary)](#recommended-behavior-summary)
 
@@ -206,8 +208,11 @@ Orchestrator deployments MUST support auto-start on the host so that the orchest
 - [REQ-ORCHES-0117](../requirements/orches.md#req-orches-0117)
 - [REQ-ORCHES-0150](../requirements/orches.md#req-orches-0150)
 - [REQ-ORCHES-0151](../requirements/orches.md#req-orches-0151)
+- [REQ-ORCHES-0188](../requirements/orches.md#req-orches-0188)
+- [REQ-ORCHES-0189](../requirements/orches.md#req-orches-0189)
+- [REQ-WORKER-0176](../requirements/worker.md#req-worker-0176)
 
-The orchestrator cannot report fully ready until at least one inference path exists and until the PMA has informed the orchestrator that it is online.
+The orchestrator cannot report fully ready until at least one inference path exists, until at least one PMA instance has informed the orchestrator that it is online, and until the **PMA inference capability check** succeeds for the bootstrap path (see [PMA Inference Capability Check (Readiness)](#pma-inference-capability-check-readiness)).
 
 ### Inference Path
 
@@ -221,24 +226,52 @@ The orchestrator cannot report fully ready until at least one inference path exi
 - The worker MUST report to the orchestrator when it has become ready (e.g. after applying config and starting Worker API and, when instructed, the local inference container) so the orchestrator can treat the node as an inference path.
   This report MAY be the config ack with status applied, or a dedicated readiness notification as defined in the worker node spec.
 
+### PMA Instance per Session Binding
+
+- Spec ID: `CYNAI.ORCHES.PmaInstancePerSessionBinding` <a id="spec-cynai-orches-pmainstancepersessionbinding"></a>
+
+Normative model
+
+- The orchestrator MUST provision **one `cynode-pma` managed service instance per session binding** (each instance has a distinct `service_id` in `managed_services.services[]`).
+- Each instance receives its own identity-bound worker-proxy UDS mount and **at most one** active PMA MCP credential binding in the secure store for that `service_id`, matching [CYNAI.MCPGAT.PmaSessionTokens](mcp/mcp_gateway_enforcement.md#spec-cynai-mcpgat-pmasessiontokens).
+- **Project Analyst Agent (PAA)** remains a separate concern: **PAA** uses `cynode-pma` in `project_analyst` mode for **task-scoped** verification and analysis; it is **not** a replacement for a per-session Project Manager PMA instance.
+
+#### PMA Instance per Session Binding Requirements Traces
+
+- [REQ-ORCHES-0188](../requirements/orches.md#req-orches-0188)
+- [REQ-WORKER-0176](../requirements/worker.md#req-worker-0176)
+
 ### PMA Startup
 
-- The orchestrator MUST start the Project Manager Agent by instructing a worker node to run PMA as a **managed service container** when the **first** inference path becomes available: either the first worker node has reported ready and is inference-capable, or the orchestrator has an LLM API key configured for PMA via API Egress.
-- The orchestrator MUST deliver the PMA start bundle via node configuration (managed services desired state); see [`docs/tech_specs/worker_node_payloads.md`](worker_node_payloads.md) `node_configuration_payload_v1` `managed_services`.
+- The orchestrator MUST start the Project Manager Agent by instructing a worker node to run **at least one** PMA **managed service instance** when the **first** inference path becomes available: either the first worker node has reported ready and is inference-capable, or the orchestrator has an LLM API key configured for PMA via API Egress.
+  That bootstrap instance is used for readiness and the **PMA inference capability check**; subsequent sessions each receive **additional** PMA instances per [PMA Instance Per Session Binding](#pma-instance-per-session-binding).
+- The orchestrator MUST deliver PMA start bundles via node configuration (managed services desired state); see [`docs/tech_specs/worker_node_payloads.md`](worker_node_payloads.md) `node_configuration_payload_v1` `managed_services`.
 - The orchestrator MUST NOT instruct a node to start PMA before at least one of these conditions is satisfied.
+
+### PMA Inference Capability Check (Readiness)
+
+- Spec ID: `CYNAI.BOOTST.PmaInferenceCapabilityCheck` <a id="spec-cynai-bootst-pmainferencecapabilitycheck"></a>
+
+After the orchestrator has directed the worker to start the **bootstrap** PMA instance and the worker has reported that instance `state=ready`, the orchestrator MUST run a **PMA inference capability check** before reporting the control plane **fully ready**:
+
+- The check MUST exercise **inference through PMA** (not only the raw inference backend or container health) so that worker proxy + PMA + inference stack are validated together.
+- The check MUST include this **function test**: the orchestrator directs PMA to execute the **`help.list`** MCP tool call (per [Help MCP Tools](mcp_tools/help_tools.md)) and return the tool results; the check MUST fail closed if PMA does not successfully complete that tool invocation (including MCP gateway authorization and worker proxy token attachment for the bootstrap credential).
+- Additional minimal orchestrator-initiated steps (for example a tiny completion) MAY be combined with the same readiness pass; the **`help.list`** function test is **required**.
+
+Traces To: [REQ-ORCHES-0189](../requirements/orches.md#req-orches-0189), [REQ-BOOTST-0002](../requirements/bootst.md#req-bootst-0002).
 
 ### PMA Informs Orchestrator
 
-- The orchestrator MUST learn that PMA is online via **worker-reported managed service status** (and endpoints) for PMA.
-  The worker determines readiness by health checking the PMA container per the configured health contract and reports `state=ready`.
+- The orchestrator MUST learn that PMA is online via **worker-reported managed service status** (and endpoints) for **each** PMA instance (`service_id`).
+  The worker determines readiness by health checking each PMA container per the configured health contract and reports `state=ready`.
   See [`docs/tech_specs/worker_node_payloads.md`](worker_node_payloads.md) `node_capability_report_v1` `managed_services_status`.
 
 ## Recommended Behavior (Summary)
 
 - The orchestrator MUST ensure at least one inference path is available before reporting ready.
   If no worker has reported ready with inference and no PMA-facing LLM API key is configured, the orchestrator MUST refuse to enter a ready state.
-- The orchestrator MUST start PMA when the first inference path exists (worker ready and inference-capable, or API Egress key for PMA).
-- The orchestrator MUST NOT report ready until the PMA is online and reachable (per worker-reported `managed_services_status` and endpoint contract).
+- The orchestrator MUST start **at least one** PMA instance when the first inference path exists (worker ready and inference-capable, or API Egress key for PMA); additional PMA instances are provisioned **per session binding**.
+- The orchestrator MUST NOT report ready until the bootstrap PMA instance is online and reachable **and** the **PMA inference capability check** has succeeded (per [PMA Inference Capability Check (Readiness)](#pma-inference-capability-check-readiness)).
   PMA is a core system feature and is always required; disabling PMA is not supported.
 - **PMA inference preference:** PMA configuration MUST prefer local inference via worker nodes unless overridden by user-specified config (e.g. `agents.project_manager.model.selection.execution_mode=force_external`).
   When a dispatchable local inference worker is available, the orchestrator MUST prefer a local Project Manager model; external inference via API Egress is used only when no local worker is available or when the user has explicitly overridden to force external.

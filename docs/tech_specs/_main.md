@@ -32,7 +32,7 @@ It uses a central orchestrator to coordinate node-local workers, sandboxed execu
 
 ### Key Principles
 
-- Agents use MCP as the standard tool interface.
+- Agents use MCP as the standard tool interface; per-tool specs forbid **ADMIN**-level invocation via MCP tool calls (e.g. [Skills MCP Tools](mcp_tools/skills_tools.md)), enforced at [`docs/tech_specs/mcp/mcp_gateway_enforcement.md`](mcp/mcp_gateway_enforcement.md).
 - Worker agents run in sandbox containers with restricted network access.
 - Nodes are configured by the orchestrator at registration time and can receive dynamic updates.
 - User clients interact through a single User API Gateway.
@@ -57,6 +57,7 @@ It uses a central orchestrator to coordinate node-local workers, sandboxed execu
 
 - `cynork` CLI (management app): [`docs/tech_specs/cynork_cli.md`](cynork_cli.md)
   - `cynork` TUI: [`docs/tech_specs/cynork_tui.md`](cynork_tui.md)
+  - `cynork` TUI session cache (disk): [`docs/tech_specs/cynork_tui_session_cache.md`](cynork_tui_session_cache.md)
   - `cynork` TUI slash commands: [`docs/tech_specs/cynork_tui_slash_commands.md`](cynork_tui_slash_commands.md)
   - CLI core commands: [`docs/tech_specs/cli_management_app_commands_core.md`](cli_management_app_commands_core.md)
   - CLI task commands: [`docs/tech_specs/cli_management_app_commands_tasks.md`](cli_management_app_commands_tasks.md)

@@ -349,6 +349,7 @@ Source requirements: [`docs/tech_specs/worker_node.md`](worker_node.md#spec-cyna
 - `managed_services` (object, optional)
   - Desired state for orchestrator-directed managed services that this node MUST run and supervise.
   - Managed services are long-lived service containers (distinct from per-job sandbox containers).
+  - The orchestrator MAY include **multiple** entries with `service_type=pma` and **distinct** `service_id` values (one Project Manager PMA instance per session binding per [CYNAI.ORCHES.PmaInstancePerSessionBinding](orchestrator_bootstrap.md#spec-cynai-orches-pmainstancepersessionbinding)).
   - `services` (array of objects, optional)
     - Each element declares a desired managed service instance on this node.
     - Required fields (minimum):
@@ -400,8 +401,8 @@ Source requirements: [`docs/tech_specs/worker_node.md`](worker_node.md#spec-cyna
         - `agent_token` (string, optional)
           - Token delivered to the **worker** (in node config); the **worker proxy** MUST hold it and attach it when forwarding agent-originated requests to the orchestrator (e.g. internal proxy to MCP gateway).
             The token MUST NOT be passed to the agent container or given to the agent; agents MUST NOT receive tokens or secrets directly.
-            For **system-level** managed agents (e.g. PMA), the orchestrator does not associate the token with a specific user.
-            For **user-scoped** managed agents (e.g. PAA when deployed as a managed service), the orchestrator MUST associate the token with the user on whose behalf the agent is acting, so the gateway can resolve user context for preferences, access control, and auditing.
+            For **PMA**, MCP credentials are **per authenticated user session**; the orchestrator associates each delivered token with **user_id** and session binding metadata as defined in [CYNAI.MCPGAT.PmaSessionTokens](mcp/mcp_gateway_enforcement.md#spec-cynai-mcpgat-pmasessiontokens).
+            For **user-scoped** managed agents other than PMA (e.g. PAA when deployed as a managed service), the orchestrator MUST associate the token with the user on whose behalf the agent is acting, so the gateway can resolve user context for preferences, access control, and auditing.
             Traces To: [REQ-WORKER-0164](../requirements/worker.md#req-worker-0164).
             See also: [CYNAI.WORKER.NodeLocalSecureStore](worker_node.md#spec-cynai-worker-nodelocalsecurestore), [CYNAI.WORKER.AgentTokenStorageAndLifecycle](worker_node.md#spec-cynai-worker-agenttokenstorageandlifecycle).
         - `agent_token_expires_at` (string, optional)

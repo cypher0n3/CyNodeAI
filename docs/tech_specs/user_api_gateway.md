@@ -17,6 +17,7 @@
   - [Required Operation Coverage](#required-operation-coverage)
   - [Support for `cynork` Chat Slash Commands Requirements Traces](#support-for-cynork-chat-slash-commands-requirements-traces)
 - [Authentication and Auditing](#authentication-and-auditing)
+  - [PMA Provisioning on Session Establishment](#pma-provisioning-on-session-establishment)
   - [Authentication and Auditing Requirements Traces](#authentication-and-auditing-requirements-traces)
 - [Web Console](#web-console)
   - [Web Console Requirements Traces](#web-console-requirements-traces)
@@ -341,11 +342,24 @@ New gateway endpoints or resources added for other clients (e.g. admin console) 
 - The gateway SHOULD support per-user rate limiting and request size limits.
 - For the MVP local user account model and secure credential handling requirements, see [`docs/tech_specs/local_user_accounts.md`](local_user_accounts.md).
 
+### PMA Provisioning on Session Establishment
+
+- Spec ID: `CYNAI.USRGWY.PmaProvisioningOnSessionEstablishment` <a id="spec-cynai-usrgwy-pmaprovisioningonsessionestablishment"></a>
+
+When a user completes authentication and **establishes or resumes** an interactive session-through **cynork**, the **Web Console**, a **messaging** connector, or any other gateway client-the gateway MUST coordinate with the orchestrator so that **greedy PMA provisioning** runs immediately (see [CYNAI.ORCHES.PmaGreedyProvisioningOnLogin](orchestrator.md#spec-cynai-orches-pmagreedyprovisioningonlogin)).
+
+The gateway MUST NOT require the user to send a chat message or first PMA-backed API call before the orchestrator begins PMA instance startup and credential binding for that session.
+
+#### PMA Provisioning on Session Establishment Requirements Traces
+
+- [REQ-USRGWY-0161](../requirements/usrgwy.md#req-usrgwy-0161)
+
 ### Authentication and Auditing Requirements Traces
 
 - [REQ-USRGWY-0124](../requirements/usrgwy.md#req-usrgwy-0124)
 - [REQ-USRGWY-0125](../requirements/usrgwy.md#req-usrgwy-0125)
 - [REQ-USRGWY-0133](../requirements/usrgwy.md#req-usrgwy-0133)
+- [REQ-USRGWY-0161](../requirements/usrgwy.md#req-usrgwy-0161)
 
 ## Web Console
 

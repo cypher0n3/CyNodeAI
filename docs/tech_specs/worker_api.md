@@ -261,6 +261,8 @@ Timeout rules (required)
 - `artifacts` (array, optional): When the job used an SBA runner image and the node read `/job/artifacts/`, the node MAY include artifact descriptors or content (e.g. name, content_type, size_bytes, content_base64 or ref) so the orchestrator can persist artifact blobs and refs.
   When the job used a step-executor runner image, the node MAY similarly include artifacts from `/job/artifacts/` if the step executor staged any.
   Shape is implementation-defined but MUST be suitable for orchestrator storage and client retrieval.
+- `memory_snapshot` (object or null, optional): When the job used an SBA runner image, the node MUST include the job-scoped memory blob (from `/job/memory.json` per [Memory tools](agent_local_tools/memory_tools.md#spec-cynai-mcptoo-memoryjobcompletionsnapshot)) when the file exists and is valid JSON; otherwise MAY omit or set to null.
+  The orchestrator persists it for post-hoc analysis of agent memory state.
 
 #### Status Codes
 
@@ -345,9 +347,9 @@ The Worker API MUST support a **stop job** (cancel job) operation so the orchest
     The node may respond with 202 Accepted and deliver the result when the SBA reports completion.
     If the SBA never reports completion (e.g. crash, hang), the node MUST still report the job as failed or timeout to the orchestrator once the job timeout is reached or the container has exited, so the orchestrator can persist the failure and re-issue or retry as policy allows.
     See [cynode_sba.md - Job lifecycle and status reporting](cynode_sba.md#spec-cynai-sbagnt-joblifecycle).
-  - **Read job results after exit:** After the container has exited (or been stopped), the node MUST read `/job/result.json` from the host bind-mount (and optionally `/job/artifacts/`) and MUST derive job status from the container exit code and/or from the SBA result contract when present.
+  - **Read job results after exit:** After the container has exited (or been stopped), the node MUST read `/job/result.json` from the host bind-mount (and optionally `/job/artifacts/` and `/job/memory.json` per [Memory tools - Job Completion Snapshot](agent_local_tools/memory_tools.md#spec-cynai-mcptoo-memoryjobcompletionsnapshot)) and MUST derive job status from the container exit code and/or from the SBA result contract when present.
     When the container exits without a valid result (e.g. crash, OOM kill, non-zero exit with missing or invalid `/job/result.json`), the node MUST still report a terminal state (e.g. `status=failed`) to the orchestrator with a result payload that allows the orchestrator to persist the failure (and re-issue or retry the job if policy allows).
-  - **Build and return response:** The node MUST build the response body including `sba_result` (when present) and `artifacts` as defined in the Run Job response fields and return them in the same HTTP response to the orchestrator.
+  - **Build and return response:** The node MUST build the response body including `sba_result` (when present), `artifacts`, and `memory_snapshot` (when present per [Memory tools - Job Completion Snapshot](agent_local_tools/memory_tools.md#spec-cynai-mcptoo-memoryjobcompletionsnapshot)) as defined in the Run Job response fields and return them in the same HTTP response to the orchestrator.
   - **Retention:** The node MUST NOT clear or delete the job directory until the response has been sent.
   The node SHOULD retain the job directory until orchestrator persistence is confirmed when the protocol supports it.
   This aligns with [cynode_sba.md - Result and Artifact Delivery](cynode_sba.md#spec-cynai-sbagnt-resultandartifactdelivery) (node-mediated delivery path).

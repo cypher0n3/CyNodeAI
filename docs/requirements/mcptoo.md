@@ -103,8 +103,10 @@ It covers MCP tooling conventions, tool catalog expectations, and SDK installati
   <a id="req-mcptoo-0122"></a>
 - **REQ-MCPTOO-0123:** The help MCP MUST return tool and invocation help text from tool definitions.
   When called without a tool-specific topic, it MUST return an overview and list of available tools (scoped to caller's identity).
+  The help MCP MUST expose `help.list`, which MUST return the same list of available help topics (tool names with short descriptions from each tool's `Help` field) as that list portion, scoped to the caller's identity.
   When called with a tool name, it MUST return the tool's Help plus each invocation's Help with effective scope.
   [CYNAI.MCPTOO.HelpMcpContract](../tech_specs/mcp/mcp_tool_definitions.md#spec-cynai-mcptoo-helpmcpcontract)
+  [CYNAI.MCPTOO.HelpTools](../tech_specs/mcp_tools/help_tools.md#spec-cynai-mcptoo-helptools)
   <a id="req-mcptoo-0123"></a>
 - **REQ-MCPTOO-0124:** The system MUST support external MCP server endpoint registration via the User API Gateway.
   Endpoints MUST be stored with base URL, credential reference, owner, and scope (user-scoped or shared).

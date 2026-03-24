@@ -206,13 +206,16 @@ It covers orchestrator control-plane behavior, task lifecycle, dispatch, and sta
   [CYNAI.ORCHES.InferenceContainerDecision](../tech_specs/orchestrator_inference_container_decision.md#spec-cynai-orches-inferencecontainerdecision)
   [CYNAI.WORKER.Payload.ConfigurationV1](../tech_specs/worker_node_payloads.md#spec-cynai-worker-payload-configuration-v1)
   <a id="req-orches-0149"></a>
-- **REQ-ORCHES-0150:** The orchestrator MUST start the Project Manager Agent (cynode-pma) by instructing a worker node to run PMA as a managed service container when the first inference path becomes available: either the first worker node has reported ready to the orchestrator and is inference-capable, or the orchestrator has an LLM API key configured for PMA via the API Egress Server.
-  The orchestrator MUST deliver the PMA start bundle via node configuration managed services desired state.
+- **REQ-ORCHES-0150:** The orchestrator MUST start the Project Manager Agent (cynode-pma) by instructing a worker node to run **at least one** PMA managed service instance when the first inference path becomes available: either the first worker node has reported ready to the orchestrator and is inference-capable, or the orchestrator has an LLM API key configured for PMA via the API Egress Server.
+  That first instance supports **bootstrap readiness** (see REQ-ORCHES-0189); additional PMA instances are provisioned **per session binding** per REQ-ORCHES-0188.
+  The orchestrator MUST deliver PMA start bundles via node configuration managed services desired state.
   The orchestrator MUST NOT instruct a node to start PMA before at least one of these conditions is satisfied.
   [CYNAI.BOOTST.OrchestratorReadinessAndPmaStartup](../tech_specs/orchestrator_bootstrap.md#spec-cynai-bootst-orchestratorreadinessandpmastartup)
   [CYNAI.ORCHES.ManagedServicesWorkerManaged](../tech_specs/orchestrator.md#spec-cynai-orches-managedservices)
+  [CYNAI.ORCHES.PmaInstancePerSessionBinding](../tech_specs/orchestrator_bootstrap.md#spec-cynai-orches-pmainstancepersessionbinding)
   <a id="req-orches-0150"></a>
 - **REQ-ORCHES-0151:** The orchestrator MUST learn that PMA has come online via worker-reported managed service status (and worker-mediated endpoint) so that the orchestrator can use PMA and update readiness accordingly.
+  The orchestrator MUST track **each** PMA instance by `service_id` and session binding so that handoffs route to the correct instance (REQ-ORCHES-0188).
   [CYNAI.PMAGNT.PmaInformsOrchestratorOnline](../tech_specs/cynode_pma.md#spec-cynai-pmagnt-pmainformsorchestratoronline)
   [CYNAI.WORKER.Payload.CapabilityReportV1](../tech_specs/worker_node_payloads.md#spec-cynai-worker-payload-capabilityreport-v1)
   <a id="req-orches-0151"></a>
@@ -241,16 +244,18 @@ It covers orchestrator control-plane behavior, task lifecycle, dispatch, and sta
   [CYNAI.ORCHES.ManagedServicesWorkerManaged](../tech_specs/orchestrator.md#spec-cynai-orches-managedservices)
   [CYNAI.WORKER.Payload.CapabilityReportV1](../tech_specs/worker_node_payloads.md#spec-cynai-worker-payload-capabilityreport-v1)
   <a id="req-orches-0161"></a>
-- **REQ-ORCHES-0162:** The orchestrator MUST route `model=cynodeai.pm` traffic to PMA using the worker-mediated endpoint reported by the worker and MUST NOT rely on compose DNS or direct host-port addressing for PMA.
+- **REQ-ORCHES-0162:** The orchestrator MUST route `model=cynodeai.pm` traffic to the **PMA managed service instance for the active session binding** using the worker-mediated endpoint reported for that instance's `service_id` and MUST NOT rely on compose DNS or direct host-port addressing for PMA.
   This routing rule MUST apply to both `POST /v1/chat/completions` and `POST /v1/responses`.
   [CYNAI.ORCHES.ManagedServicesWorkerManaged](../tech_specs/orchestrator.md#spec-cynai-orches-managedservices)
+  [CYNAI.ORCHES.PmaInstancePerSessionBinding](../tech_specs/orchestrator_bootstrap.md#spec-cynai-orches-pmainstancepersessionbinding)
   [CYNAI.WORKER.ManagedAgentProxyBidirectional](../tech_specs/worker_api.md#spec-cynai-worker-managedagentproxy)
   <a id="req-orches-0162"></a>
-- **REQ-ORCHES-0163:** For **user-scoped** agents (PAA, SBA), the orchestrator MUST associate each agent token it issues with the **user on whose behalf the agent is acting** (and MUST track this association) so that when the worker proxy forwards requests on behalf of the agent (using the token the worker holds), the gateway can resolve user context for preferences, access control to user- and project-scoped data, and audit attribution.
+- **REQ-ORCHES-0163:** For **user-scoped** agents (PMA, PAA, SBA), the orchestrator MUST associate each agent token it issues with the **user on whose behalf the agent is acting** (and MUST track this association) so that when the worker proxy forwards requests on behalf of the agent (using the token the worker holds), the gateway can resolve user context for preferences, access control to user- and project-scoped data, and audit attribution.
   Agent tokens are delivered to the worker for the worker proxy to hold; agents MUST NOT be given tokens or secrets directly.
+  For **PMA**, credentials are **per authenticated user session** and MUST carry an **invocation class** (see REQ-MCPGAT-0117, REQ-MCPGAT-0118, REQ-ORCHES-0186, and REQ-ORCHES-0187).
   For **SBA**, the token MUST also be bound to task_id, project_id, and session scope.
-  For **system-level** agents (PMA), the agent token is not user-associated.
   [CYNAI.MCPGAT.AgentScopedTokens](../tech_specs/mcp/mcp_gateway_enforcement.md#spec-cynai-mcpgat-agentscopedtokens)
+  [CYNAI.MCPGAT.PmaSessionTokens](../tech_specs/mcp/mcp_gateway_enforcement.md#spec-cynai-mcpgat-pmasessiontokens)
   [CYNAI.WORKER.Payload.ConfigurationV1](../tech_specs/worker_node_payloads.md#spec-cynai-worker-payload-configuration-v1) (managed_services orchestrator.agent_token)
   [CYNAI.WORKER.AgentTokensWorkerHeldOnly](../tech_specs/worker_node.md#spec-cynai-worker-agenttokensworkerheldonly)
   <a id="req-orches-0163"></a>
@@ -347,3 +352,40 @@ It covers orchestrator control-plane behavior, task lifecycle, dispatch, and sta
   [project_manager_agent.md](../tech_specs/project_manager_agent.md)
   [user_api_gateway.md](../tech_specs/user_api_gateway.md)
   <a id="req-orches-0185"></a>
+- **REQ-ORCHES-0186:** The orchestrator MUST issue, refresh, rotate, and invalidate **PMA MCP credentials** per authenticated user session as defined in [CYNAI.MCPGAT.PmaSessionTokens](../tech_specs/mcp/mcp_gateway_enforcement.md#spec-cynai-mcpgat-pmasessiontokens).
+  The orchestrator MUST deliver credential material to workers via node configuration (or an equivalent orchestrator-controlled channel) so the worker proxy can attach credentials without exposing them to PMA.
+  For **long-lived** interactive sessions, the orchestrator MUST rotate credentials **before** expiry and MUST invalidate superseded credentials after the overlap window.
+  [CYNAI.MCPGAT.PmaSessionTokens](../tech_specs/mcp/mcp_gateway_enforcement.md#spec-cynai-mcpgat-pmasessiontokens)
+  [CYNAI.WORKER.AgentTokenStorageAndLifecycle](../tech_specs/worker_node.md#spec-cynai-worker-agenttokenstorageandlifecycle)
+  <a id="req-orches-0186"></a>
+- **REQ-ORCHES-0187:** When the orchestrator hands work to PMA **without** an active User API Gateway session (for example **scheduled** interpretation, **task** routing, or other **orchestrator-initiated** triggers), it MUST issue PMA MCP credentials with invocation class **orchestrator_initiated** and MUST bind them to the **same** user and subject scope (task, schedule, thread lineage) that justified the handoff.
+  When the user is actively driving PMA through the User API Gateway, the orchestrator MUST issue credentials with invocation class **user_gateway_session** (see REQ-USRGWY-0160).
+  The orchestrator MUST NOT present **user_gateway_session** credentials for purely orchestrator-initiated PMA work, and MUST NOT require an interactive gateway login to mint **orchestrator_initiated** credentials when policy allows that automation for the user.
+  [CYNAI.MCPGAT.PmaInvocationClass](../tech_specs/mcp/mcp_gateway_enforcement.md#spec-cynai-mcpgat-pmainvocationclass)
+  [CYNAI.MCPGAT.PmaSessionTokens](../tech_specs/mcp/mcp_gateway_enforcement.md#spec-cynai-mcpgat-pmasessiontokens)
+  <a id="req-orches-0187"></a>
+- **REQ-ORCHES-0188:** The orchestrator MUST provision **one `cynode-pma` managed service instance per session binding** (each instance has a distinct `service_id` and its own worker-proxy UDS identity and credential binding).
+  The orchestrator MUST NOT rely on a single shared PMA container on a worker node to serve all concurrent user sessions or orchestrator-initiated work.
+  The orchestrator MUST route each PMA handoff to the managed service instance **for that session binding**.
+  **Project Analyst Agent (PAA)** remains distinct: `cynode-pma` in `project_analyst` mode is used for **task-scoped** verification and analyst work, not as a substitute for per-session PMA Project Manager instances.
+  [CYNAI.ORCHES.PmaInstancePerSessionBinding](../tech_specs/orchestrator_bootstrap.md#spec-cynai-orches-pmainstancepersessionbinding)
+  [CYNAI.WORKER.ManagedServiceContainers](../tech_specs/worker_node.md#spec-cynai-worker-managedservicecontainers)
+  <a id="req-orches-0188"></a>
+- **REQ-ORCHES-0189:** When the **first** worker node becomes available with a **local inference** path, the orchestrator MUST direct that worker to start **at least one** PMA managed service instance (bootstrap instance) and MUST run a **PMA inference capability check** **before** treating that worker and the control plane as **fully ready** for normal workload.
+  The capability check MUST include the **function test** defined in [CYNAI.BOOTST.PmaInferenceCapabilityCheck](../tech_specs/orchestrator_bootstrap.md#spec-cynai-bootst-pmainferencecapabilitycheck): direct PMA to execute the **`help.list`** MCP tool call and return the results.
+  When readiness relies on **external** PMA inference only (API Egress), the orchestrator MUST still apply an equivalent PMA capability check for any bootstrap PMA instance started on a worker when local inference is configured.
+  The orchestrator MUST NOT report `GET /readyz` success until this check passes for the configured inference path.
+  [CYNAI.BOOTST.OrchestratorReadinessAndPmaStartup](../tech_specs/orchestrator_bootstrap.md#spec-cynai-bootst-orchestratorreadinessandpmastartup)
+  [CYNAI.BOOTST.PmaInferenceCapabilityCheck](../tech_specs/orchestrator_bootstrap.md#spec-cynai-bootst-pmainferencecapabilitycheck)
+  [CYNAI.ORCHES.Rule.HealthEndpoints](../tech_specs/orchestrator.md#spec-cynai-orches-rule-healthendpoints)
+  <a id="req-orches-0189"></a>
+- **REQ-ORCHES-0190:** When a user **authenticates** through the User API Gateway and **establishes or resumes** an interactive session on **any** supported client surface (including **cynork**, **Web Console**, **messaging connector** inbound sessions, and other first-party gateway clients), the orchestrator MUST **greedily** start or ensure a **PMA** managed service instance for that user's **session binding** (per REQ-ORCHES-0188).
+  The orchestrator MUST issue or refresh PMA MCP credentials with invocation class **user_gateway_session**, deliver worker configuration, and MUST NOT wait for the first chat completion or first PMA-consuming request solely to trigger provisioning.
+  [CYNAI.ORCHES.PmaGreedyProvisioningOnLogin](../tech_specs/orchestrator.md#spec-cynai-orches-pmagreedyprovisioningonlogin)
+  [CYNAI.ORCHES.PmaInstancePerSessionBinding](../tech_specs/orchestrator_bootstrap.md#spec-cynai-orches-pmainstancepersessionbinding)
+  <a id="req-orches-0190"></a>
+- **REQ-ORCHES-0191:** The orchestrator MUST **detect stale PMA** managed service instances (for example session ended, user logged out, idle beyond policy, expired session binding or credentials, or orphaned instances after client disconnect) and MUST **tear them down**: remove or update desired state so workers **stop** the corresponding containers, and **invalidate** PMA MCP credentials for those bindings.
+  The orchestrator MUST NOT leave unbounded accumulation of idle PMA instances when policy requires cleanup.
+  [CYNAI.ORCHES.StalePmaTeardown](../tech_specs/orchestrator.md#spec-cynai-orches-stalepmateardown)
+  [CYNAI.ORCHES.PmaInstancePerSessionBinding](../tech_specs/orchestrator_bootstrap.md#spec-cynai-orches-pmainstancepersessionbinding)
+  <a id="req-orches-0191"></a>

@@ -71,7 +71,7 @@ Common invocation pattern for specification tools: (1) Resolve caller identity a
 
 <a id="algo-cynai-mcptoo-taskspecificationsset"></a>
 
-1. Apply common pattern; validate task_id and specification_ids.
+1. Apply common pattern; validate required `task_id` and `specification_ids` (array of uuid).
 2. Resolve task and each specification; MUST ensure task's project_id matches each specification's project_id; reject if any mismatch.
 3. Replace join table rows linking task to specifications; commit.
 4. Audit and return.

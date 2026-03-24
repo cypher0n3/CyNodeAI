@@ -33,6 +33,7 @@
   - [PMA Opportunistic Secret Scan Rule](#pma-opportunistic-secret-scan-rule)
   - [Streaming Assistant Output Requirements Traces](#streaming-assistant-output-requirements-traces)
 - [Node-Local Inference Backend Environment](#node-local-inference-backend-environment)
+  - [Node-Local Model Load and Keepalive](#node-local-model-load-and-keepalive)
   - [Node-Local Inference Backend Environment Requirements Traces](#node-local-inference-backend-environment-requirements-traces)
 - [Policy and Tool Boundaries](#policy-and-tool-boundaries)
   - [See Also (PMA Overview)](#see-also-pma-overview)
@@ -69,6 +70,8 @@ Behavioral responsibilities remain defined by:
 ## Purpose and Trust Boundary
 
 `cynode-pma` is an orchestrator-owned agent runtime hosted as a **worker-managed service container**.
+The orchestrator provisions **one PMA instance per session binding** (distinct `service_id` per instance on the worker); see [CYNAI.ORCHES.PmaInstancePerSessionBinding](orchestrator_bootstrap.md#spec-cynai-orches-pmainstancepersessionbinding).
+**Project Analyst** work remains distinct: `project_analyst` mode is for **task-scoped** verification and analysis, not a substitute for a dedicated Project Manager instance per interactive or orchestrator-initiated session.
 It is not a per-task sandbox container and it is not a worker agent.
 It MUST NOT execute arbitrary code locally.
 It delegates execution to worker nodes and sandbox containers through orchestrator-mediated mechanisms.
@@ -522,9 +525,23 @@ When `cynode-pma` uses node-local inference through the worker-managed service c
 - When an orchestrator-directed backend environment value is not supported by the selected local inference adapter, PMA SHOULD log a bounded operator-visible warning and MUST continue using only the supported subset.
 - PMA MUST NOT require direct access to worker host environment variables when the managed-service inference contract already supplies the needed backend-derived values.
 
+### Node-Local Model Load and Keepalive
+
+- Spec ID: `CYNAI.PMAGNT.NodeLocalModelLoadAndKeepalive` <a id="spec-cynai-pmagnt-nodelocalmodelloadandkeepalive"></a>
+
+When PMA uses **node-local** inference (the default integration is **Ollama** behind the worker's inference proxy per [Node-Local Inference and Sandbox Workflow](worker_node.md#spec-cynai-worker-nodelocalinference)), PMA MUST:
+
+- **Load:** On instance startup (or when the effective local model name changes), call the inference backend so the **effective Project Manager model** is **loaded** into memory (for Ollama, typically via a minimal generate/chat request or the backend's documented load behavior).
+- **Keep warm:** For the **entire lifetime** of that PMA instance, **periodically** invoke the inference backend so the model **remains resident**, using minimal work (short prompt, low `num_predict`, or backend-specific keep-warm operation) compatible with the adapter.
+
+**Default keep-warm interval:** **300 seconds** (5 minutes) between keep-warm calls unless overridden by configuration (see [Configuration Surface](#configuration-surface)); product policy MAY tighten or loosen this default.
+
+The PMA process MUST stop keep-warm activity when the instance is shutting down.
+
 ### Node-Local Inference Backend Environment Requirements Traces
 
 - [REQ-PMAGNT-0116](../requirements/pmagnt.md#req-pmagnt-0116)
+- [REQ-PMAGNT-0129](../requirements/pmagnt.md#req-pmagnt-0129)
 
 ## Policy and Tool Boundaries
 
@@ -555,9 +572,9 @@ In this model, it does so via a worker-proxy URL (UDS-only, per [Unified UDS Pat
 `cynode-pma` MUST NOT call orchestrator endpoints directly; the worker proxy is the single egress from the agent container.
 The gateway remains the single enforcement and audit point at the orchestrator.
 When making MCP requests, `cynode-pma` calls the **worker proxy** (e.g. the URL in `mcp_gateway_proxy_url`); `cynode-pma` MUST NOT receive or present an agent token.
-The **worker proxy** holds the PM agent token (issued by the orchestrator, delivered to the worker in node config) and attaches it when forwarding requests to the orchestrator MCP gateway; see [Agent-Scoped Tokens or API Keys](mcp/mcp_gateway_enforcement.md#spec-cynai-mcpgat-agentscopedtokens).
-The PM token is system-level (not bound to a specific user); user context for a given request comes from the conversation or task when applicable.
-The gateway authenticates the token and restricts tool access to the allowlist and per-tool scope for the resolved agent type.
+The **worker proxy** holds **PMA MCP credentials** issued by the orchestrator **per authenticated user session** (delivered to the worker in node configuration) and attaches the credential that matches the **active session binding** and **invocation class** (interactive User API Gateway session vs orchestrator-initiated work such as schedules or task handoff) when forwarding requests to the orchestrator MCP gateway.
+See [Agent-Scoped Tokens or API Keys](mcp/mcp_gateway_enforcement.md#spec-cynai-mcpgat-agentscopedtokens), [PMA Per-User Session Tokens and Rotation](mcp/mcp_gateway_enforcement.md#spec-cynai-mcpgat-pmasessiontokens), and [PMA Invocation Class](mcp/mcp_gateway_enforcement.md#spec-cynai-mcpgat-pmainvocationclass).
+The gateway authenticates the credential, resolves **user identity** and **invocation class** from it, rejects cross-user tool scope, and restricts tool access to the allowlist and per-tool scope for the PM agent type.
 The gateway restricts PM/PA to tools that have **PM scope** (or **both**) in the orchestrator's per-tool scope; see [Per-tool scope: Sandbox vs PM](mcp_tools/access_allowlists_and_scope.md#spec-cynai-mcpgat-pertoolscope).
 Tools that are sandbox-only MUST NOT be invokable by `cynode-pma`.
 
@@ -617,6 +634,7 @@ See [Default CyNodeAI Interaction Skill](skills_storage_and_inference.md#spec-cy
 
 - When the gateway allowlist and access control permit, `cynode-pma` MAY use the MCP skills tools `skills.create`, `skills.list`, `skills.get`, `skills.update`, and `skills.delete`.
   Permission is determined by the role allowlist in [access_allowlists_and_scope.md](mcp_tools/access_allowlists_and_scope.md) and per-tool access control; the implementation MUST NOT invoke a skills tool if the gateway rejects the call.
+- Authoritative **`skills.*`** tool contracts and gateway rules are in [Skills MCP Tools](mcp_tools/skills_tools.md); backend merge and store semantics are in [Skills storage and inference](skills_storage_and_inference.md).
 - All skill tool invocations are audited and subject to the same scope and malicious-pattern checks as web and CLI.
 
 #### See Also (Skills Tools)
@@ -639,6 +657,7 @@ This section defines the minimum configuration surface for `cynode-pma`.
 
 ### Optional Configuration Values
 
+- **Node-local keep-warm interval** (seconds) for periodic inference-backend calls under [Node-Local Model Load and Keepalive](#node-local-model-load-and-keepalive); default **300** when unset.
 - Feature toggles for spawning analyst sub-agents.
 - Concurrency limits for analyst sub-agents.
 
