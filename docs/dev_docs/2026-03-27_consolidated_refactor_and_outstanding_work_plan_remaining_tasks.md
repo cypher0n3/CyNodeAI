@@ -124,6 +124,18 @@ Source: [_bugs.md](_bugs.md) Bug 5; post-consolidation regression from [2026-03-
 - Gateway handler: `orchestrator/internal/mcpgateway/handlers.go` (routing table, `validateScopedIDs`).
 - API egress: `orchestrator/cmd/api-egress/main.go` (`resolveSubjectFromTask`).
 
+#### Task 4 - `cynork task create` / `ensure_e2e_task` (E2E `task_id` Prereq)
+
+`just e2e --tags control_plane` runs a `task_id` prereq (`helpers.ensure_e2e_task`) so workflow tests receive `state.TASK_ID`.
+
+**Root cause (2026-03-27):** The shared auth prereq can leave **only** `e2e_gateway_session.json` (tokens) next to the temp config path while **`config.yaml` is missing** (`_ensure_shared_auth_config` does not always create the file). `ensure_e2e_task` used to return immediately when `os.path.isfile(config_path)` was false, so **`cynork task create` never ran**.
+Additional hardening: `ensure_minimal_gateway_config_yaml` (`scripts/test_scripts/e2e_config_file.py`), `parse_json_loose` (`scripts/test_scripts/e2e_json.py`), `task_id`/`id` extraction, auth refresh before binary create, and `helpers.gateway_post_task_no_inference` for flaky `POST /v1/tasks` after long MCP runs (`e2e_0810`, `e2e_0812`).
+No defect in the `cynork` binary itself.
+
+- [x] Diagnose: document root cause (sidecar-only auth + early `isfile` guard; optional JSON/`id` edge cases).
+- [x] Fix: remove the `isfile` gate; write minimal `config.yaml` via `ensure_valid_auth_session` / `prepare_e2e_cynork_auth`; `parse_json_loose`; `_task_id_from_create_task_payload`; `gateway_post_task_no_inference`; binary-first with HTTP fallback last.
+- [x] Verify: no `ensure_e2e_task failed` warning under `just e2e --tags control_plane`; workflow slice not skipped for `task_id`; `e2e_0812` allowlist subtest passes (re-run full tag after major stack changes).
+
 #### Discovery (Task 4) Steps
 
 - [x] Trace the request path for `helpers.mcp_tool_call("skills.create", ...)`: confirm whether the direct control-plane request hits the MCP gateway handler or goes through api-egress.
@@ -137,8 +149,8 @@ Source: [_bugs.md](_bugs.md) Bug 5; post-consolidation regression from [2026-03-
 All three test layers MUST be added or updated before implementation.
 
 - **Python E2E tests** (verify failures are understood):
-  - [ ] Run `just e2e --tags control_plane` (or targeted `e2e_0810`) and capture all 11 failures.
-  - [ ] Run `e2e_0812` with the required env vars to un-skip and capture results.
+  - [x] Run `just e2e --tags control_plane` (or targeted `e2e_0810`) and capture all 11 failures.
+  - [x] Run `e2e_0812` with the required env vars to un-skip and capture results.
   - [x] Document expected vs actual behavior for each failing subtest.
 - **BDD scenarios** (add or update in `features/orchestrator/` or `features/e2e/`):
   - [x] Add or update BDD scenario asserting that `skills.create` with `user_id` (and without `task_id`) succeeds through the MCP gateway.
@@ -147,7 +159,7 @@ All three test layers MUST be added or updated before implementation.
   - [x] Add unit test asserting `validateScopedIDs` does not return `task_id required` for `skills.*` tools.
   - [x] Add unit test for extraneous argument handling: call with extra `task_id` on a tool that does not declare `TaskID: true` and assert success (not 400).
   - [x] If the api-egress is involved, add unit test asserting the egress correctly handles tools that use `user_id` scoping instead of `task_id`.
-- [ ] **Red - Python E2E:** Run `just e2e --tags control_plane` (e2e_0810) and e2e_0812 per Red above; confirm failures match the known Bug 5 symptoms.
+- [x] **Red - Python E2E:** Run `just e2e --tags control_plane` (e2e_0810) and e2e_0812 per Red above; confirm failures match the known Bug 5 symptoms.
 - [x] **Red - BDD:** Run `just test-bdd` for MCP gateway scenarios; confirm new skills and extraneous-argument scenarios fail as expected.
 - [x] **Red - Go:** Run `go test` / `just test-go-cover` for `orchestrator/internal/mcpgateway` and `orchestrator/cmd/api-egress`; confirm new unit tests fail for the expected reason until fixed.
 - [x] **Red validation gate:** Do not proceed to Green until root cause is confirmed and Python E2E, BDD, and Go Red checks above prove the gap.
@@ -159,10 +171,10 @@ All three test layers MUST be added or updated before implementation.
   - [x] If E2E request format: update `helpers.mcp_tool_call` to include `task_id` in the request envelope when required, or update individual test calls.
   - [x] If both: fix handler for spec compliance AND update E2E tests for correct request format.
 - [x] Ensure extraneous argument handling complies with spec: gateway MUST ignore unknown argument keys.
-- [ ] Run all e2e_0810 subtests until they pass (all 11 failures resolved).
-- [ ] Resolve e2e_0812 skips if possible (set required env vars in test setup or document why they remain skipped).
+- [x] Run all e2e_0810 subtests until they pass (all 11 failures resolved).
+- [x] Resolve e2e_0812 skips if possible (set required env vars in test setup or document why they remain skipped).
 - [x] Run targeted unit and BDD tests until they pass.
-- [ ] Validation gate: do not proceed until all MCP tool routing tests are green.
+- [x] Validation gate: do not proceed until all MCP tool routing tests are green.
 
 #### Refactor (Task 4)
 
@@ -177,22 +189,22 @@ All three test layers MUST pass before this task is complete.
 
 - [x] **Go unit tests:** Run `just test-go-cover` for `orchestrator/internal/mcpgateway` and `orchestrator/cmd/api-egress`; confirm all MCP gateway unit tests pass and coverage meets thresholds.
 - [x] **BDD tests:** Run `just test-bdd` for MCP gateway scenarios; confirm skills and extraneous-argument scenarios pass.
-- [ ] **Python E2E tests:** Run `just setup-dev restart --force` then `just e2e --tags control_plane`; confirm all e2e_0810 tests pass (0 failures) and e2e_0812 tests pass or have only documented skips.
+- [x] **Python E2E tests:** Run `just setup-dev restart --force` then `just e2e --tags control_plane`; confirm all e2e_0810 tests pass (0 failures) and e2e_0812 tests pass or have only documented skips.
 - [x] Run `just lint-go` for changed packages.
 - [x] Run `just lint-python` for changed test scripts.
-- [ ] **Testing validation gate:** Do not start Task 5 until **Go**, **BDD**, **Python E2E**, `just lint-go`, and `just lint-python` in `#### Testing (Task 4)` above are each satisfied per their checkboxes.
+- [x] **Testing validation gate:** Do not start Task 5 until **Go**, **BDD**, **Python E2E**, `just lint-go`, and `just lint-python` in `#### Testing (Task 4)` above are each satisfied per their checkboxes.
 
 #### Closeout (Task 4)
 
 - [x] Generate a **task completion report** for Task 4: root cause of Bug 5, what was fixed (handler, tests, or both), what tests pass now, any remaining e2e_0812 skips and why.
 - [x] Update `_bugs.md` Bug 5 with resolution status.
-- [ ] Do not start Task 5 until this closeout is done.
-- [ ] Mark every completed step in this task with `- [x]`. (Last step.)
+- [x] Do not start Task 5 until this closeout is done.
+- [x] Mark every completed step in this task with `- [x]`. (Last step.)
 
 **Task 4 verification note (2026-03-27):** Discovery shows the control-plane path never routes MCP tool calls through api-egress; `requiredScopedIds` for `skills.*` is user-scoped only.
 No gateway code change was required for Bug 5; regression tests and BDD were added.
-Run `just e2e --tags control_plane` (and optionally `e2e_0812` with env) against a live stack to close the remaining Python E2E checkboxes.
-See `docs/dev_docs/2026-03-27_task4_mcp_skills_bug5_completion_report.md`.
+**E2E closeout:** See `docs/dev_docs/2026-03-27_task4_control_plane_e2e_execution_report.md` and log `tmp/e2e_control_plane_task4_closeout_2026-03-27.log`.
+See also `docs/dev_docs/2026-03-27_task4_mcp_skills_bug5_completion_report.md` and **Task 4 - `cynork task create` / `ensure_e2e_task`** above.
 
 ---
 
@@ -211,10 +223,12 @@ Source: [2026-03-19_streaming_remaining_work_execution_plan.md](2026-03-19_strea
 
 #### Discovery (Task 5) Steps
 
-- [ ] Re-read PMA streaming requirements and cynode_pma spec for state machine, overwrite scopes, and secret handling.
-- [ ] Inspect `agents/internal/pma/` (chat.go, langchain.go) for current wrapper, event emission, and buffer usage.
-- [ ] Confirm where the secure-buffer helper lives and how PMA should call it.
-- [ ] List existing PMA unit tests that cover streaming and identify gaps for state machine, overwrite, and secure buffers.
+- [x] Re-read PMA streaming requirements and cynode_pma spec for state machine, overwrite scopes, and secret handling.
+- [x] Inspect `agents/internal/pma/` (chat.go, langchain.go) for current wrapper, event emission, and buffer usage.
+- [x] Confirm where the secure-buffer helper lives and how PMA should call it.
+- [x] List existing PMA unit tests that cover streaming and identify gaps for state machine, overwrite, and secure buffers.
+
+See `docs/dev_docs/2026-03-27_task5_discovery_streaming_notes.md`.
 
 #### Red (Task 5)
 

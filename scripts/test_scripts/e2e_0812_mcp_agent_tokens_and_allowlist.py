@@ -92,12 +92,8 @@ class TestMCPAgentTokensAndAllowlist(unittest.TestCase):
 
         token = helpers.read_token_from_config(state.CONFIG_PATH)
         self.assertTrue(token, "access token required")
-        st, t_body = helpers.gateway_request(
-            "POST",
-            "/v1/tasks",
-            token,
-            {"prompt": "e2e mcp allowlist", "use_inference": False},
-            timeout=60,
+        st, t_body = helpers.gateway_post_task_no_inference(
+            token, "e2e mcp allowlist", timeout=60
         )
         self.assertGreater(st, 0, "user gateway unreachable")
         self.assertIn(st, (200, 201), t_body)

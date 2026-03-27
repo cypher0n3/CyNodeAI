@@ -27,3 +27,9 @@ Closure work adds **regression tests** (Go + BDD) and updates **`docs/dev_docs/_
 
 - Run **`just e2e --tags control_plane`** (and optionally **`e2e_0812`** with required env) against a live dev stack to satisfy remaining plan checkboxes for Python E2E.
 - **`e2e_0812`** may still skip without agent token env; unchanged by this task.
+
+## E2E `task_id` Prereq (`ensure_e2e_task`) - 2026-03-27 Addendum
+
+The `task_id` prereq could fail while **`cynork task create` was never invoked**: auth left **tokens in `e2e_gateway_session.json` only**, with **no `config.yaml`**, and `ensure_e2e_task` exited early on `os.path.isfile(config_path)`.
+Fixed by writing minimal `gateway_url` YAML via `ensure_minimal_gateway_config_yaml`, dropping the early `isfile` check, and hardening JSON / `id` handling. **`helpers.gateway_post_task_no_inference`** reduces flakes on `POST /v1/tasks` after long MCP matrices (`e2e_0810`, `e2e_0812`).
+See **Task 4 - `cynork task create` / `ensure_e2e_task`** in `docs/dev_docs/2026-03-27_consolidated_refactor_and_outstanding_work_plan_remaining_tasks.md`.

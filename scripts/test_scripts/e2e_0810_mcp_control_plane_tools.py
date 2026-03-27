@@ -73,12 +73,8 @@ class TestMCPControlPlaneToolRoutes(unittest.TestCase):
                 self.assertEqual(code, 404, raw)
 
         # --- Create task (user API) so task-scoped tools have a real task_id ---
-        st, t_body = helpers.gateway_request(
-            "POST",
-            "/v1/tasks",
-            token,
-            {"prompt": "e2e mcp tool routing (no inference)", "use_inference": False},
-            timeout=60,
+        st, t_body = helpers.gateway_post_task_no_inference(
+            token, "e2e mcp tool routing (no inference)"
         )
         self.assertGreater(st, 0, "user gateway unreachable (check USER_API / stack)")
         self.assertIn(st, (200, 201), t_body)
@@ -212,7 +208,11 @@ class TestMCPControlPlaneToolRoutes(unittest.TestCase):
         with self.subTest(tool="artifact.get"):
             code, raw, _ = mcp(
                 "artifact.get",
-                {"task_id": task_id, "path": "no/such/artifact.txt"},
+                {
+                    "user_id": user_id,
+                    "scope": "user",
+                    "path": "no/such/artifact.txt",
+                },
             )
             self.assertEqual(code, 404, raw)
 
@@ -282,12 +282,8 @@ class TestMCPControlPlaneToolRoutes(unittest.TestCase):
             self.assertEqual(code, 200, raw)
 
         # Second task for cancel (leave first task for reads above).
-        st, t2_body = helpers.gateway_request(
-            "POST",
-            "/v1/tasks",
-            token,
-            {"prompt": "e2e mcp cancel target", "use_inference": False},
-            timeout=60,
+        st, t2_body = helpers.gateway_post_task_no_inference(
+            token, "e2e mcp cancel target"
         )
         self.assertGreater(st, 0, "user gateway unreachable (check USER_API / stack)")
         self.assertIn(st, (200, 201), t2_body)

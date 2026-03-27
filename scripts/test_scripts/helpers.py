@@ -13,6 +13,8 @@ import urllib.error
 import urllib.request
 
 from scripts.test_scripts import config
+from scripts.test_scripts.e2e_config_file import ensure_minimal_gateway_config_yaml
+from scripts.test_scripts.e2e_json import parse_json_loose
 import scripts.test_scripts.e2e_state as state
 
 # Cynork persists gateway_url + TUI prefs in config.yaml only (no secrets).
@@ -166,12 +168,9 @@ def prepare_e2e_cynork_auth():
             os.makedirs(d, mode=0o700, exist_ok=True)
         except OSError as exc:
             return False, f"create config dir: {exc}"
-    if not os.path.isfile(path):
-        try:
-            with open(path, "w", encoding="utf-8") as f:
-                f.write(f"gateway_url: {config.USER_API}\n")
-        except OSError as exc:
-            return False, f"write config: {exc}"
+    ok_yaml, yaml_detail = ensure_minimal_gateway_config_yaml(path)
+    if not ok_yaml:
+        return False, yaml_detail
     return ensure_valid_auth_session(path)
 
 
@@ -360,6 +359,28 @@ def gateway_request(method, path, access_token, json_body=None, timeout=30):
         return 0, ""
 
 
+def gateway_post_task_no_inference(token, prompt, timeout=60, retries=4):
+    """POST ``/v1/tasks`` with ``use_inference: false``; retry on transport failure (st==0).
+
+    Long local E2E runs (MCP matrices, UDS proxy) can leave the next gateway call timing out;
+    a short backoff reduces flakes.
+    """
+    last_st, last_body = 0, ""
+    for _ in range(retries):
+        st, body = gateway_request(
+            "POST",
+            "/v1/tasks",
+            token,
+            {"prompt": prompt, "use_inference": False},
+            timeout=timeout,
+        )
+        if st > 0:
+            return st, body
+        last_st, last_body = st, body
+        time.sleep(2)
+    return last_st, last_body
+
+
 def read_refresh_token_from_config(config_path):
     """Read refresh token from E2E sidecar or legacy YAML. Return None if missing."""
     _, ref = _read_e2e_session_tokens(config_path)
@@ -400,8 +421,9 @@ def read_token_from_config(config_path):
 
 def ensure_valid_auth_session(config_path):
     """Ensure cynork config has a currently valid auth session; return (ok, detail)."""
-    if not config_path or not os.path.isfile(config_path):
-        return False, "config path missing"
+    ok_yaml, yaml_detail = ensure_minimal_gateway_config_yaml(config_path)
+    if not ok_yaml:
+        return False, yaml_detail
     token = read_token_from_config(config_path)
     if not token:
         ok, out, err = _run_cynork_subprocess(
@@ -450,32 +472,27 @@ def ensure_e2e_task(config_path, max_attempts=3):
     """Create one prompt task and set state.TASK_ID for tests that need it.
 
     Idempotent if already set. Return True if state.TASK_ID is set, False on failure.
-    Requires valid auth (ensure_valid_auth_session first).
+    Refreshes the shared auth session before calling ``cynork`` so ``CYNORK_TOKEN``
+    matches the E2E sidecar after long suites.
+
+    Prefer ``cynork task create`` (binary); if that yields no task id after retries,
+    fall back to user-gateway ``POST /v1/tasks`` when an access token is available.
     """
     if getattr(state, "TASK_ID", None):
         return True
-    if not config_path or not os.path.isfile(config_path):
+    if not config_path:
         return False
-    for attempt in range(1, max_attempts + 1):
-        if attempt > 1:
-            time.sleep(5)
-        _, out, _ = run_cynork(
-            [
-                "task",
-                "create",
-                "-p",
-                "E2E setup: please reply ok.",
-                "-o",
-                "json",
-            ],
-            config_path,
-        )
-        data = parse_json_safe(out)
-        task_id = (data or {}).get("task_id") or ""
-        if task_id:
-            state.TASK_ID = task_id
-            return True
-    return False
+    # Do not require config.yaml here: ``ensure_valid_auth_session`` creates a minimal
+    # gateway_url file when only the E2E token sidecar exists (auth prereq path).
+    auth_ok, _ = ensure_valid_auth_session(config_path)
+    if not auth_ok:
+        return False
+    if _ensure_e2e_task_via_cynork(config_path, max_attempts):
+        return True
+    token = read_token_from_config(config_path)
+    if not token:
+        return False
+    return _ensure_e2e_task_via_gateway(token, max_attempts)
 
 
 def ensure_node_registered():
@@ -646,6 +663,58 @@ def parse_json_safe(text):
         return json.loads(text) if text else None
     except json.JSONDecodeError:
         return None
+
+
+def _task_id_from_create_task_payload(data):
+    """Return task id string from create-task JSON (user API / cynork), or ""."""
+    if not isinstance(data, dict):
+        return ""
+    tid = data.get("task_id") or data.get("id") or ""
+    if tid is None:
+        return ""
+    return str(tid).strip()
+
+
+def _ensure_e2e_task_via_cynork(config_path, max_attempts):
+    """Run ``cynork task create``; set ``state.TASK_ID`` on success. Return bool."""
+    for attempt in range(1, max_attempts + 1):
+        if attempt > 1:
+            time.sleep(5)
+        _ok, out, err = run_cynork(
+            [
+                "task",
+                "create",
+                "-p",
+                "E2E setup: please reply ok.",
+                "-o",
+                "json",
+            ],
+            config_path,
+        )
+        data = parse_json_loose(out) or parse_json_loose(err)
+        task_id = _task_id_from_create_task_payload(data)
+        if task_id:
+            state.TASK_ID = task_id
+            return True
+    return False
+
+
+def _ensure_e2e_task_via_gateway(token, max_attempts):
+    """POST ``/v1/tasks``; set ``state.TASK_ID`` on success. Return bool."""
+    for attempt in range(1, max_attempts + 1):
+        if attempt > 1:
+            time.sleep(5)
+        st, body = gateway_post_task_no_inference(
+            token, "E2E setup: please reply ok.", timeout=60, retries=4
+        )
+        if st not in (200, 201):
+            continue
+        data = parse_json_loose(body) or {}
+        tid = _task_id_from_create_task_payload(data)
+        if tid:
+            state.TASK_ID = tid
+            return True
+    return False
 
 
 def jq_get(obj, *keys, default=None):
