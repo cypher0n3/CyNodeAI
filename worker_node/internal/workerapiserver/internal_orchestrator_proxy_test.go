@@ -322,14 +322,9 @@ func TestHandleInternalOrchestratorAgentReady_ForwardSuccess(t *testing.T) {
 	}
 }
 
-// TestPerServiceUDS_MCPCallRoundTrip exercises the same path PMA uses: http+unix://…/proxy.sock
-// plus POST /v1/worker/internal/orchestrator/mcp:call with the managed-service proxy JSON envelope.
-func TestPerServiceUDS_MCPCallRoundTrip(t *testing.T) {
-	store := testSecureStore(t)
-	if err := store.PutAgentToken("svc-uds", "tok-uds", ""); err != nil {
-		t.Fatal(err)
-	}
-	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+func newMCPCallRoundTripUpstream(t *testing.T) *httptest.Server {
+	t.Helper()
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != toolsCallPath {
 			t.Errorf("upstream path %s", r.URL.Path)
 		}
@@ -346,26 +341,34 @@ func TestPerServiceUDS_MCPCallRoundTrip(t *testing.T) {
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = w.Write([]byte(`{"routed":true}`))
 	}))
-	defer up.Close()
+}
 
-	oldClient := internalOrchestratorHTTPClient
-	internalOrchestratorHTTPClient = up.Client()
-	t.Cleanup(func() { internalOrchestratorHTTPClient = oldClient })
+func unixSocketHTTPClient(udsPath string) *http.Client {
+	return &http.Client{
+		Transport: &http.Transport{
+			DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
+				var d net.Dialer
+				return d.DialContext(ctx, "unix", udsPath)
+			},
+		},
+	}
+}
 
+func startUDSInternalOrchestratorTestServer(t *testing.T, store *securestore.Store, mcpToolsURL, serviceID string) (udsPath string, shutdown func()) {
+	t.Helper()
 	mux := http.NewServeMux()
 	registerInternalOrchestratorProxyHandlers(mux, embedInternalProxyConfig{
-		MCPToolsBaseURL: up.URL,
+		MCPToolsBaseURL: mcpToolsURL,
 		SecureStore:     store,
 	})
-
 	dir := t.TempDir()
-	udsPath := filepath.Join(dir, "run", "managed_agent_proxy", "svc-uds", "proxy.sock")
+	udsPath = filepath.Join(dir, "run", "managed_agent_proxy", serviceID, "proxy.sock")
 	cfg := &RunConfig{
 		PublicHandler:      http.NewServeMux(),
 		InternalHandler:    mux,
 		ListenAddr:         "127.0.0.1:0",
 		InternalListenAddr: "",
-		SocketByService:    map[string]string{"svc-uds": udsPath},
+		SocketByService:    map[string]string{serviceID: udsPath},
 	}
 	srv, err := NewServer(cfg)
 	if err != nil {
@@ -381,12 +384,30 @@ func TestPerServiceUDS_MCPCallRoundTrip(t *testing.T) {
 	case <-time.After(2 * time.Second):
 		t.Fatal("server not ready")
 	}
-	defer func() {
+	return udsPath, func() {
 		cancel()
 		shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer shutdownCancel()
 		_ = srv.Shutdown(shutdownCtx)
-	}()
+	}
+}
+
+// TestPerServiceUDS_MCPCallRoundTrip exercises the same path PMA uses: http+unix://…/proxy.sock
+// plus POST /v1/worker/internal/orchestrator/mcp:call with the managed-service proxy JSON envelope.
+func TestPerServiceUDS_MCPCallRoundTrip(t *testing.T) {
+	store := testSecureStore(t)
+	if err := store.PutAgentToken("svc-uds", "tok-uds", ""); err != nil {
+		t.Fatal(err)
+	}
+	up := newMCPCallRoundTripUpstream(t)
+	defer up.Close()
+
+	oldClient := internalOrchestratorHTTPClient
+	internalOrchestratorHTTPClient = up.Client()
+	t.Cleanup(func() { internalOrchestratorHTTPClient = oldClient })
+
+	udsPath, shutdown := startUDSInternalOrchestratorTestServer(t, store, up.URL, "svc-uds")
+	defer shutdown()
 
 	payload := base64.StdEncoding.EncodeToString([]byte(`{"tool_name":"help.list","arguments":{}}`))
 	body := `{"version":1,"method":"POST","path":"/v1/mcp/tools/call","headers":{"Content-Type":["application/json"]},"body_b64":"` + payload + `"}`
@@ -395,15 +416,7 @@ func TestPerServiceUDS_MCPCallRoundTrip(t *testing.T) {
 		t.Fatal(err)
 	}
 	req.Header.Set("Content-Type", "application/json")
-	client := &http.Client{
-		Transport: &http.Transport{
-			DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
-				var d net.Dialer
-				return d.DialContext(ctx, "unix", udsPath)
-			},
-		},
-	}
-	resp, err := client.Do(req)
+	resp, err := unixSocketHTTPClient(udsPath).Do(req)
 	if err != nil {
 		t.Fatal(err)
 	}

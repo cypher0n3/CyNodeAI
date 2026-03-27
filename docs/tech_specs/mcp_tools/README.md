@@ -15,7 +15,7 @@ All tool definitions in these specs comply with the project's canonical MCP tool
 - **Endpoint resolution**: When `Server` is not `default`, the gateway resolves the endpoint slug to base URL and credentials in request context.
   See [MCP Endpoint Registry](../mcp/mcp_endpoint_registry.md) for the complete specification.
 
-Built-in catalog tools normally use `Server: default` and are implemented by the orchestrator MCP gateway, except **agent-local** tools documented as such (e.g. [Memory tools](../agent_local_tools/memory_tools.md) for the SBA: on-disk in the sandbox, no gateway hop).
+Built-in catalog tools normally use `Server: default` and are implemented on the orchestrator **control-plane** MCP tool routes, except **agent-local** tools documented as such (e.g. [Memory tools](../agent_local_tools/memory_tools.md) for the SBA: on-disk in the sandbox, no gateway hop).
 
 ## Access, Allowlists, and Per-Tool Scope
 

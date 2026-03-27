@@ -38,5 +38,5 @@ Ensure `WORKER_API_BEARER_TOKEN` and (if using the API) other env are set in the
 ## Node-Manager on the Host
 
 For full node behavior (register with orchestrator, fetch config, start PMA and sandbox containers), run node-manager on the host so it can call podman/docker.
-Use the repo `just setup-dev start` flow (orchestrator + node-manager binary) or run the node-manager binary with the right env; it will start worker-api and manage containers.
-The worker_node compose stack is worker-api only.
+Use the repo `just setup-dev start` flow (orchestrator + node-manager binary) or run the node-manager binary with the right env; the Worker API is served in-process by that binary, which also manages PMA and sandbox containers.
+The worker_node compose stack is **worker-api only** (optional isolation of the HTTP API without full node-manager behavior).

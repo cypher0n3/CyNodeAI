@@ -20,7 +20,7 @@ import subprocess
 import sys
 import unittest
 
-from scripts.test_scripts import config, helpers
+from scripts.test_scripts import config, helpers, ollama_e2e_helpers
 from scripts.test_scripts import e2e_tags
 import scripts.test_scripts.e2e_state as state
 
@@ -207,12 +207,12 @@ def _run_single_prereq(name, opts):
         if opts.skip_ollama:
             os.environ["E2E_SKIP_INFERENCE_SMOKE"] = "1"
         else:
-            if not helpers.run_ollama_inference_smoke():
+            if not ollama_e2e_helpers.run_ollama_inference_smoke():
                 print("Error: Ollama inference smoke failed", file=sys.stderr)
                 return False
             include_tags = [t.strip() for t in (opts.tags or "").split(",") if t.strip()]
             if "pma_inference" in include_tags:
-                if not helpers.ollama_container_running():
+                if not ollama_e2e_helpers.ollama_container_running():
                     print(
                         "Error: pma_inference needs stack started with Ollama.",
                         file=sys.stderr,

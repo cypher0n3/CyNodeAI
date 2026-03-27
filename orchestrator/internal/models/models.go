@@ -702,20 +702,20 @@ type TaskArtifact struct {
 // Uniqueness is enforced per scope_partition + path (see orchestrator_artifacts_storage.md).
 // For GORM persistence, use OrchestratorArtifactRecord in the database package.
 type OrchestratorArtifactBase struct {
-	ScopeLevel   string     `gorm:"column:scope_level;index" json:"scope_level"`       // user | group | project | global
-	ScopePartition string   `gorm:"column:scope_partition;uniqueIndex:uix_orch_art_scope_path,priority:1;not null" json:"scope_partition"`
-	OwnerUserID  *uuid.UUID `gorm:"column:owner_user_id;index" json:"owner_user_id,omitempty"`
-	GroupID      *uuid.UUID `gorm:"column:group_id;index" json:"group_id,omitempty"`
-	ProjectID    *uuid.UUID `gorm:"column:project_id;index" json:"project_id,omitempty"`
-	Path         string     `gorm:"column:path;uniqueIndex:uix_orch_art_scope_path,priority:2;not null" json:"path"`
-	StorageRef   string     `gorm:"column:storage_ref;not null" json:"storage_ref"`
-	SizeBytes    *int64     `gorm:"column:size_bytes" json:"size_bytes,omitempty"`
-	ContentType  *string    `gorm:"column:content_type" json:"content_type,omitempty"`
-	ChecksumSHA256 *string  `gorm:"column:checksum_sha256" json:"checksum_sha256,omitempty"`
-	CreatedByJobID *uuid.UUID `gorm:"column:created_by_job_id;index" json:"created_by_job_id,omitempty"`
+	ScopeLevel          string     `gorm:"column:scope_level;index" json:"scope_level"` // user | group | project | global
+	ScopePartition      string     `gorm:"column:scope_partition;uniqueIndex:uix_orch_art_scope_path,priority:1;not null" json:"scope_partition"`
+	OwnerUserID         *uuid.UUID `gorm:"column:owner_user_id;index" json:"owner_user_id,omitempty"`
+	GroupID             *uuid.UUID `gorm:"column:group_id;index" json:"group_id,omitempty"`
+	ProjectID           *uuid.UUID `gorm:"column:project_id;index" json:"project_id,omitempty"`
+	Path                string     `gorm:"column:path;uniqueIndex:uix_orch_art_scope_path,priority:2;not null" json:"path"`
+	StorageRef          string     `gorm:"column:storage_ref;not null" json:"storage_ref"`
+	SizeBytes           *int64     `gorm:"column:size_bytes" json:"size_bytes,omitempty"`
+	ContentType         *string    `gorm:"column:content_type" json:"content_type,omitempty"`
+	ChecksumSHA256      *string    `gorm:"column:checksum_sha256" json:"checksum_sha256,omitempty"`
+	CreatedByJobID      *uuid.UUID `gorm:"column:created_by_job_id;index" json:"created_by_job_id,omitempty"`
 	LastModifiedByJobID *uuid.UUID `gorm:"column:last_modified_by_job_id" json:"last_modified_by_job_id,omitempty"`
-	CorrelationTaskID *uuid.UUID `gorm:"column:correlation_task_id;index" json:"correlation_task_id,omitempty"`
-	RunID *uuid.UUID `gorm:"column:run_id;index" json:"run_id,omitempty"`
+	CorrelationTaskID   *uuid.UUID `gorm:"column:correlation_task_id;index" json:"correlation_task_id,omitempty"`
+	RunID               *uuid.UUID `gorm:"column:run_id;index" json:"run_id,omitempty"`
 }
 
 // OrchestratorArtifact is a scope-partitioned artifact (domain type for API and MCP).

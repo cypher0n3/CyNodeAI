@@ -70,8 +70,8 @@ func TestIntegration_StartBackgroundJobs_hashOnlyThenStaleOnly(t *testing.T) {
 	parent, cancel := context.WithCancel(ctx)
 	StartBackgroundJobs(parent, svc, &config.OrchestratorConfig{
 		ArtifactHashBackfillEnabled:  true,
-		ArtifactHashBackfillInterval:   10 * time.Millisecond,
-		ArtifactStaleCleanupEnabled:    false,
+		ArtifactHashBackfillInterval: 10 * time.Millisecond,
+		ArtifactStaleCleanupEnabled:  false,
 	}, slog.New(slog.NewTextHandler(io.Discard, nil)))
 	time.Sleep(25 * time.Millisecond)
 	cancel()

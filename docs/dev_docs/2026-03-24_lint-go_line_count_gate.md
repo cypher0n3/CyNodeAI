@@ -1,4 +1,8 @@
-# lint-go: line count gate (2026-03-24)
+# Lint-Go: Line Count Gate (2026-03-24)
+
+- [Behaviour](#behaviour)
+
+## Behaviour
 
 `just lint-go` (`.ci_scripts/justfile`) scans repository `.go` files (excludes `.git`, `vendor`, `.venv`, `tmp`, and `_bdd/tmp`).
 

@@ -27,7 +27,7 @@ Cynork does not depend on [go_shared_libs](../go_shared_libs/); it talks to the 
 Prefer repo-level tooling in the root [`justfile`](../justfile).
 
 - Build from repo root with `just build-cynork` or `just build-cynork-dev`.
-- Run against a local User API Gateway (e.g. after `just e2e` or running the orchestrator compose stack).
+- Run against a local User API Gateway after `just setup-dev start`, `just setup-dev full-demo`, or any workflow that brings up the orchestrator stack and gateways.
 - Configuration: config file (default `~/.config/cynork/config.yaml`) and environment overrides; see [cynork CLI spec - Authentication and Configuration](../docs/tech_specs/cynork_cli.md#authentication-and-configuration).
 
 ## 4 Testing and Linting

@@ -90,11 +90,13 @@ skips), not silent hangs without an owner.
 - Markdown formatting is governed by `.editorconfig` and `.markdownlint.yml`.
   - Comply with standards outlined in `docs/docs_standards/markdown_conventions.md`.
   - Keep Markdown ASCII-only (avoid emoji and non-ASCII punctuation) unless explicitly allowed by the linter config.
+    **Exception:** the repository root [README.md](README.md) may use non-ASCII (for example emoji in overview bullets) when it improves scanability.
   - Do NOT use markdown tables unless explicitly directed.
   - **NOTE:** Use `just lint-md <path>` to apply automatic markdownlint fixes before fixing other linter issues.
     This will save a lot of manual work.
 - Python linting configuration exists in `.flake8` and `.pylintrc` (line length 100).
   When adding Python code, follow these configs and keep excluded directories in mind (for example `tmp/`).
+- Go files have a max allowed line length of 1000 lines.
 
 ## Contribution Expectations
 

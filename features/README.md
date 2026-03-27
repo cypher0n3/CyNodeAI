@@ -77,7 +77,7 @@ This repository currently validates behavior primarily through Go tests and end-
 
 - Run `just test-go` to run Go tests across all modules.
 - Run `just test-bdd` to run the current BDD/Godog suites for modules that ship `_bdd` tests in this repo, which currently includes orchestrator, worker node, cynork, agents, and e2e support modules.
-- Run `just e2e` to run the repository happy path that exercises orchestrator and worker node behavior.
+- Run `just e2e` to run the Python E2E suite against an already-running stack (user-gateway, control-plane, node-manager / Worker API).
 
 Feature scenarios may also be reflected in orchestrator integration tests under [`orchestrator/internal/handlers/`](../orchestrator/internal/handlers/).
 

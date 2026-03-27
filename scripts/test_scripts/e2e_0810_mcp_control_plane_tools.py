@@ -1,12 +1,13 @@
 # E2E: POST /v1/mcp/tools/call on control-plane — every routed MCP tool name (or 404 path).
 # Same matrix over the live worker UDS path (POST …/mcp:call) as cynode-pma uses.
-# Traces: docs/tech_specs/mcp_tooling.md; REQ-MCPGAT (gateway routing); node_tools.md.
+# Traces: docs/tech_specs/mcp/mcp_tooling.md; REQ-MCPGAT-0001, REQ-MCPGAT-0106;
+# docs/tech_specs/mcp_tools/node_tools.md; REQ-MCPTOO-0106.
 
 import os
 import unittest
 import uuid
 
-from scripts.test_scripts import helpers
+from scripts.test_scripts import helpers, mcp_worker_uds_helpers
 import scripts.test_scripts.e2e_state as state
 
 
@@ -320,8 +321,8 @@ class TestMCPControlPlaneToolRoutes(unittest.TestCase):
         ):
             self.skipTest("E2E_SKIP_WORKER_MCP_UDS is set")
 
-        state_dir = helpers.resolve_worker_node_state_dir()
-        socks = helpers.find_managed_agent_proxy_socks(state_dir)
+        state_dir = mcp_worker_uds_helpers.resolve_worker_node_state_dir()
+        socks = mcp_worker_uds_helpers.find_managed_agent_proxy_socks(state_dir)
         if not socks:
             msg = (
                 "no per-service proxy.sock under run/managed_agent_proxy "
@@ -341,7 +342,7 @@ class TestMCPControlPlaneToolRoutes(unittest.TestCase):
         for sock in socks:
 
             def mcp_uds(tool, args=None, _sock=sock):
-                code, raw = helpers.mcp_tool_call_worker_uds(
+                code, raw = mcp_worker_uds_helpers.mcp_tool_call_worker_uds(
                     _sock, tool, arguments=args, timeout=120
                 )
                 return code, raw, helpers.parse_json_safe(raw)

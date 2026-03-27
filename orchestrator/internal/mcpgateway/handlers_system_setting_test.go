@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/cypher0n3/cynodeai/orchestrator/internal/database"
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/models"
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/testutil"
 )
@@ -142,11 +141,7 @@ func TestHandleSystemSettingList_StoreError(t *testing.T) {
 
 func TestHandleSystemSettingCreateUpdate_StoreError(t *testing.T) {
 	args := map[string]interface{}{"key": "k", "value": "v", "value_type": "string"}
-	cases := []struct {
-		name string
-		prep func(*testutil.MockDB)
-		call func(context.Context, database.Store, map[string]interface{}, *models.McpToolCallAuditLog) (int, []byte, *models.McpToolCallAuditLog)
-	}{
+	cases := []mcpHandlerToolCase{
 		{"create", func(m *testutil.MockDB) { m.ForceError = errors.New("db") }, handleSystemSettingCreate},
 		{"update", func(m *testutil.MockDB) { m.UpdateSystemSettingErr = errors.New("db") }, handleSystemSettingUpdate},
 	}

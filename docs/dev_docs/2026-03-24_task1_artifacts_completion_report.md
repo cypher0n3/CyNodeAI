@@ -1,10 +1,11 @@
-# Task 1 completion report: Orchestrator artifacts (2026-03-24)
+# Task 1 Completion Report: Orchestrator Artifacts (2026-03-24)
 
 ## Summary
 
-Implemented **explicit read grants** for user-scoped orchestrator artifacts (`artifact_read_grants` table, `GrantArtifactRead` / `HasArtifactReadGrant`, RBAC in `artifacts.Service.canReadScope`), extended **BDD** with group/project/global scope scenarios, **cross-principal read** via grant, and **MCP gateway** routing checks (PM agent may `artifact.put`; sandbox agent denied). Wired `POST /v1/mcp/tools/call` into the orchestrator `_bdd` test mux with configurable PM/sandbox bearer tokens.
+Implemented **explicit read grants** for user-scoped orchestrator artifacts (`artifact_read_grants` table, `GrantArtifactRead` / `HasArtifactReadGrant`, RBAC in `artifacts.Service.canReadScope`), extended **BDD** with group/project/global scope scenarios, **cross-principal read** via grant, and **MCP gateway** routing checks (PM agent may `artifact.put`; sandbox agent denied).
+Wired `POST /v1/mcp/tools/call` into the orchestrator `_bdd` test mux with configurable PM/sandbox bearer tokens.
 
-## What passed
+## What Passed
 
 - `go test ./orchestrator/_bdd` (orchestrator Godog suite), including new artifact scenarios.
 - `go test ./orchestrator/internal/artifacts/...` (including integration tests with testcontainers/PG).
@@ -13,13 +14,17 @@ Implemented **explicit read grants** for user-scoped orchestrator artifacts (`ar
 - `just lint-go` (vet + staticcheck).
 - `just validate-feature-files` after adding `@req_*` tags to scenarios.
 
-## Deviations and follow-up
+## Deviations and Follow-Up
 
-- **`just test-go-cover`** still fails repo-wide for **pre-existing** gaps (e.g. cynork `internal/tui`, `tuicache`; orchestrator `internal/database` at ~85%, `internal/artifacts` ~62%, `mcpgateway`, `s3blob`, several `cmd/*` packages below 90%). Task 1 added integration coverage for grants and service read path; raising **entire** package percentages to 90% is follow-on work, not completed in this pass.
+- **`just test-go-cover`** still fails repo-wide for **pre-existing** gaps (e.g. cynork `internal/tui`, `tuicache`; orchestrator `internal/database` at ~85%, `internal/artifacts` ~62%, `mcpgateway`, `s3blob`, several `cmd/*` packages below 90%).
+  Task 1 added integration coverage for grants and service read path; raising **entire** package percentages to 90% is follow-on work, not completed in this pass.
 - **`just lint-go-ci`** still reports many issues across the repo (dupl, goconst, etc.); not introduced solely by this task; plan noted existing golangci noise.
-- **Extract shared RBAC helpers** (Refactor): artifact scope checks remain in `internal/artifacts`; handlers stay thin. No shared extraction was necessary once read path used `checkScope` for non-user scopes; **no silent deferral**—extraction was not needed for duplicate code between handlers.
+- **Extract shared RBAC helpers** (Refactor):
+  - Artifact scope checks remain in `internal/artifacts`; handlers stay thin.
+  - No shared extraction was necessary once the read path used `checkScope` for non-user scopes.
+  - **no silent deferral**-extraction was not needed for duplicate code between handlers.
 
-## Files touched (high level)
+## Files Touched (High Level)
 
 - `orchestrator/internal/database/artifact_read_grants.go`, `migrate.go`
 - `orchestrator/internal/artifacts/service.go`, `service_integration_test.go`

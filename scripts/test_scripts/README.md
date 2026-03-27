@@ -19,13 +19,14 @@
 ## Overview
 
 Python-based E2E tests that exercise the user-gateway (auth, tasks, models, chat) and the control-plane (node registration, capability) via the cynork CLI and curl.
-They mirror the flow in `scripts/setup-dev.sh` `run_e2e_test` but run as unittest; the suite is independent of the bash scripts.
+They target the same running services and ports you get from `just setup-dev start` or `just setup-dev full-demo`.
+`just e2e` runs this suite by invoking `run_e2e.py`, which discovers and executes these tests with the standard library `unittest` harness (see [scripts/README.md](../README.md) for stack recipes).
 Tests are discovered from all `e2e_*.py` modules in this directory.
 Standard library only plus subprocess (cynork, curl); no extra Python deps.
 
 ## Prerequisites
 
-- **Stack running:** orchestrator (compose), node (node-manager + worker-api).
+- **Stack running:** orchestrator (compose) and node-manager on the host (`cynodeai-wnm-dev`), which embeds the Worker API in-process (same port as standalone worker-api in compose-only setups).
   Start with `just setup-dev start` or `just setup-dev full-demo` (which runs the suite after start).
   Default startup uses the **prescribed sequence** (orchestrator without OLLAMA in stack; PMA via orchestrator/worker).
   If the stack does not reach ready, use `--ollama-in-stack` or `SETUP_DEV_OLLAMA_IN_STACK=1` when OLLAMA in compose is needed.

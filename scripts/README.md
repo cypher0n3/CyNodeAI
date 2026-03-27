@@ -49,8 +49,8 @@ When you run `just setup-dev start`, `full-demo`, or `restart`, the following ru
    **ollama** is the only profile (use `--ollama-in-stack` or `SETUP_DEV_OLLAMA_IN_STACK=1`).
    **AI agents must NOT use** these flags; they bypass the node-manager path and invalidate GPU variant E2E (e2e_0800).
    PMA is started by the node-manager, not by compose.
-3. **Start node** - Script runs the node-manager binary (`worker_node/bin/cynodeai-wnm-dev`), which starts worker-api as a subprocess.
-   The node-manager polls the control-plane `/readyz` before registering; the script then waits for worker-api `/healthz` (up to 30s).
+3. **Start node** - Script runs the node-manager binary (`worker_node/bin/cynodeai-wnm-dev`), which serves the Worker API **in-process** (embedded HTTP server in the same binary; see `worker_node/cmd/node-manager` and `workerapiserver.RunEmbedded`).
+   The node-manager polls the control-plane `/readyz` before registering; the script then waits for Worker API `/healthz` (up to 30s).
 4. **PMA** - The worker node starts PMA when the orchestrator directs (see orchestrator_bootstrap.md, worker_node managed services).
    Script waits for control-plane readyz (up to 60s).
 

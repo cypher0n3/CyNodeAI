@@ -74,12 +74,12 @@ type OrchestratorConfig struct {
 	WorkflowRunnerBearerToken string // WORKFLOW_RUNNER_BEARER_TOKEN; optional
 
 	// Artifacts (S3/MinIO): when endpoint is empty, user-gateway and MCP artifact tools stay disabled for blob ops.
-	ArtifactsS3Endpoint          string // ARTIFACTS_S3_ENDPOINT
-	ArtifactsS3Region            string // ARTIFACTS_S3_REGION; default us-east-1
-	ArtifactsS3AccessKey         string // ARTIFACTS_S3_ACCESS_KEY
-	ArtifactsS3SecretKey         string // ARTIFACTS_S3_SECRET_KEY
-	ArtifactsS3Bucket            string // ARTIFACTS_S3_BUCKET
-	ArtifactHashInlineMaxBytes   int64  // ARTIFACT_HASH_INLINE_MAX_BYTES; default 1 MiB
+	ArtifactsS3Endpoint        string // ARTIFACTS_S3_ENDPOINT
+	ArtifactsS3Region          string // ARTIFACTS_S3_REGION; default us-east-1
+	ArtifactsS3AccessKey       string // ARTIFACTS_S3_ACCESS_KEY
+	ArtifactsS3SecretKey       string // ARTIFACTS_S3_SECRET_KEY
+	ArtifactsS3Bucket          string // ARTIFACTS_S3_BUCKET
+	ArtifactHashInlineMaxBytes int64  // ARTIFACT_HASH_INLINE_MAX_BYTES; default 1 MiB
 	// Background hash backfill for large uploads that omitted checksum (disabled by default).
 	ArtifactHashBackfillEnabled  bool          // ARTIFACT_HASH_BACKFILL_ENABLED; default false
 	ArtifactHashBackfillInterval time.Duration // ARTIFACT_HASH_BACKFILL_INTERVAL; default 10m
@@ -117,41 +117,41 @@ type NodeConfig struct {
 // LoadOrchestratorConfig loads configuration from environment.
 func LoadOrchestratorConfig() *OrchestratorConfig {
 	return &OrchestratorConfig{
-		DatabaseURL:               getEnv("DATABASE_URL", "postgres://postgres:postgres@localhost:5432/cynodeai?sslmode=disable"),
-		ListenAddr:                getEnv("LISTEN_ADDR", ":12080"),
-		ReadTimeout:               getDurationEnv("READ_TIMEOUT", 30*time.Second),
-		WriteTimeout:              getDurationEnv("WRITE_TIMEOUT", 300*time.Second), // chat path with thinking models can take 3+ minutes
-		IdleTimeout:               getDurationEnv("IDLE_TIMEOUT", 120*time.Second),
-		MaxHeaderBytes:            getIntEnv("MAX_HEADER_BYTES", 1<<20),
-		MaxRequestBodyMB:          getIntEnv("MAX_REQUEST_BODY_MB", 10),
-		JWTSecret:                 getEnv("JWT_SECRET", "change-me-in-production"),
-		JWTAccessDuration:         getDurationEnv("JWT_ACCESS_DURATION", 15*time.Minute),
-		JWTRefreshDuration:        getDurationEnv("JWT_REFRESH_DURATION", 7*24*time.Hour),
-		JWTNodeDuration:           getDurationEnv("JWT_NODE_DURATION", 24*time.Hour),
-		NodeRegistrationPSK:       getEnv("NODE_REGISTRATION_PSK", "default-psk-change-me"),
-		OrchestratorPublicURL:     getEnv("ORCHESTRATOR_PUBLIC_URL", "http://localhost:12082"),
-		WorkerAPIBearerToken:      getEnv("WORKER_API_BEARER_TOKEN", "dev-worker-api-token-change-me"),
-		WorkerAPITargetURL:        getEnv("WORKER_API_TARGET_URL", ""),
-		WorkerInternalAgentToken:   getEnv("WORKER_INTERNAL_AGENT_TOKEN", ""),
-		MCPSandboxAgentBearerToken: getEnv("MCP_SANDBOX_AGENT_BEARER_TOKEN", ""),
-		BootstrapAdminPassword:     getEnv("BOOTSTRAP_ADMIN_PASSWORD", "admin123"),
-		RateLimitPerMinute:        getIntEnv("RATE_LIMIT_PER_MINUTE", 60),
-		InferenceURL:              getEnv("OLLAMA_BASE_URL", getEnv("INFERENCE_URL", "")),
-		InferenceModel:            getEnv("INFERENCE_MODEL", "qwen3.5:0.8b"),
-		PMAEnabled:                getBoolEnv("PMA_ENABLED", true),
-		PMABinaryPath:             getEnv("PMA_BINARY", "cynode-pma"),
-		PMAListenAddr:             getEnv("PMA_LISTEN_ADDR", ":8090"),
-		PMAInstructionsRoot:       getEnv("PMA_INSTRUCTIONS_ROOT", ""),
-		PMABaseURL:                getEnv("PMA_BASE_URL", ""),
-		PMAServiceID:              getEnv("PMA_SERVICE_ID", "pma-main"),
-		PMAImage:                  getEnv("PMA_IMAGE", "ghcr.io/cypher0n3/cynode-pma:latest"),
-		PMAHostNodeSlug:           getEnv("PMA_HOST_NODE_SLUG", ""),
-		PMAPreferHostLabel:        getEnv("PMA_PREFER_HOST_LABEL", "orchestrator_host"),
-		WorkflowRunnerBearerToken: getEnv("WORKFLOW_RUNNER_BEARER_TOKEN", ""),
-		ArtifactsS3Endpoint:        getEnv("ARTIFACTS_S3_ENDPOINT", ""),
-		ArtifactsS3Region:          getEnv("ARTIFACTS_S3_REGION", "us-east-1"),
-		ArtifactsS3AccessKey:       getEnv("ARTIFACTS_S3_ACCESS_KEY", ""),
-		ArtifactsS3SecretKey:       getEnv("ARTIFACTS_S3_SECRET_KEY", ""),
+		DatabaseURL:                     getEnv("DATABASE_URL", "postgres://postgres:postgres@localhost:5432/cynodeai?sslmode=disable"),
+		ListenAddr:                      getEnv("LISTEN_ADDR", ":12080"),
+		ReadTimeout:                     getDurationEnv("READ_TIMEOUT", 30*time.Second),
+		WriteTimeout:                    getDurationEnv("WRITE_TIMEOUT", 300*time.Second), // chat path with thinking models can take 3+ minutes
+		IdleTimeout:                     getDurationEnv("IDLE_TIMEOUT", 120*time.Second),
+		MaxHeaderBytes:                  getIntEnv("MAX_HEADER_BYTES", 1<<20),
+		MaxRequestBodyMB:                getIntEnv("MAX_REQUEST_BODY_MB", 10),
+		JWTSecret:                       getEnv("JWT_SECRET", "change-me-in-production"),
+		JWTAccessDuration:               getDurationEnv("JWT_ACCESS_DURATION", 15*time.Minute),
+		JWTRefreshDuration:              getDurationEnv("JWT_REFRESH_DURATION", 7*24*time.Hour),
+		JWTNodeDuration:                 getDurationEnv("JWT_NODE_DURATION", 24*time.Hour),
+		NodeRegistrationPSK:             getEnv("NODE_REGISTRATION_PSK", "default-psk-change-me"),
+		OrchestratorPublicURL:           getEnv("ORCHESTRATOR_PUBLIC_URL", "http://localhost:12082"),
+		WorkerAPIBearerToken:            getEnv("WORKER_API_BEARER_TOKEN", "dev-worker-api-token-change-me"),
+		WorkerAPITargetURL:              getEnv("WORKER_API_TARGET_URL", ""),
+		WorkerInternalAgentToken:        getEnv("WORKER_INTERNAL_AGENT_TOKEN", ""),
+		MCPSandboxAgentBearerToken:      getEnv("MCP_SANDBOX_AGENT_BEARER_TOKEN", ""),
+		BootstrapAdminPassword:          getEnv("BOOTSTRAP_ADMIN_PASSWORD", "admin123"),
+		RateLimitPerMinute:              getIntEnv("RATE_LIMIT_PER_MINUTE", 60),
+		InferenceURL:                    getEnv("OLLAMA_BASE_URL", getEnv("INFERENCE_URL", "")),
+		InferenceModel:                  getEnv("INFERENCE_MODEL", "qwen3.5:0.8b"),
+		PMAEnabled:                      getBoolEnv("PMA_ENABLED", true),
+		PMABinaryPath:                   getEnv("PMA_BINARY", "cynode-pma"),
+		PMAListenAddr:                   getEnv("PMA_LISTEN_ADDR", ":8090"),
+		PMAInstructionsRoot:             getEnv("PMA_INSTRUCTIONS_ROOT", ""),
+		PMABaseURL:                      getEnv("PMA_BASE_URL", ""),
+		PMAServiceID:                    getEnv("PMA_SERVICE_ID", "pma-main"),
+		PMAImage:                        getEnv("PMA_IMAGE", "ghcr.io/cypher0n3/cynode-pma:latest"),
+		PMAHostNodeSlug:                 getEnv("PMA_HOST_NODE_SLUG", ""),
+		PMAPreferHostLabel:              getEnv("PMA_PREFER_HOST_LABEL", "orchestrator_host"),
+		WorkflowRunnerBearerToken:       getEnv("WORKFLOW_RUNNER_BEARER_TOKEN", ""),
+		ArtifactsS3Endpoint:             getEnv("ARTIFACTS_S3_ENDPOINT", ""),
+		ArtifactsS3Region:               getEnv("ARTIFACTS_S3_REGION", "us-east-1"),
+		ArtifactsS3AccessKey:            getEnv("ARTIFACTS_S3_ACCESS_KEY", ""),
+		ArtifactsS3SecretKey:            getEnv("ARTIFACTS_S3_SECRET_KEY", ""),
 		ArtifactsS3Bucket:               getEnv("ARTIFACTS_S3_BUCKET", "cynodeai-artifacts"),
 		ArtifactHashInlineMaxBytes:      getInt64Env("ARTIFACT_HASH_INLINE_MAX_BYTES", 1024*1024),
 		ArtifactHashBackfillEnabled:     getBoolEnv("ARTIFACT_HASH_BACKFILL_ENABLED", false),

@@ -6,8 +6,8 @@
 
 import unittest
 
-from scripts.test_scripts import config, helpers
-from scripts.test_scripts import gpu_variant
+import scripts.test_scripts.ollama_e2e_helpers as ollama_e2e
+from scripts.test_scripts import config, gpu_variant
 
 
 def _image_tag(image: str | None) -> str | None:
@@ -37,12 +37,12 @@ class TestGPUVariantOllama(unittest.TestCase):
         expected = gpu_variant.detect_expected_ollama_variant()
         if expected is None:
             self.skipTest("No GPU detected (nvidia-smi and rocm-smi both absent or empty)")
-        if not helpers.ollama_container_running():
+        if not ollama_e2e.ollama_container_running():
             self.skipTest(
                 f"Ollama container ({config.OLLAMA_CONTAINER_NAME}) not running; "
                 "start stack with node-manager (e.g. just setup-dev start)"
             )
-        image = helpers.get_ollama_container_image()
+        image = ollama_e2e.get_ollama_container_image()
         self.assertIsNotNone(image, "Ollama container running but image not found")
         actual_tag = _image_tag(image)
         self.assertTrue(

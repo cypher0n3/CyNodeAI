@@ -39,7 +39,7 @@ func runArtifactsTestcontainersSetup(ctx context.Context) (*postgres.PostgresCon
 		_, _ = os.Stderr.WriteString("[artifacts/testcontainers] ConnectionString failed: " + err.Error() + "\n")
 		return container, false
 	}
-		connStr = urlForceIPv4Localhost(connStr, "5432")
+	connStr = urlForceIPv4Localhost(connStr, "5432")
 	select {
 	case <-setupCtx.Done():
 		return container, false

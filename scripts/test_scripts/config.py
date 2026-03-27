@@ -30,12 +30,17 @@ def _env_bool(key: str, default: bool) -> bool:
 
 
 # Orchestrator (docs/tech_specs/ports_and_endpoints.md)
-# Default loopback host is 127.0.0.1 so urllib/cynork match Docker-published ports (avoids ::1 quirks).
+# Default loopback is 127.0.0.1 so urllib/cynork match Docker-published ports
+# (avoids ::1 quirks).
 _E2E_LOOPBACK = os.environ.get("E2E_LOOPBACK_HOST", "127.0.0.1").strip() or "127.0.0.1"
 ORCHESTRATOR_PORT = int(os.environ.get("ORCHESTRATOR_PORT", "12080"))
 CONTROL_PLANE_PORT = int(os.environ.get("CONTROL_PLANE_PORT", "12082"))
-USER_API = os.environ.get("USER_API") or f"http://{_E2E_LOOPBACK}:{ORCHESTRATOR_PORT}"
-CONTROL_PLANE_API = os.environ.get("CONTROL_PLANE_API") or f"http://{_E2E_LOOPBACK}:{CONTROL_PLANE_PORT}"
+USER_API = os.environ.get("USER_API") or (
+    f"http://{_E2E_LOOPBACK}:{ORCHESTRATOR_PORT}"
+)
+CONTROL_PLANE_API = os.environ.get("CONTROL_PLANE_API") or (
+    f"http://{_E2E_LOOPBACK}:{CONTROL_PLANE_PORT}"
+)
 
 # API egress (orchestrator/docker-compose.yml profile optional; port must match compose)
 API_EGRESS_PORT = int(os.environ.get("API_EGRESS_PORT", "12084"))

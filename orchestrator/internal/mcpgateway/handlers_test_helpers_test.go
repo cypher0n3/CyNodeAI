@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -19,11 +20,45 @@ import (
 
 const jsonMCPBodyHelpList = `{"tool_name":"help.list","arguments":{}}`
 
-// mcpHandlerToolCase drives table-driven MCP handler tests (store error → HTTP 500).
+// mcpHandlerToolCase drives table-driven MCP handler tests (store error -> HTTP 500).
 type mcpHandlerToolCase struct {
 	name string
 	prep func(*testutil.MockDB)
 	call func(context.Context, database.Store, map[string]interface{}, *models.McpToolCallAuditLog) (int, []byte, *models.McpToolCallAuditLog)
+}
+
+func newTestMockWithTask(t *testing.T) (context.Context, *testutil.MockDB, uuid.UUID) {
+	t.Helper()
+	ctx := context.Background()
+	mock := testutil.NewMockDB()
+	user, _ := mock.CreateUser(ctx, "mcp-task-"+strings.ReplaceAll(t.Name(), "/", "-"), nil)
+	proj, _ := mock.GetOrCreateDefaultProjectForUser(ctx, user.ID)
+	uid := user.ID
+	task, _ := mock.CreateTask(ctx, &uid, "prompt", nil, &proj.ID)
+	return ctx, mock, task.ID
+}
+
+func testMCPHandlerSimpleStoreError(t *testing.T, prep func(*testutil.MockDB), call func(context.Context, database.Store, map[string]interface{}, *models.McpToolCallAuditLog) (int, []byte, *models.McpToolCallAuditLog), args map[string]interface{}) {
+	t.Helper()
+	ctx := context.Background()
+	mock := testutil.NewMockDB()
+	prep(mock)
+	rec := &models.McpToolCallAuditLog{}
+	code, _, _ := call(ctx, mock, args, rec)
+	if code != http.StatusInternalServerError {
+		t.Fatalf("got %d", code)
+	}
+}
+
+func testMCPHandleTaskWithPrep(t *testing.T, prep func(*testutil.MockDB), call func(context.Context, database.Store, map[string]interface{}, *models.McpToolCallAuditLog) (int, []byte, *models.McpToolCallAuditLog)) {
+	t.Helper()
+	ctx, mock, taskID := newTestMockWithTask(t)
+	prep(mock)
+	rec := &models.McpToolCallAuditLog{}
+	code, _, _ := call(ctx, mock, map[string]interface{}{"task_id": taskID.String()}, rec)
+	if code != http.StatusInternalServerError {
+		t.Fatalf("got %d", code)
+	}
 }
 
 func assertToolCallStoreOKHasKey(t *testing.T, mock *testutil.MockDB, body, jsonKey string) {

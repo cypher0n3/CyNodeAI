@@ -468,11 +468,7 @@ func TestProjectResponseMap_DescriptionOptional(t *testing.T) {
 
 func TestHandleTaskAndProjectList_ListError(t *testing.T) {
 	ctx := context.Background()
-	cases := []struct {
-		name string
-		prep func(*testutil.MockDB)
-		call func(context.Context, database.Store, map[string]interface{}, *models.McpToolCallAuditLog) (int, []byte, *models.McpToolCallAuditLog)
-	}{
+	cases := []mcpHandlerToolCase{
 		{
 			"task_list",
 			func(m *testutil.MockDB) { m.ListTasksByUserErr = errors.New("db") },
@@ -498,69 +494,31 @@ func TestHandleTaskAndProjectList_ListError(t *testing.T) {
 	}
 }
 func TestHandleTaskResult_JobsError(t *testing.T) {
-	ctx := context.Background()
-	mock := testutil.NewMockDB()
-	user, _ := mock.CreateUser(ctx, "tr-jobs-err", nil)
-	proj, _ := mock.GetOrCreateDefaultProjectForUser(ctx, user.ID)
-	uid := user.ID
-	task, _ := mock.CreateTask(ctx, &uid, "prompt", nil, &proj.ID)
-	mock.GetJobsByTaskIDErr = errors.New("db")
-	rec := &models.McpToolCallAuditLog{}
-	code, _, _ := handleTaskResult(ctx, mock, map[string]interface{}{"task_id": task.ID.String()}, rec)
-	if code != http.StatusInternalServerError {
-		t.Fatalf("got %d", code)
-	}
+	testMCPHandleTaskWithPrep(t, func(m *testutil.MockDB) { m.GetJobsByTaskIDErr = errors.New("db") }, handleTaskResult)
 }
 
 func TestHandleTaskCancel_UpdateStatusError(t *testing.T) {
-	ctx := context.Background()
-	mock := testutil.NewMockDB()
-	user, _ := mock.CreateUser(ctx, "tc-upd-err", nil)
-	proj, _ := mock.GetOrCreateDefaultProjectForUser(ctx, user.ID)
-	uid := user.ID
-	task, _ := mock.CreateTask(ctx, &uid, "prompt", nil, &proj.ID)
-	mock.UpdateTaskStatusErr = errors.New("db")
-	rec := &models.McpToolCallAuditLog{}
-	code, _, _ := handleTaskCancel(ctx, mock, map[string]interface{}{"task_id": task.ID.String()}, rec)
-	if code != http.StatusInternalServerError {
-		t.Fatalf("got %d", code)
-	}
+	testMCPHandleTaskWithPrep(t, func(m *testutil.MockDB) { m.UpdateTaskStatusErr = errors.New("db") }, handleTaskCancel)
 }
 
 func TestHandleTaskLogs_JobsError(t *testing.T) {
-	ctx := context.Background()
-	mock := testutil.NewMockDB()
-	user, _ := mock.CreateUser(ctx, "tlg-jobs-err", nil)
-	proj, _ := mock.GetOrCreateDefaultProjectForUser(ctx, user.ID)
-	uid := user.ID
-	task, _ := mock.CreateTask(ctx, &uid, "prompt", nil, &proj.ID)
-	mock.GetJobsByTaskIDErr = errors.New("db")
-	rec := &models.McpToolCallAuditLog{}
-	code, _, _ := handleTaskLogs(ctx, mock, map[string]interface{}{"task_id": task.ID.String()}, rec)
-	if code != http.StatusInternalServerError {
-		t.Fatalf("got %d", code)
-	}
-}
-func TestHandleJobGet_InternalError(t *testing.T) {
-	ctx := context.Background()
-	mock := testutil.NewMockDB()
-	mock.GetJobByIDErr = errors.New("db")
-	rec := &models.McpToolCallAuditLog{}
-	jid := uuid.New()
-	code, _, _ := handleJobGet(ctx, mock, map[string]interface{}{"job_id": jid.String()}, rec)
-	if code != http.StatusInternalServerError {
-		t.Fatalf("got %d", code)
-	}
+	testMCPHandleTaskWithPrep(t, func(m *testutil.MockDB) { m.GetJobsByTaskIDErr = errors.New("db") }, handleTaskLogs)
 }
 
-func TestHandleTaskGet_InternalError(t *testing.T) {
-	ctx := context.Background()
-	mock := testutil.NewMockDB()
-	mock.GetTaskByIDErr = errors.New("db")
-	rec := &models.McpToolCallAuditLog{}
-	tid := uuid.New()
-	code, _, _ := handleTaskGet(ctx, mock, map[string]interface{}{"task_id": tid.String()}, rec)
-	if code != http.StatusInternalServerError {
-		t.Fatalf("got %d", code)
+func TestHandleJobAndTaskGet_InternalError(t *testing.T) {
+	cases := []struct {
+		name  string
+		idKey string
+		prep  func(*testutil.MockDB)
+		call  func(context.Context, database.Store, map[string]interface{}, *models.McpToolCallAuditLog) (int, []byte, *models.McpToolCallAuditLog)
+	}{
+		{"job_get", "job_id", func(m *testutil.MockDB) { m.GetJobByIDErr = errors.New("db") }, handleJobGet},
+		{"task_get", "task_id", func(m *testutil.MockDB) { m.GetTaskByIDErr = errors.New("db") }, handleTaskGet},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			id := uuid.New().String()
+			testMCPHandlerSimpleStoreError(t, tc.prep, tc.call, map[string]interface{}{tc.idKey: id})
+		})
 	}
 }

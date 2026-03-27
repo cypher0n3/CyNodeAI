@@ -14,6 +14,8 @@ import (
 	"github.com/testcontainers/testcontainers-go/wait"
 )
 
+const integrationTestArtifactBucket = "artifact-test"
+
 func setupRootlessPodmanHostS3() {
 	if os.Getenv("DOCKER_HOST") != "" {
 		return
@@ -64,12 +66,54 @@ func minioRoundTripObjectOps(t *testing.T, ctx context.Context, client *Client, 
 	if err := client.PutObject(ctx, key+"-nct", body, nil); err != nil {
 		t.Fatalf("PutObject nil content type: %v", err)
 	}
-	got2, err := client.GetObject(ctx, key + "-nct")
+	got2, err := client.GetObject(ctx, key+"-nct")
 	if err != nil || !bytes.Equal(got2, body) {
 		t.Fatalf("GetObject: %v", err)
 	}
-	if client.Bucket() != "artifact-test" {
+	if client.Bucket() != integrationTestArtifactBucket {
 		t.Fatalf("Bucket: %q", client.Bucket())
+	}
+}
+
+func minioTestCanceledPutGetDelete(t *testing.T, ctx context.Context, client *Client, body []byte) {
+	t.Helper()
+	cancelCtx, cancel := context.WithCancel(ctx)
+	cancel()
+	if err := client.PutObject(cancelCtx, "k1/nope", body, nil); err == nil {
+		t.Fatal("PutObject with canceled context: expected error")
+	}
+	if err := client.PutObject(ctx, "k1/cancel-get", body, nil); err != nil {
+		t.Fatalf("PutObject: %v", err)
+	}
+	cancelCtx2, cancel2 := context.WithCancel(ctx)
+	cancel2()
+	if _, err := client.GetObject(cancelCtx2, "k1/cancel-get"); err == nil {
+		t.Fatal("GetObject with canceled context: expected error")
+	}
+	if err := client.PutObject(ctx, "k1/cancel-del", body, nil); err != nil {
+		t.Fatalf("PutObject: %v", err)
+	}
+	cancelCtx3, cancel3 := context.WithCancel(ctx)
+	cancel3()
+	if err := client.DeleteObject(cancelCtx3, "k1/cancel-del"); err == nil {
+		t.Fatal("DeleteObject with canceled context: expected error")
+	}
+}
+
+func minioTestSecondClientHeadBucket(t *testing.T, ctx context.Context, ep string) {
+	t.Helper()
+	client2, err := New(ctx, &Config{
+		Endpoint:  ep,
+		Region:    "us-east-1",
+		AccessKey: "minioadmin",
+		SecretKey: "minioadmin",
+		Bucket:    integrationTestArtifactBucket,
+	})
+	if err != nil {
+		t.Fatalf("New second client: %v", err)
+	}
+	if client2.Bucket() != integrationTestArtifactBucket {
+		t.Fatalf("second Bucket: %q", client2.Bucket())
 	}
 }
 
@@ -123,7 +167,7 @@ func TestIntegration_MinIOClientRoundTrip(t *testing.T) {
 		Region:    "us-east-1",
 		AccessKey: "minioadmin",
 		SecretKey: "minioadmin",
-		Bucket:    "artifact-test",
+		Bucket:    integrationTestArtifactBucket,
 	})
 	if err != nil {
 		t.Fatalf("New: %v", err)
@@ -142,49 +186,15 @@ func TestIntegration_MinIOClientRoundTrip(t *testing.T) {
 		Region:    "",
 		AccessKey: "minioadmin",
 		SecretKey: "minioadmin",
-		Bucket:    "artifact-test",
+		Bucket:    integrationTestArtifactBucket,
 	})
 	if err != nil {
 		t.Fatalf("New with default region: %v", err)
 	}
-	if client3.Bucket() != "artifact-test" {
+	if client3.Bucket() != integrationTestArtifactBucket {
 		t.Fatalf("client3 Bucket: %q", client3.Bucket())
 	}
 
-	cancelCtx, cancel := context.WithCancel(ctx)
-	cancel()
-	if err := client.PutObject(cancelCtx, "k1/nope", body, nil); err == nil {
-		t.Fatal("PutObject with canceled context: expected error")
-	}
-	if err := client.PutObject(ctx, "k1/cancel-get", body, nil); err != nil {
-		t.Fatalf("PutObject: %v", err)
-	}
-	cancelCtx2, cancel2 := context.WithCancel(ctx)
-	cancel2()
-	if _, err := client.GetObject(cancelCtx2, "k1/cancel-get"); err == nil {
-		t.Fatal("GetObject with canceled context: expected error")
-	}
-	if err := client.PutObject(ctx, "k1/cancel-del", body, nil); err != nil {
-		t.Fatalf("PutObject: %v", err)
-	}
-	cancelCtx3, cancel3 := context.WithCancel(ctx)
-	cancel3()
-	if err := client.DeleteObject(cancelCtx3, "k1/cancel-del"); err == nil {
-		t.Fatal("DeleteObject with canceled context: expected error")
-	}
-
-	// Second client with same bucket exercises HeadBucket success path in ensureBucket.
-	client2, err := New(ctx, &Config{
-		Endpoint:  ep,
-		Region:    "us-east-1",
-		AccessKey: "minioadmin",
-		SecretKey: "minioadmin",
-		Bucket:    "artifact-test",
-	})
-	if err != nil {
-		t.Fatalf("New second client: %v", err)
-	}
-	if client2.Bucket() != "artifact-test" {
-		t.Fatalf("second Bucket: %q", client2.Bucket())
-	}
+	minioTestCanceledPutGetDelete(t, ctx, client, body)
+	minioTestSecondClientHeadBucket(t, ctx, ep)
 }

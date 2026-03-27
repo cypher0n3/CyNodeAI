@@ -13,7 +13,7 @@ import time
 import unittest
 import uuid
 
-from scripts.test_scripts import config, helpers
+from scripts.test_scripts import config, helpers, ollama_e2e_helpers
 import scripts.test_scripts.e2e_state as state
 
 # Startup and warm-up allowance for a capable model on first load.
@@ -39,7 +39,7 @@ class TestPMAChatCapableModel(unittest.TestCase):
         self.assertTrue(ok, detail)
         if os.environ.get("E2E_SKIP_INFERENCE_SMOKE", "") or config.E2E_SKIP_INFERENCE_SMOKE:
             self.skipTest("inference smoke disabled (E2E_SKIP_INFERENCE_SMOKE)")
-        if not helpers.is_ollama_model_available(config.OLLAMA_CAPABLE_MODEL):
+        if not ollama_e2e_helpers.is_ollama_model_available(config.OLLAMA_CAPABLE_MODEL):
             self.skipTest(
                 f"capable model {config.OLLAMA_CAPABLE_MODEL!r} not available in Ollama container"
             )

@@ -68,7 +68,7 @@ Primary workspace modules from [go.work](go.work):
 - [cynork/](cynork/) - Go CLI management client built with Cobra.
 - [e2e/](e2e/) - Go BDD support module used by the repository test harness.
 - [go_shared_libs/](go_shared_libs/) - Shared Go contracts and types used across services.
-- [orchestrator/](orchestrator/) - Control-plane services such as the control plane, user gateway, MCP gateway, and API egress.
+- [orchestrator/](orchestrator/) - Control-plane services: control plane (including MCP tool routes), user gateway, API egress, and optional legacy compose profiles (see [orchestrator/README.md](orchestrator/README.md)).
 - [worker_node/](worker_node/) - Node manager, worker API, and inference proxy services.
 
 Other important directories:
@@ -95,7 +95,7 @@ See [docs/tech_specs/orchestrator.md](docs/tech_specs/orchestrator.md).
 
 - `⚙️` Register with the orchestrator and report capabilities.
 - `📦` Run sandbox containers for agent work and optional local inference.
-- `🔌` Host the worker API, node manager, and inference proxy components.
+- `🔌` Run node-manager as a single binary with an embedded Worker API, plus inference proxy and sandbox management as designed.
 - `📡` Return results, logs, and status back to the orchestrator.
 
 See [docs/tech_specs/worker_node.md](docs/tech_specs/worker_node.md).
