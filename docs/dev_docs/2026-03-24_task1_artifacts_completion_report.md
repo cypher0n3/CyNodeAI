@@ -1,28 +1,24 @@
-# Task 1 Completion Report: Orchestrator Artifacts (2026-03-24)
+# Task 1 Completion Report: Orchestrator Artifacts (2026-03-24; Updated 2026-03-27)
 
 ## Summary
 
 Implemented **explicit read grants** for user-scoped orchestrator artifacts (`artifact_read_grants` table, `GrantArtifactRead` / `HasArtifactReadGrant`, RBAC in `artifacts.Service.canReadScope`), extended **BDD** with group/project/global scope scenarios, **cross-principal read** via grant, and **MCP gateway** routing checks (PM agent may `artifact.put`; sandbox agent denied).
 Wired `POST /v1/mcp/tools/call` into the orchestrator `_bdd` test mux with configurable PM/sandbox bearer tokens.
 
-## What Passed
+## What Passed (2026-03-27)
 
-- `go test ./orchestrator/_bdd` (orchestrator Godog suite), including new artifact scenarios.
+- `just test-go-cover` - all Go modules meet per-package coverage thresholds (including `orchestrator/internal/database` at >=90% for artifact store paths).
+- `go test ./orchestrator/_bdd` (orchestrator Godog suite), including artifact scenarios.
 - `go test ./orchestrator/internal/artifacts/...` (including integration tests with testcontainers/PG).
-- `go test ./orchestrator/internal/database/...` (including `TestIntegration_ArtifactReadGrant`).
-- `just e2e --tags artifacts` (Python E2E for artifacts module).
-- `just lint-go` (vet + staticcheck).
-- `just validate-feature-files` after adding `@req_*` tags to scenarios.
+- `go test ./orchestrator/internal/database/...`.
+- `just e2e --tags artifacts` (Python E2E for artifacts module; run when stack/E2E prerequisites are available).
+- `just lint-go` and `just lint-go-ci` - clean in this session.
+- `just docs-check` when specs or feature files change.
 
 ## Deviations and Follow-Up
 
-- **`just test-go-cover`** still fails repo-wide for **pre-existing** gaps (e.g. cynork `internal/tui`, `tuicache`; orchestrator `internal/database` at ~85%, `internal/artifacts` ~62%, `mcpgateway`, `s3blob`, several `cmd/*` packages below 90%).
-  Task 1 added integration coverage for grants and service read path; raising **entire** package percentages to 90% is follow-on work, not completed in this pass.
-- **`just lint-go-ci`** still reports many issues across the repo (dupl, goconst, etc.); not introduced solely by this task; plan noted existing golangci noise.
-- **Extract shared RBAC helpers** (Refactor):
-  - Artifact scope checks remain in `internal/artifacts`; handlers stay thin.
-  - No shared extraction was necessary once the read path used `checkScope` for non-user scopes.
-  - **no silent deferral**-extraction was not needed for duplicate code between handlers.
+- **Extract shared RBAC helpers** (Refactor): Artifact scope checks remain in `internal/artifacts`; handlers stay thin.
+  No duplicate extraction was required once the read path used `checkScope` for non-user scopes.
 
 ## Files Touched (High Level)
 

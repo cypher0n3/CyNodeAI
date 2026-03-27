@@ -14,6 +14,8 @@ const (
 	LandmarkResponseComplete = "[CYNRK_RESPONSE_COMPLETE]"
 	// LandmarkThreadSwitched indicates the active thread has changed.
 	LandmarkThreadSwitched = "[CYNRK_THREAD_SWITCHED]"
+	// LandmarkThreadReady indicates the current thread was confirmed without switching (e.g. after re-auth).
+	LandmarkThreadReady = "[CYNRK_THREAD_READY]"
 	// LandmarkAuthRecoveryReady indicates login/re-auth is being prompted.
 	LandmarkAuthRecoveryReady = "[CYNRK_AUTH_RECOVERY_READY]"
 

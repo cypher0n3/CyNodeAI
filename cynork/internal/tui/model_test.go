@@ -297,6 +297,33 @@ func TestModel_HandleKey_LoadingIgnoresKeys(t *testing.T) {
 	}
 }
 
+func TestEnsureThreadScrollbackLine(t *testing.T) {
+	tests := []struct {
+		name       string
+		prior      string
+		after      string
+		resume     string
+		wantSwitch bool
+		wantReady  bool
+	}{
+		{"same_thread_confirmed", "tid-1", "tid-1", "", false, true},
+		{"resume_from_empty", "", "tid-1", "1", true, false},
+		{"switch_without_resume", "tid-1", "tid-2", "", true, false},
+		{"first_thread_new", "", "tid-new", "", false, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := ensureThreadScrollbackLine(tt.prior, tt.after, tt.resume)
+			hasSw := strings.Contains(got, chat.LandmarkThreadSwitched)
+			hasRd := strings.Contains(got, chat.LandmarkThreadReady)
+			if hasSw != tt.wantSwitch || hasRd != tt.wantReady {
+				t.Errorf("ensureThreadScrollbackLine(%q,%q,%q) = %q; want switch=%v ready=%v",
+					tt.prior, tt.after, tt.resume, got, tt.wantSwitch, tt.wantReady)
+			}
+		})
+	}
+}
+
 func TestModel_InputHistory_PushAndNavigate(t *testing.T) {
 	const inputFirst, inputSecond = "first", "second"
 	m := NewModel(&chat.Session{})

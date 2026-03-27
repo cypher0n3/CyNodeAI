@@ -505,7 +505,7 @@ func TestModel_SlashConnect_UpdateURL_HealthWarning(t *testing.T) {
 	}
 }
 
-func TestModel_HandleEnterKey_IgnoresWhenLoadingNonEmpty(t *testing.T) {
+func TestModel_HandleEnterKey_BlocksPlainChatWhenLoading(t *testing.T) {
 	m := NewModel(&chat.Session{})
 	m.Loading = true
 	m.Input = testSampleWordHello
@@ -515,6 +515,29 @@ func TestModel_HandleEnterKey_IgnoresWhenLoadingNonEmpty(t *testing.T) {
 	}
 	if m.Input != testSampleWordHello {
 		t.Errorf("Input cleared: %q", m.Input)
+	}
+}
+
+func TestModel_HandleEnterKey_AllowsSlashWhileLoading(t *testing.T) {
+	m := NewModel(&chat.Session{})
+	m.Loading = true
+	m.Input = "/version"
+	_, cmd := m.handleKey(tea.KeyMsg{Type: tea.KeyEnter})
+	if cmd == nil {
+		t.Fatal("expected non-nil cmd for /version while loading")
+	}
+	if m.Input != "" {
+		t.Errorf("Input should be cleared after dispatch: %q", m.Input)
+	}
+}
+
+func TestModel_HandleEnterKey_AllowsShellWhileLoading(t *testing.T) {
+	m := NewModel(&chat.Session{})
+	m.Loading = true
+	m.Input = "!echo hi"
+	_, cmd := m.handleKey(tea.KeyMsg{Type: tea.KeyEnter})
+	if cmd == nil {
+		t.Fatal("expected non-nil cmd for shell escape while loading")
 	}
 }
 

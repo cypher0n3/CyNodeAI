@@ -64,6 +64,7 @@ type cynorkState struct {
 	skillSelectorSetup    string // if non-empty, GET /v1/skills/{id} accepts this selector too
 	multipleSkillsMode    bool   // GET /v1/skills returns 2 skills (ambiguity scenario)
 	authErrorNextReq      bool   // next GET /v1/users/me returns 401
+	tuiBugfixLoading      bool   // cynork_tui_bugfixes.feature: Given loading is true
 
 	mu sync.Mutex
 }
@@ -131,6 +132,7 @@ func InitializeCynorkSuite(sc *godog.ScenarioContext, state *cynorkState) {
 		state.skillSelectorSetup = ""
 		state.multipleSkillsMode = false
 		state.authErrorNextReq = false
+		state.tuiBugfixLoading = false
 		state.mockServer = httptest.NewServer(state.mockGatewayMux())
 		wd, err := os.Getwd()
 		if err != nil {

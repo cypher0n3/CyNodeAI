@@ -478,6 +478,7 @@ The TUI MUST start unconditionally without requiring a valid login token at laun
 - **Consecutive failure cap:** The TUI MUST NOT prompt for login indefinitely.
   After `AuthRecovery.MaxConsecutiveFailures` (see constants) consecutive auth failures (startup or in-session), the TUI MUST return to the composer (or exit at startup) and MUST display a clear error message instructing the user to run `/auth login` or exit; the TUI MUST NOT automatically show the login prompt again for that session until the user explicitly invokes `/auth login` or restarts.
 - Secret input MUST use secure input behavior and MUST NOT be echoed or persisted in transcript history.
+- **Reference layout (optional):** The reference TUI centers the login card on the main view, uses a fixed-width right-aligned label column with values on true-black (`#000000`) panels, reverse-video carets aligned with composer semantics, and ignores Ctrl+word motion on the password field.
 
 ### `AuthRecovery` Constants
 

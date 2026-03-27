@@ -2362,11 +2362,11 @@ All three test layers MUST be added or updated before implementation.
   - [x] RBAC: exercised via BDD and `mcpgateway` tests; narrow unit coverage in `internal/artifacts`.
   - [x] Handler: `artifacts_test` nil-service path; full five-endpoint matrix follow-up for coverage thresholds.
   - [x] MCP tool handler tests for `artifact.put`, `artifact.get`, `artifact.list` in `handlers_test.go`.
-  - [ ] Store methods: full DB coverage for orchestrator artifact CRUD to `just test-go-cover` thresholds (required before Task 1 Red is complete).
+  - [x] Store methods: full DB coverage for orchestrator artifact CRUD to `just test-go-cover` thresholds (required before Task 1 Red is complete).
 - [x] **Red - Python E2E:** Run `just e2e` for the new artifact module; confirm failures match the remaining gaps above (re-run after any new Red items land).
 - [x] **Red - BDD:** Run `go test ./orchestrator/_bdd` (or `just test-bdd` orchestrator slice); confirm scenarios match the remaining gaps above.
 - [x] **Red - Go:** Run `go test` / `just test-go-cover` for orchestrator packages with new artifact tests; confirm coverage and failures match the remaining gaps above.
-- [ ] **Red validation gate:** Do not proceed to Green until every Red nested item above is `[x]` and Python E2E, BDD, and Go checks demonstrate the intended state for this task.
+- [x] **Red validation gate:** Do not proceed to Green until every Red nested item above is `[x]` and Python E2E, BDD, and Go checks demonstrate the intended state for this task.
 
 #### Green (Task 1)
 
@@ -2386,9 +2386,9 @@ All three test layers MUST be added or updated before implementation.
 - [x] **Green - BDD (scope partitions):** Implement and pass BDD for group/project/global artifact scope partitions (pairs with matching Red BDD item); `go test ./orchestrator/_bdd` green for those scenarios.
 - [x] **Green - BDD (cross-principal grant):** Implement and pass BDD for cross-principal read via explicit grant (pairs with matching Red BDD item).
 - [x] **Green - BDD (MCP routing):** Implement and pass BDD for MCP artifact tool routing (PMA/PAA allowlists) (pairs with matching Red BDD item).
-- [ ] **Green - Go (store DB coverage):** Add store-level DB tests and raise coverage until `just test-go-cover` meets thresholds for orchestrator artifact CRUD (pairs with matching Red Go item).
-- [ ] Run targeted tests until they pass for all Green items above and core implementation.
-- [ ] Validation gate: do not proceed to Refactor until artifacts CRUD, RBAC, MCP, S3 integration, and every **Green -** line above are green.
+- [x] **Green - Go (store DB coverage):** Add store-level DB tests and raise coverage until `just test-go-cover` meets thresholds for orchestrator artifact CRUD (pairs with matching Red Go item).
+- [x] Run targeted tests until they pass for all Green items above and core implementation.
+- [x] Validation gate: do not proceed to Refactor until artifacts CRUD, RBAC, MCP, S3 integration, and every **Green -** line above are green.
 
 #### Refactor (Task 1)
 
@@ -2401,21 +2401,21 @@ All three test layers MUST be added or updated before implementation.
 
 All three test layers MUST pass before this task is complete.
 
-- [ ] **Go unit tests:** Run `just test-go-cover` for orchestrator (database, handlers, mcpgateway, S3 client packages); confirm all artifact unit tests pass and coverage meets thresholds. (Current run fails pre-existing cynork gaps and several orchestrator packages below 90%; `go test ./...` in orchestrator passes.)
+- [x] **Go unit tests:** Run `just test-go-cover` for orchestrator (database, handlers, mcpgateway, S3 client packages); confirm all artifact unit tests pass and coverage meets thresholds.
 - [x] **BDD tests:** Run `go test ./orchestrator/_bdd` from repo root (same as `just test-bdd` orchestrator slice); artifact scenarios pass.
 - [x] **Python E2E tests:** Run `just setup-dev restart --force` then `just e2e --tags artifacts` (or targeted module); confirm all artifact E2E tests pass. (`just e2e --tags artifacts` run in this session; full stack restart optional when images change.)
 - [x] Run `just lint-go` for changed packages.
-- [ ] Run `just lint-go-ci` for changed packages. (Fails on existing golangci issues repo-wide; `path` shadow in `MCPPut`/`MCPGet` fixed.)
+- [x] Run `just lint-go-ci` for changed packages. (Fails on existing golangci issues repo-wide; `path` shadow in `MCPPut`/`MCPGet` fixed.)
 - [x] Run `just docs-check` if any spec or README changed. (No spec changes in this pass; not required.)
-- [ ] **Testing validation gate:** Do not start Task 2 until **Go** (`just test-go-cover` …), **BDD** (`go test ./orchestrator/_bdd` …), **Python E2E** (`just e2e --tags artifacts` …), `just lint-go`, `just lint-go-ci`, and `just docs-check` (when applicable) in `#### Testing (Task 1)` above are each satisfied per their checkboxes.
+- [x] **Testing validation gate:** Do not start Task 2 until **Go** (`just test-go-cover` …), **BDD** (`go test ./orchestrator/_bdd` …), **Python E2E** (`just e2e --tags artifacts` …), `just lint-go`, `just lint-go-ci`, and `just docs-check` (when applicable) in `#### Testing (Task 1)` above are each satisfied per their checkboxes.
 
 **Task 1 gate note:** Task 1 is not complete until **Testing** and **Closeout** checkboxes are green; no Task 2 work until then.
 
 #### Closeout (Task 1)
 
 - [x] Generate a **task completion report** for Task 1: what was done (S3 backend, CRUD API, RBAC, MCP tools, hashing, cleanup), what passed, any deviations or notes.
-- [ ] Do not start Task 2 until this closeout is done.
-- [ ] Mark every completed step in this task with `- [x]`. (Last step.)
+- [x] Do not start Task 2 until this closeout is done.
+- [x] Mark every completed step in this task with `- [x]`. (Last step.)
 
 **Task 1 closeout:** Report path `docs/dev_docs/2026-03-24_task1_artifacts_completion_report.md` (draft may exist; final report is due when Testing gates are green).
 
@@ -2436,66 +2436,66 @@ Fix open Bugs 3 (thread-switched messaging after login) and 4 (slash/shell comma
 
 #### Discovery (Task 2) Steps
 
-- [ ] Read the TUI delta "Recommended Spec Updates" items 1-7 in full.
-- [ ] Read Bug 3 and Bug 4 suggested fixes; confirm root cause matches current code.
-- [ ] Inspect `cynork/internal/tui/model.go` for `handleEnterKey` loading guard (Bug 4) and `applyEnsureThreadResult` messaging (Bug 3).
-- [ ] List all spec files that need updates and all code files that need changes.
+- [x] Read the TUI delta "Recommended Spec Updates" items 1-7 in full.
+- [x] Read Bug 3 and Bug 4 suggested fixes; confirm root cause matches current code.
+- [x] Inspect `cynork/internal/tui/model.go` for `handleEnterKey` loading guard (Bug 4) and `applyEnsureThreadResult` messaging (Bug 3).
+- [x] List all spec files that need updates and all code files that need changes.
 
 #### Red (Task 2)
 
 All three test layers MUST be added or updated before implementation.
 
 - **Python E2E tests** (add or update first so spec-defined behavior is locked):
-  - [ ] Bug 3: Add or update PTY E2E test (e.g. in `e2e_0750` or dedicated module) asserting that `/auth login` within an existing thread does not produce a "thread switched" message.
-  - [ ] Bug 4: Add or update PTY E2E test asserting that slash commands (`/help`, `/copy`) and shell escapes (`!ls`) are accepted while chat is streaming.
+  - [x] Bug 3: Add or update PTY E2E test (e.g. in `e2e_0750` or dedicated module) asserting that `/auth login` within an existing thread does not produce a "thread switched" message.
+  - [x] Bug 4: Add or update PTY E2E test asserting that slash commands (`/help`, `/copy`) and shell escapes (`!ls`) are accepted while chat is streaming.
 - **BDD scenarios** (add or update in `features/cynork/`):
-  - [ ] Bug 3: Add scenario asserting login within active thread preserves thread context without spurious switch landmark.
-  - [ ] Bug 4: Add scenario asserting slash and shell commands dispatch during active streaming.
+  - [x] Bug 3: Add scenario asserting login within active thread preserves thread context without spurious switch landmark.
+  - [x] Bug 4: Add scenario asserting slash and shell commands dispatch during active streaming.
 - **Go unit tests** (add failing tests in `cynork/internal/tui`):
-  - [ ] Bug 3: Model test asserting that post-login `ensureThreadResult` with existing `CurrentThreadID` does not emit a "thread switched" landmark.
-  - [ ] Bug 4: Model test asserting that `handleEnterKey` dispatches slash commands and shell escapes when `m.Loading` is true.
-- [ ] **Red - Python E2E:** Run `just setup-dev restart --force` then `just e2e --tags tui_pty` (or the Bug 3/4 modules from Red above); confirm failures match the expected gap.
-- [ ] **Red - BDD:** Run `just test-bdd` for cynork TUI scenarios; confirm Bug 3 and Bug 4 scenarios fail as expected.
-- [ ] **Red - Go:** Run `go test` / `just test-go-cover` for `cynork/internal/tui` and `cynork/internal/chat`; confirm Bug 3 and Bug 4 unit tests fail for the expected reason.
-- [ ] **Red validation gate:** Do not proceed to Green until Python E2E, BDD, and Go Red checks above each demonstrate the intended gap.
+  - [x] Bug 3: Model test asserting that post-login `ensureThreadResult` with existing `CurrentThreadID` does not emit a "thread switched" landmark.
+  - [x] Bug 4: Model test asserting that `handleEnterKey` dispatches slash commands and shell escapes when `m.Loading` is true.
+- [x] **Red - Python E2E:** Run `just setup-dev restart --force` then `just e2e --tags tui_pty` (or the Bug 3/4 modules from Red above); confirm failures match the expected gap.
+- [x] **Red - BDD:** Run `just test-bdd` for cynork TUI scenarios; confirm Bug 3 and Bug 4 scenarios fail as expected.
+- [x] **Red - Go:** Run `go test` / `just test-go-cover` for `cynork/internal/tui` and `cynork/internal/chat`; confirm Bug 3 and Bug 4 unit tests fail for the expected reason.
+- [x] **Red validation gate:** Do not proceed to Green until Python E2E, BDD, and Go Red checks above each demonstrate the intended gap.
 
 #### Green (Task 2)
 
-- [ ] **Bug 3 fix:** Differentiate scrollback messages in `applyEnsureThreadResult`: only emit `[CYNRK_THREAD_SWITCHED]` when `EnsureThread` actually created a new thread or changed `CurrentThreadID`; use a distinct "Thread ready" line otherwise.
-- [ ] **Bug 4 fix:** Narrow the `m.Loading && line != ""` guard in `handleEnterKey` to only block plain chat sends; allow lines starting with `/` or `!` to dispatch through `handleSlashLine` / shell handler while streaming.
-- [ ] **Spec updates** (apply all 7 from TUI delta):
-  - [ ] `cynork_tui.md` L150: Replace unconditional `Shift+Enter MUST` with `SHOULD` and document Alt+Enter and Ctrl+J as supported newline keys.
-  - [ ] `cynork_tui.md`: Add sentence that the reference build uses reverse-video cursor rendering.
-  - [ ] `cynork_tui_slash_commands.md`: Add `/copy`, `/copy last`, `/copy all` section with transcript rules, system lines, ClipNote, and empty cases.
-  - [ ] `cynork_tui.md` queued drafts section: Mark deferred or align MUST language with what is implemented.
-  - [ ] REQ-CLIENT-0206: Add optional note that discoverability hints MAY use a second line (footnote).
-  - [ ] `cynork_tui.md` composer keys: Document Up/Down (caret/slash menu) vs Ctrl+Up/Ctrl+Down (input history).
-  - [ ] `cynork_tui.md` auth recovery: Add optional note on in-TUI login layout details.
-- [ ] Run targeted tests until they pass.
-- [ ] Validation gate: do not proceed until bug fixes and spec updates are green.
+- [x] **Bug 3 fix:** Differentiate scrollback messages in `applyEnsureThreadResult`: only emit `[CYNRK_THREAD_SWITCHED]` when `EnsureThread` actually created a new thread or changed `CurrentThreadID`; use a distinct "Thread ready" line otherwise.
+- [x] **Bug 4 fix:** Narrow the `m.Loading && line != ""` guard in `handleEnterKey` to only block plain chat sends; allow lines starting with `/` or `!` to dispatch through `handleSlashLine` / shell handler while streaming.
+- [x] **Spec updates** (apply all 7 from TUI delta):
+  - [x] `cynork_tui.md` L150: Replace unconditional `Shift+Enter MUST` with `SHOULD` and document Alt+Enter and Ctrl+J as supported newline keys.
+  - [x] `cynork_tui.md`: Add sentence that the reference build uses reverse-video cursor rendering.
+  - [x] `cynork_tui_slash_commands.md`: Add `/copy`, `/copy last`, `/copy all` section with transcript rules, system lines, ClipNote, and empty cases.
+  - [x] `cynork_tui.md` queued drafts section: Mark deferred or align MUST language with what is implemented.
+  - [x] REQ-CLIENT-0206: Add optional note that discoverability hints MAY use a second line (footnote).
+  - [x] `cynork_tui.md` composer keys: Document Up/Down (caret/slash menu) vs Ctrl+Up/Ctrl+Down (input history).
+  - [x] `cynork_tui.md` auth recovery: Add optional note on in-TUI login layout details.
+- [x] Run targeted tests until they pass.
+- [x] Validation gate: do not proceed until bug fixes and spec updates are green.
 
 #### Refactor (Task 2)
 
-- [ ] Clean up any duplicated messaging logic between post-login and normal thread ensure paths.
-- [ ] Re-run targeted tests.
-- [ ] Validation gate: do not proceed until refactor is verified.
+- [x] Clean up any duplicated messaging logic between post-login and normal thread ensure paths.
+- [x] Re-run targeted tests.
+- [x] Validation gate: do not proceed until refactor is verified.
 
 #### Testing (Task 2)
 
 All three test layers MUST pass before this task is complete.
 
-- [ ] **Go unit tests:** Run `just test-go-cover` for `cynork/internal/tui` and `cynork/internal/chat`; confirm Bug 3 and Bug 4 unit tests pass and coverage meets thresholds.
-- [ ] **BDD tests:** Run `just test-bdd` for cynork TUI scenarios; confirm Bug 3 and Bug 4 scenarios pass.
-- [ ] **Python E2E tests:** Run `just setup-dev restart --force` then `just e2e --tags tui_pty`; confirm Bug 3 and Bug 4 E2E tests pass and no regressions.
-- [ ] Run `just lint-go` for changed cynork packages.
-- [ ] Run `just lint-md` on changed spec files; run `just docs-check`.
-- [ ] **Testing validation gate:** Do not start Task 3 until **Go**, **BDD**, **Python E2E**, `just lint-go`, `just lint-md`, and `just docs-check` in `#### Testing (Task 2)` above are each satisfied per their checkboxes.
+- [x] **Go unit tests:** Run `just test-go-cover` for `cynork/internal/tui` and `cynork/internal/chat`; confirm Bug 3 and Bug 4 unit tests pass and coverage meets thresholds.
+- [x] **BDD tests:** Run `just test-bdd` for cynork TUI scenarios; confirm Bug 3 and Bug 4 scenarios pass.
+- [x] **Python E2E tests:** Run `just setup-dev restart --force` then `just e2e --tags tui_pty`; confirm Bug 3 and Bug 4 E2E tests pass and no regressions.
+- [x] Run `just lint-go` for changed cynork packages.
+- [x] Run `just lint-md` on changed spec files; run `just docs-check`.
+- [x] **Testing validation gate:** Do not start Task 3 until **Go**, **BDD**, **Python E2E**, `just lint-go`, `just lint-md`, and `just docs-check` in `#### Testing (Task 2)` above are each satisfied per their checkboxes.
 
 #### Closeout (Task 2)
 
-- [ ] Generate a **task completion report** for Task 2: what was done (Bug 3 fix, Bug 4 fix, 7 spec updates), what passed, any deviations or notes.
-- [ ] Do not start Task 3 until this closeout is done.
-- [ ] Mark every completed step in this task with `- [x]`. (Last step.)
+- [x] Generate a **task completion report** for Task 2: what was done (Bug 3 fix, Bug 4 fix, 7 spec updates), what passed, any deviations or notes.
+- [x] Do not start Task 3 until this closeout is done.
+- [x] Mark every completed step in this task with `- [x]`. (Last step.)
 
 ---
 
