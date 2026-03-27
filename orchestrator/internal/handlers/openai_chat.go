@@ -377,7 +377,18 @@ func (h *OpenAIChatHandler) completeViaPMAStream(ctx context.Context, w http.Res
 		writeSSENamedEvent(w, userapi.SSEEventThinkingDelta, string(b))
 		return nil
 	}
-	cb := pmaclient.PMAStreamCallbacks{OnDelta: onDelta, OnThinking: onThinking, OnIterationStart: onIterationStart}
+	onToolCall := func(name, args string) error {
+		payload := userapi.SSEToolCallPayload{Name: name, Arguments: args}
+		b, err := json.Marshal(payload)
+		if err != nil {
+			return err
+		}
+		writeSSENamedEvent(w, userapi.SSEEventToolCall, string(b))
+		return nil
+	}
+	cb := pmaclient.PMAStreamCallbacks{
+		OnDelta: onDelta, OnThinking: onThinking, OnIterationStart: onIterationStart, OnToolCall: onToolCall,
+	}
 	if err := pmaclient.CallChatCompletionStreamWithCallbacks(ctx, nil, cand.endpoint, msgs, workerToken, cb); err != nil {
 		return err
 	}

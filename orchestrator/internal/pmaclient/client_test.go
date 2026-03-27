@@ -593,3 +593,88 @@ func TestProcessNDJSONLine_IterationStartNonIntSkipped(t *testing.T) {
 		t.Errorf("iteration_start string should not invoke callback: saw=%d", sawIteration)
 	}
 }
+
+func TestProcessNDJSONLine_ToolCall(t *testing.T) {
+	var name, args string
+	requireProcessNDJSONLineOK(t, `{"tool_call":{"name":"web_search","arguments":"{}"}}`, PMAStreamCallbacks{
+		OnToolCall: func(n, a string) error {
+			name, args = n, a
+			return nil
+		},
+	})
+	if name != "web_search" || args != "{}" {
+		t.Fatalf("tool_call = (%q, %q), want (web_search, {})", name, args)
+	}
+}
+
+func TestProcessNDJSONLine_ToolCallInvalidPayloadSkipped(t *testing.T) {
+	var called bool
+	err := processNDJSONLine([]byte(`{"tool_call":"not-an-object"}`), PMAStreamCallbacks{
+		OnToolCall: func(_, _ string) error {
+			called = true
+			return nil
+		},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if called {
+		t.Error("invalid tool_call payload should be skipped")
+	}
+}
+
+func TestProcessNDJSONLine_ThinkingError(t *testing.T) {
+	want := fmt.Errorf("thinking err")
+	err := processNDJSONLine([]byte(`{"thinking":"x"}`), PMAStreamCallbacks{
+		OnThinking: func(string) error { return want },
+	})
+	if err != want {
+		t.Fatalf("err = %v, want %v", err, want)
+	}
+}
+
+func TestProcessNDJSONLine_EmptyDeltaSkipped(t *testing.T) {
+	var deltas int
+	requireProcessNDJSONLineOK(t, `{"delta":""}`, PMAStreamCallbacks{
+		OnDelta: func(string) error {
+			deltas++
+			return nil
+		},
+	})
+	if deltas != 0 {
+		t.Errorf("empty delta should not invoke OnDelta, got %d calls", deltas)
+	}
+}
+
+func TestReadHTTPErrorSnippet_NilReader(t *testing.T) {
+	if got := readHTTPErrorSnippet(nil); got != "" {
+		t.Errorf("want empty, got %q", got)
+	}
+}
+
+func TestCallChatCompletionStream_ManagedProxyStream_SendsBearerToken(t *testing.T) {
+	var authHeader string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		authHeader = r.Header.Get("Authorization")
+		if r.URL.Path != pathManagedProxy {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		w.Header().Set("Content-Type", "application/x-ndjson")
+		_, _ = w.Write([]byte(`{"delta":"z"}` + "\n"))
+	}))
+	defer server.Close()
+	url := server.URL + pathManagedProxy
+	err := CallChatCompletionStream(context.Background(), nil, url, nil, "worker-tok", func(d string) error {
+		if d != "z" {
+			t.Errorf("delta = %q", d)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatalf("stream: %v", err)
+	}
+	if authHeader != "Bearer worker-tok" {
+		t.Errorf("Authorization = %q", authHeader)
+	}
+}

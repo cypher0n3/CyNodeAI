@@ -250,6 +250,7 @@ func streamOllamaChatToNDJSON(ctx context.Context, w http.ResponseWriter, chatMe
 	scanner.Buffer(buf, maxScan)
 	var enc *json.Encoder
 	started := false
+	clf := newStreamingClassifier()
 	for scanner.Scan() {
 		if ctx.Err() != nil {
 			return hadDelta, ctx.Err(), started
@@ -259,7 +260,7 @@ func streamOllamaChatToNDJSON(ctx context.Context, w http.ResponseWriter, chatMe
 		if err != nil {
 			return hadDelta, err, started
 		}
-		emitted, hdrsSent, err := ollamaNDJSONEmitContentDelta(w, &enc, &started, content)
+		emitted, hdrsSent, err := emitNDJSONEmissions(w, &enc, &started, clf.Feed(content))
 		if err != nil {
 			return hadDelta, err, hdrsSent
 		}
@@ -273,34 +274,65 @@ func streamOllamaChatToNDJSON(ctx context.Context, w http.ResponseWriter, chatMe
 	if err := scanner.Err(); err != nil {
 		return hadDelta, fmt.Errorf("reading inference stream: %w", err), started
 	}
+	emitted, hdrsSent, err := emitNDJSONEmissions(w, &enc, &started, clf.Flush())
+	if err != nil {
+		return hadDelta, err, hdrsSent
+	}
+	if emitted {
+		hadDelta = true
+	}
+	if started && enc != nil {
+		if err := enc.Encode(map[string]bool{"done": true}); err != nil {
+			return hadDelta, err, true
+		}
+		flushResponseWriter(w)
+	}
 	return hadDelta, nil, started
 }
 
-// ollamaNDJSONEmitContentDelta writes NDJSON headers and one delta line when content is non-empty.
-// headersSentOnErr is true when err is non-nil and the HTTP response headers were already committed.
-func ollamaNDJSONEmitContentDelta(w http.ResponseWriter, enc **json.Encoder, started *bool, content string) (emittedDelta, headersSentOnErr bool, err error) {
-	if content == "" {
-		return false, false, nil
-	}
-	if !*started {
-		w.Header().Set("Content-Type", "application/x-ndjson")
-		w.Header().Set("X-Accel-Buffering", "no")
-		w.WriteHeader(http.StatusOK)
-		flushResponseWriter(w)
-		e := json.NewEncoder(w)
-		e.SetEscapeHTML(false)
-		if err := e.Encode(map[string]int{"iteration_start": 1}); err != nil {
-			return false, true, err
+// emitNDJSONEmissions writes classifier emissions (delta, thinking, tool_call) to the NDJSON stream.
+func emitNDJSONEmissions(w http.ResponseWriter, enc **json.Encoder, started *bool, emissions []streamEmitted) (emittedAny bool, headersSentOnErr bool, err error) {
+	for _, em := range emissions {
+		if em.Kind == streamEmitDelta && em.Text == "" {
+			continue
+		}
+		if em.Kind != streamEmitDelta && strings.TrimSpace(em.Text) == "" {
+			continue
+		}
+		if !*started {
+			w.Header().Set("Content-Type", "application/x-ndjson")
+			w.Header().Set("X-Accel-Buffering", "no")
+			w.WriteHeader(http.StatusOK)
+			flushResponseWriter(w)
+			e := json.NewEncoder(w)
+			e.SetEscapeHTML(false)
+			if err := e.Encode(map[string]int{"iteration_start": 1}); err != nil {
+				return false, true, err
+			}
+			flushResponseWriter(w)
+			*enc = e
+			*started = true
+		}
+		var encErr error
+		switch em.Kind {
+		case streamEmitDelta:
+			encErr = (*enc).Encode(map[string]string{"delta": em.Text})
+		case streamEmitThinking:
+			encErr = (*enc).Encode(map[string]string{"thinking": em.Text})
+		case streamEmitToolCall:
+			encErr = (*enc).Encode(map[string]any{
+				"tool_call": map[string]string{"name": "stream", "arguments": em.Text},
+			})
+		default:
+			continue
+		}
+		if encErr != nil {
+			return emittedAny, true, encErr
 		}
 		flushResponseWriter(w)
-		*enc = e
-		*started = true
+		emittedAny = true
 	}
-	if encErr := (*enc).Encode(map[string]string{"delta": content}); encErr != nil {
-		return true, true, encErr
-	}
-	flushResponseWriter(w)
-	return true, false, nil
+	return emittedAny, false, nil
 }
 
 // streamCompletionToWriter runs direct inference and streams Ollama NDJSON (real token chunks).
@@ -741,7 +773,7 @@ func readInferenceOllamaChatBody(body io.Reader, logger *slog.Logger) (string, e
 // readInferenceStream reads Ollama NDJSON streaming response chunks and accumulates content.
 // Returns the concatenated content with no think-block processing applied.
 func readInferenceStream(body interface{ Read([]byte) (int, error) }, logger *slog.Logger) (string, error) {
-	var sb strings.Builder
+	var acc []byte
 	scanner := bufio.NewScanner(body)
 	for scanner.Scan() {
 		line := scanner.Bytes()
@@ -752,7 +784,7 @@ func readInferenceStream(body interface{ Read([]byte) (int, error) }, logger *sl
 		if err != nil {
 			return "", err
 		}
-		sb.WriteString(content)
+		appendStreamBufferSecure(&acc, []byte(content))
 		if done {
 			break
 		}
@@ -760,7 +792,7 @@ func readInferenceStream(body interface{ Read([]byte) (int, error) }, logger *sl
 	if err := scanner.Err(); err != nil {
 		return "", fmt.Errorf("reading inference stream: %w", err)
 	}
-	return sb.String(), nil
+	return string(acc), nil
 }
 
 // parseInferenceChunk parses one NDJSON line from an Ollama streaming response.

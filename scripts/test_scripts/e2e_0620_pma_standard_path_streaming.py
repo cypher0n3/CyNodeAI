@@ -124,3 +124,95 @@ class TestPMAStandardPathStreaming(unittest.TestCase):
                     )
             except json.JSONDecodeError:
                 continue
+
+    def _named_events(self, events):
+        return [e for e in events if e.get("event")]
+
+    def _openai_content_deltas(self, events):
+        """Unnamed SSE data lines that are chat.completion.chunk JSON with content deltas."""
+        out = []
+        for e in events:
+            if e.get("event") is not None:
+                continue
+            data = helpers.parse_json_safe(e.get("data") or "")
+            if not isinstance(data, dict):
+                continue
+            choices = data.get("choices") or []
+            if not choices:
+                continue
+            delta = (choices[0] or {}).get("delta") or {}
+            content = delta.get("content")
+            if content:
+                out.append(content)
+        return out
+
+    def test_pma_gateway_sse_relays_iteration_and_optional_named_extensions(self):
+        """Relay iteration_start, deltas, and optional cynodeai.* extension events."""
+        headers = _auth_headers(state.CONFIG_PATH)
+        headers["Content-Type"] = "application/json"
+        headers["Accept"] = "text/event-stream"
+        payload = {
+            "model": "cynodeai.pm",
+            "stream": True,
+            "messages": [{"role": "user", "content": "Reply with exactly: OK"}],
+        }
+        resp = requests.post(
+            f"{self._gateway_url()}/v1/chat/completions",
+            headers=headers,
+            json=payload,
+            stream=True,
+            timeout=_SSE_TIMEOUT_SEC,
+        )
+        if resp.status_code != 200:
+            self.skipTest(f"gateway returned {resp.status_code}")
+        events, _ = helpers.parse_sse_stream_typed(resp)
+        named = self._named_events(events)
+        ev_names = {e.get("event") for e in named}
+        self.assertTrue(
+            self._openai_content_deltas(events),
+            "SSE must include OpenAI-style content delta chunks",
+        )
+        self.assertIn(
+            "cynodeai.iteration_start",
+            ev_names,
+            "SSE must relay cynodeai.iteration_start from PMA NDJSON",
+        )
+        for opt in ("cynodeai.thinking_delta", "cynodeai.tool_call", "cynodeai.amendment"):
+            if opt not in ev_names:
+                continue
+            for ev in named:
+                if ev.get("event") != opt:
+                    continue
+                data = helpers.parse_json_safe(ev.get("data") or "")
+                self.assertIsInstance(data, dict, f"{opt} data must be JSON object")
+
+    def test_pma_gateway_sse_amendment_payload_shape_when_present(self):
+        """When PMA emits overwrite NDJSON, gateway relays cynodeai.amendment with valid scope."""
+        headers = _auth_headers(state.CONFIG_PATH)
+        headers["Content-Type"] = "application/json"
+        headers["Accept"] = "text/event-stream"
+        payload = {
+            "model": "cynodeai.pm",
+            "stream": True,
+            "messages": [{"role": "user", "content": "Reply with exactly: OK"}],
+        }
+        resp = requests.post(
+            f"{self._gateway_url()}/v1/chat/completions",
+            headers=headers,
+            json=payload,
+            stream=True,
+            timeout=_SSE_TIMEOUT_SEC,
+        )
+        if resp.status_code != 200:
+            self.skipTest(f"gateway returned {resp.status_code}")
+        events, _ = helpers.parse_sse_stream_typed(resp)
+        amendments = [e for e in events if e.get("event") == "cynodeai.amendment"]
+        if not amendments:
+            self.skipTest("no amendment events in this completion (overwrite is path-dependent)")
+        for ev in amendments:
+            data = helpers.parse_json_safe(ev.get("data") or "{}")
+            if not isinstance(data, dict):
+                continue
+            scope = data.get("scope")
+            if scope is not None:
+                self.assertIn(scope, ("iteration", "turn"), data)

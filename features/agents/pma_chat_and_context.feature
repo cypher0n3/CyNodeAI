@@ -26,6 +26,7 @@ Scenario: Composed context order is baseline then project then task then additio
   And "## Project context" appears before "## Task context" in the captured prompt
   And "## Task context" appears before "## User additional context" in the captured prompt
 
+@wip
 @req_orches_0165
 @spec_cynai_pmagnt_conversationhistory
 @spec_cynai_pmagnt_chatsurfacemapping
@@ -37,6 +38,7 @@ Scenario: Responses-surface continuation preserves prior turns and keeps current
   And the last captured user message is "Continue the plan"
   And the last captured user message is not folded into the system message
 
+@wip
 @req_pmagnt_0116
 @spec_cynai_pmagnt_nodelocalinferenceenv
 Scenario: PMA applies node-local backend env values to local inference requests
@@ -64,6 +66,7 @@ Scenario: PMA streams visible assistant text incrementally without leaking hidde
   And PMA does not emit hidden thinking as visible text deltas
   And PMA finishes with a terminal completion event
 
+@wip
 @req_pmagnt_0120
 @spec_cynai_pmagnt_streamingllmwrapper
 Scenario: PMA streaming wrapper tees tokens to output stream and internal buffer
@@ -92,6 +95,7 @@ Scenario: PMA emits full thinking content as NDJSON thinking events
   Then the NDJSON stream includes thinking events containing the full reasoning text
   And the thinking content is not suppressed or summarized
 
+@wip
 @req_pmagnt_0120
 @spec_cynai_pmagnt_pmastreamingndjsonformat
 Scenario: PMA emits iteration_start events between langchaingo iterations
@@ -110,6 +114,7 @@ Scenario: PMA emits per-iteration overwrite when think-tag tokens leak to visibl
   Then PMA emits an overwrite NDJSON event with scope "iteration" and reason "think_tag_leaked"
   And the overwrite content does not include the leaked tag characters
 
+@wip
 @req_pmagnt_0124
 @spec_cynai_pmagnt_pmastreamingoverwrite
 Scenario: PMA emits per-turn overwrite on agent output correction

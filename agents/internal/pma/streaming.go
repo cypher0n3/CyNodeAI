@@ -54,15 +54,28 @@ func (s *streamingLLM) GenerateContent(ctx context.Context, messages []llms.Mess
 		s.flusher.Flush()
 	}
 
+	clf := newStreamingClassifier()
 	streamFn := func(ctx context.Context, chunk []byte) error {
-		if len(chunk) == 0 {
-			return nil
-		}
-		if err := s.enc.Encode(map[string]string{"delta": string(chunk)}); err != nil {
-			return err
-		}
-		if s.flusher != nil {
-			s.flusher.Flush()
+		for _, em := range clf.Feed(string(chunk)) {
+			var err error
+			switch em.Kind {
+			case streamEmitDelta:
+				err = s.enc.Encode(map[string]string{"delta": em.Text})
+			case streamEmitThinking:
+				err = s.enc.Encode(map[string]string{"thinking": em.Text})
+			case streamEmitToolCall:
+				err = s.enc.Encode(map[string]any{
+					"tool_call": map[string]string{"name": "stream", "arguments": em.Text},
+				})
+			default:
+				continue
+			}
+			if err != nil {
+				return err
+			}
+			if s.flusher != nil {
+				s.flusher.Flush()
+			}
 		}
 		return nil
 	}

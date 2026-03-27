@@ -49,6 +49,8 @@ type agentsTestState struct {
 	pmaResponseStatus int
 	pmaResponseBody   []byte
 	pmaOldOllamaURL   string // restored in After when mock was used
+	// PMA streaming (NDJSON body from /internal/chat/completion when stream=true)
+	pmaStreamLines []string // Ollama-style NDJSON lines for mock inference server
 	// Task result contract scenario (SBA result from task result)
 	taskResultJSON []byte
 	taskStatus     string
@@ -84,12 +86,14 @@ func InitializeAgentsSuite(sc *godog.ScenarioContext, state *agentsTestState) {
 		state.pmaCapturedPrompt = ""
 		state.pmaResponseStatus = 0
 		state.pmaResponseBody = nil
+		state.pmaStreamLines = nil
 		if state.pmaOldOllamaURL != "" {
 			os.Setenv("OLLAMA_BASE_URL", state.pmaOldOllamaURL)
 		} else if state.pmaMockInference != nil {
 			os.Unsetenv("OLLAMA_BASE_URL")
 		}
 		state.pmaOldOllamaURL = ""
+		os.Unsetenv("INFERENCE_MODEL")
 		state.taskResultJSON = nil
 		state.taskStatus = ""
 		state.firstJobResult = nil
@@ -107,6 +111,7 @@ func InitializeAgentsSuite(sc *godog.ScenarioContext, state *agentsTestState) {
 	registerSBARunnerSteps(sc, state)
 	registerSBALifecycleSteps(sc, state)
 	registerPMASteps(sc, state)
+	registerPMAStreamingSteps(sc, state)
 }
 
 // registerSBAContractSteps registers steps for SBA job spec and result contract validation.

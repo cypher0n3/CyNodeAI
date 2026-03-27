@@ -150,6 +150,7 @@ type PMAStreamCallbacks struct {
 	OnDelta          func(string) error
 	OnThinking       func(string) error
 	OnIterationStart func(iteration int) error
+	OnToolCall       func(name, arguments string) error
 }
 
 // CallChatCompletionStream streams completion from PMA; onDelta is called for each token.
@@ -265,12 +266,25 @@ func processNDJSONLine(line []byte, cb PMAStreamCallbacks) error {
 	}); err != nil {
 		return err
 	}
-	return ndjsonStringField(raw, "thinking", func(s string) error {
+	if err := ndjsonStringField(raw, "thinking", func(s string) error {
 		if cb.OnThinking == nil {
 			return nil
 		}
 		return cb.OnThinking(s)
-	})
+	}); err != nil {
+		return err
+	}
+	if rawTC, ok := raw["tool_call"]; ok && cb.OnToolCall != nil {
+		var payload struct {
+			Name      string `json:"name"`
+			Arguments string `json:"arguments"`
+		}
+		if err := json.Unmarshal(rawTC, &payload); err != nil {
+			return nil
+		}
+		return cb.OnToolCall(payload.Name, payload.Arguments)
+	}
+	return nil
 }
 
 func callViaManagedProxyStreamWithCallbacks(ctx context.Context, client *http.Client, proxyURL string, handoffBody []byte, workerBearerToken string, cb PMAStreamCallbacks) error {

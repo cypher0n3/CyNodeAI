@@ -235,53 +235,54 @@ See `docs/dev_docs/2026-03-27_task5_discovery_streaming_notes.md`.
 All three test layers MUST be added or updated before implementation.
 
 - **Python E2E tests** (add or update first so spec-defined behavior is locked):
-  - [ ] Add or update E2E tests (e.g. `e2e_0620_pma_ndjson.py`) asserting that PMA streaming output contains separate `delta`, `thinking_delta`, and `tool_call` event types.
-  - [ ] Add E2E assertion for per-iteration and per-turn overwrite events when PMA emits them.
-  - [ ] Run `just e2e --tags pma_inference` and confirm new assertions fail.
+  - [x] Add or update E2E tests (e.g. `e2e_0620_pma_ndjson.py`) asserting that PMA streaming output contains separate `delta`, `thinking_delta`, and `tool_call` event types.
+  - [x] Add E2E assertion for per-iteration and per-turn overwrite events when PMA emits them.
+  - [x] Run `just e2e --tags pma_inference` and confirm new assertions fail (Red phase; superseded by Green).
 - **BDD scenarios** (add or extend in `pma_chat_and_context.feature`):
-  - [ ] Add scenarios for overwrite events (per-iteration, per-turn scope).
-  - [ ] Add scenarios for thinking/tool-call separation in streaming output.
+  - [x] Add scenarios for overwrite events (per-iteration, per-turn scope). *(Scenarios already in feature; Red wires steps.)*
+  - [x] Add scenarios for thinking/tool-call separation in streaming output. *(Same.)*
 - **Go unit tests** (add failing tests in `agents/internal/pma`):
-  - [ ] State machine routes visible text to `delta`, thinking to `thinking_delta`, tool-call content to `tool_call`; ambiguous partial tags buffered.
-  - [ ] Per-iteration overwrite event replaces only targeted iteration segment.
-  - [ ] Per-turn overwrite event replaces entire visible in-flight content.
-  - [ ] Secret-bearing append/replace paths use the shared secure-buffer helper.
-- [ ] **Red - Python E2E:** Run `just setup-dev restart --force` then `just e2e --tags pma_inference`; confirm new PMA streaming assertions fail.
-- [ ] **Red - BDD:** Run `just test-bdd` for PMA feature coverage; confirm new overwrite and streaming scenarios fail as expected.
-- [ ] **Red - Go:** Run `go test` / `just test-go-cover` for `agents/internal/pma`; confirm new state machine, overwrite, and secure-buffer tests fail as expected.
-- [ ] **Red validation gate:** Do not proceed to Green until Python E2E, BDD, and Go Red checks above prove the gaps across all three layers.
+  - [x] State machine routes visible text to `delta`, thinking to `thinking_delta`, tool-call content to `tool_call`; ambiguous partial tags buffered.
+  - [x] Per-iteration overwrite event replaces only targeted iteration segment.
+  - [x] Per-turn overwrite event replaces entire visible in-flight content.
+  - [x] Secret-bearing append/replace paths use the shared secure-buffer helper.
+- [x] **Red - Python E2E:** Run `just setup-dev restart --force` then `just e2e --tags pma_inference`; confirm new PMA streaming assertions fail.
+- [x] **Red - BDD:** Run `just test-bdd` for PMA feature coverage; confirm new overwrite and streaming scenarios fail as expected.
+- [x] **Red - Go:** Run `go test` / `just test-go-cover` for `agents/internal/pma`; confirm new state machine, overwrite, and secure-buffer tests fail as expected.
+- [x] **Red validation gate:** Do not proceed to Green until Python E2E, BDD, and Go Red checks above prove the gaps across all three layers.
 
 #### Green (Task 5)
 
-- [ ] Implement configurable streaming token state machine in PMA:
-  - [ ] Route visible text to `delta`, hidden thinking to `thinking`, detected tool-call content to `tool_call`.
-  - [ ] Buffer ambiguous partial tags instead of leaking as visible text.
-- [ ] Emit PMA overwrite events for both scopes (per-iteration, per-turn) per spec.
-- [ ] Wrap PMA secret-bearing stream buffer operations with the secure-buffer helper.
-- [ ] Re-run PMA unit tests until they pass.
-- [ ] Validation gate: do not proceed until PMA streaming state machine and overwrite are green.
+- [x] Implement configurable streaming token state machine in PMA:
+  - [x] Route visible text to `delta`, hidden thinking to `thinking`, detected tool-call content to `tool_call`.
+  - [x] Buffer ambiguous partial tags instead of leaking as visible text.
+- [x] Emit PMA overwrite events for both scopes (per-iteration, per-turn) per spec.
+- [x] Wrap PMA secret-bearing stream buffer operations with the secure-buffer helper.
+- [x] Re-run PMA unit tests until they pass.
+- [x] Validation gate: do not proceed until PMA streaming state machine and overwrite are green.
 
 #### Refactor (Task 5)
 
-- [ ] Extract small helpers for state machine and overwrite logic; remove duplication.
-- [ ] Re-run Task 5 targeted tests.
-- [ ] Validation gate: do not proceed until refactor is verified.
+- [x] Extract small helpers for state machine and overwrite logic; remove duplication.
+- [x] Re-run Task 5 targeted tests.
+- [x] Validation gate: do not proceed until refactor is verified.
 
 #### Testing (Task 5)
 
 All three test layers MUST pass before this task is complete.
 
-- [ ] **Go unit tests:** Run `just test-go-cover` for affected PMA packages; confirm state machine, overwrite, and secure-buffer unit tests pass and coverage meets thresholds.
-- [ ] **BDD tests:** Run `just test-bdd` for PMA feature coverage; confirm overwrite and streaming scenarios pass.
-- [ ] **Python E2E tests:** Run `just setup-dev restart --force` then `just e2e --tags pma_inference`; confirm PMA streaming E2E assertions pass.
-- [ ] Run `just lint-go` for changed packages.
-- [ ] **Testing validation gate:** Do not start Task 6 until **Go**, **BDD**, **Python E2E**, and `just lint-go` in `#### Testing (Task 5)` above are each satisfied per their checkboxes.
+- [x] **Go unit tests:** Run `just test-go-cover` for affected PMA packages; confirm state machine, overwrite, and secure-buffer unit tests pass and coverage meets thresholds.
+- [x] **BDD tests:** Run `just test-bdd` for PMA feature coverage; confirm overwrite and streaming scenarios pass.
+- [x] **Python E2E tests:** Run `just setup-dev restart --force` then `just e2e --tags pma_inference`; confirm PMA streaming E2E assertions pass.
+- [x] Run `just lint-go` for changed packages.
+- [x] Run `just lint-python` for changed E2E runner (`scripts/test_scripts/run_e2e.py`) and `e2e_0620_pma_standard_path_streaming.py`.
+- [x] **Testing validation gate:** Do not start Task 6 until **Go**, **BDD**, **Python E2E**, `just lint-go`, and `just lint-python` in `#### Testing (Task 5)` above are each satisfied per their checkboxes.
 
 #### Closeout (Task 5)
 
-- [ ] Generate a **task completion report** for Task 5: what changed (state machine, overwrite, secure-buffer), what tests passed.
-- [ ] Do not start Task 6 until closeout is done.
-- [ ] Mark every completed step in this task with `- [x]`. (Last step.)
+- [x] Generate a **task completion report** for Task 5: what changed (state machine, overwrite, secure-buffer), what tests passed.
+- [x] Do not start Task 6 until closeout is done.
+- [x] Mark every completed step in this task with `- [x]`. (Last step.)
 
 ---
 

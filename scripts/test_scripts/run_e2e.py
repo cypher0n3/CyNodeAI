@@ -218,10 +218,12 @@ def _run_single_prereq(name, opts):
                         file=sys.stderr,
                     )
                     return False
+                # After a fresh stack restart, Ollama may load a multi-GB model into GPU/ROCm
+                # for 5–10+ minutes before the first chat returns 2xx; 180s is too tight.
                 if not helpers.wait_for_pma_chat_ready(
-                    timeout_sec=180, poll_interval=5
+                    timeout_sec=600, poll_interval=5
                 ):
-                    print("Error: PMA chat not ready within 180s", file=sys.stderr)
+                    print("Error: PMA chat not ready within 600s", file=sys.stderr)
                     return False
     return True
 
