@@ -91,7 +91,9 @@ func TestIntegration_UpdateBlob_forbiddenOtherUser(t *testing.T) {
 	}
 	uid := alice.ID
 	ct := testPlainTextCT
-	art, err := svc.CreateFromBody(ctx, uid, alice.Handle, "user", &uid, nil, nil, "owned-upd.txt", []byte("x"), &ct, nil, nil, nil)
+	art, err := svc.CreateFromBody(ctx, uid, alice.Handle, &CreateFromBodyInput{
+		Level: "user", OwnerUserID: &uid, ArtifactPath: "owned-upd.txt", Body: []byte("x"), ContentType: &ct,
+	})
 	if err != nil {
 		t.Fatalf("CreateFromBody: %v", err)
 	}
@@ -114,7 +116,9 @@ func TestIntegration_Delete_forbiddenOtherUser(t *testing.T) {
 	}
 	uid := alice.ID
 	ct := testPlainTextCT
-	art, err := svc.CreateFromBody(ctx, uid, alice.Handle, "user", &uid, nil, nil, "owned-del.txt", []byte("x"), &ct, nil, nil, nil)
+	art, err := svc.CreateFromBody(ctx, uid, alice.Handle, &CreateFromBodyInput{
+		Level: "user", OwnerUserID: &uid, ArtifactPath: "owned-del.txt", Body: []byte("x"), ContentType: &ct,
+	})
 	if err != nil {
 		t.Fatalf("CreateFromBody: %v", err)
 	}
@@ -132,7 +136,9 @@ func TestIntegration_CreateFromBody_nilContentType(t *testing.T) {
 		t.Fatalf("CreateUser: %v", err)
 	}
 	uid := user.ID
-	art, err := svc.CreateFromBody(ctx, uid, user.Handle, "user", &uid, nil, nil, "nil-ct.txt", []byte("x"), nil, nil, nil, nil)
+	art, err := svc.CreateFromBody(ctx, uid, user.Handle, &CreateFromBodyInput{
+		Level: "user", OwnerUserID: &uid, ArtifactPath: "nil-ct.txt", Body: []byte("x"),
+	})
 	if err != nil {
 		t.Fatalf("CreateFromBody: %v", err)
 	}
@@ -156,7 +162,9 @@ func TestIntegration_ServiceUserScopeRoundTrip(t *testing.T) {
 
 	body := []byte("integration blob")
 	ct := testPlainTextCT
-	art, err := svc.CreateFromBody(ctx, uid, handle, "user", &uid, nil, nil, "int/path.txt", body, &ct, nil, nil, nil)
+	art, err := svc.CreateFromBody(ctx, uid, handle, &CreateFromBodyInput{
+		Level: "user", OwnerUserID: &uid, ArtifactPath: "int/path.txt", Body: body, ContentType: &ct,
+	})
 	if err != nil {
 		t.Fatalf("CreateFromBody: %v", err)
 	}
@@ -213,7 +221,9 @@ func TestIntegration_CreateFromBody_putFails(t *testing.T) {
 	}
 	uid := user.ID
 	ct := testPlainTextCT
-	_, err = svc.CreateFromBody(ctx, uid, user.Handle, "user", &uid, nil, nil, "pf.txt", []byte("x"), &ct, nil, nil, nil)
+	_, err = svc.CreateFromBody(ctx, uid, user.Handle, &CreateFromBodyInput{
+		Level: "user", OwnerUserID: &uid, ArtifactPath: "pf.txt", Body: []byte("x"), ContentType: &ct,
+	})
 	if err == nil {
 		t.Fatal("expected PutObject error")
 	}
@@ -230,7 +240,9 @@ func TestIntegration_GetByScopePath_blobReadFails(t *testing.T) {
 	}
 	uid := user.ID
 	ct := testPlainTextCT
-	_, err = svc.CreateFromBody(ctx, uid, user.Handle, "user", &uid, nil, nil, "gspf.txt", []byte("z"), &ct, nil, nil, nil)
+	_, err = svc.CreateFromBody(ctx, uid, user.Handle, &CreateFromBodyInput{
+		Level: "user", OwnerUserID: &uid, ArtifactPath: "gspf.txt", Body: []byte("z"), ContentType: &ct,
+	})
 	if err != nil {
 		t.Fatalf("CreateFromBody: %v", err)
 	}
@@ -252,7 +264,9 @@ func TestIntegration_GetBlob_blobReadFails(t *testing.T) {
 	}
 	uid := user.ID
 	ct := testPlainTextCT
-	art, err := svc.CreateFromBody(ctx, uid, user.Handle, "user", &uid, nil, nil, "gf.txt", []byte("y"), &ct, nil, nil, nil)
+	art, err := svc.CreateFromBody(ctx, uid, user.Handle, &CreateFromBodyInput{
+		Level: "user", OwnerUserID: &uid, ArtifactPath: "gf.txt", Body: []byte("y"), ContentType: &ct,
+	})
 	if err != nil {
 		t.Fatalf("CreateFromBody: %v", err)
 	}
@@ -274,7 +288,9 @@ func TestIntegration_Delete_blobDeleteFails(t *testing.T) {
 	}
 	uid := user.ID
 	ct := testPlainTextCT
-	art, err := svc.CreateFromBody(ctx, uid, user.Handle, "user", &uid, nil, nil, "del-blob.txt", []byte("x"), &ct, nil, nil, nil)
+	art, err := svc.CreateFromBody(ctx, uid, user.Handle, &CreateFromBodyInput{
+		Level: "user", OwnerUserID: &uid, ArtifactPath: "del-blob.txt", Body: []byte("x"), ContentType: &ct,
+	})
 	if err != nil {
 		t.Fatalf("CreateFromBody: %v", err)
 	}
@@ -295,7 +311,9 @@ func TestIntegration_UpdateBlob_putFails(t *testing.T) {
 	}
 	uid := user.ID
 	ct := testPlainTextCT
-	art, err := svc.CreateFromBody(ctx, uid, user.Handle, "user", &uid, nil, nil, "upd-blob.txt", []byte("x"), &ct, nil, nil, nil)
+	art, err := svc.CreateFromBody(ctx, uid, user.Handle, &CreateFromBodyInput{
+		Level: "user", OwnerUserID: &uid, ArtifactPath: "upd-blob.txt", Body: []byte("x"), ContentType: &ct,
+	})
 	if err != nil {
 		t.Fatalf("CreateFromBody: %v", err)
 	}
@@ -322,7 +340,9 @@ func TestIntegration_ServiceUserScopeReadGrant(t *testing.T) {
 	uid := owner.ID
 	body := []byte("granted-read")
 	ct := testPlainTextCT
-	art, err := svc.CreateFromBody(ctx, uid, owner.Handle, "user", &uid, nil, nil, "grant/read.txt", body, &ct, nil, nil, nil)
+	art, err := svc.CreateFromBody(ctx, uid, owner.Handle, &CreateFromBodyInput{
+		Level: "user", OwnerUserID: &uid, ArtifactPath: "grant/read.txt", Body: body, ContentType: &ct,
+	})
 	if err != nil {
 		t.Fatalf("CreateFromBody: %v", err)
 	}
@@ -353,7 +373,9 @@ func TestIntegration_SystemDeleteArtifact(t *testing.T) {
 	}
 	uid := user.ID
 	ct := testPlainTextCT
-	art, err := svc.CreateFromBody(ctx, uid, user.Handle, "user", &uid, nil, nil, "sysdel.txt", []byte("x"), &ct, nil, nil, nil)
+	art, err := svc.CreateFromBody(ctx, uid, user.Handle, &CreateFromBodyInput{
+		Level: "user", OwnerUserID: &uid, ArtifactPath: "sysdel.txt", Body: []byte("x"), ContentType: &ct,
+	})
 	if err != nil {
 		t.Fatalf("CreateFromBody: %v", err)
 	}
@@ -377,7 +399,9 @@ func TestIntegration_BackfillAndPrune(t *testing.T) {
 	}
 	uid := user.ID
 	ct := testPlainTextCT
-	_, err = svc.CreateFromBody(ctx, uid, user.Handle, "user", &uid, nil, nil, "bf.txt", []byte("x"), &ct, nil, nil, nil)
+	_, err = svc.CreateFromBody(ctx, uid, user.Handle, &CreateFromBodyInput{
+		Level: "user", OwnerUserID: &uid, ArtifactPath: "bf.txt", Body: []byte("x"), ContentType: &ct,
+	})
 	if err != nil {
 		t.Fatalf("CreateFromBody: %v", err)
 	}
@@ -523,7 +547,9 @@ func TestIntegration_BackfillPopulatesChecksum(t *testing.T) {
 	}
 	uid := user.ID
 	ct := testPlainTextCT
-	art, err := svc.CreateFromBody(ctx, uid, user.Handle, "user", &uid, nil, nil, "bf-check.txt", []byte("hello"), &ct, nil, nil, nil)
+	art, err := svc.CreateFromBody(ctx, uid, user.Handle, &CreateFromBodyInput{
+		Level: "user", OwnerUserID: &uid, ArtifactPath: "bf-check.txt", Body: []byte("hello"), ContentType: &ct,
+	})
 	if err != nil {
 		t.Fatalf("CreateFromBody: %v", err)
 	}
@@ -559,7 +585,9 @@ func TestIntegration_PruneStale_skipsOnBlobDeleteFailure(t *testing.T) {
 	}
 	uid := user.ID
 	ct := testPlainTextCT
-	art, err := svc.CreateFromBody(ctx, uid, user.Handle, "user", &uid, nil, nil, "prune-skip.txt", []byte("z"), &ct, nil, nil, nil)
+	art, err := svc.CreateFromBody(ctx, uid, user.Handle, &CreateFromBodyInput{
+		Level: "user", OwnerUserID: &uid, ArtifactPath: "prune-skip.txt", Body: []byte("z"), ContentType: &ct,
+	})
 	if err != nil {
 		t.Fatalf("CreateFromBody: %v", err)
 	}
@@ -589,7 +617,9 @@ func TestIntegration_PruneStaleByMaxAge_deletesOldRows(t *testing.T) {
 	}
 	uid := user.ID
 	ct := testPlainTextCT
-	art, err := svc.CreateFromBody(ctx, uid, user.Handle, "user", &uid, nil, nil, "old.txt", []byte("z"), &ct, nil, nil, nil)
+	art, err := svc.CreateFromBody(ctx, uid, user.Handle, &CreateFromBodyInput{
+		Level: "user", OwnerUserID: &uid, ArtifactPath: "old.txt", Body: []byte("z"), ContentType: &ct,
+	})
 	if err != nil {
 		t.Fatalf("CreateFromBody: %v", err)
 	}

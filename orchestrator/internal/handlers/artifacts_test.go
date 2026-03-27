@@ -44,11 +44,7 @@ type fakeArtSvc struct {
 	listArts []*models.OrchestratorArtifact
 }
 
-func (f *fakeArtSvc) CreateFromBody(ctx context.Context, subjectUserID uuid.UUID, subjectHandle string, level string,
-	ownerUserID, groupID, projectID *uuid.UUID,
-	artifactPath string, body []byte, contentType *string,
-	createdByJobID, correlationTaskID *uuid.UUID, runID *uuid.UUID,
-) (*models.OrchestratorArtifact, error) {
+func (f *fakeArtSvc) CreateFromBody(ctx context.Context, subjectUserID uuid.UUID, subjectHandle string, in *artifacts.CreateFromBodyInput) (*models.OrchestratorArtifact, error) {
 	if f.createErr != nil {
 		return nil, f.createErr
 	}

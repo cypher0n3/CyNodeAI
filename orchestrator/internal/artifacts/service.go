@@ -82,53 +82,52 @@ func SanitizePath(p string) (string, error) {
 }
 
 // CreateFromBody uploads bytes and inserts metadata.
-func (s *Service) CreateFromBody(ctx context.Context, subjectUserID uuid.UUID, subjectHandle string, level string,
-	ownerUserID, groupID, projectID *uuid.UUID,
-	artifactPath string, body []byte, contentType *string,
-	createdByJobID, correlationTaskID *uuid.UUID, runID *uuid.UUID,
-) (*models.OrchestratorArtifact, error) {
+func (s *Service) CreateFromBody(ctx context.Context, subjectUserID uuid.UUID, subjectHandle string, in *CreateFromBodyInput) (*models.OrchestratorArtifact, error) {
 	if s == nil || s.DB == nil || s.Blob == nil {
 		return nil, errors.New("artifacts service not configured")
 	}
-	partition, err := ScopePartition(level, ownerUserID, groupID, projectID)
+	if in == nil {
+		return nil, errors.New("create input required")
+	}
+	partition, err := ScopePartition(in.Level, in.OwnerUserID, in.GroupID, in.ProjectID)
 	if err != nil {
 		return nil, err
 	}
-	ap, err := SanitizePath(artifactPath)
+	ap, err := SanitizePath(in.ArtifactPath)
 	if err != nil {
 		return nil, err
 	}
-	if err := s.canWriteScope(ctx, subjectUserID, subjectHandle, strings.ToLower(level), ownerUserID, groupID, projectID); err != nil {
+	if err := s.canWriteScope(ctx, subjectUserID, subjectHandle, strings.ToLower(in.Level), in.OwnerUserID, in.GroupID, in.ProjectID); err != nil {
 		return nil, err
 	}
 	id := uuid.New()
 	storageKey := fmt.Sprintf("artifacts/%s", id.String())
-	if err := s.Blob.PutObject(ctx, storageKey, body, contentType); err != nil {
+	if err := s.Blob.PutObject(ctx, storageKey, in.Body, in.ContentType); err != nil {
 		return nil, err
 	}
 	var checksum *string
-	if s.HashInlineMaxBytes <= 0 || int64(len(body)) <= s.HashInlineMaxBytes {
-		sum := sha256.Sum256(body)
+	if s.HashInlineMaxBytes <= 0 || int64(len(in.Body)) <= s.HashInlineMaxBytes {
+		sum := sha256.Sum256(in.Body)
 		h := hex.EncodeToString(sum[:])
 		checksum = &h
 	}
-	sz := int64(len(body))
+	sz := int64(len(in.Body))
 	row := &models.OrchestratorArtifact{
 		OrchestratorArtifactBase: models.OrchestratorArtifactBase{
-			ScopeLevel:          strings.ToLower(level),
+			ScopeLevel:          strings.ToLower(in.Level),
 			ScopePartition:      partition,
-			OwnerUserID:         ownerUserID,
-			GroupID:             groupID,
-			ProjectID:           projectID,
+			OwnerUserID:         in.OwnerUserID,
+			GroupID:             in.GroupID,
+			ProjectID:           in.ProjectID,
 			Path:                ap,
 			StorageRef:          storageKey,
 			SizeBytes:           &sz,
-			ContentType:         contentType,
+			ContentType:         in.ContentType,
 			ChecksumSHA256:      checksum,
-			CreatedByJobID:      createdByJobID,
+			CreatedByJobID:      in.CreatedByJobID,
 			LastModifiedByJobID: nil,
-			CorrelationTaskID:   correlationTaskID,
-			RunID:               runID,
+			CorrelationTaskID:   in.CorrelationTaskID,
+			RunID:               in.RunID,
 		},
 		ID: id,
 	}
@@ -394,8 +393,17 @@ func (s *Service) MCPPut(ctx context.Context, subjectUserID uuid.UUID, subjectHa
 	if err != nil && !errors.Is(err, database.ErrNotFound) {
 		return nil, err
 	}
-	art, err := s.CreateFromBody(ctx, subjectUserID, subjectHandle, scope, ownerID, groupID, projectID, pathStr, raw, ctPtr,
-		uuidArg(args, "job_id"), uuidArg(args, "task_id"), nil)
+	art, err := s.CreateFromBody(ctx, subjectUserID, subjectHandle, &CreateFromBodyInput{
+		Level:             scope,
+		OwnerUserID:       ownerID,
+		GroupID:           groupID,
+		ProjectID:         projectID,
+		ArtifactPath:      pathStr,
+		Body:              raw,
+		ContentType:       ctPtr,
+		CreatedByJobID:    uuidArg(args, "job_id"),
+		CorrelationTaskID: uuidArg(args, "task_id"),
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -427,13 +435,13 @@ func (s *Service) MCPGet(ctx context.Context, subjectUserID uuid.UUID, subjectHa
 		return nil, err
 	}
 	return map[string]interface{}{
-		"status":                "success",
-		"artifact_id":           art.ID.String(),
-		"path":                  art.Path,
-		"content_bytes_base64":  base64.StdEncoding.EncodeToString(data),
-		"content_type":          art.ContentType,
-		"size_bytes":            art.SizeBytes,
-		"checksum_sha256":       art.ChecksumSHA256,
+		"status":               "success",
+		"artifact_id":          art.ID.String(),
+		"path":                 art.Path,
+		"content_bytes_base64": base64.StdEncoding.EncodeToString(data),
+		"content_type":         art.ContentType,
+		"size_bytes":           art.SizeBytes,
+		"checksum_sha256":      art.ChecksumSHA256,
 	}, nil
 }
 

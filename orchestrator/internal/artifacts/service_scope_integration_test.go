@@ -65,6 +65,13 @@ func mustAdminUser(t *testing.T, ctx context.Context, db *database.DB) *models.U
 	return adm
 }
 
+func mustCreateFromBodyOK(t *testing.T, svc *Service, ctx context.Context, subjectID uuid.UUID, subjectHandle string, in *CreateFromBodyInput) {
+	t.Helper()
+	if _, err := svc.CreateFromBody(ctx, subjectID, subjectHandle, in); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestIntegration_ListAndScopes(t *testing.T) {
 	f := setupScopeListFixtures(t)
 	t.Run("list_group_and_global_non_admin_forbidden", func(t *testing.T) {
@@ -115,9 +122,9 @@ func scopeListGroupGlobalNonAdminForbidden(t *testing.T, f *scopeListFixtures) {
 	adm := mustAdminUser(t, f.ctx, f.db)
 	ct := f.ct
 	gid := uuid.New()
-	if _, err := f.svc.CreateFromBody(f.ctx, adm.ID, adm.Handle, "group", nil, &gid, nil, "g-list.txt", []byte("x"), &ct, nil, nil, nil); err != nil {
-		t.Fatal(err)
-	}
+	mustCreateFromBodyOK(t, f.svc, f.ctx, adm.ID, adm.Handle, &CreateFromBodyInput{
+		Level: "group", GroupID: &gid, ArtifactPath: "g-list.txt", Body: []byte("x"), ContentType: &ct,
+	})
 	_, err := f.svc.List(f.ctx, f.alice.ID, f.alice.Handle, database.ListOrchestratorArtifactsParams{
 		ScopeLevel: "group",
 		GroupID:    &gid,
@@ -126,9 +133,9 @@ func scopeListGroupGlobalNonAdminForbidden(t *testing.T, f *scopeListFixtures) {
 	if !errors.Is(err, ErrForbidden) {
 		t.Fatalf("List group non-admin: %v", err)
 	}
-	if _, err := f.svc.CreateFromBody(f.ctx, adm.ID, adm.Handle, "global", nil, nil, nil, "glob-list.txt", []byte("x"), &ct, nil, nil, nil); err != nil {
-		t.Fatal(err)
-	}
+	mustCreateFromBodyOK(t, f.svc, f.ctx, adm.ID, adm.Handle, &CreateFromBodyInput{
+		Level: "global", ArtifactPath: "glob-list.txt", Body: []byte("x"), ContentType: &ct,
+	})
 	_, err = f.svc.List(f.ctx, f.alice.ID, f.alice.Handle, database.ListOrchestratorArtifactsParams{
 		ScopeLevel: "global",
 		Limit:      10,
@@ -142,9 +149,9 @@ func scopeListUserWithOffset(t *testing.T, f *scopeListFixtures) {
 	ct := f.ct
 	for i := range 3 {
 		path := fmt.Sprintf("off-%d.txt", i)
-		if _, err := f.svc.CreateFromBody(f.ctx, f.alice.ID, f.alice.Handle, "user", &f.alice.ID, nil, nil, path, []byte("x"), &ct, nil, nil, nil); err != nil {
-			t.Fatal(err)
-		}
+		mustCreateFromBodyOK(t, f.svc, f.ctx, f.alice.ID, f.alice.Handle, &CreateFromBodyInput{
+			Level: "user", OwnerUserID: &f.alice.ID, ArtifactPath: path, Body: []byte("x"), ContentType: &ct,
+		})
 	}
 	rows, err := f.svc.List(f.ctx, f.alice.ID, f.alice.Handle, database.ListOrchestratorArtifactsParams{
 		ScopeLevel:  "user",
@@ -162,9 +169,9 @@ func scopeListUserWithOffset(t *testing.T, f *scopeListFixtures) {
 
 func scopeListUserWrongPrincipal(t *testing.T, f *scopeListFixtures) {
 	ct := f.ct
-	if _, err := f.svc.CreateFromBody(f.ctx, f.alice.ID, f.alice.Handle, "user", &f.alice.ID, nil, nil, "u1.txt", []byte("a"), &ct, nil, nil, nil); err != nil {
-		t.Fatal(err)
-	}
+	mustCreateFromBodyOK(t, f.svc, f.ctx, f.alice.ID, f.alice.Handle, &CreateFromBodyInput{
+		Level: "user", OwnerUserID: &f.alice.ID, ArtifactPath: "u1.txt", Body: []byte("a"), ContentType: &ct,
+	})
 	_, err := f.svc.List(f.ctx, f.bob.ID, f.bob.Handle, database.ListOrchestratorArtifactsParams{
 		ScopeLevel:  "user",
 		OwnerUserID: &f.alice.ID,
@@ -177,7 +184,9 @@ func scopeListUserWrongPrincipal(t *testing.T, f *scopeListFixtures) {
 
 func scopeListProjectOwnProject(t *testing.T, f *scopeListFixtures) {
 	ct := f.ct
-	_, err := f.svc.CreateFromBody(f.ctx, f.alice.ID, f.alice.Handle, "project", nil, nil, &f.proj.ID, "p1.txt", []byte("p"), &ct, nil, nil, nil)
+	_, err := f.svc.CreateFromBody(f.ctx, f.alice.ID, f.alice.Handle, &CreateFromBodyInput{
+		Level: "project", ProjectID: &f.proj.ID, ArtifactPath: "p1.txt", Body: []byte("p"), ContentType: &ct,
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -196,9 +205,9 @@ func scopeListProjectOwnProject(t *testing.T, f *scopeListFixtures) {
 
 func scopeGetByPathProjectForbidden(t *testing.T, f *scopeListFixtures) {
 	ct := f.ct
-	if _, err := f.svc.CreateFromBody(f.ctx, f.alice.ID, f.alice.Handle, "project", nil, nil, &f.proj.ID, "p-bob-deny.txt", []byte("z"), &ct, nil, nil, nil); err != nil {
-		t.Fatal(err)
-	}
+	mustCreateFromBodyOK(t, f.svc, f.ctx, f.alice.ID, f.alice.Handle, &CreateFromBodyInput{
+		Level: "project", ProjectID: &f.proj.ID, ArtifactPath: "p-bob-deny.txt", Body: []byte("z"), ContentType: &ct,
+	})
 	_, _, err := f.svc.GetByScopePath(f.ctx, f.bob.ID, f.bob.Handle, "project", nil, nil, &f.proj.ID, "p-bob-deny.txt")
 	if !errors.Is(err, ErrForbidden) {
 		t.Fatalf("GetByScopePath: %v", err)
@@ -226,7 +235,9 @@ func scopeListValidationErrors(t *testing.T, f *scopeListFixtures) {
 func scopeGetBlobGlobalNonAdmin(t *testing.T, f *scopeListFixtures) {
 	adm := mustAdminUser(t, f.ctx, f.db)
 	ct := f.ct
-	art, err := f.svc.CreateFromBody(f.ctx, adm.ID, adm.Handle, "global", nil, nil, nil, "glob-nonadmin.txt", []byte("x"), &ct, nil, nil, nil)
+	art, err := f.svc.CreateFromBody(f.ctx, adm.ID, adm.Handle, &CreateFromBodyInput{
+		Level: "global", ArtifactPath: "glob-nonadmin.txt", Body: []byte("x"), ContentType: &ct,
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -240,7 +251,9 @@ func scopeGetBlobGroupNonAdmin(t *testing.T, f *scopeListFixtures) {
 	adm := mustAdminUser(t, f.ctx, f.db)
 	ct := f.ct
 	gid := uuid.New()
-	art, err := f.svc.CreateFromBody(f.ctx, adm.ID, adm.Handle, "group", nil, &gid, nil, "g-read.txt", []byte("gr"), &ct, nil, nil, nil)
+	art, err := f.svc.CreateFromBody(f.ctx, adm.ID, adm.Handle, &CreateFromBodyInput{
+		Level: "group", GroupID: &gid, ArtifactPath: "g-read.txt", Body: []byte("gr"), ContentType: &ct,
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -254,11 +267,15 @@ func scopeGroupGlobalAdminHandle(t *testing.T, f *scopeListFixtures) {
 	adm := mustAdminUser(t, f.ctx, f.db)
 	ct := f.ct
 	gid := uuid.New()
-	_, err := f.svc.CreateFromBody(f.ctx, adm.ID, adm.Handle, "group", nil, &gid, nil, "g.txt", []byte("g"), &ct, nil, nil, nil)
+	_, err := f.svc.CreateFromBody(f.ctx, adm.ID, adm.Handle, &CreateFromBodyInput{
+		Level: "group", GroupID: &gid, ArtifactPath: "g.txt", Body: []byte("g"), ContentType: &ct,
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, err = f.svc.CreateFromBody(f.ctx, adm.ID, adm.Handle, "global", nil, nil, nil, "glob.txt", []byte("gl"), &ct, nil, nil, nil)
+	_, err = f.svc.CreateFromBody(f.ctx, adm.ID, adm.Handle, &CreateFromBodyInput{
+		Level: "global", ArtifactPath: "glob.txt", Body: []byte("gl"), ContentType: &ct,
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -274,7 +291,9 @@ func scopeGroupGlobalAdminHandle(t *testing.T, f *scopeListFixtures) {
 
 func scopeDeleteProjectScoped(t *testing.T, f *scopeListFixtures) {
 	ct := f.ct
-	art, err := f.svc.CreateFromBody(f.ctx, f.alice.ID, f.alice.Handle, "project", nil, nil, &f.proj.ID, "del-me.txt", []byte("d"), &ct, nil, nil, nil)
+	art, err := f.svc.CreateFromBody(f.ctx, f.alice.ID, f.alice.Handle, &CreateFromBodyInput{
+		Level: "project", ProjectID: &f.proj.ID, ArtifactPath: "del-me.txt", Body: []byte("d"), ContentType: &ct,
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -286,7 +305,9 @@ func scopeDeleteProjectScoped(t *testing.T, f *scopeListFixtures) {
 func scopeUpdateBlobLargeHashDefer(t *testing.T, f *scopeListFixtures) {
 	ct := f.ct
 	small := NewServiceWithBlob(f.db, f.blob, 4)
-	art, err := small.CreateFromBody(f.ctx, f.alice.ID, f.alice.Handle, "user", &f.alice.ID, nil, nil, "big.bin", []byte("12345678"), &ct, nil, nil, nil)
+	art, err := small.CreateFromBody(f.ctx, f.alice.ID, f.alice.Handle, &CreateFromBodyInput{
+		Level: "user", OwnerUserID: &f.alice.ID, ArtifactPath: "big.bin", Body: []byte("12345678"), ContentType: &ct,
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -352,7 +373,9 @@ func scopeMCPInvalidB64(t *testing.T, f *scopeListFixtures) {
 
 func scopeNilServiceMethods(t *testing.T, f *scopeListFixtures) {
 	var nilSvc *Service
-	if _, err := nilSvc.CreateFromBody(f.ctx, uuid.New(), "x", "user", &f.alice.ID, nil, nil, "p", nil, nil, nil, nil, nil); err == nil {
+	if _, err := nilSvc.CreateFromBody(f.ctx, uuid.New(), "x", &CreateFromBodyInput{
+		Level: "user", OwnerUserID: &f.alice.ID, ArtifactPath: "p", Body: nil,
+	}); err == nil {
 		t.Fatal("expected error")
 	}
 	if _, _, err := nilSvc.GetBlob(f.ctx, f.alice.ID, f.alice.Handle, uuid.New()); err == nil {

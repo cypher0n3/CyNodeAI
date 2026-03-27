@@ -79,7 +79,18 @@ func (h *ArtifactsHandler) Create(w http.ResponseWriter, r *http.Request) {
 		WriteBadRequest(w, "path or filename query parameter required")
 		return
 	}
-	art, err := h.svc.CreateFromBody(ctx, *userID, handle, level, ownerID, groupID, projectID, artifactPath, body, ctPtr, jobID, taskID, runID)
+	art, err := h.svc.CreateFromBody(ctx, *userID, handle, &artifacts.CreateFromBodyInput{
+		Level:             level,
+		OwnerUserID:       ownerID,
+		GroupID:           groupID,
+		ProjectID:         projectID,
+		ArtifactPath:      artifactPath,
+		Body:              body,
+		ContentType:       ctPtr,
+		CreatedByJobID:    jobID,
+		CorrelationTaskID: taskID,
+		RunID:             runID,
+	})
 	if err != nil {
 		h.writeArtifactErr(w, err)
 		return
