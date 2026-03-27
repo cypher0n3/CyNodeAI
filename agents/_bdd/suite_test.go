@@ -18,6 +18,15 @@ func featurePath() string {
 	return "../../features/agents"
 }
 
+func godogStrict() bool {
+	switch os.Getenv("GODOG_STRICT") {
+	case "1", "true":
+		return true
+	default:
+		return false
+	}
+}
+
 func TestAgentsBDD(t *testing.T) {
 	state := &agentsTestState{}
 	suite := godog.TestSuite{
@@ -29,6 +38,7 @@ func TestAgentsBDD(t *testing.T) {
 			Paths:    []string{featurePath()},
 			TestingT: t,
 			Tags:     "~@wip",
+			Strict:   godogStrict(),
 		},
 	}
 	if suite.Run() != 0 {

@@ -20,8 +20,8 @@ go_modules := shell("grep -E '^[[:space:]]*\\./' \"$1\" | sed 's|^[[:space:]]*\\
 default:
     @just --list
 
-# Local CI: all lint, all tests (with 90% coverage), Go vuln check, BDD suites.
-ci: build-dev lint vulncheck-go test-go-cover test-bdd
+# Local CI: all lint, all tests (with 90% coverage), Go vuln check, BDD suites (Godog strict: pending/undefined/ambiguous steps fail).
+ci: build-dev lint vulncheck-go test-go-cover bdd-ci
     @:
 
 # Lint delegation (implemented in .ci_scripts/justfile).
@@ -523,6 +523,14 @@ test-bdd timeout="30m": install-go podman-setup
       [ -d "./$m/_bdd" ] || continue
       go test -v -timeout "{{ timeout }}" "./$m/_bdd" -count=1
     done
+
+# BDD with github.com/cucumber/godog strict mode for agents/_bdd (GODOG_STRICT=1): fails on pending, undefined, or ambiguous steps.
+# Other _bdd modules run the same tests without Strict until their step bindings are complete (run with GODOG_STRICT=1 per module locally to verify).
+bdd-ci:
+    #!/usr/bin/env bash
+    set -e
+    export GODOG_STRICT=1
+    just test-bdd
 
 # Dev setup (scripts/justfile). Usage: just setup-dev <command> [ARGS]. Run just setup-dev help.
 setup-dev CMD *ARGS:
