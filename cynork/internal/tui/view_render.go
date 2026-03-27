@@ -17,18 +17,19 @@ import (
 	"github.com/cypher0n3/cynodeai/cynork/internal/chat"
 )
 
+// ScrollbackSystemLinePrefix marks slash/shell/thread feedback (not chat turns). Rendered dim like meta.
+const ScrollbackSystemLinePrefix = "· "
+
 // Styling for transcript roles (distinct from plain "You:" / "Assistant:" prefixes).
 var (
 	userLabelStyle      = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("86"))
 	assistantLabelStyle = lipgloss.NewStyle().Bold(true).Foreground(lipgloss.Color("213"))
 	metaLineStyle       = lipgloss.NewStyle().Foreground(lipgloss.Color("241"))
-	// scrollbackSystemLinePrefix marks slash/shell/thread feedback (not chat turns). Rendered dim like meta.
-	scrollbackSystemLinePrefix = "· "
-	systemLineStyle            = lipgloss.NewStyle().Foreground(lipgloss.Color("241"))
-	userFrameStyle             = lipgloss.NewStyle().
-					Border(lipgloss.NormalBorder(), false, false, false, true).
-					BorderForeground(lipgloss.Color("86")).
-					Padding(0, 1)
+	systemLineStyle     = lipgloss.NewStyle().Foreground(lipgloss.Color("241"))
+	userFrameStyle      = lipgloss.NewStyle().
+				Border(lipgloss.NormalBorder(), false, false, false, true).
+				BorderForeground(lipgloss.Color("86")).
+				Padding(0, 1)
 	assistantFrameStyle = lipgloss.NewStyle().
 				Border(lipgloss.NormalBorder(), false, false, false, true).
 				BorderForeground(lipgloss.Color("213")).
@@ -38,8 +39,8 @@ var (
 	copySelectFootnoteStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("241"))
 )
 
-// copySelectFootnote is shown under the composer (discoverability for copy/paste).
-const copySelectFootnote = "Ctrl+↑↓ prior messages · Alt+Enter newline · Shift+drag select · Ctrl+Y /copy last · /copy all"
+// CopySelectFootnote is shown under the composer (discoverability for copy/paste).
+const CopySelectFootnote = "Ctrl+↑↓ prior messages · Alt+Enter / Ctrl+J newline · Shift+drag select · Ctrl+Y /copy last · /copy all"
 
 func newTUIViewport(w, h int) viewport.Model {
 	km := viewport.DefaultKeyMap()
@@ -138,7 +139,7 @@ func isRolePairLine(a, b string) bool {
 
 func (m *Model) renderScrollbackEntry(line string) string {
 	switch {
-	case strings.HasPrefix(line, scrollbackSystemLinePrefix):
+	case strings.HasPrefix(line, ScrollbackSystemLinePrefix):
 		return systemLineStyle.Render(line)
 	case strings.HasPrefix(line, "You: "):
 		return m.renderUserBlock(strings.TrimPrefix(line, "You: "))
@@ -156,7 +157,7 @@ func wrapSystemScrollbackLines(lines []string) []string {
 	}
 	out := make([]string, len(lines))
 	for i, l := range lines {
-		out[i] = scrollbackSystemLinePrefix + l
+		out[i] = ScrollbackSystemLinePrefix + l
 	}
 	return out
 }
@@ -338,7 +339,7 @@ func (m *Model) renderComposerBox(composerLines []string) string {
 
 // renderCopyHintLine returns the dim footnote under the composer (selection + copy).
 func (m *Model) renderCopyHintLine() string {
-	return copySelectFootnoteStyle.Width(m.Width).Render(copySelectFootnote)
+	return copySelectFootnoteStyle.Width(m.Width).Render(CopySelectFootnote)
 }
 
 func (m *Model) isViewportScrollKey(msg tea.KeyMsg) bool {

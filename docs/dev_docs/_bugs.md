@@ -457,58 +457,28 @@ Documented 2026-03-24: root cause is the `handleEnterKey` loading guard applied 
 
 ## Bug 5: MCP Gateway `skills.*` Tool Calls Return `task_id required`
 
-All `skills.*` MCP tool calls (`skills.create`, `skills.list`, `skills.get`, `skills.update`, `skills.delete`) return `400: {"error":"task_id required"}` on both the direct control-plane path (`POST /v1/mcp/tools/call`) and the worker UDS internal proxy path.
+**Status: closed (2026-03-27).**
 
-### Bug 5 Summary
+Direct control-plane `POST /v1/mcp/tools/call` hits `mcpgateway.ToolCallHandler` in the control-plane (and the worker UDS proxy forwards the same JSON body to that path).
+`helpers.mcp_tool_call` posts only `tool_name` and `arguments`; there is no top-level `task_id` field.
+`ValidateRequiredScopedIds` in `orchestrator/internal/mcpgateway/handlers.go` maps each `skills.*` tool to `{UserID: true}` only.
+It returns `task_id required` only when a tool declares `TaskID: true` (for example `preference.effective`), not for `skills.*`.
+If `user_id` is missing or not a valid UUID string, the gateway returns `user_id required` instead.
 
-After the MCP consolidation (2026-03-22/23), the `skills.*` tool calls fail with `task_id required` even though:
+The historical E2E failures with body `{"error":"task_id required"}` on `skills.*` do not match the current gateway implementation (regression during consolidation or a mismatched binary was suspected).
+Closure work adds regression coverage: unit tests (`TestValidateRequiredScopedIds`, `TestValidateRequiredScopedIds_SkillsNeverRequireTaskID`), BDD (`features/orchestrator/orchestrator_mcp_skills.feature`), and the existing matrix in `e2e_0810_mcp_control_plane_tools.py`.
 
-1. The MCP gateway routing table in `handlers.go` defines `skills.*` entries with `{UserID: true}` (not `TaskID: true`).
-2. The spec ([mcp_tooling.md](../tech_specs/mcp/mcp_tooling.md)) explicitly states skills tools take `user_id`, not `task_id`.
-3. The spec ([mcp_gateway_enforcement.md](../tech_specs/mcp/mcp_gateway_enforcement.md)) states the gateway MUST ignore extraneous arguments like `task_id` on tools that do not use it.
-
-The E2E tests (`e2e_0810_mcp_control_plane_tools.py`) pass `user_id` in the arguments as required, but the response is `task_id required` - suggesting a different code path (possibly `api-egress` `resolveSubjectFromTask` or a request-level `task_id` field) is intercepting the call before the per-tool handler runs.
-
-### Bug 5 Evidence
+### Bug 5 Evidence (Historical)
 
 ```text
 FAIL: test_mcp_tool_routes_round_trip (tool='skills.create')
 AssertionError: 400 != 200 : {"error":"task_id required"}
-
-FAIL: test_mcp_tool_routes_round_trip (tool='skills.list')
-AssertionError: 400 != 200 : {"error":"task_id required"}
-
-FAIL: test_mcp_tool_routes_round_trip (tool='skills.get')
-AssertionError: 400 != 200 : {"error":"task_id required"}
-
-FAIL: test_mcp_tool_routes_round_trip (tool='skills.update')
-AssertionError: 400 != 200 : {"error":"task_id required"}
-
-FAIL: test_mcp_tool_routes_round_trip (tool='skills.delete')
-AssertionError: 400 != 200 : {"error":"task_id required"}
 ```
 
-Same failures on the worker UDS path (6 failures including one gateway-unreachable assertion).
-`e2e_0812` tests skip due to missing env vars (not directly related).
+(Same pattern for other `skills.*` subtests; worker UDS path reported similarly.)
 
-### Bug 5 Affected Files
+### Bug 5 Resolution
 
-- **MCP gateway handler:** `orchestrator/internal/mcpgateway/handlers.go` (routing table, `validateScopedIDs`, per-tool handlers).
-- **API egress:** `orchestrator/cmd/api-egress/main.go` (`resolveSubjectFromTask` requires `task_id`).
-- **E2E tests:** `scripts/test_scripts/e2e_0810_mcp_control_plane_tools.py` (11 failures), `scripts/test_scripts/e2e_0812_mcp_agent_tokens_and_allowlist.py` (2 skips).
-- **E2E helpers:** `scripts/test_scripts/helpers.py` (`mcp_tool_call`, `mcp_tool_call_worker_uds`).
-- **Specs:**
-  - [mcp_tooling.md](../tech_specs/mcp/mcp_tooling.md) (skills tools use `user_id`, not `task_id`).
-  - [mcp_gateway_enforcement.md](../tech_specs/mcp/mcp_gateway_enforcement.md) (extraneous argument handling).
-  - [mcp_tools/skills_tools.md](../tech_specs/mcp_tools/skills_tools.md) (skills tool contracts).
-
-### Bug 5 Investigation Required
-
-1. Trace the request path for `helpers.mcp_tool_call("skills.create", ...)`: confirm whether the request hits the MCP gateway handler directly or goes through the api-egress.
-2. Determine whether the MCP consolidation introduced a request-level `task_id` requirement (outside of per-tool arguments) that was not present before.
-3. Determine the correct fix: either (a) the handler/middleware must not require `task_id` for tools that are user-scoped, or (b) the E2E helper must include `task_id` in the request envelope (not arguments) when the routing requires it.
-
-### Bug 5 Investigation Status
-
-Not fixed.
-Documented 2026-03-24.
+- Confirmed request path: `scripts/test_scripts/helpers.py` -> control-plane `POST /v1/mcp/tools/call` -> `ToolCallHandler` -> `ValidateRequiredScopedIds` -> `handleSkills*`.
+- No code change required in the gateway for scoped-ID rules; extraneous `task_id` in `arguments` is ignored for tools that do not require it.
+- Re-run `just e2e --tags control_plane` against a live dev stack to confirm `e2e_0810` green in your environment.

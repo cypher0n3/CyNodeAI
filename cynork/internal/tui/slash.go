@@ -149,7 +149,7 @@ func slashCopyCmd(m *Model, rest string) tea.Cmd {
 	rest = strings.TrimSpace(strings.ToLower(rest))
 	switch rest {
 	case "", "last", "assistant":
-		text := lastAssistantPlain(m.Scrollback)
+		text := LastAssistantPlain(m.Scrollback)
 		if strings.TrimSpace(text) == "" {
 			return func() tea.Msg {
 				return copyClipboardResultMsg{
@@ -160,7 +160,7 @@ func slashCopyCmd(m *Model, rest string) tea.Cmd {
 		}
 		return slashClipboardSequence(text, "Last message copied to clipboard.")
 	case "all", "transcript":
-		text := plainTranscript(m.Scrollback)
+		text := PlainTranscript(m.Scrollback)
 		if strings.TrimSpace(text) == "" {
 			return func() tea.Msg {
 				return copyClipboardResultMsg{

@@ -15,4 +15,5 @@ func InitializeCynorkSuiteExtra(sc *godog.ScenarioContext, state *cynorkState) {
 	registerCynorkExtraTUIDeferred(sc, state)
 	registerCynorkExtraScrollbackConfig(sc, state)
 	registerCynorkTuiBugfixes(sc, state)
+	registerCynorkTuiComposerCopy(sc)
 }

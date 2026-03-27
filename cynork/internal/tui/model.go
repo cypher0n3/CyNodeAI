@@ -389,14 +389,14 @@ func (m *Model) applyCopyClipboardResult(msg copyClipboardResultMsg) (tea.Model,
 	m.scrollbackCacheValid = false
 	if msg.err != nil {
 		m.ClipNote = "Copy failed: " + msg.err.Error()
-		m.Scrollback = append(m.Scrollback, scrollbackSystemLinePrefix+"Copy failed: "+msg.err.Error())
+		m.Scrollback = append(m.Scrollback, ScrollbackSystemLinePrefix+"Copy failed: "+msg.err.Error())
 	} else {
 		line := msg.successDetail
 		if line == "" {
 			line = "Copied to clipboard."
 		}
 		m.ClipNote = line
-		m.Scrollback = append(m.Scrollback, scrollbackSystemLinePrefix+line)
+		m.Scrollback = append(m.Scrollback, ScrollbackSystemLinePrefix+line)
 	}
 	cmd := m.scheduleClipNoteClear()
 	return m, cmd
@@ -407,7 +407,7 @@ func (m *Model) scheduleClipNoteClear() tea.Cmd {
 }
 
 func (m *Model) cmdCopyLastAssistant() tea.Cmd {
-	text := lastAssistantPlain(m.Scrollback)
+	text := LastAssistantPlain(m.Scrollback)
 	if strings.TrimSpace(text) == "" {
 		return func() tea.Msg {
 			return copyClipboardResultMsg{
@@ -514,7 +514,7 @@ func (m *Model) handleComposerCtrlUpKey() (tea.Model, tea.Cmd) {
 	if m.slashMenuVisible() && len(m.filteredSlashCommands()) > 0 {
 		return m, nil
 	}
-	m.navigateInputHistory(true)
+	m.NavigateInputHistory(true)
 	return m, nil
 }
 
@@ -522,7 +522,7 @@ func (m *Model) handleComposerCtrlDownKey() (tea.Model, tea.Cmd) {
 	if m.slashMenuVisible() && len(m.filteredSlashCommands()) > 0 {
 		return m, nil
 	}
-	m.navigateInputHistory(false)
+	m.NavigateInputHistory(false)
 	return m, nil
 }
 
@@ -649,7 +649,7 @@ func (m *Model) handleSlashLine(line string) (tea.Model, tea.Cmd) {
 		m.Loading = true
 		return m, tuiCmd
 	}
-	m.Scrollback = append(m.Scrollback, scrollbackSystemLinePrefix+"Unknown command. Type /help for available commands.")
+	m.Scrollback = append(m.Scrollback, ScrollbackSystemLinePrefix+"Unknown command. Type /help for available commands.")
 	return m, nil
 }
 
@@ -667,166 +667,8 @@ func (m *Model) handleCtrlC() (tea.Model, tea.Cmd) {
 	if m.ctrlCCount >= ctrlCExitThreshold {
 		return m, tea.Quit
 	}
-	m.Scrollback = append(m.Scrollback, scrollbackSystemLinePrefix+"(Press Ctrl+C again to exit)")
+	m.Scrollback = append(m.Scrollback, ScrollbackSystemLinePrefix+"(Press Ctrl+C again to exit)")
 	return m, nil
-}
-
-// handleThreadCommand handles /thread new, list, switch, rename. Returns a tea.Cmd for async ops, or nil.
-func (m *Model) handleThreadCommand(line string) tea.Cmd {
-	if m.Session == nil {
-		return nil
-	}
-	line = strings.TrimSpace(line)
-	if !strings.HasPrefix(line, "/thread") {
-		return nil
-	}
-	rest := strings.TrimSpace(strings.TrimPrefix(line, "/thread"))
-	parts := strings.Fields(rest)
-	sub := ""
-	if len(parts) > 0 {
-		sub = strings.ToLower(parts[0])
-	}
-	switch sub {
-	case "new":
-		return m.threadCommandNew()
-	case "list":
-		return m.threadListCmd()
-	case "switch":
-		return m.threadCommandSwitch(parts, rest)
-	case "rename":
-		return m.threadCommandRename(parts, rest)
-	default:
-		m.threadCommandUsage(rest)
-		return nil
-	}
-}
-
-func (m *Model) threadCommandNew() tea.Cmd {
-	threadID, err := m.Session.NewThread()
-	if err != nil {
-		m.Scrollback = append(m.Scrollback, scrollbackSystemLinePrefix+"Error: "+err.Error())
-		return nil
-	}
-	m.Scrollback = append(m.Scrollback, scrollbackSystemLinePrefix+chat.LandmarkThreadSwitched+" New thread: "+threadID)
-	m.persistLastThreadToCache()
-	return nil
-}
-
-func (m *Model) threadCommandSwitch(parts []string, rest string) tea.Cmd {
-	if len(parts) < 2 {
-		m.Scrollback = append(m.Scrollback, scrollbackSystemLinePrefix+"Usage: /thread switch <selector> (use ordinal, id, or title from /thread list)")
-		return nil
-	}
-	selector := strings.TrimSpace(strings.TrimPrefix(rest, "switch"))
-	id, err := m.Session.ResolveThreadSelector(selector, 50)
-	if err != nil {
-		m.Scrollback = append(m.Scrollback, scrollbackSystemLinePrefix+"Error: "+err.Error())
-		return nil
-	}
-	m.Session.SetCurrentThreadID(id)
-	m.Scrollback = append(m.Scrollback, scrollbackSystemLinePrefix+chat.LandmarkThreadSwitched+" Switched to thread: "+id)
-	m.persistLastThreadToCache()
-	return nil
-}
-
-func (m *Model) threadCommandRename(parts []string, rest string) tea.Cmd {
-	if len(parts) < 2 {
-		m.Scrollback = append(m.Scrollback, scrollbackSystemLinePrefix+"Usage: /thread rename <title>")
-		return nil
-	}
-	title := strings.TrimSpace(strings.TrimPrefix(rest, "rename"))
-	title = strings.TrimSpace(title)
-	if title == "" {
-		m.Scrollback = append(m.Scrollback, scrollbackSystemLinePrefix+"Usage: /thread rename <title>")
-		return nil
-	}
-	return m.threadRenameCmd(title)
-}
-
-func (m *Model) threadCommandUsage(rest string) {
-	if rest != "" {
-		m.Scrollback = append(m.Scrollback, scrollbackSystemLinePrefix+"Unknown: /thread "+rest+" (use new, list, switch, rename)")
-	} else {
-		m.Scrollback = append(m.Scrollback, scrollbackSystemLinePrefix+"Thread: new, list, switch <id>, rename <title>")
-	}
-}
-
-func (m *Model) threadListCmd() tea.Cmd {
-	return func() tea.Msg {
-		if m.Session == nil {
-			return threadListResult{err: fmt.Errorf("no session")}
-		}
-		items, err := m.Session.ListThreads(20, 0)
-		if err != nil {
-			return threadListResult{err: err}
-		}
-		lines := []string{"--- Threads (use ordinal, id, or title with /thread switch <selector>) ---"}
-		for i, t := range items {
-			title := ""
-			if t.Title != nil {
-				title = *t.Title
-			}
-			if title == "" {
-				title = "(no title)"
-			}
-			ordinal := fmt.Sprintf("%d", i+1)
-			lines = append(lines, fmt.Sprintf("  %s  %s  %s", ordinal, t.ID, title))
-		}
-		return threadListResult{lines: lines}
-	}
-}
-
-func (m *Model) threadRenameCmd(title string) tea.Cmd {
-	return func() tea.Msg {
-		if m.Session == nil {
-			return threadRenameResult{err: fmt.Errorf("no session")}
-		}
-		err := m.Session.PatchThreadTitle("", title)
-		return threadRenameResult{err: err}
-	}
-}
-
-func (m *Model) pushInputHistory(line string) {
-	if line == "" {
-		return
-	}
-	// Prepend so newest is index 0; drop duplicates of last sent
-	if len(m.InputHistory) > 0 && m.InputHistory[0] == line {
-		return
-	}
-	m.InputHistory = append([]string{line}, m.InputHistory...)
-	if len(m.InputHistory) > maxInputHistory {
-		m.InputHistory = m.InputHistory[:maxInputHistory]
-	}
-}
-
-func (m *Model) navigateInputHistory(up bool) {
-	if len(m.InputHistory) == 0 {
-		return
-	}
-	switch {
-	case up:
-		switch {
-		case m.InputHistoryIdx < 0:
-			m.InputHistoryIdx = 0
-		case m.InputHistoryIdx < len(m.InputHistory)-1:
-			m.InputHistoryIdx++
-		default:
-			return
-		}
-		m.Input = m.InputHistory[m.InputHistoryIdx]
-		m.syncInputCursorEnd()
-	default:
-		if m.InputHistoryIdx <= 0 {
-			m.InputHistoryIdx = -1
-			m.Input = ""
-			m.inputCursor = 0
-			return
-		}
-		m.InputHistoryIdx--
-		m.Input = m.InputHistory[m.InputHistoryIdx]
-		m.syncInputCursorEnd()
-	}
 }
 
 func (m *Model) applyStreamDelta(msg streamDeltaMsg) (tea.Model, tea.Cmd) {
@@ -850,7 +692,7 @@ func (m *Model) applyThreadListResult(msg threadListResult) (tea.Model, tea.Cmd)
 	m.Loading = false
 	if msg.err != nil {
 		m.Err = msg.err.Error()
-		m.Scrollback = append(m.Scrollback, scrollbackSystemLinePrefix+"Error: "+msg.err.Error())
+		m.Scrollback = append(m.Scrollback, ScrollbackSystemLinePrefix+"Error: "+msg.err.Error())
 	} else {
 		m.Scrollback = append(m.Scrollback, wrapSystemScrollbackLines(msg.lines)...)
 	}
@@ -861,9 +703,9 @@ func (m *Model) applyThreadRenameResult(msg threadRenameResult) (tea.Model, tea.
 	m.Loading = false
 	if msg.err != nil {
 		m.Err = msg.err.Error()
-		m.Scrollback = append(m.Scrollback, scrollbackSystemLinePrefix+"Error: "+msg.err.Error())
+		m.Scrollback = append(m.Scrollback, ScrollbackSystemLinePrefix+"Error: "+msg.err.Error())
 	} else {
-		m.Scrollback = append(m.Scrollback, scrollbackSystemLinePrefix+"Thread renamed.")
+		m.Scrollback = append(m.Scrollback, ScrollbackSystemLinePrefix+"Thread renamed.")
 	}
 	return m, nil
 }
@@ -963,14 +805,14 @@ func ensureThreadScrollbackLine(priorID, afterID, resumeSelector string) string 
 // EnsureThreadScrollbackSystemLine returns the full dim-prefixed scrollback line for EnsureThread (Bug 3).
 // Exported for BDD steps; matches applyEnsureThreadResult.
 func EnsureThreadScrollbackSystemLine(priorID, afterID, resumeSelector string) string {
-	return scrollbackSystemLinePrefix + ensureThreadScrollbackLine(priorID, afterID, resumeSelector)
+	return ScrollbackSystemLinePrefix + ensureThreadScrollbackLine(priorID, afterID, resumeSelector)
 }
 
 func (m *Model) applyEnsureThreadResult(msg ensureThreadResult) (tea.Model, tea.Cmd) {
 	if msg.err != nil {
-		m.Scrollback = append(m.Scrollback, scrollbackSystemLinePrefix+"Error: "+msg.err.Error())
+		m.Scrollback = append(m.Scrollback, ScrollbackSystemLinePrefix+"Error: "+msg.err.Error())
 	} else if msg.threadID != "" {
-		line := scrollbackSystemLinePrefix + ensureThreadScrollbackLine(msg.priorThreadID, msg.threadID, msg.resumeSelector)
+		line := ScrollbackSystemLinePrefix + ensureThreadScrollbackLine(msg.priorThreadID, msg.threadID, msg.resumeSelector)
 		m.Scrollback = append(m.Scrollback, line)
 	}
 	_, tok := m.maybeStartProactiveTokenRefresh()

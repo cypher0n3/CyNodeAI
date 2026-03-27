@@ -702,7 +702,7 @@ func TestModel_SlashWhoami_Dispatch(t *testing.T) {
 
 func TestView_MainLayoutRendersScrollbackSlashMenuClipErr(t *testing.T) {
 	m := NewModel(&chat.Session{ProjectID: "p1", Model: "m1", CurrentThreadID: "thread-12345678"})
-	m.Scrollback = []string{"You: hello", "Assistant: world", scrollbackSystemLinePrefix + "meta"}
+	m.Scrollback = []string{"You: hello", "Assistant: world", ScrollbackSystemLinePrefix + "meta"}
 	m.Input = testSlashThreadFilter
 	m.slashMenuSel = 0
 	m.ClipNote = "copied"

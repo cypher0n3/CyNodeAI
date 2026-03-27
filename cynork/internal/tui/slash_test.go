@@ -71,7 +71,7 @@ func TestSlashCopyCmd_ResultMessages(t *testing.T) {
 	t.Parallel()
 	t.Run("all_empty_transcript", func(t *testing.T) {
 		m2 := NewModel(nil)
-		m2.Scrollback = []string{scrollbackSystemLinePrefix + "meta"}
+		m2.Scrollback = []string{ScrollbackSystemLinePrefix + "meta"}
 		res := assertCopyClipboardOK(t, slashCopyCmd(m2, "all")())
 		if res.successDetail != "All text copied to clipboard." {
 			t.Errorf("successDetail = %q", res.successDetail)

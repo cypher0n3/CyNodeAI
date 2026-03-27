@@ -102,6 +102,7 @@ func TestValidateRequiredScopedIds(t *testing.T) {
 		{"artifact.get has user_id", "artifact.get", map[string]interface{}{"user_id": uuid.New().String(), "path": "out/x", "scope": "user"}, ""},
 		{"skills.create missing user_id", "skills.create", map[string]interface{}{"content": "x"}, "user_id required"},
 		{"skills.create has user_id", "skills.create", map[string]interface{}{"user_id": uuid.New().String(), "content": "x"}, ""},
+		{"skills.create extraneous task_id ignored", "skills.create", map[string]interface{}{"user_id": uuid.New().String(), "content": "x", "task_id": uuid.New().String()}, ""},
 		{"unknown tool", "other.tool", nil, ""},
 	}
 	for _, tt := range tests {
@@ -113,6 +114,19 @@ func TestValidateRequiredScopedIds(t *testing.T) {
 		})
 	}
 }
+
+func TestValidateRequiredScopedIds_SkillsNeverRequireTaskID(t *testing.T) {
+	uid := uuid.New().String()
+	for _, name := range []string{
+		"skills.create", "skills.list", "skills.get", "skills.update", "skills.delete",
+	} {
+		got := ValidateRequiredScopedIds(name, map[string]interface{}{"user_id": uid})
+		if got == "task_id required" {
+			t.Fatalf("%s: unexpected task_id required", name)
+		}
+	}
+}
+
 func TestToolCallHandler_LegacyDbToolName_ReturnsNotFound(t *testing.T) {
 	callToolHandlerPOST(t, `{"tool_name":"db.preference.get","arguments":{"scope_type":"system","key":"k"}}`, http.StatusNotFound)
 }

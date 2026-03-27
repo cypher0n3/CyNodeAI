@@ -317,10 +317,13 @@ class TestTuiSlashCommands(unittest.TestCase):
         with harness.TuiPtySession(state.CONFIG_PATH, timeout=25) as session:
             self._wait_ready(session)
             session.send_keys(["! echo hello_from_shell", "enter"])
-            time.sleep(_SLASH_CMD_SETTLE_SEC)
-            out = session.capture_screen(drain_sec=0.3) or ""
+            out = session.read_until_landmark(
+                ["hello_from_shell"],
+                timeout_sec=5.0,
+            )
             self.assertIn(
-                "hello_from_shell", out,
+                "hello_from_shell",
+                out,
                 f"! echo should show stdout inline; got: {repr(out[:400])}",
             )
             # Session stays active.
@@ -359,6 +362,96 @@ class TestTuiSlashCommands(unittest.TestCase):
             self.assertTrue(
                 "42" in out or "exit" in out.lower(),
                 f"Non-zero ! exit should show exit code; got: {repr(out[:400])}",
+            )
+            session.send_keys(["ctrl+c", "ctrl+c"])
+
+    # ---------------------------------------------------------- /copy (Task 3 E2E alignment)
+    def test_tui_slash_copy_last_no_assistant_shows_feedback(self):
+        """/copy last with no assistant message shows scrollback feedback (no spurious switch)."""
+        if not harness.pty_available():
+            self.skipTest("pexpect not installed")
+        with harness.TuiPtySession(state.CONFIG_PATH, timeout=25) as session:
+            self._wait_ready(session)
+            session.send_keys(["/copy last", "enter"])
+            out = session.read_until_landmark(
+                [
+                    "No assistant message",
+                    "assistant message to copy",
+                    "Copy failed",
+                ],
+                timeout_sec=6.0,
+            )
+            self.assertTrue(
+                "No assistant message" in out
+                or "assistant message to copy" in out.lower()
+                or "Copy failed" in out,
+                f"expected no-assistant copy feedback; got: {repr(out[:500])}",
+            )
+            session.send_keys(["ctrl+c", "ctrl+c"])
+
+    def test_tui_slash_copy_last_after_chat_shows_feedback(self):
+        """After a send, /copy last reports last-assistant copy feedback in scrollback."""
+        if not harness.pty_available():
+            self.skipTest("pexpect not installed")
+        bearer = helpers.read_token_from_config(state.CONFIG_PATH)
+        self.assertTrue(bearer, "no access token after E2E login prereq")
+        token = f"e2e_copy_last_{int(time.time())}"
+        with harness.TuiPtySession(
+            state.CONFIG_PATH,
+            timeout=90,
+            env_extra={"CYNORK_TOKEN": bearer},
+        ) as session:
+            self._wait_ready(session)
+            session.send_keys([token, "enter"])
+            _ = session.read_until_landmark(
+                [
+                    "You:",
+                    token,
+                    harness.LANDMARK_PROMPT_READY,
+                    harness.LANDMARK_PROMPT_READY_SHORT,
+                ],
+                timeout_sec=75,
+            )
+            time.sleep(0.35)
+            session.send_keys(["/copy last", "enter"])
+            out = session.read_until_landmark(
+                [
+                    "Last message copied",
+                    "No assistant message",
+                    "Copy failed",
+                    "Copied to clipboard",
+                ],
+                timeout_sec=8.0,
+            )
+            self.assertTrue(
+                "Last message copied" in out
+                or "Copied to clipboard" in out
+                or "Copy failed" in out
+                or "No assistant message" in out,
+                f"expected /copy last feedback; got: {repr(out[:700])}",
+            )
+            session.send_keys(["ctrl+c", "ctrl+c"])
+
+    def test_tui_slash_copy_all_shows_feedback(self):
+        """/copy all produces transcript copy feedback (empty or full transcript)."""
+        if not harness.pty_available():
+            self.skipTest("pexpect not installed")
+        with harness.TuiPtySession(state.CONFIG_PATH, timeout=25) as session:
+            self._wait_ready(session)
+            session.send_keys(["/copy all", "enter"])
+            out = session.read_until_landmark(
+                [
+                    "All text copied",
+                    "Copy failed",
+                    "Copied to clipboard",
+                ],
+                timeout_sec=6.0,
+            )
+            self.assertTrue(
+                "All text copied" in out
+                or "Copied to clipboard" in out
+                or "Copy failed" in out,
+                f"expected /copy all feedback; got: {repr(out[:500])}",
             )
             session.send_keys(["ctrl+c", "ctrl+c"])
 

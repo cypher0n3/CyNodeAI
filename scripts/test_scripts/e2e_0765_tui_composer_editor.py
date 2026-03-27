@@ -50,7 +50,9 @@ class TestTuiComposerEditor(unittest.TestCase):
             self._wait_ready(session)
             out = session.capture_screen(drain_sec=0.4) or ""
             self.assertTrue(
-                "prior messages" in out and "Alt+Enter" in out,
+                "prior messages" in out
+                and "Alt+Enter" in out
+                and "Ctrl+J" in out,
                 f"Expected footnote substrings; got: {repr(out[:900])}",
             )
             session.send_keys(["ctrl+c", "ctrl+c"])
@@ -147,6 +149,63 @@ class TestTuiComposerEditor(unittest.TestCase):
                 token,
                 snap,
                 f"Ctrl+Up should recall last sent line; got: {repr(snap[:700])}",
+            )
+            session.send_keys(["ctrl+c", "ctrl+c"])
+
+    def test_tui_composer_ctrl_down_navigates_forward_in_history(self):
+        """After Ctrl+Up recalls older line, Ctrl+Down moves forward to newer history entry."""
+        if not harness.pty_available():
+            self.skipTest("pexpect not installed")
+        bearer = helpers.read_token_from_config(state.CONFIG_PATH)
+        self.assertTrue(bearer, "no access token after E2E login prereq")
+        first = f"e2e_hist_a_{int(time.time())}"
+        second = f"e2e_hist_b_{int(time.time())}"
+        with harness.TuiPtySession(
+            state.CONFIG_PATH,
+            timeout=120,
+            env_extra={"CYNORK_TOKEN": bearer},
+        ) as session:
+            self._wait_ready(session)
+            session.send_keys([first, "enter"])
+            _ = session.read_until_landmark(
+                [
+                    "You:",
+                    first,
+                    harness.LANDMARK_PROMPT_READY,
+                    harness.LANDMARK_PROMPT_READY_SHORT,
+                ],
+                timeout_sec=75,
+            )
+            time.sleep(0.35)
+            session.send_keys([second, "enter"])
+            _ = session.read_until_landmark(
+                [
+                    "You:",
+                    second,
+                    harness.LANDMARK_PROMPT_READY,
+                    harness.LANDMARK_PROMPT_READY_SHORT,
+                ],
+                timeout_sec=75,
+            )
+            time.sleep(0.35)
+            session.send_keys(["ctrl+up"])
+            time.sleep(_SETTLE_SEC)
+            session.send_keys(["ctrl+up"])
+            time.sleep(_SETTLE_SEC)
+            snap_old = session.capture_screen(drain_sec=0.4) or ""
+            self.assertIn(
+                first,
+                snap_old,
+                f"Ctrl+Up twice should show older sent line; got: {repr(snap_old[:700])}",
+            )
+            session.send_keys(["ctrl+down"])
+            time.sleep(_SETTLE_SEC)
+            snap_newer = session.capture_screen(drain_sec=0.4) or ""
+            self.assertIn(
+                second,
+                snap_newer,
+                "Ctrl+Down should recall newer history; got: "
+                + repr(snap_newer[:700]),
             )
             session.send_keys(["ctrl+c", "ctrl+c"])
 

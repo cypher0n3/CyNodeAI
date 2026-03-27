@@ -117,7 +117,7 @@ func TestWrapSystemScrollbackLines(t *testing.T) {
 		t.Fatal("nil in nil out")
 	}
 	got := wrapSystemScrollbackLines([]string{"a", "b"})
-	if len(got) != 2 || !strings.HasPrefix(got[0], scrollbackSystemLinePrefix) {
+	if len(got) != 2 || !strings.HasPrefix(got[0], ScrollbackSystemLinePrefix) {
 		t.Fatalf("%v", got)
 	}
 }

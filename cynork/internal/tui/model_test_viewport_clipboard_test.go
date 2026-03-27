@@ -139,10 +139,10 @@ func TestModel_View_LoginOverlayNarrow(t *testing.T) {
 }
 
 func TestLastAssistantPlain(t *testing.T) {
-	if lastAssistantPlain(nil) != "" || lastAssistantPlain([]string{"You: x"}) != "" {
+	if LastAssistantPlain(nil) != "" || LastAssistantPlain([]string{"You: x"}) != "" {
 		t.Fatal("expected empty")
 	}
-	if got := lastAssistantPlain([]string{"meta", "Assistant: last"}); got != "last" {
+	if got := LastAssistantPlain([]string{"meta", "Assistant: last"}); got != "last" {
 		t.Fatalf("got %q", got)
 	}
 }

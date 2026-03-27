@@ -15,7 +15,7 @@ _TUI_STARTUP_DELAY_SEC = 1.5
 
 
 def _pty_screen_contains_user_message(screen: str, fragment: str) -> bool:
-    """True if scrollback likely contains the user's sent text (glamour may omit a plain 'You:' prefix)."""
+    """True if scrollback likely has the user's sent text (glamour may omit 'You:')."""
     s = (screen or "").lower()
     return "you:" in s or fragment.lower() in s
 
@@ -152,7 +152,8 @@ class TestTuiPty(unittest.TestCase):
                 harness.LANDMARK_PROMPT_READY in combined
                 or harness.LANDMARK_PROMPT_READY_SHORT in combined
                 or _pty_screen_contains_user_message(combined, "hi"),
-                f"TUI should return to prompt-ready or show user message; output: {repr(combined[:800])}",
+                "TUI should return to prompt-ready or show user message; output: "
+                + repr(combined[:800]),
             )
 
     def test_tui_pty_slash_version_while_assistant_in_flight(self):

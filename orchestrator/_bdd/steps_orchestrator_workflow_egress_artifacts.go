@@ -661,6 +661,51 @@ func registerOrchestratorWorkflowEgressArtifacts(sc *godog.ScenarioContext, stat
 		st.lastResponseBody, _ = io.ReadAll(resp.Body)
 		return nil
 	})
+	sc.Step(`^the MCP agent "([^"]*)" calls skills.create for user "([^"]*)" with content "([^"]*)" including extraneous task_id$`, func(ctx context.Context, agentRole, userHandle, content string) error {
+		st := getState(ctx)
+		if st == nil || st.server == nil || st.db == nil {
+			return godog.ErrSkip
+		}
+		u, err := st.db.GetUserByHandle(ctx, userHandle)
+		if err != nil {
+			return err
+		}
+		payload := map[string]interface{}{
+			"tool_name": "skills.create",
+			"arguments": map[string]interface{}{
+				"user_id": u.ID.String(),
+				"name":    "bdd-mcp-skill",
+				"content": content,
+				"scope":   "user",
+				"task_id": uuid.New().String(),
+			},
+		}
+		raw, err := json.Marshal(payload)
+		if err != nil {
+			return err
+		}
+		req, err := http.NewRequest(http.MethodPost, st.server.URL+"/v1/mcp/tools/call", bytes.NewReader(raw))
+		if err != nil {
+			return err
+		}
+		req.Header.Set("Content-Type", "application/json")
+		switch strings.ToLower(strings.TrimSpace(agentRole)) {
+		case "pm":
+			req.Header.Set("Authorization", "Bearer "+st.pmMCPAgentToken)
+		case "sandbox":
+			req.Header.Set("Authorization", "Bearer "+st.sandboxMCPAgentToken)
+		default:
+			return fmt.Errorf("unknown MCP agent role %q", agentRole)
+		}
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			return err
+		}
+		defer resp.Body.Close()
+		st.lastStatusCode = resp.StatusCode
+		st.lastResponseBody, _ = io.ReadAll(resp.Body)
+		return nil
+	})
 	sc.Step(`^I create a task with prompt "([^"]*)"$`, func(ctx context.Context, prompt string) error {
 		st := getState(ctx)
 		if st == nil || st.server == nil {

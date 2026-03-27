@@ -33,7 +33,7 @@ func (m *Model) applyShellExecDone(msg shellExecDoneMsg) (tea.Model, tea.Cmd) {
 		m.Scrollback = append(m.Scrollback, wrapSystemScrollbackLines(strings.Split(strings.TrimRight(msg.output, "\n"), "\n"))...)
 	}
 	if msg.exitCode != 0 {
-		m.Scrollback = append(m.Scrollback, scrollbackSystemLinePrefix+fmt.Sprintf("exit status %d", msg.exitCode))
+		m.Scrollback = append(m.Scrollback, ScrollbackSystemLinePrefix+fmt.Sprintf("exit status %d", msg.exitCode))
 	}
 	return m, nil
 }
@@ -68,7 +68,7 @@ func (m *Model) applyLoginResult(msg loginResultMsg) (tea.Model, tea.Cmd) {
 	m.LoginPassword = ""
 	m.LoginErr = ""
 	if msg.Err != nil {
-		m.Scrollback = append(m.Scrollback, scrollbackSystemLinePrefix+"Login failed: "+msg.Err.Error())
+		m.Scrollback = append(m.Scrollback, ScrollbackSystemLinePrefix+"Login failed: "+msg.Err.Error())
 		return m, nil
 	}
 	client := gateway.NewClient(msg.GatewayURL)
@@ -80,11 +80,11 @@ func (m *Model) applyLoginResult(msg loginResultMsg) (tea.Model, tea.Cmd) {
 		m.AuthProvider.SetGatewayURL(msg.GatewayURL, false)
 		m.AuthProvider.SetTokens(msg.AccessToken, msg.RefreshToken)
 		if err := m.AuthProvider.Save(); err != nil {
-			m.Scrollback = append(m.Scrollback, scrollbackSystemLinePrefix+"Logged in but config save failed: "+err.Error())
+			m.Scrollback = append(m.Scrollback, ScrollbackSystemLinePrefix+"Logged in but config save failed: "+err.Error())
 			return m, nil
 		}
 	}
-	m.Scrollback = append(m.Scrollback, scrollbackSystemLinePrefix+"Logged in.")
+	m.Scrollback = append(m.Scrollback, ScrollbackSystemLinePrefix+"Logged in.")
 	// Ensure thread after login: new (default) or resolve --resume-thread (cynork_tui.md).
 	return m, combineTeaCmds(m.ensureThreadCmd(), m.maybeStartGatewayHealthPollOnce())
 }
@@ -116,7 +116,7 @@ func (m *Model) handleLoginFormKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.ShowLoginForm = false
 		m.LoginPassword = ""
 		m.LoginErr = ""
-		m.Scrollback = append(m.Scrollback, scrollbackSystemLinePrefix+"Login cancelled.")
+		m.Scrollback = append(m.Scrollback, ScrollbackSystemLinePrefix+"Login cancelled.")
 		return m, nil
 	case "tab":
 		m.LoginFocusedField = (m.LoginFocusedField + 1) % 3
@@ -588,8 +588,8 @@ func orEmpty(s string) string {
 	return s
 }
 
-// lastAssistantPlain returns the raw text of the most recent assistant scrollback line (no "Assistant: " prefix).
-func lastAssistantPlain(lines []string) string {
+// LastAssistantPlain returns the raw text of the most recent assistant scrollback line (no "Assistant: " prefix).
+func LastAssistantPlain(lines []string) string {
 	for i := len(lines) - 1; i >= 0; i-- {
 		if strings.HasPrefix(lines[i], assistantPrefix) {
 			return strings.TrimPrefix(lines[i], assistantPrefix)
@@ -598,12 +598,12 @@ func lastAssistantPlain(lines []string) string {
 	return ""
 }
 
-// plainTranscript joins scrollback lines for /copy all (plain text).
+// PlainTranscript joins scrollback lines for /copy all (plain text).
 // Lines marked as system feedback (slash/thread/shell) are omitted so the transcript is chat turns only.
-func plainTranscript(lines []string) string {
+func PlainTranscript(lines []string) string {
 	var b strings.Builder
 	for _, line := range lines {
-		if strings.HasPrefix(line, scrollbackSystemLinePrefix) {
+		if strings.HasPrefix(line, ScrollbackSystemLinePrefix) {
 			continue
 		}
 		if b.Len() > 0 {
