@@ -1,0 +1,11 @@
+{
+    "cSpell.userWords": [
+        "Godog",
+        "cynork",
+        "cynodeai"
+    ],
+    "cucumber.glue": [
+        "**/_bdd/*.go",
+        "**/_bdd/**/*.go"
+    ],
+}
