@@ -158,8 +158,9 @@ Web Console-specific requirements live in [webcon.md](webcon.md) (REQ-WEBCON-*).
   [CYNAI.CLIENT.CliSkillsManagement](../tech_specs/cli_management_app_commands_admin.md#spec-cynai-client-cliskillsmanagement)
   [CYNAI.SKILLS.SkillManagementCrud](../tech_specs/skills_storage_and_inference.md#spec-cynai-skills-skillmanagementcrud)
   <a id="req-client-0146"></a>
-- **REQ-CLIENT-0149:** The CLI MUST NOT persist plaintext gateway tokens or session credentials in the user config directory.
+- **REQ-CLIENT-0149:** The CLI MUST NOT persist plaintext gateway tokens or session credentials in the user config directory or in `config.yaml`.
   The CLI MUST support supplying the bearer token via the `CYNORK_TOKEN` environment variable for non-interactive and scripting use, and SHOULD support reading the token from a password store or credential helper (kubectl-style) when implemented.
+  **Exception:** session tokens MAY be stored outside the config directory using the OS credential store or, when that is unavailable, a dedicated file under the XDG cache directory (see [CYNAI.CLIENT.CliSessionPersistence](../tech_specs/cynork_cli.md#spec-cynai-client-clisessionpersistence)).
   Other local preferences (e.g. gateway URL, TUI UI settings) MAY be stored under the documented config path.
   [CYNAI.CLIENT.CliAuthConfig](../tech_specs/cynork_cli.md#spec-cynai-client-cliauth)
   [CYNAI.CLIENT.CliConfigFileLocation](../tech_specs/cynork_cli.md#spec-cynai-client-cliconfigfilelocation)
@@ -168,7 +169,8 @@ Web Console-specific requirements live in [webcon.md](webcon.md) (REQ-WEBCON-*).
   <a id="req-client-0149"></a>
 - **REQ-CLIENT-0150:** The CLI MUST resolve the config file path for non-secret preferences consistently (e.g. honoring XDG_CONFIG_HOME).
   When writing non-secret preferences, the CLI MUST write atomically (e.g. temp file then rename) so a crash does not leave a partial file; subsequent invocations MUST see either the previous config or a complete new one.
-  The CLI MUST NOT persist access tokens, refresh tokens, or other session credentials to disk as plaintext; reuse across separate CLI processes MUST be via environment variables (e.g. `CYNORK_TOKEN`, `CYNORK_REFRESH_TOKEN`) or an optional credential helper.
+  The CLI MUST NOT persist access tokens, refresh tokens, or other session credentials in the user config directory or in `config.yaml`.
+  Reuse across separate CLI processes MAY use environment variables (e.g. `CYNORK_TOKEN`, `CYNORK_REFRESH_TOKEN`), the built-in session store (OS keyring or XDG cache file outside the config directory), or an optional credential helper.
   When the default config path cannot be resolved (e.g. home directory unavailable and no `--config` given), commands that persist preferences MUST fail with a clear error.
   [CYNAI.CLIENT.CliConfigFileLocation](../tech_specs/cynork_cli.md#spec-cynai-client-cliconfigfilelocation)
   [CYNAI.CLIENT.CliSessionPersistence](../tech_specs/cynork_cli.md#spec-cynai-client-clisessionpersistence)

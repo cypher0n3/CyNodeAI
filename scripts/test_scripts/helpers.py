@@ -185,7 +185,9 @@ def _e2e_auth_error_text(out, err):
 def _run_cynork_subprocess(args, config_path, env_extra=None, timeout=None, input_text=None):
     """Run cynork subprocess with sidecar hooks.
 
-    Used by ensure_valid_auth_session (no outer retry loop).
+    When config_path is set, sets XDG_CACHE_HOME beside that config so session.json
+    does not collide with the developer default cache. Used by ensure_valid_auth_session
+    (no outer retry loop).
     """
     if timeout is None:
         timeout = int(config.E2E_CYNORK_TIMEOUT)
@@ -194,6 +196,16 @@ def _run_cynork_subprocess(args, config_path, env_extra=None, timeout=None, inpu
     env["CYNORK_GATEWAY_URL"] = config.USER_API
     args_list = list(args)
     if config_path:
+        cfg_dir = os.path.dirname(os.path.abspath(config_path))
+        if cfg_dir:
+            cache_home = os.path.join(cfg_dir, ".e2e-xdg-cache")
+            try:
+                os.makedirs(cache_home, mode=0o700, exist_ok=True)
+            except OSError:
+                pass
+            else:
+                env["XDG_CACHE_HOME"] = cache_home
+        env.setdefault("CYNORK_DISABLE_OS_CREDSTORE", "1")
         acc, ref = _read_e2e_session_tokens(config_path)
         if acc:
             env["CYNORK_TOKEN"] = acc

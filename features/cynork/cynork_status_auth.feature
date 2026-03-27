@@ -46,10 +46,11 @@ Scenario: Whoami without token fails
 @req_client_0150
 @req_client_0103
 @spec_cynai_client_clisessionpersistence
-Scenario: A separate cynork process does not inherit a login token from disk
+Scenario: A separate cynork process loads the session from the credential store
   Given I am logged in with username "alice" and password "secret"
   When I run cynork auth whoami using the stored config
-  Then cynork exits with code 3
+  Then cynork exits with code 0
+  And cynork stdout contains "user=alice"
 
 @req_identy_0105
 @spec_cynai_client_cliauth

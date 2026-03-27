@@ -86,7 +86,8 @@ See [../orchestrator/README.md](../orchestrator/README.md) and, if using contain
 ### 2. Obtain Gateway Credentials
 
 - **Option A (login)**: Use the cynork CLI or another client to log in and obtain a JWT (or session token).
-  Example with cynork: `cynork auth login -u <handle> -p <password>`; the stored token can be used as the OpenWebUI API key if the gateway accepts Bearer tokens for the OpenAI-compat endpoint.
+  Example with cynork: `cynork auth login -u <handle> -p <password>`; cynork persists the session in the OS credential store or under the XDG cache directory (not in `config.yaml`) so later `cynork` commands reuse it.
+  For OpenWebUI, paste a bearer token or API key your deployment documents for that integration (for example a long-lived key from Option B, or `CYNORK_TOKEN` in scripted setups).
 - **Option B (API key)**: If the gateway supports long-lived API keys for integrations, create one in the admin console or via API and use it as the OpenWebUI API key.
 
 The gateway MUST authenticate user clients; see [user_api_gateway.md - Authentication and Auditing](tech_specs/user_api_gateway.md#authentication-and-auditing).

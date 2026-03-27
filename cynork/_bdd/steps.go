@@ -73,9 +73,17 @@ func getState(ctx context.Context) *cynorkState {
 	return s
 }
 
+func (s *cynorkState) credstoreEnv() []string {
+	cacheRoot := filepath.Join(filepath.Dir(s.configPath), "xdg-cache")
+	return []string{
+		"XDG_CACHE_HOME=" + cacheRoot,
+		"CYNORK_DISABLE_OS_CREDSTORE=1",
+	}
+}
+
 func (s *cynorkState) runCynork(args []string, env ...string) (exit int, stdout, stderr string) {
 	cmd := exec.Command(s.cynorkBin, args...)
-	cmd.Env = append(os.Environ(), env...)
+	cmd.Env = append(os.Environ(), append(s.credstoreEnv(), env...)...)
 	if s.bddRoot != "" {
 		cmd.Dir = s.bddRoot
 	}
@@ -135,6 +143,9 @@ func InitializeCynorkSuite(sc *godog.ScenarioContext, state *cynorkState) {
 		state.bddRoot = filepath.Join(root, "cynork", "_bdd")
 		tmpDir := filepath.Join(state.bddRoot, "tmp")
 		_ = os.MkdirAll(tmpDir, 0o755)
+		_ = os.MkdirAll(filepath.Join(tmpDir, "xdg-cache"), 0o755)
+		// Drop persisted session/thread cache so scenarios do not see tokens from earlier features.
+		_ = os.RemoveAll(filepath.Join(tmpDir, "xdg-cache", "cynork"))
 		state.configPath = filepath.Join(tmpDir, "cynork-bdd-config.yaml")
 		_ = os.WriteFile(state.configPath, []byte("gateway_url: http://localhost\n"), 0o600)
 		// Attachment files for scenarios that use tmp/doc1.txt, tmp/doc2.txt.
@@ -230,7 +241,7 @@ func InitializeCynorkSuite(sc *godog.ScenarioContext, state *cynorkState) {
 
 	sc.Step(`^I run cynork auth whoami using the stored config$`, func(ctx context.Context) error {
 		st := getState(ctx)
-		// No CYNORK_TOKEN: tokens are not persisted to disk; expect auth failure.
+		// No CYNORK_TOKEN: session must come from the same XDG cache dir as login (subprocess env).
 		env := []string{"CYNORK_GATEWAY_URL=" + st.mockServer.URL}
 		args := []string{"--config", st.configPath, "auth", "whoami"}
 		st.lastExit, st.lastStdout, st.lastStderr = st.runCynork(args, env...)
@@ -953,7 +964,7 @@ func InitializeCynorkSuite(sc *godog.ScenarioContext, state *cynorkState) {
 // runCynorkWithStdin runs cynork with the given stdin content (e.g. "/exit\n" for chat).
 func (s *cynorkState) runCynorkWithStdin(args []string, env []string, stdin string) (exit int, stdout, stderr string) {
 	cmd := exec.Command(s.cynorkBin, args...)
-	cmd.Env = append(os.Environ(), env...)
+	cmd.Env = append(os.Environ(), append(s.credstoreEnv(), env...)...)
 	cmd.Stdin = strings.NewReader(stdin)
 	var outBuf, errBuf bytes.Buffer
 	cmd.Stdout = &outBuf

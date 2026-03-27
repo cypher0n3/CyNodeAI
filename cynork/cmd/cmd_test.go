@@ -425,7 +425,7 @@ func TestTuiAuthProvider_Save_AfterLoginPreservesFileGatewayWithEnvOverride(t *t
 		cfgGatewayFromEnv = false
 		cfgGatewayPersistExplicit = false
 	}()
-	p := &tuiAuthProvider{cfg: cfg, saveFn: saveConfig}
+	p := &tuiAuthProvider{cfg: cfg, saveFn: persistSessionAndConfig}
 	p.SetGatewayURL("http://127.0.0.1:49152", false)
 	if err := p.Save(); err != nil {
 		t.Fatalf("Save: %v", err)
@@ -459,7 +459,7 @@ func TestTuiAuthProvider_Save_AfterExplicitConnectPersistsNewGateway(t *testing.
 		cfgGatewayFromEnv = false
 		cfgGatewayPersistExplicit = false
 	}()
-	p := &tuiAuthProvider{cfg: cfg, saveFn: saveConfig}
+	p := &tuiAuthProvider{cfg: cfg, saveFn: persistSessionAndConfig}
 	p.SetGatewayURL("http://127.0.0.1:33333", true)
 	if err := p.Save(); err != nil {
 		t.Fatalf("Save: %v", err)

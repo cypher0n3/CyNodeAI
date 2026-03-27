@@ -27,8 +27,8 @@ type TUIConfig struct {
 }
 
 // Config holds CLI configuration (file + env overrides).
-// Token and RefreshToken are process memory only; they MUST NOT be loaded from
-// or written to config.yaml (see Save and finalizeAfterConfigFileRead).
+// Token and RefreshToken are not loaded from or written to config.yaml (see Save and finalizeAfterConfigFileRead).
+// They may be filled from environment variables or the session store (OS keyring or XDG cache); see session_store.go.
 type Config struct {
 	GatewayURL   string    `yaml:"gateway_url" json:"gateway_url"`
 	Token        string    `yaml:"token" json:"token"`
@@ -44,6 +44,13 @@ type persistedConfig struct {
 
 // userHomeDir is overridable in tests.
 var userHomeDir = os.UserHomeDir
+
+// SetUserHomeDirForTest replaces user resolution for tests; the returned function restores the previous hook.
+func SetUserHomeDirForTest(fn func() (string, error)) (restore func()) {
+	prev := userHomeDir
+	userHomeDir = fn
+	return func() { userHomeDir = prev }
+}
 
 // resolveXDGOrHome returns $envKey/cynork when set, else ~/.homeSub/cynork.
 func resolveXDGOrHome(envKey, homeSub string) (string, error) {

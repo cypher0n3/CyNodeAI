@@ -683,7 +683,10 @@ func TestRunSlashConnect_UpdateURL(t *testing.T) {
 	}))
 	defer srv.Close()
 	cfg = &config.Config{GatewayURL: "http://old:1", Token: "tok"}
-	defer func() { cfg = nil }()
+	defer func() {
+		cfg = nil
+		cfgGatewayPersistExplicit = false
+	}()
 	session := chat.NewSession(gateway.NewClient("http://old:1"))
 	session.SetToken("tok")
 	if err := runSlashConnect(session, srv.URL); err != nil {
@@ -696,7 +699,10 @@ func TestRunSlashConnect_UpdateURL(t *testing.T) {
 
 func TestRunSlashConnect_HealthFail(t *testing.T) {
 	cfg = &config.Config{GatewayURL: "http://old:1", Token: "tok"}
-	defer func() { cfg = nil }()
+	defer func() {
+		cfg = nil
+		cfgGatewayPersistExplicit = false
+	}()
 	session := chat.NewSession(gateway.NewClient("http://old:1"))
 	session.SetToken("tok")
 	if err := runSlashConnect(session, "http://localhost:9"); err != nil {

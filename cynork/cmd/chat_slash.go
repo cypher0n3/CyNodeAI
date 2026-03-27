@@ -7,7 +7,9 @@ import (
 	"strings"
 
 	"github.com/cypher0n3/cynodeai/cynork/internal/chat"
+	"github.com/cypher0n3/cynodeai/cynork/internal/config"
 	"github.com/cypher0n3/cynodeai/cynork/internal/gateway"
+	"github.com/cypher0n3/cynodeai/go_shared_libs/secretutil"
 )
 
 // SlashCommand describes one slash command for help and autocomplete.
@@ -148,7 +150,9 @@ var runCynorkSubcommandForSlash = runCynorkSubcommand
 // On error it prints to stderr and returns nil so behavior matches runCynorkSubcommand (child prints and exits).
 func runCynorkSubcommandInProcess(subcommand, rest string) error {
 	args := parseArgs(rest)
-	rootCmd.SetArgs(append([]string{subcommand}, args...))
+	argv := append([]string{subcommand}, args...)
+	rootCmd.SetArgs(argv)
+	defer rootCmd.SetArgs(nil) // next Execute uses os.Args[1:]; Cobra retains SetArgs otherwise
 	if err := rootCmd.Execute(); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		return nil
@@ -215,10 +219,16 @@ func runSlashAuthDelegated(session *chat.Session, rest string) error {
 	}
 	switch sub {
 	case "login", "refresh":
-		// Auth subcommand updated in-memory cfg (tokens are not reloaded from disk).
 		cfgGatewayFromEnv = os.Getenv("CYNORK_GATEWAY_URL") != ""
+		if err := config.ApplySessionStore(cfg); err != nil {
+			return err
+		}
 		session.SetToken(cfg.Token)
 	case "logout":
+		secretutil.RunWithSecret(func() {
+			cfg.Token = ""
+			cfg.RefreshToken = ""
+		})
 		session.SetToken("")
 	}
 	return nil

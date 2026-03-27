@@ -158,6 +158,8 @@ It authenticates to the User API Gateway and is authorized by the gateway.
 - `CYNORK_GATEWAY_URL`: if set, overrides `gateway_url` from the config file after load.
 - `CYNORK_TOKEN`: if set, supplies the bearer token for the process (see [Token Resolution (Precedence)](#token-resolution-precedence)); use for CI, scripting, or reuse across separate CLI invocations.
 - `CYNORK_REFRESH_TOKEN`: if set, supplies the refresh token for `cynork auth refresh` when not held in memory (same reuse model as `CYNORK_TOKEN`).
+- `CYNORK_DISABLE_OS_CREDSTORE`: if set to `1`, the CLI MUST NOT use the OS credential store for the built-in session helper (file cache only).
+  Intended for automated tests; not for end-user documentation.
 - Overrides apply at config load time; the effective gateway URL and token used for requests MUST be the result of applying overrides to the loaded non-secret config and resolved token.
 
 #### Default Gateway URL
@@ -170,8 +172,10 @@ It authenticates to the User API Gateway and is authorized by the gateway.
 - Spec ID: `CYNAI.CLIENT.CliSessionPersistence` <a id="spec-cynai-client-clisessionpersistence"></a>
 - Traces To: [REQ-CLIENT-0150](../requirements/client.md#req-client-0150)
 - When writing **non-secret** preferences to the config file (e.g. `gateway_url`, TUI settings), the CLI MUST write atomically (e.g. write to a temp file in the same directory then rename to the final path) so that a crash or interrupt does not leave a partial or corrupt file; subsequent invocations MUST see either the previous config or a complete new one.
-- The CLI MUST NOT persist access tokens, refresh tokens, or other session credentials to disk as plaintext.
-  Reuse across separate processes MUST be via `CYNORK_TOKEN`, `CYNORK_REFRESH_TOKEN`, or an optional credential helper.
+- The CLI MUST NOT persist access tokens, refresh tokens, or other session credentials in the **user config directory** or in `config.yaml` (see [REQ-CLIENT-0103](../requirements/client.md#req-client-0103), [REQ-CLIENT-0149](../requirements/client.md#req-client-0149)).
+- **Exception (session cache):** the CLI MAY persist the gateway session (access and refresh tokens) outside the config directory: it SHOULD use the OS credential store when available (e.g. Keychain, Secret Service); if that is unavailable or fails, it MAY fall back to a JSON file under the XDG cache path (`$XDG_CACHE_HOME/cynork/session.json`, or `~/.cache/cynork/session.json` when `XDG_CACHE_HOME` is unset).
+  That file MUST be created with restrictive permissions (e.g. `0600`) and MUST NOT be placed under the same directory as `config.yaml`.
+- Reuse across separate processes MAY use this built-in session store, or `CYNORK_TOKEN` / `CYNORK_REFRESH_TOKEN`, or an optional `credential_helper` executable when implemented.
 - When the default config path cannot be resolved (e.g. home directory unavailable and no `--config` given), commands that persist preferences MUST fail with a clear error and MUST NOT proceed with an empty path.
 
 ### Token Resolution (Precedence)
@@ -189,11 +193,16 @@ The CLI MUST NOT load bearer tokens from the config file (legacy `token` keys ar
 
 #### Environment Variable
 
-If `CYNORK_TOKEN` is set and non-empty, use it and skip credential helper.
+If `CYNORK_TOKEN` is set and non-empty, use it for the bearer token and skip further token resolution for the access token (refresh token MAY still be filled from `CYNORK_REFRESH_TOKEN` or the built-in session store when those fields are empty).
+
+#### Built-In Session Store
+
+If the access token is still empty after the environment step, the CLI MUST try the built-in session store: read from the OS credential store when permitted (see `CYNORK_DISABLE_OS_CREDSTORE`); if no session is found there, read the session cache file under the XDG cache directory (see [Session Persistence (Reliability)](#spec-cynai-client-clisessionpersistence)).
+Partial fills are allowed (e.g. only refresh token from the store when the access token was supplied via `CYNORK_TOKEN`).
 
 #### Credential Helper
 
-If `credential_helper` is set in the loaded config, invoke the helper (see [Credential Helper Protocol](#credential-helper-protocol)) with action `get`; if the helper returns a non-empty secret, use it.
+If `credential_helper` is set in the loaded config, invoke the helper (see [Credential Helper Protocol](#credential-helper-protocol)) with action `get`; if the helper returns a non-empty secret, use it. (When both built-in session store and `credential_helper` are present, implementations SHOULD define a single deterministic precedence; the reference implementation prefers environment variables, then the built-in session store, then a future subprocess helper when wired.)
 
 #### No Token
 
@@ -341,8 +350,8 @@ All subcommands that call the gateway MUST use the resolved gateway URL and reso
 
 - `cynork version`: print version string (e.g. from build); MUST NOT require auth.
 - `cynork status`: report gateway reachability and optionally auth status; MAY require auth for full status.
-- `cynork auth login`: interactive or flag-based login; POST to gateway login endpoint; MUST keep tokens in process memory only unless a credential helper stores them; MUST NOT echo password; MUST NOT write plaintext tokens to the config file.
-- `cynork auth logout`: clear in-memory token state and optionally invoke credential helper to clear stored credentials; MUST NOT require gateway call.
+- `cynork auth login`: interactive or flag-based login; POST to gateway login endpoint; MUST persist the session via the built-in store (OS keyring preferred, else XDG session cache file); MUST NOT echo password; MUST NOT write tokens to `config.yaml`.
+- `cynork auth logout`: clear in-memory token state and clear the built-in session store; optionally invoke a configured credential helper to clear stored credentials when implemented; MUST NOT require gateway call.
 - `cynork auth whoami`: call gateway with current token; MUST require auth.
 - `cynork task ...`: full CRUD (create, list, get, update, delete/archive), cancel, result, watch, logs, and artifacts; see [Task commands](cli_management_app_commands_tasks.md).
   Task delete is archive (soft delete).
@@ -403,7 +412,7 @@ Implementation MUST follow [Go REST API Standards](go_rest_api_standards.md) whe
 ### Required Package Layout
 
 - `cmd/`: Cobra root and subcommands; MUST NOT contain business logic beyond delegation to internal packages.
-- `internal/config/`: Config file load, XDG/default path resolution, env overrides, and token resolution (env then credential helper; config file MUST NOT supply bearer tokens).
+- `internal/config/`: Config file load, XDG/default path resolution, env overrides, built-in session store (OS keyring then XDG cache file), and token resolution; config file MUST NOT supply bearer tokens.
   MUST expose a single load entrypoint that returns a struct with at least `GatewayURL` and resolved `Token`; token resolution MUST be implemented as specified in [Token Resolution (Precedence)](#token-resolution-precedence) and [Credential Helper Protocol](#credential-helper-protocol).
 - `internal/gateway/`: HTTP client for the User API Gateway; MUST set `Authorization: Bearer <token>` on every request when token is non-empty; MUST map 401/403/429/5xx to typed errors; MUST NOT log request or response bodies that may contain secrets.
 - `internal/output/`: Formatters for table and JSON output; MUST support `--output table` and `--output json` for list/get commands.

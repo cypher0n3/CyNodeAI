@@ -156,15 +156,21 @@ func TestRunAuthLogin_LoginFails(t *testing.T) {
 	}
 }
 
-func TestRunAuthLogin_SaveFails(t *testing.T) {
+func TestRunAuthLogin_PersistFails(t *testing.T) {
 	server := mockJSONServer(t, http.StatusOK, userapi.LoginResponse{AccessToken: "tok", TokenType: "Bearer"})
 	defer server.Close()
 	dir := t.TempDir()
-	blocker := filepath.Join(dir, "blocker")
-	if err := os.WriteFile(blocker, []byte("x"), 0o600); err != nil {
+	blockFile := filepath.Join(dir, "block")
+	if err := os.WriteFile(blockFile, []byte("x"), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	configPath = filepath.Join(blocker, "nested", "config.yaml")
+	t.Setenv("XDG_CACHE_HOME", blockFile)
+	t.Setenv("CYNORK_DISABLE_OS_CREDSTORE", "1")
+
+	configPath = filepath.Join(dir, "config.yaml")
+	if err := os.WriteFile(configPath, []byte("gateway_url: "+server.URL+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
 	cfg = &config.Config{GatewayURL: server.URL}
 	authLoginHandle = "u"
 	authLoginPasswordStdin = true
@@ -184,14 +190,17 @@ func TestRunAuthLogin_SaveFails(t *testing.T) {
 	_, _ = w.WriteString("p\n")
 	_ = w.Close()
 	if err := runAuthLogin(nil, nil); err == nil {
-		t.Fatal("expected save error")
+		t.Fatal("expected persist session error")
 	}
 }
 
-func TestRunAuthLogin_ConfigPathFails(t *testing.T) {
+func TestRunAuthLogin_SucceedsWithoutDefaultConfigPath(t *testing.T) {
 	server := mockJSONServer(t, http.StatusOK, userapi.LoginResponse{AccessToken: "tok", TokenType: "Bearer"})
 	defer server.Close()
-	configPath = ""
+	configPath = filepath.Join(t.TempDir(), "config.yaml")
+	if err := os.WriteFile(configPath, []byte("gateway_url: "+server.URL+"\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
 	cfg = &config.Config{GatewayURL: server.URL}
 	authLoginHandle = "u"
 	authLoginPasswordStdin = true
@@ -213,19 +222,8 @@ func TestRunAuthLogin_ConfigPathFails(t *testing.T) {
 		authLoginPasswordStdin = false
 		getDefaultConfigPath = old
 	}()
-	if err := runAuthLogin(nil, nil); err == nil {
-		t.Fatal("expected config path error")
-	}
-}
-
-func TestRunAuthLogout_ConfigPathFails(t *testing.T) {
-	configPath = ""
-	cfg = &config.Config{GatewayURL: "http://localhost", Token: "x"}
-	old := getDefaultConfigPath
-	getDefaultConfigPath = func() (string, error) { return "", errors.New("injected") }
-	defer func() { configPath = ""; cfg = nil; getDefaultConfigPath = old }()
-	if err := runAuthLogout(nil, nil); err == nil {
-		t.Fatal("expected config path error")
+	if err := runAuthLogin(nil, nil); err != nil {
+		t.Fatalf("login should not need default config path for yaml save: %v", err)
 	}
 }
 

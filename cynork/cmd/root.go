@@ -47,6 +47,9 @@ var rootCmd = &cobra.Command{
 		if err != nil {
 			return exit.Usage(fmt.Errorf("load config: %w", err))
 		}
+		if err := config.ApplySessionStore(cfg); err != nil {
+			return exit.Usage(fmt.Errorf("load session: %w", err))
+		}
 		cfgGatewayFromEnv = os.Getenv("CYNORK_GATEWAY_URL") != ""
 		if outputFmt != "" && outputFmt != outputFormatTable && outputFmt != outputFormatJSON {
 			return exit.Usage(fmt.Errorf("output must be table or json"))

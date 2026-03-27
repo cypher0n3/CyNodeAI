@@ -78,7 +78,7 @@ func (p *tuiAuthProvider) SetShowToolOutputByDefault(v bool) {
 func runTUIWithSession(session *chat.Session, resumeThreadSelector string) error {
 	tui.SetTUIVersion(version)
 	m := tui.NewModel(session)
-	m.SetAuthProvider(&tuiAuthProvider{cfg: cfg, saveFn: saveConfig})
+	m.SetAuthProvider(&tuiAuthProvider{cfg: cfg, saveFn: persistSessionAndConfig})
 	m.SetResumeThreadSelector(resumeThreadSelector)
 	m.SetHealthPollInterval(tuiHealthPollIntervalSec(cfg))
 	// Startup token failure: open in-session login instead of exiting (cynork_tui.md Auth Recovery).

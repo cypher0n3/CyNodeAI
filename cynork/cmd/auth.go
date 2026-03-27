@@ -29,13 +29,13 @@ var authCmd = &cobra.Command{
 
 var authLoginCmd = &cobra.Command{
 	Use:   "login",
-	Short: "Log in (token kept in process memory only)",
+	Short: "Log in (session stored in OS keyring or XDG cache, not config.yaml)",
 	RunE:  runAuthLogin,
 }
 
 var authLogoutCmd = &cobra.Command{
 	Use:   "logout",
-	Short: "Clear in-memory token state",
+	Short: "Clear stored session and in-memory token state",
 	RunE:  runAuthLogout,
 }
 
@@ -47,8 +47,8 @@ var authWhoamiCmd = &cobra.Command{
 
 var authRefreshCmd = &cobra.Command{
 	Use:   "refresh",
-	Short: "Refresh access token using CYNORK_REFRESH_TOKEN or in-memory refresh token",
-	Long:  "Calls POST /v1/auth/refresh. Use after login in the same process, or set CYNORK_REFRESH_TOKEN (tokens are not persisted to disk).",
+	Short: "Refresh access token using stored session, CYNORK_REFRESH_TOKEN, or in-memory refresh token",
+	Long:  "Calls POST /v1/auth/refresh. Uses the persisted refresh token after login, or CYNORK_REFRESH_TOKEN, or the current process session.",
 	RunE:  runAuthRefresh,
 }
 
@@ -74,8 +74,8 @@ func runAuthLogin(_ *cobra.Command, _ []string) error {
 		cfg.Token = resp.AccessToken
 		cfg.RefreshToken = resp.RefreshToken
 	})
-	if err := saveConfig(); err != nil {
-		return err
+	if err := config.PersistSession(cfg.Token, cfg.RefreshToken); err != nil {
+		return exit.Usage(fmt.Errorf("persist session: %w", err))
 	}
 	if outputFmt == outputFormatJSON {
 		_ = jsonOutputEncoder().Encode(map[string]any{"logged_in": true, "user": handle})
@@ -186,13 +186,21 @@ func readPasswordFromStdin() (string, error) {
 	return text, nil
 }
 
+// persistSessionAndConfig writes the session store and non-secret config.yaml (gateway, TUI prefs).
+func persistSessionAndConfig() error {
+	if err := config.PersistSession(cfg.Token, cfg.RefreshToken); err != nil {
+		return fmt.Errorf("persist session: %w", err)
+	}
+	return saveConfig()
+}
+
 func runAuthLogout(_ *cobra.Command, _ []string) error {
 	secretutil.RunWithSecret(func() {
 		cfg.Token = ""
 		cfg.RefreshToken = ""
 	})
-	if err := saveConfig(); err != nil {
-		return err
+	if err := config.PersistSession("", ""); err != nil {
+		return exit.Usage(fmt.Errorf("clear session: %w", err))
 	}
 	if outputFmt == outputFormatJSON {
 		_ = jsonOutputEncoder().Encode(map[string]any{"logged_out": true})
@@ -222,7 +230,7 @@ func runAuthWhoami(_ *cobra.Command, _ []string) error {
 
 func runAuthRefresh(_ *cobra.Command, _ []string) error {
 	if cfg.RefreshToken == "" {
-		return exit.Auth(fmt.Errorf("no refresh token: run 'cynork auth login' in this process first, or set CYNORK_REFRESH_TOKEN"))
+		return exit.Auth(fmt.Errorf("no refresh token: run 'cynork auth login', or set CYNORK_REFRESH_TOKEN"))
 	}
 	client := gateway.NewClient(cfg.GatewayURL)
 	resp, err := client.Refresh(cfg.RefreshToken)
@@ -233,6 +241,9 @@ func runAuthRefresh(_ *cobra.Command, _ []string) error {
 		cfg.Token = resp.AccessToken
 		cfg.RefreshToken = resp.RefreshToken
 	})
+	if err := config.PersistSession(cfg.Token, cfg.RefreshToken); err != nil {
+		return exit.Usage(fmt.Errorf("persist session: %w", err))
+	}
 	fmt.Println("Token refreshed successfully.")
 	return nil
 }
