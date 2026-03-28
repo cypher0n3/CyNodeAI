@@ -42,10 +42,18 @@ type sendResult struct {
 	err     error
 }
 
-// streamDeltaMsg carries one incremental delta or an amendment (secret_redaction) for the in-flight turn.
+// streamDeltaMsg carries one streaming event for the in-flight assistant turn.
 type streamDeltaMsg struct {
-	delta     string
-	amendment string
+	delta      string
+	amendment  string
+	thinking   string
+	toolName   string
+	toolArgs   string
+	isHeartbeat bool
+	hbElapsed   int
+	hbStatus    string
+	iterationStart bool
+	iteration      int
 }
 
 // streamDoneMsg signals that the active streaming turn is complete.
@@ -156,6 +164,9 @@ type Model struct {
 	streamCh     <-chan chat.ChatStreamDelta // active stream channel; nil when idle
 	streamBuf    strings.Builder             // accumulates in-flight visible text
 	ctrlCCount   int                         // successive Ctrl+C when idle → exit
+	// Transcript is the structured turn list (user + assistant); mirrors interactive chat scrollback.
+	Transcript            []TranscriptTurn
+	streamHeartbeatNote   string // ephemeral progress line (heartbeat); not persisted in scrollback
 
 	// login form overlay (REQ-CLIENT-0190: in-session login; password not echoed)
 	ShowLoginForm   bool
@@ -595,6 +606,7 @@ func (m *Model) handleEnterKey() (tea.Model, tea.Cmd) {
 		return m.handleSlashLine(line)
 	}
 	m.Scrollback = append(m.Scrollback, "You: "+line)
+	m.appendTranscriptUser(line)
 	m.pushInputHistory(line)
 	m.InputHistoryIdx = -1
 	m.Loading = true
@@ -672,12 +684,48 @@ func (m *Model) handleCtrlC() (tea.Model, tea.Cmd) {
 }
 
 func (m *Model) applyStreamDelta(msg streamDeltaMsg) (tea.Model, tea.Cmd) {
-	if msg.amendment != "" {
+	m.streamHeartbeatNote = ""
+	switch {
+	case msg.amendment != "":
 		m.streamBuf.Reset()
 		m.streamBuf.WriteString(msg.amendment)
-	} else {
+	case msg.thinking != "":
+		m.appendTranscriptThinking(msg.thinking)
+		if m.streamCh != nil {
+			return m, scheduleNextDelta(m.streamCh)
+		}
+		return m, nil
+	case msg.toolName != "" || msg.toolArgs != "":
+		m.appendTranscriptToolCall(msg.toolName, msg.toolArgs)
+		if m.streamCh != nil {
+			return m, scheduleNextDelta(m.streamCh)
+		}
+		return m, nil
+	case msg.isHeartbeat:
+		if msg.hbStatus != "" {
+			m.streamHeartbeatNote = msg.hbStatus
+		} else {
+			m.streamHeartbeatNote = fmt.Sprintf("heartbeat %ds", msg.hbElapsed)
+		}
+		if m.streamCh != nil {
+			return m, scheduleNextDelta(m.streamCh)
+		}
+		return m, nil
+	case msg.iterationStart:
+		if len(m.Transcript) > 0 {
+			last := &m.Transcript[len(m.Transcript)-1]
+			if last.Role == RoleAssistant && last.InFlight {
+				last.StreamingState.Phase = StreamingPhaseWorking
+			}
+		}
+		if m.streamCh != nil {
+			return m, scheduleNextDelta(m.streamCh)
+		}
+		return m, nil
+	default:
 		m.streamBuf.WriteString(msg.delta)
 	}
+	m.syncInFlightTranscriptVisible()
 	prefix := assistantPrefix
 	if len(m.Scrollback) > 0 && strings.HasPrefix(m.Scrollback[len(m.Scrollback)-1], prefix) {
 		m.Scrollback[len(m.Scrollback)-1] = prefix + m.streamBuf.String()

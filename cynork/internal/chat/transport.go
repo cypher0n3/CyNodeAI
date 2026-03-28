@@ -24,6 +24,7 @@ type AssistantTurn struct {
 // ChatStreamDelta is one incremental event from a streaming assistant turn.
 // When Done is true the stream has ended; Err carries any terminal error.
 // Amendment is set when the gateway sends cynodeai.amendment (e.g. secret_redaction): replace accumulated visible text in place.
+// At most one of the structured fields (Thinking, Tool*, Heartbeat, IterationStart) should be set per event.
 type ChatStreamDelta struct {
 	Delta      string
 	Done       bool
@@ -31,6 +32,15 @@ type ChatStreamDelta struct {
 	ResponseID string
 	// Amendment is the full redacted content when event type is secret_redaction; replace in-flight text in place.
 	Amendment string
+	Thinking   string
+	ToolName   string
+	ToolArgs   string
+	// IterationStart is true when the gateway emits cynodeai.iteration_start; Iteration is the iteration index.
+	IterationStart bool
+	Iteration      int
+	IsHeartbeat    bool
+	HeartbeatElapsed int
+	HeartbeatStatus  string
 }
 
 // ChatTransport sends a user message and returns the assistant turn.
@@ -65,6 +75,32 @@ func (t *CompletionsTransport) StreamMessage(ctx context.Context, message, model
 	ch := make(chan ChatStreamDelta, streamDeltaBufSize)
 	go func() {
 		defer close(ch)
+		extra := &gateway.StreamExtra{
+			OnThinking: func(content string) {
+				select {
+				case ch <- ChatStreamDelta{Thinking: content}:
+				case <-ctx.Done():
+				}
+			},
+			OnToolCall: func(name, args string) {
+				select {
+				case ch <- ChatStreamDelta{ToolName: name, ToolArgs: args}:
+				case <-ctx.Done():
+				}
+			},
+			OnHeartbeat: func(elapsedSec int, status string) {
+				select {
+				case ch <- ChatStreamDelta{IsHeartbeat: true, HeartbeatElapsed: elapsedSec, HeartbeatStatus: status}:
+				case <-ctx.Done():
+				}
+			},
+			OnIterationStart: func(iter int) {
+				select {
+				case ch <- ChatStreamDelta{IterationStart: true, Iteration: iter}:
+				case <-ctx.Done():
+				}
+			},
+		}
 		err := t.Client.ChatStream(ctx, message, model, projectID,
 			func(delta string) {
 				select {
@@ -77,7 +113,8 @@ func (t *CompletionsTransport) StreamMessage(ctx context.Context, message, model
 				case ch <- ChatStreamDelta{Amendment: redacted}:
 				case <-ctx.Done():
 				}
-			})
+			},
+			extra)
 		ch <- ChatStreamDelta{Done: true, Err: err}
 	}()
 	return ch, nil
@@ -102,6 +139,32 @@ func (t *ResponsesTransport) StreamMessage(ctx context.Context, message, model, 
 	ch := make(chan ChatStreamDelta, streamDeltaBufSize)
 	go func() {
 		defer close(ch)
+		extra := &gateway.StreamExtra{
+			OnThinking: func(content string) {
+				select {
+				case ch <- ChatStreamDelta{Thinking: content}:
+				case <-ctx.Done():
+				}
+			},
+			OnToolCall: func(name, args string) {
+				select {
+				case ch <- ChatStreamDelta{ToolName: name, ToolArgs: args}:
+				case <-ctx.Done():
+				}
+			},
+			OnHeartbeat: func(elapsedSec int, status string) {
+				select {
+				case ch <- ChatStreamDelta{IsHeartbeat: true, HeartbeatElapsed: elapsedSec, HeartbeatStatus: status}:
+				case <-ctx.Done():
+				}
+			},
+			OnIterationStart: func(iter int) {
+				select {
+				case ch <- ChatStreamDelta{IterationStart: true, Iteration: iter}:
+				case <-ctx.Done():
+				}
+			},
+		}
 		respID, err := t.Client.ResponsesStream(ctx, message, model, projectID,
 			func(delta string) {
 				select {
@@ -114,7 +177,8 @@ func (t *ResponsesTransport) StreamMessage(ctx context.Context, message, model, 
 				case ch <- ChatStreamDelta{Amendment: redacted}:
 				case <-ctx.Done():
 				}
-			})
+			},
+			extra)
 		ch <- ChatStreamDelta{Done: true, Err: err, ResponseID: respID}
 	}()
 	return ch, nil

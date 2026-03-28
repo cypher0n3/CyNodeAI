@@ -20,6 +20,15 @@ import (
 
 const pathV1Responses = "/v1/responses"
 
+// StreamExtra carries optional callbacks for named CyNodeAI SSE extension events
+// (thinking_delta, tool_call, heartbeat, iteration_start). Nil fields are ignored.
+type StreamExtra struct {
+	OnThinking       func(content string)
+	OnToolCall       func(name, args string)
+	OnHeartbeat      func(elapsedSec int, status string)
+	OnIterationStart func(iteration int)
+}
+
 // Client calls the User API Gateway (auth, tasks, health).
 type Client struct {
 	BaseURL    string
@@ -395,7 +404,8 @@ func (c *Client) ResponsesWithOptions(message, model, projectID string) (*Respon
 
 // ChatStream calls POST /v1/chat/completions with stream=true and invokes onDelta for each
 // visible-text delta; onAmendment is called for cynodeai.amendment (e.g. secret_redaction) with the full redacted content.
-func (c *Client) ChatStream(ctx context.Context, message, model, projectID string, onDelta func(string), onAmendment func(redactedContent string)) error {
+// extra may be nil; when set, thinking/tool/heartbeat/iteration callbacks are invoked for named SSE events.
+func (c *Client) ChatStream(ctx context.Context, message, model, projectID string, onDelta func(string), onAmendment func(redactedContent string), extra *StreamExtra) error {
 	req := userapi.ChatCompletionsRequest{
 		Model:    model,
 		Messages: []userapi.ChatMessage{{Role: "user", Content: message}},
@@ -433,13 +443,14 @@ func (c *Client) ChatStream(ctx context.Context, message, model, projectID strin
 	if resp.StatusCode != http.StatusOK {
 		return c.parseError(resp)
 	}
-	return readChatSSEStream(ctx, resp.Body, onDelta, onAmendment, nil)
+	return readChatSSEStream(ctx, resp.Body, onDelta, onAmendment, nil, extra)
 }
 
 // ResponsesStream calls POST /v1/responses with stream=true and invokes onDelta for each
 // visible-text delta; onAmendment is called for cynodeai.amendment (e.g. secret_redaction).
 // Returns the streamed response_id from the first event when the gateway sends it (Task 4).
-func (c *Client) ResponsesStream(ctx context.Context, message, model, projectID string, onDelta func(string), onAmendment func(redactedContent string)) (responseID string, err error) {
+// extra may be nil; when set, extended SSE events are forwarded to the callbacks.
+func (c *Client) ResponsesStream(ctx context.Context, message, model, projectID string, onDelta func(string), onAmendment func(redactedContent string), extra *StreamExtra) (responseID string, err error) {
 	input, err := json.Marshal(message)
 	if err != nil {
 		return "", fmt.Errorf("marshal input: %w", err)
@@ -482,7 +493,7 @@ func (c *Client) ResponsesStream(ctx context.Context, message, model, projectID 
 		return "", c.parseError(resp)
 	}
 	var streamedID string
-	err = readChatSSEStream(ctx, resp.Body, onDelta, onAmendment, func(rid string) { streamedID = rid })
+	err = readChatSSEStream(ctx, resp.Body, onDelta, onAmendment, func(rid string) { streamedID = rid }, extra)
 	return streamedID, err
 }
 
@@ -518,7 +529,7 @@ func parseSSEDataLine(data string) *parsedSSEEvent {
 	return &parsedSSEEvent{chunk: chunk}
 }
 
-func readChatSSEStream(_ context.Context, r io.Reader, onDelta func(string), onAmendment func(redactedContent string), onResponseID func(string)) error {
+func readChatSSEStream(_ context.Context, r io.Reader, onDelta func(string), onAmendment func(redactedContent string), onResponseID func(string), extra *StreamExtra) error {
 	if onAmendment == nil {
 		onAmendment = func(string) {}
 	}
@@ -534,7 +545,7 @@ func readChatSSEStream(_ context.Context, r io.Reader, onDelta func(string), onA
 			continue
 		}
 		data := strings.TrimPrefix(line, "data: ")
-		done, err := processChatSSEDataLine(data, lastEvent, onDelta, onAmendment, onResponseID)
+		done, err := processChatSSEDataLine(data, lastEvent, onDelta, onAmendment, onResponseID, extra)
 		if err != nil {
 			return err
 		}
@@ -551,18 +562,50 @@ func readChatSSEStream(_ context.Context, r io.Reader, onDelta func(string), onA
 
 // processChatSSEDataLine handles one "data: ..." line. Returns (streamDone, error).
 // When onResponseID is non-nil and data is JSON with response_id (e.g. /v1/responses), invokes it and skips delta.
-func processChatSSEDataLine(data, lastEvent string, onDelta, onAmendment, onResponseID func(string)) (streamDone bool, err error) {
+func processChatSSEDataLine(data, lastEvent string, onDelta, onAmendment, onResponseID func(string), extra *StreamExtra) (streamDone bool, err error) {
 	if data == "[DONE]" {
 		return true, nil
 	}
 	switch lastEvent {
-	case "cynodeai.amendment":
+	case userapi.SSEEventAmendment:
 		applySecretRedactionAmendment(data, onAmendment)
 		return false, nil
 	case userapi.SSEEventResponseOutputTextDelta:
 		applyResponsesOutputTextDelta(data, onDelta)
 		return false, nil
 	case userapi.SSEEventResponseCompleted:
+		return false, nil
+	case userapi.SSEEventThinkingDelta:
+		if extra != nil && extra.OnThinking != nil {
+			var p userapi.SSEThinkingDeltaPayload
+			if json.Unmarshal([]byte(data), &p) == nil && p.Content != "" {
+				extra.OnThinking(p.Content)
+			}
+		}
+		return false, nil
+	case userapi.SSEEventToolCall:
+		if extra != nil && extra.OnToolCall != nil {
+			var p userapi.SSEToolCallPayload
+			if json.Unmarshal([]byte(data), &p) == nil && (p.Name != "" || p.Arguments != "") {
+				extra.OnToolCall(p.Name, p.Arguments)
+			}
+		}
+		return false, nil
+	case userapi.SSEEventHeartbeat:
+		if extra != nil && extra.OnHeartbeat != nil {
+			var p userapi.SSEHeartbeatPayload
+			if json.Unmarshal([]byte(data), &p) == nil {
+				extra.OnHeartbeat(p.ElapsedS, p.Status)
+			}
+		}
+		return false, nil
+	case userapi.SSEEventIterationStart:
+		if extra != nil && extra.OnIterationStart != nil {
+			var p userapi.SSEIterationStartPayload
+			if json.Unmarshal([]byte(data), &p) == nil {
+				extra.OnIterationStart(p.Iteration)
+			}
+		}
 		return false, nil
 	}
 	if tryInvokeResponseIDCallback(data, onResponseID) {

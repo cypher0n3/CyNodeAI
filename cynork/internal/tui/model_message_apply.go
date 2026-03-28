@@ -3,6 +3,7 @@ package tui
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -236,9 +237,25 @@ func (m *Model) applyStreamDone(msg streamDoneMsg) {
 	m.Loading = false
 	m.streamCancel = nil
 	m.streamCh = nil
+	m.streamHeartbeatNote = ""
 	final := strings.TrimSpace(m.streamBuf.String())
 	m.streamBuf.Reset()
+	if len(m.Transcript) > 0 {
+		last := &m.Transcript[len(m.Transcript)-1]
+		if last.Role == RoleAssistant && last.InFlight {
+			last.InFlight = false
+			last.Content = final
+			// Any terminal stream error (cancel, disconnect, upstream failure) marks an interrupted turn.
+			last.Interrupted = msg.err != nil
+		}
+	}
 	if msg.err != nil && final == "" {
+		// User canceled before any visible token: still surface interrupted semantics (PTY/E2E).
+		if errors.Is(msg.err, context.Canceled) {
+			m.Err = ""
+			m.Scrollback = append(m.Scrollback, "(stream interrupted)")
+			return
+		}
 		// Stream failed with no partial content.
 		m.Err = msg.err.Error()
 		// Replace the placeholder line with an error line.
@@ -275,6 +292,7 @@ func (m *Model) streamCmd(line string) tea.Cmd {
 	}
 	// Seed the in-flight line.
 	m.Scrollback = append(m.Scrollback, assistantPrefix)
+	m.seedTranscriptAssistantInFlight()
 	ctx, cancel := context.WithCancel(context.Background())
 	m.streamCancel = cancel
 	m.streamBuf.Reset()
@@ -303,6 +321,18 @@ func readNextDelta(ch <-chan chat.ChatStreamDelta) tea.Msg {
 		}
 		if delta.Amendment != "" {
 			return streamDeltaMsg{amendment: delta.Amendment}
+		}
+		if delta.Thinking != "" {
+			return streamDeltaMsg{thinking: delta.Thinking}
+		}
+		if delta.ToolName != "" || delta.ToolArgs != "" {
+			return streamDeltaMsg{toolName: delta.ToolName, toolArgs: delta.ToolArgs}
+		}
+		if delta.IsHeartbeat {
+			return streamDeltaMsg{isHeartbeat: true, hbElapsed: delta.HeartbeatElapsed, hbStatus: delta.HeartbeatStatus}
+		}
+		if delta.IterationStart {
+			return streamDeltaMsg{iterationStart: true, iteration: delta.Iteration}
 		}
 		return streamDeltaMsg{delta: delta.Delta}
 	case <-time.After(streamPollInterval):
@@ -405,8 +435,12 @@ func (m *Model) viewStatusBar() string {
 			thread = thread[:8] + "…"
 		}
 	}
-	tail := fmt.Sprintf(" | project: %s | model: %s | thread: %s | %s",
-		projectID, modelName, thread, composerHint)
+	hb := ""
+	if strings.TrimSpace(m.streamHeartbeatNote) != "" {
+		hb = " | " + m.streamHeartbeatNote
+	}
+	tail := fmt.Sprintf(" | project: %s | model: %s | thread: %s | %s%s",
+		projectID, modelName, thread, composerHint, hb)
 	tailStyled := lipgloss.NewStyle().Bold(true).Render(tail)
 	statusLine := " " + m.renderGatewayStatusIndicator() + tailStyled
 	return lipgloss.NewStyle().Width(m.Width).Render(statusLine)

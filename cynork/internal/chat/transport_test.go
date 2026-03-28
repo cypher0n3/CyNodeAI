@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/cypher0n3/cynodeai/cynork/internal/gateway"
+	"github.com/cypher0n3/cynodeai/go_shared_libs/contracts/userapi"
 )
 
 const testPathCompletions = "/v1/chat/completions"
@@ -98,6 +99,46 @@ func sseChunk(content, finishReason string) string {
 		content, fr) + "\n\n"
 }
 
+func TestCompletionsTransport_StreamMessage_EmitsStructuredDeltas(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != testPathCompletions || r.Method != http.MethodPost {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.WriteHeader(http.StatusOK)
+		th, _ := json.Marshal(map[string]string{"content": "think-chunk"})
+		_, _ = w.Write([]byte("event: " + userapi.SSEEventThinkingDelta + "\n"))
+		_, _ = w.Write([]byte("data: " + string(th) + "\n\n"))
+		_, _ = w.Write([]byte(sseChunk("visible", "")))
+		_, _ = w.Write([]byte(sseChunk("", "stop")))
+		_, _ = w.Write([]byte("data: [DONE]\n\n"))
+	}))
+	defer server.Close()
+	client := gateway.NewClient(server.URL)
+	client.SetToken("tok")
+	transport := &CompletionsTransport{Client: client}
+	ch, err := transport.StreamMessage(context.Background(), "hi", "m", "p")
+	if err != nil {
+		t.Fatalf("StreamMessage: %v", err)
+	}
+	var sawThink, sawDelta bool
+	for ev := range ch {
+		if ev.Done {
+			break
+		}
+		if ev.Thinking != "" {
+			sawThink = true
+		}
+		if ev.Delta != "" {
+			sawDelta = true
+		}
+	}
+	if !sawThink || !sawDelta {
+		t.Fatalf("expected thinking + visible deltas; sawThink=%v sawDelta=%v", sawThink, sawDelta)
+	}
+}
+
 func TestCompletionsTransport_StreamMessage(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != testPathCompletions || r.Method != http.MethodPost {
@@ -131,6 +172,46 @@ func TestCompletionsTransport_StreamMessage(t *testing.T) {
 	}
 	if buf.String() != "hello world" {
 		t.Errorf("accumulated = %q, want %q", buf.String(), "hello world")
+	}
+}
+
+func TestResponsesTransport_StreamMessage_EmitsStructuredDeltas(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != testPathResponses || r.Method != http.MethodPost {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		w.Header().Set("Content-Type", "text/event-stream")
+		w.WriteHeader(http.StatusOK)
+		th, _ := json.Marshal(map[string]string{"content": "think-r"})
+		_, _ = w.Write([]byte("event: " + userapi.SSEEventThinkingDelta + "\n"))
+		_, _ = w.Write([]byte("data: " + string(th) + "\n\n"))
+		_, _ = w.Write([]byte(sseChunk("resp-bit", "")))
+		_, _ = w.Write([]byte(sseChunk("", "stop")))
+		_, _ = w.Write([]byte("data: [DONE]\n\n"))
+	}))
+	defer server.Close()
+	client := gateway.NewClient(server.URL)
+	client.SetToken("tok")
+	transport := &ResponsesTransport{Client: client}
+	ch, err := transport.StreamMessage(context.Background(), "hi", "m", "p")
+	if err != nil {
+		t.Fatalf("StreamMessage: %v", err)
+	}
+	var sawThink, sawDelta bool
+	for ev := range ch {
+		if ev.Done {
+			break
+		}
+		if ev.Thinking != "" {
+			sawThink = true
+		}
+		if ev.Delta != "" {
+			sawDelta = true
+		}
+	}
+	if !sawThink || !sawDelta {
+		t.Fatalf("responses stream: sawThink=%v sawDelta=%v", sawThink, sawDelta)
 	}
 }
 

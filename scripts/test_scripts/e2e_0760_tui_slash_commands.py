@@ -522,6 +522,33 @@ class TestTuiSlashCommands(unittest.TestCase):
             )
             session.send_keys(["ctrl+c", "ctrl+c"])
 
+    def test_tui_slash_show_thinking_after_chat_still_toggles(self):
+        """After a chat turn completes, /show-thinking still toggles (local transcript path)."""
+        if not harness.pty_available():
+            self.skipTest("pexpect not installed")
+        with harness.TuiPtySession(state.CONFIG_PATH, timeout=90) as session:
+            self._wait_ready(session)
+            session.send_keys(["Reply with exactly: OK", "enter"])
+            combined = ""
+            deadline = time.time() + 70
+            while time.time() < deadline:
+                time.sleep(0.35)
+                combined += session.capture_screen(drain_sec=0.25) or ""
+                if (
+                    harness.LANDMARK_PROMPT_READY in combined
+                    or harness.LANDMARK_PROMPT_READY_SHORT in combined
+                    or "OK" in combined
+                ):
+                    break
+            session.send_keys(["/show-thinking", "enter"])
+            time.sleep(_SLASH_CMD_SETTLE_SEC)
+            out = session.capture_screen(drain_sec=0.35) or ""
+            self.assertTrue(
+                "thinking" in out.lower() or "visible" in out.lower(),
+                f"/show-thinking after chat should confirm; got: {repr(out[:500])}",
+            )
+            session.send_keys(["ctrl+c", "ctrl+c"])
+
     # ----------------------------------------------------------------- /status
     def test_tui_slash_status_shows_output(self):
         """/status shows gateway health or connection status (Task 4C).

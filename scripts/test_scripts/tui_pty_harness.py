@@ -235,3 +235,35 @@ class TuiPtySession:
         before = self._proc.before or ""
         after = self._proc.after if isinstance(self._proc.after, str) else ""
         return _ANSI_RE.sub("", before + after)
+
+
+def wait_scrollback_contains(session, needles, timeout_sec=20.0, poll_sec=0.25):
+    """Poll ``capture_screen`` until every string in ``needles`` appears in combined output.
+
+    Returns the accumulated ANSI-stripped text (may be partial if timed out).
+    """
+    if isinstance(needles, str):
+        needles = [needles]
+    deadline = time.time() + timeout_sec
+    combined = ""
+    while time.time() < deadline:
+        combined += session.capture_screen(drain_sec=0.2) or ""
+        if all(n in combined for n in needles):
+            return combined
+        time.sleep(poll_sec)
+    return combined
+
+
+def extract_thread_token_from_status(screen):
+    """Return the truncated thread token from the status bar (``thread: …``), or \"\"."""
+    if not screen:
+        return ""
+    m = re.search(r"thread:\s*([^\s|]+)", screen, flags=re.IGNORECASE)
+    if not m:
+        return ""
+    return m.group(1).strip()
+
+
+def cancel_stream_keys():
+    """Key sequence to cancel an in-flight stream (Ctrl+C once)."""
+    return ["ctrl+c"]

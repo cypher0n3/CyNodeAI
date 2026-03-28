@@ -237,6 +237,84 @@ class TestTuiPty(unittest.TestCase):
                 f"Expected in-flight or post-completion landmark; output: {repr(out_s[:500])}",
             )
 
+    def test_tui_pty_cancel_mid_stream_retains_partial_and_marks_interrupted(self):
+        """Cancel mid-stream: scrollback keeps Assistant line and '(stream interrupted)'."""
+        if not harness.pty_available():
+            self.skipTest("pexpect not installed or not Unix")
+        with harness.TuiPtySession(state.CONFIG_PATH, timeout=90) as session:
+            time.sleep(_TUI_STARTUP_DELAY_SEC)
+            self.assertTrue(
+                session.wait_for_prompt_ready(timeout_sec=12),
+                "TUI did not reach prompt-ready or first paint",
+            )
+            session.send_keys(
+                [
+                    "Write at least three long paragraphs about rivers. "
+                    "Use numbered sentences.",
+                    "enter",
+                ]
+            )
+            # Allow the stream to start; cancel is always a client cancel (context.Canceled).
+            # TUI appends "(stream interrupted)" even if no visible token arrived yet.
+            time.sleep(1.25)
+            session.send_keys(harness.cancel_stream_keys())
+            post = harness.wait_scrollback_contains(
+                session,
+                ["(stream interrupted)"],
+                timeout_sec=20.0,
+            )
+            self.assertIn(
+                "(stream interrupted)",
+                post,
+                f"expected interrupt marker after cancel; got: {repr(post[:900])}",
+            )
+            self.assertTrue(
+                "Assistant" in post or "assistant" in post.lower(),
+                "assistant turn area should remain visible after cancel; "
+                + repr(post[:900]),
+            )
+
+    def test_tui_pty_new_session_resumes_cached_thread_token(self):
+        """Second TUI launch reuses last thread id from XDG cache (connection recovery UX)."""
+        if not harness.pty_available():
+            self.skipTest("pexpect not installed or not Unix")
+        thread_id_first = None
+        with harness.TuiPtySession(state.CONFIG_PATH, timeout=90) as session:
+            time.sleep(_TUI_STARTUP_DELAY_SEC)
+            self.assertTrue(session.wait_for_prompt_ready(timeout_sec=12))
+            session.send_keys(["e2e thread cache ping", "enter"])
+            combined = ""
+            deadline = time.time() + 75
+            while time.time() < deadline:
+                time.sleep(0.35)
+                combined += session.capture_screen(drain_sec=0.25) or ""
+                if (
+                    harness.LANDMARK_PROMPT_READY in combined
+                    or harness.LANDMARK_PROMPT_READY_SHORT in combined
+                    or "You:" in combined
+                ):
+                    break
+            scr1 = session.capture_screen(drain_sec=0.4) or ""
+            tid = harness.extract_thread_token_from_status(scr1)
+            thread_id_first = tid if tid else None
+        thread_id_second = None
+        with harness.TuiPtySession(state.CONFIG_PATH, timeout=90) as session:
+            time.sleep(_TUI_STARTUP_DELAY_SEC)
+            self.assertTrue(session.wait_for_prompt_ready(timeout_sec=12))
+            scr2 = session.capture_screen(drain_sec=0.45) or ""
+            tid2 = harness.extract_thread_token_from_status(scr2)
+            thread_id_second = tid2 if tid2 else None
+        if not thread_id_first or not thread_id_second:
+            self.skipTest(
+                "thread token not visible in status bar (no cached thread yet); "
+                f"first={thread_id_first!r} second={thread_id_second!r}"
+            )
+        self.assertEqual(
+            thread_id_first,
+            thread_id_second,
+            "fresh TUI session should resume cached thread id",
+        )
+
     def test_tui_pty_ctrl_c_cancels_stream(self):
         """Ctrl+C while a message is in-flight cancels the stream; second Ctrl+C exits.
         Asserts CYNAI.USRGWY.OpenAIChatApi.Streaming client cancellation (REQ-CLIENT-0209)."""

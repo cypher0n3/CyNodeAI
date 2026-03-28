@@ -178,6 +178,32 @@ func TestSession_PatchThreadTitle(t *testing.T) {
 	}
 }
 
+func TestSession_PatchThreadTitle_UsesCurrentWhenThreadIDEmpty(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/chat/threads/cur-tid" || r.Method != http.MethodPatch {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer server.Close()
+	client := gateway.NewClient(server.URL)
+	client.SetToken("tok")
+	session := NewSession(client)
+	session.SetCurrentThreadID("cur-tid")
+	if err := session.PatchThreadTitle("", "Renamed"); err != nil {
+		t.Fatalf("PatchThreadTitle: %v", err)
+	}
+}
+
+func TestSession_ResolveThreadSelector_EmptySelector(t *testing.T) {
+	session := NewSession(gateway.NewClient("http://localhost"))
+	id, err := session.ResolveThreadSelector("", 10)
+	if err != nil || id != "" {
+		t.Fatalf("ResolveThreadSelector empty: id=%q err=%v", id, err)
+	}
+}
+
 func TestSession_SetCurrentThreadID(t *testing.T) {
 	session := NewSession(gateway.NewClient("http://localhost"))
 	session.SetCurrentThreadID("thread-abc")
