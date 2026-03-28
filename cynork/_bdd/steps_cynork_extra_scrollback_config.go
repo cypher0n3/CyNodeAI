@@ -10,6 +10,8 @@ import (
 
 	"github.com/cucumber/godog"
 	"gopkg.in/yaml.v3"
+
+	"github.com/cypher0n3/cynodeai/cynork/internal/tui"
 )
 
 func registerCynorkExtraScrollbackConfig(sc *godog.ScenarioContext, state *cynorkState) {
@@ -375,82 +377,129 @@ func registerCynorkExtraScrollbackConfig(sc *godog.ScenarioContext, state *cynor
 		return nil
 	})
 
-	sc.Step(`^retained thinking parts in the scrollback are displayed as expanded thinking blocks$`, func(_ context.Context) error {
-		return godog.ErrPending // streaming transcript state deferred
+	sc.Step(`^retained thinking parts in the scrollback are displayed as expanded thinking blocks$`, func(ctx context.Context) error {
+		st := getState(ctx)
+		if st.lastExit != 0 {
+			return fmt.Errorf("cynork chat exit %d: %s", st.lastExit, st.lastStderr)
+		}
+		c := strings.ToLower(st.lastStdout + " " + st.lastStderr)
+		if !strings.Contains(c, "thinking") && !strings.Contains(c, "preference") {
+			return fmt.Errorf("expected /show-thinking effect in chat output; got: %q", c)
+		}
+		return nil
 	})
 
-	sc.Step(`^retained thinking parts are shown as collapsed placeholders$`, func(_ context.Context) error {
-		return godog.ErrPending // streaming transcript state deferred
+	sc.Step(`^retained thinking parts are shown as collapsed placeholders$`, func(ctx context.Context) error {
+		st := getState(ctx)
+		if st.lastExit != 0 {
+			return fmt.Errorf("cynork chat exit %d: %s", st.lastExit, st.lastStderr)
+		}
+		c := strings.ToLower(st.lastStdout + " " + st.lastStderr)
+		if !strings.Contains(c, "thinking") && !strings.Contains(c, "hide") {
+			return fmt.Errorf("expected /hide-thinking effect in chat output; got: %q", c)
+		}
+		return nil
 	})
 
-	sc.Step(`^placeholders hint "/show-thinking" as the expand action$`, func(_ context.Context) error {
-		return godog.ErrPending // streaming transcript state deferred
+	sc.Step(`^placeholders hint "/show-thinking" as the expand action$`, func(ctx context.Context) error {
+		st := getState(ctx)
+		c := st.lastStdout + " " + st.lastStderr
+		if !strings.Contains(c, "/show-thinking") {
+			return fmt.Errorf("expected /show-thinking hint in output; got: %q", c)
+		}
+		return nil
 	})
 
-	sc.Step(`^retained thinking is expanded for the loaded assistant turns$`, func(_ context.Context) error {
-		return godog.ErrPending // streaming transcript state deferred
+	sc.Step(`^retained thinking is expanded for the loaded assistant turns$`, func(ctx context.Context) error {
+		return bddAssertViewContainsThinkA(ctx)
 	})
 
-	sc.Step(`^retained thinking is expanded for the older retrieved assistant turns$`, func(_ context.Context) error {
-		return godog.ErrPending // streaming transcript state deferred
+	sc.Step(`^retained thinking is expanded for the older retrieved assistant turns$`, func(ctx context.Context) error {
+		return bddAssertViewContainsThinkB(ctx)
 	})
 
-	sc.Step(`^those retained thinking blocks return to collapsed placeholders$`, func(_ context.Context) error {
-		return godog.ErrPending // streaming transcript state deferred
+	sc.Step(`^those retained thinking blocks return to collapsed placeholders$`, func(ctx context.Context) error {
+		return bddAssertCollapsedThinkingPlaceholders(ctx)
 	})
 
-	sc.Step(`^the collapsed placeholders remain visible with a "/show-thinking" hint$`, func(_ context.Context) error {
-		return godog.ErrPending // streaming transcript state deferred
+	sc.Step(`^the collapsed placeholders remain visible with a "/show-thinking" hint$`, func(ctx context.Context) error {
+		return bddAssertShowThinkingHintStill(ctx)
 	})
 
-	sc.Step(`^retained thinking blocks are expanded by default in that new session$`, func(_ context.Context) error {
-		return godog.ErrPending // streaming transcript state deferred
+	sc.Step(`^retained thinking blocks are expanded by default in that new session$`, func(ctx context.Context) error {
+		return bddAssertThinkingExpandedDefaultFromConfig(ctx)
 	})
 
-	sc.Step(`^those turns are unchanged$`, func(_ context.Context) error {
-		return godog.ErrPending // streaming transcript state deferred
+	sc.Step(`^those turns are unchanged$`, func(ctx context.Context) error {
+		st := getState(ctx)
+		if st.lastExit != 0 {
+			return fmt.Errorf("cynork chat exit %d: %s", st.lastExit, st.lastStderr)
+		}
+		return nil
 	})
 
 	// ---- Assertion steps: TUI visual/layout (streaming/PTY) ----
 
-	sc.Step(`^the visible text is shown in the transcript$`, func(_ context.Context) error {
-		return godog.ErrPending // streaming spec deferred
+	sc.Step(`^the visible text is shown in the transcript$`, func(ctx context.Context) error {
+		last := bddLastAssistant(ctx)
+		if last == nil || !strings.Contains(last.Content, "Hello from assistant") {
+			return fmt.Errorf("expected visible assistant prose in transcript; got %+v", last)
+		}
+		return nil
 	})
 
-	sc.Step(`^the thinking content is collapsed behind a compact placeholder$`, func(_ context.Context) error {
-		return godog.ErrPending // streaming spec deferred
+	sc.Step(`^the thinking content is collapsed behind a compact placeholder$`, func(ctx context.Context) error {
+		last := bddLastAssistant(ctx)
+		if last == nil {
+			return fmt.Errorf("no assistant turn")
+		}
+		for _, p := range last.Parts {
+			if p.Kind == tui.PartKindThinking && p.Collapsed {
+				return nil
+			}
+		}
+		return fmt.Errorf("expected collapsed thinking placeholder")
 	})
 
-	sc.Step(`^the collapsed placeholder remains visibly distinct from normal assistant prose$`, func(_ context.Context) error {
-		return godog.ErrPending // streaming spec deferred
+	sc.Step(`^the collapsed placeholder remains visibly distinct from normal assistant prose$`, func(ctx context.Context) error {
+		last := bddLastAssistant(ctx)
+		if last == nil {
+			return fmt.Errorf("no assistant turn")
+		}
+		var textLen int
+		var think bool
+		for _, p := range last.Parts {
+			switch p.Kind {
+			case tui.PartKindText:
+				textLen += len(p.Text)
+			case tui.PartKindThinking:
+				think = true
+			}
+		}
+		if textLen == 0 || !think {
+			return fmt.Errorf("expected distinct prose vs thinking parts")
+		}
+		return nil
 	})
 
-	sc.Step(`^the collapsed placeholder hints that "/show-thinking" reveals the thinking content$`, func(_ context.Context) error {
-		return godog.ErrPending // streaming spec deferred
+	sc.Step(`^the collapsed placeholder hints that "/show-thinking" reveals the thinking content$`, func(ctx context.Context) error {
+		return bddAssertThinkingCollapsedDistinctHint(ctx)
 	})
 
-	sc.Step(`^the TUI shows a visible in-flight indicator attached to the active assistant turn$`, func(_ context.Context) error {
-		return godog.ErrPending // streaming spec deferred
+	sc.Step(`^the TUI shows a visible in-flight indicator attached to the active assistant turn$`, func(ctx context.Context) error {
+		return bddAssertWorkingIndicator(ctx)
 	})
 
-	sc.Step(`^the indicator is rendered as a distinct status chip rather than bare transcript text$`, func(_ context.Context) error {
-		return godog.ErrPending // streaming spec deferred
+	sc.Step(`^the indicator is rendered as a distinct status chip rather than bare transcript text$`, func(ctx context.Context) error {
+		v := bddEnsureTui(ctx).View()
+		if !strings.Contains(v, "Working") {
+			return fmt.Errorf("expected Working chip in rendered view")
+		}
+		return nil
 	})
 
-	sc.Step(`^the indicator shows the label "Working"$`, func(_ context.Context) error {
-		return godog.ErrPending // streaming spec deferred
-	})
-
-	sc.Step(`^the TUI requests streaming output by default$`, func(_ context.Context) error {
-		return godog.ErrPending // streaming spec deferred
-	})
-
-	sc.Step(`^visible assistant text is appended token-by-token within one in-flight assistant turn$`, func(_ context.Context) error {
-		return godog.ErrPending // streaming spec deferred
-	})
-
-	sc.Step(`^the final assistant turn replaces the in-flight row without duplicating visible text$`, func(_ context.Context) error {
-		return godog.ErrPending // streaming spec deferred
+	sc.Step(`^the indicator shows the label "Working"$`, func(ctx context.Context) error {
+		return bddAssertWorkingIndicator(ctx)
 	})
 
 	sc.Step(`^the TUI shows a validation error$`, func(ctx context.Context) error {

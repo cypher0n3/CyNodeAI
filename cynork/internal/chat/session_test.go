@@ -160,14 +160,18 @@ func TestSession_ListThreads(t *testing.T) {
 	}
 }
 
-func TestSession_PatchThreadTitle(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/v1/chat/threads/t1" || r.Method != http.MethodPatch {
+func patchThreadTitleOKServer(expectPath string) *httptest.Server {
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != expectPath || r.Method != http.MethodPatch {
 			w.WriteHeader(http.StatusNotFound)
 			return
 		}
 		w.WriteHeader(http.StatusOK)
 	}))
+}
+
+func TestSession_PatchThreadTitle(t *testing.T) {
+	server := patchThreadTitleOKServer("/v1/chat/threads/t1")
 	defer server.Close()
 	client := gateway.NewClient(server.URL)
 	client.SetToken("tok")
@@ -179,13 +183,7 @@ func TestSession_PatchThreadTitle(t *testing.T) {
 }
 
 func TestSession_PatchThreadTitle_UsesCurrentWhenThreadIDEmpty(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/v1/chat/threads/cur-tid" || r.Method != http.MethodPatch {
-			w.WriteHeader(http.StatusNotFound)
-			return
-		}
-		w.WriteHeader(http.StatusOK)
-	}))
+	server := patchThreadTitleOKServer("/v1/chat/threads/cur-tid")
 	defer server.Close()
 	client := gateway.NewClient(server.URL)
 	client.SetToken("tok")

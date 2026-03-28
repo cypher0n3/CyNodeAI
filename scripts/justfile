@@ -131,6 +131,13 @@ _start_impl *ARGS:
     [ "$SETUP_DEV_OLLAMA_IN_STACK" = "1" ] && ollama_in_stack=true
     echo "[INFO] Building dev binaries..."; (cd "$root" && just build-dev)
     echo "[INFO] Building cynode-pma image..."; (cd "$root" && just agents/build-cynode-pma-image -- --build-arg SKIP_UPX="{{ skip_upx }}")
+    # Orchestrator images must match ./orchestrator (MCP on control-plane, gateway routes, api-egress).
+    # Without this, `localhost/cynodeai-control-plane:dev` can stay pinned to an old layer while the
+    # :dev tag moves — containers keep stale binaries (e.g. missing POST /v1/mcp/tools/call → E2E 404).
+    echo "[INFO] Building orchestrator images (control-plane, user-gateway, api-egress)..."
+    (cd "$root" && just orchestrator/build-control-plane-image -- --build-arg SKIP_UPX="{{ skip_upx }}")
+    (cd "$root" && just orchestrator/build-user-gateway-image -- --build-arg SKIP_UPX="{{ skip_upx }}")
+    (cd "$root" && just orchestrator/build-api-egress-image -- --build-arg SKIP_UPX="{{ skip_upx }}")
     rt=""
     podman ps >/dev/null 2>&1 && rt=podman
     [ -z "$rt" ] && docker ps >/dev/null 2>&1 && rt=docker

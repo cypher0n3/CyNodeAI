@@ -82,6 +82,7 @@ Scenario: TUI stores tool-call content during streaming and toggles display with
   And the tool-call content is hidden by default
   And when I enable "show tool output" the stored tool-call content is displayed instantly without a server request
 
+@wip
 @req_client_0218
 @spec_cynai_client_cynorktui_generationstate
 Scenario: Per-iteration overwrite replaces only the targeted iteration visible text

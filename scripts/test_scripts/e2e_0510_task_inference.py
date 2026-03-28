@@ -39,10 +39,11 @@ class TestInferenceTask(unittest.TestCase):
         task_id = (data or {}).get("task_id")
         self.assertIsNotNone(task_id, "inference task create failed")
         state.INF_TASK_ID = task_id
-        status = None
-        data = None
-        for _ in range(18):
-            time.sleep(5)
+        # Full E2E runs many tasks first; inference sandbox jobs can sit queued for several minutes.
+        # Poll frequently (3s) for up to 15m — coarser 5s×60 polls were still timing out under load.
+        deadline = time.time() + 900
+        status, data = None, None
+        while time.time() < deadline:
             _, out, _ = helpers.run_cynork(
                 ["task", "result", task_id, "-o", "json"], state.CONFIG_PATH
             )
@@ -50,12 +51,20 @@ class TestInferenceTask(unittest.TestCase):
             status = (data or {}).get("status")
             if status in ("completed", "failed"):
                 break
+            time.sleep(3)
+        self.assertIsNotNone(
+            status,
+            "inference task result polling timed out (15m) without terminal status",
+        )
         self.assertEqual(
             status, "completed",
             f"inference task did not complete (status={status!r})",
         )
-        raw = helpers.jq_get(data, "jobs", 0, "result")
-        job_result = helpers.parse_json_safe(raw) if isinstance(raw, str) else raw
+        # cynork -o json flattens job RunJobResponse into top-level stdout (see cynork printTaskResultJSON);
+        # raw API shape uses jobs[0].result — get_sba_job_result handles both.
+        job_result = helpers.get_sba_job_result(data)
+        if isinstance(job_result, str):
+            job_result = helpers.parse_json_safe(job_result)
         stdout = (job_result or {}).get("stdout") if isinstance(job_result, dict) else None
         self.assertTrue(
             stdout and "http+unix://" in str(stdout),

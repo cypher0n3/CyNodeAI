@@ -353,25 +353,18 @@ func registerCynorkExtraMockGateway(sc *godog.ScenarioContext, state *cynorkStat
 
 	// ---- Setup steps: gateway streaming (pending) ----
 
-	sc.Step(`^the gateway returns a structured assistant turn with visible text and thinking$`, func(_ context.Context) error {
-		return godog.ErrPending // streaming spec deferred
+	sc.Step(`^the gateway returns a structured assistant turn with visible text and thinking$`, bddGatewayStructuredTurn)
+
+	sc.Step(`^the gateway is still generating the current assistant turn$`, bddGatewayStillGenerating)
+
+	sc.Step(`^the gateway supports stream=true and emits real token-by-token visible assistant text$`, func(ctx context.Context) error {
+		getState(ctx).bddGatewayTokenStream = true
+		return nil
 	})
 
-	sc.Step(`^the gateway is still generating the current assistant turn$`, func(_ context.Context) error {
-		return godog.ErrPending // streaming spec deferred
-	})
+	sc.Step(`^the TUI has sent a message and the gateway is streaming the assistant response$`, bddTUISentMessageAndStreaming)
 
-	sc.Step(`^the gateway supports stream=true and emits real token-by-token visible assistant text$`, func(_ context.Context) error {
-		return godog.ErrPending // streaming spec deferred
-	})
-
-	sc.Step(`^the TUI has sent a message and the gateway is streaming the assistant response$`, func(_ context.Context) error {
-		return godog.ErrPending // streaming spec deferred
-	})
-
-	sc.Step(`^the connection to the gateway is interrupted before the stream completes$`, func(_ context.Context) error {
-		return godog.ErrPending // streaming spec deferred
-	})
+	sc.Step(`^the connection to the gateway is interrupted before the stream completes$`, bddConnectionInterruptedMidStream)
 
 	// ---- Setup steps: task named ----
 
@@ -591,11 +584,7 @@ func registerCynorkExtraMockGateway(sc *godog.ScenarioContext, state *cynorkStat
 		return godog.ErrPending // requires PTY
 	})
 
-	sc.Step(`^I send a normal interactive chat turn from the TUI$`, func(_ context.Context) error {
-		return godog.ErrPending // streaming spec deferred
-	})
+	sc.Step(`^I send a normal interactive chat turn from the TUI$`, bddSendNormalInteractiveStreamTurn)
 
-	sc.Step(`^I send Ctrl-C or otherwise cancel the active stream$`, func(_ context.Context) error {
-		return godog.ErrPending // streaming spec deferred
-	})
+	sc.Step(`^I send Ctrl-C or otherwise cancel the active stream$`, bddCancelActiveStream)
 }

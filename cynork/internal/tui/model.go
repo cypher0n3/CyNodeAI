@@ -44,14 +44,14 @@ type sendResult struct {
 
 // streamDeltaMsg carries one streaming event for the in-flight assistant turn.
 type streamDeltaMsg struct {
-	delta      string
-	amendment  string
-	thinking   string
-	toolName   string
-	toolArgs   string
-	isHeartbeat bool
-	hbElapsed   int
-	hbStatus    string
+	delta          string
+	amendment      string
+	thinking       string
+	toolName       string
+	toolArgs       string
+	isHeartbeat    bool
+	hbElapsed      int
+	hbStatus       string
 	iterationStart bool
 	iteration      int
 }
@@ -162,11 +162,13 @@ type Model struct {
 	// streaming state
 	streamCancel context.CancelFunc          // cancel the active stream; nil when idle
 	streamCh     <-chan chat.ChatStreamDelta // active stream channel; nil when idle
-	streamBuf    strings.Builder             // accumulates in-flight visible text
-	ctrlCCount   int                         // successive Ctrl+C when idle → exit
+	// streamBuf holds visible tokens for the live Assistant scrollback line; the in-flight
+	// TranscriptTurn.Content is updated from the same buffer via syncInFlightTranscriptVisible.
+	streamBuf  strings.Builder
+	ctrlCCount int // successive Ctrl+C when idle → exit
 	// Transcript is the structured turn list (user + assistant); mirrors interactive chat scrollback.
-	Transcript            []TranscriptTurn
-	streamHeartbeatNote   string // ephemeral progress line (heartbeat); not persisted in scrollback
+	Transcript          []TranscriptTurn
+	streamHeartbeatNote string // ephemeral progress line (heartbeat); not persisted in scrollback
 
 	// login form overlay (REQ-CLIENT-0190: in-session login; password not echoed)
 	ShowLoginForm   bool
@@ -210,6 +212,11 @@ type Model struct {
 
 	// proactiveTokenRefreshStarted is true after we schedule tea.Every for token refresh.
 	proactiveTokenRefreshStarted bool
+
+	// Stream connection recovery (gateway drop mid-stream; cynork_tui.md ConnectionRecovery).
+	connectionRecoveryState ConnectionState
+	streamRecoveryAttempt   int
+	streamRecoveryGen       int
 
 	// healthPollIntervalSec is seconds between GET /healthz polls (0 = disabled). Set by CLI from config.
 	healthPollIntervalSec    int
@@ -312,11 +319,12 @@ func (m *Model) applyStreamMsgs(msg tea.Msg) (tea.Model, tea.Cmd, bool) {
 		m.streamCh = msg.ch
 		return m, scheduleNextDelta(m.streamCh), true
 	case streamDeltaMsg:
-		mm, cmd := m.applyStreamDelta(msg)
+		mm, cmd := m.applyStreamDelta(&msg)
 		return mm, cmd, true
 	case streamDoneMsg:
 		m.applyStreamDone(msg)
-		return m, nil, true
+		cmd := m.maybeScheduleStreamRecovery(msg)
+		return m, cmd, true
 	case sendResult:
 		m.applySendResult(msg)
 		return m, nil, true
@@ -389,6 +397,9 @@ func (m *Model) applyTokenAndGatewayMsgs(msg tea.Msg) (tea.Model, tea.Cmd, bool)
 		return mm, cmd, true
 	case gatewayHealthResultMsg:
 		mm, cmd := m.applyGatewayHealthResult(msg)
+		return mm, cmd, true
+	case streamRecoveryTickMsg:
+		mm, cmd := m.applyStreamRecoveryTick(msg)
 		return mm, cmd, true
 	default:
 		return m, nil, false
@@ -683,7 +694,18 @@ func (m *Model) handleCtrlC() (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
-func (m *Model) applyStreamDelta(msg streamDeltaMsg) (tea.Model, tea.Cmd) {
+// scheduleIfStreaming schedules the next delta read when a live stream channel is active.
+func (m *Model) scheduleIfStreaming() (tea.Model, tea.Cmd) {
+	if m.streamCh != nil {
+		return m, scheduleNextDelta(m.streamCh)
+	}
+	return m, nil
+}
+
+func (m *Model) applyStreamDelta(msg *streamDeltaMsg) (tea.Model, tea.Cmd) {
+	if msg == nil {
+		return m, nil
+	}
 	m.streamHeartbeatNote = ""
 	switch {
 	case msg.amendment != "":
@@ -691,26 +713,17 @@ func (m *Model) applyStreamDelta(msg streamDeltaMsg) (tea.Model, tea.Cmd) {
 		m.streamBuf.WriteString(msg.amendment)
 	case msg.thinking != "":
 		m.appendTranscriptThinking(msg.thinking)
-		if m.streamCh != nil {
-			return m, scheduleNextDelta(m.streamCh)
-		}
-		return m, nil
+		return m.scheduleIfStreaming()
 	case msg.toolName != "" || msg.toolArgs != "":
 		m.appendTranscriptToolCall(msg.toolName, msg.toolArgs)
-		if m.streamCh != nil {
-			return m, scheduleNextDelta(m.streamCh)
-		}
-		return m, nil
+		return m.scheduleIfStreaming()
 	case msg.isHeartbeat:
 		if msg.hbStatus != "" {
 			m.streamHeartbeatNote = msg.hbStatus
 		} else {
 			m.streamHeartbeatNote = fmt.Sprintf("heartbeat %ds", msg.hbElapsed)
 		}
-		if m.streamCh != nil {
-			return m, scheduleNextDelta(m.streamCh)
-		}
-		return m, nil
+		return m.scheduleIfStreaming()
 	case msg.iterationStart:
 		if len(m.Transcript) > 0 {
 			last := &m.Transcript[len(m.Transcript)-1]
@@ -718,10 +731,7 @@ func (m *Model) applyStreamDelta(msg streamDeltaMsg) (tea.Model, tea.Cmd) {
 				last.StreamingState.Phase = StreamingPhaseWorking
 			}
 		}
-		if m.streamCh != nil {
-			return m, scheduleNextDelta(m.streamCh)
-		}
-		return m, nil
+		return m.scheduleIfStreaming()
 	default:
 		m.streamBuf.WriteString(msg.delta)
 	}
@@ -730,10 +740,7 @@ func (m *Model) applyStreamDelta(msg streamDeltaMsg) (tea.Model, tea.Cmd) {
 	if len(m.Scrollback) > 0 && strings.HasPrefix(m.Scrollback[len(m.Scrollback)-1], prefix) {
 		m.Scrollback[len(m.Scrollback)-1] = prefix + m.streamBuf.String()
 	}
-	if m.streamCh != nil {
-		return m, scheduleNextDelta(m.streamCh)
-	}
-	return m, nil
+	return m.scheduleIfStreaming()
 }
 
 func (m *Model) applyThreadListResult(msg threadListResult) (tea.Model, tea.Cmd) {

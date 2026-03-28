@@ -233,6 +233,40 @@ func (m *Model) applySendResult(msg sendResult) {
 	}
 }
 
+// applyStreamDoneNoVisibleError handles terminal error with no accumulated visible text.
+func (m *Model) applyStreamDoneNoVisibleError(msg streamDoneMsg) bool {
+	if msg.err == nil {
+		return false
+	}
+	// User canceled before any visible token: still surface interrupted semantics (PTY/E2E).
+	if errors.Is(msg.err, context.Canceled) {
+		m.Err = ""
+		m.Scrollback = append(m.Scrollback, "(stream interrupted)")
+		return true
+	}
+	// Stream failed with no partial content.
+	m.Err = msg.err.Error()
+	prefix := assistantPrefix
+	if len(m.Scrollback) > 0 && strings.HasPrefix(m.Scrollback[len(m.Scrollback)-1], prefix) {
+		m.Scrollback[len(m.Scrollback)-1] = "Error: " + m.Err
+	} else {
+		m.Scrollback = append(m.Scrollback, "Error: "+m.Err)
+	}
+	return true
+}
+
+func (m *Model) reconcileFinalAssistantScrollback(final string) {
+	prefix := assistantPrefix
+	if len(m.Scrollback) == 0 || !strings.HasPrefix(m.Scrollback[len(m.Scrollback)-1], prefix) {
+		return
+	}
+	if final == "" {
+		m.Scrollback[len(m.Scrollback)-1] = prefix + "(no response)"
+		return
+	}
+	m.Scrollback[len(m.Scrollback)-1] = prefix + final
+}
+
 func (m *Model) applyStreamDone(msg streamDoneMsg) {
 	m.Loading = false
 	m.streamCancel = nil
@@ -249,34 +283,10 @@ func (m *Model) applyStreamDone(msg streamDoneMsg) {
 			last.Interrupted = msg.err != nil
 		}
 	}
-	if msg.err != nil && final == "" {
-		// User canceled before any visible token: still surface interrupted semantics (PTY/E2E).
-		if errors.Is(msg.err, context.Canceled) {
-			m.Err = ""
-			m.Scrollback = append(m.Scrollback, "(stream interrupted)")
-			return
-		}
-		// Stream failed with no partial content.
-		m.Err = msg.err.Error()
-		// Replace the placeholder line with an error line.
-		prefix := assistantPrefix
-		if len(m.Scrollback) > 0 && strings.HasPrefix(m.Scrollback[len(m.Scrollback)-1], prefix) {
-			m.Scrollback[len(m.Scrollback)-1] = "Error: " + m.Err
-		} else {
-			m.Scrollback = append(m.Scrollback, "Error: "+m.Err)
-		}
+	if msg.err != nil && final == "" && m.applyStreamDoneNoVisibleError(msg) {
 		return
 	}
-	// Reconcile the final content into the scrollback line.
-	prefix := assistantPrefix
-	if len(m.Scrollback) > 0 && strings.HasPrefix(m.Scrollback[len(m.Scrollback)-1], prefix) {
-		if final == "" {
-			// Empty response — keep the line as "(no response)".
-			m.Scrollback[len(m.Scrollback)-1] = prefix + "(no response)"
-		} else {
-			m.Scrollback[len(m.Scrollback)-1] = prefix + final
-		}
-	}
+	m.reconcileFinalAssistantScrollback(final)
 	if msg.err != nil {
 		// Partial content received but stream ended with error (e.g. cancel).
 		m.Scrollback = append(m.Scrollback, "(stream interrupted)")
@@ -296,6 +306,9 @@ func (m *Model) streamCmd(line string) tea.Cmd {
 	ctx, cancel := context.WithCancel(context.Background())
 	m.streamCancel = cancel
 	m.streamBuf.Reset()
+	m.streamRecoveryGen++
+	m.clearConnectionRecovery()
+
 	session := m.Session
 	return func() tea.Msg {
 		ch, err := session.StreamMessage(ctx, line)
@@ -309,6 +322,31 @@ func (m *Model) streamCmd(line string) tea.Cmd {
 	}
 }
 
+func chatStreamDeltaToMsg(delta *chat.ChatStreamDelta) tea.Msg {
+	if delta == nil {
+		return streamDeltaMsg{}
+	}
+	if delta.Done {
+		return streamDoneMsg{responseID: delta.ResponseID, err: delta.Err}
+	}
+	if delta.Amendment != "" {
+		return streamDeltaMsg{amendment: delta.Amendment}
+	}
+	if delta.Thinking != "" {
+		return streamDeltaMsg{thinking: delta.Thinking}
+	}
+	if delta.ToolName != "" || delta.ToolArgs != "" {
+		return streamDeltaMsg{toolName: delta.ToolName, toolArgs: delta.ToolArgs}
+	}
+	if delta.IsHeartbeat {
+		return streamDeltaMsg{isHeartbeat: true, hbElapsed: delta.HeartbeatElapsed, hbStatus: delta.HeartbeatStatus}
+	}
+	if delta.IterationStart {
+		return streamDeltaMsg{iterationStart: true, iteration: delta.Iteration}
+	}
+	return streamDeltaMsg{delta: delta.Delta}
+}
+
 // readNextDelta returns the next delta, amendment, or streamPollMsg if nothing is ready.
 func readNextDelta(ch <-chan chat.ChatStreamDelta) tea.Msg {
 	select {
@@ -316,25 +354,7 @@ func readNextDelta(ch <-chan chat.ChatStreamDelta) tea.Msg {
 		if !ok {
 			return streamDoneMsg{}
 		}
-		if delta.Done {
-			return streamDoneMsg{responseID: delta.ResponseID, err: delta.Err}
-		}
-		if delta.Amendment != "" {
-			return streamDeltaMsg{amendment: delta.Amendment}
-		}
-		if delta.Thinking != "" {
-			return streamDeltaMsg{thinking: delta.Thinking}
-		}
-		if delta.ToolName != "" || delta.ToolArgs != "" {
-			return streamDeltaMsg{toolName: delta.ToolName, toolArgs: delta.ToolArgs}
-		}
-		if delta.IsHeartbeat {
-			return streamDeltaMsg{isHeartbeat: true, hbElapsed: delta.HeartbeatElapsed, hbStatus: delta.HeartbeatStatus}
-		}
-		if delta.IterationStart {
-			return streamDeltaMsg{iterationStart: true, iteration: delta.Iteration}
-		}
-		return streamDeltaMsg{delta: delta.Delta}
+		return chatStreamDeltaToMsg(&delta)
 	case <-time.After(streamPollInterval):
 		return streamPollMsg{}
 	}
@@ -439,8 +459,15 @@ func (m *Model) viewStatusBar() string {
 	if strings.TrimSpace(m.streamHeartbeatNote) != "" {
 		hb = " | " + m.streamHeartbeatNote
 	}
-	tail := fmt.Sprintf(" | project: %s | model: %s | thread: %s | %s%s",
-		projectID, modelName, thread, composerHint, hb)
+	rec := ""
+	switch m.connectionRecoveryState {
+	case ConnectionStateReconnecting:
+		rec = " | " + string(ConnectionStateReconnecting)
+	case ConnectionStateDisconnected:
+		rec = " | " + string(ConnectionStateDisconnected)
+	}
+	tail := fmt.Sprintf(" | project: %s | model: %s | thread: %s | %s%s%s",
+		projectID, modelName, thread, composerHint, hb, rec)
 	tailStyled := lipgloss.NewStyle().Bold(true).Render(tail)
 	statusLine := " " + m.renderGatewayStatusIndicator() + tailStyled
 	return lipgloss.NewStyle().Width(m.Width).Render(statusLine)

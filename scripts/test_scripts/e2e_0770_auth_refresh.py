@@ -17,6 +17,12 @@ class TestRefresh(unittest.TestCase):
     def setUp(self):
         ok, detail = helpers.prepare_e2e_cynork_auth()
         self.assertTrue(ok, detail)
+        # Long full-suite runs can keep a working access token while the sidecar refresh_token is
+        # stale (e.g. server-side rotation). Re-fetch login tokens so auth refresh starts aligned.
+        self.assertTrue(
+            helpers.sync_e2e_gateway_session_from_login(state.CONFIG_PATH),
+            "sync login tokens before refresh assertions",
+        )
 
     def test_refresh(self):
         """Assert cynork auth refresh succeeds, session updates, and stale refresh is rejected."""

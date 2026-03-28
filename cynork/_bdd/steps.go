@@ -15,6 +15,8 @@ import (
 	"sync"
 
 	"github.com/cucumber/godog"
+
+	"github.com/cypher0n3/cynodeai/cynork/internal/tui"
 )
 
 type ctxKey int
@@ -55,6 +57,12 @@ type cynorkState struct {
 	lastChatModel         string            // last model seen in POST /v1/chat/completions
 	lastChatProjectHeader string            // last OpenAI-Project header in POST /v1/chat/completions
 	chatCompleted         bool              // true if POST /v1/chat/completions was called
+	lastChatStream        bool              // last POST /v1/chat/completions had JSON stream:true
+	bddStream             *tui.Model        // in-memory TUI model for streaming BDD (see steps_cynork_streaming_bdd.go)
+	bddGatewayTokenStream bool              // Given: mock should tokenize SSE for progressive streaming scenarios
+	bddStreamDegraded     bool              // Given: mock/backend simulates non-incremental visible streaming
+	bddStreamSawHeartbeat bool              // When: degraded stream path applied a heartbeat delta
+	bddHeartbeatViewSnap  string            // View snapshot before stream DONE (heartbeat scenario)
 	task404Mode           bool              // next GET /v1/tasks/{id} returns 404
 	prefsErrorMode        bool              // next prefs request returns 500
 	taskStatuses          map[string]string // taskID -> "running"/"completed" override
@@ -123,6 +131,12 @@ func InitializeCynorkSuite(sc *godog.ScenarioContext, state *cynorkState) {
 		state.lastChatModel = ""
 		state.lastChatProjectHeader = ""
 		state.chatCompleted = false
+		state.lastChatStream = false
+		state.bddStream = nil
+		state.bddGatewayTokenStream = false
+		state.bddStreamDegraded = false
+		state.bddStreamSawHeartbeat = false
+		state.bddHeartbeatViewSnap = ""
 		state.task404Mode = false
 		state.prefsErrorMode = false
 		state.taskStatuses = nil

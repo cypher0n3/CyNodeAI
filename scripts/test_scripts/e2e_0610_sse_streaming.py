@@ -36,7 +36,7 @@ def _parse_sse_stream(response):
         if not line:
             continue
         if line.startswith("data: "):
-            data = line[len("data: "):]
+            data = line[len("data: "):].strip("\r")
             if data == "[DONE]":
                 found_done = True
                 break
@@ -219,6 +219,13 @@ class TestSSEStreaming(unittest.TestCase):
             choices = chunk.get("choices", [])
             if choices:
                 full_content += choices[0].get("delta", {}).get("content", "")
+                continue
+            # Native responses stream uses top-level string deltas (e.g. {"delta":"OK"}), not chat.completion.chunk.
+            d = chunk.get("delta")
+            if isinstance(d, str):
+                full_content += d
+            elif isinstance(d, dict):
+                full_content += d.get("content", "") or ""
 
         self.assertTrue(
             full_content.strip(),

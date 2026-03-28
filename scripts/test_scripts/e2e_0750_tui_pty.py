@@ -301,9 +301,20 @@ class TestTuiPty(unittest.TestCase):
         with harness.TuiPtySession(state.CONFIG_PATH, timeout=90) as session:
             time.sleep(_TUI_STARTUP_DELAY_SEC)
             self.assertTrue(session.wait_for_prompt_ready(timeout_sec=12))
-            scr2 = session.capture_screen(drain_sec=0.45) or ""
-            tid2 = harness.extract_thread_token_from_status(scr2)
-            thread_id_second = tid2 if tid2 else None
+            # Thread resume from XDG cache runs after prompt-ready; status may show
+            # ``thread: (default)`` until EnsureThread + cache read finish.
+            deadline = time.time() + 18.0
+            while time.time() < deadline:
+                scr2 = session.capture_screen(drain_sec=0.45) or ""
+                tid2 = harness.extract_thread_token_from_status(scr2)
+                if tid2 and tid2 != "(default)":
+                    thread_id_second = tid2
+                    break
+                time.sleep(0.35)
+            if thread_id_second is None:
+                scr2 = session.capture_screen(drain_sec=0.45) or ""
+                tid2 = harness.extract_thread_token_from_status(scr2)
+                thread_id_second = tid2 if tid2 else None
         if not thread_id_first or not thread_id_second:
             self.skipTest(
                 "thread token not visible in status bar (no cached thread yet); "

@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+
+	"github.com/cypher0n3/cynodeai/go_shared_libs/contracts/userapi"
 )
 
 func (s *cynorkState) mockGatewayMux() *http.ServeMux {
@@ -268,6 +270,7 @@ func (s *cynorkState) mockGatewayMux() *http.ServeMux {
 		}
 		var req struct {
 			Model    string `json:"model"`
+			Stream   bool   `json:"stream"`
 			Messages []struct {
 				Role    string `json:"role"`
 				Content string `json:"content"`
@@ -283,6 +286,7 @@ func (s *cynorkState) mockGatewayMux() *http.ServeMux {
 			s.lastChatModel = req.Model
 		}
 		s.lastChatProjectHeader = r.Header.Get("OpenAI-Project")
+		s.lastChatStream = req.Stream
 		s.mu.Unlock()
 		resp := ""
 		if len(req.Messages) > 0 {
@@ -291,11 +295,66 @@ func (s *cynorkState) mockGatewayMux() *http.ServeMux {
 				resp = strings.TrimSpace(strings.TrimPrefix(resp, "echo "))
 			}
 		}
+		if req.Stream {
+			w.Header().Set("Content-Type", "text/event-stream")
+			w.WriteHeader(http.StatusOK)
+			fl, _ := w.(http.Flusher)
+			parts := []string{"to", "ken"}
+			if s.bddStreamDegraded {
+				parts = []string{"full answer"}
+			}
+			for _, p := range parts {
+				bddWriteChatCompletionDelta(w, fl, p, nil)
+			}
+			stop := "stop"
+			bddWriteChatCompletionDelta(w, fl, "", &stop)
+			_, _ = w.Write([]byte("data: [DONE]\n\n"))
+			if fl != nil {
+				fl.Flush()
+			}
+			return
+		}
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		_ = json.NewEncoder(w).Encode(map[string]any{
 			"choices": []map[string]any{
 				{"message": map[string]any{"role": "assistant", "content": resp}, "finish_reason": "stop"},
+			},
+		})
+	})
+	mux.HandleFunc("POST /v1/responses", func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") == "" {
+			w.WriteHeader(http.StatusUnauthorized)
+			return
+		}
+		var req struct {
+			Stream bool `json:"stream"`
+		}
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			return
+		}
+		if req.Stream {
+			w.Header().Set("Content-Type", "text/event-stream")
+			w.WriteHeader(http.StatusOK)
+			fl, _ := w.(http.Flusher)
+			bddWriteSSELine(w, fl, "", []byte(`{"response_id":"bdd-resp-1"}`))
+			delta, _ := json.Marshal(map[string]string{"delta": "resp"})
+			bddWriteSSELine(w, fl, userapi.SSEEventResponseOutputTextDelta, delta)
+			_, _ = w.Write([]byte("data: [DONE]\n\n"))
+			if fl != nil {
+				fl.Flush()
+			}
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"id":      "bdd-resp-json",
+			"object":  "response",
+			"created": 1,
+			"output": []map[string]string{
+				{"type": "text", "text": "responses non-stream ok"},
 			},
 		})
 	})
@@ -642,4 +701,31 @@ func (s *cynorkState) mockGatewayMux() *http.ServeMux {
 		_ = json.NewEncoder(w).Encode(map[string]any{"id": "s1", "name": "Untitled skill", "scope": "user"})
 	})
 	return mux
+}
+
+func bddWriteSSELine(w http.ResponseWriter, fl http.Flusher, event string, data []byte) {
+	if event != "" {
+		_, _ = fmt.Fprintf(w, "event: %s\n", event)
+	}
+	_, _ = fmt.Fprintf(w, "data: %s\n\n", data)
+	if fl != nil {
+		fl.Flush()
+	}
+}
+
+func bddWriteChatCompletionDelta(w http.ResponseWriter, fl http.Flusher, content string, finishReason *string) {
+	chunk := userapi.ChatCompletionChunk{
+		ID:      "bdd-chunk",
+		Object:  "chat.completion.chunk",
+		Created: 1,
+		Model:   "bdd-model",
+		Choices: []userapi.ChatCompletionChunkChoice{
+			{Index: 0, Delta: userapi.ChatCompletionChunkDelta{Content: content}, FinishReason: finishReason},
+		},
+	}
+	b, err := json.Marshal(chunk)
+	if err != nil {
+		return
+	}
+	bddWriteSSELine(w, fl, "", b)
 }

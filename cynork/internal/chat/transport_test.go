@@ -99,25 +99,30 @@ func sseChunk(content, finishReason string) string {
 		content, fr) + "\n\n"
 }
 
-func TestCompletionsTransport_StreamMessage_EmitsStructuredDeltas(t *testing.T) {
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != testPathCompletions || r.Method != http.MethodPost {
+func structuredDeltaSSEHandler(path, thinkContent string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != path || r.Method != http.MethodPost {
 			w.WriteHeader(http.StatusNotFound)
 			return
 		}
 		w.Header().Set("Content-Type", "text/event-stream")
 		w.WriteHeader(http.StatusOK)
-		th, _ := json.Marshal(map[string]string{"content": "think-chunk"})
+		th, _ := json.Marshal(map[string]string{"content": thinkContent})
 		_, _ = w.Write([]byte("event: " + userapi.SSEEventThinkingDelta + "\n"))
 		_, _ = w.Write([]byte("data: " + string(th) + "\n\n"))
 		_, _ = w.Write([]byte(sseChunk("visible", "")))
 		_, _ = w.Write([]byte(sseChunk("", "stop")))
 		_, _ = w.Write([]byte("data: [DONE]\n\n"))
-	}))
+	}
+}
+
+func assertTransportSawThinkAndDelta(t *testing.T, path, think string, newTransport func(*gateway.Client) ChatTransport) {
+	t.Helper()
+	server := httptest.NewServer(structuredDeltaSSEHandler(path, think))
 	defer server.Close()
 	client := gateway.NewClient(server.URL)
 	client.SetToken("tok")
-	transport := &CompletionsTransport{Client: client}
+	transport := newTransport(client)
 	ch, err := transport.StreamMessage(context.Background(), "hi", "m", "p")
 	if err != nil {
 		t.Fatalf("StreamMessage: %v", err)
@@ -136,6 +141,37 @@ func TestCompletionsTransport_StreamMessage_EmitsStructuredDeltas(t *testing.T) 
 	}
 	if !sawThink || !sawDelta {
 		t.Fatalf("expected thinking + visible deltas; sawThink=%v sawDelta=%v", sawThink, sawDelta)
+	}
+}
+
+func TestTransports_StreamMessage_EmitsStructuredDeltas(t *testing.T) {
+	cases := []struct {
+		name         string
+		path         string
+		think        string
+		newTransport func(*gateway.Client) ChatTransport
+	}{
+		{
+			name:  "Completions",
+			path:  testPathCompletions,
+			think: "think-chunk",
+			newTransport: func(c *gateway.Client) ChatTransport {
+				return &CompletionsTransport{Client: c}
+			},
+		},
+		{
+			name:  "Responses",
+			path:  testPathResponses,
+			think: "think-r",
+			newTransport: func(c *gateway.Client) ChatTransport {
+				return &ResponsesTransport{Client: c}
+			},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			assertTransportSawThinkAndDelta(t, tc.path, tc.think, tc.newTransport)
+		})
 	}
 }
 

@@ -188,6 +188,10 @@ class TestTuiComposerEditor(unittest.TestCase):
                 timeout_sec=75,
             )
             time.sleep(0.35)
+            # Empty scrollback so "first" is not matched from prior "You:" lines when
+            # asserting composer text.
+            session.send_keys(["/clear", "enter"])
+            time.sleep(_SETTLE_SEC)
             session.send_keys(["ctrl+up"])
             time.sleep(_SETTLE_SEC)
             session.send_keys(["ctrl+up"])

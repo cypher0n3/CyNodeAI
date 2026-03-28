@@ -326,12 +326,24 @@ class TestTuiSlashCommands(unittest.TestCase):
                 out,
                 f"! echo should show stdout inline; got: {repr(out[:400])}",
             )
-            # Session stays active.
-            screen = session.capture_screen(drain_sec=0.2) or ""
+            # Session stays active: when scrollback is non-empty the prompt-ready landmark is only
+            # in the empty-scrollback path; composer still shows the "│ >" prompt (see view_render).
+            deadline = time.time() + 10.0
+            ok = False
+            last = ""
+            while time.time() < deadline:
+                last = session.capture_screen(drain_sec=0.25) or ""
+                if (
+                    harness.LANDMARK_PROMPT_READY in last
+                    or harness.LANDMARK_PROMPT_READY_SHORT in last
+                    or "│ >" in last
+                ):
+                    ok = True
+                    break
+                time.sleep(0.1)
             self.assertTrue(
-                harness.LANDMARK_PROMPT_READY in screen
-                or harness.LANDMARK_PROMPT_READY_SHORT in screen,
-                f"Session should remain active after ! cmd; status: {repr(screen[:300])}",
+                ok,
+                f"Session should remain active after ! cmd; status: {repr(last[:500])}",
             )
             session.send_keys(["ctrl+c", "ctrl+c"])
 

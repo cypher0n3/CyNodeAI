@@ -7,6 +7,8 @@ import (
 	"strings"
 
 	"github.com/cucumber/godog"
+
+	"github.com/cypher0n3/cynodeai/cynork/internal/tui"
 )
 
 func registerCynorkExtraTUIDeferred(sc *godog.ScenarioContext, state *cynorkState) {
@@ -417,24 +419,47 @@ func registerCynorkExtraTUIDeferred(sc *godog.ScenarioContext, state *cynorkStat
 	})
 
 	// Streaming thread steps
-	sc.Step(`^the TUI attempts to auto-reconnect with bounded backoff$`, func(_ context.Context) error {
-		return godog.ErrPending // streaming spec deferred
+	sc.Step(`^the TUI attempts to auto-reconnect with bounded backoff$`, func(ctx context.Context) error {
+		m := bddEnsureTui(ctx)
+		if m.StreamBDDConnectionRecoveryState() != tui.ConnectionStateReconnecting {
+			return fmt.Errorf("expected Reconnecting state; got %v", m.StreamBDDConnectionRecoveryState())
+		}
+		if m.StreamBDDStreamRecoveryAttempt() < 1 {
+			return fmt.Errorf("expected recovery attempt >= 1")
+		}
+		return nil
 	})
 
-	sc.Step(`^after reconnection the TUI retains any already-received visible text in the transcript$`, func(_ context.Context) error {
-		return godog.ErrPending // streaming spec deferred
+	sc.Step(`^after reconnection the TUI retains any already-received visible text in the transcript$`, func(ctx context.Context) error {
+		last := bddLastAssistant(ctx)
+		if last == nil || !strings.Contains(last.Content, "partial") {
+			return fmt.Errorf("expected partial visible text retained; got %q", last.Content)
+		}
+		return nil
 	})
 
-	sc.Step(`^the in-flight turn is marked as interrupted or shows a clear indicator$`, func(_ context.Context) error {
-		return godog.ErrPending // streaming spec deferred
+	sc.Step(`^the in-flight turn is marked as interrupted or shows a clear indicator$`, func(ctx context.Context) error {
+		last := bddLastAssistant(ctx)
+		if last == nil || !last.Interrupted {
+			return fmt.Errorf("expected interrupted in-flight turn")
+		}
+		return nil
 	})
 
-	sc.Step(`^the current thread and session are preserved$`, func(_ context.Context) error {
-		return godog.ErrPending // streaming spec deferred
+	sc.Step(`^the current thread and session are preserved$`, func(ctx context.Context) error {
+		m := bddEnsureTui(ctx)
+		if m.Session == nil || m.Session.CurrentThreadID != "bdd-thread-1" {
+			return fmt.Errorf("expected thread id preserved")
+		}
+		return nil
 	})
 
-	sc.Step(`^I can continue the session without restarting the TUI$`, func(_ context.Context) error {
-		return godog.ErrPending // streaming spec deferred
+	sc.Step(`^I can continue the session without restarting the TUI$`, func(ctx context.Context) error {
+		m := bddEnsureTui(ctx)
+		if m.Loading || m.Err != "" {
+			return fmt.Errorf("expected idle session without hard error; Loading=%v Err=%q", m.Loading, m.Err)
+		}
+		return nil
 	})
 
 	// ---- Assertion steps: status/auth slash commands ----

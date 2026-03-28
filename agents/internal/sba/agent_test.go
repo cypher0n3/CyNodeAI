@@ -45,11 +45,12 @@ func TestRunJob_WrapsRunAgent(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 0)
 	defer cancel()
 	result := RunJob(ctx, spec, t.TempDir())
-	if result == nil {
+	if result != nil {
+		if result.Status != statusTimeout {
+			t.Errorf("Status = %q (expected timeout with 0 deadline)", result.Status)
+		}
+	} else {
 		t.Fatal("RunJob returned nil")
-	}
-	if result.Status != statusTimeout {
-		t.Errorf("Status = %q (expected timeout with 0 deadline)", result.Status)
 	}
 }
 
