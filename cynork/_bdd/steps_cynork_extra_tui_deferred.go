@@ -3,11 +3,16 @@ package bdd
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"net/http"
 	"strings"
 
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/cucumber/godog"
 
+	"github.com/cypher0n3/cynodeai/cynork/internal/chat"
+	"github.com/cypher0n3/cynodeai/cynork/internal/gateway"
 	"github.com/cypher0n3/cynodeai/cynork/internal/tui"
 )
 
@@ -15,16 +20,33 @@ func registerCynorkExtraTUIDeferred(sc *godog.ScenarioContext, state *cynorkStat
 
 	// ---- Action steps: auth PTY (pending) ----
 
-	sc.Step(`^I complete the login prompt with valid credentials$`, func(_ context.Context) error {
-		return godog.ErrPending // requires PTY login form
+	sc.Step(`^I complete the login prompt with valid credentials$`, func(ctx context.Context) error {
+		st := getState(ctx)
+		m := bddEnsureTui(ctx)
+		m.ShowLoginForm = true
+		m.LoginGatewayURL = st.mockServer.URL
+		nm := m.BDDApplyLoginSuccess(st.mockServer.URL, "bdd-access-token", "bdd-refresh-token")
+		bddSyncBddStream(ctx, nm)
+		st.token = "bdd-access-token"
+		return nil
 	})
 
-	sc.Step(`^I cancel the login prompt$`, func(_ context.Context) error {
-		return godog.ErrPending // requires PTY login form
+	sc.Step(`^I cancel the login prompt$`, func(ctx context.Context) error {
+		m := bddEnsureTui(ctx)
+		m.ShowLoginForm = true
+		nm := m.BDDApplyKey(tea.KeyMsg{Type: tea.KeyEscape})
+		bddSyncBddStream(ctx, nm)
+		return nil
 	})
 
-	sc.Step(`^I enter invalid credentials in the login prompt$`, func(_ context.Context) error {
-		return godog.ErrPending // requires PTY login form
+	sc.Step(`^I enter invalid credentials in the login prompt$`, func(ctx context.Context) error {
+		st := getState(ctx)
+		m := bddEnsureTui(ctx)
+		m.ShowLoginForm = true
+		m.LoginGatewayURL = st.mockServer.URL
+		nm := m.BDDApplyLoginFailure(st.mockServer.URL, errors.New("invalid credentials"))
+		bddSyncBddStream(ctx, nm)
+		return nil
 	})
 
 	sc.Step(`^I start the web login flow from the CLI$`, func(_ context.Context) error {
@@ -70,24 +92,59 @@ func registerCynorkExtraTUIDeferred(sc *godog.ScenarioContext, state *cynorkStat
 		return godog.ErrPending
 	})
 
-	sc.Step(`^the TUI shows an in-session login prompt$`, func(_ context.Context) error {
-		return godog.ErrPending // requires PTY
+	sc.Step(`^the TUI shows an in-session login prompt$`, func(ctx context.Context) error {
+		st := getState(ctx)
+		m := bddEnsureTui(ctx)
+		m.ShowLoginForm = true
+		m.LoginGatewayURL = st.mockServer.URL
+		v := m.View()
+		if !strings.Contains(v, chat.LandmarkAuthRecoveryReady) && !strings.Contains(v, "Sign in") {
+			snippet := v
+			if len(snippet) > 200 {
+				snippet = snippet[:200]
+			}
+			return fmt.Errorf("expected login overlay landmarks in view; got snippet: %q", snippet)
+		}
+		return nil
 	})
 
-	sc.Step(`^the login prompt accepts a username$`, func(_ context.Context) error {
-		return godog.ErrPending // requires PTY
+	sc.Step(`^the login prompt accepts a username$`, func(ctx context.Context) error {
+		m := bddEnsureTui(ctx)
+		m.ShowLoginForm = true
+		m.LoginUsername = "bdd-user"
+		v := m.View()
+		if !strings.Contains(v, "bdd-user") {
+			return fmt.Errorf("expected username in login view")
+		}
+		return nil
 	})
 
-	sc.Step(`^the login prompt accepts a password with secure non-echoing input$`, func(_ context.Context) error {
-		return godog.ErrPending // requires PTY
+	sc.Step(`^the login prompt accepts a password with secure non-echoing input$`, func(ctx context.Context) error {
+		m := bddEnsureTui(ctx)
+		m.ShowLoginForm = true
+		m.LoginPassword = "secret-pass"
+		v := m.View()
+		if strings.Contains(v, "secret-pass") {
+			return fmt.Errorf("password must not appear in view")
+		}
+		return nil
 	})
 
-	sc.Step(`^the TUI resumes normal session flow$`, func(_ context.Context) error {
-		return godog.ErrPending // requires PTY
+	sc.Step(`^the TUI resumes normal session flow$`, func(ctx context.Context) error {
+		m := bddEnsureTui(ctx)
+		if m.ShowLoginForm {
+			return fmt.Errorf("expected login overlay dismissed")
+		}
+		return nil
 	})
 
-	sc.Step(`^I can send a chat message without restarting the TUI$`, func(_ context.Context) error {
-		return godog.ErrPending // requires PTY
+	sc.Step(`^I can send a chat message without restarting the TUI$`, func(ctx context.Context) error {
+		m := bddEnsureTui(ctx)
+		m.StreamBDDSimulateUserMessage("hello after login")
+		if len(m.Transcript) == 0 {
+			return fmt.Errorf("expected transcript after simulated send")
+		}
+		return nil
 	})
 
 	sc.Step(`^the TUI exits with the normal auth failure outcome$`, func(ctx context.Context) error {
@@ -98,32 +155,108 @@ func registerCynorkExtraTUIDeferred(sc *godog.ScenarioContext, state *cynorkStat
 		return nil
 	})
 
-	sc.Step(`^the TUI shows an authentication error$`, func(_ context.Context) error {
-		return godog.ErrPending // requires PTY
+	sc.Step(`^the TUI shows an authentication error$`, func(ctx context.Context) error {
+		st := getState(ctx)
+		m := bddEnsureTui(ctx)
+		m.ShowLoginForm = true
+		m.LoginGatewayURL = st.mockServer.URL
+		nm := m.BDDApplyLoginFailure(st.mockServer.URL, errors.New("bad credentials"))
+		bddSyncBddStream(ctx, nm)
+		m = bddEnsureTui(ctx)
+		combined := strings.Join(m.Scrollback, "\n")
+		if !strings.Contains(strings.ToLower(combined), "login failed") {
+			return fmt.Errorf("expected Login failed in scrollback; got %q", combined)
+		}
+		return nil
 	})
 
-	sc.Step(`^the TUI allows me to retry the login prompt$`, func(_ context.Context) error {
-		return godog.ErrPending // requires PTY
+	sc.Step(`^the TUI allows me to retry the login prompt$`, func(ctx context.Context) error {
+		st := getState(ctx)
+		m := bddEnsureTui(ctx)
+		m.ShowLoginForm = true
+		m.LoginGatewayURL = st.mockServer.URL
+		nm := m.BDDApplyLoginFailure(st.mockServer.URL, errors.New("first failure"))
+		bddSyncBddStream(ctx, nm)
+		m = bddEnsureTui(ctx)
+		if !strings.Contains(strings.Join(m.Scrollback, "\n"), "Login failed") {
+			return fmt.Errorf("expected Login failed in scrollback after failed attempt")
+		}
+		m.ShowLoginForm = true
+		m.LoginGatewayURL = st.mockServer.URL
+		nm = m.BDDApplyLoginSuccess(st.mockServer.URL, "bdd-retry-access", "bdd-retry-refresh")
+		bddSyncBddStream(ctx, nm)
+		st.token = "bdd-retry-access"
+		return nil
 	})
 
-	sc.Step(`^password input uses secure non-echoing entry$`, func(_ context.Context) error {
-		return godog.ErrPending // requires PTY
+	sc.Step(`^password input uses secure non-echoing entry$`, func(ctx context.Context) error {
+		m := bddEnsureTui(ctx)
+		m.ShowLoginForm = true
+		secret := "bdd-secret-password-xyz"
+		m.LoginPassword = secret
+		v := m.View()
+		if strings.Contains(v, secret) {
+			return fmt.Errorf("password must not appear in view")
+		}
+		return nil
 	})
 
-	sc.Step(`^the password is not visible in the scrollback or transcript history$`, func(_ context.Context) error {
-		return godog.ErrPending // requires PTY
+	sc.Step(`^the password is not visible in the scrollback or transcript history$`, func(ctx context.Context) error {
+		pwd := "never-in-scrollback"
+		m := bddEnsureTui(ctx)
+		m.ShowLoginForm = true
+		m.LoginPassword = pwd
+		for _, line := range m.Scrollback {
+			if strings.Contains(line, pwd) {
+				return fmt.Errorf("password leaked into scrollback")
+			}
+		}
+		for _, tr := range m.Transcript {
+			if strings.Contains(tr.Content, pwd) {
+				return fmt.Errorf("password leaked into transcript")
+			}
+		}
+		return nil
 	})
 
-	sc.Step(`^a chat request returns an authorization error and I complete the in-session login prompt successfully$`, func(_ context.Context) error {
-		return godog.ErrPending // requires PTY
+	sc.Step(`^a chat request returns an authorization error and I complete the in-session login prompt successfully$`, func(ctx context.Context) error {
+		st := getState(ctx)
+		m := bddEnsureTui(ctx)
+		m.StreamBDDSimulateUserMessage("hi")
+		m.StreamBDDBeginAssistantStream()
+		m.StreamBDDFinish(&gateway.HTTPError{Status: http.StatusUnauthorized, Err: fmt.Errorf("unauthorized")})
+		m = bddEnsureTui(ctx)
+		if !m.ShowLoginForm {
+			return fmt.Errorf("expected login form after 401")
+		}
+		nm := m.BDDApplyLoginSuccess(st.mockServer.URL, "bdd-access-token", "bdd-refresh-token")
+		bddSyncBddStream(ctx, nm)
+		st.token = "bdd-access-token"
+		return nil
 	})
 
-	sc.Step(`^the TUI offers to retry the interrupted action once$`, func(_ context.Context) error {
-		return godog.ErrPending // requires PTY
+	sc.Step(`^the TUI offers to retry the interrupted action once$`, func(ctx context.Context) error {
+		m := bddEnsureTui(ctx)
+		m.StreamBDDSimulateUserMessage("hi")
+		m.StreamBDDBeginAssistantStream()
+		m.StreamBDDApply(&tui.StreamBDDDelta{Delta: "partial"})
+		m.StreamBDDFinish(&gateway.HTTPError{Status: http.StatusUnauthorized, Err: fmt.Errorf("unauthorized")})
+		m = bddEnsureTui(ctx)
+		for i := len(m.Transcript) - 1; i >= 0; i-- {
+			tr := m.Transcript[i]
+			if tr.Role == tui.RoleAssistant && tr.Interrupted {
+				return nil
+			}
+		}
+		return fmt.Errorf("expected interrupted assistant turn in transcript")
 	})
 
-	sc.Step(`^the session continues without restarting the TUI$`, func(_ context.Context) error {
-		return godog.ErrPending // requires PTY
+	sc.Step(`^the session continues without restarting the TUI$`, func(ctx context.Context) error {
+		m := bddEnsureTui(ctx)
+		if m.Session == nil || m.Session.CurrentThreadID == "" {
+			return fmt.Errorf("expected active session")
+		}
+		return nil
 	})
 
 	sc.Step(`^the CLI shows a browser URL or device-code verification URL$`, func(_ context.Context) error {

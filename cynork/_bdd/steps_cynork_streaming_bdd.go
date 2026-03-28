@@ -8,6 +8,7 @@ import (
 	"os"
 	"strings"
 
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/cucumber/godog"
 	"gopkg.in/yaml.v3"
 
@@ -31,6 +32,15 @@ func bddEnsureTui(ctx context.Context) *tui.Model {
 		st.bddStream = m
 	}
 	return st.bddStream
+}
+
+func bddSyncBddStream(ctx context.Context, nm tea.Model) {
+	st := getState(ctx)
+	mm, ok := nm.(*tui.Model)
+	if !ok {
+		return
+	}
+	st.bddStream = mm
 }
 
 func bddGatewayStructuredTurn(ctx context.Context) error {

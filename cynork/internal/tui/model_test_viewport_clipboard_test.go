@@ -132,7 +132,7 @@ func TestModel_View_LoginOverlayNarrow(t *testing.T) {
 	m.ShowLoginForm = true
 	m.Width = 24
 	m.Height = 12
-	m.LoginGatewayURL = "http://gw"
+	m.LoginGatewayURL = loginTestGatewayURL
 	if v := m.View(); v == "" {
 		t.Fatal("empty view")
 	}

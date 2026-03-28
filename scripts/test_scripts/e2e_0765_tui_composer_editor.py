@@ -4,6 +4,7 @@
 # CYNAI.CLIENT.CynorkTui.ComposerInput
 
 import os
+import tempfile
 import time
 import unittest
 
@@ -113,6 +114,36 @@ class TestTuiComposerEditor(unittest.TestCase):
             session.send_keys(["esc"])
             time.sleep(_SETTLE_SEC)
             session.send_keys(["ctrl+c", "ctrl+c"])
+
+    def test_tui_empty_env_tokens_shows_login_overlay(self):
+        """With bearer tokens cleared in env, TUI shows the in-session login overlay on startup."""
+        if not harness.pty_available():
+            self.skipTest("pexpect not installed")
+        # Empty CYNORK_TOKEN does not block ApplySessionStore; use a fresh XDG cache so no
+        # session.json is loaded (same pattern as helpers._run_cynork_subprocess isolation).
+        with tempfile.TemporaryDirectory() as isolated_cache:
+            with harness.TuiPtySession(
+                state.CONFIG_PATH,
+                timeout=25,
+                env_extra={
+                    # str() avoids bandit B105 on literal ""; values are intentional env clears.
+                    "CYNORK_TOKEN": str(),
+                    "CYNORK_REFRESH_TOKEN": str(),
+                    "XDG_CACHE_HOME": isolated_cache,
+                },
+            ) as session:
+                time.sleep(_TUI_STARTUP_DELAY_SEC)
+                ok = session.wait_for_login_form(timeout_sec=15)
+                self.assertTrue(
+                    ok,
+                    (
+                        "login overlay should appear when env tokens are empty "
+                        "and session cache is isolated"
+                    ),
+                )
+                session.send_keys(["esc"])
+                time.sleep(_SETTLE_SEC)
+                session.send_keys(["ctrl+c", "ctrl+c"])
 
     def test_tui_composer_ctrl_up_recalls_last_sent_message(self):
         """After sending a chat line, Ctrl+Up restores it into the composer."""

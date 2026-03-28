@@ -34,13 +34,14 @@ Implemented cynork BDD support for **streaming and in-memory TUI simulation** wi
 
 ## Full `just e2e` (Entire Python Suite)
 
-A full run completed **2026-03-28** with **58 failures** (149 tests, 8 skipped).
-Failures grouped as: inference task missing `http+unix://` in captured stdout (`e2e_0510`), `cynork auth refresh` (`e2e_0770`), MCP control-plane tool routes returning **404** (`e2e_0810`, duplicated across direct HTTP and worker UDS paths), and artifacts CRUD **404** (`e2e_0850`).
-Those paths are outside the cynork BDD/streaming edits in this task; treat as **stack health / configuration / long-run drift** until reproduced after `just setup-dev restart --force` and a shorter ordered run.
+Earlier **2026-03-28** run: **58 failures** (149 tests, 8 skipped) with symptoms in `e2e_0510`, `e2e_0770`, MCP **404**, artifacts **404** (stack/image drift; see orchestrator image rebuild and E2E fixes on `mvp/phase-2`).
+
+**Follow-up:** Full `just e2e --no-build` completed **OK** (149 tests, 8 skipped, ~33 min) after E2E fixes to inference task result parsing, `/v1/responses` SSE delta shape, TUI thread-cache polling, and longer inference-task wait.
+Treat full suite as the release gate when run on a fresh `just setup-dev` stack.
 
 ## Not Done Here
 
-- Green **full** `just e2e` in the environment above (see section **Full `just e2e`**).
+- None for the **full Python suite** gate once the stack matches rebuilt images and the E2E scripts above.
 
 ## Remaining `ErrPending` (Intentional)
 

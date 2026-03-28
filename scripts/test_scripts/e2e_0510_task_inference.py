@@ -60,8 +60,9 @@ class TestInferenceTask(unittest.TestCase):
             status, "completed",
             f"inference task did not complete (status={status!r})",
         )
-        # cynork -o json flattens job RunJobResponse into top-level stdout (see cynork printTaskResultJSON);
-        # raw API shape uses jobs[0].result — get_sba_job_result handles both.
+        # cynork -o json flattens job RunJobResponse into top-level stdout
+        # (see cynork printTaskResultJSON); raw API shape uses jobs[0].result —
+        # get_sba_job_result handles both.
         job_result = helpers.get_sba_job_result(data)
         if isinstance(job_result, str):
             job_result = helpers.parse_json_safe(job_result)

@@ -100,6 +100,19 @@ class TuiPtySession:
         ref = helpers.read_refresh_token_from_config(self.config_path)
         if ref:
             env["CYNORK_REFRESH_TOKEN"] = ref
+        # Match helpers._run_cynork_subprocess: isolate XDG cache beside config so PTY runs do not
+        # read ~/.cache/cynork/session.json; allow env_extra to override (e.g. empty-token test).
+        if self.config_path:
+            cfg_dir = os.path.dirname(os.path.abspath(self.config_path))
+            if cfg_dir:
+                cache_home = os.path.join(cfg_dir, ".e2e-xdg-cache")
+                try:
+                    os.makedirs(cache_home, mode=0o700, exist_ok=True)
+                except OSError:
+                    pass
+                else:
+                    env.setdefault("XDG_CACHE_HOME", cache_home)
+        env.setdefault("CYNORK_DISABLE_OS_CREDSTORE", "1")
         env.update(self.env_extra)
         # Run TUI under script -q so it gets a proper PTY and stays up
         cmd_str = " ".join(
@@ -210,12 +223,16 @@ class TuiPtySession:
 
     def wait_for_login_form(self, timeout_sec=8):
         """Wait until /auth login overlay is visible. True if landmark or form seen."""
+        # Do not include "Sign in" in expect patterns: it matches before the rest of the title
+        # line (including [CYNRK_AUTH_RECOVERY_READY]) is flushed, so read_until_landmark
+        # would return too early and miss the landmark / Gateway URL lines.
         out = self.read_until_landmark(
-            [LANDMARK_AUTH_RECOVERY_READY], timeout_sec
+            [LANDMARK_AUTH_RECOVERY_READY, "Gateway URL"],
+            timeout_sec,
         )
         if LANDMARK_AUTH_RECOVERY_READY in out:
             return True
-        # Fallback: titled "Sign in" / landmark strip; fields Gateway URL / Username
+        # Startup login (no recovery landmark): form fields.
         if "Gateway URL" in out and "Username" in out:
             return True
         return ("Sign in" in out or "Login" in out) and (

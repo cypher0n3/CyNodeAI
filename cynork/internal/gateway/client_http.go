@@ -3,6 +3,7 @@ package gateway
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -116,6 +117,16 @@ func (e *HTTPError) Error() string {
 }
 
 func (e *HTTPError) Unwrap() error { return e.Err }
+
+// IsUnauthorized reports whether err is or wraps an *HTTPError with HTTP 401.
+// Used by the TUI to open in-session login recovery (REQ-CLIENT-0190).
+func IsUnauthorized(err error) bool {
+	if err == nil {
+		return false
+	}
+	var he *HTTPError
+	return errors.As(err, &he) && he.Status == http.StatusUnauthorized
+}
 
 func (c *Client) parseError(resp *http.Response) error {
 	body, _ := io.ReadAll(io.LimitReader(resp.Body, 4096))

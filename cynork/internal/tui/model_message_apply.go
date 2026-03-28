@@ -226,6 +226,13 @@ func runLoginCmd(gatewayURL, username, password string) tea.Cmd {
 func (m *Model) applySendResult(msg sendResult) {
 	m.Loading = false
 	if msg.err != nil {
+		if gateway.IsUnauthorized(msg.err) {
+			m.Err = ""
+			_, _ = m.applyOpenLoginForm()
+			m.Scrollback = append(m.Scrollback,
+				ScrollbackSystemLinePrefix+chat.LandmarkAuthRecoveryReady+" Session expired. Sign in to continue.")
+			return
+		}
 		m.Err = msg.err.Error()
 		m.Scrollback = append(m.Scrollback, "Error: "+m.Err)
 	} else if msg.visible != "" {
@@ -255,6 +262,31 @@ func (m *Model) applyStreamDoneNoVisibleError(msg streamDoneMsg) bool {
 	return true
 }
 
+// applyUnauthorizedStreamEnd opens the in-TUI login overlay after a streaming turn ends with HTTP 401
+// (REQ-CLIENT-0190 in-session auth recovery). Preserves partial visible content when present.
+func (m *Model) applyUnauthorizedStreamEnd(final string) {
+	if len(m.Transcript) > 0 {
+		last := &m.Transcript[len(m.Transcript)-1]
+		if last.Role == RoleAssistant && last.InFlight {
+			last.InFlight = false
+			last.Content = final
+			last.Interrupted = true
+		}
+	}
+	if final == "" {
+		prefix := assistantPrefix
+		if len(m.Scrollback) > 0 && strings.HasPrefix(m.Scrollback[len(m.Scrollback)-1], prefix) {
+			m.Scrollback = m.Scrollback[:len(m.Scrollback)-1]
+		}
+	} else {
+		m.reconcileFinalAssistantScrollback(final)
+	}
+	m.Err = ""
+	_, _ = m.applyOpenLoginForm()
+	m.Scrollback = append(m.Scrollback,
+		ScrollbackSystemLinePrefix+chat.LandmarkAuthRecoveryReady+" Session expired. Sign in to continue.")
+}
+
 func (m *Model) reconcileFinalAssistantScrollback(final string) {
 	prefix := assistantPrefix
 	if len(m.Scrollback) == 0 || !strings.HasPrefix(m.Scrollback[len(m.Scrollback)-1], prefix) {
@@ -274,6 +306,10 @@ func (m *Model) applyStreamDone(msg streamDoneMsg) {
 	m.streamHeartbeatNote = ""
 	final := strings.TrimSpace(m.streamBuf.String())
 	m.streamBuf.Reset()
+	if msg.err != nil && gateway.IsUnauthorized(msg.err) {
+		m.applyUnauthorizedStreamEnd(final)
+		return
+	}
 	if len(m.Transcript) > 0 {
 		last := &m.Transcript[len(m.Transcript)-1]
 		if last.Role == RoleAssistant && last.InFlight {

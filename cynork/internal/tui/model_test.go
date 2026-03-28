@@ -13,6 +13,7 @@ import (
 
 const loginTestGatewayURL = "http://gw"
 const loginTestPassword = "pass"
+const loginTestUsername = "alice"
 const testHealthzPath = "/healthz"
 const testSlashThreadFilter = "/th"
 

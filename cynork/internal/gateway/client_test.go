@@ -3,6 +3,7 @@ package gateway
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -921,5 +922,25 @@ func TestClient_ListModels_Success(t *testing.T) {
 	}
 	if resp.Object != "list" || len(resp.Data) != 1 || resp.Data[0].ID != "cynodeai.pm" {
 		t.Errorf("resp = %+v", resp)
+	}
+}
+
+func TestIsUnauthorized(t *testing.T) {
+	t.Parallel()
+	if IsUnauthorized(nil) {
+		t.Error("nil should not be unauthorized")
+	}
+	if IsUnauthorized(errors.New("plain")) {
+		t.Error("plain error should not be unauthorized")
+	}
+	u := &HTTPError{Status: http.StatusUnauthorized, Err: errors.New("expired")}
+	if !IsUnauthorized(u) {
+		t.Error("HTTPError 401 should be unauthorized")
+	}
+	if !IsUnauthorized(fmt.Errorf("wrap: %w", u)) {
+		t.Error("wrapped HTTPError 401 should be unauthorized")
+	}
+	if IsUnauthorized(&HTTPError{Status: http.StatusForbidden, Err: errors.New("no")}) {
+		t.Error("403 should not be unauthorized")
 	}
 }

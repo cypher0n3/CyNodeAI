@@ -207,7 +207,7 @@ func TestModel_LoginFormKey_Enter_Valid(t *testing.T) {
 	m := NewModel(&chat.Session{})
 	m.ShowLoginForm = true
 	m.LoginGatewayURL = server.URL
-	m.LoginUsername = "alice"
+	m.LoginUsername = loginTestUsername
 	m.LoginPassword = loginTestPassword
 	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	if cmd == nil {
@@ -228,7 +228,7 @@ func TestModel_LoginFormKey_Enter_LoginError(t *testing.T) {
 	m := NewModel(&chat.Session{})
 	m.ShowLoginForm = true
 	m.LoginGatewayURL = server.URL
-	m.LoginUsername = "alice"
+	m.LoginUsername = loginTestUsername
 	m.LoginPassword = "bad"
 	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	if cmd == nil {
@@ -672,7 +672,7 @@ func TestModel_SlashWhoami_Dispatch(t *testing.T) {
 		if r.URL.Path == "/v1/users/me" {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusOK)
-			_, _ = w.Write([]byte(`{"id":"u1","handle":"alice"}`))
+			_, _ = fmt.Fprintf(w, `{"id":"u1","handle":"%s"}`, loginTestUsername)
 		}
 	}))
 	defer srv.Close()
@@ -691,12 +691,12 @@ func TestModel_SlashWhoami_Dispatch(t *testing.T) {
 	}
 	found := false
 	for _, l := range res.lines {
-		if strings.Contains(l, "alice") {
+		if strings.Contains(l, loginTestUsername) {
 			found = true
 		}
 	}
 	if !found {
-		t.Errorf("/whoami expected 'alice' in lines; got %v", res.lines)
+		t.Errorf("/whoami expected %q in lines; got %v", loginTestUsername, res.lines)
 	}
 }
 

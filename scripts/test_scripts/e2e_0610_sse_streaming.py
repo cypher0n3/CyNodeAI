@@ -220,7 +220,8 @@ class TestSSEStreaming(unittest.TestCase):
             if choices:
                 full_content += choices[0].get("delta", {}).get("content", "")
                 continue
-            # Native responses stream uses top-level string deltas (e.g. {"delta":"OK"}), not chat.completion.chunk.
+            # Native responses stream uses top-level string deltas
+            # (e.g. {"delta":"OK"}), not chat.completion.chunk.
             d = chunk.get("delta")
             if isinstance(d, str):
                 full_content += d
