@@ -304,71 +304,71 @@ Source: [2026-03-19_streaming_remaining_work_execution_plan.md](2026-03-19_strea
 
 #### Discovery (Task 6) Steps
 
-- [ ] Re-read gateway streaming requirements and openai_compatible_chat_api spec (relay, accumulators, persistence, heartbeat, cancellation).
-- [ ] Inspect `orchestrator/internal/handlers/openai_chat.go` and database/thread persistence for current relay and persistence paths.
-- [ ] Locate all uses of `emitContentAsSSE` and define replacement (heartbeat + final delta).
-- [ ] Confirm e2e_0630_gateway_streaming_contract.py test list and which tests currently skip or pass.
+- [x] Re-read gateway streaming requirements and openai_compatible_chat_api spec (relay, accumulators, persistence, heartbeat, cancellation).
+- [x] Inspect `orchestrator/internal/handlers/openai_chat.go` and database/thread persistence for current relay and persistence paths.
+- [x] Locate all uses of `emitContentAsSSE` and define replacement (heartbeat + final delta).
+- [x] Confirm e2e_0630_gateway_streaming_contract.py test list and which tests currently skip or pass.
 
 #### Red (Task 6)
 
 All three test layers MUST be added or updated before implementation.
 
 - **Python E2E tests** (add or update first so spec-defined behavior is locked):
-  - [ ] Add or update tests in `e2e_0630_gateway_streaming_contract.py` asserting: separate visible/thinking/tool events, `/v1/responses` native event model, heartbeat SSE when upstream is slow, client disconnect cancels stream.
-  - [ ] Add E2E assertions for persisted assistant turn structured parts (retrieve after stream completes and verify thinking/tool parts present, redacted).
-  - [ ] Run `just e2e --tags chat` and confirm new assertions fail.
+  - [x] Add or update tests in `e2e_0630_gateway_streaming_contract.py` asserting: separate visible/thinking/tool events, `/v1/responses` native event model, heartbeat SSE when upstream is slow, client disconnect cancels stream.
+  - [x] Add E2E assertions for persisted assistant turn structured parts (retrieve after stream completes and verify thinking/tool parts present, redacted).
+  - [x] Run `just e2e --tags chat` and confirm new assertions fail.
 - **BDD scenarios** (add or update in `features/orchestrator/openai_compat_chat.feature` and `features/e2e/chat_openai_compatible.feature`):
-  - [ ] Add scenarios for separate visible/thinking/tool accumulators.
-  - [ ] Add scenarios for heartbeat SSE fallback.
-  - [ ] Add scenarios for client disconnect cancellation.
-  - [ ] Add scenarios for persisted structured assistant turn with redacted parts.
+  - [x] Add scenarios for separate visible/thinking/tool accumulators.
+  - [x] Add scenarios for heartbeat SSE fallback.
+  - [x] Add scenarios for client disconnect cancellation.
+  - [x] Add scenarios for persisted structured assistant turn with redacted parts.
 - **Go unit tests** (add failing tests in orchestrator handler/database packages):
-  - [ ] Separate visible, thinking, and tool-call accumulators; overwrite events applied to correct scope.
-  - [ ] Post-stream redaction on all three accumulators before terminal completion.
-  - [ ] `/v1/responses` native event model and streamed response_id.
-  - [ ] Persisted assistant turn has structured parts (thinking, tool_call) with redacted content only.
-  - [ ] Heartbeat SSE when upstream does not stream; no use of `emitContentAsSSE` on standard path.
-  - [ ] Client disconnect cancels stream and does not leave upstream running indefinitely.
-  - [ ] Database/integration tests for persisted structured parts.
-- [ ] **Red - Python E2E:** Run `just setup-dev restart --force` then `just e2e --tags chat`; confirm new gateway contract assertions fail.
-- [ ] **Red - BDD:** Run `just test-bdd` for orchestrator/openai_compat_chat and e2e/chat features; confirm new gateway scenarios fail as expected.
-- [ ] **Red - Go:** Run `go test` / `just test-go-cover` for orchestrator handler and database packages; confirm new gateway unit tests fail as expected.
-- [ ] **Red validation gate:** Do not proceed to Green until Python E2E, BDD, and Go Red checks above prove the gateway gaps across all three layers.
+  - [x] Separate visible, thinking, and tool-call accumulators; overwrite events applied to correct scope.
+  - [x] Post-stream redaction on all three accumulators before terminal completion.
+  - [x] `/v1/responses` native event model and streamed response_id.
+  - [x] Persisted assistant turn has structured parts (thinking, tool_call) with redacted content only.
+  - [x] Heartbeat SSE when upstream does not stream; no use of `emitContentAsSSE` on standard path.
+  - [x] Client disconnect cancels stream and does not leave upstream running indefinitely.
+  - [x] Database/integration tests for persisted structured parts.
+- [x] **Red - Python E2E:** Run `just setup-dev restart --force` then `just e2e --tags chat`; confirm new gateway contract assertions fail.
+- [x] **Red - BDD:** Run `just test-bdd` for orchestrator/openai_compat_chat and e2e/chat features; confirm new gateway scenarios fail as expected.
+- [x] **Red - Go:** Run `go test` / `just test-go-cover` for orchestrator handler and database packages; confirm new gateway unit tests fail as expected.
+- [x] **Red validation gate:** Do not proceed to Green until Python E2E, BDD, and Go Red checks above prove the gateway gaps across all three layers.
 
 #### Green (Task 6)
 
-- [ ] Maintain separate visible-text, thinking, and tool-call accumulators in the gateway relay.
-- [ ] Apply per-iteration and per-turn overwrite events to the correct accumulator scope; run post-stream secret scan on all three before terminal completion.
-- [ ] Emit `/v1/responses` in native responses event model with named `cynodeai.*` extensions and streamed response_id.
-- [ ] Persist final redacted structured assistant turn.
-- [ ] Remove or bypass `emitContentAsSSE`; use heartbeat SSE plus one final visible-text delta when upstream cannot stream.
-- [ ] Treat client cancellation/disconnect as stream cancellation.
-- [ ] Wrap gateway secret-bearing accumulator paths with the secure-buffer helper.
-- [ ] Re-run gateway tests until they pass.
-- [ ] Validation gate: do not proceed until gateway relay, persistence, and fallback are green.
+- [x] Maintain separate visible-text, thinking, and tool-call accumulators in the gateway relay.
+- [x] Apply per-iteration and per-turn overwrite events to the correct accumulator scope; run post-stream secret scan on all three before terminal completion.
+- [x] Emit `/v1/responses` in native responses event model with named `cynodeai.*` extensions and streamed response_id.
+- [x] Persist final redacted structured assistant turn.
+- [x] Remove or bypass `emitContentAsSSE`; use heartbeat SSE plus one final visible-text delta when upstream cannot stream.
+- [x] Treat client cancellation/disconnect as stream cancellation.
+- [x] Wrap gateway secret-bearing accumulator paths with the secure-buffer helper.
+- [x] Re-run gateway tests until they pass.
+- [x] Validation gate: do not proceed until gateway relay, persistence, and fallback are green.
 
 #### Refactor (Task 6)
 
-- [ ] Extract relay and accumulator helpers; share logic between chat-completions and responses paths.
-- [ ] Remove obsolete fake-stream and single-accumulator code.
-- [ ] Re-run Task 6 targeted tests.
-- [ ] Validation gate: do not proceed until refactor is verified.
+- [x] Extract relay and accumulator helpers; share logic between chat-completions and responses paths.
+- [x] Remove obsolete fake-stream and single-accumulator code.
+- [x] Re-run Task 6 targeted tests.
+- [x] Validation gate: do not proceed until refactor is verified.
 
 #### Testing (Task 6)
 
 All three test layers MUST pass before this task is complete.
 
-- [ ] **Go unit tests:** Run `just test-go-cover` for orchestrator handler, database, and integration packages; confirm gateway unit tests pass and coverage meets thresholds.
-- [ ] **BDD tests:** Run `just test-bdd` for orchestrator/openai_compat_chat and e2e/chat features; confirm all gateway streaming scenarios pass.
-- [ ] **Python E2E tests:** Run `just setup-dev restart --force` then `just e2e --tags chat`; confirm e2e_0630 and related gateway E2E tests pass.
-- [ ] Run `just lint-go` for changed packages.
-- [ ] **Testing validation gate:** Do not start Task 7 until **Go**, **BDD**, **Python E2E**, and `just lint-go` in `#### Testing (Task 6)` above are each satisfied per their checkboxes.
+- [x] **Go unit tests:** Run `just test-go-cover` for orchestrator handler, database, and integration packages; confirm gateway unit tests pass and coverage meets thresholds.
+- [x] **BDD tests:** Run `just test-bdd` for orchestrator/openai_compat_chat and e2e/chat features; confirm all gateway streaming scenarios pass.
+- [x] **Python E2E tests:** Run `just setup-dev restart --force` then `just e2e --tags chat`; confirm e2e_0630 and related gateway E2E tests pass.
+- [x] Run `just lint-go` for changed packages.
+- [x] **Testing validation gate:** Do not start Task 7 until **Go**, **BDD**, **Python E2E**, and `just lint-go` in `#### Testing (Task 6)` above are each satisfied per their checkboxes.
 
 #### Closeout (Task 6)
 
-- [ ] Generate a **task completion report** for Task 6: what changed (accumulators, /v1/responses, persistence, heartbeat, cancellation, secure-buffer), what tests passed.
-- [ ] Do not start Task 7 until closeout is done.
-- [ ] Mark every completed step in this task with `- [x]`. (Last step.)
+- [x] Generate a **task completion report** for Task 6: what changed (accumulators, /v1/responses, persistence, heartbeat, cancellation, secure-buffer), what tests passed.
+- [x] Do not start Task 7 until closeout is done.
+- [x] Mark every completed step in this task with `- [x]`. (Last step.)
 
 ---
 

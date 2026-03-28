@@ -594,6 +594,21 @@ func TestProcessNDJSONLine_IterationStartNonIntSkipped(t *testing.T) {
 	}
 }
 
+func TestProcessNDJSONLine_Amendment(t *testing.T) {
+	var got PMAAmendment
+	requireProcessNDJSONLineOK(t, `{"amendment":{"type":"secret_redaction","content":"x"}}`, PMAStreamCallbacks{
+		OnAmendment: func(a *PMAAmendment) error {
+			if a != nil {
+				got = *a
+			}
+			return nil
+		},
+	})
+	if got.Type != "secret_redaction" || got.Content != "x" {
+		t.Fatalf("amendment = %+v", got)
+	}
+}
+
 func TestProcessNDJSONLine_ToolCall(t *testing.T) {
 	var name, args string
 	requireProcessNDJSONLineOK(t, `{"tool_call":{"name":"web_search","arguments":"{}"}}`, PMAStreamCallbacks{

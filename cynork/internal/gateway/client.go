@@ -555,26 +555,57 @@ func processChatSSEDataLine(data, lastEvent string, onDelta, onAmendment, onResp
 	if data == "[DONE]" {
 		return true, nil
 	}
-	if lastEvent == "cynodeai.amendment" {
-		var amendment struct {
-			Type    string   `json:"type"`
-			Content string   `json:"content"`
-			Kinds   []string `json:"redaction_kinds"`
-		}
-		if json.Unmarshal([]byte(data), &amendment) == nil && amendment.Type == "secret_redaction" {
-			onAmendment(amendment.Content)
-		}
+	switch lastEvent {
+	case "cynodeai.amendment":
+		applySecretRedactionAmendment(data, onAmendment)
+		return false, nil
+	case userapi.SSEEventResponseOutputTextDelta:
+		applyResponsesOutputTextDelta(data, onDelta)
+		return false, nil
+	case userapi.SSEEventResponseCompleted:
 		return false, nil
 	}
-	if onResponseID != nil {
-		var respID struct {
-			ResponseID string `json:"response_id"`
-		}
-		if json.Unmarshal([]byte(data), &respID) == nil && respID.ResponseID != "" {
-			onResponseID(respID.ResponseID)
-			return false, nil
-		}
+	if tryInvokeResponseIDCallback(data, onResponseID) {
+		return false, nil
 	}
+	return processChatCompletionSSEChoices(data, onDelta)
+}
+
+func applySecretRedactionAmendment(data string, onAmendment func(string)) {
+	var amendment struct {
+		Type    string   `json:"type"`
+		Content string   `json:"content"`
+		Kinds   []string `json:"redaction_kinds"`
+	}
+	if json.Unmarshal([]byte(data), &amendment) == nil && amendment.Type == "secret_redaction" {
+		onAmendment(amendment.Content)
+	}
+}
+
+func applyResponsesOutputTextDelta(data string, onDelta func(string)) {
+	var d struct {
+		Delta string `json:"delta"`
+	}
+	if json.Unmarshal([]byte(data), &d) == nil && d.Delta != "" {
+		onDelta(d.Delta)
+	}
+}
+
+func tryInvokeResponseIDCallback(data string, onResponseID func(string)) bool {
+	if onResponseID == nil {
+		return false
+	}
+	var respID struct {
+		ResponseID string `json:"response_id"`
+	}
+	if json.Unmarshal([]byte(data), &respID) == nil && respID.ResponseID != "" {
+		onResponseID(respID.ResponseID)
+		return true
+	}
+	return false
+}
+
+func processChatCompletionSSEChoices(data string, onDelta func(string)) (streamDone bool, err error) {
 	ev := parseSSEDataLine(data)
 	if ev == nil {
 		return false, nil

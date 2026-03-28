@@ -269,6 +269,24 @@ func TestWriteLangchainNDJSONStream_MultipleDeltaChunks(t *testing.T) {
 	}
 }
 
+func TestWriteLangchainNDJSONStream_VisibleEmbedsThinkAndToolCall(t *testing.T) {
+	rec := httptest.NewRecorder()
+	vis := "hi" + xmlThinkOpen + "reason" + xmlThinkClose + " there " + toolCallOpen + `{"n":1}` + toolCallClose + " tail"
+	if err := writeLangchainNDJSONStream(rec, vis, ""); err != nil {
+		t.Fatal(err)
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, "tool_call") {
+		t.Errorf("expected tool_call NDJSON: %s", body)
+	}
+	if !strings.Contains(body, "thinking") {
+		t.Errorf("expected thinking from embedded think block: %s", body)
+	}
+	if !strings.Contains(body, "tail") {
+		t.Errorf("expected trailing visible delta: %s", body)
+	}
+}
+
 // TestStreamingLLM_Call exercises GenerateFromSinglePrompt on the streaming LLM.
 func TestStreamingLLM_Call(t *testing.T) {
 	rec := httptest.NewRecorder()

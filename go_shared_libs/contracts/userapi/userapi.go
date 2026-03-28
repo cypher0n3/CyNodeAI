@@ -220,6 +220,9 @@ const (
 	SSEEventIterationStart = "cynodeai.iteration_start"
 	SSEEventAmendment      = "cynodeai.amendment"
 	SSEEventHeartbeat      = "cynodeai.heartbeat"
+	// Responses API native stream events (CYNAI.USRGWY.OpenAIChatApi.StreamingPerEndpointSSEFormat).
+	SSEEventResponseOutputTextDelta = "response.output_text.delta"
+	SSEEventResponseCompleted       = "response.completed"
 )
 
 // SSEThinkingDeltaPayload is the data payload for event: cynodeai.thinking_delta.
@@ -250,6 +253,7 @@ type SSEIterationStartPayload struct {
 type SSEAmendmentPayload struct {
 	Type           string   `json:"type"`
 	Content        string   `json:"content"`
+	Redacted       string   `json:"redacted,omitempty"` // same as Content for secret_redaction; E2E/clients may key on this field
 	RedactionKinds []string `json:"redaction_kinds,omitempty"`
 	Scope          string   `json:"scope,omitempty"`
 	Iteration      *int     `json:"iteration,omitempty"`

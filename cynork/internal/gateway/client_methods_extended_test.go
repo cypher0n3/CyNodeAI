@@ -481,6 +481,12 @@ func sseChunkLine(content, finishReason string) string {
 		content, fr)
 }
 
+// responsesOutputTextDeltaSSE is a native /v1/responses stream fragment (per CYNAI.USRGWY.StreamingPerEndpointSSEFormat).
+func responsesOutputTextDeltaSSE(delta string) string {
+	b, _ := json.Marshal(map[string]string{"delta": delta})
+	return fmt.Sprintf("event: %s\ndata: %s\n\n", userapi.SSEEventResponseOutputTextDelta, string(b))
+}
+
 func TestClient_ChatStream_Success(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != pathV1ChatCompletions || r.Method != http.MethodPost {
@@ -554,8 +560,7 @@ func TestClient_ResponsesStream_Success(t *testing.T) {
 		}
 		w.Header().Set("Content-Type", "text/event-stream")
 		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(sseChunkLine("resp text", "")))
-		_, _ = w.Write([]byte(sseChunkLine("", "stop")))
+		_, _ = w.Write([]byte(responsesOutputTextDeltaSSE("resp text")))
 		_, _ = w.Write([]byte("data: [DONE]\n\n"))
 	}))
 	defer srv.Close()
@@ -603,7 +608,7 @@ func TestClient_ResponsesStream_ReturnsStreamedResponseID(t *testing.T) {
 		w.Header().Set("Content-Type", "text/event-stream")
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte("data: {\"response_id\":\"resp-abc-123\"}\n\n"))
-		_, _ = w.Write([]byte(sseChunkLine("ok", "")))
+		_, _ = w.Write([]byte(responsesOutputTextDeltaSSE("ok")))
 		_, _ = w.Write([]byte("data: [DONE]\n\n"))
 	}))
 	defer srv.Close()
@@ -636,7 +641,7 @@ func TestClient_ResponsesStream_WithProjectAndToken(t *testing.T) {
 		}
 		w.Header().Set("Content-Type", "text/event-stream")
 		w.WriteHeader(http.StatusOK)
-		_, _ = w.Write([]byte(sseChunkLine("projected", "")))
+		_, _ = w.Write([]byte(responsesOutputTextDeltaSSE("projected")))
 		_, _ = w.Write([]byte("data: [DONE]\n\n"))
 	}))
 	defer srv.Close()

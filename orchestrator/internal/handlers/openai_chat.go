@@ -19,6 +19,7 @@ import (
 
 	"github.com/cypher0n3/cynodeai/go_shared_libs/contracts/nodepayloads"
 	"github.com/cypher0n3/cynodeai/go_shared_libs/contracts/userapi"
+	"github.com/cypher0n3/cynodeai/go_shared_libs/secretutil"
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/database"
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/inference"
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/models"
@@ -202,10 +203,9 @@ func (h *OpenAIChatHandler) ChatCompletions(w http.ResponseWriter, r *http.Reque
 		},
 	})
 	if req.Stream {
-		// Degraded-mode SSE: upstream can't provide true token deltas; emit full turn in one event.
 		completionID := uuid.New().String()
 		prepareSSEResponse(w)
-		emitContentAsSSE(w, completionID, effectiveModel, content)
+		emitDegradedStreamingFallback(timeoutCtx, w, completionID, effectiveModel, content, false)
 		return
 	}
 	writeOpenAIJSON(w, http.StatusOK, buildChatCompletionsResponse(effectiveModel, content))
@@ -318,8 +318,171 @@ func (h *OpenAIChatHandler) completeViaPMA(ctx context.Context, effectiveModel s
 	return h.runCompletionWithRetry(ctx, effectiveModel, "pma", "PMA chat completion failed", call)
 }
 
-// completeViaPMAStream streams completion from PMA token-by-token, persists the full reply and audit, then sends [DONE].
-// chunkID is used as the SSE chunk id (e.g. completion id or response_id); assistantMeta is optional message metadata (e.g. response_id for /v1/responses).
+// pmaStreamToolRec records one streamed tool call for persistence metadata.
+type pmaStreamToolRec struct {
+	name string
+	args string
+}
+
+// pmaRelayState holds PMA stream accumulation and SSE emission for one streaming completion.
+type pmaRelayState struct {
+	w              http.ResponseWriter
+	visibleB       strings.Builder
+	thinkingB      strings.Builder
+	toolRecs       []pmaStreamToolRec
+	responsesMode  bool
+	chunkID        string
+	effectiveModel string
+}
+
+func (s *pmaRelayState) emitVisibleChunkToSSE(delta string) error {
+	if s.responsesMode {
+		p, _ := json.Marshal(map[string]string{"delta": delta})
+		writeSSENamedEvent(s.w, userapi.SSEEventResponseOutputTextDelta, string(p))
+		return nil
+	}
+	chunk := buildChatCompletionChunk(s.chunkID, s.effectiveModel, delta, nil)
+	b, err := json.Marshal(chunk)
+	if err != nil {
+		return err
+	}
+	writeSSEEvent(s.w, string(b))
+	return nil
+}
+
+func (s *pmaRelayState) appendVisibleAndEmit(delta string) error {
+	_, _ = s.visibleB.WriteString(delta)
+	return s.emitVisibleChunkToSSE(delta)
+}
+
+func (s *pmaRelayState) emitIterationStartEvent(iteration int) error {
+	payload := userapi.SSEIterationStartPayload{Iteration: iteration}
+	b, err := json.Marshal(payload)
+	if err != nil {
+		return err
+	}
+	writeSSENamedEvent(s.w, userapi.SSEEventIterationStart, string(b))
+	return nil
+}
+
+func (s *pmaRelayState) emitThinkingAndBuffer(th string) error {
+	secretutil.RunWithSecret(func() {
+		_, _ = s.thinkingB.WriteString(th)
+	})
+	payload := userapi.SSEThinkingDeltaPayload{Content: th}
+	b, err := json.Marshal(payload)
+	if err != nil {
+		return err
+	}
+	writeSSENamedEvent(s.w, userapi.SSEEventThinkingDelta, string(b))
+	return nil
+}
+
+func (s *pmaRelayState) recordToolAndEmit(name, args string) error {
+	s.toolRecs = append(s.toolRecs, pmaStreamToolRec{name: name, args: args})
+	payload := userapi.SSEToolCallPayload{Name: name, Arguments: args}
+	b, err := json.Marshal(payload)
+	if err != nil {
+		return err
+	}
+	writeSSENamedEvent(s.w, userapi.SSEEventToolCall, string(b))
+	return nil
+}
+
+func (s *pmaRelayState) relayAmendment(a *pmaclient.PMAAmendment) error {
+	if a == nil {
+		return nil
+	}
+	p := userapi.SSEAmendmentPayload{
+		Type: a.Type, Content: a.Content, Scope: a.Scope, Iteration: a.Iteration,
+		Reason: a.Reason, RedactionKinds: a.RedactionKinds,
+	}
+	if a.Type == "secret_redaction" {
+		p.Redacted = a.Content
+	}
+	b, err := json.Marshal(p)
+	if err != nil {
+		return err
+	}
+	writeSSENamedEvent(s.w, userapi.SSEEventAmendment, string(b))
+	if a.Type == "secret_redaction" {
+		s.visibleB.Reset()
+		_, _ = s.visibleB.WriteString(a.Content)
+	}
+	return nil
+}
+
+func (s *pmaRelayState) streamCallbacks() pmaclient.PMAStreamCallbacks {
+	return pmaclient.PMAStreamCallbacks{
+		OnDelta:          s.appendVisibleAndEmit,
+		OnThinking:       s.emitThinkingAndBuffer,
+		OnIterationStart: s.emitIterationStartEvent,
+		OnToolCall:       s.recordToolAndEmit,
+		OnAmendment:      s.relayAmendment,
+	}
+}
+
+func writePMAStreamInitialSSE(w http.ResponseWriter, responsesMode bool, chunkID, effectiveModel string) {
+	if responsesMode {
+		b, _ := json.Marshal(map[string]string{"response_id": chunkID})
+		writeSSEEvent(w, string(b))
+	}
+	if !responsesMode {
+		open := userapi.ChatCompletionChunk{
+			ID:      chunkID,
+			Object:  "chat.completion.chunk",
+			Created: time.Now().Unix(),
+			Model:   effectiveModel,
+			Choices: []userapi.ChatCompletionChunkChoice{
+				{Index: 0, Delta: userapi.ChatCompletionChunkDelta{Role: "assistant"}, FinishReason: nil},
+			},
+		}
+		if b, err := json.Marshal(open); err == nil {
+			writeSSEEvent(w, string(b))
+		}
+	}
+}
+
+func writePMAStreamTerminalSSE(w http.ResponseWriter, responsesMode bool, chunkID, effectiveModel string) {
+	stop := "stop"
+	if responsesMode {
+		comp, _ := json.Marshal(map[string]interface{}{
+			"type": "response.completed",
+			"response": map[string]interface{}{
+				"id":     chunkID,
+				"object": "response",
+				"status": "completed",
+			},
+		})
+		writeSSENamedEvent(w, userapi.SSEEventResponseCompleted, string(comp))
+	} else {
+		final := buildChatCompletionChunk(chunkID, effectiveModel, "", &stop)
+		if b, err := json.Marshal(final); err == nil {
+			writeSSEEvent(w, string(b))
+		}
+	}
+	writeSSEDone(w)
+}
+
+func persistStreamedAssistantTurn(h *OpenAIChatHandler, ctx context.Context, threadID uuid.UUID, userID, projectID *uuid.UUID, start time.Time, content string, rkVisible []string, meta *string) {
+	if _, err := h.db.AppendChatMessage(ctx, threadID, chatRoleAssistant, content, meta); err != nil {
+		h.logger.Error("append assistant message (stream)", "error", err)
+	}
+	durationMs := int(time.Since(start).Milliseconds())
+	_ = h.db.CreateChatAuditLog(ctx, &models.ChatAuditLog{
+		ChatAuditLogBase: models.ChatAuditLogBase{
+			UserID:           userID,
+			ProjectID:        projectID,
+			Outcome:          "success",
+			RedactionApplied: len(rkVisible) > 0,
+			RedactionKinds:   kindsJSON(rkVisible),
+			DurationMs:       &durationMs,
+		},
+	})
+}
+
+// completeViaPMAStream streams completion from PMA token-by-token, persists visible text and optional structured parts, then sends terminal SSE.
+// chunkID is the SSE chunk id (completion id) or response id for /v1/responses. assistantMeta, when non-nil, selects native Responses SSE mapping.
 // Caller must have called prepareSSEResponse(w) before calling this.
 func (h *OpenAIChatHandler) completeViaPMAStream(ctx context.Context, w http.ResponseWriter, cand pmaEndpointCandidate, redacted []userapi.ChatMessage, threadID uuid.UUID, userID, projectID *uuid.UUID, start time.Time, effectiveModel, chunkID string, assistantMeta *string) error {
 	workerToken := strings.TrimSpace(cand.workerAPIBearerToken)
@@ -330,18 +493,91 @@ func (h *OpenAIChatHandler) completeViaPMAStream(ctx context.Context, w http.Res
 	for _, m := range redacted {
 		msgs = append(msgs, pmaclient.ChatMessage{Role: m.Role, Content: m.Content})
 	}
-	var fullContent strings.Builder
+	responsesMode := assistantMeta != nil
+	relay := &pmaRelayState{
+		w: w, responsesMode: responsesMode, chunkID: chunkID, effectiveModel: effectiveModel,
+	}
+	writePMAStreamInitialSSE(w, responsesMode, chunkID, effectiveModel)
+	if err := pmaclient.CallChatCompletionStreamWithCallbacks(ctx, nil, cand.endpoint, msgs, workerToken, relay.streamCallbacks()); err != nil {
+		return err
+	}
+	rawVisible := relay.visibleB.String()
+	rawThinking := relay.thinkingB.String()
+	redactedVisible, rkVisible := redactStringContent(rawVisible)
+	redactedThinking, _ := redactStringContent(rawThinking)
+	redactedTools := make([]pmaStreamToolRec, len(relay.toolRecs))
+	for i, tc := range relay.toolRecs {
+		ra, _ := redactStringContent(tc.args)
+		redactedTools[i] = pmaStreamToolRec{name: tc.name, args: ra}
+	}
+	meta := mergeAssistantStreamMetadata(assistantMeta, redactedVisible, redactedThinking, redactedTools)
+	persistStreamedAssistantTurn(h, ctx, threadID, userID, projectID, start, redactedVisible, rkVisible, meta)
+	writePMAStreamTerminalSSE(w, responsesMode, chunkID, effectiveModel)
+	return nil
+}
+
+func redactStringContent(s string) (redacted string, kinds []string) {
+	amended, rk := redactSecrets([]userapi.ChatMessage{{Role: chatRoleUser, Content: s}})
+	return amended[0].Content, rk
+}
+
+// mergeAssistantStreamMetadata builds JSON metadata with response_id (if any) and structured parts when thinking or tool calls exist.
+func mergeAssistantStreamMetadata(responseMeta *string, visible, thinking string, tools []pmaStreamToolRec) *string {
+	if thinking == "" && len(tools) == 0 {
+		return responseMeta
+	}
+	base := map[string]interface{}{}
+	if responseMeta != nil && strings.TrimSpace(*responseMeta) != "" {
+		_ = json.Unmarshal([]byte(*responseMeta), &base)
+	}
+	var parts []map[string]interface{}
+	if visible != "" {
+		parts = append(parts, map[string]interface{}{"type": "text", "text": visible})
+	}
+	if thinking != "" {
+		parts = append(parts, map[string]interface{}{"type": "thinking", "text": thinking})
+	}
+	for _, tc := range tools {
+		parts = append(parts, map[string]interface{}{
+			"type": "tool_call", "name": tc.name, "arguments": tc.args,
+		})
+	}
+	base["parts"] = parts
+	b, err := json.Marshal(base)
+	if err != nil {
+		return responseMeta
+	}
+	s := string(b)
+	return &s
+}
+
+// emitDegradedStreamingFallback emits heartbeat then a single visible delta per CYNAI.USRGWY.StreamingHeartbeatFallback (no fake chunking).
+func emitDegradedStreamingFallback(ctx context.Context, w http.ResponseWriter, chunkID, model, content string, responsesMode bool) {
+	_ = ctx
+	hb, _ := json.Marshal(userapi.SSEHeartbeatPayload{ElapsedS: 0, Status: "processing"})
+	writeSSENamedEvent(w, userapi.SSEEventHeartbeat, string(hb))
+	redacted, _ := redactStringContent(content)
 	stop := "stop"
-	// For /v1/responses, emit response_id early so clients see streamed response_id (Task 1 contract).
-	if assistantMeta != nil {
-		b, _ := json.Marshal(map[string]string{"response_id": chunkID})
-		writeSSEEvent(w, string(b))
+	if responsesMode {
+		d, _ := json.Marshal(map[string]string{"delta": redacted})
+		writeSSENamedEvent(w, userapi.SSEEventResponseOutputTextDelta, string(d))
+		comp, _ := json.Marshal(map[string]interface{}{
+			"type": "response.completed",
+			"response": map[string]interface{}{
+				"id":     chunkID,
+				"object": "response",
+				"status": "completed",
+			},
+		})
+		writeSSENamedEvent(w, userapi.SSEEventResponseCompleted, string(comp))
+		writeSSEDone(w)
+		return
 	}
 	open := userapi.ChatCompletionChunk{
 		ID:      chunkID,
 		Object:  "chat.completion.chunk",
 		Created: time.Now().Unix(),
-		Model:   effectiveModel,
+		Model:   model,
 		Choices: []userapi.ChatCompletionChunkChoice{
 			{Index: 0, Delta: userapi.ChatCompletionChunkDelta{Role: "assistant"}, FinishReason: nil},
 		},
@@ -349,69 +585,15 @@ func (h *OpenAIChatHandler) completeViaPMAStream(ctx context.Context, w http.Res
 	if b, err := json.Marshal(open); err == nil {
 		writeSSEEvent(w, string(b))
 	}
-	onDelta := func(delta string) error {
-		fullContent.WriteString(delta)
-		chunk := buildChatCompletionChunk(chunkID, effectiveModel, delta, nil)
-		b, err := json.Marshal(chunk)
-		if err != nil {
-			return err
-		}
+	chunk := buildChatCompletionChunk(chunkID, model, redacted, nil)
+	if b, err := json.Marshal(chunk); err == nil {
 		writeSSEEvent(w, string(b))
-		return nil
 	}
-	onIterationStart := func(iteration int) error {
-		payload := userapi.SSEIterationStartPayload{Iteration: iteration}
-		b, err := json.Marshal(payload)
-		if err != nil {
-			return err
-		}
-		writeSSENamedEvent(w, userapi.SSEEventIterationStart, string(b))
-		return nil
-	}
-	onThinking := func(th string) error {
-		payload := userapi.SSEThinkingDeltaPayload{Content: th}
-		b, err := json.Marshal(payload)
-		if err != nil {
-			return err
-		}
-		writeSSENamedEvent(w, userapi.SSEEventThinkingDelta, string(b))
-		return nil
-	}
-	onToolCall := func(name, args string) error {
-		payload := userapi.SSEToolCallPayload{Name: name, Arguments: args}
-		b, err := json.Marshal(payload)
-		if err != nil {
-			return err
-		}
-		writeSSENamedEvent(w, userapi.SSEEventToolCall, string(b))
-		return nil
-	}
-	cb := pmaclient.PMAStreamCallbacks{
-		OnDelta: onDelta, OnThinking: onThinking, OnIterationStart: onIterationStart, OnToolCall: onToolCall,
-	}
-	if err := pmaclient.CallChatCompletionStreamWithCallbacks(ctx, nil, cand.endpoint, msgs, workerToken, cb); err != nil {
-		return err
-	}
-	content := fullContent.String()
-	if _, err := h.db.AppendChatMessage(ctx, threadID, chatRoleAssistant, content, assistantMeta); err != nil {
-		h.logger.Error("append assistant message (stream)", "error", err)
-	}
-	durationMs := int(time.Since(start).Milliseconds())
-	_ = h.db.CreateChatAuditLog(ctx, &models.ChatAuditLog{
-		ChatAuditLogBase: models.ChatAuditLogBase{
-			UserID:           userID,
-			ProjectID:        projectID,
-			Outcome:          "success",
-			RedactionApplied: false,
-			DurationMs:       &durationMs,
-		},
-	})
-	final := buildChatCompletionChunk(chunkID, effectiveModel, "", &stop)
+	final := buildChatCompletionChunk(chunkID, model, "", &stop)
 	if b, err := json.Marshal(final); err == nil {
 		writeSSEEvent(w, string(b))
 	}
 	writeSSEDone(w)
-	return nil
 }
 
 // resolvePMAEndpoint returns the PMA base URL for chat routing.
@@ -675,50 +857,6 @@ func buildChatCompletionChunk(id, model, delta string, finishReason *string) use
 			},
 		},
 	}
-}
-
-// sseChunkSize is the approximate rune count per content delta in degraded-mode streaming
-// so the TUI receives incremental updates instead of one large event.
-const sseChunkSize = 48
-
-// emitContentAsSSE emits content as SSE events: an opening role chunk, content delta chunks
-// (split so the client sees incremental updates), and a final stop chunk, then [DONE].
-// Degraded mode when upstream cannot provide token-by-token deltas (CYNAI.USRGWY.OpenAIChatApi.Streaming).
-func emitContentAsSSE(w http.ResponseWriter, id, model, content string) {
-	stop := "stop"
-	// Opening chunk: role only, no content.
-	open := userapi.ChatCompletionChunk{
-		ID:      id,
-		Object:  "chat.completion.chunk",
-		Created: time.Now().Unix(),
-		Model:   model,
-		Choices: []userapi.ChatCompletionChunkChoice{
-			{Index: 0, Delta: userapi.ChatCompletionChunkDelta{Role: "assistant"}, FinishReason: nil},
-		},
-	}
-	if b, err := json.Marshal(open); err == nil {
-		writeSSEEvent(w, string(b))
-	}
-	// Emit content in small chunks so the TUI can show incremental streaming.
-	runes := []rune(content)
-	for i := 0; i < len(runes); {
-		end := i + sseChunkSize
-		if end > len(runes) {
-			end = len(runes)
-		}
-		delta := string(runes[i:end])
-		i = end
-		chunk := buildChatCompletionChunk(id, model, delta, nil)
-		if b, err := json.Marshal(chunk); err == nil {
-			writeSSEEvent(w, string(b))
-		}
-	}
-	// Final stop chunk.
-	final := buildChatCompletionChunk(id, model, "", &stop)
-	if b, err := json.Marshal(final); err == nil {
-		writeSSEEvent(w, string(b))
-	}
-	writeSSEDone(w)
 }
 
 // trimHistoryToCharBudget returns the most recent messages from history whose cumulative

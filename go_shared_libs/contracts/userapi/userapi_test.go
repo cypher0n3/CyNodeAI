@@ -51,6 +51,14 @@ func TestStatusConstants(t *testing.T) {
 // TestSSEEventConstantsAndPayloads locks the CyNodeAI streaming SSE event names and payload shapes
 // per CYNAI.USRGWY.OpenAIChatApi.StreamingPerEndpointSSEFormat.
 func TestSSEEventConstantsAndPayloads(t *testing.T) {
+	t.Run("cynodeai_event_names", testSSEEventNamesHavePrefix)
+	t.Run("amendment_payloads", testSSEAmendmentPayloadRoundtrips)
+	t.Run("heartbeat_payload", testSSEHeartbeatPayloadRoundtrip)
+	t.Run("responses_stream_events", testResponsesStreamEventConstants)
+}
+
+func testSSEEventNamesHavePrefix(t *testing.T) {
+	t.Helper()
 	eventNames := []string{
 		SSEEventThinkingDelta, SSEEventToolCall, SSEEventToolProgress,
 		SSEEventIterationStart, SSEEventAmendment, SSEEventHeartbeat,
@@ -63,11 +71,13 @@ func TestSSEEventConstantsAndPayloads(t *testing.T) {
 			t.Errorf("SSE event must have cynodeai. prefix: %q", name)
 		}
 	}
+}
 
-	// Amendment payload roundtrip (secret_redaction and overwrite).
+func testSSEAmendmentPayloadRoundtrips(t *testing.T) {
+	t.Helper()
+	var out SSEAmendmentPayload
 	secretPayload := SSEAmendmentPayload{Type: "secret_redaction", Content: "redacted", RedactionKinds: []string{"api_key"}}
 	b, _ := json.Marshal(secretPayload)
-	var out SSEAmendmentPayload
 	if err := json.Unmarshal(b, &out); err != nil || out.Type != secretPayload.Type {
 		t.Errorf("amendment secret_redaction roundtrip: %v", err)
 	}
@@ -77,12 +87,21 @@ func TestSSEEventConstantsAndPayloads(t *testing.T) {
 	if err := json.Unmarshal(b, &out); err != nil || out.Scope != "iteration" || out.Iteration == nil || *out.Iteration != 1 {
 		t.Errorf("amendment overwrite roundtrip: %v", err)
 	}
+}
 
-	// Heartbeat payload roundtrip.
+func testSSEHeartbeatPayloadRoundtrip(t *testing.T) {
+	t.Helper()
 	hb := SSEHeartbeatPayload{ElapsedS: 5, Status: "processing"}
-	b, _ = json.Marshal(hb)
+	b, _ := json.Marshal(hb)
 	var hbOut SSEHeartbeatPayload
 	if err := json.Unmarshal(b, &hbOut); err != nil || hbOut.ElapsedS != 5 {
 		t.Errorf("heartbeat roundtrip: %v", err)
+	}
+}
+
+func testResponsesStreamEventConstants(t *testing.T) {
+	t.Helper()
+	if SSEEventResponseOutputTextDelta == "" || SSEEventResponseCompleted == "" {
+		t.Error("responses SSE event constants must be non-empty")
 	}
 }

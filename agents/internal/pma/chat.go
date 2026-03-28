@@ -251,35 +251,9 @@ func streamOllamaChatToNDJSON(ctx context.Context, w http.ResponseWriter, chatMe
 	var enc *json.Encoder
 	started := false
 	clf := newStreamingClassifier()
-	for scanner.Scan() {
-		if ctx.Err() != nil {
-			return hadDelta, ctx.Err(), started
-		}
-		line := scanner.Bytes()
-		content, done, err := parseInferenceChunk(line, logger)
-		if err != nil {
-			return hadDelta, err, started
-		}
-		emitted, hdrsSent, err := emitNDJSONEmissions(w, &enc, &started, clf.Feed(content))
-		if err != nil {
-			return hadDelta, err, hdrsSent
-		}
-		if emitted {
-			hadDelta = true
-		}
-		if done {
-			break
-		}
-	}
-	if err := scanner.Err(); err != nil {
-		return hadDelta, fmt.Errorf("reading inference stream: %w", err), started
-	}
-	emitted, hdrsSent, err := emitNDJSONEmissions(w, &enc, &started, clf.Flush())
+	hadDelta, err, started = scanOllamaInferenceNDJSON(ctx, w, scanner, clf, logger, &enc, &started)
 	if err != nil {
-		return hadDelta, err, hdrsSent
-	}
-	if emitted {
-		hadDelta = true
+		return hadDelta, err, started
 	}
 	if started && enc != nil {
 		if err := enc.Encode(map[string]bool{"done": true}); err != nil {
@@ -290,49 +264,101 @@ func streamOllamaChatToNDJSON(ctx context.Context, w http.ResponseWriter, chatMe
 	return hadDelta, nil, started
 }
 
+func scanOllamaInferenceNDJSON(ctx context.Context, w http.ResponseWriter, scanner *bufio.Scanner, clf *streamingClassifier, logger *slog.Logger, enc **json.Encoder, started *bool) (hadDelta bool, err error, headersSent bool) {
+	for scanner.Scan() {
+		if ctx.Err() != nil {
+			return hadDelta, ctx.Err(), *started
+		}
+		line := scanner.Bytes()
+		content, done, err := parseInferenceChunk(line, logger)
+		if err != nil {
+			return hadDelta, err, *started
+		}
+		emitted, hdrsSent, err := emitNDJSONEmissions(w, enc, started, clf.Feed(content))
+		if err != nil {
+			return hadDelta, err, hdrsSent
+		}
+		if emitted {
+			hadDelta = true
+		}
+		if done {
+			break
+		}
+	}
+	if scanErr := scanner.Err(); scanErr != nil {
+		return hadDelta, fmt.Errorf("reading inference stream: %w", scanErr), *started
+	}
+	emitted, hdrsSent, err := emitNDJSONEmissions(w, enc, started, clf.Flush())
+	if err != nil {
+		return hadDelta, err, hdrsSent
+	}
+	if emitted {
+		hadDelta = true
+	}
+	return hadDelta, nil, *started
+}
+
 // emitNDJSONEmissions writes classifier emissions (delta, thinking, tool_call) to the NDJSON stream.
-func emitNDJSONEmissions(w http.ResponseWriter, enc **json.Encoder, started *bool, emissions []streamEmitted) (emittedAny bool, headersSentOnErr bool, err error) {
+func emitNDJSONEmissions(w http.ResponseWriter, enc **json.Encoder, started *bool, emissions []streamEmitted) (emittedAny, headersSentOnErr bool, err error) {
 	for _, em := range emissions {
-		if em.Kind == streamEmitDelta && em.Text == "" {
+		if !emissionWorthEmitting(em) {
 			continue
 		}
-		if em.Kind != streamEmitDelta && strings.TrimSpace(em.Text) == "" {
-			continue
+		if err := ensureNDJSONStreamStarted(w, enc, started); err != nil {
+			return emittedAny, true, err
 		}
-		if !*started {
-			w.Header().Set("Content-Type", "application/x-ndjson")
-			w.Header().Set("X-Accel-Buffering", "no")
-			w.WriteHeader(http.StatusOK)
-			flushResponseWriter(w)
-			e := json.NewEncoder(w)
-			e.SetEscapeHTML(false)
-			if err := e.Encode(map[string]int{"iteration_start": 1}); err != nil {
-				return false, true, err
-			}
-			flushResponseWriter(w)
-			*enc = e
-			*started = true
-		}
-		var encErr error
-		switch em.Kind {
-		case streamEmitDelta:
-			encErr = (*enc).Encode(map[string]string{"delta": em.Text})
-		case streamEmitThinking:
-			encErr = (*enc).Encode(map[string]string{"thinking": em.Text})
-		case streamEmitToolCall:
-			encErr = (*enc).Encode(map[string]any{
-				"tool_call": map[string]string{"name": "stream", "arguments": em.Text},
-			})
-		default:
-			continue
-		}
+		ok, encErr := encodeNDJSONStreamEmission(*enc, em)
 		if encErr != nil {
 			return emittedAny, true, encErr
+		}
+		if !ok {
+			continue
 		}
 		flushResponseWriter(w)
 		emittedAny = true
 	}
 	return emittedAny, false, nil
+}
+
+func emissionWorthEmitting(em streamEmitted) bool {
+	if em.Kind == streamEmitDelta {
+		return em.Text != ""
+	}
+	return strings.TrimSpace(em.Text) != ""
+}
+
+func ensureNDJSONStreamStarted(w http.ResponseWriter, enc **json.Encoder, started *bool) error {
+	if *started {
+		return nil
+	}
+	w.Header().Set("Content-Type", "application/x-ndjson")
+	w.Header().Set("X-Accel-Buffering", "no")
+	w.WriteHeader(http.StatusOK)
+	flushResponseWriter(w)
+	e := json.NewEncoder(w)
+	e.SetEscapeHTML(false)
+	if err := e.Encode(map[string]int{"iteration_start": 1}); err != nil {
+		return err
+	}
+	flushResponseWriter(w)
+	*enc = e
+	*started = true
+	return nil
+}
+
+func encodeNDJSONStreamEmission(enc *json.Encoder, em streamEmitted) (encoded bool, err error) {
+	switch em.Kind {
+	case streamEmitDelta:
+		return true, enc.Encode(map[string]string{"delta": em.Text})
+	case streamEmitThinking:
+		return true, enc.Encode(map[string]string{"thinking": em.Text})
+	case streamEmitToolCall:
+		return true, enc.Encode(map[string]any{
+			"tool_call": map[string]string{"name": "stream", "arguments": em.Text},
+		})
+	default:
+		return false, nil
+	}
 }
 
 // streamCompletionToWriter runs direct inference and streams Ollama NDJSON (real token chunks).

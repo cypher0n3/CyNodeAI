@@ -145,12 +145,23 @@ func CallChatCompletion(ctx context.Context, client *http.Client, baseURL string
 	return out.Content, nil
 }
 
+// PMAAmendment is the PMA NDJSON "amendment" object (overwrite or secret_redaction).
+type PMAAmendment struct {
+	Type           string   `json:"type"`
+	Content        string   `json:"content"`
+	Scope          string   `json:"scope,omitempty"`
+	Iteration      *int     `json:"iteration,omitempty"`
+	Reason         string   `json:"reason,omitempty"`
+	RedactionKinds []string `json:"redaction_kinds,omitempty"`
+}
+
 // PMAStreamCallbacks are invoked for each NDJSON line from PMA stream. OnDelta is required; others are optional.
 type PMAStreamCallbacks struct {
 	OnDelta          func(string) error
 	OnThinking       func(string) error
 	OnIterationStart func(iteration int) error
 	OnToolCall       func(name, arguments string) error
+	OnAmendment      func(*PMAAmendment) error
 }
 
 // CallChatCompletionStream streams completion from PMA; onDelta is called for each token.
@@ -250,6 +261,10 @@ func processNDJSONLine(line []byte, cb PMAStreamCallbacks) error {
 	if json.Unmarshal(line, &raw) != nil {
 		return nil
 	}
+	return dispatchNDJSONCallbacks(raw, cb)
+}
+
+func dispatchNDJSONCallbacks(raw map[string]json.RawMessage, cb PMAStreamCallbacks) error {
 	if err := ndjsonIntField(raw, "iteration_start", func(iter int) error {
 		if cb.OnIterationStart == nil {
 			return nil
@@ -274,17 +289,37 @@ func processNDJSONLine(line []byte, cb PMAStreamCallbacks) error {
 	}); err != nil {
 		return err
 	}
-	if rawTC, ok := raw["tool_call"]; ok && cb.OnToolCall != nil {
-		var payload struct {
-			Name      string `json:"name"`
-			Arguments string `json:"arguments"`
-		}
-		if err := json.Unmarshal(rawTC, &payload); err != nil {
-			return nil
-		}
-		return cb.OnToolCall(payload.Name, payload.Arguments)
+	if err := ndjsonHandleToolCall(raw, cb); err != nil {
+		return err
 	}
-	return nil
+	return ndjsonHandleAmendment(raw, cb)
+}
+
+func ndjsonHandleToolCall(raw map[string]json.RawMessage, cb PMAStreamCallbacks) error {
+	rawTC, ok := raw["tool_call"]
+	if !ok || cb.OnToolCall == nil {
+		return nil
+	}
+	var payload struct {
+		Name      string `json:"name"`
+		Arguments string `json:"arguments"`
+	}
+	if err := json.Unmarshal(rawTC, &payload); err != nil {
+		return nil
+	}
+	return cb.OnToolCall(payload.Name, payload.Arguments)
+}
+
+func ndjsonHandleAmendment(raw map[string]json.RawMessage, cb PMAStreamCallbacks) error {
+	rawAm, ok := raw["amendment"]
+	if !ok || cb.OnAmendment == nil {
+		return nil
+	}
+	var p PMAAmendment
+	if err := json.Unmarshal(rawAm, &p); err != nil {
+		return nil
+	}
+	return cb.OnAmendment(&p)
 }
 
 func callViaManagedProxyStreamWithCallbacks(ctx context.Context, client *http.Client, proxyURL string, handoffBody []byte, workerBearerToken string, cb PMAStreamCallbacks) error {

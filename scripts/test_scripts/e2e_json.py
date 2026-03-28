@@ -1,5 +1,7 @@
 """Loose JSON parsing for E2E (cynork / HTTP stdout noise)."""
 
+# Traces: REQ-ORCHES-0120 (E2E parse cynork / gateway JSON output).
+
 import json
 
 

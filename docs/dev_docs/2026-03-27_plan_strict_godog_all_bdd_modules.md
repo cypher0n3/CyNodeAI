@@ -42,7 +42,7 @@ todos:
     dependencies:
       - strict-godog-step-006
   - id: strict-godog-step-008
-    content: "Create or update [`tmp/bdd_strict_gap_analysis.md`](../../tmp/bdd_strict_gap_analysis.md) with deduplicated `step is undefined`, `step implementation is pending`, and `ambiguous step definition` lines from the four non-agent logs in [`tmp/`](../../tmp/), grouped by module."
+    content: "Create or update `tmp/bdd_strict_gap_analysis.md` with deduplicated `step is undefined`, `step implementation is pending`, and `ambiguous step definition` lines from the four non-agent logs in `tmp/`, grouped by module."
     status: pending
     dependencies:
       - strict-godog-step-007
@@ -137,12 +137,12 @@ todos:
     dependencies:
       - strict-godog-step-025
   - id: strict-godog-step-027
-    content: "Discovery (Task 3): map each [`features/orchestrator/*.feature`](../../features/orchestrator/) file to the primary [`orchestrator/_bdd/*.go`](../../orchestrator/_bdd/) step file that should own its bindings; append the map to [`tmp/bdd_strict_gap_analysis.md`](../../tmp/bdd_strict_gap_analysis.md)."
+    content: "Discovery (Task 3): map each [`features/orchestrator/*.feature`](../../features/orchestrator/) file to the primary [`orchestrator/_bdd/*.go`](../../orchestrator/_bdd/) step file that should own its bindings; append the map to `tmp/bdd_strict_gap_analysis.md`."
     status: pending
     dependencies:
       - strict-godog-step-026
   - id: strict-godog-step-028
-    content: "Discovery (Task 3): refresh [`tmp/bdd_strict_orchestrator.log`](../../tmp/bdd_strict_orchestrator.log) and build [`tmp/bdd_strict_orchestrator_checklist.md`](../../tmp/bdd_strict_orchestrator_checklist.md) listing each failing `TestOrchestratorBDD/` scenario name with its undefined or ambiguous line."
+    content: "Discovery (Task 3): refresh `tmp/bdd_strict_orchestrator.log` and build `tmp/bdd_strict_orchestrator_checklist.md` listing each failing `TestOrchestratorBDD/` scenario name with its undefined or ambiguous line."
     status: pending
     dependencies:
       - strict-godog-step-027
@@ -157,7 +157,7 @@ todos:
     dependencies:
       - strict-godog-step-029
   - id: strict-godog-step-031
-    content: "Green (Task 3): implement remaining items from [`tmp/bdd_strict_orchestrator_checklist.md`](../../tmp/bdd_strict_orchestrator_checklist.md) until `(cd orchestrator && GODOG_STRICT=1 go test -count=1 -timeout 35m ./_bdd)` exits 0."
+    content: "Green (Task 3): implement remaining items from `tmp/bdd_strict_orchestrator_checklist.md` until `(cd orchestrator && GODOG_STRICT=1 go test -count=1 -timeout 35m ./_bdd)` exits 0."
     status: pending
     dependencies:
       - strict-godog-step-030
@@ -187,7 +187,7 @@ todos:
     dependencies:
       - strict-godog-step-035
   - id: strict-godog-step-037
-    content: "Discovery (Task 4): map [`features/e2e/*.feature`](../../features/e2e/) files to [`e2e/_bdd/*.go`](../../e2e/_bdd/) owners; refresh [`tmp/bdd_strict_e2e.log`](../../tmp/bdd_strict_e2e.log) and build [`tmp/bdd_strict_e2e_checklist.md`](../../tmp/bdd_strict_e2e_checklist.md) from strict output."
+    content: "Discovery (Task 4): map [`features/e2e/*.feature`](../../features/e2e/) files to [`e2e/_bdd/*.go`](../../e2e/_bdd/) owners; refresh `tmp/bdd_strict_e2e.log` and build `tmp/bdd_strict_e2e_checklist.md` from strict output."
     status: pending
     dependencies:
       - strict-godog-step-036
@@ -227,7 +227,7 @@ todos:
     dependencies:
       - strict-godog-step-043
   - id: strict-godog-step-045
-    content: "Discovery (Task 5): grep [`cynork/_bdd`](../../cynork/_bdd) for `godog.ErrPending` and `TODO: write pending` and save hits to [`tmp/bdd_strict_cynork_pending.txt`](../../tmp/bdd_strict_cynork_pending.txt); refresh [`tmp/bdd_strict_cynork.log`](../../tmp/bdd_strict_cynork.log) and split undefined vs pending in [`tmp/bdd_strict_cynork_checklist.md`](../../tmp/bdd_strict_cynork_checklist.md)."
+    content: "Discovery (Task 5): grep [`cynork/_bdd`](../../cynork/_bdd) for `godog.ErrPending` and `TODO: write pending` and save hits to `tmp/bdd_strict_cynork_pending.txt`; refresh `tmp/bdd_strict_cynork.log` and split undefined vs pending in `tmp/bdd_strict_cynork_checklist.md`."
     status: pending
     dependencies:
       - strict-godog-step-044
@@ -242,7 +242,7 @@ todos:
     dependencies:
       - strict-godog-step-046
   - id: strict-godog-step-048
-    content: "Green (Task 5): implement every remaining **undefined** step from [`tmp/bdd_strict_cynork_checklist.md`](../../tmp/bdd_strict_cynork_checklist.md) in [`cynork/_bdd`](../../cynork/_bdd)."
+    content: "Green (Task 5): implement every remaining **undefined** step from `tmp/bdd_strict_cynork_checklist.md` in [`cynork/_bdd`](../../cynork/_bdd)."
     status: pending
     dependencies:
       - strict-godog-step-047
@@ -374,7 +374,7 @@ agents, cynork, e2e, orchestrator, and worker_node.
 - Do not weaken existing scenario intent: fix step bindings or split PTY-only work to Python E2E per [`features/cynork/README.md`](../../features/cynork/README.md) instead of deleting coverage.
 - Keep `Tags: "~@wip"` in each `suite_test.go` unless the plan explicitly removes `@wip` after steps exist.
 - Use `just` targets for repo checks (`just lint-go`, `just test-bdd`, `just bdd-ci`, `just ci`); do not bypass them with ad-hoc scripts unless a step documents why.
-- Store scratch logs under [`tmp/`](../../tmp/) only; do not commit large log files.
+- Store scratch logs under `tmp/` only; do not commit large log files.
 
 ## Execution Plan
 
@@ -383,7 +383,7 @@ Do not start the next task until the previous task Testing and Closeout steps pa
 
 ### Task 1: Inventory, Logs, and Shared Strict Contract
 
-Establish a strict-mode baseline for every `_bdd` module, capture gap logs under [`tmp/`](../../tmp/), and record how `godogStrict()` will be shared or copied.
+Establish a strict-mode baseline for every `_bdd` module, capture gap logs under `tmp/`, and record how `godogStrict()` will be shared or copied.
 
 #### Task 1 Requirements and Specifications
 
@@ -403,7 +403,7 @@ Establish a strict-mode baseline for every `_bdd` module, capture gap logs under
 
 #### Red (Task 1)
 
-- [ ] Create or update [`tmp/bdd_strict_gap_analysis.md`](../../tmp/bdd_strict_gap_analysis.md) with deduplicated `step is undefined`, `step implementation is pending`, and `ambiguous step definition` lines from the four non-agent logs in [`tmp/`](../../tmp/), grouped by module.
+- [ ] Create or update `tmp/bdd_strict_gap_analysis.md` with deduplicated `step is undefined`, `step implementation is pending`, and `ambiguous step definition` lines from the four non-agent logs in `tmp/`, grouped by module.
 
 #### Green (Task 1)
 
@@ -473,8 +473,8 @@ Close all undefined and ambiguous bindings for gateway, chat, responses, streami
 
 #### Discovery (Task 3)
 
-- [ ] Discovery (Task 3): map each [`features/orchestrator/*.feature`](../../features/orchestrator/) file to the primary [`orchestrator/_bdd/*.go`](../../orchestrator/_bdd/) step file that should own its bindings; append the map to [`tmp/bdd_strict_gap_analysis.md`](../../tmp/bdd_strict_gap_analysis.md).
-- [ ] Discovery (Task 3): refresh [`tmp/bdd_strict_orchestrator.log`](../../tmp/bdd_strict_orchestrator.log) and build [`tmp/bdd_strict_orchestrator_checklist.md`](../../tmp/bdd_strict_orchestrator_checklist.md) listing each failing `TestOrchestratorBDD/` scenario name with its undefined or ambiguous line.
+- [ ] Discovery (Task 3): map each [`features/orchestrator/*.feature`](../../features/orchestrator/) file to the primary [`orchestrator/_bdd/*.go`](../../orchestrator/_bdd/) step file that should own its bindings; append the map to `tmp/bdd_strict_gap_analysis.md`.
+- [ ] Discovery (Task 3): refresh `tmp/bdd_strict_orchestrator.log` and build `tmp/bdd_strict_orchestrator_checklist.md` listing each failing `TestOrchestratorBDD/` scenario name with its undefined or ambiguous line.
 
 #### Red (Task 3)
 
@@ -483,7 +483,7 @@ Close all undefined and ambiguous bindings for gateway, chat, responses, streami
 #### Green (Task 3)
 
 - [ ] Green (Task 3): implement undefined steps for OpenAI-compatible chat, responses, SSE streaming, redaction, and amendment scenarios in [`orchestrator/_bdd`](../../orchestrator/_bdd) until `go test -run 'TestOrchestratorBDD//OpenAI'` passes under `GODOG_STRICT=1` (adjust `-run` to match Godog subtest names from the log).
-- [ ] Green (Task 3): implement remaining items from [`tmp/bdd_strict_orchestrator_checklist.md`](../../tmp/bdd_strict_orchestrator_checklist.md) until `(cd orchestrator && GODOG_STRICT=1 go test -count=1 -timeout 35m ./_bdd)` exits 0.
+- [ ] Green (Task 3): implement remaining items from `tmp/bdd_strict_orchestrator_checklist.md` until `(cd orchestrator && GODOG_STRICT=1 go test -count=1 -timeout 35m ./_bdd)` exits 0.
 - [ ] Green (Task 3): add `godogStrict()` and `Strict: godogStrict()` to [`orchestrator/_bdd/suite_test.go`](../../orchestrator/_bdd/suite_test.go).
 
 #### Refactor (Task 3)
@@ -510,7 +510,7 @@ Implement end-to-end OpenAI-compatible and streaming steps until [`e2e/_bdd`](..
 
 #### Discovery (Task 4)
 
-- [ ] Discovery (Task 4): map [`features/e2e/*.feature`](../../features/e2e/) files to [`e2e/_bdd/*.go`](../../e2e/_bdd/) owners; refresh [`tmp/bdd_strict_e2e.log`](../../tmp/bdd_strict_e2e.log) and build [`tmp/bdd_strict_e2e_checklist.md`](../../tmp/bdd_strict_e2e_checklist.md) from strict output.
+- [ ] Discovery (Task 4): map [`features/e2e/*.feature`](../../features/e2e/) files to [`e2e/_bdd/*.go`](../../e2e/_bdd/) owners; refresh `tmp/bdd_strict_e2e.log` and build `tmp/bdd_strict_e2e_checklist.md` from strict output.
 
 #### Red (Task 4)
 
@@ -546,7 +546,7 @@ Replace headless-testable `ErrPending` stubs, implement undefined steps, keep PT
 
 #### Discovery (Task 5)
 
-- [ ] Discovery (Task 5): grep [`cynork/_bdd`](../../cynork/_bdd) for `godog.ErrPending` and `TODO: write pending` and save hits to [`tmp/bdd_strict_cynork_pending.txt`](../../tmp/bdd_strict_cynork_pending.txt); refresh [`tmp/bdd_strict_cynork.log`](../../tmp/bdd_strict_cynork.log) and split undefined vs pending in [`tmp/bdd_strict_cynork_checklist.md`](../../tmp/bdd_strict_cynork_checklist.md).
+- [ ] Discovery (Task 5): grep [`cynork/_bdd`](../../cynork/_bdd) for `godog.ErrPending` and `TODO: write pending` and save hits to `tmp/bdd_strict_cynork_pending.txt`; refresh `tmp/bdd_strict_cynork.log` and split undefined vs pending in `tmp/bdd_strict_cynork_checklist.md`.
 
 #### Red (Task 5)
 
@@ -555,7 +555,7 @@ Replace headless-testable `ErrPending` stubs, implement undefined steps, keep PT
 #### Green (Task 5)
 
 - [ ] Green (Task 5): replace headless-testable pending stubs in [`cynork/_bdd/steps2.go`](../../cynork/_bdd/steps2.go) (and related step files) with real assertions; keep PTY-only scenarios tagged `@wip` per [`features/cynork/README.md`](../../features/cynork/README.md).
-- [ ] Green (Task 5): implement every remaining **undefined** step from [`tmp/bdd_strict_cynork_checklist.md`](../../tmp/bdd_strict_cynork_checklist.md) in [`cynork/_bdd`](../../cynork/_bdd).
+- [ ] Green (Task 5): implement every remaining **undefined** step from `tmp/bdd_strict_cynork_checklist.md` in [`cynork/_bdd`](../../cynork/_bdd).
 - [ ] Green (Task 5): add `godogStrict()` and `Strict: godogStrict()` to [`cynork/_bdd/suite_test.go`](../../cynork/_bdd/suite_test.go).
 
 #### Refactor (Task 5)

@@ -1,5 +1,7 @@
 """Minimal cynork config.yaml for E2E (gateway_url only; tokens stay in sidecar)."""
 
+# Traces: REQ-ORCHES-0120 (E2E cynork gateway URL in config).
+
 import os
 
 from scripts.test_scripts import config

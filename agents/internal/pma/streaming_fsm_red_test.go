@@ -96,9 +96,9 @@ func TestTurnOverwriteReplace_WhitespaceOnlyUsesVisible(t *testing.T) {
 func TestStreamingTokenFSM_ToolBlockAndStrayCloses(t *testing.T) {
 	fsm := newStreamingTokenFSM()
 	open := "\u003ctool_call\u003e"
-	close := "\u003c/tool_call\u003e"
+	toolCloseTag := "\u003c/tool_call\u003e"
 	var out []streamEmitted
-	for _, chunk := range []string{open, `{"x":1}`, close, " after"} {
+	for _, chunk := range []string{open, `{"x":1}`, toolCloseTag, " after"} {
 		out = append(out, fsm.Feed(chunk)...)
 	}
 	out = append(out, fsm.Flush()...)
@@ -160,4 +160,3 @@ func TestStreamingTokenFSM_ToolEOFWithoutClose(t *testing.T) {
 		t.Fatalf("tool = %q", tool)
 	}
 }
-

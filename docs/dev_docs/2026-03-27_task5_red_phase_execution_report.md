@@ -9,7 +9,8 @@
 ## Summary
 
 Task 5 **Red** wiring: new failing tests and step definitions for PMA streaming,
-overwrite, and secure-buffer gaps. **Green is not started** in this pass.
+overwrite, and secure-buffer gaps.
+**Green is not started** in this pass.
 
 ## Python E2E
 
@@ -19,13 +20,14 @@ File: `scripts/test_scripts/e2e_0620_pma_standard_path_streaming.py`.
   and `cynodeai.tool_call` SSE events, and at least one `cynodeai.amendment` on the
   standard PMA path.
 - `just e2e --tags pma_inference` was run; the suite exited **1** because the
-  **ollama** prereq failed (all matching tests skipped). Log:
+  **ollama** prereq failed (all matching tests skipped).
+    Output was captured in
   `tmp/e2e_pma_inference_task5_red_2026-03-27.log`.
 - **Follow-up:** With `just setup-dev restart --force` and a healthy Ollama/PMA
   stack, re-run to confirm the new tests **fail** for the expected product gaps
   (not only skips).
 
-## BDD (agents)
+## BDD (Agents)
 
 File: `agents/_bdd/pma_streaming_steps.go` (registered from `agents/_bdd/steps.go`).
 
@@ -37,7 +39,7 @@ File: `agents/_bdd/pma_streaming_steps.go` (registered from `agents/_bdd/steps.g
   streaming NDJSON assertions (no `thinking` / `tool_call` / `overwrite` lines),
   and capable-model+MCP scenarios blocked until Green.
 
-## Go (agents/internal/pma)
+## Go (Agents/internal/pma)
 
 Files: `streaming_fsm.go`, `streaming_fsm_red_test.go`.
 
@@ -45,9 +47,9 @@ Files: `streaming_fsm.go`, `streaming_fsm_red_test.go`.
   Green implements classification, overwrite semantics, and `secretutil` wrapping.
 - `go test ./agents/internal/pma` fails on the new Red tests (expected).
 
-## Open validation
+## Open Validation
 
-- **Red – Python E2E gate:** Not closed until a stack run proves new assertions
+- **Red - Python E2E gate:** Not closed until a stack run proves new assertions
   fail (or pass after Green), not skip-only on prereqs.
 - **Red validation gate (plan):** Keep open until the Python E2E gate above is
   satisfied.

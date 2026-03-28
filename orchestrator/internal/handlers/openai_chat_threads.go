@@ -129,9 +129,8 @@ func (h *OpenAIChatHandler) Responses(w http.ResponseWriter, r *http.Request) {
 		},
 	})
 	if req.Stream {
-		// Degraded-mode SSE stream for /v1/responses when upstream is blocking.
 		prepareSSEResponse(w)
-		emitContentAsSSE(w, responseID, effectiveModel, content)
+		emitDegradedStreamingFallback(timeoutCtx, w, responseID, effectiveModel, content, true)
 		return
 	}
 	writeOpenAIJSON(w, http.StatusOK, userapi.ResponsesCreateResponse{

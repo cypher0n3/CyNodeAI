@@ -146,6 +146,39 @@ func TestParseResponsesInputAsMessageArray_EmptyArray(t *testing.T) {
 	}
 }
 
+func TestRedactStringContent(t *testing.T) {
+	out, kinds := redactStringContent("token sk-abcdefghijklmnopqrstuvwxyz1234567890abcd")
+	if !strings.Contains(out, secretRedacted) {
+		t.Fatalf("got %q", out)
+	}
+	if len(kinds) == 0 {
+		t.Fatal("expected redaction kinds")
+	}
+}
+
+func TestEmitDegradedStreamingFallback_Chat_IncludesHeartbeat(t *testing.T) {
+	rec := httptest.NewRecorder()
+	prepareSSEResponse(rec)
+	emitDegradedStreamingFallback(context.Background(), rec, "cid", "m", "hello", false)
+	body := rec.Body.String()
+	if !strings.Contains(body, "cynodeai.heartbeat") {
+		t.Fatalf("missing heartbeat: %s", body)
+	}
+	if !strings.Contains(body, `"content":"hello"`) {
+		t.Fatalf("missing single delta: %s", body)
+	}
+}
+
+func TestEmitDegradedStreamingFallback_Responses_NativeEvents(t *testing.T) {
+	rec := httptest.NewRecorder()
+	prepareSSEResponse(rec)
+	emitDegradedStreamingFallback(context.Background(), rec, "resp_abc", "m", "hi", true)
+	body := rec.Body.String()
+	if !strings.Contains(body, "response.output_text.delta") || !strings.Contains(body, "response.completed") {
+		t.Fatalf("expected native responses events: %s", body)
+	}
+}
+
 // buildTestChatMessages builds a minimal redacted message slice for testing.
 func buildTestChatMessages(content string) []userapi.ChatMessage {
 	return []userapi.ChatMessage{{Role: "user", Content: content}}
@@ -338,14 +371,23 @@ func TestNewThread_DBError(t *testing.T) {
 
 // --- completeViaPMAStream ---
 
-func TestCompleteViaPMAStream_Success(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+func newTestPMAStreamNDJSONServer(t *testing.T, lines ...string) *httptest.Server {
+	t.Helper()
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/x-ndjson")
-		// PMA NDJSON: iteration_start then deltas (pmaclient processNDJSONLine expects top-level keys).
-		_, _ = fmt.Fprintln(w, `{"iteration_start":1}`)
-		_, _ = fmt.Fprintln(w, `{"delta":"hello "}`)
-		_, _ = fmt.Fprintln(w, `{"delta":"world"}`)
+		for _, ln := range lines {
+			_, _ = fmt.Fprintln(w, ln)
+		}
 	}))
+}
+
+func TestCompleteViaPMAStream_Success(t *testing.T) {
+	// PMA NDJSON: iteration_start then deltas (pmaclient processNDJSONLine expects top-level keys).
+	srv := newTestPMAStreamNDJSONServer(t,
+		`{"iteration_start":1}`,
+		`{"delta":"hello "}`,
+		`{"delta":"world"}`,
+	)
 	defer srv.Close()
 
 	db := testutil.NewMockDB()
@@ -393,5 +435,95 @@ func TestCompleteViaPMAStream_Error(t *testing.T) {
 	)
 	if err == nil {
 		t.Error("expected an error from closed server")
+	}
+}
+
+func TestCompleteViaPMAStream_ResponsesModeNativeSSE(t *testing.T) {
+	srv := newTestPMAStreamNDJSONServer(t, `{"delta":"x"}`)
+	defer srv.Close()
+	db := testutil.NewMockDB()
+	h := NewOpenAIChatHandler(db, newTestLogger(), "", "", "")
+	cand := pmaEndpointCandidate{endpoint: srv.URL}
+	threadID := uuid.New()
+	userID := uuid.New()
+	rec := httptest.NewRecorder()
+	meta := `{"response_id":"resp_z"}`
+	err := h.completeViaPMAStream(context.Background(), rec, cand,
+		[]userapi.ChatMessage{{Role: "user", Content: "test"}},
+		threadID, &userID, nil, time.Now(), "cynodeai.pm", "resp_z", &meta)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, "response.output_text.delta") || !strings.Contains(body, "response.completed") {
+		t.Fatalf("expected native responses SSE: %s", body)
+	}
+}
+
+func TestCompleteViaPMAStream_PersistsStructuredParts(t *testing.T) {
+	srv := newTestPMAStreamNDJSONServer(t,
+		`{"delta":"visible"}`,
+		`{"thinking":"sec"}`,
+		`{"tool_call":{"name":"n","arguments":"{}"}}`,
+	)
+	defer srv.Close()
+	db := testutil.NewMockDB()
+	h := NewOpenAIChatHandler(db, newTestLogger(), "", "", "")
+	cand := pmaEndpointCandidate{endpoint: srv.URL}
+	threadID := uuid.New()
+	userID := uuid.New()
+	rec := httptest.NewRecorder()
+	err := h.completeViaPMAStream(context.Background(), rec, cand,
+		[]userapi.ChatMessage{{Role: "user", Content: "test"}},
+		threadID, &userID, nil, time.Now(), "m", "cid", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	msgs, err := db.ListChatMessages(context.Background(), threadID, 10)
+	if err != nil || len(msgs) == 0 {
+		t.Fatalf("messages: %v len=%d", err, len(msgs))
+	}
+	last := msgs[len(msgs)-1]
+	if last.Role != "assistant" || last.Content != "visible" {
+		t.Fatalf("assistant row: role=%q content=%q", last.Role, last.Content)
+	}
+	if last.Metadata == nil {
+		t.Fatal("expected metadata with parts")
+	}
+	var meta map[string]interface{}
+	if err := json.Unmarshal([]byte(*last.Metadata), &meta); err != nil {
+		t.Fatal(err)
+	}
+	parts, ok := meta["parts"].([]interface{})
+	if !ok || len(parts) < 3 {
+		t.Fatalf("parts: %v", meta["parts"])
+	}
+}
+
+func TestCompleteViaPMAStream_RelaysAmendmentAndFixesVisible(t *testing.T) {
+	srv := newTestPMAStreamNDJSONServer(t,
+		`{"delta":"wrong"}`,
+		`{"amendment":{"type":"secret_redaction","content":"ok"}}`,
+	)
+	defer srv.Close()
+	db := testutil.NewMockDB()
+	h := NewOpenAIChatHandler(db, newTestLogger(), "", "", "")
+	cand := pmaEndpointCandidate{endpoint: srv.URL}
+	threadID := uuid.New()
+	userID := uuid.New()
+	rec := httptest.NewRecorder()
+	err := h.completeViaPMAStream(context.Background(), rec, cand,
+		[]userapi.ChatMessage{{Role: "user", Content: "test"}},
+		threadID, &userID, nil, time.Now(), "m", "cid", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(rec.Body.String(), "cynodeai.amendment") {
+		t.Fatalf("missing amendment: %s", rec.Body.String())
+	}
+	msgs, _ := db.ListChatMessages(context.Background(), threadID, 10)
+	last := msgs[len(msgs)-1]
+	if last.Content != "ok" {
+		t.Fatalf("persisted content = %q", last.Content)
 	}
 }

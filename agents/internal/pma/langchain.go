@@ -248,43 +248,62 @@ func writeLangchainNDJSONStream(w http.ResponseWriter, visible, thinking string)
 	}
 	visible = strings.TrimSpace(visible)
 	if visible != "" {
-		clf := newStreamingClassifier()
-		emissions := clf.Feed(visible)
-		emissions = append(emissions, clf.Flush()...)
-		for _, em := range emissions {
-			switch em.Kind {
-			case streamEmitToolCall:
-				if err := enc.Encode(map[string]any{
-					"tool_call": map[string]string{"name": "stream", "arguments": em.Text},
-				}); err != nil {
-					return err
-				}
-				flushResponseWriter(w)
-			case streamEmitThinking:
-				if err := enc.Encode(map[string]string{"thinking": em.Text}); err != nil {
-					return err
-				}
-				flushResponseWriter(w)
-			case streamEmitDelta:
-				runes := []rune(em.Text)
-				for i := 0; i < len(runes); i += pmaStreamDeltaRunes {
-					end := i + pmaStreamDeltaRunes
-					if end > len(runes) {
-						end = len(runes)
-					}
-					chunk := string(runes[i:end])
-					if err := enc.Encode(map[string]string{"delta": chunk}); err != nil {
-						return err
-					}
-					flushResponseWriter(w)
-				}
-			}
+		if err := writeLangchainClassifiedVisible(enc, w, visible); err != nil {
+			return err
 		}
 	}
 	if err := enc.Encode(map[string]bool{"done": true}); err != nil {
 		return err
 	}
 	flushResponseWriter(w)
+	return nil
+}
+
+func writeLangchainClassifiedVisible(enc *json.Encoder, w http.ResponseWriter, visible string) error {
+	clf := newStreamingClassifier()
+	emissions := clf.Feed(visible)
+	emissions = append(emissions, clf.Flush()...)
+	for _, em := range emissions {
+		if err := encodeLangchainClassifiedEmission(enc, w, em); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func encodeLangchainClassifiedEmission(enc *json.Encoder, w http.ResponseWriter, em streamEmitted) error {
+	switch em.Kind {
+	case streamEmitToolCall:
+		if err := enc.Encode(map[string]any{
+			"tool_call": map[string]string{"name": "stream", "arguments": em.Text},
+		}); err != nil {
+			return err
+		}
+		flushResponseWriter(w)
+		return nil
+	case streamEmitThinking:
+		if err := enc.Encode(map[string]string{"thinking": em.Text}); err != nil {
+			return err
+		}
+		flushResponseWriter(w)
+		return nil
+	case streamEmitDelta:
+		return encodeLangchainDeltaChunks(enc, w, em.Text)
+	default:
+		return nil
+	}
+}
+
+func encodeLangchainDeltaChunks(enc *json.Encoder, w http.ResponseWriter, text string) error {
+	runes := []rune(text)
+	for i := 0; i < len(runes); i += pmaStreamDeltaRunes {
+		end := min(i+pmaStreamDeltaRunes, len(runes))
+		chunk := string(runes[i:end])
+		if err := enc.Encode(map[string]string{"delta": chunk}); err != nil {
+			return err
+		}
+		flushResponseWriter(w)
+	}
 	return nil
 }
 

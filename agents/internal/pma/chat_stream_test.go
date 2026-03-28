@@ -240,8 +240,8 @@ func TestStreamCapableModelNDJSON_AgentNotFinishedFallsBackToOllama(t *testing.T
 
 func TestStreamOllamaChatToNDJSONOutcome_EmitsToolCallNDJSON(t *testing.T) {
 	open := "\u003ctool_call\u003e"
-	close := "\u003c/tool_call\u003e"
-	srv := newMockOllamaStreamContentChunksServer(t, []string{open, `{"fn":1}`, close, " tail"})
+	toolCloseTag := "\u003c/tool_call\u003e"
+	srv := newMockOllamaStreamContentChunksServer(t, []string{open, `{"fn":1}`, toolCloseTag, " tail"})
 	defer srv.Close()
 	t.Setenv("OLLAMA_BASE_URL", srv.URL)
 	t.Setenv("INFERENCE_URL", "")
