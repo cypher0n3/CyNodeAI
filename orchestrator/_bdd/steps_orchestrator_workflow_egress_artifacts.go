@@ -65,6 +65,22 @@ func registerOrchestratorWorkflowEgressArtifacts(sc *godog.ScenarioContext, stat
 		}
 		return nil
 	})
+	sc.Step(`^workflow resume state contains substring "([^"]*)"$`, func(ctx context.Context, needle string) error {
+		st := getState(ctx)
+		if st == nil || len(st.lastTaskResultBody) == 0 {
+			return godog.ErrSkip
+		}
+		var out struct {
+			State *string `json:"state"`
+		}
+		if err := json.Unmarshal(st.lastTaskResultBody, &out); err != nil {
+			return err
+		}
+		if out.State == nil || !strings.Contains(*out.State, needle) {
+			return fmt.Errorf("workflow resume state missing %q in %v", needle, out.State)
+		}
+		return nil
+	})
 	sc.Step(`^I store the lease_id from workflow start response$`, func(ctx context.Context) error {
 		st := getState(ctx)
 		if st == nil || len(st.workflowStartBody) == 0 {
@@ -211,6 +227,71 @@ func registerOrchestratorWorkflowEgressArtifacts(sc *godog.ScenarioContext, stat
 			resp2.Body.Close()
 		}
 		body3, _ := json.Marshal(map[string]string{"task_id": st.taskID, "last_node_id": nodeID})
+		req3, _ := http.NewRequest("POST", st.server.URL+"/v1/workflow/checkpoint", bytes.NewReader(body3))
+		req3.Header.Set("Content-Type", "application/json")
+		if resp3, err := http.DefaultClient.Do(req3); err != nil {
+			return err
+		} else if resp3.StatusCode != http.StatusNoContent {
+			resp3.Body.Close()
+			return fmt.Errorf("checkpoint returned %d", resp3.StatusCode)
+		} else {
+			resp3.Body.Close()
+		}
+		body4, _ := json.Marshal(map[string]string{"task_id": st.taskID})
+		req4, _ := http.NewRequest("POST", st.server.URL+"/v1/workflow/resume", bytes.NewReader(body4))
+		req4.Header.Set("Content-Type", "application/json")
+		resp4, err := http.DefaultClient.Do(req4)
+		if err != nil {
+			return err
+		}
+		defer resp4.Body.Close()
+		st.lastStatusCode = resp4.StatusCode
+		st.lastTaskResultBody, _ = io.ReadAll(resp4.Body)
+		return nil
+	})
+	sc.Step(`^I create a task with prompt "([^"]*)" and start workflow for task with holder "([^"]*)" and save verification review checkpoint and resume workflow for task$`, func(ctx context.Context, prompt, holder string) error {
+		st := getState(ctx)
+		if st == nil || st.server == nil {
+			return godog.ErrSkip
+		}
+		body, _ := json.Marshal(map[string]string{"prompt": prompt})
+		req, _ := http.NewRequest("POST", st.server.URL+"/v1/tasks", bytes.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		req.Header.Set("Authorization", "Bearer "+st.accessToken)
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			return err
+		}
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusCreated {
+			return fmt.Errorf("create task returned %d", resp.StatusCode)
+		}
+		var out struct {
+			TaskID string `json:"task_id"`
+		}
+		if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+			return err
+		}
+		st.taskID = out.TaskID
+		body2, _ := json.Marshal(map[string]string{"task_id": st.taskID, "holder_id": holder})
+		req2, _ := http.NewRequest("POST", st.server.URL+"/v1/workflow/start", bytes.NewReader(body2))
+		req2.Header.Set("Content-Type", "application/json")
+		if resp2, err := http.DefaultClient.Do(req2); err != nil {
+			return err
+		} else {
+			resp2.Body.Close()
+		}
+		verifyState := `{"pma_tasked_paa":true,"paa_outcome":"accepted","findings":"criteria met"}`
+		type checkpointBody struct {
+			TaskID     string `json:"task_id"`
+			LastNodeID string `json:"last_node_id"`
+			State      string `json:"state"`
+		}
+		body3, _ := json.Marshal(checkpointBody{
+			TaskID:     st.taskID,
+			LastNodeID: "verify_step_result",
+			State:      verifyState,
+		})
 		req3, _ := http.NewRequest("POST", st.server.URL+"/v1/workflow/checkpoint", bytes.NewReader(body3))
 		req3.Header.Set("Content-Type", "application/json")
 		if resp3, err := http.DefaultClient.Do(req3); err != nil {

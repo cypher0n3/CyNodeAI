@@ -40,6 +40,14 @@ Scenario: Resume workflow returns checkpoint when saved
   Then workflow resume response status is 200
   And workflow resume response includes last_node_id "plan_steps"
 
+@req_orches_0145
+@spec_cynai_orches_workflowstartresumeapi
+Scenario: Verification review checkpoint persists PMA to PAA outcome in workflow state
+  When I create a task with prompt "pma paa verify flow" and start workflow for task with holder "runner-verify" and save verification review checkpoint and resume workflow for task
+  Then workflow resume response status is 200
+  And workflow resume response includes last_node_id "verify_step_result"
+  And workflow resume state contains substring "paa_outcome"
+
 @req_orches_0146
 @spec_cynai_orches_taskworkflowleaselifecycle
 Scenario: Release lease then another holder can start

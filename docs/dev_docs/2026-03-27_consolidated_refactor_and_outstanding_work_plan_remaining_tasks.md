@@ -39,14 +39,14 @@ Completed plans are listed for context; outstanding plans feed tasks in this doc
   - [2026-03-19_pma_minimal_tools_execution_plan.md](2026-03-19_pma_minimal_tools_execution_plan.md) - Closed 2026-03-21 (see completion report); Tasks 5-6 checked, Tasks 1-4 checkboxes not updated but implementation summary confirms done.
   - [2026-03-19_gorm_base_struct_record_standard_execution_plan.md](2026-03-19_gorm_base_struct_record_standard_execution_plan.md) - Superseded by the 2026-03-20 GORM table definition plan (which completed all tasks including the items in this older plan).
 - **Outstanding (feeds this plan):**
-  - [2026-03-19_streaming_remaining_work_execution_plan.md](2026-03-19_streaming_remaining_work_execution_plan.md) - All six tasks unchecked; feeds Tasks 5-8 below.
-  - [2026-03-14_plan_after_tui_fix.md](2026-03-14_plan_after_tui_fix.md) - All seven tasks unchecked; streaming (Task 1) is covered by the streaming plan; auth/session (Task 3), BDD coverage (Task 4), worker docs (Task 5), MVP Phase 2 (Task 6), and closeout (Task 7) feed Tasks 8-10 and 12 below.
-  - [2026-03-19_postgres_schema_refactoring_plan.md](2026-03-19_postgres_schema_refactoring_plan.md) - All items pending; feeds Task 12 below.
+  - [2026-03-19_streaming_remaining_work_execution_plan.md](2026-03-19_streaming_remaining_work_execution_plan.md) - Superseded by Tasks 5-8 completion in this plan (2026-03-29).
+  - [2026-03-14_plan_after_tui_fix.md](2026-03-14_plan_after_tui_fix.md) - Superseded by Tasks 8-10 and 12 completion in this plan (2026-03-29).
+  - [2026-03-19_postgres_schema_refactoring_plan.md](2026-03-19_postgres_schema_refactoring_plan.md) - Addressed by Task 11 closure (schema index distributed; see task11 closeout report).
 - **Reports and references (not plans):**
   - [2026-03-23_e2e_single_run_consolidated_report.md](2026-03-23_e2e_single_run_consolidated_report.md) - E2E failure analysis; symptom buckets guide testing in multiple tasks.
   - [2026-03-23_e2e_tech_spec_alignment_review.md](2026-03-23_e2e_tech_spec_alignment_review.md) - Alignment gaps feed Task 3.
   - [2026-03-22_cynork_tui_spec_delta.md](2026-03-22_cynork_tui_spec_delta.md) - TUI implementation vs spec delta; feeds Task 2.
-  - [_bugs.md](_bugs.md) - Bugs 1-2 fixed; Bugs 3-5 open; feeds Tasks 2 and 4.
+  - [_bugs.md](_bugs.md) - Bugs 1-2 and 5 fixed/closed; Bugs 3-4 open (documented follow-on UX); fed Tasks 2, 4, and 12 closeout.
   - [_draft_specs_incorporation_and_conflicts_report.md](_draft_specs_incorporation_and_conflicts_report.md) - Context only; no direct tasks.
   - [2026-03-15_streaming_specs_implementation_plan.md](2026-03-15_streaming_specs_implementation_plan.md) - Tasks 1-4 complete; remaining work extracted into 2026-03-19 streaming remaining work plan.
 
@@ -642,12 +642,12 @@ All three test layers MUST be added or updated before implementation of each sli
 
 - **Python E2E tests** (add or update first for each slice so spec-defined behavior is locked):
   - [x] For each MCP tool slice: add E2E tests validating the tool behavior via PMA chat or direct API.
-  - [ ] For each LangGraph/verification-loop slice: add E2E tests validating the PMA-to-PAA flow and result review.
+  - [x] For each LangGraph/verification-loop slice: add E2E tests validating the PMA-to-PAA flow and result review.
   - [x] For chat/runtime drift fixes: add E2E tests for bounded wait, retry, and reliability scenarios.
   - [x] Run `just e2e` for new modules and confirm they fail before implementation.
 - **BDD scenarios** (add or update for each slice):
   - [x] For each MCP tool slice: add BDD scenarios in relevant feature files.
-  - [ ] For graph-node and verification-loop work: add BDD scenarios.
+  - [x] For graph-node and verification-loop work: add BDD scenarios.
   - [x] For reliability fixes: add scenarios for bounded wait and retry behavior.
 - **Go unit tests** (add failing tests for each slice):
   - [x] For each MCP tool slice: unit tests for handler, store, and RBAC enforcement.
@@ -656,18 +656,18 @@ All three test layers MUST be added or updated before implementation of each sli
 - [x] **Red - Python E2E:** For each slice, run `just e2e` for new modules; confirm failures before implementation.
 - [x] **Red - BDD:** For each slice, run `just test-bdd`; confirm new scenarios fail before implementation.
 - [x] **Red - Go:** For each slice, run `go test` / `just test-go-cover`; confirm new tests fail before implementation.
-- [ ] **Red validation gate:** Do not proceed to Green until the test plan is defined and each slice has failing tests in Python E2E, BDD, and Go.
+- [x] **Red validation gate:** Do not proceed to Green until the test plan is defined and each slice has failing tests in Python E2E, BDD, and Go.
 
 #### Green (Task 10)
 
 - [x] Resume remaining MCP tool slices beyond the minimum PMA chat slice.
-- [ ] Finish remaining LangGraph graph-node work.
-- [ ] Finish verification-loop work for PMA to Project Analyst to result review flows.
+- [x] Finish remaining LangGraph graph-node work.
+- [x] Finish verification-loop work for PMA to Project Analyst to result review flows.
 - [x] Close known chat/runtime drifts (bounded wait, retry, reliability).
 - [x] Update worker deployment docs: separate normative topology from deferred implementation.
 - [x] Run `just docs-check` after doc edits.
 - [x] Run targeted validation per slice; run `just ci` and `just e2e` when the phase closes.
-- [ ] Validation gate: do not proceed until all slices and gates pass.
+- [x] Validation gate: do not proceed until all slices and gates pass.
 
 #### Refactor (Task 10)
 
@@ -707,46 +707,46 @@ Source: [2026-03-19_postgres_schema_refactoring_plan.md](2026-03-19_postgres_sch
 
 #### Discovery (Task 11) Steps
 
-- [ ] Read the postgres schema refactoring plan in full (table-to-document mapping, execution steps, considerations).
-- [ ] Confirm the table-to-document mapping is still accurate after recent spec changes (e.g. artifacts schema may now be split already).
-- [ ] Count total table groups and estimate effort for a proof-of-concept batch (identity and authentication tables).
+- [x] Read the postgres schema refactoring plan in full (table-to-document mapping, execution steps, considerations).
+- [x] Confirm the table-to-document mapping is still accurate after recent spec changes (e.g. artifacts schema may now be split already).
+- [x] Count total table groups and estimate effort for a proof-of-concept batch (identity and authentication tables).
 
 #### Red (Task 11)
 
-- [ ] N/A for docs-only task; Discovery suffices.
+- [x] N/A for docs-only task; Discovery suffices.
 
 #### Green (Task 11)
 
-- [ ] Start with proof of concept: move identity and authentication tables (`users`, `password_credentials`, `refresh_sessions`) to `local_user_accounts.md`.
-  - [ ] Extract table definition section from `postgres_schema.md`.
-  - [ ] Add "Postgres Schema" section with Spec IDs and anchors to target doc.
-  - [ ] Update `postgres_schema.md` to link to new location.
-  - [ ] Update all cross-references in other docs that pointed to the old location.
-- [ ] If proof of concept validates well, proceed through remaining table groups per the mapping.
-- [ ] Keep `postgres_schema.md` as an index/overview with: links to distributed definitions, table creation order and dependencies, naming conventions, and "Storing This Schema in Code" section.
-- [ ] Run `just lint-md` on all affected files after each batch.
-- [ ] Run `just docs-check` to verify links after each batch.
-- [ ] Validation gate: do not proceed until all Spec ID anchors work and docs-check passes.
+- [x] Start with proof of concept: move identity and authentication tables (`users`, `password_credentials`, `refresh_sessions`) to `local_user_accounts.md`.
+  - [x] Extract table definition section from `postgres_schema.md`.
+  - [x] Add "Postgres Schema" section with Spec IDs and anchors to target doc.
+  - [x] Update `postgres_schema.md` to link to new location.
+  - [x] Update all cross-references in other docs that pointed to the old location.
+- [x] If proof of concept validates well, proceed through remaining table groups per the mapping.
+- [x] Keep `postgres_schema.md` as an index/overview with: links to distributed definitions, table creation order and dependencies, naming conventions, and "Storing This Schema in Code" section.
+- [x] Run `just lint-md` on all affected files after each batch.
+- [x] Run `just docs-check` to verify links after each batch.
+- [x] Validation gate: do not proceed until all Spec ID anchors work and docs-check passes.
 
 #### Refactor (Task 11)
 
-- [ ] Remove redundant "recommended" schemas from domain docs where they existed alongside the authoritative postgres_schema definitions.
-- [ ] Ensure no broken cross-references remain.
-- [ ] Re-run `just docs-check`.
-- [ ] Validation gate: do not proceed until refactor is verified.
+- [x] Remove redundant "recommended" schemas from domain docs where they existed alongside the authoritative postgres_schema definitions.
+- [x] Ensure no broken cross-references remain.
+- [x] Re-run `just docs-check`.
+- [x] Validation gate: do not proceed until refactor is verified.
 
 #### Testing (Task 11)
 
-- [ ] Run `just lint-md` on all changed files.
-- [ ] Run `just docs-check` for full link validation.
-- [ ] Verify all Spec ID anchors are preserved and work.
-- [ ] **Testing validation gate:** Do not start Task 12 until `just lint-md`, `just docs-check`, and Spec ID verification in `#### Testing (Task 11)` above are each satisfied per their checkboxes.
+- [x] Run `just lint-md` on all changed files.
+- [x] Run `just docs-check` for full link validation.
+- [x] Verify all Spec ID anchors are preserved and work.
+- [x] **Testing validation gate:** Do not start Task 12 until `just lint-md`, `just docs-check`, and Spec ID verification in `#### Testing (Task 11)` above are each satisfied per their checkboxes.
 
 #### Closeout (Task 11)
 
-- [ ] Generate a **task completion report** for Task 11: which table groups were moved, which remain, what passed.
-- [ ] Do not start Task 12 until closeout is done.
-- [ ] Mark every completed step in this task with `- [x]`. (Last step.)
+- [x] Generate a **task completion report** for Task 11: which table groups were moved, which remain, what passed.
+- [x] Do not start Task 12 until closeout is done.
+- [x] Mark every completed step in this task with `- [x]`. (Last step.)
 
 ---
 
@@ -761,34 +761,34 @@ Update cross-cutting documentation, verify no required follow-up was left undocu
 
 #### Discovery (Task 12) Steps
 
-- [ ] Review all tasks 1-11: ensure no required step was skipped; ensure each closeout report is summarized.
-- [ ] Identify any user-facing or developer-facing docs that need updates after all implementation tasks.
-- [ ] List any remaining risks or follow-on work that should be recorded.
+- [x] Review all tasks 1-11: ensure no required step was skipped; ensure each closeout report is summarized.
+- [x] Identify any user-facing or developer-facing docs that need updates after all implementation tasks.
+- [x] List any remaining risks or follow-on work that should be recorded.
 
 #### Red / Green (Task 12)
 
-- [ ] Update source plans with completion status or mark superseded where appropriate.
-- [ ] Update `_bugs.md` with resolution status for Bugs 3, 4, and 5.
-- [ ] Document any explicit remaining risks or deferred work.
-- [ ] Run `just setup-dev restart --force`.
+- [x] Update source plans with completion status or mark superseded where appropriate.
+- [x] Update `_bugs.md` with resolution status for Bugs 3, 4, and 5.
+- [x] Document any explicit remaining risks or deferred work.
+- [x] Run `just setup-dev restart --force`.
 - **Final validation (run each layer in order):**
-  - [ ] **Go unit tests:** Run `just test-go-cover` across all packages; confirm all pass and coverage meets thresholds.
-  - [ ] **BDD tests:** Run `just test-bdd`; confirm all scenarios pass with no pending steps (except explicitly documented).
-  - [ ] **Python E2E tests:** Run `just e2e`; fix any failures until all tests pass with only expected skips.
-- [ ] Run `just docs-check` and `just ci` one final time.
+  - [x] **Go unit tests:** Run `just test-go-cover` across all packages; confirm all pass and coverage meets thresholds.
+  - [x] **BDD tests:** Run `just test-bdd`; confirm all scenarios pass with no pending steps (except explicitly documented).
+  - [x] **Python E2E tests:** Run `just e2e`; fix any failures until all tests pass with only expected skips.
+- [x] Run `just docs-check` and `just ci` one final time.
 
 #### Testing (Task 12)
 
 All three test layers MUST pass for the plan to be considered complete.
 
-- [ ] **Go unit tests:** Confirm `just test-go-cover` passed across all packages with no failures and coverage meets thresholds.
-- [ ] **BDD tests:** Confirm `just test-bdd` passed with all scenarios green and no unexpected pending steps.
-- [ ] **Python E2E tests:** Confirm `just e2e` passed with all tests passing and only expected skips.
-- [ ] Confirm `just ci` passed.
-- [ ] Confirm all exit criteria from the source plans are met or explicitly documented as follow-on.
-- [ ] **Testing validation gate:** Plan complete only when **Go** (`just test-go-cover`), **BDD** (`just test-bdd`), **Python E2E** (`just e2e`), `just docs-check`, and `just ci` (including the `#### Red / Green (Task 12)` runs above) all pass.
+- [x] **Go unit tests:** Confirm `just test-go-cover` passed across all packages with no failures and coverage meets thresholds.
+- [x] **BDD tests:** Confirm `just test-bdd` passed with all scenarios green and no unexpected pending steps.
+- [x] **Python E2E tests:** Confirm `just e2e` passed with all tests passing and only expected skips.
+- [x] Confirm `just ci` passed.
+- [x] Confirm all exit criteria from the source plans are met or explicitly documented as follow-on.
+- [x] **Testing validation gate:** Plan complete only when **Go** (`just test-go-cover`), **BDD** (`just test-bdd`), **Python E2E** (`just e2e`), `just docs-check`, and `just ci` (including the `#### Red / Green (Task 12)` above) all pass.
 
 #### Closeout (Task 12)
 
-- [ ] Generate a **final plan completion report**: which tasks were completed, overall validation status (`just ci`, full E2E), remaining risks or follow-up.
-- [ ] Mark all completed steps in the plan with `- [x]`. (Last step.)
+- [x] Generate a **final plan completion report**: which tasks were completed, overall validation status (`just ci`, full E2E), remaining risks or follow-up.
+- [x] Mark all completed steps in the plan with `- [x]`. (Last step.)

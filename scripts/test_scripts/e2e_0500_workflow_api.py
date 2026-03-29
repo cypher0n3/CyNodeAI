@@ -108,3 +108,58 @@ class TestWorkflowAPI(unittest.TestCase):
             "already_running",
             f"expected status already_running: {data2}",
         )
+
+    def test_workflow_verification_checkpoint_persists_review_state(self):
+        """Checkpoint at verify_step_result stores PMA->PAA review JSON; resume returns it."""
+        if not getattr(state, "TASK_ID", None):
+            self.skipTest("TASK_ID not set (task_id prereq failed or not declared)")
+        headers = {}
+        if getattr(config, "WORKFLOW_RUNNER_BEARER_TOKEN", ""):
+            headers["Authorization"] = f"Bearer {config.WORKFLOW_RUNNER_BEARER_TOKEN}"
+        tid = state.TASK_ID
+        body_start = json.dumps({"task_id": tid, "holder_id": "e2e-verify-holder"})
+        code, _ = helpers.run_curl_with_status(
+            "POST",
+            f"{config.CONTROL_PLANE_API}/v1/workflow/start",
+            data=body_start,
+            headers=headers or None,
+        )
+        self.assertIn(code, (200, 409), f"workflow start: {code}")
+        verify_state = json.dumps(
+            {
+                "pma_tasked_paa": True,
+                "paa_outcome": "accepted",
+                "findings": "e2e verification slice",
+            }
+        )
+        body_cp = json.dumps(
+            {
+                "task_id": tid,
+                "last_node_id": "verify_step_result",
+                "state": verify_state,
+            }
+        )
+        code_cp, _ = helpers.run_curl_with_status(
+            "POST",
+            f"{config.CONTROL_PLANE_API}/v1/workflow/checkpoint",
+            data=body_cp,
+            headers=headers or None,
+        )
+        self.assertEqual(code_cp, 204, "checkpoint must return 204")
+        body_res = json.dumps({"task_id": tid})
+        code_r, raw = helpers.run_curl_with_status(
+            "POST",
+            f"{config.CONTROL_PLANE_API}/v1/workflow/resume",
+            data=body_res,
+            headers=headers or None,
+        )
+        self.assertEqual(code_r, 200, f"resume: {raw}")
+        data = helpers.parse_json_safe(raw) or {}
+        self.assertEqual(
+            data.get("last_node_id"),
+            "verify_step_result",
+            data,
+        )
+        st = data.get("state")
+        self.assertIsNotNone(st, "resume must include state")
+        self.assertIn("paa_outcome", str(st))

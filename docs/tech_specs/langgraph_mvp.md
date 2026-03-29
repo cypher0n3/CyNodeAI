@@ -464,5 +464,7 @@ flowchart LR
 
 - Orchestrator-side agents MUST use MCP database tools for state reads and writes.
 - Worker agents run in sandbox containers and MUST use MCP tools for controlled operations.
+- **Contract reference runner:** [`scripts/workflow_runner_stub/minimal_runner.py`](../../scripts/workflow_runner_stub/minimal_runner.py) is a stdlib-only client that acquires a workflow lease, writes a `verify_step_result` checkpoint with PMA-to-PAA review fields in `state`, resumes, and releases the lease.
+  It illustrates the HTTP contract for a Python workflow process before a LangGraph-backed runner is packaged for deployment.
 
 See [`docs/tech_specs/mcp/mcp_tooling.md`](mcp/mcp_tooling.md), [`docs/tech_specs/project_manager_agent.md`](project_manager_agent.md), and [`docs/tech_specs/user_preferences.md`](user_preferences.md).

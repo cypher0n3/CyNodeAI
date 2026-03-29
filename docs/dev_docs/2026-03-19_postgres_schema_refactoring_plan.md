@@ -1,5 +1,7 @@
 # Postgres Schema Refactoring Plan
 
+<!-- Status 2026-03-29: mapping implemented in-tree; see 2026-03-29_task11_postgres_schema_doc_refactor_closure.md -->
+
 ## Overview
 
 The `postgres_schema.md` file (1631 lines) currently serves as the single canonical source for all PostgreSQL table definitions.

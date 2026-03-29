@@ -386,6 +386,12 @@ Investigated (2026-03-24): behavior traced in `cynork`; root cause is a mix of r
 
 Not fixed (code): awaiting product decision on scrollback wording and whether to pass thread context into the in-TUI login path.
 
+### Bug 3 Plan Closeout (2026-03-29)
+
+**Status:** Open (no code change in this pass).
+
+Documented in the consolidated execution plan final closeout: behavior is understood; fix is product-owned (scrollback differentiation and optional thread context on in-TUI login).
+
 ## Bug 4: `cynork tui` Cannot Submit Slash or Shell Commands While Chat is Streaming
 
 Composer Enter is ignored for non-empty input while `Loading` is true, including slash and shell prefixes.
@@ -454,6 +460,12 @@ Product should confirm whether slash/shell during streaming must work **without*
 
 Not fixed (code).
 Documented 2026-03-24: root cause is the `handleEnterKey` loading guard applied to all non-empty lines before slash/shell dispatch.
+
+### Bug 4 Plan Closeout (2026-03-29)
+
+**Status:** Open (no code change in this pass).
+
+Recorded in the consolidated plan final closeout: narrow the guard or implement spec queue plus Ctrl+Enter per `cynork_tui.md` when prioritized.
 
 ## Bug 5: MCP Gateway `skills.*` Tool Calls Return `task_id required`
 
