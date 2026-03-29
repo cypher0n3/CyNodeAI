@@ -343,7 +343,7 @@ It covers orchestrator control-plane behavior, task lifecycle, dispatch, and sta
   <a id="req-orches-0183"></a>
 - **REQ-ORCHES-0184:** On a task cancel request (from User API Gateway, PMA, or slash command), the orchestrator MUST mark the task as canceled and MUST send a **stop job** request to the worker node when the task has an **active job** (dispatched and not yet in a terminal state).
   The worker node MUST stop the job (graceful SBA stop then container kill fallback per Worker API spec).
-  See [user_directed_job_kill_proposal.md](../draft_specs/user_directed_job_kill_proposal.md) and [worker_api.md - Stop Job](../tech_specs/worker_api.md#spec-cynai-worker-stopjob).
+  See [002_user_directed_job_kill_proposal.md](../draft_specs/002_user_directed_job_kill_proposal.md) and [worker_api.md - Stop Job](../tech_specs/worker_api.md#spec-cynai-worker-stopjob).
   [orchestrator.md](../tech_specs/orchestrator.md)
   <a id="req-orches-0184"></a>
 - **REQ-ORCHES-0185:** A task in `planning_state=ready` MAY be transitioned back to `draft` as long as the task was **not executed**.

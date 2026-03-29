@@ -6,6 +6,14 @@ This directory holds **draft** and **proposal** specifications that are under co
 
 Draft specs are incubators: they allow exploration of design options, new features, or cross-cutting concerns before being refined into requirements and technical specifications.
 
+## Directory Layout
+
+- **`README.md` (this file):** Navigation and conventions for the whole tree.
+- **Root (`docs/draft_specs/*.md`):** Active proposals and designs.
+  Filenames prefixed with `NNN_` (e.g. `001_`, `002_`) indicate **integration priority** (lower number = integrate into canonical docs sooner). `README.md` in this directory is not numbered.
+- **[`integrated/`](integrated/README.md):** Drafts whose normative content already lives in `docs/tech_specs/` (and requirements as applicable); kept for history only.
+- **[`partial/`](partial/):** Drafts that are **partly** reflected in canonical docs; promotion or merge work remains.
+
 ## Relationship to Canonical Documentation
 
 CyNodeAI uses two canonical layers (see [meta.md](../../meta.md) and [docs/README.md](../README.md)):
@@ -40,7 +48,7 @@ When a draft is **accepted**, its content should be:
 
 - Follow [Markdown conventions](../docs_standards/markdown_conventions.md) and keep docs ASCII-only unless explicitly allowed.
 - For consistency with future promotion, consider aligning draft structure with [spec authoring standards](../docs_standards/spec_authoring_writing_and_validation.md) (e.g. clear purpose, traceability placeholders).
-- Use a short, descriptive filename (e.g. `pgvector_proposal_draft.md`, `nats_messaging.md`).
+- Use a short, descriptive filename; new proposals in the root directory may be assigned the next `NNN_` prefix to fit the integration queue (see [Directory Layout](#directory-layout)).
 - Prefer one main topic per document; use addenda or numbered follow-ups if you need to extend an existing draft.
 
 ## Cross-References
