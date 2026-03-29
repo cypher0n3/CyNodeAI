@@ -133,7 +133,8 @@ These behaviors are reflected in Phase 1 (inference path requirement), Phase 2 (
   P2-03: Preference tools `db.preference.get`, `db.preference.list`, `db.preference.effective` implemented with typed schemas and size-limited responses.
   P2-10-orchestrator: Implemented; task create with `use_sba` (API) or `--use-sba` (cynork) creates job with `job_spec_json` and SBA runner image; dispatcher passes through; `CreateJobWithID`; unit and testcontainers tests; handlers and database coverage at or above 90%.
   Workflow start/resume and lease foundations have landed, and early API Egress / Worker Telemetry slices are present.
-  Allow path for broader non-preference MCP tools and the remaining LangGraph graph-node work are still outstanding.
+  The MCP gateway routes an expanded catalog (for example preference, task, project, job, artifact, skills, help, node, system_setting) per `orchestrator/internal/mcpgateway/handlers.go`; sandbox agents remain on the narrower sandbox allowlist in `allowlist.go`.
+  **Remaining Phase 2 (implementation):** Python LangGraph workflow runner graph nodes wired to MCP and Worker API (P2-06), and end-to-end verification-loop automation (P2-08), per [Phase 2 LangGraph Integration Checklist](#phase-2-langgraph-integration-checklist) and [Implementation Order (Done vs Remaining)](#implementation-order-done-vs-remaining).
 
 ## Prompt Interpretation: Intended Semantics
 
@@ -659,8 +660,7 @@ See the remediation notes in this section and the execution tracker for status.
 - **PMA startup (REQ-ORCHES-0150):** Implemented behavior starts PMA eagerly.
   Requirement: start PMA only when the first inference path is available (worker ready and inference-capable, or API Egress key for PMA).
   Remediation: Step 3 of 2026-03-01 execution plan.
-- **Chat completion reliability (REQ-ORCHES-0131, REQ-ORCHES-0132):** Bounded wait duration and transient retry with backoff are not yet implemented in the chat completions handler.
-  Remediation: Step 3 of 2026-03-01 execution plan.
+- **Chat completion reliability (REQ-ORCHES-0131, REQ-ORCHES-0132):** Implemented in the orchestrator `OpenAIChatHandler` (`orchestrator/internal/handlers/openai_chat.go`): maximum wait via context deadline and bounded retries with backoff for transient inference failures; covered by unit tests and `features/orchestrator/openai_compat_chat.feature`.
 - **Task create contract (user_api_gateway.md):** Optional task name and attachment ingestion are not yet accepted in the request model or passed through to storage.
   Remediation: Step 3 of 2026-03-01 execution plan.
 
@@ -674,10 +674,10 @@ The basic E2E path for SBA job results is also in place.
 
 ### Suggested Next Work
 
-1. **Phase 2 MCP expansion:** Implement the next MVP tool slices beyond `db.preference.*`, or explicitly freeze MVP scope for the currently implemented MCP catalog.
+1. **Phase 2 MCP expansion:** Extend or freeze the MVP catalog relative to [tech_specs/mcp_tools/README.md](tech_specs/mcp_tools/README.md); PM routes a broad set in `mcpgateway/handlers.go` while sandbox agents remain on `sandboxAllowedTools` in `allowlist.go`.
 2. **Phase 2 workflow completion:** Finish the remaining LangGraph graph nodes, verification loop, and end-to-end workflow coverage on top of the landed workflow start/resume and lease foundations.
 3. **PMA follow-up buildout:** Continue the PMA/SBA instructions and context work under [P1.7-05](#phase-17-agent-artifacts-pma-first-then-sba), including preserved draft-spec follow-ups for conversation history, explicit thread control, and backend-env delivery.
-4. **Contract drifts:** Close the remaining known drifts around PMA startup gating, chat bounded-wait/retry behavior, and task-create attachment/task-name support.
+4. **Contract drifts:** Close the remaining known drifts around PMA startup gating and task-create attachment/task-name support (chat bounded-wait/retry is implemented; see [Known Drifts (Evidence-Based)](#known-drifts-evidence-based)).
 5. **Phase 3 and 4 roadmap:** Continue multi-node robustness, API Egress policy completion, external routing, Secure Browser, and the broader admin/CLI surface after Phase 2 is stable.
 
 ## References

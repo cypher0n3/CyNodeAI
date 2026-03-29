@@ -16,6 +16,16 @@ _TUI_STARTUP_DELAY_SEC = 1.5
 _SETTLE_SEC = 0.45
 
 
+def _dismiss_auth_overlay_if_present(session):
+    """If in-session login recovery is visible, Esc and wait for prompt-ready."""
+    snap = session.capture_screen(drain_sec=0.35) or ""
+    if harness.LANDMARK_AUTH_RECOVERY_READY not in snap:
+        return
+    session.send_keys(["esc"])
+    time.sleep(_SETTLE_SEC)
+    session.wait_for_prompt_ready(timeout_sec=25)
+
+
 def _ensure_config_file():
     if not state.CONFIG_PATH:
         return
@@ -219,10 +229,16 @@ class TestTuiComposerEditor(unittest.TestCase):
                 timeout_sec=75,
             )
             time.sleep(0.35)
+            _dismiss_auth_overlay_if_present(session)
             # Empty scrollback so "first" is not matched from prior "You:" lines when
             # asserting composer text.
             session.send_keys(["/clear", "enter"])
             time.sleep(_SETTLE_SEC)
+            _dismiss_auth_overlay_if_present(session)
+            self.assertTrue(
+                session.wait_for_prompt_ready(timeout_sec=25),
+                "prompt-ready after /clear (composer history test)",
+            )
             session.send_keys(["ctrl+up"])
             time.sleep(_SETTLE_SEC)
             session.send_keys(["ctrl+up"])

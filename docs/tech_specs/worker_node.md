@@ -867,6 +867,15 @@ The implementation supports **single-process (host binary) only**.
 Node Manager and Worker API run in one process; one binary (`cynodeai-wnm`), one system service.
 No separate Worker API process and no Worker API as a managed container.
 
+#### Normative Topology vs. Deferred Alternatives
+
+- **Normative (requirements):** [REQ-WORKER-0272](../requirements/worker.md#req-worker-0272) requires the Node Manager and the Worker API to run in **one host process** (one binary, one service unit).
+  That process is the **worker control plane** for registration, configuration, the Worker API HTTP surface, telemetry, and Node Manager duties.
+- **Compatible with single-process:** **Managed service containers** (for example PMA or a local inference backend) are **separate containers** that the Node Manager starts and supervises.
+  They are not additional Worker API OS processes.
+  See [Managed Service Containers](#managed-service-containers) and [Node-Local Inference and Sandbox Workflow](#node-local-inference-and-sandbox-workflow).
+- **Deferred / not implemented:** A deployment that splits Node Manager and Worker API into **separate OS processes** or runs the Worker API as its **own container image** (independent of the Node Manager binary) is **out of scope** for the current implementation and is not required by REQ-WORKER-0272 for MVP.
+
 Error conditions:
 
 - If the Worker API HTTP server cannot bind or start (e.g. port in use), the process MUST fail startup with a clear error and non-zero exit code.
