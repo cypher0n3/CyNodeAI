@@ -309,7 +309,7 @@ Constraints
 - Spec ID: `CYNAI.USRGWY.ChatSlashCommandSupport` <a id="spec-cynai-usrgwy-chatslashcommandsupport"></a>
 
 The User API Gateway MUST expose endpoints and operations that support every cynork chat slash
-command defined in the [cynork TUI slash commands spec](cynork_tui_slash_commands.md#spec-cynai-client-cynorktuislashcommands).
+command defined in the [cynork TUI slash commands spec](cynork/cynork_tui_slash_commands.md#spec-cynai-client-cynorktuislashcommands).
 The CLI executes slash commands by calling the same gateway APIs as the non-interactive CLI; the gateway and orchestrator MUST support that full surface.
 
 ### Required Operation Coverage

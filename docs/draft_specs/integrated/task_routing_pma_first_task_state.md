@@ -311,7 +311,7 @@ All paths are repository-relative and linked from this draft.
 
 - Update [go_shared_libs/contracts/userapi/userapi.go](../../../go_shared_libs/contracts/userapi/userapi.go) to add request and response types for the task ready transition if it is exposed via the gateway.
 
-- Update [docs/tech_specs/cli_management_app_commands_tasks.md](../../tech_specs/cli_management_app_commands_tasks.md) to document `planning_state` in task create, get, list, and result output formats.
+- Update [docs/tech_specs/cli_management_app_commands_tasks.md](../../tech_specs/cynork/cli_management_app_commands_tasks.md) to document `planning_state` in task create, get, list, and result output formats.
 
 ### 10.2 Orchestrator Schema and Models
 
@@ -371,7 +371,7 @@ All paths are repository-relative and linked from this draft.
 
 - Add a `cynork task ready <task_id>` command in [cynork/cmd/task.go](../../../cynork/cmd/task.go) if the ready transition is exposed through the gateway.
 
-- Update [docs/tech_specs/cynork_cli.md](../../tech_specs/cynork_cli.md) and [docs/tech_specs/cli_management_app_commands_tasks.md](../../tech_specs/cli_management_app_commands_tasks.md) to document the new CLI command and output fields.
+- Update [docs/tech_specs/cynork_cli.md](../../tech_specs/cynork/cynork_cli.md) and [docs/tech_specs/cli_management_app_commands_tasks.md](../../tech_specs/cynork/cli_management_app_commands_tasks.md) to document the new CLI command and output fields.
 
 ### 10.7 BDD and E2E Test Updates
 

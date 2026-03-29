@@ -39,7 +39,7 @@ A single Cynork command, `cynork stack ps`, would present a **normalized, repo-a
 ## Goals
 
 - One command answers: "Is my local CyNodeAI stack (orchestrator compose + node on this machine) up, and what is running?"
-- Output works in **table** and **json** modes per existing Cynork global output rules ([`cynork_cli.md`](../tech_specs/cynork_cli.md#spec-cynai-client-clicommandsurface)).
+- Output works in **table** and **json** modes per existing Cynork global output rules ([`cynork_cli.md`](../tech_specs/cynork/cynork_cli.md#spec-cynai-client-clicommandsurface)).
 - Behavior is **deterministic** when the container engine and paths are known; when something cannot be inspected (permissions, engine missing), the command reports `unknown` or a clear error rather than guessing.
 - No gateway authentication required: the command is strictly **local introspection** (useful before login or when the gateway is down).
 
@@ -77,7 +77,7 @@ This section defines the `stack` command group and the `ps` operation contract.
 #### 2.2 Operation Outputs
 
 - Table or JSON document written to stdout per `-o` / `--output`.
-- Human-readable status lines for non-fatal diagnostics MAY go to stderr in table mode; JSON mode MUST keep stdout as a single JSON value ([`cynork_cli.md`](../tech_specs/cynork_cli.md#spec-cynai-client-clicommandsurface)).
+- Human-readable status lines for non-fatal diagnostics MAY go to stderr in table mode; JSON mode MUST keep stdout as a single JSON value ([`cynork_cli.md`](../tech_specs/cynork/cynork_cli.md#spec-cynai-client-clicommandsurface)).
 
 #### 2.3 Proposed Runtime Behavior
 
@@ -174,7 +174,7 @@ Proposed fields:
 
 ## Flags and Configuration
 
-All global flags from [`cynork_cli.md`](../tech_specs/cynork_cli.md#spec-cynai-client-clicommandsurface) apply (`--output`, `--quiet`, `--no-color`, `--config` ignored unless future stack config is stored in cynork config).
+All global flags from [`cynork_cli.md`](../tech_specs/cynork/cynork_cli.md#spec-cynai-client-clicommandsurface) apply (`--output`, `--quiet`, `--no-color`, `--config` ignored unless future stack config is stored in cynork config).
 
 Proposed **command-specific** flags:
 
@@ -195,7 +195,7 @@ Proposed **environment variables** (mirror flags when set):
 
 ## Exit Codes and Errors
 
-Align with [`cynork_cli.md`](../tech_specs/cynork_cli.md#spec-cynai-client-cliexitcodes):
+Align with [`cynork_cli.md`](../tech_specs/cynork/cynork_cli.md#spec-cynai-client-cliexitcodes):
 
 - `0`: Command completed and produced output (rows may include `exited` or `unknown`).
 - `2`: Usage error (invalid flag combination, bad URL).
@@ -229,8 +229,8 @@ Links below map this draft to current requirements and to files that would chang
 
 ### Specifications to Update When Promoting From Draft
 
-- [`cynork_cli.md`](../tech_specs/cynork_cli.md): add `cynork stack ps` under command surface and link a small sub-doc or section for flags and JSON shape.
-- [`cli_management_app_commands_core.md`](../tech_specs/cli_management_app_commands_core.md) or new `cli_management_app_commands_stack.md` for detail.
+- [`cynork_cli.md`](../tech_specs/cynork/cynork_cli.md): add `cynork stack ps` under command surface and link a small sub-doc or section for flags and JSON shape.
+- [`cli_management_app_commands_core.md`](../tech_specs/cynork/cli_management_app_commands_core.md) or new `cli_management_app_commands_stack.md` for detail.
 
 ## Open Points
 
@@ -241,7 +241,7 @@ Links below map this draft to current requirements and to files that would chang
 
 ## References
 
-- [`docs/tech_specs/cynork_cli.md`](../tech_specs/cynork_cli.md)
+- [`docs/tech_specs/cynork_cli.md`](../tech_specs/cynork/cynork_cli.md)
 - [`docs/tech_specs/ports_and_endpoints.md`](../tech_specs/ports_and_endpoints.md)
 - [`docs/development_setup.md`](../development_setup.md)
 - [`docs/tech_specs/worker_node.md`](../tech_specs/worker_node.md)

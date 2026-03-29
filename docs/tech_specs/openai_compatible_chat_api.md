@@ -941,5 +941,5 @@ Async chat MUST NOT reuse task identifiers or task-result endpoints for chat.
 - [User API Gateway](user_api_gateway.md)
 - [Chat Threads and Messages](chat_threads_and_messages.md)
 - [Runs and Sessions API](runs_and_sessions_api.md)
-- [CLI management app - Chat command](cli_management_app_commands_chat.md)
+- [CLI management app - Chat command](cynork/cli_management_app_commands_chat.md)
 - [OpenWebUI and CyNodeAI Integration](../openwebui_cynodeai_integration.md)

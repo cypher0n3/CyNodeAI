@@ -47,6 +47,7 @@
 - [MCP Tool Interface](#mcp-tool-interface)
 - [Workflow Engine](#workflow-engine)
   - [Task Workflow Lease Lifecycle](#task-workflow-lease-lifecycle)
+- [Orchestrator Self-Metadata and Logging](#orchestrator-self-metadata-and-logging)
 - [Orchestrator Shutdown](#orchestrator-shutdown)
   - [Orchestrator Shutdown Traces To](#orchestrator-shutdown-traces-to)
 - [Orchestrator Bootstrap Configuration](#orchestrator-bootstrap-configuration)
@@ -402,23 +403,23 @@ See [`docs/tech_specs/external_model_routing.md`](external_model_routing.md) and
 The orchestrator MUST select an effective "Project Manager model" on startup to run the Project Manager Agent.
 This selection is distinct from where sandbox jobs run.
 
-#### 1 `Orchestrator.SelectProjectManagerModel` Operation
+#### `Orchestrator.SelectProjectManagerModel` Operation
 
 - Spec ID: `CYNAI.ORCHES.Operation.SelectProjectManagerModel` <a id="spec-cynai-orches-operation-selectprojectmanagermodel"></a>
 
-##### 1.1 `Orchestrator.SelectProjectManagerModel` Traces To
+##### 1 `Orchestrator.SelectProjectManagerModel` Traces To
 
 - [REQ-ORCHES-0117](../requirements/orches.md#req-orches-0117)
 - [REQ-MODELS-0004](../requirements/models.md#req-models-0004)
 - [REQ-MODELS-0005](../requirements/models.md#req-models-0005)
 - [REQ-MODELS-0008](../requirements/models.md#req-models-0008)
 
-##### 1.2 `Orchestrator.SelectProjectManagerModel` Selection Scope
+##### 2 `Orchestrator.SelectProjectManagerModel` Selection Scope
 
 - the Project Manager inference execution target (local node vs external provider routing path), and
 - the effective Project Manager model reference to run on that target.
 
-##### 1.3 `Orchestrator.SelectProjectManagerModel` Inputs
+##### 3 `Orchestrator.SelectProjectManagerModel` Inputs
 
 - System settings:
   - `agents.project_manager.model.selection.execution_mode` (string)
@@ -439,7 +440,7 @@ This selection is distinct from where sandbox jobs run.
   - Model availability for each candidate node (loaded vs not loaded), and the ability to request a model load.
 - External routing configuration and policy (when local inference is unavailable or cannot satisfy selection).
 
-##### 1.4 `Orchestrator.SelectProjectManagerModel` Outputs
+##### 4 `Orchestrator.SelectProjectManagerModel` Outputs
 
 - An effective selection tuple:
   - `execution_mode`: `local` or `external`
@@ -447,34 +448,34 @@ This selection is distinct from where sandbox jobs run.
   - `model_ref`: string (local model name, or external provider model identifier)
   - `selection_reason`: an ordered list of machine-readable reason codes (for audit/logging)
 
-##### 1.5 `Orchestrator.SelectProjectManagerModel` Behavior
+##### 5 `Orchestrator.SelectProjectManagerModel` Behavior
 
 The orchestrator selects exactly one effective Project Manager model on startup.
 The required procedure is defined in the [Orchestrator.SelectProjectManagerModel Algorithm](#algo-cynai-orches-operation-selectprojectmanagermodel).
 
-##### 1.6 `Orchestrator.SelectProjectManagerModel` Determinism Requirements
+##### 6 `Orchestrator.SelectProjectManagerModel` Determinism Requirements
 
 - All tie-breaks in this operation are resolved lexicographically by `node_slug` (ascending).
 - If a required system setting key is unset, this operation uses the default value specified in Inputs.
 
-##### 1.7 `Orchestrator.SelectProjectManagerModel` Definitions
+##### 7 `Orchestrator.SelectProjectManagerModel` Definitions
 
 - A node is considered "on the same host as the orchestrator" if its capability report `node.labels` contains the literal label `orchestrator_host`.
 - `vram_total_mb` for a node is computed as:
   - sum of all present `gpu.devices[].vram_mb` values, ignoring devices that omit `vram_mb`
   - if no `vram_mb` values are present, `vram_total_mb=0`
 
-##### 1.8 `Orchestrator.SelectProjectManagerModel` Error Conditions
+##### 8 `Orchestrator.SelectProjectManagerModel` Error Conditions
 
 - If `agents.project_manager.model.selection.mode=fixed_model` and `agents.project_manager.model.local_default_ollama_model` is unset, selection fails.
 - If `execution_mode=local` is selected and no local candidate model can be loaded successfully, selection fails unless `execution_mode=external` is allowed and configured.
 - If selection fails and the orchestrator does not currently have an online Project Manager model, the orchestrator MUST continue to re-run selection when relevant inputs change until a Project Manager model is online.
 
-##### 1.9 `Orchestrator.SelectProjectManagerModel` Ordering and Determinism
+##### 9 `Orchestrator.SelectProjectManagerModel` Ordering and Determinism
 
 Selection proceeds in the strict order defined by the [Orchestrator.SelectProjectManagerModel Algorithm](#algo-cynai-orches-operation-selectprojectmanagermodel).
 
-##### 1.10 `Orchestrator.SelectProjectManagerModel` Algorithm
+##### 10 `Orchestrator.SelectProjectManagerModel` Algorithm
 
 <a id="algo-cynai-orches-operation-selectprojectmanagermodel"></a>
 
@@ -519,7 +520,7 @@ Selection proceeds in the strict order defined by the [Orchestrator.SelectProjec
    - If external routing is configured and allowed, set `execution_mode=external` and select an external `model_ref`.
    - Otherwise, fail selection.
 
-#### 2 `Orchestrator.WarmupProjectManagerModel` Rule
+#### `Orchestrator.WarmupProjectManagerModel` Rule
 
 - Spec ID: `CYNAI.ORCHES.Rule.WarmupProjectManagerModel` <a id="spec-cynai-orches-rule-warmupprojectmanagermodel"></a>
 
@@ -527,12 +528,12 @@ Traces To: [REQ-ORCHES-0117](../requirements/orches.md#req-orches-0117)
 
 This Spec Item defines the required startup warmup behavior after a local Project Manager model selection has been made.
 
-##### 2.1 `Orchestrator.WarmupProjectManagerModel` Outcomes
+##### 1 `Orchestrator.WarmupProjectManagerModel` Outcomes
 
 - If `execution_mode=local`, the orchestrator transitions to ready state only after the selected local `model_ref` is reported as loaded and available by the selected node.
 - If `execution_mode=external`, warmup does not require a local model load.
 
-##### 2.2 `Orchestrator.WarmupProjectManagerModel` Algorithm
+##### 2 `Orchestrator.WarmupProjectManagerModel` Algorithm
 
 <a id="algo-cynai-orches-rule-warmupprojectmanagermodel"></a>
 
@@ -547,7 +548,7 @@ This Spec Item defines the required startup warmup behavior after a local Projec
    - a node registers, becomes dispatchable, or updates its capability report
    - a node model availability state changes for any candidate Project Manager model on any dispatchable local inference node
 
-#### 3 `Orchestrator.MonitorProjectManagerModel` Rule
+#### `Orchestrator.MonitorProjectManagerModel` Rule
 
 - Spec ID: `CYNAI.ORCHES.Rule.MonitorProjectManagerModel` <a id="spec-cynai-orches-rule-monitorprojectmanagermodel"></a>
 
@@ -570,14 +571,14 @@ The orchestrator MUST re-validate the currently selected Project Manager model w
   - `agents.project_manager.model.local_default_ollama_model`
 - External routing configuration or policy changes that affect whether an external execution path is configured and allowed.
 
-##### 3.1 `Orchestrator.MonitorProjectManagerModel` Required Behavior
+##### 1 `Orchestrator.MonitorProjectManagerModel` Required Behavior
 
 - If the orchestrator is in a ready state and the Project Manager model becomes unavailable, the orchestrator MUST transition out of ready state.
 - While not ready, the orchestrator MUST continue to serve the management surfaces required to become ready (for example system settings and credential configuration).
 - When the Project Manager model becomes unavailable or when relevant inputs change, the orchestrator MUST re-run `Orchestrator.SelectProjectManagerModel` and apply `Orchestrator.WarmupProjectManagerModel` until a Project Manager model is online again.
 - If the orchestrator must restart the Project Manager Agent due to a model availability change, it MUST restore the agent state from PostgreSQL so task progress remains resumable.
 
-##### 3.2 `Orchestrator.MonitorProjectManagerModel` Note
+##### 2 `Orchestrator.MonitorProjectManagerModel` Note
 
 - For the MVP, the Project Manager model is responsible for all inference task assignment decisions.
   See [REQ-ORCHES-0119](../requirements/orches.md#req-orches-0119) and [`docs/tech_specs/project_manager_agent.md`](project_manager_agent.md).
@@ -947,28 +948,196 @@ See [langgraph_mvp.md](langgraph_mvp.md) for the graph topology, state model, no
 
 - Spec ID: `CYNAI.ORCHES.TaskWorkflowLeaseLifecycle` <a id="spec-cynai-orches-taskworkflowleaselifecycle"></a>
 
-#### Task Workflow Lease Lifecycle Traces To
-
-- [REQ-ORCHES-0146](../requirements/orches.md#req-orches-0146)
-
 The orchestrator grants and releases the task workflow lease; the workflow runner acquires or checks it via the orchestrator API (see [langgraph_mvp.md](langgraph_mvp.md#spec-cynai-orches-workflowstartresumeapi)).
 The lease table and columns are defined in [langgraph_mvp.md - Task Workflow Leases Table](langgraph_mvp.md#spec-cynai-schema-taskworkflowleasestable).
 
-**Acquire.**
+#### Task Workflow Lease Lifecycle - Acquire
+
 The workflow runner calls the orchestrator (as part of the workflow start API or a dedicated lease endpoint) to acquire the lease for a `task_id`.
 The request includes the workflow runner identity (`holder_id`).
 The orchestrator grants the lease only if no other holder has it; otherwise it returns a defined error (e.g. 409 Conflict).
 Idempotent acquire: if the same holder re-requests for the same `task_id` with the same `lease_id` (or equivalent), the orchestrator returns success without changing state.
 
-**Release.**
+#### Task Workflow Lease Lifecycle - Release
+
 On normal workflow completion or failure, the workflow runner calls the orchestrator to release the lease (e.g. as part of a completion/failure report or a dedicated release operation).
 The orchestrator updates the lease row so the task is no longer held.
 If the workflow runner does not release (e.g. crash), the orchestrator may release on expiry (see Expiry).
 
-**Expiry.**
+#### Task Workflow Lease Lifecycle - Expiry
+
 Each lease row has an `expires_at` (timestamptz).
 The workflow runner may renew the lease before expiry (e.g. by sending a heartbeat or an explicit renew request that the orchestrator uses to extend `expires_at`).
 If the workflow runner does not renew before `expires_at`, the orchestrator treats the lease as released and may allow another start for that task.
+
+#### Task Workflow Lease Lifecycle Traces To
+
+- [REQ-ORCHES-0146](../requirements/orches.md#req-orches-0146)
+
+## Orchestrator Self-Metadata and Logging
+
+This section defines metadata the orchestrator tracks about itself (artifact storage utilization, utilization windows for scheduling, scheduler health) and how it logs that information.
+It also defines orchestrator-side redaction for SBA inference logs received from workers.
+
+### Document and Traces
+
+Normative definitions for orchestrator self-metadata follow.
+
+#### `Doc` Orchestrator Self-Metadata Overview
+
+- Spec ID: `CYNAI.ORCHES.Doc.OrchestratorSelfMetadata` <a id="spec-cynai-orches-doc-orchestratorselfmetadata"></a>
+
+This subsection defines metadata the orchestrator MUST or SHOULD track about itself and its components, and how it MUST log that information for operational use.
+Implementations use this metadata to schedule maintenance during low-utilization windows and to expose a concise view of orchestrator and storage health.
+
+##### `Doc` Orchestrator Self-Metadata Overview Traces To
+
+- [REQ-ORCHES-0100](../requirements/orches.md#req-orches-0100)
+- [REQ-ORCHES-0101](../requirements/orches.md#req-orches-0101)
+- [REQ-ORCHES-0105](../requirements/orches.md#req-orches-0105)
+- [REQ-ORCHES-0127](../requirements/orches.md#req-orches-0127)
+- [REQ-ORCHES-0167](../requirements/orches.md#req-orches-0167)
+- [Orchestrator Artifacts Storage](orchestrator_artifacts_storage.md)
+- [Orchestrator](#spec-cynai-orches-doc-orchestrator)
+
+### Blob Storage Utilization
+
+Artifact blob storage utilization types and rules follow.
+
+#### `Type` Blob Storage Utilization Snapshot
+
+- Spec ID: `CYNAI.ORCHES.Type.BlobStorageUtilizationSnapshot` <a id="spec-cynai-orches-type-blobstorageutilizationsnapshot"></a>
+
+A snapshot of artifact blob storage utilization at a point in time.
+
+- **`capacity_bytes`** (optional): Total usable capacity of the S3-like backend (or bucket) in bytes, when the backend exposes it.
+- **`used_bytes`**: Total size of blob data stored in the artifact backend, in bytes (sum of artifact sizes in the database or trusted backend metric).
+- **`artifact_count`**: Number of artifact blobs that contribute to `used_bytes`.
+- **`collected_at`**: Timestamp (UTC) when the snapshot was collected.
+
+The orchestrator MUST be able to produce this snapshot on demand and MAY periodically sample and store or log it.
+
+##### `Type` Blob Storage Utilization Snapshot Traces To
+
+- [REQ-ORCHES-0127](../requirements/orches.md#req-orches-0127)
+- [REQ-ORCHES-0167](../requirements/orches.md#req-orches-0167)
+- [Orchestrator Artifacts Storage - DB metadata](orchestrator_artifacts_storage.md#spec-cynai-orches-artifactsdbmetadata)
+
+#### `Rule` Blob Storage Utilization Tracking
+
+- Spec ID: `CYNAI.ORCHES.Rule.BlobStorageUtilizationTracking` <a id="spec-cynai-orches-rule-blobstorageutilizationtracking"></a>
+
+The orchestrator MUST track artifact blob storage utilization for the S3-like backend used for artifacts.
+The orchestrator SHOULD refresh this snapshot on a configurable interval or on demand so scheduling and cleanup logic can consider current utilization.
+Collection failure MUST NOT block readiness or task dispatch (degraded metadata only).
+
+##### `Rule` Blob Storage Utilization Tracking Traces To
+
+- [Orchestrator Artifacts Storage](orchestrator_artifacts_storage.md)
+
+### Utilization Windows and Downtime Scheduling
+
+Utilization windows and scheduling rules follow.
+
+#### `Type` Utilization Window
+
+- Spec ID: `CYNAI.ORCHES.Type.UtilizationWindow` <a id="spec-cynai-orches-type-utilizationwindow"></a>
+
+A time window with an associated utilization level for deciding when to run maintenance or low-priority jobs.
+
+- **`start_at`**, **`end_at`**: Window boundaries (UTC).
+- **`level`**: `high`, `medium`, or `low` (`low` is suitable for downtime-sensitive background work).
+- **`metric`** (optional), **`value`** (optional): Metric used and numeric value for logging.
+
+#### `Rule` Utilization-Based Downtime Scheduling
+
+- Spec ID: `CYNAI.ORCHES.Rule.UtilizationBasedDowntimeScheduling` <a id="spec-cynai-orches-rule-utilizationbaseddowntimescheduling"></a>
+
+The orchestrator MUST use utilization metadata to prefer running downtime-sensitive tasks (stale artifact cleanup, background hash updates, and similar) during low-utilization windows, with a maximum deferral bound so work eventually runs.
+
+##### `Rule` Utilization-Based Downtime Scheduling Traces To
+
+- [REQ-ORCHES-0100](../requirements/orches.md#req-orches-0100)
+- [REQ-ORCHES-0101](../requirements/orches.md#req-orches-0101)
+- [Stale Artifact Cleanup](orchestrator_artifacts_storage.md#spec-cynai-orches-artifactsstalecleanup)
+
+#### `Operation` Record Utilization Windows
+
+- Spec ID: `CYNAI.ORCHES.Operation.RecordUtilizationWindows` <a id="spec-cynai-orches-operation-recordutilizationwindows"></a>
+
+The orchestrator MUST periodically record utilization samples and MUST be able to derive high/low windows from recent history for scheduling.
+
+##### `Operation` Record Utilization Windows Traces To
+
+- [REQ-ORCHES-0100](../requirements/orches.md#req-orches-0100)
+- [REQ-ORCHES-0105](../requirements/orches.md#req-orches-0105)
+
+### Component and Scheduler Summary
+
+Summary types and scheduler metrics rules follow.
+
+#### `Type` Orchestrator Self-Metadata Summary
+
+- Spec ID: `CYNAI.ORCHES.Type.OrchestratorSelfMetadataSummary` <a id="spec-cynai-orches-type-orchestratorselfmetadatasummary"></a>
+
+A concise summary for status or admin APIs: optional `blob_storage`, `utilization`, `scheduler`, and `components` fields.
+Optional fields MAY be omitted when unsupported or when collection fails.
+
+#### `Rule` Scheduler Metrics for Utilization
+
+- Spec ID: `CYNAI.ORCHES.Rule.SchedulerMetricsForUtilization` <a id="spec-cynai-orches-rule-schedulermetricsforutilization"></a>
+
+The orchestrator MUST expose at least one of active job count or queue depth to scheduling logic for utilization classification.
+
+##### `Rule` Scheduler Metrics for Utilization Traces To
+
+- [REQ-ORCHES-0100](../requirements/orches.md#req-orches-0100)
+- [Task Scheduler](#spec-cynai-orches-taskscheduler)
+
+### Self-Metadata Logging
+
+Logging obligations for self-metadata follow.
+
+#### `Rule` Self-Metadata Logging
+
+- Spec ID: `CYNAI.ORCHES.Rule.SelfMetadataLogging` <a id="spec-cynai-orches-rule-selfmetadatalogging"></a>
+
+The orchestrator MUST log self-metadata and key scheduling decisions in structured form without logging secrets (credentials, user content, artifact bodies).
+
+##### `Rule` Self-Metadata Logging Traces To
+
+- [REQ-ORCHES-0120](../requirements/orches.md#req-orches-0120)
+- [Orchestrator Artifacts Storage](orchestrator_artifacts_storage.md)
+
+### Self-Metadata Exposure
+
+How operators access self-metadata follows.
+
+#### `Operation` Expose Self-Metadata
+
+- Spec ID: `CYNAI.ORCHES.Operation.ExposeSelfMetadata` <a id="spec-cynai-orches-operation-exposeselfmetadata"></a>
+
+The orchestrator SHOULD expose [Orchestrator Self-Metadata Summary](#spec-cynai-orches-type-orchestratorselfmetadatasummary) to authenticated operators (for example via an admin endpoint or alongside other detailed operator health or status responses).
+
+##### `Operation` Expose Self-Metadata Traces To
+
+- [REQ-ORCHES-0120](../requirements/orches.md#req-orches-0120)
+
+### SBA Inference Log Redaction
+
+Orchestrator-side redaction for stored inference logs follows.
+
+#### `Rule` Redact SBA Inference Data Before Storage
+
+- Spec ID: `CYNAI.ORCHES.SbaInferenceLogRedaction` <a id="spec-cynai-orches-sbainferencelogredaction"></a>
+
+The orchestrator MUST redact secrets from SBA inference data (and any other chat or inference log content it stores) **before** persisting it, using the same shared opportunistic redaction approach as the gateway chat path where applicable.
+Only redacted content MUST be persisted; redaction metadata SHOULD be stored when the schema supports it.
+
+##### `Rule` Redact SBA Inference Data Before Storage Traces To
+
+- [REQ-USRGWY-0132](../requirements/usrgwy.md#req-usrgwy-0132)
+- [REQ-ORCHES-0120](../requirements/orches.md#req-orches-0120)
 
 ## Orchestrator Shutdown
 

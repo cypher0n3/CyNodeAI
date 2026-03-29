@@ -12,7 +12,7 @@ The JSON document records **when** the session started (`session_started_at`), *
 
 ### Cynork TUI Session Cache Traces To
 
-- [REQ-CLIENT-0188](../requirements/client.md#req-client-0188)
+- [REQ-CLIENT-0188](../../requirements/client.md#req-client-0188)
 
 ### Related Documents
 
@@ -41,7 +41,7 @@ The JSON document records **when** the session started (`session_started_at`), *
 
 ### Session Cache Root Directory Traces To
 
-- [REQ-CLIENT-0188](../requirements/client.md#req-client-0188)
+- [REQ-CLIENT-0188](../../requirements/client.md#req-client-0188)
 
 ## Session Id and Filename
 
@@ -63,7 +63,7 @@ The JSON document records **when** the session started (`session_started_at`), *
 
 ### Session Id and Filename Traces To
 
-- [REQ-CLIENT-0188](../requirements/client.md#req-client-0188)
+- [REQ-CLIENT-0188](../../requirements/client.md#req-client-0188)
 
 ## Session Cache JSON Document
 
@@ -149,7 +149,7 @@ The JSON document records **when** the session started (`session_started_at`), *
 
 ### Session Cache JSON Document Traces To
 
-- [REQ-CLIENT-0188](../requirements/client.md#req-client-0188)
+- [REQ-CLIENT-0188](../../requirements/client.md#req-client-0188)
 
 ## Retention of Recent Sessions
 
@@ -179,7 +179,7 @@ The JSON document records **when** the session started (`session_started_at`), *
 
 ### Retention of Recent Sessions Traces To
 
-- [REQ-CLIENT-0188](../requirements/client.md#req-client-0188)
+- [REQ-CLIENT-0188](../../requirements/client.md#req-client-0188)
 
 ## Read and Write Operations
 
@@ -206,7 +206,7 @@ The JSON document records **when** the session started (`session_started_at`), *
 
 ### Read and Write Operations Traces To
 
-- [REQ-CLIENT-0188](../requirements/client.md#req-client-0188)
+- [REQ-CLIENT-0188](../../requirements/client.md#req-client-0188)
 
 ## Forbidden Content
 
@@ -218,7 +218,7 @@ Session cache remains aligned with [Cynork TUI - Local Cache](cynork_tui.md#spec
 
 ### Forbidden Content Traces To
 
-- [REQ-CLIENT-0188](../requirements/client.md#req-client-0188)
+- [REQ-CLIENT-0188](../../requirements/client.md#req-client-0188)
 
 ## Constants
 
@@ -228,4 +228,4 @@ Session cache remains aligned with [Cynork TUI - Local Cache](cynork_tui.md#spec
 
 ### Constants Traces To
 
-- [REQ-CLIENT-0188](../requirements/client.md#req-client-0188)
+- [REQ-CLIENT-0188](../../requirements/client.md#req-client-0188)

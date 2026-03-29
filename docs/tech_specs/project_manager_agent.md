@@ -372,6 +372,18 @@ The PMA is responsible for **building** the project plan (tasks and execution or
 When the user describes a goal that implies multiple steps or a project, the PMA SHOULD first produce a plan (e.g. list of tasks with order and acceptance criteria), persist it or associate tasks with the plan, and only then create tasks and hand off for execution.
 The PMA SHOULD refine project plans as needed based on updated information from the user (e.g. after clarification or change requests).
 
+### Plan Creation Procedure (Skill)
+
+- Spec ID: `CYNAI.AGENTS.PlanCreationProcedure` <a id="spec-cynai-agents-plancreationprocedure"></a>
+
+When the deployment supplies the **PMA plan creation skill** ([`default_skills/pma_plan_creation_skill.md`](../../default_skills/pma_plan_creation_skill.md)), the PMA SHOULD follow that procedure when building or refining project plans so structure, task naming, dependencies, and MCP persistence align with host schemas and lock/approval rules.
+Plan and task reads MUST remain via MCP tools (or gateway equivalents) per [Tool Access and Database Access](#tool-access-and-database-access); the skill content is procedural guidance, not a second source of truth for schemas.
+Future catalog additions (for example `plan.help`, `task.help`, and project-plan CRUD tools) MUST be documented in [mcp_tools/](mcp_tools/README.md) and allowlists in [access_allowlists_and_scope.md](mcp_tools/access_allowlists_and_scope.md) when implemented.
+
+#### Plan Creation Procedure Traces
+
+- [REQ-PMAGNT-0111](../requirements/pmagnt.md#req-pmagnt-0111)
+
 ## Task Review and Ready Transition
 
 - Spec ID: `CYNAI.AGENTS.TaskReviewAndReadyTransition` <a id="spec-cynai-agents-taskreviewandreadytransition"></a>

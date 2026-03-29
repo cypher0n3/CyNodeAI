@@ -341,6 +341,9 @@ Minimum required fields
 - Optional in `constraints`: `ext_net_allowed` (default false) documents whether the job is permitted to use **external** network access (outside worker/orchestrator) via worker proxies (e.g. web egress for dependency downloads or API Egress for external APIs).
   The SBA always has outbound via proxy for job lifecycle (status reporting, result delivery), MCP (e.g. skills, artifacts), and inference; this flag concerns access to external destinations only, not network as a whole.
   See [Worker Proxies](#worker-proxies-inference-and-web-egress) and [Sandbox Boundary and Security](#sandbox-boundary-and-security).
+- Optional top-level **`workspace`**: when present, declares that `/workspace` MUST be pre-populated from a Git repository before the container starts.
+  Shape: `source` = `git` (required when `workspace` is present), `provider`, `repo_identifier`, optional `base_url`, optional `ref` (branch/tag/commit).
+  Resolution and allowlist enforcement follow [Workspace Provisioning](project_git_repos.md#spec-cynai-projct-workspaceprovisioning); the job builder MUST only reference repos in the task's project's `project_git_repos` set.
 
 ### Inference Models (Job-Defined Allowlist)
 

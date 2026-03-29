@@ -2430,8 +2430,8 @@ Fix open Bugs 3 (thread-switched messaging after login) and 4 (slash/shell comma
 
 - [docs/dev_docs/old/2026-03-22_cynork_tui_spec_delta.md](2026-03-22_cynork_tui_spec_delta.md (Recommended Spec Updates section).
 - [docs/dev_docs/_bugs.md](../_bugs.md) (Bug 3: thread messaging; Bug 4: slash during streaming).
-- [docs/tech_specs/cynork_tui.md](../../tech_specs/cynork_tui.md) (Layout and Interaction, queued drafts, composer keys, auth recovery).
-- [docs/tech_specs/cynork_tui_slash_commands.md](../../tech_specs/cynork_tui_slash_commands.md) (`/copy` family).
+- [docs/tech_specs/cynork_tui.md](../../tech_specs/cynork/cynork_tui.md) (Layout and Interaction, queued drafts, composer keys, auth recovery).
+- [docs/tech_specs/cynork_tui_slash_commands.md](../../tech_specs/cynork/cynork_tui_slash_commands.md) (`/copy` family).
 - [docs/requirements/client.md](../../requirements/client.md) (REQ-CLIENT-0190, REQ-CLIENT-0206).
 
 #### Discovery (Task 2) Steps
@@ -2506,8 +2506,8 @@ Address the gaps identified in the E2E vs tech spec alignment review: add E2E co
 #### Task 3 Requirements and Specifications
 
 - E2E vs tech spec alignment (archived; see [2026-03-29 review consolidated summary](../2026-03-29_review_consolidated_summary.md)) (Gaps / Follow-Ups were in the original review).
-- [docs/tech_specs/cynork_tui_slash_commands.md](../../tech_specs/cynork_tui_slash_commands.md) (`/copy` per Task 2 spec update).
-- [docs/tech_specs/cynork_tui.md](../../tech_specs/cynork_tui.md) (composer keys, Ctrl+Up/Ctrl+Down history).
+- [docs/tech_specs/cynork_tui_slash_commands.md](../../tech_specs/cynork/cynork_tui_slash_commands.md) (`/copy` per Task 2 spec update).
+- [docs/tech_specs/cynork_tui.md](../../tech_specs/cynork/cynork_tui.md) (composer keys, Ctrl+Up/Ctrl+Down history).
 - E2E scripts: `scripts/test_scripts/e2e_0760_tui_slash_commands.py`, `scripts/test_scripts/e2e_0765_tui_composer_editor.py`.
 - BDD features: `features/cynork/cynork_tui.feature`, `features/cynork/cynork_tui_streaming.feature`.
 
@@ -2837,7 +2837,7 @@ Source: [2026-03-19_streaming_remaining_work_execution_plan.md](2026-03-19_strea
 
 - [docs/requirements/client.md](../../requirements/client.md) REQ-CLIENT-0182-0185, 0192, 0193, 0195, 0202, 0204, 0209, 0213-0220.
 - [docs/requirements/stands.md](../../requirements/stands.md) REQ-STANDS-0133.
-- [docs/tech_specs/cynork_tui.md](../../tech_specs/cynork_tui.md) (TranscriptRendering, GenerationState, ThinkingContentStorageDuringStreaming, ToolCallContentStorageDuringStreaming, SecureBufferHandlingForInFlightStreamingContent, ConnectionRecovery).
+- [docs/tech_specs/cynork_tui.md](../../tech_specs/cynork/cynork_tui.md) (TranscriptRendering, GenerationState, ThinkingContentStorageDuringStreaming, ToolCallContentStorageDuringStreaming, SecureBufferHandlingForInFlightStreamingContent, ConnectionRecovery).
 - [features/cynork/cynork_tui_streaming.feature](../../../features/cynork/cynork_tui_streaming.feature).
 - [features/cynork/cynork_tui.feature](../../../features/cynork/cynork_tui.feature).
 - Current harness: [scripts/test_scripts/tui_pty_harness.py](../../../scripts/test_scripts/tui_pty_harness.py).
@@ -2996,7 +2996,7 @@ Source: [2026-03-14_plan_after_tui_fix.md](2026-03-14_plan_after_tui_fix.md Task
 #### Task 9 Requirements and Specifications
 
 - [docs/requirements/client.md](../../requirements/client.md) (auth recovery, in-session model/project).
-- [docs/tech_specs/cynork_tui.md](../../tech_specs/cynork_tui.md) (auth recovery, status bar, in-session switches).
+- [docs/tech_specs/cynork_tui.md](../../tech_specs/cynork/cynork_tui.md) (auth recovery, status bar, in-session switches).
 
 #### Discovery (Task 9) Steps
 

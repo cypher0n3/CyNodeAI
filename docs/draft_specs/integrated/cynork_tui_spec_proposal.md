@@ -13,7 +13,7 @@
 Baseline references:
 
 - [Chat Threads and Messages](../../tech_specs/chat_threads_and_messages.md) (CYNAI.USRGWY.ChatThreadsMessages), [REQ-USRGWY-0130](../../requirements/usrgwy.md#req-usrgwy-0130)
-- [cli_management_app_commands_chat.md](../../tech_specs/cli_management_app_commands_chat.md), [cli_management_app_shell_output.md](../../tech_specs/cli_management_app_shell_output.md), [REQ-CLIENT-0161](../../requirements/client.md) onward
+- [cli_management_app_commands_chat.md](../../tech_specs/cynork/cli_management_app_commands_chat.md), [cli_management_app_shell_output.md](../../tech_specs/cynork/cli_management_app_shell_output.md), [REQ-CLIENT-0161](../../requirements/client.md) onward
 - [OpenAI-Compatible Chat API](../../tech_specs/openai_compatible_chat_api.md)
 
 This document proposes requirements and spec extensions so that:
@@ -50,13 +50,13 @@ The plan cut this proposal down to a minimal first rollout; the refinements belo
 - **Stable requirements:** REQ-USRGWY-0135 (explicit thread creation), 0136--0138 (structured turns, ordering, thinking not in canonical transcript).
   REQ-CLIENT-0181 (explicit fresh-thread creation), 0182--0186 (structured-turn preference, hide thinking, multi-item turn, in-flight update, plain output).
   This draft uses **REQ-USRGWY-0142--0145** and **REQ-CLIENT-0199--0204** for the corresponding proposal items to avoid ID conflicts with stable.
-- **Stable specs:** [cynork_tui.md](../../tech_specs/cynork_tui.md), [cynork_cli.md](../../tech_specs/cynork_cli.md) TUI scope, [chat_threads_and_messages.md](../../tech_specs/chat_threads_and_messages.md) StructuredTurns and API surface, [cli_management_app_commands_chat.md](../../tech_specs/cli_management_app_commands_chat.md) thread controls.
+- **Stable specs:** [cynork_tui.md](../../tech_specs/cynork/cynork_tui.md), [cynork_cli.md](../../tech_specs/cynork/cynork_cli.md) TUI scope, [chat_threads_and_messages.md](../../tech_specs/chat_threads_and_messages.md) StructuredTurns and API surface, [cli_management_app_commands_chat.md](../../tech_specs/cynork/cli_management_app_commands_chat.md) thread controls.
 
 #### 2.1.2 Explicitly Deferred From First Rollout (Plan Phase 2)
 
 - Thread summary and archive; download-ref workflows (attachment upload for user messages is out of scope); queued drafts; making bare `cynork` launch the TUI; web/SSO login.
 - Proposal REQ-CLIENT-0187--0198 and USRGWY 0139--0141, 0142--0145 (as written here) are not yet in stable requirements.
-  Behavior for auth recovery, layout, and transcript rendering is specified in [cynork_tui.md](../../tech_specs/cynork_tui.md) in prose.
+  Behavior for auth recovery, layout, and transcript rendering is specified in [cynork_tui.md](../../tech_specs/cynork/cynork_tui.md) in prose.
 
 #### 2.1.3 REQ ID Mapping (Draft vs Stable)
 
@@ -158,7 +158,7 @@ Each entry uses the canonical format: requirement line, spec reference link(s) t
   <a id="req-client-0204"></a>
 
 - **REQ-CLIENT-0187 (proposed):** The cynork chat TUI MAY persist local configuration for TUI preferences (e.g. default model, composer single vs multi-line, context pane default visibility, keybinding overrides).
-  If supported, config MUST use the same config file or config directory as the rest of cynork (see [CliConfigFileLocation](../../tech_specs/cynork_cli.md#spec-cynai-client-cliconfigfilelocation)); config MUST NOT store secrets (tokens, passwords, or message content).
+  If supported, config MUST use the same config file or config directory as the rest of cynork (see [CliConfigFileLocation](../../tech_specs/cynork/cynork_cli.md#spec-cynai-client-cliconfigfilelocation)); config MUST NOT store secrets (tokens, passwords, or message content).
   [CYNAI.CLIENT.CynorkChat.LocalConfig](#spec-cynai-client-cynorkchat-localconfig)
   <a id="req-client-0187"></a>
 
@@ -421,7 +421,7 @@ These spec items define how uploaded files (from the `@` shorthand and gateway u
 
 ## 5 Proposed Spec Additions (Cynork Chat TUI)
 
-These would extend [cli_management_app_commands_chat.md](../../tech_specs/cli_management_app_commands_chat.md) and related cynork specs.
+These would extend [cli_management_app_commands_chat.md](../../tech_specs/cynork/cli_management_app_commands_chat.md) and related cynork specs.
 Spec IDs use the CLIENT domain per [requirements_domains.md](../../docs_standards/requirements_domains.md).
 
 ### 5.1 TUI Layout and Interaction
@@ -512,7 +512,7 @@ Regions are stacked and optionally split as follows; all coordinates are relativ
 
 - **Command palette:** Ctrl+P or F10 opens the command palette; Escape or focus-out closes it.
 
-- **Exit:** `/exit`, `/quit`, or EOF (e.g. Ctrl+D) ends the session; behavior per existing [CliChat](../../tech_specs/cli_management_app_commands_chat.md) spec.
+- **Exit:** `/exit`, `/quit`, or EOF (e.g. Ctrl+D) ends the session; behavior per existing [CliChat](../../tech_specs/cynork/cli_management_app_commands_chat.md) spec.
 
 #### 5.1.3 Shell Escape and Interactive Subprocesses
 
@@ -595,13 +595,7 @@ flowchart TB
 Vertical order: row1 (scrollback left, context pane right when visible), then composer, then status bar.
 Horizontal: scrollback and context pane share the top row; composer spans left column only; status bar spans full width.
 
-#### 5.1.6 TUI Visual Mockup
-
-The following mockup illustrates the TUI with context pane visible and a sample conversation.
-
-![Cynork chat TUI mockup](../../tech_specs/images/cynork_chat_tui_mockup.png)
-
-#### 5.1.7 Structured Transcript Rendering
+#### 5.1.6 Structured Transcript Rendering
 
 The scrollback SHOULD distinguish transcript item kinds instead of flattening everything into assistant prose.
 
@@ -620,7 +614,7 @@ The scrollback SHOULD distinguish transcript item kinds instead of flattening ev
   Large or verbose result bodies SHOULD be collapsed by default with an explicit expand action.
 - **Fallback:** If the gateway provides only plain `content` and no structured `parts`, the client SHOULD fall back to text-only rendering without inventing fake tool rows.
 
-#### 5.1.8 Queued Drafts and Deferred Send
+#### 5.1.7 Queued Drafts and Deferred Send
 
 The TUI SHOULD support an explicit outbox-like draft queue for messages the user wants to send later.
 
@@ -633,13 +627,13 @@ The TUI SHOULD support an explicit outbox-like draft queue for messages the user
 - **Safety:** Queued drafts may contain @ references; when sent, @-referenced files are uploaded at send time.
   The UI SHOULD surface any validation or send failure (e.g. missing file, upload error) clearly.
 
-#### 5.1.9 Downloads (Assistant-Provided Only)
+#### 5.1.8 Downloads (Assistant-Provided Only)
 
 - **Download refs:** When the gateway exposes assistant-provided files (e.g. via `download_ref` parts), the TUI SHOULD surface them as explicit download items with filename, media type, and size when known.
   The action label MAY be a keybinding, command palette action, or slash-command hint, but the interaction MUST require user intent.
   The UI MUST NOT auto-download without user action.
 
-#### 5.1.10 @ File References (Cursor-Like)
+#### 5.1.9 @ File References (Cursor-Like)
 
 - Spec ID: `CYNAI.CLIENT.CynorkChat.AtFileReferences` <a id="spec-cynai-client-cynorkchat-atfilereferences"></a>
 - Traces To: [REQ-CLIENT-0198](#req-client-0198)
@@ -675,8 +669,8 @@ The TUI SHOULD support an explicit outbox-like draft queue for messages the user
 
 Doc changes (no new Spec ID; alignment of existing specs and requirements):
 
-- In [cynork_cli.md](../../tech_specs/cynork_cli.md): remove "Interactive shell mode with tab completion" from MVP scope or mark it deprecated.
-- In [cli_management_app_shell_output.md](../../tech_specs/cli_management_app_shell_output.md): remove the Interactive Mode (REPL) section or rewrite as "Chat UI interaction rules" if that document remains the home for output/scripting rules.
+- In [cynork_cli.md](../../tech_specs/cynork/cynork_cli.md): remove "Interactive shell mode with tab completion" from MVP scope or mark it deprecated.
+- In [cli_management_app_shell_output.md](../../tech_specs/cynork/cli_management_app_shell_output.md): remove the Interactive Mode (REPL) section or rewrite as "Chat UI interaction rules" if that document remains the home for output/scripting rules.
 - Requirements: remove or deprecate `REQ-CLIENT-0136` through `REQ-CLIENT-0159` (and related REPL requirements) and replace with the chat-as-primary and TUI requirements proposed above.
 - BDD: replace or rewrite [features/cynork/cynork_shell.feature](../../../features/cynork/cynork_shell.feature) with chat-based acceptance criteria; extend [features/cynork/cynork_chat.feature](../../../features/cynork/cynork_chat.feature) for TUI behaviors (e.g. multi-line send, slash completion).
 
@@ -686,7 +680,7 @@ Doc changes (no new Spec ID; alignment of existing specs and requirements):
 - Status: proposed
 - Traces To: [REQ-CLIENT-0187](#req-client-0187)
 - Chat-specific preferences MAY be stored in the same config file as the rest of cynork, under a dedicated key (e.g. `chat` or `tui`), or in a separate file under the same config directory (e.g. `$XDG_CONFIG_HOME/cynork/chat.yaml`).
-  When using the same file, the structure MUST extend the existing [CliConfigFileLocation](../../tech_specs/cynork_cli.md#spec-cynai-client-cliconfigfilelocation) YAML; unknown keys at the top level continue to be ignored; the `chat` (or `tui`) key is optional.
+  When using the same file, the structure MUST extend the existing [CliConfigFileLocation](../../tech_specs/cynork/cynork_cli.md#spec-cynai-client-cliconfigfilelocation) YAML; unknown keys at the top level continue to be ignored; the `chat` (or `tui`) key is optional.
 - Allowed keys (all optional): `default_model` (string, OpenAI model id for the session when `--model` is not set); `composer_multiline` (boolean, default false); `context_pane_visible` (boolean, default false); `context_pane_width_columns` (integer, min 20, max 48); `show_thinking_blocks` (boolean, default false); `queue_send_mode` (string, e.g. `manual` or `sequential`); `keybindings` (object mapping action names to key sequences, if overrides are supported).
   No key may hold a secret (token, password, or message content); the CLI MUST NOT write or read secrets from this config.
 - Config load: the same `--config` flag and default path resolution as the rest of cynork apply; chat preferences are read after the main config load and MAY be absent (defaults apply).
@@ -698,7 +692,7 @@ Doc changes (no new Spec ID; alignment of existing specs and requirements):
 - Status: proposed; first rollout implemented (explicit `cynork tui` only; bare `cynork` default deferred per [Integration Plan and Refinements](#21-integration-plan-and-refinements)).
 - Traces To: [REQ-CLIENT-0197](#req-client-0197)
 - Rollout order:
-  - First rollout: the CLI SHOULD expose the full-screen chat TUI explicitly as `cynork tui`. **(Done in stable; see [cynork_tui.md](../../tech_specs/cynork_tui.md) Entrypoint and Compatibility.)**
+  - First rollout: the CLI SHOULD expose the full-screen chat TUI explicitly as `cynork tui`. **(Done in stable; see [cynork_tui.md](../../tech_specs/cynork/cynork_tui.md) Entrypoint and Compatibility.)**
   - Later rollout: once the TUI is feature-complete for the intended initial scope, invoking `cynork` with no subcommand SHOULD launch that same TUI by default instead of printing top-level help.
 - Existing explicit commands and subcommands MUST remain available, including `cynork chat`, `cynork task`, `cynork project`, `cynork auth`, and other established command paths.
 - Compatibility handling:
@@ -733,7 +727,7 @@ Doc changes (no new Spec ID; alignment of existing specs and requirements):
 - Startup behavior:
   - If the resolved token is empty at startup, the CLI MUST prompt the user to log in.
   - After a successful login, the CLI MUST start the chat session loop and render the TUI normally.
-  - If login fails or is aborted, the CLI MUST exit with an auth error exit code (consistent with [Exit Codes](../../tech_specs/cynork_cli.md#spec-cynai-client-cliexitcodes)).
+  - If login fails or is aborted, the CLI MUST exit with an auth error exit code (consistent with [Exit Codes](../../tech_specs/cynork/cynork_cli.md#spec-cynai-client-cliexitcodes)).
 - In-session behavior:
   - If the gateway responds with an auth error (e.g. HTTP 401/403) to a chat completion request or a slash-command gateway call, the CLI MUST pause the session and prompt the user to re-authenticate.
   - After successful re-authentication, the CLI SHOULD offer to retry the failed operation once (default: retry), then resume normal session flow.
@@ -758,7 +752,7 @@ Doc changes (no new Spec ID; alignment of existing specs and requirements):
   - browser-based authorization (CLI opens browser to an auth URL, receives a callback on localhost, and exchanges for token).
 - Constraints:
   - The CLI MUST NOT print tokens to stdout in normal operation.
-  - The CLI MUST store the resulting token using the existing token storage model (config and/or credential helper) and MUST follow the file-permission and atomic-write rules in [CliConfigFileLocation](../../tech_specs/cynork_cli.md#spec-cynai-client-cliconfigfilelocation).
+  - The CLI MUST store the resulting token using the existing token storage model (config and/or credential helper) and MUST follow the file-permission and atomic-write rules in [CliConfigFileLocation](../../tech_specs/cynork/cynork_cli.md#spec-cynai-client-cliconfigfilelocation).
   - The CLI MUST time out and fail cleanly if the user does not complete the web flow within a bounded time.
 
 ## 6 Implementation Action Plan
@@ -878,11 +872,11 @@ Canonical links to requirement anchors and Spec Item anchors in this document:
 ## 10 Related Documents
 
 - `2026-03-12_plan_next_round_execution.md` (doc removed; TUI-first integration plan; source of refinements and deferred scope)
-- [cynork_tui.md](../../tech_specs/cynork_tui.md) (stable TUI spec for first rollout)
+- [cynork_tui.md](../../tech_specs/cynork/cynork_tui.md) (stable TUI spec for first rollout)
 - [Chat Threads and Messages](../../tech_specs/chat_threads_and_messages.md)
 - [OpenAI-Compatible Chat API](../../tech_specs/openai_compatible_chat_api.md)
 - [User API Gateway requirements](../../requirements/usrgwy.md) (REQ-USRGWY-0130)
 - [Client requirements](../../requirements/client.md) (chat and REPL requirements)
-- [cynork CLI tech spec](../../tech_specs/cynork_cli.md)
-- [cli_management_app_commands_chat.md](../../tech_specs/cli_management_app_commands_chat.md)
-- [cli_management_app_shell_output.md](../../tech_specs/cli_management_app_shell_output.md)
+- [cynork CLI tech spec](../../tech_specs/cynork/cynork_cli.md)
+- [cli_management_app_commands_chat.md](../../tech_specs/cynork/cli_management_app_commands_chat.md)
+- [cli_management_app_shell_output.md](../../tech_specs/cynork/cli_management_app_shell_output.md)

@@ -429,7 +429,7 @@ See [REQ-PROJCT-0124](../requirements/projct.md#req-projct-0124).
 - [REQ-PROJCT-0113](../requirements/projct.md#req-projct-0113)
 
 Users MUST be able to edit and update project plans and associated tasks via client tools (Web Console, CLI, or API).
-The gateway API and client parity (Web Console, CLI) MUST support plan and task CRUD for plans and tasks the user is authorized to access; see [`user_api_gateway.md`](user_api_gateway.md) and [`cynork_cli.md`](cynork_cli.md).
+The gateway API and client parity (Web Console, CLI) MUST support plan and task CRUD for plans and tasks the user is authorized to access; see [`user_api_gateway.md`](user_api_gateway.md) and [`cynork_cli.md`](cynork/cynork_cli.md).
 
 ### Project Plan and Task Text as Markdown
 

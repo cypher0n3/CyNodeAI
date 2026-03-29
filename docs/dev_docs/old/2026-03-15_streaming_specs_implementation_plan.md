@@ -33,11 +33,11 @@ The target outcome is spec-compliant streaming across PMA, the user gateway, `cy
 - [docs/requirements/usrgwy.md](../../requirements/usrgwy.md) with focus on `REQ-USRGWY-0149` through `REQ-USRGWY-0156`.
 - [docs/requirements/pmagnt.md](../../requirements/pmagnt.md) with focus on `REQ-PMAGNT-0118` and `REQ-PMAGNT-0120` through `REQ-PMAGNT-0126`.
 - [docs/requirements/stands.md](../../requirements/stands.md) with focus on `REQ-STANDS-0133`.
-- [docs/tech_specs/cynork_tui.md](../../tech_specs/cynork_tui.md) with focus on `TranscriptRendering`, `GenerationState`, `ThinkingContentStorageDuringStreaming`, `ToolCallContentStorageDuringStreaming`, `SecureBufferHandlingForInFlightStreamingContent`, and `ConnectionRecovery`.
+- [docs/tech_specs/cynork_tui.md](../../tech_specs/cynork/cynork_tui.md) with focus on `TranscriptRendering`, `GenerationState`, `ThinkingContentStorageDuringStreaming`, `ToolCallContentStorageDuringStreaming`, `SecureBufferHandlingForInFlightStreamingContent`, and `ConnectionRecovery`.
 - [docs/tech_specs/openai_compatible_chat_api.md](../../tech_specs/openai_compatible_chat_api.md) with focus on `Streaming`, `StreamingRedactionPipeline`, `StreamingPerEndpointSSEFormat`, and `StreamingHeartbeatFallback`.
 - [docs/tech_specs/cynode_pma.md](../../tech_specs/cynode_pma.md) with focus on `StreamingAssistantOutput`, `StreamingLLMWrapper`, `StreamingTokenStateMachine`, `PMAStreamingNDJSONFormat`, and `PMAStreamingOverwrite`.
 - [docs/tech_specs/chat_threads_and_messages.md](../../tech_specs/chat_threads_and_messages.md) with focus on structured turn `parts`, thinking retention, and tool-call persistence.
-- [docs/tech_specs/cli_management_app_commands_chat.md](../../tech_specs/cli_management_app_commands_chat.md) with focus on thread continuity and connection interruption behavior.
+- [docs/tech_specs/cli_management_app_commands_chat.md](../../tech_specs/cynork/cli_management_app_commands_chat.md) with focus on thread continuity and connection interruption behavior.
 - [features/agents/pma_chat_and_context.feature](../../../features/agents/pma_chat_and_context.feature).
 - [features/orchestrator/openai_compat_chat.feature](../../../features/orchestrator/openai_compat_chat.feature).
 - [features/cynork/cynork_tui.feature](../../../features/cynork/cynork_tui.feature), [features/cynork/cynork_tui_streaming.feature](../../../features/cynork/cynork_tui_streaming.feature), and [features/cynork/cynork_tui_threads.feature](../../../features/cynork/cynork_tui_threads.feature).
@@ -362,8 +362,8 @@ Teach `cynork` to understand the new per-endpoint streaming surface instead of a
 
 - [docs/requirements/client.md](../../requirements/client.md) for `REQ-CLIENT-0182`, `REQ-CLIENT-0185`, `REQ-CLIENT-0186`, `REQ-CLIENT-0209`, and `REQ-CLIENT-0215` through `REQ-CLIENT-0220`.
 - [docs/tech_specs/openai_compatible_chat_api.md](../../tech_specs/openai_compatible_chat_api.md) for per-endpoint SSE behavior.
-- [docs/tech_specs/cynork_tui.md](../../tech_specs/cynork_tui.md) for generation-state and transcript expectations.
-- [docs/tech_specs/cli_management_app_commands_chat.md](../../tech_specs/cli_management_app_commands_chat.md) for chat-surface continuity.
+- [docs/tech_specs/cynork_tui.md](../../tech_specs/cynork/cynork_tui.md) for generation-state and transcript expectations.
+- [docs/tech_specs/cli_management_app_commands_chat.md](../../tech_specs/cynork/cli_management_app_commands_chat.md) for chat-surface continuity.
 - [features/e2e/chat_openai_compatible.feature](../../../features/e2e/chat_openai_compatible.feature).
 - Task 1 through Task 3 artifacts.
 
@@ -439,9 +439,9 @@ Use the richer event model to make the TUI render one logical in-flight assistan
 
 - [docs/requirements/client.md](../../requirements/client.md) for `REQ-CLIENT-0182`, `REQ-CLIENT-0183`, `REQ-CLIENT-0184`, `REQ-CLIENT-0185`, `REQ-CLIENT-0192`, `REQ-CLIENT-0193`, `REQ-CLIENT-0195`, `REQ-CLIENT-0202`, `REQ-CLIENT-0204`, `REQ-CLIENT-0209`, and `REQ-CLIENT-0213` through `REQ-CLIENT-0220`.
 - [docs/requirements/stands.md](../../requirements/stands.md) for `REQ-STANDS-0133`.
-- [docs/tech_specs/cynork_tui.md](../../tech_specs/cynork_tui.md) with focus on `TranscriptRendering`, `GenerationState`, `ThinkingContentStorageDuringStreaming`, `ToolCallContentStorageDuringStreaming`, `SecureBufferHandlingForInFlightStreamingContent`, and `ConnectionRecovery`.
+- [docs/tech_specs/cynork_tui.md](../../tech_specs/cynork/cynork_tui.md) with focus on `TranscriptRendering`, `GenerationState`, `ThinkingContentStorageDuringStreaming`, `ToolCallContentStorageDuringStreaming`, `SecureBufferHandlingForInFlightStreamingContent`, and `ConnectionRecovery`.
 - [docs/tech_specs/chat_threads_and_messages.md](../../tech_specs/chat_threads_and_messages.md).
-- [docs/tech_specs/cli_management_app_commands_chat.md](../../tech_specs/cli_management_app_commands_chat.md).
+- [docs/tech_specs/cli_management_app_commands_chat.md](../../tech_specs/cynork/cli_management_app_commands_chat.md).
 - [features/cynork/cynork_tui.feature](../../../features/cynork/cynork_tui.feature).
 - [features/cynork/cynork_tui_streaming.feature](../../../features/cynork/cynork_tui_streaming.feature).
 - [features/cynork/cynork_tui_threads.feature](../../../features/cynork/cynork_tui_threads.feature).
@@ -620,7 +620,7 @@ Close the work with validation, user-facing help updates, and any approved doc f
 - [docs/requirements/client.md](../../requirements/client.md).
 - [docs/requirements/usrgwy.md](../../requirements/usrgwy.md).
 - [docs/requirements/pmagnt.md](../../requirements/pmagnt.md).
-- [docs/tech_specs/cynork_tui.md](../../tech_specs/cynork_tui.md).
+- [docs/tech_specs/cynork_tui.md](../../tech_specs/cynork/cynork_tui.md).
 - [docs/tech_specs/openai_compatible_chat_api.md](../../tech_specs/openai_compatible_chat_api.md).
 - [docs/tech_specs/cynode_pma.md](../../tech_specs/cynode_pma.md).
 - [docs/tech_specs/chat_threads_and_messages.md](../../tech_specs/chat_threads_and_messages.md).

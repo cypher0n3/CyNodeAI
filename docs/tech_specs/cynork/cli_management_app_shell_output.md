@@ -38,14 +38,14 @@ Entrypoint and invocation
 
 #### Traces to Requirements
 
-- [REQ-CLIENT-0136](../requirements/client.md#req-client-0136)
-- [REQ-CLIENT-0137](../requirements/client.md#req-client-0137)
-- [REQ-CLIENT-0138](../requirements/client.md#req-client-0138)
-- [REQ-CLIENT-0139](../requirements/client.md#req-client-0139)
-- [REQ-CLIENT-0140](../requirements/client.md#req-client-0140)
-- [REQ-CLIENT-0141](../requirements/client.md#req-client-0141)
-- [REQ-CLIENT-0142](../requirements/client.md#req-client-0142)
-- [REQ-CLIENT-0159](../requirements/client.md#req-client-0159)
+- [REQ-CLIENT-0136](../../requirements/client.md#req-client-0136)
+- [REQ-CLIENT-0137](../../requirements/client.md#req-client-0137)
+- [REQ-CLIENT-0138](../../requirements/client.md#req-client-0138)
+- [REQ-CLIENT-0139](../../requirements/client.md#req-client-0139)
+- [REQ-CLIENT-0140](../../requirements/client.md#req-client-0140)
+- [REQ-CLIENT-0141](../../requirements/client.md#req-client-0141)
+- [REQ-CLIENT-0142](../../requirements/client.md#req-client-0142)
+- [REQ-CLIENT-0159](../../requirements/client.md#req-client-0159)
 
 ## Output and Scripting
 
@@ -62,7 +62,7 @@ Output MUST remain valid JSON and parseable by tools such as `jq`.
 
 #### Pretty-Printed JSON Output Requirements Traces
 
-- [REQ-CLIENT-0163](../requirements/client.md#req-client-0163)
+- [REQ-CLIENT-0163](../../requirements/client.md#req-client-0163)
 
 ### Output and Scripting Applicable Requirements
 
@@ -78,7 +78,7 @@ Output MUST remain valid JSON and parseable by tools such as `jq`.
 
 #### Output and Scripting Applicable Requirements Requirements Traces
 
-- [REQ-CLIENT-0143](../requirements/client.md#req-client-0143)
-- [REQ-CLIENT-0144](../requirements/client.md#req-client-0144)
-- [REQ-CLIENT-0145](../requirements/client.md#req-client-0145)
-- [REQ-CLIENT-0163](../requirements/client.md#req-client-0163)
+- [REQ-CLIENT-0143](../../requirements/client.md#req-client-0143)
+- [REQ-CLIENT-0144](../../requirements/client.md#req-client-0144)
+- [REQ-CLIENT-0145](../../requirements/client.md#req-client-0145)
+- [REQ-CLIENT-0163](../../requirements/client.md#req-client-0163)

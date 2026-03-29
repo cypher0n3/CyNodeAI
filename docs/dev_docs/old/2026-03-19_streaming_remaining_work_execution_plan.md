@@ -41,7 +41,7 @@ Complete the streaming implementation so that:
 ## References
 
 - Requirements: [docs/requirements/client.md](../../requirements/client.md) (REQ-CLIENT-0182, 0183, 0184, 0185, 0192, 0193, 0195, 0202, 0204, 0209, 0213-0220), [docs/requirements/usrgwy.md](../../requirements/usrgwy.md) (REQ-USRGWY-0149-0156), [docs/requirements/pmagnt.md](../../requirements/pmagnt.md) (REQ-PMAGNT-0118, 0120-0126), [docs/requirements/stands.md](../../requirements/stands.md) (REQ-STANDS-0133).
-- Tech specs: [docs/tech_specs/openai_compatible_chat_api.md](../../tech_specs/openai_compatible_chat_api.md), [docs/tech_specs/cynode_pma.md](../../tech_specs/cynode_pma.md), [docs/tech_specs/cynork_tui.md](../../tech_specs/cynork_tui.md), [docs/tech_specs/chat_threads_and_messages.md](../../tech_specs/chat_threads_and_messages.md), [docs/tech_specs/cli_management_app_commands_chat.md](../../tech_specs/cli_management_app_commands_chat.md).
+- Tech specs: [docs/tech_specs/openai_compatible_chat_api.md](../../tech_specs/openai_compatible_chat_api.md), [docs/tech_specs/cynode_pma.md](../../tech_specs/cynode_pma.md), [docs/tech_specs/cynork_tui.md](../../tech_specs/cynork/cynork_tui.md), [docs/tech_specs/chat_threads_and_messages.md](../../tech_specs/chat_threads_and_messages.md), [docs/tech_specs/cli_management_app_commands_chat.md](../../tech_specs/cynork/cli_management_app_commands_chat.md).
 - Feature files: [pma_chat_and_context.feature](../../../features/agents/pma_chat_and_context.feature), [openai_compat_chat.feature](../../../features/orchestrator/openai_compat_chat.feature), [cynork_tui_streaming.feature](../../../features/cynork/cynork_tui_streaming.feature), [cynork_tui.feature](../../../features/cynork/cynork_tui.feature), [cynork_tui_threads.feature](../../../features/cynork/cynork_tui_threads.feature), [chat_openai_compatible.feature](../../../features/e2e/chat_openai_compatible.feature).
 - Implementation (Go): `agents/internal/pma/`, `orchestrator/internal/handlers/openai_chat.go`, `orchestrator/internal/database/`,
   `cynork/internal/gateway/client.go`, `cynork/internal/chat/transport.go`, `cynork/internal/tui/`, `cynork/_bdd/steps2.go`.
@@ -207,7 +207,7 @@ All listed harness work is in scope; do not defer.
 
 #### Task 3 Requirements and Specifications
 
-- [docs/tech_specs/cynork_tui.md](../../tech_specs/cynork_tui.md) (TranscriptRendering, GenerationState, ConnectionRecovery).
+- [docs/tech_specs/cynork_tui.md](../../tech_specs/cynork/cynork_tui.md) (TranscriptRendering, GenerationState, ConnectionRecovery).
 - [features/cynork/cynork_tui_streaming.feature](../../../features/cynork/cynork_tui_streaming.feature).
 - Current harness: [scripts/test_scripts/tui_pty_harness.py](../../../scripts/test_scripts/tui_pty_harness.py); landmarks in `cynork/internal/chat/landmarks.go`.
 
@@ -268,7 +268,7 @@ Wire the TUI to the richer event model: canonical TranscriptTurn/TranscriptPart 
 
 - [docs/requirements/client.md](../../requirements/client.md) REQ-CLIENT-0182-0185, 0192, 0193, 0195, 0202, 0204, 0209, 0213-0220.
 - [docs/requirements/stands.md](../../requirements/stands.md) REQ-STANDS-0133.
-- [docs/tech_specs/cynork_tui.md](../../tech_specs/cynork_tui.md) (TranscriptRendering, GenerationState, ThinkingContentStorageDuringStreaming, ToolCallContentStorageDuringStreaming, SecureBufferHandlingForInFlightStreamingContent, ConnectionRecovery).
+- [docs/tech_specs/cynork_tui.md](../../tech_specs/cynork/cynork_tui.md) (TranscriptRendering, GenerationState, ThinkingContentStorageDuringStreaming, ToolCallContentStorageDuringStreaming, SecureBufferHandlingForInFlightStreamingContent, ConnectionRecovery).
 - [features/cynork/cynork_tui_streaming.feature](../../../features/cynork/cynork_tui_streaming.feature), [features/cynork/cynork_tui.feature](../../../features/cynork/cynork_tui.feature), [features/cynork/cynork_tui_threads.feature](../../../features/cynork/cynork_tui_threads.feature).
 
 #### Discovery (Task 4) Steps
@@ -392,7 +392,7 @@ Update user-facing and developer-facing docs to reflect streaming behavior; prod
 #### Task 6 Requirements and Specifications
 
 - [docs/requirements/client.md](../../requirements/client.md), [docs/requirements/usrgwy.md](../../requirements/usrgwy.md), [docs/requirements/pmagnt.md](../../requirements/pmagnt.md).
-- [docs/tech_specs/cynork_tui.md](../../tech_specs/cynork_tui.md), [docs/tech_specs/openai_compatible_chat_api.md](../../tech_specs/openai_compatible_chat_api.md), [docs/tech_specs/cynode_pma.md](../../tech_specs/cynode_pma.md), [docs/tech_specs/chat_threads_and_messages.md](../../tech_specs/chat_threads_and_messages.md).
+- [docs/tech_specs/cynork_tui.md](../../tech_specs/cynork/cynork_tui.md), [docs/tech_specs/openai_compatible_chat_api.md](../../tech_specs/openai_compatible_chat_api.md), [docs/tech_specs/cynode_pma.md](../../tech_specs/cynode_pma.md), [docs/tech_specs/chat_threads_and_messages.md](../../tech_specs/chat_threads_and_messages.md).
 
 #### Discovery (Task 6) Steps
 

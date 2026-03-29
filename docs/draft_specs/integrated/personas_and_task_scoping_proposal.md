@@ -421,7 +421,8 @@ The following draft specs in `docs/draft_specs/` are related; this proposal alig
 
 - **[task_routing_pma_first_task_state.md](task_routing_pma_first_task_state.md):** Introduces task `planning_state` (draft/ready) and PMA-first review; only tasks in `ready` are eligible for execution.
   This proposal assumes the job builder dispatches only for tasks that meet execution gates; when that draft is adopted, only `planning_state=ready` tasks are eligible for job build/dispatch.
-- **[pma_plan_creation_skill_spec_integration.md](../partial/pma_plan_creation_skill_spec_integration.md):** Plan and task creation via MCP (plan.help, task.help, db.plan.*, task steps as map keyed by numeric IDs).
+- **[pma_plan_creation_skill_spec_integration.md](pma_plan_creation_skill_spec_integration.md):** Plan and task creation via MCP (plan.help, task.help, db.plan.*, task steps as map keyed by numeric IDs).
+  Normative content: [project_manager_agent](../../tech_specs/project_manager_agent.md), [cynode_pma](../../tech_specs/cynode_pma.md).
   This proposal's task steps and task_ids map pattern are consistent; persona_id and recommended_skill_ids on tasks are complementary to the plan-creation skill; persona.list/persona.get for PMA support task assignment.
 - **[002_user_directed_job_kill_proposal.md](../002_user_directed_job_kill_proposal.md):** User- or PMA-directed job kill; orchestrator sends stop to worker; SBA graceful stop then container kill.
   For bundle jobs, killing the job stops the entire job (all tasks in the bundle); one job_id, one stop request.

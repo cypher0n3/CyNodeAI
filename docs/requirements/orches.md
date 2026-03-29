@@ -105,7 +105,7 @@ It covers orchestrator control-plane behavior, task lifecycle, dispatch, and sta
   The create operation MUST return a task identifier in the response **within a bounded time** (without waiting for task execution to complete), so that clients can poll for status and result.
   [orchestrator.md](../tech_specs/orchestrator.md)
   [CYNAI.ORCHES.Rule.TaskCreateHandoff](../tech_specs/orchestrator.md#spec-cynai-orches-rule-taskcreatehandoff)
-  [CYNAI.CLIENT.CliTaskCreatePrompt](../tech_specs/cli_management_app_commands_tasks.md#spec-cynai-client-clitaskcreateprompt)
+  [CYNAI.CLIENT.CliTaskCreatePrompt](../tech_specs/cynork/cli_management_app_commands_tasks.md#spec-cynai-client-clitaskcreateprompt)
   [data_rest_api.md](../tech_specs/data_rest_api.md)
   <a id="req-orches-0122"></a>
 - **REQ-ORCHES-0123:** The orchestrator MUST dispatch work to worker nodes via the Worker API and update task/job state based on results.
@@ -115,33 +115,33 @@ It covers orchestrator control-plane behavior, task lifecycle, dispatch, and sta
 - **REQ-ORCHES-0124:** The orchestrator MUST persist job results (including stdout/stderr and exit code) and make them retrievable to authorized clients.
   [orchestrator.md](../tech_specs/orchestrator.md)
   [worker_api.md](../tech_specs/worker_api.md)
-  [CYNAI.CLIENT.CliTaskResult](../tech_specs/cli_management_app_commands_tasks.md#spec-cynai-client-clitaskresult)
-  [CYNAI.CLIENT.CliTaskLogs](../tech_specs/cli_management_app_commands_tasks.md#spec-cynai-client-clitasklogs)
+  [CYNAI.CLIENT.CliTaskResult](../tech_specs/cynork/cli_management_app_commands_tasks.md#spec-cynai-client-clitaskresult)
+  [CYNAI.CLIENT.CliTaskLogs](../tech_specs/cynork/cli_management_app_commands_tasks.md#spec-cynai-client-clitasklogs)
   <a id="req-orches-0124"></a>
 - **REQ-ORCHES-0125:** Authorized clients MUST be able to read task state (including status) through the User API Gateway.
   [orchestrator.md](../tech_specs/orchestrator.md)
   [data_rest_api.md](../tech_specs/data_rest_api.md)
-  [CYNAI.CLIENT.CliTaskList](../tech_specs/cli_management_app_commands_tasks.md#spec-cynai-client-clitasklist)
-  [CYNAI.CLIENT.CliTaskGet](../tech_specs/cli_management_app_commands_tasks.md#spec-cynai-client-clitaskget)
-  [CYNAI.CLIENT.CliTaskResult](../tech_specs/cli_management_app_commands_tasks.md#spec-cynai-client-clitaskresult)
+  [CYNAI.CLIENT.CliTaskList](../tech_specs/cynork/cli_management_app_commands_tasks.md#spec-cynai-client-clitasklist)
+  [CYNAI.CLIENT.CliTaskGet](../tech_specs/cynork/cli_management_app_commands_tasks.md#spec-cynai-client-clitaskget)
+  [CYNAI.CLIENT.CliTaskResult](../tech_specs/cynork/cli_management_app_commands_tasks.md#spec-cynai-client-clitaskresult)
   <a id="req-orches-0125"></a>
 - **REQ-ORCHES-0126:** Task creation MUST accept a natural-language user prompt and MUST accept task input as plain text or Markdown.
   The system MUST interpret the prompt or task text to decide whether to call an AI model and/or execute sandbox jobs.
   The system SHALL use inference by default when interpreting (no user opt-in required).
   The user prompt or task text MUST NOT be executed as a literal shell command unless the user explicitly requests raw command execution (e.g. script, commands, or a dedicated raw-command flag).
   [user_api_gateway.md](../tech_specs/user_api_gateway.md)
-  [cli_management_app_commands_tasks.md](../tech_specs/cli_management_app_commands_tasks.md#spec-cynai-client-clitaskcreateprompt)
+  [cli_management_app_commands_tasks.md](../tech_specs/cynork/cli_management_app_commands_tasks.md#spec-cynai-client-clitaskcreateprompt)
   <a id="req-orches-0126"></a>
 - **REQ-ORCHES-0127:** Task creation MUST support attachments (e.g. files or other artifacts).
   Clients MAY supply attachments as path strings (CLI) or via file upload (web console); the gateway and orchestrator define how attachment payloads are ingested and made available to the task.
   [user_api_gateway.md](../tech_specs/user_api_gateway.md)
-  [cli_management_app_commands_tasks.md](../tech_specs/cli_management_app_commands_tasks.md#spec-cynai-client-clitaskcreateprompt)
+  [cli_management_app_commands_tasks.md](../tech_specs/cynork/cli_management_app_commands_tasks.md#spec-cynai-client-clitaskcreateprompt)
   [web_console.md](../tech_specs/web_console.md#spec-cynai-webcon-apisurface)
   <a id="req-orches-0127"></a>
 - **REQ-ORCHES-0128:** Task creation MUST support running a **script** (e.g. path to a script file) and a **short series of commands** as explicit task input types.
   When the client supplies a script or commands, the system MUST run them in the sandbox (or equivalent) rather than interpreting the input as natural language.
   [user_api_gateway.md](../tech_specs/user_api_gateway.md)
-  [cli_management_app_commands_tasks.md](../tech_specs/cli_management_app_commands_tasks.md#spec-cynai-client-clitaskcreateprompt)
+  [cli_management_app_commands_tasks.md](../tech_specs/cynork/cli_management_app_commands_tasks.md#spec-cynai-client-clitaskcreateprompt)
   <a id="req-orches-0128"></a>
 - **REQ-ORCHES-0129:** The orchestrator MUST continuously validate that the selected Project Manager model remains online after startup.
   If the selected Project Manager model becomes unavailable due to node loss, eviction, failure, or relevant system setting changes, the orchestrator MUST transition out of ready state and MUST re-run Project Manager model selection and warmup until a Project Manager model is online again.
@@ -151,7 +151,7 @@ It covers orchestrator control-plane behavior, task lifecycle, dispatch, and sta
   Operations include: task (list, get, create, cancel, result, logs, artifacts list, artifacts get), status, whoami, nodes (list, get), preferences (list, get, set, delete, effective), and skills (list, get).
   Chat slash commands MUST use the same gateway API surface as the non-interactive CLI; no separate chat-only API is required.
   [CYNAI.USRGWY.ChatSlashCommandSupport](../tech_specs/user_api_gateway.md#spec-cynai-usrgwy-chatslashcommandsupport)
-  [cli_management_app_commands_chat.md](../tech_specs/cli_management_app_commands_chat.md#spec-cynai-client-clichatslashcommandreference)
+  [cli_management_app_commands_chat.md](../tech_specs/cynork/cli_management_app_commands_chat.md#spec-cynai-client-clichatslashcommandreference)
   <a id="req-orches-0130"></a>
 - **REQ-ORCHES-0131:** The orchestrator MUST enforce a maximum total wait duration when producing an OpenAI-compatible interactive chat response.
   If the response does not finish before the cap, the gateway MUST return a clear timeout error.

@@ -461,6 +461,39 @@ Implementation notes
 - The inference proxy sidecar (or worker process) MUST be minimal and MUST NOT expose credentials to the sandbox.
 - The inference proxy MUST enforce request size limits and timeouts (e.g. maximum request body 10 MiB, per-request timeout 120 seconds).
 
+### SBA Inference Proxy Capture and Reporting
+
+Capture, binding, and reporting rules for the inference proxy follow.
+
+#### 1 `Rule` Inference Proxy Capture
+
+- Spec ID: `CYNAI.WORKER.InferenceProxyCapture` <a id="spec-cynai-worker-inferenceproxycapture"></a>
+
+The worker inference proxy that serves SBA traffic MUST capture each LLM request and response body passing through it (non-streaming path).
+The proxy MUST associate each capture with the `job_id` and `task_id` for that proxy instance.
+The worker MUST apply opportunistic secret redaction to captured payloads using a **shared library** also used by the orchestrator gateway path so behavior is consistent (see [Redact SBA inference data before storage](orchestrator.md#spec-cynai-orches-sbainferencelogredaction)).
+The worker MUST include redacted captures in reports to the orchestrator for optional persistence (exact Worker API shape is defined in [worker_api.md](worker_api.md)).
+
+#### 2 `Rule` Inference Proxy Job Binding
+
+- Spec ID: `CYNAI.WORKER.InferenceProxyJobBinding` <a id="spec-cynai-worker-inferenceproxyjobbinding"></a>
+
+Each inference proxy instance MUST be created with the `job_id` and `task_id` for the sandbox job it serves; every captured record MUST carry those identifiers.
+
+#### 3 `Rule` SBA Non-Streaming Redact-Forward
+
+- Spec ID: `CYNAI.WORKER.SbaNonStreamingRedactForward` <a id="spec-cynai-worker-sbanonstreamingredactforward"></a>
+
+For SBA non-streaming completions, the proxy MAY buffer the full response, redact, forward redacted content to the SBA, and attach redacted payloads to the orchestrator report.
+
+#### 4 `Operation` Inference Report to Orchestrator
+
+- Spec ID: `CYNAI.WORKER.InferenceReportToOrchestrator` <a id="spec-cynai-worker-inferencereporttoorchestrator"></a>
+
+The worker MUST NOT send unredacted request or response bodies in inference reports; only redactor output MUST be included.
+
+**Traces To:** [REQ-WORKER-0114](../requirements/worker.md#req-worker-0114), [REQ-WORKER-0115](../requirements/worker.md#req-worker-0115), [Node-Local Inference](#spec-cynai-worker-nodelocalinference).
+
 ## Node Sandbox MCP Exposure
 
 When the orchestrator needs to manage or interact with a sandbox on a node, sandbox

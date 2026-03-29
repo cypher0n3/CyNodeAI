@@ -232,7 +232,7 @@ There is no Phase 5 in [`docs/tech_specs/_main.md`](../docs/tech_specs/_main.md)
     - [`REQ-CLIENT-0157`](../docs/requirements/client.md#req-client-0157)
   - **Specs**:
     - [`user_api_gateway.md`](../docs/tech_specs/user_api_gateway.md#core-capabilities)
-    - [`CYNAI.CLIENT.CliTaskCreatePrompt`](../docs/tech_specs/cli_management_app_commands_tasks.md#spec-cynai-client-clitaskcreateprompt)
+    - [`CYNAI.CLIENT.CliTaskCreatePrompt`](../docs/tech_specs/cynork/cli_management_app_commands_tasks.md#spec-cynai-client-clitaskcreateprompt)
 
 - **P1.5-02 (4-8h): Minimal "prompt as model input" execution path with result = model output.**
   - **Deliverable**: For a natural-language prompt, orchestrator produces a task result that contains model output, not a shell error like `Tell: not found`.
@@ -256,7 +256,7 @@ There is no Phase 5 in [`docs/tech_specs/_main.md`](../docs/tech_specs/_main.md)
     - [`REQ-CLIENT-0151`](../docs/requirements/client.md#req-client-0151)
     - [`REQ-CLIENT-0153`](../docs/requirements/client.md#req-client-0153)
   - **Specs**:
-    - [`CYNAI.CLIENT.CliTaskCreatePrompt`](../docs/tech_specs/cli_management_app_commands_tasks.md#spec-cynai-client-clitaskcreateprompt)
+    - [`CYNAI.CLIENT.CliTaskCreatePrompt`](../docs/tech_specs/cynork/cli_management_app_commands_tasks.md#spec-cynai-client-clitaskcreateprompt)
 
 ### Phase 1.7 Agent Artifacts (PMA First, Then SBA)
 
@@ -524,7 +524,7 @@ Reference: [docs/tech_specs/\_main.md](../docs/tech_specs/_main.md) Phase 1; [ex
   Script-driven E2E (`just e2e` / `scripts/setup-dev.sh` full-demo) runs this when the node is started with inference and a model is loaded.
 - **CLI (cynork):** Separate Go module at `cynork/`; in `go.work` and justfile `go_modules`; version, status, auth (login/logout/whoami), task create/result; config via env and optional `~/.config/cynork/config.yaml`.
   Gateway URL default `http://localhost:12080`; no direct DB access; all operations via User API Gateway.
-  See [cynork_cli.md](../docs/tech_specs/cynork_cli.md) and [ports_and_endpoints.md](../docs/tech_specs/ports_and_endpoints.md).
+  See [cynork_cli.md](../docs/tech_specs/cynork/cynork_cli.md) and [ports_and_endpoints.md](../docs/tech_specs/ports_and_endpoints.md).
 
 **Done:** CLI module, worker-managed inference proxy path, worker_node BDD for inference; orchestrator/User API default to inference path; minimal prompt-as-model-input path; raw/script/commands mode; BDD for natural-language prompt (default) and result containing model output, and for commands mode (literal shell).
 Worker BDD: GET /readyz, 413 on oversized body. `just ci` passes.
@@ -583,8 +583,8 @@ Reference: [docs/tech_specs/\_main.md](../docs/tech_specs/_main.md) Phase 3, [wo
   Routing policy, signals, and settings per [external_model_routing.md](../docs/tech_specs/external_model_routing.md).
   External inference with node sandboxes (model via API Egress, sandbox for tools); per-agent routing settings for Project Manager and Project Analyst.
 - Secure Browser Service: deterministic sanitization, DB-backed rules.
-- CLI expansion per [cynork_cli.md](../docs/tech_specs/cynork_cli.md) MVP Scope: auth token support and `whoami`; interactive shell mode with tab completion for all MVP commands; credential list, create, rotate, disable for API Egress; preference list, get, set for system and user scopes; effective preferences for a task; node list, get, enable, disable, drain; skills (see [skills_storage_and_inference.md](../docs/tech_specs/skills_storage_and_inference.md)).
-  Recommended admin keys: [cli_management_app_commands_admin.md](../docs/tech_specs/cli_management_app_commands_admin.md).
+- CLI expansion per [cynork_cli.md](../docs/tech_specs/cynork/cynork_cli.md) MVP Scope: auth token support and `whoami`; interactive shell mode with tab completion for all MVP commands; credential list, create, rotate, disable for API Egress; preference list, get, set for system and user scopes; effective preferences for a task; node list, get, enable, disable, drain; skills (see [skills_storage_and_inference.md](../docs/tech_specs/skills_storage_and_inference.md)).
+  Recommended admin keys: [cli_management_app_commands_admin.md](../docs/tech_specs/cynork/cli_management_app_commands_admin.md).
 - Web Console after CLI; parity with CLI for admin capabilities.
 
 Reference: [docs/tech_specs/\_main.md](../docs/tech_specs/_main.md) Phase 4.
@@ -688,7 +688,7 @@ The basic E2E path for SBA job results is also in place.
 - [docs/tech_specs/worker_node.md](../docs/tech_specs/worker_node.md) - Node-local inference, Option A (proxy sidecar).
 - [docs/tech_specs/sandbox_container.md](../docs/tech_specs/sandbox_container.md) - Node-local inference access; SBA runner image.
 - [docs/tech_specs/cynode_sba.md](../docs/tech_specs/cynode_sba.md) - Sandbox agent runner (cynode-sba) spec; Phase 2 P2-09, P2-10.
-- [docs/tech_specs/cynork_cli.md](../docs/tech_specs/cynork_cli.md) - CLI goals, commands, MVP scope.
+- [docs/tech_specs/cynork_cli.md](../docs/tech_specs/cynork/cynork_cli.md) - CLI goals, commands, MVP scope.
 - [docs/tech_specs/ports_and_endpoints.md](../docs/tech_specs/ports_and_endpoints.md) - Default ports and E2E/BDD port usage.
 - [docs/tech_specs/sandbox_image_registry.md](../docs/tech_specs/sandbox_image_registry.md) - Registry behavior deferred; schema tables in scope for MVP (see Tech Spec Alignment).
 - [docs/tech_specs/mcp/user_installable_mcp_tools.md](../docs/tech_specs/mcp/user_installable_mcp_tools.md) - Out of MVP scope; deferred.

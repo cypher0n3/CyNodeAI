@@ -23,7 +23,7 @@ Outcome: end-to-end interactive streaming, minimum MCP-in-the-loop for PMA chat,
 
 - `2026-03-12_plan_next_round_execution.md` (doc removed; source of outstanding work; Phases 3-8 unchecked items).
 - [docs/requirements/client.md](../../requirements/client.md), [docs/requirements/usrgwy.md](../../requirements/usrgwy.md), [docs/requirements/pmagnt.md](../../requirements/pmagnt.md), [docs/requirements/orches.md](../../requirements/orches.md).
-- [docs/tech_specs/openai_compatible_chat_api.md](../../tech_specs/openai_compatible_chat_api.md) (streaming), [docs/tech_specs/chat_threads_and_messages.md](../../tech_specs/chat_threads_and_messages.md) (thinking persistence), [docs/tech_specs/cynode_pma.md](../../tech_specs/cynode_pma.md) (streaming, MCP), [docs/tech_specs/cynork_tui.md](../../tech_specs/cynork_tui.md), [docs/tech_specs/mcp/mcp_gateway_enforcement.md](../../tech_specs/mcp/mcp_gateway_enforcement.md).
+- [docs/tech_specs/openai_compatible_chat_api.md](../../tech_specs/openai_compatible_chat_api.md) (streaming), [docs/tech_specs/chat_threads_and_messages.md](../../tech_specs/chat_threads_and_messages.md) (thinking persistence), [docs/tech_specs/cynode_pma.md](../../tech_specs/cynode_pma.md) (streaming, MCP), [docs/tech_specs/cynork_tui.md](../../tech_specs/cynork/cynork_tui.md), [docs/tech_specs/mcp/mcp_gateway_enforcement.md](../../tech_specs/mcp/mcp_gateway_enforcement.md).
 - Implementation: gateway, orchestrator handlers, cynork/internal/chat (transport), cynork/internal/tui, agents/internal/pma, scripts/test_scripts (PTY harness).
 
 ## Constraints
@@ -77,7 +77,7 @@ Deliver `stream=true` on both interactive chat surfaces, client-driven cancellat
 #### Task 1 Requirements and Specifications
 
 - [REQ-USRGWY-0149](../../requirements/usrgwy.md), [REQ-USRGWY-0150](../../requirements/usrgwy.md), [REQ-PMAGNT-0118](../../requirements/pmagnt.md), [REQ-CLIENT-0209](../../requirements/client.md).
-- [CYNAI.USRGWY.OpenAIChatApi.Streaming](../../tech_specs/openai_compatible_chat_api.md), [CYNAI.PMAGNT.StreamingAssistantOutput](../../tech_specs/cynode_pma.md), [CYNAI.CLIENT.CynorkTui.GenerationState](../../tech_specs/cynork_tui.md).
+- [CYNAI.USRGWY.OpenAIChatApi.Streaming](../../tech_specs/openai_compatible_chat_api.md), [CYNAI.PMAGNT.StreamingAssistantOutput](../../tech_specs/cynode_pma.md), [CYNAI.CLIENT.CynorkTui.GenerationState](../../tech_specs/cynork/cynork_tui.md).
 - 2026-03-12 plan (doc removed) Phase 3 "Required Backend Validation Before TUI Wiring" and Phase 4 "Transport and Rendering Seams" (streaming and cancellation bullets); Phase 5 "Core TUI Experience" (streaming slice); Phase 6 streaming and cancellation coverage.
 
 #### Discovery (Task 1) Steps
@@ -191,7 +191,7 @@ Optionally align interactive `cynork chat` with the fullscreen TUI entry flow wh
 #### Task 3 Requirements and Specifications
 
 - [docs/requirements/client.md](../../requirements/client.md) (auth recovery, in-session model/project).
-- [docs/tech_specs/cynork_tui.md](../../tech_specs/cynork_tui.md) (auth recovery, status bar, in-session switches).
+- [docs/tech_specs/cynork_tui.md](../../tech_specs/cynork/cynork_tui.md) (auth recovery, status bar, in-session switches).
 - 2026-03-12 plan (doc removed) Phase 5 "Auth Recovery", "Thread and Session UX" (project/model in-session), "Tandem TUI and Harness Validation", "TUI Chat-Complete Exit".
 
 #### Discovery (Task 3) Steps
@@ -250,7 +250,7 @@ Add or complete BDD and PTY coverage for auth recovery, both chat surfaces, inte
 #### Task 4 Requirements and Specifications
 
 - [docs/requirements/client.md](../../requirements/client.md), [docs/requirements/usrgwy.md](../../requirements/usrgwy.md).
-- [docs/tech_specs/cynork_tui.md](../../tech_specs/cynork_tui.md).
+- [docs/tech_specs/cynork_tui.md](../../tech_specs/cynork/cynork_tui.md).
 - 2026-03-12 plan (doc removed) Phase 6 TUI Validation and BDD (unchecked items).
 
 #### Discovery (Task 4) Steps

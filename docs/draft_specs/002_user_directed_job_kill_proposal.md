@@ -46,7 +46,7 @@ This proposal does not change the gateway contract; it specifies that when task 
 ## 3. Authorization and Orchestrator Role
 
 - **Authorization:** Only the **user** (or an identity acting with the user's permission) who is allowed to cancel the task MAY trigger a job kill for that task.
-  The same access rules as for [task cancel](../tech_specs/cli_management_app_commands_tasks.md#spec-cynai-client-clicommandsurface) and gateway task operations apply: the subject must be authorized to cancel the task (e.g. task owner, project member, or admin as defined by access control).
+  The same access rules as for [task cancel](../tech_specs/cynork/cli_management_app_commands_tasks.md#spec-cynai-client-clicommandsurface) and gateway task operations apply: the subject must be authorized to cancel the task (e.g. task owner, project member, or admin as defined by access control).
 
 - **Orchestrator role:** On receiving a task cancel request (from gateway, PMA, or internal call triggered by slash command), the orchestrator MUST:
   1. Mark the task as canceled (or transitioning to canceled) in task state and persist.
@@ -105,7 +105,7 @@ When the node receives a stop job request for a running job that uses an **SBA**
 
 ## 7. Relationship to Existing Specs
 
-- **Task cancel (CLI / Gateway):** [CLI task cancel](../tech_specs/cli_management_app_commands_tasks.md#spec-cynai-client-clicommandsurface) and the User API Gateway task cancel remain the canonical way to request cancellation; this proposal extends the **orchestrator and worker** behavior so that cancel results in a stop request to the node when the task has an active job.
+- **Task cancel (CLI / Gateway):** [CLI task cancel](../tech_specs/cynork/cli_management_app_commands_tasks.md#spec-cynai-client-clicommandsurface) and the User API Gateway task cancel remain the canonical way to request cancellation; this proposal extends the **orchestrator and worker** behavior so that cancel results in a stop request to the node when the task has an active job.
 - **Worker API:** [worker_api.md](../tech_specs/worker_api.md) currently defines only `POST /v1/worker/jobs:run`.
   This proposal adds a **stop job** endpoint and required behavior; the exact path and payloads MUST be added to the Worker API spec upon adoption.
 - **Worker node:** [worker_node.md](../tech_specs/worker_node.md) and [worker_node_payloads.md](../tech_specs/worker_node_payloads.md) do not yet define stop job; adoption would add a Spec Item for stop job and reference the Worker API stop endpoint.
@@ -116,7 +116,7 @@ When the node receives a stop job request for a running job that uses an **SBA**
 
 - [Worker API](../tech_specs/worker_api.md)
 - [Worker Node](../tech_specs/worker_node.md)
-- [CLI task cancel](../tech_specs/cli_management_app_commands_tasks.md#spec-cynai-client-clicommandsurface)
+- [CLI task cancel](../tech_specs/cynork/cli_management_app_commands_tasks.md#spec-cynai-client-clicommandsurface)
 - [CyNode PMA](../tech_specs/cynode_pma.md)
 - [Default Messaging Connectors - Slash Commands](001_default_messaging_connectors_proposal.md)
 - [CyNode SBA - Job lifecycle](../tech_specs/cynode_sba.md) (for SBA in-progress and completion)

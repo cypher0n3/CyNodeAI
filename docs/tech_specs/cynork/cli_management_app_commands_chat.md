@@ -25,7 +25,7 @@ The session MUST use the same User API Gateway and token resolution as other com
 The chat interface MUST use the gateway's OpenAI-compatible interactive chat API.
 `POST /v1/chat/completions` remains the baseline line-oriented chat contract.
 As part of the TUI rollout, the client chat implementation MUST also support `POST /v1/responses` under the same user-facing chat contract.
-See [`docs/tech_specs/openai_compatible_chat_api.md`](openai_compatible_chat_api.md).
+See [`docs/tech_specs/openai_compatible_chat_api.md`](../openai_compatible_chat_api.md).
 
 ## Chat Command
 
@@ -33,27 +33,27 @@ See [`docs/tech_specs/openai_compatible_chat_api.md`](openai_compatible_chat_api
 
 ### Chat Command Requirements Traces
 
-- [REQ-CLIENT-0161](../requirements/client.md#req-client-0161)
-- [REQ-CLIENT-0162](../requirements/client.md#req-client-0162)
-- [REQ-CLIENT-0164](../requirements/client.md#req-client-0164)
-- [REQ-CLIENT-0181](../requirements/client.md#req-client-0181)
-- [REQ-CLIENT-0165](../requirements/client.md#req-client-0165)
-- [REQ-CLIENT-0166](../requirements/client.md#req-client-0166)
-- [REQ-CLIENT-0167](../requirements/client.md#req-client-0167)
-- [REQ-CLIENT-0168](../requirements/client.md#req-client-0168)
-- [REQ-CLIENT-0169](../requirements/client.md#req-client-0169)
-- [REQ-CLIENT-0170](../requirements/client.md#req-client-0170)
-- [REQ-CLIENT-0171](../requirements/client.md#req-client-0171)
-- [REQ-CLIENT-0172](../requirements/client.md#req-client-0172)
-- [REQ-CLIENT-0173](../requirements/client.md#req-client-0173)
-- [REQ-CLIENT-0175](../requirements/client.md#req-client-0175)
-- [REQ-CLIENT-0176](../requirements/client.md#req-client-0176)
-- [REQ-CLIENT-0177](../requirements/client.md#req-client-0177)
-- [REQ-CLIENT-0178](../requirements/client.md#req-client-0178)
-- [REQ-CLIENT-0182](../requirements/client.md#req-client-0182)
-- [REQ-CLIENT-0183](../requirements/client.md#req-client-0183)
-- [REQ-CLIENT-0184](../requirements/client.md#req-client-0184)
-- [REQ-CLIENT-0186](../requirements/client.md#req-client-0186)
+- [REQ-CLIENT-0161](../../requirements/client.md#req-client-0161)
+- [REQ-CLIENT-0162](../../requirements/client.md#req-client-0162)
+- [REQ-CLIENT-0164](../../requirements/client.md#req-client-0164)
+- [REQ-CLIENT-0181](../../requirements/client.md#req-client-0181)
+- [REQ-CLIENT-0165](../../requirements/client.md#req-client-0165)
+- [REQ-CLIENT-0166](../../requirements/client.md#req-client-0166)
+- [REQ-CLIENT-0167](../../requirements/client.md#req-client-0167)
+- [REQ-CLIENT-0168](../../requirements/client.md#req-client-0168)
+- [REQ-CLIENT-0169](../../requirements/client.md#req-client-0169)
+- [REQ-CLIENT-0170](../../requirements/client.md#req-client-0170)
+- [REQ-CLIENT-0171](../../requirements/client.md#req-client-0171)
+- [REQ-CLIENT-0172](../../requirements/client.md#req-client-0172)
+- [REQ-CLIENT-0173](../../requirements/client.md#req-client-0173)
+- [REQ-CLIENT-0175](../../requirements/client.md#req-client-0175)
+- [REQ-CLIENT-0176](../../requirements/client.md#req-client-0176)
+- [REQ-CLIENT-0177](../../requirements/client.md#req-client-0177)
+- [REQ-CLIENT-0178](../../requirements/client.md#req-client-0178)
+- [REQ-CLIENT-0182](../../requirements/client.md#req-client-0182)
+- [REQ-CLIENT-0183](../../requirements/client.md#req-client-0183)
+- [REQ-CLIENT-0184](../../requirements/client.md#req-client-0184)
+- [REQ-CLIENT-0186](../../requirements/client.md#req-client-0186)
 
 ### `cynork chat` Invocation
 
@@ -84,9 +84,9 @@ See [`docs/tech_specs/openai_compatible_chat_api.md`](openai_compatible_chat_api
 
 #### Thread Controls Traces To
 
-- [REQ-CLIENT-0181](../requirements/client.md#req-client-0181)
-- [REQ-CLIENT-0199](../requirements/client.md#req-client-0199)
-- [REQ-CLIENT-0200](../requirements/client.md#req-client-0200)
+- [REQ-CLIENT-0181](../../requirements/client.md#req-client-0181)
+- [REQ-CLIENT-0199](../../requirements/client.md#req-client-0199)
+- [REQ-CLIENT-0200](../../requirements/client.md#req-client-0200)
 
 The CLI MUST support starting with a new thread by default and resuming a previous thread only when the user supplies an explicit startup option.
 It MUST support explicit fresh-thread creation during an active session (e.g. `/thread new`) and MUST respect current project context for thread creation.
@@ -131,7 +131,7 @@ Interactive chat SHOULD also expose thread-list, switch, and rename operations u
 
 #### One-Shot Mode Traces To
 
-- [REQ-CLIENT-0178](../requirements/client.md#req-client-0178)
+- [REQ-CLIENT-0178](../../requirements/client.md#req-client-0178)
 
 When `cynork chat` is invoked with `-m, --message <text>`, the CLI MUST operate in one-shot mode:
 
@@ -161,7 +161,7 @@ The following applies when the CLI is not in one-shot mode (i.e. when `--message
 
 #### Chat Session Warm-Up Traces To
 
-- [REQ-CLIENT-0177](../requirements/client.md#req-client-0177)
+- [REQ-CLIENT-0177](../../requirements/client.md#req-client-0177)
 
 When the gateway exposes a chat warm-up endpoint (e.g. `POST /v1/chat/warm`), the CLI SHOULD call it once after auth and before entering the interactive chat loop (before showing the first prompt).
 The CLI MUST NOT block the prompt on warm-up completion: use fire-and-forget or a short timeout so the user can type immediately.
@@ -173,7 +173,7 @@ The model parameter MAY be omitted (gateway default) or set from the session def
 
 #### Slash Commands and Discoverability Traces To
 
-- [REQ-CLIENT-0164](../requirements/client.md#req-client-0164)
+- [REQ-CLIENT-0164](../../requirements/client.md#req-client-0164)
 
 The CLI MUST make slash commands discoverable to the user.
 At least one of the following MUST be implemented: (1) display the list of available slash commands when the chat session starts, or (2) support `/help` (see below) so the user can request the list at any time.
@@ -186,7 +186,7 @@ Implementations MAY show a short description next to each command (e.g. `/exit -
 
 ##### Slash Command Autocomplete Traces To
 
-- [REQ-CLIENT-0165](../requirements/client.md#req-client-0165)
+- [REQ-CLIENT-0165](../../requirements/client.md#req-client-0165)
 
 When the user types `/` at the start of the chat input line, the CLI MUST display the list of available slash commands inline (e.g. directly below the input).
 Each list entry MUST show the command name (e.g. `/exit`, `/help`) and a short description of what the command does.
@@ -204,7 +204,7 @@ Implementations MUST honor `--no-color` for the suggestion list (e.g. no colors 
 
 All slash commands start with `/` and are case-insensitive for the command name (e.g. `/help`, `/Help`, and `/HELP` are equivalent).
 Input that does not start with `/` or `!` is sent to the PM model as a chat message.
-When the message contains `@` file references, the CLI MUST resolve and upload them per the gateway contract; uploads are stored in the [orchestrator artifacts store](orchestrator_artifacts_storage.md) (see [OpenAI Chat API - At-Reference Workflow](openai_compatible_chat_api.md#spec-cynai-usrgwy-openaichatapi-atreferenceworkflow)).
+When the message contains `@` file references, the CLI MUST resolve and upload them per the gateway contract; uploads are stored in the [orchestrator artifacts store](../orchestrator_artifacts_storage.md) (see [OpenAI Chat API - At-Reference Workflow](../openai_compatible_chat_api.md#spec-cynai-usrgwy-openaichatapi-atreferenceworkflow)).
 Input that starts with `/` but does not match a known command SHOULD be treated as an unknown command.
 The CLI MUST print a brief error or hint (e.g. "Unknown command. Type /help for available commands.") and MUST NOT send the line to the PM model.
 Exact command semantics and execution algorithms are defined in [cynork_tui_slash_commands.md](cynork_tui_slash_commands.md).
@@ -215,7 +215,7 @@ Exact command semantics and execution algorithms are defined in [cynork_tui_slas
 
 ##### Shell Escape Traces To
 
-- [REQ-CLIENT-0175](../requirements/client.md#req-client-0175)
+- [REQ-CLIENT-0175](../../requirements/client.md#req-client-0175)
 
 When the user types a line that starts with `!`, the CLI MUST treat the remainder of the line as a shell command.
 The CLI MUST run the command in the user's underlying shell (e.g. `sh -c "<rest>"`) and MUST display the command's combined stdout and stderr inline in the chat.
@@ -236,8 +236,8 @@ That canonical contract includes the local-session commands, thinking-visibility
 
 ##### Model Selection Traces To
 
-- [REQ-CLIENT-0171](../requirements/client.md#req-client-0171)
-- [REQ-CLIENT-0172](../requirements/client.md#req-client-0172)
+- [REQ-CLIENT-0171](../../requirements/client.md#req-client-0171)
+- [REQ-CLIENT-0172](../../requirements/client.md#req-client-0172)
 
 Interactive `cynork chat` MUST implement the model-selection slash commands exactly as defined in [CYNAI.CLIENT.CynorkTui.ModelSlashCommands](cynork_tui_slash_commands.md#spec-cynai-client-cynorktui-modelslashcommands).
 Model selection affects only interactive chat completion requests and MUST NOT change any user preference or system setting.
@@ -248,7 +248,7 @@ Model selection affects only interactive chat completion requests and MUST NOT c
 
 ##### Project Context Traces To
 
-- [REQ-CLIENT-0173](../requirements/client.md#req-client-0173)
+- [REQ-CLIENT-0173](../../requirements/client.md#req-client-0173)
 
 Project context affects only chat session association and any user-initiated task operations that accept a project context.
 Project context MUST NOT be implicitly assigned.
@@ -262,7 +262,7 @@ Implementations SHOULD reuse the same request-building and output code paths as 
 
 ##### Task Slash Commands Traces To
 
-- [REQ-CLIENT-0166](../requirements/client.md#req-client-0166)
+- [REQ-CLIENT-0166](../../requirements/client.md#req-client-0166)
 
 Interactive `cynork chat` MUST implement the task slash commands exactly as defined in [CYNAI.CLIENT.CynorkTui.TaskSlashCommands](cynork_tui_slash_commands.md#spec-cynai-client-cynorktui-taskslashcommands).
 Each MUST call the same User API Gateway endpoints as the corresponding `cynork task` subcommand.
@@ -279,7 +279,7 @@ Output MUST be shown inline in the chat (pretty-printed per [Pretty-Printed JSON
 
 ##### Status and Identity Traces To
 
-- [REQ-CLIENT-0167](../requirements/client.md#req-client-0167)
+- [REQ-CLIENT-0167](../../requirements/client.md#req-client-0167)
 
 Interactive `cynork chat` MUST implement the status and auth slash commands exactly as defined in [CYNAI.CLIENT.CynorkTui.StatusSlashCommands](cynork_tui_slash_commands.md#spec-cynai-client-cynorktui-statusslashcommands).
 
@@ -289,7 +289,7 @@ Interactive `cynork chat` MUST implement the status and auth slash commands exac
 
 ##### Node Slash Commands Traces To
 
-- [REQ-CLIENT-0168](../requirements/client.md#req-client-0168)
+- [REQ-CLIENT-0168](../../requirements/client.md#req-client-0168)
 
 Interactive `cynork chat` MUST implement the node slash commands exactly as defined in [CYNAI.CLIENT.CynorkTui.NodeSlashCommands](cynork_tui_slash_commands.md#spec-cynai-client-cynorktui-nodeslashcommands).
 
@@ -299,7 +299,7 @@ Interactive `cynork chat` MUST implement the node slash commands exactly as defi
 
 ##### Preferences Slash Commands Traces To
 
-- [REQ-CLIENT-0169](../requirements/client.md#req-client-0169)
+- [REQ-CLIENT-0169](../../requirements/client.md#req-client-0169)
 
 Interactive `cynork chat` MUST implement the preference slash commands exactly as defined in [CYNAI.CLIENT.CynorkTui.PreferenceSlashCommands](cynork_tui_slash_commands.md#spec-cynai-client-cynorktui-preferenceslashcommands).
 
@@ -312,7 +312,7 @@ Each MUST call the same User API Gateway endpoints as the corresponding `cynork 
 
 ##### Skills Slash Commands Traces To
 
-- [REQ-CLIENT-0170](../requirements/client.md#req-client-0170)
+- [REQ-CLIENT-0170](../../requirements/client.md#req-client-0170)
 
 ### `cynork chat` Response Output (Pretty Formatting)
 
@@ -320,11 +320,11 @@ Each MUST call the same User API Gateway endpoints as the corresponding `cynork 
 
 #### Response Output Traces To
 
-- [REQ-CLIENT-0162](../requirements/client.md#req-client-0162)
-- [REQ-CLIENT-0182](../requirements/client.md#req-client-0182)
-- [REQ-CLIENT-0183](../requirements/client.md#req-client-0183)
-- [REQ-CLIENT-0184](../requirements/client.md#req-client-0184)
-- [REQ-CLIENT-0186](../requirements/client.md#req-client-0186)
+- [REQ-CLIENT-0162](../../requirements/client.md#req-client-0162)
+- [REQ-CLIENT-0182](../../requirements/client.md#req-client-0182)
+- [REQ-CLIENT-0183](../../requirements/client.md#req-client-0183)
+- [REQ-CLIENT-0184](../../requirements/client.md#req-client-0184)
+- [REQ-CLIENT-0186](../../requirements/client.md#req-client-0186)
 
 - When `--plain` is not set, the CLI MUST render model responses with pretty-formatted output: interpret Markdown in the visible assistant text and display it in a human-readable way in the terminal.
 - The CLI MUST support at least: headings, lists (ordered and unordered), code blocks (with optional syntax highlighting), inline code, emphasis (bold/italic), and links.
@@ -350,7 +350,7 @@ Each MUST call the same User API Gateway endpoints as the corresponding `cynork 
 
 ##### Subcommand Errors Traces To
 
-- [REQ-CLIENT-0176](../requirements/client.md#req-client-0176)
+- [REQ-CLIENT-0176](../../requirements/client.md#req-client-0176)
 
 When a slash command (e.g. `/skills list`, `/prefs list`) or a shell-escape command (`! ...`) fails (e.g. gateway returns 404, or the shell command exits non-zero), the CLI MUST display the error to the user (e.g. on stderr) and MUST continue the chat session.
 The CLI MUST NOT exit with a non-zero code or show the top-level command Usage in response to such a failure.

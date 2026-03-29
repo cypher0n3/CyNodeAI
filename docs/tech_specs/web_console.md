@@ -50,7 +50,7 @@ This spec implements those requirements and adds implementation detail for the N
 - [REQ-CLIENT-0004](../requirements/client.md#req-client-0004)
 
 The Web Console and the CLI management app MUST offer the same administrative capabilities.
-When adding or changing a capability in this spec (for example a new credential workflow, preference scope, node action, or skill operation), the [cynork CLI](cynork_cli.md) spec and implementation MUST be updated to match, and vice versa.
+When adding or changing a capability in this spec (for example a new credential workflow, preference scope, node action, or skill operation), the [cynork CLI](cynork/cynork_cli.md) spec and implementation MUST be updated to match, and vice versa.
 Use the same gateway APIs and the same authorization and auditing rules for both clients.
 
 ## Primary Use Cases
@@ -197,7 +197,7 @@ UI MUST provide the following.
 
 - [REQ-CLIENT-0179](../requirements/client.md#req-client-0179)
 
-The web console MUST support full CRUD for **Agent personas** (create, list, view, update, delete) via the User API Gateway, with the same capabilities as cynork (see [Personas Management](cli_management_app_commands_admin.md#spec-cynai-client-clipersonasmanagement)).
+The web console MUST support full CRUD for **Agent personas** (create, list, view, update, delete) via the User API Gateway, with the same capabilities as cynork (see [Personas Management](cynork/cli_management_app_commands_admin.md#spec-cynai-client-clipersonasmanagement)).
 Agent personas are reusable SBA role/identity descriptions (not customer or end-user personas); scope_type and scope_id determine visibility; create/update/delete are subject to RBAC per scope (e.g. admin for system-scoped); see [data_rest_api.md - Core Resources](data_rest_api.md#spec-cynai-datapi-coreresources).
 
 UI MUST provide:
@@ -216,7 +216,7 @@ UI MUST provide:
 
 - [REQ-CLIENT-0174](../requirements/client.md#req-client-0174)
 
-The web console MUST support basic project CRUD (create, list, view, update, delete or disable) via the User API Gateway, with the same capabilities as the CLI (see [Project Management](cli_management_app_commands_admin.md#spec-cynai-client-cliprojectmanagement)).
+The web console MUST support basic project CRUD (create, list, view, update, delete or disable) via the User API Gateway, with the same capabilities as the CLI (see [Project Management](cynork/cli_management_app_commands_admin.md#spec-cynai-client-cliprojectmanagement)).
 The web console MUST support project plan review (list plans per project, view plan by plan_id, view revision history) and plan approve (re-approve) with parity to the CLI; a project may have multiple plans, with only one active at a time; see [Project Plan API](user_api_gateway.md#spec-cynai-usrgwy-projectplanapi) and [REQ-CLIENT-0180](../requirements/client.md#req-client-0180).
 Projects have a user-friendly title (display name) and an optional text description for lists and detail views.
 

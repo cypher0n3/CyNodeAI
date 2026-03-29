@@ -45,35 +45,35 @@ The CLI is intended to support the same administrative capabilities as the Web C
 
 ### Document Overview Requirements Traces
 
-- [REQ-CLIENT-0001](../requirements/client.md#req-client-0001)
-- [REQ-CLIENT-0004](../requirements/client.md#req-client-0004)
+- [REQ-CLIENT-0001](../../requirements/client.md#req-client-0001)
+- [REQ-CLIENT-0004](../../requirements/client.md#req-client-0004)
 
 ### Related Documents
 
-- Client requirements: [`docs/requirements/client.md`](../requirements/client.md)
-- User API Gateway: [`docs/tech_specs/user_api_gateway.md`](user_api_gateway.md)
-- Web Console: [`docs/tech_specs/web_console.md`](web_console.md)
-- User preferences: [`docs/tech_specs/user_preferences.md`](user_preferences.md)
-- Skills storage and CRUD: [`docs/tech_specs/skills_storage_and_inference.md`](skills_storage_and_inference.md)
-- Data REST API: [`docs/tech_specs/data_rest_api.md`](data_rest_api.md)
-- API Egress (credentials): [`docs/tech_specs/api_egress_server.md`](api_egress_server.md)
-- Git Egress (credentials): [`docs/tech_specs/mcp_tools/git_egress.md`](mcp_tools/git_egress.md)
+- Client requirements: [`docs/requirements/client.md`](../../requirements/client.md)
+- User API Gateway: [`docs/tech_specs/user_api_gateway.md`](../user_api_gateway.md)
+- Web Console: [`docs/tech_specs/web_console.md`](../web_console.md)
+- User preferences: [`docs/tech_specs/user_preferences.md`](../user_preferences.md)
+- Skills storage and CRUD: [`docs/tech_specs/skills_storage_and_inference.md`](../skills_storage_and_inference.md)
+- Data REST API: [`docs/tech_specs/data_rest_api.md`](../data_rest_api.md)
+- API Egress (credentials): [`docs/tech_specs/api_egress_server.md`](../api_egress_server.md)
+- Git Egress (credentials): [`docs/tech_specs/mcp_tools/git_egress.md`](../mcp_tools/git_egress.md)
 
 ## Capability Parity With Web Console
 
 - Spec ID: `CYNAI.CLIENT.CliCapabilityParity` <a id="spec-cynai-client-clicapabilityparity"></a>
 
-The CLI and the [Web Console](web_console.md) MUST offer the same administrative capabilities.
+The CLI and the [Web Console](../web_console.md) MUST offer the same administrative capabilities.
 When adding or changing a capability in this spec (for example a new command, credential workflow, preference scope, node action, or skill operation), the Web Console spec and implementation MUST be updated to match, and vice versa.
 Use the same gateway APIs and the same authorization and auditing rules for both clients.
 
 ### Capability Parity Requirements Traces
 
-- [REQ-CLIENT-0004](../requirements/client.md#req-client-0004)
+- [REQ-CLIENT-0004](../../requirements/client.md#req-client-0004)
 
 ### User-Gateway Alignment (Implementation Status)
 
-Cynork calls the User API Gateway ([user_api_gateway.md](user_api_gateway.md)).
+Cynork calls the User API Gateway ([user_api_gateway.md](../user_api_gateway.md)).
 The following alignment is for implementers:
 
 - **Implemented on gateway and used by cynork:** `GET /healthz`, `POST /v1/auth/login`, `POST /v1/auth/refresh`, `POST /v1/auth/logout`, `GET /v1/users/me`, `POST /v1/users/{id}/revoke_sessions` (admin), `POST /v1/tasks`, `GET /v1/tasks`, `GET /v1/tasks/{id}`, `GET /v1/tasks/{id}/result`, `POST /v1/tasks/{id}/cancel`, `GET /v1/tasks/{id}/logs`, `POST /v1/chat/completions`.
@@ -113,11 +113,11 @@ Non-goals
 
 The following requirements apply.
 
-- [REQ-CLIENT-0100](../requirements/client.md#req-client-0100)
-- [REQ-CLIENT-0101](../requirements/client.md#req-client-0101)
-- [REQ-CLIENT-0102](../requirements/client.md#req-client-0102)
-- [REQ-CLIENT-0103](../requirements/client.md#req-client-0103)
-- [REQ-CLIENT-0104](../requirements/client.md#req-client-0104)
+- [REQ-CLIENT-0100](../../requirements/client.md#req-client-0100)
+- [REQ-CLIENT-0101](../../requirements/client.md#req-client-0101)
+- [REQ-CLIENT-0102](../../requirements/client.md#req-client-0102)
+- [REQ-CLIENT-0103](../../requirements/client.md#req-client-0103)
+- [REQ-CLIENT-0104](../../requirements/client.md#req-client-0104)
 
 ## Authentication and Configuration
 
@@ -130,8 +130,8 @@ It authenticates to the User API Gateway and is authorized by the gateway.
 
 #### Configuration File and Location Requirements Traces
 
-- [REQ-CLIENT-0149](../requirements/client.md#req-client-0149)
-- [REQ-CLIENT-0150](../requirements/client.md#req-client-0150)
+- [REQ-CLIENT-0149](../../requirements/client.md#req-client-0149)
+- [REQ-CLIENT-0150](../../requirements/client.md#req-client-0150)
 
 #### Config File Path
 
@@ -145,7 +145,7 @@ It authenticates to the User API Gateway and is authorized by the gateway.
 - Supported top-level keys:
   - `gateway_url` (string, optional): base URL of the User API Gateway (e.g. `http://localhost:12080`).
   - `token` (string, optional): **legacy**; MUST NOT be written by the CLI.
-    If present, the CLI MUST ignore it for auth, strip it from the file on load, and MUST NOT persist bearer tokens to disk as plaintext (see [REQ-CLIENT-0103](../requirements/client.md#req-client-0103), [REQ-CLIENT-0149](../requirements/client.md#req-client-0149)).
+    If present, the CLI MUST ignore it for auth, strip it from the file on load, and MUST NOT persist bearer tokens to disk as plaintext (see [REQ-CLIENT-0103](../../requirements/client.md#req-client-0103), [REQ-CLIENT-0149](../../requirements/client.md#req-client-0149)).
   - `credential_helper` (string, optional): command or helper name to obtain the token (see [Credential Helper Protocol](#credential-helper-protocol)).
   - `tui` (object, optional): TUI-specific local preferences.
     Supported first-pass field:
@@ -165,14 +165,14 @@ It authenticates to the User API Gateway and is authorized by the gateway.
 #### Default Gateway URL
 
 - When `gateway_url` is empty after load and env override, the CLI MUST use the default `http://localhost:12080` (or a build-time constant matching the orchestrator default).
-- See [Ports and endpoints](ports_and_endpoints.md#spec-cynai-stands-clicynork) for the consolidated default and overrides.
+- See [Ports and endpoints](../ports_and_endpoints.md#spec-cynai-stands-clicynork) for the consolidated default and overrides.
 
 #### Session Persistence (Reliability)
 
 - Spec ID: `CYNAI.CLIENT.CliSessionPersistence` <a id="spec-cynai-client-clisessionpersistence"></a>
-- Traces To: [REQ-CLIENT-0150](../requirements/client.md#req-client-0150)
+- Traces To: [REQ-CLIENT-0150](../../requirements/client.md#req-client-0150)
 - When writing **non-secret** preferences to the config file (e.g. `gateway_url`, TUI settings), the CLI MUST write atomically (e.g. write to a temp file in the same directory then rename to the final path) so that a crash or interrupt does not leave a partial or corrupt file; subsequent invocations MUST see either the previous config or a complete new one.
-- The CLI MUST NOT persist access tokens, refresh tokens, or other session credentials in the **user config directory** or in `config.yaml` (see [REQ-CLIENT-0103](../requirements/client.md#req-client-0103), [REQ-CLIENT-0149](../requirements/client.md#req-client-0149)).
+- The CLI MUST NOT persist access tokens, refresh tokens, or other session credentials in the **user config directory** or in `config.yaml` (see [REQ-CLIENT-0103](../../requirements/client.md#req-client-0103), [REQ-CLIENT-0149](../../requirements/client.md#req-client-0149)).
 - **Exception (session cache):** the CLI MAY persist the gateway session (access and refresh tokens) outside the config directory: it SHOULD use the OS credential store when available (e.g. Keychain, Secret Service); if that is unavailable or fails, it MAY fall back to a JSON file under the XDG cache path (`$XDG_CACHE_HOME/cynork/session.json`, or `~/.cache/cynork/session.json` when `XDG_CACHE_HOME` is unset).
   That file MUST be created with restrictive permissions (e.g. `0600`) and MUST NOT be placed under the same directory as `config.yaml`.
 - Reuse across separate processes MAY use this built-in session store, or `CYNORK_TOKEN` / `CYNORK_REFRESH_TOKEN`, or an optional `credential_helper` executable when implemented.
@@ -183,13 +183,13 @@ It authenticates to the User API Gateway and is authorized by the gateway.
 - Spec ID: `CYNAI.CLIENT.CliTokenResolution` <a id="spec-cynai-client-clitokenresolution"></a>
 
 The CLI MUST resolve the bearer token used for gateway requests by following this order; the first non-empty value wins.
-The CLI MUST NOT load bearer tokens from the config file (legacy `token` keys are ignored and stripped on load per [REQ-CLIENT-0103](../requirements/client.md#req-client-0103)).
+The CLI MUST NOT load bearer tokens from the config file (legacy `token` keys are ignored and stripped on load per [REQ-CLIENT-0103](../../requirements/client.md#req-client-0103)).
 
 #### Token Resolution Requirements Traces
 
-- [REQ-CLIENT-0105](../requirements/client.md#req-client-0105)
-- [REQ-CLIENT-0106](../requirements/client.md#req-client-0106)
-- [REQ-CLIENT-0149](../requirements/client.md#req-client-0149)
+- [REQ-CLIENT-0105](../../requirements/client.md#req-client-0105)
+- [REQ-CLIENT-0106](../../requirements/client.md#req-client-0106)
+- [REQ-CLIENT-0149](../../requirements/client.md#req-client-0149)
 
 #### Environment Variable
 
@@ -242,7 +242,7 @@ When the config contains a non-empty `credential_helper`, the CLI SHOULD use it 
 
 #### Credential Helper Protocol Requirements Traces
 
-- [REQ-CLIENT-0149](../requirements/client.md#req-client-0149)
+- [REQ-CLIENT-0149](../../requirements/client.md#req-client-0149)
 
 ### Authentication and Configuration Applicable Requirements
 
@@ -250,10 +250,10 @@ When the config contains a non-empty `credential_helper`, the CLI SHOULD use it 
 
 #### Authentication and Configuration Requirements Traces
 
-- [REQ-CLIENT-0105](../requirements/client.md#req-client-0105)
-- [REQ-CLIENT-0106](../requirements/client.md#req-client-0106)
-- [REQ-CLIENT-0107](../requirements/client.md#req-client-0107)
-- [REQ-CLIENT-0149](../requirements/client.md#req-client-0149)
+- [REQ-CLIENT-0105](../../requirements/client.md#req-client-0105)
+- [REQ-CLIENT-0106](../../requirements/client.md#req-client-0106)
+- [REQ-CLIENT-0107](../../requirements/client.md#req-client-0107)
+- [REQ-CLIENT-0149](../../requirements/client.md#req-client-0149)
 
 ## Command Surface
 
@@ -266,10 +266,10 @@ See [Auth Recovery](cynork_tui.md#spec-cynai-client-cynorkchat-authrecovery).
 
 ### Command Surface Requirements Traces
 
-- [REQ-CLIENT-0101](../requirements/client.md#req-client-0101)
-- [REQ-CLIENT-0155](../requirements/client.md#req-client-0155)
-- [REQ-CLIENT-0156](../requirements/client.md#req-client-0156)
-- [REQ-CLIENT-0158](../requirements/client.md#req-client-0158)
+- [REQ-CLIENT-0101](../../requirements/client.md#req-client-0101)
+- [REQ-CLIENT-0155](../../requirements/client.md#req-client-0155)
+- [REQ-CLIENT-0156](../../requirements/client.md#req-client-0156)
+- [REQ-CLIENT-0158](../../requirements/client.md#req-client-0158)
 
 ### Global Flags
 
@@ -375,7 +375,7 @@ All subcommands that call the gateway MUST use the resolved gateway URL and reso
   - Create: `cynork persona create --title "..." --description "..."` (optional `--scope-type`, `--scope-id`).
   - Update: `cynork persona update <persona_id>` (optional `--title`, `--description`, `--scope-type`, `--scope-id`).
   - Delete: `cynork persona delete <persona_id>`.
-- `cynork skills ...`: full CRUD via gateway; see [Skill Management CRUD (Web and CLI)](skills_storage_and_inference.md#spec-cynai-skills-skillmanagementcrud) and [Skills Management](cli_management_app_commands_admin.md#spec-cynai-client-cliskillsmanagement).
+- `cynork skills ...`: full CRUD via gateway; see [Skill Management CRUD (Web and CLI)](../skills_storage_and_inference.md#spec-cynai-skills-skillmanagementcrud) and [Skills Management](cli_management_app_commands_admin.md#spec-cynai-client-cliskillsmanagement).
   - Create: `cynork skills load <file.md>` (required file path; optional `--name`, `--scope`).
   - List: `cynork skills list` (optional `--scope`, `--owner`).
   - Get: `cynork skills get <skill_selector>`.
@@ -407,7 +407,7 @@ On invalid config file (syntax error), the CLI MUST exit with code 2 before runn
 - Spec ID: `CYNAI.CLIENT.CliImplementation` <a id="spec-cynai-client-cliimpl"></a>
 
 The CLI MUST be implemented in Go using Cobra for the command tree.
-Implementation MUST follow [Go REST API Standards](go_rest_api_standards.md) where applicable (e.g. HTTP client behavior, error handling).
+Implementation MUST follow [Go REST API Standards](../go_rest_api_standards.md) where applicable (e.g. HTTP client behavior, error handling).
 
 ### Required Package Layout
 
@@ -434,14 +434,14 @@ Implementation MUST follow [Go REST API Standards](go_rest_api_standards.md) whe
 
 - The CLI MUST NOT log config file contents, token values, credential helper stdin/stdout containing secrets, or any flag value that is a secret (e.g. `--secret-file` path MAY be logged; file contents MUST NOT).
 - When reading secrets from stdin or a file, buffers MUST be cleared or not retained longer than necessary for the single request.
-- Go code that handles the resolved token, credential helper I/O, or any secret value MUST use `runtime/secret` when available per [REQ-STANDS-0133](../requirements/stands.md#req-stands-0133); when not available, MUST use best-effort secure erasure before returning.
+- Go code that handles the resolved token, credential helper I/O, or any secret value MUST use `runtime/secret` when available per [REQ-STANDS-0133](../../requirements/stands.md#req-stands-0133); when not available, MUST use best-effort secure erasure before returning.
 
 ### Implementation Specification Requirements Traces
 
-- [REQ-CLIENT-0101](../requirements/client.md#req-client-0101)
-- [REQ-CLIENT-0102](../requirements/client.md#req-client-0102)
-- [REQ-CLIENT-0103](../requirements/client.md#req-client-0103)
-- [REQ-STANDS-0133](../requirements/stands.md#req-stands-0133) (Go code handling tokens or secrets)
+- [REQ-CLIENT-0101](../../requirements/client.md#req-client-0101)
+- [REQ-CLIENT-0102](../../requirements/client.md#req-client-0102)
+- [REQ-CLIENT-0103](../../requirements/client.md#req-client-0103)
+- [REQ-STANDS-0133](../../requirements/stands.md#req-stands-0133) (Go code handling tokens or secrets)
 
 ## TUI Scope and Locked Decisions
 
@@ -474,7 +474,7 @@ Normative TUI behavior and layout are defined in [cynork_tui.md](cynork_tui.md).
 
 2. Related specifications
 
-   - [User API Gateway](user_api_gateway.md)
-   - [Data REST API](data_rest_api.md)
-   - [Web Console](web_console.md)
-   - [Client requirements](../requirements/client.md)
+   - [User API Gateway](../user_api_gateway.md)
+   - [Data REST API](../data_rest_api.md)
+   - [Web Console](../web_console.md)
+   - [Client requirements](../../requirements/client.md)

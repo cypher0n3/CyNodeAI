@@ -37,7 +37,7 @@ Implementation must live in the right places: MCP tool handlers in the orchestra
   [docs/tech_specs/mcp/mcp_gateway_enforcement.md](../../tech_specs/mcp/mcp_gateway_enforcement.md),
   [docs/tech_specs/mcp/mcp_tooling.md](../../tech_specs/mcp/mcp_tooling.md),
   [docs/tech_specs/user_api_gateway.md](../../tech_specs/user_api_gateway.md),
-  [docs/tech_specs/cli_management_app_commands_tasks.md](../../tech_specs/cli_management_app_commands_tasks.md).
+  [docs/tech_specs/cli_management_app_commands_tasks.md](../../tech_specs/cynork/cli_management_app_commands_tasks.md).
 - Implementation: `orchestrator/cmd/mcp-gateway/main.go`, `orchestrator/internal/handlers/tasks.go`,
   `orchestrator/internal/database/`, `agents/internal/pma/` (mcp_client, mcp_tools),
   `agents/internal/sba/` (mcp_client, mcp_tools), `go_shared_libs/` (contracts only).

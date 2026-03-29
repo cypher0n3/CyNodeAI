@@ -245,7 +245,7 @@ Both paths MUST result in the skill being stored in the skill store and register
 Related specs
 
 - Web Console: [`docs/tech_specs/web_console.md`](web_console.md)
-- CLI management app: [`docs/tech_specs/cynork_cli.md`](cynork_cli.md)
+- CLI management app: [`docs/tech_specs/cynork/cynork_cli.md`](cynork/cynork_cli.md)
 - Skill auditing: [Skill Auditing (Malicious Pattern Scanning)](#skill-auditing-malicious-pattern-scanning)
 - Full CRUD: [Skill Management CRUD (Web and CLI)](#skill-management-crud-web-and-cli)
 
@@ -296,7 +296,7 @@ All operations MUST go through the User API Gateway; the same controls (authenti
 Related specs
 
 - Web Console: [`docs/tech_specs/web_console.md`](web_console.md)
-- CLI management app: [`docs/tech_specs/cynork_cli.md`](cynork_cli.md)
+- CLI management app: [`docs/tech_specs/cynork/cynork_cli.md`](cynork/cynork_cli.md)
 
 ## Effective Skill Set and Resolution (Backend Semantics)
 

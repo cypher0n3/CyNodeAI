@@ -138,4 +138,4 @@ Admins MUST be able to turn individual MCP tools on or off.
 - When a tool is disabled, the MCP gateway MUST reject invocations of that tool regardless of role allowlist or access control allow rules.
 - When a tool is enabled (or not listed as disabled), normal role allowlist and access control evaluation apply.
 - Configuration MAY be stored in system settings (e.g. `mcp.tools.disabled` as an array of tool names, or per-tool keys such as `mcp.tool.<tool_name>.enabled`) and/or enforced via access control rules (e.g. deny rules for specific tools).
-- The Web Console and CLI management app MUST expose the ability for admins to view and change per-tool enable/disable state, consistent with [client capability parity](../cynork_cli.md) and [Web Console](../web_console.md).
+- The Web Console and CLI management app MUST expose the ability for admins to view and change per-tool enable/disable state, consistent with [client capability parity](../cynork/cynork_cli.md) and [Web Console](../web_console.md).

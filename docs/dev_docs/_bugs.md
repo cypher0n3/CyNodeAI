@@ -207,7 +207,7 @@ See [REQ-ORCHES-0175](../requirements/orches.md#req-orches-0175) and [orchestrat
 
 ## Bug 2: Cannot Launch Cynork TUI Without Connectivity
 
-Logged-in users hit gateway APIs before the TUI renders; offline startup should show the UI first, per [cynork_tui.md](../tech_specs/cynork_tui.md) entrypoint rules.
+Logged-in users hit gateway APIs before the TUI renders; offline startup should show the UI first, per [cynork_tui.md](../tech_specs/cynork/cynork_tui.md) entrypoint rules.
 
 ### Bug 2 Summary
 
@@ -224,7 +224,7 @@ The product spec expects the fullscreen TUI to **render first** and defer thread
 
 ### Bug 2 Expected Behavior (Spec)
 
-[cynork_tui.md](../tech_specs/cynork_tui.md) (`CYNAI.CLIENT.CynorkTui.EntryPoint`):
+[cynork_tui.md](../tech_specs/cynork/cynork_tui.md) (`CYNAI.CLIENT.CynorkTui.EntryPoint`):
 
 - `cynork tui` MUST start and render the TUI surface **unconditionally**, without requiring a valid login token at launch.
 - Token resolution and validation MUST be deferred to the initial gateway connection **after** the TUI is visible.
@@ -250,14 +250,14 @@ The startup path for an existing token does not use that; it blocks in the CLI l
 - **On TUI `Init`:** When `OpenLoginFormOnInit` is false and the session has a token, dispatch `ensureThreadCmd()` (same as post-login) so thread creation/listing happens in the Bubble Tea loop and failures surface in-scrollback.
 - **First message:** Ensure behavior matches the spec: thread must exist before the first completion.
   If `EnsureThread` fails in the async path, the first send may need to either block on retry or show a clear error.
-  Align with [Connection Recovery](../tech_specs/cynork_tui.md#connection-recovery) and thread semantics already documented.
+  Align with [Connection Recovery](../tech_specs/cynork/cynork_tui.md#connection-recovery) and thread semantics already documented.
 
 ### Bug 2 Files Involved
 
 - **Pre-TUI network call:** `cynork/cmd/tui.go` (`runTUI`).
 - **Thread ensure implementation:** `cynork/internal/chat/session.go` (`EnsureThread`, `NewThread`, `ResolveThreadSelector`).
 - **Async ensure after login:** `cynork/internal/tui/model.go` (`ensureThreadCmd`, `applyEnsureThreadResult`, `applyLoginResult`).
-- **Spec:** `docs/tech_specs/cynork_tui.md` (Entrypoint and Compatibility).
+- **Spec:** `docs/tech_specs/cynork/cynork_tui.md` (Entrypoint and Compatibility).
 
 ### Bug 2 Suggested Tests
 
@@ -315,7 +315,7 @@ For example, a typical no-token-at-launch flow where `Init` never ran `ensureThr
 
 ### Bug 3 Spec Expectations
 
-- [cynork_tui.md](../tech_specs/cynork_tui.md) Auth Recovery: after successful in-session re-authentication, the TUI SHOULD resume the same session state and return focus to the interrupted flow rather than forcing a full restart.
+- [cynork_tui.md](../tech_specs/cynork/cynork_tui.md) Auth Recovery: after successful in-session re-authentication, the TUI SHOULD resume the same session state and return focus to the interrupted flow rather than forcing a full restart.
 - Same doc Entry / thread semantics: default is a new thread unless `--resume-thread` is supplied; thread must exist before the first completion.
 
 There is tension only if "same session state" is interpreted as always keeping the same thread after login.
@@ -370,7 +370,7 @@ That is the opposite problem (stale thread id) but relevant when validating "new
 - `cynork/internal/chat/session.go` - `EnsureThread`, `NewThread`.
 - `cynork/cmd/tui.go` - `runTUI`, `runTUIWithSession`, `SetResumeThreadSelector`.
 - `cynork/internal/tui/slash.go` - `/auth login` -> `openLoginFormMsg`; `authLogout`.
-- Spec: `docs/tech_specs/cynork_tui.md` (Auth Recovery, Entry / threads).
+- Spec: `docs/tech_specs/cynork/cynork_tui.md` (Auth Recovery, Entry / threads).
 
 ### Bug 3 Suggested Tests
 
@@ -402,7 +402,7 @@ While the assistant turn is **streaming** (`Loading` true, streaming deltas in f
 Pressing Enter with non-empty input is ignored.
 Typing in the composer may still work; the failure is on **Enter** to execute.
 
-This is stricter than users expect (run `/help`, `/thread list`, `!date`, etc. without waiting for the stream to finish) and may conflict with **streaming-aware composer** behavior described in [cynork_tui.md](../tech_specs/cynork_tui.md) (queued drafts, Ctrl+Enter send-now), which is not fully implemented in the current key path.
+This is stricter than users expect (run `/help`, `/thread list`, `!date`, etc. without waiting for the stream to finish) and may conflict with **streaming-aware composer** behavior described in [cynork_tui.md](../tech_specs/cynork/cynork_tui.md) (queued drafts, Ctrl+Enter send-now), which is not fully implemented in the current key path.
 
 ### Bug 4 Observed Behavior
 
@@ -427,7 +427,7 @@ So **all** non-empty submits are suppressed during loading, not only "send anoth
 
 ### Bug 4 Expected Behavior (Spec Cross-Check)
 
-[cynork_tui.md](../tech_specs/cynork_tui.md) (**Layout and Interaction** / streaming) describes:
+[cynork_tui.md](../tech_specs/cynork/cynork_tui.md) (**Layout and Interaction** / streaming) describes:
 
 - While the agent is streaming, **Enter** should add composer content to a **queue** (and clear the composer), not send immediately.
 - **Ctrl+Enter** should **send now** and may interrupt streaming.
@@ -449,7 +449,7 @@ Product should confirm whether slash/shell during streaming must work **without*
 ### Bug 4 Files Involved
 
 - `cynork/internal/tui/model.go` - `handleEnterKey`, `handleSlashLine`, `streamCmd`, `applyStreamDone` / `Loading` lifecycle.
-- Spec: [cynork_tui.md](../tech_specs/cynork_tui.md) (streaming, composer keybindings); [cynork_tui_slash_commands.md](../tech_specs/cynork_tui_slash_commands.md) for slash semantics.
+- Spec: [cynork_tui.md](../tech_specs/cynork/cynork_tui.md) (streaming, composer keybindings); [cynork_tui_slash_commands.md](../tech_specs/cynork/cynork_tui_slash_commands.md) for slash semantics.
 
 ### Bug 4 Suggested Tests
 

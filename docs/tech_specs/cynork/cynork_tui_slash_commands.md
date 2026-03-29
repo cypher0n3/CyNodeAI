@@ -48,7 +48,7 @@ Related documents:
 - [Cynork TUI](cynork_tui.md)
 - [CLI management app - chat command](cli_management_app_commands_chat.md)
 - [Cynork CLI](cynork_cli.md)
-- [User API Gateway](user_api_gateway.md)
+- [User API Gateway](../user_api_gateway.md)
 
 ## Slash Command Execution Model
 
@@ -66,10 +66,10 @@ They MUST be handled locally by the TUI command dispatcher and MUST NOT be sent 
 
 ### Slash Command Execution Model Traces To
 
-- [REQ-CLIENT-0164](../requirements/client.md#req-client-0164)
-- [REQ-CLIENT-0165](../requirements/client.md#req-client-0165)
-- [REQ-CLIENT-0176](../requirements/client.md#req-client-0176)
-- [REQ-CLIENT-0207](../requirements/client.md#req-client-0207)
+- [REQ-CLIENT-0164](../../requirements/client.md#req-client-0164)
+- [REQ-CLIENT-0165](../../requirements/client.md#req-client-0165)
+- [REQ-CLIENT-0176](../../requirements/client.md#req-client-0176)
+- [REQ-CLIENT-0207](../../requirements/client.md#req-client-0207)
 
 ### `SlashCommandExecution` Algorithm
 
@@ -113,15 +113,15 @@ The TUI MUST provide these local slash commands:
 
 ### Local Session Slash Commands Traces To
 
-- [REQ-CLIENT-0164](../requirements/client.md#req-client-0164)
-- [REQ-CLIENT-0183](../requirements/client.md#req-client-0183)
-- [REQ-CLIENT-0193](../requirements/client.md#req-client-0193)
-- [REQ-CLIENT-0195](../requirements/client.md#req-client-0195)
-- [REQ-CLIENT-0203](../requirements/client.md#req-client-0203)
-- [REQ-CLIENT-0208](../requirements/client.md#req-client-0208)
-- [REQ-CLIENT-0211](../requirements/client.md#req-client-0211)
-- [REQ-CLIENT-0214](../requirements/client.md#req-client-0214)
-- [REQ-CLIENT-0217](../requirements/client.md#req-client-0217)
+- [REQ-CLIENT-0164](../../requirements/client.md#req-client-0164)
+- [REQ-CLIENT-0183](../../requirements/client.md#req-client-0183)
+- [REQ-CLIENT-0193](../../requirements/client.md#req-client-0193)
+- [REQ-CLIENT-0195](../../requirements/client.md#req-client-0195)
+- [REQ-CLIENT-0203](../../requirements/client.md#req-client-0203)
+- [REQ-CLIENT-0208](../../requirements/client.md#req-client-0208)
+- [REQ-CLIENT-0211](../../requirements/client.md#req-client-0211)
+- [REQ-CLIENT-0214](../../requirements/client.md#req-client-0214)
+- [REQ-CLIENT-0217](../../requirements/client.md#req-client-0217)
 
 ### Thinking Visibility Behavior
 
@@ -141,10 +141,10 @@ They MUST NOT modify stored message content in the database, canonical plain-tex
 
 ### Thinking Visibility Behavior Traces To
 
-- [REQ-CLIENT-0183](../requirements/client.md#req-client-0183)
-- [REQ-CLIENT-0195](../requirements/client.md#req-client-0195)
-- [REQ-CLIENT-0208](../requirements/client.md#req-client-0208)
-- [REQ-CLIENT-0211](../requirements/client.md#req-client-0211)
+- [REQ-CLIENT-0183](../../requirements/client.md#req-client-0183)
+- [REQ-CLIENT-0195](../../requirements/client.md#req-client-0195)
+- [REQ-CLIENT-0208](../../requirements/client.md#req-client-0208)
+- [REQ-CLIENT-0211](../../requirements/client.md#req-client-0211)
 
 ### Tool Output Visibility Behavior
 
@@ -164,8 +164,8 @@ They MUST NOT modify stored message content in the database, canonical plain-tex
 
 ### Tool Output Visibility Behavior Traces To
 
-- [REQ-CLIENT-0193](../requirements/client.md#req-client-0193)
-- [REQ-CLIENT-0217](../requirements/client.md#req-client-0217)
+- [REQ-CLIENT-0193](../../requirements/client.md#req-client-0193)
+- [REQ-CLIENT-0217](../../requirements/client.md#req-client-0217)
 
 ### `LocalSlashCommands` Algorithm
 
@@ -210,10 +210,10 @@ Whatever selector form is supported, the client MUST display that selector in th
 
 ### Thread Slash Commands Traces To
 
-- [REQ-CLIENT-0181](../requirements/client.md#req-client-0181)
-- [REQ-CLIENT-0199](../requirements/client.md#req-client-0199)
-- [REQ-CLIENT-0200](../requirements/client.md#req-client-0200)
-- [REQ-CLIENT-0207](../requirements/client.md#req-client-0207)
+- [REQ-CLIENT-0181](../../requirements/client.md#req-client-0181)
+- [REQ-CLIENT-0199](../../requirements/client.md#req-client-0199)
+- [REQ-CLIENT-0200](../../requirements/client.md#req-client-0200)
+- [REQ-CLIENT-0207](../../requirements/client.md#req-client-0207)
 
 ### `ThreadSlashCommands` Algorithm
 
@@ -239,9 +239,9 @@ The TUI MUST provide:
 
 ### Model Slash Commands Traces To
 
-- [REQ-CLIENT-0171](../requirements/client.md#req-client-0171)
-- [REQ-CLIENT-0172](../requirements/client.md#req-client-0172)
-- [REQ-CLIENT-0207](../requirements/client.md#req-client-0207)
+- [REQ-CLIENT-0171](../../requirements/client.md#req-client-0171)
+- [REQ-CLIENT-0172](../../requirements/client.md#req-client-0172)
+- [REQ-CLIENT-0207](../../requirements/client.md#req-client-0207)
 
 ### `ModelSlashCommands` Algorithm
 
@@ -266,8 +266,8 @@ The TUI MUST provide:
 
 ### Project Slash Commands Traces To
 
-- [REQ-CLIENT-0173](../requirements/client.md#req-client-0173)
-- [REQ-CLIENT-0207](../requirements/client.md#req-client-0207)
+- [REQ-CLIENT-0173](../../requirements/client.md#req-client-0173)
+- [REQ-CLIENT-0207](../../requirements/client.md#req-client-0207)
 
 ### `ProjectSlashCommands` Algorithm
 
@@ -294,9 +294,9 @@ The TUI MUST provide:
 
 ### Status and Auth Slash Commands Traces To
 
-- [REQ-CLIENT-0167](../requirements/client.md#req-client-0167)
-- [REQ-CLIENT-0176](../requirements/client.md#req-client-0176)
-- [REQ-CLIENT-0207](../requirements/client.md#req-client-0207)
+- [REQ-CLIENT-0167](../../requirements/client.md#req-client-0167)
+- [REQ-CLIENT-0176](../../requirements/client.md#req-client-0176)
+- [REQ-CLIENT-0207](../../requirements/client.md#req-client-0207)
 
 ### `StatusSlashCommands` Algorithm
 
@@ -326,8 +326,8 @@ Where a task slash command references an existing task, `<task_selector>` is the
 
 ### Task Slash Commands Traces To
 
-- [REQ-CLIENT-0166](../requirements/client.md#req-client-0166)
-- [REQ-CLIENT-0207](../requirements/client.md#req-client-0207)
+- [REQ-CLIENT-0166](../../requirements/client.md#req-client-0166)
+- [REQ-CLIENT-0207](../../requirements/client.md#req-client-0207)
 
 ### `TaskSlashCommands` Algorithm
 
@@ -349,8 +349,8 @@ The TUI MUST provide:
 
 ### Node Slash Commands Traces To
 
-- [REQ-CLIENT-0168](../requirements/client.md#req-client-0168)
-- [REQ-CLIENT-0207](../requirements/client.md#req-client-0207)
+- [REQ-CLIENT-0168](../../requirements/client.md#req-client-0168)
+- [REQ-CLIENT-0207](../../requirements/client.md#req-client-0207)
 
 ### `NodeSlashCommands` Algorithm
 
@@ -374,8 +374,8 @@ The TUI MUST provide:
 
 ### Preference Slash Commands Traces To
 
-- [REQ-CLIENT-0169](../requirements/client.md#req-client-0169)
-- [REQ-CLIENT-0207](../requirements/client.md#req-client-0207)
+- [REQ-CLIENT-0169](../../requirements/client.md#req-client-0169)
+- [REQ-CLIENT-0207](../../requirements/client.md#req-client-0207)
 
 ### `PreferenceSlashCommands` Algorithm
 
@@ -402,8 +402,8 @@ If a user-typeable selector matches multiple visible skills, the client MUST fai
 
 ### Skill Slash Commands Traces To
 
-- [REQ-CLIENT-0170](../requirements/client.md#req-client-0170)
-- [REQ-CLIENT-0207](../requirements/client.md#req-client-0207)
+- [REQ-CLIENT-0170](../../requirements/client.md#req-client-0170)
+- [REQ-CLIENT-0207](../../requirements/client.md#req-client-0207)
 
 ### `SkillSlashCommands` Algorithm
 

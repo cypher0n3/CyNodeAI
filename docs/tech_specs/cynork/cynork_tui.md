@@ -11,7 +11,6 @@
   - [Queued Drafts and Deferred Send](#queued-drafts-and-deferred-send)
   - [`QueuedDrafts` Deferred Implementation](#queueddrafts-deferred-implementation)
   - [Layout and Interaction Traces To](#layout-and-interaction-traces-to)
-- [Visual Mockup](#visual-mockup)
 - [Thread History](#thread-history)
 - [Transcript Rendering](#transcript-rendering)
   - [Transcript Rendering Requirements Traces](#transcript-rendering-requirements-traces)
@@ -52,43 +51,43 @@ The TUI expectation is real token-by-token streaming from the gateway: visible a
 ### `cynork` TUI Traces To
 
 - [CYNAI.CLIENT.TuiScope](cynork_cli.md#spec-cynai-client-tuiscope)
-- [REQ-CLIENT-0212](../requirements/client.md#req-client-0212)
-- [REQ-CLIENT-0181](../requirements/client.md#req-client-0181)
-- [REQ-CLIENT-0182](../requirements/client.md#req-client-0182)
-- [REQ-CLIENT-0183](../requirements/client.md#req-client-0183)
-- [REQ-CLIENT-0184](../requirements/client.md#req-client-0184)
-- [REQ-CLIENT-0185](../requirements/client.md#req-client-0185)
-- [REQ-CLIENT-0187](../requirements/client.md#req-client-0187)
-- [REQ-CLIENT-0188](../requirements/client.md#req-client-0188)
-- [REQ-CLIENT-0189](../requirements/client.md#req-client-0189)
-- [REQ-CLIENT-0190](../requirements/client.md#req-client-0190)
-- [REQ-CLIENT-0191](../requirements/client.md#req-client-0191)
-- [REQ-CLIENT-0192](../requirements/client.md#req-client-0192)
-- [REQ-CLIENT-0193](../requirements/client.md#req-client-0193)
-- [REQ-CLIENT-0194](../requirements/client.md#req-client-0194)
-- [REQ-CLIENT-0195](../requirements/client.md#req-client-0195)
-- [REQ-CLIENT-0196](../requirements/client.md#req-client-0196)
-- [REQ-CLIENT-0197](../requirements/client.md#req-client-0197)
-- [REQ-CLIENT-0198](../requirements/client.md#req-client-0198)
-- [REQ-CLIENT-0199](../requirements/client.md#req-client-0199)
-- [REQ-CLIENT-0200](../requirements/client.md#req-client-0200)
-- [REQ-CLIENT-0201](../requirements/client.md#req-client-0201)
-- [REQ-CLIENT-0202](../requirements/client.md#req-client-0202)
-- [REQ-CLIENT-0203](../requirements/client.md#req-client-0203)
-- [REQ-CLIENT-0204](../requirements/client.md#req-client-0204)
-- [REQ-CLIENT-0205](../requirements/client.md#req-client-0205)
-- [REQ-CLIENT-0206](../requirements/client.md#req-client-0206)
-- [REQ-CLIENT-0207](../requirements/client.md#req-client-0207)
-- [REQ-CLIENT-0213](../requirements/client.md#req-client-0213)
-- [REQ-CLIENT-0214](../requirements/client.md#req-client-0214)
+- [REQ-CLIENT-0212](../../requirements/client.md#req-client-0212)
+- [REQ-CLIENT-0181](../../requirements/client.md#req-client-0181)
+- [REQ-CLIENT-0182](../../requirements/client.md#req-client-0182)
+- [REQ-CLIENT-0183](../../requirements/client.md#req-client-0183)
+- [REQ-CLIENT-0184](../../requirements/client.md#req-client-0184)
+- [REQ-CLIENT-0185](../../requirements/client.md#req-client-0185)
+- [REQ-CLIENT-0187](../../requirements/client.md#req-client-0187)
+- [REQ-CLIENT-0188](../../requirements/client.md#req-client-0188)
+- [REQ-CLIENT-0189](../../requirements/client.md#req-client-0189)
+- [REQ-CLIENT-0190](../../requirements/client.md#req-client-0190)
+- [REQ-CLIENT-0191](../../requirements/client.md#req-client-0191)
+- [REQ-CLIENT-0192](../../requirements/client.md#req-client-0192)
+- [REQ-CLIENT-0193](../../requirements/client.md#req-client-0193)
+- [REQ-CLIENT-0194](../../requirements/client.md#req-client-0194)
+- [REQ-CLIENT-0195](../../requirements/client.md#req-client-0195)
+- [REQ-CLIENT-0196](../../requirements/client.md#req-client-0196)
+- [REQ-CLIENT-0197](../../requirements/client.md#req-client-0197)
+- [REQ-CLIENT-0198](../../requirements/client.md#req-client-0198)
+- [REQ-CLIENT-0199](../../requirements/client.md#req-client-0199)
+- [REQ-CLIENT-0200](../../requirements/client.md#req-client-0200)
+- [REQ-CLIENT-0201](../../requirements/client.md#req-client-0201)
+- [REQ-CLIENT-0202](../../requirements/client.md#req-client-0202)
+- [REQ-CLIENT-0203](../../requirements/client.md#req-client-0203)
+- [REQ-CLIENT-0204](../../requirements/client.md#req-client-0204)
+- [REQ-CLIENT-0205](../../requirements/client.md#req-client-0205)
+- [REQ-CLIENT-0206](../../requirements/client.md#req-client-0206)
+- [REQ-CLIENT-0207](../../requirements/client.md#req-client-0207)
+- [REQ-CLIENT-0213](../../requirements/client.md#req-client-0213)
+- [REQ-CLIENT-0214](../../requirements/client.md#req-client-0214)
 
 ### Related Documents
 
 - [Chat command](cli_management_app_commands_chat.md)
 - [TUI slash commands](cynork_tui_slash_commands.md)
 - [TUI session cache (disk layout)](cynork_tui_session_cache.md)
-- [Chat threads and messages](chat_threads_and_messages.md)
-- [OpenAI-compatible chat API](openai_compatible_chat_api.md)
+- [Chat threads and messages](../chat_threads_and_messages.md)
+- [OpenAI-compatible chat API](../openai_compatible_chat_api.md)
 
 ## Entrypoint and Compatibility
 
@@ -96,8 +95,8 @@ The TUI expectation is real token-by-token streaming from the gateway: visible a
 
 ### Entrypoint and Compatibility Traces To
 
-- [REQ-CLIENT-0197](../requirements/client.md#req-client-0197)
-- [REQ-CLIENT-0202](../requirements/client.md#req-client-0202)
+- [REQ-CLIENT-0197](../../requirements/client.md#req-client-0197)
+- [REQ-CLIENT-0202](../../requirements/client.md#req-client-0202)
 
 - `cynork tui` is the explicit full-screen TUI entrypoint and MUST be provided as a top-level command.
   `cynork tui` MUST start and render the TUI surface unconditionally, without requiring a valid login token at launch.
@@ -198,29 +197,23 @@ This behavior is **not implemented yet** in cynork; the following is the shape t
 
 ### Layout and Interaction Traces To
 
-- [REQ-CLIENT-0189](../requirements/client.md#req-client-0189)
-- [REQ-CLIENT-0190](../requirements/client.md#req-client-0190)
-- [REQ-CLIENT-0192](../requirements/client.md#req-client-0192)
-- [REQ-CLIENT-0193](../requirements/client.md#req-client-0193)
-- [REQ-CLIENT-0194](../requirements/client.md#req-client-0194)
-- [REQ-CLIENT-0195](../requirements/client.md#req-client-0195)
-- [REQ-CLIENT-0196](../requirements/client.md#req-client-0196)
-- [REQ-CLIENT-0198](../requirements/client.md#req-client-0198)
-- [REQ-CLIENT-0199](../requirements/client.md#req-client-0199)
-- [REQ-CLIENT-0200](../requirements/client.md#req-client-0200)
-- [REQ-CLIENT-0201](../requirements/client.md#req-client-0201)
-- [REQ-CLIENT-0202](../requirements/client.md#req-client-0202)
-- [REQ-CLIENT-0203](../requirements/client.md#req-client-0203)
-- [REQ-CLIENT-0204](../requirements/client.md#req-client-0204)
-- [REQ-CLIENT-0205](../requirements/client.md#req-client-0205)
-- [REQ-CLIENT-0206](../requirements/client.md#req-client-0206)
-- [REQ-CLIENT-0207](../requirements/client.md#req-client-0207)
-
-## Visual Mockup
-
-The canonical retained design mockup for the TUI is shown below.
-
-![Cynork chat TUI mockup](./images/cynork_chat_tui_mockup.png)
+- [REQ-CLIENT-0189](../../requirements/client.md#req-client-0189)
+- [REQ-CLIENT-0190](../../requirements/client.md#req-client-0190)
+- [REQ-CLIENT-0192](../../requirements/client.md#req-client-0192)
+- [REQ-CLIENT-0193](../../requirements/client.md#req-client-0193)
+- [REQ-CLIENT-0194](../../requirements/client.md#req-client-0194)
+- [REQ-CLIENT-0195](../../requirements/client.md#req-client-0195)
+- [REQ-CLIENT-0196](../../requirements/client.md#req-client-0196)
+- [REQ-CLIENT-0198](../../requirements/client.md#req-client-0198)
+- [REQ-CLIENT-0199](../../requirements/client.md#req-client-0199)
+- [REQ-CLIENT-0200](../../requirements/client.md#req-client-0200)
+- [REQ-CLIENT-0201](../../requirements/client.md#req-client-0201)
+- [REQ-CLIENT-0202](../../requirements/client.md#req-client-0202)
+- [REQ-CLIENT-0203](../../requirements/client.md#req-client-0203)
+- [REQ-CLIENT-0204](../../requirements/client.md#req-client-0204)
+- [REQ-CLIENT-0205](../../requirements/client.md#req-client-0205)
+- [REQ-CLIENT-0206](../../requirements/client.md#req-client-0206)
+- [REQ-CLIENT-0207](../../requirements/client.md#req-client-0207)
 
 ## Thread History
 
@@ -268,16 +261,16 @@ The TUI SHOULD follow the same broad rendering pattern used by modern chat tools
 
 ### Transcript Rendering Requirements Traces
 
-- [REQ-CLIENT-0182](../requirements/client.md#req-client-0182)
-- [REQ-CLIENT-0183](../requirements/client.md#req-client-0183)
-- [REQ-CLIENT-0184](../requirements/client.md#req-client-0184)
-- [REQ-CLIENT-0192](../requirements/client.md#req-client-0192)
-- [REQ-CLIENT-0193](../requirements/client.md#req-client-0193)
-- [REQ-CLIENT-0194](../requirements/client.md#req-client-0194)
-- [REQ-CLIENT-0195](../requirements/client.md#req-client-0195)
-- [REQ-CLIENT-0208](../requirements/client.md#req-client-0208)
-- [REQ-CLIENT-0216](../requirements/client.md#req-client-0216)
-- [REQ-CLIENT-0217](../requirements/client.md#req-client-0217)
+- [REQ-CLIENT-0182](../../requirements/client.md#req-client-0182)
+- [REQ-CLIENT-0183](../../requirements/client.md#req-client-0183)
+- [REQ-CLIENT-0184](../../requirements/client.md#req-client-0184)
+- [REQ-CLIENT-0192](../../requirements/client.md#req-client-0192)
+- [REQ-CLIENT-0193](../../requirements/client.md#req-client-0193)
+- [REQ-CLIENT-0194](../../requirements/client.md#req-client-0194)
+- [REQ-CLIENT-0195](../../requirements/client.md#req-client-0195)
+- [REQ-CLIENT-0208](../../requirements/client.md#req-client-0208)
+- [REQ-CLIENT-0216](../../requirements/client.md#req-client-0216)
+- [REQ-CLIENT-0217](../../requirements/client.md#req-client-0217)
 
 ## Generation State
 
@@ -285,15 +278,15 @@ The TUI SHOULD follow the same broad rendering pattern used by modern chat tools
 
 ### Generation State Traces To
 
-- [REQ-CLIENT-0185](../requirements/client.md#req-client-0185)
-- [REQ-CLIENT-0209](../requirements/client.md#req-client-0209)
-- [REQ-CLIENT-0215](../requirements/client.md#req-client-0215)
-- [REQ-CLIENT-0216](../requirements/client.md#req-client-0216)
-- [REQ-CLIENT-0217](../requirements/client.md#req-client-0217)
-- [REQ-CLIENT-0218](../requirements/client.md#req-client-0218)
-- [REQ-CLIENT-0219](../requirements/client.md#req-client-0219)
-- [REQ-CLIENT-0220](../requirements/client.md#req-client-0220)
-- [REQ-CLIENT-0221](../requirements/client.md#req-client-0221)
+- [REQ-CLIENT-0185](../../requirements/client.md#req-client-0185)
+- [REQ-CLIENT-0209](../../requirements/client.md#req-client-0209)
+- [REQ-CLIENT-0215](../../requirements/client.md#req-client-0215)
+- [REQ-CLIENT-0216](../../requirements/client.md#req-client-0216)
+- [REQ-CLIENT-0217](../../requirements/client.md#req-client-0217)
+- [REQ-CLIENT-0218](../../requirements/client.md#req-client-0218)
+- [REQ-CLIENT-0219](../../requirements/client.md#req-client-0219)
+- [REQ-CLIENT-0220](../../requirements/client.md#req-client-0220)
+- [REQ-CLIENT-0221](../../requirements/client.md#req-client-0221)
 
 - The TUI expects real token-by-token streaming: the gateway MUST deliver visible assistant text as incremental token deltas on the standard streaming path, not as one buffered payload at completion.
 - While a response is in progress, the TUI MUST render exactly one in-flight assistant turn and MUST update that turn in place rather than appending duplicate assistant rows.
@@ -311,7 +304,7 @@ The TUI SHOULD follow the same broad rendering pattern used by modern chat tools
 - When hidden thinking is available during streaming, the TUI SHOULD update the same collapsed thinking placeholder block in place rather than emitting raw reasoning text into the visible assistant answer area.
 - When the TUI receives a `cynodeai.amendment` SSE event with `type: secret_redaction` during a streaming turn, it MUST replace the accumulated visible assistant text for the in-flight turn with the `content` value from the amendment event.
   The replacement MUST happen in place within the same in-flight row; the TUI MUST NOT append a second assistant row or leave stale unredacted text visible.
-  See [Streaming Redaction Pipeline](openai_compatible_chat_api.md#spec-cynai-usrgwy-openaichatapi-streamingredactionpipeline) for the gateway-side algorithm and amendment event wire format.
+  See [Streaming Redaction Pipeline](../openai_compatible_chat_api.md#spec-cynai-usrgwy-openaichatapi-streamingredactionpipeline) for the gateway-side algorithm and amendment event wire format.
 - When the final assistant turn is committed, the TUI MUST remove the transient in-flight indicator and replace the in-flight row with the final ordered assistant turn content.
 - Final reconciliation MUST preserve already streamed visible assistant text (or the amended text if an amendment event was received), MUST keep the final item ordering, and MUST NOT duplicate visible assistant text that was already shown during streaming.
 - Final reconciliation MUST discard ephemeral progress-only labels and MUST retain only the final persisted transcript content and any separately rendered structured items.
@@ -362,7 +355,7 @@ Secret-bearing in-flight buffer code paths MUST run inside `runtime/secret` (`se
 This includes the `applyStreamDelta` method that appends to `streamBuf`, the amendment-replacement path, and the thinking/tool-call buffer append paths.
 
 The TUI's buffer is display-only and is not a persistence or redaction layer, but the in-memory content is secret-bearing until an amendment event replaces it.
-When `runtime/secret` is not available, the TUI MUST use best-effort secure erasure (zeroing the backing slice before dropping the reference), using the shared `runWithSecret` utility from `go_shared_libs/secretutil/` per [CYNAI.STANDS.SecretHandling](go_rest_api_standards.md#spec-cynai-stands-secrethandling).
+When `runtime/secret` is not available, the TUI MUST use best-effort secure erasure (zeroing the backing slice before dropping the reference), using the shared `runWithSecret` utility from `go_shared_libs/secretutil/` per [CYNAI.STANDS.SecretHandling](../go_rest_api_standards.md#spec-cynai-stands-secrethandling).
 
 ## Connection Recovery
 
@@ -378,7 +371,7 @@ When the connection to the gateway is lost or interrupted while a response is st
 
 ### Connection Recovery Traces To
 
-- [REQ-CLIENT-0213](../requirements/client.md#req-client-0213)
+- [REQ-CLIENT-0213](../../requirements/client.md#req-client-0213)
 
 ## Completion and Discovery
 
@@ -386,7 +379,7 @@ When the connection to the gateway is lost or interrupted while a response is st
 
 ### Completion and Discovery Traces To
 
-- [REQ-CLIENT-0203](../requirements/client.md#req-client-0203)
+- [REQ-CLIENT-0203](../../requirements/client.md#req-client-0203)
 
 The TUI SHOULD provide completion and fuzzy discovery for interactive chat actions.
 
@@ -401,11 +394,11 @@ The TUI SHOULD provide completion and fuzzy discovery for interactive chat actio
 
 ### Local File References Traces To
 
-- [REQ-CLIENT-0198](../requirements/client.md#req-client-0198)
+- [REQ-CLIENT-0198](../../requirements/client.md#req-client-0198)
 
 The composer MAY support `@` references to local files.
 
-- `@` references are resolved locally at send time and uploaded per the gateway contract; files are stored in the [orchestrator artifacts store](orchestrator_artifacts_storage.md) and retrievable via the unified artifacts API (see [Chat File Upload Storage](chat_threads_and_messages.md#spec-cynai-usrgwy-chatthreadsmessages-fileuploadstorage), [OpenAI Chat API - At-Reference Workflow](openai_compatible_chat_api.md#spec-cynai-usrgwy-openaichatapi-atreferenceworkflow)).
+- `@` references are resolved locally at send time and uploaded per the gateway contract; files are stored in the [orchestrator artifacts store](../orchestrator_artifacts_storage.md) and retrievable via the unified artifacts API (see [Chat File Upload Storage](../chat_threads_and_messages.md#spec-cynai-usrgwy-chatthreadsmessages-fileuploadstorage), [OpenAI Chat API - At-Reference Workflow](../openai_compatible_chat_api.md#spec-cynai-usrgwy-openaichatapi-atreferenceworkflow)).
 - If the user references a missing, unreadable, oversized, or disallowed file, the client MUST surface an error and MUST NOT send the message until the user resolves the issue.
 - The TUI MAY provide autocomplete or browser-like lookup when the user types `@`.
 - After a successful send, the transcript MAY show compact attachment metadata instead of replaying raw local paths.
@@ -416,9 +409,9 @@ The composer MAY support `@` references to local files.
 
 ### Local Config Traces To
 
-- [REQ-CLIENT-0187](../requirements/client.md#req-client-0187)
-- [REQ-CLIENT-0211](../requirements/client.md#req-client-0211)
-- [REQ-CLIENT-0217](../requirements/client.md#req-client-0217)
+- [REQ-CLIENT-0187](../../requirements/client.md#req-client-0187)
+- [REQ-CLIENT-0211](../../requirements/client.md#req-client-0211)
+- [REQ-CLIENT-0217](../../requirements/client.md#req-client-0217)
 
 TUI-specific preferences MAY live in the same config directory as the rest of cynork.
 
@@ -444,7 +437,7 @@ TUI-specific preferences MAY live in the same config directory as the rest of cy
 
 ### Local Cache Traces To
 
-- [REQ-CLIENT-0188](../requirements/client.md#req-client-0188)
+- [REQ-CLIENT-0188](../../requirements/client.md#req-client-0188)
 
 The TUI MAY cache lightweight metadata that improves responsiveness of completion and history panes.
 
@@ -464,7 +457,7 @@ That document is the single source of truth for directory layout (`tui_sessions/
 
 ### Auth Recovery Traces To
 
-- [REQ-CLIENT-0190](../requirements/client.md#req-client-0190)
+- [REQ-CLIENT-0190](../../requirements/client.md#req-client-0190)
 
 The TUI MUST start unconditionally without requiring a valid login token at launch and MUST support interactive login recovery at startup and during the session.
 
@@ -491,7 +484,7 @@ The TUI MUST start unconditionally without requiring a valid login token at laun
 
 ### Web Login Traces To
 
-- [REQ-CLIENT-0191](../requirements/client.md#req-client-0191)
+- [REQ-CLIENT-0191](../../requirements/client.md#req-client-0191)
 
 The CLI SHOULD support a web-based login flow suitable for SSO-capable deployments.
 

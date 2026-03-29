@@ -8,6 +8,7 @@
   - [`RepoIdentifierFormat` Rule](#repoidentifierformat-rule)
 - [Project Git Repos and Git Egress](#project-git-repos-and-git-egress)
   - [Git Egress Project-Scoped Allowlist](#git-egress-project-scoped-allowlist)
+- [Workspace Provisioning (Repo to Sandbox)](#workspace-provisioning-repo-to-sandbox)
 - [MCP and Admin Surfaces](#mcp-and-admin-surfaces)
   - [`ProjectGitReposMcp` Operation](#projectgitreposmcp-operation)
 - [MVP Notes](#mvp-notes)
@@ -123,6 +124,27 @@ See [`docs/tech_specs/mcp_tools/git_egress.md`](mcp_tools/git_egress.md) for the
 #### Git Egress Project-Scoped Allowlist Requirements Traces
 
 - [REQ-APIEGR-0127](../requirements/apiegr.md#req-apiegr-0127)
+
+## Workspace Provisioning (Repo to Sandbox)
+
+The same `project_git_repos` allowlist used for Git egress (when a task has `project_id`) is also the allowlist for **which repositories may be cloned** to populate a job's `/workspace` before the sandbox starts.
+
+### `WorkspaceProvisioning` Rule
+
+- Spec ID: `CYNAI.PROJCT.WorkspaceProvisioning` <a id="spec-cynai-projct-workspaceprovisioning"></a>
+
+- **Credential boundary:** Git credentials MUST reside only in orchestrator-side or API-Egress-adjacent services that implement Git egress and/or workspace provisioning.
+  Worker nodes, Node Manager, and sandboxes MUST NOT receive Git credentials; they MAY receive only a **content-only bundle** (e.g. tarball) produced after clone.
+- **Allowlist:** When a job requests workspace content from a Git repo, the provisioning component MUST resolve the task's `project_id`, load that project's `project_git_repos`, and MUST allow provisioning only when `(provider, repo_identifier, base_url)` matches an associated row.
+- **Output:** The bundle MUST NOT contain credentials, remote URLs with embedded secrets, or `.git/config` entries that expose credentials; a local `.git` MAY be present for sandbox-local Git commands if it cannot leak credentials off-node.
+- **Sequence:** Orchestrator (or job builder) requests a bundle for `(provider, repo_identifier, ref, task_id)`; provisioning validates allowlist, clones using stored credentials, returns a tarball or reference; orchestrator or node transfers the bundle; the node unpacks into the job workspace before container start; the sandbox sees a populated `/workspace` without direct remote access.
+
+#### Workspace Provisioning Requirements Traces
+
+- [REQ-PROJCT-0106](../requirements/projct.md#req-projct-0106)
+- [REQ-APIEGR-0127](../requirements/apiegr.md#req-apiegr-0127)
+
+See also [git_egress.md](mcp_tools/git_egress.md), [cynode_sba.md](cynode_sba.md) (optional `workspace` on the job), [worker_node.md](worker_node.md) (workspace mount and unpack).
 
 ## MCP and Admin Surfaces
 

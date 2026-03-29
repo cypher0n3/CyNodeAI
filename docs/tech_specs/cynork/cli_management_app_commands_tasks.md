@@ -17,9 +17,9 @@ All `task` subcommands MUST require auth.
 
 ### Task Identifier
 
-- Where a task is referenced (e.g. `task get`, `task update`, `task delete`, `task cancel`, `task result`, `task logs`, `task artifacts list`, `task artifacts get`), the CLI MUST accept either the task UUID or the human-readable task name (see [Project Manager Agent - Task Naming](project_manager_agent.md#spec-cynai-agents-pmtasknaming)).
+- Where a task is referenced (e.g. `task get`, `task update`, `task delete`, `task cancel`, `task result`, `task logs`, `task artifacts list`, `task artifacts get`), the CLI MUST accept either the task UUID or the human-readable task name (see [Project Manager Agent - Task Naming](../project_manager_agent.md#spec-cynai-agents-pmtasknaming)).
 - Task list and task get output MUST include the task name when the system provides one (e.g. in table mode as `task_name=<name>` and in JSON as `task_name`).
-  For task name format and semantics, see [Project Manager Agent - Task Naming](project_manager_agent.md#spec-cynai-agents-pmtasknaming).
+  For task name format and semantics, see [Project Manager Agent - Task Naming](../project_manager_agent.md#spec-cynai-agents-pmtasknaming).
 
 ### Task Status Enum
 
@@ -34,7 +34,7 @@ The task result `status` field (from gateway or CLI output) MUST be exactly one 
 
 ### Task `planning_state`
 
-- Task create returns `planning_state=draft`; workflow execution is gated on `planning_state=ready` (see [postgres_schema.md - Tasks Table](postgres_schema.md#spec-cynai-schema-taskstable)).
+- Task create returns `planning_state=draft`; workflow execution is gated on `planning_state=ready` (see [postgres_schema.md - Tasks Table](../postgres_schema.md#spec-cynai-schema-taskstable)).
 - Task list, get, and result output MUST include `planning_state` when the gateway provides it.
 - A task MAY be transitioned to `ready` by the Project Manager Agent after review, or by an explicit ready operation (e.g. `POST /v1/tasks/{id}/ready` or `cynork task ready <task_id>` when exposed).
 
@@ -70,12 +70,12 @@ Task input modes (exactly one MUST be provided)
 - `--name <string>`.
   Suggested human-readable name for the task.
   When provided, the CLI MUST include it in the task create request.
-  The orchestrator accepts the value, normalizes it per [Task Naming](project_manager_agent.md#spec-cynai-agents-pmtasknaming), and ensures uniqueness (e.g. appends a number) when the normalized name already exists in scope.
+  The orchestrator accepts the value, normalizes it per [Task Naming](../project_manager_agent.md#spec-cynai-agents-pmtasknaming), and ensures uniqueness (e.g. appends a number) when the normalized name already exists in scope.
 - `--project-id <project_id>`.
   Optional project association for the task.
   When provided, the CLI MUST include it in the task create request.
-  When omitted, the gateway MUST associate the task with the authenticated user's default project (see [Default project](projects_and_scopes.md#spec-cynai-access-defaultproject)).
-  See [Projects and Scope Model](projects_and_scopes.md).
+  When omitted, the gateway MUST associate the task with the authenticated user's default project (see [Default project](../projects_and_scopes.md#spec-cynai-access-defaultproject)).
+  See [Projects and Scope Model](../projects_and_scopes.md).
 - `--result`.
   Default is false.
   When set, after creating the task the CLI MUST poll the gateway for the task result until the task reaches a closed (terminal) status (`completed`, `failed`, `canceled`, or `superseded`), then MUST print the result in the same format as `cynork task result`.
@@ -120,13 +120,13 @@ Task input modes (exactly one MUST be provided)
 
 #### `cynork task create` Traces To
 
-- [REQ-ORCHES-0122](../requirements/orches.md#req-orches-0122)
-- [REQ-ORCHES-0126](../requirements/orches.md#req-orches-0126)
-- [REQ-ORCHES-0127](../requirements/orches.md#req-orches-0127)
-- [REQ-ORCHES-0128](../requirements/orches.md#req-orches-0128)
-- [REQ-CLIENT-0151](../requirements/client.md#req-client-0151)
-- [REQ-CLIENT-0153](../requirements/client.md#req-client-0153)
-- [REQ-CLIENT-0157](../requirements/client.md#req-client-0157)
+- [REQ-ORCHES-0122](../../requirements/orches.md#req-orches-0122)
+- [REQ-ORCHES-0126](../../requirements/orches.md#req-orches-0126)
+- [REQ-ORCHES-0127](../../requirements/orches.md#req-orches-0127)
+- [REQ-ORCHES-0128](../../requirements/orches.md#req-orches-0128)
+- [REQ-CLIENT-0151](../../requirements/client.md#req-client-0151)
+- [REQ-CLIENT-0153](../../requirements/client.md#req-client-0153)
+- [REQ-CLIENT-0157](../../requirements/client.md#req-client-0157)
 
 ### `cynork task list`
 
@@ -250,7 +250,7 @@ Fetch task result; optionally wait until the task reaches a terminal status.
 #### `cynork task result` Output
 
 - If `--wait` is set, the CLI MUST poll the gateway until the task reaches a terminal status.
-  Closed (terminal) statuses are `completed`, `failed`, `canceled`, and `superseded`; see [Task status and closed state](../tech_specs/postgres_schema.md#spec-cynai-schema-taskstatusandclosed).
+  Closed (terminal) statuses are `completed`, `failed`, `canceled`, and `superseded`; see [Task status and closed state](../postgres_schema.md#spec-cynai-schema-taskstatusandclosed).
 - Table mode MUST print exactly one line and MUST include at least `task_id=<id>`, `status=<status>`, and when the system provides a task name, `task_name=<name>`; when the gateway provides `planning_state`, table mode MUST include it.
 - If the task is in a terminal status, table mode MUST also include `stdout=<...>` and `stderr=<...>`.
 - JSON mode MUST print a single JSON object with at least `task_id`, `status`, and when provided, `task_name`; and when terminal, `stdout` and `stderr`.

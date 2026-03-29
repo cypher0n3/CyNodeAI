@@ -31,7 +31,7 @@ It coordinates sandboxed worker execution across local nodes and optional cloud 
 - **REST APIs**: all REST APIs in this system MUST be implemented in Go (see `docs/tech_specs/go_rest_api_standards.md`).
 - **Admin clients parity**: the Web Console and the CLI management app (`cynork`) MUST offer the same administrative capabilities.
   When adding or changing a capability in one client, the other MUST be updated to match.
-  See `docs/requirements/client.md` (REQ-CLIENT-0004) and the capability-parity sections in `docs/tech_specs/web_console.md` and `docs/tech_specs/cynork_cli.md`.
+  See `docs/requirements/client.md` (REQ-CLIENT-0004) and the capability-parity sections in `docs/tech_specs/web_console.md` and `docs/tech_specs/cynork/cynork_cli.md`.
 
 ## Security and Access Notes
 
@@ -52,7 +52,7 @@ It coordinates sandboxed worker execution across local nodes and optional cloud 
 - `go_shared_libs/`: shared Go contracts and types used by orchestrator and worker node; see `go_shared_libs/README.md`.
 - `orchestrator/`: orchestrator Go module (control-plane, user-gateway, api-egress, etc.); see `orchestrator/README.md`.
 - `worker_node/`: worker-node Go module (node manager, worker API); see `worker_node/README.md`.
-- `cynork/`: CLI management client (Go, Cobra); see `cynork/README.md` and `docs/tech_specs/cynork_cli.md`.
+- `cynork/`: CLI management client (Go, Cobra); see `cynork/README.md` and `docs/tech_specs/cynork/cynork_cli.md`.
 - `scripts/`: E2E tests and aux scripts; see `scripts/README.md`.
   Dev setup is implemented in `scripts/justfile` (just/shell); use `just setup-dev` or `just setup-dev help`.
   Python: `test_scripts/` (E2E suite).

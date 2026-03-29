@@ -5,7 +5,7 @@
 The TUI is a rich client over the gateway's OpenAI-compatible chat and thread-management REST APIs.
 It does not send CyNodeAI-specific thread IDs on `POST /v1/chat/completions` or `POST /v1/responses`; thread association is server-managed per `(user_id, project_id)` and explicit `POST /v1/chat/threads` for new threads.
 
-**Spec alignment:** [cynork_tui.md](cynork_tui.md), [chat_threads_and_messages.md](chat_threads_and_messages.md), [openai_compatible_chat_api.md](openai_compatible_chat_api.md).
+**Spec alignment:** [cynork_tui.md](cynork_tui.md), [chat_threads_and_messages.md](../chat_threads_and_messages.md), [openai_compatible_chat_api.md](../openai_compatible_chat_api.md).
 
 ## Layers
 

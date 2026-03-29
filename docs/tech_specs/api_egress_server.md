@@ -286,7 +286,7 @@ List credentials
 
 ### Admin API Clients
 
-- The [Web Console](web_console.md) and the [cynork CLI](cynork_cli.md) MUST use the above endpoint contract for API Egress credential operations.
+- The [Web Console](web_console.md) and the [cynork CLI](cynork/cynork_cli.md) MUST use the above endpoint contract for API Egress credential operations.
 - The gateway SHOULD expose this contract in its OpenAPI/Swagger spec for discovery and for the admin console Swagger UI.
 
 ### Admin API Requirements Traces

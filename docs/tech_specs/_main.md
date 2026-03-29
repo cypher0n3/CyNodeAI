@@ -55,15 +55,15 @@ It uses a central orchestrator to coordinate node-local workers, sandboxed execu
 
 ### User Interfaces
 
-- `cynork` CLI (management app): [`docs/tech_specs/cynork_cli.md`](cynork_cli.md)
-  - `cynork` TUI: [`docs/tech_specs/cynork_tui.md`](cynork_tui.md)
-  - `cynork` TUI session cache (disk): [`docs/tech_specs/cynork_tui_session_cache.md`](cynork_tui_session_cache.md)
-  - `cynork` TUI slash commands: [`docs/tech_specs/cynork_tui_slash_commands.md`](cynork_tui_slash_commands.md)
-  - CLI core commands: [`docs/tech_specs/cli_management_app_commands_core.md`](cli_management_app_commands_core.md)
-  - CLI task commands: [`docs/tech_specs/cli_management_app_commands_tasks.md`](cli_management_app_commands_tasks.md)
-  - CLI chat command: [`docs/tech_specs/cli_management_app_commands_chat.md`](cli_management_app_commands_chat.md)
-  - CLI admin and resource commands: [`docs/tech_specs/cli_management_app_commands_admin.md`](cli_management_app_commands_admin.md)
-  - CLI legacy shell compatibility and output: [`docs/tech_specs/cli_management_app_shell_output.md`](cli_management_app_shell_output.md)
+- `cynork` CLI (management app): [`docs/tech_specs/cynork/cynork_cli.md`](cynork/cynork_cli.md)
+  - `cynork` TUI: [`docs/tech_specs/cynork/cynork_tui.md`](cynork/cynork_tui.md)
+  - `cynork` TUI session cache (disk): [`docs/tech_specs/cynork/cynork_tui_session_cache.md`](cynork/cynork_tui_session_cache.md)
+  - `cynork` TUI slash commands: [`docs/tech_specs/cynork/cynork_tui_slash_commands.md`](cynork/cynork_tui_slash_commands.md)
+  - CLI core commands: [`docs/tech_specs/cynork/cli_management_app_commands_core.md`](cynork/cli_management_app_commands_core.md)
+  - CLI task commands: [`docs/tech_specs/cynork/cli_management_app_commands_tasks.md`](cynork/cli_management_app_commands_tasks.md)
+  - CLI chat command: [`docs/tech_specs/cynork/cli_management_app_commands_chat.md`](cynork/cli_management_app_commands_chat.md)
+  - CLI admin and resource commands: [`docs/tech_specs/cynork/cli_management_app_commands_admin.md`](cynork/cli_management_app_commands_admin.md)
+  - CLI legacy shell compatibility and output: [`docs/tech_specs/cynork/cli_management_app_shell_output.md`](cynork/cli_management_app_shell_output.md)
 - Web Console: [`docs/tech_specs/web_console.md`](web_console.md)
 
 ### API Specifications

@@ -53,7 +53,7 @@ The current implementation-oriented breakdown (4-8 hour chunks) is maintained in
     The worker injects an inference proxy URL such as `INFERENCE_PROXY_URL=http+unix://...`, not a TCP endpoint.
     See [`docs/tech_specs/worker_node.md`](tech_specs/worker_node.md) and [`docs/tech_specs/sandbox_container.md`](tech_specs/sandbox_container.md).
   - CLI management app (cynork) exists as a separate Go module and can perform basic auth and task operations against the User API Gateway.
-    See [`docs/tech_specs/cynork_cli.md`](tech_specs/cynork_cli.md).
+    See [`docs/tech_specs/cynork_cli.md`](tech_specs/cynork/cynork_cli.md).
 
 - **Agent implementation and orchestrator integration (Phase 1.7)**.
   - Implement `cynode-pma` binary (role flag, instructions paths) and start it as part of orchestrator startup so the PM chat surface is backed by the real agent.
@@ -84,7 +84,7 @@ The current implementation-oriented breakdown (4-8 hour chunks) is maintained in
   - Secure Browser Service (optional) for controlled web access and deterministic sanitization.
     See [`docs/tech_specs/secure_browser_service.md`](tech_specs/secure_browser_service.md).
   - CLI expansion for credentials, preferences, skills, and node management.
-    See [`docs/tech_specs/cynork_cli.md`](tech_specs/cynork_cli.md) and [`docs/tech_specs/skills_storage_and_inference.md`](tech_specs/skills_storage_and_inference.md).
+    See [`docs/tech_specs/cynork_cli.md`](tech_specs/cynork/cynork_cli.md) and [`docs/tech_specs/skills_storage_and_inference.md`](tech_specs/skills_storage_and_inference.md).
 
 ### Deferred Until After MVP
 
@@ -160,7 +160,7 @@ For the full task breakdown with requirement and spec references, see [`docs/mvp
   See [`docs/tech_specs/worker_node.md`](tech_specs/worker_node.md) and [`docs/tech_specs/sandbox_container.md`](tech_specs/sandbox_container.md).
 - Extend E2E to exercise inference inside the sandbox for the single-node deployment.
 - Add the minimum viable CLI slice as a separate Go module.
-  See [`docs/tech_specs/cynork_cli.md`](tech_specs/cynork_cli.md).
+  See [`docs/tech_specs/cynork_cli.md`](tech_specs/cynork/cynork_cli.md).
 
 #### Phase 2 MCP in the Loop
 
@@ -187,5 +187,5 @@ For the full task breakdown with requirement and spec references, see [`docs/mvp
 - Add external model routing per [`docs/tech_specs/external_model_routing.md`](tech_specs/external_model_routing.md).
   This includes routing policy and signals, external inference with node sandboxes, configurable settings, and per-agent overrides for Project Manager and Project Analyst.
 - Expand the CLI management app surface for credentials, user preferences, skills, and node management.
-  See [`docs/tech_specs/cynork_cli.md`](tech_specs/cynork_cli.md) and [`docs/tech_specs/skills_storage_and_inference.md`](tech_specs/skills_storage_and_inference.md).
+  See [`docs/tech_specs/cynork_cli.md`](tech_specs/cynork/cynork_cli.md) and [`docs/tech_specs/skills_storage_and_inference.md`](tech_specs/skills_storage_and_inference.md).
 - Defer the web console until after the CLI exists.

@@ -12,10 +12,10 @@ It is part of the [cynork CLI](cynork_cli.md) specification.
 
 ### Traces To
 
-- [REQ-CLIENT-0101](../requirements/client.md#req-client-0101)
-- [REQ-CLIENT-0155](../requirements/client.md#req-client-0155)
-- [REQ-CLIENT-0156](../requirements/client.md#req-client-0156)
-- [REQ-CLIENT-0158](../requirements/client.md#req-client-0158)
+- [REQ-CLIENT-0101](../../requirements/client.md#req-client-0101)
+- [REQ-CLIENT-0155](../../requirements/client.md#req-client-0155)
+- [REQ-CLIENT-0156](../../requirements/client.md#req-client-0156)
+- [REQ-CLIENT-0158](../../requirements/client.md#req-client-0158)
 
 ## `cynork version`
 

@@ -629,6 +629,7 @@ The orchestrator MUST learn that PMA is online via worker-reported managed servi
 
 When the inference backend used by `cynode-pma` supports **skills**, the system MUST supply the **default CyNodeAI interaction skill** to each inference request so the agent has consistent guidance on MCP tools, gateway usage, and conventions.
 See [Default CyNodeAI Interaction Skill](skills_storage_and_inference.md#spec-cynai-skills-defaultcynodeaiskill) and [REQ-SKILLS-0116](../requirements/skills.md#req-skills-0116).
+When the deployment enables it, the system MAY also supply the **PMA plan creation skill** ([`default_skills/pma_plan_creation_skill.md`](../../default_skills/pma_plan_creation_skill.md)) to `project_manager` instances so plan-building behavior matches [Plan creation procedure](project_manager_agent.md#spec-cynai-agents-plancreationprocedure).
 
 ### Skills MCP Tools
 

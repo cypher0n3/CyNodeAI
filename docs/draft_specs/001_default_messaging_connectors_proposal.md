@@ -205,7 +205,8 @@ Required context when routing an inbound message to PMA:
 
 PMA receives the message in the same way it receives chat or other inbound user messages: with sufficient context to associate it with the relevant task, project, and prior conversation.
 PMA may respond in the same connector channel (thread or DM) so the user sees a continuous back-and-forth.
-Implementation details (webhook ingestion, idempotency, replay protection) SHOULD align with the existing [Connector Framework](../tech_specs/connector_framework.md) and [connector hardening draft](partial/connector_framework_hardening.md) (e.g. webhook signature validation, replay window).
+Implementation details (webhook ingestion, idempotency, replay protection) SHOULD align with the existing [Connector Framework](../tech_specs/connector_framework.md) and [connector operation hardening](../tech_specs/connector_framework.md#spec-cynai-connec-connectoroperationhardening) (e.g. webhook signature validation, replay window).
+See also archived [connector_framework_hardening](integrated/connector_framework_hardening.md).
 
 ## 9. Slash Commands
 
@@ -248,7 +249,7 @@ Slash commands are first-class inbound messages; they are routed to PMA like any
 - [API Egress Server - Escalate to Human Review](../tech_specs/api_egress_server.md#spec-cynai-apiegr-sanitycheck)
 - [Connector Framework](../tech_specs/connector_framework.md)
 - [Connector requirements (connec.md)](../requirements/connec.md)
-- [Connector Framework Hardening (draft)](partial/connector_framework_hardening.md)
+- [Connector Framework Hardening (archived stub)](integrated/connector_framework_hardening.md)
 - [User-Directed Job Kill (draft)](002_user_directed_job_kill_proposal.md)
 - [CyNode PMA](../tech_specs/cynode_pma.md)
 - [Draft specs README](README.md)

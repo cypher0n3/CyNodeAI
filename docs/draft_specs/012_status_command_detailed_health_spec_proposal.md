@@ -26,7 +26,7 @@
 
 Extend the `/status` slash command (and `cynork status`) to return detailed health of every component in the stack, including explicit PMA (Project Manager Agent) up/healthy status, instead of only gateway reachability.
 
-Current behavior (per [cli_management_app_commands_core.md](../tech_specs/cli_management_app_commands_core.md) and [cli_management_app_commands_chat.md](../tech_specs/cli_management_app_commands_chat.md)): the CLI calls the gateway `GET /healthz`, treats HTTP 200 with body containing `ok` as healthy, and prints `ok` (table) or `{"gateway":"ok"}` (JSON).
+Current behavior (per [cli_management_app_commands_core.md](../tech_specs/cynork/cli_management_app_commands_core.md) and [cli_management_app_commands_chat.md](../tech_specs/cynork/cli_management_app_commands_chat.md)): the CLI calls the gateway `GET /healthz`, treats HTTP 200 with body containing `ok` as healthy, and prints `ok` (table) or `{"gateway":"ok"}` (JSON).
 Chat `/status` is defined as "same as cynork status".
 There is no visibility into control-plane, MCP gateway, API Egress, PostgreSQL, worker nodes, or PMA.
 
@@ -117,7 +117,7 @@ Add at least two new requirements in `docs/requirements/usrgwy.md` (User API Gat
 
 ### 5 CLI Cynork Status
 
-- Spec ID (proposed): extend `CYNAI.CLIENT.CliStatus` in [cli_management_app_commands_core.md](../tech_specs/cli_management_app_commands_core.md).
+- Spec ID (proposed): extend `CYNAI.CLIENT.CliStatus` in [cli_management_app_commands_core.md](../tech_specs/cynork/cli_management_app_commands_core.md).
 
 #### 5.1 CLI Status Behavior
 
@@ -136,7 +136,7 @@ Add at least two new requirements in `docs/requirements/usrgwy.md` (User API Gat
 
 ### 6 Chat Slash Status
 
-- Spec ID (proposed): extend `CYNAI.CLIENT.CliChatSlashStatus` in [cli_management_app_commands_chat.md](../tech_specs/cli_management_app_commands_chat.md).
+- Spec ID (proposed): extend `CYNAI.CLIENT.CliChatSlashStatus` in [cli_management_app_commands_chat.md](../tech_specs/cynork/cli_management_app_commands_chat.md).
 
 #### 6.1 Chat Status Behavior
 
@@ -166,8 +166,8 @@ Add at least two new requirements in `docs/requirements/usrgwy.md` (User API Gat
 ## References
 
 - [REQ-CLIENT-0167](../requirements/client.md#req-client-0167) (slash commands `/status`, `/whoami`)
-- [cli_management_app_commands_core.md](../tech_specs/cli_management_app_commands_core.md) (`cynork status`)
-- [cli_management_app_commands_chat.md](../tech_specs/cli_management_app_commands_chat.md) (Status and Identity Slash Commands)
+- [cli_management_app_commands_core.md](../tech_specs/cynork/cli_management_app_commands_core.md) (`cynork status`)
+- [cli_management_app_commands_chat.md](../tech_specs/cynork/cli_management_app_commands_chat.md) (Status and Identity Slash Commands)
 - [user_api_gateway.md](../tech_specs/user_api_gateway.md) (Support for Cynork Chat Slash Commands)
 - [orchestrator.md](../tech_specs/orchestrator.md) (Health Checks)
 - [orchestrator_bootstrap.md](../tech_specs/orchestrator_bootstrap.md) (PMA startup, worker-reported status)

@@ -21,6 +21,8 @@ These must be addressed before any production deployment:
 12. **Change `RunJobResponse.ExitCode`** from `int` to `*int`. ([Report 5](2026-03-29_review_report_5_shared_libs.md))
 13. **Add GitHub Actions CI workflow.** ([Report 6](2026-03-29_review_report_6_testing.md))
 
+Plan: [_plan_001_immediate.md](_plan_001_immediate.md)
+
 ## 2 Bugs
 
 - **Bug 3 (`/auth login` thread UX):** ⚠️ Open.

@@ -113,7 +113,7 @@ It connects to the User API Gateway:
 Cynork expects the orchestrator's user-gateway to be reachable at the configured URL (default 12080).
 It does not use 11434 or any other port.
 
-See [`docs/tech_specs/cynork_cli.md`](cynork_cli.md).
+See [`docs/tech_specs/cynork/cynork_cli.md`](cynork/cynork_cli.md).
 
 ## Conflict Avoidance
 

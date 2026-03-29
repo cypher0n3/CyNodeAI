@@ -9,6 +9,7 @@
 - [User API Gateway Surface](#user-api-gateway-surface)
 - [Initial Connectors](#initial-connectors)
 - [OpenClaw Connector Compatibility](#openclaw-connector-compatibility)
+- [Connector Operation Hardening](#connector-operation-hardening)
 - [Connector MCP Adapters](#connector-mcp-adapters)
 
 ## Document Overview
@@ -213,6 +214,27 @@ Response handling guidance
 
 - Responses MUST be schema-validated and size-limited.
 - Responses MUST be normalized and redacted to prevent accidental secret leakage.
+
+## Connector Operation Hardening
+
+Extensions for execution modes, async operations, idempotency, and inbound webhook safety.
+These rules apply in addition to the [Connector Model](#connector-model) and [Policy and Auditing](#policy-and-auditing).
+
+### `ConnectorOperationHardening` Rule
+
+- Spec ID: `CYNAI.CONNEC.ConnectorOperationHardening` <a id="spec-cynai-connec-connectoroperationhardening"></a>
+
+- **Execution modes:** Each connector operation MUST declare `sync` (blocking) and/or `async` (job-based with result retrieval by job id).
+  Long-running work MUST be async.
+- **Async jobs:** Async operations MUST emit states `pending`, `running`, `succeeded`, `failed`, `canceled`, MUST support result retrieval by `job_id`, and MUST enforce max result payload size.
+- **Timeouts and retries:** Operations MUST declare `max_timeout_ms` and transient-only `retry_policy`; the orchestrator MUST enforce timeout caps.
+- **Idempotency:** Mutating operations SHOULD accept `idempotency_key`; implementations SHOULD persist idempotency records for a configurable TTL and return the original result for duplicate keys within TTL.
+- **Inbound webhooks:** Inbound connectors MUST validate webhook signatures and MUST enforce a replay window (configurable; default order of minutes).
+
+#### Connector Operation Hardening Requirements Traces
+
+- [REQ-CONNEC-0100](../requirements/connec.md#req-connec-0100)
+- [REQ-CONNEC-0101](../requirements/connec.md#req-connec-0101)
 
 ## Connector MCP Adapters
 

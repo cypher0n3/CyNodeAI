@@ -19,16 +19,16 @@ It is part of the [cynork CLI](cynork_cli.md) specification.
 
 - Spec ID: `CYNAI.CLIENT.CliCredentialManagement` <a id="spec-cynai-client-clicredential"></a>
 
+The CLI MUST support credential workflows for API Egress and Git Egress using the gateway endpoints defined in [API Egress Server - Admin API (Gateway Endpoints)](../api_egress_server.md#spec-cynai-apiegr-adminapigatewayendpoints).
+Responses MUST return metadata only; the CLI MUST NOT print or log secret values.
+
 ### Traces to Requirements
 
-- [REQ-CLIENT-0116](../requirements/client.md#req-client-0116)
-- [REQ-CLIENT-0117](../requirements/client.md#req-client-0117)
-- [REQ-CLIENT-0118](../requirements/client.md#req-client-0118)
-- [REQ-CLIENT-0119](../requirements/client.md#req-client-0119)
-- [REQ-CLIENT-0120](../requirements/client.md#req-client-0120)
-
-The CLI MUST support credential workflows for API Egress and Git Egress using the gateway endpoints defined in [API Egress Server - Admin API (Gateway Endpoints)](api_egress_server.md#spec-cynai-apiegr-adminapigatewayendpoints).
-Responses MUST return metadata only; the CLI MUST NOT print or log secret values.
+- [REQ-CLIENT-0116](../../requirements/client.md#req-client-0116)
+- [REQ-CLIENT-0117](../../requirements/client.md#req-client-0117)
+- [REQ-CLIENT-0118](../../requirements/client.md#req-client-0118)
+- [REQ-CLIENT-0119](../../requirements/client.md#req-client-0119)
+- [REQ-CLIENT-0120](../../requirements/client.md#req-client-0120)
 
 ### `cynork creds list`
 
@@ -150,18 +150,11 @@ Output
 
 - Spec ID: `CYNAI.CLIENT.CliPreferencesManagement` <a id="spec-cynai-client-clipreferences"></a>
 
-### Preferences Management Requirements Traces
-
-- [REQ-CLIENT-0121](../requirements/client.md#req-client-0121)
-- [REQ-CLIENT-0122](../requirements/client.md#req-client-0122)
-- [REQ-CLIENT-0123](../requirements/client.md#req-client-0123)
-- [REQ-CLIENT-0124](../requirements/client.md#req-client-0124)
-
-The CLI MUST support reading and writing preferences via the Data REST API; scope and key semantics are defined in [User preferences](user_preferences.md).
+The CLI MUST support reading and writing preferences via the Data REST API; scope and key semantics are defined in [User preferences](../user_preferences.md).
 
 All preference commands MUST require auth.
 
-Recommended keys to support (MVP)
+### Preferences Management - Keys to Support (MVP)
 
 - `output.summary_style` (string)
   - examples: concise, detailed
@@ -179,28 +172,31 @@ Recommended keys to support (MVP)
   - Per-task-kind disallowed languages.
 - `standards.markdown.line_length` (number)
 
-Scope type enum
+### Preferences Management - Scope Type Enum
 
 - `system`
 - `user`
 - `project`
 - `task`
 
+### Preferences Management Requirements Traces
+
+- [REQ-CLIENT-0121](../../requirements/client.md#req-client-0121)
+- [REQ-CLIENT-0122](../../requirements/client.md#req-client-0122)
+- [REQ-CLIENT-0123](../../requirements/client.md#req-client-0123)
+- [REQ-CLIENT-0124](../../requirements/client.md#req-client-0124)
+
 ## System Settings Management
 
 - Spec ID: `CYNAI.CLIENT.CliSystemSettingsManagement` <a id="spec-cynai-client-clisystemsettings"></a>
 
-### System Settings Management Requirements Traces
-
-- [REQ-CLIENT-0160](../requirements/client.md#req-client-0160)
-
 The CLI MUST support reading and writing system settings via the User API Gateway.
 System settings are not user preferences and are not managed via `cynork prefs`.
-User preferences are managed via `cynork prefs`; see [User preferences](user_preferences.md).
+User preferences are managed via `cynork prefs`; see [User preferences](../user_preferences.md).
 
 Recommended keys to support (MVP)
 
-Semantics: [Project Manager Model (Startup Selection and Warmup)](orchestrator.md#spec-cynai-orches-projectmanagermodelstartup).
+Semantics: [Project Manager Model (Startup Selection and Warmup)](../orchestrator.md#spec-cynai-orches-projectmanagermodelstartup).
 
 - `agents.project_manager.model.local_default_ollama_model` (string)
 - `agents.project_manager.model.selection.execution_mode` (string)
@@ -210,6 +206,10 @@ Semantics: [Project Manager Model (Startup Selection and Warmup)](orchestrator.m
 Command group
 
 - `cynork settings ...`
+
+### System Settings Management Requirements Traces
+
+- [REQ-CLIENT-0160](../../requirements/client.md#req-client-0160)
 
 ### `cynork prefs list`
 
@@ -335,11 +335,11 @@ Output
 
 ### Node Management Requirements Traces
 
-- [REQ-CLIENT-0125](../requirements/client.md#req-client-0125)
-- [REQ-CLIENT-0126](../requirements/client.md#req-client-0126)
-- [REQ-CLIENT-0128](../requirements/client.md#req-client-0128)
+- [REQ-CLIENT-0125](../../requirements/client.md#req-client-0125)
+- [REQ-CLIENT-0126](../../requirements/client.md#req-client-0126)
+- [REQ-CLIENT-0128](../../requirements/client.md#req-client-0128)
 
-The CLI MUST support node inventory and admin actions via the User API Gateway (no direct worker API calls); semantics align with [Node](worker_node.md) and the [Web Console](web_console.md).
+The CLI MUST support node inventory and admin actions via the User API Gateway (no direct worker API calls); semantics align with [Node](../worker_node.md) and the [Web Console](../web_console.md).
 
 All node commands MUST require auth.
 
@@ -463,15 +463,15 @@ Output
 
 - Spec ID: `CYNAI.CLIENT.CliProjectManagement` <a id="spec-cynai-client-cliprojectmanagement"></a>
 
+The CLI MUST support basic project CRUD (create, list, get, update, delete or disable) via the User API Gateway.
+The CLI MUST support project plan review (view plan, view revision history) and plan approve (re-approve) per [Project Plan API](../user_api_gateway.md#spec-cynai-usrgwy-projectplanapi).
+Projects have a user-friendly title (`display_name`) and an optional text description; see [Projects and Scope Model](../projects_and_scopes.md) and [REQ-PROJCT-0103](../../requirements/projct.md#req-projct-0103).
+All project commands MUST require auth.
+
 ### Project Management Requirements Traces
 
-- [REQ-CLIENT-0174](../requirements/client.md#req-client-0174)
-- [REQ-CLIENT-0180](../requirements/client.md#req-client-0180)
-
-The CLI MUST support basic project CRUD (create, list, get, update, delete or disable) via the User API Gateway.
-The CLI MUST support project plan review (view plan, view revision history) and plan approve (re-approve) per [Project Plan API](user_api_gateway.md#spec-cynai-usrgwy-projectplanapi).
-Projects have a user-friendly title (`display_name`) and an optional text description; see [Projects and Scope Model](projects_and_scopes.md) and [REQ-PROJCT-0103](../requirements/projct.md#req-projct-0103).
-All project commands MUST require auth.
+- [REQ-CLIENT-0174](../../requirements/client.md#req-client-0174)
+- [REQ-CLIENT-0180](../../requirements/client.md#req-client-0180)
 
 ### `cynork project create`
 
@@ -596,7 +596,7 @@ Output
 
 ### Project Plan Review and Approve
 
-The CLI MUST support listing a project's plans, viewing a plan, listing plan revisions, and approving a plan via the User API Gateway; see [Project Plan API](user_api_gateway.md#spec-cynai-usrgwy-projectplanapi).
+The CLI MUST support listing a project's plans, viewing a plan, listing plan revisions, and approving a plan via the User API Gateway; see [Project Plan API](../user_api_gateway.md#spec-cynai-usrgwy-projectplanapi).
 A project may have multiple plans; only one plan per project may be active at a time.
 
 #### `cynork project plans list <project_id>`
@@ -635,7 +635,7 @@ A project may have multiple plans; only one plan per project may be active at a 
 ### Project RBAC (Role Bindings)
 
 The CLI MUST allow setting and listing RBAC role bindings scoped to a project.
-Role bindings assign a role to a user or group within project scope; see [RBAC Model](rbac_and_groups.md#spec-cynai-access-rbacmodel) and [Projects and Scope Model](projects_and_scopes.md#spec-cynai-access-rbacscope).
+Role bindings assign a role to a user or group within project scope; see [RBAC Model](../rbac_and_groups.md#spec-cynai-access-rbacmodel) and [Projects and Scope Model](../projects_and_scopes.md#spec-cynai-access-rbacscope).
 
 #### `cynork project rbac list <project_id>`
 
@@ -701,14 +701,14 @@ Output
 
 - Spec ID: `CYNAI.CLIENT.CliPersonasManagement` <a id="spec-cynai-client-clipersonasmanagement"></a>
 
+The CLI MUST support full CRUD for **Agent personas** (list, get, create, update, delete) via the User API Gateway, with the same capability set as the Web Console per [REQ-CLIENT-0004](../../requirements/client.md#req-client-0004).
+Agent personas are reusable SBA role/identity descriptions (not customer or end-user personas); see [cynode_sba.md - Persona on the Job](../cynode_sba.md#spec-cynai-sbagnt-jobpersona) and [postgres_schema.md - Personas Table](../postgres_schema.md#spec-cynai-schema-personastable).
+Create, update, and delete are subject to RBAC: only users with appropriate roles may edit Agent personas in a given scope (e.g. admin for system-scoped; user for own user-scoped); see [data_rest_api.md - Core Resources](../data_rest_api.md#spec-cynai-datapi-coreresources).
+All persona commands MUST require auth.
+
 ### Personas Management Requirements Traces
 
-- [REQ-CLIENT-0179](../requirements/client.md#req-client-0179)
-
-The CLI MUST support full CRUD for **Agent personas** (list, get, create, update, delete) via the User API Gateway, with the same capability set as the Web Console per [REQ-CLIENT-0004](../requirements/client.md#req-client-0004).
-Agent personas are reusable SBA role/identity descriptions (not customer or end-user personas); see [cynode_sba.md - Persona on the Job](cynode_sba.md#spec-cynai-sbagnt-jobpersona) and [postgres_schema.md - Personas Table](postgres_schema.md#spec-cynai-schema-personastable).
-Create, update, and delete are subject to RBAC: only users with appropriate roles may edit Agent personas in a given scope (e.g. admin for system-scoped; user for own user-scoped); see [data_rest_api.md - Core Resources](data_rest_api.md#spec-cynai-datapi-coreresources).
-All persona commands MUST require auth.
+- [REQ-CLIENT-0179](../../requirements/client.md#req-client-0179)
 
 ### `cynork persona list`
 
@@ -804,25 +804,25 @@ Output
 
 - Spec ID: `CYNAI.CLIENT.CliSkillsManagement` <a id="spec-cynai-client-cliskillsmanagement"></a>
 
-### Skills Management Requirements Traces
-
-- [REQ-CLIENT-0146](../requirements/client.md#req-client-0146)
-
-The CLI MUST support full CRUD for skills (create/load, list, get, update, delete) via the User API Gateway, with the same controls as defined in [Skill Management CRUD (Web and CLI)](skills_storage_and_inference.md#spec-cynai-skills-skillmanagementcrud).
+The CLI MUST support full CRUD for skills (create/load, list, get, update, delete) via the User API Gateway, with the same controls as defined in [Skill Management CRUD (Web and CLI)](../skills_storage_and_inference.md#spec-cynai-skills-skillmanagementcrud).
 
 All skills commands MUST require auth.
 
-Skill selector
+### Skills Management - Skill Selector
 
 - Where an existing skill is referenced (for example `skills get`, `skills update`, or `skills delete`), the CLI MUST accept either the backend `skill_id` or a user-typeable skill selector such as an unambiguous human-readable skill name.
 - If a user-typeable selector matches multiple visible skills, the CLI MUST fail with a concise ambiguity error and require the user to disambiguate.
 
-Scope enum
+### Skills Management - Scope Enum
 
 - `user`
 - `group`
 - `project`
 - `global`
+
+### Skills Management Requirements Traces
+
+- [REQ-CLIENT-0146](../../requirements/client.md#req-client-0146)
 
 ### `cynork skills load <file.md>`
 

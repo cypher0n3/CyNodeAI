@@ -386,7 +386,7 @@ Source: [2026-03-19_streaming_remaining_work_execution_plan.md](2026-03-19_strea
 
 - [docs/requirements/client.md](../../requirements/client.md) REQ-CLIENT-0182-0185, 0192, 0193, 0195, 0202, 0204, 0209, 0213-0220.
 - [docs/requirements/stands.md](../../requirements/stands.md) REQ-STANDS-0133.
-- [docs/tech_specs/cynork_tui.md](../../tech_specs/cynork_tui.md) (TranscriptRendering, GenerationState, ThinkingContentStorageDuringStreaming, ToolCallContentStorageDuringStreaming, SecureBufferHandlingForInFlightStreamingContent, ConnectionRecovery).
+- [docs/tech_specs/cynork_tui.md](../../tech_specs/cynork/cynork_tui.md) (TranscriptRendering, GenerationState, ThinkingContentStorageDuringStreaming, ToolCallContentStorageDuringStreaming, SecureBufferHandlingForInFlightStreamingContent, ConnectionRecovery).
 - [features/cynork/cynork_tui_streaming.feature](../../../features/cynork/cynork_tui_streaming.feature).
 - [features/cynork/cynork_tui.feature](../../../features/cynork/cynork_tui.feature).
 - Current harness: [scripts/test_scripts/tui_pty_harness.py](../../../scripts/test_scripts/tui_pty_harness.py).
@@ -550,7 +550,7 @@ Source: [2026-03-14_plan_after_tui_fix.md](2026-03-14_plan_after_tui_fix.md) Tas
 #### Task 9 Requirements and Specifications
 
 - [docs/requirements/client.md](../../requirements/client.md) (auth recovery, in-session model/project).
-- [docs/tech_specs/cynork_tui.md](../../tech_specs/cynork_tui.md) (auth recovery, status bar, in-session switches).
+- [docs/tech_specs/cynork_tui.md](../../tech_specs/cynork/cynork_tui.md) (auth recovery, status bar, in-session switches).
 
 #### Discovery (Task 9) Steps
 
