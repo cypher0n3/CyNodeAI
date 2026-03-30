@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/cypher0n3/cynodeai/go_shared_libs/contracts/workerapi"
+	"github.com/cypher0n3/cynodeai/go_shared_libs/httplimits"
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/database"
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/models"
 )
@@ -159,7 +160,7 @@ func callWorkerAPIOnce(ctx context.Context, client *http.Client, workerBaseURL, 
 		return nil, fmt.Errorf("worker api returned %s", resp.Status)
 	}
 	var runResp workerapi.RunJobResponse
-	if err := json.NewDecoder(resp.Body).Decode(&runResp); err != nil {
+	if err := json.NewDecoder(io.LimitReader(resp.Body, httplimits.DefaultMaxHTTPResponseBytes)).Decode(&runResp); err != nil {
 		return nil, err
 	}
 	if runResp.Version != 1 {

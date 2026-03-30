@@ -15,6 +15,7 @@ import (
 	"strings"
 
 	"github.com/cypher0n3/cynodeai/go_shared_libs/contracts/userapi"
+	"github.com/cypher0n3/cynodeai/go_shared_libs/httplimits"
 )
 
 const pathV1Responses = "/v1/responses"
@@ -78,7 +79,7 @@ func (c *Client) GetMe() (*userapi.UserResponse, error) {
 		return nil, c.parseError(resp)
 	}
 	var out userapi.UserResponse
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+	if err := decodeResponseJSON(resp, &out); err != nil {
 		return nil, fmt.Errorf("decode user response: %w", err)
 	}
 	return &out, nil
@@ -98,7 +99,7 @@ func (c *Client) Health() error {
 	if resp.StatusCode != http.StatusOK {
 		return fmt.Errorf("healthz: %s", resp.Status)
 	}
-	body, err := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(io.LimitReader(resp.Body, httplimits.DefaultMaxHTTPResponseBytes))
 	if err != nil {
 		return fmt.Errorf("healthz: read body: %w", err)
 	}
@@ -140,7 +141,7 @@ func (c *Client) ListTasks(req ListTasksRequest) (*userapi.ListTasksResponse, er
 		return nil, c.parseError(resp)
 	}
 	var out userapi.ListTasksResponse
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+	if err := decodeResponseJSON(resp, &out); err != nil {
 		return nil, fmt.Errorf("decode list tasks response: %w", err)
 	}
 	for i := range out.Tasks {
@@ -170,7 +171,7 @@ func (c *Client) GetTask(taskID string) (*userapi.TaskResponse, error) {
 		return nil, c.parseError(resp)
 	}
 	var out userapi.TaskResponse
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+	if err := decodeResponseJSON(resp, &out); err != nil {
 		return nil, fmt.Errorf("decode task response: %w", err)
 	}
 	normalizeTaskResponse(&out)
@@ -197,7 +198,7 @@ func (c *Client) doTaskPath(method, path string, out interface{}, decodeErrPrefi
 	if resp.StatusCode != http.StatusOK {
 		return c.parseError(resp)
 	}
-	if err := json.NewDecoder(resp.Body).Decode(out); err != nil {
+	if err := decodeResponseJSON(resp, out); err != nil {
 		return fmt.Errorf("%s: %w", decodeErrPrefix, err)
 	}
 	return nil
@@ -224,7 +225,7 @@ func (c *Client) GetTaskLogs(taskID, stream string) (*userapi.TaskLogsResponse, 
 		return nil, c.parseError(resp)
 	}
 	var out userapi.TaskLogsResponse
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+	if err := decodeResponseJSON(resp, &out); err != nil {
 		return nil, fmt.Errorf("decode task logs response: %w", err)
 	}
 	return &out, nil
@@ -330,7 +331,7 @@ func (c *Client) ChatWithOptions(message, model, projectID string) (*ChatRespons
 		return nil, c.parseError(resp)
 	}
 	var out userapi.ChatCompletionsResponse
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+	if err := decodeResponseJSON(resp, &out); err != nil {
 		return nil, fmt.Errorf("decode chat response: %w", err)
 	}
 	content := ""
@@ -389,7 +390,7 @@ func (c *Client) ResponsesWithOptions(message, model, projectID string) (*Respon
 		return nil, c.parseError(resp)
 	}
 	var out userapi.ResponsesCreateResponse
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+	if err := decodeResponseJSON(resp, &out); err != nil {
 		return nil, fmt.Errorf("decode responses: %w", err)
 	}
 	visible := ""
@@ -715,7 +716,7 @@ func (c *Client) NewChatThread(projectID string) (string, error) {
 	var out struct {
 		ThreadID string `json:"thread_id"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+	if err := decodeResponseJSON(resp, &out); err != nil {
 		return "", fmt.Errorf("decode thread response: %w", err)
 	}
 	return out.ThreadID, nil
@@ -770,7 +771,7 @@ func (c *Client) ListChatThreads(projectID string, limit, offset int) ([]ChatThr
 	var out struct {
 		Data []ChatThreadItem `json:"data"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+	if err := decodeResponseJSON(resp, &out); err != nil {
 		return nil, fmt.Errorf("decode list threads response: %w", err)
 	}
 	return out.Data, nil
@@ -836,7 +837,7 @@ func (c *Client) GetChatThread(threadID string) (*ChatThreadItem, error) {
 		return nil, c.parseError(resp)
 	}
 	var out ChatThreadItem
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+	if err := decodeResponseJSON(resp, &out); err != nil {
 		return nil, fmt.Errorf("decode thread response: %w", err)
 	}
 	return &out, nil
@@ -878,7 +879,7 @@ func (c *Client) GetBytes(path string) ([]byte, error) {
 	if resp.StatusCode != http.StatusOK {
 		return nil, c.parseError(resp)
 	}
-	return io.ReadAll(resp.Body)
+	return io.ReadAll(io.LimitReader(resp.Body, httplimits.DefaultMaxHTTPResponseBytes))
 }
 
 // PostBytes performs an authenticated POST with optional body and returns the response body.
@@ -898,7 +899,7 @@ func (c *Client) PostBytes(path string, body []byte) ([]byte, error) {
 	if resp.StatusCode == http.StatusNoContent {
 		return nil, nil
 	}
-	return io.ReadAll(resp.Body)
+	return io.ReadAll(io.LimitReader(resp.Body, httplimits.DefaultMaxHTTPResponseBytes))
 }
 
 // PutBytes performs an authenticated PUT with body and returns the response body.
@@ -918,7 +919,7 @@ func (c *Client) PutBytes(path string, body []byte) ([]byte, error) {
 	if resp.StatusCode == http.StatusNoContent {
 		return nil, nil
 	}
-	return io.ReadAll(resp.Body)
+	return io.ReadAll(io.LimitReader(resp.Body, httplimits.DefaultMaxHTTPResponseBytes))
 }
 
 // DeleteBytes performs an authenticated DELETE and returns the response body.
@@ -934,5 +935,5 @@ func (c *Client) DeleteBytes(path string) ([]byte, error) {
 	if resp.StatusCode == http.StatusNoContent {
 		return nil, nil
 	}
-	return io.ReadAll(resp.Body)
+	return io.ReadAll(io.LimitReader(resp.Body, httplimits.DefaultMaxHTTPResponseBytes))
 }

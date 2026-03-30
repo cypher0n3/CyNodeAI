@@ -21,6 +21,7 @@ import (
 	"github.com/cypher0n3/cynodeai/go_shared_libs/contracts/nodepayloads"
 	"github.com/cypher0n3/cynodeai/go_shared_libs/contracts/problem"
 	"github.com/cypher0n3/cynodeai/go_shared_libs/contracts/workerapi"
+	"github.com/cypher0n3/cynodeai/go_shared_libs/httplimits"
 	"github.com/cypher0n3/cynodeai/go_shared_libs/secretutil"
 	"github.com/cypher0n3/cynodeai/worker_node/internal/securestore"
 	"github.com/cypher0n3/cynodeai/worker_node/internal/telemetry"
@@ -193,6 +194,7 @@ func managedServiceProxyHTTPHandler(bearerToken string, socketByService map[stri
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
+		httplimits.WrapRequestBody(w, r, httplimits.DefaultMaxAPIRequestBodyBytes)
 		proxyReq, body, socketPath, errCode, err := validateManagedProxyRequest(r, bearerToken, socketByService, logger)
 		if err != nil {
 			if errCode == http.StatusUnauthorized {
@@ -326,7 +328,7 @@ func doManagedProxyUpstream(ctx context.Context, proxyReq *managedProxyRequest, 
 		return managedProxyResponse{}, http.StatusBadGateway, fmt.Errorf("upstream error")
 	}
 	defer func() { _ = resp.Body.Close() }()
-	respBody, err := io.ReadAll(resp.Body)
+	respBody, err := io.ReadAll(io.LimitReader(resp.Body, httplimits.DefaultMaxHTTPResponseBytes))
 	if err != nil {
 		if logger != nil {
 			logger.Error("managed-service proxy: read upstream body", "error", err)

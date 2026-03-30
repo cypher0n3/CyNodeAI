@@ -12,13 +12,13 @@ import (
 	"time"
 
 	"github.com/cypher0n3/cynodeai/go_shared_libs/contracts/problem"
+	"github.com/cypher0n3/cynodeai/go_shared_libs/httplimits"
 	"github.com/cypher0n3/cynodeai/worker_node/internal/securestore"
 )
 
 const (
-	internalOrchestratorProxyMaxBody = 4 << 20
-	toolsCallPath                    = "/v1/mcp/tools/call"
-	internalOrchestratorHTTPTimeout  = 300 * time.Second
+	toolsCallPath                  = "/v1/mcp/tools/call"
+	internalOrchestratorHTTPTimeout = 300 * time.Second
 )
 
 var internalOrchestratorHTTPClient = &http.Client{Timeout: internalOrchestratorHTTPTimeout}
@@ -68,7 +68,7 @@ func handleInternalOrchestratorAgentReady(w http.ResponseWriter, r *http.Request
 }
 
 func decodeManagedProxyRequest(w http.ResponseWriter, r *http.Request, defaultPath string) (proxyReq managedProxyRequest, bodyBytes []byte, path string, ok bool) {
-	r.Body = http.MaxBytesReader(w, r.Body, internalOrchestratorProxyMaxBody)
+	r.Body = http.MaxBytesReader(w, r.Body, httplimits.DefaultMaxAPIRequestBodyBytes)
 	if err := json.NewDecoder(r.Body).Decode(&proxyReq); err != nil {
 		embedWriteProblem(w, http.StatusBadRequest, problem.TypeValidation, "Bad Request", "invalid proxy request body")
 		return managedProxyRequest{}, nil, "", false
@@ -111,7 +111,7 @@ func getAgentTokenForProxy(cfg embedInternalProxyConfig, serviceID string, w htt
 }
 
 func writeManagedProxyJSONFromUpstream(w http.ResponseWriter, resp *http.Response) bool {
-	respBody, err := io.ReadAll(resp.Body)
+	respBody, err := io.ReadAll(io.LimitReader(resp.Body, httplimits.DefaultMaxHTTPResponseBytes))
 	if err != nil {
 		embedWriteProblem(w, http.StatusBadGateway, problem.TypeInternal, "Bad Gateway", "failed to read upstream response")
 		return false

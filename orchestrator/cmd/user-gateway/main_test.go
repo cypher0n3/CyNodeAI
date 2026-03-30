@@ -11,6 +11,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cypher0n3/cynodeai/go_shared_libs/httplimits"
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/config"
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/models"
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/testutil"
@@ -47,7 +48,7 @@ func TestLimitBody(t *testing.T) {
 		called = true
 		w.WriteHeader(http.StatusOK)
 	}
-	wrapped := limitBody(100, next)
+	wrapped := httplimits.LimitBody(100, next)
 	req := httptest.NewRequest("POST", "/", bytes.NewBufferString("small"))
 	rec := httptest.NewRecorder()
 	wrapped(rec, req)

@@ -14,6 +14,8 @@ import (
 	"strings"
 	"time"
 	"unicode/utf8"
+
+	"github.com/cypher0n3/cynodeai/go_shared_libs/httplimits"
 )
 
 // defaultPMAHTTPTimeout caps PMA HTTP client calls (stream and non-stream). Kept in sync with
@@ -139,7 +141,7 @@ func CallChatCompletion(ctx context.Context, client *http.Client, baseURL string
 		return "", httpErrWithBody("PMA chat completion", resp.Status, resp.Body)
 	}
 	var out CompletionResponse
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+	if err := json.NewDecoder(io.LimitReader(resp.Body, httplimits.DefaultMaxHTTPResponseBytes)).Decode(&out); err != nil {
 		return "", err
 	}
 	return out.Content, nil
@@ -209,7 +211,7 @@ func readNDJSONStream(ctx context.Context, body io.Reader, contentType string, o
 
 func readNDJSONStreamWithCallbacks(ctx context.Context, body io.Reader, contentType string, cb PMAStreamCallbacks) error {
 	if contentType != "" && !strings.Contains(contentType, "application/x-ndjson") && !strings.Contains(contentType, "application/json") {
-		bodyBytes, _ := io.ReadAll(body)
+		bodyBytes, _ := io.ReadAll(io.LimitReader(body, httplimits.DefaultMaxHTTPResponseBytes))
 		var single CompletionResponse
 		if json.Unmarshal(bodyBytes, &single) == nil && single.Content != "" && cb.OnDelta != nil {
 			return cb.OnDelta(single.Content)
@@ -397,7 +399,7 @@ func callViaManagedProxy(ctx context.Context, client *http.Client, proxyURL stri
 		return "", httpErrWithBody("PMA proxy call", resp.Status, resp.Body)
 	}
 	var proxyResp managedProxyResponse
-	if err := json.NewDecoder(resp.Body).Decode(&proxyResp); err != nil {
+	if err := json.NewDecoder(io.LimitReader(resp.Body, httplimits.DefaultMaxHTTPResponseBytes)).Decode(&proxyResp); err != nil {
 		return "", err
 	}
 	if proxyResp.Status != http.StatusOK {

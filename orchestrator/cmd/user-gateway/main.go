@@ -12,6 +12,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/cypher0n3/cynodeai/go_shared_libs/httplimits"
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/artifacts"
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/auth"
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/config"
@@ -103,41 +104,41 @@ func run(ctx context.Context, cfg *config.OrchestratorConfig, store database.Sto
 
 	maxBodyBytes := int64(cfg.MaxRequestBodyMB) * 1024 * 1024
 
-	mux.HandleFunc("POST /v1/auth/login", limitBody(maxBodyBytes, authHandler.Login))
-	mux.HandleFunc("POST /v1/auth/refresh", limitBody(maxBodyBytes, authHandler.Refresh))
+	mux.HandleFunc("POST /v1/auth/login", httplimits.LimitBody(maxBodyBytes, authHandler.Login))
+	mux.HandleFunc("POST /v1/auth/refresh", httplimits.LimitBody(maxBodyBytes, authHandler.Refresh))
 
-	mux.Handle("POST /v1/auth/logout", authMiddleware.RequireUserAuth(http.HandlerFunc(limitBody(maxBodyBytes, authHandler.Logout))))
+	mux.Handle("POST /v1/auth/logout", authMiddleware.RequireUserAuth(http.HandlerFunc(httplimits.LimitBody(maxBodyBytes, authHandler.Logout))))
 	mux.Handle("GET /v1/users/me", authMiddleware.RequireUserAuth(http.HandlerFunc(userHandler.GetMe)))
 	mux.Handle("POST /v1/users/{id}/revoke_sessions", authMiddleware.RequireAdminAuth(http.HandlerFunc(userHandler.RevokeSessions)))
-	mux.Handle("POST /v1/tasks", authMiddleware.RequireUserAuth(http.HandlerFunc(limitBody(maxBodyBytes, taskHandler.CreateTask))))
-	mux.Handle("POST /v1/tasks/{id}/ready", authMiddleware.RequireUserAuth(http.HandlerFunc(limitBody(maxBodyBytes, taskHandler.PostTaskReady))))
+	mux.Handle("POST /v1/tasks", authMiddleware.RequireUserAuth(http.HandlerFunc(httplimits.LimitBody(maxBodyBytes, taskHandler.CreateTask))))
+	mux.Handle("POST /v1/tasks/{id}/ready", authMiddleware.RequireUserAuth(http.HandlerFunc(httplimits.LimitBody(maxBodyBytes, taskHandler.PostTaskReady))))
 	mux.Handle("GET /v1/tasks", authMiddleware.RequireUserAuth(http.HandlerFunc(taskHandler.ListTasks)))
 	mux.Handle("GET /v1/tasks/{id}", authMiddleware.RequireUserAuth(http.HandlerFunc(taskHandler.GetTask)))
 	mux.Handle("GET /v1/tasks/{id}/result", authMiddleware.RequireUserAuth(http.HandlerFunc(taskHandler.GetTaskResult)))
 	mux.Handle("POST /v1/tasks/{id}/cancel", authMiddleware.RequireUserAuth(http.HandlerFunc(taskHandler.CancelTask)))
 	mux.Handle("GET /v1/tasks/{id}/logs", authMiddleware.RequireUserAuth(http.HandlerFunc(taskHandler.GetTaskLogs)))
 	mux.Handle("GET /v1/models", authMiddleware.RequireUserAuth(http.HandlerFunc(openAIChatHandler.ListModels)))
-	mux.Handle("POST /v1/chat/completions", authMiddleware.RequireUserAuth(http.HandlerFunc(limitBody(maxBodyBytes, openAIChatHandler.ChatCompletions))))
-	mux.Handle("POST /v1/responses", authMiddleware.RequireUserAuth(http.HandlerFunc(limitBody(maxBodyBytes, openAIChatHandler.Responses))))
-	mux.Handle("POST /v1/chat/threads", authMiddleware.RequireUserAuth(http.HandlerFunc(limitBody(maxBodyBytes, openAIChatHandler.NewThread))))
+	mux.Handle("POST /v1/chat/completions", authMiddleware.RequireUserAuth(http.HandlerFunc(httplimits.LimitBody(maxBodyBytes, openAIChatHandler.ChatCompletions))))
+	mux.Handle("POST /v1/responses", authMiddleware.RequireUserAuth(http.HandlerFunc(httplimits.LimitBody(maxBodyBytes, openAIChatHandler.Responses))))
+	mux.Handle("POST /v1/chat/threads", authMiddleware.RequireUserAuth(http.HandlerFunc(httplimits.LimitBody(maxBodyBytes, openAIChatHandler.NewThread))))
 	mux.Handle("GET /v1/chat/threads", authMiddleware.RequireUserAuth(http.HandlerFunc(openAIChatHandler.ListThreads)))
 	mux.Handle("GET /v1/chat/threads/{id}", authMiddleware.RequireUserAuth(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { openAIChatHandler.GetThread(w, r, r.PathValue("id")) })))
 	mux.Handle("GET /v1/chat/threads/{id}/messages", authMiddleware.RequireUserAuth(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		openAIChatHandler.ListThreadMessages(w, r, r.PathValue("id"))
 	})))
-	mux.Handle("PATCH /v1/chat/threads/{id}", authMiddleware.RequireUserAuth(http.HandlerFunc(limitBody(maxBodyBytes, func(w http.ResponseWriter, r *http.Request) {
+	mux.Handle("PATCH /v1/chat/threads/{id}", authMiddleware.RequireUserAuth(http.HandlerFunc(httplimits.LimitBody(maxBodyBytes, func(w http.ResponseWriter, r *http.Request) {
 		openAIChatHandler.PatchThreadTitle(w, r, r.PathValue("id"))
 	}))))
 	mux.Handle("GET /v1/skills", authMiddleware.RequireUserAuth(http.HandlerFunc(skillsHandler.List)))
 	mux.Handle("GET /v1/skills/{id}", authMiddleware.RequireUserAuth(http.HandlerFunc(skillsHandler.Get)))
-	mux.Handle("POST /v1/skills/load", authMiddleware.RequireUserAuth(http.HandlerFunc(limitBody(maxBodyBytes, skillsHandler.Load))))
-	mux.Handle("PUT /v1/skills/{id}", authMiddleware.RequireUserAuth(http.HandlerFunc(limitBody(maxBodyBytes, skillsHandler.Update))))
+	mux.Handle("POST /v1/skills/load", authMiddleware.RequireUserAuth(http.HandlerFunc(httplimits.LimitBody(maxBodyBytes, skillsHandler.Load))))
+	mux.Handle("PUT /v1/skills/{id}", authMiddleware.RequireUserAuth(http.HandlerFunc(httplimits.LimitBody(maxBodyBytes, skillsHandler.Update))))
 	mux.Handle("DELETE /v1/skills/{id}", authMiddleware.RequireUserAuth(http.HandlerFunc(skillsHandler.Delete)))
 
-	mux.Handle("POST /v1/artifacts", authMiddleware.RequireUserAuth(http.HandlerFunc(limitBody(maxBodyBytes, artifactsHandler.Create))))
+	mux.Handle("POST /v1/artifacts", authMiddleware.RequireUserAuth(http.HandlerFunc(httplimits.LimitBody(httplimits.DefaultMaxArtifactUploadBytes, artifactsHandler.Create))))
 	mux.Handle("GET /v1/artifacts", authMiddleware.RequireUserAuth(http.HandlerFunc(artifactsHandler.Find)))
 	mux.Handle("GET /v1/artifacts/{artifact_id}", authMiddleware.RequireUserAuth(http.HandlerFunc(artifactsHandler.Read)))
-	mux.Handle("PUT /v1/artifacts/{artifact_id}", authMiddleware.RequireUserAuth(http.HandlerFunc(limitBody(maxBodyBytes, artifactsHandler.Update))))
+	mux.Handle("PUT /v1/artifacts/{artifact_id}", authMiddleware.RequireUserAuth(http.HandlerFunc(httplimits.LimitBody(httplimits.DefaultMaxArtifactUploadBytes, artifactsHandler.Update))))
 	mux.Handle("DELETE /v1/artifacts/{artifact_id}", authMiddleware.RequireUserAuth(http.HandlerFunc(artifactsHandler.Delete)))
 
 	handler := middleware.Recovery(logger)(middleware.Logging(logger)(mux))
@@ -199,13 +200,6 @@ func getEnv(key, def string) string {
 		return v
 	}
 	return def
-}
-
-func limitBody(maxBytes int64, next http.HandlerFunc) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		r.Body = http.MaxBytesReader(w, r.Body, maxBytes)
-		next(w, r)
-	}
 }
 
 // gatewayReadyzHandler returns a readiness handler per CYNAI.ORCHES.Rule.HealthEndpoints.

@@ -9,70 +9,70 @@ overview: |
 todos:
   - id: st-001
     content: "Search all Go modules for `io.ReadAll` without `io.LimitReader` and `json.NewDecoder(r.Body).Decode` without `http.MaxBytesReader`; list every site by file and line."
-    status: pending
+    status: completed
   - id: st-002
     content: "Categorize sites by module: orchestrator handlers (artifacts, MCP gateway), worker node (managed proxy, nodeagent), PMA (chat handler, Ollama response), SBA (stdin, file reads, MCP client), cynork (gateway client, password input)."
-    status: pending
+    status: completed
     dependencies:
       - st-001
   - id: st-003
     content: "Read `docs/tech_specs/go_rest_api_standards.md` for body-size-limit requirements."
-    status: pending
+    status: completed
     dependencies:
       - st-002
   - id: st-004
     content: "Add a unit test per module: send a request body exceeding 10 MB and assert rejection (413 or reader error)."
-    status: pending
+    status: completed
     dependencies:
       - st-003
   - id: st-005
     content: "Run `go test -v -run TestMaxBytes ./orchestrator/...`, `go test -v -run TestMaxBytes ./worker_node/...`, `go test -v -run TestMaxBytes ./agents/...`, `go test -v -run TestMaxBytes ./cynork/...` and confirm failures."
-    status: pending
+    status: completed
     dependencies:
       - st-004
   - id: st-006
     content: "Wrap every `json.NewDecoder(r.Body)` with `http.MaxBytesReader(w, r.Body, maxBodySize)` in orchestrator, worker node, PMA, and SBA handlers."
-    status: pending
+    status: completed
     dependencies:
       - st-005
   - id: st-007
     content: "Wrap every `io.ReadAll(resp.Body)` with `io.LimitReader(resp.Body, maxResponseSize)` in cynork gateway client, SBA MCP client, and worker node nodeagent."
-    status: pending
+    status: completed
     dependencies:
       - st-006
   - id: st-008
     content: "Define `maxBodySize` and `maxResponseSize` constants in `go_shared_libs` or per-module config; use consistent defaults (e.g., 10 MB for API bodies, 100 MB for artifact uploads)."
-    status: pending
+    status: completed
     dependencies:
       - st-007
   - id: st-009
     content: "Re-run `go test -v -run TestMaxBytes ./orchestrator/...`, `go test -v -run TestMaxBytes ./worker_node/...`, `go test -v -run TestMaxBytes ./agents/...`, `go test -v -run TestMaxBytes ./cynork/...` and confirm green."
-    status: pending
+    status: completed
     dependencies:
       - st-008
   - id: st-010
     content: "Run `just lint-go` on all changed files and `go test -cover` for each module; confirm 90% threshold."
-    status: pending
+    status: completed
     dependencies:
       - st-009
   - id: st-011
     content: "Run `just e2e --tags no_inference` to verify no regression from body-size limits."
-    status: pending
+    status: completed
     dependencies:
       - st-010
   - id: st-012
     content: "Validation gate -- do not proceed to Task 2 until all checks pass."
-    status: pending
+    status: completed
     dependencies:
       - st-011
   - id: st-013
     content: "Generate task completion report for Task 1 listing every file changed and the limit applied. Mark completed steps `- [x]`."
-    status: pending
+    status: completed
     dependencies:
       - st-012
   - id: st-014
     content: "Do not start Task 2 until Task 1 closeout is done."
-    status: pending
+    status: completed
     dependencies:
       - st-013
   - id: st-015
@@ -723,21 +723,21 @@ A malicious or buggy peer can OOM any component.
 
 #### Discovery (Task 1) Steps
 
-- [ ] Search all Go modules for `io.ReadAll` without `io.LimitReader` and `json.NewDecoder(r.Body).Decode` without `http.MaxBytesReader`; list every site by file and line.
-- [ ] Categorize sites by module: orchestrator handlers (artifacts, MCP gateway), worker node (managed proxy, nodeagent), PMA (chat handler, Ollama response), SBA (stdin, file reads, MCP client), cynork (gateway client, password input).
-- [ ] Read `docs/tech_specs/go_rest_api_standards.md` for body-size-limit requirements.
+- [x] Search all Go modules for `io.ReadAll` without `io.LimitReader` and `json.NewDecoder(r.Body).Decode` without `http.MaxBytesReader`; list every site by file and line.
+- [x] Categorize sites by module: orchestrator handlers (artifacts, MCP gateway), worker node (managed proxy, nodeagent), PMA (chat handler, Ollama response), SBA (stdin, file reads, MCP client), cynork (gateway client, password input).
+- [x] Read `docs/tech_specs/go_rest_api_standards.md` for body-size-limit requirements.
 
 #### Red (Task 1)
 
-- [ ] Add a unit test per module: send a request body exceeding 10 MB and assert rejection (413 or reader error).
-- [ ] Run `go test -v -run TestMaxBytes ./orchestrator/...`, `go test -v -run TestMaxBytes ./worker_node/...`, `go test -v -run TestMaxBytes ./agents/...`, `go test -v -run TestMaxBytes ./cynork/...` and confirm failures.
+- [x] Add a unit test per module: send a request body exceeding 10 MB and assert rejection (413 or reader error).
+- [x] Run `go test -v -run TestMaxBytes ./orchestrator/...`, `go test -v -run TestMaxBytes ./worker_node/...`, `go test -v -run TestMaxBytes ./agents/...`, `go test -v -run TestMaxBytes ./cynork/...` and confirm failures.
 
 #### Green (Task 1)
 
-- [ ] Wrap every `json.NewDecoder(r.Body)` with `http.MaxBytesReader(w, r.Body, maxBodySize)` in orchestrator, worker node, PMA, and SBA handlers.
-- [ ] Wrap every `io.ReadAll(resp.Body)` with `io.LimitReader(resp.Body, maxResponseSize)` in cynork gateway client, SBA MCP client, and worker node nodeagent.
-- [ ] Define `maxBodySize` and `maxResponseSize` constants in `go_shared_libs` or per-module config; use consistent defaults (e.g., 10 MB for API bodies, 100 MB for artifact uploads).
-- [ ] Re-run `go test -v -run TestMaxBytes ./orchestrator/...`, `go test -v -run TestMaxBytes ./worker_node/...`, `go test -v -run TestMaxBytes ./agents/...`, `go test -v -run TestMaxBytes ./cynork/...` and confirm green.
+- [x] Wrap every `json.NewDecoder(r.Body)` with `http.MaxBytesReader(w, r.Body, maxBodySize)` in orchestrator, worker node, PMA, and SBA handlers.
+- [x] Wrap every `io.ReadAll(resp.Body)` with `io.LimitReader(resp.Body, maxResponseSize)` in cynork gateway client, SBA MCP client, and worker node nodeagent.
+- [x] Define `maxBodySize` and `maxResponseSize` constants in `go_shared_libs` or per-module config; use consistent defaults (e.g., 10 MB for API bodies, 100 MB for artifact uploads).
+- [x] Re-run `go test -v -run TestMaxBytes ./orchestrator/...`, `go test -v -run TestMaxBytes ./worker_node/...`, `go test -v -run TestMaxBytes ./agents/...`, `go test -v -run TestMaxBytes ./cynork/...` and confirm green.
 
 #### Refactor (Task 1)
 
@@ -745,15 +745,15 @@ No additional refactor needed; the constants and wrapping are the implementation
 
 #### Testing (Task 1)
 
-- [ ] Run `just lint-go` on all changed files and `go test -cover` for each module; confirm 90% threshold.
-- [ ] Run `just e2e --tags no_inference` to verify no regression from body-size limits.
-- [ ] Validation gate -- do not proceed to Task 2 until all checks pass.
+- [x] Run `just lint-go` on all changed files and `go test -cover` for each module; confirm 90% threshold.
+- [x] Run `just e2e --tags no_inference` to verify no regression from body-size limits.
+- [x] Validation gate -- do not proceed to Task 2 until all checks pass.
 
 #### Closeout (Task 1)
 
-- [ ] Generate task completion report for Task 1 listing every file changed and the limit applied.
+- [x] Generate task completion report for Task 1 listing every file changed and the limit applied.
   Mark completed steps `- [x]`.
-- [ ] Do not start Task 2 until Task 1 closeout is done.
+- [x] Do not start Task 2 until Task 1 closeout is done.
 
 ---
 

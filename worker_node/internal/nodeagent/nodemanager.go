@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"net/url"
@@ -17,6 +18,7 @@ import (
 	"time"
 
 	"github.com/cypher0n3/cynodeai/go_shared_libs/contracts/nodepayloads"
+	"github.com/cypher0n3/cynodeai/go_shared_libs/httplimits"
 	"github.com/cypher0n3/cynodeai/worker_node/internal/securestore"
 )
 
@@ -320,7 +322,7 @@ func doAgentTokenRefRequest(ctx context.Context, cfg *Config, svc *nodepayloads.
 		AgentToken          string `json:"agent_token"`
 		AgentTokenExpiresAt string `json:"agent_token_expires_at,omitempty"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&tokenResp); err != nil {
+	if err := json.NewDecoder(io.LimitReader(resp.Body, httplimits.DefaultMaxHTTPResponseBytes)).Decode(&tokenResp); err != nil {
 		return "", "", fmt.Errorf("decode agent_token_ref response: %w", err)
 	}
 	token = strings.TrimSpace(tokenResp.AgentToken)

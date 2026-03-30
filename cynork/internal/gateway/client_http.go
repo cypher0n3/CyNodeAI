@@ -10,7 +10,12 @@ import (
 	"net/url"
 
 	"github.com/cypher0n3/cynodeai/go_shared_libs/contracts/problem"
+	"github.com/cypher0n3/cynodeai/go_shared_libs/httplimits"
 )
+
+func decodeResponseJSON(resp *http.Response, out any) error {
+	return json.NewDecoder(io.LimitReader(resp.Body, httplimits.DefaultMaxHTTPResponseBytes)).Decode(out)
+}
 
 func (c *Client) doRequest(method, path string, query url.Values, body io.Reader) (*http.Response, error) {
 	base, err := url.Parse(c.BaseURL)
@@ -48,7 +53,7 @@ func (c *Client) doPostJSON(path string, reqBody any, wantStatus int, out any) e
 	if resp.StatusCode != wantStatus {
 		return c.parseError(resp)
 	}
-	if err := json.NewDecoder(resp.Body).Decode(out); err != nil {
+	if err := decodeResponseJSON(resp, out); err != nil {
 		return fmt.Errorf("decode response: %w", err)
 	}
 	return nil
@@ -81,7 +86,7 @@ func (c *Client) doPostJSONNoAuth(path string, reqBody any, wantStatus int, out 
 	if resp.StatusCode != wantStatus {
 		return c.parseError(resp)
 	}
-	if err := json.NewDecoder(resp.Body).Decode(out); err != nil {
+	if err := decodeResponseJSON(resp, out); err != nil {
 		return fmt.Errorf("decode response: %w", err)
 	}
 	return nil
@@ -97,7 +102,7 @@ func (c *Client) doGetJSON(path string, out any) error {
 	if resp.StatusCode != http.StatusOK {
 		return c.parseError(resp)
 	}
-	if err := json.NewDecoder(resp.Body).Decode(out); err != nil {
+	if err := decodeResponseJSON(resp, out); err != nil {
 		return fmt.Errorf("decode response: %w", err)
 	}
 	return nil

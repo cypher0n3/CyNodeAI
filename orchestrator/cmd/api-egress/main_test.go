@@ -9,11 +9,13 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
 
+	"github.com/cypher0n3/cynodeai/go_shared_libs/httplimits"
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/database"
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/models"
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/testutil"
@@ -398,6 +400,19 @@ func TestCallHandler_WithStore_NoUserContext_403(t *testing.T) {
 	_ = json.NewDecoder(w.Body).Decode(&resp)
 	if resp["detail"] != "task has no user context" {
 		t.Errorf("detail: %v", resp["detail"])
+	}
+}
+
+func TestCallHandler_OversizeJSONBody(t *testing.T) {
+	h := newCallHandler(slog.Default(), "", "openai")
+	pad := strings.Repeat("x", int(httplimits.DefaultMaxAPIRequestBodyBytes)+1024)
+	body := []byte(`{"provider":"openai","operation":"chat","task_id":"` + pad + `"}`)
+	w := httptest.NewRecorder()
+	r := httptest.NewRequest(http.MethodPost, "/v1/call", bytes.NewReader(body))
+	r.Header.Set("Content-Type", "application/json")
+	h.ServeHTTP(w, r)
+	if w.Code != http.StatusRequestEntityTooLarge {
+		t.Fatalf("code %d want 413", w.Code)
 	}
 }
 

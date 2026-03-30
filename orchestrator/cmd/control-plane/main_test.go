@@ -19,6 +19,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/cypher0n3/cynodeai/go_shared_libs/contracts/workerapi"
+	"github.com/cypher0n3/cynodeai/go_shared_libs/httplimits"
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/config"
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/database"
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/dispatcher"
@@ -107,6 +108,20 @@ func TestRegisterMCPToolRoute(t *testing.T) {
 	mux.ServeHTTP(rec, req)
 	if rec.Code == http.StatusNotFound {
 		t.Fatal("expected POST /v1/mcp/tools/call to be registered on the control-plane mux")
+	}
+}
+
+func TestRegisterMCPToolRoute_OversizeBody(t *testing.T) {
+	mux := http.NewServeMux()
+	registerMCPToolRoute(mux, testutil.NewMockDB(), slog.Default(), config.LoadOrchestratorConfig())
+	pad := strings.Repeat("x", int(httplimits.DefaultMaxAPIRequestBodyBytes)+1024)
+	body := `{"tool_name":"help.list","arguments":{"p":"` + pad + `"}}`
+	req := httptest.NewRequest(http.MethodPost, "/v1/mcp/tools/call", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	mux.ServeHTTP(rec, req)
+	if rec.Code != http.StatusRequestEntityTooLarge {
+		t.Fatalf("code %d want 413", rec.Code)
 	}
 }
 

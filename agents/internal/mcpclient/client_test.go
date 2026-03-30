@@ -361,3 +361,36 @@ func TestLangchainTool_Call(t *testing.T) {
 		t.Errorf("nil client: %q %v", out, err)
 	}
 }
+
+type errAfterByte struct{ done bool }
+
+func (e *errAfterByte) Read(p []byte) (int, error) {
+	if e.done {
+		return 0, io.ErrUnexpectedEOF
+	}
+	e.done = true
+	p[0] = '{'
+	return 1, nil
+}
+
+type roundTripFunc func(*http.Request) (*http.Response, error)
+
+func (f roundTripFunc) RoundTrip(r *http.Request) (*http.Response, error) { return f(r) }
+
+func TestClient_Call_ResponseReadFails(t *testing.T) {
+	c := &Client{
+		BaseURL: "http://example.com",
+		HTTPClient: &http.Client{
+			Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
+				return &http.Response{
+					StatusCode: http.StatusOK,
+					Body:       io.NopCloser(&errAfterByte{}),
+				}, nil
+			}),
+		},
+	}
+	_, _, err := c.Call(context.Background(), testToolNameTaskGet, nil)
+	if err == nil {
+		t.Fatal("expected error from body read")
+	}
+}

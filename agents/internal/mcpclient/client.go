@@ -8,12 +8,15 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"net/url"
 	"os"
 	"strings"
 	"time"
+
+	"github.com/cypher0n3/cynodeai/go_shared_libs/httplimits"
 )
 
 const (
@@ -129,7 +132,10 @@ func (c *Client) Call(ctx context.Context, toolName string, arguments map[string
 	}
 	defer func() { _ = resp.Body.Close() }()
 	var buf bytes.Buffer
-	_, _ = buf.ReadFrom(resp.Body)
+	_, err = buf.ReadFrom(io.LimitReader(resp.Body, httplimits.DefaultMaxHTTPResponseBytes))
+	if err != nil {
+		return nil, 0, err
+	}
 	return buf.Bytes(), resp.StatusCode, nil
 }
 
@@ -195,7 +201,10 @@ func (c *Client) callViaWorkerInternalProxy(ctx context.Context, mcpBody []byte)
 	}
 	defer func() { _ = resp.Body.Close() }()
 	var buf bytes.Buffer
-	_, _ = buf.ReadFrom(resp.Body)
+	_, err = buf.ReadFrom(io.LimitReader(resp.Body, httplimits.DefaultMaxHTTPResponseBytes))
+	if err != nil {
+		return nil, 0, err
+	}
 	if resp.StatusCode != http.StatusOK {
 		return buf.Bytes(), resp.StatusCode, nil
 	}

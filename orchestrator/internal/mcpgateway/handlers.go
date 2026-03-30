@@ -11,6 +11,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/cypher0n3/cynodeai/go_shared_libs/httplimits"
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/artifacts"
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/database"
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/models"
@@ -40,10 +41,10 @@ func auditRecCreateExistsOrInternalErr(rec *models.McpToolCallAuditLog, err erro
 	return http.StatusInternalServerError, []byte(`{"error":"internal error"}`), auditRec
 }
 
-func decodeToolCallRequest(r *http.Request) (toolName string, args map[string]interface{}, ok bool) {
+func decodeToolCallRequest(r *http.Request) (toolName string, args map[string]interface{}, err error) {
 	var req toolCallRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		return "", nil, false
+		return "", nil, err
 	}
 	toolName = req.ToolName
 	if toolName == "" {
@@ -53,7 +54,7 @@ func decodeToolCallRequest(r *http.Request) (toolName string, args map[string]in
 	if args == nil {
 		args = make(map[string]interface{})
 	}
-	return toolName, args, true
+	return toolName, args, nil
 }
 
 // requiredScopedIds defines which of task_id, run_id, job_id, user_id are required for a tool (REQ-MCPGAT-0103--0106, mcp_gateway_enforcement.md).
@@ -206,8 +207,13 @@ func ToolCallHandler(store database.Store, logger *slog.Logger, auth *ToolCallAu
 			_, _ = w.Write([]byte("database not configured"))
 			return
 		}
-		toolName, args, ok := decodeToolCallRequest(r)
-		if !ok {
+		httplimits.WrapRequestBody(w, r, httplimits.DefaultMaxAPIRequestBodyBytes)
+		toolName, args, err := decodeToolCallRequest(r)
+		if err != nil {
+			if strings.Contains(err.Error(), "request body too large") {
+				w.WriteHeader(http.StatusRequestEntityTooLarge)
+				return
+			}
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}

@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/artifacts"
+	"github.com/cypher0n3/cynodeai/go_shared_libs/httplimits"
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/auth"
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/config"
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/database"
@@ -205,14 +206,19 @@ func run(ctx context.Context, store database.Store, cfg *config.OrchestratorConf
 	workflowHandler := handlers.NewWorkflowHandler(store, logger)
 	workflowAuth := middleware.RequireWorkflowRunnerAuth(cfg.WorkflowRunnerBearerToken)
 
+	maxBodyBytes := int64(cfg.MaxRequestBodyMB) * 1024 * 1024
+	if maxBodyBytes <= 0 {
+		maxBodyBytes = httplimits.DefaultMaxAPIRequestBodyBytes
+	}
+
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", healthzHandler)
 	mux.HandleFunc("GET /readyz", readyzHandler(store, cfg, logger))
 
-	mux.HandleFunc("POST /v1/nodes/register", nodeHandler.Register)
+	mux.HandleFunc("POST /v1/nodes/register", httplimits.LimitBody(maxBodyBytes, nodeHandler.Register))
 	mux.Handle("GET /v1/nodes/config", authMiddleware.RequireNodeAuth(http.HandlerFunc(nodeHandler.GetConfig)))
-	mux.Handle("POST /v1/nodes/config", authMiddleware.RequireNodeAuth(http.HandlerFunc(nodeHandler.ConfigAck)))
-	mux.Handle("POST /v1/nodes/capability", authMiddleware.RequireNodeAuth(http.HandlerFunc(nodeHandler.ReportCapability)))
+	mux.Handle("POST /v1/nodes/config", authMiddleware.RequireNodeAuth(http.HandlerFunc(httplimits.LimitBody(maxBodyBytes, nodeHandler.ConfigAck))))
+	mux.Handle("POST /v1/nodes/capability", authMiddleware.RequireNodeAuth(http.HandlerFunc(httplimits.LimitBody(maxBodyBytes, nodeHandler.ReportCapability))))
 
 	// MCP tool calls share the control-plane database (P2-02 audit); do not run a separate mcp-gateway with its own DSN.
 	artSvc := wireArtifactsService(ctx, store, cfg, logger)
@@ -221,10 +227,10 @@ func run(ctx context.Context, store database.Store, cfg *config.OrchestratorConf
 		artifacts.StartBackgroundJobs(ctx, artSvc, cfg, logger)
 	}
 
-	mux.Handle("POST /v1/workflow/start", workflowAuth(http.HandlerFunc(workflowHandler.Start)))
-	mux.Handle("POST /v1/workflow/resume", workflowAuth(http.HandlerFunc(workflowHandler.Resume)))
-	mux.Handle("POST /v1/workflow/checkpoint", workflowAuth(http.HandlerFunc(workflowHandler.SaveCheckpoint)))
-	mux.Handle("POST /v1/workflow/release", workflowAuth(http.HandlerFunc(workflowHandler.Release)))
+	mux.Handle("POST /v1/workflow/start", workflowAuth(http.HandlerFunc(httplimits.LimitBody(maxBodyBytes, workflowHandler.Start))))
+	mux.Handle("POST /v1/workflow/resume", workflowAuth(http.HandlerFunc(httplimits.LimitBody(maxBodyBytes, workflowHandler.Resume))))
+	mux.Handle("POST /v1/workflow/checkpoint", workflowAuth(http.HandlerFunc(httplimits.LimitBody(maxBodyBytes, workflowHandler.SaveCheckpoint))))
+	mux.Handle("POST /v1/workflow/release", workflowAuth(http.HandlerFunc(httplimits.LimitBody(maxBodyBytes, workflowHandler.Release))))
 
 	handler := middleware.Recovery(logger)(middleware.Logging(logger)(mux))
 

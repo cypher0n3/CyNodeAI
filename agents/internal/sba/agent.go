@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"net/url"
@@ -15,6 +16,7 @@ import (
 	"time"
 
 	"github.com/cypher0n3/cynodeai/go_shared_libs/contracts/sbajob"
+	"github.com/cypher0n3/cynodeai/go_shared_libs/httplimits"
 	"github.com/tmc/langchaingo/agents"
 	"github.com/tmc/langchaingo/llms"
 	"github.com/tmc/langchaingo/llms/ollama"
@@ -238,7 +240,7 @@ func runDirectGeneration(ctx context.Context, spec *sbajob.JobSpec, opts *RunAge
 		} `json:"message"`
 		Error string `json:"error"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&out); err != nil {
+	if err := json.NewDecoder(io.LimitReader(resp.Body, httplimits.DefaultMaxHTTPResponseBytes)).Decode(&out); err != nil {
 		result.Status = statusFailed
 		code := failureCodeStepFailed
 		msg := fmt.Sprintf("direct gen decode: %v", err)

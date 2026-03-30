@@ -15,6 +15,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/cypher0n3/cynodeai/go_shared_libs/httplimits"
 	"github.com/cypher0n3/cynodeai/go_shared_libs/secretutil"
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/config"
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/database"
@@ -176,8 +177,13 @@ func (h *callHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if !h.authenticateBearer(w, r) {
 		return
 	}
+	httplimits.WrapRequestBody(w, r, httplimits.DefaultMaxAPIRequestBodyBytes)
 	var req callRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		if strings.Contains(err.Error(), "request body too large") {
+			h.writeProblem(w, http.StatusRequestEntityTooLarge, "Request Entity Too Large", "request body exceeds maximum size")
+			return
+		}
 		h.writeProblem(w, http.StatusBadRequest, "Bad Request", "invalid JSON")
 		return
 	}

@@ -20,6 +20,8 @@ import (
 	"time"
 
 	"github.com/tmc/langchaingo/agents"
+
+	"github.com/cypher0n3/cynodeai/go_shared_libs/httplimits"
 )
 
 const roleUser = "user"
@@ -60,8 +62,13 @@ func ChatCompletionHandler(instructionsContent string, logger *slog.Logger) http
 			w.WriteHeader(http.StatusMethodNotAllowed)
 			return
 		}
+		httplimits.WrapRequestBody(w, r, httplimits.DefaultMaxAPIRequestBodyBytes)
 		var req InternalChatCompletionRequest
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			if strings.Contains(err.Error(), "request body too large") {
+				w.WriteHeader(http.StatusRequestEntityTooLarge)
+				return
+			}
 			logger.Warn("chat completion decode error", "error", err)
 			writeJSON(w, http.StatusBadRequest, InternalChatCompletionResponse{})
 			return
@@ -727,7 +734,7 @@ func callInference(ctx context.Context, systemContext string, messages []struct 
 		return "", "", err
 	}
 	defer func() { _ = resp.Body.Close() }()
-	raw, err := readInferenceOllamaChatBody(resp.Body, logger)
+	raw, err := readInferenceOllamaChatBody(io.LimitReader(resp.Body, httplimits.DefaultMaxHTTPResponseBytes), logger)
 	if err != nil {
 		return "", "", err
 	}

@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"net/http"
 	"net/url"
@@ -19,6 +20,7 @@ import (
 	"time"
 
 	"github.com/cypher0n3/cynodeai/go_shared_libs/contracts/nodepayloads"
+	"github.com/cypher0n3/cynodeai/go_shared_libs/httplimits"
 	"github.com/cypher0n3/cynodeai/go_shared_libs/contracts/problem"
 	"github.com/cypher0n3/cynodeai/worker_node/internal/containerps"
 )
@@ -118,12 +120,12 @@ func FetchConfig(ctx context.Context, cfg *Config, bootstrap *BootstrapData) (*n
 
 	if resp.StatusCode != http.StatusOK {
 		var p problem.Details
-		_ = json.NewDecoder(resp.Body).Decode(&p)
+		_ = json.NewDecoder(io.LimitReader(resp.Body, httplimits.DefaultMaxHTTPResponseBytes)).Decode(&p)
 		return nil, fmt.Errorf("get config: %s (%d) %s", resp.Status, resp.StatusCode, p.Detail)
 	}
 
 	var payload nodepayloads.NodeConfigurationPayload
-	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
+	if err := json.NewDecoder(io.LimitReader(resp.Body, httplimits.DefaultMaxHTTPResponseBytes)).Decode(&payload); err != nil {
 		return nil, fmt.Errorf("decode config: %w", err)
 	}
 	if payload.Version != 1 {
@@ -166,7 +168,7 @@ func SendConfigAck(ctx context.Context, cfg *Config, bootstrap *BootstrapData, n
 
 	if resp.StatusCode != http.StatusNoContent && resp.StatusCode != http.StatusOK {
 		var p problem.Details
-		_ = json.NewDecoder(resp.Body).Decode(&p)
+		_ = json.NewDecoder(io.LimitReader(resp.Body, httplimits.DefaultMaxHTTPResponseBytes)).Decode(&p)
 		return fmt.Errorf("config ack: %s (%d) %s", resp.Status, resp.StatusCode, p.Detail)
 	}
 	return nil
@@ -286,12 +288,12 @@ func register(ctx context.Context, cfg *Config) (*BootstrapData, error) {
 
 	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
 		var p problem.Details
-		_ = json.NewDecoder(resp.Body).Decode(&p)
+		_ = json.NewDecoder(io.LimitReader(resp.Body, httplimits.DefaultMaxHTTPResponseBytes)).Decode(&p)
 		return nil, fmt.Errorf("registration failed: %s (%d) %s", resp.Status, resp.StatusCode, p.Detail)
 	}
 
 	var bootstrap nodepayloads.BootstrapResponse
-	if err := json.NewDecoder(resp.Body).Decode(&bootstrap); err != nil {
+	if err := json.NewDecoder(io.LimitReader(resp.Body, httplimits.DefaultMaxHTTPResponseBytes)).Decode(&bootstrap); err != nil {
 		return nil, fmt.Errorf("decode bootstrap response: %w", err)
 	}
 
@@ -347,7 +349,7 @@ func reportCapabilities(ctx context.Context, cfg *Config, bootstrap *BootstrapDa
 
 	if resp.StatusCode != http.StatusNoContent {
 		var p problem.Details
-		_ = json.NewDecoder(resp.Body).Decode(&p)
+		_ = json.NewDecoder(io.LimitReader(resp.Body, httplimits.DefaultMaxHTTPResponseBytes)).Decode(&p)
 		return fmt.Errorf("capability report failed: %s (%d) %s", resp.Status, resp.StatusCode, p.Detail)
 	}
 
@@ -410,7 +412,7 @@ func queryOllamaTags(ctx context.Context, port string) ([]string, bool) {
 	}
 	defer func() { _ = resp.Body.Close() }()
 	var tags ollamaTagsResponse
-	if json.NewDecoder(resp.Body).Decode(&tags) != nil {
+	if json.NewDecoder(io.LimitReader(resp.Body, httplimits.DefaultMaxHTTPResponseBytes)).Decode(&tags) != nil {
 		return nil, true
 	}
 	names := make([]string, 0, len(tags.Models))
