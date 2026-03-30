@@ -480,7 +480,7 @@ Users may also approve and activate directly via Web Console, CLI, or user-authe
 
 Whenever a plan's **document** (plan name, plan body), **plan's task list**, or **task dependencies** are updated (by any user or agent) while that plan is **active**, the system MUST set that plan's state back to **draft** (and clear `plan_approved_at`, `plan_approved_by`).
 The plan remains editable (subject to lock); workflow for tasks in that plan MUST NOT start until a user (or principal with approve permission) re-approves the plan (set state to ready) and activates it (set state to active).
-Implementation MUST perform this clear in the same transaction or immediately after the update that changed the plan, task list, or task dependencies; see [Workflow start gate (plan approved)](langgraph_mvp.md#spec-cynai-orches-workflowstartgateplanapproved).
+Implementation MUST perform this clear in the same transaction or immediately after the update that changed the plan, task list, or task dependencies; see [Workflow start gate (plan approved)](workflow_mvp.md#spec-cynai-orches-workflowstartgateplanapproved).
 
 ### Plan Revisions
 

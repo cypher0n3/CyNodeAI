@@ -9,7 +9,7 @@
   - [Option A Pros](#option-a-pros)
   - [Option A Cons](#option-a-cons)
 - [Option B: Go-Native Workflow With PMA Instruction Set](#option-b-go-native-workflow-with-pma-instruction-set)
-  - [How it Would Work](#how-it-would-work)
+  - [How It Would Work](#how-it-would-work)
   - [Option B Pros](#option-b-pros)
   - [Option B Cons](#option-b-cons)
 - [Option C: Go LangGraph Library (`langgraphgo`)](#option-c-go-langgraph-library-langgraphgo)
@@ -44,7 +44,7 @@ This section maps the specced LangGraph architecture against what is actually im
 
 ### What the Spec Calls For
 
-Per [`langgraph_mvp.md`](../tech_specs/langgraph_mvp.md) and [`orchestrator.md`](../tech_specs/orchestrator.md) Workflow Engine:
+Per [`langgraph_mvp.md`](../tech_specs/workflow_mvp.md) and [`orchestrator.md`](../tech_specs/orchestrator.md) Workflow Engine:
 
 - A **separate Python LangGraph process** invoked by the Go orchestrator over HTTP.
 - The Python process owns the graph topology (Load Task Context => Plan Steps => Dispatch Step => Collect Result => Verify Step Result => Finalize/Mark Failed).
@@ -192,7 +192,7 @@ The workflow runner would be a Go component with a well-defined instruction set,
   If the workflow topology grows significantly (many parallel branches, dynamic node insertion, complex error recovery), a Go state machine becomes harder to maintain than a graph framework.
   However, this is speculative for the MVP scope.
 - **Spec rewrite.**
-  [`langgraph_mvp.md`](../tech_specs/langgraph_mvp.md), portions of [`orchestrator.md`](../tech_specs/orchestrator.md), [`project_manager_agent.md`](../tech_specs/project_manager_agent.md), [`cynode_pma.md`](../tech_specs/cynode_pma.md), and several requirements entries reference "Python LangGraph process" and would need updates.
+  [`langgraph_mvp.md`](../tech_specs/workflow_mvp.md), portions of [`orchestrator.md`](../tech_specs/orchestrator.md), [`project_manager_agent.md`](../tech_specs/project_manager_agent.md), [`cynode_pma.md`](../tech_specs/cynode_pma.md), and several requirements entries reference "Python LangGraph process" and would need updates.
 
 ## Option C: Go LangGraph Library (`langgraphgo`)
 
@@ -382,7 +382,7 @@ This section scopes the change if LangGraph is dropped in favor of a Go-native r
 
 ### Specs That Would Need Updates
 
-- [`langgraph_mvp.md`](../tech_specs/langgraph_mvp.md): Rename or restructure to "Workflow MVP" or similar; remove Python-specific runtime references; retain the graph topology, node behaviors, checkpoint schema, and lease contract (all of which are runtime-agnostic).
+- [`langgraph_mvp.md`](../tech_specs/workflow_mvp.md): Rename or restructure to "Workflow MVP" or similar; remove Python-specific runtime references; retain the graph topology, node behaviors, checkpoint schema, and lease contract (all of which are runtime-agnostic).
 - [`orchestrator.md`](../tech_specs/orchestrator.md) Workflow Engine section: Replace "separate Python LangGraph process" with "Go-native workflow runner."
 - [`cynode_pma.md`](../tech_specs/cynode_pma.md) Process Boundaries: Update the PMA/workflow-runner boundary description.
 - [`project_manager_agent.md`](../tech_specs/project_manager_agent.md) LLM and Tool Execution: Update "LangGraph remains the graph runner" to reflect Go-native runner.
@@ -415,7 +415,7 @@ A Go-native runner that satisfies the same behavioral contracts meets every requ
 
 ## References
 
-- [`docs/tech_specs/langgraph_mvp.md`](../tech_specs/langgraph_mvp.md)
+- [`docs/tech_specs/langgraph_mvp.md`](../tech_specs/workflow_mvp.md)
 - [`docs/tech_specs/orchestrator.md`](../tech_specs/orchestrator.md) (Workflow Engine section)
 - [`docs/tech_specs/cynode_pma.md`](../tech_specs/cynode_pma.md)
 - [`docs/tech_specs/project_manager_agent.md`](../tech_specs/project_manager_agent.md)

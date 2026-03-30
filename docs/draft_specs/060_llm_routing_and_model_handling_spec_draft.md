@@ -685,5 +685,5 @@ func SelectInferencePath(record ModelCapabilityRecord, mcpGatewayURL string) Inf
 - [`docs/tech_specs/external_model_routing.md`](../tech_specs/external_model_routing.md)
 - [`docs/tech_specs/orchestrator.md`](../tech_specs/orchestrator.md) -
   `CYNAI.ORCHES.Operation.SelectProjectManagerModel`
-- [`docs/draft_specs/007_model_capabilities_update_blob_spec_proposal.md`](007_model_capabilities_update_blob_spec_proposal.md)
+- [`docs/draft_specs/070_model_capabilities_update_blob_spec_proposal.md`](070_model_capabilities_update_blob_spec_proposal.md)
 - [`agents/internal/pma/langchain.go`](../../agents/internal/pma/langchain.go) - current `isCapableModel` implementation

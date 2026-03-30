@@ -218,7 +218,7 @@ Users SHOULD be able to send **slash commands** in the messaging channel to perf
   - Example: `/setting pma.model local` to direct PMA to prefer local inference (PMA applies the change with user direction via the appropriate backend).
   - Example: `/status` to ask for a short status of tasks or system.
   - Example: `/task cancel <task_id>` or `/kill job <task_id>` to cancel a task and stop its running job at user direction; PMA invokes the orchestrator cancel path and the worker node stops the SBA (graceful then container kill fallback).
-    See [User-Directed Job Kill](002_user_directed_job_kill_proposal.md).
+    See [User-Directed Job Kill](020_user_directed_job_kill_proposal.md).
 - **PMA role:** PMA receives the slash command as an inbound message with context (user, project, connector, thread).
   PMA parses the command, maps it to an action (including config/settings changes), and performs the action with user direction (e.g. via MCP tools or orchestrator APIs that update user/project settings).
   PMA responds in the same channel with confirmation or result (e.g. "Notifications for escalations enabled" or "Setting updated.").
@@ -250,6 +250,6 @@ Slash commands are first-class inbound messages; they are routed to PMA like any
 - [Connector Framework](../tech_specs/connector_framework.md)
 - [Connector requirements (connec.md)](../requirements/connec.md)
 - [Connector Framework Hardening (archived stub)](integrated/connector_framework_hardening.md)
-- [User-Directed Job Kill (draft)](002_user_directed_job_kill_proposal.md)
+- [User-Directed Job Kill (draft)](020_user_directed_job_kill_proposal.md)
 - [CyNode PMA](../tech_specs/cynode_pma.md)
 - [Draft specs README](README.md)

@@ -1,4 +1,4 @@
-# LangGraph MVP Workflow
+# Workflow MVP
 
 - [Document Overview](#document-overview)
 - [MVP Goal](#mvp-goal)
@@ -34,7 +34,7 @@
 
 ## Document Overview
 
-This document defines the minimum viable LangGraph workflow used by the orchestrator to drive tasks to completion.
+This document defines the minimum viable workflow used by the orchestrator to drive tasks to completion.
 It focuses on the Project Manager Agent happy path with retries and verification.
 
 ## MVP Goal
@@ -50,14 +50,14 @@ The MVP workflow should:
 
 ## Integration With the Orchestrator
 
-This section defines how the LangGraph workflow is integrated with the orchestrator so that implementation choices are unambiguous.
+This section defines how the workflow is integrated with the orchestrator so that implementation choices are unambiguous.
 
 ### Runtime and Hosting
 
-- The LangGraph workflow runs as part of the orchestrator's workflow engine.
-- The workflow engine MUST be a **separate Python LangGraph process** invoked by the Go orchestrator (e.g. HTTP or RPC).
-  The workflow process does not serve the orchestrator's REST APIs.
-- The orchestrator MUST provide a stable contract for starting workflows, passing `task_id`, and reading/writing checkpoints so that the graph can be resumed after any restart (orchestrator or workflow process).
+- The workflow runs as part of the orchestrator's workflow engine.
+- The workflow engine is a **Go-native workflow runner** (state machine) within the orchestrator process.
+  The runner implements the graph topology and node transitions; it does not serve the orchestrator's REST APIs.
+- The orchestrator MUST provide a stable contract for starting workflows, passing `task_id`, and reading/writing checkpoints so that the graph can be resumed after any restart.
 - The Project Manager Agent's behavior is implemented by this graph: the graph is the execution model for the agent.
   Planning, dispatch, verification, and finalization are graph nodes, not separate services.
 
@@ -199,7 +199,7 @@ Implementations MUST set the plan's state to `draft` whenever that plan's docume
 
 - The workflow MUST persist checkpoint data after each node transition so that state is durable and the graph can resume from the last checkpoint.
 - The checkpoint store MUST be backed by PostgreSQL (or an orchestrator-owned store that uses PostgreSQL as the source of truth).
-- The workflow implementation MUST support loading checkpoint state by `task_id` and continuing from the next node when the orchestrator or workflow process restarts.
+- The workflow implementation MUST support loading checkpoint state by `task_id` and continuing from the next node when the orchestrator restarts.
 - The checkpoint schema and storage are prescriptive; see [Checkpoint schema (prescriptive)](#checkpoint-schema-prescriptive) under Checkpointing and Resumability.
 - The orchestrator MUST NOT run workflow steps without going through the checkpoint layer so that resumability is guaranteed.
 
@@ -223,7 +223,7 @@ The following mapping is the MVP reference mapping.
 #### LLM and Tool Execution (Implementation)
 
 - The LLM and tool execution performed within graph nodes (e.g. Plan Steps, Verify Step Result) are implemented using **langchaingo** (Go), including **multiple simultaneous tool calls** where supported by the model and MCP gateway.
-- LangGraph remains the graph runner and checkpoint owner; see [Runtime and Hosting](#runtime-and-hosting) and [Checkpoint Persistence Contract](#checkpoint-persistence-contract).
+- The workflow engine is the graph runner and checkpoint owner; see [Runtime and Hosting](#runtime-and-hosting) and [Checkpoint Persistence Contract](#checkpoint-persistence-contract).
 - See [Project Manager Agent - LLM and Tool Execution (Implementation)](project_manager_agent.md#spec-cynai-agents-pmllmtoolimplementation).
 
 ### Sub-Agent Invocation
@@ -254,7 +254,7 @@ Before the system signs off on plan completion (sets the plan to state `complete
   2. For each task in the plan with `closed = true`, validates that the task's outcome meets the standards laid out in that task (acceptance criteria, requirements, and any verification evidence from the task workflow).
   3. For any task that does not meet standard: **issue re-work** - e.g. re-open the task with feedback and remediation details, or create a follow-up task that depends on it; the re-work MUST be driven so the task (or its follow-up) can be re-executed and re-validated.
   4. Does not set the plan to `completed` until every task in the plan has passed this validation (or the validation is explicitly skipped per policy, e.g. override for operators).
-- Validation MAY be implemented as a **plan-scoped workflow** (separate from the per-task LangGraph) or as a dedicated phase invoked by the gateway or PMA before allowing the "set plan to completed" operation.
+- Validation MAY be implemented as a **plan-scoped workflow** (separate from the per-task workflow) or as a dedicated phase invoked by the gateway or PMA before allowing the "set plan to completed" operation.
 - The Project Analyst Agent (PAA) MAY be invoked to perform or assist the validation (e.g. per-task verification against acceptance criteria); findings feed into the re-work decision.
 
 #### Re-Work Handling
@@ -356,7 +356,7 @@ This section describes persistence of workflow state so work can resume after re
 
 ### Applicable Requirements
 
-- Spec ID: `CYNAI.AGENTS.LanggraphCheckpointing` <a id="spec-cynai-agents-lgcheckpoint"></a>
+- Spec ID: `CYNAI.AGENTS.WorkflowCheckpointing` <a id="spec-cynai-agents-workflowcheckpointing"></a>
 
 #### Applicable Requirements Requirements Traces
 
@@ -383,7 +383,7 @@ Full column list, constraints, and the companion `task_workflow_leases` table ar
 
 - Spec ID: `CYNAI.SCHEMA.WorkflowCheckpoints` <a id="spec-cynai-schema-workflowcheckpoints"></a>
 
-The LangGraph workflow engine persists checkpoint state and per-task workflow leases in PostgreSQL so workflows can resume after restarts and only one active workflow runs per task.
+The workflow engine persists checkpoint state and per-task workflow leases in PostgreSQL so workflows can resume after restarts and only one active workflow runs per task.
 
 **Schema definitions (index):** See [Workflow Checkpoints](postgres_schema.md#spec-cynai-schema-workflowcheckpoints) in [`postgres_schema.md`](postgres_schema.md).
 
@@ -393,7 +393,7 @@ The LangGraph workflow engine persists checkpoint state and per-task workflow le
 
 Table name: `workflow_checkpoints`.
 
-The LangGraph workflow engine persists checkpoint state to PostgreSQL so that workflows can resume after restarts.
+The workflow engine persists checkpoint state to PostgreSQL so that workflows can resume after restarts.
 The orchestrator does not run workflow steps without going through this checkpoint layer.
 
 - `id` (uuid, pk)
@@ -465,6 +465,6 @@ flowchart LR
 - Orchestrator-side agents MUST use MCP database tools for state reads and writes.
 - Worker agents run in sandbox containers and MUST use MCP tools for controlled operations.
 - **Contract reference runner:** [`scripts/workflow_runner_stub/minimal_runner.py`](../../scripts/workflow_runner_stub/minimal_runner.py) is a stdlib-only client that acquires a workflow lease, writes a `verify_step_result` checkpoint with PMA-to-PAA review fields in `state`, resumes, and releases the lease.
-  It illustrates the HTTP contract for a Python workflow process before a LangGraph-backed runner is packaged for deployment.
+  It illustrates the HTTP contract for an external workflow client.
 
 See [`docs/tech_specs/mcp/mcp_tooling.md`](mcp/mcp_tooling.md), [`docs/tech_specs/project_manager_agent.md`](project_manager_agent.md), and [`docs/tech_specs/user_preferences.md`](user_preferences.md).

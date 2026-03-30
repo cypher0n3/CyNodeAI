@@ -20,8 +20,8 @@
 - [Phase 1 Single Node Happy Path](#phase-1-single-node-happy-path)
 - [Phase 1.5 Single Node Full Capability](#phase-15-single-node-full-capability)
 - [Phase 2 MCP in the Loop](#phase-2-mcp-in-the-loop)
-  - [Phase 2 LangGraph Integration Checklist](#phase-2-langgraph-integration-checklist)
-  - [Phase 2 LangGraph Tasks (Optional 4-8 Hour Chunks)](#phase-2-langgraph-tasks-optional-4-8-hour-chunks)
+  - [Phase 2 Workflow Integration Checklist](#phase-2-workflow-integration-checklist)
+  - [Phase 2 Workflow Tasks (Optional 4-8 Hour Chunks)](#phase-2-workflow-tasks-optional-4-8-hour-chunks)
 - [Phase 3 Multi Node Robustness](#phase-3-multi-node-robustness)
 - [Phase 4 Optional Controlled Egress and Integrations](#phase-4-optional-controlled-egress-and-integrations)
 - [Feature Files and BDD](#feature-files-and-bdd)
@@ -76,16 +76,16 @@ Recent tech spec updates incorporated into this plan:
   - Not in current MVP scope per [mvp.md](mvp.md).
   - Deferred; if product adds them later, this plan can be updated.
 
-- **SBA and PMA implementation (langchaingo)** ([cynode_sba.md](../docs/tech_specs/cynode_sba.md), [project_manager_agent.md](../docs/tech_specs/project_manager_agent.md), [langgraph_mvp.md](../docs/tech_specs/langgraph_mvp.md)):
+- **SBA and PMA implementation (langchaingo)** ([cynode_sba.md](../docs/tech_specs/cynode_sba.md), [project_manager_agent.md](../docs/tech_specs/project_manager_agent.md), [workflow_mvp.md](../docs/tech_specs/workflow_mvp.md)):
   - **SBA:** The canonical implementation of `cynode-sba` is in Go using [langchaingo](https://github.com/tmc/langchaingo) for LLM calls, agent loop, and MCP tools (wrapped as langchaingo tools).
   - **PMA:** PMA uses langchaingo (Go) for LLM and tool execution, including multiple simultaneous tool calls where supported.
-  - LangGraph remains the orchestrator workflow engine (graph, checkpointing to PostgreSQL, lease); langchaingo implements the agentic steps within workflow nodes.
+  - The workflow engine is a Go-native workflow runner (graph, checkpointing to PostgreSQL, lease); langchaingo implements the agentic steps within workflow nodes.
 
 These behaviors are reflected in Phase 1 (inference path requirement), Phase 2 (workflow model routing), and Phase 4 (API Egress, external model routing fallback, and policy).
 
 ## Phase Summary
 
-- **Phase 0** - Foundations (schema, node payloads, MCP gateway spec, LangGraph contract) - Complete for the MVP-supported scope
+- **Phase 0** - Foundations (schema, node payloads, MCP gateway spec, Workflow MVP contract) - Complete for the MVP-supported scope
 - **Phase 1** - Single node happy path (registration, dispatch, sandbox, auth, task APIs) - Complete
 - **Phase 1.5** - Inference in sandbox, E2E inference, CLI, prompt interpretation - Complete under the current UDS-based container boundary contract
 - **Phase 1.7** - PMA/SBA agent artifacts and PMA integration - Complete, with a few tracked contract drifts still to close
@@ -134,7 +134,7 @@ These behaviors are reflected in Phase 1 (inference path requirement), Phase 2 (
   P2-10-orchestrator: Implemented; task create with `use_sba` (API) or `--use-sba` (cynork) creates job with `job_spec_json` and SBA runner image; dispatcher passes through; `CreateJobWithID`; unit and testcontainers tests; handlers and database coverage at or above 90%.
   Workflow start/resume and lease foundations have landed, and early API Egress / Worker Telemetry slices are present.
   The MCP gateway routes an expanded catalog (for example preference, task, project, job, artifact, skills, help, node, system_setting) per `orchestrator/internal/mcpgateway/handlers.go`; sandbox agents remain on the narrower sandbox allowlist in `allowlist.go`.
-  **Remaining Phase 2 (implementation):** Python LangGraph workflow runner graph nodes wired to MCP and Worker API (P2-06), and end-to-end verification-loop automation (P2-08), per [Phase 2 LangGraph Integration Checklist](#phase-2-langgraph-integration-checklist) and [Implementation Order (Done vs Remaining)](#implementation-order-done-vs-remaining).
+  **Remaining Phase 2 (implementation):** Go-native workflow runner graph nodes wired to MCP and Worker API (P2-06), and end-to-end verification-loop automation (P2-08), per [Phase 2 Workflow Integration Checklist](#phase-2-workflow-integration-checklist) and [Implementation Order (Done vs Remaining)](#implementation-order-done-vs-remaining).
 
 ## Prompt Interpretation: Intended Semantics
 
@@ -156,7 +156,7 @@ See [REQ-ORCHES-0126](../docs/requirements/orches.md#req-orches-0126) and task-p
 2. Minimal "prompt as model input" path (Option A: sandbox job with fixed model-call script; Option B: orchestrator calls inference and stores result without sandbox).
 3. Explicit raw/script/commands mode for backward compatibility.
 4. BDD/feature coverage for natural-language prompt in, model output out.
-5. Phase 2: full interpretation via LangGraph/workflow (model + sandbox orchestration) per [langgraph_mvp.md](../docs/tech_specs/langgraph_mvp.md).
+5. Phase 2: full interpretation via workflow engine (model + sandbox orchestration) per [workflow_mvp.md](../docs/tech_specs/workflow_mvp.md).
 
 See Task Breakdown Phase 1.5 and Phase 2 for concrete tasks.
 
@@ -494,7 +494,7 @@ If we want a Phase 5, we should first define its scope and add it to the tech-sp
 - Postgres schema (users, auth sessions, groups/RBAC, tasks, jobs, nodes, artifacts, audit).
 - Node payloads: capability report, config payload, registration bootstrap (PSK to JWT), config versioning, refresh/ack/rollback.
 - MCP gateway enforcement: allowlists, access control, auditing, task-scoped tool schemas, policy mapping to `access_control_rules` (action `mcp.tool.invoke`).
-- LangGraph MVP workflow contract and checkpointing.
+- Workflow MVP contract and checkpointing.
 
 Reference: [docs/tech_specs/\_main.md](../docs/tech_specs/_main.md) Phase 0.
 
@@ -507,7 +507,7 @@ Reference: [docs/tech_specs/\_main.md](../docs/tech_specs/_main.md) Phase 0.
   In the single-node case, the system MUST refuse to enter a ready state if the node cannot run the inference container and there is no configured external provider key.
 - Orchestrator: Project Manager model selection and warmup at startup.
 - User API Gateway: local auth (login/refresh), create task, retrieve result.
-- Phase 1: config on startup only; long-lived node JWT; tasks as single sandbox job (no LangGraph).
+- Phase 1: config on startup only; long-lived node JWT; tasks as single sandbox job (no workflow engine).
 - Task creation: plain text/Markdown, attachments, script, or commands; interpretation and inference default; Phase 1 may pass prompt as sandbox command until interpretation layer exists.
 
 Reference: [docs/tech_specs/\_main.md](../docs/tech_specs/_main.md) Phase 1; [external_model_routing.md](../docs/tech_specs/external_model_routing.md) (routing goal and ready-state gating).
@@ -528,7 +528,7 @@ Reference: [docs/tech_specs/\_main.md](../docs/tech_specs/_main.md) Phase 1; [ex
 
 **Done:** CLI module, worker-managed inference proxy path, worker_node BDD for inference; orchestrator/User API default to inference path; minimal prompt-as-model-input path; raw/script/commands mode; BDD for natural-language prompt (default) and result containing model output, and for commands mode (literal shell).
 Worker BDD: GET /readyz, 413 on oversized body. `just ci` passes.
-**Next:** Phase 2 (MCP in the loop, LangGraph workflow).
+**Next:** Phase 2 (MCP in the loop, workflow engine).
 
 Reference: [docs/tech_specs/worker_node.md](../docs/tech_specs/worker_node.md), [docs/tech_specs/sandbox_container.md](../docs/tech_specs/sandbox_container.md).
 
@@ -539,33 +539,33 @@ Reference: [docs/tech_specs/worker_node.md](../docs/tech_specs/worker_node.md), 
 - **SBA (cynode-sba):** Phase 2 includes implementation of the sandbox agent runner per [cynode_sba.md](../docs/tech_specs/cynode_sba.md): P2-09 (cynode-sba binary and SBA runner image), P2-10 (Worker API and orchestrator integration for SBA runner jobs).
   When the worker runs a job with the SBA runner image, the container invokes `cynode-sba`; the node derives the Worker API response from the SBA result contract.
   P2-08 (Verify Step Result) then uses this runner when PMA tasks the Project Analyst or sandbox agent.
-- **Workflow engine:** **Separate Python LangGraph process** invoked by the Go orchestrator; one instance per `task_id`; **lease in orchestrator DB** (single-active-workflow-per-task); **prescriptive checkpoint schema** in PostgreSQL ([workflow_checkpoints](../docs/tech_specs/postgres_schema.md#workflow-checkpoints-table), [task_workflow_leases](../docs/tech_specs/postgres_schema.md#task-workflow-leases-table)).
+- **Workflow engine:** **Go-native workflow runner** (state machine) within the orchestrator process; one instance per `task_id`; **lease in orchestrator DB** (single-active-workflow-per-task); **prescriptive checkpoint schema** in PostgreSQL ([workflow_checkpoints](../docs/tech_specs/postgres_schema.md#workflow-checkpoints-table), [task_workflow_leases](../docs/tech_specs/postgres_schema.md#task-workflow-leases-table)).
   Workflow nodes map to MCP DB, model routing (local or API Egress), Worker API dispatch, result collection.
 - **Scheduler:** When a run requires interpretation, **scheduler hands payload directly to PMA**; **PMA creates the task and starts the workflow internally** (no separate enqueue-workflow-start step).
 - **Verify Step Result:** **PMA tasks the Project Analyst (or other sandbox agent)** to verify; findings back to workflow state.
-- **Process boundaries:** **cynode-pma** (chat, MCP) and **workflow runner** (LangGraph) are **separate processes** sharing MCP gateway and DB; orchestrator starts workflow runner for a task; chat and planning go to PMA.
+- **Process boundaries:** **cynode-pma** (chat, MCP) and **workflow runner** are **separate processes** sharing MCP gateway and DB; orchestrator starts workflow runner for a task; chat and planning go to PMA.
 
 Model routing in Phase 2 follows [external_model_routing.md](../docs/tech_specs/external_model_routing.md): local preferred; external via API Egress when policy allows; orchestrator-side agent settings (e.g. Project Manager / Project Analyst) may override defaults.
 
-### Phase 2 LangGraph Integration Checklist
+### Phase 2 Workflow Integration Checklist
 
-Concrete steps for Phase 2 LangGraph integration:
+Concrete steps for Phase 2 workflow integration:
 
-- (a) Checkpoint table/schema implemented per [langgraph_mvp.md](../docs/tech_specs/langgraph_mvp.md) and [postgres_schema.md](../docs/tech_specs/postgres_schema.md).
-- (b) Workflow start/resume API (Go orchestrator to Python LangGraph process).
+- (a) Checkpoint table/schema implemented per [workflow_mvp.md](../docs/tech_specs/workflow_mvp.md) and [postgres_schema.md](../docs/tech_specs/postgres_schema.md).
+- (b) Workflow start/resume API (orchestrator to workflow runner).
 - (c) Graph nodes wired to MCP DB tools and Worker API.
 - (d) Lease acquisition in orchestrator DB (workflow runner acquires/checks lease via orchestrator).
 - (e) Verify Step Result implemented as PMA tasking Project Analyst or other sandbox agent.
 
-### Phase 2 LangGraph Tasks (Optional 4-8 Hour Chunks)
+### Phase 2 Workflow Tasks (Optional 4-8 Hour Chunks)
 
 - **P2-04 (4-8h):** Checkpoint table and schema per spec; workflow runner can persist and load by task_id.
-- **P2-05 (4-8h):** Workflow start/resume API from Go orchestrator to Python LangGraph process.
+- **P2-05 (4-8h):** Workflow start/resume API from orchestrator to Go-native workflow runner.
 - **P2-06 (4-8h):** Graph nodes wired to MCP DB tools and Worker API (Load Task Context, Plan Steps, Dispatch Step, Collect Result, Finalize Summary, Mark Failed).
 - **P2-07 (4-8h):** Lease acquisition in orchestrator DB; workflow runner acquires/checks lease via orchestrator before running.
 - **P2-08 (4-8h):** Verify Step Result implemented as PMA tasking Project Analyst or other sandbox agent; findings written back to workflow state.
 
-Reference: [docs/tech_specs/\_main.md](../docs/tech_specs/_main.md) Phase 2, [langgraph_mvp.md](../docs/tech_specs/langgraph_mvp.md), [orchestrator.md](../docs/tech_specs/orchestrator.md#workflow-engine).
+Reference: [docs/tech_specs/\_main.md](../docs/tech_specs/_main.md) Phase 2, [workflow_mvp.md](../docs/tech_specs/workflow_mvp.md), [orchestrator.md](../docs/tech_specs/orchestrator.md#workflow-engine).
 
 ## Phase 3 Multi Node Robustness
 
@@ -635,7 +635,7 @@ Items below are implemented.
 
 ### Remaining (Order)
 
-1. Phase 2 remaining: broader MCP tool allow paths, remaining LangGraph graph-node work, and fuller verification-loop integration.
+1. Phase 2 remaining: broader MCP tool allow paths, remaining workflow graph-node work, and fuller verification-loop integration.
 2. Phase 3: Multi-node selection, leases/retries, and richer node telemetry.
 3. Phase 4: API Egress policy completion, external routing, Secure Browser, and the broader admin/CLI surface.
 
@@ -646,7 +646,7 @@ Content was consolidated from dev_docs that have been deleted.
 
 ### Remediation Status (Done / Deferred / Pending)
 
-- **Done:** Worker API response contract (SbaResult, StepExecutorResult, Artifacts); healthz body `ok` (Worker API, User API Gateway, control-plane, cynork); LangGraph schema (workflow_checkpoints, task_workflow_leases); admin revoke_sessions;
+- **Done:** Worker API response contract (SbaResult, StepExecutorResult, Artifacts); healthz body `ok` (Worker API, User API Gateway, control-plane, cynork); workflow schema (workflow_checkpoints, task_workflow_leases); admin revoke_sessions;
   node payloads (sandbox_registries array, capability optional fields); cynork Health() and POST /v1/chat/completions; SBA in-progress (dispatcher sets job running); SBA spec and BDD refactor (nodemanager.RunWithOptions); sandbox image registry schema; worker stdout/stderr 256 KiB verified; REQ-CLIENT-0004 parity baseline in cynork_cli.md (former remediation plan 4.5).
 - **Deferred:** User API Gateway task create attachments and task name normalization.
   Implement when gateway/PM require.
@@ -675,7 +675,7 @@ The basic E2E path for SBA job results is also in place.
 ### Suggested Next Work
 
 1. **Phase 2 MCP expansion:** Extend or freeze the MVP catalog relative to [tech_specs/mcp_tools/README.md](tech_specs/mcp_tools/README.md); PM routes a broad set in `mcpgateway/handlers.go` while sandbox agents remain on `sandboxAllowedTools` in `allowlist.go`.
-2. **Phase 2 workflow completion:** Finish the remaining LangGraph graph nodes, verification loop, and end-to-end workflow coverage on top of the landed workflow start/resume and lease foundations.
+2. **Phase 2 workflow completion:** Finish the remaining workflow graph nodes, verification loop, and end-to-end workflow coverage on top of the landed workflow start/resume and lease foundations.
 3. **PMA follow-up buildout:** Continue the PMA/SBA instructions and context work under [P1.7-05](#phase-17-agent-artifacts-pma-first-then-sba), including preserved draft-spec follow-ups for conversation history, explicit thread control, and backend-env delivery.
 4. **Contract drifts:** Close the remaining known drifts around PMA startup gating and task-create attachment/task-name support (chat bounded-wait/retry is implemented; see [Known Drifts (Evidence-Based)](#known-drifts-evidence-based)).
 5. **Phase 3 and 4 roadmap:** Continue multi-node robustness, API Egress policy completion, external routing, Secure Browser, and the broader admin/CLI surface after Phase 2 is stable.

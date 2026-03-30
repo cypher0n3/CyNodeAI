@@ -28,7 +28,7 @@ When the user sends a **slash command** in a configured messaging connector (Sig
 
 - Example: `/kill job <task_id>` or `/task cancel <task_id>` (or task name when supported).
 - The connector delivers the message to PMA with context (user, connector, thread); PMA parses the slash command and performs the same cancel flow as below (invokes task cancel and, when applicable, worker stop).
-- Slash commands for job kill are part of the default slash-command set described in [Default Messaging Connectors - Slash Commands](001_default_messaging_connectors_proposal.md).
+- Slash commands for job kill are part of the default slash-command set described in [Default Messaging Connectors - Slash Commands](010_default_messaging_connectors_proposal.md).
 
 ### 2.2 PMA (Natural Language)
 
@@ -110,7 +110,7 @@ When the node receives a stop job request for a running job that uses an **SBA**
   This proposal adds a **stop job** endpoint and required behavior; the exact path and payloads MUST be added to the Worker API spec upon adoption.
 - **Worker node:** [worker_node.md](../tech_specs/worker_node.md) and [worker_node_payloads.md](../tech_specs/worker_node_payloads.md) do not yet define stop job; adoption would add a Spec Item for stop job and reference the Worker API stop endpoint.
 - **PMA:** PMA already has context for tasks and can call MCP or gateway to perform task operations; this proposal requires that when the user directs PMA to kill a job, PMA triggers the same orchestrator cancel path and that the orchestrator sends the worker stop request.
-- **Messaging connectors:** [Default Messaging Connectors](001_default_messaging_connectors_proposal.md) (slash commands) MUST include a way to cancel a task or kill a job (e.g. `/task cancel <task_id>` or `/kill job <task_id>`); see [Section 2.1](#21-slash-command-messaging-connectors).
+- **Messaging connectors:** [Default Messaging Connectors](010_default_messaging_connectors_proposal.md) (slash commands) MUST include a way to cancel a task or kill a job (e.g. `/task cancel <task_id>` or `/kill job <task_id>`); see [Section 2.1](#21-slash-command-messaging-connectors).
 
 ## 8. References
 
@@ -118,5 +118,5 @@ When the node receives a stop job request for a running job that uses an **SBA**
 - [Worker Node](../tech_specs/worker_node.md)
 - [CLI task cancel](../tech_specs/cynork/cli_management_app_commands_tasks.md#spec-cynai-client-clicommandsurface)
 - [CyNode PMA](../tech_specs/cynode_pma.md)
-- [Default Messaging Connectors - Slash Commands](001_default_messaging_connectors_proposal.md)
+- [Default Messaging Connectors - Slash Commands](010_default_messaging_connectors_proposal.md)
 - [CyNode SBA - Job lifecycle](../tech_specs/cynode_sba.md) (for SBA in-progress and completion)

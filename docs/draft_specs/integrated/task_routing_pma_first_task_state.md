@@ -401,7 +401,7 @@ All paths are repository-relative and linked from this draft.
 
 ## 12 References
 
-- [langgraph_mvp.md](../../tech_specs/langgraph_mvp.md) (workflow start triggers and gates).
+- [workflow_mvp.md](../../tech_specs/workflow_mvp.md) (workflow start triggers and gates).
 - [projects_and_scopes.md](../../tech_specs/projects_and_scopes.md) (plan state model to mirror).
 - [postgres_schema.md](../../tech_specs/postgres_schema.md) (task status vs closed, dependencies).
 - [project_manager_agent.md](../../tech_specs/project_manager_agent.md) (task and project context composition).

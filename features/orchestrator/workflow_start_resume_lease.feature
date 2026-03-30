@@ -1,7 +1,7 @@
 @suite_orchestrator
 Feature: Workflow Start Resume and Lease
 
-  As a workflow runner (e.g. LangGraph process)
+  As a workflow runner (e.g. Go workflow runner)
   I want to start, resume, checkpoint, and release task workflows
   So that at most one active workflow runs per task and state is durable
 

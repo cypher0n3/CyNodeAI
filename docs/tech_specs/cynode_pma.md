@@ -129,7 +129,7 @@ See [`docs/tech_specs/openai_compatible_chat_api.md`](openai_compatible_chat_api
 
 ### Process Boundaries and Workflow Runner
 
-**cynode-pma** (chat, MCP) and the **workflow runner** (LangGraph) are **separate processes**.
+**cynode-pma** (chat, MCP) and the **workflow runner** are **separate processes**.
 They share the MCP gateway and DB.
 The orchestrator starts the workflow runner for a given task; chat and planning go to PMA; the workflow runner executes the graph and does not serve chat.
 See [orchestrator.md](orchestrator.md) Workflow Engine section.
@@ -228,7 +228,7 @@ For multi-turn chat, prior conversation turns MUST be preserved and included in 
 
 ### Langchain-Capable Path
 
-- When the agent uses a LangChain-capable pipeline (e.g. LangGraph or a chain that accepts message history), prior turns MUST be included in the composed context passed to the model.
+- When the agent uses a LangChain-capable pipeline (e.g. the workflow engine or a chain that accepts message history), prior turns MUST be included in the composed context passed to the model.
 - The system-context composition (baseline, role instructions, project/task context, preferences) MUST be sent as the system block or equivalent; prior user and assistant turns MUST be sent as conversation history in the prescribed order and MUST NOT be folded into the system block.
 
 ### Executor Input

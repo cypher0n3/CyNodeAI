@@ -31,8 +31,8 @@ The current implementation-oriented breakdown (4-8 hour chunks) is maintained in
     See [`docs/tech_specs/worker_node_payloads.md`](tech_specs/worker_node_payloads.md).
   - MCP gateway enforcement rules and initial allowlists (spec definition, with runtime integration in Phase 2).
     See [`docs/tech_specs/mcp/mcp_gateway_enforcement.md`](tech_specs/mcp/mcp_gateway_enforcement.md).
-  - LangGraph MVP workflow contract (spec definition, with runtime integration in Phase 2).
-    See [`docs/tech_specs/langgraph_mvp.md`](tech_specs/langgraph_mvp.md).
+  - Workflow MVP contract (spec definition, with runtime integration in Phase 2).
+    See [`docs/tech_specs/workflow_mvp.md`](tech_specs/workflow_mvp.md).
 
 - **Single-node end-to-end execution (Phase 1)**.
   - Orchestrator control-plane supports node registration (PSK => JWT), capability ingest, config delivery, job dispatch, and result collection.
@@ -65,8 +65,8 @@ The current implementation-oriented breakdown (4-8 hour chunks) is maintained in
     See [`docs/tech_specs/mcp/mcp_gateway_enforcement.md`](tech_specs/mcp/mcp_gateway_enforcement.md) and [`docs/tech_specs/mcp/mcp_tool_call_auditing.md`](tech_specs/mcp/mcp_tool_call_auditing.md).
   - Orchestrator-side agents use MCP database tools (no direct PostgreSQL access).
     See [`docs/tech_specs/mcp/mcp_tooling.md`](tech_specs/mcp/mcp_tooling.md).
-  - LangGraph MVP workflow drives tasks with persisted checkpoints and resumability.
-    See [`docs/tech_specs/langgraph_mvp.md`](tech_specs/langgraph_mvp.md).
+  - Workflow MVP drives tasks with persisted checkpoints and resumability.
+    See [`docs/tech_specs/workflow_mvp.md`](tech_specs/workflow_mvp.md).
 
 - **Multi-node robustness (Phase 3)**.
   - Node selection (capability, load, data locality, model availability).
@@ -122,8 +122,8 @@ For the full task breakdown with requirement and spec references, see [`docs/mvp
   - Specify configuration refresh, acknowledgement payload, and rollback reporting.
 - Define MCP gateway enforcement and initial tool allowlists by role.
   See [`docs/tech_specs/mcp/mcp_gateway_enforcement.md`](tech_specs/mcp/mcp_gateway_enforcement.md).
-- Define the LangGraph MVP workflow contract and checkpointing requirements.
-  See [`docs/tech_specs/langgraph_mvp.md`](tech_specs/langgraph_mvp.md).
+- Define the Workflow MVP contract and checkpointing requirements.
+  See [`docs/tech_specs/workflow_mvp.md`](tech_specs/workflow_mvp.md).
 
 #### Phase 1 Single Node Happy Path (MVP Phase 1)
 
@@ -146,7 +146,7 @@ For the full task breakdown with requirement and spec references, see [`docs/mvp
 - Phase 1 config refresh: node fetches configuration on startup only (no polling).
 - Phase 1 node JWT: long-lived; node re-registers on expiry.
 - Phase 1 workflow engine: tasks are executed as a single dispatched sandbox job.
-  LangGraph is not integrated in the Phase 1 runtime loop.
+  The workflow engine is not integrated in the Phase 1 runtime loop.
 - Task creation: user-facing input is plain text or Markdown, attachments, script, or a short series of commands.
   For script or commands, the system runs them in the sandbox.
   For plain text or Markdown, the system interprets the input and uses inference by default.
@@ -167,8 +167,8 @@ For the full task breakdown with requirement and spec references, see [`docs/mvp
 - Continue the orchestrator MCP tool gateway rollout beyond the already-landed scoping, auditing, and preference-tool foundations.
 - Add the remaining MVP MCP database and artifact tool slices needed by orchestrator-side and worker-side agents.
 - Ensure orchestrator-side agents use MCP database tools and do not connect to Postgres directly.
-- Finish integrating the LangGraph MVP workflow as the orchestrator workflow engine for the Project Manager Agent.
-  See [`docs/tech_specs/langgraph_mvp.md`](tech_specs/langgraph_mvp.md).
+- Finish integrating the Workflow MVP as the orchestrator workflow engine for the Project Manager Agent.
+  See [`docs/tech_specs/workflow_mvp.md`](tech_specs/workflow_mvp.md).
 
 #### Phase 3 Multi Node Robustness
 

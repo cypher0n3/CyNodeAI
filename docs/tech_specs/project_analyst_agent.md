@@ -70,11 +70,11 @@ Task scope constraint
 - A Project Analyst agent MUST treat its assigned `task_id` as its only authority scope for state, evidence, and outputs.
 - A Project Analyst agent MUST NOT read or write data for unrelated tasks except through explicitly allowlisted, non-task-specific tools.
 
-LangGraph MVP
+Workflow MVP
 
 - **Orchestrator kicks off to PMA.**
-  In the **Verify Step Result** node of the LangGraph workflow, **PMA tasks the Project Analyst (or another sandbox agent)** to perform verification; findings are written back into the workflow state.
-  See [langgraph_mvp.md](langgraph_mvp.md) Sub-Agent Invocation section.
+  In the **Verify Step Result** node of the workflow, **PMA tasks the Project Analyst (or another sandbox agent)** to perform verification; findings are written back into the workflow state.
+  See [workflow_mvp.md](workflow_mvp.md) Sub-Agent Invocation section.
 
 ## External Provider Usage
 

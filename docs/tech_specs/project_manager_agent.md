@@ -68,7 +68,7 @@ See [`docs/tech_specs/openai_compatible_chat_api.md`](openai_compatible_chat_api
 - Spec ID: `CYNAI.AGENTS.PMLlmToolImplementation` <a id="spec-cynai-agents-pmllmtoolimplementation"></a>
 
 PMA uses **langchaingo** (Go) for LLM calls and tool execution, including **multiple simultaneous tool calls** where supported by the model and the orchestrator gateway.
-The [LangGraph MVP workflow](langgraph_mvp.md) remains the graph runner and checkpoint owner.
+The [Workflow MVP](workflow_mvp.md) defines the graph runner and checkpoint owner.
 Langchaingo implements the agentic steps within nodes (e.g. Plan Steps, Verify Step Result).
 MCP tool calls from PMA go to the **orchestrator MCP gateway** (HTTP on the **control-plane** in default deployments; see [MCP Tool Access](cynode_pma.md#spec-cynai-pmagnt-mcptoolaccess)), typically via **`mcpclient`** from the PMA binary through the **worker internal proxy**.
 Langchaingo tools wrap those MCP calls inside the PMA process.

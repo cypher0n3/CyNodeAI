@@ -132,7 +132,7 @@ It uses a central orchestrator to coordinate node-local workers, sandboxed execu
 - CyNode PMA (`cynode-pma`): [`docs/tech_specs/cynode_pma.md`](cynode_pma.md)
 - CyNode SBA (`cynode-sba`): [`docs/tech_specs/cynode_sba.md`](cynode_sba.md)
 - CyNode Step Executor (`cynode-sse`): [`docs/tech_specs/cynode_step_executor.md`](cynode_step_executor.md)
-- LangGraph MVP workflow: [`docs/tech_specs/langgraph_mvp.md`](langgraph_mvp.md)
+- Workflow MVP: [`docs/tech_specs/workflow_mvp.md`](workflow_mvp.md)
 
 ### Bootstrap Configurations
 

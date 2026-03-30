@@ -21,8 +21,8 @@ It covers agent behaviors, responsibilities, and workflow integration.
 - **REQ-AGENTS-0003:** Project Analyst: PostgreSQL access only through MCP tools; effective preferences and recording.
   [CYNAI.AGENTS.ProjectAnalystToolAccess](../tech_specs/project_analyst_agent.md#spec-cynai-agents-patoolaccess)
   <a id="req-agents-0003"></a>
-- **REQ-AGENTS-0004:** LangGraph checkpoint to PostgreSQL per transition; resumable; idempotent steps.
-  [CYNAI.AGENTS.LanggraphCheckpointing](../tech_specs/langgraph_mvp.md#spec-cynai-agents-lgcheckpoint)
+- **REQ-AGENTS-0004:** Workflow checkpoint to PostgreSQL per transition; resumable; idempotent steps.
+  [CYNAI.AGENTS.WorkflowCheckpointing](../tech_specs/workflow_mvp.md#spec-cynai-agents-workflowcheckpointing)
   <a id="req-agents-0004"></a>
 
 - **REQ-AGENTS-0100:** A cloud worker MUST NOT access PostgreSQL directly.
@@ -77,13 +77,13 @@ It covers agent behaviors, responsibilities, and workflow integration.
   [CYNAI.AGENTS.ProjectAnalystToolAccess](../tech_specs/project_analyst_agent.md#spec-cynai-agents-patoolaccess)
   <a id="req-agents-0115"></a>
 - **REQ-AGENTS-0116:** The workflow MUST checkpoint progress to PostgreSQL after each node transition.
-  [CYNAI.AGENTS.LanggraphCheckpointing](../tech_specs/langgraph_mvp.md#spec-cynai-agents-lgcheckpoint)
+  [CYNAI.AGENTS.WorkflowCheckpointing](../tech_specs/workflow_mvp.md#spec-cynai-agents-workflowcheckpointing)
   <a id="req-agents-0116"></a>
 - **REQ-AGENTS-0117:** The workflow MUST be resumable after orchestrator restarts.
-  [CYNAI.AGENTS.LanggraphCheckpointing](../tech_specs/langgraph_mvp.md#spec-cynai-agents-lgcheckpoint)
+  [CYNAI.AGENTS.WorkflowCheckpointing](../tech_specs/workflow_mvp.md#spec-cynai-agents-workflowcheckpointing)
   <a id="req-agents-0117"></a>
 - **REQ-AGENTS-0118:** Each step attempt MUST be idempotent or have idempotency keys.
-  [CYNAI.AGENTS.LanggraphCheckpointing](../tech_specs/langgraph_mvp.md#spec-cynai-agents-lgcheckpoint)
+  [CYNAI.AGENTS.WorkflowCheckpointing](../tech_specs/workflow_mvp.md#spec-cynai-agents-workflowcheckpointing)
   <a id="req-agents-0118"></a>
 
 - **REQ-AGENTS-0119:** The Project Manager Agent SHOULD be able to pair external inference with sandbox execution on a node when tool runs are required.

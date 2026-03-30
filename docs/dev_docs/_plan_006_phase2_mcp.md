@@ -2,13 +2,13 @@
 name: Phase 2 MCP in the Loop
 overview: |
   Implement the two remaining Phase 2 MCP-in-the-loop items.
-  P2-06: Production-grade LangGraph graph-node process wired to MCP and
-  Worker API for multi-step workflow orchestration (Load Task Context => Plan
-  Steps => Dispatch Step => Collect Result => Verify => Finalize).
+  P2-06: Go-native workflow runner (state machine) wired to MCP and Worker
+  API for multi-step workflow orchestration (Load Task Context => Plan Steps
+  => Dispatch Step => Collect Result => Verify => Finalize).
   P2-08: Full verification loop with PMA tasking Project Analyst and writing
   findings back through the workflow (multi-agent round-trip automation).
-  Both build on the existing minimal_runner.py reference and persistence
-  contract.
+  Both build on the existing workflow start/resume/lease foundations and
+  persistence contract.
 todos:
   - id: p2-001
     content: "Read `scripts/minimal_runner.py` (or equivalent stdlib reference runner) to understand the current Worker API contract validation and what it covers."
@@ -24,12 +24,12 @@ todos:
     dependencies:
       - p2-002
   - id: p2-004
-    content: "Read existing `agents/` code to identify where the LangGraph graph-node process would integrate with the Worker API and MCP tool interface."
+    content: "Read existing `agents/` and `orchestrator/` code to identify where the Go-native workflow runner would integrate with the Worker API and MCP tool interface."
     status: pending
     dependencies:
       - p2-003
   - id: p2-005
-    content: "Read LangGraph documentation for Python graph-node architecture and state management patterns (current best practices)."
+    content: "Read `docs/tech_specs/workflow_mvp.md` for the Go-native workflow runner graph topology, state model, and node behaviors."
     status: pending
     dependencies:
       - p2-004
@@ -49,17 +49,17 @@ todos:
     dependencies:
       - p2-007
   - id: p2-009
-    content: "Add Python unit tests: each graph node must produce expected output given mock MCP tool responses and mock Worker API responses."
+    content: "Add Go unit tests: each graph node must produce expected output given mock MCP tool responses and mock Worker API responses."
     status: pending
     dependencies:
       - p2-008
   - id: p2-010
-    content: "Add Python integration test: end-to-end graph execution with mock MCP server and mock Worker API must traverse all nodes in order."
+    content: "Add Go integration test: end-to-end graph execution with mock MCP server and mock Worker API must traverse all nodes in order."
     status: pending
     dependencies:
       - p2-009
   - id: p2-011
-    content: "Run `python -m pytest tests/test_graph_node.py -v` and confirm failures (graph-node not yet implemented)."
+    content: "Run `go test -v -run TestWorkflowRunner ./orchestrator/...` and confirm failures (workflow runner not yet implemented)."
     status: pending
     dependencies:
       - p2-010
@@ -99,22 +99,22 @@ todos:
     dependencies:
       - p2-017
   - id: p2-019
-    content: "Wire graph nodes into a LangGraph `StateGraph` with edges and conditional routing (Verify => Finalize or Verify => PlanSteps)."
+    content: "Wire graph nodes into a Go state machine with transitions and conditional routing (Verify => Finalize or Verify => PlanSteps)."
     status: pending
     dependencies:
       - p2-018
   - id: p2-020
-    content: "Re-run `python -m pytest tests/test_graph_node.py -v` and confirm green."
+    content: "Re-run `go test -v -run TestWorkflowRunner ./orchestrator/...` and confirm green."
     status: pending
     dependencies:
       - p2-019
   - id: p2-021
-    content: "Ensure the graph-node process can run as a standalone Python process invoked by the Worker API (container entry point)."
+    content: "Ensure the workflow runner integrates with the orchestrator process and uses existing checkpoint/lease infrastructure."
     status: pending
     dependencies:
       - p2-020
   - id: p2-022
-    content: "Run `just lint-python` on all new and changed Python files."
+    content: "Run `just lint-go` on all new and changed Go files."
     status: pending
     dependencies:
       - p2-021
@@ -159,17 +159,17 @@ todos:
     dependencies:
       - p2-029
   - id: p2-031
-    content: "Add Python unit tests: PMA tasking PA must create a sub-task with verification criteria; PA result must be written back to the workflow state; PMA must evaluate findings."
+    content: "Add Go unit tests: PMA tasking PA must create a sub-task with verification criteria; PA result must be written back to the workflow state; PMA must evaluate findings."
     status: pending
     dependencies:
       - p2-030
   - id: p2-032
-    content: "Add Python integration test: end-to-end PMA => PA => PMA verification loop with mock agents must complete the full round-trip."
+    content: "Add Go integration test: end-to-end PMA => PA => PMA verification loop with mock agents must complete the full round-trip."
     status: pending
     dependencies:
       - p2-031
   - id: p2-033
-    content: "Run `python -m pytest tests/test_verification_loop.py -v` and confirm failures."
+    content: "Run `go test -v -run TestVerificationLoop ./orchestrator/...` and confirm failures."
     status: pending
     dependencies:
       - p2-032
@@ -194,17 +194,17 @@ todos:
     dependencies:
       - p2-036
   - id: p2-038
-    content: "Wire the verification loop into the LangGraph graph: add a `VerifyWithPA` node that creates sub-task, waits for PA completion, and evaluates findings."
+    content: "Wire the verification loop into the Go workflow runner: add a `VerifyWithPA` node that creates sub-task, waits for PA completion, and evaluates findings."
     status: pending
     dependencies:
       - p2-037
   - id: p2-039
-    content: "Re-run `python -m pytest tests/test_verification_loop.py -v` and confirm green."
+    content: "Re-run `go test -v -run TestVerificationLoop ./orchestrator/...` and confirm green."
     status: pending
     dependencies:
       - p2-038
   - id: p2-040
-    content: "Run `just lint-python` on all new and changed Python files."
+    content: "Run `just lint-go` on all new and changed Go files."
     status: pending
     dependencies:
       - p2-039
@@ -264,15 +264,16 @@ todos:
 
 ## Goal
 
-Implement the two remaining Phase 2 MCP-in-the-loop items: a production-grade LangGraph graph-node process for multi-step workflow orchestration (P2-06) and a full PMA-to-PA verification loop for multi-agent round-trip automation (P2-08).
-Both build on the existing `minimal_runner.py` reference runner and the persistence contract.
+Implement the two remaining Phase 2 MCP-in-the-loop items: a Go-native workflow runner (state machine) for multi-step workflow orchestration (P2-06) and a full PMA-to-PA verification loop for multi-agent round-trip automation (P2-08).
+Both build on the existing workflow start/resume/lease foundations and the persistence contract.
 
 ## References
 
 - Todo: [`_todo.md`](_todo.md) section 6
 - Tech specs: [`docs/tech_specs/project_manager_agent.md`](../tech_specs/project_manager_agent.md), [`docs/tech_specs/cynode_pma.md`](../tech_specs/cynode_pma.md), [`docs/tech_specs/cynode_sba.md`](../tech_specs/cynode_sba.md)
 - Requirements: [`docs/requirements/orches.md`](../requirements/orches.md) (task lifecycle, workflow), [`docs/requirements/pmagnt.md`](../requirements/pmagnt.md) (PMA tasking)
-- Existing reference: `scripts/minimal_runner.py` (stdlib reference runner for Worker API contract)
+- Workflow spec: [`docs/tech_specs/workflow_mvp.md`](../tech_specs/workflow_mvp.md) (graph topology, state model, node behaviors)
+- Existing reference: `scripts/workflow_runner_stub/minimal_runner.py` (stdlib reference runner for Worker API contract)
 - MCP tool catalog: [`docs/tech_specs/mcp_tools/README.md`](../tech_specs/mcp_tools/README.md)
 - Implementation: `agents/`, `orchestrator/`, `worker_node/`, `scripts/`
 
@@ -291,9 +292,9 @@ Both build on the existing `minimal_runner.py` reference runner and the persiste
 
 Tasks are ordered by dependency: the graph-node process (P2-06) must be working before the verification loop (P2-08) can be wired end-to-end.
 
-### Task 1: P2-06 -- LangGraph Graph-Node Process for Multi-Step Workflow Orchestration
+### Task 1: P2-06 -- Go-Native Workflow Runner for Multi-Step Workflow Orchestration
 
-Build a production-grade Python LangGraph process that implements the multi-step workflow: Load Task Context => Plan Steps => Dispatch Step => Collect Result => Verify => Finalize.
+Build a Go-native workflow runner (state machine) within the orchestrator that implements the multi-step workflow: Load Task Context => Plan Steps => Dispatch Step => Collect Result => Verify => Finalize.
 The current `minimal_runner.py` validates the API contract but does not implement production orchestration.
 
 #### Task 1 Requirements and Specifications
@@ -301,24 +302,24 @@ The current `minimal_runner.py` validates the API contract but does not implemen
 - [`docs/tech_specs/`](../tech_specs/) -- multi-step workflow orchestration spec
 - [`docs/requirements/orches.md`](../requirements/orches.md) -- task lifecycle, step dispatch
 - MCP tool catalog: [`docs/tech_specs/mcp_tools/README.md`](../tech_specs/mcp_tools/README.md)
-- Existing reference: `scripts/minimal_runner.py`
+- Existing reference: `scripts/workflow_runner_stub/minimal_runner.py`
 
 #### Discovery (Task 1) Steps
 
-- [ ] Read `scripts/minimal_runner.py` (or equivalent stdlib reference runner) to understand the current Worker API contract validation and what it covers.
-- [ ] Read `docs/tech_specs/` for the multi-step workflow orchestration spec: Load Task Context => Plan Steps => Dispatch Step => Collect Result => Verify => Finalize.
+- [ ] Read `scripts/workflow_runner_stub/minimal_runner.py` (or equivalent stdlib reference runner) to understand the current Worker API contract validation and what it covers.
+- [ ] Read `docs/tech_specs/workflow_mvp.md` for the multi-step workflow orchestration spec: Load Task Context => Plan Steps => Dispatch Step => Collect Result => Verify => Finalize.
 - [ ] Read `docs/requirements/` for workflow orchestration requirements (task lifecycle, step dispatch, result collection).
-- [ ] Read existing `agents/` code to identify where the LangGraph graph-node process would integrate with the Worker API and MCP tool interface.
-- [ ] Read LangGraph documentation for Python graph-node architecture and state management patterns (current best practices).
+- [ ] Read existing `agents/` and `orchestrator/` code to identify where the Go-native workflow runner would integrate with the Worker API and MCP tool interface.
+- [ ] Read `docs/tech_specs/workflow_mvp.md` for the Go-native workflow runner graph topology, state model, and node behaviors.
 
 #### Red (Task 1)
 
 - [ ] Design the graph-node architecture: define nodes (LoadTaskContext, PlanSteps, DispatchStep, CollectResult, Verify, Finalize), edges, and state schema.
 - [ ] Define the MCP tool interface for each graph node: which MCP tools each node calls, expected inputs/outputs, and error handling.
 - [ ] Define the Worker API contract for step dispatch: how the graph-node process submits jobs, receives results, and reports status.
-- [ ] Add Python unit tests: each graph node must produce expected output given mock MCP tool responses and mock Worker API responses.
-- [ ] Add Python integration test: end-to-end graph execution with mock MCP server and mock Worker API must traverse all nodes in order.
-- [ ] Run `python -m pytest tests/test_graph_node.py -v` and confirm failures (graph-node not yet implemented).
+- [ ] Add Go unit tests: each graph node must produce expected output given mock MCP tool responses and mock Worker API responses.
+- [ ] Add Go integration test: end-to-end graph execution with mock MCP server and mock Worker API must traverse all nodes in order.
+- [ ] Run `go test -v -run TestWorkflowRunner ./orchestrator/...` and confirm failures (workflow runner not yet implemented).
 - [ ] Add or extend E2E test `scripts/test_scripts/e2e_0900_workflow_graph_node.py` with tags `[suite_orchestrator, full_demo, workflow, no_inference]` and prereqs `[gateway, config, auth, node_register]`: submit a multi-step task, verify graph-node traverses all stages.
 
 #### Green (Task 1)
@@ -329,17 +330,17 @@ The current `minimal_runner.py` validates the API contract but does not implemen
 - [ ] Implement `CollectResult` node: poll or await Worker API job completion; collect results into graph state.
 - [ ] Implement `Verify` node: validate collected results against task acceptance criteria; route to Finalize or back to PlanSteps for retry.
 - [ ] Implement `Finalize` node: write final results back to orchestrator via MCP `task.update` tool; set task status to complete.
-- [ ] Wire graph nodes into a LangGraph `StateGraph` with edges and conditional routing (Verify => Finalize or Verify => PlanSteps).
-- [ ] Re-run `python -m pytest tests/test_graph_node.py -v` and confirm green.
+- [ ] Wire graph nodes into a Go state machine with transitions and conditional routing (Verify => Finalize or Verify => PlanSteps).
+- [ ] Re-run `go test -v -run TestWorkflowRunner ./orchestrator/...` and confirm green.
 
 #### Refactor (Task 1)
 
-- [ ] Ensure the graph-node process can run as a standalone Python process invoked by the Worker API (container entry point).
+- [ ] Ensure the workflow runner integrates with the orchestrator process and uses existing checkpoint/lease infrastructure.
 
 #### Testing (Task 1)
 
-- [ ] Run `just lint-python` on all new and changed Python files.
-- [ ] Run `just e2e --tags workflow,no_inference` to verify the graph-node integration with the dev stack.
+- [ ] Run `just lint-go` on all new and changed Go files.
+- [ ] Run `just e2e --tags workflow,no_inference` to verify the workflow runner integration with the dev stack.
 - [ ] Validation gate -- do not proceed to Task 2 until all checks pass.
 
 #### Closeout (Task 1)
@@ -370,9 +371,9 @@ The current persistence contract exists but the round-trip is not automated end-
 #### Red (Task 2)
 
 - [ ] Design the verification loop: PMA creates a sub-task with verification criteria, dispatches to PA via the workflow graph-node, PA executes and writes findings back, PMA evaluates findings against criteria.
-- [ ] Add Python unit tests: PMA tasking PA must create a sub-task with verification criteria; PA result must be written back to the workflow state; PMA must evaluate findings.
-- [ ] Add Python integration test: end-to-end PMA => PA => PMA verification loop with mock agents must complete the full round-trip.
-- [ ] Run `python -m pytest tests/test_verification_loop.py -v` and confirm failures.
+- [ ] Add Go unit tests: PMA tasking PA must create a sub-task with verification criteria; PA result must be written back to the workflow state; PMA must evaluate findings.
+- [ ] Add Go integration test: end-to-end PMA => PA => PMA verification loop with mock agents must complete the full round-trip.
+- [ ] Run `go test -v -run TestVerificationLoop ./orchestrator/...` and confirm failures.
 - [ ] Add or extend E2E test `scripts/test_scripts/e2e_0910_verification_loop.py` with tags `[suite_orchestrator, full_demo, workflow, pma_inference]` and prereqs `[gateway, config, auth, node_register]`: PMA tasks PA, PA writes findings, PMA verifies.
 
 #### Green (Task 2)
@@ -380,8 +381,8 @@ The current persistence contract exists but the round-trip is not automated end-
 - [ ] Implement PMA tasking: PMA creates sub-task for PA with verification criteria via MCP `task.create` tool with `parent_task_id` and acceptance criteria.
 - [ ] Implement PA result write-back: PA writes findings to task result via MCP `task.update` tool with structured findings payload.
 - [ ] Implement PMA verification: PMA reads PA findings via MCP `task.get` tool, evaluates against acceptance criteria, and marks the parent task as verified or failed.
-- [ ] Wire the verification loop into the LangGraph graph: add a `VerifyWithPA` node that creates sub-task, waits for PA completion, and evaluates findings.
-- [ ] Re-run `python -m pytest tests/test_verification_loop.py -v` and confirm green.
+- [ ] Wire the verification loop into the Go workflow runner: add a `VerifyWithPA` node that creates sub-task, waits for PA completion, and evaluates findings.
+- [ ] Re-run `go test -v -run TestVerificationLoop ./orchestrator/...` and confirm green.
 
 #### Refactor (Task 2)
 
@@ -389,7 +390,7 @@ No additional refactor needed.
 
 #### Testing (Task 2)
 
-- [ ] Run `just lint-python` on all new and changed Python files.
+- [ ] Run `just lint-go` on all new and changed Go files.
 - [ ] Run `just e2e --tags workflow,pma_inference` (requires inference; skip if unavailable) to verify the full multi-agent round-trip.
 - [ ] Validation gate -- do not proceed to Task 3 until all checks pass.
 

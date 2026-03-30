@@ -122,7 +122,7 @@ BDD and/or E2E: second interactive session (or second user) yields a distinct PM
 
 Plan: [_plan_006_phase2_mcp.md](_plan_006_phase2_mcp.md)
 
-- **P2-06:** Python LangGraph graph-node process wired to MCP and Worker API.
+- **P2-06:** Go-native workflow runner (state machine) wired to MCP and Worker API.
   Only a stdlib reference runner (`minimal_runner.py`) exists to validate the API contract.
   Production-grade multi-step workflow orchestration (Load Task Context => Plan Steps => Dispatch Step => Collect Result => Verify => Finalize) is not implemented as a first-class component.
 - **P2-08:** Full verification-loop with PMA tasking Project Analyst and writing findings back through the workflow is a persistence contract only; the multi-agent round-trip is not automated end-to-end.

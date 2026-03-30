@@ -180,11 +180,11 @@ It covers orchestrator control-plane behavior, task lifecycle, dispatch, and sta
   <a id="req-orches-0143"></a>
 - **REQ-ORCHES-0144:** The orchestrator MUST provide a stable workflow start/resume API to the workflow runner (transport, operations, and idempotency semantics prescribed in tech specs).
   The workflow runner MUST acquire or validate the task workflow lease via the orchestrator before running.
-  [CYNAI.ORCHES.WorkflowStartResumeAPI](../tech_specs/langgraph_mvp.md#spec-cynai-orches-workflowstartresumeapi)
+  [CYNAI.ORCHES.WorkflowStartResumeAPI](../tech_specs/workflow_mvp.md#spec-cynai-orches-workflowstartresumeapi)
   <a id="req-orches-0144"></a>
 - **REQ-ORCHES-0145:** At most one active workflow per task.
   A duplicate start request for a task that already has an active workflow (lease held) MUST return a defined response (e.g. 409 Conflict or 200 with status indicating already running) and MUST NOT start a second instance.
-  [CYNAI.ORCHES.WorkflowStartResumeAPI](../tech_specs/langgraph_mvp.md#spec-cynai-orches-workflowstartresumeapi)
+  [CYNAI.ORCHES.WorkflowStartResumeAPI](../tech_specs/workflow_mvp.md#spec-cynai-orches-workflowstartresumeapi)
   <a id="req-orches-0145"></a>
 - **REQ-ORCHES-0146:** Task workflow lease acquire, release (on completion or failure), and expiry (and optional renewal) semantics MUST be defined and enforced by the orchestrator.
   The workflow runner MUST use the orchestrator as the sole source of truth for the lease.
@@ -192,7 +192,7 @@ It covers orchestrator control-plane behavior, task lifecycle, dispatch, and sta
   <a id="req-orches-0146"></a>
 - **REQ-ORCHES-0147:** The conditions under which the orchestrator starts a workflow for a task (triggers) MUST be defined in one place: task created via User API, task created via chat/PMA, and scheduled run handed to PMA.
   The orchestrator MUST follow these triggers when starting the workflow runner.
-  [CYNAI.ORCHES.WorkflowStartTriggers](../tech_specs/langgraph_mvp.md#spec-cynai-orches-workflowstarttriggers)
+  [CYNAI.ORCHES.WorkflowStartTriggers](../tech_specs/workflow_mvp.md#spec-cynai-orches-workflowstarttriggers)
   <a id="req-orches-0147"></a>
 
 - **REQ-ORCHES-0148:** The orchestrator MUST set each node's Worker API dispatch URL from the node-reported `worker_api.base_url` (in registration and capability reports) and MUST update it when the node reports a new value; an operator MAY configure an explicit override (e.g. same-host or dev), and when an override is used it MUST be clearly documented as an override.
@@ -221,18 +221,18 @@ It covers orchestrator control-plane behavior, task lifecycle, dispatch, and sta
   <a id="req-orches-0151"></a>
 - **REQ-ORCHES-0152:** When a task is associated with a plan (task.plan_id set), the orchestrator MUST NOT start a workflow for that task until that plan's state is active (the one approved plan per project) or the PMA has explicitly requested workflow start for that task (handoff).
   When the task has no plan_id (or the project has no plans), the orchestrator MAY start the workflow per the normal triggers.
-  [CYNAI.ORCHES.WorkflowStartGatePlanApproved](../tech_specs/langgraph_mvp.md#spec-cynai-orches-workflowstartgateplanapproved)
+  [CYNAI.ORCHES.WorkflowStartGatePlanApproved](../tech_specs/workflow_mvp.md#spec-cynai-orches-workflowstartgateplanapproved)
   <a id="req-orches-0152"></a>
 - **REQ-ORCHES-0153:** When a task in a plan has dependencies (task_dependencies rows), the orchestrator MUST NOT start a workflow for that task until every dependency (depends_on_task_id) has status `completed`.
   Tasks that depend on a failed, canceled, or superseded task MUST NOT start until that dependency is retried and reaches status `completed`.
   Multiple tasks MAY be started in parallel when they have no unsatisfied dependencies (no dependencies, or all dependencies have status `completed`).
   Execution order and runnability are defined only by task dependencies (no ordinal).
-  [CYNAI.ORCHES.WorkflowPlanOrder](../tech_specs/langgraph_mvp.md#spec-cynai-orches-workflowplanorder)
+  [CYNAI.ORCHES.WorkflowPlanOrder](../tech_specs/workflow_mvp.md#spec-cynai-orches-workflowplanorder)
   [CYNAI.SCHEMA.TaskDependenciesTable](../tech_specs/postgres_schema.md#spec-cynai-schema-taskdependenciestable)
   <a id="req-orches-0153"></a>
 - **REQ-ORCHES-0154:** When a task is set to status `canceled`, the system MUST automatically set to `canceled` every task that depends on it (each task_id that has this task as depends_on_task_id in task_dependencies).
   This MUST be applied transitively: dependents of those tasks are also canceled, so the entire downstream dependency graph from the canceled task is canceled.
-  [CYNAI.ORCHES.CancelCascadesToDependents](../tech_specs/langgraph_mvp.md#spec-cynai-orches-cancelcascadestodependents)
+  [CYNAI.ORCHES.CancelCascadesToDependents](../tech_specs/workflow_mvp.md#spec-cynai-orches-cancelcascadestodependents)
   [CYNAI.SCHEMA.TaskDependenciesTable](../tech_specs/postgres_schema.md#spec-cynai-schema-taskdependenciestable)
   <a id="req-orches-0154"></a>
 
@@ -322,14 +322,14 @@ It covers orchestrator control-plane behavior, task lifecycle, dispatch, and sta
   [project_manager_agent.md](../tech_specs/project_manager_agent.md)
   <a id="req-orches-0177"></a>
 - **REQ-ORCHES-0178:** Only tasks in `planning_state=ready` MAY start workflow execution; all other workflow start gates (plan state, dependencies, lease) apply after this gate.
-  [langgraph_mvp.md - Workflow Start Triggers](../tech_specs/langgraph_mvp.md#spec-cynai-orches-workflowstarttriggers)
+  [workflow_mvp.md - Workflow Start Triggers](../tech_specs/workflow_mvp.md#spec-cynai-orches-workflowstarttriggers)
   [CYNAI.SCHEMA.TasksTable](../tech_specs/postgres_schema.md#spec-cynai-schema-taskstable)
   <a id="req-orches-0178"></a>
 - **REQ-ORCHES-0179:** The Project Manager Agent (or an authorized path) MAY transition a task from `draft` to `ready` after review and enrichment; that transition is the path that enables workflow execution for the task.
   [project_manager_agent.md](../tech_specs/project_manager_agent.md)
   <a id="req-orches-0179"></a>
 - **REQ-ORCHES-0180:** The system MUST deny workflow start for a task in `planning_state=draft` and MUST return a defined error (e.g. HTTP 409 with a reason such as "task not ready").
-  [langgraph_mvp.md - Workflow Start Gate](../tech_specs/langgraph_mvp.md#spec-cynai-orches-workflowstartgateplanapproved)
+  [workflow_mvp.md - Workflow Start Gate](../tech_specs/workflow_mvp.md#spec-cynai-orches-workflowstartgateplanapproved)
   <a id="req-orches-0180"></a>
 - **REQ-ORCHES-0181:** The orchestrator MUST resolve an effective allowed model set (intersection of system, project, and user allowlists) and MUST NOT dispatch a job with a model outside that set.
   [orchestrator.md](../tech_specs/orchestrator.md)
@@ -343,7 +343,7 @@ It covers orchestrator control-plane behavior, task lifecycle, dispatch, and sta
   <a id="req-orches-0183"></a>
 - **REQ-ORCHES-0184:** On a task cancel request (from User API Gateway, PMA, or slash command), the orchestrator MUST mark the task as canceled and MUST send a **stop job** request to the worker node when the task has an **active job** (dispatched and not yet in a terminal state).
   The worker node MUST stop the job (graceful SBA stop then container kill fallback per Worker API spec).
-  See [002_user_directed_job_kill_proposal.md](../draft_specs/002_user_directed_job_kill_proposal.md) and [worker_api.md - Stop Job](../tech_specs/worker_api.md#spec-cynai-worker-stopjob).
+  See [020_user_directed_job_kill_proposal.md](../draft_specs/020_user_directed_job_kill_proposal.md) and [worker_api.md - Stop Job](../tech_specs/worker_api.md#spec-cynai-worker-stopjob).
   [orchestrator.md](../tech_specs/orchestrator.md)
   <a id="req-orches-0184"></a>
 - **REQ-ORCHES-0185:** A task in `planning_state=ready` MAY be transitioned back to `draft` as long as the task was **not executed**.

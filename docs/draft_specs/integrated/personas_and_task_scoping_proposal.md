@@ -299,7 +299,7 @@ This makes the **task** the place where "which persona runs this work" is decide
   - **Result reporting:** The job result (e.g. result contract in cynode_sba.md / worker_api.md) SHOULD allow per-task results when the job is a bundle (e.g. an array of { task_id, status, result_snippet } or similar) so the orchestrator can update each task's status and store task-level outcomes.
     Exact shape is for the canonical result spec; this draft notes that bundle jobs require a way to report which task(s) completed and with what outcome.
   - **User-directed job kill:** When a user (or PMA) directs that a job be killed, the **entire job** is stopped; for a bundle job, all tasks in that job are stopped together.
-    See [002_user_directed_job_kill_proposal.md](../002_user_directed_job_kill_proposal.md) for stop semantics and orchestrator/worker behavior.
+    See [020_user_directed_job_kill_proposal.md](../020_user_directed_job_kill_proposal.md) for stop semantics and orchestrator/worker behavior.
 
 ### Recommended Skills for a Task
 
@@ -351,7 +351,7 @@ Promotion of this behavior into the canonical **pma_task_creation_skill** and **
 When this proposal is accepted, the following updates are recommended:
 
 - **Area:** Task vs job terminology (existing specs)
-  - document: orchestrator.md, cynode_sba.md, postgres_schema.md, langgraph_mvp.md, worker_api.md, mcp_tools/ (sandbox/job tools)
+  - document: orchestrator.md, cynode_sba.md, postgres_schema.md, workflow_mvp.md, worker_api.md, mcp_tools/ (sandbox/job tools)
   - change: Ensure the **task** (durable work item, tasks table, one persona, plan/dependencies) vs **job** (execution unit dispatched to a worker, jobs table, job payload consumed by SBA) distinction is explicit where these concepts are introduced or used.
     Add a short "Task vs job" subsection or reference in the spec index (_main.md) if no single canonical definition exists.
     In orchestrator.md: clarify that tasks are created and managed; jobs are created when dispatching to a node and carry the resolved task context.
@@ -393,7 +393,7 @@ When this proposal is accepted, the following updates are recommended:
   - change: Define **context.task_contexts** (or equivalent) for bundles: **required** map keyed by same numeric keys as task_ids, value = **full** per-task context object (id, name, description, acceptance_criteria, requirements, steps, skill_ids); bundle is self-contained, no SBA-to-orchestrator fetch for task info.
   - change: Retain single **context** shape for single-task jobs (task_ids with one key).
     Define or extend the **result contract** for bundle jobs so the SBA can report per-task outcomes (e.g. array of task_id + status + result) for orchestrator to update each task.
-  - change: When user-directed job kill is adopted (see [002_user_directed_job_kill_proposal.md](../002_user_directed_job_kill_proposal.md)), bundle jobs: stop request applies to the whole job (all tasks in the bundle).
+  - change: When user-directed job kill is adopted (see [020_user_directed_job_kill_proposal.md](../020_user_directed_job_kill_proposal.md)), bundle jobs: stop request applies to the whole job (all tasks in the bundle).
 - **Area:** PMA skill
   - document: default_skills/pma_task_creation_skill.md
   - change: Add steps: one persona per task; break work into smaller chunks when multiple roles; set persona_id when appropriate; set recommended_skill_ids; call persona/skills MCP or gateway to resolve.
@@ -424,9 +424,9 @@ The following draft specs in `docs/draft_specs/` are related; this proposal alig
 - **[pma_plan_creation_skill_spec_integration.md](pma_plan_creation_skill_spec_integration.md):** Plan and task creation via MCP (plan.help, task.help, db.plan.*, task steps as map keyed by numeric IDs).
   Normative content: [project_manager_agent](../../tech_specs/project_manager_agent.md), [cynode_pma](../../tech_specs/cynode_pma.md).
   This proposal's task steps and task_ids map pattern are consistent; persona_id and recommended_skill_ids on tasks are complementary to the plan-creation skill; persona.list/persona.get for PMA support task assignment.
-- **[002_user_directed_job_kill_proposal.md](../002_user_directed_job_kill_proposal.md):** User- or PMA-directed job kill; orchestrator sends stop to worker; SBA graceful stop then container kill.
+- **[020_user_directed_job_kill_proposal.md](../020_user_directed_job_kill_proposal.md):** User- or PMA-directed job kill; orchestrator sends stop to worker; SBA graceful stop then container kill.
   For bundle jobs, killing the job stops the entire job (all tasks in the bundle); one job_id, one stop request.
-- **[010_worker_node_agent_draft_spec.md](../010_worker_node_agent_draft_spec.md):** WNA (host-level agent) uses the same job spec and result contract as container SBA.
+- **[100_worker_node_agent_draft_spec.md](../100_worker_node_agent_draft_spec.md):** WNA (host-level agent) uses the same job spec and result contract as container SBA.
   This proposal's job shape (task_ids map, embedded task context for bundles) applies to both WNA and container SBA.
 - **[orchestrator_specifications_table.md](orchestrator_specifications_table.md):** Specifications table and plan/task reference join tables.
   Tasks may reference specifications; persona and recommended_skill_ids on tasks are independent of specification references; no conflict.

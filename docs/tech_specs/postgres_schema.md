@@ -260,7 +260,7 @@ Editing (create, update, delete) is subject to RBAC: system-scoped personas requ
 The orchestrator owns task state and a queue of jobs backed by PostgreSQL.
 Nodes register with the orchestrator and report capabilities; the orchestrator stores node registry and optional capability snapshot.
 
-Sources: [`orchestrator.md`](orchestrator.md), [`worker_node.md`](worker_node.md), [`langgraph_mvp.md`](langgraph_mvp.md).
+Sources: [`orchestrator.md`](orchestrator.md), [`worker_node.md`](worker_node.md), [`workflow_mvp.md`](workflow_mvp.md).
 
 **Schema definitions:** See [Postgres Schema](orchestrator.md#spec-cynai-schema-tasksjobsnodes) in [`orchestrator.md`](orchestrator.md).
 
@@ -316,24 +316,24 @@ Sources: [`orchestrator.md`](orchestrator.md), [`worker_node.md`](worker_node.md
 
 - Spec ID: `CYNAI.SCHEMA.WorkflowCheckpoints` <a id="spec-cynai-schema-workflowcheckpoints"></a>
 
-The LangGraph workflow engine persists checkpoint state to PostgreSQL so that workflows can resume after restarts.
+The workflow engine persists checkpoint state to PostgreSQL so that workflows can resume after restarts.
 The orchestrator does not run workflow steps without going through this checkpoint layer.
 
-Source: [langgraph_mvp.md](langgraph_mvp.md) (checkpoint schema and workflow API).
+Source: [workflow_mvp.md](workflow_mvp.md) (checkpoint schema and workflow API).
 
-**Schema definitions:** See [Postgres Schema](langgraph_mvp.md#spec-cynai-schema-workflowcheckpoints) in [`langgraph_mvp.md`](langgraph_mvp.md).
+**Schema definitions:** See [Postgres Schema](workflow_mvp.md#spec-cynai-schema-workflowcheckpoints) in [`workflow_mvp.md`](workflow_mvp.md).
 
 ### Workflow Checkpoints Table
 
 - Spec ID: `CYNAI.SCHEMA.WorkflowCheckpointsTable` <a id="spec-cynai-schema-workflowcheckpointstable"></a>
 
-**Schema definitions:** See [Workflow Checkpoints Table](langgraph_mvp.md#spec-cynai-schema-workflowcheckpointstable).
+**Schema definitions:** See [Workflow Checkpoints Table](workflow_mvp.md#spec-cynai-schema-workflowcheckpointstable).
 
 ### Task Workflow Leases Table
 
 - Spec ID: `CYNAI.SCHEMA.TaskWorkflowLeasesTable` <a id="spec-cynai-schema-taskworkflowleasestable"></a>
 
-**Schema definitions:** See [Task Workflow Leases Table](langgraph_mvp.md#spec-cynai-schema-taskworkflowleasestable).
+**Schema definitions:** See [Task Workflow Leases Table](workflow_mvp.md#spec-cynai-schema-taskworkflowleasestable).
 
 ## Sandbox Image Registry
 

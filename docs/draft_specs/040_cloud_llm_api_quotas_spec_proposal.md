@@ -5,7 +5,7 @@
 - **Date:** 2026-03-16
 - **Purpose:** Draft spec for provider-side and per-credential quotas when calling cloud LLM APIs (OpenAI, Anthropic, etc.), including discovery, enforcement, and model-selection integration.
 - **Status:** Draft only; not yet merged into `docs/requirements/` or `docs/tech_specs/`.
-- **Related:** [Token Usage, Quotas, and Rate Limits](005_token_usage_quotas_spec_proposal.md), [External Model Routing](../tech_specs/external_model_routing.md), [API Egress Server](../tech_specs/api_egress_server.md), [Cloud Agents](../tech_specs/cloud_agents.md), [Personas and Task Scoping](integrated/personas_and_task_scoping_proposal.md).
+- **Related:** [Token Usage, Quotas, and Rate Limits](050_token_usage_quotas_spec_proposal.md), [External Model Routing](../tech_specs/external_model_routing.md), [API Egress Server](../tech_specs/api_egress_server.md), [Cloud Agents](../tech_specs/cloud_agents.md), [Personas and Task Scoping](integrated/personas_and_task_scoping_proposal.md).
 
 This document defines how the system:
 
@@ -16,7 +16,7 @@ This document defines how the system:
 ## 2 Scope
 
 - **In scope:** Cloud LLM providers reached via API Egress (OpenAI, Anthropic, and other OpenAI-compatible endpoints); per-credential and provider-tier quota configuration; pre-call quota check; 429 handling and optional retry/backoff.
-- **Out of scope:** Internal token usage recording and user/project quotas (see [Token Usage, Quotas, and Rate Limits](005_token_usage_quotas_spec_proposal.md)); local inference limits; cost tracking (referenced but not defined here).
+- **Out of scope:** Internal token usage recording and user/project quotas (see [Token Usage, Quotas, and Rate Limits](050_token_usage_quotas_spec_proposal.md)); local inference limits; cost tracking (referenced but not defined here).
 
 ## 3 Proposed Requirements (Placeholder)
 

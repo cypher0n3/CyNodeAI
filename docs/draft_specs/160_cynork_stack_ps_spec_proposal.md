@@ -47,7 +47,7 @@ A single Cynork command, `cynork stack ps`, would present a **normalized, repo-a
 
 - Replacing `docker compose ps` or `podman compose ps` as the full source of truth for arbitrary compose projects; Cynork only projects CyNodeAI-relevant rows into its own format.
 - Remote or multi-host cluster views (that remains orchestrator or `cynork nodes`-style data once those APIs exist).
-- Replacing `cynork status` or a future gateway-backed detailed health endpoint (see [`012_status_command_detailed_health_spec_proposal.md`](012_status_command_detailed_health_spec_proposal.md)): `stack ps` is **local topology**, not **application health** or **authorized node registry** state.
+- Replacing `cynork status` or a future gateway-backed detailed health endpoint (see [`120_status_command_detailed_health_spec_proposal.md`](120_status_command_detailed_health_spec_proposal.md)): `stack ps` is **local topology**, not **application health** or **authorized node registry** state.
 - Defining a new Web Console page unless product later mandates parity for local-only diagnostics (currently treated as operator CLI convenience).
 
 ## Relationship to Other Commands
@@ -246,4 +246,4 @@ Links below map this draft to current requirements and to files that would chang
 - [`docs/development_setup.md`](../development_setup.md)
 - [`docs/tech_specs/worker_node.md`](../tech_specs/worker_node.md)
 - [`orchestrator/docker-compose.yml`](../../orchestrator/docker-compose.yml)
-- [`docs/draft_specs/012_status_command_detailed_health_spec_proposal.md`](012_status_command_detailed_health_spec_proposal.md)
+- [`docs/draft_specs/120_status_command_detailed_health_spec_proposal.md`](120_status_command_detailed_health_spec_proposal.md)

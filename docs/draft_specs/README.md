@@ -10,7 +10,8 @@ Draft specs are incubators: they allow exploration of design options, new featur
 
 - **`README.md` (this file):** Navigation and conventions for the whole tree.
 - **Root (`docs/draft_specs/*.md`):** Active proposals and designs.
-  Filenames prefixed with `NNN_` (e.g. `001_`, `002_`) indicate **integration priority** (lower number = integrate into canonical docs sooner). `README.md` in this directory is not numbered.
+  Filenames prefixed with `NNN_` use **increments of 10** (e.g. `010_`, `020_`, `030_`) so new drafts can be inserted between existing numbers without renumbering the whole queue.
+    The number indicates **integration priority** (lower = integrate into canonical docs sooner). `README.md` in this directory is not numbered.
 - **[`integrated/`](integrated/README.md):** Drafts whose normative content already lives in `docs/tech_specs/` (and requirements as applicable); kept for history only.
 - **[`partial/`](partial/):** Drafts that are **partly** reflected in canonical docs; promotion or merge work remains.
 
@@ -48,7 +49,7 @@ When a draft is **accepted**, its content should be:
 
 - Follow [Markdown conventions](../docs_standards/markdown_conventions.md) and keep docs ASCII-only unless explicitly allowed.
 - For consistency with future promotion, consider aligning draft structure with [spec authoring standards](../docs_standards/spec_authoring_writing_and_validation.md) (e.g. clear purpose, traceability placeholders).
-- Use a short, descriptive filename; new proposals in the root directory may be assigned the next `NNN_` prefix to fit the integration queue (see [Directory Layout](#directory-layout)).
+- Use a short, descriptive filename; new proposals in the root directory may be assigned the next free `NNN_` slot in steps of 10 to fit the integration queue (see [Directory Layout](#directory-layout)).
 - Prefer one main topic per document; use addenda or numbered follow-ups if you need to extend an existing draft.
 
 ## Cross-References

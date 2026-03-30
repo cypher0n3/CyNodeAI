@@ -126,7 +126,7 @@ The scheduler MUST be available via the User API Gateway so users can create and
 - Spec ID: `CYNAI.ORCHES.JobBuilder` <a id="spec-cynai-orches-jobbuilder"></a>
 
 The orchestrator builds a job spec from one or more tasks before dispatch.
-Only tasks with `planning_state=ready` are eligible for execution; see [Task Create Handoff](#task-create-handoff) and [Workflow Start Gate](langgraph_mvp.md#spec-cynai-orches-workflowstartgateplanapproved).
+Only tasks with `planning_state=ready` are eligible for execution; see [Task Create Handoff](#task-create-handoff) and [Workflow Start Gate](workflow_mvp.md#spec-cynai-orches-workflowstartgateplanapproved).
 The job builder MUST:
 
 1. **Eligibility:** Consider only tasks whose `planning_state=ready` (and other gates such as plan state, dependencies, lease) when selecting work to run.
@@ -791,8 +791,8 @@ Stores explicit task-within-plan dependencies; execution order and runnability a
 **Multiple prerequisites:** A task may depend on **multiple** other tasks; the table stores one row per (dependent task, prerequisite task).
 Thus `task_id` may appear in many rows with different `depends_on_task_id` values.
 The orchestrator and PMA use this structure to resolve all prerequisites for a task and to surface runnable tasks (see below).
-When a task is set to `canceled`, all tasks that depend on it (directly or transitively) are set to `canceled` automatically; see [REQ-ORCHES-0154](../requirements/orches.md#req-orches-0154) and [Cancel cascades to dependents](langgraph_mvp.md#spec-cynai-orches-cancelcascadestodependents).
-A task is **runnable** when all tasks it depends on have `status = 'completed'`; see [Project plan and task dependencies](langgraph_mvp.md#spec-cynai-orches-workflowplanorder) and [REQ-ORCHES-0153](../requirements/orches.md#req-orches-0153).
+When a task is set to `canceled`, all tasks that depend on it (directly or transitively) are set to `canceled` automatically; see [REQ-ORCHES-0154](../requirements/orches.md#req-orches-0154) and [Cancel cascades to dependents](workflow_mvp.md#spec-cynai-orches-cancelcascadestodependents).
+A task is **runnable** when all tasks it depends on have `status = 'completed'`; see [Project plan and task dependencies](workflow_mvp.md#spec-cynai-orches-workflowplanorder) and [REQ-ORCHES-0153](../requirements/orches.md#req-orches-0153).
 
 - `id` (uuid, pk)
 - `task_id` (uuid, fk to `tasks.id`, NOT NULL)
@@ -927,29 +927,29 @@ See [`docs/tech_specs/mcp/mcp_tooling.md`](mcp/mcp_tooling.md).
 
 ## Workflow Engine
 
-The orchestrator uses LangGraph to implement multi-step and multi-agent workflows.
-The Project Manager Agent's behavior is implemented by the LangGraph MVP workflow.
+The orchestrator uses a Go-native workflow runner to implement multi-step and multi-agent workflows.
+The Project Manager Agent's behavior is implemented by the [Workflow MVP](workflow_mvp.md).
 
-The workflow engine is a **separate Python LangGraph process** (separate from the Go orchestrator process).
+The workflow engine is a **Go-native state machine** within the orchestrator process.
 The orchestrator invokes it via a stable start/resume and checkpoint contract.
-The workflow start/resume API contract and workflow start triggers are defined in [langgraph_mvp.md](langgraph_mvp.md): [Workflow Start/Resume API Contract](langgraph_mvp.md#spec-cynai-orches-workflowstartresumeapi) and [Workflow Start Triggers](langgraph_mvp.md#spec-cynai-orches-workflowstarttriggers).
+The workflow start/resume API contract and workflow start triggers are defined in [workflow_mvp.md](workflow_mvp.md): [Workflow Start/Resume API Contract](workflow_mvp.md#spec-cynai-orches-workflowstartresumeapi) and [Workflow Start Triggers](workflow_mvp.md#spec-cynai-orches-workflowstarttriggers).
 Lease lifecycle is defined in [Task Workflow Lease Lifecycle](#task-workflow-lease-lifecycle) below.
 
-**Process boundaries:** **cynode-pma** (chat, MCP tools) and the **workflow runner** (LangGraph graph execution) are **separate processes**.
+**Process boundaries:** **cynode-pma** (chat, MCP tools) and the **workflow runner** (workflow graph execution) are **separate processes**.
 They share the MCP gateway and DB.
 The orchestrator starts the workflow runner for a given task; chat and planning requests go to PMA; the workflow runner executes the graph and does not serve chat.
 
-**Single-active-workflow-per-task:** The lease that enforces only one active workflow per task is **held in the orchestrator DB** (table or row semantics defined in [langgraph_mvp.md - Task Workflow Leases Table](langgraph_mvp.md#spec-cynai-schema-taskworkflowleasestable)).
+**Single-active-workflow-per-task:** The lease that enforces only one active workflow per task is **held in the orchestrator DB** (table or row semantics defined in [workflow_mvp.md - Task Workflow Leases Table](workflow_mvp.md#spec-cynai-schema-taskworkflowleasestable)).
 The workflow runner acquires or checks the lease via the orchestrator before running.
 
-See [langgraph_mvp.md](langgraph_mvp.md) for the graph topology, state model, node behaviors, checkpoint schema, and wiring to orchestrator capabilities (MCP, Worker API, model routing).
+See [workflow_mvp.md](workflow_mvp.md) for the graph topology, state model, node behaviors, checkpoint schema, and wiring to orchestrator capabilities (MCP, Worker API, model routing).
 
 ### Task Workflow Lease Lifecycle
 
 - Spec ID: `CYNAI.ORCHES.TaskWorkflowLeaseLifecycle` <a id="spec-cynai-orches-taskworkflowleaselifecycle"></a>
 
-The orchestrator grants and releases the task workflow lease; the workflow runner acquires or checks it via the orchestrator API (see [langgraph_mvp.md](langgraph_mvp.md#spec-cynai-orches-workflowstartresumeapi)).
-The lease table and columns are defined in [langgraph_mvp.md - Task Workflow Leases Table](langgraph_mvp.md#spec-cynai-schema-taskworkflowleasestable).
+The orchestrator grants and releases the task workflow lease; the workflow runner acquires or checks it via the orchestrator API (see [workflow_mvp.md](workflow_mvp.md#spec-cynai-orches-workflowstartresumeapi)).
+The lease table and columns are defined in [workflow_mvp.md - Task Workflow Leases Table](workflow_mvp.md#spec-cynai-schema-taskworkflowleasestable).
 
 #### Task Workflow Lease Lifecycle - Acquire
 

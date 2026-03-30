@@ -3,7 +3,7 @@
 - [Document Overview](#document-overview)
 - [Goals](#goals)
 - [Go SDK (Recommended for REST Services)](#go-sdk-recommended-for-rest-services)
-- [Python SDK (When a Python Workflow Runtime is Used)](#python-sdk-when-a-python-workflow-runtime-is-used)
+- [Python SDK (Contingent)](#python-sdk-contingent)
 - [Reference Servers for Local Development](#reference-servers-for-local-development)
 
 ## Document Overview
@@ -69,10 +69,11 @@ Toolchain
 
 - Follow [`docs/tech_specs/go_rest_api_standards.md`](../go_rest_api_standards.md) for toolchain pinning guidance.
 
-## Python SDK (When a Python Workflow Runtime is Used)
+## Python SDK (Contingent)
 
-CyNodeAI MAY implement the workflow engine in a separate process (for example a Python LangGraph runtime).
-If the workflow runtime needs MCP protocol support directly, it SHOULD use the official Python MCP SDK.
+The CyNodeAI workflow engine is implemented as a Go-native workflow runner within the orchestrator process (see [workflow_mvp.md](../workflow_mvp.md)).
+A Python MCP SDK is not required for the workflow engine.
+If a future Python process needs MCP protocol support directly, it SHOULD use the official Python MCP SDK.
 
 ### Python SDK Usage
 
@@ -86,7 +87,6 @@ If the workflow runtime needs MCP protocol support directly, it SHOULD use the o
 
 - Spec ID: `CYNAI.MCPTOO.WorkflowRuntimeNoDirectDb` <a id="spec-cynai-mcptoo-workflowruntimenodb"></a>
 
-- Pin Python dependencies and keep them isolated to the workflow runtime directory.
 - The workflow runtime MUST NOT connect directly to PostgreSQL.
   It MUST use MCP database tools (or an internal service that enforces the same policy).
 
