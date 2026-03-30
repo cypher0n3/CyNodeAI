@@ -693,8 +693,8 @@ func TestRunSlashConnect_UpdateURL(t *testing.T) {
 	if err := runSlashConnect(session, srv.URL); err != nil {
 		t.Fatalf("runSlashConnect update: %v", err)
 	}
-	if session.Client.BaseURL != srv.URL {
-		t.Errorf("session.Client.BaseURL not updated, got %q", session.Client.BaseURL)
+	if session.Client.BaseURL() != srv.URL {
+		t.Errorf("session.Client.BaseURL not updated, got %q", session.Client.BaseURL())
 	}
 }
 

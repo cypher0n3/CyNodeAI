@@ -2,11 +2,13 @@ package workerapiserver
 
 import (
 	"bytes"
+	"context"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"strings"
 	"time"
@@ -110,6 +112,24 @@ func getAgentTokenForProxy(cfg embedInternalProxyConfig, serviceID string, w htt
 	return rec, true
 }
 
+const internalProxyAuditSource = "worker_internal_orchestrator_proxy"
+
+func emitInternalOrchestratorProxyAudit(ctx context.Context, cfg embedInternalProxyConfig, serviceID, destination, method, path string, statusCode int, start time.Time) {
+	if cfg.ProxyAuditLogger == nil {
+		return
+	}
+	cfg.ProxyAuditLogger.LogAttrs(ctx, slog.LevelInfo, "internal_orchestrator_proxy_audit",
+		slog.String("timestamp", time.Now().UTC().Format(time.RFC3339Nano)),
+		slog.String("source", internalProxyAuditSource),
+		slog.String("destination", destination),
+		slog.String("method", method),
+		slog.String("path", path),
+		slog.Int("status_code", statusCode),
+		slog.Int64("duration_ms", time.Since(start).Milliseconds()),
+		slog.String("service_id", serviceID),
+	)
+}
+
 func writeManagedProxyJSONFromUpstream(w http.ResponseWriter, resp *http.Response) bool {
 	respBody, err := io.ReadAll(io.LimitReader(resp.Body, httplimits.DefaultMaxHTTPResponseBytes))
 	if err != nil {
@@ -165,11 +185,14 @@ func handleInternalOrchestratorProxyForward(w http.ResponseWriter, r *http.Reque
 		upReq.Header.Set("Content-Type", "application/json")
 	}
 	upReq.Header.Set("Authorization", "Bearer "+strings.TrimSpace(rec.Token))
+	auditStart := time.Now()
 	resp, err := internalOrchestratorHTTPClient.Do(upReq)
 	if err != nil {
+		emitInternalOrchestratorProxyAudit(ctx, cfg, serviceID, upstreamURL, method, path, 0, auditStart)
 		embedWriteProblem(w, http.StatusBadGateway, problem.TypeInternal, "Bad Gateway", fmt.Sprintf("upstream request failed: %v", err))
 		return
 	}
 	defer func() { _ = resp.Body.Close() }()
+	emitInternalOrchestratorProxyAudit(ctx, cfg, serviceID, upstreamURL, method, path, resp.StatusCode, auditStart)
 	writeManagedProxyJSONFromUpstream(w, resp)
 }

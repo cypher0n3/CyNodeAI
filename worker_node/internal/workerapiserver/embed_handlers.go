@@ -59,6 +59,9 @@ type embedInternalProxyConfig struct {
 	MCPToolsBaseURL string
 	SocketByService map[string]string
 	SecureStore     *securestore.Store
+	// ProxyAuditLogger receives structured JSON audit lines for each proxied orchestrator request (REQ-WORKER-0163).
+	// When nil at mux build time, buildMuxesFromEmbedConfig sets it from the embed server logger.
+	ProxyAuditLogger *slog.Logger
 }
 
 type embedProxyConfig struct {
@@ -184,7 +187,14 @@ func buildMuxesFromEmbedConfig(
 	publicMux.HandleFunc("POST /v1/worker/managed-services/{id}/proxy:http", managedServiceProxyHTTPHandler(bearerToken, proxyCfg.InternalProxy.SocketByService, logger))
 	registerEmbedTelemetryHandlers(publicMux, bearerToken, telemetryStore, logger)
 	internalMux = http.NewServeMux()
-	registerInternalOrchestratorProxyHandlers(internalMux, proxyCfg.InternalProxy)
+	ip := proxyCfg.InternalProxy
+	if ip.ProxyAuditLogger == nil {
+		ip.ProxyAuditLogger = logger
+	}
+	if ip.ProxyAuditLogger == nil {
+		ip.ProxyAuditLogger = slog.Default()
+	}
+	registerInternalOrchestratorProxyHandlers(internalMux, ip)
 	return publicMux, internalMux
 }
 

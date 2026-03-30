@@ -48,8 +48,8 @@ func TestSession_SetModel_SetProjectID_SetToken(t *testing.T) {
 		t.Errorf("ProjectID = %q", session.ProjectID)
 	}
 	session.SetToken("new-tok")
-	if client.Token != "new-tok" {
-		t.Errorf("client.Token = %q", client.Token)
+	if client.Token() != "new-tok" {
+		t.Errorf("client.Token = %q", client.Token())
 	}
 }
 

@@ -431,14 +431,14 @@ func (m *Model) slashConnectCmd(rest string) tea.Cmd {
 func (m *Model) connectShow() slashResultMsg {
 	url := "(unknown)"
 	if m.Session != nil && m.Session.Client != nil {
-		url = m.Session.Client.BaseURL
+		url = m.Session.Client.BaseURL()
 	}
 	return slashResultMsg{lines: []string{"gateway: " + url}}
 }
 
 func (m *Model) connectSet(url string) slashResultMsg {
 	if m.Session != nil && m.Session.Client != nil {
-		m.Session.Client.BaseURL = url
+		m.Session.Client.SetBaseURL(url)
 	}
 	if m.AuthProvider != nil {
 		m.AuthProvider.SetGatewayURL(url, true)
@@ -523,7 +523,7 @@ func (m *Model) slashStatusCmd() tea.Cmd {
 		if err := m.Session.Client.Health(context.Background()); err != nil {
 			return slashResultMsg{lines: []string{"status: unreachable — " + err.Error()}}
 		}
-		return slashResultMsg{lines: []string{"status: ok — " + m.Session.Client.BaseURL}}
+		return slashResultMsg{lines: []string{"status: ok — " + m.Session.Client.BaseURL()}}
 	}
 }
 
@@ -631,8 +631,8 @@ func (m *Model) slashSubprocCmd(sub, rest string) tea.Cmd {
 		args := append([]string{sub}, strings.Fields(rest)...)
 		cmd := exec.Command(exe, args...)
 		cmd.Env = append(os.Environ(),
-			"CYNORK_GATEWAY_URL="+m.Session.Client.BaseURL,
-			"CYNORK_TOKEN="+m.Session.Client.Token,
+			"CYNORK_GATEWAY_URL="+m.Session.Client.BaseURL(),
+			"CYNORK_TOKEN="+m.Session.Client.Token(),
 		)
 		var buf bytes.Buffer
 		cmd.Stdout = &buf

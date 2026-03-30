@@ -347,337 +347,337 @@ todos:
       - st-067
   - id: st-069
     content: "Read `worker_node/internal/proxy/internal_orchestrator_proxy.go` lines 126-175 to map current proxy request/response flow."
-    status: pending
+    status: completed
     dependencies:
       - st-068
   - id: st-070
     content: "Read `docs/requirements/worker.md` REQ-WORKER-0163 for audit logging requirements on the internal proxy."
-    status: pending
+    status: completed
     dependencies:
       - st-069
   - id: st-071
     content: "Add a unit test: proxied requests must produce a structured audit log entry containing timestamp, source, destination, method, path, status code, and duration."
-    status: pending
+    status: completed
     dependencies:
       - st-070
   - id: st-072
     content: "Run `go test -v -run TestProxyAuditLog ./worker_node/internal/proxy/...` and confirm failure."
-    status: pending
+    status: completed
     dependencies:
       - st-071
   - id: st-073
     content: "Implement audit logging middleware in the internal orchestrator proxy: log each request/response pair as structured JSON."
-    status: pending
+    status: completed
     dependencies:
       - st-072
   - id: st-074
     content: "Re-run `go test -v -run TestProxyAuditLog ./worker_node/internal/proxy/...` and confirm green."
-    status: pending
+    status: completed
     dependencies:
       - st-073
   - id: st-075
     content: "Run `just lint-go` on changed files and `go test -cover ./worker_node/...`; confirm 90% threshold."
-    status: pending
+    status: completed
     dependencies:
       - st-074
   - id: st-076
     content: "Validation gate -- do not proceed to Task 8 until all checks pass."
-    status: pending
+    status: completed
     dependencies:
       - st-075
   - id: st-077
     content: "Generate task completion report for Task 7. Mark completed steps `- [x]`."
-    status: pending
+    status: completed
     dependencies:
       - st-076
   - id: st-078
     content: "Do not start Task 8 until Task 7 closeout is done."
-    status: pending
+    status: completed
     dependencies:
       - st-077
   - id: st-079
     content: "Read `agents/internal/sba/lifecycle.go` lines 53 (`NotifyInProgress`) and 71 (`NotifyCompletion`) to confirm response bodies are not closed."
-    status: pending
+    status: completed
     dependencies:
       - st-078
   - id: st-080
     content: "Add a unit test: lifecycle HTTP calls must close response bodies (use a mock server that tracks body close)."
-    status: pending
+    status: completed
     dependencies:
       - st-079
   - id: st-081
     content: "Run `go test -v -run TestLifecycleBodyClose ./agents/internal/sba/...` and confirm failure."
-    status: pending
+    status: completed
     dependencies:
       - st-080
   - id: st-082
     content: "Add `defer resp.Body.Close()` to `NotifyInProgress` and `NotifyCompletion` in `lifecycle.go`."
-    status: pending
+    status: completed
     dependencies:
       - st-081
   - id: st-083
     content: "Re-run `go test -v -run TestLifecycleBodyClose ./agents/internal/sba/...` and confirm green."
-    status: pending
+    status: completed
     dependencies:
       - st-082
   - id: st-084
     content: "Run `just lint-go` on changed files and `go test -cover ./agents/...`; confirm 90% threshold."
-    status: pending
+    status: completed
     dependencies:
       - st-083
   - id: st-085
     content: "Validation gate -- do not proceed to Task 9 until all checks pass."
-    status: pending
+    status: completed
     dependencies:
       - st-084
   - id: st-086
     content: "Generate task completion report for Task 8. Mark completed steps `- [x]`."
-    status: pending
+    status: completed
     dependencies:
       - st-085
   - id: st-087
     content: "Do not start Task 9 until Task 8 closeout is done."
-    status: pending
+    status: completed
     dependencies:
       - st-086
   - id: st-088
     content: "Read `cynork/internal/gateway/client.go` and identify the `http.Client` configuration (timeout, transport settings)."
-    status: pending
+    status: completed
     dependencies:
       - st-087
   - id: st-089
     content: "Read `cynork/internal/gateway/client.go` and identify exported fields `Token` and `BaseURL` that are accessed without synchronization."
-    status: pending
+    status: completed
     dependencies:
       - st-088
   - id: st-090
     content: "Add a unit test: `http.Client` must have a non-zero `Timeout` (e.g., 30s default)."
-    status: pending
+    status: completed
     dependencies:
       - st-089
   - id: st-091
     content: "Add a test using `go test -race`: concurrent reads and writes of `Client.Token` and `Client.BaseURL` must not race."
-    status: pending
+    status: completed
     dependencies:
       - st-090
   - id: st-092
     content: "Run `go test -v -run 'TestClientTimeout|TestClientRace' -race ./cynork/internal/gateway/...` and confirm failures."
-    status: pending
+    status: completed
     dependencies:
       - st-091
   - id: st-093
     content: "Set a default `http.Client.Timeout` of 30s in the client constructor."
-    status: pending
+    status: completed
     dependencies:
       - st-092
   - id: st-094
     content: "Make `Token` and `BaseURL` unexported; add synchronized getter/setter methods using `sync.RWMutex`."
-    status: pending
+    status: completed
     dependencies:
       - st-093
   - id: st-095
     content: "Update all callers in cynork to use the new accessor methods."
-    status: pending
+    status: completed
     dependencies:
       - st-094
   - id: st-096
     content: "Re-run `go test -v -run 'TestClientTimeout|TestClientRace' -race ./cynork/internal/gateway/...` and confirm green."
-    status: pending
+    status: completed
     dependencies:
       - st-095
   - id: st-097
     content: "Run `just lint-go` on changed files and `go test -race -cover ./cynork/...`; confirm 90% threshold."
-    status: pending
+    status: completed
     dependencies:
       - st-096
   - id: st-098
     content: "Validation gate -- do not proceed to Task 10 until all checks pass."
-    status: pending
+    status: completed
     dependencies:
       - st-097
   - id: st-099
     content: "Generate task completion report for Task 9. Mark completed steps `- [x]`."
-    status: pending
+    status: completed
     dependencies:
       - st-098
   - id: st-100
     content: "Do not start Task 10 until Task 9 closeout is done."
-    status: pending
+    status: completed
     dependencies:
       - st-099
   - id: st-101
     content: "Read `agents/cmd/cynode-sba/main.go` line 140 (`failureResult` with hardcoded `ProtocolVersion: \"1.0\"`) and lines 167-172 (dead `writeResultFailure`)."
-    status: pending
+    status: completed
     dependencies:
       - st-100
   - id: st-102
     content: "Read `go_shared_libs/contracts/sbajob/sbajob.go` for existing result status types and protocol version definitions."
-    status: pending
+    status: completed
     dependencies:
       - st-101
   - id: st-103
     content: "Add a unit test: SBA result status values and protocol version must come from shared constants in `go_shared_libs`, not hardcoded strings."
-    status: pending
+    status: completed
     dependencies:
       - st-102
   - id: st-104
     content: "Run `go test -v -run TestResultConstants ./agents/cmd/cynode-sba/...` and confirm failure."
-    status: pending
+    status: completed
     dependencies:
       - st-103
   - id: st-105
     content: "Define `SBAProtocolVersion`, `StatusSuccess`, `StatusFailure`, and other result status constants in `go_shared_libs/contracts/sbajob/`."
-    status: pending
+    status: completed
     dependencies:
       - st-104
   - id: st-106
     content: "Replace hardcoded strings in `agents/cmd/cynode-sba/main.go` with the shared constants; remove dead `writeResultFailure` code."
-    status: pending
+    status: completed
     dependencies:
       - st-105
   - id: st-107
     content: "Re-run `go test -v -run TestResultConstants ./agents/cmd/cynode-sba/...` and confirm green."
-    status: pending
+    status: completed
     dependencies:
       - st-106
   - id: st-108
     content: "Run `just lint-go` on changed files and `go test -cover ./agents/...` and `go test -cover ./go_shared_libs/...`; confirm 90% threshold."
-    status: pending
+    status: completed
     dependencies:
       - st-107
   - id: st-109
     content: "Validation gate -- do not proceed to Task 11 until all checks pass."
-    status: pending
+    status: completed
     dependencies:
       - st-108
   - id: st-110
     content: "Generate task completion report for Task 10. Mark completed steps `- [x]`."
-    status: pending
+    status: completed
     dependencies:
       - st-109
   - id: st-111
     content: "Do not start Task 11 until Task 10 closeout is done."
-    status: pending
+    status: completed
     dependencies:
       - st-110
   - id: st-112
     content: "Read `docs/requirements/` index to identify the 11 domains with zero BDD coverage: ACCESS, DATAPI, PROJCT, WEBPRX, MCPTOO, AGENTS, WEBCON, CONNEC, BROWSR, STANDS, STEPEX."
-    status: pending
+    status: completed
     dependencies:
       - st-111
   - id: st-113
     content: "For each domain, read the corresponding requirements file and identify 2-3 key scenarios suitable for BDD feature files."
-    status: pending
+    status: completed
     dependencies:
       - st-112
   - id: st-114
     content: "Create BDD feature files for the four domains called out in the todo: ACCESS, AGENTS, MCPGAT, MCPTOO; follow the project feature-file conventions in `features/`."
-    status: pending
+    status: completed
     dependencies:
       - st-113
   - id: st-115
     content: "Tag each scenario with the appropriate `@req_DOMAIN_NNNN` and `@wip` tags."
-    status: pending
+    status: completed
     dependencies:
       - st-114
   - id: st-116
     content: "Run `just test-bdd` and confirm the new scenarios are discovered (expected to be pending or fail if step definitions are missing)."
-    status: pending
+    status: completed
     dependencies:
       - st-115
   - id: st-117
     content: "Add step definitions for the new scenarios where existing Go test infrastructure supports them; leave `@wip` on scenarios that require infrastructure not yet available."
-    status: pending
+    status: completed
     dependencies:
       - st-116
   - id: st-118
     content: "Run `just lint-md` on all new feature files."
-    status: pending
+    status: completed
     dependencies:
       - st-117
   - id: st-119
     content: "Validation gate -- do not proceed to Task 12 until all checks pass."
-    status: pending
+    status: completed
     dependencies:
       - st-118
   - id: st-120
     content: "Generate task completion report for Task 11. Mark completed steps `- [x]`."
-    status: pending
+    status: completed
     dependencies:
       - st-119
   - id: st-121
     content: "Do not start Task 12 until Task 11 closeout is done."
-    status: pending
+    status: completed
     dependencies:
       - st-120
   - id: st-122
     content: "Read `.github/workflows/ci.yml` to understand current CI job structure."
-    status: pending
+    status: completed
     dependencies:
       - st-121
   - id: st-123
     content: "Read `justfile` to identify the `just e2e --tags no_inference` target and its prerequisites (dev stack, config)."
-    status: pending
+    status: completed
     dependencies:
       - st-122
   - id: st-124
     content: "Add a CI job that starts the dev stack and runs `just e2e --tags no_inference`; use service containers or `just setup-dev start` in the workflow."
-    status: pending
+    status: completed
     dependencies:
       - st-123
   - id: st-125
     content: "Ensure the E2E job runs after the existing lint/test/build jobs and only on branches that have the dev stack available."
-    status: pending
+    status: completed
     dependencies:
       - st-124
   - id: st-126
     content: "Run `just ci` locally and confirm all targets pass including the new E2E integration."
-    status: pending
+    status: completed
     dependencies:
       - st-125
   - id: st-127
     content: "Validation gate -- do not proceed to Task 13 until all checks pass."
-    status: pending
+    status: completed
     dependencies:
       - st-126
   - id: st-128
     content: "Generate task completion report for Task 12. Mark completed steps `- [x]`."
-    status: pending
+    status: completed
     dependencies:
       - st-127
   - id: st-129
     content: "Do not start Task 13 until Task 12 closeout is done."
-    status: pending
+    status: completed
     dependencies:
       - st-128
   - id: st-130
     content: "Update `docs/dev_docs/_todo.md` to mark all 12 Short-Term items as complete."
-    status: pending
+    status: completed
     dependencies:
       - st-129
   - id: st-131
     content: "Verify no follow-up work was left undocumented."
-    status: pending
+    status: completed
     dependencies:
       - st-130
   - id: st-132
     content: "Run `just docs-check` on all changed documentation."
-    status: pending
+    status: completed
     dependencies:
       - st-131
   - id: st-133
     content: "Run `just e2e --tags no_inference` as final E2E regression gate."
-    status: pending
+    status: completed
     dependencies:
       - st-132
   - id: st-134
     content: "Generate final plan completion report: tasks completed, overall validation, remaining risks."
-    status: pending
+    status: completed
     dependencies:
       - st-133
   - id: st-135
     content: "Mark all completed steps in the plan with `- [x]`. (Last step.)"
-    status: pending
+    status: completed
     dependencies:
       - st-134
 ---
@@ -977,18 +977,17 @@ The internal orchestrator proxy in the worker node does not log proxied requests
 
 #### Discovery (Task 7) Steps
 
-- [ ] Read `worker_node/internal/proxy/internal_orchestrator_proxy.go` lines 126-175 to map current proxy request/response flow.
-- [ ] Read `docs/requirements/worker.md` REQ-WORKER-0163 for audit logging requirements on the internal proxy.
+- [x] Read `worker_node/internal/workerapiserver/internal_orchestrator_proxy.go` (`handleInternalOrchestratorProxyForward`) for proxy flow (plan cited `internal/proxy/`; code lives under `workerapiserver`).
+- [x] Read `docs/requirements/worker.md` REQ-WORKER-0163 for audit logging requirements on the internal proxy.
 
 #### Red (Task 7)
 
-- [ ] Add a unit test: proxied requests must produce a structured audit log entry containing timestamp, source, destination, method, path, status code, and duration.
-- [ ] Run `go test -v -run TestProxyAuditLog ./worker_node/internal/proxy/...` and confirm failure.
+- [x] Add `TestProxyAuditLog` in `worker_node/internal/workerapiserver` (structured JSON: timestamp, source, destination, method, path, status_code, duration_ms).
+- [x] Run `go test -v -run TestProxyAuditLog ./worker_node/internal/workerapiserver/...` (red then green).
 
 #### Green (Task 7)
 
-- [ ] Implement audit logging middleware in the internal orchestrator proxy: log each request/response pair as structured JSON.
-- [ ] Re-run `go test -v -run TestProxyAuditLog ./worker_node/internal/proxy/...` and confirm green.
+- [x] Emit structured JSON audit via `ProxyAuditLogger` / `emitInternalOrchestratorProxyAudit`; wire logger in `buildMuxesFromEmbedConfig`.
 
 #### Refactor (Task 7)
 
@@ -996,14 +995,12 @@ No additional refactor needed.
 
 #### Testing (Task 7)
 
-- [ ] Run `just lint-go` on changed files and `go test -cover ./worker_node/...`; confirm 90% threshold.
-- [ ] Validation gate -- do not proceed to Task 8 until all checks pass.
+- [x] `just lint` and `just test-go-cover` (worker_node packages >= 90%).
 
 #### Closeout (Task 7)
 
-- [ ] Generate task completion report for Task 7.
-  Mark completed steps `- [x]`.
-- [ ] Do not start Task 8 until Task 7 closeout is done.
+- [x] Generate task completion report for Task 7 (`docs/dev_docs/task7_completion_report.md`).
+- [x] Do not start Task 8 until Task 7 closeout is done.
 
 ---
 
@@ -1017,17 +1014,17 @@ SBA lifecycle HTTP calls (`NotifyInProgress`, `NotifyCompletion`) do not close r
 
 #### Discovery (Task 8) Steps
 
-- [ ] Read `agents/internal/sba/lifecycle.go` lines 53 (`NotifyInProgress`) and 71 (`NotifyCompletion`) to confirm response bodies are not closed.
+- [x] Read `agents/internal/sba/lifecycle.go` lines 53 (`NotifyInProgress`) and 71 (`NotifyCompletion`) to confirm response bodies are not closed.
 
 #### Red (Task 8)
 
-- [ ] Add a unit test: lifecycle HTTP calls must close response bodies (use a mock server that tracks body close).
-- [ ] Run `go test -v -run TestLifecycleBodyClose ./agents/internal/sba/...` and confirm failure.
+- [x] Add a unit test: lifecycle HTTP calls must close response bodies (use a mock server that tracks body close).
+- [x] Run `go test -v -run TestLifecycleBodyClose ./agents/internal/sba/...` and confirm failure.
 
 #### Green (Task 8)
 
-- [ ] Add `defer resp.Body.Close()` to `NotifyInProgress` and `NotifyCompletion` in `lifecycle.go`.
-- [ ] Re-run `go test -v -run TestLifecycleBodyClose ./agents/internal/sba/...` and confirm green.
+- [x] Add `defer resp.Body.Close()` to `NotifyInProgress` and `NotifyCompletion` in `lifecycle.go`.
+- [x] Re-run `go test -v -run TestLifecycleBodyClose ./agents/internal/sba/...` and confirm green.
 
 #### Refactor (Task 8)
 
@@ -1035,14 +1032,14 @@ No additional refactor needed.
 
 #### Testing (Task 8)
 
-- [ ] Run `just lint-go` on changed files and `go test -cover ./agents/...`; confirm 90% threshold.
-- [ ] Validation gate -- do not proceed to Task 9 until all checks pass.
+- [x] Run `just lint-go` on changed files and `go test -cover ./agents/...`; confirm 90% threshold.
+- [x] Validation gate -- do not proceed to Task 9 until all checks pass.
 
 #### Closeout (Task 8)
 
-- [ ] Generate task completion report for Task 8.
+- [x] Generate task completion report for Task 8.
   Mark completed steps `- [x]`.
-- [ ] Do not start Task 9 until Task 8 closeout is done.
+- [x] Do not start Task 9 until Task 8 closeout is done.
 
 ---
 
@@ -1056,21 +1053,21 @@ The cynork gateway client has no default HTTP timeout and exposes `Token`/`BaseU
 
 #### Discovery (Task 9) Steps
 
-- [ ] Read `cynork/internal/gateway/client.go` and identify the `http.Client` configuration (timeout, transport settings).
-- [ ] Read `cynork/internal/gateway/client.go` and identify exported fields `Token` and `BaseURL` that are accessed without synchronization.
+- [x] Read `cynork/internal/gateway/client.go` and identify the `http.Client` configuration (timeout, transport settings).
+- [x] Read `cynork/internal/gateway/client.go` and identify exported fields `Token` and `BaseURL` that are accessed without synchronization.
 
 #### Red (Task 9)
 
-- [ ] Add a unit test: `http.Client` must have a non-zero `Timeout` (e.g., 30s default).
-- [ ] Add a test using `go test -race`: concurrent reads and writes of `Client.Token` and `Client.BaseURL` must not race.
-- [ ] Run `go test -v -run 'TestClientTimeout|TestClientRace' -race ./cynork/internal/gateway/...` and confirm failures.
+- [x] Add a unit test: `http.Client` must have a non-zero `Timeout` (e.g., 30s default).
+- [x] Add a test using `go test -race`: concurrent reads and writes of `Client.Token` and `Client.BaseURL` must not race.
+- [x] Run `go test -v -run 'TestClientTimeout|TestClientRace' -race ./cynork/internal/gateway/...` and confirm failures.
 
 #### Green (Task 9)
 
-- [ ] Set a default `http.Client.Timeout` of 30s in the client constructor.
-- [ ] Make `Token` and `BaseURL` unexported; add synchronized getter/setter methods using `sync.RWMutex`.
-- [ ] Update all callers in cynork to use the new accessor methods.
-- [ ] Re-run `go test -v -run 'TestClientTimeout|TestClientRace' -race ./cynork/internal/gateway/...` and confirm green.
+- [x] Set a default `http.Client.Timeout` of 30s in the client constructor.
+- [x] Make `Token` and `BaseURL` unexported; add synchronized getter/setter methods using `sync.RWMutex`.
+- [x] Update all callers in cynork to use the new accessor methods.
+- [x] Re-run `go test -v -run 'TestClientTimeout|TestClientRace' -race ./cynork/internal/gateway/...` and confirm green.
 
 #### Refactor (Task 9)
 
@@ -1078,14 +1075,14 @@ No additional refactor beyond the encapsulation.
 
 #### Testing (Task 9)
 
-- [ ] Run `just lint-go` on changed files and `go test -race -cover ./cynork/...`; confirm 90% threshold.
-- [ ] Validation gate -- do not proceed to Task 10 until all checks pass.
+- [x] Run `just lint-go` on changed files and `go test -race -cover ./cynork/...`; confirm 90% threshold.
+- [x] Validation gate -- do not proceed to Task 10 until all checks pass.
 
 #### Closeout (Task 9)
 
-- [ ] Generate task completion report for Task 9.
+- [x] Generate task completion report for Task 9.
   Mark completed steps `- [x]`.
-- [ ] Do not start Task 10 until Task 9 closeout is done.
+- [x] Do not start Task 10 until Task 9 closeout is done.
 
 ---
 
@@ -1100,19 +1097,19 @@ SBA result statuses and protocol version are hardcoded strings; dead code exists
 
 #### Discovery (Task 10) Steps
 
-- [ ] Read `agents/cmd/cynode-sba/main.go` line 140 (`failureResult` with hardcoded `ProtocolVersion: "1.0"`) and lines 167-172 (dead `writeResultFailure`).
-- [ ] Read `go_shared_libs/contracts/sbajob/sbajob.go` for existing result status types and protocol version definitions.
+- [x] Read `agents/cmd/cynode-sba/main.go` line 140 (`failureResult` with hardcoded `ProtocolVersion: "1.0"`) and lines 167-172 (dead `writeResultFailure`).
+- [x] Read `go_shared_libs/contracts/sbajob/sbajob.go` for existing result status types and protocol version definitions.
 
 #### Red (Task 10)
 
-- [ ] Add a unit test: SBA result status values and protocol version must come from shared constants in `go_shared_libs`, not hardcoded strings.
-- [ ] Run `go test -v -run TestResultConstants ./agents/cmd/cynode-sba/...` and confirm failure.
+- [x] Add a unit test: SBA result status values and protocol version must come from shared constants in `go_shared_libs`, not hardcoded strings.
+- [x] Run `go test -v -run TestResultConstants ./agents/cmd/cynode-sba/...` and confirm failure.
 
 #### Green (Task 10)
 
-- [ ] Define `SBAProtocolVersion`, `StatusSuccess`, `StatusFailure`, and other result status constants in `go_shared_libs/contracts/sbajob/`.
-- [ ] Replace hardcoded strings in `agents/cmd/cynode-sba/main.go` with the shared constants; remove dead `writeResultFailure` code.
-- [ ] Re-run `go test -v -run TestResultConstants ./agents/cmd/cynode-sba/...` and confirm green.
+- [x] Define `SBAProtocolVersion`, `StatusSuccess`, `StatusFailure`, and other result status constants in `go_shared_libs/contracts/sbajob/`.
+- [x] Replace hardcoded strings in `agents/cmd/cynode-sba/main.go` with the shared constants; remove dead `writeResultFailure` code.
+- [x] Re-run `go test -v -run TestResultConstants ./agents/cmd/cynode-sba/...` and confirm green.
 
 #### Refactor (Task 10)
 
@@ -1120,14 +1117,14 @@ No additional refactor needed.
 
 #### Testing (Task 10)
 
-- [ ] Run `just lint-go` on changed files and `go test -cover ./agents/...` and `go test -cover ./go_shared_libs/...`; confirm 90% threshold.
-- [ ] Validation gate -- do not proceed to Task 11 until all checks pass.
+- [x] Run `just lint-go` on changed files and `go test -cover ./agents/...` and `go test -cover ./go_shared_libs/...`; confirm 90% threshold.
+- [x] Validation gate -- do not proceed to Task 11 until all checks pass.
 
 #### Closeout (Task 10)
 
-- [ ] Generate task completion report for Task 10.
+- [x] Generate task completion report for Task 10.
   Mark completed steps `- [x]`.
-- [ ] Do not start Task 11 until Task 10 closeout is done.
+- [x] Do not start Task 11 until Task 10 closeout is done.
 
 ---
 
@@ -1143,18 +1140,18 @@ This task adds initial feature files for the four domains called out in the todo
 
 #### Discovery (Task 11) Steps
 
-- [ ] Read `docs/requirements/` index to identify the 11 domains with zero BDD coverage: ACCESS, DATAPI, PROJCT, WEBPRX, MCPTOO, AGENTS, WEBCON, CONNEC, BROWSR, STANDS, STEPEX.
-- [ ] For each domain, read the corresponding requirements file and identify 2-3 key scenarios suitable for BDD feature files.
+- [x] Read `docs/requirements/` index to identify the 11 domains with zero BDD coverage: ACCESS, DATAPI, PROJCT, WEBPRX, MCPTOO, AGENTS, WEBCON, CONNEC, BROWSR, STANDS, STEPEX.
+- [x] For each domain, read the corresponding requirements file and identify 2-3 key scenarios suitable for BDD feature files.
 
 #### Red (Task 11)
 
-- [ ] Create BDD feature files for the four domains called out in the todo: ACCESS, AGENTS, MCPGAT, MCPTOO; follow the project feature-file conventions in `features/`.
-- [ ] Tag each scenario with the appropriate `@req_DOMAIN_NNNN` and `@wip` tags.
-- [ ] Run `just test-bdd` and confirm the new scenarios are discovered (expected to be pending or fail if step definitions are missing).
+- [x] Create BDD feature files for the four domains called out in the todo: ACCESS, AGENTS, MCPGAT, MCPTOO; follow the project feature-file conventions in `features/`.
+- [x] Tag each scenario with the appropriate `@req_DOMAIN_NNNN` and `@wip` tags.
+- [x] Run `just test-bdd` and confirm the new scenarios are discovered (expected to be pending or fail if step definitions are missing).
 
 #### Green (Task 11)
 
-- [ ] Add step definitions for the new scenarios where existing Go test infrastructure supports them; leave `@wip` on scenarios that require infrastructure not yet available.
+- [x] Add step definitions for the new scenarios where existing Go test infrastructure supports them; leave `@wip` on scenarios that require infrastructure not yet available.
 
 #### Refactor (Task 11)
 
@@ -1162,14 +1159,14 @@ No additional refactor needed.
 
 #### Testing (Task 11)
 
-- [ ] Run `just lint-md` on all new feature files.
-- [ ] Validation gate -- do not proceed to Task 12 until all checks pass.
+- [x] Run `just lint-md` on all new feature files.
+- [x] Validation gate -- do not proceed to Task 12 until all checks pass.
 
 #### Closeout (Task 11)
 
-- [ ] Generate task completion report for Task 11.
+- [x] Generate task completion report for Task 11.
   Mark completed steps `- [x]`.
-- [ ] Do not start Task 12 until Task 11 closeout is done.
+- [x] Do not start Task 12 until Task 11 closeout is done.
 
 ---
 
@@ -1184,8 +1181,8 @@ E2E tests exist but are not run in CI, making regressions invisible until manual
 
 #### Discovery (Task 12) Steps
 
-- [ ] Read `.github/workflows/ci.yml` to understand current CI job structure.
-- [ ] Read `justfile` to identify the `just e2e --tags no_inference` target and its prerequisites (dev stack, config).
+- [x] Read `.github/workflows/ci.yml` to understand current CI job structure.
+- [x] Read `justfile` to identify the `just e2e --tags no_inference` target and its prerequisites (dev stack, config).
 
 #### Red (Task 12)
 
@@ -1193,8 +1190,8 @@ No red phase; this is infrastructure work.
 
 #### Green (Task 12)
 
-- [ ] Add a CI job that starts the dev stack and runs `just e2e --tags no_inference`; use service containers or `just setup-dev start` in the workflow.
-- [ ] Ensure the E2E job runs after the existing lint/test/build jobs and only on branches that have the dev stack available.
+- [x] Add a CI job that starts the dev stack and runs `just e2e --tags no_inference`; use service containers or `just setup-dev start` in the workflow.
+- [x] Ensure the E2E job runs after the existing lint/test/build jobs and only on branches that have the dev stack available.
 
 #### Refactor (Task 12)
 
@@ -1202,22 +1199,22 @@ No refactor needed.
 
 #### Testing (Task 12)
 
-- [ ] Run `just ci` locally and confirm all targets pass including the new E2E integration.
-- [ ] Validation gate -- do not proceed to Task 13 until all checks pass.
+- [x] Run `just ci` locally and confirm all targets pass including the new E2E integration.
+- [x] Validation gate -- do not proceed to Task 13 until all checks pass.
 
 #### Closeout (Task 12)
 
-- [ ] Generate task completion report for Task 12.
+- [x] Generate task completion report for Task 12.
   Mark completed steps `- [x]`.
-- [ ] Do not start Task 13 until Task 12 closeout is done.
+- [x] Do not start Task 13 until Task 12 closeout is done.
 
 ---
 
 ### Task 13: Documentation and Closeout
 
-- [ ] Update `docs/dev_docs/_todo.md` to mark all 12 Short-Term items as complete.
-- [ ] Verify no follow-up work was left undocumented.
-- [ ] Run `just docs-check` on all changed documentation.
-- [ ] Run `just e2e --tags no_inference` as final E2E regression gate.
-- [ ] Generate final plan completion report: tasks completed, overall validation, remaining risks.
-- [ ] Mark all completed steps in the plan with `- [x]`. (Last step.)
+- [x] Update `docs/dev_docs/_todo.md` to mark all 12 Short-Term items as complete.
+- [x] Verify no follow-up work was left undocumented.
+- [x] Run `just docs-check` on all changed documentation.
+- [x] Run `just e2e --tags no_inference` as final E2E regression gate.
+- [x] Generate final plan completion report: tasks completed, overall validation, remaining risks.
+- [x] Mark all completed steps in the plan with `- [x]`. (Last step.)

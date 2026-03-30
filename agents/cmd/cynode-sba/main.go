@@ -84,7 +84,7 @@ func run(args []string) int {
 		return 1
 	}
 
-	if result.Status != "success" {
+	if result.Status != sbajob.ResultStatusSuccess {
 		return 1
 	}
 	return 0
@@ -138,9 +138,9 @@ func applyEnvOverrides(stdinStdout *bool, jobPath, resultPath, workspace *string
 
 func failureResult(code, msg string) *sbajob.Result {
 	return &sbajob.Result{
-		ProtocolVersion: "1.0",
+		ProtocolVersion: sbajob.SBAProtocolVersion,
 		JobID:           "",
-		Status:          "failure",
+		Status:          sbajob.ResultStatusFailure,
 		FailureCode:     &code,
 		FailureMessage:  &msg,
 	}
@@ -162,11 +162,4 @@ func writeResultTo(resultPath string, w io.Writer, stdinStdout bool, r *sbajob.R
 		return os.WriteFile(resultPath, data, 0o644)
 	}
 	return nil
-}
-
-func writeResultFailure(resultPath, failureCode, failureMessage string, logger *slog.Logger) {
-	r := failureResult(failureCode, failureMessage)
-	if err := writeResultTo(resultPath, nil, false, r, logger); err != nil {
-		logger.Error("failed to write result", "error", err)
-	}
 }

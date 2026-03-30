@@ -3,12 +3,15 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/cypher0n3/cynodeai/go_shared_libs/contracts/sbajob"
 )
 
 func TestRun_MissingJobFile_ExitsOneAndWritesResult(t *testing.T) {
@@ -29,7 +32,7 @@ func TestRun_MissingJobFile_ExitsOneAndWritesResult(t *testing.T) {
 	if err := json.Unmarshal(data, &r); err != nil {
 		t.Fatal(err)
 	}
-	if r.Status != "failure" || r.FailureCode == nil || *r.FailureCode != "schema_validation" {
+	if r.Status != sbajob.ResultStatusFailure || r.FailureCode == nil || *r.FailureCode != "schema_validation" {
 		t.Errorf("result: status=%q failure_code=%v", r.Status, r.FailureCode)
 	}
 }
@@ -84,7 +87,7 @@ func TestRun_ValidJobSuccess_ExitsZeroAndWritesResult(t *testing.T) {
 	if err := json.Unmarshal(data, &r); err != nil {
 		t.Fatal(err)
 	}
-	if r.Status != "success" || r.JobID != "j1" {
+	if r.Status != sbajob.ResultStatusSuccess || r.JobID != "j1" {
 		t.Errorf("result: status=%q job_id=%q", r.Status, r.JobID)
 	}
 }
@@ -115,7 +118,7 @@ func TestRun_StepFailure_ExitsOneAndWritesResult(t *testing.T) {
 	if err := json.Unmarshal(data, &r); err != nil {
 		t.Fatal(err)
 	}
-	if r.Status != "failure" {
+	if r.Status != sbajob.ResultStatusFailure {
 		t.Errorf("result: status=%q", r.Status)
 	}
 	if r.FailureCode == nil {
@@ -159,8 +162,41 @@ func TestRun_EnvOverridesPaths(t *testing.T) {
 
 func TestWriteResultFailure_WhenWriteFails_LogsError(t *testing.T) {
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelError}))
-	// writeResultFailure should not panic when result path is invalid (e.g. dir not writable)
-	writeResultFailure("/nonexistent/path/result.json", "schema_validation", "test", logger)
+	// writeResultTo should not panic when result path is invalid (e.g. dir not writable)
+	_ = writeResultTo("/nonexistent/path/result.json", nil, false, failureResult("schema_validation", "test"), logger)
+}
+
+func TestWriteResultTo_StdinStdoutSuccess(t *testing.T) {
+	var buf bytes.Buffer
+	r := failureResult("c", "d")
+	if err := writeResultTo("", &buf, true, r, slog.Default()); err != nil {
+		t.Fatalf("writeResultTo: %v", err)
+	}
+	if !bytes.Contains(buf.Bytes(), []byte(sbajob.SBAProtocolVersion)) {
+		t.Errorf("stdout JSON missing protocol: %s", buf.String())
+	}
+}
+
+type errWriter struct{}
+
+func (errWriter) Write(_ []byte) (int, error) { return 0, errors.New("write failed") }
+
+func TestWriteResultTo_StdinStdoutWriteError(t *testing.T) {
+	err := writeResultTo("", errWriter{}, true, failureResult("e", "f"), slog.Default())
+	if err == nil {
+		t.Fatal("expected error from writer")
+	}
+}
+
+// TestResultConstants ensures result helpers use shared contract constants (not ad-hoc strings).
+func TestResultConstants(t *testing.T) {
+	r := failureResult("code", "msg")
+	if r.ProtocolVersion != sbajob.SBAProtocolVersion {
+		t.Errorf("ProtocolVersion = %q want %q", r.ProtocolVersion, sbajob.SBAProtocolVersion)
+	}
+	if r.Status != sbajob.ResultStatusFailure {
+		t.Errorf("Status = %q want %q", r.Status, sbajob.ResultStatusFailure)
+	}
 }
 
 func TestRun_StdinMode_ReadsJobWritesResultToStdout(t *testing.T) {

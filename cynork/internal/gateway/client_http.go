@@ -19,7 +19,8 @@ func decodeResponseJSON(resp *http.Response, out any) error {
 }
 
 func (c *Client) doRequest(ctx context.Context, method, path string, query url.Values, body io.Reader) (*http.Response, error) {
-	base, err := url.Parse(c.BaseURL)
+	baseStr, tok := c.readURLAndToken()
+	base, err := url.Parse(baseStr)
 	if err != nil {
 		return nil, fmt.Errorf("invalid base URL: %w", err)
 	}
@@ -35,8 +36,8 @@ func (c *Client) doRequest(ctx context.Context, method, path string, query url.V
 	if body != nil {
 		req.Header.Set("Content-Type", "application/json")
 	}
-	if c.Token != "" {
-		req.Header.Set("Authorization", "Bearer "+c.Token)
+	if tok != "" {
+		req.Header.Set("Authorization", "Bearer "+tok)
 	}
 	return c.HTTPClient.Do(req)
 }
@@ -66,7 +67,8 @@ func (c *Client) doPostJSONNoAuth(ctx context.Context, path string, reqBody any,
 	if err != nil {
 		return fmt.Errorf("marshal request: %w", err)
 	}
-	base, err := url.Parse(c.BaseURL)
+	baseStr, _ := c.readURLAndToken()
+	base, err := url.Parse(baseStr)
 	if err != nil {
 		return fmt.Errorf("invalid base URL: %w", err)
 	}

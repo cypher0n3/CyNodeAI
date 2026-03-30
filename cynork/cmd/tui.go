@@ -82,7 +82,7 @@ func runTUIWithSession(session *chat.Session, resumeThreadSelector string) error
 	m.SetResumeThreadSelector(resumeThreadSelector)
 	m.SetHealthPollInterval(tuiHealthPollIntervalSec(cfg))
 	// Startup token failure: open in-session login instead of exiting (cynork_tui.md Auth Recovery).
-	if session.Client != nil && session.Client.Token == "" {
+	if session.Client != nil && session.Client.Token() == "" {
 		m.OpenLoginFormOnInit = true
 	}
 	p := tea.NewProgram(m, tea.WithAltScreen(), tea.WithMouseCellMotion())

@@ -295,7 +295,7 @@ func (m *Model) Init() tea.Cmd {
 	if m.OpenLoginFormOnInit {
 		return func() tea.Msg { return openLoginFormMsg{} }
 	}
-	if m.Session != nil && m.Session.Client != nil && m.Session.Client.Token != "" {
+	if m.Session != nil && m.Session.Client != nil && m.Session.Client.Token() != "" {
 		return m.ensureThreadCmd()
 	}
 	return nil
@@ -823,7 +823,7 @@ func (m *Model) readResumeThreadFromCache(userID, prior, sel string) string {
 	if err != nil {
 		return ""
 	}
-	tid, ok, _ := tuicache.ReadLastThread(root, m.Session.Client.BaseURL, userID, m.Session.ProjectID)
+	tid, ok, _ := tuicache.ReadLastThread(root, m.Session.Client.BaseURL(), userID, m.Session.ProjectID)
 	if !ok {
 		return ""
 	}
@@ -868,7 +868,7 @@ func (m *Model) resolveEnsureThreadID(prior, afterCache, cacheTID, sel, userID s
 }
 
 func (m *Model) userIDForEnsureThread() string {
-	if m.Session.Client == nil || m.Session.Client.Token == "" {
+	if m.Session.Client == nil || m.Session.Client.Token() == "" {
 		return ""
 	}
 	u, err := m.Session.Client.GetMe(context.Background())
@@ -880,7 +880,7 @@ func (m *Model) userIDForEnsureThread() string {
 
 // persistLastThreadToCache writes CurrentThreadID under the XDG cache dir (keyed by gateway, user, project).
 func (m *Model) persistLastThreadToCache() {
-	if m.Session == nil || m.Session.Client == nil || m.Session.Client.Token == "" || m.Session.CurrentThreadID == "" {
+	if m.Session == nil || m.Session.Client == nil || m.Session.Client.Token() == "" || m.Session.CurrentThreadID == "" {
 		return
 	}
 	u, err := m.Session.Client.GetMe(context.Background())
@@ -891,7 +891,7 @@ func (m *Model) persistLastThreadToCache() {
 	if err != nil {
 		return
 	}
-	_ = tuicache.WriteLastThread(root, m.Session.Client.BaseURL, u.ID, m.Session.ProjectID, m.Session.CurrentThreadID)
+	_ = tuicache.WriteLastThread(root, m.Session.Client.BaseURL(), u.ID, m.Session.ProjectID, m.Session.CurrentThreadID)
 }
 
 // ensureThreadScrollbackLine picks landmark + suffix for thread ensure scrollback (Bug 3).
@@ -928,7 +928,7 @@ func (m *Model) applyEnsureThreadResult(msg *ensureThreadResult) (tea.Model, tea
 			m.Session.SetCurrentThreadID(msg.threadID)
 			if msg.userID != "" && m.Session.Client != nil {
 				if root, err := tuicache.Root(); err == nil {
-					_ = tuicache.WriteLastThread(root, m.Session.Client.BaseURL, msg.userID, m.Session.ProjectID, msg.threadID)
+					_ = tuicache.WriteLastThread(root, m.Session.Client.BaseURL(), msg.userID, m.Session.ProjectID, msg.threadID)
 				}
 			}
 		}

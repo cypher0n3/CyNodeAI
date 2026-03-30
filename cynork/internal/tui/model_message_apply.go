@@ -47,8 +47,8 @@ func (m *Model) applyOpenLoginForm() (tea.Model, tea.Cmd) {
 	m.LoginPassword = ""
 	m.LoginFocusedField = 0
 	switch {
-	case m.Session != nil && m.Session.Client != nil && m.Session.Client.BaseURL != "":
-		m.LoginGatewayURL = m.Session.Client.BaseURL
+	case m.Session != nil && m.Session.Client != nil && m.Session.Client.BaseURL() != "":
+		m.LoginGatewayURL = m.Session.Client.BaseURL()
 	case m.AuthProvider != nil:
 		m.LoginGatewayURL = m.AuthProvider.GatewayURL()
 	default:

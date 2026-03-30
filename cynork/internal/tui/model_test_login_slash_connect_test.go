@@ -471,8 +471,8 @@ func TestModel_SlashConnect_UpdateURL(t *testing.T) {
 	if _, ok := msg.(slashResultMsg); !ok {
 		t.Fatalf("cmd() = %T, want slashResultMsg", msg)
 	}
-	if client.BaseURL != srv.URL {
-		t.Errorf("expected BaseURL=%s, got %q", srv.URL, client.BaseURL)
+	if client.BaseURL() != srv.URL {
+		t.Errorf("expected BaseURL=%s, got %q", srv.URL, client.BaseURL())
 	}
 }
 
@@ -943,8 +943,8 @@ func TestModel_Update_TokenRefreshResult(t *testing.T) {
 	m.SetAuthProvider(&stubAuthProvider{refresh: "r"})
 	upd, _ := m.Update(tokenRefreshResultMsg{resp: &userapi.LoginResponse{AccessToken: "na", RefreshToken: "nr"}})
 	mod := upd.(*Model)
-	if mod.Session.Client.Token != "na" {
-		t.Fatalf("token not updated: %q", mod.Session.Client.Token)
+	if mod.Session.Client.Token() != "na" {
+		t.Fatalf("token not updated: %q", mod.Session.Client.Token())
 	}
 }
 

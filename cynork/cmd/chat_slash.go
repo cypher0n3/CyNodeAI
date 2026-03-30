@@ -240,14 +240,14 @@ func runSlashConnect(session *chat.Session, rest string) error {
 	rest = strings.TrimSpace(rest)
 	if rest == "" {
 		if session != nil && session.Client != nil {
-			fmt.Fprintln(os.Stderr, "gateway:", session.Client.BaseURL)
+			fmt.Fprintln(os.Stderr, "gateway:", session.Client.BaseURL())
 		} else {
 			fmt.Fprintln(os.Stderr, "gateway: (not connected)")
 		}
 		return nil
 	}
 	if session != nil && session.Client != nil {
-		session.Client.BaseURL = rest
+		session.Client.SetBaseURL(rest)
 	}
 	cfg.GatewayURL = rest
 	cfgGatewayPersistExplicit = true

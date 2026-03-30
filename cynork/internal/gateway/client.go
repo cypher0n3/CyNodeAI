@@ -13,12 +13,16 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+	"sync"
+	"time"
 
 	"github.com/cypher0n3/cynodeai/go_shared_libs/contracts/userapi"
 	"github.com/cypher0n3/cynodeai/go_shared_libs/httplimits"
 )
 
 const pathV1Responses = "/v1/responses"
+
+const defaultGatewayClientTimeout = 30 * time.Second
 
 // StreamExtra carries optional callbacks for named CyNodeAI SSE extension events
 // (thinking_delta, tool_call, heartbeat, iteration_start). Nil fields are ignored.
@@ -31,22 +35,54 @@ type StreamExtra struct {
 
 // Client calls the User API Gateway (auth, tasks, health).
 type Client struct {
-	BaseURL    string
-	Token      string
+	mu         sync.RWMutex
+	baseURL    string
+	token      string
 	HTTPClient *http.Client
 }
 
 // NewClient returns a client for the given base URL (e.g. http://localhost:12080).
 func NewClient(baseURL string) *Client {
 	return &Client{
-		BaseURL:    baseURL,
-		HTTPClient: http.DefaultClient,
+		baseURL: baseURL,
+		HTTPClient: &http.Client{
+			Timeout: defaultGatewayClientTimeout,
+		},
 	}
+}
+
+func (c *Client) readURLAndToken() (baseURL, token string) {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.baseURL, c.token
+}
+
+// BaseURL returns the configured gateway base URL.
+func (c *Client) BaseURL() string {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.baseURL
+}
+
+// SetBaseURL sets the gateway base URL (e.g. after /connect).
+func (c *Client) SetBaseURL(u string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.baseURL = u
+}
+
+// Token returns the current Bearer token (may be empty).
+func (c *Client) Token() string {
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.token
 }
 
 // SetToken sets the Bearer token for subsequent requests.
 func (c *Client) SetToken(token string) {
-	c.Token = token
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.token = token
 }
 
 // Login calls POST /v1/auth/login and returns the token response.
@@ -303,7 +339,8 @@ func (c *Client) ChatWithOptions(ctx context.Context, message, model, projectID 
 	if err != nil {
 		return nil, fmt.Errorf("marshal chat request: %w", err)
 	}
-	base, err := url.Parse(c.BaseURL)
+	baseStr, tok := c.readURLAndToken()
+	base, err := url.Parse(baseStr)
 	if err != nil {
 		return nil, fmt.Errorf("invalid base URL: %w", err)
 	}
@@ -316,8 +353,8 @@ func (c *Client) ChatWithOptions(ctx context.Context, message, model, projectID 
 		return nil, err
 	}
 	httpReq.Header.Set("Content-Type", "application/json")
-	if c.Token != "" {
-		httpReq.Header.Set("Authorization", "Bearer "+c.Token)
+	if tok != "" {
+		httpReq.Header.Set("Authorization", "Bearer "+tok)
 	}
 	if projectID != "" {
 		httpReq.Header.Set("OpenAI-Project", projectID)
@@ -362,7 +399,8 @@ func (c *Client) ResponsesWithOptions(ctx context.Context, message, model, proje
 	if err != nil {
 		return nil, fmt.Errorf("marshal responses request: %w", err)
 	}
-	base, err := url.Parse(c.BaseURL)
+	baseStr, tok := c.readURLAndToken()
+	base, err := url.Parse(baseStr)
 	if err != nil {
 		return nil, fmt.Errorf("invalid base URL: %w", err)
 	}
@@ -375,8 +413,8 @@ func (c *Client) ResponsesWithOptions(ctx context.Context, message, model, proje
 		return nil, err
 	}
 	httpReq.Header.Set("Content-Type", "application/json")
-	if c.Token != "" {
-		httpReq.Header.Set("Authorization", "Bearer "+c.Token)
+	if tok != "" {
+		httpReq.Header.Set("Authorization", "Bearer "+tok)
 	}
 	if projectID != "" {
 		httpReq.Header.Set("OpenAI-Project", projectID)
@@ -415,7 +453,8 @@ func (c *Client) ChatStream(ctx context.Context, message, model, projectID strin
 	if err != nil {
 		return fmt.Errorf("marshal chat stream request: %w", err)
 	}
-	base, err := url.Parse(c.BaseURL)
+	baseStr, tok := c.readURLAndToken()
+	base, err := url.Parse(baseStr)
 	if err != nil {
 		return fmt.Errorf("invalid base URL: %w", err)
 	}
@@ -429,8 +468,8 @@ func (c *Client) ChatStream(ctx context.Context, message, model, projectID strin
 	}
 	httpReq.Header.Set("Content-Type", "application/json")
 	httpReq.Header.Set("Accept", "text/event-stream")
-	if c.Token != "" {
-		httpReq.Header.Set("Authorization", "Bearer "+c.Token)
+	if tok != "" {
+		httpReq.Header.Set("Authorization", "Bearer "+tok)
 	}
 	if projectID != "" {
 		httpReq.Header.Set("OpenAI-Project", projectID)
@@ -464,7 +503,8 @@ func (c *Client) ResponsesStream(ctx context.Context, message, model, projectID 
 	if err != nil {
 		return "", fmt.Errorf("marshal responses stream request: %w", err)
 	}
-	base, err := url.Parse(c.BaseURL)
+	baseStr, tok := c.readURLAndToken()
+	base, err := url.Parse(baseStr)
 	if err != nil {
 		return "", fmt.Errorf("invalid base URL: %w", err)
 	}
@@ -478,8 +518,8 @@ func (c *Client) ResponsesStream(ctx context.Context, message, model, projectID 
 	}
 	httpReq.Header.Set("Content-Type", "application/json")
 	httpReq.Header.Set("Accept", "text/event-stream")
-	if c.Token != "" {
-		httpReq.Header.Set("Authorization", "Bearer "+c.Token)
+	if tok != "" {
+		httpReq.Header.Set("Authorization", "Bearer "+tok)
 	}
 	if projectID != "" {
 		httpReq.Header.Set("OpenAI-Project", projectID)
@@ -687,7 +727,8 @@ func processChatCompletionSSEChoices(data string, onDelta func(string)) (streamD
 // NewChatThread calls POST /v1/chat/threads and returns the new thread ID.
 // Use this when the user wants to start a fresh conversation context.
 func (c *Client) NewChatThread(ctx context.Context, projectID string) (string, error) {
-	base, err := url.Parse(c.BaseURL)
+	baseStr, tok := c.readURLAndToken()
+	base, err := url.Parse(baseStr)
 	if err != nil {
 		return "", fmt.Errorf("invalid base URL: %w", err)
 	}
@@ -699,8 +740,8 @@ func (c *Client) NewChatThread(ctx context.Context, projectID string) (string, e
 	if err != nil {
 		return "", err
 	}
-	if c.Token != "" {
-		httpReq.Header.Set("Authorization", "Bearer "+c.Token)
+	if tok != "" {
+		httpReq.Header.Set("Authorization", "Bearer "+tok)
 	}
 	if projectID != "" {
 		httpReq.Header.Set("OpenAI-Project", projectID)
@@ -734,7 +775,8 @@ type ChatThreadItem struct {
 
 // ListChatThreads calls GET /v1/chat/threads with optional project and pagination.
 func (c *Client) ListChatThreads(ctx context.Context, projectID string, limit, offset int) ([]ChatThreadItem, error) {
-	base, err := url.Parse(c.BaseURL)
+	baseStr, tok := c.readURLAndToken()
+	base, err := url.Parse(baseStr)
 	if err != nil {
 		return nil, fmt.Errorf("invalid base URL: %w", err)
 	}
@@ -754,8 +796,8 @@ func (c *Client) ListChatThreads(ctx context.Context, projectID string, limit, o
 	if err != nil {
 		return nil, err
 	}
-	if c.Token != "" {
-		req.Header.Set("Authorization", "Bearer "+c.Token)
+	if tok != "" {
+		req.Header.Set("Authorization", "Bearer "+tok)
 	}
 	if projectID != "" {
 		req.Header.Set("OpenAI-Project", projectID)
@@ -779,7 +821,8 @@ func (c *Client) ListChatThreads(ctx context.Context, projectID string, limit, o
 
 // PatchThreadTitle calls PATCH /v1/chat/threads/{id} to set the thread title.
 func (c *Client) PatchThreadTitle(ctx context.Context, threadID, title string) error {
-	base, err := url.Parse(c.BaseURL)
+	baseStr, tok := c.readURLAndToken()
+	base, err := url.Parse(baseStr)
 	if err != nil {
 		return fmt.Errorf("invalid base URL: %w", err)
 	}
@@ -797,8 +840,8 @@ func (c *Client) PatchThreadTitle(ctx context.Context, threadID, title string) e
 		return err
 	}
 	req.Header.Set("Content-Type", "application/json")
-	if c.Token != "" {
-		req.Header.Set("Authorization", "Bearer "+c.Token)
+	if tok != "" {
+		req.Header.Set("Authorization", "Bearer "+tok)
 	}
 	resp, err := c.HTTPClient.Do(req)
 	if err != nil {
@@ -813,7 +856,8 @@ func (c *Client) PatchThreadTitle(ctx context.Context, threadID, title string) e
 
 // GetChatThread calls GET /v1/chat/threads/{id} and returns the thread (title, summary, etc.).
 func (c *Client) GetChatThread(ctx context.Context, threadID string) (*ChatThreadItem, error) {
-	base, err := url.Parse(c.BaseURL)
+	baseStr, tok := c.readURLAndToken()
+	base, err := url.Parse(baseStr)
 	if err != nil {
 		return nil, fmt.Errorf("invalid base URL: %w", err)
 	}
@@ -825,8 +869,8 @@ func (c *Client) GetChatThread(ctx context.Context, threadID string) (*ChatThrea
 	if err != nil {
 		return nil, err
 	}
-	if c.Token != "" {
-		req.Header.Set("Authorization", "Bearer "+c.Token)
+	if tok != "" {
+		req.Header.Set("Authorization", "Bearer "+tok)
 	}
 	resp, err := c.HTTPClient.Do(req)
 	if err != nil {

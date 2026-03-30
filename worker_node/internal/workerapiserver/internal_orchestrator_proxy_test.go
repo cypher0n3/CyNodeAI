@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"log/slog"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -441,5 +442,60 @@ func TestPerServiceUDS_MCPCallRoundTrip(t *testing.T) {
 	}
 	if !bytes.Contains(raw, []byte(`"routed":true`)) {
 		t.Fatalf("decoded body: %s", raw)
+	}
+}
+
+// TestProxyAuditLog asserts REQ-WORKER-0163: each proxied request emits a structured JSON audit record
+// (timestamp, source, destination, method, path, status code, duration).
+func TestProxyAuditLog(t *testing.T) {
+	var buf bytes.Buffer
+	auditLogger := slog.New(slog.NewJSONHandler(&buf, &slog.HandlerOptions{Level: slog.LevelInfo}))
+	store := testSecureStore(t)
+	if err := store.PutAgentToken("svc-audit", "tok-audit", ""); err != nil {
+		t.Fatal(err)
+	}
+	up := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"ok":true}`))
+	}))
+	t.Cleanup(up.Close)
+
+	oldClient := internalOrchestratorHTTPClient
+	internalOrchestratorHTTPClient = up.Client()
+	t.Cleanup(func() { internalOrchestratorHTTPClient = oldClient })
+
+	payload := base64.StdEncoding.EncodeToString([]byte(`{}`))
+	body := `{"version":1,"method":"POST","path":"","headers":{"Content-Type":["application/json"]},"body_b64":"` + payload + `"}`
+	rec := httptest.NewRecorder()
+	req := httptest.NewRequest(http.MethodPost, "/v1/worker/internal/orchestrator/mcp:call", strings.NewReader(body))
+	ctx := context.WithValue(req.Context(), CallerServiceIDContextKey, "svc-audit")
+	req = req.WithContext(ctx)
+
+	handleInternalOrchestratorMCPCall(rec, req, embedInternalProxyConfig{
+		MCPToolsBaseURL:  up.URL,
+		SecureStore:      store,
+		ProxyAuditLogger: auditLogger,
+	})
+	if rec.Code != http.StatusOK {
+		t.Fatalf("code=%d body=%s", rec.Code, rec.Body.String())
+	}
+	var line map[string]any
+	if err := json.Unmarshal(buf.Bytes(), &line); err != nil {
+		t.Fatalf("audit JSON: %v raw=%q", err, buf.String())
+	}
+	required := []string{"timestamp", "source", "destination", "method", "path", "status_code", "duration_ms"}
+	for _, k := range required {
+		if _, ok := line[k]; !ok {
+			t.Errorf("missing audit field %q: %v", k, line)
+		}
+	}
+	if line["source"] != internalProxyAuditSource {
+		t.Errorf("source = %v want %q", line["source"], internalProxyAuditSource)
+	}
+	if line["destination"] == "" || line["method"] == "" || line["path"] == "" {
+		t.Errorf("empty routing fields: %v", line)
+	}
+	if sc, ok := line["status_code"].(float64); !ok || int(sc) != http.StatusOK {
+		t.Errorf("status_code = %v want 200", line["status_code"])
 	}
 }

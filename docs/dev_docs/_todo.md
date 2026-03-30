@@ -40,7 +40,9 @@ Plan: [_plan_002_bugs.md](_plan_002_bugs.md)
 
 Plan: [_plan_003_short_term.md](_plan_003_short_term.md)
 
-Address within 1-2 sprints:
+**Status (2026-03-30):** Completed per the plan; see `task1_completion_report.md` through `task12_completion_report.md` and the final report in this directory.
+
+Address within 1-2 sprints (tracking list retained for context):
 
 1. **Add `http.MaxBytesReader` and `io.LimitReader`** across all modules for unbounded reads. ([Consolidated summary](2026-03-29_review_consolidated_summary.md))
 2. **Add `context.Context`** to all functions performing network I/O without it. ([Report 2](2026-03-29_review_report_2_worker_node.md), [Report 3](2026-03-29_review_report_3_agents.md), [Report 4](2026-03-29_review_report_4_cynork.md))

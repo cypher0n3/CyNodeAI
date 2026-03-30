@@ -50,7 +50,11 @@ func (c *LifecycleClient) NotifyInProgress(ctx context.Context) {
 		return
 	}
 	req.Header.Set("Content-Type", "application/json")
-	_, _ = c.HTTPClient.Do(req)
+	resp, err := c.HTTPClient.Do(req)
+	if err != nil {
+		return
+	}
+	_ = resp.Body.Close()
 }
 
 // NotifyCompletion POSTs completion with the result contract (best-effort). No-op if BaseURL empty.
@@ -68,5 +72,9 @@ func (c *LifecycleClient) NotifyCompletion(ctx context.Context, result *sbajob.R
 		return
 	}
 	req.Header.Set("Content-Type", "application/json")
-	_, _ = c.HTTPClient.Do(req)
+	resp, err := c.HTTPClient.Do(req)
+	if err != nil {
+		return
+	}
+	_ = resp.Body.Close()
 }

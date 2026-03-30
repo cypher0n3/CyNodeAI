@@ -307,12 +307,12 @@ func TestClient_GetTaskResult_DecodeError(t *testing.T) {
 
 func TestClient_NewClient_SetToken(t *testing.T) {
 	c := NewClient("http://localhost")
-	if c.BaseURL != "http://localhost" || c.HTTPClient == nil {
+	if c.BaseURL() != "http://localhost" || c.HTTPClient == nil {
 		t.Errorf("NewClient: %+v", c)
 	}
 	c.SetToken("t")
-	if c.Token != "t" {
-		t.Errorf("Token = %q", c.Token)
+	if c.Token() != "t" {
+		t.Errorf("Token = %q", c.Token())
 	}
 }
 

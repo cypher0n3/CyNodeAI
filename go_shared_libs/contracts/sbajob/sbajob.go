@@ -14,6 +14,16 @@ import (
 // Unknown major versions must be refused per CYNAI.SBAGNT.ProtocolVersioning.
 const SupportedProtocolMajor = 1
 
+// SBAProtocolVersion is the JSON protocol_version string for result.json (major.minor).
+const SBAProtocolVersion = "1.0"
+
+// Result status values (CYNAI.SBAGNT.ResultContract).
+const (
+	ResultStatusSuccess = "success"
+	ResultStatusFailure = "failure"
+	ResultStatusTimeout = "timeout"
+)
+
 // SBA execution modes.
 const (
 	ExecutionModeAgentInference = "agent_inference"
