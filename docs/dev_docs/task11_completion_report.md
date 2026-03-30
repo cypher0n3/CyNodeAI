@@ -1,31 +1,22 @@
-# Task 11 Completion Report - BDD Stubs (ACCESS, AGENTS, MCPGAT, MCPTOO)
+# Task 11 Completion Report — BDD (ACCESS, AGENTS, MCPGAT, MCPTOO)
 
 ## Summary
 
-Added four `@wip` feature files under `features/` with suite tags, user stories, and `@req_*` + `@spec_*` traceability:
+Executable feature files (no `@wip`) under `features/` with suite tags, user stories, and `@req_*` + `@spec_*` traceability:
 
-- **Domain:** ACCESS
-  - file: `features/e2e/access_domain_stub.feature`
-  - suite: `@suite_e2e`
-- **Domain:** AGENTS
-  - file: `features/agents/agents_domain_stub.feature`
-  - suite: `@suite_agents`
-- **Domain:** MCPGAT
-  - file: `features/orchestrator/mcpgat_domain_stub.feature`
-  - suite: `@suite_orchestrator`
-- **Domain:** MCPTOO
-  - file: `features/orchestrator/mcptoo_domain_stub.feature`
-  - suite: `@suite_orchestrator`
+- **ACCESS:** `features/e2e/access_control_gateway.feature` (`@suite_e2e`) — unauthenticated `GET /v1/tasks` expects 401; step `I call GET "..." without an Authorization header` in `e2e/_bdd/steps.go`.
+- **AGENTS (SBAGNT):** `features/agents/sbagnt_runner_contract.feature` — validates protocol `1.0` job spec (reuses existing SBA contract steps).
+- **MCPGAT:** `features/orchestrator/mcpgat_gateway_auth.feature` — `POST /v1/mcp/tools/call` without `Authorization` expects 401; step in `orchestrator/_bdd/steps_orchestrator_workflow_egress_artifacts.go`.
+- **MCPTOO:** `features/orchestrator/mcptoo_help_catalog.feature` — PM agent `help.list` returns 200 and JSON containing `topics`; steps in same Go file.
 
-Scenarios stay `@wip` so default Godog runs exclude them (`~@wip`); no new step definitions were added because executable steps are deferred until stack support exists (per plan Green note).
+Earlier stub filenames (`*_domain_stub.feature`) were removed in favor of the files above.
 
-Discovery used `docs/requirements/README.md` and domain files `access.md`, `sbagnt.md`, `mcpgat.md`, `mcptoo.md` for REQ IDs; spec tags point to existing tech-spec anchors (e.g. `CYNAI.ACCESS.Doc.AccessControl`, `CYNAI.SBAGNT.Doc.CyNodeSba`, `CYNAI.MCPGAT.Doc.GatewayEnforcement`, `CYNAI.MCPTOO.Doc.McpSdkInstallation`).
+Discovery used `docs/requirements/README.md` and domain files for REQ IDs; spec tags use tech-spec anchors as before.
 
 ## Validation
 
-- `just test-bdd` (Godog suites; `@wip` scenarios excluded by `~@wip` as designed)
-- `just validate-feature-files` and `just lint-gherkin` on `features/` (repo convention for Gherkin)
-- `just lint-md` on the Task 11 completion report (markdownlint does not apply cleanly to `.feature` paths-same MD041 behavior as existing `features/**/*.feature` when passed explicitly to markdownlint-cli2)
+- `just test-bdd` (Godog suites run these scenarios by default)
+- `just validate-feature-files` and `just lint-gherkin` on `features/`
 
 ## Plan
 

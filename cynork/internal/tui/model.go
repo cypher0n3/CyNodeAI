@@ -47,16 +47,18 @@ type sendResult struct {
 
 // streamDeltaMsg carries one streaming event for the in-flight assistant turn.
 type streamDeltaMsg struct {
-	delta          string
-	amendment      string
-	thinking       string
-	toolName       string
-	toolArgs       string
-	isHeartbeat    bool
-	hbElapsed      int
-	hbStatus       string
-	iterationStart bool
-	iteration      int
+	delta                    string
+	amendment                string
+	amendmentScope           string // "turn" (default) or "iteration"
+	amendmentTargetIteration int    // required when scope is "iteration"
+	thinking                 string
+	toolName                 string
+	toolArgs                 string
+	isHeartbeat              bool
+	hbElapsed                int
+	hbStatus                 string
+	iterationStart           bool
+	iteration                int
 }
 
 // streamDoneMsg signals that the active streaming turn is complete.
@@ -193,8 +195,13 @@ type Model struct {
 	streamCh     <-chan chat.ChatStreamDelta // active stream channel; nil when idle
 	// streamBuf holds visible tokens for the live Assistant scrollback line; the in-flight
 	// TranscriptTurn.Content is updated from the same buffer via syncInFlightTranscriptVisible.
-	streamBuf  strings.Builder
-	ctrlCCount int // successive Ctrl+C when idle → exit
+	streamBuf strings.Builder
+	// streamIterMode is true after the first cynodeai.iteration_start in this turn; deltas then
+	// append to streamIterSegs[streamCurIter] and streamBuf is rebuilt as the concatenation of segments.
+	streamIterMode   bool
+	streamCurIter    int
+	streamIterSegs   map[int]string // iteration index -> visible text for that iteration
+	ctrlCCount       int            // successive Ctrl+C when idle → exit
 	// Transcript is the structured turn list (user + assistant); mirrors interactive chat scrollback.
 	Transcript          []TranscriptTurn
 	streamHeartbeatNote string // ephemeral progress line (heartbeat); not persisted in scrollback
@@ -725,6 +732,28 @@ func (m *Model) scheduleIfStreaming() (tea.Model, tea.Cmd) {
 	return m, nil
 }
 
+func (m *Model) clearStreamIterationState() {
+	m.streamIterSegs = nil
+	m.streamCurIter = 0
+	m.streamIterMode = false
+}
+
+func (m *Model) rebuildStreamBufFromIterationSegs() {
+	m.streamBuf.Reset()
+	if len(m.streamIterSegs) == 0 {
+		return
+	}
+	maxK := 0
+	for k := range m.streamIterSegs {
+		if k > maxK {
+			maxK = k
+		}
+	}
+	for i := 1; i <= maxK; i++ {
+		m.streamBuf.WriteString(m.streamIterSegs[i])
+	}
+}
+
 func (m *Model) applyStreamDelta(msg *streamDeltaMsg) (tea.Model, tea.Cmd) {
 	if msg == nil {
 		return m, nil
@@ -732,8 +761,17 @@ func (m *Model) applyStreamDelta(msg *streamDeltaMsg) (tea.Model, tea.Cmd) {
 	m.streamHeartbeatNote = ""
 	switch {
 	case msg.amendment != "":
-		m.streamBuf.Reset()
-		m.streamBuf.WriteString(msg.amendment)
+		if msg.amendmentScope == "iteration" && msg.amendmentTargetIteration > 0 && m.streamIterMode {
+			if m.streamIterSegs == nil {
+				m.streamIterSegs = make(map[int]string)
+			}
+			m.streamIterSegs[msg.amendmentTargetIteration] = msg.amendment
+			m.rebuildStreamBufFromIterationSegs()
+		} else {
+			m.clearStreamIterationState()
+			m.streamBuf.Reset()
+			m.streamBuf.WriteString(msg.amendment)
+		}
 	case msg.thinking != "":
 		m.appendTranscriptThinking(msg.thinking)
 		return m.scheduleIfStreaming()
@@ -748,15 +786,37 @@ func (m *Model) applyStreamDelta(msg *streamDeltaMsg) (tea.Model, tea.Cmd) {
 		}
 		return m.scheduleIfStreaming()
 	case msg.iterationStart:
+		m.streamIterMode = true
+		if m.streamIterSegs == nil {
+			m.streamIterSegs = make(map[int]string)
+		}
+		m.streamCurIter = msg.iteration
+		if _, ok := m.streamIterSegs[msg.iteration]; !ok {
+			m.streamIterSegs[msg.iteration] = ""
+		}
+		m.rebuildStreamBufFromIterationSegs()
 		if len(m.Transcript) > 0 {
 			last := &m.Transcript[len(m.Transcript)-1]
 			if last.Role == RoleAssistant && last.InFlight {
 				last.StreamingState.Phase = StreamingPhaseWorking
 			}
 		}
+		m.syncInFlightTranscriptVisible()
+		prefix := assistantPrefix
+		if len(m.Scrollback) > 0 && strings.HasPrefix(m.Scrollback[len(m.Scrollback)-1], prefix) {
+			m.Scrollback[len(m.Scrollback)-1] = prefix + m.streamBuf.String()
+		}
 		return m.scheduleIfStreaming()
 	default:
-		m.streamBuf.WriteString(msg.delta)
+		if m.streamIterMode && m.streamCurIter > 0 {
+			if m.streamIterSegs == nil {
+				m.streamIterSegs = make(map[int]string)
+			}
+			m.streamIterSegs[m.streamCurIter] += msg.delta
+			m.rebuildStreamBufFromIterationSegs()
+		} else {
+			m.streamBuf.WriteString(msg.delta)
+		}
 	}
 	m.syncInFlightTranscriptVisible()
 	prefix := assistantPrefix

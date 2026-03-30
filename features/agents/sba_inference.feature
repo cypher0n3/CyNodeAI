@@ -8,7 +8,6 @@ Feature: SBA Inference and User-Facing Reply
   Per REQ-SBAGNT-0109 and remediation plan: when inference is required, task failure is product failure.
   E2E tests must fail (not skip) when SBA inference task reaches status "failed".
 
-@wip
 @req_sbagnt_0001
 @req_sbagnt_0109
 @spec_cynai_sbagnt_workerproxies
@@ -20,7 +19,6 @@ Scenario: SBA task with inference completes with sba_result and user-facing repl
   And the job result contains "sba_result"
   And the job result has a user-facing reply (non-empty stdout or sba_result steps/reply)
 
-@wip
 @req_sbagnt_0109
 @spec_cynai_sbagnt_jobinferencemodel
 Scenario: SBA task with inference that fails is treated as product failure

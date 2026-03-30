@@ -293,6 +293,32 @@ def run_curl_with_status(method, url, data=None, headers=None, timeout=30):
         return 0, ""
 
 
+def run_curl_with_status_file(method, url, file_path, headers=None, timeout=120):
+    """POST body from ``file_path`` via curl ``--data-binary @file``.
+
+    For bodies too large for ``-d`` (e.g. API max-body checks). Returns ``(status_code, body)``.
+    """
+    cmd = ["curl", "-s", "-S", "-w", "%{http_code}", "-X", method, url]
+    if headers:
+        for h, v in headers.items():
+            cmd.extend(["-H", f"{h}: {v}"])
+    cmd.extend(["--data-binary", "@" + file_path])
+    try:
+        r = subprocess.run(
+            cmd, capture_output=True, text=True, timeout=timeout, check=False
+        )
+        out = (r.stdout or "").strip()
+        if len(out) >= 3 and out[-3:].isdigit():
+            code = int(out[-3:])
+            body = out[:-3]
+        else:
+            code = 0
+            body = out
+        return code, body
+    except (subprocess.TimeoutExpired, FileNotFoundError):
+        return 0, ""
+
+
 def run_curl(method, url, data=None, headers=None, timeout=30):
     """Run curl; return (ok, body). ok is True when status is 2xx."""
     code, body = run_curl_with_status(

@@ -31,8 +31,10 @@ type ChatStreamDelta struct {
 	Err        error
 	ResponseID string
 	// Amendment is the full redacted content when event type is secret_redaction; replace in-flight text in place.
-	Amendment string
-	Thinking  string
+	Amendment                string
+	AmendmentScope           string // "turn" (default) or "iteration"
+	AmendmentTargetIteration int
+	Thinking                 string
 	ToolName  string
 	ToolArgs  string
 	// IterationStart is true when the gateway emits cynodeai.iteration_start; Iteration is the iteration index.

@@ -69,7 +69,6 @@ Scenario: Node manager starts inference backend with rocm variant when orchestra
 
 @req_worker_0002
 @spec_cynai_worker_failfast
-@wip
 Scenario: Node manager fail-fast when inference startup fails
   Given the node manager is configured to fail inference startup
   When the node manager runs the startup sequence against the mock orchestrator

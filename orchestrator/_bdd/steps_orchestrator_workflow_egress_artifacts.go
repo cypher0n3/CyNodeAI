@@ -805,6 +805,78 @@ func registerOrchestratorWorkflowEgressArtifacts(sc *godog.ScenarioContext, stat
 		st.lastResponseBody, _ = io.ReadAll(resp.Body)
 		return nil
 	})
+	sc.Step(`^I call POST "/v1/mcp/tools/call" without Authorization with tool_name "([^"]*)"$`, func(ctx context.Context, toolName string) error {
+		st := getState(ctx)
+		if st == nil || st.server == nil {
+			return godog.ErrSkip
+		}
+		payload := map[string]interface{}{
+			"tool_name": toolName,
+			"arguments": map[string]interface{}{},
+		}
+		raw, err := json.Marshal(payload)
+		if err != nil {
+			return err
+		}
+		req, err := http.NewRequest(http.MethodPost, st.server.URL+"/v1/mcp/tools/call", bytes.NewReader(raw))
+		if err != nil {
+			return err
+		}
+		req.Header.Set("Content-Type", "application/json")
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			return err
+		}
+		defer resp.Body.Close()
+		st.lastStatusCode = resp.StatusCode
+		st.lastResponseBody, _ = io.ReadAll(resp.Body)
+		return nil
+	})
+	sc.Step(`^the MCP agent "([^"]*)" calls help\.list with empty arguments$`, func(ctx context.Context, agentRole string) error {
+		st := getState(ctx)
+		if st == nil || st.server == nil {
+			return godog.ErrSkip
+		}
+		payload := map[string]interface{}{
+			"tool_name": "help.list",
+			"arguments": map[string]interface{}{},
+		}
+		raw, err := json.Marshal(payload)
+		if err != nil {
+			return err
+		}
+		req, err := http.NewRequest(http.MethodPost, st.server.URL+"/v1/mcp/tools/call", bytes.NewReader(raw))
+		if err != nil {
+			return err
+		}
+		req.Header.Set("Content-Type", "application/json")
+		switch strings.ToLower(strings.TrimSpace(agentRole)) {
+		case "pm":
+			req.Header.Set("Authorization", "Bearer "+st.pmMCPAgentToken)
+		case "sandbox":
+			req.Header.Set("Authorization", "Bearer "+st.sandboxMCPAgentToken)
+		default:
+			return fmt.Errorf("unknown MCP agent role %q", agentRole)
+		}
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			return err
+		}
+		defer resp.Body.Close()
+		st.lastStatusCode = resp.StatusCode
+		st.lastResponseBody, _ = io.ReadAll(resp.Body)
+		return nil
+	})
+	sc.Step(`^the last HTTP response body contains "([^"]*)"$`, func(ctx context.Context, sub string) error {
+		st := getState(ctx)
+		if st == nil || len(st.lastResponseBody) == 0 {
+			return fmt.Errorf("no response body")
+		}
+		if !bytes.Contains(st.lastResponseBody, []byte(sub)) {
+			return fmt.Errorf("body %q does not contain %q", string(st.lastResponseBody), sub)
+		}
+		return nil
+	})
 	sc.Step(`^I create a task with prompt "([^"]*)"$`, func(ctx context.Context, prompt string) error {
 		st := getState(ctx)
 		if st == nil || st.server == nil {

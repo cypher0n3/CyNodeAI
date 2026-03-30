@@ -5,7 +5,6 @@ Feature: PMA chat file context
   I want cynode-pma to preserve accepted chat file context in model requests
   So that user-attached files remain available to planning and response generation
 
-@wip
 @req_pmagnt_0115
 @spec_cynai_pmagnt_chatfilecontext
 Scenario: PMA includes accepted chat file context in the LLM request
@@ -14,7 +13,6 @@ Scenario: PMA includes accepted chat file context in the LLM request
   When I send the request to the PMA internal chat completion endpoint
   Then the captured model request includes the accepted file context
 
-@wip
 @req_pmagnt_0115
 @spec_cynai_pmagnt_chatfilecontext
 Scenario: PMA returns a clear error when the selected model cannot support an accepted file type

@@ -224,6 +224,56 @@ func TestChatCompletionHandler_InferenceError(t *testing.T) {
 	}
 }
 
+func TestPrepareChatCompletionRequest_MergesFilesIntoLastUser(t *testing.T) {
+	req := &InternalChatCompletionRequest{
+		Messages: []struct {
+			Role    string `json:"role"`
+			Content string `json:"content"`
+		}{
+			{Role: "user", Content: "hello"},
+		},
+		ChatFiles: []ChatFileRef{
+			{Name: "notes.txt", MIMEType: "text/plain", Text: "line1"},
+		},
+	}
+	if err := prepareChatCompletionRequest(req); err != nil {
+		t.Fatal(err)
+	}
+	if len(req.ChatFiles) != 0 {
+		t.Fatal("ChatFiles should be cleared after merge")
+	}
+	if !strings.Contains(req.Messages[0].Content, "## Chat file: notes.txt") || !strings.Contains(req.Messages[0].Content, "line1") {
+		t.Fatalf("content = %q", req.Messages[0].Content)
+	}
+}
+
+func TestPrepareChatCompletionRequest_UnsupportedMIME(t *testing.T) {
+	req := &InternalChatCompletionRequest{
+		Messages: []struct {
+			Role    string `json:"role"`
+			Content string `json:"content"`
+		}{{Role: "user", Content: "x"}},
+		ChatFiles: []ChatFileRef{
+			{Name: "b.bin", MIMEType: "application/octet-stream", Text: "x"},
+		},
+	}
+	if err := prepareChatCompletionRequest(req); err == nil {
+		t.Fatal("expected error")
+	}
+}
+
+func TestChatCompletionHandler_UnsupportedChatFileMIME(t *testing.T) {
+	handler := ChatCompletionHandler("", slog.Default())
+	body := `{"messages":[{"role":"user","content":"hi"}],"chat_files":[{"name":"x.bin","mime_type":"application/octet-stream","text":"data"}]}`
+	req := httptest.NewRequest(http.MethodPost, "/internal/chat/completion", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	handler(rec, req)
+	if rec.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("status %d, want 422", rec.Code)
+	}
+}
+
 func TestBuildSystemContext(t *testing.T) {
 	base := "base"
 	if got := buildSystemContext(base, &InternalChatCompletionRequest{}); got != base {

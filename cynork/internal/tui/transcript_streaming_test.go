@@ -118,6 +118,31 @@ func TestApplyStreamDelta_AmendmentReplacesBuffer(t *testing.T) {
 	}
 }
 
+func TestApplyStreamDelta_IterationAmendmentReplacesOneSegment(t *testing.T) {
+	m := &Model{}
+	m.Scrollback = []string{assistantPrefix}
+	m.appendTranscriptUser("u")
+	m.seedTranscriptAssistantInFlight()
+	m.applyStreamDelta(&streamDeltaMsg{iterationStart: true, iteration: 1})
+	m.applyStreamDelta(&streamDeltaMsg{delta: "Hello world"})
+	m.applyStreamDelta(&streamDeltaMsg{iterationStart: true, iteration: 2})
+	m.applyStreamDelta(&streamDeltaMsg{delta: "Next part"})
+	if m.streamBuf.String() != "Hello worldNext part" {
+		t.Fatalf("buf = %q", m.streamBuf.String())
+	}
+	m.applyStreamDelta(&streamDeltaMsg{
+		amendment:                "Corrected text",
+		amendmentScope:           "iteration",
+		amendmentTargetIteration: 1,
+	})
+	if m.streamIterSegs[1] != "Corrected text" || m.streamIterSegs[2] != "Next part" {
+		t.Fatalf("segs = %#v", m.streamIterSegs)
+	}
+	if m.streamBuf.String() != "Corrected textNext part" {
+		t.Errorf("buf = %q", m.streamBuf.String())
+	}
+}
+
 func TestApplyStreamDelta_DefaultDeltaUpdatesScrollbackAndTranscript(t *testing.T) {
 	m := &Model{}
 	m.Scrollback = []string{assistantPrefix}

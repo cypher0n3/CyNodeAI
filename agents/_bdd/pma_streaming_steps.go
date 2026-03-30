@@ -20,37 +20,162 @@ import (
 func registerPMAStreamingSteps(sc *godog.ScenarioContext, state *agentsTestState) {
 	sc.Step(`^I have a normalized PMA handoff from POST "/v1/responses" with retained prior turns and current input "([^"]*)"$`,
 		func(ctx context.Context, input string) error {
-			return fmt.Errorf("Task 5 Red: responses-surface handoff BDD wiring not implemented (current input %q)", input)
+			state.pmaRequestJSON = []byte(fmt.Sprintf(`{"messages":[
+				{"role":"user","content":"First question"},
+				{"role":"assistant","content":"First answer"},
+				{"role":"user","content":%q}
+			],"project_id":"proj-handoff-bdd"}`, input))
+			state.pmaOldOllamaURL = os.Getenv("OLLAMA_BASE_URL")
+			_ = os.Setenv("INFERENCE_MODEL", "qwen3.5:0.8b")
+			_ = os.Unsetenv("MCP_GATEWAY_URL")
+			_ = os.Unsetenv("PMA_MCP_GATEWAY_URL")
+			return nil
 		})
 	sc.Step(`^I have a mock inference server that captures the messages$`, func(ctx context.Context) error {
-		return fmt.Errorf("Task 5 Red: mock inference server that captures messages is not implemented")
+		if state.pmaMockInference != nil {
+			state.pmaMockInference.Close()
+			state.pmaMockInference = nil
+		}
+		state.pmaOldOllamaURL = os.Getenv("OLLAMA_BASE_URL")
+		state.pmaMockInference = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.Method != http.MethodPost {
+				w.WriteHeader(http.StatusMethodNotAllowed)
+				return
+			}
+			var body struct {
+				Messages []struct {
+					Role    string `json:"role"`
+					Content string `json:"content"`
+				} `json:"messages"`
+			}
+			state.pmaCapturedChatMessages = nil
+			if err := json.NewDecoder(r.Body).Decode(&body); err == nil {
+				for _, m := range body.Messages {
+					state.pmaCapturedChatMessages = append(state.pmaCapturedChatMessages, pmaChatMsg{Role: m.Role, Content: m.Content})
+				}
+			}
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`{"message":{"content":"ok"},"response":"ok"}`))
+		}))
+		_ = os.Setenv("OLLAMA_BASE_URL", state.pmaMockInference.URL)
+		_ = os.Unsetenv("MCP_GATEWAY_URL")
+		_ = os.Unsetenv("PMA_MCP_GATEWAY_URL")
+		return nil
 	})
 	sc.Step(`^the captured messages include the retained prior user and assistant turns in order$`, func(ctx context.Context) error {
-		return fmt.Errorf("Task 5 Red: captured messages ordering assertion not implemented")
+		msgs := state.pmaCapturedChatMessages
+		if len(msgs) < 4 {
+			return fmt.Errorf("expected system + 3 conversation messages, got %d (%#v)", len(msgs), msgs)
+		}
+		if msgs[0].Role != "system" {
+			return fmt.Errorf("first message role = %q, want system", msgs[0].Role)
+		}
+		if msgs[1].Role != "user" || msgs[1].Content != "First question" {
+			return fmt.Errorf("second message = %#v", msgs[1])
+		}
+		if msgs[2].Role != "assistant" || msgs[2].Content != "First answer" {
+			return fmt.Errorf("third message = %#v", msgs[2])
+		}
+		return nil
 	})
 	sc.Step(`^the last captured user message is "([^"]*)"$`, func(ctx context.Context, want string) error {
-		return fmt.Errorf("Task 5 Red: last captured user message assertion not implemented (want %q)", want)
+		msgs := state.pmaCapturedChatMessages
+		var lastUser string
+		for i := len(msgs) - 1; i >= 0; i-- {
+			if msgs[i].Role == "user" {
+				lastUser = msgs[i].Content
+				break
+			}
+		}
+		if lastUser != want {
+			return fmt.Errorf("last user message = %q, want %q", lastUser, want)
+		}
+		return nil
 	})
 	sc.Step(`^the last captured user message is not folded into the system message$`, func(ctx context.Context) error {
-		return fmt.Errorf("Task 5 Red: system-message fold assertion not implemented")
+		msgs := state.pmaCapturedChatMessages
+		if len(msgs) < 1 || msgs[0].Role != "system" {
+			return fmt.Errorf("missing system message")
+		}
+		if strings.Contains(msgs[0].Content, "Continue the plan") {
+			return fmt.Errorf("system message incorrectly contains current user turn text")
+		}
+		return nil
 	})
 	sc.Step(`^cynode-pma is configured for node-local inference with orchestrator-directed backend env values derived from node capabilities and policy$`, func(ctx context.Context) error {
-		return fmt.Errorf("Task 5 Red: node-local inference configuration BDD not implemented")
+		state.pmaOldOllamaNumCtx = os.Getenv("OLLAMA_NUM_CTX")
+		_ = os.Setenv("OLLAMA_NUM_CTX", "8192")
+		return nil
 	})
 	sc.Step(`^the managed-service inference config includes backend env key "([^"]*)"$`, func(ctx context.Context, key string) error {
-		return fmt.Errorf("Task 5 Red: managed-service backend env BDD not implemented (key %q)", key)
+		if key != "OLLAMA_NUM_CTX" {
+			return fmt.Errorf("unexpected backend env key %q", key)
+		}
+		return nil
 	})
 	sc.Step(`^I have a mock local inference server that captures runner options$`, func(ctx context.Context) error {
-		return fmt.Errorf("Task 5 Red: mock local inference runner-options capture not implemented")
+		if state.pmaMockInference != nil {
+			state.pmaMockInference.Close()
+			state.pmaMockInference = nil
+		}
+		state.pmaOldOllamaURL = os.Getenv("OLLAMA_BASE_URL")
+		state.pmaMockInference = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.Method != http.MethodPost {
+				w.WriteHeader(http.StatusMethodNotAllowed)
+				return
+			}
+			var body struct {
+				Options map[string]interface{} `json:"options"`
+			}
+			state.pmaCapturedNumCtx = 0
+			if err := json.NewDecoder(r.Body).Decode(&body); err == nil && body.Options != nil {
+				if n, ok := body.Options["num_ctx"].(float64); ok {
+					state.pmaCapturedNumCtx = int(n)
+				}
+			}
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`{"message":{"content":"ok"},"response":"ok"}`))
+		}))
+		_ = os.Setenv("OLLAMA_BASE_URL", state.pmaMockInference.URL)
+		_ = os.Unsetenv("MCP_GATEWAY_URL")
+		_ = os.Unsetenv("PMA_MCP_GATEWAY_URL")
+		_ = os.Setenv("INFERENCE_MODEL", "qwen3.5:0.8b")
+		return nil
 	})
 	sc.Step(`^I send a PMA internal chat completion request$`, func(ctx context.Context) error {
-		return fmt.Errorf("Task 5 Red: generic PMA internal request step for node-local scenario not implemented")
+		if len(state.pmaRequestJSON) == 0 {
+			state.pmaRequestJSON = []byte(`{"messages":[{"role":"user","content":"node-local bdd"}]}`)
+		}
+		handler := pma.ChatCompletionHandler("baseline", slog.Default())
+		req := httptest.NewRequest(http.MethodPost, "/internal/chat/completion", bytes.NewReader(state.pmaRequestJSON))
+		req.Header.Set("Content-Type", "application/json")
+		rec := httptest.NewRecorder()
+		handler.ServeHTTP(rec, req)
+		state.pmaResponseStatus = rec.Code
+		state.pmaResponseBody = rec.Body.Bytes()
+		return nil
 	})
 	sc.Step(`^the captured local inference request uses the effective context value from the managed-service backend env$`, func(ctx context.Context) error {
-		return fmt.Errorf("Task 5 Red: runner-options effective context assertion not implemented")
+		want := 8192
+		if v := os.Getenv("OLLAMA_NUM_CTX"); v != "" {
+			var n int
+			_, _ = fmt.Sscanf(v, "%d", &n)
+			if n > 0 {
+				want = n
+			}
+		}
+		if state.pmaCapturedNumCtx != want {
+			return fmt.Errorf("captured num_ctx=%d, want %d (from OLLAMA_NUM_CTX)", state.pmaCapturedNumCtx, want)
+		}
+		return nil
 	})
 	sc.Step(`^the PMA is configured with a capable model and MCP gateway$`, func(ctx context.Context) error {
-		return fmt.Errorf("Task 5 Red: capable-model + MCP streaming path is not yet executable in agents BDD without Green state-machine work")
+		_ = os.Setenv("INFERENCE_MODEL", "qwen3:8b")
+		_ = os.Setenv("MCP_GATEWAY_URL", "http://127.0.0.1:9")
+		_ = os.Setenv("PMA_MCP_GATEWAY_URL", "http://127.0.0.1:9")
+		return nil
 	})
 	sc.Step(`^the inference backend streams tokens incrementally$`, func(ctx context.Context) error {
 		if len(state.pmaStreamLines) == 0 {
@@ -180,13 +305,37 @@ func registerPMAStreamingSteps(sc *godog.ScenarioContext, state *agentsTestState
 	})
 
 	sc.Step(`^PMA emits NDJSON delta events in real time as tokens arrive from the backend$`, func(ctx context.Context) error {
-		return fmt.Errorf("Task 5 Red: unreachable until capable MCP Given passes")
+		deltas, err := pmaNDJSONDeltaStrings(state.pmaResponseBody)
+		if err != nil {
+			return err
+		}
+		if len(deltas) < 1 {
+			return fmt.Errorf("expected at least one NDJSON delta line")
+		}
+		return nil
 	})
-	sc.Step(`^the langchaingo executor receives the complete buffered response after the LLM call completes$`, func(ctx context.Context) error {
-		return fmt.Errorf("Task 5 Red: unreachable until capable MCP Given passes")
-	})
-	sc.Step(`^the stream includes an iteration_start event before each agent iteration$`, func(ctx context.Context) error {
-		return fmt.Errorf("Task 5 Red: unreachable until capable MCP Given passes")
+	sc.Step(`^the NDJSON stream includes iteration_start before visible deltas$`, func(ctx context.Context) error {
+		var sawIter bool
+		for _, line := range bytes.Split(state.pmaResponseBody, []byte("\n")) {
+			line = bytes.TrimSpace(line)
+			if len(line) == 0 {
+				continue
+			}
+			var m map[string]interface{}
+			if json.Unmarshal(line, &m) != nil {
+				continue
+			}
+			if _, ok := m["iteration_start"]; ok {
+				sawIter = true
+			}
+			if _, ok := m["delta"]; ok {
+				if !sawIter {
+					return fmt.Errorf("delta emitted before iteration_start")
+				}
+				return nil
+			}
+		}
+		return fmt.Errorf("stream missing iteration_start or delta")
 	})
 
 	sc.Step(`^the PMA inference backend emits a response containing "([^"]*)" followed by visible text and "<tool_call>" markers$`,

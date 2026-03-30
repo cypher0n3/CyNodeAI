@@ -194,6 +194,27 @@ func registerE2ESteps(sc *godog.ScenarioContext, state *e2eState) {
 	})
 
 	// Chat OpenAI-compatible
+	sc.Step(`^I call GET "([^"]*)" without an Authorization header$`, func(ctx context.Context, path string) error {
+		st := getState(ctx)
+		if st == nil {
+			return fmt.Errorf("no state")
+		}
+		if !gatewayReachable(st.gatewayURL) {
+			return godog.ErrSkip
+		}
+		req, err := http.NewRequest("GET", st.gatewayURL+path, nil)
+		if err != nil {
+			return err
+		}
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			return err
+		}
+		defer resp.Body.Close()
+		st.lastStatusCode = resp.StatusCode
+		st.lastResponseBody, _ = io.ReadAll(resp.Body)
+		return nil
+	})
 	sc.Step(`^I call GET "([^"]*)"$`, func(ctx context.Context, path string) error {
 		st := getState(ctx)
 		if st == nil {

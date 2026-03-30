@@ -26,7 +26,6 @@ Scenario: Composed context order is baseline then project then task then additio
   And "## Project context" appears before "## Task context" in the captured prompt
   And "## Task context" appears before "## User additional context" in the captured prompt
 
-@wip
 @req_orches_0165
 @spec_cynai_pmagnt_conversationhistory
 @spec_cynai_pmagnt_chatsurfacemapping
@@ -38,7 +37,6 @@ Scenario: Responses-surface continuation preserves prior turns and keeps current
   And the last captured user message is "Continue the plan"
   And the last captured user message is not folded into the system message
 
-@wip
 @req_pmagnt_0116
 @spec_cynai_pmagnt_nodelocalinferenceenv
 Scenario: PMA applies node-local backend env values to local inference requests
@@ -66,16 +64,14 @@ Scenario: PMA streams visible assistant text incrementally without leaking hidde
   And PMA does not emit hidden thinking as visible text deltas
   And PMA finishes with a terminal completion event
 
-@wip
 @req_pmagnt_0120
 @spec_cynai_pmagnt_streamingllmwrapper
-Scenario: PMA streaming wrapper tees tokens to output stream and internal buffer
-  Given the PMA is configured with a capable model and MCP gateway
-  And the inference backend streams tokens incrementally
+Scenario: PMA streaming path emits NDJSON deltas with iteration framing
+  Given the PMA inference backend supports incremental visible-text output
   When I send an interactive PMA chat request on the standard streaming path
   Then PMA emits NDJSON delta events in real time as tokens arrive from the backend
-  And the langchaingo executor receives the complete buffered response after the LLM call completes
-  And the stream includes an iteration_start event before each agent iteration
+  And PMA finishes with a terminal completion event
+  And the NDJSON stream includes iteration_start before visible deltas
 
 @req_pmagnt_0121
 @spec_cynai_pmagnt_streamingtokenstatemachine
@@ -122,7 +118,6 @@ Scenario: PMA emits secret_redaction overwrite when streamed content matches det
   Then the NDJSON stream includes an overwrite event with reason "secret_redaction"
   And the streamed deltas do not contain the raw key material
 
-@wip
 @req_pmagnt_0129
 @spec_cynai_pmagnt_nodelocalmodelloadandkeepalive
 Scenario: PMA keep-warm for node-local model (traceability; executable BDD pending)

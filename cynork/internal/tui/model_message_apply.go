@@ -342,6 +342,7 @@ func (m *Model) streamCmd(line string) tea.Cmd {
 	ctx, cancel := context.WithCancel(context.Background())
 	m.streamCancel = cancel
 	m.streamBuf.Reset()
+	m.clearStreamIterationState()
 	m.streamRecoveryGen++
 	m.clearConnectionRecovery()
 
@@ -465,7 +466,11 @@ func chatStreamDeltaToMsg(delta *chat.ChatStreamDelta) tea.Msg {
 		return streamDoneMsg{responseID: delta.ResponseID, err: delta.Err}
 	}
 	if delta.Amendment != "" {
-		return streamDeltaMsg{amendment: delta.Amendment}
+		return streamDeltaMsg{
+			amendment:                delta.Amendment,
+			amendmentScope:           delta.AmendmentScope,
+			amendmentTargetIteration: delta.AmendmentTargetIteration,
+		}
 	}
 	if delta.Thinking != "" {
 		return streamDeltaMsg{thinking: delta.Thinking}

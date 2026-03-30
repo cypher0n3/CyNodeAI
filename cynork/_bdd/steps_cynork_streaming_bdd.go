@@ -220,6 +220,47 @@ func registerCynorkStreamingBDDSteps(sc *godog.ScenarioContext, _ *cynorkState) 
 		return nil
 	})
 	sc.Step(`^Given the TUI has sent a message and the gateway is streaming the assistant response token-by-token$`, bddTUISentMessageAndStreamingTokenByToken)
+	sc.Step(`^Given the TUI has sent a message and the gateway is streaming the assistant response$`, func(ctx context.Context) error {
+		m := bddEnsureTui(ctx)
+		m.StreamBDDResetModel()
+		m.StreamBDDSimulateUserMessage("hi")
+		m.StreamBDDBeginAssistantStream()
+		return nil
+	})
+	sc.Step(`^And the stream includes a cynodeai\.iteration_start event for iteration (\d+)$`, func(ctx context.Context, iter int) error {
+		m := bddEnsureTui(ctx)
+		m.StreamBDDApply(&tui.StreamBDDDelta{IterationStart: true, Iteration: iter})
+		return nil
+	})
+	sc.Step(`^And visible text "([^"]*)" has been streamed for iteration (\d+)$`, func(ctx context.Context, text string, _ int) error {
+		m := bddEnsureTui(ctx)
+		m.StreamBDDApply(&tui.StreamBDDDelta{Delta: text})
+		return nil
+	})
+	sc.Step(`^When the gateway emits a cynodeai\.amendment event with scope "([^"]*)" targeting iteration (\d+) and content "([^"]*)"$`, func(ctx context.Context, scope string, targetIter int, content string) error {
+		m := bddEnsureTui(ctx)
+		m.StreamBDDApply(&tui.StreamBDDDelta{
+			Amendment:                content,
+			AmendmentScope:           scope,
+			AmendmentTargetIteration: targetIter,
+		})
+		m.StreamBDDFinish(nil)
+		return nil
+	})
+	sc.Step(`^Then the TUI replaces only iteration 1 visible text with "([^"]*)"$`, func(ctx context.Context, want string) error {
+		m := bddEnsureTui(ctx)
+		if got := m.StreamBDDIterationSegment(1); got != want {
+			return fmt.Errorf("iteration 1 visible: got %q want %q", got, want)
+		}
+		return nil
+	})
+	sc.Step(`^And iteration 2 visible text "([^"]*)" remains unchanged$`, func(ctx context.Context, want string) error {
+		m := bddEnsureTui(ctx)
+		if got := m.StreamBDDIterationSegment(2); got != want {
+			return fmt.Errorf("iteration 2 visible: got %q want %q", got, want)
+		}
+		return nil
+	})
 	sc.Step(`^Given the assistant response contains a detected secret$`, func(_ context.Context) error { return nil })
 	sc.Step(`^Given the assistant response does not contain any detected secrets$`, func(_ context.Context) error { return nil })
 	sc.Step(`^Given the gateway supports both POST "/v1/chat/completions" and POST "/v1/responses"$`, func(_ context.Context) error { return nil })

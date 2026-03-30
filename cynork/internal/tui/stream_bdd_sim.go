@@ -7,16 +7,18 @@ import (
 // StreamBDDDelta is a test/BDD-friendly view of one streaming event applied directly
 // to the model (no live tea.Cmd loop, no stream channel scheduling).
 type StreamBDDDelta struct {
-	Delta            string
-	Amendment        string
-	Thinking         string
-	ToolName         string
-	ToolArgs         string
-	IsHeartbeat      bool
-	HeartbeatElapsed int
-	HeartbeatStatus  string
-	IterationStart   bool
-	Iteration        int
+	Delta                    string
+	Amendment                string
+	AmendmentScope           string // "turn" (default) or "iteration"
+	AmendmentTargetIteration int
+	Thinking                 string
+	ToolName                 string
+	ToolArgs                 string
+	IsHeartbeat              bool
+	HeartbeatElapsed         int
+	HeartbeatStatus          string
+	IterationStart           bool
+	Iteration                int
 }
 
 // StreamBDDResetModel clears scrollback, transcript, and streaming scratch state for an isolated BDD scenario.
@@ -33,6 +35,7 @@ func (m *Model) StreamBDDResetStreamingState() {
 	m.streamCh = nil
 	m.streamCancel = nil
 	m.streamBuf.Reset()
+	m.clearStreamIterationState()
 	m.streamHeartbeatNote = ""
 	m.Loading = false
 	m.clearConnectionRecovery()
@@ -48,6 +51,7 @@ func (m *Model) StreamBDDSimulateUserMessage(line string) {
 func (m *Model) StreamBDDBeginAssistantStream() {
 	m.Loading = true
 	m.streamBuf.Reset()
+	m.clearStreamIterationState()
 	m.streamHeartbeatNote = ""
 	m.streamCh = nil
 	m.Scrollback = append(m.Scrollback, assistantPrefix)
@@ -63,16 +67,18 @@ func (m *Model) StreamBDDApply(d *StreamBDDDelta) {
 	m.streamCh = nil
 	defer func() { m.streamCh = saved }()
 	msg := streamDeltaMsg{
-		delta:          d.Delta,
-		amendment:      d.Amendment,
-		thinking:       d.Thinking,
-		toolName:       d.ToolName,
-		toolArgs:       d.ToolArgs,
-		isHeartbeat:    d.IsHeartbeat,
-		hbElapsed:      d.HeartbeatElapsed,
-		hbStatus:       d.HeartbeatStatus,
-		iterationStart: d.IterationStart,
-		iteration:      d.Iteration,
+		delta:                    d.Delta,
+		amendment:                d.Amendment,
+		amendmentScope:           d.AmendmentScope,
+		amendmentTargetIteration: d.AmendmentTargetIteration,
+		thinking:                 d.Thinking,
+		toolName:                 d.ToolName,
+		toolArgs:                 d.ToolArgs,
+		isHeartbeat:              d.IsHeartbeat,
+		hbElapsed:                d.HeartbeatElapsed,
+		hbStatus:                 d.HeartbeatStatus,
+		iterationStart:           d.IterationStart,
+		iteration:                d.Iteration,
 	}
 	m.applyStreamDelta(&msg)
 }
@@ -99,6 +105,14 @@ func (m *Model) StreamBDDStreamRecoveryAttempt() int {
 // StreamBDDHeartbeatNote returns the ephemeral heartbeat status line (empty after stream completes).
 func (m *Model) StreamBDDHeartbeatNote() string {
 	return m.streamHeartbeatNote
+}
+
+// StreamBDDIterationSegment returns visible text accumulated for one iteration index during streaming (tests/BDD).
+func (m *Model) StreamBDDIterationSegment(iter int) string {
+	if m.streamIterSegs == nil {
+		return ""
+	}
+	return m.streamIterSegs[iter]
 }
 
 func (m *Model) StreamBDDDrainChatStream(ch <-chan chat.ChatStreamDelta) {

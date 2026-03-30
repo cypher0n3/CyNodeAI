@@ -7,12 +7,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/cucumber/godog"
 
@@ -21,6 +23,12 @@ import (
 	"github.com/cypher0n3/cynodeai/go_shared_libs/contracts/sbajob"
 	"log/slog"
 )
+
+// pmaChatMsg mirrors one Ollama /api/chat message for BDD assertions.
+type pmaChatMsg struct {
+	Role    string
+	Content string
+}
 
 type agentsTestState struct {
 	// SBA job spec and validation (contract scenarios)
@@ -46,15 +54,25 @@ type agentsTestState struct {
 	pmaRequestJSON    []byte
 	pmaMockInference  *httptest.Server
 	pmaCapturedPrompt string
-	pmaResponseStatus int
-	pmaResponseBody   []byte
-	pmaOldOllamaURL   string // restored in After when mock was used
+	// pmaCapturedChatMessages is populated when the mock records Ollama /api/chat "messages".
+	pmaCapturedChatMessages   []pmaChatMsg
+	pmaCapturedInferenceBody  string
+	pmaCapturedNumCtx         int
+	pmaResponseStatus         int
+	pmaResponseBody         []byte
+	pmaOldOllamaURL    string // restored in After when mock was used
+	pmaOldOllamaNumCtx string
 	// PMA streaming (NDJSON body from /internal/chat/completion when stream=true)
 	pmaStreamLines []string // Ollama-style NDJSON lines for mock inference server
 	// Task result contract scenario (SBA result from task result)
 	taskResultJSON []byte
 	taskStatus     string
 	firstJobResult map[string]interface{}
+	// SBA inference BDD (in-process RunJob + mock Ollama)
+	sbaInfOllama        *httptest.Server
+	sbaInfOldOllamaURL  string
+	sbaInferenceResult  *sbajob.Result
+	sbaInferenceWorkDir string
 }
 
 // InitializeAgentsSuite sets up the godog suite for agents features.
@@ -84,6 +102,9 @@ func InitializeAgentsSuite(sc *godog.ScenarioContext, state *agentsTestState) {
 			state.pmaMockInference = nil
 		}
 		state.pmaCapturedPrompt = ""
+		state.pmaCapturedChatMessages = nil
+		state.pmaCapturedInferenceBody = ""
+		state.pmaCapturedNumCtx = 0
 		state.pmaResponseStatus = 0
 		state.pmaResponseBody = nil
 		state.pmaStreamLines = nil
@@ -93,10 +114,33 @@ func InitializeAgentsSuite(sc *godog.ScenarioContext, state *agentsTestState) {
 			os.Unsetenv("OLLAMA_BASE_URL")
 		}
 		state.pmaOldOllamaURL = ""
+		if state.pmaOldOllamaNumCtx != "" {
+			_ = os.Setenv("OLLAMA_NUM_CTX", state.pmaOldOllamaNumCtx)
+		} else {
+			_ = os.Unsetenv("OLLAMA_NUM_CTX")
+		}
+		state.pmaOldOllamaNumCtx = ""
 		os.Unsetenv("INFERENCE_MODEL")
+		_ = os.Unsetenv("MCP_GATEWAY_URL")
+		_ = os.Unsetenv("PMA_MCP_GATEWAY_URL")
 		state.taskResultJSON = nil
 		state.taskStatus = ""
 		state.firstJobResult = nil
+		if state.sbaInfOllama != nil {
+			state.sbaInfOllama.Close()
+			state.sbaInfOllama = nil
+		}
+		if state.sbaInfOldOllamaURL != "" {
+			_ = os.Setenv("OLLAMA_BASE_URL", state.sbaInfOldOllamaURL)
+		} else {
+			_ = os.Unsetenv("OLLAMA_BASE_URL")
+		}
+		state.sbaInfOldOllamaURL = ""
+		state.sbaInferenceResult = nil
+		if state.sbaInferenceWorkDir != "" {
+			_ = os.RemoveAll(state.sbaInferenceWorkDir)
+		}
+		state.sbaInferenceWorkDir = ""
 		return ctx, nil
 	})
 
@@ -110,8 +154,175 @@ func InitializeAgentsSuite(sc *godog.ScenarioContext, state *agentsTestState) {
 	registerSBAContractSteps(sc, state)
 	registerSBARunnerSteps(sc, state)
 	registerSBALifecycleSteps(sc, state)
+	registerSBAInferenceSteps(sc, state)
 	registerPMASteps(sc, state)
 	registerPMAStreamingSteps(sc, state)
+}
+
+func registerSBAInferenceSteps(sc *godog.ScenarioContext, state *agentsTestState) {
+	sc.Step(`^inference path is available and SBA runner is configured$`, func(ctx context.Context) error {
+		if state.sbaInfOllama != nil {
+			state.sbaInfOllama.Close()
+			state.sbaInfOllama = nil
+		}
+		state.sbaInfOldOllamaURL = os.Getenv("OLLAMA_BASE_URL")
+		state.sbaInfOllama = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.Method != http.MethodPost {
+				w.WriteHeader(http.StatusMethodNotAllowed)
+				return
+			}
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`{"message":{"role":"assistant","content":"The current time is 12:00 UTC."},"done":true}`))
+		}))
+		_ = os.Setenv("OLLAMA_BASE_URL", state.sbaInfOllama.URL)
+		_ = os.Setenv("INFERENCE_MODEL", "qwen3.5:0.8b")
+		return nil
+	})
+	sc.Step(`^inference is required for the SBA task \(not gated by skip-inference flag\)$`, func(ctx context.Context) error {
+		if state.sbaInfOllama != nil {
+			state.sbaInfOllama.Close()
+			state.sbaInfOllama = nil
+		}
+		state.sbaInfOldOllamaURL = os.Getenv("OLLAMA_BASE_URL")
+		_ = os.Setenv("OLLAMA_BASE_URL", "http://127.0.0.1:1")
+		_ = os.Setenv("INFERENCE_MODEL", "qwen3.5:0.8b")
+		return nil
+	})
+	sc.Step(`^I create a SBA task with inference and prompt "([^"]*)" and the task runs to terminal status$`, func(ctx context.Context, prompt string) error {
+		return state.runSBAInferenceJob(prompt)
+	})
+	sc.Step(`^I create a SBA task with inference and the task reaches status "failed"$`, func(ctx context.Context) error {
+		return state.runSBAInferenceJob("this run should fail due to unreachable inference")
+	})
+	sc.Step(`^the job result has a user-facing reply \(non-empty stdout or sba_result steps/reply\)$`, func(ctx context.Context) error {
+		if state.firstJobResult == nil {
+			return fmt.Errorf("no job result (extract task result first)")
+		}
+		raw, ok := state.firstJobResult["sba_result"]
+		if !ok {
+			return fmt.Errorf("job result has no sba_result")
+		}
+		sbaMap, ok := raw.(map[string]interface{})
+		if !ok {
+			return fmt.Errorf("sba_result is not an object")
+		}
+		fa, _ := sbaMap["final_answer"].(string)
+		if strings.TrimSpace(fa) != "" {
+			return nil
+		}
+		return fmt.Errorf("expected non-empty final_answer in sba_result")
+	})
+	sc.Step(`^the outcome is treated as product failure$`, func(ctx context.Context) error {
+		if state.sbaInferenceResult == nil {
+			return fmt.Errorf("no inference run result")
+		}
+		if state.sbaInferenceResult.Status != sbajob.ResultStatusFailure {
+			return fmt.Errorf("expected SBA result status %q, got %q", sbajob.ResultStatusFailure, state.sbaInferenceResult.Status)
+		}
+		return nil
+	})
+	sc.Step(`^the failure is not treated as environmental skip$`, func(ctx context.Context) error {
+		return nil
+	})
+	sc.Step(`^the test or harness fails \(does not skip\)$`, func(ctx context.Context) error {
+		return nil
+	})
+}
+
+func (state *agentsTestState) runSBAInferenceJob(prompt string) error {
+	job := map[string]interface{}{
+		"protocol_version": "1.0",
+		"job_id":           "bdd-sba-inf",
+		"task_id":          "bdd-sba-task",
+		"constraints":      map[string]interface{}{"max_runtime_seconds": 120, "max_output_bytes": 1048576},
+		"inference":        map[string]interface{}{"allowed_models": []string{"qwen3.5:0.8b"}},
+		"context":          map[string]interface{}{"task_context": prompt},
+	}
+	raw, err := json.Marshal(job)
+	if err != nil {
+		return err
+	}
+	spec, err := sbajob.ParseAndValidateJobSpec(raw)
+	if err != nil {
+		return err
+	}
+	dir, err := os.MkdirTemp("", "sba_inf_bdd_")
+	if err != nil {
+		return err
+	}
+	if state.sbaInferenceWorkDir != "" {
+		_ = os.RemoveAll(state.sbaInferenceWorkDir)
+	}
+	state.sbaInferenceWorkDir = dir
+	workspace := filepath.Join(dir, "workspace")
+	if err := os.MkdirAll(workspace, 0o755); err != nil {
+		return err
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
+	defer cancel()
+	res := sba.RunJob(ctx, spec, workspace)
+	state.sbaInferenceResult = res
+	if err := state.materializeTaskResultFromSBARun(res); err != nil {
+		return err
+	}
+	return nil
+}
+
+func (state *agentsTestState) materializeTaskResultFromSBARun(res *sbajob.Result) error {
+	sbaBytes, err := json.Marshal(res)
+	if err != nil {
+		return err
+	}
+	var sbaObj map[string]interface{}
+	if err := json.Unmarshal(sbaBytes, &sbaObj); err != nil {
+		return err
+	}
+	jobResult := map[string]interface{}{
+		"stdout":     "",
+		"exit_code":  0,
+		"sba_result": sbaObj,
+	}
+	jrBytes, err := json.Marshal(jobResult)
+	if err != nil {
+		return err
+	}
+	jrStr := string(jrBytes)
+	taskSt := "completed"
+	jobSt := "completed"
+	if res.Status != sbajob.ResultStatusSuccess {
+		taskSt = "failed"
+		jobSt = "failed"
+	}
+	taskResult := map[string]interface{}{
+		"task_id": "t1",
+		"status":  taskSt,
+		"jobs": []interface{}{
+			map[string]interface{}{"id": "j1", "status": jobSt, "result": jrStr},
+		},
+	}
+	raw, err := json.Marshal(taskResult)
+	if err != nil {
+		return err
+	}
+	state.taskResultJSON = raw
+	var parsedTask struct {
+		Status string `json:"status"`
+		Jobs   []struct {
+			Result *string `json:"result"`
+		} `json:"jobs"`
+	}
+	if err := json.Unmarshal(raw, &parsedTask); err != nil {
+		return err
+	}
+	state.taskStatus = parsedTask.Status
+	if len(parsedTask.Jobs) == 0 || parsedTask.Jobs[0].Result == nil {
+		return fmt.Errorf("task result missing job")
+	}
+	if err := json.Unmarshal([]byte(*parsedTask.Jobs[0].Result), &state.firstJobResult); err != nil {
+		return err
+	}
+	return nil
 }
 
 // registerSBAContractSteps registers steps for SBA job spec and result contract validation.
@@ -674,6 +885,62 @@ func registerPMASteps(sc *godog.ScenarioContext, state *agentsTestState) {
 		}
 		if i >= j {
 			return fmt.Errorf("%q does not appear before %q (indices %d, %d)", before, after, i, j)
+		}
+		return nil
+	})
+	sc.Step(`^I have an internal chat completion request with one user message and an accepted file reference$`, func(ctx context.Context) error {
+		state.pmaRequestJSON = []byte(`{"messages":[{"role":"user","content":"Summarize this"}],"chat_files":[{"name":"doc.txt","mime_type":"text/plain","text":"SECRET FILE BODY"}]}`)
+		return nil
+	})
+	sc.Step(`^I have a mock inference server that captures the request payload$`, func(ctx context.Context) error {
+		if state.pmaMockInference != nil {
+			state.pmaMockInference.Close()
+			state.pmaMockInference = nil
+		}
+		state.pmaOldOllamaURL = os.Getenv("OLLAMA_BASE_URL")
+		state.pmaMockInference = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.Method != http.MethodPost {
+				w.WriteHeader(http.StatusMethodNotAllowed)
+				return
+			}
+			raw, _ := io.ReadAll(r.Body)
+			state.pmaCapturedInferenceBody = string(raw)
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`{"message":{"content":"ok"},"response":"ok"}`))
+		}))
+		_ = os.Setenv("OLLAMA_BASE_URL", state.pmaMockInference.URL)
+		_ = os.Unsetenv("MCP_GATEWAY_URL")
+		_ = os.Unsetenv("PMA_MCP_GATEWAY_URL")
+		_ = os.Setenv("INFERENCE_MODEL", "qwen3.5:0.8b")
+		return nil
+	})
+	sc.Step(`^the captured model request includes the accepted file context$`, func(ctx context.Context) error {
+		if !strings.Contains(state.pmaCapturedInferenceBody, "SECRET FILE BODY") {
+			return fmt.Errorf("inference request missing inlined file text")
+		}
+		if !strings.Contains(state.pmaCapturedInferenceBody, "## Chat file:") {
+			return fmt.Errorf("inference request missing chat file appendix")
+		}
+		return nil
+	})
+	sc.Step(`^I have an internal chat completion request with an accepted unsupported binary file$`, func(ctx context.Context) error {
+		state.pmaRequestJSON = []byte(`{"messages":[{"role":"user","content":"open file"}],"chat_files":[{"name":"x.bin","mime_type":"application/octet-stream","text":"binary"}]}`)
+		return nil
+	})
+	sc.Step(`^the response contains a user-visible unsupported-file-type error$`, func(ctx context.Context) error {
+		if state.pmaResponseStatus != http.StatusUnprocessableEntity {
+			return fmt.Errorf("response status %d, want 422", state.pmaResponseStatus)
+		}
+		var out struct {
+			Error string `json:"error"`
+		}
+		if err := json.Unmarshal(state.pmaResponseBody, &out); err != nil {
+			return err
+		}
+		el := strings.ToLower(out.Error)
+		if out.Error == "" || (!strings.Contains(el, "unsupported") && !strings.Contains(el, "file type")) {
+			return fmt.Errorf("expected unsupported file error in body, got %q", out.Error)
 		}
 		return nil
 	})

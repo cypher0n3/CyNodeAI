@@ -104,6 +104,7 @@ Gaps (e.g. 0011-0019 between 0010 and 0020) allow inserting new tests without re
 
 - **e2e_0010_cli_version_and_status** - Cynork version and status; no auth.
 - **e2e_0020_gateway_health_readyz** - GET /healthz and /readyz; assert 200 or 503 per spec.
+- **e2e_0025_gateway_access_and_body_limits** - GET `/v1/tasks` without bearer → 401; POST `/v1/tasks` with body >10 MiB → 400; MCP `/v1/mcp/tools/call` without bearer → 401 when agent tokens are configured.
 - **e2e_0030_auth_login** - Auth login acceptance coverage (`-u`/`--user` + `--password-stdin`); creates temp config dir and writes token to `state.CONFIG_PATH`.
 - **e2e_0040_auth_negative_whoami** - Whoami without login fails (negative test).
 - **e2e_0050_auth_whoami** - Auth whoami; asserts user=admin.

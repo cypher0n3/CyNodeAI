@@ -45,13 +45,25 @@ type InternalChatCompletionRequest struct {
 	UserID            string `json:"user_id,omitempty"`
 	AdditionalContext string `json:"additional_context,omitempty"`
 	Stream            bool   `json:"stream,omitempty"`
+	// ChatFiles lists accepted user file context for the turn (REQ-PMAGNT-0115). Inline text is required for
+	// text-capable MIME types on the direct Ollama path; unsupported types yield a 422 error.
+	ChatFiles []ChatFileRef `json:"chat_files,omitempty"`
+}
+
+// ChatFileRef is an accepted chat file attached to the current user turn.
+type ChatFileRef struct {
+	Name     string `json:"name"`
+	MIMEType string `json:"mime_type"`
+	Text     string `json:"text,omitempty"`
 }
 
 // InternalChatCompletionResponse is the response body.
 // Thinking holds extracted think-block reasoning (REQ-PMAGNT-0117/0122); visible text is Content.
+// Error is set for non-2xx semantic failures (e.g. unsupported file type).
 type InternalChatCompletionResponse struct {
 	Content  string `json:"content"`
 	Thinking string `json:"thinking,omitempty"`
+	Error    string `json:"error,omitempty"`
 }
 
 // ChatCompletionHandler returns an HTTP handler for POST /internal/chat/completion.
@@ -75,6 +87,10 @@ func ChatCompletionHandler(instructionsContent string, logger *slog.Logger) http
 		}
 		if len(req.Messages) == 0 {
 			writeJSON(w, http.StatusBadRequest, InternalChatCompletionResponse{})
+			return
+		}
+		if err := prepareChatCompletionRequest(&req); err != nil {
+			writeJSON(w, http.StatusUnprocessableEntity, InternalChatCompletionResponse{Error: err.Error()})
 			return
 		}
 		// Capture a detached root context before calling resolveContent so that
@@ -504,7 +520,68 @@ func stripToCurrentMessage(req *InternalChatCompletionRequest) *InternalChatComp
 		TaskID:            req.TaskID,
 		UserID:            req.UserID,
 		AdditionalContext: req.AdditionalContext,
+		Stream:            req.Stream,
+		ChatFiles:         nil,
 	}
+}
+
+// prepareChatCompletionRequest validates chat_files and merges inline text into the last user message.
+// Clears ChatFiles after merging so retries do not duplicate blocks.
+func prepareChatCompletionRequest(req *InternalChatCompletionRequest) error {
+	if len(req.ChatFiles) == 0 {
+		return nil
+	}
+	for _, f := range req.ChatFiles {
+		mt := strings.TrimSpace(f.MIMEType)
+		if mt == "" {
+			return fmt.Errorf("chat file %q: mime_type is required", f.Name)
+		}
+		if !chatFileMIMEAcceptedForDirectPath(mt) {
+			return fmt.Errorf("unsupported file type %q for model path", mt)
+		}
+		if strings.TrimSpace(f.Text) == "" {
+			return fmt.Errorf("chat file %q: text content is required for this file type", f.Name)
+		}
+	}
+	lastUser := -1
+	for i := len(req.Messages) - 1; i >= 0; i-- {
+		if strings.TrimSpace(req.Messages[i].Role) == roleUser {
+			lastUser = i
+			break
+		}
+	}
+	if lastUser < 0 {
+		return fmt.Errorf("no user message to attach chat files to")
+	}
+	req.Messages[lastUser].Content = strings.TrimSpace(req.Messages[lastUser].Content) + buildChatFileAppendix(req.ChatFiles)
+	req.ChatFiles = nil
+	return nil
+}
+
+func chatFileMIMEAcceptedForDirectPath(mime string) bool {
+	m := strings.ToLower(strings.TrimSpace(mime))
+	if strings.HasPrefix(m, "text/") {
+		return true
+	}
+	switch m {
+	case "application/json", "application/xml":
+		return true
+	default:
+		return false
+	}
+}
+
+func buildChatFileAppendix(files []ChatFileRef) string {
+	var b strings.Builder
+	for _, f := range files {
+		b.WriteString("\n\n## Chat file: ")
+		b.WriteString(f.Name)
+		b.WriteString(" (")
+		b.WriteString(f.MIMEType)
+		b.WriteString(")\n")
+		b.WriteString(strings.TrimSpace(f.Text))
+	}
+	return b.String()
 }
 
 // getCompletionContent runs the appropriate inference path (langchaingo for capable models, direct Ollama otherwise).
