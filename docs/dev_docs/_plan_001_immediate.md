@@ -321,67 +321,67 @@ todos:
     status: completed
   - id: imm-097
     content: "Read `orchestrator/internal/models/models.go` (`TaskBase` ~line 226) and confirm `PlanningState` field is missing."
-    status: pending
+    status: completed
   - id: imm-098
     content: "Read `orchestrator/internal/handlers/tasks.go` `CreateTask` to identify immediate-execution code path."
-    status: pending
+    status: completed
   - id: imm-099
     content: "Read `orchestrator/internal/handlers/workflow_gate.go` ~lines 55-57 for current start gate logic."
-    status: pending
+    status: completed
   - id: imm-100
     content: "Add `PlanningState string` field to `TaskBase` in `models.go` with JSON tag and GORM column."
-    status: pending
+    status: completed
   - id: imm-101
     content: "Add unit tests: (a) `CreateTask` sets `planning_state=draft` and does NOT call immediate execution; (b) workflow gate rejects `planning_state != ready`; (c) transition endpoint moves `draft` to `ready`."
-    status: pending
+    status: completed
   - id: imm-102
     content: "Run `go test -v -run TestPlanningState ./orchestrator/internal/handlers/...` and confirm failures."
-    status: pending
+    status: completed
   - id: imm-208
     content: "Add `scripts/test_scripts/e2e_0425_task_planning_state.py` with tags `[suite_cynork, full_demo, task, no_inference]` and prereqs `[gateway, config, auth, node_register]`: create => draft, blocked until approved, approval => ready."
-    status: pending
+    status: completed
   - id: imm-103
     content: "In `CreateTask`: set `PlanningState = \"draft\"`; guard execution behind `PlanningState == \"ready\"`."
-    status: pending
+    status: completed
   - id: imm-104
     content: "In `workflow_gate.go`: reject workflow start when `task.PlanningState != \"ready\"`."
-    status: pending
+    status: completed
   - id: imm-105
     content: "Implement handler to transition `PlanningState` from `draft` to `ready` (the spec-required approval step)."
-    status: pending
+    status: completed
   - id: imm-106
     content: "Re-run tests and confirm green."
-    status: pending
+    status: completed
   - id: imm-107
     content: "Define `PlanningStateDraft` and `PlanningStateReady` as typed constants."
-    status: pending
+    status: completed
   - id: imm-108
     content: "Update existing tests expecting immediate execution on creation to reflect draft-first behavior."
-    status: pending
+    status: completed
   - id: imm-109
     content: "Run `go test -cover ./orchestrator/...`; confirm 90% threshold."
-    status: pending
+    status: completed
   - id: imm-110
     content: "Run `just test-bdd` for orchestrator BDD scenarios to check regressions."
-    status: pending
+    status: completed
   - id: imm-111
     content: "Run `just lint-go` on all changed files."
-    status: pending
+    status: completed
   - id: imm-209
     content: "Update existing task E2E tests (`e2e_0420_task_create.py` and downstream) to account for draft-first behavior."
-    status: pending
+    status: completed
   - id: imm-210
     content: "Run `just e2e --tags task,no_inference` to verify task lifecycle regression with `planning_state`."
-    status: pending
+    status: completed
   - id: imm-112
     content: "Validation gate -- do not proceed to Task 10 until all checks pass."
-    status: pending
+    status: completed
   - id: imm-113
     content: "Generate task completion report covering model, handler, and gate changes. Mark completed steps `- [x]`."
-    status: pending
+    status: completed
   - id: imm-114
     content: "Do not start Task 10 until Task 9 closeout is done."
-    status: pending
+    status: completed
   - id: imm-115
     content: "Read `worker_node/internal/executor/executor.go`: `buildSandboxRunArgsForPod` (~lines 753-771), `buildSBARunArgsForPod` (~lines 660-695), pod creation (~line 190)."
     status: pending
@@ -978,43 +978,43 @@ Tasks execute immediately on creation instead of entering `draft` state for PMA 
 
 #### Discovery (Task 9) Steps
 
-- [ ] Read `orchestrator/internal/models/models.go` (`TaskBase` ~line 226) and confirm `PlanningState` field is missing.
-- [ ] Read `orchestrator/internal/handlers/tasks.go` `CreateTask` to identify immediate-execution code path.
-- [ ] Read `orchestrator/internal/handlers/workflow_gate.go` ~lines 55-57 for current start gate logic.
+- [x] Read `orchestrator/internal/models/models.go` (`TaskBase` ~line 226) and confirm `PlanningState` field is missing.
+- [x] Read `orchestrator/internal/handlers/tasks.go` `CreateTask` to identify immediate-execution code path.
+- [x] Read `orchestrator/internal/handlers/workflow_gate.go` ~lines 55-57 for current start gate logic.
 
 #### Red (Task 9)
 
-- [ ] Add `PlanningState string` field to `TaskBase` in `models.go` with JSON tag and GORM column.
-- [ ] Add unit tests: (a) `CreateTask` sets `planning_state=draft` and does NOT call immediate execution; (b) workflow gate rejects `planning_state != ready`; (c) transition endpoint moves `draft` to `ready`.
-- [ ] Run `go test -v -run TestPlanningState ./orchestrator/internal/handlers/...` and confirm failures.
-- [ ] Add `scripts/test_scripts/e2e_0425_task_planning_state.py` with tags `[suite_cynork, full_demo, task, no_inference]` and prereqs `[gateway, config, auth, node_register]`: create returns `planning_state=draft`, task blocked until approved, approval transitions to `ready`.
+- [x] Add `PlanningState string` field to `TaskBase` in `models.go` with JSON tag and GORM column.
+- [x] Add unit tests: (a) `CreateTask` sets `planning_state=draft` and does NOT call immediate execution; (b) workflow gate rejects `planning_state != ready`; (c) transition endpoint moves `draft` to `ready`.
+- [x] Run `go test -v -run TestPlanningState ./orchestrator/internal/handlers/...` and confirm failures.
+- [x] Add `scripts/test_scripts/e2e_0425_task_planning_state.py` with tags `[suite_cynork, full_demo, task, no_inference]` and prereqs `[gateway, config, auth, node_register]`: create returns `planning_state=draft`, task blocked until approved, approval transitions to `ready`.
 
 #### Green (Task 9)
 
-- [ ] In `CreateTask`: set `PlanningState = "draft"`; guard execution behind `PlanningState == "ready"`.
-- [ ] In `workflow_gate.go`: reject workflow start when `task.PlanningState != "ready"`.
-- [ ] Implement handler to transition `PlanningState` from `draft` to `ready` (the spec-required approval step).
-- [ ] Re-run tests and confirm green.
+- [x] In `CreateTask`: set `PlanningState = "draft"`; guard execution behind `PlanningState == "ready"`.
+- [x] In `workflow_gate.go`: reject workflow start when `task.PlanningState != "ready"`.
+- [x] Implement handler to transition `PlanningState` from `draft` to `ready` (the spec-required approval step).
+- [x] Re-run tests and confirm green.
 
 #### Refactor (Task 9)
 
-- [ ] Define `PlanningStateDraft` and `PlanningStateReady` as typed constants.
-- [ ] Update existing tests expecting immediate execution on creation to reflect draft-first behavior.
+- [x] Define `PlanningStateDraft` and `PlanningStateReady` as typed constants.
+- [x] Update existing tests expecting immediate execution on creation to reflect draft-first behavior.
 
 #### Testing (Task 9)
 
-- [ ] Run `go test -cover ./orchestrator/...`; confirm 90% threshold.
-- [ ] Run `just test-bdd` for orchestrator BDD scenarios to check regressions.
-- [ ] Run `just lint-go` on all changed files.
-- [ ] Update existing task E2E tests (`e2e_0420_task_create.py` and downstream) to account for draft-first behavior where they assume immediate execution.
-- [ ] Run `just e2e --tags task,no_inference` to verify task lifecycle regression with `planning_state`.
-- [ ] Validation gate -- do not proceed to Task 10 until all checks pass.
+- [x] Run `go test -cover ./orchestrator/...`; confirm 90% threshold.
+- [x] Run `just test-bdd` for orchestrator BDD scenarios to check regressions.
+- [x] Run `just lint-go` on all changed files.
+- [x] Update existing task E2E tests (`e2e_0420_task_create.py` and downstream) to account for draft-first behavior where they assume immediate execution.
+- [x] Run `just e2e --tags task,no_inference` to verify task lifecycle regression with `planning_state`.
+- [x] Validation gate -- do not proceed to Task 10 until all checks pass.
 
 #### Closeout (Task 9)
 
-- [ ] Generate task completion report covering model, handler, and gate changes.
+- [x] Generate task completion report covering model, handler, and gate changes.
   Mark completed steps `- [x]`.
-- [ ] Do not start Task 10 until Task 9 closeout is done.
+- [x] Do not start Task 10 until Task 9 closeout is done.
 
 ---
 

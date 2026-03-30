@@ -286,6 +286,7 @@ func InitializeOrchestratorSuite(sc *godog.ScenarioContext, state *testState) {
 		mux.Handle("GET /v1/tasks/{id}", authMiddleware.RequireUserAuth(http.HandlerFunc(taskHandler.GetTask)))
 		mux.Handle("GET /v1/tasks/{id}/result", authMiddleware.RequireUserAuth(http.HandlerFunc(taskHandler.GetTaskResult)))
 		mux.Handle("POST /v1/tasks/{id}/cancel", authMiddleware.RequireUserAuth(http.HandlerFunc(taskHandler.CancelTask)))
+		mux.Handle("POST /v1/tasks/{id}/ready", authMiddleware.RequireUserAuth(http.HandlerFunc(taskHandler.PostTaskReady)))
 		mux.Handle("GET /v1/tasks/{id}/logs", authMiddleware.RequireUserAuth(http.HandlerFunc(taskHandler.GetTaskLogs)))
 		openAIChatHandler := handlers.NewOpenAIChatHandler(db, slog.Default(), inferenceURL, inferenceModel, bddGetEnv("WORKER_API_BEARER_TOKEN", ""))
 		mux.Handle("GET /v1/models", authMiddleware.RequireUserAuth(http.HandlerFunc(openAIChatHandler.ListModels)))
@@ -382,6 +383,9 @@ func RegisterOrchestratorSteps(sc *godog.ScenarioContext, state *testState) {
 }
 
 func orchestratorSelectsNodeForDispatch(ctx context.Context) error {
+	if err := postTaskReadyHTTP(ctx); err != nil {
+		return err
+	}
 	st := getState(ctx)
 	if st == nil || st.workerServer == nil || st.db == nil {
 		return godog.ErrSkip
@@ -405,6 +409,9 @@ func orchestratorSelectsNodeForDispatch(ctx context.Context) error {
 }
 
 func taskCompletes(ctx context.Context) error {
+	if err := postTaskReadyHTTP(ctx); err != nil {
+		return err
+	}
 	st := getState(ctx)
 	if st == nil || st.db == nil || st.taskID == "" {
 		return godog.ErrSkip
@@ -430,6 +437,29 @@ func taskCompletes(ctx context.Context) error {
 		time.Sleep(50 * time.Millisecond)
 	}
 	return fmt.Errorf("task did not complete within 15s")
+}
+
+// postTaskReadyHTTP calls POST /v1/tasks/{id}/ready so draft tasks can run jobs or workflows (REQ-ORCHES-0179).
+func postTaskReadyHTTP(ctx context.Context) error {
+	st := getState(ctx)
+	if st == nil || st.server == nil || st.taskID == "" {
+		return godog.ErrSkip
+	}
+	req, err := http.NewRequest("POST", st.server.URL+"/v1/tasks/"+st.taskID+"/ready", nil)
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Authorization", "Bearer "+st.accessToken)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		b, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("post task ready returned %d: %s", resp.StatusCode, string(b))
+	}
+	return nil
 }
 
 func getTaskResult(ctx context.Context) error {

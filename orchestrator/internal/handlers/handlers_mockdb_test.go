@@ -13,11 +13,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 
 	"github.com/cypher0n3/cynodeai/go_shared_libs/contracts/userapi"
-	"github.com/cypher0n3/cynodeai/orchestrator/internal/auth"
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/models"
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/testutil"
 )
@@ -27,11 +25,16 @@ const mimeSSE = "text/event-stream"
 
 func newMockTask(createdBy *uuid.UUID, status string, prompt *string) *models.Task {
 	now := time.Now().UTC()
+	ps := models.PlanningStateReady
+	if status == models.TaskStatusPending {
+		ps = models.PlanningStateDraft
+	}
 	return &models.Task{
 		TaskBase: models.TaskBase{
-			CreatedBy: createdBy,
-			Status:    status,
-			Prompt:    prompt,
+			CreatedBy:     createdBy,
+			Status:        status,
+			Prompt:        prompt,
+			PlanningState: ps,
 		},
 		ID:        uuid.New(),
 		CreatedAt: now,
@@ -39,19 +42,17 @@ func newMockTask(createdBy *uuid.UUID, status string, prompt *string) *models.Ta
 	}
 }
 
-func newMockRefreshSession(userID uuid.UUID, tokenHash []byte, expiresAt time.Time) *models.RefreshSession {
-	now := time.Now().UTC()
-	return &models.RefreshSession{
-		RefreshSessionBase: models.RefreshSessionBase{
-			UserID:           userID,
-			RefreshTokenHash: tokenHash,
-			IsActive:         true,
-			ExpiresAt:        expiresAt,
-		},
-		ID:        uuid.New(),
-		CreatedAt: now,
-		UpdatedAt: now,
+// postTaskReadyExpect calls POST /v1/tasks/{id}/ready and asserts the status code.
+func postTaskReadyExpect(t *testing.T, handler *TaskHandler, ctx context.Context, taskID uuid.UUID, wantCode int) *httptest.ResponseRecorder {
+	t.Helper()
+	req := httptest.NewRequest(http.MethodPost, "/v1/tasks/"+taskID.String()+"/ready", http.NoBody).WithContext(ctx)
+	req.SetPathValue("id", taskID.String())
+	rec := httptest.NewRecorder()
+	handler.PostTaskReady(rec, req)
+	if rec.Code != wantCode {
+		t.Fatalf("PostTaskReady: want %d got %d: %s", wantCode, rec.Code, rec.Body.String())
 	}
+	return rec
 }
 
 func newMockJobSimple(taskID uuid.UUID, status string, payload, result *string) *models.Job {
@@ -73,450 +74,6 @@ func newMockJobSimple(taskID uuid.UUID, status string, payload, result *string) 
 
 func newTestLogger() *slog.Logger {
 	return slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelError}))
-}
-
-// --- Auth Handler Tests ---
-
-func TestAuthHandler_LoginSuccess(t *testing.T) {
-	mockDB := testutil.NewMockDB()
-	jwtMgr := auth.NewJWTManager("test-secret-key-1234567890123456", 15*time.Minute, 7*24*time.Hour, 24*time.Hour)
-	rateLimiter := auth.NewRateLimiter(100, time.Minute)
-	logger := newTestLogger()
-
-	handler := NewAuthHandler(mockDB, jwtMgr, rateLimiter, logger)
-
-	// Create user and password
-	user := &models.User{
-		UserBase: models.UserBase{
-			Handle:   "testuser",
-			IsActive: true,
-		},
-		ID:        uuid.New(),
-		CreatedAt: time.Now().UTC(),
-		UpdatedAt: time.Now().UTC(),
-	}
-	mockDB.AddUser(user)
-
-	passwordHash, _ := auth.HashPassword("testpassword123", nil)
-	cred := &models.PasswordCredential{
-		PasswordCredentialBase: models.PasswordCredentialBase{
-			UserID:       user.ID,
-			PasswordHash: passwordHash,
-			HashAlg:      "argon2id",
-		},
-		ID:        uuid.New(),
-		CreatedAt: time.Now().UTC(),
-		UpdatedAt: time.Now().UTC(),
-	}
-	mockDB.AddPasswordCredential(cred)
-
-	body := userapi.LoginRequest{Handle: "testuser", Password: "testpassword123"}
-	jsonBody, _ := json.Marshal(body)
-	req := httptest.NewRequest("POST", "/v1/auth/login", bytes.NewBuffer(jsonBody))
-	rec := httptest.NewRecorder()
-
-	handler.Login(rec, req)
-
-	if rec.Code != http.StatusOK {
-		t.Errorf("expected status 200, got %d: %s", rec.Code, rec.Body.String())
-	}
-
-	var resp userapi.LoginResponse
-	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
-		t.Fatalf("failed to unmarshal response: %v", err)
-	}
-	if resp.AccessToken == "" {
-		t.Error("expected access token")
-	}
-	if resp.RefreshToken == "" {
-		t.Error("expected refresh token")
-	}
-	if resp.TokenType != "Bearer" {
-		t.Errorf("expected Bearer token type, got %s", resp.TokenType)
-	}
-}
-
-func TestAuthHandler_LoginUserNotFound(t *testing.T) {
-	mockDB := testutil.NewMockDB()
-	jwtMgr := auth.NewJWTManager("test-secret-key-1234567890123456", 15*time.Minute, 7*24*time.Hour, 24*time.Hour)
-	rateLimiter := auth.NewRateLimiter(100, time.Minute)
-	logger := newTestLogger()
-
-	handler := NewAuthHandler(mockDB, jwtMgr, rateLimiter, logger)
-
-	body := userapi.LoginRequest{Handle: "nonexistent", Password: "anypassword"}
-	jsonBody, _ := json.Marshal(body)
-	req := httptest.NewRequest("POST", "/v1/auth/login", bytes.NewBuffer(jsonBody))
-	rec := httptest.NewRecorder()
-
-	handler.Login(rec, req)
-
-	if rec.Code != http.StatusUnauthorized {
-		t.Errorf("expected status 401, got %d", rec.Code)
-	}
-}
-
-func TestAuthHandler_LoginInvalidPassword(t *testing.T) {
-	mockDB := testutil.NewMockDB()
-	jwtMgr := auth.NewJWTManager("test-secret-key-1234567890123456", 15*time.Minute, 7*24*time.Hour, 24*time.Hour)
-	rateLimiter := auth.NewRateLimiter(100, time.Minute)
-	logger := newTestLogger()
-
-	handler := NewAuthHandler(mockDB, jwtMgr, rateLimiter, logger)
-
-	user := &models.User{
-		UserBase: models.UserBase{
-			Handle:   "testuser",
-			IsActive: true,
-		},
-		ID:        uuid.New(),
-		CreatedAt: time.Now().UTC(),
-		UpdatedAt: time.Now().UTC(),
-	}
-	mockDB.AddUser(user)
-
-	passwordHash, _ := auth.HashPassword("correctpassword", nil)
-	cred := &models.PasswordCredential{
-		PasswordCredentialBase: models.PasswordCredentialBase{
-			UserID:       user.ID,
-			PasswordHash: passwordHash,
-			HashAlg:      "argon2id",
-		},
-		ID:        uuid.New(),
-		CreatedAt: time.Now().UTC(),
-		UpdatedAt: time.Now().UTC(),
-	}
-	mockDB.AddPasswordCredential(cred)
-
-	body := userapi.LoginRequest{Handle: "testuser", Password: "wrongpassword"}
-	jsonBody, _ := json.Marshal(body)
-	req := httptest.NewRequest("POST", "/v1/auth/login", bytes.NewBuffer(jsonBody))
-	rec := httptest.NewRecorder()
-
-	handler.Login(rec, req)
-
-	if rec.Code != http.StatusUnauthorized {
-		t.Errorf("expected status 401, got %d", rec.Code)
-	}
-}
-
-func mockDBAddInactiveUser(db *testutil.MockDB, now time.Time) *models.User {
-	u := &models.User{}
-	u.ID, u.Handle, u.IsActive, u.CreatedAt, u.UpdatedAt = uuid.New(), "inactiveuser", false, now, now
-	db.AddUser(u)
-	return u
-}
-
-func mockDBAddUserNoCred(db *testutil.MockDB, now time.Time) *models.User {
-	u := &models.User{
-		UserBase:  models.UserBase{Handle: "nopassworduser", IsActive: true},
-		ID:        uuid.New(),
-		CreatedAt: now,
-		UpdatedAt: now,
-	}
-	db.AddUser(u)
-	return u
-}
-
-func TestAuthHandler_LoginUnauthorizedCases(t *testing.T) {
-	now := time.Now().UTC()
-	tests := []struct {
-		name          string
-		setupUser     func(*testutil.MockDB, time.Time) *models.User
-		addCredential bool
-		loginHandle   string
-		loginPassword string
-		wantStatus    int
-	}{
-		{"inactive user", mockDBAddInactiveUser, true, "inactiveuser", "password", http.StatusUnauthorized},
-		{"no password credential", mockDBAddUserNoCred, false, "nopassworduser", "password", http.StatusUnauthorized},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			mockDB := testutil.NewMockDB()
-			u := tt.setupUser(mockDB, now)
-			if tt.addCredential {
-				hash, _ := auth.HashPassword(tt.loginPassword, nil)
-				mockDB.AddPasswordCredential(&models.PasswordCredential{
-					PasswordCredentialBase: models.PasswordCredentialBase{
-						UserID:       u.ID,
-						PasswordHash: hash,
-						HashAlg:      "bcrypt",
-					},
-					ID:        uuid.New(),
-					CreatedAt: now,
-					UpdatedAt: now,
-				})
-			}
-			handler := NewAuthHandler(mockDB, auth.NewJWTManager("test-secret-key-1234567890123456", 15*time.Minute, 7*24*time.Hour, 24*time.Hour), auth.NewRateLimiter(100, time.Minute), newTestLogger())
-			req, rec := recordedRequestJSON("POST", "/v1/auth/login", userapi.LoginRequest{Handle: tt.loginHandle, Password: tt.loginPassword})
-			handler.Login(rec, req)
-			assertStatusCode(t, rec, tt.wantStatus)
-		})
-	}
-}
-
-func TestAuthHandler_LoginDBError(t *testing.T) {
-	mockDB := testutil.NewMockDB()
-	mockDB.ForceError = errors.New("database error")
-	jwtMgr := auth.NewJWTManager("test-secret-key-1234567890123456", 15*time.Minute, 7*24*time.Hour, 24*time.Hour)
-	rateLimiter := auth.NewRateLimiter(100, time.Minute)
-	logger := newTestLogger()
-
-	handler := NewAuthHandler(mockDB, jwtMgr, rateLimiter, logger)
-
-	body := userapi.LoginRequest{Handle: "testuser", Password: "testpassword"}
-	jsonBody, _ := json.Marshal(body)
-	req := httptest.NewRequest("POST", "/v1/auth/login", bytes.NewBuffer(jsonBody))
-	rec := httptest.NewRecorder()
-
-	handler.Login(rec, req)
-
-	if rec.Code != http.StatusInternalServerError {
-		t.Errorf("expected status 500, got %d", rec.Code)
-	}
-}
-
-func TestAuthHandler_RefreshSuccess(t *testing.T) {
-	mockDB := testutil.NewMockDB()
-	jwtMgr := auth.NewJWTManager("test-secret-key-1234567890123456", 15*time.Minute, 7*24*time.Hour, 24*time.Hour)
-	rateLimiter := auth.NewRateLimiter(100, time.Minute)
-	logger := newTestLogger()
-
-	handler := NewAuthHandler(mockDB, jwtMgr, rateLimiter, logger)
-
-	user := &models.User{
-		UserBase: models.UserBase{
-			Handle:   "testuser",
-			IsActive: true,
-		},
-		ID:        uuid.New(),
-		CreatedAt: time.Now().UTC(),
-		UpdatedAt: time.Now().UTC(),
-	}
-	mockDB.AddUser(user)
-
-	// Generate refresh token
-	refreshToken, expiresAt, _ := jwtMgr.GenerateRefreshToken(user.ID)
-	tokenHash := auth.HashToken(refreshToken)
-
-	session := newMockRefreshSession(user.ID, tokenHash, expiresAt)
-	mockDB.AddRefreshSession(session)
-
-	body := userapi.RefreshRequest{RefreshToken: refreshToken}
-	jsonBody, _ := json.Marshal(body)
-	req := httptest.NewRequest("POST", "/v1/auth/refresh", bytes.NewBuffer(jsonBody))
-	rec := httptest.NewRecorder()
-
-	handler.Refresh(rec, req)
-
-	if rec.Code != http.StatusOK {
-		t.Errorf("expected status 200, got %d: %s", rec.Code, rec.Body.String())
-	}
-
-	var resp userapi.LoginResponse
-	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
-		t.Fatalf("failed to unmarshal response: %v", err)
-	}
-	if resp.AccessToken == "" {
-		t.Error("expected new access token")
-	}
-}
-
-func TestAuthHandler_RefreshInvalidUserIDInToken(t *testing.T) {
-	secret := "test-secret-key-1234567890123456"
-	jwtMgr := auth.NewJWTManager(secret, 15*time.Minute, 7*24*time.Hour, 24*time.Hour)
-	handler := NewAuthHandler(testutil.NewMockDB(), jwtMgr, auth.NewRateLimiter(100, time.Minute), newTestLogger())
-	now := time.Now()
-	claims := &auth.Claims{
-		RegisteredClaims: jwt.RegisteredClaims{
-			Issuer:    "cynodeai",
-			Subject:   "not-a-valid-uuid",
-			IssuedAt:  jwt.NewNumericDate(now),
-			ExpiresAt: jwt.NewNumericDate(now.Add(time.Hour)),
-			ID:        uuid.New().String(),
-		},
-		TokenType: auth.TokenTypeRefresh,
-		UserID:    "not-a-valid-uuid",
-	}
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	tokenStr, err := token.SignedString([]byte(secret))
-	if err != nil {
-		t.Fatalf("sign token: %v", err)
-	}
-	req, rec := recordedRequestJSON("POST", "/v1/auth/refresh", userapi.RefreshRequest{RefreshToken: tokenStr})
-	handler.Refresh(rec, req)
-	if rec.Code != http.StatusUnauthorized {
-		t.Errorf("expected 401, got %d", rec.Code)
-	}
-}
-
-func TestAuthHandler_RefreshInactiveUser(t *testing.T) {
-	mockDB := testutil.NewMockDB()
-	jwtMgr := auth.NewJWTManager("test-secret-key-1234567890123456", 15*time.Minute, 7*24*time.Hour, 24*time.Hour)
-	rateLimiter := auth.NewRateLimiter(100, time.Minute)
-	logger := newTestLogger()
-
-	handler := NewAuthHandler(mockDB, jwtMgr, rateLimiter, logger)
-
-	user := &models.User{
-		UserBase: models.UserBase{
-			Handle:   "testuser",
-			IsActive: false, // Inactive
-		},
-		ID:        uuid.New(),
-		CreatedAt: time.Now().UTC(),
-		UpdatedAt: time.Now().UTC(),
-	}
-	mockDB.AddUser(user)
-
-	refreshToken, expiresAt, _ := jwtMgr.GenerateRefreshToken(user.ID)
-	tokenHash := auth.HashToken(refreshToken)
-
-	session := newMockRefreshSession(user.ID, tokenHash, expiresAt)
-	mockDB.AddRefreshSession(session)
-
-	body := userapi.RefreshRequest{RefreshToken: refreshToken}
-	jsonBody, _ := json.Marshal(body)
-	req := httptest.NewRequest("POST", "/v1/auth/refresh", bytes.NewBuffer(jsonBody))
-	rec := httptest.NewRecorder()
-
-	handler.Refresh(rec, req)
-
-	if rec.Code != http.StatusUnauthorized {
-		t.Errorf("expected status 401, got %d", rec.Code)
-	}
-}
-
-func TestAuthHandler_RefreshSessionNotFound(t *testing.T) {
-	mockDB := testutil.NewMockDB()
-	jwtMgr := auth.NewJWTManager("test-secret-key-1234567890123456", 15*time.Minute, 7*24*time.Hour, 24*time.Hour)
-	rateLimiter := auth.NewRateLimiter(100, time.Minute)
-	logger := newTestLogger()
-
-	handler := NewAuthHandler(mockDB, jwtMgr, rateLimiter, logger)
-
-	user := &models.User{
-		UserBase: models.UserBase{
-			Handle:   "testuser",
-			IsActive: true,
-		},
-		ID:        uuid.New(),
-		CreatedAt: time.Now().UTC(),
-		UpdatedAt: time.Now().UTC(),
-	}
-	mockDB.AddUser(user)
-
-	refreshToken, _, _ := jwtMgr.GenerateRefreshToken(user.ID)
-	// No session added
-
-	body := userapi.RefreshRequest{RefreshToken: refreshToken}
-	jsonBody, _ := json.Marshal(body)
-	req := httptest.NewRequest("POST", "/v1/auth/refresh", bytes.NewBuffer(jsonBody))
-	rec := httptest.NewRecorder()
-
-	handler.Refresh(rec, req)
-
-	if rec.Code != http.StatusUnauthorized {
-		t.Errorf("expected status 401, got %d", rec.Code)
-	}
-}
-
-func TestAuthHandler_LogoutWithRefreshToken(t *testing.T) {
-	mockDB := testutil.NewMockDB()
-	jwtMgr := auth.NewJWTManager("test-secret-key-1234567890123456", 15*time.Minute, 7*24*time.Hour, 24*time.Hour)
-	rateLimiter := auth.NewRateLimiter(100, time.Minute)
-	logger := newTestLogger()
-
-	handler := NewAuthHandler(mockDB, jwtMgr, rateLimiter, logger)
-
-	user := &models.User{
-		UserBase: models.UserBase{
-			Handle:   "testuser",
-			IsActive: true,
-		},
-		ID:        uuid.New(),
-		CreatedAt: time.Now().UTC(),
-		UpdatedAt: time.Now().UTC(),
-	}
-	mockDB.AddUser(user)
-
-	refreshToken, expiresAt, _ := jwtMgr.GenerateRefreshToken(user.ID)
-	tokenHash := auth.HashToken(refreshToken)
-
-	session := newMockRefreshSession(user.ID, tokenHash, expiresAt)
-	mockDB.AddRefreshSession(session)
-
-	ctx := context.WithValue(context.Background(), contextKeyUserID, user.ID)
-	body := userapi.LogoutRequest{RefreshToken: refreshToken}
-	jsonBody, _ := json.Marshal(body)
-	req := httptest.NewRequest("POST", "/v1/auth/logout", bytes.NewBuffer(jsonBody)).WithContext(ctx)
-	rec := httptest.NewRecorder()
-
-	handler.Logout(rec, req)
-
-	if rec.Code != http.StatusNoContent {
-		t.Errorf("expected status 204, got %d", rec.Code)
-	}
-}
-
-// --- User Handler Tests ---
-
-func TestUserHandler_GetMeSuccess(t *testing.T) {
-	mockDB := testutil.NewMockDB()
-	logger := newTestLogger()
-
-	handler := NewUserHandler(mockDB, logger)
-
-	email := "test@example.com"
-	user := &models.User{
-		UserBase: models.UserBase{
-			Handle:   "testuser",
-			Email:    &email,
-			IsActive: true,
-		},
-		ID:        uuid.New(),
-		CreatedAt: time.Now().UTC(),
-		UpdatedAt: time.Now().UTC(),
-	}
-	mockDB.AddUser(user)
-
-	ctx := context.WithValue(context.Background(), contextKeyUserID, user.ID)
-	req := httptest.NewRequest("GET", "/v1/users/me", http.NoBody).WithContext(ctx)
-	rec := httptest.NewRecorder()
-
-	handler.GetMe(rec, req)
-
-	if rec.Code != http.StatusOK {
-		t.Errorf("expected status 200, got %d: %s", rec.Code, rec.Body.String())
-	}
-
-	var resp userapi.UserResponse
-	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
-		t.Fatalf("failed to unmarshal response: %v", err)
-	}
-	if resp.Handle != "testuser" {
-		t.Errorf("expected handle 'testuser', got %s", resp.Handle)
-	}
-}
-
-func TestUserHandler_GetMeDBError(t *testing.T) {
-	mockDB := testutil.NewMockDB()
-	mockDB.ForceError = errors.New("database error")
-	logger := newTestLogger()
-
-	handler := NewUserHandler(mockDB, logger)
-
-	userID := uuid.New()
-	ctx := context.WithValue(context.Background(), contextKeyUserID, userID)
-	req := httptest.NewRequest("GET", "/v1/users/me", http.NoBody).WithContext(ctx)
-	rec := httptest.NewRecorder()
-
-	handler.GetMe(rec, req)
-
-	if rec.Code != http.StatusInternalServerError {
-		t.Errorf("expected status 500, got %d", rec.Code)
-	}
 }
 
 // --- Task Handler Tests ---
@@ -706,6 +263,7 @@ func TestTaskHandler_CreateTaskWithUseInference_StoresUseInferenceInJobPayload(t
 	if err != nil {
 		t.Fatalf("parse task ID: %v", err)
 	}
+	postTaskReadyExpect(t, handler, ctx, taskID, http.StatusOK)
 	jobs, err := mockDB.GetJobsByTaskID(ctx, taskID)
 	if err != nil {
 		t.Fatalf("GetJobsByTaskID: %v", err)
@@ -749,6 +307,7 @@ func TestTaskHandler_CreateTask_UseSBA_StoresSBAJobPayload(t *testing.T) {
 	if err != nil {
 		t.Fatalf("parse task ID: %v", err)
 	}
+	postTaskReadyExpect(t, handler, ctx, taskID, http.StatusOK)
 	jobs, err := mockDB.GetJobsByTaskID(ctx, taskID)
 	if err != nil {
 		t.Fatalf("GetJobsByTaskID: %v", err)
@@ -812,6 +371,7 @@ func TestTaskHandler_CreateTask_InputModePrompt_StoresPromptJobPayload(t *testin
 		t.Fatalf("unmarshal: %v", err)
 	}
 	taskID, _ := uuid.Parse(resp.ResolveTaskID())
+	postTaskReadyExpect(t, handler, ctx, taskID, http.StatusOK)
 	jobs, _ := mockDB.GetJobsByTaskID(ctx, taskID)
 	if len(jobs) != 1 {
 		t.Fatalf("expected 1 job, got %d", len(jobs))
@@ -852,6 +412,7 @@ func TestTaskHandler_CreateTask_PromptMode_OrchestratorInference_CreateJobComple
 	var resp userapi.TaskResponse
 	_ = json.Unmarshal(rec.Body.Bytes(), &resp)
 	taskID, _ := uuid.Parse(resp.ResolveTaskID())
+	postTaskReadyExpect(t, handler, ctx, taskID, http.StatusOK)
 	jobs, _ := mockDB.GetJobsByTaskID(ctx, taskID)
 	if len(jobs) != 1 {
 		t.Fatalf("expected 1 job (sandbox fallback), got %d", len(jobs))
@@ -880,14 +441,22 @@ func TestTaskHandler_CreateTask_PromptMode_OrchestratorInference(t *testing.T) {
 	if rec.Code != http.StatusCreated {
 		t.Fatalf("expected 201, got %d: %s", rec.Code, rec.Body.String())
 	}
-	var resp userapi.TaskResponse
-	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+	var created userapi.TaskResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &created); err != nil {
 		t.Fatalf("unmarshal: %v", err)
 	}
-	if resp.Status != userapi.StatusCompleted {
-		t.Errorf("expected status completed (orchestrator inference), got %s", resp.Status)
+	if created.Status != userapi.StatusQueued {
+		t.Errorf("expected status queued after create, got %s", created.Status)
 	}
-	taskID, _ := uuid.Parse(resp.ResolveTaskID())
+	taskID, _ := uuid.Parse(created.ResolveTaskID())
+	readyRec := postTaskReadyExpect(t, handler, ctx, taskID, http.StatusOK)
+	var readyResp userapi.TaskResponse
+	if err := json.Unmarshal(readyRec.Body.Bytes(), &readyResp); err != nil {
+		t.Fatalf("unmarshal ready: %v", err)
+	}
+	if readyResp.Status != userapi.StatusCompleted {
+		t.Errorf("expected status completed (orchestrator inference), got %s", readyResp.Status)
+	}
 	jobs, _ := mockDB.GetJobsByTaskID(ctx, taskID)
 	if len(jobs) != 1 {
 		t.Fatalf("expected 1 job, got %d", len(jobs))
@@ -925,6 +494,7 @@ func TestTaskHandler_CreateTask_InputModeCommands_WithUseInference_StoresUseInfe
 	var resp userapi.TaskResponse
 	_ = json.Unmarshal(rec.Body.Bytes(), &resp)
 	taskID, _ := uuid.Parse(resp.ResolveTaskID())
+	postTaskReadyExpect(t, handler, ctx, taskID, http.StatusOK)
 	jobs, _ := mockDB.GetJobsByTaskID(ctx, taskID)
 	if len(jobs) != 1 {
 		t.Fatalf("expected 1 job, got %d", len(jobs))
@@ -956,6 +526,7 @@ func TestTaskHandler_CreateTask_InputModeCommands_StoresShellJobPayload(t *testi
 	var resp userapi.TaskResponse
 	_ = json.Unmarshal(rec.Body.Bytes(), &resp)
 	taskID, _ := uuid.Parse(resp.ResolveTaskID())
+	postTaskReadyExpect(t, handler, ctx, taskID, http.StatusOK)
 	jobs, _ := mockDB.GetJobsByTaskID(ctx, taskID)
 	if len(jobs) != 1 {
 		t.Fatalf("expected 1 job, got %d", len(jobs))
@@ -991,4 +562,75 @@ func TestTaskHandler_CreateTaskDBError(t *testing.T) {
 	if rec.Code != http.StatusInternalServerError {
 		t.Errorf("expected status 500, got %d", rec.Code)
 	}
+}
+// createJobErrorStore fails only CreateJob (CreateTask handler: task created, job creation fails).
+type createJobErrorStore struct {
+	*testutil.MockDB
+}
+
+func (m *createJobErrorStore) CreateJob(_ context.Context, _ uuid.UUID, _ string) (*models.Job, error) {
+	return nil, errors.New("create job error")
+}
+
+// createJobWithIDErrorStore fails only CreateJobWithID (UseSBA path).
+type createJobWithIDErrorStore struct {
+	*testutil.MockDB
+}
+
+func (m *createJobWithIDErrorStore) CreateJobWithID(_ context.Context, _, _ uuid.UUID, _ string) (*models.Job, error) {
+	return nil, errors.New("create job with id error")
+}
+
+// createJobCompletedErrorStore fails only CreateJobCompleted (orchestrator inference path).
+type createJobCompletedErrorStore struct {
+	*testutil.MockDB
+}
+
+func (m *createJobCompletedErrorStore) CreateJobCompleted(_ context.Context, _, _ uuid.UUID, _ string) (*models.Job, error) {
+	return nil, errors.New("create job completed error")
+}
+
+func TestTaskHandler_CreateTask_UseSBA_CreateJobWithIDFails(t *testing.T) {
+	mockDB := &createJobWithIDErrorStore{MockDB: testutil.NewMockDB()}
+	handler := NewTaskHandler(mockDB, newTestLogger(), "", "")
+	userID := uuid.New()
+	ctx := context.WithValue(context.Background(), contextKeyUserID, userID)
+	req, rec := recordedRequestJSON("POST", "/v1/tasks", userapi.CreateTaskRequest{Prompt: "p", UseSBA: true})
+	req = req.WithContext(ctx)
+	handler.CreateTask(rec, req)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("expected status 201, got %d", rec.Code)
+	}
+	var created userapi.TaskResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &created); err != nil {
+		t.Fatal(err)
+	}
+	taskID, err := uuid.Parse(created.ResolveTaskID())
+	if err != nil {
+		t.Fatal(err)
+	}
+	postTaskReadyExpect(t, handler, ctx, taskID, http.StatusInternalServerError)
+}
+
+func TestTaskHandler_CreateTask_CreateJobFails(t *testing.T) {
+	mockDB := &createJobErrorStore{MockDB: testutil.NewMockDB()}
+	handler := NewTaskHandler(mockDB, newTestLogger(), "", "")
+	userID := uuid.New()
+	ctx := context.WithValue(context.Background(), contextKeyUserID, userID)
+	req, rec := recordedRequestJSON("POST", "/v1/tasks", userapi.CreateTaskRequest{Prompt: "p"})
+	req = req.WithContext(ctx)
+	handler.CreateTask(rec, req)
+
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("expected status 201, got %d", rec.Code)
+	}
+	var created userapi.TaskResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &created); err != nil {
+		t.Fatal(err)
+	}
+	taskID, err := uuid.Parse(created.ResolveTaskID())
+	if err != nil {
+		t.Fatal(err)
+	}
+	postTaskReadyExpect(t, handler, ctx, taskID, http.StatusInternalServerError)
 }

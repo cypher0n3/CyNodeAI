@@ -38,6 +38,8 @@ class TestInferenceTask(unittest.TestCase):
         data = helpers.parse_json_safe(out)
         task_id = (data or {}).get("task_id")
         self.assertIsNotNone(task_id, "inference task create failed")
+        ok_r, _, err_r = helpers.cynork_task_ready(task_id, state.CONFIG_PATH)
+        self.assertTrue(ok_r, f"task ready failed: {err_r}")
         state.INF_TASK_ID = task_id
         # Full E2E runs many tasks first; inference sandbox jobs can sit queued for several minutes.
         # Poll frequently (3s) for up to 15m — coarser 5s×60 polls were still timing out under load.

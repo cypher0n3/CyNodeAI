@@ -115,6 +115,7 @@ Gaps (e.g. 0011-0019 between 0010 and 0020) allow inserting new tests without re
 - **e2e_0380_control_plane_node_register** - POST `/v1/nodes/register`; sets `state.NODE_JWT`.
 - **e2e_0390_control_plane_capability** - POST `/v1/nodes/capability` with node JWT.
 - **e2e_0420_task_create** - Task create acceptance coverage for prompt mode plus canonical `--name` and `--attach`; sets `state.TASK_ID`.
+- **e2e_0425_task_planning_state** - `planning_state=draft` on create; workflow start blocked until `task ready`; requires `WORKFLOW_RUNNER_BEARER_TOKEN` for the workflow gate case.
 - **e2e_0430_task_list** - Task list JSON; asserts tasks array and created task present.
 - **e2e_0440_task_get** - Get task by ID.
 - **e2e_0450_task_result** - Get task result; asserts status present.

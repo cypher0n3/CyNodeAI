@@ -751,6 +751,9 @@ func registerOrchestratorBootstrapTasks(sc *godog.ScenarioContext, state *testSt
 	})
 	// Workflow start/resume/checkpoint/release (REQ-ORCHES-0144--0147)
 	sc.Step(`^I start workflow for task with holder "([^"]*)"$`, func(ctx context.Context, holder string) error {
+		if err := postTaskReadyHTTP(ctx); err != nil {
+			return err
+		}
 		st := getState(ctx)
 		if st == nil || st.server == nil || st.taskID == "" {
 			return godog.ErrSkip

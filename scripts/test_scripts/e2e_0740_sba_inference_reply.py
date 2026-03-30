@@ -72,6 +72,8 @@ class TestSbaInferenceReply(unittest.TestCase):
         data = helpers.parse_json_safe(out)
         task_id = (data or {}).get("task_id")
         self.assertIsNotNone(task_id, "SBA inference reply task create failed")
+        ok_r, _, err_r = helpers.cynork_task_ready(task_id, state.CONFIG_PATH)
+        self.assertTrue(ok_r, f"task ready failed: {err_r}")
         status = None
         result_data = None
         for _ in range(60):

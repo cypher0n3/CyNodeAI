@@ -61,11 +61,12 @@ func (db *DB) CreateTask(ctx context.Context, createdBy *uuid.UUID, prompt strin
 	record := &TaskRecord{
 		GormModelUUID: newGormModelUUIDNow(),
 		TaskBase: models.TaskBase{
-			CreatedBy: createdBy,
-			ProjectID: effectiveProjectID,
-			Status:    models.TaskStatusPending,
-			Prompt:    &prompt,
-			Summary:   &summary,
+			CreatedBy:     createdBy,
+			ProjectID:     effectiveProjectID,
+			Status:        models.TaskStatusPending,
+			Prompt:        &prompt,
+			Summary:       &summary,
+			PlanningState: models.PlanningStateDraft,
 		},
 	}
 	if err := db.createRecord(ctx, record, "create task"); err != nil {
@@ -157,6 +158,20 @@ func isTerminalTaskStatus(status string) bool {
 func (db *DB) UpdateTaskSummary(ctx context.Context, taskID uuid.UUID, summary string) error {
 	return db.updateWhere(ctx, &TaskRecord{}, "id", taskID,
 		map[string]interface{}{"summary": summary}, "update task summary")
+}
+
+// UpdateTaskMetadata updates tasks.metadata (JSON text / jsonb).
+func (db *DB) UpdateTaskMetadata(ctx context.Context, taskID uuid.UUID, metadata *string) error {
+	now := time.Now().UTC()
+	return db.updateWhere(ctx, &TaskRecord{}, "id", taskID,
+		map[string]interface{}{"metadata": metadata, "updated_at": now}, "update task metadata")
+}
+
+// UpdateTaskPlanningState sets tasks.planning_state (REQ-ORCHES-0176, 0179).
+func (db *DB) UpdateTaskPlanningState(ctx context.Context, taskID uuid.UUID, planningState string) error {
+	now := time.Now().UTC()
+	return db.updateWhere(ctx, &TaskRecord{}, "id", taskID,
+		map[string]interface{}{"planning_state": planningState, "updated_at": now}, "update task planning state")
 }
 
 // ListTasksByUser lists tasks created by a user.

@@ -249,6 +249,17 @@ func tcCreateTaskJobAndVerifyPayload(t *testing.T, db Store, ctx context.Context
 	if err != nil {
 		t.Fatalf("CreateTask: %v", err)
 	}
+	meta := `{"tc":1}`
+	if err := db.UpdateTaskMetadata(ctx, task.ID, &meta); err != nil {
+		t.Fatalf("UpdateTaskMetadata: %v", err)
+	}
+	reloaded, err := db.GetTaskByID(ctx, task.ID)
+	if err != nil {
+		t.Fatalf("GetTaskByID after metadata: %v", err)
+	}
+	if reloaded.Metadata == nil || strings.TrimSpace(*reloaded.Metadata) == "" {
+		t.Errorf("metadata not stored: %v", reloaded.Metadata)
+	}
 	job, err := db.CreateJob(ctx, task.ID, `{"x":1}`)
 	if err != nil {
 		t.Fatalf("CreateJob: %v", err)

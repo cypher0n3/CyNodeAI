@@ -852,6 +852,17 @@ func (c *Client) CreateTask(req *userapi.CreateTaskRequest) (*userapi.TaskRespon
 	return &out, nil
 }
 
+// PostTaskReady calls POST /v1/tasks/{id}/ready (requires auth).
+func (c *Client) PostTaskReady(taskID string) (*userapi.TaskResponse, error) {
+	var out userapi.TaskResponse
+	path := "/v1/tasks/" + url.PathEscape(taskID) + "/ready"
+	if err := c.doPostJSON(path, struct{}{}, http.StatusOK, &out); err != nil {
+		return nil, err
+	}
+	normalizeTaskResponse(&out)
+	return &out, nil
+}
+
 // GetTaskResult calls GET /v1/tasks/{id}/result (requires auth).
 func (c *Client) GetTaskResult(taskID string) (*userapi.TaskResultResponse, error) {
 	return doTaskAction[userapi.TaskResultResponse](c, http.MethodGet, taskID, "/result", "decode task result response")

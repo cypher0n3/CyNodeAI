@@ -723,17 +723,37 @@ func TestRunTaskCreate_TaskFileModeAndProjectID(t *testing.T) {
 }
 
 func TestRunTaskCreate_ResultWait(t *testing.T) {
-	first := true
+	firstResult := true
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		if r.URL.Path == pathV1Tasks && r.Method == http.MethodPost {
 			w.WriteHeader(http.StatusCreated)
-			_ = json.NewEncoder(w).Encode(userapi.TaskResponse{ID: "task-1", Status: "queued"})
+			_ = json.NewEncoder(w).Encode(userapi.TaskResponse{
+				ID:             "task-1",
+				Status:         "queued",
+				PlanningState:  userapi.PlanningStateDraft,
+			})
+			return
+		}
+		if r.URL.Path == "/v1/tasks/task-1" && r.Method == http.MethodGet {
+			_ = json.NewEncoder(w).Encode(userapi.TaskResponse{
+				ID:             "task-1",
+				Status:         "queued",
+				PlanningState: userapi.PlanningStateDraft,
+			})
+			return
+		}
+		if r.URL.Path == "/v1/tasks/task-1/ready" && r.Method == http.MethodPost {
+			_ = json.NewEncoder(w).Encode(userapi.TaskResponse{
+				ID:             "task-1",
+				Status:         "queued",
+				PlanningState: userapi.PlanningStateReady,
+			})
 			return
 		}
 		if r.URL.Path == "/v1/tasks/task-1/result" && r.Method == http.MethodGet {
-			if first {
-				first = false
+			if firstResult {
+				firstResult = false
 				_ = json.NewEncoder(w).Encode(userapi.TaskResultResponse{TaskID: "task-1", Status: "running", Jobs: []userapi.JobResponse{}})
 				return
 			}
@@ -753,6 +773,66 @@ func TestRunTaskCreate_ResultWait(t *testing.T) {
 	}()
 	if err := runTaskCreate(nil, nil); err != nil {
 		t.Fatalf("runTaskCreate --result: %v", err)
+	}
+}
+
+func TestRunTaskReady_JSON(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/v1/tasks/x/ready" && r.Method == http.MethodPost {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			_ = json.NewEncoder(w).Encode(userapi.TaskResponse{
+				ID:             "x",
+				Status:         "queued",
+				PlanningState:  userapi.PlanningStateReady,
+			})
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+	oldFmt := outputFmt
+	cfg = &config.Config{GatewayURL: server.URL, Token: "tok"}
+	outputFmt = outputFormatJSON
+	defer func() {
+		cfg = nil
+		outputFmt = oldFmt
+	}()
+	if err := runTaskReady(nil, []string{"x"}); err != nil {
+		t.Fatalf("runTaskReady: %v", err)
+	}
+}
+
+func TestRunTaskReady_Table(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/v1/tasks/y/ready" && r.Method == http.MethodPost {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			_ = json.NewEncoder(w).Encode(userapi.TaskResponse{ID: "y", Status: "queued"})
+			return
+		}
+		w.WriteHeader(http.StatusNotFound)
+	}))
+	defer server.Close()
+	oldFmt := outputFmt
+	cfg = &config.Config{GatewayURL: server.URL, Token: "tok"}
+	outputFmt = outputFormatTable
+	defer func() {
+		cfg = nil
+		outputFmt = oldFmt
+	}()
+	if err := runTaskReady(nil, []string{"y"}); err != nil {
+		t.Fatalf("runTaskReady: %v", err)
+	}
+}
+
+func TestRunTaskReady_NoToken(t *testing.T) {
+	prev := cfg
+	cfg = &config.Config{GatewayURL: "http://localhost", Token: ""}
+	defer func() { cfg = prev }()
+	err := runTaskReady(nil, []string{"z"})
+	if err == nil {
+		t.Fatal("expected auth error")
 	}
 }
 

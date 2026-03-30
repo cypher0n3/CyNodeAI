@@ -138,6 +138,9 @@ func registerOrchestratorWorkflowEgressArtifacts(sc *godog.ScenarioContext, stat
 			return err
 		}
 		st.taskID = out.TaskID
+		if err := postTaskReadyHTTP(ctx); err != nil {
+			return err
+		}
 		body2, _ := json.Marshal(map[string]string{"task_id": st.taskID, "holder_id": holder})
 		req2, _ := http.NewRequest("POST", st.server.URL+"/v1/workflow/start", bytes.NewReader(body2))
 		req2.Header.Set("Content-Type", "application/json")
@@ -174,6 +177,9 @@ func registerOrchestratorWorkflowEgressArtifacts(sc *godog.ScenarioContext, stat
 			return err
 		}
 		st.taskID = out.TaskID
+		if err := postTaskReadyHTTP(ctx); err != nil {
+			return err
+		}
 		body2, _ := json.Marshal(map[string]string{"task_id": st.taskID, "holder_id": h1})
 		req2, _ := http.NewRequest("POST", st.server.URL+"/v1/workflow/start", bytes.NewReader(body2))
 		req2.Header.Set("Content-Type", "application/json")
@@ -218,6 +224,9 @@ func registerOrchestratorWorkflowEgressArtifacts(sc *godog.ScenarioContext, stat
 			return err
 		}
 		st.taskID = out.TaskID
+		if err := postTaskReadyHTTP(ctx); err != nil {
+			return err
+		}
 		body2, _ := json.Marshal(map[string]string{"task_id": st.taskID, "holder_id": holder})
 		req2, _ := http.NewRequest("POST", st.server.URL+"/v1/workflow/start", bytes.NewReader(body2))
 		req2.Header.Set("Content-Type", "application/json")
@@ -273,6 +282,9 @@ func registerOrchestratorWorkflowEgressArtifacts(sc *godog.ScenarioContext, stat
 			return err
 		}
 		st.taskID = out.TaskID
+		if err := postTaskReadyHTTP(ctx); err != nil {
+			return err
+		}
 		body2, _ := json.Marshal(map[string]string{"task_id": st.taskID, "holder_id": holder})
 		req2, _ := http.NewRequest("POST", st.server.URL+"/v1/workflow/start", bytes.NewReader(body2))
 		req2.Header.Set("Content-Type", "application/json")
@@ -338,6 +350,9 @@ func registerOrchestratorWorkflowEgressArtifacts(sc *godog.ScenarioContext, stat
 			return err
 		}
 		st.taskID = out.TaskID
+		if err := postTaskReadyHTTP(ctx); err != nil {
+			return err
+		}
 		body2, _ := json.Marshal(map[string]string{"task_id": st.taskID, "holder_id": h1})
 		req2, _ := http.NewRequest("POST", st.server.URL+"/v1/workflow/start", bytes.NewReader(body2))
 		req2.Header.Set("Content-Type", "application/json")
@@ -399,6 +414,9 @@ func registerOrchestratorWorkflowEgressArtifacts(sc *godog.ScenarioContext, stat
 			return err
 		}
 		st.taskID = out.TaskID
+		if err := postTaskReadyHTTP(ctx); err != nil {
+			return err
+		}
 		body2, _ := json.Marshal(map[string]string{"task_id": st.taskID, "holder_id": holder})
 		req2, _ := http.NewRequest("POST", st.server.URL+"/v1/workflow/start", bytes.NewReader(body2))
 		req2.Header.Set("Content-Type", "application/json")

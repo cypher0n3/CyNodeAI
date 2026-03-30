@@ -22,6 +22,11 @@ class TestWorkflowAPI(unittest.TestCase):
         """Start workflow for task; 200 with run_id, or 409 if lease already held."""
         if not getattr(state, "TASK_ID", None):
             self.skipTest("TASK_ID not set (task_id prereq failed or not declared)")
+        ok_r, _, err_r = helpers.run_cynork(
+            ["task", "ready", state.TASK_ID, "-o", "json"],
+            state.CONFIG_PATH,
+        )
+        self.assertTrue(ok_r, f"task ready failed: {err_r}")
         headers = {}
         if getattr(config, "WORKFLOW_RUNNER_BEARER_TOKEN", ""):
             headers["Authorization"] = f"Bearer {config.WORKFLOW_RUNNER_BEARER_TOKEN}"
@@ -41,6 +46,11 @@ class TestWorkflowAPI(unittest.TestCase):
         """Start workflow twice for same task; second returns 409."""
         if not getattr(state, "TASK_ID", None):
             self.skipTest("TASK_ID not set (task_id prereq failed or not declared)")
+        ok_r, _, err_r = helpers.run_cynork(
+            ["task", "ready", state.TASK_ID, "-o", "json"],
+            state.CONFIG_PATH,
+        )
+        self.assertTrue(ok_r, f"task ready failed: {err_r}")
         headers = {}
         if getattr(config, "WORKFLOW_RUNNER_BEARER_TOKEN", ""):
             headers["Authorization"] = f"Bearer {config.WORKFLOW_RUNNER_BEARER_TOKEN}"
@@ -73,6 +83,11 @@ class TestWorkflowAPI(unittest.TestCase):
         task_id = (data or {}).get("task_id")
         if not task_id:
             self.skipTest("task create did not return task_id")
+        ok_r, _, err_r = helpers.run_cynork(
+            ["task", "ready", task_id, "-o", "json"],
+            state.CONFIG_PATH,
+        )
+        self.assertTrue(ok_r, f"task ready failed: {err_r}")
         headers = {}
         if getattr(config, "WORKFLOW_RUNNER_BEARER_TOKEN", ""):
             headers["Authorization"] = f"Bearer {config.WORKFLOW_RUNNER_BEARER_TOKEN}"
@@ -113,6 +128,11 @@ class TestWorkflowAPI(unittest.TestCase):
         """Checkpoint at verify_step_result stores PMA->PAA review JSON; resume returns it."""
         if not getattr(state, "TASK_ID", None):
             self.skipTest("TASK_ID not set (task_id prereq failed or not declared)")
+        ok_r, _, err_r = helpers.run_cynork(
+            ["task", "ready", state.TASK_ID, "-o", "json"],
+            state.CONFIG_PATH,
+        )
+        self.assertTrue(ok_r, f"task ready failed: {err_r}")
         headers = {}
         if getattr(config, "WORKFLOW_RUNNER_BEARER_TOKEN", ""):
             headers["Authorization"] = f"Bearer {config.WORKFLOW_RUNNER_BEARER_TOKEN}"

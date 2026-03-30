@@ -16,6 +16,12 @@ const (
 	StatusSuperseded = "superseded"
 )
 
+// PlanningState values (REQ-ORCHES-0176; gateway task responses).
+const (
+	PlanningStateDraft = "draft"
+	PlanningStateReady = "ready"
+)
+
 // --- Auth ---
 
 // LoginRequest is the body for POST /v1/auth/login.
@@ -69,15 +75,16 @@ type CreateTaskRequest struct {
 // TaskResponse is the task in create/get/list responses (CLI spec: task_id, status, optional task_name).
 // Attachments lists artifact paths for the task (REQ-ORCHES-0127, REQ-CLIENT-0157).
 type TaskResponse struct {
-	ID          string   `json:"id"`
-	TaskID      string   `json:"task_id"`
-	Status      string   `json:"status"`
-	TaskName    *string  `json:"task_name,omitempty"`
-	Prompt      *string  `json:"prompt,omitempty"`
-	Summary     *string  `json:"summary,omitempty"`
-	CreatedAt   string   `json:"created_at"`
-	UpdatedAt   string   `json:"updated_at"`
-	Attachments []string `json:"attachments,omitempty"`
+	ID             string   `json:"id"`
+	TaskID         string   `json:"task_id"`
+	Status         string   `json:"status"`
+	PlanningState  string   `json:"planning_state,omitempty"`
+	TaskName       *string  `json:"task_name,omitempty"`
+	Prompt         *string  `json:"prompt,omitempty"`
+	Summary        *string  `json:"summary,omitempty"`
+	CreatedAt      string   `json:"created_at"`
+	UpdatedAt      string   `json:"updated_at"`
+	Attachments    []string `json:"attachments,omitempty"`
 }
 
 // ResolveTaskID returns the task identifier (task_id if set, else id).
@@ -104,9 +111,10 @@ type CancelTaskResponse struct {
 
 // TaskResultResponse is the body of GET /v1/tasks/{id}/result.
 type TaskResultResponse struct {
-	TaskID string        `json:"task_id"`
-	Status string        `json:"status"`
-	Jobs   []JobResponse `json:"jobs"`
+	TaskID        string        `json:"task_id"`
+	Status        string        `json:"status"`
+	PlanningState string        `json:"planning_state,omitempty"`
+	Jobs          []JobResponse `json:"jobs"`
 }
 
 // JobResponse is one job in a task result.

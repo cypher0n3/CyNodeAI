@@ -30,6 +30,8 @@ class TestPromptTask(unittest.TestCase):
             if task_id:
                 break
         self.assertIsNotNone(task_id, "prompt task create failed")
+        ok_r, _, err_r = helpers.cynork_task_ready(task_id, state.CONFIG_PATH)
+        self.assertTrue(ok_r, f"task ready failed: {err_r}")
         state.PROMPT_TASK_ID = task_id
         status = None
         result_data = None

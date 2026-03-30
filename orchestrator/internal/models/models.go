@@ -233,6 +233,7 @@ type TaskBase struct {
 	AcceptanceCriteria *string    `gorm:"column:acceptance_criteria;type:jsonb" json:"acceptance_criteria,omitempty"`
 	Summary            *string    `gorm:"column:summary" json:"summary,omitempty"`
 	Metadata           *string    `gorm:"column:metadata;type:jsonb" json:"metadata,omitempty"`
+	PlanningState      string     `gorm:"column:planning_state;index;not null;default:draft" json:"planning_state"`
 }
 
 // Task represents a user-submitted task (domain type for API/handler consumption).
@@ -327,6 +328,12 @@ const (
 	TaskStatusFailed     = "failed"
 	TaskStatusCanceled   = "canceled"
 	TaskStatusSuperseded = "superseded"
+)
+
+// PlanningState values (REQ-ORCHES-0176, REQ-ORCHES-0178).
+const (
+	PlanningStateDraft = "draft"
+	PlanningStateReady = "ready"
 )
 
 // JobStatus constants.

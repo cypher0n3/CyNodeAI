@@ -335,6 +335,7 @@ class _PrereqFilterSuite(unittest.TestSuite):
 
 def main():
     """Discover and run E2E tests; exit 0 on success, 1 on failure or setup error."""
+    argv_full = list(sys.argv)
     opts, unknown = parse_args()
     sys.argv = [sys.argv[0]] + unknown
 
@@ -345,7 +346,8 @@ def main():
     if single_id and timeout_sec > 0 and os.environ.get("E2E_NO_TIMEOUT_WRAP") != "1":
         env = os.environ.copy()
         env["E2E_NO_TIMEOUT_WRAP"] = "1"
-        argv = [sys.executable, os.path.abspath(__file__)] + sys.argv[1:]
+        # Must use argv_full[1:]: argparse strips known flags from sys.argv before this point.
+        argv = [sys.executable, os.path.abspath(__file__)] + argv_full[1:]
         try:
             proc = subprocess.run(
                 argv,

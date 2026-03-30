@@ -40,6 +40,11 @@ class TestTaskCreate(unittest.TestCase):
             data = helpers.parse_json_safe(out)
             task_id = (data or {}).get("task_id") or ""
             if task_id:
+                self.assertEqual(
+                    (data or {}).get("planning_state"),
+                    "draft",
+                    f"expected planning_state draft on create: {data}",
+                )
                 state.TASK_ID = task_id
                 return
             if attempt == 3:

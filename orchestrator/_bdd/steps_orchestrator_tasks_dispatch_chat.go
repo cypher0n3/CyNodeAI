@@ -480,6 +480,9 @@ func registerOrchestratorTasksDispatchChat(sc *godog.ScenarioContext, state *tes
 			return err
 		}
 		st.taskID = out.TaskID
+		if err := postTaskReadyHTTP(ctx); err != nil {
+			return err
+		}
 		client := &http.Client{Timeout: 30 * time.Second}
 		deadline := time.Now().Add(15 * time.Second)
 		for time.Now().Before(deadline) {

@@ -3,6 +3,7 @@ package database
 import (
 	"context"
 	"errors"
+	"strings"
 
 	"github.com/google/uuid"
 
@@ -53,6 +54,11 @@ func (db *DB) workflowGateCheckDeps(ctx context.Context, taskID uuid.UUID) (deny
 // and langgraph_mvp.md WorkflowStartGatePlanApproved. If the task has no plan_id, allows start.
 // Otherwise checks plan archived/state and task dependencies. Returns non-empty denyReason to deny with 409.
 func (db *DB) EvaluateWorkflowStartGate(ctx context.Context, task *models.Task, requestedByPMA bool) (denyReason string, err error) {
+	// REQ-ORCHES-0178, REQ-ORCHES-0180: only planning_state=ready may start workflow.
+	ps := strings.TrimSpace(task.PlanningState)
+	if ps != "" && ps != models.PlanningStateReady {
+		return "task not ready for workflow", nil
+	}
 	if task.PlanID == nil {
 		return "", nil
 	}

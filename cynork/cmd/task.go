@@ -73,6 +73,13 @@ var taskResultCmd = &cobra.Command{
 	RunE:  runTaskResult,
 }
 
+var taskReadyCmd = &cobra.Command{
+	Use:   "ready [task-id]",
+	Short: "Mark task ready for execution via POST /v1/tasks/{id}/ready",
+	Args:  cobra.ExactArgs(1),
+	RunE:  runTaskReady,
+}
+
 var taskCancelCmd = &cobra.Command{
 	Use:   "cancel [task-id]",
 	Short: "Cancel a task via POST /v1/tasks/{id}/cancel",
@@ -116,7 +123,7 @@ var terminalTaskStatuses = map[string]bool{
 
 func init() {
 	rootCmd.AddCommand(taskCmd)
-	taskCmd.AddCommand(taskCreateCmd, taskListCmd, taskGetCmd, taskResultCmd, taskCancelCmd, taskLogsCmd, taskWatchCmd, taskArtifactsCmd)
+	taskCmd.AddCommand(taskCreateCmd, taskListCmd, taskGetCmd, taskResultCmd, taskReadyCmd, taskCancelCmd, taskLogsCmd, taskWatchCmd, taskArtifactsCmd)
 	taskArtifactsCmd.AddCommand(taskArtifactsListCmd)
 	taskWatchCmd.Flags().DurationVarP(&taskWatchInterval, "interval", "n", 2*time.Second, "poll interval")
 	taskWatchCmd.Flags().BoolVar(&taskWatchNoClear, "no-clear", false, "do not clear screen between polls")
@@ -321,6 +328,16 @@ func buildCreateTaskRequest(prompt, mode string, projectID *string, attachments 
 }
 
 func waitAndPrintTaskResult(client *gateway.Client, taskID string) error {
+	task, err := client.GetTask(taskID)
+	if err != nil {
+		return exitFromGatewayErr(err)
+	}
+	if strings.TrimSpace(task.PlanningState) == userapi.PlanningStateDraft {
+		_, err := client.PostTaskReady(taskID)
+		if err != nil {
+			return exitFromGatewayErr(err)
+		}
+	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
 	defer stop()
 	for {
@@ -405,6 +422,24 @@ func runTaskGet(_ *cobra.Command, args []string) error {
 		line += " task_name=" + *task.TaskName
 	}
 	fmt.Println(line)
+	return nil
+}
+
+func runTaskReady(_ *cobra.Command, args []string) error {
+	if cfg.Token == "" {
+		return exit.Auth(fmt.Errorf("not logged in: run 'cynork auth login'"))
+	}
+	client := gateway.NewClient(cfg.GatewayURL)
+	client.SetToken(cfg.Token)
+	task, err := client.PostTaskReady(args[0])
+	if err != nil {
+		return exitFromGatewayErr(err)
+	}
+	if outputFmt == outputFormatJSON {
+		_ = jsonOutputEncoder().Encode(task)
+		return nil
+	}
+	fmt.Println("task_id=" + task.ResolveTaskID())
 	return nil
 }
 

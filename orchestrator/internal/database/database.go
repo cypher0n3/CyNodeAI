@@ -69,6 +69,8 @@ type Store interface {
 	GetTaskBySummary(ctx context.Context, userID uuid.UUID, summary string) (*models.Task, error)
 	UpdateTaskStatus(ctx context.Context, taskID uuid.UUID, status string) error
 	UpdateTaskSummary(ctx context.Context, taskID uuid.UUID, summary string) error
+	UpdateTaskMetadata(ctx context.Context, taskID uuid.UUID, metadata *string) error
+	UpdateTaskPlanningState(ctx context.Context, taskID uuid.UUID, planningState string) error
 	ListTasksByUser(ctx context.Context, userID uuid.UUID, limit, offset int) ([]*models.Task, error)
 	GetJobsByTaskID(ctx context.Context, taskID uuid.UUID) ([]*models.Job, error)
 	CreateJob(ctx context.Context, taskID uuid.UUID, payload string) (*models.Job, error)

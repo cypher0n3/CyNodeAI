@@ -113,27 +113,6 @@ func normalizeInputMode(mode string) string {
 	return mode
 }
 
-func (h *TaskHandler) tryCompleteWithOrchestratorInference(
-	ctx context.Context,
-	w http.ResponseWriter,
-	task *models.Task,
-	prompt string,
-	attachmentPaths []string,
-	inputMode string,
-) bool {
-	if inputMode != InputModePrompt || strings.TrimSpace(h.inferenceURL) == "" {
-		return false
-	}
-	job, err := h.createTaskWithOrchestratorInference(ctx, task.ID, prompt)
-	if err == nil {
-		_ = job // job already completed
-		WriteJSON(w, http.StatusCreated, mcptaskbridge.TaskToResponse(task, mcptaskbridge.TaskStatusToSpec(models.TaskStatusCompleted), attachmentPaths))
-		return true
-	}
-	h.logger.Warn("orchestrator inference failed, falling back to sandbox job", "error", err)
-	return false
-}
-
 func (h *TaskHandler) createSandboxJob(ctx context.Context, taskID uuid.UUID, prompt string, useInference bool, inputMode string) error {
 	payload, err := marshalJobPayload(prompt, useInference, inputMode)
 	if err != nil {
@@ -174,27 +153,16 @@ func (h *TaskHandler) CreateTask(w http.ResponseWriter, r *http.Request) {
 
 	attachmentPaths := h.persistTaskAttachments(ctx, task.ID, req.Attachments)
 
-	inputMode := normalizeInputMode(req.InputMode)
-
-	if req.UseSBA {
-		if h.createTaskSBA(ctx, w, task, req.Prompt, attachmentPaths) {
-			return
-		}
-	}
-
-	// Prompt mode: prefer orchestrator-side inference when configured; fall back to sandbox job path on error.
-	if h.tryCompleteWithOrchestratorInference(ctx, w, task, req.Prompt, attachmentPaths, inputMode) {
+	meta := mergePendingExecMetadata(task.Metadata, req)
+	if err := h.db.UpdateTaskMetadata(ctx, task.ID, meta); err != nil {
+		h.logger.Error("update task metadata", "error", err)
+		WriteInternalError(w, "Failed to create task")
 		return
 	}
-
-	// Create a single queued job (sandbox path).
-	useInference := req.UseInference
-	if inputMode == InputModePrompt {
-		useInference = true
-	}
-	if err := h.createSandboxJob(ctx, task.ID, req.Prompt, useInference, inputMode); err != nil {
-		h.logger.Error("create sandbox job", "error", err)
-		WriteInternalError(w, "Failed to create task job")
+	task, err = h.db.GetTaskByID(ctx, task.ID)
+	if err != nil {
+		h.logger.Error("reload task", "error", err)
+		WriteInternalError(w, "Failed to create task")
 		return
 	}
 
@@ -264,23 +232,18 @@ except Exception as e: print('[Ollama request failed]', str(e), file=sys.stderr)
 
 // createTaskSBA creates a single job with SBA runner (job_spec_json) and writes 201 or 5xx (P2-10).
 func (h *TaskHandler) createTaskSBA(ctx context.Context, w http.ResponseWriter, task *models.Task, prompt string, attachmentPaths []string) bool {
-	jobID := uuid.New()
-	payload, err := buildSBAJobPayload(task.ID, jobID, prompt, h.inferenceModel)
+	exec := pendingExecFlags{UseSBA: true, InputMode: InputModePrompt}
+	t2, err := h.dispatchTaskJobsCore(ctx, task, exec)
 	if err != nil {
 		if strings.Contains(err.Error(), "inference readiness") {
 			WriteBadRequest(w, err.Error())
 			return true
 		}
-		h.logger.Error("build SBA job payload", "error", err)
+		h.logger.Error("create SBA job", "error", err)
 		WriteInternalError(w, "Failed to create SBA job")
 		return true
 	}
-	if _, err := h.db.CreateJobWithID(ctx, task.ID, jobID, payload); err != nil {
-		h.logger.Error("create SBA job", "error", err)
-		WriteInternalError(w, "Failed to create task job")
-		return true
-	}
-	WriteJSON(w, http.StatusCreated, mcptaskbridge.TaskToResponse(task, mcptaskbridge.TaskStatusToSpec(task.Status), attachmentPaths))
+	WriteJSON(w, http.StatusCreated, mcptaskbridge.TaskToResponse(t2, mcptaskbridge.TaskStatusToSpec(t2.Status), attachmentPaths))
 	return true
 }
 
@@ -593,22 +556,32 @@ func (h *TaskHandler) Chat(w http.ResponseWriter, r *http.Request) {
 		WriteInternalError(w, "Failed to process message")
 		return
 	}
-	if h.inferenceURL != "" {
-		job, err := h.createTaskWithOrchestratorInference(ctx, task.ID, req.Message)
-		if err == nil {
-			WriteJSON(w, http.StatusOK, ChatResponse{Response: h.chatResponseFromJob(job)})
-			return
-		}
-		h.logger.Warn("chat orchestrator inference failed, falling back to job", "error", err)
+	chatReq := userapi.CreateTaskRequest{
+		Prompt:       req.Message,
+		InputMode:    InputModePrompt,
+		UseInference: true,
 	}
-	payload, err := marshalJobPayload(req.Message, true, InputModePrompt)
-	if err != nil {
-		h.logger.Error("chat marshal payload", "error", err)
+	meta := mergePendingExecMetadata(task.Metadata, chatReq)
+	if err := h.db.UpdateTaskMetadata(ctx, task.ID, meta); err != nil {
+		h.logger.Error("chat update task metadata", "error", err)
 		WriteInternalError(w, "Failed to process message")
 		return
 	}
-	if _, err := h.db.CreateJob(ctx, task.ID, payload); err != nil {
-		h.logger.Error("chat create job", "error", err)
+	if err := h.db.UpdateTaskPlanningState(ctx, task.ID, models.PlanningStateReady); err != nil {
+		h.logger.Error("chat update planning state", "error", err)
+		WriteInternalError(w, "Failed to process message")
+		return
+	}
+	task, err = h.db.GetTaskByID(ctx, task.ID)
+	if err != nil {
+		h.logger.Error("chat reload task", "error", err)
+		WriteInternalError(w, "Failed to process message")
+		return
+	}
+	exec := parsePendingExecFromMetadata(task.Metadata)
+	task, err = h.dispatchTaskJobsCore(ctx, task, exec)
+	if err != nil {
+		h.logger.Error("chat dispatch jobs", "error", err)
 		WriteInternalError(w, "Failed to process message")
 		return
 	}

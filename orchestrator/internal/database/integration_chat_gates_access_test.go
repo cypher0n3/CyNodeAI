@@ -117,6 +117,9 @@ func workflowGateCreateTaskWithPlan(t *testing.T, db *DB, ctx context.Context, p
 	if err := db.GORM().WithContext(ctx).Model(&TaskRecord{}).Where("id = ?", task.ID).Update("plan_id", planID).Error; err != nil {
 		t.Fatalf("update task plan_id: %v", err)
 	}
+	if err := db.UpdateTaskPlanningState(ctx, task.ID, models.PlanningStateReady); err != nil {
+		t.Fatalf("UpdateTaskPlanningState: %v", err)
+	}
 	task, err = db.GetTaskByID(ctx, task.ID)
 	if err != nil {
 		t.Fatalf("GetTaskByID: %v", err)
@@ -130,6 +133,13 @@ func TestIntegration_WorkflowStartGate_NoPlan(t *testing.T) {
 	if err != nil {
 		t.Fatalf("CreateTask: %v", err)
 	}
+	if err := db.UpdateTaskPlanningState(ctx, task.ID, models.PlanningStateReady); err != nil {
+		t.Fatalf("UpdateTaskPlanningState: %v", err)
+	}
+	task, err = db.GetTaskByID(ctx, task.ID)
+	if err != nil {
+		t.Fatalf("GetTaskByID: %v", err)
+	}
 	deny, err := db.EvaluateWorkflowStartGate(ctx, task, false)
 	if err != nil {
 		t.Fatalf("EvaluateWorkflowStartGate: %v", err)
@@ -139,11 +149,33 @@ func TestIntegration_WorkflowStartGate_NoPlan(t *testing.T) {
 	}
 }
 
+func TestIntegration_WorkflowStartGate_PlanningDraftDenied(t *testing.T) {
+	db, ctx := integrationDB(t)
+	task, err := db.CreateTask(ctx, nil, "workflow-gate-draft", nil, nil)
+	if err != nil {
+		t.Fatalf("CreateTask: %v", err)
+	}
+	deny, err := db.EvaluateWorkflowStartGate(ctx, task, false)
+	if err != nil {
+		t.Fatalf("EvaluateWorkflowStartGate: %v", err)
+	}
+	if deny != "task not ready for workflow" {
+		t.Errorf("got deny=%q want task not ready for workflow", deny)
+	}
+}
+
 func TestIntegration_WorkflowStartGate_PlanNotFound(t *testing.T) {
 	db, ctx := integrationDB(t)
 	task, err := db.CreateTask(ctx, nil, "workflow-gate-badplan", nil, nil)
 	if err != nil {
 		t.Fatalf("CreateTask: %v", err)
+	}
+	if err := db.UpdateTaskPlanningState(ctx, task.ID, models.PlanningStateReady); err != nil {
+		t.Fatalf("UpdateTaskPlanningState: %v", err)
+	}
+	task, err = db.GetTaskByID(ctx, task.ID)
+	if err != nil {
+		t.Fatalf("GetTaskByID: %v", err)
 	}
 	nonexistentPlanID := uuid.New()
 	if err := db.GORM().WithContext(ctx).Model(&TaskRecord{}).Where("id = ?", task.ID).Update("plan_id", nonexistentPlanID).Error; err != nil {

@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"log/slog"
 	"net/http"
@@ -256,9 +257,11 @@ func TestCreateTaskSBA_InferenceReadinessFailureReturnsBadRequest(t *testing.T) 
 		logger:         slog.Default(),
 		inferenceModel: "",
 	}
+	prompt := "prompt"
 	task := &models.Task{
 		TaskBase: models.TaskBase{
 			Status: models.TaskStatusPending,
+			Prompt: &prompt,
 		},
 		ID: uuid.New(),
 	}
@@ -269,5 +272,157 @@ func TestCreateTaskSBA_InferenceReadinessFailureReturnsBadRequest(t *testing.T) 
 	}
 	if rec.Code != http.StatusBadRequest {
 		t.Fatalf("expected 400, got %d", rec.Code)
+	}
+}
+
+func TestCreateTask_ReturnsDraftPlanningState(t *testing.T) {
+	mockDB := testutil.NewMockDB()
+	handler := NewTaskHandler(mockDB, slog.Default(), "", "")
+	userID := uuid.New()
+	req := httptest.NewRequest(http.MethodPost, "/v1/tasks", strings.NewReader(`{"prompt":"hello world"}`))
+	req = req.WithContext(context.WithValue(req.Context(), contextKeyUserID, userID))
+	rec := httptest.NewRecorder()
+	handler.CreateTask(rec, req)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("status %d: %s", rec.Code, rec.Body.String())
+	}
+	var tr userapi.TaskResponse
+	if err := json.Unmarshal(rec.Body.Bytes(), &tr); err != nil {
+		t.Fatal(err)
+	}
+	if tr.PlanningState != userapi.PlanningStateDraft {
+		t.Fatalf("planning_state=%q want draft", tr.PlanningState)
+	}
+}
+
+func TestPostTaskReady_EnqueuesSandboxJob(t *testing.T) {
+	mockDB := testutil.NewMockDB()
+	handler := NewTaskHandler(mockDB, slog.Default(), "", "")
+	userID := uuid.New()
+	task, err := mockDB.CreateTask(context.Background(), &userID, "echo hi", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req := httptest.NewRequest(http.MethodPost, "/v1/tasks/"+task.ID.String()+"/ready", http.NoBody)
+	req = req.WithContext(context.WithValue(req.Context(), contextKeyUserID, userID))
+	req.SetPathValue("id", task.ID.String())
+	rec := httptest.NewRecorder()
+	handler.PostTaskReady(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status %d: %s", rec.Code, rec.Body.String())
+	}
+	jobs, err := mockDB.GetJobsByTaskID(context.Background(), task.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(jobs) != 1 {
+		t.Fatalf("expected 1 job, got %d", len(jobs))
+	}
+}
+
+func TestPostTaskReady_AlreadyReady_ReturnsOK(t *testing.T) {
+	mockDB := testutil.NewMockDB()
+	handler := NewTaskHandler(mockDB, slog.Default(), "", "")
+	userID := uuid.New()
+	task, err := mockDB.CreateTask(context.Background(), &userID, "p", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := mockDB.UpdateTaskPlanningState(context.Background(), task.ID, models.PlanningStateReady); err != nil {
+		t.Fatal(err)
+	}
+	req := httptest.NewRequest(http.MethodPost, "/v1/tasks/"+task.ID.String()+"/ready", http.NoBody)
+	req = req.WithContext(context.WithValue(req.Context(), contextKeyUserID, userID))
+	req.SetPathValue("id", task.ID.String())
+	rec := httptest.NewRecorder()
+	handler.PostTaskReady(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestPostTaskReady_NonDraftNonReady_Returns409(t *testing.T) {
+	mockDB := testutil.NewMockDB()
+	handler := NewTaskHandler(mockDB, slog.Default(), "", "")
+	userID := uuid.New()
+	task, err := mockDB.CreateTask(context.Background(), &userID, "p", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mockDB.Tasks[task.ID].PlanningState = "review"
+	req := httptest.NewRequest(http.MethodPost, "/v1/tasks/"+task.ID.String()+"/ready", http.NoBody)
+	req = req.WithContext(context.WithValue(req.Context(), contextKeyUserID, userID))
+	req.SetPathValue("id", task.ID.String())
+	rec := httptest.NewRecorder()
+	handler.PostTaskReady(rec, req)
+	if rec.Code != http.StatusConflict {
+		t.Fatalf("status %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestPostTaskReady_AlreadyHasJobs_Returns409(t *testing.T) {
+	mockDB := testutil.NewMockDB()
+	handler := NewTaskHandler(mockDB, slog.Default(), "", "")
+	userID := uuid.New()
+	task, err := mockDB.CreateTask(context.Background(), &userID, "p", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := mockDB.CreateJob(context.Background(), task.ID, "{}"); err != nil {
+		t.Fatal(err)
+	}
+	req := httptest.NewRequest(http.MethodPost, "/v1/tasks/"+task.ID.String()+"/ready", http.NoBody)
+	req = req.WithContext(context.WithValue(req.Context(), contextKeyUserID, userID))
+	req.SetPathValue("id", task.ID.String())
+	rec := httptest.NewRecorder()
+	handler.PostTaskReady(rec, req)
+	if rec.Code != http.StatusConflict {
+		t.Fatalf("status %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
+func TestPostTaskReady_ListJobsError_Returns500(t *testing.T) {
+	mockDB := testutil.NewMockDB()
+	mockDB.GetJobsByTaskIDErr = errors.New("list jobs failed")
+	handler := NewTaskHandler(mockDB, slog.Default(), "", "")
+	userID := uuid.New()
+	task, err := mockDB.CreateTask(context.Background(), &userID, "p", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req := httptest.NewRequest(http.MethodPost, "/v1/tasks/"+task.ID.String()+"/ready", http.NoBody)
+	req = req.WithContext(context.WithValue(req.Context(), contextKeyUserID, userID))
+	req.SetPathValue("id", task.ID.String())
+	rec := httptest.NewRecorder()
+	handler.PostTaskReady(rec, req)
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("status %d: %s", rec.Code, rec.Body.String())
+	}
+}
+
+type postReadyPlanningErrStore struct {
+	*testutil.MockDB
+}
+
+func (m *postReadyPlanningErrStore) UpdateTaskPlanningState(_ context.Context, _ uuid.UUID, _ string) error {
+	return errors.New("planning update failed")
+}
+
+func TestPostTaskReady_UpdatePlanningStateError_Returns500(t *testing.T) {
+	base := testutil.NewMockDB()
+	mockDB := &postReadyPlanningErrStore{MockDB: base}
+	handler := NewTaskHandler(mockDB, slog.Default(), "", "")
+	userID := uuid.New()
+	task, err := mockDB.CreateTask(context.Background(), &userID, "p", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	req := httptest.NewRequest(http.MethodPost, "/v1/tasks/"+task.ID.String()+"/ready", http.NoBody)
+	req = req.WithContext(context.WithValue(req.Context(), contextKeyUserID, userID))
+	req.SetPathValue("id", task.ID.String())
+	rec := httptest.NewRecorder()
+	handler.PostTaskReady(rec, req)
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("status %d: %s", rec.Code, rec.Body.String())
 	}
 }

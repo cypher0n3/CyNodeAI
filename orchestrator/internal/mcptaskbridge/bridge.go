@@ -45,6 +45,9 @@ func TaskToResponse(t *models.Task, status string, attachmentPaths []string) use
 		CreatedAt: t.CreatedAt.Format(time.RFC3339),
 		UpdatedAt: t.UpdatedAt.Format(time.RFC3339),
 	}
+	if strings.TrimSpace(t.PlanningState) != "" {
+		resp.PlanningState = t.PlanningState
+	}
 	if len(attachmentPaths) > 0 {
 		resp.Attachments = attachmentPaths
 	}
@@ -158,11 +161,15 @@ func TaskResultForUser(ctx context.Context, store database.Store, taskID uuid.UU
 	for _, job := range jobs {
 		jobResponses = append(jobResponses, JobToResponse(job))
 	}
-	return userapi.TaskResultResponse{
+	out := userapi.TaskResultResponse{
 		TaskID: task.ID.String(),
 		Status: TaskStatusToSpec(task.Status),
 		Jobs:   jobResponses,
-	}, nil
+	}
+	if strings.TrimSpace(task.PlanningState) != "" {
+		out.PlanningState = task.PlanningState
+	}
+	return out, nil
 }
 
 // CancelTask mirrors POST /v1/tasks/{id}/cancel (task status + non-terminal jobs canceled).

@@ -739,6 +739,14 @@ def get_sba_job_result(result_data):
     return job_result
 
 
+def cynork_task_ready(task_id, config_path):
+    """Run ``cynork task ready`` so draft tasks dispatch jobs. Returns (ok, out, err)."""
+    return run_cynork(
+        ["task", "ready", task_id, "-o", "json"],
+        config_path,
+    )
+
+
 def poll_task_result(task_id, config_path, loops=60):
     """Poll task result until completed/failed or loops exhausted. Return (status, result_data)."""
     result_data = None
@@ -763,6 +771,12 @@ def create_and_poll_sba_task(create_args, config_path, max_attempts=3):
         task_id = (data or {}).get("task_id")
         if not task_id:
             return None, None, None
+        ok_ready, _, _ = cynork_task_ready(task_id, config_path)
+        if not ok_ready:
+            if attempt < max_attempts:
+                time.sleep(3)
+                continue
+            return task_id, None, None
         status, result_data = poll_task_result(task_id, config_path)
         if status not in ("completed", "failed"):
             if attempt < max_attempts:
