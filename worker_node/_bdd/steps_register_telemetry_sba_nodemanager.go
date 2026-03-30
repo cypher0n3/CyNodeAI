@@ -476,7 +476,7 @@ func RegisterNodeManagerConfigSteps(sc *godog.ScenarioContext, state *workerTest
 				}
 				return nil
 			},
-			StartManagedServices: func(svcs []nodepayloads.ConfigManagedService) error {
+			StartManagedServices: func(_ context.Context, svcs []nodepayloads.ConfigManagedService) error {
 				st.mu.Lock()
 				st.managedServicesStarted = append([]nodepayloads.ConfigManagedService(nil), svcs...)
 				st.mu.Unlock()

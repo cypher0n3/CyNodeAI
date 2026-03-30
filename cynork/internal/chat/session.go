@@ -92,17 +92,17 @@ func (s *Session) StreamMessage(ctx context.Context, message string) (<-chan Cha
 
 // CreateNewThreadID creates a new chat thread via the gateway without changing CurrentThreadID.
 // Use when the caller applies the id on the main goroutine (e.g. Bubble Tea Update).
-func (s *Session) CreateNewThreadID() (string, error) {
+func (s *Session) CreateNewThreadID(ctx context.Context) (string, error) {
 	if s.Client == nil {
 		return "", fmt.Errorf("no client")
 	}
-	return s.Client.NewChatThread(s.ProjectID)
+	return s.Client.NewChatThread(ctx, s.ProjectID)
 }
 
 // NewThread creates a new chat thread via the gateway; uses session project context.
 // On success sets CurrentThreadID to the new thread id.
-func (s *Session) NewThread() (threadID string, err error) {
-	threadID, err = s.CreateNewThreadID()
+func (s *Session) NewThread(ctx context.Context) (threadID string, err error) {
+	threadID, err = s.CreateNewThreadID(ctx)
 	if err != nil {
 		return "", err
 	}
@@ -111,26 +111,26 @@ func (s *Session) NewThread() (threadID string, err error) {
 }
 
 // ListThreads returns threads for the current user and project (recent-first, paginated).
-func (s *Session) ListThreads(limit, offset int) ([]gateway.ChatThreadItem, error) {
-	return s.Client.ListChatThreads(s.ProjectID, limit, offset)
+func (s *Session) ListThreads(ctx context.Context, limit, offset int) ([]gateway.ChatThreadItem, error) {
+	return s.Client.ListChatThreads(ctx, s.ProjectID, limit, offset)
 }
 
 // PatchThreadTitle renames the thread; requires CurrentThreadID or pass threadID.
-func (s *Session) PatchThreadTitle(threadID, title string) error {
+func (s *Session) PatchThreadTitle(ctx context.Context, threadID, title string) error {
 	if threadID == "" {
 		threadID = s.CurrentThreadID
 	}
-	return s.Client.PatchThreadTitle(threadID, title)
+	return s.Client.PatchThreadTitle(ctx, threadID, title)
 }
 
 // ResolveThreadSelector resolves a user-typeable selector (ordinal "1", id prefix, or title) to a thread ID.
 // Lists threads with ListThreads(limit, 0) and returns the first matching thread's ID.
 // Ordinal: "1" = first thread, "2" = second, etc. Also matches full or prefix of thread ID, or title (case-insensitive).
-func (s *Session) ResolveThreadSelector(selector string, limit int) (threadID string, err error) {
+func (s *Session) ResolveThreadSelector(ctx context.Context, selector string, limit int) (threadID string, err error) {
 	if selector == "" {
 		return "", nil
 	}
-	items, err := s.ListThreads(limit, 0)
+	items, err := s.ListThreads(ctx, limit, 0)
 	if err != nil {
 		return "", err
 	}
@@ -141,9 +141,9 @@ const defaultThreadListLimit = 50
 
 // EnsureThread ensures the session has a current thread: create new (if selector empty) or resolve and switch (if selector set).
 // If resumeSelector is empty and CurrentThreadID is already set (e.g. after in-session re-login), the existing thread is kept.
-func (s *Session) EnsureThread(resumeSelector string) error {
+func (s *Session) EnsureThread(ctx context.Context, resumeSelector string) error {
 	if resumeSelector != "" {
-		id, err := s.ResolveThreadSelector(resumeSelector, defaultThreadListLimit)
+		id, err := s.ResolveThreadSelector(ctx, resumeSelector, defaultThreadListLimit)
 		if err != nil {
 			return err
 		}
@@ -153,7 +153,7 @@ func (s *Session) EnsureThread(resumeSelector string) error {
 	if s.CurrentThreadID != "" {
 		return nil
 	}
-	_, err := s.NewThread()
+	_, err := s.NewThread(ctx)
 	return err
 }
 

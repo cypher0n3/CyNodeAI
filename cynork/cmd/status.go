@@ -19,9 +19,9 @@ func init() {
 	rootCmd.AddCommand(statusCmd)
 }
 
-func runStatus(_ *cobra.Command, _ []string) error {
+func runStatus(cmd *cobra.Command, _ []string) error {
 	client := gateway.NewClient(cfg.GatewayURL)
-	if err := client.Health(); err != nil {
+	if err := client.Health(cmdContext(cmd)); err != nil {
 		return exit.Gateway(fmt.Errorf("gateway unreachable: %w", err))
 	}
 	if outputFmt == outputFormatJSON {

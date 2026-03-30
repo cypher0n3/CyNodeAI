@@ -93,7 +93,7 @@ func TestPullModels_ExecsPullForEachModel(t *testing.T) {
 	withRunner(t, fake)
 	_ = os.Setenv("OLLAMA_CONTAINER_NAME", "cynodeai-ollama")
 	defer func() { _ = os.Unsetenv("OLLAMA_CONTAINER_NAME") }()
-	if err := pullModels([]string{"qwen3.5:9b", "qwen3:8b"}); err != nil {
+	if err := pullModels(context.Background(), []string{"qwen3.5:9b", "qwen3:8b"}); err != nil {
 		t.Fatalf("pullModels: %v", err)
 	}
 	if len(calls) != 2 {
@@ -120,7 +120,7 @@ func TestPullModels_SkipsEmptyModelName(t *testing.T) {
 		return []byte(""), nil
 	})
 	withRunner(t, fake)
-	if err := pullModels([]string{"", "qwen3:8b"}); err != nil {
+	if err := pullModels(context.Background(), []string{"", "qwen3:8b"}); err != nil {
 		t.Fatalf("pullModels: %v", err)
 	}
 	if len(calls) != 1 {
@@ -133,7 +133,7 @@ func TestPullModels_ReturnsFirstError(t *testing.T) {
 		return []byte("no such container"), errors.New("exit status 1")
 	})
 	withRunner(t, fake)
-	err := pullModels([]string{"qwen3.5:9b"})
+	err := pullModels(context.Background(), []string{"qwen3.5:9b"})
 	if err == nil {
 		t.Error("expected error when exec fails, got nil")
 	}
@@ -259,5 +259,24 @@ func TestRun_NoFlagCallsRunMain(t *testing.T) {
 	code := <-done
 	if code != 1 {
 		t.Errorf("run(no args) should delegate to runMain and get 1, got %d", code)
+	}
+}
+
+type fakeCtxCancelRunner struct{}
+
+func (fakeCtxCancelRunner) LookPath(string) (string, error) { return "/bin/podman", nil }
+func (fakeCtxCancelRunner) CombinedOutput(string, ...string) ([]byte, error) { return nil, nil }
+func (fakeCtxCancelRunner) CombinedOutputContext(ctx context.Context, _ string, _ ...string) ([]byte, error) {
+	return nil, ctx.Err()
+}
+func (fakeCtxCancelRunner) StartDetached(string, []string, []string) error { return nil }
+
+func TestContextCancel_pullModels(t *testing.T) {
+	withRunner(t, fakeCtxCancelRunner{})
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	err := pullModels(ctx, []string{"m"})
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("pullModels: want context.Canceled, got %v", err)
 	}
 }

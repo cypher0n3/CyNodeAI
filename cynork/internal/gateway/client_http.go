@@ -2,6 +2,7 @@ package gateway
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -17,7 +18,7 @@ func decodeResponseJSON(resp *http.Response, out any) error {
 	return json.NewDecoder(io.LimitReader(resp.Body, httplimits.DefaultMaxHTTPResponseBytes)).Decode(out)
 }
 
-func (c *Client) doRequest(method, path string, query url.Values, body io.Reader) (*http.Response, error) {
+func (c *Client) doRequest(ctx context.Context, method, path string, query url.Values, body io.Reader) (*http.Response, error) {
 	base, err := url.Parse(c.BaseURL)
 	if err != nil {
 		return nil, fmt.Errorf("invalid base URL: %w", err)
@@ -27,7 +28,7 @@ func (c *Client) doRequest(method, path string, query url.Values, body io.Reader
 		return nil, fmt.Errorf("invalid path: %w", err)
 	}
 	u.RawQuery = query.Encode()
-	req, err := http.NewRequest(method, u.String(), body)
+	req, err := http.NewRequestWithContext(ctx, method, u.String(), body)
 	if err != nil {
 		return nil, err
 	}
@@ -40,12 +41,12 @@ func (c *Client) doRequest(method, path string, query url.Values, body io.Reader
 	return c.HTTPClient.Do(req)
 }
 
-func (c *Client) doPostJSON(path string, reqBody any, wantStatus int, out any) error {
+func (c *Client) doPostJSON(ctx context.Context, path string, reqBody any, wantStatus int, out any) error {
 	body, err := json.Marshal(reqBody)
 	if err != nil {
 		return fmt.Errorf("marshal request: %w", err)
 	}
-	resp, err := c.doRequest(http.MethodPost, path, nil, bytes.NewReader(body))
+	resp, err := c.doRequest(ctx, http.MethodPost, path, nil, bytes.NewReader(body))
 	if err != nil {
 		return err
 	}
@@ -60,7 +61,7 @@ func (c *Client) doPostJSON(path string, reqBody any, wantStatus int, out any) e
 }
 
 // doPostJSONNoAuth posts JSON without Authorization header (e.g. refresh).
-func (c *Client) doPostJSONNoAuth(path string, reqBody any, wantStatus int, out any) error {
+func (c *Client) doPostJSONNoAuth(ctx context.Context, path string, reqBody any, wantStatus int, out any) error {
 	body, err := json.Marshal(reqBody)
 	if err != nil {
 		return fmt.Errorf("marshal request: %w", err)
@@ -73,7 +74,7 @@ func (c *Client) doPostJSONNoAuth(path string, reqBody any, wantStatus int, out 
 	if err != nil {
 		return fmt.Errorf("invalid path: %w", err)
 	}
-	req, err := http.NewRequest(http.MethodPost, u.String(), bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, u.String(), bytes.NewReader(body))
 	if err != nil {
 		return err
 	}
@@ -93,8 +94,8 @@ func (c *Client) doPostJSONNoAuth(path string, reqBody any, wantStatus int, out 
 }
 
 // doGetJSON performs authenticated GET and decodes JSON into out.
-func (c *Client) doGetJSON(path string, out any) error {
-	resp, err := c.doRequest(http.MethodGet, path, nil, nil)
+func (c *Client) doGetJSON(ctx context.Context, path string, out any) error {
+	resp, err := c.doRequest(ctx, http.MethodGet, path, nil, nil)
 	if err != nil {
 		return err
 	}

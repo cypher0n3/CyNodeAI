@@ -389,7 +389,7 @@ func TestRunWithOptions_StartManagedServicesCalled(t *testing.T) {
 	opts := &RunOptions{
 		StartWorkerAPI: func(string) error { return nil },
 		StartOllama:    func(_, _ string, _ map[string]string) error { return nil },
-		StartManagedServices: func(svcs []nodepayloads.ConfigManagedService) error {
+		StartManagedServices: func(_ context.Context, svcs []nodepayloads.ConfigManagedService) error {
 			servicesReceived = append([]nodepayloads.ConfigManagedService(nil), svcs...)
 			return nil
 		},
@@ -457,7 +457,7 @@ func TestRunWithOptions_ManagedServicesFailFast(t *testing.T) {
 	opts := &RunOptions{
 		StartWorkerAPI:       func(string) error { return nil },
 		StartOllama:          func(_, _ string, _ map[string]string) error { return nil },
-		StartManagedServices: func([]nodepayloads.ConfigManagedService) error { return errors.New("managed service start failed") },
+		StartManagedServices: func(context.Context, []nodepayloads.ConfigManagedService) error { return errors.New("managed service start failed") },
 	}
 	ctx := context.Background()
 	err := RunWithOptions(ctx, nil, cfg, opts)

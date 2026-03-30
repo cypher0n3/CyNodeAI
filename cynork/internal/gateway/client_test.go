@@ -1,6 +1,7 @@
 package gateway
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -47,7 +48,7 @@ func TestClient_ListTasks_WithLimitOffset(t *testing.T) {
 	defer server.Close()
 	client := NewClient(server.URL)
 	client.SetToken("tok")
-	_, err := client.ListTasks(ListTasksRequest{Limit: 5, Offset: 10, Cursor: "2"})
+	_, err := client.ListTasks(context.Background(), ListTasksRequest{Limit: 5, Offset: 10, Cursor: "2"})
 	if err != nil {
 		t.Fatalf("ListTasks: %v", err)
 	}
@@ -90,7 +91,7 @@ func TestClient_Login(t *testing.T) {
 	defer server.Close()
 
 	client := NewClient(server.URL)
-	resp, err := client.Login(userapi.LoginRequest{Handle: "u", Password: "p"})
+	resp, err := client.Login(context.Background(), userapi.LoginRequest{Handle: "u", Password: "p"})
 	if err != nil {
 		t.Fatalf("Login: %v", err)
 	}
@@ -106,7 +107,7 @@ func TestClient_Login_Unauthorized(t *testing.T) {
 	defer server.Close()
 
 	client := NewClient(server.URL)
-	_, err := client.Login(userapi.LoginRequest{Handle: "u", Password: "wrong"})
+	_, err := client.Login(context.Background(), userapi.LoginRequest{Handle: "u", Password: "wrong"})
 	if err == nil {
 		t.Fatal("expected error")
 	}
@@ -123,7 +124,7 @@ func TestClient_Health(t *testing.T) {
 	defer server.Close()
 
 	client := NewClient(server.URL)
-	if err := client.Health(); err != nil {
+	if err := client.Health(context.Background()); err != nil {
 		t.Fatalf("Health: %v", err)
 	}
 }
@@ -139,13 +140,13 @@ func TestClient_CreateTask_RequiresAuth(t *testing.T) {
 	defer server.Close()
 
 	client := NewClient(server.URL)
-	_, err := client.CreateTask(&userapi.CreateTaskRequest{Prompt: "echo hi"})
+	_, err := client.CreateTask(context.Background(), &userapi.CreateTaskRequest{Prompt: "echo hi"})
 	if err == nil {
 		t.Fatal("expected error when no token")
 	}
 
 	client.SetToken("tok")
-	resp, err := client.CreateTask(&userapi.CreateTaskRequest{Prompt: "echo hi"})
+	resp, err := client.CreateTask(context.Background(), &userapi.CreateTaskRequest{Prompt: "echo hi"})
 	if err != nil {
 		t.Fatalf("CreateTask with token: %v", err)
 	}
@@ -169,7 +170,7 @@ func TestClient_GetTaskResult(t *testing.T) {
 
 	client := NewClient(server.URL)
 	client.SetToken("tok")
-	resp, err := client.GetTaskResult("tid-123")
+	resp, err := client.GetTaskResult(context.Background(), "tid-123")
 	if err != nil {
 		t.Fatalf("GetTaskResult: %v", err)
 	}
@@ -183,7 +184,7 @@ func TestClient_GetTaskResult(t *testing.T) {
 
 func TestClient_InvalidBaseURL(t *testing.T) {
 	client := NewClient("://invalid")
-	err := client.Health()
+	err := client.Health(context.Background())
 	if err == nil {
 		t.Fatal("expected error for invalid base URL")
 	}
@@ -195,7 +196,7 @@ func TestClient_Health_Non200(t *testing.T) {
 	}))
 	defer server.Close()
 	client := NewClient(server.URL)
-	err := client.Health()
+	err := client.Health(context.Background())
 	if err == nil {
 		t.Fatal("expected error for 503")
 	}
@@ -208,7 +209,7 @@ func TestClient_Health_BodyMustContainOk(t *testing.T) {
 	}))
 	defer server.Close()
 	client := NewClient(server.URL)
-	err := client.Health()
+	err := client.Health(context.Background())
 	if err == nil {
 		t.Fatal("expected error when body does not contain ok")
 	}
@@ -222,7 +223,7 @@ func TestClient_GetMe_DecodeError(t *testing.T) {
 	defer server.Close()
 	client := NewClient(server.URL)
 	client.SetToken("tok")
-	_, err := client.GetMe()
+	_, err := client.GetMe(context.Background())
 	if err == nil {
 		t.Fatal("expected decode error")
 	}
@@ -233,7 +234,7 @@ func TestClient_GetMe_Unauthorized(t *testing.T) {
 	defer server.Close()
 	client := NewClient(server.URL)
 	client.SetToken("tok")
-	_, err := client.GetMe()
+	_, err := client.GetMe(context.Background())
 	if err == nil {
 		t.Fatal("expected error")
 	}
@@ -250,7 +251,7 @@ func TestClient_GetMe_Success(t *testing.T) {
 	defer server.Close()
 	client := NewClient(server.URL)
 	client.SetToken("tok")
-	user, err := client.GetMe()
+	user, err := client.GetMe(context.Background())
 	if err != nil {
 		t.Fatalf("GetMe: %v", err)
 	}
@@ -266,7 +267,7 @@ func TestClient_parseError_NonJSONBody(t *testing.T) {
 	}))
 	defer server.Close()
 	client := NewClient(server.URL)
-	_, err := client.Login(userapi.LoginRequest{Handle: "u", Password: "p"})
+	_, err := client.Login(context.Background(), userapi.LoginRequest{Handle: "u", Password: "p"})
 	if err == nil {
 		t.Fatal("expected error")
 	}
@@ -276,7 +277,7 @@ func TestClient_Login_DecodeError(t *testing.T) {
 	server := httptest.NewServer(rawHandler(http.StatusOK, "not json"))
 	defer server.Close()
 	client := NewClient(server.URL)
-	_, err := client.Login(userapi.LoginRequest{Handle: "u", Password: "p"})
+	_, err := client.Login(context.Background(), userapi.LoginRequest{Handle: "u", Password: "p"})
 	if err == nil {
 		t.Fatal("expected decode error")
 	}
@@ -287,7 +288,7 @@ func TestClient_CreateTask_DecodeError(t *testing.T) {
 	defer server.Close()
 	client := NewClient(server.URL)
 	client.SetToken("tok")
-	_, err := client.CreateTask(&userapi.CreateTaskRequest{Prompt: "x"})
+	_, err := client.CreateTask(context.Background(), &userapi.CreateTaskRequest{Prompt: "x"})
 	if err == nil {
 		t.Fatal("expected decode error")
 	}
@@ -298,7 +299,7 @@ func TestClient_GetTaskResult_DecodeError(t *testing.T) {
 	defer server.Close()
 	client := NewClient(server.URL)
 	client.SetToken("tok")
-	_, err := client.GetTaskResult("tid")
+	_, err := client.GetTaskResult(context.Background(), "tid")
 	if err == nil {
 		t.Fatal("expected decode error")
 	}
@@ -324,7 +325,7 @@ func (errTransport) RoundTrip(*http.Request) (*http.Response, error) {
 func TestClient_Health_DoFails(t *testing.T) {
 	client := NewClient("http://localhost")
 	client.HTTPClient = &http.Client{Transport: errTransport{}}
-	err := client.Health()
+	err := client.Health(context.Background())
 	if err == nil {
 		t.Fatal("expected error when request fails")
 	}
@@ -333,7 +334,7 @@ func TestClient_Health_DoFails(t *testing.T) {
 func TestClient_Login_DoFails(t *testing.T) {
 	client := NewClient("http://localhost")
 	client.HTTPClient = &http.Client{Transport: errTransport{}}
-	_, err := client.Login(userapi.LoginRequest{Handle: "u", Password: "p"})
+	_, err := client.Login(context.Background(), userapi.LoginRequest{Handle: "u", Password: "p"})
 	if err == nil {
 		t.Fatal("expected error")
 	}
@@ -343,7 +344,7 @@ func TestClient_GetMe_DoFails(t *testing.T) {
 	client := NewClient("http://localhost")
 	client.HTTPClient = &http.Client{Transport: errTransport{}}
 	client.SetToken("tok")
-	_, err := client.GetMe()
+	_, err := client.GetMe(context.Background())
 	if err == nil {
 		t.Fatal("expected error")
 	}
@@ -353,7 +354,7 @@ func TestClient_CreateTask_DoFails(t *testing.T) {
 	client := NewClient("http://localhost")
 	client.HTTPClient = &http.Client{Transport: errTransport{}}
 	client.SetToken("tok")
-	_, err := client.CreateTask(&userapi.CreateTaskRequest{Prompt: "x"})
+	_, err := client.CreateTask(context.Background(), &userapi.CreateTaskRequest{Prompt: "x"})
 	if err == nil {
 		t.Fatal("expected error")
 	}
@@ -363,7 +364,7 @@ func TestClient_GetTaskResult_DoFails(t *testing.T) {
 	client := NewClient("http://localhost")
 	client.HTTPClient = &http.Client{Transport: errTransport{}}
 	client.SetToken("tok")
-	_, err := client.GetTaskResult("tid")
+	_, err := client.GetTaskResult(context.Background(), "tid")
 	if err == nil {
 		t.Fatal("expected error")
 	}
@@ -386,7 +387,7 @@ func TestClient_ListTasks_Success(t *testing.T) {
 	defer server.Close()
 	client := NewClient(server.URL)
 	client.SetToken("tok")
-	resp, err := client.ListTasks(ListTasksRequest{Limit: 10})
+	resp, err := client.ListTasks(context.Background(), ListTasksRequest{Limit: 10})
 	if err != nil {
 		t.Fatalf("ListTasks: %v", err)
 	}
@@ -405,7 +406,7 @@ func TestClient_ListTasks_Unauthorized(t *testing.T) {
 	server := httptest.NewServer(jsonHandler(http.StatusUnauthorized, problem.Details{Detail: "expired", Status: 401}))
 	defer server.Close()
 	client := NewClient(server.URL)
-	_, err := client.ListTasks(ListTasksRequest{})
+	_, err := client.ListTasks(context.Background(), ListTasksRequest{})
 	if err == nil {
 		t.Fatal("expected error")
 	}
@@ -426,7 +427,7 @@ func TestClient_GetTask_Success(t *testing.T) {
 	defer server.Close()
 	client := NewClient(server.URL)
 	client.SetToken("tok")
-	task, err := client.GetTask(testTaskID)
+	task, err := client.GetTask(context.Background(), testTaskID)
 	if err != nil {
 		t.Fatalf("GetTask: %v", err)
 	}
@@ -440,7 +441,7 @@ func TestClient_GetTask_NormalizesTaskID(t *testing.T) {
 	defer server.Close()
 	client := NewClient(server.URL)
 	client.SetToken("tok")
-	task, err := client.GetTask("tid-only")
+	task, err := client.GetTask(context.Background(), "tid-only")
 	if err != nil {
 		t.Fatalf("GetTask: %v", err)
 	}
@@ -456,8 +457,8 @@ func TestClient_ExpectError(t *testing.T) {
 		body   interface{}
 		call   func(*Client) error
 	}{
-		{"GetTask_NotFound", http.StatusNotFound, problem.Details{Detail: "not found", Status: 404}, func(c *Client) error { _, err := c.GetTask("tid-missing"); return err }},
-		{"CancelTask_Forbidden", http.StatusForbidden, problem.Details{Detail: "not owner", Status: 403}, func(c *Client) error { _, err := c.CancelTask(testTaskID); return err }},
+		{"GetTask_NotFound", http.StatusNotFound, problem.Details{Detail: "not found", Status: 404}, func(c *Client) error { _, err := c.GetTask(context.Background(), "tid-missing"); return err }},
+		{"CancelTask_Forbidden", http.StatusForbidden, problem.Details{Detail: "not owner", Status: 403}, func(c *Client) error { _, err := c.CancelTask(context.Background(), testTaskID); return err }},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -483,7 +484,7 @@ func TestClient_CancelTask_Success(t *testing.T) {
 	defer server.Close()
 	client := NewClient(server.URL)
 	client.SetToken("tok")
-	resp, err := client.CancelTask(testTaskID)
+	resp, err := client.CancelTask(context.Background(), testTaskID)
 	if err != nil {
 		t.Fatalf("CancelTask: %v", err)
 	}
@@ -503,7 +504,7 @@ func TestClient_GetTaskLogs_Success(t *testing.T) {
 	defer server.Close()
 	client := NewClient(server.URL)
 	client.SetToken("tok")
-	logs, err := client.GetTaskLogs(testTaskID, "")
+	logs, err := client.GetTaskLogs(context.Background(), testTaskID, "")
 	if err != nil {
 		t.Fatalf("GetTaskLogs: %v", err)
 	}
@@ -517,7 +518,7 @@ func TestClient_GetTaskLogs_NotFound(t *testing.T) {
 	defer server.Close()
 	client := NewClient(server.URL)
 	client.SetToken("tok")
-	_, err := client.GetTaskLogs("tid-missing", "stdout")
+	_, err := client.GetTaskLogs(context.Background(), "tid-missing", "stdout")
 	if err == nil {
 		t.Fatal("expected error")
 	}
@@ -553,7 +554,7 @@ func TestClient_Chat_Success(t *testing.T) {
 	defer server.Close()
 	client := NewClient(server.URL)
 	client.SetToken("tok")
-	resp, err := client.Chat("hello")
+	resp, err := client.Chat(context.Background(), "hello")
 	if err != nil {
 		t.Fatalf("Chat: %v", err)
 	}
@@ -590,7 +591,7 @@ func TestClient_ChatWithOptions_ModelAndProject(t *testing.T) {
 	defer server.Close()
 	client := NewClient(server.URL)
 	client.SetToken("tok")
-	resp, err := client.ChatWithOptions("hi", "gpt-4", testProjectID)
+	resp, err := client.ChatWithOptions(context.Background(), "hi", "gpt-4", testProjectID)
 	if err != nil {
 		t.Fatalf("ChatWithOptions: %v", err)
 	}
@@ -616,7 +617,7 @@ func TestClient_PutBytes_Success(t *testing.T) {
 	defer server.Close()
 	client := NewClient(server.URL)
 	client.SetToken("tok")
-	body, err := client.PutBytes(pathV1Skill, []byte(`{"content":"# x"}`))
+	body, err := client.PutBytes(context.Background(), pathV1Skill, []byte(`{"content":"# x"}`))
 	if err != nil {
 		t.Fatalf("PutBytes: %v", err)
 	}
@@ -637,7 +638,7 @@ func TestClient_PutBytes_NoContent(t *testing.T) {
 	defer server.Close()
 	client := NewClient(server.URL)
 	client.SetToken("tok")
-	body, err := client.PutBytes(pathV1Skill, []byte(`{}`))
+	body, err := client.PutBytes(context.Background(), pathV1Skill, []byte(`{}`))
 	if err != nil {
 		t.Fatalf("PutBytes: %v", err)
 	}
@@ -648,7 +649,7 @@ func TestClient_PutBytes_NoContent(t *testing.T) {
 
 func TestClient_PutBytes_Error(t *testing.T) {
 	expectHTTPError(t, jsonHandler(http.StatusBadRequest, problem.Details{Detail: "bad", Status: 400}),
-		func(c *Client) error { _, err := c.PutBytes(pathV1Skill, []byte("{}")); return err })
+		func(c *Client) error { _, err := c.PutBytes(context.Background(), pathV1Skill, []byte("{}")); return err })
 }
 
 //nolint:dupl // PutBytes/DeleteBytes success handler pattern
@@ -665,7 +666,7 @@ func TestClient_DeleteBytes_Success(t *testing.T) {
 	defer server.Close()
 	client := NewClient(server.URL)
 	client.SetToken("tok")
-	body, err := client.DeleteBytes(pathV1Prefs)
+	body, err := client.DeleteBytes(context.Background(), pathV1Prefs)
 	if err != nil {
 		t.Fatalf("DeleteBytes: %v", err)
 	}
@@ -686,7 +687,7 @@ func TestClient_DeleteBytes_NoContent(t *testing.T) {
 	defer server.Close()
 	client := NewClient(server.URL)
 	client.SetToken("tok")
-	body, err := client.DeleteBytes(pathV1Prefs)
+	body, err := client.DeleteBytes(context.Background(), pathV1Prefs)
 	if err != nil {
 		t.Fatalf("DeleteBytes: %v", err)
 	}
@@ -697,7 +698,7 @@ func TestClient_DeleteBytes_NoContent(t *testing.T) {
 
 func TestClient_DeleteBytes_Error(t *testing.T) {
 	expectHTTPError(t, jsonHandler(http.StatusForbidden, problem.Details{Detail: "forbidden", Status: 403}),
-		func(c *Client) error { _, err := c.DeleteBytes(pathV1Prefs); return err })
+		func(c *Client) error { _, err := c.DeleteBytes(context.Background(), pathV1Prefs); return err })
 }
 
 func TestClient_ChatWithOptions_EmptyOptionalParams(t *testing.T) {
@@ -716,7 +717,7 @@ func TestClient_ChatWithOptions_EmptyOptionalParams(t *testing.T) {
 	defer server.Close()
 	client := NewClient(server.URL)
 	client.SetToken("tok")
-	resp, err := client.ChatWithOptions("hi", "", "")
+	resp, err := client.ChatWithOptions(context.Background(), "hi", "", "")
 	if err != nil {
 		t.Fatalf("ChatWithOptions: %v", err)
 	}
@@ -730,7 +731,7 @@ func TestClient_ChatWithOptions_ServerError(t *testing.T) {
 	defer server.Close()
 	client := NewClient(server.URL)
 	client.SetToken("tok")
-	_, err := client.ChatWithOptions("hi", "m", "p")
+	_, err := client.ChatWithOptions(context.Background(), "hi", "m", "p")
 	if err == nil {
 		t.Fatal("expected error")
 	}
@@ -741,7 +742,7 @@ func TestClient_ChatWithOptions_InvalidJSON(t *testing.T) {
 	defer server.Close()
 	client := NewClient(server.URL)
 	client.SetToken("tok")
-	_, err := client.ChatWithOptions("hi", "", "")
+	_, err := client.ChatWithOptions(context.Background(), "hi", "", "")
 	if err == nil {
 		t.Fatal("expected decode error")
 	}
@@ -750,7 +751,7 @@ func TestClient_ChatWithOptions_InvalidJSON(t *testing.T) {
 func TestClient_ChatWithOptions_RequestFails(t *testing.T) {
 	client := NewClient("http://127.0.0.1:0")
 	client.SetToken("tok")
-	_, err := client.ChatWithOptions("hi", "", "")
+	_, err := client.ChatWithOptions(context.Background(), "hi", "", "")
 	if err == nil {
 		t.Fatal("expected request error")
 	}
@@ -778,7 +779,7 @@ func TestClient_ResponsesWithOptions_Success(t *testing.T) {
 	defer server.Close()
 	client := NewClient(server.URL)
 	client.SetToken("tok")
-	resp, err := client.ResponsesWithOptions("hello", "gpt-4", testProjectID)
+	resp, err := client.ResponsesWithOptions(context.Background(), "hello", "gpt-4", testProjectID)
 	if err != nil {
 		t.Fatalf("ResponsesWithOptions: %v", err)
 	}
@@ -793,7 +794,7 @@ func TestClient_ResponsesWithOptions_ErrorPaths(t *testing.T) {
 		defer server.Close()
 		client := NewClient(server.URL)
 		client.SetToken("tok")
-		if _, err := client.ResponsesWithOptions("hi", "", ""); err == nil {
+		if _, err := client.ResponsesWithOptions(context.Background(), "hi", "", ""); err == nil {
 			t.Fatal("expected error")
 		}
 	})
@@ -802,7 +803,7 @@ func TestClient_ResponsesWithOptions_ErrorPaths(t *testing.T) {
 		defer server.Close()
 		client := NewClient(server.URL)
 		client.SetToken("tok")
-		if _, err := client.ResponsesWithOptions("hi", "", ""); err == nil {
+		if _, err := client.ResponsesWithOptions(context.Background(), "hi", "", ""); err == nil {
 			t.Fatal("expected decode error")
 		}
 	})
@@ -811,7 +812,7 @@ func TestClient_ResponsesWithOptions_ErrorPaths(t *testing.T) {
 func TestClient_ResponsesWithOptions_InvalidBaseURL(t *testing.T) {
 	client := NewClient("://invalid")
 	client.SetToken("tok")
-	_, err := client.ResponsesWithOptions("hi", "", "")
+	_, err := client.ResponsesWithOptions(context.Background(), "hi", "", "")
 	if err == nil {
 		t.Fatal("expected error for invalid base URL")
 	}
@@ -820,7 +821,7 @@ func TestClient_ResponsesWithOptions_InvalidBaseURL(t *testing.T) {
 func TestClient_ResponsesWithOptions_RequestFails(t *testing.T) {
 	client := NewClient("http://127.0.0.1:0")
 	client.SetToken("tok")
-	_, err := client.ResponsesWithOptions("hi", "", "")
+	_, err := client.ResponsesWithOptions(context.Background(), "hi", "", "")
 	if err == nil {
 		t.Fatal("expected error when request fails")
 	}
@@ -842,7 +843,7 @@ func TestClient_ResponsesWithOptions_MultipleTextOutputs(t *testing.T) {
 	defer server.Close()
 	client := NewClient(server.URL)
 	client.SetToken("tok")
-	resp, err := client.ResponsesWithOptions("hi", "", "")
+	resp, err := client.ResponsesWithOptions(context.Background(), "hi", "", "")
 	if err != nil {
 		t.Fatalf("ResponsesWithOptions: %v", err)
 	}
@@ -860,7 +861,7 @@ func TestClient_ResponsesWithOptions_EmptyOutput(t *testing.T) {
 	defer server.Close()
 	client := NewClient(server.URL)
 	client.SetToken("tok")
-	resp, err := client.ResponsesWithOptions("hi", "", "")
+	resp, err := client.ResponsesWithOptions(context.Background(), "hi", "", "")
 	if err != nil {
 		t.Fatalf("ResponsesWithOptions: %v", err)
 	}
@@ -891,7 +892,7 @@ func TestClient_Refresh_Success(t *testing.T) {
 	}))
 	defer server.Close()
 	client := NewClient(server.URL)
-	resp, err := client.Refresh("old-refresh-token")
+	resp, err := client.Refresh(context.Background(), "old-refresh-token")
 	if err != nil {
 		t.Fatalf("Refresh: %v", err)
 	}
@@ -916,7 +917,7 @@ func TestClient_ListModels_Success(t *testing.T) {
 	defer server.Close()
 	client := NewClient(server.URL)
 	client.SetToken("tok")
-	resp, err := client.ListModels()
+	resp, err := client.ListModels(context.Background())
 	if err != nil {
 		t.Fatalf("ListModels: %v", err)
 	}
@@ -942,7 +943,7 @@ func TestClient_PostTaskReady(t *testing.T) {
 	defer server.Close()
 	client := NewClient(server.URL)
 	client.SetToken("tok")
-	out, err := client.PostTaskReady("t-1")
+	out, err := client.PostTaskReady(context.Background(), "t-1")
 	if err != nil {
 		t.Fatalf("PostTaskReady: %v", err)
 	}

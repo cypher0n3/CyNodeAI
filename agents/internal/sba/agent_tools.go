@@ -173,7 +173,7 @@ func applyUnifiedDiffTool() *SBATool {
 				return "", "invalid JSON: " + err.Error(), false
 			}
 			b, _ := json.Marshal(args)
-			sr := applyUnifiedDiffStep(0, b, te.Workspace)
+			sr := applyUnifiedDiffStep(ctx, 0, b, te.Workspace)
 			if sr.Status != statusSuccess {
 				return sr.Output, sr.Error, false
 			}

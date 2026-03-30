@@ -5,6 +5,7 @@ package tui
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"io"
 	"os"
@@ -311,7 +312,7 @@ func (m *Model) slashModelsCmd() tea.Cmd {
 		if m.Session == nil || m.Session.Client == nil {
 			return slashResultMsg{lines: []string{"Error: not connected"}}
 		}
-		resp, err := m.Session.Client.ListModels()
+		resp, err := m.Session.Client.ListModels(context.Background())
 		if err != nil {
 			return slashResultMsg{lines: []string{"Error: " + err.Error()}}
 		}
@@ -370,7 +371,7 @@ func (m *Model) authWhoami() slashResultMsg {
 	if m.Session == nil || m.Session.Client == nil {
 		return slashResultMsg{lines: []string{"Error: not connected"}}
 	}
-	user, err := m.Session.Client.GetMe()
+	user, err := m.Session.Client.GetMe(context.Background())
 	if err != nil {
 		return slashResultMsg{lines: []string{"Error: " + err.Error()}}
 	}
@@ -403,7 +404,7 @@ func (m *Model) authRefresh() slashResultMsg {
 	if m.Session == nil || m.Session.Client == nil {
 		return slashResultMsg{lines: []string{"Error: not connected"}}
 	}
-	resp, err := m.Session.Client.Refresh(refreshToken)
+	resp, err := m.Session.Client.Refresh(context.Background(), refreshToken)
 	if err != nil {
 		return slashResultMsg{lines: []string{"Error: " + err.Error()}}
 	}
@@ -444,7 +445,7 @@ func (m *Model) connectSet(url string) slashResultMsg {
 		_ = m.AuthProvider.Save()
 	}
 	if m.Session != nil && m.Session.Client != nil {
-		if err := m.Session.Client.Health(); err != nil {
+		if err := m.Session.Client.Health(context.Background()); err != nil {
 			return slashResultMsg{lines: []string{
 				"gateway updated to: " + url,
 				"Warning: health check failed: " + err.Error(),
@@ -519,7 +520,7 @@ func (m *Model) slashStatusCmd() tea.Cmd {
 		if m.Session == nil || m.Session.Client == nil {
 			return slashResultMsg{lines: []string{"status: not connected"}}
 		}
-		if err := m.Session.Client.Health(); err != nil {
+		if err := m.Session.Client.Health(context.Background()); err != nil {
 			return slashResultMsg{lines: []string{"status: unreachable — " + err.Error()}}
 		}
 		return slashResultMsg{lines: []string{"status: ok — " + m.Session.Client.BaseURL}}
@@ -560,7 +561,7 @@ func (m *Model) projectListCmd() slashResultMsg {
 	if m.Session == nil || m.Session.Client == nil {
 		return slashResultMsg{lines: []string{"Error: not connected"}}
 	}
-	resp, err := m.Session.Client.ListProjects()
+	resp, err := m.Session.Client.ListProjects(context.Background())
 	if err != nil {
 		return slashResultMsg{lines: []string{"Error: " + err.Error()}}
 	}
@@ -583,7 +584,7 @@ func (m *Model) projectGetCmd(id string) slashResultMsg {
 	if m.Session == nil || m.Session.Client == nil {
 		return slashResultMsg{lines: []string{"Error: not connected"}}
 	}
-	proj, err := m.Session.Client.GetProject(id)
+	proj, err := m.Session.Client.GetProject(context.Background(), id)
 	if err != nil {
 		return slashResultMsg{lines: []string{"Error: " + err.Error()}}
 	}

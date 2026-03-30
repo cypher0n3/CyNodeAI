@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
@@ -39,7 +40,7 @@ func (m *Model) handleThreadCommand(line string) tea.Cmd {
 }
 
 func (m *Model) threadCommandNew() tea.Cmd {
-	threadID, err := m.Session.NewThread()
+	threadID, err := m.Session.NewThread(context.Background())
 	if err != nil {
 		m.Scrollback = append(m.Scrollback, ScrollbackSystemLinePrefix+"Error: "+err.Error())
 		return nil
@@ -55,7 +56,7 @@ func (m *Model) threadCommandSwitch(parts []string, rest string) tea.Cmd {
 		return nil
 	}
 	selector := strings.TrimSpace(strings.TrimPrefix(rest, "switch"))
-	id, err := m.Session.ResolveThreadSelector(selector, 50)
+	id, err := m.Session.ResolveThreadSelector(context.Background(), selector, 50)
 	if err != nil {
 		m.Scrollback = append(m.Scrollback, ScrollbackSystemLinePrefix+"Error: "+err.Error())
 		return nil
@@ -93,7 +94,7 @@ func (m *Model) threadListCmd() tea.Cmd {
 		if m.Session == nil {
 			return threadListResult{err: fmt.Errorf("no session")}
 		}
-		items, err := m.Session.ListThreads(20, 0)
+		items, err := m.Session.ListThreads(context.Background(), 20, 0)
 		if err != nil {
 			return threadListResult{err: err}
 		}
@@ -118,7 +119,7 @@ func (m *Model) threadRenameCmd(title string) tea.Cmd {
 		if m.Session == nil {
 			return threadRenameResult{err: fmt.Errorf("no session")}
 		}
-		err := m.Session.PatchThreadTitle("", title)
+		err := m.Session.PatchThreadTitle(context.Background(), "", title)
 		return threadRenameResult{err: err}
 	}
 }

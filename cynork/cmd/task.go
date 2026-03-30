@@ -262,7 +262,7 @@ func validateAttachments(paths []string) error {
 	return nil
 }
 
-func runTaskCreate(_ *cobra.Command, _ []string) error {
+func runTaskCreate(cmd *cobra.Command, _ []string) error {
 	if err := requireAuthToken(); err != nil {
 		return err
 	}
@@ -277,16 +277,17 @@ func runTaskCreate(_ *cobra.Command, _ []string) error {
 	if err := validateAttachments(taskCreateAttachments); err != nil {
 		return exit.Usage(err)
 	}
+	apiCtx := cmdContext(cmd)
 	client := gateway.NewClient(cfg.GatewayURL)
 	client.SetToken(cfg.Token)
 	req := buildCreateTaskRequest(prompt, mode, projectID, taskCreateAttachments)
-	task, err := client.CreateTask(&req)
+	task, err := client.CreateTask(apiCtx, &req)
 	if err != nil {
 		return exitFromGatewayErr(err)
 	}
 	taskID := task.ResolveTaskID()
 	if taskCreateResult {
-		return waitAndPrintTaskResult(client, taskID)
+		return waitAndPrintTaskResult(apiCtx, client, taskID)
 	}
 	return printTaskCreateOutput(task, taskID)
 }
@@ -327,21 +328,21 @@ func buildCreateTaskRequest(prompt, mode string, projectID *string, attachments 
 	return req
 }
 
-func waitAndPrintTaskResult(client *gateway.Client, taskID string) error {
-	task, err := client.GetTask(taskID)
+func waitAndPrintTaskResult(parent context.Context, client *gateway.Client, taskID string) error {
+	task, err := client.GetTask(parent, taskID)
 	if err != nil {
 		return exitFromGatewayErr(err)
 	}
 	if strings.TrimSpace(task.PlanningState) == userapi.PlanningStateDraft {
-		_, err := client.PostTaskReady(taskID)
+		_, err := client.PostTaskReady(parent, taskID)
 		if err != nil {
 			return exitFromGatewayErr(err)
 		}
 	}
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+	sigCtx, stop := signal.NotifyContext(parent, os.Interrupt)
 	defer stop()
 	for {
-		result, err := client.GetTaskResult(taskID)
+		result, err := client.GetTaskResult(parent, taskID)
 		if err != nil {
 			return exitFromGatewayErr(err)
 		}
@@ -350,7 +351,7 @@ func waitAndPrintTaskResult(client *gateway.Client, taskID string) error {
 			return nil
 		}
 		select {
-		case <-ctx.Done():
+		case <-sigCtx.Done():
 			return nil
 		case <-time.After(2 * time.Second):
 		}
@@ -366,7 +367,7 @@ func printTaskCreateOutput(task *userapi.TaskResponse, taskID string) error {
 	return nil
 }
 
-func runTaskList(_ *cobra.Command, _ []string) error {
+func runTaskList(cmd *cobra.Command, _ []string) error {
 	if cfg.Token == "" {
 		return exit.Auth(fmt.Errorf("not logged in: run 'cynork auth login'"))
 	}
@@ -379,7 +380,7 @@ func runTaskList(_ *cobra.Command, _ []string) error {
 	if limit > 200 {
 		limit = 200
 	}
-	resp, err := client.ListTasks(gateway.ListTasksRequest{
+	resp, err := client.ListTasks(cmdContext(cmd), gateway.ListTasksRequest{
 		Limit:  limit,
 		Offset: taskListOffset,
 		Cursor: taskListCursor,
@@ -403,13 +404,13 @@ func runTaskList(_ *cobra.Command, _ []string) error {
 	return nil
 }
 
-func runTaskGet(_ *cobra.Command, args []string) error {
+func runTaskGet(cmd *cobra.Command, args []string) error {
 	if cfg.Token == "" {
 		return exit.Auth(fmt.Errorf("not logged in: run 'cynork auth login'"))
 	}
 	client := gateway.NewClient(cfg.GatewayURL)
 	client.SetToken(cfg.Token)
-	task, err := client.GetTask(args[0])
+	task, err := client.GetTask(cmdContext(cmd), args[0])
 	if err != nil {
 		return exitFromGatewayErr(err)
 	}
@@ -425,13 +426,13 @@ func runTaskGet(_ *cobra.Command, args []string) error {
 	return nil
 }
 
-func runTaskReady(_ *cobra.Command, args []string) error {
+func runTaskReady(cmd *cobra.Command, args []string) error {
 	if cfg.Token == "" {
 		return exit.Auth(fmt.Errorf("not logged in: run 'cynork auth login'"))
 	}
 	client := gateway.NewClient(cfg.GatewayURL)
 	client.SetToken(cfg.Token)
-	task, err := client.PostTaskReady(args[0])
+	task, err := client.PostTaskReady(cmdContext(cmd), args[0])
 	if err != nil {
 		return exitFromGatewayErr(err)
 	}
@@ -443,20 +444,21 @@ func runTaskReady(_ *cobra.Command, args []string) error {
 	return nil
 }
 
-func runTaskResult(_ *cobra.Command, args []string) error {
+func runTaskResult(cmd *cobra.Command, args []string) error {
 	if cfg.Token == "" {
 		return exit.Auth(fmt.Errorf("not logged in: run 'cynork auth login'"))
 	}
 	taskID := args[0]
 	client := gateway.NewClient(cfg.GatewayURL)
 	client.SetToken(cfg.Token)
+	apiCtx := cmdContext(cmd)
 	if taskResultWait {
 		interval := taskResultWaitInterval
 		if interval < time.Second {
 			interval = time.Second
 		}
 		for {
-			result, err := client.GetTaskResult(taskID)
+			result, err := client.GetTaskResult(apiCtx, taskID)
 			if err != nil {
 				return exitFromGatewayErr(err)
 			}
@@ -467,7 +469,7 @@ func runTaskResult(_ *cobra.Command, args []string) error {
 			time.Sleep(interval)
 		}
 	}
-	result, err := client.GetTaskResult(taskID)
+	result, err := client.GetTaskResult(apiCtx, taskID)
 	if err != nil {
 		return exitFromGatewayErr(err)
 	}
@@ -475,7 +477,7 @@ func runTaskResult(_ *cobra.Command, args []string) error {
 	return nil
 }
 
-func runTaskCancel(_ *cobra.Command, args []string) error {
+func runTaskCancel(cmd *cobra.Command, args []string) error {
 	if cfg.Token == "" {
 		return exit.Auth(fmt.Errorf("not logged in: run 'cynork auth login'"))
 	}
@@ -489,7 +491,7 @@ func runTaskCancel(_ *cobra.Command, args []string) error {
 	}
 	client := gateway.NewClient(cfg.GatewayURL)
 	client.SetToken(cfg.Token)
-	resp, err := client.CancelTask(taskID)
+	resp, err := client.CancelTask(cmdContext(cmd), taskID)
 	if err != nil {
 		return exitFromGatewayErr(err)
 	}
@@ -501,13 +503,13 @@ func runTaskCancel(_ *cobra.Command, args []string) error {
 	return nil
 }
 
-func runTaskLogs(_ *cobra.Command, args []string) error {
+func runTaskLogs(cmd *cobra.Command, args []string) error {
 	if cfg.Token == "" {
 		return exit.Auth(fmt.Errorf("not logged in: run 'cynork auth login'"))
 	}
 	client := gateway.NewClient(cfg.GatewayURL)
 	client.SetToken(cfg.Token)
-	logs, err := client.GetTaskLogs(args[0], "")
+	logs, err := client.GetTaskLogs(cmdContext(cmd), args[0], "")
 	if err != nil {
 		return exitFromGatewayErr(err)
 	}
@@ -577,14 +579,14 @@ func parseTaskJobResultStderr(raw string) (string, bool) {
 	return "", false
 }
 
-func runTaskArtifactsList(_ *cobra.Command, args []string) error {
+func runTaskArtifactsList(cmd *cobra.Command, args []string) error {
 	if cfg.Token == "" {
 		return exit.Auth(fmt.Errorf("not logged in: run 'cynork auth login'"))
 	}
 	client := gateway.NewClient(cfg.GatewayURL)
 	client.SetToken(cfg.Token)
 	path := "/v1/tasks/" + url.PathEscape(args[0]) + "/artifacts"
-	body, err := client.GetBytes(path)
+	body, err := client.GetBytes(cmdContext(cmd), path)
 	if err != nil {
 		return exitFromGatewayErr(err)
 	}
@@ -595,7 +597,7 @@ func runTaskArtifactsList(_ *cobra.Command, args []string) error {
 	return nil
 }
 
-func runTaskWatch(_ *cobra.Command, args []string) error {
+func runTaskWatch(cmd *cobra.Command, args []string) error {
 	if cfg.Token == "" {
 		return exit.Auth(fmt.Errorf("not logged in: run 'cynork auth login'"))
 	}
@@ -603,7 +605,7 @@ func runTaskWatch(_ *cobra.Command, args []string) error {
 	client := gateway.NewClient(cfg.GatewayURL)
 	client.SetToken(cfg.Token)
 
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+	ctx, stop := signal.NotifyContext(cmdContext(cmd), os.Interrupt)
 	defer stop()
 
 	useClear := !taskWatchNoClear && term.IsTerminal(int(os.Stdout.Fd()))
@@ -613,7 +615,7 @@ func runTaskWatch(_ *cobra.Command, args []string) error {
 	}
 
 	for {
-		result, err := client.GetTaskResult(taskID)
+		result, err := client.GetTaskResult(ctx, taskID)
 		if err != nil {
 			return exitFromGatewayErr(err)
 		}

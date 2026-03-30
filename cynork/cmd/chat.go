@@ -70,10 +70,11 @@ func formatChatResponse(response string, plain, noColor bool) (string, error) {
 	return out, nil
 }
 
-func runChat(_ *cobra.Command, _ []string) error {
+func runChat(cmd *cobra.Command, _ []string) error {
 	if cfg.Token == "" {
 		return exit.Auth(fmt.Errorf("not logged in: run 'cynork auth login'"))
 	}
+	ctx := cmdContext(cmd)
 	client := gateway.NewClient(cfg.GatewayURL)
 	client.SetToken(cfg.Token)
 	session := chat.NewSession(client)
@@ -83,11 +84,11 @@ func runChat(_ *cobra.Command, _ []string) error {
 	session.NoColor = noColor
 	switch {
 	case chatResumeThread != "":
-		if err := session.EnsureThread(chatResumeThread); err != nil {
+		if err := session.EnsureThread(ctx, chatResumeThread); err != nil {
 			return fmt.Errorf("resume thread: %w", err)
 		}
 	case chatThreadNew:
-		threadID, err := session.NewThread()
+		threadID, err := session.NewThread(ctx)
 		if err != nil {
 			return fmt.Errorf("start new thread: %w", err)
 		}

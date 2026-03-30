@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 
@@ -102,7 +103,7 @@ func runStubFetch(path, emptyJSON string) error {
 	}
 	client := gateway.NewClient(cfg.GatewayURL)
 	client.SetToken(cfg.Token)
-	body, err := client.GetBytes(path)
+	body, err := client.GetBytes(context.Background(), path)
 	if err != nil {
 		return exitFromGatewayErr(err)
 	}
@@ -123,7 +124,7 @@ func runStubSet(path string) error {
 	}
 	client := gateway.NewClient(cfg.GatewayURL)
 	client.SetToken(cfg.Token)
-	_, err := client.PostBytes(path, []byte("{}"))
+	_, err := client.PostBytes(context.Background(), path, []byte("{}"))
 	if err != nil {
 		return exitFromGatewayErr(err)
 	}
@@ -137,7 +138,7 @@ func runStubDelete(path string) error {
 	}
 	client := gateway.NewClient(cfg.GatewayURL)
 	client.SetToken(cfg.Token)
-	body, err := client.DeleteBytes(path)
+	body, err := client.DeleteBytes(context.Background(), path)
 	if err != nil {
 		return exitFromGatewayErr(err)
 	}

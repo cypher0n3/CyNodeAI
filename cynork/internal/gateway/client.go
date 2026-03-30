@@ -50,27 +50,27 @@ func (c *Client) SetToken(token string) {
 }
 
 // Login calls POST /v1/auth/login and returns the token response.
-func (c *Client) Login(req userapi.LoginRequest) (*userapi.LoginResponse, error) {
+func (c *Client) Login(ctx context.Context, req userapi.LoginRequest) (*userapi.LoginResponse, error) {
 	var out userapi.LoginResponse
-	if err := c.doPostJSON("/v1/auth/login", req, http.StatusOK, &out); err != nil {
+	if err := c.doPostJSON(ctx, "/v1/auth/login", req, http.StatusOK, &out); err != nil {
 		return nil, err
 	}
 	return &out, nil
 }
 
 // Refresh calls POST /v1/auth/refresh and returns new tokens (no auth header required).
-func (c *Client) Refresh(refreshToken string) (*userapi.LoginResponse, error) {
+func (c *Client) Refresh(ctx context.Context, refreshToken string) (*userapi.LoginResponse, error) {
 	req := userapi.RefreshRequest{RefreshToken: refreshToken}
 	var out userapi.LoginResponse
-	if err := c.doPostJSONNoAuth("/v1/auth/refresh", req, http.StatusOK, &out); err != nil {
+	if err := c.doPostJSONNoAuth(ctx, "/v1/auth/refresh", req, http.StatusOK, &out); err != nil {
 		return nil, err
 	}
 	return &out, nil
 }
 
 // GetMe calls GET /v1/users/me (requires auth).
-func (c *Client) GetMe() (*userapi.UserResponse, error) {
-	resp, err := c.doRequest(http.MethodGet, "/v1/users/me", nil, nil)
+func (c *Client) GetMe(ctx context.Context) (*userapi.UserResponse, error) {
+	resp, err := c.doRequest(ctx, http.MethodGet, "/v1/users/me", nil, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -90,8 +90,8 @@ func (c *Client) GetMe() (*userapi.UserResponse, error) {
 type HealthResponse struct{}
 
 // Health calls GET /healthz and returns nil if status 200 and body contains "ok".
-func (c *Client) Health() error {
-	resp, err := c.doRequest(http.MethodGet, "/healthz", nil, nil)
+func (c *Client) Health(ctx context.Context) error {
+	resp, err := c.doRequest(ctx, http.MethodGet, "/healthz", nil, nil)
 	if err != nil {
 		return err
 	}
@@ -118,7 +118,7 @@ type ListTasksRequest struct {
 }
 
 // ListTasks calls GET /v1/tasks (requires auth).
-func (c *Client) ListTasks(req ListTasksRequest) (*userapi.ListTasksResponse, error) {
+func (c *Client) ListTasks(ctx context.Context, req ListTasksRequest) (*userapi.ListTasksResponse, error) {
 	q := url.Values{}
 	if req.Limit > 0 {
 		q.Set("limit", fmt.Sprint(req.Limit))
@@ -132,7 +132,7 @@ func (c *Client) ListTasks(req ListTasksRequest) (*userapi.ListTasksResponse, er
 	if req.Status != "" {
 		q.Set("status", req.Status)
 	}
-	resp, err := c.doRequest(http.MethodGet, "/v1/tasks", q, nil)
+	resp, err := c.doRequest(ctx, http.MethodGet, "/v1/tasks", q, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -160,9 +160,9 @@ func normalizeTaskResponse(t *userapi.TaskResponse) {
 }
 
 // GetTask calls GET /v1/tasks/{id} (requires auth).
-func (c *Client) GetTask(taskID string) (*userapi.TaskResponse, error) {
+func (c *Client) GetTask(ctx context.Context, taskID string) (*userapi.TaskResponse, error) {
 	path := "/v1/tasks/" + url.PathEscape(taskID)
-	resp, err := c.doRequest(http.MethodGet, path, nil, nil)
+	resp, err := c.doRequest(ctx, http.MethodGet, path, nil, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -179,18 +179,18 @@ func (c *Client) GetTask(taskID string) (*userapi.TaskResponse, error) {
 }
 
 // doTaskAction is a generic helper for task subpath operations that decode a typed response.
-func doTaskAction[T any](c *Client, method, taskID, suffix, decodeErrPrefix string) (*T, error) {
+func doTaskAction[T any](ctx context.Context, c *Client, method, taskID, suffix, decodeErrPrefix string) (*T, error) {
 	var out T
 	path := "/v1/tasks/" + url.PathEscape(taskID) + suffix
-	if err := c.doTaskPath(method, path, &out, decodeErrPrefix); err != nil {
+	if err := c.doTaskPath(ctx, method, path, &out, decodeErrPrefix); err != nil {
 		return nil, err
 	}
 	return &out, nil
 }
 
 // doTaskPath performs a request to a task subpath and decodes the JSON response into out.
-func (c *Client) doTaskPath(method, path string, out interface{}, decodeErrPrefix string) error {
-	resp, err := c.doRequest(method, path, nil, nil)
+func (c *Client) doTaskPath(ctx context.Context, method, path string, out interface{}, decodeErrPrefix string) error {
+	resp, err := c.doRequest(ctx, method, path, nil, nil)
 	if err != nil {
 		return err
 	}
@@ -205,18 +205,18 @@ func (c *Client) doTaskPath(method, path string, out interface{}, decodeErrPrefi
 }
 
 // CancelTask calls POST /v1/tasks/{id}/cancel (requires auth).
-func (c *Client) CancelTask(taskID string) (*userapi.CancelTaskResponse, error) {
-	return doTaskAction[userapi.CancelTaskResponse](c, http.MethodPost, taskID, "/cancel", "decode cancel task response")
+func (c *Client) CancelTask(ctx context.Context, taskID string) (*userapi.CancelTaskResponse, error) {
+	return doTaskAction[userapi.CancelTaskResponse](ctx, c, http.MethodPost, taskID, "/cancel", "decode cancel task response")
 }
 
 // GetTaskLogs calls GET /v1/tasks/{id}/logs (requires auth).
 // Stream query param: stdout | stderr | all (default).
-func (c *Client) GetTaskLogs(taskID, stream string) (*userapi.TaskLogsResponse, error) {
+func (c *Client) GetTaskLogs(ctx context.Context, taskID, stream string) (*userapi.TaskLogsResponse, error) {
 	path := "/v1/tasks/" + url.PathEscape(taskID) + "/logs"
 	if stream != "" {
 		path += "?stream=" + url.QueryEscape(stream)
 	}
-	resp, err := c.doRequest(http.MethodGet, path, nil, nil)
+	resp, err := c.doRequest(ctx, http.MethodGet, path, nil, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -250,9 +250,9 @@ type ListModelEntry struct {
 }
 
 // ListModels calls GET /v1/models (requires auth).
-func (c *Client) ListModels() (*ListModelsResponse, error) {
+func (c *Client) ListModels(ctx context.Context) (*ListModelsResponse, error) {
 	var out ListModelsResponse
-	if err := c.doGetJSON("/v1/models", &out); err != nil {
+	if err := c.doGetJSON(ctx, "/v1/models", &out); err != nil {
 		return nil, err
 	}
 	return &out, nil
@@ -270,31 +270,31 @@ type ListProjectsResponse struct {
 }
 
 // ListProjects calls GET /v1/projects (requires auth).
-func (c *Client) ListProjects() (*ListProjectsResponse, error) {
+func (c *Client) ListProjects(ctx context.Context) (*ListProjectsResponse, error) {
 	var out ListProjectsResponse
-	if err := c.doGetJSON("/v1/projects", &out); err != nil {
+	if err := c.doGetJSON(ctx, "/v1/projects", &out); err != nil {
 		return nil, err
 	}
 	return &out, nil
 }
 
 // GetProject calls GET /v1/projects/{id} (requires auth).
-func (c *Client) GetProject(id string) (*ProjectEntry, error) {
+func (c *Client) GetProject(ctx context.Context, id string) (*ProjectEntry, error) {
 	var out ProjectEntry
-	if err := c.doGetJSON("/v1/projects/"+url.PathEscape(id), &out); err != nil {
+	if err := c.doGetJSON(ctx, "/v1/projects/"+url.PathEscape(id), &out); err != nil {
 		return nil, err
 	}
 	return &out, nil
 }
 
 // Chat calls POST /v1/chat/completions (requires auth). Sends one user message; returns assistant content per openai_compatible_chat_api.md.
-func (c *Client) Chat(message string) (*ChatResponse, error) {
-	return c.ChatWithOptions(message, "", "")
+func (c *Client) Chat(ctx context.Context, message string) (*ChatResponse, error) {
+	return c.ChatWithOptions(ctx, message, "", "")
 }
 
 // ChatWithOptions is like Chat but allows session model and OpenAI-Project header.
 // If model is non-empty it is sent in the request body; if projectID is non-empty it is sent as OpenAI-Project header.
-func (c *Client) ChatWithOptions(message, model, projectID string) (*ChatResponse, error) {
+func (c *Client) ChatWithOptions(ctx context.Context, message, model, projectID string) (*ChatResponse, error) {
 	req := userapi.ChatCompletionsRequest{
 		Model:    model,
 		Messages: []userapi.ChatMessage{{Role: "user", Content: message}},
@@ -311,7 +311,7 @@ func (c *Client) ChatWithOptions(message, model, projectID string) (*ChatRespons
 	if err != nil {
 		return nil, fmt.Errorf("invalid path: %w", err)
 	}
-	httpReq, err := http.NewRequest(http.MethodPost, u.String(), bytes.NewReader(body))
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, u.String(), bytes.NewReader(body))
 	if err != nil {
 		return nil, err
 	}
@@ -349,7 +349,7 @@ type ResponsesResponse struct {
 
 // ResponsesWithOptions calls POST /v1/responses with input as a single user message string.
 // If model or projectID is non-empty they are sent in the body or as OpenAI-Project header respectively.
-func (c *Client) ResponsesWithOptions(message, model, projectID string) (*ResponsesResponse, error) {
+func (c *Client) ResponsesWithOptions(ctx context.Context, message, model, projectID string) (*ResponsesResponse, error) {
 	input, err := json.Marshal(message)
 	if err != nil {
 		return nil, fmt.Errorf("marshal input: %w", err)
@@ -370,7 +370,7 @@ func (c *Client) ResponsesWithOptions(message, model, projectID string) (*Respon
 	if err != nil {
 		return nil, fmt.Errorf("invalid path: %w", err)
 	}
-	httpReq, err := http.NewRequest(http.MethodPost, u.String(), bytes.NewReader(body))
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, u.String(), bytes.NewReader(body))
 	if err != nil {
 		return nil, err
 	}
@@ -686,7 +686,7 @@ func processChatCompletionSSEChoices(data string, onDelta func(string)) (streamD
 
 // NewChatThread calls POST /v1/chat/threads and returns the new thread ID.
 // Use this when the user wants to start a fresh conversation context.
-func (c *Client) NewChatThread(projectID string) (string, error) {
+func (c *Client) NewChatThread(ctx context.Context, projectID string) (string, error) {
 	base, err := url.Parse(c.BaseURL)
 	if err != nil {
 		return "", fmt.Errorf("invalid base URL: %w", err)
@@ -695,7 +695,7 @@ func (c *Client) NewChatThread(projectID string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("invalid path: %w", err)
 	}
-	httpReq, err := http.NewRequest(http.MethodPost, u.String(), http.NoBody)
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, u.String(), http.NoBody)
 	if err != nil {
 		return "", err
 	}
@@ -733,7 +733,7 @@ type ChatThreadItem struct {
 }
 
 // ListChatThreads calls GET /v1/chat/threads with optional project and pagination.
-func (c *Client) ListChatThreads(projectID string, limit, offset int) ([]ChatThreadItem, error) {
+func (c *Client) ListChatThreads(ctx context.Context, projectID string, limit, offset int) ([]ChatThreadItem, error) {
 	base, err := url.Parse(c.BaseURL)
 	if err != nil {
 		return nil, fmt.Errorf("invalid base URL: %w", err)
@@ -750,7 +750,7 @@ func (c *Client) ListChatThreads(projectID string, limit, offset int) ([]ChatThr
 		q.Set("offset", strconv.Itoa(offset))
 	}
 	u.RawQuery = q.Encode()
-	req, err := http.NewRequest(http.MethodGet, u.String(), http.NoBody)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), http.NoBody)
 	if err != nil {
 		return nil, err
 	}
@@ -778,7 +778,7 @@ func (c *Client) ListChatThreads(projectID string, limit, offset int) ([]ChatThr
 }
 
 // PatchThreadTitle calls PATCH /v1/chat/threads/{id} to set the thread title.
-func (c *Client) PatchThreadTitle(threadID, title string) error {
+func (c *Client) PatchThreadTitle(ctx context.Context, threadID, title string) error {
 	base, err := url.Parse(c.BaseURL)
 	if err != nil {
 		return fmt.Errorf("invalid base URL: %w", err)
@@ -792,7 +792,7 @@ func (c *Client) PatchThreadTitle(threadID, title string) error {
 	if err != nil {
 		return err
 	}
-	req, err := http.NewRequest(http.MethodPatch, u.String(), bytes.NewReader(raw))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPatch, u.String(), bytes.NewReader(raw))
 	if err != nil {
 		return err
 	}
@@ -812,7 +812,7 @@ func (c *Client) PatchThreadTitle(threadID, title string) error {
 }
 
 // GetChatThread calls GET /v1/chat/threads/{id} and returns the thread (title, summary, etc.).
-func (c *Client) GetChatThread(threadID string) (*ChatThreadItem, error) {
+func (c *Client) GetChatThread(ctx context.Context, threadID string) (*ChatThreadItem, error) {
 	base, err := url.Parse(c.BaseURL)
 	if err != nil {
 		return nil, fmt.Errorf("invalid base URL: %w", err)
@@ -821,7 +821,7 @@ func (c *Client) GetChatThread(threadID string) (*ChatThreadItem, error) {
 	if err != nil {
 		return nil, fmt.Errorf("invalid path: %w", err)
 	}
-	req, err := http.NewRequest(http.MethodGet, u.String(), http.NoBody)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), http.NoBody)
 	if err != nil {
 		return nil, err
 	}
@@ -844,9 +844,9 @@ func (c *Client) GetChatThread(threadID string) (*ChatThreadItem, error) {
 }
 
 // CreateTask calls POST /v1/tasks (requires auth).
-func (c *Client) CreateTask(req *userapi.CreateTaskRequest) (*userapi.TaskResponse, error) {
+func (c *Client) CreateTask(ctx context.Context, req *userapi.CreateTaskRequest) (*userapi.TaskResponse, error) {
 	var out userapi.TaskResponse
-	if err := c.doPostJSON("/v1/tasks", req, http.StatusCreated, &out); err != nil {
+	if err := c.doPostJSON(ctx, "/v1/tasks", req, http.StatusCreated, &out); err != nil {
 		return nil, err
 	}
 	normalizeTaskResponse(&out)
@@ -854,10 +854,10 @@ func (c *Client) CreateTask(req *userapi.CreateTaskRequest) (*userapi.TaskRespon
 }
 
 // PostTaskReady calls POST /v1/tasks/{id}/ready (requires auth).
-func (c *Client) PostTaskReady(taskID string) (*userapi.TaskResponse, error) {
+func (c *Client) PostTaskReady(ctx context.Context, taskID string) (*userapi.TaskResponse, error) {
 	var out userapi.TaskResponse
 	path := "/v1/tasks/" + url.PathEscape(taskID) + "/ready"
-	if err := c.doPostJSON(path, struct{}{}, http.StatusOK, &out); err != nil {
+	if err := c.doPostJSON(ctx, path, struct{}{}, http.StatusOK, &out); err != nil {
 		return nil, err
 	}
 	normalizeTaskResponse(&out)
@@ -865,13 +865,13 @@ func (c *Client) PostTaskReady(taskID string) (*userapi.TaskResponse, error) {
 }
 
 // GetTaskResult calls GET /v1/tasks/{id}/result (requires auth).
-func (c *Client) GetTaskResult(taskID string) (*userapi.TaskResultResponse, error) {
-	return doTaskAction[userapi.TaskResultResponse](c, http.MethodGet, taskID, "/result", "decode task result response")
+func (c *Client) GetTaskResult(ctx context.Context, taskID string) (*userapi.TaskResultResponse, error) {
+	return doTaskAction[userapi.TaskResultResponse](ctx, c, http.MethodGet, taskID, "/result", "decode task result response")
 }
 
 // GetBytes performs an authenticated GET and returns the body (for stub endpoints like /v1/creds).
-func (c *Client) GetBytes(path string) ([]byte, error) {
-	resp, err := c.doRequest(http.MethodGet, path, nil, nil)
+func (c *Client) GetBytes(ctx context.Context, path string) ([]byte, error) {
+	resp, err := c.doRequest(ctx, http.MethodGet, path, nil, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -883,12 +883,12 @@ func (c *Client) GetBytes(path string) ([]byte, error) {
 }
 
 // PostBytes performs an authenticated POST with optional body and returns the response body.
-func (c *Client) PostBytes(path string, body []byte) ([]byte, error) {
+func (c *Client) PostBytes(ctx context.Context, path string, body []byte) ([]byte, error) {
 	var r io.Reader
 	if len(body) > 0 {
 		r = bytes.NewReader(body)
 	}
-	resp, err := c.doRequest(http.MethodPost, path, nil, r)
+	resp, err := c.doRequest(ctx, http.MethodPost, path, nil, r)
 	if err != nil {
 		return nil, err
 	}
@@ -903,12 +903,12 @@ func (c *Client) PostBytes(path string, body []byte) ([]byte, error) {
 }
 
 // PutBytes performs an authenticated PUT with body and returns the response body.
-func (c *Client) PutBytes(path string, body []byte) ([]byte, error) {
+func (c *Client) PutBytes(ctx context.Context, path string, body []byte) ([]byte, error) {
 	var r io.Reader
 	if len(body) > 0 {
 		r = bytes.NewReader(body)
 	}
-	resp, err := c.doRequest(http.MethodPut, path, nil, r)
+	resp, err := c.doRequest(ctx, http.MethodPut, path, nil, r)
 	if err != nil {
 		return nil, err
 	}
@@ -923,8 +923,8 @@ func (c *Client) PutBytes(path string, body []byte) ([]byte, error) {
 }
 
 // DeleteBytes performs an authenticated DELETE and returns the response body.
-func (c *Client) DeleteBytes(path string) ([]byte, error) {
-	resp, err := c.doRequest(http.MethodDelete, path, nil, nil)
+func (c *Client) DeleteBytes(ctx context.Context, path string) ([]byte, error) {
+	resp, err := c.doRequest(ctx, http.MethodDelete, path, nil, nil)
 	if err != nil {
 		return nil, err
 	}

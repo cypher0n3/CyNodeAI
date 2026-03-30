@@ -841,15 +841,31 @@ func TestApplyUnifiedDiffStep_Success(t *testing.T) {
 	_ = os.WriteFile(filepath.Join(dir, "f.txt"), []byte("a\n"), 0o644)
 	diff := "--- a/f.txt\n+++ b/f.txt\n@@ -1 +1,2 @@\n a\n+b\n"
 	args, _ := json.Marshal(map[string]string{"diff": diff})
-	sr := applyUnifiedDiffStep(0, args, dir)
+	sr := applyUnifiedDiffStep(context.Background(), 0, args, dir)
 	if sr.Status != wantStatusSuccess {
 		t.Errorf("Status = %q: %s", sr.Status, sr.Error)
 	}
 }
 
+func TestContextCancel_applyUnifiedDiffStep(t *testing.T) {
+	dir := t.TempDir()
+	_ = os.WriteFile(filepath.Join(dir, "f.txt"), []byte("a\n"), 0o644)
+	diff := "--- a/f.txt\n+++ b/f.txt\n@@ -1 +1,2 @@\n a\n+b\n"
+	args, _ := json.Marshal(map[string]string{"diff": diff})
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	sr := applyUnifiedDiffStep(ctx, 0, args, dir)
+	if sr.Status != statusFailed {
+		t.Fatalf("expected failure when ctx canceled, got %q", sr.Status)
+	}
+	if !strings.Contains(sr.Error, "context canceled") {
+		t.Fatalf("expected context canceled in error, got %q", sr.Error)
+	}
+}
+
 func TestApplyUnifiedDiffStep_InvalidArgs_Fails(t *testing.T) {
 	dir := t.TempDir()
-	sr := applyUnifiedDiffStep(0, []byte(`{"diff": 123}`), dir) // diff must be string
+	sr := applyUnifiedDiffStep(context.Background(), 0, []byte(`{"diff": 123}`), dir) // diff must be string
 	if sr.Status != statusFailed {
 		t.Errorf("Status = %q", sr.Status)
 	}
@@ -859,7 +875,7 @@ func TestApplyUnifiedDiffStep_PathEscape_Rejected(t *testing.T) {
 	dir := t.TempDir()
 	diff := "--- a/../../etc/passwd\n+++ b/../../etc/passwd\n@@ -1 +1 @@\n-x\n+y\n"
 	args, _ := json.Marshal(map[string]string{"diff": diff})
-	sr := applyUnifiedDiffStep(0, args, dir)
+	sr := applyUnifiedDiffStep(context.Background(), 0, args, dir)
 	if sr.Status != statusFailed {
 		t.Errorf("Status = %q", sr.Status)
 	}
@@ -916,7 +932,7 @@ func TestApplyUnifiedDiffStep_PatchFails(t *testing.T) {
 	dir := t.TempDir()
 	// Invalid diff that patch will reject
 	args, _ := json.Marshal(map[string]string{"diff": "--- a/x\n+++ b/x\n@@ -1 +1 @@\n-foo\n+bar\n"})
-	sr := applyUnifiedDiffStep(0, args, dir)
+	sr := applyUnifiedDiffStep(context.Background(), 0, args, dir)
 	// patch may fail (file x does not exist) or succeed depending on patch version
 	if sr.Status != statusFailed && sr.Status != wantStatusSuccess {
 		t.Errorf("Status = %q", sr.Status)

@@ -60,13 +60,13 @@ func init() {
 	authLoginCmd.Flags().BoolVar(&authLoginPasswordStdin, "password-stdin", false, "read password from stdin")
 }
 
-func runAuthLogin(_ *cobra.Command, _ []string) error {
+func runAuthLogin(cmd *cobra.Command, _ []string) error {
 	handle, password, err := gatherLoginCredentials()
 	if err != nil {
 		return err
 	}
 	client := gateway.NewClient(cfg.GatewayURL)
-	resp, err := client.Login(userapi.LoginRequest{Handle: handle, Password: password})
+	resp, err := client.Login(cmdContext(cmd), userapi.LoginRequest{Handle: handle, Password: password})
 	if err != nil {
 		return exitFromGatewayErr(err)
 	}
@@ -210,13 +210,13 @@ func runAuthLogout(_ *cobra.Command, _ []string) error {
 	return nil
 }
 
-func runAuthWhoami(_ *cobra.Command, _ []string) error {
+func runAuthWhoami(cmd *cobra.Command, _ []string) error {
 	if cfg.Token == "" {
 		return exit.Auth(fmt.Errorf("not logged in: run 'cynork auth login' or set CYNORK_TOKEN"))
 	}
 	client := gateway.NewClient(cfg.GatewayURL)
 	client.SetToken(cfg.Token)
-	user, err := client.GetMe()
+	user, err := client.GetMe(cmdContext(cmd))
 	if err != nil {
 		return exitFromGatewayErr(err)
 	}
@@ -228,12 +228,12 @@ func runAuthWhoami(_ *cobra.Command, _ []string) error {
 	return nil
 }
 
-func runAuthRefresh(_ *cobra.Command, _ []string) error {
+func runAuthRefresh(cmd *cobra.Command, _ []string) error {
 	if cfg.RefreshToken == "" {
 		return exit.Auth(fmt.Errorf("no refresh token: run 'cynork auth login', or set CYNORK_REFRESH_TOKEN"))
 	}
 	client := gateway.NewClient(cfg.GatewayURL)
-	resp, err := client.Refresh(cfg.RefreshToken)
+	resp, err := client.Refresh(cmdContext(cmd), cfg.RefreshToken)
 	if err != nil {
 		return exitFromGatewayErr(err)
 	}

@@ -96,7 +96,7 @@ func reconcileManagedServices(ctx context.Context, logger *slog.Logger, nodeConf
 	if nodeConfig == nil || nodeConfig.ManagedServices == nil || len(nodeConfig.ManagedServices.Services) == 0 {
 		return
 	}
-	if err := opts.StartManagedServices(nodeConfig.ManagedServices.Services); err != nil {
+	if err := opts.StartManagedServices(ctx, nodeConfig.ManagedServices.Services); err != nil {
 		if logger != nil {
 			logger.Warn("managed services reconcile error", "error", err)
 		}

@@ -323,7 +323,7 @@ func TestMaybeStartManagedServices_NoOpPaths(t *testing.T) {
 	}
 	called := false
 	opts := &RunOptions{
-		StartManagedServices: func([]nodepayloads.ConfigManagedService) error {
+		StartManagedServices: func(context.Context, []nodepayloads.ConfigManagedService) error {
 			called = true
 			return nil
 		},
@@ -443,7 +443,7 @@ func TestReconcileManagedServices_NilOpts(t *testing.T) {
 func TestReconcileManagedServices_NilNodeConfig(t *testing.T) {
 	called := false
 	opts := &RunOptions{
-		StartManagedServices: func(_ []nodepayloads.ConfigManagedService) error {
+		StartManagedServices: func(context.Context, []nodepayloads.ConfigManagedService) error {
 			called = true
 			return nil
 		},
@@ -457,7 +457,7 @@ func TestReconcileManagedServices_NilNodeConfig(t *testing.T) {
 func TestReconcileManagedServices_EmptyServices(t *testing.T) {
 	called := false
 	opts := &RunOptions{
-		StartManagedServices: func(_ []nodepayloads.ConfigManagedService) error {
+		StartManagedServices: func(context.Context, []nodepayloads.ConfigManagedService) error {
 			called = true
 			return nil
 		},
@@ -474,7 +474,7 @@ func TestReconcileManagedServices_EmptyServices(t *testing.T) {
 func TestReconcileManagedServices_CallsStartManagedServices(t *testing.T) {
 	called := false
 	opts := &RunOptions{
-		StartManagedServices: func(svcs []nodepayloads.ConfigManagedService) error {
+		StartManagedServices: func(_ context.Context, svcs []nodepayloads.ConfigManagedService) error {
 			called = true
 			return nil
 		},
@@ -492,7 +492,7 @@ func TestReconcileManagedServices_CallsStartManagedServices(t *testing.T) {
 
 func TestReconcileManagedServices_LogsOnError(t *testing.T) {
 	opts := &RunOptions{
-		StartManagedServices: func(_ []nodepayloads.ConfigManagedService) error {
+		StartManagedServices: func(context.Context, []nodepayloads.ConfigManagedService) error {
 			return errors.New("container gone")
 		},
 	}
@@ -636,7 +636,7 @@ func TestMaybePullModels_NilPullModels(t *testing.T) {
 
 func TestMaybePullModels_NoSelectedModel(t *testing.T) {
 	called := false
-	opts := &RunOptions{PullModels: func(_ []string) error { called = true; return nil }}
+	opts := &RunOptions{PullModels: func(context.Context, []string) error { called = true; return nil }}
 	maybePullModels(context.Background(), nil, &nodepayloads.NodeConfigurationPayload{
 		InferenceBackend: &nodepayloads.ConfigInferenceBackend{},
 	}, opts)
@@ -649,7 +649,7 @@ func TestMaybePullModels_AlreadyAvailable(t *testing.T) {
 	_ = os.Setenv("NODE_MANAGER_TEST_NO_EXISTING_INFERENCE", "1")
 	defer func() { _ = os.Setenv("NODE_MANAGER_TEST_NO_EXISTING_INFERENCE", "1") }()
 	called := false
-	opts := &RunOptions{PullModels: func(_ []string) error { called = true; return nil }}
+	opts := &RunOptions{PullModels: func(context.Context, []string) error { called = true; return nil }}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = io.WriteString(w, `{"models":[{"name":"`+testOllamaModelQwen38+`"}]}`)
@@ -673,7 +673,7 @@ func TestMaybePullModels_MissingModel(t *testing.T) {
 	_ = os.Setenv("NODE_MANAGER_TEST_NO_EXISTING_INFERENCE", "1")
 	defer func() { _ = os.Setenv("NODE_MANAGER_TEST_NO_EXISTING_INFERENCE", "1") }()
 	pulled := make(chan []string, 1)
-	opts := &RunOptions{PullModels: func(m []string) error { pulled <- m; return nil }}
+	opts := &RunOptions{PullModels: func(_ context.Context, m []string) error { pulled <- m; return nil }}
 	maybePullModels(context.Background(), nil, &nodepayloads.NodeConfigurationPayload{
 		InferenceBackend: &nodepayloads.ConfigInferenceBackend{SelectedModel: "qwen3.5:9b"},
 	}, opts)
@@ -691,7 +691,7 @@ func TestMaybePullModels_ModelsToEnsurePullsOnlyMissing(t *testing.T) {
 	_ = os.Setenv("NODE_MANAGER_TEST_NO_EXISTING_INFERENCE", "1")
 	defer func() { _ = os.Setenv("NODE_MANAGER_TEST_NO_EXISTING_INFERENCE", "1") }()
 	pulled := make(chan []string, 1)
-	opts := &RunOptions{PullModels: func(m []string) error { pulled <- m; return nil }}
+	opts := &RunOptions{PullModels: func(_ context.Context, m []string) error { pulled <- m; return nil }}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		_, _ = io.WriteString(w, `{"models":[{"name":"qwen3.5:0.8b"}]}`)

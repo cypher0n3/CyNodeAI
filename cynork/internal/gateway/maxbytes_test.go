@@ -2,6 +2,7 @@ package gateway
 
 import (
 	"bytes"
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -16,7 +17,7 @@ func TestMaxBytes_ResponseBodyCapped(t *testing.T) {
 	}))
 	t.Cleanup(srv.Close)
 	c := NewClient(srv.URL)
-	b, err := c.GetBytes("/any")
+	b, err := c.GetBytes(context.Background(), "/any")
 	if err != nil {
 		t.Fatal(err)
 	}

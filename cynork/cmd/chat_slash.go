@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
@@ -258,7 +259,7 @@ func runSlashConnect(session *chat.Session, rest string) error {
 		_ = saveConfig()
 	}
 	if session != nil && session.Client != nil {
-		if err := session.Client.Health(); err != nil {
+		if err := session.Client.Health(context.Background()); err != nil {
 			fmt.Fprintf(os.Stderr, "gateway updated to: %s (warning: health check failed: %v)\n", rest, err)
 			return nil
 		}
@@ -386,7 +387,7 @@ func runSlashThread(session *chat.Session, rest string) error {
 }
 
 func doSlashThreadNew(session *chat.Session) {
-	threadID, err := session.NewThread()
+	threadID, err := session.NewThread(context.Background())
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "thread: %v\n", err)
 		return
@@ -395,7 +396,7 @@ func doSlashThreadNew(session *chat.Session) {
 }
 
 func doSlashThreadList(session *chat.Session) {
-	items, err := session.ListThreads(slashThreadListLimit, 0)
+	items, err := session.ListThreads(context.Background(), slashThreadListLimit, 0)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "thread list: %v\n", err)
 		return
@@ -409,7 +410,7 @@ func doSlashThreadSwitch(session *chat.Session, parts []string) {
 		fmt.Fprintln(os.Stderr, "Usage: /thread switch <selector> (use ordinal, id, or title from /thread list)")
 		return
 	}
-	id, err := session.ResolveThreadSelector(selector, slashThreadListLimit)
+	id, err := session.ResolveThreadSelector(context.Background(), selector, slashThreadListLimit)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "thread switch: %v\n", err)
 		return
@@ -424,7 +425,7 @@ func doSlashThreadRename(session *chat.Session, parts []string) {
 		fmt.Fprintln(os.Stderr, "Usage: /thread rename <title>")
 		return
 	}
-	if err := session.PatchThreadTitle("", title); err != nil {
+	if err := session.PatchThreadTitle(context.Background(), "", title); err != nil {
 		fmt.Fprintf(os.Stderr, "thread rename: %v\n", err)
 		return
 	}

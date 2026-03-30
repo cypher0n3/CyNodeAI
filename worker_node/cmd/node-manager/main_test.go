@@ -310,6 +310,9 @@ func (f fakeRunner) LookPath(string) (string, error) {
 func (f fakeRunner) CombinedOutput(string, ...string) ([]byte, error) {
 	return f.combinedOutput, f.combinedErr
 }
+func (f fakeRunner) CombinedOutputContext(context.Context, string, ...string) ([]byte, error) {
+	return f.combinedOutput, f.combinedErr
+}
 func (f fakeRunner) StartDetached(string, []string, []string) error {
 	return f.startErr
 }
@@ -320,6 +323,9 @@ type fakeRunnerFunc func(name string, args ...string) ([]byte, error)
 
 func (f fakeRunnerFunc) LookPath(bin string) (string, error) { return "/fake/" + bin, nil }
 func (f fakeRunnerFunc) CombinedOutput(name string, args ...string) ([]byte, error) {
+	return f(name, args...)
+}
+func (f fakeRunnerFunc) CombinedOutputContext(_ context.Context, name string, args ...string) ([]byte, error) {
 	return f(name, args...)
 }
 func (fakeRunnerFunc) StartDetached(string, []string, []string) error { return nil }
@@ -663,7 +669,8 @@ func TestStartManagedServices_SuccessAndSkips(t *testing.T) {
 		{
 			name: "one service",
 			services: []nodepayloads.ConfigManagedService{
-				{ServiceID: "pma-1", ServiceType: "pma", Image: "pma:latest"},
+				// Not "pma": avoids UDS health wait (30s) in unit tests without a real socket.
+				{ServiceID: "svc-1", ServiceType: "worker", Image: "worker:latest"},
 			},
 		},
 		{
@@ -684,7 +691,7 @@ func TestStartManagedServices_SuccessAndSkips(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			withRunner(t, fakeRunner{})
-			err := startManagedServices(tt.services)
+			err := startManagedServices(context.Background(), tt.services)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("startManagedServices() err = %v", err)
 			}
@@ -698,7 +705,7 @@ func TestStartManagedServices_SkipsNameEqualToPrefix(t *testing.T) {
 	services := []nodepayloads.ConfigManagedService{
 		{ServiceID: "///", ServiceType: "pma", Image: "img"},
 	}
-	if err := startManagedServices(services); err != nil {
+	if err := startManagedServices(context.Background(), services); err != nil {
 		t.Errorf("startManagedServices (skip invalid name) should not error: %v", err)
 	}
 }
@@ -709,22 +716,22 @@ func TestStartManagedServices_PropagatesError(t *testing.T) {
 	services := []nodepayloads.ConfigManagedService{
 		{ServiceID: "pma-1", ServiceType: "pma", Image: "pma:latest"},
 	}
-	if err := startManagedServices(services); err == nil {
+	if err := startManagedServices(context.Background(), services); err == nil {
 		t.Error("expected error from startOneManagedService")
 	}
 }
 
 func TestStartOneManagedService_ExistingContainer(t *testing.T) {
 	withRunner(t, fakeRunner{
-		combinedOutput: []byte("cynodeai-managed-pma-1\n"),
+		combinedOutput: []byte("cynodeai-managed-svc-1\n"),
 	})
 
 	svc := &nodepayloads.ConfigManagedService{
-		ServiceID:   "pma-1",
-		ServiceType: "pma",
-		Image:       "pma:latest",
+		ServiceID:   "svc-1",
+		ServiceType: "worker",
+		Image:       "worker:latest",
 	}
-	if err := startOneManagedService("podman", svc, "pma-1", "pma", "pma:latest", "cynodeai-managed-pma-1"); err != nil {
+	if err := startOneManagedService(context.Background(), "podman", svc, "svc-1", "worker", "worker:latest", "cynodeai-managed-svc-1"); err != nil {
 		t.Errorf("startOneManagedService existing: %v", err)
 	}
 }
@@ -737,7 +744,7 @@ func TestStartOneManagedService_RunFails(t *testing.T) {
 		ServiceType: "pma",
 		Image:       "pma:latest",
 	}
-	if err := startOneManagedService("podman", svc, "pma-1", "pma", "pma:latest", "cynodeai-managed-pma-1"); err == nil {
+	if err := startOneManagedService(context.Background(), "podman", svc, "pma-1", "pma", "pma:latest", "cynodeai-managed-pma-1"); err == nil {
 		t.Error("expected error when run fails")
 	}
 }
@@ -818,8 +825,8 @@ func TestStopNodeManagedContainers_PSError(t *testing.T) {
 }
 
 func TestWaitForPMAReadyUDS_EmptyPath(t *testing.T) {
-	waitForPMAReadyUDS("", time.Second)
-	waitForPMAReadyUDS("  ", time.Second)
+	_ = waitForPMAReadyUDS(context.Background(), "", time.Second)
+	_ = waitForPMAReadyUDS(context.Background(), "  ", time.Second)
 }
 
 func TestWaitForPMAReadyUDS_Success(t *testing.T) {
@@ -831,11 +838,13 @@ func TestWaitForPMAReadyUDS_Success(t *testing.T) {
 	}
 	defer func() { _ = listener.Close() }()
 	mux := http.NewServeMux()
-	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) })
+	mux.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusOK) })
 	srv := &http.Server{Handler: mux}
 	go func() { _ = srv.Serve(listener) }()
 	defer func() { _ = srv.Close() }()
-	waitForPMAReadyUDS(sockPath, 2*time.Second)
+	if err := waitForPMAReadyUDS(context.Background(), sockPath, 2*time.Second); err != nil {
+		t.Fatalf("waitForPMAReadyUDS: %v", err)
+	}
 }
 
 func TestRunMain_TelemetryStoreUnavailable(t *testing.T) {

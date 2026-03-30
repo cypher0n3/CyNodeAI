@@ -24,13 +24,13 @@ func init() {
 	modelsCmd.AddCommand(modelsListCmd)
 }
 
-func runModelsList(_ *cobra.Command, _ []string) error {
+func runModelsList(cmd *cobra.Command, _ []string) error {
 	if cfg.Token == "" {
 		return exit.Auth(fmt.Errorf("not logged in: run 'cynork auth login'"))
 	}
 	client := gateway.NewClient(cfg.GatewayURL)
 	client.SetToken(cfg.Token)
-	resp, err := client.ListModels()
+	resp, err := client.ListModels(cmdContext(cmd))
 	if err != nil {
 		return exitFromGatewayErr(err)
 	}

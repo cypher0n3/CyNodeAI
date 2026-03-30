@@ -149,7 +149,7 @@ type applyUnifiedDiffArgs struct {
 	Diff string `json:"diff"`
 }
 
-func applyUnifiedDiffStep(index int, raw json.RawMessage, workspace string) sbajob.StepResult {
+func applyUnifiedDiffStep(ctx context.Context, index int, raw json.RawMessage, workspace string) sbajob.StepResult {
 	sr := sbajob.StepResult{Index: index, Type: "apply_unified_diff", Status: statusSuccess}
 	var args applyUnifiedDiffArgs
 	if err := json.Unmarshal(raw, &args); err != nil {
@@ -162,7 +162,7 @@ func applyUnifiedDiffStep(index int, raw json.RawMessage, workspace string) sbaj
 		sr.Error = err.Error()
 		return sr
 	}
-	cmd := exec.Command("patch", "-p1", "-d", workspace, "--forward")
+	cmd := exec.CommandContext(ctx, "patch", "-p1", "-d", workspace, "--forward")
 	cmd.Stdin = strings.NewReader(args.Diff)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
@@ -399,7 +399,7 @@ func runOneStepDirect(ctx context.Context, i int, step sbajob.StepSpec, maxOut i
 	case "read_file":
 		return readFileStep(i, step.Args, maxOut, workspace)
 	case "apply_unified_diff":
-		return applyUnifiedDiffStep(i, step.Args, workspace)
+		return applyUnifiedDiffStep(ctx, i, step.Args, workspace)
 	case "list_tree":
 		return listTreeStep(i, step.Args, maxOut, workspace)
 	case "search_files":

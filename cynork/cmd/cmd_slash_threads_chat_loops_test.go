@@ -3,6 +3,7 @@ package cmd
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"io"
@@ -433,7 +434,7 @@ func TestStartNewThread_Success(t *testing.T) {
 	defer srv.Close()
 	session := chat.NewSession(gateway.NewClient(srv.URL))
 	session.SetToken("tok")
-	threadID, err := session.NewThread()
+	threadID, err := session.NewThread(context.Background())
 	if err != nil {
 		t.Fatalf("session.NewThread: %v", err)
 	}
@@ -452,7 +453,7 @@ func TestStartNewThread_Error(t *testing.T) {
 	}))
 	defer srv.Close()
 	session := chat.NewSession(gateway.NewClient(srv.URL))
-	if _, err := session.NewThread(); err == nil {
+	if _, err := session.NewThread(context.Background()); err == nil {
 		t.Fatal("expected error on non-201 response")
 	}
 }

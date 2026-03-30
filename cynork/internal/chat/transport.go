@@ -63,7 +63,7 @@ type CompletionsTransport struct {
 
 // SendMessage implements ChatTransport using the completions endpoint (non-streaming).
 func (t *CompletionsTransport) SendMessage(ctx context.Context, message, model, projectID string) (*AssistantTurn, error) {
-	resp, err := t.Client.ChatWithOptions(message, model, projectID)
+	resp, err := t.Client.ChatWithOptions(ctx, message, model, projectID)
 	if err != nil {
 		return nil, err
 	}
@@ -103,7 +103,7 @@ type ResponsesTransport struct {
 
 // SendMessage implements ChatTransport using the responses endpoint (non-streaming).
 func (t *ResponsesTransport) SendMessage(ctx context.Context, message, model, projectID string) (*AssistantTurn, error) {
-	resp, err := t.Client.ResponsesWithOptions(message, model, projectID)
+	resp, err := t.Client.ResponsesWithOptions(ctx, message, model, projectID)
 	if err != nil {
 		return nil, err
 	}

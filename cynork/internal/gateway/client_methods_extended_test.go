@@ -26,7 +26,7 @@ func TestClient_ListProjects_Success(t *testing.T) {
 	defer server.Close()
 	client := NewClient(server.URL)
 	client.SetToken("tok")
-	resp, err := client.ListProjects()
+	resp, err := client.ListProjects(context.Background())
 	if err != nil {
 		t.Fatalf("ListProjects: %v", err)
 	}
@@ -47,7 +47,7 @@ func TestClient_GetProject_Success(t *testing.T) {
 	defer server.Close()
 	client := NewClient(server.URL)
 	client.SetToken("tok")
-	proj, err := client.GetProject("p1")
+	proj, err := client.GetProject(context.Background(), "p1")
 	if err != nil {
 		t.Fatalf("GetProject: %v", err)
 	}
@@ -62,11 +62,11 @@ func TestClient_UnauthorizedOrBadStatus(t *testing.T) {
 		name string
 		run  func(*Client) error
 	}{
-		{"Chat", func(c *Client) error { _, err := c.Chat("hi"); return err }},
-		{"Refresh", func(c *Client) error { _, err := c.Refresh("refresh-tok"); return err }},
+		{"Chat", func(c *Client) error { _, err := c.Chat(context.Background(), "hi"); return err }},
+		{"Refresh", func(c *Client) error { _, err := c.Refresh(context.Background(), "refresh-tok"); return err }},
 		{"ListModels", func(c *Client) error {
 			c.SetToken("tok")
-			_, err := c.ListModels()
+			_, err := c.ListModels(context.Background())
 			return err
 		}},
 	}
@@ -88,10 +88,10 @@ func TestClient_InvalidJSONResponse(t *testing.T) {
 		body []byte
 		run  func(*Client) error
 	}{
-		{"Refresh", []byte("not json"), func(c *Client) error { _, err := c.Refresh("tok"); return err }},
+		{"Refresh", []byte("not json"), func(c *Client) error { _, err := c.Refresh(context.Background(), "tok"); return err }},
 		{"ListModels", []byte("[]"), func(c *Client) error {
 			c.SetToken("tok")
-			_, err := c.ListModels()
+			_, err := c.ListModels(context.Background())
 			return err
 		}},
 	}
@@ -120,7 +120,7 @@ func TestClient_Refresh_ReturnsCreated(t *testing.T) {
 	}))
 	defer server.Close()
 	client := NewClient(server.URL)
-	_, err := client.Refresh("tok")
+	_, err := client.Refresh(context.Background(), "tok")
 	if err == nil {
 		t.Fatal("expected error when status is 201")
 	}
@@ -148,7 +148,7 @@ func TestClient_GetBytes_Success(t *testing.T) {
 	defer server.Close()
 	client := NewClient(server.URL)
 	client.SetToken("tok")
-	body, err := client.GetBytes("/v1/creds")
+	body, err := client.GetBytes(context.Background(), "/v1/creds")
 	if err != nil {
 		t.Fatalf("GetBytes: %v", err)
 	}
@@ -161,7 +161,7 @@ func TestClient_GetBytes_Unauthorized(t *testing.T) {
 	server := httptest.NewServer(jsonHandler(http.StatusUnauthorized, problem.Details{Status: 401}))
 	defer server.Close()
 	client := NewClient(server.URL)
-	_, err := client.GetBytes("/v1/creds")
+	_, err := client.GetBytes(context.Background(), "/v1/creds")
 	if err == nil {
 		t.Fatal("expected error")
 	}
@@ -178,7 +178,7 @@ func TestClient_PostBytes_Success(t *testing.T) {
 	defer server.Close()
 	client := NewClient(server.URL)
 	client.SetToken("tok")
-	_, err := client.PostBytes("/v1/prefs", []byte("{}"))
+	_, err := client.PostBytes(context.Background(), "/v1/prefs", []byte("{}"))
 	if err != nil {
 		t.Fatalf("PostBytes: %v", err)
 	}
@@ -191,7 +191,7 @@ func TestClient_PostBytes_NoContent(t *testing.T) {
 	defer server.Close()
 	client := NewClient(server.URL)
 	client.SetToken("tok")
-	body, err := client.PostBytes("/v1/prefs", nil)
+	body, err := client.PostBytes(context.Background(), "/v1/prefs", nil)
 	if err != nil {
 		t.Fatalf("PostBytes: %v", err)
 	}
@@ -211,7 +211,7 @@ func TestClient_GetBytes(t *testing.T) {
 	defer server.Close()
 	client := NewClient(server.URL)
 	client.SetToken("tok")
-	body, err := client.GetBytes("/v1/creds")
+	body, err := client.GetBytes(context.Background(), "/v1/creds")
 	if err != nil {
 		t.Fatalf("GetBytes: %v", err)
 	}
@@ -233,7 +233,7 @@ func expectHTTPError(t *testing.T, handler http.Handler, fn func(*Client) error)
 
 func TestClient_GetBytes_Error(t *testing.T) {
 	expectHTTPError(t, jsonHandler(http.StatusUnauthorized, problem.Details{Detail: "unauthorized", Status: 401}),
-		func(c *Client) error { _, err := c.GetBytes("/v1/creds"); return err })
+		func(c *Client) error { _, err := c.GetBytes(context.Background(), "/v1/creds"); return err })
 }
 
 func TestClient_PostBytes(t *testing.T) {
@@ -248,7 +248,7 @@ func TestClient_PostBytes(t *testing.T) {
 	defer server.Close()
 	client := NewClient(server.URL)
 	client.SetToken("tok")
-	body, err := client.PostBytes("/v1/prefs", []byte("{}"))
+	body, err := client.PostBytes(context.Background(), "/v1/prefs", []byte("{}"))
 	if err != nil {
 		t.Fatalf("PostBytes: %v", err)
 	}
@@ -262,7 +262,7 @@ func TestClient_PostBytes_Error(t *testing.T) {
 	defer server.Close()
 	client := NewClient(server.URL)
 	client.SetToken("tok")
-	_, err := client.PostBytes("/v1/prefs", []byte("{}"))
+	_, err := client.PostBytes(context.Background(), "/v1/prefs", []byte("{}"))
 	if err == nil {
 		t.Fatal("expected error")
 	}
@@ -290,7 +290,7 @@ func TestClient_NewChatThread_Success(t *testing.T) {
 	defer srv.Close()
 	c := NewClient(srv.URL)
 	c.SetToken("tok")
-	got, err := c.NewChatThread("")
+	got, err := c.NewChatThread(context.Background(), "")
 	if err != nil {
 		t.Fatalf("NewChatThread: %v", err)
 	}
@@ -310,7 +310,7 @@ func TestClient_NewChatThread_WithProject(t *testing.T) {
 	}))
 	defer srv.Close()
 	c := NewClient(srv.URL)
-	_, err := c.NewChatThread(testProjectID)
+	_, err := c.NewChatThread(context.Background(), testProjectID)
 	if err != nil {
 		t.Fatalf("NewChatThread: %v", err)
 	}
@@ -321,7 +321,7 @@ func TestClient_NewChatThread_Error(t *testing.T) {
 	srv := httptest.NewServer(jsonHandler(http.StatusUnauthorized, errBody))
 	defer srv.Close()
 	c := NewClient(srv.URL)
-	_, err := c.NewChatThread("")
+	_, err := c.NewChatThread(context.Background(), "")
 	if err == nil {
 		t.Fatal("expected error on non-201 response")
 	}
@@ -331,7 +331,7 @@ func TestClient_NewChatThread_BadJSON(t *testing.T) {
 	srv := httptest.NewServer(threadsAPIHandler(pathV1ChatThreads, http.StatusCreated, "not-json{{{"))
 	defer srv.Close()
 	c := NewClient(srv.URL)
-	_, err := c.NewChatThread("")
+	_, err := c.NewChatThread(context.Background(), "")
 	if err == nil {
 		t.Fatal("expected error on bad JSON response")
 	}
@@ -339,7 +339,7 @@ func TestClient_NewChatThread_BadJSON(t *testing.T) {
 
 func TestClient_NewChatThread_NetworkError(t *testing.T) {
 	c := NewClient("http://127.0.0.1:1") // nothing listening
-	_, err := c.NewChatThread("")
+	_, err := c.NewChatThread(context.Background(), "")
 	if err == nil {
 		t.Fatal("expected error when server unreachable")
 	}
@@ -347,7 +347,7 @@ func TestClient_NewChatThread_NetworkError(t *testing.T) {
 
 func TestClient_NewChatThread_InvalidBaseURL(t *testing.T) {
 	c := NewClient("://bad-url")
-	_, err := c.NewChatThread("")
+	_, err := c.NewChatThread(context.Background(), "")
 	if err == nil {
 		t.Fatal("expected error on invalid base URL")
 	}
@@ -361,7 +361,7 @@ func TestClient_ListChatThreads_Success(t *testing.T) {
 	defer srv.Close()
 	c := NewClient(srv.URL)
 	c.SetToken("tok")
-	list, err := c.ListChatThreads("", 20, 0)
+	list, err := c.ListChatThreads(context.Background(), "", 20, 0)
 	if err != nil {
 		t.Fatalf("ListChatThreads: %v", err)
 	}
@@ -385,7 +385,7 @@ func TestClient_PatchThreadTitle_Success(t *testing.T) {
 	defer srv.Close()
 	c := NewClient(srv.URL)
 	c.SetToken("tok")
-	err := c.PatchThreadTitle("thread-1", "New Title")
+	err := c.PatchThreadTitle(context.Background(), "thread-1", "New Title")
 	if err != nil {
 		t.Fatalf("PatchThreadTitle: %v", err)
 	}
@@ -410,7 +410,7 @@ func TestClient_ListChatThreads_WithProjectAndPagination(t *testing.T) {
 	defer srv.Close()
 	c := NewClient(srv.URL)
 	c.SetToken("tok")
-	_, err := c.ListChatThreads("proj-1", 5, 10)
+	_, err := c.ListChatThreads(context.Background(), "proj-1", 5, 10)
 	if err != nil {
 		t.Fatalf("ListChatThreads: %v", err)
 	}
@@ -422,7 +422,7 @@ func TestClient_PatchThreadTitle_DoFails(t *testing.T) {
 	srv.Close()
 	c := NewClient(u)
 	c.SetToken("tok")
-	err := c.PatchThreadTitle("thread-1", "Title")
+	err := c.PatchThreadTitle(context.Background(), "thread-1", "Title")
 	if err == nil {
 		t.Fatal("expected error when server closed")
 	}
@@ -434,7 +434,7 @@ func TestClient_PatchThreadTitle_Error(t *testing.T) {
 	defer srv.Close()
 	c := NewClient(srv.URL)
 	c.SetToken("tok")
-	err := c.PatchThreadTitle("thread-1", "Title")
+	err := c.PatchThreadTitle(context.Background(), "thread-1", "Title")
 	if err == nil {
 		t.Fatal("expected error from PatchThreadTitle")
 	}
@@ -446,7 +446,7 @@ func TestClient_ListChatThreads_Error(t *testing.T) {
 	defer srv.Close()
 	c := NewClient(srv.URL)
 	c.SetToken("tok")
-	_, err := c.ListChatThreads("", 20, 0)
+	_, err := c.ListChatThreads(context.Background(), "", 20, 0)
 	if err == nil {
 		t.Fatal("expected error from ListChatThreads")
 	}
@@ -454,7 +454,7 @@ func TestClient_ListChatThreads_Error(t *testing.T) {
 
 func TestClient_ListChatThreads_InvalidBaseURL(t *testing.T) {
 	c := NewClient("://bad")
-	_, err := c.ListChatThreads("", 20, 0)
+	_, err := c.ListChatThreads(context.Background(), "", 20, 0)
 	if err == nil {
 		t.Fatal("expected error from ListChatThreads")
 	}
@@ -465,7 +465,7 @@ func TestClient_ListChatThreads_BadJSON(t *testing.T) {
 	defer srv.Close()
 	c := NewClient(srv.URL)
 	c.SetToken("tok")
-	_, err := c.ListChatThreads("", 20, 0)
+	_, err := c.ListChatThreads(context.Background(), "", 20, 0)
 	if err == nil {
 		t.Fatal("expected error from ListChatThreads")
 	}
@@ -808,7 +808,7 @@ func TestClient_GetChatThread_Success(t *testing.T) {
 	defer srv.Close()
 	c := NewClient(srv.URL)
 	c.SetToken("tok")
-	thread, err := c.GetChatThread(testTaskID)
+	thread, err := c.GetChatThread(context.Background(), testTaskID)
 	if err != nil {
 		t.Fatalf("GetChatThread: %v", err)
 	}
@@ -824,7 +824,7 @@ func TestClient_GetChatThread_NotFound(t *testing.T) {
 	defer srv.Close()
 	c := NewClient(srv.URL)
 	c.SetToken("tok")
-	_, err := c.GetChatThread("missing")
+	_, err := c.GetChatThread(context.Background(), "missing")
 	if err == nil {
 		t.Error("expected error for 404")
 	}
@@ -838,7 +838,7 @@ func TestClient_GetChatThread_DecodeError(t *testing.T) {
 	defer srv.Close()
 	c := NewClient(srv.URL)
 	c.SetToken("tok")
-	_, err := c.GetChatThread("t1")
+	_, err := c.GetChatThread(context.Background(), "t1")
 	if err == nil {
 		t.Error("expected decode error")
 	}
@@ -846,7 +846,7 @@ func TestClient_GetChatThread_DecodeError(t *testing.T) {
 
 func TestClient_GetChatThread_InvalidBaseURL(t *testing.T) {
 	c := NewClient("://invalid")
-	_, err := c.GetChatThread("t1")
+	_, err := c.GetChatThread(context.Background(), "t1")
 	if err == nil {
 		t.Error("expected error for invalid base URL")
 	}
@@ -859,7 +859,7 @@ func TestClient_PatchThreadTitle_ServerError(t *testing.T) {
 	defer srv.Close()
 	c := NewClient(srv.URL)
 	c.SetToken("tok")
-	err := c.PatchThreadTitle("t1", "New Title")
+	err := c.PatchThreadTitle(context.Background(), "t1", "New Title")
 	if err == nil {
 		t.Error("expected error for 500")
 	}
@@ -870,7 +870,7 @@ func TestClient_Login_Refresh_Success(t *testing.T) {
 	srv := httptest.NewServer(routeHandler("/v1/auth/refresh", http.MethodPost, body))
 	defer srv.Close()
 	c := NewClient(srv.URL)
-	resp, err := c.Refresh("old-refresh")
+	resp, err := c.Refresh(context.Background(), "old-refresh")
 	if err != nil {
 		t.Fatalf("Refresh: %v", err)
 	}
@@ -885,7 +885,7 @@ func TestClient_Login_Refresh_Error(t *testing.T) {
 	}))
 	defer srv.Close()
 	c := NewClient(srv.URL)
-	_, err := c.Refresh("bad-refresh")
+	_, err := c.Refresh(context.Background(), "bad-refresh")
 	if err == nil {
 		t.Error("expected error for 401")
 	}
@@ -898,7 +898,7 @@ func TestClient_Login_Refresh_DecodeError(t *testing.T) {
 	}))
 	defer srv.Close()
 	c := NewClient(srv.URL)
-	_, err := c.Refresh("tok")
+	_, err := c.Refresh(context.Background(), "tok")
 	if err == nil {
 		t.Error("expected decode error")
 	}

@@ -4,6 +4,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net"
@@ -38,6 +39,7 @@ const (
 type cmdRunner interface {
 	LookPath(string) (string, error)
 	CombinedOutput(string, ...string) ([]byte, error)
+	CombinedOutputContext(context.Context, string, ...string) ([]byte, error)
 	StartDetached(string, []string, []string) error
 }
 
@@ -48,6 +50,10 @@ type realCmdRunner struct{}
 func (realCmdRunner) LookPath(bin string) (string, error) { return exec.LookPath(bin) }
 func (realCmdRunner) CombinedOutput(name string, args ...string) ([]byte, error) {
 	cmd := exec.Command(name, args...)
+	return cmd.CombinedOutput()
+}
+func (realCmdRunner) CombinedOutputContext(ctx context.Context, name string, args ...string) ([]byte, error) {
+	cmd := exec.CommandContext(ctx, name, args...)
 	return cmd.CombinedOutput()
 }
 func (realCmdRunner) StartDetached(name string, args, env []string) error {
@@ -285,10 +291,12 @@ func runMain(ctx context.Context) int {
 	}
 	cfg := nodeagent.LoadConfig()
 	opts := &nodeagent.RunOptions{
-		StartWorkerAPI:       func(tok string) error { return startEmbeddedWorkerAPI(runCtx, tok, stateDir, telemetryStore, logger) },
-		StartOllama:          startOllama,
-		StartManagedServices: startManagedServices,
-		PullModels:           pullModels,
+		StartWorkerAPI: func(tok string) error { return startEmbeddedWorkerAPI(runCtx, tok, stateDir, telemetryStore, logger) },
+		StartOllama:    startOllama,
+		StartManagedServices: func(ctx context.Context, svcs []nodepayloads.ConfigManagedService) error {
+			return startManagedServices(ctx, svcs)
+		},
+		PullModels: pullModels,
 	}
 	if getEnv("NODE_MANAGER_SKIP_SERVICES", "") != "" {
 		opts = nil
@@ -494,7 +502,7 @@ func startOllama(image, variant string, env map[string]string) error {
 // pullModels calls `ollama pull` for each model in the list sequentially inside the
 // running Ollama container. It is called in the background by node-manager so a slow
 // pull does not block node startup or managed-service reconciliation.
-func pullModels(models []string) error {
+func pullModels(ctx context.Context, models []string) error {
 	name := getEnv("OLLAMA_CONTAINER_NAME", "cynodeai-ollama")
 	rt := getEnv("CONTAINER_RUNTIME", "podman")
 	var firstErr error
@@ -502,7 +510,7 @@ func pullModels(models []string) error {
 		if model == "" {
 			continue
 		}
-		out, err := runner.CombinedOutput(rt, "exec", name, "ollama", "pull", model)
+		out, err := runner.CombinedOutputContext(ctx, rt, "exec", name, "ollama", "pull", model)
 		if err != nil {
 			if firstErr == nil {
 				firstErr = fmt.Errorf("pull %q: %w: %s", model, err, strings.TrimSpace(string(out)))
@@ -541,28 +549,49 @@ func sanitizeContainerName(serviceID string) string {
 // waitForPMAReadyUDS polls GET /healthz over the PMA Unix domain socket until 200 or timeout.
 // socketPath is the host path to the PMA service.sock (e.g. stateDir/run/managed_agent_proxy/<serviceID>/service.sock).
 // REQ-WORKER-0174 / REQ-WORKER-0270: PMA uses UDS only; no TCP health check.
-func waitForPMAReadyUDS(socketPath string, timeout time.Duration) {
+func waitForPMAReadyUDS(ctx context.Context, socketPath string, timeout time.Duration) error {
 	path := strings.TrimSpace(socketPath)
 	if path == "" {
-		return
+		return nil
 	}
+	loopCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
 	transport := &http.Transport{
-		DialContext: func(ctx context.Context, _, _ string) (net.Conn, error) {
+		DialContext: func(dctx context.Context, _, _ string) (net.Conn, error) {
 			var d net.Dialer
-			return d.DialContext(ctx, "unix", path)
+			return d.DialContext(dctx, "unix", path)
 		},
 	}
 	client := &http.Client{Transport: transport, Timeout: 2 * time.Second}
-	deadline := time.Now().Add(timeout)
-	for time.Now().Before(deadline) {
-		resp, err := client.Get("http://unix/healthz")
+	for {
+		select {
+		case <-loopCtx.Done():
+			if errors.Is(loopCtx.Err(), context.DeadlineExceeded) {
+				// Legacy behavior: polling window ends without treating timeout as startup failure.
+				return nil
+			}
+			return loopCtx.Err()
+		default:
+		}
+		req, err := http.NewRequestWithContext(loopCtx, http.MethodGet, "http://unix/healthz", nil)
+		if err != nil {
+			return err
+		}
+		resp, err := client.Do(req)
 		if err == nil {
 			_ = resp.Body.Close()
 			if resp.StatusCode == http.StatusOK {
-				return
+				return nil
 			}
 		}
-		time.Sleep(500 * time.Millisecond)
+		select {
+		case <-loopCtx.Done():
+			if errors.Is(loopCtx.Err(), context.DeadlineExceeded) {
+				return nil
+			}
+			return loopCtx.Err()
+		case <-time.After(500 * time.Millisecond):
+		}
 	}
 }
 
@@ -583,13 +612,15 @@ func buildManagedServiceRunArgs(rt string, svc *nodepayloads.ConfigManagedServic
 }
 
 // startOneManagedService ensures the managed service container is running and, for PMA, waits for /healthz over UDS.
-func startOneManagedService(rt string, svc *nodepayloads.ConfigManagedService, serviceID, serviceType, image, name string) error {
+func startOneManagedService(ctx context.Context, rt string, svc *nodepayloads.ConfigManagedService, serviceID, serviceType, image, name string) error {
 	out, err := runner.CombinedOutput(rt, "ps", "-a", "--format", "{{.Names}}")
 	if err == nil && containerps.NameListed(string(out), name) {
 		_, _ = runner.CombinedOutput(rt, "start", name)
 		if strings.EqualFold(serviceType, "pma") {
 			sockPath := filepath.Join(effectiveStateDir(), nodeagent.ManagedAgentProxySocketBaseDir, serviceID, "service.sock")
-			waitForPMAReadyUDS(sockPath, 30*time.Second)
+			if err := waitForPMAReadyUDS(ctx, sockPath, 30*time.Second); err != nil {
+				return err
+			}
 		}
 		return nil
 	}
@@ -599,7 +630,9 @@ func startOneManagedService(rt string, svc *nodepayloads.ConfigManagedService, s
 	}
 	if strings.EqualFold(serviceType, "pma") {
 		sockPath := filepath.Join(effectiveStateDir(), nodeagent.ManagedAgentProxySocketBaseDir, serviceID, "service.sock")
-		waitForPMAReadyUDS(sockPath, 30*time.Second)
+		if err := waitForPMAReadyUDS(ctx, sockPath, 30*time.Second); err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -607,7 +640,7 @@ func startOneManagedService(rt string, svc *nodepayloads.ConfigManagedService, s
 // startManagedServices starts each desired managed service container (e.g. PMA) from config.
 // Containers are named cynodeai-managed-<service_id>. If a container already exists, it is started if stopped.
 // For PMA, waits for the service to respond on /healthz before returning so the orchestrator does not get "ready" before the container is reachable.
-func startManagedServices(services []nodepayloads.ConfigManagedService) error {
+func startManagedServices(ctx context.Context, services []nodepayloads.ConfigManagedService) error {
 	rt := getEnv("CONTAINER_RUNTIME", "podman")
 	for i := range services {
 		svc := &services[i]
@@ -621,7 +654,7 @@ func startManagedServices(services []nodepayloads.ConfigManagedService) error {
 		if name == managedServiceContainerPrefix {
 			continue
 		}
-		if err := startOneManagedService(rt, svc, serviceID, serviceType, image, name); err != nil {
+		if err := startOneManagedService(ctx, rt, svc, serviceID, serviceType, image, name); err != nil {
 			return err
 		}
 	}

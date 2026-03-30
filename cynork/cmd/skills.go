@@ -68,7 +68,7 @@ func runSkillsGet(_ *cobra.Command, args []string) error {
 	return runStubFetch("/v1/skills/"+args[0], "{}")
 }
 
-func runSkillsLoad(_ *cobra.Command, args []string) error {
+func runSkillsLoad(cmd *cobra.Command, args []string) error {
 	if cfg.Token == "" {
 		return exit.Auth(fmt.Errorf("not logged in: run 'cynork auth login'"))
 	}
@@ -89,7 +89,7 @@ func runSkillsLoad(_ *cobra.Command, args []string) error {
 	}
 	client := gateway.NewClient(cfg.GatewayURL)
 	client.SetToken(cfg.Token)
-	resp, err := client.PostBytes("/v1/skills/load", body)
+	resp, err := client.PostBytes(cmdContext(cmd), "/v1/skills/load", body)
 	if err != nil {
 		return exitFromGatewayErr(err)
 	}
@@ -99,7 +99,7 @@ func runSkillsLoad(_ *cobra.Command, args []string) error {
 	return nil
 }
 
-func runSkillsUpdate(_ *cobra.Command, args []string) error {
+func runSkillsUpdate(cmd *cobra.Command, args []string) error {
 	content, err := os.ReadFile(args[1])
 	if err != nil {
 		return fmt.Errorf("read file: %w", err)
@@ -120,7 +120,7 @@ func runSkillsUpdate(_ *cobra.Command, args []string) error {
 	}
 	client := gateway.NewClient(cfg.GatewayURL)
 	client.SetToken(cfg.Token)
-	resp, err := client.PutBytes("/v1/skills/"+args[0], body)
+	resp, err := client.PutBytes(cmdContext(cmd), "/v1/skills/"+args[0], body)
 	if err != nil {
 		return exitFromGatewayErr(err)
 	}

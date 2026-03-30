@@ -1,6 +1,7 @@
 package tui
 
 import (
+	"context"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -65,7 +66,7 @@ func (m *Model) gatewayHealthCheckCmd() tea.Cmd {
 		if m.Session == nil || m.Session.Client == nil {
 			return gatewayHealthResultMsg{state: gatewayHealthNoClient}
 		}
-		if err := m.Session.Client.Health(); err != nil {
+		if err := m.Session.Client.Health(context.Background()); err != nil {
 			return gatewayHealthResultMsg{state: gatewayHealthDown}
 		}
 		return gatewayHealthResultMsg{state: gatewayHealthOK}

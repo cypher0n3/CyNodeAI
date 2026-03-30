@@ -211,7 +211,7 @@ func (m *Model) loginFormAppend(s string) {
 func runLoginCmd(gatewayURL, username, password string) tea.Cmd {
 	return func() tea.Msg {
 		client := gateway.NewClient(gatewayURL)
-		resp, err := client.Login(userapi.LoginRequest{Handle: username, Password: password})
+		resp, err := client.Login(context.Background(), userapi.LoginRequest{Handle: username, Password: password})
 		if err != nil {
 			return loginResultMsg{GatewayURL: gatewayURL, Err: err}
 		}

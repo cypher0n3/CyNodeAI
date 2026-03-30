@@ -82,11 +82,11 @@ type BootstrapData struct {
 type RunOptions struct {
 	StartWorkerAPI       func(bearerToken string) error
 	StartOllama          func(image, variant string, env map[string]string) error
-	StartManagedServices func(services []nodepayloads.ConfigManagedService) error
+	StartManagedServices func(ctx context.Context, services []nodepayloads.ConfigManagedService) error
 	// PullModels is called in the background after the inference backend starts.
 	// It receives the ordered list of desired model names and is expected to pull
 	// any that are not already available. May be nil (pull skipped).
-	PullModels func(models []string) error
+	PullModels func(ctx context.Context, models []string) error
 }
 
 // Run performs registration, config fetch, service startup, config ack, then capability reporting until ctx is canceled.
@@ -485,7 +485,7 @@ func maybePullModels(ctx context.Context, logger *slog.Logger, nodeConfig *nodep
 		logger.Info("pulling inference models in background", "models", missing)
 	}
 	go func() {
-		if err := opts.PullModels(missing); err != nil && logger != nil {
+		if err := opts.PullModels(ctx, missing); err != nil && logger != nil {
 			logger.Warn("model pull failed", "error", err, "models", missing)
 		}
 	}()
@@ -533,7 +533,7 @@ func maybeStartManagedServices(ctx context.Context, logger *slog.Logger, nodeCon
 		}
 		return nil
 	}
-	if err := opts.StartManagedServices(nodeConfig.ManagedServices.Services); err != nil {
+	if err := opts.StartManagedServices(ctx, nodeConfig.ManagedServices.Services); err != nil {
 		if logger != nil {
 			logger.Error("managed services start failed", "error", err, "count", len(nodeConfig.ManagedServices.Services))
 		}

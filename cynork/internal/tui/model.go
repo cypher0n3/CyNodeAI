@@ -804,7 +804,7 @@ func (m *Model) readResumeThreadFromCache(userID, prior, sel string) string {
 func (m *Model) resolveEnsureThreadID(prior, afterCache, cacheTID, sel, userID string) ensureThreadResult {
 	switch {
 	case sel != "":
-		finalID, err := m.Session.ResolveThreadSelector(sel, chatThreadListLimit)
+		finalID, err := m.Session.ResolveThreadSelector(context.Background(), sel, chatThreadListLimit)
 		if err != nil {
 			return ensureThreadResult{err: err, resumeSelector: sel, userID: userID}
 		}
@@ -824,7 +824,7 @@ func (m *Model) resolveEnsureThreadID(prior, afterCache, cacheTID, sel, userID s
 			resumedFromCache: resumedFromCache,
 		}
 	default:
-		finalID, err := m.Session.CreateNewThreadID()
+		finalID, err := m.Session.CreateNewThreadID(context.Background())
 		if err != nil {
 			return ensureThreadResult{err: err, userID: userID}
 		}
@@ -842,7 +842,7 @@ func (m *Model) userIDForEnsureThread() string {
 	if m.Session.Client == nil || m.Session.Client.Token == "" {
 		return ""
 	}
-	u, err := m.Session.Client.GetMe()
+	u, err := m.Session.Client.GetMe(context.Background())
 	if err != nil {
 		return ""
 	}
@@ -854,7 +854,7 @@ func (m *Model) persistLastThreadToCache() {
 	if m.Session == nil || m.Session.Client == nil || m.Session.Client.Token == "" || m.Session.CurrentThreadID == "" {
 		return
 	}
-	u, err := m.Session.Client.GetMe()
+	u, err := m.Session.Client.GetMe(context.Background())
 	if err != nil {
 		return
 	}
@@ -943,7 +943,7 @@ func (m *Model) tokenRefreshCmd() tea.Cmd {
 		return nil
 	}
 	return func() tea.Msg {
-		resp, err := m.Session.Client.Refresh(rt)
+		resp, err := m.Session.Client.Refresh(context.Background(), rt)
 		if err != nil {
 			return tokenRefreshResultMsg{err: err}
 		}

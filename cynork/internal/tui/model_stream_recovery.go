@@ -96,7 +96,7 @@ func (m *Model) applyStreamRecoveryTick(msg streamRecoveryTickMsg) (tea.Model, t
 		m.streamRecoveryAttempt = 0
 		return m, nil
 	}
-	if err := m.Session.Client.Health(); err != nil {
+	if err := m.Session.Client.Health(context.Background()); err != nil {
 		if msg.attempt >= streamRecoveryMaxAttempts {
 			m.connectionRecoveryState = ConnectionStateDisconnected
 			m.streamRecoveryAttempt = 0

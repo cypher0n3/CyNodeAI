@@ -77,62 +77,62 @@ todos:
       - st-013
   - id: st-015
     content: "Search worker node for functions performing network I/O without `context.Context`: `waitForPMAReadyUDS`, `pullModels`, `detectExistingInference` in `worker_node/cmd/node-manager/main.go`."
-    status: pending
+    status: completed
     dependencies:
       - st-014
   - id: st-016
     content: "Search cynork for gateway client methods missing context: all non-streaming methods in `cynork/internal/gateway/client.go`."
-    status: pending
+    status: completed
     dependencies:
       - st-015
   - id: st-017
     content: "Search SBA for `applyUnifiedDiffStep` and other network calls missing context in `agents/internal/sba/`."
-    status: pending
+    status: completed
     dependencies:
       - st-016
   - id: st-018
     content: "Add a unit test per function: pass a pre-cancelled context and assert the function returns `context.Canceled` (not hangs)."
-    status: pending
+    status: completed
     dependencies:
       - st-017
   - id: st-019
     content: "Run `go test -v -run TestContextCancel ./worker_node/...`, `go test -v -run TestContextCancel ./cynork/...`, `go test -v -run TestContextCancel ./agents/...` and confirm failures."
-    status: pending
+    status: completed
     dependencies:
       - st-018
   - id: st-020
     content: "Add `ctx context.Context` as the first parameter to each identified function; propagate to downstream HTTP calls via `req.WithContext(ctx)` or `http.NewRequestWithContext`."
-    status: pending
+    status: completed
     dependencies:
       - st-019
   - id: st-021
     content: "Update all callers to pass the appropriate context (request context, shutdown context, or `context.Background()` with documented justification)."
-    status: pending
+    status: completed
     dependencies:
       - st-020
   - id: st-022
     content: "Re-run context cancellation tests and confirm green."
-    status: pending
+    status: completed
     dependencies:
       - st-021
   - id: st-023
     content: "Run `just lint-go` on all changed files and `go test -cover` for each module; confirm 90% threshold."
-    status: pending
+    status: completed
     dependencies:
       - st-022
   - id: st-024
     content: "Validation gate -- do not proceed to Task 3 until all checks pass."
-    status: pending
+    status: completed
     dependencies:
       - st-023
   - id: st-025
     content: "Generate task completion report for Task 2. Mark completed steps `- [x]`."
-    status: pending
+    status: completed
     dependencies:
       - st-024
   - id: st-026
     content: "Do not start Task 3 until Task 2 closeout is done."
-    status: pending
+    status: completed
     dependencies:
       - st-025
   - id: st-027
@@ -770,20 +770,20 @@ Multiple components perform network I/O or long-running operations without conte
 
 #### Discovery (Task 2) Steps
 
-- [ ] Search worker node for functions performing network I/O without `context.Context`: `waitForPMAReadyUDS`, `pullModels`, `detectExistingInference` in `worker_node/cmd/node-manager/main.go`.
-- [ ] Search cynork for gateway client methods missing context: all non-streaming methods in `cynork/internal/gateway/client.go`.
-- [ ] Search SBA for `applyUnifiedDiffStep` and other network calls missing context in `agents/internal/sba/`.
+- [x] Search worker node for functions performing network I/O without `context.Context`: `waitForPMAReadyUDS`, `pullModels`, `detectExistingInference` in `worker_node/cmd/node-manager/main.go`.
+- [x] Search cynork for gateway client methods missing context: all non-streaming methods in `cynork/internal/gateway/client.go`.
+- [x] Search SBA for `applyUnifiedDiffStep` and other network calls missing context in `agents/internal/sba/`.
 
 #### Red (Task 2)
 
-- [ ] Add a unit test per function: pass a pre-cancelled context and assert the function returns `context.Canceled` (not hangs).
-- [ ] Run `go test -v -run TestContextCancel ./worker_node/...`, `go test -v -run TestContextCancel ./cynork/...`, `go test -v -run TestContextCancel ./agents/...` and confirm failures.
+- [x] Add a unit test per function: pass a pre-cancelled context and assert the function returns `context.Canceled` (not hangs).
+- [x] Run `go test -v -run TestContextCancel ./worker_node/...`, `go test -v -run TestContextCancel ./cynork/...`, `go test -v -run TestContextCancel ./agents/...` and confirm failures.
 
 #### Green (Task 2)
 
-- [ ] Add `ctx context.Context` as the first parameter to each identified function; propagate to downstream HTTP calls via `req.WithContext(ctx)` or `http.NewRequestWithContext`.
-- [ ] Update all callers to pass the appropriate context (request context, shutdown context, or `context.Background()` with documented justification).
-- [ ] Re-run context cancellation tests and confirm green.
+- [x] Add `ctx context.Context` as the first parameter to each identified function; propagate to downstream HTTP calls via `req.WithContext(ctx)` or `http.NewRequestWithContext`.
+- [x] Update all callers to pass the appropriate context (request context, shutdown context, or `context.Background()` with documented justification).
+- [x] Re-run context cancellation tests and confirm green.
 
 #### Refactor (Task 2)
 
@@ -791,14 +791,14 @@ No additional refactor beyond the signature changes.
 
 #### Testing (Task 2)
 
-- [ ] Run `just lint-go` on all changed files and `go test -cover` for each module; confirm 90% threshold.
-- [ ] Validation gate -- do not proceed to Task 3 until all checks pass.
+- [x] Run `just lint-go` on all changed files and `go test -cover` for each module; confirm 90% threshold.
+- [x] Validation gate -- do not proceed to Task 3 until all checks pass.
 
 #### Closeout (Task 2)
 
-- [ ] Generate task completion report for Task 2.
+- [x] Generate task completion report for Task 2.
   Mark completed steps `- [x]`.
-- [ ] Do not start Task 3 until Task 2 closeout is done.
+- [x] Do not start Task 3 until Task 2 closeout is done.
 
 ---
 

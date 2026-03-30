@@ -123,7 +123,7 @@ func TestSession_NewThread(t *testing.T) {
 	client.SetToken("tok")
 	session := NewSession(client)
 	session.SetProjectID("proj")
-	threadID, err := session.NewThread()
+	threadID, err := session.NewThread(context.Background())
 	if err != nil {
 		t.Fatalf("NewThread: %v", err)
 	}
@@ -151,7 +151,7 @@ func TestSession_ListThreads(t *testing.T) {
 	client := gateway.NewClient(server.URL)
 	client.SetToken("tok")
 	session := NewSession(client)
-	list, err := session.ListThreads(10, 0)
+	list, err := session.ListThreads(context.Background(), 10, 0)
 	if err != nil {
 		t.Fatalf("ListThreads: %v", err)
 	}
@@ -176,7 +176,7 @@ func TestSession_PatchThreadTitle(t *testing.T) {
 	client := gateway.NewClient(server.URL)
 	client.SetToken("tok")
 	session := NewSession(client)
-	err := session.PatchThreadTitle("t1", "Title")
+	err := session.PatchThreadTitle(context.Background(), "t1", "Title")
 	if err != nil {
 		t.Fatalf("PatchThreadTitle: %v", err)
 	}
@@ -189,14 +189,14 @@ func TestSession_PatchThreadTitle_UsesCurrentWhenThreadIDEmpty(t *testing.T) {
 	client.SetToken("tok")
 	session := NewSession(client)
 	session.SetCurrentThreadID("cur-tid")
-	if err := session.PatchThreadTitle("", "Renamed"); err != nil {
+	if err := session.PatchThreadTitle(context.Background(), "", "Renamed"); err != nil {
 		t.Fatalf("PatchThreadTitle: %v", err)
 	}
 }
 
 func TestSession_ResolveThreadSelector_EmptySelector(t *testing.T) {
 	session := NewSession(gateway.NewClient("http://localhost"))
-	id, err := session.ResolveThreadSelector("", 10)
+	id, err := session.ResolveThreadSelector(context.Background(), "", 10)
 	if err != nil || id != "" {
 		t.Fatalf("ResolveThreadSelector empty: id=%q err=%v", id, err)
 	}
@@ -291,14 +291,14 @@ func TestSession_ResolveThreadSelector_OrdinalAndID(t *testing.T) {
 	client := gateway.NewClient(server.URL)
 	client.SetToken("tok")
 	session := NewSession(client)
-	id, err := session.ResolveThreadSelector("1", 10)
+	id, err := session.ResolveThreadSelector(context.Background(), "1", 10)
 	if err != nil {
 		t.Fatalf("ResolveThreadSelector(1): %v", err)
 	}
 	if id != "tid-first" {
 		t.Errorf("ordinal 1 = %q, want tid-first", id)
 	}
-	id, err = session.ResolveThreadSelector("tid-second", 10)
+	id, err = session.ResolveThreadSelector(context.Background(), "tid-second", 10)
 	if err != nil {
 		t.Fatalf("ResolveThreadSelector(tid-second): %v", err)
 	}
@@ -330,13 +330,13 @@ func TestSession_EnsureThread_NewAndResume(t *testing.T) {
 	client := gateway.NewClient(server.URL)
 	client.SetToken("tok")
 	session := NewSession(client)
-	if err := session.EnsureThread(""); err != nil {
+	if err := session.EnsureThread(context.Background(), ""); err != nil {
 		t.Fatalf("EnsureThread() new: %v", err)
 	}
 	if !created || session.CurrentThreadID != "new-tid" {
 		t.Errorf("created=%v CurrentThreadID=%q", created, session.CurrentThreadID)
 	}
-	if err := session.EnsureThread("1"); err != nil {
+	if err := session.EnsureThread(context.Background(), "1"); err != nil {
 		t.Fatalf("EnsureThread(1): %v", err)
 	}
 	if session.CurrentThreadID != "resumed-tid" {
@@ -361,7 +361,7 @@ func TestSession_EnsureThread_SkipsNewWhenThreadAlreadySet(t *testing.T) {
 	client.SetToken("tok")
 	session := NewSession(client)
 	session.CurrentThreadID = "existing-tid"
-	if err := session.EnsureThread(""); err != nil {
+	if err := session.EnsureThread(context.Background(), ""); err != nil {
 		t.Fatalf("EnsureThread: %v", err)
 	}
 	if postCount != 0 {
@@ -393,7 +393,7 @@ func TestSession_NewThread_Error(t *testing.T) {
 	client := gateway.NewClient(server.URL)
 	client.SetToken("tok")
 	session := NewSession(client)
-	_, err := session.NewThread()
+	_, err := session.NewThread(context.Background())
 	if err == nil {
 		t.Error("expected error from NewThread on 500 response")
 	}
@@ -407,7 +407,7 @@ func TestSession_PatchThreadTitle_Error(t *testing.T) {
 	client := gateway.NewClient(server.URL)
 	client.SetToken("tok")
 	session := NewSession(client)
-	err := session.PatchThreadTitle("t1", "Title")
+	err := session.PatchThreadTitle(context.Background(), "t1", "Title")
 	if err == nil {
 		t.Error("expected error from PatchThreadTitle on 404")
 	}
@@ -421,7 +421,7 @@ func TestSession_ResolveThreadSelector_ListError(t *testing.T) {
 	client := gateway.NewClient(server.URL)
 	client.SetToken("tok")
 	session := NewSession(client)
-	_, err := session.ResolveThreadSelector("1", 10)
+	_, err := session.ResolveThreadSelector(context.Background(), "1", 10)
 	if err == nil {
 		t.Error("expected error from ResolveThreadSelector when ListThreads fails")
 	}
@@ -495,7 +495,7 @@ func TestSession_EnsureThread_ResolveError(t *testing.T) {
 	client := gateway.NewClient(server.URL)
 	client.SetToken("tok")
 	session := NewSession(client)
-	err := session.EnsureThread("some-selector")
+	err := session.EnsureThread(context.Background(), "some-selector")
 	if err == nil {
 		t.Error("expected error from EnsureThread when resolve fails")
 	}
