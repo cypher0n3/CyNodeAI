@@ -27,7 +27,7 @@ const (
 	// defaultPmaMaxAgentIterations caps the langchaingo OpenAIFunctionsAgent loop.
 	// Each LLM turn + tool round-trip consumes at least one iteration; 3 was too low
 	// (constant ErrNotFinished → no-tools fallback → empty or fake answers). Keep
-	// under gateway timeouts via pmaLangchainCompletionTimeout (300s), not an artificially
+	// under gateway timeouts via LangchainCompletionTimeout (300s), not an artificially
 	// tiny iteration cap.
 	defaultPmaMaxAgentIterations = 20
 	maxPmaMaxAgentIterations     = 80

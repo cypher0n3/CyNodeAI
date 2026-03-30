@@ -128,6 +128,30 @@ func TestToolCallHandler_SkillsGet_NotFound(t *testing.T) {
 	callToolHandlerWithStore(t, mock, body, http.StatusNotFound)
 }
 
+func TestToolCallHandler_SkillsUpdate_SystemSkillForbidden(t *testing.T) {
+	mock := testutil.NewMockDB()
+	user, _ := mock.CreateUser(context.Background(), "u", nil)
+	mock.AddUser(user)
+	sysSkill, err := mock.CreateSkill(context.Background(), "sys", "# c", "global", nil, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := `{"tool_name":"skills.update","arguments":{"user_id":"` + user.ID.String() + `","skill_id":"` + sysSkill.ID.String() + `","name":"x"}}`
+	callToolHandlerWithStore(t, mock, body, http.StatusForbidden)
+}
+
+func TestToolCallHandler_SkillsDelete_SystemSkillForbidden(t *testing.T) {
+	mock := testutil.NewMockDB()
+	user, _ := mock.CreateUser(context.Background(), "u", nil)
+	mock.AddUser(user)
+	sysSkill, err := mock.CreateSkill(context.Background(), "sys", "# c", "global", nil, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := `{"tool_name":"skills.delete","arguments":{"user_id":"` + user.ID.String() + `","skill_id":"` + sysSkill.ID.String() + `"}}`
+	callToolHandlerWithStore(t, mock, body, http.StatusForbidden)
+}
+
 func TestToolCallHandler_SkillsUpdate_NoArgs(t *testing.T) {
 	callToolHandlerPOST(t, `{"tool_name":"skills.update","arguments":{}}`, http.StatusBadRequest)
 }

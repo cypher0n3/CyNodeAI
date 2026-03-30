@@ -13,6 +13,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"time"
@@ -77,6 +78,21 @@ type Store struct {
 	key      []byte
 	kemKey   *mlkem.DecapsulationKey768
 	kemKeyMu sync.Mutex
+}
+
+// Close zeros sensitive key material and releases references. Safe to call multiple times.
+func (s *Store) Close() {
+	if s == nil {
+		return
+	}
+	s.kemKeyMu.Lock()
+	s.kemKey = nil
+	s.kemKeyMu.Unlock()
+	if len(s.key) > 0 {
+		zeroBytes(s.key)
+		runtime.KeepAlive(s)
+	}
+	s.key = nil
 }
 
 // Open initializes the secure store under <state_dir>/secrets and resolves a master key.

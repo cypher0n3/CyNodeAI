@@ -2,67 +2,109 @@ package workerapi
 
 import (
 	"encoding/json"
+	"errors"
 	"testing"
 )
 
 func TestDefaultSandboxSpec(t *testing.T) {
-	spec := DefaultSandboxSpec()
-	if spec.Image != DefaultImage {
-		t.Errorf("DefaultSandboxSpec().Image = %q, want %q", spec.Image, DefaultImage)
+	s := DefaultSandboxSpec()
+	if s.Image != DefaultImage || s.Command != nil || s.Env != nil {
+		t.Fatalf("DefaultSandboxSpec = %+v", s)
 	}
-	if spec.Command != nil {
-		t.Errorf("DefaultSandboxSpec().Command should be nil, got %v", spec.Command)
+}
+
+func TestExitCodePtr(t *testing.T) {
+	p := ExitCodePtr(42)
+	if p == nil || *p != 42 {
+		t.Fatalf("ExitCodePtr(42) = %v", p)
 	}
 }
 
 func TestValidateRequest(t *testing.T) {
-	tests := []struct {
-		name    string
-		req     *RunJobRequest
-		wantErr bool
-	}{
-		{"nil request", nil, true},
-		{"empty command", &RunJobRequest{Sandbox: SandboxSpec{Command: []string{}}}, true},
-		{"nil command", &RunJobRequest{Sandbox: SandboxSpec{Command: nil}}, true},
-		{"valid", &RunJobRequest{Sandbox: SandboxSpec{Command: []string{"echo", "hi"}}}, false},
+	if err := ValidateRequest(nil); err == nil {
+		t.Fatal("nil request: want error")
+	} else {
+		var rv *RequestValidationError
+		if !errors.As(err, &rv) || rv.Reason == "" {
+			t.Fatalf("want RequestValidationError, got %v", err)
+		}
 	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			err := ValidateRequest(tt.req)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("ValidateRequest() error = %v, wantErr %v", err, tt.wantErr)
-			}
-		})
+	req := &RunJobRequest{Version: 1, Sandbox: SandboxSpec{Image: "x"}}
+	if err := ValidateRequest(req); err == nil {
+		t.Fatal("empty command: want error")
+	}
+	req.Sandbox.Command = []string{"sh", "-c", "true"}
+	if err := ValidateRequest(req); err != nil {
+		t.Fatalf("valid: %v", err)
+	}
+	req2 := &RunJobRequest{Version: 1, Sandbox: SandboxSpec{Image: "img", JobSpecJSON: "{}"}}
+	if err := ValidateRequest(req2); err != nil {
+		t.Fatalf("SBA without command: %v", err)
 	}
 }
 
 func TestRequestValidationError_Error(t *testing.T) {
-	e := &RequestValidationError{Reason: "test reason"}
-	if e.Error() != "test reason" {
-		t.Errorf("Error() = %q, want %q", e.Error(), "test reason")
+	e := &RequestValidationError{Reason: "bad"}
+	if e.Error() != "bad" {
+		t.Errorf("Error() = %q", e.Error())
 	}
 }
 
-func TestRunJobRequestResponseJSON(t *testing.T) {
-	req := RunJobRequest{
-		Version: 1,
-		TaskID:  "task-1",
-		JobID:   "job-1",
-		Sandbox: SandboxSpec{
-			Image:   DefaultImage,
-			Command: []string{"echo", "hello"},
-			Env:     map[string]string{"K": "V"},
+func TestRunJobResponse_roundTripDiagnostics(t *testing.T) {
+	resp := RunJobResponse{
+		Version: 1, TaskID: "t", JobID: "j", Status: StatusFailed,
+		ExitCode: ExitCodePtr(1),
+		RunDiagnostics: &RunDiagnostics{
+			Runtime: "podman", RuntimeArgv: []string{"podman", "run"},
+			JobDir: "/tmp/job", Image: "img", ContainerStarted: true,
 		},
+		Truncated: TruncatedInfo{Stdout: true},
 	}
-	data, err := json.Marshal(req)
+	data, err := json.Marshal(resp)
 	if err != nil {
-		t.Fatalf("Marshal: %v", err)
+		t.Fatal(err)
 	}
-	var decoded RunJobRequest
-	if err := json.Unmarshal(data, &decoded); err != nil {
-		t.Fatalf("Unmarshal: %v", err)
+	var back RunJobResponse
+	if err := json.Unmarshal(data, &back); err != nil {
+		t.Fatal(err)
 	}
-	if decoded.Version != req.Version || decoded.TaskID != req.TaskID || decoded.Sandbox.Image != req.Sandbox.Image {
-		t.Errorf("round-trip mismatch: got %+v", decoded)
+	if back.RunDiagnostics == nil || back.RunDiagnostics.Runtime != "podman" {
+		t.Fatalf("diagnostics: %+v", back.RunDiagnostics)
+	}
+	if !back.Truncated.Stdout || back.Truncated.Stderr {
+		t.Fatalf("truncated: %+v", back.Truncated)
+	}
+}
+
+func TestExitCodeZero(t *testing.T) {
+	resp := RunJobResponse{
+		Version:   1,
+		TaskID:    "t1",
+		JobID:     "j1",
+		Status:    StatusCompleted,
+		ExitCode:  ExitCodePtr(0),
+		Stdout:    "out",
+		Stderr:    "",
+		StartedAt: "2020-01-01T00:00:00Z",
+		EndedAt:   "2020-01-01T00:00:01Z",
+		Truncated: TruncatedInfo{},
+	}
+	data, err := json.Marshal(resp)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(data, &raw); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := raw["exit_code"]; !ok {
+		t.Fatalf("exit_code missing from JSON: %s", data)
+	}
+	var back RunJobResponse
+	if err := json.Unmarshal(data, &back); err != nil {
+		t.Fatal(err)
+	}
+	if back.ExitCode == nil || *back.ExitCode != 0 {
+		t.Fatalf("unmarshal ExitCode = %v", back.ExitCode)
 	}
 }

@@ -30,6 +30,9 @@ const assistantPrefix = "Assistant: "
 
 const maxInputHistory = 50
 
+// chatThreadListLimit matches chat package default for ResolveThreadSelector / EnsureThread.
+const chatThreadListLimit = 50
+
 // ctrlCExitThreshold is the number of successive Ctrl+C presses (when idle) required to exit the TUI.
 const ctrlCExitThreshold = 2
 
@@ -87,6 +90,8 @@ type ensureThreadResult struct {
 	priorThreadID string
 	// resumeSelector is the CLI --resume-thread value (empty for default ensure path).
 	resumeSelector string
+	// userID is set when cache persistence should run in applyEnsureThreadResult (main goroutine).
+	userID string
 }
 
 // openLoginFormMsg opens the in-TUI login overlay (per REQ-CLIENT-0190, Auth Recovery).
@@ -772,21 +777,52 @@ func (m *Model) ensureThreadCmd() tea.Cmd {
 }
 
 func (m *Model) runEnsureThread() tea.Msg {
+	return m.buildEnsureThreadOutcome()
+}
+
+// buildEnsureThreadOutcome computes thread selection without mutating Session. tea.Cmd closures
+// must not write Model or Session; apply mutations only from Update handlers (here: applyEnsureThreadResult).
+func (m *Model) buildEnsureThreadOutcome() ensureThreadResult {
 	if m.Session == nil {
 		return ensureThreadResult{err: fmt.Errorf("no session")}
 	}
 	userID := m.userIDForEnsureThread()
-	m.tryResumeThreadFromCache(userID)
 	prior := m.Session.CurrentThreadID
 	sel := m.ResumeThreadSelector
-	if err := m.Session.EnsureThread(sel); err != nil {
-		return ensureThreadResult{err: err}
+	cacheTID := ""
+	if prior == "" && sel == "" && userID != "" && m.Session.Client != nil {
+		if root, err := tuicache.Root(); err == nil {
+			if tid, ok, _ := tuicache.ReadLastThread(root, m.Session.Client.BaseURL, userID, m.Session.ProjectID); ok {
+				cacheTID = tid
+			}
+		}
 	}
-	m.persistCurrentThreadAfterEnsure(userID)
+	afterCache := prior
+	if afterCache == "" && cacheTID != "" {
+		afterCache = cacheTID
+	}
+
+	var finalID string
+	var err error
+	switch {
+	case sel != "":
+		finalID, err = m.Session.ResolveThreadSelector(sel, chatThreadListLimit)
+		if err != nil {
+			return ensureThreadResult{err: err, resumeSelector: sel, userID: userID}
+		}
+	case afterCache != "":
+		finalID = afterCache
+	default:
+		finalID, err = m.Session.CreateNewThreadID()
+		if err != nil {
+			return ensureThreadResult{err: err, userID: userID}
+		}
+	}
 	return ensureThreadResult{
-		threadID:       m.Session.CurrentThreadID,
-		priorThreadID:  prior,
+		threadID:       finalID,
+		priorThreadID:  afterCache,
 		resumeSelector: sel,
+		userID:         userID,
 	}
 }
 
@@ -799,31 +835,6 @@ func (m *Model) userIDForEnsureThread() string {
 		return ""
 	}
 	return u.ID
-}
-
-func (m *Model) tryResumeThreadFromCache(userID string) {
-	if m.Session.CurrentThreadID != "" || m.ResumeThreadSelector != "" || userID == "" || m.Session.Client == nil {
-		return
-	}
-	root, err := tuicache.Root()
-	if err != nil {
-		return
-	}
-	tid, ok, _ := tuicache.ReadLastThread(root, m.Session.Client.BaseURL, userID, m.Session.ProjectID)
-	if ok {
-		m.Session.SetCurrentThreadID(tid)
-	}
-}
-
-func (m *Model) persistCurrentThreadAfterEnsure(userID string) {
-	if userID == "" || m.Session.Client == nil {
-		return
-	}
-	root, err := tuicache.Root()
-	if err != nil {
-		return
-	}
-	_ = tuicache.WriteLastThread(root, m.Session.Client.BaseURL, userID, m.Session.ProjectID, m.Session.CurrentThreadID)
 }
 
 // persistLastThreadToCache writes CurrentThreadID under the XDG cache dir (keyed by gateway, user, project).
@@ -867,6 +878,14 @@ func (m *Model) applyEnsureThreadResult(msg ensureThreadResult) (tea.Model, tea.
 	if msg.err != nil {
 		m.Scrollback = append(m.Scrollback, ScrollbackSystemLinePrefix+"Error: "+msg.err.Error())
 	} else if msg.threadID != "" {
+		if m.Session != nil {
+			m.Session.SetCurrentThreadID(msg.threadID)
+			if msg.userID != "" && m.Session.Client != nil {
+				if root, err := tuicache.Root(); err == nil {
+					_ = tuicache.WriteLastThread(root, m.Session.Client.BaseURL, msg.userID, m.Session.ProjectID, msg.threadID)
+				}
+			}
+		}
 		line := ScrollbackSystemLinePrefix + ensureThreadScrollbackLine(msg.priorThreadID, msg.threadID, msg.resumeSelector)
 		m.Scrollback = append(m.Scrollback, line)
 	}

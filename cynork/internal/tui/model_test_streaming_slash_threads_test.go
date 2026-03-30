@@ -871,6 +871,9 @@ func TestModel_Init_EnsureThreadWhenLoggedIn(t *testing.T) {
 		t.Fatal("Init() with token should return ensureThreadCmd")
 	}
 	msg := cmd()
+	if session.CurrentThreadID != "" {
+		t.Fatal("EnsureThread cmd must not set CurrentThreadID before Update")
+	}
 	res, ok := msg.(ensureThreadResult)
 	if !ok || res.err != nil || res.threadID != "init-thread-id" {
 		t.Errorf("expected ensureThreadResult{threadID:init-thread-id}; got %T %+v", msg, msg)
@@ -892,12 +895,16 @@ func TestModel_Update_EnsureThreadResult_Error(t *testing.T) {
 
 // TestModel_Update_EnsureThreadResult_Success verifies applyEnsureThreadResult adds thread ID line.
 func TestModel_Update_EnsureThreadResult_Success(t *testing.T) {
-	m := NewModel(&chat.Session{})
+	session := &chat.Session{}
+	m := NewModel(session)
 	updated, cmd := m.Update(ensureThreadResult{threadID: "tid-ok"})
 	if cmd != nil {
 		t.Errorf("cmd = %v, want nil", cmd)
 	}
 	mod := updated.(*Model)
+	if mod.Session.CurrentThreadID != "tid-ok" {
+		t.Errorf("CurrentThreadID = %q, want tid-ok", mod.Session.CurrentThreadID)
+	}
 	found := false
 	for _, line := range mod.Scrollback {
 		if strings.Contains(line, "tid-ok") {

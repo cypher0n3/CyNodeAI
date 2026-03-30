@@ -31,7 +31,7 @@ func newWorkerServer(t *testing.T, resp *workerapi.RunJobResponse) *httptest.Ser
 func TestRunOnce_Success(t *testing.T) {
 	workerResp := &workerapi.RunJobResponse{
 		Version: 1, TaskID: "t1", JobID: "j1",
-		Status: workerapi.StatusCompleted, ExitCode: 0,
+		Status: workerapi.StatusCompleted, ExitCode: workerapi.ExitCodePtr(0),
 		StartedAt: "2026-01-01T00:00:00Z", EndedAt: "2026-01-01T00:00:01Z",
 	}
 	server := newWorkerServer(t, workerResp)
@@ -89,7 +89,7 @@ func TestRunOnce_NoDispatchableNodes(t *testing.T) {
 func TestRunOnce_WorkerReturnsFailed(t *testing.T) {
 	workerResp := &workerapi.RunJobResponse{
 		Version: 1, TaskID: "t1", JobID: "j1",
-		Status: workerapi.StatusFailed, ExitCode: 1,
+		Status: workerapi.StatusFailed, ExitCode: workerapi.ExitCodePtr(1),
 		StartedAt: "2026-01-01T00:00:00Z", EndedAt: "2026-01-01T00:00:01Z",
 	}
 	server := newWorkerServer(t, workerResp)
@@ -201,7 +201,7 @@ func TestRunOnce_WorkerTransientEOFThenSuccess(t *testing.T) {
 		w.WriteHeader(http.StatusOK)
 		_ = json.NewEncoder(w).Encode(&workerapi.RunJobResponse{
 			Version: 1, TaskID: "t1", JobID: "j1",
-			Status: workerapi.StatusCompleted, ExitCode: 0,
+			Status: workerapi.StatusCompleted, ExitCode: workerapi.ExitCodePtr(0),
 			StartedAt: "2026-01-01T00:00:00Z", EndedAt: "2026-01-01T00:00:01Z",
 		})
 	}))
@@ -238,7 +238,7 @@ func makeDispatchable(t *testing.T, mock *testutil.MockDB, ctx context.Context, 
 func TestRunOnce_CanceledTaskNotOverwritten(t *testing.T) {
 	workerResp := &workerapi.RunJobResponse{
 		Version: 1, TaskID: "t1", JobID: "j1",
-		Status: workerapi.StatusCompleted, ExitCode: 0,
+		Status: workerapi.StatusCompleted, ExitCode: workerapi.ExitCodePtr(0),
 		StartedAt: "2026-01-01T00:00:00Z", EndedAt: "2026-01-01T00:00:01Z",
 	}
 	server := newWorkerServer(t, workerResp)

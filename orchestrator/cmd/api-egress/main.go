@@ -15,6 +15,8 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/cypher0n3/cynodeai/go_shared_libs/secretutil"
+	"github.com/cypher0n3/cynodeai/orchestrator/internal/config"
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/database"
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/middleware"
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/models"
@@ -39,6 +41,10 @@ func runMain(ctx context.Context) int {
 
 // run sets up and runs the server until ctx is canceled. Used by main and tests.
 func run(ctx context.Context, logger *slog.Logger) error {
+	cfg := config.LoadOrchestratorConfig()
+	if err := config.ValidateSecrets(cfg); err != nil {
+		return err
+	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /healthz", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
@@ -152,7 +158,12 @@ func (h *callHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	if h.token != "" {
 		auth := r.Header.Get("Authorization")
-		if !strings.HasPrefix(auth, "Bearer ") || strings.TrimPrefix(auth, "Bearer ") != h.token {
+		if !strings.HasPrefix(auth, "Bearer ") {
+			h.writeProblem(w, http.StatusUnauthorized, "Unauthorized", "")
+			return
+		}
+		got := strings.TrimSpace(strings.TrimPrefix(auth, "Bearer "))
+		if !secretutil.TokenEquals(got, h.token) {
 			h.writeProblem(w, http.StatusUnauthorized, "Unauthorized", "")
 			return
 		}

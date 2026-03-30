@@ -3,9 +3,22 @@
 package config
 
 import (
+	"errors"
+	"fmt"
 	"os"
 	"strconv"
+	"strings"
 	"time"
+)
+
+// Well-known dev defaults shipped in LoadOrchestratorConfig. When ORCHESTRATOR_DEV_MODE=false,
+// ValidateSecrets rejects configuration that still uses these values for production safety.
+const (
+	DefaultJWTSecret              = "change-me-in-production"
+	DefaultNodeRegistrationPSK    = "default-psk-change-me"
+	DefaultWorkerAPIBearerToken   = "dev-worker-api-token-change-me"
+	DefaultBootstrapAdminPassword = "admin123"
+	envOrchestratorDevMode        = "ORCHESTRATOR_DEV_MODE"
 )
 
 // OrchestratorConfig holds orchestrator configuration.
@@ -46,6 +59,8 @@ type OrchestratorConfig struct {
 	// MCPSandboxAgentBearerToken when set (with WorkerInternalAgentToken) configures a second MCP gateway
 	// bearer identity for sandbox/worker agents; restricted to the worker tool allowlist (mcpgateway/allowlist.go).
 	MCPSandboxAgentBearerToken string // MCP_SANDBOX_AGENT_BEARER_TOKEN; optional
+	// MCPPAAgentBearerToken identifies Project Analyst (PA) agents for MCP tool-call allowlists (optional).
+	MCPPAAgentBearerToken string // MCP_PA_AGENT_BEARER_TOKEN; optional
 
 	// Bootstrap
 	BootstrapAdminPassword string
@@ -72,6 +87,11 @@ type OrchestratorConfig struct {
 
 	// Workflow runner: bearer token for workflow start/resume/checkpoint/release API. When set, requests must include Authorization: Bearer <value>.
 	WorkflowRunnerBearerToken string // WORKFLOW_RUNNER_BEARER_TOKEN; optional
+
+	// DevMode when true allows JWT, node PSK, worker API bearer, and bootstrap admin password to match
+	// the well-known defaults above (local dev and E2E). Set ORCHESTRATOR_DEV_MODE=false in production
+	// and supply non-default secrets (see ValidateSecrets).
+	DevMode bool
 
 	// Artifacts (S3/MinIO): when endpoint is empty, user-gateway and MCP artifact tools stay disabled for blob ops.
 	ArtifactsS3Endpoint        string // ARTIFACTS_S3_ENDPOINT
@@ -124,17 +144,19 @@ func LoadOrchestratorConfig() *OrchestratorConfig {
 		IdleTimeout:                     getDurationEnv("IDLE_TIMEOUT", 120*time.Second),
 		MaxHeaderBytes:                  getIntEnv("MAX_HEADER_BYTES", 1<<20),
 		MaxRequestBodyMB:                getIntEnv("MAX_REQUEST_BODY_MB", 10),
-		JWTSecret:                       getEnv("JWT_SECRET", "change-me-in-production"),
+		JWTSecret:                       getEnv("JWT_SECRET", DefaultJWTSecret),
 		JWTAccessDuration:               getDurationEnv("JWT_ACCESS_DURATION", 15*time.Minute),
 		JWTRefreshDuration:              getDurationEnv("JWT_REFRESH_DURATION", 7*24*time.Hour),
 		JWTNodeDuration:                 getDurationEnv("JWT_NODE_DURATION", 24*time.Hour),
-		NodeRegistrationPSK:             getEnv("NODE_REGISTRATION_PSK", "default-psk-change-me"),
+		NodeRegistrationPSK:             getEnv("NODE_REGISTRATION_PSK", DefaultNodeRegistrationPSK),
 		OrchestratorPublicURL:           getEnv("ORCHESTRATOR_PUBLIC_URL", "http://localhost:12082"),
-		WorkerAPIBearerToken:            getEnv("WORKER_API_BEARER_TOKEN", "dev-worker-api-token-change-me"),
+		WorkerAPIBearerToken:            getEnv("WORKER_API_BEARER_TOKEN", DefaultWorkerAPIBearerToken),
 		WorkerAPITargetURL:              getEnv("WORKER_API_TARGET_URL", ""),
 		WorkerInternalAgentToken:        getEnv("WORKER_INTERNAL_AGENT_TOKEN", ""),
 		MCPSandboxAgentBearerToken:      getEnv("MCP_SANDBOX_AGENT_BEARER_TOKEN", ""),
-		BootstrapAdminPassword:          getEnv("BOOTSTRAP_ADMIN_PASSWORD", "admin123"),
+		MCPPAAgentBearerToken:           getEnv("MCP_PA_AGENT_BEARER_TOKEN", ""),
+		BootstrapAdminPassword:          getEnv("BOOTSTRAP_ADMIN_PASSWORD", DefaultBootstrapAdminPassword),
+		DevMode:                         getBoolEnv(envOrchestratorDevMode, true),
 		RateLimitPerMinute:              getIntEnv("RATE_LIMIT_PER_MINUTE", 60),
 		InferenceURL:                    getEnv("OLLAMA_BASE_URL", getEnv("INFERENCE_URL", "")),
 		InferenceModel:                  getEnv("INFERENCE_MODEL", "qwen3.5:0.8b"),
@@ -162,11 +184,39 @@ func LoadOrchestratorConfig() *OrchestratorConfig {
 	}
 }
 
+// ValidateSecrets returns an error when DevMode is false and any of JWT, node PSK, worker API bearer,
+// or bootstrap admin password still equals its documented dev default. When DevMode is true, defaults are allowed.
+func ValidateSecrets(cfg *OrchestratorConfig) error {
+	if cfg == nil {
+		return errors.New("config is nil")
+	}
+	if cfg.DevMode {
+		return nil
+	}
+	var bad []string
+	if cfg.JWTSecret == DefaultJWTSecret {
+		bad = append(bad, "JWT_SECRET")
+	}
+	if cfg.NodeRegistrationPSK == DefaultNodeRegistrationPSK {
+		bad = append(bad, "NODE_REGISTRATION_PSK")
+	}
+	if cfg.WorkerAPIBearerToken == DefaultWorkerAPIBearerToken {
+		bad = append(bad, "WORKER_API_BEARER_TOKEN")
+	}
+	if cfg.BootstrapAdminPassword == DefaultBootstrapAdminPassword {
+		bad = append(bad, "BOOTSTRAP_ADMIN_PASSWORD")
+	}
+	if len(bad) == 0 {
+		return nil
+	}
+	return fmt.Errorf("insecure default secrets not allowed when %s=false: %s", envOrchestratorDevMode, strings.Join(bad, ", "))
+}
+
 // LoadNodeConfig loads node configuration from environment.
 func LoadNodeConfig() *NodeConfig {
 	return &NodeConfig{
 		OrchestratorURL:       getEnv("ORCHESTRATOR_URL", "http://localhost:12082"),
-		RegistrationPSK:       getEnv("NODE_REGISTRATION_PSK", "default-psk-change-me"),
+		RegistrationPSK:       getEnv("NODE_REGISTRATION_PSK", DefaultNodeRegistrationPSK),
 		NodeSlug:              getEnv("NODE_SLUG", "node-01"),
 		NodeName:              getEnv("NODE_NAME", "Default Node"),
 		ListenAddr:            getEnv("NODE_LISTEN_ADDR", ":12090"),

@@ -90,10 +90,19 @@ func (s *Session) StreamMessage(ctx context.Context, message string) (<-chan Cha
 	return s.Transport.StreamMessage(ctx, message, s.Model, s.ProjectID)
 }
 
+// CreateNewThreadID creates a new chat thread via the gateway without changing CurrentThreadID.
+// Use when the caller applies the id on the main goroutine (e.g. Bubble Tea Update).
+func (s *Session) CreateNewThreadID() (string, error) {
+	if s.Client == nil {
+		return "", fmt.Errorf("no client")
+	}
+	return s.Client.NewChatThread(s.ProjectID)
+}
+
 // NewThread creates a new chat thread via the gateway; uses session project context.
 // On success sets CurrentThreadID to the new thread id.
 func (s *Session) NewThread() (threadID string, err error) {
-	threadID, err = s.Client.NewChatThread(s.ProjectID)
+	threadID, err = s.CreateNewThreadID()
 	if err != nil {
 		return "", err
 	}

@@ -20,6 +20,7 @@ import (
 
 	"github.com/cypher0n3/cynodeai/go_shared_libs/contracts/nodepayloads"
 	"github.com/cypher0n3/cynodeai/go_shared_libs/contracts/problem"
+	"github.com/cypher0n3/cynodeai/worker_node/internal/containerps"
 )
 
 // refreshNodeConfig re-fetches the node config from the orchestrator and returns the
@@ -353,19 +354,6 @@ func reportCapabilities(ctx context.Context, cfg *Config, bootstrap *BootstrapDa
 	return nil
 }
 
-// containerNameMatches reports whether the podman ps output contains an exact container name
-// match. podman ps --format {{.Names}} emits one name per line; we check each line to avoid
-// false positives where the target is a prefix of another container name
-// (e.g. "cynodeai-ollama" matching "cynodeai-ollama-proxy-test").
-func containerNameMatches(psOutput, name string) bool {
-	for _, line := range strings.Split(psOutput, "\n") {
-		if strings.TrimSpace(line) == name {
-			return true
-		}
-	}
-	return false
-}
-
 // detectExistingInference returns whether an inference container/service already exists and is running.
 // Used to set inference.existing_service and inference.running in capability reports.
 // When NODE_MANAGER_TEST_NO_EXISTING_INFERENCE is set (e.g. unit tests), returns false, false.
@@ -380,7 +368,7 @@ func detectExistingInference(ctx context.Context) (existingService, running bool
 	if err != nil {
 		return false, false
 	}
-	existingService = containerNameMatches(string(out), name)
+	existingService = containerps.NameListed(string(out), name)
 	if !existingService {
 		return false, false
 	}
@@ -389,7 +377,7 @@ func detectExistingInference(ctx context.Context) (existingService, running bool
 	if err2 != nil {
 		return true, false
 	}
-	if !containerNameMatches(string(out2), name) {
+	if !containerps.NameListed(string(out2), name) {
 		return true, false
 	}
 	port := getEnv("OLLAMA_PORT", "11434")

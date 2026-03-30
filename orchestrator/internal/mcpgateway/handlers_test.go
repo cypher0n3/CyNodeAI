@@ -165,13 +165,15 @@ func TestToolCallHandler_MethodNotAllowed(t *testing.T) {
 }
 func TestToolCallHandler_BearerHelpListMatrix(t *testing.T) {
 	cases := []struct {
-		name   string
-		bearer string
-		want   int
+		name       string
+		bearer     string
+		setHeader  bool
+		want       int
 	}{
-		{"invalid_token", "Bearer wrong-token", http.StatusUnauthorized},
-		{"pm_token", "Bearer pm-secret", http.StatusOK},
-		{"sandbox_token", "Bearer sand-secret", http.StatusOK},
+		{"no_bearer", "", false, http.StatusUnauthorized},
+		{"invalid_token", "Bearer wrong-token", true, http.StatusUnauthorized},
+		{"pm_token", "Bearer pm-secret", true, http.StatusOK},
+		{"sandbox_token", "Bearer sand-secret", true, http.StatusOK},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -179,7 +181,9 @@ func TestToolCallHandler_BearerHelpListMatrix(t *testing.T) {
 			auth := &ToolCallAuth{PMToken: "pm-secret", SandboxToken: "sand-secret"}
 			handler := ToolCallHandler(mock, slog.Default(), auth)
 			req := httptest.NewRequest(http.MethodPost, "/v1/mcp/tools/call", strings.NewReader(jsonMCPBodyHelpList))
-			req.Header.Set("Authorization", tc.bearer)
+			if tc.setHeader {
+				req.Header.Set("Authorization", tc.bearer)
+			}
 			rr := httptest.NewRecorder()
 			handler.ServeHTTP(rr, req)
 			if rr.Code != tc.want {

@@ -14,6 +14,13 @@ import (
 	"github.com/cypher0n3/cynodeai/go_shared_libs/contracts/workerapi"
 )
 
+func exitCodeVal(r *workerapi.RunJobResponse) int {
+	if r == nil || r.ExitCode == nil {
+		return 0
+	}
+	return *r.ExitCode
+}
+
 const goOSWindows = "windows"
 
 func TestNew(t *testing.T) {
@@ -401,8 +408,8 @@ exit 1
 	if err != nil {
 		t.Fatalf("RunJob: %v", err)
 	}
-	if resp.Status != workerapi.StatusCompleted || resp.ExitCode != 0 {
-		t.Errorf("status=%s exitCode=%d stderr=%s", resp.Status, resp.ExitCode, resp.Stderr)
+	if resp.Status != workerapi.StatusCompleted || exitCodeVal(resp) != 0 {
+		t.Errorf("status=%s exitCode=%d stderr=%s", resp.Status, exitCodeVal(resp), resp.Stderr)
 	}
 	if !strings.Contains(resp.Stdout, "in-pod-output") {
 		t.Errorf("stdout=%q", resp.Stdout)
@@ -513,8 +520,8 @@ exit 1
 	if resp.Status != workerapi.StatusFailed {
 		t.Errorf("status=%s", resp.Status)
 	}
-	if resp.ExitCode != 2 {
-		t.Errorf("exitCode=%d", resp.ExitCode)
+	if exitCodeVal(resp) != 2 {
+		t.Errorf("exitCode=%d", exitCodeVal(resp))
 	}
 }
 
@@ -665,8 +672,8 @@ func TestRunJobDirectSuccess(t *testing.T) {
 	if err != nil {
 		t.Fatalf("RunJob: %v", err)
 	}
-	if resp.Status != workerapi.StatusCompleted || resp.ExitCode != 0 {
-		t.Errorf("status=%s exitCode=%d", resp.Status, resp.ExitCode)
+	if resp.Status != workerapi.StatusCompleted || exitCodeVal(resp) != 0 {
+		t.Errorf("status=%s exitCode=%d", resp.Status, exitCodeVal(resp))
 	}
 	if resp.Stdout != "hello\n" && resp.Stdout != "hello\r\n" {
 		t.Errorf("stdout=%q", resp.Stdout)
@@ -693,8 +700,8 @@ func TestRunJobDirectExitError(t *testing.T) {
 	if err != nil {
 		t.Fatalf("RunJob: %v", err)
 	}
-	if resp.Status != workerapi.StatusFailed || resp.ExitCode != 3 {
-		t.Errorf("status=%s exitCode=%d", resp.Status, resp.ExitCode)
+	if resp.Status != workerapi.StatusFailed || exitCodeVal(resp) != 3 {
+		t.Errorf("status=%s exitCode=%d", resp.Status, exitCodeVal(resp))
 	}
 }
 
@@ -717,8 +724,8 @@ func TestRunJobDirectExitErrorWithStderr(t *testing.T) {
 	if err != nil {
 		t.Fatalf("RunJob: %v", err)
 	}
-	if resp.Status != workerapi.StatusFailed || resp.ExitCode != 3 {
-		t.Errorf("status=%s exitCode=%d", resp.Status, resp.ExitCode)
+	if resp.Status != workerapi.StatusFailed || exitCodeVal(resp) != 3 {
+		t.Errorf("status=%s exitCode=%d", resp.Status, exitCodeVal(resp))
 	}
 	if resp.Stderr == "" {
 		t.Error("expected stderr from failed command")
@@ -748,8 +755,8 @@ func TestRunJobDirectTimeout(t *testing.T) {
 	if err != nil {
 		t.Fatalf("RunJob: %v", err)
 	}
-	if resp.Status != workerapi.StatusTimeout || resp.ExitCode != -1 {
-		t.Errorf("status=%s exitCode=%d", resp.Status, resp.ExitCode)
+	if resp.Status != workerapi.StatusTimeout || exitCodeVal(resp) != -1 {
+		t.Errorf("status=%s exitCode=%d", resp.Status, exitCodeVal(resp))
 	}
 }
 
@@ -767,8 +774,8 @@ func TestRunJobDirectNonExitError(t *testing.T) {
 	if err != nil {
 		t.Fatalf("RunJob: %v", err)
 	}
-	if resp.Status != workerapi.StatusFailed || resp.ExitCode != -1 {
-		t.Errorf("status=%s exitCode=%d stderr=%q", resp.Status, resp.ExitCode, resp.Stderr)
+	if resp.Status != workerapi.StatusFailed || exitCodeVal(resp) != -1 {
+		t.Errorf("status=%s exitCode=%d stderr=%q", resp.Status, exitCodeVal(resp), resp.Stderr)
 	}
 }
 

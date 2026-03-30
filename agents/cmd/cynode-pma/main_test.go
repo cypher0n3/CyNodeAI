@@ -11,7 +11,21 @@ import (
 	"runtime"
 	"testing"
 	"time"
+
+	"github.com/cypher0n3/cynodeai/agents/internal/pma"
 )
+
+// TestWriteTimeout asserts the HTTP write deadline does not truncate streaming before the
+// PMA langchain completion budget (REQ-PMAGNT-0106 / cynode_pma.md): either disabled (0) or
+// at least inference timeout plus a small margin.
+func TestWriteTimeout(t *testing.T) {
+	const margin = 10 * time.Second
+	inf := pma.LangchainCompletionTimeout
+	if pmaHTTPWriteTimeout != 0 && pmaHTTPWriteTimeout < inf+margin {
+		t.Fatalf("WriteTimeout %v must be 0 (disabled for streaming) or >= %v (inference + %v margin); got %v",
+			pmaHTTPWriteTimeout, inf+margin, margin, pmaHTTPWriteTimeout)
+	}
+}
 
 func TestResolveRole(t *testing.T) {
 	if resolveRole("project_manager") != "project_manager" {

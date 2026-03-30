@@ -60,7 +60,7 @@ func TestRun_ShutdownFails(t *testing.T) {
 func TestRun_DispatcherRunsOneTick(t *testing.T) {
 	workerResp := workerapi.RunJobResponse{
 		Version: 1, TaskID: "t1", JobID: "j1",
-		Status: workerapi.StatusCompleted, ExitCode: 0,
+		Status: workerapi.StatusCompleted, ExitCode: workerapi.ExitCodePtr(0),
 		StartedAt: "2026-01-01T00:00:00Z", EndedAt: "2026-01-01T00:00:01Z",
 	}
 	server := newWorkerServerOK(&workerResp)
@@ -411,7 +411,7 @@ func (m *completeJobErrorStore) CompleteJob(_ context.Context, _ uuid.UUID, _, _
 func TestDispatchOnce_CompleteJobFails(t *testing.T) {
 	workerResp := workerapi.RunJobResponse{
 		Version: 1, TaskID: "t1", JobID: "j1",
-		Status: workerapi.StatusCompleted, ExitCode: 0,
+		Status: workerapi.StatusCompleted, ExitCode: workerapi.ExitCodePtr(0),
 		StartedAt: "2026-01-01T00:00:00Z", EndedAt: "2026-01-01T00:00:01Z",
 	}
 	server := newWorkerServerOK(&workerResp)

@@ -9,6 +9,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/cypher0n3/cynodeai/go_shared_libs/secretutil"
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/auth"
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/handlers"
 )
@@ -140,7 +141,7 @@ func RequireWorkflowRunnerAuth(token string) func(http.Handler) http.Handler {
 				return
 			}
 			got := extractBearerToken(r)
-			if got == "" || got != token {
+			if got == "" || !secretutil.TokenEquals(got, token) {
 				handlers.WriteUnauthorized(w, "Missing or invalid workflow runner token")
 				return
 			}

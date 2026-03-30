@@ -12,15 +12,15 @@ import (
 )
 
 // ToolCallAuth configures optional bearer-token identity for POST /v1/mcp/tools/call.
-// When at least one token is non-empty, a request that includes Authorization: Bearer <token>
-// is matched to an agent role and gateway allowlists apply (REQ-MCPGAT-0114, mcp_gateway_enforcement.md).
-// Requests without a Bearer header remain unrestricted (legacy control-plane access for tests and ops).
+// When at least one token is non-empty, callers must send Authorization: Bearer <token>
+// matching a configured identity; allowlists apply per role (REQ-MCPGAT-0114, mcp_gateway_enforcement.md).
 //
-// PM token is typically WORKER_INTERNAL_AGENT_TOKEN (PMA / managed services). Sandbox token is a
-// separate credential used for worker / sandbox agent tool surfaces (MCP_SANDBOX_AGENT_BEARER_TOKEN).
+// PM token is typically WORKER_INTERNAL_AGENT_TOKEN (PMA / managed services). Sandbox token is
+// MCP_SANDBOX_AGENT_BEARER_TOKEN. PA token is MCP_PA_AGENT_BEARER_TOKEN (Project Analyst).
 type ToolCallAuth struct {
 	PMToken      string
 	SandboxToken string
+	PAToken      string
 }
 
 // AgentRole is a coarse agent identity derived from a bearer token.
@@ -30,18 +30,20 @@ const (
 	AgentRoleNone AgentRole = iota
 	AgentRolePM
 	AgentRoleSandbox
+	AgentRolePA
 )
 
 func (a *ToolCallAuth) anyTokenConfigured() bool {
 	if a == nil {
 		return false
 	}
-	return strings.TrimSpace(a.PMToken) != "" || strings.TrimSpace(a.SandboxToken) != ""
+	return strings.TrimSpace(a.PMToken) != "" ||
+		strings.TrimSpace(a.SandboxToken) != "" ||
+		strings.TrimSpace(a.PAToken) != ""
 }
 
 // resolveRole returns the agent role for a bearer token. ok is false when no configured token matches.
-// PM token is checked before sandbox; configure distinct values for WORKER_INTERNAL_AGENT_TOKEN and
-// MCP_SANDBOX_AGENT_BEARER_TOKEN when both are used.
+// Order: PM, sandbox, PA (use distinct secret values for each).
 func (a *ToolCallAuth) resolveRole(bearer string) (AgentRole, bool) {
 	if a == nil {
 		return AgentRoleNone, false
@@ -57,6 +59,10 @@ func (a *ToolCallAuth) resolveRole(bearer string) (AgentRole, bool) {
 	sand := strings.TrimSpace(a.SandboxToken)
 	if sand != "" && tokensEqualConstantTime(bearer, sand) {
 		return AgentRoleSandbox, true
+	}
+	pa := strings.TrimSpace(a.PAToken)
+	if pa != "" && tokensEqualConstantTime(bearer, pa) {
+		return AgentRolePA, true
 	}
 	return AgentRoleNone, false
 }
@@ -82,8 +88,8 @@ func parseBearerToken(h string) string {
 	return strings.TrimSpace(h[len(prefix):])
 }
 
-// sandboxAllowedTools is the worker/sandbox allowlist for tools implemented on the control-plane
-// gateway (see docs/tech_specs/mcp_tools/access_allowlists_and_scope.md Worker Agent Allowlist).
+// sandboxAllowedTools is the worker/sandbox allowlist (exact tool names).
+// See docs/tech_specs/mcp_tools/access_allowlists_and_scope.md Worker Agent Allowlist.
 var sandboxAllowedTools = map[string]struct{}{
 	"help.list":            {},
 	"help.get":             {},
@@ -98,6 +104,61 @@ var sandboxAllowedTools = map[string]struct{}{
 func sandboxAllowsTool(toolName string) bool {
 	_, ok := sandboxAllowedTools[toolName]
 	return ok
+}
+
+// pmToolPrefixes covers the Project Manager agent surface (prefix match).
+// See docs/tech_specs/mcp_tools/access_allowlists_and_scope.md Project Manager Agent Allowlist.
+var pmToolPrefixes = []string{
+	"task.", "project.", "preference.", "job.", "system_setting.", "specification.",
+	"node.", "sandbox.", "artifact.", "artifacts.", "model.", "connector.",
+	"web.", "api.", "git.", "help.", "persona.", "skills.",
+}
+
+// paToolPrefixes covers the Project Analyst agent surface (prefix match; narrower than PM).
+var paToolPrefixes = []string{
+	"task.", "project.", "preference.", "job.", "artifact.", "artifacts.", "help.", "persona.", "skills.",
+}
+
+var paBlockedPrefixes = []string{
+	"node.", "sandbox.", "system_setting.", "connector.", "model.",
+}
+
+func hasAllowedToolPrefix(toolName string, prefixes []string) bool {
+	for _, p := range prefixes {
+		if strings.HasPrefix(toolName, p) {
+			return true
+		}
+	}
+	return false
+}
+
+func pmAllowsTool(toolName string) bool {
+	return hasAllowedToolPrefix(toolName, pmToolPrefixes)
+}
+
+func paAllowsTool(toolName string) bool {
+	for _, p := range paBlockedPrefixes {
+		if strings.HasPrefix(toolName, p) {
+			return false
+		}
+	}
+	if toolName == "task.cancel" {
+		return false
+	}
+	return hasAllowedToolPrefix(toolName, paToolPrefixes)
+}
+
+func roleAllowsTool(role AgentRole, toolName string) bool {
+	switch role {
+	case AgentRolePM:
+		return pmAllowsTool(toolName)
+	case AgentRoleSandbox:
+		return sandboxAllowsTool(toolName)
+	case AgentRolePA:
+		return paAllowsTool(toolName)
+	default:
+		return false
+	}
 }
 
 func writeAgentAuthDeny(ctx context.Context, w http.ResponseWriter, store database.Store, logger *slog.Logger, toolName string, args map[string]interface{}, start time.Time, httpStatus int, errorType, jsonBody string) {
@@ -131,14 +192,16 @@ func tryAgentAllowlist(
 	}
 	tok := parseBearerToken(r.Header.Get("Authorization"))
 	if tok == "" {
-		return true
+		writeAgentAuthDeny(ctx, w, store, logger, toolName, args, start, http.StatusUnauthorized,
+			"missing_bearer", `{"error":"authentication required"}`)
+		return false
 	}
 	role, ok := auth.resolveRole(tok)
 	if !ok {
 		writeAgentAuthDeny(ctx, w, store, logger, toolName, args, start, http.StatusUnauthorized, "invalid_agent_token", `{"error":"invalid or unrecognized agent token"}`)
 		return false
 	}
-	if role == AgentRoleSandbox && !sandboxAllowsTool(toolName) {
+	if !roleAllowsTool(role, toolName) {
 		writeAgentAuthDeny(ctx, w, store, logger, toolName, args, start, http.StatusForbidden, "agent_allowlist_denied", `{"error":"tool not allowed for this agent role"}`)
 		return false
 	}

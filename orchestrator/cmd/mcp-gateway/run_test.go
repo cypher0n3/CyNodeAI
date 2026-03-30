@@ -289,3 +289,23 @@ func TestRun_WithTestStore(t *testing.T) {
 		t.Errorf("run: %v", err)
 	}
 }
+
+func TestRun_RejectDefaultSecretsWhenDevModeFalse(t *testing.T) {
+	oldDev := os.Getenv("ORCHESTRATOR_DEV_MODE")
+	_ = os.Setenv("ORCHESTRATOR_DEV_MODE", "false")
+	defer func() {
+		if oldDev != "" {
+			_ = os.Setenv("ORCHESTRATOR_DEV_MODE", oldDev)
+		} else {
+			_ = os.Unsetenv("ORCHESTRATOR_DEV_MODE")
+		}
+	}()
+	_ = os.Unsetenv("JWT_SECRET")
+	_ = os.Unsetenv("NODE_REGISTRATION_PSK")
+	_ = os.Unsetenv("WORKER_API_BEARER_TOKEN")
+	_ = os.Unsetenv("BOOTSTRAP_ADMIN_PASSWORD")
+	err := run(context.Background(), slog.Default())
+	if err == nil {
+		t.Fatal("expected validation error when ORCHESTRATOR_DEV_MODE=false and defaults")
+	}
+}

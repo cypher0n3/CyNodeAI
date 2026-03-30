@@ -165,7 +165,7 @@ func TestAuthMiddleware_RequireAdminAuth(t *testing.T) {
 	})
 }
 
-func TestRequireWorkflowRunnerAuth(t *testing.T) {
+func TestWorkflowAuth(t *testing.T) {
 	t.Run("empty_token_allows", func(t *testing.T) {
 		called := false
 		h := RequireWorkflowRunnerAuth("")(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { called = true; w.WriteHeader(http.StatusOK) }))

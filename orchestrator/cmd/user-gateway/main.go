@@ -35,6 +35,10 @@ func runMain(ctx context.Context) int {
 	}))
 	slog.SetDefault(logger)
 	cfg := config.LoadOrchestratorConfig()
+	if err := config.ValidateSecrets(cfg); err != nil {
+		logger.Error("invalid configuration", "error", err)
+		return 1
+	}
 	db, err := database.Open(ctx, cfg.DatabaseURL)
 	if err != nil {
 		logger.Error("failed to connect to database", "error", err)

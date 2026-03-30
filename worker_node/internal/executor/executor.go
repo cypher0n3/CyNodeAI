@@ -169,7 +169,7 @@ func (e *Executor) RunJob(ctx context.Context, req *workerapi.RunJobRequest, wor
 
 	if ctx.Err() == context.DeadlineExceeded {
 		resp.Status = workerapi.StatusTimeout
-		resp.ExitCode = -1
+		resp.ExitCode = workerapi.ExitCodePtr(-1)
 		return resp, nil
 	}
 
@@ -179,7 +179,7 @@ func (e *Executor) RunJob(ctx context.Context, req *workerapi.RunJobRequest, wor
 	}
 
 	resp.Status = workerapi.StatusCompleted
-	resp.ExitCode = 0
+	resp.ExitCode = workerapi.ExitCodePtr(0)
 	return resp, nil
 }
 
@@ -261,7 +261,7 @@ func (e *Executor) runJobWithPodInference(ctx context.Context, req *workerapi.Ru
 
 	if ctx.Err() == context.DeadlineExceeded {
 		resp.Status = workerapi.StatusTimeout
-		resp.ExitCode = -1
+		resp.ExitCode = workerapi.ExitCodePtr(-1)
 		return resp, nil
 	}
 	if runErr != nil {
@@ -269,7 +269,7 @@ func (e *Executor) runJobWithPodInference(ctx context.Context, req *workerapi.Ru
 		return resp, nil
 	}
 	resp.Status = workerapi.StatusCompleted
-	resp.ExitCode = 0
+	resp.ExitCode = workerapi.ExitCodePtr(0)
 	return resp, nil
 }
 
@@ -353,7 +353,7 @@ func probeProxyRunningOnce(ctx context.Context, runtime, proxyContainerID string
 func setPodInferenceError(resp *workerapi.RunJobResponse, prefix string, out []byte) {
 	resp.EndedAt = time.Now().UTC().Format(time.RFC3339)
 	resp.Status = workerapi.StatusFailed
-	resp.ExitCode = -1
+	resp.ExitCode = workerapi.ExitCodePtr(-1)
 	resp.Stderr = prefix + ": " + strings.TrimSpace(string(out))
 }
 
@@ -454,7 +454,7 @@ func (e *Executor) runJobSBA(ctx context.Context, req *workerapi.RunJobRequest, 
 
 	if ctx.Err() == context.DeadlineExceeded {
 		resp.Status = workerapi.StatusTimeout
-		resp.ExitCode = -1
+		resp.ExitCode = workerapi.ExitCodePtr(-1)
 		return resp, nil
 	}
 	if runErr != nil {
@@ -553,7 +553,7 @@ func (e *Executor) runJobSBAWithPodInference(
 	resp.Stderr = truncateUTF8(stderr.String(), e.maxOutputBytes)
 	if ctx.Err() == context.DeadlineExceeded {
 		resp.Status = workerapi.StatusTimeout
-		resp.ExitCode = -1
+		resp.ExitCode = workerapi.ExitCodePtr(-1)
 		return resp, nil
 	}
 	if runErr != nil {
@@ -585,7 +585,7 @@ func isExitError(err error) bool {
 func setSBAError(resp *workerapi.RunJobResponse, msg string) {
 	resp.EndedAt = time.Now().UTC().Format(time.RFC3339)
 	resp.Status = workerapi.StatusFailed
-	resp.ExitCode = -1
+	resp.ExitCode = workerapi.ExitCodePtr(-1)
 	resp.Stderr = msg
 }
 
@@ -697,7 +697,7 @@ func buildSBARunArgsForPod(req *workerapi.RunJobRequest, podName, jobDir, worksp
 func setSbaFailedIfUnset(resp *workerapi.RunJobResponse, stderrMsg string) {
 	if resp.Status != workerapi.StatusTimeout && resp.Status == "" {
 		resp.Status = workerapi.StatusFailed
-		resp.ExitCode = -1
+		resp.ExitCode = workerapi.ExitCodePtr(-1)
 		if resp.Stderr == "" {
 			resp.Stderr = stderrMsg
 		}
@@ -723,11 +723,11 @@ func applySbaResultFromDir(jobDir string, resp *workerapi.RunJobResponse) {
 	switch sbaResult.Status {
 	case "success":
 		resp.Status = workerapi.StatusCompleted
-		resp.ExitCode = 0
+		resp.ExitCode = workerapi.ExitCodePtr(0)
 	case "failure":
 		resp.Status = workerapi.StatusFailed
-		if resp.ExitCode == 0 {
-			resp.ExitCode = 1
+		if resp.ExitCode == nil || *resp.ExitCode == 0 {
+			resp.ExitCode = workerapi.ExitCodePtr(1)
 		}
 	}
 }
@@ -810,14 +810,14 @@ func (e *Executor) setRunError(resp *workerapi.RunJobResponse, err error) {
 	resp.Status = workerapi.StatusFailed
 	errMsg := err.Error()
 	if exitErr, ok := err.(*exec.ExitError); ok {
-		resp.ExitCode = exitErr.ExitCode()
+		resp.ExitCode = workerapi.ExitCodePtr(exitErr.ExitCode())
 		if resp.Stderr != "" {
 			resp.Stderr = "runtime exit " + strconv.Itoa(exitErr.ExitCode()) + ": " + errMsg + "\n--- runtime stderr ---\n" + resp.Stderr
 		} else {
 			resp.Stderr = "runtime exit " + strconv.Itoa(exitErr.ExitCode()) + ": " + errMsg
 		}
 	} else {
-		resp.ExitCode = -1
+		resp.ExitCode = workerapi.ExitCodePtr(-1)
 		if resp.Stderr != "" {
 			resp.Stderr = errMsg + "\n--- runtime stderr ---\n" + resp.Stderr
 		} else {
@@ -830,7 +830,7 @@ func (e *Executor) runDirect(ctx context.Context, req *workerapi.RunJobRequest, 
 	if len(req.Sandbox.Command) == 0 {
 		resp.EndedAt = time.Now().UTC().Format(time.RFC3339)
 		resp.Status = workerapi.StatusFailed
-		resp.ExitCode = -1
+		resp.ExitCode = workerapi.ExitCodePtr(-1)
 		resp.Stderr = "direct runtime requires sandbox.command (SBA jobs need a container runtime)"
 		return resp, nil
 	}
@@ -874,7 +874,7 @@ func (e *Executor) runDirect(ctx context.Context, req *workerapi.RunJobRequest, 
 
 	if ctx.Err() == context.DeadlineExceeded {
 		resp.Status = workerapi.StatusTimeout
-		resp.ExitCode = -1
+		resp.ExitCode = workerapi.ExitCodePtr(-1)
 		return resp, nil
 	}
 
@@ -884,7 +884,7 @@ func (e *Executor) runDirect(ctx context.Context, req *workerapi.RunJobRequest, 
 	}
 
 	resp.Status = workerapi.StatusCompleted
-	resp.ExitCode = 0
+	resp.ExitCode = workerapi.ExitCodePtr(0)
 	return resp, nil
 }
 

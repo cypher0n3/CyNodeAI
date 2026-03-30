@@ -24,10 +24,10 @@ import (
 
 const roleUser = "user"
 
-// pmaLangchainCompletionTimeout caps each getCompletionContent attempt (primary and empty-output retry).
+// LangchainCompletionTimeout caps each getCompletionContent attempt (primary and empty-output retry).
 // Align with orchestrator chatCompletionTimeout / pmaclient defaultPMAHTTPTimeout (300s): qwen3 with
 // tools can use multiple agent iterations and must not hit context deadline before the gateway does.
-const pmaLangchainCompletionTimeout = 300 * time.Second
+const LangchainCompletionTimeout = 300 * time.Second
 
 // InternalChatCompletionRequest is the body for POST /internal/chat/completion (orchestrator handoff).
 // Optional fields support full context order per CYNAI.PMAGNT.LLMContextComposition: project, task, additional context.
@@ -104,7 +104,7 @@ func canStreamCompletion(req *InternalChatCompletionRequest) bool {
 // streaming when falling back to direct inference; completed langchain turns emit progressive
 // delta chunks (pmaStreamDeltaRunes). Mirrors resolveContent retries on empty output.
 func streamCompletionLangchainToWriter(detachedRoot context.Context, w http.ResponseWriter, instructionsContent string, req *InternalChatCompletionRequest, logger *slog.Logger) {
-	runCtx, cancel := context.WithTimeout(detachedRoot, pmaLangchainCompletionTimeout)
+	runCtx, cancel := context.WithTimeout(detachedRoot, LangchainCompletionTimeout)
 	defer cancel()
 	out := streamTryLangchainNDJSON(runCtx, w, instructionsContent, req, logger)
 	if out == streamNDJSONOK {
@@ -119,7 +119,7 @@ func streamCompletionLangchainToWriter(detachedRoot context.Context, w http.Resp
 		logger.Warn("stream completion produced empty output; retrying with current message only",
 			"original_msg_count", len(req.Messages))
 	}
-	retryCtx, retryCancel := context.WithTimeout(detachedRoot, pmaLangchainCompletionTimeout)
+	retryCtx, retryCancel := context.WithTimeout(detachedRoot, LangchainCompletionTimeout)
 	defer retryCancel()
 	stripped := stripToCurrentMessage(req)
 	out = streamTryLangchainNDJSON(retryCtx, w, instructionsContent, stripped, logger)
@@ -158,7 +158,7 @@ func streamCapableModelNDJSON(ctx context.Context, w http.ResponseWriter, system
 		buildAgentInput(systemContextWithHistory, currentInput),
 		mcpClient,
 		logger,
-		pmaLangchainCompletionTimeout,
+		LangchainCompletionTimeout,
 	)
 	if err != nil {
 		if errors.Is(err, agents.ErrNotFinished) || errors.Is(err, agents.ErrAgentNoReturn) {
@@ -427,7 +427,7 @@ func streamCompletionWriteChunk(enc *json.Encoder, w http.ResponseWriter, line [
 // orchestrator/gateway deadline on the incoming request cancels the LLM+MCP run early and surfaces
 // as 500 on streaming proxy calls even though the gateway client timeout is much longer.
 func resolveContent(detachedRoot context.Context, instructionsContent string, req *InternalChatCompletionRequest, logger *slog.Logger) (content, thinking string, httpStatus int) {
-	runCtx, cancel := context.WithTimeout(detachedRoot, pmaLangchainCompletionTimeout)
+	runCtx, cancel := context.WithTimeout(detachedRoot, LangchainCompletionTimeout)
 	defer cancel()
 	content, thinking, err := getCompletionContent(runCtx, instructionsContent, req, logger)
 	if err != nil {
@@ -443,7 +443,7 @@ func resolveContent(detachedRoot context.Context, instructionsContent string, re
 	logger.Warn("chat completion produced empty output; retrying with current message only",
 		"original_msg_count", len(req.Messages))
 	stripped := stripToCurrentMessage(req)
-	retryCtx, retryCancel := context.WithTimeout(detachedRoot, pmaLangchainCompletionTimeout)
+	retryCtx, retryCancel := context.WithTimeout(detachedRoot, LangchainCompletionTimeout)
 	defer retryCancel()
 	content, thinking, err = getCompletionContent(retryCtx, instructionsContent, stripped, logger)
 	if err != nil {
@@ -501,7 +501,7 @@ func getCompletionContentCapableLangchain(ctx context.Context, systemContext str
 		buildAgentInput(systemContextWithHistory, currentInput),
 		mcpClient,
 		logger,
-		pmaLangchainCompletionTimeout,
+		LangchainCompletionTimeout,
 	)
 	if err != nil {
 		if errors.Is(err, agents.ErrNotFinished) || errors.Is(err, agents.ErrAgentNoReturn) {

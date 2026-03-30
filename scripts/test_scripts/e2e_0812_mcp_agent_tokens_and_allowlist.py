@@ -106,6 +106,20 @@ class TestMCPAgentTokensAndAllowlist(unittest.TestCase):
         )
         self.assertEqual(code, 200, raw)
 
+        code, raw = helpers.mcp_tool_call("help.list", {}, bearer_token=None, timeout=60)
+        self.assertEqual(code, 401, raw)
+
+        pa = config.MCP_PA_AGENT_BEARER_TOKEN.strip()
+        if pa:
+            code, raw = helpers.mcp_tool_call(
+                "help.list", {}, bearer_token=pa, timeout=60
+            )
+            self.assertEqual(code, 200, raw)
+            code, raw = helpers.mcp_tool_call(
+                "node.list", {}, bearer_token=pa, timeout=60
+            )
+            self.assertEqual(code, 403, raw)
+
         code, raw = helpers.mcp_tool_call(
             "task.get", {"task_id": task_id}, bearer_token=pm, timeout=60
         )

@@ -21,6 +21,7 @@ import (
 	"github.com/cypher0n3/cynodeai/go_shared_libs/contracts/nodepayloads"
 	"github.com/cypher0n3/cynodeai/go_shared_libs/contracts/problem"
 	"github.com/cypher0n3/cynodeai/go_shared_libs/contracts/workerapi"
+	"github.com/cypher0n3/cynodeai/go_shared_libs/secretutil"
 	"github.com/cypher0n3/cynodeai/worker_node/internal/securestore"
 	"github.com/cypher0n3/cynodeai/worker_node/internal/telemetry"
 )
@@ -275,11 +276,8 @@ func doManagedProxyUpstreamStream(ctx context.Context, proxyReq *managedProxyReq
 }
 
 func validateManagedProxyRequest(r *http.Request, bearerToken string, socketByService map[string]string, logger *slog.Logger) (req *managedProxyRequest, body []byte, socketPath string, errCode int, err error) {
-	if bearerToken != "" {
-		auth := r.Header.Get("Authorization")
-		if !strings.HasPrefix(auth, "Bearer ") || strings.TrimSpace(auth[7:]) != bearerToken {
-			return nil, nil, "", http.StatusUnauthorized, fmt.Errorf("unauthorized")
-		}
+	if bearerToken != "" && !embedBearerOK(r.Header.Get("Authorization"), bearerToken) {
+		return nil, nil, "", http.StatusUnauthorized, fmt.Errorf("unauthorized")
 	}
 	serviceID := r.PathValue("id")
 	if serviceID == "" {
@@ -399,13 +397,22 @@ func embedWriteProblem(w http.ResponseWriter, status int, typ, title, detail str
 	_ = json.NewEncoder(w).Encode(problem.Details{Type: typ, Title: title, Status: status, Detail: detail})
 }
 
+// embedBearerOK reports whether Authorization matches the expected bearer token (constant-time compare).
+func embedBearerOK(authHeader, bearerToken string) bool {
+	if bearerToken == "" {
+		return true
+	}
+	if !strings.HasPrefix(authHeader, "Bearer ") {
+		return false
+	}
+	got := strings.TrimSpace(authHeader[len("Bearer "):])
+	return secretutil.TokenEquals(got, bearerToken)
+}
+
 func embedTelemetryAuth(w http.ResponseWriter, r *http.Request, bearerToken string) bool {
-	if bearerToken != "" {
-		auth := r.Header.Get("Authorization")
-		if !strings.HasPrefix(auth, "Bearer ") || strings.TrimSpace(auth[7:]) != bearerToken {
-			embedWriteProblem(w, http.StatusUnauthorized, problem.TypeAuthentication, "Unauthorized", "Invalid or missing bearer token")
-			return false
-		}
+	if bearerToken != "" && !embedBearerOK(r.Header.Get("Authorization"), bearerToken) {
+		embedWriteProblem(w, http.StatusUnauthorized, problem.TypeAuthentication, "Unauthorized", "Invalid or missing bearer token")
+		return false
 	}
 	return true
 }

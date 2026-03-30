@@ -21,6 +21,7 @@ import (
 
 	"github.com/cypher0n3/cynodeai/go_shared_libs/contracts/nodepayloads"
 	"github.com/cypher0n3/cynodeai/go_shared_libs/contracts/workerapi"
+	"github.com/cypher0n3/cynodeai/worker_node/internal/containerps"
 	"github.com/cypher0n3/cynodeai/worker_node/internal/executor"
 	"github.com/cypher0n3/cynodeai/worker_node/internal/nodeagent"
 	"github.com/cypher0n3/cynodeai/worker_node/internal/telemetry"
@@ -402,18 +403,6 @@ func startEmbeddedWorkerAPI(ctx context.Context, bearerToken, stateDir string, t
 
 // startOllama starts the Phase 1 inference container (Ollama). image/variant from config or env. Fail-fast on error.
 // If a container named cynodeai-ollama already exists (e.g. from orchestrator compose), start it if stopped and return.
-// containerNameExact reports whether psOutput (from podman ps --format {{.Names}}) contains
-// name as an exact line match, avoiding false positives where the target is a prefix of
-// another container name (e.g. "cynodeai-ollama" must not match "cynodeai-ollama-proxy-test").
-func containerNameExact(psOutput, name string) bool {
-	for _, line := range strings.Split(psOutput, "\n") {
-		if strings.TrimSpace(line) == name {
-			return true
-		}
-	}
-	return false
-}
-
 // ollamaRunGPUKind decides how to pass GPU devices into the Ollama container: "rocm", "cuda", or "" (CPU / unknown).
 // variant and image come from nodemanager.maybeStartOllama (or env fallbacks): cuda|cpu -> ollama/ollama; rocm -> ollama/ollama:rocm.
 // The upstream default image ollama/ollama is the NVIDIA/CUDA build (there is no :cuda tag).
@@ -474,7 +463,7 @@ func startOllama(image, variant string, env map[string]string) error {
 	// Use exact name matching to avoid false positives when the target name is a prefix of
 	// another container (e.g. "cynodeai-ollama" must not match "cynodeai-ollama-proxy-test").
 	out, err := runner.CombinedOutput(rt, "ps", "-a", "--format", "{{.Names}}")
-	if err == nil && containerNameExact(string(out), name) {
+	if err == nil && containerps.NameListed(string(out), name) {
 		_, _ = runner.CombinedOutput(rt, "start", name)
 		return nil
 	}
@@ -596,7 +585,7 @@ func buildManagedServiceRunArgs(rt string, svc *nodepayloads.ConfigManagedServic
 // startOneManagedService ensures the managed service container is running and, for PMA, waits for /healthz over UDS.
 func startOneManagedService(rt string, svc *nodepayloads.ConfigManagedService, serviceID, serviceType, image, name string) error {
 	out, err := runner.CombinedOutput(rt, "ps", "-a", "--format", "{{.Names}}")
-	if err == nil && strings.Contains(string(out), name) {
+	if err == nil && containerps.NameListed(string(out), name) {
 		_, _ = runner.CombinedOutput(rt, "start", name)
 		if strings.EqualFold(serviceType, "pma") {
 			sockPath := filepath.Join(effectiveStateDir(), nodeagent.ManagedAgentProxySocketBaseDir, serviceID, "service.sock")

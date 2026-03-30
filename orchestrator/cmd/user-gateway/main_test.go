@@ -355,3 +355,22 @@ func TestGatewayReadyzHandler_StoreError_Returns503(t *testing.T) {
 		t.Errorf("unexpected body: %s", w.Body.String())
 	}
 }
+
+func TestRunMain_RejectDefaultSecretsWhenDevModeFalse(t *testing.T) {
+	oldDev := os.Getenv("ORCHESTRATOR_DEV_MODE")
+	_ = os.Setenv("ORCHESTRATOR_DEV_MODE", "false")
+	defer func() {
+		if oldDev != "" {
+			_ = os.Setenv("ORCHESTRATOR_DEV_MODE", oldDev)
+		} else {
+			_ = os.Unsetenv("ORCHESTRATOR_DEV_MODE")
+		}
+	}()
+	_ = os.Unsetenv("JWT_SECRET")
+	_ = os.Unsetenv("NODE_REGISTRATION_PSK")
+	_ = os.Unsetenv("WORKER_API_BEARER_TOKEN")
+	_ = os.Unsetenv("BOOTSTRAP_ADMIN_PASSWORD")
+	if code := runMain(context.Background()); code != 1 {
+		t.Fatalf("expected exit 1 when ORCHESTRATOR_DEV_MODE=false and defaults, got %d", code)
+	}
+}

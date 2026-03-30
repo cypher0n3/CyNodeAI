@@ -75,6 +75,9 @@ func RunEmbedded(ctx context.Context, cfg EmbedConfig) (readyCh <-chan struct{},
 		shutdownCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
 		defer cancel()
 		_ = srv.Shutdown(shutdownCtx)
+		if proxyCfg.InternalProxy.SecureStore != nil {
+			proxyCfg.InternalProxy.SecureStore.Close()
+		}
 	}
 	return ready, shutdownFn, nil
 }

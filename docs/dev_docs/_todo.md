@@ -25,6 +25,8 @@ Plan: [_plan_001_immediate.md](_plan_001_immediate.md)
 
 ## 2 Bugs
 
+Plan: [_plan_002_bugs.md](_plan_002_bugs.md)
+
 - **Bug 3 (`/auth login` thread UX):** ⚠️ Open.
   Investigated; behavior is a mix of actual `NewThread` when `CurrentThreadID` is empty and UX conflation via a single scrollback landmark.
   The Task 2 fix addresses the landmark differentiation (`THREAD_READY` vs `THREAD_SWITCHED`), but the broader product decision on scrollback wording and thread context for in-TUI login is still pending.
@@ -34,6 +36,8 @@ Plan: [_plan_001_immediate.md](_plan_001_immediate.md)
   The broader spec alignment is documented as awaiting product confirmation.
 
 ## 3 Short-Term (High-Severity Issues)
+
+Plan: [_plan_003_short_term.md](_plan_003_short_term.md)
 
 Address within 1-2 sprints:
 
@@ -53,6 +57,8 @@ Address within 1-2 sprints:
 
 ## 4 Planned (Medium-Severity Improvements)
 
+Plan: [_plan_004_planned.md](_plan_004_planned.md)
+
 Address within the next release cycle:
 
 1. **Wrap database operations in transactions** (lease, checkpoint, task create, preference upsert). ([Report 1](2026-03-29_review_report_1_orchestrator.md))
@@ -67,6 +73,8 @@ Address within the next release cycle:
 10. **Merge BDD coverage into Go profiles** or document as separate metric. ([Report 6](2026-03-29_review_report_6_testing.md))
 
 ## 5 Per-Session-Binding PMA Provisioning
+
+Plan: [_plan_005_pma_provisioning.md](_plan_005_pma_provisioning.md)
 
 Normative refs (requirements):
 
@@ -111,12 +119,16 @@ BDD and/or E2E: second interactive session (or second user) yields a distinct PM
 
 ## 6 Phase 2 MCP in the Loop
 
+Plan: [_plan_006_phase2_mcp.md](_plan_006_phase2_mcp.md)
+
 - **P2-06:** Python LangGraph graph-node process wired to MCP and Worker API.
   Only a stdlib reference runner (`minimal_runner.py`) exists to validate the API contract.
   Production-grade multi-step workflow orchestration (Load Task Context => Plan Steps => Dispatch Step => Collect Result => Verify => Finalize) is not implemented as a first-class component.
 - **P2-08:** Full verification-loop with PMA tasking Project Analyst and writing findings back through the workflow is a persistence contract only; the multi-agent round-trip is not automated end-to-end.
 
 ## 7 Longer-Term (Maintenance and Debt)
+
+Plan: [_plan_007_longer_term.md](_plan_007_longer_term.md)
 
 1. **Adopt versioned migrations** to replace AutoMigrate. ([Report 1](2026-03-29_review_report_1_orchestrator.md), [Report 2](2026-03-29_review_report_2_worker_node.md))
 2. **Align PMA startup** with worker-instruction model (REQ-ORCHES-0150). ([Report 1](2026-03-29_review_report_1_orchestrator.md))

@@ -222,8 +222,8 @@ func TestRunJobDirectEmptyCommand(t *testing.T) {
 	if err != nil {
 		t.Fatalf("RunJob: %v", err)
 	}
-	if resp.Status != workerapi.StatusFailed || resp.ExitCode != -1 {
-		t.Errorf("status=%s exitCode=%d (expected failed when direct + empty command)", resp.Status, resp.ExitCode)
+	if resp.Status != workerapi.StatusFailed || exitCodeVal(resp) != -1 {
+		t.Errorf("status=%s exitCode=%d (expected failed when direct + empty command)", resp.Status, exitCodeVal(resp))
 	}
 	if resp.Stderr == "" || !strings.Contains(resp.Stderr, "direct runtime") {
 		t.Errorf("stderr %q should mention direct runtime", resp.Stderr)
@@ -510,8 +510,8 @@ exit 1
 func TestSetSBAError(t *testing.T) {
 	resp := &workerapi.RunJobResponse{}
 	setSBAError(resp, "test error")
-	if resp.Status != workerapi.StatusFailed || resp.ExitCode != -1 || resp.Stderr != "test error" {
-		t.Errorf("setSBAError: status=%s exitCode=%d stderr=%q", resp.Status, resp.ExitCode, resp.Stderr)
+	if resp.Status != workerapi.StatusFailed || exitCodeVal(resp) != -1 || resp.Stderr != "test error" {
+		t.Errorf("setSBAError: status=%s exitCode=%d stderr=%q", resp.Status, exitCodeVal(resp), resp.Stderr)
 	}
 	if resp.EndedAt == "" {
 		t.Error("setSBAError: EndedAt should be set")
@@ -773,8 +773,8 @@ func TestApplySbaResultFromDir_MissingFile(t *testing.T) {
 	dir := t.TempDir()
 	resp := &workerapi.RunJobResponse{}
 	applySbaResultFromDir(dir, resp)
-	if resp.Status != workerapi.StatusFailed || resp.ExitCode != -1 {
-		t.Errorf("missing result: status=%s exitCode=%d", resp.Status, resp.ExitCode)
+	if resp.Status != workerapi.StatusFailed || exitCodeVal(resp) != -1 {
+		t.Errorf("missing result: status=%s exitCode=%d", resp.Status, exitCodeVal(resp))
 	}
 }
 
@@ -796,8 +796,8 @@ func TestApplySbaResultFromDir_ValidResult(t *testing.T) {
 			if resp.SbaResult == nil {
 				t.Fatal("expected SbaResult set")
 			}
-			if resp.Status != tc.wantStatus || resp.ExitCode != tc.wantExit {
-				t.Errorf("status=%s exitCode=%d want %s %d", resp.Status, resp.ExitCode, tc.wantStatus, tc.wantExit)
+			if resp.Status != tc.wantStatus || exitCodeVal(resp) != tc.wantExit {
+				t.Errorf("status=%s exitCode=%d want %s %d", resp.Status, exitCodeVal(resp), tc.wantStatus, tc.wantExit)
 			}
 		})
 	}
@@ -818,8 +818,8 @@ func TestApplySbaResultFromDir_InvalidJSON(t *testing.T) {
 	_ = os.WriteFile(filepath.Join(dir, resultFilename), []byte(`not json`), 0o644)
 	resp := &workerapi.RunJobResponse{}
 	applySbaResultFromDir(dir, resp)
-	if resp.Status != workerapi.StatusFailed || resp.ExitCode != -1 {
-		t.Errorf("invalid JSON: status=%s exitCode=%d", resp.Status, resp.ExitCode)
+	if resp.Status != workerapi.StatusFailed || exitCodeVal(resp) != -1 {
+		t.Errorf("invalid JSON: status=%s exitCode=%d", resp.Status, exitCodeVal(resp))
 	}
 }
 
@@ -857,8 +857,8 @@ func TestSetRunError_NonExitErrorWithStderr(t *testing.T) {
 	e := New("direct", time.Second, 1024, "", "", nil)
 	resp := &workerapi.RunJobResponse{Stderr: "prior stderr"}
 	e.setRunError(resp, fmt.Errorf("executable not found"))
-	if resp.Status != workerapi.StatusFailed || resp.ExitCode != -1 {
-		t.Errorf("status=%s exitCode=%d", resp.Status, resp.ExitCode)
+	if resp.Status != workerapi.StatusFailed || exitCodeVal(resp) != -1 {
+		t.Errorf("status=%s exitCode=%d", resp.Status, exitCodeVal(resp))
 	}
 	if !strings.Contains(resp.Stderr, "executable not found") || !strings.Contains(resp.Stderr, "--- runtime stderr ---\nprior stderr") {
 		t.Errorf("stderr should append prior: %q", resp.Stderr)

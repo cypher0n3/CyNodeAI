@@ -731,8 +731,8 @@ func RegisterWorkerNodeSteps(sc *godog.ScenarioContext, state *workerTestState) 
 		if err := json.Unmarshal(st.lastBody, &dec); err != nil {
 			return err
 		}
-		if dec.ExitCode != code {
-			return fmt.Errorf("exit code %d, want %d", dec.ExitCode, code)
+		if dec.ExitCode == nil || *dec.ExitCode != code {
+			return fmt.Errorf("exit code %v, want %d", dec.ExitCode, code)
 		}
 		return nil
 	})

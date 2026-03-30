@@ -112,6 +112,10 @@ func runMainWithContext(ctx context.Context, store database.Store) int {
 	slog.SetDefault(logger)
 
 	cfg := config.LoadOrchestratorConfig()
+	if err := config.ValidateSecrets(cfg); err != nil {
+		logger.Error("invalid configuration", "error", err)
+		return 1
+	}
 
 	var err error
 	store, err = resolveStore(ctx, store, cfg, logger, migrateOnly)
@@ -178,6 +182,7 @@ func registerMCPToolRoute(mux *http.ServeMux, store database.Store, logger *slog
 	mcpToolAuth := &mcpgateway.ToolCallAuth{
 		PMToken:      cfg.WorkerInternalAgentToken,
 		SandboxToken: cfg.MCPSandboxAgentBearerToken,
+		PAToken:      cfg.MCPPAAgentBearerToken,
 	}
 	mux.HandleFunc("POST /v1/mcp/tools/call", mcpgateway.ToolCallHandler(store, logger, mcpToolAuth))
 }

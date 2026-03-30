@@ -9,316 +9,316 @@ overview: |
 todos:
   - id: imm-001
     content: "Read `agents/cmd/cynode-pma/main.go` (WriteTimeout ~line 93) and `agents/internal/pma/chat.go` (`pmaLangchainCompletionTimeout` ~line 30); confirm the mismatch."
-    status: pending
+    status: completed
   - id: imm-002
     content: "Read PMA tech spec (`docs/tech_specs/cynode_pma.md`) for timeout requirements."
-    status: pending
+    status: completed
   - id: imm-003
     content: "Add a test asserting HTTP server WriteTimeout is zero or >= inference timeout + 10s margin."
-    status: pending
+    status: completed
   - id: imm-004
     content: "Run `go test -v -run TestWriteTimeout ./agents/cmd/cynode-pma/...` and confirm the test fails."
-    status: pending
+    status: completed
   - id: imm-005
     content: "Set WriteTimeout to `0` (disabled for streaming) in `agents/cmd/cynode-pma/main.go`."
-    status: pending
+    status: completed
   - id: imm-006
     content: "Re-run `go test -v -run TestWriteTimeout ./agents/cmd/cynode-pma/...` and confirm green."
-    status: pending
+    status: completed
   - id: imm-007
     content: "Extract the timeout into a named constant if not already defined; keep tests green."
-    status: pending
+    status: completed
   - id: imm-008
     content: "Run `just lint-go` on changed files and `go test -cover ./agents/...`; confirm 90% threshold."
-    status: pending
+    status: completed
   - id: imm-200
     content: "Run `just e2e --tags streaming,pma_inference` to verify PMA streaming regression (requires inference; skip if unavailable)."
-    status: pending
+    status: completed
   - id: imm-009
     content: "Validation gate -- do not proceed to Task 2 until all checks pass."
-    status: pending
+    status: completed
   - id: imm-010
     content: "Generate task completion report (changes, tests passed, deviations). Mark completed steps `- [x]`."
-    status: pending
+    status: completed
   - id: imm-011
     content: "Do not start Task 2 until Task 1 closeout is done."
-    status: pending
+    status: completed
   - id: imm-012
     content: "Read `worker_node/cmd/node-manager/main.go` ~line 599 (`startOneManagedService` with `strings.Contains`) and ~line 408 (`containerNameExact`)."
-    status: pending
+    status: completed
   - id: imm-013
     content: "Identify all callers of `startOneManagedService` to assess impact of the fix."
-    status: pending
+    status: completed
   - id: imm-014
     content: "Add a unit test exercising container name matching with a prefix collision (e.g., `cynodeai-managed-pma` vs `cynodeai-managed-pma-test`)."
-    status: pending
+    status: completed
   - id: imm-015
     content: "Run `go test -v -run TestContainerNameMatch ./worker_node/cmd/node-manager/...` and confirm the test fails."
-    status: pending
+    status: completed
   - id: imm-016
     content: "Replace `strings.Contains(string(out), name)` in `startOneManagedService` with `containerNameExact`."
-    status: pending
+    status: completed
   - id: imm-017
     content: "Re-run the test and confirm green."
-    status: pending
+    status: completed
   - id: imm-018
     content: "Consolidate `containerNameExact` and `containerNameMatches` into a single shared function."
-    status: pending
+    status: completed
   - id: imm-019
     content: "Run `just lint-go` on changed files and `go test -cover ./worker_node/...`; confirm 90% threshold."
-    status: pending
+    status: completed
   - id: imm-201
     content: "Run `just e2e --tags worker,no_inference` to verify managed service startup regression."
-    status: pending
+    status: completed
   - id: imm-020
     content: "Validation gate -- do not proceed to Task 3 until all checks pass."
-    status: pending
+    status: completed
   - id: imm-021
     content: "Generate task completion report. Mark completed steps `- [x]`."
-    status: pending
+    status: completed
   - id: imm-022
     content: "Do not start Task 3 until Task 2 closeout is done."
-    status: pending
+    status: completed
   - id: imm-023
     content: "Read `cynork/internal/tui/model.go` ~lines 774-791 (`runEnsureThread`) and the `applyEnsureThreadResult` handler."
-    status: pending
+    status: completed
   - id: imm-024
     content: "Identify all reads of `Session.CurrentThreadID` in `View()` and goroutine-accessed paths."
-    status: pending
+    status: completed
   - id: imm-025
     content: "Add a test using `go test -race` on the TUI thread-initialization path to detect the race."
-    status: pending
+    status: completed
   - id: imm-026
     content: "Run `go test -race -v -run TestEnsureThread ./cynork/internal/tui/...` and confirm the race is detected."
-    status: pending
+    status: completed
   - id: imm-027
     content: "Move all `Session.CurrentThreadID` mutations into `applyEnsureThreadResult`; have the goroutine return the resolved thread ID as data without writing model fields."
-    status: pending
+    status: completed
   - id: imm-028
     content: "Re-run `go test -race -v -run TestEnsureThread ./cynork/internal/tui/...` and confirm no race."
-    status: pending
+    status: completed
   - id: imm-029
     content: "Verify no other `tea.Cmd` closures directly mutate model fields; document the pattern if recurring."
-    status: pending
+    status: completed
   - id: imm-030
     content: "Run `go test -race ./cynork/...` and `go test -cover ./cynork/...`; confirm 90% threshold."
-    status: pending
+    status: completed
   - id: imm-202
     content: "Run `just e2e --tags tui_pty,no_inference` to verify TUI thread-initialization regression."
-    status: pending
+    status: completed
   - id: imm-031
     content: "Validation gate -- do not proceed to Task 4 until all checks pass."
-    status: pending
+    status: completed
   - id: imm-032
     content: "Generate task completion report. Mark completed steps `- [x]`."
-    status: pending
+    status: completed
   - id: imm-033
     content: "Do not start Task 4 until Task 3 closeout is done."
-    status: pending
+    status: completed
   - id: imm-034
     content: "Read `worker_node/internal/securestore/store.go` struct definition (~lines 75-80); identify `key` and `kemKey` fields."
-    status: pending
+    status: completed
   - id: imm-035
     content: "Identify all call sites that create a `securestore.Store` to wire `Close()` into shutdown paths."
-    status: pending
+    status: completed
   - id: imm-036
     content: "Add a unit test: create a Store, call `Close()`, verify key material is zeroed (all bytes == 0)."
-    status: pending
+    status: completed
   - id: imm-037
     content: "Run `go test -v -run TestStoreClose ./worker_node/internal/securestore/...` and confirm failure (method missing)."
-    status: pending
+    status: completed
   - id: imm-038
     content: "Implement `func (s *Store) Close()` that zeros `s.key` and `s.kemKey`."
-    status: pending
+    status: completed
   - id: imm-039
     content: "Wire `defer store.Close()` into `worker_node/cmd/node-manager/main.go` shutdown path."
-    status: pending
+    status: completed
   - id: imm-040
     content: "Re-run the test and confirm green."
-    status: pending
+    status: completed
   - id: imm-041
     content: "Ensure zeroing is not optimizable away by the compiler (use `runtime.KeepAlive` or similar)."
-    status: pending
+    status: completed
   - id: imm-042
     content: "Run `just lint-go` on changed files and `go test -cover ./worker_node/internal/securestore/...`; confirm 90% threshold."
-    status: pending
+    status: completed
   - id: imm-043
     content: "Validation gate -- do not proceed to Task 5 until all checks pass."
-    status: pending
+    status: completed
   - id: imm-044
     content: "Generate task completion report. Mark completed steps `- [x]`."
-    status: pending
+    status: completed
   - id: imm-045
     content: "Do not start Task 5 until Task 4 closeout is done."
-    status: pending
+    status: completed
   - id: imm-046
     content: "Search all Go modules for `!=` token/bearer comparisons: `orchestrator/cmd/api-egress/main.go:155`, `orchestrator/internal/middleware/auth.go:148`, `worker_node/internal/workerapiserver/embed_handlers.go:280,405`. Identify any additional sites."
-    status: pending
+    status: completed
   - id: imm-047
     content: "Add or update unit tests at each site verifying token comparison rejects incorrect tokens and accepts correct ones."
-    status: pending
+    status: completed
   - id: imm-048
     content: "Run targeted tests: `go test -v -run TestTokenAuth ./orchestrator/cmd/api-egress/...`, `go test -v -run TestWorkflowAuth ./orchestrator/internal/middleware/...`, `go test -v -run TestBearerAuth ./worker_node/internal/workerapiserver/...`."
-    status: pending
+    status: completed
   - id: imm-049
     content: "Replace each `got != token` with `subtle.ConstantTimeCompare([]byte(got), []byte(expected)) != 1`; add `import \"crypto/subtle\"` where missing."
-    status: pending
+    status: completed
   - id: imm-050
     content: "Re-run all targeted tests and confirm green."
-    status: pending
+    status: completed
   - id: imm-051
     content: "If multiple modules duplicate the pattern, extract a shared helper (e.g., `secretutil.TokenEquals`) into `go_shared_libs`."
-    status: pending
+    status: completed
   - id: imm-052
     content: "Run `go test -cover ./orchestrator/...` and `go test -cover ./worker_node/...`; confirm 90% threshold."
-    status: pending
+    status: completed
   - id: imm-053
     content: "Run `just lint-go` on all changed files."
-    status: pending
+    status: completed
   - id: imm-203
     content: "Run `just e2e --tags auth,no_inference` and `just e2e --tags worker,no_inference` to verify bearer auth regression."
-    status: pending
+    status: completed
   - id: imm-054
     content: "Validation gate -- do not proceed to Task 6 until all checks pass."
-    status: pending
+    status: completed
   - id: imm-055
     content: "Generate task completion report listing each file changed and old vs new pattern. Mark completed steps `- [x]`."
-    status: pending
+    status: completed
   - id: imm-056
     content: "Do not start Task 6 until Task 5 closeout is done."
-    status: pending
+    status: completed
   - id: imm-057
     content: "Read `go_shared_libs/contracts/workerapi/workerapi.go` ~line 69 (`ExitCode int`)."
-    status: pending
+    status: completed
   - id: imm-058
     content: "Search `orchestrator/` and `worker_node/` for all consumers of `RunJobResponse.ExitCode` that must handle `*int`."
-    status: pending
+    status: completed
   - id: imm-059
     content: "Add a unit test: marshal `RunJobResponse` with ExitCode=0, unmarshal, assert `exit_code` field is present and equals 0."
-    status: pending
+    status: completed
   - id: imm-060
     content: "Run `go test -v -run TestExitCodeZero ./go_shared_libs/contracts/workerapi/...` and confirm failure."
-    status: pending
+    status: completed
   - id: imm-061
     content: "Change `ExitCode int` to `ExitCode *int` in `go_shared_libs/contracts/workerapi/workerapi.go`; remove `omitempty` or keep it (nil omits, non-nil emits)."
-    status: pending
+    status: completed
   - id: imm-062
     content: "Update all consumers in `orchestrator/` and `worker_node/` to dereference the pointer safely (nil check)."
-    status: pending
+    status: completed
   - id: imm-063
     content: "Re-run the test and confirm green."
-    status: pending
+    status: completed
   - id: imm-064
     content: "Verify all JSON serialization/deserialization paths handle `*int` correctly; confirm no compile errors across modules."
-    status: pending
+    status: completed
   - id: imm-065
     content: "Run `go test ./go_shared_libs/...`, `go test ./orchestrator/...`, `go test ./worker_node/...`; confirm 90% threshold."
-    status: pending
+    status: completed
   - id: imm-066
     content: "Run `just lint-go` on changed files."
-    status: pending
+    status: completed
   - id: imm-204
     content: "Run `just e2e --tags task,no_inference` and `just e2e --tags sba,no_inference` to verify task result and SBA contract regression."
-    status: pending
+    status: completed
   - id: imm-067
     content: "Validation gate -- do not proceed to Task 7 until all checks pass."
-    status: pending
+    status: completed
   - id: imm-068
     content: "Generate task completion report. Mark completed steps `- [x]`."
-    status: pending
+    status: completed
   - id: imm-069
     content: "Do not start Task 7 until Task 6 closeout is done."
-    status: pending
+    status: completed
   - id: imm-070
     content: "Read `orchestrator/internal/config/config.go` ~lines 127-137 for hardcoded defaults (`JWTSecret`, `BootstrapAdminPassword`, `NodeRegistrationPSK`, `WorkerAPIBearerToken`)."
-    status: pending
+    status: completed
   - id: imm-071
     content: "Determine how dev mode is signaled (env var, config flag) to gate the validation."
-    status: pending
+    status: completed
   - id: imm-072
     content: "Add unit tests: call validation with each insecure default and `dev_mode=false` => error; `dev_mode=true` => allowed."
-    status: pending
+    status: completed
   - id: imm-073
     content: "Run `go test -v -run TestInsecureDefaults ./orchestrator/internal/config/...` and confirm failure (function missing)."
-    status: pending
+    status: completed
   - id: imm-074
     content: "Implement `ValidateSecrets(cfg *Config) error` checking each secret against its hardcoded default; error if any match while `DevMode` is false."
-    status: pending
+    status: completed
   - id: imm-075
     content: "Call `ValidateSecrets` at startup in each orchestrator binary (control-plane, user-gateway, mcp-gateway, api-egress) before serving."
-    status: pending
+    status: completed
   - id: imm-076
     content: "Re-run the test and confirm green."
-    status: pending
+    status: completed
   - id: imm-077
     content: "Extract default values into named constants for clarity; keep tests green."
-    status: pending
+    status: completed
   - id: imm-078
     content: "Run `just lint-go` on changed files and `go test -cover ./orchestrator/internal/config/...`; confirm 90% threshold."
-    status: pending
+    status: completed
   - id: imm-205
     content: "Run `just e2e --tags gateway,no_inference` to confirm dev-mode stack starts normally with default secrets."
-    status: pending
+    status: completed
   - id: imm-079
     content: "Validation gate -- do not proceed to Task 8 until all checks pass."
-    status: pending
+    status: completed
   - id: imm-080
     content: "Generate task completion report. Mark completed steps `- [x]`."
-    status: pending
+    status: completed
   - id: imm-081
     content: "Do not start Task 8 until Task 7 closeout is done."
-    status: pending
+    status: completed
   - id: imm-082
     content: "Read `orchestrator/internal/mcpgateway/allowlist.go` lines 29-33 (agent roles), 87-96 (sandbox allowlist), 129-144 (no-token bypass and PM fallthrough)."
-    status: pending
+    status: completed
   - id: imm-083
     content: "Read `orchestrator/internal/mcpgateway/handlers.go` ~line 769 (system skill mutation guard)."
-    status: pending
+    status: completed
   - id: imm-084
     content: "Read MCP gateway enforcement spec and access allowlists spec for required PM and PA tool allowlists."
-    status: pending
+    status: completed
   - id: imm-085
     content: "Add unit tests: (a) no-token request => 401, (b) PM agent restricted to its allowlist, (c) PA agent role recognized with its allowlist, (d) system skill mutation => 403."
-    status: pending
+    status: completed
   - id: imm-086
     content: "Run `go test -v -run TestAllowlist ./orchestrator/internal/mcpgateway/...` and confirm failures."
-    status: pending
+    status: completed
   - id: imm-206
     content: "Add or extend `scripts/test_scripts/e2e_0812_mcp_agent_tokens_and_allowlist.py` with E2E cases: no-token rejection, PM allowlist, PA role, system skill mutation rejection."
-    status: pending
+    status: completed
   - id: imm-087
     content: "In `allowlist.go`: remove no-token bypass; add `AgentRolePA` with its allowlist; implement PM allowlist enforcement."
-    status: pending
+    status: completed
   - id: imm-088
     content: "In `handlers.go`: fix system skill mutation guard to reject 403 when `skill.IsSystem == true`."
-    status: pending
+    status: completed
   - id: imm-089
     content: "Re-run `go test -v -run TestAllowlist ./orchestrator/internal/mcpgateway/...` and confirm green."
-    status: pending
+    status: completed
   - id: imm-090
     content: "Extract allowlist definitions into a separate config/constant block for maintainability; keep tests green."
-    status: pending
+    status: completed
   - id: imm-091
     content: "Run `go test -cover ./orchestrator/internal/mcpgateway/...`; confirm 90% threshold."
-    status: pending
+    status: completed
   - id: imm-092
     content: "Run `just lint-go` on changed files."
-    status: pending
+    status: completed
   - id: imm-093
     content: "Run BDD scenarios tagged `@req_MCPGAT` via `just test-bdd` to confirm no regressions."
-    status: pending
+    status: completed
   - id: imm-207
     content: "Run `just e2e --tags control_plane,no_inference` to verify MCP gateway and tool-call regression."
-    status: pending
+    status: completed
   - id: imm-094
     content: "Validation gate -- do not proceed to Task 9 until all checks pass."
-    status: pending
+    status: completed
   - id: imm-095
     content: "Generate task completion report detailing each sub-issue fixed. Mark completed steps `- [x]`."
-    status: pending
+    status: completed
   - id: imm-096
     content: "Do not start Task 9 until Task 8 closeout is done."
-    status: pending
+    status: completed
   - id: imm-097
     content: "Read `orchestrator/internal/models/models.go` (`TaskBase` ~line 226) and confirm `PlanningState` field is missing."
     status: pending
@@ -628,34 +628,34 @@ PMA `WriteTimeout` (120s) is less than the inference timeout (300s), causing str
 
 #### Discovery (Task 1) Steps
 
-- [ ] Read `agents/cmd/cynode-pma/main.go` (WriteTimeout ~line 93) and `agents/internal/pma/chat.go` (`pmaLangchainCompletionTimeout` ~line 30); confirm the mismatch.
-- [ ] Read PMA tech spec ([`docs/tech_specs/cynode_pma.md`](../tech_specs/cynode_pma.md)) for timeout requirements.
+- [x] Read `agents/cmd/cynode-pma/main.go` (WriteTimeout ~line 93) and `agents/internal/pma/chat.go` (`pmaLangchainCompletionTimeout` ~line 30); confirm the mismatch.
+- [x] Read PMA tech spec ([`docs/tech_specs/cynode_pma.md`](../tech_specs/cynode_pma.md)) for timeout requirements.
 
 #### Red (Task 1)
 
-- [ ] Add a test asserting HTTP server WriteTimeout is zero or >= inference timeout + 10s margin.
-- [ ] Run `go test -v -run TestWriteTimeout ./agents/cmd/cynode-pma/...` and confirm the test fails.
+- [x] Add a test asserting HTTP server WriteTimeout is zero or >= inference timeout + 10s margin.
+- [x] Run `go test -v -run TestWriteTimeout ./agents/cmd/cynode-pma/...` and confirm the test fails.
 
 #### Green (Task 1)
 
-- [ ] Set WriteTimeout to `0` (disabled for streaming) in `agents/cmd/cynode-pma/main.go`.
-- [ ] Re-run `go test -v -run TestWriteTimeout ./agents/cmd/cynode-pma/...` and confirm green.
+- [x] Set WriteTimeout to `0` (disabled for streaming) in `agents/cmd/cynode-pma/main.go`.
+- [x] Re-run `go test -v -run TestWriteTimeout ./agents/cmd/cynode-pma/...` and confirm green.
 
 #### Refactor (Task 1)
 
-- [ ] Extract the timeout into a named constant if not already defined; keep tests green.
+- [x] Extract the timeout into a named constant if not already defined; keep tests green.
 
 #### Testing (Task 1)
 
-- [ ] Run `just lint-go` on changed files and `go test -cover ./agents/...`; confirm 90% threshold.
-- [ ] Run `just e2e --tags streaming,pma_inference` to verify PMA streaming is not truncated after timeout change (requires inference; skip if unavailable).
-- [ ] Validation gate -- do not proceed to Task 2 until all checks pass.
+- [x] Run `just lint-go` on changed files and `go test -cover ./agents/...`; confirm 90% threshold.
+- [x] Run `just e2e --tags streaming,pma_inference` to verify PMA streaming is not truncated after timeout change (requires inference; skip if unavailable).
+- [x] Validation gate -- do not proceed to Task 2 until all checks pass.
 
 #### Closeout (Task 1)
 
-- [ ] Generate task completion report (changes, tests passed, deviations).
+- [x] Generate task completion report (changes, tests passed, deviations).
   Mark completed steps `- [x]`.
-- [ ] Do not start Task 2 until Task 1 closeout is done.
+- [x] Do not start Task 2 until Task 1 closeout is done.
 
 ---
 
@@ -670,34 +670,34 @@ PMA `WriteTimeout` (120s) is less than the inference timeout (300s), causing str
 
 #### Discovery (Task 2) Steps
 
-- [ ] Read `worker_node/cmd/node-manager/main.go` ~line 599 (`startOneManagedService` with `strings.Contains`) and ~line 408 (`containerNameExact`).
-- [ ] Identify all callers of `startOneManagedService` to assess impact of the fix.
+- [x] Read `worker_node/cmd/node-manager/main.go` ~line 599 (`startOneManagedService` with `strings.Contains`) and ~line 408 (`containerNameExact`).
+- [x] Identify all callers of `startOneManagedService` to assess impact of the fix.
 
 #### Red (Task 2)
 
-- [ ] Add a unit test exercising container name matching with a prefix collision (e.g., `cynodeai-managed-pma` vs `cynodeai-managed-pma-test`).
-- [ ] Run `go test -v -run TestContainerNameMatch ./worker_node/cmd/node-manager/...` and confirm the test fails.
+- [x] Add a unit test exercising container name matching with a prefix collision (e.g., `cynodeai-managed-pma` vs `cynodeai-managed-pma-test`).
+- [x] Run `go test -v -run TestContainerNameMatch ./worker_node/cmd/node-manager/...` and confirm the test fails.
 
 #### Green (Task 2)
 
-- [ ] Replace `strings.Contains(string(out), name)` in `startOneManagedService` with `containerNameExact`.
-- [ ] Re-run the test and confirm green.
+- [x] Replace `strings.Contains(string(out), name)` in `startOneManagedService` with `containerNameExact`.
+- [x] Re-run the test and confirm green.
 
 #### Refactor (Task 2)
 
-- [ ] Consolidate `containerNameExact` and `containerNameMatches` into a single shared function.
+- [x] Consolidate `containerNameExact` and `containerNameMatches` into a single shared function.
 
 #### Testing (Task 2)
 
-- [ ] Run `just lint-go` on changed files and `go test -cover ./worker_node/...`; confirm 90% threshold.
-- [ ] Run `just e2e --tags worker,no_inference` to verify managed service startup regression.
-- [ ] Validation gate -- do not proceed to Task 3 until all checks pass.
+- [x] Run `just lint-go` on changed files and `go test -cover ./worker_node/...`; confirm 90% threshold.
+- [x] Run `just e2e --tags worker,no_inference` to verify managed service startup regression.
+- [x] Validation gate -- do not proceed to Task 3 until all checks pass.
 
 #### Closeout (Task 2)
 
-- [ ] Generate task completion report.
+- [x] Generate task completion report.
   Mark completed steps `- [x]`.
-- [ ] Do not start Task 3 until Task 2 closeout is done.
+- [x] Do not start Task 3 until Task 2 closeout is done.
 
 ---
 
@@ -712,34 +712,34 @@ PMA `WriteTimeout` (120s) is less than the inference timeout (300s), causing str
 
 #### Discovery (Task 3) Steps
 
-- [ ] Read `cynork/internal/tui/model.go` ~lines 774-791 (`runEnsureThread`) and the `applyEnsureThreadResult` handler.
-- [ ] Identify all reads of `Session.CurrentThreadID` in `View()` and goroutine-accessed paths.
+- [x] Read `cynork/internal/tui/model.go` ~lines 774-791 (`runEnsureThread`) and the `applyEnsureThreadResult` handler.
+- [x] Identify all reads of `Session.CurrentThreadID` in `View()` and goroutine-accessed paths.
 
 #### Red (Task 3)
 
-- [ ] Add a test using `go test -race` on the TUI thread-initialization path to detect the race.
-- [ ] Run `go test -race -v -run TestEnsureThread ./cynork/internal/tui/...` and confirm the race is detected.
+- [x] Add a test using `go test -race` on the TUI thread-initialization path to detect the race.
+- [x] Run `go test -race -v -run TestEnsureThread ./cynork/internal/tui/...` and confirm the race is detected.
 
 #### Green (Task 3)
 
-- [ ] Move all `Session.CurrentThreadID` mutations into `applyEnsureThreadResult`; have the goroutine return the resolved thread ID as data without writing model fields.
-- [ ] Re-run `go test -race -v -run TestEnsureThread ./cynork/internal/tui/...` and confirm no race.
+- [x] Move all `Session.CurrentThreadID` mutations into `applyEnsureThreadResult`; have the goroutine return the resolved thread ID as data without writing model fields.
+- [x] Re-run `go test -race -v -run TestEnsureThread ./cynork/internal/tui/...` and confirm no race.
 
 #### Refactor (Task 3)
 
-- [ ] Verify no other `tea.Cmd` closures directly mutate model fields; document the pattern if recurring.
+- [x] Verify no other `tea.Cmd` closures directly mutate model fields; document the pattern if recurring.
 
 #### Testing (Task 3)
 
-- [ ] Run `go test -race ./cynork/...` and `go test -cover ./cynork/...`; confirm 90% threshold.
-- [ ] Run `just e2e --tags tui_pty,no_inference` to verify TUI thread-initialization regression.
-- [ ] Validation gate -- do not proceed to Task 4 until all checks pass.
+- [x] Run `go test -race ./cynork/...` and `go test -cover ./cynork/...`; confirm 90% threshold.
+- [x] Run `just e2e --tags tui_pty,no_inference` to verify TUI thread-initialization regression.
+- [x] Validation gate -- do not proceed to Task 4 until all checks pass.
 
 #### Closeout (Task 3)
 
-- [ ] Generate task completion report.
+- [x] Generate task completion report.
   Mark completed steps `- [x]`.
-- [ ] Do not start Task 4 until Task 3 closeout is done.
+- [x] Do not start Task 4 until Task 3 closeout is done.
 
 ---
 
@@ -754,34 +754,34 @@ The secure store has no `Close()` method; AES master key and ML-KEM decapsulatio
 
 #### Discovery (Task 4) Steps
 
-- [ ] Read `worker_node/internal/securestore/store.go` struct definition (~lines 75-80); identify `key` and `kemKey` fields.
-- [ ] Identify all call sites that create a `securestore.Store` to wire `Close()` into shutdown paths.
+- [x] Read `worker_node/internal/securestore/store.go` struct definition (~lines 75-80); identify `key` and `kemKey` fields.
+- [x] Identify all call sites that create a `securestore.Store` to wire `Close()` into shutdown paths.
 
 #### Red (Task 4)
 
-- [ ] Add a unit test: create a Store, call `Close()`, verify key material is zeroed (all bytes == 0).
-- [ ] Run `go test -v -run TestStoreClose ./worker_node/internal/securestore/...` and confirm failure (method missing).
+- [x] Add a unit test: create a Store, call `Close()`, verify key material is zeroed (all bytes == 0).
+- [x] Run `go test -v -run TestStoreClose ./worker_node/internal/securestore/...` and confirm failure (method missing).
 
 #### Green (Task 4)
 
-- [ ] Implement `func (s *Store) Close()` that zeros `s.key` and `s.kemKey`.
-- [ ] Wire `defer store.Close()` into `worker_node/cmd/node-manager/main.go` shutdown path.
-- [ ] Re-run the test and confirm green.
+- [x] Implement `func (s *Store) Close()` that zeros `s.key` and `s.kemKey`.
+- [x] Wire `defer store.Close()` into `worker_node/cmd/node-manager/main.go` shutdown path.
+- [x] Re-run the test and confirm green.
 
 #### Refactor (Task 4)
 
-- [ ] Ensure zeroing is not optimizable away by the compiler (use `runtime.KeepAlive` or similar).
+- [x] Ensure zeroing is not optimizable away by the compiler (use `runtime.KeepAlive` or similar).
 
 #### Testing (Task 4)
 
-- [ ] Run `just lint-go` on changed files and `go test -cover ./worker_node/internal/securestore/...`; confirm 90% threshold.
-- [ ] Validation gate -- do not proceed to Task 5 until all checks pass.
+- [x] Run `just lint-go` on changed files and `go test -cover ./worker_node/internal/securestore/...`; confirm 90% threshold.
+- [x] Validation gate -- do not proceed to Task 5 until all checks pass.
 
 #### Closeout (Task 4)
 
-- [ ] Generate task completion report.
+- [x] Generate task completion report.
   Mark completed steps `- [x]`.
-- [ ] Do not start Task 5 until Task 4 closeout is done.
+- [x] Do not start Task 5 until Task 4 closeout is done.
 
 ---
 
@@ -796,35 +796,35 @@ Token comparisons using `!=` in api-egress, workflow middleware, and worker API 
 
 #### Discovery (Task 5) Steps
 
-- [ ] Search all Go modules for `!=` token/bearer comparisons: `orchestrator/cmd/api-egress/main.go:155`, `orchestrator/internal/middleware/auth.go:148`, `worker_node/internal/workerapiserver/embed_handlers.go:280,405`.
+- [x] Search all Go modules for `!=` token/bearer comparisons: `orchestrator/cmd/api-egress/main.go:155`, `orchestrator/internal/middleware/auth.go:148`, `worker_node/internal/workerapiserver/embed_handlers.go:280,405`.
   Identify any additional sites.
 
 #### Red (Task 5)
 
-- [ ] Add or update unit tests at each site verifying token comparison rejects incorrect tokens and accepts correct ones.
-- [ ] Run targeted tests: `go test -v -run TestTokenAuth ./orchestrator/cmd/api-egress/...`, `go test -v -run TestWorkflowAuth ./orchestrator/internal/middleware/...`, `go test -v -run TestBearerAuth ./worker_node/internal/workerapiserver/...`.
+- [x] Add or update unit tests at each site verifying token comparison rejects incorrect tokens and accepts correct ones.
+- [x] Run targeted tests: `go test -v -run TestTokenAuth ./orchestrator/cmd/api-egress/...`, `go test -v -run TestWorkflowAuth ./orchestrator/internal/middleware/...`, `go test -v -run TestBearerAuth ./worker_node/internal/workerapiserver/...`.
 
 #### Green (Task 5)
 
-- [ ] Replace each `got != token` with `subtle.ConstantTimeCompare([]byte(got), []byte(expected)) != 1`; add `import "crypto/subtle"` where missing.
-- [ ] Re-run all targeted tests and confirm green.
+- [x] Replace each `got != token` with `subtle.ConstantTimeCompare([]byte(got), []byte(expected)) != 1`; add `import "crypto/subtle"` where missing.
+- [x] Re-run all targeted tests and confirm green.
 
 #### Refactor (Task 5)
 
-- [ ] If multiple modules duplicate the pattern, extract a shared helper (e.g., `secretutil.TokenEquals`) into `go_shared_libs`.
+- [x] If multiple modules duplicate the pattern, extract a shared helper (e.g., `secretutil.TokenEquals`) into `go_shared_libs`.
 
 #### Testing (Task 5)
 
-- [ ] Run `go test -cover ./orchestrator/...` and `go test -cover ./worker_node/...`; confirm 90% threshold.
-- [ ] Run `just lint-go` on all changed files.
-- [ ] Run `just e2e --tags auth,no_inference` and `just e2e --tags worker,no_inference` to verify bearer auth regression across orchestrator and worker.
-- [ ] Validation gate -- do not proceed to Task 6 until all checks pass.
+- [x] Run `go test -cover ./orchestrator/...` and `go test -cover ./worker_node/...`; confirm 90% threshold.
+- [x] Run `just lint-go` on all changed files.
+- [x] Run `just e2e --tags auth,no_inference` and `just e2e --tags worker,no_inference` to verify bearer auth regression across orchestrator and worker.
+- [x] Validation gate -- do not proceed to Task 6 until all checks pass.
 
 #### Closeout (Task 5)
 
-- [ ] Generate task completion report listing each file changed and old vs new pattern.
+- [x] Generate task completion report listing each file changed and old vs new pattern.
   Mark completed steps `- [x]`.
-- [ ] Do not start Task 6 until Task 5 closeout is done.
+- [x] Do not start Task 6 until Task 5 closeout is done.
 
 ---
 
@@ -839,36 +839,36 @@ Token comparisons using `!=` in api-egress, workflow middleware, and worker API 
 
 #### Discovery (Task 6) Steps
 
-- [ ] Read `go_shared_libs/contracts/workerapi/workerapi.go` ~line 69 (`ExitCode int`).
-- [ ] Search `orchestrator/` and `worker_node/` for all consumers of `RunJobResponse.ExitCode` that must handle `*int`.
+- [x] Read `go_shared_libs/contracts/workerapi/workerapi.go` ~line 69 (`ExitCode int`).
+- [x] Search `orchestrator/` and `worker_node/` for all consumers of `RunJobResponse.ExitCode` that must handle `*int`.
 
 #### Red (Task 6)
 
-- [ ] Add a unit test: marshal `RunJobResponse` with ExitCode=0, unmarshal, assert `exit_code` field is present and equals 0.
-- [ ] Run `go test -v -run TestExitCodeZero ./go_shared_libs/contracts/workerapi/...` and confirm failure.
+- [x] Add a unit test: marshal `RunJobResponse` with ExitCode=0, unmarshal, assert `exit_code` field is present and equals 0.
+- [x] Run `go test -v -run TestExitCodeZero ./go_shared_libs/contracts/workerapi/...` and confirm failure.
 
 #### Green (Task 6)
 
-- [ ] Change `ExitCode int` to `ExitCode *int` in `go_shared_libs/contracts/workerapi/workerapi.go`; remove `omitempty` or keep it (nil omits, non-nil emits).
-- [ ] Update all consumers in `orchestrator/` and `worker_node/` to dereference the pointer safely (nil check).
-- [ ] Re-run the test and confirm green.
+- [x] Change `ExitCode int` to `ExitCode *int` in `go_shared_libs/contracts/workerapi/workerapi.go`; remove `omitempty` or keep it (nil omits, non-nil emits).
+- [x] Update all consumers in `orchestrator/` and `worker_node/` to dereference the pointer safely (nil check).
+- [x] Re-run the test and confirm green.
 
 #### Refactor (Task 6)
 
-- [ ] Verify all JSON serialization/deserialization paths handle `*int` correctly; confirm no compile errors across modules.
+- [x] Verify all JSON serialization/deserialization paths handle `*int` correctly; confirm no compile errors across modules.
 
 #### Testing (Task 6)
 
-- [ ] Run `go test ./go_shared_libs/...`, `go test ./orchestrator/...`, `go test ./worker_node/...`; confirm 90% threshold.
-- [ ] Run `just lint-go` on changed files.
-- [ ] Run `just e2e --tags task,no_inference` and `just e2e --tags sba,no_inference` to verify task result and SBA contract regression.
-- [ ] Validation gate -- do not proceed to Task 7 until all checks pass.
+- [x] Run `go test ./go_shared_libs/...`, `go test ./orchestrator/...`, `go test ./worker_node/...`; confirm 90% threshold.
+- [x] Run `just lint-go` on changed files.
+- [x] Run `just e2e --tags task,no_inference` and `just e2e --tags sba,no_inference` to verify task result and SBA contract regression.
+- [x] Validation gate -- do not proceed to Task 7 until all checks pass.
 
 #### Closeout (Task 6)
 
-- [ ] Generate task completion report.
+- [x] Generate task completion report.
   Mark completed steps `- [x]`.
-- [ ] Do not start Task 7 until Task 6 closeout is done.
+- [x] Do not start Task 7 until Task 6 closeout is done.
 
 ---
 
@@ -883,35 +883,35 @@ Orchestrator ships hardcoded dev defaults for JWT secret, admin password, and PS
 
 #### Discovery (Task 7) Steps
 
-- [ ] Read `orchestrator/internal/config/config.go` ~lines 127-137 for hardcoded defaults (`JWTSecret`, `BootstrapAdminPassword`, `NodeRegistrationPSK`, `WorkerAPIBearerToken`).
-- [ ] Determine how dev mode is signaled (env var, config flag) to gate the validation.
+- [x] Read `orchestrator/internal/config/config.go` ~lines 127-137 for hardcoded defaults (`JWTSecret`, `BootstrapAdminPassword`, `NodeRegistrationPSK`, `WorkerAPIBearerToken`).
+- [x] Determine how dev mode is signaled (env var, config flag) to gate the validation.
 
 #### Red (Task 7)
 
-- [ ] Add unit tests: call validation with each insecure default and `dev_mode=false` => error; `dev_mode=true` => allowed.
-- [ ] Run `go test -v -run TestInsecureDefaults ./orchestrator/internal/config/...` and confirm failure (function missing).
+- [x] Add unit tests: call validation with each insecure default and `dev_mode=false` => error; `dev_mode=true` => allowed.
+- [x] Run `go test -v -run TestInsecureDefaults ./orchestrator/internal/config/...` and confirm failure (function missing).
 
 #### Green (Task 7)
 
-- [ ] Implement `ValidateSecrets(cfg *Config) error` checking each secret against its hardcoded default; error if any match while `DevMode` is false.
-- [ ] Call `ValidateSecrets` at startup in each orchestrator binary (control-plane, user-gateway, mcp-gateway, api-egress) before serving.
-- [ ] Re-run the test and confirm green.
+- [x] Implement `ValidateSecrets(cfg *Config) error` checking each secret against its hardcoded default; error if any match while `DevMode` is false.
+- [x] Call `ValidateSecrets` at startup in each orchestrator binary (control-plane, user-gateway, mcp-gateway, api-egress) before serving.
+- [x] Re-run the test and confirm green.
 
 #### Refactor (Task 7)
 
-- [ ] Extract default values into named constants for clarity; keep tests green.
+- [x] Extract default values into named constants for clarity; keep tests green.
 
 #### Testing (Task 7)
 
-- [ ] Run `just lint-go` on changed files and `go test -cover ./orchestrator/internal/config/...`; confirm 90% threshold.
-- [ ] Run `just e2e --tags gateway,no_inference` to confirm dev-mode stack starts normally with default secrets.
-- [ ] Validation gate -- do not proceed to Task 8 until all checks pass.
+- [x] Run `just lint-go` on changed files and `go test -cover ./orchestrator/internal/config/...`; confirm 90% threshold.
+- [x] Run `just e2e --tags gateway,no_inference` to confirm dev-mode stack starts normally with default secrets.
+- [x] Validation gate -- do not proceed to Task 8 until all checks pass.
 
 #### Closeout (Task 7)
 
-- [ ] Generate task completion report.
+- [x] Generate task completion report.
   Mark completed steps `- [x]`.
-- [ ] Do not start Task 8 until Task 7 closeout is done.
+- [x] Do not start Task 8 until Task 7 closeout is done.
 
 ---
 
@@ -928,39 +928,39 @@ Three sub-issues: (a) no-token requests bypass allowlist enforcement, (b) PM age
 
 #### Discovery (Task 8) Steps
 
-- [ ] Read `orchestrator/internal/mcpgateway/allowlist.go` lines 29-33 (agent roles), 87-96 (sandbox allowlist), 129-144 (no-token bypass and PM fallthrough).
-- [ ] Read `orchestrator/internal/mcpgateway/handlers.go` ~line 769 (system skill mutation guard).
-- [ ] Read MCP gateway enforcement spec and access allowlists spec for required PM and PA tool allowlists.
+- [x] Read `orchestrator/internal/mcpgateway/allowlist.go` lines 29-33 (agent roles), 87-96 (sandbox allowlist), 129-144 (no-token bypass and PM fallthrough).
+- [x] Read `orchestrator/internal/mcpgateway/handlers.go` ~line 769 (system skill mutation guard).
+- [x] Read MCP gateway enforcement spec and access allowlists spec for required PM and PA tool allowlists.
 
 #### Red (Task 8)
 
-- [ ] Add unit tests: (a) no-token request => 401, (b) PM agent restricted to its allowlist, (c) PA agent role recognized with its allowlist, (d) system skill mutation => 403.
-- [ ] Run `go test -v -run TestAllowlist ./orchestrator/internal/mcpgateway/...` and confirm failures.
-- [ ] Add or extend `scripts/test_scripts/e2e_0812_mcp_agent_tokens_and_allowlist.py` with E2E cases: no-token rejection, PM allowlist enforcement, PA role recognition, system skill mutation rejection.
+- [x] Add unit tests: (a) no-token request => 401, (b) PM agent restricted to its allowlist, (c) PA agent role recognized with its allowlist, (d) system skill mutation => 403.
+- [x] Run `go test -v -run TestAllowlist ./orchestrator/internal/mcpgateway/...` and confirm failures.
+- [x] Add or extend `scripts/test_scripts/e2e_0812_mcp_agent_tokens_and_allowlist.py` with E2E cases: no-token rejection, PM allowlist enforcement, PA role recognition, system skill mutation rejection.
 
 #### Green (Task 8)
 
-- [ ] In `allowlist.go`: remove no-token bypass; add `AgentRolePA` with its allowlist; implement PM allowlist enforcement.
-- [ ] In `handlers.go`: fix system skill mutation guard to reject 403 when `skill.IsSystem == true`.
-- [ ] Re-run `go test -v -run TestAllowlist ./orchestrator/internal/mcpgateway/...` and confirm green.
+- [x] In `allowlist.go`: remove no-token bypass; add `AgentRolePA` with its allowlist; implement PM allowlist enforcement.
+- [x] In `handlers.go`: fix system skill mutation guard to reject 403 when `skill.IsSystem == true`.
+- [x] Re-run `go test -v -run TestAllowlist ./orchestrator/internal/mcpgateway/...` and confirm green.
 
 #### Refactor (Task 8)
 
-- [ ] Extract allowlist definitions into a separate config/constant block for maintainability; keep tests green.
+- [x] Extract allowlist definitions into a separate config/constant block for maintainability; keep tests green.
 
 #### Testing (Task 8)
 
-- [ ] Run `go test -cover ./orchestrator/internal/mcpgateway/...`; confirm 90% threshold.
-- [ ] Run `just lint-go` on changed files.
-- [ ] Run BDD scenarios tagged `@req_MCPGAT` via `just test-bdd` to confirm no regressions.
-- [ ] Run `just e2e --tags control_plane,no_inference` to verify MCP gateway and tool-call regression.
-- [ ] Validation gate -- do not proceed to Task 9 until all checks pass.
+- [x] Run `go test -cover ./orchestrator/internal/mcpgateway/...`; confirm 90% threshold.
+- [x] Run `just lint-go` on changed files.
+- [x] Run BDD scenarios tagged `@req_MCPGAT` via `just test-bdd` to confirm no regressions.
+- [x] Run `just e2e --tags control_plane,no_inference` to verify MCP gateway and tool-call regression.
+- [x] Validation gate -- do not proceed to Task 9 until all checks pass.
 
 #### Closeout (Task 8)
 
-- [ ] Generate task completion report detailing each sub-issue fixed.
+- [x] Generate task completion report detailing each sub-issue fixed.
   Mark completed steps `- [x]`.
-- [ ] Do not start Task 9 until Task 8 closeout is done.
+- [x] Do not start Task 9 until Task 8 closeout is done.
 
 ---
 

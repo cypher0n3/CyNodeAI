@@ -198,6 +198,51 @@ func TestBuildMuxesFromEmbedConfig_HealthzReadyz(t *testing.T) {
 	}
 }
 
+func TestEmbedBearerOK(t *testing.T) {
+	if !embedBearerOK("ignored", "") {
+		t.Fatal("empty expected token should allow any auth header")
+	}
+	if !embedBearerOK("Bearer secret", "secret") {
+		t.Fatal("matching token should succeed")
+	}
+	if embedBearerOK("Bearer x", "secret") {
+		t.Fatal("wrong token should fail")
+	}
+	if embedBearerOK("Basic secret", "secret") {
+		t.Fatal("non-Bearer scheme should fail")
+	}
+	if embedBearerOK("Bearer secret", "secret ") {
+		t.Fatal("trailing space on expected token should not match")
+	}
+}
+
+// TestBearerAuth verifies embed telemetry routes reject wrong bearer and accept the configured token.
+func TestBearerAuth(t *testing.T) {
+	exec := executor.New("direct", 5*time.Second, 1024, "", "", nil)
+	pub, _ := buildMuxesFromEmbedConfig(exec, "good-bearer", t.TempDir(), nil, slog.Default(), embedProxyConfig{
+		ManagedServiceTargets: map[string]embedManagedServiceTarget{},
+		InternalProxy:         embedInternalProxyConfig{},
+	})
+	t.Run("wrong_rejected", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/v1/worker/telemetry/node:info", http.NoBody)
+		req.Header.Set("Authorization", "Bearer bad")
+		w := httptest.NewRecorder()
+		pub.ServeHTTP(w, req)
+		if w.Code != http.StatusUnauthorized {
+			t.Errorf("code=%d want 401", w.Code)
+		}
+	})
+	t.Run("correct_ok", func(t *testing.T) {
+		req := httptest.NewRequest(http.MethodGet, "/v1/worker/telemetry/node:info", http.NoBody)
+		req.Header.Set("Authorization", "Bearer good-bearer")
+		w := httptest.NewRecorder()
+		pub.ServeHTTP(w, req)
+		if w.Code != http.StatusOK {
+			t.Errorf("code=%d body=%s", w.Code, w.Body.String())
+		}
+	})
+}
+
 func TestBuildMuxesFromEmbedConfig_TelemetryNodeInfoAndStats(t *testing.T) {
 	exec := executor.New("direct", 5*time.Second, 1024, "", "", nil)
 	pub, _ := buildMuxesFromEmbedConfig(exec, "bearer-tok", t.TempDir(), nil, slog.Default(), embedProxyConfig{
@@ -507,6 +552,45 @@ func TestBuildMuxesFromEmbedConfig_NodeInfo_KernelVersionReadFails(t *testing.T)
 	platform, _ := data["platform"].(map[string]interface{})
 	if platform != nil && platform["kernel_version"] != "" {
 		t.Errorf("expected empty kernel_version when read fails, got %q", platform["kernel_version"])
+	}
+}
+
+func TestBuildMuxesFromEmbedConfig_NodeInfo_StoreEmptyKernelFallback(t *testing.T) {
+	oldPath := kernelVersionPath
+	kernelVersionPath = "/nonexistent/kernel-version-for-test"
+	defer func() { kernelVersionPath = oldPath }()
+	ctx := context.Background()
+	dir := t.TempDir()
+	store, err := telemetry.Open(ctx, dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = store.Close() }()
+	if err := store.InsertNodeBoot(ctx, &telemetry.NodeBootRow{
+		BootID: "b-empty-kernel", NodeSlug: "slug", BuildVersion: "1.0",
+		PlatformOS: "linux", PlatformArch: "amd64", KernelVersion: "",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	exec := executor.New("direct", 5*time.Second, 1024, "", "", nil)
+	pub, _ := buildMuxesFromEmbedConfig(exec, "tok", dir, store, slog.Default(), embedProxyConfig{
+		ManagedServiceTargets: map[string]embedManagedServiceTarget{},
+		InternalProxy:         embedInternalProxyConfig{},
+	})
+	req := httptest.NewRequest(http.MethodGet, "/v1/worker/telemetry/node:info", http.NoBody)
+	req.Header.Set("Authorization", "Bearer tok")
+	w := httptest.NewRecorder()
+	pub.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("node:info status = %d", w.Code)
+	}
+	var data map[string]interface{}
+	if err := json.NewDecoder(w.Body).Decode(&data); err != nil {
+		t.Fatal(err)
+	}
+	platform, _ := data["platform"].(map[string]interface{})
+	if platform == nil || platform["kernel_version"] != "" {
+		t.Errorf("expected empty kernel_version from fallback when store row omits it, got %v", platform)
 	}
 }
 

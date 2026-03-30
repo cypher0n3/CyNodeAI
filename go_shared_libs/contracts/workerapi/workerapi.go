@@ -66,7 +66,7 @@ type RunJobResponse struct {
 	TaskID             string            `json:"task_id"`
 	JobID              string            `json:"job_id"`
 	Status             string            `json:"status"`
-	ExitCode           int               `json:"exit_code,omitempty"`
+	ExitCode           *int              `json:"exit_code,omitempty"`
 	Stdout             string            `json:"stdout"`
 	Stderr             string            `json:"stderr"`
 	StartedAt          string            `json:"started_at"`
@@ -93,6 +93,12 @@ func DefaultSandboxSpec() SandboxSpec {
 		Command: nil,
 		Env:     nil,
 	}
+}
+
+// ExitCodePtr returns a pointer to c for RunJobResponse.ExitCode so JSON includes exit_code when 0.
+func ExitCodePtr(c int) *int {
+	p := c
+	return &p
 }
 
 // ValidateRequest returns an error if the request is invalid for execution.

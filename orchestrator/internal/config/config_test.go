@@ -2,6 +2,7 @@ package config
 
 import (
 	"os"
+	"strings"
 	"testing"
 	"time"
 )
@@ -11,8 +12,13 @@ func TestLoadOrchestratorConfig_Defaults(t *testing.T) {
 	_ = os.Unsetenv("DATABASE_URL")
 	_ = os.Unsetenv("LISTEN_ADDR")
 	_ = os.Unsetenv("JWT_SECRET")
+	_ = os.Unsetenv(envOrchestratorDevMode)
 
 	cfg := LoadOrchestratorConfig()
+
+	if !cfg.DevMode {
+		t.Error("DevMode should default to true when ORCHESTRATOR_DEV_MODE is unset")
+	}
 
 	if cfg.DatabaseURL == "" {
 		t.Error("DatabaseURL should have a default value")
@@ -36,6 +42,66 @@ func TestLoadOrchestratorConfig_Defaults(t *testing.T) {
 
 	if cfg.OrchestratorPublicURL == "" {
 		t.Error("OrchestratorPublicURL should have a default value")
+	}
+}
+
+func TestValidateSecrets_nil(t *testing.T) {
+	if err := ValidateSecrets(nil); err == nil {
+		t.Fatal("expected error for nil config")
+	}
+}
+
+func TestValidateSecrets_devModeAllowsDefaults(t *testing.T) {
+	cfg := &OrchestratorConfig{
+		DevMode:                true,
+		JWTSecret:              DefaultJWTSecret,
+		NodeRegistrationPSK:    DefaultNodeRegistrationPSK,
+		WorkerAPIBearerToken:   DefaultWorkerAPIBearerToken,
+		BootstrapAdminPassword: DefaultBootstrapAdminPassword,
+	}
+	if err := ValidateSecrets(cfg); err != nil {
+		t.Fatalf("DevMode true: %v", err)
+	}
+}
+
+func TestValidateSecrets_prodRejectsDefaults(t *testing.T) {
+	cfg := &OrchestratorConfig{
+		DevMode:                false,
+		JWTSecret:              DefaultJWTSecret,
+		NodeRegistrationPSK:    DefaultNodeRegistrationPSK,
+		WorkerAPIBearerToken:   DefaultWorkerAPIBearerToken,
+		BootstrapAdminPassword: DefaultBootstrapAdminPassword,
+	}
+	err := ValidateSecrets(cfg)
+	if err == nil {
+		t.Fatal("expected error when DevMode is false and defaults are used")
+	}
+	for _, key := range []string{"JWT_SECRET", "NODE_REGISTRATION_PSK", "WORKER_API_BEARER_TOKEN", "BOOTSTRAP_ADMIN_PASSWORD"} {
+		if !strings.Contains(err.Error(), key) {
+			t.Errorf("error should mention %q: %v", key, err)
+		}
+	}
+}
+
+func TestValidateSecrets_prodOKWhenCustom(t *testing.T) {
+	cfg := &OrchestratorConfig{
+		DevMode:                false,
+		JWTSecret:              "custom-jwt",
+		NodeRegistrationPSK:    "custom-psk",
+		WorkerAPIBearerToken:   "custom-worker",
+		BootstrapAdminPassword: "custom-password",
+	}
+	if err := ValidateSecrets(cfg); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestInsecureDefaults(t *testing.T) {
+	// Plan gate: non-dev mode must not accept shipped defaults.
+	cfg := LoadOrchestratorConfig()
+	cfg.DevMode = false
+	if err := ValidateSecrets(cfg); err == nil {
+		t.Fatal("LoadOrchestratorConfig values with DevMode false should fail validation")
 	}
 }
 

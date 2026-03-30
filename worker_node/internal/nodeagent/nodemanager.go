@@ -216,6 +216,7 @@ func syncManagedServiceAgentTokens(ctx context.Context, cfg *Config, nodeConfig 
 	if err != nil {
 		return fmt.Errorf("secure store unavailable for managed service token lifecycle: %w", err)
 	}
+	defer store.Close()
 	if logger != nil && source == securestore.MasterKeySourceEnvB64 {
 		logger.Warn("secure store uses env_b64 master key backend; migrate to stronger host-backed key source")
 	}

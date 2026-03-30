@@ -216,7 +216,7 @@ func (h *TaskHandler) createTaskWithOrchestratorInference(ctx context.Context, t
 		TaskID:    taskID.String(),
 		JobID:     jobID.String(),
 		Status:    workerapi.StatusCompleted,
-		ExitCode:  0,
+		ExitCode:  workerapi.ExitCodePtr(0),
 		Stdout:    response,
 		Stderr:    "",
 		StartedAt: nowStr,

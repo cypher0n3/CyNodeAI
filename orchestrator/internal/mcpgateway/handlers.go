@@ -193,8 +193,8 @@ func routeAndWriteAudit(ctx context.Context, w http.ResponseWriter, store databa
 
 // toolCallHandler writes an audit record for every tool call (P2-02) and routes MCP tools (catalog names).
 // P2-01: enforces required scoped ids (task_id/run_id/job_id) per tool before routing; rejects with 400 when missing.
-// When auth is non-nil and agent bearer tokens are configured, Authorization: Bearer is resolved to PM or sandbox
-// and sandbox agents are restricted to the worker allowlist (see allowlist.go).
+// When auth is non-nil and agent bearer tokens are configured, callers must authenticate and
+// PM / sandbox / PA roles are restricted to their allowlists (see allowlist.go).
 func ToolCallHandler(store database.Store, logger *slog.Logger, auth *ToolCallAuth) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
@@ -803,7 +803,13 @@ func handleSkillsUpdate(ctx context.Context, store database.Store, args map[stri
 		code, body := writePreferenceErrToAudit(err, rec)
 		return code, body, auditRec
 	}
-	if !skill.IsSystem && (skill.OwnerID == nil || *skill.OwnerID != *userID) {
+	if skill.IsSystem {
+		rec.Decision = auditDecisionDeny
+		rec.Status = auditStatusError
+		rec.ErrorType = &auditErrForbidden
+		return http.StatusForbidden, []byte(`{"error":"system skills cannot be modified"}`), auditRec
+	}
+	if skill.OwnerID == nil || *skill.OwnerID != *userID {
 		rec.Decision = auditDecisionAllow
 		rec.Status = auditStatusError
 		rec.ErrorType = &auditErrNotFound
@@ -858,7 +864,13 @@ func handleSkillsDelete(ctx context.Context, store database.Store, args map[stri
 		code, body := writePreferenceErrToAudit(err, rec)
 		return code, body, auditRec
 	}
-	if !skill.IsSystem && (skill.OwnerID == nil || *skill.OwnerID != *userID) {
+	if skill.IsSystem {
+		rec.Decision = auditDecisionDeny
+		rec.Status = auditStatusError
+		rec.ErrorType = &auditErrForbidden
+		return http.StatusForbidden, []byte(`{"error":"system skills cannot be deleted"}`), auditRec
+	}
+	if skill.OwnerID == nil || *skill.OwnerID != *userID {
 		rec.Decision = auditDecisionAllow
 		rec.Status = auditStatusError
 		rec.ErrorType = &auditErrNotFound

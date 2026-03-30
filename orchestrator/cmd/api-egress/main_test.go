@@ -19,6 +19,41 @@ import (
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/testutil"
 )
 
+// TestTokenAuth exercises bearer validation on the egress call handler (constant-time compare).
+func TestTokenAuth(t *testing.T) {
+	h := newCallHandler(slog.Default(), "correct-token", "openai,github")
+	body := []byte(`{"provider":"openai","operation":"chat"}`)
+	t.Run("missing", func(t *testing.T) {
+		w := httptest.NewRecorder()
+		r := httptest.NewRequest(http.MethodPost, "/v1/call", bytes.NewReader(body))
+		r.Header.Set("Content-Type", "application/json")
+		h.ServeHTTP(w, r)
+		if w.Code != http.StatusUnauthorized {
+			t.Errorf("code=%d", w.Code)
+		}
+	})
+	t.Run("wrong", func(t *testing.T) {
+		w := httptest.NewRecorder()
+		r := httptest.NewRequest(http.MethodPost, "/v1/call", bytes.NewReader(body))
+		r.Header.Set("Content-Type", "application/json")
+		r.Header.Set("Authorization", "Bearer wrong-token")
+		h.ServeHTTP(w, r)
+		if w.Code != http.StatusUnauthorized {
+			t.Errorf("code=%d", w.Code)
+		}
+	})
+	t.Run("correct", func(t *testing.T) {
+		w := httptest.NewRecorder()
+		r := httptest.NewRequest(http.MethodPost, "/v1/call", bytes.NewReader(body))
+		r.Header.Set("Content-Type", "application/json")
+		r.Header.Set("Authorization", "Bearer correct-token")
+		h.ServeHTTP(w, r)
+		if w.Code != http.StatusNotImplemented {
+			t.Errorf("code=%d want 501", w.Code)
+		}
+	})
+}
+
 func TestGetEnv(t *testing.T) {
 	_ = os.Unsetenv("TEST_AE_ENV")
 	if getEnv("TEST_AE_ENV", "def") != "def" {

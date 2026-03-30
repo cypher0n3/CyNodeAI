@@ -23,6 +23,7 @@ func mcpAuthFromEnv() *mcpgateway.ToolCallAuth {
 	return &mcpgateway.ToolCallAuth{
 		PMToken:      getEnv("WORKER_INTERNAL_AGENT_TOKEN", ""),
 		SandboxToken: getEnv("MCP_SANDBOX_AGENT_BEARER_TOKEN", ""),
+		PAToken:      getEnv("MCP_PA_AGENT_BEARER_TOKEN", ""),
 	}
 }
 
@@ -87,6 +88,10 @@ func openGatewayStore(ctx context.Context, logger *slog.Logger) (store database.
 // run sets up and runs the server until ctx is canceled. Used by main and tests.
 // When DATABASE_URL is set (or testStore/testDatabaseOpen is set in tests), tool-call handler writes audit records.
 func run(ctx context.Context, logger *slog.Logger) error {
+	cfg := config.LoadOrchestratorConfig()
+	if err := config.ValidateSecrets(cfg); err != nil {
+		return err
+	}
 	store, closeDB, err := openGatewayStore(ctx, logger)
 	if err != nil {
 		return err
@@ -100,7 +105,6 @@ func run(ctx context.Context, logger *slog.Logger) error {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte("ok"))
 	})
-	cfg := config.LoadOrchestratorConfig()
 	if db, ok := store.(*database.DB); ok {
 		artSvc, aerr := artifacts.NewServiceFromConfig(ctx, db, cfg)
 		if aerr != nil {

@@ -57,6 +57,7 @@ WORKER_API_BEARER_TOKEN = os.environ.get(
 # When both are set, the gateway enforces the sandbox worker allowlist for the sandbox token.
 WORKER_INTERNAL_AGENT_TOKEN = os.environ.get("WORKER_INTERNAL_AGENT_TOKEN", "")
 MCP_SANDBOX_AGENT_BEARER_TOKEN = os.environ.get("MCP_SANDBOX_AGENT_BEARER_TOKEN", "")
+MCP_PA_AGENT_BEARER_TOKEN = os.environ.get("MCP_PA_AGENT_BEARER_TOKEN", "")
 
 # Optional bearer tokens (when set, E2E sends them)
 WORKFLOW_RUNNER_BEARER_TOKEN = os.environ.get("WORKFLOW_RUNNER_BEARER_TOKEN", "")

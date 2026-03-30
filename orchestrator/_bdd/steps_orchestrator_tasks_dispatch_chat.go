@@ -699,7 +699,7 @@ func registerOrchestratorTasksDispatchChat(sc *godog.ScenarioContext, state *tes
 				w.WriteHeader(http.StatusOK)
 				_ = json.NewEncoder(w).Encode(workerapi.RunJobResponse{
 					Version: 1, TaskID: "", JobID: "", Status: workerapi.StatusCompleted,
-					ExitCode: 0, Stdout: "ok",
+					ExitCode: workerapi.ExitCodePtr(0), Stdout: "ok",
 					StartedAt: time.Now().UTC().Format(time.RFC3339),
 					EndedAt:   time.Now().UTC().Format(time.RFC3339),
 				})
@@ -802,7 +802,7 @@ func registerOrchestratorTasksDispatchChat(sc *godog.ScenarioContext, state *tes
 					TaskID:    "",
 					JobID:     "",
 					Status:    workerapi.StatusCompleted,
-					ExitCode:  0,
+					ExitCode:  workerapi.ExitCodePtr(0),
 					Stdout:    "ok",
 					StartedAt: time.Now().UTC().Format(time.RFC3339),
 					EndedAt:   time.Now().UTC().Format(time.RFC3339),

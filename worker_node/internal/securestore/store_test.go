@@ -25,6 +25,28 @@ func validMasterKeyB64() string {
 	return base64.StdEncoding.EncodeToString([]byte("0123456789abcdef0123456789abcdef"))
 }
 
+func TestStoreClose(t *testing.T) {
+	t.Setenv(masterKeyEnvName, validMasterKeyB64())
+	store, _, err := Open(t.TempDir())
+	if err != nil {
+		t.Fatalf("Open: %v", err)
+	}
+	raw := store.key
+	if len(raw) != requiredKeyLenBytes {
+		t.Fatalf("key len %d", len(raw))
+	}
+	store.Close()
+	for i := range raw {
+		if raw[i] != 0 {
+			t.Fatalf("master key byte %d not zeroed after Close", i)
+		}
+	}
+	if store.key != nil {
+		t.Fatal("key slice should be nil after Close")
+	}
+	store.Close() // idempotent
+}
+
 func TestOpen_EnvMasterKey(t *testing.T) {
 	t.Setenv(masterKeyEnvName, validMasterKeyB64())
 	store, source, err := Open(t.TempDir())

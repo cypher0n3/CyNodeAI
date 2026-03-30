@@ -18,6 +18,10 @@ import (
 	"github.com/cypher0n3/cynodeai/agents/internal/pma"
 )
 
+// pmaHTTPWriteTimeout is the http.Server WriteTimeout for PMA. Use 0 to disable the write
+// deadline so streaming responses are not cut off before LangchainCompletionTimeout elapses.
+const pmaHTTPWriteTimeout = 0
+
 func main() {
 	os.Exit(runWithSignal(os.Args[1:]))
 }
@@ -90,7 +94,7 @@ func run(ctx context.Context, args []string) int {
 		Handler:           mux,
 		ReadHeaderTimeout: 10 * time.Second,
 		ReadTimeout:       60 * time.Second,
-		WriteTimeout:      120 * time.Second,
+		WriteTimeout:      pmaHTTPWriteTimeout,
 		IdleTimeout:       120 * time.Second,
 	}
 
