@@ -128,27 +128,27 @@ func TestToolCallHandler_SkillsGet_NotFound(t *testing.T) {
 	callToolHandlerWithStore(t, mock, body, http.StatusNotFound)
 }
 
-func TestToolCallHandler_SkillsUpdate_SystemSkillForbidden(t *testing.T) {
-	mock := testutil.NewMockDB()
+func mockUserWithSystemSkill(t *testing.T) (mock *testutil.MockDB, userID, skillID string) {
+	t.Helper()
+	mock = testutil.NewMockDB()
 	user, _ := mock.CreateUser(context.Background(), "u", nil)
 	mock.AddUser(user)
 	sysSkill, err := mock.CreateSkill(context.Background(), "sys", "# c", "global", nil, true)
 	if err != nil {
 		t.Fatal(err)
 	}
-	body := `{"tool_name":"skills.update","arguments":{"user_id":"` + user.ID.String() + `","skill_id":"` + sysSkill.ID.String() + `","name":"x"}}`
+	return mock, user.ID.String(), sysSkill.ID.String()
+}
+
+func TestToolCallHandler_SkillsUpdate_SystemSkillForbidden(t *testing.T) {
+	mock, uid, sid := mockUserWithSystemSkill(t)
+	body := `{"tool_name":"skills.update","arguments":{"user_id":"` + uid + `","skill_id":"` + sid + `","name":"x"}}`
 	callToolHandlerWithStore(t, mock, body, http.StatusForbidden)
 }
 
 func TestToolCallHandler_SkillsDelete_SystemSkillForbidden(t *testing.T) {
-	mock := testutil.NewMockDB()
-	user, _ := mock.CreateUser(context.Background(), "u", nil)
-	mock.AddUser(user)
-	sysSkill, err := mock.CreateSkill(context.Background(), "sys", "# c", "global", nil, true)
-	if err != nil {
-		t.Fatal(err)
-	}
-	body := `{"tool_name":"skills.delete","arguments":{"user_id":"` + user.ID.String() + `","skill_id":"` + sysSkill.ID.String() + `"}}`
+	mock, uid, sid := mockUserWithSystemSkill(t)
+	body := `{"tool_name":"skills.delete","arguments":{"user_id":"` + uid + `","skill_id":"` + sid + `"}}`
 	callToolHandlerWithStore(t, mock, body, http.StatusForbidden)
 }
 

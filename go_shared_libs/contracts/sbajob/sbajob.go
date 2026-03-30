@@ -56,6 +56,9 @@ type InferenceSpec struct {
 
 // ContextSpec holds baseline, project, task, requirements, acceptance criteria, preferences, skills.
 type ContextSpec struct {
+	// PersonaTitle and PersonaDescription embed the Agent persona when present (REQ-SBAGNT-0113); first block in prompt.
+	PersonaTitle       string            `json:"persona_title,omitempty"`
+	PersonaDescription string            `json:"persona_description,omitempty"`
 	BaselineContext    string            `json:"baseline_context,omitempty"`
 	ProjectContext     string            `json:"project_context,omitempty"`
 	TaskContext        string            `json:"task_context,omitempty"`

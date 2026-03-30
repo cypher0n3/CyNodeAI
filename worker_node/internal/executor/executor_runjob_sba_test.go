@@ -717,6 +717,9 @@ func TestBuildSBARunArgsForPod_AgentInferenceUsesUDS(t *testing.T) {
 	if !strings.Contains(argStr, "--pod pod-1") {
 		t.Fatalf("expected pod argument, got: %s", argStr)
 	}
+	if !strings.Contains(argStr, "--network=none") {
+		t.Fatalf("expected --network=none for sandbox isolation (REQ-WORKER-0174), got: %s", argStr)
+	}
 	// MUST inject INFERENCE_PROXY_URL as UDS URL.
 	if !strings.Contains(argStr, "INFERENCE_PROXY_URL=http+unix://") {
 		t.Fatalf("expected INFERENCE_PROXY_URL=http+unix://... (REQ-SANDBX-0131), got: %s", argStr)

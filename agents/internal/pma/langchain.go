@@ -240,15 +240,24 @@ func writeLangchainNDJSONStream(w http.ResponseWriter, visible, thinking string)
 		return err
 	}
 	flushResponseWriter(w)
-	if strings.TrimSpace(thinking) != "" {
-		if err := enc.Encode(map[string]string{"thinking": thinking}); err != nil {
+	thinkRed, thinkFound, _ := redactKnownSecrets(thinking)
+	visRed, visFound, _ := redactKnownSecrets(visible)
+	kinds := secretKindsFromBuffers(visible, thinking, "")
+	secretFound := visFound || thinkFound
+	if strings.TrimSpace(thinkRed) != "" {
+		if err := enc.Encode(map[string]string{"thinking": thinkRed}); err != nil {
 			return err
 		}
 		flushResponseWriter(w)
 	}
-	visible = strings.TrimSpace(visible)
-	if visible != "" {
-		if err := writeLangchainClassifiedVisible(enc, w, visible); err != nil {
+	visRed = strings.TrimSpace(visRed)
+	if visRed != "" {
+		if err := writeLangchainClassifiedVisible(enc, w, visRed); err != nil {
+			return err
+		}
+	}
+	if secretFound {
+		if err := encodeOverwriteNDJSON(enc, w, 1, visRed, "iteration", "secret_redaction", kinds); err != nil {
 			return err
 		}
 	}

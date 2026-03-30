@@ -563,6 +563,7 @@ func TestTaskHandler_CreateTaskDBError(t *testing.T) {
 		t.Errorf("expected status 500, got %d", rec.Code)
 	}
 }
+
 // createJobErrorStore fails only CreateJob (CreateTask handler: task created, job creation fails).
 type createJobErrorStore struct {
 	*testutil.MockDB

@@ -165,7 +165,10 @@ func TestBuildUserPrompt_NoDeadline_NoTimeRemaining(t *testing.T) {
 	if prompt == "" {
 		t.Fatal("empty prompt")
 	}
-	if !strings.Contains(prompt, "Task: Do X") || !strings.Contains(prompt, "Baseline") || !strings.Contains(prompt, "Project: Proj") || !strings.Contains(prompt, "Acceptance: AC1") || !strings.Contains(prompt, "Extra") {
+	if !strings.Contains(prompt, "Task context:") || !strings.Contains(prompt, "Do X") ||
+		!strings.Contains(prompt, "Baseline context:") || !strings.Contains(prompt, "Baseline") ||
+		!strings.Contains(prompt, "Project context:") || !strings.Contains(prompt, "Proj") ||
+		!strings.Contains(prompt, "Acceptance: AC1") || !strings.Contains(prompt, "Additional context:") || !strings.Contains(prompt, "Extra") {
 		t.Errorf("prompt missing context: %s", prompt)
 	}
 }
@@ -197,26 +200,59 @@ func TestBuildUserPrompt_WithSteps_IncludesSuggestedSteps(t *testing.T) {
 	}
 }
 
-func TestAppendTimeRemaining_PastDeadline_NoOutput(t *testing.T) {
-	ctx, cancel := context.WithTimeout(context.Background(), -1)
+func TestBuildUserPrompt_WithDeadline_IncludesTimeRemaining(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
-	var b strings.Builder
-	appendTimeRemaining(&b, ctx)
-	if b.Len() != 0 {
-		t.Errorf("expected no output for past deadline, got %q", b.String())
+	spec := &sbajob.JobSpec{
+		ProtocolVersion: "1.0",
+		JobID:           "j1",
+		TaskID:          "t1",
+		Constraints:     sbajob.JobConstraints{MaxRuntimeSeconds: 60, MaxOutputBytes: 1024},
+		Context:         &sbajob.ContextSpec{TaskContext: "x"},
+	}
+	prompt := buildUserPrompt(ctx, spec)
+	if !strings.Contains(prompt, "Time remaining:") {
+		t.Errorf("expected deadline in runtime section: %q", prompt)
 	}
 }
 
-func TestAppendTimeRemaining_WithFutureDeadline(t *testing.T) {
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-	var b strings.Builder
-	appendTimeRemaining(&b, ctx)
-	if b.Len() == 0 {
-		t.Error("expected Time remaining for future deadline")
+// REQ-SBAGNT-0113: persona first, then baseline, project, task, requirements, preferences, additional, skills, runtime.
+func TestBuildUserPrompt_ContextBlockOrder(t *testing.T) {
+	spec := &sbajob.JobSpec{
+		ProtocolVersion: "1.0",
+		JobID:           "j1",
+		TaskID:          "t1",
+		Constraints:     sbajob.JobConstraints{MaxRuntimeSeconds: 60, MaxOutputBytes: 1024},
+		Context: &sbajob.ContextSpec{
+			PersonaTitle:       "Reviewer",
+			PersonaDescription: "You are a code reviewer.",
+			BaselineContext:    "BASELINE_MARK",
+			ProjectContext:     "PROJECT_MARK",
+			TaskContext:        "TASK_MARK",
+			Requirements:       []string{"REQ_MARK"},
+			Preferences:        map[string]string{"theme": "dark"},
+			AdditionalContext:  "EXTRA_MARK",
+			SkillIDs:           []string{"sk1"},
+		},
+		Steps: []sbajob.StepSpec{{Type: "noop"}},
 	}
-	if !strings.Contains(b.String(), "Time remaining:") {
-		t.Errorf("prompt missing Time remaining: %q", b.String())
+	prompt := buildUserPrompt(context.Background(), spec)
+	idx := func(s string) int { return strings.Index(prompt, s) }
+	order := []string{
+		"Agent persona:", "BASELINE_MARK", "PROJECT_MARK", "TASK_MARK",
+		"Requirements and acceptance criteria:", "REQ_MARK", "Preferences:", "theme", "Additional context:", "EXTRA_MARK", "Skills:", "sk1",
+		"Runtime context", "Job defines 1", "Suggested steps",
+	}
+	prev := -1
+	for _, mark := range order {
+		p := idx(mark)
+		if p < 0 {
+			t.Fatalf("missing %q in prompt:\n%s", mark, prompt)
+		}
+		if p <= prev {
+			t.Fatalf("order wrong at %q (prev index %d, got %d):\n%s", mark, prev, p, prompt)
+		}
+		prev = p
 	}
 }
 

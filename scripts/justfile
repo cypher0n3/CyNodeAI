@@ -21,6 +21,7 @@ help:
     @echo "Usage: just setup-dev <command> [OPTIONS]  or  just scripts/<command>"
     @echo ""
     @echo "Commands: start-db, stop-db, clean-db, migrate, build, build-e2e-images, start, stop, restart, clean, component <name> <action>, test-e2e, full-demo, e2e, help"
+    @echo "Options: --force (start, restart, full-demo): rebuild all container images from scratch (--no-cache)"
     @echo "Env: SKIP_UPX (default 1 for setup-dev; set to 0 to enable UPX in image builds)"
     @echo "AI agents: do NOT use --ollama-in-stack or SETUP_DEV_OLLAMA_IN_STACK (invalidates GPU variant E2E)."
     @echo "On start failure, scripts/setup_dev_diagnostics.sh prints log paths, hints, and recent container logs."
@@ -111,9 +112,9 @@ build:
     @just build-dev
 
 # E2E images (worker_node + agents). Run root justfile so worker_node/ and agents/ resolve to repo modules.
-build-e2e-images:
-    @(cd "{{ root_dir }}" && just worker_node/build-inference-proxy-image -- --build-arg SKIP_UPX={{ skip_upx }})
-    @(cd "{{ root_dir }}" && just agents/build-cynode-sba-image -- --build-arg SKIP_UPX={{ skip_upx }})
+build-e2e-images *ARGS:
+    @(cd "{{ root_dir }}" && just worker_node/build-inference-proxy-image -- {{ ARGS }} --build-arg SKIP_UPX={{ skip_upx }})
+    @(cd "{{ root_dir }}" && just agents/build-cynode-sba-image -- {{ ARGS }} --build-arg SKIP_UPX={{ skip_upx }})
 
 start *ARGS:
     just _start_impl {{ ARGS }}
@@ -127,17 +128,23 @@ _start_impl *ARGS:
     # Bypass: --ollama-in-stack / SETUP_DEV_OLLAMA_IN_STACK=1 runs Ollama in compose instead of node-manager.
     # AI agents must NOT use these; they invalidate GPU variant validation (e2e_205, Bug 1 fix).
     ollama_in_stack=false
-    for a in "$@"; do [ "$a" = "--ollama-in-stack" ] && ollama_in_stack=true; done
+    force=false
+    for a in "$@"; do
+        [ "$a" = "--ollama-in-stack" ] && ollama_in_stack=true
+        [ "$a" = "--force" ] && force=true
+    done
     [ "$SETUP_DEV_OLLAMA_IN_STACK" = "1" ] && ollama_in_stack=true
+    no_cache=""
+    $force && no_cache="--no-cache"
     echo "[INFO] Building dev binaries..."; (cd "$root" && just build-dev)
-    echo "[INFO] Building cynode-pma image..."; (cd "$root" && just agents/build-cynode-pma-image -- --build-arg SKIP_UPX="{{ skip_upx }}")
+    echo "[INFO] Building cynode-pma image..."; (cd "$root" && just agents/build-cynode-pma-image -- $no_cache --build-arg SKIP_UPX="{{ skip_upx }}")
     # Orchestrator images must match ./orchestrator (MCP on control-plane, gateway routes, api-egress).
     # Without this, `localhost/cynodeai-control-plane:dev` can stay pinned to an old layer while the
     # :dev tag moves — containers keep stale binaries (e.g. missing POST /v1/mcp/tools/call → E2E 404).
     echo "[INFO] Building orchestrator images (control-plane, user-gateway, api-egress)..."
-    (cd "$root" && just orchestrator/build-control-plane-image -- --build-arg SKIP_UPX="{{ skip_upx }}")
-    (cd "$root" && just orchestrator/build-user-gateway-image -- --build-arg SKIP_UPX="{{ skip_upx }}")
-    (cd "$root" && just orchestrator/build-api-egress-image -- --build-arg SKIP_UPX="{{ skip_upx }}")
+    (cd "$root" && just orchestrator/build-control-plane-image -- $no_cache --build-arg SKIP_UPX="{{ skip_upx }}")
+    (cd "$root" && just orchestrator/build-user-gateway-image -- $no_cache --build-arg SKIP_UPX="{{ skip_upx }}")
+    (cd "$root" && just orchestrator/build-api-egress-image -- $no_cache --build-arg SKIP_UPX="{{ skip_upx }}")
     rt=""
     podman ps >/dev/null 2>&1 && rt=podman
     [ -z "$rt" ] && docker ps >/dev/null 2>&1 && rt=docker
@@ -290,13 +297,21 @@ full-demo *ARGS:
     set -e
     root="$(cd "{{ root_dir }}" && pwd)"
     stop_on_success=false
-    for a in "$@"; do [ "$a" = "--stop-on-success" ] && stop_on_success=true; done
+    force=false
+    for a in "$@"; do
+        [ "$a" = "--stop-on-success" ] && stop_on_success=true
+        [ "$a" = "--force" ] && force=true
+    done
     [ "$STOP_ON_SUCCESS_ENV" = "1" ] && stop_on_success=true
+    no_cache=""
+    $force && no_cache="--no-cache"
+    start_force=""
+    $force && start_force="--force"
     (cd "$root" && just build-dev)
-    (cd "$root" && just scripts/build-e2e-images)
-    (cd "$root" && just orchestrator/build-control-plane-image -- --build-arg SKIP_UPX="{{ skip_upx }}")
-    (cd "$root" && just orchestrator/build-user-gateway-image -- --build-arg SKIP_UPX="{{ skip_upx }}")
-    (cd "$root" && just scripts/start)
+    (cd "$root" && just scripts/build-e2e-images $no_cache)
+    (cd "$root" && just orchestrator/build-control-plane-image -- $no_cache --build-arg SKIP_UPX="{{ skip_upx }}")
+    (cd "$root" && just orchestrator/build-user-gateway-image -- $no_cache --build-arg SKIP_UPX="{{ skip_upx }}")
+    (cd "$root" && just scripts/start $start_force)
     export NODE_STATE_DIR="{{ node_state_dir }}"
     # Export inference image so e2e_090 (UDS proxy URL in sandbox) and related tests run, not skip.
     export INFERENCE_PROXY_IMAGE="${INFERENCE_PROXY_IMAGE:-cynodeai-inference-proxy:dev}"

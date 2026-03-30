@@ -151,22 +151,30 @@ func parseAllowlist(allowlist string) map[string]bool {
 	return allowed
 }
 
+func (h *callHandler) authenticateBearer(w http.ResponseWriter, r *http.Request) bool {
+	if h.token == "" {
+		return true
+	}
+	auth := r.Header.Get("Authorization")
+	if !strings.HasPrefix(auth, "Bearer ") {
+		h.writeProblem(w, http.StatusUnauthorized, "Unauthorized", "")
+		return false
+	}
+	got := strings.TrimSpace(strings.TrimPrefix(auth, "Bearer "))
+	if !secretutil.TokenEquals(got, h.token) {
+		h.writeProblem(w, http.StatusUnauthorized, "Unauthorized", "")
+		return false
+	}
+	return true
+}
+
 func (h *callHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		h.writeProblem(w, http.StatusMethodNotAllowed, "Method Not Allowed", "")
 		return
 	}
-	if h.token != "" {
-		auth := r.Header.Get("Authorization")
-		if !strings.HasPrefix(auth, "Bearer ") {
-			h.writeProblem(w, http.StatusUnauthorized, "Unauthorized", "")
-			return
-		}
-		got := strings.TrimSpace(strings.TrimPrefix(auth, "Bearer "))
-		if !secretutil.TokenEquals(got, h.token) {
-			h.writeProblem(w, http.StatusUnauthorized, "Unauthorized", "")
-			return
-		}
+	if !h.authenticateBearer(w, r) {
+		return
 	}
 	var req callRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {

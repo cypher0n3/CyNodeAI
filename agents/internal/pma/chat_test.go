@@ -612,10 +612,10 @@ func TestResolveInferenceClient_TCPPassthrough(t *testing.T) {
 	if url != "http://localhost:11434" {
 		t.Errorf("expected passthrough URL, got %q", url)
 	}
-	if client == nil {
+	switch {
+	case client == nil:
 		t.Fatal("expected non-nil http.Client for TCP URL")
-	}
-	if client.Transport != nil {
+	case client.Transport != nil:
 		t.Error("expected nil transport (default) for TCP URL")
 	}
 }
@@ -626,10 +626,10 @@ func TestResolveInferenceClient_UnixSocket(t *testing.T) {
 	if url != udsPlainHost {
 		t.Errorf("expected %q for unix socket URL, got %q", udsPlainHost, url)
 	}
-	if client == nil {
+	switch {
+	case client == nil:
 		t.Fatal("expected non-nil http.Client for unix socket URL")
-	}
-	if client.Transport == nil {
+	case client.Transport == nil:
 		t.Error("expected custom transport for unix socket URL")
 	}
 }

@@ -153,7 +153,7 @@ func (h *TaskHandler) CreateTask(w http.ResponseWriter, r *http.Request) {
 
 	attachmentPaths := h.persistTaskAttachments(ctx, task.ID, req.Attachments)
 
-	meta := mergePendingExecMetadata(task.Metadata, req)
+	meta := mergePendingExecMetadata(task.Metadata, &req)
 	if err := h.db.UpdateTaskMetadata(ctx, task.ID, meta); err != nil {
 		h.logger.Error("update task metadata", "error", err)
 		WriteInternalError(w, "Failed to create task")
@@ -561,7 +561,7 @@ func (h *TaskHandler) Chat(w http.ResponseWriter, r *http.Request) {
 		InputMode:    InputModePrompt,
 		UseInference: true,
 	}
-	meta := mergePendingExecMetadata(task.Metadata, chatReq)
+	meta := mergePendingExecMetadata(task.Metadata, &chatReq)
 	if err := h.db.UpdateTaskMetadata(ctx, task.ID, meta); err != nil {
 		h.logger.Error("chat update task metadata", "error", err)
 		WriteInternalError(w, "Failed to process message")

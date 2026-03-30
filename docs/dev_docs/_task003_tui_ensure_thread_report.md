@@ -1,13 +1,19 @@
-# Task 3 completion: runEnsureThread data race
+# Task 3 Completion: Runensurethread Data Race
 
-**Date:** 2026-03-29
+- [Changes](#changes)
+- [Tests](#tests)
+- [Deviations](#deviations)
 
 ## Changes
 
 - `cynork/internal/chat/session.go`: Added `CreateNewThreadID()` (API only, no `CurrentThreadID` mutation); `NewThread()` delegates to it.
-- `cynork/internal/tui/model.go`: Replaced inline `runEnsureThread` mutations with `buildEnsureThreadOutcome()` that only reads session/cache and returns `ensureThreadResult` (including `userID` for cache write). Removed `tryResumeThreadFromCache` / `persistCurrentThreadAfterEnsure`. `applyEnsureThreadResult` now sets `Session.CurrentThreadID`, writes last-thread cache, and appends scrollback (main goroutine only). Documented tea.Cmd must not mutate model/session.
+- `cynork/internal/tui/model.go`: Replaced inline `runEnsureThread` mutations with `buildEnsureThreadOutcome()` that only reads session/cache and returns `ensureThreadResult` (including `userID` for cache write).
+  Removed `tryResumeThreadFromCache` / `persistCurrentThreadAfterEnsure`. `applyEnsureThreadResult` now sets `Session.CurrentThreadID`, writes last-thread cache, and appends scrollback (main goroutine only).
+  Documented tea.Cmd must not mutate model/session.
 - `cynork/internal/tui/ensure_thread_test.go`: `TestEnsureThread_OutcomeDoesNotMutateSessionBeforeApply`, `TestEnsureThread_ConcurrentReadCurrentThreadIDDuringOutcomeBuild` (with `-race`).
 - `cynork/internal/tui/model_test_streaming_slash_threads_test.go`: Init test asserts no `CurrentThreadID` before `Update`; success test asserts session updated after apply.
+
+**Date:** 2026-03-29.
 
 ## Tests
 

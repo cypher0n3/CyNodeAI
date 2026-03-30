@@ -287,6 +287,21 @@ func TestWriteLangchainNDJSONStream_VisibleEmbedsThinkAndToolCall(t *testing.T) 
 	}
 }
 
+func TestWriteLangchainNDJSONStream_SecretEmitsOverwrite(t *testing.T) {
+	rec := httptest.NewRecorder()
+	leak := "tok sk-12345678901234567890123456789012 end"
+	if err := writeLangchainNDJSONStream(rec, leak, ""); err != nil {
+		t.Fatal(err)
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, `"overwrite"`) || !strings.Contains(body, "secret_redaction") {
+		t.Fatalf("expected overwrite NDJSON: %s", body)
+	}
+	if strings.Contains(body, "sk-12345678901234567890123456789012") {
+		t.Fatal("raw secret should not appear in NDJSON body")
+	}
+}
+
 // TestStreamingLLM_Call exercises GenerateFromSinglePrompt on the streaming LLM.
 func TestStreamingLLM_Call(t *testing.T) {
 	rec := httptest.NewRecorder()
@@ -322,6 +337,22 @@ func TestStreamingLLM_CallMethodDirect(t *testing.T) {
 	}
 	if s != "direct-call" {
 		t.Errorf("Call = %q", s)
+	}
+}
+
+func TestStreamingLLM_SecretInStreamEmitsOverwrite(t *testing.T) {
+	rec := httptest.NewRecorder()
+	iter := 0
+	secret := "sk-12345678901234567890123456789012"
+	inner := &mockLLM{responses: []string{secret}}
+	llm := newStreamingLLM(inner, rec, &iter)
+	_, err := llms.GenerateFromSinglePrompt(context.Background(), llm, "p")
+	if err != nil {
+		t.Fatal(err)
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, `"overwrite"`) {
+		t.Fatalf("expected overwrite: %s", body)
 	}
 }
 
@@ -512,10 +543,10 @@ func TestResolveOllamaClientConfig_UnixSocket(t *testing.T) {
 	if url != udsPlainHost {
 		t.Errorf("expected %q for unix socket, got %q", udsPlainHost, url)
 	}
-	if client == nil {
+	switch {
+	case client == nil:
 		t.Fatal("expected non-nil http.Client for unix socket")
-	}
-	if client.Transport == nil {
+	case client.Transport == nil:
 		t.Error("expected custom transport for unix socket")
 	}
 }

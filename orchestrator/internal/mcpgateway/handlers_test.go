@@ -165,10 +165,10 @@ func TestToolCallHandler_MethodNotAllowed(t *testing.T) {
 }
 func TestToolCallHandler_BearerHelpListMatrix(t *testing.T) {
 	cases := []struct {
-		name       string
-		bearer     string
-		setHeader  bool
-		want       int
+		name      string
+		bearer    string
+		setHeader bool
+		want      int
 	}{
 		{"no_bearer", "", false, http.StatusUnauthorized},
 		{"invalid_token", "Bearer wrong-token", true, http.StatusUnauthorized},

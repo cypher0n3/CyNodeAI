@@ -99,6 +99,7 @@ func run(ctx context.Context, args []string) int {
 	}
 
 	go serveHTTP(server, cfg.ListenAddr, logger)
+	pma.StartKeepWarm(ctx, logger)
 
 	<-ctx.Done()
 	logger.Info("shutting down...")

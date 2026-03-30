@@ -1,6 +1,8 @@
-# Task 1 completion: PMA WriteTimeout
+# Task 1 Completion: PMA WriteTimeout
 
-**Date:** 2026-03-29 (local)
+- [Changes](#changes)
+- [Tests Run](#tests-run)
+- [Deviations](#deviations)
 
 ## Changes
 
@@ -9,7 +11,9 @@
 - `agents/cmd/cynode-pma/main.go`: Introduced `pmaHTTPWriteTimeout` set to `0` so `http.Server` does not apply a write deadline shorter than streaming inference. `WriteTimeout` uses this constant.
 - `agents/cmd/cynode-pma/main_test.go`: Added `TestWriteTimeout` asserting write timeout is either disabled (`0`) or at least `LangchainCompletionTimeout + 10s`.
 
-## Tests run
+**Date:** 2026-03-29 (local).
+
+## Tests Run
 
 - `go test -v -run TestWriteTimeout ./agents/cmd/cynode-pma/...` (pass)
 - `go test -cover ./agents/...` (all packages >= 90%)

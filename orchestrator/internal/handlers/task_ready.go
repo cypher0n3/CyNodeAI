@@ -23,7 +23,7 @@ type pendingExecFlags struct {
 	InputMode    string `json:"input_mode"`
 }
 
-func mergePendingExecMetadata(existing *string, req userapi.CreateTaskRequest) *string {
+func mergePendingExecMetadata(existing *string, req *userapi.CreateTaskRequest) *string {
 	flags := pendingExecFlags{
 		UseSBA:       req.UseSBA,
 		UseInference: req.UseInference,

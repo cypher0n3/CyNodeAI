@@ -168,6 +168,8 @@ func (db *DB) UpdateTaskMetadata(ctx context.Context, taskID uuid.UUID, metadata
 }
 
 // UpdateTaskPlanningState sets tasks.planning_state (REQ-ORCHES-0176, 0179).
+//
+//nolint:dupl // intentional parallel to UpdateNodeCapability (different model/columns).
 func (db *DB) UpdateTaskPlanningState(ctx context.Context, taskID uuid.UUID, planningState string) error {
 	now := time.Now().UTC()
 	return db.updateWhere(ctx, &TaskRecord{}, "id", taskID,

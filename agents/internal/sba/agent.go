@@ -395,10 +395,17 @@ func getLLM(spec *sbajob.JobSpec, opts *RunAgentOptions) (llms.Model, error) {
 
 func buildUserPrompt(ctx context.Context, spec *sbajob.JobSpec) string {
 	var b strings.Builder
-	appendTimeRemaining(&b, ctx)
 	if spec.Context != nil {
-		appendContextBlock(&b, spec.Context)
+		appendPersonaSection(&b, spec.Context)
+		appendBaselineSection(&b, spec.Context)
+		appendProjectSection(&b, spec.Context)
+		appendTaskSection(&b, spec.Context)
+		appendRequirementsAndAcceptanceSection(&b, spec.Context)
+		appendPreferencesSection(&b, spec.Context)
+		appendAdditionalContextSection(&b, spec.Context)
+		appendSkillsSection(&b, spec.Context)
 	}
+	appendRuntimeTurnSection(&b, ctx, spec)
 	appendStepsBlock(&b, spec.Steps)
 	if b.Len() == 0 {
 		return "Complete the task. Use the available tools as needed."
@@ -407,38 +414,121 @@ func buildUserPrompt(ctx context.Context, spec *sbajob.JobSpec) string {
 	return strings.TrimSpace(b.String())
 }
 
-func appendTimeRemaining(b *strings.Builder, ctx context.Context) {
-	deadline, ok := ctx.Deadline()
-	if !ok {
+func appendPersonaSection(b *strings.Builder, c *sbajob.ContextSpec) {
+	title := strings.TrimSpace(c.PersonaTitle)
+	desc := strings.TrimSpace(c.PersonaDescription)
+	if title == "" && desc == "" {
 		return
 	}
-	if d := time.Until(deadline); d > 0 {
-		fmt.Fprintf(b, "Time remaining: %.0f seconds.\n\n", d.Seconds())
+	b.WriteString("Agent persona:\n")
+	if title != "" {
+		fmt.Fprintf(b, "Title: %s\n", title)
+	}
+	if desc != "" {
+		fmt.Fprintf(b, "%s\n\n", desc)
+	} else {
+		b.WriteString("\n")
 	}
 }
 
-func appendContextBlock(b *strings.Builder, c *sbajob.ContextSpec) {
-	if c.TaskContext != "" {
-		b.WriteString("Task: " + c.TaskContext + "\n\n")
+func appendBaselineSection(b *strings.Builder, c *sbajob.ContextSpec) {
+	if strings.TrimSpace(c.BaselineContext) == "" {
+		return
 	}
-	if c.BaselineContext != "" {
-		b.WriteString("Baseline: " + c.BaselineContext + "\n\n")
+	b.WriteString("Baseline context:\n")
+	b.WriteString(c.BaselineContext)
+	b.WriteString("\n\n")
+}
+
+func appendProjectSection(b *strings.Builder, c *sbajob.ContextSpec) {
+	if strings.TrimSpace(c.ProjectContext) == "" {
+		return
 	}
-	if c.ProjectContext != "" {
-		b.WriteString("Project: " + c.ProjectContext + "\n\n")
+	b.WriteString("Project context:\n")
+	b.WriteString(c.ProjectContext)
+	b.WriteString("\n\n")
+}
+
+func appendTaskSection(b *strings.Builder, c *sbajob.ContextSpec) {
+	if strings.TrimSpace(c.TaskContext) == "" {
+		return
 	}
+	b.WriteString("Task context:\n")
+	b.WriteString(c.TaskContext)
+	b.WriteString("\n\n")
+}
+
+func appendRequirementsAndAcceptanceSection(b *strings.Builder, c *sbajob.ContextSpec) {
+	if len(c.Requirements) == 0 && len(c.AcceptanceCriteria) == 0 {
+		return
+	}
+	b.WriteString("Requirements and acceptance criteria:\n")
 	for _, r := range c.Requirements {
-		b.WriteString("- " + r + "\n")
-	}
-	if len(c.Requirements) > 0 {
-		b.WriteString("\n")
+		b.WriteString("- Requirement: " + r + "\n")
 	}
 	for _, ac := range c.AcceptanceCriteria {
-		b.WriteString("Acceptance: " + ac + "\n")
+		b.WriteString("- Acceptance: " + ac + "\n")
 	}
-	if c.AdditionalContext != "" {
-		b.WriteString("\n" + c.AdditionalContext + "\n")
+	b.WriteString("\n")
+}
+
+func appendPreferencesSection(b *strings.Builder, c *sbajob.ContextSpec) {
+	if len(c.Preferences) == 0 {
+		return
 	}
+	b.WriteString("Preferences:\n")
+	for k, v := range c.Preferences {
+		fmt.Fprintf(b, "- %s: %s\n", k, v)
+	}
+	b.WriteString("\n")
+}
+
+func appendAdditionalContextSection(b *strings.Builder, c *sbajob.ContextSpec) {
+	if strings.TrimSpace(c.AdditionalContext) == "" {
+		return
+	}
+	b.WriteString("Additional context:\n")
+	b.WriteString(c.AdditionalContext)
+	b.WriteString("\n\n")
+}
+
+func appendSkillsSection(b *strings.Builder, c *sbajob.ContextSpec) {
+	if len(c.SkillIDs) == 0 && c.Skills == nil {
+		return
+	}
+	b.WriteString("Skills:\n")
+	for _, id := range c.SkillIDs {
+		fmt.Fprintf(b, "- skill_id: %s\n", id)
+	}
+	if c.Skills != nil {
+		raw, err := json.Marshal(c.Skills)
+		if err == nil && len(raw) > 0 && string(raw) != "null" {
+			b.WriteString(string(raw))
+			b.WriteString("\n")
+		}
+	}
+	b.WriteString("\n")
+}
+
+func appendRuntimeTurnSection(b *strings.Builder, ctx context.Context, spec *sbajob.JobSpec) {
+	var lines []string
+	if deadline, ok := ctx.Deadline(); ok {
+		if d := time.Until(deadline); d > 0 {
+			lines = append(lines, fmt.Sprintf("Time remaining: %.0f seconds.", d.Seconds()))
+		}
+	}
+	if spec != nil && len(spec.Steps) > 0 {
+		lines = append(lines, fmt.Sprintf("Job defines %d suggested step(s) in the spec.", len(spec.Steps)))
+	}
+	if len(lines) == 0 {
+		return
+	}
+	b.WriteString("Runtime context (this turn):\n")
+	for _, ln := range lines {
+		b.WriteString(ln)
+		b.WriteString("\n")
+	}
+	b.WriteString("\n")
 }
 
 func appendStepsBlock(b *strings.Builder, steps []sbajob.StepSpec) {

@@ -658,7 +658,8 @@ func BuildSBARunArgsForPod(req *workerapi.RunJobRequest, podName, jobDir, worksp
 }
 
 func buildSBARunArgsForPod(req *workerapi.RunJobRequest, podName, jobDir, workspaceDir, sockHostDir string, e *Executor, executionMode string) []string {
-	args := []string{"run", "--rm", "--pod", podName}
+	// REQ-WORKER-0174: sandbox has no direct egress; inference via UDS mount only. Proxy sidecar keeps pod network for upstream.
+	args := []string{"run", "--rm", "--pod", podName, "--network=none"}
 	jobMountOpt := fmt.Sprintf("%s:%s", jobDir, jobMount)
 	if e.runtime == runtimePodman {
 		jobMountOpt += ":z"
@@ -751,7 +752,8 @@ func buildProxyRunArgs(podName, ollamaUpstreamURL, image string, command []strin
 
 // buildSandboxRunArgsForPod returns the argv for running the sandbox container in the pod.
 func buildSandboxRunArgsForPod(req *workerapi.RunJobRequest, podName, workspaceDir, sockHostDir string, env map[string]string, image string) []string {
-	args := []string{"run", "--rm", "--pod", podName}
+	// REQ-WORKER-0174: workload network isolation; proxy remains on pod network for Ollama upstream. UDS via /run/cynode mount.
+	args := []string{"run", "--rm", "--pod", podName, "--network=none"}
 	if workspaceDir != "" {
 		args = append(args, "-v", fmt.Sprintf("%s:%s", workspaceDir, workspaceMount), "-w", workspaceMount)
 	}

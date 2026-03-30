@@ -190,7 +190,6 @@ func TestTaskHandler_GetTaskResultDBError(t *testing.T) {
 	}
 }
 
-
 //nolint:dupl // node registration body struct repeated across tests
 func TestNodeHandler_NewNodeRegistrationJWTError(t *testing.T) {
 	mockDB := testutil.NewMockDB()
@@ -462,4 +461,3 @@ func TestNodeHandler_RegisterNewNode_CreateNodeFails(t *testing.T) {
 		t.Errorf("expected status 500, got %d", rec.Code)
 	}
 }
-

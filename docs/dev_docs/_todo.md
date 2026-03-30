@@ -2,6 +2,8 @@
 
 ## 1 Immediate (Security and Correctness)
 
+**Status (2026-03-30):** Tracked items below were executed per [_plan_001_immediate.md](_plan_001_immediate.md); see [_plan_001_final_report.md](_plan_001_final_report.md) and per-task `_task*.md` reports in this directory.
+
 These must be addressed before any production deployment:
 
 1. **Fix authorization fail-open.**

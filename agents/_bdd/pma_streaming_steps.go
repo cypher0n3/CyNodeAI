@@ -207,6 +207,38 @@ func registerPMAStreamingSteps(sc *godog.ScenarioContext, state *agentsTestState
 		state.pmaStreamLines = ollamaChatStreamLines("<thin", "k>leak</think>fixed")
 		return nil
 	})
+	sc.Step(`^the PMA inference backend emits a response containing a synthetic OpenAI-style key segment$`, func(ctx context.Context) error {
+		// Matches reOpenAIKey: sk- + at least 20 alphanumerics (REQ-PMAGNT-0125).
+		state.pmaStreamLines = ollamaChatStreamLines("prefix sk-12345678901234567890123456789012 suffix")
+		return nil
+	})
+	sc.Step(`^the NDJSON stream includes an overwrite event with reason "secret_redaction"$`, func(ctx context.Context) error {
+		for _, m := range splitNDJSONMaps(state.pmaResponseBody) {
+			ov, ok := m["overwrite"].(map[string]interface{})
+			if !ok {
+				continue
+			}
+			if fmt.Sprint(ov["reason"]) == "secret_redaction" {
+				return nil
+			}
+		}
+		return fmt.Errorf("no NDJSON overwrite with reason secret_redaction in stream")
+	})
+	sc.Step(`^the streamed deltas do not contain the raw key material$`, func(ctx context.Context) error {
+		const raw = "sk-12345678901234567890123456789012"
+		deltas, err := pmaNDJSONDeltaStrings(state.pmaResponseBody)
+		if err != nil {
+			return err
+		}
+		joined := strings.Join(deltas, "")
+		if strings.Contains(joined, raw) {
+			return fmt.Errorf("visible deltas must not contain raw key material")
+		}
+		if strings.Contains(string(state.pmaResponseBody), raw) {
+			return fmt.Errorf("response body must not contain raw key material")
+		}
+		return nil
+	})
 
 	sc.Step(`^PMA emits thinking NDJSON events for the content between think tags$`, func(ctx context.Context) error {
 		for _, m := range splitNDJSONMaps(state.pmaResponseBody) {

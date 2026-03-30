@@ -722,38 +722,37 @@ func TestRunTaskCreate_TaskFileModeAndProjectID(t *testing.T) {
 	}
 }
 
-func TestRunTaskCreate_ResultWait(t *testing.T) {
-	firstResult := true
-	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+func taskCreateResultWaitHandler(firstResult *bool) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		if r.URL.Path == pathV1Tasks && r.Method == http.MethodPost {
 			w.WriteHeader(http.StatusCreated)
 			_ = json.NewEncoder(w).Encode(userapi.TaskResponse{
-				ID:             "task-1",
-				Status:         "queued",
-				PlanningState:  userapi.PlanningStateDraft,
+				ID:            "task-1",
+				Status:        "queued",
+				PlanningState: userapi.PlanningStateDraft,
 			})
 			return
 		}
 		if r.URL.Path == "/v1/tasks/task-1" && r.Method == http.MethodGet {
 			_ = json.NewEncoder(w).Encode(userapi.TaskResponse{
-				ID:             "task-1",
-				Status:         "queued",
+				ID:            "task-1",
+				Status:        "queued",
 				PlanningState: userapi.PlanningStateDraft,
 			})
 			return
 		}
 		if r.URL.Path == "/v1/tasks/task-1/ready" && r.Method == http.MethodPost {
 			_ = json.NewEncoder(w).Encode(userapi.TaskResponse{
-				ID:             "task-1",
-				Status:         "queued",
+				ID:            "task-1",
+				Status:        "queued",
 				PlanningState: userapi.PlanningStateReady,
 			})
 			return
 		}
 		if r.URL.Path == "/v1/tasks/task-1/result" && r.Method == http.MethodGet {
-			if firstResult {
-				firstResult = false
+			if *firstResult {
+				*firstResult = false
 				_ = json.NewEncoder(w).Encode(userapi.TaskResultResponse{TaskID: "task-1", Status: "running", Jobs: []userapi.JobResponse{}})
 				return
 			}
@@ -761,7 +760,12 @@ func TestRunTaskCreate_ResultWait(t *testing.T) {
 			return
 		}
 		w.WriteHeader(http.StatusNotFound)
-	}))
+	}
+}
+
+func TestRunTaskCreate_ResultWait(t *testing.T) {
+	firstResult := true
+	server := httptest.NewServer(taskCreateResultWaitHandler(&firstResult))
 	defer server.Close()
 	cfg = &config.Config{GatewayURL: server.URL, Token: "tok"}
 	taskCreatePrompt = testPromptEchoHi
@@ -782,9 +786,9 @@ func TestRunTaskReady_JSON(t *testing.T) {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusOK)
 			_ = json.NewEncoder(w).Encode(userapi.TaskResponse{
-				ID:             "x",
-				Status:         "queued",
-				PlanningState:  userapi.PlanningStateReady,
+				ID:            "x",
+				Status:        "queued",
+				PlanningState: userapi.PlanningStateReady,
 			})
 			return
 		}

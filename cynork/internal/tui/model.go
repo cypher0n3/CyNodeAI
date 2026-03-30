@@ -350,7 +350,8 @@ func (m *Model) applyThreadMsgs(msg tea.Msg) (tea.Model, tea.Cmd, bool) {
 		mm, cmd := m.applyThreadRenameResult(msg)
 		return mm, cmd, true
 	case ensureThreadResult:
-		mm, cmd := m.applyEnsureThreadResult(msg)
+		et := msg
+		mm, cmd := m.applyEnsureThreadResult(&et)
 		return mm, cmd, true
 	default:
 		return m, nil, false
@@ -874,7 +875,7 @@ func EnsureThreadScrollbackSystemLine(priorID, afterID, resumeSelector string) s
 	return ScrollbackSystemLinePrefix + ensureThreadScrollbackLine(priorID, afterID, resumeSelector)
 }
 
-func (m *Model) applyEnsureThreadResult(msg ensureThreadResult) (tea.Model, tea.Cmd) {
+func (m *Model) applyEnsureThreadResult(msg *ensureThreadResult) (tea.Model, tea.Cmd) {
 	if msg.err != nil {
 		m.Scrollback = append(m.Scrollback, ScrollbackSystemLinePrefix+"Error: "+msg.err.Error())
 	} else if msg.threadID != "" {

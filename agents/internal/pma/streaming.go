@@ -55,33 +55,60 @@ func (s *streamingLLM) GenerateContent(ctx context.Context, messages []llms.Mess
 	}
 
 	clf := newStreamingClassifier()
+	var raw []streamEmitted
 	streamFn := func(ctx context.Context, chunk []byte) error {
 		for _, em := range clf.Feed(string(chunk)) {
-			var err error
-			switch em.Kind {
-			case streamEmitDelta:
-				err = s.enc.Encode(map[string]string{"delta": em.Text})
-			case streamEmitThinking:
-				err = s.enc.Encode(map[string]string{"thinking": em.Text})
-			case streamEmitToolCall:
-				err = s.enc.Encode(map[string]any{
-					"tool_call": map[string]string{"name": "stream", "arguments": em.Text},
-				})
-			default:
-				continue
-			}
-			if err != nil {
+			raw = append(raw, em)
+			if err := s.encodeStreamEmitted(em); err != nil {
 				return err
-			}
-			if s.flusher != nil {
-				s.flusher.Flush()
 			}
 		}
 		return nil
 	}
 	opts := append([]llms.CallOption{}, options...)
 	opts = append(opts, llms.WithStreamingFunc(streamFn))
-	return s.inner.GenerateContent(ctx, messages, opts...)
+	resp, err := s.inner.GenerateContent(ctx, messages, opts...)
+	if err != nil {
+		return resp, err
+	}
+	for _, em := range clf.Flush() {
+		raw = append(raw, em)
+		if err := s.encodeStreamEmitted(em); err != nil {
+			return resp, err
+		}
+	}
+	combined := joinEmittedVisible(raw) + joinEmittedThinking(raw) + joinEmittedToolCalls(raw)
+	if detectSecrets(combined) {
+		rv, _, kinds := redactKnownSecrets(joinEmittedVisible(raw))
+		if err := encodeOverwriteNDJSON(s.enc, s.w, iter, rv, "iteration", "secret_redaction", kinds); err != nil {
+			return resp, err
+		}
+	}
+	return resp, nil
+}
+
+func (s *streamingLLM) encodeStreamEmitted(em streamEmitted) error {
+	rem := redactStreamEmitted(em)
+	var err error
+	switch rem.Kind {
+	case streamEmitDelta:
+		err = s.enc.Encode(map[string]string{"delta": rem.Text})
+	case streamEmitThinking:
+		err = s.enc.Encode(map[string]string{"thinking": rem.Text})
+	case streamEmitToolCall:
+		err = s.enc.Encode(map[string]any{
+			"tool_call": map[string]string{"name": "stream", "arguments": rem.Text},
+		})
+	default:
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	if s.flusher != nil {
+		s.flusher.Flush()
+	}
+	return nil
 }
 
 // Call implements llms.Model via single-prompt generation.

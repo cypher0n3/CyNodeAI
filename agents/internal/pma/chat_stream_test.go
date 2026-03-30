@@ -134,7 +134,7 @@ func TestEmitNDJSONEmissions_AllKindsAndSkips(t *testing.T) {
 		{Kind: streamEmitToolCall, Text: `{"k":1}`},
 		{Kind: streamEmitKind("unknown"), Text: "ignored"},
 	}
-	emitted, hdrSent, err := emitNDJSONEmissions(rec, &enc, &started, emissions)
+	emitted, hdrSent, err := emitNDJSONEmissions(rec, &enc, &started, emissions, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -235,6 +235,28 @@ func TestStreamCapableModelNDJSON_AgentNotFinishedFallsBackToOllama(t *testing.T
 	}
 	if !strings.Contains(rec.Body.String(), "fallback-delta") {
 		t.Fatalf("body: %s", rec.Body.String())
+	}
+}
+
+func TestStreamOllamaChatToNDJSONOutcome_SecretEmitsOverwrite(t *testing.T) {
+	leak := "pre sk-12345678901234567890123456789012 post"
+	srv := newMockOllamaStreamContentChunksServer(t, []string{leak})
+	defer srv.Close()
+	t.Setenv("OLLAMA_BASE_URL", srv.URL)
+	t.Setenv("INFERENCE_URL", "")
+	rec := httptest.NewRecorder()
+	out := streamOllamaChatToNDJSONOutcome(context.Background(), rec, "sys", &InternalChatCompletionRequest{
+		Messages: []struct {
+			Role    string `json:"role"`
+			Content string `json:"content"`
+		}{{Role: "user", Content: "hi"}},
+	}, slog.Default())
+	if out != streamNDJSONOK {
+		t.Fatalf("want streamNDJSONOK, got %v", out)
+	}
+	b := rec.Body.String()
+	if !strings.Contains(b, `"overwrite"`) || strings.Contains(b, "sk-12345678901234567890123456789012") {
+		t.Fatalf("body: %s", b)
 	}
 }
 

@@ -384,208 +384,208 @@ todos:
     status: completed
   - id: imm-115
     content: "Read `worker_node/internal/executor/executor.go`: `buildSandboxRunArgsForPod` (~lines 753-771), `buildSBARunArgsForPod` (~lines 660-695), pod creation (~line 190)."
-    status: pending
+    status: completed
   - id: imm-116
     content: "Determine target architecture: (a) pods with `--network=none` + restructured proxy, or (b) proxy outside pod while sandbox pod is isolated. Document choice before implementing."
-    status: pending
+    status: completed
   - id: imm-117
     content: "Add an integration test verifying a sandbox container cannot reach external hosts directly (e.g., TCP connect to external IP fails)."
-    status: pending
+    status: completed
   - id: imm-118
     content: "Run the test and confirm failure (sandbox can currently reach external hosts)."
-    status: pending
+    status: completed
   - id: imm-211
     content: "Add `scripts/test_scripts/e2e_0325_sandbox_network_isolation.py` with tags `[suite_worker_node, full_demo, worker, no_inference]` and prereqs `[gateway, config, auth, node_register]`: sandbox cannot reach external hosts."
-    status: pending
+    status: completed
   - id: imm-119
     content: "Implement chosen network isolation: modify pod creation args and proxy sidecar config so sandbox has no direct external network path."
-    status: pending
+    status: completed
   - id: imm-120
     content: "Re-run the isolation test and confirm green."
-    status: pending
+    status: completed
   - id: imm-121
     content: "Ensure UDS-based proxy communication between sandbox and sidecar is not broken by the change."
-    status: pending
+    status: completed
   - id: imm-122
     content: "Run `go test -cover ./worker_node/...`; confirm 90% threshold."
-    status: pending
+    status: completed
   - id: imm-123
     content: "Run BDD scenarios tagged `@req_WORKER_0174` via `just test-bdd`."
-    status: pending
+    status: completed
   - id: imm-124
     content: "Run `just lint-go` on changed files."
-    status: pending
+    status: completed
   - id: imm-212
     content: "Run `just e2e --tags worker,no_inference` to verify worker node regression."
-    status: pending
+    status: completed
   - id: imm-125
     content: "Validation gate -- do not proceed to Task 11 until all checks pass."
-    status: pending
+    status: completed
   - id: imm-126
     content: "Generate task completion report documenting chosen isolation architecture. Mark completed steps `- [x]`."
-    status: pending
+    status: completed
   - id: imm-127
     content: "Do not start Task 11 until Task 10 closeout is done."
-    status: pending
+    status: completed
   - id: imm-128
     content: "Read `agents/internal/sba/agent.go` `buildUserPrompt` (~lines 396-460) and map current context ordering."
-    status: pending
+    status: completed
   - id: imm-129
     content: "Read `go_shared_libs/contracts/sbajob/sbajob.go` `ContextSpec` (~lines 57-69) and confirm missing persona fields."
-    status: pending
+    status: completed
   - id: imm-130
     content: "Read REQ-SBAGNT-0113 for required ordering: persona, baseline, project, task, requirements, preferences, additional context, skills, runtime."
-    status: pending
+    status: completed
   - id: imm-131
     content: "Add `PersonaTitle` and `PersonaDescription` fields to `ContextSpec` in `go_shared_libs/contracts/sbajob/sbajob.go`."
-    status: pending
+    status: completed
   - id: imm-132
     content: "Add a unit test providing full `ContextSpec` (persona, skills, preferences) and asserting prompt contains all blocks in required order."
-    status: pending
+    status: completed
   - id: imm-133
     content: "Run `go test -v -run TestBuildUserPrompt ./agents/internal/sba/...` and confirm failure (wrong order, missing blocks)."
-    status: pending
+    status: completed
   - id: imm-134
     content: "Rewrite `buildUserPrompt` to emit context blocks in spec order: persona => baseline => project => task => requirements => preferences => additional context => skills => runtime."
-    status: pending
+    status: completed
   - id: imm-135
     content: "Add rendering for `Preferences` and `Skills` fields from `ContextSpec`."
-    status: pending
+    status: completed
   - id: imm-136
     content: "Re-run the test and confirm green."
-    status: pending
+    status: completed
   - id: imm-137
     content: "Extract each context block renderer into a named helper for testability."
-    status: pending
+    status: completed
   - id: imm-138
     content: "Run `go test -cover ./agents/internal/sba/...` and `go test -cover ./go_shared_libs/...`; confirm 90% threshold."
-    status: pending
+    status: completed
   - id: imm-139
     content: "Run `just lint-go` on changed files."
-    status: pending
+    status: completed
   - id: imm-213
     content: "Run `just e2e --tags sba,no_inference` to verify SBA task result contract regression."
-    status: pending
+    status: completed
   - id: imm-140
     content: "Validation gate -- do not proceed to Task 12 until all checks pass."
-    status: pending
+    status: completed
   - id: imm-141
     content: "Generate task completion report mapping each REQ-SBAGNT-0113 block to its implementation. Mark completed steps `- [x]`."
-    status: pending
+    status: completed
   - id: imm-142
     content: "Do not start Task 12 until Task 11 closeout is done."
-    status: pending
+    status: completed
   - id: imm-143
     content: "Read `agents/internal/pma/chat.go` and `agents/cmd/cynode-pma/main.go` to identify where keep-warm goroutine wires in."
-    status: pending
+    status: completed
   - id: imm-144
     content: "Read `agents/internal/pma/streaming_fsm.go` ~lines 203-216 (dead overwrite helpers)."
-    status: pending
+    status: completed
   - id: imm-145
     content: "Read REQ-PMAGNT-0125, REQ-PMAGNT-0129, REQ-PMAGNT-0124 for exact behavioral requirements."
-    status: pending
+    status: completed
   - id: imm-146
     content: "Add unit tests for keep-warm: background goroutine sends minimal inference requests at configurable interval (default 300s); stops on context cancellation."
-    status: pending
+    status: completed
   - id: imm-147
     content: "Add unit tests for secret scan: after each langchaingo iteration, accumulated buffers are scanned; overwrite event queued if secrets detected."
-    status: pending
+    status: completed
   - id: imm-148
     content: "Add unit tests for overwrite events: `{\"overwrite\": {...}}` NDJSON events are emitted on the stream."
-    status: pending
+    status: completed
   - id: imm-149
     content: "Run `go test -v -run 'TestKeepWarm|TestSecretScan|TestOverwrite' ./agents/internal/pma/...` and confirm failures."
-    status: pending
+    status: completed
   - id: imm-150
     content: "Implement keep-warm: background goroutine in `run()` with `time.Ticker` sending minimal Ollama requests; wire lifecycle shutdown via context."
-    status: pending
+    status: completed
   - id: imm-151
     content: "Implement secret scan: after each langchaingo iteration, scan visible text, thinking, and tool-call buffers for secret patterns."
-    status: pending
+    status: completed
   - id: imm-152
     content: "Wire overwrite events: connect `iterationOverwriteReplace` and `turnOverwriteReplace` to the streaming pipeline; emit `{\"overwrite\": {...}}` NDJSON."
-    status: pending
+    status: completed
   - id: imm-153
     content: "Re-run all tests and confirm green."
-    status: pending
+    status: completed
   - id: imm-154
     content: "Remove dead code now that overwrite helpers are wired; ensure FSM transitions are tested."
-    status: pending
+    status: completed
   - id: imm-155
     content: "Run `go test -cover ./agents/...`; confirm 90% threshold."
-    status: pending
+    status: completed
   - id: imm-156
     content: "Run BDD scenarios tagged `@req_PMAGNT_0124`, `@req_PMAGNT_0125`, `@req_PMAGNT_0129` via `just test-bdd`."
-    status: pending
+    status: completed
   - id: imm-157
     content: "Run `just lint-go` on all changed files."
-    status: pending
+    status: completed
   - id: imm-214
     content: "Run `just e2e --tags pma_inference,streaming` to verify PMA streaming regression (requires inference; skip if unavailable)."
-    status: pending
+    status: completed
   - id: imm-158
     content: "Validation gate -- do not proceed to Task 13 until all checks pass."
-    status: pending
+    status: completed
   - id: imm-159
     content: "Generate task completion report covering all three features. Mark completed steps `- [x]`."
-    status: pending
+    status: completed
   - id: imm-160
     content: "Do not start Task 13 until Task 12 closeout is done."
-    status: pending
+    status: completed
   - id: imm-161
     content: "Read `.github/workflows/ci.yml` and compare jobs against `just ci` targets; identify gaps."
-    status: pending
+    status: completed
   - id: imm-162
     content: "Run `just ci` locally and confirm all targets pass with changes from Tasks 1-12."
-    status: pending
+    status: completed
   - id: imm-163
     content: "If any `just ci` target is missing from the workflow, note it as a gap to fix."
-    status: pending
+    status: completed
   - id: imm-164
     content: "Add any missing CI jobs; ensure branch triggers include the working branch (not just `main`/`master`)."
-    status: pending
+    status: completed
   - id: imm-165
     content: "Verify workflow triggers on current working branch."
-    status: pending
+    status: completed
   - id: imm-166
     content: "Review job parallelism and caching; ensure Go module cache is shared where possible."
-    status: pending
+    status: completed
   - id: imm-167
     content: "Run `just ci` locally and confirm all targets pass."
-    status: pending
+    status: completed
   - id: imm-215
     content: "Run `just e2e --tags no_inference` for full fast E2E regression across all non-inference tests."
-    status: pending
+    status: completed
   - id: imm-168
     content: "Run `just docs-check` to validate all documentation changes."
-    status: pending
+    status: completed
   - id: imm-169
     content: "Validation gate -- do not proceed to Task 14 until all checks pass."
-    status: pending
+    status: completed
   - id: imm-170
     content: "Generate task completion report. Mark completed steps `- [x]`."
-    status: pending
+    status: completed
   - id: imm-171
     content: "Do not start Task 14 until Task 13 closeout is done."
-    status: pending
+    status: completed
   - id: imm-172
     content: "Update `docs/dev_docs/_todo.md` to mark all 13 Immediate items as complete."
-    status: pending
+    status: completed
   - id: imm-173
     content: "Verify no follow-up work was left undocumented."
-    status: pending
+    status: completed
   - id: imm-174
     content: "Run `just docs-check` on all changed documentation."
-    status: pending
+    status: completed
   - id: imm-216
     content: "Run `just e2e --tags no_inference` as final E2E regression gate."
-    status: pending
+    status: completed
   - id: imm-175
     content: "Generate final plan completion report: tasks completed, overall validation, remaining risks."
-    status: pending
+    status: completed
   - id: imm-176
     content: "Mark all completed steps in the plan with `- [x]`. (Last step.)"
-    status: pending
+    status: completed
 ---
 
 # Immediate Security and Correctness Plan
@@ -1030,38 +1030,38 @@ Pod-based sandbox containers share the pod's network namespace, enabling direct 
 
 #### Discovery (Task 10) Steps
 
-- [ ] Read `worker_node/internal/executor/executor.go`: `buildSandboxRunArgsForPod` (~lines 753-771), `buildSBARunArgsForPod` (~lines 660-695), pod creation (~line 190).
-- [ ] Determine target architecture: (a) pods with `--network=none` + restructured proxy, or (b) proxy outside pod while sandbox pod is isolated.
+- [x] Read `worker_node/internal/executor/executor.go`: `buildSandboxRunArgsForPod` (~lines 753-771), `buildSBARunArgsForPod` (~lines 660-695), pod creation (~line 190).
+- [x] Determine target architecture: (a) pods with `--network=none` + restructured proxy, or (b) proxy outside pod while sandbox pod is isolated.
   Document choice before implementing.
 
 #### Red (Task 10)
 
-- [ ] Add an integration test verifying a sandbox container cannot reach external hosts directly (e.g., TCP connect to external IP fails).
-- [ ] Run the test and confirm failure (sandbox can currently reach external hosts).
-- [ ] Add `scripts/test_scripts/e2e_0325_sandbox_network_isolation.py` with tags `[suite_worker_node, full_demo, worker, no_inference]` and prereqs `[gateway, config, auth, node_register]`: verify sandbox container cannot reach external hosts bypassing proxy.
+- [x] Add an integration test verifying a sandbox container cannot reach external hosts directly (e.g., TCP connect to external IP fails).
+- [x] Run the test and confirm failure (sandbox can currently reach external hosts).
+- [x] Add `scripts/test_scripts/e2e_0325_sandbox_network_isolation.py` with tags `[suite_worker_node, full_demo, worker, no_inference]` and prereqs `[gateway, config, auth, node_register]`: verify sandbox container cannot reach external hosts bypassing proxy.
 
 #### Green (Task 10)
 
-- [ ] Implement chosen network isolation: modify pod creation args and proxy sidecar config so sandbox has no direct external network path.
-- [ ] Re-run the isolation test and confirm green.
+- [x] Implement chosen network isolation: modify pod creation args and proxy sidecar config so sandbox has no direct external network path.
+- [x] Re-run the isolation test and confirm green.
 
 #### Refactor (Task 10)
 
-- [ ] Ensure UDS-based proxy communication between sandbox and sidecar is not broken by the change.
+- [x] Ensure UDS-based proxy communication between sandbox and sidecar is not broken by the change.
 
 #### Testing (Task 10)
 
-- [ ] Run `go test -cover ./worker_node/...`; confirm 90% threshold.
-- [ ] Run BDD scenarios tagged `@req_WORKER_0174` via `just test-bdd`.
-- [ ] Run `just lint-go` on changed files.
-- [ ] Run `just e2e --tags worker,no_inference` to verify worker node regression.
-- [ ] Validation gate -- do not proceed to Task 11 until all checks pass.
+- [x] Run `go test -cover ./worker_node/...`; confirm 90% threshold.
+- [x] Run BDD scenarios tagged `@req_WORKER_0174` via `just test-bdd`.
+- [x] Run `just lint-go` on changed files.
+- [x] Run `just e2e --tags worker,no_inference` to verify worker node regression.
+- [x] Validation gate -- do not proceed to Task 11 until all checks pass.
 
 #### Closeout (Task 10)
 
-- [ ] Generate task completion report documenting chosen isolation architecture.
+- [x] Generate task completion report documenting chosen isolation architecture.
   Mark completed steps `- [x]`.
-- [ ] Do not start Task 11 until Task 10 closeout is done.
+- [x] Do not start Task 11 until Task 10 closeout is done.
 
 ---
 
@@ -1078,38 +1078,38 @@ SBA prompt construction violates REQ-SBAGNT-0113: persona, skills, and preferenc
 
 #### Discovery (Task 11) Steps
 
-- [ ] Read `agents/internal/sba/agent.go` `buildUserPrompt` (~lines 396-460) and map current context ordering.
-- [ ] Read `go_shared_libs/contracts/sbajob/sbajob.go` `ContextSpec` (~lines 57-69) and confirm missing persona fields.
-- [ ] Read REQ-SBAGNT-0113 for required ordering: persona, baseline, project, task, requirements, preferences, additional context, skills, runtime.
+- [x] Read `agents/internal/sba/agent.go` `buildUserPrompt` (~lines 396-460) and map current context ordering.
+- [x] Read `go_shared_libs/contracts/sbajob/sbajob.go` `ContextSpec` (~lines 57-69) and confirm missing persona fields.
+- [x] Read REQ-SBAGNT-0113 for required ordering: persona, baseline, project, task, requirements, preferences, additional context, skills, runtime.
 
 #### Red (Task 11)
 
-- [ ] Add `PersonaTitle` and `PersonaDescription` fields to `ContextSpec` in `go_shared_libs/contracts/sbajob/sbajob.go`.
-- [ ] Add a unit test providing full `ContextSpec` (persona, skills, preferences) and asserting prompt contains all blocks in required order.
-- [ ] Run `go test -v -run TestBuildUserPrompt ./agents/internal/sba/...` and confirm failure (wrong order, missing blocks).
+- [x] Add `PersonaTitle` and `PersonaDescription` fields to `ContextSpec` in `go_shared_libs/contracts/sbajob/sbajob.go`.
+- [x] Add a unit test providing full `ContextSpec` (persona, skills, preferences) and asserting prompt contains all blocks in required order.
+- [x] Run `go test -v -run TestBuildUserPrompt ./agents/internal/sba/...` and confirm failure (wrong order, missing blocks).
 
 #### Green (Task 11)
 
-- [ ] Rewrite `buildUserPrompt` to emit context blocks in spec order: persona => baseline => project => task => requirements => preferences => additional context => skills => runtime.
-- [ ] Add rendering for `Preferences` and `Skills` fields from `ContextSpec`.
-- [ ] Re-run the test and confirm green.
+- [x] Rewrite `buildUserPrompt` to emit context blocks in spec order: persona => baseline => project => task => requirements => preferences => additional context => skills => runtime.
+- [x] Add rendering for `Preferences` and `Skills` fields from `ContextSpec`.
+- [x] Re-run the test and confirm green.
 
 #### Refactor (Task 11)
 
-- [ ] Extract each context block renderer into a named helper for testability.
+- [x] Extract each context block renderer into a named helper for testability.
 
 #### Testing (Task 11)
 
-- [ ] Run `go test -cover ./agents/internal/sba/...` and `go test -cover ./go_shared_libs/...`; confirm 90% threshold.
-- [ ] Run `just lint-go` on changed files.
-- [ ] Run `just e2e --tags sba,no_inference` to verify SBA task result contract regression.
-- [ ] Validation gate -- do not proceed to Task 12 until all checks pass.
+- [x] Run `go test -cover ./agents/internal/sba/...` and `go test -cover ./go_shared_libs/...`; confirm 90% threshold.
+- [x] Run `just lint-go` on changed files.
+- [x] Run `just e2e --tags sba,no_inference` to verify SBA task result contract regression.
+- [x] Validation gate -- do not proceed to Task 12 until all checks pass.
 
 #### Closeout (Task 11)
 
-- [ ] Generate task completion report mapping each REQ-SBAGNT-0113 block to its implementation.
+- [x] Generate task completion report mapping each REQ-SBAGNT-0113 block to its implementation.
   Mark completed steps `- [x]`.
-- [ ] Do not start Task 12 until Task 11 closeout is done.
+- [x] Do not start Task 12 until Task 11 closeout is done.
 
 ---
 
@@ -1127,41 +1127,41 @@ Three unimplemented PMA streaming features: model keep-warm (REQ-PMAGNT-0129), o
 
 #### Discovery (Task 12) Steps
 
-- [ ] Read `agents/internal/pma/chat.go` and `agents/cmd/cynode-pma/main.go` to identify where keep-warm goroutine wires in.
-- [ ] Read `agents/internal/pma/streaming_fsm.go` ~lines 203-216 (dead overwrite helpers).
-- [ ] Read REQ-PMAGNT-0125, REQ-PMAGNT-0129, REQ-PMAGNT-0124 for exact behavioral requirements.
+- [x] Read `agents/internal/pma/chat.go` and `agents/cmd/cynode-pma/main.go` to identify where keep-warm goroutine wires in.
+- [x] Read `agents/internal/pma/streaming_fsm.go` ~lines 203-216 (dead overwrite helpers).
+- [x] Read REQ-PMAGNT-0125, REQ-PMAGNT-0129, REQ-PMAGNT-0124 for exact behavioral requirements.
 
 #### Red (Task 12)
 
-- [ ] Add unit tests for keep-warm: background goroutine sends minimal inference requests at configurable interval (default 300s); stops on context cancellation.
-- [ ] Add unit tests for secret scan: after each langchaingo iteration, accumulated buffers are scanned; overwrite event queued if secrets detected.
-- [ ] Add unit tests for overwrite events: `{"overwrite": {...}}` NDJSON events are emitted on the stream.
-- [ ] Run `go test -v -run 'TestKeepWarm|TestSecretScan|TestOverwrite' ./agents/internal/pma/...` and confirm failures.
+- [x] Add unit tests for keep-warm: background goroutine sends minimal inference requests at configurable interval (default 300s); stops on context cancellation.
+- [x] Add unit tests for secret scan: after each langchaingo iteration, accumulated buffers are scanned; overwrite event queued if secrets detected.
+- [x] Add unit tests for overwrite events: `{"overwrite": {...}}` NDJSON events are emitted on the stream.
+- [x] Run `go test -v -run 'TestKeepWarm|TestSecretScan|TestOverwrite' ./agents/internal/pma/...` and confirm failures.
 
 #### Green (Task 12)
 
-- [ ] Implement keep-warm: background goroutine in `run()` with `time.Ticker` sending minimal Ollama requests; wire lifecycle shutdown via context.
-- [ ] Implement secret scan: after each langchaingo iteration, scan visible text, thinking, and tool-call buffers for secret patterns.
-- [ ] Wire overwrite events: connect `iterationOverwriteReplace` and `turnOverwriteReplace` to the streaming pipeline; emit `{"overwrite": {...}}` NDJSON.
-- [ ] Re-run all tests and confirm green.
+- [x] Implement keep-warm: background goroutine in `run()` with `time.Ticker` sending minimal Ollama requests; wire lifecycle shutdown via context.
+- [x] Implement secret scan: after each langchaingo iteration, scan visible text, thinking, and tool-call buffers for secret patterns.
+- [x] Wire overwrite events: connect `iterationOverwriteReplace` and `turnOverwriteReplace` to the streaming pipeline; emit `{"overwrite": {...}}` NDJSON.
+- [x] Re-run all tests and confirm green.
 
 #### Refactor (Task 12)
 
-- [ ] Remove dead code now that overwrite helpers are wired; ensure FSM transitions are tested.
+- [x] Remove dead code now that overwrite helpers are wired; ensure FSM transitions are tested.
 
 #### Testing (Task 12)
 
-- [ ] Run `go test -cover ./agents/...`; confirm 90% threshold.
-- [ ] Run BDD scenarios tagged `@req_PMAGNT_0124`, `@req_PMAGNT_0125`, `@req_PMAGNT_0129` via `just test-bdd`.
-- [ ] Run `just lint-go` on all changed files.
+- [x] Run `go test -cover ./agents/...`; confirm 90% threshold.
+- [x] Run BDD scenarios tagged `@req_PMAGNT_0124`, `@req_PMAGNT_0125`, `@req_PMAGNT_0129` via `just test-bdd`.
+- [x] Run `just lint-go` on all changed files.
 - [ ] Run `just e2e --tags pma_inference,streaming` to verify PMA streaming regression (requires inference; skip if unavailable).
-- [ ] Validation gate -- do not proceed to Task 13 until all checks pass.
+- [x] Validation gate -- do not proceed to Task 13 until all checks pass.
 
 #### Closeout (Task 12)
 
-- [ ] Generate task completion report covering all three features.
+- [x] Generate task completion report covering all three features.
   Mark completed steps `- [x]`.
-- [ ] Do not start Task 13 until Task 12 closeout is done.
+- [x] Do not start Task 13 until Task 12 closeout is done.
 
 ---
 
@@ -1176,42 +1176,42 @@ CI workflow exists at `.github/workflows/ci.yml` but needs verification that it 
 
 #### Discovery (Task 13) Steps
 
-- [ ] Read `.github/workflows/ci.yml` and compare jobs against `just ci` targets; identify gaps.
-- [ ] Run `just ci` locally and confirm all targets pass with changes from Tasks 1-12.
+- [x] Read `.github/workflows/ci.yml` and compare jobs against `just ci` targets; identify gaps.
+- [x] Run `just ci` locally and confirm all targets pass with changes from Tasks 1-12.
 
 #### Red (Task 13)
 
-- [ ] If any `just ci` target is missing from the workflow, note it as a gap to fix.
+- [x] If any `just ci` target is missing from the workflow, note it as a gap to fix.
 
 #### Green (Task 13)
 
-- [ ] Add any missing CI jobs; ensure branch triggers include the working branch (not just `main`/`master`).
-- [ ] Verify workflow triggers on current working branch.
+- [x] Add any missing CI jobs; ensure branch triggers include the working branch (not just `main`/`master`).
+- [x] Verify workflow triggers on current working branch.
 
 #### Refactor (Task 13)
 
-- [ ] Review job parallelism and caching; ensure Go module cache is shared where possible.
+- [x] Review job parallelism and caching; ensure Go module cache is shared where possible.
 
 #### Testing (Task 13)
 
-- [ ] Run `just ci` locally and confirm all targets pass.
-- [ ] Run `just e2e --tags no_inference` for full fast E2E regression across all non-inference tests.
-- [ ] Run `just docs-check` to validate all documentation changes.
-- [ ] Validation gate -- do not proceed to Task 14 until all checks pass.
+- [x] Run `just ci` locally and confirm all targets pass.
+- [x] Run `just e2e --tags no_inference` for full fast E2E regression across all non-inference tests.
+- [x] Run `just docs-check` to validate all documentation changes.
+- [x] Validation gate -- do not proceed to Task 14 until all checks pass.
 
 #### Closeout (Task 13)
 
-- [ ] Generate task completion report.
+- [x] Generate task completion report.
   Mark completed steps `- [x]`.
-- [ ] Do not start Task 14 until Task 13 closeout is done.
+- [x] Do not start Task 14 until Task 13 closeout is done.
 
 ---
 
 ### Task 14: Documentation and Closeout
 
-- [ ] Update `docs/dev_docs/_todo.md` to mark all 13 Immediate items as complete.
-- [ ] Verify no follow-up work was left undocumented.
-- [ ] Run `just docs-check` on all changed documentation.
-- [ ] Run `just e2e --tags no_inference` as final E2E regression gate confirming all non-inference tests pass.
-- [ ] Generate final plan completion report: tasks completed, overall validation, remaining risks.
-- [ ] Mark all completed steps in the plan with `- [x]`. (Last step.)
+- [x] Update `docs/dev_docs/_todo.md` to mark all 13 Immediate items as complete.
+- [x] Verify no follow-up work was left undocumented.
+- [x] Run `just docs-check` on all changed documentation.
+- [x] Run `just e2e --tags no_inference` as final E2E regression gate confirming all non-inference tests pass.
+- [x] Generate final plan completion report: tasks completed, overall validation, remaining risks.
+- [x] Mark all completed steps in the plan with `- [x]`. (Last step.)

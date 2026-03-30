@@ -76,7 +76,8 @@ class TestSbaInferenceReply(unittest.TestCase):
         self.assertTrue(ok_r, f"task ready failed: {err_r}")
         status = None
         result_data = None
-        for _ in range(60):
+        # SBA + inference can exceed 5m under parallel E2E load (node queue, Ollama).
+        for _ in range(120):
             time.sleep(5)
             _, out, _ = helpers.run_cynork(
                 ["task", "result", task_id, "-o", "json"],

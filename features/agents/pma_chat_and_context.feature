@@ -114,6 +114,22 @@ Scenario: PMA emits per-iteration overwrite when think-tag tokens leak to visibl
   Then PMA emits an overwrite NDJSON event with scope "iteration" and reason "think_tag_leaked"
   And the overwrite content does not include the leaked tag characters
 
+@req_pmagnt_0125
+@spec_cynai_pmagnt_pmaopportunisticsecretscan
+Scenario: PMA emits secret_redaction overwrite when streamed content matches detectable secret patterns
+  Given the PMA inference backend emits a response containing a synthetic OpenAI-style key segment
+  When I send an interactive PMA chat request on the standard streaming path
+  Then the NDJSON stream includes an overwrite event with reason "secret_redaction"
+  And the streamed deltas do not contain the raw key material
+
+@wip
+@req_pmagnt_0129
+@spec_cynai_pmagnt_nodelocalmodelloadandkeepalive
+Scenario: PMA keep-warm for node-local model (traceability; executable BDD pending)
+  Given the PMA inference backend supports incremental visible-text output
+  When I send an interactive PMA chat request on the standard streaming path
+  Then PMA finishes with a terminal completion event
+
 @wip
 @req_pmagnt_0124
 @spec_cynai_pmagnt_pmastreamingoverwrite

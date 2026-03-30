@@ -246,9 +246,13 @@ func TestBuildSandboxRunArgsForPod(t *testing.T) {
 	}
 	env := map[string]string{"CYNODE_TASK_ID": "t1", "CYNODE_JOB_ID": "j1", "CYNODE_WORKSPACE_DIR": "/workspace", envInferenceProxyURL: "http+unix://%2Frun%2Fcynode%2Finference-proxy.sock"}
 	args := buildSandboxRunArgsForPod(req, "mypod", "/tmp/ws", "/tmp/sock-dir", env, "alpine")
+	hasNetNone := false
 	hasInferenceProxy := false
 	hasSockMount := false
 	for i, a := range args {
+		if a == "--network=none" {
+			hasNetNone = true
+		}
 		if strings.HasPrefix(a, "INFERENCE_PROXY_URL=http+unix://") {
 			hasInferenceProxy = true
 		}
@@ -258,6 +262,9 @@ func TestBuildSandboxRunArgsForPod(t *testing.T) {
 		if a == "-v" && i+1 < len(args) && strings.HasPrefix(args[i+1], "/tmp/sock-dir:") {
 			hasSockMount = true
 		}
+	}
+	if !hasNetNone {
+		t.Errorf("args must include --network=none (REQ-WORKER-0174), got %v", args)
 	}
 	if !hasInferenceProxy {
 		t.Errorf("args should contain INFERENCE_PROXY_URL=http+unix://... (REQ-SANDBX-0131), got %v", args)

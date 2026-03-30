@@ -1,6 +1,9 @@
-# Task 6 completion: `RunJobResponse.ExitCode` as `*int`
+# Task 6 Completion: `RunJobResponse.ExitCode` as `*int`
 
-**Date:** 2026-03-29
+- [Changes](#changes)
+- [Tests](#tests)
+- [Worker API Server Coverage](#worker-api-server-coverage)
+- [E2E (Deviation From Plan Wording)](#e2e-deviation-from-plan-wording)
 
 ## Changes
 
@@ -13,21 +16,25 @@
 - `orchestrator/internal/dispatcher/run_test.go`, `orchestrator/cmd/control-plane/main_test.go`, `orchestrator/cmd/control-plane/main_run_extra_test.go`: stubs use `workerapi.ExitCodePtr(...)`.
 - `orchestrator/internal/handlers/tasks.go`, `orchestrator/_bdd/steps_orchestrator_tasks_dispatch_chat.go`: synthetic responses use `ExitCodePtr`.
 
+**Date:** 2026-03-29.
+
 ## Tests
 
 - `just lint-go`
 - `just test-go-cover` (includes `go_shared_libs/contracts/workerapi` at 100% after added tests)
 
-## Worker API server coverage
+## Worker API Server Coverage
 
-- `worker_node/internal/workerapiserver/embed_handlers_test.go`: `TestEmbedBearerOK`, `TestBuildMuxesFromEmbedConfig_NodeInfo_StoreEmptyKernelFallback` to hold package coverage at ≥ 90%.
+- `worker_node/internal/workerapiserver/embed_handlers_test.go`: `TestEmbedBearerOK`, `TestBuildMuxesFromEmbedConfig_NodeInfo_StoreEmptyKernelFallback` to hold package coverage at >= 90%.
 
-## E2E (deviation from plan wording)
+## E2E (Deviation From Plan Wording)
 
-- Ran `just e2e --tags task --exclude-tags sba,inference` — task create/list/get/result/logs/cancel/status filters and prompt task (15 tests, ~87s). This targets task lifecycle and job JSON without pulling every `no_inference`-tagged module (OR semantics would add unrelated suites).
+- Ran `just e2e --tags task --exclude-tags sba,inference` - task create/list/get/result/logs/cancel/status filters and prompt task (15 tests, ~87s).
+  This targets task lifecycle and job JSON without pulling every `no_inference`-tagged module (OR semantics would add unrelated suites).
 
-- Did **not** complete `just e2e --tags sba,no_inference` as written: every module tagged `sba` also carries `sba_inference` and/or `ollama` prereqs; `e2e_0720` blocks in `ensure_e2e_sba_task` when SBA task setup is slow. SBA run-arg contract coverage remains in unit/E2E UDS suites (`e2e_0340`) and BDD.
+- Did **not** complete `just e2e --tags sba,no_inference` as written: every module tagged `sba` also carries `sba_inference` and/or `ollama` prereqs; `e2e_0720` blocks in `ensure_e2e_sba_task` when SBA task setup is slow.
+  SBA run-arg contract coverage remains in unit/E2E UDS suites (`e2e_0340`) and BDD.
 
 ## Deviations
 
-- E2E gate uses the task-focused command above instead of the plan’s comma-separated `task,no_inference` / `sba,no_inference` lines, for the same OR-tag reason documented in Task 5’s report.
+- E2E gate uses the task-focused command above instead of the plan's comma-separated `task,no_inference` / `sba,no_inference` lines, for the same OR-tag reason documented in Task 5's report.

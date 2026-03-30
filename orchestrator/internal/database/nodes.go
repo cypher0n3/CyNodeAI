@@ -52,6 +52,8 @@ func (db *DB) UpdateNodeLastSeen(ctx context.Context, nodeID uuid.UUID) error {
 }
 
 // UpdateNodeCapability updates a node's capability hash and timestamp.
+//
+//nolint:dupl // intentional parallel to UpdateTaskPlanningState (different model/columns).
 func (db *DB) UpdateNodeCapability(ctx context.Context, nodeID uuid.UUID, capHash string) error {
 	now := time.Now().UTC()
 	return db.updateWhere(ctx, &NodeRecord{}, "id", nodeID,

@@ -251,11 +251,20 @@ func streamOllamaChatToNDJSON(ctx context.Context, w http.ResponseWriter, chatMe
 	var enc *json.Encoder
 	started := false
 	clf := newStreamingClassifier()
-	hadDelta, err, started = scanOllamaInferenceNDJSON(ctx, w, scanner, clf, logger, &enc, &started)
+	var rawAccum ndjsonRawAccum
+	hadDelta, err, started = scanOllamaInferenceNDJSON(ctx, w, scanner, clf, logger, &enc, &started, &rawAccum)
 	if err != nil {
 		return hadDelta, err, started
 	}
 	if started && enc != nil {
+		combined := rawAccum.vis.String() + rawAccum.think.String() + rawAccum.tool.String()
+		if detectSecrets(combined) {
+			rv, _, _ := redactKnownSecrets(strings.TrimSpace(rawAccum.vis.String()))
+			kinds := secretKindsFromBuffers(rawAccum.vis.String(), rawAccum.think.String(), rawAccum.tool.String())
+			if err := encodeOverwriteNDJSON(enc, w, 1, rv, "iteration", "secret_redaction", kinds); err != nil {
+				return hadDelta, err, true
+			}
+		}
 		if err := enc.Encode(map[string]bool{"done": true}); err != nil {
 			return hadDelta, err, true
 		}
@@ -264,7 +273,7 @@ func streamOllamaChatToNDJSON(ctx context.Context, w http.ResponseWriter, chatMe
 	return hadDelta, nil, started
 }
 
-func scanOllamaInferenceNDJSON(ctx context.Context, w http.ResponseWriter, scanner *bufio.Scanner, clf *streamingClassifier, logger *slog.Logger, enc **json.Encoder, started *bool) (hadDelta bool, err error, headersSent bool) {
+func scanOllamaInferenceNDJSON(ctx context.Context, w http.ResponseWriter, scanner *bufio.Scanner, clf *streamingClassifier, logger *slog.Logger, enc **json.Encoder, started *bool, raw *ndjsonRawAccum) (hadDelta bool, err error, headersSent bool) {
 	for scanner.Scan() {
 		if ctx.Err() != nil {
 			return hadDelta, ctx.Err(), *started
@@ -274,7 +283,7 @@ func scanOllamaInferenceNDJSON(ctx context.Context, w http.ResponseWriter, scann
 		if err != nil {
 			return hadDelta, err, *started
 		}
-		emitted, hdrsSent, err := emitNDJSONEmissions(w, enc, started, clf.Feed(content))
+		emitted, hdrsSent, err := emitNDJSONEmissions(w, enc, started, clf.Feed(content), raw)
 		if err != nil {
 			return hadDelta, err, hdrsSent
 		}
@@ -288,7 +297,7 @@ func scanOllamaInferenceNDJSON(ctx context.Context, w http.ResponseWriter, scann
 	if scanErr := scanner.Err(); scanErr != nil {
 		return hadDelta, fmt.Errorf("reading inference stream: %w", scanErr), *started
 	}
-	emitted, hdrsSent, err := emitNDJSONEmissions(w, enc, started, clf.Flush())
+	emitted, hdrsSent, err := emitNDJSONEmissions(w, enc, started, clf.Flush(), raw)
 	if err != nil {
 		return hadDelta, err, hdrsSent
 	}
@@ -298,16 +307,39 @@ func scanOllamaInferenceNDJSON(ctx context.Context, w http.ResponseWriter, scann
 	return hadDelta, nil, *started
 }
 
+// ndjsonRawAccum captures raw classifier text for post-iteration secret scan (REQ-PMAGNT-0125).
+type ndjsonRawAccum struct {
+	vis, think, tool strings.Builder
+}
+
+func (a *ndjsonRawAccum) note(em streamEmitted) {
+	if a == nil {
+		return
+	}
+	switch em.Kind {
+	case streamEmitDelta:
+		a.vis.WriteString(em.Text)
+	case streamEmitThinking:
+		a.think.WriteString(em.Text)
+	case streamEmitToolCall:
+		a.tool.WriteString(em.Text)
+	}
+}
+
 // emitNDJSONEmissions writes classifier emissions (delta, thinking, tool_call) to the NDJSON stream.
-func emitNDJSONEmissions(w http.ResponseWriter, enc **json.Encoder, started *bool, emissions []streamEmitted) (emittedAny, headersSentOnErr bool, err error) {
+func emitNDJSONEmissions(w http.ResponseWriter, enc **json.Encoder, started *bool, emissions []streamEmitted, raw *ndjsonRawAccum) (emittedAny, headersSentOnErr bool, err error) {
 	for _, em := range emissions {
-		if !emissionWorthEmitting(em) {
+		if raw != nil {
+			raw.note(em)
+		}
+		rem := redactStreamEmitted(em)
+		if !emissionWorthEmitting(rem) {
 			continue
 		}
 		if err := ensureNDJSONStreamStarted(w, enc, started); err != nil {
 			return emittedAny, true, err
 		}
-		ok, encErr := encodeNDJSONStreamEmission(*enc, em)
+		ok, encErr := encodeNDJSONStreamEmission(*enc, rem)
 		if encErr != nil {
 			return emittedAny, true, encErr
 		}

@@ -23,35 +23,29 @@ import (
 func TestTokenAuth(t *testing.T) {
 	h := newCallHandler(slog.Default(), "correct-token", "openai,github")
 	body := []byte(`{"provider":"openai","operation":"chat"}`)
-	t.Run("missing", func(t *testing.T) {
-		w := httptest.NewRecorder()
-		r := httptest.NewRequest(http.MethodPost, "/v1/call", bytes.NewReader(body))
-		r.Header.Set("Content-Type", "application/json")
-		h.ServeHTTP(w, r)
-		if w.Code != http.StatusUnauthorized {
-			t.Errorf("code=%d", w.Code)
-		}
-	})
-	t.Run("wrong", func(t *testing.T) {
-		w := httptest.NewRecorder()
-		r := httptest.NewRequest(http.MethodPost, "/v1/call", bytes.NewReader(body))
-		r.Header.Set("Content-Type", "application/json")
-		r.Header.Set("Authorization", "Bearer wrong-token")
-		h.ServeHTTP(w, r)
-		if w.Code != http.StatusUnauthorized {
-			t.Errorf("code=%d", w.Code)
-		}
-	})
-	t.Run("correct", func(t *testing.T) {
-		w := httptest.NewRecorder()
-		r := httptest.NewRequest(http.MethodPost, "/v1/call", bytes.NewReader(body))
-		r.Header.Set("Content-Type", "application/json")
-		r.Header.Set("Authorization", "Bearer correct-token")
-		h.ServeHTTP(w, r)
-		if w.Code != http.StatusNotImplemented {
-			t.Errorf("code=%d want 501", w.Code)
-		}
-	})
+	tests := []struct {
+		name       string
+		authHeader string
+		wantCode   int
+	}{
+		{"missing", "", http.StatusUnauthorized},
+		{"wrong", "Bearer wrong-token", http.StatusUnauthorized},
+		{"correct", "Bearer correct-token", http.StatusNotImplemented},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			w := httptest.NewRecorder()
+			r := httptest.NewRequest(http.MethodPost, "/v1/call", bytes.NewReader(body))
+			r.Header.Set("Content-Type", "application/json")
+			if tc.authHeader != "" {
+				r.Header.Set("Authorization", tc.authHeader)
+			}
+			h.ServeHTTP(w, r)
+			if w.Code != tc.wantCode {
+				t.Errorf("code=%d want %d", w.Code, tc.wantCode)
+			}
+		})
+	}
 }
 
 func TestGetEnv(t *testing.T) {
