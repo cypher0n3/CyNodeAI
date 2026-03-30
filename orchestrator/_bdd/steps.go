@@ -214,6 +214,11 @@ func InitializeOrchestratorSuite(sc *godog.ScenarioContext, state *testState) {
 			_ = db.Close()
 			return ctx, err
 		}
+		cfg := config.LoadOrchestratorConfig()
+		if err := database.ApplyWorkerBearerEncryptionAtStartup(ctx, db, cfg.JWTSecret); err != nil {
+			_ = db.Close()
+			return ctx, err
+		}
 		// orchestrator_startup.feature expects /readyz to be 503 when no dispatchable nodes exist.
 		// Earlier scenarios in the suite leave nodes in the shared Postgres; clear data only for this scenario.
 		if s.Name == "Orchestrator remains not ready when no inference path is available" {
@@ -231,7 +236,6 @@ func InitializeOrchestratorSuite(sc *godog.ScenarioContext, state *testState) {
 				return ctx, err
 			}
 		}
-		cfg := config.LoadOrchestratorConfig()
 		jwtManager := auth.NewJWTManager(
 			cfg.JWTSecret,
 			cfg.JWTAccessDuration,

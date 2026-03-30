@@ -40,14 +40,13 @@ func (m *Model) handleThreadCommand(line string) tea.Cmd {
 }
 
 func (m *Model) threadCommandNew() tea.Cmd {
-	threadID, err := m.Session.NewThread(context.Background())
-	if err != nil {
-		m.Scrollback = append(m.Scrollback, ScrollbackSystemLinePrefix+"Error: "+err.Error())
-		return nil
+	return func() tea.Msg {
+		if m.Session == nil {
+			return threadNewResult{err: fmt.Errorf("no session")}
+		}
+		threadID, err := m.Session.CreateNewThreadID(context.Background())
+		return threadNewResult{threadID: threadID, err: err}
 	}
-	m.Scrollback = append(m.Scrollback, ScrollbackSystemLinePrefix+chat.LandmarkThreadSwitched+" New thread: "+threadID)
-	m.persistLastThreadToCache()
-	return nil
 }
 
 func (m *Model) threadCommandSwitch(parts []string, rest string) tea.Cmd {
@@ -56,15 +55,13 @@ func (m *Model) threadCommandSwitch(parts []string, rest string) tea.Cmd {
 		return nil
 	}
 	selector := strings.TrimSpace(strings.TrimPrefix(rest, "switch"))
-	id, err := m.Session.ResolveThreadSelector(context.Background(), selector, 50)
-	if err != nil {
-		m.Scrollback = append(m.Scrollback, ScrollbackSystemLinePrefix+"Error: "+err.Error())
-		return nil
+	return func() tea.Msg {
+		if m.Session == nil {
+			return threadSwitchResult{err: fmt.Errorf("no session")}
+		}
+		id, err := m.Session.ResolveThreadSelector(context.Background(), selector, 50)
+		return threadSwitchResult{threadID: id, err: err}
 	}
-	m.Session.SetCurrentThreadID(id)
-	m.Scrollback = append(m.Scrollback, ScrollbackSystemLinePrefix+chat.LandmarkThreadSwitched+" Switched to thread: "+id)
-	m.persistLastThreadToCache()
-	return nil
 }
 
 func (m *Model) threadCommandRename(parts []string, rest string) tea.Cmd {
@@ -122,6 +119,28 @@ func (m *Model) threadRenameCmd(title string) tea.Cmd {
 		err := m.Session.PatchThreadTitle(context.Background(), "", title)
 		return threadRenameResult{err: err}
 	}
+}
+
+func (m *Model) applyThreadIDChange(threadID string, err error, successLine string) (tea.Model, tea.Cmd) {
+	m.Loading = false
+	if err != nil {
+		m.Scrollback = append(m.Scrollback, ScrollbackSystemLinePrefix+"Error: "+err.Error())
+		return m, nil
+	}
+	if m.Session != nil {
+		m.Session.SetCurrentThreadID(threadID)
+	}
+	m.Scrollback = append(m.Scrollback, ScrollbackSystemLinePrefix+successLine)
+	m.persistLastThreadToCache()
+	return m, nil
+}
+
+func (m *Model) applyThreadNewResult(msg threadNewResult) (tea.Model, tea.Cmd) {
+	return m.applyThreadIDChange(msg.threadID, msg.err, chat.LandmarkThreadSwitched+" New thread: "+msg.threadID)
+}
+
+func (m *Model) applyThreadSwitchResult(msg threadSwitchResult) (tea.Model, tea.Cmd) {
+	return m.applyThreadIDChange(msg.threadID, msg.err, chat.LandmarkThreadSwitched+" Switched to thread: "+msg.threadID)
 }
 
 func (m *Model) pushInputHistory(line string) {

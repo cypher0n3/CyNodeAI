@@ -173,6 +173,8 @@ type Store interface {
 // DB wraps GORM database operations.
 type DB struct {
 	db *gorm.DB
+	// workerBearerKey is a 32-byte AES key derived from JWT secret; when set, worker_api_bearer_token is encrypted at rest (Task 6).
+	workerBearerKey []byte
 }
 
 // Ensure DB implements Store.

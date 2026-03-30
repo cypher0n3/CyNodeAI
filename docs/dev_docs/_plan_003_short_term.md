@@ -137,212 +137,212 @@ todos:
       - st-025
   - id: st-027
     content: "Search orchestrator for `time.Sleep` in retry loops: `openai_chat.go:702-704` and any other sites."
-    status: pending
+    status: completed
     dependencies:
       - st-026
   - id: st-028
     content: "Add a unit test: retry loop must respect context cancellation during backoff (cancelled context causes immediate return, not sleep)."
-    status: pending
+    status: completed
     dependencies:
       - st-027
   - id: st-029
     content: "Run `go test -v -run TestRetryContextCancel ./orchestrator/...` and confirm failure."
-    status: pending
+    status: completed
     dependencies:
       - st-028
   - id: st-030
     content: "Replace `time.Sleep(backoff)` with `select { case <-ctx.Done(): return ctx.Err() case <-time.After(backoff): }` in each retry loop."
-    status: pending
+    status: completed
     dependencies:
       - st-029
   - id: st-031
     content: "Re-run `go test -v -run TestRetryContextCancel ./orchestrator/...` and confirm green."
-    status: pending
+    status: completed
     dependencies:
       - st-030
   - id: st-032
     content: "Run `just lint-go` on changed files and `go test -cover ./orchestrator/...`; confirm 90% threshold."
-    status: pending
+    status: completed
     dependencies:
       - st-031
   - id: st-033
     content: "Validation gate -- do not proceed to Task 4 until all checks pass."
-    status: pending
+    status: completed
     dependencies:
       - st-032
   - id: st-034
     content: "Generate task completion report for Task 3. Mark completed steps `- [x]`."
-    status: pending
+    status: completed
     dependencies:
       - st-033
   - id: st-035
     content: "Do not start Task 4 until Task 3 closeout is done."
-    status: pending
+    status: completed
     dependencies:
       - st-034
   - id: st-036
     content: "Read `cynork/internal/tui/model.go` and identify all synchronous network I/O calls in `Update()`: `/thread new`, `/thread switch`, stream recovery `Health()`, and any other blocking calls."
-    status: pending
+    status: completed
     dependencies:
       - st-035
   - id: st-037
     content: "Read `docs/tech_specs/cynork/cynork_tui.md` for the Bubble Tea `Cmd` pattern and async I/O requirements."
-    status: pending
+    status: completed
     dependencies:
       - st-036
   - id: st-038
     content: "Add a test: `Update()` must return in under 50ms for each identified network call (assert no blocking I/O)."
-    status: pending
+    status: completed
     dependencies:
       - st-037
   - id: st-039
     content: "Run `go test -v -run TestUpdateNoBlock ./cynork/internal/tui/...` and confirm failure (Update blocks on network I/O)."
-    status: pending
+    status: completed
     dependencies:
       - st-038
   - id: st-040
     content: "Refactor each synchronous network call into a `tea.Cmd` that returns a message; handle the result in `Update()` via the returned message type."
-    status: pending
+    status: completed
     dependencies:
       - st-039
   - id: st-041
     content: "Re-run `go test -v -run TestUpdateNoBlock ./cynork/internal/tui/...` and confirm green."
-    status: pending
+    status: completed
     dependencies:
       - st-040
   - id: st-042
     content: "Run `just lint-go` on changed files and `go test -race -cover ./cynork/...`; confirm 90% threshold."
-    status: pending
+    status: completed
     dependencies:
       - st-041
   - id: st-043
     content: "Run `just e2e --tags tui_pty,no_inference` to verify TUI responsiveness."
-    status: pending
+    status: completed
     dependencies:
       - st-042
   - id: st-044
     content: "Validation gate -- do not proceed to Task 5 until all checks pass."
-    status: pending
+    status: completed
     dependencies:
       - st-043
   - id: st-045
     content: "Generate task completion report for Task 4. Mark completed steps `- [x]`."
-    status: pending
+    status: completed
     dependencies:
       - st-044
   - id: st-046
     content: "Do not start Task 5 until Task 4 closeout is done."
-    status: pending
+    status: completed
     dependencies:
       - st-045
   - id: st-047
     content: "Read `orchestrator/internal/handlers/workflow.go` lines 129-252 and identify which workflow handlers lack auth checks."
-    status: pending
+    status: completed
     dependencies:
       - st-046
   - id: st-048
     content: "Read `orchestrator/internal/middleware/auth.go` to understand the existing auth middleware and how to apply it to workflow routes."
-    status: pending
+    status: completed
     dependencies:
       - st-047
   - id: st-049
     content: "Add unit tests: unauthenticated requests to each workflow handler endpoint must return 401."
-    status: pending
+    status: completed
     dependencies:
       - st-048
   - id: st-050
     content: "Run `go test -v -run TestWorkflowAuth ./orchestrator/internal/handlers/...` and confirm failures."
-    status: pending
+    status: completed
     dependencies:
       - st-049
   - id: st-051
     content: "Apply auth middleware to all workflow handler routes that currently lack it."
-    status: pending
+    status: completed
     dependencies:
       - st-050
   - id: st-052
     content: "Re-run `go test -v -run TestWorkflowAuth ./orchestrator/internal/handlers/...` and confirm green."
-    status: pending
+    status: completed
     dependencies:
       - st-051
   - id: st-053
     content: "Run `just lint-go` on changed files and `go test -cover ./orchestrator/...`; confirm 90% threshold."
-    status: pending
+    status: completed
     dependencies:
       - st-052
   - id: st-054
     content: "Validation gate -- do not proceed to Task 6 until all checks pass."
-    status: pending
+    status: completed
     dependencies:
       - st-053
   - id: st-055
     content: "Generate task completion report for Task 5. Mark completed steps `- [x]`."
-    status: pending
+    status: completed
     dependencies:
       - st-054
   - id: st-056
     content: "Do not start Task 6 until Task 5 closeout is done."
-    status: pending
+    status: completed
     dependencies:
       - st-055
   - id: st-057
     content: "Read `orchestrator/internal/handlers/nodes.go` lines 168-174 to confirm `worker_api_bearer_token` is stored in plaintext."
-    status: pending
+    status: completed
     dependencies:
       - st-056
   - id: st-058
     content: "Read `orchestrator/internal/models/models.go` for the node model and identify the column storing the token."
-    status: pending
+    status: completed
     dependencies:
       - st-057
   - id: st-059
     content: "Add a unit test: stored `worker_api_bearer_token` must not equal the plaintext input (assert encryption at rest)."
-    status: pending
+    status: completed
     dependencies:
       - st-058
   - id: st-060
     content: "Run `go test -v -run TestTokenEncryption ./orchestrator/internal/handlers/...` and confirm failure."
-    status: pending
+    status: completed
     dependencies:
       - st-059
   - id: st-061
     content: "Implement symmetric encryption (AES-GCM with a server-side key derived from `JWTSecret` or a dedicated encryption key) for `worker_api_bearer_token` before DB write; decrypt on read."
-    status: pending
+    status: completed
     dependencies:
       - st-060
   - id: st-062
     content: "Re-run `go test -v -run TestTokenEncryption ./orchestrator/internal/handlers/...` and confirm green."
-    status: pending
+    status: completed
     dependencies:
       - st-061
   - id: st-063
     content: "Add a migration or startup path to re-encrypt existing plaintext tokens on first run after upgrade."
-    status: pending
+    status: completed
     dependencies:
       - st-062
   - id: st-064
     content: "Run `just lint-go` on changed files and `go test -cover ./orchestrator/...`; confirm 90% threshold."
-    status: pending
+    status: completed
     dependencies:
       - st-063
   - id: st-065
     content: "Run `just e2e --tags worker,no_inference` to verify node registration and worker communication."
-    status: pending
+    status: completed
     dependencies:
       - st-064
   - id: st-066
     content: "Validation gate -- do not proceed to Task 7 until all checks pass."
-    status: pending
+    status: completed
     dependencies:
       - st-065
   - id: st-067
     content: "Generate task completion report for Task 6. Mark completed steps `- [x]`."
-    status: pending
+    status: completed
     dependencies:
       - st-066
   - id: st-068
     content: "Do not start Task 7 until Task 6 closeout is done."
-    status: pending
+    status: completed
     dependencies:
       - st-067
   - id: st-069
@@ -812,17 +812,17 @@ Retry loops in the orchestrator use `time.Sleep` which ignores context cancellat
 
 #### Discovery (Task 3) Steps
 
-- [ ] Search orchestrator for `time.Sleep` in retry loops: `openai_chat.go:702-704` and any other sites.
+- [x] Search orchestrator for `time.Sleep` in retry loops: `openai_chat.go:702-704` and any other sites.
 
 #### Red (Task 3)
 
-- [ ] Add a unit test: retry loop must respect context cancellation during backoff (cancelled context causes immediate return, not sleep).
-- [ ] Run `go test -v -run TestRetryContextCancel ./orchestrator/...` and confirm failure.
+- [x] Add a unit test: retry loop must respect context cancellation during backoff (cancelled context causes immediate return, not sleep).
+- [x] Run `go test -v -run TestRetryContextCancel ./orchestrator/...` and confirm failure.
 
 #### Green (Task 3)
 
-- [ ] Replace `time.Sleep(backoff)` with `select { case <-ctx.Done(): return ctx.Err() case <-time.After(backoff): }` in each retry loop.
-- [ ] Re-run `go test -v -run TestRetryContextCancel ./orchestrator/...` and confirm green.
+- [x] Replace `time.Sleep(backoff)` with `select { case <-ctx.Done(): return ctx.Err() case <-time.After(backoff): }` in each retry loop.
+- [x] Re-run `go test -v -run TestRetryContextCancel ./orchestrator/...` and confirm green.
 
 #### Refactor (Task 3)
 
@@ -830,14 +830,14 @@ No additional refactor needed.
 
 #### Testing (Task 3)
 
-- [ ] Run `just lint-go` on changed files and `go test -cover ./orchestrator/...`; confirm 90% threshold.
-- [ ] Validation gate -- do not proceed to Task 4 until all checks pass.
+- [x] Run `just lint-go` on changed files and `go test -cover ./orchestrator/...`; confirm 90% threshold.
+- [x] Validation gate -- do not proceed to Task 4 until all checks pass.
 
 #### Closeout (Task 3)
 
-- [ ] Generate task completion report for Task 3.
+- [x] Generate task completion report for Task 3.
   Mark completed steps `- [x]`.
-- [ ] Do not start Task 4 until Task 3 closeout is done.
+- [x] Do not start Task 4 until Task 3 closeout is done.
 
 ---
 
@@ -852,18 +852,18 @@ Synchronous network calls in `Update()` for `/thread new`, `/thread switch`, and
 
 #### Discovery (Task 4) Steps
 
-- [ ] Read `cynork/internal/tui/model.go` and identify all synchronous network I/O calls in `Update()`: `/thread new`, `/thread switch`, stream recovery `Health()`, and any other blocking calls.
-- [ ] Read `docs/tech_specs/cynork/cynork_tui.md` for the Bubble Tea `Cmd` pattern and async I/O requirements.
+- [x] Read `cynork/internal/tui/model.go` and identify all synchronous network I/O calls in `Update()`: `/thread new`, `/thread switch`, stream recovery `Health()`, and any other blocking calls.
+- [x] Read `docs/tech_specs/cynork/cynork_tui.md` for the Bubble Tea `Cmd` pattern and async I/O requirements.
 
 #### Red (Task 4)
 
-- [ ] Add a test: `Update()` must return in under 50ms for each identified network call (assert no blocking I/O).
-- [ ] Run `go test -v -run TestUpdateNoBlock ./cynork/internal/tui/...` and confirm failure (Update blocks on network I/O).
+- [x] Add a test: `Update()` must return in under 50ms for each identified network call (assert no blocking I/O).
+- [x] Run `go test -v -run TestUpdateNoBlock ./cynork/internal/tui/...` and confirm failure (Update blocks on network I/O).
 
 #### Green (Task 4)
 
-- [ ] Refactor each synchronous network call into a `tea.Cmd` that returns a message; handle the result in `Update()` via the returned message type.
-- [ ] Re-run `go test -v -run TestUpdateNoBlock ./cynork/internal/tui/...` and confirm green.
+- [x] Refactor each synchronous network call into a `tea.Cmd` that returns a message; handle the result in `Update()` via the returned message type.
+- [x] Re-run `go test -v -run TestUpdateNoBlock ./cynork/internal/tui/...` and confirm green.
 
 #### Refactor (Task 4)
 
@@ -871,15 +871,15 @@ No additional refactor beyond the async conversion.
 
 #### Testing (Task 4)
 
-- [ ] Run `just lint-go` on changed files and `go test -race -cover ./cynork/...`; confirm 90% threshold.
-- [ ] Run `just e2e --tags tui_pty,no_inference` to verify TUI responsiveness.
-- [ ] Validation gate -- do not proceed to Task 5 until all checks pass.
+- [x] Run `just lint-go` on changed files and `go test -race -cover ./cynork/...`; confirm 90% threshold.
+- [x] Run `just e2e --tags tui_pty,no_inference` to verify TUI responsiveness.
+- [x] Validation gate -- do not proceed to Task 5 until all checks pass.
 
 #### Closeout (Task 4)
 
-- [ ] Generate task completion report for Task 4.
+- [x] Generate task completion report for Task 4.
   Mark completed steps `- [x]`.
-- [ ] Do not start Task 5 until Task 4 closeout is done.
+- [x] Do not start Task 5 until Task 4 closeout is done.
 
 ---
 
@@ -894,18 +894,18 @@ Workflow handlers in the orchestrator lack authentication middleware, allowing u
 
 #### Discovery (Task 5) Steps
 
-- [ ] Read `orchestrator/internal/handlers/workflow.go` lines 129-252 and identify which workflow handlers lack auth checks.
-- [ ] Read `orchestrator/internal/middleware/auth.go` to understand the existing auth middleware and how to apply it to workflow routes.
+- [x] Read `orchestrator/internal/handlers/workflow.go` lines 129-252 and identify which workflow handlers lack auth checks.
+- [x] Read `orchestrator/internal/middleware/auth.go` to understand the existing auth middleware and how to apply it to workflow routes.
 
 #### Red (Task 5)
 
-- [ ] Add unit tests: unauthenticated requests to each workflow handler endpoint must return 401.
-- [ ] Run `go test -v -run TestWorkflowAuth ./orchestrator/internal/handlers/...` and confirm failures.
+- [x] Add unit tests: unauthenticated requests to each workflow handler endpoint must return 401.
+- [x] Run `go test -v -run TestWorkflowAuth ./orchestrator/internal/handlers/...` and confirm failures.
 
 #### Green (Task 5)
 
-- [ ] Apply auth middleware to all workflow handler routes that currently lack it.
-- [ ] Re-run `go test -v -run TestWorkflowAuth ./orchestrator/internal/handlers/...` and confirm green.
+- [x] Apply auth middleware to all workflow handler routes that currently lack it.
+- [x] Re-run `go test -v -run TestWorkflowAuth ./orchestrator/internal/handlers/...` and confirm green.
 
 #### Refactor (Task 5)
 
@@ -913,14 +913,14 @@ No additional refactor needed.
 
 #### Testing (Task 5)
 
-- [ ] Run `just lint-go` on changed files and `go test -cover ./orchestrator/...`; confirm 90% threshold.
-- [ ] Validation gate -- do not proceed to Task 6 until all checks pass.
+- [x] Run `just lint-go` on changed files and `go test -cover ./orchestrator/...`; confirm 90% threshold.
+- [x] Validation gate -- do not proceed to Task 6 until all checks pass.
 
 #### Closeout (Task 5)
 
-- [ ] Generate task completion report for Task 5.
+- [x] Generate task completion report for Task 5.
   Mark completed steps `- [x]`.
-- [ ] Do not start Task 6 until Task 5 closeout is done.
+- [x] Do not start Task 6 until Task 5 closeout is done.
 
 ---
 
@@ -935,34 +935,34 @@ The `worker_api_bearer_token` is stored in plaintext in the orchestrator databas
 
 #### Discovery (Task 6) Steps
 
-- [ ] Read `orchestrator/internal/handlers/nodes.go` lines 168-174 to confirm `worker_api_bearer_token` is stored in plaintext.
-- [ ] Read `orchestrator/internal/models/models.go` for the node model and identify the column storing the token.
+- [x] Read `orchestrator/internal/handlers/nodes.go` lines 168-174 to confirm `worker_api_bearer_token` is stored in plaintext.
+- [x] Read `orchestrator/internal/models/models.go` for the node model and identify the column storing the token.
 
 #### Red (Task 6)
 
-- [ ] Add a unit test: stored `worker_api_bearer_token` must not equal the plaintext input (assert encryption at rest).
-- [ ] Run `go test -v -run TestTokenEncryption ./orchestrator/internal/handlers/...` and confirm failure.
+- [x] Add a unit test: stored `worker_api_bearer_token` must not equal the plaintext input (assert encryption at rest).
+- [x] Run `go test -v -run TestTokenEncryption ./orchestrator/internal/handlers/...` and confirm failure.
 
 #### Green (Task 6)
 
-- [ ] Implement symmetric encryption (AES-GCM with a server-side key derived from `JWTSecret` or a dedicated encryption key) for `worker_api_bearer_token` before DB write; decrypt on read.
-- [ ] Re-run `go test -v -run TestTokenEncryption ./orchestrator/internal/handlers/...` and confirm green.
+- [x] Implement symmetric encryption (AES-GCM with a server-side key derived from `JWTSecret` or a dedicated encryption key) for `worker_api_bearer_token` before DB write; decrypt on read.
+- [x] Re-run `go test -v -run TestTokenEncryption ./orchestrator/internal/handlers/...` and confirm green.
 
 #### Refactor (Task 6)
 
-- [ ] Add a migration or startup path to re-encrypt existing plaintext tokens on first run after upgrade.
+- [x] Add a migration or startup path to re-encrypt existing plaintext tokens on first run after upgrade.
 
 #### Testing (Task 6)
 
-- [ ] Run `just lint-go` on changed files and `go test -cover ./orchestrator/...`; confirm 90% threshold.
-- [ ] Run `just e2e --tags worker,no_inference` to verify node registration and worker communication.
-- [ ] Validation gate -- do not proceed to Task 7 until all checks pass.
+- [x] Run `just lint-go` on changed files and `go test -cover ./orchestrator/...`; confirm 90% threshold.
+- [x] Run `just e2e --tags worker,no_inference` to verify node registration and worker communication.
+- [x] Validation gate -- do not proceed to Task 7 until all checks pass.
 
 #### Closeout (Task 6)
 
-- [ ] Generate task completion report for Task 6.
+- [x] Generate task completion report for Task 6.
   Mark completed steps `- [x]`.
-- [ ] Do not start Task 7 until Task 6 closeout is done.
+- [x] Do not start Task 7 until Task 6 closeout is done.
 
 ---
 

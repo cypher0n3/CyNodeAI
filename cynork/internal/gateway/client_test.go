@@ -649,7 +649,10 @@ func TestClient_PutBytes_NoContent(t *testing.T) {
 
 func TestClient_PutBytes_Error(t *testing.T) {
 	expectHTTPError(t, jsonHandler(http.StatusBadRequest, problem.Details{Detail: "bad", Status: 400}),
-		func(c *Client) error { _, err := c.PutBytes(context.Background(), pathV1Skill, []byte("{}")); return err })
+		func(c *Client) error {
+			_, err := c.PutBytes(context.Background(), pathV1Skill, []byte("{}"))
+			return err
+		})
 }
 
 //nolint:dupl // PutBytes/DeleteBytes success handler pattern

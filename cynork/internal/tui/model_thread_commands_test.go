@@ -184,24 +184,26 @@ func TestModel_ThreadCommand_New(t *testing.T) {
 	m.Input = testThreadNewInput
 	m.Scrollback = nil
 	mod, cmd := m.handleKey(tea.KeyMsg{Type: tea.KeyEnter})
-	if cmd != nil {
-		t.Errorf("handleKey(/thread new) cmd = %v", cmd)
+	if cmd == nil {
+		t.Fatal("handleKey(/thread new) expected async cmd")
 	}
-	if mod != m {
-		t.Error("handleKey changed model")
+	updated, cmd2 := mod.Update(cmd())
+	if cmd2 != nil {
+		t.Fatalf("unexpected cmd after thread new: %v", cmd2)
 	}
+	out := updated.(*Model)
 	if session.CurrentThreadID != "new-tid" {
 		t.Errorf("CurrentThreadID = %q", session.CurrentThreadID)
 	}
 	found := false
-	for _, s := range m.Scrollback {
+	for _, s := range out.Scrollback {
 		if strings.Contains(s, "New thread:") && strings.Contains(s, "new-tid") {
 			found = true
 			break
 		}
 	}
 	if !found {
-		t.Errorf("Scrollback missing new thread line: %v", m.Scrollback)
+		t.Errorf("Scrollback missing new thread line: %v", out.Scrollback)
 	}
 }
 
@@ -373,22 +375,27 @@ func TestModel_ThreadCommand_Switch(t *testing.T) {
 	m := NewModel(session)
 	m.Input = "/thread switch thread-123"
 	m.Scrollback = nil
-	_, cmd := m.handleKey(tea.KeyMsg{Type: tea.KeyEnter})
-	if cmd != nil {
-		t.Errorf("handleKey(/thread switch) cmd = %v", cmd)
+	mod, cmd := m.handleKey(tea.KeyMsg{Type: tea.KeyEnter})
+	if cmd == nil {
+		t.Fatal("handleKey(/thread switch) expected async cmd")
 	}
+	updated, cmd2 := mod.Update(cmd())
+	if cmd2 != nil {
+		t.Fatalf("unexpected cmd after thread switch: %v", cmd2)
+	}
+	out := updated.(*Model)
 	if session.CurrentThreadID != "thread-123" {
 		t.Errorf("CurrentThreadID = %q", session.CurrentThreadID)
 	}
 	found := false
-	for _, s := range m.Scrollback {
+	for _, s := range out.Scrollback {
 		if strings.Contains(s, "Switched to thread") {
 			found = true
 			break
 		}
 	}
 	if !found {
-		t.Errorf("Scrollback = %v", m.Scrollback)
+		t.Errorf("Scrollback = %v", out.Scrollback)
 	}
 }
 
@@ -403,19 +410,24 @@ func TestModel_ThreadCommand_SwitchListError(t *testing.T) {
 	m := NewModel(session)
 	m.Input = "/thread switch 1"
 	m.Scrollback = nil
-	_, cmd := m.handleKey(tea.KeyMsg{Type: tea.KeyEnter})
-	if cmd != nil {
-		t.Errorf("handleKey(/thread switch) cmd = %v", cmd)
+	mod, cmd := m.handleKey(tea.KeyMsg{Type: tea.KeyEnter})
+	if cmd == nil {
+		t.Fatal("handleKey(/thread switch) expected async cmd")
 	}
+	updated, cmd2 := mod.Update(cmd())
+	if cmd2 != nil {
+		t.Fatalf("unexpected cmd: %v", cmd2)
+	}
+	out := updated.(*Model)
 	found := false
-	for _, s := range m.Scrollback {
+	for _, s := range out.Scrollback {
 		if strings.Contains(s, "Error:") {
 			found = true
 			break
 		}
 	}
 	if !found {
-		t.Errorf("expected list error in scrollback: %v", m.Scrollback)
+		t.Errorf("expected list error in scrollback: %v", out.Scrollback)
 	}
 }
 

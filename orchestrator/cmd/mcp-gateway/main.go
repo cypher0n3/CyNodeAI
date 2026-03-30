@@ -53,8 +53,45 @@ var testDatabaseOpen func(ctx context.Context, dsn string) (database.Store, erro
 // testShutdownHook, when set by tests, is called instead of srv.Shutdown.
 var testShutdownHook func(*http.Server, context.Context) error
 
+// testForceOpenGatewayStoreApplyError, when true, makes openGatewayStore fail after RunSchema (covers Apply error path; tests only).
+var testForceOpenGatewayStoreApplyError bool
+
+// testForceOpenGatewayStoreRunSchemaError, when true, makes openGatewayStore fail before RunSchema (tests only).
+var testForceOpenGatewayStoreRunSchemaError bool
+
+// testForceOpenGatewayStoreOpenError, when true, makes openGatewayStore fail before database.Open (tests only).
+var testForceOpenGatewayStoreOpenError bool
+
+func openGatewayPostgres(ctx context.Context, logger *slog.Logger, cfg *config.OrchestratorConfig, dsn string) (database.Store, func(), error) {
+	if testForceOpenGatewayStoreOpenError {
+		return nil, nil, errors.New("test: database open failed")
+	}
+	db, err := database.Open(ctx, dsn)
+	if err != nil {
+		return nil, nil, err
+	}
+	if testForceOpenGatewayStoreRunSchemaError {
+		_ = db.Close()
+		return nil, nil, errors.New("test: run schema failed")
+	}
+	if err := db.RunSchema(ctx, logger); err != nil {
+		_ = db.Close()
+		return nil, nil, err
+	}
+	if testForceOpenGatewayStoreApplyError {
+		_ = db.Close()
+		return nil, nil, errors.New("test: apply worker bearer failed")
+	}
+	if err := database.ApplyWorkerBearerEncryptionAtStartup(ctx, db, cfg.JWTSecret); err != nil {
+		_ = db.Close()
+		return nil, nil, err
+	}
+	logger.Info("deprecated standalone MCP gateway: database connected")
+	return db, func() { _ = db.Close() }, nil
+}
+
 // openGatewayStore resolves the database handle for the standalone gateway (tests may inject mocks).
-func openGatewayStore(ctx context.Context, logger *slog.Logger) (store database.Store, closeFn func(), err error) {
+func openGatewayStore(ctx context.Context, logger *slog.Logger, cfg *config.OrchestratorConfig) (store database.Store, closeFn func(), err error) {
 	switch {
 	case testStore != nil:
 		return testStore, nil, nil
@@ -72,16 +109,7 @@ func openGatewayStore(ctx context.Context, logger *slog.Logger) (store database.
 			logger.Warn("DATABASE_URL not set; POST /v1/mcp/tools/call returns 503 until a database is configured")
 			return nil, nil, nil
 		}
-		db, err := database.Open(ctx, dsn)
-		if err != nil {
-			return nil, nil, err
-		}
-		if err := db.RunSchema(ctx, logger); err != nil {
-			_ = db.Close()
-			return nil, nil, err
-		}
-		logger.Info("deprecated standalone MCP gateway: database connected")
-		return db, func() { _ = db.Close() }, nil
+		return openGatewayPostgres(ctx, logger, cfg, dsn)
 	}
 }
 
@@ -92,7 +120,7 @@ func run(ctx context.Context, logger *slog.Logger) error {
 	if err := config.ValidateSecrets(cfg); err != nil {
 		return err
 	}
-	store, closeDB, err := openGatewayStore(ctx, logger)
+	store, closeDB, err := openGatewayStore(ctx, logger, cfg)
 	if err != nil {
 		return err
 	}

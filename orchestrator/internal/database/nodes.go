@@ -3,6 +3,7 @@ package database
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
 
 	"gorm.io/gorm"
@@ -10,6 +11,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/cypher0n3/cynodeai/go_shared_libs/gormmodel"
+	"github.com/cypher0n3/cynodeai/orchestrator/internal/fieldcrypt"
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/models"
 )
 
@@ -25,17 +27,25 @@ func (db *DB) CreateNode(ctx context.Context, nodeSlug string) (*models.Node, er
 	if err := db.createRecord(ctx, record, "create node"); err != nil {
 		return nil, err
 	}
-	return record.ToNode(), nil
+	return db.nodeRecordToDomain(record)
 }
 
 // GetNodeBySlug retrieves a node by slug.
 func (db *DB) GetNodeBySlug(ctx context.Context, nodeSlug string) (*models.Node, error) {
-	return getDomainWhere(db, ctx, "node_slug", nodeSlug, "get node by slug", (*NodeRecord).ToNode)
+	record, err := getWhere[NodeRecord](db, ctx, "node_slug", nodeSlug, "get node by slug")
+	if err != nil {
+		return nil, err
+	}
+	return db.nodeRecordToDomain(record)
 }
 
 // GetNodeByID retrieves a node by ID.
 func (db *DB) GetNodeByID(ctx context.Context, id uuid.UUID) (*models.Node, error) {
-	return getDomainByID(db, ctx, id, "get node by id", (*NodeRecord).ToNode)
+	record, err := getByID[NodeRecord](db, ctx, id, "get node by id")
+	if err != nil {
+		return nil, err
+	}
+	return db.nodeRecordToDomain(record)
 }
 
 // UpdateNodeStatus updates a node's status.
@@ -69,7 +79,11 @@ func (db *DB) ListActiveNodes(ctx context.Context) ([]*models.Node, error) {
 	}
 	nodes := make([]*models.Node, len(records))
 	for i, r := range records {
-		nodes[i] = r.ToNode()
+		n, err := db.nodeRecordToDomain(r)
+		if err != nil {
+			return nil, err
+		}
+		nodes[i] = n
 	}
 	return nodes, nil
 }
@@ -94,7 +108,11 @@ func (db *DB) ListNodes(ctx context.Context, limit, offset int) ([]*models.Node,
 	}
 	nodes := make([]*models.Node, len(records))
 	for i, r := range records {
-		nodes[i] = r.ToNode()
+		n, err := db.nodeRecordToDomain(r)
+		if err != nil {
+			return nil, err
+		}
+		nodes[i] = n
 	}
 	return nodes, nil
 }
@@ -113,7 +131,11 @@ func (db *DB) ListDispatchableNodes(ctx context.Context) ([]*models.Node, error)
 	}
 	nodes := make([]*models.Node, len(records))
 	for i, r := range records {
-		nodes[i] = r.ToNode()
+		n, err := db.nodeRecordToDomain(r)
+		if err != nil {
+			return nil, err
+		}
+		nodes[i] = n
 	}
 	return nodes, nil
 }
@@ -168,9 +190,71 @@ func (db *DB) UpdateNodeConfigAck(ctx context.Context, nodeID uuid.UUID, configV
 
 // UpdateNodeWorkerAPIConfig stores the Worker API target URL and bearer token delivered to the node (for dispatch).
 func (db *DB) UpdateNodeWorkerAPIConfig(ctx context.Context, nodeID uuid.UUID, targetURL, bearerToken string) error {
+	stored := bearerToken
+	if len(db.workerBearerKey) > 0 {
+		enc, err := fieldcrypt.EncryptWorkerBearerToken(bearerToken, db.workerBearerKey)
+		if err != nil {
+			return wrapErr(fmt.Errorf("encrypt worker bearer token: %w", err), "update node worker api config")
+		}
+		stored = enc
+	}
 	return db.updateWhere(ctx, &NodeRecord{}, "id", nodeID,
 		map[string]interface{}{
 			"worker_api_target_url":   targetURL,
-			"worker_api_bearer_token": bearerToken,
+			"worker_api_bearer_token": stored,
 		}, "update node worker api config")
+}
+
+// SetWorkerBearerTokenKey sets the AES key for worker_api_bearer_token at-rest encryption (derived from JWT secret in main).
+func (db *DB) SetWorkerBearerTokenKey(key []byte) {
+	db.workerBearerKey = key
+}
+
+func (db *DB) nodeRecordToDomain(r *NodeRecord) (*models.Node, error) {
+	n := r.ToNode()
+	if n.WorkerAPIBearerToken == nil || len(db.workerBearerKey) == 0 {
+		return n, nil
+	}
+	s := *n.WorkerAPIBearerToken
+	if !fieldcrypt.IsEncryptedWorkerBearerToken(s) {
+		return n, nil
+	}
+	pt, err := fieldcrypt.DecryptWorkerBearerToken(s, db.workerBearerKey)
+	if err != nil {
+		return nil, fmt.Errorf("decrypt worker_api_bearer_token: %w", err)
+	}
+	n.WorkerAPIBearerToken = &pt
+	return n, nil
+}
+
+// MigratePlaintextWorkerBearerTokens re-encrypts legacy plaintext tokens to enc1: form (idempotent).
+func (db *DB) MigratePlaintextWorkerBearerTokens(ctx context.Context) error {
+	if len(db.workerBearerKey) == 0 {
+		return nil
+	}
+	var records []*NodeRecord
+	err := db.db.WithContext(ctx).
+		Where("worker_api_bearer_token IS NOT NULL AND worker_api_bearer_token != ''").
+		Find(&records).Error
+	if err != nil {
+		return wrapErr(err, "migrate worker bearer tokens list")
+	}
+	for _, r := range records {
+		if r.WorkerAPIBearerToken == nil {
+			continue
+		}
+		s := *r.WorkerAPIBearerToken
+		if fieldcrypt.IsEncryptedWorkerBearerToken(s) {
+			continue
+		}
+		enc, err := fieldcrypt.EncryptWorkerBearerToken(s, db.workerBearerKey)
+		if err != nil {
+			return wrapErr(fmt.Errorf("encrypt node %s: %w", r.ID, err), "migrate worker bearer tokens")
+		}
+		if err := db.updateWhere(ctx, &NodeRecord{}, "id", r.ID,
+			map[string]interface{}{"worker_api_bearer_token": enc}, "migrate worker bearer token"); err != nil {
+			return err
+		}
+	}
+	return nil
 }

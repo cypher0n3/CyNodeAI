@@ -54,6 +54,9 @@ const secretRedacted = "SECRET_REDACTED"
 const completionFailedMsg = "Completion failed"
 const inferenceFailedCode = "orchestrator_inference_failed"
 
+// statusClientClosedRequest is HTTP 499 (client closed request), used when the request context is canceled during completion.
+const statusClientClosedRequest = 499
+
 const chatRoleUser = "user"
 const chatRoleAssistant = "assistant"
 
@@ -700,7 +703,11 @@ func (h *OpenAIChatHandler) runCompletionWithRetry(ctx context.Context, effectiv
 			return "", http.StatusBadGateway, inferenceFailedCode, completionFailedMsg
 		}
 		backoff := chatCompletionBackoffBase * time.Duration(1<<uint(attempt))
-		time.Sleep(backoff)
+		select {
+		case <-ctx.Done():
+			return "", statusClientClosedRequest, "request_canceled", ctx.Err().Error()
+		case <-time.After(backoff):
+		}
 	}
 	h.logger.Error(failLogMsg+" after retries", "error", err)
 	return "", http.StatusBadGateway, inferenceFailedCode, completionFailedMsg

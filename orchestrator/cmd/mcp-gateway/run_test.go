@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cypher0n3/cynodeai/orchestrator/internal/config"
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/database"
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/testutil"
 )
@@ -23,6 +24,72 @@ func TestGetEnv(t *testing.T) {
 	defer func() { _ = os.Unsetenv("TEST_MCP_ENV") }()
 	if getEnv("TEST_MCP_ENV", "def") != "val" {
 		t.Error("from env")
+	}
+}
+
+// TestOpenGatewayStore_ErrorPaths covers database.Open, RunSchema, and Apply failure branches (test hooks).
+func TestOpenGatewayStore_ErrorPaths(t *testing.T) {
+	if os.Getenv("DATABASE_URL") == "" {
+		t.Skip("DATABASE_URL not set")
+	}
+	tests := []struct {
+		name string
+		arm  func(bool)
+	}{
+		{"open", func(v bool) { testForceOpenGatewayStoreOpenError = v }},
+		{"run_schema", func(v bool) { testForceOpenGatewayStoreRunSchemaError = v }},
+		{"apply", func(v bool) { testForceOpenGatewayStoreApplyError = v }},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			tt.arm(true)
+			defer tt.arm(false)
+			_, _, err := openGatewayStore(context.Background(), slog.Default(), config.LoadOrchestratorConfig())
+			if err == nil {
+				t.Fatal("expected error from failure path")
+			}
+		})
+	}
+}
+
+// TestOpenGatewayStore_EmptyDSN covers the warn branch when DATABASE_URL is unset (no test hooks).
+func TestOpenGatewayStore_EmptyDSN(t *testing.T) {
+	oldDSN := os.Getenv("DATABASE_URL")
+	_ = os.Unsetenv("DATABASE_URL")
+	defer func() {
+		if oldDSN != "" {
+			_ = os.Setenv("DATABASE_URL", oldDSN)
+		} else {
+			_ = os.Unsetenv("DATABASE_URL")
+		}
+	}()
+	cfg := config.LoadOrchestratorConfig()
+	store, closeFn, err := openGatewayStore(context.Background(), slog.Default(), cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if store != nil || closeFn != nil {
+		t.Fatalf("expected nil store and nil closeFn, got store=%v closeFn!=nil %v", store, closeFn != nil)
+	}
+}
+
+func TestRun_WithTestStore_NoDatabaseURL(t *testing.T) {
+	oldDSN := os.Getenv("DATABASE_URL")
+	_ = os.Unsetenv("DATABASE_URL")
+	defer func() {
+		if oldDSN != "" {
+			_ = os.Setenv("DATABASE_URL", oldDSN)
+		} else {
+			_ = os.Unsetenv("DATABASE_URL")
+		}
+	}()
+	testStore = testutil.NewMockDB()
+	defer func() { testStore = nil }()
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	err := run(ctx, slog.Default())
+	if err != nil {
+		t.Errorf("run: %v", err)
 	}
 }
 
@@ -287,6 +354,36 @@ func TestRun_WithTestStore(t *testing.T) {
 	cancel()
 	if err := <-done; err != nil && !errors.Is(err, context.Canceled) {
 		t.Errorf("run: %v", err)
+	}
+}
+
+// TestRun_ListenAndServeInvalidPort covers the serverErr branch when ListenAndServe fails (invalid port).
+func TestRun_ListenAndServeInvalidPort(t *testing.T) {
+	oldAddr := os.Getenv("LISTEN_ADDR")
+	_ = os.Setenv("LISTEN_ADDR", ":99999")
+	defer func() {
+		if oldAddr != "" {
+			_ = os.Setenv("LISTEN_ADDR", oldAddr)
+		} else {
+			_ = os.Unsetenv("LISTEN_ADDR")
+		}
+	}()
+	oldDSN := os.Getenv("DATABASE_URL")
+	_ = os.Unsetenv("DATABASE_URL")
+	defer func() {
+		if oldDSN != "" {
+			_ = os.Setenv("DATABASE_URL", oldDSN)
+		} else {
+			_ = os.Unsetenv("DATABASE_URL")
+		}
+	}()
+	testStore = testutil.NewMockDB()
+	defer func() { testStore = nil }()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	err := run(ctx, slog.Default())
+	if err == nil {
+		t.Error("expected error from invalid listen address")
 	}
 }
 

@@ -291,12 +291,10 @@ func runMain(ctx context.Context) int {
 	}
 	cfg := nodeagent.LoadConfig()
 	opts := &nodeagent.RunOptions{
-		StartWorkerAPI: func(tok string) error { return startEmbeddedWorkerAPI(runCtx, tok, stateDir, telemetryStore, logger) },
-		StartOllama:    startOllama,
-		StartManagedServices: func(ctx context.Context, svcs []nodepayloads.ConfigManagedService) error {
-			return startManagedServices(ctx, svcs)
-		},
-		PullModels: pullModels,
+		StartWorkerAPI:       func(tok string) error { return startEmbeddedWorkerAPI(runCtx, tok, stateDir, telemetryStore, logger) },
+		StartOllama:          startOllama,
+		StartManagedServices: startManagedServices,
+		PullModels:           pullModels,
 	}
 	if getEnv("NODE_MANAGER_SKIP_SERVICES", "") != "" {
 		opts = nil
@@ -546,6 +544,33 @@ func sanitizeContainerName(serviceID string) string {
 	}, strings.TrimSpace(serviceID))
 }
 
+// pmaPollExitOnDone returns exit=true when polling should stop (deadline: success nil err; cancel: err).
+func pmaPollExitOnDone(loopCtx context.Context) (exit bool, err error) {
+	select {
+	case <-loopCtx.Done():
+		if errors.Is(loopCtx.Err(), context.DeadlineExceeded) {
+			// Legacy behavior: polling window ends without treating timeout as startup failure.
+			return true, nil
+		}
+		return true, loopCtx.Err()
+	default:
+		return false, nil
+	}
+}
+
+// pmaBackoffOrExit waits before the next poll or stops when loopCtx ends (deadline: success).
+func pmaBackoffOrExit(loopCtx context.Context) (exit bool, err error) {
+	select {
+	case <-loopCtx.Done():
+		if errors.Is(loopCtx.Err(), context.DeadlineExceeded) {
+			return true, nil
+		}
+		return true, loopCtx.Err()
+	case <-time.After(500 * time.Millisecond):
+		return false, nil
+	}
+}
+
 // waitForPMAReadyUDS polls GET /healthz over the PMA Unix domain socket until 200 or timeout.
 // socketPath is the host path to the PMA service.sock (e.g. stateDir/run/managed_agent_proxy/<serviceID>/service.sock).
 // REQ-WORKER-0174 / REQ-WORKER-0270: PMA uses UDS only; no TCP health check.
@@ -564,16 +589,10 @@ func waitForPMAReadyUDS(ctx context.Context, socketPath string, timeout time.Dur
 	}
 	client := &http.Client{Transport: transport, Timeout: 2 * time.Second}
 	for {
-		select {
-		case <-loopCtx.Done():
-			if errors.Is(loopCtx.Err(), context.DeadlineExceeded) {
-				// Legacy behavior: polling window ends without treating timeout as startup failure.
-				return nil
-			}
-			return loopCtx.Err()
-		default:
+		if exit, err := pmaPollExitOnDone(loopCtx); exit {
+			return err
 		}
-		req, err := http.NewRequestWithContext(loopCtx, http.MethodGet, "http://unix/healthz", nil)
+		req, err := http.NewRequestWithContext(loopCtx, http.MethodGet, "http://unix/healthz", http.NoBody)
 		if err != nil {
 			return err
 		}
@@ -584,13 +603,8 @@ func waitForPMAReadyUDS(ctx context.Context, socketPath string, timeout time.Dur
 				return nil
 			}
 		}
-		select {
-		case <-loopCtx.Done():
-			if errors.Is(loopCtx.Err(), context.DeadlineExceeded) {
-				return nil
-			}
-			return loopCtx.Err()
-		case <-time.After(500 * time.Millisecond):
+		if exit, err := pmaBackoffOrExit(loopCtx); exit {
+			return err
 		}
 	}
 }

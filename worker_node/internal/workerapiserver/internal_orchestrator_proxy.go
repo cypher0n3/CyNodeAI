@@ -17,7 +17,7 @@ import (
 )
 
 const (
-	toolsCallPath                  = "/v1/mcp/tools/call"
+	toolsCallPath                   = "/v1/mcp/tools/call"
 	internalOrchestratorHTTPTimeout = 300 * time.Second
 )
 

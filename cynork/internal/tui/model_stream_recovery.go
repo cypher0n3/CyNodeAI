@@ -96,7 +96,30 @@ func (m *Model) applyStreamRecoveryTick(msg streamRecoveryTickMsg) (tea.Model, t
 		m.streamRecoveryAttempt = 0
 		return m, nil
 	}
-	if err := m.Session.Client.Health(context.Background()); err != nil {
+	next := m.streamRecoveryHealthCheckCmd(msg.attempt, msg.gen)
+	return m, next
+}
+
+func (m *Model) streamRecoveryHealthCheckCmd(attempt, gen int) tea.Cmd {
+	return func() tea.Msg {
+		if m.Session == nil || m.Session.Client == nil {
+			return streamRecoveryHealthResultMsg{gen: gen, attempt: attempt, noClient: true}
+		}
+		err := m.Session.Client.Health(context.Background())
+		return streamRecoveryHealthResultMsg{err: err, gen: gen, attempt: attempt}
+	}
+}
+
+func (m *Model) applyStreamRecoveryHealthResult(msg streamRecoveryHealthResultMsg) (tea.Model, tea.Cmd) {
+	if msg.gen != m.streamRecoveryGen {
+		return m, nil
+	}
+	if msg.noClient || m.Session == nil || m.Session.Client == nil {
+		m.connectionRecoveryState = ConnectionStateDisconnected
+		m.streamRecoveryAttempt = 0
+		return m, nil
+	}
+	if msg.err != nil {
 		if msg.attempt >= streamRecoveryMaxAttempts {
 			m.connectionRecoveryState = ConnectionStateDisconnected
 			m.streamRecoveryAttempt = 0

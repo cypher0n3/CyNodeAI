@@ -54,8 +54,16 @@ func TestApplyStreamRecoveryTick_HealthOKRestores(t *testing.T) {
 	m.streamRecoveryGen = 7
 	m.connectionRecoveryState = ConnectionStateReconnecting
 	_, cmd := m.applyStreamRecoveryTick(streamRecoveryTickMsg{attempt: 1, gen: 7})
-	if cmd != nil {
-		t.Errorf("expected nil cmd on success, got %v", cmd)
+	if cmd == nil {
+		t.Fatal("expected health check cmd")
+	}
+	hmsg, ok := cmd().(streamRecoveryHealthResultMsg)
+	if !ok {
+		t.Fatalf("cmd() = %T", cmd())
+	}
+	_, cmd2 := m.applyStreamRecoveryHealthResult(hmsg)
+	if cmd2 != nil {
+		t.Errorf("expected nil cmd on success, got %v", cmd2)
 	}
 	if m.connectionRecoveryState != ConnectionStateUnknown {
 		t.Errorf("state = %q", m.connectionRecoveryState)
@@ -130,7 +138,12 @@ func TestApplyStreamRecoveryTick_RetrySchedulesNextTick(t *testing.T) {
 	m.streamRecoveryGen = 2
 	_, cmd := m.applyStreamRecoveryTick(streamRecoveryTickMsg{attempt: 1, gen: 2})
 	if cmd == nil {
-		t.Fatal("expected retry cmd")
+		t.Fatal("expected health cmd")
+	}
+	hmsg := cmd().(streamRecoveryHealthResultMsg)
+	_, cmd2 := m.applyStreamRecoveryHealthResult(hmsg)
+	if cmd2 == nil {
+		t.Fatal("expected retry tick cmd")
 	}
 	if m.streamRecoveryAttempt != 2 {
 		t.Errorf("attempt = %d", m.streamRecoveryAttempt)
@@ -145,7 +158,12 @@ func TestApplyStreamRecoveryTick_MaxAttemptsGivesUp(t *testing.T) {
 	m := NewModel(&chat.Session{Client: gateway.NewClient(srv.URL)})
 	m.streamRecoveryGen = 3
 	_, cmd := m.applyStreamRecoveryTick(streamRecoveryTickMsg{attempt: streamRecoveryMaxAttempts, gen: 3})
-	if cmd != nil {
+	if cmd == nil {
+		t.Fatal("expected health cmd")
+	}
+	hmsg := cmd().(streamRecoveryHealthResultMsg)
+	_, cmd2 := m.applyStreamRecoveryHealthResult(hmsg)
+	if cmd2 != nil {
 		t.Error("expected nil after max attempts")
 	}
 	if m.connectionRecoveryState != ConnectionStateDisconnected {
@@ -163,6 +181,37 @@ func TestApplyStreamRecoveryTick_NoSessionClientDisconnects(t *testing.T) {
 	if m.connectionRecoveryState != ConnectionStateDisconnected {
 		t.Errorf("state = %v", m.connectionRecoveryState)
 	}
+}
+
+func TestApplyStreamRecoveryHealthResult_NoClientDisconnects(t *testing.T) {
+	m := NewModel(&chat.Session{Client: gateway.NewClient("http://localhost")})
+	m.streamRecoveryGen = 5
+	_, cmd := m.applyStreamRecoveryHealthResult(streamRecoveryHealthResultMsg{gen: 5, noClient: true})
+	if cmd != nil {
+		t.Errorf("expected nil cmd, got %v", cmd)
+	}
+	if m.connectionRecoveryState != ConnectionStateDisconnected {
+		t.Errorf("state = %v", m.connectionRecoveryState)
+	}
+}
+
+func TestApplyStreamRecoveryHealthResult_StaleGenIgnored(t *testing.T) {
+	m := NewModel(&chat.Session{Client: gateway.NewClient("http://localhost")})
+	m.streamRecoveryGen = 9
+	_, cmd := m.applyStreamRecoveryHealthResult(streamRecoveryHealthResultMsg{gen: 8, err: fmt.Errorf("x")})
+	if cmd != nil {
+		t.Errorf("expected nil for stale gen")
+	}
+}
+
+func TestUpdate_DispatchesStreamRecoveryHealthResult(t *testing.T) {
+	m := NewModel(&chat.Session{Client: gateway.NewClient("http://localhost")})
+	m.streamRecoveryGen = 2
+	upd, cmd := m.Update(streamRecoveryHealthResultMsg{gen: 2, noClient: true})
+	if cmd != nil {
+		t.Errorf("cmd = %v", cmd)
+	}
+	_ = upd.(*Model)
 }
 
 func TestThinkingPart_HiddenByDefaultExpandPreservesText(t *testing.T) {

@@ -1,15 +1,17 @@
-# Task 2 completion report — context propagation
+# Task 2 Completion Report - Context Propagation
 
 ## Summary
 
-Propagated `context.Context` through cynork gateway HTTP helpers and non-streaming APIs, worker node-manager pulls and PMA UDS health polling, and SBA `applyUnifiedDiffStep` (`exec.CommandContext`). Added `TestContextCancel_*` tests and `cmdContext` helper for Cobra handlers invoked with `nil *cobra.Command` in unit tests. Preserved legacy PMA wait behavior: when the poll window expires without `/healthz` 200, `waitForPMAReadyUDS` returns `nil` (same as pre-change fire-and-forget); parent cancel still surfaces `context.Canceled`.
+Propagated `context.Context` through cynork gateway HTTP helpers and non-streaming APIs, worker node-manager pulls and PMA UDS health polling, and SBA `applyUnifiedDiffStep` (`exec.CommandContext`).
+Added `TestContextCancel_*` tests and `cmdContext` helper for Cobra handlers invoked with `nil *cobra.Command` in unit tests.
+Preserved legacy PMA wait behavior: when the poll window expires without `/healthz` 200, `waitForPMAReadyUDS` returns `nil` (same as pre-change fire-and-forget); parent cancel still surfaces `context.Canceled`.
 
-## Worker node
+## Worker Node
 
-- `detectExistingInference` — already accepted `ctx` (`nodemanager_config.go`); no change.
-- `pullModels` → `pullModels(ctx, models)`; `cmdRunner` adds `CombinedOutputContext` for `exec.CommandContext`.
-- `waitForPMAReadyUDS` → `waitForPMAReadyUDS(ctx, socketPath, timeout) error`; uses `http.NewRequestWithContext`, `select` with `ctx`/deadline, and returns `nil` on `DeadlineExceeded` only.
-- `RunOptions.PullModels` → `func(ctx context.Context, models []string) error`; `RunOptions.StartManagedServices` → `func(ctx context.Context, services []nodepayloads.ConfigManagedService) error`; `maybePullModels` / `maybeStartManagedServices` / `reconcileManagedServices` pass `ctx`.
+- `detectExistingInference` - already accepted `ctx` (`nodemanager_config.go`); no change.
+- `pullModels` -> `pullModels(ctx, models)`; `cmdRunner` adds `CombinedOutputContext` for `exec.CommandContext`.
+- `waitForPMAReadyUDS` -> `waitForPMAReadyUDS(ctx, socketPath, timeout) error`; uses `http.NewRequestWithContext`, `select` with `ctx`/deadline, and returns `nil` on `DeadlineExceeded` only.
+- `RunOptions.PullModels` -> `func(ctx context.Context, models []string) error`; `RunOptions.StartManagedServices` -> `func(ctx context.Context, services []nodepayloads.ConfigManagedService) error`; `maybePullModels` / `maybeStartManagedServices` / `reconcileManagedServices` pass `ctx`.
 - Tests: `context_cancel_test.go`, `main_runmain_more_test.go` (`TestContextCancel_pullModels`), adjusted managed-service tests to avoid 30s PMA waits where unnecessary.
 
 ## Cynork
@@ -28,8 +30,8 @@ Propagated `context.Context` through cynork gateway HTTP helpers and non-streami
 ## Validation
 
 - `just lint-go`
-- `just test-go-cover` (all modules ≥ 90%)
+- `just test-go-cover` (all modules >= 90%)
 
 ## Plan
 
-YAML `st-015`–`st-026` and Task 2 markdown checklists marked completed in `docs/dev_docs/_plan_003_short_term.md`.
+YAML `st-015`-`st-026` and Task 2 markdown checklists marked completed in `docs/dev_docs/_plan_003_short_term.md`.

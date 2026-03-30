@@ -38,7 +38,7 @@ func TestLoginNewUser(t *testing.T) {
 	const wantNewID = "fresh-thread-from-post"
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
-		case r.URL.Path == "/v1/chat/threads" && r.Method == http.MethodPost:
+		case r.URL.Path == pathChatThreads && r.Method == http.MethodPost:
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusCreated)
 			_, _ = fmt.Fprintf(w, `{"thread_id":%q}`, wantNewID)
@@ -169,7 +169,7 @@ func TestScrollbackLandmark_FromEnsureThreadResult(t *testing.T) {
 // TestScrollbackLandmark_ThreadSwitch verifies THREAD_SWITCHED after /thread switch (Bug 3).
 func TestScrollbackLandmark_ThreadSwitch(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/v1/chat/threads" && r.Method == http.MethodGet {
+		if r.URL.Path == pathChatThreads && r.Method == http.MethodGet {
 			w.Header().Set("Content-Type", "application/json")
 			body := `{"data":[{"id":"sw-1","title":"Alpha","created_at":"2024-01-01T00:00:00Z","updated_at":"2024-01-01T00:00:00Z"}]}`
 			_, _ = w.Write([]byte(body))
@@ -183,6 +183,11 @@ func TestScrollbackLandmark_ThreadSwitch(t *testing.T) {
 	session := &chat.Session{Client: client, ProjectID: "p1"}
 	session.SetCurrentThreadID("old-tid")
 	m := NewModel(session)
-	_ = m.handleThreadCommand("/thread switch 1")
-	assertScrollbackHasLandmarkAndID(t, m, chat.LandmarkThreadSwitched, "sw-1")
+	cmd := m.handleThreadCommand("/thread switch 1")
+	if cmd == nil {
+		t.Fatal("expected async cmd")
+	}
+	updated, _ := m.Update(cmd())
+	m2 := updated.(*Model)
+	assertScrollbackHasLandmarkAndID(t, m2, chat.LandmarkThreadSwitched, "sw-1")
 }

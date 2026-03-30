@@ -16,8 +16,9 @@ import (
 )
 
 const (
-	wantStatusSuccess   = "success"
-	runCommandEmptyArgv = stepTypeRunCommand + " args.argv must be non-empty"
+	wantStatusSuccess         = "success"
+	runCommandEmptyArgv       = stepTypeRunCommand + " args.argv must be non-empty"
+	testUnifiedDiffPatchFAddB = "--- a/f.txt\n+++ b/f.txt\n@@ -1 +1,2 @@\n a\n+b\n"
 )
 
 func TestRunJob_EmptyWorkspace_DefaultsToSlashWorkspace(t *testing.T) {
@@ -102,8 +103,7 @@ func TestRunJob_WriteFileReadFile_ViaLocalTools(t *testing.T) {
 func TestEvalLocalTool_ApplyUnifiedDiff(t *testing.T) {
 	dir := t.TempDir()
 	_ = os.WriteFile(filepath.Join(dir, "f.txt"), []byte("a\n"), 0o644)
-	diff := "--- a/f.txt\n+++ b/f.txt\n@@ -1 +1,2 @@\n a\n+b\n"
-	args, _ := json.Marshal(map[string]string{"diff": diff})
+	args, _ := json.Marshal(map[string]string{"diff": testUnifiedDiffPatchFAddB})
 	ctx := context.Background()
 	out, err := EvalLocalTool(ctx, "apply_unified_diff", string(args), dir, 1024)
 	if err != nil {
@@ -839,8 +839,7 @@ func TestResolveWorkspacePath_CurrentDir(t *testing.T) {
 func TestApplyUnifiedDiffStep_Success(t *testing.T) {
 	dir := t.TempDir()
 	_ = os.WriteFile(filepath.Join(dir, "f.txt"), []byte("a\n"), 0o644)
-	diff := "--- a/f.txt\n+++ b/f.txt\n@@ -1 +1,2 @@\n a\n+b\n"
-	args, _ := json.Marshal(map[string]string{"diff": diff})
+	args, _ := json.Marshal(map[string]string{"diff": testUnifiedDiffPatchFAddB})
 	sr := applyUnifiedDiffStep(context.Background(), 0, args, dir)
 	if sr.Status != wantStatusSuccess {
 		t.Errorf("Status = %q: %s", sr.Status, sr.Error)
@@ -850,8 +849,7 @@ func TestApplyUnifiedDiffStep_Success(t *testing.T) {
 func TestContextCancel_applyUnifiedDiffStep(t *testing.T) {
 	dir := t.TempDir()
 	_ = os.WriteFile(filepath.Join(dir, "f.txt"), []byte("a\n"), 0o644)
-	diff := "--- a/f.txt\n+++ b/f.txt\n@@ -1 +1,2 @@\n a\n+b\n"
-	args, _ := json.Marshal(map[string]string{"diff": diff})
+	args, _ := json.Marshal(map[string]string{"diff": testUnifiedDiffPatchFAddB})
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	sr := applyUnifiedDiffStep(ctx, 0, args, dir)

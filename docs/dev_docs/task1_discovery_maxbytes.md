@@ -1,6 +1,17 @@
-# Task 1 discovery: unbounded reads and JSON request bodies (March 2026)
+# Task 1 Discovery: Unbounded Reads and JSON Request Bodies (March 2026)
 
-Sites where `io.ReadAll` was used without `io.LimitReader` on **response** bodies, or `json.NewDecoder(r.Body)` without prior `http.MaxBytesReader` on **request** bodies, are listed below by area. Test-only and BDD harness code are noted but were not changed for production hardening.
+- [Summary](#summary)
+- [`go_shared_libs`](#go_shared_libs)
+- [Orchestrator](#orchestrator)
+- [Worker Node](#worker-node)
+- [Agents](#agents)
+- [Cynork](#cynork)
+- [Tech Spec](#tech-spec)
+
+## Summary
+
+Sites where `io.ReadAll` was used without `io.LimitReader` on **response** bodies, or `json.NewDecoder(r.Body)` without prior `http.MaxBytesReader` on **request** bodies, are listed below by area.
+Test-only and BDD harness code are noted but were not changed for production hardening.
 
 ## `go_shared_libs`
 
@@ -16,7 +27,7 @@ Sites where `io.ReadAll` was used without `io.LimitReader` on **response** bodie
 - **dispatcher** (`internal/dispatcher/run.go`): Worker `RunJob` response decode uses `io.LimitReader`.
 - **pmaclient** (`internal/pmaclient/client.go`): Completion and managed-proxy JSON decodes and small non-NDJSON fallback read use `httplimits.DefaultMaxHTTPResponseBytes`.
 
-## Worker node
+## Worker Node
 
 - **embed_handlers** (`internal/workerapiserver/embed_handlers.go`): Managed-service proxy wraps incoming JSON with `httplimits.WrapRequestBody`; upstream buffered reads use `io.LimitReader`.
 - **internal_orchestrator_proxy** (`internal/workerapiserver/internal_orchestrator_proxy.go`): Proxy JSON max aligned to `httplimits.DefaultMaxAPIRequestBodyBytes`; upstream response read uses `io.LimitReader`.
@@ -29,8 +40,9 @@ Sites where `io.ReadAll` was used without `io.LimitReader` on **response** bodie
 
 ## Cynork
 
-- **gateway** (`internal/gateway/client.go`, `client_http.go`): All JSON decodes and `GetBytes`/`PostBytes`/etc. use `decodeResponseJSON` / `io.LimitReader` with `httplimits.DefaultMaxHTTPResponseBytes`. SSE streaming paths still read the live stream without a single full-body cap (by design).
+- **gateway** (`internal/gateway/client.go`, `client_http.go`): All JSON decodes and `GetBytes`/`PostBytes`/etc. use `decodeResponseJSON` / `io.LimitReader` with `httplimits.DefaultMaxHTTPResponseBytes`.
+  SSE streaming paths still read the live stream without a single full-body cap (by design).
 
-## Tech spec
+## Tech Spec
 
-- `docs/tech_specs/go_rest_api_standards.md` — Timeouts and resource limits (REQ-STANDS-0102–0107): conservative defaults and per-request limits; implementation uses shared constants and `MaxBytesReader` / `LimitReader` as above.
+- `docs/tech_specs/go_rest_api_standards.md` - Timeouts and resource limits (REQ-STANDS-0102-0107): conservative defaults and per-request limits; implementation uses shared constants and `MaxBytesReader` / `LimitReader` as above.

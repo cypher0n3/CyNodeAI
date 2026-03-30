@@ -82,6 +82,26 @@ type threadRenameResult struct {
 	err error
 }
 
+// threadNewResult is the message when CreateNewThreadID completes (async /thread new).
+type threadNewResult struct {
+	threadID string
+	err      error
+}
+
+// threadSwitchResult is the message when ResolveThreadSelector completes (async /thread switch).
+type threadSwitchResult struct {
+	threadID string
+	err      error
+}
+
+// streamRecoveryHealthResultMsg carries the outcome of an async GET /healthz during stream recovery.
+type streamRecoveryHealthResultMsg struct {
+	err      error
+	gen      int
+	attempt  int
+	noClient bool // true when Session/Client was nil in the Cmd (do not retry)
+}
+
 // ensureThreadResult is the message when EnsureThread completes (after login).
 type ensureThreadResult struct {
 	threadID string
@@ -358,6 +378,12 @@ func (m *Model) applyThreadMsgs(msg tea.Msg) (tea.Model, tea.Cmd, bool) {
 	case threadRenameResult:
 		mm, cmd := m.applyThreadRenameResult(msg)
 		return mm, cmd, true
+	case threadNewResult:
+		mm, cmd := m.applyThreadNewResult(msg)
+		return mm, cmd, true
+	case threadSwitchResult:
+		mm, cmd := m.applyThreadSwitchResult(msg)
+		return mm, cmd, true
 	case ensureThreadResult:
 		et := msg
 		mm, cmd := m.applyEnsureThreadResult(&et)
@@ -415,6 +441,9 @@ func (m *Model) applyTokenAndGatewayMsgs(msg tea.Msg) (tea.Model, tea.Cmd, bool)
 		return mm, cmd, true
 	case streamRecoveryTickMsg:
 		mm, cmd := m.applyStreamRecoveryTick(msg)
+		return mm, cmd, true
+	case streamRecoveryHealthResultMsg:
+		mm, cmd := m.applyStreamRecoveryHealthResult(msg)
 		return mm, cmd, true
 	default:
 		return m, nil, false

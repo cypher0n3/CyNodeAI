@@ -82,4 +82,10 @@ func TestSanitizePath(t *testing.T) {
 	if _, err := SanitizePath("   "); err == nil {
 		t.Fatal("expected error for whitespace-only path")
 	}
+	if _, err := SanitizePath("//"); err == nil {
+		t.Fatal("expected error for root-only path")
+	}
+	if _, err := SanitizePath("."); err == nil {
+		t.Fatal("expected error for dot-only path")
+	}
 }

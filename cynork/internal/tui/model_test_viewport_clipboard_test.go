@@ -86,19 +86,24 @@ func TestModel_ThreadCommand_New_GatewayError(t *testing.T) {
 	session := chat.NewSession(client)
 	m := NewModel(session)
 	m.Input = testThreadNewInput
-	_, cmd := m.handleKey(tea.KeyMsg{Type: tea.KeyEnter})
-	if cmd != nil {
-		t.Errorf("expected nil cmd, got %v", cmd)
+	mod, cmd := m.handleKey(tea.KeyMsg{Type: tea.KeyEnter})
+	if cmd == nil {
+		t.Fatal("expected async cmd")
 	}
+	updated, cmd2 := mod.Update(cmd())
+	if cmd2 != nil {
+		t.Fatalf("unexpected cmd: %v", cmd2)
+	}
+	out := updated.(*Model)
 	found := false
-	for _, line := range m.Scrollback {
+	for _, line := range out.Scrollback {
 		if strings.Contains(line, "Error:") {
 			found = true
 			break
 		}
 	}
 	if !found {
-		t.Errorf("expected error in scrollback: %v", m.Scrollback)
+		t.Errorf("expected error in scrollback: %v", out.Scrollback)
 	}
 }
 

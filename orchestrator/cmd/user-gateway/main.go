@@ -25,6 +25,9 @@ import (
 // testShutdownHook, when set by tests, is called instead of server.Shutdown so tests can cover the shutdown error path.
 var testShutdownHook func(*http.Server, context.Context) error
 
+// testDatabaseOpen, when set by tests, is used instead of database.Open in runMain (e.g. to run RunSchema before worker bearer migration).
+var testDatabaseOpen func(context.Context, string) (*database.DB, error)
+
 func main() {
 	os.Exit(runMain(context.Background()))
 }
@@ -40,12 +43,22 @@ func runMain(ctx context.Context) int {
 		logger.Error("invalid configuration", "error", err)
 		return 1
 	}
-	db, err := database.Open(ctx, cfg.DatabaseURL)
+	var db *database.DB
+	var err error
+	if testDatabaseOpen != nil {
+		db, err = testDatabaseOpen(ctx, cfg.DatabaseURL)
+	} else {
+		db, err = database.Open(ctx, cfg.DatabaseURL)
+	}
 	if err != nil {
 		logger.Error("failed to connect to database", "error", err)
 		return 1
 	}
 	defer func() { _ = db.Close() }()
+	if err := database.ApplyWorkerBearerEncryptionAtStartup(ctx, db, cfg.JWTSecret); err != nil {
+		logger.Error("migrate worker bearer tokens", "error", err)
+		return 1
+	}
 	return runMainWithStore(ctx, cfg, db, logger)
 }
 

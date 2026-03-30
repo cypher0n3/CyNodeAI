@@ -264,7 +264,7 @@ func TestRun_NoFlagCallsRunMain(t *testing.T) {
 
 type fakeCtxCancelRunner struct{}
 
-func (fakeCtxCancelRunner) LookPath(string) (string, error) { return "/bin/podman", nil }
+func (fakeCtxCancelRunner) LookPath(string) (string, error)                  { return "/bin/podman", nil }
 func (fakeCtxCancelRunner) CombinedOutput(string, ...string) ([]byte, error) { return nil, nil }
 func (fakeCtxCancelRunner) CombinedOutputContext(ctx context.Context, _ string, _ ...string) ([]byte, error) {
 	return nil, ctx.Err()

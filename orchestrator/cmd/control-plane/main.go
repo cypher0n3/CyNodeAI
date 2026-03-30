@@ -15,8 +15,8 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/cypher0n3/cynodeai/orchestrator/internal/artifacts"
 	"github.com/cypher0n3/cynodeai/go_shared_libs/httplimits"
+	"github.com/cypher0n3/cynodeai/orchestrator/internal/artifacts"
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/auth"
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/config"
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/database"
@@ -129,6 +129,13 @@ func runMainWithContext(ctx context.Context, store database.Store) int {
 	if migrateOnly {
 		logger.Info("schema applied (migrate-only)")
 		return 0
+	}
+
+	if db, ok := store.(*database.DB); ok {
+		if err := database.ApplyWorkerBearerEncryptionAtStartup(ctx, db, cfg.JWTSecret); err != nil {
+			logger.Error("migrate worker bearer tokens", "error", err)
+			return 1
+		}
 	}
 
 	if err := run(ctx, store, cfg, logger); err != nil {
@@ -293,11 +300,16 @@ var testPMAPollInterval time.Duration
 // inferencePathAvailable returns true when at least one inference path exists: dispatchable node or external API credential (REQ-ORCHES-0150, orchestrator_bootstrap.md).
 // waitForInferencePath polls until at least one inference path is available (node or external key) or ctx is done.
 // Returns true when inference path is available, false when ctx canceled. Used by startPMAWhenInferencePathReady and tests.
-func waitForInferencePath(ctx context.Context, store database.Store, logger *slog.Logger) bool {
-	pollInterval := 2 * time.Second
-	if testPMAPollInterval > 0 {
-		pollInterval = testPMAPollInterval
+func sleepOrDone(ctx context.Context, d time.Duration) bool {
+	select {
+	case <-ctx.Done():
+		return false
+	case <-time.After(d):
+		return true
 	}
+}
+
+func pollInferencePathUntilReady(ctx context.Context, store database.Store, logger *slog.Logger, pollInterval time.Duration) bool {
 	for {
 		select {
 		case <-ctx.Done():
@@ -309,14 +321,26 @@ func waitForInferencePath(ctx context.Context, store database.Store, logger *slo
 			if logger != nil {
 				logger.Warn("PMA startup check: inference path check failed", "error", err)
 			}
-			time.Sleep(pollInterval)
+			if !sleepOrDone(ctx, pollInterval) {
+				return false
+			}
 			continue
 		}
 		if ok {
 			return true
 		}
-		time.Sleep(pollInterval)
+		if !sleepOrDone(ctx, pollInterval) {
+			return false
+		}
 	}
+}
+
+func waitForInferencePath(ctx context.Context, store database.Store, logger *slog.Logger) bool {
+	pollInterval := 2 * time.Second
+	if testPMAPollInterval > 0 {
+		pollInterval = testPMAPollInterval
+	}
+	return pollInferencePathUntilReady(ctx, store, logger, pollInterval)
 }
 
 // startPMAWhenInferencePathReady starts cynode-pma when the first inference path is available (REQ-ORCHES-0150).

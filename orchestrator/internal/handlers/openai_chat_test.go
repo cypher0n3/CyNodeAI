@@ -53,6 +53,41 @@ func TestIsTransientInferenceError(t *testing.T) {
 	}
 }
 
+// TestRetryContextCancel verifies runCompletionWithRetry does not block on backoff after ctx is canceled (REQ-ORCHES-0132 / short-term plan Task 3).
+func TestRetryContextCancel(t *testing.T) {
+	h := NewOpenAIChatHandler(testutil.NewMockDB(), newTestLogger(), "", "", "")
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	transientErr := fmt.Errorf("dial tcp: connection refused")
+	call := func() (string, error) {
+		return "", transientErr
+	}
+
+	go func() {
+		time.Sleep(15 * time.Millisecond)
+		cancel()
+	}()
+
+	start := time.Now()
+	_, status, code, msg := h.runCompletionWithRetry(ctx, "m", "test", "fail", call)
+	elapsed := time.Since(start)
+
+	const maxWait = 300 * time.Millisecond
+	if elapsed > maxWait {
+		t.Fatalf("retry loop should return soon after context cancel during backoff, took %v (want <= %v)", elapsed, maxWait)
+	}
+	if status != statusClientClosedRequest {
+		t.Fatalf("status = %d, want %d", status, statusClientClosedRequest)
+	}
+	if code != "request_canceled" {
+		t.Fatalf("code = %q, want request_canceled", code)
+	}
+	if msg == "" {
+		t.Fatal("expected non-empty cancel message")
+	}
+}
+
 func TestExtractUserContentFromResponsesInput(t *testing.T) {
 	cases := []struct {
 		name  string

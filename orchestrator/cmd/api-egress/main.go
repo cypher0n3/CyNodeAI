@@ -27,6 +27,31 @@ func main() {
 	os.Exit(runMain(context.Background()))
 }
 
+// testAPIEgressDatabaseOpen, when set by tests, is used instead of database.Open when API_EGRESS_DSN is set (e.g. after RunSchema in integration tests).
+var testAPIEgressDatabaseOpen func(context.Context, string) (*database.DB, error)
+
+func openAPIEgressDB(ctx context.Context, logger *slog.Logger, dsn string, cfg *config.OrchestratorConfig) (*database.DB, error) {
+	var db *database.DB
+	var err error
+	if testAPIEgressDatabaseOpen != nil {
+		db, err = testAPIEgressDatabaseOpen(ctx, dsn)
+	} else {
+		db, err = database.Open(ctx, dsn)
+	}
+	if err != nil {
+		return nil, err
+	}
+	if err := db.RunSchema(ctx, logger); err != nil {
+		_ = db.Close()
+		return nil, err
+	}
+	if err := database.ApplyWorkerBearerEncryptionAtStartup(ctx, db, cfg.JWTSecret); err != nil {
+		_ = db.Close()
+		return nil, err
+	}
+	return db, nil
+}
+
 // runMain sets up logger and runs the server. Returns 0 on success, 1 on failure. Used by main and tests.
 func runMain(ctx context.Context) int {
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
@@ -55,12 +80,8 @@ func run(ctx context.Context, logger *slog.Logger) error {
 	allowlist := getEnv("API_EGRESS_ALLOWED", "openai,github")
 	dsn := getEnv("API_EGRESS_DSN", "")
 	if dsn != "" {
-		db, err := database.Open(ctx, dsn)
+		db, err := openAPIEgressDB(ctx, logger, dsn, cfg)
 		if err != nil {
-			return err
-		}
-		if err := db.RunSchema(ctx, logger); err != nil {
-			_ = db.Close()
 			return err
 		}
 		mux.Handle("POST /v1/call", newCallHandlerWithStore(logger, bearer, allowlist, db))

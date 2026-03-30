@@ -40,6 +40,6 @@ func (stubEmbedRunner) RunJob(context.Context, *workerapi.RunJobRequest, string)
 	return &workerapi.RunJobResponse{Version: 1}, nil
 }
 
-func (stubEmbedRunner) Ready(context.Context) (bool, string) {
+func (stubEmbedRunner) Ready(context.Context) (ready bool, reason string) {
 	return true, ""
 }

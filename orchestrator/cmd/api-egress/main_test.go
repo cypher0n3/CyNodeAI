@@ -100,6 +100,13 @@ func TestRun_ListenAndServeFails(t *testing.T) {
 }
 
 func TestRunMain_Success(t *testing.T) {
+	oldDSN := os.Getenv("API_EGRESS_DSN")
+	_ = os.Unsetenv("API_EGRESS_DSN")
+	defer func() {
+		if oldDSN != "" {
+			_ = os.Setenv("API_EGRESS_DSN", oldDSN)
+		}
+	}()
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
 	code := runMain(ctx)
