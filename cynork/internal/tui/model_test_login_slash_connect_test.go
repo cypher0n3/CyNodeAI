@@ -669,7 +669,7 @@ func TestModel_SlashStatus_NotConnected(t *testing.T) {
 
 func TestModel_SlashWhoami_Dispatch(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path == "/v1/users/me" {
+		if r.URL.Path == pathV1UsersMe {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusOK)
 			_, _ = fmt.Fprintf(w, `{"id":"u1","handle":"%s"}`, loginTestUsername)

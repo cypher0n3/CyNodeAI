@@ -11,6 +11,8 @@ import (
 	"github.com/cypher0n3/cynodeai/cynork/internal/gateway"
 )
 
+const pathV1UsersMe = "/v1/users/me"
+
 const loginTestGatewayURL = "http://gw"
 const loginTestPassword = "pass"
 const loginTestUsername = "alice"
@@ -301,26 +303,29 @@ func TestModel_HandleKey_LoadingIgnoresKeys(t *testing.T) {
 
 func TestEnsureThreadScrollbackLine(t *testing.T) {
 	tests := []struct {
-		name       string
-		prior      string
-		after      string
-		resume     string
-		wantSwitch bool
-		wantReady  bool
+		name             string
+		prior            string
+		after            string
+		resume           string
+		createdNew       bool
+		resumedFromCache bool
+		wantSwitch       bool
+		wantReady        bool
 	}{
-		{"same_thread_confirmed", "tid-1", "tid-1", "", false, true},
-		{"resume_from_empty", "", "tid-1", "1", true, false},
-		{"switch_without_resume", "tid-1", "tid-2", "", true, false},
-		{"first_thread_new", "", "tid-new", "", false, true},
+		{"same_thread_confirmed", "tid-1", "tid-1", "", false, false, false, true},
+		{"resume_from_empty", "", "tid-1", "1", false, false, true, false},
+		{"switch_without_resume", "tid-1", "tid-2", "", false, false, true, false},
+		{"first_thread_new", "", "tid-new", "", true, false, false, true},
+		{"cache_resume_same_id", "tid-c", "tid-c", "", false, true, true, false},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := ensureThreadScrollbackLine(tt.prior, tt.after, tt.resume)
+			got := ensureThreadScrollbackLine(tt.prior, tt.after, tt.resume, tt.createdNew, tt.resumedFromCache)
 			hasSw := strings.Contains(got, chat.LandmarkThreadSwitched)
 			hasRd := strings.Contains(got, chat.LandmarkThreadReady)
 			if hasSw != tt.wantSwitch || hasRd != tt.wantReady {
-				t.Errorf("ensureThreadScrollbackLine(%q,%q,%q) = %q; want switch=%v ready=%v",
-					tt.prior, tt.after, tt.resume, got, tt.wantSwitch, tt.wantReady)
+				t.Errorf("ensureThreadScrollbackLine(...) = %q; want switch=%v ready=%v",
+					got, tt.wantSwitch, tt.wantReady)
 			}
 		})
 	}

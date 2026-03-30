@@ -92,6 +92,10 @@ type ensureThreadResult struct {
 	resumeSelector string
 	// userID is set when cache persistence should run in applyEnsureThreadResult (main goroutine).
 	userID string
+	// createdNew is true when the thread id came from CreateNewThreadID (not cache or selector).
+	createdNew bool
+	// resumedFromCache is true when the active thread id was taken from disk cache (session had none).
+	resumedFromCache bool
 }
 
 // openLoginFormMsg opens the in-TUI login overlay (per REQ-CLIENT-0190, Auth Recovery).
@@ -227,6 +231,11 @@ type Model struct {
 	healthPollIntervalSec    int
 	gatewayHealth            gatewayHealthState
 	gatewayHealthPollStarted bool
+
+	// Queued drafts (Bug 4 / cynork_tui.md Queued Drafts).
+	queuedAutoSend       []string // Enter while agent is streaming; auto-sent when stream completes
+	queuedExplicit       []string // Ctrl+Q; not auto-sent when stream completes
+	pendingInterruptSend string   // Ctrl+Enter: send this line after current stream ends
 }
 
 // NewModel returns an initial TUI model for the given session.
@@ -328,7 +337,7 @@ func (m *Model) applyStreamMsgs(msg tea.Msg) (tea.Model, tea.Cmd, bool) {
 		return mm, cmd, true
 	case streamDoneMsg:
 		m.applyStreamDone(msg)
-		cmd := m.maybeScheduleStreamRecovery(msg)
+		cmd := combineTeaCmds(m.maybeScheduleStreamRecovery(msg), m.maybeStartNextQueuedUserTurn(true))
 		return m, cmd, true
 	case sendResult:
 		m.applySendResult(msg)
@@ -481,43 +490,6 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m.handleComposerAfterGlobalChords(msg)
 }
 
-func (m *Model) handleComposerAfterGlobalChords(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
-	switch msg.String() {
-	case "shift+enter", "alt+enter", "ctrl+j":
-		m.insertAtCursor("\n")
-		m.clampSlashMenuSelection()
-		return m, nil
-	case "enter":
-		return m.handleEnterKey()
-	case "up":
-		return m.handleComposerUpKey()
-	case "down":
-		return m.handleComposerDownKey()
-	case "ctrl+up":
-		return m.handleComposerCtrlUpKey()
-	case "ctrl+down":
-		return m.handleComposerCtrlDownKey()
-	case "tab":
-		return m.handleComposerTabKey()
-	case "esc":
-		return m.handleComposerEscKey()
-	case "left":
-		return m.handleComposerMoveRuneKey(-1)
-	case "right":
-		return m.handleComposerMoveRuneKey(1)
-	case "ctrl+left":
-		return m.handleComposerWordKey(m.moveInputCursorWordLeft)
-	case "ctrl+right":
-		return m.handleComposerWordKey(m.moveInputCursorWordRight)
-	case "backspace":
-		m.deleteRuneBeforeCursor()
-		m.clampSlashMenuSelection()
-		return m, nil
-	default:
-		return m.handleComposerRuneInsert(msg)
-	}
-}
-
 func (m *Model) handleComposerUpKey() (tea.Model, tea.Cmd) {
 	if m.slashMenuVisible() && len(m.filteredSlashCommands()) > 0 {
 		m.navSlashMenu(true)
@@ -600,11 +572,11 @@ func (m *Model) handleComposerRuneInsert(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 func (m *Model) handleEnterKey() (tea.Model, tea.Cmd) {
 	line := strings.TrimSpace(m.Input)
-	// Block only plain chat sends while streaming; slash and shell remain dispatchable (Bug 4).
-	if m.Loading && line != "" && !strings.HasPrefix(line, "/") && !strings.HasPrefix(line, "!") {
+	if m.maybeApplySlashMenuEnterCompletion() {
 		return m, nil
 	}
-	if m.maybeApplySlashMenuEnterCompletion() {
+	// Block plain chat while loading for non-streaming work before clearing the composer (async slash, etc.).
+	if m.Loading && !m.isAgentStreaming() && line != "" && !strings.HasPrefix(line, "/") && !strings.HasPrefix(line, "!") {
 		return m, nil
 	}
 	m.Input = ""
@@ -622,6 +594,12 @@ func (m *Model) handleEnterKey() (tea.Model, tea.Cmd) {
 	if strings.HasPrefix(line, "/") {
 		return m.handleSlashLine(line)
 	}
+	if m.isAgentStreaming() {
+		m.queuedAutoSend = append(m.queuedAutoSend, line)
+		m.pushInputHistory(line)
+		m.InputHistoryIdx = -1
+		return m, nil
+	}
 	m.Scrollback = append(m.Scrollback, "You: "+line)
 	m.appendTranscriptUser(line)
 	m.pushInputHistory(line)
@@ -631,10 +609,20 @@ func (m *Model) handleEnterKey() (tea.Model, tea.Cmd) {
 	return m, cmd
 }
 
-// EnterBlockedWhileLoading reports whether handleEnterKey would ignore a non-empty composer line (Bug 4).
-func EnterBlockedWhileLoading(loading bool, input string) bool {
+// EnterBlockedWhileLoading reports whether handleEnterKey would ignore a non-empty plain composer line (Bug 4).
+// When agentStreaming is true, Enter queues plain text instead of blocking.
+func EnterBlockedWhileLoading(loading, agentStreaming bool, input string) bool {
 	line := strings.TrimSpace(input)
-	return loading && line != "" && !strings.HasPrefix(line, "/") && !strings.HasPrefix(line, "!")
+	if line == "" {
+		return false
+	}
+	if strings.HasPrefix(line, "/") || strings.HasPrefix(line, "!") {
+		return false
+	}
+	if agentStreaming {
+		return false
+	}
+	return loading
 }
 
 // maybeApplySlashMenuEnterCompletion applies completion when the menu is open and input does not
@@ -790,40 +778,63 @@ func (m *Model) buildEnsureThreadOutcome() ensureThreadResult {
 	userID := m.userIDForEnsureThread()
 	prior := m.Session.CurrentThreadID
 	sel := m.ResumeThreadSelector
-	cacheTID := ""
-	if prior == "" && sel == "" && userID != "" && m.Session.Client != nil {
-		if root, err := tuicache.Root(); err == nil {
-			if tid, ok, _ := tuicache.ReadLastThread(root, m.Session.Client.BaseURL, userID, m.Session.ProjectID); ok {
-				cacheTID = tid
-			}
-		}
-	}
+	cacheTID := m.readResumeThreadFromCache(userID, prior, sel)
 	afterCache := prior
 	if afterCache == "" && cacheTID != "" {
 		afterCache = cacheTID
 	}
+	return m.resolveEnsureThreadID(prior, afterCache, cacheTID, sel, userID)
+}
 
-	var finalID string
-	var err error
+func (m *Model) readResumeThreadFromCache(userID, prior, sel string) string {
+	if prior != "" || sel != "" || userID == "" || m.Session == nil || m.Session.Client == nil {
+		return ""
+	}
+	root, err := tuicache.Root()
+	if err != nil {
+		return ""
+	}
+	tid, ok, _ := tuicache.ReadLastThread(root, m.Session.Client.BaseURL, userID, m.Session.ProjectID)
+	if !ok {
+		return ""
+	}
+	return tid
+}
+
+func (m *Model) resolveEnsureThreadID(prior, afterCache, cacheTID, sel, userID string) ensureThreadResult {
 	switch {
 	case sel != "":
-		finalID, err = m.Session.ResolveThreadSelector(sel, chatThreadListLimit)
+		finalID, err := m.Session.ResolveThreadSelector(sel, chatThreadListLimit)
 		if err != nil {
 			return ensureThreadResult{err: err, resumeSelector: sel, userID: userID}
 		}
+		return ensureThreadResult{
+			threadID:       finalID,
+			priorThreadID:  afterCache,
+			resumeSelector: sel,
+			userID:         userID,
+		}
 	case afterCache != "":
-		finalID = afterCache
+		resumedFromCache := prior == "" && cacheTID != "" && afterCache == cacheTID
+		return ensureThreadResult{
+			threadID:         afterCache,
+			priorThreadID:    afterCache,
+			resumeSelector:   sel,
+			userID:           userID,
+			resumedFromCache: resumedFromCache,
+		}
 	default:
-		finalID, err = m.Session.CreateNewThreadID()
+		finalID, err := m.Session.CreateNewThreadID()
 		if err != nil {
 			return ensureThreadResult{err: err, userID: userID}
 		}
-	}
-	return ensureThreadResult{
-		threadID:       finalID,
-		priorThreadID:  afterCache,
-		resumeSelector: sel,
-		userID:         userID,
+		return ensureThreadResult{
+			threadID:       finalID,
+			priorThreadID:  afterCache,
+			resumeSelector: sel,
+			userID:         userID,
+			createdNew:     true,
+		}
 	}
 }
 
@@ -854,9 +865,14 @@ func (m *Model) persistLastThreadToCache() {
 	_ = tuicache.WriteLastThread(root, m.Session.Client.BaseURL, u.ID, m.Session.ProjectID, m.Session.CurrentThreadID)
 }
 
-// ensureThreadScrollbackLine picks landmark + suffix for thread ensure scrollback (Bug 3: avoid
-// spurious [CYNRK_THREAD_SWITCHED] when the active thread id did not change).
-func ensureThreadScrollbackLine(priorID, afterID, resumeSelector string) string {
+// ensureThreadScrollbackLine picks landmark + suffix for thread ensure scrollback (Bug 3).
+func ensureThreadScrollbackLine(priorID, afterID, resumeSelector string, createdNew, resumedFromCache bool) string {
+	if createdNew {
+		return chat.LandmarkThreadReady + " Thread: " + afterID
+	}
+	if resumedFromCache {
+		return chat.LandmarkThreadSwitched + " Thread: " + afterID
+	}
 	if priorID == afterID {
 		return chat.LandmarkThreadReady + " Thread: " + afterID
 	}
@@ -870,9 +886,9 @@ func ensureThreadScrollbackLine(priorID, afterID, resumeSelector string) string 
 }
 
 // EnsureThreadScrollbackSystemLine returns the full dim-prefixed scrollback line for EnsureThread (Bug 3).
-// Exported for BDD steps; matches applyEnsureThreadResult.
+// Exported for BDD steps; matches applyEnsureThreadResult when created/resumed flags are unknown (both false).
 func EnsureThreadScrollbackSystemLine(priorID, afterID, resumeSelector string) string {
-	return ScrollbackSystemLinePrefix + ensureThreadScrollbackLine(priorID, afterID, resumeSelector)
+	return ScrollbackSystemLinePrefix + ensureThreadScrollbackLine(priorID, afterID, resumeSelector, false, false)
 }
 
 func (m *Model) applyEnsureThreadResult(msg *ensureThreadResult) (tea.Model, tea.Cmd) {
@@ -887,7 +903,7 @@ func (m *Model) applyEnsureThreadResult(msg *ensureThreadResult) (tea.Model, tea
 				}
 			}
 		}
-		line := ScrollbackSystemLinePrefix + ensureThreadScrollbackLine(msg.priorThreadID, msg.threadID, msg.resumeSelector)
+		line := ScrollbackSystemLinePrefix + ensureThreadScrollbackLine(msg.priorThreadID, msg.threadID, msg.resumeSelector, msg.createdNew, msg.resumedFromCache)
 		m.Scrollback = append(m.Scrollback, line)
 	}
 	_, tok := m.maybeStartProactiveTokenRefresh()

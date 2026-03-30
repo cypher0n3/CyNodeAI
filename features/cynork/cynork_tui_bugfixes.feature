@@ -12,6 +12,7 @@ Scenario: Thread ensure without changing thread id does not emit thread switched
 @req_client_0207 @spec_cynai_client_cynorktui_slashcommandexecution
 Scenario: Slash and shell commands are not blocked while loading
   Given loading is true
+  And agent streaming is true
   Then enter is not blocked for composer input "/version"
   And enter is not blocked for composer input "!echo hi"
-  And enter is blocked for composer input "hello world"
+  And enter is not blocked for composer input "hello world"

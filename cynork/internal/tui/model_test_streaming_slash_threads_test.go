@@ -686,7 +686,7 @@ func TestModel_SlashAuth_Whoami_NoClient(t *testing.T) {
 //nolint:dupl // server handler pattern similar to TestModel_SlashAuth_Refresh_Success
 func TestModel_SlashAuth_Whoami_Success(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/v1/users/me" || r.Method != http.MethodGet {
+		if r.URL.Path != pathV1UsersMe || r.Method != http.MethodGet {
 			w.WriteHeader(http.StatusNotFound)
 			return
 		}

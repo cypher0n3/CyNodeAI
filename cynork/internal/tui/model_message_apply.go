@@ -358,6 +358,105 @@ func (m *Model) streamCmd(line string) tea.Cmd {
 	}
 }
 
+// isAgentStreaming reports whether an assistant stream is in progress (Bug 4 queue model).
+func (m *Model) isAgentStreaming() bool {
+	return m.streamCancel != nil
+}
+
+// beginUserTurnStream starts a user message turn with streaming (scrollback + transcript + streamCmd).
+func (m *Model) beginUserTurnStream(line string, skipHistory bool) tea.Cmd {
+	m.Scrollback = append(m.Scrollback, "You: "+line)
+	m.appendTranscriptUser(line)
+	if !skipHistory {
+		m.pushInputHistory(line)
+		m.InputHistoryIdx = -1
+	}
+	m.Loading = true
+	return m.streamCmd(line)
+}
+
+// maybeStartNextQueuedUserTurn sends the next queued or interrupted user message after a stream ends.
+// When autoOnly is true, only the auto-queue (Enter-while-streaming) is consumed; explicit Ctrl+Q drafts remain.
+func (m *Model) maybeStartNextQueuedUserTurn(autoOnly bool) tea.Cmd {
+	if m.isAgentStreaming() {
+		return nil
+	}
+	var line string
+	var skipHist bool
+	switch {
+	case m.pendingInterruptSend != "":
+		line = m.pendingInterruptSend
+		m.pendingInterruptSend = ""
+		skipHist = false
+	case len(m.queuedAutoSend) > 0:
+		line = m.queuedAutoSend[0]
+		m.queuedAutoSend = m.queuedAutoSend[1:]
+		skipHist = true
+	case !autoOnly && len(m.queuedExplicit) > 0:
+		line = m.queuedExplicit[0]
+		m.queuedExplicit = m.queuedExplicit[1:]
+		skipHist = true
+	default:
+		return nil
+	}
+	return m.beginUserTurnStream(line, skipHist)
+}
+
+// handleCtrlEnterKey sends the composer now (interrupting streaming) or drains the next queued draft (Bug 4).
+func (m *Model) handleCtrlEnterKey() (tea.Model, tea.Cmd) {
+	line := strings.TrimSpace(m.Input)
+	if m.maybeApplySlashMenuEnterCompletion() {
+		return m, nil
+	}
+	m.Input = ""
+	m.inputCursor = 0
+	if line != "" {
+		if m.isAgentStreaming() {
+			m.pendingInterruptSend = line
+			if m.streamCancel != nil {
+				m.streamCancel()
+			}
+			return m, nil
+		}
+		cmd := m.beginUserTurnStream(line, false)
+		return m, cmd
+	}
+	if m.isAgentStreaming() {
+		var next string
+		switch {
+		case len(m.queuedAutoSend) > 0:
+			next = m.queuedAutoSend[0]
+			m.queuedAutoSend = m.queuedAutoSend[1:]
+		case len(m.queuedExplicit) > 0:
+			next = m.queuedExplicit[0]
+			m.queuedExplicit = m.queuedExplicit[1:]
+		default:
+			return m, nil
+		}
+		m.pendingInterruptSend = next
+		if m.streamCancel != nil {
+			m.streamCancel()
+		}
+		return m, nil
+	}
+	cmd := m.maybeStartNextQueuedUserTurn(false)
+	return m, cmd
+}
+
+// handleCtrlQKey queues the composer line without sending (Bug 4).
+func (m *Model) handleCtrlQKey() (tea.Model, tea.Cmd) {
+	line := strings.TrimSpace(m.Input)
+	if line == "" {
+		return m, nil
+	}
+	m.queuedExplicit = append(m.queuedExplicit, line)
+	m.pushInputHistory(line)
+	m.InputHistoryIdx = -1
+	m.Input = ""
+	m.inputCursor = 0
+	return m, nil
+}
+
 func chatStreamDeltaToMsg(delta *chat.ChatStreamDelta) tea.Msg {
 	if delta == nil {
 		return streamDeltaMsg{}

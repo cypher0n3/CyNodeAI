@@ -387,6 +387,7 @@ func (m *Model) authLogout() slashResultMsg {
 	}
 	if m.Session != nil && m.Session.Client != nil {
 		m.Session.SetToken("")
+		m.Session.SetCurrentThreadID("")
 	}
 	return slashResultMsg{lines: []string{"logged_out=true"}}
 }

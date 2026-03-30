@@ -29,13 +29,12 @@ Plan: [_plan_001_immediate.md](_plan_001_immediate.md)
 
 Plan: [_plan_002_bugs.md](_plan_002_bugs.md)
 
-- **Bug 3 (`/auth login` thread UX):** ⚠️ Open.
-  Investigated; behavior is a mix of actual `NewThread` when `CurrentThreadID` is empty and UX conflation via a single scrollback landmark.
-  The Task 2 fix addresses the landmark differentiation (`THREAD_READY` vs `THREAD_SWITCHED`), but the broader product decision on scrollback wording and thread context for in-TUI login is still pending.
-- **Bug 4 (slash/shell blocked while streaming):** ⚠️ Open.
-  Task 2 fix narrows the `handleEnterKey` loading guard so slash and shell commands dispatch during streaming.
-  However, the full spec queue model (Enter queues, Ctrl+Enter sends now) is not implemented.
-  The broader spec alignment is documented as awaiting product confirmation.
+- **Bug 3 (`/auth login` thread UX):** Resolved per [_plan_002_bugs.md](_plan_002_bugs.md) Task 1 (logout clears thread id; ensure-thread landmarks).
+  See [_plan_002_bugs_task1_report.md](_plan_002_bugs_task1_report.md).
+  Product follow-up: in-TUI login transcript scope still TBD.
+- **Bug 4 (slash/shell blocked while streaming + queue model):** Resolved per the same plan Task 2 (queue model, send-now, Ctrl+Q).
+  See [_plan_002_bugs_task2_report.md](_plan_002_bugs_task2_report.md).
+  Follow-up: full draft-queue UI and persistence per spec are not in scope of this plan.
 
 ## 3 Short-Term (High-Severity Issues)
 

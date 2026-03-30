@@ -49,6 +49,9 @@ _NAMED_KEY_BYTES = {
     # Ctrl+J = LF → KeyCtrlJ (multiline newline in composer)
     "ctrl+j": "\n",
     "ctrl+y": "\x19",
+    # C0 controls (bubbletea key.go keyNames): ctrl+q = DC1, ctrl+s = DC3
+    "ctrl+q": "\x11",
+    "ctrl+s": "\x13",
 }
 
 try:
@@ -158,7 +161,8 @@ class TuiPtySession:
 
         Special names: enter, ctrl+c, ctrl+d, esc/escape, and composer/TUI keys:
         up, down, left, right, ctrl+up, ctrl+down, ctrl+left, ctrl+right, tab,
-        shift+tab, backspace, alt+enter, ctrl+j, ctrl+y (see _NAMED_KEY_BYTES).
+        shift+tab, backspace, alt+enter, ctrl+j, ctrl+y, ctrl+q, ctrl+s
+        (see _NAMED_KEY_BYTES).
         Otherwise each part is sent as raw text (UTF-8).
         """
         if self._proc is None:
