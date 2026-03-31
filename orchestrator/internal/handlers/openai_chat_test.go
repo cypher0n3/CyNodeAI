@@ -562,3 +562,19 @@ func TestCompleteViaPMAStream_RelaysAmendmentAndFixesVisible(t *testing.T) {
 		t.Fatalf("persisted content = %q", last.Content)
 	}
 }
+
+func TestTryPMAStream_EarlyExitPaths(t *testing.T) {
+	db := testutil.NewMockDB()
+	h := NewOpenAIChatHandler(db, newTestLogger(), "", "", "")
+	rec := httptest.NewRecorder()
+	uid := uuid.New()
+	if h.tryPMAStream(t.Context(), rec, false, EffectiveModelPM, nil, uuid.Nil, &uid, nil, time.Now(), "rid", nil) {
+		t.Fatal("expected false when stream=false")
+	}
+	if h.tryPMAStream(t.Context(), rec, true, "not-pm", nil, uuid.Nil, &uid, nil, time.Now(), "rid", nil) {
+		t.Fatal("expected false when model is not cynodeai.pm")
+	}
+	if h.tryPMAStream(t.Context(), rec, true, EffectiveModelPM, nil, uuid.Nil, &uid, nil, time.Now(), "rid", nil) {
+		t.Fatal("expected false when no PMA endpoint is available")
+	}
+}

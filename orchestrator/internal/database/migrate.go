@@ -44,6 +44,7 @@ func (db *DB) runAutoMigrate(ctx context.Context, logger *slog.Logger) error {
 		&ProjectPlanRecord{},
 		&SessionRecord{},
 		&ChatThreadRecord{},
+		&SessionBindingRecord{},
 		&ChatMessageRecord{},
 		&ChatAuditLogRecord{},
 		&WorkflowCheckpointRecord{},

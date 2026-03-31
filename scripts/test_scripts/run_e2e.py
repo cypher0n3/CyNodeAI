@@ -174,6 +174,14 @@ def _collect_suite_prereqs(suite):
     return required
 
 
+def _suite_has_any_tag(suite, tag: str) -> bool:
+    """True if any test case in suite declares ``tag`` in class.tags."""
+    for test in _iter_tests(suite):
+        if isinstance(test, unittest.TestCase) and tag in e2e_tags.get_tags_for_test(test):
+            return True
+    return False
+
+
 def _run_single_prereq(name, opts):
     """Run one prereq step. Return True on success, False on failure."""
     if name == e2e_tags.PREREQ_GATEWAY:
@@ -211,7 +219,10 @@ def _run_single_prereq(name, opts):
                 print("Error: Ollama inference smoke failed", file=sys.stderr)
                 return False
             include_tags = [t.strip() for t in (opts.tags or "").split(",") if t.strip()]
-            if "pma_inference" in include_tags:
+            want_pma_chat_wait = "pma_inference" in include_tags or getattr(
+                opts, "suite_has_pma_inference", False
+            )
+            if want_pma_chat_wait:
                 if not ollama_e2e_helpers.ollama_container_running():
                     print(
                         "Error: pma_inference needs stack started with Ollama.",
@@ -369,6 +380,14 @@ def main():
         for t in _iter_tests(suite):
             print(t.id())
         sys.exit(0)
+
+    # Full-suite runs (no --tags) still include pma_inference-tagged tests; wait for PMA
+    # after Ollama smoke so greedy provisioning + worker reconcile can finish (see e2e_0610).
+    setattr(
+        opts,
+        "suite_has_pma_inference",
+        _suite_has_any_tag(suite, e2e_tags.TAG_PMA_INFERENCE),
+    )
 
     failed_prereqs = set()
     succeeded_prereqs = set()

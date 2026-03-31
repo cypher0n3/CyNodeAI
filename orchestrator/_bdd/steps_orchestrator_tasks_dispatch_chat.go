@@ -19,6 +19,7 @@ import (
 	"github.com/cypher0n3/cynodeai/go_shared_libs/contracts/nodepayloads"
 	"github.com/cypher0n3/cynodeai/go_shared_libs/contracts/userapi"
 	"github.com/cypher0n3/cynodeai/go_shared_libs/contracts/workerapi"
+	"github.com/cypher0n3/cynodeai/orchestrator/internal/auth"
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/database"
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/dispatcher"
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/models"
@@ -292,6 +293,18 @@ func registerOrchestratorTasksDispatchChat(sc *godog.ScenarioContext, state *tes
 		if err := st.db.UpdateNodeStatus(ctx, node.ID, "active"); err != nil {
 			return err
 		}
+		// REQ-ORCHES-0162 / REQ-ORCHES-0151: capability ServiceID must match the session binding for
+		// this login. Derive only from the current refresh session (not ListActiveBindingsForUser),
+		// because BDD shares one Postgres across scenarios and stale bindings would confuse routing.
+		svcID := "pma-bdd"
+		if st.refreshToken != "" {
+			if rs, err := st.db.GetActiveRefreshSession(ctx, auth.HashToken(st.refreshToken)); err == nil && rs != nil {
+				if u, uerr := st.db.GetUserByID(ctx, rs.UserID); uerr == nil && u != nil {
+					lineage := models.SessionBindingLineage{UserID: u.ID, SessionID: rs.ID, ThreadID: nil}
+					svcID = models.PMAServiceIDForBindingKey(models.DeriveSessionBindingKey(lineage))
+				}
+			}
+		}
 		report := nodepayloads.CapabilityReport{
 			Version:    1,
 			ReportedAt: time.Now().UTC().Format(time.RFC3339),
@@ -301,7 +314,7 @@ func registerOrchestratorTasksDispatchChat(sc *godog.ScenarioContext, state *tes
 			ManagedServicesStatus: &nodepayloads.ManagedServicesStatus{
 				Services: []nodepayloads.ManagedServiceStatus{
 					{
-						ServiceID:   "pma-bdd",
+						ServiceID:   svcID,
 						ServiceType: "pma",
 						State:       "ready",
 						Endpoints:   []string{st.pmaMockServerURL},

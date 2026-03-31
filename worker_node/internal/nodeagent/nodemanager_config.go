@@ -33,6 +33,17 @@ func refreshNodeConfig(ctx context.Context, logger *slog.Logger, cfg *Config, bo
 	if err != nil {
 		return current
 	}
+	if current == nil {
+		return updated
+	}
+	// PMA provision/teardown bumps config_version even when JSON comparisons might miss a
+	// semantic change; always apply a new version so managed_services cannot go stale.
+	if updated.ConfigVersion != current.ConfigVersion {
+		if logger != nil {
+			logger.Info("node config version changed", "from", current.ConfigVersion, "to", updated.ConfigVersion)
+		}
+		return updated
+	}
 	ms := managedServicesConfigChanged(current, updated)
 	inf := inferenceBackendPullSpecChanged(current, updated)
 	if !ms && !inf {
@@ -93,7 +104,15 @@ func reconcileManagedServices(ctx context.Context, logger *slog.Logger, nodeConf
 	if opts == nil || opts.StartManagedServices == nil {
 		return
 	}
-	if nodeConfig == nil || nodeConfig.ManagedServices == nil || len(nodeConfig.ManagedServices.Services) == 0 {
+	if nodeConfig == nil || nodeConfig.ManagedServices == nil {
+		return
+	}
+	if len(nodeConfig.ManagedServices.Services) == 0 {
+		if err := opts.StartManagedServices(ctx, []nodepayloads.ConfigManagedService{}); err != nil {
+			if logger != nil {
+				logger.Warn("managed services reconcile error", "error", err)
+			}
+		}
 		return
 	}
 	if err := opts.StartManagedServices(ctx, nodeConfig.ManagedServices.Services); err != nil {

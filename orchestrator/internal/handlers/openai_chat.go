@@ -130,7 +130,7 @@ func (h *OpenAIChatHandler) tryPMAStream(ctx context.Context, w http.ResponseWri
 	if !stream || effectiveModel != EffectiveModelPM {
 		return false
 	}
-	cand := h.resolvePMAEndpointCandidate(ctx)
+	cand := h.resolvePMAEndpointCandidate(ctx, *userID)
 	if cand.endpoint == "" {
 		return false
 	}
@@ -160,6 +160,11 @@ func (h *OpenAIChatHandler) ChatCompletions(w http.ResponseWriter, r *http.Reque
 	if strings.TrimSpace(effectiveModel) == "" {
 		effectiveModel = EffectiveModelPM
 	}
+	if effectiveModel == EffectiveModelPM {
+		if err := TouchPMABindingActivity(ctx, h.db, *userID); err != nil {
+			h.logger.Warn("touch pma binding activity", "error", err)
+		}
+	}
 	projectID := projectIDFromHeader(r)
 	redacted, kinds := redactSecrets(req.Messages)
 	thread, err := h.db.GetOrCreateActiveChatThread(ctx, *userID, projectID)
@@ -186,7 +191,7 @@ func (h *OpenAIChatHandler) ChatCompletions(w http.ResponseWriter, r *http.Reque
 	if h.tryPMAStream(timeoutCtx, w, req.Stream, effectiveModel, contextMessages, thread.ID, userID, projectID, start, uuid.New().String(), nil) {
 		return
 	}
-	content, status, code, msg := h.routeAndComplete(timeoutCtx, effectiveModel, contextMessages, lastUserContent)
+	content, status, code, msg := h.routeAndComplete(timeoutCtx, *userID, effectiveModel, contextMessages, lastUserContent)
 	if status != 0 {
 		writeCompletionError(w, req.Stream, status, code, msg)
 		return
@@ -283,15 +288,15 @@ func isTransientInferenceError(err error) bool {
 
 // routeAndComplete implements Chat Completion Routing Path per openai_compatible_chat_api.md § Chat Completion Routing Path.
 // Enforces max wait via ctx timeout (REQ-ORCHES-0131) and retries transient failures (REQ-ORCHES-0132).
-func (h *OpenAIChatHandler) routeAndComplete(ctx context.Context, effectiveModel string, redacted []userapi.ChatMessage, lastUserContent string) (content string, status int, code, msg string) {
+func (h *OpenAIChatHandler) routeAndComplete(ctx context.Context, userID uuid.UUID, effectiveModel string, redacted []userapi.ChatMessage, lastUserContent string) (content string, status int, code, msg string) {
 	if effectiveModel == EffectiveModelPM {
-		return h.completeViaPMA(ctx, effectiveModel, redacted)
+		return h.completeViaPMA(ctx, userID, effectiveModel, redacted)
 	}
 	return h.completeViaDirectInference(ctx, effectiveModel, lastUserContent)
 }
 
-func (h *OpenAIChatHandler) completeViaPMA(ctx context.Context, effectiveModel string, redacted []userapi.ChatMessage) (content string, status int, code, msg string) {
-	candidate := h.resolvePMAEndpointCandidate(ctx)
+func (h *OpenAIChatHandler) completeViaPMA(ctx context.Context, userID uuid.UUID, effectiveModel string, redacted []userapi.ChatMessage) (content string, status int, code, msg string) {
+	candidate := h.resolvePMAEndpointCandidate(ctx, userID)
 	if candidate.endpoint == "" {
 		h.logger.Warn("PMA base URL not configured; cannot route to cynodeai.pm")
 		return "", http.StatusServiceUnavailable, "model_unavailable", "PM agent is not available"
@@ -601,15 +606,60 @@ func emitDegradedStreamingFallback(ctx context.Context, w http.ResponseWriter, c
 
 // resolvePMAEndpoint returns the PMA base URL for chat routing.
 // Only worker-reported endpoints from capability snapshots (managed_services_status) are used; no other path is allowed.
-func (h *OpenAIChatHandler) resolvePMAEndpoint(ctx context.Context) string {
-	return h.resolvePMAEndpointCandidate(ctx).endpoint
+func (h *OpenAIChatHandler) resolvePMAEndpoint(ctx context.Context, userID uuid.UUID) string {
+	return h.resolvePMAEndpointCandidate(ctx, userID).endpoint
 }
 
-func (h *OpenAIChatHandler) resolvePMAEndpointCandidate(ctx context.Context) pmaEndpointCandidate {
+func (h *OpenAIChatHandler) resolvePMAEndpointCandidate(ctx context.Context, userID uuid.UUID) pmaEndpointCandidate {
 	if h.db == nil {
 		return pmaEndpointCandidate{}
 	}
 	candidates := h.collectReadyPMACandidates(ctx)
+	if len(candidates) == 0 {
+		return pmaEndpointCandidate{}
+	}
+	// No authenticated user: preserve legacy selection (tests, internal callers).
+	if userID == uuid.Nil {
+		return pickLatestReadyPMAEndpointCandidate(candidates)
+	}
+	bindings, err := h.db.ListActiveBindingsForUser(ctx, userID)
+	if err != nil || len(bindings) == 0 {
+		return pickLatestReadyPMAEndpointCandidate(candidates)
+	}
+	b := pickLatestSessionBinding(bindings)
+	var matched []pmaEndpointCandidate
+	for i := range candidates {
+		if candidates[i].serviceID != "" && b.ServiceID != "" && candidates[i].serviceID == b.ServiceID {
+			matched = append(matched, candidates[i])
+		}
+	}
+	if len(matched) == 0 {
+		// Stale binding (teardown removed PMA from worker snapshot but row remains): do not
+		// fail closed; fall back like the no-binding case so chat can recover after restarts.
+		h.logger.Warn(
+			"session binding service_id not in worker PMA snapshot; falling back to latest ready PMA",
+			"user_id", userID,
+			"binding_service_id", b.ServiceID,
+		)
+		return pickLatestReadyPMAEndpointCandidate(candidates)
+	}
+	return pickLatestReadyPMAEndpointCandidate(matched)
+}
+
+func pickLatestSessionBinding(bindings []*models.SessionBinding) *models.SessionBinding {
+	var best *models.SessionBinding
+	for _, b := range bindings {
+		if b == nil {
+			continue
+		}
+		if best == nil || b.UpdatedAt.After(best.UpdatedAt) {
+			best = b
+		}
+	}
+	return best
+}
+
+func pickLatestReadyPMAEndpointCandidate(candidates []pmaEndpointCandidate) pmaEndpointCandidate {
 	if len(candidates) == 0 {
 		return pmaEndpointCandidate{}
 	}
@@ -624,6 +674,7 @@ func (h *OpenAIChatHandler) resolvePMAEndpointCandidate(ctx context.Context) pma
 
 type pmaEndpointCandidate struct {
 	endpoint             string
+	serviceID            string
 	readyAt              time.Time
 	workerAPIBearerToken string
 }
@@ -665,6 +716,7 @@ func readyPMACandidatesFromSnapshot(snapshot, workerAPIBearerToken string) []pma
 		}
 		candidates = append(candidates, pmaEndpointCandidate{
 			endpoint:             svc.Endpoints[0],
+			serviceID:            strings.TrimSpace(svc.ServiceID),
 			readyAt:              readyAt,
 			workerAPIBearerToken: workerAPIBearerToken,
 		})

@@ -238,6 +238,52 @@ func stopAndRemoveContainer(rt, id string, logger *slog.Logger) {
 	}
 }
 
+// desiredManagedContainerNames returns container names the orchestrator currently wants running.
+func desiredManagedContainerNames(services []nodepayloads.ConfigManagedService) map[string]struct{} {
+	out := make(map[string]struct{})
+	for i := range services {
+		svc := &services[i]
+		serviceID := strings.TrimSpace(svc.ServiceID)
+		serviceType := strings.TrimSpace(svc.ServiceType)
+		image := strings.TrimSpace(svc.Image)
+		if serviceID == "" || serviceType == "" || image == "" {
+			continue
+		}
+		name := managedServiceContainerPrefix + sanitizeContainerName(serviceID)
+		if name == managedServiceContainerPrefix {
+			continue
+		}
+		out[name] = struct{}{}
+	}
+	return out
+}
+
+// stopUndesiredManagedContainers removes cynodeai-managed-* containers not in the desired set.
+// When orchestrator drops session-bound PMA entries (logout / scanner teardown), desired state
+// shrinks; without this pass, old pma-sb-* containers would keep running.
+func stopUndesiredManagedContainers(rt string, desired map[string]struct{}, logger *slog.Logger) {
+	out, err := runner.CombinedOutput(rt, "ps", "-a", "--format", "{{.Names}}")
+	if err != nil {
+		if logger != nil {
+			logger.Warn("managed services: list containers for teardown reconcile", "error", err)
+		}
+		return
+	}
+	for _, line := range strings.Split(string(out), "\n") {
+		name := strings.TrimSpace(line)
+		if name == "" || !strings.HasPrefix(name, managedServiceContainerPrefix) {
+			continue
+		}
+		if _, keep := desired[name]; keep {
+			continue
+		}
+		if logger != nil {
+			logger.Info("managed service no longer desired; stopping container", "name", name)
+		}
+		stopAndRemoveContainer(rt, name, logger)
+	}
+}
+
 // runMain loads config and runs the node manager until ctx is canceled.
 // Node-manager owns the telemetry DB per spec: ensures dir, records node_boot, runs retention/vacuum, records shutdown.
 // Returns 0 on success, 1 on failure. Extracted for testability.
@@ -627,6 +673,9 @@ func buildManagedServiceRunArgs(rt string, svc *nodepayloads.ConfigManagedServic
 
 // startOneManagedService ensures the managed service container is running and, for PMA, waits for /healthz over UDS.
 func startOneManagedService(ctx context.Context, rt string, svc *nodepayloads.ConfigManagedService, serviceID, serviceType, image, name string) error {
+	if strings.EqualFold(serviceType, "pma") {
+		workerapiserver.EnsureManagedPMAInferenceProxy(ctx, effectiveStateDir(), serviceID, slog.Default())
+	}
 	out, err := runner.CombinedOutput(rt, "ps", "-a", "--format", "{{.Names}}")
 	if err == nil && containerps.NameListed(string(out), name) {
 		_, _ = runner.CombinedOutput(rt, "start", name)
@@ -651,11 +700,21 @@ func startOneManagedService(ctx context.Context, rt string, svc *nodepayloads.Co
 	return nil
 }
 
-// startManagedServices starts each desired managed service container (e.g. PMA) from config.
+// startManagedServices reconciles managed containers with desired config: stops undesired, then starts each desired.
 // Containers are named cynodeai-managed-<service_id>. If a container already exists, it is started if stopped.
 // For PMA, waits for the service to respond on /healthz before returning so the orchestrator does not get "ready" before the container is reachable.
 func startManagedServices(ctx context.Context, services []nodepayloads.ConfigManagedService) error {
 	rt := getEnv("CONTAINER_RUNTIME", "podman")
+	desired := desiredManagedContainerNames(services)
+	if len(services) == 0 {
+		// Orchestrator removed all managed services (e.g. admin revoke); stop every cynodeai-managed-* container.
+		stopUndesiredManagedContainers(rt, map[string]struct{}{}, slog.Default())
+		return nil
+	}
+	// If nothing valid was parsed, do not stop all cynodeai-managed-* containers (skip-only / malformed rows).
+	if len(desired) > 0 {
+		stopUndesiredManagedContainers(rt, desired, slog.Default())
+	}
 	for i := range services {
 		svc := &services[i]
 		serviceID := strings.TrimSpace(svc.ServiceID)

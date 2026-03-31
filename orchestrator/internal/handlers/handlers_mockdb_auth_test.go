@@ -443,6 +443,7 @@ func TestAuthHandler_RefreshSessionNotFound(t *testing.T) {
 }
 
 func TestAuthHandler_LogoutWithRefreshToken(t *testing.T) {
+	t.Cleanup(ResetPMATeardownForTest)
 	mockDB := testutil.NewMockDB()
 	jwtMgr := auth.NewJWTManager("test-secret-key-1234567890123456", 15*time.Minute, 7*24*time.Hour, 24*time.Hour)
 	rateLimiter := auth.NewRateLimiter(100, time.Minute)
@@ -467,16 +468,33 @@ func TestAuthHandler_LogoutWithRefreshToken(t *testing.T) {
 	session := newMockRefreshSession(user.ID, tokenHash, expiresAt)
 	mockDB.AddRefreshSession(session)
 
-	ctx := context.WithValue(context.Background(), contextKeyUserID, user.ID)
+	ctx := context.Background()
+	lineage := models.SessionBindingLineage{UserID: user.ID, SessionID: session.ID, ThreadID: nil}
+	bindKey := models.DeriveSessionBindingKey(lineage)
+	if _, err := mockDB.UpsertSessionBinding(ctx, lineage, models.PMAServiceIDForBindingKey(bindKey), models.SessionBindingStateActive); err != nil {
+		t.Fatal(err)
+	}
+
+	reqCtx := context.WithValue(ctx, contextKeyUserID, user.ID)
 	body := userapi.LogoutRequest{RefreshToken: refreshToken}
 	jsonBody, _ := json.Marshal(body)
-	req := httptest.NewRequest("POST", "/v1/auth/logout", bytes.NewBuffer(jsonBody)).WithContext(ctx)
+	req := httptest.NewRequest("POST", "/v1/auth/logout", bytes.NewBuffer(jsonBody)).WithContext(reqCtx)
 	rec := httptest.NewRecorder()
 
 	handler.Logout(rec, req)
 
 	if rec.Code != http.StatusNoContent {
 		t.Errorf("expected status 204, got %d", rec.Code)
+	}
+	b, err := mockDB.GetSessionBindingByKey(ctx, bindKey)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if b.State != models.SessionBindingStateTeardownPending {
+		t.Fatalf("binding state %q want teardown_pending after logout", b.State)
+	}
+	if rec := LastPMATeardownForTest(); rec == nil || rec.BindingKey != bindKey {
+		t.Fatalf("expected PMA teardown record for binding %q, got %+v", bindKey, rec)
 	}
 }
 

@@ -227,6 +227,14 @@ func InitializeOrchestratorSuite(sc *godog.ScenarioContext, state *testState) {
 				return ctx, err
 			}
 		}
+		// PMA routing scenarios derive service_id from the active refresh session; stale session_bindings
+		// or nodes from earlier scenarios in the shared DB cause flaky 503 (model_unavailable).
+		if strings.Contains(s.Name, "cynodeai.pm") && strings.Contains(s.Name, "worker-reported") {
+			if err := bddTruncatePublicTables(ctx, db); err != nil {
+				_ = db.Close()
+				return ctx, err
+			}
+		}
 		// orchestrator_startup.feature registers "ready-node-01" for readiness; task lifecycle
 		// expects a single dispatcher target (test-node-01). Remove the leftover node so dispatch
 		// does not hit the wrong worker mock.

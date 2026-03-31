@@ -18,14 +18,14 @@ import (
 
 // AuthHandler handles authentication endpoints.
 type AuthHandler struct {
-	db          database.UserStore
+	db          database.Store
 	jwt         *auth.JWTManager
 	rateLimiter *auth.RateLimiter
 	logger      *slog.Logger
 }
 
 // NewAuthHandler creates a new auth handler.
-func NewAuthHandler(db database.UserStore, jwt *auth.JWTManager, rateLimiter *auth.RateLimiter, logger *slog.Logger) *AuthHandler {
+func NewAuthHandler(db database.Store, jwt *auth.JWTManager, rateLimiter *auth.RateLimiter, logger *slog.Logger) *AuthHandler {
 	return &AuthHandler{
 		db:          db,
 		jwt:         jwt,
@@ -137,11 +137,14 @@ func (h *AuthHandler) completeLogin(w http.ResponseWriter, ctx context.Context, 
 	}
 
 	tokenHash := auth.HashToken(refreshToken)
-	_, err = h.db.CreateRefreshSession(ctx, user.ID, tokenHash, expiresAt)
+	refreshRec, err := h.db.CreateRefreshSession(ctx, user.ID, tokenHash, expiresAt)
 	if err != nil {
 		h.logger.Error("create refresh session", "error", err)
 		WriteInternalError(w, "Failed to create session")
 		return
+	}
+	if err := GreedyProvisionPMAAfterInteractiveSession(ctx, h.db, user.ID, refreshRec.ID, h.logger); err != nil {
+		h.logger.Warn("greedy pma provision after login", "error", err)
 	}
 
 	h.auditLog(ctx, &user.ID, "login_success", true, ipAddr, userAgent, "")
@@ -235,11 +238,14 @@ func (h *AuthHandler) Refresh(w http.ResponseWriter, r *http.Request) {
 
 	// Store new refresh session
 	newTokenHash := auth.HashToken(newRefreshToken)
-	_, err = h.db.CreateRefreshSession(ctx, user.ID, newTokenHash, expiresAt)
+	newRefresh, err := h.db.CreateRefreshSession(ctx, user.ID, newTokenHash, expiresAt)
 	if err != nil {
 		h.logger.Error("create refresh session", "error", err)
 		WriteInternalError(w, "Failed to create session")
 		return
+	}
+	if err := GreedyProvisionPMAAfterInteractiveSession(ctx, h.db, user.ID, newRefresh.ID, h.logger); err != nil {
+		h.logger.Warn("greedy pma provision after refresh", "error", err)
 	}
 
 	h.auditLog(ctx, &userID, "refresh_success", true, ipAddr, r.UserAgent(), "")
@@ -270,6 +276,7 @@ func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) {
 		session, err := h.db.GetActiveRefreshSession(ctx, tokenHash)
 		if err == nil {
 			_ = h.db.InvalidateRefreshSession(ctx, session.ID)
+			_ = TeardownPMAForInteractiveSession(ctx, h.db, session.UserID, session.ID, "logout", h.logger)
 		}
 	}
 

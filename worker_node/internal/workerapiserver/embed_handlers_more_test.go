@@ -135,6 +135,16 @@ func TestManagedServiceProxyHTTPHandler_Unauthorized(t *testing.T) {
 }
 
 func TestManagedServiceProxyHTTPHandler_ServiceNotFound(t *testing.T) {
+	testManagedServiceProxyHTTPHandler_ServiceNotFound(t)
+}
+
+// TestMultiPMA_ProxyFailClosed_UnknownServiceID asserts REQ-WORKER-0175: proxy rejects unknown service_id (no socket).
+func TestMultiPMA_ProxyFailClosed_UnknownServiceID(t *testing.T) {
+	testManagedServiceProxyHTTPHandler_ServiceNotFound(t)
+}
+
+func testManagedServiceProxyHTTPHandler_ServiceNotFound(t *testing.T) {
+	t.Helper()
 	pub, _ := buildMuxesFromEmbedConfig(
 		executor.New("direct", 5*time.Second, 1024, "", "", nil),
 		"token", t.TempDir(), nil, slog.Default(),

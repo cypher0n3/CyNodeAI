@@ -246,6 +246,11 @@ stop:
     #!/usr/bin/env bash
     set -e
     root="$(cd "{{ root_dir }}" && pwd)"
+    # Invalidate refresh sessions + teardown per-session PMA bindings in Postgres while control-plane is up,
+    # so the next `setup-dev start` only runs cynodeai-managed-pma-main (no pma-sb-* until login). Opt out: SETUP_DEV_SKIP_SESSION_RESET=1
+    if [ "${SETUP_DEV_SKIP_SESSION_RESET:-0}" != "1" ]; then
+      bash "$root/scripts/setup_dev_reset_session_state.sh" "$root" || true
+    fi
     [ -f "{{ node_manager_pid_file }}" ] && kill -TERM "$(cat {{ node_manager_pid_file }})" 2>/dev/null || true; rm -f "{{ node_manager_pid_file }}"
     (pgrep -f cynodeai-wnm || true) | xargs -r kill -TERM 2>/dev/null || true
     (pgrep -f worker-api-dev || true) | xargs -r kill -TERM 2>/dev/null || true
@@ -446,6 +451,19 @@ e2e *ARGS:
     # Match test-e2e / full-demo so inference E2E (e2e_0510, …) are not skipped.
     export INFERENCE_PROXY_IMAGE="${INFERENCE_PROXY_IMAGE:-cynodeai-inference-proxy:dev}"
     export OLLAMA_UPSTREAM_URL="${OLLAMA_UPSTREAM_URL:-http://host.containers.internal:11434}"
+    # shellcheck source=/dev/null
+    . "$root/scripts/e2e_stack_env.sh"
+    # Node-manager runs on the host; align with repo so fixes (e.g. managed-service teardown) apply.
+    (cd "$root" && just build-node-manager-dev)
+    if [ "${E2E_SKIP_NODE_MANAGER_RESTART:-0}" != "1" ]; then
+      wp="${WORKER_PORT:-12090}"
+      if curl -sf "http://127.0.0.1:${wp}/healthz" >/dev/null 2>&1; then
+        echo "[INFO] E2E: restarting node-manager (fresh cynodeai-wnm-dev)."
+        (cd "$root" && just setup-dev component node-manager restart) || {
+          echo "[WARN] node-manager restart failed; E2E may use a stale binary." >&2
+        }
+      fi
+    fi
     py="python3"
     [ -x "$root/.venv/bin/python3" ] && py="$root/.venv/bin/python3"
     "$py" scripts/test_scripts/run_e2e.py {{ ARGS }}

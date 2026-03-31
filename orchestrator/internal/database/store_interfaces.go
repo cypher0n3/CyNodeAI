@@ -20,8 +20,11 @@ type UserStore interface {
 
 	CreateRefreshSession(ctx context.Context, userID uuid.UUID, tokenHash []byte, expiresAt time.Time) (*models.RefreshSession, error)
 	GetActiveRefreshSession(ctx context.Context, tokenHash []byte) (*models.RefreshSession, error)
+	GetRefreshSessionByID(ctx context.Context, sessionID uuid.UUID) (*models.RefreshSession, error)
 	InvalidateRefreshSession(ctx context.Context, sessionID uuid.UUID) error
 	InvalidateAllUserSessions(ctx context.Context, userID uuid.UUID) error
+	// InvalidateAllRefreshSessions marks every refresh session inactive (dev reset / emergency).
+	InvalidateAllRefreshSessions(ctx context.Context) error
 
 	CreateAuthAuditLog(ctx context.Context, userID *uuid.UUID, eventType string, success bool, ipAddress, userAgent, subjectHandle, reason *string) error
 
@@ -113,6 +116,15 @@ type ChatStore interface {
 	CreateChatAuditLog(ctx context.Context, rec *models.ChatAuditLog) error
 }
 
+// SessionBindingStore covers per-session-binding PMA control-plane rows (REQ-ORCHES-0188).
+type SessionBindingStore interface {
+	UpsertSessionBinding(ctx context.Context, lineage models.SessionBindingLineage, serviceID, state string) (*models.SessionBinding, error)
+	GetSessionBindingByKey(ctx context.Context, bindingKey string) (*models.SessionBinding, error)
+	ListActiveBindingsForUser(ctx context.Context, userID uuid.UUID) ([]*models.SessionBinding, error)
+	ListAllActiveSessionBindings(ctx context.Context) ([]*models.SessionBinding, error)
+	TouchActiveSessionBindingsForUser(ctx context.Context, userID uuid.UUID, at time.Time) error
+}
+
 // SkillStore covers user and system skills.
 type SkillStore interface {
 	CreateSkill(ctx context.Context, name, content, scope string, ownerID *uuid.UUID, isSystem bool) (*models.Skill, error)
@@ -149,18 +161,21 @@ type WorkflowHandlerDeps interface {
 type OpenAIChatHandlerDeps interface {
 	ChatStore
 	NodeStore
+	SessionBindingStore
 }
 
 // Compile-time checks: *DB implements each composed interface (review report: focused sub-stores).
 var (
-	_ UserStore           = (*DB)(nil)
-	_ TaskStore           = (*DB)(nil)
-	_ NodeStore           = (*DB)(nil)
-	_ ChatStore           = (*DB)(nil)
-	_ PreferenceStore     = (*DB)(nil)
-	_ SkillStore          = (*DB)(nil)
-	_ WorkflowStore       = (*DB)(nil)
-	_ SystemSettingsStore = (*DB)(nil)
-	_ Transactional       = (*DB)(nil)
-	_ Store               = (*DB)(nil)
+	_ UserStore             = (*DB)(nil)
+	_ TaskStore             = (*DB)(nil)
+	_ NodeStore             = (*DB)(nil)
+	_ ChatStore             = (*DB)(nil)
+	_ SessionBindingStore   = (*DB)(nil)
+	_ PreferenceStore       = (*DB)(nil)
+	_ SkillStore            = (*DB)(nil)
+	_ WorkflowStore         = (*DB)(nil)
+	_ SystemSettingsStore   = (*DB)(nil)
+	_ Transactional         = (*DB)(nil)
+	_ OpenAIChatHandlerDeps = (*DB)(nil)
+	_ Store                 = (*DB)(nil)
 )

@@ -72,6 +72,7 @@ func RunEmbedded(ctx context.Context, cfg EmbedConfig) (readyCh <-chan struct{},
 	shutdownFn := func() {
 		cancelProxies()
 		proxyWg.Wait()
+		clearEmbedInferenceRuntime()
 		shutdownCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
 		defer cancel()
 		_ = srv.Shutdown(shutdownCtx)
@@ -98,30 +99,80 @@ func embedGetEnvInt(key string, def int) int {
 	return def
 }
 
-func startManagedServiceInferenceProxies(ctx context.Context, stateDir string, targets map[string]embedManagedServiceTarget, logger *slog.Logger, wg *sync.WaitGroup) {
+var (
+	embedInferenceRuntimeMu    sync.Mutex
+	embedInferenceProxyCtx     context.Context
+	embedInferenceProxyWg      *sync.WaitGroup
+	managedPMAInferenceStarted sync.Map // serviceID -> struct{}
+)
+
+func setEmbedInferenceRuntime(pctx context.Context, wg *sync.WaitGroup) {
+	embedInferenceRuntimeMu.Lock()
+	defer embedInferenceRuntimeMu.Unlock()
+	embedInferenceProxyCtx = pctx
+	embedInferenceProxyWg = wg
+}
+
+func clearEmbedInferenceRuntime() {
+	embedInferenceRuntimeMu.Lock()
+	defer embedInferenceRuntimeMu.Unlock()
+	embedInferenceProxyCtx = nil
+	embedInferenceProxyWg = nil
+}
+
+// EnsureManagedPMAInferenceProxy starts the per-service Ollama UDS proxy for a PMA service_id if not already running.
+// Call before starting a new PMA container when the orchestrator adds session-bound instances after node-manager boot.
+func EnsureManagedPMAInferenceProxy(ctx context.Context, stateDir, serviceID string, logger *slog.Logger) {
+	serviceID = strings.TrimSpace(serviceID)
+	if serviceID == "" {
+		return
+	}
+	if _, loaded := managedPMAInferenceStarted.LoadOrStore(serviceID, struct{}{}); loaded {
+		return
+	}
+	const internalProxySocketBaseDir = "run/managed_agent_proxy"
+	sockDir := filepath.Join(stateDir, internalProxySocketBaseDir, serviceID)
+	sockPath := filepath.Join(sockDir, "inference.sock")
+	if err := os.MkdirAll(sockDir, 0o700); err != nil {
+		managedPMAInferenceStarted.Delete(serviceID)
+		if logger != nil {
+			logger.Error("inference proxy: failed to create socket dir", "service_id", serviceID, "error", err)
+		}
+		return
+	}
 	rawUpstream := embedGetEnv("OLLAMA_UPSTREAM_URL", inferenceproxy.DefaultUpstream)
 	upstreamURL := strings.ReplaceAll(rawUpstream, "host.containers.internal", "localhost")
-	const internalProxySocketBaseDir = "run/managed_agent_proxy"
+	if logger != nil {
+		logger.Info("inference proxy started", "service_id", serviceID, "sock", sockPath, "upstream", upstreamURL)
+	}
+	embedInferenceRuntimeMu.Lock()
+	pctx := embedInferenceProxyCtx
+	wg := embedInferenceProxyWg
+	embedInferenceRuntimeMu.Unlock()
+	if pctx == nil {
+		pctx = ctx
+		if pctx == nil {
+			pctx = context.Background()
+		}
+	}
+	if wg != nil {
+		wg.Add(1)
+	}
+	go func(sock, upstream string) {
+		if wg != nil {
+			defer wg.Done()
+		}
+		inferenceproxy.RunUDSWithUpstream(pctx, sock, upstream)
+	}(sockPath, upstreamURL)
+}
+
+func startManagedServiceInferenceProxies(ctx context.Context, stateDir string, targets map[string]embedManagedServiceTarget, logger *slog.Logger, wg *sync.WaitGroup) {
+	setEmbedInferenceRuntime(ctx, wg)
 	for serviceID, target := range targets {
 		if !strings.EqualFold(target.ServiceType, "pma") {
 			continue
 		}
-		sockDir := filepath.Join(stateDir, internalProxySocketBaseDir, serviceID)
-		sockPath := filepath.Join(sockDir, "inference.sock")
-		if err := os.MkdirAll(sockDir, 0o700); err != nil {
-			if logger != nil {
-				logger.Error("inference proxy: failed to create socket dir", "service_id", serviceID, "error", err)
-			}
-			continue
-		}
-		if logger != nil {
-			logger.Info("inference proxy started", "service_id", serviceID, "sock", sockPath, "upstream", upstreamURL)
-		}
-		wg.Add(1)
-		go func(id, sock, upstream string) {
-			defer wg.Done()
-			inferenceproxy.RunUDSWithUpstream(ctx, sock, upstream)
-		}(serviceID, sockPath, upstreamURL)
+		EnsureManagedPMAInferenceProxy(ctx, stateDir, serviceID, logger)
 	}
 }
 

@@ -108,7 +108,7 @@ func (h *OpenAIChatHandler) Responses(w http.ResponseWriter, r *http.Request) {
 	if h.tryPMAStream(timeoutCtx, w, req.Stream, effectiveModel, contextMessages, thread.ID, userID, projectID, start, responseID, responsesMeta) {
 		return
 	}
-	content, status, code, msg := h.routeAndComplete(timeoutCtx, effectiveModel, contextMessages, userContent)
+	content, status, code, msg := h.routeAndComplete(timeoutCtx, *userID, effectiveModel, contextMessages, userContent)
 	if status != 0 {
 		writeCompletionError(w, req.Stream, status, code, msg)
 		return

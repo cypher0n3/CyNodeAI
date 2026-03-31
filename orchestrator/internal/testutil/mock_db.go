@@ -22,6 +22,7 @@ var (
 	_ database.TaskStore             = (*MockDB)(nil)
 	_ database.NodeStore             = (*MockDB)(nil)
 	_ database.ChatStore             = (*MockDB)(nil)
+	_ database.SessionBindingStore   = (*MockDB)(nil)
 	_ database.PreferenceStore       = (*MockDB)(nil)
 	_ database.SkillStore            = (*MockDB)(nil)
 	_ database.WorkflowStore         = (*MockDB)(nil)
@@ -57,6 +58,7 @@ type MockDB struct {
 	Skills                map[uuid.UUID]*models.Skill
 	TaskWorkflowLeases    map[uuid.UUID]*models.TaskWorkflowLease
 	WorkflowCheckpoints   map[uuid.UUID]*models.WorkflowCheckpoint
+	SessionBindingsByKey  map[string]*models.SessionBinding
 
 	// Access control and API egress (for handler tests).
 	AccessControlRules              []*models.AccessControlRule
@@ -153,6 +155,7 @@ func NewMockDB() *MockDB {
 		Skills:                make(map[uuid.UUID]*models.Skill),
 		TaskWorkflowLeases:    make(map[uuid.UUID]*models.TaskWorkflowLease),
 		WorkflowCheckpoints:   make(map[uuid.UUID]*models.WorkflowCheckpoint),
+		SessionBindingsByKey:  make(map[string]*models.SessionBinding),
 	}
 }
 
@@ -315,6 +318,13 @@ func (m *MockDB) GetActiveRefreshSession(_ context.Context, tokenHash []byte) (*
 	})
 }
 
+// GetRefreshSessionByID returns a refresh session by id (any status).
+func (m *MockDB) GetRefreshSessionByID(_ context.Context, sessionID uuid.UUID) (*models.RefreshSession, error) {
+	return runWithLock(m, false, func() (*models.RefreshSession, error) {
+		return getByKey(m.RefreshSessions, sessionID)
+	})
+}
+
 // invalidateSessionsWhere marks sessions matching pred as inactive. Caller must hold m.mu.
 func (m *MockDB) invalidateSessionsWhere(pred func(*models.RefreshSession) bool) {
 	now := time.Now().UTC()
@@ -342,6 +352,11 @@ func (m *MockDB) InvalidateRefreshSession(_ context.Context, sessionID uuid.UUID
 // InvalidateAllUserSessions invalidates all sessions for a user.
 func (m *MockDB) InvalidateAllUserSessions(_ context.Context, userID uuid.UUID) error {
 	return m.invalidateSessionsWithPred(func(s *models.RefreshSession) bool { return s.UserID == userID })
+}
+
+// InvalidateAllRefreshSessions invalidates every refresh session.
+func (m *MockDB) InvalidateAllRefreshSessions(_ context.Context) error {
+	return m.invalidateSessionsWithPred(func(s *models.RefreshSession) bool { return s.IsActive })
 }
 
 // CreateAuthAuditLog creates an auth audit log entry (subjectHandle, reason per Store).

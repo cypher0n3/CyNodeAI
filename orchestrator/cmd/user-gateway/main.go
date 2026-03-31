@@ -102,6 +102,10 @@ func run(ctx context.Context, cfg *config.OrchestratorConfig, store database.Sto
 		logger.Warn("ensure default skill", "error", err)
 	}
 
+	scannerCtx, cancelScanner := context.WithCancel(ctx)
+	defer cancelScanner()
+	go handlers.RunPMABindingScanner(scannerCtx, store, logger)
+
 	authMiddleware := middleware.NewAuthMiddleware(jwtManager, logger)
 
 	mux := http.NewServeMux()

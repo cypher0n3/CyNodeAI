@@ -21,6 +21,30 @@ import (
 // TestBuildManagedServiceTargetsFromConfig_PMAUsesUDS asserts REQ-WORKER-0174 / REQ-WORKER-0270:
 // the PMA target base_url MUST be a http+unix:// URL pointing at the per-service UDS socket,
 // not a TCP URL. PMA_BASE_URL (TCP) must not be used when a stateDir is available.
+// TestMultiPMA_BuildManagedServiceTargets_TwoPMADistinctUDS asserts REQ-WORKER-0176: two PMA service_ids
+// produce distinct http+unix base URLs (independent proxy UDS per instance).
+func TestMultiPMA_BuildManagedServiceTargets_TwoPMADistinctUDS(t *testing.T) {
+	stateDir := t.TempDir()
+	t.Setenv("WORKER_API_STATE_DIR", stateDir)
+	cfg := &nodepayloads.NodeConfigurationPayload{
+		ManagedServices: &nodepayloads.ConfigManagedServices{
+			Services: []nodepayloads.ConfigManagedService{
+				{ServiceID: "pma-a", ServiceType: "pma"},
+				{ServiceID: "pma-b", ServiceType: "pma"},
+			},
+		},
+	}
+	targets := buildManagedServiceTargetsFromConfig(cfg)
+	if len(targets) != 2 {
+		t.Fatalf("want 2 targets, got %d: %+v", len(targets), targets)
+	}
+	a := targets["pma-a"]["base_url"]
+	b := targets["pma-b"]["base_url"]
+	if a == b || !strings.Contains(a, "pma-a") || !strings.Contains(b, "pma-b") {
+		t.Fatalf("expected distinct UDS URLs, a=%q b=%q", a, b)
+	}
+}
+
 func TestBuildManagedServiceTargetsFromConfig_PMAUsesUDS(t *testing.T) {
 	stateDir := t.TempDir()
 	t.Setenv("WORKER_API_STATE_DIR", stateDir)
@@ -321,10 +345,12 @@ func TestMaybeStartManagedServices_NoOpPaths(t *testing.T) {
 	if err := maybeStartManagedServices(context.Background(), nil, nil, nil); err != nil {
 		t.Fatalf("expected nil opts no-op, got %v", err)
 	}
+	var gotLen int
 	called := false
 	opts := &RunOptions{
-		StartManagedServices: func(context.Context, []nodepayloads.ConfigManagedService) error {
+		StartManagedServices: func(_ context.Context, svcs []nodepayloads.ConfigManagedService) error {
 			called = true
+			gotLen = len(svcs)
 			return nil
 		},
 	}
@@ -334,10 +360,13 @@ func TestMaybeStartManagedServices_NoOpPaths(t *testing.T) {
 		},
 	}
 	if err := maybeStartManagedServices(context.Background(), nil, cfg, opts); err != nil {
-		t.Fatalf("expected empty services no-op, got %v", err)
+		t.Fatalf("expected empty services reconcile, got %v", err)
 	}
-	if called {
-		t.Fatal("StartManagedServices must not be called for empty service list")
+	if !called {
+		t.Fatal("StartManagedServices must be called for empty service list (teardown reconcile)")
+	}
+	if gotLen != 0 {
+		t.Fatalf("expected empty slice, got len=%d", gotLen)
 	}
 }
 
@@ -455,10 +484,12 @@ func TestReconcileManagedServices_NilNodeConfig(t *testing.T) {
 }
 
 func TestReconcileManagedServices_EmptyServices(t *testing.T) {
+	var gotLen int
 	called := false
 	opts := &RunOptions{
-		StartManagedServices: func(context.Context, []nodepayloads.ConfigManagedService) error {
+		StartManagedServices: func(_ context.Context, svcs []nodepayloads.ConfigManagedService) error {
 			called = true
+			gotLen = len(svcs)
 			return nil
 		},
 	}
@@ -466,8 +497,11 @@ func TestReconcileManagedServices_EmptyServices(t *testing.T) {
 		ManagedServices: &nodepayloads.ConfigManagedServices{Services: nil},
 	}
 	reconcileManagedServices(context.Background(), nil, nodeConfig, opts)
-	if called {
-		t.Error("StartManagedServices should not be called with empty services")
+	if !called {
+		t.Error("StartManagedServices should be called with empty slice to reconcile managed teardown")
+	}
+	if gotLen != 0 {
+		t.Errorf("expected empty slice, got len=%d", gotLen)
 	}
 }
 

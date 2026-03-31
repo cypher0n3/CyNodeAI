@@ -67,10 +67,14 @@ type embedInternalProxyConfig struct {
 type embedProxyConfig struct {
 	ManagedServiceTargets map[string]embedManagedServiceTarget
 	InternalProxy         embedInternalProxyConfig
+	// EmbedStateDir is the node state dir (WORKER_API_STATE_DIR); used to resolve managed-service
+	// proxy sockets when a service_id is not in InternalProxy.SocketByService (dynamic PMA instances).
+	EmbedStateDir string
 }
 
 func loadProxyConfigFromEnv(stateDir string, logger *slog.Logger) (embedProxyConfig, error) {
 	out := embedProxyConfig{
+		EmbedStateDir:         stateDir,
 		ManagedServiceTargets: map[string]embedManagedServiceTarget{},
 		InternalProxy: embedInternalProxyConfig{
 			UpstreamBaseURL: strings.TrimSpace(os.Getenv("ORCHESTRATOR_INTERNAL_PROXY_BASE_URL")),
@@ -184,7 +188,10 @@ func buildMuxesFromEmbedConfig(
 	})
 	publicMux.HandleFunc("GET /readyz", embedReadyzHandler(runner))
 	publicMux.HandleFunc("POST /v1/worker/jobs:run", embedJobsRunHandler(runner, workspaceRoot, bearerToken))
-	publicMux.HandleFunc("POST /v1/worker/managed-services/{id}/proxy:http", managedServiceProxyHTTPHandler(bearerToken, proxyCfg.InternalProxy.SocketByService, logger))
+	publicMux.HandleFunc(
+		"POST /v1/worker/managed-services/{id}/proxy:http",
+		managedServiceProxyHTTPHandler(bearerToken, proxyCfg.EmbedStateDir, proxyCfg.InternalProxy.SocketByService, logger),
+	)
 	registerEmbedTelemetryHandlers(publicMux, bearerToken, telemetryStore, logger)
 	internalMux = http.NewServeMux()
 	ip := proxyCfg.InternalProxy
@@ -198,14 +205,14 @@ func buildMuxesFromEmbedConfig(
 	return publicMux, internalMux
 }
 
-func managedServiceProxyHTTPHandler(bearerToken string, socketByService map[string]string, logger *slog.Logger) http.HandlerFunc {
+func managedServiceProxyHTTPHandler(bearerToken string, embedStateDir string, socketByService map[string]string, logger *slog.Logger) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if r.Method != http.MethodPost {
 			http.Error(w, "method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
 		httplimits.WrapRequestBody(w, r, httplimits.DefaultMaxAPIRequestBodyBytes)
-		proxyReq, body, socketPath, errCode, err := validateManagedProxyRequest(r, bearerToken, socketByService, logger)
+		proxyReq, body, socketPath, errCode, err := validateManagedProxyRequest(r, bearerToken, embedStateDir, socketByService, logger)
 		if err != nil {
 			if errCode == http.StatusUnauthorized {
 				w.Header().Set("Content-Type", "application/json")
@@ -287,7 +294,7 @@ func doManagedProxyUpstreamStream(ctx context.Context, proxyReq *managedProxyReq
 	return 0, nil
 }
 
-func validateManagedProxyRequest(r *http.Request, bearerToken string, socketByService map[string]string, logger *slog.Logger) (req *managedProxyRequest, body []byte, socketPath string, errCode int, err error) {
+func validateManagedProxyRequest(r *http.Request, bearerToken string, embedStateDir string, socketByService map[string]string, logger *slog.Logger) (req *managedProxyRequest, body []byte, socketPath string, errCode int, err error) {
 	if bearerToken != "" && !embedBearerOK(r.Header.Get("Authorization"), bearerToken) {
 		return nil, nil, "", http.StatusUnauthorized, fmt.Errorf("unauthorized")
 	}
@@ -296,6 +303,13 @@ func validateManagedProxyRequest(r *http.Request, bearerToken string, socketBySe
 		return nil, nil, "", http.StatusBadRequest, fmt.Errorf("missing service id")
 	}
 	proxySock, ok := socketByService[serviceID]
+	if !ok || proxySock == "" {
+		if strings.TrimSpace(embedStateDir) != "" {
+			var dynOK bool
+			proxySock, dynOK = managedAgentProxySocketPathEmbed(embedStateDir, serviceID)
+			ok = dynOK
+		}
+	}
 	if !ok || proxySock == "" {
 		if logger != nil {
 			logger.Warn("managed-service proxy: no socket for service", "service_id", serviceID)

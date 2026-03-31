@@ -528,6 +528,32 @@ func TestClient_GetTaskLogs_NotFound(t *testing.T) {
 	}
 }
 
+// TestSessionContext_ChatIncludesBearerAuthorization documents REQ-ORCHES-0188: chat uses the access
+// token from login/refresh so the orchestrator can identify the user for session binding.
+func TestSessionContext_ChatIncludesBearerAuthorization(t *testing.T) {
+	var auth string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		auth = r.Header.Get("Authorization")
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_ = json.NewEncoder(w).Encode(map[string]any{
+			"choices": []map[string]any{
+				{"message": map[string]any{"role": "assistant", "content": "ok"}},
+			},
+		})
+	}))
+	defer server.Close()
+	client := NewClient(server.URL)
+	client.SetToken("session-access-token")
+	_, err := client.Chat(context.Background(), "hi")
+	if err != nil {
+		t.Fatalf("Chat: %v", err)
+	}
+	if auth != "Bearer session-access-token" {
+		t.Fatalf("Authorization = %q", auth)
+	}
+}
+
 func TestClient_Chat_Success(t *testing.T) {
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != pathV1ChatCompletions || r.Method != http.MethodPost {

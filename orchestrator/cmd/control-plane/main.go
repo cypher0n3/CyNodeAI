@@ -223,6 +223,9 @@ func run(ctx context.Context, store database.Store, cfg *config.OrchestratorConf
 	mux.HandleFunc("GET /healthz", healthzHandler)
 	mux.HandleFunc("GET /readyz", readyzHandler(store, cfg, logger))
 
+	// Dev/local: reset PMA session bindings + refresh sessions (setup-dev stop). Bearer = NODE_REGISTRATION_PSK.
+	mux.HandleFunc("POST /internal/dev/reset-pma-session-state", handlers.DevResetPMASessionStateHandler(store, cfg.NodeRegistrationPSK, logger))
+
 	mux.HandleFunc("POST /v1/nodes/register", httplimits.LimitBody(maxBodyBytes, nodeHandler.Register))
 	mux.Handle("GET /v1/nodes/config", authMiddleware.RequireNodeAuth(http.HandlerFunc(nodeHandler.GetConfig)))
 	mux.Handle("POST /v1/nodes/config", authMiddleware.RequireNodeAuth(http.HandlerFunc(httplimits.LimitBody(maxBodyBytes, nodeHandler.ConfigAck))))

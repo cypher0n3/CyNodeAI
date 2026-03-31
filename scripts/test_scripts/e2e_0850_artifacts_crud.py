@@ -125,7 +125,12 @@ class TestArtifactsCRUD(unittest.TestCase):
             "content_bytes_base64": base64.standard_b64encode(body).decode("ascii"),
             "content_type": "text/plain",
         }
-        code, raw = helpers.mcp_tool_call("artifact.put", arguments=args_put, timeout=90)
+        code, raw = helpers.mcp_tool_call(
+            "artifact.put",
+            arguments=args_put,
+            timeout=90,
+            bearer_token=helpers.mcp_pm_agent_bearer_token(),
+        )
         if code == 503:
             self.skipTest("artifacts storage not configured on control-plane")
         self.assertEqual(code, 200, raw)
@@ -140,6 +145,7 @@ class TestArtifactsCRUD(unittest.TestCase):
                 "path": rel_path,
             },
             timeout=90,
+            bearer_token=helpers.mcp_pm_agent_bearer_token(),
         )
         self.assertEqual(code, 200, raw)
         get_data = helpers.parse_json_safe(raw) or {}
@@ -151,6 +157,7 @@ class TestArtifactsCRUD(unittest.TestCase):
             "artifact.list",
             arguments={"user_id": uid, "scope": "user", "limit": 50},
             timeout=90,
+            bearer_token=helpers.mcp_pm_agent_bearer_token(),
         )
         self.assertEqual(code, 200, raw)
         list_data = helpers.parse_json_safe(raw) or {}

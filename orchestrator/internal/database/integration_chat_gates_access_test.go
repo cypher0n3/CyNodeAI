@@ -74,6 +74,70 @@ func TestIntegration_CreateRefreshSession_ReturnsSession(t *testing.T) {
 	}
 }
 
+func TestIntegration_GetRefreshSessionByID(t *testing.T) {
+	db, ctx := integrationDB(t)
+	user, err := db.CreateUser(ctx, "getrs-"+uuid.New().String(), nil)
+	if err != nil {
+		t.Fatalf("CreateUser: %v", err)
+	}
+	expires := time.Now().UTC().Add(time.Hour)
+	session, err := db.CreateRefreshSession(ctx, user.ID, []byte("tokenhash-by-id"), expires)
+	if err != nil {
+		t.Fatalf("CreateRefreshSession: %v", err)
+	}
+	loaded, err := db.GetRefreshSessionByID(ctx, session.ID)
+	if err != nil {
+		t.Fatalf("GetRefreshSessionByID: %v", err)
+	}
+	if loaded == nil || loaded.ID != session.ID || loaded.UserID != user.ID {
+		t.Fatalf("GetRefreshSessionByID: got %+v", loaded)
+	}
+}
+
+func TestIntegration_OperationsFailAfterClose(t *testing.T) {
+	db, ctx := integrationDB(t)
+	user, err := db.CreateUser(ctx, "closed-db-"+uuid.New().String(), nil)
+	if err != nil {
+		t.Fatalf("CreateUser: %v", err)
+	}
+	thread, err := db.CreateChatThread(ctx, user.ID, nil, nil)
+	if err != nil {
+		t.Fatalf("CreateChatThread: %v", err)
+	}
+	if err := db.Close(); err != nil {
+		t.Fatalf("Close: %v", err)
+	}
+
+	expires := time.Now().UTC().Add(time.Hour)
+	if _, err := db.CreateRefreshSession(ctx, user.ID, []byte("h"), expires); err == nil {
+		t.Error("CreateRefreshSession after Close: expected error")
+	}
+	if _, err := db.CreateChatThread(ctx, user.ID, nil, nil); err == nil {
+		t.Error("CreateChatThread after Close: expected error")
+	}
+	if _, err := db.AppendChatMessage(ctx, thread.ID, "user", "hi", nil); err == nil {
+		t.Error("AppendChatMessage after Close: expected error")
+	}
+	if _, err := db.GetOrCreateActiveChatThread(ctx, user.ID, nil); err == nil {
+		t.Error("GetOrCreateActiveChatThread after Close: expected error")
+	}
+	if _, err := db.GetUserByID(ctx, user.ID); err == nil {
+		t.Error("GetUserByID after Close: expected error")
+	}
+	if err := db.InvalidateRefreshSession(ctx, uuid.New()); err == nil {
+		t.Error("InvalidateRefreshSession after Close: expected error")
+	}
+	if _, _, err := db.ListChatMessages(ctx, thread.ID, 10, 0); err == nil {
+		t.Error("ListChatMessages after Close: expected error")
+	}
+	if _, err := db.GetChatThreadByID(ctx, thread.ID, user.ID); err == nil {
+		t.Error("GetChatThreadByID after Close: expected error")
+	}
+	if _, err := db.ListChatThreads(ctx, user.ID, nil, 10, 0); err == nil {
+		t.Error("ListChatThreads after Close: expected error")
+	}
+}
+
 // workflowGateCreateProjectAndPlan creates a project and plan for workflow gate tests.
 func workflowGateCreateProjectAndPlan(t *testing.T, db *DB, ctx context.Context, now time.Time, state string, archived bool) (*models.Project, uuid.UUID) {
 	t.Helper()

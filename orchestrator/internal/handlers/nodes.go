@@ -39,7 +39,7 @@ const (
 
 // NodeHandler handles node registration and management endpoints.
 type NodeHandler struct {
-	db                       database.NodeStore
+	db                       database.Store
 	jwt                      *auth.JWTManager
 	registrationPSK          string
 	orchestratorPublicURL    string
@@ -50,7 +50,7 @@ type NodeHandler struct {
 }
 
 // NewNodeHandler creates a new node handler.
-func NewNodeHandler(db database.NodeStore, jwt *auth.JWTManager, registrationPSK, orchestratorPublicURL, workerAPIBearerToken, workerAPITargetURL, workerInternalAgentToken string, logger *slog.Logger) *NodeHandler {
+func NewNodeHandler(db database.Store, jwt *auth.JWTManager, registrationPSK, orchestratorPublicURL, workerAPIBearerToken, workerAPITargetURL, workerInternalAgentToken string, logger *slog.Logger) *NodeHandler {
 	return &NodeHandler{
 		db:                       db,
 		jwt:                      jwt,
@@ -335,12 +335,8 @@ func (h *NodeHandler) buildManagedServicesDesiredState(ctx context.Context, node
 		}
 		return nil
 	}
-	serviceID := strings.TrimSpace(getEnvDefault("PMA_SERVICE_ID", "pma-main"))
-	image := strings.TrimSpace(getEnvDefault("PMA_IMAGE", "ghcr.io/cypher0n3/cynode-pma:latest"))
-	if serviceID == "" || image == "" {
-		if h.logger != nil {
-			h.logger.Debug("managed services skipped", "reason", "pma_service_id_or_image_empty", "node_slug", node.NodeSlug)
-		}
+	serviceID, image, ok := h.pmaServiceIDAndImageFromEnv(node)
+	if !ok {
 		return nil
 	}
 	selectedNodeSlug := h.selectPMAHostNodeSlug(ctx, node.NodeSlug)
@@ -353,49 +349,83 @@ func (h *NodeHandler) buildManagedServicesDesiredState(ctx context.Context, node
 		}
 		return nil
 	}
-	// For node-local inference, derive the node host from the worker API dispatch URL.
-	// If unavailable/loopback, leave base_url empty and let the worker resolve a local default.
 	inferenceBaseURL := deriveNodeLocalInferenceBaseURL(workerAPITargetURL)
 	defaultModel := h.selectPMAModel(ctx, node.ID)
-	workerInternalAgentToken := strings.TrimSpace(h.workerInternalAgentToken)
-	if workerInternalAgentToken == "" {
-		// Keep dev/prototype managed-agent proxy functional even when a dedicated
-		// internal agent token is not configured yet.
-		workerInternalAgentToken = strings.TrimSpace(h.workerAPIBearerToken)
-	}
+	token := h.resolveWorkerInternalAgentTokenForPMA()
+	services := h.buildPMAManagedServiceList(ctx, serviceID, image, inferenceBaseURL, defaultModel, inferenceBackendEnv, token)
 	if h.logger != nil {
 		h.logger.Info("managed services desired state built",
 			"node_slug", node.NodeSlug,
 			"pma_service_id", serviceID,
 			"pma_image", image,
-			"count", 1)
+			"count", len(services))
 	}
-	return &nodepayloads.ConfigManagedServices{
-		Services: []nodepayloads.ConfigManagedService{
-			{
-				ServiceID:   serviceID,
-				ServiceType: "pma",
-				Image:       image,
-				Args:        []string{"--role=project_manager"},
-				Healthcheck: &nodepayloads.ConfigManagedServiceHealthcheck{
-					Path:           "/healthz",
-					ExpectedStatus: http.StatusOK,
-				},
-				RestartPolicy: "always",
-				Role:          "project_manager",
-				Inference: &nodepayloads.ConfigManagedServiceInference{
-					Mode:         "node_local",
-					BaseURL:      inferenceBaseURL,
-					DefaultModel: defaultModel,
-					BackendEnv:   inferenceBackendEnv,
-				},
-				Orchestrator: &nodepayloads.ConfigManagedServiceOrchestrator{
-					// Let the worker generate identity-bound per-service UDS endpoints.
-					MCPGatewayProxyURL:    "auto",
-					ReadyCallbackProxyURL: "auto",
-					AgentToken:            workerInternalAgentToken,
-				},
-			},
+	return &nodepayloads.ConfigManagedServices{Services: services}
+}
+
+func (h *NodeHandler) pmaServiceIDAndImageFromEnv(node *models.Node) (serviceID, image string, ok bool) {
+	serviceID = strings.TrimSpace(getEnvDefault("PMA_SERVICE_ID", "pma-main"))
+	image = strings.TrimSpace(getEnvDefault("PMA_IMAGE", "ghcr.io/cypher0n3/cynode-pma:latest"))
+	if serviceID == "" || image == "" {
+		if h.logger != nil {
+			h.logger.Debug("managed services skipped", "reason", "pma_service_id_or_image_empty", "node_slug", node.NodeSlug)
+		}
+		return "", "", false
+	}
+	return serviceID, image, true
+}
+
+func (h *NodeHandler) resolveWorkerInternalAgentTokenForPMA() string {
+	tok := strings.TrimSpace(h.workerInternalAgentToken)
+	if tok == "" {
+		tok = strings.TrimSpace(h.workerAPIBearerToken)
+	}
+	return tok
+}
+
+func (h *NodeHandler) buildPMAManagedServiceList(ctx context.Context, serviceID, image, inferenceBaseURL, defaultModel string, inferenceBackendEnv map[string]string, workerInternalAgentToken string) []nodepayloads.ConfigManagedService {
+	services := []nodepayloads.ConfigManagedService{
+		h.pmaManagedServiceSpec(serviceID, image, inferenceBaseURL, defaultModel, inferenceBackendEnv, workerInternalAgentToken),
+	}
+	extra, err := h.db.ListAllActiveSessionBindings(ctx)
+	if err != nil {
+		if h.logger != nil {
+			h.logger.Warn("list session bindings for managed services", "error", err)
+		}
+		return services
+	}
+	for _, b := range extra {
+		if b.ServiceID == "" || b.ServiceID == serviceID {
+			continue
+		}
+		services = append(services, h.pmaManagedServiceSpec(b.ServiceID, image, inferenceBaseURL, defaultModel, inferenceBackendEnv, workerInternalAgentToken))
+	}
+	return services
+}
+
+func (h *NodeHandler) pmaManagedServiceSpec(serviceID, image, inferenceBaseURL, defaultModel string, inferenceBackendEnv map[string]string, workerInternalAgentToken string) nodepayloads.ConfigManagedService {
+	return nodepayloads.ConfigManagedService{
+		ServiceID:   serviceID,
+		ServiceType: "pma",
+		Image:       image,
+		Args:        []string{"--role=project_manager"},
+		Healthcheck: &nodepayloads.ConfigManagedServiceHealthcheck{
+			Path:           "/healthz",
+			ExpectedStatus: http.StatusOK,
+		},
+		RestartPolicy: "always",
+		Role:          "project_manager",
+		Inference: &nodepayloads.ConfigManagedServiceInference{
+			Mode:         "node_local",
+			BaseURL:      inferenceBaseURL,
+			DefaultModel: defaultModel,
+			BackendEnv:   inferenceBackendEnv,
+		},
+		Orchestrator: &nodepayloads.ConfigManagedServiceOrchestrator{
+			// Let the worker generate identity-bound per-service UDS endpoints.
+			MCPGatewayProxyURL:    "auto",
+			ReadyCallbackProxyURL: "auto",
+			AgentToken:            workerInternalAgentToken,
 		},
 	}
 }
@@ -420,11 +450,15 @@ func deriveNodeLocalInferenceBaseURL(workerAPITargetURL string) string {
 }
 
 func (h *NodeHandler) selectPMAHostNodeSlug(ctx context.Context, fallbackNodeSlug string) string {
+	return selectPMAHostNodeSlug(ctx, h.db, fallbackNodeSlug, h.logger)
+}
+
+func selectPMAHostNodeSlug(ctx context.Context, db database.Store, fallbackNodeSlug string, logger *slog.Logger) string {
 	explicit := strings.TrimSpace(getEnvDefault("PMA_HOST_NODE_SLUG", ""))
 	if explicit != "" {
 		return explicit
 	}
-	nodes, err := h.db.ListActiveNodes(ctx)
+	nodes, err := db.ListActiveNodes(ctx)
 	if err != nil || len(nodes) == 0 {
 		return fallbackNodeSlug
 	}
@@ -432,7 +466,7 @@ func (h *NodeHandler) selectPMAHostNodeSlug(ctx context.Context, fallbackNodeSlu
 	preferLabel := strings.TrimSpace(getEnvDefault("PMA_PREFER_HOST_LABEL", "orchestrator_host"))
 	if preferLabel != "" {
 		for _, n := range nodes {
-			if h.nodeHasLabel(ctx, n.ID, preferLabel) {
+			if nodeHasCapabilityLabel(ctx, db, n.ID, preferLabel) {
 				return n.NodeSlug
 			}
 		}
@@ -440,8 +474,8 @@ func (h *NodeHandler) selectPMAHostNodeSlug(ctx context.Context, fallbackNodeSlu
 	return nodes[0].NodeSlug
 }
 
-func (h *NodeHandler) nodeHasLabel(ctx context.Context, nodeID uuid.UUID, label string) bool {
-	snapJSON, err := h.db.GetLatestNodeCapabilitySnapshot(ctx, nodeID)
+func nodeHasCapabilityLabel(ctx context.Context, db database.Store, nodeID uuid.UUID, label string) bool {
+	snapJSON, err := db.GetLatestNodeCapabilitySnapshot(ctx, nodeID)
 	if err != nil {
 		return false
 	}

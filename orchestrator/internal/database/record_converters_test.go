@@ -10,6 +10,89 @@ import (
 	"github.com/cypher0n3/cynodeai/orchestrator/internal/models"
 )
 
+func TestTaskArtifactRecord_ToTaskArtifact(t *testing.T) {
+	id := uuid.MustParse("00000000-0000-4000-8000-000000000020")
+	ts := time.Unix(20, 0).UTC()
+	taskID := uuid.MustParse("00000000-0000-4000-8000-000000000021")
+	r := &TaskArtifactRecord{
+		GormModelUUID: gormmodel.GormModelUUID{
+			ID:        id,
+			CreatedAt: ts,
+			UpdatedAt: ts,
+		},
+		TaskArtifactBase: models.TaskArtifactBase{
+			TaskID: taskID,
+			Path:   "out/x.md",
+		},
+	}
+	out := r.ToTaskArtifact()
+	if out == nil || out.ID != id || out.TaskID != taskID || out.Path != "out/x.md" {
+		t.Fatalf("ToTaskArtifact: %+v", out)
+	}
+	var tr TaskArtifactRecord
+	if got := tr.TableName(); got != "task_artifacts" {
+		t.Fatalf("TableName: %q", got)
+	}
+}
+
+func TestOrchestratorArtifactRecord_ToOrchestratorArtifact(t *testing.T) {
+	id := uuid.MustParse("00000000-0000-4000-8000-000000000040")
+	ts := time.Unix(40, 0).UTC()
+	r := &OrchestratorArtifactRecord{
+		GormModelUUID: gormmodel.GormModelUUID{
+			ID:        id,
+			CreatedAt: ts,
+			UpdatedAt: ts,
+		},
+		OrchestratorArtifactBase: models.OrchestratorArtifactBase{
+			ScopeLevel:     "user",
+			ScopePartition: "part",
+			Path:           "doc.md",
+			StorageRef:     "s3://bucket/key",
+		},
+	}
+	out := r.ToOrchestratorArtifact()
+	if out == nil || out.ID != id || out.Path != "doc.md" || out.StorageRef != "s3://bucket/key" {
+		t.Fatalf("ToOrchestratorArtifact: %+v", out)
+	}
+	var nilRec *OrchestratorArtifactRecord
+	if nilRec.ToOrchestratorArtifact() != nil {
+		t.Fatal("nil receiver should map to nil domain")
+	}
+	if got := (OrchestratorArtifactRecord{}).TableName(); got != "artifacts" {
+		t.Fatalf("TableName: %q", got)
+	}
+}
+
+func TestSessionBindingRecord_ToSessionBinding(t *testing.T) {
+	id := uuid.MustParse("00000000-0000-4000-8000-000000000010")
+	ts := time.Unix(12, 0).UTC()
+	u := uuid.MustParse("00000000-0000-4000-8000-000000000011")
+	s := uuid.MustParse("00000000-0000-4000-8000-000000000012")
+	r := &SessionBindingRecord{
+		GormModelUUID: gormmodel.GormModelUUID{
+			ID:        id,
+			CreatedAt: ts,
+			UpdatedAt: ts,
+		},
+		SessionBindingBase: models.SessionBindingBase{
+			BindingKey: "bk",
+			UserID:     u,
+			SessionID:  s,
+			ServiceID:  "pma-svc",
+			State:      models.SessionBindingStateActive,
+		},
+	}
+	out := r.ToSessionBinding()
+	if out == nil || out.ID != id || out.BindingKey != "bk" || out.ServiceID != "pma-svc" {
+		t.Fatalf("ToSessionBinding: %+v", out)
+	}
+	var z SessionBindingRecord
+	if got := z.TableName(); got != "session_bindings" {
+		t.Fatalf("TableName: %q", got)
+	}
+}
+
 func TestSessionRecord_ToSession(t *testing.T) {
 	id := uuid.MustParse("00000000-0000-4000-8000-000000000001")
 	ts := time.Unix(10, 0).UTC()

@@ -112,6 +112,208 @@ def fetch_gateway_login_tokens(timeout=30):
         return None, None
 
 
+def container_runtime_ps_available():
+    """True if ``podman ps`` or ``docker ps`` succeeds (exit 0)."""
+    for bin_name in ("podman", "docker"):
+        try:
+            proc = subprocess.run(
+                [bin_name, "ps"],
+                capture_output=True,
+                text=True,
+                timeout=15,
+                check=False,
+            )
+        except (FileNotFoundError, OSError, subprocess.TimeoutExpired):
+            continue
+        if proc.returncode == 0:
+            return True
+    return False
+
+
+def list_runtime_managed_pma_container_names():
+    """Running container names matching ``cynodeai-managed-pma`` (podman or docker).
+
+    Node-manager does not upsert these into worker telemetry ``container_inventory``;
+    this matches observable state in orchestrator_bootstrap / per-session PMA specs.
+    """
+    needle = "cynodeai-managed-pma"
+    names = []
+    for bin_name in ("podman", "docker"):
+        try:
+            proc = subprocess.run(
+                [bin_name, "ps", "--format", "{{.Names}}"],
+                capture_output=True,
+                text=True,
+                timeout=15,
+                check=False,
+            )
+        except (FileNotFoundError, OSError, subprocess.TimeoutExpired):
+            continue
+        if proc.returncode != 0 or not (proc.stdout or "").strip():
+            continue
+        for line in proc.stdout.splitlines():
+            n = line.strip()
+            if needle in n:
+                names.append(n)
+        if names:
+            return sorted(set(names))
+    return []
+
+
+def count_runtime_pma_sb_container_names(names):
+    """Count per-session PMA containers (``…-managed-pma-sb-…``)."""
+    if not names:
+        return 0
+    return sum(1 for n in names if "cynodeai-managed-pma-sb-" in n)
+
+
+def wait_for_runtime_pma_sb_count_at_least(min_sb, timeout_sec=180, poll_sec=4):
+    """Poll until ``count_runtime_pma_sb_container_names`` >= min_sb.
+
+    Returns (ok, last_names, last_sb_count).
+    """
+    deadline = time.monotonic() + float(timeout_sec)
+    last_names = []
+    last_sb = 0
+    while time.monotonic() < deadline:
+        last_names = list_runtime_managed_pma_container_names()
+        last_sb = count_runtime_pma_sb_container_names(last_names)
+        if last_sb >= min_sb:
+            return True, last_names, last_sb
+        time.sleep(float(poll_sec))
+    return False, last_names, last_sb
+
+
+def runtime_pma_sb_container_name_set():
+    """Set of running container names (``cynodeai-managed-pma-sb-*``)."""
+    return {
+        n
+        for n in list_runtime_managed_pma_container_names()
+        if "cynodeai-managed-pma-sb-" in n
+    }
+
+
+def wait_for_at_least_new_pma_sb_container_names(
+    before_names, min_new, timeout_sec=180, poll_sec=4
+):
+    """Poll until at least ``min_new`` new ``pma-sb`` managed containers vs ``before_names``.
+
+    ``before_names`` is a set of full container names. Returns
+    (ok, new_names_set, all_sb_names_set).
+    """
+    deadline = time.monotonic() + float(timeout_sec)
+    before = set(before_names)
+    last_new = set()
+    last_all = set()
+    while time.monotonic() < deadline:
+        last_all = runtime_pma_sb_container_name_set()
+        last_new = last_all - before
+        if len(last_new) >= int(min_new):
+            return True, last_new, last_all
+        time.sleep(float(poll_sec))
+    return False, last_new, last_all
+
+
+def wait_until_managed_container_names_absent(container_names, timeout_sec=180, poll_sec=4):
+    """Poll until none of ``container_names`` appear in ``list_runtime_managed_pma_container_names``."""
+    want_gone = frozenset(str(n).strip() for n in container_names if str(n).strip())
+    if not want_gone:
+        return True
+    deadline = time.monotonic() + float(timeout_sec)
+    while time.monotonic() < deadline:
+        current = set(list_runtime_managed_pma_container_names())
+        if want_gone.isdisjoint(current):
+            return True
+        time.sleep(float(poll_sec))
+    return False
+
+
+def wait_until_some_pma_sb_names_removed(
+    names_before_logout, timeout_sec=180, poll_sec=4
+):
+    """Poll until at least one name in ``names_before_logout`` is gone (logout / teardown).
+
+    ``names_before_logout`` is typically ``new_sb`` from ``wait_for_at_least_new_pma_sb_container_names``.
+    """
+    want = frozenset(str(n).strip() for n in names_before_logout if str(n).strip())
+    if not want:
+        return True
+    deadline = time.monotonic() + float(timeout_sec)
+    while time.monotonic() < deadline:
+        cur = runtime_pma_sb_container_name_set()
+        if not want.issubset(cur):
+            return True
+        time.sleep(float(poll_sec))
+    return False
+
+
+def wait_until_runtime_pma_sb_empty(timeout_sec=180, poll_sec=4):
+    """Poll until no running ``cynodeai-managed-pma-sb-*`` containers (podman/docker ps)."""
+    deadline = time.monotonic() + float(timeout_sec)
+    while time.monotonic() < deadline:
+        if not runtime_pma_sb_container_name_set():
+            return True
+        time.sleep(float(poll_sec))
+    return False
+
+
+def gateway_logout(access_token, refresh_token, timeout=30):
+    """POST /v1/auth/logout with JSON body refresh_token; Bearer access_token required.
+
+    Returns (ok, status, body) where ok is True for HTTP 200 or 204.
+    """
+    acc = (access_token or "").strip()
+    ref = (refresh_token or "").strip()
+    if not acc or not ref:
+        return False, 0, ""
+    st, body = gateway_request(
+        "POST",
+        "/v1/auth/logout",
+        acc,
+        json_body={"refresh_token": ref},
+        timeout=timeout,
+    )
+    return st in (200, 204), st, body
+
+
+def gateway_get_me_user_id(access_token, timeout=30):
+    """GET /v1/users/me; return user id string or None."""
+    st, body = gateway_request("GET", "/v1/users/me", access_token, None, timeout=timeout)
+    if st != 200:
+        return None
+    try:
+        data = json.loads(body)
+        uid = data.get("id")
+        if isinstance(uid, str) and uid.strip():
+            return uid.strip()
+    except (json.JSONDecodeError, TypeError, ValueError):
+        pass
+    return None
+
+
+def gateway_admin_revoke_sessions_for_user(access_token, user_id, timeout=60):
+    """POST /v1/users/{id}/revoke_sessions (admin). Invalidates sessions + PMA teardown."""
+    uid = str(user_id or "").strip()
+    if not uid:
+        return False, 0, ""
+    st, body = gateway_request(
+        "POST",
+        f"/v1/users/{uid}/revoke_sessions",
+        access_token,
+        None,
+        timeout=timeout,
+    )
+    return st == 204, st, body
+
+
+def gateway_admin_revoke_sessions_for_me(access_token, timeout=60):
+    """Revoke all sessions for the current user (admin); tears down per-session PMA bindings."""
+    uid = gateway_get_me_user_id(access_token, timeout=timeout)
+    if not uid:
+        return False, 0, "no user id from GET /v1/users/me"
+    return gateway_admin_revoke_sessions_for_user(access_token, uid, timeout=timeout)
+
+
 def fetch_gateway_refresh_tokens(refresh_token, timeout=30):
     """POST /v1/auth/refresh; return (access_token, refresh_token) or (None, None)."""
     if not refresh_token or not str(refresh_token).strip():
@@ -363,6 +565,17 @@ def mcp_tool_call(tool_name, arguments=None, timeout=30, bearer_token=None):
 
     except (urllib.error.URLError, OSError, ValueError):
         return 0, ""
+
+
+def mcp_pm_agent_bearer_token():
+    """Return PM agent bearer for MCP when configured (matches full-demo / compose defaults).
+
+    When any MCP agent token is set on the control-plane, direct ``mcp_tool_call`` requests
+    must send ``Authorization``. Use this for catalog tests that need the Project Manager
+    allowlist. Returns None when unset (legacy dev with no agent tokens).
+    """
+    t = (config.WORKER_INTERNAL_AGENT_TOKEN or "").strip()
+    return t if t else None
 
 
 def gateway_request(method, path, access_token, json_body=None, timeout=30):
@@ -652,7 +865,8 @@ def wait_for_pma_chat_ready(timeout_sec=120, poll_interval=5):
         )
         if 200 <= code < 300:
             return True
-        if code != 503:
+        # Retry on 5xx (model loading, PMA proxy, upstream); fail fast on 4xx (auth, bad request).
+        if 400 <= code < 500:
             return False
         time.sleep(poll_interval)
     return False

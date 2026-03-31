@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"encoding/json"
+	"errors"
 	"os"
 	"testing"
 	"time"
@@ -184,5 +185,87 @@ func TestBuildManagedServicesDesiredState_BackendEnvPropagated(t *testing.T) {
 	}
 	if v := svc.Inference.BackendEnv["OLLAMA_NUM_CTX"]; v != "32768" {
 		t.Errorf("expected OLLAMA_NUM_CTX=32768, got %q", v)
+	}
+}
+
+func TestBuildManagedServicesDesiredState_ExtraDistinctServiceIDs(t *testing.T) {
+	t.Setenv("PMA_SERVICE_ID", "pma-main")
+	t.Setenv("PMA_IMAGE", "pma:latest")
+	t.Setenv("PMA_NODE_SLUG", "node-a")
+	db := testutil.NewMockDB()
+	u := uuid.New()
+	rs := uuid.New()
+	lineage := models.SessionBindingLineage{UserID: u, SessionID: rs, ThreadID: nil}
+	key := models.DeriveSessionBindingKey(lineage)
+	db.SessionBindingsByKey[key] = &models.SessionBinding{
+		SessionBindingBase: models.SessionBindingBase{
+			BindingKey: key,
+			UserID:     u,
+			SessionID:  rs,
+			ServiceID:  "pma-binding-b",
+			State:      models.SessionBindingStateActive,
+		},
+		ID:        uuid.New(),
+		CreatedAt: time.Now().UTC(),
+		UpdatedAt: time.Now().UTC(),
+	}
+	h := NewNodeHandler(db, nil, "psk", testOrchestratorURL, "", "", "", nil)
+	node := &models.Node{
+		NodeBase: models.NodeBase{NodeSlug: "node-a"},
+		ID:       uuid.New(),
+	}
+	got := h.buildManagedServicesDesiredState(t.Context(), node, "http://10.0.0.1:12090", nil)
+	if got == nil || len(got.Services) != 2 {
+		t.Fatalf("want 2 services (bootstrap + binding), got %v", got)
+	}
+	if got.Services[0].ServiceID != "pma-main" || got.Services[1].ServiceID != "pma-binding-b" {
+		t.Fatalf("unexpected service_ids: %#v", got.Services)
+	}
+}
+
+func TestBuildManagedServicesDesiredState_NilDBOrNodeReturnsNil(t *testing.T) {
+	t.Setenv("PMA_SERVICE_ID", "pma-main")
+	t.Setenv("PMA_IMAGE", "pma:latest")
+	h := NewNodeHandler(nil, nil, "psk", testOrchestratorURL, "", "", "", nil)
+	n := &models.Node{NodeBase: models.NodeBase{NodeSlug: "n"}, ID: uuid.New()}
+	if got := h.buildManagedServicesDesiredState(t.Context(), n, "http://10.0.0.1:12090", nil); got != nil {
+		t.Fatalf("nil db: want nil, got %#v", got)
+	}
+	db := testutil.NewMockDB()
+	h2 := NewNodeHandler(db, nil, "psk", testOrchestratorURL, "", "", "", nil)
+	if got := h2.buildManagedServicesDesiredState(t.Context(), nil, "http://10.0.0.1:12090", nil); got != nil {
+		t.Fatalf("nil node: want nil, got %#v", got)
+	}
+}
+
+func TestBuildManagedServicesDesiredState_SkippedWhenPMAHostIsOtherNode(t *testing.T) {
+	t.Setenv("PMA_SERVICE_ID", "pma-main")
+	t.Setenv("PMA_IMAGE", "pma:latest")
+	t.Setenv("PMA_HOST_NODE_SLUG", "other-node")
+	db := testutil.NewMockDB()
+	h := NewNodeHandler(db, nil, "psk", testOrchestratorURL, "", "", "", nil)
+	node := &models.Node{
+		NodeBase: models.NodeBase{NodeSlug: "this-node"},
+		ID:       uuid.New(),
+	}
+	if got := h.buildManagedServicesDesiredState(t.Context(), node, "http://10.0.0.1:12090", nil); got != nil {
+		t.Fatalf("expected nil when PMA host is another node, got %#v", got)
+	}
+}
+
+func TestBuildManagedServicesDesiredState_ListAllBindingsErrorStillReturnsBootstrap(t *testing.T) {
+	t.Setenv("PMA_SERVICE_ID", "pma-main")
+	t.Setenv("PMA_IMAGE", "pma:latest")
+	t.Setenv("PMA_NODE_SLUG", "node-b")
+	db := testutil.NewMockDB()
+	db.ForceError = errors.New("list bindings failed")
+	h := NewNodeHandler(db, nil, "psk", testOrchestratorURL, "", "", "", nil)
+	node := &models.Node{
+		NodeBase: models.NodeBase{NodeSlug: "node-b"},
+		ID:       uuid.New(),
+	}
+	got := h.buildManagedServicesDesiredState(t.Context(), node, "http://10.0.0.1:12090", nil)
+	if got == nil || len(got.Services) != 1 || got.Services[0].ServiceID != "pma-main" {
+		t.Fatalf("expected single bootstrap service: %#v", got)
 	}
 }

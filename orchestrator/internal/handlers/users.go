@@ -13,12 +13,12 @@ import (
 
 // UserHandler handles user endpoints.
 type UserHandler struct {
-	db     database.UserStore
+	db     database.Store
 	logger *slog.Logger
 }
 
 // NewUserHandler creates a new user handler.
-func NewUserHandler(db database.UserStore, logger *slog.Logger) *UserHandler {
+func NewUserHandler(db database.Store, logger *slog.Logger) *UserHandler {
 	return &UserHandler{
 		db:     db,
 		logger: logger,
@@ -91,6 +91,13 @@ func (h *UserHandler) RevokeSessions(w http.ResponseWriter, r *http.Request) {
 			h.logger.Error("revoke_sessions invalidate", "error", err)
 		}
 		WriteInternalError(w, "Failed to revoke sessions")
+		return
+	}
+	if err := TeardownAllActivePMABindingsForUser(ctx, h.db, userID, "admin_revoke_sessions", h.logger); err != nil {
+		if h.logger != nil {
+			h.logger.Error("revoke_sessions pma teardown", "error", err)
+		}
+		WriteInternalError(w, "Failed to tear down PMA bindings")
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)

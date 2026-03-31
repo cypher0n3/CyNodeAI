@@ -48,6 +48,7 @@ type Store interface {
 	TaskStore
 	NodeStore
 	ChatStore
+	SessionBindingStore
 	PreferenceStore
 	SkillStore
 	WorkflowStore
@@ -253,6 +254,11 @@ func (db *DB) GetActiveRefreshSession(ctx context.Context, tokenHash []byte) (*m
 	return record.ToRefreshSession(), nil
 }
 
+// GetRefreshSessionByID loads a refresh session row by primary key (any status).
+func (db *DB) GetRefreshSessionByID(ctx context.Context, sessionID uuid.UUID) (*models.RefreshSession, error) {
+	return getDomainByID(db, ctx, sessionID, "get refresh session by id", (*RefreshSessionRecord).ToRefreshSession)
+}
+
 // InvalidateRefreshSession invalidates a refresh session.
 func (db *DB) InvalidateRefreshSession(ctx context.Context, sessionID uuid.UUID) error {
 	return db.updateWhere(ctx, &RefreshSessionRecord{}, "id", sessionID,
@@ -263,6 +269,15 @@ func (db *DB) InvalidateRefreshSession(ctx context.Context, sessionID uuid.UUID)
 func (db *DB) InvalidateAllUserSessions(ctx context.Context, userID uuid.UUID) error {
 	return db.updateWhere(ctx, &RefreshSessionRecord{}, "user_id", userID,
 		map[string]interface{}{"is_active": false}, "invalidate all user sessions")
+}
+
+// InvalidateAllRefreshSessions marks every refresh session inactive.
+func (db *DB) InvalidateAllRefreshSessions(ctx context.Context) error {
+	now := time.Now().UTC()
+	return wrapErr(db.db.WithContext(ctx).Model(&RefreshSessionRecord{}).
+		Where("is_active = ?", true).
+		Updates(map[string]interface{}{"is_active": false, "updated_at": now}).Error,
+		"invalidate all refresh sessions")
 }
 
 // --- Auth audit log operations ---

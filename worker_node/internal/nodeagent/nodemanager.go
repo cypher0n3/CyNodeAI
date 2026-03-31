@@ -527,9 +527,18 @@ func maybeStartManagedServices(ctx context.Context, logger *slog.Logger, nodeCon
 		}
 		return nil
 	}
-	if nodeConfig == nil || nodeConfig.ManagedServices == nil || len(nodeConfig.ManagedServices.Services) == 0 {
+	if nodeConfig == nil || nodeConfig.ManagedServices == nil {
 		if logger != nil {
 			logger.Info("managed services skipped", "reason", "no_managed_services_in_config")
+		}
+		return nil
+	}
+	if len(nodeConfig.ManagedServices.Services) == 0 {
+		if err := opts.StartManagedServices(ctx, []nodepayloads.ConfigManagedService{}); err != nil {
+			if logger != nil {
+				logger.Error("managed services start failed", "error", err, "count", 0)
+			}
+			return fmt.Errorf("start managed services: %w", err)
 		}
 		return nil
 	}
@@ -566,6 +575,12 @@ func runCapabilityLoop(ctx context.Context, logger *slog.Logger, cfg *Config, bo
 			}
 			prev := nodeConfig
 			nodeConfig = refreshNodeConfig(ctx, logger, cfg, bootstrap, nodeConfig)
+			if managedServicesConfigChanged(prev, nodeConfig) {
+				if err := syncManagedServiceAgentTokens(ctx, cfg, nodeConfig, logger); err != nil && logger != nil {
+					logger.Warn("managed service token sync after config change", "error", err)
+				}
+				applyWorkerProxyConfigEnv(nodeConfig)
+			}
 			if inferenceBackendPullSpecChanged(prev, nodeConfig) {
 				maybePullModels(ctx, logger, nodeConfig, opts)
 			}

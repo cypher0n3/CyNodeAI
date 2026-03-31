@@ -301,7 +301,10 @@ class TestMCPControlPlaneToolRoutes(unittest.TestCase):
 
         def mcp_direct(tool, args=None):
             code, raw = helpers.mcp_tool_call(
-                tool, arguments=args, timeout=60
+                tool,
+                arguments=args,
+                timeout=60,
+                bearer_token=helpers.mcp_pm_agent_bearer_token(),
             )
             return code, raw, helpers.parse_json_safe(raw)
 
