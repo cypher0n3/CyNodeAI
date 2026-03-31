@@ -1,6 +1,28 @@
 # CyNodeAI NATS and JetStream Specification
 
-## 1. Purpose
+- [1 Purpose](#1-purpose)
+- [2 Design Principles](#2-design-principles)
+- [3 Naming Conventions](#3-naming-conventions)
+- [4 Subject Taxonomy](#4-subject-taxonomy)
+  - [4.6 Session Activity](#46-session-activity)
+  - [4.7 Node Configuration Notifications](#47-node-configuration-notifications)
+- [5 JetStream Streams](#5-jetstream-streams)
+  - [5.4 Stream: `CYNODE_SESSION`](#54-stream-cynode_session)
+- [6 Consumer Patterns](#6-consumer-patterns)
+  - [6.5 Session Activity Consumers](#65-session-activity-consumers-orchestrator)
+  - [6.6 Config Notification Consumers](#66-config-notification-consumers-node-manager)
+- [7 Message Envelope Specification](#7-message-envelope-specification)
+- [8 Payload Schemas](#8-payload-schemas)
+- [9 RBAC and Multi-Tenancy Controls](#9-rbac-and-multi-tenancy-controls)
+- [10 Idempotency and Deduplication](#10-idempotency-and-deduplication)
+- [11 Ordering and Consistency](#11-ordering-and-consistency)
+- [12 Payload Size Limits](#12-payload-size-limits)
+- [13 Operational Defaults](#13-operational-defaults)
+- [14 Implementation Checklist](#14-implementation-checklist)
+- [15 MVP Scope](#15-mvp-scope)
+- [16 References](#16-references)
+
+## 1 Purpose
 
 Define the NATS subject taxonomy, JetStream streams, consumer patterns, and message schemas to support:
 
@@ -10,10 +32,14 @@ Define the NATS subject taxonomy, JetStream streams, consumer patterns, and mess
 - Artifact and indexing (pgvector ingestion triggers)
 - Node presence and capacity
 - Live progress streaming
+- Session activity and idle lifecycle for per-session resource provisioning
 
-NATS is transport and event backbone - not the authoritative system of record.
+NATS is the unified transport and event backbone, not the authoritative system of record.
+Postgres remains the authoritative store; NATS provides real-time signaling that reduces polling latency across component boundaries.
 
-## 2. Design Principles
+Session activity tracking for per-session PMA idle lifecycle is the first production use-case (Phase 1); the architecture will be incrementally refactored to leverage NATS across the board as the unified transport layer.
+
+## 2 Design Principles
 
 - At-least-once delivery (JetStream) + idempotent consumers
 - Small messages; large payloads go to object storage and are referenced by URI + hash
@@ -21,13 +47,13 @@ NATS is transport and event backbone - not the authoritative system of record.
 - Deterministic schemas with explicit versioning
 - Stable subject patterns; add new versions via schema versioning, not subject churn
 
-## 3. Naming Conventions
+## 3 Naming Conventions
 
 - Prefix all subjects with `cynode.`
 - Use lowercase tokens separated by dots
 - Put tenant and project in the subject for routing, but do not include secrets or PII
 
-### 3.1. Recommended Ids
+### 3.1 Recommended Ids
 
 - `tenant_id` - stable string or UUID
 - `project_id` - stable string or UUID
@@ -35,7 +61,7 @@ NATS is transport and event backbone - not the authoritative system of record.
 - `work_item_id` - UUID (story/task/subtask/requirement/etc.)
 - `event_id` - UUID (unique per emitted event)
 
-## 4. Subject Taxonomy
+## 4 Subject Taxonomy
 
 Subject names are hierarchical; the following sections list canonical subjects by domain.
 
@@ -100,7 +126,35 @@ Subject names are hierarchical; the following sections list canonical subjects b
 - `cynode.node.capacity.<tenant_id>.<node_id>`
 - `cynode.node.status.<tenant_id>.<node_id>`
 
-## 5. JetStream Streams
+### 4.6 Session Activity
+
+- `cynode.session.activity.<tenant_id>.<session_id>`
+- `cynode.session.attached.<tenant_id>.<session_id>`
+- `cynode.session.detached.<tenant_id>.<session_id>`
+
+#### 4.6.1 Session Activity Notes
+
+- `activity` is published periodically by the user-gateway at `T_heartbeat` cadence for each session that has had authenticated API interaction since the last publish.
+  Each message resets the idle clock for that session binding.
+- `attached` is published once when a client establishes a session (login or reconnect after idle).
+- `detached` is published when the client cleanly disconnects (logout or explicit close).
+  If the client crashes, the absence of `activity` messages within the idle window serves as an implicit detach.
+- The user-gateway derives session liveness from normal authenticated API traffic (chat, MCP tool calls, token refresh, streaming connections) and publishes to NATS server-side.
+  Clients do not publish to NATS directly; NATS credentials are not exposed to external clients.
+- Session activity is the first production use-case for NATS in this system; future phases expand NATS adoption across the architecture.
+- See [003_pma_client_connection_session_activity_spec_proposal.md](003_pma_client_connection_session_activity_spec_proposal.md) for the full session activity model.
+
+### 4.7 Node Configuration Notifications
+
+- `cynode.node.config_changed.<tenant_id>.<node_id>`
+
+#### 4.7.1 Config Notification Notes
+
+- Published by the orchestrator control-plane when `managed_services`, policy, or other node configuration changes.
+- The node-manager subscribes and immediately fetches the updated configuration, replacing or supplementing the poll interval.
+- This reduces "config bump to container action" latency from poll-interval to near-zero.
+
+## 5 JetStream Streams
 
 Streams below define durable storage and retention for each domain.
 
@@ -179,7 +233,29 @@ Recommended max age:
 
 - 1 to 24 hours
 
-## 6. Consumer Patterns
+### 5.4 Stream: `CYNODE_SESSION`
+
+This stream stores session activity and attachment lifecycle events.
+
+#### 5.4.1 Stream Purpose (`CYNODE_SESSION`)
+
+- Short-lived session presence data for PMA idle lifecycle and re-activation replay on orchestrator restart
+
+#### 5.4.2 Stream Subjects (`CYNODE_SESSION`)
+
+- `cynode.session.activity.*.*`
+- `cynode.session.attached.*.*`
+- `cynode.session.detached.*.*`
+
+#### 5.4.3 Stream Retention (`CYNODE_SESSION`)
+
+- Time-based retention (hours); only needed for replay if the orchestrator restarts while sessions are active
+
+Recommended max age:
+
+- 1 to 6 hours
+
+## 6 Consumer Patterns
 
 Recommended subscription and processing patterns per consumer type.
 
@@ -219,7 +295,20 @@ Pattern B - Workers pull-claim jobs:
 - Subscribe to `cynode.job.progress...` and `cynode.node.capacity...`
 - Should tolerate loss or truncation; do not treat telemetry as authoritative
 
-## 7. Message Envelope Specification
+### 6.5 Session Activity Consumers (Orchestrator)
+
+- Orchestrator subscribes to `cynode.session.activity.<tenant>.<session_id>` and updates `last_activity_at` on the corresponding session binding in Postgres.
+- On `session.attached`, orchestrator ensures the session binding is `active` and the PMA managed service is in desired state (re-activation path).
+- On `session.detached`, orchestrator may begin an accelerated idle countdown or mark the binding for teardown immediately per policy.
+- The PMA binding scanner goroutine remains as a safety net for NATS downtime, missed messages, and clock skew.
+
+### 6.6 Config Notification Consumers (Node-Manager)
+
+- Node-manager subscribes to `cynode.node.config_changed.<tenant>.<node_id>` for its own node.
+- On receipt, node-manager fetches updated configuration from the control-plane and reconciles managed services.
+- The existing poll interval remains as a fallback for missed NATS messages.
+
+## 7 Message Envelope Specification
 
 All messages MUST use a common envelope with strict schema validation.
 
@@ -273,7 +362,7 @@ All messages MUST use a common envelope with strict schema validation.
 }
 ```
 
-## 8. Payload Schemas
+## 8 Payload Schemas
 
 Canonical payload shapes for core message types (versioned).
 
@@ -485,7 +574,54 @@ Policy decision recorded; payload below.
 - `decided_at`
 - `conditions` (optional)
 
-## 9. RBAC and Multi-Tenancy Controls
+### 8.12 `session.activity` `v1.0.0`
+
+Periodic heartbeat indicating an active client session; payload below.
+
+#### 8.12.1 Payload for `session.activity`
+
+- `session_id` (UUID)
+- `user_id` (UUID)
+- `binding_key` (string, opaque session binding key)
+- `client_type` (string: `cynork`|`web_console`|`other`)
+- `ts` (RFC3339 timestamp)
+
+### 8.13 `session.attached` `v1.0.0`
+
+Client has established a session activity channel; payload below.
+
+#### 8.13.1 Payload for `session.attached`
+
+- `session_id` (UUID)
+- `user_id` (UUID)
+- `binding_key` (string)
+- `client_type` (string: `cynork`|`web_console`|`other`)
+- `ts` (RFC3339 timestamp)
+
+### 8.14 `session.detached` `v1.0.0`
+
+Client has cleanly disconnected from the session activity channel; payload below.
+
+#### 8.14.1 Payload for `session.detached`
+
+- `session_id` (UUID)
+- `user_id` (UUID)
+- `binding_key` (string)
+- `reason` (string: `logout`|`client_close`|`timeout`)
+- `ts` (RFC3339 timestamp)
+
+### 8.15 `node.config_changed` `v1.0.0`
+
+Notification that the node configuration has been updated; payload below.
+
+#### 8.15.1 Payload for `node.config_changed`
+
+- `node_id` (string)
+- `config_version` (string, ULID or equivalent monotonic version)
+- `changed_sections` (array of strings, optional: `managed_services`|`policy`|`inference_backend`|`other`)
+- `ts` (RFC3339 timestamp)
+
+## 9 RBAC and Multi-Tenancy Controls
 
 Access is enforced at both NATS and message level.
 
@@ -507,11 +643,11 @@ Access is enforced at both NATS and message level.
   - sensitivity does not exceed role allowance
 - Never rely solely on subject routing for authorization
 
-## 10. Idempotency and Deduplication
+## 10 Idempotency and Deduplication
 
 Consumers must handle duplicate delivery and apply updates idempotently.
 
-### 10.1. Idempotency Requirements
+### 10.1 Idempotency Requirements
 
 - Every message includes `event_id` (unique)
 - Consumers must store processed `event_id`s (or a rolling window) to avoid double-apply
@@ -520,17 +656,17 @@ Consumers must handle duplicate delivery and apply updates idempotently.
   - Worker must check local SQLite and/or central Postgres before executing a `job_id` again
   - If duplicate received, re-emit `job.completed` with existing results where possible
 
-## 11. Ordering and Consistency
+## 11 Ordering and Consistency
 
-- Do not assume global ordering across subjects
-- For a single job, prefer publishing lifecycle events using the same `job_id` subject token to improve locality
+- Do not assume global ordering across subjects.
+- For a single job, prefer publishing lifecycle events using the same `job_id` subject token to improve locality.
 - Consumers must tolerate:
 
   - duplicates
   - out-of-order progress events
   - missing telemetry
 
-## 12. Payload Size Limits
+## 12 Payload Size Limits
 
 - Enforce a maximum message size (platform config)
 - Put large content in object storage:
@@ -541,17 +677,19 @@ Consumers must handle duplicate delivery and apply updates idempotently.
   - artifact manifests
 - Messages carry URIs + hashes, not the bytes
 
-## 13. Operational Defaults
+## 13 Operational Defaults
 
 Suggested initial defaults:
 
 - CYNODE_JOBS max age: 7 days
 - CYNODE_EVENTS max age: 90 days
 - CYNODE_TELEMETRY max age: 6 hours
+- CYNODE_SESSION max age: 6 hours
 - job.progress publish rate: 1-2 Hz per active job (tunable)
 - heartbeat publish rate: every 5-15 seconds per node (tunable)
+- session.activity publish rate: once per `T_heartbeat` (2-3 minutes) per active session
 
-## 14. Implementation Checklist
+## 14 Implementation Checklist
 
 - Define JSON schemas for each `event_type` + `event_version`
 - Implement a shared envelope validation library
@@ -563,22 +701,63 @@ Suggested initial defaults:
 - Implement object storage conventions for job specs, results, and artifacts
 - Implement subject permissions per service identity and tenant
 
-## 15. MVP Scope
+## 15 MVP Scope
 
-Minimum viable NATS implementation:
+Minimum viable NATS implementation, in recommended phase order.
+
+### 15.1 Phase 1: Session Activity and Config Notifications
+
+Deploy NATS (single-node, JetStream enabled) as part of the dev stack.
+This is the first production use-case for NATS, directly supporting per-session PMA idle lifecycle.
+
+- Subjects:
+
+  - `session.activity`, `session.attached`, `session.detached`
+  - `node.config_changed`
+- Streams:
+
+  - CYNODE_SESSION
+- Consumers:
+
+  - Orchestrator session-activity consumer (updates `last_activity_at`)
+  - Node-manager config-notification consumer (fetches updated config on change)
+- Gateway integration:
+
+  - User-gateway derives session liveness from authenticated API traffic and publishes to NATS server-side
+  - No dedicated client-facing heartbeat endpoint; clients interact via existing authenticated HTTP/SSE endpoints
+
+### 15.2 Phase 2: Node Presence
+
+Migrate node heartbeats and capacity reporting from HTTP polling to NATS pub/sub.
+
+- Subjects:
+
+  - `node.heartbeat`, `node.capacity`
+- Streams:
+
+  - CYNODE_TELEMETRY (already includes `cynode.node.*`)
+
+### 15.3 Phase 3: Job Pipeline
+
+Full job dispatch and lifecycle eventing.
 
 - Subjects:
 
   - `job.requested`, `job.started`, `job.progress`, `job.completed`
-  - `node.heartbeat`, `node.capacity`
   - `artifact.available`
 - Streams:
 
   - CYNODE_JOBS
-  - CYNODE_TELEMETRY
 - Idempotency:
 
   - job_id-based worker dedupe
   - event_id-based consumer dedupe
 
-Everything else can be added incrementally once the job pipeline is stable.
+Everything else (work items, requirements, policy, indexing) can be added incrementally once the job pipeline is stable.
+
+## 16 References
+
+- [003_pma_client_connection_session_activity_spec_proposal.md](003_pma_client_connection_session_activity_spec_proposal.md) (session activity model and idle lifecycle)
+- [orchestrator_bootstrap.md](../tech_specs/orchestrator_bootstrap.md) (PMA startup and session binding)
+- [worker_node.md](../tech_specs/worker_node.md) (managed services, reconciliation, dynamic configuration)
+- [worker_node_payloads.md](../tech_specs/worker_node_payloads.md) (`managed_services`, `policy.updates.allow_service_restart`)
